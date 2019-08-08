@@ -25,9 +25,6 @@
 #include <string.h>
 
 #ifdef WIN32
-#  if defined(_MSC_VER) && defined(_M_X64)
-#    include <math.h> /* needed for _set_FMA3_enable */
-#  endif
 #  include <windows.h>
 #  include "utfconv.h"
 #endif
@@ -237,12 +234,6 @@ int main(int argc,
   _putenv_s("OMP_WAIT_POLICY", "PASSIVE");
 #  endif
 
-  /* FMA3 support in the 2013 CRT is broken on Vista and Windows 7 RTM
-   * (fixed in SP1). Just disable it. */
-#  if defined(_MSC_VER) && defined(_M_X64)
-  _set_FMA3_enable(0);
-#  endif
-
   /* Win32 Unicode Args */
   /* NOTE: cannot use guardedalloc malloc here, as it's not yet initialized
    *       (it depends on the args passed in, which is what we're getting here!)
@@ -447,8 +438,8 @@ int main(int argc,
   /* TODO - U.pythondir */
 #else
   printf(
-      "\n* WARNING * - Blender compiled without Python!\nthis is not intended for typical "
-      "usage\n\n");
+      "\n* WARNING * - Blender compiled without Python!\n"
+      "this is not intended for typical usage\n\n");
 #endif
 
   CTX_py_init_set(C, 1);
@@ -505,7 +496,7 @@ int main(int argc,
 #ifdef WITH_PYTHON_MODULE
 void main_python_exit(void)
 {
-  WM_exit_ext((bContext *)evil_C, true);
+  WM_exit_ex((bContext *)evil_C, true);
   evil_C = NULL;
 }
 #endif

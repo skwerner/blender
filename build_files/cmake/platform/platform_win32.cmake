@@ -30,14 +30,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
   set(MSVC_CLANG On)
   set(VC_TOOLS_DIR $ENV{VCToolsRedistDir} CACHE STRING "Location of the msvc redistributables")
   set(MSVC_REDIST_DIR ${VC_TOOLS_DIR})
-  if (DEFINED MSVC_REDIST_DIR)
+  if(DEFINED MSVC_REDIST_DIR)
     file(TO_CMAKE_PATH ${MSVC_REDIST_DIR} MSVC_REDIST_DIR)
   else()
     message("Unable to detect the Visual Studio redist directory, copying of the runtime dlls will not work, try running from the visual studio developer prompt.")
   endif()
 endif()
 
-set_property(GLOBAL PROPERTY USE_FOLDERS ${WINDOWS_USE_VISUAL_STUDIO_FOLDERS})
+set_property(GLOBAL PROPERTY USE_FOLDERS ${WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS})
 
 if(NOT WITH_PYTHON_MODULE)
   set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT blender)
@@ -144,6 +144,11 @@ set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} /MT")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MT")
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /MT")
 
+#JMC is available on msvc 15.8 (1915) and up
+if(MSVC_VERSION GREATER 1914 AND NOT MSVC_CLANG)
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /JMC")
+endif()
+
 set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152 /INCREMENTAL:NO ")
 set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcmrt.lib /NODEFAULTLIB:msvcurt.lib /NODEFAULTLIB:msvcrtd.lib ")
 
@@ -166,8 +171,7 @@ if(NOT DEFINED LIBDIR)
     message(STATUS "64 bit compiler detected.")
     set(LIBDIR_BASE "win64")
   else()
-    message(STATUS "32 bit compiler detected.")
-    set(LIBDIR_BASE "windows")
+    message(FATAL_ERROR "32 bit compiler detected, blender no longer provides pre-build libraries for 32 bit windows, please set the LIBDIR cmake variable to your own library folder")
   endif()
   # Can be 1910..1912
   if(MSVC_VERSION GREATER 1919)
@@ -188,6 +192,12 @@ else()
 endif()
 if(NOT EXISTS "${LIBDIR}/")
   message(FATAL_ERROR "Windows requires pre-compiled libs at: '${LIBDIR}'")
+endif()
+
+# Mark libdir as system headers with a lower warn level, to resolve some warnings
+# that we have very little control over
+if(MSVC_VERSION GREATER_EQUAL 1914 AND NOT MSVC_CLANG)
+  add_compile_options(/experimental:external /external:templates- /external:I "${LIBDIR}" /external:W0)
 endif()
 
 # Add each of our libraries to our cmake_prefix_path so find_package() could work
@@ -339,6 +349,8 @@ if(WITH_PYTHON)
   string(REPLACE "." "" _PYTHON_VERSION_NO_DOTS ${PYTHON_VERSION})
   # Use shared libs for vc2008 and vc2010 until we actually have vc2010 libs
   set(PYTHON_LIBRARY ${LIBDIR}/python/lib/python${_PYTHON_VERSION_NO_DOTS}.lib)
+  set(PYTHON_LIBRARY_DEBUG ${LIBDIR}/python/lib/python${_PYTHON_VERSION_NO_DOTS}_d.lib)
+
   unset(_PYTHON_VERSION_NO_DOTS)
 
   # Shared includes for both vc2008 and vc2010
@@ -346,7 +358,7 @@ if(WITH_PYTHON)
 
   # uncached vars
   set(PYTHON_INCLUDE_DIRS "${PYTHON_INCLUDE_DIR}")
-  set(PYTHON_LIBRARIES  "${PYTHON_LIBRARY}")
+  set(PYTHON_LIBRARIES debug "${PYTHON_LIBRARY_DEBUG}" optimized "${PYTHON_LIBRARY}" )
 endif()
 
 if(WITH_BOOST)
@@ -373,9 +385,6 @@ if(WITH_BOOST)
     if(CMAKE_CL_64)
       set(BOOST_POSTFIX "vc140-mt-s-x64-1_68.lib")
       set(BOOST_DEBUG_POSTFIX "vc140-mt-sgd-x64-1_68.lib")
-    else()
-      set(BOOST_POSTFIX "vc140-mt-s-x32-1_68.lib")
-      set(BOOST_DEBUG_POSTFIX "vc140-mt-sgd-x32-1_68.lib")
     endif()
     set(BOOST_LIBRARIES
       optimized ${BOOST_LIBPATH}/libboost_date_time-${BOOST_POSTFIX}
@@ -635,7 +644,7 @@ if(WITH_CYCLES_EMBREE)
   endif()
 endif()
 
-if (WINDOWS_PYTHON_DEBUG)
+if(WINDOWS_PYTHON_DEBUG)
   # Include the system scripts in the blender_python_system_scripts project.
   FILE(GLOB_RECURSE inFiles "${CMAKE_SOURCE_DIR}/release/scripts/*.*" )
   ADD_CUSTOM_TARGET(blender_python_system_scripts SOURCES ${inFiles})

@@ -55,78 +55,96 @@ static void node_shader_exec_math(void *UNUSED(data),
       r = a * b;
       break;
     case NODE_MATH_DIVIDE: {
-      if (b == 0) /* We don't want to divide by zero. */
+      if (b == 0) { /* We don't want to divide by zero. */
         r = 0.0;
-      else
+      }
+      else {
         r = a / b;
+      }
       break;
     }
     case NODE_MATH_SIN: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
         r = sinf(a);
-      else
+      }
+      else {
         r = sinf(b);
+      }
       break;
     }
     case NODE_MATH_COS: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
         r = cosf(a);
-      else
+      }
+      else {
         r = cosf(b);
+      }
       break;
     }
     case NODE_MATH_TAN: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
         r = tanf(a);
-      else
+      }
+      else {
         r = tanf(b);
+      }
       break;
     }
     case NODE_MATH_ASIN: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) { /* This one only takes one input, so we've got to choose. */
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
         /* Can't do the impossible... */
-        if (a <= 1 && a >= -1)
+        if (a <= 1 && a >= -1) {
           r = asinf(a);
-        else
+        }
+        else {
           r = 0.0;
+        }
       }
       else {
         /* Can't do the impossible... */
-        if (b <= 1 && b >= -1)
+        if (b <= 1 && b >= -1) {
           r = asinf(b);
-        else
+        }
+        else {
           r = 0.0;
+        }
       }
       break;
     }
     case NODE_MATH_ACOS: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) { /* This one only takes one input, so we've got to choose. */
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
         /* Can't do the impossible... */
-        if (a <= 1 && a >= -1)
+        if (a <= 1 && a >= -1) {
           r = acosf(a);
-        else
+        }
+        else {
           r = 0.0;
+        }
       }
       else {
         /* Can't do the impossible... */
-        if (b <= 1 && b >= -1)
+        if (b <= 1 && b >= -1) {
           r = acosf(b);
-        else
+        }
+        else {
           r = 0.0;
+        }
       }
       break;
     }
     case NODE_MATH_ATAN: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
         r = atan(a);
-      else
+      }
+      else {
         r = atan(b);
+      }
       break;
     }
     case NODE_MATH_POW: {
@@ -137,7 +155,8 @@ static void node_shader_exec_math(void *UNUSED(data),
       else {
         float y_mod_1 = fabsf(fmodf(b, 1.0f));
 
-        /* if input value is not nearly an integer, fall back to zero, nicer than straight rounding */
+        /* if input value is not nearly an integer,
+         * fall back to zero, nicer than straight rounding. */
         if (y_mod_1 > 0.999f || y_mod_1 < 0.001f) {
           r = powf(a, floorf(b + 0.5f));
         }
@@ -150,53 +169,67 @@ static void node_shader_exec_math(void *UNUSED(data),
     }
     case NODE_MATH_LOG: {
       /* Don't want any imaginary numbers... */
-      if (a > 0 && b > 0)
+      if (a > 0 && b > 0) {
         r = log(a) / log(b);
-      else
+      }
+      else {
         r = 0.0;
+      }
       break;
     }
     case NODE_MATH_MIN: {
-      if (a < b)
+      if (a < b) {
         r = a;
-      else
+      }
+      else {
         r = b;
+      }
       break;
     }
     case NODE_MATH_MAX: {
-      if (a > b)
+      if (a > b) {
         r = a;
-      else
+      }
+      else {
         r = b;
+      }
       break;
     }
     case NODE_MATH_ROUND: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
         r = (a < 0) ? (int)(a - 0.5f) : (int)(a + 0.5f);
-      else
+      }
+      else {
         r = (b < 0) ? (int)(b - 0.5f) : (int)(b + 0.5f);
+      }
       break;
     }
     case NODE_MATH_LESS: {
-      if (a < b)
+      if (a < b) {
         r = 1.0f;
-      else
+      }
+      else {
         r = 0.0f;
+      }
       break;
     }
     case NODE_MATH_GREATER: {
-      if (a > b)
+      if (a > b) {
         r = 1.0f;
-      else
+      }
+      else {
         r = 0.0f;
+      }
       break;
     }
     case NODE_MATH_MOD: {
-      if (b == 0.0f)
+      if (b == 0.0f) {
         r = 0.0f;
-      else
+      }
+      else {
         r = fmod(a, b);
+      }
       break;
     }
     case NODE_MATH_ABS: {
@@ -208,42 +241,52 @@ static void node_shader_exec_math(void *UNUSED(data),
       break;
     }
     case NODE_MATH_FLOOR: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
         r = floorf(a);
-      else
+      }
+      else {
         r = floorf(b);
+      }
       break;
     }
     case NODE_MATH_CEIL: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
         r = ceilf(a);
-      else
+      }
+      else {
         r = ceilf(b);
+      }
       break;
     }
     case NODE_MATH_FRACT: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) /* This one only takes one input, so we've got to choose. */
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
         r = a - floorf(a);
-      else
+      }
+      else {
         r = b - floorf(b);
+      }
       break;
     }
     case NODE_MATH_SQRT: {
-      if (in[0]->hasinput ||
-          !in[1]->hasinput) { /* This one only takes one input, so we've got to choose. */
-        if (a > 0)
+      /* This one only takes one input, so we've got to choose. */
+      if (in[0]->hasinput || !in[1]->hasinput) {
+        if (a > 0) {
           r = sqrt(a);
-        else
+        }
+        else {
           r = 0.0;
+        }
       }
       else {
-        if (b > 0)
+        if (b > 0) {
           r = sqrt(b);
-        else
+        }
+        else {
           r = 0.0;
+        }
       }
       break;
     }

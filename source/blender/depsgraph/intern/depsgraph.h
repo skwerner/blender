@@ -73,7 +73,7 @@ enum RelationFlag {
   RELATION_FLAG_FLUSH_USER_EDIT_ONLY = (1 << 2),
   /* The relation can not be killed by the cyclic dependencies solver. */
   RELATION_FLAG_GODMODE = (1 << 4),
-  /* Relation will check existance before being added. */
+  /* Relation will check existence before being added. */
   RELATION_CHECK_BEFORE_ADD = (1 << 5),
 };
 
@@ -152,10 +152,17 @@ struct Depsgraph {
   /* Indicates which ID types were updated. */
   char id_type_updated[MAX_LIBARRAY];
 
+  /* Indicates type of IDs present in the depsgraph. */
+  char id_type_exist[MAX_LIBARRAY];
+
   /* Quick-Access Temp Data ............. */
 
   /* Nodes which have been tagged as "directly modified". */
   GSet *entry_tags;
+
+  /* Special entry tag for time source. Allows to tag invisible dependency graphs for update when
+   * scene frame changes, so then when dependency graph becomes visible it is on a proper state. */
+  bool need_update_time;
 
   /* Convenience Data ................... */
 
@@ -193,6 +200,12 @@ struct Depsgraph {
   string debug_name;
 
   bool debug_is_evaluating;
+
+  /* Is set to truth for dependency graph which are used for post-processing (compositor and
+   * sequencer).
+   * Such dependency graph needs all view layers (so render pipeline can access names), but it
+   * does not need any bases. */
+  bool is_render_pipeline_depsgraph;
 
   /* Cached list of colliders/effectors for collections and the scene
    * created along with relations, for fast lookup during evaluation. */

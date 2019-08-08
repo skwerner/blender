@@ -23,14 +23,16 @@ set(INC
   ../../blentranslation
   ../../bmesh
   ../../depsgraph
+  ../../draw
   ../../gpu
   ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../render/extern/include
   ../../windowmanager
-  ../../../../intern/guardedalloc
+  ../../../../intern/atomic
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS

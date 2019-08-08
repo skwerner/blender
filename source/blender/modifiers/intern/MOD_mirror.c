@@ -283,12 +283,13 @@ static Mesh *doMirrorOnAxis(MirrorModifierData *mmd,
     CustomData_copy_data(
         &result->ldata, &result->ldata, mp->loopstart, mp->loopstart + maxLoops, 1);
 
-    for (j = 1; j < mp->totloop; j++)
+    for (j = 1; j < mp->totloop; j++) {
       CustomData_copy_data(&result->ldata,
                            &result->ldata,
                            mp->loopstart + j,
                            mp->loopstart + maxLoops + mp->totloop - j,
                            1);
+    }
 
     ml2 = ml + mp->loopstart + maxLoops;
     e = ml2[0].e;
@@ -321,14 +322,78 @@ static Mesh *doMirrorOnAxis(MirrorModifierData *mmd,
       int j = maxLoops;
       dmloopuv += j; /* second set of loops only */
       for (; j-- > 0; dmloopuv++) {
-        if (do_mirr_u)
+        if (do_mirr_u) {
           dmloopuv->uv[0] = 1.0f - dmloopuv->uv[0] + mmd->uv_offset[0];
-        if (do_mirr_v)
+        }
+        if (do_mirr_v) {
           dmloopuv->uv[1] = 1.0f - dmloopuv->uv[1] + mmd->uv_offset[1];
+        }
         dmloopuv->uv[0] += mmd->uv_offset_copy[0];
         dmloopuv->uv[1] += mmd->uv_offset_copy[1];
       }
     }
+  }
+
+  /* handle custom split normals */
+  if (ob->type == OB_MESH && (((Mesh *)ob->data)->flag & ME_AUTOSMOOTH) &&
+      CustomData_has_layer(&result->ldata, CD_CUSTOMLOOPNORMAL)) {
+    const int totloop = result->totloop;
+    const int totpoly = result->totpoly;
+    float(*loop_normals)[3] = MEM_calloc_arrayN((size_t)totloop, sizeof(*loop_normals), __func__);
+    CustomData *ldata = &result->ldata;
+    short(*clnors)[2] = CustomData_get_layer(ldata, CD_CUSTOMLOOPNORMAL);
+    MLoopNorSpaceArray lnors_spacearr = {NULL};
+    float(*poly_normals)[3] = MEM_mallocN(sizeof(*poly_normals) * totpoly, __func__);
+
+    /* calculate custom normals into loop_normals, then mirror first half into second half */
+
+    BKE_mesh_calc_normals_poly(result->mvert,
+                               NULL,
+                               result->totvert,
+                               result->mloop,
+                               result->mpoly,
+                               totloop,
+                               totpoly,
+                               poly_normals,
+                               false);
+
+    BKE_mesh_normals_loop_split(result->mvert,
+                                result->totvert,
+                                result->medge,
+                                result->totedge,
+                                result->mloop,
+                                loop_normals,
+                                totloop,
+                                result->mpoly,
+                                poly_normals,
+                                totpoly,
+                                true,
+                                mesh->smoothresh,
+                                &lnors_spacearr,
+                                clnors,
+                                NULL);
+
+    /* mirroring has to account for loops being reversed in polys in second half */
+    mp = result->mpoly;
+    for (i = 0; i < maxPolys; i++, mp++) {
+      MPoly *mpmirror = result->mpoly + maxPolys + i;
+      int j;
+
+      for (j = mp->loopstart; j < mp->loopstart + mp->totloop; j++) {
+        int mirrorj = mpmirror->loopstart;
+        if (j > mp->loopstart) {
+          mirrorj += mpmirror->totloop - (j - mp->loopstart);
+        }
+        copy_v3_v3(loop_normals[mirrorj], loop_normals[j]);
+        loop_normals[mirrorj][axis] = -loop_normals[j][axis];
+        BKE_lnor_space_custom_normal_to_data(
+            lnors_spacearr.lspacearr[mirrorj], loop_normals[mirrorj], clnors[mirrorj]);
+      }
+    }
+
+    MEM_freeN(poly_normals);
+    MEM_freeN(loop_normals);
+    BKE_lnor_spacearr_free(&lnors_spacearr);
   }
 
   /* handle vgroup stuff */
@@ -342,10 +407,12 @@ static Mesh *doMirrorOnAxis(MirrorModifierData *mmd,
     if (flip_map) {
       for (i = 0; i < maxVerts; dvert++, i++) {
         /* merged vertices get both groups, others get flipped */
-        if (do_vtargetmap && (vtargetmap[i] != -1))
+        if (do_vtargetmap && (vtargetmap[i] != -1)) {
           defvert_flip_merged(dvert, flip_map, flip_map_len);
-        else
+        }
+        else {
           defvert_flip(dvert, flip_map, flip_map_len);
+        }
       }
 
       MEM_freeN(flip_map);

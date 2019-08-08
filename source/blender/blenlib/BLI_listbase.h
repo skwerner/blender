@@ -27,8 +27,8 @@
 #include "BLI_compiler_attrs.h"
 #include "BLI_utildefines.h"
 #include "DNA_listBase.h"
-//struct ListBase;
-//struct LinkData;
+// struct ListBase;
+// struct LinkData;
 
 #ifdef __cplusplus
 extern "C" {
@@ -171,7 +171,7 @@ struct LinkData *BLI_genericNodeN(void *data);
 #define LISTBASE_FOREACH(type, var, list) \
   for (type var = (type)((list)->first); var != NULL; var = (type)(((Link *)(var))->next))
 
-/** A verion of #LISTBASE_FOREACH that supports removing the item we're looping over. */
+/** A version of #LISTBASE_FOREACH that supports removing the item we're looping over. */
 #define LISTBASE_FOREACH_MUTABLE(type, var, list) \
   for (type var = (type)((list)->first), *var##_iter_next; \
        ((var != NULL) ? ((void)(var##_iter_next = (type)(((Link *)(var))->next)), 1) : 0); \

@@ -30,13 +30,14 @@ struct CollectionPropertyIterator;
 struct ContainerRNA;
 struct FunctionRNA;
 struct GHash;
-struct IDOverrideStatic;
-struct IDOverrideStaticProperty;
-struct IDOverrideStaticPropertyOperation;
+struct IDOverrideLibrary;
+struct IDOverrideLibraryProperty;
+struct IDOverrideLibraryPropertyOperation;
 struct IDProperty;
 struct Main;
 struct PointerRNA;
 struct PropertyRNA;
+struct ReportList;
 struct Scene;
 struct StructRNA;
 struct bContext;
@@ -85,7 +86,9 @@ typedef const EnumPropertyItem *(*PropEnumItemFunc)(struct bContext *C,
                                                     bool *r_free);
 typedef PointerRNA (*PropPointerGetFunc)(struct PointerRNA *ptr);
 typedef StructRNA *(*PropPointerTypeFunc)(struct PointerRNA *ptr);
-typedef void (*PropPointerSetFunc)(struct PointerRNA *ptr, const PointerRNA value);
+typedef void (*PropPointerSetFunc)(struct PointerRNA *ptr,
+                                   const PointerRNA value,
+                                   struct ReportList *reports);
 typedef bool (*PropPointerPollFunc)(struct PointerRNA *ptr, const PointerRNA value);
 typedef bool (*PropPointerPollFuncPy)(struct PointerRNA *ptr,
                                       const PointerRNA value,
@@ -156,8 +159,9 @@ typedef void (*PropEnumSetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *pr
 /**
  * If \a override is NULL, merely do comparison between prop_a from ptr_a and prop_b from ptr_b,
  * following comparison mode given.
- * If \a override and \a rna_path are not NULL, it will add a new override operation for overridable properties
- * that differ and have not yet been overridden (and set accordingly \a r_override_changed if given).
+ * If \a override and \a rna_path are not NULL, it will add a new override operation for
+ * overridable properties that differ and have not yet been overridden
+ * (and set accordingly \a r_override_changed if given).
  *
  * \note Given PropertyRNA are final (in case of IDProps...).
  * \note In non-array cases, \a len values are 0.
@@ -171,7 +175,7 @@ typedef int (*RNAPropOverrideDiff)(struct Main *bmain,
                                    const int len_a,
                                    const int len_b,
                                    const int mode,
-                                   struct IDOverrideStatic *override,
+                                   struct IDOverrideLibrary *override,
                                    const char *rna_path,
                                    const int flags,
                                    bool *r_override_changed);
@@ -182,8 +186,9 @@ typedef int (*RNAPropOverrideDiff)(struct Main *bmain,
  *
  * \note Given PropertyRNA are final (in case of IDProps...).
  * \note In non-array cases, \a len values are 0.
- * \note Might change given override operation (e.g. change 'add' one into 'sub'), in case computed storage value
- *       is out of range (or even change it to basic 'set' operation if nothing else works).
+ * \note Might change given override operation (e.g. change 'add' one into 'sub'),
+ * in case computed storage value is out of range
+ * (or even change it to basic 'set' operation if nothing else works).
  */
 typedef bool (*RNAPropOverrideStore)(struct Main *bmain,
                                      struct PointerRNA *ptr_local,
@@ -195,7 +200,7 @@ typedef bool (*RNAPropOverrideStore)(struct Main *bmain,
                                      const int len_local,
                                      const int len_reference,
                                      const int len_storage,
-                                     struct IDOverrideStaticPropertyOperation *opop);
+                                     struct IDOverrideLibraryPropertyOperation *opop);
 
 /**
  * Apply given override operation from src to dst (using value from storage as second operand
@@ -217,7 +222,7 @@ typedef bool (*RNAPropOverrideApply)(struct Main *bmain,
                                      struct PointerRNA *ptr_item_dst,
                                      struct PointerRNA *ptr_item_src,
                                      struct PointerRNA *ptr_item_storage,
-                                     struct IDOverrideStaticPropertyOperation *opop);
+                                     struct IDOverrideLibraryPropertyOperation *opop);
 
 /* Container - generic abstracted container of RNA properties */
 typedef struct ContainerRNA {
@@ -431,8 +436,8 @@ typedef struct PointerPropertyRNA {
   PropPointerGetFunc get;
   PropPointerSetFunc set;
   PropPointerTypeFunc typef;
-  PropPointerPollFunc
-      poll; /* unlike operators, 'set' can still run if poll fails, used for filtering display */
+  /** unlike operators, 'set' can still run if poll fails, used for filtering display. */
+  PropPointerPollFunc poll;
 
   struct StructRNA *type;
 } PointerPropertyRNA;
@@ -460,8 +465,8 @@ struct StructRNA {
   /* unique identifier, keep after 'cont' */
   const char *identifier;
 
-  /* python type, this is a subtype of pyrna_struct_Type but used so each struct can have its own type
-   * which is useful for subclassing RNA */
+  /** Python type, this is a subtype of #pyrna_struct_Type
+   * but used so each struct can have its own type which is useful for subclassing RNA. */
   void *py_type;
   void *blender_type;
 

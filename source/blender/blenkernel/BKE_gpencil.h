@@ -86,7 +86,8 @@ void BKE_gpencil_make_local(struct Main *bmain, struct bGPdata *gpd, const bool 
 void BKE_gpencil_frame_delete_laststroke(struct bGPDlayer *gpl, struct bGPDframe *gpf);
 
 /* materials */
-void BKE_gpencil_material_index_remove(struct bGPdata *gpd, int index);
+void BKE_gpencil_material_index_reassign(struct bGPdata *gpd, int totcol, int index);
+bool BKE_gpencil_material_index_used(struct bGPdata *gpd, int index);
 void BKE_gpencil_material_remap(struct bGPdata *gpd,
                                 const unsigned int *remap,
                                 unsigned int remap_len);
@@ -196,6 +197,10 @@ void BKE_gpencil_simplify_stroke(struct bGPDstroke *gps, float factor);
 void BKE_gpencil_simplify_fixed(struct bGPDstroke *gps);
 void BKE_gpencil_subdivide(struct bGPDstroke *gps, int level, int flag);
 bool BKE_gpencil_trim_stroke(struct bGPDstroke *gps);
+void BKE_gpencil_merge_distance_stroke(struct bGPDframe *gpf,
+                                       struct bGPDstroke *gps,
+                                       const float threshold,
+                                       const bool use_unselected);
 
 void BKE_gpencil_stroke_2d_flat(const struct bGPDspoint *points,
                                 int totpoints,
@@ -215,6 +220,8 @@ bool BKE_gpencil_smooth_stroke(struct bGPDstroke *gps, int i, float inf);
 bool BKE_gpencil_smooth_stroke_strength(struct bGPDstroke *gps, int point_index, float influence);
 bool BKE_gpencil_smooth_stroke_thickness(struct bGPDstroke *gps, int point_index, float influence);
 bool BKE_gpencil_smooth_stroke_uv(struct bGPDstroke *gps, int point_index, float influence);
+bool BKE_gpencil_close_stroke(struct bGPDstroke *gps);
+void BKE_gpencil_dissolve_points(struct bGPDframe *gpf, struct bGPDstroke *gps, const short tag);
 
 void BKE_gpencil_get_range_selected(struct bGPDlayer *gpl, int *r_initframe, int *r_endframe);
 float BKE_gpencil_multiframe_falloff_calc(

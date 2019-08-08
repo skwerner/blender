@@ -82,7 +82,7 @@ static SpaceLink *text_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scen
 
   BLI_addtail(&stext->regionbase, ar);
   ar->regiontype = RGN_TYPE_UI;
-  ar->alignment = RGN_ALIGN_LEFT;
+  ar->alignment = RGN_ALIGN_RIGHT;
   ar->flag = RGN_FLAG_HIDDEN;
 
   /* main region */
@@ -132,16 +132,18 @@ static void text_listener(wmWindow *UNUSED(win),
       /* check if active text was changed, no need to redraw if text isn't active
        * (reference == NULL) means text was unlinked, should update anyway for this
        * case -- no way to know was text active before unlinking or not */
-      if (wmn->reference && wmn->reference != st->text)
+      if (wmn->reference && wmn->reference != st->text) {
         break;
+      }
 
       switch (wmn->data) {
         case ND_DISPLAY:
           ED_area_tag_redraw(sa);
           break;
         case ND_CURSOR:
-          if (st->text && st->text == wmn->reference)
+          if (st->text && st->text == wmn->reference) {
             text_scroll_to_cursor__area(st, sa, true);
+          }
 
           ED_area_tag_redraw(sa);
           break;
@@ -161,16 +163,18 @@ static void text_listener(wmWindow *UNUSED(win),
           ED_area_tag_redraw(sa);
           break;
         case NA_SELECTED:
-          if (st->text && st->text == wmn->reference)
+          if (st->text && st->text == wmn->reference) {
             text_scroll_to_cursor__area(st, sa, true);
+          }
 
           break;
       }
 
       break;
     case NC_SPACE:
-      if (wmn->data == ND_SPACE_TEXT)
+      if (wmn->data == ND_SPACE_TEXT) {
         ED_area_tag_redraw(sa);
+      }
       break;
   }
 }
@@ -193,8 +197,7 @@ static void text_operatortypes(void)
   WM_operatortype_append(TEXT_OT_duplicate_line);
 
   WM_operatortype_append(TEXT_OT_convert_whitespace);
-  WM_operatortype_append(TEXT_OT_uncomment);
-  WM_operatortype_append(TEXT_OT_comment);
+  WM_operatortype_append(TEXT_OT_comment_toggle);
   WM_operatortype_append(TEXT_OT_unindent);
   WM_operatortype_append(TEXT_OT_indent);
 
@@ -218,8 +221,6 @@ static void text_operatortypes(void)
 
   WM_operatortype_append(TEXT_OT_line_break);
   WM_operatortype_append(TEXT_OT_insert);
-
-  WM_operatortype_append(TEXT_OT_properties);
 
   WM_operatortype_append(TEXT_OT_find);
   WM_operatortype_append(TEXT_OT_find_set_selected);
@@ -252,7 +253,9 @@ static int text_context(const bContext *C, const char *member, bContextDataResul
     return 1;
   }
   else if (CTX_data_equals(member, "edit_text")) {
-    CTX_data_id_pointer_set(result, &st->text->id);
+    if (st->text != NULL) {
+      CTX_data_id_pointer_set(result, &st->text->id);
+    }
     return 1;
   }
 
@@ -271,9 +274,9 @@ static void text_main_region_init(wmWindowManager *wm, ARegion *ar)
 
   /* own keymap */
   keymap = WM_keymap_ensure(wm->defaultconf, "Text Generic", SPACE_TEXT, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
   keymap = WM_keymap_ensure(wm->defaultconf, "Text", SPACE_TEXT, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
   /* add drop boxes */
   lb = WM_dropboxmap_find("Text", SPACE_TEXT, RGN_TYPE_WINDOW);
@@ -285,7 +288,7 @@ static void text_main_region_draw(const bContext *C, ARegion *ar)
 {
   /* draw entirely, view changes should be handled here */
   SpaceText *st = CTX_wm_space_text(C);
-  //View2D *v2d = &ar->v2d;
+  // View2D *v2d = &ar->v2d;
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
@@ -392,7 +395,7 @@ static void text_properties_region_init(wmWindowManager *wm, ARegion *ar)
 
   /* own keymaps */
   keymap = WM_keymap_ensure(wm->defaultconf, "Text Generic", SPACE_TEXT, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 }
 
 static void text_properties_region_draw(const bContext *C, ARegion *ar)

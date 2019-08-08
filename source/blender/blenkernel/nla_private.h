@@ -163,19 +163,20 @@ typedef struct NlaKeyframingContext {
 float nlastrip_get_frame(NlaStrip *strip, float cframe, short mode);
 
 /* --------------- NLA Evaluation (very-private stuff) ----------------------- */
-/* these functions are only defined here to avoid problems with the order in which they get defined... */
+/* these functions are only defined here to avoid problems with the order
+ * in which they get defined. */
 
 NlaEvalStrip *nlastrips_ctime_get_strip(
-    struct Depsgraph *depsgraph, ListBase *list, ListBase *strips, short index, float ctime);
-void nlastrip_evaluate(struct Depsgraph *depsgraph,
-                       PointerRNA *ptr,
+    ListBase *list, ListBase *strips, short index, float ctime, const bool flush_to_original);
+void nlastrip_evaluate(PointerRNA *ptr,
                        NlaEvalData *channels,
                        ListBase *modifiers,
                        NlaEvalStrip *nes,
-                       NlaEvalSnapshot *snapshot);
-void nladata_flush_channels(struct Depsgraph *depsgraph,
-                            PointerRNA *ptr,
+                       NlaEvalSnapshot *snapshot,
+                       const bool flush_to_original);
+void nladata_flush_channels(PointerRNA *ptr,
                             NlaEvalData *channels,
-                            NlaEvalSnapshot *snapshot);
+                            NlaEvalSnapshot *snapshot,
+                            const bool flush_to_original);
 
 #endif /* __NLA_PRIVATE_H__ */

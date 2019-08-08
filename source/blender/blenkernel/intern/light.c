@@ -56,7 +56,7 @@ void BKE_light_init(Light *la)
   la->att2 = 1.0f;
   la->mode = LA_SHADOW;
   la->bufsize = 512;
-  la->clipsta = 0.5f;
+  la->clipsta = 0.05f;
   la->clipend = 40.0f;
   la->bleedexp = 2.5f;
   la->samp = 3;
@@ -69,7 +69,7 @@ void BKE_light_init(Light *la)
   la->coeff_const = 1.0f;
   la->coeff_lin = 0.0f;
   la->coeff_quad = 0.0f;
-  la->curfalloff = curvemapping_add(1, 0.0f, 1.0f, 1.0f, 0.0f);
+  la->curfalloff = BKE_curvemapping_add(1, 0.0f, 1.0f, 1.0f, 0.0f);
   la->cascade_max_dist = 200.0f;
   la->cascade_count = 4;
   la->cascade_exponent = 0.8f;
@@ -80,8 +80,9 @@ void BKE_light_init(Light *la)
   la->contact_thickness = 0.2f;
   la->spec_fac = 1.0f;
   la->att_dist = 40.0f;
+  la->sun_angle = DEG2RADF(0.526f);
 
-  curvemapping_initialize(la->curfalloff);
+  BKE_curvemapping_initialize(la->curfalloff);
 }
 
 Light *BKE_light_add(Main *bmain, const char *name)
@@ -96,8 +97,10 @@ Light *BKE_light_add(Main *bmain, const char *name)
 }
 
 /**
- * Only copy internal data of Light ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Light ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -105,7 +108,7 @@ Light *BKE_light_add(Main *bmain, const char *name)
  */
 void BKE_light_copy_data(Main *bmain, Light *la_dst, const Light *la_src, const int flag)
 {
-  la_dst->curfalloff = curvemapping_copy(la_src->curfalloff);
+  la_dst->curfalloff = BKE_curvemapping_copy(la_src->curfalloff);
 
   if (la_src->nodetree) {
     /* Note: nodetree is *not* in bmain, however this specific case is handled at lower level
@@ -142,10 +145,11 @@ Light *BKE_light_localize(Light *la)
 
   Light *lan = BKE_libblock_copy_for_localize(&la->id);
 
-  lan->curfalloff = curvemapping_copy(la->curfalloff);
+  lan->curfalloff = BKE_curvemapping_copy(la->curfalloff);
 
-  if (la->nodetree)
+  if (la->nodetree) {
     lan->nodetree = ntreeLocalize(la->nodetree);
+  }
 
   lan->preview = NULL;
 
@@ -163,7 +167,7 @@ void BKE_light_free(Light *la)
 {
   BKE_animdata_free((ID *)la, false);
 
-  curvemapping_free(la->curfalloff);
+  BKE_curvemapping_free(la->curfalloff);
 
   /* is no lib link block, but light extension */
   if (la->nodetree) {

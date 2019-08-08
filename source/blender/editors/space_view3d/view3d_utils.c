@@ -86,21 +86,6 @@ void ED_view3d_background_color_get(const Scene *scene, const View3D *v3d, float
   UI_GetThemeColor3fv(TH_BACK, r_color);
 }
 
-void ED_view3d_cursor3d_calc_mat3(const Scene *scene, float mat[3][3])
-{
-  const View3DCursor *cursor = &scene->cursor;
-  BKE_scene_cursor_rot_to_mat3(cursor, mat);
-}
-
-void ED_view3d_cursor3d_calc_mat4(const Scene *scene, float mat[4][4])
-{
-  const View3DCursor *cursor = &scene->cursor;
-  float mat3[3][3];
-  BKE_scene_cursor_rot_to_mat3(cursor, mat3);
-  copy_m4_m3(mat, mat3);
-  copy_v3_v3(mat[3], cursor->location);
-}
-
 Camera *ED_view3d_camera_data_get(View3D *v3d, RegionView3D *rv3d)
 {
   /* establish the camera object,
@@ -1143,7 +1128,8 @@ float ED_view3d_radius_to_dist_ortho(const float lens, const float radius)
  * \param ar: Can be NULL if \a use_aspect is false.
  * \param persp: Allow the caller to tell what kind of perspective to use (ortho/view/camera)
  * \param use_aspect: Increase the distance to account for non 1:1 view aspect.
- * \param radius: The radius will be fitted exactly, typically pre-scaled by a margin (#VIEW3D_MARGIN).
+ * \param radius: The radius will be fitted exactly,
+ * typically pre-scaled by a margin (#VIEW3D_MARGIN).
  */
 float ED_view3d_radius_to_dist(const View3D *v3d,
                                const ARegion *ar,
@@ -1273,6 +1259,36 @@ void ED_view3d_distance_set(RegionView3D *rv3d, const float dist)
   sub_v3_v3(rv3d->ofs, tvec);
 
   rv3d->dist = dist;
+}
+
+/**
+ * Change the distance & offset to match the depth of \a dist_co along the view axis.
+ *
+ * \param dist_co: A world-space location to use for the new depth.
+ * \param dist_min: Resulting distances below this will be ignored.
+ * \return Success if the distance was set.
+ */
+bool ED_view3d_distance_set_from_location(RegionView3D *rv3d,
+                                          const float dist_co[3],
+                                          const float dist_min)
+{
+  float viewinv[4];
+  invert_qt_qt_normalized(viewinv, rv3d->viewquat);
+
+  float tvec[3] = {0.0f, 0.0f, -1.0f};
+  mul_qt_v3(viewinv, tvec);
+
+  float dist_co_local[3];
+  negate_v3_v3(dist_co_local, rv3d->ofs);
+  sub_v3_v3v3(dist_co_local, dist_co, dist_co_local);
+  const float delta = dot_v3v3(tvec, dist_co_local);
+  const float dist_new = rv3d->dist + delta;
+  if (dist_new >= dist_min) {
+    madd_v3_v3fl(rv3d->ofs, tvec, -delta);
+    rv3d->dist = dist_new;
+    return true;
+  }
+  return false;
 }
 
 /** \} */
@@ -1435,7 +1451,8 @@ void ED_view3d_from_object(const Object *ob, float ofs[3], float quat[4], float 
 
 /**
  * Set the object transformation from RegionView3D members.
- * \param depsgraph: The depsgraph to get the evaluated object parent for the transformation calculation.
+ * \param depsgraph: The depsgraph to get the evaluated object parent
+ * for the transformation calculation.
  * \param ob: The object which has the transformation assigned.
  * \param ofs: The view offset, normally from RegionView3D.ofs.
  * \param quat: The view rotation, quaternion normally from RegionView3D.viewquat.

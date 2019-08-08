@@ -131,8 +131,9 @@ static int material_slot_add_exec(bContext *C, wmOperator *UNUSED(op))
   Main *bmain = CTX_data_main(C);
   Object *ob = ED_object_context(C);
 
-  if (!ob)
+  if (!ob) {
     return OPERATOR_CANCELLED;
+  }
 
   BKE_object_material_slot_add(bmain, ob);
 
@@ -168,8 +169,9 @@ static int material_slot_remove_exec(bContext *C, wmOperator *op)
 {
   Object *ob = ED_object_context(C);
 
-  if (!ob)
+  if (!ob) {
     return OPERATOR_CANCELLED;
+  }
 
   /* Removing material slots in edit mode screws things up, see bug #21822.*/
   if (ob == CTX_data_edit_object(C)) {
@@ -308,7 +310,7 @@ static int material_slot_de_select(bContext *C, bool select)
     }
     else {
       /* Find the first matching material.
-       * Note: there may be multiple but thats not a common use case. */
+       * Note: there may be multiple but that's not a common use case. */
       for (short i = 0; i < ob->totcol; i++) {
         const Material *mat = give_current_material(ob, i + 1);
         if (mat_active == mat) {
@@ -366,10 +368,12 @@ static int material_slot_de_select(bContext *C, bool select)
               while (a--) {
                 if (bp->hide == 0) {
                   changed = true;
-                  if (select)
+                  if (select) {
                     bp->f1 |= SELECT;
-                  else
+                  }
+                  else {
                     bp->f1 &= ~SELECT;
+                  }
                 }
                 bp++;
               }
@@ -435,13 +439,15 @@ static int material_slot_copy_exec(bContext *C, wmOperator *UNUSED(op))
   Object *ob = ED_object_context(C);
   Material ***matar;
 
-  if (!ob || !(matar = give_matarar(ob)))
+  if (!ob || !(matar = give_matarar(ob))) {
     return OPERATOR_CANCELLED;
+  }
 
   CTX_DATA_BEGIN (C, Object *, ob_iter, selected_editable_objects) {
     if (ob != ob_iter && give_matarar(ob_iter)) {
-      if (ob->data != ob_iter->data)
+      if (ob->data != ob_iter->data) {
         assign_matarar(bmain, ob_iter, matar, ob->totcol);
+      }
 
       if (ob_iter->totcol == ob->totcol) {
         ob_iter->actcol = ob->actcol;
@@ -543,6 +549,73 @@ void OBJECT_OT_material_slot_move(wmOperatorType *ot)
                "Direction to move the active material towards");
 }
 
+static int material_slot_remove_unused_exec(bContext *C, wmOperator *op)
+{
+  Object *ob = CTX_data_active_object(C);
+
+  if (!ob) {
+    return OPERATOR_CANCELLED;
+  }
+
+  /* Removing material slots in edit mode screws things up, see bug #21822.*/
+  if (ob == CTX_data_edit_object(C)) {
+    BKE_report(op->reports, RPT_ERROR, "Unable to remove material slot in edit mode");
+    return OPERATOR_CANCELLED;
+  }
+
+  int actcol = ob->actcol;
+
+  int removed = 0;
+  for (int slot = 1; slot <= ob->totcol; slot++) {
+    while (slot <= ob->totcol && !BKE_object_material_slot_used(ob->data, slot)) {
+      ob->actcol = slot;
+      BKE_object_material_slot_remove(CTX_data_main(C), ob);
+
+      if (actcol >= slot) {
+        actcol--;
+      }
+
+      removed++;
+    }
+  }
+
+  ob->actcol = actcol;
+
+  if (!removed) {
+    return OPERATOR_CANCELLED;
+  }
+
+  BKE_reportf(op->reports, RPT_INFO, "Removed %d slots", removed);
+
+  if (ob->mode & OB_MODE_TEXTURE_PAINT) {
+    Scene *scene = CTX_data_scene(C);
+    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
+  }
+
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
+  WM_event_add_notifier(C, NC_OBJECT | ND_OB_SHADING, ob);
+  WM_event_add_notifier(C, NC_MATERIAL | ND_SHADING_PREVIEW, ob);
+
+  return OPERATOR_FINISHED;
+}
+
+void OBJECT_OT_material_slot_remove_unused(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Remove Unused Slots";
+  ot->idname = "OBJECT_OT_material_slot_remove_unused";
+  ot->description = "Remove unused material slots";
+
+  /* api callbacks */
+  ot->exec = material_slot_remove_unused_exec;
+  ot->poll = ED_operator_object_active_editable;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+}
+
 /********************** new material operator *********************/
 
 static int new_material_exec(bContext *C, wmOperator *UNUSED(op))
@@ -589,7 +662,7 @@ static int new_material_exec(bContext *C, wmOperator *UNUSED(op))
     id_us_min(&ma->id);
 
     RNA_id_pointer_create(&ma->id, &idptr);
-    RNA_property_pointer_set(&ptr, prop, idptr);
+    RNA_property_pointer_set(&ptr, prop, idptr, NULL);
     RNA_property_update(C, &ptr, prop);
   }
 
@@ -638,7 +711,7 @@ static int new_texture_exec(bContext *C, wmOperator *UNUSED(op))
     id_us_min(&tex->id);
 
     RNA_id_pointer_create(&tex->id, &idptr);
-    RNA_property_pointer_set(&ptr, prop, idptr);
+    RNA_property_pointer_set(&ptr, prop, idptr, NULL);
     RNA_property_update(C, &ptr, prop);
   }
 
@@ -689,7 +762,7 @@ static int new_world_exec(bContext *C, wmOperator *UNUSED(op))
     id_us_min(&wo->id);
 
     RNA_id_pointer_create(&wo->id, &idptr);
-    RNA_property_pointer_set(&ptr, prop, idptr);
+    RNA_property_pointer_set(&ptr, prop, idptr, NULL);
     RNA_property_update(C, &ptr, prop);
   }
 
@@ -853,7 +926,7 @@ static int light_cache_bake_exec(bContext *C, wmOperator *op)
   EEVEE_lightbake_job_data_free(rj);
 
   // no redraw needed, we leave state as we entered it
-  ED_update_for_newframe(bmain, CTX_data_depsgraph(C));
+  ED_update_for_newframe(bmain, CTX_data_depsgraph_pointer(C));
 
   WM_event_add_notifier(C, NC_SCENE | NA_EDITED, scene);
 
@@ -1026,8 +1099,9 @@ static int render_view_remove_exec(bContext *C, wmOperator *UNUSED(op))
   Scene *scene = CTX_data_scene(C);
   SceneRenderView *rv = BLI_findlink(&scene->r.views, scene->r.actview);
 
-  if (!BKE_scene_remove_render_view(scene, rv))
+  if (!BKE_scene_remove_render_view(scene, rv)) {
     return OPERATOR_CANCELLED;
+  }
 
   WM_event_add_notifier(C, NC_SCENE | ND_RENDER_OPTIONS, scene);
 
@@ -1544,14 +1618,18 @@ void SCENE_OT_freestyle_geometry_modifier_add(wmOperatorType *ot)
 
 static int freestyle_get_modifier_type(PointerRNA *ptr)
 {
-  if (RNA_struct_is_a(ptr->type, &RNA_LineStyleColorModifier))
+  if (RNA_struct_is_a(ptr->type, &RNA_LineStyleColorModifier)) {
     return LS_MODIFIER_TYPE_COLOR;
-  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleAlphaModifier))
+  }
+  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleAlphaModifier)) {
     return LS_MODIFIER_TYPE_ALPHA;
-  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleThicknessModifier))
+  }
+  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleThicknessModifier)) {
     return LS_MODIFIER_TYPE_THICKNESS;
-  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleGeometryModifier))
+  }
+  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleGeometryModifier)) {
     return LS_MODIFIER_TYPE_GEOMETRY;
+  }
   return -1;
 }
 
@@ -1831,8 +1909,9 @@ static int copy_material_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Material *ma = CTX_data_pointer_get_type(C, "material", &RNA_Material).data;
 
-  if (ma == NULL)
+  if (ma == NULL) {
     return OPERATOR_CANCELLED;
+  }
 
   copy_matcopybuf(CTX_data_main(C), ma);
 
@@ -1858,8 +1937,9 @@ static int paste_material_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Material *ma = CTX_data_pointer_get_type(C, "material", &RNA_Material).data;
 
-  if (ma == NULL)
+  if (ma == NULL) {
     return OPERATOR_CANCELLED;
+  }
 
   paste_matcopybuf(CTX_data_main(C), ma);
 
@@ -1919,8 +1999,9 @@ static void paste_mtex_copybuf(ID *id)
 {
   MTex **mtex = NULL;
 
-  if (mtexcopied == 0 || mtexcopybuf.tex == NULL)
+  if (mtexcopied == 0 || mtexcopybuf.tex == NULL) {
     return;
+  }
 
   switch (GS(id->name)) {
     case ID_PA:
@@ -1999,19 +2080,25 @@ static int paste_mtex_exec(bContext *C, wmOperator *UNUSED(op))
     FreestyleLineStyle *linestyle =
         CTX_data_pointer_get_type(C, "line_style", &RNA_FreestyleLineStyle).data;
 
-    if (ma)
+    if (ma) {
       id = &ma->id;
-    else if (la)
+    }
+    else if (la) {
       id = &la->id;
-    else if (wo)
+    }
+    else if (wo) {
       id = &wo->id;
-    else if (psys)
+    }
+    else if (psys) {
       id = &psys->part->id;
-    else if (linestyle)
+    }
+    else if (linestyle) {
       id = &linestyle->id;
+    }
 
-    if (id == NULL)
+    if (id == NULL) {
       return OPERATOR_CANCELLED;
+    }
   }
 
   paste_mtex_copybuf(id);

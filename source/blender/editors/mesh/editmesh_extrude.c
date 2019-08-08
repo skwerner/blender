@@ -36,6 +36,7 @@
 #include "RNA_access.h"
 
 #include "WM_types.h"
+#include "WM_api.h"
 
 #include "ED_mesh.h"
 #include "ED_screen.h"
@@ -347,28 +348,37 @@ static bool edbm_extrude_mesh(Object *obedit, BMEditMesh *em, wmOperator *op)
   bool changed = false;
 
   if (em->selectmode & SCE_SELECT_VERTEX) {
-    if (em->bm->totvertsel == 0)
+    if (em->bm->totvertsel == 0) {
       nr = NONE;
-    else if (em->bm->totvertsel == 1)
+    }
+    else if (em->bm->totvertsel == 1) {
       nr = VERT_ONLY;
-    else if (em->bm->totedgesel == 0)
+    }
+    else if (em->bm->totedgesel == 0) {
       nr = VERT_ONLY;
-    else
+    }
+    else {
       nr = ELEM_FLAG;
+    }
   }
   else if (em->selectmode & SCE_SELECT_EDGE) {
-    if (em->bm->totedgesel == 0)
+    if (em->bm->totedgesel == 0) {
       nr = NONE;
-    else if (em->bm->totfacesel == 0)
+    }
+    else if (em->bm->totfacesel == 0) {
       nr = EDGE_ONLY;
-    else
+    }
+    else {
       nr = ELEM_FLAG;
+    }
   }
   else {
-    if (em->bm->totfacesel == 0)
+    if (em->bm->totfacesel == 0) {
       nr = NONE;
-    else
+    }
+    else {
       nr = ELEM_FLAG;
+    }
   }
 
   switch (nr) {
@@ -431,7 +441,7 @@ void MESH_OT_extrude_region(wmOperatorType *ot)
   ot->description = "Extrude region of faces";
 
   /* api callbacks */
-  //ot->invoke = mesh_extrude_region_invoke;
+  // ot->invoke = mesh_extrude_region_invoke;
   ot->exec = edbm_extrude_region_exec;
   ot->poll = ED_operator_editmesh;
 
@@ -648,6 +658,7 @@ void MESH_OT_extrude_faces_indiv(wmOperatorType *ot)
 
 static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   BMVert *v1;
   BMIter iter;
@@ -809,7 +820,7 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
 
         /* also project the source, for retopo workflow */
         if (use_proj) {
-          EDBM_project_snap_verts(C, vc.ar, vc.em);
+          EDBM_project_snap_verts(C, depsgraph, vc.ar, vc.em);
         }
       }
 
@@ -842,7 +853,7 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
     }
 
     if (use_proj) {
-      EDBM_project_snap_verts(C, vc.ar, vc.em);
+      EDBM_project_snap_verts(C, depsgraph, vc.ar, vc.em);
     }
 
     /* This normally happens when pushing undo but modal operators
@@ -851,6 +862,9 @@ static int edbm_dupli_extrude_cursor_invoke(bContext *C, wmOperator *op, const w
     EDBM_mesh_normals_update(vc.em);
 
     EDBM_update_generic(vc.em, true, true);
+
+    WM_event_add_notifier(C, NC_GEOM | ND_DATA, obedit->data);
+    WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
   }
   MEM_freeN(objects);
 

@@ -15,12 +15,12 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- * Reorganised mar-01 nzc
- * Some really low-level file thingies.
  */
 
 /** \file
  * \ingroup bli
+ *
+ * Some really low-level file operations.
  */
 
 #include <sys/types.h>
@@ -52,7 +52,9 @@
 #ifdef WIN32
 #  include <io.h>
 #  include <direct.h>
+#  include <stdbool.h>
 #  include "BLI_winstuff.h"
+#  include "BLI_string_utf8.h"
 #  include "utfconv.h"
 #else
 #  include <sys/ioctl.h>
@@ -77,6 +79,15 @@
  */
 char *BLI_current_working_dir(char *dir, const size_t maxncpy)
 {
+#if defined(WIN32)
+  wchar_t path[MAX_PATH];
+  if (_wgetcwd(path, MAX_PATH)) {
+    if (BLI_strncpy_wchar_as_utf8(dir, path, maxncpy) != maxncpy) {
+      return dir;
+    }
+  }
+  return NULL;
+#else
   const char *pwd = BLI_getenv("PWD");
   if (pwd) {
     size_t srclen = BLI_strnlen(pwd, maxncpy);
@@ -88,8 +99,8 @@ char *BLI_current_working_dir(char *dir, const size_t maxncpy)
       return NULL;
     }
   }
-
   return getcwd(dir, maxncpy);
+#endif
 }
 
 /**
@@ -286,44 +297,72 @@ bool BLI_is_file(const char *path)
   return (mode && !S_ISDIR(mode));
 }
 
+/**
+ * Use for both text and binary file reading.
+ */
+static void *file_read_data_as_mem_impl(FILE *fp,
+                                        bool read_size_exact,
+                                        size_t pad_bytes,
+                                        size_t *r_size)
+{
+  struct stat st;
+  if (fstat(fileno(fp), &st) == -1) {
+    return NULL;
+  }
+  if (S_ISDIR(st.st_mode)) {
+    return NULL;
+  }
+  if (fseek(fp, 0L, SEEK_END) == -1) {
+    return NULL;
+  }
+  /* Don't use the 'st_size' because it may be the symlink. */
+  const long int filelen = ftell(fp);
+  if (filelen == -1) {
+    return NULL;
+  }
+  if (fseek(fp, 0L, SEEK_SET) == -1) {
+    return NULL;
+  }
+
+  void *mem = MEM_mallocN(filelen + pad_bytes, __func__);
+  if (mem == NULL) {
+    return NULL;
+  }
+
+  const long int filelen_read = fread(mem, 1, filelen, fp);
+  if ((filelen_read < 0) || ferror(fp)) {
+    MEM_freeN(mem);
+    return NULL;
+  }
+
+  if (read_size_exact) {
+    if (filelen_read != filelen) {
+      MEM_freeN(mem);
+      return NULL;
+    }
+  }
+  else {
+    if (filelen_read < filelen) {
+      mem = MEM_reallocN(mem, filelen_read + pad_bytes);
+      if (mem == NULL) {
+        return NULL;
+      }
+    }
+  }
+
+  *r_size = filelen_read;
+
+  return mem;
+}
+
 void *BLI_file_read_text_as_mem(const char *filepath, size_t pad_bytes, size_t *r_size)
 {
   FILE *fp = BLI_fopen(filepath, "r");
   void *mem = NULL;
-
   if (fp) {
-    fseek(fp, 0L, SEEK_END);
-    const long int filelen = ftell(fp);
-    if (filelen == -1) {
-      goto finally;
-    }
-    fseek(fp, 0L, SEEK_SET);
-
-    mem = MEM_mallocN(filelen + pad_bytes, __func__);
-    if (mem == NULL) {
-      goto finally;
-    }
-
-    const long int filelen_read = fread(mem, 1, filelen, fp);
-    if ((filelen_read < 0) || ferror(fp)) {
-      MEM_freeN(mem);
-      mem = NULL;
-      goto finally;
-    }
-
-    if (filelen_read < filelen) {
-      mem = MEM_reallocN(mem, filelen_read + pad_bytes);
-      if (mem == NULL) {
-        goto finally;
-      }
-    }
-
-    *r_size = filelen_read;
-
-  finally:
+    mem = file_read_data_as_mem_impl(fp, false, pad_bytes, r_size);
     fclose(fp);
   }
-
   return mem;
 }
 
@@ -331,33 +370,10 @@ void *BLI_file_read_binary_as_mem(const char *filepath, size_t pad_bytes, size_t
 {
   FILE *fp = BLI_fopen(filepath, "rb");
   void *mem = NULL;
-
   if (fp) {
-    fseek(fp, 0L, SEEK_END);
-    const long int filelen = ftell(fp);
-    if (filelen == -1) {
-      goto finally;
-    }
-    fseek(fp, 0L, SEEK_SET);
-
-    mem = MEM_mallocN(filelen + pad_bytes, __func__);
-    if (mem == NULL) {
-      goto finally;
-    }
-
-    const long int filelen_read = fread(mem, 1, filelen, fp);
-    if ((filelen_read != filelen) || ferror(fp)) {
-      MEM_freeN(mem);
-      mem = NULL;
-      goto finally;
-    }
-
-    *r_size = filelen_read;
-
-  finally:
+    mem = file_read_data_as_mem_impl(fp, true, pad_bytes, r_size);
     fclose(fp);
   }
-
   return mem;
 }
 

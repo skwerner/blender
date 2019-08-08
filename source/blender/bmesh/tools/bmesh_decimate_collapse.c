@@ -204,7 +204,7 @@ static bool bm_edge_collapse_is_degenerate_flip(BMEdge *e, const float optimize_
         /* use a small value rather then zero so we don't flip a face in multiple steps
          * (first making it zero area, then flipping again) */
         if (dot_v3v3(cross_exist, cross_optim) <= FLT_EPSILON) {
-          //printf("no flip\n");
+          // printf("no flip\n");
           return true;
         }
 #endif
@@ -690,14 +690,15 @@ static void bm_decim_triangulate_end(BMesh *bm, const int edges_tri_tot)
 static void bm_edge_collapse_loop_customdata(
     BMesh *bm, BMLoop *l, BMVert *v_clear, BMVert *v_other, const float customdata_fac)
 {
-  /* disable seam check - the seam check would have to be done per layer, its not really that important */
+  /* Disable seam check - the seam check would have to be done per layer,
+   * its not really that important. */
   //#define USE_SEAM
   /* these don't need to be updated, since they will get removed when the edge collapses */
   BMLoop *l_clear, *l_other;
   const bool is_manifold = BM_edge_is_manifold(l->e);
   int side;
 
-  /* first find the loop of 'v_other' thats attached to the face of 'l' */
+  /* first find the loop of 'v_other' that's attached to the face of 'l' */
   if (l->v == v_clear) {
     l_clear = l;
     l_other = l->next;
@@ -881,7 +882,7 @@ static bool bm_edge_collapse_is_degenerate_topology(BMEdge *e_first)
     bm_edge_tag_enable(e_iter);
   } while ((e_iter = bmesh_disk_edge_next(e_iter, e_first->v1)) != e_first);
 
-  /* ... except for the edge we will collapse, we know thats shared,
+  /* ... except for the edge we will collapse, we know that's shared,
    * disable this to avoid false positive. We could be smart and never enable these
    * face/edge tags in the first place but easier to do this */
   // bm_edge_tag_disable(e_first);

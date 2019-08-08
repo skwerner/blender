@@ -186,6 +186,18 @@ typedef enum eGP_BrushIcons {
   GP_BRUSH_ICON_ERASE_STROKE = 10,
 } eGP_BrushIcons;
 
+typedef enum eBrushCurvePreset {
+  BRUSH_CURVE_CUSTOM = 0,
+  BRUSH_CURVE_SMOOTH = 1,
+  BRUSH_CURVE_SPHERE = 2,
+  BRUSH_CURVE_ROOT = 3,
+  BRUSH_CURVE_SHARP = 4,
+  BRUSH_CURVE_LIN = 5,
+  BRUSH_CURVE_POW4 = 6,
+  BRUSH_CURVE_INVSQUARE = 7,
+  BRUSH_CURVE_CONSTANT = 8,
+} eBrushCurvePreset;
+
 typedef struct Brush {
   ID id;
 
@@ -263,6 +275,8 @@ typedef struct Brush {
 
   /** Active sculpt tool. */
   char sculpt_tool;
+  /** Active sculpt tool. */
+  char uv_sculpt_tool;
   /** Active vertex paint. */
   char vertexpaint_tool;
   /** Active weight paint. */
@@ -273,7 +287,7 @@ typedef struct Brush {
   char mask_tool;
   /** Active grease pencil tool. */
   char gpencil_tool;
-  char _pad0[2];
+  char _pad0[1];
 
   float autosmooth_factor;
 
@@ -286,6 +300,9 @@ typedef struct Brush {
   float height;
 
   float texture_sample_bias;
+
+  int curve_preset;
+  char _pad1[4];
 
   /* overlay */
   int texture_overlay_alpha;
@@ -324,7 +341,7 @@ typedef struct PaletteColor {
 typedef struct Palette {
   ID id;
 
-  /* pointer to individual colours */
+  /** Pointer to individual colors. */
   ListBase colors;
 
   int active_color;
@@ -437,6 +454,13 @@ typedef enum eBrushSculptTool {
   SCULPT_TOOL_MASK = 19,
 } eBrushSculptTool;
 
+/* Brush.uv_sculpt_tool */
+typedef enum eBrushUVSculptTool {
+  UV_SCULPT_TOOL_GRAB = 0,
+  UV_SCULPT_TOOL_RELAX = 1,
+  UV_SCULPT_TOOL_PINCH = 2,
+} eBrushUVSculptTool;
+
 /** When #BRUSH_ACCUMULATE is used */
 #define SCULPT_TOOL_HAS_ACCUMULATE(t) \
   ELEM(t, \
@@ -462,7 +486,7 @@ typedef enum eBrushSculptTool {
         SCULPT_TOOL_LAYER, \
 \
         /* These brushes could handle dynamic topology, \
-   * but user feedback indicates it's better not to */ \
+         * but user feedback indicates it's better not to */ \
         SCULPT_TOOL_SMOOTH, \
         SCULPT_TOOL_MASK) == 0)
 

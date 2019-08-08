@@ -54,6 +54,7 @@ class ObjectModeOperator:
 
 
 class QuickFur(ObjectModeOperator, Operator):
+    """Add fur setup to the selected objects"""
     bl_idname = "object.quick_fur"
     bl_label = "Quick Fur"
     bl_options = {'REGISTER', 'UNDO'}
@@ -119,6 +120,7 @@ class QuickFur(ObjectModeOperator, Operator):
 
 
 class QuickExplode(ObjectModeOperator, Operator):
+    """Make selected objects explode"""
     bl_idname = "object.quick_explode"
     bl_label = "Quick Explode"
     bl_options = {'REGISTER', 'UNDO'}
@@ -231,7 +233,7 @@ class QuickExplode(ObjectModeOperator, Operator):
 
                 nodes = mat.node_tree.nodes
                 for node in nodes:
-                    if (node.type == 'OUTPUT_MATERIAL'):
+                    if node.type == 'OUTPUT_MATERIAL':
                         node_out_mat = node
                         break
 
@@ -243,7 +245,7 @@ class QuickExplode(ObjectModeOperator, Operator):
 
                 node_mix = nodes.new('ShaderNodeMixShader')
                 node_mix.location = (node_x - offset_x, node_y)
-                mat.node_tree.links.new(node_surface.outputs["BSDF"], node_mix.inputs[1])
+                mat.node_tree.links.new(node_surface.outputs[0], node_mix.inputs[1])
                 mat.node_tree.links.new(node_mix.outputs["Shader"], node_out_mat.inputs['Surface'])
                 offset_x += 200
 
@@ -302,7 +304,7 @@ class QuickExplode(ObjectModeOperator, Operator):
 
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         self.frame_start = context.scene.frame_current
         self.frame_end = self.frame_start + self.frame_duration
         return self.execute(context)
@@ -325,6 +327,7 @@ def grid_location(x, y):
 
 
 class QuickSmoke(ObjectModeOperator, Operator):
+    """Use selected objects as smoke emitters"""
     bl_idname = "object.quick_smoke"
     bl_label = "Quick Smoke"
     bl_options = {'REGISTER', 'UNDO'}
@@ -429,6 +432,7 @@ class QuickSmoke(ObjectModeOperator, Operator):
 
 
 class QuickFluid(ObjectModeOperator, Operator):
+    """Use selected objects in a fluid simulation"""
     bl_idname = "object.quick_fluid"
     bl_label = "Quick Fluid"
     bl_options = {'REGISTER', 'UNDO'}

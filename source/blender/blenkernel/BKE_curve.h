@@ -109,6 +109,7 @@ void BKE_curve_transform(struct Curve *cu,
                          const bool do_props);
 void BKE_curve_translate(struct Curve *cu, float offset[3], const bool do_keys);
 void BKE_curve_material_index_remove(struct Curve *cu, int index);
+bool BKE_curve_material_index_used(struct Curve *cu, int index);
 void BKE_curve_material_index_clear(struct Curve *cu);
 bool BKE_curve_material_index_validate(struct Curve *cu);
 void BKE_curve_material_remap(struct Curve *cu, const unsigned int *remap, unsigned int remap_len);
@@ -134,21 +135,11 @@ void BKE_curve_editNurb_keyIndex_free(struct GHash **keyindex);
 void BKE_curve_editNurb_free(struct Curve *cu);
 struct ListBase *BKE_curve_editNurbs_get(struct Curve *cu);
 
-float *BKE_curve_make_orco(struct Depsgraph *depsgraph,
-                           struct Scene *scene,
-                           struct Object *ob,
-                           int *r_numVerts);
 float *BKE_curve_surf_make_orco(struct Object *ob);
 
 void BKE_curve_bevelList_free(struct ListBase *bev);
 void BKE_curve_bevelList_make(struct Object *ob, struct ListBase *nurbs, bool for_render);
-void BKE_curve_bevel_make(struct Depsgraph *depsgraph,
-                          struct Scene *scene,
-                          struct Object *ob,
-                          struct ListBase *disp,
-                          const bool for_render,
-                          const bool use_render_resolution,
-                          struct LinkNode *ob_cyclic_list);
+void BKE_curve_bevel_make(struct Object *ob, struct ListBase *disp);
 
 void BKE_curve_forward_diff_bezier(
     float q0, float q1, float q2, float q3, float *p, int it, int stride);
@@ -212,9 +203,9 @@ void BKE_nurb_knot_calc_u(struct Nurb *nu);
 void BKE_nurb_knot_calc_v(struct Nurb *nu);
 
 /* nurb checks if they can be drawn, also clamp order func */
-bool BKE_nurb_check_valid_u(struct Nurb *nu);
-bool BKE_nurb_check_valid_v(struct Nurb *nu);
-bool BKE_nurb_check_valid_uv(struct Nurb *nu);
+bool BKE_nurb_check_valid_u(const struct Nurb *nu);
+bool BKE_nurb_check_valid_v(const struct Nurb *nu);
+bool BKE_nurb_check_valid_uv(const struct Nurb *nu);
 
 bool BKE_nurb_order_clamp_u(struct Nurb *nu);
 bool BKE_nurb_order_clamp_v(struct Nurb *nu);

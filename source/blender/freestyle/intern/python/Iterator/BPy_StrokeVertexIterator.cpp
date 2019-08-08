@@ -77,11 +77,13 @@ static int StrokeVertexIterator_init(BPy_StrokeVertexIterator *self,
   else if (PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(
                args, kwds, "|O!", (char **)kwlist_2, &Stroke_Type, &stroke)) {
-    if (!stroke)
+    if (!stroke) {
       self->sv_it = new StrokeInternal::StrokeVertexIterator();
-    else
+    }
+    else {
       self->sv_it = new StrokeInternal::StrokeVertexIterator(
           ((BPy_Stroke *)stroke)->s->strokeVerticesBegin());
+    }
     self->reversed = false;
     self->at_start = true;
   }
@@ -225,8 +227,9 @@ static PyObject *StrokeVertexIterator_object_get(BPy_StrokeVertexIterator *self,
     return NULL;
   }
   StrokeVertex *sv = self->sv_it->operator->();
-  if (sv)
+  if (sv) {
     return BPy_StrokeVertex_from_StrokeVertex(*sv);
+  }
   Py_RETURN_NONE;
 }
 
@@ -251,7 +254,7 @@ static PyObject *StrokeVertexIterator_u_get(BPy_StrokeVertexIterator *self, void
 }
 
 PyDoc_STRVAR(StrokeVertexIterator_at_last_doc,
-             "True if the interator points to the last valid element.\n"
+             "True if the iterator points to the last valid element.\n"
              "For its counterpart (pointing to the first valid element), use it.is_begin.\n"
              "\n"
              ":type: bool");

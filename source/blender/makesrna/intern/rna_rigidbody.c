@@ -146,14 +146,6 @@ static const EnumPropertyItem rigidbody_mesh_source_items[] = {
 
 #  include "WM_api.h"
 
-#  define RB_FLAG_SET(dest, value, flag) \
-    { \
-      if (value) \
-        dest |= flag; \
-      else \
-        dest &= ~flag; \
-    }
-
 /* ******************************** */
 
 static void rna_RigidBodyWorld_reset(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
@@ -185,7 +177,7 @@ static void rna_RigidBodyWorld_split_impulse_set(PointerRNA *ptr, bool value)
 {
   RigidBodyWorld *rbw = (RigidBodyWorld *)ptr->data;
 
-  RB_FLAG_SET(rbw->flag, value, RBW_FLAG_USE_SPLIT_IMPULSE);
+  SET_FLAG_FROM_TEST(rbw->flag, value, RBW_FLAG_USE_SPLIT_IMPULSE);
 
 #  ifdef WITH_BULLET
   if (rbw->shared->physics_world) {
@@ -236,8 +228,9 @@ static void rna_RigidBodyOb_shape_reset(Main *UNUSED(bmain), Scene *scene, Point
   RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
 
   BKE_rigidbody_cache_reset(rbw);
-  if (rbo->shared->physics_shape)
+  if (rbo->shared->physics_shape) {
     rbo->flag |= RBO_FLAG_NEEDS_RESHAPE;
+  }
 }
 
 static char *rna_RigidBodyOb_path(PointerRNA *UNUSED(ptr))
@@ -266,7 +259,7 @@ static void rna_RigidBodyOb_disabled_set(PointerRNA *ptr, bool value)
 {
   RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
 
-  RB_FLAG_SET(rbo->flag, !value, RBO_FLAG_DISABLED);
+  SET_FLAG_FROM_TEST(rbo->flag, !value, RBO_FLAG_DISABLED);
 
 #  ifdef WITH_BULLET
   /* update kinematic state if necessary - only needed for active bodies */
@@ -336,10 +329,12 @@ static void rna_RigidBodyOb_collision_collections_set(PointerRNA *ptr, const boo
   int i;
 
   for (i = 0; i < 20; i++) {
-    if (values[i])
+    if (values[i]) {
       rbo->col_groups |= (1 << i);
-    else
+    }
+    else {
       rbo->col_groups &= ~(1 << i);
+    }
   }
   rbo->flag |= RBO_FLAG_NEEDS_VALIDATE;
 }
@@ -348,7 +343,7 @@ static void rna_RigidBodyOb_kinematic_state_set(PointerRNA *ptr, bool value)
 {
   RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
 
-  RB_FLAG_SET(rbo->flag, value, RBO_FLAG_KINEMATIC);
+  SET_FLAG_FROM_TEST(rbo->flag, value, RBO_FLAG_KINEMATIC);
 
 #  ifdef WITH_BULLET
   /* update kinematic state if necessary */
@@ -364,7 +359,7 @@ static void rna_RigidBodyOb_activation_state_set(PointerRNA *ptr, bool value)
 {
   RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
 
-  RB_FLAG_SET(rbo->flag, value, RBO_FLAG_USE_DEACTIVATION);
+  SET_FLAG_FROM_TEST(rbo->flag, value, RBO_FLAG_USE_DEACTIVATION);
 
 #  ifdef WITH_BULLET
   /* update activation state if necessary - only active bodies can be deactivated */
@@ -456,7 +451,7 @@ static void rna_RigidBodyCon_enabled_set(PointerRNA *ptr, bool value)
 {
   RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
-  RB_FLAG_SET(rbc->flag, value, RBC_FLAG_ENABLED);
+  SET_FLAG_FROM_TEST(rbc->flag, value, RBC_FLAG_ENABLED);
 
 #  ifdef WITH_BULLET
   if (rbc->physics_constraint) {
@@ -469,7 +464,7 @@ static void rna_RigidBodyCon_disable_collisions_set(PointerRNA *ptr, bool value)
 {
   RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
-  RB_FLAG_SET(rbc->flag, value, RBC_FLAG_DISABLE_COLLISIONS);
+  SET_FLAG_FROM_TEST(rbc->flag, value, RBC_FLAG_DISABLE_COLLISIONS);
 
   rbc->flag |= RBC_FLAG_NEEDS_VALIDATE;
 }
@@ -728,7 +723,7 @@ static void rna_RigidBodyCon_use_motor_lin_set(PointerRNA *ptr, bool value)
 {
   RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
-  RB_FLAG_SET(rbc->flag, value, RBC_FLAG_USE_MOTOR_LIN);
+  SET_FLAG_FROM_TEST(rbc->flag, value, RBC_FLAG_USE_MOTOR_LIN);
 
 #  ifdef WITH_BULLET
   if (rbc->physics_constraint) {
@@ -743,7 +738,7 @@ static void rna_RigidBodyCon_use_motor_ang_set(PointerRNA *ptr, bool value)
 {
   RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
-  RB_FLAG_SET(rbc->flag, value, RBC_FLAG_USE_MOTOR_ANG);
+  SET_FLAG_FROM_TEST(rbc->flag, value, RBC_FLAG_USE_MOTOR_ANG);
 
 #  ifdef WITH_BULLET
   if (rbc->physics_constraint) {

@@ -89,7 +89,7 @@ class FILEBROWSER_HT_header(Header):
 
 
 class FILEBROWSER_UL_dir(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, active_propname, _index):
         direntry = item
         # space = context.space_data
         icon = 'NONE'
@@ -116,11 +116,12 @@ class FILEBROWSER_UL_dir(UIList):
             layout.prop(direntry, "path", text="")
 
 
-class FILEBROWSER_PT_system_folders(Panel):
+class FILEBROWSER_PT_bookmarks_volumes(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOLS'
+    bl_options = {'DEFAULT_CLOSED'}
     bl_category = "Bookmarks"
-    bl_label = "System"
+    bl_label = "Volumes"
 
     def draw(self, context):
         layout = self.layout
@@ -132,11 +133,11 @@ class FILEBROWSER_PT_system_folders(Panel):
                               space, "system_folders_active", item_dyntip_propname="path", rows=1, maxrows=10)
 
 
-class FILEBROWSER_PT_system_bookmarks(Panel):
+class FILEBROWSER_PT_bookmarks_system(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOLS'
     bl_category = "Bookmarks"
-    bl_label = "System Bookmarks"
+    bl_label = "System"
 
     @classmethod
     def poll(cls, context):
@@ -155,7 +156,7 @@ class FILEBROWSER_PT_system_bookmarks(Panel):
 class FILEBROWSER_MT_bookmarks_context_menu(Menu):
     bl_label = "Bookmarks Specials"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         layout.operator("file.bookmark_cleanup", icon='X', text="Cleanup")
 
@@ -164,11 +165,11 @@ class FILEBROWSER_MT_bookmarks_context_menu(Menu):
         layout.operator("file.bookmark_move", icon='TRIA_DOWN_BAR', text="Move To Bottom").direction = 'BOTTOM'
 
 
-class FILEBROWSER_PT_bookmarks(Panel):
+class FILEBROWSER_PT_bookmarks_favorites(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOLS'
     bl_category = "Bookmarks"
-    bl_label = "Bookmarks"
+    bl_label = "Favorites"
 
     def draw(self, context):
         layout = self.layout
@@ -194,11 +195,11 @@ class FILEBROWSER_PT_bookmarks(Panel):
             layout.operator("file.bookmark_add", icon='ADD')
 
 
-class FILEBROWSER_PT_recent_folders(Panel):
+class FILEBROWSER_PT_bookmarks_recents(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOLS'
     bl_category = "Bookmarks"
-    bl_label = "Recent"
+    bl_label = "Recents"
 
     @classmethod
     def poll(cls, context):
@@ -249,6 +250,11 @@ class FILEBROWSER_MT_view(Menu):
         st = context.space_data
         params = st.params
 
+        layout.prop(st, "show_region_toolbar")
+        layout.prop(st, "show_region_ui", text="File Path")
+
+        layout.separator()
+
         layout.prop_menu_enum(params, "display_size")
         layout.prop_menu_enum(params, "recursion_level")
 
@@ -260,11 +266,11 @@ class FILEBROWSER_MT_view(Menu):
 classes = (
     FILEBROWSER_HT_header,
     FILEBROWSER_UL_dir,
-    FILEBROWSER_PT_system_folders,
-    FILEBROWSER_PT_system_bookmarks,
+    FILEBROWSER_PT_bookmarks_volumes,
+    FILEBROWSER_PT_bookmarks_system,
     FILEBROWSER_MT_bookmarks_context_menu,
-    FILEBROWSER_PT_bookmarks,
-    FILEBROWSER_PT_recent_folders,
+    FILEBROWSER_PT_bookmarks_favorites,
+    FILEBROWSER_PT_bookmarks_recents,
     FILEBROWSER_PT_advanced_filter,
     FILEBROWSER_MT_view,
 )

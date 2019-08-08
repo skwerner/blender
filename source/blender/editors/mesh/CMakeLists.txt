@@ -21,8 +21,9 @@ set(INC
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
-  ../../depsgraph
   ../../bmesh
+  ../../depsgraph
+  ../../draw
   ../../gpu
   ../../imbuf
   ../../makesdna
@@ -30,8 +31,8 @@ set(INC
   ../../render/extern/include
   ../../windowmanager
   ../../../../intern/clog
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS

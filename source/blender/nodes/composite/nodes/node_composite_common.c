@@ -53,14 +53,14 @@ void register_node_type_cmp_group(void)
   node_type_socket_templates(&ntype, NULL, NULL);
   node_type_size(&ntype, 140, 60, 400);
   node_type_label(&ntype, node_group_label);
-  node_type_update(&ntype, NULL, node_group_verify);
+  node_type_group_update(&ntype, node_group_update);
 
   nodeRegisterType(&ntype);
 }
 
 void register_node_type_cmp_custom_group(bNodeType *ntype)
 {
-  /* These methods can be overriden but need a default implementation otherwise. */
+  /* These methods can be overridden but need a default implementation otherwise. */
   if (ntype->poll == NULL) {
     ntype->poll = cmp_node_poll_default;
   }

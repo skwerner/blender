@@ -73,7 +73,7 @@ class ArmatureImporter : private TransformReader {
 #if 0
   struct ArmatureJoints {
     Object *ob_arm;
-    std::vector<COLLADAFW::Node*> root_joints;
+    std::vector<COLLADAFW::Node *> root_joints;
   };
   std::vector<ArmatureJoints> armature_joints;
 #endif
@@ -123,6 +123,8 @@ class ArmatureImporter : private TransformReader {
                 const char *parentname,
                 float parent_mat[4][4]);
 
+  void set_bone_transformation_type(const COLLADAFW::Node *node, Object *ob_arm);
+  bool node_is_decomposed(const COLLADAFW::Node *node);
 #if 0
   void set_leaf_bone_shapes(Object *ob_arm);
   void set_euler_rotmode();
@@ -133,7 +135,7 @@ class ArmatureImporter : private TransformReader {
 #if 0
   Object *find_armature(COLLADAFW::Node *node);
 
-  ArmatureJoints& get_armature_joints(Object *ob_arm);
+  ArmatureJoints &get_armature_joints(Object *ob_arm);
 #endif
 
   Object *create_armature_bones(Main *bmain, SkinInfo &skin);
@@ -161,7 +163,9 @@ class ArmatureImporter : private TransformReader {
 
 #if 0
   // link with meshes, create vertex groups, assign weights
-  void link_armature(Object *ob_arm, const COLLADAFW::UniqueId& geom_id, const COLLADAFW::UniqueId& controller_data_id);
+  void link_armature(Object *ob_arm,
+                     const COLLADAFW::UniqueId &geom_id,
+                     const COLLADAFW::UniqueId &controller_data_id);
 #endif
 
   bool write_skin_controller_data(const COLLADAFW::SkinControllerData *data);

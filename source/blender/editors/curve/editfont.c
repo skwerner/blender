@@ -73,9 +73,9 @@ static int kill_selection(Object *obedit, int ins);
 
 /************************* utilities ******************************/
 
-static char findaccent(char char1, unsigned int code)
+static wchar_t findaccent(wchar_t char1, unsigned int code)
 {
-  char new = 0;
+  wchar_t new = 0;
 
   if (char1 == 'a') {
     if (code == '`') {
@@ -170,7 +170,7 @@ static char findaccent(char char1, unsigned int code)
       new = 186;
     }
     else if (code == 'e') {
-      new = 143;
+      new = 339;
     }
     else if (code == 'c') {
       new = 169;
@@ -191,7 +191,7 @@ static char findaccent(char char1, unsigned int code)
   }
   else if (char1 == 't') {
     if (code == 'm') {
-      new = 153;
+      new = 8482;
     }
   }
   else if (char1 == 'u') {
@@ -342,7 +342,7 @@ static char findaccent(char char1, unsigned int code)
       new = 247;
     }
     if (code == '|') {
-      new = 135;
+      new = 8224;
     }
     if (code == '+') {
       new = 177;
@@ -350,15 +350,15 @@ static char findaccent(char char1, unsigned int code)
   }
   else if (char1 == '|') {
     if (code == '-') {
-      new = 135;
+      new = 8224;
     }
     if (code == '=') {
-      new = 136;
+      new = 8225;
     }
   }
   else if (char1 == '=') {
     if (code == '|') {
-      new = 136;
+      new = 8225;
     }
   }
   else if (char1 == '+') {
@@ -407,7 +407,6 @@ static int insert_into_textbuf(Object *obedit, uintptr_t c)
 
 static void text_update_edited(bContext *C, Object *obedit, int mode)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   Curve *cu = obedit->data;
   EditFont *ef = cu->editfont;
 
@@ -421,6 +420,7 @@ static void text_update_edited(bContext *C, Object *obedit, int mode)
   else {
     /* depsgraph runs above, but since we're not tagging for update, call direct */
     /* We need evaluated data here. */
+    Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
     BKE_vfont_to_curve(DEG_get_evaluated_object(depsgraph, obedit), mode);
   }
 
@@ -590,7 +590,7 @@ void FONT_OT_text_paste_from_file(wmOperatorType *ot)
 static void txt_add_object(bContext *C, TextLine *firstline, int totline, const float offset[3])
 {
   Main *bmain = CTX_data_main(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Curve *cu;
@@ -606,7 +606,7 @@ static void txt_add_object(bContext *C, TextLine *firstline, int totline, const 
   base = view_layer->basact;
 
   /* seems to assume view align ? TODO - look into this, could be an operator option */
-  ED_object_base_init_transform(C, base, NULL, rot);
+  ED_object_base_init_transform_on_add(base->object, NULL, rot);
 
   BKE_object_where_is_calc(depsgraph, scene, obedit);
 
@@ -1084,7 +1084,7 @@ static const EnumPropertyItem move_type_items[] = {
 
 static int move_cursor(bContext *C, int type, const bool select)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *obedit = CTX_data_edit_object(C);
   Curve *cu = obedit->data;
   EditFont *ef = cu->editfont;
@@ -2007,7 +2007,7 @@ static int font_open_exec(bContext *C, wmOperator *op)
     id_us_min(&font->id);
 
     RNA_id_pointer_create(&font->id, &idptr);
-    RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr);
+    RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr, NULL);
     RNA_property_update(C, &pprop->ptr, pprop->prop);
   }
 
@@ -2090,7 +2090,7 @@ static int font_unlink_exec(bContext *C, wmOperator *op)
   builtin_font = BKE_vfont_builtin_get();
 
   RNA_id_pointer_create(&builtin_font->id, &idptr);
-  RNA_property_pointer_set(&pprop.ptr, pprop.prop, idptr);
+  RNA_property_pointer_set(&pprop.ptr, pprop.prop, idptr, NULL);
   RNA_property_update(C, &pprop.ptr, pprop.prop);
 
   return OPERATOR_FINISHED;

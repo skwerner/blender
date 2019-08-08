@@ -136,7 +136,7 @@ typedef enum eGPDpalettecolor_Flag {
 typedef struct bGPDpalette {
   struct bGPDpalette *next, *prev;
 
-  /** Pointer to individual colours. */
+  /** Pointer to individual colors. */
   ListBase colors;
   /** Palette name. Must be unique. */
   char info[64];
@@ -148,8 +148,7 @@ typedef struct bGPDpalette {
 /* bGPDpalette->flag */
 typedef enum eGPDpalette_Flag {
   /* palette is active */
-  A,
-  PL_PALETTE_ACTIVE = (1 << 0)
+  PL_PALETTE_ACTIVE = (1 << 0),
 } eGPDpalette_Flag;
 
 /* ***************************************** */
@@ -170,7 +169,7 @@ typedef struct bGPDstroke_Runtime {
 
 /* Grease-Pencil Annotations - 'Stroke'
  * -> A stroke represents a (simplified version) of the curve
- *    drawn by the user in one 'mousedown'->'mouseup' operation
+ *    drawn by the user in one 'mouse-down'->'mouse-up' operation
  */
 typedef struct bGPDstroke {
   struct bGPDstroke *next, *prev;
@@ -251,7 +250,7 @@ typedef enum eGPDstroke_Caps {
 /* Runtime temp data for bGPDframe */
 typedef struct bGPDframe_Runtime {
   /** Parent matrix for drawing. */
-  float viewmatrix[4][4];
+  float parent_obmat[4][4];
 } bGPDframe_Runtime;
 
 /* Grease-Pencil Annotations - 'Frame'
@@ -397,7 +396,7 @@ typedef enum eGPDlayer_OnionFlag {
 
 /* layer blend_mode */
 typedef enum eGPLayerBlendModes {
-  eGplBlendMode_Normal = 0,
+  eGplBlendMode_Regular = 0,
   eGplBlendMode_Overlay = 1,
   eGplBlendMode_Add = 2,
   eGplBlendMode_Subtract = 3,
@@ -412,7 +411,7 @@ typedef enum eGPLayerBlendModes {
 typedef struct bGPdata_Runtime {
   /** Last region where drawing was originated. */
   struct ARegion *ar;
-  /** Stroke buffer (can hold GP_STROKE_BUFFER_MAX). */
+  /** Stroke buffer. */
   void *sbuffer;
 
   /* GP Object drawing */
@@ -431,11 +430,13 @@ typedef struct bGPdata_Runtime {
    * - buffer must be initialized before use, but freed after
    *   whole paint operation is over
    */
-  /** Number of elements currently in cache. */
-  short sbuffer_size;
+  /** Number of elements currently used in cache. */
+  short sbuffer_used;
   /** Flags for stroke that cache represents. */
   short sbuffer_sflag;
-  char _pad[6];
+  /** Number of total elements available in cache. */
+  short sbuffer_size;
+  char _pad[4];
 
   /** Number of control-points for stroke. */
   int tot_cp_points;
@@ -457,7 +458,7 @@ typedef struct bGPgrid {
 
 /* Grease-Pencil Annotations - 'DataBlock' */
 typedef struct bGPdata {
-  /** Grease Pencil data is a datablock. */
+  /** Grease Pencil data is a data-block. */
   ID id;
   /** Animation data - for animating draw settings. */
   struct AnimData *adt;
@@ -465,7 +466,7 @@ typedef struct bGPdata {
   /* Grease-Pencil data */
   /** BGPDlayers. */
   ListBase layers;
-  /** Settings for this datablock. */
+  /** Settings for this data-block. */
   int flag;
 
   char _pad1[4];
@@ -518,7 +519,8 @@ typedef struct bGPdata {
 
   /** Draw mode for strokes (eGP_DrawMode). */
   short draw_mode;
-  char _pad3[2];
+  /** Keyframe type for onion filter  (eBezTriple_KeyframeType plus All option) */
+  short onion_keytype;
 
   bGPgrid grid;
 
@@ -531,9 +533,9 @@ typedef struct bGPdata {
  *       changes made during the porting process.
  */
 typedef enum eGPdata_Flag {
-  /* datablock is used for "annotations"
+  /* data-block is used for "annotations"
    * NOTE: This flag used to be used in 2.4x, but should hardly ever have been set.
-   *       We can use this freely now, as all GP datablocks from pre-2.8 will get
+   *       We can use this freely now, as all GP data-blocks from pre-2.8 will get
    *       set on file load (as many old use cases are for "annotations" only)
    */
   GP_DATA_ANNOTATIONS = (1 << 0),

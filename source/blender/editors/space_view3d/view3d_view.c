@@ -30,6 +30,7 @@
 #include "BLI_math.h"
 #include "BLI_rect.h"
 #include "BLI_utildefines.h"
+#include "BLI_linklist.h"
 
 #include "BKE_action.h"
 #include "BKE_camera.h"
@@ -38,6 +39,7 @@
 #include "BKE_global.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
+#include "BKE_modifier.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 
@@ -146,7 +148,7 @@ void ED_view3d_smooth_view_ex(
   }
   sms.org_view = rv3d->view;
 
-  /* sms.to_camera = false; */ /* initizlized to zero anyway */
+  /* sms.to_camera = false; */ /* initialized to zero anyway */
 
   /* note on camera locking, this is a little confusing but works ok.
    * we may be changing the view 'as if' there is no active camera, but in fact
@@ -302,7 +304,7 @@ void ED_view3d_smooth_view(bContext *C,
                            const int smooth_viewtx,
                            const struct V3D_SmoothParams *sview)
 {
-  const Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  const Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   wmWindow *win = CTX_wm_window(C);
   ScrArea *sa = CTX_wm_area(C);
@@ -313,7 +315,6 @@ void ED_view3d_smooth_view(bContext *C,
 /* only meant for timer usage */
 static void view3d_smoothview_apply(bContext *C, View3D *v3d, ARegion *ar, bool sync_boxview)
 {
-  const Depsgraph *depsgraph = CTX_data_depsgraph(C);
   RegionView3D *rv3d = ar->regiondata;
   struct SmoothView3DStore *sms = rv3d->sms;
   float step, step_inv;
@@ -334,6 +335,8 @@ static void view3d_smoothview_apply(bContext *C, View3D *v3d, ARegion *ar, bool 
       view3d_smooth_view_state_restore(&sms->org, v3d, rv3d);
     }
     else {
+      const Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+
       view3d_smooth_view_state_restore(&sms->dst, v3d, rv3d);
 
       ED_view3d_camera_lock_sync(depsgraph, v3d, rv3d);
@@ -370,6 +373,7 @@ static void view3d_smoothview_apply(bContext *C, View3D *v3d, ARegion *ar, bool 
     rv3d->dist = sms->dst.dist * step + sms->src.dist * step_inv;
     v3d->lens = sms->dst.lens * step + sms->src.lens * step_inv;
 
+    const Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
     ED_view3d_camera_lock_sync(depsgraph, v3d, rv3d);
     if (ED_screen_animation_playing(CTX_wm_manager(C))) {
       ED_view3d_camera_lock_autokey(v3d, rv3d, C, true, true);
@@ -426,9 +430,9 @@ void ED_view3d_smooth_view_force_finish(bContext *C, View3D *v3d, ARegion *ar)
 
     /* force update of view matrix so tools that run immediately after
      * can use them without redrawing first */
-    Depsgraph *depsgraph = CTX_data_depsgraph(C);
+    Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
     Scene *scene = CTX_data_scene(C);
-    ED_view3d_update_viewmat(depsgraph, scene, v3d, ar, NULL, NULL, NULL);
+    ED_view3d_update_viewmat(depsgraph, scene, v3d, ar, NULL, NULL, NULL, false);
   }
 }
 
@@ -455,7 +459,7 @@ void VIEW3D_OT_smoothview(wmOperatorType *ot)
 
 static int view3d_camera_to_view_exec(bContext *C, wmOperator *UNUSED(op))
 {
-  const Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  const Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   View3D *v3d;
   ARegion *ar;
   RegionView3D *rv3d;
@@ -525,7 +529,7 @@ void VIEW3D_OT_camera_to_view(wmOperatorType *ot)
  * meant to take into account vertex/bone selection for eg. */
 static int view3d_camera_to_view_selected_exec(bContext *C, wmOperator *op)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   View3D *v3d = CTX_wm_view3d(C); /* can be NULL */
   Object *camera_ob = v3d ? v3d->camera : scene->camera;
@@ -739,9 +743,16 @@ void view3d_winmatrix_set(Depsgraph *depsgraph, ARegion *ar, const View3D *v3d, 
   rv3d->is_persp = !is_ortho;
 
 #if 0
-  printf("%s: %d %d %f %f %f %f %f %f\n", __func__, winx, winy,
-         viewplane.xmin, viewplane.ymin, viewplane.xmax, viewplane.ymax,
-         clipsta, clipend);
+  printf("%s: %d %d %f %f %f %f %f %f\n",
+         __func__,
+         winx,
+         winy,
+         viewplane.xmin,
+         viewplane.ymin,
+         viewplane.xmax,
+         viewplane.ymax,
+         clipsta,
+         clipend);
 #endif
 
   if (rect) { /* picking */
@@ -858,8 +869,8 @@ void view3d_viewmatrix_set(Depsgraph *depsgraph,
       vec[2] = 0.0f;
 
       if (rect_scale) {
-        /* Since 'RegionView3D.winmat' has been calculated and this function doesn't take the 'ARegion'
-         * we don't know about the region size.
+        /* Since 'RegionView3D.winmat' has been calculated and this function doesn't take the
+         * 'ARegion' we don't know about the region size.
          * Use 'rect_scale' when drawing a sub-region to apply 2D offset,
          * scaled by the difference between the sub-region and the region size.
          */
@@ -955,8 +966,8 @@ static bool drw_select_filter_object_mode_lock(Object *ob, void *user_data)
  * we want to select pose bones (this doesn't switch modes). */
 static bool drw_select_filter_object_mode_lock_for_weight_paint(Object *ob, void *user_data)
 {
-  const Object *ob_pose = user_data;
-  return (DEG_get_original_object(ob) == ob_pose);
+  LinkNode *ob_pose_list = user_data;
+  return ob_pose_list && (BLI_linklist_index(ob_pose_list, DEG_get_original_object(ob)) != -1);
 }
 
 /**
@@ -1037,10 +1048,22 @@ int view3d_opengl_select(ViewContext *vc,
     case VIEW3D_SELECT_FILTER_WPAINT_POSE_MODE_LOCK: {
       Object *obact = vc->obact;
       BLI_assert(obact && (obact->mode & OB_MODE_WEIGHT_PAINT));
-      Object *ob_pose = BKE_object_pose_armature_get(obact);
 
+      /* While this uses 'alloca' in a loop (which we typically avoid),
+       * the number of items is nearly always 1, maybe 2..3 in rare cases. */
+      LinkNode *ob_pose_list = NULL;
+      VirtualModifierData virtualModifierData;
+      const ModifierData *md = modifiers_getVirtualModifierList(obact, &virtualModifierData);
+      for (; md; md = md->next) {
+        if (md->type == eModifierType_Armature) {
+          ArmatureModifierData *amd = (ArmatureModifierData *)md;
+          if (amd->object && (amd->object->mode & OB_MODE_POSE)) {
+            BLI_linklist_prepend_alloca(&ob_pose_list, amd->object);
+          }
+        }
+      }
       object_filter.fn = drw_select_filter_object_mode_lock_for_weight_paint;
-      object_filter.user_data = ob_pose;
+      object_filter.user_data = ob_pose_list;
       break;
     }
     case VIEW3D_SELECT_FILTER_NOP:
@@ -1223,7 +1246,7 @@ static bool view3d_localview_init(const Depsgraph *depsgraph,
 
   if (local_view_bit == 0) {
     /* TODO(dfelinto): We can kick one of the other 3D views out of local view
-       specially if it is not being used.  */
+     * specially if it is not being used.  */
     BKE_report(reports, RPT_ERROR, "No more than 16 local views");
     ok = false;
   }
@@ -1392,7 +1415,7 @@ static void view3d_localview_exit(const Depsgraph *depsgraph,
 
 static int localview_exec(bContext *C, wmOperator *op)
 {
-  const Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  const Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   const int smooth_viewtx = WM_operator_smooth_viewtx_get(op);
   wmWindowManager *wm = CTX_wm_manager(C);
   wmWindow *win = CTX_wm_window(C);

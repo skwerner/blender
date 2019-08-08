@@ -1,11 +1,9 @@
 
 uniform float ImageTransparencyCutoff = 0.1;
 uniform sampler2D image;
-uniform bool imageSrgb;
 uniform bool imageNearest;
+uniform bool imagePremultiplied;
 
-uniform mat4 ProjectionMatrix;
-uniform mat4 ViewMatrixInverse;
 uniform float alpha = 0.5;
 uniform vec2 invertedViewportSize;
 uniform vec4 viewvecs[3];
@@ -25,6 +23,9 @@ in vec3 normal_viewport;
 #ifdef V3D_SHADING_TEXTURE_COLOR
 in vec2 uv_interp;
 #endif
+#ifdef V3D_SHADING_VERTEX_COLOR
+in vec3 vertexColor;
+#endif
 #ifdef V3D_LIGHTING_MATCAP
 uniform sampler2D matcapImage;
 #endif
@@ -42,11 +43,13 @@ void main()
 {
   vec4 diffuse_color;
 
-#ifdef V3D_SHADING_TEXTURE_COLOR
-  diffuse_color = workbench_sample_texture(image, uv_interp, imageSrgb, imageNearest);
+#if defined(V3D_SHADING_TEXTURE_COLOR)
+  diffuse_color = workbench_sample_texture(image, uv_interp, imageNearest, imagePremultiplied);
   if (diffuse_color.a < ImageTransparencyCutoff) {
     discard;
   }
+#elif defined(V3D_SHADING_VERTEX_COLOR)
+  diffuse_color = vec4(vertexColor, 1.0);
 #else
   diffuse_color = vec4(materialDiffuseColor, 1.0);
 #endif /* V3D_SHADING_TEXTURE_COLOR */

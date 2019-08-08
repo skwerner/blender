@@ -26,17 +26,18 @@ from bpy_extras.node_utils import find_node_input
 class MATERIAL_MT_context_menu(Menu):
     bl_label = "Material Specials"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("material.copy", icon='COPYDOWN')
         layout.operator("object.material_slot_copy")
         layout.operator("material.paste", icon='PASTEDOWN')
+        layout.operator("object.material_slot_remove_unused")
 
 
 class MATERIAL_UL_matslots(UIList):
 
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         # assert(isinstance(item, bpy.types.MaterialSlot)
         # ob = data
         slot = item
@@ -105,7 +106,7 @@ class EEVEE_MATERIAL_PT_context_material(MaterialButtonsPanel, Panel):
         if ob:
             is_sortable = len(ob.material_slots) > 1
             rows = 3
-            if (is_sortable):
+            if is_sortable:
                 rows = 5
 
             row = layout.row()
@@ -145,7 +146,7 @@ class EEVEE_MATERIAL_PT_context_material(MaterialButtonsPanel, Panel):
             row.template_ID(space, "pin_id")
 
 
-def panel_node_draw(layout, ntree, output_type, input_name):
+def panel_node_draw(layout, ntree, _output_type, input_name):
     node = ntree.get_output_node('EEVEE')
 
     if node:
@@ -209,9 +210,11 @@ class EEVEE_MATERIAL_PT_settings(MaterialButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False
 
         mat = context.material
 
+        layout.prop(mat, "use_backface_culling")
         layout.prop(mat, "blend_method")
         layout.prop(mat, "shadow_method")
 
@@ -232,6 +235,7 @@ class MATERIAL_PT_viewport(MaterialButtonsPanel, Panel):
     bl_label = "Viewport Display"
     bl_context = "material"
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 10
 
     @classmethod
     def poll(cls, context):

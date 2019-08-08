@@ -441,7 +441,8 @@ BLI_INLINE SDefBindWeightData *computeBindWeights(SDefBindCalcData *const data,
 
   bwdata->bind_polys = bpoly;
 
-  /* Loop over all adjacent edges, and build the SDefBindPoly data for each poly adjacent to those */
+  /* Loop over all adjacent edges,
+   * and build the SDefBindPoly data for each poly adjacent to those. */
   for (vedge = vert_edges; vedge; vedge = vedge->next) {
     unsigned int edge_ind = vedge->index;
 
@@ -795,7 +796,7 @@ BLI_INLINE float computeNormalDisplacement(const float point_co[3],
 
 static void bindVert(void *__restrict userdata,
                      const int index,
-                     const ParallelRangeTLS *__restrict UNUSED(tls))
+                     const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SDefBindCalcData *const data = (SDefBindCalcData *)userdata;
   float point_co[3];
@@ -860,7 +861,8 @@ static void bindVert(void *__restrict userdata,
         interp_weights_poly_v2(
             sdbind->vert_weights, bpoly->coords_v2, bpoly->numverts, bpoly->point_v2);
 
-        /* Reproject vert based on weights and original poly verts, to reintroduce poly non-planarity */
+        /* Reproject vert based on weights and original poly verts,
+         * to reintroduce poly non-planarity */
         zero_v3(point_co_proj);
         for (int j = 0; j < bpoly->numverts; j++, loop++) {
           madd_v3_v3fl(point_co_proj, bpoly->coords[j], sdbind->vert_weights[j]);
@@ -1074,7 +1076,7 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd,
     mul_v3_m4v3(data.targetCos[i], smd->mat, mvert[i].co);
   }
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (numverts > 10000);
   BLI_task_parallel_range(0, numverts, &data, bindVert, &settings);
@@ -1114,7 +1116,7 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd,
 
 static void deformVert(void *__restrict userdata,
                        const int index,
-                       const ParallelRangeTLS *__restrict UNUSED(tls))
+                       const TaskParallelTLS *__restrict UNUSED(tls))
 {
   const SDefDeformData *const data = (SDefDeformData *)userdata;
   const SDefBind *sdbind = data->bind_verts[index].binds;
@@ -1245,7 +1247,7 @@ static void surfacedeformModifier_do(ModifierData *md,
       mul_v3_m4v3(data.targetCos[i], smd->mat, mvert[i].co);
     }
 
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.use_threading = (numverts > 10000);
     BLI_task_parallel_range(0, numverts, &data, deformVert, &settings);

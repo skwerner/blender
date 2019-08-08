@@ -101,24 +101,30 @@ void BKE_texture_mapping_init(TexMapping *texmap)
     zero_m4(proj);
     proj[3][3] = 1.0f;
 
-    if (texmap->projx != PROJ_N)
+    if (texmap->projx != PROJ_N) {
       proj[texmap->projx - 1][0] = 1.0f;
-    if (texmap->projy != PROJ_N)
+    }
+    if (texmap->projy != PROJ_N) {
       proj[texmap->projy - 1][1] = 1.0f;
-    if (texmap->projz != PROJ_N)
+    }
+    if (texmap->projz != PROJ_N) {
       proj[texmap->projz - 1][2] = 1.0f;
+    }
 
     /* scale */
     copy_v3_v3(size, texmap->size);
 
     if (ELEM(texmap->type, TEXMAP_TYPE_TEXTURE, TEXMAP_TYPE_NORMAL)) {
       /* keep matrix invertible */
-      if (fabsf(size[0]) < 1e-5f)
+      if (fabsf(size[0]) < 1e-5f) {
         size[0] = signf(size[0]) * 1e-5f;
-      if (fabsf(size[1]) < 1e-5f)
+      }
+      if (fabsf(size[1]) < 1e-5f) {
         size[1] = signf(size[1]) * 1e-5f;
-      if (fabsf(size[2]) < 1e-5f)
+      }
+      if (fabsf(size[2]) < 1e-5f) {
         size[2] = signf(size[2]) * 1e-5f;
+      }
     }
 
     size_to_mat4(smat, texmap->size);
@@ -208,7 +214,8 @@ void BKE_texture_free(Tex *tex)
 
 void BKE_texture_default(Tex *tex)
 {
-  /* BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(tex, id)); */ /* Not here, can be called with some pointers set. :/ */
+  /* Not here, can be called with some pointers set. :/ */
+  /* BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(tex, id)); */
 
   tex->type = TEX_IMAGE;
   tex->ima = NULL;
@@ -254,9 +261,7 @@ void BKE_texture_default(Tex *tex)
   tex->vn_distm = 0;
   tex->vn_coltype = 0;
 
-  tex->iuser.ok = 1;
-  tex->iuser.frames = 100;
-  tex->iuser.sfra = 1;
+  BKE_imageuser_default(&tex->iuser);
 
   tex->preview = NULL;
 }
@@ -407,8 +412,10 @@ MTex *BKE_texture_mtex_add_id(ID *id, int slot)
 /* ------------------------------------------------------------------------- */
 
 /**
- * Only copy internal data of Texture ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Texture ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -466,8 +473,9 @@ Tex *BKE_texture_localize(Tex *tex)
 
   /* image texture: BKE_texture_free also doesn't decrease */
 
-  if (texn->coba)
+  if (texn->coba) {
     texn->coba = MEM_dupallocN(texn->coba);
+  }
 
   texn->preview = NULL;
 
@@ -494,8 +502,9 @@ Tex *give_current_linestyle_texture(FreestyleLineStyle *linestyle)
 
   if (linestyle) {
     mtex = linestyle->mtex[(int)(linestyle->texact)];
-    if (mtex)
+    if (mtex) {
       tex = mtex->tex;
+    }
   }
 
   return tex;
@@ -505,8 +514,9 @@ void set_current_linestyle_texture(FreestyleLineStyle *linestyle, Tex *newtex)
 {
   int act = linestyle->texact;
 
-  if (linestyle->mtex[act] && linestyle->mtex[act]->tex)
+  if (linestyle->mtex[act] && linestyle->mtex[act]->tex) {
     id_us_min(&linestyle->mtex[act]->tex->id);
+  }
 
   if (newtex) {
     if (!linestyle->mtex[act]) {
@@ -528,18 +538,21 @@ bool give_active_mtex(ID *id, MTex ***mtex_ar, short *act)
   switch (GS(id->name)) {
     case ID_LS:
       *mtex_ar = ((FreestyleLineStyle *)id)->mtex;
-      if (act)
+      if (act) {
         *act = (((FreestyleLineStyle *)id)->texact);
+      }
       break;
     case ID_PA:
       *mtex_ar = ((ParticleSettings *)id)->mtex;
-      if (act)
+      if (act) {
         *act = (((ParticleSettings *)id)->texact);
+      }
       break;
     default:
       *mtex_ar = NULL;
-      if (act)
+      if (act) {
         *act = 0;
+      }
       return false;
   }
 
@@ -548,10 +561,12 @@ bool give_active_mtex(ID *id, MTex ***mtex_ar, short *act)
 
 void set_active_mtex(ID *id, short act)
 {
-  if (act < 0)
+  if (act < 0) {
     act = 0;
-  else if (act >= MAX_MTEX)
+  }
+  else if (act >= MAX_MTEX) {
     act = MAX_MTEX - 1;
+  }
 
   switch (GS(id->name)) {
     case ID_LS:
@@ -572,8 +587,9 @@ Tex *give_current_brush_texture(Brush *br)
 
 void set_current_brush_texture(Brush *br, Tex *newtex)
 {
-  if (br->mtex.tex)
+  if (br->mtex.tex) {
     id_us_min(&br->mtex.tex->id);
+  }
 
   if (newtex) {
     br->mtex.tex = newtex;
@@ -586,12 +602,14 @@ Tex *give_current_particle_texture(ParticleSettings *part)
   MTex *mtex = NULL;
   Tex *tex = NULL;
 
-  if (!part)
+  if (!part) {
     return NULL;
+  }
 
   mtex = part->mtex[(int)(part->texact)];
-  if (mtex)
+  if (mtex) {
     tex = mtex->tex;
+  }
 
   return tex;
 }
@@ -600,8 +618,9 @@ void set_current_particle_texture(ParticleSettings *part, Tex *newtex)
 {
   int act = part->texact;
 
-  if (part->mtex[act] && part->mtex[act]->tex)
+  if (part->mtex[act] && part->mtex[act]->tex) {
     id_us_min(&part->mtex[act]->tex->id);
+  }
 
   if (newtex) {
     if (!part->mtex[act]) {
@@ -640,15 +659,15 @@ void BKE_texture_pointdensity_init_data(PointDensity *pd)
   pd->object = NULL;
   pd->psys = 0;
   pd->psys_cache_space = TEX_PD_WORLDSPACE;
-  pd->falloff_curve = curvemapping_add(1, 0, 0, 1, 1);
+  pd->falloff_curve = BKE_curvemapping_add(1, 0, 0, 1, 1);
 
   pd->falloff_curve->preset = CURVE_PRESET_LINE;
   pd->falloff_curve->cm->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
-  curvemap_reset(pd->falloff_curve->cm,
-                 &pd->falloff_curve->clipr,
-                 pd->falloff_curve->preset,
-                 CURVEMAP_SLOPE_POSITIVE);
-  curvemapping_changed(pd->falloff_curve, false);
+  BKE_curvemap_reset(pd->falloff_curve->cm,
+                     &pd->falloff_curve->clipr,
+                     pd->falloff_curve->preset,
+                     CURVEMAP_SLOPE_POSITIVE);
+  BKE_curvemapping_changed(pd->falloff_curve, false);
 }
 
 PointDensity *BKE_texture_pointdensity_add(void)
@@ -668,7 +687,7 @@ PointDensity *BKE_texture_pointdensity_copy(const PointDensity *pd, const int UN
   if (pdn->coba) {
     pdn->coba = MEM_dupallocN(pdn->coba);
   }
-  pdn->falloff_curve = curvemapping_copy(pdn->falloff_curve); /* can be NULL */
+  pdn->falloff_curve = BKE_curvemapping_copy(pdn->falloff_curve); /* can be NULL */
   return pdn;
 }
 
@@ -687,7 +706,7 @@ void BKE_texture_pointdensity_free_data(PointDensity *pd)
     pd->coba = NULL;
   }
 
-  curvemapping_free(pd->falloff_curve); /* can be NULL */
+  BKE_curvemapping_free(pd->falloff_curve); /* can be NULL */
 }
 
 void BKE_texture_pointdensity_free(PointDensity *pd)

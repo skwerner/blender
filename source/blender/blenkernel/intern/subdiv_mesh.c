@@ -63,7 +63,7 @@ typedef struct SubdivMeshContext {
    * Averaging is happening for vertices along the coarse edges and corners.
    * This is needed for both displacement and normals.
    *
-   * Displacement is being accumulated to a verticies coordinates, since those
+   * Displacement is being accumulated to a vertices coordinates, since those
    * are not needed during traversal of edge/corner vertices.
    *
    * For normals we are using dedicated array, since we can not use same
@@ -169,7 +169,7 @@ static void loops_of_ptex_get(const SubdivMeshContext *ctx,
 typedef struct VerticesForInterpolation {
   /* This field points to a vertex data which is to be used for interpolation.
    * The idea is to avoid unnecessary allocations for regular faces, where
-   * we can simply use corner verticies. */
+   * we can simply use corner vertices. */
   const CustomData *vertex_data;
   /* Vertices data calculated for ptex corners. There are always 4 elements
    * in this custom data, aligned the following way:
@@ -182,7 +182,7 @@ typedef struct VerticesForInterpolation {
    * Is allocated for non-regular faces (triangles and n-gons). */
   CustomData vertex_data_storage;
   bool vertex_data_storage_allocated;
-  /* Infices within vertex_data to interpolate for. The indices are aligned
+  /* Indices within vertex_data to interpolate for. The indices are aligned
    * with uv coordinates in a similar way as indices in loop_data_storage. */
   int vertex_indices[4];
 } VerticesForInterpolation;
@@ -267,8 +267,10 @@ static void vertex_interpolation_from_corner(const SubdivMeshContext *ctx,
         coarse_mloop[coarse_poly->loopstart +
                      (first_loop_index - coarse_poly->loopstart + 1) % coarse_poly->totloop]
             .v};
-    const int last_indices[2] = {coarse_mloop[first_loop_index].v,
-                                 coarse_mloop[last_loop_index].v};
+    const int last_indices[2] = {
+        coarse_mloop[first_loop_index].v,
+        coarse_mloop[last_loop_index].v,
+    };
     CustomData_interp(vertex_data,
                       &vertex_interpolation->vertex_data_storage,
                       first_indices,
@@ -300,7 +302,7 @@ static void vertex_interpolation_end(VerticesForInterpolation *vertex_interpolat
 typedef struct LoopsForInterpolation {
   /* This field points to a loop data which is to be used for interpolation.
    * The idea is to avoid unnecessary allocations for regular faces, where
-   * we can simply interpolate corner verticies. */
+   * we can simply interpolate corner vertices. */
   const CustomData *loop_data;
   /* Loops data calculated for ptex corners. There are always 4 elements
    * in this custom data, aligned the following way:
@@ -393,8 +395,10 @@ static void loop_interpolation_from_corner(const SubdivMeshContext *ctx,
     const int second_loop_index = base_loop_index +
                                   (first_loop_index - base_loop_index + 1) % coarse_poly->totloop;
     const int first_indices[2] = {first_loop_index, second_loop_index};
-    const int last_indices[2] = {loops_of_ptex.last_loop - coarse_mloop,
-                                 loops_of_ptex.first_loop - coarse_mloop};
+    const int last_indices[2] = {
+        loops_of_ptex.last_loop - coarse_mloop,
+        loops_of_ptex.first_loop - coarse_mloop,
+    };
     CustomData_interp(
         loop_data, &loop_interpolation->loop_data_storage, first_indices, weights, NULL, 2, 1);
     CustomData_interp(
@@ -566,6 +570,8 @@ static void evaluate_vertex_and_apply_displacement_copy(const SubdivMeshContext 
     normalize_v3(N);
     normal_float_to_short_v3(subdiv_vert->no, N);
   }
+  /* Remove facedot flag. This can happen if there is more than one subsurf modifier. */
+  subdiv_vert->flag &= ~ME_VERT_FACEDOT;
 }
 
 static void evaluate_vertex_and_apply_displacement_interpolate(
@@ -715,6 +721,31 @@ static void subdiv_mesh_vertex_edge(const SubdivForeachContext *foreach_context,
       ctx, ptex_face_index, u, v, &tls->vertex_interpolation, subdiv_vert);
 }
 
+static bool subdiv_mesh_is_center_vertex(const MPoly *coarse_poly, const float u, const float v)
+{
+  if (coarse_poly->totloop == 4) {
+    if (u == 0.5f && v == 0.5f) {
+      return true;
+    }
+  }
+  else {
+    if (u == 1.0f && v == 1.0f) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void subdiv_mesh_tag_center_vertex(const MPoly *coarse_poly,
+                                          MVert *subdiv_vert,
+                                          const float u,
+                                          const float v)
+{
+  if (subdiv_mesh_is_center_vertex(coarse_poly, u, v)) {
+    subdiv_vert->flag |= ME_VERT_FACEDOT;
+  }
+}
+
 static void subdiv_mesh_vertex_inner(const SubdivForeachContext *foreach_context,
                                      void *tls_v,
                                      const int ptex_face_index,
@@ -737,6 +768,7 @@ static void subdiv_mesh_vertex_inner(const SubdivForeachContext *foreach_context
   subdiv_vertex_data_interpolate(ctx, subdiv_vert, &tls->vertex_interpolation, u, v);
   eval_final_point_and_vertex_normal(
       subdiv, ptex_face_index, u, v, subdiv_vert->co, subdiv_vert->no);
+  subdiv_mesh_tag_center_vertex(coarse_poly, subdiv_vert, u, v);
 }
 
 /* =============================================================================
@@ -1054,20 +1086,27 @@ static void subdiv_mesh_vertex_of_loose_edge(const struct SubdivForeachContext *
   const MEdge *coarse_edge = &coarse_mesh->medge[coarse_edge_index];
   Mesh *subdiv_mesh = ctx->subdiv_mesh;
   MVert *subdiv_mvert = subdiv_mesh->mvert;
+  const bool is_simple = ctx->subdiv->settings.is_simple;
   /* Find neighbors of the current loose edge. */
   const MEdge *neighbors[2];
   find_edge_neighbors(ctx, coarse_edge, neighbors);
-  /* Get points for b-spline interpolation. */
-  float points[4][3];
-  points_for_loose_edges_interpolation_get(ctx, coarse_edge, neighbors, points);
-  /* Perform interpolation. */
-  float weights[4];
-  key_curve_position_weights(u, weights, KEY_BSPLINE);
   /* Interpolate custom data. */
   subdiv_mesh_vertex_of_loose_edge_interpolate(ctx, coarse_edge, u, subdiv_vertex_index);
-  /* Initialize  */
+  /* Interpolate coordinate. */
   MVert *subdiv_vertex = &subdiv_mvert[subdiv_vertex_index];
-  interp_v3_v3v3v3v3(subdiv_vertex->co, points[0], points[1], points[2], points[3], weights);
+  if (is_simple) {
+    const MVert *coarse_mvert = coarse_mesh->mvert;
+    const MVert *vert_1 = &coarse_mvert[coarse_edge->v1];
+    const MVert *vert_2 = &coarse_mvert[coarse_edge->v2];
+    interp_v3_v3v3(subdiv_vertex->co, vert_1->co, vert_2->co, u);
+  }
+  else {
+    float points[4][3];
+    points_for_loose_edges_interpolation_get(ctx, coarse_edge, neighbors, points);
+    float weights[4];
+    key_curve_position_weights(u, weights, KEY_BSPLINE);
+    interp_v3_v3v3v3v3(subdiv_vertex->co, points[0], points[1], points[2], points[3], weights);
+  }
   /* Reset flags and such. */
   subdiv_vertex->flag = 0;
   /* TODO(sergey): This matches old behavior, but we can as well interpolate
@@ -1088,14 +1127,14 @@ static void setup_foreach_callbacks(const SubdivMeshContext *subdiv_context,
   memset(foreach_context, 0, sizeof(*foreach_context));
   /* General information. */
   foreach_context->topology_info = subdiv_mesh_topology_info;
-  /* Every boundary geometry. Used for dispalcement and normals averaging. */
+  /* Every boundary geometry. Used for displacement and normals averaging. */
   if (subdiv_context->can_evaluate_normals || subdiv_context->have_displacement) {
     foreach_context->vertex_every_corner = subdiv_mesh_vertex_every_corner;
     foreach_context->vertex_every_edge = subdiv_mesh_vertex_every_edge;
   }
   else {
-    foreach_context->vertex_every_corner = NULL;
-    foreach_context->vertex_every_edge = NULL;
+    foreach_context->vertex_every_corner = subdiv_mesh_vertex_every_corner;
+    foreach_context->vertex_every_edge = subdiv_mesh_vertex_every_edge;
   }
   foreach_context->vertex_corner = subdiv_mesh_vertex_corner;
   foreach_context->vertex_edge = subdiv_mesh_vertex_edge;

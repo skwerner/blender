@@ -127,7 +127,8 @@ PyDoc_STRVAR(bpygpu_Batch_vertbuf_add_doc,
 "   Add another vertex buffer to the Batch.\n"
 "   It is not possible to add more vertices to the batch using this method.\n"
 "   Instead it can be used to add more attributes to the existing vertices.\n"
-"   A good use case would be when you have a separate vertex buffer for vertex positions and vertex normals.\n"
+"   A good use case would be when you have a separate\n"
+"   vertex buffer for vertex positions and vertex normals.\n"
 "   Current a batch can have at most " STRINGIFY(GPU_BATCH_VBO_MAX_LEN) " vertex buffers.\n"
 "\n"
 "   :param buf: The vertex buffer that will be added to the batch.\n"
@@ -213,7 +214,7 @@ PyDoc_STRVAR(bpygpu_Batch_draw_doc,
              "   Run the drawing program with the parameters assigned to the batch.\n"
              "\n"
              "   :param program: Program that performs the drawing operations.\n"
-             "      If ``None`` is passed, the last program setted to this batch will run.\n"
+             "      If ``None`` is passed, the last program set to this batch will run.\n"
              "   :type program: :class:`gpu.types.GPUShader`\n");
 static PyObject *bpygpu_Batch_draw(BPyGPUBatch *self, PyObject *args)
 {

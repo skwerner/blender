@@ -37,7 +37,6 @@
 #include "gpu_py_vertex_format.h"
 
 /* -------------------------------------------------------------------- */
-
 /** \name Enum Conversion.
  * \{ */
 
@@ -83,7 +82,7 @@ static int bpygpu_uniform_location_get(GPUShader *shader,
   int uniform = GPU_shader_get_uniform_ensure(shader, name);
 
   if (uniform == -1) {
-    PyErr_Format(PyExc_ValueError, "%s: uniform %.32s %.32s not found", error_prefix, name);
+    PyErr_Format(PyExc_ValueError, "%s: uniform %.32s not found", error_prefix, name);
   }
 
   return uniform;

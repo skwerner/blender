@@ -44,13 +44,16 @@ static void node_free_script(bNode *node)
   }
 }
 
-static void node_copy_script(bNodeTree *UNUSED(dest_ntree), bNode *dest_node, bNode *src_node)
+static void node_copy_script(bNodeTree *UNUSED(dest_ntree),
+                             bNode *dest_node,
+                             const bNode *src_node)
 {
   NodeShaderScript *src_nss = src_node->storage;
   NodeShaderScript *dest_nss = MEM_dupallocN(src_nss);
 
-  if (src_nss->bytecode)
+  if (src_nss->bytecode) {
     dest_nss->bytecode = MEM_dupallocN(src_nss->bytecode);
+  }
 
   dest_node->storage = dest_nss;
 }

@@ -839,8 +839,9 @@ void Mesh::add_undisplaced()
   size_t size = attr->buffer_size(
       this, (subdivision_type == SUBDIVISION_NONE) ? ATTR_PRIM_TRIANGLE : ATTR_PRIM_SUBD);
 
-  /* Center points for ngons aren't stored in Mesh::verts but are included in size since they will be
-   * calculated later, we subtract them from size here so we don't have an overflow while copying.
+  /* Center points for ngons aren't stored in Mesh::verts but are included in size since they will
+   * be calculated later, we subtract them from size here so we don't have an overflow while
+   * copying.
    */
   size -= num_ngons * attr->data_sizeof();
 
@@ -1221,6 +1222,8 @@ void MeshManager::update_osl_attributes(Device *device,
           osl_attr.type = TypeDesc::TypeFloat;
         else if (req.curve_type == TypeDesc::TypeMatrix)
           osl_attr.type = TypeDesc::TypeMatrix;
+        else if (req.curve_type == TypeFloat2)
+          osl_attr.type = TypeFloat2;
         else
           osl_attr.type = TypeDesc::TypeColor;
 
@@ -1242,6 +1245,8 @@ void MeshManager::update_osl_attributes(Device *device,
           osl_attr.type = TypeDesc::TypeFloat;
         else if (req.subd_type == TypeDesc::TypeMatrix)
           osl_attr.type = TypeDesc::TypeMatrix;
+        else if (req.subd_type == TypeFloat2)
+          osl_attr.type = TypeFloat2;
         else
           osl_attr.type = TypeDesc::TypeColor;
 
@@ -2309,6 +2314,9 @@ void MeshManager::device_free(Device *device, DeviceScene *dscene)
   dscene->attributes_float2.free();
   dscene->attributes_float3.free();
   dscene->attributes_uchar4.free();
+
+  /* Signal for shaders like displacement not to do ray tracing. */
+  dscene->data.bvh.bvh_layout = BVH_LAYOUT_NONE;
 
 #ifdef WITH_OSL
   OSLGlobals *og = (OSLGlobals *)device->osl_memory();

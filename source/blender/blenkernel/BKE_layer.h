@@ -68,7 +68,6 @@ struct ViewLayer *BKE_view_layer_find_from_collection(const struct Scene *scene,
 struct Base *BKE_view_layer_base_find(struct ViewLayer *view_layer, struct Object *ob);
 void BKE_view_layer_base_deselect_all(struct ViewLayer *view_layer);
 
-void BKE_view_layer_base_select(struct Base *selbase);
 void BKE_view_layer_base_select_and_set_active(struct ViewLayer *view_layer, struct Base *selbase);
 
 void BKE_view_layer_copy_data(struct Scene *scene_dst,
@@ -119,11 +118,11 @@ void BKE_base_set_visible(struct Scene *scene,
                           struct ViewLayer *view_layer,
                           struct Base *base,
                           bool extend);
-bool BKE_layer_collection_isolate(struct Scene *scene,
+void BKE_layer_collection_isolate(struct Scene *scene,
                                   struct ViewLayer *view_layer,
                                   struct LayerCollection *lc,
                                   bool extend);
-bool BKE_layer_collection_set_visible(struct ViewLayer *view_layer,
+void BKE_layer_collection_set_visible(struct ViewLayer *view_layer,
                                       struct LayerCollection *lc,
                                       const bool visible,
                                       const bool hierarchy);

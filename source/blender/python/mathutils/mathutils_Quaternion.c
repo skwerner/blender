@@ -236,7 +236,7 @@ PyDoc_STRVAR(Quaternion_dot_doc,
              "   :arg other: The other quaternion to perform the dot product with.\n"
              "   :type other: :class:`Quaternion`\n"
              "   :return: The dot product.\n"
-             "   :rtype: :class:`Quaternion`\n");
+             "   :rtype: float\n");
 static PyObject *Quaternion_dot(QuaternionObject *self, PyObject *value)
 {
   float tquat[QUAT_SIZE];
@@ -911,7 +911,7 @@ static PyObject *Quaternion_mul(PyObject *q1, PyObject *q2)
   return NULL;
 }
 /*------------------------obj *= obj------------------------------
- * inplace multiplication */
+ * in-place multiplication */
 static PyObject *Quaternion_imul(PyObject *q1, PyObject *q2)
 {
   float scalar;
@@ -935,7 +935,7 @@ static PyObject *Quaternion_imul(PyObject *q1, PyObject *q2)
     mul_vn_vn(quat1->quat, quat2->quat, QUAT_SIZE);
 #else
     PyErr_Format(PyExc_TypeError,
-                 "Inplace element-wise multiplication: "
+                 "In place element-wise multiplication: "
                  "not supported between '%.200s' and '%.200s' types",
                  Py_TYPE(q1)->tp_name,
                  Py_TYPE(q2)->tp_name);
@@ -1040,7 +1040,7 @@ static PyObject *Quaternion_imatmul(PyObject *q1, PyObject *q2)
   }
   else {
     PyErr_Format(PyExc_TypeError,
-                 "Inplace quaternion multiplication: "
+                 "In place quaternion multiplication: "
                  "not supported between '%.200s' and '%.200s' types",
                  Py_TYPE(q1)->tp_name,
                  Py_TYPE(q2)->tp_name);

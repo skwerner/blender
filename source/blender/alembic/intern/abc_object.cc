@@ -263,9 +263,6 @@ void AbcObjectReader::setupObjectTransform(const float time)
 
     data->cache_file = m_settings->cache_file;
     id_us_plus(&data->cache_file->id);
-
-    data->reader = reinterpret_cast<CacheReader *>(this);
-    this->incref();
   }
 }
 
@@ -273,7 +270,15 @@ Alembic::AbcGeom::IXform AbcObjectReader::xform()
 {
   /* Check that we have an empty object (locator, bone head/tail...).  */
   if (IXform::matches(m_iobject.getMetaData())) {
-    return IXform(m_iobject, Alembic::AbcGeom::kWrapExisting);
+    try {
+      return IXform(m_iobject, Alembic::AbcGeom::kWrapExisting);
+    }
+    catch (Alembic::Util::Exception &ex) {
+      printf("Alembic: error reading object transform for '%s': %s\n",
+             m_iobject.getFullName().c_str(),
+             ex.what());
+      return IXform();
+    }
   }
 
   /* Check that we have an object with actual data, in which case the
@@ -282,7 +287,15 @@ Alembic::AbcGeom::IXform AbcObjectReader::xform()
 
   /* The archive's top object can be recognised by not having a parent. */
   if (abc_parent.getParent() && IXform::matches(abc_parent.getMetaData())) {
-    return IXform(abc_parent, Alembic::AbcGeom::kWrapExisting);
+    try {
+      return IXform(abc_parent, Alembic::AbcGeom::kWrapExisting);
+    }
+    catch (Alembic::Util::Exception &ex) {
+      printf("Alembic: error reading object transform for '%s': %s\n",
+             abc_parent.getFullName().c_str(),
+             ex.what());
+      return IXform();
+    }
   }
 
   /* This can happen in certain cases. For example, MeshLab exports
@@ -322,16 +335,17 @@ void AbcObjectReader::read_matrix(float r_mat[4][4],
       mul_m4_m4m4(r_mat, m_object->parent->obmat, r_mat);
     }
     else {
-      /* This can happen if the user deleted the parent object. */
-      unit_m4(r_mat);
+      /* This can happen if the user deleted the parent object, but also if the Alembic parent was
+       * not imported (because of unknown/unsupported schema, for example). In that case just use
+       * the local matrix as if it is the world matrix. This allows us to import Alembic files from
+       * MeshRoom, see T61935. */
     }
   }
   else {
     /* Only apply scaling to root objects, parenting will propagate it. */
     float scale_mat[4][4];
     scale_m4_fl(scale_mat, scale);
-    scale_mat[3][3] = scale; /* scale translations too */
-    mul_m4_m4m4(r_mat, r_mat, scale_mat);
+    mul_m4_m4m4(r_mat, scale_mat, r_mat);
   }
 
   is_constant = schema.isConstant();
@@ -348,9 +362,6 @@ void AbcObjectReader::addCacheModifier()
   id_us_plus(&mcmd->cache_file->id);
 
   BLI_strncpy(mcmd->object_path, m_iobject.getFullName().c_str(), FILE_MAX);
-
-  mcmd->reader = reinterpret_cast<CacheReader *>(this);
-  this->incref();
 }
 
 chrono_t AbcObjectReader::minTime() const

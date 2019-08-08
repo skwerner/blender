@@ -220,27 +220,31 @@ static void rna_ParticleEdit_redo(bContext *C, PointerRNA *UNUSED(ptr))
   Object *ob = OBACT(view_layer);
   PTCacheEdit *edit = PE_get_current(scene, ob);
 
-  if (!edit)
+  if (!edit) {
     return;
+  }
 
-  if (ob)
+  if (ob) {
     DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  }
 
   BKE_particle_batch_cache_dirty_tag(edit->psys, BKE_PARTICLE_BATCH_DIRTY_ALL);
   psys_free_path_cache(edit->psys, edit);
-  DEG_id_tag_update(&CTX_data_scene(C)->id, ID_RECALC_COPY_ON_WRITE);
+  DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
 }
 
 static void rna_ParticleEdit_update(bContext *C, PointerRNA *UNUSED(ptr))
 {
+  Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *ob = OBACT(view_layer);
 
-  if (ob)
+  if (ob) {
     DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  }
 
   /* Sync tool setting changes from original to evaluated scenes. */
-  DEG_id_tag_update(&CTX_data_scene(C)->id, ID_RECALC_COPY_ON_WRITE);
+  DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
 }
 
 static void rna_ParticleEdit_tool_set(PointerRNA *ptr, int value)
@@ -365,6 +369,12 @@ static bool rna_Brush_mode_with_tool_poll(PointerRNA *ptr, PointerRNA value)
     }
     mode = OB_MODE_SCULPT;
   }
+  else if (paint_contains_brush_slot(&ts->uvsculpt->paint, tslot, &slot_index)) {
+    if (slot_index != brush->uv_sculpt_tool) {
+      return false;
+    }
+    mode = OB_MODE_EDIT;
+  }
   else if (paint_contains_brush_slot(&ts->vpaint->paint, tslot, &slot_index)) {
     if (slot_index != brush->vertexpaint_tool) {
       return false;
@@ -401,24 +411,6 @@ static void rna_Sculpt_update(bContext *C, PointerRNA *UNUSED(ptr))
       ob->sculpt->bm_smooth_shading = ((scene->toolsettings->sculpt->flags &
                                         SCULPT_DYNTOPO_SMOOTH_SHADING) != 0);
     }
-  }
-}
-
-static void rna_Sculpt_ShowDiffuseColor_update(bContext *C, PointerRNA *UNUSED(ptr))
-{
-  ViewLayer *view_layer = CTX_data_view_layer(C);
-  Object *ob = OBACT(view_layer);
-
-  if (ob && ob->sculpt) {
-    Scene *scene = CTX_data_scene(C);
-    Sculpt *sd = scene->toolsettings->sculpt;
-    ob->sculpt->show_diffuse_color = ((sd->flags & SCULPT_SHOW_DIFFUSE) != 0);
-
-    if (ob->sculpt->pbvh)
-      pbvh_show_diffuse_color_set(ob->sculpt->pbvh, ob->sculpt->show_diffuse_color);
-
-    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-    WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ob);
   }
 }
 
@@ -504,7 +496,8 @@ static void rna_ImaPaint_mode_update(bContext *C, PointerRNA *UNUSED(ptr))
     /* of course we need to invalidate here */
     BKE_texpaint_slots_refresh_object(scene, ob);
 
-    /* we assume that changing the current mode will invalidate the uv layers so we need to refresh display */
+    /* We assume that changing the current mode will invalidate the uv layers
+     * so we need to refresh display. */
     BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_main_add_notifier(NC_OBJECT | ND_DRAW, NULL);
   }
@@ -540,8 +533,9 @@ static void rna_ImaPaint_canvas_update(bContext *C, PointerRNA *UNUSED(ptr))
         if (slink->spacetype == SPACE_IMAGE) {
           SpaceImage *sima = (SpaceImage *)slink;
 
-          if (!sima->pin)
+          if (!sima->pin) {
             ED_space_image_set(bmain, sima, obedit, ima, true);
+          }
         }
       }
     }
@@ -564,12 +558,14 @@ static PointerRNA rna_GPencilSculptSettings_brush_get(PointerRNA *ptr)
   GP_Sculpt_Data *brush = NULL;
 
   if ((gset) && (gset->flag & GP_SCULPT_SETT_FLAG_WEIGHT_MODE)) {
-    if ((gset->weighttype >= GP_SCULPT_TYPE_WEIGHT) && (gset->weighttype < GP_SCULPT_TYPE_MAX))
+    if ((gset->weighttype >= GP_SCULPT_TYPE_WEIGHT) && (gset->weighttype < GP_SCULPT_TYPE_MAX)) {
       brush = &gset->brush[gset->weighttype];
+    }
   }
   else {
-    if ((gset->brushtype >= 0) && (gset->brushtype < GP_SCULPT_TYPE_WEIGHT))
+    if ((gset->brushtype >= 0) && (gset->brushtype < GP_SCULPT_TYPE_WEIGHT)) {
       brush = &gset->brush[gset->brushtype];
+    }
   }
   return rna_pointer_inherit_refine(ptr, &RNA_GPencilSculptBrush, brush);
 }
@@ -811,14 +807,6 @@ static void rna_def_sculpt(BlenderRNA *brna)
                            "constructive modifiers except multi-resolution)");
   RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
   RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_Sculpt_update");
-
-  prop = RNA_def_property(srna, "show_diffuse_color", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flags", SCULPT_SHOW_DIFFUSE);
-  RNA_def_property_ui_text(prop,
-                           "Show Diffuse Color",
-                           "Show diffuse color of object and overlay sculpt mask on top of it");
-  RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
-  RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_Sculpt_ShowDiffuseColor_update");
 
   prop = RNA_def_property(srna, "show_mask", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flags", SCULPT_HIDE_MASK);
@@ -1534,7 +1522,10 @@ static void rna_def_gpencil_sculpt(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "weight", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_range(prop, 0.0, 1.0);
-  RNA_def_property_ui_text(prop, "Weight", "Target weight");
+  RNA_def_property_ui_text(prop,
+                           "Weight",
+                           "Target weight (define a maximum range limit for the weight. Any value "
+                           "above will be clamped)");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 

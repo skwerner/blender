@@ -119,8 +119,7 @@ void TEXT_OT_cut(struct wmOperatorType *ot);
 void TEXT_OT_duplicate_line(struct wmOperatorType *ot);
 
 void TEXT_OT_convert_whitespace(struct wmOperatorType *ot);
-void TEXT_OT_uncomment(struct wmOperatorType *ot);
-void TEXT_OT_comment(struct wmOperatorType *ot);
+void TEXT_OT_comment_toggle(struct wmOperatorType *ot);
 void TEXT_OT_unindent(struct wmOperatorType *ot);
 void TEXT_OT_indent(struct wmOperatorType *ot);
 
@@ -144,8 +143,6 @@ void TEXT_OT_scroll_bar(struct wmOperatorType *ot);
 void TEXT_OT_selection_set(struct wmOperatorType *ot);
 void TEXT_OT_cursor_set(struct wmOperatorType *ot);
 void TEXT_OT_line_number(struct wmOperatorType *ot);
-
-void TEXT_OT_properties(struct wmOperatorType *ot);
 
 /* find = find indicated text */
 void TEXT_OT_find(struct wmOperatorType *ot);

@@ -24,31 +24,32 @@ set(INC
   ../blenlib
   ../blenloader
   ../blentranslation
+  ../bmesh
   ../depsgraph
   ../draw
+  ../gpencil_modifiers
   ../gpu
   ../ikplugin
   ../imbuf
   ../makesdna
   ../makesrna
-  ../bmesh
   ../modifiers
-  ../gpencil_modifiers
-  ../shader_fx
   ../nodes
   ../physics
+  ../shader_fx
   ../render/extern/include
   ../../../intern/ghost
-  ../../../intern/guardedalloc
   ../../../intern/glew-mx
+  ../../../intern/guardedalloc
   ../../../intern/iksolver/extern
-  ../../../intern/memutil
-  ../../../intern/mikktspace
   ../../../intern/atomic
   ../../../intern/clog
   ../../../intern/libmv
+  ../../../intern/memutil
+  ../../../intern/mikktspace
   ../../../intern/opensubdiv
   ../../../extern/curve_fit_nd
+  ../../../intern/smoke/extern
 )
 
 set(INC_SYS
@@ -57,6 +58,7 @@ set(INC_SYS
 )
 
 set(SRC
+  ${CMAKE_SOURCE_DIR}/release/datafiles/userdef/userdef_default.c
   intern/CCGSubSurf.c
   intern/CCGSubSurf_legacy.c
   intern/CCGSubSurf_opensubdiv.c
@@ -120,6 +122,7 @@ set(SRC
   intern/idprop_utils.c
   intern/image.c
   intern/image_gen.c
+  intern/image_save.c
   intern/ipo.c
   intern/key.c
   intern/keyconfig.c
@@ -274,6 +277,7 @@ set(SRC
   BKE_idcode.h
   BKE_idprop.h
   BKE_image.h
+  BKE_image_save.h
   BKE_ipo.h
   BKE_key.h
   BKE_keyconfig.h
@@ -519,9 +523,6 @@ if(WITH_MOD_FLUID)
 endif()
 
 if(WITH_MOD_SMOKE)
-  list(APPEND INC
-    ../../../intern/smoke/extern
-  )
   list(APPEND LIB
     bf_intern_smoke
   )

@@ -26,6 +26,7 @@
 #include "BLI_sys_types.h" /* for bool */
 
 struct ARegion;
+struct Base;
 struct DRWInstanceDataList;
 struct DRWPass;
 struct Depsgraph;
@@ -38,6 +39,7 @@ struct IDProperty;
 struct Main;
 struct Material;
 struct Object;
+struct RegionView3D;
 struct RenderEngine;
 struct RenderEngineType;
 struct Scene;
@@ -127,15 +129,21 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
 void DRW_draw_depth_loop(struct Depsgraph *depsgraph,
                          struct ARegion *ar,
                          struct View3D *v3d,
-                         struct GPUViewport *viewport);
+                         struct GPUViewport *viewport,
+                         bool use_opengl_context);
 void DRW_draw_depth_loop_gpencil(struct Depsgraph *depsgraph,
                                  struct ARegion *ar,
                                  struct View3D *v3d,
                                  struct GPUViewport *viewport);
-
-void DRW_framebuffer_select_id_setup(struct ARegion *ar, const bool clear);
-void DRW_framebuffer_select_id_release(struct ARegion *ar);
-void DRW_framebuffer_select_id_read(const struct rcti *rect, uint *r_buf);
+void DRW_draw_depth_object(struct ARegion *ar,
+                           struct GPUViewport *viewport,
+                           struct Object *object);
+void DRW_draw_select_id(struct Depsgraph *depsgraph,
+                        struct ARegion *ar,
+                        struct View3D *v3d,
+                        struct Base **bases,
+                        const uint bases_len,
+                        short select_mode);
 
 /* grease pencil render */
 bool DRW_render_check_grease_pencil(struct Depsgraph *depsgraph);
@@ -143,7 +151,6 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
 void DRW_gpencil_freecache(struct Object *ob);
 
 /* This is here because GPUViewport needs it */
-void DRW_pass_free(struct DRWPass *pass);
 struct DRWInstanceDataList *DRW_instance_data_list_create(void);
 void DRW_instance_data_list_free(struct DRWInstanceDataList *idatalist);
 
@@ -151,6 +158,9 @@ void DRW_opengl_context_create(void);
 void DRW_opengl_context_destroy(void);
 void DRW_opengl_context_enable(void);
 void DRW_opengl_context_disable(void);
+
+/* For garbage collection */
+void DRW_cache_free_old_batches(struct Main *bmain);
 
 /* Never use this. Only for closing blender. */
 void DRW_opengl_context_enable_ex(bool restore);

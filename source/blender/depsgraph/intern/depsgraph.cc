@@ -38,6 +38,7 @@
 extern "C" {
 #include "BKE_scene.h"
 #include "BKE_global.h"
+#include "BKE_idcode.h"
 }
 
 #include "DEG_depsgraph.h"
@@ -67,19 +68,22 @@ template<typename T> static void remove_from_vector(vector<T> *vector, const T &
 Depsgraph::Depsgraph(Scene *scene, ViewLayer *view_layer, eEvaluationMode mode)
     : time_source(NULL),
       need_update(true),
+      need_update_time(false),
       scene(scene),
       view_layer(view_layer),
       mode(mode),
       ctime(BKE_scene_frame_get(scene)),
       scene_cow(NULL),
       is_active(false),
-      debug_is_evaluating(false)
+      debug_is_evaluating(false),
+      is_render_pipeline_depsgraph(false)
 {
   BLI_spin_init(&lock);
   id_hash = BLI_ghash_ptr_new("Depsgraph id hash");
   entry_tags = BLI_gset_ptr_new("Depsgraph entry_tags");
   debug_flags = G.debug;
   memset(id_type_updated, 0, sizeof(id_type_updated));
+  memset(id_type_exist, 0, sizeof(id_type_exist));
   memset(physics_relations, 0, sizeof(physics_relations));
 }
 
@@ -129,6 +133,8 @@ IDNode *Depsgraph::add_id_node(ID *id, ID *id_cow_hint)
      * referencing to. */
     BLI_ghash_insert(id_hash, id, id_node);
     id_nodes.push_back(id_node);
+
+    id_type_exist[BKE_idcode_to_index(GS(id->name))] = 1;
   }
   return id_node;
 }

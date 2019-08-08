@@ -135,7 +135,7 @@ typedef struct tGPDfill {
   short fill_factor;
 
   /** number of elements currently in cache */
-  short sbuffer_size;
+  short sbuffer_used;
   /** temporary points */
   void *sbuffer;
   /** depth array for reproject */
@@ -250,8 +250,9 @@ static void gp_draw_datablock(tGPDfill *tgpf, const float ink[4])
     ED_gpencil_parent_location(tgpw.depsgraph, ob, gpd, gpl, tgpw.diff_mat);
 
     /* do not draw layer if hidden */
-    if (gpl->flag & GP_LAYER_HIDE)
+    if (gpl->flag & GP_LAYER_HIDE) {
       continue;
+    }
 
     /* if active layer and no keyframe, create a new one */
     if (gpl == tgpf->gpl) {
@@ -262,8 +263,9 @@ static void gp_draw_datablock(tGPDfill *tgpf, const float ink[4])
 
     /* get frame to draw */
     bGPDframe *gpf = BKE_gpencil_layer_getframe(gpl, cfra_eval, GP_GETFRAME_USE_PREV);
-    if (gpf == NULL)
+    if (gpf == NULL) {
       continue;
+    }
 
     for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
       /* check if stroke can be drawn */
@@ -399,7 +401,8 @@ static bool gp_render_offscreen(tGPDfill *tgpf)
   glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  ED_view3d_update_viewmat(tgpf->depsgraph, tgpf->scene, tgpf->v3d, tgpf->ar, NULL, winmat, NULL);
+  ED_view3d_update_viewmat(
+      tgpf->depsgraph, tgpf->scene, tgpf->v3d, tgpf->ar, NULL, winmat, NULL, true);
   /* set for opengl */
   GPU_matrix_projection_set(tgpf->rv3d->winmat);
   GPU_matrix_set(tgpf->rv3d->viewmat);
@@ -443,7 +446,7 @@ static void get_pixel(const ImBuf *ibuf, const int idx, float r_col[4])
   }
   else {
     /* XXX: This case probably doesn't happen, as we only write to the float buffer,
-     * but we get compiler warnings about uninitialised vars otherwise
+     * but we get compiler warnings about uninitialized vars otherwise
      */
     BLI_assert(!"gpencil_fill.c - get_pixel() non-float case is used!");
     zero_v4(r_col);
@@ -453,7 +456,7 @@ static void get_pixel(const ImBuf *ibuf, const int idx, float r_col[4])
 /* set pixel data (rgba) at index */
 static void set_pixel(ImBuf *ibuf, int idx, const float col[4])
 {
-  //BLI_assert(idx <= ibuf->x * ibuf->y);
+  // BLI_assert(idx <= ibuf->x * ibuf->y);
   if (ibuf->rect) {
     uint *rrect = &ibuf->rect[idx];
     uchar ccol[4];
@@ -915,7 +918,7 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
 {
   tGPspoint *ptc;
   ToolSettings *ts = tgpf->scene->toolsettings;
-  int totpoints = tgpf->sbuffer_size;
+  int totpoints = tgpf->sbuffer_used;
   int i = 0;
 
   if (totpoints == 0) {
@@ -930,7 +933,8 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
     view3d_region_operator_needs_opengl(tgpf->win, tgpf->ar);
     ED_view3d_autodist_init(tgpf->depsgraph, tgpf->ar, tgpf->v3d, 0);
 
-    /* since strokes are so fine, when using their depth we need a margin otherwise they might get missed */
+    /* Since strokes are so fine, when using their depth we need a margin
+     * otherwise they might get missed. */
     int depth_margin = 0;
 
     /* get an array of depths, far depths are blended */
@@ -959,8 +963,9 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
 
     if (found_depth == false) {
       /* eeh... not much we can do.. :/, ignore depth in this case */
-      for (i = totpoints - 1; i >= 0; i--)
+      for (i = totpoints - 1; i >= 0; i--) {
         tgpf->depth_arr[i] = 0.9999f;
+      }
     }
     else {
       if (interp_depth) {
@@ -979,7 +984,7 @@ static void gpencil_points_from_stack(tGPDfill *tgpf)
     return;
   }
 
-  tgpf->sbuffer_size = (short)totpoints;
+  tgpf->sbuffer_used = (short)totpoints;
   tgpf->sbuffer = MEM_callocN(sizeof(tGPspoint) * totpoints, __func__);
 
   point2D = tgpf->sbuffer;
@@ -1015,7 +1020,7 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
   MDeformVert *dvert = NULL;
   tGPspoint *point2D;
 
-  if (tgpf->sbuffer_size == 0) {
+  if (tgpf->sbuffer_used == 0) {
     return;
   }
 
@@ -1036,8 +1041,8 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
   gps->mat_nr = BKE_gpencil_object_material_ensure(tgpf->bmain, tgpf->ob, tgpf->mat);
 
   /* allocate memory for storage points */
-  gps->totpoints = tgpf->sbuffer_size;
-  gps->points = MEM_callocN(sizeof(bGPDspoint) * tgpf->sbuffer_size, "gp_stroke_points");
+  gps->totpoints = tgpf->sbuffer_used;
+  gps->points = MEM_callocN(sizeof(bGPDspoint) * tgpf->sbuffer_used, "gp_stroke_points");
 
   /* initialize triangle memory to dummy data */
   gps->tot_triangles = 0;
@@ -1064,7 +1069,7 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
     dvert = gps->dvert;
   }
 
-  for (int i = 0; i < tgpf->sbuffer_size && point2D; i++, point2D++, pt++) {
+  for (int i = 0; i < tgpf->sbuffer_used && point2D; i++, point2D++, pt++) {
     /* convert screen-coordinates to 3D coordinates */
     gp_stroke_convertcoords_tpoint(tgpf->scene,
                                    tgpf->ar,
@@ -1115,7 +1120,7 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
   }
 
   /* if parented change position relative to parent object */
-  for (int a = 0; a < tgpf->sbuffer_size; a++) {
+  for (int a = 0; a < tgpf->sbuffer_used; a++) {
     pt = &gps->points[a];
     gp_apply_parent_point(tgpf->depsgraph, tgpf->ob, tgpf->gpd, tgpf->gpl, pt);
   }
@@ -1136,7 +1141,7 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
 /* Helper: Draw status message while the user is running the operator */
 static void gpencil_fill_status_indicators(bContext *C, tGPDfill *UNUSED(tgpf))
 {
-  const char *status_str = IFACE_("Fill: ESC/RMB cancel, LMB Fill, Shift Draw on Back");
+  const char *status_str = TIP_("Fill: ESC/RMB cancel, LMB Fill, Shift Draw on Back");
   ED_workspace_status_text(C, status_str);
 }
 
@@ -1208,7 +1213,7 @@ static tGPDfill *gp_session_init_fill(bContext *C, wmOperator *UNUSED(op))
   tgpf->ar = CTX_wm_region(C);
   tgpf->rv3d = tgpf->ar->regiondata;
   tgpf->v3d = tgpf->sa->spacedata.first;
-  tgpf->depsgraph = CTX_data_depsgraph(C);
+  tgpf->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   tgpf->win = CTX_wm_window(C);
 
   /* set GP datablock */
@@ -1220,7 +1225,7 @@ static tGPDfill *gp_session_init_fill(bContext *C, wmOperator *UNUSED(op))
   tgpf->lock_axis = ts->gp_sculpt.lock_axis;
 
   tgpf->oldkey = -1;
-  tgpf->sbuffer_size = 0;
+  tgpf->sbuffer_used = 0;
   tgpf->sbuffer = NULL;
   tgpf->depth_arr = NULL;
 
@@ -1346,8 +1351,9 @@ static int gpencil_fill_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
   /* try to initialize context data needed */
   if (!gpencil_fill_init(C, op)) {
     gpencil_fill_exit(C, op);
-    if (op->customdata)
+    if (op->customdata) {
       MEM_freeN(op->customdata);
+    }
     return OPERATOR_CANCELLED;
   }
   else {

@@ -785,6 +785,10 @@ int buttons_context(const bContext *C, const char *member, bContextDataResult *r
   SpaceProperties *sbuts = CTX_wm_space_properties(C);
   ButsContextPath *path = sbuts ? sbuts->path : NULL;
 
+  if (sbuts->mainb == BCONTEXT_TOOL) {
+    return 0;
+  }
+
   if (!path) {
     return 0;
   }

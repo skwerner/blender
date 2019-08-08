@@ -89,8 +89,15 @@ const EnumPropertyItem rna_enum_brush_sculpt_tool_items[] = {
     {SCULPT_TOOL_NUDGE, "NUDGE", ICON_BRUSH_NUDGE, "Nudge", ""},
     {SCULPT_TOOL_ROTATE, "ROTATE", ICON_BRUSH_ROTATE, "Rotate", ""},
     {0, "", 0, NULL, NULL},
+    {SCULPT_TOOL_SIMPLIFY, "SIMPLIFY", ICON_BRUSH_DATA, "Simplify", ""},
     {SCULPT_TOOL_MASK, "MASK", ICON_BRUSH_MASK, "Mask", ""},
-    {SCULPT_TOOL_SIMPLIFY, "SIMPLIFY", ICON_BRUSH_DATA /* icon TODO */, "Simplify", ""},
+    {0, NULL, 0, NULL, NULL},
+};
+
+const EnumPropertyItem rna_enum_brush_uv_sculpt_tool_items[] = {
+    {UV_SCULPT_TOOL_GRAB, "GRAB", 0, "Grab", "Grab UVs"},
+    {UV_SCULPT_TOOL_RELAX, "RELAX", 0, "Relax", "Relax UVs"},
+    {UV_SCULPT_TOOL_PINCH, "PINCH", 0, "Pinch", "Pinch UVs"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -454,8 +461,9 @@ static void rna_Brush_reset_icon(Brush *br)
 {
   ID *id = &br->id;
 
-  if (br->flag & BRUSH_CUSTOM_ICON)
+  if (br->flag & BRUSH_CUSTOM_ICON) {
     return;
+  }
 
   if (id->icon_id >= BIFICONID_LAST) {
     BKE_icon_id_delete(id);
@@ -561,13 +569,16 @@ static void rna_Brush_use_gradient_set(PointerRNA *ptr, bool value)
 {
   Brush *br = (Brush *)ptr->data;
 
-  if (value)
+  if (value) {
     br->flag |= BRUSH_USE_GRADIENT;
-  else
+  }
+  else {
     br->flag &= ~BRUSH_USE_GRADIENT;
+  }
 
-  if ((br->flag & BRUSH_USE_GRADIENT) && br->gradient == NULL)
+  if ((br->flag & BRUSH_USE_GRADIENT) && br->gradient == NULL) {
     br->gradient = BKE_colorband_add(true);
+  }
 }
 
 static void rna_Brush_set_unprojected_radius(PointerRNA *ptr, float value)
@@ -1246,7 +1257,7 @@ static void rna_def_gpencil_options(BlenderRNA *brna)
   RNA_def_property_float_default(prop, 1.0f);
   RNA_def_property_ui_text(prop,
                            "Border Opacity Factor",
-                           "Amount of gradient for Dot strokes (set to 1 for full solid)");
+                           "Amount of gradient for Dot and Box strokes (set to 1 for full solid)");
   RNA_def_parameter_clear_flags(prop, PROP_ANIMATABLE, 0);
 
   /* gradient shape ratio */
@@ -1415,7 +1426,7 @@ static void rna_def_gpencil_options(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 
   prop = RNA_def_property(srna, "use_occlude_eraser", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", GP_BRUSH_OCCLUDE_ERASER);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_BRUSH_OCCLUDE_ERASER);
   RNA_def_property_ui_text(prop, "Occlude Eraser", "Erase only strokes visible and not occluded");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 }
@@ -1549,8 +1560,27 @@ static void rna_def_brush(BlenderRNA *brna)
   };
 
   static const EnumPropertyItem brush_size_unit_items[] = {
-      {0, "VIEW", 0, "View", "Measure brush size relateve to the view"},
-      {BRUSH_LOCK_SIZE, "SCENE", 0, "Scene", "Measure brush size relateve to the scene"},
+      {0, "VIEW", 0, "View", "Measure brush size relative to the view"},
+      {BRUSH_LOCK_SIZE, "SCENE", 0, "Scene", "Measure brush size relative to the scene"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem color_gradient_items[] = {
+      {0, "COLOR", 0, "Color", "Paint with a single color"},
+      {BRUSH_USE_GRADIENT, "GRADIENT", 0, "Gradient", "Paint with a gradient"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem brush_curve_preset_items[] = {
+      {BRUSH_CURVE_CUSTOM, "CUSTOM", ICON_RNDCURVE, "Custom", ""},
+      {BRUSH_CURVE_SMOOTH, "SMOOTH", ICON_SMOOTHCURVE, "Smooth", ""},
+      {BRUSH_CURVE_SPHERE, "SPHERE", ICON_SPHERECURVE, "Sphere", ""},
+      {BRUSH_CURVE_ROOT, "ROOT", ICON_ROOTCURVE, "Root", ""},
+      {BRUSH_CURVE_SHARP, "SHARP", ICON_SHARPCURVE, "Sharp", ""},
+      {BRUSH_CURVE_LIN, "LIN", ICON_LINCURVE, "Linear", ""},
+      {BRUSH_CURVE_POW4, "POW4", ICON_SHARPCURVE, "Sharper", ""},
+      {BRUSH_CURVE_INVSQUARE, "INVSQUARE", ICON_INVERSESQUARECURVE, "Inverse square", ""},
+      {BRUSH_CURVE_CONSTANT, "CONSTANT", ICON_NOCURVE, "Constant", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -1572,6 +1602,11 @@ static void rna_def_brush(BlenderRNA *brna)
    */
   prop = RNA_def_property(srna, "sculpt_tool", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, rna_enum_brush_sculpt_tool_items);
+  RNA_def_property_ui_text(prop, "Sculpt Tool", "");
+  RNA_def_property_update(prop, 0, "rna_Brush_update_and_reset_icon");
+
+  prop = RNA_def_property(srna, "uv_sculpt_tool", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, rna_enum_brush_uv_sculpt_tool_items);
   RNA_def_property_ui_text(prop, "Sculpt Tool", "");
   RNA_def_property_update(prop, 0, "rna_Brush_update_and_reset_icon");
 
@@ -1622,6 +1657,11 @@ static void rna_def_brush(BlenderRNA *brna)
   prop = RNA_def_property(srna, "mask_tool", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, brush_mask_tool_items);
   RNA_def_property_ui_text(prop, "Mask Tool", "");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
+  prop = RNA_def_property(srna, "curve_preset", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, brush_curve_preset_items);
+  RNA_def_property_ui_text(prop, "Curve Preset", "");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
   /* number values */
@@ -1791,9 +1831,8 @@ static void rna_def_brush(BlenderRNA *brna)
   RNA_def_property_ui_text(prop,
                            "Topology Rake",
                            "Automatically align edges to the brush direction to "
-                           "to generate cleaner topology and define sharp features "
-                           "dynamic topology. Best used on low-poly meshes as it has "
-                           "a performance impact");
+                           "generate cleaner topology and define sharp features. "
+                           "Best used on low-poly meshes as it has a performance impact");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
   prop = RNA_def_property(srna, "stencil_pos", PROP_FLOAT, PROP_XYZ);
@@ -1840,6 +1879,7 @@ static void rna_def_brush(BlenderRNA *brna)
   prop = RNA_def_property(srna, "blur_kernel_radius", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "blur_kernel_radius");
   RNA_def_property_range(prop, 1, 10000);
+  RNA_def_property_int_default(prop, 2);
   RNA_def_property_ui_range(prop, 1, 50, 1, -1);
   RNA_def_property_ui_text(
       prop, "Kernel Radius", "Radius of kernel used for soften and sharpen in pixels");
@@ -1898,12 +1938,6 @@ static void rna_def_brush(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", BRUSH_SIZE_PRESSURE);
   RNA_def_property_ui_icon(prop, ICON_STYLUS_PRESSURE, 0);
   RNA_def_property_ui_text(prop, "Size Pressure", "Enable tablet pressure sensitivity for size");
-  RNA_def_property_update(prop, 0, "rna_Brush_update");
-
-  prop = RNA_def_property(srna, "use_gradient", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", BRUSH_USE_GRADIENT);
-  RNA_def_property_boolean_funcs(prop, NULL, "rna_Brush_use_gradient_set");
-  RNA_def_property_ui_text(prop, "Use Gradient", "Use Gradient by utilizing a sampling method");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
   prop = RNA_def_property(srna, "use_pressure_jitter", PROP_BOOLEAN, PROP_NONE);
@@ -2021,6 +2055,13 @@ static void rna_def_brush(BlenderRNA *brna)
       prop, "Radius Unit", "Measure brush size relative to the view or the scene");
   RNA_def_property_update(prop, 0, "rna_Brush_update");
 
+  prop = RNA_def_property(srna, "color_type", PROP_ENUM, PROP_NONE); /* as an enum */
+  RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
+  RNA_def_property_enum_items(prop, color_gradient_items);
+  RNA_def_property_enum_funcs(prop, NULL, "rna_Brush_use_gradient_set", NULL);
+  RNA_def_property_ui_text(prop, "Color Type", "Use single color or gradient when painting");
+  RNA_def_property_update(prop, 0, "rna_Brush_update");
+
   prop = RNA_def_property(srna, "use_edge_to_edge", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", BRUSH_EDGE_TO_EDGE);
   RNA_def_property_ui_text(prop, "Edge-to-edge", "Drag anchor brush from edge-to-edge");
@@ -2103,6 +2144,10 @@ static void rna_def_brush(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_paint_sculpt", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "ob_mode", OB_MODE_SCULPT);
   RNA_def_property_ui_text(prop, "Use Sculpt", "Use this brush in sculpt mode");
+
+  prop = RNA_def_property(srna, "use_paint_uv_sculpt", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "ob_mode", OB_MODE_EDIT);
+  RNA_def_property_ui_text(prop, "Use UV Sculpt", "Use this brush in UV sculpt mode");
 
   prop = RNA_def_property(srna, "use_paint_vertex", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "ob_mode", OB_MODE_VERTEX_PAINT);

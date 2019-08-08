@@ -47,8 +47,8 @@ typedef struct {
 /* Keep alignment for readability. */
 /* clang-format off */
 /**
- * When editing enusre that:
- * - Plural need to match rna_main.c's #MainCollectionDef.
+ * When editing ensure that:
+ * - Plural needs to match rna_main.c's #MainCollectionDef.
  * - Keep it in sync with i18n contexts in BLT_translation.h
  */
 static IDType idtypes[] = {
@@ -116,9 +116,11 @@ static IDType *idtype_from_code(short idcode)
 {
   int i = ARRAY_SIZE(idtypes);
 
-  while (i--)
-    if (idcode == idtypes[i].code)
+  while (i--) {
+    if (idcode == idtypes[i].code) {
       return &idtypes[i];
+    }
+  }
 
   return NULL;
 }

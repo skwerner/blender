@@ -177,8 +177,52 @@ static PyObject *bpy_user_resource(PyObject *UNUSED(self), PyObject *args, PyObj
     return NULL;
   }
 
-  /* same logic as BKE_appdir_folder_id_create(), but best leave it up to the script author to create */
+  /* same logic as BKE_appdir_folder_id_create(),
+   * but best leave it up to the script author to create */
   path = BKE_appdir_folder_id_user_notest(folder_id, subdir);
+
+  return PyC_UnicodeFromByte(path ? path : "");
+}
+
+PyDoc_STRVAR(bpy_system_resource_doc,
+             ".. function:: system_resource(type, path=\"\")\n"
+             "\n"
+             "   Return a system resource path.\n"
+             "\n"
+             "   :arg type: string in ['DATAFILES', 'SCRIPTS', 'PYTHON'].\n"
+             "   :type type: string\n"
+             "   :arg path: Optional subdirectory.\n"
+             "   :type path: string\n");
+static PyObject *bpy_system_resource(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
+{
+  const char *type;
+  const char *subdir = NULL;
+  int folder_id;
+
+  const char *path;
+
+  static const char *_keywords[] = {"type", "path", NULL};
+  static _PyArg_Parser _parser = {"s|s:system_resource", _keywords, 0};
+  if (!_PyArg_ParseTupleAndKeywordsFast(args, kw, &_parser, &type, &subdir)) {
+    return NULL;
+  }
+
+  /* stupid string compare */
+  if (STREQ(type, "DATAFILES")) {
+    folder_id = BLENDER_SYSTEM_DATAFILES;
+  }
+  else if (STREQ(type, "SCRIPTS")) {
+    folder_id = BLENDER_SYSTEM_SCRIPTS;
+  }
+  else if (STREQ(type, "PYTHON")) {
+    folder_id = BLENDER_SYSTEM_PYTHON;
+  }
+  else {
+    PyErr_SetString(PyExc_ValueError, "invalid resource argument");
+    return NULL;
+  }
+
+  path = BKE_appdir_folder_id(folder_id, subdir);
 
   return PyC_UnicodeFromByte(path ? path : "");
 }
@@ -274,19 +318,41 @@ static PyObject *bpy_escape_identifier(PyObject *UNUSED(self), PyObject *value)
 }
 
 static PyMethodDef meth_bpy_script_paths = {
-    "script_paths", (PyCFunction)bpy_script_paths, METH_NOARGS, bpy_script_paths_doc};
-static PyMethodDef meth_bpy_blend_paths = {"blend_paths",
-                                           (PyCFunction)bpy_blend_paths,
-                                           METH_VARARGS | METH_KEYWORDS,
-                                           bpy_blend_paths_doc};
+    "script_paths",
+    (PyCFunction)bpy_script_paths,
+    METH_NOARGS,
+    bpy_script_paths_doc,
+};
+static PyMethodDef meth_bpy_blend_paths = {
+    "blend_paths",
+    (PyCFunction)bpy_blend_paths,
+    METH_VARARGS | METH_KEYWORDS,
+    bpy_blend_paths_doc,
+};
 static PyMethodDef meth_bpy_user_resource = {
-    "user_resource", (PyCFunction)bpy_user_resource, METH_VARARGS | METH_KEYWORDS, NULL};
-static PyMethodDef meth_bpy_resource_path = {"resource_path",
-                                             (PyCFunction)bpy_resource_path,
-                                             METH_VARARGS | METH_KEYWORDS,
-                                             bpy_resource_path_doc};
+    "user_resource",
+    (PyCFunction)bpy_user_resource,
+    METH_VARARGS | METH_KEYWORDS,
+    NULL,
+};
+static PyMethodDef meth_bpy_system_resource = {
+    "system_resource",
+    (PyCFunction)bpy_system_resource,
+    METH_VARARGS | METH_KEYWORDS,
+    bpy_system_resource_doc,
+};
+static PyMethodDef meth_bpy_resource_path = {
+    "resource_path",
+    (PyCFunction)bpy_resource_path,
+    METH_VARARGS | METH_KEYWORDS,
+    bpy_resource_path_doc,
+};
 static PyMethodDef meth_bpy_escape_identifier = {
-    "escape_identifier", (PyCFunction)bpy_escape_identifier, METH_O, bpy_escape_identifier_doc};
+    "escape_identifier",
+    (PyCFunction)bpy_escape_identifier,
+    METH_O,
+    bpy_escape_identifier_doc,
+};
 
 static PyObject *bpy_import_test(const char *modname)
 {
@@ -320,7 +386,7 @@ void BPy_init_modules(void)
     Py_DECREF(py_modpath);
   }
   else {
-    printf("bpy: couldnt find 'scripts/modules', blender probably wont start.\n");
+    printf("bpy: couldn't find 'scripts/modules', blender probably wont start.\n");
   }
   /* stand alone utility modules not related to blender directly */
   IDProp_Init_Types(); /* not actually a submodule, just types */
@@ -380,6 +446,9 @@ void BPy_init_modules(void)
   PyModule_AddObject(mod,
                      meth_bpy_user_resource.ml_name,
                      (PyObject *)PyCFunction_New(&meth_bpy_user_resource, NULL));
+  PyModule_AddObject(mod,
+                     meth_bpy_system_resource.ml_name,
+                     (PyObject *)PyCFunction_New(&meth_bpy_system_resource, NULL));
   PyModule_AddObject(mod,
                      meth_bpy_resource_path.ml_name,
                      (PyObject *)PyCFunction_New(&meth_bpy_resource_path, NULL));

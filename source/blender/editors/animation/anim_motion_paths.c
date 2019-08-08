@@ -216,8 +216,9 @@ void animviz_calc_motionpaths(Depsgraph *depsgraph,
                               bool current_frame_only)
 {
   /* sanity check */
-  if (ELEM(NULL, targets, targets->first))
+  if (ELEM(NULL, targets, targets->first)) {
     return;
+  }
 
   /* Compute frame range to bake within.
    * TODO: this method could be improved...
@@ -249,7 +250,20 @@ void animviz_calc_motionpaths(Depsgraph *depsgraph,
   /* get copies of objects/bones to get the calculated results from
    * (for copy-on-write evaluation), so that we actually get some results
    */
-  // TODO: Create a copy of background depsgraph that only contain these entities, and only evaluates them..
+
+  /* TODO: Create a copy of background depsgraph that only contain these entities,
+   * and only evaluates them.
+   *
+   * For until that is done we force dependency graph to not be active, so we don't loose unkeyed
+   * changes during updating the motion path.
+   * This still doesn't include unkeyed changes to the path itself, but allows to have updates in
+   * an environment when auto-keying and pose paste is used. */
+
+  const bool is_active_depsgraph = DEG_is_active(depsgraph);
+  if (is_active_depsgraph) {
+    DEG_make_inactive(depsgraph);
+  }
+
   for (MPathTarget *mpt = targets->first; mpt; mpt = mpt->next) {
     mpt->ob_eval = DEG_get_evaluated_object(depsgraph, mpt->ob);
 
@@ -262,10 +276,12 @@ void animviz_calc_motionpaths(Depsgraph *depsgraph,
       bAnimVizSettings *avs;
 
       /* get pointer to animviz settings for each target */
-      if (mpt->pchan)
+      if (mpt->pchan) {
         avs = &mpt->ob->pose->avs;
-      else
+      }
+      else {
         avs = &mpt->ob->avs;
+      }
 
       /* it is assumed that keyframes for bones are all grouped in a single group
        * unless an option is set to always use the whole action
@@ -306,11 +322,15 @@ void animviz_calc_motionpaths(Depsgraph *depsgraph,
 
   /* reset original environment */
   /* NOTE: We don't always need to reevaluate the main scene, as the depsgraph
-   * may be a temporary one that works on a subset of the data. We always have
-   * to resoture the current frame though. */
+   * may be a temporary one that works on a subset of the data.
+   * We always have to restore the current frame though. */
   CFRA = cfra;
   if (!current_frame_only && restore) {
     motionpaths_calc_update_scene(bmain, depsgraph);
+  }
+
+  if (is_active_depsgraph) {
+    DEG_make_active(depsgraph);
   }
 
   /* clear recalc flags from targets */
@@ -319,10 +339,12 @@ void animviz_calc_motionpaths(Depsgraph *depsgraph,
     bMotionPath *mpath = mpt->mpath;
 
     /* get pointer to animviz settings for each target */
-    if (mpt->pchan)
+    if (mpt->pchan) {
       avs = &mpt->ob->pose->avs;
-    else
+    }
+    else {
       avs = &mpt->ob->avs;
+    }
 
     /* clear the flag requesting recalculation of targets */
     avs->recalc &= ~ANIMVIZ_RECALC_PATHS;

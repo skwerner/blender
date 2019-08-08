@@ -19,7 +19,6 @@
  */
 
 #include "../ABC_alembic.h"
-#include <boost/foreach.hpp>
 
 #include <Alembic/AbcMaterial/IMaterial.h>
 
@@ -290,8 +289,9 @@ static void export_endjob(void *customdata)
     BLI_delete(data->filename, false, false);
   }
 
-  if (!data->settings.logger.empty()) {
-    std::cerr << data->settings.logger;
+  std::string log = data->settings.logger.str();
+  if (!log.empty()) {
+    std::cerr << log;
     WM_report(RPT_ERROR, "Errors occurred during the export, look in the console to know more...");
   }
 
@@ -566,11 +566,10 @@ static std::pair<bool, AbcObjectReader *> visit_object(
 
     /* We can now assign this reader as parent for our children. */
     if (nonclaiming_child_readers.size() + assign_as_parent.size() > 0) {
-      /* TODO: When we only support C++11, use for (a: b) instead. */
-      BOOST_FOREACH (AbcObjectReader *child_reader, nonclaiming_child_readers) {
+      for (AbcObjectReader *child_reader : nonclaiming_child_readers) {
         child_reader->parent_reader = reader;
       }
-      BOOST_FOREACH (AbcObjectReader *child_reader, assign_as_parent) {
+      for (AbcObjectReader *child_reader : assign_as_parent) {
         child_reader->parent_reader = reader;
       }
     }
@@ -581,14 +580,14 @@ static std::pair<bool, AbcObjectReader *> visit_object(
        * our non-claiming children. Since all claiming children share
        * the same XForm, it doesn't really matter which one we pick. */
       AbcObjectReader *claiming_child = claiming_child_readers[0];
-      BOOST_FOREACH (AbcObjectReader *child_reader, nonclaiming_child_readers) {
+      for (AbcObjectReader *child_reader : nonclaiming_child_readers) {
         child_reader->parent_reader = claiming_child;
       }
-      BOOST_FOREACH (AbcObjectReader *child_reader, assign_as_parent) {
+      for (AbcObjectReader *child_reader : assign_as_parent) {
         child_reader->parent_reader = claiming_child;
       }
       /* Claiming children should have our parent set as their parent. */
-      BOOST_FOREACH (AbcObjectReader *child_reader, claiming_child_readers) {
+      for (AbcObjectReader *child_reader : claiming_child_readers) {
         r_assign_as_parent.push_back(child_reader);
       }
     }
@@ -596,13 +595,13 @@ static std::pair<bool, AbcObjectReader *> visit_object(
       /* This object isn't claimed by any child, and didn't produce
        * a reader. Odd situation, could be the top Alembic object, or
        * an unsupported Alembic schema. Delegate to our parent. */
-      BOOST_FOREACH (AbcObjectReader *child_reader, claiming_child_readers) {
+      for (AbcObjectReader *child_reader : claiming_child_readers) {
         r_assign_as_parent.push_back(child_reader);
       }
-      BOOST_FOREACH (AbcObjectReader *child_reader, nonclaiming_child_readers) {
+      for (AbcObjectReader *child_reader : nonclaiming_child_readers) {
         r_assign_as_parent.push_back(child_reader);
       }
-      BOOST_FOREACH (AbcObjectReader *child_reader, assign_as_parent) {
+      for (AbcObjectReader *child_reader : assign_as_parent) {
         r_assign_as_parent.push_back(child_reader);
       }
     }
@@ -626,6 +625,7 @@ struct ImportJobData {
   char filename[1024];
   ImportSettings settings;
 
+  ArchiveReader *archive;
   std::vector<AbcObjectReader *> readers;
 
   short *stop;
@@ -671,9 +671,9 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
 
   cache_file->is_sequence = data->settings.is_sequence;
   cache_file->scale = data->settings.scale;
-  cache_file->handle = handle_from_archive(archive);
-  BLI_strncpy(cache_file->filepath, data->filename, 1024);
+  STRNCPY(cache_file->filepath, data->filename);
 
+  data->archive = archive;
   data->settings.cache_file = cache_file;
 
   *data->do_update = true;
@@ -780,15 +780,16 @@ static void import_endjob(void *user_data)
 
   std::vector<AbcObjectReader *>::iterator iter;
 
-  /* Delete objects on cancelation. */
+  /* Delete objects on cancellation. */
   if (data->was_cancelled) {
     for (iter = data->readers.begin(); iter != data->readers.end(); ++iter) {
       Object *ob = (*iter)->object();
 
       /* It's possible that cancellation occurred between the creation of
        * the reader and the creation of the Blender object. */
-      if (ob == NULL)
+      if (ob == NULL) {
         continue;
+      }
 
       BKE_id_free_us(data->bmain, ob);
     }
@@ -853,6 +854,7 @@ static void import_endjob(void *user_data)
 static void import_freejob(void *user_data)
 {
   ImportJobData *data = static_cast<ImportJobData *>(user_data);
+  delete data->archive;
   delete data;
 }
 
@@ -884,6 +886,7 @@ bool ABC_import(bContext *C,
   job->settings.validate_meshes = validate_meshes;
   job->error_code = ABC_NO_ERROR;
   job->was_cancelled = false;
+  job->archive = NULL;
 
   G.is_break = false;
 

@@ -110,38 +110,39 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   const int miter_inner = bmd->miter_inner;
   const float spread = bmd->spread;
 
-  bm = BKE_mesh_to_bmesh_ex(
-      mesh,
-      &(struct BMeshCreateParams){0},
-      &(struct BMeshFromMeshParams){
-          .calc_face_normal = true,
-          .add_key_index = false,
-          .use_shapekey = false,
-          .active_shapekey = 0,
-          /* XXX We probably can use CD_MASK_BAREMESH_ORIGDINDEX here instead (also for other modifiers cases)? */
-          .cd_mask_extra = {.vmask = CD_MASK_ORIGINDEX,
-                            .emask = CD_MASK_ORIGINDEX,
-                            .pmask = CD_MASK_ORIGINDEX},
-      });
+  bm = BKE_mesh_to_bmesh_ex(mesh,
+                            &(struct BMeshCreateParams){0},
+                            &(struct BMeshFromMeshParams){
+                                .calc_face_normal = true,
+                                .add_key_index = false,
+                                .use_shapekey = false,
+                                .active_shapekey = 0,
+                                /* XXX We probably can use CD_MASK_BAREMESH_ORIGDINDEX here instead
+                                 * (also for other modifiers cases)? */
+                                .cd_mask_extra = {.vmask = CD_MASK_ORIGINDEX,
+                                                  .emask = CD_MASK_ORIGINDEX,
+                                                  .pmask = CD_MASK_ORIGINDEX},
+                            });
 
-  if ((bmd->lim_flags & MOD_BEVEL_VGROUP) && bmd->defgrp_name[0])
+  if ((bmd->lim_flags & MOD_BEVEL_VGROUP) && bmd->defgrp_name[0]) {
     MOD_get_vgroup(ctx->object, mesh, bmd->defgrp_name, &dvert, &vgroup);
+  }
 
   if (vertex_only) {
     BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
-      if (!BM_vert_is_manifold(v))
-        continue;
       if (bmd->lim_flags & MOD_BEVEL_WEIGHT) {
         weight = BM_elem_float_data_get(&bm->vdata, v, CD_BWEIGHT);
-        if (weight == 0.0f)
+        if (weight == 0.0f) {
           continue;
+        }
       }
       else if (vgroup != -1) {
         weight = defvert_array_find_weight_safe(dvert, BM_elem_index_get(v), vgroup);
         /* Check is against 0.5 rather than != 0.0 because cascaded bevel modifiers will
          * interpolate weights for newly created vertices, and may cause unexpected "selection" */
-        if (weight < 0.5f)
+        if (weight < 0.5f) {
           continue;
+        }
       }
       BM_elem_flag_enable(v, BM_ELEM_TAG);
     }
@@ -165,14 +166,16 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       if (BM_edge_is_manifold(e)) {
         if (bmd->lim_flags & MOD_BEVEL_WEIGHT) {
           weight = BM_elem_float_data_get(&bm->edata, e, CD_BWEIGHT);
-          if (weight == 0.0f)
+          if (weight == 0.0f) {
             continue;
+          }
         }
         else if (vgroup != -1) {
           weight = defvert_array_find_weight_safe(dvert, BM_elem_index_get(e->v1), vgroup);
           weight2 = defvert_array_find_weight_safe(dvert, BM_elem_index_get(e->v2), vgroup);
-          if (weight < 0.5f || weight2 < 0.5f)
+          if (weight < 0.5f || weight2 < 0.5f) {
             continue;
+          }
         }
         BM_elem_flag_enable(e, BM_ELEM_TAG);
         BM_elem_flag_enable(e->v1, BM_ELEM_TAG);
@@ -181,7 +184,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     }
   }
 
-  if (harden_normals && !(((Mesh *)ctx->object->data)->flag & ME_AUTOSMOOTH)) {
+  Object *ob = ctx->object;
+
+  if (harden_normals && (ob->type == OB_MESH) && !(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH)) {
     modifier_setError(md, "Enable 'Auto Smooth' option in mesh settings for hardening");
     harden_normals = false;
   }

@@ -89,8 +89,6 @@ struct StrokeElem {
 };
 
 struct CurveDrawData {
-  Depsgraph *depsgraph;
-
   short init_event_type;
   short curve_type;
 
@@ -578,8 +576,6 @@ static bool curve_draw_init(bContext *C, wmOperator *op, bool is_invoke)
 
   struct CurveDrawData *cdd = MEM_callocN(sizeof(*cdd), __func__);
 
-  cdd->depsgraph = CTX_data_depsgraph(C);
-
   if (is_invoke) {
     ED_view3d_viewcontext_init(C, &cdd->vc);
     if (ELEM(NULL, cdd->vc.ar, cdd->vc.rv3d, cdd->vc.v3d, cdd->vc.win, cdd->vc.scene)) {
@@ -590,7 +586,7 @@ static bool curve_draw_init(bContext *C, wmOperator *op, bool is_invoke)
   }
   else {
     cdd->vc.bmain = CTX_data_main(C);
-    cdd->vc.depsgraph = CTX_data_depsgraph(C);
+    cdd->vc.depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
     cdd->vc.scene = CTX_data_scene(C);
     cdd->vc.view_layer = CTX_data_view_layer(C);
     cdd->vc.obedit = CTX_data_edit_object(C);

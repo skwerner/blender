@@ -41,10 +41,12 @@ static void rna_Text_filename_get(PointerRNA *ptr, char *value)
 {
   Text *text = (Text *)ptr->data;
 
-  if (text->name)
+  if (text->name) {
     strcpy(value, text->name);
-  else
+  }
+  else {
     value[0] = '\0';
+  }
 }
 
 static int rna_Text_filename_length(PointerRNA *ptr)
@@ -57,13 +59,16 @@ static void rna_Text_filename_set(PointerRNA *ptr, const char *value)
 {
   Text *text = (Text *)ptr->data;
 
-  if (text->name)
+  if (text->name) {
     MEM_freeN(text->name);
+  }
 
-  if (value[0])
+  if (value[0]) {
     text->name = BLI_strdup(value);
-  else
+  }
+  else {
     text->name = NULL;
+  }
 }
 
 static bool rna_Text_modified_get(PointerRNA *ptr)
@@ -88,10 +93,12 @@ static void rna_TextLine_body_get(PointerRNA *ptr, char *value)
 {
   TextLine *line = (TextLine *)ptr->data;
 
-  if (line->line)
+  if (line->line) {
     strcpy(value, line->line);
-  else
+  }
+  else {
     value[0] = '\0';
+  }
 }
 
 static int rna_TextLine_body_length(PointerRNA *ptr)
@@ -105,8 +112,9 @@ static void rna_TextLine_body_set(PointerRNA *ptr, const char *value)
   TextLine *line = (TextLine *)ptr->data;
   int len = strlen(value);
 
-  if (line->line)
+  if (line->line) {
     MEM_freeN(line->line);
+  }
 
   line->line = MEM_mallocN((len + 1) * sizeof(char), "rna_text_body");
   line->len = len;
@@ -138,6 +146,13 @@ static void rna_def_text_line(BlenderRNA *brna)
 
 static void rna_def_text(BlenderRNA *brna)
 {
+
+  static const EnumPropertyItem indentation_items[] = {
+      {0, "TABS", 0, "Tabs", "Indent using tabs"},
+      {TXT_TABSTOSPACES, "SPACES", 0, "Spaces", "Indent using spaces"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   StructRNA *srna;
   PropertyRNA *prop;
 
@@ -172,14 +187,12 @@ static void rna_def_text(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_module", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", TXT_ISSCRIPT);
   RNA_def_property_ui_text(
-      prop,
-      "Register",
-      "Register this text as a module on loading, Text name must end with \".py\"");
+      prop, "Register", "Run this text as a script on loading, Text name must end with \".py\"");
 
-  prop = RNA_def_property(srna, "use_tabs_as_spaces", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flags", TXT_TABSTOSPACES);
-  RNA_def_property_ui_text(
-      prop, "Tabs as Spaces", "Automatically converts all new tabs into spaces");
+  prop = RNA_def_property(srna, "indentation", PROP_ENUM, PROP_NONE); /* as an enum */
+  RNA_def_property_enum_bitflag_sdna(prop, NULL, "flags");
+  RNA_def_property_enum_items(prop, indentation_items);
+  RNA_def_property_ui_text(prop, "Indentation", "Use tabs or spaces for indentation");
 
   prop = RNA_def_property(srna, "lines", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_struct_type(prop, "TextLine");

@@ -184,8 +184,8 @@ bool Session::draw_gpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
     /* then verify the buffers have the expected size, so we don't
      * draw previous results in a resized window */
     if (!buffer_params.modified(display->params)) {
-      /* for CUDA we need to do tonemapping still, since we can
-       * only access GL buffers from the main thread */
+      /* for CUDA we need to do tone-mapping still, since we can
+       * only access GL buffers from the main thread. */
       if (gpu_need_tonemap) {
         thread_scoped_lock buffers_lock(buffers_mutex);
         tonemap(tile_manager.state.sample);
@@ -985,7 +985,7 @@ void Session::update_status_time(bool show_pause, bool show_done)
       substatus += string_printf(", Prefiltered %d tiles", progress.get_denoised_tiles());
     }
   }
-  else if (tile_manager.num_samples == INT_MAX)
+  else if (tile_manager.num_samples == Integrator::MAX_SAMPLES)
     substatus = string_printf("Path Tracing Sample %d", progressive_sample + 1);
   else
     substatus = string_printf("Path Tracing Sample %d/%d", progressive_sample + 1, num_samples);

@@ -872,7 +872,7 @@ void Mesh::pack_shaders(Scene *scene, uint *tri_shader)
   }
 }
 
-void Mesh::pack_normals(float2 *vnormal)
+void Mesh::pack_normals(uint *vnormal)
 {
   Attribute *attr_vN = attributes.find(ATTR_STD_VERTEX_NORMAL);
   if (attr_vN == NULL) {
@@ -892,7 +892,7 @@ void Mesh::pack_normals(float2 *vnormal)
     if (do_transform)
       vNi = safe_normalize(transform_direction(&ntfm, vNi));
 
-    vnormal[i] = encode_normal(vNi);
+    vnormal[i] = encode_normal_uint(vNi);
   }
 }
 
@@ -1802,7 +1802,7 @@ void MeshManager::device_update_mesh(
     progress.set_status("Updating Mesh", "Computing normals");
 
     uint *tri_shader = dscene->tri_shader.alloc(tri_size);
-    float2 *vnormal = dscene->tri_vnormal.alloc(vert_size);
+    uint *vnormal = dscene->tri_vnormal.alloc(vert_size);
     uint4 *tri_vindex = dscene->tri_vindex.alloc(tri_size);
     uint *tri_patch = dscene->tri_patch.alloc(tri_size);
     float2 *tri_patch_uv = dscene->tri_patch_uv.alloc(vert_size);

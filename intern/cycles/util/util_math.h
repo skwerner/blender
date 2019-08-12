@@ -674,8 +674,19 @@ ccl_device_inline float3 decode_normal(float2 f)
   return normalize(n);
 }
 
+ccl_device_inline float3 decode_normal_uint(uint u)
+{
+  float2 f;
+  constexpr float iM = 1.0f / (float(1 << 15) - 1.0f);
+  const int px =((u & 0xffff0000) >> 16);
+  const int py = (u & 0xffff);
+  f.x = clamp(px * iM - 1.0f, -1.0f, 1.0f);
+  f.y = clamp(py * iM - 1.0f, -1.0f, 1.0f);
+  return decode_normal(f);
+}
+
 /* Convert from cartesian to octahedral normals.  */
-ccl_device_inline float2 encode_normal(float3 n)
+ccl_device_inline float2 encode_normal_f(float3 n)
 {
   const float inv = 1.0f / (fabsf(n.x) + fabsf(n.y) + fabsf(n.z));
   if (isfinite_safe(inv)) {
@@ -691,6 +702,44 @@ ccl_device_inline float2 encode_normal(float3 n)
   else {
     return make_float2(0.0f, 0.0f);
   }
+}
+
+ccl_device_inline uint encode_normal_uint(float3 v)
+{
+  float2 s = encode_normal_f(v);
+  // Remap to the square
+  // Each snorm’s max value interpreted as an integer,
+  // e.g., 127.0 for snorm8
+  float M = float(1 << 15) - 1.0f;
+  // Remap components to snorm(n/2) precision...with floor instead
+  // of round (see equation 1)
+  s.x = floorf(fminf(fmaxf(s.x, -1.0f), 1.0f) * M) * (1.0f / M);
+  s.y = floorf(fminf(fmaxf(s.y, -1.0f), 1.0f) * M) * (1.0f / M);
+  float2 bestRepresentation = s;
+  float highestCosine = dot(decode_normal(s), v);
+  // Test all combinations of floor and ceil and keep the best.
+  // Note that at +/- 1, this will exit the square... but that
+  // will be a worse encoding and never win.
+  for (int i = 0; i <= 1; ++i) {
+    for (int j = 0; j <= 1; ++j) {
+      // This branch will be evaluated at compile time
+      if ((i != 0) || (j != 0)) {
+        // Offset the bit pattern (which is stored in floating
+        // point!) to effectively change the rounding mode
+        // (when i or j is 0: floor, when it is one: ceiling)
+        float2 candidate = make_float2(i, j) * (1 / M) + s;
+        float cosine = dot(decode_normal(candidate), v);
+        if (cosine > highestCosine) {
+          bestRepresentation = candidate;
+          highestCosine = cosine;
+        }
+      }
+    }
+  }
+
+  uint px = (uint)lroundf(clamp(bestRepresentation.x, -1.0f, 1.0f) * M + M);
+  uint py = (uint)lroundf(clamp(bestRepresentation.y, -1.0f, 1.0f) * M + M);
+  return (px << 16) | py;
 }
 
 /* Compares two floats.

@@ -677,7 +677,7 @@ ccl_device_inline float3 decode_normal(float2 f)
 ccl_device_inline float3 decode_normal_uint(uint u)
 {
   float2 f;
-  constexpr float iM = 1.0f / (float(1 << 15) - 1.0f);
+  const float iM = 1.0f / ((float)(1 << 15) - 1.0f);
   const int px =((u & 0xffff0000) >> 16);
   const int py = (u & 0xffff);
   f.x = clamp(px * iM - 1.0f, -1.0f, 1.0f);
@@ -688,7 +688,7 @@ ccl_device_inline float3 decode_normal_uint(uint u)
 /* Convert from cartesian to octahedral normals.  */
 ccl_device_inline float2 encode_normal_f(float3 n)
 {
-  const float inv = 1.0f / (fabsf(n.x) + fabsf(n.y) + fabsf(n.z));
+  float inv = 1.0f / (fabsf(n.x) + fabsf(n.y) + fabsf(n.z));
   if (isfinite_safe(inv)) {
     float2 projected;
     projected.x = n.x * inv;
@@ -710,7 +710,7 @@ ccl_device_inline uint encode_normal_uint(float3 v)
   // Remap to the square
   // Each snorm’s max value interpreted as an integer,
   // e.g., 127.0 for snorm8
-  float M = float(1 << 15) - 1.0f;
+  float M = (float)(1 << 15) - 1.0f;
   // Remap components to snorm(n/2) precision...with floor instead
   // of round (see equation 1)
   s.x = floorf(fminf(fmaxf(s.x, -1.0f), 1.0f) * M) * (1.0f / M);
@@ -737,8 +737,13 @@ ccl_device_inline uint encode_normal_uint(float3 v)
     }
   }
 
+#ifdef __KERNEL_OPENCL__
+  uint px = (uint)round(clamp(bestRepresentation.x, -1.0f, 1.0f) * M + M);
+  uint py = (uint)round(clamp(bestRepresentation.y, -1.0f, 1.0f) * M + M);
+#else
   uint px = (uint)lroundf(clamp(bestRepresentation.x, -1.0f, 1.0f) * M + M);
   uint py = (uint)lroundf(clamp(bestRepresentation.y, -1.0f, 1.0f) * M + M);
+#endif
   return (px << 16) | py;
 }
 

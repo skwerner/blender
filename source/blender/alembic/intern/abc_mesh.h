@@ -110,7 +110,8 @@ class AbcMeshReader : public AbcObjectReader {
                          const Alembic::Abc::ISampleSelector &sample_sel,
                          int read_flag,
                          float vel_fac,
-                         const char **err_str);
+                         const char **err_str,
+                         const std::vector<std::string> &yup_to_zup_attrs_vec);
 
  private:
   void readFaceSetsSample(Main *bmain,
@@ -144,7 +145,8 @@ class AbcSubDReader : public AbcObjectReader {
                          const Alembic::Abc::ISampleSelector &sample_sel,
                          int read_flag,
                          float vel_fac,
-                         const char **err_str);
+                         const char **err_str,
+                         const std::vector<std::string> &yup_to_zup_attrs_vec);
 };
 
 /* ************************************************************************** */

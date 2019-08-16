@@ -875,6 +875,7 @@ bool ABC_import(bContext *C,
                 bool is_sequence,
                 bool set_frame_range,
                 bool import_attrs,
+                const char *yup_to_zup_attrs_str,
                 bool import_vels,
                 int sequence_len,
                 int offset,
@@ -904,6 +905,7 @@ bool ABC_import(bContext *C,
 
   if (import_attrs) {
     job->settings.read_flag |= MOD_MESHSEQ_READ_ATTR;
+    split(std::string(yup_to_zup_attrs_str), ',', job->settings.yup_to_zup_attrs_vec);
   }
   
   if (import_vels) {

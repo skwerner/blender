@@ -30,13 +30,13 @@
 
 extern "C" {
 #include "DNA_customdata_types.h"
+#include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 
 #include "MEM_guardedalloc.h"
 #include "BLI_math_base.h"
 #include "BKE_customdata.h"
-#include "BKE_DerivedMesh.h"
 #include "BKE_idprop.h"
 }
 
@@ -507,10 +507,11 @@ static int get_cd_type(char idp_type, size_t extent)
 }
 
 template <class Type>
-static void write_data_to_customdata(const CDStreamConfig &config, const Type *data, size_t num, char type, size_t extent, const char *name)
+static void write_data_to_customdata(const CDStreamConfig &config, const Type *data, size_t num, char type,
+        size_t extent, const char *name, const std::vector<std::string> &yup_to_zup_attrs_vec)
 {
-  DerivedMesh *dm = (DerivedMesh *)config.user_data;
-  CustomData *cd = dm->getVertDataLayout(dm);
+  Mesh *mesh = (Mesh *)config.user_data;
+  CustomData *cd = &mesh->vdata;
   int cd_type = get_cd_type(type, extent);
 
   Type *cdata = (Type *)CustomData_get_layer_named(cd, cd_type, name);
@@ -520,8 +521,12 @@ static void write_data_to_customdata(const CDStreamConfig &config, const Type *d
   }
 
   if (extent == 3) {
-    for (int i = 0; i < num; i++) {
-      copy_zup_from_yup(&cdata[i * 3], &data[i * 3]);
+    if(std::find(yup_to_zup_attrs_vec.begin(), yup_to_zup_attrs_vec.end(), std::string(name)) != yup_to_zup_attrs_vec.end()) {
+        for (int i = 0; i < num; i++) {
+            copy_zup_from_yup(&cdata[i * 3], &data[i * 3]);
+        }
+    } else {
+        memcpy(cdata, data, num * extent * sizeof(Type));
     }
   }
   else {
@@ -535,7 +540,8 @@ static void read_custom_data_generic(
     const PropertyHeader &prop_header,
     const CDStreamConfig &config,
     const Alembic::Abc::ISampleSelector &iss,
-    IDProperty *&UNUSED(id_prop), char idp_type)
+    IDProperty *&UNUSED(id_prop), char idp_type,
+    const std::vector<std::string> &yup_to_zup_attrs_vec)
 {
   PropType param(prop, prop_header.getName());
   int scope = param.getScope();
@@ -546,7 +552,7 @@ static void read_custom_data_generic(
     size_t total_extent = elem_extent * array_extent;
 
     if (ELEM(total_extent, 1, 3)) {
-      DerivedMesh *dm = static_cast<DerivedMesh *>(config.user_data);
+      Mesh *mesh = static_cast<Mesh *>(config.user_data);
       typename PropType::Sample sample;
       typename PropType::Sample::samp_ptr_type vals;
       size_t array_size;
@@ -555,18 +561,18 @@ static void read_custom_data_generic(
       vals = sample.getVals();
       array_size = vals->size();
 
-      if(array_size / array_extent == dm->getNumVerts(dm)) {
+      if(array_size / array_extent == mesh->totvert) {
 #if 0
         write_data_to_idprop(id_prop, vals->getData(), array_size * elem_extent,
                              idp_type, param.getName().c_str());
 #endif
         if (idp_type == IDP_FLOAT) {
           write_data_to_customdata(config, (float *)vals->getData(), array_size / array_extent,
-                       idp_type, total_extent, param.getName().c_str());
+                       idp_type, total_extent, param.getName().c_str(), yup_to_zup_attrs_vec);
         }
         else {
           write_data_to_customdata(config, (int *)vals->getData(), array_size / array_extent,
-                       idp_type, total_extent, param.getName().c_str());
+                       idp_type, total_extent, param.getName().c_str(), yup_to_zup_attrs_vec);
         }
       }
     }
@@ -578,19 +584,20 @@ static void read_custom_data_generic(
     const PropertyHeader &prop_header,
     const CDStreamConfig &config,
     const Alembic::Abc::ISampleSelector &iss,
-    IDProperty *&id_prop)
+    IDProperty *&id_prop,
+    const std::vector<std::string> &yup_to_zup_attrs_vec)
 {
   if (IInt32GeomParam::matches(prop_header)) {
-    read_custom_data_generic<IInt32GeomParam>(prop, prop_header, config, iss, id_prop, IDP_INT);
+    read_custom_data_generic<IInt32GeomParam>(prop, prop_header, config, iss, id_prop, IDP_INT, yup_to_zup_attrs_vec);
   }
   else if (IV3iGeomParam::matches(prop_header)) {
-    read_custom_data_generic<IV3iGeomParam>(prop, prop_header, config, iss, id_prop, IDP_INT);
+    read_custom_data_generic<IV3iGeomParam>(prop, prop_header, config, iss, id_prop, IDP_INT, yup_to_zup_attrs_vec);
   }
   else if (IFloatGeomParam::matches(prop_header)) {
-    read_custom_data_generic<IFloatGeomParam>(prop, prop_header, config, iss, id_prop, IDP_FLOAT);
+    read_custom_data_generic<IFloatGeomParam>(prop, prop_header, config, iss, id_prop, IDP_FLOAT, yup_to_zup_attrs_vec);
   }
   else if (IV3fGeomParam::matches(prop_header)) {
-    read_custom_data_generic<IV3fGeomParam>(prop, prop_header, config, iss, id_prop, IDP_FLOAT);
+    read_custom_data_generic<IV3fGeomParam>(prop, prop_header, config, iss, id_prop, IDP_FLOAT, yup_to_zup_attrs_vec);
   }
 }
 
@@ -599,7 +606,8 @@ void read_custom_data(const std::string &iobject_full_name,
                       const CDStreamConfig &config,
                       const Alembic::Abc::ISampleSelector &iss, 
                       IDProperty *&id_prop,
-                      const int read_flag)
+                      const int read_flag,
+                      const std::vector<std::string> &yup_to_zup_attrs_vec)
 {
   if (!prop.valid()) {
     return;
@@ -641,7 +649,7 @@ void read_custom_data(const std::string &iobject_full_name,
         IFloatGeomParam::matches(prop_header) ||
         IV3fGeomParam::matches(prop_header)))
     {
-      read_custom_data_generic(prop, prop_header, config, iss, id_prop);
+      read_custom_data_generic(prop, prop_header, config, iss, id_prop, yup_to_zup_attrs_vec);
       continue;
     }
   }

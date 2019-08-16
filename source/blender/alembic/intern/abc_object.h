@@ -97,6 +97,8 @@ struct ImportSettings {
 
   float vel_fac;
 
+  std::vector<std::string> yup_to_zup_attrs_vec;
+
   ImportSettings()
       : do_convert_mat(false),
         from_up(0),
@@ -108,7 +110,8 @@ struct ImportSettings {
         sequence_offset(0),
         read_flag(0),
         validate_meshes(false),
-        cache_file(NULL)
+        cache_file(NULL),
+        yup_to_zup_attrs_vec()
   {
   }
 };

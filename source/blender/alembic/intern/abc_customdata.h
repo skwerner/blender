@@ -103,7 +103,8 @@ void read_custom_data(const std::string &iobject_full_name,
                       const CDStreamConfig &config,
                       const Alembic::Abc::ISampleSelector &iss,
                       IDProperty *&id_prop,
-                      const int read_flag);
+                      const int read_flag,
+                      const std::vector<std::string> &yup_to_zup_attrs_vec);
 
 void add_custom_data_to_ob(Object *ob, IDProperty *&id_prop);
 

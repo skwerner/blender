@@ -66,13 +66,15 @@ class AbcPointsReader : public AbcObjectReader {
                          const Alembic::Abc::ISampleSelector &sample_sel,
                          int read_flag,
                          float vel_fac,
-                         const char **err_str);
+                         const char **err_str,
+                         const std::vector<std::string> &yup_to_zup_attrs_vec);
 };
 void read_points_sample(const std::string &iobject_full_name,
                         const Alembic::AbcGeom::IPointsSchema &schema,
                         const Alembic::AbcGeom::ISampleSelector &selector,
                         CDStreamConfig &config, IDProperty *&id_prop,
                         const int read_flag,
-                        float vel_fac);
+                        float vel_fac,
+                        const std::vector<std::string> &yup_to_zup_attrs_vec);
 
 #endif  /* __ABC_POINTS_H__ */

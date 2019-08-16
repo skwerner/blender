@@ -64,6 +64,7 @@ class SessionParams {
   bool write_denoising_passes;
   bool full_denoising;
   DenoiseParams denoising;
+  int viewport_denoising_samples;
 
   double cancel_timeout;
   double reset_timeout;
@@ -102,6 +103,8 @@ class SessionParams {
 
     shadingsystem = SHADINGSYSTEM_SVM;
     tile_order = TILE_CENTER;
+
+    viewport_denoising_samples = 4;
   }
 
   bool modified(const SessionParams &params)
@@ -117,7 +120,8 @@ class SessionParams {
              cancel_timeout == params.cancel_timeout && reset_timeout == params.reset_timeout &&
              text_timeout == params.text_timeout &&
              progressive_update_timeout == params.progressive_update_timeout &&
-             tile_order == params.tile_order && shadingsystem == params.shadingsystem);
+             tile_order == params.tile_order && shadingsystem == params.shadingsystem &&
+             viewport_denoising_samples == params.viewport_denoising_samples);
   }
 };
 

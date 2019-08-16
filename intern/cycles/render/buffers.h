@@ -27,6 +27,7 @@
 #include "util/util_string.h"
 #include "util/util_thread.h"
 #include "util/util_types.h"
+#include "util/util_task.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -104,6 +105,8 @@ class RenderBuffers {
  * The buffer used for drawing during render, filled by converting the render
  * buffers to byte of half float storage */
 
+class DisplayDenoiser;
+
 class DisplayBuffer {
  public:
   /* buffer parameters */
@@ -128,6 +131,11 @@ class DisplayBuffer {
   void draw_set(int width, int height);
   void draw(Device *device, const DeviceDrawParams &draw_params);
   bool draw_ready();
+
+  DisplayDenoiser *denoiser;
+  half4 *denoising_buffer, *draw_buffer;
+  DedicatedTaskPool denoiser_task;
+  bool denoising_in_progress, draw_denoised;
 };
 
 /* Render Tile

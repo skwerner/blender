@@ -26,6 +26,8 @@
 #include "util/util_time.h"
 #include "util/util_types.h"
 
+#include "OpenImageDenoise/oidn.hpp"
+
 CCL_NAMESPACE_BEGIN
 
 /* Buffer Params */
@@ -425,6 +427,70 @@ bool RenderBuffers::get_pass_rect(
 }
 
 /* Display Buffer */
+bool denoiser_progress(void *user, double n);
+class DisplayDenoiser {
+ public:
+  DisplayDenoiser(int _width, int _height) : width(_width), height(_height)
+  {
+    inputbuf = new float4[width * height];
+
+    oidn::DeviceRef denoiser = oidn::newDevice();
+    denoiser.commit();
+
+    filter = denoiser.newFilter("RT");
+    filter.setImage("color", inputbuf, oidn::Format::Float3, width, height, 0, sizeof(float4));
+    filter.setImage("output", inputbuf, oidn::Format::Float3, width, height, 0, sizeof(float4));
+    filter.set("hdr", true);
+    filter.setProgressMonitorFunction(denoiser_progress, this);
+    filter.commit();
+
+    is_done.store(false);
+    cancel_requested.store(false);
+  }
+  ~DisplayDenoiser()
+  {
+    if (inputbuf) {
+      delete[] inputbuf;
+    }
+    inputbuf = NULL;
+  }
+  void execute(half4 *in_out)
+  {
+    for (size_t i = 0; i < width * height; ++i) {
+      inputbuf[i] = half4_to_float4(in_out[i]);
+    }
+
+    filter.execute();
+
+    const char *errorMessage;
+    if (oidn.getError(errorMessage) != oidn::Error::None)
+      std::cout << "Error: " << errorMessage << std::endl;
+
+    for (size_t i = 0; i < width * height; ++i) {
+      in_out[i].x = float_to_half(inputbuf[i].x);
+      in_out[i].y = float_to_half(inputbuf[i].y);
+      in_out[i].z = float_to_half(inputbuf[i].z);
+      in_out[i].w = float_to_half(inputbuf[i].w);
+    }
+    is_done.store(true);
+  }
+
+  std::atomic_bool is_done, cancel_requested;
+
+ private:
+  int width, height;
+  oidn::DeviceRef oidn;
+  float4 *inputbuf;
+  oidn::FilterRef filter;
+};
+bool denoiser_progress(void *user, double n)
+{
+  if (((DisplayDenoiser *)user)->cancel_requested.load()) {
+    ((DisplayDenoiser *)user)->cancel_requested.store(false);
+    return false;
+  }
+  return true;
+}
 
 DisplayBuffer::DisplayBuffer(Device *device, bool linear)
     : draw_width(0),
@@ -432,7 +498,12 @@ DisplayBuffer::DisplayBuffer(Device *device, bool linear)
       transparent(true), /* todo: determine from background */
       half_float(linear),
       rgba_byte(device, "display buffer byte"),
-      rgba_half(device, "display buffer half")
+      rgba_half(device, "display buffer half"),
+      denoiser(NULL),
+      denoising_buffer(NULL),
+      draw_buffer(NULL),
+      denoising_in_progress(false),
+      draw_denoised(false)
 {
 }
 
@@ -440,6 +511,18 @@ DisplayBuffer::~DisplayBuffer()
 {
   rgba_byte.free();
   rgba_half.free();
+  denoiser_task.wait();
+  if (denoiser) {
+    delete denoiser;
+  }
+  if (denoising_buffer) {
+    delete[] denoising_buffer;
+  }
+  if (draw_buffer) {
+    delete[] draw_buffer;
+  }
+  denoising_in_progress = false;
+  draw_denoised = false;
 }
 
 void DisplayBuffer::reset(BufferParams &params_)
@@ -456,6 +539,23 @@ void DisplayBuffer::reset(BufferParams &params_)
   else {
     rgba_byte.alloc_to_device(params.width, params.height);
   }
+
+  if (denoiser) {
+    denoiser->cancel_requested.store(true);
+    denoiser_task.wait();
+    delete denoiser;
+    denoiser = NULL;
+  }
+  if (denoising_buffer) {
+    delete[] denoising_buffer;
+    denoising_buffer = NULL;
+  }
+  if (draw_buffer) {
+    delete[] draw_buffer;
+    draw_buffer = NULL;
+  }
+  denoising_in_progress = false;
+  draw_denoised = false;
 }
 
 void DisplayBuffer::draw_set(int width, int height)
@@ -470,7 +570,67 @@ void DisplayBuffer::draw(Device *device, const DeviceDrawParams &draw_params)
 {
   if (draw_width != 0 && draw_height != 0) {
     device_memory &rgba = (half_float) ? (device_memory &)rgba_half : (device_memory &)rgba_byte;
+    if (half_float && draw_params.denoise) {
+      if (!denoiser) {
+        denoiser = new DisplayDenoiser(draw_width, draw_height);
+      }
+      if (!denoising_buffer) {
+        denoising_buffer = new half4[draw_width * draw_height];
+      }
+      if (!draw_buffer) {
+        draw_buffer = new half4[draw_width * draw_height];
+      }
 
+      void *tmp = rgba.host_pointer;
+
+      if (denoising_in_progress) {
+        if (denoiser->is_done.load()) {
+          denoiser_task.wait();
+          denoiser->cancel_requested.store(false);
+          denoiser->is_done.store(false);
+          ::memcpy(draw_buffer, denoising_buffer, sizeof(half4) * draw_width * draw_height);
+          denoising_in_progress = false;
+          draw_denoised = true;
+        }
+        /* temporarily swap pointers */
+        if (draw_denoised) {
+          rgba.host_pointer = draw_buffer;
+        }
+		}
+        device->draw_pixels(rgba,
+                            0,
+                            draw_width,
+                            draw_height,
+                            params.width,
+                            params.height,
+                            params.full_x,
+                            params.full_y,
+                            params.full_width,
+                            params.full_height,
+                            transparent,
+                            draw_params);
+
+        rgba.host_pointer = tmp;
+
+      if (!denoising_in_progress) {
+		  ::memcpy(denoising_buffer,
+				   (void *)rgba_half.device_pointer,
+				   draw_width * draw_height * sizeof(half4));
+
+		  denoiser->is_done.store(false);
+		  denoiser_task.push(function_bind(&DisplayDenoiser::execute, denoiser, denoising_buffer));
+		  denoising_in_progress = true;
+	  }
+      return;
+    }
+    denoising_in_progress = false;
+    draw_denoised = false;
+    if (denoiser) {
+      denoiser->cancel_requested.store(true);
+      denoiser_task.wait();
+      denoiser->cancel_requested.store(false);
+      denoiser->is_done.store(false);
+	}
     device->draw_pixels(rgba,
                         0,
                         draw_width,

@@ -984,6 +984,14 @@ bool BlenderSession::draw(int w, int h)
         &BL::RenderEngine::unbind_display_space_shader, &b_engine);
   }
 
+  if (session->params.viewport_denoising_samples > 0 && session->tile_manager.state.sample >=
+          session->params.viewport_denoising_samples && session->device->info.type == DEVICE_CPU) {
+    draw_params.denoise = true;
+  }
+  else {
+    draw_params.denoise = false;
+  }
+
   return !session->draw(buffer_params, draw_params);
 }
 

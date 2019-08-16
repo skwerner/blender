@@ -269,6 +269,7 @@ std::ostream &operator<<(std::ostream &os, const DeviceRequestedFeatures &reques
 struct DeviceDrawParams {
   function<void()> bind_display_space_shader_cb;
   function<void()> unbind_display_space_shader_cb;
+  bool denoise;
 };
 
 class Device {

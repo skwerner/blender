@@ -6736,9 +6736,9 @@ void uiTemplateCacheFile(uiLayout *layout, bContext *C, PointerRNA *ptr, const c
 
   row = uiLayoutRow(layout, false);
   uiLayoutSetActive(row, (sbuts->mainb == BCONTEXT_CONSTRAINT));
-  uiItemR(row, &fileptr, "yup_to_zup_attrs_str", 0, "Y-Up to Z-Up Custom Attributes", ICON_NONE);
+  uiItemR(row, &fileptr, "attrs_require_coord_convert_str", 0,
+          "Require coordinate conversion:", ICON_NONE);
   uiLayoutSetActive(row, RNA_boolean_get(&fileptr, "import_attrs"));
-
   /* TODO: unused for now, so no need to expose. */
 #if 0
   row = uiLayoutRow(layout, false);

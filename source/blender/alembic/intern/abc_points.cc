@@ -177,7 +177,7 @@ void AbcPointsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSel
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
   Mesh *read_mesh = this->read_mesh(mesh, sample_sel, m_settings->read_flag & ~MOD_MESHSEQ_READ_ALL, m_settings->vel_fac,
-          NULL, m_settings->yup_to_zup_attrs_vec );
+          NULL, m_settings->attrs_require_coord_convert_vec );
 
   if (read_mesh != mesh) {
     BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, &CD_MASK_MESH, true);
@@ -203,7 +203,7 @@ void read_points_sample(const std::string &iobject_full_name,
                         IDProperty *&id_prop,
                         const int read_flag,
                         float vel_fac,
-                        const std::vector<std::string> &yup_to_zup_attrs_vec)
+                        const std::vector<std::string> &attrs_require_coord_convert_vec)
 {
   Alembic::AbcGeom::IPointsSchema::Sample sample = schema.getValue(selector);
 
@@ -228,7 +228,7 @@ void read_points_sample(const std::string &iobject_full_name,
     read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities(), vel_fac);
   }
 
-  read_custom_data(iobject_full_name, prop, config, selector, id_prop, read_flag, yup_to_zup_attrs_vec);
+  read_custom_data(iobject_full_name, prop, config, selector, id_prop, read_flag, attrs_require_coord_convert_vec);
 }
 
 struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
@@ -236,7 +236,7 @@ struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
                                         int read_flag,
                                         float vel_fac,
                                         const char **err_str,
-                                        const std::vector<std::string> &yup_to_zup_attrs_vec)
+                                        const std::vector<std::string> &attrs_require_coord_convert_vec)
 {
   IPointsSchema::Sample sample;
   try {
@@ -262,7 +262,7 @@ struct Mesh *AbcPointsReader::read_mesh(struct Mesh *existing_mesh,
 
   CDStreamConfig config = get_config(new_mesh ? new_mesh : existing_mesh);
   read_points_sample(m_iobject.getFullName(), m_schema, sample_sel, config, m_idprop, read_flag, vel_fac,
-          yup_to_zup_attrs_vec);
+          attrs_require_coord_convert_vec);
 
   return new_mesh ? new_mesh : existing_mesh;
 }

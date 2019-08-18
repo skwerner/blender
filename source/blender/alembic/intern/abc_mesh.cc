@@ -1062,7 +1062,7 @@ static bool read_mesh_sample(const std::string &iobject_full_name,
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
     read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector, id_prop, settings->read_flag,
-            settings->yup_to_zup_attrs_vec);
+            settings->attrs_require_coord_convert_vec);
   }
 
   return true;
@@ -1108,7 +1108,7 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac, NULL, m_settings->yup_to_zup_attrs_vec);
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac, NULL, m_settings->attrs_require_coord_convert_vec);
   if (!read_mesh) {
     BKE_id_free(bmain, mesh);
     m_object = NULL;
@@ -1160,7 +1160,7 @@ Mesh *AbcMeshReader::read_mesh(Mesh *existing_mesh,
                                int read_flag,
                                float vel_fac,
                                const char **err_str,
-                               const std::vector<std::string> &yup_to_zup_attrs_vec)
+                               const std::vector<std::string> &attrs_require_coord_convert_vec)
 {
   IPolyMeshSchema::Sample sample;
   try {
@@ -1188,7 +1188,7 @@ Mesh *AbcMeshReader::read_mesh(Mesh *existing_mesh,
   ImportSettings settings;
   settings.read_flag |= read_flag;
   settings.vel_fac = vel_fac;
-  settings.yup_to_zup_attrs_vec = yup_to_zup_attrs_vec;
+  settings.attrs_require_coord_convert_vec = attrs_require_coord_convert_vec;
 
   bool topology_changed = positions->size() != existing_mesh->totvert ||
                           face_counts->size() != existing_mesh->totpoly ||
@@ -1374,7 +1374,7 @@ static bool read_subd_sample(const std::string &iobject_full_name,
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
     read_custom_data(iobject_full_name, schema.getArbGeomParams(), config, selector, id_prop, settings->read_flag,
-            settings->yup_to_zup_attrs_vec);
+            settings->attrs_require_coord_convert_vec);
   }
 
   return true;
@@ -1422,7 +1422,7 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac, NULL, m_settings->yup_to_zup_attrs_vec);
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac, NULL, m_settings->attrs_require_coord_convert_vec);
   if (!read_mesh) {
      BKE_id_free(bmain, mesh);
      m_object = NULL;
@@ -1485,7 +1485,7 @@ Mesh *AbcSubDReader::read_mesh(Mesh *existing_mesh,
                                int read_flag,
                                float vel_fac,
                                const char **err_str,
-                               const std::vector<std::string> &yup_to_zup_attrs_vec)
+                               const std::vector<std::string> &attrs_require_coord_convert_vec)
 {
   ISubDSchema::Sample sample;
   try {
@@ -1512,7 +1512,7 @@ Mesh *AbcSubDReader::read_mesh(Mesh *existing_mesh,
   ImportSettings settings;
   settings.read_flag |= read_flag;
   settings.vel_fac = vel_fac;
-  settings.yup_to_zup_attrs_vec = yup_to_zup_attrs_vec;
+  settings.attrs_require_coord_convert_vec = attrs_require_coord_convert_vec;
 
   if (existing_mesh->totvert != positions->size()) {
     new_mesh = BKE_mesh_new_nomain_from_template(

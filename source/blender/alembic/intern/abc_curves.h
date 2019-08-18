@@ -75,7 +75,7 @@ class AbcCurveReader : public AbcObjectReader {
                          int read_flag,
                          float vel_fac,
                          const char **err_str,
-                         const std::vector<std::string> &yup_to_zup_attrs_vec);
+                         const std::vector<std::string> &attrs_require_coord_convert_vec);
 
   void read_curve_sample(Curve *cu,
                          const Alembic::AbcGeom::ICurvesSchema &schema,

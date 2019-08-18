@@ -98,7 +98,7 @@ struct ImportSettings {
   float vel_fac;
 
   bool import_attrs;
-  std::vector<std::string> yup_to_zup_attrs_vec;
+  std::vector<std::string> attrs_require_coord_convert_vec;
 
   ImportSettings()
       : do_convert_mat(false),
@@ -113,7 +113,7 @@ struct ImportSettings {
         validate_meshes(false),
         cache_file(NULL),
         import_attrs(false),
-        yup_to_zup_attrs_vec()
+        attrs_require_coord_convert_vec()
   {
   }
 };
@@ -199,7 +199,7 @@ class AbcObjectReader {
                                  int read_flag,
                                  float vel_fac,
                                  const char **err_str,
-                                 const std::vector<std::string> &yup_to_zup_attrs_vec);
+                                 const std::vector<std::string> &attrs_require_coord_convert_vec);
 
   /** Reads the object matrix and sets up an object transform if animated. */
   void setupObjectTransform(const float time);

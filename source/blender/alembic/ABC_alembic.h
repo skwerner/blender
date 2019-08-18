@@ -99,7 +99,7 @@ bool ABC_import(struct bContext *C,
                 bool is_sequence,
                 bool set_frame_range,
                 bool import_attrs,
-                const char *yup_to_zup_attrs_str,
+                const char *attrs_require_coord_convert_str,
                 bool import_vels,
                 int sequence_len,
                 int offset,
@@ -120,7 +120,7 @@ struct Mesh *ABC_read_mesh(struct CacheReader *reader,
                            const char **err_str,
                            int flags,
                            float vel_fac,
-                           const char *yup_to_zup_attrs_str);
+                           const char *attrs_require_coord_convert_str);
 
 void CacheReader_incref(struct CacheReader *reader);
 void CacheReader_free(struct CacheReader *reader);

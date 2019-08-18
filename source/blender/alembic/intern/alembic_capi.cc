@@ -678,10 +678,10 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
 
   cache_file->import_attrs = data->settings.import_attrs;
   std::ostringstream oss;
-  std::copy(data->settings.yup_to_zup_attrs_vec.begin(), data->settings.yup_to_zup_attrs_vec.end(),
+  std::copy(data->settings.attrs_require_coord_convert_vec.begin(), data->settings.attrs_require_coord_convert_vec.end(),
           std::ostream_iterator<std::string>(oss, ","));
   if (oss.str().length() > 0) { 
-    STRNCPY(cache_file->yup_to_zup_attrs_str, oss.str().substr(0, oss.str().size()-1).c_str());
+    STRNCPY(cache_file->attrs_require_coord_convert_str, oss.str().substr(0, oss.str().size()-1).c_str());
   }
 
   data->archive = archive;
@@ -883,7 +883,7 @@ bool ABC_import(bContext *C,
                 bool is_sequence,
                 bool set_frame_range,
                 bool import_attrs,
-                const char *yup_to_zup_attrs_str,
+                const char *attrs_require_coord_convert_str,
                 bool import_vels,
                 int sequence_len,
                 int offset,
@@ -912,7 +912,7 @@ bool ABC_import(bContext *C,
   job->archive = NULL;
 
   job->settings.import_attrs = import_attrs;
-  split(std::string(yup_to_zup_attrs_str), ',', job->settings.yup_to_zup_attrs_vec);
+  split(std::string(attrs_require_coord_convert_str), ',', job->settings.attrs_require_coord_convert_vec);
   if (job->settings.import_attrs) {
     job->settings.read_flag |= MOD_MESHSEQ_READ_ATTR;
   }
@@ -977,7 +977,7 @@ Mesh *ABC_read_mesh(CacheReader *reader,
                     const char **err_str,
                     int read_flag,
                     float vel_fac,
-                    const char *yup_to_zup_attrs_str)
+                    const char *attrs_require_coord_convert_str)
 {
   AbcObjectReader *abc_reader = reinterpret_cast<AbcObjectReader *>(reader);
   IObject iobject = abc_reader->iobject();
@@ -997,10 +997,10 @@ Mesh *ABC_read_mesh(CacheReader *reader,
    * properties; they use the floor. */
   ISampleSelector sample_sel(time, ISampleSelector::kFloorIndex);
 
-  std::vector<std::string> yup_to_zup_attrs_vec;
-  split(std::string(yup_to_zup_attrs_str), ',', yup_to_zup_attrs_vec);
+  std::vector<std::string> attrs_require_coord_convert_vec;
+  split(std::string(attrs_require_coord_convert_str), ',', attrs_require_coord_convert_vec);
 
-  return abc_reader->read_mesh(existing_mesh, sample_sel, read_flag, vel_fac, err_str, yup_to_zup_attrs_vec);
+  return abc_reader->read_mesh(existing_mesh, sample_sel, read_flag, vel_fac, err_str, attrs_require_coord_convert_vec);
 }
 
 /* ************************************************************************** */

@@ -104,7 +104,7 @@ void read_custom_data(const std::string &iobject_full_name,
                       const Alembic::Abc::ISampleSelector &iss,
                       IDProperty *&id_prop,
                       const int read_flag,
-                      const std::vector<std::string> &yup_to_zup_attrs_vec);
+                      const std::vector<std::string> &attrs_require_coord_convert_vec);
 
 void add_custom_data_to_ob(Object *ob, IDProperty *&id_prop);
 

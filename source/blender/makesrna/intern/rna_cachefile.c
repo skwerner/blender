@@ -152,12 +152,13 @@ static void rna_def_cachefile(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_CacheFile_update");
 
   prop = RNA_def_property(srna, "import_attrs", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_ui_text(
-      prop, "Import Attributes", "Whether to import custom attributes");
+  RNA_def_property_ui_text(prop, "Import Attributes",
+          "If checked, custom mesh attributes will be loaded from the Alembic archive");
 
-  prop = RNA_def_property(srna, "yup_to_zup_attrs_str", PROP_STRING, PROP_NONE);
-  RNA_def_property_ui_text(prop, "Y-Up to Z-Up Custom Attributes:",
-          "A comma-delimited list of custom attributes should be converted from Y-up to Z-up coordinates");
+  prop = RNA_def_property(srna, "attrs_require_coord_convert_str", PROP_STRING, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Require coordinate conversion",
+          "A comma-delimited list of custom attributes that require coordinate conversion "
+          "(for example, Y-up to Z-up conversion)");
   RNA_def_property_update(prop, 0, "rna_CacheFile_update");
 
   /* object paths */

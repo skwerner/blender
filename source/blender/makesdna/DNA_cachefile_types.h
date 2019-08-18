@@ -85,7 +85,7 @@ typedef struct CacheFile {
   struct GSet *handle_readers;
 
   /** 1024 = YUP_TO_ZUP_ATTRS_MAX 1024 **/
-  char yup_to_zup_attrs_str[1024];
+  char attrs_require_coord_convert_str[1024];
 } CacheFile;
 
 #ifdef __cplusplus

@@ -151,6 +151,15 @@ static void rna_def_cachefile(BlenderRNA *brna)
       " (only applicable through a Transform Cache constraint)");
   RNA_def_property_update(prop, 0, "rna_CacheFile_update");
 
+  prop = RNA_def_property(srna, "import_attrs", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(
+      prop, "Import Attributes", "Whether to import custom attributes");
+
+  prop = RNA_def_property(srna, "yup_to_zup_attrs_str", PROP_STRING, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Y-Up to Z-Up Custom Attributes:",
+          "A comma-delimited list of custom attributes should be converted from Y-up to Z-up coordinates");
+  RNA_def_property_update(prop, 0, "rna_CacheFile_update");
+
   /* object paths */
   prop = RNA_def_property(srna, "object_paths", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "object_paths", NULL);

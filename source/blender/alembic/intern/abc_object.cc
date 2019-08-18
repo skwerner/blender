@@ -1,4 +1,4 @@
-﻿/*
+/*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -250,7 +250,8 @@ struct Mesh *AbcObjectReader::read_mesh(struct Mesh *existing_mesh,
                                         const Alembic::Abc::ISampleSelector &UNUSED(sample_sel),
                                         int UNUSED(read_flag),
                                         float UNUSED(vel_fac),
-                                        const char **UNUSED(err_str))
+                                        const char **UNUSED(err_str),
+                                        const std::vector<std::string> &yup_to_zup_attrs_vec)
 {
   return existing_mesh;
 }

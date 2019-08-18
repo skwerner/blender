@@ -70,7 +70,7 @@
 
 #  include "ABC_alembic.h"
 
-#define YUP_TO_ZUP_ATTRS_MAX 2048
+#define YUP_TO_ZUP_ATTRS_MAX 1024
 
 static int wm_alembic_export_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
@@ -623,9 +623,12 @@ static void ui_alembic_import_settings(uiLayout *layout, PointerRNA *imfptr)
   uiLayout *yup_to_zup_options_box = uiLayoutBox(box);
   row = uiLayoutRow(yup_to_zup_options_box, false);
   uiItemL(row, IFACE_("Y-Up to Z-Up Custom Attributes:"), ICON_NONE);
+  const bool import_attrs = RNA_boolean_get(imfptr, "import_attrs");
+  uiLayoutSetEnabled(row, import_attrs);
 
   row = uiLayoutRow(yup_to_zup_options_box, false);
   uiItemR(row, imfptr, "yup_to_zup_attrs", 0, NULL, ICON_NONE);
+  uiLayoutSetEnabled(row, import_attrs);
 }
 
 static void wm_alembic_import_draw(bContext *UNUSED(C), wmOperator *op)

@@ -76,12 +76,16 @@ typedef struct CacheFile {
   short flag;
   short draw_flag;
 
-  char _pad[4];
+  char import_attrs;
+  char _pad[3];
 
   /* Runtime */
   struct AbcArchiveHandle *handle;
   char handle_filepath[1024];
   struct GSet *handle_readers;
+
+  /** 1024 = YUP_TO_ZUP_ATTRS_MAX 1024 **/
+  char yup_to_zup_attrs_str[1024];
 } CacheFile;
 
 #ifdef __cplusplus

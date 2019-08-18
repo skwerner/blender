@@ -448,7 +448,8 @@ Mesh *AbcCurveReader::read_mesh(Mesh *existing_mesh,
                                 const ISampleSelector &sample_sel,
                                 int /*read_flag*/,
                                 float /*vel_fac*/,
-                                const char **err_str)
+                                const char **err_str,
+                                const std::vector<std::string> & /*yup_to_zup_attrs_vec*/)
 {
   ICurvesSchema::Sample sample;
 

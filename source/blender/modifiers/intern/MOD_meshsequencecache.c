@@ -149,7 +149,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     }
   }
 
-  Mesh *result = ABC_read_mesh(mcmd->reader, ctx->object, mesh, time, &err_str, mcmd->read_flag, mcmd->vel_fac);
+  Mesh *result = ABC_read_mesh(mcmd->reader, ctx->object, mesh, time, &err_str, mcmd->read_flag, mcmd->vel_fac,
+          cache_file->yup_to_zup_attrs_str);
 
   if (err_str) {
     modifier_setError(md, "%s", err_str);

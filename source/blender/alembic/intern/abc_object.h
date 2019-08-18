@@ -97,6 +97,7 @@ struct ImportSettings {
 
   float vel_fac;
 
+  bool import_attrs;
   std::vector<std::string> yup_to_zup_attrs_vec;
 
   ImportSettings()
@@ -111,6 +112,7 @@ struct ImportSettings {
         read_flag(0),
         validate_meshes(false),
         cache_file(NULL),
+        import_attrs(false),
         yup_to_zup_attrs_vec()
   {
   }
@@ -196,7 +198,8 @@ class AbcObjectReader {
                                  const Alembic::Abc::ISampleSelector &sample_sel,
                                  int read_flag,
                                  float vel_fac,
-                                 const char **err_str);
+                                 const char **err_str,
+                                 const std::vector<std::string> &yup_to_zup_attrs_vec);
 
   /** Reads the object matrix and sets up an object transform if animated. */
   void setupObjectTransform(const float time);

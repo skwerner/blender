@@ -676,6 +676,14 @@ static void import_startjob(void *user_data, short *stop, short *do_update, floa
   cache_file->scale = data->settings.scale;
   STRNCPY(cache_file->filepath, data->filename);
 
+  cache_file->import_attrs = data->settings.import_attrs;
+  std::ostringstream oss;
+  std::copy(data->settings.yup_to_zup_attrs_vec.begin(), data->settings.yup_to_zup_attrs_vec.end(),
+          std::ostream_iterator<std::string>(oss, ","));
+  if (oss.str().length() > 0) { 
+    STRNCPY(cache_file->yup_to_zup_attrs_str, oss.str().substr(0, oss.str().size()-1).c_str());
+  }
+
   data->archive = archive;
   data->settings.cache_file = cache_file;
 
@@ -903,9 +911,10 @@ bool ABC_import(bContext *C,
   job->was_cancelled = false;
   job->archive = NULL;
 
-  if (import_attrs) {
+  job->settings.import_attrs = import_attrs;
+  split(std::string(yup_to_zup_attrs_str), ',', job->settings.yup_to_zup_attrs_vec);
+  if (job->settings.import_attrs) {
     job->settings.read_flag |= MOD_MESHSEQ_READ_ATTR;
-    split(std::string(yup_to_zup_attrs_str), ',', job->settings.yup_to_zup_attrs_vec);
   }
   
   if (import_vels) {
@@ -967,7 +976,8 @@ Mesh *ABC_read_mesh(CacheReader *reader,
                     const float time,
                     const char **err_str,
                     int read_flag,
-                    float vel_fac)
+                    float vel_fac,
+                    const char *yup_to_zup_attrs_str)
 {
   AbcObjectReader *abc_reader = reinterpret_cast<AbcObjectReader *>(reader);
   IObject iobject = abc_reader->iobject();
@@ -986,7 +996,11 @@ Mesh *ABC_read_mesh(CacheReader *reader,
   /* kFloorIndex is used to be compatible with non-interpolating
    * properties; they use the floor. */
   ISampleSelector sample_sel(time, ISampleSelector::kFloorIndex);
-  return abc_reader->read_mesh(existing_mesh, sample_sel, read_flag, vel_fac, err_str);
+
+  std::vector<std::string> yup_to_zup_attrs_vec;
+  split(std::string(yup_to_zup_attrs_str), ',', yup_to_zup_attrs_vec);
+
+  return abc_reader->read_mesh(existing_mesh, sample_sel, read_flag, vel_fac, err_str, yup_to_zup_attrs_vec);
 }
 
 /* ************************************************************************** */

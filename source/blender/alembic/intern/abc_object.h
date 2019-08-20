@@ -197,9 +197,9 @@ class AbcObjectReader {
   virtual struct Mesh *read_mesh(struct Mesh *mesh,
                                  const Alembic::Abc::ISampleSelector &sample_sel,
                                  int read_flag,
-                                 float vel_fac,
-                                 const char **err_str,
-                                 const std::vector<std::string> &attrs_require_coord_convert_vec);
+                                 const char **err_str);
+  virtual bool topology_changed(Mesh *existing_mesh,
+                                const Alembic::Abc::ISampleSelector &sample_sel);
 
   /** Reads the object matrix and sets up an object transform if animated. */
   void setupObjectTransform(const float time);

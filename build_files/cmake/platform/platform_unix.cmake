@@ -369,7 +369,12 @@ if(WITH_CYCLES_EMBREE)
 endif()
 
 if(WITH_OPENIMAGEDENOISE)
-  find_package_wrapper(OpenImageDenoise REQUIRED)
+  find_package_wrapper(OpenImageDenoise)
+
+  if(NOT OPENIMAGEDENOISE_FOUND)
+    set(WITH_OPENIMAGEDENOISE OFF)
+    message(STATUS "OpenImageDenoise not found")
+  endif()
 endif()
 
 if(WITH_LLVM)

@@ -32,17 +32,16 @@
 #include "node_composite_util.h"
 
 static bNodeSocketTemplate cmp_node_denoise_in[] = {
-    {SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
-    {SOCK_RGBA, 1, N_("Albedo"), 1.0f, 1.0f, 1.0f, 1.0f},
-    {SOCK_RGBA, 1, N_("Normal"), 1.0f, 1.0f, 1.0f, 1.0f},
+    {SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, 1, N_("Albedo"), 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, 0, N_("Normal"), 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f},
     {-1, 0, ""}};
 static bNodeSocketTemplate cmp_node_denoise_out[] = {{SOCK_RGBA, 0, N_("Image")}, {-1, 0, ""}};
 
 static void node_composit_init_denonise(bNodeTree *UNUSED(ntree), bNode *node)
 {
   NodeDenoise *ndg = MEM_callocN(sizeof(NodeDenoise), "node denoise data");
-  ndg->hdr = 1;
-  ndg->srgb = 0;
+  ndg->hdr = true;
   node->storage = ndg;
 }
 

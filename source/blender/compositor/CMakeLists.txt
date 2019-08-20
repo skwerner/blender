@@ -568,4 +568,5 @@ if(WITH_OPENIMAGEDENOISE)
     ${OPENIMAGEDENOISE_INCLUDE_DIRS}
   )
 endif()
+
 blender_add_lib(bf_compositor "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

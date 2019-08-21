@@ -1758,6 +1758,13 @@ static void write_modifiers(WriteData *wd, ListBase *modbase)
           }
         }
       }
+
+    }
+    else if (md->type == eModifierType_VertexSnap) {
+      VertexSnapModifierData* vmd = (VertexSnapModifierData*)md;
+      if (vmd->total_bindings > 0) {
+        writedata(wd, DATA, sizeof(int) * vmd->total_bindings, vmd->bindings);
+      }
     }
   }
 }

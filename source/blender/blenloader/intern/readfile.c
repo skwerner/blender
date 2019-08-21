@@ -5806,6 +5806,18 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
         }
       }
     }
+    else if (md->type == eModifierType_VertexSnap) {
+      VertexSnapModifierData* vmd = (VertexSnapModifierData*)md;
+      if (vmd->total_bindings > 0) {
+        vmd->bindings = newdataadr(fd, vmd->bindings);
+        if (fd->flags & FD_FLAGS_SWITCH_ENDIAN) {
+          BLI_endian_switch_int32_array(vmd->bindings, vmd->total_bindings);
+        }
+      }
+      else {
+        vmd->bindings = NULL;
+      }
+    }
   }
 }
 

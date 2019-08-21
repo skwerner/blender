@@ -1217,6 +1217,24 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "width", slider=True)
         col.prop(md, "narrowness", slider=True)
 
+    def VERTEXSNAP(self, layout, ob, md):
+        col = layout.column()
+        col.prop(md, "target", text="")
+        col.prop(md, "blend",  text="Blend Amount")
+        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        col.prop(md, "deform_space")
+        col.prop(md, "binding_type")
+        if not md.binding_type == "INDEX":
+            bind_col = layout.column()
+            binding_dist_col = bind_col.column()
+            binding_dist_col.prop(md, "binding_distance")
+            bind_col.active = bool(md.target)
+            binding_dist_col.active = (not md.is_bound)
+            if md.is_bound:
+                bind_col.operator("object.vertexsnap_bind", text="Unbind")
+            else:
+                bind_col.operator("object.vertexsnap_bind", text="Bind")
+
     def REMESH(self, layout, _ob, md):
         if not bpy.app.build_options.mod_remesh:
             layout.label(text="Built without Remesh modifier")

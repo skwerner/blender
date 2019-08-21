@@ -2468,6 +2468,74 @@ void OBJECT_OT_laplaciandeform_bind(wmOperatorType *ot)
   edit_modifier_properties(ot);
 }
 
+
+/************************ VertexSnap bind operator *********************/
+
+static bool vertexsnap_poll(bContext *C)
+{
+  return true;
+  // return edit_modifier_poll_generic(C, &RNA_VertexSnapModifier, 0);
+}
+
+static int vertexsnap_bind_exec(bContext *C, wmOperator *op)
+{
+	Object *ob = ED_object_active_context(C);
+	Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+	VertexSnapModifierData *vmd = (VertexSnapModifierData *)edit_modifier_property_get(
+		op, ob, eModifierType_VertexSnap);
+
+	if (vmd == NULL) {
+		return OPERATOR_CANCELLED;
+	}
+
+	VertexSnapModifierData *vmd_eval = (VertexSnapModifierData *)modifier_get_evaluated(
+		depsgraph, ob, &vmd->modifier);
+
+	if (vmd->bindings && vmd->total_bindings) {
+		vmd->flags = MOD_VSNAP_NEEDS_UNBIND;
+	} 
+	else {
+		vmd->flags = MOD_VSNAP_NEEDS_BIND;
+	}
+
+  vmd_eval->flags = vmd->flags;
+
+	object_force_modifier_bind_simple_options(depsgraph, ob, &vmd->modifier);
+	vmd->flags = vmd_eval->flags = 0;
+
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+	WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
+	return OPERATOR_FINISHED;
+}
+
+static int vertexsnap_bind_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
+{
+  if (edit_modifier_invoke_properties(C, op)) {
+    return vertexsnap_bind_exec(C, op);
+  }
+  else {
+    return OPERATOR_CANCELLED;
+  }
+}
+
+void OBJECT_OT_vertexsnap_bind(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name        = "VertexSnap Bind";
+  ot->description = "Bind mesh to target in VertexSnap modifier";
+  ot->idname      = "OBJECT_OT_vertexsnap_bind";
+
+  /* api callbacks */
+  ot->poll   = vertexsnap_poll;
+  ot->invoke = vertexsnap_bind_invoke;
+  ot->exec   = vertexsnap_bind_exec;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
+  edit_modifier_properties(ot);
+}
+
+
 /************************ sdef bind operator *********************/
 
 static bool surfacedeform_bind_poll(bContext *C)

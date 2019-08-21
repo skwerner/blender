@@ -250,6 +250,8 @@ void ED_operatortypes_object(void)
 
   WM_operatortype_append(TRANSFORM_OT_vertex_random);
 
+ WM_operatortype_append(OBJECT_OT_vertexsnap_bind);
+
   WM_operatortype_append(OBJECT_OT_data_transfer);
   WM_operatortype_append(OBJECT_OT_datalayout_transfer);
   WM_operatortype_append(OBJECT_OT_surfacedeform_bind);

@@ -999,7 +999,9 @@ Mesh *ABC_read_mesh(CacheReader *reader,
                     Mesh *existing_mesh,
                     const float time,
                     const char **err_str,
-                    int read_flag)
+                    int read_flag,
+                    float vel_fac,
+                    const char *attrs_require_coord_convert_str)
 {
   AbcObjectReader *abc_reader = get_abc_reader(reader, ob, err_str);
   if (abc_reader == NULL) {
@@ -1007,7 +1009,11 @@ Mesh *ABC_read_mesh(CacheReader *reader,
   }
 
   ISampleSelector sample_sel = sample_selector_for_time(time);
-  return abc_reader->read_mesh(existing_mesh, sample_sel, read_flag, err_str);
+
+  std::vector<std::string> attrs_require_coord_convert_vec;
+  split(std::string(attrs_require_coord_convert_str), ',', attrs_require_coord_convert_vec);
+
+  return abc_reader->read_mesh(existing_mesh, sample_sel, read_flag, vel_fac, err_str, attrs_require_coord_convert_vec);
 }
 
 bool ABC_mesh_topology_changed(

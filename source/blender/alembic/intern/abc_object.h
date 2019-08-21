@@ -197,7 +197,9 @@ class AbcObjectReader {
   virtual struct Mesh *read_mesh(struct Mesh *mesh,
                                  const Alembic::Abc::ISampleSelector &sample_sel,
                                  int read_flag,
-                                 const char **err_str);
+                                 float vel_fac,
+                                 const char **err_str,
+                                 const std::vector<std::string> &attrs_require_coord_convert_vec);
   virtual bool topology_changed(Mesh *existing_mesh,
                                 const Alembic::Abc::ISampleSelector &sample_sel);
 

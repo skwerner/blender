@@ -33,6 +33,8 @@ struct MLoopUV;
 struct MPoly;
 struct MVert;
 struct Mesh;
+struct Object;
+struct IDProperty;
 
 using Alembic::Abc::ICompoundProperty;
 using Alembic::Abc::OCompoundProperty;

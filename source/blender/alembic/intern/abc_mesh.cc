@@ -882,6 +882,8 @@ static bool read_mpolys(CDStreamConfig &config, const AbcMeshData &mesh_data)
   }
 
   BKE_mesh_calc_edges(config.mesh, false, false);
+
+  return true;
 }
 
 static void process_normals(CDStreamConfig &config, const AbcMeshData &mesh_data)
@@ -974,6 +976,25 @@ ABC_INLINE void read_normals_params(AbcMeshData &abc_data,
   }
 }
 
+void read_vels(Mesh *mesh, const Alembic::AbcGeom::V3fArraySamplePtr &velocities, float vel_fac)
+{
+    if (!velocities) {
+        return;
+    }
+
+    BLI_assert(mesh->totvert == velocities->size());
+
+    float (*vdata)[3] = (float (*)[3])CustomData_add_layer(&mesh->vdata, CD_VELOCITY, CD_DEFAULT, NULL, mesh->totvert);
+
+    if (vdata) {
+        float (*data)[3] = (float (*)[3])velocities->getData();
+
+        for (int i = 0; i < mesh->totvert; i++) {
+            copy_zup_from_yup(vdata[i], data[i], vel_fac);
+        }
+    }
+}
+
 static void *add_customdata_cb(Mesh *mesh, const char *name, int data_type)
 {
   CustomDataType cd_data_type = static_cast<CustomDataType>(data_type);
@@ -1015,7 +1036,8 @@ static bool read_mesh_sample(const std::string &iobject_full_name,
                              ImportSettings *settings,
                              const IPolyMeshSchema &schema,
                              const ISampleSelector &selector,
-                             CDStreamConfig &config)
+                             CDStreamConfig &config,
+                             IDProperty *&id_prop)
 {
   const IPolyMeshSchema::Sample sample = schema.getValue(selector);
 
@@ -1049,7 +1071,7 @@ static bool read_mesh_sample(const std::string &iobject_full_name,
   }
 
   if ((settings->read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
-    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities(), settings->vel_fac);
+    read_vels(static_cast<Mesh *>(config.mesh), sample.getVelocities(), settings->vel_fac);
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
@@ -1100,7 +1122,8 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac, NULL, m_settings->attrs_require_coord_convert_vec);
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac,
+          NULL, m_settings->attrs_require_coord_convert_vec);
   if (!read_mesh) {
     BKE_id_free(bmain, mesh);
     m_object = NULL;
@@ -1236,7 +1259,7 @@ Mesh *AbcMeshReader::read_mesh(Mesh *existing_mesh,
   CDStreamConfig config = get_config(new_mesh ? new_mesh : existing_mesh);
   config.time = sample_sel.getRequestedTime();
 
-  read_mesh_sample(m_iobject.getFullName(), &settings, m_schema, sample_sel, config);
+  read_mesh_sample(m_iobject.getFullName(), &settings, m_schema, sample_sel, config, m_idprop);
 
   if (new_mesh) {
     /* Here we assume that the number of materials doesn't change, i.e. that
@@ -1368,7 +1391,7 @@ static bool read_subd_sample(const std::string &iobject_full_name,
   }
 
   if ((settings->read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
-    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities(), settings->vel_fac);
+    read_vels(static_cast<Mesh *>(config.mesh), sample.getVelocities(), settings->vel_fac);
   }
 
   if ((settings->read_flag & (MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR | MOD_MESHSEQ_READ_ATTR)) != 0) {
@@ -1421,7 +1444,8 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 {
   Mesh *mesh = BKE_mesh_add(bmain, m_data_name.c_str());
 
-  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac, NULL, m_settings->attrs_require_coord_convert_vec);
+  Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL | m_settings->read_flag, m_settings->vel_fac,
+          NULL, m_settings->attrs_require_coord_convert_vec);
   if (!read_mesh) {
      BKE_id_free(bmain, mesh);
      m_object = NULL;

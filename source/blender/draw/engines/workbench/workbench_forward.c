@@ -563,7 +563,7 @@ void workbench_forward_cache_populate(WORKBENCH_Data *vedata, Object *ob)
       (md = modifiers_findByType(ob, eModifierType_OpenVDB)) &&
       (modifier_isEnabled(scene, md, eModifierMode_Realtime)) &&
       (((OpenVDBModifierData *)md)->smoke->domain != NULL)) {
-    workbench_volume_cache_populate(vedata, scene, ob, ((OpenVDBModifierData *)md)->smoke);
+    workbench_volume_cache_populate(vedata, scene, ob, (ModifierData*)((OpenVDBModifierData *)md)->smoke);
     return; /* Do not draw solid in this case. */
   }
 

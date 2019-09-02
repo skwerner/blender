@@ -88,7 +88,8 @@ typedef enum ModifierType {
   eModifierType_MeshSequenceCache = 52,
   eModifierType_SurfaceDeform = 53,
   eModifierType_WeightedNormal = 54,
-  eModifierType_OpenVDB = 55,
+  /* Tangent Animation private */
+  eModifierType_OpenVDB = 100,
   NUM_MODIFIER_TYPES,
 } ModifierType;
 

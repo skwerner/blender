@@ -42,6 +42,9 @@ endif()
 
 cmake_minimum_required(VERSION 3.5)
 
+# Tangent animation specific configuration.  Change this to point to a different file if you wish to have a specific configuration.
+include("./build_files/cmake/config/blender_tangentanimrelease.cmake")
+
 # Prever LEGACY OpenGL to eb compatible with all the existing releases and
 # platforms which don't hare GLVND yet. Only do it if preference was not set
 # externally.

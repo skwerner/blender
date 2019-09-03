@@ -1535,6 +1535,8 @@ static void wm_block_splash_add_labels(uiBlock *block, int x, int y)
   wm_block_splash_add_label(block, version_buf, x, &y);
 
 #ifdef WITH_BUILDINFO
+  // At Tangent Animation we always show all the build information to the user.
+  show_build_info = true;
   if (show_build_info) {
     extern unsigned long build_commit_timestamp;
     extern char build_hash[], build_commit_date[], build_commit_time[], build_branch[];

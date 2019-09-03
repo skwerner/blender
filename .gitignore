@@ -40,3 +40,6 @@ Desktop.ini
 
 # in-source lib downloads
 /build_files/build_environment/downloads
+
+# Ignore VSCode's Ninja build location
+/build/ 

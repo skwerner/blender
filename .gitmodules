@@ -1,7 +1,7 @@
 [submodule "release/scripts/addons"]
-	path = release/scripts/addons
-	url = https://git.blender.org/blender-addons.git
-	branch = master
+	path = release/scripts/addons 
+	url = git://github.com/tangent-animation/blender-addons.git
+	branch = blender-v2.80-release 
 	ignore = all
 [submodule "release/scripts/addons_contrib"]
 	path = release/scripts/addons_contrib

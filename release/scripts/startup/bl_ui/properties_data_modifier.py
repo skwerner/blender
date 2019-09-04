@@ -1217,6 +1217,24 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "width", slider=True)
         col.prop(md, "narrowness", slider=True)
 
+    def VERTEXSNAP(self, layout, ob, md):
+        col = layout.column()
+        col.prop(md, "target", text="")
+        col.prop(md, "blend",  text="Blend Amount")
+        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        col.prop(md, "deform_space")
+        col.prop(md, "binding_type")
+        if not md.binding_type == "INDEX":
+            bind_col = layout.column()
+            binding_dist_col = bind_col.column()
+            binding_dist_col.prop(md, "binding_distance")
+            bind_col.active = bool(md.target)
+            binding_dist_col.active = (not md.is_bound)
+            if md.is_bound:
+                bind_col.operator("object.vertexsnap_bind", text="Unbind")
+            else:
+                bind_col.operator("object.vertexsnap_bind", text="Bind")
+
     def REMESH(self, layout, _ob, md):
         if not bpy.app.build_options.mod_remesh:
             layout.label(text="Built without Remesh modifier")
@@ -1707,6 +1725,9 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
         row = col.row()
         row.enabled = md.random
         row.prop(md, "step")
+        row = col.row()
+        row.enabled = md.random
+        row.prop(md, "seed")
         col.prop(md, "full_stroke")
         col.prop(md, "move_extreme")
 
@@ -1804,13 +1825,15 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
 
         col = split.column()
         col.label(text="Settings:")
-        row = col.row(align=True)
-        row.enabled = md.mode == 'FIXED'
-        row.prop(md, "step")
 
-        row = col.row(align=True)
-        row.enabled = not md.mode == 'FIXED'
-        row.prop(md, "factor")
+        if md.mode == 'FIXED':
+            col.prop(md, "step")
+        elif md.mode == 'ADAPTIVE':
+            col.prop(md, "factor")
+        elif md.mode == 'SAMPLE':
+            col.prop(md, "length")
+        elif md.mode == 'MERGE':
+            col.prop(md, "distance")
 
         col = layout.column()
         col.separator()

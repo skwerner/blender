@@ -137,7 +137,10 @@ void COLLECTION_OT_objects_add_active(struct wmOperatorType *ot);
 void COLLECTION_OT_objects_remove_active(struct wmOperatorType *ot);
 
 /* object_modifier.c */
-bool edit_modifier_poll_generic(struct bContext *C, struct StructRNA *rna_type, int obtype_flag);
+bool edit_modifier_poll_generic(struct bContext *C,
+                                struct StructRNA *rna_type,
+                                int obtype_flag,
+                                const bool is_editmode_allowed);
 bool edit_modifier_poll(struct bContext *C);
 void edit_modifier_properties(struct wmOperatorType *ot);
 int edit_modifier_invoke_properties(struct bContext *C, struct wmOperator *op);
@@ -168,6 +171,7 @@ void OBJECT_OT_skin_radii_equalize(struct wmOperatorType *ot);
 void OBJECT_OT_skin_armature_create(struct wmOperatorType *ot);
 void OBJECT_OT_laplaciandeform_bind(struct wmOperatorType *ot);
 void OBJECT_OT_surfacedeform_bind(struct wmOperatorType *ot);
+void OBJECT_OT_vertexsnap_bind(struct wmOperatorType *ot);
 
 /* grease pencil modifiers */
 void OBJECT_OT_gpencil_modifier_add(struct wmOperatorType *ot);
@@ -275,6 +279,9 @@ void OBJECT_OT_bake(wmOperatorType *ot);
 
 /* object_random.c */
 void TRANSFORM_OT_vertex_random(struct wmOperatorType *ot);
+
+/* object_remesh.c */
+void OBJECT_OT_voxel_remesh(struct wmOperatorType *ot);
 
 /* object_transfer_data.c */
 void OBJECT_OT_data_transfer(struct wmOperatorType *ot);

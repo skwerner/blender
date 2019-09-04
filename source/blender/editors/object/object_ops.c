@@ -250,6 +250,8 @@ void ED_operatortypes_object(void)
 
   WM_operatortype_append(TRANSFORM_OT_vertex_random);
 
+ WM_operatortype_append(OBJECT_OT_vertexsnap_bind);
+
   WM_operatortype_append(OBJECT_OT_data_transfer);
   WM_operatortype_append(OBJECT_OT_datalayout_transfer);
   WM_operatortype_append(OBJECT_OT_surfacedeform_bind);
@@ -257,6 +259,8 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_hide_view_clear);
   WM_operatortype_append(OBJECT_OT_hide_view_set);
   WM_operatortype_append(OBJECT_OT_hide_collection);
+
+  WM_operatortype_append(OBJECT_OT_voxel_remesh);
 }
 
 void ED_operatormacros_object(void)

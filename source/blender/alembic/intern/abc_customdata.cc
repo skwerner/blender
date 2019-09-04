@@ -364,7 +364,7 @@ static void read_custom_data_mcols(const std::string &iobject_full_name,
 
   /* Read the vertex colors */
   void *cd_data = config.add_customdata_cb(
-      config.user_data, prop_header.getName().c_str(), CD_MLOOPCOL);
+      config.mesh, prop_header.getName().c_str(), CD_MLOOPCOL);
   MCol *cfaces = static_cast<MCol *>(cd_data);
   MPoly *mpolys = config.mpoly;
   MLoop *mloops = config.mloop;
@@ -448,8 +448,7 @@ static void read_custom_data_uvs(const ICompoundProperty &prop,
     return;
   }
 
-  void *cd_data = config.add_customdata_cb(
-      config.user_data, prop_header.getName().c_str(), CD_MLOOPUV);
+  void *cd_data = config.add_customdata_cb(config.mesh, prop_header.getName().c_str(), CD_MLOOPUV);
 
   read_uvs(config, cd_data, sample.getVals(), sample.getIndices());
 }
@@ -510,7 +509,7 @@ template <class Type>
 static void write_data_to_customdata(const CDStreamConfig &config, const Type *data, size_t num, char type,
         size_t extent, const char *name, const std::vector<std::string> &attrs_require_coord_convert_vec)
 {
-  Mesh *mesh = (Mesh *)config.user_data;
+  Mesh *mesh = (Mesh *)config.mesh;
   CustomData *cd = &mesh->vdata;
   int cd_type = get_cd_type(type, extent);
 
@@ -552,7 +551,7 @@ static void read_custom_data_generic(
     size_t total_extent = elem_extent * array_extent;
 
     if (ELEM(total_extent, 1, 3)) {
-      Mesh *mesh = static_cast<Mesh *>(config.user_data);
+      Mesh *mesh = static_cast<Mesh *>(config.mesh);
       typename PropType::Sample sample;
       typename PropType::Sample::samp_ptr_type vals;
       size_t array_size;

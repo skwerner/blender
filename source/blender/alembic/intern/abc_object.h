@@ -200,6 +200,8 @@ class AbcObjectReader {
                                  float vel_fac,
                                  const char **err_str,
                                  const std::vector<std::string> &attrs_require_coord_convert_vec);
+  virtual bool topology_changed(Mesh *existing_mesh,
+                                const Alembic::Abc::ISampleSelector &sample_sel);
 
   /** Reads the object matrix and sets up an object transform if animated. */
   void setupObjectTransform(const float time);

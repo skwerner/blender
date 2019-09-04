@@ -116,6 +116,7 @@
 typedef struct MoveToCollectionData MoveToCollectionData;
 static void move_to_collection_menus_items(struct uiLayout *layout,
                                            struct MoveToCollectionData *menu);
+static ListBase selected_objects_get(bContext *C);
 
 /* ************* XXX **************** */
 static void error(const char *UNUSED(arg))
@@ -906,7 +907,9 @@ void ED_objects_recalculate_paths(bContext *C, Scene *scene, bool current_frame_
   }
 
   Main *bmain = CTX_data_main(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  /* NOTE: Dependency graph will be evaluated at all the frames, but we first need to access some
+   * nested pointers, like animation data. */
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ListBase targets = {NULL, NULL};
 
   /* loop over objects in scene */
@@ -1056,7 +1059,7 @@ void OBJECT_OT_paths_update(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_paths_update";
   ot->description = "Recalculate paths for selected objects";
 
-  /* api callbakcs */
+  /* api callbacks */
   ot->exec = object_update_paths_exec;
   ot->poll = object_update_paths_poll;
 
@@ -1458,6 +1461,23 @@ void OBJECT_OT_mode_set_or_submode(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
+static ListBase selected_objects_get(bContext *C)
+{
+  ListBase objects = {NULL};
+
+  if (CTX_wm_space_outliner(C) != NULL) {
+    ED_outliner_selected_objects_get(C, &objects);
+  }
+  else {
+    CTX_DATA_BEGIN (C, Object *, ob, selected_objects) {
+      BLI_addtail(&objects, BLI_genericNodeN(ob));
+    }
+    CTX_DATA_END;
+  }
+
+  return objects;
+}
+
 static bool move_to_collection_poll(bContext *C)
 {
   if (CTX_wm_space_outliner(C) != NULL) {
@@ -1470,7 +1490,7 @@ static bool move_to_collection_poll(bContext *C)
       return false;
     }
 
-    return ED_operator_object_active_editable(C);
+    return ED_operator_objectmode(C);
   }
 }
 
@@ -1496,15 +1516,7 @@ static int move_to_collection_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  if (CTX_wm_space_outliner(C) != NULL) {
-    ED_outliner_selected_objects_get(C, &objects);
-  }
-  else {
-    CTX_DATA_BEGIN (C, Object *, ob, selected_objects) {
-      BLI_addtail(&objects, BLI_genericNodeN(ob));
-    }
-    CTX_DATA_END;
-  }
+  objects = selected_objects_get(C);
 
   if (is_new) {
     char new_collection_name[MAX_NAME];
@@ -1647,6 +1659,13 @@ static MoveToCollectionData *master_collection_menu = NULL;
 static int move_to_collection_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
   Scene *scene = CTX_data_scene(C);
+
+  ListBase objects = selected_objects_get(C);
+  if (BLI_listbase_is_empty(&objects)) {
+    BKE_report(op->reports, RPT_ERROR, "No objects selected");
+    return OPERATOR_CANCELLED;
+  }
+  BLI_freelistN(&objects);
 
   /* Reset the menus data for the current master collection, and free previously allocated data. */
   move_to_collection_menus_free(&master_collection_menu);

@@ -792,8 +792,7 @@ ccl_device_inline const ShaderClosure *shader_bsdf_pick(ShaderData *sd, float *r
         if (r < next_sum) {
           sampled = i;
 
-          /* Rescale to reuse for direction sample, to better
-           * preserve stratification. */
+          /* Rescale to reuse for direction sample, to better preserve stratification. */
           *randu = (r - partial_sum) / sc->sample_weight;
           break;
         }
@@ -849,8 +848,7 @@ ccl_device_inline const ShaderClosure *shader_bssrdf_pick(ShaderData *sd,
             *throughput *= (sum_bsdf + sum_bssrdf) / sum_bssrdf;
             sampled = i;
 
-            /* Rescale to reuse for direction sample, to better
-             * preserve stratifaction. */
+            /* Rescale to reuse for direction sample, to better preserve stratification. */
             *randu = (r - partial_sum) / sc->sample_weight;
             break;
           }

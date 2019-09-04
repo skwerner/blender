@@ -776,7 +776,7 @@ bool OpenCLInfo::device_supported(const string &platform_name, const cl_device_i
     return true;
   }
   if (platform_name == "Apple" && device_type == CL_DEVICE_TYPE_GPU) {
-    return false;
+    return true;
   }
   return false;
 }
@@ -854,6 +854,11 @@ string OpenCLInfo::get_hardware_id(const string &platform_name, cl_device_id dev
                            (unsigned int)(slot_id & 0x7));
     }
   }
+#ifdef __APPLE__
+  else if (platform_name == "Apple") {
+    return string_printf("%s:%02x", platform_name.c_str(), device_id);
+  }
+#endif
   /* No general way to get a hardware ID from OpenCL => give up. */
   return "";
 }

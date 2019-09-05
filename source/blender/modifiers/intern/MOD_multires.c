@@ -185,7 +185,10 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
    * accessible via MVert. For this reason we do not evaluate multires to
    * grids when orco is requested. */
   const bool for_orco = (ctx->flag & MOD_APPLY_ORCO) != 0;
-  if ((ctx->object->mode & OB_MODE_SCULPT) && !for_orco) {
+  /* Needed when rendering or baking will in sculpt mode. */
+  const bool for_render = (ctx->flag & MOD_APPLY_RENDER) != 0;
+
+  if ((ctx->object->mode & OB_MODE_SCULPT) && !for_orco && !for_render) {
     /* NOTE: CCG takes ownership over Subdiv. */
     result = multires_as_ccg(mmd, ctx, mesh, subdiv);
     result->runtime.subdiv_ccg_tot_level = mmd->totlvl;
@@ -195,7 +198,14 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
      * Annoying and not so much black-boxed as far as sculpting goes, and
      * surely there is a better way of solving this. */
     if (ctx->object->sculpt != NULL) {
-      ctx->object->sculpt->subdiv_ccg = result->runtime.subdiv_ccg;
+      SculptSession *sculpt_session = ctx->object->sculpt;
+      sculpt_session->subdiv_ccg = result->runtime.subdiv_ccg;
+      sculpt_session->multires = mmd;
+      sculpt_session->totvert = mesh->totvert;
+      sculpt_session->totpoly = mesh->totpoly;
+      sculpt_session->mvert = NULL;
+      sculpt_session->mpoly = NULL;
+      sculpt_session->mloop = NULL;
     }
     /* NOTE: CCG becomes an owner of Subdiv descriptor, so can not share
      * this pointer. Not sure if it's needed, but might have a second look

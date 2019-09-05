@@ -38,6 +38,8 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
+#include "PIL_time.h"
+
 #include "BLO_readfile.h"
 
 #include "DNA_world_types.h"
@@ -270,7 +272,7 @@ static const char *preview_collection_name(const char pr_type)
     case MA_FLUID:
       return "Fluid";
     case MA_SPHERE_A:
-      return "World Shader Ball";
+      return "World Sphere";
     case MA_LAMP:
       return "Lamp";
     case MA_SKY:
@@ -331,28 +333,22 @@ static World *preview_get_localized_world(ShaderPreview *sp, World *world)
   return sp->worldcopy;
 }
 
-static ID *duplicate_ids(ID *id, Depsgraph *depsgraph)
+static ID *duplicate_ids(ID *id)
 {
   if (id == NULL) {
     /* Non-ID preview render. */
     return NULL;
   }
 
-  ID *id_eval = id;
-
-  if (depsgraph) {
-    id_eval = DEG_get_evaluated_id(depsgraph, id);
-  }
-
   switch (GS(id->name)) {
     case ID_MA:
-      return (ID *)BKE_material_localize((Material *)id_eval);
+      return (ID *)BKE_material_localize((Material *)id);
     case ID_TE:
-      return (ID *)BKE_texture_localize((Tex *)id_eval);
+      return (ID *)BKE_texture_localize((Tex *)id);
     case ID_LA:
-      return (ID *)BKE_light_localize((Light *)id_eval);
+      return (ID *)BKE_light_localize((Light *)id);
     case ID_WO:
-      return (ID *)BKE_world_localize((World *)id_eval);
+      return (ID *)BKE_world_localize((World *)id);
     case ID_IM:
     case ID_BR:
     case ID_SCR:
@@ -443,7 +439,14 @@ static Scene *preview_prepare_scene(
           sce->world->horb = 0.05f;
         }
 
-        set_preview_visibility(sce, view_layer, mat->pr_type, sp->pr_method);
+        if (sp->pr_method == PR_ICON_RENDER && sp->pr_main == G_pr_main_grease_pencil) {
+          /* For grease pencil, always use sphere for icon renders. */
+          set_preview_visibility(sce, view_layer, MA_SPHERE_A, sp->pr_method);
+        }
+        else {
+          /* Use specified preview shape for both preview panel and icon previews. */
+          set_preview_visibility(sce, view_layer, mat->pr_type, sp->pr_method);
+        }
 
         if (sp->pr_method != PR_ICON_RENDER) {
           if (mat->nodetree && sp->pr_method == PR_NODE_RENDER) {
@@ -455,7 +458,7 @@ static Scene *preview_prepare_scene(
         }
       }
       else {
-        sce->r.mode &= ~(R_OSA);
+        sce->display.render_aa = SCE_DISPLAY_AA_OFF;
       }
 
       for (Base *base = view_layer->object_bases.first; base; base = base->next) {
@@ -820,11 +823,6 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
   char name[32];
   int sizex;
   Main *pr_main = sp->pr_main;
-  ID *id_eval = id;
-
-  if (sp->depsgraph) {
-    id_eval = DEG_get_evaluated_id(sp->depsgraph, id);
-  }
 
   /* in case of split preview, use border render */
   if (split) {
@@ -848,7 +846,7 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
   }
 
   /* get the stuff from the builtin preview dbase */
-  sce = preview_prepare_scene(sp->bmain, sp->scene, id_eval, idtype, sp);
+  sce = preview_prepare_scene(sp->bmain, sp->scene, id, idtype, sp);
   if (sce == NULL) {
     return;
   }
@@ -872,7 +870,7 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
 
   if (sp->pr_method == PR_ICON_RENDER) {
     sce->r.scemode |= R_NO_IMAGE_LOAD;
-    sce->r.mode |= R_OSA;
+    sce->display.render_aa = SCE_DISPLAY_AA_SAMPLES_8;
   }
   else if (sp->pr_method == PR_NODE_RENDER) {
     if (idtype == ID_MA) {
@@ -881,10 +879,10 @@ static void shader_preview_render(ShaderPreview *sp, ID *id, int split, int firs
     else if (idtype == ID_TE) {
       sce->r.scemode |= R_TEXNODE_PREVIEW;
     }
-    sce->r.mode &= ~R_OSA;
+    sce->display.render_aa = SCE_DISPLAY_AA_OFF;
   }
   else { /* PR_BUTS_RENDER */
-    sce->r.mode |= R_OSA;
+    sce->display.render_aa = SCE_DISPLAY_AA_SAMPLES_8;
   }
 
   /* callbacs are cleared on GetRender() */
@@ -980,7 +978,7 @@ static void shader_preview_free(void *customdata)
     /* get rid of copied ID */
     properties = IDP_GetProperties(sp->id_copy, false);
     if (properties) {
-      IDP_FreeProperty_ex(properties, false);
+      IDP_FreePropertyContent_ex(properties, false);
       MEM_freeN(properties);
     }
     switch (GS(sp->id_copy->name)) {
@@ -1213,6 +1211,10 @@ static void icon_preview_startjob_all_sizes(void *customdata,
   for (cur_size = ip->sizes.first; cur_size; cur_size = cur_size->next) {
     PreviewImage *prv = ip->owner;
 
+    if (*stop) {
+      break;
+    }
+
     if (prv->tag & PRV_TAG_DEFFERED_DELETE) {
       /* Non-thread-protected reading is not an issue here. */
       continue;
@@ -1327,7 +1329,7 @@ void ED_preview_icon_render(
   ip.scene = scene;
   ip.owner = BKE_previewimg_id_ensure(id);
   ip.id = id;
-  ip.id_copy = duplicate_ids(id, NULL);
+  ip.id_copy = duplicate_ids(id);
 
   icon_preview_add_size(&ip, rect, sizex, sizey);
 
@@ -1338,8 +1340,13 @@ void ED_preview_icon_render(
   BLI_freelistN(&ip.sizes);
 }
 
-void ED_preview_icon_job(
-    const bContext *C, void *owner, ID *id, unsigned int *rect, int sizex, int sizey)
+void ED_preview_icon_job(const bContext *C,
+                         void *owner,
+                         ID *id,
+                         unsigned int *rect,
+                         int sizex,
+                         int sizey,
+                         const bool delay)
 {
   wmJob *wm_job;
   IconPreview *ip, *old_ip;
@@ -1351,7 +1358,7 @@ void ED_preview_icon_job(
                        CTX_wm_window(C),
                        owner,
                        "Icon Preview",
-                       WM_JOB_EXCL_RENDER | WM_JOB_SUSPEND,
+                       WM_JOB_EXCL_RENDER,
                        WM_JOB_TYPE_RENDER_PREVIEW);
 
   ip = MEM_callocN(sizeof(IconPreview), "icon preview");
@@ -1368,7 +1375,7 @@ void ED_preview_icon_job(
   ip->depsgraph = CTX_data_depsgraph(C);
   ip->owner = owner;
   ip->id = id;
-  ip->id_copy = duplicate_ids(id, ip->depsgraph);
+  ip->id_copy = duplicate_ids(id);
 
   icon_preview_add_size(ip, rect, sizex, sizey);
 
@@ -1384,6 +1391,10 @@ void ED_preview_icon_job(
   /* setup job */
   WM_jobs_customdata_set(wm_job, ip, icon_preview_free);
   WM_jobs_timer(wm_job, 0.1, NC_WINDOW, NC_WINDOW);
+  /* Wait 2s to start rendering icon previews, to not bog down user interaction.
+   * Particularly important for heavy scenes and Eevee using OpenGL that blocks
+   * the user interface drawing. */
+  WM_jobs_delay_start(wm_job, (delay) ? 2.0 : 0.0);
   WM_jobs_callbacks(wm_job, icon_preview_startjob_all_sizes, NULL, NULL, icon_preview_endjob);
 
   WM_jobs_start(CTX_wm_manager(C), wm_job);
@@ -1434,7 +1445,7 @@ void ED_preview_shader_job(const bContext *C,
   sp->sizey = sizey;
   sp->pr_method = method;
   sp->id = id;
-  sp->id_copy = duplicate_ids(id, sp->depsgraph);
+  sp->id_copy = duplicate_ids(id);
   sp->own_id_copy = true;
   sp->parent = parent;
   sp->slot = slot;
@@ -1474,6 +1485,9 @@ void ED_preview_shader_job(const bContext *C,
 void ED_preview_kill_jobs(wmWindowManager *wm, Main *UNUSED(bmain))
 {
   if (wm) {
+    /* This is called to stop all preview jobs before scene data changes, to
+     * avoid invalid memory access. */
     WM_jobs_kill(wm, NULL, common_preview_startjob);
+    WM_jobs_kill(wm, NULL, icon_preview_startjob_all_sizes);
   }
 }

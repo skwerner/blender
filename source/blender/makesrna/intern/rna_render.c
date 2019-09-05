@@ -206,7 +206,9 @@ static void engine_bake(RenderEngine *engine,
   RNA_parameter_list_free(&list);
 }
 
-static void engine_view_update(RenderEngine *engine, const struct bContext *context)
+static void engine_view_update(RenderEngine *engine,
+                               const struct bContext *context,
+                               Depsgraph *depsgraph)
 {
   extern FunctionRNA rna_RenderEngine_view_update_func;
   PointerRNA ptr;
@@ -218,12 +220,15 @@ static void engine_view_update(RenderEngine *engine, const struct bContext *cont
 
   RNA_parameter_list_create(&list, &ptr, func);
   RNA_parameter_set_lookup(&list, "context", &context);
+  RNA_parameter_set_lookup(&list, "depsgraph", &depsgraph);
   engine->type->ext.call(NULL, &ptr, func, &list);
 
   RNA_parameter_list_free(&list);
 }
 
-static void engine_view_draw(RenderEngine *engine, const struct bContext *context)
+static void engine_view_draw(RenderEngine *engine,
+                             const struct bContext *context,
+                             Depsgraph *depsgraph)
 {
   extern FunctionRNA rna_RenderEngine_view_draw_func;
   PointerRNA ptr;
@@ -235,6 +240,7 @@ static void engine_view_draw(RenderEngine *engine, const struct bContext *contex
 
   RNA_parameter_list_create(&list, &ptr, func);
   RNA_parameter_set_lookup(&list, "context", &context);
+  RNA_parameter_set_lookup(&list, "depsgraph", &depsgraph);
   engine->type->ext.call(NULL, &ptr, func, &list);
 
   RNA_parameter_list_free(&list);
@@ -286,8 +292,9 @@ static void rna_RenderEngine_unregister(Main *bmain, StructRNA *type)
 {
   RenderEngineType *et = RNA_struct_blender_type_get(type);
 
-  if (!et)
+  if (!et) {
     return;
+  }
 
   RNA_struct_free_extension(type, &et->ext);
   RNA_struct_free(&BLENDER_RNA, type);
@@ -316,8 +323,9 @@ static StructRNA *rna_RenderEngine_register(Main *bmain,
   RNA_pointer_create(NULL, &RNA_RenderEngine, &dummyengine, &dummyptr);
 
   /* validate the python class */
-  if (validate(&dummyptr, data, have_function) != 0)
+  if (validate(&dummyptr, data, have_function) != 0) {
     return NULL;
+  }
 
   if (strlen(identifier) >= sizeof(dummyet.idname)) {
     BKE_reportf(reports,
@@ -331,8 +339,9 @@ static StructRNA *rna_RenderEngine_register(Main *bmain,
   /* check if we have registered this engine type before, and remove it */
   for (et = R_engines.first; et; et = et->next) {
     if (STREQ(et->idname, dummyet.idname)) {
-      if (et->ext.srna)
+      if (et->ext.srna) {
         rna_RenderEngine_unregister(bmain, et->ext.srna);
+      }
       break;
     }
   }
@@ -554,12 +563,18 @@ static void rna_def_render_engine(BlenderRNA *brna)
   func = RNA_def_function(srna, "view_update", NULL);
   RNA_def_function_ui_description(func, "Update on data changes for viewport render");
   RNA_def_function_flag(func, FUNC_REGISTER_OPTIONAL | FUNC_ALLOW_WRITE);
-  RNA_def_pointer(func, "context", "Context", "", "");
+  parm = RNA_def_pointer(func, "context", "Context", "", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  parm = RNA_def_pointer(func, "depsgraph", "Depsgraph", "", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
   func = RNA_def_function(srna, "view_draw", NULL);
   RNA_def_function_ui_description(func, "Draw viewport render");
   RNA_def_function_flag(func, FUNC_REGISTER_OPTIONAL);
-  RNA_def_pointer(func, "context", "Context", "", "");
+  parm = RNA_def_pointer(func, "context", "Context", "", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  parm = RNA_def_pointer(func, "depsgraph", "Depsgraph", "", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
   /* shader script callbacks */
   func = RNA_def_function(srna, "update_script_node", NULL);
@@ -829,31 +844,41 @@ static void rna_def_render_engine(BlenderRNA *brna)
   prop = RNA_def_property(srna, "bl_use_preview", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_PREVIEW);
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(
+      prop,
+      "Use Preview Render",
+      "Render engine supports being used for rendering previews of materials, lights and worlds");
 
   prop = RNA_def_property(srna, "bl_use_postprocess", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "type->flag", RE_USE_POSTPROCESS);
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(prop, "Use Post Processing", "Apply compositing on render results");
 
-  prop = RNA_def_property(srna, "bl_use_shading_nodes", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_SHADING_NODES);
+  prop = RNA_def_property(srna, "bl_use_eevee_viewport", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_EEVEE_VIEWPORT);
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(
+      prop, "Use Eevee Viewport", "Uses Eevee for viewport shading in LookDev shading mode");
 
   prop = RNA_def_property(srna, "bl_use_shading_nodes_custom", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_SHADING_NODES_CUSTOM);
   RNA_def_property_boolean_default(prop, true);
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
-
-  prop = RNA_def_property(srna, "bl_use_exclude_layers", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_EXCLUDE_LAYERS);
-  RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(prop,
+                           "Use Custom Shading Nodes",
+                           "Don't expose Cycles and Eevee shading nodes in the node editor user "
+                           "interface, so own nodes can be used instead");
 
   prop = RNA_def_property(srna, "bl_use_save_buffers", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_SAVE_BUFFERS);
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(
+      prop, "Use Save Buffers", "Support render to an on disk buffer during rendering");
 
   prop = RNA_def_property(srna, "bl_use_spherical_stereo", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_SPHERICAL_STEREO);
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(prop, "Use Spherical Stereo", "Support spherical stereo camera models");
 
   RNA_define_verify_sdna(1);
 }

@@ -125,6 +125,14 @@ static void rna_Main_ID_remove(Main *bmain,
                                bool do_ui_user)
 {
   ID *id = id_ptr->data;
+  if (id->tag & LIB_TAG_NO_MAIN) {
+    BKE_reportf(reports,
+                RPT_ERROR,
+                "%s '%s' is outside of main database and can not be removed from it",
+                BKE_idcode_to_name(GS(id->name)),
+                id->name + 2);
+    return;
+  }
   if (do_unlink) {
     BKE_id_delete(bmain, id);
     RNA_POINTER_INVALIDATE(id_ptr);
@@ -200,6 +208,13 @@ static void rna_Main_scenes_remove(
 
 static Object *rna_Main_objects_new(Main *bmain, ReportList *reports, const char *name, ID *data)
 {
+  if (data != NULL && (data->tag & LIB_TAG_NO_MAIN)) {
+    BKE_report(reports,
+               RPT_ERROR,
+               "Can not create object in main database with an evaluated data data-block");
+    return NULL;
+  }
+
   char safe_name[MAX_ID_NAME - 2];
   rna_idname_validate(name, safe_name);
 
@@ -237,8 +252,9 @@ static Object *rna_Main_objects_new(Main *bmain, ReportList *reports, const char
         break;
       default: {
         const char *idname;
-        if (RNA_enum_id_from_value(rna_enum_id_type_items, GS(data->name), &idname) == 0)
+        if (RNA_enum_id_from_value(rna_enum_id_type_items, GS(data->name), &idname) == 0) {
           idname = "UNKNOWN";
+        }
 
         BKE_reportf(reports, RPT_ERROR, "ID type '%s' is not valid for an object", idname);
         return NULL;
@@ -271,6 +287,15 @@ static void rna_Main_materials_gpencil_data(Main *UNUSED(bmain), PointerRNA *id_
   ID *id = id_ptr->data;
   Material *ma = (Material *)id;
   BKE_material_init_gpencil_settings(ma);
+}
+
+static void rna_Main_materials_gpencil_remove(Main *UNUSED(bmain), PointerRNA *id_ptr)
+{
+  ID *id = id_ptr->data;
+  Material *ma = (Material *)id;
+  if (ma->gp_style) {
+    MEM_SAFE_FREE(ma->gp_style);
+  }
 }
 
 static const EnumPropertyItem *rna_Main_nodetree_type_itemf(bContext *UNUSED(C),
@@ -308,16 +333,13 @@ static Mesh *rna_Main_meshes_new(Main *bmain, const char *name)
 }
 
 /* copied from Mesh_getFromObject and adapted to RNA interface */
-Mesh *rna_Main_meshes_new_from_object(Main *bmain,
-                                      ReportList *reports,
-                                      Depsgraph *depsgraph,
-                                      Object *ob,
-                                      bool apply_modifiers,
-                                      bool calc_undeformed)
+static Mesh *rna_Main_meshes_new_from_object(Main *bmain,
+                                             ReportList *reports,
+                                             Object *object,
+                                             bool preserve_all_data_layers,
+                                             Depsgraph *depsgraph)
 {
-  Scene *sce = DEG_get_evaluated_scene(depsgraph);
-
-  switch (ob->type) {
+  switch (object->type) {
     case OB_FONT:
     case OB_CURVE:
     case OB_SURF:
@@ -329,7 +351,7 @@ Mesh *rna_Main_meshes_new_from_object(Main *bmain,
       return NULL;
   }
 
-  return BKE_mesh_new_from_object(depsgraph, bmain, sce, ob, apply_modifiers, calc_undeformed);
+  return BKE_mesh_new_from_object_to_bmain(bmain, depsgraph, object, preserve_all_data_layers);
 }
 
 static Light *rna_Main_lights_new(Main *bmain, const char *name, int type)
@@ -349,14 +371,15 @@ static Image *rna_Main_images_new(Main *bmain,
                                   int height,
                                   bool alpha,
                                   bool float_buffer,
-                                  bool stereo3d)
+                                  bool stereo3d,
+                                  bool is_data)
 {
   char safe_name[MAX_ID_NAME - 2];
   rna_idname_validate(name, safe_name);
 
   float color[4] = {0.0, 0.0, 0.0, 1.0};
   Image *image = BKE_image_add_generated(
-      bmain, width, height, safe_name, alpha ? 32 : 24, float_buffer, 0, color, stereo3d);
+      bmain, width, height, safe_name, alpha ? 32 : 24, float_buffer, 0, color, stereo3d, is_data);
   id_us_min(&image->id);
   return image;
 }
@@ -432,14 +455,15 @@ static VFont *rna_Main_fonts_load(Main *bmain,
     font = BKE_vfont_load(bmain, filepath);
   }
 
-  if (!font)
+  if (!font) {
     BKE_reportf(reports,
                 RPT_ERROR,
                 "Cannot read '%s': %s",
                 filepath,
                 errno ? strerror(errno) : TIP_("unsupported font format"));
 
-  id_us_min((ID *)font);
+    id_us_min((ID *)font);
+  }
   return font;
 }
 
@@ -532,13 +556,13 @@ static Text *rna_Main_texts_load(Main *bmain,
   errno = 0;
   txt = BKE_text_load_ex(bmain, filepath, BKE_main_blendfile_path(bmain), is_internal);
 
-  if (!txt)
+  if (!txt) {
     BKE_reportf(reports,
                 RPT_ERROR,
                 "Cannot read '%s': %s",
                 filepath,
                 errno ? strerror(errno) : TIP_("unable to load text"));
-
+  }
   return txt;
 }
 
@@ -641,6 +665,16 @@ static LightProbe *rna_Main_lightprobe_new(Main *bmain, const char *name)
   return probe;
 }
 
+static bGPdata *rna_Main_gpencils_new(Main *bmain, const char *name)
+{
+  char safe_name[MAX_ID_NAME - 2];
+  rna_idname_validate(name, safe_name);
+
+  bGPdata *gpd = BKE_gpencil_data_addnew(bmain, safe_name);
+  id_us_min(&gpd->id);
+  return gpd;
+}
+
 /* tag functions, all the same */
 #  define RNA_MAIN_ID_TAG_FUNCS_DEF(_func_name, _listbase_name, _id_type) \
     static void rna_Main_##_func_name##_tag(Main *bmain, bool value) \
@@ -667,7 +701,7 @@ RNA_MAIN_ID_TAG_FUNCS_DEF(textures, textures, ID_TE)
 RNA_MAIN_ID_TAG_FUNCS_DEF(brushes, brushes, ID_BR)
 RNA_MAIN_ID_TAG_FUNCS_DEF(worlds, worlds, ID_WO)
 RNA_MAIN_ID_TAG_FUNCS_DEF(collections, collections, ID_GR)
-//RNA_MAIN_ID_TAG_FUNCS_DEF(shape_keys, key, ID_KE)
+// RNA_MAIN_ID_TAG_FUNCS_DEF(shape_keys, key, ID_KE)
 RNA_MAIN_ID_TAG_FUNCS_DEF(texts, texts, ID_TXT)
 RNA_MAIN_ID_TAG_FUNCS_DEF(speakers, speakers, ID_SPK)
 RNA_MAIN_ID_TAG_FUNCS_DEF(sounds, sounds, ID_SO)
@@ -850,6 +884,11 @@ void RNA_def_main_materials(BlenderRNA *brna, PropertyRNA *cprop)
   parm = RNA_def_pointer(func, "material", "Material", "", "Material");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
 
+  func = RNA_def_function(srna, "remove_gpencil_data", "rna_Main_materials_gpencil_remove");
+  RNA_def_function_ui_description(func, "Remove grease pencil material settings");
+  parm = RNA_def_pointer(func, "material", "Material", "", "Material");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
+
   func = RNA_def_function(srna, "remove", "rna_Main_ID_remove");
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
   RNA_def_function_ui_description(func, "Remove a material from the current blendfile");
@@ -937,24 +976,26 @@ void RNA_def_main_meshes(BlenderRNA *brna, PropertyRNA *cprop)
   RNA_def_function_return(func, parm);
 
   func = RNA_def_function(srna, "new_from_object", "rna_Main_meshes_new_from_object");
-  RNA_def_function_ui_description(func,
-                                  "Add a new mesh created from object with modifiers applied");
+  RNA_def_function_ui_description(
+      func,
+      "Add a new mesh created from given object (undeformed geometry if object is original, and "
+      "final evaluated geometry, with all modifiers etc., if object is evaluated)");
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
-  parm = RNA_def_pointer(func,
-                         "depsgraph",
-                         "Depsgraph",
-                         "Dependency Graph",
-                         "Evaluated dependency graph within which to evaluate modifiers");
-  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
   parm = RNA_def_pointer(func, "object", "Object", "", "Object to create mesh from");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
-  parm = RNA_def_boolean(func, "apply_modifiers", 0, "", "Apply modifiers");
-  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   RNA_def_boolean(func,
-                  "calc_undeformed",
+                  "preserve_all_data_layers",
                   false,
-                  "Calculate Undeformed",
-                  "Calculate undeformed vertex coordinates");
+                  "",
+                  "Preserve all data layers in the mesh, like UV maps and vertex groups. "
+                  "By default Blender only computes the subset of data layers needed for viewport "
+                  "display and rendering, for better performance");
+  RNA_def_pointer(
+      func,
+      "depsgraph",
+      "Depsgraph",
+      "Dependency Graph",
+      "Evaluated dependency graph which is required when preserve_all_data_layers is true");
   parm = RNA_def_pointer(func,
                          "mesh",
                          "Mesh",
@@ -1104,6 +1145,7 @@ void RNA_def_main_images(BlenderRNA *brna, PropertyRNA *cprop)
   RNA_def_boolean(
       func, "float_buffer", 0, "Float Buffer", "Create an image with floating point color");
   RNA_def_boolean(func, "stereo3d", 0, "Stereo 3D", "Create left and right views");
+  RNA_def_boolean(func, "is_data", 0, "Is Data", "Create image with non-color data color space");
   /* return type */
   parm = RNA_def_pointer(func, "image", "Image", "", "New image data-block");
   RNA_def_function_return(func, parm);
@@ -1836,8 +1878,8 @@ void RNA_def_main_gpencil(BlenderRNA *brna, PropertyRNA *cprop)
   parm = RNA_def_boolean(func, "value", 0, "Value", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
-  func = RNA_def_function(srna, "new", "BKE_gpencil_data_addnew");
-  RNA_def_function_flag(func, FUNC_NO_SELF | FUNC_USE_MAIN);
+  func = RNA_def_function(srna, "new", "rna_Main_gpencils_new");
+  RNA_def_function_ui_description(func, "Add a new grease pencil datablock to the main database");
   parm = RNA_def_string(func, "name", "GreasePencil", 0, "", "New name for the data-block");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   /* return type */

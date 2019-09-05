@@ -347,7 +347,8 @@ static void object_defgroup_remove_edit_mode(Object *ob, bDeformGroup *dg)
 
   BLI_assert(def_nr != -1);
 
-  /* Make sure that no verts are using this group - if none were removed, we can skip next per-vert update. */
+  /* Make sure that no verts are using this group - if none were removed,
+   * we can skip next per-vert update. */
   if (!BKE_object_defgroup_clear(ob, dg, false)) {
     /* Nothing to do. */
   }
@@ -577,7 +578,7 @@ bool *BKE_object_defgroup_lock_flags_get(Object *ob, const int defbase_tot)
 {
   bool is_locked = false;
   int i;
-  //int defbase_tot = BLI_listbase_count(&ob->defbase);
+  // int defbase_tot = BLI_listbase_count(&ob->defbase);
   bool *lock_flags = MEM_mallocN(defbase_tot * sizeof(bool), "defflags");
   bDeformGroup *defgroup;
 
@@ -601,7 +602,7 @@ bool *BKE_object_defgroup_validmap_get(Object *ob, const int defbase_tot)
   bool *defgroup_validmap;
   GHash *gh;
   int i, step1 = 1;
-  //int defbase_tot = BLI_listbase_count(&ob->defbase);
+  // int defbase_tot = BLI_listbase_count(&ob->defbase);
   VirtualModifierData virtualModifierData;
 
   if (BLI_listbase_is_empty(&ob->defbase)) {
@@ -692,7 +693,9 @@ bool *BKE_object_defgroup_selected_get(Object *ob, int defbase_tot, int *r_dg_fl
   return dg_selection;
 }
 
-/* Marks mirror vgroups in output and counts them. Output and counter assumed to be already initialized.
+/**
+ * Marks mirror vgroups in output and counts them.
+ * Output and counter assumed to be already initialized.
  * Designed to be usable after BKE_object_defgroup_selected_get to extend selection to mirror.
  */
 void BKE_object_defgroup_mirror_selection(struct Object *ob,

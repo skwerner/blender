@@ -856,7 +856,7 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
     add_v3_v3v3(r_normal, eed->v1->no, eed->v2->no);
     sub_v3_v3v3(plane, eed->v2->co, eed->v1->co);
 
-    /* the 2 vertex normals will be close but not at rightangles to the edge
+    /* the 2 vertex normals will be close but not at right angles to the edge
      * for rotate about edge we want them to be at right angles, so we need to
      * do some extra calculation to correct the vert normals,
      * we need the plane for this */
@@ -1231,7 +1231,8 @@ void BM_mesh_elem_hflag_enable_test(BMesh *bm,
 
   /* note, better not attempt a fast path for selection as done with de-select
    * because hidden geometry and different selection modes can give different results,
-   * we could of course check for no hidden faces and then use quicker method but its not worth it. */
+   * we could of course check for no hidden faces and then use
+   * quicker method but its not worth it. */
 
   for (i = 0; i < 3; i++) {
     if (htype & flag_types[i]) {

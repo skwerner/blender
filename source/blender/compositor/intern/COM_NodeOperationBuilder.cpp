@@ -84,7 +84,7 @@ void NodeOperationBuilder::convertToOperations(ExecutionSystem *system)
     const OpInputs &op_to_list = find_operation_inputs(inverse_input_map, to);
     if (!op_from || op_to_list.empty()) {
       /* XXX allow this? error/debug message? */
-      //BLI_assert(false);
+      // BLI_assert(false);
       /* XXX note: this can happen with certain nodes (e.g. OutputFile)
        * which only generate operations in certain circumstances (rendering)
        * just let this pass silently for now ...
@@ -100,9 +100,9 @@ void NodeOperationBuilder::convertToOperations(ExecutionSystem *system)
 
   add_operation_input_constants();
 
-  resolve_proxies();
-
   add_datatype_conversions();
+
+  resolve_proxies();
 
   determineResolutions();
 

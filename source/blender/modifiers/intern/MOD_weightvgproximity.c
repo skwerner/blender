@@ -79,7 +79,8 @@ typedef struct Vert2GeomData {
   float *dist[3];
 } Vert2GeomData;
 
-/* Data which is localized to each computed chunk (i.e. thread-safe, and with continuous subset of index range). */
+/** Data which is localized to each computed chunk
+ * (i.e. thread-safe, and with continuous subset of index range). */
 typedef struct Vert2GeomDataChunk {
   /* Read-only data */
   float last_hit_co[3][3];
@@ -110,8 +111,8 @@ static void vert2geom_task_cb_ex(void *__restrict userdata,
       /* Note that we use local proximity heuristics (to reduce the nearest search).
        *
        * If we already had an hit before in same chunk of tasks (i.e. previous vertex by index),
-       * we assume this vertex is going to have a close hit to that other vertex, so we can initiate
-       * the "nearest.dist" with the expected value to that last hit.
+       * we assume this vertex is going to have a close hit to that other vertex,
+       * so we can initiate the "nearest.dist" with the expected value to that last hit.
        * This will lead in pruning of the search tree.
        */
       nearest.dist_sq = data_chunk->is_init[i] ?
@@ -579,8 +580,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
   /* If weight preview enabled... */
 #if 0 /* XXX Currently done in mod stack :/ */
-  if (do_prev)
+  if (do_prev) {
     DM_update_weight_mcol(ob, dm, 0, org_w, numIdx, indices);
+  }
 #endif
 
   /* Freeing stuff. */

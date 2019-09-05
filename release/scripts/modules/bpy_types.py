@@ -655,6 +655,12 @@ class Gizmo(StructRNA):
         return (batch, shader)
 
 
+    # Dummy class to keep the reference in `bpy_types_dict` and avoid
+# erros like: "TypeError: expected GizmoGroup subclass of class ..."
+class GizmoGroup(StructRNA):
+    __slots__ = ()
+
+
 # Only defined so operators members can be used by accessing self.order
 # with doc generation 'self.properties.bl_rna.properties' can fail
 class Operator(StructRNA, metaclass=RNAMeta):
@@ -905,7 +911,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
             props = row.operator(add_operator, text="", icon='ADD')
             props.name = wm.preset_name
 
-    def draw_preset(self, context):
+    def draw_preset(self, _context):
         """
         Define these on the subclass:
         - preset_operator (string)
@@ -945,7 +951,7 @@ class Node(StructRNA, metaclass=RNAMetaPropGroup):
     __slots__ = ()
 
     @classmethod
-    def poll(cls, ntree):
+    def poll(cls, _ntree):
         return True
 
 

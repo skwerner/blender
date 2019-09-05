@@ -104,7 +104,11 @@ typedef struct bArmature {
   struct AnimData *adt;
 
   ListBase bonebase;
-  ListBase chainbase;
+
+  /** Ghash for quicker lookups of bones by name. */
+  struct GHash *bonehash;
+  void *_pad1;
+
   /** Editbone listbase, we use pointer so we can check state. */
   ListBase *edbo;
 
@@ -143,10 +147,10 @@ typedef enum eArmature_Flag {
   ARM_DRAWNAMES = (1 << 3),
   ARM_POSEMODE = (1 << 4),
   ARM_FLAG_UNUSED_5 = (1 << 5), /* cleared */
-  ARM_DELAYDEFORM = (1 << 6),
-  ARM_FLAG_UNUSED_7 = (1 << 7), /* cleared */
+  ARM_FLAG_UNUSED_6 = (1 << 6), /* cleared */
+  ARM_FLAG_UNUSED_7 = (1 << 7),
   ARM_MIRROR_EDIT = (1 << 8),
-  ARM_AUTO_IK = (1 << 9),
+  ARM_FLAG_UNUSED_9 = (1 << 9),
   /** made option negative, for backwards compat */
   ARM_NO_CUSTOM = (1 << 10),
   /** draw custom colors  */
@@ -245,6 +249,8 @@ typedef enum eBone_Flag {
   BONE_RELATIVE_PARENTING = (1 << 23),
   /** it will add the parent end roll to the inroll */
   BONE_ADD_PARENT_END_ROLL = (1 << 24),
+  /** this bone was transformed by the mirror function */
+  BONE_TRANSFORM_MIRROR = (1 << 25),
 
 } eBone_Flag;
 

@@ -44,6 +44,7 @@ struct FluidsimSettings;
 struct GpencilBatchCache;
 struct Ipo;
 struct Material;
+struct Mesh;
 struct Object;
 struct PartDeflect;
 struct ParticleSystem;
@@ -136,6 +137,16 @@ typedef struct Object_Runtime {
   /** Only used for drawing the parent/child help-line. */
   float parent_display_origin[3];
 
+  /** Selection id of this object; only available in the original object */
+  int select_id;
+  char _pad1[3];
+
+  /**
+   * Denotes whether the evaluated mesh is owned by this object or is referenced and owned by
+   * somebody else.
+   */
+  char is_mesh_eval_owned;
+
   /** Axis aligned boundbox (in localspace). */
   struct BoundBox *bb;
 
@@ -156,11 +167,17 @@ typedef struct Object_Runtime {
    */
   struct Mesh *mesh_deform_eval;
 
+  /* This is a mesh representation of corresponding object.
+   * It created when Python calls `object.to_mesh()`. */
+  struct Mesh *object_as_temp_mesh;
+
   /** Runtime evaluated curve-specific data, not stored in the file. */
   struct CurveCache *curve_cache;
 
   /** Runtime grease pencil drawing data */
   struct GpencilBatchCache *gpencil_cache;
+
+  void *_pad2; /* Padding is here for win32s unconventional stuct alignment rules. */
 } Object_Runtime;
 
 typedef struct Object {
@@ -365,9 +382,7 @@ typedef struct Object {
   char empty_image_visibility_flag;
   char empty_image_depth;
   char empty_image_flag;
-  char _pad8[1];
-
-  int select_id;
+  char _pad8[5];
 
   /** Contains data for levels of detail. */
   ListBase lodlevels;
@@ -573,8 +588,7 @@ enum {
 
 /* **************** BASE ********************* */
 
-/* also needed for base!!!!! or rather, they interfere....*/
-/* base->flag and ob->flag */
+/* base->flag_legacy */
 enum {
   BA_WAS_SEL = (1 << 1),
   /* NOTE: BA_HAS_RECALC_DATA can be re-used later if freed in readfile.c. */
@@ -601,7 +615,7 @@ enum {
 
 /* ob->restrictflag */
 enum {
-  OB_RESTRICT_VIEW = 1 << 0,
+  OB_RESTRICT_VIEWPORT = 1 << 0,
   OB_RESTRICT_SELECT = 1 << 1,
   OB_RESTRICT_RENDER = 1 << 2,
 };

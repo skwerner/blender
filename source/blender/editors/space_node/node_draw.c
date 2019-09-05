@@ -896,7 +896,7 @@ void node_draw_sockets(View2D *v2d,
   uint col = GPU_vertformat_attr_add(format, "color", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
 
   GPU_blend(true);
-  GPU_enable_program_point_size();
+  GPU_program_point_size(true);
 
   immBindBuiltinProgram(GPU_SHADER_2D_POINT_UNIFORM_SIZE_VARYING_COLOR_OUTLINE_AA);
 
@@ -991,7 +991,7 @@ void node_draw_sockets(View2D *v2d,
 
   immUnbindProgram();
 
-  GPU_disable_program_point_size();
+  GPU_program_point_size(false);
   GPU_blend(false);
 }
 
@@ -1309,7 +1309,7 @@ static void node_draw_hidden(const bContext *C,
   nodeLabel(ntree, node, showname, sizeof(showname));
 
   /* XXX - don't print into self! */
-  //if (node->flag & NODE_MUTED)
+  // if (node->flag & NODE_MUTED)
   //  BLI_snprintf(showname, sizeof(showname), "[%s]", showname);
 
   uiBut *but = uiDefBut(node->block,
@@ -1728,8 +1728,7 @@ void drawnodespace(const bContext *C, ARegion *ar)
   draw_tree_path(snode);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, NULL, 10, V2D_GRID_CLAMP, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
+  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_draw(v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 }

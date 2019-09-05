@@ -303,6 +303,7 @@ static SpaceLink *view3d_new(const ScrArea *UNUSED(sa), const Scene *scene)
   BLI_addtail(&v3d->regionbase, ar);
   ar->regiontype = RGN_TYPE_TOOL_HEADER;
   ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
+  ar->flag = RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER;
 
   /* header */
   ar = MEM_callocN(sizeof(ARegion), "header for view3d");
@@ -661,7 +662,10 @@ static void view3d_widgets(void)
   WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_camera);
   WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_camera_view);
   WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_empty_image);
+  /* TODO(campbell): Not working well enough, disable for now. */
+#if 0
   WM_gizmogrouptype_append_and_link(gzmap_type, VIEW3D_GGT_armature_spline);
+#endif
 
   WM_gizmogrouptype_append(VIEW3D_GGT_xform_gizmo);
   WM_gizmogrouptype_append(VIEW3D_GGT_xform_cage);
@@ -1130,6 +1134,9 @@ static void view3d_header_region_listener(wmWindow *UNUSED(win),
         ED_region_tag_redraw(ar);
       }
       break;
+    case NC_BRUSH:
+      ED_region_tag_redraw(ar);
+      break;
   }
 
     /* From topbar, which ones are needed? split per header? */
@@ -1199,9 +1206,106 @@ static void view3d_buttons_region_init(wmWindowManager *wm, ARegion *ar)
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 }
 
-static void view3d_buttons_region_draw(const bContext *C, ARegion *ar)
+void ED_view3d_buttons_region_layout_ex(const bContext *C,
+                                        ARegion *ar,
+                                        const char *category_override)
 {
-  ED_region_panels_ex(C, ar, (const char *[]){CTX_data_mode_string(C), NULL}, -1, true);
+  const enum eContextObjectMode mode = CTX_data_mode_enum(C);
+
+  const char *contexts_base[4] = {NULL};
+  contexts_base[0] = CTX_data_mode_string(C);
+
+  const char **contexts = &contexts_base[1];
+
+  switch (mode) {
+    case CTX_MODE_EDIT_MESH:
+      ARRAY_SET_ITEMS(contexts, ".mesh_edit");
+      break;
+    case CTX_MODE_EDIT_CURVE:
+      ARRAY_SET_ITEMS(contexts, ".curve_edit");
+      break;
+    case CTX_MODE_EDIT_SURFACE:
+      ARRAY_SET_ITEMS(contexts, ".curve_edit");
+      break;
+    case CTX_MODE_EDIT_TEXT:
+      ARRAY_SET_ITEMS(contexts, ".text_edit");
+      break;
+    case CTX_MODE_EDIT_ARMATURE:
+      ARRAY_SET_ITEMS(contexts, ".armature_edit");
+      break;
+    case CTX_MODE_EDIT_METABALL:
+      ARRAY_SET_ITEMS(contexts, ".mball_edit");
+      break;
+    case CTX_MODE_EDIT_LATTICE:
+      ARRAY_SET_ITEMS(contexts, ".lattice_edit");
+      break;
+    case CTX_MODE_POSE:
+      ARRAY_SET_ITEMS(contexts, ".posemode");
+      break;
+    case CTX_MODE_SCULPT:
+      ARRAY_SET_ITEMS(contexts, ".paint_common", ".sculpt_mode");
+      break;
+    case CTX_MODE_PAINT_WEIGHT:
+      ARRAY_SET_ITEMS(contexts, ".paint_common", ".weightpaint");
+      break;
+    case CTX_MODE_PAINT_VERTEX:
+      ARRAY_SET_ITEMS(contexts, ".paint_common", ".vertexpaint");
+      break;
+    case CTX_MODE_PAINT_TEXTURE:
+      ARRAY_SET_ITEMS(contexts, ".paint_common", ".imagepaint");
+      break;
+    case CTX_MODE_PARTICLE:
+      ARRAY_SET_ITEMS(contexts, ".paint_common", ".particlemode");
+      break;
+    case CTX_MODE_OBJECT:
+      ARRAY_SET_ITEMS(contexts, ".objectmode");
+      break;
+    case CTX_MODE_PAINT_GPENCIL:
+      ARRAY_SET_ITEMS(contexts, ".greasepencil_paint");
+      break;
+    case CTX_MODE_SCULPT_GPENCIL:
+      ARRAY_SET_ITEMS(contexts, ".greasepencil_sculpt");
+      break;
+    case CTX_MODE_WEIGHT_GPENCIL:
+      ARRAY_SET_ITEMS(contexts, ".greasepencil_weight");
+      break;
+    default:
+      break;
+  }
+
+  switch (mode) {
+    case CTX_MODE_PAINT_GPENCIL:
+      ARRAY_SET_ITEMS(contexts, ".greasepencil_paint");
+      break;
+    case CTX_MODE_SCULPT_GPENCIL:
+      ARRAY_SET_ITEMS(contexts, ".greasepencil_sculpt");
+      break;
+    case CTX_MODE_WEIGHT_GPENCIL:
+      ARRAY_SET_ITEMS(contexts, ".greasepencil_weight");
+      break;
+    case CTX_MODE_EDIT_GPENCIL:
+      ARRAY_SET_ITEMS(contexts, ".greasepencil_edit");
+      break;
+    default:
+      break;
+  }
+
+  ListBase *paneltypes = &ar->type->paneltypes;
+
+  /* Allow drawing 3D view toolbar from non 3D view space type. */
+  if (category_override != NULL) {
+    SpaceType *st = BKE_spacetype_from_id(SPACE_VIEW3D);
+    ARegionType *art = BKE_regiontype_from_id(st, RGN_TYPE_UI);
+    paneltypes = &art->paneltypes;
+  }
+
+  const bool vertical = true;
+  ED_region_panels_layout_ex(C, ar, paneltypes, contexts_base, -1, vertical, category_override);
+}
+
+static void view3d_buttons_region_layout(const bContext *C, ARegion *ar)
+{
+  ED_view3d_buttons_region_layout_ex(C, ar, NULL);
 }
 
 static void view3d_buttons_region_listener(wmWindow *UNUSED(win),
@@ -1506,11 +1610,13 @@ void ED_spacetype_view3d(void)
   /* regions: listview/buttons */
   art = MEM_callocN(sizeof(ARegionType), "spacetype view3d buttons region");
   art->regionid = RGN_TYPE_UI;
-  art->prefsizex = 180; /* XXX */
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
   art->listener = view3d_buttons_region_listener;
+  art->message_subscribe = ED_area_do_mgs_subscribe_for_tool_ui;
   art->init = view3d_buttons_region_init;
-  art->draw = view3d_buttons_region_draw;
+  art->layout = view3d_buttons_region_layout;
+  art->draw = ED_region_panels_draw;
   BLI_addhead(&st->regiontypes, art);
 
   view3d_buttons_register(art);
@@ -1534,9 +1640,9 @@ void ED_spacetype_view3d(void)
   art->prefsizey = HEADERY;
   art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_HEADER;
   art->listener = view3d_header_region_listener;
+  art->message_subscribe = ED_area_do_mgs_subscribe_for_tool_header;
   art->init = view3d_header_region_init;
   art->draw = view3d_header_region_draw;
-  art->message_subscribe = view3d_header_region_message_subscribe;
   BLI_addhead(&st->regiontypes, art);
 
   /* regions: header */
@@ -1545,9 +1651,9 @@ void ED_spacetype_view3d(void)
   art->prefsizey = HEADERY;
   art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_HEADER;
   art->listener = view3d_header_region_listener;
+  art->message_subscribe = view3d_header_region_message_subscribe;
   art->init = view3d_header_region_init;
   art->draw = view3d_header_region_draw;
-  art->message_subscribe = ED_area_do_mgs_subscribe_for_tool_header;
   BLI_addhead(&st->regiontypes, art);
 
   /* regions: hud */

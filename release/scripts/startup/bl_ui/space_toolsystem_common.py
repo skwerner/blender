@@ -147,6 +147,25 @@ ToolDef.from_fn = from_fn
 del from_dict, from_fn, with_args
 
 
+class ToolActivePanelHelper:
+    # Sub-class must define.
+    # bl_space_type = 'VIEW_3D'
+    # bl_region_type = 'UI'
+    bl_label = "Active Tool"
+    # bl_category = "Tool"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        ToolSelectPanelHelper.draw_active_tool_header(
+            context,
+            layout,
+            show_tool_name=True,
+            tool_key=ToolSelectPanelHelper._tool_key_from_context(context, space_type=self.bl_space_type),
+        )
+
+
 class ToolSelectPanelHelper:
     """
     Generic Class, can be used for any toolbar.
@@ -277,6 +296,45 @@ class ToolSelectPanelHelper:
         return None, None, -1
 
     @staticmethod
+    def _tool_get_by_flat_index(context, space_type, tool_index):
+        """
+        Return the active Python tool definition and index (if in sub-group, else -1).
+
+        Return the index of the expanded list.
+        """
+        cls = ToolSelectPanelHelper._tool_class_from_space_type(space_type)
+        if cls is not None:
+            i = 0
+            for item, index in ToolSelectPanelHelper._tools_flatten_with_tool_index(cls.tools_from_context(context)):
+                if item is not None:
+                    if i == tool_index:
+                        return (cls, item, index)
+                    i += 1
+        return None, None, -1
+
+    @staticmethod
+    def _tool_get_by_index(context, space_type, tool_index):
+        """
+        Return the active Python tool definition and index (if in sub-group, else -1).
+
+        Return the index of the list without expanding.
+        """
+        cls = ToolSelectPanelHelper._tool_class_from_space_type(space_type)
+        if cls is not None:
+            i = 0
+            for item in cls.tools_from_context(context):
+                if item is not None:
+                    if i == tool_index:
+                        if type(item) is tuple:
+                            index = cls._tool_group_active.get(item[0].idname, 0)
+                            item = item[index]
+                        else:
+                            index = -1
+                        return (cls, item, index)
+                    i += 1
+        return None, None, -1
+
+    @staticmethod
     def _tool_active_from_context(context, space_type, mode=None, create=False):
         if space_type == 'VIEW_3D':
             if mode is None:
@@ -360,11 +418,20 @@ class ToolSelectPanelHelper:
     @classmethod
     def keymap_ui_hierarchy(cls, context_mode):
         # See: bpy_extras.keyconfig_utils
+
+        # Keymaps may be shared, don't show them twice.
+        visited = set()
+
         for context_mode_test, tools in cls.tools_all():
             if context_mode_test == context_mode:
                 for item in cls._tools_flatten_with_keymap(tools):
                     km_name = item.keymap[0]
                     # print((km.name, cls.bl_space_type, 'WINDOW', []))
+
+                    if km_name in visited:
+                        continue
+                    visited.add(km_name)
+
                     yield (km_name, cls.bl_space_type, 'WINDOW', [])
 
     # -------------------------------------------------------------------------
@@ -544,12 +611,18 @@ class ToolSelectPanelHelper:
         self.draw_cls(self.layout, context)
 
     @staticmethod
-    def _tool_key_from_context(context):
-        space_data = context.space_data
-        space_type = space_data.type
+    def _tool_key_from_context(context, *, space_type=None):
+        if space_type is None:
+            space_data = context.space_data
+            space_type = space_data.type
+        else:
+            space_data = None
+
         if space_type == 'VIEW_3D':
             return space_type, context.mode
         elif space_type == 'IMAGE_EDITOR':
+            if space_data is None:
+                space_data = context.space_data
             return space_type, space_data.mode
         elif space_type == 'NODE_EDITOR':
             return space_type, None
@@ -566,8 +639,13 @@ class ToolSelectPanelHelper:
             context, layout,
             *,
             show_tool_name=False,
+            tool_key=None,
     ):
-        space_type, mode = ToolSelectPanelHelper._tool_key_from_context(context)
+        if tool_key is None:
+            space_type, mode = ToolSelectPanelHelper._tool_key_from_context(context)
+        else:
+            space_type, mode = tool_key
+
         if space_type is None:
             return None
         item, tool, icon_value = ToolSelectPanelHelper._tool_get_active(context, space_type, mode, with_icon=True)
@@ -730,6 +808,16 @@ def description_from_id(context, space_type, idname, *, use_operator=True):
 def item_from_id(context, space_type, idname):
     # Used directly for tooltips.
     _cls, item, _index = ToolSelectPanelHelper._tool_get_by_id(context, space_type, idname)
+    return item
+
+
+def item_from_flat_index(context, space_type, index):
+    _cls, item, _index = ToolSelectPanelHelper._tool_get_by_flat_index(context, space_type, index)
+    return item
+
+
+def item_from_index(context, space_type, index):
+    _cls, item, _index = ToolSelectPanelHelper._tool_get_by_index(context, space_type, index)
     return item
 
 

@@ -61,6 +61,83 @@
 
 static void txt_screen_clamp(SpaceText *st, ARegion *ar);
 
+/************************ util ***************************/
+
+/**
+ * Tests if the given character represents a start of a new line or the
+ * indentation part of a line.
+ * \param c: The current character.
+ * \param r_last_state: A pointer to a flag representing the last state. The
+ * flag may be modified.
+ */
+static void test_line_start(char c, bool *r_last_state)
+{
+  if (c == '\n') {
+    *r_last_state = true;
+  }
+  else if (!ELEM(c, '\t', ' ')) {
+    *r_last_state = false;
+  }
+}
+
+/**
+ * This function converts the indentation tabs from a buffer to spaces.
+ * \param buf: A pointer to a cstring.
+ * \param tab_size: The size, in spaces, of the tab character.
+ */
+static char *buf_tabs_to_spaces(const char *in_buf, const int tab_size)
+{
+  /* Get the number of tab characters in buffer. */
+  bool line_start = true;
+  int num_tabs = 0;
+
+  for (int in_offset = 0; in_buf[in_offset]; in_offset++) {
+    /* Verify if is an indentation whitespace character. */
+    test_line_start(in_buf[in_offset], &line_start);
+
+    if (in_buf[in_offset] == '\t' && line_start) {
+      num_tabs++;
+    }
+  }
+
+  /* Allocate output before with extra space for expanded tabs. */
+  const int out_size = strlen(in_buf) + num_tabs * (tab_size - 1) + 1;
+  char *out_buf = MEM_mallocN(out_size * sizeof(char), __func__);
+
+  /* Fill output buffer. */
+  int spaces_until_tab = 0;
+  int out_offset = 0;
+  line_start = true;
+
+  for (int in_offset = 0; in_buf[in_offset]; in_offset++) {
+    /* Verify if is an indentation whitespace character. */
+    test_line_start(in_buf[in_offset], &line_start);
+
+    if (in_buf[in_offset] == '\t' && line_start) {
+      /* Calculate tab size so it fills until next indentation. */
+      int num_spaces = tab_size - (spaces_until_tab % tab_size);
+      spaces_until_tab = 0;
+
+      /* Write to buffer. */
+      memset(&out_buf[out_offset], ' ', num_spaces);
+      out_offset += num_spaces;
+    }
+    else {
+      if (in_buf[in_offset] == ' ') {
+        spaces_until_tab++;
+      }
+      else if (in_buf[in_offset] == '\n') {
+        spaces_until_tab = 0;
+      }
+
+      out_buf[out_offset++] = in_buf[in_offset];
+    }
+  }
+
+  out_buf[out_offset] = '\0';
+  return out_buf;
+}
+
 /************************ poll ***************************/
 
 BLI_INLINE int text_pixel_x_to_column(SpaceText *st, const int x)
@@ -170,7 +247,7 @@ static int text_new_exec(bContext *C, wmOperator *UNUSED(op))
 
   if (prop) {
     RNA_id_pointer_create(&text->id, &idptr);
-    RNA_property_pointer_set(&ptr, prop, idptr);
+    RNA_property_pointer_set(&ptr, prop, idptr, NULL);
     RNA_property_update(C, &ptr, prop);
   }
   else if (st) {
@@ -249,7 +326,7 @@ static int text_open_exec(bContext *C, wmOperator *op)
 
   if (pprop->prop) {
     RNA_id_pointer_create(&text->id, &idptr);
-    RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr);
+    RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr, NULL);
     RNA_property_update(C, &pprop->ptr, pprop->prop);
   }
   else if (st) {
@@ -308,7 +385,7 @@ void TEXT_OT_open(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);  //XXX TODO, relative_path
+                                 FILE_SORT_ALPHA);  // XXX TODO, relative_path
   RNA_def_boolean(
       ot->srna, "internal", 0, "Make internal", "Make text file internal after loading");
 }
@@ -608,7 +685,7 @@ void TEXT_OT_save_as(wmOperatorType *ot)
                                  FILE_SAVE,
                                  WM_FILESEL_FILEPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);  //XXX TODO, relative_path
+                                 FILE_SORT_ALPHA);  // XXX TODO, relative_path
 }
 
 /******************* run script operator *********************/
@@ -763,8 +840,16 @@ static int text_paste_exec(bContext *C, wmOperator *op)
 
   text_drawcache_tag_update(CTX_wm_space_text(C), 0);
 
-  TextUndoBuf *utxt = ED_text_undo_push_init(C);
-  txt_insert_buf(text, utxt, buf);
+  ED_text_undo_push_init(C);
+
+  /* Convert clipboard content indentation to spaces if specified */
+  if (text->flags & TXT_TABSTOSPACES) {
+    char *new_buf = buf_tabs_to_spaces(buf, TXT_TABSIZE);
+    MEM_freeN(buf);
+    buf = new_buf;
+  }
+
+  txt_insert_buf(text, buf);
   text_update_edited(text);
 
   MEM_freeN(buf);
@@ -808,9 +893,9 @@ static int text_duplicate_line_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Text *text = CTX_data_edit_text(C);
 
-  TextUndoBuf *utxt = ED_text_undo_push_init(C);
+  ED_text_undo_push_init(C);
 
-  txt_duplicate_line(text, utxt);
+  txt_duplicate_line(text);
 
   WM_event_add_notifier(C, NC_TEXT | NA_EDITED, text);
 
@@ -847,7 +932,7 @@ static void txt_copy_clipboard(Text *text)
     return;
   }
 
-  buf = txt_sel_to_buf(text);
+  buf = txt_sel_to_buf(text, NULL);
 
   if (buf) {
     WM_clipboard_text_set(buf, 0);
@@ -886,8 +971,8 @@ static int text_cut_exec(bContext *C, wmOperator *UNUSED(op))
 
   txt_copy_clipboard(text);
 
-  TextUndoBuf *utxt = ED_text_undo_push_init(C);
-  txt_delete_selected(text, utxt);
+  ED_text_undo_push_init(C);
+  txt_delete_selected(text);
 
   text_update_cursor_moved(C);
   WM_event_add_notifier(C, NC_TEXT | NA_EDITED, text);
@@ -923,14 +1008,14 @@ static int text_indent_exec(bContext *C, wmOperator *UNUSED(op))
 
   text_drawcache_tag_update(CTX_wm_space_text(C), 0);
 
-  TextUndoBuf *utxt = ED_text_undo_push_init(C);
+  ED_text_undo_push_init(C);
 
   if (txt_has_sel(text)) {
     txt_order_cursors(text, false);
-    txt_indent(text, utxt);
+    txt_indent(text);
   }
   else {
-    txt_add_char(text, utxt, '\t');
+    txt_add_char(text, '\t');
   }
 
   text_update_edited(text);
@@ -964,10 +1049,10 @@ static int text_unindent_exec(bContext *C, wmOperator *UNUSED(op))
 
   text_drawcache_tag_update(CTX_wm_space_text(C), 0);
 
-  TextUndoBuf *utxt = ED_text_undo_push_init(C);
+  ED_text_undo_push_init(C);
 
   txt_order_cursors(text, false);
-  txt_unindent(text, utxt);
+  txt_unindent(text);
 
   text_update_edited(text);
 
@@ -1005,15 +1090,15 @@ static int text_line_break_exec(bContext *C, wmOperator *UNUSED(op))
 
   // double check tabs/spaces before splitting the line
   curts = txt_setcurr_tab_spaces(text, space);
-  TextUndoBuf *utxt = ED_text_undo_push_init(C);
-  txt_split_curline(text, utxt);
+  ED_text_undo_push_init(C);
+  txt_split_curline(text);
 
   for (a = 0; a < curts; a++) {
     if (text->flags & TXT_TABSTOSPACES) {
-      txt_add_char(text, utxt, ' ');
+      txt_add_char(text, ' ');
     }
     else {
-      txt_add_char(text, utxt, '\t');
+      txt_add_char(text, '\t');
     }
   }
 
@@ -1054,10 +1139,10 @@ static int text_comment_exec(bContext *C, wmOperator *UNUSED(op))
   if (txt_has_sel(text)) {
     text_drawcache_tag_update(CTX_wm_space_text(C), 0);
 
-    TextUndoBuf *utxt = ED_text_undo_push_init(C);
+    ED_text_undo_push_init(C);
 
     txt_order_cursors(text, false);
-    txt_comment(text, utxt);
+    txt_comment(text);
     text_update_edited(text);
 
     text_update_cursor_moved(C);
@@ -1092,10 +1177,10 @@ static int text_uncomment_exec(bContext *C, wmOperator *UNUSED(op))
   if (txt_has_sel(text)) {
     text_drawcache_tag_update(CTX_wm_space_text(C), 0);
 
-    TextUndoBuf *utxt = ED_text_undo_push_init(C);
+    ED_text_undo_push_init(C);
 
     txt_order_cursors(text, false);
-    txt_uncomment(text, utxt);
+    txt_uncomment(text);
     text_update_edited(text);
 
     text_update_cursor_moved(C);
@@ -1183,7 +1268,7 @@ static int text_convert_whitespace_exec(bContext *C, wmOperator *op)
           for (j = 1;
                (j < tab_len) && (a + j < text_check_line_len) && (text_check_line[a + j] == ' ');
                j++) {
-            ;
+            /* pass */
           }
 
           if (j == tab_len) {
@@ -1361,9 +1446,9 @@ static int move_lines_exec(bContext *C, wmOperator *op)
   Text *text = CTX_data_edit_text(C);
   const int direction = RNA_enum_get(op->ptr, "direction");
 
-  TextUndoBuf *utxt = ED_text_undo_push_init(C);
+  ED_text_undo_push_init(C);
 
-  txt_move_lines(text, utxt, direction);
+  txt_move_lines(text, direction);
 
   text_update_cursor_moved(C);
   WM_event_add_notifier(C, NC_TEXT | NA_EDITED, text);
@@ -2145,13 +2230,13 @@ static int text_delete_exec(bContext *C, wmOperator *op)
     }
   }
 
-  TextUndoBuf *utxt = ED_text_undo_push_init(C);
+  ED_text_undo_push_init(C);
 
   if (type == DEL_PREV_WORD) {
     if (txt_cursor_is_line_start(text)) {
-      txt_backspace_char(text, utxt);
+      txt_backspace_char(text);
     }
-    txt_backspace_word(text, utxt);
+    txt_backspace_word(text);
   }
   else if (type == DEL_PREV_CHAR) {
 
@@ -2167,13 +2252,13 @@ static int text_delete_exec(bContext *C, wmOperator *op)
       }
     }
 
-    txt_backspace_char(text, utxt);
+    txt_backspace_char(text);
   }
   else if (type == DEL_NEXT_WORD) {
     if (txt_cursor_is_line_end(text)) {
-      txt_delete_char(text, utxt);
+      txt_delete_char(text);
     }
-    txt_delete_word(text, utxt);
+    txt_delete_word(text);
   }
   else if (type == DEL_NEXT_CHAR) {
 
@@ -2189,7 +2274,7 @@ static int text_delete_exec(bContext *C, wmOperator *op)
       }
     }
 
-    txt_delete_char(text, utxt);
+    txt_delete_char(text);
   }
 
   text_update_line_edited(text->curl);
@@ -2477,7 +2562,7 @@ void TEXT_OT_scroll(wmOperatorType *ot)
   ot->poll = text_scroll_poll;
 
   /* flags */
-  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR | OPTYPE_INTERNAL;
+  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY | OPTYPE_INTERNAL;
 
   /* properties */
   RNA_def_int(
@@ -2909,7 +2994,7 @@ static void text_cursor_set_exit(bContext *C, wmOperator *op)
   char *buffer;
 
   if (txt_has_sel(text)) {
-    buffer = txt_sel_to_buf(text);
+    buffer = txt_sel_to_buf(text, NULL);
     WM_clipboard_text_set(buffer, 1);
     MEM_freeN(buffer);
   }
@@ -3105,18 +3190,18 @@ static int text_insert_exec(bContext *C, wmOperator *op)
 
   str = RNA_string_get_alloc(op->ptr, "text", NULL, 0);
 
-  TextUndoBuf *utxt = ED_text_undo_push_init(C);
+  ED_text_undo_push_init(C);
 
   if (st && st->overwrite) {
     while (str[i]) {
       code = BLI_str_utf8_as_unicode_step(str, &i);
-      done |= txt_replace_char(text, utxt, code);
+      done |= txt_replace_char(text, code);
     }
   }
   else {
     while (str[i]) {
       code = BLI_str_utf8_as_unicode_step(str, &i);
-      done |= txt_add_char(text, utxt, code);
+      done |= txt_add_char(text, code);
     }
   }
 
@@ -3223,7 +3308,7 @@ static int text_find_and_replace(bContext *C, wmOperator *op, short mode)
 
   /* Replace current */
   if (mode != TEXT_FIND && txt_has_sel(text)) {
-    tmp = txt_sel_to_buf(text);
+    tmp = txt_sel_to_buf(text, NULL);
 
     if (flags & ST_MATCH_CASE) {
       found = STREQ(st->findstr, tmp);
@@ -3234,8 +3319,8 @@ static int text_find_and_replace(bContext *C, wmOperator *op, short mode)
 
     if (found) {
       if (mode == TEXT_REPLACE) {
-        TextUndoBuf *utxt = ED_text_undo_push_init(C);
-        txt_insert_buf(text, utxt, st->replacestr);
+        ED_text_undo_push_init(C);
+        txt_insert_buf(text, st->replacestr);
         if (text->curl && text->curl->format) {
           MEM_freeN(text->curl->format);
           text->curl->format = NULL;
@@ -3321,7 +3406,7 @@ static int text_find_set_selected_exec(bContext *C, wmOperator *op)
   Text *text = CTX_data_edit_text(C);
   char *tmp;
 
-  tmp = txt_sel_to_buf(text);
+  tmp = txt_sel_to_buf(text, NULL);
   BLI_strncpy(st->findstr, tmp, ST_MAX_FIND_STR);
   MEM_freeN(tmp);
 
@@ -3352,7 +3437,7 @@ static int text_replace_set_selected_exec(bContext *C, wmOperator *UNUSED(op))
   Text *text = CTX_data_edit_text(C);
   char *tmp;
 
-  tmp = txt_sel_to_buf(text);
+  tmp = txt_sel_to_buf(text, NULL);
   BLI_strncpy(st->replacestr, tmp, ST_MAX_FIND_STR);
   MEM_freeN(tmp);
 

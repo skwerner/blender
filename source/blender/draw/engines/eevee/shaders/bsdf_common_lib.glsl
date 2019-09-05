@@ -15,7 +15,7 @@ uniform sampler2D maxzBuffer;
 uniform sampler2D minzBuffer;
 uniform sampler2DArray planarDepth;
 
-#define cameraForward normalize(ViewMatrixInverse[2].xyz)
+#define cameraForward ViewMatrixInverse[2].xyz
 #define cameraPos ViewMatrixInverse[3].xyz
 #define cameraVec \
   ((ProjectionMatrix[3][3] == 0.0) ? normalize(cameraPos - worldPosition) : cameraForward)
@@ -319,7 +319,8 @@ float line_unit_sphere_intersect_dist(vec3 lineorigin, vec3 linedirection)
 
 float line_unit_box_intersect_dist(vec3 lineorigin, vec3 linedirection)
 {
-  /* https://seblagarde.wordpress.com/2012/09/29/image-based-lighting-approaches-and-parallax-corrected-cubemap/ */
+  /* https://seblagarde.wordpress.com/2012/09/29/image-based-lighting-approaches-and-parallax-corrected-cubemap/
+   */
   vec3 firstplane = (vec3(1.0) - lineorigin) / linedirection;
   vec3 secondplane = (vec3(-1.0) - lineorigin) / linedirection;
   vec3 furthestplane = max(firstplane, secondplane);
@@ -643,19 +644,19 @@ vec3 F_schlick(vec3 f0, float cos_theta)
 }
 
 /* Fresnel approximation for LTC area lights (not MRP) */
-vec3 F_area(vec3 f0, vec2 lut)
+vec3 F_area(vec3 f0, vec3 f90, vec2 lut)
 {
   /* Unreal specular matching : if specular color is below 2% intensity,
    * treat as shadowning */
-  return saturate(50.0 * dot(f0, vec3(0.3, 0.6, 0.1))) * lut.y + lut.x * f0;
+  return saturate(50.0 * dot(f0, vec3(0.3, 0.6, 0.1))) * lut.y * f90 + lut.x * f0;
 }
 
 /* Fresnel approximation for IBL */
-vec3 F_ibl(vec3 f0, vec2 lut)
+vec3 F_ibl(vec3 f0, vec3 f90, vec2 lut)
 {
   /* Unreal specular matching : if specular color is below 2% intensity,
    * treat as shadowning */
-  return saturate(50.0 * dot(f0, vec3(0.3, 0.6, 0.1))) * lut.y + lut.x * f0;
+  return saturate(50.0 * dot(f0, vec3(0.3, 0.6, 0.1))) * lut.y * f90 + lut.x * f0;
 }
 
 /* GGX */
@@ -792,9 +793,9 @@ Closure closure_mix(Closure cl1, Closure cl2, float fac)
   Closure cl;
 
   if (cl1.ssr_id == TRANSPARENT_CLOSURE_FLAG) {
-    cl1.ssr_normal = cl2.ssr_normal;
-    cl1.ssr_data = cl2.ssr_data;
-    cl1.ssr_id = cl2.ssr_id;
+    cl.ssr_normal = cl2.ssr_normal;
+    cl.ssr_data = cl2.ssr_data;
+    cl.ssr_id = cl2.ssr_id;
 #  ifdef USE_SSS
     cl1.sss_data = cl2.sss_data;
 #    ifdef USE_SSS_ALBEDO
@@ -802,10 +803,10 @@ Closure closure_mix(Closure cl1, Closure cl2, float fac)
 #    endif
 #  endif
   }
-  if (cl2.ssr_id == TRANSPARENT_CLOSURE_FLAG) {
-    cl2.ssr_normal = cl1.ssr_normal;
-    cl2.ssr_data = cl1.ssr_data;
-    cl2.ssr_id = cl1.ssr_id;
+  else if (cl2.ssr_id == TRANSPARENT_CLOSURE_FLAG) {
+    cl.ssr_normal = cl1.ssr_normal;
+    cl.ssr_data = cl1.ssr_data;
+    cl.ssr_id = cl1.ssr_id;
 #  ifdef USE_SSS
     cl2.sss_data = cl1.sss_data;
 #    ifdef USE_SSS_ALBEDO
@@ -813,13 +814,12 @@ Closure closure_mix(Closure cl1, Closure cl2, float fac)
 #    endif
 #  endif
   }
-
-  /* When mixing SSR don't blend roughness.
-   *
-   * It makes no sense to mix them really, so we take either one of them and
-   * tone down its specularity (ssr_data.xyz) while keeping its roughness (ssr_data.w).
-   */
-  if (cl1.ssr_id == outputSsrId) {
+  else if (cl1.ssr_id == outputSsrId) {
+    /* When mixing SSR don't blend roughness.
+     *
+     * It makes no sense to mix them really, so we take either one of them and
+     * tone down its specularity (ssr_data.xyz) while keeping its roughness (ssr_data.w).
+     */
     cl.ssr_data = mix(cl1.ssr_data.xyzw, vec4(vec3(0.0), cl1.ssr_data.w), fac);
     cl.ssr_normal = cl1.ssr_normal;
     cl.ssr_id = cl1.ssr_id;
@@ -835,11 +835,22 @@ Closure closure_mix(Closure cl1, Closure cl2, float fac)
   cl.radiance /= max(1e-8, cl.opacity);
 
 #  ifdef USE_SSS
-  cl.sss_data.rgb = mix(cl1.sss_data.rgb, cl2.sss_data.rgb, fac);
-  cl.sss_data.a = (cl1.sss_data.a > 0.0) ? cl1.sss_data.a : cl2.sss_data.a;
+  /* Apply Mix on input */
+  cl1.sss_data.rgb *= 1.0 - fac;
+  cl2.sss_data.rgb *= fac;
+
+  /* Select biggest radius. */
+  bool use_cl1 = (cl1.sss_data.a > cl2.sss_data.a);
+  cl.sss_data = (use_cl1) ? cl1.sss_data : cl2.sss_data;
+
 #    ifdef USE_SSS_ALBEDO
   /* TODO Find a solution to this. Dither? */
-  cl.sss_albedo = (cl1.sss_data.a > 0.0) ? cl1.sss_albedo : cl2.sss_albedo;
+  cl.sss_albedo = (use_cl1) ? cl1.sss_albedo : cl2.sss_albedo;
+  /* Add radiance that was supposed to be filtered but was rejected. */
+  cl.radiance += (use_cl1) ? cl2.sss_data.rgb * cl2.sss_albedo : cl1.sss_data.rgb * cl1.sss_albedo;
+#    else
+  /* Add radiance that was supposed to be filtered but was rejected. */
+  cl.radiance += (use_cl1) ? cl2.sss_data.rgb : cl1.sss_data.rgb;
 #    endif
 #  endif
 
@@ -886,9 +897,12 @@ layout(location = 4) out vec4 sssAlbedo;
 
 Closure nodetree_exec(void); /* Prototype */
 
-#    if defined(USE_ALPHA_BLEND_VOLUMETRICS)
+#    if defined(USE_ALPHA_BLEND)
 /* Prototype because this file is included before volumetric_lib.glsl */
-vec4 volumetric_resolve(vec4 scene_color, vec2 frag_uvs, float frag_depth);
+void volumetric_resolve(vec2 frag_uvs,
+                        float frag_depth,
+                        out vec3 transmittance,
+                        out vec3 scattering);
 #    endif
 
 #    define NODETREE_EXEC
@@ -900,10 +914,11 @@ void main()
   cl.opacity = 1.0;
 #    endif
 
-#    if defined(USE_ALPHA_BLEND_VOLUMETRICS)
-  /* XXX fragile, better use real viewport resolution */
-  vec2 uvs = gl_FragCoord.xy / vec2(2 * textureSize(maxzBuffer, 0).xy);
-  fragColor.rgb = volumetric_resolve(vec4(cl.radiance, cl.opacity), uvs, gl_FragCoord.z).rgb;
+#    if defined(USE_ALPHA_BLEND)
+  vec2 uvs = gl_FragCoord.xy * volCoordScale.zw;
+  vec3 transmittance, scattering;
+  volumetric_resolve(uvs, gl_FragCoord.z, transmittance, scattering);
+  fragColor.rgb = cl.radiance * transmittance + scattering;
   fragColor.a = cl.opacity;
 #    else
   fragColor = vec4(cl.radiance, cl.opacity);
@@ -920,10 +935,19 @@ void main()
 
   /* For Probe capture */
 #    ifdef USE_SSS
+  float fac = float(!sssToggle);
+
+#      ifdef USE_REFRACTION
+  /* SSRefraction pass is done after the SSS pass.
+   * In order to not loose the diffuse light totally we
+   * need to merge the SSS radiance to the main radiance. */
+  fac = 1.0;
+#      endif
+
 #      ifdef USE_SSS_ALBEDO
-  fragColor.rgb += cl.sss_data.rgb * cl.sss_albedo.rgb * float(!sssToggle);
+  fragColor.rgb += cl.sss_data.rgb * cl.sss_albedo.rgb * fac;
 #      else
-  fragColor.rgb += cl.sss_data.rgb * float(!sssToggle);
+  fragColor.rgb += cl.sss_data.rgb * fac;
 #      endif
 #    endif
 }

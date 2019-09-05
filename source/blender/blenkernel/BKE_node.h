@@ -225,12 +225,14 @@ typedef struct bNodeType {
   /// Free the node instance.
   void (*freefunc)(struct bNode *node);
   /// Make a copy of the node instance.
-  void (*copyfunc)(struct bNodeTree *dest_ntree, struct bNode *dest_node, struct bNode *src_node);
+  void (*copyfunc)(struct bNodeTree *dest_ntree,
+                   struct bNode *dest_node,
+                   const struct bNode *src_node);
 
   /* Registerable API callback versions, called in addition to C callbacks */
   void (*initfunc_api)(const struct bContext *C, struct PointerRNA *ptr);
   void (*freefunc_api)(struct PointerRNA *ptr);
-  void (*copyfunc_api)(struct PointerRNA *ptr, struct bNode *src_node);
+  void (*copyfunc_api)(struct PointerRNA *ptr, const struct bNode *src_node);
 
   /* can this node type be added to a node tree */
   bool (*poll)(struct bNodeType *ntype, struct bNodeTree *nodetree);
@@ -400,8 +402,9 @@ void ntreeUpdateAllUsers(struct Main *main, struct ID *id);
 
 void ntreeGetDependencyList(struct bNodeTree *ntree, struct bNode ***deplist, int *totnodes);
 
-/* XXX old trees handle output flags automatically based on special output node types and last active selection.
- * new tree types have a per-output socket flag to indicate the final output to use explicitly.
+/* XXX old trees handle output flags automatically based on special output
+ * node types and last active selection.
+ * New tree types have a per-output socket flag to indicate the final output to use explicitly.
  */
 void ntreeSetOutput(struct bNodeTree *ntree);
 
@@ -537,7 +540,23 @@ void nodeRemoveNode(struct Main *bmain,
                     struct bNode *node,
                     bool do_id_user);
 
-struct bNode *BKE_node_copy_ex(struct bNodeTree *ntree, struct bNode *node_src, const int flag);
+struct bNode *BKE_node_copy_ex(struct bNodeTree *ntree,
+                               const struct bNode *node_src,
+                               const int flag);
+
+/* Same as BKE_node_copy_ex() but stores pointers to a new node and its sockets in the source
+ * node.
+ *
+ * NOTE: DANGER ZONE!
+ *
+ * TODO(sergey): Maybe it's better to make BKE_node_copy_ex() return a mapping from old node and
+ * sockets to new one. */
+struct bNode *BKE_node_copy_store_new_pointers(struct bNodeTree *ntree,
+                                               struct bNode *node_src,
+                                               const int flag);
+struct bNodeTree *ntreeCopyTree_ex_new_pointers(const struct bNodeTree *ntree,
+                                                struct Main *bmain,
+                                                const bool do_id_user);
 
 struct bNodeLink *nodeAddLink(struct bNodeTree *ntree,
                               struct bNode *fromnode,
@@ -729,7 +748,7 @@ void node_type_storage(struct bNodeType *ntype,
                        void (*freefunc)(struct bNode *node),
                        void (*copyfunc)(struct bNodeTree *dest_ntree,
                                         struct bNode *dest_node,
-                                        struct bNode *src_node));
+                                        const struct bNode *src_node));
 void node_type_label(
     struct bNodeType *ntype,
     void (*labelfunc)(struct bNodeTree *ntree, struct bNode *, char *label, int maxlen));
@@ -775,16 +794,20 @@ void BKE_node_tree_unlink_id(ID *id, struct bNodeTree *ntree);
 /* -------------------------------------------------------------------- */
 /** \name Node Tree Iterator
  *
- * Utility macro for visiting every node tree in the library data, including local bNodeTree blocks in other IDs.
- * This avoids the need for callback functions and allows executing code in a single inner code block.
+ * Utility macro for visiting every node tree in the library data,
+ * including local bNodeTree blocks in other IDs.
+ * This avoids the need for callback functions and allows executing code
+ * in a single inner code block.
  *
  * Variables:
  *
- *   nodetree:  The actual bNodeTree data block.
- *              Check nodetree->idname or nodetree->typeinfo to use only specific types.
+ * - nodetree:
+ *   The actual bNodeTree data block.
+ *   Check nodetree->idname or nodetree->typeinfo to use only specific types.
  *
- *   id:        The owner of the bNodeTree data block.
- *              Same as nodetree if it's a linkable node tree from the library.
+ * - id:
+ *   The owner of the bNodeTree data block.
+ *   Same as nodetree if it's a linkable node tree from the library.
  *
  * Examples:
  *
@@ -852,7 +875,8 @@ void BKE_nodetree_remove_layer_n(struct bNodeTree *ntree,
 
 /* note: types are needed to restore callbacks, don't change values */
 /* range 1 - 100 is reserved for common nodes */
-/* using toolbox, we add node groups by assuming the values below don't exceed NODE_GROUP_MENU for now */
+/* using toolbox, we add node groups by assuming the values below
+ * don't exceed NODE_GROUP_MENU for now. */
 
 //#define SH_NODE_OUTPUT        1
 

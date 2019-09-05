@@ -1014,18 +1014,23 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             scene.cycles.feature_set == 'EXPERIMENTAL'
         )
         if show_adaptive_options:
-            col.label(text="View:")
-            col.prop(md, "levels", text="Levels")
             col.label(text="Render:")
             col.prop(ob.cycles, "use_adaptive_subdivision", text="Adaptive")
             if ob.cycles.use_adaptive_subdivision:
                 col.prop(ob.cycles, "dicing_rate")
             else:
                 col.prop(md, "render_levels", text="Levels")
+
+            col.separator()
+
+            col.label(text="Viewport:")
+            col.prop(md, "levels", text="Levels")
         else:
             col.label(text="Subdivisions:")
-            col.prop(md, "levels", text="View")
-            col.prop(md, "render_levels", text="Render")
+            sub = col.column(align=True)
+            sub.prop(md, "render_levels", text="Render")
+            sub.prop(md, "levels", text="Viewport")
+
             col.prop(md, "quality")
 
         col = split.column()
@@ -1914,9 +1919,9 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
 
         col = split.column()
         col.label(text="Color:")
-        col.prop(md, "hue", text="H")
-        col.prop(md, "saturation", text="S")
-        col.prop(md, "value", text="V")
+        col.prop(md, "hue", text="H", slider=True)
+        col.prop(md, "saturation", text="S", slider=True)
+        col.prop(md, "value", text="V", slider=True)
 
         row = layout.row()
         row.prop(md, "create_materials")

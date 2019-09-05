@@ -360,7 +360,7 @@ void applyProject(TransInfo *t)
           }
         }
 
-        //XXX constraintTransLim(t, td);
+        // XXX constraintTransLim(t, td);
       }
     }
   }
@@ -566,13 +566,8 @@ static void initSnappingMode(TransInfo *t)
     /* Edit mode */
     if (t->tsnap.applySnap != NULL &&  // A snapping function actually exist
         ((obedit_type != -1) &&
-         ELEM(obedit_type,
-              OB_MESH,
-              OB_ARMATURE,
-              OB_CURVE,
-              OB_LATTICE,
-              OB_MBALL)))  // Temporary limited to edit mode meshes, armature, curves, metaballs
-    {
+         /* Temporary limited to edit mode meshes, armature, curves, metaballs. */
+         ELEM(obedit_type, OB_MESH, OB_ARMATURE, OB_CURVE, OB_LATTICE, OB_MBALL))) {
       /* Exclude editmesh if using proportional edit */
       if ((obedit_type == OB_MESH) && (t->flag & T_PROP_EDIT)) {
         t->tsnap.modeSelect = SNAP_NOT_ACTIVE;
@@ -1563,24 +1558,11 @@ static void applyGridIncrement(
     /* custom aspect for fcurve */
     if (t->spacetype == SPACE_GRAPH) {
       View2D *v2d = &t->ar->v2d;
-      View2DGrid *grid;
+      Scene *scene = t->scene;
       SpaceGraph *sipo = t->sa->spacedata.first;
-      int unity = V2D_UNIT_VALUES;
-      int unitx = (sipo->flag & SIPO_DRAWTIME) ? V2D_UNIT_SECONDS : V2D_UNIT_FRAMESCALE;
-
-      /* grid */
-      grid = UI_view2d_grid_calc(t->scene,
-                                 v2d,
-                                 unitx,
-                                 V2D_GRID_NOCLAMP,
-                                 unity,
-                                 V2D_GRID_NOCLAMP,
-                                 t->ar->winx,
-                                 t->ar->winy);
-
-      UI_view2d_grid_size(grid, &asp_local[0], &asp_local[1]);
-      UI_view2d_grid_free(grid);
-
+      asp_local[0] = UI_view2d_grid_resolution_x__frames_or_seconds(
+          v2d, scene, sipo->flag & SIPO_DRAWTIME);
+      asp_local[1] = UI_view2d_grid_resolution_y__values(v2d);
       asp = asp_local;
     }
   }

@@ -159,23 +159,25 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
   effects->enabled_effects |= EEVEE_depth_of_field_init(sldata, vedata, camera);
   effects->enabled_effects |= EEVEE_temporal_sampling_init(sldata, vedata);
   effects->enabled_effects |= EEVEE_occlusion_init(sldata, vedata);
-  effects->enabled_effects |= EEVEE_subsurface_init(sldata, vedata);
   effects->enabled_effects |= EEVEE_screen_raytrace_init(sldata, vedata);
-  effects->enabled_effects |= EEVEE_volumes_init(sldata, vedata);
+
+  if ((effects->enabled_effects & EFFECT_TAA) && effects->taa_current_sample > 1) {
+    /* Update matrices here because EEVEE_screen_raytrace_init can have reset the
+     * taa_current_sample. (See T66811) */
+    EEVEE_temporal_sampling_update_matrices(vedata);
+  }
+
+  EEVEE_volumes_init(sldata, vedata);
+  EEVEE_subsurface_init(sldata, vedata);
 
   /* Force normal buffer creation. */
   if (DRW_state_is_image_render() && !minimal && (view_layer->passflag & SCE_PASS_NORMAL) != 0) {
     effects->enabled_effects |= EFFECT_NORMAL_BUFFER;
   }
 
-  /**
-   * Ping Pong buffer
-   */
-  if ((effects->enabled_effects & EFFECT_POST_BUFFER) != 0) {
-    SETUP_BUFFER(txl->color_post, fbl->effect_fb, fbl->effect_color_fb);
-  }
-  else {
-    CLEANUP_BUFFER(txl->color_post, fbl->effect_fb, fbl->effect_color_fb);
+  /* Alpha checker if background is not drawn in viewport. */
+  if (!DRW_state_is_image_render() && !DRW_state_draw_background()) {
+    effects->enabled_effects |= EFFECT_ALPHA_CHECKER;
   }
 
   /**
@@ -257,16 +259,6 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
     GPU_FRAMEBUFFER_FREE_SAFE(fbl->double_buffer_depth_fb);
   }
 
-  /**
-   * Setup double buffer so we can access last frame as it was before post processes.
-   */
-  if ((effects->enabled_effects & EFFECT_DOUBLE_BUFFER) != 0) {
-    SETUP_BUFFER(txl->color_double_buffer, fbl->double_buffer_fb, fbl->double_buffer_color_fb);
-  }
-  else {
-    CLEANUP_BUFFER(txl->color_double_buffer, fbl->double_buffer_fb, fbl->double_buffer_color_fb);
-  }
-
   if ((effects->enabled_effects & (EFFECT_TAA | EFFECT_TAA_REPROJECT)) != 0) {
     SETUP_BUFFER(txl->taa_history, fbl->taa_history_fb, fbl->taa_history_color_fb);
   }
@@ -281,7 +273,8 @@ void EEVEE_effects_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   EEVEE_TextureList *txl = vedata->txl;
   EEVEE_StorageList *stl = vedata->stl;
   EEVEE_EffectsInfo *effects = stl->effects;
-  int downsample_write = DRW_STATE_WRITE_DEPTH;
+  DRWState downsample_write = DRW_STATE_WRITE_DEPTH;
+  DRWShadingGroup *grp;
 
   /* Intel gpu seems to have problem rendering to only depth format.
    * Use color texture instead. */
@@ -292,74 +285,115 @@ void EEVEE_effects_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   struct GPUBatch *quad = DRW_cache_fullscreen_quad_get();
 
   {
-    psl->color_downsample_ps = DRW_pass_create("Downsample", DRW_STATE_WRITE_COLOR);
-    DRWShadingGroup *grp = DRW_shgroup_create(e_data.downsample_sh, psl->color_downsample_ps);
+    DRW_PASS_CREATE(psl->color_downsample_ps, DRW_STATE_WRITE_COLOR);
+    grp = DRW_shgroup_create(e_data.downsample_sh, psl->color_downsample_ps);
     DRW_shgroup_uniform_texture_ref(grp, "source", &e_data.color_src);
     DRW_shgroup_uniform_float(grp, "fireflyFactor", &sldata->common_data.ssr_firefly_fac, 1);
-    DRW_shgroup_call_add(grp, quad, NULL);
+    DRW_shgroup_call(grp, quad, NULL);
   }
 
   {
-    static int zero = 0;
-    static uint six = 6;
-    psl->color_downsample_cube_ps = DRW_pass_create("Downsample Cube", DRW_STATE_WRITE_COLOR);
-    DRWShadingGroup *grp = DRW_shgroup_create(e_data.downsample_cube_sh,
-                                              psl->color_downsample_cube_ps);
+    DRW_PASS_CREATE(psl->color_downsample_cube_ps, DRW_STATE_WRITE_COLOR);
+    grp = DRW_shgroup_create(e_data.downsample_cube_sh, psl->color_downsample_cube_ps);
     DRW_shgroup_uniform_texture_ref(grp, "source", &e_data.color_src);
     DRW_shgroup_uniform_float(grp, "texelSize", &e_data.cube_texel_size, 1);
-    DRW_shgroup_uniform_int(grp, "Layer", &zero, 1);
-    DRW_shgroup_call_instances_add(grp, quad, NULL, &six);
+    DRW_shgroup_uniform_int_copy(grp, "Layer", 0);
+    DRW_shgroup_call_instances(grp, NULL, quad, 6);
   }
 
   {
     /* Perform min/max downsample */
-    DRWShadingGroup *grp;
-
-    psl->maxz_downlevel_ps = DRW_pass_create("HiZ Max Down Level",
-                                             downsample_write | DRW_STATE_DEPTH_ALWAYS);
+    DRW_PASS_CREATE(psl->maxz_downlevel_ps, downsample_write | DRW_STATE_DEPTH_ALWAYS);
     grp = DRW_shgroup_create(e_data.maxz_downlevel_sh, psl->maxz_downlevel_ps);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &txl->maxzbuffer);
-    DRW_shgroup_call_add(grp, quad, NULL);
+    DRW_shgroup_call(grp, quad, NULL);
 
     /* Copy depth buffer to halfres top level of HiZ */
 
-    psl->maxz_downdepth_ps = DRW_pass_create("HiZ Max Copy Depth Halfres",
-                                             downsample_write | DRW_STATE_DEPTH_ALWAYS);
+    DRW_PASS_CREATE(psl->maxz_downdepth_ps, downsample_write | DRW_STATE_DEPTH_ALWAYS);
     grp = DRW_shgroup_create(e_data.maxz_downdepth_sh, psl->maxz_downdepth_ps);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
-    DRW_shgroup_call_add(grp, quad, NULL);
+    DRW_shgroup_call(grp, quad, NULL);
 
-    psl->maxz_downdepth_layer_ps = DRW_pass_create("HiZ Max Copy DepthLayer Halfres",
-                                                   downsample_write | DRW_STATE_DEPTH_ALWAYS);
+    DRW_PASS_CREATE(psl->maxz_downdepth_layer_ps, downsample_write | DRW_STATE_DEPTH_ALWAYS);
     grp = DRW_shgroup_create(e_data.maxz_downdepth_layer_sh, psl->maxz_downdepth_layer_ps);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_uniform_int(grp, "depthLayer", &e_data.depth_src_layer, 1);
-    DRW_shgroup_call_add(grp, quad, NULL);
+    DRW_shgroup_call(grp, quad, NULL);
 
-    psl->maxz_copydepth_ps = DRW_pass_create("HiZ Max Copy Depth Fullres",
-                                             downsample_write | DRW_STATE_DEPTH_ALWAYS);
+    DRW_PASS_CREATE(psl->maxz_copydepth_ps, downsample_write | DRW_STATE_DEPTH_ALWAYS);
     grp = DRW_shgroup_create(e_data.maxz_copydepth_sh, psl->maxz_copydepth_ps);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
-    DRW_shgroup_call_add(grp, quad, NULL);
+    DRW_shgroup_call(grp, quad, NULL);
 
-    psl->maxz_copydepth_layer_ps = DRW_pass_create("HiZ Max Copy DepthLayer Halfres",
-                                                   downsample_write | DRW_STATE_DEPTH_ALWAYS);
+    DRW_PASS_CREATE(psl->maxz_copydepth_layer_ps, downsample_write | DRW_STATE_DEPTH_ALWAYS);
     grp = DRW_shgroup_create(e_data.maxz_copydepth_layer_sh, psl->maxz_copydepth_layer_ps);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_uniform_int(grp, "depthLayer", &e_data.depth_src_layer, 1);
-    DRW_shgroup_call_add(grp, quad, NULL);
+    DRW_shgroup_call(grp, quad, NULL);
   }
 
   if ((effects->enabled_effects & EFFECT_VELOCITY_BUFFER) != 0) {
     /* This pass compute camera motions to the non moving objects. */
-    psl->velocity_resolve = DRW_pass_create("Velocity Resolve", DRW_STATE_WRITE_COLOR);
-    DRWShadingGroup *grp = DRW_shgroup_create(EEVEE_shaders_velocity_resolve_sh_get(),
-                                              psl->velocity_resolve);
+    DRW_PASS_CREATE(psl->velocity_resolve, DRW_STATE_WRITE_COLOR);
+    grp = DRW_shgroup_create(EEVEE_shaders_velocity_resolve_sh_get(), psl->velocity_resolve);
     DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &e_data.depth_src);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
     DRW_shgroup_uniform_mat4(grp, "currPersinv", effects->velocity_curr_persinv);
     DRW_shgroup_uniform_mat4(grp, "pastPersmat", effects->velocity_past_persmat);
-    DRW_shgroup_call_add(grp, quad, NULL);
+    DRW_shgroup_call(grp, quad, NULL);
+  }
+
+  if ((effects->enabled_effects & EFFECT_ALPHA_CHECKER) != 0) {
+    GPUShader *checker_sh = GPU_shader_get_builtin_shader(GPU_SHADER_2D_CHECKER);
+
+    copy_v4_fl4(effects->color_checker_dark, 0.15f, 0.15f, 0.15f, 1.0f);
+    copy_v4_fl4(effects->color_checker_light, 0.2f, 0.2f, 0.2f, 1.0f);
+
+    DRW_PASS_CREATE(psl->alpha_checker,
+                    DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ALPHA_UNDER_PREMUL);
+    grp = DRW_shgroup_create(checker_sh, psl->alpha_checker);
+    DRW_shgroup_uniform_vec4(grp, "color1", effects->color_checker_dark, 1);
+    DRW_shgroup_uniform_vec4(grp, "color2", effects->color_checker_light, 1);
+    DRW_shgroup_uniform_int_copy(grp, "size", 8);
+    DRW_shgroup_call(grp, quad, NULL);
+
+    float viewmat[4][4], winmat[4][4];
+    unit_m4(viewmat);
+    unit_m4(winmat);
+    /* Winmat must be negative. */
+    swap_v3_v3(winmat[0], winmat[1]);
+
+    /* Using default view bypasses the culling. */
+    const DRWView *default_view = DRW_view_default_get();
+    effects->checker_view = DRW_view_create_sub(default_view, viewmat, winmat);
+  }
+}
+
+void EEVEE_effects_draw_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
+{
+  EEVEE_FramebufferList *fbl = vedata->fbl;
+  EEVEE_TextureList *txl = vedata->txl;
+  EEVEE_EffectsInfo *effects = vedata->stl->effects;
+  DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
+  /**
+   * Setup double buffer so we can access last frame as it was before post processes.
+   */
+  if ((effects->enabled_effects & EFFECT_DOUBLE_BUFFER) != 0) {
+    SETUP_BUFFER(txl->color_double_buffer, fbl->double_buffer_fb, fbl->double_buffer_color_fb);
+  }
+  else {
+    CLEANUP_BUFFER(txl->color_double_buffer, fbl->double_buffer_fb, fbl->double_buffer_color_fb);
+  }
+
+  /**
+   * Ping Pong buffer
+   */
+  if ((effects->enabled_effects & EFFECT_POST_BUFFER) != 0) {
+    SETUP_BUFFER(txl->color_post, fbl->effect_fb, fbl->effect_color_fb);
+  }
+  else {
+    CLEANUP_BUFFER(txl->color_post, fbl->effect_fb, fbl->effect_color_fb);
   }
 }
 
@@ -459,7 +493,7 @@ void EEVEE_create_minmax_buffer(EEVEE_Data *vedata, GPUTexture *depth_src, int l
 }
 
 /**
- * Simple downsampling algorithm. Reconstruct mip chain up to mip level.
+ * Simple down-sampling algorithm. Reconstruct mip chain up to mip level.
  */
 void EEVEE_downsample_buffer(EEVEE_Data *vedata, GPUTexture *texture_src, int level)
 {
@@ -491,22 +525,46 @@ void EEVEE_downsample_cube_buffer(EEVEE_Data *vedata, GPUTexture *texture_src, i
   DRW_stats_group_end();
 }
 
-void EEVEE_draw_effects(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
+void EEVEE_draw_alpha_checker(EEVEE_Data *vedata)
 {
   EEVEE_PassList *psl = vedata->psl;
-  EEVEE_TextureList *txl = vedata->txl;
-  EEVEE_FramebufferList *fbl = vedata->fbl;
   EEVEE_StorageList *stl = vedata->stl;
   EEVEE_EffectsInfo *effects = stl->effects;
 
-  /* First resolve the velocity. */
+  if ((effects->enabled_effects & EFFECT_ALPHA_CHECKER) != 0) {
+    DRW_view_set_active(effects->checker_view);
+
+    DRW_draw_pass(psl->alpha_checker);
+
+    DRW_view_set_active(NULL);
+  }
+}
+
+static void EEVEE_velocity_resolve(EEVEE_Data *vedata)
+{
+  EEVEE_PassList *psl = vedata->psl;
+  EEVEE_FramebufferList *fbl = vedata->fbl;
+  EEVEE_StorageList *stl = vedata->stl;
+  EEVEE_EffectsInfo *effects = stl->effects;
+  struct DRWView *view = effects->taa_view;
+
   if ((effects->enabled_effects & EFFECT_VELOCITY_BUFFER) != 0) {
-    DRW_viewport_matrix_get(effects->velocity_curr_persinv, DRW_MAT_PERSINV);
+    DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
+    e_data.depth_src = dtxl->depth;
+    DRW_view_persmat_get(view, effects->velocity_curr_persinv, true);
 
     GPU_framebuffer_bind(fbl->velocity_resolve_fb);
     DRW_draw_pass(psl->velocity_resolve);
   }
-  DRW_viewport_matrix_get(effects->velocity_past_persmat, DRW_MAT_PERS);
+  DRW_view_persmat_get(view, effects->velocity_past_persmat, false);
+}
+
+void EEVEE_draw_effects(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
+{
+  EEVEE_TextureList *txl = vedata->txl;
+  EEVEE_FramebufferList *fbl = vedata->fbl;
+  EEVEE_StorageList *stl = vedata->stl;
+  EEVEE_EffectsInfo *effects = stl->effects;
 
   /* only once per frame after the first post process */
   effects->swap_double_buffer = ((effects->enabled_effects & EFFECT_DOUBLE_BUFFER) != 0);
@@ -518,6 +576,14 @@ void EEVEE_draw_effects(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
   /* Post process stack (order matters) */
   EEVEE_motion_blur_draw(vedata);
   EEVEE_depth_of_field_draw(vedata);
+
+  /* NOTE: Lookdev drawing happens before TAA but after
+   * motion blur and dof to avoid distortions.
+   * Velocity resolve use a hack to exclude lookdev
+   * spheres from creating shimering reprojection vectors. */
+  EEVEE_lookdev_draw(vedata);
+  EEVEE_velocity_resolve(vedata);
+
   EEVEE_temporal_sampling_draw(vedata);
   EEVEE_bloom_draw(vedata);
 
@@ -541,7 +607,7 @@ void EEVEE_draw_effects(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
   }
 
   /* Record pers matrix for the next frame. */
-  DRW_viewport_matrix_get(stl->effects->prev_persmat, DRW_MAT_PERS);
+  DRW_view_persmat_get(effects->taa_view, effects->prev_persmat, false);
 
   /* Update double buffer status if render mode. */
   if (DRW_state_is_image_render()) {

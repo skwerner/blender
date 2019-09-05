@@ -1,5 +1,6 @@
 uniform int color_type;
 uniform sampler2D myTexture;
+uniform bool myTexturePremultiplied;
 
 uniform float gradient_f;
 
@@ -47,10 +48,11 @@ void main()
   /* texture for endcaps */
   vec4 text_color;
   if (uvfac[1] == ENDCAP) {
-    text_color = texture2D(myTexture, vec2(mTexCoord.x, mTexCoord.y));
+    text_color = texture_read_as_srgb(
+        myTexture, myTexturePremultiplied, vec2(mTexCoord.x, mTexCoord.y));
   }
   else {
-    text_color = texture2D(myTexture, mTexCoord);
+    text_color = texture_read_as_srgb(myTexture, myTexturePremultiplied, mTexCoord);
   }
 
   /* texture */
@@ -79,10 +81,11 @@ void main()
     float d = abs(mTexCoord.y - 0.5)  * (1.1 - gradient_f);
     float alpha = 1.0 - clamp((fragColor.a - (d * 2.0)), 0.03, 1.0);
     fragColor.a = smoothstep(fragColor.a, 0.0, alpha);
-    
+
   }
   */
 
-  if (fragColor.a < 0.0035)
+  if (fragColor.a < 0.0035) {
     discard;
+  }
 }

@@ -232,6 +232,8 @@ static void distribute_grid(Mesh *mesh, ParticleSystem *psys)
 
           /* lets intersect the faces */
           for (i = 0; i < totface; i++, mface++) {
+            ParticleData *pa1 = NULL, *pa2 = NULL;
+
             copy_v3_v3(v1, mvert[mface->v1].co);
             copy_v3_v3(v2, mvert[mface->v2].co);
             copy_v3_v3(v3, mvert[mface->v3].co);
@@ -239,24 +241,32 @@ static void distribute_grid(Mesh *mesh, ParticleSystem *psys)
             bool intersects_tri = isect_ray_tri_watertight_v3(
                 co1, &isect_precalc, v1, v2, v3, &lambda, NULL);
             if (intersects_tri) {
-              if (from == PART_FROM_FACE) {
-                (pa + (int)(lambda * size[a]) * a0mul)->flag &= ~PARS_UNEXIST;
-              }
-              else { /* store number of intersections */
-                (pa + (int)(lambda * size[a]) * a0mul)->hair_index++;
-              }
+              pa1 = (pa + (int)(lambda * size[a]) * a0mul);
             }
 
             if (mface->v4 && (!intersects_tri || from == PART_FROM_VOLUME)) {
               copy_v3_v3(v4, mvert[mface->v4].co);
 
               if (isect_ray_tri_watertight_v3(co1, &isect_precalc, v1, v3, v4, &lambda, NULL)) {
-                if (from == PART_FROM_FACE) {
-                  (pa + (int)(lambda * size[a]) * a0mul)->flag &= ~PARS_UNEXIST;
-                }
-                else {
-                  (pa + (int)(lambda * size[a]) * a0mul)->hair_index++;
-                }
+                pa2 = (pa + (int)(lambda * size[a]) * a0mul);
+              }
+            }
+
+            if (pa1) {
+              if (from == PART_FROM_FACE) {
+                pa1->flag &= ~PARS_UNEXIST;
+              }
+              else { /* store number of intersections */
+                pa1->hair_index++;
+              }
+            }
+
+            if (pa2 && pa2 != pa1) {
+              if (from == PART_FROM_FACE) {
+                pa2->flag &= ~PARS_UNEXIST;
+              }
+              else { /* store number of intersections */
+                pa2->hair_index++;
               }
             }
           }
@@ -909,14 +919,14 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
       !CustomData_get_layer(&final_mesh->fdata, CD_ORIGINDEX)) {
     printf(
         "Can't create particles with the current modifier stack, disable destructive modifiers\n");
-    // XXX      error("Can't paint with the current modifier stack, disable destructive modifiers");
+    // XXX error("Can't paint with the current modifier stack, disable destructive modifiers");
     return 0;
   }
 
-  /* XXX This distribution code is totally broken in case from == PART_FROM_CHILD, it's always using finaldm
-   *     even if use_modifier_stack is unset... But making things consistent here break all existing edited
-   *     hair systems, so better wait for complete rewrite.
-   */
+  /* XXX This distribution code is totally broken in case from == PART_FROM_CHILD,
+   *     it's always using finaldm even if use_modifier_stack is unset...
+   *     But making things consistent here break all existing edited
+   *     hair systems, so better wait for complete rewrite. */
 
   psys_thread_context_init(ctx, sim);
 
@@ -1170,7 +1180,7 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
   int i_mapped = 0;
 
   for (i = 0; i < totelem && element_weight[i] == 0.0f; i++) {
-    ;
+    /* pass */
   }
   element_sum[i_mapped] = element_weight[i] * inv_totweight;
   element_map[i_mapped] = i;
@@ -1204,9 +1214,10 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
     double step, pos;
 
     step = (totpart < 2) ? 0.5 : 1.0 / (double)totpart;
-    /* This is to address tricky issues with vertex-emitting when user tries (and expects) exact 1-1 vert/part
-     * distribution (see T47983 and its two example files). It allows us to consider pos as
-     * 'midpoint between v and v+1' (or 'p and p+1', depending whether we have more vertices than particles or not),
+    /* This is to address tricky issues with vertex-emitting when user tries
+     * (and expects) exact 1-1 vert/part distribution (see T47983 and its two example files).
+     * It allows us to consider pos as 'midpoint between v and v+1'
+     * (or 'p and p+1', depending whether we have more vertices than particles or not),
      * and avoid stumbling over float impression in element_sum.
      * Note: moved face and volume distribution to this as well (instead of starting at zero),
      * for the same reasons, see T52682. */
@@ -1215,7 +1226,7 @@ static int psys_thread_context_init_distribute(ParticleThreadContext *ctx,
 
     for (i = 0, p = 0; p < totpart; p++, pos += step) {
       for (; (i < totmapped - 1) && (pos > (double)element_sum[i]); i++) {
-        ;
+        /* pass */
       }
 
       particle_element[p] = element_map[i];

@@ -73,11 +73,6 @@ enum_volume_integrators = (
     ('VOLUME_TRACKING', "Tracking", "Tracking"),
 )
 
-enum_aperture_types = (
-    ('RADIUS', "Radius", "Directly change the size of the aperture"),
-    ('FSTOP', "F-stop", "Change the size of the aperture by f-stop"),
-)
-
 enum_panorama_types = (
     ('EQUIRECTANGULAR', "Equirectangular", "Render the scene with a spherical camera, also known as Lat Long panorama"),
     ('FISHEYE_EQUIDISTANT', "Fisheye Equidistant", "Ideal for fulldomes, ignore the sensor dimensions"),
@@ -301,6 +296,21 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=0.01,
     )
 
+    min_light_bounces: IntProperty(
+            name="Min Light Bounces",
+            description="Minimum number of light bounces. Setting this higher reduces noise in the first bounces, "
+                        "but can also be less efficient for more complex geometry like hair and volumes",
+            min=0, max=1024,
+            default=0,
+    )
+    min_transparent_bounces: IntProperty(
+            name="Min Transparent Bounces",
+            description="Minimum number of transparent bounces. Setting this higher reduces noise in the first bounces, "
+                        "but can also be less efficient for more complex geometry like hair and volumes",
+            min=0, max=1024,
+            default=0,
+    )
+
     caustics_reflective: BoolProperty(
         name="Reflective Caustics",
         description="Use reflective caustics, resulting in a brighter image (more noise but added realism)",
@@ -435,11 +445,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Image brightness scale",
         min=0.0, max=10.0,
         default=1.0,
-    )
-    film_transparent: BoolProperty(
-        name="Transparent",
-        description="World background is transparent, for compositing the render over another background",
-        default=False,
     )
     film_transparent_glass: BoolProperty(
         name="Transparent Glass",
@@ -766,49 +771,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
 
 class CyclesCameraSettings(bpy.types.PropertyGroup):
 
-    aperture_type: EnumProperty(
-        name="Aperture Type",
-        description="Use f-stop number or aperture radius",
-        items=enum_aperture_types,
-        default='RADIUS',
-    )
-    aperture_fstop: FloatProperty(
-        name="Aperture f-stop",
-        description="F-stop ratio (lower numbers give more defocus, higher numbers give a sharper image)",
-        min=0.0, soft_min=0.1, soft_max=64.0,
-        default=5.6,
-        step=10,
-        precision=1,
-    )
-    aperture_size: FloatProperty(
-        name="Aperture Size",
-        description="Radius of the aperture for depth of field (higher values give more defocus)",
-        min=0.0, soft_max=10.0,
-        default=0.0,
-        step=1,
-        precision=4,
-        subtype='DISTANCE',
-    )
-    aperture_blades: IntProperty(
-        name="Aperture Blades",
-        description="Number of blades in aperture for polygonal bokeh (at least 3)",
-        min=0, max=100,
-        default=0,
-    )
-    aperture_rotation: FloatProperty(
-        name="Aperture Rotation",
-        description="Rotation of blades in aperture",
-        soft_min=-pi, soft_max=pi,
-        subtype='ANGLE',
-        default=0,
-    )
-    aperture_ratio: FloatProperty(
-        name="Aperture Ratio",
-        description="Distortion to simulate anamorphic lens bokeh",
-        min=0.01, soft_min=1.0, soft_max=2.0,
-        default=1.0,
-        precision=4,
-    )
     panorama_type: EnumProperty(
         name="Panorama Type",
         description="Distortion to use for the calculation",
@@ -1509,7 +1471,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
                 break
 
         if not found_device:
-            col = box.column(align=True);
+            col = box.column(align=True)
             col.label(text="No compatible GPUs found for path tracing", icon='INFO')
             col.label(text="Cycles will render on the CPU", icon='BLANK1')
             return

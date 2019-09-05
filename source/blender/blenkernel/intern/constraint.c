@@ -120,7 +120,8 @@ void BKE_constraint_unique_name(bConstraint *con, ListBase *list)
 /* ----------------- Evaluation Loop Preparation --------------- */
 
 /* package an object/bone for use in constraint evaluation */
-/* This function MEM_calloc's a bConstraintOb struct, that will need to be freed after evaluation */
+/* This function MEM_calloc's a bConstraintOb struct,
+ * that will need to be freed after evaluation */
 bConstraintOb *BKE_constraints_make_evalob(
     Depsgraph *depsgraph, Scene *scene, Object *ob, void *subdata, short datatype)
 {
@@ -210,10 +211,10 @@ void BKE_constraints_clear_evalob(bConstraintOb *cob)
 
   /* calculate delta of constraints evaluation */
   invert_m4_m4(imat, cob->startmat);
-  /* XXX This would seem to be in wrong order. However, it does not work in 'right' order - would be nice to
-   *     understand why premul is needed here instead of usual postmul?
-   *     In any case, we **do not get a delta** here (e.g. startmat & matrix having same location, still gives
-   *     a 'delta' with non-null translation component :/ ).*/
+  /* XXX This would seem to be in wrong order. However, it does not work in 'right' order -
+   *     would be nice to understand why premul is needed here instead of usual postmul?
+   *     In any case, we **do not get a delta** here (e.g. startmat & matrix having same location,
+   *     still gives a 'delta' with non-null translation component :/ ).*/
   mul_m4_m4m4(delta, cob->matrix, imat);
 
   /* copy matrices back to source */
@@ -352,8 +353,9 @@ void BKE_constraint_mat_convertspace(
          */
         /* XXX This is actually an ugly hack, local space of a parent-less object *is* the same as
          *     global space!
-         *     Think what we want actually here is some kind of 'Final Space', i.e. once transformations
-         *     are applied - users are often confused about this too, this is not consistent with bones
+         *     Think what we want actually here is some kind of 'Final Space', i.e
+         *     . once transformations are applied - users are often confused about this too,
+         *     this is not consistent with bones
          *     local space either... Meh :|
          *     --mont29
          */
@@ -1139,7 +1141,8 @@ static void trackto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
     float size[3], vec[3];
     float totmat[3][3];
 
-    /* Get size property, since ob->scale is only the object's own relative size, not its global one */
+    /* Get size property, since ob->scale is only the object's own relative size,
+     * not its global one. */
     mat4_to_size(size, cob->matrix);
 
     /* Clear the object's rotation */
@@ -1357,12 +1360,11 @@ static void followpath_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
         Nurb *nu = cu->nurb.first;
         curvetime = cu->ctime - data->offset;
 
-        /* ctime is now a proper var setting of Curve which gets set by Animato like any other var that's animated,
-         * but this will only work if it actually is animated...
+        /* ctime is now a proper var setting of Curve which gets set by Animato like any other var
+         * that's animated, but this will only work if it actually is animated...
          *
-         * we divide the curvetime calculated in the previous step by the length of the path, to get a time
-         * factor, which then gets clamped to lie within 0.0 - 1.0 range
-         */
+         * we divide the curvetime calculated in the previous step by the length of the path,
+         * to get a time factor, which then gets clamped to lie within 0.0 - 1.0 range. */
         curvetime /= cu->pathlen;
 
         if (nu && nu->flagu & CU_NURB_CYCLIC) {
@@ -1806,9 +1808,10 @@ static void rotlike_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
     copy_v3_v3(loc, cob->matrix[3]);
     mat4_to_size(size, cob->matrix);
 
-    /* to allow compatible rotations, must get both rotations in the order of the owner... */
+    /* To allow compatible rotations, must get both rotations in the order of the owner... */
     mat4_to_eulO(obeul, cob->rotOrder, cob->matrix);
-    /* we must get compatible eulers from the beginning because some of them can be modified below (see bug #21875) */
+    /* We must get compatible eulers from the beginning because
+     * some of them can be modified below (see bug T21875). */
     mat4_to_compatible_eulO(eul, obeul, cob->rotOrder, ct->matrix);
 
     if ((data->flag & ROTLIKE_X) == 0) {
@@ -1850,7 +1853,8 @@ static void rotlike_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
       }
     }
 
-    /* good to make eulers compatible again, since we don't know how much they were changed above */
+    /* Good to make eulers compatible again,
+     * since we don't know how much they were changed above. */
     compatible_eul(eul, obeul);
     loc_eulO_size_to_mat4(cob->matrix, loc, eul, size, cob->rotOrder);
   }
@@ -1878,6 +1882,7 @@ static void sizelike_new_data(void *cdata)
   bSizeLikeConstraint *data = (bSizeLikeConstraint *)cdata;
 
   data->flag = SIZELIKE_X | SIZELIKE_Y | SIZELIKE_Z | SIZELIKE_MULTIPLY;
+  data->power = 1.0f;
 }
 
 static void sizelike_id_looper(bConstraint *con, ConstraintIDFunc func, void *userdata)
@@ -1924,6 +1929,10 @@ static void sizelike_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *ta
 
     mat4_to_size(size, ct->matrix);
     mat4_to_size(obsize, cob->matrix);
+
+    for (int i = 0; i < 3; i++) {
+      size[i] = powf(size[i], data->power);
+    }
 
     if (data->flag & SIZELIKE_OFFSET) {
       /* Scale is a multiplicative quantity, so adding it makes no sense.
@@ -2033,7 +2042,7 @@ static void samevolume_new_data(void *cdata)
 {
   bSameVolumeConstraint *data = (bSameVolumeConstraint *)cdata;
 
-  data->flag = SAMEVOL_Y;
+  data->free_axis = SAMEVOL_Y;
   data->volume = 1.0f;
 }
 
@@ -2042,19 +2051,30 @@ static void samevolume_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *
   bSameVolumeConstraint *data = con->data;
 
   float volume = data->volume;
-  float fac = 1.0f, total_scale;
+  float fac = 1.0f, total_scale = 1.0f;
   float obsize[3];
 
   mat4_to_size(obsize, cob->matrix);
 
   /* calculate normalizing scale factor for non-essential values */
-  total_scale = obsize[0] * obsize[1] * obsize[2];
+  switch (data->mode) {
+    case SAMEVOL_STRICT:
+      total_scale = obsize[0] * obsize[1] * obsize[2];
+      break;
+    case SAMEVOL_UNIFORM:
+      total_scale = pow3f(obsize[data->free_axis]);
+      break;
+    case SAMEVOL_SINGLE_AXIS:
+      total_scale = obsize[data->free_axis];
+      break;
+  }
+
   if (total_scale != 0) {
     fac = sqrtf(volume / total_scale);
   }
 
   /* apply scaling factor to the channels not being kept */
-  switch (data->flag) {
+  switch (data->free_axis) {
     case SAMEVOL_X:
       mul_v3_fl(cob->matrix[1], fac);
       mul_v3_fl(cob->matrix[2], fac);
@@ -2093,7 +2113,6 @@ static void pycon_free(bConstraint *con)
 
   /* id-properties */
   IDP_FreeProperty(data->prop);
-  MEM_freeN(data->prop);
 
   /* multiple targets */
   BLI_freelistN(&data->targets);
@@ -2344,7 +2363,7 @@ static void armdef_accumulate_bone(bConstraintTarget *ct,
 
     /* The target is a B-Bone:
      * FIRST: find the segment (see b_bone_deform in armature.c)
-     * Need to transform co back to bonespace, only need y. */
+     * Need to transform co back to bone-space, only need y. */
     float y = iamat[0][1] * co[0] + iamat[1][1] * co[1] + iamat[2][1] * co[2] + iamat[3][1];
 
     /* Blend the matrix. */
@@ -2402,7 +2421,8 @@ static void armdef_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targ
     copy_v3_v3(input_co, cob->matrix[3]);
   }
 
-  /* Process all targets. */
+  /* Process all targets. This can't use ct->matrix, as armdef_get_tarmat is not
+   * called in solve for efficiency because the constraint needs bone data anyway. */
   for (bConstraintTarget *ct = targets->first; ct; ct = ct->next) {
     if (ct->weight <= 0.0f) {
       continue;
@@ -2575,9 +2595,9 @@ static void actcon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
       bPose pose = {{0}};
       bPoseChannel *pchan, *tchan;
 
-      /* make a copy of the bone of interest in the temp pose before evaluating action, so that it can get set
-       * - we need to manually copy over a few settings, including rotation order, otherwise this fails
-       */
+      /* make a copy of the bone of interest in the temp pose before evaluating action,
+       * so that it can get set - we need to manually copy over a few settings,
+       * including rotation order, otherwise this fails. */
       pchan = cob->pchan;
 
       tchan = BKE_pose_channel_verify(&pose, pchan->name);
@@ -3309,7 +3329,6 @@ static void minmax_new_data(void *cdata)
 
   data->minmaxflag = TRACK_Z;
   data->offset = 0.0f;
-  zero_v3(data->cache);
   data->flag = 0;
 }
 
@@ -3406,15 +3425,6 @@ static void minmax_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targ
 
     if (val1 > val2) {
       obmat[3][index] = tarmat[3][index] + data->offset;
-      if (data->flag & MINMAX_STICKY) {
-        if (data->flag & MINMAX_STUCK) {
-          copy_v3_v3(obmat[3], data->cache);
-        }
-        else {
-          copy_v3_v3(data->cache, obmat[3]);
-          data->flag |= MINMAX_STUCK;
-        }
-      }
       if (data->flag & MINMAX_USEROT) {
         /* get out of localspace */
         mul_m4_m4m4(tmat, ct->matrix, obmat);
@@ -3423,9 +3433,6 @@ static void minmax_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targ
       else {
         copy_v3_v3(cob->matrix[3], obmat[3]);
       }
-    }
-    else {
-      data->flag &= ~MINMAX_STUCK;
     }
   }
 }
@@ -3559,7 +3566,8 @@ static void clampto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
             offset = curveMin[clamp_axis] -
                      ceilf((curveMin[clamp_axis] - ownLoc[clamp_axis]) / len) * len;
 
-            /* now, we calculate as per normal, except using offset instead of curveMin[clamp_axis] */
+            /* Now, we calculate as per normal,
+             * except using offset instead of curveMin[clamp_axis]. */
             curvetime = (ownLoc[clamp_axis] - offset) / (len);
           }
           else if (ownLoc[clamp_axis] > curveMax[clamp_axis]) {
@@ -3567,7 +3575,8 @@ static void clampto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
             offset = curveMax[clamp_axis] +
                      (int)((ownLoc[clamp_axis] - curveMax[clamp_axis]) / len) * len;
 
-            /* now, we calculate as per normal, except using offset instead of curveMax[clamp_axis] */
+            /* Now, we calculate as per normal,
+             * except using offset instead of curveMax[clamp_axis]. */
             curvetime = (ownLoc[clamp_axis] - offset) / (len);
           }
           else {
@@ -3689,11 +3698,10 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
         mat4_to_size(dvec, ct->matrix);
 
         if (is_negative_m4(ct->matrix)) {
-          /* Bugfix [#27886]
-           * We can't be sure which axis/axes are negative, though we know that something is negative.
-           * Assume we don't care about negativity of separate axes. <--- This is a limitation that
-           * riggers will have to live with for now.
-           */
+          /* Bugfix T27886: (this is a limitation that riggers will have to live with for now).
+           * We can't be sure which axis/axes are negative,
+           * though we know that something is negative.
+           * Assume we don't care about negativity of separate axes. */
           negate_v3(dvec);
         }
         from_min = data->from_min_scale;
@@ -3932,9 +3940,10 @@ static void shrinkwrap_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
               break;
           }
 
-          /* transform normal into requested space */
-          /* Note that in this specific case, we need to keep scaling in non-parented 'local2world' object
-           * case, because SpaceTransform also takes it into account when handling normals. See T42447. */
+          /* Transform normal into requested space */
+          /* Note that in this specific case, we need to keep scaling in non-parented 'local2world'
+           * object case, because SpaceTransform also takes it into account when handling normals.
+           * See T42447. */
           unit_m4(mat);
           BKE_constraint_mat_convertspace(
               cob->ob, cob->pchan, mat, CONSTRAINT_SPACE_LOCAL, scon->projAxisSpace, true);
@@ -4218,6 +4227,7 @@ static void splineik_new_data(void *cdata)
   data->bulge_min = 1.0f;
 
   data->yScaleMode = CONSTRAINT_SPLINEIK_YS_FIT_CURVE;
+  data->flag = CONSTRAINT_SPLINEIK_USE_ORIGINAL_SCALE;
 }
 
 static void splineik_id_looper(bConstraint *con, ConstraintIDFunc func, void *userdata)
@@ -4829,13 +4839,9 @@ static void transformcache_evaluate(bConstraint *con, bConstraintOb *cob, ListBa
   const float frame = DEG_get_ctime(cob->depsgraph);
   const float time = BKE_cachefile_time_offset(cache_file, frame, FPS);
 
-  /* Must always load ABC handle on original. */
-  CacheFile *cache_file_orig = (CacheFile *)DEG_get_original_id(&cache_file->id);
-  BKE_cachefile_ensure_handle(G.main, cache_file_orig);
-
-  if (!data->reader) {
-    data->reader = CacheReader_open_alembic_object(
-        cache_file_orig->handle, data->reader, cob->ob, data->object_path);
+  if (!data->reader || !STREQ(data->reader_object_path, data->object_path)) {
+    STRNCPY(data->reader_object_path, data->object_path);
+    BKE_cachefile_reader_open(cache_file, &data->reader, cob->ob, data->object_path);
   }
 
   ABC_get_transform(data->reader, cob->matrix, time, cache_file->scale);
@@ -4853,12 +4859,8 @@ static void transformcache_copy(bConstraint *con, bConstraint *srccon)
 
   BLI_strncpy(dst->object_path, src->object_path, sizeof(dst->object_path));
   dst->cache_file = src->cache_file;
-
-#ifdef WITH_ALEMBIC
-  if (dst->reader) {
-    CacheReader_incref(dst->reader);
-  }
-#endif
+  dst->reader = NULL;
+  dst->reader_object_path[0] = '\0';
 }
 
 static void transformcache_free(bConstraint *con)
@@ -4866,10 +4868,8 @@ static void transformcache_free(bConstraint *con)
   bTransformCacheConstraint *data = con->data;
 
   if (data->reader) {
-#ifdef WITH_ALEMBIC
-    CacheReader_free(data->reader);
-#endif
-    data->reader = NULL;
+    BKE_cachefile_reader_free(data->cache_file, &data->reader);
+    data->reader_object_path[0] = '\0';
   }
 }
 
@@ -5085,9 +5085,9 @@ static bConstraint *add_new_constraint_internal(const char *name, short type)
   const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_from_type(type);
   const char *newName;
 
-  /* Set up a generic constraint datablock */
+  /* Set up a generic constraint data-block. */
   con->type = type;
-  con->flag |= CONSTRAINT_EXPAND | CONSTRAINT_STATICOVERRIDE_LOCAL;
+  con->flag |= CONSTRAINT_EXPAND | CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
   con->enforce = 1.0f;
 
   /* Determine a basic name, and info */
@@ -5225,13 +5225,16 @@ static void con_extern_cb(bConstraint *UNUSED(con),
   }
 }
 
-/* helper for BKE_constraints_copy(), to be used for making sure that usercounts of copied ID's are fixed up */
+/**
+ * Helper for #BKE_constraints_copy(),
+ * to be used for making sure that user-counts of copied ID's are fixed up.
+ */
 static void con_fix_copied_refs_cb(bConstraint *UNUSED(con),
                                    ID **idpoin,
                                    bool is_reference,
                                    void *UNUSED(userData))
 {
-  /* increment usercount if this is a reference type */
+  /* Increment user-count if this is a reference type. */
   if ((*idpoin) && (is_reference)) {
     id_us_plus(*idpoin);
   }
@@ -5460,7 +5463,8 @@ static bConstraint *constraint_find_original_for_update(bConstraintOb *cob, bCon
 
 /* -------- Constraints and Proxies ------- */
 
-/* Rescue all constraints tagged as being CONSTRAINT_PROXY_LOCAL (i.e. added to bone that's proxy-synced in this file) */
+/* Rescue all constraints tagged as being CONSTRAINT_PROXY_LOCAL
+ * (i.e. added to bone that's proxy-synced in this file) */
 void BKE_constraints_proxylocal_extract(ListBase *dst, ListBase *src)
 {
   bConstraint *con, *next;
@@ -5502,8 +5506,8 @@ bool BKE_constraints_proxylocked_owner(Object *ob, bPoseChannel *pchan)
 /* -------- Target-Matrix Stuff ------- */
 
 /* This function is a relic from the prior implementations of the constraints system, when all
- * constraints either had one or no targets. It used to be called during the main constraint solving
- * loop, but is now only used for the remaining cases for a few constraints.
+ * constraints either had one or no targets. It used to be called during the main constraint
+ * solving loop, but is now only used for the remaining cases for a few constraints.
  *
  * None of the actual calculations of the matrices should be done here! Also, this function is
  * not to be used by any new constraints, particularly any that have multiple targets.
@@ -5602,6 +5606,11 @@ void BKE_constraint_targets_for_solving_get(struct Depsgraph *depsgraph,
      */
     cti->get_constraint_targets(con, targets);
 
+    /* The Armature constraint doesn't need ct->matrix for evaluate at all. */
+    if (ELEM(cti->type, CONSTRAINT_TYPE_ARMATURE)) {
+      return;
+    }
+
     /* set matrices
      * - calculate if possible, otherwise just initialize as identity matrix
      */
@@ -5694,9 +5703,9 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
     }
 
     /* Interpolate the enforcement, to blend result of constraint into final owner transform
-     * - all this happens in worldspace to prevent any weirdness creeping in ([#26014] and [#25725]),
-     *   since some constraints may not convert the solution back to the input space before blending
-     *   but all are guaranteed to end up in good "worldspace" result
+     * - all this happens in worldspace to prevent any weirdness creeping in
+     *   (T26014 and T25725), since some constraints may not convert the solution back to the input
+     *   space before blending but all are guaranteed to end up in good "worldspace" result.
      */
     /* Note: all kind of stuff here before (caused trouble), much easier to just interpolate,
      * or did I miss something? -jahka (r.32105) */

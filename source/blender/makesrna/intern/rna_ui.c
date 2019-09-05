@@ -85,8 +85,9 @@ static ARegionType *region_type_find(ReportList *reports, int space_type, int re
   st = BKE_spacetype_from_id(space_type);
 
   for (art = (st) ? st->regiontypes.first : NULL; art; art = art->next) {
-    if (art->regionid == region_type)
+    if (art->regionid == region_type) {
       break;
+    }
   }
 
   /* region type not found? abort */
@@ -179,15 +180,17 @@ static void panel_draw_header_preset(const bContext *C, Panel *pnl)
   RNA_parameter_list_free(&list);
 }
 
-static void rna_Panel_unregister(Main *UNUSED(bmain), StructRNA *type)
+static void rna_Panel_unregister(Main *bmain, StructRNA *type)
 {
   ARegionType *art;
   PanelType *pt = RNA_struct_blender_type_get(type);
 
-  if (!pt)
+  if (!pt) {
     return;
-  if (!(art = region_type_find(NULL, pt->space_type, pt->region_type)))
+  }
+  if (!(art = region_type_find(NULL, pt->space_type, pt->region_type))) {
     return;
+  }
 
   RNA_struct_free_extension(type, &pt->ext);
   RNA_struct_free(&BLENDER_RNA, type);
@@ -204,8 +207,28 @@ static void rna_Panel_unregister(Main *UNUSED(bmain), StructRNA *type)
     child_pt->parent = NULL;
   }
 
+  const char space_type = pt->space_type;
   BLI_freelistN(&pt->children);
   BLI_freelinkN(&art->paneltypes, pt);
+
+  for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+    for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+      for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+        if (sl->spacetype == space_type) {
+          ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+          for (ARegion *region = regionbase->first; region; region = region->next) {
+            if (region->type == art) {
+              for (Panel *pa = region->panels.first; pa; pa = pa->next) {
+                if (pa->type == pt) {
+                  pa->type = NULL;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
   /* update while blender is running */
   WM_main_add_notifier(NC_WINDOW, NULL);
@@ -233,8 +256,9 @@ static StructRNA *rna_Panel_register(Main *bmain,
   strcpy(dummypt.translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
 
   /* validate the python class */
-  if (validate(&dummyptr, data, have_function) != 0)
+  if (validate(&dummyptr, data, have_function) != 0) {
     return NULL;
+  }
 
   if (strlen(identifier) >= sizeof(dummypt.idname)) {
     BKE_reportf(reports,
@@ -268,16 +292,31 @@ static StructRNA *rna_Panel_register(Main *bmain,
     }
   }
 
-  if (!(art = region_type_find(reports, dummypt.space_type, dummypt.region_type)))
+  if (!(art = region_type_find(reports, dummypt.space_type, dummypt.region_type))) {
     return NULL;
+  }
 
   /* check if we have registered this panel type before, and remove it */
   for (pt = art->paneltypes.first; pt; pt = pt->next) {
     if (STREQ(pt->idname, dummypt.idname)) {
-      if (pt->ext.srna)
+      PanelType *pt_next = pt->next;
+      if (pt->ext.srna) {
         rna_Panel_unregister(bmain, pt->ext.srna);
-      else
+      }
+      else {
         BLI_freelinkN(&art->paneltypes, pt);
+      }
+
+      /* The order of panel types will be altered on re-registration. */
+      if (dummypt.parent_id[0] && (parent == NULL)) {
+        for (pt = pt_next; pt; pt = pt->next) {
+          if (STREQ(pt->idname, dummypt.parent_id)) {
+            parent = pt;
+            break;
+          }
+        }
+      }
+
       break;
     }
 
@@ -285,6 +324,7 @@ static StructRNA *rna_Panel_register(Main *bmain,
       parent = pt;
     }
   }
+
   if (!RNA_struct_available_or_report(reports, dummypt.idname)) {
     return NULL;
   }
@@ -317,19 +357,21 @@ static StructRNA *rna_Panel_register(Main *bmain,
   pt->draw_header = (have_function[2]) ? panel_draw_header : NULL;
   pt->draw_header_preset = (have_function[3]) ? panel_draw_header_preset : NULL;
 
-  /* XXX use "no header" flag for some ordering of panels until we have real panel ordering */
-  if (pt->flag & PNL_NO_HEADER) {
-    PanelType *pth = art->paneltypes.first;
-    while (pth && pth->flag & PNL_NO_HEADER)
-      pth = pth->next;
+  /* Find position to insert panel based on order. */
+  PanelType *pt_iter = art->paneltypes.last;
 
-    if (pth)
-      BLI_insertlinkbefore(&art->paneltypes, pth, pt);
-    else
-      BLI_addtail(&art->paneltypes, pt);
+  for (; pt_iter; pt_iter = pt_iter->prev) {
+    /* No header has priority. */
+    if ((pt->flag & PNL_NO_HEADER) && !(pt_iter->flag & PNL_NO_HEADER)) {
+      continue;
+    }
+    if (pt_iter->order <= pt->order) {
+      break;
+    }
   }
-  else
-    BLI_addtail(&art->paneltypes, pt);
+
+  /* Insert into list. */
+  BLI_insertlinkafter(&art->paneltypes, pt_iter, pt);
 
   if (parent) {
     pt->parent = parent;
@@ -553,8 +595,9 @@ static void rna_UIList_unregister(Main *UNUSED(bmain), StructRNA *type)
 {
   uiListType *ult = RNA_struct_blender_type_get(type);
 
-  if (!ult)
+  if (!ult) {
     return;
+  }
 
   RNA_struct_free_extension(type, &ult->ext);
   RNA_struct_free(&BLENDER_RNA, type);
@@ -584,8 +627,9 @@ static StructRNA *rna_UIList_register(Main *bmain,
   RNA_pointer_create(NULL, &RNA_UIList, &dummyuilist, &dummyul_ptr);
 
   /* validate the python class */
-  if (validate(&dummyul_ptr, data, have_function) != 0)
+  if (validate(&dummyul_ptr, data, have_function) != 0) {
     return NULL;
+  }
 
   if (strlen(identifier) >= sizeof(dummyult.idname)) {
     BKE_reportf(reports,
@@ -661,10 +705,12 @@ static void rna_Header_unregister(Main *UNUSED(bmain), StructRNA *type)
   ARegionType *art;
   HeaderType *ht = RNA_struct_blender_type_get(type);
 
-  if (!ht)
+  if (!ht) {
     return;
-  if (!(art = region_type_find(NULL, ht->space_type, ht->region_type)))
+  }
+  if (!(art = region_type_find(NULL, ht->space_type, ht->region_type))) {
     return;
+  }
 
   RNA_struct_free_extension(type, &ht->ext);
   RNA_struct_free(&BLENDER_RNA, type);
@@ -695,8 +741,9 @@ static StructRNA *rna_Header_register(Main *bmain,
   RNA_pointer_create(NULL, &RNA_Header, &dummyheader, &dummyhtr);
 
   /* validate the python class */
-  if (validate(&dummyhtr, data, have_function) != 0)
+  if (validate(&dummyhtr, data, have_function) != 0) {
     return NULL;
+  }
 
   if (strlen(identifier) >= sizeof(dummyht.idname)) {
     BKE_reportf(reports,
@@ -707,14 +754,16 @@ static StructRNA *rna_Header_register(Main *bmain,
     return NULL;
   }
 
-  if (!(art = region_type_find(reports, dummyht.space_type, dummyht.region_type)))
+  if (!(art = region_type_find(reports, dummyht.space_type, dummyht.region_type))) {
     return NULL;
+  }
 
   /* check if we have registered this header type before, and remove it */
   for (ht = art->headertypes.first; ht; ht = ht->next) {
     if (STREQ(ht->idname, dummyht.idname)) {
-      if (ht->ext.srna)
+      if (ht->ext.srna) {
         rna_Header_unregister(bmain, ht->ext.srna);
+      }
       break;
     }
   }
@@ -800,8 +849,9 @@ static void rna_Menu_unregister(Main *UNUSED(bmain), StructRNA *type)
 {
   MenuType *mt = RNA_struct_blender_type_get(type);
 
-  if (!mt)
+  if (!mt) {
     return;
+  }
 
   RNA_struct_free_extension(type, &mt->ext);
   RNA_struct_free(&BLENDER_RNA, type);
@@ -838,8 +888,9 @@ static StructRNA *rna_Menu_register(Main *bmain,
   strcpy(dummymt.translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
 
   /* validate the python class */
-  if (validate(&dummymtr, data, have_function) != 0)
+  if (validate(&dummymtr, data, have_function) != 0) {
     return NULL;
+  }
 
   if (strlen(identifier) >= sizeof(dummymt.idname)) {
     BKE_reportf(reports,
@@ -916,10 +967,12 @@ static void rna_Menu_bl_description_set(PointerRNA *ptr, const char *value)
 {
   Menu *data = (Menu *)(ptr->data);
   char *str = (char *)data->type->description;
-  if (!str[0])
+  if (!str[0]) {
     BLI_strncpy(str, value, RNA_DYN_DESCR_MAX); /* utf8 already ensured */
-  else
+  }
+  else {
     assert(!"setting the bl_description on a non-builtin menu");
+  }
 }
 
 /* UILayout */
@@ -1346,6 +1399,14 @@ static void rna_def_panel(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "type->ui_units_x");
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
   RNA_def_property_ui_text(prop, "Units X", "When set, defines popup panel width");
+
+  prop = RNA_def_property(srna, "bl_order", PROP_INT, PROP_UNSIGNED);
+  RNA_def_property_int_sdna(prop, NULL, "type->order");
+  RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(
+      prop,
+      "Order",
+      "Panels with lower numbers are default ordered before panels with higher numbers");
 
   prop = RNA_def_property(srna, "use_pin", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", PNL_PIN);

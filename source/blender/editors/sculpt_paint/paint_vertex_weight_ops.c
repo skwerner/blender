@@ -130,6 +130,7 @@ static int weight_from_bones_exec(bContext *C, wmOperator *op)
       op->reports, depsgraph, scene, ob, armob, type, (me->editflag & ME_EDIT_MIRROR_X));
 
   DEG_id_tag_update(&me->id, 0);
+  DEG_relations_tag_update(CTX_data_main(C));
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, me);
 
   return OPERATOR_FINISHED;
@@ -160,7 +161,7 @@ void PAINT_OT_weight_from_bones(wmOperatorType *ot)
   ot->poll = weight_from_bones_poll;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 
   /* properties */
   ot->prop = RNA_def_enum(
@@ -694,7 +695,7 @@ static void gradientVertInit__mapFunc(void *userData,
 static int paint_weight_gradient_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   wmGesture *gesture = op->customdata;
-  WPGradient_vertStoreBase *vert_cache = gesture->userdata;
+  WPGradient_vertStoreBase *vert_cache = gesture->user_data.data;
   int ret = WM_gesture_straightline_modal(C, op, event);
 
   if (ret & OPERATOR_RUNNING_MODAL) {
@@ -750,15 +751,15 @@ static int paint_weight_gradient_exec(bContext *C, wmOperator *op)
   WPGradient_userData data = {NULL};
 
   if (is_interactive) {
-    if (gesture->userdata == NULL) {
-      gesture->userdata = MEM_mallocN(sizeof(WPGradient_vertStoreBase) +
-                                          (sizeof(WPGradient_vertStore) * me->totvert),
-                                      __func__);
-      gesture->userdata_free = false;
+    if (gesture->user_data.data == NULL) {
+      gesture->user_data.data = MEM_mallocN(sizeof(WPGradient_vertStoreBase) +
+                                                (sizeof(WPGradient_vertStore) * me->totvert),
+                                            __func__);
+      gesture->user_data.use_free = false;
       data.is_init = true;
 
       wpaint_prev_create(
-          &((WPGradient_vertStoreBase *)gesture->userdata)->wpp, me->dvert, me->totvert);
+          &((WPGradient_vertStoreBase *)gesture->user_data.data)->wpp, me->dvert, me->totvert);
 
       /* on init only, convert face -> vert sel  */
       if (me->editflag & ME_EDIT_PAINT_FACE_SEL) {
@@ -766,7 +767,7 @@ static int paint_weight_gradient_exec(bContext *C, wmOperator *op)
       }
     }
 
-    vert_cache = gesture->userdata;
+    vert_cache = gesture->user_data.data;
   }
   else {
     if (ED_wpaint_ensure_data(C, op->reports, 0, NULL) == false) {
@@ -879,7 +880,7 @@ void PAINT_OT_weight_gradient(wmOperatorType *ot)
   ot->cancel = WM_gesture_straightline_cancel;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 
   prop = RNA_def_enum(ot->srna, "type", gradient_types, 0, "Type", "");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);

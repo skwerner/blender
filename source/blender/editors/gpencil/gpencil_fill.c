@@ -401,7 +401,8 @@ static bool gp_render_offscreen(tGPDfill *tgpf)
   glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  ED_view3d_update_viewmat(tgpf->depsgraph, tgpf->scene, tgpf->v3d, tgpf->ar, NULL, winmat, NULL);
+  ED_view3d_update_viewmat(
+      tgpf->depsgraph, tgpf->scene, tgpf->v3d, tgpf->ar, NULL, winmat, NULL, true);
   /* set for opengl */
   GPU_matrix_projection_set(tgpf->rv3d->winmat);
   GPU_matrix_set(tgpf->rv3d->viewmat);
@@ -445,7 +446,7 @@ static void get_pixel(const ImBuf *ibuf, const int idx, float r_col[4])
   }
   else {
     /* XXX: This case probably doesn't happen, as we only write to the float buffer,
-     * but we get compiler warnings about uninitialised vars otherwise
+     * but we get compiler warnings about uninitialized vars otherwise
      */
     BLI_assert(!"gpencil_fill.c - get_pixel() non-float case is used!");
     zero_v4(r_col);
@@ -455,7 +456,7 @@ static void get_pixel(const ImBuf *ibuf, const int idx, float r_col[4])
 /* set pixel data (rgba) at index */
 static void set_pixel(ImBuf *ibuf, int idx, const float col[4])
 {
-  //BLI_assert(idx <= ibuf->x * ibuf->y);
+  // BLI_assert(idx <= ibuf->x * ibuf->y);
   if (ibuf->rect) {
     uint *rrect = &ibuf->rect[idx];
     uchar ccol[4];
@@ -1140,7 +1141,7 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
 /* Helper: Draw status message while the user is running the operator */
 static void gpencil_fill_status_indicators(bContext *C, tGPDfill *UNUSED(tgpf))
 {
-  const char *status_str = IFACE_("Fill: ESC/RMB cancel, LMB Fill, Shift Draw on Back");
+  const char *status_str = TIP_("Fill: ESC/RMB cancel, LMB Fill, Shift Draw on Back");
   ED_workspace_status_text(C, status_str);
 }
 

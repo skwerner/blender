@@ -31,7 +31,7 @@ from bpy.types import (
 # used for DopeSheet, NLA, and Graph Editors
 
 
-def dopesheet_filter(layout, context, generic_filters_only=False):
+def dopesheet_filter(layout, context):
     dopesheet = context.space_data.dopesheet
     is_nla = context.area.type == 'NLA_EDITOR'
 
@@ -43,18 +43,6 @@ def dopesheet_filter(layout, context, generic_filters_only=False):
         row.prop(dopesheet, "show_missing_nla", text="")
     else:  # graph and dopesheet editors - F-Curves and drivers only
         row.prop(dopesheet, "show_only_errors", text="")
-
-    if not generic_filters_only:
-        if bpy.data.collections:
-            row = layout.row(align=True)
-            row.prop(dopesheet, "filter_collection", text="")
-
-    if not is_nla:
-        row = layout.row(align=True)
-        row.prop(dopesheet, "filter_fcurve_name", text="")
-    else:
-        row = layout.row(align=True)
-        row.prop(dopesheet, "filter_text", text="")
 
 #######################################
 # Dopesheet Filtering Popovers
@@ -91,7 +79,6 @@ class DopesheetFilterPopoverBase:
         is_nla = context.area.type == 'NLA_EDITOR'
 
         col = layout.column(align=True)
-        col.label(text="With Name:")
         if not is_nla:
             row = col.row(align=True)
             row.prop(dopesheet, "filter_fcurve_name", text="")
@@ -101,7 +88,6 @@ class DopesheetFilterPopoverBase:
 
         if (not generic_filters_only) and (bpy.data.collections):
             col = layout.column(align=True)
-            col.label(text="In Collection:")
             col.prop(dopesheet, "filter_collection", text="")
 
     # Standard = Present in all panels
@@ -150,6 +136,8 @@ class DopesheetFilterPopoverBase:
             flow.prop(dopesheet, "show_shapekeys", text="Shape Keys")
         if bpy.data.cache_files:
             flow.prop(dopesheet, "show_cache_files", text="Cache Files")
+        if bpy.data.movieclips:
+            flow.prop(dopesheet, "show_movieclips", text="Movie Clips")
 
         layout.separator()
 
@@ -213,7 +201,7 @@ class DOPESHEET_HT_header(Header):
         layout.template_header()
 
         if st.mode == 'TIMELINE':
-            from .space_time import (
+            from bl_ui.space_time import (
                 TIME_MT_editor_menus,
                 TIME_HT_editor_buttons,
             )
@@ -260,9 +248,7 @@ class DOPESHEET_HT_editor_buttons(Header):
         if st.mode == 'DOPESHEET':
             dopesheet_filter(layout, context)
         elif st.mode == 'ACTION':
-            # 'generic_filters_only' limits the options to only the relevant 'generic' subset of
-            # filters which will work here and are useful (especially for character animation)
-            dopesheet_filter(layout, context, generic_filters_only=True)
+            dopesheet_filter(layout, context)
         elif st.mode == 'GPENCIL':
             row = layout.row(align=True)
             row.prop(st.dopesheet, "show_gpencil_3d_only", text="Active Only")
@@ -410,7 +396,7 @@ class DOPESHEET_MT_marker(Menu):
     def draw(self, context):
         layout = self.layout
 
-        from .space_time import marker_menu_generic
+        from bl_ui.space_time import marker_menu_generic
         marker_menu_generic(layout, context)
 
         st = context.space_data
@@ -581,20 +567,23 @@ class DOPESHEET_MT_context_menu(Menu):
     def draw(self, _context):
         layout = self.layout
 
-        layout.operator("action.copy", text="Copy")
-        layout.operator("action.paste", text="Paste")
-        layout.operator("action.paste", text="Paste Flipped").flipped = True
+        layout.operator_context = 'INVOKE_DEFAULT'
+
+        layout.operator("action.copy", text="Copy", icon='COPYDOWN')
+        layout.operator("action.paste", text="Paste", icon='PASTEDOWN')
+        layout.operator("action.paste", text="Paste Flipped", icon='PASTEFLIPDOWN').flipped = True
 
         layout.separator()
 
+        layout.operator_menu_enum("action.keyframe_type", "type", text="Keyframe Type")
         layout.operator_menu_enum("action.handle_type", "type", text="Handle Type")
         layout.operator_menu_enum("action.interpolation_type", "type", text="Interpolation Mode")
-        layout.operator_menu_enum("action.easing_type", "type", text="Easing Type")
 
         layout.separator()
 
         layout.operator("action.keyframe_insert").type = 'SEL'
         layout.operator("action.duplicate_move")
+        layout.operator_context = 'EXEC_REGION_WIN'
         layout.operator("action.delete")
 
         layout.separator()

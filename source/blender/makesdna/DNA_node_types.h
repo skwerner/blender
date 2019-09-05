@@ -161,8 +161,8 @@ typedef enum eNodeSocketDrawShape {
 
 /* socket side (input/output) */
 typedef enum eNodeSocketInOut {
-  SOCK_IN = 1,
-  SOCK_OUT = 2,
+  SOCK_IN = 1 << 0,
+  SOCK_OUT = 1 << 1,
 } eNodeSocketInOut;
 
 /* sock->flag, first bit is select */
@@ -479,9 +479,6 @@ typedef struct bNodeTree {
   int (*test_break)(void *);
   void (*update_draw)(void *);
   void *tbh, *prh, *sdh, *udh;
-
-  void *duplilock;
-
 } bNodeTree;
 
 /* ntree->type, index */
@@ -832,7 +829,7 @@ typedef struct NodeTexSky {
 typedef struct NodeTexImage {
   NodeTexBase base;
   ImageUser iuser;
-  int color_space;
+  int color_space DNA_DEPRECATED;
   int projection;
   float projection_blend;
   int interpolation;
@@ -853,7 +850,7 @@ typedef struct NodeTexBrick {
 typedef struct NodeTexEnvironment {
   NodeTexBase base;
   ImageUser iuser;
-  int color_space;
+  int color_space DNA_DEPRECATED;
   int projection;
   int interpolation;
   char _pad[4];
@@ -1120,10 +1117,6 @@ typedef struct NodeCryptomatte {
 /* sky texture */
 #define SHD_SKY_OLD 0
 #define SHD_SKY_NEW 1
-
-/* image/environment texture */
-#define SHD_COLORSPACE_NONE 0
-#define SHD_COLORSPACE_COLOR 1
 
 /* environment texture */
 #define SHD_PROJ_EQUIRECTANGULAR 0

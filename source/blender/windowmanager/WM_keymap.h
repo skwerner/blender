@@ -114,6 +114,8 @@ void WM_keymap_add_context_enum_set_items(wmKeyMap *keymap,
 wmKeyMap *WM_keymap_guess_from_context(const struct bContext *C);
 wmKeyMap *WM_keymap_guess_opname(const struct bContext *C, const char *opname);
 
+bool WM_keymap_uses_event_modifier(wmKeyMap *keymap, const int event_modifier);
+
 void WM_keymap_fix_linking(void);
 
 /* Modal Keymap */
@@ -149,11 +151,11 @@ void WM_modalkeymap_assign(struct wmKeyMap *km, const char *opname);
 /* Keymap Editor */
 
 void WM_keymap_restore_to_default(struct wmKeyMap *keymap, struct bContext *C);
-void WM_keymap_properties_reset(struct wmKeyMapItem *kmi, struct IDProperty *properties);
-void WM_keymap_restore_item_to_default(struct bContext *C,
+void WM_keymap_item_properties_reset(struct wmKeyMapItem *kmi, struct IDProperty *properties);
+void WM_keymap_item_restore_to_default(struct bContext *C,
                                        struct wmKeyMap *keymap,
                                        struct wmKeyMapItem *kmi);
-int WM_keymap_map_type_get(struct wmKeyMapItem *kmi);
+int WM_keymap_item_map_type_get(const struct wmKeyMapItem *kmi);
 
 /* Key Event */
 

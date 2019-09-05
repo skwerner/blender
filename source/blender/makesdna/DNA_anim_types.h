@@ -357,6 +357,7 @@ typedef enum eDriverTarget_TransformChannels {
   DTAR_TRANSCHAN_SCALEX,
   DTAR_TRANSCHAN_SCALEY,
   DTAR_TRANSCHAN_SCALEZ,
+  DTAR_TRANSCHAN_SCALE_AVG,
 
   MAX_DTAR_TRANSCHAN_TYPES,
 } eDriverTarget_TransformChannels;
@@ -508,7 +509,7 @@ typedef enum eDriver_Flags {
   DRIVER_FLAG_DEPRECATED = (1 << 1),
   /** Driver does replace value, but overrides (for layering of animation over driver) */
   // TODO: this needs to be implemented at some stage or left out...
-  //DRIVER_FLAG_LAYERING  = (1 << 2),
+  // DRIVER_FLAG_LAYERING  = (1 << 2),
   /** Use when the expression needs to be recompiled. */
   DRIVER_FLAG_RECOMPILE = (1 << 3),
   /** The names are cached so they don't need have python unicode versions created each time */
@@ -710,6 +711,11 @@ typedef struct NlaStrip {
   /** Settings. */
   int flag;
   char _pad2[4];
+
+  /* Pointer to an original NLA strip. */
+  struct NlaStrip *orig_strip;
+
+  void *_pad3;
 } NlaStrip;
 
 /* NLA Strip Blending Mode */
@@ -964,6 +970,8 @@ typedef enum eInsertKeyFlags {
   INSERTKEY_DRIVER = (1 << 8),
   /** for cyclic FCurves, adjust key timing to preserve the cycle period and flow */
   INSERTKEY_CYCLE_AWARE = (1 << 9),
+  /** don't create new F-Curves (implied by INSERTKEY_REPLACE) */
+  INSERTKEY_AVAILABLE = (1 << 10),
 } eInsertKeyFlags;
 
 /* ************************************************ */
@@ -998,14 +1006,14 @@ typedef struct AnimOverride {
 /**
  * Animation data for some ID block (adt)
  *
- * This block of data is used to provide all of the necessary animation data for a datablock.
+ * This block of data is used to provide all of the necessary animation data for a data-block.
  * Currently, this data will not be reusable, as there shouldn't be any need to do so.
  *
  * This information should be made available for most if not all ID-blocks, which should
  * enable all of its settings to be animatable locally. Animation from 'higher-up' ID-AnimData
  * blocks may override local settings.
  *
- * This datablock should be placed immediately after the ID block where it is used, so that
+ * This data-block should be placed immediately after the ID block where it is used, so that
  * the code which retrieves this data can do so in an easier manner.
  * See blenkernel/intern/anim_sys.c for details.
  */
@@ -1090,7 +1098,7 @@ typedef enum eAnimData_Flag {
 
 /**
  * Used for #BKE_animdata_from_id()
- * All ID-datablocks which have their own 'local' AnimData
+ * All ID-data-blocks which have their own 'local' AnimData
  * should have the same arrangement in their structs.
  */
 typedef struct IdAdtTemplate {

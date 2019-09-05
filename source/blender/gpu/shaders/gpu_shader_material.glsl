@@ -1,14 +1,4 @@
 
-uniform mat4 ModelViewMatrix;
-uniform mat4 ModelViewMatrixInverse;
-uniform mat3 NormalMatrix;
-uniform mat3 NormalMatrixInverse;
-
-#ifndef USE_ATTR
-uniform mat4 ModelMatrix;
-uniform mat4 ModelMatrixInverse;
-#endif
-
 /* Converters */
 
 float convert_rgba_to_float(vec4 color)
@@ -23,18 +13,22 @@ float exp_blender(float f)
 
 float compatible_pow(float x, float y)
 {
-  if (y == 0.0) /* x^0 -> 1, including 0^0 */
+  if (y == 0.0) { /* x^0 -> 1, including 0^0 */
     return 1.0;
+  }
 
   /* glsl pow doesn't accept negative x */
   if (x < 0.0) {
-    if (mod(-y, 2.0) == 0.0)
+    if (mod(-y, 2.0) == 0.0) {
       return pow(-x, y);
-    else
+    }
+    else {
       return -pow(-x, y);
+    }
   }
-  else if (x == 0.0)
+  else if (x == 0.0) {
     return 0.0;
+  }
 
   return pow(x, y);
 }
@@ -49,8 +43,9 @@ void rgb_to_hsv(vec4 rgb, out vec4 outcol)
   cdelta = cmax - cmin;
 
   v = cmax;
-  if (cmax != 0.0)
+  if (cmax != 0.0) {
     s = cdelta / cmax;
+  }
   else {
     s = 0.0;
     h = 0.0;
@@ -62,17 +57,21 @@ void rgb_to_hsv(vec4 rgb, out vec4 outcol)
   else {
     c = (vec3(cmax) - rgb.xyz) / cdelta;
 
-    if (rgb.x == cmax)
+    if (rgb.x == cmax) {
       h = c[2] - c[1];
-    else if (rgb.y == cmax)
+    }
+    else if (rgb.y == cmax) {
       h = 2.0 + c[0] - c[2];
-    else
+    }
+    else {
       h = 4.0 + c[1] - c[0];
+    }
 
     h /= 6.0;
 
-    if (h < 0.0)
+    if (h < 0.0) {
       h += 1.0;
+    }
   }
 
   outcol = vec4(h, s, v, rgb.w);
@@ -91,8 +90,9 @@ void hsv_to_rgb(vec4 hsv, out vec4 outcol)
     rgb = vec3(v, v, v);
   }
   else {
-    if (h == 1.0)
+    if (h == 1.0) {
       h = 0.0;
+    }
 
     h *= 6.0;
     i = floor(h);
@@ -102,53 +102,27 @@ void hsv_to_rgb(vec4 hsv, out vec4 outcol)
     q = v * (1.0 - (s * f));
     t = v * (1.0 - (s * (1.0 - f)));
 
-    if (i == 0.0)
+    if (i == 0.0) {
       rgb = vec3(v, t, p);
-    else if (i == 1.0)
+    }
+    else if (i == 1.0) {
       rgb = vec3(q, v, p);
-    else if (i == 2.0)
+    }
+    else if (i == 2.0) {
       rgb = vec3(p, v, t);
-    else if (i == 3.0)
+    }
+    else if (i == 3.0) {
       rgb = vec3(p, q, v);
-    else if (i == 4.0)
+    }
+    else if (i == 4.0) {
       rgb = vec3(t, p, v);
-    else
+    }
+    else {
       rgb = vec3(v, p, q);
+    }
   }
 
   outcol = vec4(rgb, hsv.w);
-}
-
-float srgb_to_linearrgb(float c)
-{
-  if (c < 0.04045)
-    return (c < 0.0) ? 0.0 : c * (1.0 / 12.92);
-  else
-    return pow((c + 0.055) * (1.0 / 1.055), 2.4);
-}
-
-float linearrgb_to_srgb(float c)
-{
-  if (c < 0.0031308)
-    return (c < 0.0) ? 0.0 : c * 12.92;
-  else
-    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
-}
-
-void srgb_to_linearrgb(vec4 col_from, out vec4 col_to)
-{
-  col_to.r = srgb_to_linearrgb(col_from.r);
-  col_to.g = srgb_to_linearrgb(col_from.g);
-  col_to.b = srgb_to_linearrgb(col_from.b);
-  col_to.a = col_from.a;
-}
-
-void linearrgb_to_srgb(vec4 col_from, out vec4 col_to)
-{
-  col_to.r = linearrgb_to_srgb(col_from.r);
-  col_to.g = linearrgb_to_srgb(col_from.g);
-  col_to.b = linearrgb_to_srgb(col_from.b);
-  col_to.a = col_from.a;
 }
 
 void color_to_normal_new_shading(vec3 color, out vec3 normal)
@@ -204,9 +178,9 @@ void direction_transform_m4v3(vec3 vin, mat4 mat, out vec3 vout)
   vout = (mat * vec4(vin, 0.0)).xyz;
 }
 
-void mat3_mul(vec3 vin, mat3 mat, out vec3 vout)
+void normal_transform_transposed_m4v3(vec3 vin, mat4 mat, out vec3 vout)
 {
-  vout = mat * vin;
+  vout = transpose(mat3(mat)) * vin;
 }
 
 void point_transform_m4v3(vec3 vin, mat4 mat, out vec3 vout)
@@ -230,15 +204,18 @@ void point_map_to_sphere(vec3 vin, out vec3 vout)
   float len = length(vin);
   float v, u;
   if (len > 0.0) {
-    if (vin.x == 0.0 && vin.y == 0.0)
+    if (vin.x == 0.0 && vin.y == 0.0) {
       u = 0.0;
-    else
+    }
+    else {
       u = (1.0 - atan(vin.x, vin.y) / M_PI) / 2.0;
+    }
 
     v = 1.0 - acos(vin.z / len) / M_PI;
   }
-  else
+  else {
     v = u = 0.0;
+  }
 
   vout = vec3(u, v, 0.0);
 }
@@ -248,10 +225,12 @@ void point_map_to_tube(vec3 vin, out vec3 vout)
   float u, v;
   v = (vin.z + 1.0) * 0.5;
   float len = sqrt(vin.x * vin.x + vin.y * vin[1]);
-  if (len > 0.0)
+  if (len > 0.0) {
     u = (1.0 - (atan(vin.x / len, vin.y / len) / M_PI)) * 0.5;
-  else
+  }
+  else {
     v = u = 0.0;
+  }
 
   vout = vec3(u, v, 0.0);
 }
@@ -288,10 +267,12 @@ void math_multiply(float val1, float val2, out float outval)
 
 void math_divide(float val1, float val2, out float outval)
 {
-  if (val2 == 0.0)
+  if (val2 == 0.0) {
     outval = 0.0;
-  else
+  }
+  else {
     outval = val1 / val2;
+  }
 }
 
 void math_sine(float val, out float outval)
@@ -311,18 +292,22 @@ void math_tangent(float val, out float outval)
 
 void math_asin(float val, out float outval)
 {
-  if (val <= 1.0 && val >= -1.0)
+  if (val <= 1.0 && val >= -1.0) {
     outval = asin(val);
-  else
+  }
+  else {
     outval = 0.0;
+  }
 }
 
 void math_acos(float val, out float outval)
 {
-  if (val <= 1.0 && val >= -1.0)
+  if (val <= 1.0 && val >= -1.0) {
     outval = acos(val);
-  else
+  }
+  else {
     outval = 0.0;
+  }
 }
 
 void math_atan(float val, out float outval)
@@ -338,19 +323,23 @@ void math_pow(float val1, float val2, out float outval)
   else {
     float val2_mod_1 = mod(abs(val2), 1.0);
 
-    if (val2_mod_1 > 0.999 || val2_mod_1 < 0.001)
+    if (val2_mod_1 > 0.999 || val2_mod_1 < 0.001) {
       outval = compatible_pow(val1, floor(val2 + 0.5));
-    else
+    }
+    else {
       outval = 0.0;
+    }
   }
 }
 
 void math_log(float val1, float val2, out float outval)
 {
-  if (val1 > 0.0 && val2 > 0.0)
+  if (val1 > 0.0 && val2 > 0.0) {
     outval = log2(val1) / log2(val2);
-  else
+  }
+  else {
     outval = 0.0;
+  }
 }
 
 void math_max(float val1, float val2, out float outval)
@@ -370,26 +359,32 @@ void math_round(float val, out float outval)
 
 void math_less_than(float val1, float val2, out float outval)
 {
-  if (val1 < val2)
+  if (val1 < val2) {
     outval = 1.0;
-  else
+  }
+  else {
     outval = 0.0;
+  }
 }
 
 void math_greater_than(float val1, float val2, out float outval)
 {
-  if (val1 > val2)
+  if (val1 > val2) {
     outval = 1.0;
-  else
+  }
+  else {
     outval = 0.0;
+  }
 }
 
 void math_modulo(float val1, float val2, out float outval)
 {
-  if (val2 == 0.0)
+  if (val2 == 0.0) {
     outval = 0.0;
-  else
+  }
+  else {
     outval = mod(val1, val2);
+  }
 
   /* change sign to match C convention, mod in GLSL will take absolute for negative numbers,
    * see https://www.opengl.org/sdk/docs/man/html/mod.xhtml */
@@ -423,10 +418,12 @@ void math_fract(float val, out float outval)
 
 void math_sqrt(float val, out float outval)
 {
-  if (val > 0.0)
+  if (val > 0.0) {
     outval = sqrt(val);
-  else
+  }
+  else {
     outval = 0.0;
+  }
 }
 
 void squeeze(float val, float width, float center, out float outval)
@@ -669,20 +666,26 @@ void mix_overlay(float fac, vec4 col1, vec4 col2, out vec4 outcol)
 
   outcol = col1;
 
-  if (outcol.r < 0.5)
+  if (outcol.r < 0.5) {
     outcol.r *= facm + 2.0 * fac * col2.r;
-  else
+  }
+  else {
     outcol.r = 1.0 - (facm + 2.0 * fac * (1.0 - col2.r)) * (1.0 - outcol.r);
+  }
 
-  if (outcol.g < 0.5)
+  if (outcol.g < 0.5) {
     outcol.g *= facm + 2.0 * fac * col2.g;
-  else
+  }
+  else {
     outcol.g = 1.0 - (facm + 2.0 * fac * (1.0 - col2.g)) * (1.0 - outcol.g);
+  }
 
-  if (outcol.b < 0.5)
+  if (outcol.b < 0.5) {
     outcol.b *= facm + 2.0 * fac * col2.b;
-  else
+  }
+  else {
     outcol.b = 1.0 - (facm + 2.0 * fac * (1.0 - col2.b)) * (1.0 - outcol.b);
+  }
 }
 
 void mix_sub(float fac, vec4 col1, vec4 col2, out vec4 outcol)
@@ -699,12 +702,15 @@ void mix_div(float fac, vec4 col1, vec4 col2, out vec4 outcol)
 
   outcol = col1;
 
-  if (col2.r != 0.0)
+  if (col2.r != 0.0) {
     outcol.r = facm * outcol.r + fac * outcol.r / col2.r;
-  if (col2.g != 0.0)
+  }
+  if (col2.g != 0.0) {
     outcol.g = facm * outcol.g + fac * outcol.g / col2.g;
-  if (col2.b != 0.0)
+  }
+  if (col2.b != 0.0) {
     outcol.b = facm * outcol.b + fac * outcol.b / col2.b;
+  }
 }
 
 void mix_diff(float fac, vec4 col1, vec4 col2, out vec4 outcol)
@@ -735,30 +741,39 @@ void mix_dodge(float fac, vec4 col1, vec4 col2, out vec4 outcol)
 
   if (outcol.r != 0.0) {
     float tmp = 1.0 - fac * col2.r;
-    if (tmp <= 0.0)
+    if (tmp <= 0.0) {
       outcol.r = 1.0;
-    else if ((tmp = outcol.r / tmp) > 1.0)
+    }
+    else if ((tmp = outcol.r / tmp) > 1.0) {
       outcol.r = 1.0;
-    else
+    }
+    else {
       outcol.r = tmp;
+    }
   }
   if (outcol.g != 0.0) {
     float tmp = 1.0 - fac * col2.g;
-    if (tmp <= 0.0)
+    if (tmp <= 0.0) {
       outcol.g = 1.0;
-    else if ((tmp = outcol.g / tmp) > 1.0)
+    }
+    else if ((tmp = outcol.g / tmp) > 1.0) {
       outcol.g = 1.0;
-    else
+    }
+    else {
       outcol.g = tmp;
+    }
   }
   if (outcol.b != 0.0) {
     float tmp = 1.0 - fac * col2.b;
-    if (tmp <= 0.0)
+    if (tmp <= 0.0) {
       outcol.b = 1.0;
-    else if ((tmp = outcol.b / tmp) > 1.0)
+    }
+    else if ((tmp = outcol.b / tmp) > 1.0) {
       outcol.b = 1.0;
-    else
+    }
+    else {
       outcol.b = tmp;
+    }
   }
 }
 
@@ -770,34 +785,46 @@ void mix_burn(float fac, vec4 col1, vec4 col2, out vec4 outcol)
   outcol = col1;
 
   tmp = facm + fac * col2.r;
-  if (tmp <= 0.0)
+  if (tmp <= 0.0) {
     outcol.r = 0.0;
-  else if ((tmp = (1.0 - (1.0 - outcol.r) / tmp)) < 0.0)
+  }
+  else if ((tmp = (1.0 - (1.0 - outcol.r) / tmp)) < 0.0) {
     outcol.r = 0.0;
-  else if (tmp > 1.0)
+  }
+  else if (tmp > 1.0) {
     outcol.r = 1.0;
-  else
+  }
+  else {
     outcol.r = tmp;
+  }
 
   tmp = facm + fac * col2.g;
-  if (tmp <= 0.0)
+  if (tmp <= 0.0) {
     outcol.g = 0.0;
-  else if ((tmp = (1.0 - (1.0 - outcol.g) / tmp)) < 0.0)
+  }
+  else if ((tmp = (1.0 - (1.0 - outcol.g) / tmp)) < 0.0) {
     outcol.g = 0.0;
-  else if (tmp > 1.0)
+  }
+  else if (tmp > 1.0) {
     outcol.g = 1.0;
-  else
+  }
+  else {
     outcol.g = tmp;
+  }
 
   tmp = facm + fac * col2.b;
-  if (tmp <= 0.0)
+  if (tmp <= 0.0) {
     outcol.b = 0.0;
-  else if ((tmp = (1.0 - (1.0 - outcol.b) / tmp)) < 0.0)
+  }
+  else if ((tmp = (1.0 - (1.0 - outcol.b) / tmp)) < 0.0) {
     outcol.b = 0.0;
-  else if (tmp > 1.0)
+  }
+  else if (tmp > 1.0) {
     outcol.b = 1.0;
-  else
+  }
+  else {
     outcol.b = tmp;
+  }
 }
 
 void mix_hue(float fac, vec4 col1, vec4 col2, out vec4 outcol)
@@ -1162,8 +1189,9 @@ vec3 cellnoise_color(vec3 p)
 
 float floorfrac(float x, out int i)
 {
-  i = floor_to_int(x);
-  return x - i;
+  float x_floor = floor(x);
+  i = int(x_floor);
+  return x - x_floor;
 }
 
 /* bsdfs */
@@ -1213,7 +1241,7 @@ void node_bsdf_glossy(vec4 color, float roughness, vec3 N, float ssr_id, out Clo
 {
   N = normalize(N);
   vec3 out_spec, ssr_spec;
-  eevee_closure_glossy(N, vec3(1.0), int(ssr_id), roughness, 1.0, out_spec, ssr_spec);
+  eevee_closure_glossy(N, vec3(1.0), vec3(1.0), int(ssr_id), roughness, 1.0, out_spec, ssr_spec);
   vec3 vN = mat3(ViewMatrix) * N;
   result = CLOSURE_DEFAULT;
   result.radiance = out_spec * color.rgb;
@@ -1241,7 +1269,7 @@ void node_bsdf_glass(
   vec3 refr_color = (refractionDepth > 0.0) ? color.rgb * color.rgb :
                                               color.rgb; /* Simulate 2 transmission event */
   eevee_closure_glass(
-      N, vec3(1.0), int(ssr_id), roughness, 1.0, ior, out_spec, out_refr, ssr_spec);
+      N, vec3(1.0), vec3(1.0), int(ssr_id), roughness, 1.0, ior, out_spec, out_refr, ssr_spec);
   out_refr *= refr_color;
   out_spec *= color.rgb;
   float fresnel = F_eta(ior, dot(N, cameraVec));
@@ -1275,6 +1303,8 @@ void node_bsdf_principled(vec4 base_color,
                           float ior,
                           float transmission,
                           float transmission_roughness,
+                          vec4 emission,
+                          float alpha,
                           vec3 N,
                           vec3 CN,
                           vec3 T,
@@ -1309,12 +1339,15 @@ void node_bsdf_principled(vec4 base_color,
   vec3 spec_col = F_color_blend(ior, fresnel, f0_glass) * fresnel;
   f0 = mix(f0, spec_col, transmission);
 
+  vec3 f90 = mix(vec3(1.0), f0, (1.0 - specular) * metallic);
+
   vec3 mixed_ss_base_color = mix(diffuse, subsurface_color.rgb, subsurface);
 
   float sss_scalef = dot(sss_scale, vec3(1.0 / 3.0)) * subsurface;
   eevee_closure_principled(N,
                            mixed_ss_base_color,
                            f0,
+                           f90,
                            int(ssr_id),
                            roughness,
                            CN,
@@ -1354,6 +1387,8 @@ void node_bsdf_principled(vec4 base_color,
 #    endif
   result.sss_data.rgb *= (1.0 - transmission);
 #  endif
+  result.radiance += emission.rgb;
+  result.opacity = alpha;
 }
 
 void node_bsdf_principled_dielectric(vec4 base_color,
@@ -1373,6 +1408,8 @@ void node_bsdf_principled_dielectric(vec4 base_color,
                                      float ior,
                                      float transmission,
                                      float transmission_roughness,
+                                     vec4 emission,
+                                     float alpha,
                                      vec3 N,
                                      vec3 CN,
                                      vec3 T,
@@ -1394,7 +1431,8 @@ void node_bsdf_principled_dielectric(vec4 base_color,
   float NV = dot(N, cameraVec);
   vec3 out_sheen = sheen * principled_sheen(NV, ctint, sheen_tint);
 
-  eevee_closure_default(N, diffuse, f0, int(ssr_id), roughness, 1.0, out_diff, out_spec, ssr_spec);
+  eevee_closure_default(
+      N, diffuse, f0, vec3(1.0), int(ssr_id), roughness, 1.0, out_diff, out_spec, ssr_spec);
 
   vec3 vN = mat3(ViewMatrix) * N;
   result = CLOSURE_DEFAULT;
@@ -1402,6 +1440,8 @@ void node_bsdf_principled_dielectric(vec4 base_color,
   result.ssr_data = vec4(ssr_spec, roughness);
   result.ssr_normal = normal_encode(vN, viewCameraVec);
   result.ssr_id = int(ssr_id);
+  result.radiance += emission.rgb;
+  result.opacity = alpha;
 }
 
 void node_bsdf_principled_metallic(vec4 base_color,
@@ -1421,6 +1461,8 @@ void node_bsdf_principled_metallic(vec4 base_color,
                                    float ior,
                                    float transmission,
                                    float transmission_roughness,
+                                   vec4 emission,
+                                   float alpha,
                                    vec3 N,
                                    vec3 CN,
                                    vec3 T,
@@ -1433,7 +1475,9 @@ void node_bsdf_principled_metallic(vec4 base_color,
   N = normalize(N);
   vec3 out_spec, ssr_spec;
 
-  eevee_closure_glossy(N, base_color.rgb, int(ssr_id), roughness, 1.0, out_spec, ssr_spec);
+  vec3 f90 = mix(vec3(1.0), base_color.rgb, (1.0 - specular) * metallic);
+
+  eevee_closure_glossy(N, base_color.rgb, f90, int(ssr_id), roughness, 1.0, out_spec, ssr_spec);
 
   vec3 vN = mat3(ViewMatrix) * N;
   result = CLOSURE_DEFAULT;
@@ -1441,6 +1485,8 @@ void node_bsdf_principled_metallic(vec4 base_color,
   result.ssr_data = vec4(ssr_spec, roughness);
   result.ssr_normal = normal_encode(vN, viewCameraVec);
   result.ssr_id = int(ssr_id);
+  result.radiance += emission.rgb;
+  result.opacity = alpha;
 }
 
 void node_bsdf_principled_clearcoat(vec4 base_color,
@@ -1460,6 +1506,8 @@ void node_bsdf_principled_clearcoat(vec4 base_color,
                                     float ior,
                                     float transmission,
                                     float transmission_roughness,
+                                    vec4 emission,
+                                    float alpha,
                                     vec3 N,
                                     vec3 CN,
                                     vec3 T,
@@ -1472,8 +1520,11 @@ void node_bsdf_principled_clearcoat(vec4 base_color,
   vec3 out_spec, ssr_spec;
   N = normalize(N);
 
+  vec3 f90 = mix(vec3(1.0), base_color.rgb, (1.0 - specular) * metallic);
+
   eevee_closure_clearcoat(N,
                           base_color.rgb,
+                          f90,
                           int(ssr_id),
                           roughness,
                           CN,
@@ -1489,6 +1540,8 @@ void node_bsdf_principled_clearcoat(vec4 base_color,
   result.ssr_data = vec4(ssr_spec, roughness);
   result.ssr_normal = normal_encode(vN, viewCameraVec);
   result.ssr_id = int(ssr_id);
+  result.radiance += emission.rgb;
+  result.opacity = alpha;
 }
 
 void node_bsdf_principled_subsurface(vec4 base_color,
@@ -1508,6 +1561,8 @@ void node_bsdf_principled_subsurface(vec4 base_color,
                                      float ior,
                                      float transmission,
                                      float transmission_roughness,
+                                     vec4 emission,
+                                     float alpha,
                                      vec3 N,
                                      vec3 CN,
                                      vec3 T,
@@ -1532,9 +1587,12 @@ void node_bsdf_principled_subsurface(vec4 base_color,
   float NV = dot(N, cameraVec);
   vec3 out_sheen = sheen * principled_sheen(NV, ctint, sheen_tint);
 
+  vec3 f90 = mix(vec3(1.0), base_color.rgb, (1.0 - specular) * metallic);
+
   eevee_closure_skin(N,
                      mixed_ss_base_color,
                      f0,
+                     f90,
                      int(ssr_id),
                      roughness,
                      1.0,
@@ -1562,6 +1620,8 @@ void node_bsdf_principled_subsurface(vec4 base_color,
   result.radiance += (out_diff + out_trans) * mixed_ss_base_color;
 #  endif
   result.radiance += out_diff * out_sheen;
+  result.radiance += emission.rgb;
+  result.opacity = alpha;
 }
 
 void node_bsdf_principled_glass(vec4 base_color,
@@ -1581,6 +1641,8 @@ void node_bsdf_principled_glass(vec4 base_color,
                                 float ior,
                                 float transmission,
                                 float transmission_roughness,
+                                vec4 emission,
+                                float alpha,
                                 vec3 N,
                                 vec3 CN,
                                 vec3 T,
@@ -1597,7 +1659,7 @@ void node_bsdf_principled_glass(vec4 base_color,
   f0 = mix(vec3(1.0), base_color.rgb, specular_tint);
 
   eevee_closure_glass(
-      N, vec3(1.0), int(ssr_id), roughness, 1.0, ior, out_spec, out_refr, ssr_spec);
+      N, vec3(1.0), vec3(1.0), int(ssr_id), roughness, 1.0, ior, out_spec, out_refr, ssr_spec);
 
   vec3 refr_color = base_color.rgb;
   refr_color *= (refractionDepth > 0.0) ? refr_color :
@@ -1615,6 +1677,8 @@ void node_bsdf_principled_glass(vec4 base_color,
   result.ssr_data = vec4(ssr_spec, roughness);
   result.ssr_normal = normal_encode(vN, viewCameraVec);
   result.ssr_id = int(ssr_id);
+  result.radiance += emission.rgb;
+  result.opacity = alpha;
 }
 
 void node_bsdf_translucent(vec4 color, vec3 N, out Closure result)
@@ -1690,23 +1754,6 @@ void node_ambient_occlusion(
   result_color = result_ao * color;
 }
 
-#endif /* VOLUMETRICS */
-
-/* emission */
-
-void node_emission(vec4 color, float strength, vec3 vN, out Closure result)
-{
-#ifndef VOLUMETRICS
-  color *= strength;
-  result = CLOSURE_DEFAULT;
-  result.radiance = color.rgb;
-  result.opacity = color.a;
-  result.ssr_normal = normal_encode(vN, viewCameraVec);
-#else
-  result = Closure(vec3(0.0), vec3(0.0), color.rgb * strength, 0.0);
-#endif
-}
-
 void node_wireframe(float size, vec2 barycentric, vec3 barycentric_dist, out float fac)
 {
   vec3 barys = barycentric.xyy;
@@ -1733,6 +1780,44 @@ void node_wireframe_screenspace(float size, vec2 barycentric, out float fac)
   fac = max(s.x, max(s.y, s.z));
 }
 
+#else /* VOLUMETRICS */
+
+/* Stub all bsdf functions not compatible with volumetrics. */
+#  define node_bsdf_diffuse
+#  define node_bsdf_glossy
+#  define node_bsdf_anisotropic
+#  define node_bsdf_glass
+#  define node_bsdf_toon
+#  define node_bsdf_principled
+#  define node_bsdf_principled_dielectric
+#  define node_bsdf_principled_metallic
+#  define node_bsdf_principled_clearcoat
+#  define node_bsdf_principled_subsurface
+#  define node_bsdf_principled_glass
+#  define node_bsdf_translucent
+#  define node_bsdf_transparent
+#  define node_bsdf_velvet
+#  define node_subsurface_scattering
+#  define node_bsdf_refraction
+#  define node_ambient_occlusion
+#  define node_wireframe
+#  define node_wireframe_screenspace
+
+#endif /* VOLUMETRICS */
+
+/* emission */
+
+void node_emission(vec4 color, float strength, vec3 vN, out Closure result)
+{
+  result = CLOSURE_DEFAULT;
+#ifndef VOLUMETRICS
+  result.radiance = color.rgb * strength;
+  result.ssr_normal = normal_encode(vN, viewCameraVec);
+#else
+  result.emission = color.rgb * strength;
+#endif
+}
+
 /* background */
 
 void node_tex_environment_texco(vec3 viewvec, out vec3 worldvec)
@@ -1743,11 +1828,11 @@ void node_tex_environment_texco(vec3 viewvec, out vec3 worldvec)
   vec4 v = (ProjectionMatrix[3][3] == 0.0) ? vec4(viewvec, 1.0) : vec4(0.0, 0.0, 1.0, 1.0);
   vec4 co_homogenous = (ProjectionMatrixInverse * v);
 
-  vec4 co = vec4(co_homogenous.xyz / co_homogenous.w, 0.0);
+  vec3 co = co_homogenous.xyz / co_homogenous.w;
 #  if defined(WORLD_BACKGROUND) || defined(PROBE_CAPTURE)
-  worldvec = (ViewMatrixInverse * co).xyz;
+  worldvec = mat3(ViewMatrixInverse) * co;
 #  else
-  worldvec = (ModelViewMatrixInverse * co).xyz;
+  worldvec = mat3(ModelMatrixInverse) * (mat3(ViewMatrixInverse) * co);
 #  endif
 #endif
 }
@@ -1918,12 +2003,15 @@ void node_gamma(vec4 col, float gamma, out vec4 outcol)
 {
   outcol = col;
 
-  if (col.r > 0.0)
+  if (col.r > 0.0) {
     outcol.r = compatible_pow(col.r, gamma);
-  if (col.g > 0.0)
+  }
+  if (col.g > 0.0) {
     outcol.g = compatible_pow(col.g, gamma);
-  if (col.b > 0.0)
+  }
+  if (col.b > 0.0) {
     outcol.b = compatible_pow(col.b, gamma);
+  }
 }
 
 /* geometry */
@@ -1952,8 +2040,9 @@ void node_attribute_volume_color(sampler3D tex, out vec4 outcol, out vec3 outvec
 
   vec4 value = texture(tex, cos).rgba;
   /* Density is premultiplied for interpolation, divide it out here. */
-  if (value.a > 1e-8)
+  if (value.a > 1e-8) {
     value.rgb /= value.a;
+  }
 
   outvec = value.rgb * volumeColor;
   outcol = vec4(outvec, 1.0);
@@ -2014,18 +2103,13 @@ void tangent_orco_z(vec3 orco_in, out vec3 orco_out)
   orco_out = orco_in.yxz * vec3(-0.5, 0.5, 0.0) + vec3(0.25, -0.25, 0.0);
 }
 
-void node_tangentmap(vec4 attr_tangent, mat4 toworld, out vec3 tangent)
+void node_tangentmap(vec4 attr_tangent, out vec3 tangent)
 {
-  tangent = normalize((toworld * vec4(attr_tangent.xyz, 0.0)).xyz);
+  tangent = normalize(attr_tangent.xyz);
 }
 
-void node_tangent(vec3 N, vec3 orco, mat4 objmat, mat4 toworld, out vec3 T)
+void node_tangent(vec3 N, vec3 orco, mat4 objmat, out vec3 T)
 {
-#ifndef VOLUMETRICS
-  N = normalize(gl_FrontFacing ? worldNormal : -worldNormal);
-#else
-  N = (toworld * vec4(N, 0.0)).xyz;
-#endif
   T = (objmat * vec4(orco, 0.0)).xyz;
   T = cross(N, normalize(cross(T, N)));
 }
@@ -2060,7 +2144,7 @@ void node_geometry(vec3 I,
 
   position = worldPosition;
 #  ifndef VOLUMETRICS
-  normal = normalize(gl_FrontFacing ? worldNormal : -worldNormal);
+  normal = normalize(N);
   vec3 B = dFdx(worldPosition);
   vec3 T = dFdy(worldPosition);
   true_normal = normalize(cross(B, T));
@@ -2069,7 +2153,7 @@ void node_geometry(vec3 I,
   true_normal = normal;
 #  endif
   tangent_orco_z(orco, orco);
-  node_tangent(N, orco, objmat, toworld, tangent);
+  node_tangent(N, orco, objmat, tangent);
 
   parametric = vec3(barycentric, 0.0);
   backfacing = (gl_FrontFacing) ? 0.0 : 1.0;
@@ -2091,9 +2175,8 @@ void generated_texco(vec3 I, vec3 attr_orco, out vec3 generated)
 }
 
 void node_tex_coord(vec3 I,
-                    vec3 N,
-                    mat4 viewinvmat,
-                    mat4 obinvmat,
+                    vec3 wN,
+                    mat4 obmatinv,
                     vec4 camerafac,
                     vec3 attr_orco,
                     vec3 attr_uv,
@@ -2106,22 +2189,18 @@ void node_tex_coord(vec3 I,
                     out vec3 reflection)
 {
   generated = attr_orco;
-  normal = normalize(NormalMatrixInverse * N);
+  normal = normalize(normal_world_to_object(wN));
   uv = attr_uv;
-  object = (obinvmat * (viewinvmat * vec4(I, 1.0))).xyz;
+  object = (obmatinv * (ViewMatrixInverse * vec4(I, 1.0))).xyz;
   camera = vec3(I.xy, -I.z);
   vec4 projvec = ProjectionMatrix * vec4(I, 1.0);
   window = vec3(mtex_2d_mapping(projvec.xyz / projvec.w).xy * camerafac.xy + camerafac.zw, 0.0);
-
-  vec3 shade_I = (ProjectionMatrix[3][3] == 0.0) ? normalize(I) : vec3(0.0, 0.0, -1.0);
-  vec3 view_reflection = reflect(shade_I, normalize(N));
-  reflection = (viewinvmat * vec4(view_reflection, 0.0)).xyz;
+  reflection = -reflect(cameraVec, normalize(wN));
 }
 
 void node_tex_coord_background(vec3 I,
                                vec3 N,
-                               mat4 viewinvmat,
-                               mat4 obinvmat,
+                               mat4 obmatinv,
                                vec4 camerafac,
                                vec3 attr_orco,
                                vec3 attr_uv,
@@ -2140,16 +2219,12 @@ void node_tex_coord_background(vec3 I,
 
   co = normalize(co);
 
-#if defined(WORLD_BACKGROUND) || defined(PROBE_CAPTURE)
   vec3 coords = (ViewMatrixInverse * co).xyz;
-#else
-  vec3 coords = (ModelViewMatrixInverse * co).xyz;
-#endif
 
   generated = coords;
   normal = -coords;
   uv = vec3(attr_uv.xy, 0.0);
-  object = coords;
+  object = (obmatinv * vec4(coords, 1.0)).xyz;
 
   camera = vec3(co.xy, -co.z);
   window = vec3(mtex_2d_mapping(I).xy * camerafac.xy + camerafac.zw, 0.0);
@@ -2344,6 +2419,26 @@ void node_tex_environment_empty(vec3 co, out vec4 color)
 
 /* 16bits floats limits. Higher/Lower values produce +/-inf. */
 #define safe_color(a) (clamp(a, -65520.0, 65520.0))
+
+void tex_color_alpha_clear(vec4 color, out vec4 result)
+{
+  result = vec4(color.rgb, 1.0);
+}
+
+void tex_color_alpha_premultiply(vec4 color, out vec4 result)
+{
+  result = vec4(color.rgb * color.a, 1.0);
+}
+
+void tex_color_alpha_unpremultiply(vec4 color, out vec4 result)
+{
+  if (color.a == 0.0 || color.a == 1.0) {
+    result = vec4(color.rgb, 1.0);
+  }
+  else {
+    result = vec4(color.rgb / color.a, 1.0);
+  }
+}
 
 void node_tex_image_linear(vec3 co, sampler2D ima, out vec4 color, out float alpha)
 {
@@ -2771,7 +2866,9 @@ float noise_perlin(float x, float y, float z)
 
   noise_v[1] = noise_nerp(v, noise_u[0], noise_u[1]);
 
-  return noise_scale3(noise_nerp(w, noise_v[0], noise_v[1]));
+  float r = noise_scale3(noise_nerp(w, noise_v[0], noise_v[1]));
+
+  return (isinf(r)) ? 0.0 : r;
 }
 
 float noise(vec3 p)
@@ -2860,8 +2957,9 @@ float noise_musgrave_fBm(vec3 p, float H, float lacunarity, float octaves)
   }
 
   rmd = octaves - floor(octaves);
-  if (rmd != 0.0)
+  if (rmd != 0.0) {
     value += rmd * snoise(p) * pwr;
+  }
 
   return value;
 }
@@ -2887,8 +2985,9 @@ float noise_musgrave_multi_fractal(vec3 p, float H, float lacunarity, float octa
   }
 
   rmd = octaves - floor(octaves);
-  if (rmd != 0.0)
+  if (rmd != 0.0) {
     value *= (rmd * pwr * snoise(p) + 1.0); /* correct? */
+  }
 
   return value;
 }
@@ -2947,8 +3046,9 @@ float noise_musgrave_hybrid_multi_fractal(
   p *= lacunarity;
 
   for (int i = 1; (weight > 0.001f) && (i < int(octaves)); i++) {
-    if (weight > 1.0)
+    if (weight > 1.0) {
       weight = 1.0;
+    }
 
     signal = (snoise(p) + offset) * pwr;
     pwr *= pwHL;
@@ -2958,8 +3058,9 @@ float noise_musgrave_hybrid_multi_fractal(
   }
 
   rmd = octaves - floor(octaves);
-  if (rmd != 0.0)
+  if (rmd != 0.0) {
     result += rmd * ((snoise(p) + offset) * pwr);
+  }
 
   return result;
 }
@@ -3006,18 +3107,23 @@ float svm_musgrave(int type,
                    float gain,
                    vec3 p)
 {
-  if (type == 0 /* NODE_MUSGRAVE_MULTIFRACTAL */)
+  if (type == 0 /* NODE_MUSGRAVE_MULTIFRACTAL */) {
     return intensity * noise_musgrave_multi_fractal(p, dimension, lacunarity, octaves);
-  else if (type == 1 /* NODE_MUSGRAVE_FBM */)
+  }
+  else if (type == 1 /* NODE_MUSGRAVE_FBM */) {
     return intensity * noise_musgrave_fBm(p, dimension, lacunarity, octaves);
-  else if (type == 2 /* NODE_MUSGRAVE_HYBRID_MULTIFRACTAL */)
+  }
+  else if (type == 2 /* NODE_MUSGRAVE_HYBRID_MULTIFRACTAL */) {
     return intensity *
            noise_musgrave_hybrid_multi_fractal(p, dimension, lacunarity, octaves, offset, gain);
-  else if (type == 3 /* NODE_MUSGRAVE_RIDGED_MULTIFRACTAL */)
+  }
+  else if (type == 3 /* NODE_MUSGRAVE_RIDGED_MULTIFRACTAL */) {
     return intensity *
            noise_musgrave_ridged_multi_fractal(p, dimension, lacunarity, octaves, offset, gain);
-  else if (type == 4 /* NODE_MUSGRAVE_HETERO_TERRAIN */)
+  }
+  else if (type == 4 /* NODE_MUSGRAVE_HETERO_TERRAIN */) {
     return intensity * noise_musgrave_hetero_terrain(p, dimension, lacunarity, octaves, offset);
+  }
   return 0.0;
 }
 
@@ -3164,13 +3270,16 @@ float calc_wave(
 {
   float n;
 
-  if (wave_type == 0) /* type bands */
+  if (wave_type == 0) { /* type bands */
     n = (p.x + p.y + p.z) * 10.0;
-  else /* type rings */
+  }
+  else { /* type rings */
     n = length(p) * 20.0;
+  }
 
-  if (distortion != 0.0)
+  if (distortion != 0.0) {
     n += distortion * noise_turbulence(p * detail_scale, detail, 0);
+  }
 
   if (wave_profile == 0) { /* profile sin */
     return 0.5 + 0.5 * sin(n);
@@ -3243,6 +3352,7 @@ void node_light_falloff(
 
 void node_object_info(mat4 obmat,
                       vec4 info,
+                      float mat_index,
                       out vec3 location,
                       out float object_index,
                       out float material_index,
@@ -3250,7 +3360,7 @@ void node_object_info(mat4 obmat,
 {
   location = obmat[3].xyz;
   object_index = info.x;
-  material_index = info.y;
+  material_index = mat_index;
   random = info.z;
 }
 
@@ -3271,7 +3381,7 @@ void node_bump(
     float strength, float dist, float height, vec3 N, vec3 surf_pos, float invert, out vec3 result)
 {
   N = mat3(ViewMatrix) * normalize(N);
-  dist *= invert;
+  dist *= gl_FrontFacing ? invert : -invert;
 
   vec3 dPdx = dFdx(surf_pos);
   vec3 dPdy = dFdy(surf_pos);
@@ -3310,7 +3420,7 @@ void node_hair_info(out float is_strand,
   is_strand = 1.0;
   intercept = hairTime;
   thickness = hairThickness;
-  tangent = normalize(hairTangent);
+  tangent = normalize(worldNormal);
   random = wang_hash_noise(
       uint(hairStrandID)); /* TODO: could be precomputed per strand instead. */
 #else
@@ -3344,6 +3454,7 @@ void node_vector_displacement_tangent(vec4 vector,
                                       mat4 viewmat,
                                       out vec3 result)
 {
+  /* TODO(fclem) this is broken. revisit latter. */
   vec3 N_object = normalize(((vec4(normal, 0.0) * viewmat) * obmat).xyz);
   vec3 T_object = normalize(((vec4(tangent.xyz, 0.0) * viewmat) * obmat).xyz);
   vec3 B_object = tangent.w * normalize(cross(N_object, T_object));
@@ -3388,11 +3499,11 @@ void node_output_world(Closure surface, Closure volume, out Closure result)
 #endif /* VOLUMETRICS */
 }
 
-#ifndef VOLUMETRICS
 /* TODO : clean this ifdef mess */
 /* EEVEE output */
 void world_normals_get(out vec3 N)
 {
+#ifndef VOLUMETRICS
 #  ifdef HAIR_SHADER
   vec3 B = normalize(cross(worldNormal, hairTangent));
   float cos_theta;
@@ -3405,13 +3516,17 @@ void world_normals_get(out vec3 N)
     /* Shade as a cylinder. */
     cos_theta = hairThickTime / hairThickness;
   }
-  float sin_theta = sqrt(max(0.0, 1.0f - cos_theta * cos_theta));
+  float sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
   N = normalize(worldNormal * sin_theta + B * cos_theta);
 #  else
   N = gl_FrontFacing ? worldNormal : -worldNormal;
 #  endif
+#else
+  generated_from_orco(vec3(0.0), N);
+#endif
 }
 
+#ifndef VOLUMETRICS
 void node_eevee_specular(vec4 diffuse,
                          vec4 specular,
                          float roughness,
@@ -3426,15 +3541,19 @@ void node_eevee_specular(vec4 diffuse,
                          out Closure result)
 {
   vec3 out_diff, out_spec, ssr_spec;
-  eevee_closure_default(normal,
-                        diffuse.rgb,
-                        specular.rgb,
-                        int(ssr_id),
-                        roughness,
-                        occlusion,
-                        out_diff,
-                        out_spec,
-                        ssr_spec);
+  eevee_closure_default_clearcoat(normal,
+                                  diffuse.rgb,
+                                  specular.rgb,
+                                  vec3(1.0),
+                                  int(ssr_id),
+                                  roughness,
+                                  clearcoat_normal,
+                                  clearcoat * 0.25,
+                                  clearcoat_roughness,
+                                  occlusion,
+                                  out_diff,
+                                  out_spec,
+                                  ssr_spec);
 
   vec3 vN = normalize(mat3(ViewMatrix) * normal);
   result = CLOSURE_DEFAULT;

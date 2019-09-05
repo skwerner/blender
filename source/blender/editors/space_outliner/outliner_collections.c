@@ -593,7 +593,7 @@ static int collection_link_exec(bContext *C, wmOperator *op)
 
   if (ID_IS_LINKED(active_collection) ||
       ((active_collection->flag & COLLECTION_IS_MASTER) && ID_IS_LINKED(scene))) {
-    BKE_report(op->reports, RPT_ERROR, "Cannot add a colection to a linked collection/scene");
+    BKE_report(op->reports, RPT_ERROR, "Cannot add a collection to a linked collection/scene");
     return OPERATOR_CANCELLED;
   }
 
@@ -855,7 +855,7 @@ static int collection_view_layer_exec(bContext *C, wmOperator *op)
 void OUTLINER_OT_collection_exclude_set(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Set Exclude";
+  ot->name = "Disable from View Layer";
   ot->idname = "OUTLINER_OT_collection_exclude_set";
   ot->description = "Exclude collection from the active view layer";
 
@@ -870,7 +870,7 @@ void OUTLINER_OT_collection_exclude_set(wmOperatorType *ot)
 void OUTLINER_OT_collection_exclude_clear(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Clear Exclude";
+  ot->name = "Enable in View Layer";
   ot->idname = "OUTLINER_OT_collection_exclude_clear";
   ot->description = "Include collection in the active view layer";
 
@@ -952,40 +952,39 @@ static int collection_isolate_exec(bContext *C, wmOperator *op)
   ViewLayer *view_layer = CTX_data_view_layer(C);
   SpaceOutliner *soops = CTX_wm_space_outliner(C);
   const bool extend = RNA_boolean_get(op->ptr, "extend");
-  bool depsgraph_changed = false;
   struct CollectionEditData data = {
       .scene = scene,
       .soops = soops,
   };
   data.collections_to_edit = BLI_gset_ptr_new(__func__);
-
-  /* Hide all collections before the isolate function -
-   * needed in order to support multiple selected collections. */
-  if (!extend) {
-    LayerCollection *lc_master = view_layer->layer_collections.first;
-    for (LayerCollection *lc_iter = lc_master->layer_collections.first; lc_iter;
-         lc_iter = lc_iter->next) {
-      lc_iter->flag |= LAYER_COLLECTION_RESTRICT_VIEW;
-      layer_collection_flag_recursive_set(lc_iter, LAYER_COLLECTION_RESTRICT_VIEW);
-    }
-  }
-
   outliner_tree_traverse(
       soops, &soops->tree, 0, TSE_SELECTED, layer_collection_find_data_to_edit, &data);
 
   GSetIterator collections_to_edit_iter;
   GSET_ITER (collections_to_edit_iter, data.collections_to_edit) {
     LayerCollection *layer_collection = BLI_gsetIterator_getKey(&collections_to_edit_iter);
-    depsgraph_changed |= BKE_layer_collection_isolate(scene, view_layer, layer_collection, true);
+
+    if (extend) {
+      BKE_layer_collection_isolate(scene, view_layer, layer_collection, true);
+    }
+    else {
+      PointerRNA ptr;
+      PropertyRNA *prop = RNA_struct_type_find_property(&RNA_LayerCollection, "hide_viewport");
+      RNA_pointer_create(&scene->id, &RNA_LayerCollection, layer_collection, &ptr);
+
+      /* We need to flip the value because the isolate flag routine was designed to work from the
+       * outliner as a callback. That means the collection visibility was set before the callback
+       * was called. */
+      const bool value = !RNA_property_boolean_get(&ptr, prop);
+      outliner_collection_isolate_flag(
+          scene, view_layer, layer_collection, NULL, prop, "hide_viewport", value);
+      break;
+    }
   }
   BLI_gset_free(data.collections_to_edit, NULL);
 
   BKE_layer_collection_sync(scene, view_layer);
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
-
-  if (depsgraph_changed) {
-    DEG_relations_tag_update(CTX_data_main(C));
-  }
 
   WM_main_add_notifier(NC_SCENE | ND_LAYER_CONTENT, NULL);
   return OPERATOR_FINISHED;
@@ -1023,12 +1022,12 @@ void OUTLINER_OT_collection_isolate(wmOperatorType *ot)
 
 static bool collection_show_poll(bContext *C)
 {
-  return collections_view_layer_poll(C, true, LAYER_COLLECTION_RESTRICT_VIEW);
+  return collections_view_layer_poll(C, true, LAYER_COLLECTION_HIDE);
 }
 
 static bool collection_hide_poll(bContext *C)
 {
-  return collections_view_layer_poll(C, false, LAYER_COLLECTION_RESTRICT_VIEW);
+  return collections_view_layer_poll(C, false, LAYER_COLLECTION_HIDE);
 }
 
 static bool collection_inside_poll(bContext *C)
@@ -1046,7 +1045,6 @@ static int collection_visibility_exec(bContext *C, wmOperator *op)
   SpaceOutliner *soops = CTX_wm_space_outliner(C);
   const bool is_inside = strstr(op->idname, "inside") != NULL;
   const bool show = strstr(op->idname, "show") != NULL;
-  bool depsgraph_changed = false;
   struct CollectionEditData data = {
       .scene = scene,
       .soops = soops,
@@ -1059,17 +1057,12 @@ static int collection_visibility_exec(bContext *C, wmOperator *op)
   GSetIterator collections_to_edit_iter;
   GSET_ITER (collections_to_edit_iter, data.collections_to_edit) {
     LayerCollection *layer_collection = BLI_gsetIterator_getKey(&collections_to_edit_iter);
-    depsgraph_changed |= BKE_layer_collection_set_visible(
-        view_layer, layer_collection, show, is_inside);
+    BKE_layer_collection_set_visible(view_layer, layer_collection, show, is_inside);
   }
   BLI_gset_free(data.collections_to_edit, NULL);
 
   BKE_layer_collection_sync(scene, view_layer);
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
-
-  if (depsgraph_changed) {
-    DEG_relations_tag_update(CTX_data_main(C));
-  }
 
   WM_main_add_notifier(NC_SCENE | ND_LAYER_CONTENT, NULL);
   return OPERATOR_FINISHED;
@@ -1163,12 +1156,12 @@ static bool collection_flag_poll(bContext *C, bool clear, int flag)
 
 static bool collection_enable_poll(bContext *C)
 {
-  return collection_flag_poll(C, true, COLLECTION_RESTRICT_VIEW);
+  return collection_flag_poll(C, true, COLLECTION_RESTRICT_VIEWPORT);
 }
 
 static bool collection_disable_poll(bContext *C)
 {
-  return collection_flag_poll(C, false, COLLECTION_RESTRICT_VIEW);
+  return collection_flag_poll(C, false, COLLECTION_RESTRICT_VIEWPORT);
 }
 
 static bool collection_enable_render_poll(bContext *C)
@@ -1188,7 +1181,7 @@ static int collection_flag_exec(bContext *C, wmOperator *op)
   SpaceOutliner *soops = CTX_wm_space_outliner(C);
   const bool is_render = strstr(op->idname, "render");
   const bool clear = strstr(op->idname, "show") || strstr(op->idname, "enable");
-  int flag = is_render ? COLLECTION_RESTRICT_RENDER : COLLECTION_RESTRICT_VIEW;
+  int flag = is_render ? COLLECTION_RESTRICT_RENDER : COLLECTION_RESTRICT_VIEWPORT;
   struct CollectionEditData data = {
       .scene = scene,
       .soops = soops,
@@ -1215,7 +1208,7 @@ static int collection_flag_exec(bContext *C, wmOperator *op)
 
       /* Make sure (at least for this view layer) the collection is visible. */
       if (clear && !is_render) {
-        layer_collection->flag &= ~LAYER_COLLECTION_RESTRICT_VIEW;
+        layer_collection->flag &= ~LAYER_COLLECTION_HIDE;
       }
     }
     BLI_gset_free(data.collections_to_edit, NULL);
@@ -1408,8 +1401,8 @@ static int outliner_unhide_all_exec(bContext *C, wmOperator *UNUSED(op))
   LayerCollection *lc_master = view_layer->layer_collections.first;
   for (LayerCollection *lc_iter = lc_master->layer_collections.first; lc_iter;
        lc_iter = lc_iter->next) {
-    lc_iter->flag &= ~LAYER_COLLECTION_RESTRICT_VIEW;
-    layer_collection_flag_recursive_set(lc_iter, LAYER_COLLECTION_RESTRICT_VIEW);
+    lc_iter->flag &= ~LAYER_COLLECTION_HIDE;
+    layer_collection_flag_recursive_set(lc_iter, LAYER_COLLECTION_HIDE);
   }
 
   /* Unhide all objects. */

@@ -95,8 +95,10 @@ static FModifierTypeInfo FMI_MODNAME = {
 
 /* Generators available:
  *  1) simple polynomial generator:
- *     - Expanded form - (y = C[0]*(x^(n)) + C[1]*(x^(n-1)) + ... + C[n])
- *     - Factorized form - (y = (C[0][0]*x + C[0][1]) * (C[1][0]*x + C[1][1]) * ... * (C[n][0]*x + C[n][1]))
+ *     - Expanded form:
+ *       (y = C[0]*(x^(n)) + C[1]*(x^(n-1)) + ... + C[n])
+ *     - Factorized form:
+ *       (y = (C[0][0]*x + C[0][1]) * (C[1][0]*x + C[1][1]) * ... * (C[n][0]*x + C[n][1]))
  */
 
 static void fcm_generator_free(FModifier *fcm)
@@ -217,9 +219,9 @@ static void fcm_generator_evaluate(
       float value = 1.0f, *cp = NULL;
       unsigned int i;
 
-      /* for each coefficient pair, solve for that bracket before accumulating in value by multiplying */
-      for (cp = data->coefficients, i = 0; (cp) && (i < (unsigned int)data->poly_order);
-           cp += 2, i++) {
+      /* For each coefficient pair,
+       * solve for that bracket before accumulating in value by multiplying. */
+      for (cp = data->coefficients, i = 0; (cp) && (i < (uint)data->poly_order); cp += 2, i++) {
         value *= (cp[0] * evaltime + cp[1]);
       }
 
@@ -594,14 +596,14 @@ int BKE_fcm_envelope_find_index(FCM_EnvelopeData array[],
 
 /* This modifier changes evaltime to something that exists within the curve's frame-range,
  * then re-evaluates modifier stack up to this point using the new time. This re-entrant behavior
- * is very likely to be more time-consuming than the original approach... (which was tightly integrated into
- * the calculation code...).
+ * is very likely to be more time-consuming than the original approach...
+ * (which was tightly integrated into the calculation code...).
  *
- * NOTE: this needs to be at the start of the stack to be of use, as it needs to know the extents of the
- * keyframes/sample-data.
+ * NOTE: this needs to be at the start of the stack to be of use,
+ * as it needs to know the extents of the keyframes/sample-data.
  *
- * Possible TODO - store length of cycle information that can be initialized from the extents of the
- * keyframes/sample-data, and adjusted as appropriate.
+ * Possible TODO - store length of cycle information that can be initialized from the extents of
+ * the keyframes/sample-data, and adjusted as appropriate.
  */
 
 /* temp data used during evaluation */
@@ -740,9 +742,10 @@ static float fcm_cycles_time(
     }
     /* calculate where in the cycle we are (overwrite evaltime to reflect this) */
     else if ((mode == FCM_EXTRAPOLATE_MIRROR) && ((int)(cycle + 1) % 2)) {
-      /* when 'mirror' option is used and cycle number is odd, this cycle is played in reverse
+      /* When 'mirror' option is used and cycle number is odd, this cycle is played in reverse
        * - for 'before' extrapolation, we need to flip in a different way, otherwise values past
-       *   then end of the curve get referenced (result of fmod will be negative, and with different phase)
+       *   then end of the curve get referenced
+       *   (result of fmod will be negative, and with different phase).
        */
       if (side < 0) {
         evaltime = prevkey[0] - cyct;
@@ -864,7 +867,6 @@ static void fcm_python_free(FModifier *fcm)
 
   /* id-properties */
   IDP_FreeProperty(data->prop);
-  MEM_freeN(data->prop);
 }
 
 static void fcm_python_new_data(void *mdata)
@@ -891,7 +893,7 @@ static void fcm_python_evaluate(FCurve *UNUSED(fcu),
                                 void *UNUSED(storage))
 {
 #ifdef WITH_PYTHON
-  //FMod_Python *data = (FMod_Python *)fcm->data;
+  // FMod_Python *data = (FMod_Python *)fcm->data;
 
   /* FIXME... need to implement this modifier...
    * It will need it execute a script using the custom properties
@@ -1416,7 +1418,7 @@ static float eval_fmodifier_influence(FModifier *fcm, float evaltime)
  *   several times by modifiers requesting the time be modified, as the final result
  *   would have required using the modified time
  * - modifiers only ever receive the unmodified time, as subsequent modifiers should be
- *   working on the 'global' result of the modified curve, not some localised segment,
+ *   working on the 'global' result of the modified curve, not some localized segment,
  *   so nevaltime gets set to whatever the last time-modifying modifier likes...
  * - we start from the end of the stack, as only the last one matters for now
  *
@@ -1455,9 +1457,9 @@ float evaluate_time_fmodifiers(FModifiersStackStorage *storage,
       continue;
     }
 
-    /* if modifier cannot be applied on this frame (whatever scale it is on, it won't affect the results)
-     * hence we shouldn't bother seeing what it would do given the chance
-     */
+    /* If modifier cannot be applied on this frame
+     * (whatever scale it is on, it won't affect the results)
+     * hence we shouldn't bother seeing what it would do given the chance. */
     if ((fcm->flag & FMODIFIER_FLAG_RANGERESTRICT) == 0 ||
         ((fcm->sfra <= evaltime) && (fcm->efra >= evaltime))) {
       /* only evaluate if there's a callback for this */
@@ -1508,7 +1510,8 @@ void evaluate_value_fmodifiers(FModifiersStackStorage *storage,
       continue;
     }
 
-    /* only evaluate if there's a callback for this, and if F-Modifier can be evaluated on this frame */
+    /* Only evaluate if there's a callback for this,
+     * and if F-Modifier can be evaluated on this frame. */
     if ((fcm->flag & FMODIFIER_FLAG_RANGERESTRICT) == 0 ||
         ((fcm->sfra <= evaltime) && (fcm->efra >= evaltime))) {
       if (fmi->evaluate_modifier) {

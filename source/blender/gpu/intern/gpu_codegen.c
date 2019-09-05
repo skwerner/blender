@@ -328,23 +328,29 @@ static char *gpu_generate_function_prototyps(GHash *hash)
 
     BLI_dynstr_appendf(ds, "void %s(", name);
     for (a = 0; a < function->totparam; a++) {
-      if (function->paramqual[a] == FUNCTION_QUAL_OUT)
+      if (function->paramqual[a] == FUNCTION_QUAL_OUT) {
         BLI_dynstr_append(ds, "out ");
-      else if (function->paramqual[a] == FUNCTION_QUAL_INOUT)
+      }
+      else if (function->paramqual[a] == FUNCTION_QUAL_INOUT) {
         BLI_dynstr_append(ds, "inout ");
+      }
 
-      if (function->paramtype[a] == GPU_TEX2D)
+      if (function->paramtype[a] == GPU_TEX2D) {
         BLI_dynstr_append(ds, "sampler2D");
-      else if (function->paramtype[a] == GPU_SHADOW2D)
+      }
+      else if (function->paramtype[a] == GPU_SHADOW2D) {
         BLI_dynstr_append(ds, "sampler2DShadow");
-      else
+      }
+      else {
         BLI_dynstr_append(ds, GPU_DATATYPE_STR[function->paramtype[a]]);
+      }
 #  if 0
       BLI_dynstr_appendf(ds, " param%d", a);
 #  endif
 
-      if (a != function->totparam - 1)
+      if (a != function->totparam - 1) {
         BLI_dynstr_append(ds, ", ");
+      }
     }
     BLI_dynstr_append(ds, ");\n");
   }
@@ -520,9 +526,6 @@ const char *GPU_builtin_name(eGPUBuiltin builtin)
   else if (builtin == GPU_INVERSE_OBJECT_MATRIX) {
     return "unfinvobmat";
   }
-  else if (builtin == GPU_INVERSE_NORMAL_MATRIX) {
-    return "unfinvnormat";
-  }
   else if (builtin == GPU_LOC_TO_VIEW_MATRIX) {
     return "unflocaltoviewmat";
   }
@@ -531,6 +534,9 @@ const char *GPU_builtin_name(eGPUBuiltin builtin)
   }
   else if (builtin == GPU_VIEW_POSITION) {
     return "varposition";
+  }
+  else if (builtin == GPU_WORLD_NORMAL) {
+    return "varwnormal";
   }
   else if (builtin == GPU_VIEW_NORMAL) {
     return "varnormal";
@@ -786,14 +792,14 @@ static void codegen_call_functions(DynStr *ds, ListBase *nodes, GPUOutput *final
         else if (input->builtin == GPU_INVERSE_OBJECT_MATRIX) {
           BLI_dynstr_append(ds, "objinv");
         }
-        else if (input->builtin == GPU_INVERSE_NORMAL_MATRIX) {
-          BLI_dynstr_append(ds, "norinv");
-        }
         else if (input->builtin == GPU_VIEW_POSITION) {
           BLI_dynstr_append(ds, "viewposition");
         }
         else if (input->builtin == GPU_VIEW_NORMAL) {
           BLI_dynstr_append(ds, "facingnormal");
+        }
+        else if (input->builtin == GPU_WORLD_NORMAL) {
+          BLI_dynstr_append(ds, "facingwnormal");
         }
         else {
           BLI_dynstr_append(ds, GPU_builtin_name(input->builtin));
@@ -879,20 +885,37 @@ static char *code_generate_fragment(GPUMaterial *material,
   if (builtins & GPU_INVERSE_OBJECT_MATRIX) {
     BLI_dynstr_append(ds, "\t#define objinv ModelMatrixInverse\n");
   }
-  if (builtins & GPU_INVERSE_NORMAL_MATRIX) {
-    BLI_dynstr_append(ds, "\t#define norinv NormalMatrixInverse\n");
-  }
   if (builtins & GPU_INVERSE_VIEW_MATRIX) {
     BLI_dynstr_append(ds, "\t#define viewinv ViewMatrixInverse\n");
   }
   if (builtins & GPU_LOC_TO_VIEW_MATRIX) {
-    BLI_dynstr_append(ds, "\t#define localtoviewmat ModelViewMatrix\n");
+    BLI_dynstr_append(ds, "\t#define localtoviewmat (ViewMatrix * ModelMatrix)\n");
   }
   if (builtins & GPU_INVERSE_LOC_TO_VIEW_MATRIX) {
-    BLI_dynstr_append(ds, "\t#define invlocaltoviewmat ModelViewMatrixInverse\n");
+    BLI_dynstr_append(ds,
+                      "\t#define invlocaltoviewmat (ModelMatrixInverse * ViewMatrixInverse)\n");
   }
   if (builtins & GPU_VIEW_NORMAL) {
-    BLI_dynstr_append(ds, "\tvec3 facingnormal = gl_FrontFacing? viewNormal: -viewNormal;\n");
+    BLI_dynstr_append(ds, "#ifdef HAIR_SHADER\n");
+    BLI_dynstr_append(ds, "\tvec3 n;\n");
+    BLI_dynstr_append(ds, "\tworld_normals_get(n);\n");
+    BLI_dynstr_append(ds, "\tvec3 facingnormal = transform_direction(ViewMatrix, n);\n");
+    BLI_dynstr_append(ds, "#else\n");
+    BLI_dynstr_append(ds, "\tvec3 facingnormal = gl_FrontFacing ? viewNormal: -viewNormal;\n");
+    BLI_dynstr_append(ds, "#endif\n");
+  }
+  if (builtins & GPU_WORLD_NORMAL) {
+    BLI_dynstr_append(ds, "\tvec3 facingwnormal;\n");
+    if (builtins & GPU_VIEW_NORMAL) {
+      BLI_dynstr_append(ds, "#ifdef HAIR_SHADER\n");
+      BLI_dynstr_append(ds, "\tfacingwnormal = n;\n");
+      BLI_dynstr_append(ds, "#else\n");
+      BLI_dynstr_append(ds, "\tworld_normals_get(facingwnormal);\n");
+      BLI_dynstr_append(ds, "#endif\n");
+    }
+    else {
+      BLI_dynstr_append(ds, "\tworld_normals_get(facingwnormal);\n");
+    }
   }
   if (builtins & GPU_VIEW_POSITION) {
     BLI_dynstr_append(ds, "\t#define viewposition viewPosition\n");
@@ -920,8 +943,9 @@ static char *code_generate_fragment(GPUMaterial *material,
   BLI_dynstr_free(ds);
 
 #if 0
-  if (G.debug & G_DEBUG)
+  if (G.debug & G_DEBUG) {
     printf("%s\n", code);
+  }
 #endif
 
   return code;
@@ -1018,13 +1042,39 @@ static char *code_generate_vertex(ListBase *nodes, const char *vert_code, bool u
     BLI_dynstr_append(ds, "out vec3 barycentricPosg;\n");
   }
 
+  BLI_dynstr_append(ds, "\n#define USE_ATTR\n");
+
+  /* Prototype, defined later (this is because of matrices definition). */
+  BLI_dynstr_append(ds, "void pass_attr(in vec3 position);\n");
+
+  BLI_dynstr_append(ds, "\n");
+
+  if (use_geom) {
+    /* XXX HACK: Eevee specific. */
+    char *vert_new, *vert_new2;
+    vert_new = BLI_str_replaceN(vert_code, "worldPosition", "worldPositiong");
+    vert_new2 = vert_new;
+    vert_new = BLI_str_replaceN(vert_new2, "viewPosition", "viewPositiong");
+    MEM_freeN(vert_new2);
+    vert_new2 = vert_new;
+    vert_new = BLI_str_replaceN(vert_new2, "worldNormal", "worldNormalg");
+    MEM_freeN(vert_new2);
+    vert_new2 = vert_new;
+    vert_new = BLI_str_replaceN(vert_new2, "viewNormal", "viewNormalg");
+    MEM_freeN(vert_new2);
+
+    BLI_dynstr_append(ds, vert_new);
+
+    MEM_freeN(vert_new);
+  }
+  else {
+    BLI_dynstr_append(ds, vert_code);
+  }
+
   BLI_dynstr_append(ds, "\n");
 
   BLI_dynstr_append(ds,
                     "#define USE_ATTR\n"
-                    "uniform mat3 NormalMatrix;\n"
-                    "uniform mat4 ModelMatrixInverse;\n"
-                    "uniform mat4 ModelMatrix;\n"
                     "vec3 srgb_to_linear_attr(vec3 c) {\n"
                     "\tc = max(c, vec3(0.0));\n"
                     "\tvec3 c1 = c * (1.0 / 12.92);\n"
@@ -1102,7 +1152,7 @@ static char *code_generate_vertex(ListBase *nodes, const char *vert_code, bool u
       if (input->source == GPU_SOURCE_ATTR && input->attr_first) {
         if (input->attr_type == CD_TANGENT) { /* silly exception */
           BLI_dynstr_appendf(ds,
-                             "\tvar%d%s.xyz = NormalMatrix * att%d.xyz;\n",
+                             "\tvar%d%s.xyz = transpose(mat3(ModelMatrixInverse)) * att%d.xyz;\n",
                              input->attr_id,
                              use_geom ? "g" : "",
                              input->attr_id);
@@ -1161,35 +1211,14 @@ static char *code_generate_vertex(ListBase *nodes, const char *vert_code, bool u
 
   BLI_dynstr_append(ds, "}\n");
 
-  if (use_geom) {
-    /* XXX HACK: Eevee specific. */
-    char *vert_new, *vert_new2;
-    vert_new = BLI_str_replaceN(vert_code, "worldPosition", "worldPositiong");
-    vert_new2 = vert_new;
-    vert_new = BLI_str_replaceN(vert_new2, "viewPosition", "viewPositiong");
-    MEM_freeN(vert_new2);
-    vert_new2 = vert_new;
-    vert_new = BLI_str_replaceN(vert_new2, "worldNormal", "worldNormalg");
-    MEM_freeN(vert_new2);
-    vert_new2 = vert_new;
-    vert_new = BLI_str_replaceN(vert_new2, "viewNormal", "viewNormalg");
-    MEM_freeN(vert_new2);
-
-    BLI_dynstr_append(ds, vert_new);
-
-    MEM_freeN(vert_new);
-  }
-  else {
-    BLI_dynstr_append(ds, vert_code);
-  }
-
   code = BLI_dynstr_get_cstring(ds);
 
   BLI_dynstr_free(ds);
 
 #if 0
-  if (G.debug & G_DEBUG)
+  if (G.debug & G_DEBUG) {
     printf("%s\n", code);
+  }
 #endif
 
   return code;
@@ -1488,7 +1517,6 @@ static void gpu_node_input_link(GPUNode *node, GPUNodeLink *link, const eGPUType
       input->source = GPU_SOURCE_TEX;
       input->ima = link->ima;
       input->iuser = link->iuser;
-      input->image_isdata = link->image_isdata;
       break;
     case GPU_NODE_LINK_ATTR:
       input->source = GPU_SOURCE_ATTR;
@@ -1733,13 +1761,12 @@ GPUNodeLink *GPU_uniform(float *num)
   return link;
 }
 
-GPUNodeLink *GPU_image(Image *ima, ImageUser *iuser, bool is_data)
+GPUNodeLink *GPU_image(Image *ima, ImageUser *iuser)
 {
   GPUNodeLink *link = GPU_node_link_create();
   link->link_type = GPU_NODE_LINK_IMAGE_BLENDER;
   link->ima = ima;
   link->iuser = iuser;
-  link->image_isdata = is_data;
   return link;
 }
 
@@ -2078,17 +2105,17 @@ static int count_active_texture_sampler(GPUShader *shader, char *source)
   return sampler_len;
 }
 
-static bool gpu_pass_shader_validate(GPUPass *pass)
+static bool gpu_pass_shader_validate(GPUPass *pass, GPUShader *shader)
 {
-  if (pass->shader == NULL) {
+  if (shader == NULL) {
     return false;
   }
 
   /* NOTE: The only drawback of this method is that it will count a sampler
    * used in the fragment shader and only declared (but not used) in the vertex
    * shader as used by both. But this corner case is not happening for now. */
-  int vert_samplers_len = count_active_texture_sampler(pass->shader, pass->vertexcode);
-  int frag_samplers_len = count_active_texture_sampler(pass->shader, pass->fragmentcode);
+  int vert_samplers_len = count_active_texture_sampler(shader, pass->vertexcode);
+  int frag_samplers_len = count_active_texture_sampler(shader, pass->fragmentcode);
 
   int total_samplers_len = vert_samplers_len + frag_samplers_len;
 
@@ -2099,7 +2126,7 @@ static bool gpu_pass_shader_validate(GPUPass *pass)
   }
 
   if (pass->geometrycode) {
-    int geom_samplers_len = count_active_texture_sampler(pass->shader, pass->geometrycode);
+    int geom_samplers_len = count_active_texture_sampler(shader, pass->geometrycode);
     total_samplers_len += geom_samplers_len;
     if (geom_samplers_len > GPU_max_textures_geom()) {
       return false;
@@ -2109,30 +2136,40 @@ static bool gpu_pass_shader_validate(GPUPass *pass)
   return (total_samplers_len <= GPU_max_textures());
 }
 
-void GPU_pass_compile(GPUPass *pass, const char *shname)
+bool GPU_pass_compile(GPUPass *pass, const char *shname)
 {
+  bool sucess = true;
   if (!pass->compiled) {
-    pass->shader = GPU_shader_create(
+    GPUShader *shader = GPU_shader_create(
         pass->vertexcode, pass->fragmentcode, pass->geometrycode, NULL, pass->defines, shname);
 
     /* NOTE: Some drivers / gpu allows more active samplers than the opengl limit.
      * We need to make sure to count active samplers to avoid undefined behavior. */
-    if (!gpu_pass_shader_validate(pass)) {
-      if (pass->shader != NULL) {
+    if (!gpu_pass_shader_validate(pass, shader)) {
+      sucess = false;
+      if (shader != NULL) {
         fprintf(stderr, "GPUShader: error: too many samplers in shader.\n");
-        GPU_shader_free(pass->shader);
+        GPU_shader_free(shader);
+        shader = NULL;
       }
-      pass->shader = NULL;
     }
-    else if (!BLI_thread_is_main()) {
-      /* For some Intel drivers, you must use the program at least once
-       * in the rendering context that it is linked. */
-      glUseProgram(GPU_shader_get_program(pass->shader));
-      glUseProgram(0);
+    else if (!BLI_thread_is_main() && GPU_context_local_shaders_workaround()) {
+      pass->binary.content = GPU_shader_get_binary(
+          shader, &pass->binary.format, &pass->binary.len);
+      GPU_shader_free(shader);
+      shader = NULL;
     }
 
+    pass->shader = shader;
     pass->compiled = true;
   }
+  else if (pass->binary.content && BLI_thread_is_main()) {
+    pass->shader = GPU_shader_load_from_binary(
+        pass->binary.content, pass->binary.format, pass->binary.len, shname);
+    MEM_SAFE_FREE(pass->binary.content);
+  }
+
+  return sucess;
 }
 
 void GPU_pass_release(GPUPass *pass)
@@ -2151,6 +2188,9 @@ static void gpu_pass_free(GPUPass *pass)
   MEM_SAFE_FREE(pass->geometrycode);
   MEM_SAFE_FREE(pass->vertexcode);
   MEM_SAFE_FREE(pass->defines);
+  if (pass->binary.content) {
+    MEM_freeN(pass->binary.content);
+  }
   MEM_freeN(pass);
 }
 

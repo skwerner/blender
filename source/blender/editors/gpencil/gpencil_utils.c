@@ -1387,7 +1387,7 @@ void ED_gpencil_add_defaults(bContext *C, Object *ob)
   BKE_paint_ensure(ts, (Paint **)&ts->gp_paint);
   Paint *paint = &ts->gp_paint->paint;
   /* if not exist, create a new one */
-  if (paint->brush == NULL) {
+  if ((paint->brush == NULL) || (paint->brush->gpencil_settings == NULL)) {
     /* create new brushes */
     BKE_brush_gpencil_presets(C);
   }
@@ -1421,11 +1421,8 @@ void ED_gpencil_vgroup_assign(bContext *C, Object *ob, float weight)
   }
 
   CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
-    bGPDframe *init_gpf = gpl->actframe;
+    bGPDframe *init_gpf = (is_multiedit) ? gpl->frames.first : gpl->actframe;
     bGPDstroke *gps = NULL;
-    if (is_multiedit) {
-      init_gpf = gpl->frames.first;
-    }
 
     for (bGPDframe *gpf = init_gpf; gpf; gpf = gpf->next) {
       if ((gpf == gpl->actframe) || ((gpf->flag & GP_FRAME_SELECT) && (is_multiedit))) {
@@ -1478,11 +1475,8 @@ void ED_gpencil_vgroup_remove(bContext *C, Object *ob)
   }
 
   CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
-    bGPDframe *init_gpf = gpl->actframe;
+    bGPDframe *init_gpf = (is_multiedit) ? gpl->frames.first : gpl->actframe;
     bGPDstroke *gps = NULL;
-    if (is_multiedit) {
-      init_gpf = gpl->frames.first;
-    }
 
     for (bGPDframe *gpf = init_gpf; gpf; gpf = gpf->next) {
       if ((gpf == gpl->actframe) || ((gpf->flag & GP_FRAME_SELECT) && (is_multiedit))) {
@@ -1534,11 +1528,8 @@ void ED_gpencil_vgroup_select(bContext *C, Object *ob)
   }
 
   CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
-    bGPDframe *init_gpf = gpl->actframe;
+    bGPDframe *init_gpf = (is_multiedit) ? gpl->frames.first : gpl->actframe;
     bGPDstroke *gps = NULL;
-    if (is_multiedit) {
-      init_gpf = gpl->frames.first;
-    }
 
     for (bGPDframe *gpf = init_gpf; gpf; gpf = gpf->next) {
       if ((gpf == gpl->actframe) || ((gpf->flag & GP_FRAME_SELECT) && (is_multiedit))) {
@@ -1588,11 +1579,8 @@ void ED_gpencil_vgroup_deselect(bContext *C, Object *ob)
   }
 
   CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
-    bGPDframe *init_gpf = gpl->actframe;
+    bGPDframe *init_gpf = (is_multiedit) ? gpl->frames.first : gpl->actframe;
     bGPDstroke *gps = NULL;
-    if (is_multiedit) {
-      init_gpf = gpl->frames.first;
-    }
 
     for (bGPDframe *gpf = init_gpf; gpf; gpf = gpf->next) {
       if ((gpf == gpl->actframe) || ((gpf->flag & GP_FRAME_SELECT) && (is_multiedit))) {
@@ -1689,14 +1677,13 @@ void ED_gpencil_brush_draw_eraser(Brush *brush, int x, int y)
   immUniform1f("dash_width", 12.0f);
   immUniform1f("dash_factor", 0.5f);
 
-  imm_draw_circle_wire_2d(
-      shdr_pos,
-      x,
-      y,
-      radius,
-      /* XXX Dashed shader gives bad results with sets of small segments currently,
-       *     temp hack around the issue. :( */
-      max_ii(8, radius / 2)); /* was fixed 40 */
+  imm_draw_circle_wire_2d(shdr_pos,
+                          x,
+                          y,
+                          radius,
+                          /* XXX Dashed shader gives bad results with sets of small segments
+                           * currently, temp hack around the issue. :( */
+                          max_ii(8, radius / 2)); /* was fixed 40 */
 
   immUnbindProgram();
 
@@ -2514,7 +2501,7 @@ void ED_gpencil_select_toggle_all(bContext *C, int action)
           case SEL_SELECT:
             pt->flag |= GP_SPOINT_SELECT;
             break;
-          //case SEL_DESELECT:
+          // case SEL_DESELECT:
           //  pt->flag &= ~GP_SPOINT_SELECT;
           //  break;
           case SEL_INVERT:

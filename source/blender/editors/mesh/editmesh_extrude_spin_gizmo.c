@@ -295,7 +295,8 @@ static void gizmo_mesh_spin_init_draw_prepare(const bContext *C, wmGizmoGroup *g
 
 static void gizmo_mesh_spin_init_invoke_prepare(const bContext *UNUSED(C),
                                                 wmGizmoGroup *gzgroup,
-                                                wmGizmo *gz)
+                                                wmGizmo *gz,
+                                                const wmEvent *UNUSED(event))
 {
   /* Set the initial ortho axis. */
   GizmoGroupData_SpinInit *ggd = gzgroup->customdata;
@@ -1018,7 +1019,8 @@ static void gizmo_mesh_spin_redo_draw_prepare(const bContext *UNUSED(C), wmGizmo
     ggd->data.op = WM_operator_last_redo((bContext *)ggd->data.context);
   }
 
-  /* Not essential, just avoids feedback loop where matrices could shift because of float precision.
+  /* Not essential, just avoids feedback loop where matrices
+   * could shift because of float precision.
    * Updates in this case are also redundant. */
   bool is_modal = false;
   for (wmGizmo *gz = gzgroup->gizmos.first; gz; gz = gz->next) {

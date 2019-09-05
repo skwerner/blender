@@ -424,31 +424,6 @@ void ED_screen_do_listen(bContext *C, wmNotifier *note)
   }
 }
 
-/* helper call for below, dpi changes headers */
-static void screen_refresh_headersizes(void)
-{
-  const ListBase *lb = BKE_spacetypes_list();
-  SpaceType *st;
-
-  for (st = lb->first; st; st = st->next) {
-    ARegionType *art;
-    art = BKE_regiontype_from_id(st, RGN_TYPE_HEADER);
-    if (art) {
-      art->prefsizey = ED_area_headersize();
-    }
-
-    art = BKE_regiontype_from_id(st, RGN_TYPE_TOOL_HEADER);
-    if (art) {
-      art->prefsizey = ED_area_headersize();
-    }
-
-    art = BKE_regiontype_from_id(st, RGN_TYPE_FOOTER);
-    if (art) {
-      art->prefsizey = ED_area_headersize();
-    }
-  }
-}
-
 /* make this screen usable */
 /* for file read and first use, for scaling window, area moves */
 void ED_screen_refresh(wmWindowManager *wm, wmWindow *win)
@@ -461,7 +436,6 @@ void ED_screen_refresh(wmWindowManager *wm, wmWindow *win)
     WM_window_set_dpi(win);
 
     ED_screen_global_areas_refresh(win);
-    screen_refresh_headersizes();
 
     screen_geom_vertices_scale(win, screen);
 
@@ -701,6 +675,21 @@ void ED_screen_set_active_region(bContext *C, wmWindow *win, const int xy[2])
         bool do_draw = false;
 
         for (ar = area_iter->regionbase.first; ar; ar = ar->next) {
+
+          /* call old area's deactivate if assigned */
+          if (ar == old_ar && area_iter->type->deactivate) {
+            area_iter->type->deactivate(area_iter);
+          }
+
+          if (ar == old_ar && ar != scr->active_region) {
+            wmGizmoMap *gzmap = old_ar->gizmo_map;
+            if (gzmap) {
+              if (WM_gizmo_highlight_set(gzmap, NULL)) {
+                ED_region_tag_redraw_no_rebuild(old_ar);
+              }
+            }
+          }
+
           if (ar == old_ar || ar == scr->active_region) {
             do_draw = true;
           }
@@ -910,9 +899,11 @@ static bScreen *screen_fullscreen_find_associated_normal_screen(const Main *bmai
 {
   for (bScreen *screen_iter = bmain->screens.first; screen_iter;
        screen_iter = screen_iter->id.next) {
-    ScrArea *sa = screen_iter->areabase.first;
-    if (sa && sa->full == screen) {
-      return screen_iter;
+    if ((screen_iter != screen) && ELEM(screen_iter->state, SCREENMAXIMIZED, SCREENFULL)) {
+      ScrArea *sa = screen_iter->areabase.first;
+      if (sa && sa->full == screen) {
+        return screen_iter;
+      }
     }
   }
 
@@ -931,9 +922,7 @@ bScreen *screen_change_prepare(
     return NULL;
   }
 
-  if (ELEM(screen_new->state, SCREENMAXIMIZED, SCREENFULL)) {
-    screen_new = screen_fullscreen_find_associated_normal_screen(bmain, screen_new);
-  }
+  screen_new = screen_fullscreen_find_associated_normal_screen(bmain, screen_new);
 
   /* check for valid winid */
   if (!(screen_new->winid == 0 || screen_new->winid == win->winid)) {

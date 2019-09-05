@@ -77,7 +77,9 @@ static void action_set_activemarker(void *UNUSED(a), void *UNUSED(b), void *UNUS
 }
 
 /* ************************************************************* */
-/* == POSE-LIBRARY TOOL FOR BLENDER ==
+/**
+ * Pose-Library Tool for Blender
+ * =============================
  *
  * Overview:
  *  This tool allows animators to store a set of frequently used poses to dump into
@@ -85,13 +87,13 @@ static void action_set_activemarker(void *UNUSED(a), void *UNUSED(b), void *UNUS
  *  It acts as a kind of "glorified clipboard for poses", allowing for naming of poses.
  *
  * Features:
- * - PoseLibs are simply normal Actions
- * - Each "pose" is simply a set of keyframes that occur on a particular frame
- *   -> a set of TimeMarkers that belong to each Action, help 'label' where a 'pose' can be
- *      found in the Action
+ * - PoseLibs are simply normal Actions.
+ * - Each "pose" is simply a set of keyframes that occur on a particular frame.
+ *   - A set of TimeMarkers that belong to each Action, help 'label' where a 'pose' can be
+ *     found in the Action.
  * - The Scrollwheel or PageUp/Down buttons when used in a special mode or after pressing/holding
- *   [a modifier] key, cycles through the poses available for the active pose's poselib, allowing the
- *   animator to preview what action best suits that pose
+ *   [a modifier] key, cycles through the poses available for the active pose's poselib,
+ *   allowing the animator to preview what action best suits that pose.
  */
 /* ************************************************************* */
 
@@ -1016,7 +1018,6 @@ static void poselib_backup_free_data(tPoseLib_PreviewData *pld)
     /* free custom data */
     if (plb->oldprops) {
       IDP_FreeProperty(plb->oldprops);
-      MEM_freeN(plb->oldprops);
     }
 
     /* free backup element now */
@@ -1164,23 +1165,14 @@ static void poselib_preview_apply(bContext *C, wmOperator *op)
       RNA_int_set(op->ptr, "pose_index", -2); /* -2 means don't apply any pose */
     }
 
-    /* old optimize trick... this enforces to bypass the depsgraph
-     * - note: code copied from transform_generics.c -> recalcData()
-     */
-    // FIXME: shouldn't this use the builtin stuff?
-    if ((pld->arm->flag & ARM_DELAYDEFORM) == 0) {
-      DEG_id_tag_update(&pld->ob->id, ID_RECALC_GEOMETRY); /* sets recalc flags */
-    }
-    else {
-      BKE_pose_where_is(CTX_data_depsgraph(C), pld->scene, pld->ob);
-    }
+    DEG_id_tag_update(&pld->ob->id, ID_RECALC_GEOMETRY);
   }
 
   /* do header print - if interactively previewing */
   if (pld->state == PL_PREVIEW_RUNNING) {
     if (pld->flag & PL_PREVIEW_SHOWORIGINAL) {
-      ED_area_status_text(pld->sa, IFACE_("PoseLib Previewing Pose: [Showing Original Pose]"));
-      ED_workspace_status_text(C, IFACE_("Use Tab to start previewing poses again"));
+      ED_area_status_text(pld->sa, TIP_("PoseLib Previewing Pose: [Showing Original Pose]"));
+      ED_workspace_status_text(C, TIP_("Use Tab to start previewing poses again"));
     }
     else if (pld->searchstr[0]) {
       char tempstr[65];
@@ -1204,17 +1196,17 @@ static void poselib_preview_apply(bContext *C, wmOperator *op)
 
       BLI_snprintf(pld->headerstr,
                    sizeof(pld->headerstr),
-                   IFACE_("PoseLib Previewing Pose: Filter - [%s] | "
-                          "Current Pose - \"%s\""),
+                   TIP_("PoseLib Previewing Pose: Filter - [%s] | "
+                        "Current Pose - \"%s\""),
                    tempstr,
                    markern);
       ED_area_status_text(pld->sa, pld->headerstr);
-      ED_workspace_status_text(C, IFACE_("Use ScrollWheel or PageUp/Down to change pose"));
+      ED_workspace_status_text(C, TIP_("Use ScrollWheel or PageUp/Down to change pose"));
     }
     else {
       BLI_snprintf(pld->headerstr,
                    sizeof(pld->headerstr),
-                   IFACE_("PoseLib Previewing Pose: \"%s\""),
+                   TIP_("PoseLib Previewing Pose: \"%s\""),
                    pld->marker->name);
       ED_area_status_text(pld->sa, pld->headerstr);
       ED_workspace_status_text(C, NULL);
@@ -1453,7 +1445,7 @@ static int poselib_preview_handle_event(bContext *UNUSED(C), wmOperator *op, con
       case PADMINUS:
       case MIDDLEMOUSE:
       case MOUSEMOVE:
-        //pld->redraw = PL_PREVIEW_REDRAWHEADER;
+        // pld->redraw = PL_PREVIEW_REDRAWHEADER;
         ret = OPERATOR_PASS_THROUGH;
         break;
 
@@ -1585,7 +1577,7 @@ static int poselib_preview_handle_event(bContext *UNUSED(C), wmOperator *op, con
      */
     case MIDDLEMOUSE:
     case MOUSEMOVE:
-      //pld->redraw = PL_PREVIEW_REDRAWHEADER;
+      // pld->redraw = PL_PREVIEW_REDRAWHEADER;
       ret = OPERATOR_PASS_THROUGH;
       break;
 
@@ -1608,7 +1600,7 @@ static int poselib_preview_handle_event(bContext *UNUSED(C), wmOperator *op, con
       }
       else {
         /* view manipulation (see above) */
-        //pld->redraw = PL_PREVIEW_REDRAWHEADER;
+        // pld->redraw = PL_PREVIEW_REDRAWHEADER;
         ret = OPERATOR_PASS_THROUGH;
       }
       break;
@@ -1708,7 +1700,6 @@ static void poselib_preview_cleanup(bContext *C, wmOperator *op)
   Scene *scene = pld->scene;
   Object *ob = pld->ob;
   bPose *pose = pld->pose;
-  bArmature *arm = pld->arm;
   bAction *act = pld->act;
   TimeMarker *marker = pld->marker;
 
@@ -1723,15 +1714,7 @@ static void poselib_preview_cleanup(bContext *C, wmOperator *op)
   if (pld->state == PL_PREVIEW_CANCEL) {
     poselib_backup_restore(pld);
 
-    /* old optimize trick... this enforces to bypass the depgraph
-     * - note: code copied from transform_generics.c -> recalcData()
-     */
-    if ((arm->flag & ARM_DELAYDEFORM) == 0) {
-      DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY); /* sets recalc flags */
-    }
-    else {
-      BKE_pose_where_is(CTX_data_depsgraph(C), scene, ob);
-    }
+    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   }
   else if (pld->state == PL_PREVIEW_CONFIRM) {
     /* tag poses as appropriate */
@@ -1746,7 +1729,7 @@ static void poselib_preview_cleanup(bContext *C, wmOperator *op)
 
     /* updates */
     if (IS_AUTOKEY_MODE(scene, NORMAL)) {
-      //remake_action_ipos(ob->action);
+      // remake_action_ipos(ob->action);
     }
     else {
       BKE_pose_where_is(CTX_data_depsgraph(C), scene, ob);

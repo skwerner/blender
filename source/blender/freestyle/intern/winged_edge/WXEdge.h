@@ -67,14 +67,16 @@ class WXVertex : public WVertex {
 
   virtual ~WXVertex()
   {
-    if (_curvatures)
+    if (_curvatures) {
       delete _curvatures;
+    }
   }
 
   virtual void Reset()
   {
-    if (_curvatures)
+    if (_curvatures) {
       _curvatures->Kr = 0.0;
+    }
   }
 
   inline void setCurvatures(CurvatureInfo *ci)
@@ -108,8 +110,8 @@ class WXEdge : public WEdge {
   WXNature _nature;
   // 0: the order doesn't matter. 1: the order is the orginal one. -1: the order is not good
   short _order;
-  // A front facing edge is an edge for which the bording face which is the nearest from the viewpoint is front.
-  // A back facing edge is the opposite.
+  // A front facing edge is an edge for which the bording face which is the nearest from the
+  // viewpoint is front. A back facing edge is the opposite.
   bool _front;
 
  public:
@@ -322,13 +324,13 @@ class WXFaceLayer {
  public:
   void *userdata;
   WXFace *_pWXFace;
-  // in case of silhouette: the values obtained when computing the normal-view direction dot product. _DotP[i] is
-  // this value for the vertex i for that face.
+  // in case of silhouette: the values obtained when computing the normal-view direction dot
+  // product. _DotP[i] is this value for the vertex i for that face.
   vector<float> _DotP;
   WXSmoothEdge *_pSmoothEdge;
   WXNature _Nature;
 
-  //oldtmp values
+  // oldtmp values
   // count the number of positive dot products for vertices.
   // if this number is != 0 and !=_DotP.size() -> it is a silhouette fac
   unsigned _nPosDotP;
@@ -365,8 +367,9 @@ class WXFaceLayer {
 
   virtual ~WXFaceLayer()
   {
-    if (!_DotP.empty())
+    if (!_DotP.empty()) {
       _DotP.clear();
+    }
     if (_pSmoothEdge) {
       delete _pSmoothEdge;
       _pSmoothEdge = NULL;
@@ -400,8 +403,9 @@ class WXFaceLayer {
 
   inline bool hasSmoothEdge() const
   {
-    if (_pSmoothEdge)
+    if (_pSmoothEdge) {
       return true;
+    }
     return false;
   }
 
@@ -427,22 +431,25 @@ class WXFaceLayer {
 
   inline void removeSmoothEdge()
   {
-    if (!_DotP.empty())
+    if (!_DotP.empty()) {
       _DotP.clear();
+    }
     if (_pSmoothEdge) {
       delete _pSmoothEdge;
       _pSmoothEdge = NULL;
     }
   }
 
-  /*! If one of the face layer vertex has a DotP equal to 0, this method returns the vertex where it happens */
+  /*! If one of the face layer vertex has a DotP equal to 0, this method returns the vertex where
+   * it happens */
   unsigned int Get0VertexIndex() const;
 
-  /*! In case one of the edge of the triangle is a smooth edge, this method allows to retrieve the concerned edge */
+  /*! In case one of the edge of the triangle is a smooth edge, this method allows to retrieve the
+   * concerned edge */
   unsigned int GetSmoothEdgeIndex() const;
 
-  /*! retrieves the edges of the triangle for which the signs are different (a null value is not considered) for
-   *  the dotp values at each edge extrimity
+  /*! retrieves the edges of the triangle for which the signs are different (a null value is not
+   * considered) for the dotp values at each edge extremity
    */
   void RetrieveCuspEdgesIndices(vector<int> &oCuspEdges);
 
@@ -456,10 +463,12 @@ class WXFaceLayer {
   inline void PushDotP(float iDotP)
   {
     _DotP.push_back(iDotP);
-    if (iDotP > 0.0f)
+    if (iDotP > 0.0f) {
       ++_nPosDotP;
-    if (iDotP == 0.0f)  // TODO this comparison is weak, check if it actually works
+    }
+    if (iDotP == 0.0f) {  // TODO this comparison is weak, check if it actually works
       ++_nNullDotP;
+    }
   }
 
   inline void ReplaceDotP(unsigned int index, float newDotP)
@@ -473,17 +482,19 @@ class WXFaceLayer {
     _nPosDotP = 0;
     _nNullDotP = 0;
     for (vector<float>::iterator d = _DotP.begin(), dend = _DotP.end(); d != dend; ++d) {
-      if ((*d) > 0.0f)
+      if ((*d) > 0.0f) {
         ++_nPosDotP;
-      if ((*d) == 0.0f)  // TODO ditto
+      }
+      if ((*d) == 0.0f) {  // TODO ditto
         ++_nNullDotP;
+      }
     }
   }
 
 #ifdef WITH_CXX_GUARDEDALLOC
   MEM_CXX_CLASS_ALLOC_FUNCS("Freestyle:WXFaceLayer")
 #endif
-};
+};  // namespace Freestyle
 
 class WXFace : public WFace {
  protected:
@@ -492,8 +503,8 @@ class WXFace : public WFace {
   bool _front;    // flag to tell whether the face is front facing or back facing
   float _dotp;    // value obtained when computing the normal-viewpoint dot product
 
-  vector<WXFaceLayer *>
-      _SmoothLayers;  // The data needed to store one or several smooth edges that traverse the face
+  vector<WXFaceLayer *> _SmoothLayers;  // The data needed to store one or several smooth edges
+                                        // that traverse the face
 
  public:
   inline WXFace() : WFace()
@@ -635,10 +646,12 @@ class WXFace : public WFace {
   inline void setDotP(float iDotP)
   {
     _dotp = iDotP;
-    if (_dotp > 0.0f)
+    if (_dotp > 0.0f) {
       _front = true;
-    else
+    }
+    else {
       _front = false;
+    }
   }
 
   inline void AddSmoothLayer(WXFaceLayer *iLayer)
@@ -652,10 +665,12 @@ class WXFace : public WFace {
     for (vector<WXFaceLayer *>::iterator wxf = _SmoothLayers.begin(), wxfend = _SmoothLayers.end();
          wxf != wxfend;
          ++wxf) {
-      if ((*wxf)->isViewDependant())
+      if ((*wxf)->isViewDependant()) {
         delete (*wxf);
-      else
+      }
+      else {
         layersToKeep.push_back(*wxf);
+      }
     }
     _SmoothLayers = layersToKeep;
   }
@@ -701,8 +716,8 @@ class WXShape : public WShape {
 #endif
 
  protected:
-  bool
-      _computeViewIndependent;  // flag to indicate whether the view independent stuff must be computed or not
+  bool _computeViewIndependent;  // flag to indicate whether the view independent stuff must be
+                                 // computed or not
 
  public:
   inline WXShape() : WShape()
@@ -742,29 +757,35 @@ class WXShape : public WShape {
     return new WXFace;
   }
 
-  /*! adds a new face to the shape returns the built face.
-   *   iVertexList
-   *      List of face's vertices. These vertices are not added to the WShape vertex list; they are supposed
-   *      to be already stored when calling MakeFace. The order in which the vertices are stored in the list
-   *      determines the face's edges orientation and (so) the face orientation.
+  /*!
+   * Adds a new face to the shape returns the built face.
+   * - iVertexList
+   *   List of face's vertices.
+   *   These vertices are not added to the WShape vertex list; they are
+   *   supposed to be already stored when calling MakeFace. The order in which the vertices are
+   *   stored in the list determines the face's edges orientation and (so) the face orientation.
    */
   virtual WFace *MakeFace(vector<WVertex *> &iVertexList,
                           vector<bool> &iFaceEdgeMarksList,
                           unsigned iMaterialIndex);
 
-  /*! adds a new face to the shape. The difference with the previous method is that this one is designed to build
-   *  a WingedEdge structure for which there are per vertex normals, opposed to per face normals.
-   *  returns the built face.
-   *   iVertexList
-   *      List of face's vertices. These vertices are not added to the WShape vertex list; they are supposed to be
-   *      already stored when calling MakeFace.
-   *      The order in which the vertices are stored in the list determines the face's edges orientation and (so) the
-   *      face orientation.
-   *   iNormalsList
-   *     The list of normals, iNormalsList[i] corresponding to the normal of the vertex iVertexList[i] for that face.
-   *   iTexCoordsList
-   *     The list of tex coords, iTexCoordsList[i] corresponding to the normal of the vertex iVertexList[i] for
-   *     that face.
+  /*!
+   * Adds a new face to the shape.
+   * The difference with the previous method is that this one is designed to build a WingedEdge
+   * structure for which there are per vertex normals, opposed to per face normals.
+   * returns the built face.
+   *
+   * - iVertexList:
+   *   List of face's vertices. These vertices are not added to the WShape vertex list;
+   *   they are supposed to be already stored when calling MakeFace.
+   *   The order in which the vertices are stored in the list determines
+   *   the face's edges orientation and (so) the face orientation.
+   * - iNormalsList:
+   *   The list of normals, iNormalsList[i]
+   *   corresponding to the normal of the vertex iVertexList[i] for that face.
+   * - iTexCoordsList:
+   *   The list of tex coords, iTexCoordsList[i]
+   *   corresponding to the normal of the vertex iVertexList[i] for that face.
    */
   virtual WFace *MakeFace(vector<WVertex *> &iVertexList,
                           vector<Vec3f> &iNormalsList,
@@ -781,7 +802,7 @@ class WXShape : public WShape {
       ((WXEdge *)(*we))->Reset();
     }
 
-    //Reset faces:
+    // Reset faces:
     vector<WFace *> &wfaces = GetFaceList();
     for (vector<WFace *>::iterator wf = wfaces.begin(), wfend = wfaces.end(); wf != wfend; ++wf) {
       ((WXFace *)(*wf))->Reset();
@@ -812,12 +833,14 @@ bool WXVertex::isFeature()
   int counter = 0;
   vector<WEdge *> &vedges = GetEdges();
   for (vector<WEdge *>::iterator ve = vedges.begin(), vend = vedges.end(); ve != vend; ++ve) {
-    if (((WXEdge *)(*ve))->nature() != Nature::NO_FEATURE)
+    if (((WXEdge *)(*ve))->nature() != Nature::NO_FEATURE) {
       counter++;
+    }
   }
 
-  if ((counter == 1) || (counter > 2))
+  if ((counter == 1) || (counter > 2)) {
     return true;
+  }
   return false;
 }
 

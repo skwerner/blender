@@ -65,7 +65,7 @@
 
 #include "armature_intern.h"
 
-#define DEBUG_TIME
+#undef DEBUG_TIME
 
 #include "PIL_time.h"
 #ifdef DEBUG_TIME
@@ -162,14 +162,16 @@ static bool pose_has_protected_selected(Object *ob, short warn)
     for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
       if (pchan->bone && (pchan->bone->layer & arm->layer)) {
         if (pchan->bone->layer & arm->layer_protected) {
-          if (pchan->bone->flag & BONE_SELECTED)
+          if (pchan->bone->flag & BONE_SELECTED) {
             break;
+          }
         }
       }
     }
     if (pchan) {
-      if (warn)
+      if (warn) {
         error("Cannot change Proxy protected bones");
+      }
       return 1;
     }
   }
@@ -196,38 +198,6 @@ void ED_pose_recalculate_paths(bContext *C, Scene *scene, Object *ob, bool curre
   Depsgraph *depsgraph = CTX_data_depsgraph(C);
   ListBase targets = {NULL, NULL};
   bool free_depsgraph = false;
-
-  /* Override depsgraph with a filtered, simpler copy */
-  if (!current_frame_only && G.debug_value != -1) {
-    DEG_FilterQuery query = {{0}};
-
-    DEG_FilterTarget *dft_ob = MEM_callocN(sizeof(DEG_FilterTarget), "DEG_FilterTarget");
-    dft_ob->id = &ob->id;
-    BLI_addtail(&query.targets, dft_ob);
-
-#ifdef DEBUG_TIME
-    TIMEIT_START(filter_pose_depsgraph);
-#endif
-
-    depsgraph = DEG_graph_filter(depsgraph, bmain, &query);
-
-#ifdef DEBUG_TIME
-    TIMEIT_END(filter_pose_depsgraph);
-#endif
-
-    free_depsgraph = true;
-    MEM_freeN(dft_ob);
-
-#ifdef DEBUG_TIME
-    TIMEIT_START(filter_pose_update);
-#endif
-
-    BKE_scene_graph_update_tagged(depsgraph, bmain);
-
-#ifdef DEBUG_TIME
-    TIMEIT_END(filter_pose_update);
-#endif
-  }
 
   /* set flag to force recalc, then grab the relevant bones to target */
   ob->pose->avs.recalc |= ANIMVIZ_RECALC_PATHS;
@@ -902,6 +872,8 @@ static int pose_bone_layers_exec(bContext *C, wmOperator *op)
     RNA_boolean_set_array(&ptr, "layers", layers);
 
     if (prev_ob != ob) {
+      BKE_armature_refresh_layer_used(ob->data);
+
       /* Note, notifier might evolve. */
       WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);
       DEG_id_tag_update((ID *)ob->data, ID_RECALC_COPY_ON_WRITE);
@@ -978,6 +950,8 @@ static int armature_bone_layers_exec(bContext *C, wmOperator *op)
     RNA_boolean_set_array(&ptr, "layers", layers);
   }
   CTX_DATA_END;
+
+  ED_armature_edit_refresh_layer_used(ob->data);
 
   /* note, notifier might evolve */
   WM_event_add_notifier(C, NC_OBJECT | ND_POSE, ob);

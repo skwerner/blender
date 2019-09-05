@@ -380,7 +380,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     /* DO NOT copy here the 'copied' part of loop data, we want to reverse loops
      * (so that winding of copied face get reversed, so that normals get reversed
      * and point in expected direction...).
-     * If we also copy data here, then this data get overwritten (and allocated memory becomes memleak). */
+     * If we also copy data here, then this data get overwritten
+     * (and allocated memory becomes memleak). */
 
     CustomData_copy_data(&mesh->pdata, &result->pdata, 0, 0, (int)numPolys);
     CustomData_copy_data(&mesh->pdata, &result->pdata, 0, (int)numPolys, (int)numPolys);
@@ -840,8 +841,10 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       /* notice we use 'mp->totloop' which is later overwritten,
        * we could lookup the original face but there's no point since this is a copy
        * and will have the same value, just take care when changing order of assignment */
-      k1 = mpoly[pidx].loopstart +
-           (((edge_order[eidx] - 1) + mp->totloop) % mp->totloop); /* prev loop */
+
+      /* prev loop */
+      k1 = mpoly[pidx].loopstart + (((edge_order[eidx] - 1) + mp->totloop) % mp->totloop);
+
       k2 = mpoly[pidx].loopstart + (edge_order[eidx]);
 
       mp->totloop = 4;

@@ -24,6 +24,9 @@
 #  include <OSL/oslexec.h>
 #endif
 
+#include "kernel/vdb/vdb_globals.h"
+#include "kernel/vdb/vdb_thread.h"
+
 #include "device/device.h"
 #include "device/device_denoising.h"
 #include "device/device_intern.h"
@@ -170,6 +173,10 @@ class CPUDevice : public Device {
   OSLGlobals osl_globals;
 #endif
   OIIOGlobals oiio_globals;
+
+#ifdef WITH_OPENVDB
+  OpenVDBGlobals vdb_globals;
+#endif
 
   bool use_split_kernel;
 
@@ -519,6 +526,15 @@ class CPUDevice : public Device {
   void *oiio_memory()
   {
     return &oiio_globals;
+  }
+
+  void *vdb_memory()
+  {
+#ifdef WITH_OPENVDB
+    return &vdb_globals;
+#else
+    return NULL;
+#endif
   }
 
   void thread_run(DeviceTask *task)
@@ -1048,16 +1064,6 @@ class CPUDevice : public Device {
   {
     KernelGlobals *kg = new KernelGlobals(thread_kernel_globals_init());
 
-//#ifdef WITH_OSL
-//    OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
-//#endif
-//    if (kg.oiio && kg.oiio->tex_sys) {
-//      kg.oiio_tdata = kg.oiio->tex_sys->get_perthread_info();
-//    }
-//    else {
-//      kg.oiio_tdata = NULL;
-//    }
-
     for (int sample = 0; sample < task.num_samples; sample++) {
       for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)
         shader_kernel()(kg,
@@ -1127,7 +1133,11 @@ class CPUDevice : public Device {
     kg.decoupled_volume_steps_index = 0;
     kg.coverage_asset = kg.coverage_object = kg.coverage_material = NULL;
 #ifdef WITH_OSL
-    OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
+    OSLShader::thread_init(&kg, &osl_globals);
+#endif
+#ifdef WITH_OPENVDB
+    kg.vdb = &vdb_globals;
+    kg.vdb_tdata = VDBVolume::thread_init(&vdb_globals);
 #endif
     if (kg.oiio && kg.oiio->tex_sys) {
       kg.oiio_tdata = kg.oiio->tex_sys->get_perthread_info();
@@ -1154,6 +1164,9 @@ class CPUDevice : public Device {
     }
 #ifdef WITH_OSL
     OSLShader::thread_free(kg);
+#endif
+#ifdef WITH_OPENVDB
+    VDBVolume::thread_free(kg->vdb_tdata);
 #endif
   }
 

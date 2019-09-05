@@ -1006,6 +1006,9 @@ static int filelist_geticon_ex(const int typeflag,
   else if (typeflag & FILE_TYPE_ALEMBIC) {
     return ICON_FILE_BLANK;
   }
+  else if (typeflag & FILE_TYPE_OPENVDB) {
+    return ICON_FILE_BLANK;
+  }
   else if (typeflag & FILE_TYPE_TEXT) {
     return ICON_FILE_TEXT;
   }
@@ -2125,6 +2128,9 @@ int ED_path_extension_type(const char *path)
   else if (BLI_path_extension_check(path, ".abc")) {
     return FILE_TYPE_ALEMBIC;
   }
+  else if (BLI_path_extension_check(path, ".vdb")) {
+    return FILE_TYPE_OPENVDB;
+  }
   else if (BLI_path_extension_check_array(path, imb_ext_image)) {
     return FILE_TYPE_IMAGE;
   }
@@ -2176,6 +2182,8 @@ int ED_file_extension_icon(const char *path)
     case FILE_TYPE_COLLADA:
       return ICON_FILE_BLANK;
     case FILE_TYPE_ALEMBIC:
+      return ICON_FILE_BLANK;
+    case FILE_TYPE_OPENVDB:
       return ICON_FILE_BLANK;
     case FILE_TYPE_TEXT:
       return ICON_FILE_TEXT;

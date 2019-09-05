@@ -33,6 +33,10 @@
 #  include "io_alembic.h"
 #endif
 
+#ifdef WITH_OPENVDB
+#  include "io_openvdb.h"
+#endif
+
 #include "io_cache.h"
 
 void ED_operatortypes_io(void)
@@ -45,6 +49,9 @@ void ED_operatortypes_io(void)
 #ifdef WITH_ALEMBIC
   WM_operatortype_append(WM_OT_alembic_import);
   WM_operatortype_append(WM_OT_alembic_export);
+#endif
+#ifdef WITH_OPENVDB
+  WM_operatortype_append(WM_OT_openvdb_import);
 #endif
 
   WM_operatortype_append(CACHEFILE_OT_open);

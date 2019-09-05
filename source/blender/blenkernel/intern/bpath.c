@@ -515,6 +515,10 @@ void BKE_bpath_traverse_id(
           MeshCacheModifierData *mcmd = (MeshCacheModifierData *)md;
           rewrite_path_fixed(mcmd->filepath, visit_cb, absbase, bpath_user_data);
         }
+        else if (md->type == eModifierType_OpenVDB) {
+          OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+          rewrite_path_fixed(vdbmd->filepath, visit_cb, absbase, bpath_user_data);
+        }
       }
 
       if (ob->soft) {

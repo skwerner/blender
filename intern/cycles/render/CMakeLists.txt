@@ -42,6 +42,7 @@ set(SRC
   svm.cpp
   tables.cpp
   tile.cpp
+  volume.cpp
 )
 
 set(SRC_HEADERS
@@ -75,6 +76,7 @@ set(SRC_HEADERS
   svm.h
   tables.h
   tile.h
+  volume.h
 )
 
 set(LIB
@@ -87,7 +89,11 @@ if(WITH_CYCLES_OSL)
   )
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RTTI_DISABLE_FLAGS}")
+if(WITH_OPENVDB)
+  list(APPEND LIB
+    cycles_kernel_vdb
+  )
+endif()
 
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})

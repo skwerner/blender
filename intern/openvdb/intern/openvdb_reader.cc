@@ -44,7 +44,7 @@ void OpenVDBReader::open(const openvdb::Name &filename)
     m_meta_map = m_file->getMetadata();
   }
   /* Mostly to catch exceptions related to Blosc not being supported. */
-  catch (const openvdb::IoError &e) {
+  catch (const openvdb::Exception &e) {
     std::cerr << e.what() << '\n';
     cleanupFile();
   }
@@ -117,6 +117,16 @@ openvdb::GridBase::Ptr OpenVDBReader::getGrid(const openvdb::Name &name) const
 size_t OpenVDBReader::numGrids() const
 {
   return m_file->getGrids()->size();
+}
+
+bool OpenVDBReader::hasMetadata(const openvdb::Name &name)
+{
+  return (*m_meta_map)[name] != NULL;
+}
+
+openvdb::io::File::NameIterator OpenVDBReader::getNameIter()
+{
+  return m_file->beginName();
 }
 
 void OpenVDBReader::cleanupFile()

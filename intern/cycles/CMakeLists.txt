@@ -234,6 +234,17 @@ if(WITH_OPENSUBDIV)
   )
 endif()
 
+if(WITH_OPENVDB)
+	add_definitions(-DWITH_OPENVDB)
+	add_definitions(-DDWREAL_IS_DOUBLE=0)
+	add_definitions(-DTBB_USE_EXCEPTIONS=0)
+	include_directories(
+		SYSTEM
+		${OPENVDB_INCLUDE_DIRS}
+		${TBB_INCLUDE_DIRS}
+	)
+endif()
+
 if(WITH_CYCLES_STANDALONE)
   set(WITH_CYCLES_DEVICE_OPENCL TRUE)
   set(WITH_CYCLES_DEVICE_CUDA TRUE)

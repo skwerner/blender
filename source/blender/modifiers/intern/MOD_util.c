@@ -308,5 +308,6 @@ void modifier_type_init(ModifierTypeInfo *types[])
   INIT_TYPE(SurfaceDeform);
   INIT_TYPE(WeightedNormal);
   INIT_TYPE(VertexSnap);
+  INIT_TYPE(OpenVDB);
 #undef INIT_TYPE
 }

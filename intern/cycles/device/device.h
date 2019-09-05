@@ -362,6 +362,12 @@ class Device {
     return NULL;
   }
 
+  /* OpenVDB data */
+  virtual void *vdb_memory()
+  {
+    return NULL;
+  }
+
   /* load/compile kernels, must be called before adding tasks */
   virtual bool load_kernels(const DeviceRequestedFeatures & /*requested_features*/)
   {

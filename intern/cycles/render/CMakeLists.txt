@@ -42,6 +42,7 @@ set(SRC
   svm.cpp
   tables.cpp
   tile.cpp
+  volume.cpp
 )
 
 set(SRC_HEADERS
@@ -75,6 +76,7 @@ set(SRC_HEADERS
   svm.h
   tables.h
   tile.h
+  volume.h
 )
 
 set(LIB
@@ -84,6 +86,12 @@ set(LIB
 if(WITH_CYCLES_OSL)
   list(APPEND LIB
     cycles_kernel_osl
+  )
+endif()
+
+if(WITH_OPENVDB)
+  list(APPEND LIB
+    cycles_kernel_vdb
   )
 endif()
 

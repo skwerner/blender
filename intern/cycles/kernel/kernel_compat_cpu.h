@@ -35,6 +35,10 @@
 #  define __NODES_FEATURES__ NODE_FEATURE_ALL
 #endif
 
+#ifdef __OPENVDB__
+#  include "kernel/vdb/vdb_thread.h"
+#endif
+
 #include "util/util_math.h"
 #include "util/util_simd.h"
 #include "util/util_half.h"

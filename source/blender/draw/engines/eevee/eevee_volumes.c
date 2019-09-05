@@ -423,10 +423,14 @@ void EEVEE_volumes_cache_object_add(EEVEE_ViewLayerData *sldata,
 
   /* Smoke Simulation */
   if (((ob->base_flag & BASE_FROM_DUPLI) == 0) &&
-      (md = modifiers_findByType(ob, eModifierType_Smoke)) &&
-      (modifier_isEnabled(scene, md, eModifierMode_Realtime)) &&
-      ((SmokeModifierData *)md)->domain != NULL) {
-    SmokeModifierData *smd = (SmokeModifierData *)md;
+          (((md = modifiers_findByType(ob, eModifierType_Smoke)) &&
+            (modifier_isEnabled(scene, md, eModifierMode_Realtime)) &&
+            ((SmokeModifierData *)md)->domain != NULL)) ||
+      (((md = modifiers_findByType(ob, eModifierType_OpenVDB)) &&
+        (modifier_isEnabled(scene, md, eModifierMode_Realtime)) &&
+        ((OpenVDBModifierData *)md)->smoke->domain != NULL))) {
+    SmokeModifierData *smd = md->type == eModifierType_Smoke ? (SmokeModifierData *)md :
+                                                               ((OpenVDBModifierData *)md)->smoke;
     SmokeDomainSettings *sds = smd->domain;
 
     /* Don't show smoke before simulation starts, this could be made an option in the future. */

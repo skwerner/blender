@@ -14,9 +14,13 @@
  * limitations under the License.
  */
 
+#include "kernel/vdb/vdb_globals.h"
+#include "kernel/vdb/vdb_thread.h"
+
 #include "render/mesh.h"
 #include "render/attribute.h"
 #include "render/scene.h"
+#include "render/volume.h"
 
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
@@ -143,8 +147,8 @@ static const int CUBE_SIZE = 8;
  *   volume to generate a tight mesh around the volume.
  */
 class VolumeMeshBuilder {
-  /* Auxiliary volume that is used to check if a node already added. */
-  vector<char> grid;
+  /* Auxilliary volume that is used to check if a node already added. */
+  vector<bool> grid;
 
   /* The resolution of the auxiliary volume, set to be equal to 1/CUBE_SIZE
    * of the original volume on each axis. */
@@ -362,7 +366,8 @@ struct VoxelAttributeGrid {
   int channels;
 };
 
-void MeshManager::create_volume_mesh(Scene *scene, Mesh *mesh, Progress &progress)
+void MeshManager::create_volume_mesh(
+    Scene *scene, Device *device, DeviceScene *dscene, Mesh *mesh, Progress &progress)
 {
   string msg = string_printf("Computing Volume Mesh %s", mesh->name.c_str());
   progress.set_status("Updating Mesh", msg);
@@ -373,15 +378,33 @@ void MeshManager::create_volume_mesh(Scene *scene, Mesh *mesh, Progress &progres
   VolumeParams volume_params;
   volume_params.resolution = make_int3(0, 0, 0);
 
+#ifdef WITH_OPENVDB
+  VDBThread vdb_thread((OpenVDBGlobals *)device->vdb_memory());
+#endif
+
   foreach (Attribute &attr, mesh->attributes.attributes) {
     if (attr.element != ATTR_ELEMENT_VOXEL) {
       continue;
     }
 
     VoxelAttribute *voxel = attr.data_voxel();
-    device_memory *image_memory = scene->image_manager->image_memory(voxel->slot);
-    int3 resolution = make_int3(
-        image_memory->data_width, image_memory->data_height, image_memory->data_depth);
+    device_memory *image_memory = NULL;
+    int3 resolution = make_int3(1, 1, 1);
+    if (voxel->manager && voxel->slot >= 0) {
+      image_memory = scene->image_manager->image_memory(voxel->slot);
+      resolution = make_int3(
+          image_memory->data_width, image_memory->data_height, image_memory->data_depth);
+    }
+
+    else if (voxel->vol_manager && voxel->slot < -1) {
+#ifdef WITH_OPENVDB
+      resolution = voxel->vol_manager->grids[-(voxel->slot + 2)]->vdb_resolution;
+#endif
+    }
+    else {
+      VLOG(1) << "Can't create volume mesh, invalid voxel index found in attributes\n";
+      return;
+    }
 
     if (volume_params.resolution == make_int3(0, 0, 0)) {
       volume_params.resolution = resolution;
@@ -392,8 +415,15 @@ void MeshManager::create_volume_mesh(Scene *scene, Mesh *mesh, Progress &progres
     }
 
     VoxelAttributeGrid voxel_grid;
-    voxel_grid.data = static_cast<float *>(image_memory->host_pointer);
-    voxel_grid.channels = image_memory->data_elements;
+    if (image_memory) {
+      voxel_grid.data = static_cast<float *>(image_memory->host_pointer);
+      voxel_grid.channels = image_memory->data_elements;
+    }
+    else {
+      /* VDB grid */
+      voxel_grid.data = NULL;
+      voxel_grid.channels = -(voxel->slot + 2);
+    }
     voxel_grids.push_back(voxel_grid);
   }
 
@@ -450,17 +480,50 @@ void MeshManager::create_volume_mesh(Scene *scene, Mesh *mesh, Progress &progres
   for (int z = 0; z < resolution.z; ++z) {
     for (int y = 0; y < resolution.y; ++y) {
       for (int x = 0; x < resolution.x; ++x) {
-        size_t voxel_index = compute_voxel_index(resolution, x, y, z);
-
         for (size_t i = 0; i < voxel_grids.size(); ++i) {
           const VoxelAttributeGrid &voxel_grid = voxel_grids[i];
-          const int channels = voxel_grid.channels;
-
+          int channels = voxel_grid.channels;
+          if (voxel_grid.data == NULL) {
+#ifdef WITH_OPENVDB
+            channels = 1;
+#endif
+          }
           for (int c = 0; c < channels; c++) {
-            if (voxel_grid.data[voxel_index * channels + c] >= isovalue) {
-              builder.add_node_with_padding(x, y, z);
-              break;
+            if (voxel_grid.data) {
+              size_t voxel_index = compute_voxel_index(resolution, x, y, z);
+              if (voxel_grid.data[voxel_index * channels + c] >= isovalue) {
+                builder.add_node_with_padding(x, y, z);
+                break;
+              }
             }
+#ifdef WITH_OPENVDB
+            else {
+              float r, g, b;
+              const int3 &offset = scene->volume_manager->grids[voxel_grid.channels]->vdb_offset;
+              const int3 &axis = scene->volume_manager->grids[voxel_grid.channels]->axis;
+              int index[3];
+              index[axis.x >= 0 ? axis.x : -axis.x - 1] =
+                  ((axis.x >= 0) ? x : (resolution.x - x - 1)) + offset.x;
+              index[axis.y >= 0 ? axis.y : -axis.y - 1] =
+                  ((axis.y >= 0) ? y : (resolution.y - y - 1)) + offset.y;
+              index[axis.z >= 0 ? axis.z : -axis.z - 1] =
+                  ((axis.z >= 0) ? z : (resolution.z - z - 1)) + offset.z;
+
+              if (VDBVolume::sample_index(vdb_thread.data,
+                                          voxel_grid.channels,
+                                          index[0],
+                                          index[1],
+                                          index[2],
+                                          &r,
+                                          &g,
+                                          &b)) {
+                if (r >= isovalue || r >= isovalue || g >= isovalue) {
+                  builder.add_node_with_padding(x, y, z);
+                  break;
+                }
+              }
+            }
+#endif
           }
         }
       }

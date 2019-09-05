@@ -50,7 +50,6 @@ class OSLShader {
 
   /* per thread data */
   static void thread_init(KernelGlobals *kg,
-                          KernelGlobals *kernel_globals,
                           OSLGlobals *osl_globals);
   static void thread_free(KernelGlobals *kg);
 

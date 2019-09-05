@@ -29,6 +29,10 @@ set(LIB
   cycles_render
 )
 
+if(WITH_OPENVDB)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RTTI_DISABLE_FLAGS}")
+endif()
+
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})
 

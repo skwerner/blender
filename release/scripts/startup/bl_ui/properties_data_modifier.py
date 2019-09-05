@@ -782,6 +782,120 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         col = split.column()
 
+    def OPENVDB(self, layout, ob, md):
+        layout.prop(md, "filepath")
+        layout.prop(md, "density")
+        layout.prop(md, "heat")
+        layout.prop(md, "flame")
+
+        layout.separator()
+        layout.prop(md, "color1")
+
+        if (md.use_split_color):
+            split = layout.split()
+
+            col = split.column()
+
+            col.prop(md, "use_split_color")
+
+            col = split.column()
+
+            col.prop(md, "color2", text="")
+            col.prop(md, "color3", text="")
+        else:
+            layout.prop(md, "use_split_color")
+
+        layout.separator()
+        layout.prop(md, "velocity1")
+
+        if (md.use_split_velocity):
+            split = layout.split()
+
+            col = split.column()
+
+            col.prop(md, "use_split_velocity")
+
+            col = split.column()
+
+            col.prop(md, "velocity2", text="")
+            col.prop(md, "velocity3", text="")
+        else:
+            layout.prop(md, "use_split_velocity")
+
+        layout.separator()
+
+        if md.show_axis_convert:
+            layout.prop(md, "up_axis")
+            layout.prop(md, "front_axis")
+
+        row = layout.row()
+        row.prop(md, "frame_start")
+        row.prop(md, "frame_end")
+
+        layout.prop(md, "frame_offset")
+
+        row = layout.row()
+        row.prop(md, "use_frame_override")
+
+        sub = row.row()
+        sub.active = md.use_frame_override
+        sub.prop(md, "frame_override")
+
+        layout.prop(md, "in_memory_render")
+
+        layout.separator()
+        layout.label(text="Viewport Display Options:")
+
+        row = layout.row()
+        row.prop(md, "simplify_level")
+        row.prop(md, "simplify_render")
+
+        row = layout.row()
+        row.prop(md, "hide_volume")
+
+        sub = row.row()
+        sub.active = not md.hide_volume
+        sub.prop(md, "hide_unselected")
+
+        row = layout.row()
+        row.prop(md, "density_min")
+        row.prop(md, "density_max")
+
+        layout.prop(md, "display_thickness")
+
+        row = layout.row()
+        row.prop(md, "flame_min")
+        row.prop(md, "flame_max")
+
+        layout.prop(md, "flame_thickness")
+
+        layout.prop(md, "numeric_display")
+
+        if (md.density != 'NONE' or
+                md.heat != 'NONE' or
+                md.flame != 'NONE' or
+                md.color1 != 'NONE' or
+                md.velocity1 != 'NONE'):
+            layout.separator()
+            layout.label(text="Stats:")
+
+            box = layout.box()
+
+            if (md.density != 'NONE'):
+                box.label(text="Max density value: {:.6f}".format(md.max_density))
+
+            if (md.heat != 'NONE'):
+                box.label(text="Max heat value: {:.6f}".format(md.max_heat))
+
+            if (md.flame != 'NONE'):
+                box.label(text="Max flame value: {:.6f}".format(md.max_flame))
+
+            if (md.color1 != 'NONE'):
+                box.label(text="Max color value: {:.6f}".format(md.max_color))
+
+            if (md.velocity1 != 'NONE'):
+                box.label(text="Max velocity value: {:.6f}".format(md.max_velocity))
+
     def PARTICLE_INSTANCE(self, layout, ob, md):
         layout.prop(md, "object")
         if md.object:

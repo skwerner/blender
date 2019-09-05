@@ -31,6 +31,7 @@ set(INC
   ../render/extern/include
   ../../../intern/elbeem/extern
   ../../../intern/eigen
+  ../../../intern/openvdb
   ../../../intern/guardedalloc
 )
 
@@ -73,6 +74,7 @@ set(SRC
   intern/MOD_none.c
   intern/MOD_normal_edit.c
   intern/MOD_ocean.c
+  intern/MOD_openvdb.c
   intern/MOD_particleinstance.c
   intern/MOD_particlesystem.c
   intern/MOD_remesh.c
@@ -155,5 +157,9 @@ endif()
 
 # So we can have special tricks in modifier system.
 add_definitions(${GL_DEFINITIONS})
+
+if(WITH_OPENVDB)
+  add_definitions(-DWITH_OPENVDB)
+endif()
 
 blender_add_lib(bf_modifiers "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

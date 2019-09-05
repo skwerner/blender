@@ -184,7 +184,9 @@ if(WITH_CYCLES_OSL)
   elseif(CMAKE_COMPILER_IS_GNUCC OR (CMAKE_C_COMPILER_ID MATCHES "Clang"))
     set(RTTI_DISABLE_FLAGS "-fno-rtti -DBOOST_NO_RTTI -DBOOST_NO_TYPEID")
   endif()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RTTI_DISABLE_FLAGS}")
+  if(NOT WITH_OPENVDB)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RTTI_DISABLE_FLAGS}")
+  endif()
 endif()
 
 # Definitions and Includes
@@ -234,6 +236,17 @@ if(WITH_OPENSUBDIV)
     SYSTEM
     ${OPENSUBDIV_INCLUDE_DIR}
   )
+endif()
+
+if(WITH_OPENVDB)
+	add_definitions(-DWITH_OPENVDB)
+	add_definitions(-DDWREAL_IS_DOUBLE=0)
+	add_definitions(-DTBB_USE_EXCEPTIONS=0)
+	include_directories(
+		SYSTEM
+		${OPENVDB_INCLUDE_DIRS}
+		${TBB_INCLUDE_DIRS}
+	)
 endif()
 
 if(WITH_CYCLES_STANDALONE)

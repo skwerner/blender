@@ -532,6 +532,12 @@ static inline BL::SmokeDomainSettings object_smoke_domain_find(BL::Object &b_ob)
       if (b_smd.smoke_type() == BL::SmokeModifier::smoke_type_DOMAIN)
         return b_smd.domain_settings();
     }
+    else if (b_mod->is_a(&RNA_OpenVDBModifier)) {
+      BL::OpenVDBModifier b_vdbmd(*b_mod);
+      BL::SmokeModifier b_smd(b_vdbmd.smoke());
+
+      return b_smd.domain_settings();
+    }
   }
 
   return BL::SmokeDomainSettings(PointerRNA_NULL);
@@ -552,6 +558,21 @@ static inline BL::DomainFluidSettings object_fluid_domain_find(BL::Object b_ob)
   }
 
   return BL::DomainFluidSettings(PointerRNA_NULL);
+}
+
+static inline BL::OpenVDBModifier object_vdb_modifier_find(BL::Object &b_ob)
+{
+  BL::Object::modifiers_iterator b_mod;
+
+  for (b_ob.modifiers.begin(b_mod); b_mod != b_ob.modifiers.end(); ++b_mod) {
+    if (b_mod->is_a(&RNA_OpenVDBModifier)) {
+      BL::OpenVDBModifier b_vdbmd(*b_mod);
+
+      return b_vdbmd;
+    }
+  }
+
+  return BL::OpenVDBModifier(PointerRNA_NULL);
 }
 
 static inline Mesh::SubdivisionType object_subdivision_type(BL::Object &b_ob,

@@ -2128,6 +2128,9 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
             case eModifierType_Smoke:
               data.icon = ICON_MOD_SMOKE;
               break;
+            case eModifierType_OpenVDB:
+              data.icon = ICON_MOD_SMOKE;
+              break;
             case eModifierType_Solidify:
               data.icon = ICON_MOD_SOLIDIFY;
               break;

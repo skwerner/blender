@@ -147,6 +147,11 @@ void workbench_volume_cache_populate(WORKBENCH_Data *vedata,
     return;
   }
 
+  if (sds->vdb && ((sds->vdb->flags & MOD_OPENVDB_HIDE_VOLUME) ||
+                   ((sds->vdb->flags & MOD_OPENVDB_HIDE_UNSELECTED) && !(ob->flag & SELECT)))) {
+    return;
+  }
+
   const bool use_slice = (sds->slice_method == MOD_SMOKE_SLICE_AXIS_ALIGNED &&
                           sds->axis_slice_method == AXIS_SLICE_SINGLE);
   const bool cubic_interp = (sds->interp_method == VOLUME_INTERP_CUBIC);

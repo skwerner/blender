@@ -782,7 +782,9 @@ void ShaderGraph::clean(Scene *scene)
       disconnect(displacement_in);
     }
   }
-  if (scene->integrator->ignore_subsurface_scattering || scene->integrator->ignore_textures) {
+  if (scene->integrator->ignore_subsurface_scattering ||
+      scene->integrator->ignore_textures ||
+      scene->integrator->diffuse_shaders) {
     foreach (ShaderNode *node, nodes) {
       bool ignored = false;
       if (node->special_type == SHADER_SPECIAL_TYPE_IMAGE_SLOT &&
@@ -792,6 +794,12 @@ void ShaderGraph::clean(Scene *scene)
       else if (node->special_type == SHADER_SPECIAL_TYPE_CLOSURE &&
                CLOSURE_IS_BSSRDF(node->get_closure_type()) &&
                scene->integrator->ignore_subsurface_scattering) {
+        ignored = true;
+      }
+      else if (scene->integrator->diffuse_shaders &&
+               CLOSURE_IS_BSDF_OR_BSSRDF(node->get_closure_type()) &&
+               node->get_closure_type() != CLOSURE_BSDF_TRANSPARENT_ID &&
+               node->get_closure_type() != CLOSURE_NONE_ID) {
         ignored = true;
       }
       if (ignored) {

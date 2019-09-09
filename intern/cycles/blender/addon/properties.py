@@ -671,6 +671,11 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Ignore all shaders and render with a dummy material instead"
     )
 
+    diffuse_shaders: BoolProperty   (
+        name="Diffuse only Shading",
+        default=False,
+        description="Replace surface shading with diffuse gray, leave volume and transparency intact"
+    )
     ignore_textures: BoolProperty   (
         name="Ignore Textures",
         default=False,

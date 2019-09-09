@@ -330,6 +330,7 @@ void BlenderSync::sync_integrator()
   integrator->ignore_polygon_smoothing = get_boolean(cscene, "ignore_polygon_smoothing");
   integrator->ignore_depth_of_field = get_boolean(cscene, "ignore_depth_of_field");
   integrator->ignore_subsurface_scattering = get_boolean(cscene, "ignore_subsurface_scattering");
+  integrator->diffuse_shaders = get_boolean(cscene, "diffuse_shaders");
 
   if (integrator->modified(previntegrator)) {
     integrator->tag_update(scene);
@@ -355,7 +356,8 @@ void BlenderSync::sync_integrator()
         integrator->ignore_textures != previntegrator.ignore_textures ||
         integrator->ignore_subsurface_scattering != previntegrator.ignore_subsurface_scattering ||
         integrator->ignore_polygon_smoothing != previntegrator.ignore_polygon_smoothing ||
-        integrator->ignore_displacement != previntegrator.ignore_displacement) {
+        integrator->ignore_displacement != previntegrator.ignore_displacement ||
+        integrator->diffuse_shaders != integrator->diffuse_shaders) {
       shader_recalc = true;
     }
     if (integrator->ignore_lights != previntegrator.ignore_lights ||

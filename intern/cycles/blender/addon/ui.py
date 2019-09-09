@@ -1927,6 +1927,7 @@ class CYCLES_RENDER_PT_simplify_diagnostics(CyclesButtonsPanel, Panel):
         col.prop(cscene, "ignore_lights")
         col.prop(cscene, "ignore_shadows")
         col.prop(cscene, "ignore_shaders")
+        col.prop(cscene, "diffuse_shaders")
         col.prop(cscene, "ignore_subsurface_scattering")
         col.prop(cscene, "ignore_textures")
         col.prop(cscene, "ignore_bump")

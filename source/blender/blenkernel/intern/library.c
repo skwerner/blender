@@ -1900,7 +1900,7 @@ static void library_make_local_copying_check(ID *id,
     else {
       /* This user won't be fully local in future, so current ID won't be either.
        * And we are done checking it. */
-      id->tag &= ~LIB_TAG_DOIT;
+      //id->tag &= ~LIB_TAG_DOIT;
       break;
     }
   }

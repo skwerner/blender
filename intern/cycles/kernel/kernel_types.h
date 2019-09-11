@@ -477,6 +477,7 @@ typedef enum DenoiseFlag {
 typedef enum FeatureOverrides {
   IGNORE_SHADERS = (1 << 0),
   IGNORE_VOLUMES = (1 << 1),
+  DIFFUSE_SHADERS = (1 << 2),
 } FeatureOverrides;
 
 #ifdef __KERNEL_DEBUG__

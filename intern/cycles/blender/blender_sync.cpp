@@ -375,7 +375,7 @@ void BlenderSync::sync_integrator()
         integrator->ignore_subsurface_scattering != previntegrator.ignore_subsurface_scattering ||
         integrator->ignore_polygon_smoothing != previntegrator.ignore_polygon_smoothing ||
         integrator->ignore_displacement != previntegrator.ignore_displacement ||
-        integrator->diffuse_shaders != integrator->diffuse_shaders) {
+        integrator->diffuse_shaders != previntegrator.diffuse_shaders) {
       shader_recalc = true;
     }
     if (integrator->ignore_lights != previntegrator.ignore_lights ||

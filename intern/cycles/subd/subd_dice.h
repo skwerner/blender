@@ -81,7 +81,7 @@ public:
  * Edge tessellation factors and subpatch coordinates are as follows:
  *
  *            tu1
- *     P01 --------- P11 
+ *     P01 --------- P11
  *     |               |
  * tv0 |               | tv1
  *     |               |
@@ -134,5 +134,4 @@ public:
 
 CCL_NAMESPACE_END
 
-#endif /* __SUBD_DICE_H__ */
-
+#endif  /* __SUBD_DICE_H__ */

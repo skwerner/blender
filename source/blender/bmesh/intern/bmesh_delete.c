@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Geoffrey Bantle.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_delete.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * BM remove functions.
  */
@@ -105,7 +97,7 @@ void BMO_mesh_delete_oflag_tagged(BMesh *bm, const short oflag, const char htype
 		bmo_remove_tagged_edges(bm, oflag);
 	}
 	if (htype & BM_VERT) {
-		bmo_remove_tagged_verts(bm, oflag);	
+		bmo_remove_tagged_verts(bm, oflag);
 	}
 }
 

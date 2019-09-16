@@ -14,14 +14,12 @@
 #  along with this program; if not, write to the Free Software Foundation,
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-# Contributor(s): Campbell Barton
-#
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
 
 bpy_types_Operator_bl_property__doc__ = (
-"""
+    """
 The name of a property to use as this operators primary property.
 Currently this is only used to select the default property when
 expanding an operator into a menu.

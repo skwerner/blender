@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Peter Schlaile <peter [at] schlaile [dot] de> 2011
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/indexer.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 #include <stdlib.h>
@@ -142,7 +136,7 @@ void IMB_index_builder_finish(anim_index_builder *fp, int rollback)
 	}
 
 	fclose(fp->fp);
-	
+
 	if (rollback) {
 		unlink(fp->temp_name);
 	}
@@ -185,7 +179,7 @@ struct anim_index *IMB_indexer_open(const char *name)
 	idx = MEM_callocN(sizeof(struct anim_index), "anim_index");
 
 	BLI_strncpy(idx->name, name, sizeof(idx->name));
-	
+
 	fseek(fp, 0, SEEK_END);
 
 	idx->num_entries = (ftell(fp) - 12) /
@@ -257,7 +251,7 @@ int IMB_indexer_get_frame_index(struct anim_index *idx, int frameno)
 	int first = 0;
 
 	/* bsearch (lower bound) the right index */
-	
+
 	while (len > 0) {
 		half = len >> 1;
 		middle = first;
@@ -389,7 +383,7 @@ static void get_proxy_filename(struct anim *anim, IMB_Proxy_Size preview_size,
 	char proxy_name[256];
 	char stream_suffix[20];
 	const char *name = (temp) ? "proxy_%d%s_part.avi" : "proxy_%d%s.avi";
-	
+
 	stream_suffix[0] = 0;
 
 	if (anim->streamindex > 0) {
@@ -413,23 +407,23 @@ static void get_tc_filename(struct anim *anim, IMB_Timecode_Type tc,
 		"record_run%s%s.blen_tc",
 		"free_run%s%s.blen_tc",
 		"interp_free_run%s%s.blen_tc",
-		"record_run_no_gaps%s%s.blen_tc"
+		"record_run_no_gaps%s%s.blen_tc",
 	};
 
 	char stream_suffix[20];
 	char index_name[256];
-	
+
 	stream_suffix[0] = 0;
 
 	if (anim->streamindex > 0) {
 		BLI_snprintf(stream_suffix, 20, "_st%d", anim->streamindex);
 	}
-	
+
 	BLI_snprintf(index_name, 256, index_names[i], stream_suffix, anim->suffix);
 
 	get_index_dir(anim, index_dir, sizeof(index_dir));
-	
-	BLI_join_dirfile(fname, FILE_MAXFILE + FILE_MAXDIR, 
+
+	BLI_join_dirfile(fname, FILE_MAXFILE + FILE_MAXDIR,
 	                 index_dir, index_name);
 }
 
@@ -475,7 +469,7 @@ static struct proxy_output_ctx *alloc_proxy_output_ffmpeg(
 {
 	struct proxy_output_ctx *rv = MEM_callocN(
 	        sizeof(struct proxy_output_ctx), "alloc_proxy_output");
-	
+
 	char fname[FILE_MAX];
 	int ffmpeg_quality;
 
@@ -491,7 +485,7 @@ static struct proxy_output_ctx *alloc_proxy_output_ffmpeg(
 
 	rv->of = avformat_alloc_context();
 	rv->of->oformat = av_guess_format("avi", NULL, NULL);
-	
+
 	BLI_strncpy(rv->of->filename, fname, sizeof(rv->of->filename));
 
 	fprintf(stderr, "Starting work on proxy: %s\n", rv->of->filename);
@@ -611,7 +605,7 @@ static int add_to_proxy_output_ffmpeg(
 
 	ret = avcodec_encode_video2(ctx->c, &packet, frame, &got_output);
 	if (ret < 0) {
-		fprintf(stderr, "Error encoding proxy frame %d for '%s'\n", 
+		fprintf(stderr, "Error encoding proxy frame %d for '%s'\n",
 		        ctx->cfra - 1, ctx->of->filename);
 		return 0;
 	}
@@ -661,9 +655,9 @@ static void free_proxy_output_ffmpeg(struct proxy_output_ctx *ctx,
 	avcodec_flush_buffers(ctx->c);
 
 	av_write_trailer(ctx->of);
-	
+
 	avcodec_close(ctx->c);
-	
+
 	if (ctx->of->oformat) {
 		if (!(ctx->of->oformat->flags & AVFMT_NOFILE)) {
 			avio_close(ctx->of->pb);
@@ -678,19 +672,19 @@ static void free_proxy_output_ffmpeg(struct proxy_output_ctx *ctx,
 		av_free(ctx->frame);
 	}
 
-	get_proxy_filename(ctx->anim, ctx->proxy_size, 
+	get_proxy_filename(ctx->anim, ctx->proxy_size,
 	                   fname_tmp, true);
 
 	if (rollback) {
 		unlink(fname_tmp);
 	}
 	else {
-		get_proxy_filename(ctx->anim, ctx->proxy_size, 
+		get_proxy_filename(ctx->anim, ctx->proxy_size,
 		                   fname, false);
 		unlink(fname);
 		BLI_rename(fname_tmp, fname);
 	}
-	
+
 	MEM_freeN(ctx);
 }
 
@@ -883,16 +877,16 @@ static void index_rebuild_ffmpeg_proc_decoded_frame(
 
 			if (tc_types[i] == IMB_TC_RECORD_RUN_NO_GAPS)
 				tc_frameno = context->frameno_gapless;
-			
+
 			IMB_index_builder_proc_frame(
-				context->indexer[i],
-				curr_packet->data,
-				curr_packet->size,
-				tc_frameno,
-				s_pos, s_dts, pts);
+			        context->indexer[i],
+			        curr_packet->data,
+			        curr_packet->size,
+			        tc_frameno,
+			        s_pos, s_dts, pts);
 		}
 	}
-	
+
 	context->frameno_gapless++;
 }
 
@@ -909,7 +903,7 @@ static int index_rebuild_ffmpeg(FFmpegIndexBuilderContext *context,
 
 	stream_size = avio_size(context->iFormatCtx->pb);
 
-	context->frame_rate = av_q2d(av_get_r_frame_rate_compat(context->iStream));
+	context->frame_rate = av_q2d(av_get_r_frame_rate_compat(context->iFormatCtx, context->iStream));
 	context->pts_time_base = av_q2d(context->iStream->time_base);
 
 	while (av_read_frame(context->iFormatCtx, &next_packet) >= 0) {
@@ -943,7 +937,7 @@ static int index_rebuild_ffmpeg(FFmpegIndexBuilderContext *context,
 
 		if (frame_finished) {
 			index_rebuild_ffmpeg_proc_decoded_frame(
-				context, &next_packet, in_frame);
+			        context, &next_packet, in_frame);
 		}
 		av_free_packet(&next_packet);
 	}
@@ -963,12 +957,12 @@ static int index_rebuild_ffmpeg(FFmpegIndexBuilderContext *context,
 			frame_finished = 0;
 
 			avcodec_decode_video2(
-				context->iCodecCtx, in_frame, &frame_finished,
-				&next_packet);
+			        context->iCodecCtx, in_frame, &frame_finished,
+			        &next_packet);
 
 			if (frame_finished) {
 				index_rebuild_ffmpeg_proc_decoded_frame(
-					context, &next_packet, in_frame);
+				        context, &next_packet, in_frame);
 			}
 		} while (frame_finished);
 	}
@@ -1006,12 +1000,12 @@ static AviMovie *alloc_proxy_output_avi(
 	float frs_sec_base = 1.0;
 
 	IMB_anim_get_fps(anim, &frs_sec, &frs_sec_base, false);
-	
+
 	x = width;
 	y = height;
 
 	framerate = (double) frs_sec / (double) frs_sec_base;
-	
+
 	avi = MEM_mallocN(sizeof(AviMovie), "avimovie");
 
 	format = AVI_FORMAT_MJPEG;
@@ -1020,7 +1014,7 @@ static AviMovie *alloc_proxy_output_avi(
 		MEM_freeN(avi);
 		return NULL;
 	}
-			
+
 	AVI_set_compress_option(avi, AVI_OPTION_TYPE_MAIN, 0, AVI_OPTION_WIDTH, &x);
 	AVI_set_compress_option(avi, AVI_OPTION_TYPE_MAIN, 0, AVI_OPTION_HEIGHT, &y);
 	AVI_set_compress_option(avi, AVI_OPTION_TYPE_MAIN, 0, AVI_OPTION_QUALITY, &quality);
@@ -1041,7 +1035,7 @@ static IndexBuildContext *index_fallback_create_context(struct anim *anim, IMB_T
 	/* since timecode indices only work with ffmpeg right now,
 	 * don't know a sensible fallback here...
 	 *
-	 * so no proxies, no game to play...
+	 * so no proxies...
 	 */
 	if (proxy_sizes_in_use == IMB_PROXY_NONE) {
 		return NULL;
@@ -1111,7 +1105,7 @@ static void index_rebuild_fallback(FallbackIndexBuilderContext *context,
 			*progress = next_progress;
 			*do_update = true;
 		}
-		
+
 		if (*stop) {
 			break;
 		}
@@ -1128,7 +1122,7 @@ static void index_rebuild_fallback(FallbackIndexBuilderContext *context,
 				IMB_scalefastImBuf(s_ibuf, x, y);
 
 				IMB_convert_rgba_to_abgr(s_ibuf);
-	
+
 				AVI_write_frame(context->proxy_ctx[i], pos,
 				                AVI_FORMAT_RGB32,
 				                s_ibuf->rect, x * y * 4);
@@ -1178,7 +1172,7 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim, IMB_Timecod
 			}
 		}
 	}
-	
+
 	if (!overwrite) {
 		IMB_Proxy_Size built_proxies = IMB_anim_proxy_get_existing(anim);
 		if (built_proxies != 0) {
@@ -1194,13 +1188,13 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim, IMB_Timecod
 		}
 		proxy_sizes_to_build &= ~built_proxies;
 	}
-	
+
 	fflush(stdout);
 
 	if (proxy_sizes_to_build == 0) {
 		return NULL;
 	}
-	
+
 
 	switch (anim->curtype) {
 #ifdef WITH_FFMPEG
@@ -1313,7 +1307,7 @@ struct anim *IMB_anim_open_proxy(
 
 	/* proxies are generated in the same color space as animation itself */
 	anim->proxy_anim[i] = IMB_open_anim(fname, 0, 0, anim->colorspace);
-	
+
 	anim->proxies_tried |= preview_size;
 
 	return anim->proxy_anim[i];
@@ -1336,7 +1330,7 @@ struct anim_index *IMB_anim_open_index(
 	get_tc_filename(anim, tc, fname);
 
 	anim->curr_idx[i] = IMB_indexer_open(fname);
-	
+
 	anim->indices_tried |= tc;
 
 	return anim->curr_idx[i];

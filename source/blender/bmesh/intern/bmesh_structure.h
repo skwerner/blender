@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2004 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Geoffrey Bantle.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BMESH_STRUCTURE_H__
 #define __BMESH_STRUCTURE_H__
 
-/** \file blender/bmesh/intern/bmesh_structure.h
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * The lowest level of functionality for manipulating bmesh structures.
  * None of these functions should ever be exported to the rest of Blender.
@@ -49,10 +41,11 @@ BLI_INLINE BMEdge *bmesh_disk_edge_next_safe(const BMEdge *e, const BMVert *v) A
 BLI_INLINE BMEdge *bmesh_disk_edge_prev_safe(const BMEdge *e, const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BLI_INLINE BMEdge *bmesh_disk_edge_next(const BMEdge *e, const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BLI_INLINE BMEdge *bmesh_disk_edge_prev(const BMEdge *e, const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
-int     bmesh_disk_facevert_count_ex(const BMVert *v, const int count_max) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+int     bmesh_disk_facevert_count_at_most(const BMVert *v, const int count_max) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 int     bmesh_disk_facevert_count(const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BMEdge *bmesh_disk_faceedge_find_first(const BMEdge *e, const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BMLoop *bmesh_disk_faceloop_find_first(const BMEdge *e, const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+BMLoop *bmesh_disk_faceloop_find_first_visible(const BMEdge *e, const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BMEdge *bmesh_disk_faceedge_find_next(const BMEdge *e, const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
 /* RADIAL CYCLE MANAGMENT */
@@ -63,7 +56,7 @@ void    bmesh_radial_loop_unlink(BMLoop *l) ATTR_NONNULL();
  *      bmesh_radial_loop_next(BMLoop *l) / prev.
  * just use member access l->radial_next, l->radial_prev now */
 
-int     bmesh_radial_facevert_count_ex(const BMLoop *l, const BMVert *v, const int count_max) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
+int     bmesh_radial_facevert_count_at_most(const BMLoop *l, const BMVert *v, const int count_max) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 int     bmesh_radial_facevert_count(const BMLoop *l, const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 bool    bmesh_radial_facevert_check(const BMLoop *l, const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 BMLoop *bmesh_radial_faceloop_find_first(const BMLoop *l, const BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();

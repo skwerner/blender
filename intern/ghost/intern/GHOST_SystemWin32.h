@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_SystemWin32.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_SystemWin32 class.
  */
 
@@ -59,8 +51,6 @@ class GHOST_WindowWin32;
 /**
  * WIN32 Implementation of GHOST_System class.
  * \see GHOST_System.
- * \author	Maarten Gribnau
- * \date	May 10, 2001
  */
 class GHOST_SystemWin32 : public GHOST_System {
 public:
@@ -110,7 +100,7 @@ public:
 
 	/**
 	 * Create a new window.
-	 * The new window is added to the list of windows managed. 
+	 * The new window is added to the list of windows managed.
 	 * Never explicitly delete the window, use disposeWindow() instead.
 	 * \param	title	The name of the window (displayed in the title bar of the window if the OS supports it).
 	 * \param	left	The coordinate of the left edge of the window.
@@ -132,6 +122,21 @@ public:
 	    const bool exclusive = false,
 	    const GHOST_TEmbedderWindowID parentWindow = 0);
 
+
+	/**
+	 * Create a new offscreen context.
+	 * Never explicitly delete the window, use disposeContext() instead.
+	 * \return  The new context (or 0 if creation failed).
+	 */
+	GHOST_IContext *createOffscreenContext();
+
+	/**
+	 * Dispose of a context.
+	 * \param   context Pointer to the context to be disposed.
+	 * \return  Indication of success.
+	 */
+	GHOST_TSuccess disposeContext(GHOST_IContext *context);
+
 	/***************************************************************************************
 	 ** Event management functionality
 	 ***************************************************************************************/
@@ -142,7 +147,7 @@ public:
 	 * \return Indication of the presence of events.
 	 */
 	bool processEvents(bool waitForEvent);
-	
+
 
 	/***************************************************************************************
 	 ** Cursor management functionality
@@ -188,7 +193,7 @@ public:
 	 * \return				Returns the Clipboard
 	 */
 	GHOST_TUns8 *getClipboard(bool selection) const;
-	
+
 	/**
 	 * Puts buffer to system clipboard
 	 * \param selection		Used by X11 only
@@ -197,7 +202,7 @@ public:
 	void putClipboard(GHOST_TInt8 *buffer, bool selection) const;
 
 	/**
-	 * Creates a drag'n'drop event and pushes it immediately onto the event queue. 
+	 * Creates a drag'n'drop event and pushes it immediately onto the event queue.
 	 * Called by GHOST_DropTargetWin32 class.
 	 * \param eventType The type of drag'n'drop event
 	 * \param draggedObjectType The type object concerned (currently array of file names, string, ?bitmap)
@@ -207,11 +212,11 @@ public:
 	 * \return Indication whether the event was handled.
 	 */
 	static GHOST_TSuccess pushDragDropEvent(GHOST_TEventType eventType, GHOST_TDragnDropTypes draggedObjectType, GHOST_WindowWin32 *window, int mouseX, int mouseY, void *data);
-	
-/**
- * Confirms quitting he program when there is just one window left open
- * in the application
- */
+
+	/**
+	 * Confirms quitting he program when there is just one window left open
+	 * in the application
+	 */
 	int confirmQuit(GHOST_IWindow *window) const;
 
 protected:
@@ -227,7 +232,7 @@ protected:
 	 * \return A success value.
 	 */
 	GHOST_TSuccess exit();
-	
+
 	/**
 	 * Converts raw WIN32 key codes from the wndproc to GHOST keys.
 	 * \param vKey		The virtual key from hardKey
@@ -254,6 +259,17 @@ protected:
 	 * \return The event created.
 	 */
 	static GHOST_EventButton *processButtonEvent(GHOST_TEventType type, GHOST_WindowWin32 *window, GHOST_TButtonMask mask);
+
+	/**
+	 * Creates pointer event.
+	 * \param type		The type of event to create.
+	 * \param window	The window receiving the event (the active window).
+	 * \param wParam	The wParam from the wndproc
+	 * \param lParam	The lParam from the wndproc
+	 * \param eventhandled true if the method handled the event
+	 * \return The event created.
+	 */
+	static GHOST_Event *processPointerEvent(GHOST_TEventType type, GHOST_WindowWin32 *window, WPARAM wParam, LPARAM lParam, bool & eventhandled);
 
 	/**
 	 * Creates cursor event.
@@ -288,7 +304,7 @@ protected:
 	 */
 	GHOST_TKey processSpecialKey(short vKey, short scanCode) const;
 
-	/** 
+	/**
 	 * Creates a window event.
 	 * \param type		The type of event to create.
 	 * \param window	The window receiving the event (the active window).
@@ -336,7 +352,7 @@ protected:
 	 * param keys The new state of the modifier keys.
 	 */
 	inline void storeModifierKeys(const GHOST_ModifierKeys& keys);
-	
+
 	/**
 	 * Check current key layout for AltGr
 	 */
@@ -358,7 +374,7 @@ protected:
 	 * \return current status (1 -visible, 0 - hidden)
 	 */
 	int toggleConsole(int action);
-	
+
 	/** The current state of the modifier keys. */
 	GHOST_ModifierKeys m_modifierKeys;
 	/** State variable set at initialization. */
@@ -377,7 +393,7 @@ protected:
 	/** Console status */
 	int m_consoleStatus;
 
-	/** Wheel delta accumulator **/
+	/** Wheel delta accumulator */
 	int m_wheelDeltaAccum;
 };
 

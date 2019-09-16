@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_file/filelist.c
- *  \ingroup spfile
+/** \file
+ * \ingroup spfile
  */
 
 
@@ -43,7 +35,7 @@
 #else
 #  include <io.h>
 #  include <direct.h>
-#endif   
+#endif
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
@@ -51,7 +43,6 @@
 #include "BLI_fileops_types.h"
 #include "BLI_fnmatch.h"
 #include "BLI_ghash.h"
-#include "BLI_hash_md5.h"
 #include "BLI_linklist.h"
 #include "BLI_math.h"
 #include "BLI_stack.h"
@@ -65,7 +56,6 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
 #include "BKE_icons.h"
 #include "BKE_idcode.h"
 #include "BKE_main.h"
@@ -166,7 +156,8 @@ int folderlist_clear_next(struct SpaceFile *sfile)
 	if (!sfile->folders_next)
 		return 0;
 
-	/* if previous_folder, next_folder or refresh_folder operators are executed it doesn't clear folder_next */
+	/* if previous_folder, next_folder or refresh_folder operators are executed
+	 * it doesn't clear folder_next */
 	folder = sfile->folders_prev->last;
 	if ((!folder) || (BLI_path_cmp(folder->foldername, sfile->params->dir) == 0))
 		return 0;
@@ -188,13 +179,13 @@ void folderlist_free(ListBase *folderlist)
 
 ListBase *folderlist_duplicate(ListBase *folderlist)
 {
-	
+
 	if (folderlist) {
 		ListBase *folderlistn = MEM_callocN(sizeof(*folderlistn), __func__);
 		FolderList *folder;
-		
+
 		BLI_duplicatelist(folderlistn, folderlist);
-		
+
 		for (folder = folderlistn->first; folder; folder = folder->next) {
 			folder->foldername = MEM_dupallocN(folder->foldername);
 		}
@@ -209,19 +200,24 @@ ListBase *folderlist_duplicate(ListBase *folderlist)
 typedef struct FileListInternEntry {
 	struct FileListInternEntry *next, *prev;
 
-	char uuid[16];  /* ASSET_UUID_LENGTH */
+	/** ASSET_UUID_LENGTH */
+	char uuid[16];
 
-	int typeflag;  /* eFileSel_File_Types */
-	int blentype;  /* ID type, in case typeflag has FILE_TYPE_BLENDERLIB set. */
+	/** eFileSel_File_Types */
+	int typeflag;
+	/** ID type, in case typeflag has FILE_TYPE_BLENDERLIB set. */
+	int blentype;
 
 	char *relpath;
-	char *name;  /* not striclty needed, but used during sorting, avoids to have to recompute it there... */
+	/** not strictly needed, but used during sorting, avoids to have to recompute it there... */
+	char *name;
 
 	BLI_stat_t st;
 } FileListInternEntry;
 
 typedef struct FileListIntern {
-	ListBase entries;  /* FileListInternEntry items. */
+	/** FileListInternEntry items. */
+	ListBase entries;
 	FileListInternEntry **filtered;
 
 	char curr_uuid[16];  /* Used to generate uuid during internal listing. */
@@ -236,7 +232,8 @@ typedef struct FileListEntryCache {
 	/* This one gathers all entries from both block and misc caches. Used for easy bulk-freing. */
 	ListBase cached_entries;
 
-	/* Block cache: all entries between start and end index. used for part of the list on diplay. */
+	/* Block cache: all entries between start and end index.
+	 * used for part of the list on display. */
 	FileDirEntry **block_entries;
 	int block_start_index, block_end_index, block_center_index, block_cursor;
 
@@ -267,10 +264,11 @@ typedef struct FileListEntryPreview {
 	ImBuf *img;
 } FileListEntryPreview;
 
+
 typedef struct FileListFilter {
 	unsigned int filter;
 	unsigned int filter_id;
-	char filter_glob[256];
+	char filter_glob[FILE_MAXFILE];
 	char filter_search[66];  /* + 2 for heading/trailing implicit '*' wildcards. */
 	short flags;
 } FileListFilter;
@@ -347,7 +345,7 @@ enum {
 	SPECIAL_IMG_UNKNOWNFILE = 9,
 	SPECIAL_IMG_LOADING     = 10,
 	SPECIAL_IMG_BACKUP      = 11,
-	SPECIAL_IMG_MAX
+	SPECIAL_IMG_MAX,
 };
 
 static ImBuf *gSpecialFileImages[SPECIAL_IMG_MAX];
@@ -404,7 +402,7 @@ static int compare_direntry_generic(const FileListInternEntry *entry1, const Fil
 	if (FILENAME_IS_CURRENT(entry2->relpath)) return 1;
 	if (FILENAME_IS_PARENT(entry1->relpath)) return -1;
 	if (FILENAME_IS_PARENT(entry2->relpath)) return 1;
-	
+
 	return 0;
 }
 
@@ -436,7 +434,7 @@ static int compare_date(void *UNUSED(user_data), const void *a1, const void *a2)
 	if ((ret = compare_direntry_generic(entry1, entry2))) {
 		return ret;
 	}
-	
+
 	time1 = (int64_t)entry1->st.st_mtime;
 	time2 = (int64_t)entry2->st.st_mtime;
 	if (time1 < time2) return 1;
@@ -459,7 +457,7 @@ static int compare_size(void *UNUSED(user_data), const void *a1, const void *a2)
 	if ((ret = compare_direntry_generic(entry1, entry2))) {
 		return ret;
 	}
-	
+
 	size1 = entry1->st.st_size;
 	size2 = entry2->st.st_size;
 	if (size1 < size2) return 1;
@@ -789,7 +787,7 @@ void filelist_init_icons(void)
 #ifdef WITH_HEADLESS
 	bbuf = NULL;
 #else
-	bbuf = IMB_ibImageFromMemory((unsigned char *)datatoc_prvicons_png, datatoc_prvicons_png_size, IB_rect, NULL, "<splash>");
+	bbuf = IMB_ibImageFromMemory((const uchar *)datatoc_prvicons_png, datatoc_prvicons_png_size, IB_rect, NULL, "<splash>");
 #endif
 	if (bbuf) {
 		for (y = 0; y < SPECIAL_IMG_ROWS; y++) {
@@ -910,7 +908,8 @@ static int filelist_geticon_ex(
 			return ICON_FILE_BLEND;
 		}
 		else if (is_main) {
-			/* Do not return icon for folders if icons are not 'main' draw type (e.g. when used over previews). */
+			/* Do not return icon for folders if icons are not 'main' draw type
+			 * (e.g. when used over previews). */
 			return ICON_FILE_FOLDER;
 		}
 	}
@@ -1002,7 +1001,8 @@ static void filelist_entry_clear(FileDirEntry *entry)
 	if (entry->image) {
 		IMB_freeImBuf(entry->image);
 	}
-	/* For now, consider FileDirEntryRevision::poin as not owned here, so no need to do anything about it */
+	/* For now, consider FileDirEntryRevision::poin as not owned here,
+	 * so no need to do anything about it */
 
 	if (!BLI_listbase_is_empty(&entry->variants)) {
 		FileDirEntryVariant *var;
@@ -1347,8 +1347,9 @@ void filelist_free(struct FileList *filelist)
 		printf("Attempting to delete empty filelist.\n");
 		return;
 	}
-	
-	filelist_clear_ex(filelist, false, false);  /* No need to clear cache & selection_state, we free them anyway. */
+
+	/* No need to clear cache & selection_state, we free them anyway. */
+	filelist_clear_ex(filelist, false, false);
 	filelist_cache_free(&filelist->filelist_cache);
 
 	if (filelist->selection_state) {
@@ -1419,7 +1420,7 @@ void filelist_setdir(struct FileList *filelist, char *r_dir)
 {
 	BLI_assert(strlen(r_dir) < FILE_MAX_LIBEXTRA);
 
-	BLI_cleanup_dir(G.main->name, r_dir);
+	BLI_cleanup_dir(BKE_main_blendfile_path_from_global(), r_dir);
 	const bool is_valid_path = filelist->checkdirf(filelist, r_dir, true);
 	BLI_assert(is_valid_path);
 	UNUSED_VARS_NDEBUG(is_valid_path);
@@ -1515,7 +1516,7 @@ static FileDirEntry *filelist_file_ex(struct FileList *filelist, const int index
 		return cache->block_entries[idx];
 	}
 
-	if ((ret = BLI_ghash_lookup(cache->misc_entries, SET_INT_IN_POINTER(index)))) {
+	if ((ret = BLI_ghash_lookup(cache->misc_entries, POINTER_FROM_INT(index)))) {
 		return ret;
 	}
 
@@ -1528,11 +1529,11 @@ static FileDirEntry *filelist_file_ex(struct FileList *filelist, const int index
 	/* Else, we have to add new entry to 'misc' cache - and possibly make room for it first! */
 	ret = filelist_file_create_entry(filelist, index);
 	old_index = cache->misc_entries_indices[cache->misc_cursor];
-	if ((old = BLI_ghash_popkey(cache->misc_entries, SET_INT_IN_POINTER(old_index), NULL))) {
+	if ((old = BLI_ghash_popkey(cache->misc_entries, POINTER_FROM_INT(old_index), NULL))) {
 		BLI_ghash_remove(cache->uuids, old->uuid, NULL, NULL);
 		filelist_file_release_entry(filelist, old);
 	}
-	BLI_ghash_insert(cache->misc_entries, SET_INT_IN_POINTER(index), ret);
+	BLI_ghash_insert(cache->misc_entries, POINTER_FROM_INT(index), ret);
 	BLI_ghash_insert(cache->uuids, ret->uuid, ret);
 
 	cache->misc_entries_indices[cache->misc_cursor] = index;
@@ -1555,13 +1556,14 @@ FileDirEntry *filelist_file(struct FileList *filelist, int index)
 int filelist_file_findpath(struct FileList *filelist, const char *filename)
 {
 	int fidx = -1;
-	
+
 	if (filelist->filelist.nbr_entries_filtered < 0) {
 		return fidx;
 	}
 
 	/* XXX TODO Cache could probably use a ghash on paths too? Not really urgent though.
-	 *          This is only used to find again renamed entry, annoying but looks hairy to get rid of it currently. */
+	 *          This is only used to find again renamed entry,
+	 *          annoying but looks hairy to get rid of it currently. */
 
 	for (fidx = 0; fidx < filelist->filelist.nbr_entries_filtered; fidx++) {
 		FileListInternEntry *entry = filelist->filelist_intern.filtered[fidx];
@@ -1602,7 +1604,8 @@ FileDirEntry *filelist_entry_find_uuid(struct FileList *filelist, const int uuid
 
 void filelist_file_cache_slidingwindow_set(FileList *filelist, size_t window_size)
 {
-	/* Always keep it power of 2, in [256, 8192] range for now, cache being app. twice bigger than requested window. */
+	/* Always keep it power of 2, in [256, 8192] range for now,
+	 * cache being app. twice bigger than requested window. */
 	size_t size = 256;
 	window_size *= 2;
 
@@ -1627,7 +1630,7 @@ static bool filelist_file_cache_block_create(FileList *filelist, const int start
 			FileDirEntry *entry;
 
 			/* That entry might have already been requested and stored in misc cache... */
-			if ((entry = BLI_ghash_popkey(cache->misc_entries, SET_INT_IN_POINTER(idx), NULL)) == NULL) {
+			if ((entry = BLI_ghash_popkey(cache->misc_entries, POINTER_FROM_INT(idx), NULL)) == NULL) {
 				entry = filelist_file_create_entry(filelist, idx);
 				BLI_ghash_insert(cache->uuids, entry->uuid, entry);
 			}
@@ -1723,8 +1726,9 @@ bool filelist_file_cache_block(struct FileList *filelist, const int index)
 		else {
 //			printf("Partial Recaching!\n");
 
-			/* At this point, we know we keep part of currently cached entries, so update previews if needed,
-			 * and remove everything from working queue - we'll add all newly needed entries at the end. */
+			/* At this point, we know we keep part of currently cached entries, so update previews
+			 * if needed, and remove everything from working queue - we'll add all newly needed
+			 * entries at the end. */
 			if (cache->flags & FLC_PREVIEWS_ACTIVE) {
 				filelist_cache_previews_update(filelist);
 				filelist_cache_previews_clear(cache);
@@ -1737,7 +1741,9 @@ bool filelist_file_cache_block(struct FileList *filelist, const int index)
 				int size2 = 0;
 				int idx1 = cache->block_cursor, idx2 = 0;
 
-//				printf("\tcache releasing: [%d:%d] (%d, %d)\n", cache->block_start_index, cache->block_start_index + size1, cache->block_cursor, size1);
+//				printf("\tcache releasing: [%d:%d] (%d, %d)\n",
+//				       cache->block_start_index, cache->block_start_index + size1,
+//				       cache->block_cursor, size1);
 
 				if (idx1 + size1 > cache_size) {
 					size2 = idx1 + size1 - cache_size;
@@ -1754,7 +1760,8 @@ bool filelist_file_cache_block(struct FileList *filelist, const int index)
 				int size2 = 0;
 				int idx1, idx2 = 0;
 
-//				printf("\tcache releasing: [%d:%d] (%d)\n", cache->block_end_index - size1, cache->block_end_index, cache->block_cursor);
+//				printf("\tcache releasing: [%d:%d] (%d)\n",
+//				       cache->block_end_index - size1, cache->block_end_index, cache->block_cursor);
 
 				idx1 = (cache->block_cursor + end_index - cache->block_start_index) % cache_size;
 				if (idx1 + size1 > cache_size) {
@@ -1771,7 +1778,8 @@ bool filelist_file_cache_block(struct FileList *filelist, const int index)
 
 			if (start_index < cache->block_start_index) {
 				/* Add (request) needed entries before already cached ones. */
-				/* Note: We need some index black magic to wrap around (cycle) inside our cache_size array... */
+				/* Note: We need some index black magic to wrap around (cycle)
+				 * inside our cache_size array... */
 				int size1 = cache->block_start_index - start_index;
 				int size2 = 0;
 				int idx1, idx2;
@@ -1802,7 +1810,8 @@ bool filelist_file_cache_block(struct FileList *filelist, const int index)
 //			printf("\tstart-extended...\n");
 			if (end_index > cache->block_end_index) {
 				/* Add (request) needed entries after already cached ones. */
-				/* Note: We need some index black magic to wrap around (cycle) inside our cache_size array... */
+				/* Note: We need some index black magic to wrap around (cycle)
+				 * inside our cache_size array... */
 				int size1 = end_index - cache->block_end_index;
 				int size2 = 0;
 				int idx1, idx2;
@@ -1899,11 +1908,13 @@ bool filelist_cache_previews_update(FileList *filelist)
 		FileListEntryPreview *preview = BLI_thread_queue_pop(cache->previews_done);
 		FileDirEntry *entry;
 
-		/* Paranoid (should never happen currently since we consume this queue from a single thread), but... */
+		/* Paranoid (should never happen currently
+		 * since we consume this queue from a single thread), but... */
 		if (!preview) {
 			continue;
 		}
-		/* entry might have been removed from cache in the mean time, we do not want to cache it again here. */
+		/* entry might have been removed from cache in the mean time,
+		 * we do not want to cache it again here. */
 		entry = filelist_file_ex(filelist, preview->index, false);
 
 //		printf("%s: %d - %s - %p\n", __func__, preview->index, preview->path, preview->img);
@@ -1921,7 +1932,8 @@ bool filelist_cache_previews_update(FileList *filelist)
 		}
 		else if (entry) {
 			/* We want to avoid re-processing this entry continuously!
-			 * Note that, since entries only live in cache, preview will be retried quite often anyway. */
+			 * Note that, since entries only live in cache,
+			 * preview will be retried quite often anyway. */
 			entry->flags |= FILE_ENTRY_INVALID_PREVIEW;
 		}
 
@@ -1950,21 +1962,22 @@ static bool file_is_blend_backup(const char *str)
 	}
 	else {
 		const char *loc;
-		
+
 		if (a > b + 1)
 			b++;
-		
+
 		/* allow .blend1 .blend2 .blend32 */
 		loc = BLI_strcasestr(str + a - b, ".blend");
-		
+
 		if (loc)
 			retval = 1;
 	}
-	
+
 	return (retval);
 }
 
-/* TODO: Maybe we should move this to BLI? On the other hand, it's using defines from spacefile area, so not sure... */
+/* TODO: Maybe we should move this to BLI?
+ * On the other hand, it's using defines from spacefile area, so not sure... */
 int ED_path_extension_type(const char *path)
 {
 	if (BLO_has_bfile_extension(path)) {
@@ -1973,31 +1986,31 @@ int ED_path_extension_type(const char *path)
 	else if (file_is_blend_backup(path)) {
 		return FILE_TYPE_BLENDER_BACKUP;
 	}
-	else if (BLI_testextensie(path, ".app")) {
+	else if (BLI_path_extension_check(path, ".app")) {
 		return FILE_TYPE_APPLICATIONBUNDLE;
 	}
-	else if (BLI_testextensie(path, ".py")) {
+	else if (BLI_path_extension_check(path, ".py")) {
 		return FILE_TYPE_PYSCRIPT;
 	}
-	else if (BLI_testextensie_n(path, ".txt", ".glsl", ".osl", ".data", ".pov", ".ini", ".mcr", ".inc", NULL)) {
+	else if (BLI_path_extension_check_n(path, ".txt", ".glsl", ".osl", ".data", ".pov", ".ini", ".mcr", ".inc", NULL)) {
 		return FILE_TYPE_TEXT;
 	}
-	else if (BLI_testextensie_n(path, ".ttf", ".ttc", ".pfb", ".otf", ".otc", NULL)) {
+	else if (BLI_path_extension_check_n(path, ".ttf", ".ttc", ".pfb", ".otf", ".otc", NULL)) {
 		return FILE_TYPE_FTFONT;
 	}
-	else if (BLI_testextensie(path, ".btx")) {
+	else if (BLI_path_extension_check(path, ".btx")) {
 		return FILE_TYPE_BTX;
 	}
-	else if (BLI_testextensie(path, ".dae")) {
+	else if (BLI_path_extension_check(path, ".dae")) {
 		return FILE_TYPE_COLLADA;
 	}
-	else if (BLI_testextensie(path, ".abc")) {
+	else if (BLI_path_extension_check(path, ".abc")) {
 		return FILE_TYPE_ALEMBIC;
 	}
-	else if (BLI_testextensie_array(path, imb_ext_image)) {
+	else if (BLI_path_extension_check_array(path, imb_ext_image)) {
 		return FILE_TYPE_IMAGE;
 	}
-	else if (BLI_testextensie(path, ".ogg")) {
+	else if (BLI_path_extension_check(path, ".ogg")) {
 		if (IMB_isanim(path)) {
 			return FILE_TYPE_MOVIE;
 		}
@@ -2005,10 +2018,10 @@ int ED_path_extension_type(const char *path)
 			return FILE_TYPE_SOUND;
 		}
 	}
-	else if (BLI_testextensie_array(path, imb_ext_movie)) {
+	else if (BLI_path_extension_check_array(path, imb_ext_movie)) {
 		return FILE_TYPE_MOVIE;
 	}
-	else if (BLI_testextensie_array(path, imb_ext_audio)) {
+	else if (BLI_path_extension_check_array(path, imb_ext_audio)) {
 		return FILE_TYPE_SOUND;
 	}
 	return 0;
@@ -2024,7 +2037,7 @@ static int file_extension_type(const char *dir, const char *relpath)
 int ED_file_extension_icon(const char *path)
 {
 	const int type = ED_path_extension_type(path);
-	
+
 	switch (type) {
 		case FILE_TYPE_BLENDER:
 			return ICON_FILE_BLEND;
@@ -2063,7 +2076,7 @@ unsigned int filelist_entry_select_set(
 {
 	/* Default NULL pointer if not found is fine here! */
 	void **es_p = BLI_ghash_lookup_p(filelist->selection_state, entry->uuid);
-	unsigned int entry_flag = es_p ? GET_UINT_FROM_POINTER(*es_p) : 0;
+	unsigned int entry_flag = es_p ? POINTER_AS_UINT(*es_p) : 0;
 	const unsigned int org_entry_flag = entry_flag;
 
 	BLI_assert(entry);
@@ -2089,7 +2102,7 @@ unsigned int filelist_entry_select_set(
 	if (entry_flag != org_entry_flag) {
 		if (es_p) {
 			if (entry_flag) {
-				*es_p = SET_UINT_IN_POINTER(entry_flag);
+				*es_p = POINTER_FROM_UINT(entry_flag);
 			}
 			else {
 				BLI_ghash_remove(filelist->selection_state, entry->uuid, MEM_freeN, NULL);
@@ -2098,7 +2111,7 @@ unsigned int filelist_entry_select_set(
 		else if (entry_flag) {
 			void *key = MEM_mallocN(sizeof(entry->uuid), __func__);
 			memcpy(key, entry->uuid, sizeof(entry->uuid));
-			BLI_ghash_insert(filelist->selection_state, key, SET_UINT_IN_POINTER(entry_flag));
+			BLI_ghash_insert(filelist->selection_state, key, POINTER_FROM_UINT(entry_flag));
 		}
 	}
 
@@ -2138,7 +2151,7 @@ unsigned int filelist_entry_select_get(FileList *filelist, FileDirEntry *entry, 
 	    ((check == CHECK_FILES) && !(entry->typeflag & FILE_TYPE_DIR)))
 	{
 		/* Default NULL pointer if not found is fine here! */
-		return GET_UINT_FROM_POINTER(BLI_ghash_lookup(filelist->selection_state, entry->uuid));
+		return POINTER_AS_UINT(BLI_ghash_lookup(filelist->selection_state, entry->uuid));
 	}
 
 	return 0;
@@ -2233,7 +2246,7 @@ static int filelist_readjob_list_dir(
 			/* Otherwise, do not check extensions for directories! */
 			else if (!(entry->typeflag & FILE_TYPE_DIR)) {
 				entry->typeflag = file_extension_type(root, entry->relpath);
-				if (filter_glob[0] && BLI_testextensie_glob(entry->relpath, filter_glob)) {
+				if (filter_glob[0] && BLI_path_extension_check_glob(entry->relpath, filter_glob)) {
 					entry->typeflag |= FILE_TYPE_OPERATOR;
 				}
 			}
@@ -2268,7 +2281,8 @@ static int filelist_readjob_list_lib(const char *root, ListBase *entries, const 
 		return nbr_entries;
 	}
 
-	/* memory for strings is passed into filelist[i].entry->relpath and freed in filelist_entry_free. */
+	/* memory for strings is passed into filelist[i].entry->relpath
+	 * and freed in filelist_entry_free. */
 	if (group) {
 		idcode = groupname_to_code(group);
 		names = BLO_blendhandle_get_datablock_names(libfiledata, idcode, &nnames);
@@ -2311,15 +2325,16 @@ static int filelist_readjob_list_lib(const char *root, ListBase *entries, const 
 }
 
 #if 0
-/* Kept for reference here, in case we want to add back that feature later. We do not need it currently. */
+/* Kept for reference here, in case we want to add back that feature later.
+ * We do not need it currently. */
 /* Code ***NOT*** updated for job stuff! */
-static void filelist_readjob_main_rec(struct FileList *filelist)
+static void filelist_readjob_main_rec(Main *bmain, FileList *filelist)
 {
 	ID *id;
 	FileDirEntry *files, *firstlib = NULL;
 	ListBase *lb;
 	int a, fake, idcode, ok, totlib, totbl;
-	
+
 	// filelist->type = FILE_MAIN; // XXX TODO: add modes to filebrowser
 
 	BLI_assert(filelist->filelist.entries == NULL);
@@ -2356,7 +2371,7 @@ static void filelist_readjob_main_rec(struct FileList *filelist)
 		filelist->filelist.entries[9].entry->relpath = BLI_strdup("Ika");
 		filelist->filelist.entries[10].entry->relpath = BLI_strdup("Wave");
 		filelist->filelist.entries[11].entry->relpath = BLI_strdup("Lattice");
-		filelist->filelist.entries[12].entry->relpath = BLI_strdup("Lamp");
+		filelist->filelist.entries[12].entry->relpath = BLI_strdup("Light");
 		filelist->filelist.entries[13].entry->relpath = BLI_strdup("Camera");
 		filelist->filelist.entries[14].entry->relpath = BLI_strdup("Ipo");
 		filelist->filelist.entries[15].entry->relpath = BLI_strdup("World");
@@ -2375,7 +2390,7 @@ static void filelist_readjob_main_rec(struct FileList *filelist)
 		/* make files */
 		idcode = groupname_to_code(filelist->filelist.root);
 
-		lb = which_libbase(G.main, idcode);
+		lb = which_libbase(bmain, idcode);
 		if (lb == NULL) return;
 
 		filelist->filelist.nbr_entries = 0;
@@ -2385,7 +2400,8 @@ static void filelist_readjob_main_rec(struct FileList *filelist)
 			}
 		}
 
-		/* XXX TODO: if databrowse F4 or append/link filelist->flags & FLF_HIDE_PARENT has to be set */
+		/* XXX TODO: if databrowse F4 or append/link
+		 * filelist->flags & FLF_HIDE_PARENT has to be set */
 		if (!(filelist->filter_data.flags & FLF_HIDE_PARENT))
 			filelist->filelist.nbr_entries++;
 
@@ -2394,7 +2410,7 @@ static void filelist_readjob_main_rec(struct FileList *filelist)
 		}
 
 		files = filelist->filelist.entries;
-		
+
 		if (!(filelist->filter_data.flags & FLF_HIDE_PARENT)) {
 			files->entry->relpath = BLI_strdup(FILENAME_PARENT);
 			files->typeflag |= FILE_TYPE_DIR;
@@ -2464,7 +2480,7 @@ static void filelist_readjob_do(
 	BLI_Stack *todo_dirs;
 	TodoDir *td_dir;
 	char dir[FILE_MAX_LIBEXTRA];
-	char filter_glob[64];  /* TODO should be define! */
+	char filter_glob[FILE_MAXFILE];
 	const char *root = filelist->filelist.root;
 	const int max_recursion = filelist->max_recursion;
 	int nbr_done_dirs = 0, nbr_todo_dirs = 1;
@@ -2499,10 +2515,11 @@ static void filelist_readjob_do(
 
 		BLI_stack_discard(todo_dirs);
 
-		/* ARRRG! We have to be very careful *not to use* common BLI_path_util helpers over entry->relpath itself
-		 * (nor any path containing it), since it may actually be a datablock name inside .blend file,
-		 * which can have slashes and backslashes! See T46827.
-		 * Note that in the end, this means we 'cache' valid relative subdir once here, this is actually better. */
+		/* ARRRG! We have to be very careful *not to use* common BLI_path_util helpers over
+		 * entry->relpath itself (nor any path containing it), since it may actually be a datablock
+		 * name inside .blend file, which can have slashes and backslashes! See T46827.
+		 * Note that in the end, this means we 'cache' valid relative subdir once here,
+		 * this is actually better. */
 		BLI_strncpy(rel_subdir, subdir, sizeof(rel_subdir));
 		BLI_cleanup_dir(root, rel_subdir);
 		BLI_path_rel(rel_subdir, root);
@@ -2521,13 +2538,15 @@ static void filelist_readjob_do(
 			/* Generate our entry uuid. Abusing uuid as an uint32, shall be more than enough here,
 			 * things would crash way before we overflow that counter!
 			 * Using an atomic operation to avoid having to lock thread...
-			 * Note that we do not really need this here currently, since there is a single listing thread, but better
+			 * Note that we do not really need this here currently,
+			 * since there is a single listing thread, but better
 			 * remain consistent about threading! */
 			*((uint32_t *)entry->uuid) = atomic_add_and_fetch_uint32((uint32_t *)filelist->filelist_intern.curr_uuid, 1);
 
 			/* Only thing we change in direntry here, so we need to free it first. */
 			MEM_freeN(entry->relpath);
-			entry->relpath = BLI_strdup(dir + 2);  /* + 2 to remove '//' added by BLI_path_rel to rel_subdir */
+			entry->relpath = BLI_strdup(dir + 2);  /* + 2 to remove '//'
+			                                        * added by BLI_path_rel to rel_subdir */
 			entry->name = BLI_strdup(fileentry_uiname(root, entry->relpath, entry->typeflag, dir));
 
 			/* Here we decide whether current filedirentry is to be listed too, or not. */
@@ -2568,7 +2587,8 @@ static void filelist_readjob_do(
 		MEM_freeN(subdir);
 	}
 
-	/* If we were interrupted by stop, stack may not be empty and we need to free pending dir paths. */
+	/* If we were interrupted by stop, stack may not be empty and we need to free
+	 * pending dir paths. */
 	while (!BLI_stack_is_empty(todo_dirs)) {
 		td_dir = BLI_stack_peek(todo_dirs);
 		MEM_freeN(td_dir->dir);
@@ -2601,7 +2621,8 @@ typedef struct FileListReadJob {
 	ThreadMutex lock;
 	char main_name[FILE_MAX];
 	struct FileList *filelist;
-	struct FileList *tmp_filelist;  /* XXX We may use a simpler struct here... just a linked list and root path? */
+	/** XXX We may use a simpler struct here... just a linked list and root path? */
+	struct FileList *tmp_filelist;
 } FileListReadJob;
 
 static void filelist_readjob_startjob(void *flrjv, short *stop, short *do_update, float *progress)
@@ -2700,13 +2721,14 @@ static void filelist_readjob_free(void *flrjv)
 
 void filelist_readjob_start(FileList *filelist, const bContext *C)
 {
+	Main *bmain = CTX_data_main(C);
 	wmJob *wm_job;
 	FileListReadJob *flrj;
 
 	/* prepare job data */
 	flrj = MEM_callocN(sizeof(*flrj), __func__);
 	flrj->filelist = filelist;
-	BLI_strncpy(flrj->main_name, G.main->name, sizeof(flrj->main_name));
+	BLI_strncpy(flrj->main_name, BKE_main_blendfile_path(bmain), sizeof(flrj->main_name));
 
 	filelist->flags &= ~(FL_FORCE_RESET | FL_IS_READY);
 	filelist->flags |= FL_IS_PENDING;

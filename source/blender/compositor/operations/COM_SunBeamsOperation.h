@@ -1,7 +1,4 @@
-/*
- * Copyright 2014, Blender Foundation.
- *
- * This program is free software; you can redistribute it and/or
+/* This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
@@ -15,12 +12,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Lukas Toenne
+ * Copyright 2014, Blender Foundation.
  */
 
-#ifndef _COM_SunBeamsOperation_h
-#define _COM_SunBeamsOperation_h
+#ifndef __COM_SUNBEAMSOPERATION_H__
+#define __COM_SUNBEAMSOPERATION_H__
 
 #include "COM_NodeOperation.h"
 

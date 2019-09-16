@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_EventManager.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_EventManager class.
  */
 
@@ -143,7 +135,7 @@ protected:
 
 	/** A stack with events. */
 	typedef std::deque<GHOST_IEvent *> TEventStack;
-	
+
 	/** The event stack. */
 	std::deque<GHOST_IEvent *> m_events;
 	std::deque<GHOST_IEvent *> m_handled_events;
@@ -161,4 +153,3 @@ protected:
 };
 
 #endif // __GHOST_EVENTMANAGER_H__
-

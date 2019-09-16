@@ -44,9 +44,9 @@ def replace_bpy_app_version():
 def clear_startup_blend():
     import bpy
 
-    for scene in bpy.data.scenes:
-        for obj in scene.objects:
-            scene.objects.unlink(obj)
+    for col in bpy.data.collections:
+        for obj in col.objects:
+            col.objects.unlink(obj)
 
 
 def blend_to_md5():
@@ -181,7 +181,7 @@ def main():
         sys.exit(1)
 
     if md5 != md5_new:
-        print("  Running: %s\n    MD5 Recieved: %s\n    MD5 Expected: %s" % (run, md5_new, md5))
+        print("  Running: %s\n    MD5 Received: %s\n    MD5 Expected: %s" % (run, md5_new, md5))
         sys.exit(1)
 
     print("  Success: %s" % run)

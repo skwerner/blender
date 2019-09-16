@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,17 +12,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_dupe.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Duplicate, Split, Split operators.
  */
+
+#include "MEM_guardedalloc.h"
 
 #include "BLI_math.h"
 #include "BLI_alloca.h"
@@ -64,7 +60,7 @@ static BMVert *bmo_vert_copy(
 
 	/* Mark the vert for output */
 	BMO_vert_flag_enable(bm_dst, v_dst, DUPE_NEW);
-	
+
 	return v_dst;
 }
 
@@ -79,7 +75,8 @@ static BMEdge *bmo_edge_copy(
         BMOpSlot *slot_boundarymap_out,
         BMesh *bm_dst, BMesh *bm_src,
         BMEdge *e_src,
-        GHash *vhash, GHash *ehash)
+        GHash *vhash, GHash *ehash,
+        const bool use_edge_flip_from_face)
 {
 	BMEdge *e_dst;
 	BMVert *e_dst_v1, *e_dst_v2;
@@ -103,7 +100,7 @@ static BMEdge *bmo_edge_copy(
 	/* Lookup v1 and v2 */
 	e_dst_v1 = BLI_ghash_lookup(vhash, e_src->v1);
 	e_dst_v2 = BLI_ghash_lookup(vhash, e_src->v2);
-	
+
 	/* Create a new edge */
 	e_dst = BM_edge_create(bm_dst, e_dst_v1, e_dst_v2, NULL, BM_CREATE_SKIP_CD);
 	BMO_slot_map_elem_insert(op, slot_edgemap_out, e_src, e_dst);
@@ -124,7 +121,15 @@ static BMEdge *bmo_edge_copy(
 
 	/* Mark the edge for output */
 	BMO_edge_flag_enable(bm_dst, e_dst, DUPE_NEW);
-	
+
+	if (use_edge_flip_from_face) {
+		/* Take winding from previous face (if we had one),
+		 * otherwise extruding a duplicated edges gives bad normals, see: T62487. */
+		if (BM_edge_is_boundary(e_src) && (e_src->l->v == e_src->v1)) {
+			BM_edge_verts_swap(e_dst);
+		}
+	}
+
 	return e_dst;
 }
 
@@ -164,7 +169,7 @@ static BMFace *bmo_face_copy(
 
 	/* Copy attributes */
 	BM_elem_attrs_copy(bm_src, bm_dst, f_src, f_dst);
-	
+
 	/* copy per-loop custom data */
 	l_iter_src = l_first_src;
 	l_iter_dst = BM_FACE_FIRST_LOOP(f_dst);
@@ -188,11 +193,12 @@ static BMFace *bmo_face_copy(
 static void bmo_mesh_copy(BMOperator *op, BMesh *bm_dst, BMesh *bm_src)
 {
 	const bool use_select_history = BMO_slot_bool_get(op->slots_in, "use_select_history");
+	const bool use_edge_flip_from_face = BMO_slot_bool_get(op->slots_in, "use_edge_flip_from_face");
 
 	BMVert *v = NULL, *v2;
 	BMEdge *e = NULL;
 	BMFace *f = NULL;
-	
+
 	BMIter viter, eiter, fiter;
 	GHash *vhash, *ehash;
 
@@ -257,7 +263,7 @@ static void bmo_mesh_copy(BMOperator *op, BMesh *bm_dst, BMesh *bm_src)
 			}
 			/* now copy the actual edge */
 			bmo_edge_copy(op, slot_edge_map_out, slot_boundary_map_out,
-			              bm_dst, bm_src, e, vhash, ehash);
+			              bm_dst, bm_src, e, vhash, ehash, use_edge_flip_from_face);
 			BMO_edge_flag_enable(bm_src, e, DUPE_DONE);
 		}
 	}
@@ -277,7 +283,7 @@ static void bmo_mesh_copy(BMOperator *op, BMesh *bm_dst, BMesh *bm_src)
 			BM_ITER_ELEM (e, &eiter, f, BM_EDGES_OF_FACE) {
 				if (!BMO_edge_flag_test(bm_src, e, DUPE_DONE)) {
 					bmo_edge_copy(op, slot_edge_map_out, slot_boundary_map_out,
-					              bm_dst, bm_src, e, vhash, ehash);
+					              bm_dst, bm_src, e, vhash, ehash, use_edge_flip_from_face);
 					BMO_edge_flag_enable(bm_src, e, DUPE_DONE);
 				}
 			}
@@ -286,7 +292,7 @@ static void bmo_mesh_copy(BMOperator *op, BMesh *bm_dst, BMesh *bm_src)
 			BMO_face_flag_enable(bm_src, f, DUPE_DONE);
 		}
 	}
-	
+
 	/* free pointer hashes */
 	BLI_ghash_free(vhash, NULL, NULL);
 	BLI_ghash_free(ehash, NULL, NULL);
@@ -326,16 +332,17 @@ void bmo_duplicate_exec(BMesh *bm, BMOperator *op)
 {
 	BMOperator *dupeop = op;
 	BMesh *bm_dst = BMO_slot_ptr_get(op->slots_in, "dest");
-	
-	if (!bm_dst)
+
+	if (!bm_dst) {
 		bm_dst = bm;
+	}
 
 	/* flag input */
 	BMO_slot_buffer_flag_enable(bm, dupeop->slots_in, "geom", BM_ALL_NOLOOP, DUPE_INPUT);
 
 	/* use the internal copy function */
 	bmo_mesh_copy(dupeop, bm_dst, bm);
-	
+
 	/* Output */
 	/* First copy the input buffers to output buffers - original data */
 	BMO_slot_copy(dupeop, slots_in,  "geom",
@@ -381,7 +388,6 @@ void BMO_dupe_from_flag(BMesh *bm, int htype, const char hflag)
  *
  * \note Lower level uses of this operator may want to use #BM_mesh_separate_faces
  * Since it's faster for the 'use_only_faces' case.
- *
  */
 void bmo_split_exec(BMesh *bm, BMOperator *op)
 {
@@ -393,11 +399,11 @@ void bmo_split_exec(BMesh *bm, BMOperator *op)
 
 	/* initialize our sub-operator */
 	BMO_op_init(bm, &dupeop, op->flag, "duplicate");
-	
+
 	BMO_slot_copy(splitop, slots_in, "geom",
 	              &dupeop, slots_in, "geom");
 	BMO_op_exec(bm, &dupeop);
-	
+
 	BMO_slot_buffer_flag_enable(bm, splitop->slots_in, "geom", BM_ALL_NOLOOP, SPLIT_INPUT);
 
 	if (use_only_faces) {
@@ -486,8 +492,28 @@ void bmo_spin_exec(BMesh *bm, BMOperator *op)
 	steps    = BMO_slot_int_get(op->slots_in,   "steps");
 	phi      = BMO_slot_float_get(op->slots_in, "angle") / steps;
 	do_dupli = BMO_slot_bool_get(op->slots_in,  "use_duplicate");
+	const bool use_normal_flip = BMO_slot_bool_get(op->slots_in, "use_normal_flip");
+	/* Caller needs to perform other sanity checks (such as the spin being 360d). */
+	const bool use_merge = BMO_slot_bool_get(op->slots_in, "use_merge") && steps >= 3;
 
 	axis_angle_normalized_to_mat3(rmat, axis, phi);
+
+	BMVert **vtable = NULL;
+	if (use_merge) {
+		vtable = MEM_mallocN(sizeof(BMVert *) * bm->totvert, __func__);
+		int i = 0;
+		BMIter iter;
+		BMVert *v;
+		BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+			vtable[i] = v;
+			/* Evil! store original index in normal,
+			 * this is duplicated into every other vertex.
+			 * So we can read the original from the final.
+			 *
+			 * The normals must be recalculated anyway. */
+			*((int *)&v->no[0]) = i;
+		}
+	}
 
 	BMO_slot_copy(op, slots_in,  "geom",
 	              op, slots_out, "geom_last.out");
@@ -503,14 +529,63 @@ void bmo_spin_exec(BMesh *bm, BMOperator *op)
 			BMO_op_finish(bm, &dupop);
 		}
 		else {
-			BMO_op_initf(bm, &extop, op->flag, "extrude_face_region geom=%S",
-			             op, "geom_last.out");
+			BMO_op_initf(bm, &extop, op->flag,
+			             "extrude_face_region geom=%S use_normal_flip=%b use_normal_from_adjacent=%b",
+			             op, "geom_last.out", use_normal_flip && (a == 0), (a != 0));
 			BMO_op_exec(bm, &extop);
-			BMO_op_callf(bm, op->flag,
-			             "rotate cent=%v matrix=%m3 space=%s verts=%S",
-			             cent, rmat, op, "space", &extop, "geom.out");
-			BMO_slot_copy(&extop, slots_out, "geom.out",
-			              op,     slots_out, "geom_last.out");
+			if ((use_merge && (a == steps - 1)) == false) {
+				BMO_op_callf(bm, op->flag,
+				             "rotate cent=%v matrix=%m3 space=%s verts=%S",
+				             cent, rmat, op, "space", &extop, "geom.out");
+				BMO_slot_copy(&extop, slots_out, "geom.out",
+				              op,     slots_out, "geom_last.out");
+			}
+			else {
+				/* Merge first/last vertices and edges (maintaining 'geom.out' state). */
+				BMOpSlot *slot_geom_out = BMO_slot_get(extop.slots_out, "geom.out");
+				BMElem  **elem_array = (BMElem **)slot_geom_out->data.buf;
+				int elem_array_len = slot_geom_out->len;
+				for (int i = 0; i < elem_array_len; ) {
+					if (elem_array[i]->head.htype == BM_VERT) {
+						BMVert *v_src = (BMVert *)elem_array[i];
+						BMVert *v_dst = vtable[*((const int *)&v_src->no[0])];
+						BM_vert_splice(bm, v_dst, v_src);
+						elem_array_len--;
+						elem_array[i] = elem_array[elem_array_len];
+					}
+					else {
+						i++;
+					}
+				}
+				for (int i = 0; i < elem_array_len; ) {
+					if (elem_array[i]->head.htype == BM_EDGE) {
+						BMEdge *e_src = (BMEdge *)elem_array[i];
+						BMEdge *e_dst = BM_edge_find_double(e_src);
+						if (e_dst != NULL) {
+							BM_edge_splice(bm, e_dst, e_src);
+							elem_array_len--;
+							elem_array[i] = elem_array[elem_array_len];
+							continue;
+						}
+					}
+					i++;
+				}
+				/* Full copies of faces may cause overlap. */
+				for (int i = 0; i < elem_array_len; ) {
+					if (elem_array[i]->head.htype == BM_FACE) {
+						BMFace *f_src = (BMFace *)elem_array[i];
+						BMFace *f_dst = BM_face_find_double(f_src);
+						if (f_dst != NULL) {
+							BM_face_kill(bm, f_src);
+							elem_array_len--;
+							elem_array[i] = elem_array[elem_array_len];
+							continue;
+						}
+					}
+					i++;
+				}
+				slot_geom_out->len = elem_array_len;
+			}
 			BMO_op_finish(bm, &extop);
 		}
 
@@ -520,5 +595,9 @@ void bmo_spin_exec(BMesh *bm, BMOperator *op)
 			             "translate vec=%v space=%s verts=%S",
 			             dvec, op, "space", op, "geom_last.out");
 		}
+	}
+
+	if (vtable) {
+		MEM_freeN(vtable);
 	}
 }

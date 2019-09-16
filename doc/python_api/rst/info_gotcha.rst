@@ -145,8 +145,8 @@ that happens to redraw but is more flexible and integrates better with Blenders 
 
 **Ok, Ok! I still want to draw from Python**
 
-If you insist - yes its possible, but scripts that use this hack wont be considered
-for inclusion in Blender and any issues with using it wont be considered bugs,
+If you insist - yes its possible, but scripts that use this hack won't be considered
+for inclusion in Blender and any issues with using it won't be considered bugs,
 this is also not guaranteed to work in future releases.
 
 .. code-block:: python
@@ -173,25 +173,25 @@ In this situation you can...
 
 .. _info_gotcha_mesh_faces:
 
-N-Gons and Tessellation Faces
-=============================
+N-Gons and Tessellation
+=======================
 
 Since 2.63 NGons are supported, this adds some complexity
-since in some cases you need to access triangles/quads still (some exporters for example).
+since in some cases you need to access triangles still (some exporters for example).
 
 There are now 3 ways to access faces:
 
 - :class:`bpy.types.MeshPolygon` -
   this is the data structure which now stores faces in object mode
   (access as ``mesh.polygons`` rather than ``mesh.faces``).
-- :class:`bpy.types.MeshTessFace` -
-  the result of triangulating (tessellated) polygons,
-  the main method of face access in 2.62 or older (access as ``mesh.tessfaces``).
+- :class:`bpy.types.MeshLoopTriangle` -
+  the result of tessellating polygons into triangles
+  (access as ``mesh.loop_triangles``).
 - :class:`bmesh.types.BMFace` -
   the polygons as used in editmode.
 
 For the purpose of the following documentation,
-these will be referred to as polygons, tessfaces and bmesh-faces respectively.
+these will be referred to as polygons, loop triangles and bmesh-faces respectively.
 
 5+ sided faces will be referred to as ``ngons``.
 
@@ -205,8 +205,8 @@ Support Overview
 
    * - Usage
      - :class:`bpy.types.MeshPolygon`
-     - :class:`bpy.types.MeshTessFace` 
-     - :class:`bmesh.types.BMFace` 
+     - :class:`bpy.types.MeshTessFace`
+     - :class:`bmesh.types.BMFace`
    * - Import/Create
      - Poor *(inflexible)*
      - Good *(supported as upgrade path)*
@@ -222,7 +222,7 @@ Support Overview
 
 .. note::
 
-   Using the :mod:`bmesh` api is completely separate api from :mod:`bpy`,
+   Using the :mod:`bmesh` API is completely separate API from :mod:`bpy`,
    typically you would would use one or the other based on the level of editing needed,
    not simply for a different way to access faces.
 
@@ -233,14 +233,9 @@ Creating
 All 3 datatypes can be used for face creation.
 
 - polygons are the most efficient way to create faces but the data structure is _very_ rigid and inflexible,
-  you must have all your vertes and faces ready and create them all at once.
-  This is further complicated by the fact that each polygon does not store its own verts (as with tessfaces),
+  you must have all your vertices and faces ready and create them all at once.
+  This is further complicated by the fact that each polygon does not store its own verts,
   rather they reference an index and size in :class:`bpy.types.Mesh.loops` which are a fixed array too.
-- tessfaces ideally should not be used for creating faces since they are really only tessellation cache of polygons,
-  however for scripts upgrading from 2.62 this is by far the most straightforward option.
-  This works by creating tessfaces and when finished -
-  they can be converted into polygons by calling :class:`bpy.types.Mesh.update`.
-  The obvious limitation is ngons can't be created this way.
 - bmesh-faces are most likely the easiest way for new scripts to create faces,
   since faces can be added one by one and the api has features intended for mesh manipulation.
   While :class:`bmesh.types.BMesh` uses more memory it can be managed by only operating on one mesh at a time.
@@ -265,34 +260,10 @@ All 3 data types can be used for exporting,
 the choice mostly depends on whether the target format supports ngons or not.
 
 - Polygons are the most direct & efficient way to export providing they convert into the output format easily enough.
-- Tessfaces work well for exporting to formats which dont support ngons,
+- Tessfaces work well for exporting to formats which don't support ngons,
   in fact this is the only place where their use is encouraged.
 - BMesh-Faces can work for exporting too but may not be necessary if polygons can be used
   since using bmesh gives some overhead because its not the native storage format in object mode.
-
-
-Upgrading Importers from 2.62
------------------------------
-
-Importers can be upgraded to work with only minor changes.
-
-The main change to be made is used the tessellation versions of each attribute.
-
-- mesh.faces --> :class:`bpy.types.Mesh.tessfaces`
-- mesh.uv_textures --> :class:`bpy.types.Mesh.tessface_uv_textures`
-- mesh.vertex_colors --> :class:`bpy.types.Mesh.tessface_vertex_colors`
-
-Once the data is created call :class:`bpy.types.Mesh.update` to convert the tessfaces into polygons.
-
-
-Upgrading Exporters from 2.62
------------------------------
-
-For exporters the most direct way to upgrade is to use tessfaces as with importing
-however its important to know that tessfaces may **not** exist for a mesh,
-the array will be empty as if there are no faces.
-
-So before accessing tessface data call: :class:`bpy.types.Mesh.update` ``(calc_tessface=True)``.
 
 
 EditBones, PoseBones, Bone... Bones
@@ -317,7 +288,7 @@ Example using :class:`bpy.types.EditBone` in armature editmode:
 
 This is only possible in edit mode.
 
-   >>> bpy.context.object.data.edit_bones["Bone"].head = Vector((1.0, 2.0, 3.0)) 
+   >>> bpy.context.object.data.edit_bones["Bone"].head = Vector((1.0, 2.0, 3.0))
 
 This will be empty outside of editmode.
 
@@ -362,7 +333,7 @@ Examples using :class:`bpy.types.PoseBone` in object or pose mode:
 .. code-block:: python
 
    # Gets the name of the first constraint (if it exists)
-   bpy.context.object.pose.bones["Bone"].constraints[0].name 
+   bpy.context.object.pose.bones["Bone"].constraints[0].name
 
    # Gets the last selected pose bone (pose mode only)
    bpy.context.active_pose_bone
@@ -407,7 +378,7 @@ This can cause bugs when you add some data (normally imported) then reference it
 .. code-block:: python
 
    bpy.data.meshes.new(name=meshid)
-   
+
    # normally some code, function calls...
    bpy.data.meshes[meshid]
 
@@ -417,7 +388,7 @@ Or with name assignment...
 .. code-block:: python
 
    obj.name = objname
-   
+
    # normally some code, function calls...
    obj = bpy.data.meshes[objname]
 
@@ -437,12 +408,12 @@ this way you don't run this risk of referencing existing data from the blend fil
 
    # typically declared in the main body of the function.
    mesh_name_mapping = {}
-   
+
    mesh = bpy.data.meshes.new(name=meshid)
    mesh_name_mapping[meshid] = mesh
-   
+
    # normally some code, or function calls...
-   
+
    # use own dictionary rather than bpy.data
    mesh = mesh_name_mapping[meshid]
 
@@ -551,7 +522,7 @@ to avoid getting stuck too deep in encoding problems - here are some suggestions
 
 .. note::
 
-   Sometimes it's preferrable to avoid string encoding issues by using bytes instead of Python strings,
+   Sometimes it's preferable to avoid string encoding issues by using bytes instead of Python strings,
    when reading some input its less trouble to read it as binary data
    though you will still need to decide how to treat any strings you want to use with Blender,
    some importers do this.
@@ -563,7 +534,7 @@ Strange errors using 'threading' module
 Python threading with Blender only works properly when the threads finish up before the script does.
 By using ``threading.join()`` for example.
 
-Heres an example of threading supported by Blender:
+Here is an example of threading supported by Blender:
 
 .. code-block:: python
 
@@ -633,12 +604,17 @@ so until its properly supported, best not make use of this.
 Help! My script crashes Blender
 ===============================
 
+**TL;DR:** Do not keep direct references to Blender data (of any kind) when modifying the container
+of that data, and/or when some undo/redo may happen (e.g. during modal operators execution...).
+Instead, use indices (or other data always stored by value in Python, like string keys...),
+that allow you to get access to the desired data.
+
 Ideally it would be impossible to crash Blender from Python
 however there are some problems with the API where it can be made to crash.
 
 Strictly speaking this is a bug in the API but fixing it would mean adding memory verification
 on every access since most crashes are caused by the Python objects referencing Blenders memory directly,
-whenever the memory is freed, further Python access to it can crash the script.
+whenever the memory is freed or re-allocated, further Python access to it can crash the script.
 But fixing this would make the scripts run very slow,
 or writing a very different kind of API which doesn't reference the memory directly.
 
@@ -648,10 +624,16 @@ Here are some general hints to avoid running into these problems.
   especially when working with large lists since Blender can crash simply by running out of memory.
 - Many hard to fix crashes end up being because of referencing freed data,
   when removing data be sure not to hold any references to it.
+- Re-allocation can lead to the same issues
+  (e.g. if you add a lot of items to some Collection,
+  this can lead to re-allocating the underlying container's memory,
+  invalidating all previous references to existing items).
 - Modules or classes that remain active while Blender is used,
   should not hold references to data the user may remove, instead,
   fetch data from the context each time the script is activated.
 - Crashes may not happen every time, they may happen more on some configurations/operating-systems.
+- Be wary of recursive patterns, those are very efficient at hiding the issues described here.
+- See last sub-section about `Unfortunate Corner Cases`_ for some known breaking exceptions.
 
 .. note::
 
@@ -660,6 +642,55 @@ Here are some general hints to avoid running into these problems.
 
    While the crash may be in Blenders C/C++ code,
    this can help a lot to track down the area of the script that causes the crash.
+
+.. note::
+
+   Some container modifications are actually safe, because they will never re-allocate existing data
+   (e.g. linked lists containers will never re-allocate existing items when adding or removing others).
+
+   But knowing which cases are safe and which aren't implies a deep understanding of Blender's internals.
+   That's why, unless you are willing to dive into the RNA C implementation, it's simpler to
+   always assume that data references will become invalid when modifying their containers,
+   in any possible way.
+
+
+**Don’t:**
+
+.. code-block:: python
+
+   class TestItems(bpy.types.PropertyGroup):
+       name: bpy.props.StringProperty()
+
+   bpy.utils.register_class(TestItems)
+   bpy.types.Scene.test_items = bpy.props.CollectionProperty(type=TestItems)
+
+   first_item = bpy.context.scene.test_items.add()
+   for i in range(100):
+       bpy.context.scene.test_items.add()
+
+   # This is likely to crash, as internal code may re-allocate
+   # the whole container (the collection) memory at some point.
+   first_item.name = "foobar"
+
+
+**Do:**
+
+.. code-block:: python
+
+   class TestItems(bpy.types.PropertyGroup):
+       name: bpy.props.StringProperty()
+
+   bpy.utils.register_class(TestItems)
+   bpy.types.Scene.test_items = bpy.props.CollectionProperty(type=TestItems)
+
+   first_item = bpy.context.scene.test_items.add()
+   for i in range(100):
+       bpy.context.scene.test_items.add()
+
+   # This is safe, we are getting again desired data *after*
+   # all modifications to its container are done.
+   first_item = bpy.context.scene.test_items[0]
+   first_item.name = "foobar"
 
 
 Undo/Redo
@@ -745,7 +776,7 @@ the object data but are most common when switching edit-mode.
 Array Re-Allocation
 -------------------
 
-When adding new points to a curve or vertices's/edges/polygons to a mesh,
+When adding new points to a curve or vertices/edges/polygons to a mesh,
 internally the array which stores this data is re-allocated.
 
 .. code-block:: python
@@ -758,7 +789,7 @@ internally the array which stores this data is re-allocated.
    point.co = 1.0, 2.0, 3.0
 
 This can be avoided by re-assigning the point variables after adding the new one or by storing
-indices's to the points rather than the points themselves.
+indices to the points rather than the points themselves.
 
 The best way is to sidestep the problem altogether add all the points to the curve at once.
 This means you don't have to worry about array re-allocation and its faster too
@@ -770,11 +801,11 @@ Removing Data
 
 **Any** data that you remove shouldn't be modified or accessed afterwards,
 this includes f-curves, drivers, render layers, timeline markers, modifiers, constraints
-along with objects, scenes, groups, bones.. etc.
+along with objects, scenes, collections, bones.. etc.
 
 The ``remove()`` api calls will invalidate the data they free to prevent common mistakes.
 
-The following example shows how this precortion works.
+The following example shows how this precaution works.
 
 .. code-block:: python
 
@@ -795,6 +826,17 @@ the next example will still crash.
    vertices = mesh.vertices
    bpy.data.meshes.remove(mesh)
    print(vertices)  # <- this may crash
+
+
+Unfortunate Corner Cases
+------------------------
+
+Besides all expected cases listed above, there are a few others that should not be
+an issue but, due to internal implementation details, currently are:
+
+- ``Object.hide_viewport``, ``Object.hide_select`` and ``Object.hide_render``:
+  Setting any of those booleans will trigger a rebuild of Collection caches, hence breaking
+  any current iteration over ``Collection.all_objects``.
 
 
 sys.exit

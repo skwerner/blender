@@ -1,28 +1,25 @@
 /*
- * Cineon image file format library routines.
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
  *
- * Copyright 1999,2000,2001 David Hodson <hodsond@acm.org>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * for more details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Julien Enche.
- *
+ * Copyright 1999,2000,2001 David Hodson <hodsond@acm.org>
  */
 
-/** \file blender/imbuf/intern/cineon/logImageCore.c
- *  \ingroup imbcineon
+/** \file
+ * \ingroup imbcineon
+ *
+ * Cineon image file format library routines.
  */
 
 
@@ -917,7 +914,7 @@ static float *getLinToLogLut(LogImageFile *logImage, LogImageElement logElement)
 	float gain, negativeFilmGamma, offset, step;
 	unsigned int lutsize = (unsigned int)(logElement.maxValue + 1);
 	unsigned int i;
-	
+
 	lut = MEM_mallocN(sizeof(float) * lutsize, "getLinToLogLut");
 
 	negativeFilmGamma = 0.6;
@@ -927,7 +924,7 @@ static float *getLinToLogLut(LogImageFile *logImage, LogImageElement logElement)
 
 	for (i = 0; i < lutsize; i++)
 		lut[i] = (logImage->referenceWhite + log10f(powf((i + offset) / gain, 1.7f / logImage->gamma)) / (step / negativeFilmGamma)) / logElement.maxValue;
-	
+
 	return lut;
 }
 
@@ -938,7 +935,7 @@ static float *getLogToLinLut(LogImageFile *logImage, LogImageElement logElement)
 	/* float filmGamma; unused */
 	unsigned int lutsize = (unsigned int)(logElement.maxValue + 1);
 	unsigned int i;
-	
+
 	lut = MEM_mallocN(sizeof(float) * lutsize, "getLogToLinLut");
 
 	/* Building the Log -> Lin LUT */

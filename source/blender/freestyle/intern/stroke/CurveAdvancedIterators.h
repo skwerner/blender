@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FREESTYLE_CURVE_ADVANCED_ITERATORS_H__
 #define __FREESTYLE_CURVE_ADVANCED_ITERATORS_H__
 
-/** \file blender/freestyle/intern/stroke/CurveAdvancedIterators.h
- *  \ingroup freestyle
- *  \brief Iterators used to iterate over the elements of the Curve. Can't be used in python
- *  \author Stephane Grabli
- *  \date 01/08/2003
+/** \file
+ * \ingroup freestyle
+ * \brief Iterators used to iterate over the elements of the Curve. Can't be used in python
  */
 
 #include "Stroke.h"
@@ -39,7 +33,7 @@ class CurvePoint_const_traits : public Const_traits<CurvePoint*>
 public:
 	typedef deque<CurvePoint*> vertex_container;
 	typedef vertex_container::const_iterator vertex_container_iterator;
-	typedef SVertex vertex_type; 
+	typedef SVertex vertex_type;
 };
 
 class CurvePoint_nonconst_traits : public Nonconst_traits<CurvePoint*>
@@ -47,7 +41,7 @@ class CurvePoint_nonconst_traits : public Nonconst_traits<CurvePoint*>
 public:
 	typedef deque<CurvePoint*> vertex_container;
 	typedef vertex_container::iterator vertex_container_iterator;
-	typedef SVertex vertex_type; 
+	typedef SVertex vertex_type;
 };
 
 /**********************************/
@@ -275,7 +269,7 @@ protected:
 	{
 		if (_Point != 0) {
 			delete _Point;
-		_Point = 0;
+			_Point = 0;
 		}
 		if ((_currentn == _n - 1) && (_t == 1.0f)) {
 			// we're setting the iterator to end
@@ -325,7 +319,7 @@ protected:
 		}
 	}
 
-	virtual void decrement() 
+	virtual void decrement()
 	{
 		if (_Point != 0) {
 			delete _Point;

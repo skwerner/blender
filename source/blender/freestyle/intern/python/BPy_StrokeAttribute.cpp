@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/BPy_StrokeAttribute.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BPy_StrokeAttribute.h"
@@ -135,7 +131,7 @@ static void StrokeAttribute_dealloc(BPy_StrokeAttribute *self)
 	Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
-static PyObject * StrokeAttribute_repr(BPy_StrokeAttribute *self)
+static PyObject *StrokeAttribute_repr(BPy_StrokeAttribute *self)
 {
 	stringstream repr("StrokeAttribute:");
 	repr << " r: " << self->sa->getColorR() << " g: " << self->sa->getColorG() << " b: " << self->sa->getColorB() <<
@@ -282,7 +278,7 @@ PyDoc_STRVAR(StrokeAttribute_set_attribute_real_doc,
 "   :arg value: The attribute value.\n"
 "   :type value: float\n");
 
-static PyObject * StrokeAttribute_set_attribute_real(BPy_StrokeAttribute *self, PyObject *args, PyObject *kwds)
+static PyObject *StrokeAttribute_set_attribute_real(BPy_StrokeAttribute *self, PyObject *args, PyObject *kwds)
 {
 	static const char *kwlist[] = {"name", "value", NULL};
 	char *s = 0;
@@ -306,7 +302,7 @@ PyDoc_STRVAR(StrokeAttribute_set_attribute_vec2_doc,
 "   :arg value: The attribute value.\n"
 "   :type value: :class:`mathutils.Vector`, list or tuple of 2 real numbers\n");
 
-static PyObject * StrokeAttribute_set_attribute_vec2(BPy_StrokeAttribute *self, PyObject *args, PyObject *kwds)
+static PyObject *StrokeAttribute_set_attribute_vec2(BPy_StrokeAttribute *self, PyObject *args, PyObject *kwds)
 {
 	static const char *kwlist[] = {"name", "value", NULL};
 	char *s;
@@ -335,7 +331,7 @@ PyDoc_STRVAR(StrokeAttribute_set_attribute_vec3_doc,
 "   :arg value: The attribute value.\n"
 "   :type value: :class:`mathutils.Vector`, list or tuple of 3 real numbers\n");
 
-static PyObject * StrokeAttribute_set_attribute_vec3(BPy_StrokeAttribute *self, PyObject *args, PyObject *kwds)
+static PyObject *StrokeAttribute_set_attribute_vec3(BPy_StrokeAttribute *self, PyObject *args, PyObject *kwds)
 {
 	static const char *kwlist[] = {"name", "value", NULL};
 	char *s;
@@ -371,7 +367,7 @@ static PyMethodDef BPy_StrokeAttribute_methods[] = {
 	                       StrokeAttribute_set_attribute_vec2_doc},
 	{"set_attribute_vec3", (PyCFunction) StrokeAttribute_set_attribute_vec3, METH_VARARGS | METH_KEYWORDS,
 	                       StrokeAttribute_set_attribute_vec3_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 /*----------------------mathutils callbacks ----------------------------*/
@@ -391,17 +387,17 @@ static int StrokeAttribute_mathutils_get(BaseMathObject *bmo, int subtype)
 {
 	BPy_StrokeAttribute *self = (BPy_StrokeAttribute *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_COLOR:
-		bmo->data[0] = self->sa->getColorR();
-		bmo->data[1] = self->sa->getColorG();
-		bmo->data[2] = self->sa->getColorB();
-		break;
-	case MATHUTILS_SUBTYPE_THICKNESS:
-		bmo->data[0] = self->sa->getThicknessR();
-		bmo->data[1] = self->sa->getThicknessL();
-		break;
-	default:
-		return -1;
+		case MATHUTILS_SUBTYPE_COLOR:
+			bmo->data[0] = self->sa->getColorR();
+			bmo->data[1] = self->sa->getColorG();
+			bmo->data[2] = self->sa->getColorB();
+			break;
+		case MATHUTILS_SUBTYPE_THICKNESS:
+			bmo->data[0] = self->sa->getThicknessR();
+			bmo->data[1] = self->sa->getThicknessL();
+			break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -410,14 +406,14 @@ static int StrokeAttribute_mathutils_set(BaseMathObject *bmo, int subtype)
 {
 	BPy_StrokeAttribute *self = (BPy_StrokeAttribute *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_COLOR:
-		self->sa->setColor(bmo->data[0], bmo->data[1], bmo->data[2]);
-		break;
-	case MATHUTILS_SUBTYPE_THICKNESS:
-		self->sa->setThickness(bmo->data[0], bmo->data[1]);
-		break;
-	default:
-		return -1;
+		case MATHUTILS_SUBTYPE_COLOR:
+			self->sa->setColor(bmo->data[0], bmo->data[1], bmo->data[2]);
+			break;
+		case MATHUTILS_SUBTYPE_THICKNESS:
+			self->sa->setThickness(bmo->data[0], bmo->data[1]);
+			break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -426,25 +422,25 @@ static int StrokeAttribute_mathutils_get_index(BaseMathObject *bmo, int subtype,
 {
 	BPy_StrokeAttribute *self = (BPy_StrokeAttribute *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_COLOR:
-		switch (index) {
-		case 0: bmo->data[0] = self->sa->getColorR(); break;
-		case 1: bmo->data[1] = self->sa->getColorG(); break;
-		case 2: bmo->data[2] = self->sa->getColorB(); break;
+		case MATHUTILS_SUBTYPE_COLOR:
+			switch (index) {
+				case 0: bmo->data[0] = self->sa->getColorR(); break;
+				case 1: bmo->data[1] = self->sa->getColorG(); break;
+				case 2: bmo->data[2] = self->sa->getColorB(); break;
+				default:
+					return -1;
+			}
+			break;
+		case MATHUTILS_SUBTYPE_THICKNESS:
+			switch (index) {
+				case 0: bmo->data[0] = self->sa->getThicknessR(); break;
+				case 1: bmo->data[1] = self->sa->getThicknessL(); break;
+				default:
+					return -1;
+			}
+			break;
 		default:
 			return -1;
-		}
-		break;
-	case MATHUTILS_SUBTYPE_THICKNESS:
-		switch (index) {
-		case 0: bmo->data[0] = self->sa->getThicknessR(); break;
-		case 1: bmo->data[1] = self->sa->getThicknessL(); break;
-		default:
-			return -1;
-		}
-		break;
-	default:
-		return -1;
 	}
 	return 0;
 }
@@ -453,23 +449,23 @@ static int StrokeAttribute_mathutils_set_index(BaseMathObject *bmo, int subtype,
 {
 	BPy_StrokeAttribute *self = (BPy_StrokeAttribute *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_COLOR:
-		{
-			float r = (index == 0) ? bmo->data[0] : self->sa->getColorR();
-			float g = (index == 1) ? bmo->data[1] : self->sa->getColorG();
-			float b = (index == 2) ? bmo->data[2] : self->sa->getColorB();
-			self->sa->setColor(r, g, b);
-		}
-		break;
-	case MATHUTILS_SUBTYPE_THICKNESS:
-		{
-			float tr = (index == 0) ? bmo->data[0] : self->sa->getThicknessR();
-			float tl = (index == 1) ? bmo->data[1] : self->sa->getThicknessL();
-			self->sa->setThickness(tr, tl);
-		}
-		break;
-	default:
-		return -1;
+		case MATHUTILS_SUBTYPE_COLOR:
+			{
+				float r = (index == 0) ? bmo->data[0] : self->sa->getColorR();
+				float g = (index == 1) ? bmo->data[1] : self->sa->getColorG();
+				float b = (index == 2) ? bmo->data[2] : self->sa->getColorB();
+				self->sa->setColor(r, g, b);
+			}
+			break;
+		case MATHUTILS_SUBTYPE_THICKNESS:
+			{
+				float tr = (index == 0) ? bmo->data[0] : self->sa->getThicknessR();
+				float tl = (index == 1) ? bmo->data[1] : self->sa->getThicknessL();
+				self->sa->setThickness(tr, tl);
+			}
+			break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -479,7 +475,7 @@ static Mathutils_Callback StrokeAttribute_mathutils_cb = {
 	StrokeAttribute_mathutils_get,
 	StrokeAttribute_mathutils_set,
 	StrokeAttribute_mathutils_get_index,
-	StrokeAttribute_mathutils_set_index
+	StrokeAttribute_mathutils_set_index,
 };
 
 static unsigned char StrokeAttribute_mathutils_cb_index = -1;

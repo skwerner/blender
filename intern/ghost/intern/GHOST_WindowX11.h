@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_WindowX11.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_WindowX11 class.
  */
 
@@ -41,6 +33,8 @@
 #  include <X11/extensions/XInput.h>
 #endif
 
+#include "GHOST_TaskbarX11.h"
+
 #include <map>
 
 class STR_String;
@@ -52,9 +46,7 @@ class GHOST_DropTargetX11;
 
 /**
  * X11 implementation of GHOST_IWindow.
- * Dimensions are given in screen coordinates that are relative to the upper-left corner of the screen. 
- * \author	Laurence Bourn
- * \date	October 26, 2001
+ * Dimensions are given in screen coordinates that are relative to the upper-left corner of the screen.
  */
 
 class GHOST_WindowX11 : public GHOST_Window
@@ -110,7 +102,7 @@ public:
 	getWindowBounds(
 	    GHOST_Rect& bounds
 	    ) const;
-	
+
 	void
 	getClientBounds(
 	    GHOST_Rect& bounds
@@ -147,7 +139,7 @@ public:
 	    GHOST_TInt32& outX,
 	    GHOST_TInt32& outY
 	    ) const;
-	
+
 	GHOST_TWindowState
 	getState(
 	    ) const;
@@ -156,15 +148,18 @@ public:
 	setState(
 	    GHOST_TWindowState state
 	    );
-	
+
 	GHOST_TSuccess
 	setOrder(
 	    GHOST_TWindowOrder order
 	    );
-	
+
 	GHOST_TSuccess
 	invalidate(
 	    );
+
+	GHOST_TSuccess setProgressBar(float progress);
+	GHOST_TSuccess endProgressBar();
 
 	/**
 	 * Destructor.
@@ -186,7 +181,7 @@ public:
 	validate(
 	    );
 
-	/**	
+	/**
 	 * Return a handle to the x11 window type.
 	 */
 	Window
@@ -252,7 +247,7 @@ protected:
 	setWindowCursorVisibility(
 	    bool visible
 	    );
-	
+
 	/**
 	 * Sets the cursor grab on the window using
 	 * native window system calls.
@@ -285,7 +280,7 @@ protected:
 	    int hotX,
 	    int hotY
 	    );
-	
+
 	/**
 	 * Sets the cursor shape on the window using
 	 * native window system calls (Arbitrary size/color).
@@ -305,7 +300,7 @@ protected:
 private:
 
 	/// Force use of public constructor.
-	
+
 	GHOST_WindowX11(
 	    );
 
@@ -317,11 +312,11 @@ private:
 	getStandardCursor(
 	    GHOST_TStandardCursor g_cursor
 	    );
-	
+
 	Cursor
 	getEmptyCursor(
 	    );
-	
+
 	Window m_window;
 	Display *m_display;
 	XVisualInfo *m_visualInfo;
@@ -337,15 +332,17 @@ private:
 
 	/** XCursor structure of an empty (blank) cursor */
 	Cursor m_empty_cursor;
-	
+
 	/** XCursor structure of the custom cursor */
 	Cursor m_custom_cursor;
 
 	/** XCursor to show when cursor is visible */
 	Cursor m_visible_cursor;
-	
+
 	/** Cache of XC_* ID's to XCursor structures */
 	std::map<unsigned int, Cursor> m_standard_cursors;
+
+	GHOST_TaskBarX11 m_taskbar;
 
 #ifdef WITH_XDND
 	GHOST_DropTargetX11 *m_dropTarget;
@@ -374,6 +371,5 @@ private:
 	void motifFullScreen(bool set);
 	bool motifIsFullScreen() const;
 };
-
 
 #endif // __GHOST_WINDOWX11_H__

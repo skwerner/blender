@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,11 +18,10 @@
  *
  * The Original Code is: some of this file.
  *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
-/** \file blender/blenlib/intern/math_color_inline.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 
@@ -117,7 +114,7 @@ MINLINE void linearrgb_to_srgb_uchar3(unsigned char srgb[3], const float linear[
 	float srgb_f[3];
 
 	linearrgb_to_srgb_v3_v3(srgb_f, linear);
-	F3TOCHAR3(srgb_f, srgb);
+	unit_float_to_uchar_clamp_v3(srgb, srgb_f);
 }
 
 MINLINE void linearrgb_to_srgb_uchar4(unsigned char srgb[4], const float linear[4])
@@ -125,7 +122,7 @@ MINLINE void linearrgb_to_srgb_uchar4(unsigned char srgb[4], const float linear[
 	float srgb_f[4];
 
 	linearrgb_to_srgb_v4(srgb_f, linear);
-	F4TOCHAR4(srgb_f, srgb);
+	unit_float_to_uchar_clamp_v4(srgb, srgb_f);
 }
 
 /* predivide versions to work on associated/pre-multiplied alpha. if this should
@@ -204,7 +201,7 @@ MINLINE void linearrgb_to_srgb_ushort4(unsigned short srgb[4], const float linea
 	srgb[0] = to_srgb_table_lookup(linear[0]);
 	srgb[1] = to_srgb_table_lookup(linear[1]);
 	srgb[2] = to_srgb_table_lookup(linear[2]);
-	srgb[3] = FTOUSHORT(linear[3]);
+	srgb[3] = unit_float_to_ushort_clamp(linear[3]);
 }
 
 MINLINE void srgb_to_linearrgb_uchar4(float linear[4], const unsigned char srgb[4])
@@ -225,8 +222,9 @@ MINLINE void srgb_to_linearrgb_uchar4_predivide(float linear[4], const unsigned 
 		return;
 	}
 
-	for (i = 0; i < 4; i++)
+	for (i = 0; i < 4; i++) {
 		fsrgb[i] = srgb[i] * (1.0f / 255.0f);
+	}
 
 	srgb_to_linearrgb_predivide_v4(linear, fsrgb);
 }
@@ -334,9 +332,9 @@ MINLINE void float_to_byte_dither_v3(unsigned char b[3], const float f[3], float
 {
 	float dither_value = dither_random_value(s, t) * 0.005f * dither;
 
-	b[0] = FTOCHAR(dither_value + f[0]);
-	b[1] = FTOCHAR(dither_value + f[1]);
-	b[2] = FTOCHAR(dither_value + f[2]);
+	b[0] = unit_float_to_uchar_clamp(dither_value + f[0]);
+	b[1] = unit_float_to_uchar_clamp(dither_value + f[1]);
+	b[2] = unit_float_to_uchar_clamp(dither_value + f[2]);
 }
 
 /**************** Alpha Transformations *****************/
@@ -391,19 +389,19 @@ MINLINE void straight_uchar_to_premul_float(float result[4], const unsigned char
 MINLINE void premul_float_to_straight_uchar(unsigned char *result, const float color[4])
 {
 	if (color[3] == 0.0f || color[3] == 1.0f) {
-		result[0] = FTOCHAR(color[0]);
-		result[1] = FTOCHAR(color[1]);
-		result[2] = FTOCHAR(color[2]);
-		result[3] = FTOCHAR(color[3]);
+		result[0] = unit_float_to_uchar_clamp(color[0]);
+		result[1] = unit_float_to_uchar_clamp(color[1]);
+		result[2] = unit_float_to_uchar_clamp(color[2]);
+		result[3] = unit_float_to_uchar_clamp(color[3]);
 	}
 	else {
 		const float alpha_inv = 1.0f / color[3];
 
 		/* hopefully this would be optimized */
-		result[0] = FTOCHAR(color[0] * alpha_inv);
-		result[1] = FTOCHAR(color[1] * alpha_inv);
-		result[2] = FTOCHAR(color[2] * alpha_inv);
-		result[3] = FTOCHAR(color[3]);
+		result[0] = unit_float_to_uchar_clamp(color[0] * alpha_inv);
+		result[1] = unit_float_to_uchar_clamp(color[1] * alpha_inv);
+		result[2] = unit_float_to_uchar_clamp(color[2] * alpha_inv);
+		result[3] = unit_float_to_uchar_clamp(color[3]);
 	}
 }
 

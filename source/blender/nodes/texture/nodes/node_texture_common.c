@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Campbell Barton, Alfredo de Greef, David Millan Escriva,
  * Juho Vepsäläinen
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/texture/nodes/node_texture_common.c
- *  \ingroup texnodes
+/** \file
+ * \ingroup texnodes
  */
 
 
@@ -50,7 +42,7 @@ static void copy_stack(bNodeStack *to, bNodeStack *from)
 		copy_v4_v4(to->vec, from->vec);
 		to->data = from->data;
 		to->datatype = from->datatype;
-		
+
 		/* tag as copy to prevent freeing */
 		to->is_copy = 1;
 	}
@@ -62,20 +54,20 @@ static void *group_initexec(bNodeExecContext *context, bNode *node, bNodeInstanc
 {
 	bNodeTree *ngroup = (bNodeTree *)node->id;
 	void *exec;
-	
+
 	if (!ngroup)
 		return NULL;
-	
+
 	/* initialize the internal node tree execution */
 	exec = ntreeTexBeginExecTree_internal(context, ngroup, key);
-	
+
 	return exec;
 }
 
 static void group_freeexec(void *nodedata)
 {
 	bNodeTreeExec *gexec = (bNodeTreeExec *)nodedata;
-	
+
 	ntreeTexEndExecTree_internal(gexec);
 }
 
@@ -89,7 +81,7 @@ static void group_copy_inputs(bNode *gnode, bNodeStack **in, bNodeStack *gstack)
 	bNodeSocket *sock;
 	bNodeStack *ns;
 	int a;
-	
+
 	for (node = ngroup->nodes.first; node; node = node->next) {
 		if (node->type == NODE_GROUP_INPUT) {
 			for (sock = node->outputs.first, a = 0; sock; sock = sock->next, ++a) {
@@ -113,7 +105,7 @@ static void group_copy_outputs(bNode *gnode, bNodeStack **out, bNodeStack *gstac
 	bNodeSocket *sock;
 	bNodeStack *ns;
 	int a;
-	
+
 	for (node = ngroup->nodes.first; node; node = node->next) {
 		if (node->type == NODE_GROUP_OUTPUT && (node->flag & NODE_DO_OUTPUT)) {
 			for (sock = node->inputs.first, a = 0; sock; sock = sock->next, ++a) {
@@ -133,10 +125,10 @@ static void group_execute(void *data, int thread, struct bNode *node, bNodeExecD
 {
 	bNodeTreeExec *exec = execdata->data;
 	bNodeThreadStack *nts;
-	
+
 	if (!exec)
 		return;
-	
+
 	/* XXX same behavior as trunk: all nodes inside group are executed.
 	 * it's stupid, but just makes it work. compo redesign will do this better.
 	 */
@@ -145,13 +137,13 @@ static void group_execute(void *data, int thread, struct bNode *node, bNodeExecD
 		for (inode = exec->nodetree->nodes.first; inode; inode = inode->next)
 			inode->need_exec = 1;
 	}
-	
+
 	nts = ntreeGetThreadStack(exec, thread);
-	
+
 	group_copy_inputs(node, in, nts->stack);
 	ntreeExecThreadNodes(exec, nts, data, thread);
 	group_copy_outputs(node, out, nts->stack);
-	
+
 	ntreeReleaseThreadStack(nts);
 }
 
@@ -171,12 +163,12 @@ void register_node_type_tex_group(void)
 	ntype.ext.srna = RNA_struct_find("TextureNodeGroup");
 	BLI_assert(ntype.ext.srna != NULL);
 	RNA_struct_blender_type_set(ntype.ext.srna, &ntype);
-	
+
 	node_type_socket_templates(&ntype, NULL, NULL);
 	node_type_size(&ntype, 140, 60, 400);
 	node_type_label(&ntype, node_group_label);
 	node_type_update(&ntype, NULL, node_group_verify);
 	node_type_exec(&ntype, group_initexec, group_freeexec, group_execute);
-	
+
 	nodeRegisterType(&ntype);
 }

@@ -13,12 +13,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Campbell Barton
-#
 # ***** END GPL LICENSE BLOCK *****
 
-set(INC 
+set(INC
 	.
 	../../blenkernel
 	../../blenlib
@@ -39,18 +36,24 @@ set(SRC
 	bpy_internal_import.c
 	bpy_threads.c
 	idprop_py_api.c
+	imbuf_py_api.c
 	py_capi_utils.c
 
 	bgl.h
 	blf_py_api.h
 	bpy_internal_import.h
 	idprop_py_api.h
+	imbuf_py_api.h
 	py_capi_utils.h
 
 	# header-only
 	python_utildefines.h
 )
 
+set(LIB
+	${GLEW_LIBRARY}
+)
+
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_python_ext "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_python_ext "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

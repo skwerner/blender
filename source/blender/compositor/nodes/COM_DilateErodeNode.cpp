@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_DilateErodeNode.h"
@@ -45,20 +41,20 @@ DilateErodeNode::DilateErodeNode(bNode *editorNode) : Node(editorNode)
 
 void DilateErodeNode::convertToOperations(NodeConverter &converter, const CompositorContext &context) const
 {
-	
+
 	bNode *editorNode = this->getbNode();
 	if (editorNode->custom1 == CMP_NODE_DILATEERODE_DISTANCE_THRESH) {
 		DilateErodeThresholdOperation *operation = new DilateErodeThresholdOperation();
 		operation->setDistance(editorNode->custom2);
 		operation->setInset(editorNode->custom3);
 		converter.addOperation(operation);
-		
+
 		converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
-	
+
 		if (editorNode->custom3 < 2.0f) {
 			AntiAliasOperation *antiAlias = new AntiAliasOperation();
 			converter.addOperation(antiAlias);
-			
+
 			converter.addLink(operation->getOutputSocket(), antiAlias->getInputSocket(0));
 			converter.mapOutputSocket(getOutputSocket(0), antiAlias->getOutputSocket(0));
 		}
@@ -71,7 +67,7 @@ void DilateErodeNode::convertToOperations(NodeConverter &converter, const Compos
 			DilateDistanceOperation *operation = new DilateDistanceOperation();
 			operation->setDistance(editorNode->custom2);
 			converter.addOperation(operation);
-			
+
 			converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
 			converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket(0));
 		}
@@ -79,7 +75,7 @@ void DilateErodeNode::convertToOperations(NodeConverter &converter, const Compos
 			ErodeDistanceOperation *operation = new ErodeDistanceOperation();
 			operation->setDistance(-editorNode->custom2);
 			converter.addOperation(operation);
-			
+
 			converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
 			converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket(0));
 		}
@@ -93,20 +89,20 @@ void DilateErodeNode::convertToOperations(NodeConverter &converter, const Compos
 		operationx->setQuality(quality);
 		operationx->setFalloff(PROP_SMOOTH);
 		converter.addOperation(operationx);
-		
+
 		converter.mapInputSocket(getInputSocket(0), operationx->getInputSocket(0));
 		// converter.mapInputSocket(getInputSocket(1), operationx->getInputSocket(1)); // no size input yet
-		
+
 		GaussianAlphaYBlurOperation *operationy = new GaussianAlphaYBlurOperation();
 		operationy->setData(&m_alpha_blur);
 		operationy->setQuality(quality);
 		operationy->setFalloff(PROP_SMOOTH);
 		converter.addOperation(operationy);
-		
+
 		converter.addLink(operationx->getOutputSocket(), operationy->getInputSocket(0));
 		// converter.mapInputSocket(getInputSocket(1), operationy->getInputSocket(1)); // no size input yet
 		converter.mapOutputSocket(getOutputSocket(0), operationy->getOutputSocket());
-		
+
 		converter.addPreview(operationy->getOutputSocket());
 
 		/* TODO? */
@@ -134,7 +130,7 @@ void DilateErodeNode::convertToOperations(NodeConverter &converter, const Compos
 			DilateStepOperation *operation = new DilateStepOperation();
 			operation->setIterations(editorNode->custom2);
 			converter.addOperation(operation);
-			
+
 			converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
 			converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket(0));
 		}
@@ -142,7 +138,7 @@ void DilateErodeNode::convertToOperations(NodeConverter &converter, const Compos
 			ErodeStepOperation *operation = new ErodeStepOperation();
 			operation->setIterations(-editorNode->custom2);
 			converter.addOperation(operation);
-			
+
 			converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
 			converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket(0));
 		}

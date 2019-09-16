@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BLI_THREADS_H__
-#define __BLI_THREADS_H__ 
+#define __BLI_THREADS_H__
 
-/** \file BLI_threads.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 #ifdef __cplusplus
 extern "C" {
@@ -55,28 +47,28 @@ void BLI_threadapi_exit(void);
 
 struct TaskScheduler *BLI_task_scheduler_get(void);
 
-void    BLI_init_threads(struct ListBase *threadbase, void *(*do_thread)(void *), int tot);
+void    BLI_threadpool_init(struct ListBase *threadbase, void *(*do_thread)(void *), int tot);
 int     BLI_available_threads(struct ListBase *threadbase);
-int     BLI_available_thread_index(struct ListBase *threadbase);
-void    BLI_insert_thread(struct ListBase *threadbase, void *callerdata);
-void    BLI_remove_thread(struct ListBase *threadbase, void *callerdata);
-void    BLI_remove_thread_index(struct ListBase *threadbase, int index);
-void    BLI_remove_threads(struct ListBase *threadbase);
-void    BLI_end_threads(struct ListBase *threadbase);
+int     BLI_threadpool_available_thread_index(struct ListBase *threadbase);
+void    BLI_threadpool_insert(struct ListBase *threadbase, void *callerdata);
+void    BLI_threadpool_remove(struct ListBase *threadbase, void *callerdata);
+void    BLI_threadpool_remove_index(struct ListBase *threadbase, int index);
+void    BLI_threadpool_clear(struct ListBase *threadbase);
+void    BLI_threadpool_end(struct ListBase *threadbase);
 int     BLI_thread_is_main(void);
 
 
-void BLI_begin_threaded_malloc(void);
-void BLI_end_threaded_malloc(void);
+void BLI_threaded_malloc_begin(void);
+void BLI_threaded_malloc_end(void);
 
 /* System Information */
 
 int     BLI_system_thread_count(void); /* gets the number of threads the system can make use of */
 void    BLI_system_num_threads_override_set(int num);
 int     BLI_system_num_threads_override_get(void);
-	
+
 /* Global Mutex Locks
- * 
+ *
  * One custom lock available now. can be extended. */
 
 #define LOCK_IMAGE      0
@@ -91,8 +83,8 @@ int     BLI_system_num_threads_override_get(void);
 #define LOCK_FFTW       9
 #define LOCK_VIEW3D     10
 
-void    BLI_lock_thread(int type);
-void    BLI_unlock_thread(int type);
+void    BLI_thread_lock(int type);
+void    BLI_thread_unlock(int type);
 
 /* Mutex Lock */
 
@@ -155,7 +147,7 @@ void BLI_ticket_mutex_lock(TicketMutex *ticket);
 void BLI_ticket_mutex_unlock(TicketMutex *ticket);
 
 /* Condition */
- 
+
 typedef pthread_cond_t ThreadCondition;
 
 void BLI_condition_init(ThreadCondition *cond);
@@ -177,7 +169,7 @@ void BLI_thread_queue_free(ThreadQueue *queue);
 void BLI_thread_queue_push(ThreadQueue *queue, void *work);
 void *BLI_thread_queue_pop(ThreadQueue *queue);
 void *BLI_thread_queue_pop_timeout(ThreadQueue *queue, int ms);
-int BLI_thread_queue_size(ThreadQueue *queue);
+int BLI_thread_queue_len(ThreadQueue *queue);
 bool BLI_thread_queue_is_empty(ThreadQueue *queue);
 
 void BLI_thread_queue_wait_finish(ThreadQueue *queue);
@@ -204,9 +196,14 @@ void BLI_thread_queue_nowait(ThreadQueue *queue);
 #  define BLI_thread_local_set(name, value) name = value
 #endif  /* defined(__APPLE__) */
 
+/* **** Special functions to help performance on crazy NUMA setups. **** */
+
+/* Make sure process/thread is using NUMA node with fast memory access. */
+void BLI_thread_put_process_on_fast_node(void);
+void BLI_thread_put_thread_on_fast_node(void);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif
-

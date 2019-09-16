@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,13 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
-#ifndef _COM_ReadBufferOperation_h
-#define _COM_ReadBufferOperation_h
+#ifndef __COM_READBUFFEROPERATION_H__
+#define __COM_READBUFFEROPERATION_H__
 
 #include "COM_NodeOperation.h"
 #include "COM_MemoryProxy.h"
@@ -38,13 +34,13 @@ public:
 	void setMemoryProxy(MemoryProxy *memoryProxy) { this->m_memoryProxy = memoryProxy; }
 	MemoryProxy *getMemoryProxy() { return this->m_memoryProxy; }
 	void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
-	
+
 	void *initializeTileData(rcti *rect);
 	void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 	void executePixelExtend(float output[4], float x, float y, PixelSampler sampler,
 	                        MemoryBufferExtend extend_x, MemoryBufferExtend extend_y);
 	void executePixelFiltered(float output[4], float x, float y, float dx[2], float dy[2]);
-	const bool isReadBufferOperation() const { return true; }
+	bool isReadBufferOperation() const { return true; }
 	void setOffset(unsigned int offset) { this->m_offset = offset; }
 	unsigned int getOffset() const { return this->m_offset; }
 	bool determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output);

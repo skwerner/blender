@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_operator_wrap.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file is so python can define operators that C can call into.
  * The generic callback functions for python operators are defines in
@@ -168,8 +162,9 @@ PyObject *PYOP_wrap_macro_define(PyObject *UNUSED(self), PyObject *args)
 	const char *opname;
 	const char *macroname;
 
-	if (!PyArg_ParseTuple(args, "Os:_bpy.ops.macro_define", &macro, &opname))
+	if (!PyArg_ParseTuple(args, "Os:_bpy.ops.macro_define", &macro, &opname)) {
 		return NULL;
+	}
 
 	if (WM_operatortype_find(opname, true) == NULL) {
 		PyErr_Format(PyExc_ValueError,
@@ -200,4 +195,3 @@ PyObject *PYOP_wrap_macro_define(PyObject *UNUSED(self), PyObject *args)
 
 	return pyrna_struct_CreatePyObject(&ptr_otmacro);
 }
-

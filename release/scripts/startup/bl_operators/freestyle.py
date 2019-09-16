@@ -34,28 +34,30 @@ class SCENE_OT_freestyle_fill_range_by_selection(bpy.types.Operator):
     bl_label = "Fill Range by Selection"
     bl_options = {'INTERNAL'}
 
-    type = EnumProperty(
-            name="Type", description="Type of the modifier to work on",
-            items=(("COLOR", "Color", "Color modifier type"),
-                   ("ALPHA", "Alpha", "Alpha modifier type"),
-                   ("THICKNESS", "Thickness", "Thickness modifier type")),
-            )
-    name = StringProperty(
-            name="Name",
-            description="Name of the modifier to work on",
-            )
+    type: EnumProperty(
+        name="Type", description="Type of the modifier to work on",
+        items=(
+            ('COLOR', "Color", "Color modifier type"),
+            ('ALPHA', "Alpha", "Alpha modifier type"),
+            ('THICKNESS', "Thickness", "Thickness modifier type"),
+        ),
+    )
+    name: StringProperty(
+        name="Name",
+        description="Name of the modifier to work on",
+    )
 
     @classmethod
     def poll(cls, context):
-        rl = context.scene.render.layers.active
-        return rl and rl.freestyle_settings.linesets.active
+        view_layer = context.view_layer
+        return view_layer and view_layer.freestyle_settings.linesets.active
 
     def execute(self, context):
         import sys
 
         scene = context.scene
-        rl = scene.render.layers.active
-        lineset = rl.freestyle_settings.linesets.active
+        view_layer = context.view_layer
+        lineset = view_layer.freestyle_settings.linesets.active
         linestyle = lineset.linestyle
         # Find the modifier to work on
         if self.type == 'COLOR':
@@ -78,10 +80,10 @@ class SCENE_OT_freestyle_fill_range_by_selection(bpy.types.Operator):
             self.report({'ERROR'}, "Unexpected modifier type: " + m.type)
             return {'CANCELLED'}
         # Find selected vertices in editmesh
-        ob = bpy.context.active_object
+        ob = context.active_object
         if ob.type == 'MESH' and ob.mode == 'EDIT' and ob.name != ref.name:
             bpy.ops.object.mode_set(mode='OBJECT')
-            selected_verts = [v for v in bpy.context.active_object.data.vertices if v.select]
+            selected_verts = [v for v in ob.data.vertices if v.select]
             bpy.ops.object.mode_set(mode='EDIT')
             # Compute the min/max distance from the reference to mesh vertices
             min_dist = sys.float_info.max
@@ -104,7 +106,7 @@ class SCENE_OT_freestyle_fill_range_by_selection(bpy.types.Operator):
             m.range_max = max_dist
             return {'FINISHED'}
         # Find selected mesh objects
-        selection = [ob for ob in scene.objects if ob.select and ob.type == 'MESH' and ob.name != ref.name]
+        selection = [ob for ob in scene.objects if ob.select_get() and ob.type == 'MESH' and ob.name != source.name]
         if selection:
             # Compute the min/max distance from the reference to mesh vertices
             min_dist = sys.float_info.max
@@ -198,17 +200,17 @@ class SCENE_OT_freestyle_module_open(bpy.types.Operator):
     bl_label = "Open Style Module File"
     bl_options = {'INTERNAL'}
 
-    filepath = StringProperty(subtype='FILE_PATH')
+    filepath: StringProperty(subtype='FILE_PATH')
 
-    make_internal = BoolProperty(
+    make_internal: BoolProperty(
         name="Make internal",
         description="Make module file internal after loading",
         default=True)
 
     @classmethod
     def poll(cls, context):
-        rl = context.scene.render.layers.active
-        return rl and rl.freestyle_settings.mode == 'SCRIPT'
+        view_layer = context.view_layer
+        return view_layer and view_layer.freestyle_settings.mode == 'SCRIPT'
 
     def invoke(self, context, event):
         self.freestyle_module = context.freestyle_module

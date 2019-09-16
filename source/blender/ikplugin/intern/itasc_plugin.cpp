@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
  * Original author: Benoit Bolsee
- * Contributor(s):
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/ikplugin/intern/itasc_plugin.cpp
- *  \ingroup ikplugin
+/** \file
+ * \ingroup ikplugin
  */
 
 #include <stdlib.h>
@@ -90,6 +82,7 @@ typedef void (*ErrorCallback)(const iTaSC::ConstraintValues *values, unsigned in
 
 // one structure for each target in the scene
 struct IK_Target {
+	struct Depsgraph		*bldepsgraph;
 	struct Scene			*blscene;
 	iTaSC::MovingFrame*		target;
 	iTaSC::ConstraintSet*	constraint;
@@ -107,6 +100,7 @@ struct IK_Target {
 	float					eeRest[4][4];	//end effector initial pose relative to armature
 
 	IK_Target() {
+		bldepsgraph = NULL;
 		blscene = NULL;
 		target = NULL;
 		constraint = NULL;
@@ -157,6 +151,7 @@ struct IK_Channel {
 };
 
 struct IK_Scene {
+	struct Depsgraph	*bldepsgraph;
 	struct Scene		*blscene;
 	IK_Scene*			next;
 	int					numchan;	// number of channel in pchan
@@ -177,6 +172,7 @@ struct IK_Scene {
 	std::vector<IK_Target*>		targets;
 
 	IK_Scene() {
+		bldepsgraph = NULL;
 		blscene = NULL;
 		next = NULL;
 		channels = NULL;
@@ -229,7 +225,7 @@ enum IK_SegmentAxis {
 	IK_Z = 2,
 	IK_TRANS_X = 3,
 	IK_TRANS_Y = 4,
-	IK_TRANS_Z = 5
+	IK_TRANS_Z = 5,
 };
 
 static int initialize_chain(Object *ob, bPoseChannel *pchan_tip, bConstraint *con)
@@ -550,7 +546,7 @@ static bool target_callback(const iTaSC::Timestamp& timestamp, const iTaSC::Fram
 	bConstraint *constraint = (bConstraint *)target->blenderConstraint;
 	float tarmat[4][4];
 
-	BKE_constraint_target_matrix_get(target->blscene, constraint, 0, CONSTRAINT_OBTYPE_OBJECT, target->owner, tarmat, 1.0);
+	BKE_constraint_target_matrix_get(target->bldepsgraph, target->blscene, constraint, 0, CONSTRAINT_OBTYPE_OBJECT, target->owner, tarmat, 1.0);
 
 	// rootmat contains the target pose in world coordinate
 	// if enforce is != 1.0, blend the target position with the end effector position
@@ -619,7 +615,7 @@ static bool base_callback(const iTaSC::Timestamp& timestamp, const iTaSC::Frame&
 		IK_Channel &rootchan = ikscene->channels[0];
 
 		// get polar target matrix in world space
-		BKE_constraint_target_matrix_get(ikscene->blscene, ikscene->polarConstraint, 1, CONSTRAINT_OBTYPE_OBJECT, ikscene->blArmature, mat, 1.0);
+		BKE_constraint_target_matrix_get(ikscene->bldepsgraph, ikscene->blscene, ikscene->polarConstraint, 1, CONSTRAINT_OBTYPE_OBJECT, ikscene->blArmature, mat, 1.0);
 		// convert to armature space
 		mul_m4_m4m4(polemat, imat, mat);
 		// get the target in world space (was computed before as target object are defined before base object)
@@ -863,7 +859,7 @@ static bool joint_callback(const iTaSC::Timestamp& timestamp, iTaSC::ConstraintV
 }
 
 // build array of joint corresponding to IK chain
-static int convert_channels(IK_Scene *ikscene, PoseTree *tree, float ctime)
+static int convert_channels(struct Depsgraph *depsgraph, IK_Scene *ikscene, PoseTree *tree, float ctime)
 {
 	IK_Channel *ikchan;
 	bPoseChannel *pchan;
@@ -877,10 +873,10 @@ static int convert_channels(IK_Scene *ikscene, PoseTree *tree, float ctime)
 		ikchan->owner = ikscene->blArmature;
 
 		// the constraint and channels must be applied before we build the iTaSC scene,
-		// this is because some of the pose data (e.g. pose head) don't have corresponding 
+		// this is because some of the pose data (e.g. pose head) don't have corresponding
 		// joint angles and can't be applied to the iTaSC armature dynamically
 		if (!(pchan->flag & POSE_DONE))
-			BKE_pose_where_is_bone(ikscene->blscene, ikscene->blArmature, pchan, ctime, 1);
+			BKE_pose_where_is_bone(depsgraph, ikscene->blscene, ikscene->blArmature, pchan, ctime, 1);
 		// tell blender that this channel was controlled by IK, it's cleared on each BKE_pose_where_is()
 		pchan->flag |= (POSE_DONE | POSE_CHAIN);
 
@@ -1056,7 +1052,7 @@ static void BKE_pose_rest(IK_Scene *ikscene)
 	}
 }
 
-static IK_Scene *convert_tree(Scene *blscene, Object *ob, bPoseChannel *pchan, float ctime)
+static IK_Scene *convert_tree(struct Depsgraph *depsgraph, Scene *blscene, Object *ob, bPoseChannel *pchan, float ctime)
 {
 	PoseTree *tree = (PoseTree *)pchan->iktree.first;
 	PoseTarget *target;
@@ -1068,12 +1064,11 @@ static IK_Scene *convert_tree(Scene *blscene, Object *ob, bPoseChannel *pchan, f
 	IK_Scene *ikscene;
 	IK_Channel *ikchan;
 	KDL::Frame initPose;
-	KDL::Rotation boneRot;
 	Bone *bone;
 	int a, numtarget;
 	unsigned int t;
 	float length;
-	bool ret = true, ingame;
+	bool ret = true;
 	double *rot;
 	float start[3];
 
@@ -1082,6 +1077,7 @@ static IK_Scene *convert_tree(Scene *blscene, Object *ob, bPoseChannel *pchan, f
 
 	ikscene = new IK_Scene;
 	ikscene->blscene = blscene;
+	ikscene->bldepsgraph = depsgraph;
 	arm = new iTaSC::Armature();
 	scene = new iTaSC::Scene();
 	ikscene->channels = new IK_Channel[tree->totchannel];
@@ -1089,26 +1085,13 @@ static IK_Scene *convert_tree(Scene *blscene, Object *ob, bPoseChannel *pchan, f
 	ikscene->armature = arm;
 	ikscene->scene = scene;
 	ikparam = (bItasc *)ob->pose->ikparam;
-	ingame = (ob->pose->flag & POSE_GAME_ENGINE);
+
 	if (!ikparam) {
 		// you must have our own copy
 		ikparam = &DefIKParam;
 	}
-	else if (ingame) {
-		// tweak the param when in game to have efficient stepping
-		// using fixed substep is not effecient since frames in the GE are often
-		// shorter than in animation => move to auto step automatically and set
-		// the target substep duration via min/max
-		if (!(ikparam->flag & ITASC_AUTO_STEP)) {
-			float timestep = blscene->r.frs_sec_base / blscene->r.frs_sec;
-			if (ikparam->numstep > 0)
-				timestep /= ikparam->numstep;
-			// with equal min and max, the algorythm will take this step and the indicative substep most of the time
-			ikparam->minstep = ikparam->maxstep = timestep;
-			ikparam->flag |= ITASC_AUTO_STEP;
-		}
-	}
-	if ((ikparam->flag & ITASC_SIMULATION) && !ingame)
+
+	if (ikparam->flag & ITASC_SIMULATION)
 		// no cache in animation mode
 		ikscene->cache = new iTaSC::Cache();
 
@@ -1134,16 +1117,9 @@ static IK_Scene *convert_tree(Scene *blscene, Object *ob, bPoseChannel *pchan, f
 	std::vector<double> weights;
 	double weight[3];
 	// build the array of joints corresponding to the IK chain
-	convert_channels(ikscene, tree, ctime);
-	if (ingame) {
-		// in the GE, set the initial joint angle to match the current pose
-		// this will update the jointArray in ikscene
-		convert_pose(ikscene);
-	}
-	else {
-		// in Blender, the rest pose is always 0 for joints
-		BKE_pose_rest(ikscene);
-	}
+	convert_channels(depsgraph, ikscene, tree, ctime);
+	// in Blender, the rest pose is always 0 for joints
+	BKE_pose_rest(ikscene);
 	rot = ikscene->jointArray(0);
 
 	for (a = 0, ikchan = ikscene->channels; a < tree->totchannel; ++a, ++ikchan) {
@@ -1439,6 +1415,7 @@ static IK_Scene *convert_tree(Scene *blscene, Object *ob, bPoseChannel *pchan, f
 	for (t = 0; t < ikscene->targets.size(); t++) {
 		IK_Target *iktarget = ikscene->targets[t];
 		iktarget->blscene = blscene;
+		iktarget->bldepsgraph = depsgraph;
 		condata = (bKinematicConstraint *)iktarget->blenderConstraint->data;
 		pchan = tree->pchan[iktarget->channel];
 		unsigned int controltype, bonecnt;
@@ -1526,7 +1503,7 @@ static IK_Scene *convert_tree(Scene *blscene, Object *ob, bPoseChannel *pchan, f
 	return ikscene;
 }
 
-static void create_scene(Scene *scene, Object *ob, float ctime)
+static void create_scene(struct Depsgraph *depsgraph, Scene *scene, Object *ob, float ctime)
 {
 	bPoseChannel *pchan;
 
@@ -1537,7 +1514,7 @@ static void create_scene(Scene *scene, Object *ob, float ctime)
 		if (tree) {
 			IK_Data *ikdata = get_ikdata(ob->pose);
 			// convert tree in iTaSC::Scene
-			IK_Scene *ikscene = convert_tree(scene, ob, pchan, ctime);
+			IK_Scene *ikscene = convert_tree(depsgraph, scene, ob, pchan, ctime);
 			if (ikscene) {
 				ikscene->next = ikdata->first;
 				ikdata->first = ikscene;
@@ -1576,7 +1553,7 @@ static int init_scene(Object *ob)
 	return 0;
 }
 
-static void execute_scene(Scene *blscene, IK_Scene *ikscene, bItasc *ikparam, float ctime, float frtime)
+static void execute_scene(struct Depsgraph *depsgraph, Scene *blscene, IK_Scene *ikscene, bItasc *ikparam, float ctime, float frtime)
 {
 	int i;
 	IK_Channel *ikchan;
@@ -1592,7 +1569,7 @@ static void execute_scene(Scene *blscene, IK_Scene *ikscene, bItasc *ikparam, fl
 		// in animation mode, we must get the bone position from action and constraints
 		for (i = 0, ikchan = ikscene->channels; i < ikscene->numchan; i++, ++ikchan) {
 			if (!(ikchan->pchan->flag & POSE_DONE))
-				BKE_pose_where_is_bone(blscene, ikscene->blArmature, ikchan->pchan, ctime, 1);
+				BKE_pose_where_is_bone(depsgraph, blscene, ikscene->blArmature, ikchan->pchan, ctime, 1);
 			// tell blender that this channel was controlled by IK, it's cleared on each BKE_pose_where_is()
 			ikchan->pchan->flag |= (POSE_DONE | POSE_CHAIN);
 			ikchan->jointValid = 0;
@@ -1744,7 +1721,7 @@ static void execute_scene(Scene *blscene, IK_Scene *ikscene, bItasc *ikparam, fl
 //---------------------------------------------------
 // plugin interface
 //
-void itasc_initialize_tree(struct Scene *scene, Object *ob, float ctime)
+void itasc_initialize_tree(struct Depsgraph *depsgraph, struct Scene *scene, Object *ob, float ctime)
 {
 	bPoseChannel *pchan;
 	int count = 0;
@@ -1764,13 +1741,13 @@ void itasc_initialize_tree(struct Scene *scene, Object *ob, float ctime)
 	// if at least one tree, create the scenes from the PoseTree stored in the channels
 	// postpone until execute_tree: this way the pose constraint are included
 	if (count)
-		create_scene(scene, ob, ctime);
+		create_scene(depsgraph, scene, ob, ctime);
 	itasc_update_param(ob->pose);
 	// make sure we don't rebuilt until the user changes something important
 	ob->pose->flag &= ~POSE_WAS_REBUILT;
 }
 
-void itasc_execute_tree(struct Scene *scene, Object *ob,  bPoseChannel *pchan_root, float ctime)
+void itasc_execute_tree(struct Depsgraph *depsgraph, struct Scene *scene, Object *ob,  bPoseChannel *pchan_root, float ctime)
 {
 	if (ob->pose->ikdata) {
 		IK_Data *ikdata = (IK_Data *)ob->pose->ikdata;
@@ -1781,13 +1758,7 @@ void itasc_execute_tree(struct Scene *scene, Object *ob,  bPoseChannel *pchan_ro
 		for (IK_Scene *ikscene = ikdata->first; ikscene; ikscene = ikscene->next) {
 			if (ikscene->channels[0].pchan == pchan_root) {
 				float timestep = scene->r.frs_sec_base / scene->r.frs_sec;
-				if (ob->pose->flag & POSE_GAME_ENGINE) {
-					timestep = ob->pose->ctime;
-					// limit the timestep to avoid excessive number of iteration
-					if (timestep > 0.2f)
-						timestep = 0.2f;
-				}
-				execute_scene(scene, ikscene, ikparam, ctime, timestep);
+				execute_scene(depsgraph, scene, ikscene, ikparam, ctime, timestep);
 				break;
 			}
 		}
@@ -1866,4 +1837,3 @@ void itasc_test_constraint(struct Object *ob, struct bConstraint *cons)
 			break;
 	}
 }
-

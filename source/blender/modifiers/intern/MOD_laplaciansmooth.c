@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,38 +15,32 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Alexander Pinzon
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_laplaciansmooth.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+
+#include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
-
 #include "MEM_guardedalloc.h"
 
-#include "BKE_cdderivedmesh.h"
 #include "BKE_deform.h"
+#include "BKE_editmesh.h"
+#include "BKE_library.h"
+#include "BKE_mesh.h"
 #include "BKE_modifier.h"
 
 #include "MOD_util.h"
 
 #include "eigen_capi.h"
-
-#if 0
-#define MOD_LAPLACIANSMOOTH_MAX_EDGE_PERCENTAGE 1.8f
-#define MOD_LAPLACIANSMOOTH_MIN_EDGE_PERCENTAGE 0.02f
-#endif
 
 struct BLaplacianSystem {
 	float *eweights;        /* Length weights per Edge */
@@ -60,8 +52,8 @@ struct BLaplacianSystem {
 	int numLoops;           /* Number of edges*/
 	int numPolys;           /* Number of faces*/
 	int numVerts;           /* Number of verts*/
-	short *numNeFa;         /* Number of neighboors faces around vertice*/
-	short *numNeEd;         /* Number of neighboors Edges around vertice*/
+	short *numNeFa;         /* Number of neighbors faces around vertice*/
+	short *numNeEd;         /* Number of neighbors Edges around vertice*/
 	short *zerola;          /* Is zero area or length*/
 
 	/* Pointers to data*/
@@ -77,11 +69,10 @@ struct BLaplacianSystem {
 };
 typedef struct BLaplacianSystem LaplacianSystem;
 
-static CustomDataMask required_data_mask(Object *ob, ModifierData *md);
-static bool is_disabled(ModifierData *md, int useRenderParams);
+static void required_data_mask(Object *ob, ModifierData *md, CustomData_MeshMasks *r_cddata_masks);
+static bool is_disabled(const struct Scene *UNUSED(scene), ModifierData *md, bool useRenderParams);
 static float compute_volume(const float center[3], float (*vertexCos)[3], const MPoly *mpoly, int numPolys, const MLoop *mloop);
 static LaplacianSystem *init_laplacian_system(int a_numEdges, int a_numPolys, int a_numLoops, int a_numVerts);
-static void copy_data(ModifierData *md, ModifierData *target);
 static void delete_laplacian_system(LaplacianSystem *sys);
 static void fill_laplacian_matrix(LaplacianSystem *sys);
 static void init_data(ModifierData *md);
@@ -269,7 +260,7 @@ static void init_laplacian_matrix(LaplacianSystem *sys)
 	for (i = 0; i < sys->numEdges; i++) {
 		idv1 = sys->medges[i].v1;
 		idv2 = sys->medges[i].v2;
-		/* if is boundary, apply scale-dependent umbrella operator only with neighboors in boundary */
+		/* if is boundary, apply scale-dependent umbrella operator only with neighbors in boundary */
 		if (sys->numNeEd[idv1] != sys->numNeFa[idv1] && sys->numNeEd[idv2] != sys->numNeFa[idv2]) {
 			sys->vlengths[idv1] += sys->eweights[i];
 			sys->vlengths[idv2] += sys->eweights[i];
@@ -331,7 +322,7 @@ static void validate_solution(LaplacianSystem *sys, short flag, float lambda, fl
 {
 	int i;
 	float lam;
-	float vini, vend;
+	float vini = 0.0f, vend = 0.0f;
 
 	if (flag & MOD_LAPLACIANSMOOTH_PRESERVE_VOLUME) {
 		vini = compute_volume(sys->vert_centroid, sys->vertexCos, sys->mpoly, sys->numPolys, sys->mloop);
@@ -357,7 +348,7 @@ static void validate_solution(LaplacianSystem *sys, short flag, float lambda, fl
 }
 
 static void laplaciansmoothModifier_do(
-        LaplacianSmoothModifierData *smd, Object *ob, DerivedMesh *dm,
+        LaplacianSmoothModifierData *smd, Object *ob, Mesh *mesh,
         float (*vertexCos)[3], int numVerts)
 {
 	LaplacianSystem *sys;
@@ -367,17 +358,17 @@ static void laplaciansmoothModifier_do(
 	int i, iter;
 	int defgrp_index;
 
-	sys = init_laplacian_system(dm->getNumEdges(dm), dm->getNumPolys(dm), dm->getNumLoops(dm), numVerts);
+	sys = init_laplacian_system(mesh->totedge, mesh->totpoly, mesh->totloop, numVerts);
 	if (!sys) {
 		return;
 	}
 
-	sys->mpoly = dm->getPolyArray(dm);
-	sys->mloop = dm->getLoopArray(dm);
-	sys->medges = dm->getEdgeArray(dm);
+	sys->mpoly = mesh->mpoly;
+	sys->mloop = mesh->mloop;
+	sys->medges = mesh->medge;
 	sys->vertexCos = vertexCos;
 	sys->min_area = 0.00001f;
-	modifier_get_vgroup(ob, dm, smd->defgrp_name, &dvert, &defgrp_index);
+	MOD_get_vgroup(ob, mesh, smd->defgrp_name, &dvert, &defgrp_index);
 
 	sys->vert_centroid[0] = 0.0f;
 	sys->vert_centroid[1] = 0.0f;
@@ -472,17 +463,7 @@ static void init_data(ModifierData *md)
 	smd->defgrp_name[0] = '\0';
 }
 
-static void copy_data(ModifierData *md, ModifierData *target)
-{
-#if 0
-	LaplacianSmoothModifierData *smd = (LaplacianSmoothModifierData *) md;
-	LaplacianSmoothModifierData *tsmd = (LaplacianSmoothModifierData *) target;
-#endif
-
-	modifier_copyData_generic(md, target);
-}
-
-static bool is_disabled(ModifierData *md, int UNUSED(useRenderParams))
+static bool is_disabled(const struct Scene *UNUSED(scene), ModifierData *md, bool UNUSED(useRenderParams))
 {
 	LaplacianSmoothModifierData *smd = (LaplacianSmoothModifierData *) md;
 	short flag;
@@ -495,50 +476,52 @@ static bool is_disabled(ModifierData *md, int UNUSED(useRenderParams))
 	return 0;
 }
 
-static CustomDataMask required_data_mask(Object *UNUSED(ob), ModifierData *md)
+static void required_data_mask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	LaplacianSmoothModifierData *smd = (LaplacianSmoothModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (smd->defgrp_name[0]) dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	if (smd->defgrp_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
-static void deformVerts(ModifierData *md, Object *ob, DerivedMesh *derivedData,
-                        float (*vertexCos)[3], int numVerts, ModifierApplyFlag UNUSED(flag))
+static void deformVerts(
+        ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh,
+        float (*vertexCos)[3], int numVerts)
 {
-	DerivedMesh *dm;
+	Mesh *mesh_src;
 
 	if (numVerts == 0)
 		return;
 
-	dm = get_dm(ob, NULL, derivedData, NULL, false, false);
+	mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, numVerts, false, false);
 
-	laplaciansmoothModifier_do((LaplacianSmoothModifierData *)md, ob, dm,
+	laplaciansmoothModifier_do((LaplacianSmoothModifierData *)md, ctx->object, mesh_src,
 	                           vertexCos, numVerts);
 
-	if (dm != derivedData)
-		dm->release(dm);
+	if (!ELEM(mesh_src, NULL, mesh)) {
+		BKE_id_free(NULL, mesh_src);
+	}
 }
 
 static void deformVertsEM(
-        ModifierData *md, Object *ob, struct BMEditMesh *editData,
-        DerivedMesh *derivedData, float (*vertexCos)[3], int numVerts)
+        ModifierData *md, const ModifierEvalContext *ctx, struct BMEditMesh *editData,
+        Mesh *mesh, float (*vertexCos)[3], int numVerts)
 {
-	DerivedMesh *dm;
+	Mesh *mesh_src;
 
 	if (numVerts == 0)
 		return;
 
-	dm = get_dm(ob, editData, derivedData, NULL, false, false);
+	mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
 
-	laplaciansmoothModifier_do((LaplacianSmoothModifierData *)md, ob, dm,
+	laplaciansmoothModifier_do((LaplacianSmoothModifierData *)md, ctx->object, mesh_src,
 	                           vertexCos, numVerts);
 
-	if (dm != derivedData)
-		dm->release(dm);
+	if (!ELEM(mesh_src, NULL, mesh)) {
+		BKE_id_free(NULL, mesh_src);
+	}
 }
 
 
@@ -550,22 +533,23 @@ ModifierTypeInfo modifierType_LaplacianSmooth = {
 	/* flags */             eModifierTypeFlag_AcceptsMesh |
 	                        eModifierTypeFlag_SupportsEditmode,
 
-	/* copy_data */         copy_data,
+	/* copyData */          modifier_copyData_generic,
+
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     NULL,
-	/* applyModifierEM */   NULL,
+
 	/* initData */          init_data,
 	/* requiredDataMask */  required_data_mask,
 	/* freeData */          NULL,
 	/* isDisabled */        is_disabled,
-	/* updateDepgraph */    NULL,
 	/* updateDepsgraph */   NULL,
 	/* dependsOnTime */     NULL,
 	/* dependsOnNormals */	NULL,
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

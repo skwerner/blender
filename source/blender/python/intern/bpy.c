@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file defines the '_bpy' module which is used by python's 'bpy' package
  * to access C defined builtin functions.
@@ -34,7 +28,7 @@
 #include "BLI_string.h"
 
 #include "BKE_appdir.h"
-#include "BKE_global.h" /* XXX, G.main only */
+#include "BKE_global.h" /* XXX, G_MAIN only */
 #include "BKE_blender_version.h"
 #include "BKE_bpath.h"
 
@@ -46,6 +40,7 @@
 #include "bpy_rna.h"
 #include "bpy_app.h"
 #include "bpy_rna_id_collection.h"
+#include "bpy_rna_gizmo.h"
 #include "bpy_props.h"
 #include "bpy_library.h"
 #include "bpy_operator.h"
@@ -57,6 +52,7 @@
 
 /* external util modules */
 #include "../generic/idprop_py_api.h"
+#include "bpy_msgbus.h"
 
 #ifdef WITH_FREESTYLE
 #  include "BPy_Freestyle.h"
@@ -130,13 +126,19 @@ static PyObject *bpy_blend_paths(PyObject *UNUSED(self), PyObject *args, PyObjec
 		return NULL;
 	}
 
-	if (absolute) flag |= BKE_BPATH_TRAVERSE_ABS;
-	if (!packed)  flag |= BKE_BPATH_TRAVERSE_SKIP_PACKED;
-	if (local)    flag |= BKE_BPATH_TRAVERSE_SKIP_LIBRARY;
+	if (absolute) {
+		flag |= BKE_BPATH_TRAVERSE_ABS;
+	}
+	if (!packed) {
+		flag |= BKE_BPATH_TRAVERSE_SKIP_PACKED;
+	}
+	if (local) {
+		flag |= BKE_BPATH_TRAVERSE_SKIP_LIBRARY;
+	}
 
 	list = PyList_New(0);
 
-	BKE_bpath_traverse_main(G.main, bpy_blend_paths_visit_cb, flag, (void *)list);
+	BKE_bpath_traverse_main(G_MAIN, bpy_blend_paths_visit_cb, flag, (void *)list);
 
 	return list;
 }
@@ -161,20 +163,17 @@ static PyObject *bpy_user_resource(PyObject *UNUSED(self), PyObject *args, PyObj
 	}
 
 	/* stupid string compare */
-	if      (STREQ(type, "DATAFILES")) folder_id = BLENDER_USER_DATAFILES;
-	else if (STREQ(type, "CONFIG"))    folder_id = BLENDER_USER_CONFIG;
-	else if (STREQ(type, "SCRIPTS"))   folder_id = BLENDER_USER_SCRIPTS;
-	else if (STREQ(type, "AUTOSAVE"))  folder_id = BLENDER_USER_AUTOSAVE;
+	if      (STREQ(type, "DATAFILES")) { folder_id = BLENDER_USER_DATAFILES; }
+	else if (STREQ(type, "CONFIG"))    { folder_id = BLENDER_USER_CONFIG; }
+	else if (STREQ(type, "SCRIPTS"))   { folder_id = BLENDER_USER_SCRIPTS; }
+	else if (STREQ(type, "AUTOSAVE"))  { folder_id = BLENDER_USER_AUTOSAVE; }
 	else {
 		PyErr_SetString(PyExc_ValueError, "invalid resource argument");
 		return NULL;
 	}
-	
-	/* same logic as BKE_appdir_folder_id_create(), but best leave it up to the script author to create */
-	path = BKE_appdir_folder_id(folder_id, subdir);
 
-	if (!path)
-		path = BKE_appdir_folder_id_user_notest(folder_id, subdir);
+	/* same logic as BKE_appdir_folder_id_create(), but best leave it up to the script author to create */
+	path = BKE_appdir_folder_id_user_notest(folder_id, subdir);
 
 	return PyC_UnicodeFromByte(path ? path : "");
 }
@@ -210,9 +209,9 @@ static PyObject *bpy_resource_path(PyObject *UNUSED(self), PyObject *args, PyObj
 	}
 
 	/* stupid string compare */
-	if      (STREQ(type, "USER"))    folder_id = BLENDER_RESOURCE_PATH_USER;
-	else if (STREQ(type, "LOCAL"))   folder_id = BLENDER_RESOURCE_PATH_LOCAL;
-	else if (STREQ(type, "SYSTEM"))  folder_id = BLENDER_RESOURCE_PATH_SYSTEM;
+	if      (STREQ(type, "USER"))    { folder_id = BLENDER_RESOURCE_PATH_USER; }
+	else if (STREQ(type, "LOCAL"))   { folder_id = BLENDER_RESOURCE_PATH_LOCAL; }
+	else if (STREQ(type, "SYSTEM"))  { folder_id = BLENDER_RESOURCE_PATH_SYSTEM; }
 	else {
 		PyErr_SetString(PyExc_ValueError, "invalid resource argument");
 		return NULL;
@@ -298,7 +297,6 @@ static PyObject *bpy_import_test(const char *modname)
  ******************************************************************************/
 void BPy_init_modules(void)
 {
-	extern BPy_StructRNA *bpy_context_module;
 	PointerRNA ctx_ptr;
 	PyObject *mod;
 
@@ -338,6 +336,8 @@ void BPy_init_modules(void)
 
 	BPY_rna_id_collection_module(mod);
 
+	BPY_rna_gizmo_module(mod);
+
 	bpy_import_test("bpy_types");
 	PyModule_AddObject(mod, "data", BPY_rna_module()); /* imports bpy_types by running this */
 	bpy_import_test("bpy_types");
@@ -347,6 +347,7 @@ void BPy_init_modules(void)
 	PyModule_AddObject(mod, "app", BPY_app_struct());
 	PyModule_AddObject(mod, "_utils_units", BPY_utils_units());
 	PyModule_AddObject(mod, "_utils_previews", BPY_utils_previews_module());
+	PyModule_AddObject(mod, "msgbus", BPY_msgbus_module());
 
 	/* bpy context */
 	RNA_pointer_create(NULL, &RNA_Context, (void *)BPy_GetContext(), &ctx_ptr);
@@ -370,6 +371,9 @@ void BPy_init_modules(void)
 	/* register funcs (bpy_rna.c) */
 	PyModule_AddObject(mod, meth_bpy_register_class.ml_name, (PyObject *)PyCFunction_New(&meth_bpy_register_class, NULL));
 	PyModule_AddObject(mod, meth_bpy_unregister_class.ml_name, (PyObject *)PyCFunction_New(&meth_bpy_unregister_class, NULL));
+
+	PyModule_AddObject(mod, meth_bpy_owner_id_get.ml_name, (PyObject *)PyCFunction_New(&meth_bpy_owner_id_get, NULL));
+	PyModule_AddObject(mod, meth_bpy_owner_id_set.ml_name, (PyObject *)PyCFunction_New(&meth_bpy_owner_id_set, NULL));
 
 	/* add our own modules dir, this is a python package */
 	bpy_package_py = bpy_import_test("bpy");

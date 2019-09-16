@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_internal_types.h
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -33,26 +27,20 @@
 #include "RNA_types.h"
 
 struct BlenderRNA;
-struct ContainerRNA;
-struct StructRNA;
-struct PropertyRNA;
-struct PointerRNA;
-struct FunctionRNA;
 struct CollectionPropertyIterator;
-struct bContext;
-struct IDProperty;
+struct ContainerRNA;
+struct FunctionRNA;
 struct GHash;
+struct IDOverrideStatic;
+struct IDOverrideStaticProperty;
+struct IDOverrideStaticPropertyOperation;
+struct IDProperty;
 struct Main;
+struct PointerRNA;
+struct PropertyRNA;
 struct Scene;
-
-#ifdef UNIT_TEST
-#define RNA_MAX_ARRAY_LENGTH 64
-#else
-#define RNA_MAX_ARRAY_LENGTH 32
-#endif
-
-#define RNA_MAX_ARRAY_DIMENSION 3
-
+struct StructRNA;
+struct bContext;
 
 /* store local properties here */
 #define RNA_IDP_UI "_RNA_UI"
@@ -69,10 +57,10 @@ typedef struct StructRNA *(*StructRefineFunc)(struct PointerRNA *ptr);
 typedef char *(*StructPathFunc)(struct PointerRNA *ptr);
 
 typedef int (*PropArrayLengthGetFunc)(struct PointerRNA *ptr, int length[RNA_MAX_ARRAY_DIMENSION]);
-typedef int (*PropBooleanGetFunc)(struct PointerRNA *ptr);
-typedef void (*PropBooleanSetFunc)(struct PointerRNA *ptr, int value);
-typedef void (*PropBooleanArrayGetFunc)(struct PointerRNA *ptr, int *values);
-typedef void (*PropBooleanArraySetFunc)(struct PointerRNA *ptr, const int *values);
+typedef bool (*PropBooleanGetFunc)(struct PointerRNA *ptr);
+typedef void (*PropBooleanSetFunc)(struct PointerRNA *ptr, bool value);
+typedef void (*PropBooleanArrayGetFunc)(struct PointerRNA *ptr, bool *values);
+typedef void (*PropBooleanArraySetFunc)(struct PointerRNA *ptr, const bool *values);
 typedef int (*PropIntGetFunc)(struct PointerRNA *ptr);
 typedef void (*PropIntSetFunc)(struct PointerRNA *ptr, int value);
 typedef void (*PropIntArrayGetFunc)(struct PointerRNA *ptr, int *values);
@@ -94,8 +82,8 @@ typedef const EnumPropertyItem *(*PropEnumItemFunc)(
 typedef PointerRNA (*PropPointerGetFunc)(struct PointerRNA *ptr);
 typedef StructRNA *(*PropPointerTypeFunc)(struct PointerRNA *ptr);
 typedef void (*PropPointerSetFunc)(struct PointerRNA *ptr, const PointerRNA value);
-typedef int (*PropPointerPollFunc)(struct PointerRNA *ptr, const PointerRNA value);
-typedef int (*PropPointerPollFuncPy)(struct PointerRNA *ptr, const PointerRNA value, const PropertyRNA *prop);
+typedef bool (*PropPointerPollFunc)(struct PointerRNA *ptr, const PointerRNA value);
+typedef bool (*PropPointerPollFuncPy)(struct PointerRNA *ptr, const PointerRNA value, const PropertyRNA *prop);
 typedef void (*PropCollectionBeginFunc)(struct CollectionPropertyIterator *iter, struct PointerRNA *ptr);
 typedef void (*PropCollectionNextFunc)(struct CollectionPropertyIterator *iter);
 typedef void (*PropCollectionEndFunc)(struct CollectionPropertyIterator *iter);
@@ -106,10 +94,10 @@ typedef int (*PropCollectionLookupStringFunc)(struct PointerRNA *ptr, const char
 typedef int (*PropCollectionAssignIntFunc)(struct PointerRNA *ptr, int key, const struct PointerRNA *assign_ptr);
 
 /* extended versions with PropertyRNA argument */
-typedef int (*PropBooleanGetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop);
-typedef void (*PropBooleanSetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop, int value);
-typedef void (*PropBooleanArrayGetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop, int *values);
-typedef void (*PropBooleanArraySetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop, const int *values);
+typedef bool (*PropBooleanGetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop);
+typedef void (*PropBooleanSetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop, bool value);
+typedef void (*PropBooleanArrayGetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop, bool *values);
+typedef void (*PropBooleanArraySetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop, const bool *values);
 typedef int (*PropIntGetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop);
 typedef void (*PropIntSetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop, int value);
 typedef void (*PropIntArrayGetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop, int *values);
@@ -125,6 +113,58 @@ typedef int (*PropStringLengthFuncEx)(struct PointerRNA *ptr, struct PropertyRNA
 typedef void (*PropStringSetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop, const char *value);
 typedef int (*PropEnumGetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop);
 typedef void (*PropEnumSetFuncEx)(struct PointerRNA *ptr, struct PropertyRNA *prop, int value);
+
+/* Handling override operations, and also comparison. */
+
+/**
+ * If \a override is NULL, merely do comparison between prop_a from ptr_a and prop_b from ptr_b,
+ * following comparison mode given.
+ * If \a override and \a rna_path are not NULL, it will add a new override operation for overridable properties
+ * that differ and have not yet been overridden (and set accordingly \a r_override_changed if given).
+ *
+ * \note Given PropertyRNA are final (in case of IDProps...).
+ * \note In non-array cases, \a len values are 0.
+ * \note \a override, \a rna_path and \a r_override_changed may be NULL pointers.
+ */
+typedef int (*RNAPropOverrideDiff)(
+        struct Main *bmain,
+        struct PointerRNA *ptr_a, struct PointerRNA *ptr_b,
+        struct PropertyRNA *prop_a, struct PropertyRNA *prop_b,
+        const int len_a, const int len_b,
+        const int mode,
+        struct IDOverrideStatic *override, const char *rna_path,
+        const int flags, bool *r_override_changed);
+
+/**
+ * Only used for differential override (add, sub, etc.).
+ * Store into storage the value needed to transform reference's value into local's value.
+ *
+ * \note Given PropertyRNA are final (in case of IDProps...).
+ * \note In non-array cases, \a len values are 0.
+ * \note Might change given override operation (e.g. change 'add' one into 'sub'), in case computed storage value
+ *       is out of range (or even change it to basic 'set' operation if nothing else works).
+ */
+typedef bool (*RNAPropOverrideStore)(
+        struct Main *bmain,
+        struct PointerRNA *ptr_local, struct PointerRNA *ptr_reference, struct PointerRNA *ptr_storage,
+        struct PropertyRNA *prop_local, struct PropertyRNA *prop_reference, struct PropertyRNA *prop_storage,
+        const int len_local, const int len_reference, const int len_storage,
+        struct IDOverrideStaticPropertyOperation *opop);
+
+/**
+ * Apply given override operation from src to dst (using value from storage as second operand
+ * for differential operations).
+ *
+ * \note Given PropertyRNA are final (in case of IDProps...).
+ * \note In non-array cases, \a len values are 0.
+ */
+typedef bool (*RNAPropOverrideApply)(
+        struct Main *bmain,
+        struct PointerRNA *ptr_dst, struct PointerRNA *ptr_src, struct PointerRNA *ptr_storage,
+        struct PropertyRNA *prop_dst, struct PropertyRNA *prop_src, struct PropertyRNA *prop_storage,
+        const int len_dst, const int len_src, const int len_storage,
+        struct PointerRNA *ptr_item_dst, struct PointerRNA *ptr_item_src, struct PointerRNA *ptr_item_storage,
+        struct IDOverrideStaticPropertyOperation *opop);
 
 /* Container - generic abstracted container of RNA properties */
 typedef struct ContainerRNA {
@@ -164,6 +204,8 @@ struct PropertyRNA {
 	const char *identifier;
 	/* various options */
 	int flag;
+	/* various override options */
+	int flag_override;
 	/* Function parameters flags. */
 	short flag_parameter;
 	/* Internal ("private") flags. */
@@ -203,6 +245,11 @@ struct PropertyRNA {
 	/* callback for testing if array-item editable (if applicable) */
 	ItemEditableFunc itemeditable;
 
+	/* Override handling callbacks (diff is also used for comparison). */
+	RNAPropOverrideDiff override_diff;
+	RNAPropOverrideStore override_store;
+	RNAPropOverrideApply override_apply;
+
 	/* raw access */
 	int rawoffset;
 	RawPropertyType rawtype;
@@ -241,8 +288,8 @@ typedef struct BoolPropertyRNA {
 	PropBooleanArrayGetFuncEx getarray_ex;
 	PropBooleanArraySetFuncEx setarray_ex;
 
-	int defaultvalue;
-	const int *defaultarray;
+	bool defaultvalue;
+	const bool *defaultarray;
 } BoolPropertyRNA;
 
 typedef struct IntPropertyRNA {

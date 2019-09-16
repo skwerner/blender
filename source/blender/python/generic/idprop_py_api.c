@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- *
- * Contributor(s): Joseph Eagar, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/generic/idprop_py_api.c
- *  \ingroup pygen
+/** \file
+ * \ingroup pygen
  */
 
 #include <Python.h>
@@ -268,7 +261,7 @@ static PyObject *BPy_IDGroup_GetType(BPy_IDProperty *self)
 
 static PyGetSetDef BPy_IDGroup_getseters[] = {
 	{(char *)"name", (getter)BPy_IDGroup_GetName, (setter)BPy_IDGroup_SetName, (char *)"The name of this Group.", NULL},
-	{NULL, NULL, NULL, NULL, NULL}
+	{NULL, NULL, NULL, NULL, NULL},
 };
 
 static Py_ssize_t BPy_IDGroup_Map_Len(BPy_IDProperty *self)
@@ -421,19 +414,38 @@ static IDProperty *idp_from_PyBytes(const char *name, PyObject *ob)
 	return IDP_New(IDP_STRING, &val, name);
 }
 
-static int idp_array_type_from_format_char(char format)
+static int idp_array_type_from_formatstr_and_size(const char *typestr, Py_ssize_t itemsize)
 {
-	if (format == 'i') return IDP_INT;
-	if (format == 'f') return IDP_FLOAT;
-	if (format == 'd') return IDP_DOUBLE;
+	char format = PyC_StructFmt_type_from_str(typestr);
+
+	if (PyC_StructFmt_type_is_float_any(format)) {
+		if (itemsize == 4) {
+			return IDP_FLOAT;
+		}
+		if (itemsize == 8) {
+			return IDP_DOUBLE;
+		}
+	}
+	if (PyC_StructFmt_type_is_int_any(format)) {
+		if (itemsize == 4) {
+			return IDP_INT;
+		}
+	}
+
 	return -1;
 }
 
 static const char *idp_format_from_array_type(int type)
 {
-	if (type == IDP_INT) return "i";
-	if (type == IDP_FLOAT) return "f";
-	if (type == IDP_DOUBLE) return "d";
+	if (type == IDP_INT) {
+		return "i";
+	}
+	if (type == IDP_FLOAT) {
+		return "f";
+	}
+	if (type == IDP_DOUBLE) {
+		return "d";
+	}
 	return NULL;
 }
 
@@ -442,13 +454,13 @@ static IDProperty *idp_from_PySequence_Buffer(const char *name, Py_buffer *buffe
 	IDProperty *prop;
 	IDPropertyTemplate val = {0};
 
-	int format = idp_array_type_from_format_char(*buffer->format);
-	if (format == -1) {
+	int id_type = idp_array_type_from_formatstr_and_size(buffer->format, buffer->itemsize);
+	if (id_type == -1) {
 		/* should never happen as the type has been checked before */
 		return NULL;
 	}
 	else {
-		val.array.type = format;
+		val.array.type = id_type;
 		val.array.len = buffer->len / buffer->itemsize;
 	}
 	prop = IDP_New(IDP_ARRAY, &val, name);
@@ -532,8 +544,10 @@ static IDProperty *idp_from_PySequence(const char *name, PyObject *ob)
 
 	if (PyObject_CheckBuffer(ob)) {
 		PyObject_GetBuffer(ob, &buffer, PyBUF_SIMPLE | PyBUF_FORMAT);
-		char format = *buffer.format;
-		if (ELEM(format, 'i', 'f', 'd')) {
+		char format = PyC_StructFmt_type_from_str(buffer.format);
+		if (PyC_StructFmt_type_is_float_any(format) ||
+		    (PyC_StructFmt_type_is_int_any(format) && buffer.itemsize == 4))
+		{
 			use_buffer = true;
 		}
 		else {
@@ -595,15 +609,15 @@ static IDProperty *idp_from_PyMapping(const char *name, PyObject *ob)
 	return prop;
 }
 
-static IDProperty *idp_from_DatablockPointer(const char *name, PyObject *ob, IDPropertyTemplate *val)
+static IDProperty *idp_from_DatablockPointer(const char *name, PyObject *ob)
 {
-	pyrna_id_FromPyObject(ob, &val->id);
-	return IDP_New(IDP_ID, val, name);
+	IDPropertyTemplate val = {0};
+	pyrna_id_FromPyObject(ob, &val.id);
+	return IDP_New(IDP_ID, &val, name);
 }
 
 static IDProperty *idp_from_PyObject(PyObject *name_obj, PyObject *ob)
 {
-	IDPropertyTemplate val = {0};
 	const char *name = idp_try_read_name(name_obj);
 	if (name == NULL) {
 		return NULL;
@@ -625,7 +639,7 @@ static IDProperty *idp_from_PyObject(PyObject *name_obj, PyObject *ob)
 		return idp_from_PySequence(name, ob);
 	}
 	else if (ob == Py_None || pyrna_id_CheckPyObject(ob)) {
-		return idp_from_DatablockPointer(name, ob, &val);
+		return idp_from_DatablockPointer(name, ob);
 	}
 	else if (PyMapping_Check(ob)) {
 		return idp_from_PyMapping(name, ob);
@@ -639,7 +653,6 @@ static IDProperty *idp_from_PyObject(PyObject *name_obj, PyObject *ob)
 }
 
 /* -------------------------------------------------------------------------- */
-
 /**
  * \note group can be a pointer array or a group.
  * assume we already checked key is a string.
@@ -854,7 +867,7 @@ static PyObject *BPy_IDGroup_MapDataToPy(IDProperty *prop)
 }
 
 PyDoc_STRVAR(BPy_IDGroup_pop_doc,
-".. method:: pop(key)\n"
+".. method:: pop(key, default)\n"
 "\n"
 "   Remove an item from the group, returning a Python representation.\n"
 "\n"
@@ -862,38 +875,40 @@ PyDoc_STRVAR(BPy_IDGroup_pop_doc,
 "\n"
 "   :arg key: Name of item to remove.\n"
 "   :type key: string\n"
+"   :arg default: Value to return when key isn't found, otherwise raise an exception.\n"
+"   :type default: Undefined\n"
 );
-static PyObject *BPy_IDGroup_pop(BPy_IDProperty *self, PyObject *value)
+static PyObject *BPy_IDGroup_pop(BPy_IDProperty *self, PyObject *args)
 {
 	IDProperty *idprop;
 	PyObject *pyform;
-	const char *name = _PyUnicode_AsString(value);
 
-	if (!name) {
-		PyErr_Format(PyExc_TypeError,
-		             "pop expected at least a string argument, not %.200s",
-		             Py_TYPE(value)->tp_name);
+	char *key;
+	PyObject *def = NULL;
+
+	if (!PyArg_ParseTuple(args, "s|O:get", &key, &def)) {
 		return NULL;
 	}
 
-	idprop = IDP_GetPropertyFromGroup(self->prop, name);
-
-	if (idprop) {
-		pyform = BPy_IDGroup_MapDataToPy(idprop);
-
-		if (!pyform) {
-			/* ok something bad happened with the pyobject,
-			 * so don't remove the prop from the group.  if pyform is
-			 * NULL, then it already should have raised an exception.*/
+	idprop = IDP_GetPropertyFromGroup(self->prop, key);
+	if (idprop == NULL) {
+		if (def == NULL) {
+			PyErr_SetString(PyExc_KeyError, "item not in group");
 			return NULL;
 		}
-
-		IDP_RemoveFromGroup(self->prop, idprop);
-		return pyform;
+		return Py_INCREF_RET(def);
 	}
 
-	PyErr_SetString(PyExc_KeyError, "item not in group");
-	return NULL;
+	pyform = BPy_IDGroup_MapDataToPy(idprop);
+	if (pyform == NULL) {
+		/* ok something bad happened with the pyobject,
+		 * so don't remove the prop from the group.  if pyform is
+		 * NULL, then it already should have raised an exception.*/
+		return NULL;
+	}
+
+	IDP_RemoveFromGroup(self->prop, idprop);
+	return pyform;
 }
 
 PyDoc_STRVAR(BPy_IDGroup_iter_items_doc,
@@ -933,15 +948,16 @@ PyObject *BPy_Wrap_GetKeys(IDProperty *prop)
 	IDProperty *loop;
 	int i;
 
-	for (i = 0, loop = prop->data.group.first; loop && (i < prop->len); loop = loop->next, i++)
+	for (i = 0, loop = prop->data.group.first; loop && (i < prop->len); loop = loop->next, i++) {
 		PyList_SET_ITEM(list, i, PyUnicode_FromString(loop->name));
+	}
 
 	/* if the id prop is corrupt, count the remaining */
 	for ( ; loop; loop = loop->next, i++) {
 		/* pass */
 	}
 
-	if (i != prop->len) { /* if the loop didnt finish, we know the length is wrong */
+	if (i != prop->len) { /* if the loop didn't finish, we know the length is wrong */
 		BPy_IDGroup_CorrectListLen(prop, list, i, __func__);
 		Py_DECREF(list); /*free the list*/
 		/*call self again*/
@@ -1064,7 +1080,9 @@ static PyObject *BPy_IDGroup_update(BPy_IDProperty *self, PyObject *value)
 	else if (PyDict_Check(value)) {
 		while (PyDict_Next(value, &i, &pkey, &pval)) {
 			BPy_IDGroup_Map_SetItem(self, pkey, pval);
-			if (PyErr_Occurred()) return NULL;
+			if (PyErr_Occurred()) {
+				return NULL;
+			}
 		}
 	}
 	else {
@@ -1110,14 +1128,16 @@ static PyObject *BPy_IDGroup_get(BPy_IDProperty *self, PyObject *args)
 	const char *key;
 	PyObject *def = Py_None;
 
-	if (!PyArg_ParseTuple(args, "s|O:get", &key, &def))
+	if (!PyArg_ParseTuple(args, "s|O:get", &key, &def)) {
 		return NULL;
+	}
 
 	idprop = IDP_GetPropertyFromGroup(self->prop, key);
 	if (idprop) {
 		PyObject *pyobj = BPy_IDGroup_WrapData(self->id, idprop, self->prop);
-		if (pyobj)
+		if (pyobj) {
 			return pyobj;
+		}
 	}
 
 	Py_INCREF(def);
@@ -1125,7 +1145,7 @@ static PyObject *BPy_IDGroup_get(BPy_IDProperty *self, PyObject *args)
 }
 
 static struct PyMethodDef BPy_IDGroup_methods[] = {
-	{"pop", (PyCFunction)BPy_IDGroup_pop, METH_O, BPy_IDGroup_pop_doc},
+	{"pop", (PyCFunction)BPy_IDGroup_pop, METH_VARARGS, BPy_IDGroup_pop_doc},
 	{"iteritems", (PyCFunction)BPy_IDGroup_iter_items, METH_NOARGS, BPy_IDGroup_iter_items_doc},
 	{"keys", (PyCFunction)BPy_IDGroup_keys, METH_NOARGS, BPy_IDGroup_keys_doc},
 	{"values", (PyCFunction)BPy_IDGroup_values, METH_NOARGS, BPy_IDGroup_values_doc},
@@ -1134,7 +1154,7 @@ static struct PyMethodDef BPy_IDGroup_methods[] = {
 	{"get", (PyCFunction)BPy_IDGroup_get, METH_VARARGS, BPy_IDGroup_get_doc},
 	{"to_dict", (PyCFunction)BPy_IDGroup_to_dict, METH_NOARGS, BPy_IDGroup_to_dict_doc},
 	{"clear", (PyCFunction)BPy_IDGroup_clear, METH_NOARGS, BPy_IDGroup_clear_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static PySequenceMethods BPy_IDGroup_Seq = {
@@ -1278,7 +1298,7 @@ static PyObject *BPy_IDArray_to_list(BPy_IDArray *self)
 
 static PyMethodDef BPy_IDArray_methods[] = {
 	{"to_list", (PyCFunction)BPy_IDArray_to_list, METH_NOARGS, BPy_IDArray_to_list_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static int BPy_IDArray_Len(BPy_IDArray *self)
@@ -1373,7 +1393,9 @@ static PyObject *BPy_IDArray_slice(BPy_IDArray *self, int begin, int end)
 	int count;
 
 	CLAMP(begin, 0, prop->len);
-	if (end < 0) end = prop->len + end + 1;
+	if (end < 0) {
+		end = prop->len + end + 1;
+	}
 	CLAMP(end, 0, prop->len);
 	begin = MIN2(begin, end);
 
@@ -1443,17 +1465,20 @@ static PyObject *BPy_IDArray_subscript(BPy_IDArray *self, PyObject *item)
 	if (PyIndex_Check(item)) {
 		Py_ssize_t i;
 		i = PyNumber_AsSsize_t(item, PyExc_IndexError);
-		if (i == -1 && PyErr_Occurred())
+		if (i == -1 && PyErr_Occurred()) {
 			return NULL;
-		if (i < 0)
+		}
+		if (i < 0) {
 			i += self->prop->len;
+		}
 		return BPy_IDArray_GetItem(self, i);
 	}
 	else if (PySlice_Check(item)) {
 		Py_ssize_t start, stop, step, slicelength;
 
-		if (PySlice_GetIndicesEx(item, self->prop->len, &start, &stop, &step, &slicelength) < 0)
+		if (PySlice_GetIndicesEx(item, self->prop->len, &start, &stop, &step, &slicelength) < 0) {
 			return NULL;
+		}
 
 		if (slicelength <= 0) {
 			return PyTuple_New(0);
@@ -1478,20 +1503,24 @@ static int BPy_IDArray_ass_subscript(BPy_IDArray *self, PyObject *item, PyObject
 {
 	if (PyIndex_Check(item)) {
 		Py_ssize_t i = PyNumber_AsSsize_t(item, PyExc_IndexError);
-		if (i == -1 && PyErr_Occurred())
+		if (i == -1 && PyErr_Occurred()) {
 			return -1;
-		if (i < 0)
+		}
+		if (i < 0) {
 			i += self->prop->len;
+		}
 		return BPy_IDArray_SetItem(self, i, value);
 	}
 	else if (PySlice_Check(item)) {
 		Py_ssize_t start, stop, step, slicelength;
 
-		if (PySlice_GetIndicesEx(item, self->prop->len, &start, &stop, &step, &slicelength) < 0)
+		if (PySlice_GetIndicesEx(item, self->prop->len, &start, &stop, &step, &slicelength) < 0) {
 			return -1;
+		}
 
-		if (step == 1)
+		if (step == 1) {
 			return BPy_IDArray_ass_slice(self, start, stop, value);
+		}
 		else {
 			PyErr_SetString(PyExc_TypeError, "slice steps not supported with vectors");
 			return -1;
@@ -1508,14 +1537,14 @@ static int BPy_IDArray_ass_subscript(BPy_IDArray *self, PyObject *item, PyObject
 static PyMappingMethods BPy_IDArray_AsMapping = {
 	(lenfunc)BPy_IDArray_Len,
 	(binaryfunc)BPy_IDArray_subscript,
-	(objobjargproc)BPy_IDArray_ass_subscript
+	(objobjargproc)BPy_IDArray_ass_subscript,
 };
 
 static int itemsize_by_idarray_type(int array_type)
 {
-	if (array_type == IDP_INT) return sizeof(int);
-	if (array_type == IDP_FLOAT) return sizeof(float);
-	if (array_type == IDP_DOUBLE) return sizeof(double);
+	if (array_type == IDP_INT) { return sizeof(int); }
+	if (array_type == IDP_FLOAT) { return sizeof(float); }
+	if (array_type == IDP_DOUBLE) { return sizeof(double); }
 	return -1;  /* should never happen */
 }
 
@@ -1628,7 +1657,7 @@ PyTypeObject BPy_IDArray_Type = {
 	NULL,                       /* PyObject *tp_cache; */
 	NULL,                       /* PyObject *tp_subclasses; */
 	NULL,                       /* PyObject *tp_weaklist; */
-	NULL
+	NULL,
 };
 
 /*********** ID Property Group iterator ********/
@@ -1769,7 +1798,7 @@ static PyObject *BPyInit_idprop_types(void)
 /* --- */
 
 static PyMethodDef IDProp_methods[] = {
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 
@@ -1792,51 +1821,13 @@ PyObject *BPyInit_idprop(void)
 {
 	PyObject *mod;
 	PyObject *submodule;
-	PyObject *sys_modules = PyThreadState_GET()->interp->modules;
+	PyObject *sys_modules = PyImport_GetModuleDict();
 
 	mod = PyModule_Create(&IDProp_module_def);
 
 	/* idprop.types */
 	PyModule_AddObject(mod, "types", (submodule = BPyInit_idprop_types()));
 	PyDict_SetItem(sys_modules, PyModule_GetNameObject(submodule), submodule);
-	Py_INCREF(submodule);
 
 	return mod;
 }
-
-
-#ifndef NDEBUG
-/* -------------------------------------------------------------------- */
-/* debug only function */
-
-void IDP_spit(IDProperty *prop)
-{
-	if (prop) {
-		PyGILState_STATE gilstate;
-		bool use_gil = true; /* !PyC_IsInterpreterActive(); */
-		PyObject *ret_dict;
-		PyObject *ret_str;
-
-		if (use_gil) {
-			gilstate = PyGILState_Ensure();
-		}
-
-		/* to_dict() */
-		ret_dict = BPy_IDGroup_MapDataToPy(prop);
-		ret_str = PyObject_Repr(ret_dict);
-		Py_DECREF(ret_dict);
-
-		printf("IDProperty(%p): %s\n", prop, _PyUnicode_AsString(ret_str));
-
-		Py_DECREF(ret_str);
-
-		if (use_gil) {
-			PyGILState_Release(gilstate);
-		}
-	}
-	else {
-		printf("IDProperty: <NIL>\n");
-	}
-}
-
-#endif

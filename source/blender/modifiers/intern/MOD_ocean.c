@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,77 +15,46 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Matt Ebb
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/modifiers/intern/MOD_ocean.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
-#include "DNA_customdata_types.h"
-#include "DNA_object_types.h"
-#include "DNA_meshdata_types.h"
-#include "DNA_modifier_types.h"
-#include "DNA_scene_types.h"
+#include "BLI_utildefines.h"
 
 #include "BLI_math.h"
 #include "BLI_math_inline.h"
 #include "BLI_task.h"
-#include "BLI_utildefines.h"
 
-#include "BKE_cdderivedmesh.h"
+#include "DNA_customdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_modifier_types.h"
+#include "DNA_scene_types.h"
+
+#include "BKE_library.h"
+#include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_ocean.h"
+
+#include "DEG_depsgraph_query.h"
 
 #include "MOD_modifiertypes.h"
 
 #ifdef WITH_OCEANSIM
 static void init_cache_data(Object *ob, struct OceanModifierData *omd)
 {
-	const char *relbase = modifier_path_relbase(ob);
+	const char *relbase = modifier_path_relbase_from_global(ob);
 
 	omd->oceancache = BKE_ocean_init_cache(omd->cachepath, relbase,
 	                                       omd->bakestart, omd->bakeend, omd->wave_scale,
 	                                       omd->chop_amount, omd->foam_coverage, omd->foam_fade, omd->resolution);
 }
 
-static void clear_cache_data(struct OceanModifierData *omd)
-{
-	BKE_ocean_free_cache(omd->oceancache);
-	omd->oceancache = NULL;
-	omd->cached = false;
-}
-
-/* keep in sync with init_ocean_modifier_bake(), object_modifier.c */
-static void init_ocean_modifier(struct OceanModifierData *omd)
-{
-	int do_heightfield, do_chop, do_normals, do_jacobian;
-
-	if (!omd || !omd->ocean) return;
-
-	do_heightfield = true;
-	do_chop = (omd->chop_amount > 0);
-	do_normals = (omd->flag & MOD_OCEAN_GENERATE_NORMALS);
-	do_jacobian = (omd->flag & MOD_OCEAN_GENERATE_FOAM);
-
-	BKE_ocean_free_data(omd->ocean);
-	BKE_ocean_init(omd->ocean, omd->resolution * omd->resolution, omd->resolution * omd->resolution,
-	               omd->spatial_size, omd->spatial_size,
-	               omd->wind_velocity, omd->smallest_wave, 1.0, omd->wave_direction, omd->damp, omd->wave_alignment,
-	               omd->depth, omd->time,
-	               do_heightfield, do_chop, do_normals, do_jacobian,
-	               omd->seed);
-}
-
 static void simulate_ocean_modifier(struct OceanModifierData *omd)
 {
-	if (!omd || !omd->ocean) return;
-
 	BKE_ocean_simulate(omd->ocean, omd->time, omd->wave_scale, omd->chop_amount);
 }
 #endif /* WITH_OCEANSIM */
@@ -121,8 +88,6 @@ static void initData(ModifierData *md)
 	omd->seed = 0;
 	omd->time = 1.0;
 
-	omd->refresh = 0;
-
 	omd->size = 1.0;
 	omd->repeat_x = 1;
 	omd->repeat_y = 1;
@@ -137,7 +102,7 @@ static void initData(ModifierData *md)
 	omd->foamlayername[0] = '\0';   /* layer name empty by default */
 
 	omd->ocean = BKE_ocean_add();
-	init_ocean_modifier(omd);
+	BKE_ocean_init_from_modifier(omd->ocean, omd);
 	simulate_ocean_modifier(omd);
 #else  /* WITH_OCEANSIM */
 	   /* unused */
@@ -159,51 +124,43 @@ static void freeData(ModifierData *md)
 #endif /* WITH_OCEANSIM */
 }
 
-static void copyData(ModifierData *md, ModifierData *target)
+static void copyData(const ModifierData *md, ModifierData *target, const int flag)
 {
 #ifdef WITH_OCEANSIM
 #if 0
-	OceanModifierData *omd = (OceanModifierData *) md;
+	const OceanModifierData *omd = (const OceanModifierData *) md;
 #endif
 	OceanModifierData *tomd = (OceanModifierData *) target;
 
-	freeData(target);
+	modifier_copyData_generic(md, target, flag);
 
-	modifier_copyData_generic(md, target);
-
-	tomd->refresh = 0;
-
-	/* XXX todo: copy cache runtime too */
-	tomd->cached = 0;
+	/* The oceancache object will be recreated for this copy
+	 * automatically when cached=true */
 	tomd->oceancache = NULL;
 
 	tomd->ocean = BKE_ocean_add();
-	init_ocean_modifier(tomd);
+	BKE_ocean_init_from_modifier(tomd->ocean, tomd);
 	simulate_ocean_modifier(tomd);
 #else /* WITH_OCEANSIM */
 	/* unused */
 	(void)md;
 	(void)target;
+	(void)flag;
 #endif /* WITH_OCEANSIM */
 }
 
 #ifdef WITH_OCEANSIM
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	OceanModifierData *omd = (OceanModifierData *)md;
-	CustomDataMask dataMask = 0;
 
-	if (omd->flag & MOD_OCEAN_GENERATE_FOAM)
-		dataMask |= CD_MASK_MCOL;
-
-	return dataMask;
+	if (omd->flag & MOD_OCEAN_GENERATE_FOAM) {
+		r_cddata_masks->fmask |= CD_MASK_MCOL;  /* XXX Should be loop cddata I guess? */
+	}
 }
 #else /* WITH_OCEANSIM */
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *UNUSED(md), CustomData_MeshMasks *UNUSED(r_cddata_masks))
 {
-	/* unused */
-	(void)md;
-	return 0;
 }
 #endif /* WITH_OCEANSIM */
 
@@ -213,45 +170,12 @@ static bool dependsOnNormals(ModifierData *md)
 	return (omd->geometry_mode != MOD_OCEAN_GEOM_GENERATE);
 }
 
-#if 0
-static void dm_get_bounds(DerivedMesh *dm, float *sx, float *sy, float *ox, float *oy)
-{
-	/* get bounding box of underlying dm */
-	int v, totvert = dm->getNumVerts(dm);
-	float min[3], max[3], delta[3];
-
-	MVert *mvert = dm->getVertDataArray(dm, 0);
-
-	copy_v3_v3(min, mvert->co);
-	copy_v3_v3(max, mvert->co);
-
-	for (v = 1; v < totvert; v++, mvert++) {
-		min[0] = min_ff(min[0], mvert->co[0]);
-		min[1] = min_ff(min[1], mvert->co[1]);
-		min[2] = min_ff(min[2], mvert->co[2]);
-
-		max[0] = max_ff(max[0], mvert->co[0]);
-		max[1] = max_ff(max[1], mvert->co[1]);
-		max[2] = max_ff(max[2], mvert->co[2]);
-	}
-
-	sub_v3_v3v3(delta, max, min);
-
-	*sx = delta[0];
-	*sy = delta[1];
-
-	*ox = min[0];
-	*oy = min[1];
-}
-#endif
-
 #ifdef WITH_OCEANSIM
 
 typedef struct GenerateOceanGeometryData {
 	MVert *mverts;
 	MPoly *mpolys;
 	MLoop *mloops;
-	int *origindex;
 	MLoopUV *mloopuvs;
 
 	int res_x, res_y;
@@ -305,9 +229,6 @@ static void generate_ocean_geometry_polygons(
 		mp->totloop = 4;
 
 		mp->flag |= ME_SMOOTH;
-
-		/* generated geometry does not map to original faces */
-		gogd->origindex[fi] = ORIGINDEX_NONE;
 	}
 }
 
@@ -341,9 +262,9 @@ static void generate_ocean_geometry_uvs(
 	}
 }
 
-static DerivedMesh *generate_ocean_geometry(OceanModifierData *omd)
+static Mesh *generate_ocean_geometry(OceanModifierData *omd)
 {
-	DerivedMesh *result;
+	Mesh *result;
 
 	GenerateOceanGeometryData gogd;
 
@@ -368,13 +289,11 @@ static DerivedMesh *generate_ocean_geometry(OceanModifierData *omd)
 	gogd.sx /= gogd.rx;
 	gogd.sy /= gogd.ry;
 
-	result = CDDM_new(num_verts, 0, 0, num_polys * 4, num_polys);
+	result = BKE_mesh_new_nomain(num_verts, 0, 0, num_polys * 4, num_polys);
 
-	gogd.mverts = CDDM_get_verts(result);
-	gogd.mpolys = CDDM_get_polys(result);
-	gogd.mloops = CDDM_get_loops(result);
-
-	gogd.origindex = CustomData_get_layer(&result->polyData, CD_ORIGINDEX);
+	gogd.mverts = result->mvert;
+	gogd.mpolys = result->mpoly;
+	gogd.mloops = result->mloop;
 
 	ParallelRangeSettings settings;
 	BLI_parallel_range_settings_defaults(&settings);
@@ -386,12 +305,11 @@ static DerivedMesh *generate_ocean_geometry(OceanModifierData *omd)
 	/* create faces */
 	BLI_task_parallel_range(0, gogd.res_y, &gogd, generate_ocean_geometry_polygons, &settings);
 
-	CDDM_calc_edges(result);
+	BKE_mesh_calc_edges(result, false, false);
 
 	/* add uvs */
-	if (CustomData_number_of_layers(&result->loopData, CD_MLOOPUV) < MAX_MTFACE) {
-		gogd.mloopuvs = CustomData_add_layer(&result->loopData, CD_MLOOPUV, CD_CALLOC, NULL, num_polys * 4);
-		CustomData_add_layer(&result->polyData, CD_MTEXPOLY, CD_CALLOC, NULL, num_polys);
+	if (CustomData_number_of_layers(&result->ldata, CD_MLOOPUV) < MAX_MTFACE) {
+		gogd.mloopuvs = CustomData_add_layer(&result->ldata, CD_MLOOPUV, CD_CALLOC, NULL, num_polys * 4);
 
 		if (gogd.mloopuvs) { /* unlikely to fail */
 			gogd.ix = 1.0 / gogd.rx;
@@ -401,23 +319,24 @@ static DerivedMesh *generate_ocean_geometry(OceanModifierData *omd)
 		}
 	}
 
-	result->dirty |= DM_DIRTY_NORMALS;
+	result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
 
 	return result;
 }
 
-static DerivedMesh *doOcean(ModifierData *md, Object *ob,
-                            DerivedMesh *derivedData,
-                            int UNUSED(useRenderParams))
+static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
 	OceanModifierData *omd = (OceanModifierData *) md;
+	int cfra_scene = (int)DEG_get_ctime(ctx->depsgraph);
+	Object *ob = ctx->object;
+	bool allocated_ocean = false;
 
-	DerivedMesh *dm = NULL;
+	Mesh *result = NULL;
 	OceanResult ocr;
 
 	MVert *mverts;
 
-	int cfra;
+	int cfra_for_cache;
 	int i, j;
 
 	/* use cached & inverted value for speed
@@ -430,58 +349,52 @@ static DerivedMesh *doOcean(ModifierData *md, Object *ob,
 
 	/* can happen in when size is small, avoid bad array lookups later and quit now */
 	if (!isfinite(size_co_inv)) {
-		return derivedData;
+		return mesh;
 	}
-
-	/* update modifier */
-	if (omd->refresh & MOD_OCEAN_REFRESH_ADD) {
-		omd->ocean = BKE_ocean_add();
-	}
-	if (omd->refresh & MOD_OCEAN_REFRESH_RESET) {
-		init_ocean_modifier(omd);
-	}
-	if (omd->refresh & MOD_OCEAN_REFRESH_CLEAR_CACHE) {
-		clear_cache_data(omd);
-	}
-	omd->refresh = 0;
 
 	/* do ocean simulation */
 	if (omd->cached == true) {
 		if (!omd->oceancache) {
 			init_cache_data(ob, omd);
 		}
-		BKE_ocean_simulate_cache(omd->oceancache, md->scene->r.cfra);
+		BKE_ocean_simulate_cache(omd->oceancache, cfra_scene);
 	}
 	else {
+		/* omd->ocean is NULL on an original object (in contrast to an evaluated one).
+		 * We can create a new one, but we have to free it as well once we're done.
+		 * This function is only called on an original object when applying the modifier
+		 * using the 'Apply Modifier' button, and thus it is not called frequently for
+		 * simulation. */
+		allocated_ocean |= BKE_ocean_ensure(omd);
 		simulate_ocean_modifier(omd);
 	}
 
 	if (omd->geometry_mode == MOD_OCEAN_GEOM_GENERATE) {
-		dm = generate_ocean_geometry(omd);
-		DM_ensure_normals(dm);
+		result = generate_ocean_geometry(omd);
+		BKE_mesh_ensure_normals(result);
 	}
 	else if (omd->geometry_mode == MOD_OCEAN_GEOM_DISPLACE) {
-		dm = CDDM_copy(derivedData);
+		BKE_id_copy_ex(NULL, &mesh->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
 	}
 
-	cfra = md->scene->r.cfra;
-	CLAMP(cfra, omd->bakestart, omd->bakeend);
-	cfra -= omd->bakestart; /* shift to 0 based */
+	cfra_for_cache = cfra_scene;
+	CLAMP(cfra_for_cache, omd->bakestart, omd->bakeend);
+	cfra_for_cache -= omd->bakestart; /* shift to 0 based */
 
-	mverts = dm->getVertArray(dm);
+	mverts = result->mvert;
 
 	/* add vcols before displacement - allows lookup based on position */
 
 	if (omd->flag & MOD_OCEAN_GENERATE_FOAM) {
-		if (CustomData_number_of_layers(&dm->loopData, CD_MLOOPCOL) < MAX_MCOL) {
-			const int num_polys = dm->getNumPolys(dm);
-			const int num_loops = dm->getNumLoops(dm);
-			MLoop *mloops = dm->getLoopArray(dm);
+		if (CustomData_number_of_layers(&result->ldata, CD_MLOOPCOL) < MAX_MCOL) {
+			const int num_polys = result->totpoly;
+			const int num_loops = result->totloop;
+			MLoop *mloops = result->mloop;
 			MLoopCol *mloopcols = CustomData_add_layer_named(
-			                          &dm->loopData, CD_MLOOPCOL, CD_CALLOC, NULL, num_loops, omd->foamlayername);
+			                          &result->ldata, CD_MLOOPCOL, CD_CALLOC, NULL, num_loops, omd->foamlayername);
 
 			if (mloopcols) { /* unlikely to fail */
-				MPoly *mpolys = dm->getPolyArray(dm);
+				MPoly *mpolys = result->mpoly;
 				MPoly *mp;
 
 				for (i = 0, mp = mpolys; i < num_polys; i++, mp++) {
@@ -495,7 +408,7 @@ static DerivedMesh *doOcean(ModifierData *md, Object *ob,
 						float foam;
 
 						if (omd->oceancache && omd->cached == true) {
-							BKE_ocean_cache_eval_uv(omd->oceancache, &ocr, cfra, u, v);
+							BKE_ocean_cache_eval_uv(omd->oceancache, &ocr, cfra_for_cache, u, v);
 							foam = ocr.foam;
 							CLAMP(foam, 0.0f, 1.0f);
 						}
@@ -518,7 +431,7 @@ static DerivedMesh *doOcean(ModifierData *md, Object *ob,
 
 	/* Note: tried to parallelized that one and previous foam loop, but gives 20% slower results... odd. */
 	{
-		const int num_verts = dm->getNumVerts(dm);
+		const int num_verts = result->totvert;
 
 		for (i = 0; i < num_verts; i++) {
 			float *vco = mverts[i].co;
@@ -526,7 +439,7 @@ static DerivedMesh *doOcean(ModifierData *md, Object *ob,
 			const float v = OCEAN_CO(size_co_inv, vco[1]);
 
 			if (omd->oceancache && omd->cached == true) {
-				BKE_ocean_cache_eval_uv(omd->oceancache, &ocr, cfra, u, v);
+				BKE_ocean_cache_eval_uv(omd->oceancache, &ocr, cfra_for_cache, u, v);
 			}
 			else {
 				BKE_ocean_eval_uv(omd->ocean, &ocr, u, v);
@@ -541,31 +454,32 @@ static DerivedMesh *doOcean(ModifierData *md, Object *ob,
 		}
 	}
 
+	if (allocated_ocean) {
+		BKE_ocean_free(omd->ocean);
+		omd->ocean = NULL;
+	}
+
 #undef OCEAN_CO
 
-	return dm;
+	return result;
 }
 #else  /* WITH_OCEANSIM */
-static DerivedMesh *doOcean(ModifierData *md, Object *UNUSED(ob),
-                            DerivedMesh *derivedData,
-                            int UNUSED(useRenderParams))
+static Mesh *doOcean(ModifierData *UNUSED(md), const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
 {
-	/* unused */
-	(void)md;
-	return derivedData;
+	return mesh;
 }
 #endif /* WITH_OCEANSIM */
 
-static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
-                                  DerivedMesh *derivedData,
-                                  ModifierApplyFlag UNUSED(flag))
+static Mesh *applyModifier(
+        ModifierData *md, const ModifierEvalContext *ctx,
+        Mesh *mesh)
 {
-	DerivedMesh *result;
+	Mesh *result;
 
-	result = doOcean(md, ob, derivedData, 0);
+	result = doOcean(md, ctx, mesh);
 
-	if (result != derivedData)
-		result->dirty |= DM_DIRTY_NORMALS;
+	if (result != mesh)
+		result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
 
 	return result;
 }
@@ -581,21 +495,22 @@ ModifierTypeInfo modifierType_Ocean = {
 	                        eModifierTypeFlag_EnableInEditmode,
 
 	/* copyData */          copyData,
+	/* deformMatrices_DM */ NULL,
+
 	/* deformMatrices */    NULL,
-	/* deformVerts */       NULL,
 	/* deformVertsEM */     NULL,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     applyModifier,
-	/* applyModifierEM */   NULL,
+
 	/* initData */          initData,
 	/* requiredDataMask */  requiredDataMask,
 	/* freeData */          freeData,
 	/* isDisabled */        NULL,
-	/* updateDepgraph */    NULL,
 	/* updateDepsgraph */   NULL,
 	/* dependsOnTime */     NULL,
 	/* dependsOnNormals */	dependsOnNormals,
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/jpeg.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 
@@ -48,7 +40,7 @@
 #include "IMB_imbuf.h"
 #include "IMB_metadata.h"
 #include "IMB_filetype.h"
-#include "jpeglib.h" 
+#include "jpeglib.h"
 #include "jerror.h"
 
 #include "IMB_colormanagement.h"
@@ -247,12 +239,12 @@ static boolean handle_app1(j_decompress_ptr cinfo)
 	INT32 length; /* initialized by the macro */
 	INT32 i;
 	char neogeo[128];
-	
+
 	INPUT_VARS(cinfo);
 
 	INPUT_2BYTES(cinfo, length, return false);
 	length -= 2;
-	
+
 	if (length < 16) {
 		for (i = 0; i < length; i++) {
 			INPUT_BYTE(cinfo, neogeo[i], return false);
@@ -308,12 +300,12 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
 			row_stride = cinfo->output_width * depth;
 
 			row_pointer = (*cinfo->mem->alloc_sarray)((j_common_ptr) cinfo, JPOOL_IMAGE, row_stride, 1);
-			
+
 			for (y = ibuf->y - 1; y >= 0; y--) {
 				jpeg_read_scanlines(cinfo, row_pointer, 1);
 				rect = (uchar *) (ibuf->rect + y * ibuf->x);
 				buffer = row_pointer[0];
-				
+
 				switch (depth) {
 					case 1:
 						for (x = ibuf->x; x > 0; x--) {
@@ -367,7 +359,7 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
 				 * Because JPEG format don't support the
 				 * pair "key/value" like PNG, we store the
 				 * stampinfo in a single "encode" string:
-				 *	"Blender:key:value"
+				 * "Blender:key:value"
 				 *
 				 * That is why we need split it to the
 				 * common key/value here.
@@ -382,7 +374,8 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
 					 * the information when we write
 					 * it back to disk.
 					 */
-					IMB_metadata_add_field(ibuf, "None", str);
+					IMB_metadata_ensure(&ibuf->metadata);
+					IMB_metadata_set_field(ibuf->metadata, "None", str);
 					ibuf->flags |= IB_metadata;
 					MEM_freeN(str);
 					goto next_stamp_marker;
@@ -408,7 +401,8 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
 
 				*value = '\0'; /* need finish the key string */
 				value++;
-				IMB_metadata_add_field(ibuf, key, value);
+				IMB_metadata_ensure(&ibuf->metadata);
+				IMB_metadata_set_field(ibuf->metadata, key, value);
 				ibuf->flags |= IB_metadata;
 				MEM_freeN(str);
 next_stamp_marker:
@@ -417,7 +411,7 @@ next_stamp_marker:
 
 			jpeg_finish_decompress(cinfo);
 		}
-		
+
 		jpeg_destroy((j_common_ptr) cinfo);
 		if (ibuf) {
 			ibuf->ftype = IMB_FTYPE_JPG;
@@ -454,7 +448,7 @@ ImBuf *imb_load_jpeg(const unsigned char *buffer, size_t size, int flags, char c
 	memory_source(cinfo, buffer, size);
 
 	ibuf = ibJpegImageFromCinfo(cinfo, flags);
-	
+
 	return(ibuf);
 }
 
@@ -467,7 +461,6 @@ static void write_jpeg(struct jpeg_compress_struct *cinfo, struct ImBuf *ibuf)
 	int x, y;
 	char neogeo[128];
 	struct NeoGeo_Word *neogeo_word;
-	char *text;
 
 	jpeg_start_compress(cinfo, true);
 
@@ -478,8 +471,9 @@ static void write_jpeg(struct jpeg_compress_struct *cinfo, struct ImBuf *ibuf)
 	jpeg_write_marker(cinfo, 0xe1, (JOCTET *) neogeo, 10);
 	if (ibuf->metadata) {
 		IDProperty *prop;
-		/* key + max value + "Blender" */
-		text = MEM_mallocN(530, "stamp info read");
+		/* Static storage array for the short metadata. */
+		char static_text[1024];
+		const int static_text_size = ARRAY_SIZE(static_text);
 		for (prop = ibuf->metadata->data.group.first; prop; prop = prop->next) {
 			if (prop->type == IDP_STRING) {
 				int text_len;
@@ -487,20 +481,36 @@ static void write_jpeg(struct jpeg_compress_struct *cinfo, struct ImBuf *ibuf)
 					jpeg_write_marker(cinfo, JPEG_COM, (JOCTET *) IDP_String(prop), prop->len + 1);
 				}
 
+				char *text = static_text;
+				int text_size = static_text_size;
+				/* 7 is for Blender, 2 colon separators, length of property
+				 * name and property value, followed by the NULL-terminator. */
+				const int text_length_required = 7 + 2 + strlen(prop->name) + strlen(IDP_String(prop)) + 1;
+				if (text_length_required <= static_text_size) {
+					text = MEM_mallocN(text_length_required, "jpeg metadata field");
+					text_size = text_length_required;
+				}
+
 				/*
 				 * The JPEG format don't support a pair "key/value"
 				 * like PNG, so we "encode" the stamp in a
 				 * single string:
-				 *	"Blender:key:value"
+				 * "Blender:key:value"
 				 *
 				 * The first "Blender" is a simple identify to help
 				 * in the read process.
 				 */
-				text_len = sprintf(text, "Blender:%s:%s", prop->name, IDP_String(prop));
+				text_len = BLI_snprintf(text, text_size, "Blender:%s:%s", prop->name, IDP_String(prop));
 				jpeg_write_marker(cinfo, JPEG_COM, (JOCTET *) text, text_len + 1);
+
+				/* TODO(sergey): Ideally we will try to re-use allocation as
+				 * much as possible. In practice, such long fields don't happen
+				 * often. */
+				if (text != static_text) {
+					MEM_freeN(text);
+				}
 			}
 		}
-		MEM_freeN(text);
 	}
 
 	row_pointer[0] =
@@ -582,7 +592,7 @@ static int init_jpeg(FILE *outfile, struct jpeg_compress_struct *cinfo, struct I
 			break;
 	}
 	jpeg_set_defaults(cinfo);
-	
+
 	/* own settings */
 
 	cinfo->dct_method = JDCT_FLOAT;
@@ -627,7 +637,7 @@ static int save_stdjpeg(const char *name, struct ImBuf *ibuf)
 
 int imb_savejpeg(struct ImBuf *ibuf, const char *name, int flags)
 {
-	
+
 	ibuf->flags = flags;
 	return save_stdjpeg(name, ibuf);
 }

@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,14 +13,12 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 
-#ifndef _COM_ImageOperation_h
-#define _COM_ImageOperation_h
+#ifndef __COM_MOVIECLIPOPERATION_H__
+#define __COM_MOVIECLIPOPERATION_H__
 
 #include "COM_NodeOperation.h"
 #include "DNA_movieclip_types.h"
@@ -41,7 +37,7 @@ protected:
 	int m_movieClipwidth;
 	int m_framenumber;
 	bool m_cacheFrame;
-	
+
 	/**
 	 * Determine the output resolution. The resolution is retrieved from the Renderer
 	 */
@@ -49,7 +45,7 @@ protected:
 
 public:
 	MovieClipBaseOperation();
-	
+
 	void initExecution();
 	void deinitExecution();
 	void setMovieClip(MovieClip *image) { this->m_movieClip = image; }

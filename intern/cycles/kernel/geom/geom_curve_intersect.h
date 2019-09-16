@@ -18,12 +18,6 @@ CCL_NAMESPACE_BEGIN
 
 #ifdef __HAIR__
 
-#if defined(__KERNEL_CUDA__) && (__CUDA_ARCH__ < 300)
-#  define ccl_device_curveintersect ccl_device
-#else
-#  define ccl_device_curveintersect ccl_device_forceinline
-#endif
-
 #ifdef __KERNEL_SSE2__
 ccl_device_inline ssef transform_point_T3(const ssef t[3], const ssef &a)
 {
@@ -32,7 +26,7 @@ ccl_device_inline ssef transform_point_T3(const ssef t[3], const ssef &a)
 #endif
 
 /* On CPU pass P and dir by reference to aligned vector. */
-ccl_device_curveintersect bool cardinal_curve_intersect(
+ccl_device_forceinline bool cardinal_curve_intersect(
         KernelGlobals *kg,
         Intersection *isect,
         const float3 ccl_ref P,
@@ -176,8 +170,7 @@ ccl_device_curveintersect bool cardinal_curve_intersect(
 		htfm = make_transform(
 			dir.z / d, 0, -dir.x /d, 0,
 			-dir.x * dir.y /d, d, -dir.y * dir.z /d, 0,
-			dir.x, dir.y, dir.z, 0,
-			0, 0, 0, 1);
+			dir.x, dir.y, dir.z, 0);
 
 		float4 v00 = kernel_tex_fetch(__curves, prim);
 
@@ -386,7 +379,7 @@ ccl_device_curveintersect bool cardinal_curve_intersect(
 					float inv_mw_extension = 1.0f/mw_extension;
 					if(d0 >= 0)
 						coverage = (min(d1 * inv_mw_extension, 1.0f) - min(d0 * inv_mw_extension, 1.0f)) * 0.5f;
-					else // inside
+					else  // inside
 						coverage = (min(d1 * inv_mw_extension, 1.0f) + min(-d0 * inv_mw_extension, 1.0f)) * 0.5f;
 				}
 
@@ -505,18 +498,18 @@ ccl_device_curveintersect bool cardinal_curve_intersect(
 	return hit;
 }
 
-ccl_device_curveintersect bool curve_intersect(KernelGlobals *kg,
-                                               Intersection *isect,
-                                               float3 P,
-                                               float3 direction,
-                                               uint visibility,
-                                               int object,
-                                               int curveAddr,
-                                               float time,
-                                               int type,
-                                               uint *lcg_state,
-                                               float difl,
-                                               float extmax)
+ccl_device_forceinline bool curve_intersect(KernelGlobals *kg,
+                                            Intersection *isect,
+                                            float3 P,
+                                            float3 direction,
+                                            uint visibility,
+                                            int object,
+                                            int curveAddr,
+                                            float time,
+                                            int type,
+                                            uint *lcg_state,
+                                            float difl,
+                                            float extmax)
 {
 	/* define few macros to minimize code duplication for SSE */
 #ifndef __KERNEL_SSE2__
@@ -759,31 +752,6 @@ ccl_device_curveintersect bool curve_intersect(KernelGlobals *kg,
 #endif
 }
 
-ccl_device_inline float3 curvetangent(float t, float3 p0, float3 p1, float3 p2, float3 p3)
-{
-	float fc = 0.71f;
-	float data[4];
-	float t2 = t * t;
-	data[0] = -3.0f * fc          * t2  + 4.0f * fc * t                  - fc;
-	data[1] =  3.0f * (2.0f - fc) * t2  + 2.0f * (fc - 3.0f) * t;
-	data[2] =  3.0f * (fc - 2.0f) * t2  + 2.0f * (3.0f - 2.0f * fc) * t  + fc;
-	data[3] =  3.0f * fc          * t2  - 2.0f * fc * t;
-	return data[0] * p0 + data[1] * p1 + data[2] * p2 + data[3] * p3;
-}
-
-ccl_device_inline float3 curvepoint(float t, float3 p0, float3 p1, float3 p2, float3 p3)
-{
-	float data[4];
-	float fc = 0.71f;
-	float t2 = t * t;
-	float t3 = t2 * t;
-	data[0] = -fc          * t3  + 2.0f * fc          * t2 - fc * t;
-	data[1] =  (2.0f - fc) * t3  + (fc - 3.0f)        * t2 + 1.0f;
-	data[2] =  (fc - 2.0f) * t3  + (3.0f - 2.0f * fc) * t2 + fc * t;
-	data[3] =  fc          * t3  - fc * t2;
-	return data[0] * p0 + data[1] * p1 + data[2] * p2 + data[3] * p3;
-}
-
 ccl_device_inline float3 curve_refine(KernelGlobals *kg,
                                       ShaderData *sd,
                                       const Intersection *isect,
@@ -849,16 +817,24 @@ ccl_device_inline float3 curve_refine(KernelGlobals *kg,
 			sd->Ng = normalize(-(D - tg * (dot(tg, D))));
 		}
 		else {
-			/* direction from inside to surface of curve */
-			float3 p_curr = curvepoint(isect->u, p[0], p[1], p[2], p[3]);
-			sd->Ng = normalize(P - p_curr);
+#ifdef __EMBREE__
+ 			if(kernel_data.bvh.scene) {
+ 				sd->Ng = normalize(isect->Ng);
+ 			}
+ 			else
+#endif
+			{
+				/* direction from inside to surface of curve */
+				float3 p_curr = curvepoint(isect->u, p[0], p[1], p[2], p[3]);
+				sd->Ng = normalize(P - p_curr);
 
-			/* adjustment for changing radius */
-			float gd = isect->v;
+				/* adjustment for changing radius */
+				float gd = isect->v;
 
-			if(gd != 0.0f) {
-				sd->Ng = sd->Ng - gd * tg;
-				sd->Ng = normalize(sd->Ng);
+				if(gd != 0.0f) {
+					sd->Ng = sd->Ng - gd * tg;
+					sd->Ng = normalize(sd->Ng);
+				}
 			}
 		}
 
@@ -898,13 +874,15 @@ ccl_device_inline float3 curve_refine(KernelGlobals *kg,
 			float gd = isect->v;
 
 			/* direction from inside to surface of curve */
-			sd->Ng = (dif - tg * sd->u * l) / (P_curve[0].w + sd->u * l * gd);
+			float denom = fmaxf(P_curve[0].w + sd->u * l * gd, 1e-8f);
+			sd->Ng = (dif - tg * sd->u * l) / denom;
 
 			/* adjustment for changing radius */
 			if(gd != 0.0f) {
 				sd->Ng = sd->Ng - gd * tg;
-				sd->Ng = normalize(sd->Ng);
 			}
+
+			sd->Ng = normalize(sd->Ng);
 		}
 
 		sd->N = sd->Ng;

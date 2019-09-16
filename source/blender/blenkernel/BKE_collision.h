@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,12 @@
  *
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Daniel Genrich
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_COLLISION_H__
 #define __BKE_COLLISION_H__
 
-/** \file BKE_collision.h
- *  \ingroup bke
- *  \author Daniel Genrich
+/** \file
+ * \ingroup bke
  */
 
 #include <math.h>
@@ -43,13 +34,14 @@
 
 #include "BLI_kdopbvh.h"
 
+struct Collection;
 struct CollisionModifierData;
-struct Group;
+struct Depsgraph;
 struct MFace;
 struct MVert;
+struct MVertTri;
 struct Object;
 struct Scene;
-struct MVertTri;
 
 ////////////////////////////////////////
 // used for collisions in collision.c
@@ -62,6 +54,7 @@ typedef enum {
 	COLLISION_USE_COLLFACE =    (1 << 2),
 	COLLISION_IS_EDGES =        (1 << 3),
 #endif
+	COLLISION_INACTIVE =        (1 << 4),
 } COLLISION_FLAGS;
 
 
@@ -72,7 +65,7 @@ typedef enum {
 typedef struct CollPair {
 	unsigned int face1; // cloth face
 	unsigned int face2; // object face
-	double distance; // magnitude of vector
+	float distance;
 	float normal[3];
 	float vector[3]; // unnormalized collision vector: p2-p1
 	float pa[3], pb[3]; // collision point p1 on face1, p2 on face2
@@ -143,14 +136,29 @@ void collision_move_object(struct CollisionModifierData *collmd, float step, flo
 
 void collision_get_collider_velocity(float vel_old[3], float vel_new[3], struct CollisionModifierData *collmd, struct CollPair *collpair);
 
-/////////////////////////////////////////////////
-// used in effect.c
-/////////////////////////////////////////////////
 
-/* explicit control over layer mask and dupli recursion */
-struct Object **get_collisionobjects_ext(struct Scene *scene, struct Object *self, struct Group *group, int layer, unsigned int *numcollobj, unsigned int modifier_type, bool dupli);
+/* Collision relations for dependency graph build. */
 
-struct Object **get_collisionobjects(struct Scene *scene, struct Object *self, struct Group *group, unsigned int *numcollobj, unsigned int modifier_type);
+typedef struct CollisionRelation {
+	struct CollisionRelation *next, *prev;
+	struct Object *ob;
+} CollisionRelation;
+
+struct ListBase *BKE_collision_relations_create(
+        struct Depsgraph *depsgraph,
+        struct Collection *collection,
+        unsigned int modifier_type);
+void BKE_collision_relations_free(struct ListBase *relations);
+
+/* Collision object lists for physics simulation evaluation. */
+
+struct Object **BKE_collision_objects_create(
+        struct Depsgraph *depsgraph,
+        struct Object *self,
+        struct Collection *collection,
+        unsigned int *numcollobj,
+        unsigned int modifier_type);
+void BKE_collision_objects_free(struct Object **objects);
 
 typedef struct ColliderCache {
 	struct ColliderCache *next, *prev;
@@ -158,8 +166,11 @@ typedef struct ColliderCache {
 	struct CollisionModifierData *collmd;
 } ColliderCache;
 
-struct ListBase *get_collider_cache(struct Scene *scene, struct Object *self, struct Group *group);
-void free_collider_cache(struct ListBase **colliders);
+struct ListBase *BKE_collider_cache_create(
+        struct Depsgraph *scene,
+        struct Object *self,
+        struct Collection *collection);
+void BKE_collider_cache_free(struct ListBase **colliders);
 
 /////////////////////////////////////////////////
 
@@ -168,4 +179,3 @@ void free_collider_cache(struct ListBase **colliders);
 /////////////////////////////////////////////////
 
 #endif
-

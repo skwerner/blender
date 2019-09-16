@@ -7,33 +7,32 @@
  * http://web.maths.unsw.edu.au/~fkuo/sobol/
  *
  * From these papers:
- * 
+ *
  * S. Joe and F. Y. Kuo, Remark on Algorithm 659: Implementing Sobol's quasirandom
  * sequence generator, ACM Trans. Math. Softw. 29, 49-57 (2003)
  *
  * S. Joe and F. Y. Kuo, Constructing Sobol sequences with better two-dimensional
  * projections, SIAM J. Sci. Comput. 30, 2635-2654 (2008)
- *
  */
 
 /* Copyright (c) 2008, Frances Y. Kuo and Stephen Joe
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
- * 
+ *
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in the
  *       documentation and/or other materials provided with the distribution.
- * 
+ *
  *     * Neither the names of the copyright holders nor the names of the
  *       University of New South Wales and the University of Waikato
  *       and its contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -59,7 +58,11 @@ typedef struct SobolDirectionNumbers {
 	uint m[SOBOL_MAX_NUMBER];
 } SobolDirectionNumbers;
 
-static SobolDirectionNumbers SOBOL_NUMBERS[SOBOL_MAX_DIMENSIONS-1] = {
+/* Note: this file is skipped by clang-format. */
+
+/* Keep simple alignment. */
+/* clang-format off */
+static SobolDirectionNumbers SOBOL_NUMBERS[SOBOL_MAX_DIMENSIONS - 1] = {
 {2, 1, 0, {1}},
 {3, 2, 1, {1, 3}},
 {4, 3, 1, {1, 3, 1}},
@@ -21261,6 +21264,7 @@ static SobolDirectionNumbers SOBOL_NUMBERS[SOBOL_MAX_DIMENSIONS-1] = {
 {21200, 18, 131020, {1, 1, 5, 1, 19, 1, 83, 3, 425, 873, 1943, 3935, 4257, 14587, 11829, 55217, 21963, 39683}},
 {21201, 18, 131059, {1, 1, 7, 11, 15, 7, 37, 239, 337, 245, 1557, 3681, 7357, 9639, 27367, 26869, 114603, 86317}}
 };
+/* clang-format on */
 
 void sobol_generate_direction_vectors(uint vectors[][SOBOL_BITS], int dimensions)
 {
@@ -21284,21 +21288,20 @@ void sobol_generate_direction_vectors(uint vectors[][SOBOL_BITS], int dimensions
 
 		if(L <= s) {
 			for(uint i = 0; i < L; i++)
-				v[i] = m[i] << (31-i); 
+				v[i] = m[i] << (31-i);
 		}
 		else {
 			for(uint i = 0; i < s; i++)
-				v[i] = m[i] << (31-i); 
+				v[i] = m[i] << (31-i);
 
 			for(uint i = s; i < L; i++) {
-				v[i] = v[i-s] ^ (v[i-s] >> s); 
+				v[i] = v[i-s] ^ (v[i-s] >> s);
 
-				for(uint k = 1; k < s; k++) 
-					v[i] ^= (((a >> (s-1-k)) & 1) * v[i-k]); 
+				for(uint k = 1; k < s; k++)
+					v[i] ^= (((a >> (s-1-k)) & 1) * v[i-k]);
 			}
 		}
 	}
 }
 
 CCL_NAMESPACE_END
-

@@ -1,6 +1,4 @@
 /*
- * Copyright 2012, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,15 +13,12 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
- *		Sergey Sharybin
+ * Copyright 2012, Blender Foundation.
  */
 
 
-#ifndef _COM_KeyingScreenOperation_h
-#define _COM_KeyingScreenOperation_h
+#ifndef __COM_KEYINGSCREENOPERATION_H__
+#define __COM_KEYINGSCREENOPERATION_H__
 
 #include <string.h>
 
@@ -35,7 +30,7 @@
 #include "BLI_string.h"
 
 extern "C" {
-#  include "BLI_voronoi.h"
+#  include "BLI_voronoi_2d.h"
 }
 
 /**

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,21 +15,14 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
  * Original author: Benoit Bolsee
- * Contributor(s): 
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/ikplugin/intern/ikplugin_api.c
- *  \ingroup ikplugin
+/** \file
+ * \ingroup ikplugin
  */
 
 #include "BIK_api.h"
-#include "BLI_blenlib.h"
 
 #include "DNA_object_types.h"
 #include "DNA_action_types.h"
@@ -53,8 +44,8 @@ static IKPlugin ikplugin_tab[] = {
 	{
 		iksolver_initialize_tree,
 		iksolver_execute_tree,
-		NULL,
-		NULL,
+		iksolver_release_tree,
+		iksolver_clear_data,
 		NULL,
 		NULL,
 		NULL,
@@ -89,23 +80,23 @@ static IKPlugin *get_plugin(bPose *pose)
 /*----------------------------------------*/
 /* Plugin API							  */
 
-void BIK_initialize_tree(Scene *scene, Object *ob, float ctime) 
+void BIK_initialize_tree(struct Depsgraph *depsgraph, Scene *scene, Object *ob, float ctime)
 {
 	IKPlugin *plugin = get_plugin(ob->pose);
 
 	if (plugin && plugin->initialize_tree_func)
-		plugin->initialize_tree_func(scene, ob, ctime);
+		plugin->initialize_tree_func(depsgraph, scene, ob, ctime);
 }
 
-void BIK_execute_tree(struct Scene *scene, Object *ob, bPoseChannel *pchan, float ctime) 
+void BIK_execute_tree(struct Depsgraph *depsgraph, struct Scene *scene, Object *ob, bPoseChannel *pchan, float ctime)
 {
 	IKPlugin *plugin = get_plugin(ob->pose);
 
 	if (plugin && plugin->execute_tree_func)
-		plugin->execute_tree_func(scene, ob, pchan, ctime);
+		plugin->execute_tree_func(depsgraph, scene, ob, pchan, ctime);
 }
 
-void BIK_release_tree(struct Scene *scene, Object *ob, float ctime) 
+void BIK_release_tree(struct Scene *scene, Object *ob, float ctime)
 {
 	IKPlugin *plugin = get_plugin(ob->pose);
 
@@ -144,4 +135,3 @@ void BIK_test_constraint(struct Object *ob, struct bConstraint *cons)
 	if (plugin && plugin->test_constraint)
 		plugin->test_constraint(ob, cons);
 }
-

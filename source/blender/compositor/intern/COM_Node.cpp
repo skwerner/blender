@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include <string.h>
@@ -54,7 +50,7 @@ Node::Node(bNode *editorNode, bool create_sockets) :
 			DataType dt = COM_DT_VALUE;
 			if (input->type == SOCK_RGBA) dt = COM_DT_COLOR;
 			if (input->type == SOCK_VECTOR) dt = COM_DT_VECTOR;
-			
+
 			this->addInputSocket(dt, input);
 			input = input->next;
 		}
@@ -63,7 +59,7 @@ Node::Node(bNode *editorNode, bool create_sockets) :
 			DataType dt = COM_DT_VALUE;
 			if (output->type == SOCK_RGBA) dt = COM_DT_COLOR;
 			if (output->type == SOCK_VECTOR) dt = COM_DT_VECTOR;
-			
+
 			this->addOutputSocket(dt, output);
 			output = output->next;
 		}
@@ -96,7 +92,7 @@ void Node::addInputSocket(DataType datatype, bNodeSocket *bSocket)
 void Node::addOutputSocket(DataType datatype)
 {
 	this->addOutputSocket(datatype, NULL);
-	
+
 }
 void Node::addOutputSocket(DataType datatype, bNodeSocket *bSocket)
 {

@@ -32,6 +32,8 @@ bool kernel_path_subsurface_scatter(
         ccl_addr_space float3 *throughput,
         ccl_addr_space SubsurfaceIndirectRays *ss_indirect)
 {
+	PROFILING_INIT(kg, PROFILING_SUBSURFACE);
+
 	float bssrdf_u, bssrdf_v;
 	path_state_rng_2D(kg, state, PRNG_BSDF_U, &bssrdf_u, &bssrdf_v);
 
@@ -51,6 +53,7 @@ bool kernel_path_subsurface_scatter(
 		int num_hits = subsurface_scatter_multi_intersect(kg,
 		                                                  &ss_isect,
 		                                                  sd,
+		                                                  state,
 		                                                  sc,
 		                                                  &lcg_state,
 		                                                  bssrdf_u, bssrdf_v,
@@ -60,6 +63,11 @@ bool kernel_path_subsurface_scatter(
 		        kernel_data.integrator.use_volumes &&
 		        sd->object_flag & SD_OBJECT_INTERSECTS_VOLUME;
 #  endif  /* __VOLUME__ */
+
+		/* Closure memory will be overwritten, so read required variables now. */
+		Bssrdf *bssrdf = (Bssrdf *)sc;
+		ClosureType bssrdf_type = sc->type;
+		float bssrdf_roughness = bssrdf->roughness;
 
 		/* compute lighting with the BSDF closure */
 		for(int hit = 0; hit < num_hits; hit++) {
@@ -71,9 +79,8 @@ bool kernel_path_subsurface_scatter(
 			                               hit,
 			                               sd,
 			                               state,
-			                               state->flag,
-			                               sc,
-			                               false);
+			                               bssrdf_type,
+			                               bssrdf_roughness);
 
 			kernel_path_surface_connect_light(kg, sd, emission_sd, *throughput, state, L);
 
@@ -153,4 +160,3 @@ ccl_device void kernel_path_subsurface_setup_indirect(
 #endif  /* __SUBSURFACE__ */
 
 CCL_NAMESPACE_END
-

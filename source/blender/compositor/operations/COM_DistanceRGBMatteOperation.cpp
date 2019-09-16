@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Dalai Felinto
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_DistanceRGBMatteOperation.h"
@@ -62,13 +59,13 @@ void DistanceRGBMatteOperation::executePixelSampled(float output[4], float x, fl
 
 	this->m_inputKeyProgram->readSampled(inKey, x, y, sampler);
 	this->m_inputImageProgram->readSampled(inImage, x, y, sampler);
-	
+
 	distance = this->calculateDistance(inKey, inImage);
 
 	/* store matte(alpha) value in [0] to go with
 	 * COM_SetAlphaOperation and the Value output
 	 */
- 
+
 	/*make 100% transparent */
 	if (distance < tolerance) {
 		output[0] = 0.0f;

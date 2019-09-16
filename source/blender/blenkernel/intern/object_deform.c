@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/object_deform.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdlib.h>
@@ -42,7 +38,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
-#include "DNA_object_force.h"
+#include "DNA_object_force_types.h"
 #include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
 
@@ -51,7 +47,9 @@
 #include "BKE_editmesh.h"
 #include "BKE_object_deform.h"  /* own include */
 #include "BKE_object.h"
+#include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_gpencil.h"
 
 /** \name Misc helpers
  * \{ */
@@ -68,7 +66,7 @@ static Lattice *object_defgroup_lattice_get(ID *id)
  *
  * Use it when you remove or reorder vgroups in the object.
  *
- * \param map an array mapping old indices to new indices.
+ * \param map: an array mapping old indices to new indices.
  */
 void BKE_object_defgroup_remap_update_users(Object *ob, int *map)
 {
@@ -132,7 +130,7 @@ bDeformGroup *BKE_object_defgroup_add_name(Object *ob, const char *name)
 /**
  * Add a vgroup of default name to object. *Does not* handle MDeformVert data at all!
  */
-bDeformGroup *BKE_object_defgroup_add(Object *ob) 
+bDeformGroup *BKE_object_defgroup_add(Object *ob)
 {
 	return BKE_object_defgroup_add_name(ob, DATA_("Group"));
 }
@@ -176,8 +174,8 @@ bool BKE_object_defgroup_clear(Object *ob, bDeformGroup *dg, const bool use_sele
 	if (ob->type == OB_MESH) {
 		Mesh *me = ob->data;
 
-		if (me->edit_btmesh) {
-			BMEditMesh *em = me->edit_btmesh;
+		if (me->edit_mesh) {
+			BMEditMesh *em = me->edit_mesh;
 			const int cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
 
 			if (cd_dvert_offset != -1) {
@@ -356,7 +354,7 @@ static void object_defgroup_remove_edit_mode(Object *ob, bDeformGroup *dg)
 	/* Else, make sure that any groups with higher indices are adjusted accordingly */
 	else if (ob->type == OB_MESH) {
 		Mesh *me = ob->data;
-		BMEditMesh *em = me->edit_btmesh;
+		BMEditMesh *em = me->edit_mesh;
 		const int cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
 
 		BMIter iter;
@@ -401,10 +399,17 @@ static void object_defgroup_remove_edit_mode(Object *ob, bDeformGroup *dg)
  */
 void BKE_object_defgroup_remove(Object *ob, bDeformGroup *defgroup)
 {
-	if (BKE_object_is_in_editmode_vgroup(ob))
-		object_defgroup_remove_edit_mode(ob, defgroup);
-	else
-		object_defgroup_remove_object_mode(ob, defgroup);
+	if (ob->type == OB_GPENCIL) {
+		BKE_gpencil_vgroup_remove(ob, defgroup);
+	}
+	else {
+		if (BKE_object_is_in_editmode_vgroup(ob))
+			object_defgroup_remove_edit_mode(ob, defgroup);
+		else
+			object_defgroup_remove_object_mode(ob, defgroup);
+
+		BKE_object_batch_cache_dirty_tag(ob);
+	}
 }
 
 /**
@@ -457,6 +462,70 @@ void BKE_object_defgroup_remove_all(struct Object *ob)
 	BKE_object_defgroup_remove_all_ex(ob, false);
 }
 
+/**
+ * Compute mapping for vertex groups with matching name, -1 is used for no remapping.
+ * Returns null if no remapping is required.
+ * The returned array has to be freed.
+ */
+int *BKE_object_defgroup_index_map_create(Object *ob_src, Object *ob_dst, int *r_map_len)
+{
+	/* Build src to merged mapping of vgroup indices. */
+	if (BLI_listbase_is_empty(&ob_src->defbase) || BLI_listbase_is_empty(&ob_dst->defbase)) {
+		*r_map_len = 0;
+		return NULL;
+	}
+
+	bDeformGroup *dg_src;
+	*r_map_len = BLI_listbase_count(&ob_src->defbase);
+	int *vgroup_index_map = MEM_malloc_arrayN(*r_map_len, sizeof(*vgroup_index_map), "defgroup index map create");
+	bool is_vgroup_remap_needed = false;
+	int i;
+
+	for (dg_src = ob_src->defbase.first, i = 0; dg_src; dg_src = dg_src->next, i++) {
+		vgroup_index_map[i] = defgroup_name_index(ob_dst, dg_src->name);
+		is_vgroup_remap_needed = is_vgroup_remap_needed || (vgroup_index_map[i] != i);
+	}
+
+	if (!is_vgroup_remap_needed) {
+		MEM_freeN(vgroup_index_map);
+		vgroup_index_map = NULL;
+		*r_map_len = 0;
+	}
+
+	return vgroup_index_map;
+}
+
+void BKE_object_defgroup_index_map_apply(MDeformVert *dvert, int dvert_len, const int *map, int map_len)
+{
+	if (map == NULL || map_len == 0) {
+		return;
+	}
+
+	MDeformVert *dv = dvert;
+	for (int i = 0; i < dvert_len; i++, dv++) {
+		int totweight = dv->totweight;
+		for (int j = 0; j < totweight; j++) {
+			int def_nr = dv->dw[j].def_nr;
+			if ((uint)def_nr < (uint)map_len && map[def_nr] != -1) {
+				dv->dw[j].def_nr = map[def_nr];
+			}
+			else {
+				totweight--;
+				dv->dw[j] = dv->dw[totweight];
+				j--;
+			}
+		}
+		if (totweight != dv->totweight) {
+			if (totweight) {
+				dv->dw = MEM_reallocN(dv->dw, sizeof(*dv->dw) * totweight);
+			}
+			else {
+				MEM_SAFE_FREE(dv->dw);
+			}
+			dv->totweight = totweight;
+		}
+	}
+}
 
 /**
  * Get MDeformVert vgroup data from given object. Should only be used in Object mode.
@@ -539,7 +608,7 @@ bool *BKE_object_defgroup_validmap_get(Object *ob, const int defbase_tot)
 		BLI_ghash_insert(gh, dg->name, NULL);
 	}
 
-	BLI_assert(BLI_ghash_size(gh) == defbase_tot);
+	BLI_assert(BLI_ghash_len(gh) == defbase_tot);
 
 	/* now loop through the armature modifiers and identify deform bones */
 	for (md = ob->modifiers.first; md; md = !md->next && step1 ? (step1 = 0), modifiers_getVirtualModifierList(ob, &virtualModifierData) : md->next) {
@@ -560,7 +629,7 @@ bool *BKE_object_defgroup_validmap_get(Object *ob, const int defbase_tot)
 
 					val_p = BLI_ghash_lookup_p(gh, chan->name);
 					if (val_p) {
-						*val_p = SET_INT_IN_POINTER(1);
+						*val_p = POINTER_FROM_INT(1);
 					}
 				}
 			}
@@ -574,7 +643,7 @@ bool *BKE_object_defgroup_validmap_get(Object *ob, const int defbase_tot)
 		defgroup_validmap[i] = (BLI_ghash_lookup(gh, dg->name) != NULL);
 	}
 
-	BLI_assert(i == BLI_ghash_size(gh));
+	BLI_assert(i == BLI_ghash_len(gh));
 
 	BLI_ghash_free(gh, NULL, NULL);
 
@@ -717,4 +786,3 @@ void BKE_object_defgroup_subset_to_index_array(
 		}
 	}
 }
-

@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_HueSaturationValueNode.h"
@@ -46,16 +42,16 @@ void HueSaturationValueNode::convertToOperations(NodeConverter &converter, const
 
 	ConvertRGBToHSVOperation *rgbToHSV = new ConvertRGBToHSVOperation();
 	converter.addOperation(rgbToHSV);
-	
+
 	ConvertHSVToRGBOperation *hsvToRGB = new ConvertHSVToRGBOperation();
 	converter.addOperation(hsvToRGB);
-	
+
 	ChangeHSVOperation *changeHSV = new ChangeHSVOperation();
 	converter.mapInputSocket(hueSocket, changeHSV->getInputSocket(1));
 	converter.mapInputSocket(saturationSocket, changeHSV->getInputSocket(2));
 	converter.mapInputSocket(valueSocket, changeHSV->getInputSocket(3));
 	converter.addOperation(changeHSV);
-	
+
 	MixBlendOperation *blend = new MixBlendOperation();
 	blend->setResolutionInputSocketIndex(1);
 	converter.addOperation(blend);

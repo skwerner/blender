@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FREESTYLE_INDEXED_FACE_SET_H__
 #define __FREESTYLE_INDEXED_FACE_SET_H__
 
-/** \file blender/freestyle/intern/scene_graph/IndexedFaceSet.h
- *  \ingroup freestyle
- *  \brief A Set of indexed faces to represent a surfacic object
- *  \author Stephane Grabli
- *  \date 22/01/2002
+/** \file
+ * \ingroup freestyle
+ * \brief A Set of indexed faces to represent a surfacic object
  */
 
 #include <memory.h>
@@ -90,7 +84,7 @@ public:
 	 *        - TRIANGLES     : the face indices describe single triangles
 	 *      If iCopy != 0, the array is copied; you must desallocate iFaceStyle. Else you must not.
 	 *    iVIndices,
-	 *      Array of vertices indices. 
+	 *      Array of vertices indices.
 	 *      The integers contained in this array must be multiple of 3.
 	 *      If iCopy != 0, the array is copied; you must desallocate iVIndices. Else you must not.
 	 *    iVISize
@@ -113,7 +107,7 @@ public:
 	 *      0 : the arrays are not copied. The pointers passed as arguments are used. IndexedFaceSet takes these
 	 *          arrays desallocation in charge.
 	 *      1 : the arrays are copied. The caller is in charge of the arrays, passed as arguments desallocation.
-	*/
+	 */
 	IndexedFaceSet(float *iVertices, unsigned iVSize, float *iNormals, unsigned iNSize, FrsMaterial **iMaterials,
 	               unsigned iMSize, float *iTexCoords, unsigned iTSize, unsigned iNumFaces, unsigned *iNumVertexPerFace,
 	               TRIANGLES_STYLE *iFaceStyle, FaceEdgeMark *iFaceEdgeMarks, unsigned *iVIndices, unsigned iVISize,
@@ -150,8 +144,6 @@ public:
 		std::swap(_MISize, ioOther._MISize);
 		std::swap(_TISize, ioOther._TISize);
 
-		std::swap(_displayList, ioOther._displayList);
-
 		Rep::swap(ioOther);
 	}
 
@@ -173,12 +165,6 @@ public:
 	/*! Compute the Bounding Box */
 	virtual void ComputeBBox();
 
-	/*! modifiers */
-	inline void setDisplayList(unsigned int index)
-	{
-		_displayList = index;
-	}
-
 	/*! Accessors */
 	virtual const float *vertices() const
 	{
@@ -190,7 +176,7 @@ public:
 		return _Normals;
 	}
 
-	virtual const FrsMaterial*const* frs_materials() const
+	virtual const FrsMaterial * const *frs_materials() const
 	{
 		return _FrsMaterials;
 	}
@@ -280,11 +266,6 @@ public:
 		return _TISize;
 	}
 
-	inline unsigned int displayList() const
-	{
-		return _displayList;
-	}
-
 protected:
 	float *_Vertices;
 	float *_Normals;
@@ -310,8 +291,6 @@ protected:
 	unsigned _NISize;
 	unsigned _MISize;
 	unsigned _TISize;
-
-	unsigned int _displayList;
 
 #ifdef WITH_CXX_GUARDEDALLOC
 	MEM_CXX_CLASS_ALLOC_FUNCS("Freestyle:IndexedFaceSet")

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,29 +15,24 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_FLUIDSIM_H__
 #define __BKE_FLUIDSIM_H__
 
-/** \file BKE_fluidsim.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
-struct Object;
-struct Scene;
+struct Depsgraph;
 struct FluidsimSettings;
 struct MVert;
+struct Object;
+struct Scene;
 
 /* old interface */
 
-void initElbeemMesh(struct Scene *scene, struct Object *ob,
+void initElbeemMesh(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob,
                     int *numVertices, float **vertices,
                     int *numTriangles, int **triangles,
                     int useGlobalCoords, int modifierIndex);
@@ -51,4 +44,3 @@ void fluid_get_bb(struct MVert *mvert, int totvert, float obmat[4][4],
 void fluid_estimate_memory(struct Object *ob, struct FluidsimSettings *fss, char *value);
 
 #endif
-

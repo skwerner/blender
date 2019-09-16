@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation 2013, Joshua Leung, Sergej Reich
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file rna_rigidbody.c
- *  \ingroup rna
- *  \brief RNA property definitions for Rigid Body datatypes
+/** \file
+ * \ingroup rna
+ * \brief RNA property definitions for Rigid Body datatypes
  */
 
 #include <stdlib.h>
@@ -33,7 +27,7 @@
 
 #include "rna_internal.h"
 
-#include "DNA_group_types.h"
+#include "DNA_collection_types.h"
 #include "DNA_object_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
@@ -47,7 +41,8 @@
 const EnumPropertyItem rna_enum_rigidbody_object_type_items[] = {
 	{RBO_TYPE_ACTIVE, "ACTIVE", 0, "Active", "Object is directly controlled by simulation results"},
 	{RBO_TYPE_PASSIVE, "PASSIVE", 0, "Passive", "Object is directly controlled by animation system"},
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
 
 /* collision shapes of objects in rigid body sim */
 const EnumPropertyItem rna_enum_rigidbody_object_shape_items[] = {
@@ -61,7 +56,8 @@ const EnumPropertyItem rna_enum_rigidbody_object_shape_items[] = {
 	                   "fewer vertices)"},
 	{RB_SHAPE_TRIMESH, "MESH", ICON_MESH_MONKEY, "Mesh",
 	                   "Mesh consisting of triangles only, allowing for more detailed interactions than convex hulls"},
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
 
 /* collision shapes of constraints in rigid body sim */
 const EnumPropertyItem rna_enum_rigidbody_constraint_type_items[] = {
@@ -74,7 +70,15 @@ const EnumPropertyItem rna_enum_rigidbody_constraint_type_items[] = {
 	{RBC_TYPE_6DOF_SPRING, "GENERIC_SPRING", ICON_NONE, "Generic Spring",
 	                       "Restrict translation and rotation to specified axes with springs"},
 	{RBC_TYPE_MOTOR, "MOTOR", ICON_NONE, "Motor", "Drive rigid body around or along an axis"},
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
+
+/* bullet spring type */
+static const EnumPropertyItem rna_enum_rigidbody_constraint_spring_type_items[] = {
+	{RBC_SPRING_TYPE1, "SPRING1", ICON_NONE, "Blender 2.7", "Spring implementation used in blender 2.7. Damping is capped at 1.0"},
+	{RBC_SPRING_TYPE2, "SPRING2", ICON_NONE, "Blender 2.8", "New implementation available since 2.8"},
+	{0, NULL, 0, NULL, NULL},
+};
 
 #ifndef RNA_RUNTIME
 /* mesh source for collision shape creation */
@@ -82,7 +86,8 @@ static const EnumPropertyItem rigidbody_mesh_source_items[] = {
 	{RBO_MESH_BASE, "BASE", 0, "Base", "Base mesh"},
 	{RBO_MESH_DEFORM, "DEFORM", 0, "Deform", "Deformations (shape keys, deform modifiers)"},
 	{RBO_MESH_FINAL, "FINAL", 0, "Final", "All modifiers"},
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
 #endif
 
 #ifdef RNA_RUNTIME
@@ -91,7 +96,6 @@ static const EnumPropertyItem rigidbody_mesh_source_items[] = {
 #  include "RBI_api.h"
 #endif
 
-#include "BKE_depsgraph.h"
 #include "BKE_rigidbody.h"
 
 #include "WM_api.h"
@@ -109,39 +113,53 @@ static const EnumPropertyItem rigidbody_mesh_source_items[] = {
 static void rna_RigidBodyWorld_reset(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
 	RigidBodyWorld *rbw = (RigidBodyWorld *)ptr->data;
-	
+
 	BKE_rigidbody_cache_reset(rbw);
 }
 
 static char *rna_RigidBodyWorld_path(PointerRNA *UNUSED(ptr))
-{	
-	return BLI_sprintfN("rigidbody_world");
+{
+	return BLI_strdup("rigidbody_world");
 }
 
 static void rna_RigidBodyWorld_num_solver_iterations_set(PointerRNA *ptr, int value)
 {
 	RigidBodyWorld *rbw = (RigidBodyWorld *)ptr->data;
-	
+
 	rbw->num_solver_iterations = value;
 
 #ifdef WITH_BULLET
-	if (rbw->physics_world) {
-		RB_dworld_set_solver_iterations(rbw->physics_world, value);
+	if (rbw->shared->physics_world) {
+		RB_dworld_set_solver_iterations(rbw->shared->physics_world, value);
 	}
 #endif
 }
 
-static void rna_RigidBodyWorld_split_impulse_set(PointerRNA *ptr, int value)
+static void rna_RigidBodyWorld_split_impulse_set(PointerRNA *ptr, bool value)
 {
 	RigidBodyWorld *rbw = (RigidBodyWorld *)ptr->data;
-	
+
 	RB_FLAG_SET(rbw->flag, value, RBW_FLAG_USE_SPLIT_IMPULSE);
 
 #ifdef WITH_BULLET
-	if (rbw->physics_world) {
-		RB_dworld_set_split_impulse(rbw->physics_world, value);
+	if (rbw->shared->physics_world) {
+		RB_dworld_set_split_impulse(rbw->shared->physics_world, value);
 	}
 #endif
+}
+
+static void rna_RigidBodyWorld_objects_collection_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+	RigidBodyWorld *rbw = (RigidBodyWorld *)ptr->data;
+	BKE_rigidbody_objects_collection_validate(scene, rbw);
+	rna_RigidBodyWorld_reset(bmain, scene, ptr);
+}
+
+static void rna_RigidBodyWorld_constraints_collection_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+	RigidBodyWorld *rbw = (RigidBodyWorld *)ptr->data;
+	BKE_rigidbody_constraints_collection_validate(scene, rbw);
+	rna_RigidBodyWorld_reset(bmain, scene, ptr);
 }
 
 /* ******************************** */
@@ -149,16 +167,16 @@ static void rna_RigidBodyWorld_split_impulse_set(PointerRNA *ptr, int value)
 static void rna_RigidBodyOb_reset(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
 {
 	RigidBodyWorld *rbw = scene->rigidbody_world;
-	
+
 	BKE_rigidbody_cache_reset(rbw);
 }
 
 static void rna_RigidBodyOb_shape_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
 	Object *ob = ptr->id.data;
-	
+
 	rna_RigidBodyOb_reset(bmain, scene, ptr);
-	
+
 	WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
 }
 
@@ -166,22 +184,22 @@ static void rna_RigidBodyOb_shape_reset(Main *UNUSED(bmain), Scene *scene, Point
 {
 	RigidBodyWorld *rbw = scene->rigidbody_world;
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	BKE_rigidbody_cache_reset(rbw);
-	if (rbo->physics_shape)
+	if (rbo->shared->physics_shape)
 		rbo->flag |= RBO_FLAG_NEEDS_RESHAPE;
 }
 
 static char *rna_RigidBodyOb_path(PointerRNA *UNUSED(ptr))
 {
 	/* NOTE: this hardcoded path should work as long as only Objects have this */
-	return BLI_sprintfN("rigid_body");
+	return BLI_strdup("rigid_body");
 }
 
 static void rna_RigidBodyOb_type_set(PointerRNA *ptr, int value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	rbo->type = value;
 	rbo->flag |= RBO_FLAG_NEEDS_VALIDATE;
 }
@@ -194,17 +212,17 @@ static void rna_RigidBodyOb_shape_set(PointerRNA *ptr, int value)
 	rbo->flag |= RBO_FLAG_NEEDS_VALIDATE;
 }
 
-static void rna_RigidBodyOb_disabled_set(PointerRNA *ptr, int value)
+static void rna_RigidBodyOb_disabled_set(PointerRNA *ptr, bool value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	RB_FLAG_SET(rbo->flag, !value, RBO_FLAG_DISABLED);
 
 #ifdef WITH_BULLET
 	/* update kinematic state if necessary - only needed for active bodies */
-	if ((rbo->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
-		RB_body_set_mass(rbo->physics_object, RBO_GET_MASS(rbo));
-		RB_body_set_kinematic_state(rbo->physics_object, !value);
+	if ((rbo->shared->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
+		RB_body_set_mass(rbo->shared->physics_object, RBO_GET_MASS(rbo));
+		RB_body_set_kinematic_state(rbo->shared->physics_object, !value);
 		rbo->flag |= RBO_FLAG_NEEDS_VALIDATE;
 	}
 #endif
@@ -213,13 +231,13 @@ static void rna_RigidBodyOb_disabled_set(PointerRNA *ptr, int value)
 static void rna_RigidBodyOb_mass_set(PointerRNA *ptr, float value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	rbo->mass = value;
 
 #ifdef WITH_BULLET
 	/* only active bodies need mass update */
-	if ((rbo->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
-		RB_body_set_mass(rbo->physics_object, RBO_GET_MASS(rbo));
+	if ((rbo->shared->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
+		RB_body_set_mass(rbo->shared->physics_object, RBO_GET_MASS(rbo));
 	}
 #endif
 }
@@ -227,12 +245,12 @@ static void rna_RigidBodyOb_mass_set(PointerRNA *ptr, float value)
 static void rna_RigidBodyOb_friction_set(PointerRNA *ptr, float value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	rbo->friction = value;
 
 #ifdef WITH_BULLET
-	if (rbo->physics_object) {
-		RB_body_set_friction(rbo->physics_object, value);
+	if (rbo->shared->physics_object) {
+		RB_body_set_friction(rbo->shared->physics_object, value);
 	}
 #endif
 }
@@ -240,11 +258,11 @@ static void rna_RigidBodyOb_friction_set(PointerRNA *ptr, float value)
 static void rna_RigidBodyOb_restitution_set(PointerRNA *ptr, float value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	rbo->restitution = value;
 #ifdef WITH_BULLET
-	if (rbo->physics_object) {
-		RB_body_set_restitution(rbo->physics_object, value);
+	if (rbo->shared->physics_object) {
+		RB_body_set_restitution(rbo->shared->physics_object, value);
 	}
 #endif
 }
@@ -252,17 +270,17 @@ static void rna_RigidBodyOb_restitution_set(PointerRNA *ptr, float value)
 static void rna_RigidBodyOb_collision_margin_set(PointerRNA *ptr, float value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	rbo->margin = value;
 
 #ifdef WITH_BULLET
-	if (rbo->physics_shape) {
-		RB_shape_set_margin(rbo->physics_shape, RBO_GET_MARGIN(rbo));
+	if (rbo->shared->physics_shape) {
+		RB_shape_set_margin(rbo->shared->physics_shape, RBO_GET_MARGIN(rbo));
 	}
 #endif
 }
 
-static void rna_RigidBodyOb_collision_groups_set(PointerRNA *ptr, const int *values)
+static void rna_RigidBodyOb_collision_collections_set(PointerRNA *ptr, const bool *values)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
 	int i;
@@ -276,32 +294,32 @@ static void rna_RigidBodyOb_collision_groups_set(PointerRNA *ptr, const int *val
 	rbo->flag |= RBO_FLAG_NEEDS_VALIDATE;
 }
 
-static void rna_RigidBodyOb_kinematic_state_set(PointerRNA *ptr, int value)
+static void rna_RigidBodyOb_kinematic_state_set(PointerRNA *ptr, bool value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	RB_FLAG_SET(rbo->flag, value, RBO_FLAG_KINEMATIC);
 
 #ifdef WITH_BULLET
 	/* update kinematic state if necessary */
-	if (rbo->physics_object) {
-		RB_body_set_mass(rbo->physics_object, RBO_GET_MASS(rbo));
-		RB_body_set_kinematic_state(rbo->physics_object, value);
+	if (rbo->shared->physics_object) {
+		RB_body_set_mass(rbo->shared->physics_object, RBO_GET_MASS(rbo));
+		RB_body_set_kinematic_state(rbo->shared->physics_object, value);
 		rbo->flag |= RBO_FLAG_NEEDS_VALIDATE;
 	}
 #endif
 }
 
-static void rna_RigidBodyOb_activation_state_set(PointerRNA *ptr, int value)
+static void rna_RigidBodyOb_activation_state_set(PointerRNA *ptr, bool value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	RB_FLAG_SET(rbo->flag, value, RBO_FLAG_USE_DEACTIVATION);
 
 #ifdef WITH_BULLET
 	/* update activation state if necessary - only active bodies can be deactivated */
-	if ((rbo->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
-		RB_body_set_activation_state(rbo->physics_object, value);
+	if ((rbo->shared->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
+		RB_body_set_activation_state(rbo->shared->physics_object, value);
 	}
 #endif
 }
@@ -309,13 +327,13 @@ static void rna_RigidBodyOb_activation_state_set(PointerRNA *ptr, int value)
 static void rna_RigidBodyOb_linear_sleepThresh_set(PointerRNA *ptr, float value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	rbo->lin_sleep_thresh = value;
 
 #ifdef WITH_BULLET
 	/* only active bodies need sleep threshold update */
-	if ((rbo->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
-		RB_body_set_linear_sleep_thresh(rbo->physics_object, value);
+	if ((rbo->shared->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
+		RB_body_set_linear_sleep_thresh(rbo->shared->physics_object, value);
 	}
 #endif
 }
@@ -323,13 +341,13 @@ static void rna_RigidBodyOb_linear_sleepThresh_set(PointerRNA *ptr, float value)
 static void rna_RigidBodyOb_angular_sleepThresh_set(PointerRNA *ptr, float value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	rbo->ang_sleep_thresh = value;
 
 #ifdef WITH_BULLET
 	/* only active bodies need sleep threshold update */
-	if ((rbo->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
-		RB_body_set_angular_sleep_thresh(rbo->physics_object, value);
+	if ((rbo->shared->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
+		RB_body_set_angular_sleep_thresh(rbo->shared->physics_object, value);
 	}
 #endif
 }
@@ -337,13 +355,13 @@ static void rna_RigidBodyOb_angular_sleepThresh_set(PointerRNA *ptr, float value
 static void rna_RigidBodyOb_linear_damping_set(PointerRNA *ptr, float value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	rbo->lin_damping = value;
 
 #ifdef WITH_BULLET
 	/* only active bodies need damping update */
-	if ((rbo->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
-		RB_body_set_linear_damping(rbo->physics_object, value);
+	if ((rbo->shared->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
+		RB_body_set_linear_damping(rbo->shared->physics_object, value);
 	}
 #endif
 }
@@ -351,13 +369,13 @@ static void rna_RigidBodyOb_linear_damping_set(PointerRNA *ptr, float value)
 static void rna_RigidBodyOb_angular_damping_set(PointerRNA *ptr, float value)
 {
 	RigidBodyOb *rbo = (RigidBodyOb *)ptr->data;
-	
+
 	rbo->ang_damping = value;
 
 #ifdef WITH_BULLET
 	/* only active bodies need damping update */
-	if ((rbo->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
-		RB_body_set_angular_damping(rbo->physics_object, value);
+	if ((rbo->shared->physics_object) && (rbo->type == RBO_TYPE_ACTIVE)) {
+		RB_body_set_angular_damping(rbo->shared->physics_object, value);
 	}
 #endif
 }
@@ -365,7 +383,7 @@ static void rna_RigidBodyOb_angular_damping_set(PointerRNA *ptr, float value)
 static char *rna_RigidBodyCon_path(PointerRNA *UNUSED(ptr))
 {
 	/* NOTE: this hardcoded path should work as long as only Objects have this */
-	return BLI_sprintfN("rigid_body_constraint");
+	return BLI_strdup("rigid_body_constraint");
 }
 
 static void rna_RigidBodyCon_type_set(PointerRNA *ptr, int value)
@@ -376,7 +394,15 @@ static void rna_RigidBodyCon_type_set(PointerRNA *ptr, int value)
 	rbc->flag |= RBC_FLAG_NEEDS_VALIDATE;
 }
 
-static void rna_RigidBodyCon_enabled_set(PointerRNA *ptr, int value)
+static void rna_RigidBodyCon_spring_type_set(PointerRNA *ptr, int value)
+{
+	RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
+
+	rbc->spring_type = value;
+	rbc->flag |= RBC_FLAG_NEEDS_VALIDATE;
+}
+
+static void rna_RigidBodyCon_enabled_set(PointerRNA *ptr, bool value)
 {
 	RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
@@ -389,7 +415,7 @@ static void rna_RigidBodyCon_enabled_set(PointerRNA *ptr, int value)
 #endif
 }
 
-static void rna_RigidBodyCon_disable_collisions_set(PointerRNA *ptr, int value)
+static void rna_RigidBodyCon_disable_collisions_set(PointerRNA *ptr, bool value)
 {
 	RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
@@ -398,7 +424,7 @@ static void rna_RigidBodyCon_disable_collisions_set(PointerRNA *ptr, int value)
 	rbc->flag |= RBC_FLAG_NEEDS_VALIDATE;
 }
 
-static void rna_RigidBodyCon_use_breaking_set(PointerRNA *ptr, int value)
+static void rna_RigidBodyCon_use_breaking_set(PointerRNA *ptr, bool value)
 {
 	RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
@@ -433,7 +459,7 @@ static void rna_RigidBodyCon_breaking_threshold_set(PointerRNA *ptr, float value
 #endif
 }
 
-static void rna_RigidBodyCon_override_solver_iterations_set(PointerRNA *ptr, int value)
+static void rna_RigidBodyCon_override_solver_iterations_set(PointerRNA *ptr, bool value)
 {
 	RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
@@ -468,6 +494,22 @@ static void rna_RigidBodyCon_num_solver_iterations_set(PointerRNA *ptr, int valu
 #endif
 }
 
+#ifdef WITH_BULLET
+static void rna_RigidBodyCon_do_set_spring_stiffness(RigidBodyCon *rbc, float value, int flag, int axis)
+{
+	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & flag)) {
+		switch (rbc->spring_type) {
+			case RBC_SPRING_TYPE1:
+				RB_constraint_set_stiffness_6dof_spring(rbc->physics_constraint, axis, value);
+				break;
+			case RBC_SPRING_TYPE2:
+				RB_constraint_set_stiffness_6dof_spring2(rbc->physics_constraint, axis, value);
+				break;
+		}
+	}
+}
+#endif
+
 static void rna_RigidBodyCon_spring_stiffness_x_set(PointerRNA *ptr, float value)
 {
 	RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
@@ -475,9 +517,7 @@ static void rna_RigidBodyCon_spring_stiffness_x_set(PointerRNA *ptr, float value
 	rbc->spring_stiffness_x = value;
 
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_X)) {
-		RB_constraint_set_stiffness_6dof_spring(rbc->physics_constraint, RB_LIMIT_LIN_X, value);
-	}
+	rna_RigidBodyCon_do_set_spring_stiffness(rbc, value, RBC_FLAG_USE_SPRING_X, RB_LIMIT_LIN_X);
 #endif
 }
 
@@ -488,9 +528,7 @@ static void rna_RigidBodyCon_spring_stiffness_y_set(PointerRNA *ptr, float value
 	rbc->spring_stiffness_y = value;
 
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_Y)) {
-		RB_constraint_set_stiffness_6dof_spring(rbc->physics_constraint, RB_LIMIT_LIN_Y, value);
-	}
+	rna_RigidBodyCon_do_set_spring_stiffness(rbc, value, RBC_FLAG_USE_SPRING_Y, RB_LIMIT_LIN_Y);
 #endif
 }
 
@@ -501,9 +539,7 @@ static void rna_RigidBodyCon_spring_stiffness_z_set(PointerRNA *ptr, float value
 	rbc->spring_stiffness_z = value;
 
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_Z)) {
-		RB_constraint_set_stiffness_6dof_spring(rbc->physics_constraint, RB_LIMIT_LIN_Z, value);
-	}
+	rna_RigidBodyCon_do_set_spring_stiffness(rbc, value, RBC_FLAG_USE_SPRING_Z, RB_LIMIT_LIN_Z);
 #endif
 }
 
@@ -514,9 +550,7 @@ static void rna_RigidBodyCon_spring_stiffness_ang_x_set(PointerRNA *ptr, float v
 	rbc->spring_stiffness_ang_x = value;
 
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_ANG_X)) {
-		RB_constraint_set_stiffness_6dof_spring(rbc->physics_constraint, RB_LIMIT_ANG_X, value);
-	}
+	rna_RigidBodyCon_do_set_spring_stiffness(rbc, value, RBC_FLAG_USE_SPRING_ANG_X, RB_LIMIT_ANG_X);
 #endif
 }
 
@@ -527,9 +561,7 @@ static void rna_RigidBodyCon_spring_stiffness_ang_y_set(PointerRNA *ptr, float v
 	rbc->spring_stiffness_ang_y = value;
 
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_ANG_Y)) {
-		RB_constraint_set_stiffness_6dof_spring(rbc->physics_constraint, RB_LIMIT_ANG_Y, value);
-	}
+	rna_RigidBodyCon_do_set_spring_stiffness(rbc, value, RBC_FLAG_USE_SPRING_ANG_Y, RB_LIMIT_ANG_Y);
 #endif
 }
 
@@ -540,11 +572,25 @@ static void rna_RigidBodyCon_spring_stiffness_ang_z_set(PointerRNA *ptr, float v
 	rbc->spring_stiffness_ang_z = value;
 
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_ANG_Z)) {
-		RB_constraint_set_stiffness_6dof_spring(rbc->physics_constraint, RB_LIMIT_ANG_Z, value);
-	}
+	rna_RigidBodyCon_do_set_spring_stiffness(rbc, value, RBC_FLAG_USE_SPRING_ANG_Z, RB_LIMIT_ANG_Z);
 #endif
 }
+
+#ifdef WITH_BULLET
+static void rna_RigidBodyCon_do_set_spring_damping(RigidBodyCon *rbc, float value, int flag, int axis)
+{
+	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & flag)) {
+		switch (rbc->spring_type) {
+			case RBC_SPRING_TYPE1:
+				RB_constraint_set_damping_6dof_spring(rbc->physics_constraint, axis, value);
+				break;
+			case RBC_SPRING_TYPE2:
+				RB_constraint_set_damping_6dof_spring2(rbc->physics_constraint, axis, value);
+				break;
+		}
+	}
+}
+#endif
 
 static void rna_RigidBodyCon_spring_damping_x_set(PointerRNA *ptr, float value)
 {
@@ -553,9 +599,7 @@ static void rna_RigidBodyCon_spring_damping_x_set(PointerRNA *ptr, float value)
 	rbc->spring_damping_x = value;
 
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_X)) {
-		RB_constraint_set_damping_6dof_spring(rbc->physics_constraint, RB_LIMIT_LIN_X, value);
-	}
+	rna_RigidBodyCon_do_set_spring_damping(rbc, value, RBC_FLAG_USE_SPRING_X, RB_LIMIT_LIN_X);
 #endif
 }
 
@@ -565,9 +609,7 @@ static void rna_RigidBodyCon_spring_damping_y_set(PointerRNA *ptr, float value)
 
 	rbc->spring_damping_y = value;
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_Y)) {
-		RB_constraint_set_damping_6dof_spring(rbc->physics_constraint, RB_LIMIT_LIN_Y, value);
-	}
+	rna_RigidBodyCon_do_set_spring_damping(rbc, value, RBC_FLAG_USE_SPRING_Y, RB_LIMIT_LIN_Y);
 #endif
 }
 
@@ -577,9 +619,7 @@ static void rna_RigidBodyCon_spring_damping_z_set(PointerRNA *ptr, float value)
 
 	rbc->spring_damping_z = value;
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_Z)) {
-		RB_constraint_set_damping_6dof_spring(rbc->physics_constraint, RB_LIMIT_LIN_Z, value);
-	}
+	rna_RigidBodyCon_do_set_spring_damping(rbc, value, RBC_FLAG_USE_SPRING_Z, RB_LIMIT_LIN_Z);
 #endif
 }
 
@@ -590,9 +630,7 @@ static void rna_RigidBodyCon_spring_damping_ang_x_set(PointerRNA *ptr, float val
 	rbc->spring_damping_ang_x = value;
 
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_ANG_X)) {
-		RB_constraint_set_damping_6dof_spring(rbc->physics_constraint, RB_LIMIT_ANG_X, value);
-	}
+	rna_RigidBodyCon_do_set_spring_damping(rbc, value, RBC_FLAG_USE_SPRING_ANG_X, RB_LIMIT_ANG_X);
 #endif
 }
 
@@ -602,9 +640,7 @@ static void rna_RigidBodyCon_spring_damping_ang_y_set(PointerRNA *ptr, float val
 
 	rbc->spring_damping_ang_y = value;
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_ANG_Y)) {
-		RB_constraint_set_damping_6dof_spring(rbc->physics_constraint, RB_LIMIT_ANG_Y, value);
-	}
+	rna_RigidBodyCon_do_set_spring_damping(rbc, value, RBC_FLAG_USE_SPRING_ANG_Y, RB_LIMIT_ANG_Y);
 #endif
 }
 
@@ -614,9 +650,7 @@ static void rna_RigidBodyCon_spring_damping_ang_z_set(PointerRNA *ptr, float val
 
 	rbc->spring_damping_ang_z = value;
 #ifdef WITH_BULLET
-	if (rbc->physics_constraint && rbc->type == RBC_TYPE_6DOF_SPRING && (rbc->flag & RBC_FLAG_USE_SPRING_ANG_Z)) {
-		RB_constraint_set_damping_6dof_spring(rbc->physics_constraint, RB_LIMIT_ANG_Z, value);
-	}
+	rna_RigidBodyCon_do_set_spring_damping(rbc, value, RBC_FLAG_USE_SPRING_ANG_Z, RB_LIMIT_ANG_Z);
 #endif
 }
 
@@ -633,7 +667,7 @@ static void rna_RigidBodyCon_motor_lin_max_impulse_set(PointerRNA *ptr, float va
 #endif
 }
 
-static void rna_RigidBodyCon_use_motor_lin_set(PointerRNA *ptr, int value)
+static void rna_RigidBodyCon_use_motor_lin_set(PointerRNA *ptr, bool value)
 {
 	RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
@@ -646,7 +680,7 @@ static void rna_RigidBodyCon_use_motor_lin_set(PointerRNA *ptr, int value)
 #endif
 }
 
-static void rna_RigidBodyCon_use_motor_ang_set(PointerRNA *ptr, int value)
+static void rna_RigidBodyCon_use_motor_ang_set(PointerRNA *ptr, bool value)
 {
 	RigidBodyCon *rbc = (RigidBodyCon *)ptr->data;
 
@@ -707,8 +741,8 @@ static void rna_RigidBodyWorld_convex_sweep_test(
 #ifdef WITH_BULLET
 	RigidBodyOb *rob = object->rigidbody_object;
 
-	if (rbw->physics_world != NULL && rob->physics_object != NULL) {
-		RB_world_convex_sweep_test(rbw->physics_world, rob->physics_object, ray_start, ray_end,
+	if (rbw->shared->physics_world != NULL && rob->shared->physics_object != NULL) {
+		RB_world_convex_sweep_test(rbw->shared->physics_world, rob->shared->physics_object, ray_start, ray_end,
 		                           r_location, r_hitpoint, r_normal, r_hit);
 		if (*r_hit == -2) {
 			BKE_report(reports, RPT_ERROR,
@@ -724,6 +758,13 @@ static void rna_RigidBodyWorld_convex_sweep_test(
 #endif
 }
 
+static PointerRNA rna_RigidBodyWorld_PointCache_get(PointerRNA *ptr)
+{
+	RigidBodyWorld *rbw = ptr->data;
+	return rna_pointer_inherit_refine(ptr, &RNA_PointCache, rbw->shared->pointcache);
+}
+
+
 #else
 
 static void rna_def_rigidbody_world(BlenderRNA *brna)
@@ -738,26 +779,27 @@ static void rna_def_rigidbody_world(BlenderRNA *brna)
 	RNA_def_struct_sdna(srna, "RigidBodyWorld");
 	RNA_def_struct_ui_text(srna, "Rigid Body World", "Self-contained rigid body simulation environment and settings");
 	RNA_def_struct_path_func(srna, "rna_RigidBodyWorld_path");
-	
+
 	/* groups */
-	prop = RNA_def_property(srna, "group", PROP_POINTER, PROP_NONE);
-	RNA_def_property_struct_type(prop, "Group");
+	prop = RNA_def_property(srna, "collection", PROP_POINTER, PROP_NONE);
+	RNA_def_property_struct_type(prop, "Collection");
+	RNA_def_property_pointer_sdna(prop, NULL, "group");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
-	RNA_def_property_ui_text(prop, "Group", "Group containing objects participating in this simulation");
-	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
+	RNA_def_property_ui_text(prop, "Collection", "Collection containing objects participating in this simulation");
+	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_objects_collection_update");
 
 	prop = RNA_def_property(srna, "constraints", PROP_POINTER, PROP_NONE);
-	RNA_def_property_struct_type(prop, "Group");
+	RNA_def_property_struct_type(prop, "Collection");
 	RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
-	RNA_def_property_ui_text(prop, "Constraints", "Group containing rigid body constraint objects");
-	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
-	
+	RNA_def_property_ui_text(prop, "Constraints", "Collection containing rigid body constraint objects");
+	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_constraints_collection_update");
+
 	/* booleans */
 	prop = RNA_def_property(srna, "enabled", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", RBW_FLAG_MUTED);
 	RNA_def_property_ui_text(prop, "Enabled", "Simulation will be evaluated");
 	RNA_def_property_update(prop, NC_SCENE, NULL);
-	
+
 	/* time scale */
 	prop = RNA_def_property(srna, "time_scale", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "time_scale");
@@ -766,7 +808,7 @@ static void rna_def_rigidbody_world(BlenderRNA *brna)
 	RNA_def_property_float_default(prop, 1.0f);
 	RNA_def_property_ui_text(prop, "Time Scale", "Change the speed of the simulation");
 	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
-	
+
 	/* timestep */
 	prop = RNA_def_property(srna, "steps_per_second", PROP_INT, PROP_NONE);
 	RNA_def_property_int_sdna(prop, NULL, "steps_per_second");
@@ -777,7 +819,7 @@ static void rna_def_rigidbody_world(BlenderRNA *brna)
 	                         "Number of simulation steps taken per second (higher values are more accurate "
 	                         "but slower)");
 	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
-	
+
 	/* constraint solver iterations */
 	prop = RNA_def_property(srna, "solver_iterations", PROP_INT, PROP_NONE);
 	RNA_def_property_int_sdna(prop, NULL, "num_solver_iterations");
@@ -789,7 +831,7 @@ static void rna_def_rigidbody_world(BlenderRNA *brna)
 	                         "Number of constraint solver iterations made per simulation step (higher values are more "
 	                         "accurate but slower)");
 	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
-	
+
 	/* split impulse */
 	prop = RNA_def_property(srna, "use_split_impulse", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", RBW_FLAG_USE_SPLIT_IMPULSE);
@@ -802,7 +844,8 @@ static void rna_def_rigidbody_world(BlenderRNA *brna)
 	/* cache */
 	prop = RNA_def_property(srna, "point_cache", PROP_POINTER, PROP_NONE);
 	RNA_def_property_flag(prop, PROP_NEVER_NULL);
-	RNA_def_property_pointer_sdna(prop, NULL, "pointcache");
+	RNA_def_property_pointer_funcs(prop, "rna_RigidBodyWorld_PointCache_get", NULL, NULL, NULL);
+	RNA_def_property_struct_type(prop, "PointCache");
 	RNA_def_property_ui_text(prop, "Point Cache", "");
 
 	/* effector weights */
@@ -843,13 +886,13 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 {
 	StructRNA *srna;
 	PropertyRNA *prop;
-	
-	
+
+
 	srna = RNA_def_struct(brna, "RigidBodyObject", NULL);
 	RNA_def_struct_sdna(srna, "RigidBodyOb");
 	RNA_def_struct_ui_text(srna, "Rigid Body Object", "Settings for object participating in Rigid Body Simulation");
 	RNA_def_struct_path_func(srna, "rna_RigidBodyOb_path");
-	
+
 	/* Enums */
 	prop = RNA_def_property(srna, "type", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "type");
@@ -858,21 +901,21 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Type", "Role of object in Rigid Body Simulations");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	prop = RNA_def_property(srna, "mesh_source", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "mesh_source");
 	RNA_def_property_enum_items(prop, rigidbody_mesh_source_items);
 	RNA_def_property_ui_text(prop, "Mesh Source", "Source of the mesh used to create collision shape");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	/* booleans */
 	prop = RNA_def_property(srna, "enabled", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", RBO_FLAG_DISABLED);
 	RNA_def_property_boolean_funcs(prop, NULL, "rna_RigidBodyOb_disabled_set");
 	RNA_def_property_ui_text(prop, "Enabled", "Rigid Body actively participates to the simulation");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	prop = RNA_def_property(srna, "collision_shape", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "shape");
 	RNA_def_property_enum_items(prop, rna_enum_rigidbody_object_shape_items);
@@ -880,18 +923,18 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Collision Shape", "Collision Shape of object in Rigid Body Simulations");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_shape_update");
-	
+
 	prop = RNA_def_property(srna, "kinematic", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", RBO_FLAG_KINEMATIC);
 	RNA_def_property_boolean_funcs(prop, NULL, "rna_RigidBodyOb_kinematic_state_set");
 	RNA_def_property_ui_text(prop, "Kinematic", "Allow rigid body to be controlled by the animation system");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	prop = RNA_def_property(srna, "use_deform", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", RBO_FLAG_USE_DEFORM);
 	RNA_def_property_ui_text(prop, "Deforming", "Rigid body deforms during simulation");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	/* Physics Parameters */
 	prop = RNA_def_property(srna, "mass", PROP_FLOAT, PROP_UNIT_MASS);
 	RNA_def_property_float_sdna(prop, NULL, "mass");
@@ -900,10 +943,10 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyOb_mass_set", NULL);
 	RNA_def_property_ui_text(prop, "Mass", "How much the object 'weighs' irrespective of gravity");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	/* Dynamics Parameters - Activation */
 	// TODO: define and figure out how to implement these
-	
+
 	/* Dynamics Parameters - Deactivation */
 	prop = RNA_def_property(srna, "use_deactivation", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", RBO_FLAG_USE_DEACTIVATION);
@@ -913,13 +956,13 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	                         "Enable deactivation of resting rigid bodies (increases performance and stability "
 	                         "but can cause glitches)");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	prop = RNA_def_property(srna, "use_start_deactivated", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", RBO_FLAG_START_DEACTIVATED);
 	RNA_def_property_ui_text(prop, "Start Deactivated", "Deactivate rigid body at the start of the simulation");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	prop = RNA_def_property(srna, "deactivate_linear_velocity", PROP_FLOAT, PROP_UNIT_VELOCITY);
 	RNA_def_property_float_sdna(prop, NULL, "lin_sleep_thresh");
 	RNA_def_property_range(prop, FLT_MIN, FLT_MAX); // range must always be positive (and non-zero)
@@ -928,7 +971,7 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Linear Velocity Deactivation Threshold",
 	                         "Linear Velocity below which simulation stops simulating object");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	prop = RNA_def_property(srna, "deactivate_angular_velocity", PROP_FLOAT, PROP_UNIT_VELOCITY);
 	RNA_def_property_float_sdna(prop, NULL, "ang_sleep_thresh");
 	RNA_def_property_range(prop, FLT_MIN, FLT_MAX); // range must always be positive (and non-zero)
@@ -937,7 +980,7 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Angular Velocity Deactivation Threshold",
 	                         "Angular Velocity below which simulation stops simulating object");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	/* Dynamics Parameters - Damping Parameters */
 	prop = RNA_def_property(srna, "linear_damping", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_sdna(prop, NULL, "lin_damping");
@@ -946,7 +989,7 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyOb_linear_damping_set", NULL);
 	RNA_def_property_ui_text(prop, "Linear Damping", "Amount of linear velocity that is lost over time");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	prop = RNA_def_property(srna, "angular_damping", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_sdna(prop, NULL, "ang_damping");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
@@ -954,7 +997,7 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyOb_angular_damping_set", NULL);
 	RNA_def_property_ui_text(prop, "Angular Damping", "Amount of angular velocity that is lost over time");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	/* Collision Parameters - Surface Parameters */
 	prop = RNA_def_property(srna, "friction", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_sdna(prop, NULL, "friction");
@@ -964,7 +1007,7 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyOb_friction_set", NULL);
 	RNA_def_property_ui_text(prop, "Friction", "Resistance of object to movement");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	prop = RNA_def_property(srna, "restitution", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_sdna(prop, NULL, "restitution");
 	RNA_def_property_range(prop, 0.0f, FLT_MAX);
@@ -975,7 +1018,7 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	                         "Tendency of object to bounce after colliding with another "
 	                         "(0 = stays still, 1 = perfectly elastic)");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
-	
+
 	/* Collision Parameters - Sensitivity */
 	prop = RNA_def_property(srna, "use_margin", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", RBO_FLAG_USE_MARGIN);
@@ -983,7 +1026,7 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Collision Margin",
 	                         "Use custom collision margin (some shapes will have a visible gap around them)");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_shape_reset");
-	
+
 	prop = RNA_def_property(srna, "collision_margin", PROP_FLOAT, PROP_UNIT_LENGTH);
 	RNA_def_property_float_sdna(prop, NULL, "margin");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
@@ -994,12 +1037,12 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	                         "Threshold of distance near surface where collisions are still considered "
 	                         "(best results when non-zero)");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_shape_reset");
-	
-	prop = RNA_def_property(srna, "collision_groups", PROP_BOOLEAN, PROP_LAYER_MEMBER);
+
+	prop = RNA_def_property(srna, "collision_collections", PROP_BOOLEAN, PROP_LAYER_MEMBER);
 	RNA_def_property_boolean_sdna(prop, NULL, "col_groups", 1);
 	RNA_def_property_array(prop, 20);
-	RNA_def_property_boolean_funcs(prop, NULL, "rna_RigidBodyOb_collision_groups_set");
-	RNA_def_property_ui_text(prop, "Collision Groups", "Collision Groups Rigid Body belongs to");
+	RNA_def_property_boolean_funcs(prop, NULL, "rna_RigidBodyOb_collision_collections_set");
+	RNA_def_property_ui_text(prop, "Collision Collections", "Collision collections rigid body belongs to");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
 	RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);
 }
@@ -1021,6 +1064,14 @@ static void rna_def_rigidbody_constraint(BlenderRNA *brna)
 	RNA_def_property_enum_items(prop, rna_enum_rigidbody_constraint_type_items);
 	RNA_def_property_enum_funcs(prop, NULL, "rna_RigidBodyCon_type_set", NULL);
 	RNA_def_property_ui_text(prop, "Type", "Type of Rigid Body Constraint");
+	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
+	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
+
+	prop = RNA_def_property(srna, "spring_type", PROP_ENUM, PROP_NONE);
+	RNA_def_property_enum_sdna(prop, NULL, "spring_type");
+	RNA_def_property_enum_items(prop, rna_enum_rigidbody_constraint_spring_type_items);
+	RNA_def_property_enum_funcs(prop, NULL, "rna_RigidBodyCon_spring_type_set", NULL);
+	RNA_def_property_ui_text(prop, "Spring Type", "Which implementation of spring to use");
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
 
@@ -1292,49 +1343,49 @@ static void rna_def_rigidbody_constraint(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Z Angle Stiffness", "Stiffness on the Z rotational axis");
 	RNA_def_property_update(prop, NC_OBJECT, "rna_RigidBodyOb_reset");
 
-	prop = RNA_def_property(srna, "spring_damping_x", PROP_FLOAT, PROP_FACTOR);
+	prop = RNA_def_property(srna, "spring_damping_x", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "spring_damping_x");
-	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_float_default(prop, 0.5f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyCon_spring_damping_x_set", NULL);
 	RNA_def_property_ui_text(prop, "Damping X", "Damping on the X axis");
 	RNA_def_property_update(prop, NC_OBJECT, "rna_RigidBodyOb_reset");
 
-	prop = RNA_def_property(srna, "spring_damping_y", PROP_FLOAT, PROP_FACTOR);
+	prop = RNA_def_property(srna, "spring_damping_y", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "spring_damping_y");
-	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_float_default(prop, 0.5f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyCon_spring_damping_y_set", NULL);
 	RNA_def_property_ui_text(prop, "Damping Y", "Damping on the Y axis");
 	RNA_def_property_update(prop, NC_OBJECT, "rna_RigidBodyOb_reset");
 
-	prop = RNA_def_property(srna, "spring_damping_z", PROP_FLOAT, PROP_FACTOR);
+	prop = RNA_def_property(srna, "spring_damping_z", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "spring_damping_z");
-	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_float_default(prop, 0.5f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyCon_spring_damping_z_set", NULL);
 	RNA_def_property_ui_text(prop, "Damping Z", "Damping on the Z axis");
 	RNA_def_property_update(prop, NC_OBJECT, "rna_RigidBodyOb_reset");
 
-	prop = RNA_def_property(srna, "spring_damping_ang_x", PROP_FLOAT, PROP_FACTOR);
+	prop = RNA_def_property(srna, "spring_damping_ang_x", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "spring_damping_ang_x");
-	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_float_default(prop, 0.5f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyCon_spring_damping_ang_x_set", NULL);
 	RNA_def_property_ui_text(prop, "Damping X Angle", "Damping on the X rotational axis");
 	RNA_def_property_update(prop, NC_OBJECT, "rna_RigidBodyOb_reset");
 
-	prop = RNA_def_property(srna, "spring_damping_ang_y", PROP_FLOAT, PROP_FACTOR);
+	prop = RNA_def_property(srna, "spring_damping_ang_y", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "spring_damping_ang_y");
-	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_float_default(prop, 0.5f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyCon_spring_damping_ang_y_set", NULL);
 	RNA_def_property_ui_text(prop, "Damping Y Angle", "Damping on the Y rotational axis");
 	RNA_def_property_update(prop, NC_OBJECT, "rna_RigidBodyOb_reset");
 
-	prop = RNA_def_property(srna, "spring_damping_ang_z", PROP_FLOAT, PROP_FACTOR);
+	prop = RNA_def_property(srna, "spring_damping_ang_z", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "spring_damping_ang_z");
-	RNA_def_property_range(prop, 0.0f, 1.0f);
+	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_float_default(prop, 0.5f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyCon_spring_damping_ang_z_set", NULL);
 	RNA_def_property_ui_text(prop, "Damping Z Angle", "Damping on the Z rotational axis");

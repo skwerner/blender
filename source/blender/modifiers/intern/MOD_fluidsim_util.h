@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,34 +15,29 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/modifiers/intern/MOD_fluidsim_util.h
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 
 #ifndef __MOD_FLUIDSIM_UTIL_H__
 #define __MOD_FLUIDSIM_UTIL_H__
 
+struct FluidsimModifierData;
+struct Mesh;
+struct ModifierEvalContext;
 struct Object;
 struct Scene;
-struct FluidsimModifierData;
-struct DerivedMesh;
 
 /* new fluid-modifier interface */
 void fluidsim_init(struct FluidsimModifierData *fluidmd);
 void fluidsim_free(struct FluidsimModifierData *fluidmd);
 
-struct DerivedMesh *fluidsimModifier_do(struct FluidsimModifierData *fluidmd,
-	struct Scene *scene, struct Object *ob, struct DerivedMesh *dm,
-	int useRenderParams, int isFinalCalc);
+struct Mesh *fluidsimModifier_do(
+        struct FluidsimModifierData *fluidmd,
+        const struct ModifierEvalContext *ctx,
+        struct Mesh *me);
 
 #endif
-

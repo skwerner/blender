@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/BPy_Convert.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BPy_Convert.h"
@@ -89,7 +85,7 @@ PyObject *Vector_from_Vec3f(Vec3f& vec)
 	float vec_data[3]; // because vec->_coord is protected
 	vec_data[0] = vec.x();
 	vec_data[1] = vec.y();
-	vec_data[2] = vec.z(); 
+	vec_data[2] = vec.z();
 	return Vector_CreatePyObject(vec_data, 3, NULL);
 }
 
@@ -356,7 +352,7 @@ PyObject *BPy_SShape_from_SShape(SShape& ss)
 	PyObject *py_ss = SShape_Type.tp_new(&SShape_Type, 0, 0);
 	((BPy_SShape *)py_ss)->ss = &ss;
 	((BPy_SShape *)py_ss)->borrowed = true;
-	return py_ss;	
+	return py_ss;
 }
 
 PyObject *BPy_ViewShape_from_ViewShape(ViewShape& vs)

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung, Sergej Reich
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file rb_bullet_api.cpp
- *  \ingroup RigidBody
- *  \brief Rigid Body API implementation for Bullet
+/** \file
+ * \ingroup RigidBody
+ * \brief Rigid Body API implementation for Bullet
  */
 
 /*
@@ -959,6 +951,20 @@ rbConstraint *RB_constraint_new_6dof_spring(float pivot[3], float orn[4], rbRigi
 	return (rbConstraint *)con;
 }
 
+rbConstraint *RB_constraint_new_6dof_spring2(float pivot[3], float orn[4], rbRigidBody *rb1, rbRigidBody *rb2)
+{
+	btRigidBody *body1 = rb1->body;
+	btRigidBody *body2 = rb2->body;
+	btTransform transform1;
+	btTransform transform2;
+
+	make_constraint_transforms(transform1, transform2, body1, body2, pivot, orn);
+
+	btTypedConstraint *con = new btGeneric6DofSpring2Constraint(*body1, *body2, transform1, transform2);
+
+	return (rbConstraint *)con;
+}
+
 rbConstraint *RB_constraint_new_motor(float pivot[3], float orn[4], rbRigidBody *rb1, rbRigidBody *rb2)
 {
 	btRigidBody *body1 = rb1->body;
@@ -1034,32 +1040,69 @@ void RB_constraint_set_limits_6dof(rbConstraint *con, int axis, float lower, flo
 	constraint->setLimit(axis, lower, upper);
 }
 
+void RB_constraint_set_limits_6dof_spring2(rbConstraint *con, int axis, float lower, float upper)
+{
+	btGeneric6DofSpring2Constraint *constraint = reinterpret_cast<btGeneric6DofSpring2Constraint*>(con);
+
+	constraint->setLimit(axis, lower, upper);
+}
+
 void RB_constraint_set_stiffness_6dof_spring(rbConstraint *con, int axis, float stiffness)
 {
 	btGeneric6DofSpringConstraint *constraint = reinterpret_cast<btGeneric6DofSpringConstraint*>(con);
-	
+
 	constraint->setStiffness(axis, stiffness);
 }
 
 void RB_constraint_set_damping_6dof_spring(rbConstraint *con, int axis, float damping)
 {
 	btGeneric6DofSpringConstraint *constraint = reinterpret_cast<btGeneric6DofSpringConstraint*>(con);
-	
+
 	// invert damping range so that 0 = no damping
-	constraint->setDamping(axis, 1.0f - damping);
+	damping = (damping > 1.0f) ? 0.0f : 1.0f - damping;
+
+	constraint->setDamping(axis, damping);
 }
 
 void RB_constraint_set_spring_6dof_spring(rbConstraint *con, int axis, int enable)
 {
 	btGeneric6DofSpringConstraint *constraint = reinterpret_cast<btGeneric6DofSpringConstraint*>(con);
-	
+
 	constraint->enableSpring(axis, enable);
 }
 
 void RB_constraint_set_equilibrium_6dof_spring(rbConstraint *con)
 {
 	btGeneric6DofSpringConstraint *constraint = reinterpret_cast<btGeneric6DofSpringConstraint*>(con);
-	
+
+	constraint->setEquilibriumPoint();
+}
+
+void RB_constraint_set_stiffness_6dof_spring2(rbConstraint *con, int axis, float stiffness)
+{
+	btGeneric6DofSpring2Constraint *constraint = reinterpret_cast<btGeneric6DofSpring2Constraint*>(con);
+
+	constraint->setStiffness(axis, stiffness);
+}
+
+void RB_constraint_set_damping_6dof_spring2(rbConstraint *con, int axis, float damping)
+{
+	btGeneric6DofSpring2Constraint *constraint = reinterpret_cast<btGeneric6DofSpring2Constraint*>(con);
+
+	constraint->setDamping(axis, damping);
+}
+
+void RB_constraint_set_spring_6dof_spring2(rbConstraint *con, int axis, int enable)
+{
+	btGeneric6DofSpring2Constraint *constraint = reinterpret_cast<btGeneric6DofSpring2Constraint*>(con);
+
+	constraint->enableSpring(axis, enable);
+}
+
+void RB_constraint_set_equilibrium_6dof_spring2(rbConstraint *con)
+{
+	btGeneric6DofSpring2Constraint *constraint = reinterpret_cast<btGeneric6DofSpring2Constraint*>(con);
+
 	constraint->setEquilibriumPoint();
 }
 

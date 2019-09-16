@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/avi/intern/avi_rgb.c
- *  \ingroup avi
+/** \file
+ * \ingroup avi
  *
  * This is external code. Converts rgb-type avi-s.
  */
@@ -49,7 +40,7 @@ void *avi_converter_from_avi_rgb(AviMovie *movie, int stream, unsigned char *buf
 	unsigned char *buf;
 	AviBitmapInfoHeader *bi;
 	short bits = 32;
-	
+
 	(void)size; /* unused */
 
 	bi = (AviBitmapInfoHeader *) movie->streams[stream].sf;
@@ -70,7 +61,7 @@ void *avi_converter_from_avi_rgb(AviMovie *movie, int stream, unsigned char *buf
 
 			while (y--) {
 				pxl = (unsigned short *) (buffer + y * movie->header->Width * 2);
-				
+
 #ifdef __BIG_ENDIAN__
 				pxla = (unsigned char *)pxl;
 #endif
@@ -94,12 +85,12 @@ void *avi_converter_from_avi_rgb(AviMovie *movie, int stream, unsigned char *buf
 		}
 
 		MEM_freeN(buffer);
-		
+
 		return buf;
 	}
 	else {
 		buf = imb_alloc_pixels(movie->header->Height, movie->header->Width, 3, sizeof(unsigned char),  "fromavirgbbuf");
-	
+
 		if (buf) {
 			size_t rowstride = movie->header->Width * 3;
 			if ((bits != 16) && (movie->header->Width % 2)) rowstride++;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/Interface0D/BPy_SVertex.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BPy_SVertex.h"
@@ -138,7 +134,7 @@ static PyObject *SVertex_add_fedge(BPy_SVertex *self, PyObject *args, PyObject *
 static PyMethodDef BPy_SVertex_methods[] = {
 	{"add_normal", (PyCFunction)SVertex_add_normal, METH_VARARGS | METH_KEYWORDS, SVertex_add_normal_doc},
 	{"add_fedge", (PyCFunction)SVertex_add_fedge, METH_VARARGS | METH_KEYWORDS, SVertex_add_fedge_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 /*----------------------mathutils callbacks ----------------------------*/
@@ -158,18 +154,18 @@ static int SVertex_mathutils_get(BaseMathObject *bmo, int subtype)
 {
 	BPy_SVertex *self = (BPy_SVertex *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_POINT3D:
-		bmo->data[0] = self->sv->getX();
-		bmo->data[1] = self->sv->getY();
-		bmo->data[2] = self->sv->getZ();
-		break;
-	case MATHUTILS_SUBTYPE_POINT2D:
-		bmo->data[0] = self->sv->getProjectedX();
-		bmo->data[1] = self->sv->getProjectedY();
-		bmo->data[2] = self->sv->getProjectedZ();
-		break;
-	default:
-		return -1;
+		case MATHUTILS_SUBTYPE_POINT3D:
+			bmo->data[0] = self->sv->getX();
+			bmo->data[1] = self->sv->getY();
+			bmo->data[2] = self->sv->getZ();
+			break;
+		case MATHUTILS_SUBTYPE_POINT2D:
+			bmo->data[0] = self->sv->getProjectedX();
+			bmo->data[1] = self->sv->getProjectedY();
+			bmo->data[2] = self->sv->getProjectedZ();
+			break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -178,20 +174,20 @@ static int SVertex_mathutils_set(BaseMathObject *bmo, int subtype)
 {
 	BPy_SVertex *self = (BPy_SVertex *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_POINT3D:
-		{
-			Vec3r p(bmo->data[0], bmo->data[1], bmo->data[2]);
-			self->sv->setPoint3D(p);
-		}
-		break;
-	case MATHUTILS_SUBTYPE_POINT2D:
-		{
-			Vec3r p(bmo->data[0], bmo->data[1], bmo->data[2]);
-			self->sv->setPoint2D(p);
-		}
-		break;
-	default:
-		return -1;
+		case MATHUTILS_SUBTYPE_POINT3D:
+			{
+				Vec3r p(bmo->data[0], bmo->data[1], bmo->data[2]);
+				self->sv->setPoint3D(p);
+			}
+			break;
+		case MATHUTILS_SUBTYPE_POINT2D:
+			{
+				Vec3r p(bmo->data[0], bmo->data[1], bmo->data[2]);
+				self->sv->setPoint2D(p);
+			}
+			break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -200,26 +196,26 @@ static int SVertex_mathutils_get_index(BaseMathObject *bmo, int subtype, int ind
 {
 	BPy_SVertex *self = (BPy_SVertex *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_POINT3D:
-		switch (index) {
-		case 0: bmo->data[0] = self->sv->getX(); break;
-		case 1: bmo->data[1] = self->sv->getY(); break;
-		case 2: bmo->data[2] = self->sv->getZ(); break;
+		case MATHUTILS_SUBTYPE_POINT3D:
+			switch (index) {
+				case 0: bmo->data[0] = self->sv->getX(); break;
+				case 1: bmo->data[1] = self->sv->getY(); break;
+				case 2: bmo->data[2] = self->sv->getZ(); break;
+				default:
+					return -1;
+			}
+			break;
+		case MATHUTILS_SUBTYPE_POINT2D:
+			switch (index) {
+				case 0: bmo->data[0] = self->sv->getProjectedX(); break;
+				case 1: bmo->data[1] = self->sv->getProjectedY(); break;
+				case 2: bmo->data[2] = self->sv->getProjectedZ(); break;
+				default:
+					return -1;
+			}
+			break;
 		default:
 			return -1;
-		}
-		break;
-	case MATHUTILS_SUBTYPE_POINT2D:
-		switch (index) {
-		case 0: bmo->data[0] = self->sv->getProjectedX(); break;
-		case 1: bmo->data[1] = self->sv->getProjectedY(); break;
-		case 2: bmo->data[2] = self->sv->getProjectedZ(); break;
-		default:
-			return -1;
-		}
-		break;
-	default:
-		return -1;
 	}
 	return 0;
 }
@@ -228,22 +224,22 @@ static int SVertex_mathutils_set_index(BaseMathObject *bmo, int subtype, int ind
 {
 	BPy_SVertex *self = (BPy_SVertex *)bmo->cb_user;
 	switch (subtype) {
-	case MATHUTILS_SUBTYPE_POINT3D:
-		{
-			Vec3r p(self->sv->point3D());
-			p[index] = bmo->data[index];
-			self->sv->setPoint3D(p);
-		}
-		break;
-	case MATHUTILS_SUBTYPE_POINT2D:
-		{
-			Vec3r p(self->sv->point2D());
-			p[index] = bmo->data[index];
-			self->sv->setPoint2D(p);
-		}
-		break;
-	default:
-		return -1;
+		case MATHUTILS_SUBTYPE_POINT3D:
+			{
+				Vec3r p(self->sv->point3D());
+				p[index] = bmo->data[index];
+				self->sv->setPoint3D(p);
+			}
+			break;
+		case MATHUTILS_SUBTYPE_POINT2D:
+			{
+				Vec3r p(self->sv->point2D());
+				p[index] = bmo->data[index];
+				self->sv->setPoint2D(p);
+			}
+			break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -253,7 +249,7 @@ static Mathutils_Callback SVertex_mathutils_cb = {
 	SVertex_mathutils_get,
 	SVertex_mathutils_set,
 	SVertex_mathutils_get_index,
-	SVertex_mathutils_set_index
+	SVertex_mathutils_set_index,
 };
 
 static unsigned char SVertex_mathutils_cb_index = -1;
@@ -341,7 +337,7 @@ PyDoc_STRVAR(SVertex_normals_doc,
 
 static PyObject *SVertex_normals_get(BPy_SVertex *self, void *UNUSED(closure))
 {
-	PyObject *py_normals; 
+	PyObject *py_normals;
 	set< Vec3r > normals = self->sv->normals();
 	set< Vec3r >::iterator it;
 	py_normals = PyList_New(normals.size());

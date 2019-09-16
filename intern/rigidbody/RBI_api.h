@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation,
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung, Sergej Reich
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file RBI_api.h
- *  \ingroup RigidBody
- *  \brief Rigid Body API for interfacing with external Physics Engines
+/** \file
+ * \ingroup RigidBody
+ * \brief Rigid Body API for interfacing with external Physics Engines
  */
 
 #ifndef __RB_API_H__
@@ -268,6 +260,7 @@ rbConstraint *RB_constraint_new_slider(float pivot[3], float orn[4], rbRigidBody
 rbConstraint *RB_constraint_new_piston(float pivot[3], float orn[4], rbRigidBody *rb1, rbRigidBody *rb2);
 rbConstraint *RB_constraint_new_6dof(float pivot[3], float orn[4], rbRigidBody *rb1, rbRigidBody *rb2);
 rbConstraint *RB_constraint_new_6dof_spring(float pivot[3], float orn[4], rbRigidBody *rb1, rbRigidBody *rb2);
+rbConstraint *RB_constraint_new_6dof_spring2(float pivot[3], float orn[4], rbRigidBody *rb1, rbRigidBody *rb2);
 rbConstraint *RB_constraint_new_motor(float pivot[3], float orn[4], rbRigidBody *rb1, rbRigidBody *rb2);
 
 /* ............ */
@@ -303,6 +296,13 @@ void RB_constraint_set_stiffness_6dof_spring(rbConstraint *con, int axis, float 
 void RB_constraint_set_damping_6dof_spring(rbConstraint *con, int axis, float damping);
 void RB_constraint_set_spring_6dof_spring(rbConstraint *con, int axis, int enable);
 void RB_constraint_set_equilibrium_6dof_spring(rbConstraint *con);
+
+/* 6dof spring 2 specific */
+void RB_constraint_set_limits_6dof_spring2(rbConstraint *con, int axis, float lower, float upper);
+void RB_constraint_set_stiffness_6dof_spring2(rbConstraint *con, int axis, float stiffness);
+void RB_constraint_set_damping_6dof_spring2(rbConstraint *con, int axis, float damping);
+void RB_constraint_set_spring_6dof_spring2(rbConstraint *con, int axis, int enable);
+void RB_constraint_set_equilibrium_6dof_spring2(rbConstraint *con);
 
 /* motors */
 void RB_constraint_set_enable_motor(rbConstraint *con, int enable_lin, int enable_ang);

@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/render/render_ops.c
- *  \ingroup edrend
+/** \file
+ * \ingroup edrend
  */
 
 #include <stdlib.h>
@@ -52,15 +46,18 @@ void ED_operatortypes_render(void)
 	WM_operatortype_append(MATERIAL_OT_new);
 	WM_operatortype_append(TEXTURE_OT_new);
 	WM_operatortype_append(WORLD_OT_new);
-	
+
 	WM_operatortype_append(MATERIAL_OT_copy);
 	WM_operatortype_append(MATERIAL_OT_paste);
 
-	WM_operatortype_append(SCENE_OT_render_layer_add);
-	WM_operatortype_append(SCENE_OT_render_layer_remove);
+	WM_operatortype_append(SCENE_OT_view_layer_add);
+	WM_operatortype_append(SCENE_OT_view_layer_remove);
 
 	WM_operatortype_append(SCENE_OT_render_view_add);
 	WM_operatortype_append(SCENE_OT_render_view_remove);
+
+	WM_operatortype_append(SCENE_OT_light_cache_bake);
+	WM_operatortype_append(SCENE_OT_light_cache_free);
 
 #ifdef WITH_FREESTYLE
 	WM_operatortype_append(SCENE_OT_freestyle_module_add);
@@ -85,9 +82,6 @@ void ED_operatortypes_render(void)
 	WM_operatortype_append(TEXTURE_OT_slot_copy);
 	WM_operatortype_append(TEXTURE_OT_slot_paste);
 	WM_operatortype_append(TEXTURE_OT_slot_move);
-	WM_operatortype_append(TEXTURE_OT_envmap_save);
-	WM_operatortype_append(TEXTURE_OT_envmap_clear);
-	WM_operatortype_append(TEXTURE_OT_envmap_clear_all);
 
 	/* render_internal.c */
 	WM_operatortype_append(RENDER_OT_view_show);
@@ -98,4 +92,3 @@ void ED_operatortypes_render(void)
 	/* render_opengl.c */
 	WM_operatortype_append(RENDER_OT_opengl);
 }
-

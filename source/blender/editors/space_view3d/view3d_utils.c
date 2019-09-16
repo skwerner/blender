@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_utils.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  *
  * 3D View checks and manipulation (no operators).
  */
@@ -36,6 +32,7 @@
 #include "DNA_curve_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_world_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -48,10 +45,14 @@
 #include "BKE_context.h"
 #include "BKE_object.h"
 #include "BKE_screen.h"
-#include "BKE_depsgraph.h" /* for ED_view3d_camera_lock_sync */
+#include "BKE_scene.h"
 
-#include "BIF_gl.h"
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
+
 #include "BIF_glutil.h"
+
+#include "GPU_matrix.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -60,6 +61,8 @@
 #include "ED_screen.h"
 #include "ED_view3d.h"
 
+#include "UI_resources.h"
+
 #include "view3d_intern.h"  /* own include */
 
 /* -------------------------------------------------------------------- */
@@ -67,15 +70,41 @@
  *
  * \{ */
 
-float *ED_view3d_cursor3d_get(Scene *scene, View3D *v3d)
+void ED_view3d_background_color_get(const Scene *scene, const View3D *v3d, float r_color[3])
 {
-	if (v3d && v3d->localvd) return v3d->cursor;
-	else return scene->cursor;
+	if (v3d->shading.background_type == V3D_SHADING_BACKGROUND_WORLD) {
+		if (scene->world) {
+			copy_v3_v3(r_color, &scene->world->horr);
+			return;
+		}
+	}
+	else if (v3d->shading.background_type == V3D_SHADING_BACKGROUND_VIEWPORT) {
+		copy_v3_v3(r_color, v3d->shading.background_color);
+		return;
+	}
+
+	UI_GetThemeColor3fv(TH_BACK, r_color);
+}
+
+void ED_view3d_cursor3d_calc_mat3(const Scene *scene, float mat[3][3])
+{
+	const View3DCursor *cursor = &scene->cursor;
+	BKE_scene_cursor_rot_to_mat3(cursor, mat);
+}
+
+void ED_view3d_cursor3d_calc_mat4(const Scene *scene, float mat[4][4])
+{
+	const View3DCursor *cursor = &scene->cursor;
+	float mat3[3][3];
+	BKE_scene_cursor_rot_to_mat3(cursor, mat3);
+	copy_m4_m3(mat, mat3);
+	copy_v3_v3(mat[3], cursor->location);
 }
 
 Camera *ED_view3d_camera_data_get(View3D *v3d, RegionView3D *rv3d)
 {
-	/* establish the camera object, so we can default to view mapping if anything is wrong with it */
+	/* establish the camera object,
+	 * so we can default to view mapping if anything is wrong with it */
 	if ((rv3d->persp == RV3D_CAMOB) && v3d->camera && (v3d->camera->type == OB_CAMERA)) {
 		return v3d->camera->data;
 	}
@@ -89,13 +118,14 @@ void ED_view3d_dist_range_get(
         float r_dist_range[2])
 {
 	r_dist_range[0] = v3d->grid * 0.001f;
-	r_dist_range[1] = v3d->far * 10.0f;
+	r_dist_range[1] = v3d->clip_end * 10.0f;
 }
 
 /**
  * \note copies logic of #ED_view3d_viewplane_get(), keep in sync.
  */
 bool ED_view3d_clip_range_get(
+        Depsgraph *depsgraph,
         const View3D *v3d, const RegionView3D *rv3d,
         float *r_clipsta, float *r_clipend,
         const bool use_ortho_factor)
@@ -103,34 +133,47 @@ bool ED_view3d_clip_range_get(
 	CameraParams params;
 
 	BKE_camera_params_init(&params);
-	BKE_camera_params_from_view3d(&params, v3d, rv3d);
+	BKE_camera_params_from_view3d(&params, depsgraph, v3d, rv3d);
 
 	if (use_ortho_factor && params.is_ortho) {
-		const float fac = 2.0f / (params.clipend - params.clipsta);
-		params.clipsta *= fac;
-		params.clipend *= fac;
+		const float fac = 2.0f / (params.clip_end - params.clip_start);
+		params.clip_start *= fac;
+		params.clip_end *= fac;
 	}
 
-	if (r_clipsta) *r_clipsta = params.clipsta;
-	if (r_clipend) *r_clipend = params.clipend;
+	if (r_clipsta) {
+		*r_clipsta = params.clip_start;
+	}
+	if (r_clipend) {
+		*r_clipend = params.clip_end;
+	}
 
 	return params.is_ortho;
 }
 
 bool ED_view3d_viewplane_get(
+        Depsgraph *depsgraph,
         const View3D *v3d, const RegionView3D *rv3d, int winx, int winy,
-        rctf *r_viewplane, float *r_clipsta, float *r_clipend, float *r_pixsize)
+        rctf *r_viewplane, float *r_clip_start, float *r_clip_end, float *r_pixsize)
 {
 	CameraParams params;
 
 	BKE_camera_params_init(&params);
-	BKE_camera_params_from_view3d(&params, v3d, rv3d);
+	BKE_camera_params_from_view3d(&params, depsgraph, v3d, rv3d);
 	BKE_camera_params_compute_viewplane(&params, winx, winy, 1.0f, 1.0f);
 
-	if (r_viewplane) *r_viewplane = params.viewplane;
-	if (r_clipsta) *r_clipsta = params.clipsta;
-	if (r_clipend) *r_clipend = params.clipend;
-	if (r_pixsize) *r_pixsize = params.viewdx;
+	if (r_viewplane) {
+		*r_viewplane = params.viewplane;
+	}
+	if (r_clip_start) {
+		*r_clip_start = params.clip_start;
+	}
+	if (r_clip_end) {
+		*r_clip_end = params.clip_end;
+	}
+	if (r_pixsize) {
+		*r_pixsize = params.viewdx;
+	}
 
 	return params.is_ortho;
 }
@@ -155,7 +198,7 @@ void view3d_operator_needs_opengl(const bContext *C)
 	view3d_region_operator_needs_opengl(win, ar);
 }
 
-void view3d_region_operator_needs_opengl(wmWindow *win, ARegion *ar)
+void view3d_region_operator_needs_opengl(wmWindow *UNUSED(win), ARegion *ar)
 {
 	/* for debugging purpose, context should always be OK */
 	if ((ar == NULL) || (ar->regiontype != RGN_TYPE_WINDOW)) {
@@ -164,11 +207,9 @@ void view3d_region_operator_needs_opengl(wmWindow *win, ARegion *ar)
 	else {
 		RegionView3D *rv3d = ar->regiondata;
 
-		wmSubWindowSet(win, ar->swinid);
-		glMatrixMode(GL_PROJECTION);
-		glLoadMatrixf(rv3d->winmat);
-		glMatrixMode(GL_MODELVIEW);
-		glLoadMatrixf(rv3d->viewmat);
+		wmViewport(&ar->winrct); // TODO: bad
+		GPU_matrix_projection_set(rv3d->winmat);
+		GPU_matrix_set(rv3d->viewmat);
 	}
 }
 
@@ -230,6 +271,7 @@ bool ED_view3d_context_activate(bContext *C)
 /** \name View Clipping Utilities
  *
  * \{ */
+
 void ED_view3d_clipping_calc_from_boundbox(float clip[4][4], const BoundBox *bb, const bool is_flip)
 {
 	int val;
@@ -244,40 +286,35 @@ void ED_view3d_clipping_calc_from_boundbox(float clip[4][4], const BoundBox *bb,
 	}
 }
 
-void ED_view3d_clipping_calc(BoundBox *bb, float planes[4][4], bglMats *mats, const rcti *rect)
+void ED_view3d_clipping_calc(BoundBox *bb, float planes[4][4], const ARegion *ar, const Object *ob, const rcti *rect)
 {
-	float modelview[4][4];
-	double xs, ys, p[3];
-	int val, flip_sign, a;
-
-	/* near zero floating point values can give issues with gluUnProject
-	 * in side view on some implementations */
-	if (fabs(mats->modelview[0]) < 1e-6) mats->modelview[0] = 0.0;
-	if (fabs(mats->modelview[5]) < 1e-6) mats->modelview[5] = 0.0;
-
-	/* Set up viewport so that gluUnProject will give correct values */
-	mats->viewport[0] = 0;
-	mats->viewport[1] = 0;
+	/* init in case unproject fails */
+	memset(bb->vec, 0, sizeof(bb->vec));
 
 	/* four clipping planes and bounding volume */
 	/* first do the bounding volume */
-	for (val = 0; val < 4; val++) {
-		xs = (val == 0 || val == 3) ? rect->xmin : rect->xmax;
-		ys = (val == 0 || val == 1) ? rect->ymin : rect->ymax;
+	for (int val = 0; val < 4; val++) {
+		float xs = (val == 0 || val == 3) ? rect->xmin : rect->xmax;
+		float ys = (val == 0 || val == 1) ? rect->ymin : rect->ymax;
 
-		gluUnProject(xs, ys, 0.0, mats->modelview, mats->projection, mats->viewport, &p[0], &p[1], &p[2]);
-		copy_v3fl_v3db(bb->vec[val], p);
+		ED_view3d_unproject(ar, xs, ys, 0.0, bb->vec[val]);
+		ED_view3d_unproject(ar, xs, ys, 1.0, bb->vec[4 + val]);
+	}
 
-		gluUnProject(xs, ys, 1.0, mats->modelview, mats->projection, mats->viewport, &p[0], &p[1], &p[2]);
-		copy_v3fl_v3db(bb->vec[4 + val], p);
+	/* optionally transform to object space */
+	if (ob) {
+		float imat[4][4];
+		invert_m4_m4(imat, ob->obmat);
+
+		for (int val = 0; val < 8; val++) {
+			mul_m4_v3(imat, bb->vec[val]);
+		}
 	}
 
 	/* verify if we have negative scale. doing the transform before cross
 	 * product flips the sign of the vector compared to doing cross product
 	 * before transform then, so we correct for that. */
-	for (a = 0; a < 16; a++)
-		((float *)modelview)[a] = mats->modelview[a];
-	flip_sign = is_negative_m4(modelview);
+	int flip_sign = (ob) ? is_negative_m4(ob->obmat) : false;
 
 	ED_view3d_clipping_calc_from_boundbox(planes, bb, flip_sign);
 }
@@ -302,15 +339,29 @@ static bool view3d_boundbox_clip_m4(const BoundBox *bb, float persmatob[4][4])
 		min = -vec[3];
 
 		fl = 0;
-		if (vec[0] < min) fl += 1;
-		if (vec[0] > max) fl += 2;
-		if (vec[1] < min) fl += 4;
-		if (vec[1] > max) fl += 8;
-		if (vec[2] < min) fl += 16;
-		if (vec[2] > max) fl += 32;
+		if (vec[0] < min) {
+			fl += 1;
+		}
+		if (vec[0] > max) {
+			fl += 2;
+		}
+		if (vec[1] < min) {
+			fl += 4;
+		}
+		if (vec[1] > max) {
+			fl += 8;
+		}
+		if (vec[2] < min) {
+			fl += 16;
+		}
+		if (vec[2] > max) {
+			fl += 32;
+		}
 
 		flag &= fl;
-		if (flag == 0) return true;
+		if (flag == 0) {
+			return true;
+		}
 	}
 
 	return false;
@@ -322,8 +373,12 @@ bool ED_view3d_boundbox_clip_ex(const RegionView3D *rv3d, const BoundBox *bb, fl
 
 	float persmatob[4][4];
 
-	if (bb == NULL) return true;
-	if (bb->flag & BOUNDBOX_DISABLED) return true;
+	if (bb == NULL) {
+		return true;
+	}
+	if (bb->flag & BOUNDBOX_DISABLED) {
+		return true;
+	}
 
 	mul_m4_m4m4(persmatob, (float(*)[4])rv3d->persmat, obmat);
 
@@ -332,8 +387,12 @@ bool ED_view3d_boundbox_clip_ex(const RegionView3D *rv3d, const BoundBox *bb, fl
 
 bool ED_view3d_boundbox_clip(RegionView3D *rv3d, const BoundBox *bb)
 {
-	if (bb == NULL) return true;
-	if (bb->flag & BOUNDBOX_DISABLED) return true;
+	if (bb == NULL) {
+		return true;
+	}
+	if (bb->flag & BOUNDBOX_DISABLED) {
+		return true;
+	}
 
 	return view3d_boundbox_clip_m4(bb, rv3d->persmatob);
 }
@@ -378,14 +437,15 @@ void ED_view3d_lock_clear(View3D *v3d)
  * sets the ``ofs`` and ``dist`` values of the viewport so it matches the camera,
  * otherwise switching out of camera view may jump to a different part of the scene.
  */
-void ED_view3d_persp_switch_from_camera(View3D *v3d, RegionView3D *rv3d, const char persp)
+void ED_view3d_persp_switch_from_camera(const Depsgraph *depsgraph, View3D *v3d, RegionView3D *rv3d, const char persp)
 {
 	BLI_assert(rv3d->persp == RV3D_CAMOB);
 	BLI_assert(persp != RV3D_CAMOB);
 
 	if (v3d->camera) {
-		rv3d->dist = ED_view3d_offset_distance(v3d->camera->obmat, rv3d->ofs, VIEW3D_DIST_FALLBACK);
-		ED_view3d_from_object(v3d->camera, rv3d->ofs, rv3d->viewquat, &rv3d->dist, NULL);
+		Object *ob_camera_eval = DEG_get_evaluated_object(depsgraph, v3d->camera);
+		rv3d->dist = ED_view3d_offset_distance(ob_camera_eval->obmat, rv3d->ofs, VIEW3D_DIST_FALLBACK);
+		ED_view3d_from_object(ob_camera_eval, rv3d->ofs, rv3d->viewquat, &rv3d->dist, NULL);
 	}
 
 	if (!ED_view3d_camera_lock_check(v3d, rv3d)) {
@@ -398,21 +458,23 @@ void ED_view3d_persp_switch_from_camera(View3D *v3d, RegionView3D *rv3d, const c
  *
  * shared with NDOF.
  */
-bool ED_view3d_persp_ensure(struct View3D *v3d, ARegion *ar)
+bool ED_view3d_persp_ensure(const Depsgraph *depsgraph, View3D *v3d, ARegion *ar)
 {
 	RegionView3D *rv3d = ar->regiondata;
 	const bool autopersp = (U.uiflag & USER_AUTOPERSP) != 0;
 
 	BLI_assert((rv3d->viewlock & RV3D_LOCKED) == 0);
 
-	if (ED_view3d_camera_lock_check(v3d, rv3d))
+	if (ED_view3d_camera_lock_check(v3d, rv3d)) {
 		return false;
+	}
 
 	if (rv3d->persp != RV3D_PERSP) {
 		if (rv3d->persp == RV3D_CAMOB) {
-			/* If autopersp and previous view was an axis one, switch back to PERSP mode, else reuse previous mode. */
+			/* If autopersp and previous view was an axis one,
+			 * switch back to PERSP mode, else reuse previous mode. */
 			char persp = (autopersp && RV3D_VIEW_IS_AXIS(rv3d->lview)) ? RV3D_PERSP : rv3d->lpersp;
-			ED_view3d_persp_switch_from_camera(v3d, rv3d, persp);
+			ED_view3d_persp_switch_from_camera(depsgraph, v3d, rv3d, persp);
 		}
 		else if (autopersp && RV3D_VIEW_IS_AXIS(rv3d->view)) {
 			rv3d->persp = RV3D_PERSP;
@@ -446,20 +508,21 @@ bool ED_view3d_camera_lock_check(const View3D *v3d, const RegionView3D *rv3d)
  * Apply the camera object transformation to the view-port.
  * (needed so we can use regular view-port manipulation operators, that sync back to the camera).
  */
-void ED_view3d_camera_lock_init_ex(View3D *v3d, RegionView3D *rv3d, const bool calc_dist)
+void ED_view3d_camera_lock_init_ex(const Depsgraph *depsgraph, View3D *v3d, RegionView3D *rv3d, const bool calc_dist)
 {
 	if (ED_view3d_camera_lock_check(v3d, rv3d)) {
+		Object *ob_camera_eval = DEG_get_evaluated_object(depsgraph, v3d->camera);
 		if (calc_dist) {
 			/* using a fallback dist is OK here since ED_view3d_from_object() compensates for it */
-			rv3d->dist = ED_view3d_offset_distance(v3d->camera->obmat, rv3d->ofs, VIEW3D_DIST_FALLBACK);
+			rv3d->dist = ED_view3d_offset_distance(ob_camera_eval->obmat, rv3d->ofs, VIEW3D_DIST_FALLBACK);
 		}
-		ED_view3d_from_object(v3d->camera, rv3d->ofs, rv3d->viewquat, &rv3d->dist, NULL);
+		ED_view3d_from_object(ob_camera_eval, rv3d->ofs, rv3d->viewquat, &rv3d->dist, NULL);
 	}
 }
 
-void ED_view3d_camera_lock_init(View3D *v3d, RegionView3D *rv3d)
+void ED_view3d_camera_lock_init(const Depsgraph *depsgraph, View3D *v3d, RegionView3D *rv3d)
 {
-	ED_view3d_camera_lock_init_ex(v3d, rv3d, true);
+	ED_view3d_camera_lock_init_ex(depsgraph, v3d, rv3d, true);
 }
 
 /**
@@ -467,7 +530,7 @@ void ED_view3d_camera_lock_init(View3D *v3d, RegionView3D *rv3d)
  *
  * \return true if the camera is moved.
  */
-bool ED_view3d_camera_lock_sync(View3D *v3d, RegionView3D *rv3d)
+bool ED_view3d_camera_lock_sync(const Depsgraph *depsgraph, View3D *v3d, RegionView3D *rv3d)
 {
 	if (ED_view3d_camera_lock_check(v3d, rv3d)) {
 		ObjectTfmProtectedChannels obtfm;
@@ -484,15 +547,17 @@ bool ED_view3d_camera_lock_sync(View3D *v3d, RegionView3D *rv3d)
 			while (root_parent->parent) {
 				root_parent = root_parent->parent;
 			}
+			Object *ob_camera_eval = DEG_get_evaluated_object(depsgraph, v3d->camera);
+			Object *root_parent_eval = DEG_get_evaluated_object(depsgraph, root_parent);
 
 			ED_view3d_to_m4(view_mat, rv3d->ofs, rv3d->viewquat, rv3d->dist);
 
-			normalize_m4_m4(tmat, v3d->camera->obmat);
+			normalize_m4_m4(tmat, ob_camera_eval->obmat);
 
 			invert_m4_m4(imat, tmat);
 			mul_m4_m4m4(diff_mat, view_mat, imat);
 
-			mul_m4_m4m4(parent_mat, diff_mat, root_parent->obmat);
+			mul_m4_m4m4(parent_mat, diff_mat, root_parent_eval->obmat);
 
 			BKE_object_tfm_protected_backup(root_parent, &obtfm);
 			BKE_object_apply_mat4(root_parent, parent_mat, true, false);
@@ -500,7 +565,7 @@ bool ED_view3d_camera_lock_sync(View3D *v3d, RegionView3D *rv3d)
 
 			ob_update = v3d->camera;
 			while (ob_update) {
-				DAG_id_tag_update(&ob_update->id, OB_RECALC_OB);
+				DEG_id_tag_update(&ob_update->id, ID_RECALC_TRANSFORM);
 				WM_main_add_notifier(NC_OBJECT | ND_TRANSFORM, ob_update);
 				ob_update = ob_update->parent;
 			}
@@ -509,10 +574,10 @@ bool ED_view3d_camera_lock_sync(View3D *v3d, RegionView3D *rv3d)
 			/* always maintain the same scale */
 			const short protect_scale_all = (OB_LOCK_SCALEX | OB_LOCK_SCALEY | OB_LOCK_SCALEZ);
 			BKE_object_tfm_protected_backup(v3d->camera, &obtfm);
-			ED_view3d_to_object(v3d->camera, rv3d->ofs, rv3d->viewquat, rv3d->dist);
+			ED_view3d_to_object(depsgraph, v3d->camera, rv3d->ofs, rv3d->viewquat, rv3d->dist);
 			BKE_object_tfm_protected_restore(v3d->camera, &obtfm, v3d->camera->protectflag | protect_scale_all);
 
-			DAG_id_tag_update(&v3d->camera->id, OB_RECALC_OB);
+			DEG_id_tag_update(&v3d->camera->id, ID_RECALC_TRANSFORM);
 			WM_main_add_notifier(NC_OBJECT | ND_TRANSFORM, v3d->camera);
 		}
 
@@ -593,6 +658,7 @@ bool ED_view3d_camera_lock_autokey(
 /** \} */
 
 
+
 /* -------------------------------------------------------------------- */
 /** \name Box View Support
  *
@@ -614,38 +680,56 @@ static void view3d_boxview_clip(ScrArea *sa)
 
 			if (rv3d->viewlock & RV3D_BOXCLIP) {
 				if (ELEM(rv3d->view, RV3D_VIEW_TOP, RV3D_VIEW_BOTTOM)) {
-					if (ar->winx > ar->winy) x1 = rv3d->dist;
-					else x1 = ar->winx * rv3d->dist / ar->winy;
+					if (ar->winx > ar->winy) {
+						x1 = rv3d->dist;
+					}
+					else {
+						x1 = ar->winx * rv3d->dist / ar->winy;
+					}
 
-					if (ar->winx > ar->winy) y1 = ar->winy * rv3d->dist / ar->winx;
-					else y1 = rv3d->dist;
+					if (ar->winx > ar->winy) {
+						y1 = ar->winy * rv3d->dist / ar->winx;
+					}
+					else {
+						y1 = rv3d->dist;
+					}
 					copy_v2_v2(ofs, rv3d->ofs);
 				}
 				else if (ELEM(rv3d->view, RV3D_VIEW_FRONT, RV3D_VIEW_BACK)) {
 					ofs[2] = rv3d->ofs[2];
 
-					if (ar->winx > ar->winy) z1 = ar->winy * rv3d->dist / ar->winx;
-					else z1 = rv3d->dist;
+					if (ar->winx > ar->winy) {
+						z1 = ar->winy * rv3d->dist / ar->winx;
+					}
+					else {
+						z1 = rv3d->dist;
+					}
 				}
 			}
 		}
 	}
 
 	for (val = 0; val < 8; val++) {
-		if (ELEM(val, 0, 3, 4, 7))
+		if (ELEM(val, 0, 3, 4, 7)) {
 			bb->vec[val][0] = -x1 - ofs[0];
-		else
+		}
+		else {
 			bb->vec[val][0] =  x1 - ofs[0];
+		}
 
-		if (ELEM(val, 0, 1, 4, 5))
+		if (ELEM(val, 0, 1, 4, 5)) {
 			bb->vec[val][1] = -y1 - ofs[1];
-		else
+		}
+		else {
 			bb->vec[val][1] =  y1 - ofs[1];
+		}
 
-		if (val > 3)
+		if (val > 3) {
 			bb->vec[val][2] = -z1 - ofs[2];
-		else
+		}
+		else {
 			bb->vec[val][2] =  z1 - ofs[2];
+		}
 	}
 
 	/* normals for plane equations */
@@ -669,7 +753,9 @@ static void view3d_boxview_clip(ScrArea *sa)
 			if (rv3d->viewlock & RV3D_BOXCLIP) {
 				rv3d->rflag |= RV3D_CLIPPING;
 				memcpy(rv3d->clip, clip, sizeof(clip));
-				if (rv3d->clipbb) MEM_freeN(rv3d->clipbb);
+				if (rv3d->clipbb) {
+					MEM_freeN(rv3d->clipbb);
+				}
 				rv3d->clipbb = MEM_dupallocN(bb);
 			}
 		}
@@ -877,22 +963,17 @@ static float view_autodist_depth_margin(ARegion *ar, const int mval[2], int marg
  * \param fallback_depth_pt: Use this points depth when no depth can be found.
  */
 bool ED_view3d_autodist(
-        Scene *scene, ARegion *ar, View3D *v3d,
+        Depsgraph *depsgraph, ARegion *ar, View3D *v3d,
         const int mval[2], float mouse_worldloc[3],
         const bool alphaoverride, const float fallback_depth_pt[3])
 {
-	bglMats mats; /* ZBuffer depth vars */
 	float depth_close;
-	double cent[2],  p[3];
 	int margin_arr[] = {0, 2, 4};
 	int i;
 	bool depth_ok = false;
 
 	/* Get Z Depths, needed for perspective, nice for ortho */
-	ED_view3d_draw_depth(scene, ar, v3d, alphaoverride);
-
-	/* call after in case settings have been modified since last drawing, see: T47089 */
-	bgl_get_mats(&mats);
+	ED_view3d_draw_depth(depsgraph, ar, v3d, alphaoverride);
 
 	/* Attempt with low margin's first */
 	i = 0;
@@ -902,15 +983,10 @@ bool ED_view3d_autodist(
 	} while ((depth_ok == false) && (i < ARRAY_SIZE(margin_arr)));
 
 	if (depth_ok) {
-		cent[0] = (double)mval[0] + 0.5;
-		cent[1] = (double)mval[1] + 0.5;
+		float centx = (float)mval[0] + 0.5f;
+		float centy = (float)mval[1] + 0.5f;
 
-		if (gluUnProject(cent[0], cent[1], depth_close,
-		                 mats.modelview, mats.projection, (GLint *)mats.viewport, &p[0], &p[1], &p[2]))
-		{
-			mouse_worldloc[0] = (float)p[0];
-			mouse_worldloc[1] = (float)p[1];
-			mouse_worldloc[2] = (float)p[2];
+		if (ED_view3d_unproject(ar, centx, centy, depth_close, mouse_worldloc)) {
 			return true;
 		}
 	}
@@ -924,52 +1000,44 @@ bool ED_view3d_autodist(
 	}
 }
 
-void ED_view3d_autodist_init(Scene *scene, ARegion *ar, View3D *v3d, int mode)
+void ED_view3d_autodist_init(Depsgraph *depsgraph,
+        ARegion *ar, View3D *v3d, int mode)
 {
 	/* Get Z Depths, needed for perspective, nice for ortho */
 	switch (mode) {
 		case 0:
-			ED_view3d_draw_depth(scene, ar, v3d, true);
+			ED_view3d_draw_depth(depsgraph, ar, v3d, true);
 			break;
 		case 1:
-			ED_view3d_draw_depth_gpencil(scene, ar, v3d);
+		{
+			Scene *scene = DEG_get_evaluated_scene(depsgraph);
+			ED_view3d_draw_depth_gpencil(depsgraph, scene, ar, v3d);
 			break;
+		}
 	}
 }
 
 /* no 4x4 sampling, run #ED_view3d_autodist_init first */
-bool ED_view3d_autodist_simple(
-        ARegion *ar, const int mval[2], float mouse_worldloc[3],
-        int margin, float *force_depth)
+bool ED_view3d_autodist_simple(ARegion *ar, const int mval[2], float mouse_worldloc[3],
+                               int margin, float *force_depth)
 {
-	bglMats mats; /* ZBuffer depth vars, could cache? */
 	float depth;
-	double cent[2],  p[3];
 
 	/* Get Z Depths, needed for perspective, nice for ortho */
-	if (force_depth)
+	if (force_depth) {
 		depth = *force_depth;
-	else
+	}
+	else {
 		depth = view_autodist_depth_margin(ar, mval, margin);
+	}
 
-	if (depth == FLT_MAX)
-		return false;
-
-	cent[0] = (double)mval[0] + 0.5;
-	cent[1] = (double)mval[1] + 0.5;
-
-	bgl_get_mats(&mats);
-
-	if (!gluUnProject(cent[0], cent[1], depth,
-	                  mats.modelview, mats.projection, (GLint *)mats.viewport, &p[0], &p[1], &p[2]))
-	{
+	if (depth == FLT_MAX) {
 		return false;
 	}
 
-	mouse_worldloc[0] = (float)p[0];
-	mouse_worldloc[1] = (float)p[1];
-	mouse_worldloc[2] = (float)p[2];
-	return true;
+	float centx = (float)mval[0] + 0.5f;
+	float centy = (float)mval[1] + 0.5f;
+	return ED_view3d_unproject(ar, centx, centy, depth, mouse_worldloc);
 }
 
 bool ED_view3d_autodist_depth(ARegion *ar, const int mval[2], int margin, float *depth)
@@ -1058,13 +1126,14 @@ float ED_view3d_radius_to_dist_ortho(const float lens, const float radius)
  *           +
  * </pre>
  *
- * \param ar  Can be NULL if \a use_aspect is false.
- * \param persp  Allow the caller to tell what kind of perspective to use (ortho/view/camera)
- * \param use_aspect  Increase the distance to account for non 1:1 view aspect.
- * \param radius  The radius will be fitted exactly, typically pre-scaled by a margin (#VIEW3D_MARGIN).
+ * \param ar: Can be NULL if \a use_aspect is false.
+ * \param persp: Allow the caller to tell what kind of perspective to use (ortho/view/camera)
+ * \param use_aspect: Increase the distance to account for non 1:1 view aspect.
+ * \param radius: The radius will be fitted exactly, typically pre-scaled by a margin (#VIEW3D_MARGIN).
  */
 float ED_view3d_radius_to_dist(
         const View3D *v3d, const ARegion *ar,
+        const struct Depsgraph *depsgraph,
         const char persp, const bool use_aspect,
         const float radius)
 {
@@ -1083,9 +1152,10 @@ float ED_view3d_radius_to_dist(
 		if (persp == RV3D_CAMOB) {
 			CameraParams params;
 			BKE_camera_params_init(&params);
-			params.clipsta = v3d->near;
-			params.clipend = v3d->far;
-			BKE_camera_params_from_object(&params, v3d->camera);
+			params.clip_start = v3d->clip_start;
+			params.clip_end = v3d->clip_end;
+			Object *camera_eval = DEG_get_evaluated_object(depsgraph, v3d->camera);
+			BKE_camera_params_from_object(&params, camera_eval);
 
 			lens = params.lens;
 			sensor_size = BKE_camera_sensor_size(params.sensor_fit, params.sensor_x, params.sensor_y);
@@ -1101,7 +1171,8 @@ float ED_view3d_radius_to_dist(
 
 		angle = focallength_to_fov(lens, sensor_size);
 
-		/* zoom influences lens, correct this by scaling the angle as a distance (by the zoom-level) */
+		/* zoom influences lens, correct this by scaling the angle as a distance
+		 * (by the zoom-level) */
 		angle = atanf(tanf(angle / 2.0f) * zoom) * 2.0f;
 
 		dist = ED_view3d_radius_to_dist_persp(angle, radius);
@@ -1270,12 +1341,12 @@ bool ED_view3d_lock(RegionView3D *rv3d)
 /**
  * Set the view transformation from a 4x4 matrix.
  *
- * \param mat The view 4x4 transformation matrix to assign.
- * \param ofs The view offset, normally from RegionView3D.ofs.
- * \param quat The view rotation, quaternion normally from RegionView3D.viewquat.
- * \param dist The view distance from ofs, normally from RegionView3D.dist.
+ * \param mat: The view 4x4 transformation matrix to assign.
+ * \param ofs: The view offset, normally from RegionView3D.ofs.
+ * \param quat: The view rotation, quaternion normally from RegionView3D.viewquat.
+ * \param dist: The view distance from ofs, normally from RegionView3D.dist.
  */
-void ED_view3d_from_m4(float mat[4][4], float ofs[3], float quat[4], float *dist)
+void ED_view3d_from_m4(const float mat[4][4], float ofs[3], float quat[4], float *dist)
 {
 	float nmat[3][3];
 
@@ -1286,8 +1357,9 @@ void ED_view3d_from_m4(float mat[4][4], float ofs[3], float quat[4], float *dist
 	normalize_m3(nmat);
 
 	/* Offset */
-	if (ofs)
+	if (ofs) {
 		negate_v3_v3(ofs, mat[3]);
+	}
 
 	/* Quat */
 	if (quat) {
@@ -1303,10 +1375,10 @@ void ED_view3d_from_m4(float mat[4][4], float ofs[3], float quat[4], float *dist
 /**
  * Calculate the view transformation matrix from RegionView3D input.
  * The resulting matrix is equivalent to RegionView3D.viewinv
- * \param mat The view 4x4 transformation matrix to calculate.
- * \param ofs The view offset, normally from RegionView3D.ofs.
- * \param quat The view rotation, quaternion normally from RegionView3D.viewquat.
- * \param dist The view distance from ofs, normally from RegionView3D.dist.
+ * \param mat: The view 4x4 transformation matrix to calculate.
+ * \param ofs: The view offset, normally from RegionView3D.ofs.
+ * \param quat: The view rotation, quaternion normally from RegionView3D.viewquat.
+ * \param dist: The view distance from ofs, normally from RegionView3D.dist.
  */
 void ED_view3d_to_m4(float mat[4][4], const float ofs[3], const float quat[4], const float dist)
 {
@@ -1320,13 +1392,13 @@ void ED_view3d_to_m4(float mat[4][4], const float ofs[3], const float quat[4], c
 
 /**
  * Set the RegionView3D members from an objects transformation and optionally lens.
- * \param ob The object to set the view to.
- * \param ofs The view offset to be set, normally from RegionView3D.ofs.
- * \param quat The view rotation to be set, quaternion normally from RegionView3D.viewquat.
- * \param dist The view distance from ofs to be set, normally from RegionView3D.dist.
- * \param lens The view lens angle set for cameras and lamps, normally from View3D.lens.
+ * \param ob: The object to set the view to.
+ * \param ofs: The view offset to be set, normally from RegionView3D.ofs.
+ * \param quat: The view rotation to be set, quaternion normally from RegionView3D.viewquat.
+ * \param dist: The view distance from ofs to be set, normally from RegionView3D.dist.
+ * \param lens: The view lens angle set for cameras and lights, normally from View3D.lens.
  */
-void ED_view3d_from_object(Object *ob, float ofs[3], float quat[4], float *dist, float *lens)
+void ED_view3d_from_object(const Object *ob, float ofs[3], float quat[4], float *dist, float *lens)
 {
 	ED_view3d_from_m4(ob->obmat, ofs, quat, dist);
 
@@ -1341,16 +1413,19 @@ void ED_view3d_from_object(Object *ob, float ofs[3], float quat[4], float *dist,
 
 /**
  * Set the object transformation from RegionView3D members.
- * \param ob The object which has the transformation assigned.
- * \param ofs The view offset, normally from RegionView3D.ofs.
- * \param quat The view rotation, quaternion normally from RegionView3D.viewquat.
- * \param dist The view distance from ofs, normally from RegionView3D.dist.
+ * \param depsgraph: The depsgraph to get the evaluated object parent for the transformation calculation.
+ * \param ob: The object which has the transformation assigned.
+ * \param ofs: The view offset, normally from RegionView3D.ofs.
+ * \param quat: The view rotation, quaternion normally from RegionView3D.viewquat.
+ * \param dist: The view distance from ofs, normally from RegionView3D.dist.
  */
-void ED_view3d_to_object(Object *ob, const float ofs[3], const float quat[4], const float dist)
+void ED_view3d_to_object(const Depsgraph *depsgraph, Object *ob, const float ofs[3], const float quat[4], const float dist)
 {
 	float mat[4][4];
 	ED_view3d_to_m4(mat, ofs, quat, dist);
-	BKE_object_apply_mat4(ob, mat, true, true);
+
+	Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+	BKE_object_apply_mat4_ex(ob, mat, ob_eval->parent, ob_eval->parentinv, true);
 }
 
 /** \} */
@@ -1376,7 +1451,7 @@ float ED_view3d_depth_read_cached(const ViewContext *vc, const int mval[2])
 }
 
 bool ED_view3d_depth_read_cached_normal(
-        const ViewContext *vc, const bglMats *mats, const int mval[2],
+        const ViewContext *vc, const int mval[2],
         float r_normal[3])
 {
 	/* Note: we could support passing in a radius.
@@ -1395,7 +1470,7 @@ bool ED_view3d_depth_read_cached_normal(
 
 			const double depth = (double)ED_view3d_depth_read_cached(vc, mval_ofs);
 			if ((depth > depths->depth_range[0]) && (depth < depths->depth_range[1])) {
-				if (ED_view3d_depth_unproject(ar, mats, mval_ofs, depth, coords[i])) {
+				if (ED_view3d_depth_unproject(ar, mval_ofs, depth, coords[i])) {
 					depths_valid[i] = true;
 				}
 			}
@@ -1437,69 +1512,19 @@ bool ED_view3d_depth_read_cached_normal(
 }
 
 bool ED_view3d_depth_unproject(
-        const ARegion *ar, const bglMats *mats,
+        const ARegion *ar,
         const int mval[2], const double depth,
         float r_location_world[3])
 {
-	double p[3];
-	if (gluUnProject(
-	        (double)ar->winrct.xmin + mval[0] + 0.5,
-	        (double)ar->winrct.ymin + mval[1] + 0.5,
-	        depth, mats->modelview, mats->projection, (const GLint *)mats->viewport,
-	        &p[0], &p[1], &p[2]))
-	{
-		copy_v3fl_v3db(r_location_world, p);
-		return true;
-	}
-	return false;
+	float centx = (float)mval[0] + 0.5f;
+	float centy = (float)mval[1] + 0.5f;
+	return ED_view3d_unproject(ar, centx, centy, depth, r_location_world);
 }
 
 void ED_view3d_depth_tag_update(RegionView3D *rv3d)
 {
-	if (rv3d->depths)
+	if (rv3d->depths) {
 		rv3d->depths->damaged = true;
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Background Image Utilities
- * \{ */
-
-BGpic *ED_view3d_background_image_new(View3D *v3d)
-{
-	BGpic *bgpic = MEM_callocN(sizeof(BGpic), "Background Image");
-
-	bgpic->rotation = 0.0f;
-	bgpic->size = 5.0f;
-	bgpic->blend = 0.5f;
-	bgpic->iuser.fie_ima = 2;
-	bgpic->iuser.ok = 1;
-	bgpic->view = 0; /* 0 for all */
-	bgpic->flag |= V3D_BGPIC_EXPANDED;
-
-	BLI_addtail(&v3d->bgpicbase, bgpic);
-
-	return bgpic;
-}
-
-void ED_view3d_background_image_remove(View3D *v3d, BGpic *bgpic)
-{
-	BLI_remlink(&v3d->bgpicbase, bgpic);
-
-	MEM_freeN(bgpic);
-}
-
-void ED_view3d_background_image_clear(View3D *v3d)
-{
-	BGpic *bgpic = v3d->bgpicbase.first;
-
-	while (bgpic) {
-		BGpic *next_bgpic = bgpic->next;
-
-		ED_view3d_background_image_remove(v3d, bgpic);
-
-		bgpic = next_bgpic;
 	}
 }
 

@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_ColorSpillNode.h"
@@ -32,18 +28,18 @@ ColorSpillNode::ColorSpillNode(bNode *editorNode) : Node(editorNode)
 void ColorSpillNode::convertToOperations(NodeConverter &converter, const CompositorContext &/*context*/) const
 {
 	bNode *editorsnode = getbNode();
-	
+
 	NodeInput *inputSocketImage = this->getInputSocket(0);
 	NodeInput *inputSocketFac = this->getInputSocket(1);
 	NodeOutput *outputSocketImage = this->getOutputSocket(0);
-	
+
 	ColorSpillOperation *operation;
 	operation = new ColorSpillOperation();
 	operation->setSettings((NodeColorspill *)editorsnode->storage);
 	operation->setSpillChannel(editorsnode->custom1 - 1); // Channel for spilling
 	operation->setSpillMethod(editorsnode->custom2); // Channel method
 	converter.addOperation(operation);
-	
+
 	converter.mapInputSocket(inputSocketImage, operation->getInputSocket(0));
 	converter.mapInputSocket(inputSocketFac, operation->getInputSocket(1));
 	converter.mapOutputSocket(outputSocketImage, operation->getOutputSocket());

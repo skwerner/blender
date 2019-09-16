@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * 
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_node/node_intern.h
- *  \ingroup spnode
+/** \file
+ * \ingroup spnode
  */
 
 #ifndef __NODE_INTERN_H__
@@ -39,18 +32,19 @@
 
 struct ARegion;
 struct ARegionType;
+struct Main;
 struct View2D;
 struct bContext;
-struct wmWindow;
 struct bNode;
-struct bNodeSocket;
 struct bNodeLink;
+struct bNodeSocket;
 struct wmKeyConfig;
+struct wmWindow;
 
 /* temp data to pass on to modal */
 typedef struct bNodeLinkDrag {
 	struct bNodeLinkDrag *next, *prev;
-	
+
 	/* List of links dragged by the operator.
 	 * Note: This is a list of LinkData structs on top of the actual bNodeLinks.
 	 * This way the links can be added to the node tree while being stored in this list.
@@ -63,17 +57,16 @@ typedef struct bNodeLinkDrag {
 ARegion *node_has_buttons_region(ScrArea *sa);
 ARegion *node_has_tools_region(ScrArea *sa);
 
-void snode_group_offset(struct SpaceNode *snode, float *x, float *y);	/* transform between View2Ds in the tree path */
+/* transform between View2Ds in the tree path */
+void snode_group_offset(struct SpaceNode *snode, float *x, float *y);
 
 /* node_draw.c */
 int node_get_colorid(struct bNode *node);
-void node_socket_draw(
-        const struct bContext *C, struct bNodeTree *ntree, struct bNode *node,
-        struct bNodeSocket *sock, float size, bool highlight);
 int node_get_resize_cursor(int directions);
 void node_draw_shadow(struct SpaceNode *snode, struct bNode *node, float radius, float alpha);
 void node_draw_default(const struct bContext *C, struct ARegion *ar, struct SpaceNode *snode,
                        struct bNodeTree *ntree, struct bNode *node, bNodeInstanceKey key);
+void node_draw_sockets(struct View2D *v2d, const struct bContext *C, struct bNodeTree *ntree, struct bNode *node, bool draw_outputs, bool select_all);
 void node_update_default(const struct bContext *C, struct bNodeTree *ntree, struct bNode *node);
 int node_select_area_default(struct bNode *node, int x, int y);
 int node_tweak_area_default(struct bNode *node, int x, int y);
@@ -112,7 +105,7 @@ void NODE_OT_select(struct wmOperatorType *ot);
 void NODE_OT_select_all(struct wmOperatorType *ot);
 void NODE_OT_select_linked_to(struct wmOperatorType *ot);
 void NODE_OT_select_linked_from(struct wmOperatorType *ot);
-void NODE_OT_select_border(struct wmOperatorType *ot);
+void NODE_OT_select_box(struct wmOperatorType *ot);
 void NODE_OT_select_circle(struct wmOperatorType *ot);
 void NODE_OT_select_lasso(struct wmOperatorType *ot);
 void NODE_OT_select_grouped(struct wmOperatorType *ot);
@@ -132,8 +125,11 @@ void NODE_OT_backimage_fit(struct wmOperatorType *ot);
 void NODE_OT_backimage_sample(struct wmOperatorType *ot);
 
 /* drawnode.c */
+void nodelink_batch_start(struct SpaceNode *snode);
+void nodelink_batch_end(struct SpaceNode *snode);
+
 void node_draw_link(struct View2D *v2d, struct SpaceNode *snode, struct bNodeLink *link);
-void node_draw_link_bezier(struct View2D *v2d, struct SpaceNode *snode, struct bNodeLink *link, int th_col1, bool do_shaded, int th_col2, bool do_triple, int th_col3);
+void node_draw_link_bezier(struct View2D *v2d, struct SpaceNode *snode, struct bNodeLink *link, int th_col1, int th_col2, int th_col3);
 bool node_link_bezier_points(struct View2D *v2d, struct SpaceNode *snode, struct bNodeLink *link, float coord_array[][2], int resol);
 // void node_draw_link_straight(View2D *v2d, SpaceNode *snode, bNodeLink *link, int th_col1, int do_shaded, int th_col2, int do_triple, int th_col3 );
 void draw_nodespace_back_pix(const struct bContext *C, struct ARegion *ar, struct SpaceNode *snode, bNodeInstanceKey parent_key);
@@ -156,7 +152,7 @@ void NODE_OT_group_edit(struct wmOperatorType *ot);
 
 
 /* node_relationships.c */
-bool node_connected_to_output(struct bNodeTree *ntree, struct bNode *node);
+bool node_connected_to_output(struct Main *bmain, struct bNodeTree *ntree, struct bNode *node);
 
 void NODE_OT_link(struct wmOperatorType *ot);
 void NODE_OT_link_make(struct wmOperatorType *ot);
@@ -178,8 +174,8 @@ void snode_dag_update(struct bContext *C, struct SpaceNode *snode);
 void snode_set_context(const struct bContext *C);
 
 void snode_update(struct SpaceNode *snode, struct bNode *node);
-int composite_node_active(struct bContext *C);
-int composite_node_editable(struct bContext *C);
+bool composite_node_active(struct bContext *C);
+bool composite_node_editable(struct bContext *C);
 
 int node_has_hidden_sockets(bNode *node);
 void node_set_hidden_sockets(SpaceNode *snode, bNode *node, int set);
@@ -198,8 +194,7 @@ void NODE_OT_preview_toggle(struct wmOperatorType *ot);
 void NODE_OT_options_toggle(struct wmOperatorType *ot);
 void NODE_OT_node_copy_color(struct wmOperatorType *ot);
 
-void NODE_OT_read_fullsamplelayers(struct wmOperatorType *ot);
-void NODE_OT_read_renderlayers(struct wmOperatorType *ot);
+void NODE_OT_read_viewlayers(struct wmOperatorType *ot);
 void NODE_OT_render_changed(struct wmOperatorType *ot);
 
 void NODE_OT_output_file_add_socket(struct wmOperatorType *ot);
@@ -221,13 +216,22 @@ void NODE_OT_shader_script_update(struct wmOperatorType *ot);
 void NODE_OT_viewer_border(struct wmOperatorType *ot);
 void NODE_OT_clear_viewer_border(struct wmOperatorType *ot);
 
+/* node_widgets.c */
+void NODE_GGT_backdrop_transform(struct wmGizmoGroupType *gzgt);
+void NODE_GGT_backdrop_crop(struct wmGizmoGroupType *gzgt);
+void NODE_GGT_backdrop_sun_beams(struct wmGizmoGroupType *gzgt);
+void NODE_GGT_backdrop_corner_pin(struct wmGizmoGroupType *gzgt);
+
+void NODE_OT_cryptomatte_layer_add(struct wmOperatorType *ot);
+void NODE_OT_cryptomatte_layer_remove(struct wmOperatorType *ot);
+
 extern const char *node_context_dir[];
 
 // XXXXXX
 
 // nodes draw without dpi - the view zoom is flexible
 #define HIDDEN_RAD      (0.75f * U.widget_unit)
-#define BASIS_RAD       (0.4f * U.widget_unit)
+#define BASIS_RAD       (0.2f * U.widget_unit)
 #define NODE_DYS        (U.widget_unit / 2)
 #define NODE_DY         U.widget_unit
 #define NODE_SOCKDY     (0.08f * U.widget_unit)
@@ -235,6 +239,7 @@ extern const char *node_context_dir[];
 #define NODE_HEIGHT(node) (node->height * UI_DPI_FAC)
 #define NODE_MARGIN_X   (0.75f * U.widget_unit)
 #define NODE_SOCKSIZE   (0.25f * U.widget_unit)
+#define NODE_RESIZE_MARGIN (0.20f * U.widget_unit)
 #define NODE_LINK_RESOL 12
 
 // XXX button events (butspace)

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_types_customdata.c
- *  \ingroup pybmesh
+/** \file
+ * \ingroup pybmesh
  *
  * This file defines the types for 'BMesh.verts/edges/faces/loops.layers'
  * customdata layer access.
@@ -105,9 +99,6 @@ PyDoc_STRVAR(bpy_bmlayeraccess_collection__bevel_weight_doc,
 PyDoc_STRVAR(bpy_bmlayeraccess_collection__crease_doc,
 "Edge crease for subsurf - float in [0 - 1].\n\n:type: :class:`BMLayerCollection`"
 );
-PyDoc_STRVAR(bpy_bmlayeraccess_collection__tex_doc,
-"Accessor for :class:`BMTexPoly` layer (TODO).\n\ntype: :class:`BMLayerCollection`" // TYPE DOESN'T EXIST YET
-);
 PyDoc_STRVAR(bpy_bmlayeraccess_collection__uv_doc,
 "Accessor for :class:`BMLoopUV` UV (as a 2D Vector).\n\ntype: :class:`BMLayerCollection`"
 );
@@ -120,6 +111,9 @@ PyDoc_STRVAR(bpy_bmlayeraccess_collection__skin_doc,
 PyDoc_STRVAR(bpy_bmlayeraccess_collection__paint_mask_doc,
 "Accessor for paint mask layer.\n\ntype: :class:`BMLayerCollection`"
 );
+PyDoc_STRVAR(bpy_bmlayeraccess_collection__face_map_doc,
+"FaceMap custom-data layer.\n\ntype: :class:`BMLayerCollection`"
+);
 #ifdef WITH_FREESTYLE
 PyDoc_STRVAR(bpy_bmlayeraccess_collection__freestyle_edge_doc,
 "Accessor for Freestyle edge layer.\n\ntype: :class:`BMLayerCollection`"
@@ -131,7 +125,7 @@ PyDoc_STRVAR(bpy_bmlayeraccess_collection__freestyle_face_doc,
 
 static PyObject *bpy_bmlayeraccess_collection_get(BPy_BMLayerAccess *self, void *flag)
 {
-	const int type = (int)GET_INT_FROM_POINTER(flag);
+	const int type = (int)POINTER_AS_INT(flag);
 
 	BPY_BM_CHECK_OBJ(self);
 
@@ -222,8 +216,7 @@ static PyGetSetDef bpy_bmlayeraccess_face_getseters[] = {
 	{(char *)"float",  (getter)bpy_bmlayeraccess_collection_get, (setter)NULL, (char *)bpy_bmlayeraccess_collection__float_doc, (void *)CD_PROP_FLT},
 	{(char *)"int",    (getter)bpy_bmlayeraccess_collection_get, (setter)NULL, (char *)bpy_bmlayeraccess_collection__int_doc, (void *)CD_PROP_INT},
 	{(char *)"string", (getter)bpy_bmlayeraccess_collection_get, (setter)NULL, (char *)bpy_bmlayeraccess_collection__string_doc, (void *)CD_PROP_STR},
-
-	{(char *)"tex",   (getter)bpy_bmlayeraccess_collection_get, (setter)NULL, (char *)bpy_bmlayeraccess_collection__tex_doc, (void *)CD_MTEXPOLY},
+	{(char *)"face_map", (getter)bpy_bmlayeraccess_collection_get, (setter)NULL, (char *)bpy_bmlayeraccess_collection__face_map_doc, (void *)CD_FACEMAP},
 
 #ifdef WITH_FREESTYLE
 	{(char *)"freestyle", (getter)bpy_bmlayeraccess_collection_get, (setter)NULL, (char *)bpy_bmlayeraccess_collection__freestyle_face_doc, (void *)CD_FREESTYLE_FACE},
@@ -566,7 +559,7 @@ static PyObject *bpy_bmlayercollection_get(BPy_BMLayerCollection *self, PyObject
 
 static struct PyMethodDef bpy_bmlayeritem_methods[] = {
 	{"copy_from", (PyCFunction)bpy_bmlayeritem_copy_from,    METH_O,       bpy_bmlayeritem_copy_from_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static struct PyMethodDef bpy_bmelemseq_methods[] = {
@@ -578,7 +571,7 @@ static struct PyMethodDef bpy_bmelemseq_methods[] = {
 	{"values",  (PyCFunction)bpy_bmlayercollection_values,   METH_NOARGS,  bpy_bmlayercollection_values_doc},
 	{"items",   (PyCFunction)bpy_bmlayercollection_items,    METH_NOARGS,  bpy_bmlayercollection_items_doc},
 	{"get",     (PyCFunction)bpy_bmlayercollection_get,      METH_VARARGS, bpy_bmlayercollection_get_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 /* Sequences
@@ -622,7 +615,9 @@ static PyObject *bpy_bmlayercollection_subscript_int(BPy_BMLayerCollection *self
 
 	len = bpy_bmlayercollection_length(self);
 
-	if (keynum < 0) keynum += len;
+	if (keynum < 0) {
+		keynum += len;
+	}
 	if (keynum >= 0) {
 		if (keynum < len) {
 			return BPy_BMLayerItem_CreatePyObject(self->bm, self->htype, self->type, keynum);
@@ -643,8 +638,12 @@ static PyObject *bpy_bmlayercollection_subscript_slice(BPy_BMLayerCollection *se
 
 	BPY_BM_CHECK_OBJ(self);
 
-	if (start >= len) start = len - 1;
-	if (stop  >= len) stop  = len - 1;
+	if (start >= len) {
+		start = len - 1;
+	}
+	if (stop  >= len) {
+		stop  = len - 1;
+	}
 
 	tuple = PyTuple_New(stop - start);
 
@@ -663,8 +662,9 @@ static PyObject *bpy_bmlayercollection_subscript(BPy_BMLayerCollection *self, Py
 	}
 	else if (PyIndex_Check(key)) {
 		Py_ssize_t i = PyNumber_AsSsize_t(key, PyExc_IndexError);
-		if (i == -1 && PyErr_Occurred())
+		if (i == -1 && PyErr_Occurred()) {
 			return NULL;
+		}
 		return bpy_bmlayercollection_subscript_int(self, i);
 	}
 	else if (PySlice_Check(key)) {
@@ -686,14 +686,22 @@ static PyObject *bpy_bmlayercollection_subscript(BPy_BMLayerCollection *self, Py
 			Py_ssize_t start = 0, stop = PY_SSIZE_T_MAX;
 
 			/* avoid PySlice_GetIndicesEx because it needs to know the length ahead of time. */
-			if (key_slice->start != Py_None && !_PyEval_SliceIndex(key_slice->start, &start)) return NULL;
-			if (key_slice->stop != Py_None && !_PyEval_SliceIndex(key_slice->stop, &stop))    return NULL;
+			if (key_slice->start != Py_None && !_PyEval_SliceIndex(key_slice->start, &start)) {
+				return NULL;
+			}
+			if (key_slice->stop != Py_None && !_PyEval_SliceIndex(key_slice->stop, &stop)) {
+				return NULL;
+			}
 
 			if (start < 0 || stop < 0) {
 				/* only get the length for negative values */
 				Py_ssize_t len = bpy_bmlayercollection_length(self);
-				if (start < 0) start += len;
-				if (stop  < 0) stop  += len;
+				if (start < 0) {
+					start += len;
+				}
+				if (stop  < 0) {
+					stop  += len;
+				}
 			}
 
 			if (stop - start <= 0) {
@@ -989,6 +997,7 @@ PyObject *BPy_BMLayerItem_GetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer)
 			break;
 		}
 		case CD_PROP_INT:
+		case CD_FACEMAP:
 		{
 			ret = PyLong_FromLong(*(int *)value);
 			break;
@@ -997,11 +1006,6 @@ PyObject *BPy_BMLayerItem_GetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer)
 		{
 			MStringProperty *mstring = value;
 			ret = PyBytes_FromStringAndSize(mstring->s, mstring->s_len);
-			break;
-		}
-		case CD_MTEXPOLY:
-		{
-			ret = BPy_BMTexPoly_CreatePyObject(value);
 			break;
 		}
 		case CD_MLOOPUV:
@@ -1074,6 +1078,7 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
 			break;
 		}
 		case CD_PROP_INT:
+		case CD_FACEMAP:
 		{
 			int tmp_val = PyC_Long_AsI32(py_value);
 			if (UNLIKELY(tmp_val == -1 && PyErr_Occurred())) {
@@ -1095,16 +1100,12 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
 				ret = -1;
 			}
 			else {
-				if (tmp_val_len > sizeof(mstring->s))
+				if (tmp_val_len > sizeof(mstring->s)) {
 					tmp_val_len = sizeof(mstring->s);
+				}
 				memcpy(mstring->s, tmp_val, tmp_val_len);
 				mstring->s_len = tmp_val_len;
 			}
-			break;
-		}
-		case CD_MTEXPOLY:
-		{
-			ret = BPy_BMTexPoly_AssignPyObject(value, py_value);
 			break;
 		}
 		case CD_MLOOPUV:
@@ -1136,7 +1137,7 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
 				ret = -1;
 			}
 			else {
-				*(float *)value = CLAMPIS(tmp_val, 0.0f, 1.0f);
+				*(float *)value = clamp_f(tmp_val, 0.0f, 1.0f);
 			}
 			break;
 		}
@@ -1148,7 +1149,7 @@ int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObj
 				ret = -1;
 			}
 			else {
-				*(float *)value = CLAMPIS(tmp_val, 0.0f, 1.0f);
+				*(float *)value = clamp_f(tmp_val, 0.0f, 1.0f);
 			}
 			break;
 		}

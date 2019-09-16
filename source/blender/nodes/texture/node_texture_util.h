@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/texture/node_texture_util.h
- *  \ingroup nodes
+/** \file
+ * \ingroup nodes
  */
 
 
@@ -61,7 +53,6 @@
 #include "BKE_material.h"
 #include "BKE_node.h"
 #include "BKE_texture.h"
-#include "BKE_library.h"
 
 #include "node_util.h"
 #include "NOD_texture.h"
@@ -87,7 +78,6 @@ typedef struct TexCallData {
 	short which_output;
 	int cfra;
 
-	ShadeInput *shi;
 	MTex *mtex;
 } TexCallData;
 
@@ -100,7 +90,6 @@ typedef struct TexParams {
 
 	/* optional. we don't really want these here, but image
 	 * textures need to do mapping & color correction */
-	ShadeInput *shi;
 	MTex *mtex;
 } TexParams;
 
@@ -116,7 +105,7 @@ typedef struct TexDelegate {
 } TexDelegate;
 
 
-int tex_node_poll_default(struct bNodeType *ntype, struct bNodeTree *ntree);
+bool tex_node_poll_default(struct bNodeType *ntype, struct bNodeTree *ntree);
 void tex_node_type_base(struct bNodeType *ntype, int type, const char *name, short nclass, short flag);
 
 void tex_input_rgba(float *out, bNodeStack *in, TexParams *params, short thread);

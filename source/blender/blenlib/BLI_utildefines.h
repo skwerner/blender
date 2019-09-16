@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BLI_UTILDEFINES_H__
 #define __BLI_UTILDEFINES_H__
 
-/** \file BLI_utildefines.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifdef __cplusplus
@@ -41,9 +33,15 @@ extern "C" {
 #include "BLI_compiler_compat.h"
 #include "BLI_utildefines_variadic.h"
 
-#ifndef NDEBUG /* for BLI_assert */
-#include <stdio.h>
-#endif
+/* We could remove in future. */
+#include "BLI_assert.h"
+
+/* include after _VA_NARGS macro */
+#include "BLI_compiler_typecheck.h"
+
+/* -------------------------------------------------------------------- */
+/** \name Min/Max Macros
+ * \{ */
 
 /* useful for finding bad use of min/max */
 #if 0
@@ -52,9 +50,6 @@ extern "C" {
 #  define MIN2(x, y)          (_TYPECHECK(x, y), (((x) < (y) ? (x) : (y))))
 #  define MAX2(x, y)          (_TYPECHECK(x, y), (((x) > (y) ? (x) : (y))))
 #endif
-
-/* include after _VA_NARGS macro */
-#include "BLI_compiler_typecheck.h"
 
 /* min/max */
 #if defined(__GNUC__) || defined(__clang__)
@@ -138,8 +133,11 @@ extern "C" {
 		if ((max)[1] < (vec)[1] ) (max)[1] = (vec)[1];                        \
 	} (void)0
 
-/* some math and copy defines */
+/** \} */
 
+/* -------------------------------------------------------------------- */
+/** \name Swap/Shift Macros
+ * \{ */
 
 #define SWAP(type, a, b)  {    \
 	type sw_ap;                \
@@ -158,6 +156,37 @@ extern "C" {
 	(a) = (b);                    \
 	(b) = (tval);                 \
 } (void)0
+
+/* shift around elements */
+#define SHIFT3(type, a, b, c)  {                                              \
+	type tmp;                                                                 \
+	CHECK_TYPE(a, type);                                                      \
+	CHECK_TYPE(b, type);                                                      \
+	CHECK_TYPE(c, type);                                                      \
+	tmp = a;                                                                  \
+	a = c;                                                                    \
+	c = b;                                                                    \
+	b = tmp;                                                                  \
+} (void)0
+
+#define SHIFT4(type, a, b, c, d)  {                                           \
+	type tmp;                                                                 \
+	CHECK_TYPE(a, type);                                                      \
+	CHECK_TYPE(b, type);                                                      \
+	CHECK_TYPE(c, type);                                                      \
+	CHECK_TYPE(d, type);                                                      \
+	tmp = a;                                                                  \
+	a = d;                                                                    \
+	d = c;                                                                    \
+	c = b;                                                                    \
+	b = tmp;                                                                  \
+} (void)0
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Equal to Any Element (ELEM) Macro
+ * \{ */
 
 /* ELEM#(v, ...): is the first arg equal any others? */
 /* internal helpers*/
@@ -197,97 +226,11 @@ extern "C" {
 /* reusable ELEM macro */
 #define ELEM(...) VA_NARGS_CALL_OVERLOAD(_VA_ELEM, __VA_ARGS__)
 
-/* no-op for expressions we don't want to instansiate, but must remian valid */
-#define EXPR_NOP(expr) (void)(0 ? ((void)(expr), 1) : 0)
+/** \} */
 
-/* shift around elements */
-#define SHIFT3(type, a, b, c)  {                                              \
-	type tmp;                                                                 \
-	CHECK_TYPE(a, type);                                                      \
-	CHECK_TYPE(b, type);                                                      \
-	CHECK_TYPE(c, type);                                                      \
-	tmp = a;                                                                  \
-	a = c;                                                                    \
-	c = b;                                                                    \
-	b = tmp;                                                                  \
-} (void)0
-
-#define SHIFT4(type, a, b, c, d)  {                                           \
-	type tmp;                                                                 \
-	CHECK_TYPE(a, type);                                                      \
-	CHECK_TYPE(b, type);                                                      \
-	CHECK_TYPE(c, type);                                                      \
-	CHECK_TYPE(d, type);                                                      \
-	tmp = a;                                                                  \
-	a = d;                                                                    \
-	d = c;                                                                    \
-	c = b;                                                                    \
-	b = tmp;                                                                  \
-} (void)0
-
-
-#define FTOCHAR(val) ((CHECK_TYPE_INLINE(val, float)), \
-		(char)(((val) <= 0.0f) ? 0 : (((val) > (1.0f - 0.5f / 255.0f)) ? 255 : ((255.0f * (val)) + 0.5f))))
-#define FTOUSHORT(val) ((CHECK_TYPE_INLINE(val, float)), \
-		(unsigned short)((val >= 1.0f - 0.5f / 65535) ? 65535 : (val <= 0.0f) ? 0 : (val * 65535.0f + 0.5f)))
-#define USHORTTOUCHAR(val) ((unsigned char)(((val) >= 65535 - 128) ? 255 : ((val) + 128) >> 8))
-#define F3TOCHAR3(v2, v1) {                                                   \
-		(v1)[0] = FTOCHAR((v2[0]));                                           \
-		(v1)[1] = FTOCHAR((v2[1]));                                           \
-		(v1)[2] = FTOCHAR((v2[2]));                                           \
-} (void)0
-#define F3TOCHAR4(v2, v1) {                                                   \
-		(v1)[0] = FTOCHAR((v2[0]));                                           \
-		(v1)[1] = FTOCHAR((v2[1]));                                           \
-		(v1)[2] = FTOCHAR((v2[2]));                                           \
-		(v1)[3] = 255;                                                        \
-} (void)0
-#define F4TOCHAR4(v2, v1) {                                                   \
-		(v1)[0] = FTOCHAR((v2[0]));                                           \
-		(v1)[1] = FTOCHAR((v2[1]));                                           \
-		(v1)[2] = FTOCHAR((v2[2]));                                           \
-		(v1)[3] = FTOCHAR((v2[3]));                                           \
-} (void)0
-#define VECCOPY(v1, v2) {                                                     \
-		*(v1) =   *(v2);                                                      \
-		*(v1 + 1) = *(v2 + 1);                                                \
-		*(v1 + 2) = *(v2 + 2);                                                \
-} (void)0
-#define VECCOPY2D(v1, v2) {                                                   \
-		*(v1) =   *(v2);                                                      \
-		*(v1 + 1) = *(v2 + 1);                                                \
-} (void)0
-#define VECADD(v1, v2, v3) {                                                  \
-		*(v1) =   *(v2)   + *(v3);                                            \
-		*(v1 + 1) = *(v2 + 1) + *(v3 + 1);                                    \
-		*(v1 + 2) = *(v2 + 2) + *(v3 + 2);                                    \
-} (void)0
-#define VECSUB(v1, v2, v3) {                                                  \
-		*(v1) =   *(v2)   - *(v3);                                            \
-		*(v1 + 1) = *(v2 + 1) - *(v3 + 1);                                    \
-		*(v1 + 2) = *(v2 + 2) - *(v3 + 2);                                    \
-} (void)0
-#define VECSUB2D(v1, v2, v3)     {                                            \
-		*(v1) =   *(v2)   - *(v3);                                            \
-		*(v1 + 1) = *(v2 + 1) - *(v3 + 1);                                    \
-} (void)0
-#define VECADDFAC(v1, v2, v3, fac) {                                          \
-		*(v1) =   *(v2)   + *(v3) * (fac);                                    \
-		*(v1 + 1) = *(v2 + 1) + *(v3 + 1) * (fac);                            \
-		*(v1 + 2) = *(v2 + 2) + *(v3 + 2) * (fac);                            \
-} (void)0
-#define VECMADD(v1, v2, v3, v4) {                                             \
-		*(v1) =   *(v2)   + *(v3) * (*(v4));                                  \
-		*(v1 + 1) = *(v2 + 1) + *(v3 + 1) * (*(v4 + 1));                      \
-		*(v1 + 2) = *(v2 + 2) + *(v3 + 2) * (*(v4 + 2));                      \
-} (void)0
-#define VECSUBFAC(v1, v2, v3, fac) {                                          \
-		*(v1) =   *(v2)   - *(v3) * (fac);                                    \
-		*(v1 + 1) = *(v2 + 1) - *(v3 + 1) * (fac);                            \
-		*(v1 + 2) = *(v2 + 2) - *(v3 + 2) * (fac);                            \
-} (void)0
-
-/* some misc stuff.... */
+/* -------------------------------------------------------------------- */
+/** \name Simple Math Macros
+ * \{ */
 
 /* avoid multiple access for supported compilers */
 #if defined(__GNUC__) || defined(__clang__)
@@ -298,13 +241,47 @@ extern "C" {
 #define SQUARE(a)  ({ \
 	typeof(a) a_ = (a); \
 	((a_) * (a_)); })
+#define CUBE(a)  ({ \
+	typeof(a) a_ = (a); \
+	((a_) * (a_) * (a_)); })
 
 #else
 
 #define ABS(a)  ((a) < 0 ? (-(a)) : (a))
 #define SQUARE(a)  ((a) * (a))
+#define CUBE(a)  ((a) * (a) * (a))
 
 #endif
+
+/* Float equality checks. */
+
+#define IS_EQ(a, b)  ( \
+	CHECK_TYPE_INLINE(a, double), CHECK_TYPE_INLINE(b, double), \
+	((fabs((double)((a) - (b))) >= (double) FLT_EPSILON) ? false : true))
+
+#define IS_EQF(a, b)  ( \
+	CHECK_TYPE_INLINE(a, float), CHECK_TYPE_INLINE(b, float), \
+	((fabsf((float)((a) - (b))) >= (float) FLT_EPSILON) ? false : true))
+
+#define IS_EQT(a, b, c)        (((a) > (b)) ? ((((a) - (b)) <= (c))) : (((((b) - (a)) <= (c)))))
+#define IN_RANGE(a, b, c)      (((b) < (c)) ? (((b) <  (a) && (a) <  (c))) : (((c) <  (a) && (a) <  (b))))
+#define IN_RANGE_INCL(a, b, c) (((b) < (c)) ? (((b) <= (a) && (a) <= (c))) : (((c) <= (a) && (a) <= (b))))
+
+/**
+ * Expands to an integer constant expression evaluating to a close upper bound
+ * on the number the number of decimal digits in a value expressible in the
+ * integer type given by the argument (if it is a type name) or the integer
+ * type of the argument (if it is an expression). The meaning of the resulting
+ * expression is unspecified for other arguments.
+ * i.e: `DECIMAL_DIGITS_BOUND(uchar)` is equal to 3.
+ */
+#define DECIMAL_DIGITS_BOUND(t) (241 * sizeof(t) / 100 + 1)
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clamp Macros
+ * \{ */
 
 #define CLAMPIS(a, b, c)  ((a) < (b) ? (b) : (a) > (c) ? (c) : (a))
 
@@ -375,17 +352,11 @@ extern "C" {
 	CLAMP_MAX((vec)[3], b); \
 } (void)0
 
-#define IS_EQ(a, b)  ( \
-	CHECK_TYPE_INLINE(a, double), CHECK_TYPE_INLINE(b, double), \
-	((fabs((double)((a) - (b))) >= (double) FLT_EPSILON) ? false : true))
+/** \} */
 
-#define IS_EQF(a, b)  ( \
-	CHECK_TYPE_INLINE(a, float), CHECK_TYPE_INLINE(b, float), \
-	((fabsf((float)((a) - (b))) >= (float) FLT_EPSILON) ? false : true))
-
-#define IS_EQT(a, b, c)        (((a) > (b)) ? ((((a) - (b)) <= (c))) : (((((b) - (a)) <= (c)))))
-#define IN_RANGE(a, b, c)      (((b) < (c)) ? (((b) <  (a) && (a) <  (c))) : (((c) <  (a) && (a) <  (b))))
-#define IN_RANGE_INCL(a, b, c) (((b) < (c)) ? (((b) <= (a) && (a) <= (c))) : (((c) <= (a) && (a) <= (b))))
+/* -------------------------------------------------------------------- */
+/** \name Array Unpacking Macros
+ * \{ */
 
 /* unpack vector for args */
 #define UNPACK2(a)  ((a)[0]),   ((a)[1])
@@ -396,23 +367,58 @@ extern "C" {
 #define UNPACK3_EX(pre, a, post)  UNPACK2_EX(pre, a, post), (pre((a)[2])post)
 #define UNPACK4_EX(pre, a, post)  UNPACK3_EX(pre, a, post), (pre((a)[3])post)
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Array Macros
+ * \{ */
+
 /* array helpers */
-#define ARRAY_LAST_ITEM(arr_start, arr_dtype, tot) \
-	(arr_dtype *)((char *)(arr_start) + (sizeof(*((arr_dtype *)NULL)) * (size_t)(tot - 1)))
+#define ARRAY_LAST_ITEM(arr_start, arr_dtype, arr_len) \
+	(arr_dtype *)((char *)(arr_start) + (sizeof(*((arr_dtype *)NULL)) * (size_t)(arr_len - 1)))
 
-#define ARRAY_HAS_ITEM(arr_item, arr_start, tot)  ( \
+#define ARRAY_HAS_ITEM(arr_item, arr_start, arr_len)  ( \
 	CHECK_TYPE_PAIR_INLINE(arr_start, arr_item), \
-	((unsigned int)((arr_item) - (arr_start)) < (unsigned int)(tot)))
+	((unsigned int)((arr_item) - (arr_start)) < (unsigned int)(arr_len)))
 
-#define ARRAY_DELETE(arr, index, tot_delete, tot)  { \
-		BLI_assert(index + tot_delete <= tot);  \
-		memmove(&(arr)[(index)], \
-		        &(arr)[(index) + (tot_delete)], \
-		         (((tot) - (index)) - (tot_delete)) * sizeof(*(arr))); \
-	} (void)0
+/**
+ * \note use faster #ARRAY_DELETE_REORDER_LAST when we can re-order.
+ */
+#define ARRAY_DELETE(arr, index, delete_len, arr_len) \
+	{ \
+		BLI_assert((&arr[index] >= arr) && ((index) + delete_len <= arr_len));  \
+		memmove(&(arr)[index], \
+		        &(arr)[(index) + (delete_len)], \
+		         (((arr_len) - (index)) - (delete_len)) * sizeof(*(arr))); \
+	} ((void)0)
+
+/**
+ * Re-ordering array removal.
+ *
+ * When removing single items this compiles down to:
+ * `if (index + 1 != arr_len) { arr[index] = arr[arr_len - 1]; }` (typical reordering removal),
+ * with removing multiple items, overlap is detected to avoid memcpy errors.
+ */
+#define ARRAY_DELETE_REORDER_LAST(arr, index, delete_len, arr_len) \
+	{ \
+		BLI_assert((&arr[index] >= arr) && ((index) + delete_len <= arr_len));  \
+		if ((index) + (delete_len) != (arr_len)) { \
+			if (((delete_len) == 1) || ((delete_len) <= ((arr_len) - ((index) + (delete_len))))) { \
+				memcpy(&(arr)[index], \
+				       &(arr)[(arr_len) - (delete_len)], \
+				       (delete_len) * sizeof(*(arr))); \
+			} \
+			else { \
+				memcpy(&(arr)[index], \
+				       &(arr)[(arr_len) - ((arr_len) - ((index) + (delete_len)))], \
+				       ((arr_len) - ((index) + (delete_len))) * sizeof(*(arr))); \
+			} \
+		} \
+	} ((void)0)
+
 
 /* assuming a static array */
-#if defined(__GNUC__) && !defined(__cplusplus) && !defined(__clang__)
+#if defined(__GNUC__) && !defined(__cplusplus) && !defined(__clang__) && !defined(__INTEL_COMPILER)
 #  define ARRAY_SIZE(arr) \
 	((sizeof(struct {int isnt_array : ((const void *)&(arr) == &(arr)[0]);}) * 0) + \
 	 (sizeof(arr) / sizeof(*(arr))))
@@ -458,6 +464,12 @@ extern "C" {
 /* reusable ARRAY_SET_ITEMS macro */
 #define ARRAY_SET_ITEMS(...) { VA_NARGS_CALL_OVERLOAD(_VA_ARRAY_SET_ITEMS, __VA_ARGS__); } (void)0
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Pointer Macros
+ * \{ */
+
 #if defined(__GNUC__) || defined(__clang__)
 #define POINTER_OFFSET(v, ofs) \
 	((typeof(v))((char *)(v) + (ofs)))
@@ -466,29 +478,47 @@ extern "C" {
 	((void *)((char *)(v) + (ofs)))
 #endif
 
-/* Like offsetof(typeof(), member), for non-gcc compilers */
-#define OFFSETOF_STRUCT(_struct, _member) \
-	((((char *)&((_struct)->_member)) - ((char *)(_struct))) + sizeof((_struct)->_member))
+/* Warning-free macros for storing ints in pointers. Use these _only_
+ * for storing an int in a pointer, not a pointer in an int (64bit)! */
+#define POINTER_FROM_INT(i)    ((void *)(intptr_t)(i))
+#define POINTER_AS_INT(i)  ((void)0, ((int)(intptr_t)(i)))
+
+#define POINTER_FROM_UINT(i)    ((void *)(uintptr_t)(i))
+#define POINTER_AS_UINT(i)  ((void)0, ((unsigned int)(uintptr_t)(i)))
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Struct After Macros
+ *
+ * Typically used to copy/clear polymorphic structs which have a generic
+ * member at the start which needs to be left as-is.
+ *
+ * \{ */
+
+/** Performs `offsetof(typeof(data), member) + sizeof((data)->member)` for non-gcc compilers. */
+#define OFFSETOF_STRUCT_AFTER(_struct, _member) \
+	((((const char *)&((_struct)->_member)) - ((const char *)(_struct))) + sizeof((_struct)->_member))
 
 /**
  * memcpy helper, skipping the first part of a struct,
  * ensures 'struct_dst' isn't const and the offset can be computed at compile time.
  * This isn't inclusive, the value of \a member isn't copied.
  */
-#define MEMCPY_STRUCT_OFS(struct_dst, struct_src, member)  { \
+#define MEMCPY_STRUCT_AFTER(struct_dst, struct_src, member)  { \
 	CHECK_TYPE_NONCONST(struct_dst); \
 	((void)(struct_dst == struct_src), \
-	 memcpy((char *)(struct_dst)  + OFFSETOF_STRUCT(struct_dst, member), \
-	        (char *)(struct_src)  + OFFSETOF_STRUCT(struct_dst, member), \
-	        sizeof(*(struct_dst)) - OFFSETOF_STRUCT(struct_dst, member))); \
-} (void)0
+	 memcpy((char *)(struct_dst)       + OFFSETOF_STRUCT_AFTER(struct_dst, member), \
+	        (const char *)(struct_src) + OFFSETOF_STRUCT_AFTER(struct_dst, member), \
+	        sizeof(*(struct_dst))      - OFFSETOF_STRUCT_AFTER(struct_dst, member))); \
+} ((void)0)
 
-#define MEMSET_STRUCT_OFS(struct_var, value, member)  { \
+#define MEMSET_STRUCT_AFTER(struct_var, value, member)  { \
 	CHECK_TYPE_NONCONST(struct_var); \
-	memset((char *)(struct_var)  + OFFSETOF_STRUCT(struct_var, member), \
+	memset((char *)(struct_var)  + OFFSETOF_STRUCT_AFTER(struct_var, member), \
 	       value, \
-	       sizeof(*(struct_var)) - OFFSETOF_STRUCT(struct_var, member)); \
-} (void)0
+	       sizeof(*(struct_var)) - OFFSETOF_STRUCT_AFTER(struct_var, member)); \
+} ((void)0)
 
 /* defined
  * in memory_utils.c for now. I do not know where we should put it actually... */
@@ -496,29 +526,16 @@ extern "C" {
 extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 #endif
 
-#define MEMCMP_STRUCT_OFS_IS_ZERO(struct_var, member) \
+#define MEMCMP_STRUCT_AFTER_IS_ZERO(struct_var, member) \
 	(BLI_memory_is_zero( \
-	       (char *)(struct_var)  + OFFSETOF_STRUCT(struct_var, member), \
-	       sizeof(*(struct_var)) - OFFSETOF_STRUCT(struct_var, member)))
+	       (const char *)(struct_var)  + OFFSETOF_STRUCT_AFTER(struct_var, member), \
+	       sizeof(*(struct_var))       - OFFSETOF_STRUCT_AFTER(struct_var, member)))
 
-/* Warning-free macros for storing ints in pointers. Use these _only_
- * for storing an int in a pointer, not a pointer in an int (64bit)! */
-#define SET_INT_IN_POINTER(i)    ((void *)(intptr_t)(i))
-#define GET_INT_FROM_POINTER(i)  ((void)0, ((int)(intptr_t)(i)))
+/** \} */
 
-#define SET_UINT_IN_POINTER(i)    ((void *)(uintptr_t)(i))
-#define GET_UINT_FROM_POINTER(i)  ((void)0, ((unsigned int)(uintptr_t)(i)))
-
-/* Set flag from a single test */
-#define SET_FLAG_FROM_TEST(value, test, flag) \
-{ \
-	if (test) { \
-		(value) |=  (flag); \
-	} \
-	else { \
-		(value) &= ~(flag); \
-	} \
-} ((void)0)
+/* -------------------------------------------------------------------- */
+/** \name String Macros
+ * \{ */
 
 /* Macro to convert a value to string in the preprocessor
  * STRINGIFY_ARG: gives the argument as a string
@@ -542,18 +559,21 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 #define STRCASEEQLEN(a, b, n) (strncasecmp(a, b, n) == 0)
 
 #define STRPREFIX(a, b) (strncmp((a), (b), strlen(b)) == 0)
-/* useful for debugging */
-#define AT __FILE__ ":" STRINGIFY(__LINE__)
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Unused Function/Argument Macros
+ * \{ */
 
 /* UNUSED macro, for function argument */
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 #  define UNUSED(x) UNUSED_ ## x __attribute__((__unused__))
 #else
 #  define UNUSED(x) UNUSED_ ## x
 #endif
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 #  define UNUSED_FUNCTION(x) __attribute__((__unused__)) UNUSED_ ## x
 #else
 #  define UNUSED_FUNCTION(x) UNUSED_ ## x
@@ -615,73 +635,11 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 #  define UNUSED_VARS_NDEBUG UNUSED_VARS
 #endif
 
+/** \} */
 
-/* BLI_assert(), default only to print
- * for aborting need to define WITH_ASSERT_ABORT
- */
-/* For 'abort' only. */
-#include <stdlib.h>
-
-#ifndef NDEBUG
-#  include "BLI_system.h"
-#  ifdef WITH_ASSERT_ABORT
-#    define _BLI_DUMMY_ABORT abort
-#  else
-#    define _BLI_DUMMY_ABORT() (void)0
-#  endif
-#  if defined(__GNUC__) || defined(_MSC_VER) /* check __func__ is available */
-#    define BLI_assert(a)                                                     \
-	(void)((!(a)) ?  (                                                        \
-		(                                                                     \
-		BLI_system_backtrace(stderr),                                         \
-		fprintf(stderr,                                                       \
-			"BLI_assert failed: %s:%d, %s(), at \'%s\'\n",                    \
-			__FILE__, __LINE__, __func__, STRINGIFY(a)),                      \
-		_BLI_DUMMY_ABORT(),                                                   \
-		NULL)) : NULL)
-#  else
-#    define BLI_assert(a)                                                     \
-	(void)((!(a)) ?  (                                                        \
-		(                                                                     \
-		fprintf(stderr,                                                       \
-			"BLI_assert failed: %s:%d, at \'%s\'\n",                          \
-			__FILE__, __LINE__, STRINGIFY(a)),                                \
-		_BLI_DUMMY_ABORT(),                                                   \
-		NULL)) : NULL)
-#  endif
-#else
-#  define BLI_assert(a) (void)0
-#endif
-
-/* C++ can't use _Static_assert, expects static_assert() but c++0x only,
- * Coverity also errors out. */
-#if (!defined(__cplusplus)) && \
-    (!defined(__COVERITY__)) && \
-    (defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 406))  /* gcc4.6+ only */
-#  define BLI_STATIC_ASSERT(a, msg) __extension__ _Static_assert(a, msg);
-#else
-/* Code adapted from http://www.pixelbeat.org/programming/gcc/static_assert.html */
-/* Note we need the two concats below because arguments to ## are not expanded, so we need to
- * expand __LINE__ with one indirection before doing the actual concatenation. */
-#  define ASSERT_CONCAT_(a, b) a##b
-#  define ASSERT_CONCAT(a, b) ASSERT_CONCAT_(a, b)
-   /* These can't be used after statements in c89. */
-#  if defined(__COUNTER__)  /* MSVC */
-#    define BLI_STATIC_ASSERT(a, msg) \
-         ; enum { ASSERT_CONCAT(static_assert_, __COUNTER__) = 1 / (int)(!!(a)) };
-#  else  /* older gcc, clang... */
-    /* This can't be used twice on the same line so ensure if using in headers
-     * that the headers are not included twice (by wrapping in #ifndef...#endif)
-     * Note it doesn't cause an issue when used on same line of separate modules
-     * compiled with gcc -combine -fwhole-program. */
-#    define BLI_STATIC_ASSERT(a, msg) \
-         ; enum { ASSERT_CONCAT(assert_line_, __LINE__) = 1 / (int)(!!(a)) };
-#  endif
-#endif
-
-
-#define BLI_STATIC_ASSERT_ALIGN(st, align) \
-  BLI_STATIC_ASSERT((sizeof(st) % (align) == 0), "Structure must be strictly aligned")
+/* -------------------------------------------------------------------- */
+/** \name Branch Prediction Macros
+ * \{ */
 
 /* hints for branch prediction, only use in code that runs a _lot_ where */
 #ifdef __GNUC__
@@ -691,6 +649,37 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 #  define LIKELY(x)       (x)
 #  define UNLIKELY(x)     (x)
 #endif
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Flag Macros
+ * \{ */
+
+/* Set flag from a single test */
+#define SET_FLAG_FROM_TEST(value, test, flag) \
+{ \
+	if (test) { \
+		(value) |=  (flag); \
+	} \
+	else { \
+		(value) &= ~(flag); \
+	} \
+} ((void)0)
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Misc Macros
+ * \{ */
+
+/** Useful for debugging. */
+#define AT __FILE__ ":" STRINGIFY(__LINE__)
+
+/** No-op for expressions we don't want to instansiate, but must remian valid. */
+#define EXPR_NOP(expr) (void)(0 ? ((void)(expr), 1) : 0)
+
+/** \} */
 
 #ifdef __cplusplus
 }

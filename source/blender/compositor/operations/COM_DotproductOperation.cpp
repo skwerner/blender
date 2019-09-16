@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_DotproductOperation.h"
@@ -43,7 +39,7 @@ void DotproductOperation::deinitExecution()
 	this->m_input2Operation = NULL;
 }
 
-/** @todo: current implementation is the inverse of a dotproduct. not 'logically' correct
+/** \todo: current implementation is the inverse of a dotproduct. not 'logically' correct
  */
 void DotproductOperation::executePixelSampled(float output[4], float x, float y, PixelSampler sampler)
 {

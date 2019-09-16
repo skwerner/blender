@@ -156,6 +156,7 @@ public:
 	virtual bool has_bssrdf_bump() { return false; }
 	virtual bool has_spatial_varying() { return false; }
 	virtual bool has_object_dependency() { return false; }
+	virtual bool has_attribute_dependency() { return false; }
 	virtual bool has_integrator_dependency() { return false; }
 	virtual bool has_volume_support() { return false; }
 	virtual bool has_raytrace() { return false; }
@@ -164,7 +165,7 @@ public:
 
 	int id; /* index in graph node array */
 	ShaderBump bump; /* for bump mapping utility */
-	
+
 	ShaderNodeSpecialType special_type;	/* special node type */
 
 	/* ** Selective nodes compilation ** */
@@ -284,7 +285,7 @@ protected:
 
 	/* Graph simplification routines. */
 	void clean(Scene *scene);
-	void constant_fold();
+	void constant_fold(Scene *scene);
 	void simplify_settings(Scene *scene);
 	void deduplicate_nodes();
 	void verify_volume_output();
@@ -292,5 +293,4 @@ protected:
 
 CCL_NAMESPACE_END
 
-#endif /* __GRAPH_H__ */
-
+#endif  /* __GRAPH_H__ */

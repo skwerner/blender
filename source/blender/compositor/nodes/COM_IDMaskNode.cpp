@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_IDMaskNode.h"
@@ -32,12 +28,12 @@ IDMaskNode::IDMaskNode(bNode *editorNode) : Node(editorNode)
 void IDMaskNode::convertToOperations(NodeConverter &converter, const CompositorContext &context) const
 {
 	bNode *bnode = this->getbNode();
-	
+
 	IDMaskOperation *operation;
 	operation = new IDMaskOperation();
 	operation->setObjectIndex(bnode->custom1);
 	converter.addOperation(operation);
-	
+
 	converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
 	if (bnode->custom2 == 0 || context.getRenderData()->scemode & R_FULL_SAMPLE) {
 		converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket(0));
@@ -45,7 +41,7 @@ void IDMaskNode::convertToOperations(NodeConverter &converter, const CompositorC
 	else {
 		AntiAliasOperation *antiAliasOperation = new AntiAliasOperation();
 		converter.addOperation(antiAliasOperation);
-		
+
 		converter.addLink(operation->getOutputSocket(), antiAliasOperation->getInputSocket(0));
 		converter.mapOutputSocket(getOutputSocket(0), antiAliasOperation->getOutputSocket(0));
 	}

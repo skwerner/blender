@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Gilbert, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/mathutils/mathutils_geometry.c
- *  \ingroup pymathutils
+/** \file
+ * \ingroup pymathutils
  */
 
 
@@ -34,8 +28,8 @@
 #ifndef MATH_STANDALONE /* define when building outside blender */
 #  include "MEM_guardedalloc.h"
 #  include "BLI_blenlib.h"
-#  include "BLI_boxpack2d.h"
-#  include "BLI_convexhull2d.h"
+#  include "BLI_boxpack_2d.h"
+#  include "BLI_convexhull_2d.h"
 #  include "BKE_displist.h"
 #  include "BKE_curve.h"
 #endif
@@ -627,12 +621,12 @@ static PyObject *M_Geometry_intersect_line_sphere(PyObject *UNUSED(self), PyObje
 
 		switch (isect_line_sphere_v3(line_a, line_b, sphere_co, sphere_radius, isect_a, isect_b)) {
 			case 1:
-				if (!(!clip || (((lambda = line_point_factor_v3(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_a = false;
+				if (!(!clip || (((lambda = line_point_factor_v3(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_a = false; }
 				use_b = false;
 				break;
 			case 2:
-				if (!(!clip || (((lambda = line_point_factor_v3(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_a = false;
-				if (!(!clip || (((lambda = line_point_factor_v3(isect_b, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_b = false;
+				if (!(!clip || (((lambda = line_point_factor_v3(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_a = false; }
+				if (!(!clip || (((lambda = line_point_factor_v3(isect_b, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_b = false; }
 				break;
 			default:
 				use_a = false;
@@ -700,12 +694,12 @@ static PyObject *M_Geometry_intersect_line_sphere_2d(PyObject *UNUSED(self), PyO
 
 		switch (isect_line_sphere_v2(line_a, line_b, sphere_co, sphere_radius, isect_a, isect_b)) {
 			case 1:
-				if (!(!clip || (((lambda = line_point_factor_v2(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_a = false;
+				if (!(!clip || (((lambda = line_point_factor_v2(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_a = false; }
 				use_b = false;
 				break;
 			case 2:
-				if (!(!clip || (((lambda = line_point_factor_v2(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_a = false;
-				if (!(!clip || (((lambda = line_point_factor_v2(isect_b, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) use_b = false;
+				if (!(!clip || (((lambda = line_point_factor_v2(isect_a, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_a = false; }
+				if (!(!clip || (((lambda = line_point_factor_v2(isect_b, line_a, line_b)) >= 0.0f) && (lambda <= 1.0f)))) { use_b = false; }
 				break;
 			default:
 				use_a = false;
@@ -742,7 +736,7 @@ static PyObject *M_Geometry_intersect_point_line(PyObject *UNUSED(self), PyObjec
 	float lambda;
 	PyObject *ret;
 	int size = 2;
-	
+
 	if (!PyArg_ParseTuple(
 	        args, "OOO:intersect_point_line",
 	        &py_pt, &py_line_a, &py_line_b))
@@ -760,7 +754,7 @@ static PyObject *M_Geometry_intersect_point_line(PyObject *UNUSED(self), PyObjec
 
 	/* do the calculation */
 	lambda = closest_to_line_v3(pt_out, pt, line_a, line_b);
-	
+
 	ret = PyTuple_New(2);
 	PyTuple_SET_ITEMS(ret,
 	        Vector_CreatePyObject(pt_out, size, NULL),
@@ -860,7 +854,7 @@ static PyObject *M_Geometry_intersect_point_tri_2d(PyObject *UNUSED(self), PyObj
 PyDoc_STRVAR(M_Geometry_intersect_point_quad_2d_doc,
 ".. function:: intersect_point_quad_2d(pt, quad_p1, quad_p2, quad_p3, quad_p4)\n"
 "\n"
-"   Takes 5 vectors (using only the x and y coordinates): one is the point and the next 4 define the quad, \n"
+"   Takes 5 vectors (using only the x and y coordinates): one is the point and the next 4 define the quad,\n"
 "   only the x and y are used from the vectors. Returns 1 if the point is within the quad, otherwise 0.\n"
 "   Works only with convex quads without singular edges.\n"
 "\n"
@@ -882,7 +876,7 @@ static PyObject *M_Geometry_intersect_point_quad_2d(PyObject *UNUSED(self), PyOb
 	PyObject *py_pt, *py_quad[4];
 	float pt[2], quad[4][2];
 	int i;
-	
+
 	if (!PyArg_ParseTuple(
 	        args, "OOOOO:intersect_point_quad_2d",
 	        &py_pt, UNPACK4_EX(&, py_quad, )))
@@ -954,12 +948,12 @@ PyDoc_STRVAR(M_Geometry_barycentric_transform_doc,
 "   :type tri_a2: :class:`mathutils.Vector`\n"
 "   :arg tri_a3: source triangle vertex.\n"
 "   :type tri_a3: :class:`mathutils.Vector`\n"
-"   :arg tri_a1: target triangle vertex.\n"
-"   :type tri_a1: :class:`mathutils.Vector`\n"
-"   :arg tri_a2: target triangle vertex.\n"
-"   :type tri_a2: :class:`mathutils.Vector`\n"
-"   :arg tri_a3: target triangle vertex.\n"
-"   :type tri_a3: :class:`mathutils.Vector`\n"
+"   :arg tri_b1: target triangle vertex.\n"
+"   :type tri_b1: :class:`mathutils.Vector`\n"
+"   :arg tri_b2: target triangle vertex.\n"
+"   :type tri_b2: :class:`mathutils.Vector`\n"
+"   :arg tri_b3: target triangle vertex.\n"
+"   :type tri_b3: :class:`mathutils.Vector`\n"
 "   :return: The transformed point\n"
 "   :rtype: :class:`mathutils.Vector`'s\n"
 );
@@ -1231,15 +1225,19 @@ static PyObject *M_Geometry_tessellate_polygon(PyObject *UNUSED(self), PyObject 
 				polyVec = PySequence_GetItem(polyLine, index);
 				if (VectorObject_Check(polyVec)) {
 
-					if (BaseMath_ReadCallback((VectorObject *)polyVec) == -1)
+					if (BaseMath_ReadCallback((VectorObject *)polyVec) == -1) {
 						ls_error = 1;
+					}
 
 					fp[0] = ((VectorObject *)polyVec)->vec[0];
 					fp[1] = ((VectorObject *)polyVec)->vec[1];
-					if (((VectorObject *)polyVec)->size > 2)
+					if (((VectorObject *)polyVec)->size > 2) {
 						fp[2] = ((VectorObject *)polyVec)->vec[2];
-					else
-						fp[2] = 0.0f;  /* if its a 2d vector then set the z to be zero */
+					}
+					else {
+						/* if its a 2d vector then set the z to be zero */
+						fp[2] = 0.0f;
+					}
 				}
 				else {
 					ls_error = 1;
@@ -1265,7 +1263,7 @@ static PyObject *M_Geometry_tessellate_polygon(PyObject *UNUSED(self), PyObject 
 		BKE_displist_fill(&dispbase, &dispbase, NULL, false);
 
 		/* The faces are stored in a new DisplayList
-		 * thats added to the head of the listbase */
+		 * that's added to the head of the listbase */
 		dl = dispbase.first;
 
 		tri_list = PyList_New(dl->parts);
@@ -1516,7 +1514,7 @@ static PyMethodDef M_Geometry_methods[] = {
 	{"box_fit_2d", (PyCFunction) M_Geometry_box_fit_2d, METH_O, M_Geometry_box_fit_2d_doc},
 	{"box_pack_2d", (PyCFunction) M_Geometry_box_pack_2d, METH_O, M_Geometry_box_pack_2d_doc},
 #endif
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static struct PyModuleDef M_Geometry_module_def = {

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,40 +15,34 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * Contributor(s): Joshua Leung (full recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_FCURVE_H__
 #define __BKE_FCURVE_H__
 
-/** \file BKE_fcurve.h
- *  \ingroup bke
- *  \author Joshua Leung
- *  \since 2009
+/** \file
+ * \ingroup bke
  */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+struct ChannelDriver;
+struct DriverTarget;
+struct DriverVar;
+struct FCM_EnvelopeData;
 struct FCurve;
 struct FModifier;
-struct ChannelDriver;
-struct DriverVar;
-struct DriverTarget;
-struct FCM_EnvelopeData;
 
-struct bContext;
 struct AnimData;
-struct bAction;
 struct BezTriple;
-struct StructRNA;
 struct PathResolvedRNA;
 struct PointerRNA;
 struct PropertyRNA;
+struct StructRNA;
+struct bAction;
+struct bContext;
 
 #include "DNA_curve_types.h"
 
@@ -66,28 +58,28 @@ void bezt_add_to_cfra_elem(ListBase *lb, struct BezTriple *bezt);
 
 /* ************** F-Curve Drivers ***************** */
 
-/* With these iterators for convenience, the variables "tarIndex" and "dtar" can be 
+/* With these iterators for convenience, the variables "tarIndex" and "dtar" can be
  * accessed directly from the code using them, but it is not recommended that their
  * values be changed to point at other slots...
  */
 
 /* convenience looper over ALL driver targets for a given variable (even the unused ones) */
-#define DRIVER_TARGETS_LOOPER(dvar) \
+#define DRIVER_TARGETS_LOOPER_BEGIN(dvar) \
 	{ \
 		DriverTarget *dtar = &dvar->targets[0]; \
 		int tarIndex = 0; \
 		for (; tarIndex < MAX_DRIVER_TARGETS; tarIndex++, dtar++)
-		 
+
 /* convenience looper over USED driver targets only */
-#define DRIVER_TARGETS_USED_LOOPER(dvar) \
+#define DRIVER_TARGETS_USED_LOOPER_BEGIN(dvar) \
 	{ \
 		DriverTarget *dtar = &dvar->targets[0]; \
 		int tarIndex = 0; \
 		for (; tarIndex < dvar->num_targets; tarIndex++, dtar++)
-		
+
 /* tidy up for driver targets loopers */
 #define DRIVER_TARGETS_LOOPER_END \
-}
+} ((void)0)
 
 /* ---------------------- */
 
@@ -108,7 +100,11 @@ bool  driver_get_variable_property(
         struct ChannelDriver *driver, struct DriverTarget *dtar,
         struct PointerRNA *r_ptr, struct PropertyRNA **r_prop, int *r_index);
 
-float evaluate_driver(struct PathResolvedRNA *anim_rna, struct ChannelDriver *driver, const float evaltime);
+bool BKE_driver_has_simple_expression(struct ChannelDriver *driver);
+void BKE_driver_invalidate_expression(struct ChannelDriver *driver, bool expr_changed, bool varname_changed);
+
+float evaluate_driver(struct PathResolvedRNA *anim_rna, struct ChannelDriver *driver,
+                      struct ChannelDriver *driver_orig, const float evaltime);
 
 /* ************** F-Curve Modifiers *************** */
 
@@ -122,8 +118,8 @@ typedef struct GHash FModifierStackStorage;
  *  as some constraints don't define some of these.
  *
  *  Warning: it is not too advisable to reorder order of members of this struct,
- *			as you'll have to edit quite a few ($FMODIFIER_NUM_TYPES) of these
- *			structs.
+ *           as you'll have to edit quite a few ($FMODIFIER_NUM_TYPES) of these
+ *           structs.
  */
 typedef struct FModifierTypeInfo {
 	/* admin/ident */
@@ -133,7 +129,7 @@ typedef struct FModifierTypeInfo {
 	short requires;         /* eFMI_Requirement_Flags */
 	char  name[64];          /* name of modifier in interface */
 	char  structName[64];    /* name of struct for SDNA */
-	
+
 	/* data management function pointers - special handling */
 	/* free any data that is allocated separately (optional) */
 	void (*free_data)(struct FModifier *fcm);
@@ -143,7 +139,7 @@ typedef struct FModifierTypeInfo {
 	void (*new_data)(void *mdata);
 	/* verifies that the modifier settings are valid */
 	void (*verify_data)(struct FModifier *fcm);
-	
+
 	/* evaluation */
 	/* evaluate time that the modifier requires the F-Curve to be evaluated at */
 	float (*evaluate_modifier_time)(struct FCurve *fcu, struct FModifier *fcm, float cvalue, float evaltime);
@@ -164,7 +160,7 @@ typedef enum eFMI_Action_Types {
 	/* modifier only modifies the values of points (but times stay the same) */
 	FMI_TYPE_REPLACE_VALUES,
 	/* modifier generates a curve regardless of what came before */
-	FMI_TYPE_GENERATE_CURVE
+	FMI_TYPE_GENERATE_CURVE,
 } eFMI_Action_Types;
 
 /* Flags for the requirements of a FModifier Type */
@@ -179,7 +175,7 @@ typedef enum eFMI_Requirement_Flags {
 	FMI_REQUIRES_RUNTIME_CHECK      = (1 << 2),
 
 	/* Requires to store data shared between time and valua evaluation */
-	FMI_REQUIRES_STORAGE            = (1 << 3)
+	FMI_REQUIRES_STORAGE            = (1 << 3),
 } eFMI_Requirement_Flags;
 
 /* Function Prototypes for FModifierTypeInfo's */
@@ -229,8 +225,8 @@ struct FCurve *iter_step_fcurve(struct FCurve *fcu_iter, const char rna_path[]);
 /* high level function to get an fcurve from C without having the rna */
 struct FCurve *id_data_find_fcurve(ID *id, void *data, struct StructRNA *type, const char *prop_name, int index, bool *r_driven);
 
-/* Get list of LinkData's containing pointers to the F-Curves which control the types of data indicated 
- *	e.g.  numMatches = list_find_data_fcurves(matches, &act->curves, "pose.bones[", "MyFancyBone");
+/* Get list of LinkData's containing pointers to the F-Curves which control the types of data indicated
+ * e.g.  numMatches = list_find_data_fcurves(matches, &act->curves, "pose.bones[", "MyFancyBone");
  */
 int list_find_data_fcurves(ListBase *dst, ListBase *src, const char *dataPrefix, const char *dataName);
 
@@ -269,6 +265,17 @@ bool BKE_fcurve_is_protected(struct FCurve *fcu);
 /* The curve is an infinite cycle via Cycles modifier */
 bool BKE_fcurve_is_cyclic(struct FCurve *fcu);
 
+/* Type of infinite cycle for a curve. */
+typedef enum eFCU_Cycle_Type {
+	FCU_CYCLE_NONE = 0,
+	/* The cycle repeats identically to the base range. */
+	FCU_CYCLE_PERFECT,
+	/* The cycle accumulates the change between start and end keys. */
+	FCU_CYCLE_OFFSET,
+} eFCU_Cycle_Type;
+
+eFCU_Cycle_Type BKE_fcurve_get_cycle_type(struct FCurve *fcu);
+
 /* -------- Curve Sanity --------  */
 
 void calchandles_fcurve(struct FCurve *fcu);
@@ -282,7 +289,9 @@ void correct_bezpart(float v1[2], float v2[2], float v3[2], float v4[2]);
 
 /* evaluate fcurve */
 float evaluate_fcurve(struct FCurve *fcu, float evaltime);
-float evaluate_fcurve_driver(struct PathResolvedRNA *anim_rna, struct FCurve *fcu, float evaltime);
+float evaluate_fcurve_only_curve(struct FCurve *fcu, float evaltime);
+float evaluate_fcurve_driver(struct PathResolvedRNA *anim_rna, struct FCurve *fcu,
+                             struct ChannelDriver *driver_orig, float evaltime);
 /* evaluate fcurve and store value */
 float calculate_fcurve(struct PathResolvedRNA *anim_rna, struct FCurve *fcu, float evaltime);
 
@@ -290,9 +299,9 @@ float calculate_fcurve(struct PathResolvedRNA *anim_rna, struct FCurve *fcu, flo
 
 /* -------- Defines --------  */
 
-/* Basic signature for F-Curve sample-creation function 
- *	- fcu: the F-Curve being operated on
- *	- data: pointer to some specific data that may be used by one of the callbacks
+/* Basic signature for F-Curve sample-creation function
+ * - fcu: the F-Curve being operated on
+ * - data: pointer to some specific data that may be used by one of the callbacks
  */
 typedef float (*FcuSampleFunc)(struct FCurve *fcu, void *data, float evaltime);
 
@@ -303,7 +312,7 @@ float fcurve_samplingcb_evalcurve(struct FCurve *fcu, void *data, float evaltime
 
 /* -------- Main Methods --------  */
 
-/* Main API function for creating a set of sampled curve data, given some callback function 
+/* Main API function for creating a set of sampled curve data, given some callback function
  * used to retrieve the values to store.
  */
 void fcurve_store_samples(struct FCurve *fcu, void *data, int start, int end, FcuSampleFunc sample_cb);

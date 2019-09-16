@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * allocimbuf.c
- *
  */
 
-/** \file blender/imbuf/intern/divers.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 #include "BLI_math.h"
@@ -44,62 +35,6 @@
 
 
 #include "MEM_guardedalloc.h"
-
-/**************************** Interlace/Deinterlace **************************/
-
-void IMB_de_interlace(ImBuf *ibuf)
-{
-	ImBuf *tbuf1, *tbuf2;
-	
-	if (ibuf == NULL) return;
-	if (ibuf->flags & IB_fields) return;
-	ibuf->flags |= IB_fields;
-	
-	if (ibuf->rect) {
-		/* make copies */
-		tbuf1 = IMB_allocImBuf(ibuf->x, ibuf->y / 2, 32, IB_rect);
-		tbuf2 = IMB_allocImBuf(ibuf->x, ibuf->y / 2, 32, IB_rect);
-		
-		ibuf->x *= 2;
-		IMB_rectcpy(tbuf1, ibuf, 0, 0, 0, 0, ibuf->x, ibuf->y);
-		IMB_rectcpy(tbuf2, ibuf, 0, 0, tbuf2->x, 0, ibuf->x, ibuf->y);
-	
-		ibuf->x /= 2;
-		IMB_rectcpy(ibuf, tbuf1, 0, 0, 0, 0, tbuf1->x, tbuf1->y);
-		IMB_rectcpy(ibuf, tbuf2, 0, tbuf2->y, 0, 0, tbuf2->x, tbuf2->y);
-		
-		IMB_freeImBuf(tbuf1);
-		IMB_freeImBuf(tbuf2);
-	}
-	ibuf->y /= 2;
-}
-
-void IMB_interlace(ImBuf *ibuf)
-{
-	ImBuf *tbuf1, *tbuf2;
-
-	if (ibuf == NULL) return;
-	ibuf->flags &= ~IB_fields;
-
-	ibuf->y *= 2;
-
-	if (ibuf->rect) {
-		/* make copies */
-		tbuf1 = IMB_allocImBuf(ibuf->x, ibuf->y / 2, 32, IB_rect);
-		tbuf2 = IMB_allocImBuf(ibuf->x, ibuf->y / 2, 32, IB_rect);
-
-		IMB_rectcpy(tbuf1, ibuf, 0, 0, 0, 0, ibuf->x, ibuf->y);
-		IMB_rectcpy(tbuf2, ibuf, 0, 0, 0, tbuf2->y, ibuf->x, ibuf->y);
-
-		ibuf->x *= 2;
-		IMB_rectcpy(ibuf, tbuf1, 0, 0, 0, 0, tbuf1->x, tbuf1->y);
-		IMB_rectcpy(ibuf, tbuf2, tbuf2->x, 0, 0, 0, tbuf2->x, tbuf2->y);
-		ibuf->x /= 2;
-
-		IMB_freeImBuf(tbuf1);
-		IMB_freeImBuf(tbuf2);
-	}
-}
 
 /************************* Floyd-Steinberg dithering *************************/
 
@@ -127,15 +62,15 @@ static void clear_dither_context(DitherContext *di)
 
 MINLINE void ushort_to_byte_v4(uchar b[4], const unsigned short us[4])
 {
-	b[0] = USHORTTOUCHAR(us[0]);
-	b[1] = USHORTTOUCHAR(us[1]);
-	b[2] = USHORTTOUCHAR(us[2]);
-	b[3] = USHORTTOUCHAR(us[3]);
+	b[0] = unit_ushort_to_uchar(us[0]);
+	b[1] = unit_ushort_to_uchar(us[1]);
+	b[2] = unit_ushort_to_uchar(us[2]);
+	b[3] = unit_ushort_to_uchar(us[3]);
 }
 
 MINLINE unsigned char ftochar(float value)
 {
-	return FTOCHAR(value);
+	return unit_float_to_uchar_clamp(value);
 }
 
 MINLINE void ushort_to_byte_dither_v4(uchar b[4], const unsigned short us[4], DitherContext *di, float s, float t)
@@ -146,7 +81,7 @@ MINLINE void ushort_to_byte_dither_v4(uchar b[4], const unsigned short us[4], Di
 	b[0] = ftochar(dither_value + USHORTTOFLOAT(us[0]));
 	b[1] = ftochar(dither_value + USHORTTOFLOAT(us[1]));
 	b[2] = ftochar(dither_value + USHORTTOFLOAT(us[2]));
-	b[3] = USHORTTOUCHAR(us[3]);
+	b[3] = unit_ushort_to_uchar(us[3]);
 
 #undef USHORTTOFLOAT
 }
@@ -158,7 +93,7 @@ MINLINE void float_to_byte_dither_v4(uchar b[4], const float f[4], DitherContext
 	b[0] = ftochar(dither_value + f[0]);
 	b[1] = ftochar(dither_value + f[1]);
 	b[2] = ftochar(dither_value + f[2]);
-	b[3] = FTOCHAR(f[3]);
+	b[3] = unit_float_to_uchar_clamp(f[3]);
 }
 
 /* float to byte pixels, output 4-channel RGBA */
@@ -188,7 +123,7 @@ void IMB_buffer_byte_from_float(uchar *rect_to, const float *rect_from,
 			uchar *to = rect_to + ((size_t)stride_to) * y * 4;
 
 			for (x = 0; x < width; x++, from++, to += 4)
-				to[0] = to[1] = to[2] = to[3] = FTOCHAR(from[0]);
+				to[0] = to[1] = to[2] = to[3] = unit_float_to_uchar_clamp(from[0]);
 		}
 		else if (channels_from == 3) {
 			/* RGB input */
@@ -339,7 +274,7 @@ void IMB_buffer_byte_from_float_mask(uchar *rect_to, const float *rect_from,
 
 			for (x = 0; x < width; x++, from++, to += 4)
 				if (*mask++ == FILTER_MASK_USED)
-					to[0] = to[1] = to[2] = to[3] = FTOCHAR(from[0]);
+					to[0] = to[1] = to[2] = to[3] = unit_float_to_uchar_clamp(from[0]);
 		}
 		else if (channels_from == 3) {
 			/* RGB input */

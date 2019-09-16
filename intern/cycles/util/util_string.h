@@ -29,6 +29,7 @@ using std::string;
 using std::stringstream;
 using std::ostringstream;
 using std::istringstream;
+using std::to_string;
 
 #ifdef __GNUC__
 #define PRINTF_ATTRIBUTE __attribute__((format(printf, 1, 2)))
@@ -49,6 +50,7 @@ bool string_endswith(const string& s, const char *end);
 string string_strip(const string& s);
 string string_remove_trademark(const string& s);
 string string_from_bool(const bool var);
+string to_string(const char *str);
 
 /* Wide char strings are only used on Windows to deal with non-ascii
  * characters in file names and such. No reason to use such strings
@@ -56,7 +58,6 @@ string string_from_bool(const bool var);
  *
  * Please note that strings are expected to be in UTF-8 codepage, and
  * if ANSI is needed then explicit conversion required.
- *
  */
 #ifdef _WIN32
 using std::wstring;
@@ -72,5 +73,4 @@ string string_human_readable_number(size_t num);
 
 CCL_NAMESPACE_END
 
-#endif /* __UTIL_STRING_H__ */
-
+#endif  /* __UTIL_STRING_H__ */

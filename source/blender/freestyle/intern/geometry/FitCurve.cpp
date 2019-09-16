@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,16 +12,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/geometry/FitCurve.cpp
- *  \ingroup freestyle
- *  \brief An Algorithm for Automatically Fitting Digitized Curves by Philip J. Schneider,
- *  \brief from "Graphics Gems", Academic Press, 1990
- *  \author Stephane Grabli
- *  \date 06/06/2003
+/** \file
+ * \ingroup freestyle
+ * \brief An Algorithm for Automatically Fitting Digitized Curves by Philip J. Schneider,
+ * \brief from "Graphics Gems", Academic Press, 1990
  */
 
 #include <cstdlib> // for malloc and free
@@ -61,7 +55,7 @@ static double V2SquaredLength(Vector2 *a)
 }
 
 /* returns length of input vector */
-static double V2Length(Vector2 *a) 
+static double V2Length(Vector2 *a)
 {
 	return (sqrt(V2SquaredLength(a)));
 }
@@ -96,7 +90,7 @@ static Vector2 *V2Add(Vector2 *a, Vector2 *b, Vector2 *c)
 	(*c)[0] = (*a)[0] + (*b)[0];
 	(*c)[1] = (*a)[1] + (*b)[1];
 	return c;
-} 
+}
 
 /* normalizes the input vector and returns it */
 static Vector2 *V2Normalize(Vector2 *v)

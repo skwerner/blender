@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,16 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Brecht Van Lommel
- *                 Campbell Barton
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file guardedalloc/intern/mallocn.c
- *  \ingroup MEM
+/** \file
+ * \ingroup MEM
  *
  * Guarded memory allocation, and boundary-write detection.
  */
@@ -36,6 +28,13 @@
 #include <assert.h>
 
 #include "mallocn_intern.h"
+
+#ifdef WITH_JEMALLOC_CONF
+/* If jemalloc is used, it reads this global variable and enables background
+ * threads to purge dirty pages. Otherwise we release memory too slowly or not
+ * at all if the thread that did the allocation stays inactive. */
+const char *malloc_conf = "background_thread:true,dirty_decay_ms:4000";
+#endif
 
 size_t (*MEM_allocN_len)(const void *vmemh) = MEM_lockfree_allocN_len;
 void (*MEM_freeN)(void *vmemh) = MEM_lockfree_freeN;
@@ -53,7 +52,7 @@ void (*MEM_printmemlist)(void) = MEM_lockfree_printmemlist;
 void (*MEM_callbackmemlist)(void (*func)(void *)) = MEM_lockfree_callbackmemlist;
 void (*MEM_printmemlist_stats)(void) = MEM_lockfree_printmemlist_stats;
 void (*MEM_set_error_callback)(void (*func)(const char *)) = MEM_lockfree_set_error_callback;
-bool (*MEM_check_memory_integrity)(void) = MEM_lockfree_check_memory_integrity;
+bool (*MEM_consistency_check)(void) = MEM_lockfree_consistency_check;
 void (*MEM_set_lock_callback)(void (*lock)(void), void (*unlock)(void)) = MEM_lockfree_set_lock_callback;
 void (*MEM_set_memory_debug)(void) = MEM_lockfree_set_memory_debug;
 size_t (*MEM_get_memory_in_use)(void) = MEM_lockfree_get_memory_in_use;
@@ -119,7 +118,7 @@ void MEM_use_guarded_allocator(void)
 	MEM_callbackmemlist = MEM_guarded_callbackmemlist;
 	MEM_printmemlist_stats = MEM_guarded_printmemlist_stats;
 	MEM_set_error_callback = MEM_guarded_set_error_callback;
-	MEM_check_memory_integrity = MEM_guarded_check_memory_integrity;
+	MEM_consistency_check = MEM_guarded_consistency_check;
 	MEM_set_lock_callback = MEM_guarded_set_lock_callback;
 	MEM_set_memory_debug = MEM_guarded_set_memory_debug;
 	MEM_get_memory_in_use = MEM_guarded_get_memory_in_use;

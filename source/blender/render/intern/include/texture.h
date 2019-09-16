@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/render/intern/include/texture.h
- *  \ingroup render
+/** \file
+ * \ingroup render
  */
 
 
@@ -63,28 +55,11 @@
 		}                                                                     \
 	}                                                                         \
 
-struct HaloRen;
-struct ShadeInput;
-struct TexResult;
-struct Tex;
-struct Image;
 struct ImBuf;
+struct Image;
 struct ImagePool;
-
-/* texture.h */
-
-void do_halo_tex(struct HaloRen *har, float xn, float yn, float col_r[4]);
-void do_sky_tex(
-        const float rco[3], const float view[3], const float lo[3], const float dxyview[2],
-        float hor[3], float zen[3], float *blend, int skyflag, short thread);
-void do_material_tex(struct ShadeInput *shi, struct Render *re);
-void do_lamp_tex(LampRen *la, const float lavec[3], struct ShadeInput *shi, float col_r[3], int effect);
-void do_volume_tex(struct ShadeInput *shi, const float xyz[3], int mapto_flag, float col_r[3], float *val, struct Render *re);
-
-void init_render_textures(Render *re);
-void end_render_textures(Render *re);
-
-void render_realtime_texture(struct ShadeInput *shi, struct Image *ima);
+struct Tex;
+struct TexResult;
 
 /* imagetexture.h */
 
@@ -93,4 +68,3 @@ int imagewrap(struct Tex *tex, struct Image *ima, struct ImBuf *ibuf, const floa
 void image_sample(struct Image *ima, float fx, float fy, float dx, float dy, float result[4], struct ImagePool *pool);
 
 #endif /* __TEXTURE_H__ */
-

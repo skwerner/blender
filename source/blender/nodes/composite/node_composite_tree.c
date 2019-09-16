@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s):
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/composite/node_composite_tree.c
- *  \ingroup nodes
+/** \file
+ * \ingroup nodes
  */
 
 
@@ -59,7 +51,7 @@
 static void composite_get_from_context(const bContext *C, bNodeTreeType *UNUSED(treetype), bNodeTree **r_ntree, ID **r_id, ID **r_from)
 {
 	Scene *scene = CTX_data_scene(C);
-	
+
 	*r_from = NULL;
 	*r_id = &scene->id;
 	*r_ntree = scene->nodetree;
@@ -83,7 +75,7 @@ static void foreach_nodeclass(Scene *UNUSED(scene), void *calldata, bNodeClassCa
 static void free_node_cache(bNodeTree *UNUSED(ntree), bNode *node)
 {
 	bNodeSocket *sock;
-	
+
 	for (sock = node->outputs.first; sock; sock = sock->next) {
 		if (sock->cache) {
 			sock->cache = NULL;
@@ -103,15 +95,15 @@ static void localize(bNodeTree *UNUSED(localtree), bNodeTree *ntree)
 {
 	bNode *node;
 	bNodeSocket *sock;
-	
+
 	for (node = ntree->nodes.first; node; node = node->next) {
 		/* ensure new user input gets handled ok */
 		node->need_exec = 0;
 		node->new_node->original = node;
-		
+
 		/* move over the compbufs */
 		/* right after ntreeCopyTree() oldsock pointers are valid */
-		
+
 		if (ELEM(node->type, CMP_NODE_VIEWER, CMP_NODE_SPLITVIEWER)) {
 			if (node->id) {
 				if (node->flag & NODE_DO_OUTPUT)
@@ -120,7 +112,7 @@ static void localize(bNodeTree *UNUSED(localtree), bNodeTree *ntree)
 					node->new_node->id = NULL;
 			}
 		}
-		
+
 		for (sock = node->outputs.first; sock; sock = sock->next) {
 			sock->new_sock->cache = sock->cache;
 			sock->cache = NULL;
@@ -134,20 +126,20 @@ static void local_sync(bNodeTree *localtree, bNodeTree *ntree)
 	BKE_node_preview_sync_tree(ntree, localtree);
 }
 
-static void local_merge(bNodeTree *localtree, bNodeTree *ntree)
+static void local_merge(Main *bmain, bNodeTree *localtree, bNodeTree *ntree)
 {
 	bNode *lnode;
 	bNodeSocket *lsock;
-	
+
 	/* move over the compbufs and previews */
 	BKE_node_preview_merge_tree(ntree, localtree, true);
-	
+
 	for (lnode = localtree->nodes.first; lnode; lnode = lnode->next) {
 		if (ntreeNodeExists(ntree, lnode->new_node)) {
 			if (ELEM(lnode->type, CMP_NODE_VIEWER, CMP_NODE_SPLITVIEWER)) {
 				if (lnode->id && (lnode->flag & NODE_DO_OUTPUT)) {
 					/* image_merge does sanity check for pointers */
-					BKE_image_merge((Image *)lnode->new_node->id, (Image *)lnode->id);
+					BKE_image_merge(bmain, (Image *)lnode->new_node->id, (Image *)lnode->id);
 				}
 			}
 			else if (lnode->type == CMP_NODE_MOVIEDISTORTION) {
@@ -161,7 +153,7 @@ static void local_merge(bNodeTree *localtree, bNodeTree *ntree)
 					lnode->new_node->storage = BKE_tracking_distortion_copy(lnode->storage);
 				}
 			}
-			
+
 			for (lsock = lnode->outputs.first; lsock; lsock = lsock->next) {
 				if (ntreeOutputExists(lnode->new_node, lsock->new_sock)) {
 					lsock->new_sock->cache = lsock->cache;
@@ -176,9 +168,9 @@ static void local_merge(bNodeTree *localtree, bNodeTree *ntree)
 static void update(bNodeTree *ntree)
 {
 	ntreeSetOutput(ntree);
-	
+
 	ntree_update_reroute_nodes(ntree);
-	
+
 	if (ntree->update & NTREE_UPDATE_NODES) {
 		/* clean up preview cache, in case nodes have been removed */
 		BKE_node_preview_remove_unused(ntree);
@@ -187,12 +179,12 @@ static void update(bNodeTree *ntree)
 
 static void composite_node_add_init(bNodeTree *UNUSED(bnodetree), bNode *bnode)
 {
-	/* Composite node will only show previews for input classes 
-	 * by default, other will be hidden 
+	/* Composite node will only show previews for input classes
+	 * by default, other will be hidden
 	 * but can be made visible with the show_preview option */
 	if (bnode->typeinfo->nclass != NODE_CLASS_INPUT) {
 		bnode->flag &= ~NODE_PREVIEW;
-	}	
+	}
 }
 
 bNodeTreeType *ntreeType_Composite;
@@ -200,13 +192,13 @@ bNodeTreeType *ntreeType_Composite;
 void register_node_tree_type_cmp(void)
 {
 	bNodeTreeType *tt = ntreeType_Composite = MEM_callocN(sizeof(bNodeTreeType), "compositor node tree type");
-	
+
 	tt->type = NTREE_COMPOSIT;
 	strcpy(tt->idname, "CompositorNodeTree");
-	strcpy(tt->ui_name, "Compositing");
+	strcpy(tt->ui_name, N_("Compositor"));
 	tt->ui_icon = 0;    /* defined in drawnode.c */
-	strcpy(tt->ui_description, "Compositing nodes");
-	
+	strcpy(tt->ui_description, N_("Compositing nodes"));
+
 	tt->free_cache = free_cache;
 	tt->free_node_cache = free_node_cache;
 	tt->foreach_nodeclass = foreach_nodeclass;
@@ -216,12 +208,13 @@ void register_node_tree_type_cmp(void)
 	tt->update = update;
 	tt->get_from_context = composite_get_from_context;
 	tt->node_add_init = composite_node_add_init;
-	
+
 	tt->ext.srna = &RNA_CompositorNodeTree;
-	
+
 	ntreeTypeAdd(tt);
 }
 
+extern void *COM_linker_hack;  /* Quiet warning. */
 void *COM_linker_hack = NULL;
 
 void ntreeCompositExecTree(Scene *scene, bNodeTree *ntree, RenderData *rd, int rendering, int do_preview,
@@ -261,7 +254,7 @@ void ntreeCompositUpdateRLayers(bNodeTree *ntree)
 
 }
 
-void ntreeCompositRegisterPass(bNodeTree *ntree, Scene *scene, SceneRenderLayer *srl, const char *name, int type)
+void ntreeCompositRegisterPass(bNodeTree *ntree, Scene *scene, ViewLayer *view_layer, const char *name, int type)
 {
 	bNode *node;
 
@@ -269,7 +262,7 @@ void ntreeCompositRegisterPass(bNodeTree *ntree, Scene *scene, SceneRenderLayer 
 
 	for (node = ntree->nodes.first; node; node = node->next) {
 		if (node->type == CMP_NODE_R_LAYERS)
-			node_cmp_rlayers_register_pass(ntree, node, scene, srl, name, type);
+			node_cmp_rlayers_register_pass(ntree, node, scene, view_layer, name, type);
 	}
 
 }
@@ -280,7 +273,10 @@ void ntreeCompositTagRender(Scene *curscene)
 {
 	Scene *sce;
 
-	for (sce = G.main->scene.first; sce; sce = sce->id.next) {
+	/* XXX Think using G_MAIN here is valid, since you want to update current file's scene nodes,
+	 * not the ones in temp main generated for rendering?
+	 * This is still rather weak though, ideally render struct would store own main AND original G_MAIN... */
+	for (sce = G_MAIN->scenes.first; sce; sce = sce->id.next) {
 		if (sce->nodetree) {
 			bNode *node;
 

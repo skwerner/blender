@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Nathan Letwory.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/collada/ExtraHandler.h
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #include <string>
@@ -50,31 +44,31 @@ public:
 
 	/** Handle the beginning of an element. */
 	bool elementBegin( const char* elementName, const char** attributes);
-	
+
 	/** Handle the end of an element. */
 	bool elementEnd(const char* elementName );
-	
+
 	/** Receive the data in text format. */
 	bool textData(const char* text, size_t textLength);
 
 	/** Method to ask, if the current callback handler want to read the data of the given extra element. */
-	bool parseElement ( 
-		const char* profileName, 
-		const unsigned long& elementHash, 
-		const COLLADAFW::UniqueId& uniqueId,
-		COLLADAFW::Object* object);
+	bool parseElement (
+	        const char* profileName,
+	        const unsigned long& elementHash,
+	        const COLLADAFW::UniqueId& uniqueId,
+	        COLLADAFW::Object* object);
 
 	/** For backwards compatibility with older OpenCollada, new version added object parameter */
-	bool parseElement ( 
-		const char* profileName, 
-		const unsigned long& elementHash, 
-		const COLLADAFW::UniqueId& uniqueId);
+	bool parseElement (
+	        const char* profileName,
+	        const unsigned long& elementHash,
+	        const COLLADAFW::UniqueId& uniqueId);
 private:
 	/** Disable default copy constructor. */
 	ExtraHandler(const ExtraHandler& pre);
 	/** Disable default assignment operator. */
 	const ExtraHandler& operator= ( const ExtraHandler& pre );
-	
+
 	/** Handle to DocumentImporter for interface to extra element data saving. */
 	DocumentImporter* dimp;
 	AnimationImporter* aimp;
@@ -83,4 +77,3 @@ private:
 	ExtraTags* currentExtraTags;
 	std::string currentElement;
 };
-

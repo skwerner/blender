@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Maarten Gribnau.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_WindowWin32.cpp
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  */
 
 #define _USE_MATH_DEFINES
@@ -47,11 +39,14 @@
 #include <Dwmapi.h>
 #endif
 
+#include <windowsx.h>
 #include <math.h>
 #include <string.h>
 #include <assert.h>
 
-
+#ifndef GET_POINTERID_WPARAM
+#define GET_POINTERID_WPARAM(wParam)                (LOWORD(wParam))
+#endif // GET_POINTERID_WPARAM
 
 const wchar_t *GHOST_WindowWin32::s_windowClassName = L"GHOST_WindowClass";
 const int GHOST_WindowWin32::s_maxTitleLength = 128;
@@ -87,19 +82,24 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
       m_nPressedButtons(0),
       m_customCursor(0),
       m_wantAlphaBackground(alphaBackground),
-      m_wintab(NULL),
-      m_tabletData(NULL),
-      m_tablet(0),
-      m_maxPressure(0),
       m_normal_state(GHOST_kWindowStateNormal),
-	  m_user32(NULL),
+      m_user32(NULL),
+      m_fpGetPointerInfo(NULL),
+      m_fpGetPointerPenInfo(NULL),
+      m_fpGetPointerTouchInfo(NULL),
       m_parentWindowHwnd(parentwindowhwnd),
       m_debug_context(is_debug)
 {
+	// Initialize tablet variables
+	memset(&m_wintab, 0, sizeof(m_wintab));
+	memset(&m_tabletData, 0, sizeof(m_tabletData));
+	m_tabletData.Active = GHOST_kTabletModeNone;
+
+	// Create window
 	if (state != GHOST_kWindowStateFullScreen) {
 		RECT rect;
 		MONITORINFO monitor;
-		GHOST_TUns32 tw, th; 
+		GHOST_TUns32 tw, th;
 
 #ifndef _MSC_VER
 		int cxsizeframe = GetSystemMetrics(SM_CXSIZEFRAME);
@@ -108,7 +108,7 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 		// MSVC 2012+ returns bogus values from GetSystemMetrics, bug in Windows
 		// http://connect.microsoft.com/VisualStudio/feedback/details/753224/regression-getsystemmetrics-delivers-different-values
 		RECT cxrect = {0, 0, 0, 0};
-		AdjustWindowRectEx(&cxrect, WS_POPUP | WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_THICKFRAME | WS_DLGFRAME, FALSE, 0);
+		AdjustWindowRectEx(&cxrect, WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_THICKFRAME | WS_DLGFRAME, FALSE, 0);
 
 		int cxsizeframe = abs(cxrect.bottom);
 		int cysizeframe = abs(cxrect.left);
@@ -158,7 +158,7 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 			width = rect.right - rect.left;
 			height = rect.bottom - rect.top;
 		}
-		
+
 		wchar_t *title_16 = alloc_utf16_from_8((char *)(const char *)title, 0);
 		m_hWnd = ::CreateWindowW(
 			s_windowClassName,          // pointer to registered class name
@@ -179,7 +179,7 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 		m_hWnd = ::CreateWindowW(
 		    s_windowClassName,          // pointer to registered class name
 		    title_16,                   // pointer to window name
-		    WS_POPUP | WS_MAXIMIZE,     // window style
+		    WS_MAXIMIZE,                // window style
 		    left,                       // horizontal position of window
 		    top,                        // vertical position of window
 		    width,                      // window width
@@ -190,7 +190,24 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 		    0);                         // pointer to window-creation data
 		free(title_16);
 	}
+
+	m_user32 = ::LoadLibrary("user32.dll");
+
 	if (m_hWnd) {
+		if (m_user32) {
+			// Touch enabled screens with pen support by default have gestures
+			// enabled, which results in a delay between the pointer down event
+			// and the first move when using the stylus. RegisterTouchWindow
+			// disables the new gesture architecture enabling the events to be
+			// sent immediately to the application rather than being absorbed by
+			// the gesture API.
+			GHOST_WIN32_RegisterTouchWindow pRegisterTouchWindow =
+				(GHOST_WIN32_RegisterTouchWindow)GetProcAddress(m_user32, "RegisterTouchWindow");
+			if (pRegisterTouchWindow) {
+				pRegisterTouchWindow(m_hWnd, 0);
+			}
+		}
+
 		// Register this window as a droptarget. Requires m_hWnd to be valid.
 		// Note that OleInitialize(0) has to be called prior to this. Done in GHOST_SystemWin32.
 		m_dropTarget = new GHOST_DropTargetWin32(this, m_system);
@@ -200,6 +217,11 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 
 		// Store a pointer to this class in the window structure
 		::SetWindowLongPtr(m_hWnd, GWLP_USERDATA, (LONG_PTR) this);
+
+		if (!m_system->m_windowFocus) {
+			// Lower to bottom and don't activate if we don't want focus
+			::SetWindowPos(m_hWnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+		}
 
 		// Store the device context
 		m_hDC = ::GetDC(m_hWnd);
@@ -214,18 +236,18 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 					nCmdShow = SW_SHOWMAXIMIZED;
 					break;
 				case GHOST_kWindowStateMinimized:
-					nCmdShow = SW_SHOWMINIMIZED;
+					nCmdShow = (m_system->m_windowFocus) ? SW_SHOWMINIMIZED : SW_SHOWMINNOACTIVE;
 					break;
 				case GHOST_kWindowStateNormal:
 				default:
-					nCmdShow = SW_SHOWNORMAL;
+					nCmdShow = (m_system->m_windowFocus) ? SW_SHOWNORMAL : SW_SHOWNOACTIVATE;
 					break;
 			}
 
 			::ShowWindow(m_hWnd, nCmdShow);
 #ifdef WIN32_COMPOSITING
 			if (alphaBackground && parentwindowhwnd == 0) {
-				
+
 				HRESULT hr = S_OK;
 
 				// Create and populate the Blur Behind structure
@@ -260,60 +282,70 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 		RegisterRawInputDevices(&device, 1, sizeof(device));
 	}
 
-	m_wintab = ::LoadLibrary("Wintab32.dll");
-	if (m_wintab) {
-		GHOST_WIN32_WTInfo fpWTInfo = (GHOST_WIN32_WTInfo) ::GetProcAddress(m_wintab, "WTInfoA");
-		GHOST_WIN32_WTOpen fpWTOpen = (GHOST_WIN32_WTOpen) ::GetProcAddress(m_wintab, "WTOpenA");
+	// Initialize Windows Ink
+	if (m_user32) {
+		m_fpGetPointerInfo = (GHOST_WIN32_GetPointerInfo) ::GetProcAddress(m_user32, "GetPointerInfo");
+		m_fpGetPointerPenInfo = (GHOST_WIN32_GetPointerPenInfo) ::GetProcAddress(m_user32, "GetPointerPenInfo");
+		m_fpGetPointerTouchInfo = (GHOST_WIN32_GetPointerTouchInfo) ::GetProcAddress(m_user32, "GetPointerTouchInfo");
+	}
 
-		// let's see if we can initialize tablet here
-		/* check if WinTab available. */
-		if (fpWTInfo && fpWTInfo(0, 0, NULL)) {
+	// Initialize Wintab
+	m_wintab.handle = ::LoadLibrary("Wintab32.dll");
+	if (m_wintab.handle) {
+		// Get API functions
+		m_wintab.info = (GHOST_WIN32_WTInfo) ::GetProcAddress(m_wintab.handle, "WTInfoA");
+		m_wintab.open = (GHOST_WIN32_WTOpen) ::GetProcAddress(m_wintab.handle, "WTOpenA");
+		m_wintab.close = (GHOST_WIN32_WTClose) ::GetProcAddress(m_wintab.handle, "WTClose");
+		m_wintab.packet = (GHOST_WIN32_WTPacket) ::GetProcAddress(m_wintab.handle, "WTPacket");
+		m_wintab.enable = (GHOST_WIN32_WTEnable) ::GetProcAddress(m_wintab.handle, "WTEnable");
+		m_wintab.overlap = (GHOST_WIN32_WTOverlap) ::GetProcAddress(m_wintab.handle, "WTOverlap");
+
+		// Let's see if we can initialize tablet here.
+		// Check if WinTab available by getting system context info.
+		LOGCONTEXT lc = { 0 };
+		lc.lcOptions |= CXO_SYSTEM;
+		if (m_wintab.open && m_wintab.info && m_wintab.info(WTI_DEFSYSCTX, 0, &lc)) {
 			// Now init the tablet
-			LOGCONTEXT lc;
 			/* The maximum tablet size, pressure and orientation (tilt) */
 			AXIS TabletX, TabletY, Pressure, Orientation[3];
 
 			// Open a Wintab context
 
-			// Get default context information
-			fpWTInfo(WTI_DEFCONTEXT, 0, &lc);
-
 			// Open the context
 			lc.lcPktData = PACKETDATA;
 			lc.lcPktMode = PACKETMODE;
-			lc.lcOptions |= CXO_MESSAGES | CXO_SYSTEM;
+			lc.lcOptions |= CXO_MESSAGES;
+			lc.lcMoveMask = PACKETDATA;
 
 			/* Set the entire tablet as active */
-			fpWTInfo(WTI_DEVICES, DVC_X, &TabletX);
-			fpWTInfo(WTI_DEVICES, DVC_Y, &TabletY);
+			m_wintab.info(WTI_DEVICES, DVC_X, &TabletX);
+			m_wintab.info(WTI_DEVICES, DVC_Y, &TabletY);
 
 			/* get the max pressure, to divide into a float */
-			BOOL pressureSupport = fpWTInfo(WTI_DEVICES, DVC_NPRESSURE, &Pressure);
+			BOOL pressureSupport = m_wintab.info(WTI_DEVICES, DVC_NPRESSURE, &Pressure);
 			if (pressureSupport)
-				m_maxPressure = Pressure.axMax;
+				m_wintab.maxPressure = Pressure.axMax;
 			else
-				m_maxPressure = 0;
+				m_wintab.maxPressure = 0;
 
 			/* get the max tilt axes, to divide into floats */
-			BOOL tiltSupport = fpWTInfo(WTI_DEVICES, DVC_ORIENTATION, &Orientation);
+			BOOL tiltSupport = m_wintab.info(WTI_DEVICES, DVC_ORIENTATION, &Orientation);
 			if (tiltSupport) {
 				/* does the tablet support azimuth ([0]) and altitude ([1]) */
 				if (Orientation[0].axResolution && Orientation[1].axResolution) {
 					/* all this assumes the minimum is 0 */
-					m_maxAzimuth = Orientation[0].axMax;
-					m_maxAltitude = Orientation[1].axMax;
+					m_wintab.maxAzimuth = Orientation[0].axMax;
+					m_wintab.maxAltitude = Orientation[1].axMax;
 				}
 				else {  /* no so dont do tilt stuff */
-					m_maxAzimuth = m_maxAltitude = 0;
+					m_wintab.maxAzimuth = m_wintab.maxAltitude = 0;
 				}
 			}
 
-			if (fpWTOpen) {
-				m_tablet = fpWTOpen(m_hWnd, &lc, TRUE);
-				if (m_tablet) {
-					m_tabletData = new GHOST_TabletData();
-					m_tabletData->Active = GHOST_kTabletModeNone;
-				}
+			// The Wintab spec says we must open the context disabled if we are using cursor masks.
+			m_wintab.tablet = m_wintab.open(m_hWnd, &lc, FALSE);
+			if (m_wintab.enable && m_wintab.tablet) {
+				m_wintab.enable(m_wintab.tablet, TRUE);
 			}
 		}
 	}
@@ -326,16 +358,24 @@ GHOST_WindowWin32::~GHOST_WindowWin32()
 	if (m_Bar) {
 		m_Bar->SetProgressState(m_hWnd, TBPF_NOPROGRESS);
 		m_Bar->Release();
+		m_Bar = NULL;
 	}
 
-	if (m_wintab) {
-		GHOST_WIN32_WTClose fpWTClose = (GHOST_WIN32_WTClose) ::GetProcAddress(m_wintab, "WTClose");
-		if (fpWTClose) {
-			if (m_tablet)
-				fpWTClose(m_tablet);
-			delete m_tabletData;
-			m_tabletData = NULL;
+	if (m_wintab.handle) {
+		if (m_wintab.close && m_wintab.tablet) {
+			m_wintab.close(m_wintab.tablet);
 		}
+
+		FreeLibrary(m_wintab.handle);
+		memset(&m_wintab, 0, sizeof(m_wintab));
+	}
+
+	if (m_user32) {
+		FreeLibrary(m_user32);
+		m_user32 = NULL;
+		m_fpGetPointerInfo = NULL;
+		m_fpGetPointerPenInfo = NULL;
+		m_fpGetPointerTouchInfo = NULL;
 	}
 
 	if (m_customCursor) {
@@ -345,6 +385,7 @@ GHOST_WindowWin32::~GHOST_WindowWin32()
 
 	if (m_hWnd != NULL && m_hDC != NULL && releaseNativeHandles()) {
 		::ReleaseDC(m_hWnd, m_hDC);
+		m_hDC = NULL;
 	}
 
 	if (m_hWnd) {
@@ -353,6 +394,7 @@ GHOST_WindowWin32::~GHOST_WindowWin32()
 			RevokeDragDrop(m_hWnd);
 			// Release our reference of the DropTarget and it will delete itself eventually.
 			m_dropTarget->Release();
+			m_dropTarget = NULL;
 		}
 		::SetWindowLongPtr(m_hWnd, GWLP_USERDATA, NULL);
 		::DestroyWindow(m_hWnd);
@@ -503,7 +545,7 @@ GHOST_TWindowState GHOST_WindowWin32::getState() const
 	}
 	else if (::IsZoomed(m_hWnd)) {
 		LONG_PTR result = ::GetWindowLongPtr(m_hWnd, GWL_STYLE);
-		if ((result & (WS_POPUP | WS_MAXIMIZE)) != (WS_POPUP | WS_MAXIMIZE))
+		if ((result & (WS_DLGFRAME | WS_MAXIMIZE)) == (WS_DLGFRAME | WS_MAXIMIZE))
 			state = GHOST_kWindowStateMaximized;
 		else
 			state = GHOST_kWindowStateFullScreen;
@@ -561,7 +603,7 @@ GHOST_TSuccess GHOST_WindowWin32::setState(GHOST_TWindowState state)
 			wp.showCmd = SW_SHOWMAXIMIZED;
 			wp.ptMaxPosition.x = 0;
 			wp.ptMaxPosition.y = 0;
-			::SetWindowLongPtr(m_hWnd, GWL_STYLE, WS_POPUP | WS_MAXIMIZE);
+			::SetWindowLongPtr(m_hWnd, GWL_STYLE, WS_MAXIMIZE);
 			break;
 		case GHOST_kWindowStateEmbedded:
 			::SetWindowLongPtr(m_hWnd, GWL_STYLE, WS_CHILD);
@@ -619,101 +661,80 @@ GHOST_TSuccess GHOST_WindowWin32::invalidate()
 GHOST_Context *GHOST_WindowWin32::newDrawingContext(GHOST_TDrawingContextType type)
 {
 	if (type == GHOST_kDrawingContextTypeOpenGL) {
-#if !defined(WITH_GL_EGL)
+		GHOST_Context *context;
 
 #if defined(WITH_GL_PROFILE_CORE)
-		GHOST_Context *context = new GHOST_ContextWGL(
-		        m_wantStereoVisual,
-		        m_wantAlphaBackground,
-		        m_wantNumOfAASamples,
-		        m_hWnd,
-		        m_hDC,
-		        WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-		        3, 2,
-		        GHOST_OPENGL_WGL_CONTEXT_FLAGS,
-		        GHOST_OPENGL_WGL_RESET_NOTIFICATION_STRATEGY);
-#elif defined(WITH_GL_PROFILE_ES20)
-		GHOST_Context *context = new GHOST_ContextWGL(
-		        m_wantStereoVisual,
-		        m_wantAlphaBackground,
-		        m_wantNumOfAASamples,
-		        m_hWnd,
-		        m_hDC,
-		        WGL_CONTEXT_ES2_PROFILE_BIT_EXT,
-		        2, 0,
-		        GHOST_OPENGL_WGL_CONTEXT_FLAGS,
-		        GHOST_OPENGL_WGL_RESET_NOTIFICATION_STRATEGY);
+		/* - AMD and Intel give us exactly this version
+		 * - NVIDIA gives at least this version <-- desired behavior
+		 * So we ask for 4.5, 4.4 ... 3.3 in descending order to get the best version on the user's system. */
+		for (int minor = 5; minor >= 0; --minor) {
+			context = new GHOST_ContextWGL(
+			    m_wantStereoVisual,
+			    m_wantAlphaBackground,
+			    m_wantNumOfAASamples,
+			    m_hWnd,
+			    m_hDC,
+			    WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+			    4, minor,
+			    (m_debug_context ? WGL_CONTEXT_DEBUG_BIT_ARB : 0),
+			    GHOST_OPENGL_WGL_RESET_NOTIFICATION_STRATEGY);
+
+			if (context->initializeDrawingContext()) {
+				return context;
+			}
+			else {
+				delete context;
+			}
+		}
+		context = new GHOST_ContextWGL(
+		    m_wantStereoVisual,
+		    m_wantAlphaBackground,
+		    m_wantNumOfAASamples,
+		    m_hWnd,
+		    m_hDC,
+		    WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+		    3, 3,
+		    (m_debug_context ? WGL_CONTEXT_DEBUG_BIT_ARB : 0),
+		    GHOST_OPENGL_WGL_RESET_NOTIFICATION_STRATEGY);
+
+		if (context->initializeDrawingContext()) {
+			return context;
+		}
+		else {
+			MessageBox(
+			        m_hWnd,
+			        "A graphics card and driver with support for OpenGL 3.3 or higher is required.\n"
+			        "Installing the latest driver for your graphics card may resolve the issue.\n\n"
+			        "The program will now close.",
+			        "Blender - Unsupported Graphics Card or Driver",
+			        MB_OK | MB_ICONERROR);
+			delete context;
+			exit(0);
+		}
+
 #elif defined(WITH_GL_PROFILE_COMPAT)
-		GHOST_Context *context = new GHOST_ContextWGL(
+		// ask for 2.1 context, driver gives any GL version >= 2.1 (hopefully the latest compatibility profile)
+		// 2.1 ignores the profile bit & is incompatible with core profile
+		context = new GHOST_ContextWGL(
 		        m_wantStereoVisual,
 		        m_wantAlphaBackground,
 		        m_wantNumOfAASamples,
 		        m_hWnd,
 		        m_hDC,
-#if 1
-		        0, // profile bit
-		        2, 1, // GL version requested
-#else
-		        // switch to this for Blender 2.8 development
-		        WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
-		        3, 2,
-#endif
+		        0, // no profile bit
+		        2, 1,
 		        (m_debug_context ? WGL_CONTEXT_DEBUG_BIT_ARB : 0),
 		        GHOST_OPENGL_WGL_RESET_NOTIFICATION_STRATEGY);
-#else
-#  error
-#endif
 
-#else
-
-#if defined(WITH_GL_PROFILE_CORE)
-		GHOST_Context *context = new GHOST_ContextEGL(
-		        m_wantStereoVisual,
-		        m_wantNumOfAASamples,
-		        m_hWnd,
-		        m_hDC,
-		        EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
-		        3, 2,
-		        GHOST_OPENGL_EGL_CONTEXT_FLAGS,
-		        GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
-		        EGL_OPENGL_API);
-#elif defined(WITH_GL_PROFILE_ES20)
-		GHOST_Context *context = new GHOST_ContextEGL(
-		        m_wantStereoVisual,
-		        m_wantNumOfAASamples,
-		        m_hWnd,
-		        m_hDC,
-		        0, // profile bit
-		        2, 0,
-		        GHOST_OPENGL_EGL_CONTEXT_FLAGS,
-		        GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
-		        EGL_OPENGL_ES_API);
-#elif defined(WITH_GL_PROFILE_COMPAT)
-		GHOST_Context *context = new GHOST_ContextEGL(
-		        m_wantStereoVisual,
-		        m_wantNumOfAASamples,
-		        m_hWnd,
-		        m_hDC,
-#if 1
-		        0, // profile bit
-		        2, 1, // GL version requested
-#else
-		        // switch to this for Blender 2.8 development
-		        EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT,
-		        3, 2,
-#endif
-		        GHOST_OPENGL_EGL_CONTEXT_FLAGS,
-		        GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
-		        EGL_OPENGL_API);
-#else
-#  error
-#endif
-
-#endif
-		if (context->initializeDrawingContext())
+		if (context->initializeDrawingContext()) {
 			return context;
-		else
+		}
+		else {
 			delete context;
+		}
+#else
+#  error // must specify either core or compat at build time
+#endif
 	}
 
 	return NULL;
@@ -839,7 +860,7 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCursorGrab(GHOST_TGrabCursorMode mode
 		m_cursorGrabBounds.m_l = m_cursorGrabBounds.m_r = -1; /* disable */
 		registerMouseClickEvent(3);
 	}
-	
+
 	return GHOST_kSuccess;
 }
 
@@ -857,103 +878,224 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCursorShape(GHOST_TStandardCursor cur
 	return GHOST_kSuccess;
 }
 
-void GHOST_WindowWin32::processWin32TabletInitEvent()
+GHOST_TSuccess GHOST_WindowWin32::getPointerInfo(GHOST_PointerInfoWin32 *pointerInfo, WPARAM wParam, LPARAM lParam)
 {
-	if (m_wintab && m_tabletData) {
-		GHOST_WIN32_WTInfo fpWTInfo = (GHOST_WIN32_WTInfo) ::GetProcAddress(m_wintab, "WTInfoA");
+	ZeroMemory(pointerInfo, sizeof(GHOST_PointerInfoWin32));
 
-		// let's see if we can initialize tablet here
-		/* check if WinTab available. */
-		if (fpWTInfo) {
-			AXIS Pressure, Orientation[3]; /* The maximum tablet size */
+	// Obtain the basic information from the event
+	pointerInfo->pointerId = GET_POINTERID_WPARAM(wParam);
+	pointerInfo->isInContact = IS_POINTER_INCONTACT_WPARAM(wParam);
+	pointerInfo->isPrimary = IS_POINTER_PRIMARY_WPARAM(wParam);
 
-			BOOL pressureSupport = fpWTInfo(WTI_DEVICES, DVC_NPRESSURE, &Pressure);
-			if (pressureSupport)
-				m_maxPressure = Pressure.axMax;
-			else
-				m_maxPressure = 0;
+	// Obtain more accurate and predicted information from the Pointer API
+	POINTER_INFO pointerApiInfo;
+	if (!(m_fpGetPointerInfo && m_fpGetPointerInfo(pointerInfo->pointerId, &pointerApiInfo))) {
+		return GHOST_kFailure;
+	}
 
-			BOOL tiltSupport = fpWTInfo(WTI_DEVICES, DVC_ORIENTATION, &Orientation);
-			if (tiltSupport) {
-				/* does the tablet support azimuth ([0]) and altitude ([1]) */
-				if (Orientation[0].axResolution && Orientation[1].axResolution) {
-					m_maxAzimuth = Orientation[0].axMax;
-					m_maxAltitude = Orientation[1].axMax;
-				}
-				else {  /* no so dont do tilt stuff */
-					m_maxAzimuth = m_maxAltitude = 0;
-				}
-			}
+	pointerInfo->hasButtonMask = GHOST_kSuccess;
+	switch (pointerApiInfo.ButtonChangeType) {
+	case POINTER_CHANGE_FIRSTBUTTON_DOWN:
+	case POINTER_CHANGE_FIRSTBUTTON_UP:
+		pointerInfo->buttonMask = GHOST_kButtonMaskLeft;
+		break;
+	case POINTER_CHANGE_SECONDBUTTON_DOWN:
+	case POINTER_CHANGE_SECONDBUTTON_UP:
+		pointerInfo->buttonMask = GHOST_kButtonMaskRight;
+		break;
+	case POINTER_CHANGE_THIRDBUTTON_DOWN:
+	case POINTER_CHANGE_THIRDBUTTON_UP:
+		pointerInfo->buttonMask = GHOST_kButtonMaskMiddle;
+		break;
+	case POINTER_CHANGE_FOURTHBUTTON_DOWN:
+	case POINTER_CHANGE_FOURTHBUTTON_UP:
+		pointerInfo->buttonMask = GHOST_kButtonMaskButton4;
+		break;
+	case POINTER_CHANGE_FIFTHBUTTON_DOWN:
+	case POINTER_CHANGE_FIFTHBUTTON_UP:
+		pointerInfo->buttonMask = GHOST_kButtonMaskButton5;
+		break;
+	default:
+		pointerInfo->hasButtonMask = GHOST_kFailure;
+		break;
+	}
 
-			m_tabletData->Active = GHOST_kTabletModeNone;
+	pointerInfo->pixelLocation = pointerApiInfo.ptPixelLocation;
+	pointerInfo->tabletData.Active = GHOST_kTabletModeNone;
+	pointerInfo->tabletData.Pressure = 1.0f;
+	pointerInfo->tabletData.Xtilt = 0.0f;
+	pointerInfo->tabletData.Ytilt = 0.0f;
+
+	if (pointerApiInfo.pointerType != PT_PEN) {
+		return GHOST_kFailure;
+	}
+
+	POINTER_PEN_INFO pointerPenInfo;
+	if (m_fpGetPointerPenInfo && m_fpGetPointerPenInfo(pointerInfo->pointerId, &pointerPenInfo)) {
+		pointerInfo->tabletData.Active = GHOST_kTabletModeStylus;
+
+		if (pointerPenInfo.penMask & PEN_MASK_PRESSURE) {
+			pointerInfo->tabletData.Pressure = pointerPenInfo.pressure / 1024.0f;
+		}
+
+		if (pointerPenInfo.penFlags & PEN_FLAG_ERASER) {
+			pointerInfo->tabletData.Active = GHOST_kTabletModeEraser;
+		}
+
+		if (pointerPenInfo.penFlags & PEN_MASK_TILT_X) {
+			pointerInfo->tabletData.Xtilt = fmin(fabs(pointerPenInfo.tiltX / 90), 1.0f);
+		}
+
+		if (pointerPenInfo.penFlags & PEN_MASK_TILT_Y) {
+			pointerInfo->tabletData.Ytilt = fmin(fabs(pointerPenInfo.tiltY / 90), 1.0f);
+		}
+	}
+
+	return GHOST_kSuccess;
+}
+
+void GHOST_WindowWin32::setTabletData(GHOST_TabletData * pTabletData)
+{
+	if (pTabletData) {
+		m_tabletData = *pTabletData;
+	}
+	else {
+		m_tabletData.Active = GHOST_kTabletModeNone;
+		m_tabletData.Pressure = 1.0f;
+		m_tabletData.Xtilt = 0.0f;
+		m_tabletData.Ytilt = 0.0f;
+	}
+}
+
+void GHOST_WindowWin32::processWin32TabletActivateEvent(WORD state)
+{
+	if (!useTabletAPI(GHOST_kTabletWintab)) {
+		return;
+	}
+
+	if (m_wintab.enable && m_wintab.tablet) {
+		m_wintab.enable(m_wintab.tablet, state);
+
+		if (m_wintab.overlap && state) {
+			m_wintab.overlap(m_wintab.tablet, TRUE);
 		}
 	}
 }
 
+bool GHOST_WindowWin32::useTabletAPI(GHOST_TTabletAPI api) const
+{
+	if (m_system->getTabletAPI() == api) {
+		return true;
+	}
+	else if (m_system->getTabletAPI() == GHOST_kTabletAutomatic) {
+		if (m_wintab.tablet)
+			return api == GHOST_kTabletWintab;
+		else
+			return api == GHOST_kTabletNative;
+	}
+	else {
+		return false;
+	}
+}
+
+void GHOST_WindowWin32::processWin32TabletInitEvent()
+{
+	if (!useTabletAPI(GHOST_kTabletWintab)) {
+		return;
+	}
+
+	// Let's see if we can initialize tablet here
+	if (m_wintab.info && m_wintab.tablet) {
+		AXIS Pressure, Orientation[3]; /* The maximum tablet size */
+
+		BOOL pressureSupport = m_wintab.info(WTI_DEVICES, DVC_NPRESSURE, &Pressure);
+		if (pressureSupport)
+			m_wintab.maxPressure = Pressure.axMax;
+		else
+			m_wintab.maxPressure = 0;
+
+		BOOL tiltSupport = m_wintab.info(WTI_DEVICES, DVC_ORIENTATION, &Orientation);
+		if (tiltSupport) {
+			/* does the tablet support azimuth ([0]) and altitude ([1]) */
+			if (Orientation[0].axResolution && Orientation[1].axResolution) {
+				m_wintab.maxAzimuth = Orientation[0].axMax;
+				m_wintab.maxAltitude = Orientation[1].axMax;
+			}
+			else {  /* no so dont do tilt stuff */
+				m_wintab.maxAzimuth = m_wintab.maxAltitude = 0;
+			}
+		}
+
+		m_tabletData.Active = GHOST_kTabletModeNone;
+	}
+
+	m_tabletData.Active = GHOST_kTabletModeNone;
+}
+
 void GHOST_WindowWin32::processWin32TabletEvent(WPARAM wParam, LPARAM lParam)
 {
-	PACKET pkt;
-	if (m_wintab) {
-		GHOST_WIN32_WTPacket fpWTPacket = (GHOST_WIN32_WTPacket) ::GetProcAddress(m_wintab, "WTPacket");
-		if (fpWTPacket) {
-			if (fpWTPacket((HCTX)lParam, wParam, &pkt)) {
-				if (m_tabletData) {
-					switch (pkt.pkCursor % 3) { /* % 3 for multiple devices ("DualTrack") */
-						case 0:
-							m_tabletData->Active = GHOST_kTabletModeNone; /* puck - not yet supported */
-							break;
-						case 1:
-							m_tabletData->Active = GHOST_kTabletModeStylus; /* stylus */
-							break;
-						case 2:
-							m_tabletData->Active = GHOST_kTabletModeEraser; /* eraser */
-							break;
-					}
-					if (m_maxPressure > 0) {
-						m_tabletData->Pressure = (float)pkt.pkNormalPressure / (float)m_maxPressure;
-					}
-					else {
-						m_tabletData->Pressure = 1.0f;
-					}
+	if (!useTabletAPI(GHOST_kTabletWintab)) {
+		return;
+	}
 
-					if ((m_maxAzimuth > 0) && (m_maxAltitude > 0)) {
-						ORIENTATION ort = pkt.pkOrientation;
-						float vecLen;
-						float altRad, azmRad;   /* in radians */
+	if (m_wintab.packet && m_wintab.tablet) {
+		PACKET pkt;
+		if (m_wintab.packet((HCTX)lParam, wParam, &pkt)) {
+			switch (pkt.pkCursor % 3) { /* % 3 for multiple devices ("DualTrack") */
+				case 0:
+					m_tabletData.Active = GHOST_kTabletModeNone; /* puck - not yet supported */
+					break;
+				case 1:
+					m_tabletData.Active = GHOST_kTabletModeStylus; /* stylus */
+					break;
+				case 2:
+					m_tabletData.Active = GHOST_kTabletModeEraser; /* eraser */
+					break;
+			}
 
-						/*
-						 * from the wintab spec:
-						 * orAzimuth	Specifies the clockwise rotation of the
-						 * cursor about the z axis through a full circular range.
-						 *
-						 * orAltitude	Specifies the angle with the x-y plane
-						 * through a signed, semicircular range.  Positive values
-						 * specify an angle upward toward the positive z axis;
-						 * negative values specify an angle downward toward the negative z axis.
-						 *
-						 * wintab.h defines .orAltitude as a UINT but documents .orAltitude
-						 * as positive for upward angles and negative for downward angles.
-						 * WACOM uses negative altitude values to show that the pen is inverted;
-						 * therefore we cast .orAltitude as an (int) and then use the absolute value.
-						 */
+			if (m_wintab.maxPressure > 0) {
+				m_tabletData.Pressure = (float)pkt.pkNormalPressure / (float)m_wintab.maxPressure;
+			}
+			else {
+				m_tabletData.Pressure = 1.0f;
+			}
 
-						/* convert raw fixed point data to radians */
-						altRad = (float)((fabs((float)ort.orAltitude) / (float)m_maxAltitude) * M_PI / 2.0);
-						azmRad = (float)(((float)ort.orAzimuth / (float)m_maxAzimuth) * M_PI * 2.0);
+			if ((m_wintab.maxAzimuth > 0) && (m_wintab.maxAltitude > 0)) {
+				ORIENTATION ort = pkt.pkOrientation;
+				float vecLen;
+				float altRad, azmRad;   /* in radians */
 
-						/* find length of the stylus' projected vector on the XY plane */
-						vecLen = cos(altRad);
+				/*
+				 * from the wintab spec:
+				 * orAzimuth	Specifies the clockwise rotation of the
+				 * cursor about the z axis through a full circular range.
+				 *
+				 * orAltitude	Specifies the angle with the x-y plane
+				 * through a signed, semicircular range.  Positive values
+				 * specify an angle upward toward the positive z axis;
+				 * negative values specify an angle downward toward the negative z axis.
+				 *
+				 * wintab.h defines .orAltitude as a UINT but documents .orAltitude
+				 * as positive for upward angles and negative for downward angles.
+				 * WACOM uses negative altitude values to show that the pen is inverted;
+				 * therefore we cast .orAltitude as an (int) and then use the absolute value.
+				 */
 
-						/* from there calculate X and Y components based on azimuth */
-						m_tabletData->Xtilt = sin(azmRad) * vecLen;
-						m_tabletData->Ytilt = (float)(sin(M_PI / 2.0 - azmRad) * vecLen);
+				/* convert raw fixed point data to radians */
+				altRad = (float)((fabs((float)ort.orAltitude) / (float)m_wintab.maxAltitude) * M_PI / 2.0);
+				azmRad = (float)(((float)ort.orAzimuth / (float)m_wintab.maxAzimuth) * M_PI * 2.0);
 
-					}
-					else {
-						m_tabletData->Xtilt = 0.0f;
-						m_tabletData->Ytilt = 0.0f;
-					}
-				}
+				/* find length of the stylus' projected vector on the XY plane */
+				vecLen = cos(altRad);
+
+				/* from there calculate X and Y components based on azimuth */
+				m_tabletData.Xtilt = sin(azmRad) * vecLen;
+				m_tabletData.Ytilt = (float)(sin(M_PI / 2.0 - azmRad) * vecLen);
+
+			}
+			else {
+				m_tabletData.Xtilt = 0.0f;
+				m_tabletData.Ytilt = 0.0f;
 			}
 		}
 	}
@@ -961,20 +1103,17 @@ void GHOST_WindowWin32::processWin32TabletEvent(WPARAM wParam, LPARAM lParam)
 
 void GHOST_WindowWin32::bringTabletContextToFront()
 {
-	if (m_wintab) {
-		GHOST_WIN32_WTOverlap fpWTOverlap = (GHOST_WIN32_WTOverlap) ::GetProcAddress(m_wintab, "WTOverlap");
-		if (fpWTOverlap) {
-			fpWTOverlap(m_tablet, TRUE);
-		}
+	if (!useTabletAPI(GHOST_kTabletWintab)) {
+		return;
+	}
+
+	if (m_wintab.overlap && m_wintab.tablet) {
+		m_wintab.overlap(m_wintab.tablet, TRUE);
 	}
 }
 
 GHOST_TUns16 GHOST_WindowWin32::getDPIHint()
 {
-	if (!m_user32) {
-		m_user32 = ::LoadLibrary("user32.dll");
-	}
-
 	if (m_user32) {
 		GHOST_WIN32_GetDpiForWindow fpGetDpiForWindow = (GHOST_WIN32_GetDpiForWindow) ::GetProcAddress(m_user32, "GetDpiForWindow");
 
@@ -1063,7 +1202,7 @@ GHOST_TSuccess GHOST_WindowWin32::setWindowCustomCursorShape(
 
 
 GHOST_TSuccess GHOST_WindowWin32::setProgressBar(float progress)
-{	
+{
 	/*SetProgressValue sets state to TBPF_NORMAL automaticly*/
 	if (m_Bar && S_OK == m_Bar->SetProgressValue(m_hWnd, 10000 * progress, 10000))
 		return GHOST_kSuccess;
@@ -1083,12 +1222,12 @@ GHOST_TSuccess GHOST_WindowWin32::endProgressBar()
 #ifdef WITH_INPUT_IME
 void GHOST_WindowWin32::beginIME(GHOST_TInt32 x, GHOST_TInt32 y, GHOST_TInt32 w, GHOST_TInt32 h, int completed)
 {
-	m_imeImput.BeginIME(m_hWnd, GHOST_Rect(x, y - h, x, y), (bool)completed);
+	m_imeInput.BeginIME(m_hWnd, GHOST_Rect(x, y - h, x, y), (bool)completed);
 }
 
 
 void GHOST_WindowWin32::endIME()
 {
-	m_imeImput.EndIME(m_hWnd);
+	m_imeInput.EndIME(m_hWnd);
 }
 #endif /* WITH_INPUT_IME */

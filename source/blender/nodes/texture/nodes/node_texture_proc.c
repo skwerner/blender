@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Robin Allen
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/texture/nodes/node_texture_proc.c
- *  \ingroup texnodes
+/** \file
+ * \ingroup texnodes
  */
 
 
@@ -35,7 +27,7 @@
 
 #include "RE_shader_ext.h"
 
-/* 
+/*
  * In this file: wrappers to use procedural textures as nodes
  */
 
@@ -61,19 +53,19 @@ static void do_proc(float *result, TexParams *p, const float col1[4], const floa
 {
 	TexResult texres;
 	int textype;
-	
+
 	if (is_normal) {
 		texres.nor = result;
 	}
 	else
 		texres.nor = NULL;
-	
+
 	textype = multitex_nodes(tex, p->co, p->dxt, p->dyt, p->osatex,
-	                         &texres, thread, 0, p->shi, p->mtex, NULL);
-	
+	                         &texres, thread, 0, p->mtex, NULL);
+
 	if (is_normal)
 		return;
-	
+
 	if (textype & TEX_RGB) {
 		copy_v4_v4(result, &texres.tr);
 	}
@@ -86,11 +78,11 @@ static void do_proc(float *result, TexParams *p, const float col1[4], const floa
 typedef void (*MapFn) (Tex *tex, bNodeStack **in, TexParams *p, const short thread);
 
 static void texfn(
-	float *result, 
+	float *result,
 	TexParams *p,
-	bNode *node, 
+	bNode *node,
 	bNodeStack **in,
-	char is_normal, 
+	char is_normal,
 	MapFn map_inputs,
 	short thread)
 {
@@ -98,9 +90,9 @@ static void texfn(
 	float col1[4], col2[4];
 	tex_input_rgba(col1, in[0], p, thread);
 	tex_input_rgba(col2, in[1], p, thread);
-	
+
 	map_inputs(&tex, in, p, thread);
-	
+
 	do_proc(result, p, col1, col2, is_normal, &tex, thread);
 }
 
@@ -144,10 +136,10 @@ static bNodeSocketTemplate voronoi_inputs[] = {
 	{ SOCK_FLOAT, 1, N_("W2"), 0.0f, 0.0f, 0.0f, 0.0f,   -2.0f, 2.0f, PROP_NONE },
 	{ SOCK_FLOAT, 1, N_("W3"), 0.0f, 0.0f, 0.0f, 0.0f,   -2.0f, 2.0f, PROP_NONE },
 	{ SOCK_FLOAT, 1, N_("W4"), 0.0f, 0.0f, 0.0f, 0.0f,   -2.0f, 2.0f, PROP_NONE },
-	
+
 	{ SOCK_FLOAT, 1, N_("iScale"), 1.0f, 0.0f, 0.0f, 0.0f,    0.01f,  10.0f, PROP_UNSIGNED },
 	{ SOCK_FLOAT, 1, N_("Size"),   0.25f, 0.0f, 0.0f, 0.0f,   0.0001f, 4.0f, PROP_UNSIGNED },
-	
+
 	{ -1, 0, "" }
 };
 static void voronoi_map_inputs(Tex *tex, bNodeStack **in, TexParams *p, short thread)
@@ -156,7 +148,7 @@ static void voronoi_map_inputs(Tex *tex, bNodeStack **in, TexParams *p, short th
 	tex->vn_w2 = tex_input_value(in[I + 1], p, thread);
 	tex->vn_w3 = tex_input_value(in[I + 2], p, thread);
 	tex->vn_w4 = tex_input_value(in[I + 3], p, thread);
-	
+
 	tex->ns_outscale = tex_input_value(in[I + 4], p, thread);
 	tex->noisesize   = tex_input_value(in[I + 5], p, thread);
 }
@@ -242,7 +234,7 @@ static bNodeSocketTemplate musgrave_inputs[] = {
 	{ SOCK_FLOAT, 1, N_("H"),          1.0f, 0.0f, 0.0f, 0.0f,   0.0001f, 2.0f, PROP_UNSIGNED },
 	{ SOCK_FLOAT, 1, N_("Lacunarity"), 2.0f, 0.0f, 0.0f, 0.0f,   0.0f,    6.0f, PROP_UNSIGNED },
 	{ SOCK_FLOAT, 1, N_("Octaves"),    2.0f, 0.0f, 0.0f, 0.0f,   0.0f,    8.0f, PROP_UNSIGNED },
-	
+
 	{ SOCK_FLOAT, 1, N_("iScale"),     1.0f,  0.0f, 0.0f, 0.0f,  0.0f,   10.0f, PROP_UNSIGNED },
 	{ SOCK_FLOAT, 1, N_("Size"),       0.25f, 0.0f, 0.0f, 0.0f,  0.0001f, 2.0f, PROP_UNSIGNED },
 	{ -1, 0, "" }
@@ -285,13 +277,13 @@ static void init(bNodeTree *UNUSED(ntree), bNode *node)
 {
 	Tex *tex = MEM_callocN(sizeof(Tex), "Tex");
 	node->storage = tex;
-	
+
 	BKE_texture_default(tex);
 	tex->type = node->type - TEX_NODE_PROC;
-	
+
 	if (tex->type == TEX_WOOD)
 		tex->stype = TEX_BANDNOISE;
-	
+
 }
 
 /* Node type definitions */
@@ -309,10 +301,10 @@ void register_node_type_tex_proc_##name(void) \
 	\
 	nodeRegisterType(&ntype); \
 }
-	
+
 #define C outputs_color_only
 #define CV outputs_both
-	
+
 TexDef(TEX_VORONOI,   CV, voronoi,   "Voronoi"  )
 TexDef(TEX_BLEND,     C,  blend,     "Blend"    )
 TexDef(TEX_MAGIC,     C,  magic,     "Magic"    )

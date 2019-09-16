@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): David Millan Escriva, Juho Vepsäläinen, Nathan Letwory
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_node/node_add.c
- *  \ingroup spnode
+/** \file
+ * \ingroup spnode
  */
 
 #include "MEM_guardedalloc.h"
@@ -70,32 +62,32 @@ bNode *node_add_node(const bContext *C, const char *idname, int type, float locx
 	SpaceNode *snode = CTX_wm_space_node(C);
 	Main *bmain = CTX_data_main(C);
 	bNode *node = NULL;
-	
+
 	node_deselect_all(snode);
-	
-	if (idname)
+
+	if (idname) {
 		node = nodeAddNode(C, snode->edittree, idname);
-	else
+	}
+	else {
 		node = nodeAddStaticNode(C, snode->edittree, type);
+	}
 	BLI_assert(node && node->typeinfo);
-	
-	/* generics */
-	node->locx = locx;
-	node->locy = locy + 60.0f;     /* arbitrary... so its visible, (0,0) is top of node */
+
+	/* Position mouse in node header. */
+	node->locx = locx - NODE_DY * 1.5f / UI_DPI_FAC;
+	node->locy = locy + NODE_DY * 0.5f / UI_DPI_FAC;
+
 	nodeSetSelected(node, true);
-	
-	node->locx = locx;
-	node->locy = locy + 60.0f;
-	
+
 	ntreeUpdateTree(bmain, snode->edittree);
 	ED_node_set_active(bmain, snode->edittree, node);
-	
+
 	snode_update(snode, node);
-	
+
 	if (snode->nodetree->type == NTREE_TEXTURE) {
 		ntreeTexCheckCyclics(snode->edittree);
 	}
-	
+
 	return node;
 }
 
@@ -122,7 +114,7 @@ static bool add_reroute_intersect_check(bNodeLink *link, float mcoords[][2], int
 
 typedef struct bNodeSocketLink {
 	struct bNodeSocketLink *next, *prev;
-	
+
 	struct bNodeSocket *sock;
 	struct bNodeLink *link;
 	float point[2];
@@ -131,15 +123,16 @@ typedef struct bNodeSocketLink {
 static bNodeSocketLink *add_reroute_insert_socket_link(ListBase *lb, bNodeSocket *sock, bNodeLink *link, const float point[2])
 {
 	bNodeSocketLink *socklink, *prev;
-	
+
 	socklink = MEM_callocN(sizeof(bNodeSocketLink), "socket link");
 	socklink->sock = sock;
 	socklink->link = link;
 	copy_v2_v2(socklink->point, point);
-	
+
 	for (prev = lb->last; prev; prev = prev->prev) {
-		if (prev->sock == sock)
+		if (prev->sock == sock) {
 			break;
+		}
 	}
 	BLI_insertlinkafter(lb, prev, socklink);
 	return socklink;
@@ -153,18 +146,18 @@ static bNodeSocketLink *add_reroute_do_socket_section(bContext *C, bNodeSocketLi
 	bNodeSocket *cursock = socklink->sock;
 	float insert_point[2];
 	int num_links;
-	
+
 	zero_v2(insert_point);
 	num_links = 0;
-	
+
 	while (socklink && socklink->sock == cursock) {
 		if (!(socklink->link->flag & NODE_LINK_TEST)) {
 			socklink->link->flag |= NODE_LINK_TEST;
-			
+
 			/* create the reroute node for this cursock */
 			if (!reroute_node) {
 				reroute_node = nodeAddStaticNode(C, ntree, NODE_REROUTE);
-				
+
 				/* add a single link to/from the reroute node to replace multiple links */
 				if (in_out == SOCK_OUT) {
 					nodeAddLink(ntree, socklink->link->fromnode, socklink->link->fromsock, reroute_node, reroute_node->inputs.first);
@@ -173,7 +166,7 @@ static bNodeSocketLink *add_reroute_do_socket_section(bContext *C, bNodeSocketLi
 					nodeAddLink(ntree, reroute_node, reroute_node->outputs.first, socklink->link->tonode, socklink->link->tosock);
 				}
 			}
-			
+
 			/* insert the reroute node into the link */
 			if (in_out == SOCK_OUT) {
 				socklink->link->fromnode = reroute_node;
@@ -183,21 +176,21 @@ static bNodeSocketLink *add_reroute_do_socket_section(bContext *C, bNodeSocketLi
 				socklink->link->tonode = reroute_node;
 				socklink->link->tosock = reroute_node->inputs.first;
 			}
-			
+
 			add_v2_v2(insert_point, socklink->point);
 			num_links++;
 		}
 		socklink = socklink->next;
 	}
-	
+
 	if (num_links > 0) {
 		/* average cut point from shared links */
 		mul_v2_fl(insert_point, 1.0f / num_links);
-		
+
 		reroute_node->locx = insert_point[0] / UI_DPI_FAC;
 		reroute_node->locy = insert_point[1] / UI_DPI_FAC;
 	}
-	
+
 	return socklink;
 }
 
@@ -208,7 +201,7 @@ static int add_reroute_exec(bContext *C, wmOperator *op)
 	bNodeTree *ntree = snode->edittree;
 	float mcoords[256][2];
 	int i = 0;
-	
+
 	/* Get the cut path */
 	RNA_BEGIN (op->ptr, itemptr, "path")
 	{
@@ -218,7 +211,9 @@ static int add_reroute_exec(bContext *C, wmOperator *op)
 		UI_view2d_region_to_view(&ar->v2d, (short)loc[0], (short)loc[1],
 		                         &mcoords[i][0], &mcoords[i][1]);
 		i++;
-		if (i >= 256) break;
+		if (i >= 256) {
+			break;
+		}
 	}
 	RNA_END;
 
@@ -227,28 +222,29 @@ static int add_reroute_exec(bContext *C, wmOperator *op)
 		bNodeLink *link;
 		bNodeSocketLink *socklink;
 		float insert_point[2];
-		
+
 		/* always first */
 		ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
-		
+
 		node_deselect_all(snode);
-		
+
 		/* Find cut links and sort them by sockets */
 		BLI_listbase_clear(&output_links);
 		BLI_listbase_clear(&input_links);
 
 		for (link = ntree->links.first; link; link = link->next) {
-			if (nodeLinkIsHidden(link))
+			if (nodeLinkIsHidden(link)) {
 				continue;
+			}
 			if (add_reroute_intersect_check(link, mcoords, i, insert_point)) {
 				add_reroute_insert_socket_link(&output_links, link->fromsock, link, insert_point);
 				add_reroute_insert_socket_link(&input_links, link->tosock, link, insert_point);
-				
+
 				/* Clear flag */
 				link->flag &= ~NODE_LINK_TEST;
 			}
 		}
-		
+
 		/* Create reroute nodes for intersected links.
 		 * Only one reroute if links share the same input/output socket.
 		 */
@@ -260,18 +256,18 @@ static int add_reroute_exec(bContext *C, wmOperator *op)
 		while (socklink) {
 			socklink = add_reroute_do_socket_section(C, socklink, SOCK_IN);
 		}
-		
+
 		BLI_freelistN(&output_links);
 		BLI_freelistN(&input_links);
-		
+
 		/* always last */
 		ntreeUpdateTree(CTX_data_main(C), ntree);
 		snode_notify(C, snode);
 		snode_dag_update(C, snode);
-		
+
 		return OPERATOR_FINISHED;
 	}
-	
+
 	return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
 }
 
@@ -304,6 +300,7 @@ void NODE_OT_add_reroute(wmOperatorType *ot)
 
 static int node_add_file_exec(bContext *C, wmOperator *op)
 {
+	Main *bmain = CTX_data_main(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
 	bNode *node;
 	Image *ima;
@@ -316,10 +313,7 @@ static int node_add_file_exec(bContext *C, wmOperator *op)
 
 	switch (snode->nodetree->type) {
 		case NTREE_SHADER:
-			if (BKE_scene_use_new_shading_nodes(CTX_data_scene(C)))
-				type = SH_NODE_TEX_IMAGE;
-			else
-				type = SH_NODE_TEXTURE;
+			type = SH_NODE_TEX_IMAGE;
 			break;
 		case NTREE_TEXTURE:
 			type = TEX_NODE_IMAGE;
@@ -330,36 +324,29 @@ static int node_add_file_exec(bContext *C, wmOperator *op)
 		default:
 			return OPERATOR_CANCELLED;
 	}
-	
+
 	ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
-	
+
 	node = node_add_node(C, NULL, type, snode->cursor[0], snode->cursor[1]);
-	
+
 	if (!node) {
 		BKE_report(op->reports, RPT_WARNING, "Could not add an image node");
 		return OPERATOR_CANCELLED;
 	}
-	
-	if (type == SH_NODE_TEXTURE) {
-		Tex *tex = BKE_texture_add(CTX_data_main(C), DATA_(ima->id.name));
-		tex->ima = ima;
-		node->id = (ID *)tex;
-		WM_event_add_notifier(C, NC_TEXTURE | NA_ADDED, node->id);
-	}
-	else
-		node->id = (ID *)ima;
+
+	node->id = (ID *)ima;
 
 	/* When adding new image file via drag-drop we need to load imbuf in order
 	 * to get proper image source.
 	 */
 	if (RNA_struct_property_is_set(op->ptr, "filepath")) {
-		BKE_image_signal(ima, NULL, IMA_SIGNAL_RELOAD);
+		BKE_image_signal(bmain, ima, NULL, IMA_SIGNAL_RELOAD);
 		WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, ima);
 	}
 
 	snode_notify(C, snode);
 	snode_dag_update(C, snode);
-	
+
 	return OPERATOR_FINISHED;
 }
 
@@ -367,15 +354,20 @@ static int node_add_file_invoke(bContext *C, wmOperator *op, const wmEvent *even
 {
 	ARegion *ar = CTX_wm_region(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
-	
+
 	/* convert mouse coordinates to v2d space */
 	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1],
 	                         &snode->cursor[0], &snode->cursor[1]);
-	
-	if (RNA_struct_property_is_set(op->ptr, "filepath") || RNA_struct_property_is_set(op->ptr, "name"))
+
+	snode->cursor[0] /= UI_DPI_FAC;
+	snode->cursor[1] /= UI_DPI_FAC;
+
+	if (RNA_struct_property_is_set(op->ptr, "filepath") || RNA_struct_property_is_set(op->ptr, "name")) {
 		return node_add_file_exec(C, op);
-	else
+	}
+	else {
 		return WM_operator_filesel(C, op, event);
+	}
 }
 
 void NODE_OT_add_file(wmOperatorType *ot)
@@ -401,7 +393,7 @@ void NODE_OT_add_file(wmOperatorType *ot)
 
 /* ****************** Add Mask Node Operator  ******************* */
 
-static int node_add_mask_poll(bContext *C)
+static bool node_add_mask_poll(bContext *C)
 {
 	SpaceNode *snode = CTX_wm_space_node(C);
 
@@ -410,6 +402,7 @@ static int node_add_mask_poll(bContext *C)
 
 static int node_add_mask_exec(bContext *C, wmOperator *op)
 {
+	Main *bmain = CTX_data_main(C);
 	SpaceNode *snode = CTX_wm_space_node(C);
 	bNode *node;
 	ID *mask = NULL;
@@ -417,7 +410,7 @@ static int node_add_mask_exec(bContext *C, wmOperator *op)
 	/* check input variables */
 	char name[MAX_ID_NAME - 2];
 	RNA_string_get(op->ptr, "name", name);
-	mask = BKE_libblock_find_name(ID_MSK, name);
+	mask = BKE_libblock_find_name(bmain, ID_MSK, name);
 	if (!mask) {
 		BKE_reportf(op->reports, RPT_ERROR, "Mask '%s' not found", name);
 		return OPERATOR_CANCELLED;
@@ -470,16 +463,18 @@ static int new_node_tree_exec(bContext *C, wmOperator *op)
 	const char *idname;
 	char treename_buf[MAX_ID_NAME - 2];
 	const char *treename;
-	
+
 	if (RNA_struct_property_is_set(op->ptr, "type")) {
 		prop = RNA_struct_find_property(op->ptr, "type");
 		RNA_property_enum_identifier(C, op->ptr, prop, RNA_property_enum_get(op->ptr, prop), &idname);
 	}
-	else if (snode)
+	else if (snode) {
 		idname = snode->tree_idname;
-	else
+	}
+	else {
 		return OPERATOR_CANCELLED;
-	
+	}
+
 	if (RNA_struct_property_is_set(op->ptr, "name")) {
 		RNA_string_get(op->ptr, "name", treename_buf);
 		treename = treename_buf;
@@ -487,14 +482,14 @@ static int new_node_tree_exec(bContext *C, wmOperator *op)
 	else {
 		treename = DATA_("NodeTree");
 	}
-	
+
 	if (!ntreeTypeFind(idname)) {
 		BKE_reportf(op->reports, RPT_ERROR, "Node tree type %s undefined", idname);
 		return OPERATOR_CANCELLED;
 	}
-	
+
 	ntree = ntreeAddTree(bmain, treename, idname);
-	
+
 	/* hook into UI */
 	UI_context_active_but_prop_get_templateID(C, &ptr, &prop);
 
@@ -510,10 +505,10 @@ static int new_node_tree_exec(bContext *C, wmOperator *op)
 	}
 	else if (snode) {
 		snode->nodetree = ntree;
-		
+
 		ED_node_tree_update(C);
 	}
-	
+
 	return OPERATOR_FINISHED;
 }
 
@@ -525,20 +520,19 @@ static const EnumPropertyItem *new_node_tree_type_itemf(bContext *UNUSED(C), Poi
 void NODE_OT_new_node_tree(wmOperatorType *ot)
 {
 	PropertyRNA *prop;
-	
+
 	/* identifiers */
 	ot->name = "New Node Tree";
 	ot->idname = "NODE_OT_new_node_tree";
 	ot->description = "Create a new node tree";
-	
+
 	/* api callbacks */
 	ot->exec = new_node_tree_exec;
-	
+
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-	
+
 	prop = RNA_def_enum(ot->srna, "type", DummyRNA_NULL_items, 0, "Tree Type", "");
 	RNA_def_enum_funcs(prop, new_node_tree_type_itemf);
 	RNA_def_string(ot->srna, "name", "NodeTree", MAX_ID_NAME - 2, "Name", "");
 }
-

@@ -20,7 +20,7 @@
 
 __all__ = (
     "load_image",
-    )
+)
 
 
 # limited replacement for BPyImage.comprehensiveImageLoad
@@ -103,7 +103,7 @@ def load_image(imagepath,
             path = os.path.abspath(path)
 
         try:
-            image = bpy.data.images.load(path, check_existing)
+            image = bpy.data.images.load(path, check_existing=check_existing)
         except RuntimeError:
             image = None
 
@@ -138,7 +138,7 @@ def load_image(imagepath,
 
     def _recursive_search(paths, filename_check):
         for path in paths:
-            for dirpath, dirnames, filenames in os.walk(path):
+            for dirpath, _dirnames, filenames in os.walk(path):
 
                 # skip '.svn'
                 if dirpath[0] in {".", b'.'}:

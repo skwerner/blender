@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_EventPrinter.cpp
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_EventPrinter class.
  */
 
@@ -41,7 +33,7 @@
 bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
 {
 	bool handled = true;
-	
+
 	GHOST_ASSERT(event, "event==0");
 
 	if (event->getType() == GHOST_kEventWindowUpdate) return false;
@@ -95,7 +87,7 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
 			std::cout << "GHOST_kEventKeyDown, key: " << str;
 		}
 		break;
-			
+
 		case GHOST_kEventDraggingEntered:
 		{
 			GHOST_TEventDragnDropData *dragnDropData = (GHOST_TEventDragnDropData *)((GHOST_IEvent *)event)->getData();
@@ -103,7 +95,7 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
 			std::cout << " mouse at x=" << dragnDropData->x << " y=" << dragnDropData->y;
 		}
 		break;
-			
+
 		case GHOST_kEventDraggingUpdated:
 		{
 			GHOST_TEventDragnDropData *dragnDropData = (GHOST_TEventDragnDropData *)((GHOST_IEvent *)event)->getData();
@@ -118,7 +110,7 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
 			std::cout << "GHOST_kEventDraggingExited, dragged object type : " << dragnDropData->dataType;
 		}
 		break;
-	
+
 		case GHOST_kEventDraggingDropDone:
 		{
 			GHOST_TEventDragnDropData *dragnDropData = (GHOST_TEventDragnDropData *)((GHOST_IEvent *)event)->getData();
@@ -148,14 +140,14 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
 		case GHOST_kEventOpenMainFile:
 		{
 			GHOST_TEventDataPtr eventData = ((GHOST_IEvent *)event)->getData();
-			
+
 			if (eventData)
 				std::cout << "GHOST_kEventOpenMainFile for path : " << (char *)eventData;
 			else
 				std::cout << "GHOST_kEventOpenMainFile with no path specified!!";
 		}
 		break;
-			
+
 		case GHOST_kEventQuit:
 			std::cout << "GHOST_kEventQuit";
 			break;
@@ -338,4 +330,3 @@ void GHOST_EventPrinter::getKeyString(GHOST_TKey key, char str[32]) const
 		sprintf(str, "%s", tstr);
 	}
 }
-

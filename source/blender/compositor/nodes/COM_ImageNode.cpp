@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,10 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
- *		Lukas Tönne
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_ImageNode.h"
@@ -61,10 +56,10 @@ NodeOperation *ImageNode::doMultilayerCheck(NodeConverter &converter, RenderLaye
 	operation->setRenderLayer(rl);
 	operation->setImageUser(user);
 	operation->setFramenumber(framenumber);
-	
+
 	converter.addOperation(operation);
 	converter.mapOutputSocket(outputSocket, operation->getOutputSocket());
-	
+
 	return operation;
 }
 
@@ -78,7 +73,7 @@ void ImageNode::convertToOperations(NodeConverter &converter, const CompositorCo
 	int framenumber = context.getFramenumber();
 	int numberOfOutputs = this->getNumberOfOutputSockets();
 	bool outputStraightAlpha = (editorNode->custom1 & CMP_NODE_IMAGE_USE_STRAIGHT_OUTPUT) != 0;
-	BKE_image_user_frame_calc(imageuser, context.getFramenumber(), 0);
+	BKE_image_user_frame_calc(imageuser, context.getFramenumber());
 	/* force a load, we assume iuser index will be set OK anyway */
 	if (image && image->type == IMA_TYPE_MULTILAYER) {
 		bool is_multilayer_ok = false;
@@ -105,7 +100,7 @@ void ImageNode::convertToOperations(NodeConverter &converter, const CompositorCo
 					}
 
 					/* returns the image view to use for the current active view */
-					if (BLI_listbase_count_ex(&image->rr->views, 2) > 1) {
+					if (BLI_listbase_count_at_most(&image->rr->views, 2) > 1) {
 						const int view_image = imageuser->view;
 						const bool is_allview = (view_image == 0); /* if view selected == All (0) */
 
@@ -189,10 +184,10 @@ void ImageNode::convertToOperations(NodeConverter &converter, const CompositorCo
 			operation->setRenderData(context.getRenderData());
 			operation->setViewName(context.getViewName());
 			converter.addOperation(operation);
-			
+
 			if (outputStraightAlpha) {
 				NodeOperation *alphaConvertOperation = new ConvertPremulToStraightOperation();
-				
+
 				converter.addOperation(alphaConvertOperation);
 				converter.mapOutputSocket(outputImage, alphaConvertOperation->getOutputSocket());
 				converter.addLink(operation->getOutputSocket(0), alphaConvertOperation->getInputSocket(0));
@@ -200,10 +195,10 @@ void ImageNode::convertToOperations(NodeConverter &converter, const CompositorCo
 			else {
 				converter.mapOutputSocket(outputImage, operation->getOutputSocket());
 			}
-			
+
 			converter.addPreview(operation->getOutputSocket());
 		}
-		
+
 		if (numberOfOutputs > 1) {
 			NodeOutput *alphaImage = this->getOutputSocket(1);
 			ImageAlphaOperation *alphaOperation = new ImageAlphaOperation();
@@ -213,7 +208,7 @@ void ImageNode::convertToOperations(NodeConverter &converter, const CompositorCo
 			alphaOperation->setRenderData(context.getRenderData());
 			alphaOperation->setViewName(context.getViewName());
 			converter.addOperation(alphaOperation);
-			
+
 			converter.mapOutputSocket(alphaImage, alphaOperation->getOutputSocket());
 		}
 		if (numberOfOutputs > 2) {
@@ -225,7 +220,7 @@ void ImageNode::convertToOperations(NodeConverter &converter, const CompositorCo
 			depthOperation->setRenderData(context.getRenderData());
 			depthOperation->setViewName(context.getViewName());
 			converter.addOperation(depthOperation);
-			
+
 			converter.mapOutputSocket(depthImage, depthOperation->getOutputSocket());
 		}
 		if (numberOfOutputs > 3) {
@@ -271,4 +266,3 @@ void ImageNode::convertToOperations(NodeConverter &converter, const CompositorCo
 		}
 	}
 }
-

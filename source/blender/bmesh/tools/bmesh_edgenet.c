@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,17 +12,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/tools/bmesh_edgenet.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Edgenet Fill.
- *
  */
 
 #include <limits.h>
@@ -335,7 +328,7 @@ static LinkNode *bm_edgenet_path_calc(
 				BLI_linklist_free_pool(v_ls_next, NULL, path_pool);
 				BLI_linklist_free_pool(v_ls_prev, NULL, path_pool);
 
-				// BLI_assert(BLI_mempool_count(path_pool) == 0);
+				// BLI_assert(BLI_mempool_len(path_pool) == 0);
 
 				path_len = bm_edgenet_path_from_pass(e_found->v1, &path, vnet_info, path_pool);
 				BLI_linklist_reverse(&path);
@@ -444,8 +437,8 @@ static LinkNode *bm_edgenet_path_calc_best(
  * \note New faces currently don't have their normals calculated and are flipped randomly.
  *       The caller needs to flip faces correctly.
  *
- * \param bm  The mesh to operate on.
- * \param use_edge_tag  Only fill tagged edges.
+ * \param bm: The mesh to operate on.
+ * \param use_edge_tag: Only fill tagged edges.
  */
 void BM_mesh_edgenet(
         BMesh *bm,
@@ -505,7 +498,7 @@ void BM_mesh_edgenet(
 		}
 
 		BLI_linklist_free_pool(path, NULL, path_pool);
-		BLI_assert(BLI_mempool_count(path_pool) == 0);
+		BLI_assert(BLI_mempool_len(path_pool) == 0);
 	}
 
 	bm->elem_index_dirty |= BM_FACE | BM_LOOP;

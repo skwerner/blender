@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BLI_LISTBASE_H__
 #define __BLI_LISTBASE_H__
 
-/** \file BLI_listbase.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include "BLI_compiler_attrs.h"
@@ -74,7 +66,7 @@ void BLI_listbase_sort(struct ListBase *listbase, int (*cmp)(const void *, const
 void BLI_listbase_sort_r(ListBase *listbase, int (*cmp)(void *, const void *, const void *), void *thunk) ATTR_NONNULL(1, 2);
 bool BLI_listbase_link_move(ListBase *listbase, void *vlink, int step) ATTR_NONNULL();
 void BLI_freelist(struct ListBase *listbase) ATTR_NONNULL(1);
-int  BLI_listbase_count_ex(const struct ListBase *listbase, const int count_max) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1);
+int  BLI_listbase_count_at_most(const struct ListBase *listbase, const int count_max) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1);
 int  BLI_listbase_count(const struct ListBase *listbase) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1);
 void BLI_freelinkN(struct ListBase *listbase, void *vlink) ATTR_NONNULL(1);
 
@@ -82,6 +74,7 @@ void BLI_listbase_swaplinks(struct ListBase *listbase, void *vlinka, void *vlink
 void BLI_listbases_swaplinks(struct ListBase *listbasea, struct ListBase *listbaseb, void *vlinka, void *vlinkb) ATTR_NONNULL(2, 3);
 
 void BLI_movelisttolist(struct ListBase *dst, struct ListBase *src) ATTR_NONNULL(1, 2);
+void BLI_movelisttolist_reverse(struct ListBase *dst, struct ListBase *src) ATTR_NONNULL(1, 2);
 void BLI_duplicatelist(struct ListBase *dst, const struct ListBase *src) ATTR_NONNULL(1, 2);
 void BLI_listbase_reverse(struct ListBase *lb) ATTR_NONNULL(1);
 void BLI_listbase_rotate_first(struct ListBase *lb, void *vlink) ATTR_NONNULL(1, 2);
@@ -103,35 +96,42 @@ struct LinkData *BLI_genericNodeN(void *data);
  *
  * \code{.c}
  *
- * BLI_LISTBASE_CIRCULAR_FORWARD_BEGIN (listbase, item, item_init) {
+ * LISTBASE_CIRCULAR_FORWARD_BEGIN(listbase, item, item_init)
+ * {
  *     ...operate on marker...
  * }
- * BLI_LISTBASE_CIRCULAR_FORWARD_END (listbase, item, item_init);
+ * LISTBASE_CIRCULAR_FORWARD_END (listbase, item, item_init);
  *
  * \endcode
  */
-#define BLI_LISTBASE_CIRCULAR_FORWARD_BEGIN(lb, lb_iter, lb_init) \
+#define LISTBASE_CIRCULAR_FORWARD_BEGIN(lb, lb_iter, lb_init) \
 if ((lb)->first && (lb_init || (lb_init = (lb)->first))) { \
 	lb_iter = lb_init; \
 	do {
-#define BLI_LISTBASE_CIRCULAR_FORWARD_END(lb, lb_iter, lb_init) \
+#define LISTBASE_CIRCULAR_FORWARD_END(lb, lb_iter, lb_init) \
 	} while ((lb_iter  = (lb_iter)->next ? (lb_iter)->next : (lb)->first), \
 	         (lb_iter != lb_init)); \
-}
+} ((void)0)
 
-#define BLI_LISTBASE_CIRCULAR_BACKWARD_BEGIN(lb, lb_iter, lb_init) \
+#define LISTBASE_CIRCULAR_BACKWARD_BEGIN(lb, lb_iter, lb_init) \
 if ((lb)->last && (lb_init || (lb_init = (lb)->last))) { \
 	lb_iter = lb_init; \
 	do {
-#define BLI_LISTBASE_CIRCULAR_BACKWARD_END(lb, lb_iter, lb_init) \
+#define LISTBASE_CIRCULAR_BACKWARD_END(lb, lb_iter, lb_init) \
 	} while ((lb_iter  = (lb_iter)->prev ? (lb_iter)->prev : (lb)->last), \
 	         (lb_iter != lb_init)); \
-}
+} ((void)0)
 
-#define BLI_LISTBASE_FOREACH(type, var, list) \
+#define LISTBASE_FOREACH(type, var, list) \
 	for (type var = (type)((list)->first); \
 	     var != NULL; \
-	     var = (type)(((Link*)(var))->next))
+	     var = (type)(((Link *)(var))->next))
+
+/** A verion of #LISTBASE_FOREACH that supports removing the item we're looping over. */
+#define LISTBASE_FOREACH_MUTABLE(type, var, list) \
+	for (type var = (type)((list)->first), *var##_iter_next; \
+	     ((var != NULL) ? ((void)(var##_iter_next = (type)(((Link *)(var))->next)), 1) : 0); \
+	     var = var##_iter_next)
 
 #ifdef __cplusplus
 }

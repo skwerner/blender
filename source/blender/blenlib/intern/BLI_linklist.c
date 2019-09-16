@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * Support for linked lists.
  */
 
-/** \file blender/blenlib/intern/BLI_linklist.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * Routines for working with single linked lists of 'links' - pointers to other data.
  *
@@ -49,8 +41,9 @@ int BLI_linklist_count(const LinkNode *list)
 {
 	int len;
 
-	for (len = 0; list; list = list->next)
+	for (len = 0; list; list = list->next) {
 		len++;
+	}
 
 	return len;
 }
@@ -58,21 +51,25 @@ int BLI_linklist_count(const LinkNode *list)
 int BLI_linklist_index(const LinkNode *list, void *ptr)
 {
 	int index;
-	
-	for (index = 0; list; list = list->next, index++)
-		if (list->link == ptr)
+
+	for (index = 0; list; list = list->next, index++) {
+		if (list->link == ptr) {
 			return index;
-	
+		}
+	}
+
 	return -1;
 }
 
 LinkNode *BLI_linklist_find(LinkNode *list, int index)
 {
 	int i;
-	
-	for (i = 0; list; list = list->next, i++)
-		if (i == index)
+
+	for (i = 0; list; list = list->next, i++) {
+		if (i == index) {
 			return list;
+		}
+	}
 
 	return NULL;
 }
@@ -80,16 +77,16 @@ LinkNode *BLI_linklist_find(LinkNode *list, int index)
 void BLI_linklist_reverse(LinkNode **listp)
 {
 	LinkNode *rhead = NULL, *cur = *listp;
-	
+
 	while (cur) {
 		LinkNode *next = cur->next;
-		
+
 		cur->next = rhead;
 		rhead = cur;
-		
+
 		cur = next;
 	}
-	
+
 	*listp = rhead;
 }
 
@@ -199,7 +196,7 @@ void BLI_linklist_append_nlink(LinkNodePair *list_pair, void *ptr, LinkNode *nli
 {
 	nlink->link = ptr;
 	nlink->next = NULL;
-	
+
 	if (list_pair->list) {
 		BLI_assert((list_pair->last_node != NULL) && (list_pair->last_node->next == NULL));
 		list_pair->last_node->next = nlink;
@@ -275,11 +272,12 @@ void BLI_linklist_free(LinkNode *list, LinkNodeFreeFP freefunc)
 {
 	while (list) {
 		LinkNode *next = list->next;
-		
-		if (freefunc)
+
+		if (freefunc) {
 			freefunc(list->link);
+		}
 		MEM_freeN(list);
-		
+
 		list = next;
 	}
 }
@@ -289,8 +287,9 @@ void BLI_linklist_free_pool(LinkNode *list, LinkNodeFreeFP freefunc, struct BLI_
 	while (list) {
 		LinkNode *next = list->next;
 
-		if (freefunc)
+		if (freefunc) {
 			freefunc(list->link);
+		}
 		BLI_mempool_free(mempool, list);
 
 		list = next;
@@ -311,8 +310,9 @@ void BLI_linklist_freeN(LinkNode *list)
 
 void BLI_linklist_apply(LinkNode *list, LinkNodeApplyFP applyfunc, void *userdata)
 {
-	for (; list; list = list->next)
+	for (; list; list = list->next) {
 		applyfunc(list->link, userdata);
+	}
 }
 
 /* -------------------------------------------------------------------- */

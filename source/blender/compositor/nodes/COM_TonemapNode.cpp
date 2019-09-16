@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_TonemapNode.h"
@@ -32,11 +28,11 @@ TonemapNode::TonemapNode(bNode *editorNode) : Node(editorNode)
 void TonemapNode::convertToOperations(NodeConverter &converter, const CompositorContext &/*context*/) const
 {
 	NodeTonemap *data = (NodeTonemap *)this->getbNode()->storage;
-	
+
 	TonemapOperation *operation = data->type == 1 ? new PhotoreceptorTonemapOperation() : new TonemapOperation();
 	operation->setData(data);
 	converter.addOperation(operation);
-	
+
 	converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
 	converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket(0));
 }

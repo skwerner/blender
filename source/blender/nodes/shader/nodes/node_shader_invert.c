@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/shader/nodes/node_shader_invert.c
- *  \ingroup shdnodes
+/** \file
+ * \ingroup shdnodes
  */
 
 
@@ -34,7 +26,7 @@
 
 
 
-/* **************** INVERT ******************** */ 
+/* **************** INVERT ******************** */
 static bNodeSocketTemplate sh_node_invert_in[] = {
 	{ SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
 	{ SOCK_RGBA, 1, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
@@ -46,18 +38,18 @@ static bNodeSocketTemplate sh_node_invert_out[] = {
 	{ -1, 0, "" }
 };
 
-static void node_shader_exec_invert(void *UNUSED(data), int UNUSED(thread), bNode *UNUSED(node), bNodeExecData *UNUSED(execdata), bNodeStack **in, 
+static void node_shader_exec_invert(void *UNUSED(data), int UNUSED(thread), bNode *UNUSED(node), bNodeExecData *UNUSED(execdata), bNodeStack **in,
                                     bNodeStack **out)
 {
 	float col[3], icol[3], fac;
 
 	nodestack_get_vec(&fac, SOCK_FLOAT, in[0]);
 	nodestack_get_vec(col, SOCK_VECTOR, in[1]);
-	
+
 	icol[0] = 1.0f - col[0];
 	icol[1] = 1.0f - col[1];
 	icol[2] = 1.0f - col[2];
-	
+
 	/* if fac, blend result against original input */
 	if (fac < 1.0f)
 		interp_v3_v3v3(out[0]->vec, col, icol, fac);
@@ -65,9 +57,9 @@ static void node_shader_exec_invert(void *UNUSED(data), int UNUSED(thread), bNod
 		copy_v3_v3(out[0]->vec, icol);
 }
 
-static int gpu_shader_invert(GPUMaterial *mat, bNode *UNUSED(node), bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
+static int gpu_shader_invert(GPUMaterial *mat, bNode *node, bNodeExecData *UNUSED(execdata), GPUNodeStack *in, GPUNodeStack *out)
 {
-	return GPU_stack_link(mat, "invert", in, out);
+	return GPU_stack_link(mat, node, "invert", in, out);
 }
 
 void register_node_type_sh_invert(void)
@@ -75,7 +67,6 @@ void register_node_type_sh_invert(void)
 	static bNodeType ntype;
 
 	sh_node_type_base(&ntype, SH_NODE_INVERT, "Invert", NODE_CLASS_OP_COLOR, 0);
-	node_type_compatibility(&ntype, NODE_OLD_SHADING | NODE_NEW_SHADING);
 	node_type_socket_templates(&ntype, sh_node_invert_in, sh_node_invert_out);
 	node_type_exec(&ntype, NULL, NULL, node_shader_exec_invert);
 	node_type_gpu(&ntype, gpu_shader_invert);

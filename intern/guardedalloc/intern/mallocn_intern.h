@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2013 by Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file guardedalloc/intern/mallocn_intern.h
- *  \ingroup MEM
+/** \file
+ * \ingroup MEM
  */
 
 #ifndef __MALLOCN_INTERN_H__
@@ -37,10 +29,6 @@
 #  include "mmap_win.h"
 #else
 #  include <sys/mman.h>
-#endif
-
-#if defined(_MSC_VER)
-#  define __func__ __FUNCTION__
 #endif
 
 #ifdef __GNUC__
@@ -137,7 +125,7 @@ void MEM_lockfree_printmemlist(void);
 void MEM_lockfree_callbackmemlist(void (*func)(void *));
 void MEM_lockfree_printmemlist_stats(void);
 void MEM_lockfree_set_error_callback(void (*func)(const char *));
-bool MEM_lockfree_check_memory_integrity(void);
+bool MEM_lockfree_consistency_check(void);
 void MEM_lockfree_set_lock_callback(void (*lock)(void), void (*unlock)(void));
 void MEM_lockfree_set_memory_debug(void);
 size_t MEM_lockfree_get_memory_in_use(void);
@@ -166,7 +154,7 @@ void MEM_guarded_printmemlist(void);
 void MEM_guarded_callbackmemlist(void (*func)(void *));
 void MEM_guarded_printmemlist_stats(void);
 void MEM_guarded_set_error_callback(void (*func)(const char *));
-bool MEM_guarded_check_memory_integrity(void);
+bool MEM_guarded_consistency_check(void);
 void MEM_guarded_set_lock_callback(void (*lock)(void), void (*unlock)(void));
 void MEM_guarded_set_memory_debug(void);
 size_t MEM_guarded_get_memory_in_use(void);

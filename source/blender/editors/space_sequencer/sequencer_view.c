@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,11 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 
-/** \file blender/editors/space_sequencer/sequencer_view.c
- *  \ingroup spseq
+/** \file
+ * \ingroup spseq
  */
 
 #include "MEM_guardedalloc.h"
@@ -91,13 +84,14 @@ static void sample_draw(const bContext *C, ARegion *ar, void *arg_info)
 static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
 {
 	Main *bmain = CTX_data_main(C);
+	struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
 	Scene *scene = CTX_data_scene(C);
 	SpaceSeq *sseq = (SpaceSeq *) CTX_wm_space_data(C);
 	ARegion *ar = CTX_wm_region(C);
-	ImBuf *ibuf = sequencer_ibuf_get(bmain, scene, sseq, CFRA, 0, NULL);
+	ImBuf *ibuf = sequencer_ibuf_get(bmain, depsgraph, scene, sseq, CFRA, 0, NULL);
 	ImageSampleInfo *info = op->customdata;
 	float fx, fy;
-	
+
 	if (ibuf == NULL) {
 		IMB_freeImBuf(ibuf);
 		info->draw = 0;
@@ -106,8 +100,10 @@ static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
 
 	UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fx, &fy);
 
-	fx += (float) ibuf->x / 2.0f;
-	fy += (float) ibuf->y / 2.0f;
+	fx += (float)scene->r.xsch / 2.0f;
+	fy += (float)scene->r.ysch / 2.0f;
+	fx *= (float)ibuf->x / (float)scene->r.xsch;
+	fy *= (float)ibuf->y / (float)scene->r.ysch;
 
 	if (fx >= 0.0f && fy >= 0.0f && fx < ibuf->x && fy < ibuf->y) {
 		const float *fp;
@@ -121,7 +117,7 @@ static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
 
 		info->colp = NULL;
 		info->colfp = NULL;
-		
+
 		if (ibuf->rect) {
 			cp = (unsigned char *)(ibuf->rect + y * ibuf->x + x);
 
@@ -181,8 +177,9 @@ static int sample_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 	SpaceSeq *sseq = CTX_wm_space_seq(C);
 	ImageSampleInfo *info;
 
-	if (sseq->mainb != SEQ_DRAW_IMG_IMBUF)
+	if (sseq->mainb != SEQ_DRAW_IMG_IMBUF) {
 		return OPERATOR_CANCELLED;
+	}
 
 	info = MEM_callocN(sizeof(ImageSampleInfo), "ImageSampleInfo");
 	info->art = ar->type;
@@ -219,7 +216,7 @@ static void sample_cancel(bContext *C, wmOperator *op)
 	sample_exit(C, op);
 }
 
-static int sample_poll(bContext *C)
+static bool sample_poll(bContext *C)
 {
 	SpaceSeq *sseq = CTX_wm_space_seq(C);
 	return sseq && BKE_sequencer_editing_get(CTX_data_scene(C), false) != NULL;

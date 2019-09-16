@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_BokehBlurNode.h"
@@ -49,7 +45,7 @@ void BokehBlurNode::convertToOperations(NodeConverter &converter, const Composit
 		operation->setThreshold(0.0f);
 		operation->setMaxBlur(b_node->custom4);
 		operation->setDoScaleSize(true);
-		
+
 		converter.addOperation(operation);
 		converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
 		converter.mapInputSocket(getInputSocket(1), operation->getInputSocket(1));
@@ -60,7 +56,7 @@ void BokehBlurNode::convertToOperations(NodeConverter &converter, const Composit
 		BokehBlurOperation *operation = new BokehBlurOperation();
 		operation->setQuality(context.getQuality());
 		operation->setExtendBounds(extend_bounds);
-		
+
 		converter.addOperation(operation);
 		converter.mapInputSocket(getInputSocket(0), operation->getInputSocket(0));
 		converter.mapInputSocket(getInputSocket(1), operation->getInputSocket(1));

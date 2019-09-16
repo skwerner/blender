@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_CalculateStandardDeviationOperation.h"
@@ -55,7 +51,7 @@ void *CalculateStandardDeviationOperation::initializeTileData(rcti *rect)
 		for (int i = 0, offset = 0; i < size; i++, offset += 4) {
 			if (buffer[offset + 3] > 0) {
 				pixels++;
-		
+
 				switch (this->m_setting) {
 					case 1:  /* rgb combined */
 					{
@@ -87,7 +83,7 @@ void *CalculateStandardDeviationOperation::initializeTileData(rcti *rect)
 					case 5:  /* luminance */
 					{
 						float yuv[3];
-						rgb_to_yuv(buffer[offset], buffer[offset + 1], buffer[offset + 2], &yuv[0], &yuv[1], &yuv[2]);
+						rgb_to_yuv(buffer[offset], buffer[offset + 1], buffer[offset + 2], &yuv[0], &yuv[1], &yuv[2], BLI_YUV_ITU_BT709);
 						sum += (yuv[0] - mean) * (yuv[0] - mean);
 						break;
 					}

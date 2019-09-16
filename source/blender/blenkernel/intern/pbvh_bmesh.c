@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/pbvh_bmesh.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include "MEM_guardedalloc.h"
@@ -27,7 +23,7 @@
 #include "BLI_utildefines.h"
 #include "BLI_buffer.h"
 #include "BLI_ghash.h"
-#include "BLI_heap.h"
+#include "BLI_heap_simple.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
 
@@ -111,7 +107,7 @@ static void pbvh_bmesh_verify(PBVH *bvh);
 #define BM_FACES_OF_VERT_ITER_END \
 	} \
 	BM_LOOPS_OF_VERT_ITER_END; \
-}
+} ((void)0)
 
 static void bm_edges_from_tri(BMesh *bm, BMVert *v_tri[3], BMEdge *e_tri[3])
 {
@@ -255,7 +251,7 @@ static void pbvh_bmesh_node_split(PBVH *bvh, const BBC *bbc_array, int node_inde
 	const int cd_face_node_offset = bvh->cd_face_node_offset;
 	PBVHNode *n = &bvh->nodes[node_index];
 
-	if (BLI_gset_size(n->bm_faces) <= bvh->leaf_limit) {
+	if (BLI_gset_len(n->bm_faces) <= bvh->leaf_limit) {
 		/* Node limit not exceeded */
 		pbvh_bmesh_node_finalize(bvh, node_index, cd_vert_node_offset, cd_face_node_offset);
 		return;
@@ -289,8 +285,8 @@ static void pbvh_bmesh_node_split(PBVH *bvh, const BBC *bbc_array, int node_inde
 	         *c2 = &bvh->nodes[children + 1];
 	c1->flag |= PBVH_Leaf;
 	c2->flag |= PBVH_Leaf;
-	c1->bm_faces = BLI_gset_ptr_new_ex("bm_faces", BLI_gset_size(n->bm_faces) / 2);
-	c2->bm_faces = BLI_gset_ptr_new_ex("bm_faces", BLI_gset_size(n->bm_faces) / 2);
+	c1->bm_faces = BLI_gset_ptr_new_ex("bm_faces", BLI_gset_len(n->bm_faces) / 2);
+	c2->bm_faces = BLI_gset_ptr_new_ex("bm_faces", BLI_gset_len(n->bm_faces) / 2);
 
 	/* Partition the parent node's faces between the two children */
 	GSET_ITER (gs_iter, n->bm_faces) {
@@ -305,11 +301,11 @@ static void pbvh_bmesh_node_split(PBVH *bvh, const BBC *bbc_array, int node_inde
 
 	/* Enforce at least one primitive in each node */
 	GSet *empty = NULL, *other;
-	if (BLI_gset_size(c1->bm_faces) == 0) {
+	if (BLI_gset_len(c1->bm_faces) == 0) {
 		empty = c1->bm_faces;
 		other = c2->bm_faces;
 	}
-	else if (BLI_gset_size(c2->bm_faces) == 0) {
+	else if (BLI_gset_len(c2->bm_faces) == 0) {
 		empty = c2->bm_faces;
 		other = c1->bm_faces;
 	}
@@ -375,7 +371,7 @@ static void pbvh_bmesh_node_split(PBVH *bvh, const BBC *bbc_array, int node_inde
 static bool pbvh_bmesh_node_limit_ensure(PBVH *bvh, int node_index)
 {
 	GSet *bm_faces = bvh->nodes[node_index].bm_faces;
-	const int bm_faces_size = BLI_gset_size(bm_faces);
+	const int bm_faces_size = BLI_gset_len(bm_faces);
 	if (bm_faces_size <= bvh->leaf_limit) {
 		/* Node limit not exceeded */
 		return false;
@@ -555,9 +551,9 @@ static int pbvh_bmesh_node_vert_use_count(PBVH *bvh, PBVHNode *node, BMVert *v)
 #endif
 
 #define pbvh_bmesh_node_vert_use_count_is_equal(bvh, node, v, n) \
-	(pbvh_bmesh_node_vert_use_count_ex(bvh, node, v, (n) + 1) == n)
+	(pbvh_bmesh_node_vert_use_count_at_most(bvh, node, v, (n) + 1) == n)
 
-static int pbvh_bmesh_node_vert_use_count_ex(PBVH *bvh, PBVHNode *node, BMVert *v, const int count_max)
+static int pbvh_bmesh_node_vert_use_count_at_most(PBVH *bvh, PBVHNode *node, BMVert *v, const int count_max)
 {
 	int count = 0;
 	BMFace *f;
@@ -721,7 +717,7 @@ static void pbvh_bmesh_node_drop_orig(PBVHNode *node)
 struct EdgeQueue;
 
 typedef struct EdgeQueue {
-	Heap *heap;
+	HeapSimple *heap;
 	const float *center;
 	float  center_proj[3];  /* for when we use projected coords. */
 	float radius_squared;
@@ -840,7 +836,7 @@ static void edge_queue_insert(
 		BMVert **pair = BLI_mempool_alloc(eq_ctx->pool);
 		pair[0] = e->v1;
 		pair[1] = e->v2;
-		BLI_heap_insert(eq_ctx->q->heap, priority, pair);
+		BLI_heapsimple_insert(eq_ctx->q->heap, priority, pair);
 #ifdef USE_EDGEQUEUE_TAG
 		BLI_assert(EDGE_QUEUE_TEST(e) == false);
 		EDGE_QUEUE_ENABLE(e);
@@ -1008,7 +1004,7 @@ static void long_edge_queue_create(
         PBVH *bvh, const float center[3], const float view_normal[3],
         float radius, const bool use_frontface, const bool use_projected)
 {
-	eq_ctx->q->heap = BLI_heap_new();
+	eq_ctx->q->heap = BLI_heapsimple_new();
 	eq_ctx->q->center = center;
 	eq_ctx->q->radius_squared = radius * radius;
 	eq_ctx->q->limit_len_squared = bvh->bm_max_edge_len * bvh->bm_max_edge_len;
@@ -1070,7 +1066,7 @@ static void short_edge_queue_create(
         PBVH *bvh, const float center[3], const float view_normal[3],
         float radius, const bool use_frontface, const bool use_projected)
 {
-	eq_ctx->q->heap = BLI_heap_new();
+	eq_ctx->q->heap = BLI_heapsimple_new();
 	eq_ctx->q->center = center;
 	eq_ctx->q->radius_squared = radius * radius;
 	eq_ctx->q->limit_len_squared = bvh->bm_min_edge_len * bvh->bm_min_edge_len;
@@ -1237,8 +1233,8 @@ static bool pbvh_bmesh_subdivide_long_edges(
 {
 	bool any_subdivided = false;
 
-	while (!BLI_heap_is_empty(eq_ctx->q->heap)) {
-		BMVert **pair = BLI_heap_popmin(eq_ctx->q->heap);
+	while (!BLI_heapsimple_is_empty(eq_ctx->q->heap)) {
+		BMVert **pair = BLI_heapsimple_pop_min(eq_ctx->q->heap);
 		BMVert *v1 = pair[0], *v2 = pair[1];
 		BMEdge *e;
 
@@ -1454,8 +1450,8 @@ static bool pbvh_bmesh_collapse_short_edges(
 	/* deleted verts point to vertices they were merged into, or NULL when removed. */
 	GHash *deleted_verts = BLI_ghash_ptr_new("deleted_verts");
 
-	while (!BLI_heap_is_empty(eq_ctx->q->heap)) {
-		BMVert **pair = BLI_heap_popmin(eq_ctx->q->heap);
+	while (!BLI_heapsimple_is_empty(eq_ctx->q->heap)) {
+		BMVert **pair = BLI_heapsimple_pop_min(eq_ctx->q->heap);
 		BMVert *v1  = pair[0], *v2  = pair[1];
 		BLI_mempool_free(eq_ctx->pool, pair);
 		pair = NULL;
@@ -1549,7 +1545,7 @@ bool pbvh_bmesh_node_raycast(
 bool BKE_pbvh_bmesh_node_raycast_detail(
         PBVHNode *node,
         const float ray_start[3], const float ray_normal[3],
-        float *depth, float *r_detail)
+        float *depth, float *r_edge_length)
 {
 	if (node->flag & PBVH_FullyHidden)
 		return 0;
@@ -1588,7 +1584,7 @@ bool BKE_pbvh_bmesh_node_raycast_detail(
 		float len3 = len_squared_v3v3(v_tri[2]->co, v_tri[0]->co);
 
 		/* detail returned will be set to the maximum allowed size, so take max here */
-		*r_detail = sqrtf(max_fff(len1, len2, len3));
+		*r_edge_length = sqrtf(max_fff(len1, len2, len3));
 	}
 
 	return hit;
@@ -1961,7 +1957,7 @@ bool BKE_pbvh_bmesh_update_topology(
 		short_edge_queue_create(&eq_ctx, bvh, center, view_normal, radius, use_frontface, use_projected);
 		modified |= pbvh_bmesh_collapse_short_edges(
 		        &eq_ctx, bvh, &deleted_faces);
-		BLI_heap_free(q.heap, NULL);
+		BLI_heapsimple_free(q.heap, NULL);
 		BLI_mempool_destroy(queue_pool);
 	}
 
@@ -1976,7 +1972,7 @@ bool BKE_pbvh_bmesh_update_topology(
 		long_edge_queue_create(&eq_ctx, bvh, center, view_normal, radius, use_frontface, use_projected);
 		modified |= pbvh_bmesh_subdivide_long_edges(
 		        &eq_ctx, bvh, &edge_loops);
-		BLI_heap_free(q.heap, NULL);
+		BLI_heapsimple_free(q.heap, NULL);
 		BLI_mempool_destroy(queue_pool);
 	}
 
@@ -2011,10 +2007,10 @@ void BKE_pbvh_bmesh_node_save_orig(PBVHNode *node)
 	if (node->bm_orco)
 		return;
 
-	const int totvert = BLI_gset_size(node->bm_unique_verts) +
-	                    BLI_gset_size(node->bm_other_verts);
+	const int totvert = BLI_gset_len(node->bm_unique_verts) +
+	                    BLI_gset_len(node->bm_other_verts);
 
-	const int tottri = BLI_gset_size(node->bm_faces);
+	const int tottri = BLI_gset_len(node->bm_faces);
 
 	node->bm_orco = MEM_mallocN(sizeof(*node->bm_orco) * totvert, __func__);
 	node->bm_ortri = MEM_mallocN(sizeof(*node->bm_ortri) * tottri, __func__);
@@ -2189,12 +2185,12 @@ static void pbvh_bmesh_verify(PBVH *bvh)
 		int totface = 0, totvert = 0;
 		for (int i = 0; i < bvh->totnode; i++) {
 			PBVHNode *n = &bvh->nodes[i];
-			totface += n->bm_faces ? BLI_gset_size(n->bm_faces) : 0;
-			totvert += n->bm_unique_verts ? BLI_gset_size(n->bm_unique_verts) : 0;
+			totface += n->bm_faces ? BLI_gset_len(n->bm_faces) : 0;
+			totvert += n->bm_unique_verts ? BLI_gset_len(n->bm_unique_verts) : 0;
 		}
 
-		BLI_assert(totface == BLI_gset_size(faces_all));
-		BLI_assert(totvert == BLI_gset_size(verts_all));
+		BLI_assert(totface == BLI_gset_len(faces_all));
+		BLI_assert(totvert == BLI_gset_len(verts_all));
 	}
 
 	{

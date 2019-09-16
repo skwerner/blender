@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/context.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <string.h>
@@ -30,6 +24,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_collection_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
@@ -38,6 +33,9 @@
 #include "DNA_object_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_workspace_types.h"
+
+#include "DEG_depsgraph.h"
 
 #include "BLI_listbase.h"
 #include "BLI_string.h"
@@ -47,15 +45,24 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
+#include "BKE_layer.h"
 #include "BKE_main.h"
+#include "BKE_scene.h"
 #include "BKE_screen.h"
 #include "BKE_sound.h"
+#include "BKE_workspace.h"
+
+#include "RE_engine.h"
 
 #include "RNA_access.h"
+
+#include "CLG_log.h"
 
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
 #endif
+
+static CLG_LogRef LOG = {"bke.context"};
 
 /* struct */
 
@@ -66,14 +73,16 @@ struct bContext {
 	struct {
 		struct wmWindowManager *manager;
 		struct wmWindow *window;
+		struct WorkSpace *workspace;
 		struct bScreen *screen;
 		struct ScrArea *area;
 		struct ARegion *region;
 		struct ARegion *menu;
+		struct wmGizmoGroup *gizmo_group;
 		struct bContextStore *store;
 		const char *operator_poll_msg; /* reason for poll failing */
 	} wm;
-	
+
 	/* data context */
 	struct {
 		struct Main *main;
@@ -83,13 +92,6 @@ struct bContext {
 		int py_init; /* true if python is initialized */
 		void *py_context;
 	} data;
-	
-	/* data evaluation */
-#if 0
-	struct {
-		int render;
-	} eval;
-#endif
 };
 
 /* context */
@@ -97,7 +99,7 @@ struct bContext {
 bContext *CTX_create(void)
 {
 	bContext *C;
-	
+
 	C = MEM_callocN(sizeof(bContext), "bContext");
 
 	return C;
@@ -206,7 +208,7 @@ void CTX_store_free_list(ListBase *contexts)
 	}
 }
 
-/* is python initialied? */
+/* is python initialized? */
 
 int CTX_py_init_get(bContext *C)
 {
@@ -251,10 +253,10 @@ static void *ctx_wm_python_context_get(
 				return result.ptr.data;
 			}
 			else {
-				printf("PyContext '%s' is a '%s', expected a '%s'\n",
-				       member,
-				       RNA_struct_identifier(result.ptr.type),
-				       RNA_struct_identifier(member_type));
+				CLOG_WARN(&LOG, "PyContext '%s' is a '%s', expected a '%s'",
+				          member,
+				          RNA_struct_identifier(result.ptr.type),
+				          RNA_struct_identifier(member_type));
 			}
 		}
 	}
@@ -409,11 +411,11 @@ PointerRNA CTX_data_pointer_get_type(const bContext *C, const char *member, Stru
 			return ptr;
 		}
 		else {
-			printf("%s: warning, member '%s' is '%s', not '%s'\n",
-			       __func__, member, RNA_struct_identifier(ptr.type), RNA_struct_identifier(type));
+			CLOG_WARN(&LOG, "member '%s' is '%s', not '%s'",
+			          member, RNA_struct_identifier(ptr.type), RNA_struct_identifier(type));
 		}
 	}
-	
+
 	return PointerRNA_NULL;
 }
 
@@ -454,23 +456,23 @@ int CTX_data_get(const bContext *C, const char *member, PointerRNA *r_ptr, ListB
 static void data_dir_add(ListBase *lb, const char *member, const bool use_all)
 {
 	LinkData *link;
-	
+
 	if ((use_all == false) && STREQ(member, "scene")) /* exception */
 		return;
 
 	if (BLI_findstring(lb, member, offsetof(LinkData, data)))
 		return;
-	
+
 	link = MEM_callocN(sizeof(LinkData), "LinkData");
 	link->data = (void *)member;
 	BLI_addtail(lb, link);
 }
 
 /**
- * \param C Context
- * \param use_store Use 'C->wm.store'
- * \param use_rna Use Include the properties from 'RNA_Context'
- * \param use_all Don't skip values (currently only "scene")
+ * \param C: Context
+ * \param use_store: Use 'C->wm.store'
+ * \param use_rna: Use Include the properties from 'RNA_Context'
+ * \param use_all: Don't skip values (currently only "scene")
  */
 ListBase CTX_data_dir_get_ex(const bContext *C, const bool use_store, const bool use_rna, const bool use_all)
 {
@@ -627,6 +629,11 @@ wmWindow *CTX_wm_window(const bContext *C)
 	return ctx_wm_python_context_get(C, "window", &RNA_Window, C->wm.window);
 }
 
+WorkSpace *CTX_wm_workspace(const bContext *C)
+{
+	return ctx_wm_python_context_get(C, "workspace", &RNA_WorkSpace, C->wm.workspace);
+}
+
 bScreen *CTX_wm_screen(const bContext *C)
 {
 	return ctx_wm_python_context_get(C, "screen", &RNA_Screen, C->wm.screen);
@@ -657,6 +664,16 @@ void *CTX_wm_region_data(const bContext *C)
 struct ARegion *CTX_wm_menu(const bContext *C)
 {
 	return C->wm.menu;
+}
+
+struct wmGizmoGroup *CTX_wm_gizmo_group(const bContext *C)
+{
+	return C->wm.gizmo_group;
+}
+
+struct wmMsgBus *CTX_wm_message_bus(const bContext *C)
+{
+	return C->wm.manager ? C->wm.manager->message_bus : NULL;
 }
 
 struct ReportList *CTX_wm_reports(const bContext *C)
@@ -710,10 +727,10 @@ struct SpaceImage *CTX_wm_space_image(const bContext *C)
 	return NULL;
 }
 
-struct SpaceButs *CTX_wm_space_buts(const bContext *C)
+struct SpaceProperties *CTX_wm_space_properties(const bContext *C)
 {
 	ScrArea *sa = CTX_wm_area(C);
-	if (sa && sa->spacetype == SPACE_BUTS)
+	if (sa && sa->spacetype == SPACE_PROPERTIES)
 		return sa->spacedata.first;
 	return NULL;
 }
@@ -734,7 +751,7 @@ struct SpaceSeq *CTX_wm_space_seq(const bContext *C)
 	return NULL;
 }
 
-struct SpaceOops *CTX_wm_space_outliner(const bContext *C)
+struct SpaceOutliner *CTX_wm_space_outliner(const bContext *C)
 {
 	ScrArea *sa = CTX_wm_area(C);
 	if (sa && sa->spacetype == SPACE_OUTLINER)
@@ -750,14 +767,6 @@ struct SpaceNla *CTX_wm_space_nla(const bContext *C)
 	return NULL;
 }
 
-struct SpaceTime *CTX_wm_space_time(const bContext *C)
-{
-	ScrArea *sa = CTX_wm_area(C);
-	if (sa && sa->spacetype == SPACE_TIME)
-		return sa->spacedata.first;
-	return NULL;
-}
-
 struct SpaceNode *CTX_wm_space_node(const bContext *C)
 {
 	ScrArea *sa = CTX_wm_area(C);
@@ -766,18 +775,10 @@ struct SpaceNode *CTX_wm_space_node(const bContext *C)
 	return NULL;
 }
 
-struct SpaceLogic *CTX_wm_space_logic(const bContext *C)
+struct SpaceGraph *CTX_wm_space_graph(const bContext *C)
 {
 	ScrArea *sa = CTX_wm_area(C);
-	if (sa && sa->spacetype == SPACE_LOGIC)
-		return sa->spacedata.first;
-	return NULL;
-}
-
-struct SpaceIpo *CTX_wm_space_graph(const bContext *C)
-{
-	ScrArea *sa = CTX_wm_area(C);
-	if (sa && sa->spacetype == SPACE_IPO)
+	if (sa && sa->spacetype == SPACE_GRAPH)
 		return sa->spacedata.first;
 	return NULL;
 }
@@ -814,6 +815,14 @@ struct SpaceClip *CTX_wm_space_clip(const bContext *C)
 	return NULL;
 }
 
+struct SpaceTopBar *CTX_wm_space_topbar(const bContext *C)
+{
+	ScrArea *sa = CTX_wm_area(C);
+	if (sa && sa->spacetype == SPACE_TOPBAR)
+		return sa->spacedata.first;
+	return NULL;
+}
+
 void CTX_wm_manager_set(bContext *C, wmWindowManager *wm)
 {
 	C->wm.manager = wm;
@@ -826,9 +835,11 @@ void CTX_wm_manager_set(bContext *C, wmWindowManager *wm)
 void CTX_wm_window_set(bContext *C, wmWindow *win)
 {
 	C->wm.window = win;
-	C->wm.screen = (win) ? win->screen : NULL;
-	if (C->wm.screen)
-		C->data.scene = C->wm.screen->scene;
+	if (win) {
+		C->data.scene = win->scene;
+	}
+	C->wm.workspace = (win) ? BKE_workspace_active_get(win->workspace_hook) : NULL;
+	C->wm.screen = (win) ? BKE_workspace_active_screen_get(win->workspace_hook) : NULL;
 	C->wm.area = NULL;
 	C->wm.region = NULL;
 }
@@ -836,8 +847,6 @@ void CTX_wm_window_set(bContext *C, wmWindow *win)
 void CTX_wm_screen_set(bContext *C, bScreen *screen)
 {
 	C->wm.screen = screen;
-	if (C->wm.screen)
-		C->data.scene = C->wm.screen->scene;
 	C->wm.area = NULL;
 	C->wm.region = NULL;
 }
@@ -856,6 +865,11 @@ void CTX_wm_region_set(bContext *C, ARegion *region)
 void CTX_wm_menu_set(bContext *C, ARegion *menu)
 {
 	C->wm.menu = menu;
+}
+
+void CTX_wm_gizmo_group_set(bContext *C, struct wmGizmoGroup *gzgroup)
+{
+	C->wm.gizmo_group = gzgroup;
 }
 
 void CTX_wm_operator_poll_msg_set(bContext *C, const char *msg)
@@ -896,10 +910,74 @@ Scene *CTX_data_scene(const bContext *C)
 		return C->data.scene;
 }
 
-int CTX_data_mode_enum(const bContext *C)
+ViewLayer *CTX_data_view_layer(const bContext *C)
 {
-	Object *obedit = CTX_data_edit_object(C);
+	ViewLayer *view_layer;
 
+	if (ctx_data_pointer_verify(C, "view_layer", (void *)&view_layer)) {
+		return view_layer;
+	}
+
+	wmWindow *win = CTX_wm_window(C);
+	Scene *scene = CTX_data_scene(C);
+	if (win) {
+		view_layer = BKE_view_layer_find(scene, win->view_layer_name);
+		if (view_layer) {
+			return view_layer;
+		}
+	}
+
+	return BKE_view_layer_default_view(scene);
+}
+
+RenderEngineType *CTX_data_engine_type(const bContext *C)
+{
+	Scene *scene = CTX_data_scene(C);
+	return RE_engines_find(scene->r.engine);
+}
+
+/**
+ * This is tricky. Sometimes the user overrides the render_layer
+ * but not the scene_collection. In this case what to do?
+ *
+ * If the scene_collection is linked to the ViewLayer we use it.
+ * Otherwise we fallback to the active one of the ViewLayer.
+ */
+LayerCollection *CTX_data_layer_collection(const bContext *C)
+{
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	LayerCollection *layer_collection;
+
+	if (ctx_data_pointer_verify(C, "layer_collection", (void *)&layer_collection)) {
+		if (BKE_view_layer_has_collection(view_layer, layer_collection->collection)) {
+			return layer_collection;
+		}
+	}
+
+	/* fallback */
+	return BKE_layer_collection_get_active(view_layer);
+}
+
+Collection *CTX_data_collection(const bContext *C)
+{
+	Collection *collection;
+	if (ctx_data_pointer_verify(C, "collection", (void *)&collection)) {
+		return collection;
+	}
+
+	LayerCollection *layer_collection = CTX_data_layer_collection(C);
+	if (layer_collection) {
+		return layer_collection->collection;
+	}
+
+	/* fallback */
+	Scene *scene = CTX_data_scene(C);
+	return BKE_collection_master(scene);
+}
+
+enum eContextObjectMode CTX_data_mode_enum_ex(const Object *obedit, const Object *ob, const eObjectMode object_mode)
+{
+	// Object *obedit = CTX_data_edit_object(C);
 	if (obedit) {
 		switch (obedit->type) {
 			case OB_MESH:
@@ -919,21 +997,30 @@ int CTX_data_mode_enum(const bContext *C)
 		}
 	}
 	else {
-		Object *ob = CTX_data_active_object(C);
-
+		// Object *ob = CTX_data_active_object(C);
 		if (ob) {
-			if (ob->mode & OB_MODE_POSE) return CTX_MODE_POSE;
-			else if (ob->mode & OB_MODE_SCULPT) return CTX_MODE_SCULPT;
-			else if (ob->mode & OB_MODE_WEIGHT_PAINT) return CTX_MODE_PAINT_WEIGHT;
-			else if (ob->mode & OB_MODE_VERTEX_PAINT) return CTX_MODE_PAINT_VERTEX;
-			else if (ob->mode & OB_MODE_TEXTURE_PAINT) return CTX_MODE_PAINT_TEXTURE;
-			else if (ob->mode & OB_MODE_PARTICLE_EDIT) return CTX_MODE_PARTICLE;
+			if (object_mode & OB_MODE_POSE) return CTX_MODE_POSE;
+			else if (object_mode & OB_MODE_SCULPT) return CTX_MODE_SCULPT;
+			else if (object_mode & OB_MODE_WEIGHT_PAINT) return CTX_MODE_PAINT_WEIGHT;
+			else if (object_mode & OB_MODE_VERTEX_PAINT) return CTX_MODE_PAINT_VERTEX;
+			else if (object_mode & OB_MODE_TEXTURE_PAINT) return CTX_MODE_PAINT_TEXTURE;
+			else if (object_mode & OB_MODE_PARTICLE_EDIT) return CTX_MODE_PARTICLE;
+			else if (object_mode & OB_MODE_PAINT_GPENCIL) return CTX_MODE_PAINT_GPENCIL;
+			else if (object_mode & OB_MODE_EDIT_GPENCIL) return CTX_MODE_EDIT_GPENCIL;
+			else if (object_mode & OB_MODE_SCULPT_GPENCIL) return CTX_MODE_SCULPT_GPENCIL;
+			else if (object_mode & OB_MODE_WEIGHT_GPENCIL) return CTX_MODE_WEIGHT_GPENCIL;
 		}
 	}
 
 	return CTX_MODE_OBJECT;
 }
 
+enum eContextObjectMode CTX_data_mode_enum(const bContext *C)
+{
+	Object *obedit = CTX_data_edit_object(C);
+	Object *obact = obedit ? NULL : CTX_data_active_object(C);
+	return CTX_data_mode_enum_ex(obedit, obact, obact ? obact->mode : OB_MODE_OBJECT);
+}
 
 /* would prefer if we can use the enum version below over this one - Campbell */
 /* must be aligned with above enum  */
@@ -952,8 +1039,13 @@ static const char *data_mode_strings[] = {
 	"imagepaint",
 	"particlemode",
 	"objectmode",
-	NULL
+	"greasepencil_paint",
+	"greasepencil_edit",
+	"greasepencil_sculpt",
+	"greasepencil_weight",
+	NULL,
 };
+BLI_STATIC_ASSERT(ARRAY_SIZE(data_mode_strings) == CTX_MODE_NUM + 1, "Must have a string for each context mode")
 const char *CTX_data_mode_string(const bContext *C)
 {
 	return data_mode_strings[CTX_data_mode_enum(C)];
@@ -1104,6 +1196,11 @@ int CTX_data_selected_pose_bones(const bContext *C, ListBase *list)
 	return ctx_data_collection_get(C, "selected_pose_bones", list);
 }
 
+int CTX_data_selected_pose_bones_from_active_object(const bContext *C, ListBase *list)
+{
+	return ctx_data_collection_get(C, "selected_pose_bones_from_active_object", list);
+}
+
 int CTX_data_visible_pose_bones(const bContext *C, ListBase *list)
 {
 	return ctx_data_collection_get(C, "visible_pose_bones", list);
@@ -1117,21 +1214,6 @@ bGPdata *CTX_data_gpencil_data(const bContext *C)
 bGPDlayer *CTX_data_active_gpencil_layer(const bContext *C)
 {
 	return ctx_data_pointer_get(C, "active_gpencil_layer");
-}
-
-bGPDpalette *CTX_data_active_gpencil_palette(const bContext *C)
-{
-	return ctx_data_pointer_get(C, "active_gpencil_palette");
-}
-
-bGPDpalettecolor *CTX_data_active_gpencil_palettecolor(const bContext *C)
-{
-	return ctx_data_pointer_get(C, "active_gpencil_palettecolor");
-}
-
-bGPDbrush *CTX_data_active_gpencil_brush(const bContext *C)
-{
-	return ctx_data_pointer_get(C, "active_gpencil_brush");
 }
 
 bGPDframe *CTX_data_active_gpencil_frame(const bContext *C)
@@ -1154,3 +1236,16 @@ int CTX_data_editable_gpencil_strokes(const bContext *C, ListBase *list)
 	return ctx_data_collection_get(C, "editable_gpencil_strokes", list);
 }
 
+Depsgraph *CTX_data_depsgraph(const bContext *C)
+{
+	Scene *scene = CTX_data_scene(C);
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	return BKE_scene_get_depsgraph(scene, view_layer, true);
+}
+
+Depsgraph *CTX_data_depsgraph_on_load(const bContext *C)
+{
+	Scene *scene = CTX_data_scene(C);
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	return BKE_scene_get_depsgraph(scene, view_layer, false);
+}

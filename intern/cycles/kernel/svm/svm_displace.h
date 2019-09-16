@@ -75,6 +75,8 @@ ccl_device void svm_node_set_bump(KernelGlobals *kg, ShaderData *sd, float *stac
 		object_normal_transform(kg, sd, &normal_out);
 	}
 
+	normal_out = ensure_valid_reflection(sd->Ng, sd->I, normal_out);
+
 	stack_store_float3(stack, node.w, normal_out);
 #endif
 }
@@ -135,16 +137,16 @@ ccl_device void svm_node_vector_displacement(KernelGlobals *kg, ShaderData *sd, 
 		const AttributeDescriptor attr = find_attribute(kg, sd, node.z);
 		float3 tangent;
 		if(attr.offset != ATTR_STD_NOT_FOUND) {
-			tangent = primitive_attribute_float3(kg, sd, attr, NULL, NULL);
+			tangent = primitive_surface_attribute_float3(kg, sd, attr, NULL, NULL);
 		}
 		else {
 			tangent = normalize(sd->dPdu);
 		}
 
-		float3 bitangent = normalize(cross(normal, tangent));;
+		float3 bitangent = normalize(cross(normal, tangent));
 		const AttributeDescriptor attr_sign = find_attribute(kg, sd, node.w);
 		if(attr_sign.offset != ATTR_STD_NOT_FOUND) {
-			float sign = primitive_attribute_float(kg, sd, attr_sign, NULL, NULL);
+			float sign = primitive_surface_attribute_float(kg, sd, attr_sign, NULL, NULL);
 			bitangent *= sign;
 		}
 
@@ -160,4 +162,3 @@ ccl_device void svm_node_vector_displacement(KernelGlobals *kg, ShaderData *sd, 
 }
 
 CCL_NAMESPACE_END
-

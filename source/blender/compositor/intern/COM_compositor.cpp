@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 
@@ -88,13 +84,13 @@ void COM_execute(RenderData *rd, Scene *scene, bNodeTree *editingtree, int rende
 	editingtree->progress(editingtree->prh, 0.0);
 	editingtree->stats_draw(editingtree->sdh, IFACE_("Compositing"));
 
-	bool twopass = (editingtree->flag & NTREE_TWO_PASS) > 0 && !rendering;
+	bool twopass = (editingtree->flag & NTREE_TWO_PASS) && !rendering;
 	/* initialize execution system */
 	if (twopass) {
 		ExecutionSystem *system = new ExecutionSystem(rd, scene, editingtree, rendering, twopass, viewSettings, displaySettings, viewName);
 		system->execute();
 		delete system;
-		
+
 		if (editingtree->test_break(editingtree->tbh)) {
 			// during editing multiple calls to this method can be triggered.
 			// make sure one the last one will be doing the work.

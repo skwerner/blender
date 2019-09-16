@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/mesh_mapping.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * Functions for accessing mesh connectivity data.
  * eg: polys connected to verts, UV's connected to verts.
@@ -45,7 +39,6 @@
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Mesh Connectivity Mapping
  * \{ */
 
@@ -55,13 +48,13 @@
  * but for now this replaces it because its unused. */
 
 UvVertMap *BKE_mesh_uv_vert_map_create(
-        struct MPoly *mpoly, struct MLoop *mloop, struct MLoopUV *mloopuv,
+        const MPoly *mpoly, const MLoop *mloop, const MLoopUV *mloopuv,
         unsigned int totpoly, unsigned int totvert,
         const float limit[2], const bool selected, const bool use_winding)
 {
 	UvVertMap *vmap;
 	UvMapVert *buf;
-	MPoly *mp;
+	const MPoly *mp;
 	unsigned int a;
 	int i, totuv, nverts;
 
@@ -103,8 +96,8 @@ UvVertMap *BKE_mesh_uv_vert_map_create(
 			nverts = mp->totloop;
 
 			for (i = 0; i < nverts; i++) {
-				buf->tfindex = (unsigned char)i;
-				buf->f = a;
+				buf->loop_of_poly_index = (unsigned short)i;
+				buf->poly_index = a;
 				buf->separate = 0;
 				buf->next = vmap->vert[mloop[mp->loopstart + i].v];
 				vmap->vert[mloop[mp->loopstart + i].v] = buf;
@@ -126,7 +119,8 @@ UvVertMap *BKE_mesh_uv_vert_map_create(
 	for (a = 0; a < totvert; a++) {
 		UvMapVert *newvlist = NULL, *vlist = vmap->vert[a];
 		UvMapVert *iterv, *v, *lastv, *next;
-		float *uv, *uv2, uvdiff[2];
+		const float *uv, *uv2;
+		float uvdiff[2];
 
 		while (vlist) {
 			v = vlist;
@@ -134,19 +128,19 @@ UvVertMap *BKE_mesh_uv_vert_map_create(
 			v->next = newvlist;
 			newvlist = v;
 
-			uv = mloopuv[mpoly[v->f].loopstart + v->tfindex].uv;
+			uv = mloopuv[mpoly[v->poly_index].loopstart + v->loop_of_poly_index].uv;
 			lastv = NULL;
 			iterv = vlist;
 
 			while (iterv) {
 				next = iterv->next;
 
-				uv2 = mloopuv[mpoly[iterv->f].loopstart + iterv->tfindex].uv;
+				uv2 = mloopuv[mpoly[iterv->poly_index].loopstart + iterv->loop_of_poly_index].uv;
 				sub_v2_v2v2(uvdiff, uv2, uv);
 
 
 				if (fabsf(uv[0] - uv2[0]) < limit[0] && fabsf(uv[1] - uv2[1]) < limit[1] &&
-				    (!use_winding || winding[iterv->f] == winding[v->f]))
+				    (!use_winding || winding[iterv->poly_index] == winding[v->poly_index]))
 				{
 					if (lastv) lastv->next = next;
 					else vlist = next;
@@ -243,9 +237,10 @@ static void mesh_vert_poly_or_loop_map_create(
  * Generates a map where the key is the vertex and the value is a list of polys that use that vertex as a corner.
  * The lists are allocated from one memory pool.
  */
-void BKE_mesh_vert_poly_map_create(MeshElemMap **r_map, int **r_mem,
-                                   const MPoly *mpoly, const MLoop *mloop,
-                                   int totvert, int totpoly, int totloop)
+void BKE_mesh_vert_poly_map_create(
+        MeshElemMap **r_map, int **r_mem,
+        const MPoly *mpoly, const MLoop *mloop,
+        int totvert, int totpoly, int totloop)
 {
 	mesh_vert_poly_or_loop_map_create(r_map, r_mem, mpoly, mloop, totvert, totpoly, totloop, false);
 }
@@ -254,9 +249,10 @@ void BKE_mesh_vert_poly_map_create(MeshElemMap **r_map, int **r_mem,
  * Generates a map where the key is the vertex and the value is a list of loops that use that vertex as a corner.
  * The lists are allocated from one memory pool.
  */
-void BKE_mesh_vert_loop_map_create(MeshElemMap **r_map, int **r_mem,
-                                   const MPoly *mpoly, const MLoop *mloop,
-                                   int totvert, int totpoly, int totloop)
+void BKE_mesh_vert_loop_map_create(
+        MeshElemMap **r_map, int **r_mem,
+        const MPoly *mpoly, const MLoop *mloop,
+        int totvert, int totpoly, int totloop)
 {
 	mesh_vert_poly_or_loop_map_create(r_map, r_mem, mpoly, mloop, totvert, totpoly, totloop, true);
 }
@@ -310,8 +306,9 @@ void BKE_mesh_vert_looptri_map_create(
  * Generates a map where the key is the vertex and the value is a list of edges that use that vertex as an endpoint.
  * The lists are allocated from one memory pool.
  */
-void BKE_mesh_vert_edge_map_create(MeshElemMap **r_map, int **r_mem,
-                                   const MEdge *medge, int totvert, int totedge)
+void BKE_mesh_vert_edge_map_create(
+        MeshElemMap **r_map, int **r_mem,
+        const MEdge *medge, int totvert, int totedge)
 {
 	MeshElemMap *map = MEM_callocN(sizeof(MeshElemMap) * (size_t)totvert, "vert-edge map");
 	int *indices = MEM_mallocN(sizeof(int[2]) * (size_t)totedge, "vert-edge map mem");
@@ -397,10 +394,11 @@ void BKE_mesh_vert_edge_vert_map_create(
  * Loops indices of a same poly are contiguous and in winding order.
  * The lists are allocated from one memory pool.
  */
-void BKE_mesh_edge_loop_map_create(MeshElemMap **r_map, int **r_mem,
-                                   const MEdge *UNUSED(medge), const int totedge,
-                                   const MPoly *mpoly, const int totpoly,
-                                   const MLoop *mloop, const int totloop)
+void BKE_mesh_edge_loop_map_create(
+        MeshElemMap **r_map, int **r_mem,
+        const MEdge *UNUSED(medge), const int totedge,
+        const MPoly *mpoly, const int totpoly,
+        const MLoop *mloop, const int totloop)
 {
 	MeshElemMap *map = MEM_callocN(sizeof(MeshElemMap) * (size_t)totedge, "edge-poly map");
 	int *indices = MEM_mallocN(sizeof(int) * (size_t)totloop * 2, "edge-poly map mem");
@@ -450,10 +448,11 @@ void BKE_mesh_edge_loop_map_create(MeshElemMap **r_map, int **r_mem,
  * Generates a map where the key is the edge and the value is a list of polygons that use that edge.
  * The lists are allocated from one memory pool.
  */
-void BKE_mesh_edge_poly_map_create(MeshElemMap **r_map, int **r_mem,
-                                   const MEdge *UNUSED(medge), const int totedge,
-                                   const MPoly *mpoly, const int totpoly,
-                                   const MLoop *mloop, const int totloop)
+void BKE_mesh_edge_poly_map_create(
+        MeshElemMap **r_map, int **r_mem,
+        const MEdge *UNUSED(medge), const int totedge,
+        const MPoly *mpoly, const int totpoly,
+        const MLoop *mloop, const int totloop)
 {
 	MeshElemMap *map = MEM_callocN(sizeof(MeshElemMap) * (size_t)totedge, "edge-poly map");
 	int *indices = MEM_mallocN(sizeof(int) * (size_t)totloop, "edge-poly map mem");
@@ -501,17 +500,18 @@ void BKE_mesh_edge_poly_map_create(MeshElemMap **r_map, int **r_mem,
  *
  * This has the advantage that it can operate on any data-types.
  *
- * \param totsource  The total number of elements the that \a final_origindex points to.
- * \param totfinal  The size of \a final_origindex
- * \param final_origindex  The size of the final array.
+ * \param totsource: The total number of elements the that \a final_origindex points to.
+ * \param totfinal: The size of \a final_origindex
+ * \param final_origindex: The size of the final array.
  *
  * \note ``totsource`` could be ``totpoly``,
  *       ``totfinal`` could be ``tottessface`` and ``final_origindex`` its ORIGINDEX customdata.
  *       This would allow an MPoly to loop over its tessfaces.
  */
-void BKE_mesh_origindex_map_create(MeshElemMap **r_map, int **r_mem,
-                                   const int totsource,
-                                   const int *final_origindex, const int totfinal)
+void BKE_mesh_origindex_map_create(
+        MeshElemMap **r_map, int **r_mem,
+        const int totsource,
+        const int *final_origindex, const int totfinal)
 {
 	MeshElemMap *map = MEM_callocN(sizeof(MeshElemMap) * (size_t)totsource, "poly-tessface map");
 	int *indices = MEM_mallocN(sizeof(int) * (size_t)totfinal, "poly-tessface map mem");
@@ -583,7 +583,6 @@ void BKE_mesh_origindex_map_create_looptri(
 
 
 /* -------------------------------------------------------------------- */
-
 /** \name Mesh loops/poly islands.
  * Used currently for UVs and 'smooth groups'.
  * \{ */
@@ -632,8 +631,9 @@ static void poly_edge_loop_islands_calc(
 	}
 
 	if (!edge_poly_map) {
-		BKE_mesh_edge_poly_map_create(&edge_poly_map, &edge_poly_mem,
-		                              medge, totedge, mpoly, totpoly, mloop, totloop);
+		BKE_mesh_edge_poly_map_create(
+		        &edge_poly_map, &edge_poly_mem,
+		        medge, totedge, mpoly, totpoly, mloop, totloop);
 	}
 
 	poly_groups = MEM_callocN(sizeof(int) * (size_t)totpoly, __func__);
@@ -781,15 +781,16 @@ static bool poly_is_island_boundary_smooth_cb(
 /**
  * Calculate smooth groups from sharp edges.
  *
- * \param r_totgroup The total number of groups, 1 or more.
+ * \param r_totgroup: The total number of groups, 1 or more.
  * \return Polygon aligned array of group index values (bitflags if use_bitflags is true), starting at 1
  *         (0 being used as 'invalid' flag).
  *         Note it's callers's responsibility to MEM_freeN returned array.
  */
-int *BKE_mesh_calc_smoothgroups(const MEdge *medge, const int totedge,
-                                const MPoly *mpoly, const int totpoly,
-                                const MLoop *mloop, const int totloop,
-                                int *r_totgroup, const bool use_bitflags)
+int *BKE_mesh_calc_smoothgroups(
+        const MEdge *medge, const int totedge,
+        const MPoly *mpoly, const int totpoly,
+        const MLoop *mloop, const int totloop,
+        int *r_totgroup, const bool use_bitflags)
 {
 	int *poly_groups = NULL;
 
@@ -987,21 +988,23 @@ static bool mesh_calc_islands_loop_poly_uv(
 	BKE_mesh_loop_islands_clear(r_island_store);
 	BKE_mesh_loop_islands_init(r_island_store, MISLAND_TYPE_LOOP, totloop, MISLAND_TYPE_POLY, MISLAND_TYPE_EDGE);
 
-	BKE_mesh_edge_poly_map_create(&edge_poly_map, &edge_poly_mem,
-	                              edges, totedge, polys, totpoly, loops, totloop);
+	BKE_mesh_edge_poly_map_create(
+	        &edge_poly_map, &edge_poly_mem,
+	        edges, totedge, polys, totpoly, loops, totloop);
 
 	if (luvs) {
-		BKE_mesh_edge_loop_map_create(&edge_loop_map, &edge_loop_mem,
-		                              edges, totedge, polys, totpoly, loops, totloop);
+		BKE_mesh_edge_loop_map_create(
+		        &edge_loop_map, &edge_loop_mem,
+		        edges, totedge, polys, totpoly, loops, totloop);
 		edge_boundary_check_data.loops = loops;
 		edge_boundary_check_data.luvs = luvs;
 		edge_boundary_check_data.edge_loop_map = edge_loop_map;
 	}
 
 	poly_edge_loop_islands_calc(
-	            edges, totedge, polys, totpoly, loops, totloop, edge_poly_map, false,
-	            mesh_check_island_boundary_uv, luvs ? &edge_boundary_check_data : NULL,
-	            &poly_groups, &num_poly_groups, &edge_borders, &num_edge_borders);
+	        edges, totedge, polys, totpoly, loops, totloop, edge_poly_map, false,
+	        mesh_check_island_boundary_uv, luvs ? &edge_boundary_check_data : NULL,
+	        &poly_groups, &num_poly_groups, &edge_borders, &num_edge_borders);
 
 	if (!num_poly_groups) {
 		/* Should never happen... */
@@ -1051,8 +1054,9 @@ static bool mesh_calc_islands_loop_poly_uv(
 			}
 		}
 
-		BKE_mesh_loop_islands_add(r_island_store, num_lidx, loop_indices, num_pidx, poly_indices,
-		                          num_einnercuts, edge_innercut_indices);
+		BKE_mesh_loop_islands_add(
+		        r_island_store, num_lidx, loop_indices, num_pidx, poly_indices,
+		        num_einnercuts, edge_innercut_indices);
 	}
 
 	MEM_freeN(edge_poly_map);
@@ -1089,7 +1093,7 @@ bool BKE_mesh_calc_islands_loop_poly_edgeseam(
         MeshIslandStore *r_island_store)
 {
 	return mesh_calc_islands_loop_poly_uv(
-	            verts, totvert, edges, totedge, polys, totpoly, loops, totloop, NULL, r_island_store);
+	        verts, totvert, edges, totedge, polys, totpoly, loops, totloop, NULL, r_island_store);
 }
 
 /**
@@ -1097,7 +1101,7 @@ bool BKE_mesh_calc_islands_loop_poly_edgeseam(
  *
  * \note If no MLoopUV layer is passed, we only consider edges tagged as seams as UV boundaries.
  *     This has the advantages of simplicity, and being valid/common to all UV maps.
- *     However, it means actual UV islands whithout matching UV seams will not be handled correctly...
+ *     However, it means actual UV islands without matching UV seams will not be handled correctly...
  *     If a valid UV layer is passed as \a luvs parameter, UV coordinates are also used to detect islands boundaries.
  *
  * \note All this could be optimized...
@@ -1113,7 +1117,7 @@ bool BKE_mesh_calc_islands_loop_poly_uvmap(
 {
 	BLI_assert(luvs != NULL);
 	return mesh_calc_islands_loop_poly_uv(
-	            verts, totvert, edges, totedge, polys, totpoly, loops, totloop, luvs, r_island_store);
+	        verts, totvert, edges, totedge, polys, totpoly, loops, totloop, luvs, r_island_store);
 }
 
 /** \} */

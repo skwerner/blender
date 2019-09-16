@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #ifndef __COM_DIRECTIONALBLUROPERATION_H__
@@ -41,25 +37,25 @@ public:
 	 * the inner loop of this program
 	 */
 	void executePixel(float output[4], int x, int y, void *data);
-	
+
 	/**
 	 * Initialize the execution
 	 */
 	void initExecution();
-	
+
 	/**
 	 * Deinitialize the execution
 	 */
 	void deinitExecution();
-	
+
 	bool determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output);
-	
+
 	void setData(NodeDBlurData *data) { this->m_data = data; }
 
 	void executeOpenCL(OpenCLDevice *device,
 	                   MemoryBuffer *outputMemoryBuffer, cl_mem clOutputBuffer,
 	                   MemoryBuffer **inputMemoryBuffers, list<cl_mem> *clMemToCleanUp,
 	                   list<cl_kernel> *clKernelsToCleanUp);
-	
+
 };
 #endif

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/tools/bmesh_region_match.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Given a contiguous region of faces,
  * find multiple matching regions (based on topology) and return them.
@@ -421,8 +417,8 @@ static void bm_uuidwalk_rehash(
 	UUID_Int *uuid_store;
 	uint i;
 
-	uint rehash_store_len_new = MAX2(BLI_ghash_size(uuidwalk->verts_uuid),
-	                                         BLI_ghash_size(uuidwalk->faces_uuid));
+	uint rehash_store_len_new = MAX2(BLI_ghash_len(uuidwalk->verts_uuid),
+	                                         BLI_ghash_len(uuidwalk->faces_uuid));
 
 	bm_uuidwalk_rehash_reserve(uuidwalk, rehash_store_len_new);
 	uuid_store = uuidwalk->cache.rehash_store;
@@ -520,8 +516,8 @@ static void bm_uuidwalk_pass_add(
 	verts_uuid_pass = uuidwalk->cache.verts_uuid;
 	faces_step_next = uuidwalk->cache.faces_step;
 
-	BLI_assert(BLI_ghash_size(verts_uuid_pass) == 0);
-	BLI_assert(BLI_gset_size(faces_step_next) == 0);
+	BLI_assert(BLI_ghash_len(verts_uuid_pass) == 0);
+	BLI_assert(BLI_gset_len(faces_step_next) == 0);
 
 	/* Add the face_step data from connected faces, creating new passes */
 	fstep = BLI_mempool_alloc(uuidwalk->step_pool);
@@ -583,9 +579,9 @@ static int bm_face_len_cmp(const void *v1, const void *v2)
 {
 	const BMFace *f1 = v1, *f2 = v2;
 
-	if      (f1->len > f2->len) return  1;
-	else if (f1->len < f2->len) return -1;
-	else                        return  0;
+	if      (f1->len > f2->len) { return  1; }
+	else if (f1->len < f2->len) { return -1; }
+	else                        { return  0; }
 }
 
 static uint bm_uuidwalk_init_from_edge(
@@ -659,7 +655,7 @@ static bool bm_uuidwalk_facestep_begin(
 	LinkNode *f_link, *f_link_next, **f_link_prev_p;
 	bool ok = false;
 
-	BLI_assert(BLI_ghash_size(uuidwalk->cache.faces_from_uuid) == 0);
+	BLI_assert(BLI_ghash_len(uuidwalk->cache.faces_from_uuid) == 0);
 	BLI_assert(BLI_listbase_is_empty(&fstep->items));
 
 	f_link_prev_p = &fstep->faces;
@@ -864,7 +860,7 @@ static BMFace **bm_mesh_region_match_pair(
 			break;
 		}
 
-		found = (BLI_ghash_size(w_dst->faces_uuid) == faces_src_region_len);
+		found = (BLI_ghash_len(w_dst->faces_uuid) == faces_src_region_len);
 		if (found) {
 			break;
 		}
@@ -877,7 +873,7 @@ static BMFace **bm_mesh_region_match_pair(
 
 	if (found) {
 		GHashIterator gh_iter;
-		const uint faces_result_len = BLI_ghash_size(w_dst->faces_uuid);
+		const uint faces_result_len = BLI_ghash_len(w_dst->faces_uuid);
 		uint i;
 
 		faces_result = MEM_mallocN(sizeof(*faces_result) * (faces_result_len + 1), __func__);
@@ -1374,7 +1370,7 @@ static void bm_vert_fasthash_destroy(
 /**
  * Take a face-region and return a list of matching face-regions.
  *
- * \param faces_region  A single, contiguous face-region.
+ * \param faces_region: A single, contiguous face-region.
  * \return  A list of matching null-terminated face-region arrays.
  */
 int BM_mesh_region_match(

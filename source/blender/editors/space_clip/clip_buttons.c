@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_clip/clip_buttons.c
- *  \ingroup spclip
+/** \file
+ * \ingroup spclip
  */
 
 #include <string.h>
@@ -38,21 +30,24 @@
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
-#include "BLI_math.h"
 #include "BLI_utildefines.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
 
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_screen.h"
 #include "BKE_movieclip.h"
 #include "BKE_tracking.h"
 
+#include "DEG_depsgraph.h"
+
+#include "ED_clip.h"
 #include "ED_gpencil.h"
+#include "ED_screen.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -69,14 +64,44 @@
 
 /* Panels */
 
-void ED_clip_buttons_register(ARegionType *UNUSED(art))
+static bool metadata_panel_context_poll(const bContext *C, PanelType *UNUSED(pt))
 {
+	return ED_space_clip_poll((bContext *)C);
+}
 
+static void metadata_panel_context_draw(const bContext *C, Panel *panel)
+{
+	SpaceClip *space_clip = CTX_wm_space_clip(C);
+	/* NOTE: This might not be exactly the same image buffer as shown in the
+	 * clip editor itself, since that might be coming from proxy, or being
+	 * postprocessed (stabilized or undistored).
+	 * Ideally we need to query metadata from an original image or movie without
+	 * reading actual pixels to speed up the process. */
+	ImBuf *ibuf = ED_space_clip_get_buffer(space_clip);
+	if (ibuf != NULL) {
+		ED_region_image_metadata_panel_draw(ibuf, panel->layout);
+		IMB_freeImBuf(ibuf);
+	}
+}
+
+void ED_clip_buttons_register(ARegionType *art)
+{
+	PanelType *pt;
+
+	pt = MEM_callocN(sizeof(PanelType), "spacetype clip panel metadata");
+	strcpy(pt->idname, "CLIP_PT_metadata");
+	strcpy(pt->label, N_("Metadata"));
+	strcpy(pt->category, "Footage");
+	strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
+	pt->poll = metadata_panel_context_poll;
+	pt->draw = metadata_panel_context_draw;
+	pt->flag |= PNL_DEFAULT_CLOSED;
+	BLI_addtail(&art->paneltypes, pt);
 }
 
 /********************* MovieClip Template ************************/
 
-void uiTemplateMovieClip(uiLayout *layout, bContext *C, PointerRNA *ptr, const char *propname, int compact)
+void uiTemplateMovieClip(uiLayout *layout, bContext *C, PointerRNA *ptr, const char *propname, bool compact)
 {
 	PropertyRNA *prop;
 	PointerRNA clipptr;
@@ -106,7 +131,7 @@ void uiTemplateMovieClip(uiLayout *layout, bContext *C, PointerRNA *ptr, const c
 	uiLayoutSetContextPointer(layout, "edit_movieclip", &clipptr);
 
 	if (!compact)
-		uiTemplateID(layout, C, ptr, propname, NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL);
+		uiTemplateID(layout, C, ptr, propname, NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
 
 	if (clip) {
 		uiLayout *col;
@@ -183,19 +208,27 @@ void uiTemplateTrack(uiLayout *layout, PointerRNA *ptr, const char *propname)
 #define B_MARKER_FLAG           8
 
 typedef struct {
-	int compact;                                /* compact mode */
+	/** compact mode */
+	int compact;
 
 	MovieClip *clip;
-	MovieClipUser *user;                        /* user of clip */
+	/** user of clip */
+	MovieClipUser *user;
 	MovieTrackingTrack *track;
 	MovieTrackingMarker *marker;
 
-	int framenr;                                    /* current frame number */
-	float marker_pos[2];                            /* position of marker in pixel coords */
-	float marker_pat[2];                            /* position and dimensions of marker pattern in pixel coords */
-	float track_offset[2];                          /* offset of "parenting" point */
-	float marker_search_pos[2], marker_search[2];   /* position and dimensions of marker search in pixel coords */
-	int marker_flag;                                /* marker's flags */
+	/** current frame number */
+	int framenr;
+	/** position of marker in pixel coords */
+	float marker_pos[2];
+	/** position and dimensions of marker pattern in pixel coords */
+	float marker_pat[2];
+	/** offset of "parenting" point */
+	float track_offset[2];
+	/** position and dimensions of marker search in pixel coords */
+	float marker_search_pos[2], marker_search[2];
+	/** marker's flags */
+	int marker_flag;
 } MarkerUpdateCb;
 
 static void to_pixel_space(float r[2], float a[2], int width, int height)
@@ -236,7 +269,7 @@ static void marker_block_handler(bContext *C, void *arg_cb, int event)
 		marker->pos[1] = cb->marker_pos[1] / height;
 
 		/* to update position of "parented" objects */
-		DAG_id_tag_update(&cb->clip->id, 0);
+		DEG_id_tag_update(&cb->clip->id, 0);
 		WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
 		ok = true;
@@ -321,7 +354,7 @@ static void marker_block_handler(bContext *C, void *arg_cb, int event)
 			sub_v2_v2(cb->track->markers[i].pos, delta);
 
 		/* to update position of "parented" objects */
-		DAG_id_tag_update(&cb->clip->id, 0);
+		DEG_id_tag_update(&cb->clip->id, 0);
 		WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
 		ok = true;
@@ -332,7 +365,7 @@ static void marker_block_handler(bContext *C, void *arg_cb, int event)
 }
 
 void uiTemplateMarker(uiLayout *layout, PointerRNA *ptr, const char *propname, PointerRNA *userptr,
-                      PointerRNA *trackptr, int compact)
+                      PointerRNA *trackptr, bool compact)
 {
 	PropertyRNA *prop;
 	uiBlock *block;
@@ -386,9 +419,10 @@ void uiTemplateMarker(uiLayout *layout, PointerRNA *ptr, const char *propname, P
 		else
 			tip = TIP_("Marker is enabled at current frame");
 
-		bt = uiDefIconButBitI(block, UI_BTYPE_TOGGLE_N, MARKER_DISABLED, 0, ICON_RESTRICT_VIEW_OFF, 0, 0, UI_UNIT_X, UI_UNIT_Y,
+		bt = uiDefIconButBitI(block, UI_BTYPE_TOGGLE_N, MARKER_DISABLED, 0, ICON_HIDE_OFF, 0, 0, UI_UNIT_X, UI_UNIT_Y,
 		                      &cb->marker_flag, 0, 0, 1, 0, tip);
 		UI_but_funcN_set(bt, marker_update_cb, cb, NULL);
+		UI_but_drawflag_enable(bt, UI_BUT_ICON_REVERSE);
 	}
 	else {
 		int width, height, step, digits;
@@ -531,6 +565,16 @@ void uiTemplateMovieclipInformation(uiLayout *layout, PointerRNA *ptr, const cha
 				ofs += BLI_strncpy_rlen(str + ofs, IFACE_(", RGBA byte"), sizeof(str) - ofs);
 			else
 				ofs += BLI_strncpy_rlen(str + ofs, IFACE_(", RGB byte"), sizeof(str) - ofs);
+		}
+
+		if (clip->anim != NULL) {
+			short frs_sec;
+			float frs_sec_base;
+			if (IMB_anim_get_fps(clip->anim, &frs_sec, &frs_sec_base, true)) {
+				ofs += BLI_snprintf(str + ofs, sizeof(str) - ofs,
+				                    IFACE_(", %.2f fps"),
+				                    (float)frs_sec / frs_sec_base);
+			}
 		}
 	}
 	else {

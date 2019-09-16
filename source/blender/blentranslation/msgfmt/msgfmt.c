@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,10 +15,6 @@
  *
  * The Original Code is Copyright (C) 2017 by Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 /*
@@ -186,7 +180,7 @@ typedef struct Offset {
 /* Return the generated binary output. */
 static char *generate(GHash *messages, size_t *r_output_size)
 {
-	const uint32_t num_keys = BLI_ghash_size(messages);
+	const uint32_t num_keys = BLI_ghash_len(messages);
 
 	/* Get list of sorted keys. */
 	char **keys = get_keys_sorted(messages, num_keys);

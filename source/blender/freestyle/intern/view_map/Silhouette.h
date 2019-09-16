@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FREESTYLE_SILHOUETTE_H__
 #define __FREESTYLE_SILHOUETTE_H__
 
-/** \file blender/freestyle/intern/view_map/Silhouette.h
- *  \ingroup freestyle
- *  \brief Classes to define a silhouette structure
- *  \author Stephane Grabli
- *  \date 25/03/2002
+/** \file
+ * \ingroup freestyle
+ * \brief Classes to define a silhouette structure
  */
 
 #include <float.h>
@@ -102,7 +96,7 @@ public: // Implementation of Interface0D
 		return _Point3D.z();
 	}
 
-	/*!  Returns the 3D point. */ 
+	/*!  Returns the 3D point. */
 	virtual Vec3r getPoint3D() const
 	{
 		return _Point3D;
@@ -126,7 +120,7 @@ public: // Implementation of Interface0D
 		return _Point2D.z();
 	}
 
-	/*!  Returns the 2D point. */ 
+	/*!  Returns the 2D point. */
 	virtual Vec2r getPoint2D() const
 	{
 		return Vec2r(_Point2D.x(), _Point2D.y());
@@ -144,16 +138,16 @@ public: // Implementation of Interface0D
 	/*! Returns the nature of the vertex .*/
 	virtual Nature::VertexNature getNature() const;
 
-	/*! Cast the Interface0D in SVertex if it can be. */ 
+	/*! Cast the Interface0D in SVertex if it can be. */
 	virtual SVertex *castToSVertex();
 
-	/*! Cast the Interface0D in ViewVertex if it can be. */ 
+	/*! Cast the Interface0D in ViewVertex if it can be. */
 	virtual ViewVertex *castToViewVertex();
 
-	/*! Cast the Interface0D in NonTVertex if it can be. */ 
+	/*! Cast the Interface0D in NonTVertex if it can be. */
 	virtual NonTVertex *castToNonTVertex();
 
-	/*! Cast the Interface0D in TVertex if it can be. */ 
+	/*! Cast the Interface0D in TVertex if it can be. */
 	virtual TVertex *castToTVertex();
 
 public:
@@ -163,7 +157,7 @@ private:
 	Id _Id;
 	Vec3r _Point3D;
 	Vec3r _Point2D;
-	set<Vec3r> _Normals; 
+	set<Vec3r> _Normals;
 	vector<FEdge*> _FEdges; // the edges containing this vertex
 	SShape *_Shape;  // the shape to which belongs the vertex
 	ViewVertex *_pViewVertex; // The associated viewvertex, in case there is one.
@@ -949,7 +943,7 @@ public:
 	/*! Returns an iterator over the FEdge points, pointing to the first point. The difference with verticesBegin()
 	 *  is that here we can iterate over points of the FEdge at a any given sampling.
 	 *  Indeed, for each iteration, a virtual point is created.
-	 *  \param t
+	 *  \param t:
 	 *    The sampling with which we want to iterate over points of this FEdge.
 	 */
 	virtual inline Interface0DIterator pointsBegin(float t = 0.0f);
@@ -957,7 +951,7 @@ public:
 	/*! Returns an iterator over the FEdge points, pointing after the last point. The difference with verticesEnd()
 	 * is that here we can iterate over points of the FEdge at a any given sampling.
 	 *  Indeed, for each iteration, a virtual point is created.
-	 *  \param t
+	 *  \param t:
 	 *    The sampling with which we want to iterate over points of this FEdge.
 	 */
 	virtual inline Interface0DIterator pointsEnd(float t = 0.0f);
@@ -1291,10 +1285,10 @@ protected:
 	unsigned _FrsMaterialIndex;
 #if 0
 	bool _hasVisibilityPoint;
-	Vec3r _VisibilityPointA;  // The edge on which the visibility will be computed represented 
+	Vec3r _VisibilityPointA;  // The edge on which the visibility will be computed represented
 	Vec3r _VisibilityPointB;  // using its 2 extremity points A and B
 #endif
-	void *_Face; // In case of exact silhouette, Face is the WFace crossed by Fedge 
+	void *_Face; // In case of exact silhouette, Face is the WFace crossed by Fedge
 	              // NOT HANDLED BY THE COPY CONSTRUCTEUR
 	bool _FaceMark;
 
@@ -1415,10 +1409,10 @@ private:
 	vector<SVertex*> _verticesList;  // list of all vertices
 	vector<FEdge*> _edgesList;       // list of all edges
 	Id _Id;
-	const char *_Name;
-	const char *_LibraryPath;
+	string _Name;
+	string _LibraryPath;
 	BBox<Vec3r> _BBox;
-	vector<FrsMaterial> _FrsMaterials;  
+	vector<FrsMaterial> _FrsMaterials;
 
 	float _importance;
 
@@ -1436,8 +1430,6 @@ public:
 		userdata = NULL;
 		_importance = 0.0f;
 		_ViewShape = NULL;
-		_Name = NULL;
-		_LibraryPath = NULL;
 	}
 
 	/*! Copy constructor */
@@ -1891,13 +1883,13 @@ public:
 	}
 
 	/*! Returns the name of the Shape. */
-	inline const char *getName() const
+	inline const string& getName() const
 	{
 		return _Name;
 	}
 
 	/*! Returns the library path of the Shape. */
-	inline const char *getLibraryPath() const
+	inline const string& getLibraryPath() const
 	{
 		return _LibraryPath;
 	}
@@ -1910,13 +1902,13 @@ public:
 	}
 
 	/*! Sets the name of the shape.*/
-	inline void setName(const char *name)
+	inline void setName(const string& name)
 	{
 		_Name = name;
 	}
 
 	/*! Sets the library path of the shape.*/
-	inline void setLibraryPath(const char *path)
+	inline void setLibraryPath(const string& path)
 	{
 		_LibraryPath = path;
 	}

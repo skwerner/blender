@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/GHOST_ITimerTask.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_ITimerTask interface class.
  */
 
@@ -39,16 +31,14 @@
 /**
  * Interface for a timer task.
  * Timer tasks are created by the system and can be installed by the system.
- * After installation, the timer callback-procedure or "timerProc" will be called 
+ * After installation, the timer callback-procedure or "timerProc" will be called
  * periodically. You should not need to inherit this class. It is passed to the
  * application in the timer-callback.<br>
  * <br>
- * Note that GHOST processes timers in the UI thread. You should ask GHOST 
+ * Note that GHOST processes timers in the UI thread. You should ask GHOST
  * process messages in order for the timer-callbacks to be called.
  * \see GHOST_ISystem#installTimer
  * \see GHOST_TimerProcPtr
- * \author	Maarten Gribnau
- * \date	May 31, 2001
  */
 class GHOST_ITimerTask
 {
@@ -77,7 +67,7 @@ public:
 	 * \return The timer user data.
 	 */
 	virtual GHOST_TUserDataPtr getUserData() const = 0;
-	
+
 	/**
 	 * Changes the time user data.
 	 * \param userData: The timer user data.
@@ -91,4 +81,3 @@ public:
 };
 
 #endif // __GHOST_ITIMERTASK_H__
-

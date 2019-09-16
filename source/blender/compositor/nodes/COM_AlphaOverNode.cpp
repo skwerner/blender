@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_AlphaOverNode.h"
@@ -35,14 +31,14 @@ void AlphaOverNode::convertToOperations(NodeConverter &converter, const Composit
 	NodeInput *color1Socket = this->getInputSocket(1);
 	NodeInput *color2Socket = this->getInputSocket(2);
 	bNode *editorNode = this->getbNode();
-	
+
 	MixBaseOperation *convertProg;
 	NodeTwoFloats *ntf = (NodeTwoFloats *)editorNode->storage;
 	if (ntf->x != 0.0f) {
 		AlphaOverMixedOperation *mixOperation  = new AlphaOverMixedOperation();
 		mixOperation->setX(ntf->x);
 		convertProg = mixOperation;
-	
+
 	}
 	else if (editorNode->custom1) {
 		convertProg = new AlphaOverKeyOperation();
@@ -50,7 +46,7 @@ void AlphaOverNode::convertToOperations(NodeConverter &converter, const Composit
 	else {
 		convertProg = new AlphaOverPremultiplyOperation();
 	}
-	
+
 	convertProg->setUseValueAlphaMultiply(false);
 	if (color1Socket->isLinked()) {
 		convertProg->setResolutionInputSocketIndex(1);
@@ -61,7 +57,7 @@ void AlphaOverNode::convertToOperations(NodeConverter &converter, const Composit
 	else {
 		convertProg->setResolutionInputSocketIndex(0);
 	}
-	
+
 	converter.addOperation(convertProg);
 	converter.mapInputSocket(getInputSocket(0), convertProg->getInputSocket(0));
 	converter.mapInputSocket(getInputSocket(1), convertProg->getInputSocket(1));

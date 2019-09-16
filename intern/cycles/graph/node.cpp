@@ -365,29 +365,48 @@ static bool is_array_equal(const Node *node, const Node *other, const SocketType
 	return *a == *b;
 }
 
+template<typename T>
+static bool is_value_equal(const Node *node, const Node *other, const SocketType& socket)
+{
+	const T *a = (const T*)(((char*)node) + socket.struct_offset);
+	const T *b = (const T*)(((char*)other) + socket.struct_offset);
+	return *a == *b;
+}
+
 bool Node::equals_value(const Node& other, const SocketType& socket) const
 {
-	if(socket.is_array()) {
-		switch(socket.type) {
-			case SocketType::BOOLEAN_ARRAY: return is_array_equal<bool>(this, &other, socket);
-			case SocketType::FLOAT_ARRAY: return is_array_equal<float>(this, &other, socket);
-			case SocketType::INT_ARRAY: return is_array_equal<int>(this, &other, socket);
-			case SocketType::COLOR_ARRAY: return is_array_equal<float3>(this, &other, socket);
-			case SocketType::VECTOR_ARRAY: return is_array_equal<float3>(this, &other, socket);
-			case SocketType::POINT_ARRAY: return is_array_equal<float3>(this, &other, socket);
-			case SocketType::NORMAL_ARRAY: return is_array_equal<float3>(this, &other, socket);
-			case SocketType::POINT2_ARRAY: return is_array_equal<float2>(this, &other, socket);
-			case SocketType::STRING_ARRAY: return is_array_equal<ustring>(this, &other, socket);
-			case SocketType::TRANSFORM_ARRAY: return is_array_equal<Transform>(this, &other, socket);
-			case SocketType::NODE_ARRAY: return is_array_equal<void*>(this, &other, socket);
-			default: assert(0); return true;
-		}
+	switch(socket.type) {
+		case SocketType::BOOLEAN: return is_value_equal<bool>(this, &other, socket);
+		case SocketType::FLOAT: return is_value_equal<float>(this, &other, socket);
+		case SocketType::INT: return is_value_equal<int>(this, &other, socket);
+		case SocketType::UINT: return is_value_equal<uint>(this, &other, socket);
+		case SocketType::COLOR: return is_value_equal<float3>(this, &other, socket);
+		case SocketType::VECTOR: return is_value_equal<float3>(this, &other, socket);
+		case SocketType::POINT: return is_value_equal<float3>(this, &other, socket);
+		case SocketType::NORMAL: return is_value_equal<float3>(this, &other, socket);
+		case SocketType::POINT2: return is_value_equal<float2>(this, &other, socket);
+		case SocketType::CLOSURE: return true;
+		case SocketType::STRING: return is_value_equal<ustring>(this, &other, socket);
+		case SocketType::ENUM: return is_value_equal<int>(this, &other, socket);
+		case SocketType::TRANSFORM: return is_value_equal<Transform>(this, &other, socket);
+		case SocketType::NODE: return is_value_equal<void*>(this, &other, socket);
+
+		case SocketType::BOOLEAN_ARRAY: return is_array_equal<bool>(this, &other, socket);
+		case SocketType::FLOAT_ARRAY: return is_array_equal<float>(this, &other, socket);
+		case SocketType::INT_ARRAY: return is_array_equal<int>(this, &other, socket);
+		case SocketType::COLOR_ARRAY: return is_array_equal<float3>(this, &other, socket);
+		case SocketType::VECTOR_ARRAY: return is_array_equal<float3>(this, &other, socket);
+		case SocketType::POINT_ARRAY: return is_array_equal<float3>(this, &other, socket);
+		case SocketType::NORMAL_ARRAY: return is_array_equal<float3>(this, &other, socket);
+		case SocketType::POINT2_ARRAY: return is_array_equal<float2>(this, &other, socket);
+		case SocketType::STRING_ARRAY: return is_array_equal<ustring>(this, &other, socket);
+		case SocketType::TRANSFORM_ARRAY: return is_array_equal<Transform>(this, &other, socket);
+		case SocketType::NODE_ARRAY: return is_array_equal<void*>(this, &other, socket);
+
+		case SocketType::UNDEFINED: return true;
 	}
-	else {
-		const void *a = ((char*)this) + socket.struct_offset;
-		const void *b = ((char*)&other) + socket.struct_offset;
-		return (memcmp(a, b, socket.size()) == 0);
-	}
+
+	return true;
 }
 
 /* equals */
@@ -406,6 +425,40 @@ bool Node::equals(const Node& other) const
 
 /* Hash */
 
+namespace {
+
+template<typename T>
+void value_hash(const Node *node, const SocketType& socket, MD5Hash& md5)
+{
+	md5.append(((uint8_t*)node) + socket.struct_offset, socket.size());
+}
+
+void float3_hash(const Node *node, const SocketType& socket, MD5Hash& md5)
+{
+	/* Don't compare 4th element used for padding. */
+	md5.append(((uint8_t*)node) + socket.struct_offset, sizeof(float) * 3);
+}
+
+template<typename T>
+void array_hash(const Node *node, const SocketType& socket, MD5Hash& md5)
+{
+	const array<T>& a = *(const array<T>*)(((char*)node) + socket.struct_offset);
+	for(size_t i = 0; i < a.size(); i++) {
+		md5.append((uint8_t*)&a[i], sizeof(T));
+	}
+}
+
+void float3_array_hash(const Node *node, const SocketType& socket, MD5Hash& md5)
+{
+	/* Don't compare 4th element used for padding. */
+	const array<float3>& a = *(const array<float3>*)(((char*)node) + socket.struct_offset);
+	for(size_t i = 0; i < a.size(); i++) {
+		md5.append((uint8_t*)&a[i], sizeof(float) * 3);
+	}
+}
+
+}  // namespace
+
 void Node::hash(MD5Hash& md5)
 {
 	md5.append(type->name.string());
@@ -413,15 +466,110 @@ void Node::hash(MD5Hash& md5)
 	foreach(const SocketType& socket, type->inputs) {
 		md5.append(socket.name.string());
 
-		if(socket.is_array()) {
-			const array<bool>* a = (const array<bool>*)(((char*)this) + socket.struct_offset);
-			md5.append((uint8_t*)a->data(), socket.size() * a->size());
-		}
-		else {
-			md5.append(((uint8_t*)this) + socket.struct_offset, socket.size());
+		switch(socket.type) {
+			case SocketType::BOOLEAN: value_hash<bool>(this, socket, md5); break;
+			case SocketType::FLOAT: value_hash<float>(this, socket, md5); break;
+			case SocketType::INT: value_hash<int>(this, socket, md5); break;
+			case SocketType::UINT: value_hash<uint>(this, socket, md5); break;
+			case SocketType::COLOR: float3_hash(this, socket, md5); break;
+			case SocketType::VECTOR: float3_hash(this, socket, md5); break;
+			case SocketType::POINT: float3_hash(this, socket, md5); break;
+			case SocketType::NORMAL: float3_hash(this, socket, md5); break;
+			case SocketType::POINT2: value_hash<float2>(this, socket, md5); break;
+			case SocketType::CLOSURE: break;
+			case SocketType::STRING: value_hash<ustring>(this, socket, md5); break;
+			case SocketType::ENUM: value_hash<int>(this, socket, md5); break;
+			case SocketType::TRANSFORM: value_hash<Transform>(this, socket, md5); break;
+			case SocketType::NODE: value_hash<void*>(this, socket, md5); break;
+
+			case SocketType::BOOLEAN_ARRAY: array_hash<bool>(this, socket, md5); break;
+			case SocketType::FLOAT_ARRAY: array_hash<float>(this, socket, md5); break;
+			case SocketType::INT_ARRAY: array_hash<int>(this, socket, md5); break;
+			case SocketType::COLOR_ARRAY: float3_array_hash(this, socket, md5); break;
+			case SocketType::VECTOR_ARRAY: float3_array_hash(this, socket, md5); break;
+			case SocketType::POINT_ARRAY: float3_array_hash(this, socket, md5); break;
+			case SocketType::NORMAL_ARRAY: float3_array_hash(this, socket, md5); break;
+			case SocketType::POINT2_ARRAY: array_hash<float2>(this, socket, md5); break;
+			case SocketType::STRING_ARRAY: array_hash<ustring>(this, socket, md5); break;
+			case SocketType::TRANSFORM_ARRAY: array_hash<Transform>(this, socket, md5); break;
+			case SocketType::NODE_ARRAY: array_hash<void*>(this, socket, md5); break;
+
+			case SocketType::UNDEFINED: break;
 		}
 	}
 }
 
-CCL_NAMESPACE_END
+namespace {
 
+template<typename T>
+size_t array_size_in_bytes(const Node *node, const SocketType& socket)
+{
+	const array<T>& a = *(const array<T>*)(((char*)node) + socket.struct_offset);
+	return a.size() * sizeof(T);
+}
+
+}  // namespace
+
+size_t Node::get_total_size_in_bytes() const
+{
+	size_t total_size = 0;
+	foreach(const SocketType& socket, type->inputs) {
+		switch(socket.type) {
+			case SocketType::BOOLEAN:
+			case SocketType::FLOAT:
+			case SocketType::INT:
+			case SocketType::UINT:
+			case SocketType::COLOR:
+			case SocketType::VECTOR:
+			case SocketType::POINT:
+			case SocketType::NORMAL:
+			case SocketType::POINT2:
+			case SocketType::CLOSURE:
+			case SocketType::STRING:
+			case SocketType::ENUM:
+			case SocketType::TRANSFORM:
+			case SocketType::NODE:
+				total_size += socket.size();
+				break;
+
+			case SocketType::BOOLEAN_ARRAY:
+				total_size += array_size_in_bytes<bool>(this, socket);
+				break;
+			case SocketType::FLOAT_ARRAY:
+				total_size += array_size_in_bytes<float>(this, socket);
+				break;
+			case SocketType::INT_ARRAY:
+				total_size += array_size_in_bytes<int>(this, socket);
+				break;
+			case SocketType::COLOR_ARRAY:
+				total_size += array_size_in_bytes<float3>(this, socket);
+				break;
+			case SocketType::VECTOR_ARRAY:
+				total_size += array_size_in_bytes<float3>(this, socket);
+				break;
+			case SocketType::POINT_ARRAY:
+				total_size += array_size_in_bytes<float3>(this, socket);
+				break;
+			case SocketType::NORMAL_ARRAY:
+				total_size += array_size_in_bytes<float3>(this, socket);
+				break;
+			case SocketType::POINT2_ARRAY:
+				total_size += array_size_in_bytes<float2>(this, socket);
+				break;
+			case SocketType::STRING_ARRAY:
+				total_size += array_size_in_bytes<ustring>(this, socket);
+				break;
+			case SocketType::TRANSFORM_ARRAY:
+				total_size += array_size_in_bytes<Transform>(this, socket);
+				break;
+			case SocketType::NODE_ARRAY:
+				total_size += array_size_in_bytes<void*>(this, socket);
+				break;
+
+			case SocketType::UNDEFINED: break;
+		}
+	}
+	return total_size;
+}
+
+CCL_NAMESPACE_END

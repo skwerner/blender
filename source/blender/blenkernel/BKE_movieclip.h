@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,22 +15,16 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_MOVIECLIP_H__
 #define __BKE_MOVIECLIP_H__
 
-/** \file BKE_movieclip.h
- *  \ingroup bke
- *  \author Sergey Sharybin
+/** \file
+ * \ingroup bke
  */
 
-struct EvaluationContext;
+struct Depsgraph;
 struct ImBuf;
 struct Main;
 struct MovieClip;
@@ -49,9 +41,11 @@ void BKE_movieclip_make_local(struct Main *bmain, struct MovieClip *clip, const 
 struct MovieClip *BKE_movieclip_file_add(struct Main *bmain, const char *name);
 struct MovieClip *BKE_movieclip_file_add_exists_ex(struct Main *bmain, const char *name, bool *r_exists);
 struct MovieClip *BKE_movieclip_file_add_exists(struct Main *bmain, const char *name);
-void BKE_movieclip_reload(struct MovieClip *clip);
+void BKE_movieclip_reload(struct Main *bmain, struct MovieClip *clip);
 void BKE_movieclip_clear_cache(struct MovieClip *clip);
 void BKE_movieclip_clear_proxy_cache(struct MovieClip *clip);
+
+void BKE_movieclip_convert_multilayer_ibuf(struct ImBuf *ibuf);
 
 struct ImBuf *BKE_movieclip_get_ibuf(struct MovieClip *clip, struct MovieClipUser *user);
 struct ImBuf *BKE_movieclip_get_postprocessed_ibuf(struct MovieClip *clip, struct MovieClipUser *user, int postprocess_flag);
@@ -60,6 +54,7 @@ struct ImBuf *BKE_movieclip_get_ibuf_flag(struct MovieClip *clip, struct MovieCl
 void BKE_movieclip_get_size(struct MovieClip *clip, struct MovieClipUser *user, int *width, int *height);
 void BKE_movieclip_get_size_fl(struct MovieClip *clip, struct MovieClipUser *user, float size[2]);
 int  BKE_movieclip_get_duration(struct MovieClip *clip);
+float BKE_movieclip_get_fps(struct MovieClip *clip);
 void BKE_movieclip_get_aspect(struct MovieClip *clip, float *aspx, float *aspy);
 bool BKE_movieclip_has_frame(struct MovieClip *clip, struct MovieClipUser *user);
 void BKE_movieclip_user_set_frame(struct MovieClipUser *user, int framenr);
@@ -83,10 +78,11 @@ struct ImBuf *BKE_movieclip_anim_ibuf_for_frame(struct MovieClip *clip, struct M
 bool BKE_movieclip_has_cached_frame(struct MovieClip *clip, struct MovieClipUser *user);
 bool BKE_movieclip_put_frame_if_possible(struct MovieClip *clip, struct MovieClipUser *user, struct ImBuf *ibuf);
 
-/* Evaluaiton. */
-void BKE_movieclip_eval_update(struct EvaluationContext *eval_ctx, struct MovieClip *clip);
+/* Evaluation. */
+void BKE_movieclip_eval_update(struct Depsgraph *depsgraph, struct MovieClip *clip);
+void BKE_movieclip_eval_selection_update(struct Depsgraph *depsgraph, struct MovieClip *clip);
 
-/* cacheing flags */
+/* caching flags */
 #define MOVIECLIP_CACHE_SKIP        (1 << 0)
 
 /* postprocessing flags */

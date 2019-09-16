@@ -51,7 +51,11 @@ def enum_previews_from_directory_items(self, context):
         for i, name in enumerate(image_paths):
             # generates a thumbnail preview for a file.
             filepath = os.path.join(directory, name)
-            thumb = pcoll.load(filepath, filepath, 'IMAGE')
+            icon = pcoll.get(name)
+            if not icon:
+                thumb = pcoll.load(name, filepath, 'IMAGE')
+            else:
+                thumb = pcoll[name]
             enum_items.append((name, name, "", thumb.icon_id, i))
 
     pcoll.my_previews = enum_items
@@ -89,19 +93,19 @@ preview_collections = {}
 def register():
     from bpy.types import WindowManager
     from bpy.props import (
-            StringProperty,
-            EnumProperty,
-            )
+        StringProperty,
+        EnumProperty,
+    )
 
     WindowManager.my_previews_dir = StringProperty(
-            name="Folder Path",
-            subtype='DIR_PATH',
-            default=""
-            )
+        name="Folder Path",
+        subtype='DIR_PATH',
+        default=""
+    )
 
     WindowManager.my_previews = EnumProperty(
-            items=enum_previews_from_directory_items,
-            )
+        items=enum_previews_from_directory_items,
+    )
 
     # Note that preview collections returned by bpy.utils.previews
     # are regular Python objects - you can use them to store custom data.

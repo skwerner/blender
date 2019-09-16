@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_eyedropper_depth.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * This file defines an eyedropper for picking 3D depth value (primary use is depth-of-field).
  *
@@ -44,6 +40,8 @@
 #include "BKE_screen.h"
 #include "BKE_unit.h"
 
+#include "DEG_depsgraph.h"
+
 #include "RNA_access.h"
 
 #include "UI_interface.h"
@@ -64,7 +62,9 @@
 typedef struct DepthDropper {
 	PointerRNA ptr;
 	PropertyRNA *prop;
+	bool is_undo;
 
+	bool is_set;
 	float init_depth; /* for resetting on cancel */
 
 	bool  accum_start; /* has mouse been presed */
@@ -86,7 +86,6 @@ static void depthdropper_draw_cb(const struct bContext *C, ARegion *ar, void *ar
 
 static int depthdropper_init(bContext *C, wmOperator *op)
 {
-	DepthDropper *ddr;
 	int index_dummy;
 
 	SpaceType *st;
@@ -95,9 +94,9 @@ static int depthdropper_init(bContext *C, wmOperator *op)
 	st = BKE_spacetype_from_id(SPACE_VIEW3D);
 	art = BKE_regiontype_from_id(st, RGN_TYPE_WINDOW);
 
-	op->customdata = ddr = MEM_callocN(sizeof(DepthDropper), "DepthDropper");
+	DepthDropper *ddr = MEM_callocN(sizeof(DepthDropper), __func__);
 
-	UI_context_active_but_prop_get(C, &ddr->ptr, &ddr->prop, &index_dummy);
+	uiBut *but = UI_context_active_but_prop_get(C, &ddr->ptr, &ddr->prop, &index_dummy);
 
 	/* fallback to the active camera's dof */
 	if (ddr->prop == NULL) {
@@ -107,8 +106,12 @@ static int depthdropper_init(bContext *C, wmOperator *op)
 			if (v3d->camera && v3d->camera->data && !ID_IS_LINKED(v3d->camera->data)) {
 				RNA_id_pointer_create(v3d->camera->data, &ddr->ptr);
 				ddr->prop = RNA_struct_find_property(&ddr->ptr, "dof_distance");
+				ddr->is_undo = true;
 			}
 		}
+	}
+	else {
+		ddr->is_undo = UI_but_flag_is_set(but, UI_BUT_UNDO);
 	}
 
 	if ((ddr->ptr.data == NULL) ||
@@ -116,8 +119,10 @@ static int depthdropper_init(bContext *C, wmOperator *op)
 	    (RNA_property_editable(&ddr->ptr, ddr->prop) == false) ||
 	    (RNA_property_type(ddr->prop) != PROP_FLOAT))
 	{
+		MEM_freeN(ddr);
 		return false;
 	}
+	op->customdata = ddr;
 
 	ddr->art = art;
 	ddr->draw_handle_pixel = ED_region_draw_cb_activate(art, depthdropper_draw_cb, ddr, REGION_DRAW_POST_PIXEL);
@@ -146,16 +151,13 @@ static void depthdropper_exit(bContext *C, wmOperator *op)
 /* *** depthdropper id helper functions *** */
 /**
  * \brief get the ID from the screen.
- *
  */
 static void depthdropper_depth_sample_pt(bContext *C, DepthDropper *ddr, int mx, int my, float *r_depth)
 {
 	/* we could use some clever */
-	wmWindow *win = CTX_wm_window(C);
-	ScrArea *sa = BKE_screen_find_area_xy(win->screen, SPACE_TYPE_ANY, mx, my);
-	Scene *scene = win->screen->scene;
-	UnitSettings *unit = &scene->unit;
-	const bool do_split = (unit->flag & USER_UNIT_OPT_SPLIT) != 0;
+	bScreen *screen = CTX_wm_screen(C);
+	ScrArea *sa = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, mx, my);
+	Scene *scene = CTX_data_scene(C);
 
 	ScrArea *area_prev = CTX_wm_area(C);
 	ARegion *ar_prev = CTX_wm_region(C);
@@ -166,6 +168,7 @@ static void depthdropper_depth_sample_pt(bContext *C, DepthDropper *ddr, int mx,
 		if (sa->spacetype == SPACE_VIEW3D) {
 			ARegion *ar = BKE_area_find_region_xy(sa, RGN_TYPE_WINDOW, mx, my);
 			if (ar) {
+				struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
 				View3D *v3d = sa->spacedata.first;
 				RegionView3D *rv3d = ar->regiondata;
 				/* weak, we could pass in some reference point */
@@ -183,7 +186,7 @@ static void depthdropper_depth_sample_pt(bContext *C, DepthDropper *ddr, int mx,
 
 				view3d_operator_needs_opengl(C);
 
-				if (ED_view3d_autodist(scene, ar, v3d, mval, co, true, NULL)) {
+				if (ED_view3d_autodist(depsgraph, ar, v3d, mval, co, true, NULL)) {
 					const float mval_center_fl[2] = {
 					    (float)ar->winx / 2,
 					    (float)ar->winy / 2};
@@ -194,9 +197,9 @@ static void depthdropper_depth_sample_pt(bContext *C, DepthDropper *ddr, int mx,
 
 					*r_depth = len_v3v3(view_co, co_align);
 
-					bUnit_AsString(ddr->name, sizeof(ddr->name),
-					               (double)*r_depth,
-					               4, unit->system, B_UNIT_LENGTH, do_split, false);
+					bUnit_AsString2(
+					        ddr->name, sizeof(ddr->name), (double)*r_depth,
+					        4, B_UNIT_LENGTH, &scene->unit, false);
 				}
 				else {
 					BLI_strncpy(ddr->name, "Nothing under cursor", sizeof(ddr->name));
@@ -213,6 +216,7 @@ static void depthdropper_depth_sample_pt(bContext *C, DepthDropper *ddr, int mx,
 static void depthdropper_depth_set(bContext *C, DepthDropper *ddr, const float depth)
 {
 	RNA_property_float_set(&ddr->ptr, ddr->prop, depth);
+	ddr->is_set = true;
 	RNA_property_update(C, &ddr->ptr, ddr->prop);
 }
 
@@ -249,7 +253,9 @@ static void depthdropper_depth_sample_accum(bContext *C, DepthDropper *ddr, int 
 static void depthdropper_cancel(bContext *C, wmOperator *op)
 {
 	DepthDropper *ddr = op->customdata;
-	depthdropper_depth_set(C, ddr, ddr->init_depth);
+	if (ddr->is_set) {
+		depthdropper_depth_set(C, ddr, ddr->init_depth);
+	}
 	depthdropper_exit(C, op);
 }
 
@@ -265,6 +271,8 @@ static int depthdropper_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				depthdropper_cancel(C, op);
 				return OPERATOR_CANCELLED;
 			case EYE_MODAL_SAMPLE_CONFIRM:
+			{
+				const bool is_undo = ddr->is_undo;
 				if (ddr->accum_tot == 0) {
 					depthdropper_depth_sample(C, ddr, event->x, event->y);
 				}
@@ -272,7 +280,9 @@ static int depthdropper_modal(bContext *C, wmOperator *op, const wmEvent *event)
 					depthdropper_depth_set_accum(C, ddr);
 				}
 				depthdropper_exit(C, op);
-				return OPERATOR_FINISHED;
+				/* Could support finished & undo-skip. */
+				return is_undo ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
+			}
 			case EYE_MODAL_SAMPLE_BEGIN:
 				/* enable accum and make first sample */
 				ddr->accum_start = true;
@@ -310,7 +320,6 @@ static int depthdropper_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
 		return OPERATOR_RUNNING_MODAL;
 	}
 	else {
-		depthdropper_exit(C, op);
 		return OPERATOR_CANCELLED;
 	}
 }
@@ -330,7 +339,7 @@ static int depthdropper_exec(bContext *C, wmOperator *op)
 	}
 }
 
-static int depthdropper_poll(bContext *C)
+static bool depthdropper_poll(bContext *C)
 {
 	PointerRNA ptr;
 	PropertyRNA *prop;
@@ -378,7 +387,7 @@ void UI_OT_eyedropper_depth(wmOperatorType *ot)
 	ot->poll = depthdropper_poll;
 
 	/* flags */
-	ot->flag = OPTYPE_BLOCKING | OPTYPE_INTERNAL;
+	ot->flag = OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_INTERNAL;
 
 	/* properties */
 }

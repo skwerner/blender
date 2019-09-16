@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,22 +15,17 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/composite/nodes/node_composite_viewer.c
- *  \ingroup cmpnodes
+/** \file
+ * \ingroup cmpnodes
  */
 
 
 #include "node_composite_util.h"
 
 #include "BKE_image.h"
+#include "BKE_global.h"
 
 
 /* **************** VIEWER ******************** */
@@ -48,12 +41,11 @@ static void node_composit_init_viewer(bNodeTree *UNUSED(ntree), bNode *node)
 	ImageUser *iuser = MEM_callocN(sizeof(ImageUser), "node image user");
 	node->storage = iuser;
 	iuser->sfra = 1;
-	iuser->fie_ima = 2;
 	iuser->ok = 1;
 	node->custom3 = 0.5f;
 	node->custom4 = 0.5f;
-	
-	node->id = (ID *)BKE_image_verify_viewer(IMA_TYPE_COMPOSITE, "Viewer Node");
+
+	node->id = (ID *)BKE_image_verify_viewer(G.main, IMA_TYPE_COMPOSITE, "Viewer Node");
 }
 
 void register_node_type_cmp_viewer(void)

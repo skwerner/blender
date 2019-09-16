@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/tools/bmesh_beautify.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Beautify the mesh by rotating edges between triangles
  * to more attractive positions until no more rotations can be made.
@@ -37,7 +31,7 @@
 
 #include "BLI_math.h"
 #include "BLI_heap.h"
-#include "BLI_polyfill2d_beautify.h"
+#include "BLI_polyfill_2d_beautify.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -392,7 +386,7 @@ void BM_mesh_beautify_fill(
 	bm->elem_index_dirty |= BM_EDGE;
 
 	while (BLI_heap_is_empty(eheap) == false) {
-		BMEdge *e = BLI_heap_popmin(eheap);
+		BMEdge *e = BLI_heap_pop_min(eheap);
 		i = BM_elem_index_get(e);
 		eheap_table[i] = NULL;
 
@@ -456,4 +450,3 @@ void BM_mesh_beautify_fill(
 	TIMEIT_END(beautify_fill);
 #endif
 }
-

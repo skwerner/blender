@@ -1,6 +1,4 @@
-/**
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
+/*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,6 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #include <stdlib.h>
@@ -37,7 +29,7 @@
 struct _ScrollBar {
 	int rect[2][2];
 	float thumbpos, thumbpct;
-	
+
 	int inset;
 	int minthumb;
 
@@ -48,7 +40,7 @@ struct _ScrollBar {
 static int scrollbar_get_thumbH(ScrollBar *sb)
 {
 	int scrollable_h = rect_height(sb->rect) - 2 * sb->inset;
-	
+
 	return clamp_i(sb->thumbpct * scrollable_h, sb->minthumb, scrollable_h);
 }
 
@@ -56,7 +48,7 @@ static int scrollbar_get_thumbableH(ScrollBar *sb)
 {
 	int scrollable_h = rect_height(sb->rect) - 2 * sb->inset;
 	int thumb_h = scrollbar_get_thumbH(sb);
-	
+
 	return scrollable_h - thumb_h;
 }
 
@@ -76,7 +68,7 @@ ScrollBar *scrollbar_new(int inset, int minthumb)
 	ScrollBar *sb = MEM_callocN(sizeof(*sb), "scrollbar_new");
 	sb->inset = inset;
 	sb->minthumb = minthumb;
-	
+
 	return sb;
 }
 

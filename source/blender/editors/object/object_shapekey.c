@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, shapekey support
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_shapekey.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 
@@ -35,7 +29,7 @@
 #include <unistd.h>
 #else
 #include <io.h>
-#endif   
+#endif
 
 #include "MEM_guardedalloc.h"
 
@@ -51,13 +45,14 @@
 #include "DNA_object_types.h"
 
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
+#include "BKE_curve.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
+#include "BKE_lattice.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
-#include "BKE_lattice.h"
-#include "BKE_curve.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
 
 #include "BLI_sys_types.h" // for intptr_t support
 
@@ -76,8 +71,9 @@
 
 static void ED_object_shape_key_add(bContext *C, Object *ob, const bool from_mix)
 {
+	Main *bmain = CTX_data_main(C);
 	KeyBlock *kb;
-	if ((kb = BKE_object_shapekey_insert(ob, NULL, from_mix))) {
+	if ((kb = BKE_object_shapekey_insert(bmain, ob, NULL, from_mix))) {
 		Key *key = BKE_key_from_object(ob);
 		/* for absolute shape keys, new keys may not be added last */
 		ob->shapenr = BLI_findindex(&key->block, kb) + 1;
@@ -117,7 +113,7 @@ static bool object_shape_key_mirror(bContext *C, Object *ob,
 	key = BKE_key_from_object(ob);
 	if (key == NULL)
 		return 0;
-	
+
 	kb = BLI_findlink(&key->block, ob->shapenr - 1);
 
 	if (kb) {
@@ -209,11 +205,11 @@ static bool object_shape_key_mirror(bContext *C, Object *ob,
 
 		MEM_freeN(tag_elem);
 	}
-	
+
 	*r_totmirr = totmirr;
 	*r_totfail = totfail;
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
 	return 1;
@@ -221,14 +217,14 @@ static bool object_shape_key_mirror(bContext *C, Object *ob,
 
 /********************** shape key operators *********************/
 
-static int shape_key_mode_poll(bContext *C)
+static bool shape_key_mode_poll(bContext *C)
 {
 	Object *ob = ED_object_context(C);
 	ID *data = (ob) ? ob->data : NULL;
 	return (ob && !ID_IS_LINKED(ob) && data && !ID_IS_LINKED(data) && ob->mode != OB_MODE_EDIT);
 }
 
-static int shape_key_mode_exists_poll(bContext *C)
+static bool shape_key_mode_exists_poll(bContext *C)
 {
 	Object *ob = ED_object_context(C);
 	ID *data = (ob) ? ob->data : NULL;
@@ -239,7 +235,7 @@ static int shape_key_mode_exists_poll(bContext *C)
 	       (BKE_keyblock_from_object(ob) != NULL);
 }
 
-static int shape_key_move_poll(bContext *C)
+static bool shape_key_move_poll(bContext *C)
 {
 	/* Same as shape_key_mode_exists_poll above, but ensure we have at least two shapes! */
 	Object *ob = ED_object_context(C);
@@ -250,7 +246,7 @@ static int shape_key_move_poll(bContext *C)
 	        ob->mode != OB_MODE_EDIT && key && key->totkey > 1);
 }
 
-static int shape_key_poll(bContext *C)
+static bool shape_key_poll(bContext *C)
 {
 	Object *ob = ED_object_context(C);
 	ID *data = (ob) ? ob->data : NULL;
@@ -264,8 +260,8 @@ static int shape_key_add_exec(bContext *C, wmOperator *op)
 
 	ED_object_shape_key_add(C, ob, from_mix);
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
-	DAG_relations_tag_update(CTX_data_main(C));
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+	DEG_relations_tag_update(CTX_data_main(C));
 
 	return OPERATOR_FINISHED;
 }
@@ -276,7 +272,7 @@ void OBJECT_OT_shape_key_add(wmOperatorType *ot)
 	ot->name = "Add Shape Key";
 	ot->idname = "OBJECT_OT_shape_key_add";
 	ot->description = "Add shape key to the object";
-	
+
 	/* api callbacks */
 	ot->poll = shape_key_mode_poll;
 	ot->exec = shape_key_add_exec;
@@ -302,8 +298,8 @@ static int shape_key_remove_exec(bContext *C, wmOperator *op)
 	}
 
 	if (changed) {
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
-		DAG_relations_tag_update(CTX_data_main(C));
+		DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+		DEG_relations_tag_update(CTX_data_main(C));
 		WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
 		return OPERATOR_FINISHED;
@@ -319,7 +315,7 @@ void OBJECT_OT_shape_key_remove(wmOperatorType *ot)
 	ot->name = "Remove Shape Key";
 	ot->idname = "OBJECT_OT_shape_key_remove";
 	ot->description = "Remove shape key from the object";
-	
+
 	/* api callbacks */
 	ot->poll = shape_key_mode_exists_poll;
 	ot->exec = shape_key_remove_exec;
@@ -339,13 +335,13 @@ static int shape_key_clear_exec(bContext *C, wmOperator *UNUSED(op))
 
 	if (!key || !kb)
 		return OPERATOR_CANCELLED;
-	
+
 	for (kb = key->block.first; kb; kb = kb->next)
 		kb->curval = 0.0f;
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
-	
+
 	return OPERATOR_FINISHED;
 }
 
@@ -355,7 +351,7 @@ void OBJECT_OT_shape_key_clear(wmOperatorType *ot)
 	ot->name = "Clear Shape Keys";
 	ot->description = "Clear weights for all shape keys";
 	ot->idname = "OBJECT_OT_shape_key_clear";
-	
+
 	/* api callbacks */
 	ot->poll = shape_key_poll;
 	ot->exec = shape_key_clear_exec;
@@ -375,10 +371,12 @@ static int shape_key_retime_exec(bContext *C, wmOperator *UNUSED(op))
 	if (!key || !kb)
 		return OPERATOR_CANCELLED;
 
-	for (kb = key->block.first; kb; kb = kb->next)
-		kb->pos = (cfra += 0.1f);
+	for (kb = key->block.first; kb; kb = kb->next) {
+		kb->pos = cfra;
+		cfra += 0.1f;
+	}
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
 	return OPERATOR_FINISHED;
@@ -469,7 +467,7 @@ static int shape_key_move_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 	}
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
 	return OPERATOR_FINISHED;
@@ -499,4 +497,3 @@ void OBJECT_OT_shape_key_move(wmOperatorType *ot)
 
 	RNA_def_enum(ot->srna, "type", slot_move, 0, "Type", "");
 }
-

@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,13 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
-#ifndef _COM_SocketReader_h
-#define _COM_SocketReader_h
+#ifndef __COM_SOCKETREADER_H__
+#define __COM_SOCKETREADER_H__
 #include "BLI_rect.h"
 #include "COM_defines.h"
 
@@ -32,36 +28,36 @@
 typedef enum PixelSampler {
 	COM_PS_NEAREST = 0,
 	COM_PS_BILINEAR = 1,
-	COM_PS_BICUBIC = 2
+	COM_PS_BICUBIC = 2,
 } PixelSampler;
 
 class MemoryBuffer;
 /**
- * @brief Helper class for reading socket data.
+ * \brief Helper class for reading socket data.
  * Only use this class for dispatching (un-ary and n-ary) executions.
- * @ingroup Execution
+ * \ingroup Execution
  */
 class SocketReader {
 private:
 protected:
 	/**
-	 * @brief Holds the width of the output of this operation.
+	 * \brief Holds the width of the output of this operation.
 	 */
 	unsigned int m_width;
 
 	/**
-	 * @brief Holds the height of the output of this operation.
+	 * \brief Holds the height of the output of this operation.
 	 */
 	unsigned int m_height;
 
 
 	/**
-	 * @brief calculate a single pixel
-	 * @note this method is called for non-complex
-	 * @param result is a float[4] array to store the result
-	 * @param x the x-coordinate of the pixel to calculate in image space
-	 * @param y the y-coordinate of the pixel to calculate in image space
-	 * @param inputBuffers chunks that can be read by their ReadBufferOperation.
+	 * \brief calculate a single pixel
+	 * \note this method is called for non-complex
+	 * \param result: is a float[4] array to store the result
+	 * \param x: the x-coordinate of the pixel to calculate in image space
+	 * \param y: the y-coordinate of the pixel to calculate in image space
+	 * \param inputBuffers: chunks that can be read by their ReadBufferOperation.
 	 */
 	virtual void executePixelSampled(float /*output*/[4],
 	                                 float /*x*/,
@@ -69,27 +65,27 @@ protected:
 	                                 PixelSampler /*sampler*/) { }
 
 	/**
-	 * @brief calculate a single pixel
-	 * @note this method is called for complex
-	 * @param result is a float[4] array to store the result
-	 * @param x the x-coordinate of the pixel to calculate in image space
-	 * @param y the y-coordinate of the pixel to calculate in image space
-	 * @param inputBuffers chunks that can be read by their ReadBufferOperation.
-	 * @param chunkData chunk specific data a during execution time.
+	 * \brief calculate a single pixel
+	 * \note this method is called for complex
+	 * \param result: is a float[4] array to store the result
+	 * \param x: the x-coordinate of the pixel to calculate in image space
+	 * \param y: the y-coordinate of the pixel to calculate in image space
+	 * \param inputBuffers: chunks that can be read by their ReadBufferOperation.
+	 * \param chunkData: chunk specific data a during execution time.
 	 */
 	virtual void executePixel(float output[4], int x, int y, void * /*chunkData*/) {
 		executePixelSampled(output, x, y, COM_PS_NEAREST);
 	}
 
 	/**
-	 * @brief calculate a single pixel using an EWA filter
-	 * @note this method is called for complex
-	 * @param result is a float[4] array to store the result
-	 * @param x the x-coordinate of the pixel to calculate in image space
-	 * @param y the y-coordinate of the pixel to calculate in image space
-	 * @param dx
-	 * @param dy
-	 * @param inputBuffers chunks that can be read by their ReadBufferOperation.
+	 * \brief calculate a single pixel using an EWA filter
+	 * \note this method is called for complex
+	 * \param result: is a float[4] array to store the result
+	 * \param x: the x-coordinate of the pixel to calculate in image space
+	 * \param y: the y-coordinate of the pixel to calculate in image space
+	 * \param dx:
+	 * \param dy:
+	 * \param inputBuffers: chunks that can be read by their ReadBufferOperation.
 	 */
 	virtual void executePixelFiltered(float /*output*/[4],
 	                                  float /*x*/, float /*y*/,
@@ -113,12 +109,12 @@ public:
 
 	virtual MemoryBuffer *getInputMemoryBuffer(MemoryBuffer ** /*memoryBuffers*/) { return 0; }
 
-	inline const unsigned int getWidth() const { return this->m_width; }
-	inline const unsigned int getHeight() const { return this->m_height; }
+	inline unsigned int getWidth() const { return this->m_width; }
+	inline unsigned int getHeight() const { return this->m_height; }
 
 #ifdef WITH_CXX_GUARDEDALLOC
 	MEM_CXX_CLASS_ALLOC_FUNCS("COM:SocketReader")
 #endif
 };
 
-#endif /* _COM_SocketReader_h */
+#endif /* __COM_SOCKETREADER_H__ */

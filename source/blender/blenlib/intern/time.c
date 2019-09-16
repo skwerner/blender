@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/time.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 
@@ -39,7 +31,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-double PIL_check_seconds_timer(void) 
+double PIL_check_seconds_timer(void)
 {
 	static int hasperfcounter = -1; /* (-1 == unknown) */
 	static double perffreq;
@@ -89,7 +81,7 @@ void PIL_sleep_ms(int ms)
 #include <unistd.h>
 #include <sys/time.h>
 
-double PIL_check_seconds_timer(void) 
+double PIL_check_seconds_timer(void)
 {
 	struct timeval tv;
 	struct timezone tz;
@@ -115,7 +107,7 @@ void PIL_sleep_ms(int ms)
 		sleep(ms / 1000);
 		ms = (ms % 1000);
 	}
-	
+
 	usleep(ms * 1000);
 }
 

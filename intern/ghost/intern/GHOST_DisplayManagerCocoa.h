@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_DisplayManagerCocoa.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_DisplayManagerCocoa class.
  */
 
@@ -42,8 +34,6 @@
 /**
  * Manages system displays  (Mac OSX/Cocoa implementation).
  * \see GHOST_DisplayManager
- * \author	Maarten Gribnau
- * \date	September 21, 2001
  */
 class GHOST_DisplayManagerCocoa : public GHOST_DisplayManager
 {
@@ -69,7 +59,7 @@ public:
 	GHOST_TSuccess getNumDisplaySettings(GHOST_TUns8 display, GHOST_TInt32& numSettings) const;
 
 	/**
-	 * Returns the current setting for this display device. 
+	 * Returns the current setting for this display device.
 	 * \param display The index of the display to query with 0 <= display < getNumDisplays().
 	 * \param index	  The setting index to be returned.
 	 * \param setting The setting of the display device with this index.
@@ -78,7 +68,7 @@ public:
 	GHOST_TSuccess getDisplaySetting(GHOST_TUns8 display, GHOST_TInt32 index, GHOST_DisplaySetting& setting) const;
 
 	/**
-	 * Returns the current setting for this display device. 
+	 * Returns the current setting for this display device.
 	 * \param display The index of the display to query with 0 <= display < getNumDisplays().
 	 * \param setting The current setting of the display device with this index.
 	 * \return Indication of success.
@@ -86,14 +76,14 @@ public:
 	GHOST_TSuccess getCurrentDisplaySetting(GHOST_TUns8 display, GHOST_DisplaySetting& setting) const;
 
 	/**
-	 * Changes the current setting for this display device. 
+	 * Changes the current setting for this display device.
 	 * \param display The index of the display to query with 0 <= display < getNumDisplays().
 	 * \param setting The current setting of the display device with this index.
 	 * \return Indication of success.
 	 */
 	GHOST_TSuccess setCurrentDisplaySetting(GHOST_TUns8 display, const GHOST_DisplaySetting& setting);
 
-protected:	
+protected:
 	//Do not cache values as OS X supports screen hot plug
 	/** Cached number of displays. */
 	//CGDisplayCount m_numDisplays;
@@ -103,4 +93,3 @@ protected:
 
 
 #endif // __GHOST_DISPLAYMANAGERCOCOA_H__
-

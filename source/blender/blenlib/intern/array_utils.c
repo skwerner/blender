@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,13 +12,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/array_utils.c
- *  \ingroup bli
- *  \brief Generic array manipulation API.
+/** \file
+ * \ingroup bli
+ * \brief Generic array manipulation API.
  *
  * \warning Some array operations here are inherently inefficient,
  * and only included for the cases where the performance is acceptable.
@@ -307,4 +303,21 @@ bool _bli_array_iter_span(
 	}
 
 	return false;
+}
+
+/**
+ * Simple utility to check memory is zeroed.
+ */
+bool _bli_array_is_zeroed(
+        const void *arr_v,
+        unsigned int arr_len, size_t arr_stride)
+{
+	const char *arr_step = (const char *)arr_v;
+	size_t i = arr_stride * arr_len;
+	while (i--) {
+		if (*(arr_step++)) {
+			return false;
+		}
+	}
+	return true;
 }

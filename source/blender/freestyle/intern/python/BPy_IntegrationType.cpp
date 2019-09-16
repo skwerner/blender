@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/BPy_IntegrationType.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BPy_IntegrationType.h"
@@ -63,7 +59,7 @@ PyDoc_STRVAR(Integrator_integrate_doc,
 "      :class:`UnaryFunction0DUnsigned` type.\n"
 "   :rtype: int or float");
 
-static PyObject * Integrator_integrate(PyObject * /*self*/, PyObject *args, PyObject *kwds)
+static PyObject *Integrator_integrate(PyObject * /*self*/, PyObject *args, PyObject *kwds)
 {
 	static const char *kwlist[] = {"func", "it", "it_end", "integration_type", NULL};
 	PyObject *obj1, *obj4 = 0;
@@ -109,7 +105,7 @@ PyDoc_STRVAR(module_docstring, "The Blender Freestyle.Integrator submodule\n\n")
 
 static PyMethodDef module_functions[] = {
 	{"integrate", (PyCFunction) Integrator_integrate, METH_VARARGS | METH_KEYWORDS, Integrator_integrate_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 /*-----------------------Integrator module definition--------------------------------------*/
@@ -119,7 +115,7 @@ static PyModuleDef module_definition = {
     "Freestyle.Integrator",
     module_docstring,
     -1,
-    module_functions
+    module_functions,
 };
 
 /*-----------------------BPy_IntegrationType type definition ------------------------------*/
@@ -216,7 +212,7 @@ static PyLongObject _IntegrationType_LAST = {
 int IntegrationType_Init(PyObject *module)
 {
 	PyObject *m, *d, *f;
-	
+
 	if (module == NULL)
 		return -1;
 
@@ -230,7 +226,7 @@ int IntegrationType_Init(PyObject *module)
 	PyDict_SetItemString(IntegrationType_Type.tp_dict, "MAX", BPy_IntegrationType_MAX);
 	PyDict_SetItemString(IntegrationType_Type.tp_dict, "FIRST", BPy_IntegrationType_FIRST);
 	PyDict_SetItemString(IntegrationType_Type.tp_dict, "LAST", BPy_IntegrationType_LAST);
-	
+
 	m = PyModule_Create(&module_definition);
 	if (m == NULL)
 		return -1;

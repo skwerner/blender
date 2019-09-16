@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,12 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BLI_PATH_UTIL_H__
 #define __BLI_PATH_UTIL_H__
 
-/** \file BLI_path_util.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifdef __cplusplus
@@ -41,6 +33,7 @@ struct ListBase;
 
 void BLI_setenv(const char *env, const char *val) ATTR_NONNULL(1);
 void BLI_setenv_if_new(const char *env, const char *val) ATTR_NONNULL(1);
+const char *BLI_getenv(const char *env) ATTR_NONNULL(1);
 
 void BLI_make_file_string(const char *relabase, char *string,  const char *dir, const char *file);
 void BLI_make_exist(char *dir);
@@ -60,16 +53,6 @@ bool BLI_path_name_at_index(
         const char *__restrict path, const int index,
         int *__restrict r_offset, int *__restrict r_len) ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
 
-#if 0
-typedef enum bli_rebase_state {
-	BLI_REBASE_NO_SRCDIR = 0,
-	BLI_REBASE_OK        = 1,
-	BLI_REBASE_IDENTITY  = 2
-} bli_rebase_state;
-
-int BLI_rebase_path(char *abs, size_t abs_len, char *rel, size_t rel_len, const char *base_dir, const char *src_dir, const char *dest_dir);
-#endif
-
 const char *BLI_last_slash(const char *string) ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
 int         BLI_add_slash(char *string) ATTR_NONNULL();
 void        BLI_del_slash(char *string) ATTR_NONNULL();
@@ -81,12 +64,13 @@ bool BLI_path_program_extensions_add_win32(char *name, const size_t maxlen);
 #endif
 bool BLI_path_program_search(char *fullname, const size_t maxlen, const char *name);
 
-bool BLI_testextensie(const char *str, const char *ext) ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
-bool BLI_testextensie_n(const char *str, ...) ATTR_NONNULL(1) ATTR_SENTINEL(0);
-bool BLI_testextensie_array(const char *str, const char **ext_array) ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
-bool BLI_testextensie_glob(const char *str, const char *ext_fnmatch) ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
-bool BLI_replace_extension(char *path, size_t maxlen, const char *ext) ATTR_NONNULL();
-bool BLI_ensure_extension(char *path, size_t maxlen, const char *ext) ATTR_NONNULL();
+bool BLI_path_extension_check(const char *str, const char *ext) ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
+bool BLI_path_extension_check_n(const char *str, ...) ATTR_NONNULL(1) ATTR_SENTINEL(0);
+bool BLI_path_extension_check_array(const char *str, const char **ext_array) ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
+bool BLI_path_extension_check_glob(const char *str, const char *ext_fnmatch) ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
+bool BLI_path_extension_glob_validate(char *ext_fnmatch) ATTR_NONNULL();
+bool BLI_path_extension_replace(char *path, size_t maxlen, const char *ext) ATTR_NONNULL();
+bool BLI_path_extension_ensure(char *path, size_t maxlen, const char *ext) ATTR_NONNULL();
 bool BLI_ensure_filename(char *filepath, size_t maxlen, const char *filename) ATTR_NONNULL();
 int BLI_stringdec(const char *string, char *head, char *start, unsigned short *numlen);
 void BLI_stringenc(char *string, const char *head, const char *tail, unsigned short numlen, int pic);
@@ -108,13 +92,15 @@ bool BLI_path_abs(char *path, const char *basepath)  ATTR_NONNULL();
 bool BLI_path_frame(char *path, int frame, int digits) ATTR_NONNULL();
 bool BLI_path_frame_range(char *path, int sta, int end, int digits) ATTR_NONNULL();
 bool BLI_path_frame_get(char *path, int *r_frame, int *numdigits) ATTR_NONNULL();
-void BLI_path_frame_strip(char *path, bool set_frame_char, char *ext) ATTR_NONNULL();
+void BLI_path_frame_strip(char *path, char *ext) ATTR_NONNULL();
 bool BLI_path_frame_check_chars(const char *path) ATTR_NONNULL();
 bool BLI_path_cwd(char *path, const size_t maxlen) ATTR_NONNULL();
 void BLI_path_rel(char *file, const char *relfile) ATTR_NONNULL();
 
 bool BLI_path_is_rel(const char *path) ATTR_NONNULL() ATTR_WARN_UNUSED_RESULT;
 bool BLI_path_is_unc(const char *path);
+
+void BLI_path_to_display_name(char *display_name, int maxlen, const char *name) ATTR_NONNULL();
 
 #if defined(WIN32)
 void BLI_cleanup_unc_16(wchar_t *path_16);

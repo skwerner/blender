@@ -1,6 +1,4 @@
 /*
- * Copyright 2013, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Sergey Sharybin
- *		Lukas Toenne
+ * Copyright 2013, Blender Foundation.
  */
 
 #include "COM_PlaneDistortCommonOperation.h"
@@ -28,7 +24,7 @@ extern "C" {
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_math_color.h"
-#include "BLI_jitter.h"
+#include "BLI_jitter_2d.h"
 
 #include "BKE_movieclip.h"
 #include "BKE_node.h"

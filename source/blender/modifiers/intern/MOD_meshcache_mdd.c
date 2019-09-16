@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,22 +12,18 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton, pkowal
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/modifiers/intern/MOD_meshcache_mdd.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 
-#include "BLI_sys_types.h"
 #include "BLI_utildefines.h"
+
 #include "BLI_fileops.h"
 #include "BLI_math.h"
 #ifdef __LITTLE_ENDIAN__
@@ -39,18 +33,19 @@
 #  include "BLI_winstuff.h"
 #endif
 
-#include "MOD_meshcache_util.h"  /* own include */
-
 #include "DNA_modifier_types.h"
+
+#include "MOD_meshcache_util.h"  /* own include */
 
 typedef struct MDDHead {
 	int frame_tot;
 	int verts_tot;
 } MDDHead;  /* frames, verts */
 
-static bool meshcache_read_mdd_head(FILE *fp, const int verts_tot,
-                                    MDDHead *mdd_head,
-                                    const char **err_str)
+static bool meshcache_read_mdd_head(
+        FILE *fp, const int verts_tot,
+        MDDHead *mdd_head,
+        const char **err_str)
 {
 	if (!fread(mdd_head, sizeof(*mdd_head), 1, fp)) {
 		*err_str = "Missing header";
@@ -78,11 +73,12 @@ static bool meshcache_read_mdd_head(FILE *fp, const int verts_tot,
 /**
  * Gets the index frange and factor
  */
-static bool meshcache_read_mdd_range(FILE *fp,
-                                     const int verts_tot,
-                                     const float frame, const char interp,
-                                     int r_index_range[2], float *r_factor,
-                                     const char **err_str)
+static bool meshcache_read_mdd_range(
+        FILE *fp,
+        const int verts_tot,
+        const float frame, const char interp,
+        int r_index_range[2], float *r_factor,
+        const char **err_str)
 {
 	MDDHead mdd_head;
 
@@ -97,11 +93,12 @@ static bool meshcache_read_mdd_range(FILE *fp,
 	return true;
 }
 
-static bool meshcache_read_mdd_range_from_time(FILE *fp,
-                                               const int verts_tot,
-                                               const float time, const float UNUSED(fps),
-                                               float *r_frame,
-                                               const char **err_str)
+static bool meshcache_read_mdd_range_from_time(
+        FILE *fp,
+        const int verts_tot,
+        const float time, const float UNUSED(fps),
+        float *r_frame,
+        const char **err_str)
 {
 	MDDHead mdd_head;
 	int i;
@@ -144,10 +141,11 @@ static bool meshcache_read_mdd_range_from_time(FILE *fp,
 	return true;
 }
 
-bool MOD_meshcache_read_mdd_index(FILE *fp,
-                                  float (*vertexCos)[3], const int verts_tot,
-                                  const int index, const float factor,
-                                  const char **err_str)
+bool MOD_meshcache_read_mdd_index(
+        FILE *fp,
+        float (*vertexCos)[3], const int verts_tot,
+        const int index, const float factor,
+        const char **err_str)
 {
 	MDDHead mdd_head;
 
@@ -212,10 +210,11 @@ bool MOD_meshcache_read_mdd_index(FILE *fp,
 	return true;
 }
 
-bool MOD_meshcache_read_mdd_frame(FILE *fp,
-                                  float (*vertexCos)[3], const int verts_tot, const char interp,
-                                  const float frame,
-                                  const char **err_str)
+bool MOD_meshcache_read_mdd_frame(
+        FILE *fp,
+        float (*vertexCos)[3], const int verts_tot, const char interp,
+        const float frame,
+        const char **err_str)
 {
 	int index_range[2];
 	float factor;
@@ -253,10 +252,11 @@ bool MOD_meshcache_read_mdd_frame(FILE *fp,
 	}
 }
 
-bool MOD_meshcache_read_mdd_times(const char *filepath,
-                                  float (*vertexCos)[3], const int verts_tot, const char interp,
-                                  const float time, const float fps, const char time_mode,
-                                  const char **err_str)
+bool MOD_meshcache_read_mdd_times(
+        const char *filepath,
+        float (*vertexCos)[3], const int verts_tot, const char interp,
+        const float time, const float fps, const char time_mode,
+        const char **err_str)
 {
 	float frame;
 

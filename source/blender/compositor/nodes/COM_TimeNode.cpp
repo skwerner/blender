@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_TimeNode.h"
@@ -54,8 +50,8 @@ void TimeNode::convertToOperations(NodeConverter &converter, const CompositorCon
 
 	curvemapping_initialize((CurveMapping *)node->storage);
 	fac = curvemapping_evaluateF((CurveMapping *)node->storage, 0, fac);
-	operation->setValue(CLAMPIS(fac, 0.0f, 1.0f));
+	operation->setValue(clamp_f(fac, 0.0f, 1.0f));
 	converter.addOperation(operation);
-	
+
 	converter.mapOutputSocket(getOutputSocket(0), operation->getOutputSocket());
 }

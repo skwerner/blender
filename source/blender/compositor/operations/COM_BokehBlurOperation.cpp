@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_BokehBlurOperation.h"
@@ -194,8 +190,8 @@ bool BokehBlurOperation::determineDependingAreaOfInterest(rcti *input, ReadBuffe
 }
 
 void BokehBlurOperation::executeOpenCL(OpenCLDevice *device,
-                                       MemoryBuffer *outputMemoryBuffer, cl_mem clOutputBuffer, 
-                                       MemoryBuffer **inputMemoryBuffers, list<cl_mem> *clMemToCleanUp, 
+                                       MemoryBuffer *outputMemoryBuffer, cl_mem clOutputBuffer,
+                                       MemoryBuffer **inputMemoryBuffers, list<cl_mem> *clMemToCleanUp,
                                        list<cl_kernel> * /*clKernelsToCleanUp*/)
 {
 	cl_kernel kernel = device->COM_clCreateKernel("bokehBlurKernel", NULL);
@@ -205,7 +201,7 @@ void BokehBlurOperation::executeOpenCL(OpenCLDevice *device,
 	const float max_dim = max(this->getWidth(), this->getHeight());
 	cl_int radius = this->m_size * max_dim / 100.0f;
 	cl_int step = this->getStep();
-	
+
 	device->COM_clAttachMemoryBufferToKernelParameter(kernel, 0, -1, clMemToCleanUp, inputMemoryBuffers, this->m_inputBoundingBoxReader);
 	device->COM_clAttachMemoryBufferToKernelParameter(kernel, 1,  4, clMemToCleanUp, inputMemoryBuffers, this->m_inputProgram);
 	device->COM_clAttachMemoryBufferToKernelParameter(kernel, 2,  -1, clMemToCleanUp, inputMemoryBuffers, this->m_inputBokehProgram);
@@ -214,7 +210,7 @@ void BokehBlurOperation::executeOpenCL(OpenCLDevice *device,
 	clSetKernelArg(kernel, 6, sizeof(cl_int), &radius);
 	clSetKernelArg(kernel, 7, sizeof(cl_int), &step);
 	device->COM_clAttachSizeToKernelParameter(kernel, 8, this);
-	
+
 	device->COM_clEnqueueRange(kernel, outputMemoryBuffer, 9, this);
 }
 

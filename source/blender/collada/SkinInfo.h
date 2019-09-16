@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Nathan Letwory.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file SkinInfo.h
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #ifndef __SKININFO_H__
@@ -88,7 +82,7 @@ public:
 	void transfer_uint_array_data_const(const COLLADAFW::UIntValuesArray& src, COLLADAFW::UIntValuesArray& dest);
 
 	void borrow_skin_controller_data(const COLLADAFW::SkinControllerData* skin);
-		
+
 	void free();
 
 	// using inverse bind matrices to construct armature
@@ -99,7 +93,7 @@ public:
 	void set_controller(const COLLADAFW::SkinController* co);
 
 	// called from write_controller
-	Object *create_armature(Scene *scene);
+	Object *create_armature(Main *bmain, Scene *scene, ViewLayer *view_layer);
 
 	Object* set_armature(Object *ob_arm);
 
@@ -110,7 +104,7 @@ public:
 	const COLLADAFW::UniqueId& get_controller_uid();
 
 	// check if this skin controller references a joint or any descendant of it
-	// 
+	//
 	// some nodes may not be referenced by SkinController,
 	// in this case to determine if the node belongs to this armature,
 	// we need to search down the tree

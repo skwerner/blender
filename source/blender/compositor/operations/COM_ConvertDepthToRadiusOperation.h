@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,13 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
-#ifndef _COM_ConvertDepthToRadiusOperation_h
-#define _COM_ConvertDepthToRadiusOperation_h
+#ifndef __COM_CONVERTDEPTHTORADIUSOPERATION_H__
+#define __COM_CONVERTDEPTHTORADIUSOPERATION_H__
 #include "COM_NodeOperation.h"
 #include "DNA_object_types.h"
 #include "COM_FastGaussianBlurOperation.h"
@@ -43,34 +39,34 @@ private:
 	float m_cam_lens;
 	float m_dof_sp;
 	Object *m_cameraObject;
-	
+
 	FastGaussianBlurValueOperation *m_blurPostOperation;
 public:
 	/**
 	 * Default constructor
 	 */
 	ConvertDepthToRadiusOperation();
-	
+
 	/**
 	 * the inner loop of this program
 	 */
 	void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
-	
+
 	/**
 	 * Initialize the execution
 	 */
 	void initExecution();
-	
+
 	/**
 	 * Deinitialize the execution
 	 */
 	void deinitExecution();
-	
+
 	void setfStop(float fStop) { this->m_fStop = fStop; }
 	void setMaxRadius(float maxRadius) { this->m_maxRadius = maxRadius; }
 	void setCameraObject(Object *camera) { this->m_cameraObject = camera; }
 	float determineFocalDistance();
-	void setPostBlur(FastGaussianBlurValueOperation *operation) {this->m_blurPostOperation = operation;}
-	
+	void setPostBlur(FastGaussianBlurValueOperation *operation) { this->m_blurPostOperation = operation; }
+
 };
 #endif

@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_PixelateNode.h"
@@ -35,7 +31,7 @@ void PixelateNode::convertToOperations(NodeConverter &converter, const Composito
 	NodeInput *inputSocket = this->getInputSocket(0);
 	NodeOutput *outputSocket = this->getOutputSocket(0);
 	DataType datatype = inputSocket->getDataType();
-	
+
 	if (inputSocket->isLinked()) {
 		NodeOutput *link = inputSocket->getLink();
 		datatype = link->getDataType();
@@ -43,7 +39,7 @@ void PixelateNode::convertToOperations(NodeConverter &converter, const Composito
 
 	PixelateOperation *operation = new PixelateOperation(datatype);
 	converter.addOperation(operation);
-	
+
 	converter.mapInputSocket(inputSocket, operation->getInputSocket(0));
 	converter.mapOutputSocket(outputSocket, operation->getOutputSocket(0));
 }

@@ -17,6 +17,7 @@
 #ifndef __OSL_H__
 #define __OSL_H__
 
+#include "util/util_array.h"
 #include "util/util_set.h"
 #include "util/util_string.h"
 #include "util/util_thread.h"
@@ -26,6 +27,7 @@
 #include "render/shader.h"
 
 #ifdef WITH_OSL
+#include <OSL/llvm_util.h>
 #include <OSL/oslcomp.h>
 #include <OSL/oslexec.h>
 #include <OSL/oslquery.h>
@@ -67,6 +69,8 @@ class OSLShaderManager : public ShaderManager {
 public:
 	OSLShaderManager();
 	~OSLShaderManager();
+
+	static void free_memory();
 
 	void reset(Scene *scene);
 
@@ -120,7 +124,9 @@ protected:
 
 class OSLCompiler {
 public:
-	OSLCompiler(void *manager, void *shadingsys, ImageManager *image_manager);
+	OSLCompiler(void *manager, void *shadingsys,
+	            ImageManager *image_manager,
+	            LightManager *light_manager);
 	void compile(Scene *scene, OSLGlobals *og, Shader *shader);
 
 	void add(ShaderNode *node, const char *name, bool isfilepath = false);
@@ -140,10 +146,13 @@ public:
 	void parameter_array(const char *name, const float f[], int arraylen);
 	void parameter_color_array(const char *name, const array<float3>& f);
 
+	void parameter_attribute(const char *name, ustring s);
+
 	ShaderType output_type() { return current_type; }
 
 	bool background;
 	ImageManager *image_manager;
+	LightManager *light_manager;
 
 private:
 #ifdef WITH_OSL
@@ -165,5 +174,4 @@ private:
 
 CCL_NAMESPACE_END
 
-#endif /* __OSL_H__  */
-
+#endif  /* __OSL_H__  */

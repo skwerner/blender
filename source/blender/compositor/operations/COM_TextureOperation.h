@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,14 +13,12 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 
-#ifndef _COM_TextureOperation_h
-#define _COM_TextureOperation_h
+#ifndef __COM_TEXTUREOPERATION_H__
+#define __COM_TEXTUREOPERATION_H__
 
 #include "COM_NodeOperation.h"
 #include "DNA_texture_types.h"
@@ -37,7 +33,7 @@ extern "C" {
 /**
  * Base class for all renderlayeroperations
  *
- * @todo: rename to operation.
+ * \todo: rename to operation.
  */
 class TextureBaseOperation : public NodeOperation {
 private:
@@ -54,7 +50,7 @@ protected:
 	 * Determine the output resolution. The resolution is retrieved from the Renderer
 	 */
 	void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
-	
+
 	/**
 	 * Constructor
 	 */

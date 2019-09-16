@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,26 +15,20 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): (mar-2001 nzc)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_MESH_MAPPING_H__
 #define __BKE_MESH_MAPPING_H__
 
-/** \file BKE_mesh_mapping.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
-struct MVert;
 struct MEdge;
-struct MPoly;
 struct MLoop;
-struct MLoopUV;
 struct MLoopTri;
+struct MLoopUV;
+struct MPoly;
+struct MVert;
 
 /* map from uv vertex to face (for select linked, stitch, uv suburf) */
 
@@ -50,8 +42,12 @@ typedef struct UvVertMap {
 
 typedef struct UvMapVert {
 	struct UvMapVert *next;
-	unsigned int f;
-	unsigned char tfindex, separate, flag;
+	unsigned int poly_index;
+	unsigned short loop_of_poly_index;
+	bool separate;
+	/* Zero-ed by map creation, left for use by specific areas. Is not
+	 * initialized to anything. */
+	unsigned char flag;
 } UvMapVert;
 
 /* UvElement stores per uv information so that we can quickly access information for a uv.
@@ -63,9 +59,9 @@ typedef struct UvElement {
 	/* Face the element belongs to */
 	struct BMLoop *l;
 	/* index in loop. */
-	unsigned short tfindex;
+	unsigned short loop_of_poly_index;
 	/* Whether this element is the first of coincident elements */
-	unsigned char separate;
+	bool separate;
 	/* general use flag */
 	unsigned char flag;
 	/* If generating element map with island sorting, this stores the island index */
@@ -100,9 +96,9 @@ typedef struct MeshElemMap {
 
 /* mapping */
 UvVertMap *BKE_mesh_uv_vert_map_create(
-        struct MPoly *mpoly, struct MLoop *mloop, struct MLoopUV *mloopuv,
-        unsigned int totpoly, unsigned int totvert,
-        const float limit[2], const bool selected, const bool use_winding);
+        const struct MPoly *mpoly, const struct MLoop *mloop, const struct MLoopUV *mloopuv,
+        unsigned int totpoly, unsigned int totvert, const float limit[2],
+        const bool selected, const bool use_winding);
 UvMapVert *BKE_mesh_uv_vert_map_get_vert(UvVertMap *vmap, unsigned int v);
 void       BKE_mesh_uv_vert_map_free(UvVertMap *vmap);
 

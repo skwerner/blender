@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Nicholas Bishop
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_hull.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Create a convex hull using bullet physics library.
  */
@@ -46,12 +40,12 @@
 /* Internal operator flags */
 typedef enum {
 	HULL_FLAG_INPUT =           (1 << 0),
-	
+
 	HULL_FLAG_INTERIOR_ELE =    (1 << 1),
 	HULL_FLAG_OUTPUT_GEOM =     (1 << 2),
-	
+
 	HULL_FLAG_DEL =             (1 << 3),
-	HULL_FLAG_HOLE =            (1 << 4)
+	HULL_FLAG_HOLE =            (1 << 4),
 } HullFlags;
 
 /* Store hull triangles separate from BMesh faces until the end; this
@@ -80,8 +74,9 @@ static void hull_add_triangle(
 	t->v[2] = v3;
 
 	/* Mark triangles vertices as not interior */
-	for (i = 0; i < 3; i++)
+	for (i = 0; i < 3; i++) {
 		BMO_vert_flag_disable(bm, t->v[i], HULL_FLAG_INTERIOR_ELE);
+	}
 
 	BLI_gset_insert(hull_triangles, t);
 	normal_tri_v3(t->no, v1->co, v2->co, v3->co);
@@ -106,7 +101,7 @@ static BMFace *hull_find_example_face(BMesh *bm, BMEdge *e)
 static void hull_output_triangles(BMesh *bm, GSet *hull_triangles)
 {
 	GSetIterator iter;
-	
+
 	GSET_ITER (iter, hull_triangles) {
 		HullTriangle *t = BLI_gsetIterator_getKey(&iter);
 		int i;
@@ -132,8 +127,9 @@ static void hull_output_triangles(BMesh *bm, GSet *hull_triangles)
 			else {
 				/* Look for an adjacent face that existed before the hull */
 				for (i = 0; i < 3; i++) {
-					if (!example)
+					if (!example) {
 						example = hull_find_example_face(bm, edges[i]);
+					}
 				}
 
 				/* Create new hull face */
@@ -184,8 +180,9 @@ static LinkData *final_edges_find_link(ListBase *adj, BMVert *v)
 	LinkData *link;
 
 	for (link = adj->first; link; link = link->next) {
-		if (link->data == v)
+		if (link->data == v) {
 			return link;
+		}
 	}
 
 	return NULL;
@@ -198,12 +195,14 @@ static int hull_final_edges_lookup(
 	ListBase *adj;
 
 	/* Use lower vertex pointer for hash key */
-	if (v1 > v2)
+	if (v1 > v2) {
 		SWAP(BMVert *, v1, v2);
+	}
 
 	adj = BLI_ghash_lookup(final_edges->edges, v1);
-	if (!adj)
+	if (!adj) {
 		return false;
+	}
 
 	return !!final_edges_find_link(adj, v2);
 }
@@ -213,7 +212,7 @@ static HullFinalEdges *hull_final_edges(GSet *hull_triangles)
 {
 	HullFinalEdges *final_edges;
 	GSetIterator iter;
-	
+
 	final_edges = MEM_callocN(sizeof(HullFinalEdges), "HullFinalEdges");
 	final_edges->edges = BLI_ghash_ptr_new("final edges ghash");
 	final_edges->base_pool = BLI_mempool_create(sizeof(ListBase), 0, 128, BLI_MEMPOOL_NOP);
@@ -230,8 +229,9 @@ static HullFinalEdges *hull_final_edges(GSet *hull_triangles)
 			ListBase *adj;
 
 			/* Use lower vertex pointer for hash key */
-			if (v1 > v2)
+			if (v1 > v2) {
 				SWAP(BMVert *, v1, v2);
+			}
 
 			adj = BLI_ghash_lookup(final_edges->edges, v1);
 			if (!adj) {
@@ -286,7 +286,7 @@ static void hull_remove_overlapping(
 					break;
 				}
 			}
-			
+
 			/* Note: can't change ghash while iterating, so mark
 			 * with 'skip' flag rather than deleting triangles */
 			if (BM_vert_in_face(t->v[1], f) &&
@@ -310,8 +310,9 @@ static void hull_mark_interior_elements(
 
 	/* Check for interior edges too */
 	BMO_ITER (e, &oiter, op->slots_in, "input", BM_EDGE) {
-		if (!hull_final_edges_lookup(final_edges, e->v1, e->v2))
+		if (!hull_final_edges_lookup(final_edges, e->v1, e->v2)) {
 			BMO_edge_flag_enable(bm, e, HULL_FLAG_INTERIOR_ELE);
+		}
 	}
 
 	/* Mark all input faces as interior, some may be unmarked in
@@ -336,7 +337,7 @@ static void hull_tag_unused(BMesh *bm, BMOperator *op)
 	BMO_ITER (v, &oiter, op->slots_in, "input", BM_VERT) {
 		if (BMO_vert_flag_test(bm, v, HULL_FLAG_INTERIOR_ELE)) {
 			bool del = true;
-		
+
 			BM_ITER_ELEM (e, &iter, v, BM_EDGES_OF_VERT) {
 				if (!BMO_edge_flag_test(bm, e, HULL_FLAG_INPUT)) {
 					del = false;
@@ -406,7 +407,7 @@ static void hull_tag_holes(BMesh *bm, BMOperator *op)
 	BMO_ITER (e, &oiter, op->slots_in, "input", BM_EDGE) {
 		bool hole = true;
 		bool any_faces = false;
-		
+
 		BM_ITER_ELEM (f, &iter, e, BM_FACES_OF_EDGE) {
 			any_faces = true;
 			if (!BMO_face_flag_test(bm, f, HULL_FLAG_HOLE)) {
@@ -415,8 +416,9 @@ static void hull_tag_holes(BMesh *bm, BMOperator *op)
 			}
 		}
 
-		if (hole && any_faces)
+		if (hole && any_faces) {
 			BMO_edge_flag_enable(bm, e, HULL_FLAG_HOLE);
+		}
 	}
 }
 
@@ -482,8 +484,9 @@ static BMVert **hull_verts_from_bullet(
 		if (original_index >= 0 && original_index < num_input_verts) {
 			hull_verts[i] = input_verts[original_index];
 		}
-		else
+		else {
 			BLI_assert(!"Unexpected new vertex in hull output");
+		}
 	}
 
 	return hull_verts;
@@ -511,7 +514,7 @@ static void hull_from_bullet(
 
 	hull = plConvexHullCompute(coords, num_input_verts);
 	hull_verts = hull_verts_from_bullet(hull, input_verts, num_input_verts);
-	
+
 	count = plConvexHullNumFaces(hull);
 	for (i = 0; i < count; i++) {
 		const int len = plConvexHullGetFaceSize(hull, i);
@@ -558,8 +561,9 @@ static bool hull_num_input_verts_is_ok(BMOperator *op)
 
 	BMO_ITER (v, &oiter, op->slots_in, "input", BM_VERT) {
 		partial_num_verts++;
-		if (partial_num_verts >= 3)
+		if (partial_num_verts >= 3) {
 			break;
+		}
 	}
 
 	return (partial_num_verts >= 3);
@@ -601,7 +605,7 @@ void bmo_convex_hull_exec(BMesh *bm, BMOperator *op)
 	hull_from_bullet(bm, op, hull_triangles, hull_pool);
 
 	final_edges = hull_final_edges(hull_triangles);
-	
+
 	hull_mark_interior_elements(bm, op, final_edges);
 
 	/* Remove hull triangles covered by an existing face */

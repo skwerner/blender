@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __SWEEPLINE_H__
 #define __SWEEPLINE_H__
 
-/** \file blender/freestyle/intern/geometry/SweepLine.h
- *  \ingroup freestyle
- *  \brief Class to define a Sweep Line
- *  \author Stephane Grabli
- *  \date 29/08/2002
+/** \file
+ * \ingroup freestyle
+ * \brief Class to define a Sweep Line
  */
 
 #include <list>
@@ -72,7 +66,7 @@ public:
 	}
 
 public:
-	void * userdata; // FIXME
+	void *userdata; // FIXME
 
 	Edge *EdgeA; // first segment
 	Edge *EdgeB; // second segment
@@ -216,7 +210,7 @@ struct binary_rule
 
 
 template<class T, class Point>
-class SweepLine 
+class SweepLine
 {
 public:
 	SweepLine() {}
@@ -231,7 +225,7 @@ public:
 		}
 	}
 
-	inline void process(Point& p, vector<Segment<T, Point>*>& segments, 
+	inline void process(Point& p, vector<Segment<T, Point>*>& segments,
 #if 0
 	                    binary_rule<Segment<T, Point>,Segment<T, Point> >& binrule = \
 	                            binary_rule<Segment<T, Point>, Segment<T, Point> >(),

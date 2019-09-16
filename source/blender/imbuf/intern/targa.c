@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/targa.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 
@@ -122,7 +114,7 @@ static bool makebody_tga(ImBuf *ibuf, FILE *file, int (*out)(unsigned int, FILE 
 	register int copy, bytes;
 	register unsigned int *rect, *rectstart, *temp;
 	int y;
-	
+
 	for (y = 0; y < ibuf->y; y++) {
 		bytes = ibuf->x - 1;
 		rectstart = rect = ibuf->rect + (y * ibuf->x);
@@ -253,7 +245,7 @@ int imb_savetarga(struct ImBuf *ibuf, const char *name, int flags)
 	char buf[20] = {0};
 	FILE *fildes;
 	bool ok = false;
-	
+
 	(void)flags; /* unused */
 
 	buf[16] = (ibuf->planes + 0x7) & ~0x7;
@@ -265,7 +257,7 @@ int imb_savetarga(struct ImBuf *ibuf, const char *name, int flags)
 	}
 
 	if (ibuf->foptions.flag & RAWTGA) buf[2] &= ~8;
-	
+
 	buf[8] = 0;
 	buf[9] = 0;
 	buf[10] = 0;
@@ -308,7 +300,7 @@ int imb_savetarga(struct ImBuf *ibuf, const char *name, int flags)
 				break;
 		}
 	}
-	
+
 	fclose(fildes);
 	return ok;
 }
@@ -353,7 +345,7 @@ static int checktarga(TARGA *tga, const unsigned char *mem)
 int imb_is_a_targa(const unsigned char *buf)
 {
 	TARGA tga;
-	
+
 	return checktarga(&tga, buf);
 }
 
@@ -367,7 +359,7 @@ static void complete_partial_load(struct ImBuf *ibuf, unsigned int *rect)
 		memset(rect, 0, size);
 	}
 	else {
-		/* shouldnt happen */
+		/* shouldn't happen */
 		printf("decodetarga: incomplete file, all pixels written\n");
 	}
 }
@@ -378,13 +370,13 @@ static void decodetarga(struct ImBuf *ibuf, const unsigned char *mem, size_t mem
 	int count, col, size;
 	unsigned int *rect;
 	uchar *cp = (uchar *) &col;
-	
+
 	if (ibuf == NULL) return;
 	if (ibuf->rect == NULL) return;
 
 	size = ibuf->x * ibuf->y;
 	rect = ibuf->rect;
-	
+
 	/* set alpha */
 	cp[0] = 0xff;
 	cp[1] = cp[2] = 0;
@@ -573,10 +565,10 @@ ImBuf *imb_loadtarga(const unsigned char *mem, size_t mem_size, int flags, char 
 	if (tga.imgtyp < 4)
 		ibuf->foptions.flag |= RAWTGA;
 	mem = mem + 18 + tga.numid;
-	
+
 	cp[0] = 0xff;
 	cp[1] = cp[2] = 0;
-	
+
 	if (tga.mapsize) {
 		/* load color map */
 		/*mincol = tga.maporig;*/ /*UNUSED*/
@@ -609,7 +601,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem, size_t mem_size, int flags, char 
 			}
 			cmap[count] = cp_data;
 		}
-		
+
 		size = 0;
 		for (int cmap_index = cmap_max - 1; cmap_index > 0; cmap_index >>= 1) {
 			size++;
@@ -620,7 +612,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem, size_t mem_size, int flags, char 
 			cmap[0] &= BIG_LONG(0x00ffffffl);
 		}
 	}
-	
+
 	if (flags & IB_test) {
 		if (cmap) {
 			MEM_freeN(cmap);
@@ -630,7 +622,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem, size_t mem_size, int flags, char 
 
 	if (tga.imgtyp != 1 && tga.imgtyp != 9) { /* happens sometimes (beuh) */
 		if (cmap) {
-			MEM_freeN(cmap); 
+			MEM_freeN(cmap);
 			cmap = NULL;
 		}
 	}
@@ -653,7 +645,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem, size_t mem_size, int flags, char 
 			else if (tga.pixsize <= 32) decodetarga(ibuf, mem, mem_size, 3);
 			break;
 	}
-	
+
 	if (cmap) {
 		/* apply color map */
 		rect = ibuf->rect;
@@ -666,7 +658,7 @@ ImBuf *imb_loadtarga(const unsigned char *mem, size_t mem_size, int flags, char 
 
 		MEM_freeN(cmap);
 	}
-	
+
 	if (tga.pixsize == 16) {
 		unsigned int col;
 		rect = ibuf->rect;
@@ -685,29 +677,29 @@ ImBuf *imb_loadtarga(const unsigned char *mem, size_t mem_size, int flags, char 
 		}
 		ibuf->planes = 24;
 	}
-	
+
 	if (tga.imgtyp == 3 || tga.imgtyp == 11) {
 		uchar *crect;
 		unsigned int *lrect, col;
-		
+
 		crect = (uchar *) ibuf->rect;
 		lrect = (unsigned int *) ibuf->rect;
-		
+
 		for (size = ibuf->x * ibuf->y; size > 0; size--) {
 			col = *lrect++;
-			
+
 			crect[0] = 255;
 			crect[1] = crect[2] = crect[3] = col;
 			crect += 4;
 		}
 	}
-	
+
 	if (tga.imgdes & 0x20) {
 		IMB_flipy(ibuf);
 	}
 
 	if (ibuf->rect)
 		IMB_convert_rgba_to_abgr(ibuf);
-	
+
 	return ibuf;
 }

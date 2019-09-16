@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,14 +18,13 @@
  *
  * The Original Code is: some of this file.
  *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
 #ifndef __BLI_MATH_BASE_H__
 #define __BLI_MATH_BASE_H__
 
-/** \file BLI_math_base.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifdef _MSC_VER
@@ -35,6 +32,7 @@
 #endif
 
 #include <math.h>
+#include "BLI_assert.h"
 #include "BLI_math_inline.h"
 
 #ifndef M_PI
@@ -132,6 +130,10 @@ MINLINE int max_iiii(int a, int b, int c, int d);
 MINLINE size_t min_zz(size_t a, size_t b);
 MINLINE size_t max_zz(size_t a, size_t b);
 
+MINLINE int clamp_i(int value, int min, int max);
+MINLINE float clamp_f(float value, float min, float max);
+MINLINE size_t clamp_z(size_t value, size_t min, size_t max);
+
 MINLINE int compare_ff(float a, float b, const float max_diff);
 MINLINE int compare_ff_relative(float a, float b, const float max_diff, const int max_ulps);
 
@@ -195,24 +197,28 @@ double double_round(double x, int ndigits);
  * check the vector is unit length, or zero length (which can't be helped in some cases).
  */
 #ifndef NDEBUG
-/* note: 0.0001 is too small becaues normals may be converted from short's: see [#34322] */
+/** \note 0.0001 is too small becaues normals may be converted from short's: see T34322. */
 #  define BLI_ASSERT_UNIT_EPSILON 0.0002f
+/**
+ * \note Checks are flipped so NAN doesn't assert. This is done because we're making sure the value was normalized
+ * and in the case we don't want NAN to be raising asserts since there is nothing to be done in that case.
+ */
 #  define BLI_ASSERT_UNIT_V3(v)  {                                            \
 	const float _test_unit = len_squared_v3(v);                               \
-	BLI_assert((fabsf(_test_unit - 1.0f) < BLI_ASSERT_UNIT_EPSILON) ||        \
-	           (fabsf(_test_unit)        < BLI_ASSERT_UNIT_EPSILON));         \
+	BLI_assert(!(fabsf(_test_unit - 1.0f) >= BLI_ASSERT_UNIT_EPSILON) ||      \
+	           !(fabsf(_test_unit)        >= BLI_ASSERT_UNIT_EPSILON));       \
 } (void)0
 
 #  define BLI_ASSERT_UNIT_V2(v)  {                                            \
 	const float _test_unit = len_squared_v2(v);                               \
-	BLI_assert((fabsf(_test_unit - 1.0f) < BLI_ASSERT_UNIT_EPSILON) ||        \
-	           (fabsf(_test_unit)        < BLI_ASSERT_UNIT_EPSILON));         \
+	BLI_assert(!(fabsf(_test_unit - 1.0f) >= BLI_ASSERT_UNIT_EPSILON) ||      \
+	           !(fabsf(_test_unit)        >= BLI_ASSERT_UNIT_EPSILON));       \
 } (void)0
 
 #  define BLI_ASSERT_UNIT_QUAT(q)  {                                          \
 	const float _test_unit = dot_qtqt(q, q);                                  \
-	BLI_assert((fabsf(_test_unit - 1.0f) < BLI_ASSERT_UNIT_EPSILON * 10) ||   \
-	           (fabsf(_test_unit)        < BLI_ASSERT_UNIT_EPSILON * 10));    \
+	BLI_assert(!(fabsf(_test_unit - 1.0f) >= BLI_ASSERT_UNIT_EPSILON * 10) || \
+	           !(fabsf(_test_unit)        >= BLI_ASSERT_UNIT_EPSILON * 10));  \
 } (void)0
 
 #  define BLI_ASSERT_ZERO_M3(m)  {                                            \

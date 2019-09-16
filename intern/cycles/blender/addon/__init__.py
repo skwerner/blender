@@ -19,7 +19,7 @@
 bl_info = {
     "name": "Cycles Render Engine",
     "author": "",
-    "blender": (2, 76, 0),
+    "blender": (2, 80, 0),
     "location": "Info header, render engine menu",
     "description": "Cycles Render Engine integration",
     "warning": "",
@@ -37,6 +37,8 @@ if "bpy" in locals():
         importlib.reload(version_update)
     if "ui" in locals():
         importlib.reload(ui)
+    if "operators" in locals():
+        importlib.reload(operators)
     if "properties" in locals():
         importlib.reload(properties)
     if "presets" in locals():
@@ -45,14 +47,14 @@ if "bpy" in locals():
 import bpy
 
 from . import (
-        engine,
-        version_update,
-        )
+    engine,
+    version_update,
+)
 
 
 class CyclesRender(bpy.types.RenderEngine):
     bl_idname = 'CYCLES'
-    bl_label = "Cycles Render"
+    bl_label = "Cycles"
     bl_use_shading_nodes = True
     bl_use_preview = True
     bl_use_exclude_layers = True
@@ -66,34 +68,35 @@ class CyclesRender(bpy.types.RenderEngine):
         engine.free(self)
 
     # final render
-    def update(self, data, scene):
+    def update(self, data, depsgraph):
         if not self.session:
             if self.is_preview:
                 cscene = bpy.context.scene.cycles
                 use_osl = cscene.shading_system and cscene.device == 'CPU'
 
-                engine.create(self, data, scene,
-                              None, None, None, use_osl)
+                engine.create(self, data, preview_osl=use_osl)
             else:
-                engine.create(self, data, scene)
-        else:
-            engine.reset(self, data, scene)
+                engine.create(self, data)
 
-    def render(self, scene):
-        engine.render(self)
+        engine.reset(self, data, depsgraph)
 
-    def bake(self, scene, obj, pass_type, pass_filter, object_id, pixel_array, num_pixels, depth, result):
-        engine.bake(self, obj, pass_type, pass_filter, object_id, pixel_array, num_pixels, depth, result)
+    def render(self, depsgraph):
+        engine.render(self, depsgraph)
+
+    def bake(self, depsgraph, obj, pass_type, pass_filter, object_id, pixel_array, num_pixels, depth, result):
+        engine.bake(self, depsgraph, obj, pass_type, pass_filter, object_id, pixel_array, num_pixels, depth, result)
 
     # viewport render
     def view_update(self, context):
         if not self.session:
-            engine.create(self, context.blend_data, context.scene,
+            engine.create(self, context.blend_data,
                           context.region, context.space_data, context.region_data)
-        engine.update(self, context.blend_data, context.scene)
+
+        engine.reset(self, context.blend_data, context.depsgraph)
+        engine.sync(self, context.depsgraph, context.blend_data)
 
     def view_draw(self, context):
-        engine.draw(self, context.region, context.space_data, context.region_data)
+        engine.draw(self, context.depsgraph, context.region, context.space_data, context.region_data)
 
     def update_script_node(self, node):
         if engine.with_osl():
@@ -118,6 +121,7 @@ classes = (
 def register():
     from bpy.utils import register_class
     from . import ui
+    from . import operators
     from . import properties
     from . import presets
     import atexit
@@ -130,6 +134,7 @@ def register():
 
     properties.register()
     ui.register()
+    operators.register()
     presets.register()
 
     for cls in classes:
@@ -141,6 +146,7 @@ def register():
 def unregister():
     from bpy.utils import unregister_class
     from . import ui
+    from . import operators
     from . import properties
     from . import presets
     import atexit
@@ -148,6 +154,7 @@ def unregister():
     bpy.app.handlers.version_update.remove(version_update.do_versions)
 
     ui.unregister()
+    operators.unregister()
     properties.unregister()
     presets.unregister()
 

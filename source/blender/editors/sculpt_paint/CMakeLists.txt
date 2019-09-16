@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -25,6 +22,7 @@ set(INC
 	../../blenlib
 	../../blentranslation
 	../../bmesh
+	../../depsgraph
 	../../gpu
 	../../imbuf
 	../../makesdna
@@ -42,21 +40,22 @@ set(INC_SYS
 set(SRC
 	paint_cursor.c
 	paint_curve.c
+	paint_curve_undo.c
 	paint_hide.c
 	paint_image.c
 	paint_image_2d.c
 	paint_image_proj.c
+	paint_image_undo.c
 	paint_mask.c
 	paint_ops.c
 	paint_stroke.c
-	paint_undo.c
 	paint_utils.c
 	paint_vertex.c
 	paint_vertex_color_ops.c
 	paint_vertex_color_utils.c
+	paint_vertex_proj.c
 	paint_vertex_weight_ops.c
 	paint_vertex_weight_utils.c
-	paint_vertex_proj.c
 	sculpt.c
 	sculpt_undo.c
 	sculpt_uv.c
@@ -65,10 +64,15 @@ set(SRC
 	sculpt_intern.h
 )
 
+set(LIB
+	bf_blenkernel
+	bf_blenlib
+)
+
 if(WITH_INTERNATIONAL)
 	add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_editor_sculpt_paint "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_sculpt_paint "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Nathan Letwory.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ArmatureImporter.h
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #ifndef __ARMATUREIMPORTER_H__
@@ -62,7 +56,9 @@ extern "C" {
 class ArmatureImporter : private TransformReader
 {
 private:
+	Main *m_bmain;
 	Scene *scene;
+	ViewLayer *view_layer;
 	UnitConverter *unit_converter;
 	const ImportSettings *import_settings;
 
@@ -104,8 +100,9 @@ private:
 	JointData *get_joint_data(COLLADAFW::Node *node);
 #endif
 
-	int create_bone(SkinInfo* skin, COLLADAFW::Node *node, EditBone *parent, int totchild,
-		float parent_mat[4][4], bArmature *arm, std::vector<std::string> &layer_labels);
+	int create_bone(
+	        SkinInfo* skin, COLLADAFW::Node *node, EditBone *parent, int totchild,
+	        float parent_mat[4][4], bArmature *arm, std::vector<std::string> &layer_labels);
 
 	BoneExtended &add_bone_extended(EditBone *bone, COLLADAFW::Node * node, int sibcount, std::vector<std::string> &layer_labels, BoneExtensionMap &extended_bones);
 
@@ -129,15 +126,16 @@ private:
 	ArmatureJoints& get_armature_joints(Object *ob_arm);
 #endif
 
-	Object *create_armature_bones(SkinInfo& skin);
-	void create_armature_bones(std::vector<Object *> &arm_objs);
+	Object *create_armature_bones(Main *bmain, SkinInfo& skin);
+	void create_armature_bones(Main *bmain, std::vector<Object *> &arm_objs);
 
 	/** TagsMap typedef for uid_tags_map. */
 	typedef std::map<std::string, ExtraTags*> TagsMap;
 	TagsMap uid_tags_map;
 public:
 
-	ArmatureImporter(UnitConverter *conv, MeshImporterBase *mesh, Scene *sce, const ImportSettings *import_settings);
+	ArmatureImporter(
+	        UnitConverter *conv, MeshImporterBase *mesh, Main *bmain, Scene *sce, ViewLayer *view_layer, const ImportSettings *import_settings);
 	~ArmatureImporter();
 
 	void add_root_joint(COLLADAFW::Node *node, Object *parent);
@@ -145,7 +143,7 @@ public:
 	// here we add bones to armatures, having armatures previously created in write_controller
 	void make_armatures(bContext *C, std::vector<Object *> &objects_to_scale);
 
-	void make_shape_keys();
+	void make_shape_keys(bContext *C);
 
 #if 0
 	// link with meshes, create vertex groups, assign weights
@@ -157,16 +155,16 @@ public:
 	bool write_controller(const COLLADAFW::Controller* controller);
 
 	COLLADAFW::UniqueId *get_geometry_uid(const COLLADAFW::UniqueId& controller_uid);
-	
+
 	Object *get_armature_for_joint(COLLADAFW::Node *node);
 
 	void get_rna_path_for_joint(COLLADAFW::Node *node, char *joint_path, size_t count);
-	
+
 	// gives a world-space mat
 	bool get_joint_bind_mat(float m[4][4], COLLADAFW::Node *joint);
 
 	void set_tags_map( TagsMap& tags_map);
-	
+
 };
 
 #endif

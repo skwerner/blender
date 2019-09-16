@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file BLI_blenlib.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * \section aboutbli Blender LIbrary external interface
  *
@@ -45,10 +37,10 @@
  *
  * - blenlib is written in C.
  * - The posix-compliance may move to a separate lib that deals with
- *   platform dependencies. (There are other platform-dependent 
+ *   platform dependencies. (There are other platform-dependent
  *   fixes as well.)
  * - The file i/o has some redundant code. It should be cleaned.
- * 
+ *
  * \subsection dependencies Dependencies
  *
  * - The blenlib uses type defines from \ref DNA, and functions from

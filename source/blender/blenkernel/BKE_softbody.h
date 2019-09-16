@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,20 +15,15 @@
  *
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_SOFTBODY_H__
 #define __BKE_SOFTBODY_H__
 
-/** \file BKE_softbody.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
+struct Depsgraph;
 struct Object;
 struct Scene;
 struct SoftBody;
@@ -53,13 +46,14 @@ typedef struct BodyPoint {
 extern struct SoftBody  *sbNew(struct Scene *scene);
 
 /* frees internal data and softbody itself */
-extern void             sbFree(struct SoftBody *sb);
+extern void             sbFree(struct Object *ob);
 
 /* frees simulation data to reset simulation */
 extern void             sbFreeSimulation(struct SoftBody *sb);
 
 /* do one simul step, reading and writing vertex locs from given array */
-extern void             sbObjectStep(struct Scene *scene, struct Object *ob, float framnr, float (*vertexCos)[3], int numVerts);
+extern void             sbObjectStep(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob,
+                                     float framnr, float (*vertexCos)[3], int numVerts);
 
 /* makes totally fresh start situation, resets time */
 extern void             sbObjectToSoftbody(struct Object *ob);
@@ -72,4 +66,3 @@ extern void             SB_estimate_transform(Object *ob, float lloc[3], float l
 
 
 #endif
-

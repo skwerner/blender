@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Nathan Letwory.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/collada/TransformReader.cpp
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 /* COLLADABU_ASSERT, may be able to remove later */
@@ -54,7 +48,7 @@ void TransformReader::get_node_mat(
 	float copy[4][4];
 
 	unit_m4(mat);
-	
+
 	for (unsigned int i = 0; i < node->getTransformations().getCount(); i++) {
 
 		COLLADAFW::Transformation *tm = node->getTransformations()[i];
@@ -80,18 +74,20 @@ void TransformReader::get_node_mat(
 				dae_scale_to_mat4(tm, cur);
 				break;
 			case COLLADAFW::Transformation::LOOKAT:
+				fprintf(stderr, "|!     LOOKAT transformations are not supported yet.\n");
+				break;
 			case COLLADAFW::Transformation::SKEW:
-				fprintf(stderr, "LOOKAT and SKEW transformations are not supported yet.\n");
+				fprintf(stderr, "|!     SKEW transformations are not supported yet.\n");
 				break;
 		}
 
 		copy_m4_m4(copy, mat);
 		mul_m4_m4m4(mat, copy, cur);
-		
+
 		if (animation_map) {
 			// AnimationList that drives this Transformation
 			const COLLADAFW::UniqueId& anim_list_id = tm->getAnimationList();
-		
+
 			// store this so later we can link animation data with ob
 			Animation anim = {ob, node, tm};
 			(*animation_map)[anim_list_id] = anim;

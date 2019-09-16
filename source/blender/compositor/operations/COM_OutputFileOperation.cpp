@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,19 +13,19 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
- *		Lukas Tönne
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_OutputFileOperation.h"
+
 #include <string.h>
+
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
-#include "BKE_image.h"
+
 #include "BKE_global.h"
+#include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"
 
@@ -134,11 +132,11 @@ static void write_buffer_rect(rcti *rect, const bNodeTree *tree,
 	for (y = y1; y < y2 && (!breaked); y++) {
 		for (x = x1; x < x2 && (!breaked); x++) {
 			reader->readSampled(color, x, y, COM_PS_NEAREST);
-			
+
 			for (i = 0; i < size; ++i)
 				buffer[offset + i] = color[i];
 			offset += size;
-			
+
 			if (tree->test_break && tree->test_break(tree->tbh))
 				breaked = true;
 		}
@@ -153,13 +151,13 @@ OutputSingleLayerOperation::OutputSingleLayerOperation(
 {
 	this->m_rd = rd;
 	this->m_tree = tree;
-	
+
 	this->addInputSocket(datatype);
-	
+
 	this->m_outputBuffer = NULL;
 	this->m_datatype = datatype;
 	this->m_imageInput = NULL;
-	
+
 	this->m_format = format;
 	BLI_strncpy(this->m_path, path, sizeof(this->m_path));
 
@@ -182,32 +180,31 @@ void OutputSingleLayerOperation::executeRegion(rcti *rect, unsigned int /*tileNu
 void OutputSingleLayerOperation::deinitExecution()
 {
 	if (this->getWidth() * this->getHeight() != 0) {
-		
+
 		int size = get_datatype_size(this->m_datatype);
 		ImBuf *ibuf = IMB_allocImBuf(this->getWidth(), this->getHeight(), this->m_format->planes, 0);
-		Main *bmain = G.main; /* TODO, have this passed along */
 		char filename[FILE_MAX];
 		const char *suffix;
-		
+
 		ibuf->channels = size;
 		ibuf->rect_float = this->m_outputBuffer;
-		ibuf->mall |= IB_rectfloat; 
+		ibuf->mall |= IB_rectfloat;
 		ibuf->dither = this->m_rd->dither_intensity;
-		
+
 		IMB_colormanagement_imbuf_for_write(ibuf, true, false, m_viewSettings, m_displaySettings,
 		                                    this->m_format);
 
 		suffix = BKE_scene_multiview_view_suffix_get(this->m_rd, this->m_viewName);
 
 		BKE_image_path_from_imformat(
-		        filename, this->m_path, bmain->name, this->m_rd->cfra, this->m_format,
+		        filename, this->m_path, BKE_main_blendfile_path_from_global(), this->m_rd->cfra, this->m_format,
 		        (this->m_rd->scemode & R_EXTENSION) != 0, true, suffix);
 
 		if (0 == BKE_imbuf_write(ibuf, filename, this->m_format))
 			printf("Cannot save Node File Output to %s\n", filename);
 		else
 			printf("Saved: %s\n", filename);
-		
+
 		IMB_freeImBuf(ibuf);
 	}
 	this->m_outputBuffer = NULL;
@@ -221,7 +218,7 @@ OutputOpenExrLayer::OutputOpenExrLayer(const char *name_, DataType datatype_, bo
 	BLI_strncpy(this->name, name_, sizeof(this->name));
 	this->datatype = datatype_;
 	this->use_layer = use_layer_;
-	
+
 	/* these are created in initExecution */
 	this->outputBuffer = 0;
 	this->imageInput = 0;
@@ -233,7 +230,7 @@ OutputOpenExrMultiLayerOperation::OutputOpenExrMultiLayerOperation(
 {
 	this->m_rd = rd;
 	this->m_tree = tree;
-	
+
 	BLI_strncpy(this->m_path, path, sizeof(this->m_path));
 	this->m_exr_codec = exr_codec;
 	this->m_exr_half_float = exr_half_float;
@@ -271,14 +268,13 @@ void OutputOpenExrMultiLayerOperation::deinitExecution()
 	unsigned int width = this->getWidth();
 	unsigned int height = this->getHeight();
 	if (width != 0 && height != 0) {
-		Main *bmain = G.main; /* TODO, have this passed along */
 		char filename[FILE_MAX];
 		const char *suffix;
 		void *exrhandle = IMB_exr_get_handle();
 
 		suffix = BKE_scene_multiview_view_suffix_get(this->m_rd, this->m_viewName);
 		BKE_image_path_from_imtype(
-		        filename, this->m_path, bmain->name, this->m_rd->cfra, R_IMF_IMTYPE_MULTILAYER,
+		        filename, this->m_path, BKE_main_blendfile_path_from_global(), this->m_rd->cfra, R_IMF_IMTYPE_MULTILAYER,
 		        (this->m_rd->scemode & R_EXTENSION) != 0, true, suffix);
 		BLI_make_existing_file(filename);
 
@@ -286,11 +282,11 @@ void OutputOpenExrMultiLayerOperation::deinitExecution()
 			OutputOpenExrLayer &layer = this->m_layers[i];
 			if (!layer.imageInput)
 				continue; /* skip unconnected sockets */
-			
+
 			add_exr_channels(exrhandle, this->m_layers[i].name, this->m_layers[i].datatype, "", width,
 			                 this->m_exr_half_float, this->m_layers[i].outputBuffer);
 		}
-		
+
 		/* when the filename has no permissions, this can fail */
 		if (IMB_exr_begin_write(exrhandle, filename, width, height, this->m_exr_codec, NULL)) {
 			IMB_exr_write_channels(exrhandle);
@@ -300,16 +296,15 @@ void OutputOpenExrMultiLayerOperation::deinitExecution()
 			/* XXX nice way to do report? */
 			printf("Error Writing Render Result, see console\n");
 		}
-		
+
 		IMB_exr_close(exrhandle);
 		for (unsigned int i = 0; i < this->m_layers.size(); ++i) {
 			if (this->m_layers[i].outputBuffer) {
 				MEM_freeN(this->m_layers[i].outputBuffer);
 				this->m_layers[i].outputBuffer = NULL;
 			}
-			
+
 			this->m_layers[i].imageInput = NULL;
 		}
 	}
 }
-

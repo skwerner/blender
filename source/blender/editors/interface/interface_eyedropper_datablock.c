@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,12 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_eyedropper_datablock.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * Eyedropper (ID data-blocks)
  *
@@ -37,7 +33,6 @@
 #include "DNA_object_types.h"
 
 #include "BLI_string.h"
-#include "BLI_math_vector.h"
 
 #include "BLT_translation.h"
 
@@ -68,6 +63,7 @@ typedef struct DataDropper {
 	PropertyRNA *prop;
 	short idcode;
 	const char *idcode_name;
+	bool is_undo;
 
 	ID *init_id; /* for resetting on cancel */
 
@@ -86,7 +82,6 @@ static void datadropper_draw_cb(const struct bContext *C, ARegion *ar, void *arg
 
 static int datadropper_init(bContext *C, wmOperator *op)
 {
-	DataDropper *ddr;
 	int index_dummy;
 	StructRNA *type;
 
@@ -96,17 +91,21 @@ static int datadropper_init(bContext *C, wmOperator *op)
 	st = BKE_spacetype_from_id(SPACE_VIEW3D);
 	art = BKE_regiontype_from_id(st, RGN_TYPE_WINDOW);
 
-	op->customdata = ddr = MEM_callocN(sizeof(DataDropper), "DataDropper");
+	DataDropper *ddr = MEM_callocN(sizeof(DataDropper), __func__);
 
-	UI_context_active_but_prop_get(C, &ddr->ptr, &ddr->prop, &index_dummy);
+	uiBut *but = UI_context_active_but_prop_get(C, &ddr->ptr, &ddr->prop, &index_dummy);
 
 	if ((ddr->ptr.data == NULL) ||
 	    (ddr->prop == NULL) ||
 	    (RNA_property_editable(&ddr->ptr, ddr->prop) == false) ||
 	    (RNA_property_type(ddr->prop) != PROP_POINTER))
 	{
+		MEM_freeN(ddr);
 		return false;
 	}
+	op->customdata = ddr;
+
+	ddr->is_undo = UI_but_flag_is_set(but, UI_BUT_UNDO);
 
 	ddr->art = art;
 	ddr->draw_handle_pixel = ED_region_draw_cb_activate(art, datadropper_draw_cb, ddr, REGION_DRAW_POST_PIXEL);
@@ -114,7 +113,8 @@ static int datadropper_init(bContext *C, wmOperator *op)
 	type = RNA_property_pointer_type(&ddr->ptr, ddr->prop);
 	ddr->idcode = RNA_type_to_ID_code(type);
 	BLI_assert(ddr->idcode != 0);
-	/* Note we can translate here (instead of on draw time), because this struct has very short lifetime. */
+	/* Note we can translate here (instead of on draw time),
+	 * because this struct has very short lifetime. */
 	ddr->idcode_name = TIP_(BKE_idcode_to_name(ddr->idcode));
 
 	PointerRNA ptr = RNA_property_pointer_get(&ddr->ptr, ddr->prop);
@@ -145,13 +145,12 @@ static void datadropper_exit(bContext *C, wmOperator *op)
 /* *** datadropper id helper functions *** */
 /**
  * \brief get the ID from the screen.
- *
  */
 static void datadropper_id_sample_pt(bContext *C, DataDropper *ddr, int mx, int my, ID **r_id)
 {
 	/* we could use some clever */
-	wmWindow *win = CTX_wm_window(C);
-	ScrArea *sa = BKE_screen_find_area_xy(win->screen, -1, mx, my);
+	bScreen *screen = CTX_wm_screen(C);
+	ScrArea *sa = BKE_screen_find_area_xy(screen, -1, mx, my);
 
 	ScrArea *area_prev = CTX_wm_area(C);
 	ARegion *ar_prev = CTX_wm_region(C);
@@ -190,7 +189,10 @@ static void datadropper_id_sample_pt(bContext *C, DataDropper *ddr, int mx, int 
 						}
 					}
 
-					if (id) {
+					PointerRNA idptr;
+					RNA_id_pointer_create(id, &idptr);
+
+					if (id && RNA_property_pointer_poll(&ddr->ptr, ddr->prop, &idptr)) {
 						BLI_snprintf(ddr->name, sizeof(ddr->name), "%s: %s",
 						             ddr->idcode_name, id->name + 2);
 						*r_id = id;
@@ -249,13 +251,12 @@ static int datadropper_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				return OPERATOR_CANCELLED;
 			case EYE_MODAL_SAMPLE_CONFIRM:
 			{
-				bool success;
-
-				success = datadropper_id_sample(C, ddr, event->x, event->y);
+				const bool is_undo = ddr->is_undo;
+				const bool success = datadropper_id_sample(C, ddr, event->x, event->y);
 				datadropper_exit(C, op);
-
 				if (success) {
-					return OPERATOR_FINISHED;
+					/* Could support finished & undo-skip. */
+					return is_undo ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 				}
 				else {
 					BKE_report(op->reports, RPT_WARNING, "Failed to set value");
@@ -285,7 +286,6 @@ static int datadropper_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED
 		return OPERATOR_RUNNING_MODAL;
 	}
 	else {
-		datadropper_exit(C, op);
 		return OPERATOR_CANCELLED;
 	}
 }
@@ -305,7 +305,7 @@ static int datadropper_exec(bContext *C, wmOperator *op)
 	}
 }
 
-static int datadropper_poll(bContext *C)
+static bool datadropper_poll(bContext *C)
 {
 	PointerRNA ptr;
 	PropertyRNA *prop;
@@ -345,7 +345,7 @@ void UI_OT_eyedropper_id(wmOperatorType *ot)
 	ot->poll = datadropper_poll;
 
 	/* flags */
-	ot->flag = OPTYPE_BLOCKING | OPTYPE_INTERNAL;
+	ot->flag = OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_INTERNAL;
 
 	/* properties */
 }

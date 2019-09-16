@@ -1,6 +1,4 @@
 /*
- * Copyright 2012, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,28 +13,27 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Dalai Felinto
+ * Copyright 2012, Blender Foundation.
  */
 
-#ifndef _COM_NormalizeOperation_h
-#define _COM_NormalizeOperation_h
+#ifndef __COM_NORMALIZEOPERATION_H__
+#define __COM_NORMALIZEOPERATION_H__
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
 
 /**
- * @brief base class of normalize, implementing the simple normalize
- * @ingroup operation
+ * \brief base class of normalize, implementing the simple normalize
+ * \ingroup operation
  */
 class NormalizeOperation : public NodeOperation {
 protected:
 	/**
-	 * @brief Cached reference to the reader
+	 * \brief Cached reference to the reader
 	 */
 	SocketReader *m_imageReader;
 
 	/**
-	 * @brief temporarily cache of the execution storage
+	 * \brief temporarily cache of the execution storage
 	 * it stores x->min and y->mult
 	 */
 	NodeTwoFloats *m_cachedInstance;

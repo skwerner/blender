@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file AVI_avi.h
- *  \ingroup avi
+/** \file
+ * \ingroup avi
  *
  * \section avi_about About the AVI module
  *
@@ -46,7 +37,6 @@
  * and functions. You would need the types to be able to include the
  * function headers anyway. And, after all, it is someone else's
  * code. So we keep it like this.
- *
  */
 
 #ifndef __AVI_AVI_H__
@@ -68,7 +58,7 @@ typedef struct _AviList {
 
 typedef struct _AviMainHeader {
 	int fcc;
-	int size;  
+	int size;
 	int MicroSecPerFrame;       /* MicroSecPerFrame - timing between frames */
 	int MaxBytesPerSec;        /* MaxBytesPerSec - approx bps system must handle */
 	int PaddingGranularity;
@@ -79,7 +69,7 @@ typedef struct _AviMainHeader {
 #define AVIF_TRUSTCKTYPE        0x00000800
 #define AVIF_WASCAPTUREFILE     0x00010000        /* specially allocated used for capturing real time video */
 #define AVIF_COPYRIGHTED        0x00020000        /* contains copyrighted data */
-	
+
 	int TotalFrames;
 	int InitialFrames;    /* InitialFrames - initial frame before interleaving */
 	int Streams;
@@ -91,18 +81,18 @@ typedef struct _AviMainHeader {
 
 typedef struct _AviStreamHeader {
 	int fcc;
-	int size;  
+	int size;
 	int Type;
 #define AVIST_VIDEO FCC("vids")
 #define AVIST_AUDIO FCC("auds")
 #define AVIST_MIDI  FCC("mids")
 #define AVIST_TEXT  FCC("txts")
-	
+
 	int Handler;
 	int Flags;
 #define AVISF_DISABLED 0x00000001
 #define AVISF_VIDEO_PALCHANGES 0x00010000
-	
+
 	short Priority;
 	short Language;
 	int InitialFrames;
@@ -121,7 +111,7 @@ typedef struct _AviStreamHeader {
 
 typedef struct _AviBitmapInfoHeader {
 	int fcc;
-	int size;  
+	int size;
 	int Size;
 	int Width;
 	int Height;
@@ -149,7 +139,7 @@ typedef struct _AviIndexEntry {
 	int ChunkId;
 	int Flags;
 #define AVIIF_LIST       0x00000001
-#define AVIIF_KEYFRAME   0x00000010 
+#define AVIIF_KEYFRAME   0x00000010
 #define AVIIF_NO_TIME    0x00000100
 #define AVIIF_COMPRESSOR 0x0FFF0000
 	int Offset;
@@ -166,7 +156,7 @@ typedef enum {
 	AVI_FORMAT_RGB24,  /* The most basic of forms, 3 bytes per pixel, 1 per r, g, b */
 	AVI_FORMAT_RGB32,  /* The second most basic of forms, 4 bytes per pixel, 1 per r, g, b, alpha */
 	AVI_FORMAT_AVI_RGB, /* Same as above, but is in the weird AVI order (bottom to top, left to right) */
-	AVI_FORMAT_MJPEG /* Motion-JPEG */
+	AVI_FORMAT_MJPEG, /* Motion-JPEG */
 } AviFormat;
 
 typedef struct _AviStreamRec {
@@ -178,22 +168,22 @@ typedef struct _AviStreamRec {
 
 typedef struct _AviMovie {
 	FILE *fp;
-	
+
 	int type;
 #define AVI_MOVIE_READ  0
 #define AVI_MOVIE_WRITE 1
-	
+
 	int64_t size;
 
 	AviMainHeader *header;
 	AviStreamRec *streams;
 	AviIndexEntry *entries;
 	int index_entries;
-	
+
 	int64_t movi_offset;
 	int64_t read_offset;
 	int64_t *offset_table;
-	
+
 	/* Local data goes here */
 	int interlace;
 	int odd_fields;
@@ -208,15 +198,15 @@ typedef enum {
 	AVI_ERROR_FORMAT,
 	AVI_ERROR_ALLOC,
 	AVI_ERROR_FOUND,
-	AVI_ERROR_OPTION
+	AVI_ERROR_OPTION,
 } AviError;
 
 /* belongs to the option-setting function. */
 typedef enum {
 	AVI_OPTION_WIDTH = 0,
-	AVI_OPTION_HEIGHT, 
+	AVI_OPTION_HEIGHT,
 	AVI_OPTION_QUALITY,
-	AVI_OPTION_FRAMERATE
+	AVI_OPTION_FRAMERATE,
 } AviOption;
 
 /* The offsets that will always stay the same in AVI files we

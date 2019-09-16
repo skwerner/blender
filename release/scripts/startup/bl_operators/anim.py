@@ -40,24 +40,24 @@ class ANIM_OT_keying_set_export(Operator):
     bl_idname = "anim.keying_set_export"
     bl_label = "Export Keying Set..."
 
-    filepath = StringProperty(
-            subtype='FILE_PATH',
-            )
-    filter_folder = BoolProperty(
-            name="Filter folders",
-            default=True,
-            options={'HIDDEN'},
-            )
-    filter_text = BoolProperty(
-            name="Filter text",
-            default=True,
-            options={'HIDDEN'},
-            )
-    filter_python = BoolProperty(
-            name="Filter python",
-            default=True,
-            options={'HIDDEN'},
-            )
+    filepath: StringProperty(
+        subtype='FILE_PATH',
+    )
+    filter_folder: BoolProperty(
+        name="Filter folders",
+        default=True,
+        options={'HIDDEN'},
+    )
+    filter_text: BoolProperty(
+        name="Filter text",
+        default=True,
+        options={'HIDDEN'},
+    )
+    filter_python: BoolProperty(
+        name="Filter python",
+        default=True,
+        options={'HIDDEN'},
+    )
 
     def execute(self, context):
         if not self.filepath:
@@ -79,7 +79,7 @@ class ANIM_OT_keying_set_export(Operator):
         f.write("# Keying Set Level declarations\n")
         f.write("ks = scene.keying_sets.new(idname=\"%s\", name=\"%s\")\n"
                 "" % (ks.bl_idname, ks.bl_label))
-        f.write("ks.bl_description = \"%s\"\n" % ks.bl_description)
+        f.write("ks.bl_description = %r\n" % ks.bl_description)
 
         if not ks.is_path_absolute:
             f.write("ks.is_path_absolute = False\n")
@@ -110,7 +110,7 @@ class ANIM_OT_keying_set_export(Operator):
             # - special handling is needed for "nested" ID-blocks
             #   (e.g. nodetree in Material)
             if ksp.id.bl_rna.identifier.startswith("ShaderNodeTree"):
-                # Find material or lamp using this node tree...
+                # Find material or light using this node tree...
                 id_bpy_path = "bpy.data.nodes[\"%s\"]"
                 found = False
 
@@ -121,14 +121,14 @@ class ANIM_OT_keying_set_export(Operator):
                         break
 
                 if not found:
-                    for lamp in bpy.data.lamps:
-                        if lamp.node_tree == ksp.id:
-                            id_bpy_path = "bpy.data.lamps[\"%s\"].node_tree" % (lamp.name)
+                    for light in bpy.data.lights:
+                        if light.node_tree == ksp.id:
+                            id_bpy_path = "bpy.data.lights[\"%s\"].node_tree" % (light.name)
                             found = True
                             break
 
                 if not found:
-                    self.report({'WARN'}, "Could not find material or lamp using Shader Node Tree - %s" % (ksp.id))
+                    self.report({'WARN'}, "Could not find material or light using Shader Node Tree - %s" % (ksp.id))
             elif ksp.id.bl_rna.identifier.startswith("CompositorNodeTree"):
                 # Find compositor nodetree using this node tree...
                 for scene in bpy.data.scenes:
@@ -197,65 +197,66 @@ class ANIM_OT_keying_set_export(Operator):
         return {'RUNNING_MODAL'}
 
 
-class BakeAction(Operator):
+class NLA_OT_bake(Operator):
     """Bake all selected objects loc/scale/rotation animation to an action"""
     bl_idname = "nla.bake"
     bl_label = "Bake Action"
     bl_options = {'REGISTER', 'UNDO'}
 
-    frame_start = IntProperty(
-            name="Start Frame",
-            description="Start frame for baking",
-            min=0, max=300000,
-            default=1,
-            )
-    frame_end = IntProperty(
-            name="End Frame",
-            description="End frame for baking",
-            min=1, max=300000,
-            default=250,
-            )
-    step = IntProperty(
-            name="Frame Step",
-            description="Frame Step",
-            min=1, max=120,
-            default=1,
-            )
-    only_selected = BoolProperty(
-            name="Only Selected Bones",
-            description="Only key selected bones (Pose baking only)",
-            default=True,
-            )
-    visual_keying = BoolProperty(
-            name="Visual Keying",
-            description="Keyframe from the final transformations (with constraints applied)",
-            default=False,
-            )
-    clear_constraints = BoolProperty(
-            name="Clear Constraints",
-            description="Remove all constraints from keyed object/bones, and do 'visual' keying",
-            default=False,
-            )
-    clear_parents = BoolProperty(
-            name="Clear Parents",
-            description="Bake animation onto the object then clear parents (objects only)",
-            default=False,
-            )
-    use_current_action = BoolProperty(
-            name="Overwrite Current Action",
-            description="Bake animation into current action, instead of creating a new one "
-                        "(useful for baking only part of bones in an armature)",
-            default=False,
-            )
-    bake_types = EnumProperty(
-            name="Bake Data",
-            description="Which data's transformations to bake",
-            options={'ENUM_FLAG'},
-            items=(('POSE', "Pose", "Bake bones transformations"),
-                   ('OBJECT', "Object", "Bake object transformations"),
-                   ),
-            default={'POSE'},
-            )
+    frame_start: IntProperty(
+        name="Start Frame",
+        description="Start frame for baking",
+        min=0, max=300000,
+        default=1,
+    )
+    frame_end: IntProperty(
+        name="End Frame",
+        description="End frame for baking",
+        min=1, max=300000,
+        default=250,
+    )
+    step: IntProperty(
+        name="Frame Step",
+        description="Frame Step",
+        min=1, max=120,
+        default=1,
+    )
+    only_selected: BoolProperty(
+        name="Only Selected Bones",
+        description="Only key selected bones (Pose baking only)",
+        default=True,
+    )
+    visual_keying: BoolProperty(
+        name="Visual Keying",
+        description="Keyframe from the final transformations (with constraints applied)",
+        default=False,
+    )
+    clear_constraints: BoolProperty(
+        name="Clear Constraints",
+        description="Remove all constraints from keyed object/bones, and do 'visual' keying",
+        default=False,
+    )
+    clear_parents: BoolProperty(
+        name="Clear Parents",
+        description="Bake animation onto the object then clear parents (objects only)",
+        default=False,
+    )
+    use_current_action: BoolProperty(
+        name="Overwrite Current Action",
+        description="Bake animation into current action, instead of creating a new one "
+        "(useful for baking only part of bones in an armature)",
+        default=False,
+    )
+    bake_types: EnumProperty(
+        name="Bake Data",
+        description="Which data's transformations to bake",
+        options={'ENUM_FLAG'},
+        items=(
+             ('POSE', "Pose", "Bake bones transformations"),
+             ('OBJECT', "Object", "Bake object transformations"),
+        ),
+        default={'POSE'},
+    )
 
     def execute(self, context):
         from bpy_extras import anim_utils
@@ -296,16 +297,16 @@ class BakeAction(Operator):
 
 class ClearUselessActions(Operator):
     """Mark actions with no F-Curves for deletion after save & reload of """ \
-    """file preserving \"action libraries\""""
+        """file preserving \"action libraries\""""
     bl_idname = "anim.clear_useless_actions"
     bl_label = "Clear Useless Actions"
     bl_options = {'REGISTER', 'UNDO'}
 
-    only_unused = BoolProperty(
-            name="Only Unused",
-            description="Only unused (Fake User only) actions get considered",
-            default=True,
-            )
+    only_unused: BoolProperty(
+        name="Only Unused",
+        description="Only unused (Fake User only) actions get considered",
+        default=True,
+    )
 
     @classmethod
     def poll(cls, context):
@@ -316,8 +317,10 @@ class ClearUselessActions(Operator):
 
         for action in bpy.data.actions:
             # if only user is "fake" user...
-            if ((self.only_unused is False) or
-                (action.use_fake_user and action.users == 1)):
+            if (
+                (self.only_unused is False) or
+                (action.use_fake_user and action.users == 1)
+            ):
 
                 # if it has F-Curves, then it's a "action library"
                 # (i.e. walk, wave, jump, etc.)
@@ -338,11 +341,11 @@ class UpdateAnimatedTransformConstraint(Operator):
     bl_label = "Update Animated Transform Constraints"
     bl_options = {'REGISTER', 'UNDO'}
 
-    use_convert_to_radians = BoolProperty(
-            name="Convert To Radians",
-            description="Convert fcurves/drivers affecting rotations to radians (Warning: use this only once!)",
-            default=True,
-            )
+    use_convert_to_radians: BoolProperty(
+        name="Convert To Radians",
+        description="Convert fcurves/drivers affecting rotations to radians (Warning: use this only once!)",
+        default=True,
+    )
 
     def execute(self, context):
         import animsys_refactor
@@ -417,7 +420,7 @@ class UpdateAnimatedTransformConstraint(Operator):
 
 classes = (
     ANIM_OT_keying_set_export,
-    BakeAction,
+    NLA_OT_bake,
     ClearUselessActions,
     UpdateAnimatedTransformConstraint,
 )

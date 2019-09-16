@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * 
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_file/filesel.c
- *  \ingroup spfile
+/** \file
+ * \ingroup spfile
  */
 
 
@@ -55,27 +48,24 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
-#include "BLI_fileops_types.h"
 #include "BLI_fnmatch.h"
 
 #include "BKE_appdir.h"
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_main.h"
 
 #include "BLF_api.h"
-
 
 #include "ED_fileselect.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-
 #include "RNA_access.h"
 
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
+#include "UI_view2d.h"
 
 #include "file_intern.h"
 #include "filelist.h"
@@ -96,11 +86,13 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 	FileSelectParams *params;
 	wmOperator *op = sfile->op;
 
+	const char *blendfile_path = BKE_main_blendfile_path_from_global();
+
 	/* create new parameters if necessary */
 	if (!sfile->params) {
 		sfile->params = MEM_callocN(sizeof(FileSelectParams), "fileselparams");
 		/* set path to most recently opened .blend */
-		BLI_split_dirfile(G.main->name, sfile->params->dir, sfile->params->file, sizeof(sfile->params->dir), sizeof(sfile->params->file));
+		BLI_split_dirfile(blendfile_path, sfile->params->dir, sfile->params->file, sizeof(sfile->params->dir), sizeof(sfile->params->file));
 		sfile->params->filter_glob[0] = '\0';
 		/* set the default thumbnails size */
 		sfile->params->thumbnail_size = 128;
@@ -149,8 +141,8 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 		}
 
 		if (params->dir[0]) {
-			BLI_cleanup_dir(G.main->name, params->dir);
-			BLI_path_abs(params->dir, G.main->name);
+			BLI_cleanup_dir(blendfile_path, params->dir);
+			BLI_path_abs(params->dir, blendfile_path);
 		}
 
 		if (is_directory == true && is_filename == false && is_filepath == false && is_files == false) {
@@ -194,6 +186,10 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 			if (tmp != params->filter_glob) {
 				BLI_strncpy(params->filter_glob, tmp, sizeof(params->filter_glob));
 				MEM_freeN(tmp);
+
+				/* Fix stupid things that truncating might have generated,
+				 * like last group being a 'match everything' wildcard-only one... */
+				BLI_path_extension_glob_validate(params->filter_glob);
 			}
 			params->filter |= (FILE_TYPE_OPERATOR | FILE_TYPE_FOLDER);
 		}
@@ -215,7 +211,8 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 		                    FILTER_ID_GR | FILTER_ID_IM | FILTER_ID_LA | FILTER_ID_LS | FILTER_ID_LT | FILTER_ID_MA |
 		                    FILTER_ID_MB | FILTER_ID_MC | FILTER_ID_ME | FILTER_ID_MSK | FILTER_ID_NT | FILTER_ID_OB |
 		                    FILTER_ID_PA | FILTER_ID_PAL | FILTER_ID_PC | FILTER_ID_SCE | FILTER_ID_SPK | FILTER_ID_SO |
-		                    FILTER_ID_TE | FILTER_ID_TXT | FILTER_ID_VF | FILTER_ID_WO | FILTER_ID_CF;
+		                    FILTER_ID_TE | FILTER_ID_TXT | FILTER_ID_VF | FILTER_ID_WO | FILTER_ID_CF | FILTER_ID_WS |
+		                    FILTER_ID_LP;
 
 		if (U.uiflag & USER_HIDE_DOT) {
 			params->flag |= FILE_HIDE_DOT;
@@ -223,12 +220,12 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 		else {
 			params->flag &= ~FILE_HIDE_DOT;
 		}
-		
+
 
 		if (params->type == FILE_LOADLIB) {
 			params->flag |= RNA_boolean_get(op->ptr, "link") ? FILE_LINK : 0;
 			params->flag |= RNA_boolean_get(op->ptr, "autoselect") ? FILE_AUTOSELECT : 0;
-			params->flag |= RNA_boolean_get(op->ptr, "active_layer") ? FILE_ACTIVELAY : 0;
+			params->flag |= RNA_boolean_get(op->ptr, "active_collection") ? FILE_ACTIVE_COLLECTION : 0;
 		}
 
 		if ((prop = RNA_struct_find_property(op->ptr, "display_type"))) {
@@ -243,14 +240,21 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 		}
 
 		if (params->display == FILE_DEFAULTDISPLAY) {
-			if (U.uiflag & USER_SHOW_THUMBNAILS) {
-				if (params->filter & (FILE_TYPE_IMAGE | FILE_TYPE_MOVIE | FILE_TYPE_FTFONT))
-					params->display = FILE_IMGDISPLAY;
-				else
+			if(params->display_previous == FILE_DEFAULTDISPLAY){
+				if (U.uiflag & USER_SHOW_THUMBNAILS) {
+					if (params->filter & (FILE_TYPE_IMAGE | FILE_TYPE_MOVIE | FILE_TYPE_FTFONT)) {
+						params->display = FILE_IMGDISPLAY;
+					}
+					else {
+						params->display = FILE_SHORTDISPLAY;
+					}
+				}
+				else {
 					params->display = FILE_SHORTDISPLAY;
+				}
 			}
 			else {
-				params->display = FILE_SHORTDISPLAY;
+				params->display = params->display_previous;
 			}
 		}
 
@@ -268,6 +272,7 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 		params->flag |= FILE_HIDE_DOT;
 		params->flag &= ~FILE_DIRSEL_ONLY;
 		params->display = FILE_SHORTDISPLAY;
+		params->display_previous = FILE_DEFAULTDISPLAY;
 		params->sort = FILE_SORT_ALPHA;
 		params->filter = 0;
 		params->filter_glob[0] = '\0';
@@ -282,8 +287,8 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 		sfile->folders_prev = folderlist_new();
 
 	if (!sfile->params->dir[0]) {
-		if (G.main->name[0]) {
-			BLI_split_dir_part(G.main->name, sfile->params->dir, sizeof(sfile->params->dir));
+		if (blendfile_path[0] != '\0') {
+			BLI_split_dir_part(blendfile_path, sfile->params->dir, sizeof(sfile->params->dir));
 		}
 		else {
 			const char *doc_path = BKE_appdir_folder_default();
@@ -365,12 +370,12 @@ FileSelection ED_fileselect_layout_offset_rect(FileLayout *layout, const rcti *r
 
 	if (layout == NULL)
 		return sel;
-	
+
 	colmin = (rect->xmin) / (layout->tile_w + 2 * layout->tile_border_x);
 	rowmin = (rect->ymin) / (layout->tile_h + 2 * layout->tile_border_y);
 	colmax = (rect->xmax) / (layout->tile_w + 2 * layout->tile_border_x);
 	rowmax = (rect->ymax) / (layout->tile_h + 2 * layout->tile_border_y);
-	
+
 	if (is_inside(colmin, rowmin, layout->columns, layout->rows) ||
 	    is_inside(colmax, rowmax, layout->columns, layout->rows) )
 	{
@@ -379,12 +384,12 @@ FileSelection ED_fileselect_layout_offset_rect(FileLayout *layout, const rcti *r
 		CLAMP(colmax, 0, layout->columns - 1);
 		CLAMP(rowmax, 0, layout->rows - 1);
 	}
-	
+
 	if ((colmin > layout->columns - 1) || (rowmin > layout->rows - 1)) {
 		sel.first = -1;
 	}
 	else {
-		if (layout->flag & FILE_LAYOUT_HOR) 
+		if (layout->flag & FILE_LAYOUT_HOR)
 			sel.first = layout->rows * colmin + rowmin;
 		else
 			sel.first = colmin + layout->columns * rowmin;
@@ -393,7 +398,7 @@ FileSelection ED_fileselect_layout_offset_rect(FileLayout *layout, const rcti *r
 		sel.last = -1;
 	}
 	else {
-		if (layout->flag & FILE_LAYOUT_HOR) 
+		if (layout->flag & FILE_LAYOUT_HOR)
 			sel.last = layout->rows * colmax + rowmax;
 		else
 			sel.last = colmax + layout->columns * rowmax;
@@ -409,14 +414,14 @@ int ED_fileselect_layout_offset(FileLayout *layout, int x, int y)
 
 	if (layout == NULL)
 		return -1;
-	
+
 	offsetx = (x) / (layout->tile_w + 2 * layout->tile_border_x);
 	offsety = (y) / (layout->tile_h + 2 * layout->tile_border_y);
-	
+
 	if (offsetx > layout->columns - 1) return -1;
 	if (offsety > layout->rows - 1) return -1;
-	
-	if (layout->flag & FILE_LAYOUT_HOR) 
+
+	if (layout->flag & FILE_LAYOUT_HOR)
 		active_file = layout->rows * offsetx + offsety;
 	else
 		active_file = offsetx + layout->columns * offsety;
@@ -540,7 +545,9 @@ void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *ar)
 		layout->prv_border_y = 0;
 		layout->tile_h = textheight * 3 / 2;
 		layout->height = (int)(BLI_rctf_size_y(&v2d->cur) - 2 * layout->tile_border_y);
-		layout->rows = layout->height / (layout->tile_h + 2 * layout->tile_border_y);
+		/* Padding by full scrollbar H is too much, can overlap tile border Y. */
+		layout->rows = (layout->height - V2D_SCROLL_HEIGHT + layout->tile_border_y) /
+			           (layout->tile_h + 2 * layout->tile_border_y);
 
 		column_widths(params, layout);
 
@@ -555,7 +562,6 @@ void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *ar)
 			         (int)layout->column_widths[COLUMN_DATE] + column_space +
 			         (int)layout->column_widths[COLUMN_TIME] + column_space +
 			         (int)layout->column_widths[COLUMN_SIZE] + column_space;
-
 		}
 		layout->tile_w = maxlen;
 		if (layout->rows > 0)
@@ -567,6 +573,7 @@ void ED_fileselect_init_layout(struct SpaceFile *sfile, ARegion *ar)
 		layout->width = sfile->layout->columns * (layout->tile_w + 2 * layout->tile_border_x) + layout->tile_border_x * 2;
 		layout->flag = FILE_LAYOUT_HOR;
 	}
+	params->display_previous = params->display;
 	layout->dirty = false;
 }
 
@@ -610,17 +617,18 @@ void ED_file_change_dir(bContext *C)
 int file_select_match(struct SpaceFile *sfile, const char *pattern, char *matched_file)
 {
 	int match = 0;
-	
+
 	int i;
 	FileDirEntry *file;
 	int n = filelist_files_ensure(sfile->files);
 
-	/* select any file that matches the pattern, this includes exact match 
+	/* select any file that matches the pattern, this includes exact match
 	 * if the user selects a single file by entering the filename
 	 */
 	for (i = 0; i < n; i++) {
 		file = filelist_file(sfile->files, i);
-		/* Do not check whether file is a file or dir here! Causes T44243 (we do accept dirs at this stage). */
+		/* Do not check whether file is a file or dir here! Causes T44243
+		 * (we do accept dirs at this stage). */
 		if (fnmatch(pattern, file->relpath, 0) == 0) {
 			filelist_entry_select_set(sfile->files, file, FILE_SEL_ADD, FILE_SEL_SELECTED, CHECK_ALL);
 			if (!match) {
@@ -644,7 +652,7 @@ int autocomplete_directory(struct bContext *C, char *str, void *UNUSED(arg_v))
 
 		DIR *dir;
 		struct dirent *de;
-		
+
 		BLI_split_dir_part(str, dirname, sizeof(dirname));
 
 		dir = opendir(dirname);
@@ -659,7 +667,7 @@ int autocomplete_directory(struct bContext *C, char *str, void *UNUSED(arg_v))
 				else {
 					char path[FILE_MAX];
 					BLI_stat_t status;
-					
+
 					BLI_join_dirfile(path, sizeof(path), dirname, de->d_name);
 
 					if (BLI_stat(path, &status) == 0) {
@@ -725,12 +733,46 @@ void ED_fileselect_exit(wmWindowManager *wm, ScrArea *sa, SpaceFile *sfile)
 
 	folderlist_free(sfile->folders_prev);
 	folderlist_free(sfile->folders_next);
-	
+
 	if (sfile->files) {
 		ED_fileselect_clear(wm, sa, sfile);
 		filelist_free(sfile->files);
 		MEM_freeN(sfile->files);
 		sfile->files = NULL;
 	}
+}
 
+/** Helper used by both main update code, and smoothscroll timer, to try to enable rename editing from
+ * params->renamefile name. */
+void file_params_renamefile_activate(SpaceFile *sfile, FileSelectParams *params)
+{
+	BLI_assert(params->rename_flag != 0);
+
+	if ((params->rename_flag & (FILE_PARAMS_RENAME_ACTIVE | FILE_PARAMS_RENAME_POSTSCROLL_ACTIVE)) != 0) {
+		return;
+	}
+
+	BLI_assert(params->renamefile[0] != '\0');
+
+	const int idx = filelist_file_findpath(sfile->files, params->renamefile);
+	if (idx >= 0) {
+		FileDirEntry *file = filelist_file(sfile->files, idx);
+		BLI_assert(file != NULL);
+
+		if ((params->rename_flag & FILE_PARAMS_RENAME_PENDING) != 0) {
+			filelist_entry_select_set(sfile->files, file, FILE_SEL_ADD, FILE_SEL_EDITING, CHECK_ALL);
+			params->rename_flag = FILE_PARAMS_RENAME_ACTIVE;
+		}
+		else if ((params->rename_flag & FILE_PARAMS_RENAME_POSTSCROLL_PENDING) != 0) {
+			filelist_entry_select_set(sfile->files, file, FILE_SEL_ADD, FILE_SEL_HIGHLIGHTED, CHECK_ALL);
+			params->renamefile[0] = '\0';
+			params->rename_flag = FILE_PARAMS_RENAME_POSTSCROLL_ACTIVE;
+		}
+	}
+	/* File listing is now async, only reset renaming if matching entry is not found
+	 * when file listing is not done. */
+	else if (filelist_is_ready(sfile->files)) {
+		params->renamefile[0] = '\0';
+		params->rename_flag = 0;
+	}
 }

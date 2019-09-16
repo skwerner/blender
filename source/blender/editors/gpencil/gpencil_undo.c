@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/gpencil_undo.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 
@@ -36,6 +28,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
 #include "DNA_listBase.h"
 #include "DNA_windowmanager_types.h"
 
@@ -43,20 +36,20 @@
 
 #include "BKE_blender_undo.h"
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_gpencil.h"
-#include "BKE_main.h"
 
 #include "ED_gpencil.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "DEG_depsgraph.h"
+
 #include "gpencil_intern.h"
 
 typedef struct bGPundonode {
 	struct bGPundonode *next, *prev;
-	
+
 	char name[BKE_UNDO_STR_MAX];
 	struct bGPdata *gpd;
 } bGPundonode;
@@ -72,9 +65,9 @@ int ED_gpencil_session_active(void)
 int ED_undo_gpencil_step(bContext *C, int step, const char *name)
 {
 	bGPdata **gpd_ptr = NULL, *new_gpd = NULL;
-	
+
 	gpd_ptr = ED_gpencil_data_get_pointers(C, NULL);
-	
+
 	if (step == 1) {  /* undo */
 		//printf("\t\tGP - undo step\n");
 		if (cur_node->prev) {
@@ -93,18 +86,18 @@ int ED_undo_gpencil_step(bContext *C, int step, const char *name)
 			}
 		}
 	}
-	
+
 	if (new_gpd) {
 		if (gpd_ptr) {
 			if (*gpd_ptr) {
 				bGPdata *gpd = *gpd_ptr;
 				bGPDlayer *gpl, *gpld;
-				
+
 				BKE_gpencil_free_layers(&gpd->layers);
-				
+
 				/* copy layers */
 				BLI_listbase_clear(&gpd->layers);
-				
+
 				for (gpl = new_gpd->layers.first; gpl; gpl = gpl->next) {
 					/* make a copy of source layer and its data */
 					gpld = BKE_gpencil_layer_duplicate(gpl);
@@ -112,10 +105,13 @@ int ED_undo_gpencil_step(bContext *C, int step, const char *name)
 				}
 			}
 		}
+		/* drawing batch cache is dirty now */
+		DEG_id_tag_update(&new_gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+		new_gpd->flag |= GP_DATA_CACHE_IS_DIRTY;
 	}
-	
+
 	WM_event_add_notifier(C, NC_GPENCIL | NA_EDITED, NULL);
-	
+
 	return OPERATOR_FINISHED;
 }
 
@@ -130,7 +126,7 @@ static void gpencil_undo_free_node(bGPundonode *undo_node)
 	 * or else the real copy will segfault when accessed
 	 */
 	undo_node->gpd->adt = NULL;
-	
+
 	BKE_gpencil_free(undo_node->gpd, false);
 	MEM_freeN(undo_node->gpd);
 }
@@ -138,65 +134,65 @@ static void gpencil_undo_free_node(bGPundonode *undo_node)
 void gpencil_undo_push(bGPdata *gpd)
 {
 	bGPundonode *undo_node;
-	
+
 	//printf("\t\tGP - undo push\n");
-	
+
 	if (cur_node) {
 		/* remove all un-done nodes from stack */
 		undo_node = cur_node->next;
-		
+
 		while (undo_node) {
 			bGPundonode *next_node = undo_node->next;
-			
+
 			gpencil_undo_free_node(undo_node);
 			BLI_freelinkN(&undo_nodes, undo_node);
-			
+
 			undo_node = next_node;
 		}
 	}
-	
+
 	/* limit number of undo steps to the maximum undo steps
-	 *  - to prevent running out of memory during **really** 
-	 *    long drawing sessions (triggering swapping)
+	 * - to prevent running out of memory during **really**
+	 *   long drawing sessions (triggering swapping)
 	 */
 	/* TODO: Undo-memory constraint is not respected yet, but can be added if we have any need for it */
 	if (U.undosteps && !BLI_listbase_is_empty(&undo_nodes)) {
 		/* remove anything older than n-steps before cur_node */
 		int steps = 0;
-		
+
 		undo_node = (cur_node) ? cur_node : undo_nodes.last;
 		while (undo_node) {
 			bGPundonode *prev_node = undo_node->prev;
-			
+
 			if (steps >= U.undosteps) {
 				gpencil_undo_free_node(undo_node);
 				BLI_freelinkN(&undo_nodes, undo_node);
 			}
-			
+
 			steps++;
 			undo_node = prev_node;
 		}
 	}
-	
+
 	/* create new undo node */
 	undo_node = MEM_callocN(sizeof(bGPundonode), "gpencil undo node");
-	undo_node->gpd = BKE_gpencil_data_duplicate(G.main, gpd, true);
-	
+	undo_node->gpd = BKE_gpencil_data_duplicate(NULL, gpd, true);
+
 	cur_node = undo_node;
-	
+
 	BLI_addtail(&undo_nodes, undo_node);
 }
 
 void gpencil_undo_finish(void)
 {
 	bGPundonode *undo_node = undo_nodes.first;
-	
+
 	while (undo_node) {
 		gpencil_undo_free_node(undo_node);
 		undo_node = undo_node->next;
 	}
-	
+
 	BLI_freelistN(&undo_nodes);
-	
+
 	cur_node = NULL;
 }

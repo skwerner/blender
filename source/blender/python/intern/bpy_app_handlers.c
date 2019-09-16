@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_app_handlers.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file defines a 'PyStructSequence' accessed via 'bpy.app.handlers',
  * which exposes various lists that the script author can add callback
@@ -46,41 +40,40 @@ void bpy_app_generic_callback(struct Main *main, struct ID *id, void *arg);
 static PyTypeObject BlenderAppCbType;
 
 static PyStructSequence_Field app_cb_info_fields[] = {
-	{(char *)"frame_change_pre",  (char *)"on frame change for playback and rendering (before)"},
-	{(char *)"frame_change_post", (char *)"on frame change for playback and rendering (after)"},
-	{(char *)"render_pre",        (char *)"on render (before)"},
-	{(char *)"render_post",       (char *)"on render (after)"},
-	{(char *)"render_write",      (char *)"on writing a render frame (directly after the frame is written)"},
-	{(char *)"render_stats",      (char *)"on printing render statistics"},
-	{(char *)"render_init",       (char *)"on initialization of a render job"},
-	{(char *)"render_complete",   (char *)"on completion of render job"},
-	{(char *)"render_cancel",     (char *)"on canceling a render job"},
-	{(char *)"load_pre",          (char *)"on loading a new blend file (before)"},
-	{(char *)"load_post",         (char *)"on loading a new blend file (after)"},
-	{(char *)"save_pre",          (char *)"on saving a blend file (before)"},
-	{(char *)"save_post",         (char *)"on saving a blend file (after)"},
-	{(char *)"scene_update_pre",  (char *)"on every scene data update. Does not imply that anything changed in the "
-                                          "scene, just that the dependency graph is about to be reevaluated, and the "
-                                          "scene is about to be updated by Blender's animation system."},
-	{(char *)"scene_update_post",  (char *)"on every scene data update. Does not imply that anything changed in the "
-                                           "scene, just that the dependency graph was reevaluated, and the scene was "
-                                           "possibly updated by Blender's animation system."},
-	{(char *)"game_pre",          (char *)"on starting the game engine"},
-	{(char *)"game_post",         (char *)"on ending the game engine"},
-	{(char *)"version_update",    (char *)"on ending the versioning code"},
+	{(char *)"frame_change_pre",      (char *)"on frame change for playback and rendering (before)"},
+	{(char *)"frame_change_post",     (char *)"on frame change for playback and rendering (after)"},
+	{(char *)"render_pre",            (char *)"on render (before)"},
+	{(char *)"render_post",           (char *)"on render (after)"},
+	{(char *)"render_write",          (char *)"on writing a render frame (directly after the frame is written)"},
+	{(char *)"render_stats",          (char *)"on printing render statistics"},
+	{(char *)"render_init",           (char *)"on initialization of a render job"},
+	{(char *)"render_complete",       (char *)"on completion of render job"},
+	{(char *)"render_cancel",         (char *)"on canceling a render job"},
+	{(char *)"load_pre",              (char *)"on loading a new blend file (before)"},
+	{(char *)"load_post",             (char *)"on loading a new blend file (after)"},
+	{(char *)"save_pre",              (char *)"on saving a blend file (before)"},
+	{(char *)"save_post",             (char *)"on saving a blend file (after)"},
+	{(char *)"undo_pre",              (char *)"on loading an undo step (before)"},
+	{(char *)"undo_post",             (char *)"on loading an undo step (after)"},
+	{(char *)"redo_pre",              (char *)"on loading a redo step (before)"},
+	{(char *)"redo_post",             (char *)"on loading a redo step (after)"},
+	{(char *)"depsgraph_update_pre",  (char *)"on depsgraph update (pre)"},
+	{(char *)"depsgraph_update_post", (char *)"on depsgraph update (post)"},
+	{(char *)"version_update",        (char *)"on ending the versioning code"},
+	{(char *)"load_factory_startup_post", (char *)"on loading factory startup (after)"},
 
 	/* sets the permanent tag */
-#   define APP_CB_OTHER_FIELDS 1
+#define APP_CB_OTHER_FIELDS 1
 	{(char *)"persistent",        (char *)"Function decorator for callback functions not to be removed when loading new files"},
 
-	{NULL}
+	{NULL},
 };
 
 static PyStructSequence_Desc app_cb_info_desc = {
 	(char *)"bpy.app.handlers",     /* name */
 	(char *)"This module contains callback lists",  /* doc */
 	app_cb_info_fields,    /* fields */
-	ARRAY_SIZE(app_cb_info_fields) - 1
+	ARRAY_SIZE(app_cb_info_fields) - 1,
 };
 
 #if 0
@@ -97,8 +90,9 @@ static PyObject *bpy_app_handlers_persistent_new(PyTypeObject *UNUSED(type), PyO
 {
 	PyObject *value;
 
-	if (!PyArg_ParseTuple(args, "O:bpy.app.handlers.persistent", &value))
+	if (!PyArg_ParseTuple(args, "O:bpy.app.handlers.persistent", &value)) {
 		return NULL;
+	}
 
 	if (PyFunction_Check(value)) {
 		PyObject **dict_ptr = _PyObject_GetDictPtr(value);
@@ -237,7 +231,7 @@ PyObject *BPY_app_handlers_struct(void)
 			funcstore = &funcstore_array[pos];
 			funcstore->func = bpy_app_generic_callback;
 			funcstore->alloc = 0;
-			funcstore->arg = SET_INT_IN_POINTER(pos);
+			funcstore->arg = POINTER_FROM_INT(pos);
 			BLI_callback_add(funcstore, pos);
 		}
 	}
@@ -296,7 +290,7 @@ void BPY_app_handlers_reset(const short do_all)
 /* the actual callback - not necessarily called from py */
 void bpy_app_generic_callback(struct Main *UNUSED(main), struct ID *id, void *arg)
 {
-	PyObject *cb_list = py_cb_array[GET_INT_FROM_POINTER(arg)];
+	PyObject *cb_list = py_cb_array[POINTER_AS_INT(arg)];
 	if (PyList_GET_SIZE(cb_list) > 0) {
 		PyGILState_STATE gilstate = PyGILState_Ensure();
 

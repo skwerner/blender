@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_triangulate.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Triangulate faces, also defines triangle fill.
  */
@@ -53,7 +47,7 @@ void bmo_triangulate_exec(BMesh *bm, BMOperator *op)
 	BM_mesh_elem_hflag_disable_all(bm, BM_FACE | BM_EDGE, BM_ELEM_TAG, false);
 	BMO_slot_buffer_hflag_enable(bm, op->slots_in, "faces", BM_FACE, BM_ELEM_TAG, false);
 
-	BM_mesh_triangulate(bm, quad_method, ngon_method, true, op, slot_facemap_out, slot_facemap_double_out);
+	BM_mesh_triangulate(bm, quad_method, ngon_method, 4, true, op, slot_facemap_out, slot_facemap_double_out);
 
 	BMO_slot_buffer_from_enabled_hflag(bm, op, op->slots_out, "edges.out", BM_EDGE, BM_ELEM_TAG);
 	BMO_slot_buffer_from_enabled_hflag(bm, op, op->slots_out, "faces.out", BM_FACE, BM_ELEM_TAG);
@@ -83,9 +77,9 @@ void bmo_triangle_fill_exec(BMesh *bm, BMOperator *op)
 	sf_vert_map = BLI_ghash_ptr_new_ex(__func__, BMO_slot_buffer_count(op->slots_in, "edges"));
 
 	BMO_slot_vec_get(op->slots_in, "normal", normal);
-	
+
 	BLI_scanfill_begin(&sf_ctx);
-	
+
 	BMO_ITER (e, &siter, op->slots_in, "edges", BM_EDGE) {
 		ScanFillVert *sf_verts[2];
 		BMVert **e_verts = &e->v1;
@@ -106,9 +100,9 @@ void bmo_triangle_fill_exec(BMesh *bm, BMOperator *op)
 		/* sf_edge = */ BLI_scanfill_edge_add(&sf_ctx, UNPACK2(sf_verts));
 		/* sf_edge->tmp.p = e; */ /* UNUSED */
 	}
-	nors_tot = BLI_ghash_size(sf_vert_map);
+	nors_tot = BLI_ghash_len(sf_vert_map);
 	BLI_ghash_free(sf_vert_map, NULL, NULL);
-	
+
 
 	if (is_zero_v3(normal)) {
 		/* calculate the normal from the cross product of vert-edge pairs.
@@ -225,7 +219,7 @@ void bmo_triangle_fill_exec(BMesh *bm, BMOperator *op)
 		f = BM_face_create_quad_tri(bm,
 		                            sf_tri->v1->tmp.p, sf_tri->v2->tmp.p, sf_tri->v3->tmp.p, NULL,
 		                            NULL, BM_CREATE_NO_DOUBLE);
-		
+
 		BMO_face_flag_enable(bm, f, ELE_NEW);
 		BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {
 			if (!BMO_edge_flag_test(bm, l->e, EDGE_MARK)) {
@@ -233,9 +227,9 @@ void bmo_triangle_fill_exec(BMesh *bm, BMOperator *op)
 			}
 		}
 	}
-	
+
 	BLI_scanfill_end(&sf_ctx);
-	
+
 	if (use_beauty) {
 		BMOperator bmop;
 
@@ -252,7 +246,7 @@ void bmo_triangle_fill_exec(BMesh *bm, BMOperator *op)
 		BM_ITER_MESH_MUTABLE (e, e_next, &iter, bm, BM_EDGES_OF_MESH) {
 			if (BMO_edge_flag_test(bm, e, ELE_NEW)) {
 				/* in rare cases the edges face will have already been removed from the edge */
-				if (LIKELY(e->l)) {
+				if (LIKELY(BM_edge_is_manifold(e))) {
 					BMFace *f_new = BM_faces_join_pair(bm, e->l, e->l->radial_next, false);
 					if (f_new) {
 						BMO_face_flag_enable(bm, f_new, ELE_NEW);
@@ -262,8 +256,12 @@ void bmo_triangle_fill_exec(BMesh *bm, BMOperator *op)
 						BMO_error_clear(bm);
 					}
 				}
-				else {
+				else if (e->l == NULL) {
 					BM_edge_kill(bm, e);
+				}
+				else {
+					/* Edges with 1 or 3+ faces attached,
+					 * most likely caused by a degenerate mesh. */
 				}
 			}
 		}

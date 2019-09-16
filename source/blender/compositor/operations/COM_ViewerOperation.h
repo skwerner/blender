@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,13 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
-#ifndef _COM_ViewerOperation_h
-#define _COM_ViewerOperation_h
+#ifndef __COM_VIEWEROPERATION_H__
+#define __COM_VIEWEROPERATION_H__
 #include "COM_NodeOperation.h"
 #include "DNA_image_types.h"
 #include "BLI_rect.h"
@@ -45,7 +41,7 @@ private:
 
 	const ColorManagedViewSettings *m_viewSettings;
 	const ColorManagedDisplaySettings *m_displaySettings;
-	
+
 	SocketReader *m_imageInput;
 	SocketReader *m_alphaInput;
 	SocketReader *m_depthInput;
@@ -58,7 +54,7 @@ public:
 	bool isOutputOperation(bool /*rendering*/) const { if (G.background) return false; return isActiveViewerOutput(); }
 	void setImage(Image *image) { this->m_image = image; }
 	void setImageUser(ImageUser *imageUser) { this->m_imageUser = imageUser; }
-	const bool isActiveViewerOutput() const { return this->m_active; }
+	bool isActiveViewerOutput() const { return this->m_active; }
 	void setActive(bool active) { this->m_active = active; }
 	void setCenterX(float centerX) { this->m_centerX = centerX;}
 	void setCenterY(float centerY) { this->m_centerY = centerY;}
@@ -66,7 +62,7 @@ public:
 	float getCenterX() const { return this->m_centerX; }
 	float getCenterY() const { return this->m_centerY; }
 	OrderOfChunks getChunkOrder() const { return this->m_chunkOrder; }
-	const CompositorPriority getRenderPriority() const;
+	CompositorPriority getRenderPriority() const;
 	bool isViewerOperation() const { return true; }
 	void setUseAlphaInput(bool value) { this->m_useAlphaInput = value; }
 	void setRenderData(const RenderData *rd) { this->m_rd = rd; }

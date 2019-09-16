@@ -19,6 +19,7 @@
 #include "render/scene.h"
 
 #include "util/util_foreach.h"
+#include "util/util_hash.h"
 #include "util/util_logging.h"
 #include "util/util_map.h"
 #include "util/util_progress.h"
@@ -60,16 +61,12 @@ void ParticleSystemManager::device_update_particles(Device *, DeviceScene *dscen
 	int num_particles = 1;
 	for(size_t j = 0; j < scene->particle_systems.size(); j++)
 		num_particles += scene->particle_systems[j]->particles.size();
-	
-	float4 *particles = dscene->particles.alloc(PARTICLE_SIZE*num_particles);
-	
+
+	KernelParticle *kparticles = dscene->particles.alloc(num_particles);
+
 	/* dummy particle */
-	particles[0] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-	particles[1] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-	particles[2] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-	particles[3] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-	particles[4] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-	
+	memset(kparticles, 0, sizeof(KernelParticle));
+
 	int i = 1;
 	for(size_t j = 0; j < scene->particle_systems.size(); j++) {
 		ParticleSystem *psys = scene->particle_systems[j];
@@ -77,20 +74,22 @@ void ParticleSystemManager::device_update_particles(Device *, DeviceScene *dscen
 		for(size_t k = 0; k < psys->particles.size(); k++) {
 			/* pack in texture */
 			Particle& pa = psys->particles[k];
-			int offset = i*PARTICLE_SIZE;
-			
-			particles[offset] = make_float4(pa.index, pa.age, pa.lifetime, pa.size);
-			particles[offset+1] = pa.rotation;
-			particles[offset+2] = make_float4(pa.location.x, pa.location.y, pa.location.z, pa.velocity.x);
-			particles[offset+3] = make_float4(pa.velocity.y, pa.velocity.z, pa.angular_velocity.x, pa.angular_velocity.y);
-			particles[offset+4] = make_float4(pa.angular_velocity.z, 0.0f, 0.0f, 0.0f);
-			
+
+			kparticles[i].index = pa.index;
+			kparticles[i].age = pa.age;
+			kparticles[i].lifetime = pa.lifetime;
+			kparticles[i].size = pa.size;
+			kparticles[i].rotation = pa.rotation;
+			kparticles[i].location = float3_to_float4(pa.location);
+			kparticles[i].velocity = float3_to_float4(pa.velocity);
+			kparticles[i].angular_velocity = float3_to_float4(pa.angular_velocity);
+
 			i++;
-			
+
 			if(progress.get_cancel()) return;
 		}
 	}
-	
+
 	dscene->particles.copy_to_device();
 }
 
@@ -106,9 +105,9 @@ void ParticleSystemManager::device_update(Device *device, DeviceScene *dscene, S
 
 	progress.set_status("Updating Particle Systems", "Copying Particles to device");
 	device_update_particles(device, dscene, scene, progress);
-	
+
 	if(progress.get_cancel()) return;
-	
+
 	need_update = false;
 }
 
@@ -123,4 +122,3 @@ void ParticleSystemManager::tag_update(Scene * /*scene*/)
 }
 
 CCL_NAMESPACE_END
-

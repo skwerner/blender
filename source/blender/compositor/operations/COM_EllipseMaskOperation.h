@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,13 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
-#ifndef _COM_EllipseMaskOperation_h
-#define _COM_EllipseMaskOperation_h
+#ifndef __COM_ELLIPSEMASKOPERATION_H__
+#define __COM_ELLIPSEMASKOPERATION_H__
 #include "COM_NodeOperation.h"
 
 
@@ -32,34 +28,34 @@ private:
 	 */
 	SocketReader *m_inputMask;
 	SocketReader *m_inputValue;
-	
+
 	float m_sine;
 	float m_cosine;
 	float m_aspectRatio;
 	int m_maskType;
-	
+
 	NodeEllipseMask *m_data;
 public:
 	EllipseMaskOperation();
-	
+
 	/**
 	 * the inner loop of this program
 	 */
 	void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
-	
+
 	/**
 	 * Initialize the execution
 	 */
 	void initExecution();
-	
+
 	/**
 	 * Deinitialize the execution
 	 */
 	void deinitExecution();
-	
+
 	void setData(NodeEllipseMask *data) { this->m_data = data; }
 
 	void setMaskType(int maskType) { this->m_maskType = maskType; }
-	
+
 };
 #endif

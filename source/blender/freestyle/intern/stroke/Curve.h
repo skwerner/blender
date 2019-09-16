@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FREESTYLE_CURVE_H__
 #define __FREESTYLE_CURVE_H__
 
-/** \file blender/freestyle/intern/stroke/Curve.h
- *  \ingroup freestyle
- *  \brief Class to define a container for curves
- *  \author Stephane Grabli
- *  \date 11/01/2003
+/** \file
+ * \ingroup freestyle
+ * \brief Class to define a container for curves
  */
 
 #include <deque>
@@ -94,7 +88,7 @@ public: // Implementation of Interface0D
 		return _Point3d.z();
 	}
 
-	/*!  Returns the 3D point. */ 
+	/*!  Returns the 3D point. */
 	virtual Vec3r getPoint3D() const
 	{
 		return _Point3d;
@@ -118,7 +112,7 @@ public: // Implementation of Interface0D
 		return _Point2d.z();
 	}
 
-	/*!  Returns the 2D point. */ 
+	/*!  Returns the 2D point. */
 	virtual Vec2r getPoint2D() const
 	{
 		return Vec2r(_Point2d.x(), _Point2d.y());
@@ -204,21 +198,21 @@ public:
 	CurvePoint();
 
 	/*! Builds a CurvePoint from two SVertex and an interpolation parameter.
-	 *  \param iA
+	 *  \param iA:
 	 *    The first SVertex
-	 *  \param iB
+	 *  \param iB:
 	 *    The second SVertex
-	 *  \param t2d
+	 *  \param t2d:
 	 *    A 2D interpolation parameter used to linearly interpolate \a iA and \a iB
 	 */
 	CurvePoint(SVertex *iA, SVertex *iB, float t2d);
 
 	/*! Builds a CurvePoint from two CurvePoint and an interpolation parameter.
-	 *  \param iA
+	 *  \param iA:
 	 *    The first CurvePoint
-	 *  \param iB
+	 *  \param iB:
 	 *    The second CurvePoint
-	 *  \param t2d
+	 *  \param t2d:
 	 *    The 2D interpolation parameter used to linearly interpolate \a iA and \a iB.
 	 */
 	CurvePoint(CurvePoint *iA, CurvePoint *iB, float t2d);
@@ -444,7 +438,7 @@ public:
 	}
 
 	/*! Adds a single vertex (SVertex) at the end of the Curve */
-	inline void push_vertex_back(SVertex *iVertex) 
+	inline void push_vertex_back(SVertex *iVertex)
 	{
 		if (!_Vertices.empty()) {
 			Vec3r vec_tmp(iVertex->point2d() - _Vertices.back()->point2d());
@@ -456,7 +450,7 @@ public:
 	}
 
 	/*! Adds a single vertex (CurvePoint) at the front of the Curve */
-	inline void push_vertex_front(Vertex *iVertex) 
+	inline void push_vertex_front(Vertex *iVertex)
 	{
 		if (!_Vertices.empty()) {
 			Vec3r vec_tmp(iVertex->point2d() - _Vertices.front()->point2d());
@@ -468,7 +462,7 @@ public:
 	}
 
 	/*! Adds a single vertex (SVertex) at the front of the Curve */
-	inline void push_vertex_front(SVertex *iVertex) 
+	inline void push_vertex_front(SVertex *iVertex)
 	{
 		if (!_Vertices.empty()) {
 			Vec3r vec_tmp(iVertex->point2d() - _Vertices.front()->point2d());

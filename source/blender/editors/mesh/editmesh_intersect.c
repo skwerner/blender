@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mesh/editmesh_intersect.c
- *  \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  */
 
 #include "MEM_guardedalloc.h"
@@ -30,9 +26,9 @@
 #include "BLI_memarena.h"
 #include "BLI_stack.h"
 #include "BLI_buffer.h"
-#include "BLI_kdopbvh.h"
 #include "BLI_linklist_stack.h"
 
+#include "BKE_layer.h"
 #include "BKE_editmesh_bvh.h"
 #include "BKE_context.h"
 #include "BKE_report.h"
@@ -146,9 +142,6 @@ enum {
 
 static int edbm_intersect_exec(bContext *C, wmOperator *op)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	BMEditMesh *em = BKE_editmesh_from_object(obedit);
-	BMesh *bm = em->bm;
 	const int mode = RNA_enum_get(op->ptr, "mode");
 	int (*test_fn)(BMFace *, void *);
 	bool use_separate_all = false;
@@ -186,29 +179,45 @@ static int edbm_intersect_exec(bContext *C, wmOperator *op)
 		default:  /* ISECT_SEPARATE_NONE */
 			break;
 	}
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len = 0;
+	uint isect_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		BMEditMesh *em = BKE_editmesh_from_object(obedit);
 
-	has_isect = BM_mesh_intersect(
-	        bm,
-	        em->looptris, em->tottri,
-	        test_fn, NULL,
-	        use_self, use_separate_all, true, true, true,
-	        -1,
-	        eps);
+		if (em->bm->totfacesel == 0) {
+			continue;
+		}
 
-	if (use_separate_cut) {
-		/* detach selected/un-selected faces */
-		BM_mesh_separate_faces(
-		        bm,
-		        BM_elem_cb_check_hflag_enabled_simple(const BMFace *, BM_ELEM_SELECT));
+		has_isect = BM_mesh_intersect(
+		        em->bm,
+		        em->looptris, em->tottri,
+		        test_fn, NULL,
+		        use_self, use_separate_all, true, true, true, true,
+		        -1,
+		        eps);
+
+		if (use_separate_cut) {
+			/* detach selected/un-selected faces */
+			BM_mesh_separate_faces(
+			        em->bm,
+			        BM_elem_cb_check_hflag_enabled_simple(const BMFace *, BM_ELEM_SELECT));
+		}
+
+		if (has_isect) {
+			edbm_intersect_select(em);
+		}
+		else {
+			isect_len++;
+		}
 	}
+	MEM_freeN(objects);
 
-	if (has_isect) {
-		edbm_intersect_select(em);
-	}
-	else {
+	if (isect_len == objects_len) {
 		BKE_report(op->reports, RPT_WARNING, "No intersections found");
 	}
-
 	return OPERATOR_FINISHED;
 }
 
@@ -219,7 +228,7 @@ void MESH_OT_intersect(struct wmOperatorType *ot)
 		 "Self intersect selected faces"},
 		{ISECT_SEL_UNSEL, "SELECT_UNSELECT", 0, "Selected/Unselected",
 		 "Intersect selected with unselected faces"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	static const EnumPropertyItem isect_separate_items[] = {
@@ -229,7 +238,7 @@ void MESH_OT_intersect(struct wmOperatorType *ot)
 		 "Cut into geometry keeping each side separate (Selected/Unselected only)"},
 		{ISECT_SEPARATE_NONE, "NONE", 0, "Merge",
 		 "Merge all geometry from the intersection"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -266,9 +275,6 @@ void MESH_OT_intersect(struct wmOperatorType *ot)
 
 static int edbm_intersect_boolean_exec(bContext *C, wmOperator *op)
 {
-	Object *obedit = CTX_data_edit_object(C);
-	BMEditMesh *em = BKE_editmesh_from_object(obedit);
-	BMesh *bm = em->bm;
 	const int boolean_operation = RNA_enum_get(op->ptr, "operation");
 	bool use_swap = RNA_boolean_get(op->ptr, "use_swap");
 	const float eps = RNA_float_get(op->ptr, "threshold");
@@ -276,23 +282,39 @@ static int edbm_intersect_boolean_exec(bContext *C, wmOperator *op)
 	bool has_isect;
 
 	test_fn = use_swap ? bm_face_isect_pair_swap : bm_face_isect_pair;
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len = 0;
+	uint isect_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		BMEditMesh *em = BKE_editmesh_from_object(obedit);
 
-	has_isect = BM_mesh_intersect(
-	        bm,
-	        em->looptris, em->tottri,
-	        test_fn, NULL,
-	        false, false, true, true, true,
-	        boolean_operation,
-	        eps);
+		if (em->bm->totfacesel == 0) {
+			continue;
+		}
+
+		has_isect = BM_mesh_intersect(
+		        em->bm,
+		        em->looptris, em->tottri,
+		        test_fn, NULL,
+		        false, false, true, true, false, true,
+		        boolean_operation,
+		        eps);
 
 
-	if (has_isect) {
-		edbm_intersect_select(em);
+		if (has_isect) {
+			edbm_intersect_select(em);
+		}
+		else {
+			isect_len++;
+		}
 	}
-	else {
+	MEM_freeN(objects);
+
+	if (isect_len == objects_len) {
 		BKE_report(op->reports, RPT_WARNING, "No intersections found");
 	}
-
 	return OPERATOR_FINISHED;
 }
 
@@ -302,7 +324,7 @@ void MESH_OT_intersect_boolean(struct wmOperatorType *ot)
 		{BMESH_ISECT_BOOLEAN_ISECT, "INTERSECT", 0, "Intersect", ""},
 		{BMESH_ISECT_BOOLEAN_UNION, "UNION", 0, "Union", ""},
 		{BMESH_ISECT_BOOLEAN_DIFFERENCE, "DIFFERENCE", 0, "Difference", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -610,8 +632,9 @@ static BMEdge *bm_face_split_edge_find(
 					ok = false;
 				}
 				else if (found_other_face) {
-					/* double check that _all_ the faces used by v_pivot's edges are attached to this edge
-					 * otherwise don't attempt the split since it will give non-deterministic results */
+					/* double check that _all_ the faces used by v_pivot's edges are attached
+					 * to this edge otherwise don't attempt the split since it will give
+					 * non-deterministic results */
 					BMLoop *l_radial_iter = l_iter->radial_next;
 					int other_face_shared = 0;
 					if (l_radial_iter != l_iter) {
@@ -652,257 +675,272 @@ static BMEdge *bm_face_split_edge_find(
 
 static int edbm_face_split_by_edges_exec(bContext *C, wmOperator *UNUSED(op))
 {
-	Object *obedit = CTX_data_edit_object(C);
-	BMEditMesh *em = BKE_editmesh_from_object(obedit);
-	BMesh *bm = em->bm;
 	const char hflag = BM_ELEM_TAG;
 
 	BMEdge *e;
 	BMIter iter;
 
-	BLI_SMALLSTACK_DECLARE(loop_stack, BMLoop *);
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
+	for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+		Object *obedit = objects[ob_index];
+		BMEditMesh *em = BKE_editmesh_from_object(obedit);
+		BMesh *bm = em->bm;
 
-	{
-		BMVert *v;
-		BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
-			BM_elem_flag_disable(v, hflag);
+		if ((bm->totedgesel == 0) ||
+		    (bm->totfacesel == 0))
+		{
+			continue;
 		}
-	}
 
-	/* edge index is set to -1 then used to assosiate them with faces */
-	BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
-		if (BM_elem_flag_test(e, BM_ELEM_SELECT) && BM_edge_is_wire(e)) {
-			BM_elem_flag_enable(e, hflag);
+		BLI_SMALLSTACK_DECLARE(loop_stack, BMLoop *);
 
-			BM_elem_flag_enable(e->v1, hflag);
-			BM_elem_flag_enable(e->v2, hflag);
-
+		{
+			BMVert *v;
+			BM_ITER_MESH(v, &iter, bm, BM_VERTS_OF_MESH) {
+				BM_elem_flag_disable(v, hflag);
+			}
 		}
-		else {
-			BM_elem_flag_disable(e, hflag);
-		}
-		BM_elem_index_set(e, -1);  /* set_dirty */
-	}
-	bm->elem_index_dirty |= BM_EDGE;
 
-	{
-		BMFace *f;
-		int i;
-		BM_ITER_MESH_INDEX (f, &iter, bm, BM_FACES_OF_MESH, i) {
-			if (BM_elem_flag_test(f, BM_ELEM_SELECT)) {
-				BM_elem_flag_enable(f, hflag);
+		/* edge index is set to -1 then used to associate them with faces */
+		BM_ITER_MESH(e, &iter, bm, BM_EDGES_OF_MESH) {
+			if (BM_elem_flag_test(e, BM_ELEM_SELECT) && BM_edge_is_wire(e)) {
+				BM_elem_flag_enable(e, hflag);
+
+				BM_elem_flag_enable(e->v1, hflag);
+				BM_elem_flag_enable(e->v2, hflag);
+
 			}
 			else {
-				BM_elem_flag_disable(f, hflag);
+				BM_elem_flag_disable(e, hflag);
 			}
-			BM_elem_flag_disable(f, BM_ELEM_INTERNAL_TAG);
-			BM_elem_index_set(f, i);  /* set_ok */
+			BM_elem_index_set(e, -1);  /* set_dirty */
 		}
-	}
-	bm->elem_index_dirty &= ~BM_FACE;
-
-	BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
-		if (BM_elem_flag_test(e, hflag)) {
-			BMIter viter;
-			BMVert *v;
-			BM_ITER_ELEM (v, &viter, e, BM_VERTS_OF_EDGE) {
-				BMIter liter;
-				BMLoop *l;
-
-				unsigned int loop_stack_len;
-				BMLoop *l_best = NULL;
-
-				BLI_assert(BLI_SMALLSTACK_IS_EMPTY(loop_stack));
-				loop_stack_len = 0;
-
-				BM_ITER_ELEM (l, &liter, v, BM_LOOPS_OF_VERT) {
-					if (BM_elem_flag_test(l->f, hflag)) {
-						BLI_SMALLSTACK_PUSH(loop_stack, l);
-						loop_stack_len++;
-					}
-				}
-
-				if (loop_stack_len == 0) {
-					/* pass */
-				}
-				else if (loop_stack_len == 1) {
-					l_best = BLI_SMALLSTACK_POP(loop_stack);
-				}
-				else {
-					/* complicated case, match the edge with a face-loop */
-
-					BMVert *v_other = BM_edge_other_vert(e, v);
-					float e_dir[3];
-
-					/* we want closest to zero */
-					float dot_best = FLT_MAX;
-
-					sub_v3_v3v3(e_dir, v_other->co, v->co);
-					normalize_v3(e_dir);
-
-					while ((l = BLI_SMALLSTACK_POP(loop_stack))) {
-						float dot_test;
-
-						/* Check dot first to save on expensive angle-comparison.
-						 * ideal case is 90d difference == 0.0 dot */
-						dot_test = fabsf(dot_v3v3(e_dir, l->f->no));
-						if (dot_test < dot_best) {
-
-							/* check we're in the correct corner (works with convex loops too) */
-							if (angle_signed_on_axis_v3v3v3_v3(l->prev->v->co, l->v->co, v_other->co,    l->f->no) <
-							    angle_signed_on_axis_v3v3v3_v3(l->prev->v->co, l->v->co, l->next->v->co, l->f->no))
-							{
-								dot_best = dot_test;
-								l_best = l;
-							}
-						}
-					}
-				}
-
-				if (l_best) {
-					BM_elem_index_set(e, BM_elem_index_get(l_best->f));  /* set_dirty */
-				}
-			}
-		}
-	}
-
-	{
-		BMFace *f;
-		BLI_buffer_declare_static(BMEdge **, edge_net_temp_buf, 0, 128);
-
-		BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
-			if (BM_elem_flag_test(f, hflag)) {
-				bm_face_split_by_edges(bm, f, hflag, &edge_net_temp_buf);
-			}
-		}
-		BLI_buffer_free(&edge_net_temp_buf);
-	}
-
-#ifdef USE_NET_ISLAND_CONNECT
-	/* before overwriting edge index values, collect edges left untouched */
-	BLI_Stack *edges_loose = BLI_stack_new(sizeof(BMEdge * ), __func__);
-	BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
-		if (BM_elem_flag_test(e, BM_ELEM_SELECT) && BM_edge_is_wire(e)) {
-			BLI_stack_push(edges_loose, &e);
-		}
-	}
-#endif
-
-	EDBM_mesh_normals_update(em);
-	EDBM_update_generic(em, true, true);
-
-
-#ifdef USE_NET_ISLAND_CONNECT
-	/* we may have remaining isolated regions remaining,
-	 * these will need to have connecting edges created */
-	if (!BLI_stack_is_empty(edges_loose)) {
-		GHash *face_edge_map = BLI_ghash_ptr_new(__func__);
-
-		MemArena *mem_arena = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, __func__);
-
-		BM_mesh_elem_index_ensure(bm, BM_FACE);
-
-		{
-			BMBVHTree *bmbvh = BKE_bmbvh_new(bm, em->looptris, em->tottri, BMBVH_RESPECT_SELECT, NULL, false);
-
-			BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
-				BM_elem_index_set(e, -1);  /* set_dirty */
-			}
-
-			while (!BLI_stack_is_empty(edges_loose)) {
-				BLI_stack_pop(edges_loose, &e);
-				float e_center[3];
-				mid_v3_v3v3(e_center, e->v1->co, e->v2->co);
-
-				BMFace *f = BKE_bmbvh_find_face_closest(bmbvh, e_center, FLT_MAX);
-				if (f) {
-					ghash_insert_face_edge_link(face_edge_map, f, e, mem_arena);
-					BM_elem_index_set(e, BM_elem_index_get(f));  /* set_dirty */
-				}
-			}
-
-			BKE_bmbvh_free(bmbvh);
-		}
-
 		bm->elem_index_dirty |= BM_EDGE;
 
-		BM_mesh_elem_table_ensure(bm, BM_FACE);
-
-		/* detect edges chains that span faces
-		 * and splice vertices into the closest edges */
 		{
-			GHashIterator gh_iter;
+			BMFace *f;
+			int i;
+			BM_ITER_MESH_INDEX(f, &iter, bm, BM_FACES_OF_MESH, i) {
+				if (BM_elem_flag_test(f, BM_ELEM_SELECT)) {
+					BM_elem_flag_enable(f, hflag);
+				}
+				else {
+					BM_elem_flag_disable(f, hflag);
+				}
+				BM_elem_flag_disable(f, BM_ELEM_INTERNAL_TAG);
+				BM_elem_index_set(f, i);  /* set_ok */
+			}
+		}
+		bm->elem_index_dirty &= ~BM_FACE;
 
-			GHASH_ITER(gh_iter, face_edge_map) {
-				BMFace *f = BLI_ghashIterator_getKey(&gh_iter);
-				struct LinkBase *e_ls_base = BLI_ghashIterator_getValue(&gh_iter);
-				LinkNode *e_link = e_ls_base->list;
+		BM_ITER_MESH(e, &iter, bm, BM_EDGES_OF_MESH) {
+			if (BM_elem_flag_test(e, hflag)) {
+				BMIter viter;
+				BMVert *v;
+				BM_ITER_ELEM(v, &viter, e, BM_VERTS_OF_EDGE) {
+					BMIter liter;
+					BMLoop *l;
 
-				do {
-					e = e_link->link;
+					unsigned int loop_stack_len;
+					BMLoop *l_best = NULL;
 
-					for (int j = 0; j < 2; j++) {
-						BMVert *v_pivot = (&e->v1)[j];
-						/* checking that \a v_pivot isn't in the face
-						 * prevents attempting to splice the same vertex into an edge from multiple faces */
-						if (!BM_vert_in_face(v_pivot, f)) {
-							float v_pivot_co[3];
-							float v_pivot_fac;
-							BMEdge *e_split = bm_face_split_edge_find(
-							        e, f, v_pivot, bm->ftable, bm->totface,
-							        v_pivot_co, &v_pivot_fac);
+					BLI_assert(BLI_SMALLSTACK_IS_EMPTY(loop_stack));
+					loop_stack_len = 0;
 
-							if (e_split) {
-								/* for degenerate cases this vertex may be in one of this edges radial faces */
-								if (!bm_vert_in_faces_radial(v_pivot, e_split, f)) {
-									BMEdge *e_new;
-									BMVert *v_new = BM_edge_split(bm, e_split, e_split->v1, &e_new, v_pivot_fac);
-									if (v_new) {
-										/* we _know_ these don't share an edge */
-										BM_vert_splice(bm, v_pivot, v_new);
-										BM_elem_index_set(e_new, BM_elem_index_get(e_split));
-									}
+					BM_ITER_ELEM(l, &liter, v, BM_LOOPS_OF_VERT) {
+						if (BM_elem_flag_test(l->f, hflag)) {
+							BLI_SMALLSTACK_PUSH(loop_stack, l);
+							loop_stack_len++;
+						}
+					}
+
+					if (loop_stack_len == 0) {
+						/* pass */
+					}
+					else if (loop_stack_len == 1) {
+						l_best = BLI_SMALLSTACK_POP(loop_stack);
+					}
+					else {
+						/* complicated case, match the edge with a face-loop */
+
+						BMVert *v_other = BM_edge_other_vert(e, v);
+						float e_dir[3];
+
+						/* we want closest to zero */
+						float dot_best = FLT_MAX;
+
+						sub_v3_v3v3(e_dir, v_other->co, v->co);
+						normalize_v3(e_dir);
+
+						while ((l = BLI_SMALLSTACK_POP(loop_stack))) {
+							float dot_test;
+
+							/* Check dot first to save on expensive angle-comparison.
+							 * ideal case is 90d difference == 0.0 dot */
+							dot_test = fabsf(dot_v3v3(e_dir, l->f->no));
+							if (dot_test < dot_best) {
+
+								/* check we're in the correct corner
+								 * (works with convex loops too) */
+								if (angle_signed_on_axis_v3v3v3_v3(l->prev->v->co, l->v->co, v_other->co, l->f->no) <
+								    angle_signed_on_axis_v3v3v3_v3(l->prev->v->co, l->v->co, l->next->v->co, l->f->no))
+								{
+									dot_best = dot_test;
+									l_best = l;
 								}
 							}
 						}
 					}
 
-				} while ((e_link = e_link->next));
+					if (l_best) {
+						BM_elem_index_set(e, BM_elem_index_get(l_best->f));  /* set_dirty */
+					}
+				}
 			}
 		}
-
 
 		{
-			MemArena *mem_arena_edgenet = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, __func__);
+			BMFace *f;
+			BLI_buffer_declare_static(BMEdge **, edge_net_temp_buf, 0, 128);
 
-			GHashIterator gh_iter;
-
-			GHASH_ITER(gh_iter, face_edge_map) {
-				BMFace *f = BLI_ghashIterator_getKey(&gh_iter);
-				struct LinkBase *e_ls_base = BLI_ghashIterator_getValue(&gh_iter);
-
-				bm_face_split_by_edges_island_connect(
-				        bm, f,
-				        e_ls_base->list, e_ls_base->list_len,
-				        mem_arena_edgenet);
-
-				BLI_memarena_clear(mem_arena_edgenet);
+			BM_ITER_MESH(f, &iter, bm, BM_FACES_OF_MESH) {
+				if (BM_elem_flag_test(f, hflag)) {
+					bm_face_split_by_edges(bm, f, hflag, &edge_net_temp_buf);
+				}
 			}
-
-			BLI_memarena_free(mem_arena_edgenet);
+			BLI_buffer_free(&edge_net_temp_buf);
 		}
 
-		BLI_memarena_free(mem_arena);
-
-		BLI_ghash_free(face_edge_map, NULL, NULL);
+#ifdef USE_NET_ISLAND_CONNECT
+		/* before overwriting edge index values, collect edges left untouched */
+		BLI_Stack *edges_loose = BLI_stack_new(sizeof(BMEdge *), __func__);
+		BM_ITER_MESH(e, &iter, bm, BM_EDGES_OF_MESH) {
+			if (BM_elem_flag_test(e, BM_ELEM_SELECT) && BM_edge_is_wire(e)) {
+				BLI_stack_push(edges_loose, &e);
+			}
+		}
+#endif
 
 		EDBM_mesh_normals_update(em);
 		EDBM_update_generic(em, true, true);
-	}
 
-	BLI_stack_free(edges_loose);
+
+#ifdef USE_NET_ISLAND_CONNECT
+		/* we may have remaining isolated regions remaining,
+		 * these will need to have connecting edges created */
+		if (!BLI_stack_is_empty(edges_loose)) {
+			GHash *face_edge_map = BLI_ghash_ptr_new(__func__);
+
+			MemArena *mem_arena = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, __func__);
+
+			BM_mesh_elem_index_ensure(bm, BM_FACE);
+
+			{
+				BMBVHTree *bmbvh = BKE_bmbvh_new(bm, em->looptris, em->tottri, BMBVH_RESPECT_SELECT, NULL, false);
+
+				BM_ITER_MESH(e, &iter, bm, BM_EDGES_OF_MESH) {
+					BM_elem_index_set(e, -1);  /* set_dirty */
+				}
+
+				while (!BLI_stack_is_empty(edges_loose)) {
+					BLI_stack_pop(edges_loose, &e);
+					float e_center[3];
+					mid_v3_v3v3(e_center, e->v1->co, e->v2->co);
+
+					BMFace *f = BKE_bmbvh_find_face_closest(bmbvh, e_center, FLT_MAX);
+					if (f) {
+						ghash_insert_face_edge_link(face_edge_map, f, e, mem_arena);
+						BM_elem_index_set(e, BM_elem_index_get(f));  /* set_dirty */
+					}
+				}
+
+				BKE_bmbvh_free(bmbvh);
+			}
+
+			bm->elem_index_dirty |= BM_EDGE;
+
+			BM_mesh_elem_table_ensure(bm, BM_FACE);
+
+			/* detect edges chains that span faces
+			 * and splice vertices into the closest edges */
+			{
+				GHashIterator gh_iter;
+
+				GHASH_ITER(gh_iter, face_edge_map) {
+					BMFace *f = BLI_ghashIterator_getKey(&gh_iter);
+					struct LinkBase *e_ls_base = BLI_ghashIterator_getValue(&gh_iter);
+					LinkNode *e_link = e_ls_base->list;
+
+					do {
+						e = e_link->link;
+
+						for (int j = 0; j < 2; j++) {
+							BMVert *v_pivot = (&e->v1)[j];
+							/* checking that \a v_pivot isn't in the face prevents attempting
+							 * to splice the same vertex into an edge from multiple faces */
+							if (!BM_vert_in_face(v_pivot, f)) {
+								float v_pivot_co[3];
+								float v_pivot_fac;
+								BMEdge *e_split = bm_face_split_edge_find(
+								        e, f, v_pivot, bm->ftable, bm->totface,
+								        v_pivot_co, &v_pivot_fac);
+
+								if (e_split) {
+									/* for degenerate cases this vertex may be in one
+									 * of this edges radial faces */
+									if (!bm_vert_in_faces_radial(v_pivot, e_split, f)) {
+										BMEdge *e_new;
+										BMVert *v_new = BM_edge_split(bm, e_split, e_split->v1, &e_new, v_pivot_fac);
+										if (v_new) {
+											/* we _know_ these don't share an edge */
+											BM_vert_splice(bm, v_pivot, v_new);
+											BM_elem_index_set(e_new, BM_elem_index_get(e_split));
+										}
+									}
+								}
+							}
+						}
+
+					} while ((e_link = e_link->next));
+				}
+			}
+
+
+			{
+				MemArena *mem_arena_edgenet = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, __func__);
+
+				GHashIterator gh_iter;
+
+				GHASH_ITER(gh_iter, face_edge_map) {
+					BMFace *f = BLI_ghashIterator_getKey(&gh_iter);
+					struct LinkBase *e_ls_base = BLI_ghashIterator_getValue(&gh_iter);
+
+					bm_face_split_by_edges_island_connect(
+					        bm, f,
+					        e_ls_base->list, e_ls_base->list_len,
+					        mem_arena_edgenet);
+
+					BLI_memarena_clear(mem_arena_edgenet);
+				}
+
+				BLI_memarena_free(mem_arena_edgenet);
+			}
+
+			BLI_memarena_free(mem_arena);
+
+			BLI_ghash_free(face_edge_map, NULL, NULL);
+
+			EDBM_mesh_normals_update(em);
+			EDBM_update_generic(em, true, true);
+		}
+
+		BLI_stack_free(edges_loose);
 #endif  /* USE_NET_ISLAND_CONNECT */
 
+	}
+	MEM_freeN(objects);
 	return OPERATOR_FINISHED;
 }
 

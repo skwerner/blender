@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Jan Diederich, Tod Liverseed,
- *                 Nathan Letwory
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file EffectExporter.h
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #ifndef __EFFECTEXPORTER_H__
@@ -42,38 +35,44 @@
 #include "DNA_scene_types.h"
 
 #include "ExportSettings.h"
+#include "collada_utils.h"
 
 class EffectsExporter: COLLADASW::LibraryEffects
 {
 public:
-	EffectsExporter(COLLADASW::StreamWriter *sw, const ExportSettings *export_settings);
-	void exportEffects(Scene *sce);
+	EffectsExporter(COLLADASW::StreamWriter *sw, const ExportSettings *export_settings, KeyImageMap &key_image_map);
+	void exportEffects(bContext *C, Scene *sce);
+
 	void operator()(Material *ma, Object *ob);
-	
+
 	COLLADASW::ColorOrTexture createTexture(Image *ima,
 											std::string& uv_layer_name,
 											COLLADASW::Sampler *sampler
 											/*COLLADASW::Surface *surface*/);
-	
+
 	COLLADASW::ColorOrTexture getcol(float r, float g, float b, float a);
 private:
-	/** Fills the array of mtex indices which have image. Used for exporting images. */
-	void createTextureIndices(Material *ma, std::vector<int> &indices);
-	
-	void writeBlinn(COLLADASW::EffectProfile &ep, Material *ma);
-	void writeLambert(COLLADASW::EffectProfile &ep, Material *ma);
-	void writePhong(COLLADASW::EffectProfile &ep, Material *ma);
-	void writeTextures(COLLADASW::EffectProfile &ep,
-			std::string &key,
-			COLLADASW::Sampler *sampler, 
-			MTex *t, Image *ima,
-			std::string &uvname );
+	void set_shader_type(COLLADASW::EffectProfile &ep, Material *ma);
+	void set_transparency(COLLADASW::EffectProfile &ep, Material *ma);
+	void set_diffuse_color(COLLADASW::EffectProfile &ep, Material *ma);
+	void set_reflectivity(COLLADASW::EffectProfile &ep, Material *ma);
+	void set_emission(COLLADASW::EffectProfile &ep, Material *ma);
+	void get_images(Material *ma, KeyImageMap &uid_image_map);
+	void create_image_samplers(COLLADASW::EffectProfile &ep, KeyImageMap &uid_image_map, std::string &active_uv);
+
+	void writeTextures(
+	        COLLADASW::EffectProfile &ep,
+	        std::string &key,
+	        COLLADASW::Sampler *sampler,
+	        MTex *t, Image *ima,
+	        std::string &uvname );
 
 	bool hasEffects(Scene *sce);
-	
+
 	const ExportSettings *export_settings;
-	
+	KeyImageMap &key_image_map;
 	Scene *scene;
+	bContext *mContext;
 };
 
 #endif

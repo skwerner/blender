@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,10 +15,6 @@
  *
  * The Original Code is Copyright (C) 2015 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #include "openvdb_writer.h"
@@ -45,7 +39,7 @@ void OpenVDBWriter::insert(const openvdb::GridBase::Ptr &grid)
 
 void OpenVDBWriter::insert(const openvdb::GridBase &grid)
 {
-#if (OPENVDB_LIBRARY_MAJOR_VERSION_NUMBER == 3)
+#if (OPENVDB_LIBRARY_MAJOR_VERSION_NUMBER <= 3) || defined(OPENVDB_3_ABI_COMPATIBLE)
 	m_grids->push_back(grid.copyGrid());
 #else
 	m_grids->push_back(grid.copyGridWithNewTree());

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008), Juho Vepsalainen, Jiri Hnidek
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_meta.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -47,8 +41,10 @@
 #include "DNA_object_types.h"
 
 #include "BKE_mball.h"
-#include "BKE_depsgraph.h"
 #include "BKE_main.h"
+#include "BKE_scene.h"
+
+#include "DEG_depsgraph.h"
 
 #include "WM_types.h"
 #include "WM_api.h"
@@ -62,32 +58,32 @@ static int rna_Meta_texspace_editable(PointerRNA *ptr, const char **UNUSED(r_inf
 static void rna_Meta_texspace_loc_get(PointerRNA *ptr, float *values)
 {
 	MetaBall *mb = (MetaBall *)ptr->data;
-	
+
 	/* tex_space_mball() needs object.. ugh */
-	
+
 	copy_v3_v3(values, mb->loc);
 }
 
 static void rna_Meta_texspace_loc_set(PointerRNA *ptr, const float *values)
 {
 	MetaBall *mb = (MetaBall *)ptr->data;
-	
+
 	copy_v3_v3(mb->loc, values);
 }
 
 static void rna_Meta_texspace_size_get(PointerRNA *ptr, float *values)
 {
 	MetaBall *mb = (MetaBall *)ptr->data;
-	
+
 	/* tex_space_mball() needs object.. ugh */
-	
+
 	copy_v3_v3(values, mb->size);
 }
 
 static void rna_Meta_texspace_size_set(PointerRNA *ptr, const float *values)
 {
 	MetaBall *mb = (MetaBall *)ptr->data;
-	
+
 	copy_v3_v3(mb->size, values);
 }
 
@@ -99,11 +95,11 @@ static void rna_MetaBall_update_data(Main *bmain, Scene *scene, PointerRNA *ptr)
 
 	/* cheating way for importers to avoid slow updates */
 	if (mb->id.us > 0) {
-		for (ob = bmain->object.first; ob; ob = ob->id.next)
+		for (ob = bmain->objects.first; ob; ob = ob->id.next)
 			if (ob->data == mb)
 				BKE_mball_properties_copy(scene, ob);
-	
-		DAG_id_tag_update(&mb->id, 0);
+
+		DEG_id_tag_update(&mb->id, 0);
 		WM_main_add_notifier(NC_GEOM | ND_DATA, mb);
 	}
 }
@@ -121,7 +117,7 @@ static MetaElem *rna_MetaBall_elements_new(MetaBall *mb, int type)
 
 	/* cheating way for importers to avoid slow updates */
 	if (mb->id.us > 0) {
-		DAG_id_tag_update(&mb->id, 0);
+		DEG_id_tag_update(&mb->id, 0);
 		WM_main_add_notifier(NC_GEOM | ND_DATA, &mb->id);
 	}
 
@@ -142,7 +138,7 @@ static void rna_MetaBall_elements_remove(MetaBall *mb, ReportList *reports, Poin
 
 	/* cheating way for importers to avoid slow updates */
 	if (mb->id.us > 0) {
-		DAG_id_tag_update(&mb->id, 0);
+		DEG_id_tag_update(&mb->id, 0);
 		WM_main_add_notifier(NC_GEOM | ND_DATA, &mb->id);
 	}
 }
@@ -153,12 +149,12 @@ static void rna_MetaBall_elements_clear(MetaBall *mb)
 
 	/* cheating way for importers to avoid slow updates */
 	if (mb->id.us > 0) {
-		DAG_id_tag_update(&mb->id, 0);
+		DEG_id_tag_update(&mb->id, 0);
 		WM_main_add_notifier(NC_GEOM | ND_DATA, &mb->id);
 	}
 }
 
-static int rna_Meta_is_editmode_get(PointerRNA *ptr)
+static bool rna_Meta_is_editmode_get(PointerRNA *ptr)
 {
 	MetaBall *mb = ptr->id.data;
 	return (mb->editelems != NULL);
@@ -198,7 +194,7 @@ static void rna_def_metaelement(BlenderRNA *brna)
 	RNA_def_property_enum_items(prop, rna_enum_metaelem_type_items);
 	RNA_def_property_ui_text(prop, "Type", "Metaball types");
 	RNA_def_property_update(prop, 0, "rna_MetaBall_update_data");
-	
+
 	/* number values */
 	prop = RNA_def_property(srna, "co", PROP_FLOAT, PROP_TRANSLATION);
 	RNA_def_property_float_sdna(prop, NULL, "x");
@@ -237,19 +233,19 @@ static void rna_def_metaelement(BlenderRNA *brna)
 	RNA_def_property_range(prop, 0.0f, 20.0f);
 	RNA_def_property_ui_text(prop, "Size Z", "Size of element, use of components depends on element type");
 	RNA_def_property_update(prop, 0, "rna_MetaBall_update_data");
-	
+
 	prop = RNA_def_property(srna, "stiffness", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "s");
 	RNA_def_property_range(prop, 0.0f, 10.0f);
 	RNA_def_property_ui_text(prop, "Stiffness", "Stiffness defines how much of the element to fill");
 	RNA_def_property_update(prop, 0, "rna_MetaBall_update_data");
-	
+
 	/* flags */
 	prop = RNA_def_property(srna, "use_negative", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", MB_NEGATIVE);
 	RNA_def_property_ui_text(prop, "Negative", "Set metaball as negative one");
 	RNA_def_property_update(prop, 0, "rna_MetaBall_update_data");
-	
+
 	prop = RNA_def_property(srna, "hide", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", MB_HIDE);
 	RNA_def_property_ui_text(prop, "Hide", "Hide element");
@@ -300,9 +296,9 @@ static void rna_def_metaball(BlenderRNA *brna)
 		{MB_UPDATE_HALFRES, "HALFRES", 0, "Half", "While editing, update metaball in half resolution"},
 		{MB_UPDATE_FAST, "FAST", 0, "Fast", "While editing, update metaball without polygonization"},
 		{MB_UPDATE_NEVER, "NEVER", 0, "Never", "While editing, don't update metaball at all"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
-	
+
 	srna = RNA_def_struct(brna, "MetaBall", "ID");
 	RNA_def_struct_ui_text(srna, "MetaBall", "Metaball data-block to defined blobby surfaces");
 	RNA_def_struct_ui_icon(srna, ICON_META_DATA);
@@ -319,7 +315,7 @@ static void rna_def_metaball(BlenderRNA *brna)
 	RNA_def_property_enum_items(prop, prop_update_items);
 	RNA_def_property_ui_text(prop, "Update", "Metaball edit update behavior");
 	RNA_def_property_update(prop, 0, "rna_MetaBall_update_data");
-	
+
 	/* number values */
 	prop = RNA_def_property(srna, "resolution", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_float_sdna(prop, NULL, "wiresize");
@@ -327,14 +323,14 @@ static void rna_def_metaball(BlenderRNA *brna)
 	RNA_def_property_ui_range(prop, 0.05f, 1000.0f, 2.5f, 3);
 	RNA_def_property_ui_text(prop, "Wire Size", "Polygonization resolution in the 3D viewport");
 	RNA_def_property_update(prop, 0, "rna_MetaBall_update_data");
-	
+
 	prop = RNA_def_property(srna, "render_resolution", PROP_FLOAT, PROP_DISTANCE);
 	RNA_def_property_float_sdna(prop, NULL, "rendersize");
 	RNA_def_property_range(prop, 0.005f, 10000.0f);
 	RNA_def_property_ui_range(prop, 0.025f, 1000.0f, 2.5f, 3);
 	RNA_def_property_ui_text(prop, "Render Size", "Polygonization resolution in rendering");
 	RNA_def_property_update(prop, 0, "rna_MetaBall_update_data");
-	
+
 	prop = RNA_def_property(srna, "threshold", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "thresh");
 	RNA_def_property_range(prop, 0.0f, 5.0f);
@@ -346,14 +342,14 @@ static void rna_def_metaball(BlenderRNA *brna)
 	RNA_def_property_boolean_sdna(prop, NULL, "texflag", MB_AUTOSPACE);
 	RNA_def_property_ui_text(prop, "Auto Texture Space",
 	                         "Adjust active object's texture space automatically when transforming object");
-	
+
 	prop = RNA_def_property(srna, "texspace_location", PROP_FLOAT, PROP_TRANSLATION);
 	RNA_def_property_array(prop, 3);
 	RNA_def_property_ui_text(prop, "Texture Space Location", "Texture space location");
 	RNA_def_property_editable_func(prop, "rna_Meta_texspace_editable");
 	RNA_def_property_float_funcs(prop, "rna_Meta_texspace_loc_get", "rna_Meta_texspace_loc_set", NULL);
 	RNA_def_property_update(prop, 0, "rna_MetaBall_update_data");
-	
+
 	prop = RNA_def_property(srna, "texspace_size", PROP_FLOAT, PROP_XYZ);
 	RNA_def_property_array(prop, 3);
 	RNA_def_property_flag(prop, PROP_PROPORTIONAL);
@@ -361,7 +357,7 @@ static void rna_def_metaball(BlenderRNA *brna)
 	RNA_def_property_editable_func(prop, "rna_Meta_texspace_editable");
 	RNA_def_property_float_funcs(prop, "rna_Meta_texspace_size_get", "rna_Meta_texspace_size_set", NULL);
 	RNA_def_property_update(prop, 0, "rna_MetaBall_update_data");
-	
+
 	/* not supported yet */
 #if 0
 	prop = RNA_def_property(srna, "texspace_rot", PROP_FLOAT, PROP_EULER);
@@ -370,7 +366,7 @@ static void rna_def_metaball(BlenderRNA *brna)
 	RNA_def_property_editable_func(prop, "rna_Meta_texspace_editable");
 	RNA_def_property_update(prop, 0, "rna_MetaBall_update_data");
 #endif
-	
+
 	/* materials */
 	prop = RNA_def_property(srna, "materials", PROP_COLLECTION, PROP_NONE);
 	RNA_def_property_collection_sdna(prop, NULL, "mat", "totcol");
@@ -378,7 +374,7 @@ static void rna_def_metaball(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Materials", "");
 	RNA_def_property_srna(prop, "IDMaterials"); /* see rna_ID.c */
 	RNA_def_property_collection_funcs(prop, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "rna_IDMaterials_assign_int");
-	
+
 	prop = RNA_def_property(srna, "is_editmode", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_funcs(prop, "rna_Meta_is_editmode_get", NULL);
 	RNA_def_property_clear_flag(prop, PROP_EDITABLE);

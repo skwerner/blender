@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributors: Amorilia (amorilia@users.sourceforge.net)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/dds/ColorBlock.h
- *  \ingroup imbdds
+/** \file
+ * \ingroup imbdds
  */
 
 
@@ -45,31 +39,31 @@ struct ColorBlock {
 	ColorBlock();
 	ColorBlock(const uint * linearImage);
 	ColorBlock(const ColorBlock & block);
-	ColorBlock(const Image * img, uint x, uint y);
-	
-	void init(const Image * img, uint x, uint y);
+	ColorBlock(const Image *img, uint x, uint y);
+
+	void init(const Image *img, uint x, uint y);
 	void init(uint w, uint h, const uint * data, uint x, uint y);
 	void init(uint w, uint h, const float * data, uint x, uint y);
-	
+
 	void swizzle(uint x, uint y, uint z, uint w); // 0=r, 1=g, 2=b, 3=a, 4=0xFF, 5=0
-	
+
 	bool isSingleColor(Color32 mask = Color32(0xFF, 0xFF, 0xFF, 0x00)) const;
 	bool hasAlpha() const;
-	
-	
+
+
 	// Accessors
 	const Color32 * colors() const;
 
 	Color32 color(uint i) const;
 	Color32 & color(uint i);
-	
+
 	Color32 color(uint x, uint y) const;
 	Color32 & color(uint x, uint y);
-	
+
 private:
-	
+
 	Color32 m_color[4 * 4];
-	
+
 };
 
 

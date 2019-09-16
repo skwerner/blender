@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/IMB_imbuf.h
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 /**
@@ -36,8 +28,6 @@
  * \ingroup imbuf
  *
  * \page IMB Imbuf module external interface
- *
- *
  * \section imb_about About the IMB module
  *
  * External interface of the IMage Buffer module. This module offers
@@ -105,7 +95,9 @@ void IMB_exit(void);
  *
  * \attention Defined in readimage.c
  */
-struct ImBuf *IMB_ibImageFromMemory(unsigned char *mem, size_t size, int flags, char colorspace[IM_MAX_SPACE], const char *descr);
+struct ImBuf *IMB_ibImageFromMemory(
+        const unsigned char *mem, size_t size, int flags,
+        char colorspace[IM_MAX_SPACE], const char *descr);
 
 /**
  *
@@ -209,7 +201,7 @@ typedef enum IMB_BlendMode {
 
 	IMB_BLEND_COPY = 1000,
 	IMB_BLEND_COPY_RGB = 1001,
-	IMB_BLEND_COPY_ALPHA = 1002
+	IMB_BLEND_COPY_ALPHA = 1002,
 } IMB_BlendMode;
 
 void IMB_blend_color_byte(unsigned char dst[4], unsigned char src1[4],
@@ -217,7 +209,7 @@ void IMB_blend_color_byte(unsigned char dst[4], unsigned char src1[4],
 void IMB_blend_color_float(float dst[4], float src1[4], float src2[4],
 	IMB_BlendMode mode);
 
-void IMB_rectclip(struct ImBuf *dbuf, struct ImBuf *sbuf, int *destx, 
+void IMB_rectclip(struct ImBuf *dbuf, struct ImBuf *sbuf, int *destx,
 	int *desty, int *srcx, int *srcy, int *width, int *height);
 void IMB_rectcpy(struct ImBuf *drect, struct ImBuf *srect, int destx,
 	int desty, int srcx, int srcy, int width, int height);
@@ -249,7 +241,7 @@ typedef enum IMB_Timecode_Type {
 	                                            * device (*every* consumer camcorder can do
 	                                            * that :) )*/
 	IMB_TC_RECORD_RUN_NO_GAPS = 8,
-	IMB_TC_MAX_SLOT   = 4
+	IMB_TC_MAX_SLOT   = 4,
 } IMB_Timecode_Type;
 
 typedef enum IMB_Proxy_Size {
@@ -258,7 +250,7 @@ typedef enum IMB_Proxy_Size {
 	IMB_PROXY_50 = 2,
 	IMB_PROXY_75 = 4,
 	IMB_PROXY_100 = 8,
-	IMB_PROXY_MAX_SLOT = 4
+	IMB_PROXY_MAX_SLOT = 4,
 } IMB_Proxy_Size;
 
 /* defaults to BL_proxy within the directory of the animation */
@@ -322,7 +314,7 @@ int IMB_anim_get_preseek(struct anim *anim);
 
 struct ImBuf *IMB_anim_absolute(
 	struct anim *anim, int position,
-	IMB_Timecode_Type tc        /* = 1 = IMB_TC_RECORD_RUN */, 
+	IMB_Timecode_Type tc        /* = 1 = IMB_TC_RECORD_RUN */,
 	IMB_Proxy_Size preview_size /* = 0 = IMB_PROXY_NONE */);
 
 /**
@@ -380,13 +372,13 @@ struct ImBuf *IMB_onehalf(struct ImBuf *ibuf1);
  *
  * \attention Defined in scaling.c
  */
-struct ImBuf *IMB_scaleImBuf(struct ImBuf *ibuf, unsigned int newx, unsigned int newy);
+bool IMB_scaleImBuf(struct ImBuf *ibuf, unsigned int newx, unsigned int newy);
 
 /**
  *
  * \attention Defined in scaling.c
  */
-struct ImBuf *IMB_scalefastImBuf(struct ImBuf *ibuf, unsigned int newx, unsigned int newy);
+bool IMB_scalefastImBuf(struct ImBuf *ibuf, unsigned int newx, unsigned int newy);
 
 /**
  *
@@ -399,7 +391,7 @@ void IMB_scaleImBuf_threaded(struct ImBuf *ibuf, unsigned int newx, unsigned int
  * \attention Defined in writeimage.c
  */
 short IMB_saveiff(struct ImBuf *ibuf, const char *filepath, int flags);
-struct ImBuf *IMB_prepare_write_ImBuf(const bool isfloat, struct ImBuf *ibuf);
+bool IMB_prepare_write_ImBuf(const bool isfloat, struct ImBuf *ibuf);
 
 /**
  *
@@ -426,14 +418,7 @@ int imb_get_anim_type(const char *name);
  */
 bool IMB_isfloat(struct ImBuf *ibuf);
 
-/**
- *
- * \attention Defined in divers.c
- */
-void IMB_de_interlace(struct ImBuf *ibuf);
-void IMB_interlace(struct ImBuf *ibuf);
-
-/* create char buffer, color corrected if necessary, for ImBufs that lack one */ 
+/* create char buffer, color corrected if necessary, for ImBufs that lack one */
 void IMB_rect_from_float(struct ImBuf *ibuf);
 /* Create char buffer for part of the image, color corrected if necessary,
  * Changed part will be stored in buffer. This is expected to be used for texture painting updates */
@@ -495,7 +480,7 @@ void IMB_alpha_under_color_byte(unsigned char *rect, int x, int y, float backcol
 /**
  *
  * \attention defined in readimage.c
- */  
+ */
 struct ImBuf *IMB_loadifffile(int file, const char *filepath, int flags, char colorspace[IM_MAX_SPACE], const char *descr);
 
 /**
@@ -565,22 +550,6 @@ void IMB_rectfill_alpha(struct ImBuf *ibuf, const float value);
 void buf_rectfill_area(unsigned char *rect, float *rectf, int width, int height,
                        const float col[4], struct ColorManagedDisplay *display,
                        int x1, int y1, int x2, int y2);
-
-/**
- *
- * \attention Defined in metadata.c
- */
-/** read the field from the image info into the field 
- *  \param img - the ImBuf that contains the image data
- *  \param key - the key of the field
- *  \param value - the data in the field, first one found with key is returned, 
- *                 memory has to be allocated by user.
- *  \param len - length of value buffer allocated by user.
- *  \return    - 1 (true) if ImageInfo present and value for the key found, 0 (false) otherwise
- */
-bool IMB_metadata_get_field(struct ImBuf *img, const char *key, char *value, const size_t len);
-bool IMB_metadata_change_field(struct ImBuf *img, const char *key, const char *field);
-void IMB_metadata_copy(struct ImBuf *dimb, struct ImBuf *simb);
 
 /* exported for image tools in blender, to quickly allocate 32 bits rect */
 void *imb_alloc_pixels(unsigned int x,

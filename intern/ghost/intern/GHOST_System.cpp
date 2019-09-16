@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_System.cpp
- *  \ingroup GHOST
- *  \author	Maarten Gribnau
- *  \date	May 7, 2001
+/** \file
+ * \ingroup GHOST
  */
 
 #include "GHOST_System.h"
@@ -48,13 +38,15 @@
 
 GHOST_System::GHOST_System()
     : m_nativePixel(false),
+      m_windowFocus(true),
       m_displayManager(NULL),
       m_timerManager(NULL),
       m_windowManager(NULL),
-      m_eventManager(NULL)
+      m_eventManager(NULL),
 #ifdef WITH_INPUT_NDOF
-      , m_ndofManager(0)
+      m_ndofManager(0),
 #endif
+      m_tabletAPI(GHOST_kTabletAutomatic)
 {
 }
 
@@ -113,7 +105,7 @@ GHOST_TSuccess GHOST_System::disposeWindow(GHOST_IWindow *window)
 
 	/*
 	 * Remove all pending events for the window.
-	 */ 
+	 */
 	if (m_windowManager->getWindowFound(window)) {
 		m_eventManager->removeWindowEvents(window);
 	}
@@ -272,7 +264,7 @@ GHOST_TSuccess GHOST_System::pushEvent(GHOST_IEvent *event)
 GHOST_TSuccess GHOST_System::getModifierKeyState(GHOST_TModifierKeyMask mask, bool& isDown) const
 {
 	GHOST_ModifierKeys keys;
-	// Get the state of all modifier keys 
+	// Get the state of all modifier keys
 	GHOST_TSuccess success = getModifierKeys(keys);
 	if (success) {
 		// Isolate the state of the key requested
@@ -294,10 +286,22 @@ GHOST_TSuccess GHOST_System::getButtonState(GHOST_TButtonMask mask, bool& isDown
 	return success;
 }
 
+void GHOST_System::setTabletAPI(GHOST_TTabletAPI api)
+{
+	m_tabletAPI = api;
+}
+
+GHOST_TTabletAPI GHOST_System::getTabletAPI(void)
+{
+	return m_tabletAPI;
+}
+
 #ifdef WITH_INPUT_NDOF
 void GHOST_System::setNDOFDeadZone(float deadzone)
 {
-	this->m_ndofManager->setDeadZone(deadzone);
+	if (this->m_ndofManager) {
+		this->m_ndofManager->setDeadZone(deadzone);
+	}
 }
 #endif
 
@@ -306,7 +310,7 @@ GHOST_TSuccess GHOST_System::init()
 	m_timerManager = new GHOST_TimerManager();
 	m_windowManager = new GHOST_WindowManager();
 	m_eventManager = new GHOST_EventManager();
-	
+
 #ifdef GHOST_DEBUG
 	if (m_eventManager) {
 		m_eventPrinter = new GHOST_EventPrinter();
@@ -380,9 +384,18 @@ int GHOST_System::confirmQuit(GHOST_IWindow * /*window*/) const
 	return 1;
 }
 
+bool GHOST_System::supportsNativeDialogs(void)
+{
+	return 1;
+}
+
 bool GHOST_System::useNativePixel(void)
 {
 	m_nativePixel = true;
 	return 1;
 }
 
+void GHOST_System::useWindowFocus(const bool use_focus)
+{
+	m_windowFocus = use_focus;
+}

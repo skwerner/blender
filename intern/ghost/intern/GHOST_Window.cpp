@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,23 +15,15 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_Window.cpp
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  */
 
 
 /**
  * Copyright (C) 2001 NaN Technologies B.V.
- * \author	Maarten Gribnau
- * \date	May 10, 2001
  */
 
 #include "GHOST_Window.h"
@@ -58,12 +48,12 @@ GHOST_Window::GHOST_Window(
 {
 	m_isUnsavedChanges = false;
 	m_canAcceptDragOperation = false;
-	
+
 	m_progressBarVisible = false;
-	
+
 	m_cursorGrabAccumPos[0] = 0;
 	m_cursorGrabAccumPos[1] = 0;
-	
+
 	m_nativePixelSize = 1.0f;
 
 	m_fullScreen = state == GHOST_kWindowStateFullScreen;
@@ -208,7 +198,7 @@ GHOST_TSuccess GHOST_Window::setCustomCursorShape(GHOST_TUns8 bitmap[16][2], GHO
 	                            16, 16, hotX, hotY, 0, 1);
 }
 
-GHOST_TSuccess GHOST_Window::setCustomCursorShape(GHOST_TUns8 *bitmap, GHOST_TUns8 *mask, 
+GHOST_TSuccess GHOST_Window::setCustomCursorShape(GHOST_TUns8 *bitmap, GHOST_TUns8 *mask,
                                                   int sizex, int sizey, int hotX, int hotY,
                                                   int fg_color, int bg_color)
 {
@@ -234,7 +224,7 @@ bool GHOST_Window::canAcceptDragOperation() const
 GHOST_TSuccess GHOST_Window::setModifiedState(bool isUnsavedChanges)
 {
 	m_isUnsavedChanges = isUnsavedChanges;
-	
+
 	return GHOST_kSuccess;
 }
 
@@ -242,4 +232,3 @@ bool GHOST_Window::getModifiedState()
 {
 	return m_isUnsavedChanges;
 }
-

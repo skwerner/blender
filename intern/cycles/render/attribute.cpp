@@ -48,7 +48,8 @@ void Attribute::set(ustring name_, TypeDesc type_, AttributeElement element_)
 	/* string and matrix not supported! */
 	assert(type == TypeDesc::TypeFloat || type == TypeDesc::TypeColor ||
 		type == TypeDesc::TypePoint || type == TypeDesc::TypeVector ||
-		type == TypeDesc::TypeNormal || type == TypeDesc::TypeMatrix);
+		type == TypeDesc::TypeNormal || type == TypeDesc::TypeMatrix ||
+		type == TypeFloat2);
 }
 
 void Attribute::resize(Mesh *mesh, AttributePrimitive prim, bool reserve_only)
@@ -68,6 +69,8 @@ void Attribute::resize(size_t num_elements)
 
 void Attribute::add(const float& f)
 {
+	assert(data_sizeof() == sizeof(float));
+
 	char *data = (char*)&f;
 	size_t size = sizeof(f);
 
@@ -77,6 +80,19 @@ void Attribute::add(const float& f)
 
 void Attribute::add(const uchar4& f)
 {
+	assert(data_sizeof() == sizeof(uchar4));
+
+	char *data = (char*)&f;
+	size_t size = sizeof(f);
+
+	for(size_t i = 0; i < size; i++)
+		buffer.push_back(data[i]);
+}
+
+void Attribute::add(const float2& f)
+{
+	assert(data_sizeof() == sizeof(float2));
+
 	char *data = (char*)&f;
 	size_t size = sizeof(f);
 
@@ -86,6 +102,8 @@ void Attribute::add(const uchar4& f)
 
 void Attribute::add(const float3& f)
 {
+	assert(data_sizeof() == sizeof(float3));
+
 	char *data = (char*)&f;
 	size_t size = sizeof(f);
 
@@ -95,6 +113,8 @@ void Attribute::add(const float3& f)
 
 void Attribute::add(const Transform& f)
 {
+	assert(data_sizeof() == sizeof(Transform));
+
 	char *data = (char*)&f;
 	size_t size = sizeof(f);
 
@@ -104,6 +124,8 @@ void Attribute::add(const Transform& f)
 
 void Attribute::add(const VoxelAttribute& f)
 {
+	assert(data_sizeof() == sizeof(VoxelAttribute));
+
 	char *data = (char*)&f;
 	size_t size = sizeof(f);
 
@@ -127,6 +149,8 @@ size_t Attribute::data_sizeof() const
 		return sizeof(uchar4);
 	else if(type == TypeDesc::TypeFloat)
 		return sizeof(float);
+	else if(type == TypeFloat2)
+		return sizeof(float2);
 	else if(type == TypeDesc::TypeMatrix)
 		return sizeof(Transform);
 	else
@@ -202,7 +226,7 @@ bool Attribute::same_storage(TypeDesc a, TypeDesc b)
 {
 	if(a == b)
 		return true;
-	
+
 	if(a == TypeDesc::TypeColor || a == TypeDesc::TypePoint ||
 	   a == TypeDesc::TypeVector || a == TypeDesc::TypeNormal)
 	{
@@ -267,6 +291,8 @@ const char *Attribute::standard_name(AttributeStandard std)
 			return "particle";
 		case ATTR_STD_CURVE_INTERCEPT:
 			return "curve_intercept";
+		case ATTR_STD_CURVE_RANDOM:
+			return "curve_random";
 		case ATTR_STD_PTEX_FACE_ID:
 			return "ptex_face_id";
 		case ATTR_STD_PTEX_UV:
@@ -279,6 +305,8 @@ const char *Attribute::standard_name(AttributeStandard std)
 			return "flame";
 		case ATTR_STD_VOLUME_HEAT:
 			return "heat";
+		case ATTR_STD_VOLUME_TEMPERATURE:
+			return "temperature";
 		case ATTR_STD_VOLUME_VELOCITY:
 			return "velocity";
 		case ATTR_STD_POINTINESS:
@@ -288,15 +316,19 @@ const char *Attribute::standard_name(AttributeStandard std)
 		case ATTR_STD_NUM:
 			return "";
 	}
-	
+
 	return "";
 }
 
 AttributeStandard Attribute::name_standard(const char *name)
 {
-	for(int std = ATTR_STD_NONE; std < ATTR_STD_NUM; std++)
-		if(strcmp(name, Attribute::standard_name((AttributeStandard)std)) == 0)
-			return (AttributeStandard)std;
+	if(name) {
+		for(int std = ATTR_STD_NONE; std < ATTR_STD_NUM; std++) {
+			if(strcmp(name, Attribute::standard_name((AttributeStandard)std)) == 0) {
+				return (AttributeStandard)std;
+			}
+		}
+	}
 
 	return ATTR_STD_NONE;
 }
@@ -392,7 +424,7 @@ Attribute *AttributeSet::add(AttributeStandard std, ustring name)
 				attr = add(name, TypeDesc::TypeNormal, ATTR_ELEMENT_FACE);
 				break;
 			case ATTR_STD_UV:
-				attr = add(name, TypeDesc::TypePoint, ATTR_ELEMENT_CORNER);
+				attr = add(name, TypeFloat2, ATTR_ELEMENT_CORNER);
 				break;
 			case ATTR_STD_UV_TANGENT:
 				attr = add(name, TypeDesc::TypeVector, ATTR_ELEMENT_CORNER);
@@ -423,6 +455,7 @@ Attribute *AttributeSet::add(AttributeStandard std, ustring name)
 			case ATTR_STD_VOLUME_DENSITY:
 			case ATTR_STD_VOLUME_FLAME:
 			case ATTR_STD_VOLUME_HEAT:
+			case ATTR_STD_VOLUME_TEMPERATURE:
 				attr = add(name, TypeDesc::TypeFloat, ATTR_ELEMENT_VOXEL);
 				break;
 			case ATTR_STD_VOLUME_COLOR:
@@ -442,6 +475,8 @@ Attribute *AttributeSet::add(AttributeStandard std, ustring name)
 	else if(curve_mesh) {
 		switch(std) {
 			case ATTR_STD_UV:
+				attr = add(name, TypeFloat2, ATTR_ELEMENT_CURVE);
+				break;
 			case ATTR_STD_GENERATED:
 				attr = add(name, TypeDesc::TypePoint, ATTR_ELEMENT_CURVE);
 				break;
@@ -450,6 +485,9 @@ Attribute *AttributeSet::add(AttributeStandard std, ustring name)
 				break;
 			case ATTR_STD_CURVE_INTERCEPT:
 				attr = add(name, TypeDesc::TypeFloat, ATTR_ELEMENT_CURVE_KEY);
+				break;
+			case ATTR_STD_CURVE_RANDOM:
+				attr = add(name, TypeDesc::TypeFloat, ATTR_ELEMENT_CURVE);
 				break;
 			case ATTR_STD_GENERATED_TRANSFORM:
 				attr = add(name, TypeDesc::TypeMatrix, ATTR_ELEMENT_MESH);
@@ -464,7 +502,7 @@ Attribute *AttributeSet::add(AttributeStandard std, ustring name)
 	}
 
 	attr->std = std;
-	
+
 	return attr;
 }
 
@@ -523,9 +561,23 @@ void AttributeSet::resize(bool reserve_only)
 	}
 }
 
-void AttributeSet::clear()
+void AttributeSet::clear(bool preserve_voxel_data)
 {
-	attributes.clear();
+	if(preserve_voxel_data) {
+		list<Attribute>::iterator it;
+
+		for(it = attributes.begin(); it != attributes.end();) {
+			if(it->element == ATTR_ELEMENT_VOXEL || it->std == ATTR_STD_GENERATED_TRANSFORM) {
+				it++;
+			}
+			else {
+				attributes.erase(it++);
+			}
+		}
+	}
+	else {
+		attributes.clear();
+	}
 }
 
 /* AttributeRequest */
@@ -607,9 +659,11 @@ bool AttributeRequestSet::modified(const AttributeRequestSet& other)
 
 void AttributeRequestSet::add(ustring name)
 {
-	foreach(AttributeRequest& req, requests)
-		if(req.name == name)
+	foreach(AttributeRequest& req, requests) {
+		if(req.name == name) {
 			return;
+		}
+	}
 
 	requests.push_back(AttributeRequest(name));
 }
@@ -633,12 +687,28 @@ void AttributeRequestSet::add(AttributeRequestSet& reqs)
 	}
 }
 
+void AttributeRequestSet::add_standard(ustring name)
+{
+	if(name.empty()) {
+		return;
+	}
+
+	AttributeStandard std = Attribute::name_standard(name.c_str());
+
+	if(std) {
+		add(std);
+	}
+	else {
+		add(name);
+	}
+}
+
 bool AttributeRequestSet::find(ustring name)
 {
 	foreach(AttributeRequest& req, requests)
 		if(req.name == name)
 			return true;
-	
+
 	return false;
 }
 
@@ -662,4 +732,3 @@ void AttributeRequestSet::clear()
 }
 
 CCL_NAMESPACE_END
-

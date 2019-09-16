@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,31 +15,26 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_decimate.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
-#include "DNA_object_types.h"
+#include "BLI_utildefines.h"
 
 #include "BLI_math.h"
-#include "BLI_utildefines.h"
+
+#include "DNA_object_types.h"
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BKE_modifier.h"
 #include "BKE_deform.h"
-#include "BKE_cdderivedmesh.h"
+#include "BKE_mesh.h"
+
+#include "DEG_depsgraph_query.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
@@ -64,34 +57,41 @@ static void initData(ModifierData *md)
 	dmd->defgrp_factor = 1.0;
 }
 
-static void copyData(ModifierData *md, ModifierData *target)
-{
-#if 0
-	DecimateModifierData *dmd = (DecimateModifierData *) md;
-	DecimateModifierData *tdmd = (DecimateModifierData *) target;
-#endif
-	modifier_copyData_generic(md, target);
-}
-
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	DecimateModifierData *dmd = (DecimateModifierData *) md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (dmd->defgrp_name[0] && (dmd->defgrp_factor > 0.0f)) {
-		dataMask |= CD_MASK_MDEFORMVERT;
+	if (dmd->defgrp_name[0] != '\0' && (dmd->defgrp_factor > 0.0f)) {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
 	}
-
-	return dataMask;
 }
 
-static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
-                                  DerivedMesh *derivedData,
-                                  ModifierApplyFlag UNUSED(flag))
+static DecimateModifierData *getOriginalModifierData(
+        const DecimateModifierData *dmd, const ModifierEvalContext *ctx)
+{
+	Object *ob_orig = DEG_get_original_object(ctx->object);
+	return (DecimateModifierData *)modifiers_findByName(ob_orig, dmd->modifier.name);
+}
+
+static void updateFaceCount(
+        const ModifierEvalContext *ctx, DecimateModifierData *dmd, int face_count)
+{
+	dmd->face_count = face_count;
+
+	if (DEG_is_active(ctx->depsgraph)) {
+		/* update for display only */
+		DecimateModifierData *dmd_orig = getOriginalModifierData(dmd, ctx);
+		dmd_orig->face_count = face_count;
+	}
+}
+
+static Mesh *applyModifier(
+        ModifierData *md, const ModifierEvalContext *ctx,
+        Mesh *meshData)
 {
 	DecimateModifierData *dmd = (DecimateModifierData *) md;
-	DerivedMesh *dm = derivedData, *result = NULL;
+	Mesh *mesh = meshData, *result = NULL;
 	BMesh *bm;
 	bool calc_face_normal;
 	float *vweights = NULL;
@@ -101,34 +101,34 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 #endif
 
 	/* set up front so we dont show invalid info in the UI */
-	dmd->face_count = dm->getNumPolys(dm);
+	updateFaceCount(ctx, dmd, mesh->totpoly);
 
 	switch (dmd->mode) {
 		case MOD_DECIM_MODE_COLLAPSE:
 			if (dmd->percent == 1.0f) {
-				return dm;
+				return mesh;
 			}
 			calc_face_normal = true;
 			break;
 		case MOD_DECIM_MODE_UNSUBDIV:
 			if (dmd->iter == 0) {
-				return dm;
+				return mesh;
 			}
 			calc_face_normal = false;
 			break;
 		case MOD_DECIM_MODE_DISSOLVE:
 			if (dmd->angle == 0.0f) {
-				return dm;
+				return mesh;
 			}
 			calc_face_normal = true;
 			break;
 		default:
-			return dm;
+			return mesh;
 	}
 
 	if (dmd->face_count <= 3) {
 		modifier_setError(md, "Modifier requires more than 3 input faces");
-		return dm;
+		return mesh;
 	}
 
 	if (dmd->mode == MOD_DECIM_MODE_COLLAPSE) {
@@ -136,10 +136,10 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 			MDeformVert *dvert;
 			int defgrp_index;
 
-			modifier_get_vgroup(ob, dm, dmd->defgrp_name, &dvert, &defgrp_index);
+			MOD_get_vgroup(ctx->object, mesh, dmd->defgrp_name, &dvert, &defgrp_index);
 
 			if (dvert) {
-				const unsigned int vert_tot = dm->getNumVerts(dm);
+				const unsigned int vert_tot = mesh->totvert;
 				unsigned int i;
 
 				vweights = MEM_malloc_arrayN(vert_tot, sizeof(float), __func__);
@@ -158,7 +158,13 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		}
 	}
 
-	bm = DM_to_bmesh(dm, calc_face_normal);
+	bm = BKE_mesh_to_bmesh_ex(
+	        mesh,
+	        &(struct BMeshCreateParams){0},
+	        &(struct BMeshFromMeshParams){
+	            .calc_face_normal = calc_face_normal,
+	            .cd_mask_extra = {.vmask = CD_MASK_ORIGINDEX, .emask = CD_MASK_ORIGINDEX, .pmask = CD_MASK_ORIGINDEX},
+	        });
 
 	switch (dmd->mode) {
 		case MOD_DECIM_MODE_COLLAPSE:
@@ -188,9 +194,9 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 		MEM_freeN(vweights);
 	}
 
-	/* update for display only */
-	dmd->face_count = bm->totface;
-	result = CDDM_from_bmesh(bm, false);
+	updateFaceCount(ctx, dmd, bm->totface);
+
+	result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL);
 	BLI_assert(bm->vtoolflagpool == NULL &&
 	           bm->etoolflagpool == NULL &&
 	           bm->ftoolflagpool == NULL);  /* make sure we never alloc'd these */
@@ -204,7 +210,7 @@ static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
 	TIMEIT_END(decim);
 #endif
 
-	result->dirty = DM_DIRTY_NORMALS;
+	result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
 
 	return result;
 }
@@ -216,22 +222,24 @@ ModifierTypeInfo modifierType_Decimate = {
 	/* type */              eModifierTypeType_Nonconstructive,
 	/* flags */             eModifierTypeFlag_AcceptsMesh |
 	                        eModifierTypeFlag_AcceptsCVs,
-	/* copyData */          copyData,
+
+	/* copyData */          modifier_copyData_generic,
+
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     applyModifier,
-	/* applyModifierEM */   NULL,
+
 	/* initData */          initData,
 	/* requiredDataMask */  requiredDataMask,
 	/* freeData */          NULL,
 	/* isDisabled */        NULL,
-	/* updateDepgraph */    NULL,
 	/* updateDepsgraph */   NULL,
 	/* dependsOnTime */     NULL,
 	/* dependsOnNormals */	NULL,
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

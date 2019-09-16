@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_DisplayManagerWin32.cpp
- *  \ingroup GHOST
- *  \author	Maarten Gribnau
- *  \date	September 21, 2001
+/** \file
+ * \ingroup GHOST
  */
 
 #include "GHOST_DisplayManagerWin32.h"
@@ -62,11 +52,11 @@ static BOOL get_dd(DWORD d, DISPLAY_DEVICE *dd)
 }
 
 /*
- * When you call EnumDisplaySettings with iModeNum set to zero, the operating system 
- * initializes and caches information about the display device. When you call 
- * EnumDisplaySettings with iModeNum set to a non-zero value, the function returns 
+ * When you call EnumDisplaySettings with iModeNum set to zero, the operating system
+ * initializes and caches information about the display device. When you call
+ * EnumDisplaySettings with iModeNum set to a non-zero value, the function returns
  * the information that was cached the last time the function was called with iModeNum
- * set to zero. 
+ * set to zero.
  */
 GHOST_TSuccess GHOST_DisplayManagerWin32::getNumDisplaySettings(GHOST_TUns8 display, GHOST_TInt32& numSettings) const
 {
@@ -98,9 +88,9 @@ GHOST_TSuccess GHOST_DisplayManagerWin32::getDisplaySetting(GHOST_TUns8 display,
 		setting.bpp         = dm.dmBitsPerPel;
 		/* When you call the EnumDisplaySettings function, the dmDisplayFrequency member
 		 * may return with the value 0 or 1. These values represent the display hardware's
-		 * default refresh rate. This default rate is typically set by switches on a display 
-		 * card or computer motherboard, or by a configuration program that does not use 
-		 * Win32 display functions such as ChangeDisplaySettings. 
+		 * default refresh rate. This default rate is typically set by switches on a display
+		 * card or computer motherboard, or by a configuration program that does not use
+		 * Win32 display functions such as ChangeDisplaySettings.
 		 */
 		/* First, we tried to explicitly set the frequency to 60 if EnumDisplaySettings
 		 * returned 0 or 1 but this doesn't work since later on an exact match will

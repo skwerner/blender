@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Dalai Felinto
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_MapUVOperation.h"
@@ -54,7 +51,7 @@ void MapUVOperation::executePixelSampled(float output[4], float x, float y, Pixe
 
 	/* EWA filtering */
 	this->m_inputColorProgram->readFiltered(output, uv[0], uv[1], deriv[0], deriv[1]);
-	
+
 	/* UV to alpha threshold */
 	const float threshold = this->m_alpha * 0.05f;
 	/* XXX alpha threshold is used to fade out pixels on boundaries with invalid derivatives.
@@ -174,4 +171,3 @@ bool MapUVOperation::determineDependingAreaOfInterest(rcti *input, ReadBufferOpe
 
 	return false;
 }
-

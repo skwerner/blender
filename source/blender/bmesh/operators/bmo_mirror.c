@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_mirror.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Basic mirror, optionally with UVs's.
  */
@@ -57,13 +51,13 @@ void bmo_mirror_exec(BMesh *bm, BMOperator *op)
 	BMOpSlot *slot_targetmap;
 
 	ototvert = bm->totvert;
-	
+
 	BMO_slot_mat4_get(op->slots_in, "matrix", mtx);
 	invert_m4_m4(imtx, mtx);
-	
+
 	BMO_op_initf(bm, &dupeop, op->flag, "duplicate geom=%s", op, "geom");
 	BMO_op_exec(bm, &dupeop);
-	
+
 	BMO_slot_buffer_flag_enable(bm, dupeop.slots_out, "geom.out", BM_ALL_NOLOOP, ELE_NEW);
 
 	/* create old -> new mappin */
@@ -74,7 +68,7 @@ void bmo_mirror_exec(BMesh *bm, BMOperator *op)
 	BMO_op_callf(bm, op->flag, "transform verts=%fv matrix=%m4", ELE_NEW, mtx);
 	BMO_op_callf(bm, op->flag, "scale verts=%fv vec=%v", ELE_NEW, scale);
 	BMO_op_callf(bm, op->flag, "transform verts=%fv matrix=%m4", ELE_NEW, imtx);
-	
+
 	BMO_op_init(bm, &weldop, op->flag, "weld_verts");
 
 	slot_targetmap = BMO_slot_get(weldop.slots_in, "targetmap");
@@ -87,7 +81,7 @@ void bmo_mirror_exec(BMesh *bm, BMOperator *op)
 		}
 		v = BM_iter_step(&iter);
 	}
-	
+
 	if (mirror_u || mirror_v) {
 		BMFace *f;
 		BMLoop *l;
@@ -99,22 +93,25 @@ void bmo_mirror_exec(BMesh *bm, BMOperator *op)
 			BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {
 				for (i = 0; i < totlayer; i++) {
 					luv = CustomData_bmesh_get_n(&bm->ldata, l->head.data, CD_MLOOPUV, i);
-					if (mirror_u)
+					if (mirror_u) {
 						luv->uv[0] = 1.0f - luv->uv[0];
-					if (mirror_v)
+					}
+					if (mirror_v) {
 						luv->uv[1] = 1.0f - luv->uv[1];
+					}
 				}
 			}
 		}
 	}
 
 	BMO_op_exec(bm, &weldop);
-	
+
 	BMO_op_finish(bm, &weldop);
 	BMO_op_finish(bm, &dupeop);
 
 	BMO_slot_buffer_from_enabled_flag(bm, op, op->slots_out, "geom.out", BM_ALL_NOLOOP, ELE_NEW);
 
-	if (vmap)
+	if (vmap) {
 		MEM_freeN(vmap);
+	}
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,9 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
+ */
+
+/** \file
+ * \ingroup editor/io
  */
 
 #include "MEM_guardedalloc.h"
@@ -33,7 +32,6 @@
 
 #include "BKE_cachefile.h"
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -61,8 +59,8 @@ static int cachefile_open_invoke(bContext *C, wmOperator *op, const wmEvent *eve
 		char filepath[FILE_MAX];
 		Main *bmain = CTX_data_main(C);
 
-		BLI_strncpy(filepath, bmain->name, sizeof(filepath));
-		BLI_replace_extension(filepath, sizeof(filepath), ".abc");
+		BLI_strncpy(filepath, BKE_main_blendfile_path(bmain), sizeof(filepath));
+		BLI_path_extension_replace(filepath, sizeof(filepath), ".abc");
 		RNA_string_set(op->ptr, "filepath", filepath);
 	}
 
@@ -102,8 +100,8 @@ static int cachefile_open_exec(bContext *C, wmOperator *op)
 		/* hook into UI */
 		PropertyPointerRNA *pprop = op->customdata;
 		if (pprop->prop) {
-			/* when creating new ID blocks, use is already 1, but RNA
-			 * pointer se also increases user, so this compensates it */
+			/* When creating new ID blocks, use is already 1, but RNA
+			 * pointer see also increases user, so this compensates it. */
 			id_us_min(&cache_file->id);
 
 			PointerRNA idptr;

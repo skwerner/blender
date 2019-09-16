@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,24 +15,19 @@
  *
  * The Original Code is Copyright (C) 2010 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s):
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file RE_bake.h
- *  \ingroup render
+/** \file
+ * \ingroup render
  */
 
 #ifndef __RE_BAKE_H__
 #define __RE_BAKE_H__
 
+struct Depsgraph;
 struct ImBuf;
-struct Render;
 struct Mesh;
+struct Render;
 
 typedef struct BakeImage {
 	struct Image *image;
@@ -58,9 +51,8 @@ typedef struct BakePixel {
 
 typedef struct BakeHighPolyData {
 	struct Object *ob;
-	struct ModifierData *tri_mod;
+	struct Object *ob_eval;
 	struct Mesh *me;
-	char restrict_flag;
 	bool is_flip_object;
 
 	float obmat[4][4];
@@ -71,14 +63,11 @@ typedef struct BakeHighPolyData {
 bool RE_bake_has_engine(struct Render *re);
 
 bool RE_bake_engine(
-        struct Render *re, struct Object *object, const int object_id, const BakePixel pixel_array[],
+        struct Render *re, struct Depsgraph *depsgraph, struct Object *object, const int object_id, const BakePixel pixel_array[],
         const size_t num_pixels, const int depth, const eScenePassType pass_type, const int pass_filter, float result[]);
 
 /* bake.c */
 int RE_pass_depth(const eScenePassType pass_type);
-bool RE_bake_internal(
-        struct Render *re, struct Object *object, const BakePixel pixel_array[],
-        const size_t num_pixels, const int depth, const eScenePassType pass_type, float result[]);
 
 bool RE_bake_pixels_populate_from_objects(
         struct Mesh *me_low, BakePixel pixel_array_from[], BakePixel pixel_array_to[],

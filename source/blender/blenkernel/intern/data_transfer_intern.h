@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * 
- * Contributor(s): Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/data_transfer_intern.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #ifndef __DATA_TRANSFER_INTERN_H__
@@ -33,8 +26,8 @@
 
 #include "BKE_customdata.h"  /* For cd_datatransfer_interp */
 
-struct CustomDataTransferLayerMap;
 struct CustomData;
+struct CustomDataTransferLayerMap;
 struct ListBase;
 
 float data_transfer_interp_float_do(

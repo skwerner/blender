@@ -213,7 +213,7 @@ void fresnel (vector I, normal N, float eta,
         F *= sqr (beta / (g+c));
         Kr = F;
         Kt = (1.0 - Kr) * eta*eta;
-        // OPT: the following recomputes some of the above values, but it 
+        // OPT: the following recomputes some of the above values, but it
         // gives us the same result as if the shader-writer called refract()
         T = refract(I, N, eta);
     } else {
@@ -282,6 +282,66 @@ point rotate (point p, float angle, point a, point b)
     return transform (M, p-a) + a;
 }
 
+normal ensure_valid_reflection(normal Ng, vector I, normal N)
+{
+    /* The implementation here mirrors the one in kernel_montecarlo.h,
+     * check there for an explanation of the algorithm. */
+
+    float sqr(float x) { return x*x; }
+
+    vector R = 2*dot(N, I)*N - I;
+
+    float threshold = min(0.9*dot(Ng, I), 0.01);
+    if(dot(Ng, R) >= threshold) {
+        return N;
+    }
+
+    float NdotNg = dot(N, Ng);
+    vector X = normalize(N - NdotNg*Ng);
+
+    float Ix = dot(I, X), Iz = dot(I, Ng);
+    float Ix2 = sqr(Ix), Iz2 = sqr(Iz);
+    float a = Ix2 + Iz2;
+
+    float b = sqrt(Ix2*(a - sqr(threshold)));
+    float c = Iz*threshold + a;
+
+    float fac = 0.5/a;
+    float N1_z2 = fac*(b+c), N2_z2 = fac*(-b+c);
+    int valid1 = (N1_z2 > 1e-5) && (N1_z2 <= (1.0 + 1e-5));
+    int valid2 = (N2_z2 > 1e-5) && (N2_z2 <= (1.0 + 1e-5));
+
+    float N_new_x, N_new_z;
+    if(valid1 && valid2) {
+        float N1_x = sqrt(1.0 - N1_z2), N1_z = sqrt(N1_z2);
+        float N2_x = sqrt(1.0 - N2_z2), N2_z = sqrt(N2_z2);
+
+        float R1 = 2*(N1_x*Ix + N1_z*Iz)*N1_z - Iz;
+        float R2 = 2*(N2_x*Ix + N2_z*Iz)*N2_z - Iz;
+
+        valid1 = (R1 >= 1e-5);
+        valid2 = (R2 >= 1e-5);
+        if(valid1 && valid2) {
+            N_new_x = (R1 < R2)? N1_x : N2_x;
+            N_new_z = (R1 < R2)? N1_z : N2_z;
+        }
+        else {
+            N_new_x = (R1 > R2)? N1_x : N2_x;
+            N_new_z = (R1 > R2)? N1_z : N2_z;
+        }
+
+    }
+    else if(valid1 || valid2) {
+        float Nz2 = valid1? N1_z2 : N2_z2;
+        N_new_x = sqrt(1.0 - Nz2);
+        N_new_z = sqrt(Nz2);
+    }
+    else {
+        return Ng;
+    }
+
+    return N_new_x*X + N_new_z*Ng;
+}
 
 
 // Color functions
@@ -415,7 +475,7 @@ color transformc (string from, string to, color x)
     return transformc (to, r);
 }
 
- 
+
 
 // Matrix functions
 
@@ -455,7 +515,7 @@ float smooth_linearstep (float edge0, float edge1, float x_, float eps_) {
         else if (x >= eps && x <= 1.0-eps) result = x;
         else if (x >= 1.0+eps)             result = 1;
         else if (x < eps)                  result = rampup (x+eps, 2.0*eps);
-        else /* if (x < 1.0+eps) */        result = 1.0 - rampup (1.0+eps - x, 2.0*eps);
+        else  /* if (x < 1.0+eps) */        result = 1.0 - rampup (1.0+eps - x, 2.0*eps);
     } else {
         result = step (edge0, x_);
     }
@@ -549,14 +609,12 @@ closure color principled_sheen(normal N) BUILTIN;
 closure color principled_clearcoat(normal N, float clearcoat, float clearcoat_roughness) BUILTIN;
 
 // BSSRDF
-closure color bssrdf_cubic(normal N, vector radius, float texture_blur, float sharpness) BUILTIN;
-closure color bssrdf_gaussian(normal N, vector radius, float texture_blur) BUILTIN;
-closure color bssrdf_burley(normal N, vector radius, float texture_blur, color albedo) BUILTIN;
-closure color bssrdf_principled(normal N, vector radius, float texture_blur, color subsurface_color, float roughness) BUILTIN;
+closure color bssrdf(string method, normal N, vector radius, color albedo) BUILTIN;
 
 // Hair
 closure color hair_reflection(normal N, float roughnessu, float roughnessv, vector T, float offset) BUILTIN;
 closure color hair_transmission(normal N, float roughnessu, float roughnessv, vector T, float offset) BUILTIN;
+closure color principled_hair(normal N, color sigma, float roughnessu, float roughnessv, float coat, float alpha, float eta) BUILTIN;
 
 // Volume
 closure color henyey_greenstein(float g) BUILTIN;
@@ -628,4 +686,4 @@ int getmatrix (string fromspace, output matrix M) {
 #undef PERCOMP2
 #undef PERCOMP2F
 
-#endif /* CCL_STDOSL_H */
+#endif  /* CCL_STDOSL_H */

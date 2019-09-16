@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include <string.h>
@@ -55,6 +51,7 @@ extern "C" {
 #include "COM_Converter.h"
 #include "COM_CornerPinNode.h"
 #include "COM_CropNode.h"
+#include "COM_CryptomatteNode.h"
 #include "COM_DefocusNode.h"
 #include "COM_DespeckleNode.h"
 #include "COM_DifferenceMatteNode.h"
@@ -393,7 +390,7 @@ Node *Converter::convert(bNode *b_node)
 		case CMP_NODE_TRACKPOS:
 			node = new TrackPositionNode(b_node);
 			break;
-		/* not inplemented yet */
+		/* not implemented yet */
 		case CMP_NODE_PIXELATE:
 			node = new PixelateNode(b_node);
 			break;
@@ -406,6 +403,9 @@ Node *Converter::convert(bNode *b_node)
 		case CMP_NODE_SUNBEAMS:
 			node = new SunBeamsNode(b_node);
 			break;
+		case CMP_NODE_CRYPTOMATTE:
+			node = new CryptomatteNode(b_node);
+			break;
 	}
 	return node;
 }
@@ -414,7 +414,7 @@ NodeOperation *Converter::convertDataType(NodeOperationOutput *from, NodeOperati
 {
 	DataType fromDatatype = from->getDataType();
 	DataType toDatatype = to->getDataType();
-	
+
 	if (fromDatatype == COM_DT_VALUE && toDatatype == COM_DT_COLOR) {
 		return new ConvertValueToColorOperation();
 	}
@@ -433,7 +433,7 @@ NodeOperation *Converter::convertDataType(NodeOperationOutput *from, NodeOperati
 	else if (fromDatatype == COM_DT_VECTOR && toDatatype == COM_DT_COLOR) {
 		return new ConvertVectorToColorOperation();
 	}
-	
+
 	return NULL;
 }
 

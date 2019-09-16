@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,30 +15,25 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_smooth.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
-
-#include "DNA_meshdata_types.h"
-
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BKE_cdderivedmesh.h"
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
+
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+
+#include "BKE_editmesh.h"
+#include "BKE_library.h"
+#include "BKE_mesh.h"
 #include "BKE_particle.h"
 #include "BKE_deform.h"
 
@@ -58,16 +51,7 @@ static void initData(ModifierData *md)
 	smd->defgrp_name[0] = '\0';
 }
 
-static void copyData(ModifierData *md, ModifierData *target)
-{
-#if 0
-	SmoothModifierData *smd = (SmoothModifierData *) md;
-	SmoothModifierData *tsmd = (SmoothModifierData *) target;
-#endif
-	modifier_copyData_generic(md, target);
-}
-
-static bool isDisabled(ModifierData *md, int UNUSED(useRenderParams))
+static bool isDisabled(const struct Scene *UNUSED(scene), ModifierData *md, bool UNUSED(useRenderParams))
 {
 	SmoothModifierData *smd = (SmoothModifierData *) md;
 	short flag;
@@ -80,19 +64,18 @@ static bool isDisabled(ModifierData *md, int UNUSED(useRenderParams))
 	return 0;
 }
 
-static CustomDataMask requiredDataMask(Object *UNUSED(ob), ModifierData *md)
+static void requiredDataMask(Object *UNUSED(ob), ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
 	SmoothModifierData *smd = (SmoothModifierData *)md;
-	CustomDataMask dataMask = 0;
 
 	/* ask for vertexgroups if we need them */
-	if (smd->defgrp_name[0]) dataMask |= CD_MASK_MDEFORMVERT;
-
-	return dataMask;
+	if (smd->defgrp_name[0] != '\0') {
+		r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+	}
 }
 
 static void smoothModifier_do(
-        SmoothModifierData *smd, Object *ob, DerivedMesh *dm,
+        SmoothModifierData *smd, Object *ob, Mesh *mesh,
         float (*vertexCos)[3], int numVerts)
 {
 	MDeformVert *dvert = NULL;
@@ -115,16 +98,16 @@ static void smoothModifier_do(
 	fac = smd->fac;
 	facm = 1 - fac;
 
-	if (dm->getNumVerts(dm) == numVerts) {
-		medges = dm->getEdgeArray(dm);
-		numDMEdges = dm->getNumEdges(dm);
+	if (mesh != NULL) {
+		medges = mesh->medge;
+		numDMEdges = mesh->totedge;
 	}
 	else {
 		medges = NULL;
 		numDMEdges = 0;
 	}
 
-	modifier_get_vgroup(ob, dm, smd->defgrp_name, &dvert, &defgrp_index);
+	MOD_get_vgroup(ob, mesh, smd->defgrp_name, &dvert, &defgrp_index);
 
 	/* NOTICE: this can be optimized a little bit by moving the
 	 * if (dvert) out of the loop, if needed */
@@ -173,7 +156,7 @@ static void smoothModifier_do(
 
 				/* fp is the sum of uctmp[i] verts, so must be averaged */
 				facw = 0.0f;
-				if (uctmp[i]) 
+				if (uctmp[i])
 					facw = f / (float)uctmp[i];
 
 				if (flag & MOD_SMOOTH_X)
@@ -194,7 +177,7 @@ static void smoothModifier_do(
 
 				/* fp is the sum of uctmp[i] verts, so must be averaged */
 				facw = 0.0f;
-				if (uctmp[i]) 
+				if (uctmp[i])
 					facw = fac / (float)uctmp[i];
 
 				if (flag & MOD_SMOOTH_X)
@@ -215,29 +198,38 @@ static void smoothModifier_do(
 	MEM_freeN(uctmp);
 }
 
-static void deformVerts(ModifierData *md, Object *ob, DerivedMesh *derivedData,
-                        float (*vertexCos)[3], int numVerts, ModifierApplyFlag UNUSED(flag))
+static void deformVerts(
+        ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh,
+        float (*vertexCos)[3], int numVerts)
 {
-	DerivedMesh *dm = get_dm(ob, NULL, derivedData, NULL, false, false);
+	SmoothModifierData *smd = (SmoothModifierData *)md;
+	Mesh *mesh_src = NULL;
 
-	smoothModifier_do((SmoothModifierData *)md, ob, dm,
-	                  vertexCos, numVerts);
+	/* mesh_src is needed for vgroups, and taking edges into account. */
+	mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, numVerts, false, false);
 
-	if (dm != derivedData)
-		dm->release(dm);
+	smoothModifier_do(smd, ctx->object, mesh_src, vertexCos, numVerts);
+
+	if (!ELEM(mesh_src, NULL, mesh)) {
+		BKE_id_free(NULL, mesh_src);
+	}
 }
 
 static void deformVertsEM(
-        ModifierData *md, Object *ob, struct BMEditMesh *editData,
-        DerivedMesh *derivedData, float (*vertexCos)[3], int numVerts)
+        ModifierData *md, const ModifierEvalContext *ctx, struct BMEditMesh *editData,
+        Mesh *mesh, float (*vertexCos)[3], int numVerts)
 {
-	DerivedMesh *dm = get_dm(ob, editData, derivedData, NULL, false, false);
+	SmoothModifierData *smd = (SmoothModifierData *)md;
+	Mesh *mesh_src = NULL;
 
-	smoothModifier_do((SmoothModifierData *)md, ob, dm,
-	                  vertexCos, numVerts);
+	/* mesh_src is needed for vgroups, and taking edges into account. */
+	mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
 
-	if (dm != derivedData)
-		dm->release(dm);
+	smoothModifier_do(smd, ctx->object, mesh_src, vertexCos, numVerts);
+
+	if (!ELEM(mesh_src, NULL, mesh)) {
+		BKE_id_free(NULL, mesh_src);
+	}
 }
 
 
@@ -250,22 +242,23 @@ ModifierTypeInfo modifierType_Smooth = {
 	                        eModifierTypeFlag_AcceptsCVs |
 	                        eModifierTypeFlag_SupportsEditmode,
 
-	/* copyData */          copyData,
+	/* copyData */          modifier_copyData_generic,
+
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     deformVertsEM,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     NULL,
-	/* applyModifierEM */   NULL,
+
 	/* initData */          initData,
 	/* requiredDataMask */  requiredDataMask,
 	/* freeData */          NULL,
 	/* isDisabled */        isDisabled,
-	/* updateDepgraph */    NULL,
 	/* updateDepsgraph */   NULL,
 	/* dependsOnTime */     NULL,
 	/* dependsOnNormals */	NULL,
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

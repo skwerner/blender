@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_clip/clip_ops.c
- *  \ingroup spclip
+/** \file
+ * \ingroup spclip
  */
 
 #include <errno.h>
@@ -56,11 +48,10 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_depsgraph.h"
-#include "BKE_report.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_movieclip.h"
+#include "BKE_report.h"
 #include "BKE_sound.h"
 #include "BKE_tracking.h"
 
@@ -82,6 +73,8 @@
 #include "UI_view2d.h"
 
 #include "PIL_time.h"
+
+#include "DEG_depsgraph_build.h"
 
 #include "clip_intern.h"	// own include
 
@@ -113,12 +106,16 @@ static void sclip_zoom_set(const bContext *C, float zoom, float location[2])
 	}
 
 	if ((U.uiflag & USER_ZOOM_TO_MOUSEPOS) && location) {
-		float dx, dy;
+		float aspx, aspy, w, h, dx, dy;
 
 		ED_space_clip_get_size(sc, &width, &height);
+		ED_space_clip_get_aspect(sc, &aspx, &aspy);
 
-		dx = ((location[0] - 0.5f) * width - sc->xof) * (sc->zoom - oldzoom) / sc->zoom;
-		dy = ((location[1] - 0.5f) * height - sc->yof) * (sc->zoom - oldzoom) / sc->zoom;
+		w = width * aspx;
+		h = height * aspy;
+
+		dx = ((location[0] - 0.5f) * w - sc->xof) * (sc->zoom - oldzoom) / sc->zoom;
+		dy = ((location[1] - 0.5f) * h - sc->yof) * (sc->zoom - oldzoom) / sc->zoom;
 
 		if (sc->flag & SC_LOCK_SELECTION) {
 			sc->xlockof += dx;
@@ -196,8 +193,9 @@ static int open_exec(bContext *C, wmOperator *op)
 		bool relative = RNA_boolean_get(op->ptr, "relative_path");
 
 		RNA_string_get(op->ptr, "directory", dir_only);
-		if (relative)
-			BLI_path_rel(dir_only, G.main->name);
+		if (relative) {
+			BLI_path_rel(dir_only, CTX_data_main(C)->name);
+		}
 
 		prop = RNA_struct_find_property(op->ptr, "files");
 		RNA_property_collection_lookup_int(op->ptr, prop, 0, &fileptr);
@@ -248,7 +246,7 @@ static int open_exec(bContext *C, wmOperator *op)
 
 	WM_event_add_notifier(C, NC_MOVIECLIP | NA_ADDED, clip);
 
-	DAG_relations_tag_update(bmain);
+	DEG_relations_tag_update(bmain);
 	MEM_freeN(op->customdata);
 
 	return OPERATOR_FINISHED;
@@ -266,7 +264,7 @@ static int open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event)
 	if (clip) {
 		BLI_strncpy(path, clip->name, sizeof(path));
 
-		BLI_path_abs(path, G.main->name);
+		BLI_path_abs(path, CTX_data_main(C)->name);
 		BLI_parent_dir(path);
 	}
 	else {
@@ -316,7 +314,8 @@ static int reload_exec(bContext *C, wmOperator *UNUSED(op))
 	if (!clip)
 		return OPERATOR_CANCELLED;
 
-	BKE_movieclip_reload(clip);
+	WM_jobs_kill_type(CTX_wm_manager(C), NULL, WM_JOB_TYPE_CLIP_PREFETCH);
+	BKE_movieclip_reload(CTX_data_main(C), clip);
 
 	WM_event_add_notifier(C, NC_MOVIECLIP | NA_EDITED, clip);
 
@@ -466,7 +465,7 @@ static void view_pan_cancel(bContext *C, wmOperator *op)
 void CLIP_OT_view_pan(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "View Pan";
+	ot->name = "Pan View";
 	ot->idname = "CLIP_OT_view_pan";
 	ot->description = "Pan the view";
 
@@ -897,7 +896,7 @@ void CLIP_OT_view_selected(wmOperatorType *ot)
 
 /********************** change frame operator *********************/
 
-static int change_frame_poll(bContext *C)
+static bool change_frame_poll(bContext *C)
 {
 	/* prevent changes during render */
 	if (G.is_rendering)
@@ -1313,7 +1312,7 @@ static void proxy_endjob(void *pjv)
 
 	if (pj->clip->source == MCLIP_SRC_MOVIE) {
 		/* Timecode might have changed, so do a full reload to deal with this. */
-		BKE_movieclip_reload(pj->clip);
+		BKE_movieclip_reload(pj->main, pj->clip);
 	}
 	else {
 		/* For image sequences we'll preserve original cache. */
@@ -1584,7 +1583,7 @@ void CLIP_OT_cursor_set(wmOperatorType *ot)
 	                     "Cursor location in normalized clip coordinates", -10.0f, 10.0f);
 }
 
-/********************** macroses *********************/
+/********************** macros *********************/
 
 void ED_operatormacros_clip(void)
 {

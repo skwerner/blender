@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,9 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 Kévin Dietrich.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #include "abc_curves.h"
@@ -37,8 +36,8 @@ extern "C" {
 
 #include "BLI_listbase.h"
 
-#include "BKE_cdderivedmesh.h"
 #include "BKE_curve.h"
+#include "BKE_mesh.h"
 #include "BKE_object.h"
 
 #include "ED_curve.h"
@@ -71,12 +70,11 @@ using Alembic::AbcGeom::OV2fGeomParam;
 
 /* ************************************************************************** */
 
-AbcCurveWriter::AbcCurveWriter(Scene *scene,
-                               Object *ob,
+AbcCurveWriter::AbcCurveWriter(Object *ob,
                                AbcTransformWriter *parent,
                                uint32_t time_sampling,
                                ExportSettings &settings)
-    : AbcObjectWriter(scene, ob, time_sampling, settings, parent)
+    : AbcObjectWriter(ob, time_sampling, settings, parent)
 {
 	OCurves curves(parent->alembicXform(), m_name, m_time_sampling);
 	m_schema = curves.getSchema();
@@ -154,7 +152,7 @@ void AbcCurveWriter::do_write()
 		if (nurbs->knotsu != NULL) {
 			const size_t num_knots = KNOTSU(nurbs);
 
-			/* Add an extra knot at the beggining and end of the array since most apps
+			/* Add an extra knot at the beginning and end of the array since most apps
 			 * require/expect them. */
 			knots.resize(num_knots + 2);
 
@@ -194,6 +192,27 @@ void AbcCurveWriter::do_write()
 	m_sample.setSelfBounds(bounds());
 	m_schema.set(m_sample);
 }
+
+
+AbcCurveMeshWriter::AbcCurveMeshWriter(Object *ob,
+                                       AbcTransformWriter *parent,
+                                       uint32_t time_sampling,
+                                       ExportSettings &settings)
+    : AbcGenericMeshWriter(ob, parent, time_sampling, settings)
+{}
+
+Mesh *AbcCurveMeshWriter::getEvaluatedMesh(Scene * /*scene_eval*/, Object *ob_eval, bool &r_needsfree)
+{
+	if (ob_eval->runtime.mesh_eval != NULL) {
+		/* Mesh_eval only exists when generative modifiers are in use. */
+		r_needsfree = false;
+		return ob_eval->runtime.mesh_eval;
+	}
+
+	r_needsfree = true;
+	return BKE_mesh_new_nomain_from_curve(ob_eval);
+}
+
 
 /* ************************************************************************** */
 
@@ -257,9 +276,21 @@ void AbcCurveReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSele
 
 /* ************************************************************************** */
 
-void read_curve_sample(Curve *cu, const ICurvesSchema &schema, const ISampleSelector &sample_sel)
+void AbcCurveReader::read_curve_sample(Curve *cu, const ICurvesSchema &schema, const ISampleSelector &sample_sel)
 {
-	ICurvesSchema::Sample smp = schema.getValue(sample_sel);
+	ICurvesSchema::Sample smp;
+	try {
+		smp = schema.getValue(sample_sel);
+	}
+	catch(Alembic::Util::Exception &ex) {
+		printf("Alembic: error reading curve sample for '%s/%s' at time %f: %s\n",
+		       m_iobject.getFullName().c_str(),
+		       schema.getName().c_str(),
+		       sample_sel.getRequestedTime(),
+		       ex.what());
+		return;
+	}
+
 	const Int32ArraySamplePtr num_vertices = smp.getCurvesNumVertices();
 	const P3fArraySamplePtr positions = smp.getPositions();
 	const FloatArraySamplePtr weights = smp.getPositionWeights();
@@ -399,35 +430,62 @@ void read_curve_sample(Curve *cu, const ICurvesSchema &schema, const ISampleSele
 	}
 }
 
-/* NOTE: Alembic only stores data about control points, but the DerivedMesh
+/* NOTE: Alembic only stores data about control points, but the Mesh
  * passed from the cache modifier contains the displist, which has more data
  * than the control points, so to avoid corrupting the displist we modify the
- * object directly and create a new DerivedMesh from that. Also we might need to
+ * object directly and create a new Mesh from that. Also we might need to
  * create new or delete existing NURBS in the curve.
  */
-DerivedMesh *AbcCurveReader::read_derivedmesh(DerivedMesh * /*dm*/,
-                                              const ISampleSelector &sample_sel,
-                                              int /*read_flag*/,
-                                              const char ** /*err_str*/)
+Mesh *AbcCurveReader::read_mesh(Mesh *existing_mesh,
+                                const ISampleSelector &sample_sel,
+                                int /*read_flag*/,
+                                const char **err_str)
 {
-	const ICurvesSchema::Sample sample = m_curves_schema.getValue(sample_sel);
+	ICurvesSchema::Sample sample;
+
+	try {
+		sample = m_curves_schema.getValue(sample_sel);
+	}
+	catch(Alembic::Util::Exception &ex) {
+		*err_str = "Error reading curve sample; more detail on the console";
+		printf("Alembic: error reading curve sample for '%s/%s' at time %f: %s\n",
+		       m_iobject.getFullName().c_str(),
+		       m_curves_schema.getName().c_str(),
+		       sample_sel.getRequestedTime(),
+		       ex.what());
+		return existing_mesh;
+	}
 
 	const P3fArraySamplePtr &positions = sample.getPositions();
 	const Int32ArraySamplePtr num_vertices = sample.getCurvesNumVertices();
 
 	int vertex_idx = 0;
-	int curve_idx = 0;
+	int curve_idx;
 	Curve *curve = static_cast<Curve *>(m_object->data);
 
 	const int curve_count = BLI_listbase_count(&curve->nurb);
+	bool same_topology = curve_count == num_vertices->size();
 
-	if (curve_count != num_vertices->size()) {
+	if (same_topology) {
+		Nurb *nurbs = static_cast<Nurb *>(curve->nurb.first);
+		for (curve_idx = 0; nurbs; nurbs = nurbs->next, ++curve_idx) {
+			const int num_in_alembic = (*num_vertices)[curve_idx];
+			const int num_in_blender = nurbs->pntsu;
+
+			if (num_in_alembic != num_in_blender) {
+				same_topology = false;
+				break;
+			}
+		}
+	}
+
+	if (!same_topology) {
 		BKE_nurbList_free(&curve->nurb);
 		read_curve_sample(curve, m_curves_schema, sample_sel);
 	}
 	else {
 		Nurb *nurbs = static_cast<Nurb *>(curve->nurb.first);
-		for (; nurbs; nurbs = nurbs->next, ++curve_idx) {
+		for (curve_idx = 0; nurbs; nurbs = nurbs->next, ++curve_idx) {
 			const int totpoint = (*num_vertices)[curve_idx];
 
 			if (nurbs->bp) {
@@ -449,5 +507,5 @@ DerivedMesh *AbcCurveReader::read_derivedmesh(DerivedMesh * /*dm*/,
 		}
 	}
 
-	return CDDM_from_curve(m_object);
+	return BKE_mesh_new_nomain_from_curve(m_object);
 }

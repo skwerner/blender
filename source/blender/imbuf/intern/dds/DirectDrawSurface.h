@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributors: Amorilia (amorilia@users.sourceforge.net)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/dds/DirectDrawSurface.h
- *  \ingroup imbdds
+/** \file
+ * \ingroup imbdds
  */
 
 
@@ -33,7 +27,7 @@
  */
 
 // Copyright NVIDIA Corporation 2007 -- Ignacio Castano <icastano@nvidia.com>
-// 
+//
 // Permission is hereby granted, free of charge, to any person
 // obtaining a copy of this software and associated documentation
 // files (the "Software"), to deal in the Software without
@@ -42,10 +36,10 @@
 // copies of the Software, and to permit persons to whom the
 // Software is furnished to do so, subject to the following
 // conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be
 // included in all copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 // EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
 // OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -109,7 +103,7 @@ struct DDSHeader {
 
 	// Helper methods.
 	DDSHeader();
-	
+
 	void setWidth(uint w);
 	void setHeight(uint h);
 	void setDepth(uint d);
@@ -128,9 +122,9 @@ struct DDSHeader {
 	void setSrgbFlag(bool b);
 	void setHasAlphaFlag(bool b);
 	void setUserVersion(int version);
-	
+
 	/*void swapBytes();*/
-	
+
 	bool hasDX10Header() const;
 	uint signature() const;
 	uint toolVersion() const;
@@ -147,12 +141,12 @@ class DirectDrawSurface
 public:
 	DirectDrawSurface(unsigned char *mem, uint size);
 	~DirectDrawSurface();
-	
+
 	bool isValid() const;
 	bool isSupported() const;
 
 	bool hasAlpha() const;
-	
+
 	uint mipmapCount() const;
 	uint fourCC() const;
 	uint width() const;
@@ -166,26 +160,26 @@ public:
 	void setNormalFlag(bool b);
 	void setHasAlphaFlag(bool b);
 	void setUserVersion(int version);
-	
+
 	void mipmap(Image *img, uint f, uint m);
 	void *readData(uint &size);
 	//	void mipmap(FloatImage *img, uint f, uint m);
-	
+
 	void printInfo() const;
 
 private:
-	
+
 	uint blockSize() const;
 	uint faceSize() const;
 	uint mipmapSize(uint m) const;
-	
+
 	uint offset(uint f, uint m);
-	
+
 	void readLinearImage(Image * img);
 	void readBlockImage(Image * img);
 	void readBlock(ColorBlock * rgba);
-	
-	
+
+
 private:
 	Stream stream; // memory where DDS file resides
 	DDSHeader header;

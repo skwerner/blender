@@ -29,26 +29,28 @@ _modules = [
     "anim",
     "clip",
     "console",
+    "constraint",
     "file",
     "image",
     "mask",
     "mesh",
     "node",
-    "object_align",
     "object",
-    "object_randomize_transform",
+    "object_align",
     "object_quick_effects",
+    "object_randomize_transform",
     "presets",
     "rigidbody",
     "screen_play_rendered_anim",
     "sequencer",
+    "userpref",
     "uvcalc_follow_active",
     "uvcalc_lightmap",
     "uvcalc_smart_project",
     "vertexpaint_dirt",
     "view3d",
     "wm",
-    ]
+]
 
 import bpy
 

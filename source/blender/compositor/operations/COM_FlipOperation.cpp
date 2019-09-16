@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_FlipOperation.h"
@@ -46,14 +42,14 @@ void FlipOperation::executePixelSampled(float output[4], float x, float y, Pixel
 {
 	float nx = this->m_flipX ? ((int)this->getWidth() - 1) - x : x;
 	float ny = this->m_flipY ? ((int)this->getHeight() - 1) - y : y;
-	
+
 	this->m_inputOperation->readSampled(output, nx, ny, sampler);
 }
 
 bool FlipOperation::determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output)
 {
 	rcti newInput;
-	
+
 	if (this->m_flipX) {
 		const int w = (int)this->getWidth() - 1;
 		newInput.xmax = (w - input->xmin) + 1;
@@ -72,6 +68,6 @@ bool FlipOperation::determineDependingAreaOfInterest(rcti *input, ReadBufferOper
 		newInput.ymin = input->ymin;
 		newInput.ymax = input->ymax;
 	}
-	
+
 	return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
 }

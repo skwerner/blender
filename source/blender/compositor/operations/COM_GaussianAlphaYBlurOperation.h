@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,14 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
- *		Campbell Barton
+ * Copyright 2011, Blender Foundation.
  */
 
-#ifndef _COM_GaussianAlphaYBlurOperation_h
-#define _COM_GaussianAlphaYBlurOperation_h
+#ifndef __COM_GAUSSIANALPHAYBLUROPERATION_H__
+#define __COM_GAUSSIANALPHAYBLUROPERATION_H__
 #include "COM_NodeOperation.h"
 #include "COM_BlurBaseOperation.h"
 
@@ -36,14 +31,14 @@ private:
 	void updateGauss();
 public:
 	GaussianAlphaYBlurOperation();
-	
+
 	/**
 	 * the inner loop of this program
 	 */
 	void executePixel(float output[4], int x, int y, void *data);
-	
+
 	/**
-	 * @brief initialize the execution
+	 * \brief initialize the execution
 	 */
 	void initExecution();
 
@@ -51,7 +46,7 @@ public:
 	 * Deinitialize the execution
 	 */
 	void deinitExecution();
-	
+
 	void *initializeTileData(rcti *rect);
 	bool determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output);
 

@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_CompositorNode.h"
@@ -49,7 +45,7 @@ void CompositorNode::convertToOperations(NodeConverter &converter, const Composi
 	/* alpha socket gives either 1 or a custom alpha value if "use alpha" is enabled */
 	compositorOperation->setUseAlphaInput(ignore_alpha || alphaSocket->isLinked());
 	compositorOperation->setActive(is_active);
-	
+
 	converter.addOperation(compositorOperation);
 	converter.mapInputSocket(imageSocket, compositorOperation->getInputSocket(0));
 	/* only use alpha link if "use alpha" is enabled */
@@ -58,6 +54,6 @@ void CompositorNode::convertToOperations(NodeConverter &converter, const Composi
 	else
 		converter.mapInputSocket(alphaSocket, compositorOperation->getInputSocket(1));
 	converter.mapInputSocket(depthSocket, compositorOperation->getInputSocket(2));
-	
+
 	converter.addNodeInputPreview(imageSocket);
 }

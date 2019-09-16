@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,33 +15,23 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_fluidsim.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
-
-#include "DNA_scene_types.h"
-#include "DNA_object_fluidsim.h"
-#include "DNA_object_types.h"
 
 #include "BLI_utildefines.h"
 
+#include "DNA_mesh_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_object_fluidsim_types.h"
+#include "DNA_object_types.h"
 
-#include "BKE_cdderivedmesh.h"
+#include "BKE_layer.h"
 #include "BKE_modifier.h"
 
-#include "depsgraph_private.h"
 #include "DEG_depsgraph_build.h"
 
 #include "MOD_fluidsim_util.h"
@@ -55,103 +43,79 @@
 static void initData(ModifierData *md)
 {
 	FluidsimModifierData *fluidmd = (FluidsimModifierData *) md;
-	
+
 	fluidsim_init(fluidmd);
 }
 static void freeData(ModifierData *md)
 {
 	FluidsimModifierData *fluidmd = (FluidsimModifierData *) md;
-	
+
 	fluidsim_free(fluidmd);
 }
 
-static void copyData(ModifierData *md, ModifierData *target)
+static void copyData(const ModifierData *md, ModifierData *target, const int UNUSED(flag))
 {
-	FluidsimModifierData *fluidmd = (FluidsimModifierData *) md;
+	const FluidsimModifierData *fluidmd = (const FluidsimModifierData *) md;
 	FluidsimModifierData *tfluidmd = (FluidsimModifierData *) target;
-	
-	fluidsim_free(tfluidmd);
 
-	if (fluidmd->fss) {
-		tfluidmd->fss = MEM_dupallocN(fluidmd->fss);
-		if (tfluidmd->fss && (tfluidmd->fss->meshVelocities != NULL)) {
-			tfluidmd->fss->meshVelocities = MEM_dupallocN(tfluidmd->fss->meshVelocities);
-		}
+	/* Free any FSS that was allocated in initData() */
+	if (tfluidmd->fss) {
+		MEM_SAFE_FREE(tfluidmd->fss->meshVelocities);
+		MEM_freeN(tfluidmd->fss);
+	}
+
+	if (fluidmd->fss == NULL) {
+		tfluidmd->fss = NULL;
+		return;
+	}
+
+	tfluidmd->fss = MEM_dupallocN(fluidmd->fss);
+	if (tfluidmd->fss->meshVelocities != NULL) {
+		tfluidmd->fss->meshVelocities = MEM_dupallocN(tfluidmd->fss->meshVelocities);
 	}
 }
 
 
 
-static DerivedMesh *applyModifier(ModifierData *md, Object *ob,
-                                  DerivedMesh *dm,
-                                  ModifierApplyFlag flag)
+static Mesh *applyModifier(
+        ModifierData *md, const ModifierEvalContext *ctx,
+        Mesh *mesh)
 {
 	FluidsimModifierData *fluidmd = (FluidsimModifierData *) md;
-	DerivedMesh *result = NULL;
-	
+	Mesh *result = NULL;
+
 	/* check for alloc failing */
 	if (!fluidmd->fss) {
 		initData(md);
-		
+
 		if (!fluidmd->fss) {
-			return dm;
+			return mesh;
 		}
 	}
 
-	result = fluidsimModifier_do(fluidmd, md->scene, ob, dm, flag & MOD_APPLY_RENDER, flag & MOD_APPLY_USECACHE);
+	result = fluidsimModifier_do(fluidmd, ctx, mesh);
 
-	return result ? result : dm;
+	return result ? result : mesh;
 }
 
-static void updateDepgraph(
-        ModifierData *md, DagForest *forest,
-        struct Main *UNUSED(bmain), Scene *scene,
-        Object *ob, DagNode *obNode)
-{
-	FluidsimModifierData *fluidmd = (FluidsimModifierData *) md;
-	Base *base;
-
-	if (fluidmd && fluidmd->fss) {
-		if (fluidmd->fss->type == OB_FLUIDSIM_DOMAIN) {
-			for (base = scene->base.first; base; base = base->next) {
-				Object *ob1 = base->object;
-				if (ob1 != ob) {
-					FluidsimModifierData *fluidmdtmp =
-					        (FluidsimModifierData *)modifiers_findByType(ob1, eModifierType_Fluidsim);
-					
-					/* only put dependencies from NON-DOMAIN fluids in here */
-					if (fluidmdtmp && fluidmdtmp->fss && (fluidmdtmp->fss->type != OB_FLUIDSIM_DOMAIN)) {
-						DagNode *curNode = dag_get_node(forest, ob1);
-						dag_add_relation(forest, curNode, obNode, DAG_RL_DATA_DATA | DAG_RL_OB_DATA, "Fluidsim Object");
-					}
-				}
-			}
-		}
-	}
-}
-
-static void updateDepsgraph(ModifierData *md,
-                            struct Main *UNUSED(bmain),
-                            struct Scene *scene,
-                            Object *ob,
-                            struct DepsNodeHandle *node)
+static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	FluidsimModifierData *fluidmd = (FluidsimModifierData *) md;
 	if (fluidmd && fluidmd->fss) {
 		if (fluidmd->fss->type == OB_FLUIDSIM_DOMAIN) {
-			Base *base;
-			for (base = scene->base.first; base; base = base->next) {
-				Object *ob1 = base->object;
-				if (ob1 != ob) {
+			FOREACH_SCENE_OBJECT_BEGIN(ctx->scene, ob1)
+			{
+				if (ob1 != ctx->object) {
 					FluidsimModifierData *fluidmdtmp =
 					        (FluidsimModifierData *)modifiers_findByType(ob1, eModifierType_Fluidsim);
 
 					/* Only put dependencies from NON-DOMAIN fluids in here. */
 					if (fluidmdtmp && fluidmdtmp->fss && (fluidmdtmp->fss->type != OB_FLUIDSIM_DOMAIN)) {
-						DEG_add_object_relation(node, ob1, DEG_OB_COMP_TRANSFORM, "Fluidsim Object");
+						DEG_add_object_relation(ctx->node, ob1, DEG_OB_COMP_TRANSFORM, "Fluidsim Object");
 					}
 				}
 			}
+			FOREACH_SCENE_OBJECT_END;
 		}
 	}
 }
@@ -173,21 +137,22 @@ ModifierTypeInfo modifierType_Fluidsim = {
 	                        eModifierTypeFlag_Single,
 
 	/* copyData */          copyData,
+
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     applyModifier,
-	/* applyModifierEM */   NULL,
+
 	/* initData */          initData,
 	/* requiredDataMask */  NULL,
 	/* freeData */          freeData,
 	/* isDisabled */        NULL,
-	/* updateDepgraph */    updateDepgraph,
 	/* updateDepsgraph */   updateDepsgraph,
 	/* dependsOnTime */     dependsOnTime,
 	/* dependsOnNormals */	NULL,
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

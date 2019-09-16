@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation, Joshua Leung.
  * All rights reserved.
- *
- * 
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_nla/nla_intern.h
- *  \ingroup spnla
+/** \file
+ * \ingroup spnla
  */
 
 #ifndef __NLA_INTERN_H__
@@ -60,13 +53,13 @@ enum eNlaEdit_LeftRightSelect_Mode {
 	NLAEDIT_LRSEL_TEST  = -1,
 	NLAEDIT_LRSEL_NONE,
 	NLAEDIT_LRSEL_LEFT,
-	NLAEDIT_LRSEL_RIGHT
+	NLAEDIT_LRSEL_RIGHT,
 };
 
 /* --- */
 
-void NLA_OT_select_all_toggle(wmOperatorType *ot);
-void NLA_OT_select_border(wmOperatorType *ot);
+void NLA_OT_select_all(wmOperatorType *ot);
+void NLA_OT_select_box(wmOperatorType *ot);
 void NLA_OT_select_leftright(wmOperatorType *ot);
 void NLA_OT_click_select(wmOperatorType *ot);
 
@@ -78,7 +71,7 @@ enum eNlaEdit_Snap_Mode {
 	NLAEDIT_SNAP_CFRA = 1,
 	NLAEDIT_SNAP_NEAREST_FRAME,
 	NLAEDIT_SNAP_NEAREST_SECOND,
-	NLAEDIT_SNAP_NEAREST_MARKER
+	NLAEDIT_SNAP_NEAREST_MARKER,
 };
 
 /* --- */
@@ -148,8 +141,8 @@ void NLA_OT_selected_objects_add(wmOperatorType *ot);
 /* **************************************** */
 /* nla_ops.c */
 
-int nlaop_poll_tweakmode_off(bContext *C);
-int nlaop_poll_tweakmode_on(bContext *C);
+bool nlaop_poll_tweakmode_off(bContext *C);
+bool nlaop_poll_tweakmode_on(bContext *C);
 
 bool nlaedit_is_tweakmode_on(bAnimContext *ac);
 
@@ -159,4 +152,3 @@ void nla_operatortypes(void);
 void nla_keymap(wmKeyConfig *keyconf);
 
 #endif /* __NLA_INTERN_H__ */
-

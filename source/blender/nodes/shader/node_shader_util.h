@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/shader/node_shader_util.h
- *  \ingroup nodes
+/** \file
+ * \ingroup nodes
  */
 
 
@@ -64,8 +56,6 @@
 #include "BKE_node.h"
 #include "BKE_texture.h"
 
-#include "BKE_library.h"
-
 #include "NOD_shader.h"
 #include "node_util.h"
 
@@ -78,19 +68,19 @@
 #include "RE_shader_ext.h"
 
 #include "GPU_material.h"
+#include "GPU_uniformbuffer.h"
 
 
-int sh_node_poll_default(struct bNodeType *ntype, struct bNodeTree *ntree);
+bool sh_node_poll_default(struct bNodeType *ntype, struct bNodeTree *ntree);
 void sh_node_type_base(struct bNodeType *ntype, int type, const char *name, short nclass, short flag);
 
 
 /* ********* exec data struct, remains internal *********** */
 
 typedef struct ShaderCallData {
-	ShadeInput *shi;		/* from render pipe */
-	ShadeResult *shr;		/* from render pipe */
+	/* Empty for now, may be reused if we convert shader to texture nodes. */
+	int dummy;
 } ShaderCallData;
-
 
 void nodestack_get_vec(float *in, short type_in, bNodeStack *ns);
 
@@ -98,6 +88,6 @@ void node_gpu_stack_from_data(struct GPUNodeStack *gs, int type, struct bNodeSta
 void node_data_from_gpu_stack(struct bNodeStack *ns, struct GPUNodeStack *gs);
 void node_shader_gpu_tex_mapping(struct GPUMaterial *mat, struct bNode *node, struct GPUNodeStack *in, struct GPUNodeStack *out);
 
-void ntreeExecGPUNodes(struct bNodeTreeExec *exec, struct GPUMaterial *mat, int do_outputs, short compatibility);
+void ntreeExecGPUNodes(struct bNodeTreeExec *exec, struct GPUMaterial *mat, struct bNode *output_node);
 
 #endif

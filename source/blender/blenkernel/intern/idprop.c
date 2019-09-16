@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Joseph Eagar
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/idprop.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdio.h>
@@ -40,6 +34,8 @@
 #include "BKE_idprop.h"
 #include "BKE_library.h"
 
+#include "CLG_log.h"
+
 #include "MEM_guardedalloc.h"
 
 #include "BLI_strict_flags.h"
@@ -52,6 +48,8 @@
  */
 #define IDP_ARRAY_REALLOC_LIMIT 200
 
+static CLG_LogRef LOG = {"bke.idprop"};
+
 /*local size table.*/
 static size_t idp_size_table[] = {
 	1, /*strings*/
@@ -62,7 +60,7 @@ static size_t idp_size_table[] = {
 	0, /*arrays don't have a fixed size*/
 	sizeof(ListBase), /*Group type*/
 	sizeof(void *),
-	sizeof(double)
+	sizeof(double),
 };
 
 
@@ -86,7 +84,7 @@ IDProperty *IDP_NewIDPArray(const char *name)
 	prop->type = IDP_IDPARRAY;
 	prop->len = 0;
 	BLI_strncpy(prop->name, name, MAX_IDPROP_NAME);
-	
+
 	return prop;
 }
 
@@ -113,14 +111,14 @@ IDProperty *IDP_CopyIDPArray(const IDProperty *array, const int flag)
 		memcpy(GETPROP(narray, i), tmp, sizeof(IDProperty));
 		MEM_freeN(tmp);
 	}
-	
+
 	return narray;
 }
 
 static void IDP_FreeIDPArray(IDProperty *prop, const bool do_id_user)
 {
 	int i;
-	
+
 	BLI_assert(prop->type == IDP_IDPARRAY);
 
 	for (i = 0; i < prop->len; i++)
@@ -330,9 +328,9 @@ static IDProperty *IDP_CopyArray(const IDProperty *prop, const int flag)
 
 /**
  *
- * \param st  The string to assign.
- * \param name  The property name.
- * \param maxlen  The size of the new string (including the \0 terminator).
+ * \param st: The string to assign.
+ * \param name: The property name.
+ * \param maxlen: The size of the new string (including the \0 terminator).
  * \return The new string property.
  */
 IDProperty *IDP_NewString(const char *st, const char *name, int maxlen)
@@ -472,10 +470,11 @@ static IDProperty *IDP_CopyID(const IDProperty *prop, const int flag)
 static IDProperty *IDP_CopyGroup(const IDProperty *prop, const int flag)
 {
 	IDProperty *newp, *link;
-	
+
 	BLI_assert(prop->type == IDP_GROUP);
 	newp = idp_generic_copy(prop, flag);
 	newp->len = prop->len;
+	newp->subtype = prop->subtype;
 
 	for (link = prop->data.group.first; link; link = link->next) {
 		BLI_addtail(&newp->data.group, IDP_CopyProperty_ex(link, flag));
@@ -579,10 +578,9 @@ void IDP_ReplaceGroupInGroup(IDProperty *dest, const IDProperty *src)
 void IDP_ReplaceInGroup_ex(IDProperty *group, IDProperty *prop, IDProperty *prop_exist)
 {
 	BLI_assert(group->type == IDP_GROUP);
-
 	BLI_assert(prop_exist == IDP_GetPropertyFromGroup(group, prop->name));
 
-	if ((prop_exist = IDP_GetPropertyFromGroup(group, prop->name))) {
+	if (prop_exist != NULL) {
 		BLI_insertlinkreplace(&group->data.group, prop_exist, prop);
 		IDP_FreeProperty(prop_exist);
 		MEM_freeN(prop_exist);
@@ -602,8 +600,9 @@ void IDP_ReplaceInGroup(IDProperty *group, IDProperty *prop)
 
 /**
  * If a property is missing in \a dest, add it.
+ * Do it recursively.
  */
-void IDP_MergeGroup(IDProperty *dest, const IDProperty *src, const bool do_overwrite)
+void IDP_MergeGroup_ex(IDProperty *dest, const IDProperty *src, const bool do_overwrite, const int flag)
 {
 	IDProperty *prop;
 
@@ -612,19 +611,44 @@ void IDP_MergeGroup(IDProperty *dest, const IDProperty *src, const bool do_overw
 
 	if (do_overwrite) {
 		for (prop = src->data.group.first; prop; prop = prop->next) {
-			IDProperty *copy = IDP_CopyProperty(prop);
+			if (prop->type == IDP_GROUP) {
+				IDProperty *prop_exist = IDP_GetPropertyFromGroup(dest, prop->name);
+
+				if (prop_exist != NULL) {
+					IDP_MergeGroup_ex(prop_exist, prop, do_overwrite, flag);
+					continue;
+				}
+			}
+
+			IDProperty *copy = IDP_CopyProperty_ex(prop, flag);
 			IDP_ReplaceInGroup(dest, copy);
 		}
 	}
 	else {
 		for (prop = src->data.group.first; prop; prop = prop->next) {
-			if (IDP_GetPropertyFromGroup(dest, prop->name) == NULL) {
-				IDProperty *copy = IDP_CopyProperty(prop);
+			IDProperty *prop_exist = IDP_GetPropertyFromGroup(dest, prop->name);
+			if (prop_exist != NULL) {
+				if (prop->type == IDP_GROUP) {
+					IDP_MergeGroup_ex(prop_exist, prop, do_overwrite, flag);
+					continue;
+				}
+			}
+			else {
+				IDProperty *copy = IDP_CopyProperty_ex(prop, flag);
 				dest->len++;
 				BLI_addtail(&dest->data.group, copy);
 			}
 		}
 	}
+}
+
+/**
+ * If a property is missing in \a dest, add it.
+ * Do it recursively.
+ */
+void IDP_MergeGroup(IDProperty *dest, const IDProperty *src, const bool do_overwrite)
+{
+	IDP_MergeGroup_ex(dest, src, do_overwrite, 0);
 }
 
 /**
@@ -811,7 +835,7 @@ IDProperty *IDP_GetProperties(ID *id, const bool create_if_needed)
 }
 
 /**
- * \param is_strict When false treat missing items as a match */
+ * \param is_strict: When false treat missing items as a match */
 bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is_strict)
 {
 	if (prop1 == NULL && prop2 == NULL)
@@ -832,9 +856,9 @@ bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is
 				if ((p1 != p2) && ((fabsf(p1 - p2) / max_ff(p1, p2)) < 0.001f)) {
 					printf("WARNING: Comparing two float properties that have nearly the same value (%f vs. %f)\n", p1, p2);
 					printf("    p1: ");
-					IDP_spit(prop1);
+					IDP_print(prop1);
 					printf("    p2: ");
-					IDP_spit(prop2);
+					IDP_print(prop2);
 				}
 			}
 #endif
@@ -878,15 +902,15 @@ bool IDP_EqualsProperties_ex(IDProperty *prop1, IDProperty *prop2, const bool is
 			if (prop1->len != prop2->len)
 				return false;
 
-			for (i = 0; i < prop1->len; i++)
-				if (!IDP_EqualsProperties(&array1[i], &array2[i]))
+			for (i = 0; i < prop1->len; i++) {
+				if (!IDP_EqualsProperties_ex(&array1[i], &array2[i], is_strict))
 					return false;
+			}
 			return true;
 		}
 		case IDP_ID:
 			return (IDP_Id(prop1) == IDP_Id(prop2));
 		default:
-			/* should never get here */
 			BLI_assert(0);
 			break;
 	}
@@ -960,7 +984,7 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 				prop->len = prop->totallen = val->array.len;
 				break;
 			}
-			printf("%s: bad array type.\n", __func__);
+			CLOG_ERROR(&LOG, "bad array type.");
 			return NULL;
 		}
 		case IDP_STRING:
@@ -988,7 +1012,8 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 					prop->data.pointer = MEM_mallocN(DEFAULT_ALLOC_FOR_NULL_STRINGS, "id property string 1");
 					*IDP_String(prop) = '\0';
 					prop->totallen = DEFAULT_ALLOC_FOR_NULL_STRINGS;
-					prop->len = 1; /*NULL string, has len of 1 to account for null byte.*/
+					/* NULL string, has len of 1 to account for null byte. */
+					prop->len = 1;
 				}
 				else {
 					BLI_assert((int)val->string.len <= (int)strlen(st) + 1);
@@ -1003,8 +1028,8 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 		}
 		case IDP_GROUP:
 		{
+			/* Values are set properly by calloc. */
 			prop = MEM_callocN(sizeof(IDProperty), "IDProperty group");
-			/* heh I think all needed values are set properly by calloc anyway :) */
 			break;
 		}
 		case IDP_ID:
@@ -1024,7 +1049,7 @@ IDProperty *IDP_New(const char type, const IDPropertyTemplate *val, const char *
 
 	prop->type = type;
 	BLI_strncpy(prop->name, name, MAX_IDPROP_NAME);
-	
+
 	return prop;
 }
 
@@ -1065,6 +1090,17 @@ void IDP_ClearProperty(IDProperty *prop)
 	IDP_FreeProperty(prop);
 	prop->data.pointer = NULL;
 	prop->len = prop->totallen = 0;
+}
+
+void IDP_Reset(IDProperty *prop, const IDProperty *reference)
+{
+	if (prop == NULL) {
+		return;
+	}
+	IDP_ClearProperty(prop);
+	if (reference != NULL) {
+		IDP_MergeGroup(prop, reference, true);
+	}
 }
 
 /** \} */

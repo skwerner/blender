@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/report.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdarg.h>
@@ -140,7 +134,7 @@ void BKE_reportf(ReportList *reports, ReportType type, const char *_format, ...)
 		va_start(args, _format);
 		vprintf(format, args);
 		va_end(args);
-		fprintf(stdout, "\n"); /* otherise each report needs to include a \n */
+		fprintf(stdout, "\n"); /* otherwise each report needs to include a \n */
 		fflush(stdout); /* this ensures the message is printed before a crash */
 	}
 
@@ -270,10 +264,10 @@ char *BKE_reports_string(ReportList *reports, ReportType level)
 void BKE_reports_print(ReportList *reports, ReportType level)
 {
 	char *cstring = BKE_reports_string(reports, level);
-	
+
 	if (cstring == NULL)
 		return;
-	
+
 	puts(cstring);
 	fflush(stdout);
 	MEM_freeN(cstring);
@@ -282,12 +276,12 @@ void BKE_reports_print(ReportList *reports, ReportType level)
 Report *BKE_reports_last_displayable(ReportList *reports)
 {
 	Report *report;
-	
+
 	for (report = reports->list.last; report; report = report->prev) {
 		if (ELEM(report->type, RPT_ERROR, RPT_WARNING, RPT_INFO))
 			return report;
 	}
-	
+
 	return NULL;
 }
 

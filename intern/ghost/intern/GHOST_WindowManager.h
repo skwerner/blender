@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_WindowManager.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_WindowManager class.
  */
 
@@ -41,8 +33,6 @@
 
 /**
  * Manages system windows (platform independent implementation).
- * \author	Maarten Gribnau
- * \date	May 11, 2001
  */
 class GHOST_WindowManager
 {
@@ -110,38 +100,38 @@ public:
 	 * \param window The new active window.
 	 */
 	GHOST_TSuccess setActiveWindow(GHOST_IWindow *window);
-	
+
 	/**
 	 * Returns the active window (the window receiving events).
 	 * There can be only one window active which should be in the current window list.
 	 * \return window The active window (or NULL if there is none).
 	 */
 	GHOST_IWindow *getActiveWindow(void) const;
-	
+
 
 	/**
 	 * Set this window to be inactive (not receiving events).
 	 * \param window The window to deactivate.
 	 */
 	void setWindowInactive(const GHOST_IWindow *window);
-	
+
 
 	/**
-	 * Return a vector of the windows currently managed by this 
-	 * class. 
+	 * Return a vector of the windows currently managed by this
+	 * class.
 	 * \warning It is very dangerous to mess with the contents of
-	 * this vector. Please do not destroy or add windows use the 
+	 * this vector. Please do not destroy or add windows use the
 	 * interface above for this,
 	 */
 	std::vector<GHOST_IWindow *> & getWindows();
-	
+
 	/**
 	 * Finds the window associated with an OS window object/handle
 	 * \param osWindow The OS window object/handle
 	 * \return The associated window, null if none corresponds
 	 */
 	GHOST_IWindow *getWindowAssociatedWithOSWindow(void *osWindow);
-	
+
 	/**
 	 * Return true if any windows has a modified status
 	 * \return True if any window has unsaved changes
@@ -164,8 +154,7 @@ protected:
 #ifdef WITH_CXX_GUARDEDALLOC
 	MEM_CXX_CLASS_ALLOC_FUNCS("GHOST:GHOST_WindowManager")
 #endif
-	
+
 };
 
 #endif // __GHOST_WINDOWMANAGER_H__
-

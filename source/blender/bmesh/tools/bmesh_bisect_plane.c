@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,19 +12,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/tools/bmesh_bisect_plane.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Cut the geometry in half using a plane.
  *
  * \par Implementation
- * This simply works by splitting tagged edges whos verts span either side of
+ * This simply works by splitting tagged edges who's verts span either side of
  * the plane, then splitting faces along their dividing verts.
  * The only complex case is when a ngon spans the axis multiple times,
  * in this case we need to do some extra checks to correctly bisect the ngon.
@@ -58,9 +52,9 @@ static short plane_point_test_v3(const float plane[4], const float co[3], const 
 	const float f = plane_point_side_v3(plane, co);
 	*r_depth = f;
 
-	if      (f <= -eps) return -1;
-	else if (f >=  eps) return  1;
-	else                return  0;
+	if      (f <= -eps) { return -1; }
+	else if (f >=  eps) { return  1; }
+	else                { return  0; }
 }
 
 
@@ -104,9 +98,9 @@ static int bm_vert_sortval_cb(const void *v_a_v, const void *v_b_v)
 	const float val_a = BM_VERT_SORTVAL(*((BMVert **)v_a_v));
 	const float val_b = BM_VERT_SORTVAL(*((BMVert **)v_b_v));
 
-	if      (val_a > val_b) return  1;
-	else if (val_a < val_b) return -1;
-	else                    return  0;
+	if      (val_a > val_b) { return  1; }
+	else if (val_a < val_b) { return -1; }
+	else                    { return  0; }
 }
 
 
@@ -302,9 +296,9 @@ finally:
 /* Main logic */
 
 /**
- * \param use_snap_center  Snap verts onto the plane.
- * \param use_tag  Only bisect tagged edges and faces.
- * \param oflag_center  Operator flag, enabled for geometry on the axis (existing and created)
+ * \param use_snap_center: Snap verts onto the plane.
+ * \param use_tag: Only bisect tagged edges and faces.
+ * \param oflag_center: Operator flag, enabled for geometry on the axis (existing and created)
  */
 void BM_mesh_bisect_plane(
         BMesh *bm, const float plane[4],
@@ -459,6 +453,9 @@ void BM_mesh_bisect_plane(
 	while ((f = BLI_LINKSTACK_POP(face_stack))) {
 		bm_face_bisect_verts(bm, f, plane, oflag_center, oflag_new);
 	}
+
+	/* Caused by access macros: BM_VERT_DIR, BM_VERT_SKIP. */
+	bm->elem_index_dirty |= BM_VERT;
 
 	/* now we have all faces to split in the stack */
 	BLI_LINKSTACK_FREE(face_stack);

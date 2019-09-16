@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2010)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_sequencer_api.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -48,9 +42,8 @@
 #include "BLI_path_util.h" /* BLI_split_dirfile */
 
 #include "BKE_image.h"
-#include "BKE_library.h" /* id_us_plus */
-#include "BKE_movieclip.h"
 #include "BKE_mask.h"
+#include "BKE_movieclip.h"
 
 #include "BKE_report.h"
 #include "BKE_sequencer.h"
@@ -61,7 +54,7 @@
 
 #include "WM_api.h"
 
-static void rna_Sequence_update_rnafunc(ID *id, Sequence *self, int do_data)
+static void rna_Sequence_update_rnafunc(ID *id, Sequence *self, bool do_data)
 {
 	if (do_data) {
 		BKE_sequencer_update_changed_seq_and_deps((Scene *)id, self, true, true);
@@ -74,7 +67,7 @@ static void rna_Sequence_update_rnafunc(ID *id, Sequence *self, int do_data)
 static void rna_Sequence_swap_internal(Sequence *seq_self, ReportList *reports, Sequence *seq_other)
 {
 	const char *error_msg;
-	
+
 	if (BKE_sequence_swap(seq_self, seq_other, &error_msg) == 0)
 		BKE_report(reports, RPT_ERROR, error_msg);
 }
@@ -231,7 +224,7 @@ static Sequence *rna_Sequences_new_sound(ID *id, Editing *ed, Main *bmain, Repor
 	bSound *sound = BKE_sound_new_file(bmain, file);
 
 	if (sound->playback_handle == NULL) {
-		BKE_libblock_free(bmain, sound);
+		BKE_id_free(bmain, sound);
 		BKE_report(reports, RPT_ERROR, "Sequences.new_sound: unable to open sound file");
 		return NULL;
 	}
@@ -476,7 +469,7 @@ void RNA_api_sequences(BlenderRNA *brna, PropertyRNA *cprop)
 		{SEQ_TYPE_GAUSSIAN_BLUR, "GAUSSIAN_BLUR", 0, "Gaussian Blur", ""},
 		{SEQ_TYPE_TEXT, "TEXT", 0, "Text", ""},
 		{SEQ_TYPE_COLORMIX, "COLORMIX", 0, "Color Mix", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	RNA_def_property_srna(cprop, "Sequences");

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,23 +15,15 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_WindowManager.cpp
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  */
 
 
 /**
  * Copyright (C) 2001 NaN Technologies B.V.
- * \author	Maarten Gribnau
- * \date	May 11, 2001
  */
 
 #include "GHOST_WindowManager.h"
@@ -42,7 +32,7 @@
 #include "GHOST_Window.h"
 
 
-GHOST_WindowManager::GHOST_WindowManager() : 
+GHOST_WindowManager::GHOST_WindowManager() :
 	m_fullScreenWindow(0),
 	m_activeWindow(0),
 	m_activeWindowBeforeFullScreen(0)
@@ -61,7 +51,7 @@ GHOST_TSuccess GHOST_WindowManager::addWindow(GHOST_IWindow *window)
 	GHOST_TSuccess success = GHOST_kFailure;
 	if (window) {
 		if (!getWindowFound(window)) {
-			// Store the pointer to the window 
+			// Store the pointer to the window
 			m_windows.push_back(window);
 			success = GHOST_kSuccess;
 		}
@@ -170,7 +160,7 @@ GHOST_TSuccess GHOST_WindowManager::setActiveWindow(GHOST_IWindow *window)
 	}
 	return success;
 }
-	
+
 
 GHOST_IWindow *GHOST_WindowManager::getActiveWindow(void) const
 {
@@ -200,7 +190,7 @@ GHOST_IWindow *GHOST_WindowManager::getWindowAssociatedWithOSWindow(void *osWind
 		if ((*iter)->getOSWindow() == osWindow)
 			return *iter;
 	}
-	
+
 	return NULL;
 }
 
@@ -208,7 +198,7 @@ bool GHOST_WindowManager::getAnyModifiedState()
 {
 	bool isAnyModified = false;
 	std::vector<GHOST_IWindow *>::iterator iter;
-	
+
 	for (iter = m_windows.begin(); iter != m_windows.end(); ++iter) {
 		if ((*iter)->getModifiedState())
 			isAnyModified = true;

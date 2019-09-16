@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,14 +18,13 @@
  *
  * The Original Code is: some of this file.
  *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
 #ifndef __BLI_MATH_VECTOR_H__
 #define __BLI_MATH_VECTOR_H__
 
-/** \file BLI_math_vector.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifdef __cplusplus
@@ -78,6 +75,16 @@ MINLINE void zero_v3_int(int r[3]);
 MINLINE void copy_v2_v2_int(int r[2], const int a[2]);
 MINLINE void copy_v3_v3_int(int r[3], const int a[3]);
 MINLINE void copy_v4_v4_int(int r[4], const int a[4]);
+/* double */
+MINLINE void zero_v3_db(double r[3]);
+MINLINE void copy_v2_v2_db(double r[2], const double a[2]);
+MINLINE void copy_v3_v3_db(double r[3], const double a[3]);
+MINLINE void copy_v4_v4_db(double r[4], const double a[4]);
+/* short -> float */
+MINLINE void copy_v3fl_v3s(float r[3], const short a[3]);
+/* int <-> float */
+MINLINE void copy_v2fl_v2i(float r[2], const int a[2]);
+MINLINE void round_v2i_v2fl(int r[2], const float a[2]);
 /* double -> float */
 MINLINE void copy_v2fl_v2db(float r[2], const double a[2]);
 MINLINE void copy_v3fl_v3db(float r[3], const double a[3]);
@@ -104,32 +111,40 @@ MINLINE void add_v3_v3v3(float r[3], const float a[3], const float b[3]);
 MINLINE void add_v4_v4(float r[4], const float a[4]);
 MINLINE void add_v4_v4v4(float r[4], const float a[4], const float b[4]);
 
+MINLINE void add_v3fl_v3fl_v3i(float r[3], const float a[3], const int b[3]);
+MINLINE void add_v3fl_v3fl_v3s(float r[3], const float a[3], const short b[3]);
+
 MINLINE void sub_v2_v2(float r[2], const float a[2]);
 MINLINE void sub_v2_v2v2(float r[2], const float a[2], const float b[2]);
 MINLINE void sub_v2_v2v2_int(int r[2], const int a[2], const int b[2]);
 MINLINE void sub_v3_v3(float r[3], const float a[3]);
 MINLINE void sub_v3_v3v3(float r[3], const float a[3], const float b[3]);
+MINLINE void sub_v3_v3v3_int(int r[3], const int a[3], const int b[3]);
 MINLINE void sub_v4_v4(float r[4], const float a[4]);
 MINLINE void sub_v4_v4v4(float r[4], const float a[4], const float b[4]);
+
+MINLINE void sub_v3db_v3fl_v3fl(double r[3], const float a[3], const float b[3]);
 
 MINLINE void mul_v2_fl(float r[2], float f);
 MINLINE void mul_v2_v2fl(float r[2], const float a[2], float f);
 MINLINE void mul_v3_fl(float r[3], float f);
 MINLINE void mul_v3_v3fl(float r[3], const float a[3], float f);
 MINLINE void mul_v2_v2(float r[2], const float a[2]);
+MINLINE void mul_v2_v2v2(float r[2], const float a[2], const float b[2]);
 MINLINE void mul_v3_v3(float r[3], const float a[3]);
 MINLINE void mul_v3_v3v3(float r[3], const float a[3], const float b[3]);
 MINLINE void mul_v4_fl(float r[4], float f);
+MINLINE void mul_v4_v4(float r[4], const float a[4]);
 MINLINE void mul_v4_v4fl(float r[3], const float a[3], float f);
 MINLINE void mul_v2_v2_cw(float r[2], const float mat[2], const float vec[2]);
 MINLINE void mul_v2_v2_ccw(float r[2], const float mat[2], const float vec[2]);
-MINLINE float mul_project_m4_v3_zfac(float mat[4][4], const float co[3]) ATTR_WARN_UNUSED_RESULT;
-MINLINE float dot_m3_v3_row_x(float M[3][3], const float a[3]) ATTR_WARN_UNUSED_RESULT;
-MINLINE float dot_m3_v3_row_y(float M[3][3], const float a[3]) ATTR_WARN_UNUSED_RESULT;
-MINLINE float dot_m3_v3_row_z(float M[3][3], const float a[3]) ATTR_WARN_UNUSED_RESULT;
-MINLINE float dot_m4_v3_row_x(float M[4][4], const float a[3]) ATTR_WARN_UNUSED_RESULT;
-MINLINE float dot_m4_v3_row_y(float M[4][4], const float a[3]) ATTR_WARN_UNUSED_RESULT;
-MINLINE float dot_m4_v3_row_z(float M[4][4], const float a[3]) ATTR_WARN_UNUSED_RESULT;
+MINLINE float mul_project_m4_v3_zfac(const float mat[4][4], const float co[3]) ATTR_WARN_UNUSED_RESULT;
+MINLINE float dot_m3_v3_row_x(const float M[3][3], const float a[3]) ATTR_WARN_UNUSED_RESULT;
+MINLINE float dot_m3_v3_row_y(const float M[3][3], const float a[3]) ATTR_WARN_UNUSED_RESULT;
+MINLINE float dot_m3_v3_row_z(const float M[3][3], const float a[3]) ATTR_WARN_UNUSED_RESULT;
+MINLINE float dot_m4_v3_row_x(const float M[4][4], const float a[3]) ATTR_WARN_UNUSED_RESULT;
+MINLINE float dot_m4_v3_row_y(const float M[4][4], const float a[3]) ATTR_WARN_UNUSED_RESULT;
+MINLINE float dot_m4_v3_row_z(const float M[4][4], const float a[3]) ATTR_WARN_UNUSED_RESULT;
 
 MINLINE void madd_v2_v2fl(float r[2], const float a[2], float f);
 MINLINE void madd_v3_v3fl(float r[3], const float a[3], float f);
@@ -139,6 +154,8 @@ MINLINE void madd_v3_v3v3fl(float r[3], const float a[3], const float b[3], floa
 MINLINE void madd_v3_v3v3v3(float r[3], const float a[3], const float b[3], const float c[3]);
 MINLINE void madd_v4_v4fl(float r[4], const float a[4], float f);
 MINLINE void madd_v4_v4v4(float r[4], const float a[4], const float b[4]);
+
+MINLINE void madd_v3fl_v3fl_v3fl_v3i(float r[3], const float a[3], const float b[3], const int c[3]);
 
 MINLINE void negate_v2(float r[2]);
 MINLINE void negate_v2_v2(float r[2], const float a[2]);
@@ -169,6 +186,7 @@ MINLINE double dot_v3db_v3fl(const double a[3], const float b[3]) ATTR_WARN_UNUS
 
 MINLINE float cross_v2v2(const float a[2], const float b[2]) ATTR_WARN_UNUSED_RESULT;
 MINLINE void cross_v3_v3v3(float r[3], const float a[3], const float b[3]);
+MINLINE void cross_v3_v3v3_hi_prec(float r[3], const float a[3], const float b[3]);
 
 MINLINE void add_newell_cross_v3_v3v3(float n[3], const float v_prev[3], const float v_curr[3]);
 
@@ -186,6 +204,7 @@ MINLINE float len_v2v2(const float a[2], const float b[2]) ATTR_WARN_UNUSED_RESU
 MINLINE float len_v2v2_int(const int v1[2], const int v2[2]);
 MINLINE float len_squared_v2v2(const float a[2], const float b[2]) ATTR_WARN_UNUSED_RESULT;
 MINLINE float len_squared_v3v3(const float a[3], const float b[3]) ATTR_WARN_UNUSED_RESULT;
+MINLINE float len_squared_v4v4(const float a[4], const float b[4]) ATTR_WARN_UNUSED_RESULT;
 MINLINE float len_manhattan_v2v2(const float a[2], const float b[2]) ATTR_WARN_UNUSED_RESULT;
 MINLINE int   len_manhattan_v2v2_int(const int a[2], const int b[2]) ATTR_WARN_UNUSED_RESULT;
 MINLINE float len_manhattan_v3v3(const float a[3], const float b[3]) ATTR_WARN_UNUSED_RESULT;
@@ -270,7 +289,6 @@ MINLINE bool compare_v3v3_relative(const float a[3], const float b[3], const flo
 MINLINE bool compare_v4v4_relative(const float a[4], const float b[4], const float limit, const int max_ulps)  ATTR_WARN_UNUSED_RESULT;
 
 MINLINE bool compare_len_v3v3(const float a[3], const float b[3], const float limit)  ATTR_WARN_UNUSED_RESULT;
-MINLINE bool compare_len_squared_v3v3(const float a[3], const float b[3], const float limit)  ATTR_WARN_UNUSED_RESULT;
 
 MINLINE float line_point_side_v2(const float l1[2], const float l2[2], const float pt[2]) ATTR_WARN_UNUSED_RESULT;
 
@@ -331,6 +349,7 @@ void print_vn(const char *str, const float v[], const int n);
 MINLINE void normal_float_to_short_v2(short r[2], const float n[2]);
 MINLINE void normal_short_to_float_v3(float r[3], const short n[3]);
 MINLINE void normal_float_to_short_v3(short r[3], const float n[3]);
+MINLINE void normal_float_to_short_v4(short r[4], const float n[4]);
 
 void minmax_v3v3_v3(float min[3], float max[3], const float vec[3]);
 void minmax_v2v2_v2(float min[2], float max[2], const float vec[2]);
@@ -353,6 +372,8 @@ void range_vn_u(unsigned int *array_tar, const int size, const unsigned int star
 void range_vn_fl(float *array_tar, const int size, const float start, const float step);
 void negate_vn(float *array_tar, const int size);
 void negate_vn_vn(float *array_tar, const float *array_src, const int size);
+void mul_vn_vn(float *array_tar, const float *array_src, const int size);
+void mul_vn_vnvn(float *array_tar, const float *array_src_a, const float *array_src_b, const int size);
 void mul_vn_fl(float *array_tar, const int size, const float f);
 void mul_vn_vn_fl(float *array_tar, const float *array_src, const int size, const float f);
 void add_vn_vn(float *array_tar, const float *array_src, const int size);

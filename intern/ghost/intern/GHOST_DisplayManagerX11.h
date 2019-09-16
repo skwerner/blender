@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_DisplayManagerX11.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_DisplayManagerX11 class.
  */
 
@@ -40,8 +32,6 @@ class GHOST_SystemX11;
 
 /**
  * Manages system displays  (X11 implementation).
- * \author	Laurence Bourn
- * \date	October 26, 2001
  */
 class GHOST_DisplayManagerX11 : public GHOST_DisplayManager
 {
@@ -76,7 +66,7 @@ public:
 	    ) const;
 
 	/**
-	 * Returns the current setting for this display device. 
+	 * Returns the current setting for this display device.
 	 * \param display The index of the display to query with 0 <= display < getNumDisplays().
 	 * \param index	  The setting index to be returned.
 	 * \param setting The setting of the display device with this index.
@@ -90,7 +80,7 @@ public:
 	    ) const;
 
 	/**
-	 * Returns the current setting for this display device. 
+	 * Returns the current setting for this display device.
 	 * \param display The index of the display to query with 0 <= display < getNumDisplays().
 	 * \param setting The current setting of the display device with this index.
 	 * \return Indication of success.
@@ -102,7 +92,7 @@ public:
 	    ) const;
 
 	/**
-	 * Changes the current setting for this display device. 
+	 * Changes the current setting for this display device.
 	 * \param display The index of the display to query with 0 <= display < getNumDisplays().
 	 * \param setting The current setting of the display device with this index.
 	 * \return Indication of success.
@@ -119,5 +109,4 @@ private:
 };
 
 
-#endif // 
-
+#endif //

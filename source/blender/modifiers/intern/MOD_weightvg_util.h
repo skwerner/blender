@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,31 +15,29 @@
  *
  * The Original Code is Copyright (C) 2011 by Bastien Montagne.
  * All rights reserved.
- *
- * Contributor(s): None yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_weightvg_util.h
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #ifndef __MOD_WEIGHTVG_UTIL_H__
 #define __MOD_WEIGHTVG_UTIL_H__
 
 struct CurveMapping;
-struct DerivedMesh;
+struct MDeformVert;
+struct MDeformWeight;
+struct Mesh;
+struct ModifierEvalContext;
 struct Object;
-struct Tex;
-struct Scene;
 struct RNG;
+struct Scene;
+struct Tex;
 
 /*
  * XXX I'd like to make modified weights visible in WeightPaint mode,
  *     but couldn't figure a way to do this...
- *     Maybe this will need changes in mesh_calc_modifiers (DerivedMesh.c)?
+ *     Maybe this will need changes in mesh_calc_modifiers?
  *     Or the WeightPaint mode code itself?
  */
 
@@ -70,17 +66,20 @@ void weightvg_do_map(int num, float *new_w, short mode, struct CurveMapping *cma
  * vertex index (in case the weight tables do not cover the whole vertices...).
  * XXX The standard "factor" value is assumed in [0.0, 1.0] range. Else, weird results might appear.
  */
-void weightvg_do_mask(int num, const int *indices, float *org_w, const float *new_w, Object *ob,
-                      DerivedMesh *dm, float fact, const char defgrp_name[MAX_VGROUP_NAME],
-                      struct Scene *scene, Tex *texture, int tex_use_channel, int tex_mapping,
-                      Object *tex_map_object, const char *tex_uvlayer_name);
+void weightvg_do_mask(
+        const ModifierEvalContext *ctx,
+        const int num, const int *indices, float *org_w, const float *new_w, Object *ob,
+        struct Mesh *mesh, const float fact, const char defgrp_name[MAX_VGROUP_NAME],
+        struct Scene *scene, Tex *texture, const int tex_use_channel, const int tex_mapping,
+        Object *tex_map_object, const char *tex_uvlayer_name);
 
 /* Applies weights to given vgroup (defgroup), and optionally add/remove vertices from the group.
  * If indices is not NULL, it must be a table of same length as weights, mapping to the real
  * vertex index (in case the weight table does not cover the whole vertices...).
  */
-void weightvg_update_vg(MDeformVert *dvert, int defgrp_idx, MDeformWeight **dws, int num,
-                        const int *indices, const float *weights, const bool do_add,
-                        const float add_thresh, const bool do_rem, const float rem_thresh);
+void weightvg_update_vg(
+        struct MDeformVert *dvert, int defgrp_idx, struct MDeformWeight **dws, int num,
+        const int *indices, const float *weights, const bool do_add,
+        const float add_thresh, const bool do_rem, const float rem_thresh);
 
 #endif /* __MOD_WEIGHTVG_UTIL_H__ */

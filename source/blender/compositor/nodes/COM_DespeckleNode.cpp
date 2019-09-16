@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,7 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: Campbell Barton
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_DespeckleNode.h"
@@ -35,15 +33,15 @@ void DespeckleNode::convertToOperations(NodeConverter &converter, const Composit
 	NodeInput *inputSocket = this->getInputSocket(0);
 	NodeInput *inputImageSocket = this->getInputSocket(1);
 	NodeOutput *outputSocket = this->getOutputSocket(0);
-	
+
 	DespeckleOperation *operation = new DespeckleOperation();
 	operation->setThreshold(editorNode->custom3);
 	operation->setThresholdNeighbor(editorNode->custom4);
 	converter.addOperation(operation);
-	
+
 	converter.mapInputSocket(inputImageSocket, operation->getInputSocket(0));
 	converter.mapInputSocket(inputSocket, operation->getInputSocket(1));
 	converter.mapOutputSocket(outputSocket, operation->getOutputSocket());
-	
+
 	converter.addPreview(operation->getOutputSocket(0));
 }

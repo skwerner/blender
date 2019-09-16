@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_CropOperation.h"
@@ -37,7 +33,7 @@ void CropBaseOperation::updateArea()
 	float width = inputReference->getWidth();
 	float height = inputReference->getHeight();
 	NodeTwoXYs local_settings = *this->m_settings;
-	
+
 	if (width > 0.0f && height > 0.0f) {
 		if (this->m_relative) {
 			local_settings.x1 = width * local_settings.fac_x1;
@@ -53,7 +49,7 @@ void CropBaseOperation::updateArea()
 			local_settings.x2 = width - 1;
 		if (height <= local_settings.y2 + 1)
 			local_settings.y2 = height - 1;
-		
+
 		this->m_xmax = max(local_settings.x1, local_settings.x2) + 1;
 		this->m_xmin = min(local_settings.x1, local_settings.x2);
 		this->m_ymax = max(local_settings.y1, local_settings.y2) + 1;
@@ -101,12 +97,12 @@ CropImageOperation::CropImageOperation() : CropBaseOperation()
 bool CropImageOperation::determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output)
 {
 	rcti newInput;
-	
+
 	newInput.xmax = input->xmax + this->m_xmin;
 	newInput.xmin = input->xmin + this->m_xmin;
 	newInput.ymax = input->ymax + this->m_ymin;
 	newInput.ymin = input->ymin + this->m_ymin;
-	
+
 	return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
 }
 

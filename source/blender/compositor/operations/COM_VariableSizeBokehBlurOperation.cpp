@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_VariableSizeBokehBlurOperation.h"
@@ -135,7 +131,7 @@ void VariableSizeBokehBlurOperation::executePixel(float output[4], int x, int y,
 		copy_v4_v4(color_accum, readColor);
 		copy_v4_fl(multiplier_accum, 1.0f);
 		float size_center = tempSize[0] * scalar;
-		
+
 		const int addXStepValue = QualityStepHelper::getStep();
 		const int addYStepValue = addXStepValue;
 		const int addXStepColor = addXStepValue * COM_NUM_CHANNELS_COLOR;
@@ -184,8 +180,8 @@ void VariableSizeBokehBlurOperation::executePixel(float output[4], int x, int y,
 }
 
 void VariableSizeBokehBlurOperation::executeOpenCL(OpenCLDevice *device,
-                                       MemoryBuffer *outputMemoryBuffer, cl_mem clOutputBuffer, 
-                                       MemoryBuffer **inputMemoryBuffers, list<cl_mem> *clMemToCleanUp, 
+                                       MemoryBuffer *outputMemoryBuffer, cl_mem clOutputBuffer,
+                                       MemoryBuffer **inputMemoryBuffers, list<cl_mem> *clMemToCleanUp,
                                        list<cl_kernel> * /*clKernelsToCleanUp*/)
 {
 	cl_kernel defocusKernel = device->COM_clCreateKernel("defocusKernel", NULL);
@@ -193,7 +189,7 @@ void VariableSizeBokehBlurOperation::executeOpenCL(OpenCLDevice *device,
 	cl_int step = this->getStep();
 	cl_int maxBlur;
 	cl_float threshold = this->m_threshold;
-	
+
 	MemoryBuffer *sizeMemoryBuffer = this->m_inputSizeProgram->getInputMemoryBuffer(inputMemoryBuffers);
 
 	const float max_dim = max(m_width, m_height);
@@ -212,7 +208,7 @@ void VariableSizeBokehBlurOperation::executeOpenCL(OpenCLDevice *device,
 	clSetKernelArg(defocusKernel, 8, sizeof(cl_float), &threshold);
 	clSetKernelArg(defocusKernel, 9, sizeof(cl_float), &scalar);
 	device->COM_clAttachSizeToKernelParameter(defocusKernel, 10, this);
-	
+
 	device->COM_clEnqueueRange(defocusKernel, outputMemoryBuffer, 11, this);
 }
 
@@ -243,7 +239,7 @@ bool VariableSizeBokehBlurOperation::determineDependingAreaOfInterest(rcti *inpu
 	bokehInput.xmin = 0;
 	bokehInput.ymax = COM_BLUR_BOKEH_PIXELS;
 	bokehInput.ymin = 0;
-	
+
 
 	NodeOperation *operation = getInputOperation(2);
 	if (operation->determineDependingAreaOfInterest(&newInput, readOperation, output) ) {
@@ -273,7 +269,7 @@ bool VariableSizeBokehBlurOperation::determineDependingAreaOfInterest(rcti *inpu
 
 #ifdef COM_DEFOCUS_SEARCH
 // InverseSearchRadiusOperation
-InverseSearchRadiusOperation::InverseSearchRadiusOperation() : NodeOperation() 
+InverseSearchRadiusOperation::InverseSearchRadiusOperation() : NodeOperation()
 {
 	this->addInputSocket(COM_DT_VALUE, COM_SC_NO_RESIZE); // radius
 	this->addOutputSocket(COM_DT_COLOR);
@@ -281,14 +277,14 @@ InverseSearchRadiusOperation::InverseSearchRadiusOperation() : NodeOperation()
 	this->m_inputRadius = NULL;
 }
 
-void InverseSearchRadiusOperation::initExecution() 
+void InverseSearchRadiusOperation::initExecution()
 {
 	this->m_inputRadius = this->getInputSocketReader(0);
 }
 
 void *InverseSearchRadiusOperation::initializeTileData(rcti *rect)
 {
-	MemoryBuffer * data = new MemoryBuffer(COM_DT_COLOR, rect);
+	MemoryBuffer *data = new MemoryBuffer(COM_DT_COLOR, rect);
 	float *buffer = data->getBuffer();
 	int x, y;
 	int width = this->m_inputRadius->getWidth();
@@ -313,7 +309,7 @@ void *InverseSearchRadiusOperation::initializeTileData(rcti *rect)
 //			float radius = 0.0f;
 //			float maxx = x;
 //			float maxy = y;
-	
+
 //			for (int x2 = 0 ; x2 < DIVIDER ; x2 ++) {
 //				for (int y2 = 0 ; y2 < DIVIDER ; y2 ++) {
 //					this->m_inputRadius->read(temp, rx+x2, ry+y2, COM_PS_NEAREST);
@@ -346,7 +342,7 @@ void InverseSearchRadiusOperation::executePixelChunk(float output[4], int x, int
 	buffer->readNoCheck(output, x, y);
 }
 
-void InverseSearchRadiusOperation::deinitializeTileData(rcti *rect, void *data) 
+void InverseSearchRadiusOperation::deinitializeTileData(rcti *rect, void *data)
 {
 	if (data) {
 		MemoryBuffer *mb = (MemoryBuffer *)data;
@@ -354,7 +350,7 @@ void InverseSearchRadiusOperation::deinitializeTileData(rcti *rect, void *data)
 	}
 }
 
-void InverseSearchRadiusOperation::deinitExecution() 
+void InverseSearchRadiusOperation::deinitExecution()
 {
 	this->m_inputRadius = NULL;
 }

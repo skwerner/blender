@@ -34,11 +34,10 @@ struct ccl_try_align(16) float4 {
 	};
 
 	__forceinline float4();
-	__forceinline float4(const float4& a);
 	__forceinline explicit float4(const __m128& a);
 
-	__forceinline operator const __m128&(void) const;
-	__forceinline operator __m128&(void);
+	__forceinline operator const __m128&() const;
+	__forceinline operator __m128&();
 
 	__forceinline float4& operator =(const float4& a);
 

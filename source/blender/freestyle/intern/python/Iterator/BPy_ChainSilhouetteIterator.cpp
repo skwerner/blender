@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/Iterator/BPy_ChainSilhouetteIterator.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BPy_ChainSilhouetteIterator.h"
@@ -98,7 +94,7 @@ static int ChainSilhouetteIterator_init(BPy_ChainSilhouetteIterator *self, PyObj
 		bool restrict_to_selection = (!obj1) ? true : bool_from_PyBool(obj1);
 		ViewEdge *begin = (!obj2 || obj2 == Py_None) ? NULL : ((BPy_ViewEdge *)obj2)->ve;
 		bool orientation = (!obj3) ? true : bool_from_PyBool(obj3);
-		self->cs_it = new ChainSilhouetteIterator(restrict_to_selection, begin, orientation);	
+		self->cs_it = new ChainSilhouetteIterator(restrict_to_selection, begin, orientation);
 	}
 	else {
 		PyErr_SetString(PyExc_TypeError, "invalid argument(s)");

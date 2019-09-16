@@ -118,7 +118,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 	}
 
 	/* Transparent Shadows
-	 * We only need to enable transparent shadows, if we actually have 
+	 * We only need to enable transparent shadows, if we actually have
 	 * transparent shaders in the scene. Otherwise we can disable it
 	 * to improve performance a bit. */
 	kintegrator->transparent_shadows = false;
@@ -141,7 +141,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
 	kintegrator->use_ambient_occlusion =
 		((Pass::contains(scene->film->passes, PASS_AO)) || dscene->data.background.ao_factor != 0.0f);
-	
+
 	kintegrator->sample_clamp_direct = (sample_clamp_direct == 0.0f)? FLT_MAX: sample_clamp_direct*3.0f;
 	kintegrator->sample_clamp_indirect = (sample_clamp_indirect == 0.0f)? FLT_MAX: sample_clamp_indirect*3.0f;
 
@@ -187,7 +187,12 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 		max_samples = max(max_samples, volume_samples);
 	}
 
-	max_samples *= (max_bounce + transparent_max_bounce + 3 + BSSRDF_MAX_HITS);
+	uint total_bounces = max_bounce +
+	                     transparent_max_bounce + 3 +
+	                     VOLUME_BOUNDS_MAX +
+	                     max(BSSRDF_MAX_HITS, BSSRDF_MAX_BOUNCES);
+
+	max_samples *= total_bounces;
 
 	int dimensions = PRNG_BASE_NUM + max_samples*PRNG_BOUNCE_NUM;
 	dimensions = min(dimensions, SOBOL_MAX_DIMENSIONS);
@@ -231,4 +236,3 @@ void Integrator::tag_update(Scene *scene)
 }
 
 CCL_NAMESPACE_END
-

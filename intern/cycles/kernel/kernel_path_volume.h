@@ -55,7 +55,7 @@ ccl_device_inline void kernel_path_volume_connect_light(
 			}
 		}
 	}
-#endif /* __EMISSION__ */
+#endif  /* __EMISSION__ */
 }
 
 #ifdef __KERNEL_GPU__
@@ -85,7 +85,7 @@ bool kernel_path_volume_bounce(
 
 	if(phase_pdf == 0.0f || bsdf_eval_is_zero(&phase_eval))
 		return false;
-	
+
 	/* modify throughput */
 	path_radiance_bsdf_bounce(kg, L_state, throughput, &phase_eval, phase_pdf, state->bounce, label);
 
@@ -98,6 +98,23 @@ bool kernel_path_volume_bounce(
 
 	/* update path state */
 	path_state_next(kg, state, label);
+
+	/* Russian roulette termination of volume ray scattering. */
+	float probability = path_state_continuation_probability(kg, state, *throughput);
+
+	if(probability == 0.0f) {
+		return false;
+	}
+	else if(probability != 1.0f) {
+		/* Use dimension from the previous bounce, has not been used yet. */
+		float terminate = path_state_rng_1D(kg, state, PRNG_TERMINATE - PRNG_BOUNCE_NUM);
+
+		if(terminate >= probability) {
+			return false;
+		}
+
+		*throughput /= probability;
+	}
 
 	/* setup ray */
 	ray->P = sd->P;
@@ -206,7 +223,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 
 				VolumeIntegrateResult result = kernel_volume_decoupled_scatter(kg,
 					state, ray, sd, &tp, rphase, rscatter, segment, (ls.t != FLT_MAX)? &ls.P: NULL, false);
-					
+
 				/* todo: split up light_sample so we don't have to call it again with new position */
 				if(result == VOLUME_PATH_SCATTERED &&
 				   light_sample(kg, light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
@@ -243,7 +260,7 @@ ccl_device void kernel_branched_path_volume_connect_light(
 
 		VolumeIntegrateResult result = kernel_volume_decoupled_scatter(kg,
 			state, ray, sd, &tp, rphase, rscatter, segment, (ls.t != FLT_MAX)? &ls.P: NULL, false);
-			
+
 		/* todo: split up light_sample so we don't have to call it again with new position */
 		if(result == VOLUME_PATH_SCATTERED &&
 		   light_sample(kg, light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
@@ -260,11 +277,10 @@ ccl_device void kernel_branched_path_volume_connect_light(
 			}
 		}
 	}
-#endif /* __EMISSION__ */
+#endif  /* __EMISSION__ */
 }
-#endif /* __SPLIT_KERNEL__ */
+#endif  /* __SPLIT_KERNEL__ */
 
-#endif /* __VOLUME_SCATTER__ */
+#endif  /* __VOLUME_SCATTER__ */
 
 CCL_NAMESPACE_END
-

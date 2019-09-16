@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2017 by the Blender FOundation.
  * All rights reserved.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- * 
  */
 
-/** \file blender/blenlib/intern/string_utils.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <ctype.h>
@@ -34,7 +27,6 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_listbase.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_string_utils.h"
@@ -55,10 +47,10 @@
  * Foo.001 -> "Foo", 1
  * Returning the length of "Foo"
  *
- * \param left  Where to return copy of part preceding delim
- * \param nr  Where to return value of numeric suffix
- * \param name  String to split
- * \param delim  Delimiter character
+ * \param left: Where to return copy of part preceding delim
+ * \param nr: Where to return value of numeric suffix
+ * \param name: String to split
+ * \param delim: Delimiter character
  * \return  Length of \a left
  */
 size_t BLI_split_name_num(char *left, int *nr, const char *name, const char delim)
@@ -76,8 +68,9 @@ size_t BLI_split_name_num(char *left, int *nr, const char *name, const char deli
 				left[a] = '\0';  /* truncate left part here */
 				*nr = atol(name + a + 1);
 				/* casting down to an int, can overflow for large numbers */
-				if (*nr < 0)
+				if (*nr < 0) {
 					*nr = 0;
+				}
 				return a;
 			}
 			else if (isdigit(name[a]) == 0) {
@@ -142,9 +135,9 @@ void BLI_string_split_prefix(const char *string, char *r_pre, char *r_body, cons
 /**
  * Finds the best possible flipped (left/right) name. For renaming; check for unique names afterwards.
  *
- * \param r_name flipped name, assumed to be a pointer to a string of at least \a name_len size.
- * \param from_name original name, assumed to be a pointer to a string of at least \a name_len size.
- * \param strip_number If set, remove number extensions.
+ * \param r_name: flipped name, assumed to be a pointer to a string of at least \a name_len size.
+ * \param from_name: original name, assumed to be a pointer to a string of at least \a name_len size.
+ * \param strip_number: If set, remove number extensions.
  */
 void BLI_string_flip_side_name(char *r_name, const char *from_name, const bool strip_number, const size_t name_len)
 {
@@ -275,12 +268,12 @@ void BLI_string_flip_side_name(char *r_name, const char *from_name, const bool s
  * Ensures name is unique (according to criteria specified by caller in unique_check callback),
  * incrementing its numeric suffix as necessary. Returns true if name had to be adjusted.
  *
- * \param unique_check  Return true if name is not unique
- * \param arg  Additional arg to unique_check--meaning is up to caller
- * \param defname  To initialize name if latter is empty
- * \param delim  Delimits numeric suffix in name
- * \param name  Name to be ensured unique
- * \param name_len  Maximum length of name area
+ * \param unique_check: Return true if name is not unique
+ * \param arg: Additional arg to unique_check--meaning is up to caller
+ * \param defname: To initialize name if latter is empty
+ * \param delim: Delimits numeric suffix in name
+ * \param name: Name to be ensured unique
+ * \param name_len: Maximum length of name area
  * \return true if there if the name was changed
  */
 bool BLI_uniquename_cb(
@@ -326,15 +319,13 @@ bool BLI_uniquename_cb(
 #  define GIVE_STRADDR(data, offset) ( ((char *)data) + offset)
 #endif
 
-/* Generic function to set a unique name. It is only designed to be used in situations
+/**
+ * Generic function to set a unique name. It is only designed to be used in situations
  * where the name is part of the struct.
  *
  * For places where this is used, see constraint.c for example...
  *
- *  name_offs: should be calculated using offsetof(structname, membername) macro from stddef.h
- *  len: maximum length of string (to prevent overflows, etc.)
- *  defname: the name that should be used by default if none is specified already
- *  delim: the character which acts as a delimiter between parts of the name
+ * \param name_offs: should be calculated using offsetof(structname, membername) macro from stddef.h
  */
 static bool uniquename_find_dupe(ListBase *list, void *vlink, const char *name, int name_offs)
 {
@@ -361,12 +352,12 @@ static bool uniquename_unique_check(void *arg, const char *name)
  * Ensures that the specified block has a unique name within the containing list,
  * incrementing its numeric suffix as necessary. Returns true if name had to be adjusted.
  *
- * \param list  List containing the block
- * \param vlink  The block to check the name for
- * \param defname  To initialize block name if latter is empty
- * \param delim  Delimits numeric suffix in name
- * \param name_offs  Offset of name within block structure
- * \param name_len  Maximum length of name area
+ * \param list: List containing the block
+ * \param vlink: The block to check the name for
+ * \param defname: To initialize block name if latter is empty
+ * \param delim: Delimits numeric suffix in name
+ * \param name_offs: Offset of name within block structure
+ * \param name_len: Maximum length of name area
  */
 bool BLI_uniquename(ListBase *list, void *vlink, const char *defname, char delim, int name_offs, size_t name_len)
 {
@@ -378,8 +369,9 @@ bool BLI_uniquename(ListBase *list, void *vlink, const char *defname, char delim
 	BLI_assert(name_len > 1);
 
 	/* See if we are given an empty string */
-	if (ELEM(NULL, vlink, defname))
+	if (ELEM(NULL, vlink, defname)) {
 		return false;
+	}
 
 	return BLI_uniquename_cb(uniquename_unique_check, &data, defname, delim, GIVE_STRADDR(vlink, name_offs), name_len);
 }
@@ -404,7 +396,7 @@ char *BLI_string_join_arrayN(
 	for (uint i = 0; i < strings_len; i++) {
 		total_len += strlen(strings[i]);
 	}
-	char *result = MEM_mallocN(sizeof(char) * total_len, __func__); 
+	char *result = MEM_mallocN(sizeof(char) * total_len, __func__);
 	char *c = result;
 	for (uint i = 0; i < strings_len; i++) {
 		c += BLI_strcpy_rlen(c, strings[i]);
@@ -426,7 +418,7 @@ char *BLI_string_join_array_by_sep_charN(
 		total_len = 1;
 	}
 
-	char *result = MEM_mallocN(sizeof(char) * total_len, __func__); 
+	char *result = MEM_mallocN(sizeof(char) * total_len, __func__);
 	char *c = result;
 	if (strings_len != 0) {
 		for (uint i = 0; i < strings_len; i++) {
@@ -455,7 +447,7 @@ char *BLI_string_join_array_by_sep_char_with_tableN(
 		total_len = 1;
 	}
 
-	char *result = MEM_mallocN(sizeof(char) * total_len, __func__); 
+	char *result = MEM_mallocN(sizeof(char) * total_len, __func__);
 	char *c = result;
 	if (strings_len != 0) {
 		for (uint i = 0; i < strings_len; i++) {

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_text_api.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -40,13 +34,13 @@
 
 static void rna_Text_clear(Text *text)
 {
-	BKE_text_clear(text);
+	BKE_text_clear(text, NULL);
 	WM_main_add_notifier(NC_TEXT | NA_EDITED, text);
 }
 
 static void rna_Text_write(Text *text, const char *str)
 {
-	BKE_text_write(text, str);
+	BKE_text_write(text, NULL, str);
 	WM_main_add_notifier(NC_TEXT | NA_EDITED, text);
 }
 

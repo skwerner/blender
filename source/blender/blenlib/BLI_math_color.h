@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,14 +18,13 @@
  *
  * The Original Code is: some of this file.
  *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
 #ifndef __BLI_MATH_COLOR_H__
 #define __BLI_MATH_COLOR_H__
 
-/** \file BLI_math_color.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifdef __cplusplus
@@ -51,6 +48,10 @@ extern "C" {
 #define BLI_YCC_ITU_BT709   1
 #define BLI_YCC_JFIF_0_255  2
 
+/* YUV */
+#define BLI_YUV_ITU_BT601   0
+#define BLI_YUV_ITU_BT709   1
+
 /******************* Conversion to RGB ********************/
 
 void hsv_to_rgb(float h, float s, float v, float *r, float *g, float *b);
@@ -58,14 +59,13 @@ void hsv_to_rgb_v(const float hsv[3], float r_rgb[3]);
 void hsl_to_rgb(float h, float c, float l, float *r, float *g, float *b);
 void hsl_to_rgb_v(const float hcl[3], float r_rgb[3]);
 void hex_to_rgb(char *hexcol, float *r, float *g, float *b);
-void yuv_to_rgb(float y, float u, float v, float *lr, float *lg, float *lb);
+void yuv_to_rgb(float y, float u, float v, float *lr, float *lg, float *lb, int colorspace);
 void ycc_to_rgb(float y, float cb, float cr, float *lr, float *lg, float *lb, int colorspace);
-void xyz_to_rgb(float x, float y, float z, float *r, float *g, float *b, int colorspace);
 void cpack_to_rgb(unsigned int col, float *r, float *g, float *b);
 
 /***************** Conversion from RGB ********************/
 
-void rgb_to_yuv(float r, float g, float b, float *ly, float *lu, float *lv);
+void rgb_to_yuv(float r, float g, float b, float *ly, float *lu, float *lv, int colorspace);
 void rgb_to_ycc(float r, float g, float b, float *ly, float *lcb, float *lcr, int colorspace);
 void rgb_to_hsv(float r, float g, float b, float *lh, float *ls, float *lv);
 void rgb_to_hsv_v(const float rgb[3], float r_hsv[3]);
@@ -75,8 +75,6 @@ void rgb_to_hsl_compat(float r, float g, float b, float *lh, float *ls, float *l
 void rgb_to_hsl_compat_v(const float rgb[3], float r_hsl[3]);
 void rgb_to_hsv_compat(float r, float g, float b, float *lh, float *ls, float *lv);
 void rgb_to_hsv_compat_v(const float rgb[3], float r_hsv[3]);
-void rgb_to_lab(float r, float g, float b, float *ll, float *la, float *lb);
-void rgb_to_xyz(float r, float g, float b, float *x, float *y, float *z);
 unsigned int rgb_to_cpack(float r, float g, float b);
 unsigned int hsv_to_cpack(float h, float s, float v);
 
@@ -108,7 +106,7 @@ void BLI_init_srgb_conversion(void);
 
 MINLINE void premul_to_straight_v4_v4(float straight[4], const float premul[4]);
 MINLINE void premul_to_straight_v4(float color[4]);
-MINLINE void straight_to_premul_v4_v4(float straight[4], const float premul[4]);
+MINLINE void straight_to_premul_v4_v4(float premul[4], const float straight[4]);
 MINLINE void straight_to_premul_v4(float color[4]);
 MINLINE void straight_uchar_to_premul_float(float result[4], const unsigned char color[4]);
 MINLINE void premul_float_to_straight_uchar(unsigned char *result, const float color[4]);
@@ -126,8 +124,6 @@ void rgb_uchar_to_float(float r_col[3], const unsigned char col_ub[3]);
 void rgba_uchar_to_float(float r_col[4], const unsigned char col_ub[4]);
 void rgb_float_to_uchar(unsigned char r_col[3], const float col_f[3]);
 void rgba_float_to_uchar(unsigned char r_col[4], const float col_f[4]);
-
-void xyz_to_lab(float x, float y, float z, float *l, float *a, float *b);
 
 MINLINE float rgb_to_grayscale(const float rgb[3]);
 MINLINE unsigned char rgb_to_grayscale_byte(const unsigned char rgb[3]);
@@ -164,4 +160,3 @@ void lift_gamma_gain_to_asc_cdl(float *lift, float *gamma, float *gain, float *o
 #endif
 
 #endif /* __BLI_MATH_COLOR_H__ */
-

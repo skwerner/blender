@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar, Geoffrey Bantle, Levi Schooley.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_walkers_impl.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * BMesh Walker Code.
  */
@@ -210,7 +204,7 @@ static void *bmw_VertShellWalker_step(BMWalker *walker)
 	BMVert *v_old = NULL;
 	bool restrictpass = true;
 	BMwShellWalker shellWalk = *((BMwShellWalker *)BMW_current_state(walker));
-	
+
 	if (!BLI_gset_haskey(walker->visit_set, shellWalk.base)) {
 		BLI_gset_insert(walker->visit_set, shellWalk.base);
 	}
@@ -228,11 +222,11 @@ static void *bmw_VertShellWalker_step(BMWalker *walker)
 				BMwShellWalker *newstate;
 
 				v_old = BM_edge_other_vert(curedge, shellWalk.base);
-				
+
 				/* push a new state onto the stac */
 				newState = BMW_state_add(walker);
 				BLI_gset_insert(walker->visit_set, curedge);
-				
+
 				/* populate the new stat */
 
 				newState->base = v_old;
@@ -240,7 +234,7 @@ static void *bmw_VertShellWalker_step(BMWalker *walker)
 			}
 		}
 	} while ((curedge = bmesh_disk_edge_next(curedge, shellWalk.base)) != shellWalk.curedge);
-	
+
 	return shellWalk.curedge;
 }
 #endif
@@ -603,7 +597,6 @@ static void *bmw_FaceShellWalker_step(BMWalker *walker)
  * Similar to shell walker, but visits vertices instead of edges.
  *
  * Walk from a vertex to all connected vertices.
- *
  */
 static void bmw_ConnectedVertexWalker_visitVertex(BMWalker *walker, BMVert *v)
 {
@@ -711,12 +704,12 @@ static void *bmw_IslandboundWalker_step(BMWalker *walker)
 	e = l->e;
 
 	v = BM_edge_other_vert(e, iwalk->lastv);
-	
+
 	/* pop off current state */
 	BMW_state_remove(walker);
-	
+
 	f = l->f;
-	
+
 	while (1) {
 		l = BM_loop_other_edge_loop(l, v);
 		if (BM_loop_is_manifold(l)) {
@@ -736,7 +729,7 @@ static void *bmw_IslandboundWalker_step(BMWalker *walker)
 			break;
 		}
 	}
-	
+
 	if (l == owalk.curloop) {
 		return NULL;
 	}
@@ -789,7 +782,7 @@ static void *bmw_IslandWalker_step_ex(BMWalker *walker, bool only_manifold)
 {
 	BMwIslandWalker *iwalk, owalk;
 	BMLoop *l_iter, *l_first;
-	
+
 	BMW_state_remove_r(walker, &owalk);
 	iwalk = &owalk;
 
@@ -867,7 +860,6 @@ static void *bmw_IslandManifoldWalker_step(BMWalker *walker)
  * \{
  *
  * Starts at a tool-flagged edge and walks over the edge loop
- *
  */
 
 /* utility function to see if an edge is apart of an ngon boundary */
@@ -1154,7 +1146,7 @@ static bool bmw_FaceLoopWalker_edge_begins_loop(BMWalker *walker, BMEdge *e)
 	if (BM_edge_is_wire(e)) {
 		return false;
 	}
-	
+
 	/* Don't start a loop from a boundary edge if it cannot
 	 * be extended to cover any faces */
 	if (BM_edge_is_boundary(e)) {
@@ -1162,7 +1154,7 @@ static bool bmw_FaceLoopWalker_edge_begins_loop(BMWalker *walker, BMEdge *e)
 			return false;
 		}
 	}
-	
+
 	/* Don't start a face loop from non-manifold edges */
 	if (!BM_edge_is_manifold(e)) {
 		return false;
@@ -1178,8 +1170,9 @@ static void bmw_FaceLoopWalker_begin(BMWalker *walker, void *data)
 	/* BMesh *bm = walker->bm; */ /* UNUSED */
 	/* int fcount = BM_edge_face_count(e); */ /* UNUSED */
 
-	if (!bmw_FaceLoopWalker_edge_begins_loop(walker, e))
+	if (!bmw_FaceLoopWalker_edge_begins_loop(walker, e)) {
 		return;
+	}
 
 	lwalk = BMW_state_add(walker);
 	lwalk->l = e->l;
@@ -1206,7 +1199,7 @@ static void bmw_FaceLoopWalker_begin(BMWalker *walker, void *data)
 static void *bmw_FaceLoopWalker_yield(BMWalker *walker)
 {
 	BMwFaceLoopWalker *lwalk = BMW_current_state(walker);
-	
+
 	if (!lwalk) {
 		return NULL;
 	}
@@ -1225,7 +1218,7 @@ static void *bmw_FaceLoopWalker_step(BMWalker *walker)
 
 	f = lwalk->l->f;
 	l = lwalk->l->radial_next;
-	
+
 	if (lwalk->no_calc) {
 		return f;
 	}
@@ -1314,7 +1307,7 @@ static void bmw_EdgeringWalker_begin(BMWalker *walker, void *data)
 static void *bmw_EdgeringWalker_yield(BMWalker *walker)
 {
 	BMwEdgeringWalker *lwalk = BMW_current_state(walker);
-	
+
 	if (!lwalk) {
 		return NULL;
 	}
@@ -1342,8 +1335,9 @@ static void *bmw_EdgeringWalker_step(BMWalker *walker)
 	lwalk = &owalk;
 
 	l = lwalk->l;
-	if (!l)
+	if (!l) {
 		return lwalk->wireedge;
+	}
 
 	e = l->e;
 	if (!EDGE_CHECK(e)) {
@@ -1376,12 +1370,11 @@ static void *bmw_EdgeringWalker_step(BMWalker *walker)
 	/* only walk to manifold edge */
 	if ((l->f->len % 2 == 0) && EDGE_CHECK(l->e) &&
 	    !BLI_gset_haskey(walker->visit_set, l->e))
-
 #else
 
 	l = l->radial_next;
 	l = l->next->next;
-	
+
 	if ((l->f->len != 4) || !EDGE_CHECK(l->e) || !bmw_mask_check_face(walker, l->f)) {
 		l = owalk.l->next->next;
 	}
@@ -1415,8 +1408,9 @@ static void bmw_EdgeboundaryWalker_begin(BMWalker *walker, void *data)
 
 	BLI_assert(BM_edge_is_boundary(e));
 
-	if (BLI_gset_haskey(walker->visit_set, e))
+	if (BLI_gset_haskey(walker->visit_set, e)) {
 		return;
+	}
 
 	lwalk = BMW_state_add(walker);
 	lwalk->e = e;
@@ -1491,8 +1485,9 @@ static void bmw_UVEdgeWalker_begin(BMWalker *walker, void *data)
 	BMwUVEdgeWalker *lwalk;
 	BMLoop *l = data;
 
-	if (BLI_gset_haskey(walker->visit_set, l))
+	if (BLI_gset_haskey(walker->visit_set, l)) {
 		return;
+	}
 
 	lwalk = BMW_state_add(walker);
 	lwalk->l = l;
@@ -1502,7 +1497,7 @@ static void bmw_UVEdgeWalker_begin(BMWalker *walker, void *data)
 static void *bmw_UVEdgeWalker_yield(BMWalker *walker)
 {
 	BMwUVEdgeWalker *lwalk = BMW_current_state(walker);
-	
+
 	if (!lwalk) {
 		return NULL;
 	}
@@ -1556,8 +1551,9 @@ static void *bmw_UVEdgeWalker_step(BMWalker *walker)
 				l_other = (l_radial->v != l_pivot->v) ? l_radial->next : l_radial;
 				data_other = BM_ELEM_CD_GET_VOID_P(l_other, offset);
 
-				if (!CustomData_data_equals(type, data_pivot, data_other))
+				if (!CustomData_data_equals(type, data_pivot, data_other)) {
 					continue;
+				}
 
 				lwalk = BMW_state_add(walker);
 				BLI_gset_insert(walker->visit_set, l_radial);

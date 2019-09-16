@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,14 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_node/space_node.c
- *  \ingroup spnode
+/** \file
+ * \ingroup spnode
  */
 
 #include "DNA_gpencil_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_node_types.h"
 #include "DNA_world_types.h"
@@ -49,13 +42,16 @@
 #include "ED_node.h"
 #include "ED_render.h"
 #include "ED_screen.h"
-#include "WM_api.h"
-#include "WM_types.h"
 
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
 #include "RNA_access.h"
+#include "RNA_define.h"
+#include "RNA_enum_types.h"
+
+#include "WM_api.h"
+#include "WM_types.h"
 
 #include "node_intern.h"  /* own include */
 
@@ -70,30 +66,31 @@ void ED_node_tree_start(SpaceNode *snode, bNodeTree *ntree, ID *id, ID *from)
 		MEM_freeN(path);
 	}
 	BLI_listbase_clear(&snode->treepath);
-	
+
 	if (ntree) {
 		path = MEM_callocN(sizeof(bNodeTreePath), "node tree path");
 		path->nodetree = ntree;
 		path->parent_key = NODE_INSTANCE_KEY_BASE;
-		
+
 		/* copy initial offset from bNodeTree */
 		copy_v2_v2(path->view_center, ntree->view_center);
-		
-		if (id)
+
+		if (id) {
 			BLI_strncpy(path->node_name, id->name + 2, sizeof(path->node_name));
-		
+		}
+
 		BLI_addtail(&snode->treepath, path);
-		
+
 		id_us_ensure_real(&ntree->id);
 	}
-	
+
 	/* update current tree */
 	snode->nodetree = snode->edittree = ntree;
 	snode->id = id;
 	snode->from = from;
-	
+
 	ED_node_set_active_viewer_key(snode);
-	
+
 	WM_main_add_notifier(NC_SCENE | ND_NODES, NULL);
 }
 
@@ -103,48 +100,52 @@ void ED_node_tree_push(SpaceNode *snode, bNodeTree *ntree, bNode *gnode)
 	bNodeTreePath *prev_path = snode->treepath.last;
 	path->nodetree = ntree;
 	if (gnode) {
-		if (prev_path)
+		if (prev_path) {
 			path->parent_key = BKE_node_instance_key(prev_path->parent_key, prev_path->nodetree, gnode);
-		else
+		}
+		else {
 			path->parent_key = NODE_INSTANCE_KEY_BASE;
-		
+		}
+
 		BLI_strncpy(path->node_name, gnode->name, sizeof(path->node_name));
 	}
-	else
+	else {
 		path->parent_key = NODE_INSTANCE_KEY_BASE;
-	
+	}
+
 	/* copy initial offset from bNodeTree */
 	copy_v2_v2(path->view_center, ntree->view_center);
-	
+
 	BLI_addtail(&snode->treepath, path);
-	
+
 	id_us_ensure_real(&ntree->id);
-	
+
 	/* update current tree */
 	snode->edittree = ntree;
-	
+
 	ED_node_set_active_viewer_key(snode);
-	
+
 	WM_main_add_notifier(NC_SCENE | ND_NODES, NULL);
 }
 
 void ED_node_tree_pop(SpaceNode *snode)
 {
 	bNodeTreePath *path = snode->treepath.last;
-	
+
 	/* don't remove root */
-	if (path == snode->treepath.first)
+	if (path == snode->treepath.first) {
 		return;
-	
+	}
+
 	BLI_remlink(&snode->treepath, path);
 	MEM_freeN(path);
-	
+
 	/* update current tree */
 	path = snode->treepath.last;
 	snode->edittree = path->nodetree;
-	
+
 	ED_node_set_active_viewer_key(snode);
-	
+
 	/* listener updates the View2D center from edittree */
 	WM_main_add_notifier(NC_SCENE | ND_NODES, NULL);
 }
@@ -159,8 +160,9 @@ bNodeTree *ED_node_tree_get(SpaceNode *snode, int level)
 	bNodeTreePath *path;
 	int i;
 	for (path = snode->treepath.last, i = 0; path; path = path->prev, ++i) {
-		if (i == level)
+		if (i == level) {
 			return path->nodetree;
+		}
 	}
 	return NULL;
 }
@@ -172,8 +174,9 @@ int ED_node_tree_path_length(SpaceNode *snode)
 	int i;
 	for (path = snode->treepath.first, i = 0; path; path = path->next, ++i) {
 		length += strlen(path->node_name);
-		if (i > 0)
+		if (i > 0) {
 			length += 1;	/* for separator char */
+		}
 	}
 	return length;
 }
@@ -182,7 +185,7 @@ void ED_node_tree_path_get(SpaceNode *snode, char *value)
 {
 	bNodeTreePath *path;
 	int i;
-	
+
 	value[0] = '\0';
 	for (path = snode->treepath.first, i = 0; path; path = path->next, ++i) {
 		if (i == 0) {
@@ -200,7 +203,7 @@ void ED_node_tree_path_get_fixedbuf(SpaceNode *snode, char *value, int max_lengt
 {
 	bNodeTreePath *path;
 	int size, i;
-	
+
 	value[0] = '\0';
 	for (path = snode->treepath.first, i = 0; path; path = path->next, ++i) {
 		if (i == 0) {
@@ -210,8 +213,9 @@ void ED_node_tree_path_get_fixedbuf(SpaceNode *snode, char *value, int max_lengt
 			size = BLI_snprintf_rlen(value, max_length, "/%s", path->node_name);
 		}
 		max_length -= size;
-		if (max_length <= 0)
+		if (max_length <= 0) {
 			break;
+		}
 		value += size;
 	}
 }
@@ -227,15 +231,16 @@ void ED_node_set_active_viewer_key(SpaceNode *snode)
 void snode_group_offset(SpaceNode *snode, float *x, float *y)
 {
 	bNodeTreePath *path = snode->treepath.last;
-	
+
 	if (path && path->prev) {
 		float dcenter[2];
 		sub_v2_v2v2(dcenter, path->view_center, path->prev->view_center);
 		*x = dcenter[0];
 		*y = dcenter[1];
 	}
-	else
+	else {
 		*x = *y = 0.0f;
+	}
 }
 
 /* ******************** manage regions ********************* */
@@ -245,13 +250,17 @@ ARegion *node_has_buttons_region(ScrArea *sa)
 	ARegion *ar, *arnew;
 
 	ar = BKE_area_find_region_type(sa, RGN_TYPE_UI);
-	if (ar) return ar;
+	if (ar) {
+		return ar;
+	}
 
 	/* add subdiv level; after header */
 	ar = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
 
 	/* is error! */
-	if (ar == NULL) return NULL;
+	if (ar == NULL) {
+		return NULL;
+	}
 
 	arnew = MEM_callocN(sizeof(ARegion), "buttons for node");
 
@@ -267,30 +276,34 @@ ARegion *node_has_buttons_region(ScrArea *sa)
 ARegion *node_has_tools_region(ScrArea *sa)
 {
 	ARegion *ar, *arnew;
-	
+
 	ar = BKE_area_find_region_type(sa, RGN_TYPE_TOOLS);
-	if (ar) return ar;
-	
+	if (ar) {
+		return ar;
+	}
+
 	/* add subdiv level; after header */
 	ar = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
-	
+
 	/* is error! */
-	if (ar == NULL) return NULL;
-	
+	if (ar == NULL) {
+		return NULL;
+	}
+
 	arnew = MEM_callocN(sizeof(ARegion), "node tools");
-	
+
 	BLI_insertlinkafter(&sa->regionbase, ar, arnew);
 	arnew->regiontype = RGN_TYPE_TOOLS;
 	arnew->alignment = RGN_ALIGN_LEFT;
-	
+
 	arnew->flag = RGN_FLAG_HIDDEN;
-	
+
 	return arnew;
 }
 
 /* ******************** default callbacks for node space ***************** */
 
-static SpaceLink *node_new(const bContext *UNUSED(C))
+static SpaceLink *node_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
 	ARegion *ar;
 	SpaceNode *snode;
@@ -316,7 +329,7 @@ static SpaceLink *node_new(const bContext *UNUSED(C))
 
 	BLI_addtail(&snode->regionbase, ar);
 	ar->regiontype = RGN_TYPE_HEADER;
-	ar->alignment = RGN_ALIGN_BOTTOM;
+	ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
 
 	/* buttons/list view */
 	ar = MEM_callocN(sizeof(ARegion), "buttons for node");
@@ -381,12 +394,12 @@ static void node_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(sa))
 
 }
 
-static void node_area_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
+static void node_area_listener(wmWindow *UNUSED(win), ScrArea *sa, wmNotifier *wmn, Scene *UNUSED(scene))
 {
 	/* note, ED_area_tag_refresh will re-execute compositor */
 	SpaceNode *snode = sa->spacedata.first;
 	/* shaderfrom is only used for new shading nodes, otherwise all shaders are from objects */
-	short shader_type = BKE_scene_use_new_shading_nodes(sc->scene) ? snode->shaderfrom : SNODE_SHADER_OBJECT;
+	short shader_type = snode->shaderfrom;
 
 	/* preview renders */
 	switch (wmn->category) {
@@ -397,9 +410,10 @@ static void node_area_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 					ARegion *ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
 					bNodeTreePath *path = snode->treepath.last;
 					/* shift view to node tree center */
-					if (ar && path)
+					if (ar && path) {
 						UI_view2d_center_set(&ar->v2d, path->view_center[0], path->view_center[1]);
-					
+					}
+
 					ED_area_tag_refresh(sa);
 					break;
 				}
@@ -426,21 +440,26 @@ static void node_area_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 		/* future: add ID checks? */
 		case NC_MATERIAL:
 			if (ED_node_is_shader(snode)) {
-				if (wmn->data == ND_SHADING)
+				if (wmn->data == ND_SHADING) {
 					ED_area_tag_refresh(sa);
-				else if (wmn->data == ND_SHADING_DRAW)
+				}
+				else if (wmn->data == ND_SHADING_DRAW) {
 					ED_area_tag_refresh(sa);
-				else if (wmn->data == ND_SHADING_LINKS)
+				}
+				else if (wmn->data == ND_SHADING_LINKS) {
 					ED_area_tag_refresh(sa);
-				else if (wmn->action == NA_ADDED && snode->edittree)
+				}
+				else if (wmn->action == NA_ADDED && snode->edittree) {
 					nodeSetActiveID(snode->edittree, ID_MA, wmn->reference);
+				}
 
 			}
 			break;
 		case NC_TEXTURE:
 			if (ED_node_is_shader(snode) || ED_node_is_texture(snode)) {
-				if (wmn->data == ND_NODES)
+				if (wmn->data == ND_NODES) {
 					ED_area_tag_refresh(sa);
+				}
 			}
 			break;
 		case NC_WORLD:
@@ -450,21 +469,26 @@ static void node_area_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 			break;
 		case NC_OBJECT:
 			if (ED_node_is_shader(snode)) {
-				if (wmn->data == ND_OB_SHADING)
+				if (wmn->data == ND_OB_SHADING) {
 					ED_area_tag_refresh(sa);
+				}
 			}
 			break;
 		case NC_SPACE:
-			if (wmn->data == ND_SPACE_NODE)
+			if (wmn->data == ND_SPACE_NODE) {
 				ED_area_tag_refresh(sa);
-			else if (wmn->data == ND_SPACE_NODE_VIEW)
+			}
+			else if (wmn->data == ND_SPACE_NODE_VIEW) {
 				ED_area_tag_redraw(sa);
+			}
 			break;
 		case NC_NODE:
-			if (wmn->action == NA_EDITED)
+			if (wmn->action == NA_EDITED) {
 				ED_area_tag_refresh(sa);
-			else if (wmn->action == NA_SELECTED)
+			}
+			else if (wmn->action == NA_SELECTED) {
 				ED_area_tag_redraw(sa);
+			}
 			break;
 		case NC_SCREEN:
 			switch (wmn->data) {
@@ -487,8 +511,9 @@ static void node_area_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 					/* note that nodeUpdateID is already called by BKE_image_signal() on all
 					 * scenes so really this is just to know if the images is used in the compo else
 					 * painting on images could become very slow when the compositor is open. */
-					if (nodeUpdateID(snode->nodetree, wmn->reference))
+					if (nodeUpdateID(snode->nodetree, wmn->reference)) {
 						ED_area_tag_refresh(sa);
+					}
 				}
 			}
 			break;
@@ -496,8 +521,9 @@ static void node_area_listener(bScreen *sc, ScrArea *sa, wmNotifier *wmn)
 		case NC_MOVIECLIP:
 			if (wmn->action == NA_EDITED) {
 				if (ED_node_is_compositor(snode)) {
-					if (nodeUpdateID(snode->nodetree, wmn->reference))
+					if (nodeUpdateID(snode->nodetree, wmn->reference)) {
 						ED_area_tag_refresh(sa);
+					}
 				}
 			}
 			break;
@@ -524,25 +550,28 @@ static void node_area_refresh(const struct bContext *C, ScrArea *sa)
 {
 	/* default now: refresh node is starting preview */
 	SpaceNode *snode = sa->spacedata.first;
-	
+
 	snode_set_context(C);
 
 	if (snode->nodetree) {
 		if (snode->nodetree->type == NTREE_SHADER) {
 			if (GS(snode->id->name) == ID_MA) {
 				Material *ma = (Material *)snode->id;
-				if (ma->use_nodes)
+				if (ma->use_nodes) {
 					ED_preview_shader_job(C, sa, snode->id, NULL, NULL, 100, 100, PR_NODE_RENDER);
+				}
 			}
 			else if (GS(snode->id->name) == ID_LA) {
-				Lamp *la = (Lamp *)snode->id;
-				if (la->use_nodes)
+				Light *la = (Light *)snode->id;
+				if (la->use_nodes) {
 					ED_preview_shader_job(C, sa, snode->id, NULL, NULL, 100, 100, PR_NODE_RENDER);
+				}
 			}
 			else if (GS(snode->id->name) == ID_WO) {
 				World *wo = (World *)snode->id;
-				if (wo->use_nodes)
+				if (wo->use_nodes) {
 					ED_preview_shader_job(C, sa, snode->id, NULL, NULL, 100, 100, PR_NODE_RENDER);
+				}
 			}
 		}
 		else if (snode->nodetree->type == NTREE_COMPOSIT) {
@@ -593,13 +622,13 @@ static void node_buttons_region_init(wmWindowManager *wm, ARegion *ar)
 
 	ED_region_panels_init(wm, ar);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Node Generic", SPACE_NODE, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Node Generic", SPACE_NODE, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 }
 
 static void node_buttons_region_draw(const bContext *C, ARegion *ar)
 {
-	ED_region_panels(C, ar, NULL, -1, true);
+	ED_region_panels(C, ar);
 }
 
 /* add handlers, stuff you only do once or on area/region changes */
@@ -609,13 +638,13 @@ static void node_toolbar_region_init(wmWindowManager *wm, ARegion *ar)
 
 	ED_region_panels_init(wm, ar);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Node Generic", SPACE_NODE, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Node Generic", SPACE_NODE, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 }
 
 static void node_toolbar_region_draw(const bContext *C, ARegion *ar)
 {
-	ED_region_panels(C, ar, NULL, -1, true);
+	ED_region_panels(C, ar);
 }
 
 static void node_cursor(wmWindow *win, ScrArea *sa, ARegion *ar)
@@ -625,14 +654,14 @@ static void node_cursor(wmWindow *win, ScrArea *sa, ARegion *ar)
 	/* convert mouse coordinates to v2d space */
 	UI_view2d_region_to_view(&ar->v2d, win->eventstate->x - ar->winrct.xmin, win->eventstate->y - ar->winrct.ymin,
 	                         &snode->cursor[0], &snode->cursor[1]);
-	
+
 	/* here snode->cursor is used to detect the node edge for sizing */
 	node_set_cursor(win, snode, snode->cursor);
 
 	/* XXX snode->cursor is in placing new nodes space */
 	snode->cursor[0] /= UI_DPI_FAC;
 	snode->cursor[1] /= UI_DPI_FAC;
-	
+
 }
 
 /* Initialize main region, setting handlers. */
@@ -644,10 +673,10 @@ static void node_main_region_init(wmWindowManager *wm, ARegion *ar)
 	UI_view2d_region_reinit(&ar->v2d, V2D_COMMONVIEW_CUSTOM, ar->winx, ar->winy);
 
 	/* own keymaps */
-	keymap = WM_keymap_find(wm->defaultconf, "Node Generic", SPACE_NODE, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Node Generic", SPACE_NODE, 0);
 	WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-	keymap = WM_keymap_find(wm->defaultconf, "Node Editor", SPACE_NODE, 0);
+	keymap = WM_keymap_ensure(wm->defaultconf, "Node Editor", SPACE_NODE, 0);
 	WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
 
 	/* add drop boxes */
@@ -664,40 +693,32 @@ static void node_main_region_draw(const bContext *C, ARegion *ar)
 
 /* ************* dropboxes ************* */
 
-static int node_ima_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event))
+static bool node_ima_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event), const char **UNUSED(tooltip))
 {
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (GS(id->name) == ID_IM)
-			return 1;
+	if (drag->type == WM_DRAG_PATH) {
+		/* rule might not work? */
+		return (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE));
 	}
-	else if (drag->type == WM_DRAG_PATH) {
-		if (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE))   /* rule might not work? */
-			return 1;
+	else {
+		return WM_drag_ID(drag, ID_IM) != NULL;
 	}
-	return 0;
 }
 
-static int node_mask_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event))
+static bool node_mask_drop_poll(bContext *UNUSED(C), wmDrag *drag, const wmEvent *UNUSED(event), const char **UNUSED(tooltip))
 {
-	if (drag->type == WM_DRAG_ID) {
-		ID *id = drag->poin;
-		if (GS(id->name) == ID_MSK)
-			return 1;
-	}
-	return 0;
+	return WM_drag_ID(drag, ID_MSK) != NULL;
 }
 
 static void node_id_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-	ID *id = drag->poin;
+	ID *id = WM_drag_ID(drag, 0);
 
 	RNA_string_set(drop->ptr, "name", id->name + 2);
 }
 
 static void node_id_path_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-	ID *id = drag->poin;
+	ID *id = WM_drag_ID(drag, 0);
 
 	if (id) {
 		RNA_string_set(drop->ptr, "name", id->name + 2);
@@ -737,52 +758,82 @@ static void node_header_region_draw(const bContext *C, ARegion *ar)
 }
 
 /* used for header + main region */
-static void node_region_listener(bScreen *UNUSED(sc), ScrArea *UNUSED(sa), ARegion *ar, wmNotifier *wmn)
+static void node_region_listener(
+        wmWindow *UNUSED(win), ScrArea *UNUSED(sa), ARegion *ar,
+        wmNotifier *wmn, const Scene *UNUSED(scene))
 {
+	wmGizmoMap *gzmap = ar->gizmo_map;
+
 	/* context changes */
 	switch (wmn->category) {
 		case NC_SPACE:
-			if (wmn->data == ND_SPACE_NODE)
-				ED_region_tag_redraw(ar);
+			switch (wmn->data) {
+				case ND_SPACE_NODE:
+					ED_region_tag_redraw(ar);
+					break;
+				case ND_SPACE_NODE_VIEW:
+					WM_gizmomap_tag_refresh(gzmap);
+					break;
+			}
 			break;
 		case NC_SCREEN:
+			if (wmn->data == ND_LAYOUTSET || wmn->action == NA_EDITED) {
+				WM_gizmomap_tag_refresh(gzmap);
+			}
 			switch (wmn->data) {
-				case ND_SCREENCAST:
 				case ND_ANIMPLAY:
+				case ND_LAYER:
 					ED_region_tag_redraw(ar);
 					break;
 			}
 			break;
 		case NC_WM:
-			if (wmn->data == ND_JOB)
+			if (wmn->data == ND_JOB) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_SCENE:
+			ED_region_tag_redraw(ar);
+			if (wmn->data == ND_RENDER_RESULT) {
+				WM_gizmomap_tag_refresh(gzmap);
+			}
+			break;
+		case NC_NODE:
+			ED_region_tag_redraw(ar);
+			if (ELEM(wmn->action, NA_EDITED, NA_SELECTED)) {
+				WM_gizmomap_tag_refresh(gzmap);
+			}
+			break;
 		case NC_MATERIAL:
 		case NC_TEXTURE:
 		case NC_WORLD:
-		case NC_NODE:
 		case NC_LINESTYLE:
 			ED_region_tag_redraw(ar);
 			break;
 		case NC_OBJECT:
-			if (wmn->data == ND_OB_SHADING)
+			if (wmn->data == ND_OB_SHADING) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_ID:
-			if (wmn->action == NA_RENAME)
+			if (wmn->action == NA_RENAME) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 		case NC_GPENCIL:
-			if (wmn->action == NA_EDITED)
+			if (wmn->action == NA_EDITED) {
 				ED_region_tag_redraw(ar);
-			else if (wmn->data & ND_GPENCIL_EDITMODE)
+			}
+			else if (wmn->data & ND_GPENCIL_EDITMODE) {
 				ED_region_tag_redraw(ar);
+			}
 			break;
 	}
 }
 
-const char *node_context_dir[] = {"selected_nodes", "active_node", NULL};
+const char *node_context_dir[] = {
+	"selected_nodes", "active_node", "light", "material", "world", NULL
+};
 
 static int node_context(const bContext *C, const char *member, bContextDataResult *result)
 {
@@ -822,8 +873,37 @@ static int node_context(const bContext *C, const char *member, bContextDataResul
 		CTX_data_type_set(result, CTX_DATA_TYPE_POINTER);
 		return 1;
 	}
+	else if (CTX_data_equals(member, "material")) {
+		if (snode->id && GS(snode->id->name) == ID_MA) {
+			CTX_data_id_pointer_set(result, snode->id);
+		}
+		return 1;
+	}
+	else if (CTX_data_equals(member, "light")) {
+		if (snode->id && GS(snode->id->name) == ID_LA) {
+			CTX_data_id_pointer_set(result, snode->id);
+		}
+		return 1;
+	}
+	else if (CTX_data_equals(member, "world")) {
+		if (snode->id && GS(snode->id->name) == ID_WO) {
+			CTX_data_id_pointer_set(result, snode->id);
+		}
+		return 1;
+	}
 
 	return 0;
+}
+
+static void node_widgets(void)
+{
+	/* create the widgetmap for the area here */
+	wmGizmoMapType *gzmap_type = WM_gizmomaptype_ensure(
+	        &(const struct wmGizmoMapType_Params){SPACE_NODE, RGN_TYPE_WINDOW});
+	WM_gizmogrouptype_append_and_link(gzmap_type, NODE_GGT_backdrop_transform);
+	WM_gizmogrouptype_append_and_link(gzmap_type, NODE_GGT_backdrop_crop);
+	WM_gizmogrouptype_append_and_link(gzmap_type, NODE_GGT_backdrop_sun_beams);
+	WM_gizmogrouptype_append_and_link(gzmap_type, NODE_GGT_backdrop_corner_pin);
 }
 
 static void node_id_remap(ScrArea *UNUSED(sa), SpaceLink *slink, ID *old_id, ID *new_id)
@@ -897,6 +977,32 @@ static void node_id_remap(ScrArea *UNUSED(sa), SpaceLink *slink, ID *old_id, ID 
 	}
 }
 
+
+static int node_space_subtype_get(ScrArea *sa)
+{
+	SpaceNode *snode = sa->spacedata.first;
+	return rna_node_tree_idname_to_enum(snode->tree_idname);
+}
+
+static void node_space_subtype_set(ScrArea *sa, int value)
+{
+	SpaceNode *snode = sa->spacedata.first;
+	ED_node_set_tree_type(snode, rna_node_tree_type_from_enum(value));
+}
+
+static void node_space_subtype_item_extend(
+        bContext *C, EnumPropertyItem **item, int *totitem)
+{
+	bool free;
+	const EnumPropertyItem *item_src = RNA_enum_node_tree_types_itemf_impl(C, &free);
+	for (const EnumPropertyItem *item_iter = item_src; item_iter->identifier; item_iter++) {
+		RNA_enum_item_add(item, totitem, item_iter);
+	}
+	if (free) {
+		MEM_freeN((void *)item_src);
+	}
+}
+
 /* only called once, from space/spacetypes.c */
 void ED_spacetype_node(void)
 {
@@ -916,17 +1022,21 @@ void ED_spacetype_node(void)
 	st->refresh = node_area_refresh;
 	st->context = node_context;
 	st->dropboxes = node_dropboxes;
+	st->gizmos = node_widgets;
 	st->id_remap = node_id_remap;
+	st->space_subtype_item_extend = node_space_subtype_item_extend;
+	st->space_subtype_get = node_space_subtype_get;
+	st->space_subtype_set = node_space_subtype_set;
 
 	/* regions: main window */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype node region");
 	art->regionid = RGN_TYPE_WINDOW;
 	art->init = node_main_region_init;
 	art->draw = node_main_region_draw;
+	art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_GIZMO | ED_KEYMAP_TOOL | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_GPENCIL;
 	art->listener = node_region_listener;
 	art->cursor = node_cursor;
 	art->event_cursor = true;
-	art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_GPENCIL;
 
 	BLI_addhead(&st->regiontypes, art);
 
@@ -956,16 +1066,17 @@ void ED_spacetype_node(void)
 	/* regions: toolbar */
 	art = MEM_callocN(sizeof(ARegionType), "spacetype view3d tools region");
 	art->regionid = RGN_TYPE_TOOLS;
-	art->prefsizex = 160; /* XXX */
+	art->prefsizex = 58; /* XXX */
 	art->prefsizey = 50; /* XXX */
 	art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
 	art->listener = node_region_listener;
+	art->message_subscribe = ED_region_generic_tools_region_message_subscribe;
+	art->snap_size = ED_region_generic_tools_region_snap_size;
 	art->init = node_toolbar_region_init;
 	art->draw = node_toolbar_region_draw;
 	BLI_addhead(&st->regiontypes, art);
-	
+
 	node_toolbar_register(art);
 
 	BKE_spacetype_register(st);
 }
-

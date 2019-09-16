@@ -1,6 +1,4 @@
-/* 
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
+/*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,28 +12,26 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributors: Matt Ebb
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_OCEAN_H__
 #define __BKE_OCEAN_H__
 
-/** \file BKE_ocean.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+struct OceanModifierData;
+
 typedef struct OceanResult {
 	float disp[3];
 	float normal[3];
 	float foam;
-	
+
 	/* raw eigenvalues/vectors */
 	float Jminus;
 	float Jplus;
@@ -47,31 +43,33 @@ typedef struct OceanCache {
 	struct ImBuf **ibufs_disp;
 	struct ImBuf **ibufs_foam;
 	struct ImBuf **ibufs_norm;
-	
+
 	const char *bakepath;
 	const char *relbase;
-	
+
 	/* precalculated for time range */
 	float *time;
-	
+
 	/* constant for time range */
 	float wave_scale;
 	float chop_amount;
 	float foam_coverage;
 	float foam_fade;
-	
+
 	int start;
 	int end;
 	int duration;
 	int resolution_x;
 	int resolution_y;
-	
+
 	int baked;
 } OceanCache;
 
 struct Ocean *BKE_ocean_add(void);
 void BKE_ocean_free_data(struct Ocean *oc);
 void BKE_ocean_free(struct Ocean *oc);
+bool BKE_ocean_ensure(struct OceanModifierData *omd);
+void BKE_ocean_init_from_modifier(struct Ocean *ocean, struct OceanModifierData const *omd);
 
 void BKE_ocean_init(
         struct Ocean *o, int M, int N, float Lx, float Lz, float V, float l, float A, float w, float damp,
@@ -93,12 +91,14 @@ struct OceanCache *BKE_ocean_init_cache(
         int start, int end, float wave_scale,
         float chop_amount, float foam_coverage, float foam_fade, int resolution);
 void BKE_ocean_simulate_cache(struct OceanCache *och, int frame);
-	
+
 void BKE_ocean_bake(struct Ocean *o, struct OceanCache *och, void (*update_cb)(void *, float progress, int *cancel), void *update_cb_data);
 void BKE_ocean_cache_eval_uv(struct OceanCache *och, struct OceanResult *ocr, int f, float u, float v);
 void BKE_ocean_cache_eval_ij(struct OceanCache *och, struct OceanResult *ocr, int f, int i, int j);
 
 void BKE_ocean_free_cache(struct OceanCache *och);
+void BKE_ocean_free_modifier_cache(struct OceanModifierData *omd);
+
 #ifdef __cplusplus
 }
 #endif

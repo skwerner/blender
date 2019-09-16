@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * 
- * Contributor(s): Blender Foundation, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_sequencer/sequencer_intern.h
- *  \ingroup spseq
+/** \file
+ * \ingroup spseq
  */
 
 #ifndef __SEQUENCER_INTERN_H__
@@ -36,17 +29,18 @@
 
 /* internal exports only */
 
-struct Sequence;
-struct bContext;
-struct rctf;
-struct SpaceSeq;
-struct ScrArea;
 struct ARegion;
 struct ARegionType;
-struct Scene;
+struct Depsgraph;
 struct Main;
-struct wmOperator;
+struct Scene;
+struct ScrArea;
+struct Sequence;
+struct SpaceSeq;
 struct StripElem;
+struct bContext;
+struct rctf;
+struct wmOperator;
 
 /* space_sequencer.c */
 struct ARegion *sequencer_has_buttons_region(struct ScrArea *sa);
@@ -54,17 +48,15 @@ struct ARegion *sequencer_has_buttons_region(struct ScrArea *sa);
 
 /* sequencer_draw.c */
 void draw_timeline_seq(const struct bContext *C, struct ARegion *ar);
-void draw_image_seq(const struct bContext *C, struct Scene *scene, struct  ARegion *ar, struct SpaceSeq *sseq, int cfra, int offset, bool draw_overlay, bool draw_backdrop);
+void sequencer_draw_preview(const struct bContext *C, struct Scene *scene, struct  ARegion *ar, struct SpaceSeq *sseq, int cfra, int offset, bool draw_overlay, bool draw_backdrop);
 void color3ubv_from_seq(struct Scene *curscene, struct Sequence *seq, unsigned char col[3]);
-void draw_shadedstrip(struct Sequence *seq, unsigned char col[3], float x1, float y1, float x2, float y2);
-void draw_sequence_extensions(struct Scene *scene, struct ARegion *ar, struct Sequence *seq);
 
 void sequencer_special_update_set(Sequence *seq);
 
 /* UNUSED */
 // void seq_reset_imageofs(struct SpaceSeq *sseq);
 
-struct ImBuf *sequencer_ibuf_get(struct Main *bmain, struct Scene *scene, struct SpaceSeq *sseq, int cfra, int frame_ofs, const char *viewname);
+struct ImBuf *sequencer_ibuf_get(struct Main *bmain, struct Depsgraph *depsgraph, struct Scene *scene, struct SpaceSeq *sseq, int cfra, int frame_ofs, const char *viewname);
 
 /* sequencer_edit.c */
 struct View2D;
@@ -76,20 +68,20 @@ void recurs_sel_seq(struct Sequence *seqm);
 int seq_effect_find_selected(struct Scene *scene, struct Sequence *activeseq, int type, struct Sequence **selseq1, struct Sequence **selseq2, struct Sequence **selseq3, const char **error_str);
 
 /* operator helpers */
-int sequencer_edit_poll(struct bContext *C);
+bool sequencer_edit_poll(struct bContext *C);
 /* UNUSED */
-//int sequencer_strip_poll(struct bContext *C);
-int sequencer_strip_has_path_poll(struct bContext *C);
-int sequencer_view_preview_poll(struct bContext *C);
-int sequencer_view_strips_poll(struct bContext *C);
+//bool sequencer_strip_poll(struct bContext *C);
+bool sequencer_strip_has_path_poll(struct bContext *C);
+bool sequencer_view_preview_poll(struct bContext *C);
+bool sequencer_view_strips_poll(struct bContext *C);
 
 /* externs */
 extern EnumPropertyItem sequencer_prop_effect_types[];
 extern EnumPropertyItem prop_side_types[];
 
 /* operators */
-struct wmOperatorType;
 struct wmKeyConfig;
+struct wmOperatorType;
 
 void SEQUENCER_OT_cut(struct wmOperatorType *ot);
 void SEQUENCER_OT_slip(struct wmOperatorType *ot);
@@ -149,7 +141,7 @@ void SEQUENCER_OT_select_linked(struct wmOperatorType *ot);
 void SEQUENCER_OT_select_linked_pick(struct wmOperatorType *ot);
 void SEQUENCER_OT_select_handles(struct wmOperatorType *ot);
 void SEQUENCER_OT_select_active_side(struct wmOperatorType *ot);
-void SEQUENCER_OT_select_border(struct wmOperatorType *ot);
+void SEQUENCER_OT_select_box(struct wmOperatorType *ot);
 void SEQUENCER_OT_select_inverse(struct wmOperatorType *ot);
 void SEQUENCER_OT_select_grouped(struct wmOperatorType *ot);
 
@@ -164,18 +156,18 @@ void SEQUENCER_OT_effect_strip_add(struct wmOperatorType *ot);
 
 enum {
 	SEQ_CUT_SOFT,
-	SEQ_CUT_HARD
+	SEQ_CUT_HARD,
 };
 enum {
 	SEQ_SELECTED,
-	SEQ_UNSELECTED
+	SEQ_UNSELECTED,
 };
 
 enum {
 	SEQ_SELECT_LR_NONE = 0,
 	SEQ_SELECT_LR_MOUSE,
 	SEQ_SELECT_LR_LEFT,
-	SEQ_SELECT_LR_RIGHT	
+	SEQ_SELECT_LR_RIGHT,
 };
 
 /* defines used internally */
@@ -213,4 +205,3 @@ int sequencer_image_seq_get_minmax_frame(struct wmOperator *op, int sfra, int *r
 void sequencer_image_seq_reserve_frames(struct wmOperator *op, struct StripElem *se, int len, int minframe, int numdigits);
 
 #endif /* __SEQUENCER_INTERN_H__ */
-

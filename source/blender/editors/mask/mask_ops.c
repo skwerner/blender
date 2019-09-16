@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mask/mask_ops.c
- *  \ingroup edmask
+/** \file
+ * \ingroup edmask
  */
 
 #include "MEM_guardedalloc.h"
@@ -35,9 +27,10 @@
 #include "BLI_math.h"
 
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_main.h"
 #include "BKE_mask.h"
+
+#include "DEG_depsgraph.h"
 
 #include "DNA_scene_types.h"
 #include "DNA_mask_types.h"
@@ -51,6 +44,7 @@
 #include "ED_keyframing.h"
 #include "ED_mask.h"
 #include "ED_screen.h"
+#include "ED_select_utils.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -338,7 +332,7 @@ Mask *ED_mask_new(bContext *C, const char *name)
 }
 
 /* Get ative layer. Will create mask/layer to be sure there's an active layer.  */
-MaskLayer *ED_mask_layer_ensure(bContext *C)
+MaskLayer *ED_mask_layer_ensure(bContext *C, bool *r_added_mask)
 {
 	Mask *mask = CTX_data_edit_mask(C);
 	MaskLayer *mask_layer;
@@ -346,6 +340,7 @@ MaskLayer *ED_mask_layer_ensure(bContext *C)
 	if (mask == NULL) {
 		/* If there's no active mask, create one. */
 		mask = ED_mask_new(C, NULL);
+		*r_added_mask = true;
 	}
 
 	mask_layer = BKE_mask_layer_active(mask);
@@ -364,6 +359,8 @@ static int mask_new_exec(bContext *C, wmOperator *op)
 	RNA_string_get(op->ptr, "name", name);
 
 	ED_mask_new(C, name);
+
+	WM_event_add_notifier(C, NC_MASK | NA_ADDED, NULL);
 
 	return OPERATOR_FINISHED;
 }
@@ -459,7 +456,7 @@ enum {
 	SLIDE_ACTION_POINT   = 1,
 	SLIDE_ACTION_HANDLE  = 2,
 	SLIDE_ACTION_FEATHER = 3,
-	SLIDE_ACTION_SPLINE  = 4
+	SLIDE_ACTION_SPLINE  = 4,
 };
 
 typedef struct SlidePointData {
@@ -1062,7 +1059,7 @@ static int slide_point_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			}
 
 			WM_event_add_notifier(C, NC_MASK | NA_EDITED, data->mask);
-			DAG_id_tag_update(&data->mask->id, 0);
+			DEG_id_tag_update(&data->mask->id, 0);
 
 			break;
 		}
@@ -1089,7 +1086,7 @@ static int slide_point_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				}
 
 				WM_event_add_notifier(C, NC_MASK | NA_EDITED, data->mask);
-				DAG_id_tag_update(&data->mask->id, 0);
+				DEG_id_tag_update(&data->mask->id, 0);
 
 				free_slide_point_data(op->customdata); /* keep this last! */
 				return OPERATOR_FINISHED;
@@ -1105,7 +1102,7 @@ static int slide_point_modal(bContext *C, wmOperator *op, const wmEvent *event)
 			cancel_slide_point(op->customdata);
 
 			WM_event_add_notifier(C, NC_MASK | NA_EDITED, data->mask);
-			DAG_id_tag_update(&data->mask->id, 0);
+			DEG_id_tag_update(&data->mask->id, 0);
 
 			free_slide_point_data(op->customdata); /* keep this last! */
 			return OPERATOR_CANCELLED;
@@ -1469,7 +1466,7 @@ static int slide_spline_curvature_modal(bContext *C, wmOperator *op, const wmEve
 			}
 
 			WM_event_add_notifier(C, NC_MASK | NA_EDITED, slide_data->mask);
-			DAG_id_tag_update(&slide_data->mask->id, 0);
+			DEG_id_tag_update(&slide_data->mask->id, 0);
 
 			break;
 		}
@@ -1483,7 +1480,7 @@ static int slide_spline_curvature_modal(bContext *C, wmOperator *op, const wmEve
 				}
 
 				WM_event_add_notifier(C, NC_MASK | NA_EDITED, slide_data->mask);
-				DAG_id_tag_update(&slide_data->mask->id, 0);
+				DEG_id_tag_update(&slide_data->mask->id, 0);
 
 				free_slide_spline_curvature_data(slide_data); /* keep this last! */
 				return OPERATOR_FINISHED;
@@ -1495,7 +1492,7 @@ static int slide_spline_curvature_modal(bContext *C, wmOperator *op, const wmEve
 			cancel_slide_spline_curvature(slide_data);
 
 			WM_event_add_notifier(C, NC_MASK | NA_EDITED, slide_data->mask);
-			DAG_id_tag_update(&slide_data->mask->id, 0);
+			DEG_id_tag_update(&slide_data->mask->id, 0);
 
 			free_slide_spline_curvature_data(op->customdata); /* keep this last! */
 			return OPERATOR_CANCELLED;
@@ -1541,7 +1538,7 @@ static int cyclic_toggle_exec(bContext *C, wmOperator *UNUSED(op))
 		}
 	}
 
-	DAG_id_tag_update(&mask->id, 0);
+	DEG_id_tag_update(&mask->id, 0);
 	WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
 
 	return OPERATOR_FINISHED;
@@ -1900,7 +1897,7 @@ static int set_handle_type_exec(bContext *C, wmOperator *op)
 
 	if (changed) {
 		WM_event_add_notifier(C, NC_MASK | ND_DATA, mask);
-		DAG_id_tag_update(&mask->id, 0);
+		DEG_id_tag_update(&mask->id, 0);
 
 		return OPERATOR_FINISHED;
 	}
@@ -1915,7 +1912,7 @@ void MASK_OT_handle_type_set(wmOperatorType *ot)
 		{HD_ALIGN, "ALIGNED", 0, "Aligned Single", ""},
 		{HD_ALIGN_DOUBLESIDE, "ALIGNED_DOUBLESIDE", 0, "Aligned", ""},
 		{HD_FREE, "FREE", 0, "Free", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1955,7 +1952,7 @@ static int mask_hide_view_clear_exec(bContext *C, wmOperator *op)
 
 	if (changed) {
 		WM_event_add_notifier(C, NC_MASK | ND_DRAW, mask);
-		DAG_id_tag_update(&mask->id, 0);
+		DEG_id_tag_update(&mask->id, 0);
 
 		return OPERATOR_FINISHED;
 	}
@@ -2019,7 +2016,7 @@ static int mask_hide_view_set_exec(bContext *C, wmOperator *op)
 
 	if (changed) {
 		WM_event_add_notifier(C, NC_MASK | ND_DRAW, mask);
-		DAG_id_tag_update(&mask->id, 0);
+		DEG_id_tag_update(&mask->id, 0);
 
 		return OPERATOR_FINISHED;
 	}
@@ -2079,7 +2076,7 @@ static int mask_feather_weight_clear_exec(bContext *C, wmOperator *UNUSED(op))
 		BKE_mask_update_display(mask, CFRA);
 
 		WM_event_add_notifier(C, NC_MASK | ND_DRAW, mask);
-		DAG_id_tag_update(&mask->id, 0);
+		DEG_id_tag_update(&mask->id, 0);
 
 		return OPERATOR_FINISHED;
 	}
@@ -2105,7 +2102,7 @@ void MASK_OT_feather_weight_clear(wmOperatorType *ot)
 
 /******************** move mask layer operator *********************/
 
-static int mask_layer_move_poll(bContext *C)
+static bool mask_layer_move_poll(bContext *C)
 {
 	if (ED_maskedit_mask_poll(C)) {
 		Mask *mask = CTX_data_edit_mask(C);
@@ -2157,7 +2154,7 @@ void MASK_OT_layer_move(wmOperatorType *ot)
 	static const EnumPropertyItem direction_items[] = {
 		{-1, "UP", 0, "Up", ""},
 		{1, "DOWN", 0, "Down", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -2215,7 +2212,8 @@ static int mask_duplicate_exec(bContext *C, wmOperator *UNUSED(op))
 					MaskSplinePoint *new_point;
 					int b;
 
-					/* BKE_mask_spline_add might allocate the points, need to free them in this case. */
+					/* BKE_mask_spline_add might allocate the points,
+					 * need to free them in this case. */
 					if (new_spline->points) {
 						MEM_freeN(new_spline->points);
 					}
@@ -2334,7 +2332,7 @@ void MASK_OT_copy_splines(wmOperatorType *ot)
 
 /********************** paste tracks from clipboard operator *********************/
 
-static int paste_splines_poll(bContext *C)
+static bool paste_splines_poll(bContext *C)
 {
 	if (ED_maskedit_mask_poll(C)) {
 		return BKE_mask_clipboard_is_empty() == false;

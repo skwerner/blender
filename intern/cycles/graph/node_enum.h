@@ -39,10 +39,12 @@ struct NodeEnum {
 	int operator[](ustring x) const { return left.find(x)->second; }
 	ustring operator[](int y) const { return right.find(y)->second; }
 
+	unordered_map<ustring, int, ustringHash>::const_iterator begin() const { return left.begin(); }
+	unordered_map<ustring, int, ustringHash>::const_iterator end() const { return left.end(); }
+
 private:
 	unordered_map<ustring, int, ustringHash> left;
 	unordered_map<int, ustring> right;
 };
 
 CCL_NAMESPACE_END
-

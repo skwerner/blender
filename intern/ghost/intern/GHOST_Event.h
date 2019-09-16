@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_Event.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_Event class.
  */
 
@@ -38,8 +30,6 @@
 
 /**
  * Base class for events received the operating system.
- * \author	Maarten Gribnau
- * \date	May 11, 2001
  */
 class GHOST_Event : public GHOST_IEvent
 {
@@ -60,7 +50,7 @@ public:
 	 * \return The event type.
 	 */
 	GHOST_TEventType getType()
-	{ 
+	{
 		return m_type;
 	}
 
@@ -74,7 +64,7 @@ public:
 	}
 
 	/**
-	 * Returns the window this event was generated on, 
+	 * Returns the window this event was generated on,
 	 * or NULL if it is a 'system' event.
 	 * \return The generating window.
 	 */
@@ -104,4 +94,3 @@ protected:
 };
 
 #endif // __GHOST_EVENT_H__
-

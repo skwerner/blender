@@ -1,6 +1,4 @@
 /*
- * Copyright 2012, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Dalai Felinto
+ * Copyright 2012, Blender Foundation.
  */
 
 #include "COM_ChannelMatteNode.h"
@@ -53,9 +50,9 @@ void ChannelMatteNode::convertToOperations(NodeConverter &converter, const Compo
 			break;
 		case CMP_NODE_CHANNEL_MATTE_CS_YCC: /* YCC */
 			convert = new ConvertRGBToYCCOperation();
-			((ConvertRGBToYCCOperation *)convert)->setMode(0); /* BLI_YCC_ITU_BT601 */
+			((ConvertRGBToYCCOperation *)convert)->setMode(BLI_YCC_ITU_BT709);
 			inv_convert = new ConvertYCCToRGBOperation();
-			((ConvertYCCToRGBOperation *)inv_convert)->setMode(0); /* BLI_YCC_ITU_BT601 */
+			((ConvertYCCToRGBOperation *)inv_convert)->setMode(BLI_YCC_ITU_BT709);
 			break;
 		default:
 			break;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * Dynamically sized string ADT
  */
 
-/** \file blender/blenlib/intern/BLI_dynstr.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <stdlib.h>  /* malloc */
@@ -58,7 +50,7 @@
 typedef struct DynStrElem DynStrElem;
 struct DynStrElem {
 	DynStrElem *next;
-	
+
 	char *str;
 };
 
@@ -81,7 +73,7 @@ DynStr *BLI_dynstr_new(void)
 	ds->elems = ds->last = NULL;
 	ds->curlen = 0;
 	ds->memarena = NULL;
-	
+
 	return ds;
 }
 
@@ -108,22 +100,24 @@ BLI_INLINE void *dynstr_alloc(DynStr *__restrict ds, size_t size)
 /**
  * Append a c-string to a DynStr.
  *
- * \param ds The DynStr to append to.
- * \param cstr The c-string to append.
+ * \param ds: The DynStr to append to.
+ * \param cstr: The c-string to append.
  */
 void BLI_dynstr_append(DynStr *__restrict ds, const char *cstr)
 {
 	DynStrElem *dse = dynstr_alloc(ds, sizeof(*dse));
 	int cstrlen = strlen(cstr);
-	
+
 	dse->str = dynstr_alloc(ds, cstrlen + 1);
 	memcpy(dse->str, cstr, cstrlen + 1);
 	dse->next = NULL;
-	
-	if (!ds->last)
+
+	if (!ds->last) {
 		ds->last = ds->elems = dse;
-	else
+	}
+	else {
 		ds->last = ds->last->next = dse;
+	}
 
 	ds->curlen += cstrlen;
 }
@@ -131,9 +125,9 @@ void BLI_dynstr_append(DynStr *__restrict ds, const char *cstr)
 /**
  * Append a length clamped c-string to a DynStr.
  *
- * \param ds The DynStr to append to.
- * \param cstr The c-string to append.
- * \param len The maximum length of the c-string to copy.
+ * \param ds: The DynStr to append to.
+ * \param cstr: The c-string to append.
+ * \param len: The maximum length of the c-string to copy.
  */
 void BLI_dynstr_nappend(DynStr *__restrict ds, const char *cstr, int len)
 {
@@ -145,10 +139,12 @@ void BLI_dynstr_nappend(DynStr *__restrict ds, const char *cstr, int len)
 	dse->str[cstrlen] = '\0';
 	dse->next = NULL;
 
-	if (!ds->last)
+	if (!ds->last) {
 		ds->last = ds->elems = dse;
-	else
+	}
+	else {
 		ds->last = ds->last->next = dse;
+	}
 
 	ds->curlen += cstrlen;
 }
@@ -162,10 +158,12 @@ void BLI_dynstr_vappendf(DynStr *__restrict ds, const char *__restrict format, v
 
 	while (1) {
 		va_list args_cpy;
-		if (len == sizeof(fixedmessage))
+		if (len == sizeof(fixedmessage)) {
 			message = fixedmessage;
-		else
+		}
+		else {
 			message = MEM_callocN(sizeof(char) * len, "BLI_dynstr_appendf");
+		}
 
 		/* cant reuse the same args, so work on a copy */
 		va_copy(args_cpy, args);
@@ -175,8 +173,9 @@ void BLI_dynstr_vappendf(DynStr *__restrict ds, const char *__restrict format, v
 		if (retval == -1) {
 			/* -1 means not enough space, but on windows it may also mean
 			 * there is a formatting error, so we impose a maximum length */
-			if (message != fixedmessage)
+			if (message != fixedmessage) {
 				MEM_freeN(message);
+			}
 			message = NULL;
 
 			len *= 2;
@@ -187,30 +186,33 @@ void BLI_dynstr_vappendf(DynStr *__restrict ds, const char *__restrict format, v
 		}
 		else if (retval >= len) {
 			/* in C99 the actual length required is returned */
-			if (message != fixedmessage)
+			if (message != fixedmessage) {
 				MEM_freeN(message);
+			}
 			message = NULL;
 
 			/* retval doesn't include \0 terminator */
 			len = retval + 1;
 		}
-		else
+		else {
 			break;
+		}
 	}
 
 	if (message) {
 		BLI_dynstr_append(ds, message);
 
-		if (message != fixedmessage)
+		if (message != fixedmessage) {
 			MEM_freeN(message);
+		}
 	}
 }
 
 /**
  * Append a c-string to a DynStr, but with formatting like printf.
  *
- * \param ds The DynStr to append to.
- * \param format The printf format string to use.
+ * \param ds: The DynStr to append to.
+ * \param format: The printf format string to use.
  */
 void BLI_dynstr_appendf(DynStr *__restrict ds, const char *__restrict format, ...)
 {
@@ -225,10 +227,12 @@ void BLI_dynstr_appendf(DynStr *__restrict ds, const char *__restrict format, ..
 	 * va_start/va_end have to be called for each vsnprintf call */
 
 	while (1) {
-		if (len == sizeof(fixedmessage))
+		if (len == sizeof(fixedmessage)) {
 			message = fixedmessage;
-		else
+		}
+		else {
 			message = MEM_callocN(sizeof(char) * (len), "BLI_dynstr_appendf");
+		}
 
 		va_start(args, format);
 		retval = vsnprintf(message, len, format, args);
@@ -237,8 +241,9 @@ void BLI_dynstr_appendf(DynStr *__restrict ds, const char *__restrict format, ..
 		if (retval == -1) {
 			/* -1 means not enough space, but on windows it may also mean
 			 * there is a formatting error, so we impose a maximum length */
-			if (message != fixedmessage)
+			if (message != fixedmessage) {
 				MEM_freeN(message);
+			}
 			message = NULL;
 
 			len *= 2;
@@ -249,29 +254,32 @@ void BLI_dynstr_appendf(DynStr *__restrict ds, const char *__restrict format, ..
 		}
 		else if (retval >= len) {
 			/* in C99 the actual length required is returned */
-			if (message != fixedmessage)
+			if (message != fixedmessage) {
 				MEM_freeN(message);
+			}
 			message = NULL;
 
 			/* retval doesn't include \0 terminator */
 			len = retval + 1;
 		}
-		else
+		else {
 			break;
+		}
 	}
 
 	if (message) {
 		BLI_dynstr_append(ds, message);
 
-		if (message != fixedmessage)
+		if (message != fixedmessage) {
 			MEM_freeN(message);
+		}
 	}
 }
 
 /**
  * Find the length of a DynStr.
  *
- * \param ds The DynStr of interest.
+ * \param ds: The DynStr of interest.
  * \return The length of \a ds.
  */
 int BLI_dynstr_get_len(DynStr *ds)
@@ -308,7 +316,7 @@ void BLI_dynstr_get_cstring_ex(DynStr *__restrict ds, char *__restrict rets)
  * <i> The returned c-string should be freed
  * using MEM_freeN. </i>
  *
- * \param ds The DynStr of interest.
+ * \param ds: The DynStr of interest.
  * \return The contents of \a ds as a c-string.
  */
 char *BLI_dynstr_get_cstring(DynStr *ds)
@@ -321,7 +329,7 @@ char *BLI_dynstr_get_cstring(DynStr *ds)
 /**
  * Clear the DynStr
  *
- * \param ds The DynStr to clear.
+ * \param ds: The DynStr to clear.
  */
 void BLI_dynstr_clear(DynStr *ds)
 {
@@ -344,7 +352,7 @@ void BLI_dynstr_clear(DynStr *ds)
 /**
  * Free the DynStr
  *
- * \param ds The DynStr to free.
+ * \param ds: The DynStr to free.
  */
 void BLI_dynstr_free(DynStr *ds)
 {

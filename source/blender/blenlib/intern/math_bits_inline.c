@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,11 +13,10 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
-/** \file blender/blenlib/intern/math_bits_inline.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifndef __MATH_BITS_INLINE_C__
@@ -34,7 +31,7 @@
 MINLINE int bitscan_forward_i(int a)
 {
 	BLI_assert(a != 0);
-#  ifdef _MSC_VER
+#ifdef _MSC_VER
 	unsigned long ctz;
 	_BitScanForward(&ctz, a);
 	return ctz;
@@ -63,7 +60,7 @@ MINLINE unsigned int bitscan_forward_clear_uint(unsigned int *a)
 MINLINE int bitscan_reverse_i(int a)
 {
 	BLI_assert(a != 0);
-#  ifdef _MSC_VER
+#ifdef _MSC_VER
 	unsigned long clz;
 	_BitScanReverse(&clz, a);
 	return clz;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,27 +12,28 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_transform_snap_object_context.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_TRANSFORM_SNAP_OBJECT_CONTEXT_H__
 #define __ED_TRANSFORM_SNAP_OBJECT_CONTEXT_H__
 
-struct BMVert;
 struct BMEdge;
 struct BMFace;
+struct BMVert;
 
+struct ARegion;
+struct Depsgraph;
 struct ListBase;
-struct Scene;
 struct Main;
 struct Object;
-struct ARegion;
+struct Scene;
 struct View3D;
+struct ViewLayer;
+struct bContext;
 
 /* transform_snap_object.c */
 
@@ -69,13 +68,15 @@ struct SnapObjectParams {
 	char snap_select;
 	/* use editmode cage */
 	unsigned int use_object_edit_cage : 1;
+	/* snap to the closest element, use when using more than one snap type */
+	unsigned int use_occlusion_test   : 1;
 };
 
 typedef struct SnapObjectContext SnapObjectContext;
 SnapObjectContext *ED_transform_snap_object_context_create(
-        struct Main *bmain, struct Scene *scene, int flag);
+        struct Main *bmain, struct Scene *scene, struct Depsgraph *depsgraph, int flag);
 SnapObjectContext *ED_transform_snap_object_context_create_view3d(
-        struct Main *bmain, struct Scene *scene, int flag,
+        struct Main *bmain, struct Scene *scene, struct Depsgraph *depsgraph, int flag,
         /* extra args for view3d */
         const struct ARegion *ar, const struct View3D *v3d);
 void ED_transform_snap_object_context_destroy(SnapObjectContext *sctx);
@@ -113,23 +114,15 @@ bool ED_transform_snap_object_project_view3d_ex(
         const unsigned short snap_to,
         const struct SnapObjectParams *params,
         const float mval[2], float *dist_px,
-        float *ray_depth,
-        float r_loc[3], float r_no[3], int *r_index);
+        float r_loc[3], float r_no[3], int *r_index,
+        struct Object **r_ob, float r_obmat[4][4]);
 bool ED_transform_snap_object_project_view3d(
         struct SnapObjectContext *sctx,
         const unsigned short snap_to,
         const struct SnapObjectParams *params,
         const float mval[2], float *dist_px,
-        float *ray_depth,
         /* return args */
         float r_loc[3], float r_no[3]);
-bool ED_transform_snap_object_project_view3d_mixed(
-        SnapObjectContext *sctx,
-        const unsigned short snap_to_flag,
-        const struct SnapObjectParams *params,
-        const float mval_fl[2], float *dist_px,
-        bool use_depth,
-        float r_co[3], float r_no[3]);
 
 bool ED_transform_snap_object_project_all_view3d_ex(
         SnapObjectContext *sctx,

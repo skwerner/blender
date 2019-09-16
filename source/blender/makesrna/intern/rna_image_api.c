@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Arystanbek Dyussenov
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_image_api.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -56,17 +49,14 @@
 #include "IMB_imbuf.h"
 #include "IMB_colormanagement.h"
 
-#include "GPU_draw.h"
-#include "GPU_debug.h"
-
 #include "DNA_image_types.h"
 #include "DNA_scene_types.h"
 
 #include "MEM_guardedalloc.h"
 
-static void rna_ImagePackedFile_save(ImagePackedFile *imapf, ReportList *reports)
+static void rna_ImagePackedFile_save(ImagePackedFile *imapf, Main *bmain, ReportList *reports)
 {
-	if (writePackedFile(reports, imapf->filepath, imapf->packedfile, 0) != RET_OK) {
+	if (writePackedFile(reports, BKE_main_blendfile_path(bmain), imapf->filepath, imapf->packedfile, 0) != RET_OK) {
 		BKE_reportf(reports, RPT_ERROR, "Could not save packed file to disk as '%s'",
 		            imapf->filepath);
 	}
@@ -118,7 +108,9 @@ static void rna_Image_save_render(Image *image, bContext *C, ReportList *reports
 
 static void rna_Image_save(Image *image, Main *bmain, bContext *C, ReportList *reports)
 {
-	ImBuf *ibuf = BKE_image_acquire_ibuf(image, NULL, NULL);
+	void *lock;
+
+	ImBuf *ibuf = BKE_image_acquire_ibuf(image, NULL, &lock);
 	if (ibuf) {
 		char filename[FILE_MAX];
 		BLI_strncpy(filename, image->name, sizeof(filename));
@@ -133,7 +125,7 @@ static void rna_Image_save(Image *image, Main *bmain, bContext *C, ReportList *r
 			if (image->source == IMA_SRC_GENERATED)
 				image->source = IMA_SRC_FILE;
 
-			IMB_colormanagment_colorspace_from_ibuf_ftype(&image->colorspace_settings, ibuf);
+			IMB_colormanagement_colorspace_from_ibuf_ftype(&image->colorspace_settings, ibuf);
 
 			ibuf->userflags &= ~IB_BITMAPDIRTY;
 		}
@@ -145,13 +137,13 @@ static void rna_Image_save(Image *image, Main *bmain, bContext *C, ReportList *r
 		BKE_reportf(reports, RPT_ERROR, "Image '%s' does not have any image data", image->id.name + 2);
 	}
 
-	BKE_image_release_ibuf(image, ibuf, NULL);
+	BKE_image_release_ibuf(image, ibuf, lock);
 	WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, image);
 }
 
 static void rna_Image_pack(
         Image *image, Main *bmain, bContext *C, ReportList *reports,
-        int as_png, const char *data, int data_len)
+        bool as_png, const char *data, int data_len)
 {
 	ImBuf *ibuf = BKE_image_acquire_ibuf(image, NULL, NULL);
 
@@ -177,7 +169,7 @@ static void rna_Image_pack(
 	WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, image);
 }
 
-static void rna_Image_unpack(Image *image, ReportList *reports, int method)
+static void rna_Image_unpack(Image *image, Main *bmain, ReportList *reports, int method)
 {
 	if (!BKE_image_has_packedfile(image)) {
 		BKE_report(reports, RPT_ERROR, "Image not packed");
@@ -188,13 +180,14 @@ static void rna_Image_unpack(Image *image, ReportList *reports, int method)
 	}
 	else {
 		/* reports its own error on failure */
-		unpackImage(reports, image, method);
+		unpackImage(bmain, reports, image, method);
 	}
 }
 
-static void rna_Image_reload(Image *image)
+static void rna_Image_reload(Image *image, Main *bmain)
 {
-	BKE_image_signal(image, NULL, IMA_SIGNAL_RELOAD);
+	BKE_image_signal(bmain, image, NULL, IMA_SIGNAL_RELOAD);
+	WM_main_add_notifier(NC_IMAGE | NA_EDITED, image);
 }
 
 static void rna_Image_update(Image *image, ReportList *reports)
@@ -223,54 +216,58 @@ static void rna_Image_scale(Image *image, ReportList *reports, int width, int he
 
 static int rna_Image_gl_load(Image *image, ReportList *reports, int frame, int filter, int mag)
 {
-	ImBuf *ibuf;
-	unsigned int *bind = &image->bindcode[TEXTARGET_TEXTURE_2D];
+	GPUTexture *tex = image->gputexture[TEXTARGET_TEXTURE_2D];
 	int error = GL_NO_ERROR;
-	ImageUser iuser = {NULL};
-	void *lock;
 
-	if (*bind)
+	if (tex)
 		return error;
+
+	ImageUser iuser = {NULL};
 	iuser.framenr = frame;
 	iuser.ok = true;
 
-	ibuf = BKE_image_acquire_ibuf(image, &iuser, &lock);
+	void *lock;
+	ImBuf *ibuf = BKE_image_acquire_ibuf(image, &iuser, &lock);
 
 	/* clean glError buffer */
 	while (glGetError() != GL_NO_ERROR) {}
 
 	if (ibuf == NULL || ibuf->rect == NULL) {
 		BKE_reportf(reports, RPT_ERROR, "Image '%s' does not have any image data", image->id.name + 2);
-		BKE_image_release_ibuf(image, ibuf, NULL);
+		BKE_image_release_ibuf(image, ibuf, lock);
 		return (int)GL_INVALID_OPERATION;
 	}
 
-	GPU_create_gl_tex(bind, ibuf->rect, ibuf->rect_float, ibuf->x, ibuf->y, GL_TEXTURE_2D,
+	unsigned int bindcode = 0;
+	GPU_create_gl_tex(&bindcode, ibuf->rect, ibuf->rect_float, ibuf->x, ibuf->y, GL_TEXTURE_2D,
 	                  (filter != GL_NEAREST && filter != GL_LINEAR), false, image);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (GLint)filter);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (GLint)mag);
 
+	/* TODO(merwin): validate input (dimensions, filter, mag) before calling OpenGL
+	 *               instead of trusting input & testing for error after */
 	error = glGetError();
 
 	if (error) {
-		glDeleteTextures(1, (GLuint *)bind);
-		image->bindcode[TEXTARGET_TEXTURE_2D] = 0;
+		glDeleteTextures(1, (GLuint *)&bindcode);
+	}
+	else {
+		image->gputexture[TEXTARGET_TEXTURE_2D] = GPU_texture_from_bindcode(GL_TEXTURE_2D, bindcode);
 	}
 
-	BKE_image_release_ibuf(image, ibuf, NULL);
+	BKE_image_release_ibuf(image, ibuf, lock);
 
 	return error;
 }
 
 static int rna_Image_gl_touch(Image *image, ReportList *reports, int frame, int filter, int mag)
 {
-	unsigned int *bind = &image->bindcode[TEXTARGET_TEXTURE_2D];
 	int error = GL_NO_ERROR;
 
 	BKE_image_tag_time(image);
 
-	if (*bind == 0)
+	if (image->gputexture[TEXTARGET_TEXTURE_2D] == NULL)
 		error = rna_Image_gl_load(image, reports, frame, filter, mag);
 
 	return error;
@@ -302,7 +299,7 @@ void RNA_api_image_packed_file(StructRNA *srna)
 
 	func = RNA_def_function(srna, "save", "rna_ImagePackedFile_save");
 	RNA_def_function_ui_description(func, "Save the packed file to its filepath");
-	RNA_def_function_flag(func, FUNC_USE_REPORTS);
+	RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_REPORTS);
 }
 
 void RNA_api_image(StructRNA *srna)
@@ -332,10 +329,11 @@ void RNA_api_image(StructRNA *srna)
 
 	func = RNA_def_function(srna, "unpack", "rna_Image_unpack");
 	RNA_def_function_ui_description(func, "Save an image packed in the .blend file to disk");
-	RNA_def_function_flag(func, FUNC_USE_REPORTS);
+	RNA_def_function_flag(func, FUNC_USE_MAIN | FUNC_USE_REPORTS);
 	RNA_def_enum(func, "method", rna_enum_unpack_method_items, PF_USE_LOCAL, "method", "How to unpack");
 
 	func = RNA_def_function(srna, "reload", "rna_Image_reload");
+	RNA_def_function_flag(func, FUNC_USE_MAIN);
 	RNA_def_function_ui_description(func, "Reload the image from its source path");
 
 	func = RNA_def_function(srna, "update", "rna_Image_update");
@@ -395,4 +393,3 @@ void RNA_api_image(StructRNA *srna)
 }
 
 #endif
-

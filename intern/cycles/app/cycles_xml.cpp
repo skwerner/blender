@@ -40,6 +40,7 @@
 
 #include "util/util_foreach.h"
 #include "util/util_path.h"
+#include "util/util_projection.h"
 #include "util/util_transform.h"
 #include "util/util_xml.h"
 
@@ -183,7 +184,7 @@ static bool xml_equal_string(xml_node node, const char *name, const char *value)
 
 	if(attr)
 		return string_iequals(attr.value(), value);
-	
+
 	return false;
 }
 
@@ -204,7 +205,7 @@ static void xml_read_camera(XMLReadState& state, xml_node node)
 	cam->matrix = state.tfm;
 
 	cam->need_update = true;
-	cam->update();
+	cam->update(state.scene);
 }
 
 /* Shader */
@@ -441,7 +442,7 @@ static void xml_read_mesh(const XMLReadState& state, xml_node node)
 		if(xml_read_float_array(UV, node, "UV")) {
 			ustring name = ustring("UVMap");
 			Attribute *attr = mesh->attributes.add(ATTR_STD_UV, name);
-			float3 *fdata = attr->data_float3();
+			float2 *fdata = attr->data_float2();
 
 			/* loop over the triangles */
 			index_offset = 0;
@@ -455,9 +456,9 @@ static void xml_read_mesh(const XMLReadState& state, xml_node node)
 					assert(v1*2+1 < (int)UV.size());
 					assert(v2*2+1 < (int)UV.size());
 
-					fdata[0] = make_float3(UV[v0*2], UV[v0*2+1], 0.0);
-					fdata[1] = make_float3(UV[v1*2], UV[v1*2+1], 0.0);
-					fdata[2] = make_float3(UV[v2*2], UV[v2*2+1], 0.0);
+					fdata[0] = make_float2(UV[v0*2], UV[v0*2+1]);
+					fdata[1] = make_float2(UV[v1*2], UV[v1*2+1]);
+					fdata[2] = make_float2(UV[v2*2], UV[v2*2+1]);
 					fdata += 3;
 				}
 
@@ -515,8 +516,6 @@ static void xml_read_mesh(const XMLReadState& state, xml_node node)
 		xml_read_float(&sdparams.dicing_rate, node, "dicing_rate");
 		sdparams.dicing_rate = std::max(0.1f, sdparams.dicing_rate);
 
-		state.scene->camera->update();
-		sdparams.camera = state.scene->camera;
 		sdparams.objecttoworld = state.tfm;
 	}
 
@@ -546,8 +545,10 @@ static void xml_read_transform(xml_node node, Transform& tfm)
 {
 	if(node.attribute("matrix")) {
 		vector<float> matrix;
-		if(xml_read_float_array(matrix, node, "matrix") && matrix.size() == 16)
-			tfm = tfm * transform_transpose((*(Transform*)&matrix[0]));
+		if(xml_read_float_array(matrix, node, "matrix") && matrix.size() == 16) {
+			ProjectionTransform projection = *(ProjectionTransform*)&matrix[0];
+			tfm = tfm * projection_to_transform(projection_transpose(projection));
+		}
 	}
 
 	if(node.attribute("translate")) {
@@ -694,4 +695,3 @@ void xml_read_file(Scene *scene, const char *filepath)
 }
 
 CCL_NAMESPACE_END
-

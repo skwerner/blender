@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_edgenet.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Edge-Net for filling in open edge-loops.
  */
@@ -50,8 +44,9 @@ void bmo_edgenet_fill_exec(BMesh *bm, BMOperator *op)
 	const bool use_smooth     = BMO_slot_bool_get(op->slots_in, "use_smooth");
 //	const int sides           = BMO_slot_int_get(op->slots_in,  "sides");
 
-	if (!bm->totvert || !bm->totedge)
+	if (!bm->totvert || !bm->totedge) {
 		return;
+	}
 
 	BM_mesh_elem_hflag_disable_all(bm, BM_EDGE, BM_ELEM_TAG, false);
 	BMO_slot_buffer_hflag_enable(bm, op->slots_in, "edges", BM_EDGE, BM_ELEM_TAG, false);
@@ -179,22 +174,22 @@ void bmo_edgenet_prepare_exec(BMesh *bm, BMOperator *op)
 
 		if (!count) {
 			edges1 = edges;
-			BLI_array_count_set(edges1, BLI_array_count(edges));
+			BLI_array_len_set(edges1, BLI_array_len(edges));
 		}
 		else {
 			edges2 = edges;
-			BLI_array_count_set(edges2, BLI_array_count(edges));
+			BLI_array_len_set(edges2, BLI_array_len(edges));
 		}
 
 		BLI_array_clear(edges);
 		count++;
 	}
 
-	if (edges1 && BLI_array_count(edges1) > 2 &&
-	    BM_edge_share_vert_check(edges1[0], edges1[BLI_array_count(edges1) - 1]))
+	if (edges1 && BLI_array_len(edges1) > 2 &&
+	    BM_edge_share_vert_check(edges1[0], edges1[BLI_array_len(edges1) - 1]))
 	{
-		if (edges2 && BLI_array_count(edges2) > 2 &&
-		    BM_edge_share_vert_check(edges2[0], edges2[BLI_array_count(edges2) - 1]))
+		if (edges2 && BLI_array_len(edges2) > 2 &&
+		    BM_edge_share_vert_check(edges2[0], edges2[BLI_array_len(edges2) - 1]))
 		{
 			BLI_array_free(edges1);
 			BLI_array_free(edges2);
@@ -206,8 +201,8 @@ void bmo_edgenet_prepare_exec(BMesh *bm, BMOperator *op)
 		}
 	}
 
-	if (edges2 && BLI_array_count(edges2) > 2 &&
-	    BM_edge_share_vert_check(edges2[0], edges2[BLI_array_count(edges2) - 1]))
+	if (edges2 && BLI_array_len(edges2) > 2 &&
+	    BM_edge_share_vert_check(edges2[0], edges2[BLI_array_len(edges2) - 1]))
 	{
 		edges2 = NULL;
 	}
@@ -218,23 +213,23 @@ void bmo_edgenet_prepare_exec(BMesh *bm, BMOperator *op)
 		float dvec1[3];
 		float dvec2[3];
 
-		if (BLI_array_count(edges1) == 1) {
+		if (BLI_array_len(edges1) == 1) {
 			v1 = edges1[0]->v1;
 			v2 = edges1[0]->v2;
 		}
 		else {
 			v1 = BM_vert_in_edge(edges1[1], edges1[0]->v1) ? edges1[0]->v2 : edges1[0]->v1;
-			i  = BLI_array_count(edges1) - 1;
+			i  = BLI_array_len(edges1) - 1;
 			v2 = BM_vert_in_edge(edges1[i - 1], edges1[i]->v1) ? edges1[i]->v2 : edges1[i]->v1;
 		}
 
-		if (BLI_array_count(edges2) == 1) {
+		if (BLI_array_len(edges2) == 1) {
 			v3 = edges2[0]->v1;
 			v4 = edges2[0]->v2;
 		}
 		else {
 			v3 = BM_vert_in_edge(edges2[1], edges2[0]->v1) ? edges2[0]->v2 : edges2[0]->v1;
-			i  = BLI_array_count(edges2) - 1;
+			i  = BLI_array_len(edges2) - 1;
 			v4 = BM_vert_in_edge(edges2[i - 1], edges2[i]->v1) ? edges2[i]->v2 : edges2[i]->v1;
 		}
 
@@ -265,9 +260,9 @@ void bmo_edgenet_prepare_exec(BMesh *bm, BMOperator *op)
 	else if (edges1) {
 		BMVert *v1, *v2;
 
-		if (BLI_array_count(edges1) > 1) {
+		if (BLI_array_len(edges1) > 1) {
 			v1 = BM_vert_in_edge(edges1[1], edges1[0]->v1) ? edges1[0]->v2 : edges1[0]->v1;
-			i  = BLI_array_count(edges1) - 1;
+			i  = BLI_array_len(edges1) - 1;
 			v2 = BM_vert_in_edge(edges1[i - 1], edges1[i]->v1) ? edges1[i]->v2 : edges1[i]->v1;
 			e  = BM_edge_create(bm, v1, v2, NULL, BM_CREATE_NO_DOUBLE);
 			BMO_edge_flag_enable(bm, e, ELE_NEW);

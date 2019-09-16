@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributors: Amorilia (amorilia@users.sourceforge.net)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/dds/BlockDXT.h
- *  \ingroup imbdds
+/** \file
+ * \ingroup imbdds
  */
 
 
@@ -33,7 +27,7 @@
  */
 
 // Copyright NVIDIA Corporation 2007 -- Ignacio Castano <icastano@nvidia.com>
-// 
+//
 // Permission is hereby granted, free of charge, to any person
 // obtaining a copy of this software and associated documentation
 // files (the "Software"), to deal in the Software without
@@ -42,10 +36,10 @@
 // copies of the Software, and to permit persons to whom the
 // Software is furnished to do so, subject to the following
 // conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be
 // included in all copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 // EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
 // OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -79,10 +73,10 @@ struct BlockDXT1 {
 
 	void evaluatePalette3(Color32 color_array[4]) const;
 	void evaluatePalette4(Color32 color_array[4]) const;
-	
+
 	void decodeBlock(ColorBlock * block) const;
 	void decodeBlockNV5x(ColorBlock * block) const;
-	
+
 	void setIndices(int * idx);
 
 	void flip4();
@@ -119,9 +113,9 @@ struct AlphaBlockDXT3 {
 		};
 		uint16 row[4];
 	};
-	
+
 	void decodeBlock(ColorBlock * block) const;
-	
+
 	void flip4();
 	void flip2();
 };
@@ -131,10 +125,10 @@ struct AlphaBlockDXT3 {
 struct BlockDXT3 {
 	AlphaBlockDXT3 alpha;
 	BlockDXT1 color;
-	
+
 	void decodeBlock(ColorBlock * block) const;
 	void decodeBlockNV5x(ColorBlock * block) const;
-	
+
 	void flip4();
 	void flip2();
 };
@@ -187,7 +181,7 @@ struct AlphaBlockDXT5 {
 	uint8 bitsD() const { return (u >> 55) & 0x7LL; }
 	uint8 bitsE() const { return (u >> 58) & 0x7LL; }
 	uint8 bitsF() const { return (u >> 61) & 0x7LL; }
-	
+
 	void evaluatePalette(uint8 alpha[8]) const;
 	void evaluatePalette8(uint8 alpha[8]) const;
 	void evaluatePalette6(uint8 alpha[8]) const;
@@ -195,9 +189,9 @@ struct AlphaBlockDXT5 {
 
 	uint index(uint index) const;
 	void setIndex(uint index, uint value);
-	
+
 	void decodeBlock(ColorBlock * block) const;
-	
+
 	void flip4();
 	void flip2();
 };
@@ -207,10 +201,10 @@ struct AlphaBlockDXT5 {
 struct BlockDXT5 {
 	AlphaBlockDXT5 alpha;
 	BlockDXT1 color;
-	
+
 	void decodeBlock(ColorBlock * block) const;
 	void decodeBlockNV5x(ColorBlock * block) const;
-	
+
 	void flip4();
 	void flip2();
 };
@@ -218,9 +212,9 @@ struct BlockDXT5 {
 /// ATI1 block.
 struct BlockATI1 {
 	AlphaBlockDXT5 alpha;
-	
+
 	void decodeBlock(ColorBlock * block) const;
-	
+
 	void flip4();
 	void flip2();
 };
@@ -229,9 +223,9 @@ struct BlockATI1 {
 struct BlockATI2 {
 	AlphaBlockDXT5 x;
 	AlphaBlockDXT5 y;
-	
+
 	void decodeBlock(ColorBlock * block) const;
-	
+
 	void flip4();
 	void flip2();
 };
@@ -249,7 +243,7 @@ struct BlockCTX1 {
 	void setIndices(int * idx);
 
 	void decodeBlock(ColorBlock * block) const;
-	
+
 	void flip4();
 	void flip2();
 };

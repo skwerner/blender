@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,11 +18,10 @@
  *
  * The Original Code is: some of this file.
  *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
-/** \file blender/blenlib/intern/math_base_inline.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifndef __MATH_BASE_INLINE_C__
@@ -68,16 +65,16 @@ MINLINE float pow7f(float x)
 
 MINLINE float sqrt3f(float f)
 {
-	if      (UNLIKELY(f == 0.0f)) return 0.0f;
-	else if (UNLIKELY(f <  0.0f)) return -(float)(exp(log(-f) / 3.0));
-	else                          return  (float)(exp(log( f) / 3.0));
+	if      (UNLIKELY(f == 0.0f)) { return 0.0f; }
+	else if (UNLIKELY(f <  0.0f)) { return -(float)(exp(log(-f) / 3.0)); }
+	else                          { return  (float)(exp(log( f) / 3.0)); }
 }
 
 MINLINE double sqrt3d(double d)
 {
-	if      (UNLIKELY(d == 0.0)) return 0.0;
-	else if (UNLIKELY(d <  0.0)) return -exp(log(-d) / 3.0);
-	else                         return  exp(log( d) / 3.0);
+	if      (UNLIKELY(d == 0.0)) { return 0.0; }
+	else if (UNLIKELY(d <  0.0)) { return -exp(log(-d) / 3.0); }
+	else                         { return  exp(log( d) / 3.0); }
 }
 
 MINLINE float sqrtf_signed(float f)
@@ -87,42 +84,42 @@ MINLINE float sqrtf_signed(float f)
 
 MINLINE float saacos(float fac)
 {
-	if      (UNLIKELY(fac <= -1.0f)) return (float)M_PI;
-	else if (UNLIKELY(fac >=  1.0f)) return 0.0f;
-	else                             return acosf(fac);
+	if      (UNLIKELY(fac <= -1.0f)) { return (float)M_PI; }
+	else if (UNLIKELY(fac >=  1.0f)) { return 0.0f; }
+	else                             { return acosf(fac); }
 }
 
 MINLINE float saasin(float fac)
 {
-	if      (UNLIKELY(fac <= -1.0f)) return (float)-M_PI / 2.0f;
-	else if (UNLIKELY(fac >=  1.0f)) return (float) M_PI / 2.0f;
-	else                             return asinf(fac);
+	if      (UNLIKELY(fac <= -1.0f)) { return (float)-M_PI / 2.0f; }
+	else if (UNLIKELY(fac >=  1.0f)) { return (float) M_PI / 2.0f; }
+	else                             { return asinf(fac); }
 }
 
 MINLINE float sasqrt(float fac)
 {
-	if (UNLIKELY(fac <= 0.0f)) return 0.0f;
-	else                       return sqrtf(fac);
+	if (UNLIKELY(fac <= 0.0f)) { return 0.0f; }
+	else                       { return sqrtf(fac); }
 }
 
 MINLINE float saacosf(float fac)
 {
-	if      (UNLIKELY(fac <= -1.0f)) return (float)M_PI;
-	else if (UNLIKELY(fac >=  1.0f)) return 0.0f;
-	else                             return acosf(fac);
+	if      (UNLIKELY(fac <= -1.0f)) { return (float)M_PI; }
+	else if (UNLIKELY(fac >=  1.0f)) { return 0.0f; }
+	else                             { return acosf(fac); }
 }
 
 MINLINE float saasinf(float fac)
 {
-	if      (UNLIKELY(fac <= -1.0f)) return (float)-M_PI / 2.0f;
-	else if (UNLIKELY(fac >=  1.0f)) return (float) M_PI / 2.0f;
-	else                             return asinf(fac);
+	if      (UNLIKELY(fac <= -1.0f)) { return (float)-M_PI / 2.0f; }
+	else if (UNLIKELY(fac >=  1.0f)) { return (float) M_PI / 2.0f; }
+	else                             { return asinf(fac); }
 }
 
 MINLINE float sasqrtf(float fac)
 {
-	if (UNLIKELY(fac <= 0.0f)) return 0.0f;
-	else                       return sqrtf(fac);
+	if (UNLIKELY(fac <= 0.0f)) { return 0.0f; }
+	else                       { return sqrtf(fac); }
 }
 
 MINLINE float interpf(float target, float origin, float fac)
@@ -143,8 +140,9 @@ MINLINE int is_power_of_2_i(int n)
 
 MINLINE int power_of_2_max_i(int n)
 {
-	if (is_power_of_2_i(n))
+	if (is_power_of_2_i(n)) {
 		return n;
+	}
 
 	do {
 		n = n & (n - 1);
@@ -155,8 +153,9 @@ MINLINE int power_of_2_max_i(int n)
 
 MINLINE int power_of_2_min_i(int n)
 {
-	while (!is_power_of_2_i(n))
+	while (!is_power_of_2_i(n)) {
 		n = n & (n - 1);
+	}
 
 	return n;
 }
@@ -324,10 +323,31 @@ MINLINE size_t max_zz(size_t a, size_t b)
 	return (b < a) ? a : b;
 }
 
+MINLINE int clamp_i(int value, int min, int max)
+{
+	return min_ii(max_ii(value, min), max);
+}
+
+MINLINE float clamp_f(float value, float min, float max)
+{
+	if (value > max) {
+		return max;
+	}
+	else if (value < min) {
+		return min;
+	}
+	return value;
+}
+
+MINLINE size_t clamp_z(size_t value, size_t min, size_t max)
+{
+	return min_zz(max_zz(value, min), max);
+}
+
 /**
  * Almost-equal for IEEE floats, using absolute difference method.
  *
- * \param max_diff the maximum absolute difference.
+ * \param max_diff: the maximum absolute difference.
  */
 MINLINE int compare_ff(float a, float b, const float max_diff)
 {
@@ -337,9 +357,9 @@ MINLINE int compare_ff(float a, float b, const float max_diff)
 /**
  * Almost-equal for IEEE floats, using their integer representation (mixing ULP and absolute difference methods).
  *
- * \param max_diff is the maximum absolute difference (allows to take care of the near-zero area,
+ * \param max_diff: is the maximum absolute difference (allows to take care of the near-zero area,
  *                 where relative difference methods cannot really work).
- * \param max_ulps is the 'maximum number of floats + 1' allowed between \a a and \a b to consider them equal.
+ * \param max_ulps: is the 'maximum number of floats + 1' allowed between \a a and \a b to consider them equal.
  *
  * \see https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
  */
@@ -347,10 +367,8 @@ MINLINE int compare_ff_relative(float a, float b, const float max_diff, const in
 {
 	union {float f; int i;} ua, ub;
 
-#if 0  /* No BLI_assert in INLINE :/ */
 	BLI_assert(sizeof(float) == sizeof(int));
 	BLI_assert(max_ulps < (1 << 22));
-#endif
 
 	if (fabsf(a - b) <= max_diff) {
 		return 1;
@@ -371,16 +389,16 @@ MINLINE float signf(float f)
 
 MINLINE int signum_i_ex(float a, float eps)
 {
-	if (a >  eps) return  1;
-	if (a < -eps) return -1;
-	else          return  0;
+	if (a >  eps) { return  1; }
+	if (a < -eps) { return -1; }
+	else          { return  0; }
 }
 
 MINLINE int signum_i(float a)
 {
-	if (a > 0.0f) return  1;
-	if (a < 0.0f) return -1;
-	else          return  0;
+	if (a > 0.0f) { return  1; }
+	if (a < 0.0f) { return -1; }
+	else          { return  0; }
 }
 
 /** Returns number of (base ten) *significant* digits of integer part of given float
@@ -454,7 +472,7 @@ MALWAYS_INLINE __m128 _bli_math_fastpow24(const __m128 arg)
 	 */
 	/* 0x3F4CCCCD = 4/5 */
 	/* 0x4F55A7FB = 2^(127/(4/5) - 127) * 0.994^(1/(4/5)) */
-	/* error max = 0.17	avg = 0.0018	|avg| = 0.05 */
+	/* error max = 0.17, avg = 0.0018, |avg| = 0.05 */
 	__m128 x = _bli_math_fastpow(0x3F4CCCCD, 0x4F55A7FB, arg);
 	__m128 arg2 = _mm_mul_ps(arg, arg);
 	__m128 arg4 = _mm_mul_ps(arg2, arg2);
@@ -495,5 +513,36 @@ MALWAYS_INLINE __m128 _bli_math_blend_sse(const __m128 mask,
 }
 
 #endif  /* __SSE2__ */
+
+/* Low level conversion functions */
+MINLINE unsigned char unit_float_to_uchar_clamp(float val)
+{
+	return (unsigned char)(((val <= 0.0f) ? 0 : ((val > (1.0f - 0.5f / 255.0f)) ? 255 : ((255.0f * val) + 0.5f))));
+}
+#define unit_float_to_uchar_clamp(val) ((CHECK_TYPE_INLINE(val, float)), unit_float_to_uchar_clamp(val))
+
+MINLINE unsigned short unit_float_to_ushort_clamp(float val)
+{
+	return (unsigned short)((val >= 1.0f - 0.5f / 65535) ? 65535 : (val <= 0.0f) ? 0 : (val * 65535.0f + 0.5f));
+}
+#define unit_float_to_ushort_clamp(val) ((CHECK_TYPE_INLINE(val, float)), unit_float_to_ushort_clamp(val))
+
+MINLINE unsigned char unit_ushort_to_uchar(unsigned short val)
+{
+	return (unsigned char)(((val) >= 65535 - 128) ? 255 : ((val) + 128) >> 8);
+}
+#define unit_ushort_to_uchar(val) ((CHECK_TYPE_INLINE(val, unsigned short)), unit_ushort_to_uchar(val))
+
+#define unit_float_to_uchar_clamp_v3(v1, v2) {                                              \
+	(v1)[0] = unit_float_to_uchar_clamp((v2[0]));                                           \
+	(v1)[1] = unit_float_to_uchar_clamp((v2[1]));                                           \
+	(v1)[2] = unit_float_to_uchar_clamp((v2[2]));                                           \
+} ((void)0)
+#define unit_float_to_uchar_clamp_v4(v1, v2) {                                              \
+	(v1)[0] = unit_float_to_uchar_clamp((v2[0]));                                           \
+	(v1)[1] = unit_float_to_uchar_clamp((v2[1]));                                           \
+	(v1)[2] = unit_float_to_uchar_clamp((v2[2]));                                           \
+	(v1)[3] = unit_float_to_uchar_clamp((v2[3]));                                           \
+} ((void)0)
 
 #endif /* __MATH_BASE_INLINE_C__ */

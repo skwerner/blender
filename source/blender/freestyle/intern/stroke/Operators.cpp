@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,16 +12,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/stroke/Operators.cpp
- *  \ingroup freestyle
- *  \brief Class gathering stroke creation algorithms
- *  \author Stephane Grabli
- *  \author Emmanuel Turquin
- *  \date 01/07/2003
+/** \file
+ * \ingroup freestyle
+ * \brief Class gathering stroke creation algorithms
  */
 
 #include <algorithm>
@@ -704,7 +697,7 @@ static int __recursiveSplit(Chain *_curve, UnaryFunction0D<double>& func, UnaryP
 	if (newId == 0) {
 		newId = new Id(_curve->getId());
 		_curve->setSplittingId(newId);
-	} 
+	}
 
 	Chain *new_curve_a = new Chain(*newId);
 	newId->setSecond(newId->getSecond() + 1);
@@ -791,9 +784,9 @@ int Operators::recursiveSplit(UnaryFunction0D<double>& func, UnaryPredicate1D& p
 	if (!splitted_chains.empty()) {
 		for (cit = splitted_chains.begin(), citend = splitted_chains.end(); cit != citend; ++cit) {
 			delete (*cit);
-		} 
+		}
 		splitted_chains.clear();
-	} 
+	}
 
 	_current_chains_set.clear();
 #if 0
@@ -1036,7 +1029,7 @@ static Stroke *createStroke(Interface1D& inter)
 	Vec2r previous = current;
 	SVertex *sv;
 	CurvePoint *cp;
-	StrokeVertex *stroke_vertex = NULL;  
+	StrokeVertex *stroke_vertex = NULL;
 	bool hasSingularity = false;
 
 	do {

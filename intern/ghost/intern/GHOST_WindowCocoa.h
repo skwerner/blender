@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Maarten Gribnau, Jason Wilkins
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_WindowCocoa.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_WindowCocoa class.
  */
 
@@ -89,7 +81,7 @@ public:
 	 * \return The validity of the window.
 	 */
 	bool getValid() const;
-	
+
 	/**
 	 * Returns the associated NSWindow object
 	 * \return The associated NSWindow object
@@ -110,11 +102,11 @@ public:
 
 	/**
 	 * Returns the window rectangle dimensions.
-	 * The dimensions are given in screen coordinates that are relative to the upper-left corner of the screen. 
+	 * The dimensions are given in screen coordinates that are relative to the upper-left corner of the screen.
 	 * \param bounds The bounding rectangle of the window.
 	 */
 	void getWindowBounds(GHOST_Rect& bounds) const;
-	
+
 	/**
 	 * Returns the client rectangle dimensions.
 	 * The left and top members of the rectangle are always zero.
@@ -153,7 +145,7 @@ public:
 	 * \return Indication of success.
 	 */
 	GHOST_TSuccess setModifiedState(bool isUnsavedChanges);
-	
+
 	/**
 	 * Converts a point in screen coordinates to client rectangle coordinates
 	 * \param inX	The x-coordinate on the screen.
@@ -197,7 +189,7 @@ public:
 	 * \return The NSScreen object
 	 */
 	NSScreen *getScreen();
-	
+
 	/**
 	 * Sets the state of the window (normal, minimized, maximized).
 	 * \param state The state of the window.
@@ -213,7 +205,7 @@ public:
 	GHOST_TSuccess setOrder(GHOST_TWindowOrder order);
 
 	void loadCursor(bool visible, GHOST_TStandardCursor cursor) const;
-    
+
 	const GHOST_TabletData *GetTabletData()
 	{
 		return &m_tablet;
@@ -223,32 +215,32 @@ public:
 	{
 		return m_tablet;
 	}
-	
+
 	/**
 	 * Sets the progress bar value displayed in the window/application icon
 	 * \param progress The progress % (0.0 to 1.0)
 	 */
 	GHOST_TSuccess setProgressBar(float progress);
-	
+
 	/**
 	 * Hides the progress bar icon
 	 */
 	GHOST_TSuccess endProgressBar();
-	
-	
+
+
 	void setNativePixelSize(void);
 
 	GHOST_TSuccess beginFullScreen() const {return GHOST_kFailure;}
 
 	GHOST_TSuccess endFullScreen() const {return GHOST_kFailure;}
-	
+
 	/** public function to get the window containing the OpenGL view */
 	CocoaWindow *getCocoaWindow() const {return m_window;};
 
 	/* Internal value to ensure proper redraws during animations */
 	void setImmediateDraw(bool value) { m_immediateDraw = value; }
 	bool getImmediateDraw(void) const { return m_immediateDraw; }
-	
+
 protected:
 
 	/**
@@ -268,13 +260,13 @@ protected:
 	 * native window system calls.
 	 */
 	GHOST_TSuccess setWindowCursorVisibility(bool visible);
-	
+
 	/**
 	 * Sets the cursor grab on the window using
 	 * native window system calls.
 	 */
 	GHOST_TSuccess setWindowCursorGrab(GHOST_TGrabCursorMode mode);
-		
+
 	/**
 	 * Sets the cursor shape on the window using
 	 * native window system calls.
@@ -287,14 +279,14 @@ protected:
 	 */
 	GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 *bitmap, GHOST_TUns8 *mask,
 	                                                  int sizex, int sizey, int hotX, int hotY, int fg_color, int bg_color);
-					
+
 	GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2], GHOST_TUns8 mask[16][2], int hotX, int hotY);
 
 	/** The window containing the OpenGL view */
 	CocoaWindow *m_window;
-	
+
 	/** The openGL view */
-	CocoaOpenGLView *m_openGLView; 
+	CocoaOpenGLView *m_openGLView;
 
 	/** The mother SystemCocoa class to send events */
 	GHOST_SystemCocoa *m_systemCocoa;

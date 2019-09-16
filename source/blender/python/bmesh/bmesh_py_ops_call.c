@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_ops_call.c
- *  \ingroup pybmesh
+/** \file
+ * \ingroup pybmesh
  *
  * This file provides __call__ aka BPy_BMO_call for
  * the bmesh operator and has been given its own file
@@ -46,6 +40,8 @@
 #include "../generic/python_utildefines.h"
 #include "../generic/py_capi_utils.h"
 
+BLI_STATIC_ASSERT(sizeof(PyC_FlagSet) == sizeof(BMO_FlagSet), "size mismatch");
+
 static int bpy_bm_op_as_py_error(BMesh *bm)
 {
 	if (BMO_error_occurred(bm)) {
@@ -65,10 +61,10 @@ static int bpy_bm_op_as_py_error(BMesh *bm)
 /**
  * \brief Utility function to check BMVert/BMEdge/BMFace's
  *
- * \param value
- * \param bm Check the \a value against this.
- * \param htype Test \a value matches this type.
- * \param descr Description text.
+ * \param value:
+ * \param bm: Check the \a value against this.
+ * \param htype: Test \a value matches this type.
+ * \param descr: Description text.
  */
 static int bpy_slot_from_py_elem_check(
         BPy_BMElem *value, BMesh *bm, const char htype,
@@ -103,11 +99,11 @@ static int bpy_slot_from_py_elem_check(
 /**
  * \brief Utility function to check BMVertSeq/BMEdgeSeq/BMFaceSeq's
  *
- * \param value Caller must check its a BMeshSeq
- * \param bm Check the \a value against this.
- * \param htype_py The type(s) of \a value.
- * \param htype_bmo The type(s) supported by the target slot.
- * \param descr Description text.
+ * \param value: Caller must check its a BMeshSeq
+ * \param bm: Check the \a value against this.
+ * \param htype_py: The type(s) of \a value.
+ * \param htype_bmo: The type(s) supported by the target slot.
+ * \param descr: Description text.
  */
 static int bpy_slot_from_py_elemseq_check(
         BPy_BMGeneric *value, BMesh *bm,
@@ -169,16 +165,46 @@ static int bpy_slot_from_py(
 		}
 		case BMO_OP_SLOT_INT:
 		{
-			const int param = PyC_Long_AsI32(value);
+			if (slot->slot_subtype.intg == BMO_OP_SLOT_SUBTYPE_INT_ENUM) {
+				int enum_val = -1;
+				PyC_FlagSet *items = (PyC_FlagSet *)slot->data.enum_data.flags;
+				const char *enum_str = _PyUnicode_AsString(value);
 
-			if (param == -1 && PyErr_Occurred()) {
-				PyErr_Format(PyExc_TypeError,
-				             "%.200s: keyword \"%.200s\" expected an int, not %.200s",
-				             opname, slot_name, Py_TYPE(value)->tp_name);
-				return -1;
+				if (enum_str == NULL) {
+					PyErr_Format(PyExc_TypeError,
+					             "%.200s: keyword \"%.200s\" expected a string, not %.200s",
+					             opname, slot_name, Py_TYPE(value)->tp_name);
+					return -1;
+				}
+
+				if (PyC_FlagSet_ValueFromID(items, enum_str, &enum_val, slot_name) == -1) {
+					return -1;
+				}
+
+				BMO_SLOT_AS_INT(slot) = enum_val;
+			}
+			else if (slot->slot_subtype.intg == BMO_OP_SLOT_SUBTYPE_INT_FLAG) {
+				int flag = 0;
+				PyC_FlagSet *items = (PyC_FlagSet *)slot->data.enum_data.flags;
+
+				if (PyC_FlagSet_ToBitfield(items, value, &flag, slot_name) == -1) {
+					return -1;
+				}
+
+				BMO_SLOT_AS_INT(slot) = flag;
 			}
 			else {
-				BMO_SLOT_AS_INT(slot) = param;
+				const int param = PyC_Long_AsI32(value);
+
+				if (param == -1 && PyErr_Occurred()) {
+					PyErr_Format(PyExc_TypeError,
+					             "%.200s: keyword \"%.200s\" expected an int, not %.200s",
+					             opname, slot_name, Py_TYPE(value)->tp_name);
+					return -1;
+				}
+				else {
+					BMO_SLOT_AS_INT(slot) = param;
+				}
 			}
 			break;
 		}
@@ -510,7 +536,7 @@ static int bpy_slot_from_py(
 }
 
 /**
- * Use for getting return values from an operator thats already executed.
+ * Use for getting return values from an operator that's already executed.
  *
  * \note Don't throw any exceptions and should always return a valid (PyObject *).
  */
@@ -566,7 +592,7 @@ static PyObject *bpy_slot_to_py(BMesh *bm, BMOpSlot *slot)
 			switch (slot->slot_subtype.map) {
 				case BMO_OP_SLOT_SUBTYPE_MAP_ELEM:
 				{
-					item = _PyDict_NewPresized(slot_hash ? BLI_ghash_size(slot_hash) : 0);
+					item = _PyDict_NewPresized(slot_hash ? BLI_ghash_len(slot_hash) : 0);
 					if (slot_hash) {
 						GHASH_ITER (hash_iter, slot_hash) {
 							BMHeader *ele_key = BLI_ghashIterator_getKey(&hash_iter);
@@ -584,7 +610,7 @@ static PyObject *bpy_slot_to_py(BMesh *bm, BMOpSlot *slot)
 				}
 				case BMO_OP_SLOT_SUBTYPE_MAP_FLT:
 				{
-					item = _PyDict_NewPresized(slot_hash ? BLI_ghash_size(slot_hash) : 0);
+					item = _PyDict_NewPresized(slot_hash ? BLI_ghash_len(slot_hash) : 0);
 					if (slot_hash) {
 						GHASH_ITER (hash_iter, slot_hash) {
 							BMHeader *ele_key = BLI_ghashIterator_getKey(&hash_iter);
@@ -602,7 +628,7 @@ static PyObject *bpy_slot_to_py(BMesh *bm, BMOpSlot *slot)
 				}
 				case BMO_OP_SLOT_SUBTYPE_MAP_INT:
 				{
-					item = _PyDict_NewPresized(slot_hash ? BLI_ghash_size(slot_hash) : 0);
+					item = _PyDict_NewPresized(slot_hash ? BLI_ghash_len(slot_hash) : 0);
 					if (slot_hash) {
 						GHASH_ITER (hash_iter, slot_hash) {
 							BMHeader *ele_key = BLI_ghashIterator_getKey(&hash_iter);
@@ -620,7 +646,7 @@ static PyObject *bpy_slot_to_py(BMesh *bm, BMOpSlot *slot)
 				}
 				case BMO_OP_SLOT_SUBTYPE_MAP_BOOL:
 				{
-					item = _PyDict_NewPresized(slot_hash ? BLI_ghash_size(slot_hash) : 0);
+					item = _PyDict_NewPresized(slot_hash ? BLI_ghash_len(slot_hash) : 0);
 					if (slot_hash) {
 						GHASH_ITER (hash_iter, slot_hash) {
 							BMHeader *ele_key = BLI_ghashIterator_getKey(&hash_iter);

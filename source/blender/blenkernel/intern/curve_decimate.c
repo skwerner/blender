@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/curve_decimate.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "DNA_curve_types.h"
@@ -159,7 +155,7 @@ static void curve_decimate(
 		struct Knot *k;
 
 		{
-			struct Removal *r = BLI_heap_popmin(heap);
+			struct Removal *r = BLI_heap_pop_min(heap);
 			k = &knots[r->knot_index];
 			k->heap_node = NULL;
 			k->prev->handles[1] = r->handles[0];

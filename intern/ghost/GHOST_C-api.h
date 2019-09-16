@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,9 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
-/** \ingroup GHOST
- *
- * \file GHOST_C-api.h
+/** \file
+ * \ingroup GHOST
  * \brief GHOST C-API function and type declarations.
  */
 
@@ -36,7 +27,7 @@
 #include "GHOST_Types.h"
 
 #ifdef __cplusplus
-extern "C" { 
+extern "C" {
 #endif
 
 /**
@@ -52,6 +43,7 @@ GHOST_DECLARE_HANDLE(GHOST_WindowHandle);
 GHOST_DECLARE_HANDLE(GHOST_EventHandle);
 GHOST_DECLARE_HANDLE(GHOST_RectangleHandle);
 GHOST_DECLARE_HANDLE(GHOST_EventConsumerHandle);
+GHOST_DECLARE_HANDLE(GHOST_ContextHandle);
 
 
 /**
@@ -102,7 +94,7 @@ extern GHOST_TUns64 GHOST_GetMilliSeconds(GHOST_SystemHandle systemhandle);
 
 /**
  * Installs a timer.
- * Note that, on most operating systems, messages need to be processed in order 
+ * Note that, on most operating systems, messages need to be processed in order
  * for the timer callbacks to be invoked.
  * \param systemhandle The handle to the system
  * \param delay The time to wait for the first call to the timerProc (in milliseconds)
@@ -164,7 +156,7 @@ extern void GHOST_GetAllDisplayDimensions(GHOST_SystemHandle systemhandle,
 
 /**
  * Create a new window.
- * The new window is added to the list of windows managed. 
+ * The new window is added to the list of windows managed.
  * Never explicitly delete the window, use disposeWindow() instead.
  * \param systemhandle The handle to the system
  * \param title The name of the window (displayed in the title bar of the window if the OS supports it).
@@ -189,6 +181,23 @@ extern GHOST_WindowHandle GHOST_CreateWindow(
         GHOST_GLSettings glSettings);
 
 /**
+ * Create a new offscreen context.
+ * Never explicitly delete the context, use disposeContext() instead.
+ * \param systemhandle The handle to the system
+ * \return A handle to the new context ( == NULL if creation failed).
+ */
+extern GHOST_ContextHandle GHOST_CreateOpenGLContext(GHOST_SystemHandle systemhandle);
+
+/**
+ * Dispose of a context.
+ * \param systemhandle The handle to the system
+ * \param contexthandle Handle to the context to be disposed.
+ * \return Indication of success.
+ */
+extern GHOST_TSuccess GHOST_DisposeOpenGLContext(GHOST_SystemHandle systemhandle,
+                                                    GHOST_ContextHandle contexthandle);
+
+/**
  * Returns the window user data.
  * \param windowhandle The handle to the window
  * \return The window user data.
@@ -200,7 +209,7 @@ extern GHOST_TUserDataPtr GHOST_GetWindowUserData(GHOST_WindowHandle windowhandl
  * \param windowhandle The handle to the window
  * \param userdata The window user data.
  */
-extern void GHOST_SetWindowUserData(GHOST_WindowHandle windowhandle, 
+extern void GHOST_SetWindowUserData(GHOST_WindowHandle windowhandle,
                                     GHOST_TUserDataPtr userdata);
 
 /**
@@ -470,7 +479,7 @@ extern GHOST_TEventType GHOST_GetEventType(GHOST_EventHandle eventhandle);
 extern GHOST_TUns64 GHOST_GetEventTime(GHOST_EventHandle eventhandle);
 
 /**
- * Returns the window this event was generated on, 
+ * Returns the window this event was generated on,
  * or NULL if it is a 'system' event.
  * \param eventhandle The handle to the event
  * \return The generating window.
@@ -548,7 +557,7 @@ extern void GHOST_SetTitle(GHOST_WindowHandle windowhandle,
 /**
  * Returns the title displayed in the title bar. The title
  * should be free'd with free().
- * 
+ *
  * \param windowhandle The handle to the window
  * \return The title, free with free().
  */
@@ -709,6 +718,27 @@ extern GHOST_TSuccess GHOST_ActivateWindowDrawingContext(GHOST_WindowHandle wind
  * \return Indication of success.
  */
 extern GHOST_TSuccess GHOST_InvalidateWindow(GHOST_WindowHandle windowhandle);
+
+/**
+ * Activates the drawing context of this context.
+ * \param contexthandle The handle to the context
+ * \return A success indicator.
+ */
+extern GHOST_TSuccess GHOST_ActivateOpenGLContext(GHOST_ContextHandle contexthandle);
+
+/**
+ * Release the drawing context bound to this thread.
+ * \param contexthandle The handle to the context
+ * \return A success indicator.
+ */
+extern GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthandle);
+
+/**
+ * Set which tablet API to use. Only affects Windows, other platforms have a single API.
+ * \param systemhandle The handle to the system
+ * \param api Enum indicating which API to use.
+ */
+extern void GHOST_SetTabletAPI(GHOST_SystemHandle systemhandle, GHOST_TTabletAPI api);
 
 /**
  * Returns the status of the tablet
@@ -898,9 +928,19 @@ extern int GHOST_toggleConsole(int action);
 extern int GHOST_confirmQuit(GHOST_WindowHandle windowhandle);
 
 /**
+ * Informs if the system provides native dialogs (eg. confirm quit)
+ */
+extern int GHOST_SupportsNativeDialogs(void);
+
+/**
  * Use native pixel size (MacBook pro 'retina'), if supported.
  */
 extern int GHOST_UseNativePixels(void);
+
+/**
+ * Focus window after opening, or put them in the background.
+ */
+extern void GHOST_UseWindowFocus(int use_focus);
 
 /**
  * If window was opened using native pixel size, it returns scaling factor.

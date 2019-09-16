@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include <algorithm>
@@ -73,16 +69,16 @@ CompositorPriority ExecutionGroup::getRenderPriotrity()
 bool ExecutionGroup::canContainOperation(NodeOperation *operation)
 {
 	if (!this->m_initialized) { return true; }
-	
+
 	if (operation->isReadBufferOperation()) { return true; }
 	if (operation->isWriteBufferOperation()) { return false; }
 	if (operation->isSetOperation()) { return true; }
-	
+
 	/* complex groups don't allow further ops (except read buffer and values, see above) */
 	if (m_complex) { return false; }
 	/* complex ops can't be added to other groups (except their own, which they initialize, see above) */
 	if (operation->isComplex()) { return false; }
-	
+
 	return true;
 }
 
@@ -90,16 +86,16 @@ bool ExecutionGroup::addOperation(NodeOperation *operation)
 {
 	if (!canContainOperation(operation))
 		return false;
-	
+
 	if (!operation->isReadBufferOperation() && !operation->isWriteBufferOperation()) {
 		m_complex = operation->isComplex();
 		m_openCL = operation->isOpenCL();
 		m_singleThreaded = operation->isSingleThreaded();
 		m_initialized = true;
 	}
-	
+
 	m_operations.push_back(operation);
-	
+
 	return true;
 }
 
@@ -185,9 +181,9 @@ void ExecutionGroup::execute(ExecutionSystem *graph)
 {
 	const CompositorContext &context = graph->getContext();
 	const bNodeTree *bTree = context.getbNodeTree();
-	if (this->m_width == 0 || this->m_height == 0) {return; } /// @note: break out... no pixels to calculate.
-	if (bTree->test_break && bTree->test_break(bTree->tbh)) {return; } /// @note: early break out for blur and preview nodes
-	if (this->m_numberOfChunks == 0) {return; } /// @note: early break out
+	if (this->m_width == 0 || this->m_height == 0) {return; } /// \note: break out... no pixels to calculate.
+	if (bTree->test_break && bTree->test_break(bTree->tbh)) {return; } /// \note: early break out for blur and preview nodes
+	if (this->m_numberOfChunks == 0) {return; } /// \note: early break out
 	unsigned int chunkNumber;
 
 	this->m_executionStartTime = PIL_check_seconds_timer();
@@ -382,7 +378,7 @@ void ExecutionGroup::finalizeChunkExecution(int chunkNumber, MemoryBuffer **memo
 {
 	if (this->m_chunkExecutionStates[chunkNumber] == COM_ES_SCHEDULED)
 		this->m_chunkExecutionStates[chunkNumber] = COM_ES_EXECUTED;
-	
+
 	atomic_add_and_fetch_u(&this->m_chunksFinished, 1);
 	if (memoryBuffers) {
 		for (unsigned int index = 0; index < this->m_cachedMaxReadBufferOffset; index++) {
@@ -437,7 +433,7 @@ void ExecutionGroup::determineChunkRect(rcti *rect, const unsigned int chunkNumb
 MemoryBuffer *ExecutionGroup::allocateOutputBuffer(int /*chunkNumber*/,
                                                    rcti *rect)
 {
-	// we asume that this method is only called from complex execution groups.
+	// we assume that this method is only called from complex execution groups.
 	NodeOperation *operation = this->getOutputOperation();
 	if (operation->isWriteBufferOperation()) {
 		WriteBufferOperation *writeOperation = (WriteBufferOperation *)operation;

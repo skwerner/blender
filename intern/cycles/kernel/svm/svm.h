@@ -30,8 +30,7 @@
  * in local memory on the GPU, as it would take too many register and indexes in
  * ways not known at compile time. This seems the only solution even though it
  * may be slow, with two positive factors. If the same shader is being executed,
- * memory access will be coalesced, and on fermi cards, memory will actually be
- * cached.
+ * memory access will be coalesced and cached.
  *
  * The result of shader execution will be a single closure. This means the
  * closure type, associated label, data and weight. Sampling from multiple
@@ -158,6 +157,7 @@ CCL_NAMESPACE_END
 #include "kernel/svm/svm_camera.h"
 #include "kernel/svm/svm_geometry.h"
 #include "kernel/svm/svm_hsv.h"
+#include "kernel/svm/svm_ies.h"
 #include "kernel/svm/svm_image.h"
 #include "kernel/svm/svm_gamma.h"
 #include "kernel/svm/svm_brightness.h"
@@ -184,6 +184,7 @@ CCL_NAMESPACE_END
 #include "kernel/svm/svm_bump.h"
 
 #ifdef __SHADER_RAYTRACE__
+#  include "kernel/svm/svm_ao.h"
 #  include "kernel/svm/svm_bevel.h"
 #endif
 
@@ -243,7 +244,7 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 				svm_node_geometry(kg, sd, stack, node.y, node.z);
 				break;
 			case NODE_CONVERT:
-				svm_node_convert(sd, stack, node.y, node.z, node.w);
+				svm_node_convert(kg, sd, stack, node.y, node.z, node.w);
 				break;
 			case NODE_TEX_COORD:
 				svm_node_tex_coord(kg, sd, path_flag, stack, node, &offset);
@@ -312,7 +313,7 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 			case NODE_LEAVE_BUMP_EVAL:
 				svm_node_leave_bump_eval(kg, sd, stack, node.y);
 				break;
-#      endif /* NODES_FEATURE(NODE_FEATURE_BUMP_STATE) */
+#      endif  /* NODES_FEATURE(NODE_FEATURE_BUMP_STATE) */
 #    endif  /* NODES_FEATURE(NODE_FEATURE_BUMP) */
 			case NODE_HSV:
 				svm_node_hsv(kg, sd, stack, node, &offset);
@@ -324,9 +325,6 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 			case NODE_CLOSURE_HOLDOUT:
 				svm_node_closure_holdout(sd, stack, node);
 				break;
-			case NODE_CLOSURE_AMBIENT_OCCLUSION:
-				svm_node_closure_ambient_occlusion(sd, stack, node);
-				break;
 			case NODE_FRESNEL:
 				svm_node_fresnel(sd, stack, node.y, node.z, node.w);
 				break;
@@ -335,7 +333,10 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 				break;
 #  if NODES_FEATURE(NODE_FEATURE_VOLUME)
 			case NODE_CLOSURE_VOLUME:
-				svm_node_closure_volume(kg, sd, stack, node, type, path_flag);
+				svm_node_closure_volume(kg, sd, stack, node, type);
+				break;
+			case NODE_PRINCIPLED_VOLUME:
+				svm_node_principled_volume(kg, sd, stack, node, type, path_flag, &offset);
 				break;
 #  endif  /* NODES_FEATURE(NODE_FEATURE_VOLUME) */
 #  ifdef __EXTRA_NODES__
@@ -419,6 +420,9 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 			case NODE_LIGHT_FALLOFF:
 				svm_node_light_falloff(sd, stack, node);
 				break;
+			case NODE_IES:
+				svm_node_ies(kg, sd, stack, node, &offset);
+				break;
 #  endif  /* __EXTRA_NODES__ */
 #endif  /* NODES_GROUP(NODE_GROUP_LEVEL_2) */
 
@@ -459,7 +463,7 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 				svm_node_wireframe(kg, sd, stack, node);
 				break;
 			case NODE_WAVELENGTH:
-				svm_node_wavelength(sd, stack, node.y, node.z);
+				svm_node_wavelength(kg, sd, stack, node.y, node.z);
 				break;
 			case NODE_BLACKBODY:
 				svm_node_blackbody(kg, sd, stack, node.y, node.z);
@@ -473,6 +477,9 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 #  ifdef __SHADER_RAYTRACE__
 			case NODE_BEVEL:
 				svm_node_bevel(kg, sd, state, stack, node);
+				break;
+			case NODE_AMBIENT_OCCLUSION:
+				svm_node_ao(kg, sd, state, stack, node);
 				break;
 #  endif  /* __SHADER_RAYTRACE__ */
 #endif  /* NODES_GROUP(NODE_GROUP_LEVEL_3) */
@@ -490,5 +497,4 @@ ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg, ShaderData *sd, ccl_a
 
 CCL_NAMESPACE_END
 
-#endif /* __SVM_H__ */
-
+#endif  /* __SVM_H__ */

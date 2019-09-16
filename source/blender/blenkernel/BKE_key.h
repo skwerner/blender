@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,30 +15,22 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_KEY_H__
 #define __BKE_KEY_H__
 
-/** \file BKE_key.h
- *  \ingroup bke
- *  \since March 2001
- *  \author nzc
+/** \file
+ * \ingroup bke
  */
+struct Curve;
+struct ID;
 struct Key;
 struct KeyBlock;
-struct ID;
-struct ListBase;
-struct Curve;
-struct Object;
 struct Lattice;
+struct ListBase;
 struct Main;
 struct Mesh;
+struct Object;
 struct WeightsArrayCache;
 
 /* Kernel prototypes */
@@ -50,7 +40,7 @@ extern "C" {
 
 void        BKE_key_free(struct Key *sc);
 void        BKE_key_free_nolib(struct Key *key);
-struct Key *BKE_key_add(struct ID *id);
+struct Key *BKE_key_add(struct Main *bmain, struct ID *id);
 void BKE_key_copy_data(struct Main *bmain, struct Key *key_dst, const struct Key *key_src, const int flag);
 struct Key *BKE_key_copy(struct Main *bmain, const struct Key *key);
 struct Key *BKE_key_copy_nolib(struct Key *key);
@@ -66,10 +56,12 @@ float *BKE_key_evaluate_object_ex(
 float *BKE_key_evaluate_object(
         struct Object *ob, int *r_totelem);
 
+bool BKE_key_idtype_support(const short id_type);
+
 struct Key     **BKE_key_from_id_p(struct ID *id);
 struct Key      *BKE_key_from_id(struct ID *id);
-struct Key     **BKE_key_from_object_p(struct Object *ob);
-struct Key      *BKE_key_from_object(struct Object *ob);
+struct Key     **BKE_key_from_object_p(const struct Object *ob);
+struct Key      *BKE_key_from_object(const struct Object *ob);
 struct KeyBlock *BKE_keyblock_from_object(struct Object *ob);
 struct KeyBlock *BKE_keyblock_from_object_reference(struct Object *ob);
 
@@ -80,29 +72,19 @@ struct KeyBlock *BKE_keyblock_find_name(struct Key *key, const char name[]);
 void             BKE_keyblock_copy_settings(struct KeyBlock *kb_dst, const struct KeyBlock *kb_src);
 char            *BKE_keyblock_curval_rnapath_get(struct Key *key, struct KeyBlock *kb);
 
-// needed for the GE
-typedef struct WeightsArrayCache {
-	int num_defgroup_weights;
-	float **defgroup_weights;
-} WeightsArrayCache;
-
-float **BKE_keyblock_get_per_block_weights(struct Object *ob, struct Key *key, struct WeightsArrayCache *cache);
-void BKE_keyblock_free_per_block_weights(struct Key *key, float **per_keyblock_weights, struct WeightsArrayCache *cache);
-void BKE_key_evaluate_relative(const int start, int end, const int tot, char *basispoin, struct Key *key, struct KeyBlock *actkb,
-                               float **per_keyblock_weights, const int mode);
-
 /* conversion functions */
 /* Note: 'update_from' versions do not (re)allocate mem in kb, while 'convert_from' do. */
 void    BKE_keyblock_update_from_lattice(struct Lattice *lt, struct KeyBlock *kb);
 void    BKE_keyblock_convert_from_lattice(struct Lattice *lt, struct KeyBlock *kb);
 void    BKE_keyblock_convert_to_lattice(struct KeyBlock *kb, struct Lattice *lt);
 
+int     BKE_keyblock_curve_element_count(struct ListBase *nurb);
 void    BKE_keyblock_update_from_curve(struct Curve *cu, struct KeyBlock *kb, struct ListBase *nurb);
 void    BKE_keyblock_convert_from_curve(struct Curve *cu, struct KeyBlock *kb, struct ListBase *nurb);
 void    BKE_keyblock_convert_to_curve(struct KeyBlock *kb, struct Curve  *cu, struct ListBase *nurb);
 
 void    BKE_keyblock_update_from_mesh(struct Mesh *me, struct KeyBlock *kb);
-void    BKE_keyblock_convert_from_mesh(struct Mesh *me, struct KeyBlock *kb);
+void    BKE_keyblock_convert_from_mesh(struct Mesh *me, struct Key *key, struct KeyBlock *kb);
 void    BKE_keyblock_convert_to_mesh(struct KeyBlock *kb, struct Mesh *me);
 void    BKE_keyblock_mesh_calc_normals(
         struct KeyBlock *kb, struct Mesh *mesh, float (*r_vertnors)[3], float (*r_polynors)[3], float (*r_loopnors)[3]);

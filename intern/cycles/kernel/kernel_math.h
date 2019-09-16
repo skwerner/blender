@@ -21,7 +21,8 @@
 #include "util/util_math.h"
 #include "util/util_math_fast.h"
 #include "util/util_math_intersect.h"
+#include "util/util_projection.h"
 #include "util/util_texture.h"
 #include "util/util_transform.h"
 
-#endif /* __KERNEL_MATH_H__ */
+#endif  /* __KERNEL_MATH_H__ */

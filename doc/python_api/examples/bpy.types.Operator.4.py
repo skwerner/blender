@@ -16,11 +16,11 @@ class CustomDrawOperator(bpy.types.Operator):
     bl_idname = "object.custom_draw"
     bl_label = "Simple Modal Operator"
 
-    filepath = bpy.props.StringProperty(subtype="FILE_PATH")
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
 
-    my_float = bpy.props.FloatProperty(name="Float")
-    my_bool = bpy.props.BoolProperty(name="Toggle Option")
-    my_string = bpy.props.StringProperty(name="String Value")
+    my_float: bpy.props.FloatProperty(name="Float")
+    my_bool: bpy.props.BoolProperty(name="Toggle Option")
+    my_string: bpy.props.StringProperty(name="String Value")
 
     def execute(self, context):
         print("Test", self)
@@ -40,6 +40,7 @@ class CustomDrawOperator(bpy.types.Operator):
         row.prop(self, "my_bool")
 
         col.prop(self, "my_string")
+
 
 bpy.utils.register_class(CustomDrawOperator)
 

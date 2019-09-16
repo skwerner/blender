@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/avi/intern/avi_options.c
- *  \ingroup avi
+/** \file
+ * \ingroup avi
  *
  * This is external code. Sets some compression related options
  * (width, height quality, framerate).
@@ -49,7 +40,7 @@ AviError AVI_set_compress_option(AviMovie *movie, int option_type, int stream, A
 	int useconds;
 
 	(void)stream; /* unused */
-	
+
 	if (movie->header->TotalFrames != 0)  /* Can't change params after we have already started writing frames */
 		return AVI_ERROR_OPTION;
 
@@ -129,4 +120,3 @@ AviError AVI_set_compress_option(AviMovie *movie, int option_type, int stream, A
 
 	return AVI_ERROR_NONE;
 }
-

@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,13 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
-#ifndef _COM_ConvolutionFilterOperation_h_
-#define _COM_ConvolutionFilterOperation_h_
+#ifndef __COM_CONVOLUTIONFILTEROPERATION_H__
+#define __COM_CONVOLUTIONFILTEROPERATION_H__
 
 #include "COM_NodeOperation.h"
 
@@ -40,7 +36,7 @@ public:
 	void set3x3Filter(float f1, float f2, float f3, float f4, float f5, float f6, float f7, float f8, float f9);
 	bool determineDependingAreaOfInterest(rcti *input, ReadBufferOperation *readOperation, rcti *output);
 	void executePixel(float output[4], int x, int y, void *data);
-	
+
 	void initExecution();
 	void deinitExecution();
 };

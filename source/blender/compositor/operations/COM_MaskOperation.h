@@ -1,6 +1,4 @@
 /*
- * Copyright 2012, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,14 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
- *		Sergey Sharybin
+ * Copyright 2012, Blender Foundation.
  */
 
-#ifndef _COM_MaskOperation_h
-#define _COM_MaskOperation_h
+#ifndef __COM_MASKOPERATION_H__
+#define __COM_MASKOPERATION_H__
 
 
 #include "COM_NodeOperation.h"
@@ -48,7 +43,6 @@ protected:
 	float m_frame_shutter;
 	int   m_frame_number;
 
-	bool m_do_smooth;
 	bool m_do_feather;
 
 	struct MaskRasterHandle *m_rasterMaskHandles[CMP_NODE_MASK_MBLUR_SAMPLES_MAX];
@@ -80,7 +74,6 @@ public:
 		this->m_mask_px_ofs[1] = this->m_maskHeightInv * 0.5f;
 	}
 	void setFramenumber(int frame_number) { this->m_frame_number = frame_number; }
-	void setSmooth(bool smooth) { this->m_do_smooth = smooth; }
 	void setFeather(bool feather) { this->m_do_feather = feather; }
 
 	void setMotionBlurSamples(int samples) { this->m_rasterMaskHandleTot = min(max(1, samples), CMP_NODE_MASK_MBLUR_SAMPLES_MAX); }

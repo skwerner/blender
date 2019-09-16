@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,14 +13,12 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 
-#ifndef _COM_RenderLayersBaseProg_h
-#define _COM_RenderLayersBaseProg_h
+#ifndef __COM_RENDERLAYERSPROG_H__
+#define __COM_RENDERLAYERSPROG_H__
 
 #include "COM_NodeOperation.h"
 #include "DNA_scene_types.h"
@@ -30,15 +26,13 @@
 #include "BKE_image.h"
 extern "C" {
 #  include "RE_pipeline.h"
-#  include "RE_shader_ext.h"
-#  include "RE_render_ext.h"
 #  include "MEM_guardedalloc.h"
 }
 
 /**
  * Base class for all renderlayeroperations
  *
- * @todo: rename to operation.
+ * \todo: rename to operation.
  */
 class RenderLayersProg : public NodeOperation {
 protected:
@@ -46,7 +40,7 @@ protected:
 	 * Reference to the scene object.
 	 */
 	Scene *m_scene;
-	
+
 	/**
 	 * layerId of the layer where this operation needs to get its data from
 	 */
@@ -61,24 +55,24 @@ protected:
 	 * cached instance to the float buffer inside the layer
 	 */
 	float *m_inputBuffer;
-	
+
 	/**
 	 * renderpass where this operation needs to get its data from
 	 */
 	std::string m_passName;
-	
+
 	int m_elementsize;
 
 	/**
-	 * @brief render data used for active rendering
+	 * \brief render data used for active rendering
 	 */
 	const RenderData *m_rd;
-	
+
 	/**
 	 * Determine the output resolution. The resolution is retrieved from the Renderer
 	 */
 	void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
-	
+
 	/**
 	 * retrieve the reference to the float buffer of the renderer.
 	 */
@@ -92,7 +86,7 @@ public:
 	RenderLayersProg(const char *passName, DataType type, int elementsize);
 	/**
 	 * setter for the scene field. Will be called from
-	 * @see RenderLayerNode to set the actual scene where
+	 * \see RenderLayerNode to set the actual scene where
 	 * the data will be retrieved from.
 	 */
 	void setScene(Scene *scene) { this->m_scene = scene; }

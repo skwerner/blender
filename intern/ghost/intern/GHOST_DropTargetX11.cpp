@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 by the Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Sergey Sharybin.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_DropTargetX11.cpp
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  */
 
 #include "GHOST_DropTargetX11.h"
@@ -192,7 +184,7 @@ void GHOST_DropTargetX11::UrlDecode(char *decodedOut, int bufferSize, const char
 
 char *GHOST_DropTargetX11::FileUrlDecode(char *fileUrl)
 {
-	if (strncpy(fileUrl, "file://", 7) != 0) {
+	if (strncmp(fileUrl, "file://", 7) == 0) {
 		/* assume one character of encoded URL can be expanded to 4 chars max */
 		int decodedSize = 4 * strlen(fileUrl) + 1;
 		char *decodedPath = (char *)malloc(decodedSize);

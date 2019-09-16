@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __RNA_DEFINE_H__
 #define __RNA_DEFINE_H__
 
-/** \file RNA_define.h
- *  \ingroup RNA
- *  Functions used during preprocess and runtime, for defining the RNA. */
+/** \file
+ * \ingroup RNA
+ *
+ * Functions used during preprocess and runtime, for defining the RNA.
+ */
 
 #include <float.h>
 #include <limits.h>
@@ -36,6 +32,14 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#ifdef UNIT_TEST
+#define RNA_MAX_ARRAY_LENGTH 64
+#else
+#define RNA_MAX_ARRAY_LENGTH 32
+#endif
+
+#define RNA_MAX_ARRAY_DIMENSION 3
 
 /* Blender RNA */
 
@@ -76,11 +80,11 @@ void RNA_def_struct_translation_context(StructRNA *srna, const char *context);
 
 typedef void StructOrFunctionRNA;
 
-PropertyRNA *RNA_def_boolean(StructOrFunctionRNA *cont, const char *identifier, int default_value, const char *ui_name, const char *ui_description);
-PropertyRNA *RNA_def_boolean_array(StructOrFunctionRNA *cont, const char *identifier, int len, int *default_value, const char *ui_name, const char *ui_description);
-PropertyRNA *RNA_def_boolean_layer(StructOrFunctionRNA *cont, const char *identifier, int len, int *default_value, const char *ui_name, const char *ui_description);
-PropertyRNA *RNA_def_boolean_layer_member(StructOrFunctionRNA *cont, const char *identifier, int len, int *default_value, const char *ui_name, const char *ui_description);
-PropertyRNA *RNA_def_boolean_vector(StructOrFunctionRNA *cont, const char *identifier, int len, int *default_value, const char *ui_name, const char *ui_description);
+PropertyRNA *RNA_def_boolean(StructOrFunctionRNA *cont, const char *identifier, bool default_value, const char *ui_name, const char *ui_description);
+PropertyRNA *RNA_def_boolean_array(StructOrFunctionRNA *cont, const char *identifier, int len, bool *default_value, const char *ui_name, const char *ui_description);
+PropertyRNA *RNA_def_boolean_layer(StructOrFunctionRNA *cont, const char *identifier, int len, bool *default_value, const char *ui_name, const char *ui_description);
+PropertyRNA *RNA_def_boolean_layer_member(StructOrFunctionRNA *cont, const char *identifier, int len, bool *default_value, const char *ui_name, const char *ui_description);
+PropertyRNA *RNA_def_boolean_vector(StructOrFunctionRNA *cont, const char *identifier, int len, bool *default_value, const char *ui_name, const char *ui_description);
 
 PropertyRNA *RNA_def_int(StructOrFunctionRNA *cont, const char *identifier, int default_value, int hardmin, int hardmax, const char *ui_name, const char *ui_description, int softmin, int softmax);
 PropertyRNA *RNA_def_int_vector(StructOrFunctionRNA *cont, const char *identifier, int len, const int *default_value, int hardmin, int hardmax, const char *ui_name, const char *ui_description, int softmin, int softmax);
@@ -141,6 +145,8 @@ void RNA_def_property_collection_sdna(PropertyRNA *prop, const char *structname,
 
 void RNA_def_property_flag(PropertyRNA *prop, PropertyFlag flag);
 void RNA_def_property_clear_flag(PropertyRNA *prop, PropertyFlag flag);
+void RNA_def_property_override_flag(PropertyRNA *prop, PropertyOverrideFlag flag);
+void RNA_def_property_override_clear_flag(PropertyRNA *prop, PropertyOverrideFlag flag);
 void RNA_def_property_tags(PropertyRNA *prop, int tags);
 void RNA_def_property_subtype(PropertyRNA *prop, PropertySubType subtype);
 void RNA_def_property_array(PropertyRNA *prop, int length);
@@ -152,8 +158,8 @@ void RNA_def_property_string_maxlength(PropertyRNA *prop, int maxlength);
 void RNA_def_property_struct_type(PropertyRNA *prop, const char *type);
 void RNA_def_property_struct_runtime(PropertyRNA *prop, StructRNA *type);
 
-void RNA_def_property_boolean_default(PropertyRNA *prop, int value);
-void RNA_def_property_boolean_array_default(PropertyRNA *prop, const int *array);
+void RNA_def_property_boolean_default(PropertyRNA *prop, bool value);
+void RNA_def_property_boolean_array_default(PropertyRNA *prop, const bool *array);
 void RNA_def_property_int_default(PropertyRNA *prop, int value);
 void RNA_def_property_int_array_default(PropertyRNA *prop, const int *array);
 void RNA_def_property_float_default(PropertyRNA *prop, float value);
@@ -163,11 +169,13 @@ void RNA_def_property_string_default(PropertyRNA *prop, const char *value);
 
 void RNA_def_property_ui_text(PropertyRNA *prop, const char *name, const char *description);
 void RNA_def_property_ui_range(PropertyRNA *prop, double min, double max, double step, int precision);
-void RNA_def_property_ui_icon(PropertyRNA *prop, int icon, bool consecutive);
+void RNA_def_property_ui_icon(PropertyRNA *prop, int icon, int consecutive);
 
 void RNA_def_property_update(PropertyRNA *prop, int noteflag, const char *updatefunc);
 void RNA_def_property_editable_func(PropertyRNA *prop, const char *editable);
 void RNA_def_property_editable_array_func(PropertyRNA *prop, const char *editable);
+
+void RNA_def_property_override_funcs(PropertyRNA *prop, const char *diff, const char *store, const char *apply);
 
 void RNA_def_property_update_runtime(PropertyRNA *prop, const void *func);
 void RNA_def_property_poll_runtime(PropertyRNA *prop, const void *func);
@@ -238,6 +246,10 @@ extern const int rna_matrix_dimsize_3x3[];
 extern const int rna_matrix_dimsize_4x4[];
 extern const int rna_matrix_dimsize_4x2[];
 
+extern const float rna_default_axis_angle[4];
+extern const float rna_default_quaternion[4];
+extern const float rna_default_scale_3d[3];
+
 /* max size for dynamic defined type descriptors,
  * this value is arbitrary */
 #define RNA_DYN_DESCR_MAX 240
@@ -247,4 +259,3 @@ extern const int rna_matrix_dimsize_4x2[];
 #endif
 
 #endif /* __RNA_DEFINE_H__ */
-

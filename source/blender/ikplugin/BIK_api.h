@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
  * Original author: Benoit Bolsee
- * Contributor(s): 
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/ikplugin/BIK_api.h
- *  \ingroup ikplugin
+/** \file
+ * \ingroup ikplugin
  */
 
 
@@ -38,11 +30,12 @@
 extern "C" {
 #endif
 
+struct Depsgraph;
 struct Object;
-struct bPoseChannel;
-struct bPose;
 struct Scene;
 struct bConstraint;
+struct bPose;
+struct bPoseChannel;
 
 enum BIK_ParamType {
 	BIK_PARAM_TYPE_FLOAT = 0,
@@ -61,8 +54,8 @@ struct BIK_ParamValue {
 };
 typedef struct BIK_ParamValue BIK_ParamValue;
 
-void BIK_initialize_tree(struct Scene *scene, struct Object *ob, float ctime);
-void BIK_execute_tree(struct Scene *scene, struct Object *ob, struct bPoseChannel *pchan, float ctime);
+void BIK_initialize_tree(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, float ctime);
+void BIK_execute_tree(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, struct bPoseChannel *pchan, float ctime);
 void BIK_release_tree(struct Scene *scene, struct Object *ob, float ctime);
 void BIK_clear_data(struct bPose *pose);
 void BIK_clear_cache(struct bPose *pose);

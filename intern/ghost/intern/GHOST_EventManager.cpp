@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,23 +15,15 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_EventManager.cpp
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  */
 
 
 /**
  * Copyright (C) 2001 NaN Technologies B.V.
- * \author	Maarten Gribnau
- * \date	May 14, 2001
  */
 
 #include "GHOST_EventManager.h"
@@ -127,7 +117,7 @@ GHOST_TSuccess GHOST_EventManager::addConsumer(GHOST_IEventConsumer *consumer)
 {
 	GHOST_TSuccess success;
 	GHOST_ASSERT(consumer, "invalid consumer");
-	
+
 	// Check to see whether the consumer is already in our list
 	TConsumerVector::const_iterator iter = std::find(m_consumers.begin(), m_consumers.end(), consumer);
 

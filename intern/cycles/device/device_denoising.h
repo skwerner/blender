@@ -23,6 +23,8 @@
 
 #include "kernel/filter/filter_defines.h"
 
+#include "util/util_profiling.h"
+
 CCL_NAMESPACE_BEGIN
 
 class DenoisingTask {
@@ -32,23 +34,34 @@ public:
 	float nlm_k_2;
 	float pca_threshold;
 
-	/* Pointer and parameters of the RenderBuffers. */
+	/* Parameters of the RenderBuffers. */
 	struct RenderBuffers {
-		int denoising_data_offset;
-		int denoising_clean_offset;
-		int pass_stride;
 		int offset;
-		int stride;
-		device_ptr ptr;
+		int pass_stride;
+		int frame_stride;
 		int samples;
 	} render_buffer;
 
-	TilesInfo *tiles;
-	device_vector<int> tiles_mem;
-	void tiles_from_rendertiles(RenderTile *rtiles);
+	/* Pointer and parameters of the target buffer. */
+	struct TargetBuffer {
+		int offset;
+		int stride;
+		int pass_stride;
+		int denoising_clean_offset;
+		int denoising_output_offset;
+		device_ptr ptr;
+	} target_buffer;
+
+	TileInfo *tile_info;
+	device_vector<int> tile_info_mem;
+
+	ProfilingState *profiler;
 
 	int4 rect;
 	int4 filter_area;
+
+	bool write_passes;
+	bool do_filter;
 
 	struct DeviceFunctions {
 		function<bool(device_ptr image_ptr,    /* Contains the values that are smoothed. */
@@ -58,8 +71,10 @@ public:
 		              )> non_local_means;
 		function<bool(device_ptr color_ptr,
 		              device_ptr color_variance_ptr,
-		              device_ptr output_ptr
-		              )> reconstruct;
+		              device_ptr scale_ptr,
+		              int frame
+		              )> accumulate;
+		function<bool(device_ptr output_ptr)> solve;
 		function<bool()> construct_transform;
 
 		function<bool(device_ptr a_ptr,
@@ -78,22 +93,25 @@ public:
 		function<bool(int mean_offset,
 		              int variance_offset,
 		              device_ptr mean_ptr,
-		              device_ptr variance_ptr
+		              device_ptr variance_ptr,
+		              float scale
 		              )> get_feature;
 		function<bool(device_ptr image_ptr,
 		              device_ptr variance_ptr,
 		              device_ptr depth_ptr,
 		              device_ptr output_ptr
 		              )> detect_outliers;
-		function<bool(device_ptr*)> set_tiles;
+		function<bool(int out_offset,
+		              device_ptr frop_ptr,
+		              device_ptr buffer_ptr
+		              )> write_feature;
+		function<void(RenderTile *rtiles)> map_neighbor_tiles;
+		function<void(RenderTile *rtiles)> unmap_neighbor_tiles;
 	} functions;
 
 	/* Stores state of the current Reconstruction operation,
 	 * which is accessed by the device in order to perform the operation. */
 	struct ReconstructionState {
-		device_ptr temporary_1_ptr; /* There two images are used as temporary storage. */
-		device_ptr temporary_2_ptr;
-
 		int4 filter_window;
 		int4 buffer_params;
 
@@ -104,16 +122,13 @@ public:
 	/* Stores state of the current NLM operation,
 	 * which is accessed by the device in order to perform the operation. */
 	struct NLMState {
-		device_ptr temporary_1_ptr; /* There three images are used as temporary storage. */
-		device_ptr temporary_2_ptr;
-		device_ptr temporary_3_ptr;
-
 		int r;      /* Search radius of the filter. */
 		int f;      /* Patch size of the filter. */
 		float a;    /* Variance compensation factor in the MSE estimation. */
 		float k_2;  /* Squared value of the k parameter of the filter. */
+		bool is_color;
 
-		void set_parameters(int r_, int f_, float a_, float k_2_) { r = r_; f = f_; a = a_, k_2 = k_2_; }
+		void set_parameters(int r_, int f_, float a_, float k_2_, bool is_color_) { r = r_; f = f_; a = a_, k_2 = k_2_; is_color = is_color_; }
 	} nlm_state;
 
 	struct Storage {
@@ -121,9 +136,6 @@ public:
 		device_only_memory<int>    rank;
 		device_only_memory<float>  XtWX;
 		device_only_memory<float3> XtWY;
-		device_only_memory<float>  temporary_1;
-		device_only_memory<float>  temporary_2;
-		device_only_memory<float>  temporary_color;
 		int w;
 		int h;
 
@@ -131,19 +143,14 @@ public:
 		: transform(device, "denoising transform"),
 		  rank(device, "denoising rank"),
 		  XtWX(device, "denoising XtWX"),
-		  XtWY(device, "denoising XtWY"),
-		  temporary_1(device, "denoising NLM temporary 1"),
-		  temporary_2(device, "denoising NLM temporary 2"),
-		  temporary_color(device, "denoising temporary color")
+		  XtWY(device, "denoising XtWY")
 		{}
 	} storage;
 
-	DenoisingTask(Device *device);
+	DenoisingTask(Device *device, const DeviceTask &task);
 	~DenoisingTask();
 
-	void init_from_devicetask(const DeviceTask &task);
-
-	bool run_denoising();
+	void run_denoising(RenderTile *tile);
 
 	struct DenoiseBuffers {
 		int pass_stride;
@@ -151,17 +158,35 @@ public:
 		int stride;
 		int h;
 		int width;
+		int frame_stride;
 		device_only_memory<float> mem;
+		device_only_memory<float> temporary_mem;
+		bool use_time;
+		bool use_intensity;
+
+		bool gpu_temporary_mem;
 
 		DenoiseBuffers(Device *device)
-		: mem(device, "denoising pixel buffer")
+		: mem(device, "denoising pixel buffer"),
+		  temporary_mem(device, "denoising temporary mem")
 	    {}
 	} buffer;
 
 protected:
 	Device *device;
+
+	void set_render_buffer(RenderTile *rtiles);
+	void setup_denoising_buffer();
+	void prefilter_shadowing();
+	void prefilter_features();
+	void prefilter_color();
+	void construct_transform();
+	void reconstruct();
+
+	void load_buffer();
+	void write_buffer();
 };
 
 CCL_NAMESPACE_END
 
-#endif /* __DEVICE_DENOISING_H__ */
+#endif  /* __DEVICE_DENOISING_H__ */

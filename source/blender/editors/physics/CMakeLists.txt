@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -23,11 +20,11 @@ set(INC
 	../../blenkernel
 	../../blenlib
 	../../blentranslation
+	../../depsgraph
 	../../gpu
 	../../makesdna
 	../../makesrna
 	../../windowmanager
-	../../../../intern/elbeem/extern
 	../../../../intern/guardedalloc
 	../../../../intern/glew-mx
 )
@@ -40,6 +37,7 @@ set(SRC
 	dynamicpaint_ops.c
 	particle_boids.c
 	particle_edit.c
+	particle_edit_undo.c
 	particle_object.c
 	physics_fluid.c
 	physics_ops.c
@@ -48,11 +46,29 @@ set(SRC
 	rigidbody_object.c
 	rigidbody_world.c
 
+	particle_edit_utildefines.h
 	physics_intern.h
 )
 
+set(LIB
+	bf_blenkernel
+	bf_blenlib
+)
+
 if(WITH_MOD_FLUID)
+	list(APPEND INC
+		../../../../intern/elbeem/extern
+	)
+	list(APPEND LIB
+		bf_intern_elbeem
+	)
 	add_definitions(-DWITH_MOD_FLUID)
+endif()
+
+if(WITH_MOD_SMOKE)
+	list(APPEND LIB
+		bf_intern_smoke
+	)
 endif()
 
 if(WITH_INTERNATIONAL)
@@ -68,4 +84,4 @@ endif()
 
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_editor_physics "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_physics "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

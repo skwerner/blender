@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Robin Allen
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/texture/nodes/node_texture_math.c
- *  \ingroup texnodes
+/** \file
+ * \ingroup texnodes
  */
 
 
@@ -38,12 +30,12 @@
 static bNodeSocketTemplate inputs[] = {
 	{ SOCK_FLOAT, 1, N_("Value"), 0.5f, 0.5f, 0.5f, 1.0f, -100.0f, 100.0f, PROP_NONE},
 	{ SOCK_FLOAT, 1, N_("Value"), 0.5f, 0.5f, 0.5f, 1.0f, -100.0f, 100.0f, PROP_NONE},
-	{ -1, 0, "" }
+	{ -1, 0, "" },
 };
 
 static bNodeSocketTemplate outputs[] = {
 	{ SOCK_FLOAT, 0, N_("Value")},
-	{ -1, 0, "" }
+	{ -1, 0, "" },
 };
 
 static void valuefn(float *out, TexParams *p, bNode *node, bNodeStack **in, short thread)
@@ -186,6 +178,39 @@ static void valuefn(float *out, TexParams *p, bNode *node, bNodeStack **in, shor
 		case NODE_MATH_ABS:
 		{
 			*out = fabsf(in0);
+			break;
+		}
+
+		case NODE_MATH_ATAN2:
+		{
+			*out = atan2(in0, in1);
+			break;
+		}
+
+		case NODE_MATH_FLOOR:
+		{
+			*out = floorf(in0);
+			break;
+		}
+
+		case NODE_MATH_CEIL:
+		{
+			*out = ceilf(in0);
+			break;
+		}
+
+		case NODE_MATH_FRACT:
+		{
+			*out = in0 - floorf(in0);
+			break;
+		}
+
+		case NODE_MATH_SQRT:
+		{
+			if (in0 > 0.0f)
+				*out = sqrtf(in0);
+			else
+				*out = 0.0f;
 			break;
 		}
 

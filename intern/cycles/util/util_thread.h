@@ -17,16 +17,17 @@
 #ifndef __UTIL_THREAD_H__
 #define __UTIL_THREAD_H__
 
-#if (__cplusplus > 199711L) || (defined(_MSC_VER) && _MSC_VER >= 1800)
-#  include <thread>
-#  include <mutex>
-#  include <condition_variable>
-#  include <functional>
-#else
-#  include <boost/thread.hpp>
-#endif
-#include <pthread.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
 #include <queue>
+
+#ifdef _WIN32
+#  include "util_windows.h"
+#else
+#  include <pthread.h>
+#endif
 
 #ifdef __APPLE__
 #  include <libkern/OSAtomic.h>
@@ -36,33 +37,32 @@
 
 CCL_NAMESPACE_BEGIN
 
-#if (__cplusplus > 199711L) || (defined(_MSC_VER) && _MSC_VER >= 1800)
 typedef std::mutex thread_mutex;
 typedef std::unique_lock<std::mutex> thread_scoped_lock;
 typedef std::condition_variable thread_condition_variable;
-#else
-/* use boost for mutexes */
-typedef boost::mutex thread_mutex;
-typedef boost::mutex::scoped_lock thread_scoped_lock;
-typedef boost::condition_variable thread_condition_variable;
-#endif
 
-/* own pthread based implementation, to avoid boost version conflicts with
- * dynamically loaded blender plugins */
+/* Own thread implementation similar to std::thread, so we can set a
+ * custom stack size on macOS. */
 
 class thread {
 public:
-	thread(function<void(void)> run_cb, int group = -1);
+	/* NOTE: Node index of -1 means that affinity will be inherited from the
+	 * parent thread and no override on top of that will happen. */
+	thread(function<void()> run_cb, int node = -1);
 	~thread();
 
 	static void *run(void *arg);
 	bool join();
 
 protected:
-	function<void(void)> run_cb_;
-	pthread_t pthread_id_;
+	function<void()> run_cb_;
+#ifdef __APPLE__
+	pthread_t pthread_id;
+#else
+	std::thread std_thread;
+#endif
 	bool joined_;
-	int group_;
+	int node_;
 };
 
 /* Own wrapper around pthread's spin lock to make it's use easier. */
@@ -81,7 +81,24 @@ public:
 	inline void unlock() {
 		OSSpinLockUnlock(&spin_);
 	}
-#else  /* __APPLE__ */
+#elif defined(_WIN32)
+	inline thread_spin_lock() {
+		const DWORD SPIN_COUNT = 50000;
+		InitializeCriticalSectionAndSpinCount(&cs_, SPIN_COUNT);
+	}
+
+	inline ~thread_spin_lock() {
+		DeleteCriticalSection(&cs_);
+	}
+
+	inline void lock() {
+		EnterCriticalSection(&cs_);
+	}
+
+	inline void unlock() {
+		LeaveCriticalSection(&cs_);
+	}
+#else
 	inline thread_spin_lock() {
 		pthread_spin_init(&spin_, 0);
 	}
@@ -97,10 +114,12 @@ public:
 	inline void unlock() {
 		pthread_spin_unlock(&spin_);
 	}
-#endif  /* __APPLE__ */
+#endif
 protected:
 #ifdef __APPLE__
 	OSSpinLock spin_;
+#elif defined(_WIN32)
+	CRITICAL_SECTION cs_;
 #else
 	pthread_spinlock_t spin_;
 #endif
@@ -125,5 +144,4 @@ protected:
 
 CCL_NAMESPACE_END
 
-#endif /* __UTIL_THREAD_H__ */
-
+#endif  /* __UTIL_THREAD_H__ */

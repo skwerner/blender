@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2010 by Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/GHOST_Path-api.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  */
 
 
@@ -36,7 +28,7 @@
 #include "GHOST_Types.h"
 
 #ifdef __cplusplus
-extern "C" { 
+extern "C" {
 #endif
 
 GHOST_DECLARE_HANDLE(GHOST_SystemPathsHandle);
@@ -79,7 +71,7 @@ extern const GHOST_TUns8 *GHOST_getBinaryDir(void);
 extern void GHOST_addToSystemRecentFiles(const char *filename);
 
 #ifdef __cplusplus
-} 
+}
 #endif
 
 #endif

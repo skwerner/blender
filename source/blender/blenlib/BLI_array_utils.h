@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,16 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BLI_ARRAY_UTILS_H__
 #define __BLI_ARRAY_UTILS_H__
 
-/** \file BLI_array_utils.h
- *  \ingroup bli
- *  \brief Generic array manipulation API.
+/** \file
+ * \ingroup bli
+ * \brief Generic array manipulation API.
  */
 
 #include "BLI_compiler_typecheck.h"
@@ -41,7 +37,7 @@ void _bli_array_permute(
         const unsigned int *index, void *arr_temp);
 #define BLI_array_permute(arr, arr_len, order) \
 	_bli_array_permute(arr, arr_len, sizeof(*(arr)), order, NULL)
-#define BLI_array_permute_ex(arr, arr_len, index, arr_temp) \
+#define BLI_array_permute_ex(arr, arr_len, order, arr_temp) \
 	_bli_array_permute(arr, arr_len, sizeof(*(arr)), order, arr_temp)
 
 int _bli_array_findindex(const void *arr, unsigned int arr_len, size_t arr_stride, const void *p);
@@ -74,10 +70,18 @@ bool _bli_array_iter_span(
         bool use_wrap, bool use_delimit_bounds,
         bool (*test_fn)(const void *arr_item, void *user_data), void *user_data,
         unsigned int span_step[2], unsigned int *r_span_len);
-#define BLI_array_iter_span(arr, arr_len, use_wrap, use_delimit_bounds, test_fn, user_data, \
-	        span_step, r_span_len) \
+#define BLI_array_iter_span( \
+        arr, arr_len, use_wrap, use_delimit_bounds, test_fn, user_data, \
+        span_step, r_span_len) \
 	_bli_array_iter_span( \
 	        arr, arr_len, sizeof(*(arr)), use_wrap, use_delimit_bounds, test_fn, user_data, \
 	        span_step, r_span_len)
+
+bool _bli_array_is_zeroed(
+        const void *arr,
+        unsigned int arr_len, size_t arr_stride);
+#define BLI_array_is_zeroed(arr, arr_len) \
+	_bli_array_is_zeroed( \
+	        arr, arr_len, sizeof(*(arr)))
 
 #endif  /* __BLI_ARRAY_UTILS_H__ */

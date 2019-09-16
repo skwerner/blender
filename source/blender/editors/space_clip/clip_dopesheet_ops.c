@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_clip/clip_dopesheet_ops.c
- *  \ingroup spclip
+/** \file
+ * \ingroup spclip
  */
 
 #include "DNA_scene_types.h"
@@ -53,7 +45,7 @@
 
 #include "clip_intern.h"	// own include
 
-static int space_clip_dopesheet_poll(bContext *C)
+static bool space_clip_dopesheet_poll(bContext *C)
 {
 	if (ED_space_clip_tracking_poll(C)) {
 		SpaceClip *sc = CTX_wm_space_clip(C);
@@ -70,7 +62,7 @@ static int space_clip_dopesheet_poll(bContext *C)
 
 /********************** select channel operator *********************/
 
-static int dopesheet_select_channel_poll(bContext *C)
+static bool dopesheet_select_channel_poll(bContext *C)
 {
 	SpaceClip *sc = CTX_wm_space_clip(C);
 

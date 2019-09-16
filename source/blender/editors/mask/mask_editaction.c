@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mask/mask_editaction.c
- *  \ingroup edmask
+/** \file
+ * \ingroup edmask
  */
 
 #include <stdio.h>
@@ -51,9 +45,9 @@
 
 /* ***************************************** */
 /* NOTE ABOUT THIS FILE:
- *  This file contains code for editing Mask data in the Action Editor
- *  as a 'keyframes', so that a user can adjust the timing of Mask shapekeys.
- *  Therefore, this file mostly contains functions for selecting Mask frames (shapekeys).
+ * This file contains code for editing Mask data in the Action Editor
+ * as a 'keyframes', so that a user can adjust the timing of Mask shapekeys.
+ * Therefore, this file mostly contains functions for selecting Mask frames (shapekeys).
  */
 /* ***************************************** */
 /* Generics - Loopers */
@@ -187,7 +181,7 @@ void ED_mask_select_frame(MaskLayer *masklay, int selx, short select_mode)
 }
 
 /* select the frames in this layer that occur within the bounds specified */
-void ED_masklayer_frames_select_border(MaskLayer *masklay, float min, float max, short select_mode)
+void ED_masklayer_frames_select_box(MaskLayer *masklay, float min, float max, short select_mode)
 {
 	MaskLayerShape *masklay_shape;
 
@@ -205,21 +199,21 @@ void ED_masklayer_frames_select_border(MaskLayer *masklay, float min, float max,
 void ED_masklayer_frames_select_region(KeyframeEditData *ked, MaskLayer *masklay, short tool, short select_mode)
 {
 	MaskLayerShape *masklay_shape;
-	
+
 	if (masklay == NULL)
 		return;
-	
+
 	/* only select frames which are within the region */
 	for (masklay_shape = masklay->splines_shapes.first; masklay_shape; masklay_shape = masklay_shape->next) {
 		/* construct a dummy point coordinate to do this testing with */
 		float pt[2] = {0};
-		
+
 		pt[0] = masklay_shape->frame;
 		pt[1] = ked->channel_y;
-		
+
 		/* check the necessary regions */
 		if (tool == BEZT_OK_CHANNEL_LASSO) {
-			/* Lasso */	
+			/* Lasso */
 			if (keyframe_region_lasso_test(ked->data, pt))
 				masklayshape_select(masklay_shape, select_mode);
 		}
@@ -336,4 +330,3 @@ void ED_masklayer_snap_frames(MaskLayer *masklay, Scene *scene, short mode)
 			break;
 	}
 }
-

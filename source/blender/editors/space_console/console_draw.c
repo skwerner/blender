@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_console/console_draw.c
- *  \ingroup spconsole
+/** \file
+ * \ingroup spconsole
  */
 
 #include <math.h>
@@ -39,7 +33,7 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BIF_gl.h"
+#include "GPU_immediate.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -73,7 +67,7 @@ void console_scrollback_prompt_begin(struct SpaceConsole *sc, ConsoleLine *cl_du
 	/* fake the edit line being in the scroll buffer */
 	ConsoleLine *cl = sc->history.last;
 	int prompt_len = strlen(sc->prompt);
-	
+
 	cl_dummy->type = CONSOLE_LINE_INPUT;
 	cl_dummy->len = prompt_len + cl->len;
 	cl_dummy->len_alloc = cl_dummy->len + 1;
@@ -82,7 +76,7 @@ void console_scrollback_prompt_begin(struct SpaceConsole *sc, ConsoleLine *cl_du
 	memcpy(cl_dummy->line + prompt_len, cl->line, cl->len + 1);
 	BLI_addtail(&sc->scrollback, cl_dummy);
 }
-void console_scrollback_prompt_end(struct SpaceConsole *sc, ConsoleLine *cl_dummy) 
+void console_scrollback_prompt_end(struct SpaceConsole *sc, ConsoleLine *cl_dummy)
 {
 	MEM_freeN(cl_dummy->line);
 	BLI_remlink(&sc->scrollback, cl_dummy);
@@ -97,10 +91,10 @@ static int console_textview_begin(TextViewContext *tvc)
 	tvc->lheight = sc->lheight * UI_DPI_FAC;
 	tvc->sel_start = sc->sel_start;
 	tvc->sel_end = sc->sel_end;
-	
+
 	/* iterator */
 	tvc->iter = sc->scrollback.last;
-	
+
 	return (tvc->iter != NULL);
 }
 
@@ -108,7 +102,7 @@ static void console_textview_end(TextViewContext *tvc)
 {
 	SpaceConsole *sc = (SpaceConsole *)tvc->arg1;
 	(void)sc;
-	
+
 }
 
 static int console_textview_step(TextViewContext *tvc)
@@ -138,8 +132,9 @@ static void console_cursor_wrap_offset(const char *str, int width, int *row, int
 			*column = 0;
 		}
 
-		if (end && str >= end)
+		if (end && str >= end) {
 			break;
+		}
 
 		*column += col;
 	}
@@ -157,6 +152,8 @@ static int console_textview_line_color(struct TextViewContext *tvc, unsigned cha
 		int offl = 0, offc = 0;
 		int xy[2] = {CONSOLE_DRAW_MARGIN, CONSOLE_DRAW_MARGIN};
 		int pen[2];
+		GPUVertFormat *format = immVertexFormat();
+		uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 		xy[1] += tvc->lheight / 6;
 
 		console_cursor_wrap_offset(sc->prompt, tvc->console_width, &offl, &offc, NULL);
@@ -168,14 +165,17 @@ static int console_textview_line_color(struct TextViewContext *tvc, unsigned cha
 		pen[1] += tvc->lheight * offl;
 
 		/* cursor */
-		UI_GetThemeColor3ubv(TH_CONSOLE_CURSOR, fg);
-		glColor3ubv(fg);
+		immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+		immUniformThemeColor(TH_CONSOLE_CURSOR);
 
-		glRecti((xy[0] + pen[0]) - 1,
-		        (xy[1] + pen[1]),
-		        (xy[0] + pen[0]) + 1,
-		        (xy[1] + pen[1] + tvc->lheight)
-		        );
+		immRectf(pos,
+		         (xy[0] + pen[0]) - 1,
+		         (xy[1] + pen[1]),
+		         (xy[0] + pen[0]) + 1,
+		         (xy[1] + pen[1] + tvc->lheight)
+		         );
+
+		immUnbindProgram();
 	}
 
 	console_line_color(fg, cl_iter->type);
@@ -193,7 +193,7 @@ static int console_textview_main__internal(struct SpaceConsole *sc, ARegion *ar,
 {
 	ConsoleLine cl_dummy = {NULL};
 	int ret = 0;
-	
+
 	View2D *v2d = &ar->v2d;
 
 	TextViewContext tvc = {0};

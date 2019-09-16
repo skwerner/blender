@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/BPy_SShape.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BPy_SShape.h"
@@ -122,7 +118,7 @@ PyDoc_STRVAR(SShape_add_vertex_doc,
 "   :arg vertex: An SVertex object.\n"
 "   :type vertex: :class:`SVertex`");
 
-static PyObject * SShape_add_vertex(BPy_SShape *self, PyObject *args, PyObject *kwds)
+static PyObject *SShape_add_vertex(BPy_SShape *self, PyObject *args, PyObject *kwds)
 {
 	static const char *kwlist[] = {"edge", NULL};
 	PyObject *py_sv = 0;
@@ -152,7 +148,7 @@ static PyMethodDef BPy_SShape_methods[] = {
 	{"add_edge", (PyCFunction)SShape_add_edge, METH_VARARGS | METH_KEYWORDS, SShape_add_edge_doc},
 	{"add_vertex", (PyCFunction)SShape_add_vertex, METH_VARARGS | METH_KEYWORDS, SShape_add_vertex_doc},
 	{"compute_bbox", (PyCFunction)SShape_compute_bbox, METH_NOARGS, SShape_compute_bbox_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 /*----------------------SShape get/setters ----------------------------*/
@@ -185,7 +181,7 @@ PyDoc_STRVAR(SShape_name_doc,
 
 static PyObject *SShape_name_get(BPy_SShape *self, void *UNUSED(closure))
 {
-	return PyUnicode_FromString(self->ss->getName());
+	return PyUnicode_FromString(self->ss->getName().c_str());
 }
 
 static int SShape_name_set(BPy_SShape *self, PyObject *value, void *UNUSED(closure))
@@ -232,11 +228,11 @@ static PyObject *SShape_vertices_get(BPy_SShape *self, void *UNUSED(closure))
 	vector< SVertex * >::iterator it;
 	PyObject *py_vertices = PyList_New(vertices.size());
 	unsigned int i = 0;
-	
+
 	for (it = vertices.begin(); it != vertices.end(); it++) {
 		PyList_SET_ITEM(py_vertices, i++, BPy_SVertex_from_SVertex(*(*it)));
 	}
-	
+
 	return py_vertices;
 }
 
@@ -252,11 +248,11 @@ static PyObject *SShape_edges_get(BPy_SShape *self, void *UNUSED(closure))
 	vector< FEdge * >::iterator it;
 	PyObject *py_edges = PyList_New(edges.size());
 	unsigned int i = 0;
-	
+
 	for (it = edges.begin(); it != edges.end(); it++) {
 		PyList_SET_ITEM(py_edges, i++, Any_BPy_FEdge_from_FEdge(*(*it)));
 	}
-	
+
 	return py_edges;
 }
 

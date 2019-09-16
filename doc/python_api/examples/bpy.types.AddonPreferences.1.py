@@ -9,7 +9,7 @@ bl_info = {
     "wiki_url": "",
     "tracker_url": "",
     "category": "Object",
-    }
+}
 
 
 import bpy
@@ -22,18 +22,18 @@ class ExampleAddonPreferences(AddonPreferences):
     # when defining this in a submodule of a python package.
     bl_idname = __name__
 
-    filepath = StringProperty(
-            name="Example File Path",
-            subtype='FILE_PATH',
-            )
-    number = IntProperty(
-            name="Example Number",
-            default=4,
-            )
-    boolean = BoolProperty(
-            name="Example Boolean",
-            default=False,
-            )
+    filepath: StringProperty(
+        name="Example File Path",
+        subtype='FILE_PATH',
+    )
+    number: IntProperty(
+        name="Example Number",
+        default=4,
+    )
+    boolean: BoolProperty(
+        name="Example Boolean",
+        default=False,
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -50,8 +50,8 @@ class OBJECT_OT_addon_prefs_example(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        user_preferences = context.user_preferences
-        addon_prefs = user_preferences.addons[__name__].preferences
+        preferences = context.preferences
+        addon_prefs = preferences.addons[__name__].preferences
 
         info = ("Path: %s, Number: %d, Boolean %r" %
                 (addon_prefs.filepath, addon_prefs.number, addon_prefs.boolean))

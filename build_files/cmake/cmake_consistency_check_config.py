@@ -1,9 +1,12 @@
 import os
 
-IGNORE = (
+IGNORE_SOURCE = (
     "/test/",
     "/tests/gtests/",
     "/release/",
+
+    # specific source files
+    "extern/audaspace/",
 
     # specific source files
     "extern/bullet2/src/BulletCollision/CollisionDispatch/btBox2dBox2dCollisionAlgorithm.cpp",
@@ -17,6 +20,10 @@ IGNORE = (
     "intern/audaspace/SRC/AUD_SRCResampleFactory.cpp",
     "intern/audaspace/SRC/AUD_SRCResampleReader.cpp",
 
+    "doc/doxygen/doxygen.extern.h",
+    "doc/doxygen/doxygen.intern.h",
+    "doc/doxygen/doxygen.main.h",
+    "doc/doxygen/doxygen.source.h",
     "extern/bullet2/src/BulletCollision/CollisionDispatch/btBox2dBox2dCollisionAlgorithm.h",
     "extern/bullet2/src/BulletCollision/CollisionDispatch/btConvex2dConvex2dAlgorithm.h",
     "extern/bullet2/src/BulletCollision/CollisionDispatch/btInternalEdgeUtility.h",
@@ -25,12 +32,12 @@ IGNORE = (
     "extern/bullet2/src/BulletDynamics/Character/btKinematicCharacterController.h",
     "extern/bullet2/src/BulletDynamics/ConstraintSolver/btHinge2Constraint.h",
     "extern/bullet2/src/BulletDynamics/ConstraintSolver/btUniversalConstraint.h",
-    "extern/carve/include/carve/config.h",
-    "extern/carve/include/carve/random/random.h",
-    "extern/carve/patches/files/config.h",
-    "extern/carve/patches/files/random.h",
     "intern/audaspace/SRC/AUD_SRCResampleFactory.h",
     "intern/audaspace/SRC/AUD_SRCResampleReader.h",
+)
+
+IGNORE_CMAKE = (
+    "extern/audaspace/CMakeLists.txt",
 )
 
 UTF8_CHECK = True

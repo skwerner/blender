@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Dalai Felinto
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_DistanceYCCMatteOperation.h"
@@ -32,4 +29,3 @@ float DistanceYCCMatteOperation::calculateDistance(float key[4], float image[4])
 	/* only measure the second 2 values */
 	return len_v2v2(key + 1, image + 1);
 }
-

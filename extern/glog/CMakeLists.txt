@@ -16,10 +16,6 @@
 #
 # The Original Code is Copyright (C) 2016, Blender Foundation
 # All rights reserved.
-#
-# Contributor(s): Blender Foundation,
-#                 Sergey Sharybin
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -40,6 +36,7 @@ set(SRC
 
 	src/config.h
 	src/config_freebsd.h
+	src/config_haiku.h
 	src/config_hurd.h
 	src/config_linux.h
 	src/config_mac.h
@@ -55,6 +52,15 @@ set(SRC
 	src/stacktrace_x86_64-inl.h
 	src/stacktrace_x86-inl.h
 )
+
+set(LIB
+)
+
+if(NOT WITH_SYSTEM_GFLAGS)
+	list(APPEND LIB
+		extern_gflags
+	)
+endif()
 
 if(WIN32)
 	list(APPEND SRC
@@ -72,21 +78,25 @@ if(WIN32)
 		src/windows
 	)
 else()
+	list(APPEND INC
+		include
+	)
 	list(APPEND SRC
 		src/demangle.cc
 		src/signalhandler.cc
 		src/symbolize.cc
 
 		src/demangle.h
-		src/glog/logging.h
-		src/glog/log_severity.h
-		src/glog/raw_logging.h
-		src/glog/vlog_is_on.h
 		src/symbolize.h
+
+		include/glog/logging.h
+		include/glog/log_severity.h
+		include/glog/raw_logging.h
+		include/glog/vlog_is_on.h
 	)
 endif()
 
 add_definitions(${GFLAGS_DEFINES})
 add_definitions(${GLOG_DEFINES})
 
-blender_add_lib(extern_glog "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(extern_glog "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

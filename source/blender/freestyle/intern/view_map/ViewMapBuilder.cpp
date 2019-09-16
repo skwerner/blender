@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/view_map/ViewMapBuilder.cpp
- *  \ingroup freestyle
- *  \brief Class to build silhouette edges from a Winged-Edge structure
- *  \author Stephane Grabli
- *  \date 25/03/2002
+/** \file
+ * \ingroup freestyle
+ * \brief Class to build silhouette edges from a Winged-Edge structure
  */
 
 #include <algorithm>
@@ -1004,7 +998,7 @@ ViewMap *ViewMapBuilder::BuildViewMap(WingedEdge& we, visibility_algo iAlgo, rea
 	computeInitialViewEdges(we);
 
 	// Detects cusps
-	computeCusps(_ViewMap); 
+	computeCusps(_ViewMap);
 
 	// Compute intersections
 	ComputeIntersections(_ViewMap, sweep_line, epsilon);
@@ -1059,7 +1053,7 @@ void ViewMapBuilder::CullViewEdges(ViewMap *ioViewMap, real viewProscenium[4], r
 		cout << "Origin: [" << prosceniumOrigin[0] << ", " << prosceniumOrigin[1] << "]"<< endl;
 	}
 
-	// A separate occluder proscenium will also be maintained, starting out the same as the viewport proscenium, and 
+	// A separate occluder proscenium will also be maintained, starting out the same as the viewport proscenium, and
 	// expanding as necessary so that it encompasses the center point of at least one feature edge in each retained view
 	// edge.
 	// The occluder proscenium will be used later to cull occluding triangles before they are inserted into the Grid.
@@ -1182,7 +1176,7 @@ void ViewMapBuilder::CullViewEdges(ViewMap *ioViewMap, real viewProscenium[4], r
 			FEdge *festart = (*ve)->fedgeA();
 			FEdge *fe = festart;
 			do {
-				// If not (already) visible and center point inside occluder proscenium, 
+				// If not (already) visible and center point inside occluder proscenium,
 				if (!fe->isInImage() && insideProscenium(occluderProscenium, fe->center2d())) {
 					// Use the feature edge for visibility determination
 					fe->setIsInImage(true);
@@ -1947,7 +1941,8 @@ int ViewMapBuilder::ComputeRayCastingVisibility(FEdge *fe, Grid *iGrid, real eps
 	int viewport[4];
 	SilhouetteGeomEngine::retrieveViewport(viewport);
 	if ((A.x() < viewport[0]) || (A.x() > viewport[2]) || (A.y() < viewport[1]) || (A.y() > viewport[3]) ||
-	    (B.x() < viewport[0]) || (B.x() > viewport[2]) || (B.y() < viewport[1]) || (B.y() > viewport[3])) {
+	    (B.x() < viewport[0]) || (B.x() > viewport[2]) || (B.y() < viewport[1]) || (B.y() > viewport[3]))
+	{
 		cerr << "Warning: point is out of the grid for fedge " << fe->getId() << endl;
 		//return 0;
 	}
@@ -2286,7 +2281,7 @@ void ViewMapBuilder::ComputeSweepLineIntersections(ViewMap *ioViewMap, real epsi
 	for (fe = ioEdges.begin(), fend = ioEdges.end(); fe != fend; fe++)
 		(*fe)->userdata = NULL;
 
-	// list containing the new edges resulting from splitting operations. 
+	// list containing the new edges resulting from splitting operations.
 	vector<FEdge*> newEdges;
 
 	// retrieve the intersected edges:

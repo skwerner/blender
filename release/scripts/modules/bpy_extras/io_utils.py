@@ -21,7 +21,7 @@
 __all__ = (
     "ExportHelper",
     "ImportHelper",
-    "orientation_helper_factory",
+    "orientation_helper",
     "axis_conversion",
     "axis_conversion_ensure",
     "create_derived_objects",
@@ -32,7 +32,7 @@ __all__ = (
     "path_reference_copy",
     "path_reference_mode",
     "unique_name"
-    )
+)
 
 import bpy
 from bpy.props import (
@@ -52,24 +52,18 @@ def _check_axis_conversion(op):
 
 
 class ExportHelper:
-    filepath = StringProperty(
-            name="File Path",
-            description="Filepath used for exporting the file",
-            maxlen=1024,
-            subtype='FILE_PATH',
-            )
-    check_existing = BoolProperty(
-            name="Check Existing",
-            description="Check and warn on overwriting existing files",
-            default=True,
-            options={'HIDDEN'},
-            )
-
-    # needed for mix-ins
-    order = [
-        "filepath",
-        "check_existing",
-        ]
+    filepath: StringProperty(
+        name="File Path",
+        description="Filepath used for exporting the file",
+        maxlen=1024,
+        subtype='FILE_PATH',
+    )
+    check_existing: BoolProperty(
+        name="Check Existing",
+        description="Check and warn on overwriting existing files",
+        default=True,
+        options={'HIDDEN'},
+    )
 
     # subclasses can override with decorator
     # True == use ext, False == no ext, None == do nothing.
@@ -112,17 +106,12 @@ class ExportHelper:
 
 
 class ImportHelper:
-    filepath = StringProperty(
-            name="File Path",
-            description="Filepath used for importing the file",
-            maxlen=1024,
-            subtype='FILE_PATH',
-            )
-
-    # needed for mix-ins
-    order = [
-        "filepath",
-        ]
+    filepath: StringProperty(
+        name="File Path",
+        description="Filepath used for importing the file",
+        maxlen=1024,
+        subtype='FILE_PATH',
+    )
 
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
@@ -132,51 +121,58 @@ class ImportHelper:
         return _check_axis_conversion(self)
 
 
-def orientation_helper_factory(name, axis_forward='Y', axis_up='Z'):
-    members = {}
+def orientation_helper(axis_forward='Y', axis_up='Z'):
+    """
+    A decorator for import/export classes, generating properties needed by the axis conversion system and IO helpers,
+    with specified default values (axes).
+    """
+    def wrapper(cls):
+        # Without that, we may end up adding those fields to some **parent** class' __annotations__ property
+        # (like the ImportHelper or ExportHelper ones)! See T58772.
+        if "__annotations__" not in cls.__dict__:
+            setattr(cls, "__annotations__", {})
 
-    def _update_axis_forward(self, context):
-        if self.axis_forward[-1] == self.axis_up[-1]:
-            self.axis_up = (self.axis_up[0:-1] +
-                    'XYZ'[('XYZ'.index(self.axis_up[-1]) + 1) % 3])
+        def _update_axis_forward(self, context):
+            if self.axis_forward[-1] == self.axis_up[-1]:
+                self.axis_up = (self.axis_up[0:-1] +
+                                'XYZ'[('XYZ'.index(self.axis_up[-1]) + 1) % 3])
 
-    members['axis_forward'] = EnumProperty(
+        cls.__annotations__['axis_forward'] = EnumProperty(
             name="Forward",
-            items=(('X', "X Forward", ""),
-                   ('Y', "Y Forward", ""),
-                   ('Z', "Z Forward", ""),
-                   ('-X', "-X Forward", ""),
-                   ('-Y', "-Y Forward", ""),
-                   ('-Z', "-Z Forward", ""),
-                   ),
+            items=(
+                ('X', "X Forward", ""),
+                ('Y', "Y Forward", ""),
+                ('Z', "Z Forward", ""),
+                ('-X', "-X Forward", ""),
+                ('-Y', "-Y Forward", ""),
+                ('-Z', "-Z Forward", ""),
+            ),
             default=axis_forward,
             update=_update_axis_forward,
-            )
+        )
 
-    def _update_axis_up(self, context):
-        if self.axis_up[-1] == self.axis_forward[-1]:
-            self.axis_forward = (self.axis_forward[0:-1] +
-                    'XYZ'[('XYZ'.index(self.axis_forward[-1]) + 1) % 3])
+        def _update_axis_up(self, context):
+            if self.axis_up[-1] == self.axis_forward[-1]:
+                self.axis_forward = (self.axis_forward[0:-1] +
+                                     'XYZ'[('XYZ'.index(self.axis_forward[-1]) + 1) % 3])
 
-    members['axis_up'] = EnumProperty(
+        cls.__annotations__['axis_up'] = EnumProperty(
             name="Up",
-            items=(('X', "X Up", ""),
-                   ('Y', "Y Up", ""),
-                   ('Z', "Z Up", ""),
-                   ('-X', "-X Up", ""),
-                   ('-Y', "-Y Up", ""),
-                   ('-Z', "-Z Up", ""),
-                   ),
+            items=(
+                ('X', "X Up", ""),
+                ('Y', "Y Up", ""),
+                ('Z', "Z Up", ""),
+                ('-X', "-X Up", ""),
+                ('-Y', "-Y Up", ""),
+                ('-Z', "-Z Up", ""),
+            ),
             default=axis_up,
             update=_update_axis_up,
-            )
+        )
 
-    members["order"] = [
-        "axis_forward",
-        "axis_up",
-        ]
+        return cls
 
-    return type(name, (object,), members)
+    return wrapper
 
 
 # Axis conversion function, not pretty LUT
@@ -205,7 +201,7 @@ _axis_convert_matrix = (
     ((1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (0.0, 0.0, -1.0)),
     ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, -1.0, 0.0)),
     ((1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)),
-    )
+)
 
 # store args as a single int
 # (X Y Z -X -Y -Z) --> (0, 1, 2, 3, 4, 5)
@@ -282,7 +278,7 @@ _axis_convert_lut = (
     {0x408, 0x810, 0xA20, 0x228, 0x081, 0x891, 0x699, 0x2A9, 0x102, 0x50A,
      0x71A, 0xB22, 0x4CB, 0x8D3, 0xAE3, 0x2EB, 0x144, 0x954, 0x75C, 0x36C,
      0x045, 0x44D, 0x65D, 0xA65},
-    )
+)
 
 _axis_convert_num = {'X': 0, 'Y': 1, 'Z': 2, '-X': 3, '-Y': 4, '-Z': 5}
 
@@ -303,11 +299,11 @@ def axis_conversion(from_forward='Y', from_up='Z', to_forward='Y', to_up='Z'):
                         "can't use up/forward on the same axis")
 
     value = reduce(int.__or__, (_axis_convert_num[a] << (i * 3)
-                   for i, a in enumerate((from_forward,
-                                          from_up,
-                                          to_forward,
-                                          to_up,
-                                          ))))
+                                for i, a in enumerate((from_forward,
+                                                       from_up,
+                                                       to_forward,
+                                                       to_up,
+                                                       ))))
 
     for i, axis_lut in enumerate(_axis_convert_lut):
         if value in axis_lut:
@@ -350,10 +346,10 @@ def axis_conversion_ensure(operator, forward_attr, up_attr):
 # return a tuple (free, object list), free is True if memory should be freed
 # later with free_derived_objects()
 def create_derived_objects(scene, ob):
-    if ob.parent and ob.parent.dupli_type in {'VERTS', 'FACES'}:
+    if ob.parent and ob.parent.instance_type in {'VERTS', 'FACES'}:
         return False, None
 
-    if ob.dupli_type != 'NONE':
+    if ob.instance_type != 'NONE':
         ob.dupli_list_create(scene)
         return True, [(dob.object, dob.matrix) for dob in ob.dupli_list]
     else:
@@ -392,20 +388,21 @@ def unpack_face_list(list_of_tuples):
 
 
 path_reference_mode = EnumProperty(
-        name="Path Mode",
-        description="Method used to reference paths",
-        items=(('AUTO', "Auto", "Use Relative paths with subdirectories only"),
-               ('ABSOLUTE', "Absolute", "Always write absolute paths"),
-               ('RELATIVE', "Relative", "Always write relative paths "
-                                        "(where possible)"),
-               ('MATCH', "Match", "Match Absolute/Relative "
-                                  "setting with input path"),
-               ('STRIP', "Strip Path", "Filename only"),
-               ('COPY', "Copy", "Copy the file to the destination path "
-                                "(or subdirectory)"),
-               ),
-        default='AUTO',
-        )
+    name="Path Mode",
+    description="Method used to reference paths",
+    items=(
+        ('AUTO', "Auto", "Use Relative paths with subdirectories only"),
+        ('ABSOLUTE', "Absolute", "Always write absolute paths"),
+        ('RELATIVE', "Relative", "Always write relative paths "
+         "(where possible)"),
+        ('MATCH', "Match", "Match Absolute/Relative "
+         "setting with input path"),
+        ('STRIP', "Strip Path", "Filename only"),
+        ('COPY', "Copy", "Copy the file to the destination path "
+         "(or subdirectory)"),
+    ),
+    default='AUTO',
+)
 
 
 def path_reference(filepath,

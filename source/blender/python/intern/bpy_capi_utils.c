@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/intern/bpy_capi_utils.c
- *  \ingroup pythonintern
+/** \file
+ * \ingroup pythonintern
  *
  * This file contains Blender/Python utility functions to help implementing API's.
  * This is not related to a particular module.
@@ -54,8 +48,9 @@ char *BPy_enum_as_string(const EnumPropertyItem *item)
 	char *cstring;
 
 	for (e = item; item->identifier; item++) {
-		if (item->identifier[0])
+		if (item->identifier[0]) {
 			BLI_dynstr_appendf(dynstr, (e == item) ? "'%s'" : ", '%s'", item->identifier);
+		}
 	}
 
 	cstring = BLI_dynstr_get_cstring(dynstr);
@@ -81,28 +76,42 @@ short BPy_reports_to_error(ReportList *reports, PyObject *exception, const bool 
 	return (report_str == NULL) ? 0 : -1;
 }
 
+/**
+ * A version of #BKE_report_write_file_fp that uses Python's stdout.
+ */
+void BPy_reports_write_stdout(const ReportList *reports, const char *header)
+{
+	if (header) {
+		PySys_WriteStdout("%s\n", header);
+	}
+
+	for (const Report *report = reports->list.first; report; report = report->next) {
+		PySys_WriteStdout("%s: %s\n", report->typestr, report->message);
+	}
+}
 
 bool BPy_errors_to_report_ex(ReportList *reports, const bool use_full, const bool use_location)
 {
 	PyObject *pystring;
 
-	if (!PyErr_Occurred())
+	if (!PyErr_Occurred()) {
 		return 1;
-	
+	}
+
 	/* less hassle if we allow NULL */
 	if (reports == NULL) {
 		PyErr_Print();
 		PyErr_Clear();
 		return 1;
 	}
-	
+
 	if (use_full) {
 		pystring = PyC_ExceptionBuffer();
 	}
 	else {
 		pystring = PyC_ExceptionBuffer_Simple();
 	}
-	
+
 	if (pystring == NULL) {
 		BKE_report(reports, RPT_ERROR, "Unknown py-exception, could not convert");
 		return 0;

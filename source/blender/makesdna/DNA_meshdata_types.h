@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_meshdata_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_MESHDATA_TYPES_H__
@@ -41,7 +33,8 @@ struct Image;
 typedef struct MFace {
 	unsigned int v1, v2, v3, v4;
 	short mat_nr;
-	char edcode, flag;  /* we keep edcode, for conversion to edges draw flags in old files */
+	/** We keep edcode, for conversion to edges draw flags in old files. */
+	char edcode, flag;
 } MFace;
 
 typedef struct MEdge {
@@ -58,7 +51,8 @@ typedef struct MDeformWeight {
 typedef struct MDeformVert {
 	struct MDeformWeight *dw;
 	int totweight;
-	int flag;  /* flag only in use for weightpaint now */
+	/** Flag only in use for weightpaint now. */
+	int flag;
 } MDeformVert;
 
 typedef struct MVert {
@@ -78,15 +72,18 @@ typedef struct MCol {
 typedef struct MPoly {
 	/* offset into loop array and number of loops in the face */
 	int loopstart;
-	int totloop;  /* keep signed since we need to subtract when getting the previous loop */
+	/** Keep signed since we need to subtract when getting the previous loop. */
+	int totloop;
 	short mat_nr;
-	char flag, pad;
+	char flag, _pad;
 } MPoly;
 
 /* the e here is because we want to move away from relying on edge hashes.*/
 typedef struct MLoop {
-	unsigned int v;  /* vertex index */
-	unsigned int e;  /* edge index */
+	/** Vertex index. */
+	unsigned int v;
+	/** Edge index. */
+	unsigned int e;
 } MLoop;
 
 /**
@@ -95,7 +92,7 @@ typedef struct MLoop {
  * There is no attempt to maintain this data's validity over time, any changes to the underlying mesh
  * invalidate the #MLoopTri array, which will need to be re-calculated.
  *
- * Users normally access this via #DerivedMesh.getLoopTriArray.
+ * Users normally access this via #BKE_mesh_runtime_looptri_ensure.
  * In rare cases its calculated directly, with #BKE_mesh_recalc_looptri.
  *
  * Typical usage includes:
@@ -164,18 +161,18 @@ typedef struct MLoop {
  *     MEdge *ed = &medge[mloop[lt->tri[j]].e];
  *     unsigned int tri_edge[2]  = {mloop[lt->tri[j]].v, mloop[lt->tri[j_next]].v};
  *
- *     if (((ed->v1 == tri_edge[0]) && (ed->v1 == tri_edge[1])) ||
- *         ((ed->v1 == tri_edge[1]) && (ed->v1 == tri_edge[0])))
+ *     if (((ed->v1 == tri_edge[0]) && (ed->v2 == tri_edge[1])) ||
+ *         ((ed->v1 == tri_edge[1]) && (ed->v2 == tri_edge[0])))
  *     {
  *         printf("real edge found %u %u\n", tri_edge[0], tri_edge[1]);
  *     }
  * }
  * \endcode
  *
+ * See #BKE_mesh_looptri_get_real_edges for a utility that does this.
+ *
  * \note A #MLoopTri may be in the middle of an ngon and not reference **any** edges.
  */
-#
-#
 typedef struct MLoopTri {
 	unsigned int tri[3];
 	unsigned int poly;
@@ -186,22 +183,9 @@ typedef struct MVertTri {
 	unsigned int tri[3];
 } MVertTri;
 
-
-typedef struct MTexPoly {
-	struct Image *tpage;
-	char flag, transp;
-	short mode, tile, pad;
-} MTexPoly;
-
-/* can copy from/to MTexPoly/MTFace */
-#define ME_MTEXFACE_CPY(dst, src)   \
-{                                   \
-	(dst)->tpage  = (src)->tpage;   \
-	(dst)->flag   = (src)->flag;    \
-	(dst)->transp = (src)->transp;  \
-	(dst)->mode   = (src)->mode;    \
-	(dst)->tile   = (src)->tile;    \
-} (void)0
+//typedef struct MTexPoly {
+//	void *_pad;
+//} MTexPoly;
 
 typedef struct MLoopUV {
 	float uv[2];
@@ -250,15 +234,13 @@ typedef struct MLoopCol {
 
 typedef struct MSelect {
 	int index;
-	int type;  /* ME_VSEL/ME_ESEL/ME_FSEL */
+	/** ME_VSEL/ME_ESEL/ME_FSEL. */
+	int type;
 } MSelect;
 
 /*tessellation uv face data*/
 typedef struct MTFace {
 	float uv[4][2];
-	struct Image *tpage;
-	char flag, transp;
-	short mode, tile, unwrap;
 } MTFace;
 
 /*Custom Data Properties*/
@@ -286,13 +268,16 @@ typedef struct MDisps {
 	int level;
 	float (*disps)[3];
 
-	/* Used for hiding parts of a multires mesh. Essentially the multires equivalent of MVert.flag's ME_HIDE bit.
-	 * NOTE: This is a bitmap, keep in sync with type used in BLI_bitmap.h
+	/**
+	 * Used for hiding parts of a multires mesh.
+	 * Essentially the multires equivalent of MVert.flag's ME_HIDE bit.
+	 *
+	 * \note This is a bitmap, keep in sync with type used in BLI_bitmap.h
 	 */
 	unsigned int *hidden;
 } MDisps;
 
-/** Multires structs kept for compatibility with old files **/
+/** Multires structs kept for compatibility with old files. */
 typedef struct MultiresCol {
 	float a, r, g, b;
 } MultiresCol;
@@ -305,7 +290,7 @@ typedef struct MultiresColFace {
 typedef struct MultiresFace {
 	unsigned int v[4];
 	unsigned int mid;
-	char flag, mat_nr, pad[2];
+	char flag, mat_nr, _pad[2];
 } MultiresFace;
 
 typedef struct MultiresEdge {
@@ -320,7 +305,8 @@ typedef struct MultiresLevel {
 	MultiresColFace *colfaces;
 	MultiresEdge *edges;
 
-	unsigned int totvert, totface, totedge, pad;
+	unsigned int totvert, totface, totedge;
+	char _pad[4];
 
 	/* Kept for compatibility with even older files */
 	MVert *verts;
@@ -340,7 +326,7 @@ typedef struct Multires {
 	char *edge_creases;
 } Multires;
 
-/** End Multires **/
+/* End Multires */
 
 typedef struct MRecast {
 	int i;
@@ -353,23 +339,24 @@ typedef struct GridPaintMask {
 	/* The maximum multires level associated with this grid */
 	unsigned int level;
 
-	int pad;
+	char _pad[4];
 } GridPaintMask;
 
 typedef enum eMVertSkinFlag {
-	/* Marks a vertex as the edge-graph root, used for calculating rotations for all connected edges (recursively).
-	 * Also used to choose a root when generating an armature.
+	/** Marks a vertex as the edge-graph root, used for calculating rotations for all connected
+	 * edges (recursively). Also used to choose a root when generating an armature.
 	 */
 	MVERT_SKIN_ROOT = 1,
 
-	/* Marks a branch vertex (vertex with more than two connected edges), so that it's neighbors are
-	 * directly hulled together, rather than the default of generating intermediate frames.
+	/** Marks a branch vertex (vertex with more than two connected edges), so that it's neighbors
+	 * are directly hulled together, rather than the default of generating intermediate frames.
 	 */
 	MVERT_SKIN_LOOSE = 2,
 } eMVertSkinFlag;
 
 typedef struct MVertSkin {
-	/* Radii of the skin, define how big the generated frames are. Currently only the first two elements are used. */
+	/* Radii of the skin, define how big the generated frames are.
+	 * Currently only the first two elements are used. */
 	float radius[3];
 
 	/* eMVertSkinFlag */
@@ -378,7 +365,7 @@ typedef struct MVertSkin {
 
 typedef struct FreestyleEdge {
 	char flag;
-	char pad[3];
+	char _pad[3];
 } FreestyleEdge;
 
 /* FreestyleEdge->flag */
@@ -388,7 +375,7 @@ enum {
 
 typedef struct FreestyleFace {
 	char flag;
-	char pad[3];
+	char _pad[3];
 } FreestyleFace;
 
 /* FreestyleFace->flag */
@@ -401,7 +388,7 @@ enum {
 /*	SELECT              = (1 << 0), */
 	ME_VERT_TMP_TAG     = (1 << 2),
 	ME_HIDE             = (1 << 4),
-	ME_VERT_MERGED      = (1 << 6),
+/*	ME_VERT_MERGED      = (1 << 6), */
 	ME_VERT_PBVH_UPDATE = (1 << 7),
 };
 
@@ -437,7 +424,7 @@ enum {
 enum {
 	ME_SMOOTH   = (1 << 0),
 	ME_FACE_SEL = (1 << 1),
-/*	ME_HIDE     = (1 << 4), */ 
+/*	ME_HIDE     = (1 << 4), */
 };
 
 #define ME_POLY_LOOP_PREV(mloop, mp, i)  (&(mloop)[(mp)->loopstart + (((i) + (mp)->totloop - 1) % (mp)->totloop)])
@@ -461,60 +448,6 @@ enum {
 	ME_VSEL = 0,
 	ME_ESEL = 1,
 	ME_FSEL = 2,
-};
-
-/* mtface->flag */
-enum {
-	// TF_SELECT = (1 << 0),  /* use MFace hide flag (after 2.43), should be able to reuse after 2.44 */
-	// TF_ACTIVE = (1 << 1),  /* deprecated! */
-	TF_SEL1   = (1 << 2),
-	TF_SEL2   = (1 << 3),
-	TF_SEL3   = (1 << 4),
-	TF_SEL4   = (1 << 5),
-};
-
-/* mtface->mode */
-enum {
-	TF_DYNAMIC    = (1 << 0),
-	TF_ALPHASORT  = (1 << 1),
-	TF_TEX        = (1 << 2),
-	TF_SHAREDVERT = (1 << 3),
-	TF_LIGHT      = (1 << 4),
-
-	TF_CONVERTED  = (1 << 5),  /* tface converted to material */
-
-	TF_SHAREDCOL  = (1 << 6),
-	// TF_TILES      = (1 << 7),  /* deprecated */
-	TF_BILLBOARD  = (1 << 8),
-	TF_TWOSIDE    = (1 << 9),
-	TF_INVISIBLE  = (1 << 10),
-
-	TF_OBCOL      = (1 << 11),
-	TF_BILLBOARD2 = (1 << 12),  /* with Z axis constraint */
-	TF_SHADOW     = (1 << 13),
-	TF_BMFONT     = (1 << 14),
-};
-
-/* mtface->transp, values 1-4 are used as flags in the GL, WARNING, TF_SUB cant work with this */
-enum {
-	TF_SOLID = 0,
-	TF_ADD   = (1 << 0),
-	TF_ALPHA = (1 << 1),
-	TF_CLIP  = (1 << 2),  /* clipmap alpha/binary alpha all or nothing! */
-
-	TF_SUB   = 3,  /* sub is not available in the user interface anymore */
-};
-
-/* mtface->unwrap */
-enum {
-	TF_DEPRECATED1 = (1 << 0),
-	TF_DEPRECATED2 = (1 << 1),
-	TF_DEPRECATED3 = (1 << 2),
-	TF_DEPRECATED4 = (1 << 3),
-	TF_PIN1        = (1 << 4),
-	TF_PIN2        = (1 << 5),
-	TF_PIN3        = (1 << 6),
-	TF_PIN4        = (1 << 7),
 };
 
 #endif  /* __DNA_MESHDATA_TYPES_H__ */

@@ -20,7 +20,6 @@
  * other parts of the scene.
  *
  * BVH_MOTION: motion blur rendering
- *
  */
 
 #if BVH_FEATURE(BVH_HAIR)
@@ -29,7 +28,7 @@
 #  define NODE_INTERSECT qbvh_aligned_node_intersect
 #endif
 
-ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
+ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
                                              const Ray *ray,
                                              LocalIntersection *local_isect,
                                              int local_object,
@@ -59,7 +58,10 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 	int object = OBJECT_NONE;
 	float isect_t = ray->t;
 
-	local_isect->num_hits = 0;
+	if(local_isect != NULL) {
+		local_isect->num_hits = 0;
+	}
+	kernel_assert((local_isect == NULL) == (max_hits == 0));
 
 	const int object_flag = kernel_tex_fetch(__object_flag, local_object);
 	if(!(object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
@@ -78,12 +80,6 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 #endif
 		object = local_object;
 	}
-
-#ifndef __KERNEL_SSE41__
-	if(!isfinite(P.x)) {
-		return;
-	}
-#endif
 
 	ssef tnear(0.0f), tfar(isect_t);
 #if BVH_FEATURE(BVH_HAIR)
@@ -250,16 +246,18 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 						/* Intersect ray against primitive, */
 						for(; prim_addr < prim_addr2; prim_addr++) {
 							kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
-							triangle_intersect_local(kg,
-							                         local_isect,
-							                         P,
-							                         dir,
-							                         object,
-							                         local_object,
-							                         prim_addr,
-							                         isect_t,
-							                         lcg_state,
-							                         max_hits);
+							if(triangle_intersect_local(kg,
+							                            local_isect,
+							                            P,
+							                            dir,
+							                            object,
+							                            local_object,
+							                            prim_addr,
+							                            isect_t,
+							                            lcg_state,
+							                            max_hits)) {
+								return true;
+							}
 						}
 						break;
 					}
@@ -268,17 +266,19 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 						/* Intersect ray against primitive. */
 						for(; prim_addr < prim_addr2; prim_addr++) {
 							kernel_assert(kernel_tex_fetch(__prim_type, prim_addr) == type);
-							motion_triangle_intersect_local(kg,
-							                                local_isect,
-							                                P,
-							                                dir,
-							                                ray->time,
-							                                object,
-							                                local_object,
-							                                prim_addr,
-							                                isect_t,
-							                                lcg_state,
-							                                max_hits);
+							if(motion_triangle_intersect_local(kg,
+							                                   local_isect,
+							                                   P,
+							                                   dir,
+							                                   ray->time,
+							                                   object,
+							                                   local_object,
+							                                   prim_addr,
+							                                   isect_t,
+							                                   lcg_state,
+							                                   max_hits)) {
+								return true;
+							}
 						}
 						break;
 					}
@@ -289,6 +289,8 @@ ccl_device void BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 			}
 		} while(node_addr != ENTRYPOINT_SENTINEL);
 	} while(node_addr != ENTRYPOINT_SENTINEL);
+
+	return false;
 }
 
 #undef NODE_INTERSECT

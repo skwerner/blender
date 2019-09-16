@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_FREESTYLE_H__
 #define __BKE_FREESTYLE_H__
 
-/** \file BKE_freestyle.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "DNA_scene_types.h"
@@ -44,13 +36,13 @@ struct FreestyleModuleConfig;
 struct Main;
 
 /* RNA aliases */
-typedef struct FreestyleSettings FreestyleSettings;
 typedef struct FreestyleModuleSettings FreestyleModuleSettings;
+typedef struct FreestyleSettings FreestyleSettings;
 
 /* FreestyleConfig */
 void BKE_freestyle_config_init(FreestyleConfig *config);
-void BKE_freestyle_config_free(FreestyleConfig *config);
-void BKE_freestyle_config_copy(FreestyleConfig *new_config, FreestyleConfig *config, const int flag);
+void BKE_freestyle_config_free(FreestyleConfig *config, const bool do_id_user);
+void BKE_freestyle_config_copy(FreestyleConfig *new_config, const FreestyleConfig *config, const int flag);
 
 /* FreestyleConfig.modules */
 FreestyleModuleConfig *BKE_freestyle_module_add(FreestyleConfig *config);
@@ -70,4 +62,3 @@ void BKE_freestyle_lineset_unique_name(FreestyleConfig *config, FreestyleLineSet
 #endif
 
 #endif
-

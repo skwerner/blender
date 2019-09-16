@@ -1,6 +1,4 @@
 /*
- * Copyright 2013, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Lukas Toenne
+ * Copyright 2013, Blender Foundation.
  */
 
 extern "C" {
@@ -73,13 +70,13 @@ NodeOperation *NodeConverter::setInvalidOutput(NodeOutput *output)
 {
 	/* this is a really bad situation - bring on the pink! - so artists know this is bad */
 	const float warning_color[4] = {1.0f, 0.0f, 1.0f, 1.0f};
-	
+
 	SetColorOperation *operation = new SetColorOperation();
 	operation->setChannels(warning_color);
-	
+
 	m_builder->addOperation(operation);
 	m_builder->mapOutputSocket(output, operation->getOutputSocket());
-	
+
 	return operation;
 }
 
@@ -87,9 +84,9 @@ NodeOperationOutput *NodeConverter::addInputProxy(NodeInput *input, bool use_con
 {
 	SocketProxyOperation *proxy = new SocketProxyOperation(input->getDataType(), use_conversion);
 	m_builder->addOperation(proxy);
-	
+
 	m_builder->mapInputSocket(input, proxy->getInputSocket(0));
-	
+
 	return proxy->getOutputSocket();
 }
 
@@ -97,9 +94,9 @@ NodeOperationInput *NodeConverter::addOutputProxy(NodeOutput *output, bool use_c
 {
 	SocketProxyOperation *proxy = new SocketProxyOperation(output->getDataType(), use_conversion);
 	m_builder->addOperation(proxy);
-	
+
 	m_builder->mapOutputSocket(output, proxy->getOutputSocket());
-	
+
 	return proxy->getInputSocket(0);
 }
 
@@ -107,7 +104,7 @@ void NodeConverter::addInputValue(NodeOperationInput *input, float value)
 {
 	SetValueOperation *operation = new SetValueOperation();
 	operation->setValue(value);
-	
+
 	m_builder->addOperation(operation);
 	m_builder->addLink(operation->getOutputSocket(), input);
 }
@@ -116,7 +113,7 @@ void NodeConverter::addInputColor(NodeOperationInput *input, const float value[4
 {
 	SetColorOperation *operation = new SetColorOperation();
 	operation->setChannels(value);
-	
+
 	m_builder->addOperation(operation);
 	m_builder->addLink(operation->getOutputSocket(), input);
 }
@@ -125,7 +122,7 @@ void NodeConverter::addInputVector(NodeOperationInput *input, const float value[
 {
 	SetVectorOperation *operation = new SetVectorOperation();
 	operation->setVector(value);
-	
+
 	m_builder->addOperation(operation);
 	m_builder->addLink(operation->getOutputSocket(), input);
 }
@@ -134,7 +131,7 @@ void NodeConverter::addOutputValue(NodeOutput *output, float value)
 {
 	SetValueOperation *operation = new SetValueOperation();
 	operation->setValue(value);
-	
+
 	m_builder->addOperation(operation);
 	m_builder->mapOutputSocket(output, operation->getOutputSocket());
 }
@@ -143,7 +140,7 @@ void NodeConverter::addOutputColor(NodeOutput *output, const float value[4])
 {
 	SetColorOperation *operation = new SetColorOperation();
 	operation->setChannels(value);
-	
+
 	m_builder->addOperation(operation);
 	m_builder->mapOutputSocket(output, operation->getOutputSocket());
 }
@@ -152,7 +149,7 @@ void NodeConverter::addOutputVector(NodeOutput *output, const float value[3])
 {
 	SetVectorOperation *operation = new SetVectorOperation();
 	operation->setVector(value);
-	
+
 	m_builder->addOperation(operation);
 	m_builder->mapOutputSocket(output, operation->getOutputSocket());
 }

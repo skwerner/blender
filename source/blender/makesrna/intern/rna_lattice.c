@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_lattice.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -43,10 +37,11 @@
 #include "DNA_scene_types.h"
 
 #include "BLI_string.h"
-#include "BKE_depsgraph.h"
 #include "BKE_lattice.h"
 #include "BKE_main.h"
 #include "BKE_deform.h"
+
+#include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -97,13 +92,13 @@ static void rna_Lattice_update_data(Main *UNUSED(bmain), Scene *UNUSED(scene), P
 {
 	ID *id = ptr->id.data;
 
-	DAG_id_tag_update(id, 0);
+	DEG_id_tag_update(id, 0);
 	WM_main_add_notifier(NC_GEOM | ND_DATA, id);
 }
 
 /* copy settings to editlattice,
  * we could split this up differently (one update call per property)
- * but for now thats overkill
+ * but for now that's overkill
  */
 static void rna_Lattice_update_data_editlatt(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
@@ -119,7 +114,7 @@ static void rna_Lattice_update_data_editlatt(Main *UNUSED(bmain), Scene *UNUSED(
 		BLI_strncpy(lt_em->vgroup, lt->vgroup, sizeof(lt_em->vgroup));
 	}
 
-	DAG_id_tag_update(id, 0);
+	DEG_id_tag_update(id, 0);
 	WM_main_add_notifier(NC_GEOM | ND_DATA, id);
 }
 
@@ -135,7 +130,7 @@ static void rna_Lattice_update_size(Main *bmain, Scene *scene, PointerRNA *ptr)
 	neww = (lt->opntsw > 0) ? lt->opntsw : lt->pntsw;
 
 	/* BKE_lattice_resize needs an object, any object will have the same result */
-	for (ob = bmain->object.first; ob; ob = ob->id.next) {
+	for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 		if (ob->data == lt) {
 			BKE_lattice_resize(lt, newu, newv, neww, ob);
 			if (lt->editlatt)
@@ -154,7 +149,7 @@ static void rna_Lattice_update_size(Main *bmain, Scene *scene, PointerRNA *ptr)
 	rna_Lattice_update_data(bmain, scene, ptr);
 }
 
-static void rna_Lattice_use_outside_set(PointerRNA *ptr, int value)
+static void rna_Lattice_use_outside_set(PointerRNA *ptr, bool value)
 {
 	Lattice *lt = ptr->data;
 
@@ -215,19 +210,19 @@ static char *rna_LatticePoint_path(PointerRNA *ptr)
 	Lattice *lt = (Lattice *)ptr->id.data;
 	void *point = ptr->data;
 	BPoint *points = NULL;
-	
+
 	if (lt->editlatt && lt->editlatt->latt->def)
 		points = lt->editlatt->latt->def;
 	else
 		points = lt->def;
-	
+
 	if (points && point) {
 		int tot = lt->pntsu * lt->pntsv * lt->pntsw;
-		
+
 		/* only return index if in range */
 		if ((point >= (void *)points) && (point < (void *)(points + tot))) {
 			int pt_index = (int)((BPoint *)point - points);
-			
+
 			return BLI_sprintfN("points[%d]", pt_index);
 		}
 	}
@@ -235,7 +230,7 @@ static char *rna_LatticePoint_path(PointerRNA *ptr)
 	return BLI_strdup("");
 }
 
-static int rna_Lattice_is_editmode_get(PointerRNA *ptr)
+static bool rna_Lattice_is_editmode_get(PointerRNA *ptr)
 {
 	Lattice *lt = (Lattice *)ptr->id.data;
 	return (lt->editlatt != NULL);
@@ -344,7 +339,7 @@ static void rna_def_lattice(BlenderRNA *brna)
 	RNA_def_property_boolean_funcs(prop, NULL, "rna_Lattice_use_outside_set");
 	RNA_def_property_ui_text(prop, "Outside", "Only draw, and take into account, the outer vertices");
 	RNA_def_property_update(prop, 0, "rna_Lattice_update_data_editlatt");
-	
+
 	prop = RNA_def_property(srna, "vertex_group", PROP_STRING, PROP_NONE);
 	RNA_def_property_string_sdna(prop, NULL, "vgroup");
 	RNA_def_property_ui_text(prop, "Vertex Group", "Vertex group to apply the influence of the lattice");

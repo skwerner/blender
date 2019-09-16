@@ -67,10 +67,6 @@ typedef ccl_global struct SplitBranchedState {
 
 	uint lcg_state;
 	LocalIntersection ss_isect;
-
-#  ifdef __VOLUME__
-	VolumeStack volume_stack[VOLUME_STACK_SIZE];
-#  endif  /* __VOLUME__ */
 #endif  /*__SUBSURFACE__ */
 
 	int shared_sample_count; /* number of branched samples shared with other threads */
@@ -90,14 +86,14 @@ typedef ccl_global struct SplitBranchedState {
 	SPLIT_DATA_ENTRY(ccl_global SubsurfaceIndirectRays, ss_rays, 1)
 #else
 #  define SPLIT_DATA_SUBSURFACE_ENTRIES
-#endif /* __SUBSURFACE__ */
+#endif  /* __SUBSURFACE__ */
 
 #ifdef __VOLUME__
 #  define SPLIT_DATA_VOLUME_ENTRIES \
 	SPLIT_DATA_ENTRY(ccl_global PathState, state_shadow, 1)
 #else
 #  define SPLIT_DATA_VOLUME_ENTRIES
-#endif /* __VOLUME__ */
+#endif  /* __VOLUME__ */
 
 #define SPLIT_DATA_ENTRIES \
 	SPLIT_DATA_ENTRY(ccl_global float3, throughput, 1) \

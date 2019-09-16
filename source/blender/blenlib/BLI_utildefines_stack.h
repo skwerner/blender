@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BLI_UTILDEFINES_STACK_H__
 #define __BLI_UTILDEFINES_STACK_H__
 
-/** \file BLI_utildefines_stack.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * Macro's for a simple array based stack
- * \note Caller handles alloc & free).
+ * \note Caller handles alloc & free.
  */
 
 /* only validate array-bounds in debug mode */
@@ -77,13 +73,13 @@
 	SWAP(typeof(stack_a), stack_a, stack_b); \
 	SWAP(unsigned int, _##stack_a##_index, _##stack_b##_index); \
 	_STACK_SWAP_TOTALLOC(stack_a, stack_b); \
-	} ((void)0)
+} ((void)0)
 #else
 #define STACK_SWAP(stack_a, stack_b) { \
 	SWAP(void *, stack_a, stack_b); \
 	SWAP(unsigned int, _##stack_a##_index, _##stack_b##_index); \
 	_STACK_SWAP_TOTALLOC(stack_a, stack_b); \
-	} ((void)0)
+} ((void)0)
 #endif
 
 #endif  /* __BLI_UTILDEFINES_STACK_H__ */

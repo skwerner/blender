@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_SystemX11.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_SystemX11 class.
  */
 
@@ -34,6 +26,7 @@
 #define __GHOST_SYSTEMX11_H__
 
 #include <X11/Xlib.h>
+#include <X11/XKBlib.h> /* allow detectable autorepeate */
 
 #include "GHOST_System.h"
 #include "../GHOST_Types.h"
@@ -41,6 +34,12 @@
 // For tablets
 #ifdef WITH_X11_XINPUT
 #  include <X11/extensions/XInput.h>
+
+/* Disable xinput warp, currently not implemented by Xorg for multi-head display.
+ * (see comment in xserver "Xi/xiwarppointer.c" -> "FIXME: panoramix stuff is missing" ~ v1.13.4)
+ * If this is supported we can add back xinput for warping (fixing T48901).
+ * For now disable (see T50383). */
+// #  define USE_X11_XINPUT_WARP
 #endif
 
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
@@ -72,8 +71,6 @@ class GHOST_WindowX11;
 /**
  * X11 Implementation of GHOST_System class.
  * \see GHOST_System.
- * \author	Laurence Bourn
- * \date	October 26, 2001
  */
 
 class GHOST_SystemX11 : public GHOST_System {
@@ -86,7 +83,7 @@ public:
 
 	GHOST_SystemX11(
 	    );
-	
+
 	/**
 	 * Destructor.
 	 */
@@ -97,6 +94,10 @@ public:
 	init(
 	    );
 
+	/**
+	 * Informs if the system provides native dialogs (eg. confirm quit)
+	 */
+	virtual bool supportsNativeDialogs(void);
 
 	/**
 	 * \section Interface Inherited from GHOST_ISystem
@@ -110,7 +111,7 @@ public:
 	GHOST_TUns64
 	getMilliSeconds(
 	    ) const;
-	
+
 
 	/**
 	 * Returns the number of displays on this system.
@@ -142,18 +143,18 @@ public:
 
 	/**
 	 * Create a new window.
-	 * The new window is added to the list of windows managed. 
+	 * The new window is added to the list of windows managed.
 	 * Never explicitly delete the window, use disposeWindow() instead.
-	 * \param	title	The name of the window (displayed in the title bar of the window if the OS supports it).
-	 * \param	left		The coordinate of the left edge of the window.
-	 * \param	top		The coordinate of the top edge of the window.
-	 * \param	width		The width the window.
-	 * \param	height		The height the window.
-	 * \param	state		The state of the window when opened.
-	 * \param	type		The type of drawing context installed in this window.
-	 * \param	stereoVisual    Create a stereo visual for quad buffered stereo.
-	 * \param	exclusive	Use to show the window ontop and ignore others
-	 *						(used fullscreen).
+	 * \param   title   The name of the window (displayed in the title bar of the window if the OS supports it).
+	 * \param   left        The coordinate of the left edge of the window.
+	 * \param   top     The coordinate of the top edge of the window.
+	 * \param   width       The width the window.
+	 * \param   height      The height the window.
+	 * \param   state       The state of the window when opened.
+	 * \param   type        The type of drawing context installed in this window.
+	 * \param   stereoVisual    Create a stereo visual for quad buffered stereo.
+	 * \param   exclusive   Use to show the window ontop and ignore others
+	 *                      (used fullscreen).
 	 * \param	parentWindow    Parent (embedder) window
 	 * \return	The new window (or 0 if creation failed).
 	 */
@@ -171,6 +172,26 @@ public:
 	    const GHOST_TEmbedderWindowID parentWindow = 0
 	    );
 
+
+	/**
+	 * Create a new offscreen context.
+	 * Never explicitly delete the context, use disposeContext() instead.
+	 * \return  The new context (or 0 if creation failed).
+	 */
+	GHOST_IContext *
+	createOffscreenContext(
+	    );
+
+	/**
+	 * Dispose of a context.
+	 * \param   context Pointer to the context to be disposed.
+	 * \return  Indication of success.
+	 */
+	GHOST_TSuccess
+	disposeContext(
+	    GHOST_IContext *context
+	    );
+
 	/**
 	 * Retrieves events from the system and stores them in the queue.
 	 * \param waitForEvent Flag to wait for an event (or return immediately).
@@ -186,7 +207,7 @@ public:
 	    GHOST_TInt32& x,
 	    GHOST_TInt32& y
 	    ) const;
-	
+
 	GHOST_TSuccess
 	setCursorPosition(
 	    GHOST_TInt32 x,
@@ -215,15 +236,15 @@ public:
 
 	/**
 	 * Flag a window as dirty. This will
-	 * generate a GHOST window update event on a call to processEvents() 
+	 * generate a GHOST window update event on a call to processEvents()
 	 */
 
 	void
 	addDirtyWindow(
 	    GHOST_WindowX11 *bad_wind
 	    );
-  
- 
+
+
 	/**
 	 * return a pointer to the X11 display structure
 	 */
@@ -232,7 +253,7 @@ public:
 	getXDisplay(
 	        ) {
 		return m_display;
-	}	
+	}
 
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
 	XIM
@@ -253,7 +274,7 @@ public:
 	 * \return				Returns the Clipboard indicated by Flag
 	 */
 	GHOST_TUns8 *getClipboard(bool selection) const;
-	
+
 	/**
 	 * Puts buffer to system clipboard
 	 * \param buffer	The buffer to copy to the clipboard
@@ -263,14 +284,14 @@ public:
 
 #ifdef WITH_XDND
 	/**
-	 * Creates a drag'n'drop event and pushes it immediately onto the event queue. 
+	 * Creates a drag'n'drop event and pushes it immediately onto the event queue.
 	 * Called by GHOST_DropTargetX11 class.
 	 * \param eventType The type of drag'n'drop event
 	 * \param draggedObjectType The type object concerned (currently array of file names, string, ?bitmap)
 	 * \param mouseX x mouse coordinate (in window coordinates)
 	 * \param mouseY y mouse coordinate
 	 * \param window The window on which the event occurred
-	 * \return Indication whether the event was handled. 
+	 * \return Indication whether the event was handled.
 	 */
 	static GHOST_TSuccess pushDragDropEvent(GHOST_TEventType eventType, GHOST_TDragnDropTypes draggedObjectType, GHOST_IWindow *window, int mouseX, int mouseY, void *data);
 #endif
@@ -284,28 +305,22 @@ public:
 
 #ifdef WITH_X11_XINPUT
 	typedef struct GHOST_TabletX11 {
-		XDevice *StylusDevice;
-		XDevice *EraserDevice;
-
-		XID StylusID, EraserID;
+		GHOST_TTabletMode mode;
+		XDevice *Device;
+		XID ID;
 
 		int MotionEvent;
 		int ProxInEvent;
 		int ProxOutEvent;
 		int PressEvent;
 
-		int MotionEventEraser;
-		int ProxInEventEraser;
-		int ProxOutEventEraser;
-		int PressEventEraser;
-
 		int PressureLevels;
 		int XtiltLevels, YtiltLevels;
 	} GHOST_TabletX11;
 
-	GHOST_TabletX11 &GetXTablet()
+	std::vector<GHOST_TabletX11> &GetXTablets()
 	{
-		return m_xtablet;
+		return m_xtablets;
 	}
 #endif // WITH_X11_XINPUT
 
@@ -349,13 +364,17 @@ public:
 private:
 
 	Display *m_display;
+
+	/* Use for scancode lookups. */
+	XkbDescRec *m_xkb_descr;
+
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
 	XIM m_xim;
 #endif
 
 #ifdef WITH_X11_XINPUT
 	/* Tablet devices */
-	GHOST_TabletX11 m_xtablet;
+	std::vector<GHOST_TabletX11> m_xtablets;
 #endif
 
 	/// The vector of windows that need to be updated.
@@ -368,7 +387,7 @@ private:
 	char m_keyboard_vector[32];
 
 	/* to prevent multiple warp, we store the time of the last warp event
-	 *  and stop accumulating all events generated before that */
+	 * and stop accumulating all events generated before that */
 	Time m_last_warp;
 
 	/* detect autorepeat glitch */
@@ -385,6 +404,7 @@ private:
 #endif
 
 #ifdef WITH_X11_XINPUT
+	void clearXInputDevices();
 	void refreshXInputDevices();
 #endif
 
@@ -409,4 +429,3 @@ private:
 };
 
 #endif
-

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_types_select.c
- *  \ingroup pybmesh
+/** \file
+ * \ingroup pybmesh
  *
  * This file defines the types for 'BMesh.select_history'
  * sequence and iterator.
@@ -179,7 +173,7 @@ static struct PyMethodDef bpy_bmeditselseq_methods[] = {
 	{"add",      (PyCFunction)bpy_bmeditselseq_add,      METH_O,      bpy_bmeditselseq_add_doc},
 	{"remove",   (PyCFunction)bpy_bmeditselseq_remove,   METH_O,      bpy_bmeditselseq_remove_doc},
 	{"discard",  (PyCFunction)bpy_bmeditselseq_discard,  METH_O,      bpy_bmeditselseq_discard_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 
@@ -245,14 +239,13 @@ static PyObject *bpy_bmeditselseq_subscript_slice(BPy_BMEditSelSeq *self, Py_ssi
 	}
 
 	/* add items until stop */
-	while ((ese = ese->next)) {
+	do {
 		PyList_APPEND(list, BPy_BMElem_CreatePyObject(self->bm, &ese->ele->head));
-
 		count++;
 		if (count == stop) {
 			break;
 		}
-	}
+	} while ((ese = ese->next));
 
 	return list;
 }
@@ -262,8 +255,9 @@ static PyObject *bpy_bmeditselseq_subscript(BPy_BMEditSelSeq *self, PyObject *ke
 	/* don't need error check here */
 	if (PyIndex_Check(key)) {
 		Py_ssize_t i = PyNumber_AsSsize_t(key, PyExc_IndexError);
-		if (i == -1 && PyErr_Occurred())
+		if (i == -1 && PyErr_Occurred()) {
 			return NULL;
+		}
 		return bpy_bmeditselseq_subscript_int(self, i);
 	}
 	else if (PySlice_Check(key)) {
@@ -285,14 +279,22 @@ static PyObject *bpy_bmeditselseq_subscript(BPy_BMEditSelSeq *self, PyObject *ke
 			Py_ssize_t start = 0, stop = PY_SSIZE_T_MAX;
 
 			/* avoid PySlice_GetIndicesEx because it needs to know the length ahead of time. */
-			if (key_slice->start != Py_None && !_PyEval_SliceIndex(key_slice->start, &start)) return NULL;
-			if (key_slice->stop != Py_None && !_PyEval_SliceIndex(key_slice->stop, &stop))    return NULL;
+			if (key_slice->start != Py_None && !_PyEval_SliceIndex(key_slice->start, &start)) {
+				return NULL;
+			}
+			if (key_slice->stop != Py_None && !_PyEval_SliceIndex(key_slice->stop, &stop)) {
+				return NULL;
+			}
 
 			if (start < 0 || stop < 0) {
 				/* only get the length for negative values */
 				Py_ssize_t len = bpy_bmeditselseq_length(self);
-				if (start < 0) start += len;
-				if (stop  < 0) stop  += len;
+				if (start < 0) {
+					start += len;
+				}
+				if (stop  < 0) {
+					stop  += len;
+				}
 			}
 
 			if (stop - start <= 0) {

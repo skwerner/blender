@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Arystanbek Dyussenov
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_test.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -150,7 +144,7 @@ void RNA_def_test(BlenderRNA *brna)
 	RNA_def_property_flag(prop, PROP_DYNAMIC);
 	RNA_def_property_dynamic_array_funcs(prop, "rna_Test_idarr_get_length", "rna_Test_idarr_set_length");
 	RNA_def_property_int_funcs(prop, "rna_Test_idarr_get", "rna_Test_idarr_set", NULL);
-	
+
 	prop = RNA_def_boolean_array(srna, "bdarr", DYNAMIC_ARRAY_SIZE, NULL, "bdarr", "boolean array");
 	RNA_def_property_flag(prop, PROP_DYNAMIC);
 	RNA_def_property_dynamic_array_funcs(prop, "rna_Test_bdarr_get_length", "rna_Test_bdarr_set_length");

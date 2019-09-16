@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -23,6 +20,7 @@ set(INC
 	../../blenkernel
 	../../blenlib
 	../../blentranslation
+	../../depsgraph
 	../../gpu
 	../../makesdna
 	../../makesrna
@@ -47,12 +45,19 @@ set(SRC
 	graph_intern.h
 )
 
-if(WITH_AUDASPACE)
-	add_definitions(${AUDASPACE_DEFINITIONS})
+set(LIB
+	bf_blenkernel
+	bf_blenlib
+)
 
+if(WITH_AUDASPACE)
 	list(APPEND INC_SYS
 		${AUDASPACE_C_INCLUDE_DIRS}
 	)
+	list(APPEND LIB
+		bf_intern_audaspace
+	)
+	add_definitions(-DWITH_AUDASPACE)
 endif()
 
 if(WITH_INTERNATIONAL)
@@ -61,4 +66,4 @@ endif()
 
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_editor_space_graph "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_space_graph "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

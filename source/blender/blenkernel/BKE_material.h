@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,28 +15,22 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_MATERIAL_H__
 #define __BKE_MATERIAL_H__
 
-/** \file BKE_material.h
- *  \ingroup bke
- *  \brief General operations, lookup, etc. for materials.
+/** \file
+ * \ingroup bke
+ * \brief General operations, lookup, etc. for materials.
  */
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+struct ID;
 struct Main;
 struct Material;
-struct ID;
 struct Object;
 struct Scene;
 
@@ -46,19 +38,20 @@ struct Scene;
 
 void init_def_material(void);
 void BKE_material_free(struct Material *ma);
-void BKE_material_free_ex(struct Material *ma, bool do_id_user);
-void test_object_materials(struct Object *ob, struct ID *id);
+void test_object_materials(struct Main *bmain, struct Object *ob, struct ID *id);
 void test_all_objects_materials(struct Main *bmain, struct ID *id);
 void BKE_material_resize_object(struct Main *bmain, struct Object *ob, const short totcol, bool do_id_user);
 void BKE_material_init(struct Material *ma);
 void BKE_material_remap_object(struct Object *ob, const unsigned int *remap);
 void BKE_material_remap_object_calc(struct  Object *ob_dst, struct Object *ob_src, short *remap_src_to_dst);
 struct Material *BKE_material_add(struct Main *bmain, const char *name);
+struct Material *BKE_material_add_gpencil(struct Main *bmain, const char *name);
 void BKE_material_copy_data(struct Main *bmain, struct Material *ma_dst, const struct Material *ma_src, const int flag);
 struct Material *BKE_material_copy(struct Main *bmain, const struct Material *ma);
 struct Material *BKE_material_localize(struct Material *ma);
 struct Material *give_node_material(struct Material *ma); /* returns node material or self */
 void BKE_material_make_local(struct Main *bmain, struct Material *ma, const bool lib_local);
+void BKE_material_init_gpencil_settings(struct Material *ma);
 
 /* UNUSED */
 // void automatname(struct Material *);
@@ -75,17 +68,20 @@ enum {
 	BKE_MAT_ASSIGN_EXISTING,
 	BKE_MAT_ASSIGN_USERPREF,
 	BKE_MAT_ASSIGN_OBDATA,
-	BKE_MAT_ASSIGN_OBJECT
+	BKE_MAT_ASSIGN_OBJECT,
 };
 
-struct Material *give_current_material(struct Object *ob, short act);
-void assign_material_id(struct ID *id, struct Material *ma, short act);
-void assign_material(struct Object *ob, struct Material *ma, short act, int assign_type);
-void assign_matarar(struct Object *ob, struct Material ***matar, short totcol);
+struct Material **give_current_material_p(struct Object *ob, short act);
+struct Material  *give_current_material(struct Object *ob, short act);
+void assign_material_id(struct Main *bmain, struct ID *id, struct Material *ma, short act);
+void assign_material(struct Main *bmain, struct Object *ob, struct Material *ma, short act, int assign_type);
+void assign_matarar(struct Main *bmain, struct Object *ob, struct Material ***matar, short totcol);
 
 short BKE_object_material_slot_find_index(struct Object *ob, struct Material *ma);
-bool  BKE_object_material_slot_add(struct Object *ob);
-bool  BKE_object_material_slot_remove(struct Object *ob);
+bool  BKE_object_material_slot_add(struct Main *bmain, struct Object *ob);
+bool  BKE_object_material_slot_remove(struct Main *bmain, struct Object *ob);
+
+struct MaterialGPencilStyle *BKE_material_gpencil_settings_get(struct Object *ob, short act);
 
 void BKE_texpaint_slot_refresh_cache(struct Scene *scene, struct Material *ma);
 void BKE_texpaint_slots_refresh_object(struct Scene *scene, struct Object *ob);
@@ -97,26 +93,21 @@ struct Material *BKE_material_pop_id(struct Main *bmain, struct ID *id, int inde
 void BKE_material_clear_id(struct Main *bmain, struct ID *id, bool update_data);
 /* rendering */
 
-void init_render_material(struct Material *, int, float *);
-void init_render_materials(struct Main *, int r_mode, float *amd, bool do_default_material);
-void end_render_material(struct Material *);
-void end_render_materials(struct Main *);
-
-bool material_in_material(struct Material *parmat, struct Material *mat);
-
 void ramp_blend(int type, float r_col[3], const float fac, const float col[3]);
-
-/* driver update hacks */
-void material_drivers_update(struct Scene *scene, struct Material *mat, float ctime);
 
 /* copy/paste */
 void clear_matcopybuf(void);
 void free_matcopybuf(void);
-void copy_matcopybuf(struct Material *ma);
-void paste_matcopybuf(struct Material *ma);
+void copy_matcopybuf(struct Main *bmain, struct Material *ma);
+void paste_matcopybuf(struct Main *bmain, struct Material *ma);
 
-/* handle backward compatibility for tface/materials called from doversion */	
-int do_version_tface(struct Main *main);
+/* Evaluation. */
+
+struct Depsgraph;
+
+void BKE_material_eval(struct Depsgraph *depsgraph, struct Material *material);
+
+extern struct Material defmaterial;
 
 #ifdef __cplusplus
 }

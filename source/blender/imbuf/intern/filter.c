@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,33 +15,23 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Morten Mikkelsen.
- *
- * ***** END GPL LICENSE BLOCK *****
  * filter.c
- *
  */
 
-/** \file blender/imbuf/intern/filter.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h"
+#include "BLI_math_base.h"
 
 #include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
 #include "IMB_filter.h"
 
 #include "imbuf.h"
-
-/************************************************************************/
-/*				FILTERS					*/
-/************************************************************************/
 
 static void filtrow(unsigned char *point, int x)
 {
@@ -68,7 +56,7 @@ static void filtrow(unsigned char *point, int x)
 static void filtrowf(float *point, int x)
 {
 	float c1, c2, c3;
-	
+
 	if (x > 1) {
 		c1 = c2 = *point;
 		for (x--; x > 0; x--) {
@@ -111,7 +99,7 @@ static void filtcolum(unsigned char *point, int y, int skip)
 static void filtcolumf(float *point, int y, int skip)
 {
 	float c1, c2, c3, *point2;
-	
+
 	if (y > 1) {
 		c1 = c2 = *point;
 		point2 = point;
@@ -210,7 +198,7 @@ static void imb_filterN(ImBuf *out, ImBuf *in)
 
 	const int channels = in->channels;
 	const int rowlen = in->x;
-	
+
 	if (in->rect && out->rect) {
 		for (int y = 0; y < in->y; y++) {
 			/* setup rows */
@@ -397,7 +385,7 @@ static int check_pixel_assigned(const void *buffer, const char *mask, const int 
 }
 
 /* if alpha is zero, it checks surrounding pixels and averages color. sets new alphas to 1.0
- * 
+ *
  * When a mask is given, only effect pixels with a mask value of 1, defined as BAKE_MASK_MARGIN in rendercore.c
  * */
 void IMB_filter_extend(struct ImBuf *ibuf, char *mask, int filter)
@@ -514,13 +502,13 @@ void IMB_remakemipmap(ImBuf *ibuf, int use_filter)
 {
 	ImBuf *hbuf = ibuf;
 	int curmap = 0;
-	
+
 	ibuf->miptot = 1;
-	
+
 	while (curmap < IMB_MIPMAP_LEVELS) {
-		
+
 		if (ibuf->mipmap[curmap]) {
-			
+
 			if (use_filter) {
 				ImBuf *nbuf = IMB_allocImBuf(hbuf->x, hbuf->y, hbuf->planes, hbuf->flags);
 				imb_filterN(nbuf, hbuf);
@@ -530,15 +518,15 @@ void IMB_remakemipmap(ImBuf *ibuf, int use_filter)
 			else
 				imb_onehalf_no_alloc(ibuf->mipmap[curmap], hbuf);
 		}
-		
+
 		ibuf->miptot = curmap + 2;
 		hbuf = ibuf->mipmap[curmap];
 		if (hbuf)
 			hbuf->miplevel = curmap + 1;
-		
+
 		if (!hbuf || (hbuf->x <= 2 && hbuf->y <= 2))
 			break;
-		
+
 		curmap++;
 	}
 }
@@ -550,11 +538,11 @@ void IMB_makemipmap(ImBuf *ibuf, int use_filter)
 	int curmap = 0;
 
 	imb_freemipmapImBuf(ibuf);
-	
+
 	/* no mipmap for non RGBA images */
 	if (ibuf->rect_float && ibuf->channels < 4)
 		return;
-	
+
 	ibuf->miptot = 1;
 
 	while (curmap < IMB_MIPMAP_LEVELS) {
@@ -660,9 +648,9 @@ void IMB_unpremultiply_rect(unsigned int *rect, char planes, int w, int h)
 		for (y = 0; y < h; y++) {
 			for (x = 0; x < w; x++, cp += 4) {
 				val = cp[3] != 0 ? 1.0f / (float)cp[3] : 1.0f;
-				cp[0] = FTOCHAR(cp[0] * val);
-				cp[1] = FTOCHAR(cp[1] * val);
-				cp[2] = FTOCHAR(cp[2] * val);
+				cp[0] = unit_float_to_uchar_clamp(cp[0] * val);
+				cp[1] = unit_float_to_uchar_clamp(cp[1] * val);
+				cp[2] = unit_float_to_uchar_clamp(cp[2] * val);
 			}
 		}
 	}

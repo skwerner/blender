@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_DilateErodeOperation.h"
@@ -200,7 +196,7 @@ void DilateDistanceOperation::executePixel(float output[4], int x, int y, void *
 	const int maxy = min(y + this->m_scope, rect->ymax);
 	const int bufferWidth = BLI_rcti_size_x(rect);
 	int offset;
-	
+
 	float value = 0.0f;
 
 	for (int yi = miny; yi < maxy; yi++) {
@@ -244,7 +240,7 @@ void DilateDistanceOperation::executeOpenCL(OpenCLDevice *device,
 
 	cl_int distanceSquared = this->m_distance * this->m_distance;
 	cl_int scope = this->m_scope;
-	
+
 	device->COM_clAttachMemoryBufferToKernelParameter(dilateKernel, 0,  2, clMemToCleanUp, inputMemoryBuffers, this->m_inputProgram);
 	device->COM_clAttachOutputMemoryBufferToKernelParameter(dilateKernel, 1, clOutputBuffer);
 	device->COM_clAttachMemoryBufferOffsetToKernelParameter(dilateKernel, 3, outputMemoryBuffer);
@@ -255,7 +251,7 @@ void DilateDistanceOperation::executeOpenCL(OpenCLDevice *device,
 }
 
 // Erode Distance
-ErodeDistanceOperation::ErodeDistanceOperation() : DilateDistanceOperation() 
+ErodeDistanceOperation::ErodeDistanceOperation() : DilateDistanceOperation()
 {
 	/* pass */
 }
@@ -274,7 +270,7 @@ void ErodeDistanceOperation::executePixel(float output[4], int x, int y, void *d
 	const int maxy = min(y + this->m_scope, rect->ymax);
 	const int bufferWidth = BLI_rcti_size_x(rect);
 	int offset;
-	
+
 	float value = 1.0f;
 
 	for (int yi = miny; yi < maxy; yi++) {
@@ -301,7 +297,7 @@ void ErodeDistanceOperation::executeOpenCL(OpenCLDevice *device,
 
 	cl_int distanceSquared = this->m_distance * this->m_distance;
 	cl_int scope = this->m_scope;
-	
+
 	device->COM_clAttachMemoryBufferToKernelParameter(erodeKernel, 0,  2, clMemToCleanUp, inputMemoryBuffers, this->m_inputProgram);
 	device->COM_clAttachOutputMemoryBufferToKernelParameter(erodeKernel, 1, clOutputBuffer);
 	device->COM_clAttachMemoryBufferOffsetToKernelParameter(erodeKernel, 3, outputMemoryBuffer);

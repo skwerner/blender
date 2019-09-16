@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 by Janne Karhu.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_boid.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <float.h>
@@ -67,7 +59,7 @@ const EnumPropertyItem rna_enum_boidrule_type_items[] = {
 	{eBoidRuleType_FollowWall, "FOLLOW_WALL", 0, "Follow Wall",
 	                           "Move next to a deflector object's in direction of it's tangent"},
 #endif
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 #ifndef RNA_RUNTIME
@@ -77,7 +69,7 @@ static const EnumPropertyItem boidruleset_type_items[] = {
 	                         "fuzziness threshold is evaluated)"},
 	{eBoidRulesetType_Random, "RANDOM", 0, "Random", "A random rule is selected for each boid"},
 	{eBoidRulesetType_Average, "AVERAGE", 0, "Average", "All rules are averaged"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 #endif
 
@@ -87,20 +79,22 @@ static const EnumPropertyItem boidruleset_type_items[] = {
 #include "BLI_math_base.h"
 
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_particle.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
 
 static void rna_Boids_reset(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
 	if (ptr->type == &RNA_ParticleSystem) {
 		ParticleSystem *psys = (ParticleSystem *)ptr->data;
-		
-		psys->recalc = PSYS_RECALC_RESET;
 
-		DAG_id_tag_update(ptr->id.data, OB_RECALC_DATA);
+		psys->recalc = ID_RECALC_PSYS_RESET;
+
+		DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY);
 	}
 	else
-		DAG_id_tag_update(ptr->id.data, OB_RECALC_DATA | PSYS_RECALC_RESET);
+		DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_RESET);
 
 	WM_main_add_notifier(NC_OBJECT | ND_PARTICLE | NA_EDITED, NULL);
 }
@@ -108,15 +102,15 @@ static void rna_Boids_reset_deps(Main *bmain, Scene *UNUSED(scene), PointerRNA *
 {
 	if (ptr->type == &RNA_ParticleSystem) {
 		ParticleSystem *psys = (ParticleSystem *)ptr->data;
-		
-		psys->recalc = PSYS_RECALC_RESET;
 
-		DAG_id_tag_update(ptr->id.data, OB_RECALC_DATA);
+		psys->recalc = ID_RECALC_PSYS_RESET;
+
+		DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY);
 	}
 	else
-		DAG_id_tag_update(ptr->id.data, OB_RECALC_DATA | PSYS_RECALC_RESET);
+		DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_RESET);
 
-	DAG_relations_tag_update(bmain);
+	DEG_relations_tag_update(bmain);
 
 	WM_main_add_notifier(NC_OBJECT | ND_PARTICLE | NA_EDITED, NULL);
 }
@@ -209,12 +203,13 @@ static int particle_id_check(PointerRNA *ptr)
 static char *rna_BoidSettings_path(PointerRNA *ptr)
 {
 	BoidSettings *boids = (BoidSettings *)ptr->data;
-	
+
 	if (particle_id_check(ptr)) {
 		ParticleSettings *part = (ParticleSettings *)ptr->id.data;
-		
-		if (part->boids == boids)
-			return BLI_sprintfN("boids");
+
+		if (part->boids == boids) {
+			return BLI_strdup("boids");
+		}
 	}
 	return NULL;
 }
@@ -387,7 +382,7 @@ static void rna_def_boidrule_average_speed(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Level", "How much velocity's z-component is kept constant");
 	RNA_def_property_update(prop, 0, "rna_Boids_reset");
 
-	prop = RNA_def_property(srna, "speed", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "speed", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_ui_text(prop, "Speed", "Percentage of maximum speed");
 	RNA_def_property_update(prop, 0, "rna_Boids_reset");
@@ -416,37 +411,38 @@ static void rna_def_boidrule(BlenderRNA *brna)
 {
 	StructRNA *srna;
 	PropertyRNA *prop;
-	
+
 	/* data */
 	srna = RNA_def_struct(brna, "BoidRule", NULL);
 	RNA_def_struct_ui_text(srna, "Boid Rule", "");
 	RNA_def_struct_refine_func(srna, "rna_BoidRule_refine");
 	RNA_def_struct_path_func(srna, "rna_BoidRule_path");
-	
+
 	/* strings */
 	prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
 	RNA_def_property_ui_text(prop, "Name", "Boid rule name");
 	RNA_def_struct_name_property(srna, prop);
-	
+
 	/* enums */
 	prop = RNA_def_property(srna, "type", PROP_ENUM, PROP_NONE);
 	RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 	RNA_def_property_enum_sdna(prop, NULL, "type");
 	RNA_def_property_enum_items(prop, rna_enum_boidrule_type_items);
 	RNA_def_property_ui_text(prop, "Type", "");
-	
+
 	/* flags */
 	prop = RNA_def_property(srna, "use_in_air", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", BOIDRULE_IN_AIR);
 	RNA_def_property_ui_text(prop, "In Air", "Use rule when boid is flying");
 	RNA_def_property_update(prop, 0, "rna_Boids_reset");
-	
+
 	prop = RNA_def_property(srna, "use_on_land", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", BOIDRULE_ON_LAND);
 	RNA_def_property_ui_text(prop, "On Land", "Use rule when boid is on land");
 	RNA_def_property_update(prop, 0, "rna_Boids_reset");
-	
+
 	/*prop = RNA_def_property(srna, "show_expanded", PROP_BOOLEAN, PROP_NONE); */
+	/*RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);*/
 	/*RNA_def_property_boolean_sdna(prop, NULL, "mode", eModifierMode_Expanded); */
 	/*RNA_def_property_ui_text(prop, "Expanded", "Set modifier expanded in the user interface"); */
 

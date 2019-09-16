@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_ViewLevelsNode.h"
@@ -36,12 +32,12 @@ void ViewLevelsNode::convertToOperations(NodeConverter &converter, const Composi
 	NodeInput *input = this->getInputSocket(0);
 	if (input->isLinked()) {
 		// add preview to inputSocket;
-		
+
 		/* calculate mean operation */
 		{
 			CalculateMeanOperation *operation = new CalculateMeanOperation();
 			operation->setSetting(this->getbNode()->custom1);
-			
+
 			converter.addOperation(operation);
 			converter.mapInputSocket(input, operation->getInputSocket(0));
 			converter.mapOutputSocket(this->getOutputSocket(0), operation->getOutputSocket());
@@ -51,7 +47,7 @@ void ViewLevelsNode::convertToOperations(NodeConverter &converter, const Composi
 		{
 			CalculateStandardDeviationOperation *operation = new CalculateStandardDeviationOperation();
 			operation->setSetting(this->getbNode()->custom1);
-			
+
 			converter.addOperation(operation);
 			converter.mapInputSocket(input, operation->getInputSocket(0));
 			converter.mapOutputSocket(this->getOutputSocket(1), operation->getOutputSocket());

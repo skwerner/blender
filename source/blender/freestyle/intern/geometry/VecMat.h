@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,20 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __VECMAT_H__
 #define __VECMAT_H__
 
-/** \file blender/freestyle/intern/geometry/VecMat.h
- *  \ingroup freestyle
- *  \brief Vectors and Matrices definition and manipulation
- *  \author Sylvain Paris
- *  \author Emmanuel Turquin
- *  \author Stephane Grabli
- *  \date 12/06/2003
+/** \file
+ * \ingroup freestyle
+ * \brief Vectors and Matrices definition and manipulation
  */
 
 #include <iostream>
@@ -150,21 +142,21 @@ public:
 		Vec<T, N> res(v);
 		res += *this;
 		return res;
-	} 
+	}
 
 	inline Vec<T, N> operator-(const Vec<T, N>& v) const
 	{
 		Vec<T, N> res(*this);
 		res -= v;
 		return res;
-	} 
+	}
 
 	inline Vec<T, N> operator*(const typename Vec<T, N>::value_type r) const
 	{
 		Vec<T, N> res(*this);
 		res *= r;
 		return res;
-	} 
+	}
 
 	inline Vec<T, N> operator/(const typename Vec<T, N>::value_type r) const
 	{
@@ -172,7 +164,7 @@ public:
 		if (r)
 			res /= r;
 		return res;
-	} 
+	}
 
 	// dot product
 	inline value_type operator*(const Vec<T, N>& v) const
@@ -181,7 +173,7 @@ public:
 		for (unsigned int i = 0; i < N; i++)
 			sum += (*this)[i] * v[i];
 		return sum;
-	} 
+	}
 
 	template <class U>
 	inline Vec<T, N>& operator=(const Vec<U, N>& v)
@@ -255,7 +247,7 @@ public:
 			if (this->_coord[i] == v[i])
 				continue;
 		}
-		return false;  
+		return false;
 	}
 
 	inline bool operator>(const Vec<T, N>& v) const
@@ -268,7 +260,7 @@ public:
 			if (this->_coord[i] == v[i])
 				continue;
 		}
-		return false;  
+		return false;
 	}
 
 protected:

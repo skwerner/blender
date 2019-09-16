@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,19 +12,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FITCURVE_H__
 #define __FITCURVE_H__
 
-/** \file blender/freestyle/intern/geometry/FitCurve.h
- *  \ingroup freestyle
- *  \brief An Algorithm for Automatically Fitting Digitized Curves by Philip J. Schneider,
- *  \brief from "Graphics Gems", Academic Press, 1990
- *  \author Stephane Grabli
- *  \date 06/06/2003
+/** \file
+ * \ingroup freestyle
+ * \brief An Algorithm for Automatically Fitting Digitized Curves by Philip J. Schneider,
+ * \brief from "Graphics Gems", Academic Press, 1990
  */
 
 #include <vector>
@@ -90,7 +84,7 @@ public:
 	 *      Control points of the sets of bezier curve segments.
 	 *      Each segment is made of 4 points (polynomial degree of curve = 3)
 	 *    error
-	 *      max error tolerance between resulting curve and input data 
+	 *      max error tolerance between resulting curve and input data
 	 */
 	void FitCurve(std::vector<Vec2d>& data, std::vector<Vec2d>& oCurve, double error);
 

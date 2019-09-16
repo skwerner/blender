@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FREESTYLE_SPHERICAL_GRID_H__
 #define __FREESTYLE_SPHERICAL_GRID_H__
 
-/** \file blender/freestyle/intern/view_map/SphericalGrid.h
- *  \ingroup freestyle
- *  \brief Class to define a cell grid surrounding the projected image of a scene
- *  \author Alexander Beels
- *  \date 2010-12-19
+/** \file
+ * \ingroup freestyle
+ * \brief Class to define a cell grid surrounding the projected image of a scene
  */
 
 #define SPHERICAL_GRID_LOGGING 0
@@ -173,7 +167,7 @@ public:
 	// Accessors:
 	bool orthographicProjection() const;
 	const Vec3r& viewpoint() const;
-	bool enableQI() const; 
+	bool enableQI() const;
 
 private:
 	void getCellCoordinates(const Vec3r& point, unsigned& x, unsigned& y);
@@ -317,7 +311,7 @@ inline void SphericalGrid::Iterator::reportDepth(Vec3r origin, Vec3r u, real t)
 		// If the current occluder is the best occludee so far, save it.
 		if (! _foundOccludee || _occludeeDepth > depth) {
 			markCurrentOccludeeCandidate(depth);
-		} 
+		}
 	}
 	else {
 #if SPHERICAL_GRID_LOGGING

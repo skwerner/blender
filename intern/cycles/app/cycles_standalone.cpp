@@ -32,6 +32,7 @@
 #include "util/util_string.h"
 #include "util/util_time.h"
 #include "util/util_transform.h"
+#include "util/util_unique_ptr.h"
 #include "util/util_version.h"
 
 #ifdef WITH_CYCLES_STANDALONE_GUI
@@ -51,6 +52,7 @@ struct Options {
 	SessionParams session_params;
 	bool quiet;
 	bool show_help, interactive, pause;
+	string output_path;
 } options;
 
 static void session_print(const string& str)
@@ -84,6 +86,33 @@ static void session_print_status()
 	/* print status */
 	status = string_printf("Progress %05.2f   %s", (double) progress*100, status.c_str());
 	session_print(status);
+}
+
+static bool write_render(const uchar *pixels, int w, int h, int channels)
+{
+	string msg = string_printf("Writing image %s", options.output_path.c_str());
+	session_print(msg);
+
+	unique_ptr<ImageOutput> out = unique_ptr<ImageOutput>(ImageOutput::create(options.output_path));
+	if(!out) {
+		return false;
+	}
+
+	ImageSpec spec(w, h, channels, TypeDesc::UINT8);
+	if(!out->open(options.output_path, spec)) {
+		return false;
+	}
+
+	/* conversion for different top/bottom convention */
+	out->write_image(TypeDesc::UINT8,
+		pixels + (h - 1) * w * channels,
+		AutoStride,
+		-w * channels,
+		AutoStride);
+
+	out->close();
+
+	return true;
 }
 
 static BufferParams& session_buffer_params()
@@ -120,6 +149,7 @@ static void scene_init()
 
 static void session_init()
 {
+	options.session_params.write_render_cb = write_render;
 	options.session = new Session(options.session_params);
 
 	if(options.session_params.background && !options.quiet)
@@ -333,13 +363,8 @@ static void options_parse(int argc, const char **argv)
 	string devicename = "CPU";
 	bool list = false;
 
-	vector<DeviceType>& types = Device::available_types();
-
-	/* TODO(sergey): Here's a feedback loop happens: on the one hand we want
-	 * the device list to be printed in help message, on the other hand logging
-	 * is not initialized yet so we wouldn't have debug log happening in the
-	 * device initialization.
-	 */
+	/* List devices for which support is compiled in. */
+	vector<DeviceType> types = Device::available_types();
 	foreach(DeviceType type, types) {
 		if(device_names != "")
 			device_names += ", ";
@@ -364,7 +389,7 @@ static void options_parse(int argc, const char **argv)
 		"--background", &options.session_params.background, "Render in background, without user interface",
 		"--quiet", &options.quiet, "In background mode, don't print progress messages",
 		"--samples %d", &options.session_params.samples, "Number of samples to render",
-		"--output %s", &options.session_params.output_path, "File path to write output image",
+		"--output %s", &options.output_path, "File path to write output image",
 		"--threads %d", &options.session_params.threads, "CPU Rendering Threads",
 		"--width  %d", &options.width, "Window width in pixel",
 		"--height %d", &options.height, "Window height in pixel",
@@ -391,7 +416,7 @@ static void options_parse(int argc, const char **argv)
 	}
 
 	if(list) {
-		vector<DeviceInfo>& devices = Device::available_devices();
+		vector<DeviceInfo> devices = Device::available_devices();
 		printf("Devices:\n");
 
 		foreach(DeviceInfo& info, devices) {
@@ -426,15 +451,12 @@ static void options_parse(int argc, const char **argv)
 
 	/* find matching device */
 	DeviceType device_type = Device::type_from_string(devicename.c_str());
-	vector<DeviceInfo>& devices = Device::available_devices();
-	bool device_available = false;
+	vector<DeviceInfo> devices = Device::available_devices(DEVICE_MASK(device_type));
 
-	foreach(DeviceInfo& device, devices) {
-		if(device_type == device.type) {
-			options.session_params.device = device;
-			device_available = true;
-			break;
-		}
+	bool device_available = false;
+	if (!devices.empty()) {
+		options.session_params.device = devices.front();
+		device_available = true;
 	}
 
 	/* handle invalid configurations */
@@ -494,4 +516,3 @@ int main(int argc, const char **argv)
 
 	return 0;
 }
-

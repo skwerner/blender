@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/Interface1D/BPy_ViewEdge.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BPy_ViewEdge.h"
@@ -87,7 +83,7 @@ static PyObject *ViewEdge_update_fedges(BPy_ViewEdge *self)
 
 static PyMethodDef BPy_ViewEdge_methods[] = {
 	{"update_fedges", (PyCFunction)ViewEdge_update_fedges, METH_NOARGS, ViewEdge_update_fedges_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 /*----------------------ViewEdge get/setters ----------------------------*/
@@ -182,7 +178,7 @@ PyDoc_STRVAR(ViewEdge_viewshape_doc,
 ":type: :class:`ViewShape`");
 
 static PyObject *ViewEdge_viewshape_get(BPy_ViewEdge *self, void *UNUSED(closure))
-{	
+{
 	ViewShape *vs = self->ve->viewShape();
 	if (vs)
 		return BPy_ViewShape_from_ViewShape(*vs);

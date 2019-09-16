@@ -38,22 +38,22 @@ import bpy
 # The languages defined in Blender.
 LANGUAGES_CATEGORIES = (
     # Min completeness level, UI english label.
-    ( 0.95, "Complete"),
-    ( 0.33, "In Progress"),
-    ( -1.0, "Starting"),
+    (0.95, "Complete"),
+    (0.33, "In Progress"),
+    (-1.0, "Starting"),
 )
 LANGUAGES = (
     # ID, UI english label, ISO code.
-    ( 0, "Default (Default)", "DEFAULT"),
-    ( 1, "English (English)", "en_US"),
-    ( 2, "Japanese (日本語)", "ja_JP"),
-    ( 3, "Dutch (Nederlandse taal)", "nl_NL"),
-    ( 4, "Italian (Italiano)", "it_IT"),
-    ( 5, "German (Deutsch)", "de_DE"),
-    ( 6, "Finnish (Suomi)", "fi_FI"),
-    ( 7, "Swedish (Svenska)", "sv_SE"),
-    ( 8, "French (Français)", "fr_FR"),
-    ( 9, "Spanish (Español)", "es"),
+    (0, "Automatic (Automatic)", "DEFAULT"),
+    (1, "English (English)", "en_US"),
+    (2, "Japanese (日本語)", "ja_JP"),
+    (3, "Dutch (Nederlandse taal)", "nl_NL"),
+    (4, "Italian (Italiano)", "it_IT"),
+    (5, "German (Deutsch)", "de_DE"),
+    (6, "Finnish (Suomi)", "fi_FI"),
+    (7, "Swedish (Svenska)", "sv_SE"),
+    (8, "French (Français)", "fr_FR"),
+    (9, "Spanish (Español)", "es"),
     (10, "Catalan (Català)", "ca_AD"),
     (11, "Czech (Český)", "cs_CZ"),
     (12, "Portuguese (Português)", "pt_PT"),
@@ -91,6 +91,9 @@ LANGUAGES = (
     (41, "Vietnamese (tiếng Việt)", "vi_VN"),
     (42, "Basque (Euskara)", "eu_EU"),
     (43, "Hausa (Hausa)", "ha"),
+    (44, "Kazakh (қазақша)", "kk_KZ"),
+    (45, "Abkhaz (Аԥсуа бызшәа)", "ab"),
+    (46, "Thai (ภาษาไทย)", "th_TH"),
 )
 
 # Default context, in py!
@@ -104,7 +107,7 @@ IMPORT_MIN_LEVEL = 0.0
 
 # Languages in /branches we do not want to import in /trunk currently...
 IMPORT_LANGUAGES_SKIP = {
-    'am_ET', 'bg_BG', 'fi_FI', 'el_GR', 'et_EE', 'ne_NP', 'ro_RO', 'uz_UZ', 'uz_UZ@cyrillic',
+    'am_ET', 'bg_BG', 'fi_FI', 'el_GR', 'et_EE', 'ne_NP', 'ro_RO', 'uz_UZ', 'uz_UZ@cyrillic', 'kk_KZ',
 }
 
 # Languages that need RTL pre-processing.
@@ -262,7 +265,7 @@ PYGETTEXT_KEYWORDS = (() +
 
 # Check printf mismatches between msgid and msgstr.
 CHECK_PRINTF_FORMAT = (
-    r"(?!<%)(?:%%)*%"          # Begining, with handling for crazy things like '%%%%%s'
+    r"(?!<%)(?:%%)*%"          # Beginning, with handling for crazy things like '%%%%%s'
     r"[-+#0]?"                 # Flags (note: do not add the ' ' (space) flag here, generates too much false positives!)
     r"(?:\*|[0-9]+)?"          # Width
     r"(?:\.(?:\*|[0-9]+))?"    # Precision
@@ -296,6 +299,11 @@ WARN_MSGID_NOT_CAPITALIZED_ALLOWED = {
     "fps: %i",
     "gimbal",
     "global",
+    "glTF 2.0 (.glb/.gltf)",
+    "glTF Binary (.glb)",
+    "glTF Embedded (.gltf)",
+    "glTF Separate (.gltf + .bin + textures)",
+    "invoke() needs to be called before execute()",
     "iScale",
     "iso-8859-15",
     "iTaSC",
@@ -325,26 +333,35 @@ WARN_MSGID_NOT_CAPITALIZED_ALLOWED = {
     "vBVH",
     "view",
     "wav",
+    "wmOwnerID '%s' not in workspace '%s'",
     "y",
     # Sub-strings.
     "available with",
     "brown fox",
     "can't save image while rendering",
     "constructive modifier",
+    "cursor",
+    "custom",
+    "custom matrix",
+    "custom orientation",
     "edge data",
     "expected a timeline/animation area to be active",
     "expected a view3d region",
     "expected a view3d region & editcurve",
     "expected a view3d region & editmesh",
     "face data",
+    "gimbal",
+    "global",
     "image file not found",
     "image format is read-only",
     "image path can't be written to",
     "in memory to enable editing!",
     "jumps over",
     "left",
+    "local",
     "multi-res modifier",
     "non-triangle face",
+    "normal",
     "right",
     "the lazy dog",
     "unable to load movie clip",
@@ -359,6 +376,7 @@ WARN_MSGID_NOT_CAPITALIZED_ALLOWED = {
     "unsupported movie clip format",
     "vertex data",
     "verts only",
+    "view",
     "virtual parents",
 }
 WARN_MSGID_NOT_CAPITALIZED_ALLOWED |= set(lng[2] for lng in LANGUAGES)
@@ -371,6 +389,7 @@ WARN_MSGID_END_POINT_ALLOWED = {
     "Pad.",
     "    RNA Path: bpy.types.",
     "Temp. Diff.",
+    "Temperature Diff.",
 }
 
 PARSER_CACHE_HASH = 'sha1'
@@ -514,6 +533,7 @@ def _do_set(ref, path):
 def _gen_get_set_path(ref, name):
     def _get(self):
         return _do_get(getattr(self, ref), getattr(self, name))
+
     def _set(self, value):
         setattr(self, name, _do_set(getattr(self, ref), value))
     return _get, _set
@@ -551,6 +571,8 @@ class I18nSettings:
             self.__dict__ = {uid: data for uid, data in globals().items() if not uid.startswith("_")}
         if isinstance(fname, str):
             if not os.path.isfile(fname):
+                # Assume it is already real JSon string...
+                self.from_json(fname)
                 return
             with open(fname) as f:
                 self.from_json(f.read())
@@ -579,6 +601,7 @@ class I18nSettings:
 
     def _get_py_sys_paths(self):
         return self.INTERN_PY_SYS_PATHS
+
     def _set_py_sys_paths(self, val):
         old_paths = set(self.INTERN_PY_SYS_PATHS.split(";")) - {""}
         new_paths = set(val.split(";")) - {""}

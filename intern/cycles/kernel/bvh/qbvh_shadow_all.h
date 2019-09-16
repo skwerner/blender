@@ -21,7 +21,6 @@
  * BVH_INSTANCING: object instancing
  * BVH_HAIR: hair curve rendering
  * BVH_MOTION: motion blur rendering
- *
  */
 
 #if BVH_FEATURE(BVH_HAIR)
@@ -66,11 +65,6 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 	*num_hits = 0;
 	isect_array->t = tmax;
 
-#ifndef __KERNEL_SSE41__
-	if(!isfinite(P.x)) {
-		return false;
-	}
-#endif
 
 #if BVH_FEATURE(BVH_INSTANCING)
 	int num_hits_in_instance = 0;
@@ -103,7 +97,7 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 			/* Traverse internal nodes. */
 			while(node_addr >= 0 && node_addr != ENTRYPOINT_SENTINEL) {
 				float4 inodes = kernel_tex_fetch(__bvh_nodes, node_addr+0);
-				(void)inodes;
+				(void) inodes;
 
 				if(false
 #ifdef __VISIBILITY_FLAG__
@@ -358,7 +352,7 @@ ccl_device bool BVH_FUNCTION_FULL_NAME(QBVH)(KernelGlobals *kg,
 								shader = __float_as_int(str.z);
 							}
 #endif
-							int flag = kernel_tex_fetch(__shader_flag, (shader & SHADER_MASK)*SHADER_SIZE);
+							int flag = kernel_tex_fetch(__shaders, (shader & SHADER_MASK)).flags;
 
 							/* if no transparent shadows, all light is blocked */
 							if(!(flag & SD_HAS_TRANSPARENT_SHADOW)) {

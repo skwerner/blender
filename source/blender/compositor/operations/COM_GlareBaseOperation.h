@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,13 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
-#ifndef _COM_GlareBaseOperation_h
-#define _COM_GlareBaseOperation_h
+#ifndef __COM_GLAREBASEOPERATION_H__
+#define __COM_GLAREBASEOPERATION_H__
 
 #include "COM_SingleThreadedOperation.h"
 #include "DNA_node_types.h"
@@ -39,12 +35,12 @@ typedef float fRGB[4];
 class GlareBaseOperation : public SingleThreadedOperation {
 private:
 	/**
-	 * @brief Cached reference to the inputProgram
+	 * \brief Cached reference to the inputProgram
 	 */
 	SocketReader *m_inputProgram;
 
 	/**
-	 * @brief settings of the glare node.
+	 * \brief settings of the glare node.
 	 */
 	NodeGlare *m_settings;
 public:

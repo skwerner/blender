@@ -215,7 +215,7 @@ static void view_motion(int x, int y)
 	V.mouseY = y;
 }
 
-static void view_idle(void)
+static void view_idle()
 {
 	if(V.redraw) {
 		V.redraw = false;
@@ -252,7 +252,7 @@ void view_main_loop(const char *title, int width, int height,
 	glutInitDisplayMode(GLUT_RGB|GLUT_DOUBLE|GLUT_DEPTH);
 	glutCreateWindow(title);
 
-	mxMakeCurrentContext(mxCreateContext());
+	glewInit();
 
 	view_reshape(width, height);
 
@@ -272,4 +272,3 @@ void view_redraw()
 }
 
 CCL_NAMESPACE_END
-

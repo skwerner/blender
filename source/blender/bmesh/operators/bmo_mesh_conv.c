@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_mesh_conv.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * This file contains functions
  * for converting a Mesh
@@ -38,6 +32,7 @@
 #include "bmesh.h"
 #include "intern/bmesh_operators_private.h"
 
+#include "BKE_global.h"
 
 void bmo_mesh_to_bmesh_exec(BMesh *bm, BMOperator *op)
 {
@@ -62,15 +57,18 @@ void bmo_object_load_bmesh_exec(BMesh *bm, BMOperator *op)
 	Mesh *me = ob->data;
 
 	BMO_op_callf(bm, op->flag,
-	             "bmesh_to_mesh mesh=%p object=%p skip_tessface=%b",
-	             me, ob, true);
+	             "bmesh_to_mesh mesh=%p object=%p",
+	             me, ob);
 }
 
 void bmo_bmesh_to_mesh_exec(BMesh *bm, BMOperator *op)
 {
 	Mesh *me = BMO_slot_ptr_get(op->slots_in, "mesh");
 	/* Object *ob = BMO_slot_ptr_get(op, "object"); */
-	const bool dotess = !BMO_slot_bool_get(op->slots_in, "skip_tessface");
 
-	BM_mesh_bm_to_me(bm, me, (&(struct BMeshToMeshParams){ .calc_tessface = dotess, }));
+	BM_mesh_bm_to_me(
+	        G.main, bm, me,
+	        (&(struct BMeshToMeshParams){
+	            .calc_object_remap = true,
+	        }));
 }

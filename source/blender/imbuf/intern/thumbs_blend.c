@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/thumbs_blend.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 
@@ -29,17 +23,14 @@
 #include <string.h>
 
 #include "BLI_utildefines.h"
-#include "BLI_endian_switch.h"
-#include "BLI_fileops.h"
 #include "BLI_linklist.h"
+#include "BLI_listbase.h"  /* Needed due to import of BLO_readfile.h */
 
 #include "BLO_blend_defs.h"
 #include "BLO_readfile.h"
 
-#include "BKE_global.h"
 #include "BKE_idcode.h"
 #include "BKE_icons.h"
-#include "BKE_library.h"
 #include "BKE_main.h"
 
 #include "DNA_ID.h"  /* For preview images... */
@@ -145,7 +136,7 @@ void IMB_thumb_overlay_blend(unsigned int *thumb, int width, int height, float a
 	{
 		int x, y;
 		int stride_x = (margin_r - margin_l) - 2;
-		
+
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++, px += 4) {
 				int hline = 0, vline = 0;

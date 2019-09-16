@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * Windows-posix compatibility layer, windows-specific functions.
  */
 
-/** \file blender/blenlib/intern/winstuff.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 
@@ -60,20 +52,24 @@ int BLI_getInstallationDir(char *str)
 	GetModuleFileName(NULL, str, FILE_MAX);
 	BLI_split_dir_part(str, dir, sizeof(dir)); /* shouldn't be relative */
 	a = strlen(dir);
-	if (dir[a - 1] == '\\') dir[a - 1] = 0;
-	
+	if (dir[a - 1] == '\\') {
+		dir[a - 1] = 0;
+	}
+
 	strcpy(str, dir);
-	
+
 	return 1;
 }
 
 static void RegisterBlendExtension_Fail(HKEY root)
 {
 	printf("failed\n");
-	if (root)
+	if (root) {
 		RegCloseKey(root);
-	if (!G.background)
+	}
+	if (!G.background) {
 		MessageBox(0, "Could not register file extension.", "Blender error", MB_OK | MB_ICONERROR);
+	}
 	TerminateProcess(GetCurrentProcess(), 1);
 }
 
@@ -112,8 +108,9 @@ void RegisterBlendExtension(void)
 		/* try HKCU on failure */
 		usr_mode = true;
 		lresult = RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Classes", 0, KEY_ALL_ACCESS, &root);
-		if (lresult != ERROR_SUCCESS)
+		if (lresult != ERROR_SUCCESS) {
 			RegisterBlendExtension_Fail(0);
+		}
 	}
 
 	lresult = RegCreateKeyEx(root, "blendfile", 0,
@@ -123,8 +120,9 @@ void RegisterBlendExtension(void)
 		lresult = RegSetValueEx(hkey, NULL, 0, REG_SZ, (BYTE *)buffer, strlen(buffer) + 1);
 		RegCloseKey(hkey);
 	}
-	if (lresult != ERROR_SUCCESS)
+	if (lresult != ERROR_SUCCESS) {
 		RegisterBlendExtension_Fail(root);
+	}
 
 	lresult = RegCreateKeyEx(root, "blendfile\\shell\\open\\command", 0,
 	                         NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hkey, &dwd);
@@ -133,8 +131,9 @@ void RegisterBlendExtension(void)
 		lresult = RegSetValueEx(hkey, NULL, 0, REG_SZ, (BYTE *)buffer, strlen(buffer) + 1);
 		RegCloseKey(hkey);
 	}
-	if (lresult != ERROR_SUCCESS)
+	if (lresult != ERROR_SUCCESS) {
 		RegisterBlendExtension_Fail(root);
+	}
 
 	lresult = RegCreateKeyEx(root, "blendfile\\DefaultIcon", 0,
 	                         NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hkey, &dwd);
@@ -143,8 +142,9 @@ void RegisterBlendExtension(void)
 		lresult = RegSetValueEx(hkey, NULL, 0, REG_SZ, (BYTE *)buffer, strlen(buffer) + 1);
 		RegCloseKey(hkey);
 	}
-	if (lresult != ERROR_SUCCESS)
+	if (lresult != ERROR_SUCCESS) {
 		RegisterBlendExtension_Fail(root);
+	}
 
 	lresult = RegCreateKeyEx(root, ".blend", 0,
 	                         NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hkey, &dwd);
@@ -153,19 +153,22 @@ void RegisterBlendExtension(void)
 		lresult = RegSetValueEx(hkey, NULL, 0, REG_SZ, (BYTE *)buffer, strlen(buffer) + 1);
 		RegCloseKey(hkey);
 	}
-	if (lresult != ERROR_SUCCESS)
+	if (lresult != ERROR_SUCCESS) {
 		RegisterBlendExtension_Fail(root);
-	
+	}
+
 	BLI_getInstallationDir(InstallDir);
 	GetSystemDirectory(SysDir, FILE_MAXDIR);
 #ifdef _WIN64
 	ThumbHandlerDLL = "BlendThumb64.dll";
 #else
 	IsWow64Process(GetCurrentProcess(), &IsWOW64);
-	if (IsWOW64 == true)
+	if (IsWOW64 == true) {
 		ThumbHandlerDLL = "BlendThumb64.dll";
-	else
+	}
+	else {
 		ThumbHandlerDLL = "BlendThumb.dll";
+	}
 #endif
 	snprintf(RegCmd, MAX_PATH * 2, "%s\\regsvr32 /s \"%s\\%s\"", SysDir, InstallDir, ThumbHandlerDLL);
 	system(RegCmd);
@@ -182,8 +185,8 @@ void RegisterBlendExtension(void)
 void get_default_root(char *root)
 {
 	char str[MAX_PATH + 1];
-	
-	/* the default drive to resolve a directory without a specified drive 
+
+	/* the default drive to resolve a directory without a specified drive
 	 * should be the Windows installation drive, since this was what the OS
 	 * assumes. */
 	if (GetWindowsDirectory(str, MAX_PATH + 1)) {
@@ -193,7 +196,7 @@ void get_default_root(char *root)
 		root[3] = '\0';
 	}
 	else {
-		/* if GetWindowsDirectory fails, something has probably gone wrong, 
+		/* if GetWindowsDirectory fails, something has probably gone wrong,
 		 * we are trying the blender install dir though */
 		if (GetModuleFileName(NULL, str, MAX_PATH + 1)) {
 			printf("Error! Could not get the Windows Directory - "

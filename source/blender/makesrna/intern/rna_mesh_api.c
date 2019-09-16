@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_mesh_api.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -39,7 +32,6 @@
 #include "BLI_sys_types.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_math.h"
 
 #include "rna_internal.h"  /* own include */
 
@@ -48,16 +40,18 @@
 #include "DNA_mesh_types.h"
 
 #include "BKE_mesh.h"
+#include "BKE_mesh_tangent.h"
 #include "BKE_mesh_mapping.h"
+#include "BKE_mesh_runtime.h"
 #include "ED_mesh.h"
 
 static const char *rna_Mesh_unit_test_compare(struct Mesh *mesh, struct Mesh *mesh2)
 {
 	const char *ret = BKE_mesh_cmp(mesh, mesh2, FLT_EPSILON * 60);
-	
+
 	if (!ret)
 		ret = "Same";
-	
+
 	return ret;
 }
 
@@ -92,7 +86,7 @@ static void rna_Mesh_calc_tangents(Mesh *mesh, ReportList *reports, const char *
 		BKE_mesh_calc_normals_split(mesh);
 	}
 
-	BKE_mesh_loop_tangents(mesh, uvmap, r_looptangents, reports);
+	BKE_mesh_calc_loop_tangent_single(mesh, uvmap, r_looptangents, reports);
 }
 
 static void rna_Mesh_free_tangents(Mesh *mesh)
@@ -100,12 +94,12 @@ static void rna_Mesh_free_tangents(Mesh *mesh)
 	CustomData_free_layers(&mesh->ldata, CD_MLOOPTANGENT, mesh->totloop);
 }
 
-static void rna_Mesh_calc_tessface(Mesh *mesh, int free_mpoly)
+static void rna_Mesh_calc_looptri(Mesh *mesh)
 {
-	ED_mesh_calc_tessface(mesh, free_mpoly != 0);
+	BKE_mesh_runtime_looptri_ensure(mesh);
 }
 
-static void rna_Mesh_calc_smooth_groups(Mesh *mesh, int use_bitflags, int *r_poly_group_len,
+static void rna_Mesh_calc_smooth_groups(Mesh *mesh, bool use_bitflags, int *r_poly_group_len,
                                         int **r_poly_group, int *r_group_total)
 {
 	*r_poly_group_len = mesh->totpoly;
@@ -118,43 +112,11 @@ static void rna_Mesh_calc_smooth_groups(Mesh *mesh, int use_bitflags, int *r_pol
 
 static void rna_Mesh_normals_split_custom_do(Mesh *mesh, float (*custom_loopnors)[3], const bool use_vertices)
 {
-	float (*polynors)[3];
-	short (*clnors)[2];
-	const int numloops = mesh->totloop;
-	bool free_polynors = false;
-
-	clnors = CustomData_get_layer(&mesh->ldata, CD_CUSTOMLOOPNORMAL);
-	if (clnors) {
-		memset(clnors, 0, sizeof(*clnors) * numloops);
-	}
-	else {
-		clnors = CustomData_add_layer(&mesh->ldata, CD_CUSTOMLOOPNORMAL, CD_DEFAULT, NULL, numloops);
-	}
-
-	if (CustomData_has_layer(&mesh->pdata, CD_NORMAL)) {
-		polynors = CustomData_get_layer(&mesh->pdata, CD_NORMAL);
-	}
-	else {
-		polynors = MEM_mallocN(sizeof(float[3]) * mesh->totpoly, __func__);
-		BKE_mesh_calc_normals_poly(
-		            mesh->mvert, NULL, mesh->totvert,
-		            mesh->mloop, mesh->mpoly, mesh->totloop, mesh->totpoly, polynors, false);
-		free_polynors = true;
-	}
-
 	if (use_vertices) {
-		BKE_mesh_normals_loop_custom_from_vertices_set(
-		        mesh->mvert, custom_loopnors, mesh->totvert, mesh->medge, mesh->totedge, mesh->mloop, mesh->totloop,
-		        mesh->mpoly, (const float (*)[3])polynors, mesh->totpoly, clnors);
+		BKE_mesh_set_custom_normals_from_vertices(mesh, custom_loopnors);
 	}
 	else {
-		BKE_mesh_normals_loop_custom_set(
-		        mesh->mvert, mesh->totvert, mesh->medge, mesh->totedge, mesh->mloop, custom_loopnors, mesh->totloop,
-		        mesh->mpoly, (const float (*)[3])polynors, mesh->totpoly, clnors);
-	}
-
-	if (free_polynors) {
-		MEM_freeN(polynors);
+		BKE_mesh_set_custom_normals(mesh, custom_loopnors);
 	}
 }
 
@@ -172,7 +134,7 @@ static void rna_Mesh_normals_split_custom_set(Mesh *mesh, ReportList *reports, i
 
 	rna_Mesh_normals_split_custom_do(mesh, loopnors, false);
 
-	DAG_id_tag_update(&mesh->id, 0);
+	DEG_id_tag_update(&mesh->id, 0);
 }
 
 static void rna_Mesh_normals_split_custom_set_from_vertices(
@@ -190,14 +152,14 @@ static void rna_Mesh_normals_split_custom_set_from_vertices(
 
 	rna_Mesh_normals_split_custom_do(mesh, vertnors, true);
 
-	DAG_id_tag_update(&mesh->id, 0);
+	DEG_id_tag_update(&mesh->id, 0);
 }
 
-static void rna_Mesh_transform(Mesh *mesh, float *mat, int shape_keys)
+static void rna_Mesh_transform(Mesh *mesh, float *mat, bool shape_keys)
 {
 	BKE_mesh_transform(mesh, (float (*)[4])mat, shape_keys);
 
-	DAG_id_tag_update(&mesh->id, 0);
+	DEG_id_tag_update(&mesh->id, 0);
 }
 
 static void rna_Mesh_flip_normals(Mesh *mesh)
@@ -205,14 +167,26 @@ static void rna_Mesh_flip_normals(Mesh *mesh)
 	BKE_mesh_polygons_flip(mesh->mpoly, mesh->mloop, &mesh->ldata, mesh->totpoly);
 	BKE_mesh_tessface_clear(mesh);
 	BKE_mesh_calc_normals(mesh);
+	BKE_mesh_runtime_clear_geometry(mesh);
 
-	DAG_id_tag_update(&mesh->id, 0);
+	DEG_id_tag_update(&mesh->id, 0);
 }
 
-static void rna_Mesh_split_faces(Mesh *mesh, int free_loop_normals)
+static void rna_Mesh_split_faces(Mesh *mesh, bool free_loop_normals)
 {
 	BKE_mesh_split_faces(mesh, free_loop_normals != 0);
 }
+
+static void rna_Mesh_update_gpu_tag(Mesh *mesh)
+{
+	BKE_mesh_batch_cache_dirty_tag(mesh, BKE_MESH_BATCH_DIRTY_ALL);
+}
+
+static void rna_Mesh_count_selected_items(Mesh *mesh, int r_count[3])
+{
+	BKE_mesh_count_selected_items(mesh, r_count);
+}
+
 
 #else
 
@@ -262,12 +236,8 @@ void RNA_api_mesh(StructRNA *srna)
 	func = RNA_def_function(srna, "free_tangents", "rna_Mesh_free_tangents");
 	RNA_def_function_ui_description(func, "Free tangents");
 
-	func = RNA_def_function(srna, "calc_tessface", "rna_Mesh_calc_tessface");
-	RNA_def_function_ui_description(func, "Calculate face tessellation (supports editmode too)");
-	RNA_def_boolean(func, "free_mpoly", 0, "Free MPoly", "Free data used by polygons and loops. "
-	                "WARNING: This destructive operation removes regular faces, "
-	                "only used on temporary mesh data-blocks to reduce memory footprint of render "
-	                "engines and export scripts");
+	func = RNA_def_function(srna, "calc_loop_triangles", "rna_Mesh_calc_looptri");
+	RNA_def_function_ui_description(func, "Calculate loop triangle tessellation (supports editmode too)");
 
 	func = RNA_def_function(srna, "calc_smooth_groups", "rna_Mesh_calc_smooth_groups");
 	RNA_def_function_ui_description(func, "Calculate smooth groups from sharp edges");
@@ -301,8 +271,11 @@ void RNA_api_mesh(StructRNA *srna)
 
 	func = RNA_def_function(srna, "update", "ED_mesh_update");
 	RNA_def_boolean(func, "calc_edges", 0, "Calculate Edges", "Force recalculation of edges");
-	RNA_def_boolean(func, "calc_tessface", 0, "Calculate Tessellation", "Force recalculation of tessellation faces");
+	RNA_def_boolean(func, "calc_edges_loose", 0, "Calculate Loose Edges", "Calculate the loose state of each edge");
+	RNA_def_boolean(func, "calc_loop_triangles", 0, "Calculate Triangules", "Force recalculation of triangle tessellation");
 	RNA_def_function_flag(func, FUNC_USE_CONTEXT);
+
+	RNA_def_function(srna, "update_gpu_tag", "rna_Mesh_update_gpu_tag");
 
 	func = RNA_def_function(srna, "unit_test_compare", "rna_Mesh_unit_test_compare");
 	RNA_def_pointer(func, "mesh", "Mesh", "", "Mesh to compare to");
@@ -324,6 +297,11 @@ void RNA_api_mesh(StructRNA *srna)
 	                                "invalid indices corrected (to default 0)");
 	parm = RNA_def_boolean(func, "result", 0, "Result", "");
 	RNA_def_function_return(func, parm);
+
+	func = RNA_def_function(srna, "count_selected_items", "rna_Mesh_count_selected_items ");
+	RNA_def_function_ui_description(func, "Return the number of selected items (vert, edge, face)");
+	parm = RNA_def_int_vector(func, "result", 3, NULL, 0, INT_MAX, "Result", NULL, 0, INT_MAX);
+	RNA_def_function_output(func, parm);
 }
 
 #endif

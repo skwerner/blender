@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_extrude.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Extrude faces and solidify.
  */
@@ -44,7 +38,7 @@
 enum {
 	EXT_INPUT   = 1,
 	EXT_KEEP    = 2,
-	EXT_DEL     = 4
+	EXT_DEL     = 4,
 };
 
 #define VERT_MARK 1
@@ -175,7 +169,7 @@ static void bm_extrude_copy_face_loop_attributes(BMesh *bm, BMFace *f)
 static void bm_extrude_disable_skin_root(BMesh *bm, BMVert *v)
 {
 	MVertSkin *vs;
-	
+
 	vs = CustomData_bmesh_get(&bm->vdata, v->head.data, CD_MVERT_SKIN);
 	vs->flag &= ~MVERT_SKIN_ROOT;
 }
@@ -186,7 +180,8 @@ void bmo_extrude_edge_only_exec(BMesh *bm, BMOperator *op)
 	BMOperator dupeop;
 	BMFace *f;
 	BMEdge *e, *e_new;
-	
+	const bool use_normal_flip = BMO_slot_bool_get(op->slots_in, "use_normal_flip");
+
 	BMO_ITER (e, &siter, op->slots_in, "edges", BM_EDGE) {
 		BMO_edge_flag_enable(bm, e, EXT_INPUT);
 		BMO_vert_flag_enable(bm, e->v1, EXT_INPUT);
@@ -212,7 +207,9 @@ void bmo_extrude_edge_only_exec(BMesh *bm, BMOperator *op)
 		BMVert *f_verts[4];
 		e_new = BMO_iter_map_value_ptr(&siter);
 
-		if (e->l && e->v1 != e->l->v) {
+
+		const bool edge_normal_flip = !(e->l && e->v1 != e->l->v);
+		if (edge_normal_flip == use_normal_flip) {
 			f_verts[0] = e->v1;
 			f_verts[1] = e->v2;
 			f_verts[2] = e_new->v2;
@@ -227,16 +224,16 @@ void bmo_extrude_edge_only_exec(BMesh *bm, BMOperator *op)
 		/* not sure what to do about example face, pass NULL for now */
 		f = BM_face_create_verts(bm, f_verts, 4, NULL, BM_CREATE_NOP, true);
 		bm_extrude_copy_face_loop_attributes(bm, f);
-		
+
 		if (BMO_edge_flag_test(bm, e, EXT_INPUT)) {
 			e = e_new;
 		}
-		
+
 		BMO_face_flag_enable(bm, f, EXT_KEEP);
 		BMO_edge_flag_enable(bm, e, EXT_KEEP);
 		BMO_vert_flag_enable(bm, e->v1, EXT_KEEP);
 		BMO_vert_flag_enable(bm, e->v2, EXT_KEEP);
-		
+
 	}
 
 	BMO_op_finish(bm, &dupeop);
@@ -261,8 +258,9 @@ void bmo_extrude_vert_indiv_exec(BMesh *bm, BMOperator *op)
 		dupev = BM_vert_create(bm, v->co, v, BM_CREATE_NOP);
 		BMO_vert_flag_enable(bm, dupev, EXT_KEEP);
 
-		if (has_vskin)
+		if (has_vskin) {
 			bm_extrude_disable_skin_root(bm, v);
+		}
 
 		if (select_history_map) {
 			BMEditSelection *ese;
@@ -332,9 +330,11 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 	BMEdge *e, *e_new;
 	BMVert *v;
 	BMFace *f;
-	bool found, fwd, delorig = false;
+	bool found, delorig = false;
 	BMOpSlot *slot_facemap_out;
 	BMOpSlot *slot_edges_exclude;
+	const bool use_normal_flip = BMO_slot_bool_get(op->slots_in, "use_normal_flip");
+	const bool use_normal_from_adjacent = BMO_slot_bool_get(op->slots_in, "use_normal_from_adjacent");
 
 	/* initialize our sub-operators */
 	BMO_op_initf(
@@ -343,7 +343,7 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 	        BMO_slot_bool_get(op->slots_in, "use_select_history"));
 
 	BMO_slot_buffer_flag_enable(bm, op->slots_in, "geom", BM_EDGE | BM_FACE, EXT_INPUT);
-	
+
 	/* if one flagged face is bordered by an un-flagged face, then we delete
 	 * original geometry unless caller explicitly asked to keep it. */
 	if (!BMO_slot_bool_get(op->slots_in, "use_keep_orig")) {
@@ -404,7 +404,7 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 			}
 		}
 	}
-	
+
 	BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
 		if (BMO_face_flag_test(bm, f, EXT_INPUT)) {
 			BMO_face_flag_enable(bm, f, EXT_DEL);
@@ -436,7 +436,7 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 	if (delorig) {
 		BMO_op_exec(bm, &delop);
 	}
-	
+
 	/* if not delorig, reverse loops of original face */
 	if (!delorig) {
 		BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
@@ -445,7 +445,7 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 			}
 		}
 	}
-	
+
 	BMO_slot_copy(&dupeop, slots_out, "geom.out",
 	              op,      slots_out, "geom.out");
 
@@ -465,10 +465,12 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 			BM_edge_kill(bm, e);
 
 			/* kill standalone vertices from this edge - see [#32341] */
-			if (!v1->e)
+			if (!v1->e) {
 				BM_vert_kill(bm, v1);
-			if (!v2->e)
+			}
+			if (!v2->e) {
 				BM_vert_kill(bm, v2);
+			}
 
 			continue;
 		}
@@ -485,16 +487,23 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 			continue;
 		}
 
-		/* orient loop to give same normal as a loop of newedge
-		 * if it exists (will be an extruded face),
-		 * else same normal as a loop of e, if it exists */
-		if (!e_new->l)
-			fwd = !e->l || !(e->l->v == e->v1);
-		else
-			fwd = (e_new->l->v == e_new->v1);
+		bool edge_normal_flip;
+		if (use_normal_from_adjacent == false) {
+			/* Orient loop to give same normal as a loop of 'e_new'
+			 * if it exists (will be one of the faces from the region),
+			 * else same normal as a loop of e, if it exists. */
+			edge_normal_flip = !(
+			        e_new->l ?
+			        (e_new->l->v == e_new->v1) :
+			        (!e->l || !(e->l->v == e->v1)));
+		}
+		else {
+			/* Special case, needed for repetitive extrusions
+			 * that use the normals from the previously created faces. */
+			edge_normal_flip = !(e->l && e->v1 != e->l->v);
+		}
 
-		
-		if (fwd) {
+		if (edge_normal_flip == use_normal_flip) {
 			f_verts[0] = e->v1;
 			f_verts[1] = e->v2;
 			f_verts[2] = e_new->v2;
@@ -557,7 +566,9 @@ void bmo_extrude_face_region_exec(BMesh *bm, BMOperator *op)
 	}
 
 	/* cleanup */
-	if (delorig) BMO_op_finish(bm, &delop);
+	if (delorig) {
+		BMO_op_finish(bm, &delop);
+	}
 	BMO_op_finish(bm, &dupeop);
 }
 

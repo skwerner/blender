@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,26 +12,25 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar
- *
- * ***** END GPL LICENSE BLOCK *****
  */
- 
+
 #ifndef __BKE_IDPROP_H__
 #define __BKE_IDPROP_H__
 
-/** \file BKE_idprop.h
- *  \ingroup bke
- *  \author Joseph Eagar
+/** \file
+ * \ingroup bke
  */
 
 #include "DNA_ID.h"
 
 #include "BLI_compiler_attrs.h"
 
-struct IDProperty;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ID;
+struct IDProperty;
 
 typedef union IDPropertyTemplate {
 	int i;
@@ -91,6 +88,7 @@ void IDP_ReplaceGroupInGroup(struct IDProperty *dest, const struct IDProperty *s
 void IDP_ReplaceInGroup(struct IDProperty *group, struct IDProperty *prop) ATTR_NONNULL();
 void IDP_ReplaceInGroup_ex(struct IDProperty *group, struct IDProperty *prop, struct IDProperty *prop_exist);
 void IDP_MergeGroup(IDProperty *dest, const IDProperty *src, const bool do_overwrite) ATTR_NONNULL();
+void IDP_MergeGroup_ex(IDProperty *dest, const IDProperty *src, const bool do_overwrite, const int flag) ATTR_NONNULL();
 bool IDP_AddToGroup(struct IDProperty *group, struct IDProperty *prop) ATTR_NONNULL();
 bool IDP_InsertToGroup(struct IDProperty *group, struct IDProperty *previous,
                       struct IDProperty *pnew) ATTR_NONNULL(1 /* group */, 3 /* pnew */);
@@ -117,6 +115,8 @@ void IDP_FreeProperty(struct IDProperty *prop);
 void IDP_ClearProperty(IDProperty *prop);
 
 void IDP_RelinkProperty(struct IDProperty *prop);
+
+void IDP_Reset(IDProperty *prop, const IDProperty *reference);
 
 #define IDP_Int(prop)                     ((prop)->data.val)
 #define IDP_Array(prop)                   ((prop)->data.pointer)
@@ -145,9 +145,17 @@ void IDP_RelinkProperty(struct IDProperty *prop);
 #  define IDP_Id(prop)               ((ID *) (prop)->data.pointer)
 #endif
 
-#ifndef NDEBUG
-/* for printout only */
-void IDP_spit(IDProperty *prop);
+/* Format IDProperty as strings */
+char *IDP_reprN(
+        const struct IDProperty *prop, uint *r_len);
+void IDP_repr_fn(
+        const IDProperty *prop,
+        void (*str_append_fn)(void *user_data, const char *str, uint str_len),
+        void *user_data);
+void  IDP_print(const struct IDProperty *prop);
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* __BKE_IDPROP_H__ */

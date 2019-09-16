@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/Director.h
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #ifndef __FREESTYLE_PYTHON_DIRECTOR_H__
@@ -53,7 +49,7 @@ int Director_BPy_UnaryFunction1D___call__(void *uf1D, void *py_uf1D, Interface1D
 
 // UnaryPredicate0D: __call__
 int Director_BPy_UnaryPredicate0D___call__(UnaryPredicate0D *up0D, Interface0DIterator& if0D_it);
-	
+
 // UnaryPredicate1D: __call__
 int Director_BPy_UnaryPredicate1D___call__(UnaryPredicate1D *up1D, Interface1D& if1D);
 

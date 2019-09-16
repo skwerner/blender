@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file creator/creator_signals.c
- *  \ingroup creator
+/** \file
+ * \ingroup creator
  */
 
 #ifndef WITH_PYTHON_MODULE
@@ -64,16 +60,15 @@
 #include "BKE_main.h"
 #include "BKE_report.h"
 
-/* for passing information between creator and gameengine */
-#ifdef WITH_GAMEENGINE
-#  include "BL_System.h"
-#else /* dummy */
-#  define SYS_SystemHandle int
-#endif
-
 #include <signal.h>
 
 #include "creator_intern.h"  /* own include */
+
+// #define USE_WRITE_CRASH_BLEND
+#ifdef USE_WRITE_CRASH_BLEND
+#  include "BKE_undo_system.h"
+#  include "BLO_undofile.h"
+#endif
 
 /* set breakpoints here when running in debug mode, useful to catch floating point errors */
 #if defined(__linux__) || defined(_WIN32) || defined(OSX_SSE_FPE)
@@ -110,38 +105,41 @@ static void sig_handle_crash_backtrace(FILE *fp)
 
 static void sig_handle_crash(int signum)
 {
+	wmWindowManager *wm = G_MAIN->wm.first;
 
-#if 0
-	{
-		char fname[FILE_MAX];
+#ifdef USE_WRITE_CRASH_BLEND
+	if (wm->undo_stack) {
+		struct MemFile *memfile = BKE_undosys_stack_memfile_get_active(wm->undo_stack);
+		if (memfile) {
+			char fname[FILE_MAX];
 
-		if (!G.main->name[0]) {
-			BLI_make_file_string("/", fname, BKE_tempdir_base(), "crash.blend");
+			if (!G_MAIN->name[0]) {
+				BLI_make_file_string("/", fname, BKE_tempdir_base(), "crash.blend");
+			}
+			else {
+				BLI_strncpy(fname, G_MAIN->name, sizeof(fname));
+				BLI_path_extension_replace(fname, sizeof(fname), ".crash.blend");
+			}
+
+			printf("Writing: %s\n", fname);
+			fflush(stdout);
+
+			BLO_memfile_write_file(memfile, fname);
 		}
-		else {
-			BLI_strncpy(fname, G.main->name, sizeof(fname));
-			BLI_replace_extension(fname, sizeof(fname), ".crash.blend");
-		}
-
-		printf("Writing: %s\n", fname);
-		fflush(stdout);
-
-		BKE_undo_save_file(fname);
 	}
 #endif
 
 	FILE *fp;
 	char header[512];
-	wmWindowManager *wm = G.main->wm.first;
 
 	char fname[FILE_MAX];
 
-	if (!G.main->name[0]) {
+	if (!G_MAIN->name[0]) {
 		BLI_join_dirfile(fname, sizeof(fname), BKE_tempdir_base(), "blender.crash.txt");
 	}
 	else {
-		BLI_join_dirfile(fname, sizeof(fname), BKE_tempdir_base(), BLI_path_basename(G.main->name));
-		BLI_replace_extension(fname, sizeof(fname), ".crash.txt");
+		BLI_join_dirfile(fname, sizeof(fname), BKE_tempdir_base(), BLI_path_basename(G_MAIN->name));
+		BLI_path_extension_replace(fname, sizeof(fname), ".crash.txt");
 	}
 
 	printf("Writing: %s\n", fname);
@@ -332,8 +330,10 @@ void main_signal_setup_fpe(void)
 	                       (_MM_MASK_OVERFLOW | _MM_MASK_INVALID | _MM_MASK_DIV_ZERO));
 # endif /* OSX_SSE_FPE */
 # if defined(_WIN32) && defined(_MSC_VER)
-	_controlfp_s(NULL, 0, _MCW_EM); /* enables all fp exceptions */
-	_controlfp_s(NULL, _EM_DENORMAL | _EM_UNDERFLOW | _EM_INEXACT, _MCW_EM); /* hide the ones we don't care about */
+	/* enables all fp exceptions */
+	_controlfp_s(NULL, 0, _MCW_EM);
+	/* hide the ones we don't care about */
+	_controlfp_s(NULL, _EM_DENORMAL | _EM_UNDERFLOW | _EM_INEXACT, _MCW_EM);
 # endif /* _WIN32 && _MSC_VER */
 #endif
 }

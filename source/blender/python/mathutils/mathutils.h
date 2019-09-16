@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,17 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Gilbert
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __MATHUTILS_H__
 #define __MATHUTILS_H__
 
-/** \file blender/python/mathutils/mathutils.h
- *  \ingroup pymathutils
+/** \file
+ * \ingroup pymathutils
  */
 
 /* Can cast different mathutils types to this, use for generic funcs */
@@ -62,7 +56,7 @@ enum {
 	float *_data;               /* array of data (alias), wrapped status depends on wrapped status */            \
 	PyObject *cb_user;          /* if this vector references another object, otherwise NULL,                     \
 	                             * *Note* this owns its reference */                                             \
-	unsigned char cb_type;      /* which user funcs do we adhere to, RNA, GameObject, etc */                     \
+	unsigned char cb_type;      /* which user funcs do we adhere to, RNA, etc */                                 \
 	unsigned char cb_subtype;   /* subtype: location, rotation...                                                \
 	                             * to avoid defining many new functions for every attribute of the same type */  \
 	unsigned char flag          /* wrapped data type? */                                                         \
@@ -170,10 +164,8 @@ Py_hash_t mathutils_array_hash(const float *float_array, size_t array_len);
 int column_vector_multiplication(float rvec[4], VectorObject *vec, MatrixObject *mat);
 
 #ifndef MATH_STANDALONE
-/* dynstr as python string utility funcions */
+/* dynstr as python string utility functions */
 PyObject *mathutils_dynstr_to_py(struct DynStr *ds);
 #endif
-
-int mathutils_deepcopy_args_check(PyObject *args);
 
 #endif /* __MATHUTILS_H__ */

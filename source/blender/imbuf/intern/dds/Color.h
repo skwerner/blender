@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributors: Amorilia (amorilia@users.sourceforge.net)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/dds/Color.h
- *  \ingroup imbdds
+/** \file
+ * \ingroup imbdds
  */
 
 
@@ -69,7 +63,7 @@ public:
 	operator unsigned int () const {
 		return u;
 	}
-	
+
 	union {
 		struct {
 			unsigned char b, g, r, a;
@@ -85,7 +79,7 @@ public:
 	Color16() { }
 	Color16(const Color16 & c) : u(c.u) { }
 	explicit Color16(unsigned short U) : u(U) { }
-	
+
 	union {
 		struct {
 			unsigned short b : 5;

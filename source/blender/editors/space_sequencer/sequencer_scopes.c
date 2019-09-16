@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,13 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Author: Peter Schlaile < peter [at] schlaile [dot] de >
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/editors/space_sequencer/sequencer_scopes.c
- *  \ingroup spseq
+/** \file
+ * \ingroup spseq
  */
 
 
@@ -160,7 +155,7 @@ static ImBuf *make_waveform_view_from_ibuf_byte(ImBuf *ibuf)
 
 	wform_put_grid(tgt, w, h);
 	wform_put_border(tgt, w, h);
-	
+
 	for (x = 0; x < 256; x++) {
 		wtable[x] = (unsigned char) (pow(((float) x + 1) / 256, waveform_gamma) * 255);
 	}
@@ -229,7 +224,7 @@ static ImBuf *make_waveform_view_from_ibuf_float(ImBuf *ibuf)
 	}
 
 	wform_put_border(tgt, w, h);
-	
+
 	return rval;
 }
 
@@ -285,7 +280,7 @@ static ImBuf *make_sep_waveform_view_from_ibuf_byte(ImBuf *ibuf)
 	}
 
 	wform_put_border(tgt, w, h);
-	
+
 	return rval;
 }
 
@@ -334,7 +329,7 @@ static ImBuf *make_sep_waveform_view_from_ibuf_float(ImBuf *ibuf)
 	}
 
 	wform_put_border(tgt, w, h);
-	
+
 	return rval;
 }
 
@@ -402,10 +397,10 @@ static void draw_zebra_float(ImBuf *src, ImBuf *ibuf, float perc)
 				}
 			}
 
-			*o++ = FTOCHAR(r);
-			*o++ = FTOCHAR(g);
-			*o++ = FTOCHAR(b);
-			*o++ = FTOCHAR(a);
+			*o++ = unit_float_to_uchar_clamp(r);
+			*o++ = unit_float_to_uchar_clamp(g);
+			*o++ = unit_float_to_uchar_clamp(b);
+			*o++ = unit_float_to_uchar_clamp(a);
 		}
 	}
 }
@@ -503,7 +498,7 @@ static ImBuf *make_histogram_view_from_ibuf_byte(ImBuf *ibuf)
 
 	memset(bins, 0, sizeof(bins));
 
-	MakeHistogramViewData data = {.ibuf = ibuf, .bins = bins};
+	MakeHistogramViewData data = { .ibuf = ibuf, .bins = bins, };
 	ParallelRangeSettings settings;
 	BLI_parallel_range_settings_defaults(&settings);
 	settings.use_threading = (ibuf->y >= 256);
@@ -518,12 +513,15 @@ static ImBuf *make_histogram_view_from_ibuf_byte(ImBuf *ibuf)
 
 	nr = nb = ng = 0;
 	for (x = 0; x < HIS_STEPS; x++) {
-		if (bins[0][x] > nr)
+		if (bins[0][x] > nr) {
 			nr = bins[0][x];
-		if (bins[1][x] > ng)
+		}
+		if (bins[1][x] > ng) {
 			ng = bins[1][x];
-		if (bins[2][x] > nb)
+		}
+		if (bins[2][x] > nb) {
 			nb = bins[2][x];
+		}
 	}
 
 	for (x = 0; x < HIS_STEPS; x++) {
@@ -542,7 +540,7 @@ static ImBuf *make_histogram_view_from_ibuf_byte(ImBuf *ibuf)
 	}
 
 	wform_put_border((unsigned char *) rval->rect, rval->x, rval->y);
-	
+
 	return rval;
 }
 
@@ -588,7 +586,7 @@ static ImBuf *make_histogram_view_from_ibuf_float(ImBuf *ibuf)
 
 	memset(bins, 0, sizeof(bins));
 
-	MakeHistogramViewData data = {.ibuf = ibuf, .bins = bins};
+	MakeHistogramViewData data = { .ibuf = ibuf, .bins = bins, };
 	ParallelRangeSettings settings;
 	BLI_parallel_range_settings_defaults(&settings);
 	settings.use_threading = (ibuf->y >= 256);
@@ -603,14 +601,17 @@ static ImBuf *make_histogram_view_from_ibuf_float(ImBuf *ibuf)
 
 	nr = nb = ng = 0;
 	for (x = 0; x < HIS_STEPS; x++) {
-		if (bins[0][x] > nr)
+		if (bins[0][x] > nr) {
 			nr = bins[0][x];
-		if (bins[1][x] > ng)
+		}
+		if (bins[1][x] > ng) {
 			ng = bins[1][x];
-		if (bins[2][x] > nb)
+		}
+		if (bins[2][x] > nb) {
 			nb = bins[2][x];
+		}
 	}
-	
+
 	for (x = 0; x < HIS_STEPS; x++) {
 		if (nr) {
 			draw_histogram_bar(rval, x + 1, ((float) bins[0][x]) / nr, 0);
@@ -622,11 +623,11 @@ static ImBuf *make_histogram_view_from_ibuf_float(ImBuf *ibuf)
 			draw_histogram_bar(rval, x + 1, ((float) bins[2][x]) / nb, 2);
 		}
 	}
-	
+
 	draw_histogram_marker(rval, get_bin_float(0.0));
 	draw_histogram_marker(rval, get_bin_float(1.0));
 	wform_put_border((unsigned char *) rval->rect, rval->x, rval->y);
-	
+
 	return rval;
 }
 
@@ -653,7 +654,7 @@ static void vectorscope_put_cross(unsigned char r, unsigned char g,  unsigned ch
 	rgb[1] = (float)g / 255.0f;
 	rgb[2] = (float)b / 255.0f;
 	rgb_to_yuv_normalized(rgb, yuv);
-			
+
 	p = tgt + 4 * (w * (int) ((yuv[2] * (h - 3) + 1)) +
 	                   (int) ((yuv[1] * (w - 3) + 1)));
 
@@ -698,12 +699,12 @@ static ImBuf *make_vectorscope_view_from_ibuf_byte(ImBuf *ibuf)
 		for (x = 0; x < ibuf->x; x++) {
 			const char *src1 = src + 4 * (ibuf->x * y + x);
 			char *p;
-			
+
 			rgb[0] = (float)src1[0] / 255.0f;
 			rgb[1] = (float)src1[1] / 255.0f;
 			rgb[2] = (float)src1[2] / 255.0f;
 			rgb_to_yuv_normalized(rgb, yuv);
-			
+
 			p = tgt + 4 * (w * (int) ((yuv[2] * (h - 3) + 1)) +
 			                   (int) ((yuv[1] * (w - 3) + 1)));
 			scope_put_pixel(wtable, (unsigned char *)p);
@@ -744,7 +745,7 @@ static ImBuf *make_vectorscope_view_from_ibuf_float(ImBuf *ibuf)
 		for (x = 0; x < ibuf->x; x++) {
 			const float *src1 = src + 4 * (ibuf->x * y + x);
 			const char *p;
-			
+
 			memcpy(rgb, src1, 3 * sizeof(float));
 
 			CLAMP(rgb[0], 0.0f, 1.0f);
@@ -752,7 +753,7 @@ static ImBuf *make_vectorscope_view_from_ibuf_float(ImBuf *ibuf)
 			CLAMP(rgb[2], 0.0f, 1.0f);
 
 			rgb_to_yuv_normalized(rgb, yuv);
-			
+
 			p = tgt + 4 * (w * (int) ((yuv[2] * (h - 3) + 1)) +
 			                   (int) ((yuv[1] * (w - 3) + 1)));
 			scope_put_pixel(wtable, (unsigned char *)p);

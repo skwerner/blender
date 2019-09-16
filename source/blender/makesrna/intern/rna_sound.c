@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton, Roland Hess
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_sound.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 
@@ -32,7 +26,6 @@
 #include "rna_internal.h"
 
 #include "DNA_sound_types.h"
-#include "DNA_property_types.h"
 
 #ifdef RNA_RUNTIME
 
@@ -45,13 +38,13 @@ static void rna_Sound_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 	BKE_sound_load(bmain, (bSound *)ptr->data);
 }
 
-static int rna_Sound_caching_get(PointerRNA *ptr)
+static bool rna_Sound_caching_get(PointerRNA *ptr)
 {
 	bSound *sound = (bSound *)(ptr->data);
 	return (sound->flags & SOUND_FLAGS_CACHING) != 0;
 }
 
-static void rna_Sound_caching_set(PointerRNA *ptr, const int value)
+static void rna_Sound_caching_set(PointerRNA *ptr, const bool value)
 {
 	bSound *sound = (bSound *)(ptr->data);
 	if (value)

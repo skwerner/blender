@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/BPy_UnaryPredicate1D.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BPy_UnaryPredicate1D.h"
@@ -161,9 +157,9 @@ static PyObject *UnaryPredicate1D___call__(BPy_UnaryPredicate1D *self, PyObject 
 
 	if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!", (char **)kwlist, &Interface1D_Type, &py_if1D))
 		return NULL;
-	
+
 	Interface1D *if1D = ((BPy_Interface1D *)py_if1D)->if1D;
-	
+
 	if (!if1D) {
 		string class_name(Py_TYPE(self)->tp_name);
 		PyErr_SetString(PyExc_RuntimeError, (class_name + " has no Interface1D").c_str());

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
- 
+
 #ifndef __BLI_SMALLHASH_H__
 #define __BLI_SMALLHASH_H__
 
-/** \file BLI_smallhash.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include "BLI_compiler_attrs.h"
@@ -66,7 +58,7 @@ bool    BLI_smallhash_remove(SmallHash *sh, uintptr_t key) ATTR_NONNULL(1);
 void   *BLI_smallhash_lookup(const SmallHash *sh, uintptr_t key) ATTR_NONNULL(1) ATTR_WARN_UNUSED_RESULT;
 void  **BLI_smallhash_lookup_p(const SmallHash *sh, uintptr_t key) ATTR_NONNULL(1) ATTR_WARN_UNUSED_RESULT;
 bool    BLI_smallhash_haskey(const SmallHash *sh, uintptr_t key) ATTR_NONNULL(1);
-int     BLI_smallhash_count(const SmallHash *sh)  ATTR_NONNULL(1);
+int     BLI_smallhash_len(const SmallHash *sh)  ATTR_NONNULL(1);
 void   *BLI_smallhash_iternext(SmallHashIter *iter, uintptr_t *key)  ATTR_NONNULL(1) ATTR_WARN_UNUSED_RESULT;
 void  **BLI_smallhash_iternext_p(SmallHashIter *iter, uintptr_t *key)  ATTR_NONNULL(1) ATTR_WARN_UNUSED_RESULT;
 void   *BLI_smallhash_iternew(const SmallHash *sh, SmallHashIter *iter, uintptr_t *key) ATTR_NONNULL(1) ATTR_WARN_UNUSED_RESULT;

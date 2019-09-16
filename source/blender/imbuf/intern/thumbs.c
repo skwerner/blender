@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Andrea Weikert.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/thumbs.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 #include <stdio.h>
@@ -44,9 +36,9 @@
 #include "BLI_threads.h"
 #include BLI_SYSTEM_PID_H
 
-#include "BLO_readfile.h"
-
 #include "DNA_space_types.h"  /* For FILE_MAX_LIBEXTRA */
+
+#include "BLO_readfile.h"
 
 #include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
@@ -61,12 +53,15 @@
 #include <stdio.h>
 
 #ifdef WIN32
-#  include <windows.h> /* need to include windows.h so _WIN32_IE is defined  */
+   /* Need to include windows.h so _WIN32_IE is defined. */
+#  include <windows.h>
 #  ifndef _WIN32_IE
-#    define _WIN32_IE 0x0400 /* minimal requirements for SHGetSpecialFolderPath on MINGW MSVC has this defined already */
+     /* Minimal requirements for SHGetSpecialFolderPath on MINGW MSVC has this defined already. */
+#    define _WIN32_IE 0x0400
 #  endif
-#  include <shlobj.h>  /* for SHGetSpecialFolderPath, has to be done before BLI_winstuff
-                        * because 'near' is disabled through BLI_windstuff */
+   /* For SHGetSpecialFolderPath, has to be done before BLI_winstuff
+    * because 'near' is disabled through BLI_windstuff */
+#  include <shlobj.h>
 #  include <direct.h> /* chdir */
 #  include "BLI_winstuff.h"
 #  include "utfconv.h"
@@ -99,10 +94,10 @@ static bool get_thumb_dir(char *dir, ThumbSize size)
 	s += strlen(dir);
 #else
 #if defined(USE_FREEDESKTOP)
-	const char *home_cache = getenv("XDG_CACHE_HOME");
-	const char *home = home_cache ? home_cache : getenv("HOME");
+	const char *home_cache = BLI_getenv("XDG_CACHE_HOME");
+	const char *home = home_cache ? home_cache : BLI_getenv("HOME");
 #else
-	const char *home = getenv("HOME");
+	const char *home = BLI_getenv("HOME");
 #endif
 	if (!home) return 0;
 	s += BLI_strncpy_rlen(s, home, FILE_MAX);
@@ -146,7 +141,7 @@ typedef enum {
 	UNSAFE_ALLOW_PLUS = 0x2, /* Allows '+'  */
 	UNSAFE_PATH       = 0x8, /* Allows '/', '&', '=', ':', '@', '+', '$' and ',' */
 	UNSAFE_HOST       = 0x10, /* Allows '/' and ':' and '@' */
-	UNSAFE_SLASHES    = 0x20 /* Allows all characters except for '/' and '%' */
+	UNSAFE_SLASHES    = 0x20, /* Allows all characters except for '/' and '%' */
 } UnsafeCharacterSet;
 
 static const unsigned char acceptable[96] = {
@@ -162,7 +157,7 @@ static const unsigned char acceptable[96] = {
 	/* `    a    b    c    d    e    f    g    h    i    j    k    l    m    n    o */
 	0x20,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,
 	/* p    q    r    s    t    u    v    w    x    y    z    {    |    }    ~  DEL */
-	0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x20,0x20,0x20,0x3F,0x20
+	0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x20,0x20,0x20,0x3F,0x20,
 };
 
 static const char hex[17] = "0123456789abcdef";
@@ -223,7 +218,7 @@ static bool uri_from_filename(const char *path, char *uri)
 {
 	char orig_uri[URI_MAX];
 	const char *dirstart = path;
-	
+
 #ifdef WIN32
 	{
 		char vol[3];
@@ -362,7 +357,7 @@ static ImBuf *thumb_create_ex(
 		}
 		else {
 			if (ELEM(source, THB_SOURCE_IMAGE, THB_SOURCE_BLEND, THB_SOURCE_FONT)) {
-				/* only load if we didnt give an image */
+				/* only load if we didn't give an image */
 				if (img == NULL) {
 					switch (source) {
 						case THB_SOURCE_IMAGE:
@@ -430,16 +425,17 @@ static ImBuf *thumb_create_ex(
 			IMB_scaleImBuf(img, ex, ey);
 		}
 		BLI_snprintf(desc, sizeof(desc), "Thumbnail for %s", uri);
-		IMB_metadata_change_field(img, "Description", desc);
-		IMB_metadata_change_field(img, "Software", "Blender");
-		IMB_metadata_change_field(img, "Thumb::URI", uri);
-		IMB_metadata_change_field(img, "Thumb::MTime", mtime);
+		IMB_metadata_ensure(&img->metadata);
+		IMB_metadata_set_field(img->metadata, "Software", "Blender");
+		IMB_metadata_set_field(img->metadata, "Thumb::URI", uri);
+		IMB_metadata_set_field(img->metadata, "Description", desc);
+		IMB_metadata_set_field(img->metadata, "Thumb::MTime", mtime);
 		if (use_hash) {
-			IMB_metadata_change_field(img, "X-Blender::Hash", hash);
+			IMB_metadata_set_field(img->metadata, "X-Blender::Hash", hash);
 		}
 		if (ELEM(source, THB_SOURCE_IMAGE, THB_SOURCE_BLEND, THB_SOURCE_FONT)) {
-			IMB_metadata_change_field(img, "Thumb::Image::Width", cwidth);
-			IMB_metadata_change_field(img, "Thumb::Image::Height", cheight);
+			IMB_metadata_set_field(img->metadata, "Thumb::Image::Width", cwidth);
+			IMB_metadata_set_field(img->metadata, "Thumb::Image::Height", cheight);
 		}
 		img->ftype = IMB_FTYPE_PNG;
 		img->planes = 32;
@@ -589,7 +585,7 @@ ImBuf *IMB_thumb_manage(const char *org_path, ThumbSize size, ThumbSource source
 
 				const bool use_hash = thumbhash_from_path(file_path, source, thumb_hash);
 
-				if (IMB_metadata_get_field(img, "Thumb::MTime", mtime, sizeof(mtime))) {
+				if (IMB_metadata_get_field(img->metadata, "Thumb::MTime", mtime, sizeof(mtime))) {
 					regenerate = (st.st_mtime != atol(mtime));
 				}
 				else {
@@ -598,7 +594,7 @@ ImBuf *IMB_thumb_manage(const char *org_path, ThumbSize size, ThumbSource source
 				}
 
 				if (use_hash && !regenerate) {
-					if (IMB_metadata_get_field(img, "X-Blender::Hash", thumb_hash_curr, sizeof(thumb_hash_curr))) {
+					if (IMB_metadata_get_field(img->metadata, "X-Blender::Hash", thumb_hash_curr, sizeof(thumb_hash_curr))) {
 						regenerate = !STREQ(thumb_hash, thumb_hash_curr);
 					}
 					else {
@@ -652,7 +648,7 @@ static struct IMBThumbLocks {
 
 void IMB_thumb_locks_acquire(void)
 {
-	BLI_lock_thread(LOCK_IMAGE);
+	BLI_thread_lock(LOCK_IMAGE);
 
 	if (thumb_locks.lock_counter == 0) {
 		BLI_assert(thumb_locks.locked_paths == NULL);
@@ -663,12 +659,12 @@ void IMB_thumb_locks_acquire(void)
 
 	BLI_assert(thumb_locks.locked_paths != NULL);
 	BLI_assert(thumb_locks.lock_counter > 0);
-	BLI_unlock_thread(LOCK_IMAGE);
+	BLI_thread_unlock(LOCK_IMAGE);
 }
 
 void IMB_thumb_locks_release(void)
 {
-	BLI_lock_thread(LOCK_IMAGE);
+	BLI_thread_lock(LOCK_IMAGE);
 	BLI_assert((thumb_locks.locked_paths != NULL) && (thumb_locks.lock_counter > 0));
 
 	thumb_locks.lock_counter--;
@@ -678,14 +674,14 @@ void IMB_thumb_locks_release(void)
 		BLI_condition_end(&thumb_locks.cond);
 	}
 
-	BLI_unlock_thread(LOCK_IMAGE);
+	BLI_thread_unlock(LOCK_IMAGE);
 }
 
 void IMB_thumb_path_lock(const char *path)
 {
 	void *key = BLI_strdup(path);
 
-	BLI_lock_thread(LOCK_IMAGE);
+	BLI_thread_lock(LOCK_IMAGE);
 	BLI_assert((thumb_locks.locked_paths != NULL) && (thumb_locks.lock_counter > 0));
 
 	if (thumb_locks.locked_paths) {
@@ -694,14 +690,14 @@ void IMB_thumb_path_lock(const char *path)
 		}
 	}
 
-	BLI_unlock_thread(LOCK_IMAGE);
+	BLI_thread_unlock(LOCK_IMAGE);
 }
 
 void IMB_thumb_path_unlock(const char *path)
 {
 	const void *key = path;
 
-	BLI_lock_thread(LOCK_IMAGE);
+	BLI_thread_lock(LOCK_IMAGE);
 	BLI_assert((thumb_locks.locked_paths != NULL) && (thumb_locks.lock_counter > 0));
 
 	if (thumb_locks.locked_paths) {
@@ -711,5 +707,5 @@ void IMB_thumb_path_unlock(const char *path)
 		BLI_condition_notify_all(&thumb_locks.cond);
 	}
 
-	BLI_unlock_thread(LOCK_IMAGE);
+	BLI_thread_unlock(LOCK_IMAGE);
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2003-2009, Antony Riakiotakis
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_sequencer/sequencer_preview.c
- *  \ingroup spseq
+/** \file
+ * \ingroup spseq
  */
 
 #include "DNA_sequence_types.h"
@@ -80,11 +74,11 @@ static void preview_startjob(void *data, short *stop, short *do_update, float *p
 	BLI_mutex_lock(pj->mutex);
 	previewjb = pj->previews.first;
 	BLI_mutex_unlock(pj->mutex);
-	
+
 	while (previewjb) {
 		PreviewJobAudio *preview_next;
 		bSound *sound = previewjb->sound;
-		
+
 		BKE_sound_read_waveform(sound, stop);
 
 		if (*stop || G.is_break) {
@@ -96,14 +90,14 @@ static void preview_startjob(void *data, short *stop, short *do_update, float *p
 
 				/* make sure we cleanup the loading flag! */
 				BLI_spin_lock(sound->spinlock);
-				sound->flags &= ~SOUND_FLAGS_WAVEFORM_LOADING;
+				sound->tags &= ~SOUND_TAGS_WAVEFORM_LOADING;
 				BLI_spin_unlock(sound->spinlock);
-				
+
 				BLI_mutex_lock(pj->mutex);
 				previewjb = previewjb->next;
 				BLI_mutex_unlock(pj->mutex);
 			}
-			
+
 			BLI_mutex_lock(pj->mutex);
 			BLI_freelistN(&pj->previews);
 			pj->total = 0;
@@ -111,12 +105,12 @@ static void preview_startjob(void *data, short *stop, short *do_update, float *p
 			BLI_mutex_unlock(pj->mutex);
 			break;
 		}
-		
+
 		BLI_mutex_lock(pj->mutex);
 		preview_next = previewjb->next;
 		BLI_freelinkN(&pj->previews, previewjb);
 		previewjb = preview_next;
-		pj->processed++;		
+		pj->processed++;
 		*progress = (pj->total > 0) ? (float)pj->processed / (float)pj->total : 1.0f;
 		*do_update = true;
 		BLI_mutex_unlock(pj->mutex);
@@ -145,19 +139,19 @@ void sequencer_preview_add_sound(const bContext *C, Sequence *seq)
 
 	if (!pj) {
 		pj = MEM_callocN(sizeof(PreviewJob), "preview rebuild job");
-	
+
 		pj->mutex = BLI_mutex_alloc();
 		pj->scene = CTX_data_scene(C);
-		
+
 		WM_jobs_customdata_set(wm_job, pj, free_preview_job);
 		WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_SEQUENCER, NC_SCENE | ND_SEQUENCER);
 		WM_jobs_callbacks(wm_job, preview_startjob, NULL, NULL, preview_endjob);
 	}
-	
+
 	/* attempt to lock mutex of job here */
-		
+
 	audiojob->sound = seq->sound;
-	
+
 	BLI_mutex_lock(pj->mutex);
 	BLI_addtail(&pj->previews, audiojob);
 	pj->total++;
@@ -168,5 +162,5 @@ void sequencer_preview_add_sound(const bContext *C, Sequence *seq)
 		WM_jobs_start(CTX_wm_manager(C), wm_job);
 	}
 
-	ED_area_tag_redraw(sa);	
+	ED_area_tag_redraw(sa);
 }

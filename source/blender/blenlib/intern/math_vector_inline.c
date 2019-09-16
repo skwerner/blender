@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,11 +18,10 @@
  *
  * The Original Code is: some of this file.
  *
- * ***** END GPL LICENSE BLOCK *****
  * */
 
-/** \file blender/blenlib/intern/math_vector_inline.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifndef __MATH_VECTOR_INLINE_C__
@@ -66,6 +63,13 @@ MINLINE void copy_v3_v3(float r[3], const float a[3])
 	r[0] = a[0];
 	r[1] = a[1];
 	r[2] = a[2];
+}
+
+MINLINE void copy_v3fl_v3s(float r[3], const short a[3])
+{
+	r[0] = (float)a[0];
+	r[1] = (float)a[1];
+	r[2] = (float)a[2];
 }
 
 MINLINE void copy_v4_v4(float r[4], const float a[4])
@@ -142,12 +146,6 @@ MINLINE void copy_v4_v4_char(char r[4], const char a[4])
 }
 
 /* short */
-MINLINE void zero_v3_int(int r[3])
-{
-	r[0] = 0;
-	r[1] = 0;
-	r[2] = 0;
-}
 
 MINLINE void copy_v2_v2_short(short r[2], const short a[2])
 {
@@ -171,6 +169,13 @@ MINLINE void copy_v4_v4_short(short r[4], const short a[4])
 }
 
 /* int */
+MINLINE void zero_v3_int(int r[3])
+{
+	r[0] = 0;
+	r[1] = 0;
+	r[2] = 0;
+}
+
 MINLINE void copy_v2_v2_int(int r[2], const int a[2])
 {
 	r[0] = a[0];
@@ -190,6 +195,48 @@ MINLINE void copy_v4_v4_int(int r[4], const int a[4])
 	r[1] = a[1];
 	r[2] = a[2];
 	r[3] = a[3];
+}
+
+/* double */
+MINLINE void zero_v3_db(double r[3])
+{
+	r[0] = 0.0;
+	r[1] = 0.0;
+	r[2] = 0.0;
+}
+
+MINLINE void copy_v2_v2_db(double r[2], const double a[2])
+{
+	r[0] = a[0];
+	r[1] = a[1];
+}
+
+MINLINE void copy_v3_v3_db(double r[3], const double a[3])
+{
+	r[0] = a[0];
+	r[1] = a[1];
+	r[2] = a[2];
+}
+
+MINLINE void copy_v4_v4_db(double r[4], const double a[4])
+{
+	r[0] = a[0];
+	r[1] = a[1];
+	r[2] = a[2];
+	r[3] = a[3];
+}
+
+/* int <-> float */
+MINLINE void round_v2i_v2fl(int r[2], const float a[2])
+{
+	r[0] = (int)roundf(a[0]);
+	r[1] = (int)roundf(a[1]);
+}
+
+MINLINE void copy_v2fl_v2i(float r[2], const int a[2])
+{
+	r[0] = (float)a[0];
+	r[1] = (float)a[1];
 }
 
 /* double -> float */
@@ -335,6 +382,20 @@ MINLINE void add_v3_v3v3(float r[3], const float a[3], const float b[3])
 	r[2] = a[2] + b[2];
 }
 
+MINLINE void add_v3fl_v3fl_v3i(float r[3], const float a[3], const int b[3])
+{
+	r[0] = a[0] + (float)b[0];
+	r[1] = a[1] + (float)b[1];
+	r[2] = a[2] + (float)b[2];
+}
+
+MINLINE void add_v3fl_v3fl_v3s(float r[3], const float a[3], const short b[3])
+{
+	r[0] = a[0] + (float)b[0];
+	r[1] = a[1] + (float)b[1];
+	r[2] = a[2] + (float)b[2];
+}
+
 MINLINE void add_v4_v4(float r[4], const float a[4])
 {
 	r[0] += a[0];
@@ -381,6 +442,20 @@ MINLINE void sub_v3_v3v3(float r[3], const float a[3], const float b[3])
 	r[0] = a[0] - b[0];
 	r[1] = a[1] - b[1];
 	r[2] = a[2] - b[2];
+}
+
+MINLINE void sub_v3_v3v3_int(int r[3], const int a[3], const int b[3])
+{
+	r[0] = a[0] - b[0];
+	r[1] = a[1] - b[1];
+	r[2] = a[2] - b[2];
+}
+
+MINLINE void sub_v3db_v3fl_v3fl(double r[3], const float a[3], const float b[3])
+{
+	r[0] = (double)a[0] - (double)b[0];
+	r[1] = (double)a[1] - (double)b[1];
+	r[2] = (double)a[2] - (double)b[2];
 }
 
 MINLINE void sub_v4_v4(float r[4], const float a[4])
@@ -446,6 +521,14 @@ MINLINE void mul_v4_fl(float r[4], float f)
 	r[3] *= f;
 }
 
+MINLINE void mul_v4_v4(float r[4], const float a[4])
+{
+	r[0] *= a[0];
+	r[1] *= a[1];
+	r[2] *= a[2];
+	r[3] *= a[3];
+}
+
 MINLINE void mul_v4_v4fl(float r[4], const float a[4], float f)
 {
 	r[0] = a[0] * f;
@@ -491,7 +574,7 @@ MINLINE void mul_v2_v2_ccw(float r[2], const float mat[2], const float vec[2])
  * return co_4d[3];
  * \endcode
  */
-MINLINE float mul_project_m4_v3_zfac(float mat[4][4], const float co[3])
+MINLINE float mul_project_m4_v3_zfac(const float mat[4][4], const float co[3])
 {
 	return (mat[0][3] * co[0]) +
 	       (mat[1][3] * co[1]) +
@@ -501,15 +584,15 @@ MINLINE float mul_project_m4_v3_zfac(float mat[4][4], const float co[3])
 /**
  * Has the effect of #mul_m3_v3(), on a single axis.
  */
-MINLINE float dot_m3_v3_row_x(float M[3][3], const float a[3])
+MINLINE float dot_m3_v3_row_x(const float M[3][3], const float a[3])
 {
 	return M[0][0] * a[0] + M[1][0] * a[1] + M[2][0] * a[2];
 }
-MINLINE float dot_m3_v3_row_y(float M[3][3], const float a[3])
+MINLINE float dot_m3_v3_row_y(const float M[3][3], const float a[3])
 {
 	return M[0][1] * a[0] + M[1][1] * a[1] + M[2][1] * a[2];
 }
-MINLINE float dot_m3_v3_row_z(float M[3][3], const float a[3])
+MINLINE float dot_m3_v3_row_z(const float M[3][3], const float a[3])
 {
 	return M[0][2] * a[0] + M[1][2] * a[1] + M[2][2] * a[2];
 }
@@ -518,15 +601,15 @@ MINLINE float dot_m3_v3_row_z(float M[3][3], const float a[3])
  * Has the effect of #mul_mat3_m4_v3(), on a single axis.
  * (no adding translation)
  */
-MINLINE float dot_m4_v3_row_x(float M[4][4], const float a[3])
+MINLINE float dot_m4_v3_row_x(const float M[4][4], const float a[3])
 {
 	return M[0][0] * a[0] + M[1][0] * a[1] + M[2][0] * a[2];
 }
-MINLINE float dot_m4_v3_row_y(float M[4][4], const float a[3])
+MINLINE float dot_m4_v3_row_y(const float M[4][4], const float a[3])
 {
 	return M[0][1] * a[0] + M[1][1] * a[1] + M[2][1] * a[2];
 }
-MINLINE float dot_m4_v3_row_z(float M[4][4], const float a[3])
+MINLINE float dot_m4_v3_row_z(const float M[4][4], const float a[3])
 {
 	return M[0][2] * a[0] + M[1][2] * a[1] + M[2][2] * a[2];
 }
@@ -571,6 +654,13 @@ MINLINE void madd_v3_v3v3v3(float r[3], const float a[3], const float b[3], cons
 	r[2] = a[2] + b[2] * c[2];
 }
 
+MINLINE void madd_v3fl_v3fl_v3fl_v3i(float r[3], const float a[3], const float b[3], const int c[3])
+{
+	r[0] = a[0] + b[0] * (float)c[0];
+	r[1] = a[1] + b[1] * (float)c[1];
+	r[2] = a[2] + b[2] * (float)c[2];
+}
+
 MINLINE void madd_v4_v4fl(float r[4], const float a[4], float f)
 {
 	r[0] += a[0] * f;
@@ -592,6 +682,12 @@ MINLINE void mul_v3_v3v3(float r[3], const float v1[3], const float v2[3])
 	r[0] = v1[0] * v2[0];
 	r[1] = v1[1] * v2[1];
 	r[2] = v1[2] * v2[2];
+}
+
+MINLINE void mul_v2_v2v2(float r[2], const float a[2], const float b[2])
+{
+	r[0] = a[0] * b[0];
+	r[1] = a[1] * b[1];
 }
 
 MINLINE void negate_v2(float r[2])
@@ -753,6 +849,16 @@ MINLINE void cross_v3_v3v3(float r[3], const float a[3], const float b[3])
 	r[2] = a[0] * b[1] - a[1] * b[0];
 }
 
+/* cross product suffers from severe precision loss when vectors are
+ * nearly parallel or opposite; doing the computation in double helps a lot */
+MINLINE void cross_v3_v3v3_hi_prec(float r[3], const float a[3], const float b[3])
+{
+	BLI_assert(r != a && r != b);
+	r[0] = (float)((double)a[1] * (double)b[2] - (double)a[2] * (double)b[1]);
+	r[1] = (float)((double)a[2] * (double)b[0] - (double)a[0] * (double)b[2]);
+	r[2] = (float)((double)a[0] * (double)b[1] - (double)a[1] * (double)b[0]);
+}
+
 /* Newell's Method */
 /* excuse this fairly specific function,
  * its used for polygon normals all over the place
@@ -844,6 +950,14 @@ MINLINE float len_squared_v3v3(const float a[3], const float b[3])
 
 	sub_v3_v3v3(d, b, a);
 	return dot_v3v3(d, d);
+}
+
+MINLINE float len_squared_v4v4(const float a[4], const float b[4])
+{
+	float d[4];
+
+	sub_v4_v4v4(d, b, a);
+	return dot_v4v4(d, d);
 }
 
 MINLINE float len_manhattan_v2v2(const float a[2], const float b[2])
@@ -988,6 +1102,15 @@ MINLINE void normal_float_to_short_v3(short out[3], const float in[3])
 	out[2] = (short) (in[2] * 32767.0f);
 }
 
+MINLINE void normal_float_to_short_v4(short out[4], const float in[4])
+{
+	out[0] = (short) (in[0] * 32767.0f);
+	out[1] = (short) (in[1] * 32767.0f);
+	out[2] = (short) (in[2] * 32767.0f);
+	out[3] = (short) (in[3] * 32767.0f);
+}
+
+
 /********************************* Comparison ********************************/
 
 
@@ -1077,24 +1200,9 @@ MINLINE bool compare_v4v4_relative(const float v1[4], const float v2[4], const f
 
 MINLINE bool compare_len_v3v3(const float v1[3], const float v2[3], const float limit)
 {
-	float x, y, z;
-
-	x = v1[0] - v2[0];
-	y = v1[1] - v2[1];
-	z = v1[2] - v2[2];
-
-	return ((x * x + y * y + z * z) <= (limit * limit));
-}
-
-MINLINE bool compare_len_squared_v3v3(const float v1[3], const float v2[3], const float limit_sq)
-{
-	float x, y, z;
-
-	x = v1[0] - v2[0];
-	y = v1[1] - v2[1];
-	z = v1[2] - v2[2];
-
-	return ((x * x + y * y + z * z) <= limit_sq);
+	float d[3];
+	sub_v3_v3v3(d, v1, v2);
+	return (dot_v3v3(d, d) <= (limit * limit));
 }
 
 /**

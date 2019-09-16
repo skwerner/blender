@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_DisplayManager.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_DisplayManager class.
  */
 
@@ -39,8 +31,6 @@
 
 /**
  * Manages system displays  (platform independent implementation).
- * \author	Maarten Gribnau
- * \date	September 21, 2001
  */
 class GHOST_DisplayManager
 {
@@ -50,7 +40,7 @@ public:
 	 * Constructor.
 	 */
 	GHOST_DisplayManager(void);
-	
+
 	/**
 	 * Destructor.
 	 */
@@ -79,7 +69,7 @@ public:
 	                                             GHOST_TInt32& numSettings) const;
 
 	/**
-	 * Returns the current setting for this display device. 
+	 * Returns the current setting for this display device.
 	 * \param display The index of the display to query with 0 <= display < getNumDisplays().
 	 * \param index	  The setting index to be returned.
 	 * \param setting The setting of the display device with this index.
@@ -90,7 +80,7 @@ public:
 	                                         GHOST_DisplaySetting& setting) const;
 
 	/**
-	 * Returns the current setting for this display device. 
+	 * Returns the current setting for this display device.
 	 * \param display The index of the display to query with 0 <= display < getNumDisplays().
 	 * \param setting The current setting of the display device with this index.
 	 * \return Indication of success.
@@ -128,7 +118,7 @@ protected:
 	 * \return Indication of success.
 	 */
 	GHOST_TSuccess initializeSettings(void);
-	
+
 	/** Tells whether the list of display modes has been stored already. */
 	bool m_settingsInitialized;
 	/** The list with display settings for the main display. */
@@ -142,4 +132,3 @@ protected:
 
 
 #endif // __GHOST_DISPLAYMANAGER_H__
-

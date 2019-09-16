@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/view_map/FEdgeXDetector.cpp
- *  \ingroup freestyle
- *  \brief Detects/flags/builds extended features edges on the WXEdge structure
- *  \author Stephane Grabli
- *  \date 26/10/2003
+/** \file
+ * \ingroup freestyle
+ * \brief Detects/flags/builds extended features edges on the WXEdge structure
  */
 
 #include <float.h>
@@ -193,7 +187,7 @@ void FEdgeXDetector::computeCurvatures(WXVertex *vertex)
 	Vec3r e1, n, v;
 	// one vertex curvature info :
 	CurvatureInfo *C;
-	float radius = _sphereRadius * _meanEdgeSize; 
+	float radius = _sphereRadius * _meanEdgeSize;
 
 	// view independent stuff
 	if (_computeViewIndependent) {
@@ -369,7 +363,7 @@ void FEdgeXDetector::processCreaseShape(WXShape *iWShape)
 	if (!_computeViewIndependent)
 		return;
 
-	// Make a pass on the edges to detect the CREASE 
+	// Make a pass on the edges to detect the CREASE
 	vector<WEdge*>::iterator we, weend;
 	vector<WEdge*> &wedges = iWShape->getEdgeList();
 	for (we = wedges.begin(), weend = wedges.end(); we != weend; ++we) {
@@ -573,7 +567,8 @@ void FEdgeXDetector::ProcessSuggestiveContourFace(WXFace *iFace)
 	real threshold = _meanKr;
 	if (faceLayer->nPosDotP()!=numVertices) {
 		if ((fabs(faceLayer->dotP(0)) < threshold) && (fabs(faceLayer->dotP(1)) < threshold) &&
-		    (fabs(faceLayer->dotP(2)) < threshold)) {
+		    (fabs(faceLayer->dotP(2)) < threshold))
+		{
 			faceLayer->ReplaceDotP(0, 0);
 			faceLayer->ReplaceDotP(1, 0);
 			faceLayer->ReplaceDotP(2, 0);

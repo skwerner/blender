@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 by Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Bastien Montagne.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_data_transfer.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 #include "DNA_mesh_types.h"
@@ -40,12 +32,14 @@
 
 #include "BKE_context.h"
 #include "BKE_data_transfer.h"
-#include "BKE_depsgraph.h"
-#include "BKE_DerivedMesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_remap.h"
+#include "BKE_mesh_runtime.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -69,7 +63,8 @@ static const EnumPropertyItem DT_layer_items[] = {
 #if 0  /* XXX For now, would like to finish/merge work from 2014 gsoc first. */
 	{DT_TYPE_SHAPEKEY, "SHAPEKEYS", 0, "Shapekey(s)", "Transfer active or all shape keys"},
 #endif
-#if 0  /* XXX When SkinModifier is enabled, it seems to erase its own CD_MVERT_SKIN layer from final DM :( */
+#if 0  /* XXX When SkinModifier is enabled,
+        * it seems to erase its own CD_MVERT_SKIN layer from final DM :( */
 	{DT_TYPE_SKIN, "SKIN", 0, "Skin Weight", "Transfer skin weights"},
 #endif
 	{DT_TYPE_BWEIGHT_VERT, "BEVEL_WEIGHT_VERT", 0, "Bevel Weight", "Transfer bevel weights"},
@@ -86,24 +81,34 @@ static const EnumPropertyItem DT_layer_items[] = {
 	{0, "", 0, "Face Data", ""},
 	{DT_TYPE_SHARP_FACE, "SMOOTH", 0, "Smooth", "Transfer flat/smooth mark"},
 	{DT_TYPE_FREESTYLE_FACE, "FREESTYLE_FACE", 0, "Freestyle Mark", "Transfer Freestyle face mark"},
-	{0, NULL, 0, NULL, NULL}
+	{0, NULL, 0, NULL, NULL},
 };
 
 /* Note: rna_enum_dt_layers_select_src_items enum is from rna_modifier.c */
 static const EnumPropertyItem *dt_layers_select_src_itemf(
         bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
 {
-	EnumPropertyItem *item = NULL, tmp_item = {0};
-	int totitem = 0;
-
-	const int data_type = RNA_enum_get(ptr, "data_type");
-
 	if (!C) {  /* needed for docs and i18n tools */
 		return rna_enum_dt_layers_select_src_items;
 	}
 
-	RNA_enum_items_add_value(&item, &totitem, rna_enum_dt_layers_select_src_items, DT_LAYERS_ACTIVE_SRC);
+	EnumPropertyItem *item = NULL, tmp_item = {0};
+	int totitem = 0;
+	const int data_type = RNA_enum_get(ptr, "data_type");
+
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
+
+	PropertyRNA *prop = RNA_struct_find_property(ptr, "use_reverse_transfer");
+	const bool reverse_transfer = prop != NULL &&  RNA_property_boolean_get(ptr, prop);
+	const int layers_select_dst = reverse_transfer ? RNA_enum_get(ptr, "layers_select_src") :
+	                                                 RNA_enum_get(ptr, "layers_select_dst");
+
+	if (!reverse_transfer || layers_select_dst == DT_LAYERS_ACTIVE_DST || layers_select_dst >= 0) {
+		RNA_enum_items_add_value(&item, &totitem, rna_enum_dt_layers_select_src_items, DT_LAYERS_ACTIVE_SRC);
+	}
 	RNA_enum_items_add_value(&item, &totitem, rna_enum_dt_layers_select_src_items, DT_LAYERS_ALL_SRC);
+
+
 
 	if (data_type == DT_TYPE_MDEFORMVERT) {
 		Object *ob_src = CTX_data_active_object(C);
@@ -131,46 +136,48 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(
 	}
 	else if (data_type == DT_TYPE_UV) {
 		Object *ob_src = CTX_data_active_object(C);
-		Scene *scene = CTX_data_scene(C);
 
 		if (ob_src) {
-			DerivedMesh *dm_src;
-			CustomData *pdata;
+			Mesh *me_eval;
 			int num_data, i;
 
-			/* XXX Is this OK? */
-			dm_src = mesh_get_derived_final(scene, ob_src, CD_MASK_BAREMESH | CD_MTEXPOLY);
-			pdata = dm_src->getPolyDataLayout(dm_src);
-			num_data = CustomData_number_of_layers(pdata, CD_MTEXPOLY);
+			Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+			Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
+
+			CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH;
+			cddata_masks.lmask |= CD_MASK_MLOOPUV;
+			me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_src_eval, &cddata_masks);
+			num_data = CustomData_number_of_layers(&me_eval->ldata, CD_MLOOPUV);
 
 			RNA_enum_item_add_separator(&item, &totitem);
 
 			for (i = 0; i < num_data; i++) {
 				tmp_item.value = i;
-				tmp_item.identifier = tmp_item.name = CustomData_get_layer_name(pdata, CD_MTEXPOLY, i);
+				tmp_item.identifier = tmp_item.name = CustomData_get_layer_name(&me_eval->ldata, CD_MLOOPUV, i);
 				RNA_enum_item_add(&item, &totitem, &tmp_item);
 			}
 		}
 	}
 	else if (data_type == DT_TYPE_VCOL) {
 		Object *ob_src = CTX_data_active_object(C);
-		Scene *scene = CTX_data_scene(C);
 
 		if (ob_src) {
-			DerivedMesh *dm_src;
-			CustomData *ldata;
+			Mesh *me_eval;
 			int num_data, i;
 
-			/* XXX Is this OK? */
-			dm_src = mesh_get_derived_final(scene, ob_src, CD_MASK_BAREMESH | CD_MLOOPCOL);
-			ldata = dm_src->getLoopDataLayout(dm_src);
-			num_data = CustomData_number_of_layers(ldata, CD_MLOOPCOL);
+			Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+			Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
+
+			CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH;
+			cddata_masks.lmask |= CD_MASK_MLOOPCOL;
+			me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_src_eval, &cddata_masks);
+			num_data = CustomData_number_of_layers(&me_eval->ldata, CD_MLOOPCOL);
 
 			RNA_enum_item_add_separator(&item, &totitem);
 
 			for (i = 0; i < num_data; i++) {
 				tmp_item.value = i;
-				tmp_item.identifier = tmp_item.name = CustomData_get_layer_name(ldata, CD_MLOOPCOL, i);
+				tmp_item.identifier = tmp_item.name = CustomData_get_layer_name(&me_eval->ldata, CD_MLOOPCOL, i);
 				RNA_enum_item_add(&item, &totitem, &tmp_item);
 			}
 		}
@@ -186,16 +193,19 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(
 static const EnumPropertyItem *dt_layers_select_dst_itemf(
         bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
 {
-	EnumPropertyItem *item = NULL;
-	int totitem = 0;
-
-	const int layers_select_src = RNA_enum_get(ptr, "layers_select_src");
-
 	if (!C) {  /* needed for docs and i18n tools */
 		return rna_enum_dt_layers_select_dst_items;
 	}
 
-	if (layers_select_src == DT_LAYERS_ACTIVE_SRC || layers_select_src >= 0) {
+	EnumPropertyItem *item = NULL;
+	int totitem = 0;
+
+	PropertyRNA *prop = RNA_struct_find_property(ptr, "use_reverse_transfer");
+	const bool reverse_transfer = prop != NULL &&  RNA_property_boolean_get(ptr, prop);
+	const int layers_select_src = reverse_transfer ? RNA_enum_get(ptr, "layers_select_dst") :
+	                                                 RNA_enum_get(ptr, "layers_select_src");
+
+	if (reverse_transfer || layers_select_src == DT_LAYERS_ACTIVE_SRC || layers_select_src >= 0) {
 		RNA_enum_items_add_value(&item, &totitem, rna_enum_dt_layers_select_dst_items, DT_LAYERS_ACTIVE_DST);
 	}
 	RNA_enum_items_add_value(&item, &totitem, rna_enum_dt_layers_select_dst_items, DT_LAYERS_NAME_DST);
@@ -331,7 +341,7 @@ static bool data_transfer_exec_is_object_valid(
 		return true;
 	}
 	else if (!ID_IS_LINKED(me)) {
-		/* Do not transfer apply operation more than once. */
+		/* Do not apply transfer operation more than once. */
 		/* XXX This is not nice regarding vgroups, which are half-Object data... :/ */
 		BKE_reportf(op->reports, RPT_WARNING,
 		            "Skipping object '%s', data '%s' has already been processed with a previous object",
@@ -342,8 +352,9 @@ static bool data_transfer_exec_is_object_valid(
 
 static int data_transfer_exec(bContext *C, wmOperator *op)
 {
-	Scene *scene = CTX_data_scene(C);
 	Object *ob_src = ED_object_active_context(C);
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
+	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 
 	ListBase ctx_objects;
 	CollectionPointerLink *ctx_ob_dst;
@@ -407,12 +418,15 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
 		}
 
 		if (data_transfer_exec_is_object_valid(op, ob_src, ob_dst, reverse_transfer)) {
+			Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
+
 			if (space_transform) {
-				BLI_SPACE_TRANSFORM_SETUP(space_transform, ob_dst, ob_src);
+				Object *ob_dst_eval = DEG_get_evaluated_object(depsgraph, ob_dst);
+				BLI_SPACE_TRANSFORM_SETUP(space_transform, ob_dst_eval, ob_src_eval);
 			}
 
 			if (BKE_object_data_transfer_mesh(
-			        scene, ob_src, ob_dst, data_type, use_create,
+			        depsgraph, scene_eval, ob_src_eval, ob_dst, data_type, use_create,
 			        map_vert_mode, map_edge_mode, map_loop_mode, map_poly_mode,
 			        space_transform, use_auto_transform,
 			        max_distance, ray_radius, islands_precision,
@@ -423,7 +437,7 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
 			}
 		}
 
-		DAG_id_tag_update(&ob_dst->id, OB_RECALC_DATA);
+		DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
 
 		if (reverse_transfer) {
 			SWAP(Object *, ob_src, ob_dst);
@@ -445,7 +459,7 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
 
 /* Used by both OBJECT_OT_data_transfer and OBJECT_OT_datalayout_transfer */
 /* Note this context poll is only really partial, it cannot check for all possible invalid cases. */
-static int data_transfer_poll(bContext *C)
+static bool data_transfer_poll(bContext *C)
 {
 	Object *ob = ED_object_active_context(C);
 	ID *data = (ob) ? ob->data : NULL;
@@ -453,8 +467,9 @@ static int data_transfer_poll(bContext *C)
 }
 
 /* Used by both OBJECT_OT_data_transfer and OBJECT_OT_datalayout_transfer */
-static bool data_transfer_draw_check_prop(PointerRNA *ptr, PropertyRNA *prop)
+static bool data_transfer_poll_property(const bContext *UNUSED(C), wmOperator *op, const PropertyRNA *prop)
 {
+	PointerRNA *ptr = op->ptr;
 	PropertyRNA *prop_other;
 
 	const char *prop_id = RNA_property_identifier(prop);
@@ -515,20 +530,7 @@ static bool data_transfer_draw_check_prop(PointerRNA *ptr, PropertyRNA *prop)
 	return true;
 }
 
-/* Used by both OBJECT_OT_data_transfer and OBJECT_OT_datalayout_transfer */
-static void data_transfer_ui(bContext *C, wmOperator *op)
-{
-	uiLayout *layout = op->layout;
-	wmWindowManager *wm = CTX_wm_manager(C);
-	PointerRNA ptr;
-
-	RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
-
-	/* Main auto-draw call */
-	uiDefAutoButsRNA(layout, &ptr, data_transfer_draw_check_prop, '\0');
-}
-
-/* transfers weight from active to selected */
+/* Transfer mesh data from active to selected objects. */
 void OBJECT_OT_data_transfer(wmOperatorType *ot)
 {
 	PropertyRNA *prop;
@@ -540,13 +542,13 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
 
 	/* API callbacks.*/
 	ot->poll = data_transfer_poll;
+	ot->poll_property = data_transfer_poll_property;
 	ot->invoke = WM_menu_invoke;
 	ot->exec = data_transfer_exec;
 	ot->check = data_transfer_check;
-	ot->ui = data_transfer_ui;
 
 	/* Flags.*/
-	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 
 	/* Properties.*/
 	prop = RNA_def_boolean(ot->srna, "use_reverse_transfer", false, "Reverse Transfer",
@@ -613,15 +615,16 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
  *       or as a DataTransfer modifier tool.
  */
 
-static int datalayout_transfer_poll(bContext *C)
+static bool datalayout_transfer_poll(bContext *C)
 {
 	return (edit_modifier_poll_generic(C, &RNA_DataTransferModifier, (1 << OB_MESH)) || data_transfer_poll(C));
 }
 
 static int datalayout_transfer_exec(bContext *C, wmOperator *op)
 {
-	Scene *scene = CTX_data_scene(C);
 	Object *ob_act = ED_object_active_context(C);
+	Depsgraph *depsgraph = CTX_data_depsgraph(C);
+	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 	DataTransferModifierData *dtmd;
 
 	dtmd = (DataTransferModifierData *)edit_modifier_property_get(op, ob_act, eModifierType_DataTransfer);
@@ -638,10 +641,12 @@ static int datalayout_transfer_exec(bContext *C, wmOperator *op)
 			return OPERATOR_CANCELLED;
 		}
 
-		BKE_object_data_transfer_layout(scene, ob_src, ob_dst, dtmd->data_types, use_delete,
+		Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
+
+		BKE_object_data_transfer_layout(depsgraph, scene_eval, ob_src_eval, ob_dst, dtmd->data_types, use_delete,
 		                                dtmd->layers_select_src, dtmd->layers_select_dst);
 
-		DAG_id_tag_update(&ob_dst->id, OB_RECALC_DATA);
+		DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
 	}
 	else {
 		Object *ob_src = ob_act;
@@ -663,16 +668,18 @@ static int datalayout_transfer_exec(bContext *C, wmOperator *op)
 			layers_select_dst[fromto_idx] = layers_dst;
 		}
 
+		Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
+
 		data_transfer_exec_preprocess_objects(C, op, ob_src, &ctx_objects, false);
 
 		for (ctx_ob_dst = ctx_objects.first; ctx_ob_dst; ctx_ob_dst = ctx_ob_dst->next) {
 			Object *ob_dst = ctx_ob_dst->ptr.data;
 			if (data_transfer_exec_is_object_valid(op, ob_src, ob_dst, false)) {
-				BKE_object_data_transfer_layout(scene, ob_src, ob_dst, data_type, use_delete,
+				BKE_object_data_transfer_layout(depsgraph, scene_eval, ob_src_eval, ob_dst, data_type, use_delete,
 				                                layers_select_src, layers_select_dst);
 			}
 
-			DAG_id_tag_update(&ob_dst->id, OB_RECALC_DATA);
+			DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
 		}
 
 		BLI_freelistN(&ctx_objects);
@@ -702,13 +709,13 @@ void OBJECT_OT_datalayout_transfer(wmOperatorType *ot)
 	ot->idname = "OBJECT_OT_datalayout_transfer";
 
 	ot->poll = datalayout_transfer_poll;
+	ot->poll_property = data_transfer_poll_property;
 	ot->invoke = datalayout_transfer_invoke;
 	ot->exec = datalayout_transfer_exec;
 	ot->check = data_transfer_check;
-	ot->ui = data_transfer_ui;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 
 	/* Properties.*/
 	edit_modifier_properties(ot);

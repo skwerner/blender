@@ -83,18 +83,20 @@ struct BlenderCamera {
 	Transform matrix;
 
 	float offscreen_dicing_scale;
+
+	int motion_steps;
 };
 
 static void blender_camera_init(BlenderCamera *bcam,
                                 BL::RenderSettings& b_render)
 {
-	memset(bcam, 0, sizeof(BlenderCamera));
+	memset((void *)bcam, 0, sizeof(BlenderCamera));
 
 	bcam->type = CAMERA_PERSPECTIVE;
 	bcam->zoom = 1.0f;
 	bcam->pixelaspect = make_float2(1.0f, 1.0f);
-	bcam->sensor_width = 32.0f;
-	bcam->sensor_height = 18.0f;
+	bcam->sensor_width = 36.0f;
+	bcam->sensor_height = 24.0f;
 	bcam->sensor_fit = BlenderCamera::AUTO;
 	bcam->shuttertime = 1.0f;
 	bcam->motion_position = Camera::MOTION_POSITION_CENTER;
@@ -122,7 +124,7 @@ static float blender_camera_focal_distance(BL::RenderEngine& b_engine,
 
 	if(!b_dof_object)
 		return b_camera.dof_distance();
-	
+
 	/* for dof object, return distance along camera Z direction */
 	BL::Array<float, 16> b_ob_matrix;
 	b_engine.camera_model_matrix(b_ob, bcam->use_spherical_stereo, b_ob_matrix);
@@ -227,9 +229,16 @@ static void blender_camera_from_object(BlenderCamera *bcam,
 		else
 			bcam->sensor_fit = BlenderCamera::VERTICAL;
 	}
-	else {
-		/* from lamp not implemented yet */
+	else if(b_ob_data.is_a(&RNA_Light)) {
+		/* Can also look through spot light. */
+		BL::SpotLight b_light(b_ob_data);
+		float lens = 16.0f / tanf(b_light.spot_size() * 0.5f);
+		if (lens > 0.0f) {
+			bcam->lens = lens;
+		}
 	}
+
+	bcam->motion_steps = object_motion_steps(b_ob, b_ob);
 }
 
 static Transform blender_camera_matrix(const Transform& tfm,
@@ -246,8 +255,7 @@ static Transform blender_camera_matrix(const Transform& tfm,
 			result = tfm *
 				make_transform(1.0f, 0.0f, 0.0f, 0.0f,
 				               0.0f, 0.0f, 1.0f, 0.0f,
-				               0.0f, 1.0f, 0.0f, 0.0f,
-				               0.0f, 0.0f, 0.0f, 1.0f);
+				               0.0f, 1.0f, 0.0f, 0.0f);
 		}
 		else {
 			/* Make it so environment camera needs to be pointed in the direction
@@ -257,8 +265,7 @@ static Transform blender_camera_matrix(const Transform& tfm,
 			result = tfm *
 				make_transform( 0.0f, -1.0f, 0.0f, 0.0f,
 				                0.0f,  0.0f, 1.0f, 0.0f,
-				               -1.0f,  0.0f, 0.0f, 0.0f,
-				                0.0f,  0.0f, 0.0f, 1.0f);
+				               -1.0f,  0.0f, 0.0f, 0.0f);
 		}
 	}
 	else {
@@ -455,9 +462,8 @@ static void blender_camera_sync(Camera *cam,
 	cam->matrix = blender_camera_matrix(bcam->matrix,
 	                                    bcam->type,
 	                                    bcam->panorama_type);
-	cam->motion.pre = cam->matrix;
-	cam->motion.post = cam->matrix;
-	cam->use_motion = false;
+	cam->motion.clear();
+	cam->motion.resize(bcam->motion_steps, cam->matrix);
 	cam->use_perspective_motion = false;
 	cam->shuttertime = bcam->shuttertime;
 	cam->fov_pre = cam->fov;
@@ -566,20 +572,15 @@ void BlenderSync::sync_camera_motion(BL::RenderSettings& b_render,
 	Transform tfm = get_transform(b_ob_matrix);
 	tfm = blender_camera_matrix(tfm, cam->type, cam->panorama_type);
 
-	if(tfm != cam->matrix) {
-		VLOG(1) << "Camera " << b_ob.name() << " motion detected.";
-		if(motion_time == 0.0f) {
-			/* When motion blur is not centered in frame, cam->matrix gets reset. */
-			cam->matrix = tfm;
-		}
-		else if(motion_time == -1.0f) {
-			cam->motion.pre = tfm;
-			cam->use_motion = true;
-		}
-		else if(motion_time == 1.0f) {
-			cam->motion.post = tfm;
-			cam->use_motion = true;
-		}
+	if(motion_time == 0.0f) {
+		/* When motion blur is not centered in frame, cam->matrix gets reset. */
+		cam->matrix = tfm;
+	}
+
+	/* Set transform in motion array. */
+	int motion_step = cam->motion_step(motion_time);
+	if(motion_step >= 0) {
+		cam->motion[motion_step] = tfm;
 	}
 
 	if(cam->type == CAMERA_PERSPECTIVE) {
@@ -647,7 +648,7 @@ static void blender_camera_from_view(BlenderCamera *bcam,
 
 	if(b_rv3d.view_perspective() == BL::RegionView3D::view_perspective_CAMERA) {
 		/* camera view */
-		BL::Object b_ob = (b_v3d.lock_camera_and_layers())? b_scene.camera(): b_v3d.camera();
+		BL::Object b_ob = (b_v3d.use_local_camera())? b_v3d.camera(): b_scene.camera();
 
 		if(b_ob) {
 			blender_camera_from_object(bcam, b_engine, b_ob, skip_panorama);
@@ -730,7 +731,7 @@ static void blender_camera_view_subset(BL::RenderEngine& b_engine,
 
 	blender_camera_viewplane(&cam_bcam, cam_bcam.full_width, cam_bcam.full_height,
 		&cam, &cam_aspect, &sensor_size);
-	
+
 	/* return */
 	*view_box = view * (1.0f/view_aspect);
 	*cam_box = cam * (1.0f/cam_aspect);
@@ -783,7 +784,7 @@ static void blender_camera_border(BlenderCamera *bcam,
 		return;
 	}
 
-	BL::Object b_ob = (b_v3d.lock_camera_and_layers())? b_scene.camera(): b_v3d.camera();
+	BL::Object b_ob = (b_v3d.use_local_camera())? b_v3d.camera(): b_scene.camera();
 
 	if(!b_ob)
 		return;
@@ -899,4 +900,3 @@ BufferParams BlenderSync::get_buffer_params(BL::RenderSettings& b_render,
 }
 
 CCL_NAMESPACE_END
-

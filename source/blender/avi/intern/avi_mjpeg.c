@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/avi/intern/avi_mjpeg.c
- *  \ingroup avi
+/** \file
+ * \ingroup avi
  *
  * This is external code. Converts between avi and mpeg/jpeg.
  */
@@ -70,25 +61,25 @@ static void std_huff_tables(j_decompress_ptr dinfo)
 {
 	static const UINT8 bits_dc_luminance[17] =
 	{ /* 0-base */
-		0, 0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0
+		0, 0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
 	};
 	static const UINT8 val_dc_luminance[] =
 	{
-		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
 	};
 
 	static const UINT8 bits_dc_chrominance[17] =
 	{ /* 0-base */
-		0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0
+		0, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
 	};
 	static const UINT8 val_dc_chrominance[] =
 	{
-		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
 	};
 
 	static const UINT8 bits_ac_luminance[17] =
 	{ /* 0-base */
-		0, 0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 0x7d
+		0, 0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 0x7d,
 	};
 	static const UINT8 val_ac_luminance[] =
 	{
@@ -112,11 +103,11 @@ static void std_huff_tables(j_decompress_ptr dinfo)
 		0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2,
 		0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea,
 		0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8,
-		0xf9, 0xfa
+		0xf9, 0xfa,
 	};
 	static const UINT8 bits_ac_chrominance[17] =
 	{ /* 0-base */
-		0, 0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 0x77
+		0, 0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 0x77,
 	};
 	static const UINT8 val_ac_chrominance[] =
 	{
@@ -140,7 +131,7 @@ static void std_huff_tables(j_decompress_ptr dinfo)
 		0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda,
 		0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9,
 		0xea, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8,
-		0xf9, 0xfa
+		0xf9, 0xfa,
 	};
 
 	add_huff_table(dinfo, &dinfo->dc_huff_tbl_ptrs[0],
@@ -157,7 +148,7 @@ static int Decode_JPEG(unsigned char *inBuffer, unsigned char *outBuffer, unsign
 {
 	struct jpeg_decompress_struct dinfo;
 	struct jpeg_error_mgr jerr;
-	
+
 	(void)width; /* unused */
 
 	numbytes = 0;
@@ -182,7 +173,7 @@ static int Decode_JPEG(unsigned char *inBuffer, unsigned char *outBuffer, unsign
 	jpeg_finish_decompress(&dinfo);
 
 	if (dinfo.output_height >= height) return 0;
-	
+
 	inBuffer += numbytes;
 	jpegmemsrcmgr_build(&dinfo, inBuffer, bufsize - numbytes);
 
@@ -200,7 +191,7 @@ static int Decode_JPEG(unsigned char *inBuffer, unsigned char *outBuffer, unsign
 	}
 	jpeg_finish_decompress(&dinfo);
 	jpeg_destroy_decompress(&dinfo);
-	
+
 	return 1;
 }
 
@@ -221,7 +212,7 @@ static void Compress_JPEG(int quality, unsigned char *outbuffer, const unsigned 
 
 	jpeg_set_defaults(&cinfo);
 	jpeg_set_colorspace(&cinfo, JCS_YCbCr);
-		
+
 	jpeg_set_quality(&cinfo, quality, true);
 
 	cinfo.dc_huff_tbl_ptrs[0]->sent_table = true;
@@ -267,11 +258,11 @@ static void Compress_JPEG(int quality, unsigned char *outbuffer, const unsigned 
 static void interlace(unsigned char *to, unsigned char *from, int width, int height)
 {
 	size_t i, rowstride = width * 3;
-	
+
 	for (i = 0; i < height; i++) {
 		if (i & 1)
 			memcpy(&to[i * rowstride], &from[(i / 2 + height / 2) * rowstride], rowstride);
-		else 
+		else
 			memcpy(&to[i * rowstride], &from[(i / 2) * rowstride], rowstride);
 	}
 }
@@ -279,11 +270,11 @@ static void interlace(unsigned char *to, unsigned char *from, int width, int hei
 static void deinterlace(int odd, unsigned char *to, unsigned char *from, int width, int height)
 {
 	size_t i, rowstride = width * 3;
-	
+
 	for (i = 0; i < height; i++) {
 		if ((i & 1) == odd)
 			memcpy(&to[(i / 2 + height / 2) * rowstride], &from[i * rowstride], rowstride);
-		else 
+		else
 			memcpy(&to[(i / 2) * rowstride], &from[i * rowstride], rowstride);
 	}
 }
@@ -301,19 +292,19 @@ void *avi_converter_from_mjpeg(AviMovie *movie, int stream, unsigned char *buffe
 	}
 
 	deint = Decode_JPEG(buffer, buf, movie->header->Width, movie->header->Height, *size);
-	
+
 	MEM_freeN(buffer);
-	
+
 	if (deint) {
 		buffer = imb_alloc_pixels(movie->header->Height, movie->header->Width, 3, sizeof(unsigned char), "avi.avi_converter_from_mjpeg 2");
 		if (buffer) {
 			interlace(buffer, buf, movie->header->Width, movie->header->Height);
 		}
 		MEM_freeN(buf);
-	
+
 		buf = buffer;
 	}
-		
+
 	return buf;
 }
 
@@ -321,7 +312,7 @@ void *avi_converter_to_mjpeg(AviMovie *movie, int stream, unsigned char *buffer,
 {
 	unsigned char *buf;
 	size_t bufsize = *size;
-	
+
 	numbytes = 0;
 	*size = 0;
 
@@ -341,23 +332,25 @@ void *avi_converter_to_mjpeg(AviMovie *movie, int stream, unsigned char *buffer,
 	else {
 		deinterlace(movie->odd_fields, buf, buffer, movie->header->Width, movie->header->Height);
 		MEM_freeN(buffer);
-	
+
 		buffer = buf;
 		buf = imb_alloc_pixels(movie->header->Height, movie->header->Width, 3, sizeof(unsigned char), "avi.avi_converter_to_mjpeg 1");
 
 		if (buf) {
-			Compress_JPEG(movie->streams[stream].sh.Quality / 100,
-				      buf, buffer,
-				      movie->header->Width,
-				      movie->header->Height / 2,
-				      bufsize / 2);
+			Compress_JPEG(
+			        movie->streams[stream].sh.Quality / 100,
+			        buf, buffer,
+			        movie->header->Width,
+			        movie->header->Height / 2,
+			        bufsize / 2);
 			*size += numbytes;
 			numbytes = 0;
-			Compress_JPEG(movie->streams[stream].sh.Quality / 100,
-				      buf + *size, buffer + (size_t)(movie->header->Height / 2) * (size_t)movie->header->Width * 3,
-				      movie->header->Width,
-				      movie->header->Height / 2,
-				      bufsize / 2);
+			Compress_JPEG(
+			        movie->streams[stream].sh.Quality / 100,
+			        buf + *size, buffer + (size_t)(movie->header->Height / 2) * (size_t)movie->header->Width * 3,
+			        movie->header->Width,
+			        movie->header->Height / 2,
+			        bufsize / 2);
 			*size += numbytes;
 		}
 	}
@@ -390,14 +383,14 @@ static void jpegmemdestmgr_term_destination(j_compress_ptr cinfo)
 static void jpegmemdestmgr_build(j_compress_ptr cinfo, unsigned char *buffer, size_t bufsize)
 {
 	cinfo->dest = MEM_mallocN(sizeof(*(cinfo->dest)), "avi.jpegmemdestmgr_build");
-	
+
 	cinfo->dest->init_destination = jpegmemdestmgr_init_destination;
 	cinfo->dest->empty_output_buffer = jpegmemdestmgr_empty_output_buffer;
 	cinfo->dest->term_destination = jpegmemdestmgr_term_destination;
 
 	cinfo->dest->next_output_byte = buffer;
 	cinfo->dest->free_in_buffer = bufsize;
-	
+
 	numbytes = bufsize;
 }
 
@@ -411,16 +404,16 @@ static void jpegmemsrcmgr_init_source(j_decompress_ptr dinfo)
 static boolean jpegmemsrcmgr_fill_input_buffer(j_decompress_ptr dinfo)
 {
 	unsigned char *buf = (unsigned char *) dinfo->src->next_input_byte - 2;
-	
+
 	/* if we get called, must have run out of data */
 	WARNMS(dinfo, JWRN_JPEG_EOF);
-	
+
 	buf[0] = (JOCTET) 0xFF;
 	buf[1] = (JOCTET) JPEG_EOI;
-	
+
 	dinfo->src->next_input_byte = buf;
 	dinfo->src->bytes_in_buffer = 2;
-	
+
 	return true;
 }
 
@@ -436,20 +429,20 @@ static void jpegmemsrcmgr_skip_input_data(j_decompress_ptr dinfo, long skipcnt)
 static void jpegmemsrcmgr_term_source(j_decompress_ptr dinfo)
 {
 	numbytes -= dinfo->src->bytes_in_buffer;
-	
+
 	MEM_freeN(dinfo->src);
 }
 
 static void jpegmemsrcmgr_build(j_decompress_ptr dinfo, unsigned char *buffer, size_t bufsize)
 {
 	dinfo->src = MEM_mallocN(sizeof(*(dinfo->src)), "avi.jpegmemsrcmgr_build");
-	
+
 	dinfo->src->init_source = jpegmemsrcmgr_init_source;
 	dinfo->src->fill_input_buffer = jpegmemsrcmgr_fill_input_buffer;
 	dinfo->src->skip_input_data = jpegmemsrcmgr_skip_input_data;
 	dinfo->src->resync_to_restart = jpeg_resync_to_restart;
 	dinfo->src->term_source = jpegmemsrcmgr_term_source;
-	
+
 	dinfo->src->bytes_in_buffer = bufsize;
 	dinfo->src->next_input_byte = buffer;
 

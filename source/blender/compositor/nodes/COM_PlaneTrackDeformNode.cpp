@@ -1,6 +1,4 @@
 /*
- * Copyright 2013, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,10 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
- *		Sergey Sharybin
+ * Copyright 2013, Blender Foundation.
  */
 
 #include "COM_PlaneTrackDeformNode.h"
@@ -42,13 +37,13 @@ void PlaneTrackDeformNode::convertToOperations(NodeConverter &converter, const C
 	bNode *editorNode = this->getbNode();
 	MovieClip *clip = (MovieClip *) editorNode->id;
 	NodePlaneTrackDeformData *data = (NodePlaneTrackDeformData *) editorNode->storage;
-	
+
 	int frame_number = context.getFramenumber();
-	
+
 	NodeInput *input_image = this->getInputSocket(0);
 	NodeOutput *output_warped_image = this->getOutputSocket(0);
 	NodeOutput *output_plane = this->getOutputSocket(1);
-	
+
 	PlaneTrackWarpImageOperation *warp_image_operation = new PlaneTrackWarpImageOperation();
 	warp_image_operation->setMovieClip(clip);
 	warp_image_operation->setTrackingObject(data->tracking_object);
@@ -59,10 +54,10 @@ void PlaneTrackDeformNode::convertToOperations(NodeConverter &converter, const C
 		warp_image_operation->setMotionBlurShutter(data->motion_blur_shutter);
 	}
 	converter.addOperation(warp_image_operation);
-	
+
 	converter.mapInputSocket(input_image, warp_image_operation->getInputSocket(0));
 	converter.mapOutputSocket(output_warped_image, warp_image_operation->getOutputSocket());
-	
+
 	PlaneTrackMaskOperation *plane_mask_operation = new PlaneTrackMaskOperation();
 	plane_mask_operation->setMovieClip(clip);
 	plane_mask_operation->setTrackingObject(data->tracking_object);
@@ -73,6 +68,6 @@ void PlaneTrackDeformNode::convertToOperations(NodeConverter &converter, const C
 		plane_mask_operation->setMotionBlurShutter(data->motion_blur_shutter);
 	}
 	converter.addOperation(plane_mask_operation);
-	
+
 	converter.mapOutputSocket(output_plane, plane_mask_operation->getOutputSocket());
 }

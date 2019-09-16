@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Campbell Barton.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 
@@ -37,7 +34,7 @@ if(NOT WITH_HEADLESS)
 	set(SRC
 		datatoc_icon.c
 	)
-
+	setup_platform_linker_flags()
 	if(WIN32)
 		include_directories(
 			../blenlib
@@ -52,8 +49,6 @@ if(NOT WITH_HEADLESS)
 			../../../intern/utfconv/utfconv.c
 		)
 
-		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}")
-		set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}")
 	endif()
 
 	include_directories(${PNG_INCLUDE_DIRS})

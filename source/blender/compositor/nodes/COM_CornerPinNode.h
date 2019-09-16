@@ -1,7 +1,4 @@
-/*
- * Copyright 2014, Blender Foundation.
- *
- * This program is free software; you can redistribute it and/or
+/* This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
@@ -15,12 +12,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Lukas Toenne
+ * Copyright 2014, Blender Foundation.
  */
 
-#ifndef _COM_CornerPinNode_h
-#define _COM_CornerPinNode_h
+#ifndef __COM_CORNERPINNODE_H__
+#define __COM_CORNERPINNODE_H__
 
 #include "COM_Node.h"
 
@@ -29,8 +25,8 @@ extern "C" {
 }
 
 /**
- * @brief CornerPinNode
- * @ingroup Node
+ * \brief CornerPinNode
+ * \ingroup Node
  */
 class CornerPinNode : public Node {
 public:
@@ -38,4 +34,4 @@ public:
 	void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
 };
 
-#endif /* _COM_CornerPinNode_h */
+#endif /* __COM_CORNERPINNODE_H__ */

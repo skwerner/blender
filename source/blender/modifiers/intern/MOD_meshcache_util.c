@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,26 +12,24 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/modifiers/intern/MOD_meshcache_util.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include "BLI_utildefines.h"
+
 #include "BLI_math.h"
 
 #include "DNA_modifier_types.h"
 
 #include "MOD_meshcache_util.h"
 
-void MOD_meshcache_calc_range(const float frame, const char interp,
-                              const int frame_tot,
-                              int r_index_range[2], float *r_factor)
+void MOD_meshcache_calc_range(
+        const float frame, const char interp,
+        const int frame_tot,
+        int r_index_range[2], float *r_factor)
 {
 	if (interp == MOD_MESHCACHE_INTERP_NONE) {
 		r_index_range[0] = r_index_range[1] = max_ii(0, min_ii(frame_tot - 1, round_fl_to_int(frame)));

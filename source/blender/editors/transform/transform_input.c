@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_input.c
- *  \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 
@@ -30,14 +24,17 @@
 
 #include "DNA_screen_types.h"
 
+#include "BKE_context.h"
+
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "WM_types.h"
+#include "WM_api.h"
 
 #include "transform.h"
 
-#include "MEM_guardedalloc.h" 
+#include "MEM_guardedalloc.h"
 
 /* ************************** INPUT FROM MOUSE *************************** */
 
@@ -125,7 +122,7 @@ void setCustomPoints(TransInfo *UNUSED(t), MouseInput *mi, const int mval_start[
 	int *data;
 
 	mi->data = MEM_reallocN(mi->data, sizeof(int) * 4);
-	
+
 	data = mi->data;
 
 	data[0] = mval_start[0];
@@ -134,13 +131,25 @@ void setCustomPoints(TransInfo *UNUSED(t), MouseInput *mi, const int mval_start[
 	data[3] = mval_end[1];
 }
 
+void setCustomPointsFromDirection(TransInfo *t, MouseInput *mi, const float dir[2])
+{
+	BLI_ASSERT_UNIT_V2(dir);
+	const int win_axis = t->ar ? ((abs((int)(t->ar->winx * dir[0])) + abs((int)(t->ar->winy * dir[1]))) / 2) : 1;
+	const int mval_start[2] = {
+		mi->imval[0] + dir[0] * win_axis,
+		mi->imval[1] + dir[1] * win_axis,
+	};
+	const int mval_end[2] = {mi->imval[0], mi->imval[1]};
+	setCustomPoints(t, mi, mval_start, mval_end);
+}
+
 static void InputCustomRatioFlip(TransInfo *UNUSED(t), MouseInput *mi, const double mval[2], float output[3])
 {
 	double length;
 	double distance;
 	double dx, dy;
 	const int *data = mi->data;
-	
+
 	if (data) {
 		int mdx, mdy;
 		dx = data[2] - data[0];
@@ -182,7 +191,8 @@ static void InputAngle(TransInfo *UNUSED(t), MouseInput *mi, const double mval[2
 	double dx3 = mval[0] - data->mval_prev[0];
 	double dy3 = mval[1] - data->mval_prev[1];
 
-	/* use doubles here, to make sure a "1.0" (no rotation) doesn't become 9.999999e-01, which gives 0.02 for acos */
+	/* use doubles here, to make sure a "1.0" (no rotation)
+	 * doesn't become 9.999999e-01, which gives 0.02 for acos */
 	double deler = (((dx1 * dx1 + dy1 * dy1) +
 	                 (dx2 * dx2 + dy2 * dy2) -
 	                 (dx3 * dx3 + dy3 * dy3)) / (2.0 * (((A * B) != 0.0) ? (A * B) : 1.0)));
@@ -329,15 +339,41 @@ void initMouseInputMode(TransInfo *t, MouseInput *mi, MouseInputMode mode)
 			break;
 		case INPUT_CUSTOM_RATIO:
 			mi->apply = InputCustomRatio;
-			t->helpline = HLP_NONE;
+			t->helpline = HLP_CARROW;
 			break;
 		case INPUT_CUSTOM_RATIO_FLIP:
 			mi->apply = InputCustomRatioFlip;
-			t->helpline = HLP_NONE;
+			t->helpline = HLP_CARROW;
 			break;
 		case INPUT_NONE:
 		default:
 			mi->apply = NULL;
+			break;
+	}
+
+	/* setup for the mouse cursor: either set a custom one,
+	 * or hide it if it will be drawn with the helpline */
+	wmWindow *win = CTX_wm_window(t->context);
+	switch (t->helpline) {
+		case HLP_NONE:
+			/* INPUT_VECTOR, INPUT_CUSTOM_RATIO, INPUT_CUSTOM_RATIO_FLIP */
+			if (t->flag & T_MODAL) {
+				t->flag |= T_MODAL_CURSOR_SET;
+				WM_cursor_modal_set(win, BC_NSEW_SCROLLCURSOR);
+			}
+			break;
+		case HLP_SPRING:
+		case HLP_ANGLE:
+		case HLP_TRACKBALL:
+		case HLP_HARROW:
+		case HLP_VARROW:
+		case HLP_CARROW:
+			if (t->flag & T_MODAL) {
+				t->flag |= T_MODAL_CURSOR_SET;
+				WM_cursor_modal_set(win, CURSOR_NONE);
+			}
+			break;
+		default:
 			break;
 	}
 
@@ -346,9 +382,6 @@ void initMouseInputMode(TransInfo *t, MouseInput *mi, MouseInputMode mode)
 	if (mi_data_prev && (mi_data_prev != mi->data)) {
 		MEM_freeN(mi_data_prev);
 	}
-
-	/* bootstrap mouse input with initial values */
-	applyMouseInput(t, mi, mi->imval, t->values);
 }
 
 void setInputPostFct(MouseInput *mi, void (*post)(struct TransInfo *t, float values[3]))
@@ -389,6 +422,17 @@ void applyMouseInput(TransInfo *t, MouseInput *mi, const int mval[2], float outp
 
 	if (mi->apply != NULL) {
 		mi->apply(t, mi, mval_db, output);
+	}
+
+	if (!is_zero_v3(t->values_modal_offset)) {
+		float values_ofs[3];
+		if (t->con.mode & CON_APPLY) {
+			mul_v3_m3v3(values_ofs, t->spacemtx, t->values_modal_offset);
+		}
+		else {
+			copy_v3_v3(values_ofs, t->values_modal_offset);
+		}
+		add_v3_v3(t->values, values_ofs);
 	}
 
 	if (mi->post) {

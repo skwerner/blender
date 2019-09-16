@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,14 @@
  *
  * The Original Code is written by Rob Haarsma (phase)
  * All rights reserved.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * This code parses the Freetype font outline data to chains of Blender's beziertriples.
  * Additional information can be found at the bottom of this file.
  *
  * Code that uses exotic character maps is present but commented out.
  */
 
-/** \file blender/blenlib/intern/freetypefont.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <ft2build.h>
@@ -99,7 +92,7 @@ static VChar *freetypechar_to_vchar(FT_Face face, FT_ULong charcode, VFontData *
 		che->index = charcode;
 		che->width = glyph->advance.x * scale;
 
-		BLI_ghash_insert(vfd->characters, SET_UINT_IN_POINTER(che->index), che);
+		BLI_ghash_insert(vfd->characters, POINTER_FROM_UINT(che->index), che);
 
 		/* Start converting the FT data */
 		onpoints = (int *)MEM_callocN((ftoutline.n_contours) * sizeof(int), "onpoints");
@@ -111,10 +104,13 @@ static VChar *freetypechar_to_vchar(FT_Face face, FT_ULong charcode, VFontData *
 
 			for (k = 0; k < n; k++) {
 				l = (j > 0) ? (k + ftoutline.contours[j - 1] + 1) : k;
-				if (k == 0) l_first = l;
+				if (k == 0) {
+					l_first = l;
+				}
 
-				if (ftoutline.tags[l] == FT_Curve_Tag_On)
+				if (ftoutline.tags[l] == FT_Curve_Tag_On) {
 					onpoints[j]++;
+				}
 
 				{
 					const int l_next = (k < n - 1) ? (l + 1) : l_first;
@@ -147,7 +143,9 @@ static VChar *freetypechar_to_vchar(FT_Face face, FT_ULong charcode, VFontData *
 			/* individual curve loop, start-end */
 			for (k = 0; k < n; k++) {
 				l = (j > 0) ? (k + ftoutline.contours[j - 1] + 1) : k;
-				if (k == 0) l_first = l;
+				if (k == 0) {
+					l_first = l;
+				}
 
 				/* virtual conic on-curve points */
 				{
@@ -291,14 +289,6 @@ static VFontData *objfnt_to_ftvfontdata(PackedFile *pf)
 	const char *fontname;
 	VFontData *vfd;
 
-#if 0
-	FT_CharMap found = 0;
-	FT_CharMap charmap;
-	FT_UShort my_platform_id = TT_PLATFORM_MICROSOFT;
-	FT_UShort my_encoding_id = TT_MS_ID_UNICODE_CS;
-	int n;
-#endif
-
 	/* load the freetype font */
 	err = FT_New_Memory_Face(library,
 	                         pf->data,
@@ -306,26 +296,9 @@ static VFontData *objfnt_to_ftvfontdata(PackedFile *pf)
 	                         0,
 	                         &face);
 
-	if (err) return NULL;
-
-#if 0
-	for (n = 0; n < face->num_charmaps; n++)
-	{
-		charmap = face->charmaps[n];
-		if (charmap->platform_id == my_platform_id &&
-		    charmap->encoding_id == my_encoding_id)
-		{
-			found = charmap;
-			break;
-		}
+	if (err) {
+		return NULL;
 	}
-
-	if (!found) { return NULL; }
-
-	/* now, select the charmap for the face object */
-	err = FT_Set_Charmap(face, found);
-	if (err) { return NULL; }
-#endif
 
 	/* allocate blender font */
 	vfd = MEM_callocN(sizeof(*vfd), "FTVFontData");
@@ -353,16 +326,34 @@ static VFontData *objfnt_to_ftvfontdata(PackedFile *pf)
 
 		err = FT_Set_Charmap(face, found);
 
-		if (err)
+		if (err) {
 			return NULL;
+		}
 
 		lcode = charcode = FT_Get_First_Char(face, &glyph_index);
 	}
 
+	/* Blender default BFont is not "complete". */
+	const bool complete_font = (face->ascender != 0) && (face->descender != 0) &&
+	                           (face->ascender != face->descender);
+
+	if (complete_font) {
+		/* We can get descender as well, but we simple store descender in relation to the ascender.
+		 * Also note that descender is stored as a negative number. */
+		vfd->ascender = (float)face->ascender / (face->ascender - face->descender);
+	}
+	else {
+		vfd->ascender = 0.8f;
+		vfd->em_height = 1.0f;
+	}
 
 	/* Adjust font size */
 	if (face->bbox.yMax != face->bbox.yMin) {
 		vfd->scale = (float)(1.0 / (double)(face->bbox.yMax - face->bbox.yMin));
+
+		if (complete_font) {
+			vfd->em_height = (float)(face->ascender - face->descender) / (face->bbox.yMax - face->bbox.yMin);
+		}
 	}
 	else {
 		vfd->scale = 1.0f / 1000.0f;
@@ -379,8 +370,9 @@ static VFontData *objfnt_to_ftvfontdata(PackedFile *pf)
 		charcode = FT_Get_Next_Char(face, charcode, &glyph_index);
 
 		/* Check that we won't start infinite loop */
-		if (charcode <= lcode)
+		if (charcode <= lcode) {
 			break;
+		}
 		lcode = charcode;
 	}
 
@@ -393,13 +385,6 @@ static int check_freetypefont(PackedFile *pf)
 	FT_Face face;
 	FT_GlyphSlot glyph;
 	FT_UInt glyph_index;
-#if 0
-	FT_CharMap charmap;
-	FT_CharMap found;
-	FT_UShort my_platform_id = TT_PLATFORM_MICROSOFT;
-	FT_UShort my_encoding_id = TT_MS_ID_UNICODE_CS;
-	int n;
-#endif
 	int success = 0;
 
 	err = FT_New_Memory_Face(library,
@@ -412,23 +397,6 @@ static int check_freetypefont(PackedFile *pf)
 		//XXX error("This is not a valid font");
 	}
 	else {
-
-#if 0
-		for (n = 0; n < face->num_charmaps; n++) {
-			charmap = face->charmaps[n];
-			if (charmap->platform_id == my_platform_id && charmap->encoding_id == my_encoding_id) {
-				found = charmap;
-				break;
-			}
-		}
-
-		if (!found) { return 0; }
-
-		/* now, select the charmap for the face object */
-		err = FT_Set_Charmap(face, found);
-		if (err) { return 0; }
-#endif
-
 		glyph_index = FT_Get_Char_Index(face, 'A');
 		err = FT_Load_Glyph(face, glyph_index, FT_LOAD_NO_SCALE | FT_LOAD_NO_BITMAP);
 		if (err) {
@@ -445,7 +413,7 @@ static int check_freetypefont(PackedFile *pf)
 			}
 		}
 	}
-	
+
 	return success;
 }
 
@@ -453,7 +421,7 @@ static int check_freetypefont(PackedFile *pf)
  * Construct a new VFontData structure from
  * Freetype font data in a PackedFile.
  *
- * \param pf The font data.
+ * \param pf: The font data.
  * \retval A new VFontData structure, or NULL
  * if unable to load.
  */
@@ -470,14 +438,14 @@ VFontData *BLI_vfontdata_from_freetypefont(PackedFile *pf)
 	}
 
 	success = check_freetypefont(pf);
-	
+
 	if (success) {
 		vfd = objfnt_to_ftvfontdata(pf);
 	}
 
 	/* free Freetype */
 	FT_Done_FreeType(library);
-	
+
 	return vfd;
 }
 
@@ -501,7 +469,9 @@ VChar *BLI_vfontchar_from_freetypefont(VFont *vfont, unsigned long character)
 {
 	VChar *che = NULL;
 
-	if (!vfont) return NULL;
+	if (!vfont) {
+		return NULL;
+	}
 
 	/* Init Freetype */
 	err = FT_Init_FreeType(&library);
@@ -520,7 +490,8 @@ VChar *BLI_vfontchar_from_freetypefont(VFont *vfont, unsigned long character)
 }
 
 /* Yeah, this is very bad... But why is this in BLI in the first place, since it uses Nurb data?
- * Anyway, do not feel like duplicating whole Nurb copy code here, so unless someone has a better idea... */
+ * Anyway, do not feel like duplicating whole Nurb copy code here,
+ * so unless someone has a better idea... */
 #include "../../blenkernel/BKE_curve.h"
 
 VChar *BLI_vfontchar_copy(const VChar *vchar_src, const int UNUSED(flag))
@@ -533,22 +504,6 @@ VChar *BLI_vfontchar_copy(const VChar *vchar_src, const int UNUSED(flag))
 	return vchar_dst;
 }
 
-#if 0
-
-/* Freetype2 Outline struct */
-
-typedef struct  FT_Outline_ {
-	short       n_contours;      /* number of contours in glyph        */
-	short       n_points;        /* number of points in the glyph      */
-
-	FT_Vector  *points;          /* the outline's points               */
-	char       *tags;            /* the points flags                   */
-	short      *contours;        /* the contour end points             */
-
-	int         flags;           /* outline masks                      */
-} FT_Outline;
-
-#endif
 
 /*
  * from: http://www.freetype.org/freetype2/docs/glyphs/glyphs-6.html#section-1
@@ -563,8 +518,6 @@ typedef struct  FT_Outline_ {
  *
  * Each arc is described through a series of start, end and control points. Each point of the outline
  * has a specific tag which indicates whether it is used to describe a line segment or an arc.
- *
- *
  * The following rules are applied to decompose the contour's points into segments and arcs :
  *
  * # two successive "on" points indicate a line segment joining them.
@@ -595,9 +548,6 @@ typedef struct  FT_Outline_ {
  *                            Two "on" points
  *    Two "on" points       and one "conic" point
  *                             between them
- *
- *
- *
  *                 *
  *   #            __      Two "on" points with two "conic"
  *    \          -  -     points between them. The point
@@ -607,10 +557,6 @@ typedef struct  FT_Outline_ {
  *         --             It does not appear in the point
  *                        list.
  *         *
- *
- *
- *
- *
  *         *                # on
  *                    *     * off
  *          __---__
@@ -622,8 +568,6 @@ typedef struct  FT_Outline_ {
  *      Two "on" points
  *    and two "cubic" point
  *       between them
- *
- *
  * Each glyph's original outline points are located on a grid of indivisible units. The points are stored
  * in the font file as 16-bit integer grid coordinates, with the grid origin's being at (0, 0); they thus
  * range from -16384 to 16383.
@@ -635,5 +579,4 @@ typedef struct  FT_Outline_ {
  * B1=(P0+2*P1)/3
  * B2=(P2+2*P1)/3
  * B3=P2
- *
  */

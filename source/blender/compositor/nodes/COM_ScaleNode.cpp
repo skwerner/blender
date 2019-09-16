@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_ScaleNode.h"
@@ -36,7 +32,7 @@ ScaleNode::ScaleNode(bNode *editorNode) : Node(editorNode)
 void ScaleNode::convertToOperations(NodeConverter &converter, const CompositorContext &context) const
 {
 	bNode *bnode = this->getbNode();
-	
+
 	NodeInput *inputSocket = this->getInputSocket(0);
 	NodeInput *inputXSocket = this->getInputSocket(1);
 	NodeInput *inputYSocket = this->getInputSocket(2);
@@ -47,7 +43,7 @@ void ScaleNode::convertToOperations(NodeConverter &converter, const CompositorCo
 		{
 			ScaleOperation *operation = new ScaleOperation();
 			converter.addOperation(operation);
-			
+
 			converter.mapInputSocket(inputSocket, operation->getInputSocket(0));
 			converter.mapInputSocket(inputXSocket, operation->getInputSocket(1));
 			converter.mapInputSocket(inputYSocket, operation->getInputSocket(2));
@@ -62,10 +58,10 @@ void ScaleNode::convertToOperations(NodeConverter &converter, const CompositorCo
 			SetValueOperation *scaleFactorOperation = new SetValueOperation();
 			scaleFactorOperation->setValue(context.getRenderData()->size / 100.0f);
 			converter.addOperation(scaleFactorOperation);
-			
+
 			ScaleOperation *operation = new ScaleOperation();
 			converter.addOperation(operation);
-			
+
 			converter.mapInputSocket(inputSocket, operation->getInputSocket(0));
 			converter.addLink(scaleFactorOperation->getOutputSocket(), operation->getInputSocket(1));
 			converter.addLink(scaleFactorOperation->getOutputSocket(), operation->getInputSocket(2));

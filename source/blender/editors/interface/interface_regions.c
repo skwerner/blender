@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- * 
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_regions.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * General Interface Region Code
  *
@@ -61,8 +55,12 @@ ARegion *ui_region_temp_add(bScreen *sc)
 void ui_region_temp_remove(bContext *C, bScreen *sc, ARegion *ar)
 {
 	wmWindow *win = CTX_wm_window(C);
-	if (win)
+
+	BLI_assert(ar->regiontype == RGN_TYPE_TEMPORARY);
+	BLI_assert(BLI_findindex(&sc->regionbase, ar) != -1);
+	if (win) {
 		wm_draw_region_clear(win, ar);
+	}
 
 	ED_region_exit(C, ar);
 	BKE_area_region_free(NULL, ar);     /* NULL: no spacetype */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,16 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Brecht Van Lommel
- *                 Campbell Barton
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file guardedalloc/intern/mallocn.c
- *  \ingroup MEM
+/** \file
+ * \ingroup MEM
  *
  * Memory allocation which keeps track on allocated memory counters
  */
@@ -171,7 +163,7 @@ void *MEM_lockfree_dupallocN(const void *vmemh)
 	void *newp = NULL;
 	if (vmemh) {
 		MemHead *memh = MEMHEAD_FROM_PTR(vmemh);
-		const size_t prev_size = MEM_allocN_len(vmemh);
+		const size_t prev_size = MEM_lockfree_allocN_len(vmemh);
 		if (UNLIKELY(MEMHEAD_IS_MMAP(memh))) {
 			newp = MEM_lockfree_mapallocN(prev_size, "dupli_mapalloc");
 		}
@@ -196,7 +188,7 @@ void *MEM_lockfree_reallocN_id(void *vmemh, size_t len, const char *str)
 
 	if (vmemh) {
 		MemHead *memh = MEMHEAD_FROM_PTR(vmemh);
-		size_t old_len = MEM_allocN_len(vmemh);
+		size_t old_len = MEM_lockfree_allocN_len(vmemh);
 
 		if (LIKELY(!MEMHEAD_IS_ALIGNED(memh))) {
 			newp = MEM_lockfree_mallocN(len, "realloc");
@@ -204,9 +196,9 @@ void *MEM_lockfree_reallocN_id(void *vmemh, size_t len, const char *str)
 		else {
 			MemHeadAligned *memh_aligned = MEMHEAD_ALIGNED_FROM_PTR(vmemh);
 			newp = MEM_lockfree_mallocN_aligned(
-				old_len,
-				(size_t)memh_aligned->alignment,
-				"realloc");
+			        len,
+			        (size_t)memh_aligned->alignment,
+			        "realloc");
 		}
 
 		if (newp) {
@@ -235,16 +227,17 @@ void *MEM_lockfree_recallocN_id(void *vmemh, size_t len, const char *str)
 
 	if (vmemh) {
 		MemHead *memh = MEMHEAD_FROM_PTR(vmemh);
-		size_t old_len = MEM_allocN_len(vmemh);
+		size_t old_len = MEM_lockfree_allocN_len(vmemh);
 
 		if (LIKELY(!MEMHEAD_IS_ALIGNED(memh))) {
 			newp = MEM_lockfree_mallocN(len, "recalloc");
 		}
 		else {
 			MemHeadAligned *memh_aligned = MEMHEAD_ALIGNED_FROM_PTR(vmemh);
-			newp = MEM_lockfree_mallocN_aligned(old_len,
-			                                    (size_t)memh_aligned->alignment,
-			                                    "recalloc");
+			newp = MEM_lockfree_mallocN_aligned(
+			        len,
+			        (size_t)memh_aligned->alignment,
+			        "recalloc");
 		}
 
 		if (newp) {
@@ -469,7 +462,7 @@ void MEM_lockfree_set_error_callback(void (*func)(const char *))
 	error_callback = func;
 }
 
-bool MEM_lockfree_check_memory_integrity(void)
+bool MEM_lockfree_consistency_check(void)
 {
 	return true;
 }

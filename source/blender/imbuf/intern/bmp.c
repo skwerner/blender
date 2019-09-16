@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/bmp.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 #include "BLI_utildefines.h"
@@ -130,7 +122,7 @@ struct ImBuf *imb_bmp_decode(const unsigned char *mem, size_t size, int flags, c
 	unsigned short col;
 	double xppm, yppm;
 	bool top_to_bottom = false;
-	
+
 	(void)size; /* unused */
 
 	if (checkbmp(mem) == 0) return(NULL);
@@ -248,7 +240,7 @@ struct ImBuf *imb_bmp_decode(const unsigned char *mem, size_t size, int flags, c
 					rect[0] = bmp[2];
 					rect[1] = bmp[1];
 					rect[2] = bmp[0];
-					
+
 					rect[3] = 255;
 					rect += 4; bmp += 3;
 				}
@@ -277,7 +269,7 @@ struct ImBuf *imb_bmp_decode(const unsigned char *mem, size_t size, int flags, c
 		ibuf->ppm[1] = yppm;
 		ibuf->ftype = IMB_FTYPE_BMP;
 	}
-	
+
 	return(ibuf);
 }
 
@@ -297,7 +289,7 @@ static int putShortLSB(unsigned short us, FILE *ofile)
 {
 	putc((us >> 0) & 0xFF, ofile);
 	return putc((us >> 8) & 0xFF, ofile);
-} 
+}
 
 /* Found write info at http://users.ece.gatech.edu/~slabaugh/personal/c/bitmapUnix.c */
 int imb_savebmp(struct ImBuf *ibuf, const char *name, int flags)
@@ -306,7 +298,7 @@ int imb_savebmp(struct ImBuf *ibuf, const char *name, int flags)
 	size_t bytesize, extrabytes, ptr;
 	uchar *data;
 	FILE *ofile;
-	
+
 	(void)flags; /* unused */
 
 	extrabytes = (4 - ibuf->x * 3 % 4) % 4;

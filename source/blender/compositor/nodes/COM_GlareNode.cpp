@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_GlareNode.h"
@@ -40,7 +36,7 @@ void GlareNode::convertToOperations(NodeConverter &converter, const CompositorCo
 {
 	bNode *node = this->getbNode();
 	NodeGlare *glare = (NodeGlare *)node->storage;
-	
+
 	GlareBaseOperation *glareoperation = NULL;
 	switch (glare->type) {
 		default:
@@ -59,17 +55,17 @@ void GlareNode::convertToOperations(NodeConverter &converter, const CompositorCo
 	}
 	BLI_assert(glareoperation);
 	glareoperation->setGlareSettings(glare);
-	
+
 	GlareThresholdOperation *thresholdOperation = new GlareThresholdOperation();
 	thresholdOperation->setGlareSettings(glare);
-	
+
 	SetValueOperation *mixvalueoperation = new SetValueOperation();
 	mixvalueoperation->setValue(0.5f + glare->mix * 0.5f);
-	
+
 	MixGlareOperation *mixoperation = new MixGlareOperation();
 	mixoperation->setResolutionInputSocketIndex(1);
 	mixoperation->getInputSocket(2)->setResizeMode(COM_SC_FIT);
-	
+
 	converter.addOperation(glareoperation);
 	converter.addOperation(thresholdOperation);
 	converter.addOperation(mixvalueoperation);
@@ -77,7 +73,7 @@ void GlareNode::convertToOperations(NodeConverter &converter, const CompositorCo
 
 	converter.mapInputSocket(getInputSocket(0), thresholdOperation->getInputSocket(0));
 	converter.addLink(thresholdOperation->getOutputSocket(), glareoperation->getInputSocket(0));
-	
+
 	converter.addLink(mixvalueoperation->getOutputSocket(), mixoperation->getInputSocket(0));
 	converter.mapInputSocket(getInputSocket(0), mixoperation->getInputSocket(1));
 	converter.addLink(glareoperation->getOutputSocket(), mixoperation->getInputSocket(2));

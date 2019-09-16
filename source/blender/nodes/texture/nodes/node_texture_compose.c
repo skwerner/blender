@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,20 +15,14 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Robin Allen
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/texture/nodes/node_texture_compose.c
- *  \ingroup texnodes
+/** \file
+ * \ingroup texnodes
  */
 
 
-#include "node_texture_util.h"      
+#include "node_texture_util.h"
 #include "NOD_texture.h"
 
 static bNodeSocketTemplate inputs[] = {
@@ -38,11 +30,11 @@ static bNodeSocketTemplate inputs[] = {
 	{ SOCK_FLOAT, 1, N_("Green"), 0.0f, 0.0f, 0.0f, 0.0f,  0.0f, 1.0f, PROP_UNSIGNED },
 	{ SOCK_FLOAT, 1, N_("Blue"),  0.0f, 0.0f, 0.0f, 0.0f,  0.0f, 1.0f, PROP_UNSIGNED },
 	{ SOCK_FLOAT, 1, N_("Alpha"), 1.0f, 0.0f, 0.0f, 0.0f,  0.0f, 1.0f, PROP_UNSIGNED },
-	{ -1, 0, "" }
+	{ -1, 0, "" },
 };
 static bNodeSocketTemplate outputs[] = {
 	{ SOCK_RGBA, 0, N_("Color") },
-	{ -1, 0, "" }
+	{ -1, 0, "" },
 };
 
 static void colorfn(float *out, TexParams *p, bNode *UNUSED(node), bNodeStack **in, short thread)
@@ -60,10 +52,10 @@ static void exec(void *data, int UNUSED(thread), bNode *node, bNodeExecData *exe
 void register_node_type_tex_compose(void)
 {
 	static bNodeType ntype;
-	
+
 	tex_node_type_base(&ntype, TEX_NODE_COMPOSE, "Combine RGBA", NODE_CLASS_OP_COLOR, 0);
 	node_type_socket_templates(&ntype, inputs, outputs);
 	node_type_exec(&ntype, NULL, NULL, exec);
-	
+
 	nodeRegisterType(&ntype);
 }

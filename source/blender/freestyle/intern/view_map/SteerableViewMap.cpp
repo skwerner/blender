@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/view_map/SteerableViewMap.cpp
- *  \ingroup freestyle
- *  \brief Convenient access to the steerable ViewMap to which any element of the ViewMap belongs to.
- *  \author Stephane Grabli
- *  \date 01/07/2003
+/** \file
+ * \ingroup freestyle
+ * \brief Convenient access to the steerable ViewMap to which any element of the ViewMap belongs to.
  */
 
 #include <sstream>
@@ -91,7 +85,7 @@ void SteerableViewMap::Clear()
 		}
 		delete[] _imagesPyramids;
 		_imagesPyramids = 0;
-	} 
+	}
 	if (!_mapping.empty()) {
 		for (map<unsigned int, double*>::iterator m = _mapping.begin(), mend = _mapping.end();  m != mend; ++m) {
 			delete[] (*m).second;
@@ -170,7 +164,7 @@ unsigned SteerableViewMap::getSVMNumber(unsigned id)
 	map<unsigned int, double *>::iterator o = _mapping.find(id);
 	if (o != _mapping.end()) {
 		double *wvalues = (*o).second;
-		double maxw = 0.0; 
+		double maxw = 0.0;
 		unsigned winner = _nbOrientations + 1;
 		for (unsigned i = 0; i < _nbOrientations; ++i) {
 			double w = wvalues[i];

@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -23,7 +20,10 @@ set(INC
 	../../blenfont
 	../../blenkernel
 	../../blenlib
+	../../blenloader
 	../../blentranslation
+	../../depsgraph
+	../../draw
 	../../gpu
 	../../imbuf
 	../../makesdna
@@ -42,6 +42,7 @@ set(SRC
 	interface.c
 	interface_align.c
 	interface_anim.c
+	interface_context_menu.c
 	interface_draw.c
 	interface_eyedropper.c
 	interface_eyedropper_color.c
@@ -51,16 +52,20 @@ set(SRC
 	interface_eyedropper_driver.c
 	interface_handlers.c
 	interface_icons.c
+	interface_icons_event.c
 	interface_layout.c
 	interface_ops.c
 	interface_panel.c
-	interface_regions.c
+	interface_query.c
 	interface_region_color_picker.c
+	interface_region_hud.c
 	interface_region_menu_pie.c
 	interface_region_menu_popup.c
+	interface_region_popover.c
 	interface_region_popup.c
 	interface_region_search.c
 	interface_region_tooltip.c
+	interface_regions.c
 	interface_style.c
 	interface_templates.c
 	interface_utils.c
@@ -69,7 +74,15 @@ set(SRC
 	view2d.c
 	view2d_ops.c
 
+	interface_eyedropper_intern.h
 	interface_intern.h
+	interface_regions_intern.h
+)
+
+set(LIB
+	bf_blenkernel
+	bf_blenlib
+	bf_editor_datafiles
 )
 
 if(WITH_INTERNATIONAL)
@@ -78,6 +91,10 @@ endif()
 
 if(WITH_HEADLESS)
 	add_definitions(-DWITH_HEADLESS)
+endif()
+
+if(WITH_CYCLES)
+	add_definitions(-DWITH_CYCLES)
 endif()
 
 if(WITH_PYTHON)
@@ -92,4 +109,4 @@ endif()
 
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_editor_interface "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_interface "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/view_map/ViewMap.cpp
- *  \ingroup freestyle
- *  \brief Classes to define a View Map (ViewVertex, ViewEdge, etc.)
- *  \author Stephane Grabli
- *  \date 03/09/2002
+/** \file
+ * \ingroup freestyle
+ * \brief Classes to define a View Map (ViewVertex, ViewEdge, etc.)
  */
 
 #include <float.h>
@@ -95,7 +89,7 @@ ViewShape *ViewMap::viewShape(unsigned id)
 
 void ViewMap::AddViewShape(ViewShape *iVShape)
 {
-	_shapeIdToIndex[iVShape->getId().getFirst()] = _VShapes.size(); 
+	_shapeIdToIndex[iVShape->getId().getFirst()] = _VShapes.size();
 	_VShapes.push_back(iVShape);
 }
 
@@ -305,13 +299,13 @@ static bool ViewEdgeComp(ViewVertex::directedViewEdge& dve1, ViewVertex::directe
 	if (v1.y() > 0) {
 		if (v2.y() < 0)
 			return true;
-		else 
+		else
 			return (v1.x() > v2.x());
 	}
 	else {
 		if (v2.y() > 0)
 			return false;
-		else 
+		else
 			return (v1.x() < v2.x());
 	}
 	return false;
@@ -387,7 +381,7 @@ void TVertex::setBackEdgeB(ViewEdge *iBackEdgeB, bool incoming)
 
 void TVertex::Replace(ViewEdge *iOld, ViewEdge *iNew)
 {
-	// theoritically, we only replace edges for which this 
+	// theoritically, we only replace edges for which this
 	// view vertex is the B vertex
 	if ((iOld == _FrontEdgeA.first) && (_FrontEdgeA.first->B() == this)) {
 		_FrontEdgeA.first = iNew;
@@ -501,7 +495,7 @@ ViewVertexInternal::orientedViewEdgeIterator TVertex::edgesIterator(ViewEdge *iE
 /**********************************/
 /*                                */
 /*                                */
-/*             NonTVertex         */ 
+/*             NonTVertex         */
 /*                                */
 /*                                */
 /**********************************/

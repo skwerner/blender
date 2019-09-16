@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_ExecutionSystem.h"
@@ -132,7 +128,7 @@ void ExecutionSystem::execute()
 	editingtree->stats_draw(editingtree->sdh, IFACE_("Compositing | Initializing execution"));
 
 	DebugInfo::execute_started(this);
-	
+
 	unsigned int order = 0;
 	for (vector<NodeOperation *>::iterator iter = this->m_operations.begin(); iter != this->m_operations.end(); ++iter) {
 		NodeOperation *operation = *iter;

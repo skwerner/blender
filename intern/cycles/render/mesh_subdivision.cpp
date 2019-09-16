@@ -204,7 +204,9 @@ public:
 			src = dest;
 		}
 
-		patch_table->ComputeLocalPointValues(&verts[0], &verts[num_refiner_verts]);
+		if(num_local_points) {
+			patch_table->ComputeLocalPointValues(&verts[0], &verts[num_refiner_verts]);
+		}
 
 		/* create patch map */
 		patch_map = new Far::PatchMap(*patch_table);
@@ -229,6 +231,9 @@ public:
 				if(attr.same_storage(attr.type, TypeDesc::TypeFloat)) {
 					primvar_refiner.Interpolate(i+1, (OsdValue<float>*)src, (OsdValue<float>*&)dest);
 				}
+				else if(attr.same_storage(attr.type, TypeFloat2)) {
+					primvar_refiner.Interpolate(i+1, (OsdValue<float2>*)src, (OsdValue<float2>*&)dest);
+				}
 				else {
 					primvar_refiner.Interpolate(i+1, (OsdValue<float4>*)src, (OsdValue<float4>*&)dest);
 				}
@@ -236,13 +241,19 @@ public:
 				src = dest;
 			}
 
-			if(attr.same_storage(attr.type, TypeDesc::TypeFloat)) {
-				patch_table->ComputeLocalPointValues((OsdValue<float>*)&attr.buffer[0],
-					                                 (OsdValue<float>*)&attr.buffer[num_refiner_verts * attr.data_sizeof()]);
-			}
-			else {
-				patch_table->ComputeLocalPointValues((OsdValue<float4>*)&attr.buffer[0],
-					                                 (OsdValue<float4>*)&attr.buffer[num_refiner_verts * attr.data_sizeof()]);
+			if(num_local_points) {
+				if(attr.same_storage(attr.type, TypeDesc::TypeFloat)) {
+					patch_table->ComputeLocalPointValues((OsdValue<float>*)&attr.buffer[0],
+							                             (OsdValue<float>*)&attr.buffer[num_refiner_verts * attr.data_sizeof()]);
+				}
+				else if(attr.same_storage(attr.type, TypeFloat2)) {
+					patch_table->ComputeLocalPointValues((OsdValue<float2>*)&attr.buffer[0],
+														 (OsdValue<float2>*)&attr.buffer[num_refiner_verts * attr.data_sizeof()]);
+				}
+				else {
+					patch_table->ComputeLocalPointValues((OsdValue<float4>*)&attr.buffer[0],
+							                             (OsdValue<float4>*)&attr.buffer[num_refiner_verts * attr.data_sizeof()]);
+				}
 			}
 		}
 		else if(attr.element == ATTR_ELEMENT_CORNER || attr.element == ATTR_ELEMENT_CORNER_BYTE) {
@@ -609,4 +620,3 @@ void Mesh::tessellate(DiagSplit *split)
 }
 
 CCL_NAMESPACE_END
-

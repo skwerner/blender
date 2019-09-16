@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar, Geoffrey Bantle, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/intern/bmesh_marking.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Selection routines for bmesh structures.
  * This is actually all old code ripped from
@@ -43,6 +37,9 @@
 #include "bmesh.h"
 #include "bmesh_structure.h"
 
+/* For '_FLAG_OVERLAP'. */
+#include "bmesh_private.h"
+
 static void recount_totsels(BMesh *bm)
 {
 	const char iter_types[3] = {BM_VERTS_OF_MESH,
@@ -63,7 +60,9 @@ static void recount_totsels(BMesh *bm)
 		int count = 0;
 
 		BM_ITER_MESH (ele, &iter, bm, iter_types[i]) {
-			if (BM_elem_flag_test(ele, BM_ELEM_SELECT)) count += 1;
+			if (BM_elem_flag_test(ele, BM_ELEM_SELECT)) {
+				count += 1;
+			}
 		}
 		*tots[i] = count;
 	}
@@ -609,7 +608,7 @@ void BM_mesh_select_mode_set(BMesh *bm, int selectmode)
 {
 	BMIter iter;
 	BMElem *ele;
-	
+
 	bm->selectmode = selectmode;
 
 	if (bm->selectmode & SCE_SELECT_VERTEX) {
@@ -670,20 +669,32 @@ static int bm_mesh_flag_count(
 
 	if (htype & BM_VERT) {
 		BM_ITER_MESH (ele, &iter, bm, BM_VERTS_OF_MESH) {
-			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) continue;
-			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) tot++;
+			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) {
+				continue;
+			}
+			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) {
+				tot++;
+			}
 		}
 	}
 	if (htype & BM_EDGE) {
 		BM_ITER_MESH (ele, &iter, bm, BM_EDGES_OF_MESH) {
-			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) continue;
-			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) tot++;
+			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) {
+				continue;
+			}
+			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) {
+				tot++;
+			}
 		}
 	}
 	if (htype & BM_FACE) {
 		BM_ITER_MESH (ele, &iter, bm, BM_FACES_OF_MESH) {
-			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) continue;
-			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) tot++;
+			if (respecthide && BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) {
+				continue;
+			}
+			if (BM_elem_flag_test_bool(ele, hflag) == test_for_enabled) {
+				tot++;
+			}
 		}
 	}
 
@@ -737,13 +748,13 @@ BMFace *BM_mesh_active_face_get(BMesh *bm, const bool is_sloppy, const bool is_s
 		BMIter iter;
 		BMFace *f = NULL;
 		BMEditSelection *ese;
-		
+
 		/* Find the latest non-hidden face from the BMEditSelection */
 		ese = bm->selected.last;
 		for ( ; ese; ese = ese->prev) {
 			if (ese->htype == BM_FACE) {
 				f = (BMFace *)ese->ele;
-				
+
 				if (BM_elem_flag_test(f, BM_ELEM_HIDDEN)) {
 					f = NULL;
 				}
@@ -828,7 +839,7 @@ void BM_editselection_center(BMEditSelection *ese, float r_center[3])
 	}
 	else if (ese->htype == BM_FACE) {
 		BMFace *efa = (BMFace *)ese->ele;
-		BM_face_calc_center_mean(efa, r_center);
+		BM_face_calc_center_median(efa, r_center);
 	}
 }
 
@@ -842,10 +853,10 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
 		BMEdge *eed = (BMEdge *)ese->ele;
 		float plane[3]; /* need a plane to correct the normal */
 		float vec[3]; /* temp vec storage */
-		
+
 		add_v3_v3v3(r_normal, eed->v1->no, eed->v2->no);
 		sub_v3_v3v3(plane, eed->v2->co, eed->v1->co);
-		
+
 		/* the 2 vertex normals will be close but not at rightangles to the edge
 		 * for rotate about edge we want them to be at right angles, so we need to
 		 * do some extra calculation to correct the vert normals,
@@ -853,7 +864,7 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
 		cross_v3_v3v3(vec, r_normal, plane);
 		cross_v3_v3v3(r_normal, plane, vec);
 		normalize_v3(r_normal);
-		
+
 	}
 	else if (ese->htype == BM_FACE) {
 		BMFace *efa = (BMFace *)ese->ele;
@@ -863,13 +874,13 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
 
 /* Calculate a plane that is rightangles to the edge/vert/faces normal
  * also make the plane run along an axis that is related to the geometry,
- * because this is used for the manipulators Y axis. */
+ * because this is used for the gizmos Y axis. */
 void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
 {
 	if (ese->htype == BM_VERT) {
 		BMVert *eve = (BMVert *)ese->ele;
 		float vec[3] = {0.0f, 0.0f, 0.0f};
-		
+
 		if (ese->prev) { /* use previously selected data to make a useful vertex plane */
 			BM_editselection_center(ese->prev, vec);
 			sub_v3_v3v3(r_plane, vec, eve->co);
@@ -879,9 +890,9 @@ void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
 			 * we cant make a crossvec from a vec thats the same as the vec
 			 * unlikely but possible, so make sure if the normal is (0, 0, 1)
 			 * that vec isn't the same or in the same direction even. */
-			if      (eve->no[0] < 0.5f) vec[0] = 1.0f;
-			else if (eve->no[1] < 0.5f) vec[1] = 1.0f;
-			else                        vec[2] = 1.0f;
+			if      (eve->no[0] < 0.5f) { vec[0] = 1.0f; }
+			else if (eve->no[1] < 0.5f) { vec[1] = 1.0f; }
+			else                        { vec[2] = 1.0f; }
 			cross_v3_v3v3(r_plane, eve->no, vec);
 		}
 		normalize_v3(r_plane);
@@ -895,7 +906,7 @@ void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
 		else {
 			/* the plane is simple, it runs along the edge
 			 * however selecting different edges can swap the direction of the y axis.
-			 * this makes it less likely for the y axis of the manipulator
+			 * this makes it less likely for the y axis of the gizmo
 			 * (running along the edge).. to flip less often.
 			 * at least its more predictable */
 			if (eed->v2->co[1] > eed->v1->co[1]) {  /* check which to do first */
@@ -1058,6 +1069,68 @@ GHash *BM_select_history_map_create(BMesh *bm)
 	return map;
 }
 
+/**
+ * Map arguments may all be the same pointer.
+ */
+void BM_select_history_merge_from_targetmap(
+        BMesh *bm,
+        GHash *vert_map,
+        GHash *edge_map,
+        GHash *face_map,
+        const bool use_chain)
+{
+
+#ifdef DEBUG
+	for (BMEditSelection *ese = bm->selected.first; ese; ese = ese->next) {
+		BLI_assert(BM_ELEM_API_FLAG_TEST(ese->ele, _FLAG_OVERLAP) == 0);
+	}
+#endif
+
+	for (BMEditSelection *ese = bm->selected.first; ese; ese = ese->next) {
+		BM_ELEM_API_FLAG_ENABLE(ese->ele, _FLAG_OVERLAP);
+
+		/* Only loop when (use_chain == true). */
+		GHash *map = NULL;
+		switch (ese->ele->head.htype) {
+			case BM_VERT: map = vert_map; break;
+			case BM_EDGE: map = edge_map; break;
+			case BM_FACE: map = face_map; break;
+			default: BMESH_ASSERT(0);     break;
+		}
+		if (map != NULL) {
+			BMElem *ele_dst = ese->ele;
+			while (true) {
+				BMElem *ele_dst_next = BLI_ghash_lookup(map, ele_dst);
+				BLI_assert(ele_dst != ele_dst_next);
+				if (ele_dst_next == NULL) {
+					break;
+				}
+				ele_dst = ele_dst_next;
+				/* Break loop on circular reference (should never happen). */
+				if (UNLIKELY(ele_dst == ese->ele)) {
+					BLI_assert(0);
+					break;
+				}
+				if (use_chain == false) {
+					break;
+				}
+			}
+			ese->ele = ele_dst;
+		}
+	}
+
+	/* Remove overlapping duplicates. */
+	for (BMEditSelection *ese = bm->selected.first, *ese_next; ese; ese = ese_next) {
+		ese_next = ese->next;
+		if (BM_ELEM_API_FLAG_TEST(ese->ele, _FLAG_OVERLAP)) {
+			BM_ELEM_API_FLAG_DISABLE(ese->ele, _FLAG_OVERLAP);
+		}
+		else {
+			BLI_freelinkN(&bm->selected, ese);
+		}
+	}
+}
+
 void BM_mesh_elem_hflag_disable_test(
         BMesh *bm, const char htype, const char hflag,
         const bool respecthide, const bool overwrite, const char hflag_test)
@@ -1148,10 +1221,6 @@ void BM_mesh_elem_hflag_enable_test(
 	int i;
 
 	BLI_assert((htype & ~BM_ALL_NOLOOP) == 0);
-
-	if (hflag & BM_ELEM_SELECT) {
-		BM_select_history_clear(bm);
-	}
 
 	/* note, better not attempt a fast path for selection as done with de-select
 	 * because hidden geometry and different selection modes can give different results,
@@ -1261,7 +1330,7 @@ void BM_edge_hide_set(BMEdge *e, const bool hide)
 			BM_elem_flag_set(l_iter->f, BM_ELEM_HIDDEN, hide);
 		} while ((l_iter = l_iter->radial_next) != l_first);
 	}
-	
+
 	BM_elem_flag_set(e, BM_ELEM_HIDDEN, hide);
 
 	/* hide vertices if necessary */
@@ -1316,15 +1385,21 @@ void _bm_elem_hide_set(BMesh *bm, BMHeader *head, const bool hide)
 	 * hiding an element */
 	switch (head->htype) {
 		case BM_VERT:
-			if (hide) BM_vert_select_set(bm, (BMVert *)head, false);
+			if (hide) {
+				BM_vert_select_set(bm, (BMVert *)head, false);
+			}
 			BM_vert_hide_set((BMVert *)head, hide);
 			break;
 		case BM_EDGE:
-			if (hide) BM_edge_select_set(bm, (BMEdge *)head, false);
+			if (hide) {
+				BM_edge_select_set(bm, (BMEdge *)head, false);
+			}
 			BM_edge_hide_set((BMEdge *)head, hide);
 			break;
 		case BM_FACE:
-			if (hide) BM_face_select_set(bm, (BMFace *)head, false);
+			if (hide) {
+				BM_face_select_set(bm, (BMFace *)head, false);
+			}
 			BM_face_hide_set((BMFace *)head, hide);
 			break;
 		default:

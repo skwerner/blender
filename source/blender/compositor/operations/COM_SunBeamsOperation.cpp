@@ -1,7 +1,4 @@
-/*
- * Copyright 2014, Blender Foundation.
- *
- * This program is free software; you can redistribute it and/or
+/* This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
  * of the License, or (at your option) any later version.
@@ -15,8 +12,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Lukas Toenne
+ * Copyright 2014, Blender Foundation.
  */
 
 #include "MEM_guardedalloc.h"
@@ -50,7 +46,7 @@ void SunBeamsOperation::initExecution()
  * For a target point (x,y) the sector should be chosen such that
  *   ``u >= v >= 0``
  * This removes the need to handle all sorts of special cases.
- * 
+ *
  * Template parameters:
  * fxu : buffer increment in x for sector u+1
  * fxv : buffer increment in x for sector v+1
@@ -61,7 +57,7 @@ template <int fxu, int fxv, int fyu, int fyv>
 struct BufferLineAccumulator {
 
 	/* utility functions implementing the matrix transform to/from sector space */
-	
+
 	static inline void buffer_to_sector(const float source[2], int x, int y, int &u, int &v)
 	{
 		int x0 = (int)source[0];
@@ -105,9 +101,9 @@ struct BufferLineAccumulator {
 	 * at dist_min from the target pt. This way the loop can be canceled as soon as it runs
 	 * out of the buffer rect, because no pixels further along the line can contribute.
 	 *
-	 * \param x, y  Start location in the buffer
-	 * \param num  Total steps in the loop
-	 * \param v, dv  Vertical offset in sector space, for line offset perpendicular to the loop axis
+	 * \param x, y: Start location in the buffer
+	 * \param num: Total steps in the loop
+	 * \param v, dv: Vertical offset in sector space, for line offset perpendicular to the loop axis
 	 */
 	static float *init_buffer_iterator(MemoryBuffer *input, const float source[2], const float co[2],
 	                                   float dist_min, float dist_max,
@@ -141,7 +137,7 @@ struct BufferLineAccumulator {
 
 	/**
 	 * Perform the actual accumulation along a ray segment from source to pt.
-	 * Only pixels withing dist_min..dist_max contribute.
+	 * Only pixels within dist_min..dist_max contribute.
 	 *
 	 * The loop runs backwards(!) over the primary sector space axis u, i.e. increasing distance to pt.
 	 * After each step it decrements v by dv < 1, adding a buffer shift when necessary.
@@ -155,9 +151,9 @@ struct BufferLineAccumulator {
 		float v, dv;
 		float falloff_factor;
 		float border[4];
-		
+
 		zero_v4(output);
-		
+
 		if ((int)(co[0] - source[0]) == 0 && (int)(co[1] - source[1]) == 0) {
 			copy_v4_v4(output, input->getBuffer() + COM_NUM_CHANNELS_COLOR * ((int)source[0] + input->getWidth() * (int)source[1]));
 			return;
@@ -174,7 +170,7 @@ struct BufferLineAccumulator {
 		for (int i = 0; i < num; i++) {
 			float weight = 1.0f - (float)i * falloff_factor;
 			weight *= weight;
-			
+
 			/* range check, use last valid color when running beyond the image border */
 			if (x >= rect.xmin && x < rect.xmax && y >= rect.ymin && y < rect.ymax) {
 				madd_v4_v4fl(output, buffer, buffer[3] * weight);
@@ -184,7 +180,7 @@ struct BufferLineAccumulator {
 			else {
 				madd_v4_v4fl(output, border, border[3] * weight);
 			}
-			
+
 			/* TODO implement proper filtering here, see
 			 * https://en.wikipedia.org/wiki/Lanczos_resampling
 			 * https://en.wikipedia.org/wiki/Sinc_function
@@ -335,4 +331,3 @@ bool SunBeamsOperation::determineDependingAreaOfInterest(rcti *input, ReadBuffer
 
 	return NodeOperation::determineDependingAreaOfInterest(&rect, readOperation, output);
 }
-

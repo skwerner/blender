@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FREESTYLE_VIEW_MAP_BUILDER_H__
 #define __FREESTYLE_VIEW_MAP_BUILDER_H__
 
-/** \file blender/freestyle/intern/view_map/ViewMapBuilder.h
- *  \ingroup freestyle
- *  \brief Class to build silhouette edges from a Winged-Edge structure
- *  \author Stephane Grabli
- *  \date 25/03/2002
+/** \file
+ * \ingroup freestyle
+ * \brief Class to build silhouette edges from a Winged-Edge structure
  */
 
 #include <vector>
@@ -159,7 +153,7 @@ public:
 	/*! Builds the scene view map returns the list the view map
 	 *  it is up to the caller to delete this ViewMap
 	 *    iWRoot
-	 *      The root group node containing the WEdge structured scene 
+	 *      The root group node containing the WEdge structured scene
 	 */
 	ViewMap *BuildViewMap(WingedEdge& we, visibility_algo iAlgo, real epsilon, const BBox<Vec3r>& bbox,
 	                      unsigned int sceneNumFaces);
@@ -180,7 +174,7 @@ public:
 
 	/*! Computes the 2D scene silhouette edges visibility
 	 *    iGrid
-	 *      For the Ray Casting algorithm. 
+	 *      For the Ray Casting algorithm.
 	 */
 	void ComputeEdgesVisibility(ViewMap *ioViewMap, WingedEdge& we, const BBox<Vec3r>& bbox, unsigned int sceneNumFaces,
 	                            visibility_algo iAlgo = ray_casting, real epsilon = 1.0e-6);

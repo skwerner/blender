@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,19 +12,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file BLI_callbacks.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #ifndef __BLI_CALLBACKS_H__
 #define __BLI_CALLBACKS_H__
 
-struct Main;
 struct ID;
+struct Main;
 
 /**
  * Common suffix uses:
@@ -49,12 +45,15 @@ typedef enum {
 	BLI_CB_EVT_LOAD_POST,
 	BLI_CB_EVT_SAVE_PRE,
 	BLI_CB_EVT_SAVE_POST,
-	BLI_CB_EVT_SCENE_UPDATE_PRE,
-	BLI_CB_EVT_SCENE_UPDATE_POST,
-	BLI_CB_EVT_GAME_PRE,
-	BLI_CB_EVT_GAME_POST,
+	BLI_CB_EVT_UNDO_PRE,
+	BLI_CB_EVT_UNDO_POST,
+	BLI_CB_EVT_REDO_PRE,
+	BLI_CB_EVT_REDO_POST,
+	BLI_CB_EVT_DEPSGRAPH_UPDATE_PRE,
+	BLI_CB_EVT_DEPSGRAPH_UPDATE_POST,
 	BLI_CB_EVT_VERSION_UPDATE,
-	BLI_CB_EVT_TOT
+	BLI_CB_EVT_LOAD_FACTORY_STARTUP_POST,
+	BLI_CB_EVT_TOT,
 } eCbEvent;
 
 
@@ -66,7 +65,7 @@ typedef struct bCallbackFuncStore {
 } bCallbackFuncStore;
 
 
-void BLI_callback_exec(struct Main *main, struct ID *self, eCbEvent evt);
+void BLI_callback_exec(struct Main *bmain, struct ID *self, eCbEvent evt);
 void BLI_callback_add(bCallbackFuncStore *funcstore, eCbEvent evt);
 
 void BLI_callback_global_init(void);

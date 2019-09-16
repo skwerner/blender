@@ -23,27 +23,16 @@
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
 #include "util/util_set.h"
+#include "util/util_string.h"
 
 CCL_NAMESPACE_BEGIN
 
-Device *device_opencl_create(DeviceInfo& info, Stats &stats, bool background)
+Device *device_opencl_create(DeviceInfo& info, Stats &stats, Profiler &profiler, bool background)
 {
-	vector<OpenCLPlatformDevice> usable_devices;
-	OpenCLInfo::get_usable_devices(&usable_devices);
-	assert(info.num < usable_devices.size());
-	const OpenCLPlatformDevice& platform_device = usable_devices[info.num];
-	const string& platform_name = platform_device.platform_name;
-	const cl_device_type device_type = platform_device.device_type;
-	if(OpenCLInfo::kernel_use_split(platform_name, device_type)) {
-		VLOG(1) << "Using split kernel.";
-		return opencl_create_split_device(info, stats, background);
-	} else {
-		VLOG(1) << "Using mega kernel.";
-		return opencl_create_mega_device(info, stats, background);
-	}
+	return opencl_create_split_device(info, stats, profiler, background);
 }
 
-bool device_opencl_init(void)
+bool device_opencl_init()
 {
 	static bool initialized = false;
 	static bool result = false;
@@ -110,7 +99,6 @@ void device_opencl_info(vector<DeviceInfo>& devices)
 	foreach(OpenCLPlatformDevice& platform_device, usable_devices) {
 		/* Compute unique ID for persistent user preferences. */
 		const string& platform_name = platform_device.platform_name;
-		const cl_device_type device_type = platform_device.device_type;
 		const string& device_name = platform_device.device_name;
 		string hardware_id = platform_device.hardware_id;
 		if(hardware_id == "") {
@@ -131,18 +119,19 @@ void device_opencl_info(vector<DeviceInfo>& devices)
 		info.num = num_devices;
 		/* We don't know if it's used for display, but assume it is. */
 		info.display_device = true;
-		info.advanced_shading = OpenCLInfo::kernel_use_advanced_shading(platform_name);
-		info.use_split_kernel = OpenCLInfo::kernel_use_split(platform_name,
-		                                                     device_type);
+		info.use_split_kernel = true;
 		info.has_volume_decoupled = false;
-		info.bvh_layout_mask = BVH_LAYOUT_BVH2;
 		info.id = id;
+
+		/* Check OpenCL extensions */
+		info.has_half_images = platform_device.device_extensions.find("cl_khr_fp16") != string::npos;
+
 		devices.push_back(info);
 		num_devices++;
 	}
 }
 
-string device_opencl_capabilities(void)
+string device_opencl_capabilities()
 {
 	if(OpenCLInfo::device_type() == 0) {
 		return "All OpenCL devices are forced to be OFF";
@@ -162,11 +151,14 @@ string device_opencl_capabilities(void)
 	platform_ids.resize(num_platforms);
 	opencl_assert(clGetPlatformIDs(num_platforms, &platform_ids[0], NULL));
 
-#define APPEND_STRING_INFO(func, id, name, what) \
+	typedef char cl_string[1024];
+
+#define APPEND_INFO(func, id, name, what, type) \
 	do { \
-		char data[1024] = "\0"; \
+		type data; \
+		memset(&data, 0, sizeof(data)); \
 		opencl_assert(func(id, what, sizeof(data), &data, NULL)); \
-		result += string_printf("%s: %s\n", name, data); \
+		result += string_printf("%s: %s\n", name, to_string(data).c_str()); \
 	} while(false)
 #define APPEND_STRING_EXTENSION_INFO(func, id, name, what) \
 	do { \
@@ -178,10 +170,10 @@ string device_opencl_capabilities(void)
 			} \
 		} \
 	} while(false)
-#define APPEND_PLATFORM_STRING_INFO(id, name, what) \
-	APPEND_STRING_INFO(clGetPlatformInfo, id, "\tPlatform " name, what)
-#define APPEND_DEVICE_STRING_INFO(id, name, what) \
-	APPEND_STRING_INFO(clGetDeviceInfo, id, "\t\t\tDevice " name, what)
+#define APPEND_PLATFORM_INFO(id, name, what, type) \
+	APPEND_INFO(clGetPlatformInfo, id, "\tPlatform " name, what, type)
+#define APPEND_DEVICE_INFO(id, name, what, type) \
+	APPEND_INFO(clGetDeviceInfo, id, "\t\t\tDevice " name, what, type)
 #define APPEND_DEVICE_STRING_EXTENSION_INFO(id, name, what) \
 	APPEND_STRING_EXTENSION_INFO(clGetDeviceInfo, id, "\t\t\tDevice " name, what)
 
@@ -191,11 +183,11 @@ string device_opencl_capabilities(void)
 
 		result += string_printf("Platform #%u\n", platform);
 
-		APPEND_PLATFORM_STRING_INFO(platform_id, "Name", CL_PLATFORM_NAME);
-		APPEND_PLATFORM_STRING_INFO(platform_id, "Vendor", CL_PLATFORM_VENDOR);
-		APPEND_PLATFORM_STRING_INFO(platform_id, "Version", CL_PLATFORM_VERSION);
-		APPEND_PLATFORM_STRING_INFO(platform_id, "Profile", CL_PLATFORM_PROFILE);
-		APPEND_PLATFORM_STRING_INFO(platform_id, "Extensions", CL_PLATFORM_EXTENSIONS);
+		APPEND_PLATFORM_INFO(platform_id, "Name", CL_PLATFORM_NAME, cl_string);
+		APPEND_PLATFORM_INFO(platform_id, "Vendor", CL_PLATFORM_VENDOR, cl_string);
+		APPEND_PLATFORM_INFO(platform_id, "Version", CL_PLATFORM_VERSION, cl_string);
+		APPEND_PLATFORM_INFO(platform_id, "Profile", CL_PLATFORM_PROFILE, cl_string);
+		APPEND_PLATFORM_INFO(platform_id, "Extensions", CL_PLATFORM_EXTENSIONS, cl_string);
 
 		cl_uint num_devices = 0;
 		opencl_assert(clGetDeviceIDs(platform_ids[platform],
@@ -216,13 +208,16 @@ string device_opencl_capabilities(void)
 
 			result += string_printf("\t\tDevice: #%u\n", device);
 
-			APPEND_DEVICE_STRING_INFO(device_id, "Name", CL_DEVICE_NAME);
+			APPEND_DEVICE_INFO(device_id, "Name", CL_DEVICE_NAME, cl_string);
 			APPEND_DEVICE_STRING_EXTENSION_INFO(device_id, "Board Name", CL_DEVICE_BOARD_NAME_AMD);
-			APPEND_DEVICE_STRING_INFO(device_id, "Vendor", CL_DEVICE_VENDOR);
-			APPEND_DEVICE_STRING_INFO(device_id, "OpenCL C Version", CL_DEVICE_OPENCL_C_VERSION);
-			APPEND_DEVICE_STRING_INFO(device_id, "Profile", CL_DEVICE_PROFILE);
-			APPEND_DEVICE_STRING_INFO(device_id, "Version", CL_DEVICE_VERSION);
-			APPEND_DEVICE_STRING_INFO(device_id, "Extensions", CL_DEVICE_EXTENSIONS);
+			APPEND_DEVICE_INFO(device_id, "Vendor", CL_DEVICE_VENDOR, cl_string);
+			APPEND_DEVICE_INFO(device_id, "OpenCL C Version", CL_DEVICE_OPENCL_C_VERSION, cl_string);
+			APPEND_DEVICE_INFO(device_id, "Profile", CL_DEVICE_PROFILE, cl_string);
+			APPEND_DEVICE_INFO(device_id, "Version", CL_DEVICE_VERSION, cl_string);
+			APPEND_DEVICE_INFO(device_id, "Extensions", CL_DEVICE_EXTENSIONS, cl_string);
+			APPEND_DEVICE_INFO(device_id, "Max clock frequency (MHz)", CL_DEVICE_MAX_CLOCK_FREQUENCY, cl_uint);
+			APPEND_DEVICE_INFO(device_id, "Max compute units", CL_DEVICE_MAX_COMPUTE_UNITS, cl_uint);
+			APPEND_DEVICE_INFO(device_id, "Max work group size", CL_DEVICE_MAX_WORK_GROUP_SIZE, size_t);
 		}
 	}
 
@@ -235,4 +230,4 @@ string device_opencl_capabilities(void)
 
 CCL_NAMESPACE_END
 
-#endif /* WITH_OPENCL */
+#endif  /* WITH_OPENCL */

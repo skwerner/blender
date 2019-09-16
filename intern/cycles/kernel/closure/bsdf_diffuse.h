@@ -88,7 +88,7 @@ ccl_device int bsdf_diffuse_sample(const ShaderClosure *sc, float3 Ng, float3 I,
 	}
 	else
 		*pdf = 0.0f;
-	
+
 	return LABEL_REFLECT|LABEL_DIFFUSE;
 }
 
@@ -139,5 +139,4 @@ ccl_device int bsdf_translucent_sample(const ShaderClosure *sc, float3 Ng, float
 
 CCL_NAMESPACE_END
 
-#endif /* __BSDF_DIFFUSE_H__ */
-
+#endif  /* __BSDF_DIFFUSE_H__ */

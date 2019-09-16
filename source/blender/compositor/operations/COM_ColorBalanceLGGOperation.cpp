@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_ColorBalanceLGGOperation.h"
@@ -58,14 +54,14 @@ void ColorBalanceLGGOperation::executePixelSampled(float output[4], float x, flo
 {
 	float inputColor[4];
 	float value[4];
-	
+
 	this->m_inputValueOperation->readSampled(value, x, y, sampler);
 	this->m_inputColorOperation->readSampled(inputColor, x, y, sampler);
-	
+
 	float fac = value[0];
 	fac = min(1.0f, fac);
 	const float mfac = 1.0f - fac;
-	
+
 	output[0] = mfac * inputColor[0] + fac * colorbalance_lgg(inputColor[0], this->m_lift[0], this->m_gamma_inv[0], this->m_gain[0]);
 	output[1] = mfac * inputColor[1] + fac * colorbalance_lgg(inputColor[1], this->m_lift[1], this->m_gamma_inv[1], this->m_gain[1]);
 	output[2] = mfac * inputColor[2] + fac * colorbalance_lgg(inputColor[2], this->m_lift[2], this->m_gamma_inv[2], this->m_gain[2]);

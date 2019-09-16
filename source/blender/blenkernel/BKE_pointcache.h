@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,24 +15,18 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Campbell Barton <ideasman42@gmail.com>
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_POINTCACHE_H__
 #define __BKE_POINTCACHE_H__
 
-/** \file BKE_pointcache.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "DNA_ID.h"
 #include "DNA_dynamicpaint_types.h"
-#include "DNA_object_force.h"
+#include "DNA_object_force_types.h"
 #include "DNA_boid_types.h"
 #include <stdio.h> /* for FILE */
 
@@ -89,10 +81,11 @@ struct Object;
 struct ParticleKey;
 struct ParticleSystem;
 struct PointCache;
+struct RigidBodyWorld;
 struct Scene;
 struct SmokeModifierData;
 struct SoftBody;
-struct RigidBodyWorld;
+struct ViewLayer;
 
 struct OpenVDBReader;
 struct OpenVDBWriter;
@@ -140,7 +133,7 @@ typedef struct PTCacheID {
 	unsigned int default_step;
 	unsigned int max_step;
 
-	/* flags defined in DNA_object_force.h */
+	/* flags defined in DNA_object_force_types.h */
 	unsigned int data_types, info_types;
 
 	/* copies point data to cache data */
@@ -184,8 +177,10 @@ typedef struct PTCacheID {
 } PTCacheID;
 
 typedef struct PTCacheBaker {
-	struct Main *main;
+	struct Main *bmain;
 	struct Scene *scene;
+	struct ViewLayer *view_layer;
+	struct Depsgraph *depsgraph;
 	int bake;
 	int render;
 	int anim_init;
@@ -227,12 +222,11 @@ typedef struct PTCacheEditPoint {
 } PTCacheEditPoint;
 
 typedef struct PTCacheUndo {
-	struct PTCacheUndo *next, *prev;
 	struct PTCacheEditPoint *points;
 
 	/* particles stuff */
 	struct ParticleData *particles;
-	struct KDTree *emitter_field;
+	struct KDTree_3d *emitter_field;
 	float *emitter_cosnos;
 	int psys_flag;
 
@@ -240,19 +234,30 @@ typedef struct PTCacheUndo {
 	struct ListBase mem_cache;
 
 	int totpoint;
-	char name[64];
+
+	size_t undo_size;
 } PTCacheUndo;
 
+enum {
+	/* Modifier stack got evaluated during particle edit mode, need to copy
+	 * new evaluated particles to the edit struct.
+	 */
+	PT_CACHE_EDIT_UPDATE_PARTICLE_FROM_EVAL = (1 << 0),
+};
+
 typedef struct PTCacheEdit {
-	ListBase undo;
-	struct PTCacheUndo *curundo;
+	int flags;
+
 	PTCacheEditPoint *points;
 
 	struct PTCacheID pid;
 
 	/* particles stuff */
 	struct ParticleSystem *psys;
-	struct KDTree *emitter_field;
+	struct ParticleSystem *psys_eval;
+	struct ParticleSystemModifierData *psmd;
+	struct ParticleSystemModifierData *psmd_eval;
+	struct KDTree_3d *emitter_field;
 	float *emitter_cosnos; /* localspace face centers and normals (average of its verts), from the derived mesh */
 	int *mirror_cache;
 
@@ -276,7 +281,14 @@ void BKE_ptcache_id_from_smoke(PTCacheID *pid, struct Object *ob, struct SmokeMo
 void BKE_ptcache_id_from_dynamicpaint(PTCacheID *pid, struct Object *ob, struct DynamicPaintSurface *surface);
 void BKE_ptcache_id_from_rigidbody(PTCacheID *pid, struct Object *ob, struct RigidBodyWorld *rbw);
 
-void BKE_ptcache_ids_from_object(struct ListBase *lb, struct Object *ob, struct Scene *scene, int duplis);
+PTCacheID BKE_ptcache_id_find(struct Object *ob, struct Scene *scene, struct PointCache *cache);
+void BKE_ptcache_ids_from_object(
+        struct ListBase *lb, struct Object *ob, struct Scene *scene, int duplis);
+
+/****************** Query funcs ****************************/
+
+/* Check whether object has a point cache. */
+bool BKE_ptcache_object_has(struct Scene *scene, struct Object *ob, int duplis);
 
 /***************** Global funcs ****************************/
 void BKE_ptcache_remove(void);
@@ -295,7 +307,7 @@ void BKE_ptcache_update_info(PTCacheID *pid);
 /* Size of cache data type. */
 int     BKE_ptcache_data_size(int data_type);
 
-/* Is point with indes in memory cache */
+/* Is point with index in memory cache */
 int BKE_ptcache_mem_index_find(struct PTCacheMem *pm, unsigned int index);
 
 /* Memory cache read/write helpers. */
@@ -319,7 +331,7 @@ struct PointCache *BKE_ptcache_copy_list(struct ListBase *ptcaches_new, const st
 /********************** Baking *********************/
 
 /* Bakes cache with cache_step sized jumps in time, not accurate but very fast. */
-void BKE_ptcache_quick_cache_all(struct Main *bmain, struct Scene *scene);
+void BKE_ptcache_quick_cache_all(struct Main *bmain, struct Scene *scene, struct ViewLayer *view_layer);
 
 /* Bake cache or simulate to current frame with settings defined in the baker. */
 void BKE_ptcache_bake(struct PTCacheBaker *baker);

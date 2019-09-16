@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Jiri Hnidek <jiri.hnidek@vslib.cz>.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/mball_tessellate.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdio.h>
@@ -48,10 +42,12 @@
 
 #include "BKE_global.h"
 
-#include "BKE_depsgraph.h"
-#include "BKE_scene.h"
 #include "BKE_displist.h"
 #include "BKE_mball_tessellate.h"  /* own include */
+#include "BKE_scene.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "BLI_strict_flags.h"
 
@@ -446,35 +442,35 @@ static void freepolygonize(PROCESS *process)
 
 /**** Cubical Polygonization (optional) ****/
 
-#define LB  0  /* left bottom edge	*/
-#define LT  1  /* left top edge	*/
-#define LN  2  /* left near edge	*/
-#define LF  3  /* left far edge	*/
+#define LB  0  /* left bottom edge */
+#define LT  1  /* left top edge */
+#define LN  2  /* left near edge */
+#define LF  3  /* left far edge */
 #define RB  4  /* right bottom edge */
-#define RT  5  /* right top edge	*/
-#define RN  6  /* right near edge	*/
-#define RF  7  /* right far edge	*/
-#define BN  8  /* bottom near edge	*/
-#define BF  9  /* bottom far edge	*/
-#define TN  10 /* top near edge	*/
-#define TF  11 /* top far edge	*/
+#define RT  5  /* right top edge */
+#define RN  6  /* right near edge */
+#define RF  7  /* right far edge */
+#define BN  8  /* bottom near edge */
+#define BF  9  /* bottom far edge */
+#define TN  10 /* top near edge */
+#define TF  11 /* top far edge */
 
 static INTLISTS *cubetable[256];
 static char faces[256];
 
 /* edge: LB, LT, LN, LF, RB, RT, RN, RF, BN, BF, TN, TF */
 static int corner1[12] = {
-	LBN, LTN, LBN, LBF, RBN, RTN, RBN, RBF, LBN, LBF, LTN, LTF
+	LBN, LTN, LBN, LBF, RBN, RTN, RBN, RBF, LBN, LBF, LTN, LTF,
 };
 static int corner2[12] = {
-	LBF, LTF, LTN, LTF, RBF, RTF, RTN, RTF, RBN, RBF, RTN, RTF
+	LBF, LTF, LTN, LTF, RBF, RTF, RTN, RTF, RBN, RBF, RTN, RTF,
 };
 static int leftface[12] = {
-	B, L, L, F, R, T, N, R, N, B, T, F
+	B, L, L, F, R, T, N, R, N, B, T, F,
 };
 /* face on left when going corner1 to corner2 */
 static int rightface[12] = {
-	L, T, N, L, B, R, R, F, B, F, N, T
+	L, T, N, L, B, R, R, F, B, F, N, T,
 };
 /* face on right when going corner1 to corner2 */
 
@@ -836,27 +832,6 @@ static void vnormal(PROCESS *process, const float point[3], float r_no[3])
 	r_no[0] = metaball(process, point[0] + delta, point[1], point[2]) - f;
 	r_no[1] = metaball(process, point[0], point[1] + delta, point[2]) - f;
 	r_no[2] = metaball(process, point[0], point[1], point[2] + delta) - f;
-
-#if 0
-	f = normalize_v3(r_no);
-
-	if (0) {
-		float tvec[3];
-
-		delta *= 2.0f;
-
-		f = process->function(process, point[0], point[1], point[2]);
-
-		tvec[0] = process->function(process, point[0] + delta, point[1], point[2]) - f;
-		tvec[1] = process->function(process, point[0], point[1] + delta, point[2]) - f;
-		tvec[2] = process->function(process, point[0], point[1], point[2] + delta) - f;
-
-		if (normalize_v3(tvec) != 0.0f) {
-			add_v3_v3(r_no, tvec);
-			normalize_v3(r_no);
-		}
-	}
-#endif
 }
 #endif  /* USE_ACCUM_NORMAL */
 
@@ -1055,7 +1030,7 @@ static void polygonize(PROCESS *process)
  * Iterates over ALL objects in the scene and all of its sets, including
  * making all duplis(not only metas). Copies metas to mainb array.
  * Computes bounding boxes for building BVH. */
-static void init_meta(EvaluationContext *eval_ctx, PROCESS *process, Scene *scene, Object *ob)
+static void init_meta(Depsgraph *depsgraph, PROCESS *process, Scene *scene, Object *ob)
 {
 	Scene *sce_iter = scene;
 	Base *base;
@@ -1074,13 +1049,13 @@ static void init_meta(EvaluationContext *eval_ctx, PROCESS *process, Scene *scen
 	BLI_split_name_num(obname, &obnr, ob->id.name + 2, '.');
 
 	/* make main array */
-	BKE_scene_base_iter_next(eval_ctx, &iter, &sce_iter, 0, NULL, NULL);
-	while (BKE_scene_base_iter_next(eval_ctx, &iter, &sce_iter, 1, &base, &bob)) {
+	BKE_scene_base_iter_next(depsgraph, &iter, &sce_iter, 0, NULL, NULL);
+	while (BKE_scene_base_iter_next(depsgraph, &iter, &sce_iter, 1, &base, &bob)) {
 		if (bob->type == OB_MBALL) {
 			zero_size = 0;
 			ml = NULL;
 
-			if (bob == ob && (base->flag & OB_FROMDUPLI) == 0) {
+			if (bob == ob && (base->flag_legacy & OB_FROMDUPLI) == 0) {
 				mb = ob->data;
 
 				if (mb->editelems) ml = mb->editelems->first;
@@ -1232,12 +1207,13 @@ static void init_meta(EvaluationContext *eval_ctx, PROCESS *process, Scene *scen
 	}
 }
 
-void BKE_mball_polygonize(EvaluationContext *eval_ctx, Scene *scene, Object *ob, ListBase *dispbase)
+void BKE_mball_polygonize(Depsgraph *depsgraph, Scene *scene, Object *ob, ListBase *dispbase)
 {
 	MetaBall *mb;
 	DispList *dl;
 	unsigned int a;
 	PROCESS process = {0};
+	bool is_render = DEG_get_mode(depsgraph) == DAG_EVAL_RENDER;
 
 	mb = ob->data;
 
@@ -1248,10 +1224,10 @@ void BKE_mball_polygonize(EvaluationContext *eval_ctx, Scene *scene, Object *ob,
 	else if (process.thresh < 0.1f)   process.converge_res = 4;
 	else                              process.converge_res = 2;
 
-	if ((eval_ctx->mode != DAG_EVAL_RENDER) && (mb->flag == MB_UPDATE_NEVER)) return;
+	if (is_render && (mb->flag == MB_UPDATE_NEVER)) return;
 	if ((G.moving & (G_TRANSFORM_OBJ | G_TRANSFORM_EDIT)) && mb->flag == MB_UPDATE_FAST) return;
 
-	if (eval_ctx->mode == DAG_EVAL_RENDER) {
+	if (is_render) {
 		process.size = mb->rendersize;
 	}
 	else {
@@ -1266,16 +1242,16 @@ void BKE_mball_polygonize(EvaluationContext *eval_ctx, Scene *scene, Object *ob,
 	process.pgn_elements = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, "Metaball memarena");
 
 	/* initialize all mainb (MetaElems) */
-	init_meta(eval_ctx, &process, scene, ob);
+	init_meta(depsgraph, &process, scene, ob);
 
 	if (process.totelem > 0) {
 		build_bvh_spatial(&process, &process.metaball_bvh, 0, process.totelem, &process.allbb);
 
 		/* don't polygonize metaballs with too high resolution (base mball to small)
 		 * note: Eps was 0.0001f but this was giving problems for blood animation for durian, using 0.00001f */
-		if (ob->size[0] > 0.00001f * (process.allbb.max[0] - process.allbb.min[0]) ||
-		    ob->size[1] > 0.00001f * (process.allbb.max[1] - process.allbb.min[1]) ||
-		    ob->size[2] > 0.00001f * (process.allbb.max[2] - process.allbb.min[2]))
+		if (ob->scale[0] > 0.00001f * (process.allbb.max[0] - process.allbb.min[0]) ||
+		    ob->scale[1] > 0.00001f * (process.allbb.max[1] - process.allbb.min[1]) ||
+		    ob->scale[2] > 0.00001f * (process.allbb.max[2] - process.allbb.min[2]))
 		{
 			polygonize(&process);
 

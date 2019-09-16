@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/allocimbuf.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 
@@ -106,14 +98,14 @@ void imb_freemipmapImBuf(ImBuf *ibuf)
 void imb_freerectfloatImBuf(ImBuf *ibuf)
 {
 	if (ibuf == NULL) return;
-	
+
 	if (ibuf->rect_float && (ibuf->mall & IB_rectfloat)) {
 		MEM_freeN(ibuf->rect_float);
 		ibuf->rect_float = NULL;
 	}
 
 	imb_freemipmapImBuf(ibuf);
-	
+
 	ibuf->rect_float = NULL;
 	ibuf->mall &= ~IB_rectfloat;
 }
@@ -126,7 +118,7 @@ void imb_freerectImBuf(ImBuf *ibuf)
 	if (ibuf->rect && (ibuf->mall & IB_rect))
 		MEM_freeN(ibuf->rect);
 	ibuf->rect = NULL;
-	
+
 	imb_freemipmapImBuf(ibuf);
 
 	ibuf->mall &= ~IB_rect;
@@ -153,13 +145,6 @@ void imb_freetilesImBuf(ImBuf *ibuf)
 
 	ibuf->tiles = NULL;
 	ibuf->mall &= ~IB_tiles;
-}
-
-static void imb_free_bitmap_font(ImBuf *ibuf)
-{
-	if (ibuf->userdata && (ibuf->userflags & IB_BITMAPFONT)) {
-		MEM_freeN(ibuf->userdata);
-	}
 }
 
 static void freeencodedbufferImBuf(ImBuf *ibuf)
@@ -215,11 +200,10 @@ void IMB_freeImBuf(ImBuf *ibuf)
 			imb_freerectImBuf(ibuf);
 			imb_freerectfloatImBuf(ibuf);
 			imb_freetilesImBuf(ibuf);
-			imb_free_bitmap_font(ibuf);
 			IMB_freezbufImBuf(ibuf);
 			IMB_freezbuffloatImBuf(ibuf);
 			freeencodedbufferImBuf(ibuf);
-			IMB_metadata_free(ibuf);
+			IMB_metadata_free(ibuf->metadata);
 			colormanage_cache_free(ibuf);
 
 			if (ibuf->dds_data.data != NULL) {
@@ -266,30 +250,30 @@ ImBuf *IMB_makeSingleUser(ImBuf *ibuf)
 bool addzbufImBuf(ImBuf *ibuf)
 {
 	if (ibuf == NULL) return false;
-	
+
 	IMB_freezbufImBuf(ibuf);
-	
+
 	if ((ibuf->zbuf = imb_alloc_pixels(ibuf->x, ibuf->y, 1, sizeof(unsigned int), __func__))) {
 		ibuf->mall |= IB_zbuf;
 		ibuf->flags |= IB_zbuf;
 		return true;
 	}
-	
+
 	return false;
 }
 
 bool addzbuffloatImBuf(ImBuf *ibuf)
 {
 	if (ibuf == NULL) return false;
-	
+
 	IMB_freezbuffloatImBuf(ibuf);
-	
+
 	if ((ibuf->zbuf_float = imb_alloc_pixels(ibuf->x, ibuf->y, 1, sizeof(float), __func__))) {
 		ibuf->mall |= IB_zbuffloat;
 		ibuf->flags |= IB_zbuffloat;
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -372,17 +356,17 @@ void *imb_alloc_pixels(unsigned int x,
 bool imb_addrectfloatImBuf(ImBuf *ibuf)
 {
 	if (ibuf == NULL) return false;
-	
+
 	if (ibuf->rect_float)
 		imb_freerectfloatImBuf(ibuf);  /* frees mipmap too, hrm */
-	
+
 	ibuf->channels = 4;
 	if ((ibuf->rect_float = imb_alloc_pixels(ibuf->x, ibuf->y, 4, sizeof(float), __func__))) {
 		ibuf->mall |= IB_rectfloat;
 		ibuf->flags |= IB_rectfloat;
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -390,12 +374,12 @@ bool imb_addrectfloatImBuf(ImBuf *ibuf)
 bool imb_addrectImBuf(ImBuf *ibuf)
 {
 	if (ibuf == NULL) return false;
-	
+
 	/* don't call imb_freerectImBuf, it frees mipmaps, this call is used only too give float buffers display */
 	if (ibuf->rect && (ibuf->mall & IB_rect))
 		MEM_freeN(ibuf->rect);
 	ibuf->rect = NULL;
-	
+
 	if ((ibuf->rect = imb_alloc_pixels(ibuf->x, ibuf->y, 4, sizeof(unsigned char), __func__))) {
 		ibuf->mall |= IB_rect;
 		ibuf->flags |= IB_rect;
@@ -511,7 +495,7 @@ ImBuf *IMB_dupImBuf(const ImBuf *ibuf1)
 	ImBuf *ibuf2, tbuf;
 	int flags = 0;
 	int a, x, y;
-	
+
 	if (ibuf1 == NULL) return NULL;
 
 	if (ibuf1->rect) flags |= IB_rect;
@@ -521,14 +505,13 @@ ImBuf *IMB_dupImBuf(const ImBuf *ibuf1)
 
 	x = ibuf1->x;
 	y = ibuf1->y;
-	if (ibuf1->flags & IB_fields) y *= 2;
-	
+
 	ibuf2 = IMB_allocImBuf(x, y, ibuf1->planes, flags);
 	if (ibuf2 == NULL) return NULL;
 
 	if (flags & IB_rect)
 		memcpy(ibuf2->rect, ibuf1->rect, ((size_t)x) * y * sizeof(int));
-	
+
 	if (flags & IB_rectfloat)
 		memcpy(ibuf2->rect_float, ibuf1->rect_float, ((size_t)ibuf1->channels) * x * y * sizeof(float));
 
@@ -550,7 +533,7 @@ ImBuf *IMB_dupImBuf(const ImBuf *ibuf1)
 
 	/* silly trick to copy the entire contents of ibuf1 struct over to ibuf */
 	tbuf = *ibuf1;
-	
+
 	/* fix pointers */
 	tbuf.rect          = ibuf2->rect;
 	tbuf.rect_float    = ibuf2->rect_float;
@@ -560,7 +543,7 @@ ImBuf *IMB_dupImBuf(const ImBuf *ibuf1)
 	for (a = 0; a < IMB_MIPMAP_LEVELS; a++)
 		tbuf.mipmap[a] = NULL;
 	tbuf.dds_data.data = NULL;
-	
+
 	/* set malloc flag */
 	tbuf.mall               = ibuf2->mall;
 	tbuf.c_handle           = NULL;

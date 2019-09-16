@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_MapValueNode.h"
@@ -33,14 +29,14 @@ MapValueNode::MapValueNode(bNode *editorNode) : Node(editorNode)
 void MapValueNode::convertToOperations(NodeConverter &converter, const CompositorContext &/*context*/) const
 {
 	TexMapping *storage =  (TexMapping *)this->getbNode()->storage;
-	
+
 	NodeInput *colorSocket = this->getInputSocket(0);
 	NodeOutput *valueSocket = this->getOutputSocket(0);
-	
+
 	MapValueOperation *convertProg = new MapValueOperation();
 	convertProg->setSettings(storage);
 	converter.addOperation(convertProg);
-	
+
 	converter.mapInputSocket(colorSocket, convertProg->getInputSocket(0));
 	converter.mapOutputSocket(valueSocket, convertProg->getOutputSocket(0));
 }

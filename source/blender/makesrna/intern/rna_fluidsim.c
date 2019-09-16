@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,19 +12,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_fluidsim.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
 
-#include "DNA_object_fluidsim.h"
+#include "DNA_object_fluidsim_types.h"
 
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
@@ -46,13 +40,14 @@
 #include "DNA_scene_types.h"
 #include "DNA_particle_types.h"
 
-#include "BKE_depsgraph.h"
 #include "BKE_fluidsim.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
+
+#include "DEG_depsgraph.h"
 
 static StructRNA *rna_FluidSettings_refine(struct PointerRNA *ptr)
 {
@@ -82,18 +77,18 @@ static void rna_fluid_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerR
 {
 	Object *ob = ptr->id.data;
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ob);
 }
 
-static int fluidsim_find_lastframe(Object *ob, FluidsimSettings *fss)
+static int fluidsim_find_lastframe(Main *bmain, Object *ob, FluidsimSettings *fss)
 {
 	char targetFileTest[FILE_MAX];
 	char targetFile[FILE_MAX];
 	int curFrame = 1;
 
 	BLI_join_dirfile(targetFile, sizeof(targetFile), fss->surfdataPath, OB_FLUIDSIM_SURF_FINAL_OBJ_FNAME);
-	BLI_path_abs(targetFile, modifier_path_relbase(ob));
+	BLI_path_abs(targetFile, modifier_path_relbase(bmain, ob));
 
 	do {
 		BLI_strncpy(targetFileTest, targetFile, sizeof(targetFileTest));
@@ -109,7 +104,7 @@ static void rna_fluid_find_enframe(Main *bmain, Scene *scene, PointerRNA *ptr)
 	FluidsimModifierData *fluidmd = (FluidsimModifierData *)modifiers_findByType(ob, eModifierType_Fluidsim);
 
 	if (fluidmd->fss->flag & OB_FLUIDSIM_REVERSE) {
-		fluidmd->fss->lastgoodframe = fluidsim_find_lastframe(ob, fluidmd->fss);
+		fluidmd->fss->lastgoodframe = fluidsim_find_lastframe(bmain, ob, fluidmd->fss);
 	}
 	else {
 		fluidmd->fss->lastgoodframe = -1;
@@ -124,7 +119,7 @@ static void rna_FluidSettings_update_type(Main *bmain, Scene *scene, PointerRNA 
 	ParticleSystemModifierData *psmd;
 	ParticleSystem *psys, *next_psys;
 	ParticleSettings *part;
-	
+
 	fluidmd = (FluidsimModifierData *)modifiers_findByType(ob, eModifierType_Fluidsim);
 	fluidmd->fss->flag &= ~OB_FLUIDSIM_REVERSE; /* clear flag */
 
@@ -222,7 +217,7 @@ static void rna_def_fluidsim_slip(StructRNA *srna)
 		                    "Mix between no-slip and free-slip (non moving objects only!)"},
 		{OB_FSBND_FREESLIP, "FREESLIP", 0, "Free Slip",
 		                    "Obstacle only causes zero normal velocity (=not sticky, non moving objects only!)"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	prop = RNA_def_property(srna, "slip_type", PROP_ENUM, PROP_NONE);
@@ -231,7 +226,7 @@ static void rna_def_fluidsim_slip(StructRNA *srna)
 	RNA_def_property_enum_items(prop, slip_items);
 	RNA_def_property_ui_text(prop, "Slip Type", "");
 
-	prop = RNA_def_property(srna, "partial_slip_factor", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "partial_slip_factor", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_sdna(prop, NULL, "partSlipValue");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
 	RNA_def_property_ui_text(prop, "Partial Slip Amount",
@@ -242,7 +237,7 @@ static void rna_def_fluid_mesh_vertices(BlenderRNA *brna)
 {
 	StructRNA *srna;
 	PropertyRNA *prop;
-	
+
 	srna = RNA_def_struct(brna, "FluidVertexVelocity", NULL);
 	RNA_def_struct_ui_text(srna, "Fluid Mesh Velocity", "Velocity of a simulated fluid mesh");
 	RNA_def_struct_ui_icon(srna, ICON_VERTEXSEL);
@@ -264,7 +259,7 @@ static void rna_def_fluidsim_domain(BlenderRNA *brna)
 		{OB_FSDOM_GEOM, "GEOMETRY", 0, "Geometry", "Display geometry"},
 		{OB_FSDOM_PREVIEW, "PREVIEW", 0, "Preview", "Display preview quality results"},
 		{OB_FSDOM_FINAL, "FINAL", 0, "Final", "Display final quality results"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	srna = RNA_def_struct(brna, "DomainFluidSettings", "FluidSettings");
@@ -278,7 +273,7 @@ static void rna_def_fluidsim_domain(BlenderRNA *brna)
 	RNA_def_property_int_sdna(prop, NULL, "threads");
 	RNA_def_property_range(prop, 0, BLENDER_MAX_THREADS);
 	RNA_def_property_ui_text(prop, "Simulation Threads", "Override number of threads for the simulation, 0 is automatic");
-	
+
 	prop = RNA_def_property(srna, "resolution", PROP_INT, PROP_NONE);
 	RNA_def_property_int_sdna(prop, NULL, "resolutionxyz");
 	RNA_def_property_range(prop, 1, 1024);
@@ -326,32 +321,32 @@ static void rna_def_fluidsim_domain(BlenderRNA *brna)
 	RNA_def_property_array(prop, 3);
 	RNA_def_property_range(prop, -1000.1, 1000.1);
 	RNA_def_property_ui_text(prop, "Gravity", "Gravity in X, Y and Z direction");
-	
+
 	prop = RNA_def_property(srna, "use_time_override", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", OB_FLUIDSIM_OVERRIDE_TIME);
 	RNA_def_property_ui_text(prop, "Override Time",
 	                         "Use a custom start and end time (in seconds) instead of the scene's timeline");
-	
+
 	prop = RNA_def_property(srna, "start_time", PROP_FLOAT, PROP_TIME);
 	RNA_def_property_float_sdna(prop, NULL, "animStart");
 	RNA_def_property_range(prop, 0, FLT_MAX);
 	RNA_def_property_ui_text(prop, "Start Time", "Simulation time of the first blender frame (in seconds)");
-	
+
 	prop = RNA_def_property(srna, "end_time", PROP_FLOAT, PROP_TIME);
 	RNA_def_property_float_sdna(prop, NULL, "animEnd");
 	RNA_def_property_range(prop, 0, FLT_MAX);
 	RNA_def_property_ui_text(prop, "End Time", "Simulation time of the last blender frame (in seconds)");
-	
+
 	prop = RNA_def_property(srna, "frame_offset", PROP_INT, PROP_NONE);
 	RNA_def_property_int_sdna(prop, NULL, "frameOffset");
 	RNA_def_property_ui_text(prop, "Cache Offset", "Offset when reading baked cache");
 	RNA_def_property_update(prop, NC_OBJECT, "rna_fluid_update");
-	
+
 	prop = RNA_def_property(srna, "simulation_scale", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "realsize");
 	RNA_def_property_range(prop, 0.001, 10);
 	RNA_def_property_ui_text(prop, "Real World Size", "Size of the simulation domain in meters");
-	
+
 	prop = RNA_def_property(srna, "simulation_rate", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "animRate");
 	RNA_def_property_range(prop, 0.0, 100.0);
@@ -430,7 +425,7 @@ static void rna_def_fluidsim_domain(BlenderRNA *brna)
 	RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
 	RNA_def_property_range(prop, 0.0, 10.0);
 	RNA_def_property_ui_text(prop, "Generate Particles", "Amount of particles to generate (0=off, 1=normal, >1=more)");
-	
+
 	/* simulated fluid mesh data */
 	prop = RNA_def_property(srna, "fluid_mesh_vertices", PROP_COLLECTION, PROP_NONE);
 	RNA_def_property_collection_sdna(prop, NULL, "meshVelocities", "totvert");
@@ -448,7 +443,7 @@ static void rna_def_fluidsim_volume(StructRNA *srna)
 		{1, "VOLUME", 0, "Volume", "Use only the inner volume of the mesh"},
 		{2, "SHELL", 0, "Shell", "Use only the outer shell of the mesh"},
 		{3, "BOTH", 0, "Both", "Use both the inner volume and the outer shell of the mesh"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	prop = RNA_def_property(srna, "volume_initialization", PROP_ENUM, PROP_NONE);
@@ -470,7 +465,7 @@ static void rna_def_fluidsim_volume(StructRNA *srna)
 static void rna_def_fluidsim_active(StructRNA *srna)
 {
 	PropertyRNA *prop;
-	
+
 	prop = RNA_def_property(srna, "use", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_sdna(prop, NULL, "flag", OB_FLUIDSIM_ACTIVE);
 	RNA_def_property_ui_text(prop, "Enabled", "Object contributes to the fluid simulation");
@@ -488,7 +483,7 @@ static void rna_def_fluidsim_fluid(BlenderRNA *brna)
 
 	rna_def_fluidsim_active(srna);
 	rna_def_fluidsim_volume(srna);
-	
+
 	prop = RNA_def_property(srna, "initial_velocity", PROP_FLOAT, PROP_VELOCITY);
 	RNA_def_property_float_sdna(prop, NULL, "iniVelx");
 	RNA_def_property_array(prop, 3);
@@ -614,12 +609,12 @@ static void rna_def_fluidsim_control(BlenderRNA *brna)
 	                       "Fluid simulation settings for objects controlling the motion of fluid in the simulation");
 
 	rna_def_fluidsim_active(srna);
-	
+
 	prop = RNA_def_property(srna, "start_time", PROP_FLOAT, PROP_TIME);
 	RNA_def_property_float_sdna(prop, NULL, "cpsTimeStart");
 	RNA_def_property_range(prop, 0.0, FLT_MAX);
 	RNA_def_property_ui_text(prop, "Start Time", "Time when the control particles are activated");
-	
+
 	prop = RNA_def_property(srna, "end_time", PROP_FLOAT, PROP_TIME);
 	RNA_def_property_float_sdna(prop, NULL, "cpsTimeEnd");
 	RNA_def_property_range(prop, 0.0, FLT_MAX);
@@ -635,7 +630,7 @@ static void rna_def_fluidsim_control(BlenderRNA *brna)
 	RNA_def_property_float_sdna(prop, NULL, "attractforceRadius");
 	RNA_def_property_range(prop, 0.0, 10.0);
 	RNA_def_property_ui_text(prop, "Attraction Radius", "Force field radius around the control object");
-	
+
 	prop = RNA_def_property(srna, "velocity_strength", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "velocityforceStrength");
 	RNA_def_property_range(prop, 0.0, 10.0);
@@ -681,7 +676,7 @@ void RNA_def_fluidsim(BlenderRNA *brna)
 		                       "fluidsim domain object"},
 		{OB_FLUIDSIM_CONTROL, "CONTROL", 0, "Control",
 		 "Object is made a fluid control mesh, which influences the fluid"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 

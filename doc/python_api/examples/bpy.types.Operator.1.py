@@ -28,8 +28,8 @@ class SimpleMouseOperator(bpy.types.Operator):
     bl_idname = "wm.mouse_position"
     bl_label = "Invoke Mouse Operator"
 
-    x = bpy.props.IntProperty()
-    y = bpy.props.IntProperty()
+    x: bpy.props.IntProperty()
+    y: bpy.props.IntProperty()
 
     def execute(self, context):
         # rather than printing, use the report function,
@@ -41,6 +41,7 @@ class SimpleMouseOperator(bpy.types.Operator):
         self.x = event.mouse_x
         self.y = event.mouse_y
         return self.execute(context)
+
 
 bpy.utils.register_class(SimpleMouseOperator)
 

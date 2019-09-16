@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_clip/tracking_ops_stabilize.c
- *  \ingroup spclip
+/** \file
+ * \ingroup spclip
  */
 
 #include "MEM_guardedalloc.h"
@@ -38,7 +30,8 @@
 
 #include "BKE_context.h"
 #include "BKE_tracking.h"
-#include "BKE_depsgraph.h"
+
+#include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -49,7 +42,7 @@
 
 /********************* add 2d stabilization tracks operator ********************/
 
-static int stabilize_2d_poll(bContext *C)
+static bool stabilize_2d_poll(bContext *C)
 {
 	if (ED_space_clip_tracking_poll(C)) {
 		SpaceClip *sc = CTX_wm_space_clip(C);
@@ -84,7 +77,7 @@ static int stabilize_2d_add_exec(bContext *C, wmOperator *UNUSED(op))
 	}
 
 	if (update) {
-		DAG_id_tag_update(&clip->id, 0);
+		DEG_id_tag_update(&clip->id, 0);
 		WM_event_add_notifier(C, NC_MOVIECLIP | ND_DISPLAY, clip);
 	}
 
@@ -138,7 +131,7 @@ static int stabilize_2d_remove_exec(bContext *C, wmOperator *UNUSED(op))
 	}
 
 	if (update) {
-		DAG_id_tag_update(&clip->id, 0);
+		DEG_id_tag_update(&clip->id, 0);
 		WM_event_add_notifier(C, NC_MOVIECLIP | ND_DISPLAY, clip);
 	}
 
@@ -227,7 +220,7 @@ static int stabilize_2d_rotation_add_exec(bContext *C, wmOperator *UNUSED(op))
 	}
 
 	if (update) {
-		DAG_id_tag_update(&clip->id, 0);
+		DEG_id_tag_update(&clip->id, 0);
 		WM_event_add_notifier(C, NC_MOVIECLIP | ND_DISPLAY, clip);
 	}
 
@@ -281,7 +274,7 @@ static int stabilize_2d_rotation_remove_exec(bContext *C, wmOperator *UNUSED(op)
 	}
 
 	if (update) {
-		DAG_id_tag_update(&clip->id, 0);
+		DEG_id_tag_update(&clip->id, 0);
 		WM_event_add_notifier(C, NC_MOVIECLIP | ND_DISPLAY, clip);
 	}
 
@@ -344,4 +337,3 @@ void CLIP_OT_stabilize_2d_rotation_select(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
-

@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Nathan Letwory.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/intern/node_exec.h
- *  \ingroup nodes
+/** \file
+ * \ingroup nodes
  */
 
 
@@ -43,25 +35,25 @@
 
 #include "RNA_types.h"
 
-struct bNodeTree;
 struct bNode;
 struct bNodeStack;
+struct bNodeTree;
 
 /* Node execution data */
 typedef struct bNodeExec {
 	struct bNode *node;				/* backpointer to node */
 	bNodeExecData data;
-	
+
 	NodeFreeExecFunction freeexecfunc; /* free function, stored in exec itself to avoid dangling node pointer access */
 } bNodeExec;
 
 /* Execution Data for each instance of node tree execution */
 typedef struct bNodeTreeExec {
 	struct bNodeTree *nodetree;		/* backpointer to node tree */
-	
+
 	int totnodes;					/* total node count */
 	struct bNodeExec *nodeexec;		/* per-node execution data */
-	
+
 	int stacksize;
 	struct bNodeStack *stack;		/* socket data stack */
 	/* only used by material and texture trees to keep one stack for each thread */

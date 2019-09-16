@@ -93,6 +93,7 @@ public:
 	void wait_work(Summary *stats = NULL);	/* work and wait until all tasks are done */
 	void cancel();		/* cancel all tasks, keep worker threads running */
 	void stop();		/* stop all worker threads */
+	bool finished();	/* check if all work has been completed */
 
 	bool canceled();	/* for worker threads, test if canceled */
 
@@ -118,7 +119,7 @@ protected:
 };
 
 /* Task Scheduler
- * 
+ *
  * Central scheduler that holds running threads ready to execute tasks. A singe
  * queue holds the task from all pools. */
 
@@ -207,4 +208,3 @@ protected:
 CCL_NAMESPACE_END
 
 #endif
-

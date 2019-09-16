@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,32 +12,30 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_EDITMESH_H__
 #define __BKE_EDITMESH_H__
 
-/** \file BKE_editmesh.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  *
  * The \link edmesh EDBM module\endlink is for editmode bmesh stuff.
- * In contrast, the this module is for code shared with blenkernel thats
+ * In contrast, this module is for code shared with blenkernel that's
  * only concerned with low level operations on the #BMEditMesh structure.
  */
 
 #include "BKE_customdata.h"
 #include "bmesh.h"
 
-struct BMesh;
 struct BMLoop;
-struct Mesh;
-struct Scene;
+struct BMesh;
+struct Depsgraph;
 struct DerivedMesh;
+struct EditMeshData;
+struct Mesh;
 struct MeshStatVis;
+struct Scene;
 
 /**
  * This structure is used for mesh edit-mode.
@@ -56,15 +52,16 @@ typedef struct BMEditMesh {
 	/*this is for undoing failed operations*/
 	struct BMEditMesh *emcopy;
 	int emcopyusers;
-	
+
 	/* we store tessellations as triplets of three loops,
 	 * which each define a triangle.*/
 	struct BMLoop *(*looptris)[3];
 	int tottri;
 
+	struct Mesh *mesh_eval_final, *mesh_eval_cage;
+
 	/*derivedmesh stuff*/
-	struct DerivedMesh *derivedFinal, *derivedCage;
-	CustomDataMask lastDataMask;
+	CustomData_MeshMasks lastDataMask;
 	unsigned char (*derivedVertColor)[4];
 	int derivedVertColorLen;
 	unsigned char (*derivedFaceColor)[4];
@@ -88,17 +85,18 @@ BMEditMesh *BKE_editmesh_copy(BMEditMesh *em);
 BMEditMesh *BKE_editmesh_from_object(struct Object *ob);
 void        BKE_editmesh_free_derivedmesh(BMEditMesh *em);
 void        BKE_editmesh_free(BMEditMesh *em);
-void        BKE_editmesh_update_linked_customdata(BMEditMesh *em);
 
 void        BKE_editmesh_color_free(BMEditMesh *em);
 void        BKE_editmesh_color_ensure(BMEditMesh *em, const char htype);
 float     (*BKE_editmesh_vertexCos_get_orco(BMEditMesh *em, int *r_numVerts))[3];
+void        BKE_editmesh_lnorspace_update(BMEditMesh *em);
 
 /* editderivedmesh.c */
 /* should really be defined in editmesh.c, but they use 'EditDerivedBMesh' */
-void        BKE_editmesh_statvis_calc(BMEditMesh *em, struct DerivedMesh *dm,
-                                      const struct MeshStatVis *statvis);
+void BKE_editmesh_statvis_calc(
+        BMEditMesh *em, struct EditMeshData *emd, const struct MeshStatVis *statvis);
 
-float (*BKE_editmesh_vertexCos_get(struct BMEditMesh *em, struct Scene *scene, int *r_numVerts))[3];
+float (*BKE_editmesh_vertexCos_get(
+           struct Depsgraph *depsgraph, struct BMEditMesh *em, struct Scene *scene, int *r_numVerts))[3];
 
 #endif /* __BKE_EDITMESH_H__ */

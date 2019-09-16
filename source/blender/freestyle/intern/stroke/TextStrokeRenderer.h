@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/stroke/TextStrokeRenderer.h
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 //
@@ -28,7 +24,7 @@
 //  Purpose          : Class to define the text rendering of a stroke
 //                     Format:
 //                     x y width height // bbox
-//                     //list of vertices : 
+//                     //list of vertices :
 //                     t x y z t1 t2 r g b alpha ...
 //                      ...
 //  Date of creation : 01/14/2005
@@ -38,9 +34,9 @@
 #ifndef TEXTSTROKERENDERER_H
 #define TEXTSTROKERENDERER_H
 
-# include "StrokeRenderer.h"
-# include "../system/FreestyleConfig.h"
-# include <fstream>
+#include "StrokeRenderer.h"
+#include "../system/FreestyleConfig.h"
+#include <fstream>
 
 namespace Freestyle {
 

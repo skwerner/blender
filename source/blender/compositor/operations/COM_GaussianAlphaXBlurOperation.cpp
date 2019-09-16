@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,10 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
- *		Campbell Barton
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_GaussianAlphaXBlurOperation.h"
@@ -56,7 +51,7 @@ void GaussianAlphaXBlurOperation::initExecution()
 	if (this->m_sizeavailable) {
 		float rad = max_ff(m_size * m_data.sizex, 0.0f);
 		m_filtersize = min_ii(ceil(rad), MAX_GAUSSTAB_RADIUS);
-		
+
 		m_gausstab = BlurBaseOperation::make_gausstab(rad, m_filtersize);
 		m_distbuf_inv = BlurBaseOperation::make_dist_fac_inverse(rad, m_filtersize, m_falloff);
 	}
@@ -68,7 +63,7 @@ void GaussianAlphaXBlurOperation::updateGauss()
 		updateSize();
 		float rad = max_ff(m_size * m_data.sizex, 0.0f);
 		m_filtersize = min_ii(ceil(rad), MAX_GAUSSTAB_RADIUS);
-		
+
 		m_gausstab = BlurBaseOperation::make_gausstab(rad, m_filtersize);
 	}
 
@@ -76,7 +71,7 @@ void GaussianAlphaXBlurOperation::updateGauss()
 		updateSize();
 		float rad = max_ff(m_size * m_data.sizex, 0.0f);
 		m_filtersize = min_ii(ceil(rad), MAX_GAUSSTAB_RADIUS);
-		
+
 		m_distbuf_inv = BlurBaseOperation::make_dist_fac_inverse(rad, m_filtersize, m_falloff);
 	}
 }

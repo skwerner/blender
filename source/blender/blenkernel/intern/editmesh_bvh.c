@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2010 by Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joseph Eagar
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/editmesh_bvh.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "MEM_guardedalloc.h"
@@ -147,9 +139,9 @@ BMBVHTree *BKE_bmbvh_new_ex(
 
 		BLI_bvhtree_insert(bmtree->tree, i, (float *)cos, 3);
 	}
-	
+
 	BLI_bvhtree_balance(bmtree->tree);
-	
+
 	return bmtree;
 }
 
@@ -188,11 +180,11 @@ BMBVHTree *BKE_bmbvh_new(
 void BKE_bmbvh_free(BMBVHTree *bmtree)
 {
 	BLI_bvhtree_free(bmtree->tree);
-	
+
 	if (bmtree->cos_cage && bmtree->cos_cage_free) {
 		MEM_freeN((void *)bmtree->cos_cage);
 	}
-	
+
 	MEM_freeN(bmtree);
 }
 
@@ -313,7 +305,7 @@ BMFace *BKE_bmbvh_ray_cast(BMBVHTree *bmtree, const float co[3], const float dir
 	/* ok to leave 'uv' uninitialized */
 	bmcb_data.looptris = (const BMLoop *(*)[3])bmtree->looptris;
 	bmcb_data.cos_cage = (const float (*)[3])bmtree->cos_cage;
-	
+
 	BLI_bvhtree_ray_cast(bmtree->tree, co, dir, radius, &hit, bmbvh_ray_cast_cb, &bmcb_data);
 
 	if (hit.index != -1 && hit.dist != dist) {

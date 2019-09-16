@@ -29,15 +29,15 @@ class EditExternally(Operator):
     bl_label = "Image Edit Externally"
     bl_options = {'REGISTER'}
 
-    filepath = StringProperty(
-            subtype='FILE_PATH',
-            )
+    filepath: StringProperty(
+        subtype='FILE_PATH',
+    )
 
     @staticmethod
     def _editor_guess(context):
         import sys
 
-        image_editor = context.user_preferences.filepaths.image_editor
+        image_editor = context.preferences.filepaths.image_editor
 
         # use image editor in the preferences when available.
         if not image_editor:
@@ -82,7 +82,7 @@ class EditExternally(Operator):
             import traceback
             traceback.print_exc()
             self.report({'ERROR'},
-                        "Image editor could not be launched, please ensure that "
+                        "Image editor could not be launched, ensure that "
                         "the path in User Preferences > File is valid, and Blender has rights to launch it")
 
             return {'CANCELLED'}
@@ -103,7 +103,7 @@ class EditExternally(Operator):
             return {'CANCELLED'}
 
         if sd.type == 'IMAGE_EDITOR':
-            filepath = image.filepath_from_user(sd.image_user)
+            filepath = image.filepath_from_user(image_user=sd.image_user)
         else:
             filepath = image.filepath
 
@@ -189,7 +189,7 @@ class ProjectEdit(Operator):
         if bpy.data.is_saved:
             filepath = "//" + filepath
         else:
-            tmpdir = context.user_preferences.filepaths.temporary_directory
+            tmpdir = context.preferences.filepaths.temporary_directory
             filepath = os.path.join(tmpdir, "project_edit")
 
         obj = context.object

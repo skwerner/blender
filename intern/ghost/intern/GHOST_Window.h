@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_Window.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_Window class.
  */
 
@@ -40,12 +32,10 @@ class GHOST_Context;
 
 /**
  * Platform independent implementation of GHOST_IWindow.
- * Dimensions are given in screen coordinates that are relative to the 
+ * Dimensions are given in screen coordinates that are relative to the
  * upper-left corner of the screen.
  * Implements part of the GHOST_IWindow interface and adds some methods to
  * be implemented by childs of this class.
- * \author	Maarten Gribnau
- * \date	May 7, 2001
  */
 class GHOST_Window : public GHOST_IWindow
 {
@@ -55,14 +45,14 @@ public:
 	 * Constructor.
 	 * Creates a new window and opens it.
 	 * To check if the window was created properly, use the getValid() method.
-	 * \param width				The width the window.
-	 * \param heigh				The height the window.
-	 * \param state				The state the window is initially opened with.
-	 * \param type				The type of drawing context installed in this window.
-	 * \param stereoVisual		Stereo visual for quad buffered stereo.
-	 * \param exclusive			Use to show the window ontop and ignore others
-	 *							(used fullscreen).
-	 * \param numOfAASamples	Number of samples used for AA (zero if no AA)
+	 * \param width             The width the window.
+	 * \param heigh             The height the window.
+	 * \param state             The state the window is initially opened with.
+	 * \param type              The type of drawing context installed in this window.
+	 * \param stereoVisual      Stereo visual for quad buffered stereo.
+	 * \param exclusive         Use to show the window ontop and ignore others
+	 *                          (used fullscreen).
+	 * \param numOfAASamples    Number of samples used for AA (zero if no AA)
 	 */
 	GHOST_Window(
 	    GHOST_TUns32 width,
@@ -94,7 +84,7 @@ public:
 	 * virtual GHOST_TSuccess activateDrawingContext() = 0;
 	 * virtual GHOST_TSuccess invalidate() = 0;
 	 */
-	 
+
 	/**
 	 * Destructor.
 	 * Closes the window and disposes resources allocated.
@@ -105,7 +95,7 @@ public:
 	 * Returns indication as to whether the window is valid.
 	 * \return The validity of the window.
 	 */
-	virtual bool getValid() const { 
+	virtual bool getValid() const {
 		return m_context != NULL;
 	}
 
@@ -114,7 +104,7 @@ public:
 	 * \return The associated OS object/handle
 	 */
 	virtual void *getOSWindow() const;
-	
+
 	/**
 	 * Returns the current cursor shape.
 	 * \return	The current cursor shape.
@@ -185,14 +175,14 @@ public:
 	virtual GHOST_TSuccess setProgressBar(float /*progress*/) {
 		return GHOST_kFailure;
 	}
-	
+
 	/**
 	 * Hides the progress bar in the icon
 	 */
 	virtual GHOST_TSuccess endProgressBar() {
 		return GHOST_kFailure;
 	}
-	
+
 	/**
 	 * Sets the swap interval for swapBuffers.
 	 * \param interval The swap interval to use.
@@ -216,26 +206,26 @@ public:
 	 * Tells if the ongoing drag'n'drop object can be accepted upon mouse drop
 	 */
 	void setAcceptDragOperation(bool canAccept);
-	
+
 	/**
 	 * Returns acceptance of the dropped object
 	 * Usually called by the "object dropped" event handling function
 	 */
 	bool canAcceptDragOperation() const;
-	
+
 	/**
 	 * Sets the window "modified" status, indicating unsaved changes
 	 * \param isUnsavedChanges Unsaved changes or not
 	 * \return Indication of success.
 	 */
 	virtual GHOST_TSuccess setModifiedState(bool isUnsavedChanges);
-	
+
 	/**
 	 * Gets the window "modified" status, indicating unsaved changes
 	 * \return True if there are unsaved changes
 	 */
 	virtual bool getModifiedState();
-	
+
 	/**
 	 * Returns the type of drawing context used in this window.
 	 * \return The current type of drawing context.
@@ -278,7 +268,7 @@ public:
 	{
 		return m_userData;
 	}
-	
+
 	/**
 	 * Changes the window user data.
 	 * \param userData: The window user data.
@@ -287,7 +277,7 @@ public:
 	{
 		m_userData = userData;
 	}
-	
+
 	float getNativePixelSize(void)
 	{
 		if (m_nativePixelSize > 0.0f)
@@ -296,9 +286,9 @@ public:
 	}
 
 	/**
-	* Returns the recommended DPI for this window.
-	* \return The recommended DPI for this window.
-	*/
+	 * Returns the recommended DPI for this window.
+	 * \return The recommended DPI for this window.
+	 */
 	virtual inline GHOST_TUns16 getDPIHint()
 	{
 		return 96;
@@ -341,7 +331,7 @@ protected:
 	virtual GHOST_TSuccess setWindowCursorGrab(GHOST_TGrabCursorMode /*mode*/) {
 		return GHOST_kSuccess;
 	}
-	
+
 	/**
 	 * Sets the cursor shape on the window using
 	 * native window system calls.
@@ -355,15 +345,15 @@ protected:
 	virtual GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
 	                                                  GHOST_TUns8 mask[16][2],
 	                                                  int hotX, int hotY) = 0;
-	
-	virtual GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 *bitmap, GHOST_TUns8 *mask, 
+
+	virtual GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 *bitmap, GHOST_TUns8 *mask,
 	                                                  int szx, int szy, int hotX, int hotY, int fg, int bg) = 0;
 
 	GHOST_TSuccess releaseNativeHandles();
 
 	/** The drawing context installed in this window. */
 	GHOST_TDrawingContextType m_drawingContextType;
-	
+
 	/** The window user data */
 	GHOST_TUserDataPtr m_userData;
 
@@ -384,16 +374,16 @@ protected:
 
 	/** The current shape of the cursor */
 	GHOST_TStandardCursor m_cursorShape;
-    
+
 	/** The presence of progress indicator with the application icon */
 	bool m_progressBarVisible;
-	
+
 	/** The acceptance of the "drop candidate" of the current drag'n'drop operation */
 	bool m_canAcceptDragOperation;
-	
+
 	/** Modified state : are there unsaved changes */
 	bool m_isUnsavedChanges;
-	
+
 	/** Stores whether this is a full screen window. */
 	bool m_fullScreen;
 
@@ -407,7 +397,7 @@ protected:
 	GHOST_TUns32 m_fullScreenWidth;
 	/** Full-screen height */
 	GHOST_TUns32 m_fullScreenHeight;
-	
+
 	/* OSX only, retina screens */
 	float m_nativePixelSize;
 
@@ -461,4 +451,3 @@ inline GHOST_TStandardCursor GHOST_Window::getCursorShape() const
 }
 
 #endif // _GHOST_WINDOW_H
-

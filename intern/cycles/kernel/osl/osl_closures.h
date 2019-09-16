@@ -5,7 +5,7 @@
  * All Rights Reserved.
  *
  * Modifications Copyright 2011, Blender Foundation.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -45,14 +45,10 @@ CCL_NAMESPACE_BEGIN
 OSL::ClosureParam *closure_emission_params();
 OSL::ClosureParam *closure_background_params();
 OSL::ClosureParam *closure_holdout_params();
-OSL::ClosureParam *closure_ambient_occlusion_params();
 OSL::ClosureParam *closure_bsdf_diffuse_ramp_params();
 OSL::ClosureParam *closure_bsdf_phong_ramp_params();
 OSL::ClosureParam *closure_bsdf_transparent_params();
-OSL::ClosureParam *closure_bssrdf_cubic_params();
-OSL::ClosureParam *closure_bssrdf_gaussian_params();
-OSL::ClosureParam *closure_bssrdf_burley_params();
-OSL::ClosureParam *closure_bssrdf_principled_params();
+OSL::ClosureParam *closure_bssrdf_params();
 OSL::ClosureParam *closure_absorption_params();
 OSL::ClosureParam *closure_henyey_greenstein_params();
 OSL::ClosureParam *closure_bsdf_microfacet_multi_ggx_params();
@@ -68,14 +64,10 @@ OSL::ClosureParam *closure_bsdf_principled_clearcoat_params();
 void closure_emission_prepare(OSL::RendererServices *, int id, void *data);
 void closure_background_prepare(OSL::RendererServices *, int id, void *data);
 void closure_holdout_prepare(OSL::RendererServices *, int id, void *data);
-void closure_ambient_occlusion_prepare(OSL::RendererServices *, int id, void *data);
 void closure_bsdf_diffuse_ramp_prepare(OSL::RendererServices *, int id, void *data);
 void closure_bsdf_phong_ramp_prepare(OSL::RendererServices *, int id, void *data);
 void closure_bsdf_transparent_prepare(OSL::RendererServices *, int id, void *data);
-void closure_bssrdf_cubic_prepare(OSL::RendererServices *, int id, void *data);
-void closure_bssrdf_gaussian_prepare(OSL::RendererServices *, int id, void *data);
-void closure_bssrdf_burley_prepare(OSL::RendererServices *, int id, void *data);
-void closure_bssrdf_principled_prepare(OSL::RendererServices *, int id, void *data);
+void closure_bssrdf_prepare(OSL::RendererServices *, int id, void *data);
 void closure_absorption_prepare(OSL::RendererServices *, int id, void *data);
 void closure_henyey_greenstein_prepare(OSL::RendererServices *, int id, void *data);
 void closure_bsdf_microfacet_multi_ggx_prepare(OSL::RendererServices *, int id, void *data);
@@ -87,6 +79,7 @@ void closure_bsdf_microfacet_multi_ggx_fresnel_prepare(OSL::RendererServices *, 
 void closure_bsdf_microfacet_multi_ggx_glass_fresnel_prepare(OSL::RendererServices *, int id, void *data);
 void closure_bsdf_microfacet_multi_ggx_aniso_fresnel_prepare(OSL::RendererServices *, int id, void *data);
 void closure_bsdf_principled_clearcoat_prepare(OSL::RendererServices *, int id, void *data);
+void closure_bsdf_principled_hair_prepare(OSL::RendererServices *, int id, void *data);
 
 #define CCLOSURE_PREPARE(name, classname)          \
 void name(RendererServices *, int id, void *data) \
@@ -153,5 +146,4 @@ CCLOSURE_PREPARE_STATIC(bsdf_##lower##_prepare, Upper##Closure)
 
 CCL_NAMESPACE_END
 
-#endif /* __OSL_CLOSURES_H__ */
-
+#endif  /* __OSL_CLOSURES_H__ */

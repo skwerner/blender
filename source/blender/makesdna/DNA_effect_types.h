@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_effect_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_EFFECT_TYPES_H__
@@ -46,7 +38,7 @@
 		/* emit only from faces*/
 #define PAF_OFACE		64
 		/* show emitter (don't hide actual mesh)*/
-#define PAF_SHOWE		128	
+#define PAF_SHOWE		128
 		/* true random emit from faces (not just ordered jitter)*/
 #define PAF_TRAND		256
 		/* even distribution in face emission based on face areas*/
@@ -78,15 +70,15 @@
 typedef struct Effect {
 	struct Effect *next, *prev;
 	short type, flag, buttype, rt;
-	
+
 } Effect;
 
 typedef struct BuildEff {
 	struct BuildEff *next, *prev;
 	short type, flag, buttype, rt;
-	
+
 	float len, sfra;
-	
+
 } BuildEff;
 
 #
@@ -97,46 +89,48 @@ typedef struct Particle {
 	short mat_nr, rt;
 } Particle;
 
-struct Group;
+struct Collection;
 
 typedef struct PartEff {
 	struct PartEff *next, *prev;
 	short type, flag, buttype, stype, vertgroup, userjit;
-	
+
 	float sta, end, lifetime;
 	int totpart, totkey, seed;
-	
+
 	float normfac, obfac, randfac, texfac, randlife;
 	float force[3];
 	float damp;
-	
-	float nabla, vectsize, maxlen, pad, defvec[3];
-	
+
+	float nabla, vectsize, maxlen, defvec[3];
+	char _pad[4];
+
 	float mult[4], life[4];
 	short child[4], mat[4];
 	short texmap, curmult;
 	short staticstep, omat, timetex, speedtex, flag2, flag2neg;
 	short disp, vertgroup_v;
-	
-	char vgroupname[64], vgroupname_v[64];	/* MAX_VGROUP_NAME */
-	float imat[4][4];	/* inverse matrix of parent Object */
-	
+
+	/** MAX_VGROUP_NAME. */
+	char vgroupname[64], vgroupname_v[64];
+	/** Inverse matrix of parent Object. */
+	float imat[4][4];
+
 	Particle *keys;
-	struct Group *group;
-	
+	struct Collection *group;
+
 } PartEff;
 
 
 typedef struct WaveEff {
 	struct WaveEff *next, *prev;
 	short type, flag, buttype, stype;
-	
+
 	float startx, starty, height, width;
 	float narrow, speed, minfac, damp;
-	
+
 	float timeoffs, lifetime;
-	
+
 } WaveEff;
 
 #endif
-

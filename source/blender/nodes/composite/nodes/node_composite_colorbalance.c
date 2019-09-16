@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Matt Ebb.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/composite/nodes/node_composite_colorbalance.c
- *  \ingroup cmpnodes
+/** \file
+ * \ingroup cmpnodes
  */
 
 #include "node_composite_util.h"
@@ -35,12 +27,12 @@
 static bNodeSocketTemplate cmp_node_colorbalance_in[] = {
 	{SOCK_FLOAT, 1, N_("Fac"),	1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, PROP_FACTOR},
 	{SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
-	{-1, 0, ""}
+	{-1, 0, ""},
 };
 
 static bNodeSocketTemplate cmp_node_colorbalance_out[] = {
 	{SOCK_RGBA, 0, N_("Image")},
-	{-1, 0, ""}
+	{-1, 0, ""},
 };
 
 /* Sync functions update formula parameters for other modes, such that the result is comparable.
@@ -52,7 +44,7 @@ void ntreeCompositColorBalanceSyncFromLGG(bNodeTree *UNUSED(ntree), bNode *node)
 {
 	NodeColorBalance *n = node->storage;
 	int c;
-	
+
 	for (c = 0; c < 3; ++c) {
 		n->slope[c] = (2.0f - n->lift[c]) * n->gain[c];
 		n->offset[c] = (n->lift[c] - 1.0f) * n->gain[c];
@@ -64,7 +56,7 @@ void ntreeCompositColorBalanceSyncFromCDL(bNodeTree *UNUSED(ntree), bNode *node)
 {
 	NodeColorBalance *n = node->storage;
 	int c;
-	
+
 	for (c = 0; c < 3; ++c) {
 		float d = n->slope[c] + n->offset[c];
 		n->lift[c] = (d != 0.0f ? n->slope[c] + 2.0f * n->offset[c] / d : 0.0f);

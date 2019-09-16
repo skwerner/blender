@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_Debug.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Macro's used in GHOST debug target.
  */
 
@@ -35,14 +27,14 @@
 
 #ifdef _MSC_VER
 #  ifdef DEBUG
-#    pragma warning (disable:4786) // suppress stl-MSVC debug info warning
-     // #define GHOST_DEBUG
-#  endif // DEBUG
-#endif // _MSC_VER
+     /* Suppress stl-MSVC debug info warning. */
+#    pragma warning (disable:4786)
+#  endif
+#endif
 
-#ifdef WITH_GHOST_DEBUG 
+#ifdef WITH_GHOST_DEBUG
 #  define GHOST_DEBUG // spit ghost events to stdout
-#endif // WITH_GHOST_DEBUG 
+#endif // WITH_GHOST_DEBUG
 
 #ifdef GHOST_DEBUG
 #  include <iostream>
@@ -84,4 +76,3 @@
 #endif // GHOST_DEBUG
 
 #endif // __GHOST_DEBUG_H__
-

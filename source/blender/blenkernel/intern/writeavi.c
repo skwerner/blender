@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,12 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Robert Wenzlaff
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  * Functions for writing avi-format files.
  * Added interface for generic movie support (ton)
  */
 
-/** \file blender/blenkernel/intern/writeavi.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -39,12 +30,14 @@
 
 #include "DNA_scene_types.h"
 
-#include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_global.h"
-#include "BKE_main.h"
 #include "BKE_report.h"
+#ifdef WITH_AVI
+#  include "BLI_blenlib.h"
+
+#  include "BKE_main.h"
+#endif
 
 #include "BKE_writeavi.h"
 
@@ -84,10 +77,6 @@ static void context_free_avi(void *context_v);
 #  include "BKE_writeffmpeg.h"
 #endif
 
-#ifdef WITH_FRAMESERVER
-#  include "BKE_writeframeserver.h"
-#endif
-
 bMovieHandle *BKE_movie_handle_get(const char imtype)
 {
 	static bMovieHandle mh = {NULL};
@@ -121,16 +110,6 @@ bMovieHandle *BKE_movie_handle_get(const char imtype)
 		mh.context_free = BKE_ffmpeg_context_free;
 	}
 #endif
-#ifdef WITH_FRAMESERVER
-	if (imtype == R_IMF_IMTYPE_FRAMESERVER) {
-		mh.start_movie = BKE_frameserver_start;
-		mh.append_movie = BKE_frameserver_append;
-		mh.end_movie = BKE_frameserver_end;
-		mh.get_next_frame = BKE_frameserver_loop;
-		mh.context_create = BKE_frameserver_context_create;
-		mh.context_free = BKE_frameserver_context_free;
-	}
-#endif
 
 	/* in case all above are disabled */
 	(void)imtype;
@@ -159,12 +138,12 @@ static void filepath_avi(char *string, RenderData *rd, bool preview, const char 
 	}
 
 	strcpy(string, rd->pic);
-	BLI_path_abs(string, G.main->name);
+	BLI_path_abs(string, BKE_main_blendfile_path_from_global());
 
 	BLI_make_existing_file(string);
 
 	if (rd->scemode & R_EXTENSION) {
-		if (!BLI_testextensie(string, ".avi")) {
+		if (!BLI_path_extension_check(string, ".avi")) {
 			BLI_path_frame_range(string, sfra, efra, 4);
 			strcat(string, ".avi");
 		}
@@ -203,7 +182,7 @@ static int start_avi(void *context_v, Scene *UNUSED(scene), RenderData *rd, int 
 		BKE_report(reports, RPT_ERROR, "Cannot open or start AVI movie file");
 		return 0;
 	}
-			
+
 	AVI_set_compress_option(avi, AVI_OPTION_TYPE_MAIN, 0, AVI_OPTION_WIDTH, &x);
 	AVI_set_compress_option(avi, AVI_OPTION_TYPE_MAIN, 0, AVI_OPTION_HEIGHT, &y);
 	AVI_set_compress_option(avi, AVI_OPTION_TYPE_MAIN, 0, AVI_OPTION_QUALITY, &quality);
@@ -211,9 +190,7 @@ static int start_avi(void *context_v, Scene *UNUSED(scene), RenderData *rd, int 
 
 	avi->interlace = 0;
 	avi->odd_fields = 0;
-/*  avi->interlace = rd->mode & R_FIELDS; */
-/*  avi->odd_fields = (rd->mode & R_ODDFIELD) ? 1 : 0; */
-	
+
 	printf("Created avi: %s\n", name);
 	return 1;
 }
@@ -225,7 +202,7 @@ static int append_avi(void *context_v, RenderData *UNUSED(rd), int start_frame, 
 	int x, y;
 	char *cp, rt;
 	AviMovie *avi = context_v;
-	
+
 	if (avi == NULL)
 		return 0;
 
@@ -236,7 +213,7 @@ static int append_avi(void *context_v, RenderData *UNUSED(rd), int start_frame, 
 	/* flip y and convert to abgr */
 	for (y = 0; y < recty; y++, rt1 += rectx, rt2 -= rectx) {
 		memcpy(rt1, rt2, rectx * sizeof(int));
-		
+
 		cp = (char *)rt1;
 		for (x = rectx; x > 0; x--) {
 			rt = cp[0];
@@ -248,7 +225,7 @@ static int append_avi(void *context_v, RenderData *UNUSED(rd), int start_frame, 
 			cp += 4;
 		}
 	}
-	
+
 	AVI_write_frame(avi, (frame - start_frame), AVI_FORMAT_RGB32, rectot, rectx * recty * 4);
 //	printf("added frame %3d (frame %3d in avi): ", frame, frame-start_frame);
 

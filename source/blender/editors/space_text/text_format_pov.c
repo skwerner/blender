@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -13,12 +11,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_text/text_format_pov.c
- *  \ingroup sptext
+/** \file
+ * \ingroup sptext
  */
 
 #include <string.h>
@@ -34,9 +30,10 @@
 
 /* *** POV Keywords (for format_line) *** */
 
-/* Checks the specified source string for a POV keyword (minus boolean & 'nil').
+/**
+ * Checks the specified source string for a POV keyword (minus boolean & 'nil').
  * This name must start at the beginning of the source string and must be
- * followed by a non-identifier (see text_check_identifier(char)) or null char.
+ * followed by a non-identifier (see #text_check_identifier(char)) or null char.
  *
  * If a keyword is found, the length of the matching word is returned.
  * Otherwise, -1 is returned.
@@ -44,9 +41,11 @@
  * See:
  * http://www.povray.org/documentation/view/3.7.0/212/
  */
-
 static int txtfmt_pov_find_keyword(const char *string)
 {
+	/* Keep aligned args for readability. */
+	/* clang-format off */
+
 	int i, len;
 	/* Language Directives */
 	if      (STR_LITERAL_STARTSWITH(string, "deprecated",  len)) i = len;
@@ -83,7 +82,9 @@ static int txtfmt_pov_find_keyword(const char *string)
 	else if (STR_LITERAL_STARTSWITH(string, "if",          len)) i = len;
 	else                                                         i = 0;
 
-	/* If next source char is an identifier (eg. 'i' in "definate") no match */
+	/* clang-format on */
+
+	/* If next source char is an identifier (eg. 'i' in "definite") no match */
 	return (i == 0 || text_check_identifier(string[i])) ? -1 : i;
 }
 
@@ -94,6 +95,9 @@ static int txtfmt_pov_find_reserved_keywords(const char *string)
 	 * list is from...
 	 * http://www.povray.org/documentation/view/3.7.0/212/
 	 */
+
+	/* Keep aligned args for readability. */
+	/* clang-format off */
 
 	/* Float Functions */
 	if 		(STR_LITERAL_STARTSWITH(string, "conserve_energy",    len)) i = len;
@@ -236,7 +240,9 @@ static int txtfmt_pov_find_reserved_keywords(const char *string)
 	else if (STR_LITERAL_STARTSWITH(string, "str",                len)) i = len;
 	else                                                                i = 0;
 
-	/* If next source char is an identifier (eg. 'i' in "definate") no match */
+	/* clang-format on */
+
+	/* If next source char is an identifier (eg. 'i' in "definite") no match */
 	return (i == 0 || text_check_identifier(string[i])) ? -1 : i;
 }
 
@@ -249,6 +255,10 @@ static int txtfmt_pov_find_reserved_builtins(const char *string)
 	 * list is from...
 	 * http://www.povray.org/documentation/view/3.7.0/212/
 	 */
+
+	/* Keep aligned args for readability. */
+	/* clang-format off */
+
 	/* Language Keywords */
 	if      (STR_LITERAL_STARTSWITH(string, "reflection_exponent", len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "area_illumination",   len)) i = len;
@@ -466,14 +476,17 @@ static int txtfmt_pov_find_reserved_builtins(const char *string)
 	else if (STR_LITERAL_STARTSWITH(string, "z",                   len)) i = len;
 	else                                                                 i = 0;
 
-	/* If next source char is an identifier (eg. 'i' in "definate") no match */
+	/* clang-format off */
+
+	/* If next source char is an identifier (eg. 'i' in "definite") no match */
 	return (i == 0 || text_check_identifier(string[i])) ? -1 : i;
 }
 
 
-/* Checks the specified source string for a POV modifiers. This
+/**
+ * Checks the specified source string for a POV modifiers. This
  * name must start at the beginning of the source string and must be followed
- * by a non-identifier (see text_check_identifier(char)) or null character.
+ * by a non-identifier (see #text_check_identifier(char)) or null character.
  *
  * If a special name is found, the length of the matching name is returned.
  * Otherwise, -1 is returned.
@@ -481,12 +494,11 @@ static int txtfmt_pov_find_reserved_builtins(const char *string)
  * See:
  * http://www.povray.org/documentation/view/3.7.0/212/
  */
-
 static int txtfmt_pov_find_specialvar(const char *string)
 {
 	int i, len;
 	/* Modifiers */
-	if 		(STR_LITERAL_STARTSWITH(string, "dispersion_samples", len)) i = len;
+	if      (STR_LITERAL_STARTSWITH(string, "dispersion_samples", len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "projected_through",  len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "double_illuminate",  len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "expand_thresholds",  len)) i = len;
@@ -498,7 +510,7 @@ static int txtfmt_pov_find_specialvar(const char *string)
 	else if (STR_LITERAL_STARTSWITH(string, "max_trace_level",    len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "gray_threshold",     len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "pretrace_start",     len)) i = len;
-	else if	(STR_LITERAL_STARTSWITH(string, "normal_indices",     len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "normal_indices",     len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "normal_vectors",     len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "vertex_vectors",     len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "noise_generator",    len)) i = len;
@@ -577,7 +589,7 @@ static int txtfmt_pov_find_specialvar(const char *string)
 	else if (STR_LITERAL_STARTSWITH(string, "autostop",           len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "caustics",           len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "octaves",            len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "aa_level", 		  len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "aa_level",           len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "frequency",          len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "fog_offset",         len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "modulation",         len)) i = len;
@@ -642,64 +654,68 @@ static int txtfmt_pov_find_specialvar(const char *string)
 	else if (STR_LITERAL_STARTSWITH(string, "radius",             len)) i = len;
 	/* Camera Types and options*/
 	else if (STR_LITERAL_STARTSWITH(string, "omni_directional_stereo",  len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "lambert_cylindrical",		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "miller_cylindrical", 		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "lambert_azimuthal",  		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "ultra_wide_angle",   		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "camera_direction",   		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "camera_location ",   		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "van_der_grinten",    		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "aitoff_hammer",   	  		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "smyth_craster",   	  		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "orthographic",       		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "camera_right",       		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "blur_samples",       		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "plate_carree",       		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "camera_type",        		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "perspective",        		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "mesh_camera",        		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "focal_point",        		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "balthasart",         		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "confidence",         		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "parallaxe",          		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "hobo_dyer",          		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "camera_up",          		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "panoramic",          		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "eckert_vi",   	  	  		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "eckert_iv",   	  	  		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "mollweide",   	  	  		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "aperture",           		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "behrmann",           		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "variance",           		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "stereo",             		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "icosa",           	  		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "tetra",           	  		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "octa",           	  		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "mercator",   		  		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "omnimax",            		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "fisheye",            		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "edwards",            		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "peters",             		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "gall",            	  		len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "lambert_cylindrical",      len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "miller_cylindrical",       len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "lambert_azimuthal",        len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "ultra_wide_angle",         len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "camera_direction",         len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "camera_location ",         len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "van_der_grinten",          len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "aitoff_hammer",            len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "smyth_craster",            len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "orthographic",             len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "camera_right",             len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "blur_samples",             len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "plate_carree",             len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "camera_type",              len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "perspective",              len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "mesh_camera",              len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "focal_point",              len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "balthasart",               len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "confidence",               len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "parallaxe",                len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "hobo_dyer",                len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "camera_up",                len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "panoramic",                len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "eckert_vi",                len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "eckert_iv",                len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "mollweide",                len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "aperture",                 len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "behrmann",                 len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "variance",                 len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "stereo",                   len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "icosa",                    len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "tetra",                    len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "octa",                     len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "mercator",                 len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "omnimax",                  len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "fisheye",                  len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "edwards",                  len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "peters",                   len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "gall",                     len)) i = len;
 	else                                                                i = 0;
 
-	/* If next source char is an identifier (eg. 'i' in "definate") no match */
+	/* If next source char is an identifier (eg. 'i' in "definite") no match */
 	return (i == 0 || text_check_identifier(string[i])) ? -1 : i;
 }
 
 static int txtfmt_pov_find_bool(const char *string)
 {
 	int i, len;
-	/*Built-in Constants*/
-	if      (STR_LITERAL_STARTSWITH(string, "unofficial",   len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "false",   		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "no",      		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "off",     		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "true",    		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "yes",     		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "on",      		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "pi",      		len)) i = len;
-	else if (STR_LITERAL_STARTSWITH(string, "tau",     		len)) i = len;
+
+	/* Keep aligned args for readability. */
+	/* clang-format off */
+
+	/* Built-in Constants */
+	if      (STR_LITERAL_STARTSWITH(string, "unofficial",          len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "false",               len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "no",                  len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "off",                 len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "true",                len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "yes",                 len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "on",                  len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "pi",                  len)) i = len;
+	else if (STR_LITERAL_STARTSWITH(string, "tau",                 len)) i = len;
 	/* Encodings */
 	else if (STR_LITERAL_STARTSWITH(string, "sint16be",            len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "sint16le",            len)) i = len;
@@ -729,6 +745,8 @@ static int txtfmt_pov_find_bool(const char *string)
 	else if (STR_LITERAL_STARTSWITH(string, "ttf",                 len)) i = len;
 	else                                                                 i = 0;
 
+	/* clang-format on */
+
 	/* If next source char is an identifier (eg. 'i' in "Nonetheless") no match */
 	return (i == 0 || text_check_identifier(string[i])) ? -1 : i;
 }
@@ -736,11 +754,18 @@ static int txtfmt_pov_find_bool(const char *string)
 static char txtfmt_pov_format_identifier(const char *str)
 {
 	char fmt;
+
+	/* Keep aligned args for readability. */
+	/* clang-format off */
+
 	if      ((txtfmt_pov_find_specialvar(str))        != -1) fmt = FMT_TYPE_SPECIAL;
 	else if ((txtfmt_pov_find_keyword(str))           != -1) fmt = FMT_TYPE_KEYWORD;
 	else if ((txtfmt_pov_find_reserved_keywords(str)) != -1) fmt = FMT_TYPE_RESERVED;
 	else if ((txtfmt_pov_find_reserved_builtins(str)) != -1) fmt = FMT_TYPE_DIRECTIVE;
 	else                                                     fmt = FMT_TYPE_DEFAULT;
+
+	/* clang-format on */
+
 	return fmt;
 }
 
@@ -859,12 +884,17 @@ static void txtfmt_pov_format_line(SpaceText *st, TextLine *line, const bool do_
 			}
 			/* Not ws, a digit, punct, or continuing text. Must be new, check for special words */
 			else {
+				/* Keep aligned args for readability. */
+				/* clang-format off */
+
 				/* Special vars(v) or built-in keywords(b) */
 				/* keep in sync with 'txtfmt_pov_format_identifier()' */
 				if      ((i = txtfmt_pov_find_specialvar(str))        != -1) prev = FMT_TYPE_SPECIAL;
 				else if ((i = txtfmt_pov_find_keyword(str))           != -1) prev = FMT_TYPE_KEYWORD;
 				else if ((i = txtfmt_pov_find_reserved_keywords(str)) != -1) prev = FMT_TYPE_RESERVED;
 				else if ((i = txtfmt_pov_find_reserved_builtins(str)) != -1) prev = FMT_TYPE_DIRECTIVE;
+
+				/* clang-format on */
 
 				if (i > 0) {
 					text_format_fill_ascii(&str, &fmt, prev, i);

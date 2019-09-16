@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_dissolve.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Removes isolated geometry regions without creating holes in the mesh.
  */
@@ -158,7 +152,7 @@ void bmo_dissolve_faces_exec(BMesh *bm, BMOperator *op)
 	}
 
 	BMO_slot_buffer_flag_enable(bm, op->slots_in, "faces", BM_FACE, FACE_MARK | FACE_TAG);
-	
+
 	/* collect region */
 	BMO_ITER (f, &oiter, op->slots_in, "faces", BM_FACE) {
 		BMFace *f_iter;
@@ -178,8 +172,8 @@ void bmo_dissolve_faces_exec(BMesh *bm, BMOperator *op)
 			BLI_array_append(faces, f_iter);
 		}
 		BMW_end(&regwalker);
-		
-		for (i = 0; i < BLI_array_count(faces); i++) {
+
+		for (i = 0; i < BLI_array_len(faces); i++) {
 			f_iter = faces[i];
 			BMO_face_flag_disable(bm, f_iter, FACE_TAG);
 			BMO_face_flag_enable(bm, f_iter, FACE_ORIG);
@@ -190,7 +184,7 @@ void bmo_dissolve_faces_exec(BMesh *bm, BMOperator *op)
 			BMO_error_raise(bm, op, BMERR_DISSOLVEFACES_FAILED, NULL);
 			goto cleanup;
 		}
-		
+
 		BLI_array_append(faces, NULL);
 		BLI_array_append(regions, faces);
 	}
@@ -198,20 +192,21 @@ void bmo_dissolve_faces_exec(BMesh *bm, BMOperator *op)
 	/* track how many faces we should end up with */
 	int totface_target = bm->totface;
 
-	for (i = 0; i < BLI_array_count(regions); i++) {
+	for (i = 0; i < BLI_array_len(regions); i++) {
 		BMFace *f_new;
 		int tot = 0;
-		
+
 		faces = regions[i];
 		if (!faces[0]) {
 			BMO_error_raise(bm, op, BMERR_DISSOLVEFACES_FAILED,
 			                "Could not find boundary of dissolve region");
 			goto cleanup;
 		}
-		
-		while (faces[tot])
+
+		while (faces[tot]) {
 			tot++;
-		
+		}
+
 		f_new = BM_faces_join(bm, faces, tot, true);
 
 		if (f_new) {
@@ -259,8 +254,10 @@ void bmo_dissolve_faces_exec(BMesh *bm, BMOperator *op)
 
 cleanup:
 	/* free/cleanup */
-	for (i = 0; i < BLI_array_count(regions); i++) {
-		if (regions[i]) MEM_freeN(regions[i]);
+	for (i = 0; i < BLI_array_len(regions); i++) {
+		if (regions[i]) {
+			MEM_freeN(regions[i]);
+		}
 	}
 
 	BLI_array_free(regions);

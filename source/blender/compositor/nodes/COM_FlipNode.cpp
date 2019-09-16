@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor: 
- *		Jeroen Bakker 
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_FlipNode.h"
@@ -36,7 +32,7 @@ void FlipNode::convertToOperations(NodeConverter &converter, const CompositorCon
 	NodeOutput *outputSocket = this->getOutputSocket(0);
 	FlipOperation *operation = new FlipOperation();
 	switch (this->getbNode()->custom1) {
-		case 0: /// @TODO: I didn't find any constants in the old implementation, should I introduce them.
+		case 0: /// \TODO: I didn't find any constants in the old implementation, should I introduce them.
 			operation->setFlipX(true);
 			operation->setFlipY(false);
 			break;
@@ -49,7 +45,7 @@ void FlipNode::convertToOperations(NodeConverter &converter, const CompositorCon
 			operation->setFlipY(true);
 			break;
 	}
-	
+
 	converter.addOperation(operation);
 	converter.mapInputSocket(inputSocket, operation->getInputSocket(0));
 	converter.mapOutputSocket(outputSocket, operation->getOutputSocket(0));

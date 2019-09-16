@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,32 +15,26 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_CURVE_H__
 #define __BKE_CURVE_H__
 
-/** \file BKE_curve.h
- *  \ingroup bke
- *  \since March 2001
- *  \author nzc
+/** \file
+ * \ingroup bke
  */
 
 struct BezTriple;
 struct Curve;
+struct Depsgraph;
 struct EditNurb;
 struct GHash;
+struct LinkNode;
 struct ListBase;
 struct Main;
 struct Nurb;
 struct Object;
-struct Scene;
 struct Path;
+struct Scene;
 struct TextBox;
 struct rctf;
 
@@ -67,7 +59,7 @@ typedef struct CVKeyIndex {
 #define SEGMENTSU(nu)       ( ((nu)->flagu & CU_NURB_CYCLIC) ? (nu)->pntsu : (nu)->pntsu - 1)
 #define SEGMENTSV(nu)       ( ((nu)->flagv & CU_NURB_CYCLIC) ? (nu)->pntsv : (nu)->pntsv - 1)
 
-#define CU_DO_TILT(cu, nu) (((nu->flag & CU_2D) && (cu->flag & CU_3D) == 0) ? 0 : 1)
+#define CU_DO_TILT(cu, nu) ((((nu)->flag & CU_2D) && ((cu)->flag & CU_3D) == 0) ? 0 : 1)
 #define CU_DO_RADIUS(cu, nu) ((CU_DO_TILT(cu, nu) || ((cu)->flag & CU_PATH_RADIUS) || (cu)->bevobj || (cu)->ext1 != 0.0f || (cu)->ext2 != 0.0f) ? 1 : 0)
 
 /* not 3d and not unfilled */
@@ -88,7 +80,7 @@ void BKE_curve_curve_dimension_update(struct Curve *cu);
 void BKE_curve_boundbox_calc(struct Curve *cu, float r_loc[3], float r_size[3]);
 struct BoundBox *BKE_curve_boundbox_get(struct Object *ob);
 void BKE_curve_texspace_calc(struct Curve *cu);
-void BKE_curve_texspace_get(struct Curve *cu, float r_loc[3], float r_rot[3], float r_size[3]);
+struct BoundBox *BKE_curve_texspace_get(struct Curve *cu, float r_loc[3], float r_rot[3], float r_size[3]);
 
 bool BKE_curve_minmax(struct Curve *cu, bool use_radius, float min[3], float max[3]);
 bool BKE_curve_center_median(struct Curve *cu, float cent[3]);
@@ -98,7 +90,7 @@ void BKE_curve_transform(struct Curve *cu, float mat[4][4], const bool do_keys, 
 void BKE_curve_translate(struct Curve *cu, float offset[3], const bool do_keys);
 void BKE_curve_material_index_remove(struct Curve *cu, int index);
 void BKE_curve_material_index_clear(struct Curve *cu);
-int BKE_curve_material_index_validate(struct Curve *cu);
+bool BKE_curve_material_index_validate(struct Curve *cu);
 void BKE_curve_material_remap(struct Curve *cu, const unsigned int *remap, unsigned int remap_len);
 
 ListBase    *BKE_curve_nurbs_get(struct Curve *cu);
@@ -122,13 +114,15 @@ void BKE_curve_editNurb_keyIndex_free(struct GHash **keyindex);
 void BKE_curve_editNurb_free(struct Curve *cu);
 struct ListBase *BKE_curve_editNurbs_get(struct Curve *cu);
 
-float *BKE_curve_make_orco(struct Scene *scene, struct Object *ob, int *r_numVerts);
+float *BKE_curve_make_orco(struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob, int *r_numVerts);
 float *BKE_curve_surf_make_orco(struct Object *ob);
 
 void BKE_curve_bevelList_free(struct ListBase *bev);
 void BKE_curve_bevelList_make(struct Object *ob, struct ListBase *nurbs, bool for_render);
-void BKE_curve_bevel_make(struct Scene *scene, struct Object *ob,  struct ListBase *disp,
-                          const bool for_render, const bool use_render_resolution);
+void BKE_curve_bevel_make(
+        struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob,  struct ListBase *disp,
+        const bool for_render, const bool use_render_resolution,
+        struct LinkNode *ob_cyclic_list);
 
 void BKE_curve_forward_diff_bezier(float q0, float q1, float q2, float q3, float *p, int it, int stride);
 void BKE_curve_forward_diff_tangent_bezier(float q0, float q1, float q2, float q3, float *p, int it, int stride);
@@ -154,11 +148,16 @@ void BKE_nurb_free(struct Nurb *nu);
 struct Nurb *BKE_nurb_duplicate(const struct Nurb *nu);
 struct Nurb *BKE_nurb_copy(struct Nurb *src, int pntsu, int pntsv);
 
-void BKE_nurb_test2D(struct Nurb *nu);
+void BKE_nurb_test_2d(struct Nurb *nu);
 void BKE_nurb_minmax(struct Nurb *nu, bool use_radius, float min[3], float max[3]);
+float BKE_nurb_calc_length(const struct Nurb *nu, int resolution);
 
-void BKE_nurb_makeFaces(struct Nurb *nu, float *coord_array, int rowstride, int resolu, int resolv);
-void BKE_nurb_makeCurve(struct Nurb *nu, float *coord_array, float *tilt_array, float *radius_array, float *weight_array, int resolu, int stride);
+void BKE_nurb_makeFaces(
+        const struct Nurb *nu, float *coord_array,
+        int rowstride, int resolu, int resolv);
+void BKE_nurb_makeCurve(
+        const struct Nurb *nu, float *coord_array, float *tilt_array, float *radius_array, float *weight_array,
+        int resolu, int stride);
 
 unsigned int BKE_curve_calc_coords_axis_len(
         const unsigned int bezt_array_len, const unsigned int resolu,
@@ -215,10 +214,17 @@ void BKE_nurb_handles_test(struct Nurb *nu, const bool use_handles);
 
 /* **** Depsgraph evaluation **** */
 
-struct EvaluationContext;
+void BKE_curve_eval_geometry(
+        struct Depsgraph *depsgraph,
+        struct Curve *curve);
 
-void BKE_curve_eval_geometry(struct EvaluationContext *eval_ctx,
-                             struct Curve *curve);
+/* Draw Cache */
+enum {
+	BKE_CURVE_BATCH_DIRTY_ALL = 0,
+	BKE_CURVE_BATCH_DIRTY_SELECT,
+};
+void BKE_curve_batch_cache_dirty_tag(struct Curve *cu, int mode);
+void BKE_curve_batch_cache_free(struct Curve *cu);
 
 /* curve_decimate.c */
 unsigned int BKE_curve_decimate_bezt_array(
@@ -229,5 +235,8 @@ unsigned int BKE_curve_decimate_bezt_array(
 void BKE_curve_decimate_nurb(
         struct Nurb *nu, const unsigned int resolu,
         const float error_sq_max, const unsigned int error_target_len);
+
+extern void (*BKE_curve_batch_cache_dirty_tag_cb)(struct Curve *cu, int mode);
+extern void (*BKE_curve_batch_cache_free_cb)(struct Curve *cu);
 
 #endif  /* __BKE_CURVE_H__ */

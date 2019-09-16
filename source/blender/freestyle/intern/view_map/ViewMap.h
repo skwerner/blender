@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __FREESTYLE_VIEW_MAP_H__
 #define __FREESTYLE_VIEW_MAP_H__
 
-/** \file blender/freestyle/intern/view_map/ViewMap.h
- *  \ingroup freestyle
- *  \brief Classes to define a View Map (ViewVertex, ViewEdge, etc.)
- *  \author Stephane Grabli
- *  \date 03/09/2002
+/** \file
+ * \ingroup freestyle
+ * \brief Classes to define a View Map (ViewVertex, ViewEdge, etc.)
  */
 
 #include <map>
@@ -218,7 +212,7 @@ public:
 	 *    iB2D
 	 *      The x,y,z 2D coordinates of the projection of iB3D
 	 *    iFEdgeB
-	 *      The second FEdge   
+	 *      The second FEdge
 	 *    id
 	 *      The id that must be given to that TVertex
 	 */
@@ -650,7 +644,7 @@ public:
 /**********************************/
 /*                                */
 /*                                */
-/*             NonTVertex         */ 
+/*             NonTVertex         */
 /*                                */
 /*                                */
 /**********************************/
@@ -1364,14 +1358,14 @@ public:
 
 	/*! Returns an Interface0DIterator to iterate over the points of this ViewEdge at a given resolution.
 	 *  The returned Interface0DIterator points on the first Point of the ViewEdge.
-	 *  \param t
+	 *  \param t:
 	 *    the sampling value.
 	 */
 	virtual Interface0DIterator pointsBegin(float t = 0.0f);
 
 	/*! Returns an Interface0DIterator to iterate over the points of this ViewEdge at a given resolution.
 	 *  The returned Interface0DIterator points after the last Point of the ViewEdge.
-	 *  \param t
+	 *  \param t:
 	 *    the sampling value.
 	 */
 	virtual Interface0DIterator pointsEnd(float t = 0.0f);
@@ -1566,13 +1560,13 @@ public:
 	}
 
 	/*! Returns the ViewShape name. */
-	inline const char *getName() const
+	inline const string& getName() const
 	{
 		return _SShape->getName();
 	}
 
 	/*! Returns the ViewShape library path. */
-	inline const char *getLibraryPath() const
+	inline const string& getLibraryPath() const
 	{
 		return _SShape->getLibraryPath();
 	}
@@ -1625,16 +1619,16 @@ public:
 
 
 /*
-  #############################################
-  #############################################
-  #############################################
-  ######                                 ######
-  ######   I M P L E M E N T A T I O N   ######
-  ######                                 ######
-  #############################################
-  #############################################
-  #############################################
-*/
+ * #############################################
+ * #############################################
+ * #############################################
+ * ######                                 ######
+ * ######   I M P L E M E N T A T I O N   ######
+ * ######                                 ######
+ * #############################################
+ * #############################################
+ * #############################################
+ */
 /* for inline functions */
 
 void ViewShape::SplitEdge(FEdge *fe, const vector<TVertex*>& iViewVertices, vector<FEdge*>& ioNewEdges,
@@ -1643,7 +1637,7 @@ void ViewShape::SplitEdge(FEdge *fe, const vector<TVertex*>& iViewVertices, vect
 	ViewEdge *vEdge = fe->viewedge();
 
 	// We first need to sort the view vertices from farther to closer to fe->vertexA
-	SVertex *sv, *sv2; 
+	SVertex *sv, *sv2;
 	ViewVertex *vva, *vvb;
 	vector<TVertex*>::const_iterator vv, vvend;
 	for (vv = iViewVertices.begin(), vvend = iViewVertices.end(); vv != vvend; vv++) {
@@ -1660,7 +1654,7 @@ void ViewShape::SplitEdge(FEdge *fe, const vector<TVertex*>& iViewVertices, vect
 				sv = sv2;
 		}
 		else {
-		// if the shape is the same we can safely differ the two vertices using their ids:
+			// if the shape is the same we can safely differ the two vertices using their ids:
 			if (sv->getId() != fe->vertexA()->getId())
 				sv = sv2;
 		}
@@ -1685,7 +1679,7 @@ void ViewShape::SplitEdge(FEdge *fe, const vector<TVertex*>& iViewVertices, vect
 		if ((vva == 0) || (vvb == 0)) { // that means we're dealing with a closed viewedge (loop)
 			// remove the chain that was starting by the fedge A of vEdge (which is different from fe !!!!)
 			shape->RemoveEdgeFromChain(vEdge->fedgeA());
-			// we set 
+			// we set
 			vEdge->setA(*vv);
 			vEdge->setB(*vv);
 			vEdge->setFEdgeA(newEdge);

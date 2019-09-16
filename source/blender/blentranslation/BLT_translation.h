@@ -1,10 +1,8 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version. 
+ * of the License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blentranslation/BLT_translation.h
- *  \ingroup blt
+/** \file
+ * \ingroup blt
  */
 
 
@@ -121,15 +113,15 @@ bool BLT_lang_is_ime_supported(void);
 #define BLT_I18NCONTEXT_ID_BRUSH                "Brush"
 #define BLT_I18NCONTEXT_ID_CAMERA               "Camera"
 #define BLT_I18NCONTEXT_ID_CACHEFILE            "CacheFile"
+#define BLT_I18NCONTEXT_ID_COLLECTION           "Collection"
 #define BLT_I18NCONTEXT_ID_CURVE                "Curve"
 #define BLT_I18NCONTEXT_ID_FREESTYLELINESTYLE   "FreestyleLineStyle"
 #define BLT_I18NCONTEXT_ID_GPENCIL              "GPencil"
-#define BLT_I18NCONTEXT_ID_GROUP                "Group"
 #define BLT_I18NCONTEXT_ID_ID                   "ID"
 #define BLT_I18NCONTEXT_ID_IMAGE                "Image"
 /*#define BLT_I18NCONTEXT_ID_IPO                  "Ipo"*/ /* Deprecated */
 #define BLT_I18NCONTEXT_ID_SHAPEKEY             "Key"
-#define BLT_I18NCONTEXT_ID_LAMP                 "Lamp"
+#define BLT_I18NCONTEXT_ID_LIGHT                "Light"
 #define BLT_I18NCONTEXT_ID_LIBRARY              "Library"
 #define BLT_I18NCONTEXT_ID_LATTICE              "Lattice"
 #define BLT_I18NCONTEXT_ID_MATERIAL             "Material"
@@ -140,6 +132,7 @@ bool BLT_lang_is_ime_supported(void);
 #define BLT_I18NCONTEXT_ID_PAINTCURVE           "PaintCurve"
 #define BLT_I18NCONTEXT_ID_PALETTE              "Palette"
 #define BLT_I18NCONTEXT_ID_PARTICLESETTINGS     "ParticleSettings"
+#define BLT_I18NCONTEXT_ID_LIGHTPROBE           "LightProbe"
 #define BLT_I18NCONTEXT_ID_SCENE                "Scene"
 #define BLT_I18NCONTEXT_ID_SCREEN               "Screen"
 #define BLT_I18NCONTEXT_ID_SEQUENCE             "Sequence"
@@ -149,6 +142,7 @@ bool BLT_lang_is_ime_supported(void);
 #define BLT_I18NCONTEXT_ID_TEXT                 "Text"
 #define BLT_I18NCONTEXT_ID_VFONT                "VFont"
 #define BLT_I18NCONTEXT_ID_WORLD                "World"
+#define BLT_I18NCONTEXT_ID_WORKSPACE            "WorkSpace"
 #define BLT_I18NCONTEXT_ID_WINDOWMANAGER        "WindowManager"
 #define BLT_I18NCONTEXT_ID_MOVIECLIP            "MovieClip"
 #define BLT_I18NCONTEXT_ID_MASK                 "Mask"
@@ -173,15 +167,15 @@ typedef struct {
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_BRUSH, "id_brush"),                                                       \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_CAMERA, "id_camera"),                                                     \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_CACHEFILE, "id_cachefile"),                                               \
+	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_COLLECTION, "id_collection"),                                             \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_CURVE, "id_curve"),                                                       \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_FREESTYLELINESTYLE, "id_fs_linestyle"),                                   \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_GPENCIL, "id_gpencil"),                                                   \
-	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_GROUP, "id_group"),                                                       \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_ID, "id_id"),                                                             \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_IMAGE, "id_image"),                                                       \
 	/*BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_IPO, "id_ipo"),*/                                                       \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SHAPEKEY, "id_shapekey"),                                                 \
-	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_LAMP, "id_lamp"),                                                         \
+	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_LIGHT, "id_light"),                                                       \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_LIBRARY, "id_library"),                                                   \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_LATTICE, "id_lattice"),                                                   \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_MASK, "id_mask"),                                                         \
@@ -194,6 +188,7 @@ typedef struct {
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_PAINTCURVE, "id_paintcurve"),                                             \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_PALETTE, "id_palette"),                                                   \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_PARTICLESETTINGS, "id_particlesettings"),                                 \
+	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_LIGHTPROBE, "id_lightprobe"),                                             \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SCENE, "id_scene"),                                                       \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SCREEN, "id_screen"),                                                     \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_SEQUENCE, "id_sequence"),                                                 \
@@ -203,6 +198,7 @@ typedef struct {
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_TEXT, "id_text"),                                                         \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_VFONT, "id_vfont"),                                                       \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_WORLD, "id_world"),                                                       \
+	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_WORKSPACE, "id_workspace"),                                               \
 	BLT_I18NCONTEXTS_ITEM(BLT_I18NCONTEXT_ID_WINDOWMANAGER, "id_windowmanager"),                                       \
 	{NULL, NULL, NULL}                                                                                                 \
 }

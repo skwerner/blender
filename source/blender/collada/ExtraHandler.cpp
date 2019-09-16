@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Nathan Letwory.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/collada/ExtraHandler.cpp
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #include <stddef.h>
@@ -54,9 +48,9 @@ bool ExtraHandler::elementEnd(const char *elementName)
 bool ExtraHandler::textData(const char *text, size_t textLength)
 {
 	char buf[1024];
-	
+
 	if (currentElement.length() == 0 || currentExtraTags == 0) return false;
-	
+
 	BLI_strncpy(buf, text, textLength + 1);
 	currentExtraTags->addTag(currentElement, std::string(buf));
 	return true;

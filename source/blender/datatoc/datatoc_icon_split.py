@@ -68,7 +68,7 @@ def image_from_file(filepath):
 
     if bpy is not None:
         pixels, pixel_w, pixel_h = image_from_file__bpy(filepath)
-    #else:
+    # else:
     #    pixels, pixel_w, pixel_h = image_from_file__py(filepath)
 
     return pixels, pixel_w, pixel_h
@@ -95,12 +95,14 @@ def write_subimage(sub_x, sub_y, sub_w, sub_h,
 
     with open(filepath, 'wb') as f:
 
-        f.write(struct.pack('<6I',
+        f.write(
+            struct.pack(
+                '<6I',
                 sub_w, sub_h,
                 sub_x, sub_y,
                 # redundant but including to maintain consistency
                 pixel_w, pixel_h,
-                ))
+            ))
 
         for y in range(sub_h):
             for x in range(sub_w):
@@ -113,8 +115,9 @@ def write_subimage(sub_x, sub_y, sub_w, sub_h,
 _dice_icon_name_cache = {}
 
 
-def dice_icon_name(x, y, parts_x, parts_y,
-                   name_style=None, prefix=""):
+def dice_icon_name(
+        x, y, parts_x, parts_y,
+        name_style=None, prefix=""):
     """
     How to name icons, this is mainly for what name we get in git,
     the actual names don't really matter, its just nice to have the
@@ -125,25 +128,31 @@ def dice_icon_name(x, y, parts_x, parts_y,
         # Init on demand
         if not _dice_icon_name_cache:
             import re
+            count = 0
 
             # Search for eg: DEF_ICON(BRUSH_NUDGE) --> BRUSH_NUDGE
-            re_icon = re.compile('^\s*DEF_ICON\(\s*([A-Za-z0-9_]+)\s*\).*$')
+            re_icon = re.compile(r'^\s*DEF_ICON.*\(\s*([A-Za-z0-9_]+)\s*\).*$')
 
             ui_icons_h = os.path.join(SOURCE_DIR, "source", "blender", "editors", "include", "UI_icons.h")
             with open(ui_icons_h, 'r', encoding="utf-8") as f:
                 for l in f:
                     match = re_icon.search(l)
                     if match:
-                        icon_name = match.group(1).lower()
-                        # print(l.rstrip())
-                        _dice_icon_name_cache[len(_dice_icon_name_cache)] = icon_name
+                        if l.find('DEF_ICON_BLANK') == -1:
+                            icon_name = match.group(1).lower()
+                            print(icon_name)
+                            _dice_icon_name_cache[count] = icon_name
+                        count += 1
         # ---- Done with icon cache
 
         index = (y * parts_x) + x
+        if index not in _dice_icon_name_cache:
+            return None
+
         icon_name = _dice_icon_name_cache[index]
 
         # for debugging its handy to sort by number
-        #~ id_str = "%03d_%s%s.dat" % (index, prefix, icon_name)
+        # ~ id_str = "%03d_%s%s.dat" % (index, prefix, icon_name)
 
         id_str = "%s%s.dat" % (prefix, icon_name)
 
@@ -158,16 +167,18 @@ def dice_icon_name(x, y, parts_x, parts_y,
     return id_str
 
 
-def dice(filepath, output, output_prefix, name_style,
-         parts_x, parts_y,
-         minx, miny, maxx, maxy,
-         minx_icon, miny_icon, maxx_icon, maxy_icon,
-         spacex_icon, spacey_icon,
-         ):
+def dice(
+        filepath, output, output_prefix, name_style,
+        parts_x, parts_y,
+        minx, miny, maxx, maxy,
+        minx_icon, miny_icon, maxx_icon, maxy_icon,
+        spacex_icon, spacey_icon,
+):
 
-    is_simple = (max(minx, miny, maxx, maxy,
-                     minx_icon, miny_icon, maxx_icon, maxy_icon,
-                     spacex_icon, spacey_icon) == 0)
+    is_simple = (max(
+        minx, miny, maxx, maxy,
+        minx_icon, miny_icon, maxx_icon, maxy_icon,
+        spacex_icon, spacey_icon) == 0)
 
     pixels, pixel_w, pixel_h = image_from_file(filepath)
 
@@ -199,9 +210,14 @@ def dice(filepath, output, output_prefix, name_style,
 
     for x in range(parts_x):
         for y in range(parts_y):
-            id_str = dice_icon_name(x, y,
-                                    parts_x, parts_y,
-                                    name_style=name_style, prefix=output_prefix)
+            id_str = dice_icon_name(
+                x, y,
+                parts_x, parts_y,
+                name_style=name_style, prefix=output_prefix
+            )
+            if not id_str:
+                continue
+
             filepath = os.path.join(output, id_str)
             if VERBOSE:
                 print("  writing:", filepath)
@@ -235,25 +251,35 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, epilog=epilog)
 
     # File path options
-    parser.add_argument("--image", dest="image", metavar='FILE',
-            help="Image file")
-
-    parser.add_argument("--output", dest="output", metavar='DIR',
-            help="Output directory")
-
-    parser.add_argument("--output_prefix", dest="output_prefix", metavar='STRING',
-            help="Output prefix")
+    parser.add_argument(
+        "--image", dest="image", metavar='FILE',
+        help="Image file",
+    )
+    parser.add_argument(
+        "--output", dest="output", metavar='DIR',
+        help="Output directory",
+    )
+    parser.add_argument(
+        "--output_prefix", dest="output_prefix", metavar='STRING',
+        help="Output prefix",
+    )
 
     # Icon naming option
-    parser.add_argument("--name_style", dest="name_style", metavar='ENUM', type=str,
-            choices=('', 'UI_ICONS'),
-            help="The metod used for naming output data")
+    parser.add_argument(
+        "--name_style", dest="name_style", metavar='ENUM', type=str,
+        choices=('', 'UI_ICONS'),
+        help="The metod used for naming output data",
+    )
 
     # Options for dicing up the image
-    parser.add_argument("--parts_x", dest="parts_x", metavar='INT', type=int,
-            help="Grid X parts")
-    parser.add_argument("--parts_y", dest="parts_y", metavar='INT', type=int,
-            help="Grid Y parts")
+    parser.add_argument(
+        "--parts_x", dest="parts_x", metavar='INT', type=int,
+        help="Grid X parts",
+    )
+    parser.add_argument(
+        "--parts_y", dest="parts_y", metavar='INT', type=int,
+        help="Grid Y parts",
+    )
 
     _help = "Inset from the outer edge (in pixels)"
     parser.add_argument("--minx", dest="minx", metavar='INT', type=int, help=_help)
@@ -286,6 +312,7 @@ def main():
          args.minx_icon, args.miny_icon, args.maxx_icon, args.maxy_icon,
          args.spacex_icon, args.spacey_icon,
          )
+
 
 if __name__ == "__main__":
     main()

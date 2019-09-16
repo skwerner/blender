@@ -217,6 +217,8 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
 	ShaderData *sd, ShaderData *emission_sd, float3 throughput, ccl_addr_space PathState *state,
 	PathRadiance *L)
 {
+	PROFILING_INIT(kg, PROFILING_CONNECT_LIGHT);
+
 #ifdef __EMISSION__
 	if(!(kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL)))
 		return;
@@ -274,6 +276,8 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
                                            PathRadianceState *L_state,
                                            ccl_addr_space Ray *ray)
 {
+	PROFILING_INIT(kg, PROFILING_SURFACE_BOUNCE);
+
 	/* no BSDF? we can stop here */
 	if(sd->flag & SD_BSDF) {
 		/* sample BSDF */
@@ -329,10 +333,9 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 	}
 #ifdef __VOLUME__
 	else if(sd->flag & SD_HAS_ONLY_VOLUME) {
-		/* no surface shader but have a volume shader? act transparent */
-
-		/* update path state, count as transparent */
-		path_state_next(kg, state, LABEL_TRANSPARENT);
+		if(!path_state_volume_next(kg, state)) {
+			return false;
+		}
 
 		if(state->bounce == 0)
 			ray->t -= sd->ray_length; /* clipping works through transparent */
@@ -357,4 +360,3 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
 }
 
 CCL_NAMESPACE_END
-

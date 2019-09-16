@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_bridge.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Connect verts across faces (splits faces) and bridge tool.
  */
@@ -390,10 +384,10 @@ static void bridge_loop_pair(
 				l_b = l_b_next = BM_iter_at_index(bm, BM_LOOPS_OF_VERT, v_b, 0);
 			}
 
-			if (l_a && l_a_next == NULL) l_a_next = l_a;
-			if (l_a_next && l_a == NULL) l_a = l_a_next;
-			if (l_b && l_b_next == NULL) l_b_next = l_b;
-			if (l_b_next && l_b == NULL) l_b = l_b_next;
+			if (l_a && l_a_next == NULL) { l_a_next = l_a; }
+			if (l_a_next && l_a == NULL) { l_a = l_a_next; }
+			if (l_b && l_b_next == NULL) { l_b_next = l_b; }
+			if (l_b_next && l_b == NULL) { l_b = l_b_next; }
 			f_example = l_a ? l_a->f : (l_b ? l_b->f : NULL);
 
 			if (v_b != v_b_next) {

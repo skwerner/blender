@@ -93,6 +93,7 @@ class Integrator : public Node {
   bool ignore_shaders, ignore_volumes, ignore_lights, ignore_shadows;
   bool ignore_displacement, ignore_bump, ignore_polygon_smoothing;
   bool ignore_depth_of_field, ignore_subsurface_scattering, ignore_textures;
+  bool diffuse_shaders;
 
   bool need_update;
 

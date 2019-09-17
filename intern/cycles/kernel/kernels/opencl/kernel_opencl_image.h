@@ -57,7 +57,11 @@ ccl_device_inline float4 svm_image_texture_read(KernelGlobals *kg,
   else if (texture_type == IMAGE_DATA_TYPE_BYTE4) {
     uchar4 r = tex_fetch(uchar4, info, offset);
     float f = 1.0f / 255.0f;
-    return make_float4(r.x * f, r.y * f, r.z * f, r.w * f);
+    float4 result =  make_float4(r.x * f, r.y * f, r.z * f, r.w * f);
+    if (info->compress_as_srgb) {
+      result = color_srgb_to_linear_v4(result);
+    }
+    return result;
   }
   /* Ushort4 */
   else if (texture_type == IMAGE_DATA_TYPE_USHORT4) {
@@ -91,6 +95,9 @@ ccl_device_inline float4 svm_image_texture_read(KernelGlobals *kg,
   else {
     uchar r = tex_fetch(uchar, info, offset);
     float f = r * (1.0f / 255.0f);
+    if (info->compress_as_srgb) {
+      f = color_srgb_to_linear(f);
+    }
     return make_float4(f, f, f, 1.0f);
   }
 }

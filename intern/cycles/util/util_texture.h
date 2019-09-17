@@ -39,7 +39,6 @@ typedef enum InterpolationType {
   INTERPOLATION_CLOSEST = 1,
   INTERPOLATION_CUBIC = 2,
   INTERPOLATION_SMART = 3,
-
   INTERPOLATION_NUM_TYPES,
 } InterpolationType;
 
@@ -93,8 +92,9 @@ typedef struct TextureInfo {
   uint64_t data;
   /* Buffer number for OpenCL. */
   uint cl_buffer;
-  /* Interpolation and extension type. */
-  uint interpolation, extension;
+  /* Interpolation, extension and compression type. */
+  uint interpolation;
+  unsigned short extension, compress_as_srgb;
   /* Dimensions. */
   uint width, height, depth;
 } TextureInfo;

@@ -321,9 +321,6 @@ void ImageTextureNode::compile(SVMCompiler &compiler)
     int vector_offset = tex_mapping.compile_begin(compiler, vector_in);
     uint flags = 0;
 
-    if (compress_as_srgb) {
-      flags |= NODE_IMAGE_COMPRESS_AS_SRGB;
-    }
     if (!alpha_out->links.empty()) {
       const bool unassociate_alpha = !(ColorSpaceManager::colorspace_is_data(colorspace) ||
                                        alpha_type == IMAGE_ALPHA_CHANNEL_PACKED ||
@@ -527,10 +524,6 @@ void EnvironmentTextureNode::compile(SVMCompiler &compiler)
   if (slot != -1) {
     int vector_offset = tex_mapping.compile_begin(compiler, vector_in);
     uint flags = 0;
-
-    if (compress_as_srgb) {
-      flags |= NODE_IMAGE_COMPRESS_AS_SRGB;
-    }
 
     compiler.add_node(NODE_TEX_ENVIRONMENT,
                       slot,

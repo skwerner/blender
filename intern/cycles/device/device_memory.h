@@ -210,6 +210,7 @@ class device_memory {
   const char *name;
   InterpolationType interpolation;
   ExtensionType extension;
+  bool compress_as_srgb;
 
   /* Pointers. */
   Device *device;

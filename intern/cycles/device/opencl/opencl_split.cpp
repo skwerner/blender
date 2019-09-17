@@ -1307,6 +1307,7 @@ void OpenCLDevice::flush_texture_buffers()
 
       info.interpolation = mem->interpolation;
       info.extension = mem->extension;
+      info.compress_as_srgb = mem->compress_as_srgb;
     }
   }
 

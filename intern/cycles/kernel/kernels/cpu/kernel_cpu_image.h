@@ -80,12 +80,13 @@ template<typename T> struct TextureInterpolator {
     return make_float4(r.x * f, r.y * f, r.z * f, r.w * f);
   }
 
-  static ccl_always_inline float4 read(const T *data, int x, int y, int width, int height)
+  static ccl_always_inline float4 read(const T *data, int x, int y, int width, int height, bool srgb)
   {
     if (x < 0 || y < 0 || x >= width || y >= height) {
       return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
     }
-    return read(data[y * width + x]);
+    float4 result = read(data[y * width + x]);
+    return srgb ? color_srgb_to_linear_v4(result) : result;
   }
 
   static ccl_always_inline int wrap_periodic(int x, int width)
@@ -136,7 +137,11 @@ template<typename T> struct TextureInterpolator {
         kernel_assert(0);
         return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
     }
-    return read(data[ix + iy * width]);
+    float4 result = read(data[ix + iy * width]);
+    if (info.compress_as_srgb) {
+      result = color_srgb_to_linear_v4(result);
+    }
+    return result;
   }
 
   static ccl_always_inline float4 interp_linear(const TextureInfo &info, float x, float y)
@@ -168,10 +173,11 @@ template<typename T> struct TextureInterpolator {
         kernel_assert(0);
         return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
     }
-    return (1.0f - ty) * (1.0f - tx) * read(data, ix, iy, width, height) +
-           (1.0f - ty) * tx * read(data, nix, iy, width, height) +
-           ty * (1.0f - tx) * read(data, ix, niy, width, height) +
-           ty * tx * read(data, nix, niy, width, height);
+    const bool srgb = info.compress_as_srgb;
+    return (1.0f - ty) * (1.0f - tx) * read(data, ix, iy, width, height, srgb) +
+           (1.0f - ty) * tx * read(data, nix, iy, width, height, srgb) +
+           ty * (1.0f - tx) * read(data, ix, niy, width, height, srgb) +
+           ty * tx * read(data, nix, niy, width, height, srgb);
   }
 
   static ccl_always_inline float4 interp_cubic(const TextureInfo &info, float x, float y)
@@ -219,10 +225,11 @@ template<typename T> struct TextureInterpolator {
     const int xc[4] = {pix, ix, nix, nnix};
     const int yc[4] = {piy, iy, niy, nniy};
     float u[4], v[4];
+    const bool srgb = info.compress_as_srgb;
     /* Some helper macro to keep code reasonable size,
      * let compiler to inline all the matrix multiplications.
      */
-#define DATA(x, y) (read(data, xc[x], yc[y], width, height))
+#define DATA(x, y) (read(data, xc[x], yc[y], width, height, srgb))
 #define TERM(col) \
   (v[col] * \
    (u[0] * DATA(0, col) + u[1] * DATA(1, col) + u[2] * DATA(2, col) + u[3] * DATA(3, col)))

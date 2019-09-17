@@ -1230,7 +1230,7 @@ class CUDADevice : public Device {
     texDesc.addressMode[1] = address_mode;
     texDesc.addressMode[2] = address_mode;
     texDesc.filterMode = filter_mode;
-    texDesc.flags = CU_TRSF_NORMALIZED_COORDINATES;
+    texDesc.flags = CU_TRSF_NORMALIZED_COORDINATES | (mem.compress_as_srgb ? CU_TRSF_SRGB : 0);
 
     cuda_assert(cuTexObjectCreate(&cmem->texobject, &resDesc, &texDesc, NULL));
 

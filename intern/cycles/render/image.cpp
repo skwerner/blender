@@ -818,6 +818,7 @@ void ImageManager::device_load_image(
     img->mem = tex_img;
     img->mem->interpolation = img->interpolation;
     img->mem->extension = img->extension;
+    img->mem->compress_as_srgb = false;
 
     thread_scoped_lock device_lock(device_mutex);
     tex_img->copy_to_device();
@@ -837,6 +838,7 @@ void ImageManager::device_load_image(
     img->mem = tex_img;
     img->mem->interpolation = img->interpolation;
     img->mem->extension = img->extension;
+    img->mem->compress_as_srgb = false;
 
     thread_scoped_lock device_lock(device_mutex);
     tex_img->copy_to_device();
@@ -859,6 +861,7 @@ void ImageManager::device_load_image(
     img->mem = tex_img;
     img->mem->interpolation = img->interpolation;
     img->mem->extension = img->extension;
+    img->mem->compress_as_srgb = img->metadata.compress_as_srgb;
 
     thread_scoped_lock device_lock(device_mutex);
     tex_img->copy_to_device();
@@ -878,6 +881,7 @@ void ImageManager::device_load_image(
     img->mem = tex_img;
     img->mem->interpolation = img->interpolation;
     img->mem->extension = img->extension;
+    img->mem->compress_as_srgb = img->metadata.compress_as_srgb;
 
     thread_scoped_lock device_lock(device_mutex);
     tex_img->copy_to_device();
@@ -900,6 +904,7 @@ void ImageManager::device_load_image(
     img->mem = tex_img;
     img->mem->interpolation = img->interpolation;
     img->mem->extension = img->extension;
+    img->mem->compress_as_srgb = false;
 
     thread_scoped_lock device_lock(device_mutex);
     tex_img->copy_to_device();
@@ -919,6 +924,7 @@ void ImageManager::device_load_image(
     img->mem = tex_img;
     img->mem->interpolation = img->interpolation;
     img->mem->extension = img->extension;
+    img->mem->compress_as_srgb = false;
 
     thread_scoped_lock device_lock(device_mutex);
     tex_img->copy_to_device();
@@ -941,6 +947,7 @@ void ImageManager::device_load_image(
     img->mem = tex_img;
     img->mem->interpolation = img->interpolation;
     img->mem->extension = img->extension;
+    img->mem->compress_as_srgb = false;
 
     thread_scoped_lock device_lock(device_mutex);
     tex_img->copy_to_device();
@@ -960,6 +967,7 @@ void ImageManager::device_load_image(
     img->mem = tex_img;
     img->mem->interpolation = img->interpolation;
     img->mem->extension = img->extension;
+    img->mem->compress_as_srgb = false;
 
     thread_scoped_lock device_lock(device_mutex);
     tex_img->copy_to_device();

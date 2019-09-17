@@ -408,8 +408,7 @@ typedef enum NodeImageProjection {
 } NodeImageProjection;
 
 typedef enum NodeImageFlags {
-  NODE_IMAGE_COMPRESS_AS_SRGB = 1,
-  NODE_IMAGE_ALPHA_UNASSOCIATE = 2,
+  NODE_IMAGE_ALPHA_UNASSOCIATE = 1,
 } NodeImageFlags;
 
 typedef enum NodeEnvironmentProjection {

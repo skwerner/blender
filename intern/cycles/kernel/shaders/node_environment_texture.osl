@@ -79,7 +79,4 @@ shader node_environment_texture(
     if (!is_float)
       Color = min(Color, 1.0);
   }
-
-  if (compress_as_srgb)
-    Color = color_srgb_to_scene_linear(Color);
 }

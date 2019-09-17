@@ -467,7 +467,7 @@ class CPUDevice : public Device {
       TextureInfo &info = texture_info[flat_slot];
       info.data = (uint64_t)mem.host_pointer;
       info.cl_buffer = 0;
-      info.interpolation = mem.interpolation;
+      info.interpolation = mem.interpolation | (mem.compress_as_srgb ? 0x1000 : 0);
       info.extension = mem.extension;
       info.width = mem.data_width;
       info.height = mem.data_height;

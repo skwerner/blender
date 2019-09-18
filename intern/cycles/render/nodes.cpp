@@ -396,7 +396,7 @@ void ImageTextureNode::compile(OSLCompiler &compiler)
 
   if (slot == -1) {
     compiler.parameter_texture(
-        "filename", filename, compress_as_srgb ? u_colorspace_raw : known_colorspace);
+        "filename", filename, compress_as_srgb ? ustring("sRGB") : known_colorspace);
   }
   else {
     compiler.parameter_texture("filename", slot);
@@ -408,7 +408,6 @@ void ImageTextureNode::compile(OSLCompiler &compiler)
 
   compiler.parameter(this, "projection");
   compiler.parameter(this, "projection_blend");
-  compiler.parameter("compress_as_srgb", compress_as_srgb);
   compiler.parameter("ignore_alpha", alpha_type == IMAGE_ALPHA_IGNORE);
   compiler.parameter("unassociate_alpha", !alpha_out->links.empty() && unassociate_alpha);
   compiler.parameter("is_float", is_float);
@@ -580,7 +579,7 @@ void EnvironmentTextureNode::compile(OSLCompiler &compiler)
 
   if (slot == -1) {
     compiler.parameter_texture(
-        "filename", filename, compress_as_srgb ? u_colorspace_raw : known_colorspace);
+        "filename", filename, compress_as_srgb ? ustring("sRGB") : known_colorspace);
   }
   else {
     compiler.parameter_texture("filename", slot);
@@ -588,7 +587,6 @@ void EnvironmentTextureNode::compile(OSLCompiler &compiler)
 
   compiler.parameter(this, "projection");
   compiler.parameter(this, "interpolation");
-  compiler.parameter("compress_as_srgb", compress_as_srgb);
   compiler.parameter("ignore_alpha", alpha_type == IMAGE_ALPHA_IGNORE);
   compiler.parameter("is_float", is_float);
   compiler.add(this, "node_environment_texture");

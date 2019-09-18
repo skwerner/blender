@@ -80,13 +80,20 @@ template<typename T> struct TextureInterpolator {
     return make_float4(r.x * f, r.y * f, r.z * f, r.w * f);
   }
 
-  static ccl_always_inline float4 read(const T *data, int x, int y, int width, int height, bool srgb)
+  static ccl_always_inline float4 read(const T data, bool srgb)
+  {
+    float4 value = read(data);
+    return srgb ? color_srgb_to_linear_v4(value) : value;
+  }
+
+  static ccl_always_inline float4
+  read(const T *data, int x, int y, int width, int height, bool srgb)
   {
     if (x < 0 || y < 0 || x >= width || y >= height) {
       return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
     }
-    float4 result = read(data[y * width + x]);
-    return srgb ? color_srgb_to_linear_v4(result) : result;
+    float4 value = read(data[y * width + x]);
+    return srgb ? color_srgb_to_linear_v4(value) : value;
   }
 
   static ccl_always_inline int wrap_periodic(int x, int width)
@@ -137,11 +144,7 @@ template<typename T> struct TextureInterpolator {
         kernel_assert(0);
         return make_float4(0.0f, 0.0f, 0.0f, 0.0f);
     }
-    float4 result = read(data[ix + iy * width]);
-    if (info.compress_as_srgb) {
-      result = color_srgb_to_linear_v4(result);
-    }
-    return result;
+    return read(data[ix + iy * width], info.compress_as_srgb);
   }
 
   static ccl_always_inline float4 interp_linear(const TextureInfo &info, float x, float y)
@@ -296,7 +299,7 @@ template<typename T> struct TextureInterpolator {
     }
 
     const T *data = (const T *)info.data;
-    return read(data[ix + iy * width + iz * width * height]);
+    return read(data[ix + iy * width + iz * width * height], info.compress_as_srgb);
   }
 
   static ccl_always_inline float4 interp_3d_linear(const TextureInfo &info,
@@ -344,18 +347,19 @@ template<typename T> struct TextureInterpolator {
     }
 
     const T *data = (const T *)info.data;
+    const bool srgb = info.compress_as_srgb;
     float4 r;
 
     r = (1.0f - tz) * (1.0f - ty) * (1.0f - tx) *
-        read(data[ix + iy * width + iz * width * height]);
-    r += (1.0f - tz) * (1.0f - ty) * tx * read(data[nix + iy * width + iz * width * height]);
-    r += (1.0f - tz) * ty * (1.0f - tx) * read(data[ix + niy * width + iz * width * height]);
-    r += (1.0f - tz) * ty * tx * read(data[nix + niy * width + iz * width * height]);
+        read(data[ix + iy * width + iz * width * height], srgb);
+    r += (1.0f - tz) * (1.0f - ty) * tx * read(data[nix + iy * width + iz * width * height], srgb);
+    r += (1.0f - tz) * ty * (1.0f - tx) * read(data[ix + niy * width + iz * width * height], srgb);
+    r += (1.0f - tz) * ty * tx * read(data[nix + niy * width + iz * width * height], srgb);
 
-    r += tz * (1.0f - ty) * (1.0f - tx) * read(data[ix + iy * width + niz * width * height]);
-    r += tz * (1.0f - ty) * tx * read(data[nix + iy * width + niz * width * height]);
-    r += tz * ty * (1.0f - tx) * read(data[ix + niy * width + niz * width * height]);
-    r += tz * ty * tx * read(data[nix + niy * width + niz * width * height]);
+    r += tz * (1.0f - ty) * (1.0f - tx) * read(data[ix + iy * width + niz * width * height], srgb);
+    r += tz * (1.0f - ty) * tx * read(data[nix + iy * width + niz * width * height], srgb);
+    r += tz * ty * (1.0f - tx) * read(data[ix + niy * width + niz * width * height], srgb);
+    r += tz * ty * tx * read(data[nix + niy * width + niz * width * height], srgb);
 
     return r;
   }
@@ -435,11 +439,12 @@ template<typename T> struct TextureInterpolator {
     const int zc[4] = {
         width * height * piz, width * height * iz, width * height * niz, width * height * nniz};
     float u[4], v[4], w[4];
+    const bool srgb = info.compress_as_srgb;
 
     /* Some helper macro to keep code reasonable size,
      * let compiler to inline all the matrix multiplications.
      */
-#define DATA(x, y, z) (read(data[xc[x] + yc[y] + zc[z]]))
+#define DATA(x, y, z) (read(data[xc[x] + yc[y] + zc[z]], srgb))
 #define COL_TERM(col, row) \
   (v[col] * (u[0] * DATA(0, col, row) + u[1] * DATA(1, col, row) + u[2] * DATA(2, col, row) + \
              u[3] * DATA(3, col, row)))

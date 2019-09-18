@@ -1170,6 +1170,9 @@ class OptiXDevice : public Device {
 
       CUDA_TEXTURE_DESC tex_desc = {};
       tex_desc.flags = CU_TRSF_NORMALIZED_COORDINATES;
+      if (mem.compress_as_srgb) {
+        tex_desc.flags |= CU_TRSF_SRGB;
+      }
       CUDA_RESOURCE_DESC res_desc = {};
 
       switch (mem.extension) {

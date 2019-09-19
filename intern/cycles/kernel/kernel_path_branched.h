@@ -111,7 +111,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
 
       for (int j = 0; j < num_samples; j++) {
         PathState ps = *state;
-        Ray pray = *ray;
+        Ray pray = volume_ray;
         float3 tp = *throughput;
 
         /* branch RNG state */

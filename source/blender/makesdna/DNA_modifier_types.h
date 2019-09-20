@@ -121,7 +121,7 @@ typedef struct ModifierData {
 
 typedef enum {
   /* This modifier has been inserted in local override, and hence can be fully edited. */
-  eModifierFlag_StaticOverride_Local = (1 << 0),
+  eModifierFlag_OverrideLibrary_Local = (1 << 0),
   /* This modifier does not own its caches, but instead shares them with another modifier. */
   eModifierFlag_SharedCaches = (1 << 1),
 } ModifierFlag;
@@ -1852,12 +1852,15 @@ typedef struct MeshSeqCacheModifierData {
   ModifierData modifier;
 
   struct CacheFile *cache_file;
-  struct CacheReader *reader;
   /** 1024 = FILE_MAX. */
   char object_path[1024];
 
   char read_flag;
   char _pad[7];
+
+  /* Runtime. */
+  struct CacheReader *reader;
+  char reader_object_path[1024];
 } MeshSeqCacheModifierData;
 
 /* MeshSeqCacheModifierData.read_flag */

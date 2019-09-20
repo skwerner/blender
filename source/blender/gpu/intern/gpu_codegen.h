@@ -99,7 +99,6 @@ struct GPUNodeLink {
     struct {
       struct Image *ima;
       struct ImageUser *iuser;
-      bool image_isdata;
     };
   };
 };
@@ -137,7 +136,6 @@ typedef struct GPUInput {
       struct GPUTexture **coba; /* input texture, only set at runtime */
       struct Image *ima;        /* image */
       struct ImageUser *iuser;  /* image user */
-      bool image_isdata;        /* image does not contain color data */
       bool bindtex;             /* input is responsible for binding the texture? */
       int texid;                /* number for multitexture, starting from zero */
       eGPUType textype;         /* texture type (2D, 1D Array ...) */
@@ -166,6 +164,11 @@ struct GPUPass {
   char *defines;
   uint refcount; /* Orphaned GPUPasses gets freed by the garbage collector. */
   uint32_t hash; /* Identity hash generated from all GLSL code. */
+  struct {
+    char *content;
+    uint format;
+    int len;
+  } binary;
   bool compiled; /* Did we already tried to compile the attached GPUShader. */
 };
 
@@ -187,7 +190,7 @@ void GPU_nodes_extract_dynamic_inputs(struct GPUShader *shader, ListBase *inputs
 void GPU_nodes_get_vertex_attrs(ListBase *nodes, struct GPUVertAttrLayers *attrs);
 void GPU_nodes_prune(ListBase *nodes, struct GPUNodeLink *outlink);
 
-void GPU_pass_compile(GPUPass *pass, const char *shname);
+bool GPU_pass_compile(GPUPass *pass, const char *shname);
 void GPU_pass_release(GPUPass *pass);
 void GPU_pass_free_nodes(ListBase *nodes);
 

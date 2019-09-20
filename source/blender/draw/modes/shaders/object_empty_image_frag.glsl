@@ -9,6 +9,7 @@ out vec4 fragColor;
 
 #ifndef USE_WIRE
 uniform sampler2D image;
+uniform bool imagePremultiplied;
 #endif
 
 uniform int depthMode;
@@ -19,7 +20,7 @@ void main()
 #ifdef USE_WIRE
   fragColor = finalColor;
 #else
-  vec4 tex_col = texture(image, texCoord_interp);
+  vec4 tex_col = texture_read_as_srgb(image, imagePremultiplied, texCoord_interp);
   fragColor = finalColor * tex_col;
 
   if (useAlphaTest) {

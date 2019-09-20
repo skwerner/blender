@@ -32,6 +32,7 @@ struct Collection;
 struct Depsgraph;
 struct Main;
 struct Object;
+struct ReportList;
 struct Scene;
 
 /* -------------- */
@@ -94,6 +95,12 @@ void BKE_rigidbody_calc_center_of_mass(struct Object *ob, float r_center[3]);
 /* Utilities */
 
 struct RigidBodyWorld *BKE_rigidbody_get_world(struct Scene *scene);
+bool BKE_rigidbody_add_object(struct Main *bmain,
+                              struct Scene *scene,
+                              struct Object *ob,
+                              int type,
+                              struct ReportList *reports);
+void BKE_rigidbody_ensure_local_object(struct Main *bmain, struct Object *ob);
 void BKE_rigidbody_remove_object(struct Main *bmain, struct Scene *scene, struct Object *ob);
 void BKE_rigidbody_remove_constraint(struct Scene *scene, struct Object *ob);
 
@@ -106,7 +113,8 @@ void BKE_rigidbody_remove_constraint(struct Scene *scene, struct Object *ob);
             (rbo->flag & RBO_FLAG_DISABLED))) ? \
        (0.0f) : \
        (rbo->mass))
-/* get collision margin for Rigid Body Object, triangle mesh and cone shapes cannot embed margin, convex hull always uses custom margin */
+/* Get collision margin for Rigid Body Object, triangle mesh and cone shapes cannot embed margin,
+ * convex hull always uses custom margin. */
 #define RBO_GET_MARGIN(rbo) \
   ((rbo->flag & RBO_FLAG_USE_MARGIN || rbo->shape == RB_SHAPE_CONVEXH || \
     rbo->shape == RB_SHAPE_TRIMESH || rbo->shape == RB_SHAPE_CONE) ? \

@@ -33,7 +33,7 @@ extern "C" {
 /**
  * Creates a "handle" for a C++ GHOST object.
  * A handle is just an opaque pointer to an empty struct.
- * In the API the pointer is casted to the actual C++ class.
+ * In the API the pointer is cast to the actual C++ class.
  * The 'name' argument to the macro is the name of the handle to create.
  */
 
@@ -155,7 +155,8 @@ extern void GHOST_GetAllDisplayDimensions(GHOST_SystemHandle systemhandle,
  * The new window is added to the list of windows managed.
  * Never explicitly delete the window, use disposeWindow() instead.
  * \param systemhandle The handle to the system
- * \param title The name of the window (displayed in the title bar of the window if the OS supports it).
+ * \param title The name of the window
+ * (displayed in the title bar of the window if the OS supports it).
  * \param left The coordinate of the left edge of the window.
  * \param top The coordinate of the top edge of the window.
  * \param width The width the window.
@@ -324,20 +325,6 @@ extern GHOST_TSuccess GHOST_SetCursorShape(GHOST_WindowHandle windowhandle,
                                            GHOST_TStandardCursor cursorshape);
 
 /**
- * Set the shape of the cursor to a custom cursor.
- * \param windowhandle The handle to the window
- * \param bitmap The bitmap data for the cursor.
- * \param  mask The mask data for the cursor.
- * \param hotX The X coordinate of the cursor hotspot.
- * \param hotY The Y coordinate of the cursor hotspot.
- * \return Indication of success.
- */
-extern GHOST_TSuccess GHOST_SetCustomCursorShape(GHOST_WindowHandle windowhandle,
-                                                 GHOST_TUns8 bitmap[16][2],
-                                                 GHOST_TUns8 mask[16][2],
-                                                 int hotX,
-                                                 int hotY);
-/**
  * Set the shape of the cursor to a custom cursor of specified size.
  * \param windowhandle The handle to the window
  * \param bitmap The bitmap data for the cursor.
@@ -346,18 +333,17 @@ extern GHOST_TSuccess GHOST_SetCustomCursorShape(GHOST_WindowHandle windowhandle
  * \param sizey The height of the cursor
  * \param hotX The X coordinate of the cursor hotspot.
  * \param hotY The Y coordinate of the cursor hotspot.
- * \param   fg_color, bg_color  Colors of the cursor
+ * \param canInvertColor Let macOS invert cursor color to match platform convention.
  * \return Indication of success.
  */
-extern GHOST_TSuccess GHOST_SetCustomCursorShapeEx(GHOST_WindowHandle windowhandle,
-                                                   GHOST_TUns8 *bitmap,
-                                                   GHOST_TUns8 *mask,
-                                                   int sizex,
-                                                   int sizey,
-                                                   int hotX,
-                                                   int hotY,
-                                                   int fg_color,
-                                                   int bg_color);
+extern GHOST_TSuccess GHOST_SetCustomCursorShape(GHOST_WindowHandle windowhandle,
+                                                 GHOST_TUns8 *bitmap,
+                                                 GHOST_TUns8 *mask,
+                                                 int sizex,
+                                                 int sizey,
+                                                 int hotX,
+                                                 int hotY,
+                                                 GHOST_TUns8 canInvertColor);
 
 /**
  * Returns the visibility state of the cursor.
@@ -409,6 +395,7 @@ extern GHOST_TSuccess GHOST_SetCursorPosition(GHOST_SystemHandle systemhandle,
  */
 extern GHOST_TSuccess GHOST_SetCursorGrab(GHOST_WindowHandle windowhandle,
                                           GHOST_TGrabCursorMode mode,
+                                          GHOST_TAxisFlag warp_axis,
                                           int bounds[4],
                                           const int mouse_ungrab_xy[2]);
 
@@ -444,8 +431,8 @@ extern GHOST_TSuccess GHOST_GetButtonState(GHOST_SystemHandle systemhandle,
  ***************************************************************************************/
 
 /**
- * Sets 3D mouse deadzone
- * \param deadzone Deadzone of the 3D mouse (both for rotation and pan) relative to full range
+ * Sets 3D mouse dead-zone.
+ * \param deadzone: Dead-zone of the 3D mouse (both for rotation and pan) relative to full range.
  */
 extern void GHOST_setNDOFDeadZone(float deadzone);
 #endif
@@ -684,17 +671,12 @@ extern GHOST_TSuccess GHOST_SetSwapInterval(GHOST_WindowHandle windowhandle, int
 
 /**
  * Gets the current swap interval for swapBuffers.
- * \param windowhandle The handle to the window
- * \param intervalOut pointer to location to return swap interval (left untouched if there is an error)
+ * \param windowhandle: The handle to the window
+ * \param intervalOut: pointer to location to return swap interval
+ * (left untouched if there is an error)
  * \return A boolean success indicator of if swap interval was successfully read.
  */
 extern GHOST_TSuccess GHOST_GetSwapInterval(GHOST_WindowHandle windowhandle, int *intervalOut);
-
-/**
- * Gets the current swap interval for swapBuffers.
- * \return Number of AA Samples (0 if there is no multisample buffer)
- */
-extern GHOST_TUns16 GHOST_GetNumOfAASamples(GHOST_WindowHandle windowhandle);
 
 /**
  * Activates the drawing context of this window.
@@ -723,6 +705,11 @@ extern GHOST_TSuccess GHOST_ActivateOpenGLContext(GHOST_ContextHandle contexthan
  * \return A success indicator.
  */
 extern GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthandle);
+
+/**
+ * Get the OpenGL framebuffer handle that serves as a default framebuffer.
+ */
+extern unsigned int GHOST_GetDefaultOpenGLFramebuffer(GHOST_WindowHandle windwHandle);
 
 /**
  * Set which tablet API to use. Only affects Windows, other platforms have a single API.
@@ -790,7 +777,8 @@ extern GHOST_TSuccess GHOST_IsEmptyRectangle(GHOST_RectangleHandle rectanglehand
 
 /**
  * Returns whether this rectangle is valid.
- * Valid rectangles are rectangles that have m_l <= m_r and m_t <= m_b. Thus, empty rectangles are valid.
+ * Valid rectangles are rectangles that have m_l <= m_r and m_t <= m_b.
+ * Thus, empty rectangles are valid.
  * \param rectanglehandle The handle to the rectangle
  * \return Success value (true == valid rectangle)
  */
@@ -907,17 +895,6 @@ extern void GHOST_putClipboard(GHOST_TInt8 *buffer, int selection);
  * \return current status (1 -visible, 0 - hidden)
  */
 extern int GHOST_toggleConsole(int action);
-
-/**
- * Confirms quitting he program when there is just one window left open
- * in the application
- */
-extern int GHOST_confirmQuit(GHOST_WindowHandle windowhandle);
-
-/**
- * Informs if the system provides native dialogs (eg. confirm quit)
- */
-extern int GHOST_SupportsNativeDialogs(void);
 
 /**
  * Use native pixel size (MacBook pro 'retina'), if supported.

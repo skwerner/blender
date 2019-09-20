@@ -1382,7 +1382,11 @@ static size_t strswapbufcpy(char *buf, const char **orig)
   char *dst = buf;
   size_t i = 0;
   *orig = buf;
-  while ((*dst = *src)) { dst++; src++; i++; }
+  while ((*dst = *src)) {
+    dst++;
+    src++;
+    i++;
+  }
   return i + 1; /* include '\0' */
 }
 #endif
@@ -1541,7 +1545,8 @@ static const EnumPropertyItem *enum_items_from_py(PyObject *seq_fast,
    * immediately after use, so we need to duplicate them, ugh.
    * annoying because it works most of the time without this. */
   {
-    EnumPropertyItem *items_dup = MEM_mallocN((sizeof(EnumPropertyItem) * (seq_len + 1)) + (sizeof(char) * totbuf),
+    EnumPropertyItem *items_dup = MEM_mallocN((sizeof(EnumPropertyItem) * (seq_len + 1)) +
+                                                  (sizeof(char) * totbuf),
                                               "enum_items_from_py2");
     EnumPropertyItem *items_ptr = items_dup;
     char *buf = ((char *)items_dup) + (sizeof(EnumPropertyItem) * (seq_len + 1));
@@ -2272,7 +2277,10 @@ static PyObject *BPy_BoolVectorProperty(PyObject *self, PyObject *args, PyObject
       return NULL;
     }
 
-    // prop = RNA_def_boolean_array(srna, id, size, pydef ? def:NULL, name ? name : id, description);
+#if 0
+    prop = RNA_def_boolean_array(
+        srna, id, size, pydef ? def : NULL, name ? name : id, description);
+#endif
     prop = RNA_def_property(srna, id, PROP_BOOLEAN, subtype);
     RNA_def_property_array(prop, size);
     if (pydef) {
@@ -2978,8 +2986,8 @@ PyDoc_STRVAR(
     "      .. warning::\n"
     "\n"
     "         There is a known bug with using a callback,\n"
-    "         Python must keep a reference to the strings returned or Blender will misbehave\n"
-    "         or even crash."
+    "         Python must keep a reference to the strings returned by the callback or Blender\n"
+    "         will misbehave or even crash."
     "\n"
     "   :type items: sequence of string tuples or a function\n" BPY_PROPDEF_NAME_DOC
         BPY_PROPDEF_DESC_DOC

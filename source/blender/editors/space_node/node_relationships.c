@@ -562,7 +562,7 @@ static void node_link_update_header(bContext *C, bNodeLinkDrag *UNUSED(nldrag))
 {
   char header[UI_MAX_DRAW_STR];
 
-  BLI_strncpy(header, IFACE_("LMB: drag node link, RMB: cancel"), sizeof(header));
+  BLI_strncpy(header, TIP_("LMB: drag node link, RMB: cancel"), sizeof(header));
   ED_workspace_status_text(C, header);
 }
 
@@ -986,8 +986,8 @@ void NODE_OT_link_make(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = node_make_link_exec;
-  ot->poll =
-      ED_operator_node_editable;  // XXX we need a special poll which checks that there are selected input/output sockets
+  // XXX we need a special poll which checks that there are selected input/output sockets
+  ot->poll = ED_operator_node_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

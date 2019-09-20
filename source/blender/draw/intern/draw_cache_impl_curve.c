@@ -42,6 +42,8 @@
 
 #include "DRW_render.h"
 
+#include "draw_cache_inline.h"
+
 #include "draw_cache_impl.h" /* own include */
 
 #define SELECT 1
@@ -472,12 +474,16 @@ static void curve_batch_cache_init(Curve *cu)
   cache->is_dirty = false;
 }
 
-static CurveBatchCache *curve_batch_cache_get(Curve *cu)
+void DRW_curve_batch_cache_validate(Curve *cu)
 {
   if (!curve_batch_cache_valid(cu)) {
     curve_batch_cache_clear(cu);
     curve_batch_cache_init(cu);
   }
+}
+
+static CurveBatchCache *curve_batch_cache_get(Curve *cu)
+{
   return cu->batch_cache;
 }
 
@@ -595,7 +601,7 @@ static void curve_create_curves_lines(CurveRenderData *rdata, GPUIndexBuf *ibo_c
   const int index_len = edge_len + curve_len * 2;
 
   GPUIndexBufBuilder elb;
-  GPU_indexbuf_init_ex(&elb, GPU_PRIM_LINE_STRIP, index_len, vert_len, true);
+  GPU_indexbuf_init_ex(&elb, GPU_PRIM_LINE_STRIP, index_len, vert_len);
 
   int v_idx = 0;
   for (const BevList *bl = rdata->ob_curve_cache->bev.first; bl; bl = bl->next) {
@@ -689,7 +695,7 @@ static char beztriple_vflag_get(
 {
   char vflag = 0;
   SET_FLAG_FROM_TEST(vflag, (flag & SELECT), VFLAG_VERT_SELECTED);
-  SET_FLAG_FROM_TEST(vflag, (v_idx == rdata->actvert), VFLAG_VERT_ACTIVE);
+  SET_FLAG_FROM_TEST(vflag, (v_idx == rdata->actvert && nu_id == rdata->actnu), VFLAG_VERT_ACTIVE);
   SET_FLAG_FROM_TEST(vflag, (nu_id == rdata->actnu), ACTIVE_NURB);
   /* handle color id */
   vflag |= col_id << 4; /* << 4 because of EVEN_U_BIT */
@@ -700,7 +706,7 @@ static char bpoint_vflag_get(CurveRenderData *rdata, char flag, int v_idx, int n
 {
   char vflag = 0;
   SET_FLAG_FROM_TEST(vflag, (flag & SELECT), VFLAG_VERT_SELECTED);
-  SET_FLAG_FROM_TEST(vflag, (v_idx == rdata->actvert), VFLAG_VERT_ACTIVE);
+  SET_FLAG_FROM_TEST(vflag, (v_idx == rdata->actvert && nu_id == rdata->actnu), VFLAG_VERT_ACTIVE);
   SET_FLAG_FROM_TEST(vflag, (nu_id == rdata->actnu), ACTIVE_NURB);
   SET_FLAG_FROM_TEST(vflag, ((u % 2) == 0), EVEN_U_BIT);
   vflag |= COLOR_NURB_ULINE_ID << 4; /* << 4 because of EVEN_U_BIT */
@@ -748,7 +754,7 @@ static void curve_create_edit_data_and_handles(CurveRenderData *rdata,
     GPU_indexbuf_init(elbp_lines, GPU_PRIM_LINES, edges_len_capacity, verts_len_capacity);
   }
 
-  int v_idx = 0, nu_id = 0;
+  int nu_id = 0;
   for (Nurb *nu = rdata->nurbs->first; nu; nu = nu->next, nu_id++) {
     const BezTriple *bezt = nu->bezt;
     const BPoint *bp = nu->bp;
@@ -767,9 +773,9 @@ static void curve_create_edit_data_and_handles(CurveRenderData *rdata,
         }
         if (vbo_data) {
           char vflag[3] = {
-              beztriple_vflag_get(rdata, bezt->f1, bezt->h1, v_idx, nu_id),
-              beztriple_vflag_get(rdata, bezt->f2, bezt->h1, v_idx, nu_id),
-              beztriple_vflag_get(rdata, bezt->f3, bezt->h2, v_idx, nu_id),
+              beztriple_vflag_get(rdata, bezt->f1, bezt->h1, a, nu_id),
+              beztriple_vflag_get(rdata, bezt->f2, bezt->h1, a, nu_id),
+              beztriple_vflag_get(rdata, bezt->f3, bezt->h2, a, nu_id),
           };
           for (int j = 0; j < 3; j++) {
             GPU_vertbuf_attr_set(vbo_data, attr_id.data, vbo_len_used + j, &vflag[j]);
@@ -781,12 +787,11 @@ static void curve_create_edit_data_and_handles(CurveRenderData *rdata,
           }
         }
         vbo_len_used += 3;
-        v_idx += 1;
       }
     }
     else if (bp) {
       int pt_len = nu->pntsu * nu->pntsv;
-      for (int a = 0; a < pt_len; a++, bp++) {
+      for (int a = 0; a < pt_len; a++, bp++, vbo_len_used += 1) {
         if (bp->hide == true) {
           continue;
         }
@@ -808,14 +813,12 @@ static void curve_create_edit_data_and_handles(CurveRenderData *rdata,
           }
         }
         if (vbo_data) {
-          char vflag = bpoint_vflag_get(rdata, bp->f1, v_idx, nu_id, u);
+          char vflag = bpoint_vflag_get(rdata, bp->f1, a, nu_id, u);
           GPU_vertbuf_attr_set(vbo_data, attr_id.data, vbo_len_used, &vflag);
         }
         if (vbo_pos) {
           GPU_vertbuf_attr_set(vbo_pos, attr_id.pos, vbo_len_used, bp->vec);
         }
-        vbo_len_used += 1;
-        v_idx += 1;
       }
     }
   }
@@ -988,6 +991,10 @@ void DRW_curve_batch_cache_create_requested(Object *ob)
     }
   }
 
+#ifdef DRW_DEBUG_MESH_CACHE_REQUEST
+  printf("-- %s %s --\n", __func__, ob->id.name + 2);
+#endif
+
   /* Generate MeshRenderData flags */
   int mr_flag = 0;
   DRW_ADD_FLAG_FROM_VBO_REQUEST(mr_flag, cache->ordered.pos_nor, CU_DATATYPE_SURFACE);
@@ -1010,6 +1017,10 @@ void DRW_curve_batch_cache_create_requested(Object *ob)
   for (int i = 0; i < cache->mat_len; ++i) {
     DRW_ADD_FLAG_FROM_IBO_REQUEST(mr_flag, cache->surf_per_mat_tris[i], CU_DATATYPE_SURFACE);
   }
+
+#ifdef DRW_DEBUG_MESH_CACHE_REQUEST
+  printf("  mr_flag %d\n\n", mr_flag);
+#endif
 
   CurveRenderData *rdata = curve_render_data_create(cu, ob->runtime.curve_cache, mr_flag);
 

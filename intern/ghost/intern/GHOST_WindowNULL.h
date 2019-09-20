@@ -45,9 +45,8 @@ class GHOST_WindowNULL : public GHOST_Window {
                    GHOST_TWindowState state,
                    const GHOST_TEmbedderWindowID parentWindow,
                    GHOST_TDrawingContextType type,
-                   const bool stereoVisual,
-                   const GHOST_TUns16 numOfAASamples)
-      : GHOST_Window(width, height, state, stereoVisual, false, numOfAASamples), m_system(system)
+                   const bool stereoVisual)
+      : GHOST_Window(width, height, state, stereoVisual, false), m_system(system)
   {
     setTitle(title);
   }
@@ -69,21 +68,13 @@ class GHOST_WindowNULL : public GHOST_Window {
   {
     return GHOST_kSuccess;
   }
-  GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                            GHOST_TUns8 mask[16][2],
-                                            int hotX,
-                                            int hotY)
-  {
-    return GHOST_kSuccess;
-  }
   GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 *bitmap,
                                             GHOST_TUns8 *mask,
                                             int sizex,
                                             int sizey,
                                             int hotX,
                                             int hotY,
-                                            int fg_color,
-                                            int bg_color)
+                                            bool canInvertColor)
   {
     return GHOST_kSuccess;
   }

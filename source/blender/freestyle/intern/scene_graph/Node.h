@@ -19,7 +19,8 @@
 
 /** \file
  * \ingroup freestyle
- * \brief Abstract class for scene graph nodes. Inherits from BaseObject which defines the addRef release mechanism.
+ * \brief Abstract class for scene graph nodes. Inherits from BaseObject which defines the addRef
+ * release mechanism.
  */
 
 #include "SceneVisitor.h"
@@ -78,13 +79,16 @@ class Node : public BaseObject {
   /*! Makes the union of _BBox and iBox */
   virtual void AddBBox(const BBox<Vec3r> &iBox)
   {
-    if (iBox.empty())
+    if (iBox.empty()) {
       return;
+    }
 
-    if (_BBox.empty())
+    if (_BBox.empty()) {
       _BBox = iBox;
-    else
+    }
+    else {
       _BBox += iBox;
+    }
   }
 
   /*! Updates the BBox */

@@ -575,7 +575,7 @@ static void draw_image_buffer(const bContext *C,
     /* If RGBA display with color management */
     if ((sima->flag & (SI_SHOW_R | SI_SHOW_G | SI_SHOW_B | SI_SHOW_ALPHA)) == 0) {
 
-      glaDrawImBuf_glsl_ctx_clipping(
+      ED_draw_imbuf_ctx_clipping(
           C, ibuf, x, y, GL_NEAREST, 0, 0, clip_max_x, clip_max_y, zoomx, zoomy);
     }
     else {
@@ -673,7 +673,7 @@ void draw_image_grease_pencil(bContext *C, bool onlyv2d)
   }
   else {
     /* assume that UI_view2d_restore(C) has been called... */
-    //SpaceImage *sima = (SpaceImage *)CTX_wm_space_data(C);
+    // SpaceImage *sima = (SpaceImage *)CTX_wm_space_data(C);
 
     /* draw grease-pencil ('screen' strokes) */
     ED_annotation_draw_view2d(C, 0);
@@ -699,6 +699,7 @@ void draw_image_sample_line(SpaceImage *sima)
     immUniformArray4fv(
         "colors", (float *)(float[][4]){{1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f, 1.0f}}, 2);
     immUniform1f("dash_width", 2.0f);
+    immUniform1f("dash_factor", 0.5f);
 
     immBegin(GPU_PRIM_LINES, 2);
     immVertex2fv(shdr_dashed_pos, hist->co[0]);
@@ -795,6 +796,11 @@ void draw_image_main(const bContext *C, ARegion *ar)
   /* retrieve the image and information about it */
   ima = ED_space_image(sima);
   ED_space_image_get_zoom(sima, ar, &zoomx, &zoomy);
+
+  /* Tag image as in active use for garbage collector. */
+  if (ima) {
+    BKE_image_tag_time(ima);
+  }
 
   show_viewer = (ima && ima->source == IMA_SRC_VIEWER) != 0;
   show_render = (show_viewer && ima->type == IMA_TYPE_R_RESULT) != 0;

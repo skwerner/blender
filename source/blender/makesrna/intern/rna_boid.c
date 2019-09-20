@@ -75,12 +75,26 @@ const EnumPropertyItem rna_enum_boidrule_type_items[] = {
      "Maintain speed, flight level or wander"},
     {eBoidRuleType_Fight, "FIGHT", 0, "Fight", "Go to closest enemy and attack when in range"},
 #if 0
-  {eBoidRuleType_Protect, "PROTECT", 0, "Protect", "Go to enemy closest to target and attack when in range"},
-  {eBoidRuleType_Hide, "HIDE", 0, "Hide", "Find a deflector move to it's other side from closest enemy"},
-  {eBoidRuleType_FollowPath, "FOLLOW_PATH", 0, "Follow Path",
-                             "Move along a assigned curve or closest curve in a group"},
-  {eBoidRuleType_FollowWall, "FOLLOW_WALL", 0, "Follow Wall",
-                             "Move next to a deflector object's in direction of it's tangent"},
+    {eBoidRuleType_Protect,
+     "PROTECT",
+     0,
+     "Protect",
+     "Go to enemy closest to target and attack when in range"},
+    {eBoidRuleType_Hide,
+     "HIDE",
+     0,
+     "Hide",
+     "Find a deflector move to it's other side from closest enemy"},
+    {eBoidRuleType_FollowPath,
+     "FOLLOW_PATH",
+     0,
+     "Follow Path",
+     "Move along a assigned curve or closest curve in a group"},
+    {eBoidRuleType_FollowWall,
+     "FOLLOW_WALL",
+     0,
+     "Follow Wall",
+     "Move next to a deflector object's in direction of it's tangent"},
 #endif
     {0, NULL, 0, NULL, NULL},
 };
@@ -118,8 +132,9 @@ static void rna_Boids_reset(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRN
 
     DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY);
   }
-  else
+  else {
     DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_RESET);
+  }
 
   WM_main_add_notifier(NC_OBJECT | ND_PARTICLE | NA_EDITED, NULL);
 }
@@ -132,8 +147,9 @@ static void rna_Boids_reset_deps(Main *bmain, Scene *UNUSED(scene), PointerRNA *
 
     DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY);
   }
-  else
+  else {
     DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_RESET);
+  }
 
   DEG_relations_tag_update(bmain);
 
@@ -178,8 +194,9 @@ static PointerRNA rna_BoidState_active_boid_rule_get(PointerRNA *ptr)
   BoidRule *rule = (BoidRule *)state->rules.first;
 
   for (; rule; rule = rule->next) {
-    if (rule->flag & BOIDRULE_CURRENT)
+    if (rule->flag & BOIDRULE_CURRENT) {
       return rna_pointer_inherit_refine(ptr, &RNA_BoidRule, rule);
+    }
   }
   return rna_pointer_inherit_refine(ptr, &RNA_BoidRule, NULL);
 }
@@ -198,8 +215,9 @@ static int rna_BoidState_active_boid_rule_index_get(PointerRNA *ptr)
   int i = 0;
 
   for (; rule; rule = rule->next, i++) {
-    if (rule->flag & BOIDRULE_CURRENT)
+    if (rule->flag & BOIDRULE_CURRENT) {
       return i;
+    }
   }
   return 0;
 }
@@ -211,10 +229,12 @@ static void rna_BoidState_active_boid_rule_index_set(struct PointerRNA *ptr, int
   int i = 0;
 
   for (; rule; rule = rule->next, i++) {
-    if (i == value)
+    if (i == value) {
       rule->flag |= BOIDRULE_CURRENT;
-    else
+    }
+    else {
       rule->flag &= ~BOIDRULE_CURRENT;
+    }
   }
 }
 
@@ -245,8 +265,9 @@ static PointerRNA rna_BoidSettings_active_boid_state_get(PointerRNA *ptr)
   BoidState *state = (BoidState *)boids->states.first;
 
   for (; state; state = state->next) {
-    if (state->flag & BOIDSTATE_CURRENT)
+    if (state->flag & BOIDSTATE_CURRENT) {
       return rna_pointer_inherit_refine(ptr, &RNA_BoidState, state);
+    }
   }
   return rna_pointer_inherit_refine(ptr, &RNA_BoidState, NULL);
 }
@@ -265,8 +286,9 @@ static int rna_BoidSettings_active_boid_state_index_get(PointerRNA *ptr)
   int i = 0;
 
   for (; state; state = state->next, i++) {
-    if (state->flag & BOIDSTATE_CURRENT)
+    if (state->flag & BOIDSTATE_CURRENT) {
       return i;
+    }
   }
   return 0;
 }
@@ -278,10 +300,12 @@ static void rna_BoidSettings_active_boid_state_index_set(struct PointerRNA *ptr,
   int i = 0;
 
   for (; state; state = state->next, i++) {
-    if (i == value)
+    if (i == value) {
       state->flag |= BOIDSTATE_CURRENT;
-    else
+    }
+    else {
       state->flag &= ~BOIDSTATE_CURRENT;
+    }
   }
 }
 

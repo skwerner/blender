@@ -22,6 +22,8 @@ import bpy
 from bpy.types import Menu, Panel, UIList
 from bl_ui.utils import PresetPanel
 
+from bpy.app.translations import pgettext_tip as tip_
+
 
 class RENDER_PT_presets(PresetPanel, Panel):
     bl_label = "Render Presets"
@@ -61,7 +63,7 @@ class RENDER_PT_dimensions(RenderOutputButtonsPanel, Panel):
     _frame_rate_args_prev = None
     _preset_class = None
 
-    def draw_header_preset(self, context):
+    def draw_header_preset(self, _context):
         RENDER_PT_presets.draw_panel_header(self.layout)
 
     @staticmethod
@@ -81,10 +83,10 @@ class RENDER_PT_dimensions(RenderOutputButtonsPanel, Panel):
         custom_framerate = (fps_rate not in {23.98, 24, 25, 29.97, 30, 50, 59.94, 60})
 
         if custom_framerate is True:
-            fps_label_text = f"Custom ({fps_rate!r} fps)"
+            fps_label_text = tip_("Custom (%.4g fps)") % fps_rate
             show_framerate = True
         else:
-            fps_label_text = f"{fps_rate!r} fps"
+            fps_label_text = tip_("%.4g fps") % fps_rate
             show_framerate = (preset_label == "Custom")
 
         RENDER_PT_dimensions._frame_rate_args_prev = args
@@ -313,7 +315,7 @@ class RENDER_PT_output_views(RenderOutputButtonsPanel, Panel):
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
-    def poll(self, context):
+    def poll(cls, context):
         rd = context.scene.render
         return rd.use_multiview
 
@@ -332,7 +334,7 @@ class RENDER_PT_encoding(RenderOutputButtonsPanel, Panel):
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
-    def draw_header_preset(self, context):
+    def draw_header_preset(self, _context):
         RENDER_PT_ffmpeg_presets.draw_panel_header(self.layout)
 
     @classmethod
@@ -381,7 +383,7 @@ class RENDER_PT_encoding_video(RenderOutputButtonsPanel, Panel):
         if needs_codec and ffmpeg.codec == 'NONE':
             return
 
-        if ffmpeg.codec in {'DNXHD'}:
+        if ffmpeg.codec == 'DNXHD':
             layout.prop(ffmpeg, "use_lossless_output")
 
         # Output quality
@@ -443,7 +445,7 @@ class RENDER_PT_encoding_audio(RenderOutputButtonsPanel, Panel):
 
 
 class RENDER_UL_renderviews(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, index):
         view = item
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             if view.name in {"left", "right"}:

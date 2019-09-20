@@ -86,7 +86,7 @@ Scene *ED_scene_add(Main *bmain, bContext *C, wmWindow *win, eSceneCopyMethod me
  * \note Only call outside of area/region loops
  * \return true if successful
  */
-bool ED_scene_delete(bContext *C, Main *bmain, wmWindow *win, Scene *scene)
+bool ED_scene_delete(bContext *C, Main *bmain, Scene *scene)
 {
   Scene *scene_new;
 
@@ -94,14 +94,24 @@ bool ED_scene_delete(bContext *C, Main *bmain, wmWindow *win, Scene *scene)
   wmWindowManager *wm = bmain->wm.first;
   WM_jobs_kill_type(wm, scene, WM_JOB_TYPE_ANY);
 
-  if (scene->id.prev)
+  if (scene->id.prev) {
     scene_new = scene->id.prev;
-  else if (scene->id.next)
+  }
+  else if (scene->id.next) {
     scene_new = scene->id.next;
-  else
+  }
+  else {
     return false;
+  }
 
-  WM_window_set_active_scene(bmain, C, win, scene_new);
+  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+    if (win->parent != NULL) { /* We only care about main windows here... */
+      continue;
+    }
+    if (win->scene == scene) {
+      WM_window_set_active_scene(bmain, C, win, scene_new);
+    }
+  }
 
   BKE_id_delete(bmain, scene);
 
@@ -241,12 +251,13 @@ static int scene_delete_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
 
-  if (ED_scene_delete(C, CTX_data_main(C), CTX_wm_window(C), scene) == false) {
+  if (ED_scene_delete(C, CTX_data_main(C), scene) == false) {
     return OPERATOR_CANCELLED;
   }
 
-  if (G.debug & G_DEBUG)
+  if (G.debug & G_DEBUG) {
     printf("scene delete %p\n", scene);
+  }
 
   WM_event_add_notifier(C, NC_SCENE | NA_REMOVED, scene);
 

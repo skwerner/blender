@@ -1,9 +1,6 @@
 
-uniform mat4 ModelViewProjectionMatrix;
-uniform mat4 ModelMatrix;
-
 in vec3 pos;
-in vec3 c; /* active color */
+in vec3 ac; /* active color */
 
 out vec3 finalColor;
 
@@ -17,11 +14,12 @@ vec3 srgb_to_linear_attr(vec3 c)
 
 void main()
 {
-  gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+  vec3 world_pos = point_object_to_world(pos);
+  gl_Position = point_world_to_ndc(world_pos);
 
-  finalColor = srgb_to_linear_attr(c);
+  finalColor = srgb_to_linear_attr(ac);
 
 #ifdef USE_WORLD_CLIP_PLANES
-  world_clip_planes_calc_clip_distance((ModelMatrix * vec4(pos, 1.0)).xyz);
+  world_clip_planes_calc_clip_distance(world_pos);
 #endif
 }

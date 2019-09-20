@@ -50,8 +50,9 @@ int ED_mesh_mirror_spatial_table(
     Object *ob, BMEditMesh *em, Mesh *me_eval, const float co[3], char mode)
 {
   if (mode == 'u') { /* use table */
-    if (MirrKdStore.tree == NULL)
+    if (MirrKdStore.tree == NULL) {
       ED_mesh_mirror_spatial_table(ob, em, me_eval, NULL, 's');
+    }
 
     if (MirrKdStore.tree) {
       KDTreeNearest_3d nearest;
@@ -70,8 +71,9 @@ int ED_mesh_mirror_spatial_table(
     const bool use_em = (!me_eval && em && me->edit_mesh == em);
     const int totvert = use_em ? em->bm->totvert : me_eval ? me_eval->totvert : me->totvert;
 
-    if (MirrKdStore.tree) /* happens when entering this call without ending it */
+    if (MirrKdStore.tree) { /* happens when entering this call without ending it */
       ED_mesh_mirror_spatial_table(ob, em, me_eval, co, 'e');
+    }
 
     MirrKdStore.tree = BLI_kdtree_3d_new(totvert);
 
@@ -126,19 +128,23 @@ typedef struct MirrTopoVert_t {
 
 static int mirrtopo_hash_sort(const void *l1, const void *l2)
 {
-  if ((MirrTopoHash_t)(intptr_t)l1 > (MirrTopoHash_t)(intptr_t)l2)
+  if ((MirrTopoHash_t)(intptr_t)l1 > (MirrTopoHash_t)(intptr_t)l2) {
     return 1;
-  else if ((MirrTopoHash_t)(intptr_t)l1 < (MirrTopoHash_t)(intptr_t)l2)
+  }
+  else if ((MirrTopoHash_t)(intptr_t)l1 < (MirrTopoHash_t)(intptr_t)l2) {
     return -1;
+  }
   return 0;
 }
 
 static int mirrtopo_vert_sort(const void *v1, const void *v2)
 {
-  if (((MirrTopoVert_t *)v1)->hash > ((MirrTopoVert_t *)v2)->hash)
+  if (((MirrTopoVert_t *)v1)->hash > ((MirrTopoVert_t *)v2)->hash) {
     return 1;
-  else if (((MirrTopoVert_t *)v1)->hash < ((MirrTopoVert_t *)v2)->hash)
+  }
+  else if (((MirrTopoVert_t *)v1)->hash < ((MirrTopoVert_t *)v2)->hash) {
     return -1;
+  }
   return 0;
 }
 
@@ -316,7 +322,7 @@ void ED_mesh_mirrtopo_init(Mesh *me,
     BMVert **vtable = em->bm->vtable;
     for (a = 1; a <= totvert; a++) {
       // printf("I %d %ld %d\n",
-      //        (a - last), MirrTopoPairs[a].hash, MirrTopoPairs[a].v_indexs);
+      //        (a - last), MirrTopoPairs[a].hash, MirrTopoPairs[a].v_index);
       if ((a == totvert) || (topo_pairs[a - 1].hash != topo_pairs[a].hash)) {
         const int match_count = a - last;
         if (match_count == 2) {

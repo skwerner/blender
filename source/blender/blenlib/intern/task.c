@@ -211,6 +211,10 @@ struct TaskScheduler {
   ThreadMutex queue_mutex;
   ThreadCondition queue_cond;
 
+  ThreadMutex startup_mutex;
+  ThreadCondition startup_cond;
+  volatile int num_thread_started;
+
   volatile bool do_exit;
 
   /* NOTE: In pthread's TLS we store the whole TaskThread structure. */
@@ -429,6 +433,14 @@ static void *task_scheduler_thread_run(void *thread_p)
 
   pthread_setspecific(scheduler->tls_id_key, thread);
 
+  /* signal the main thread when all threads have started */
+  BLI_mutex_lock(&scheduler->startup_mutex);
+  scheduler->num_thread_started++;
+  if (scheduler->num_thread_started == scheduler->num_threads) {
+    BLI_condition_notify_one(&scheduler->startup_cond);
+  }
+  BLI_mutex_unlock(&scheduler->startup_mutex);
+
   /* keep popping off tasks */
   while (task_scheduler_thread_wait_pop(scheduler, &task)) {
     TaskPool *pool = task->pool;
@@ -462,6 +474,10 @@ TaskScheduler *BLI_task_scheduler_create(int num_threads)
   BLI_listbase_clear(&scheduler->queue);
   BLI_mutex_init(&scheduler->queue_mutex);
   BLI_condition_init(&scheduler->queue_cond);
+
+  BLI_mutex_init(&scheduler->startup_mutex);
+  BLI_condition_init(&scheduler->startup_cond);
+  scheduler->num_thread_started = 0;
 
   if (num_threads == 0) {
     /* automatic number of threads will be main thread + num cores */
@@ -503,6 +519,17 @@ TaskScheduler *BLI_task_scheduler_create(int num_threads)
       }
     }
   }
+
+  /* Wait for all worker threads to start before returning to caller to prevent the case where
+   * threads are still starting and pthread_join is called, which causes a deadlock on pthreads4w.
+   */
+  BLI_mutex_lock(&scheduler->startup_mutex);
+  /* NOTE: Use loop here to avoid false-positive everything-is-ready caused by spontaneous thread
+   * wake up. */
+  while (scheduler->num_thread_started != num_threads) {
+    BLI_condition_wait(&scheduler->startup_cond, &scheduler->startup_mutex);
+  }
+  BLI_mutex_unlock(&scheduler->startup_mutex);
 
   return scheduler;
 }
@@ -551,6 +578,8 @@ void BLI_task_scheduler_free(TaskScheduler *scheduler)
   /* delete mutex/condition */
   BLI_mutex_end(&scheduler->queue_mutex);
   BLI_condition_end(&scheduler->queue_cond);
+  BLI_mutex_end(&scheduler->startup_mutex);
+  BLI_condition_end(&scheduler->startup_cond);
 
   MEM_freeN(scheduler);
 }
@@ -714,13 +743,15 @@ TaskPool *BLI_task_pool_create(TaskScheduler *scheduler, void *userdata)
 
 /**
  * Create a background task pool.
- * In multi-threaded context, there is no differences with \a BLI_task_pool_create(), but in single-threaded case
- * it is ensured to have at least one worker thread to run on (i.e. you do not have to call
- * \a BLI_task_pool_work_and_wait() on it to be sure it will be processed).
+ * In multi-threaded context, there is no differences with #BLI_task_pool_create(),
+ * but in single-threaded case it is ensured to have at least one worker thread to run on
+ * (i.e. you don't have to call #BLI_task_pool_work_and_wait
+ * on it to be sure it will be processed).
  *
- * \note Background pools are non-recursive (that is, you should not create other background pools in tasks assigned
- *       to a background pool, they could end never being executed, since the 'fallback' background thread is already
- *       busy with parent task in single-threaded context).
+ * \note Background pools are non-recursive
+ * (that is, you should not create other background pools in tasks assigned to a background pool,
+ * they could end never being executed, since the 'fallback' background thread is already
+ * busy with parent task in single-threaded context).
  */
 TaskPool *BLI_task_pool_create_background(TaskScheduler *scheduler, void *userdata)
 {
@@ -1078,7 +1109,8 @@ static void parallel_range_single_thread(const int start,
 }
 
 /**
- * This function allows to parallelized for loops in a similar way to OpenMP's 'parallel for' statement.
+ * This function allows to parallelized for loops in a similar way to OpenMP's
+ * 'parallel for' statement.
  *
  * See public API doc of ParallelRangeSettings for description of all settings.
  */
@@ -1264,10 +1296,12 @@ BLI_INLINE int task_parallel_listbasecalc_chunk_size(const int num_threads)
  * \param listbase: The double linked list to loop over.
  * \param userdata: Common userdata passed to all instances of \a func.
  * \param func: Callback function.
- * \param use_threading: If \a true, actually split-execute loop in threads, else just do a sequential forloop
- *                      (allows caller to use any kind of test to switch on parallelization or not).
+ * \param use_threading: If \a true, actually split-execute loop in threads,
+ * else just do a sequential forloop
+ * (allows caller to use any kind of test to switch on parallelization or not).
  *
- * \note There is no static scheduling here, since it would need another full loop over items to count them...
+ * \note There is no static scheduling here,
+ * since it would need another full loop over items to count them.
  */
 void BLI_task_parallel_listbase(struct ListBase *listbase,
                                 void *userdata,
@@ -1336,7 +1370,8 @@ static void parallel_mempool_func(TaskPool *__restrict pool, void *taskdata, int
  * \param mempool: The iterable BLI_mempool to loop over.
  * \param userdata: Common userdata passed to all instances of \a func.
  * \param func: Callback function.
- * \param use_threading: If \a true, actually split-execute loop in threads, else just do a sequential for loop
+ * \param use_threading: If \a true, actually split-execute loop in threads,
+ * else just do a sequential for loop
  * (allows caller to use any kind of test to switch on parallelization or not).
  *
  * \note There is no static scheduling here.

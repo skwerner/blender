@@ -23,6 +23,8 @@
  */
 
 #include "BKE_context.h"
+#include "BKE_library.h"
+
 #include "../node_composite_util.h"
 
 /* **************** SWITCH VIEW ******************** */
@@ -43,8 +45,9 @@ static void cmp_node_switch_view_sanitycheck(bNodeTree *ntree, bNode *node)
 {
   bNodeSocket *sock;
 
-  if (!BLI_listbase_is_empty(&node->inputs))
+  if (!BLI_listbase_is_empty(&node->inputs)) {
     return;
+  }
 
   sock = ntreeCompositSwitchViewAddSocket(ntree, node, "No View");
   sock->flag |= SOCK_HIDDEN;
@@ -57,8 +60,9 @@ static void cmp_node_switch_view_update(bNodeTree *ntree, bNode *node)
   Scene *scene = (Scene *)node->id;
 
   /* only update when called from the operator button */
-  if (node->update != NODE_UPDATE_OPERATOR)
+  if (node->update != NODE_UPDATE_OPERATOR) {
     return;
+  }
 
   if (scene == NULL) {
     nodeRemoveAllSockets(ntree, node);
@@ -78,10 +82,12 @@ static void cmp_node_switch_view_update(bNodeTree *ntree, bNode *node)
       nodeRemoveSocket(ntree, node, sock_del);
     }
     else {
-      if (srv->viewflag & SCE_VIEW_DISABLE)
+      if (srv->viewflag & SCE_VIEW_DISABLE) {
         sock->flag |= SOCK_HIDDEN;
-      else
+      }
+      else {
         sock->flag &= ~SOCK_HIDDEN;
+      }
 
       sock = sock->prev;
     }
@@ -91,13 +97,16 @@ static void cmp_node_switch_view_update(bNodeTree *ntree, bNode *node)
   for (srv = scene->r.views.first; srv; srv = srv->next) {
     sock = BLI_findstring(&node->inputs, srv->name, offsetof(bNodeSocket, name));
 
-    if (sock == NULL)
+    if (sock == NULL) {
       sock = ntreeCompositSwitchViewAddSocket(ntree, node, srv->name);
+    }
 
-    if (srv->viewflag & SCE_VIEW_DISABLE)
+    if (srv->viewflag & SCE_VIEW_DISABLE) {
       sock->flag |= SOCK_HIDDEN;
-    else
+    }
+    else {
       sock->flag &= ~SOCK_HIDDEN;
+    }
   }
 
   /* make sure there is always one socket */
@@ -115,6 +124,7 @@ static void init_switch_view(const bContext *C, PointerRNA *ptr)
 
   /* store scene for updates */
   node->id = (ID *)scene;
+  id_us_plus(node->id);
 
   if (scene) {
     RenderData *rd = &scene->r;
@@ -122,8 +132,9 @@ static void init_switch_view(const bContext *C, PointerRNA *ptr)
     for (nr = 0, srv = rd->views.first; srv; srv = srv->next, nr++) {
       sock = ntreeCompositSwitchViewAddSocket(ntree, node, srv->name);
 
-      if ((srv->viewflag & SCE_VIEW_DISABLE))
+      if ((srv->viewflag & SCE_VIEW_DISABLE)) {
         sock->flag |= SOCK_HIDDEN;
+      }
     }
   }
 
@@ -140,7 +151,7 @@ void register_node_type_cmp_switch_view(void)
 
   ntype.initfunc_api = init_switch_view;
 
-  node_type_update(&ntype, cmp_node_switch_view_update, NULL);
+  node_type_update(&ntype, cmp_node_switch_view_update);
 
   nodeRegisterType(&ntype);
 }

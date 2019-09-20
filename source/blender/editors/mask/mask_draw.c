@@ -52,6 +52,8 @@
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
+#include "DEG_depsgraph_query.h"
+
 #include "mask_intern.h" /* own include */
 
 static void mask_spline_color_get(MaskLayer *masklay,
@@ -203,11 +205,13 @@ static void draw_spline_points(const bContext *C,
   float(*feather_points)[2], (*fp)[2];
   float min[2], max[2];
 
-  if (!spline->tot_point)
+  if (!spline->tot_point) {
     return;
+  }
 
-  if (sc)
+  if (sc) {
     undistort = sc->clip && (sc->user.render_flag & MCLIP_PROXY_RENDER_UNDISTORT);
+  }
 
   /* TODO, add this to sequence editor */
   float handle_size = 2.0f * UI_GetThemeValuef(TH_HANDLE_VERTEX_SIZE) * U.pixelsize;
@@ -233,8 +237,9 @@ static void draw_spline_points(const bContext *C,
 
       copy_v2_v2(feather_point, *fp);
 
-      if (undistort)
+      if (undistort) {
         mask_point_undistort_pos(sc, feather_point, feather_point);
+      }
 
       if (j == 0) {
         sel = MASKPOINT_ISSEL_ANY(point);
@@ -244,10 +249,12 @@ static void draw_spline_points(const bContext *C,
       }
 
       if (sel) {
-        if (point == masklay->act_point)
+        if (point == masklay->act_point) {
           immUniformColor3f(1.0f, 1.0f, 1.0f);
-        else
+        }
+        else {
           immUniformThemeColorShadeAlpha(TH_HANDLE_VERTEX_SELECT, 0, 255);
+        }
       }
       else {
         immUniformThemeColorShadeAlpha(TH_HANDLE_VERTEX, 0, 255);
@@ -314,13 +321,16 @@ static void draw_spline_points(const bContext *C,
 
     /* draw CV point */
     if (MASKPOINT_ISSEL_KNOT(point)) {
-      if (point == masklay->act_point)
+      if (point == masklay->act_point) {
         immUniformColor3f(1.0f, 1.0f, 1.0f);
-      else
+      }
+      else {
         immUniformThemeColorShadeAlpha(TH_HANDLE_VERTEX_SELECT, 0, 255);
+      }
     }
-    else
+    else {
       immUniformThemeColorShadeAlpha(TH_HANDLE_VERTEX, 0, 255);
+    }
 
     immBegin(GPU_PRIM_POINTS, 1);
     immVertex2fv(pos, vert);
@@ -490,6 +500,7 @@ static void mask_draw_curve_type(const bContext *C,
       immUniform1i("colors_len", 2); /* "advanced" mode */
       immUniformArray4fv("colors", colors, 2);
       immUniform1f("dash_width", 4.0f);
+      immUniform1f("dash_factor", 0.5f);
       GPU_line_width(1.0f);
 
       mask_draw_array(pos, draw_method, points, tot_point);
@@ -502,8 +513,9 @@ static void mask_draw_curve_type(const bContext *C,
       BLI_assert(false);
   }
 
-  if (points != orig_points)
+  if (points != orig_points) {
     MEM_freeN(points);
+  }
 }
 
 static void draw_spline_curve(const bContext *C,
@@ -533,8 +545,9 @@ static void draw_spline_curve(const bContext *C,
 
   diff_points = BKE_mask_spline_differentiate_with_resolution(spline, &tot_diff_point, resol);
 
-  if (!diff_points)
+  if (!diff_points) {
     return;
+  }
 
   if (is_smooth) {
     GPU_line_smooth(true);
@@ -588,7 +601,7 @@ static void draw_masklays(const bContext *C,
   GPU_blend(true);
   GPU_blend_set_func_separate(
       GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-  GPU_enable_program_point_size();
+  GPU_program_point_size(true);
 
   MaskLayer *masklay;
   int i;
@@ -623,7 +636,7 @@ static void draw_masklays(const bContext *C,
     }
   }
 
-  GPU_disable_program_point_size();
+  GPU_program_point_size(false);
   GPU_blend(false);
 }
 
@@ -633,8 +646,9 @@ void ED_mask_draw(const bContext *C, const char draw_flag, const char draw_type)
   Mask *mask = CTX_data_edit_mask(C);
   int width, height;
 
-  if (!mask)
+  if (!mask) {
     return;
+  }
 
   ED_mask_get_size(sa, &width, &height);
 
@@ -661,7 +675,8 @@ static float *mask_rasterize(Mask *mask, const int width, const int height)
 /* sets up the opengl context.
  * width, height are to match the values from ED_mask_get_size() */
 void ED_mask_draw_region(
-    Mask *mask,
+    Depsgraph *depsgraph,
+    Mask *mask_,
     ARegion *ar,
     const char draw_flag,
     const char draw_type,
@@ -679,6 +694,7 @@ void ED_mask_draw_region(
     const bContext *C)
 {
   struct View2D *v2d = &ar->v2d;
+  Mask *mask_eval = (Mask *)DEG_get_evaluated_id(depsgraph, &mask_->id);
 
   /* aspect always scales vertically in movie and image spaces */
   const float width = width_i, height = (float)height_i * (aspy / aspx);
@@ -724,7 +740,7 @@ void ED_mask_draw_region(
 
   if (draw_flag & MASK_DRAWFLAG_OVERLAY) {
     float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
-    float *buffer = mask_rasterize(mask, width, height);
+    float *buffer = mask_rasterize(mask_eval, width, height);
 
     if (overlay_mode != MASK_OVERLAY_ALPHACHANNEL) {
       /* More blending types could be supported in the future. */
@@ -768,7 +784,7 @@ void ED_mask_draw_region(
   }
 
   /* draw! */
-  draw_masklays(C, mask, draw_flag, draw_type, width, height);
+  draw_masklays(C, mask_eval, draw_flag, draw_type, width, height);
 
   if (do_draw_cb) {
     ED_region_draw_cb_draw(C, ar, REGION_DRAW_POST_VIEW);

@@ -105,8 +105,8 @@ typedef enum DerivedMeshType {
 
 typedef enum DMForeachFlag {
   DM_FOREACH_NOP = 0,
-  DM_FOREACH_USE_NORMAL =
-      (1 << 0), /* foreachMappedVert, foreachMappedLoop, foreachMappedFaceCenter */
+  /* foreachMappedVert, foreachMappedLoop, foreachMappedFaceCenter */
+  DM_FOREACH_USE_NORMAL = (1 << 0),
 } DMForeachFlag;
 
 typedef enum DMDirtyFlag {
@@ -134,8 +134,9 @@ struct DerivedMesh {
    * \warning Typical access is done via #getLoopTriArray, #getNumLoopTri.
    */
   struct {
-    /* WARNING! swapping between array (ready-to-be-used data) and array_wip (where data is actually computed)
-     *          shall always be protected by same lock as one used for looptris computing. */
+    /* WARNING! swapping between array (ready-to-be-used data) and array_wip
+     * (where data is actually computed) shall always be protected by same
+     * lock as one used for looptris computing. */
     struct MLoopTri *array, *array_wip;
     int num;
     int num_alloc;
@@ -454,8 +455,7 @@ struct Mesh *editbmesh_get_eval_cage(struct Depsgraph *depsgraph,
                                      const struct CustomData_MeshMasks *dataMask);
 struct Mesh *editbmesh_get_eval_cage_from_orig(struct Depsgraph *depsgraph,
                                                struct Scene *scene,
-                                               struct Object *,
-                                               struct BMEditMesh *em,
+                                               struct Object *object,
                                                const struct CustomData_MeshMasks *dataMask);
 struct Mesh *editbmesh_get_eval_cage_and_final(struct Depsgraph *depsgraph,
                                                struct Scene *scene,

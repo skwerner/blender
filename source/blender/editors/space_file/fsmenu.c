@@ -39,10 +39,13 @@
 /* Need to include windows.h so _WIN32_IE is defined. */
 #  include <windows.h>
 /* For SHGetSpecialFolderPath, has to be done before BLI_winstuff
-    * because 'near' is disabled through BLI_windstuff. */
+ * because 'near' is disabled through BLI_windstuff. */
 #  include <shlobj.h>
 #  include "BLI_winstuff.h"
 #endif
+
+#include "WM_api.h"
+#include "WM_types.h"
 
 #ifdef __APPLE__
 #  include <Carbon/Carbon.h>
@@ -219,9 +222,8 @@ void fsmenu_entry_refresh_valid(struct FSMenuEntry *fsentry)
   if (fsentry->path && fsentry->path[0]) {
 #ifdef WIN32
     /* XXX Special case, always consider those as valid.
-     *     Thanks to Windows, which can spend five seconds to perform a mere stat() call on those paths...
-     *     See T43684.
-     */
+     * Thanks to Windows, which can spend five seconds to perform a mere stat() call on those paths
+     * See T43684. */
     const char *exceptions[] = {"A:\\", "B:\\", NULL};
     const size_t exceptions_len[] = {strlen(exceptions[0]), strlen(exceptions[1]), 0};
     int i;
@@ -297,8 +299,8 @@ void fsmenu_insert_entry(struct FSMenu *fsmenu,
   fsm_iter->save = (flag & FS_INSERT_SAVE) != 0;
 
   if ((category == FS_CATEGORY_RECENT) && (!name || !name[0])) {
-    /* Special handling when adding new recent entry - check if dir exists in some other categories,
-     * and try to use name from there if so. */
+    /* Special handling when adding new recent entry - check if dir exists in
+     * some other categories, and try to use name from there if so. */
     FSMenuCategory cats[] = {
         FS_CATEGORY_SYSTEM, FS_CATEGORY_SYSTEM_BOOKMARKS, FS_CATEGORY_BOOKMARKS};
     int i = ARRAY_SIZE(cats);
@@ -352,8 +354,9 @@ void fsmenu_remove_entry(struct FSMenu *fsmenu, FSMenuCategory category, int idx
 
   fsm_head = ED_fsmenu_get_category(fsmenu, category);
 
-  for (fsm_iter = fsm_head; fsm_iter && idx; fsm_prev = fsm_iter, fsm_iter = fsm_iter->next)
+  for (fsm_iter = fsm_head; fsm_iter && idx; fsm_prev = fsm_iter, fsm_iter = fsm_iter->next) {
     idx--;
+  }
 
   if (fsm_iter) {
     /* you should only be able to remove entries that were
@@ -383,8 +386,9 @@ void fsmenu_write_file(struct FSMenu *fsmenu, const char *filename)
   int nwritten = 0;
 
   FILE *fp = BLI_fopen(filename, "w");
-  if (!fp)
+  if (!fp) {
     return;
+  }
 
   fprintf(fp, "[Bookmarks]\n");
   for (fsm_iter = ED_fsmenu_get_category(fsmenu, FS_CATEGORY_BOOKMARKS); fsm_iter;
@@ -420,8 +424,9 @@ void fsmenu_read_bookmarks(struct FSMenu *fsmenu, const char *filename)
   FILE *fp;
 
   fp = BLI_fopen(filename, "r");
-  if (!fp)
+  if (!fp) {
     return;
+  }
 
   name[0] = '\0';
 
@@ -519,11 +524,12 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 #else
 #  ifdef __APPLE__
   {
-    /* Get mounted volumes better method OSX 10.6 and higher, see: */
-    /*https://developer.apple.com/library/mac/#documentation/CoreFOundation/Reference/CFURLRef/Reference/reference.html*/
+    /* Get mounted volumes better method OSX 10.6 and higher, see:
+     * https://developer.apple.com/library/mac/#documentation/CoreFOundation/Reference/CFURLRef/Reference/reference.html
+     */
 
-    /* we get all volumes sorted including network and do not relay
-     * on user-defined finder visibility, less confusing */
+    /* We get all volumes sorted including network and do not relay
+     * on user-defined finder visibility, less confusing. */
 
     CFURLRef cfURL = NULL;
     CFURLEnumeratorResult result = kCFURLEnumeratorSuccess;
@@ -534,8 +540,9 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
       char defPath[FILE_MAX];
 
       result = CFURLEnumeratorGetNextURL(volEnum, &cfURL, NULL);
-      if (result != kCFURLEnumeratorSuccess)
+      if (result != kCFURLEnumeratorSuccess) {
         continue;
+      }
 
       CFURLGetFileSystemRepresentation(cfURL, false, (UInt8 *)defPath, FILE_MAX);
 
@@ -565,14 +572,16 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
                                                     kLSSharedFileListDoNotMountVolumes,
                                                 &cfURL,
                                                 NULL);
-        if (err != noErr || !cfURL)
+        if (err != noErr || !cfURL) {
           continue;
+        }
 
         CFStringRef pathString = CFURLCopyFileSystemPath(cfURL, kCFURLPOSIXPathStyle);
 
         if (pathString == NULL ||
-            !CFStringGetCString(pathString, line, sizeof(line), kCFStringEncodingUTF8))
+            !CFStringGetCString(pathString, line, sizeof(line), kCFStringEncodingUTF8)) {
           continue;
+        }
 
         /* Add end slash for consistency with other platforms */
         BLI_add_slash(line);
@@ -678,8 +687,9 @@ void fsmenu_read_system(struct FSMenu *fsmenu, int read_bookmarks)
 #    endif
 
       /* fallback */
-      if (!found)
+      if (!found) {
         fsmenu_insert_entry(fsmenu, FS_CATEGORY_SYSTEM, "/", NULL, FS_INSERT_SORTED);
+      }
     }
   }
 #  endif
@@ -714,31 +724,59 @@ void fsmenu_refresh_system_category(struct FSMenu *fsmenu)
   fsmenu_read_system(fsmenu, true);
 }
 
-void fsmenu_refresh_bookmarks_status(struct FSMenu *fsmenu)
+static void fsmenu_free_ex(FSMenu **fsmenu)
 {
-  int categories[] = {
-      FS_CATEGORY_SYSTEM, FS_CATEGORY_SYSTEM_BOOKMARKS, FS_CATEGORY_BOOKMARKS, FS_CATEGORY_RECENT};
-  int i;
-
-  for (i = sizeof(categories) / sizeof(*categories); i--;) {
-    FSMenuEntry *fsm_iter = ED_fsmenu_get_category(fsmenu, categories[i]);
-    for (; fsm_iter; fsm_iter = fsm_iter->next) {
-      fsmenu_entry_refresh_valid(fsm_iter);
-    }
+  if (*fsmenu != NULL) {
+    fsmenu_free_category(*fsmenu, FS_CATEGORY_SYSTEM);
+    fsmenu_free_category(*fsmenu, FS_CATEGORY_SYSTEM_BOOKMARKS);
+    fsmenu_free_category(*fsmenu, FS_CATEGORY_BOOKMARKS);
+    fsmenu_free_category(*fsmenu, FS_CATEGORY_RECENT);
+    MEM_freeN(*fsmenu);
   }
+
+  *fsmenu = NULL;
 }
 
 void fsmenu_free(void)
 {
-  if (g_fsmenu) {
-    fsmenu_free_category(g_fsmenu, FS_CATEGORY_SYSTEM);
-    fsmenu_free_category(g_fsmenu, FS_CATEGORY_SYSTEM_BOOKMARKS);
-    fsmenu_free_category(g_fsmenu, FS_CATEGORY_BOOKMARKS);
-    fsmenu_free_category(g_fsmenu, FS_CATEGORY_RECENT);
-    MEM_freeN(g_fsmenu);
+  fsmenu_free_ex(&g_fsmenu);
+}
+
+static void fsmenu_copy_category(struct FSMenu *fsmenu_dst,
+                                 struct FSMenu *fsmenu_src,
+                                 const FSMenuCategory category)
+{
+  FSMenuEntry *fsm_dst_prev = NULL, *fsm_dst_head = NULL;
+  FSMenuEntry *fsm_src_iter = ED_fsmenu_get_category(fsmenu_src, category);
+
+  for (; fsm_src_iter != NULL; fsm_src_iter = fsm_src_iter->next) {
+    FSMenuEntry *fsm_dst = MEM_dupallocN(fsm_src_iter);
+    if (fsm_dst->path != NULL) {
+      fsm_dst->path = MEM_dupallocN(fsm_dst->path);
+    }
+
+    if (fsm_dst_prev != NULL) {
+      fsm_dst_prev->next = fsm_dst;
+    }
+    else {
+      fsm_dst_head = fsm_dst;
+    }
+    fsm_dst_prev = fsm_dst;
   }
 
-  g_fsmenu = NULL;
+  ED_fsmenu_set_category(fsmenu_dst, category, fsm_dst_head);
+}
+
+static FSMenu *fsmenu_copy(FSMenu *fsmenu)
+{
+  FSMenu *fsmenu_copy = MEM_dupallocN(fsmenu);
+
+  fsmenu_copy_category(fsmenu_copy, fsmenu_copy, FS_CATEGORY_SYSTEM);
+  fsmenu_copy_category(fsmenu_copy, fsmenu_copy, FS_CATEGORY_SYSTEM_BOOKMARKS);
+  fsmenu_copy_category(fsmenu_copy, fsmenu_copy, FS_CATEGORY_BOOKMARKS);
+  fsmenu_copy_category(fsmenu_copy, fsmenu_copy, FS_CATEGORY_RECENT);
+
+  return fsmenu_copy;
 }
 
 int fsmenu_get_active_indices(struct FSMenu *fsmenu, enum FSMenuCategory category, const char *dir)
@@ -753,4 +791,100 @@ int fsmenu_get_active_indices(struct FSMenu *fsmenu, enum FSMenuCategory categor
   }
 
   return -1;
+}
+
+/* Thanks to some bookmarks sometimes being network drives that can have tens of seconds of delay
+ * before being defined as unreachable by the OS, we need to validate the bookmarks in an async
+ * job...
+ */
+static void fsmenu_bookmark_validate_job_startjob(void *fsmenuv,
+                                                  short *stop,
+                                                  short *do_update,
+                                                  float *UNUSED(progress))
+{
+  FSMenu *fsmenu = fsmenuv;
+
+  int categories[] = {
+      FS_CATEGORY_SYSTEM, FS_CATEGORY_SYSTEM_BOOKMARKS, FS_CATEGORY_BOOKMARKS, FS_CATEGORY_RECENT};
+
+  for (size_t i = ARRAY_SIZE(categories); i--;) {
+    FSMenuEntry *fsm_iter = ED_fsmenu_get_category(fsmenu, categories[i]);
+    for (; fsm_iter; fsm_iter = fsm_iter->next) {
+      if (*stop) {
+        return;
+      }
+      /* Note that we do not really need atomics primitives or thread locks here, since this only
+       * sets one short, which is assumed to be 'atomic'-enough for us here. */
+      fsmenu_entry_refresh_valid(fsm_iter);
+      *do_update = true;
+    }
+  }
+}
+
+static void fsmenu_bookmark_validate_job_update(void *fsmenuv)
+{
+  FSMenu *fsmenu_job = fsmenuv;
+
+  int categories[] = {
+      FS_CATEGORY_SYSTEM, FS_CATEGORY_SYSTEM_BOOKMARKS, FS_CATEGORY_BOOKMARKS, FS_CATEGORY_RECENT};
+
+  for (size_t i = ARRAY_SIZE(categories); i--;) {
+    FSMenuEntry *fsm_iter_src = ED_fsmenu_get_category(fsmenu_job, categories[i]);
+    FSMenuEntry *fsm_iter_dst = ED_fsmenu_get_category(ED_fsmenu_get(), categories[i]);
+    for (; fsm_iter_dst != NULL; fsm_iter_dst = fsm_iter_dst->next) {
+      while (fsm_iter_src != NULL && !STREQ(fsm_iter_dst->path, fsm_iter_src->path)) {
+        fsm_iter_src = fsm_iter_src->next;
+      }
+      if (fsm_iter_src == NULL) {
+        return;
+      }
+      fsm_iter_dst->valid = fsm_iter_src->valid;
+    }
+  }
+}
+
+static void fsmenu_bookmark_validate_job_end(void *fsmenuv)
+{
+  /* In case there would be some dangling update... */
+  fsmenu_bookmark_validate_job_update(fsmenuv);
+}
+
+static void fsmenu_bookmark_validate_job_free(void *fsmenuv)
+{
+  FSMenu *fsmenu = fsmenuv;
+  fsmenu_free_ex(&fsmenu);
+}
+
+static void fsmenu_bookmark_validate_job_start(wmWindowManager *wm)
+{
+  wmJob *wm_job;
+  FSMenu *fsmenu_job = fsmenu_copy(g_fsmenu);
+
+  /* setup job */
+  wm_job = WM_jobs_get(
+      wm, wm->winactive, wm, "Validating Bookmarks...", 0, WM_JOB_TYPE_FSMENU_BOOKMARK_VALIDATE);
+  WM_jobs_customdata_set(wm_job, fsmenu_job, fsmenu_bookmark_validate_job_free);
+  WM_jobs_timer(wm_job, 0.01, NC_SPACE | ND_SPACE_FILE_LIST, NC_SPACE | ND_SPACE_FILE_LIST);
+  WM_jobs_callbacks(wm_job,
+                    fsmenu_bookmark_validate_job_startjob,
+                    NULL,
+                    fsmenu_bookmark_validate_job_update,
+                    fsmenu_bookmark_validate_job_end);
+
+  /* start the job */
+  WM_jobs_start(wm, wm_job);
+}
+
+static void fsmenu_bookmark_validate_job_stop(wmWindowManager *wm)
+{
+  WM_jobs_kill_type(wm, wm, WM_JOB_TYPE_FSMENU_BOOKMARK_VALIDATE);
+}
+
+void fsmenu_refresh_bookmarks_status(wmWindowManager *wm, FSMenu *fsmenu)
+{
+  BLI_assert(fsmenu == ED_fsmenu_get());
+  UNUSED_VARS_NDEBUG(fsmenu);
+
+  fsmenu_bookmark_validate_job_stop(wm);
+  fsmenu_bookmark_validate_job_start(wm);
 }

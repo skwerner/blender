@@ -119,8 +119,9 @@ static void clamp_to_filelist(int numfiles, FileSelection *sel)
   }
 
   /* fix if last file invalid */
-  if ((sel->first > 0) && (sel->last < 0))
+  if ((sel->first > 0) && (sel->last < 0)) {
     sel->last = numfiles - 1;
+  }
 
   /* clamp */
   if ((sel->first >= numfiles)) {
@@ -148,8 +149,9 @@ static FileSelection file_selection_get(bContext *C, const rcti *rect, bool fill
     int f;
     /* Try to find a smaller-index selected item. */
     for (f = sel.last; f >= 0; f--) {
-      if (filelist_entry_select_index_get(sfile->files, f, CHECK_ALL))
+      if (filelist_entry_select_index_get(sfile->files, f, CHECK_ALL)) {
         break;
+      }
     }
     if (f >= 0) {
       sel.first = f + 1;
@@ -157,8 +159,9 @@ static FileSelection file_selection_get(bContext *C, const rcti *rect, bool fill
     /* If none found, try to find a higher-index selected item. */
     else {
       for (f = sel.first; f < numfiles; f++) {
-        if (filelist_entry_select_index_get(sfile->files, f, CHECK_ALL))
+        if (filelist_entry_select_index_get(sfile->files, f, CHECK_ALL)) {
           break;
+        }
       }
       if (f < numfiles) {
         sel.last = f - 1;
@@ -298,8 +301,9 @@ static FileSelect file_select(
       sfile->files, &sel, select, FILE_SEL_SELECTED, check_type);
 
   /* Don't act on multiple selected files */
-  if (sel.first != sel.last)
+  if (sel.first != sel.last) {
     select = 0;
+  }
 
   /* Do we have a valid selection and are we actually selecting */
   if ((sel.last >= 0) && (select != FILE_SEL_REMOVE)) {
@@ -482,14 +486,16 @@ static int file_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   const bool fill = RNA_boolean_get(op->ptr, "fill");
   const bool do_diropen = RNA_boolean_get(op->ptr, "open");
 
-  if (ar->regiontype != RGN_TYPE_WINDOW)
+  if (ar->regiontype != RGN_TYPE_WINDOW) {
     return OPERATOR_CANCELLED;
+  }
 
   rect.xmin = rect.xmax = event->mval[0];
   rect.ymin = rect.ymax = event->mval[1];
 
-  if (!BLI_rcti_isect_pt(&ar->v2d.mask, rect.xmin, rect.ymin))
+  if (!BLI_rcti_isect_pt(&ar->v2d.mask, rect.xmin, rect.ymin)) {
     return OPERATOR_CANCELLED;
+  }
 
   if (sfile && sfile->params) {
     int idx = sfile->params->highlight_file;
@@ -512,10 +518,12 @@ static int file_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
         sfile->files, 0, FILE_SEL_REMOVE, FILE_SEL_SELECTED, CHECK_ALL);
   }
 
-  if (FILE_SELECT_DIR == ret)
+  if (FILE_SELECT_DIR == ret) {
     WM_event_add_notifier(C, NC_SPACE | ND_SPACE_FILE_LIST, NULL);
-  else if (FILE_SELECT_FILE == ret)
+  }
+  else if (FILE_SELECT_FILE == ret) {
     WM_event_add_notifier(C, NC_SPACE | ND_SPACE_FILE_PARAMS, NULL);
+  }
 
   WM_event_add_mousemove(C); /* for directory changes */
   WM_event_add_notifier(C, NC_SPACE | ND_SPACE_FILE_PARAMS, NULL);
@@ -794,33 +802,48 @@ void FILE_OT_select_walk(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-static int file_select_all_exec(bContext *C, wmOperator *UNUSED(op))
+static int file_select_all_exec(bContext *C, wmOperator *op)
 {
   ScrArea *sa = CTX_wm_area(C);
   SpaceFile *sfile = CTX_wm_space_file(C);
   FileSelection sel;
   const int numfiles = filelist_files_ensure(sfile->files);
-  const bool has_selection = file_is_any_selected(sfile->files);
+  int action = RNA_enum_get(op->ptr, "action");
+
+  if (action == SEL_TOGGLE) {
+    action = file_is_any_selected(sfile->files) ? SEL_DESELECT : SEL_SELECT;
+  }
 
   sel.first = 0;
   sel.last = numfiles - 1;
 
-  /* select all only if previously no file was selected */
-  if (has_selection) {
-    filelist_entries_select_index_range_set(
-        sfile->files, &sel, FILE_SEL_REMOVE, FILE_SEL_SELECTED, CHECK_ALL);
-    sfile->params->active_file = -1;
+  FileCheckType check_type;
+  FileSelType filesel_type;
+
+  switch (action) {
+    case SEL_SELECT:
+    case SEL_INVERT: {
+      check_type = (sfile->params->flag & FILE_DIRSEL_ONLY) ? CHECK_DIRS : CHECK_FILES;
+      filesel_type = (action == SEL_INVERT) ? FILE_SEL_TOGGLE : FILE_SEL_ADD;
+      break;
+    }
+    case SEL_DESELECT: {
+      check_type = CHECK_ALL;
+      filesel_type = FILE_SEL_REMOVE;
+      break;
+    }
+    default: {
+      BLI_assert(0);
+      return OPERATOR_CANCELLED;
+    }
   }
-  else {
-    const FileCheckType check_type = (sfile->params->flag & FILE_DIRSEL_ONLY) ? CHECK_DIRS :
-                                                                                CHECK_FILES;
-    int i;
 
-    filelist_entries_select_index_range_set(
-        sfile->files, &sel, FILE_SEL_ADD, FILE_SEL_SELECTED, check_type);
+  filelist_entries_select_index_range_set(
+      sfile->files, &sel, filesel_type, FILE_SEL_SELECTED, check_type);
 
-    /* set active_file to first selected */
-    for (i = 0; i < numfiles; i++) {
+  sfile->params->active_file = -1;
+  if (action != SEL_DESELECT) {
+    for (int i = 0; i < numfiles; i++) {
       if (filelist_entry_select_index_get(sfile->files, i, check_type)) {
         sfile->params->active_file = i;
         break;
@@ -847,6 +870,7 @@ void FILE_OT_select_all(wmOperatorType *ot)
   ot->poll = ED_operator_file_active;
 
   /* properties */
+  WM_operator_properties_select_all(ot);
 }
 
 /* ---------- BOOKMARKS ----------- */
@@ -1003,7 +1027,7 @@ static int bookmark_cleanup_exec(bContext *C, wmOperator *UNUSED(op))
     BLI_make_file_string(
         "/", name, BKE_appdir_folder_id_create(BLENDER_USER_CONFIG, NULL), BLENDER_BOOKMARK_FILE);
     fsmenu_write_file(fsmenu, name);
-    fsmenu_refresh_bookmarks_status(fsmenu);
+    fsmenu_refresh_bookmarks_status(CTX_wm_manager(C), fsmenu);
     ED_area_tag_refresh(sa);
     ED_area_tag_redraw(sa);
   }
@@ -1149,8 +1173,9 @@ int file_highlight_set(SpaceFile *sfile, ARegion *ar, int mx, int my)
   FileSelectParams *params;
   int numfiles, origfile;
 
-  if (sfile == NULL || sfile->files == NULL)
+  if (sfile == NULL || sfile->files == NULL) {
     return 0;
+  }
 
   numfiles = filelist_files_ensure(sfile->files);
   params = ED_fileselect_get_params(sfile);
@@ -1169,13 +1194,16 @@ int file_highlight_set(SpaceFile *sfile, ARegion *ar, int mx, int my)
     highlight_file = ED_fileselect_layout_offset(
         sfile->layout, (int)(v2d->tot.xmin + fx), (int)(v2d->tot.ymax - fy));
 
-    if ((highlight_file >= 0) && (highlight_file < numfiles))
+    if ((highlight_file >= 0) && (highlight_file < numfiles)) {
       params->highlight_file = highlight_file;
-    else
+    }
+    else {
       params->highlight_file = -1;
+    }
   }
-  else
+  else {
     params->highlight_file = -1;
+  }
 
   return (params->highlight_file != origfile);
 }
@@ -1185,8 +1213,9 @@ static int file_highlight_invoke(bContext *C, wmOperator *UNUSED(op), const wmEv
   ARegion *ar = CTX_wm_region(C);
   SpaceFile *sfile = CTX_wm_space_file(C);
 
-  if (!file_highlight_set(sfile, ar, event->x, event->y))
+  if (!file_highlight_set(sfile, ar, event->x, event->y)) {
     return OPERATOR_PASS_THROUGH;
+  }
 
   ED_area_tag_redraw(CTX_wm_area(C));
 
@@ -1223,8 +1252,9 @@ static bool file_operator_poll(bContext *C)
   bool poll = ED_operator_file_active(C);
   SpaceFile *sfile = CTX_wm_space_file(C);
 
-  if (!sfile || !sfile->op)
+  if (!sfile || !sfile->op) {
     poll = 0;
+  }
 
   return poll;
 }
@@ -1447,8 +1477,7 @@ int file_exec(bContext *C, wmOperator *exec_op)
   else if (sfile->op) {
     wmOperator *op = sfile->op;
 
-    /* when used as a macro, for doubleclick,
-     * to prevent closing when doubleclicking on .. item */
+    /* When used as a macro, for double-click, to prevent closing when double-clicking on item. */
     if (RNA_boolean_get(exec_op->ptr, "need_active")) {
       const int numfiles = filelist_files_ensure(sfile->files);
       int i, active = 0;
@@ -1459,8 +1488,9 @@ int file_exec(bContext *C, wmOperator *exec_op)
           break;
         }
       }
-      if (active == 0)
+      if (active == 0) {
         return OPERATOR_CANCELLED;
+      }
     }
 
     sfile->op = NULL;
@@ -1553,6 +1583,9 @@ static int file_refresh_exec(bContext *C, wmOperator *UNUSED(unused))
   /* refresh system directory menu */
   fsmenu_refresh_system_category(fsmenu);
 
+  /* Update bookmarks 'valid' state. */
+  fsmenu_refresh_bookmarks_status(wm, fsmenu);
+
   WM_event_add_notifier(C, NC_SPACE | ND_SPACE_FILE_LIST, NULL);
 
   return OPERATOR_FINISHED;
@@ -1575,8 +1608,9 @@ int file_previous_exec(bContext *C, wmOperator *UNUSED(unused))
   SpaceFile *sfile = CTX_wm_space_file(C);
 
   if (sfile->params) {
-    if (!sfile->folders_next)
+    if (!sfile->folders_next) {
       sfile->folders_next = folderlist_new();
+    }
 
     folderlist_pushdir(sfile->folders_next, sfile->params->dir);
     folderlist_popdir(sfile->folders_prev, sfile->params->dir);
@@ -1605,8 +1639,9 @@ int file_next_exec(bContext *C, wmOperator *UNUSED(unused))
 {
   SpaceFile *sfile = CTX_wm_space_file(C);
   if (sfile->params) {
-    if (!sfile->folders_next)
+    if (!sfile->folders_next) {
       sfile->folders_next = folderlist_new();
+    }
 
     folderlist_pushdir(sfile->folders_prev, sfile->params->dir);
     folderlist_popdir(sfile->folders_next, sfile->params->dir);
@@ -1627,19 +1662,19 @@ static int file_smoothscroll_invoke(bContext *C, wmOperator *UNUSED(op), const w
   ScrArea *sa = CTX_wm_area(C);
   SpaceFile *sfile = CTX_wm_space_file(C);
   ARegion *ar, *oldar = CTX_wm_region(C);
-  int offset;
-  int numfiles, numfiles_layout;
-  int edit_idx = -1;
+  const bool is_horizontal = (sfile->layout->flag & FILE_LAYOUT_HOR) != 0;
   int i;
 
   /* escape if not our timer */
-  if (sfile->smoothscroll_timer == NULL || sfile->smoothscroll_timer != event->customdata)
+  if (sfile->smoothscroll_timer == NULL || sfile->smoothscroll_timer != event->customdata) {
     return OPERATOR_PASS_THROUGH;
+  }
 
-  numfiles = filelist_files_ensure(sfile->files);
+  const int numfiles = filelist_files_ensure(sfile->files);
 
   /* Due to async nature of file listing, we may execute this code before `file_refresh()`
-   * editing entry is available in our listing, so we also have to handle switching to rename mode here. */
+   * editing entry is available in our listing,
+   * so we also have to handle switching to rename mode here. */
   FileSelectParams *params = ED_fileselect_get_params(sfile);
   if ((params->rename_flag &
        (FILE_PARAMS_RENAME_PENDING | FILE_PARAMS_RENAME_POSTSCROLL_PENDING)) != 0) {
@@ -1647,6 +1682,7 @@ static int file_smoothscroll_invoke(bContext *C, wmOperator *UNUSED(op), const w
   }
 
   /* check if we are editing a name */
+  int edit_idx = -1;
   for (i = 0; i < numfiles; ++i) {
     if (filelist_entry_select_index_get(sfile->files, i, CHECK_ALL) &
         (FILE_SEL_EDITING | FILE_SEL_HIGHLIGHTED)) {
@@ -1657,8 +1693,8 @@ static int file_smoothscroll_invoke(bContext *C, wmOperator *UNUSED(op), const w
 
   /* if we are not editing, we are done */
   if (edit_idx == -1) {
-    /* Do not invalidate timer if filerename is still pending, we might still be building the filelist
-     * and yet have to find edited entry... */
+    /* Do not invalidate timer if filerename is still pending,
+     * we might still be building the filelist and yet have to find edited entry. */
     if (params->rename_flag == 0) {
       WM_event_remove_timer(CTX_wm_manager(C), CTX_wm_window(C), sfile->smoothscroll_timer);
       sfile->smoothscroll_timer = NULL;
@@ -1674,35 +1710,63 @@ static int file_smoothscroll_invoke(bContext *C, wmOperator *UNUSED(op), const w
     return OPERATOR_PASS_THROUGH;
   }
 
-  offset = max_ii(
-      0,
-      ED_fileselect_layout_offset(sfile->layout, (int)ar->v2d.cur.xmin, (int)-ar->v2d.cur.ymax));
+  /* Number of items in a block (i.e. lines in a column in horizontal layout, or columns in a line
+   * in vertical layout).
+   */
+  const int items_block_size = is_horizontal ? sfile->layout->rows : sfile->layout->columns;
 
-  /* scroll offset is the first file in the row/column we are editing in */
+  /* Scroll offset is the first file in the row/column we are editing in. */
   if (sfile->scroll_offset == 0) {
-    if (sfile->layout->flag & FILE_LAYOUT_HOR) {
-      sfile->scroll_offset = (edit_idx / sfile->layout->rows) * sfile->layout->rows;
-      if (sfile->scroll_offset <= offset)
-        sfile->scroll_offset -= sfile->layout->rows;
-    }
-    else {
-      sfile->scroll_offset = (edit_idx / sfile->layout->columns) * sfile->layout->columns;
-      if (sfile->scroll_offset <= offset)
-        sfile->scroll_offset -= sfile->layout->columns;
-    }
+    sfile->scroll_offset = (edit_idx / items_block_size) * items_block_size;
   }
 
-  numfiles_layout = ED_fileselect_layout_numfiles(sfile->layout, ar);
-  /* Using margins helps avoiding scrolling to stop when target item is barely visible on one side of the screen
-   * (i.e. it centers a bit more the target). */
-  int numfiles_layout_margin = max_ii(0, numfiles_layout / 3);
+  const int numfiles_layout = ED_fileselect_layout_numfiles(sfile->layout, ar);
+  const int first_visible_item = ED_fileselect_layout_offset(
+      sfile->layout, (int)ar->v2d.cur.xmin, (int)-ar->v2d.cur.ymax);
+  const int last_visible_item = first_visible_item + numfiles_layout + 1;
 
-  /* check if we have reached our final scroll position */
-  if ((sfile->scroll_offset >= offset + numfiles_layout_margin) &&
-      (sfile->scroll_offset < offset + numfiles_layout - numfiles_layout_margin)) {
+  /* Note: the special case for vertical layout is because filename is at the bottom of items then,
+   * so we artificially move current row back one step, to ensure we show bottom of
+   * active item rather than its top (important in case visible height is low). */
+  const int middle_offset = max_ii(
+      0, (first_visible_item + last_visible_item) / 2 - (is_horizontal ? 0 : items_block_size));
+
+  const int min_middle_offset = numfiles_layout / 2;
+  const int max_middle_offset = ((numfiles / items_block_size) * items_block_size +
+                                 ((numfiles % items_block_size) != 0 ? items_block_size : 0)) -
+                                (numfiles_layout / 2);
+  /* Actual (physical) scrolling info, in pixels, used to detect whether we are fully at the
+   * beginning/end of the view. */
+  /* Note that there is a weird glitch, that sometimes tot rctf is smaller than cur rctf...
+   * that is why we still need to keep the min/max_middle_offset checks too. :( */
+  const float min_tot_scroll = is_horizontal ? ar->v2d.tot.xmin : -ar->v2d.tot.ymax;
+  const float max_tot_scroll = is_horizontal ? ar->v2d.tot.xmax : -ar->v2d.tot.ymin;
+  const float min_curr_scroll = is_horizontal ? ar->v2d.cur.xmin : -ar->v2d.cur.ymax;
+  const float max_curr_scroll = is_horizontal ? ar->v2d.cur.xmax : -ar->v2d.cur.ymin;
+
+  /* Check if we have reached our final scroll position. */
+  /* Filelist has to be ready, otherwise it makes no sense to stop scrolling yet. */
+  const bool is_ready = filelist_is_ready(sfile->files);
+  /* Edited item must be in the 'middle' of shown area (kind of approximated).
+   * Note that we have to do the check in 'block space', not in 'item space' here. */
+  const bool is_centered = (abs(middle_offset / items_block_size -
+                                sfile->scroll_offset / items_block_size) == 0);
+  /* OR edited item must be towards the beginning, and we are scrolled fully to the start. */
+  const bool is_full_start = ((sfile->scroll_offset < min_middle_offset) &&
+                              (min_curr_scroll - min_tot_scroll < 1.0f) &&
+                              (middle_offset - min_middle_offset < items_block_size));
+  /* OR edited item must be towards the end, and we are scrolled fully to the end.
+   * This one is crucial (unlike the one for the beginning), because without it we won't scroll
+   * fully to the end, and last column or row wil end up only partially drawn. */
+  const bool is_full_end = ((sfile->scroll_offset > max_middle_offset) &&
+                            (max_tot_scroll - max_curr_scroll < 1.0f) &&
+                            (max_middle_offset - middle_offset < items_block_size));
+
+  if (is_ready && (is_centered || is_full_start || is_full_end)) {
     WM_event_remove_timer(CTX_wm_manager(C), CTX_wm_window(C), sfile->smoothscroll_timer);
     sfile->smoothscroll_timer = NULL;
-    /* Postscroll (after rename has been validated by user) is done, rename process is totally finisehd, cleanup. */
+    /* Post-scroll (after rename has been validated by user) is done,
+     * rename process is totally finished, cleanup. */
     if ((params->rename_flag & FILE_PARAMS_RENAME_POSTSCROLL_ACTIVE) != 0) {
       params->renamefile[0] = '\0';
       params->rename_flag = 0;
@@ -1710,27 +1774,53 @@ static int file_smoothscroll_invoke(bContext *C, wmOperator *UNUSED(op), const w
     return OPERATOR_FINISHED;
   }
 
-  /* temporarily set context to the main window region,
-   * so the scroll operators work */
+  /* Temporarily set context to the main window region,
+   * so that the pan operator works. */
   CTX_wm_region_set(C, ar);
 
   /* scroll one step in the desired direction */
-  if (sfile->scroll_offset < offset) {
-    if (sfile->layout->flag & FILE_LAYOUT_HOR) {
-      WM_operator_name_call(C, "VIEW2D_OT_scroll_left", 0, NULL);
+  PointerRNA op_ptr;
+  int deltax = 0;
+  int deltay = 0;
+
+  /* We adjust speed of scrolling to avoid tens of seconds of it in e.g. directories with tens of
+   * thousands of folders... See T65782. */
+  /* This will slow down scrolling when approaching final goal, also avoids going too far and
+   * having to bounce back... */
+
+  /* Number of blocks (columns in horizontal layout, rows otherwise) between current middle of
+   * screen, and final goal position. */
+  const int diff_offset = sfile->scroll_offset / items_block_size -
+                          middle_offset / items_block_size;
+  /* convert diff_offset into pixels. */
+  const int diff_offset_delta = abs(diff_offset) *
+                                (is_horizontal ?
+                                     sfile->layout->tile_w + 2 * sfile->layout->tile_border_x :
+                                     sfile->layout->tile_h + 2 * sfile->layout->tile_border_y);
+  const int scroll_delta = max_ii(2, diff_offset_delta / 15);
+
+  if (diff_offset < 0) {
+    if (is_horizontal) {
+      deltax = -scroll_delta;
     }
     else {
-      WM_operator_name_call(C, "VIEW2D_OT_scroll_up", 0, NULL);
+      deltay = scroll_delta;
     }
   }
   else {
-    if (sfile->layout->flag & FILE_LAYOUT_HOR) {
-      WM_operator_name_call(C, "VIEW2D_OT_scroll_right", 0, NULL);
+    if (is_horizontal) {
+      deltax = scroll_delta;
     }
     else {
-      WM_operator_name_call(C, "VIEW2D_OT_scroll_down", 0, NULL);
+      deltay = -scroll_delta;
     }
   }
+  WM_operator_properties_create(&op_ptr, "VIEW2D_OT_pan");
+  RNA_int_set(&op_ptr, "deltax", deltax);
+  RNA_int_set(&op_ptr, "deltay", deltay);
+
+  WM_operator_name_call(C, "VIEW2D_OT_pan", WM_OP_EXEC_DEFAULT, &op_ptr);
+  WM_operator_properties_free(&op_ptr);
 
   ED_region_tag_redraw(ar);
 
@@ -1791,8 +1881,10 @@ void FILE_OT_filepath_drop(wmOperatorType *ot)
   RNA_def_string_file_path(ot->srna, "filepath", "Path", FILE_MAX, "", "");
 }
 
-/* create a new, non-existing folder name, returns 1 if successful, 0 if name couldn't be created.
- * The actual name is returned in 'name', 'folder' contains the complete path, including the new folder name.
+/**
+ * Create a new, non-existing folder name, returns 1 if successful, 0 if name couldn't be created.
+ * The actual name is returned in 'name', 'folder' contains the complete path,
+ * including the new folder name.
  */
 static int new_folder_path(const char *parent, char *folder, char *name)
 {
@@ -2026,8 +2118,9 @@ void file_directory_enter_handle(bContext *C, void *UNUSED(arg_unused), void *UN
 #if defined(WIN32)
     else if (!can_create_dir(sfile->params->dir)) {
       const char *lastdir = folderlist_peeklastdir(sfile->folders_prev);
-      if (lastdir)
+      if (lastdir) {
         BLI_strncpy(sfile->params->dir, lastdir, sizeof(sfile->params->dir));
+      }
     }
 #endif
     else {
@@ -2046,8 +2139,9 @@ void file_directory_enter_handle(bContext *C, void *UNUSED(arg_unused), void *UN
         RNA_string_set(&ptr, "directory", sfile->params->dir);
         RNA_boolean_set(&ptr, "open", true);
 
-        if (lastdir)
+        if (lastdir) {
           BLI_strncpy(sfile->params->dir, lastdir, sizeof(sfile->params->dir));
+        }
 
         WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
         WM_operator_properties_free(&ptr);
@@ -2149,15 +2243,17 @@ ARegion *file_tools_region(ScrArea *sa)
 {
   ARegion *ar, *arnew;
 
-  if ((ar = BKE_area_find_region_type(sa, RGN_TYPE_TOOLS)) != NULL)
+  if ((ar = BKE_area_find_region_type(sa, RGN_TYPE_TOOLS)) != NULL) {
     return ar;
+  }
 
   /* add subdiv level; after header */
   ar = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
 
   /* is error! */
-  if (ar == NULL)
+  if (ar == NULL) {
     return NULL;
+  }
 
   arnew = MEM_callocN(sizeof(ARegion), "tools for file");
   BLI_insertlinkafter(&sa->regionbase, ar, arnew);
@@ -2177,8 +2273,9 @@ static int file_bookmark_toggle_exec(bContext *C, wmOperator *UNUSED(unused))
   ScrArea *sa = CTX_wm_area(C);
   ARegion *ar = file_tools_region(sa);
 
-  if (ar)
+  if (ar) {
     ED_region_toggle_hidden(C, ar);
+  }
 
   return OPERATOR_FINISHED;
 }
@@ -2220,8 +2317,9 @@ static void filenum_newname(char *name, size_t name_size, int add)
   }
 
   pic += add;
-  if (pic < 0)
+  if (pic < 0) {
     pic = 0;
+  }
   BLI_stringenc(name_temp, head, tail, digits, pic);
   BLI_strncpy(name, name_temp, name_size);
 }
@@ -2270,7 +2368,8 @@ static int file_rename_exec(bContext *C, wmOperator *UNUSED(op))
       filelist_entry_select_index_set(
           sfile->files, idx, FILE_SEL_ADD, FILE_SEL_EDITING, CHECK_ALL);
       BLI_strncpy(sfile->params->renamefile, file->relpath, FILE_MAXFILE);
-      /* We can skip the pending state, as we can directly set FILE_SEL_EDITING on the expected entry here. */
+      /* We can skip the pending state,
+       * as we can directly set FILE_SEL_EDITING on the expected entry here. */
       sfile->params->rename_flag = FILE_PARAMS_RENAME_ACTIVE;
     }
     ED_area_tag_redraw(sa);
@@ -2335,8 +2434,9 @@ static bool file_delete_poll(bContext *C)
     int i;
     int num_selected = 0;
 
-    if (filelist_islibrary(sfile->files, dir, NULL))
+    if (filelist_islibrary(sfile->files, dir, NULL)) {
       poll = 0;
+    }
     for (i = 0; i < numfiles; i++) {
       if (filelist_entry_select_index_get(sfile->files, i, CHECK_FILES)) {
         num_selected++;
@@ -2346,8 +2446,9 @@ static bool file_delete_poll(bContext *C)
       poll = 0;
     }
   }
-  else
+  else {
     poll = 0;
+  }
 
   return poll;
 }

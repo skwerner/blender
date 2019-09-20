@@ -99,7 +99,7 @@ typedef struct HairAttributeID {
 
 typedef struct EditStrandData {
   float pos[3];
-  uchar color;
+  float color;
 } EditStrandData;
 
 static GPUVertFormat *edit_points_vert_format_get(uint *r_pos_id, uint *r_color_id)
@@ -110,7 +110,7 @@ static GPUVertFormat *edit_points_vert_format_get(uint *r_pos_id, uint *r_color_
     /* Keep in sync with EditStrandData */
     pos_id = GPU_vertformat_attr_add(&edit_point_format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
     color_id = GPU_vertformat_attr_add(
-        &edit_point_format, "color", GPU_COMP_U8, 1, GPU_FETCH_INT_TO_FLOAT_UNIT);
+        &edit_point_format, "color", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
   }
   *r_pos_id = pos_id;
   *r_color_id = color_id;
@@ -317,7 +317,7 @@ static void particle_calculate_parent_uvs(ParticleSystem *psys,
 
 static void particle_calculate_parent_mcol(ParticleSystem *psys,
                                            ParticleSystemModifierData *psmd,
-                                           const int num_uv_layers,
+                                           const int num_col_layers,
                                            const int parent_index,
                                            /*const*/ MCol **mcols,
                                            MCol *r_mcol)
@@ -338,7 +338,7 @@ static void particle_calculate_parent_mcol(ParticleSystem *psys,
   }
   if (num != DMCACHE_NOTFOUND && num != DMCACHE_ISCHILD) {
     MFace *mface = &psmd->mesh_final->mface[num];
-    for (int j = 0; j < num_uv_layers; j++) {
+    for (int j = 0; j < num_col_layers; j++) {
       psys_interpolate_mcol(mcols[j] + num, mface->v4, particle->fuv, &r_mcol[j]);
     }
   }
@@ -388,7 +388,7 @@ static void particle_interpolate_children_mcol(ParticleSystem *psys,
   if (num != DMCACHE_NOTFOUND) {
     MFace *mface = &psmd->mesh_final->mface[num];
     for (int j = 0; j < num_col_layers; j++) {
-      psys_interpolate_mcol(mcols[j] + num, mface->v4, particle->fuv, &r_mcol[j]);
+      psys_interpolate_mcol(mcols[j] + num * 4, mface->v4, particle->fuv, &r_mcol[j]);
     }
   }
 }
@@ -693,12 +693,12 @@ static int particle_batch_cache_fill_segments_edit(
       float strand_t = (float)(j) / path->segments;
       if (particle) {
         float weight = particle_key_weight(particle, i, strand_t);
-        /* NaN or unclamped become 0xFF */
-        seg_data->color = (uchar)((weight <= 1.0f) ? 0xFE * weight : 0xFF);
+        /* NaN or unclamped become 1.0f */
+        seg_data->color = (weight < 1.0f) ? weight : 1.0f;
       }
       else {
         float selected = particle_key_select_ratio(edit, i, strand_t);
-        seg_data->color = (uchar)(0xFF * selected);
+        seg_data->color = selected;
       }
       GPU_indexbuf_add_generic_vert(elb, curr_point);
       curr_point++;
@@ -835,7 +835,9 @@ static void particle_batch_cache_ensure_procedural_strand_data(PTCacheEdit *edit
                                                                ParticleHairCache *cache)
 {
   int active_uv = 0;
+  int render_uv = 0;
   int active_col = 0;
+  int render_col = 0;
 
   ParticleSystemModifierData *psmd = (ParticleSystemModifierData *)md;
 
@@ -843,10 +845,12 @@ static void particle_batch_cache_ensure_procedural_strand_data(PTCacheEdit *edit
     if (CustomData_has_layer(&psmd->mesh_final->ldata, CD_MLOOPUV)) {
       cache->num_uv_layers = CustomData_number_of_layers(&psmd->mesh_final->ldata, CD_MLOOPUV);
       active_uv = CustomData_get_active_layer(&psmd->mesh_final->ldata, CD_MLOOPUV);
+      render_uv = CustomData_get_render_layer(&psmd->mesh_final->ldata, CD_MLOOPUV);
     }
     if (CustomData_has_layer(&psmd->mesh_final->ldata, CD_MLOOPCOL)) {
       cache->num_col_layers = CustomData_number_of_layers(&psmd->mesh_final->ldata, CD_MLOOPCOL);
       active_col = CustomData_get_active_layer(&psmd->mesh_final->ldata, CD_MLOOPCOL);
+      render_col = CustomData_get_render_layer(&psmd->mesh_final->ldata, CD_MLOOPCOL);
     }
   }
 
@@ -897,7 +901,10 @@ static void particle_batch_cache_ensure_procedural_strand_data(PTCacheEdit *edit
     BLI_snprintf(cache->uv_layer_names[i][n++], MAX_LAYER_NAME_LEN, "a%u", hash);
 
     if (i == active_uv) {
-      BLI_strncpy(cache->uv_layer_names[i][n], "u", MAX_LAYER_NAME_LEN);
+      BLI_strncpy(cache->uv_layer_names[i][n++], "au", MAX_LAYER_NAME_LEN);
+    }
+    if (i == render_uv) {
+      BLI_strncpy(cache->uv_layer_names[i][n++], "u", MAX_LAYER_NAME_LEN);
     }
   }
   /* Vertex colors */
@@ -917,7 +924,10 @@ static void particle_batch_cache_ensure_procedural_strand_data(PTCacheEdit *edit
     }
 
     if (i == active_col) {
-      BLI_strncpy(cache->col_layer_names[i][n], "c", MAX_LAYER_NAME_LEN);
+      BLI_strncpy(cache->col_layer_names[i][n++], "ac", MAX_LAYER_NAME_LEN);
+    }
+    if (i == render_col) {
+      BLI_strncpy(cache->col_layer_names[i][n++], "c", MAX_LAYER_NAME_LEN);
     }
   }
 
@@ -1053,7 +1063,7 @@ static void particle_batch_cache_ensure_procedural_indices(PTCacheEdit *edit,
   GPU_vertbuf_data_alloc(vbo, 1);
 
   GPUIndexBufBuilder elb;
-  GPU_indexbuf_init_ex(&elb, prim_type, element_count, element_count, true);
+  GPU_indexbuf_init_ex(&elb, prim_type, element_count, element_count);
 
   if (edit != NULL && edit->pathcache != NULL) {
     particle_batch_cache_fill_segments_indices(
@@ -1194,8 +1204,7 @@ static void particle_batch_cache_ensure_pos_and_seg(PTCacheEdit *edit,
   GPU_vertbuf_data_alloc(hair_cache->pos, hair_cache->point_len);
 
   GPUIndexBufBuilder elb;
-  GPU_indexbuf_init_ex(
-      &elb, GPU_PRIM_LINE_STRIP, hair_cache->elems_len, hair_cache->point_len, true);
+  GPU_indexbuf_init_ex(&elb, GPU_PRIM_LINE_STRIP, hair_cache->elems_len, hair_cache->point_len);
 
   if (num_uv_layers || num_col_layers) {
     BKE_mesh_tessface_ensure(psmd->mesh_final);
@@ -1436,11 +1445,12 @@ static void drw_particle_get_hair_source(Object *object,
                                          PTCacheEdit *edit,
                                          ParticleDrawSource *r_draw_source)
 {
+  const DRWContextState *draw_ctx = DRW_context_state_get();
   r_draw_source->object = object;
   r_draw_source->psys = psys;
   r_draw_source->md = md;
   r_draw_source->edit = edit;
-  if ((object->mode & OB_MODE_PARTICLE_EDIT) != 0) {
+  if (psys_in_edit_mode(draw_ctx->depsgraph, psys)) {
     r_draw_source->object = DEG_get_original_object(object);
     r_draw_source->psys = psys_orig_get(psys);
   }
@@ -1499,8 +1509,7 @@ static void particle_batch_cache_ensure_edit_pos_and_seg(PTCacheEdit *edit,
   GPU_vertbuf_data_alloc(hair_cache->pos, hair_cache->point_len);
   GPU_vertbuf_attr_get_raw_data(hair_cache->pos, pos_id, &data_step);
 
-  GPU_indexbuf_init_ex(
-      &elb, GPU_PRIM_LINE_STRIP, hair_cache->elems_len, hair_cache->point_len, true);
+  GPU_indexbuf_init_ex(&elb, GPU_PRIM_LINE_STRIP, hair_cache->elems_len, hair_cache->point_len);
 
   if (edit != NULL && edit->pathcache != NULL) {
     particle_batch_cache_fill_segments_edit(
@@ -1565,7 +1574,7 @@ static void particle_batch_cache_ensure_edit_inner_pos(PTCacheEdit *edit,
     const PTCacheEditPoint *point = &edit->points[point_index];
     for (int key_index = 0; key_index < point->totkey - 1; key_index++) {
       PTCacheEditKey *key = &point->keys[key_index];
-      uchar color = (key->flag & PEK_SELECT) ? 0xFF : 0x00;
+      float color = (key->flag & PEK_SELECT) ? 1.0f : 0.0f;
       GPU_vertbuf_attr_set(cache->edit_inner_pos, pos_id, global_key_index, key->world_co);
       GPU_vertbuf_attr_set(cache->edit_inner_pos, color_id, global_key_index, &color);
       global_key_index++;
@@ -1611,7 +1620,8 @@ static void particle_batch_cache_ensure_edit_tip_pos(PTCacheEdit *edit, Particle
   for (int point_index = 0; point_index < edit->totpoint; point_index++) {
     const PTCacheEditPoint *point = &edit->points[point_index];
     PTCacheEditKey *key = &point->keys[point->totkey - 1];
-    uchar color = (key->flag & PEK_SELECT) ? 0xFF : 0x00;
+    float color = (key->flag & PEK_SELECT) ? 1.0f : 0.0f;
+
     GPU_vertbuf_attr_set(cache->edit_tip_pos, pos_id, point_index, key->world_co);
     GPU_vertbuf_attr_set(cache->edit_tip_pos, color_id, point_index, &color);
   }

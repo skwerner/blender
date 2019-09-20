@@ -56,6 +56,7 @@
 #include "BKE_paint.h"
 #include "BKE_report.h"
 #include "BKE_subsurf.h"
+#include "BKE_layer.h"
 
 #include "DEG_depsgraph.h"
 
@@ -78,6 +79,10 @@
 
 #include "sculpt_intern.h"
 #include "paint_intern.h" /* own include */
+
+/* -------------------------------------------------------------------- */
+/** \name Internal Utilities
+ * \{ */
 
 /* Use for 'blur' brush, align with PBVH nodes, created and freed on each update. */
 struct VPaintAverageAccum {
@@ -312,16 +317,20 @@ static uint vpaint_blend(const VPaint *vp,
 
     for (a = 0; a < 4; a++) {
       if (ct[a] < co[a]) {
-        if (cp[a] < ct[a])
+        if (cp[a] < ct[a]) {
           cp[a] = ct[a];
-        else if (cp[a] > co[a])
+        }
+        else if (cp[a] > co[a]) {
           cp[a] = co[a];
+        }
       }
       else {
-        if (cp[a] < co[a])
+        if (cp[a] < co[a]) {
           cp[a] = co[a];
-        else if (cp[a] > ct[a])
+        }
+        else if (cp[a] > ct[a]) {
           cp[a] = ct[a];
+        }
       }
     }
   }
@@ -400,12 +409,15 @@ static float wpaint_blend(const VPaint *wp,
 
 static float wpaint_clamp_monotonic(float oldval, float curval, float newval)
 {
-  if (newval < oldval)
+  if (newval < oldval) {
     return MIN2(newval, curval);
-  else if (newval > oldval)
+  }
+  else if (newval > oldval) {
     return MAX2(newval, curval);
-  else
+  }
+  else {
     return newval;
+  }
 }
 
 /* ----------------------------------------------------- */
@@ -553,7 +565,8 @@ static void do_weight_paint_normalize_all_locked_try_active(MDeformVert *dvert,
 
   if (!success) {
     /**
-     * Locks prevented the first pass from full completion, so remove restriction on active group; e.g:
+     * Locks prevented the first pass from full completion,
+     * so remove restriction on active group; e.g:
      *
      * - With 1.0 weight painted into active:
      *   nonzero locked weight; first pass zeroed out unlocked weight; scale 1 down to fit.
@@ -565,9 +578,11 @@ static void do_weight_paint_normalize_all_locked_try_active(MDeformVert *dvert,
 }
 
 #if 0 /* UNUSED */
-static bool has_unselected_unlocked_bone_group(
-        int defbase_tot, bool *defbase_sel, int selected,
-        const bool *lock_flags, const bool *vgroup_validmap)
+static bool has_unselected_unlocked_bone_group(int defbase_tot,
+                                               bool *defbase_sel,
+                                               int selected,
+                                               const bool *lock_flags,
+                                               const bool *vgroup_validmap)
 {
   int i;
   if (defbase_tot == selected) {
@@ -843,15 +858,15 @@ static void do_weight_paint_vertex_single(
               dv_mirr, wpi->defbase_tot, wpi->vgroup_validmap, wpi->lock_flags, wpi->mirror.lock);
         }
         else {
-          /* this case accounts for...
-           * - painting onto a center vertex of a mesh
-           * - x mirror is enabled
-           * - auto normalize is enabled
-           * - the group you are painting onto has a L / R version
+          /* This case accounts for:
+           * - Painting onto a center vertex of a mesh.
+           * - X-mirror is enabled.
+           * - Auto normalize is enabled.
+           * - The group you are painting onto has a L / R version.
            *
            * We want L/R vgroups to have the same weight but this cant be if both are over 0.5,
-           * We _could_ have special check for that, but this would need its own normalize function which
-           * holds 2 groups from changing at once.
+           * We _could_ have special check for that, but this would need its own
+           * normalize function which holds 2 groups from changing at once.
            *
            * So! just balance out the 2 weights, it keeps them equal and everything normalized.
            *
@@ -1004,12 +1019,12 @@ static void vertex_paint_init_session(Depsgraph *depsgraph,
   BLI_assert(ob->sculpt == NULL);
   ob->sculpt = MEM_callocN(sizeof(SculptSession), "sculpt session");
   ob->sculpt->mode_type = object_mode;
-  BKE_sculpt_update_mesh_elements(depsgraph, scene, scene->toolsettings->sculpt, ob, false, false);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false);
 }
 
-static void vertex_paint_init_stroke(Depsgraph *depsgraph, Scene *scene, Object *ob)
+static void vertex_paint_init_stroke(Depsgraph *depsgraph, Object *ob)
 {
-  BKE_sculpt_update_mesh_elements(depsgraph, scene, scene->toolsettings->sculpt, ob, false, false);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false);
 }
 
 static void vertex_paint_init_session_data(const ToolSettings *ts, Object *ob)
@@ -1089,6 +1104,8 @@ static void vertex_paint_init_session_data(const ToolSettings *ts, Object *ob)
     }
   }
 }
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Enter Vertex/Weight Paint Mode
@@ -1254,7 +1271,9 @@ void ED_object_wpaintmode_exit(struct bContext *C)
 
 /** \} */
 
-/* *************** set wpaint operator ****************** */
+/* -------------------------------------------------------------------- */
+/** \name Toggle Weight Paint Operator
+ * \{ */
 
 /**
  * \note Keep in sync with #vpaint_mode_toggle_exec
@@ -1287,17 +1306,47 @@ static int wpaint_mode_toggle_exec(bContext *C, wmOperator *op)
     BKE_paint_toolslots_brush_validate(bmain, &ts->wpaint->paint);
   }
 
-  /* When locked, it's almost impossible to select the pose then the object to enter weight paint mode.
+  /* When locked, it's almost impossible to select the pose-object
+   * then the mesh-object to enter weight paint mode.
+   * Even when the object mode is not locked this is inconvenient - so allow in either case.
+   *
    * In this case move our pose object in/out of pose mode.
-   * This is in fits with the convention of selecting multiple objects and entering a mode. */
-  if (scene->toolsettings->object_flag & SCE_OBJECT_MODE_LOCK) {
-    Object *ob_arm = modifiers_isDeformedByArmature(ob);
-    if (ob_arm && (ob_arm->base_flag & BASE_SELECTED)) {
-      if (ob_arm->mode & OB_MODE_POSE) {
-        ED_object_posemode_exit_ex(bmain, ob_arm);
-      }
-      else {
-        ED_object_posemode_enter_ex(bmain, ob_arm);
+   * This is in fits with the convention of selecting multiple objects and entering a mode.
+   */
+  {
+    VirtualModifierData virtualModifierData;
+    ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+    if (md != NULL) {
+      /* Can be NULL. */
+      View3D *v3d = CTX_wm_view3d(C);
+      ViewLayer *view_layer = CTX_data_view_layer(C);
+      for (; md; md = md->next) {
+        if (md->type == eModifierType_Armature) {
+          ArmatureModifierData *amd = (ArmatureModifierData *)md;
+          Object *ob_arm = amd->object;
+          if (ob_arm != NULL) {
+            const Base *base_arm = BKE_view_layer_base_find(view_layer, ob_arm);
+            if (base_arm && BASE_VISIBLE(v3d, base_arm)) {
+              if (is_mode_set) {
+                if ((ob_arm->mode & OB_MODE_POSE) != 0) {
+                  ED_object_posemode_exit_ex(bmain, ob_arm);
+                }
+              }
+              else {
+                /* Only check selected status when entering weight-paint mode
+                 * because we may have multiple armature objects.
+                 * Selecting one will de-select the other, which would leave it in pose-mode
+                 * when exiting weight paint mode. While usable, this looks like inconsistent
+                 * behavior from a user perspective. */
+                if (base_arm->flag & BASE_SELECTED) {
+                  if ((ob_arm->mode & OB_MODE_POSE) == 0) {
+                    ED_object_posemode_enter_ex(bmain, ob_arm);
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -1322,12 +1371,15 @@ static int wpaint_mode_toggle_exec(bContext *C, wmOperator *op)
 static bool paint_poll_test(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
-  if (ob == NULL || ob->type != OB_MESH)
+  if (ob == NULL || ob->type != OB_MESH) {
     return 0;
-  if (!ob->data || ID_IS_LINKED(ob->data))
+  }
+  if (!ob->data || ID_IS_LINKED(ob->data)) {
     return 0;
-  if (CTX_data_edit_object(C))
+  }
+  if (CTX_data_edit_object(C)) {
     return 0;
+  }
   return 1;
 }
 
@@ -1347,7 +1399,11 @@ void PAINT_OT_weight_paint_toggle(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 }
 
-/* ************ weight paint operator ********** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Weight Paint Operator
+ * \{ */
 
 struct WPaintData {
   ViewContext vc;
@@ -1395,20 +1451,24 @@ static void vwpaint_update_cache_invariants(
   }
 
   /* Initial mouse location */
-  if (mouse)
+  if (mouse) {
     copy_v2_v2(cache->initial_mouse, mouse);
-  else
+  }
+  else {
     zero_v2(cache->initial_mouse);
+  }
 
   mode = RNA_enum_get(op->ptr, "mode");
   cache->invert = mode == BRUSH_STROKE_INVERT;
   cache->alt_smooth = mode == BRUSH_STROKE_SMOOTH;
   /* not very nice, but with current events system implementation
    * we can't handle brush appearance inversion hotkey separately (sergey) */
-  if (cache->invert)
+  if (cache->invert) {
     ups->draw_inverted = true;
-  else
+  }
+  else {
     ups->draw_inverted = false;
+  }
 
   copy_v2_v2(cache->mouse, cache->initial_mouse);
   /* Truly temporary data that isn't stored in properties */
@@ -1479,8 +1539,7 @@ static void vwpaint_update_cache_variants(bContext *C, VPaint *vp, Object *ob, P
   cache->radius_squared = cache->radius * cache->radius;
 
   if (ss->pbvh) {
-    BKE_pbvh_update(ss->pbvh, PBVH_UpdateRedraw, NULL);
-    BKE_pbvh_update(ss->pbvh, PBVH_UpdateBB, NULL);
+    BKE_pbvh_update_bounds(ss->pbvh, PBVH_UpdateRedraw | PBVH_UpdateBB);
   }
 }
 
@@ -1601,7 +1660,7 @@ static bool wpaint_stroke_test_start(bContext *C, wmOperator *op, const float mo
   }
 
   /* If not previously created, create vertex/weight paint mode session data */
-  vertex_paint_init_stroke(depsgraph, scene, ob);
+  vertex_paint_init_stroke(depsgraph, ob);
   vwpaint_update_cache_invariants(C, vp, ss, op, mouse);
   vertex_paint_init_session_data(ts, ob);
 
@@ -1665,8 +1724,9 @@ static void do_wpaint_precompute_weight_cb_ex(void *__restrict userdata,
 static void precompute_weight_values(
     bContext *C, Object *ob, Brush *brush, struct WPaintData *wpd, WeightPaintInfo *wpi, Mesh *me)
 {
-  if (wpd->precomputed_weight_ready && !brush_use_accumulate_ex(brush, ob->mode))
+  if (wpd->precomputed_weight_ready && !brush_use_accumulate_ex(brush, ob->mode)) {
     return;
+  }
 
   /* threaded loop over vertices */
   SculptThreadedTaskData data = {
@@ -1872,8 +1932,9 @@ static void do_wpaint_brush_smear_task_cb_ex(void *__restrict userdata,
               const float final_alpha = brush_fade * brush_strength * grid_alpha *
                                         brush_alpha_pressure;
 
-              if (final_alpha <= 0.0f)
+              if (final_alpha <= 0.0f) {
                 continue;
+              }
 
               do_weight_paint_vertex(
                   data->vp, data->ob, data->wpi, v_index, final_alpha, (float)weight_final);
@@ -2156,8 +2217,9 @@ static void wpaint_do_paint(bContext *C,
 
   wpaint_paint_leaves(C, ob, sd, wp, wpd, wpi, me, nodes, totnode);
 
-  if (nodes)
+  if (nodes) {
     MEM_freeN(nodes);
+  }
 }
 
 static void wpaint_do_radial_symmetry(bContext *C,
@@ -2239,7 +2301,6 @@ static void wpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
   vwpaint_update_cache_variants(C, wp, ob, itemptr);
 
   float mat[4][4];
-  float mval[2];
 
   const float brush_alpha_value = BKE_brush_alpha_get(scene, brush);
 
@@ -2289,7 +2350,7 @@ static void wpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
 
   /* calculate pivot for rotation around seletion if needed */
   /* also needed for "View Selected" on last stroke */
-  paint_last_stroke_update(scene, vc->ar, mval);
+  paint_last_stroke_update(scene, vc->ar, ss->cache->mouse);
 
   BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_ALL);
 
@@ -2306,18 +2367,17 @@ static void wpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
     /* previous is not set in the current cache else
      * the partial rect will always grow */
     if (ss->cache) {
-      if (!BLI_rcti_is_empty(&ss->cache->previous_r))
+      if (!BLI_rcti_is_empty(&ss->cache->previous_r)) {
         BLI_rcti_union(&r, &ss->cache->previous_r);
+      }
     }
 
     r.xmin += vc->ar->winrct.xmin - 2;
     r.xmax += vc->ar->winrct.xmin + 2;
     r.ymin += vc->ar->winrct.ymin - 2;
     r.ymax += vc->ar->winrct.ymin + 2;
-
-    ss->partial_redraw = 1;
   }
-  ED_region_tag_redraw_partial(vc->ar, &r);
+  ED_region_tag_redraw_partial(vc->ar, &r, true);
 }
 
 static void wpaint_stroke_done(const bContext *C, struct PaintStroke *stroke)
@@ -2326,18 +2386,24 @@ static void wpaint_stroke_done(const bContext *C, struct PaintStroke *stroke)
   struct WPaintData *wpd = paint_stroke_mode_data(stroke);
 
   if (wpd) {
-    if (wpd->defbase_sel)
+    if (wpd->defbase_sel) {
       MEM_freeN((void *)wpd->defbase_sel);
-    if (wpd->vgroup_validmap)
+    }
+    if (wpd->vgroup_validmap) {
       MEM_freeN((void *)wpd->vgroup_validmap);
-    if (wpd->lock_flags)
+    }
+    if (wpd->lock_flags) {
       MEM_freeN((void *)wpd->lock_flags);
-    if (wpd->active.lock)
+    }
+    if (wpd->active.lock) {
       MEM_freeN((void *)wpd->active.lock);
-    if (wpd->mirror.lock)
+    }
+    if (wpd->mirror.lock) {
       MEM_freeN((void *)wpd->mirror.lock);
-    if (wpd->precomputed_weight)
+    }
+    if (wpd->precomputed_weight) {
       MEM_freeN(wpd->precomputed_weight);
+    }
 
     MEM_freeN(wpd);
   }
@@ -2439,7 +2505,11 @@ void PAINT_OT_weight_paint(wmOperatorType *ot)
   paint_stroke_operator_properties(ot);
 }
 
-/* ************ set / clear vertex paint mode ********** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Toggle Vertex Paint Operator
+ * \{ */
 
 /**
  * \note Keep in sync with #wpaint_mode_toggle_exec
@@ -2502,7 +2572,11 @@ void PAINT_OT_vertex_paint_toggle(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 }
 
-/* ********************** vertex paint operator ******************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Vertex Paint Operator
+ * \{ */
 
 /* Implementation notes:
  *
@@ -2568,12 +2642,14 @@ static bool vpaint_stroke_test_start(bContext *C, struct wmOperator *op, const f
 
   /* context checks could be a poll() */
   me = BKE_mesh_from_object(ob);
-  if (me == NULL || me->totpoly == 0)
+  if (me == NULL || me->totpoly == 0) {
     return false;
+  }
 
   ED_mesh_color_ensure(me, NULL);
-  if (me->mloopcol == NULL)
+  if (me->mloopcol == NULL) {
     return false;
+  }
 
   /* make mode data storage */
   vpd = MEM_callocN(sizeof(*vpd), "VPaintData");
@@ -2618,7 +2694,7 @@ static bool vpaint_stroke_test_start(bContext *C, struct wmOperator *op, const f
   }
 
   /* If not previously created, create vertex/weight paint mode session data */
-  vertex_paint_init_stroke(depsgraph, scene, ob);
+  vertex_paint_init_stroke(depsgraph, ob);
   vwpaint_update_cache_invariants(C, vp, ss, op, mouse);
   vertex_paint_init_session_data(ts, ob);
 
@@ -3226,12 +3302,12 @@ static void vpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
   VPaint *vp = ts->vpaint;
   ViewContext *vc = &vpd->vc;
   Object *ob = vc->obact;
+  SculptSession *ss = ob->sculpt;
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
 
   vwpaint_update_cache_variants(C, vp, ob, itemptr);
 
   float mat[4][4];
-  float mval[2];
 
   ED_view3d_init_mats_rv3d(ob, vc->rv3d);
 
@@ -3253,7 +3329,7 @@ static void vpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
 
   /* calculate pivot for rotation around seletion if needed */
   /* also needed for "View Selected" on last stroke */
-  paint_last_stroke_update(scene, vc->ar, mval);
+  paint_last_stroke_update(scene, vc->ar, ss->cache->mouse);
 
   ED_region_tag_redraw(vc->ar);
 
@@ -3278,12 +3354,15 @@ static void vpaint_stroke_done(const bContext *C, struct PaintStroke *stroke)
     ED_vpaint_proj_handle_free(vpd->vp_handle);
   }
 
-  if (vpd->mlooptag)
+  if (vpd->mlooptag) {
     MEM_freeN(vpd->mlooptag);
-  if (vpd->smear.color_prev)
+  }
+  if (vpd->smear.color_prev) {
     MEM_freeN(vpd->smear.color_prev);
-  if (vpd->smear.color_curr)
+  }
+  if (vpd->smear.color_curr) {
     MEM_freeN(vpd->smear.color_curr);
+  }
 
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
@@ -3367,3 +3446,5 @@ void PAINT_OT_vertex_paint(wmOperatorType *ot)
 
   paint_stroke_operator_properties(ot);
 }
+
+/** \} */

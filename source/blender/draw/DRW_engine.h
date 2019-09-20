@@ -38,6 +38,7 @@ struct IDProperty;
 struct Main;
 struct Material;
 struct Object;
+struct RegionView3D;
 struct RenderEngine;
 struct RenderEngineType;
 struct Scene;
@@ -132,6 +133,18 @@ void DRW_draw_depth_loop_gpencil(struct Depsgraph *depsgraph,
                                  struct ARegion *ar,
                                  struct View3D *v3d,
                                  struct GPUViewport *viewport);
+void DRW_draw_depth_object(struct ARegion *ar,
+                           struct GPUViewport *viewport,
+                           struct Object *object);
+void DRW_draw_select_id_object(struct Scene *scene,
+                               struct RegionView3D *rv3d,
+                               struct Object *ob,
+                               short select_mode,
+                               bool draw_facedot,
+                               uint initial_offset,
+                               uint *r_vert_offset,
+                               uint *r_edge_offset,
+                               uint *r_face_offset);
 
 void DRW_framebuffer_select_id_setup(struct ARegion *ar, const bool clear);
 void DRW_framebuffer_select_id_release(struct ARegion *ar);
@@ -143,7 +156,6 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
 void DRW_gpencil_freecache(struct Object *ob);
 
 /* This is here because GPUViewport needs it */
-void DRW_pass_free(struct DRWPass *pass);
 struct DRWInstanceDataList *DRW_instance_data_list_create(void);
 void DRW_instance_data_list_free(struct DRWInstanceDataList *idatalist);
 
@@ -151,6 +163,9 @@ void DRW_opengl_context_create(void);
 void DRW_opengl_context_destroy(void);
 void DRW_opengl_context_enable(void);
 void DRW_opengl_context_disable(void);
+
+/* For garbage collection */
+void DRW_cache_free_old_batches(struct Main *bmain);
 
 /* Never use this. Only for closing blender. */
 void DRW_opengl_context_enable_ex(bool restore);

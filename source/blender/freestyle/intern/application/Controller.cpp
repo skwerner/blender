@@ -76,8 +76,8 @@ Controller::Controller()
 {
   const string sep(Config::DIR_SEP.c_str());
 #if 0
-  const string filename = Config::Path::getInstance()->getHomeDir() + sep + Config::OPTIONS_DIR + sep +
-                          Config::OPTIONS_CURRENT_DIRS_FILE;
+  const string filename = Config::Path::getInstance()->getHomeDir() + sep + Config::OPTIONS_DIR +
+                          sep + Config::OPTIONS_CURRENT_DIRS_FILE;
   _current_dirs = new ConfigIO(filename, Config::APPLICATION_NAME + "CurrentDirs", true);
 #endif
 
@@ -136,21 +136,24 @@ Controller::~Controller()
 {
   if (NULL != _RootNode) {
     int ref = _RootNode->destroy();
-    if (0 == ref)
+    if (0 == ref) {
       delete _RootNode;
+    }
   }
 
 #if 0
   if (NULL != _SilhouetteNode) {
     int ref = _SilhouetteNode->destroy();
-    if (0 == ref)
+    if (0 == ref) {
       delete _SilhouetteNode;
+    }
   }
 
   if (NULL != _DebugNode) {
     int ref = _DebugNode->destroy();
-    if (0 == ref)
+    if (0 == ref) {
       delete _DebugNode;
+    }
   }
 #endif
 
@@ -179,13 +182,14 @@ Controller::~Controller()
     _ProgressBar = NULL;
   }
 
-  //delete _current_dirs;
+  // delete _current_dirs;
 }
 
 void Controller::setView(AppView *iView)
 {
-  if (NULL == iView)
+  if (NULL == iView) {
     return;
+  }
 
   _pView = iView;
   _Canvas->setViewer(_pView);
@@ -279,16 +283,19 @@ int Controller::LoadMesh(Render *re, ViewLayer *view_layer, Depsgraph *depsgraph
   _pView->setModel(_RootNode);
   //_pView->FitBBox();
 
-  if (_pRenderMonitor->testBreak())
+  if (_pRenderMonitor->testBreak()) {
     return 0;
+  }
 
   if (_EnableViewMapCache) {
 
     NodeCamera *cam;
-    if (g_freestyle.proj[3][3] != 0.0)
+    if (g_freestyle.proj[3][3] != 0.0) {
       cam = new NodeOrthographicCamera;
-    else
+    }
+    else {
       cam = new NodePerspectiveCamera;
+    }
     double proj[16];
     for (int i = 0; i < 4; i++) {
       for (int j = 0; j < 4; j++) {
@@ -300,7 +307,7 @@ int Controller::LoadMesh(Render *re, ViewLayer *view_layer, Depsgraph *depsgraph
     _RootNode->AddChild(new NodeViewLayer(*re->scene, *view_layer));
 
     sceneHashFunc.reset();
-    //blenderScene->accept(sceneHashFunc);
+    // blenderScene->accept(sceneHashFunc);
     _RootNode->accept(sceneHashFunc);
     if (G.debug & G_DEBUG_FREESTYLE) {
       cout << "Scene hash       : " << sceneHashFunc.toString() << endl;
@@ -337,7 +344,7 @@ int Controller::LoadMesh(Render *re, ViewLayer *view_layer, Depsgraph *depsgraph
   }
 
   soc QFileInfo qfi(iFileName);
-  soc string basename((const char*)qfi.fileName().toAscii().data());
+  soc string basename((const char *)qfi.fileName().toAscii().data());
   char cleaned[FILE_MAX];
   BLI_strncpy(cleaned, iFileName, FILE_MAX);
   BLI_cleanup_file(NULL, cleaned);
@@ -389,8 +396,9 @@ void Controller::ClearRootNode()
   _pView->DetachModel();
   if (NULL != _RootNode) {
     int ref = _RootNode->destroy();
-    if (0 == ref)
+    if (0 == ref) {
       _RootNode->addRef();
+    }
     _RootNode->clearBBox();
   }
 }
@@ -441,8 +449,9 @@ void Controller::DeleteViewMap(bool freeCache)
   _pView->DetachDebug();
   if (NULL != _DebugNode) {
     int ref = _DebugNode->destroy();
-    if (0 == ref)
+    if (0 == ref) {
       _DebugNode->addRef();
+    }
   }
 #endif
 
@@ -460,8 +469,9 @@ void Controller::DeleteViewMap(bool freeCache)
 
 void Controller::ComputeViewMap()
 {
-  if (!_ListOfModels.size())
+  if (!_ListOfModels.size()) {
     return;
+  }
 
   DeleteViewMap(true);
 
@@ -520,8 +530,9 @@ void Controller::ComputeViewMap()
   }
 
   int viewport[4];
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < 4; i++) {
     viewport[i] = g_freestyle.viewport[i];
+  }
 
 #if 0
   if (G.debug & G_DEBUG_FREESTYLE) {
@@ -554,8 +565,9 @@ void Controller::ComputeViewMap()
     printf("Feature lines    : %lf\n", duration);
   }
 
-  if (_pRenderMonitor->testBreak())
+  if (_pRenderMonitor->testBreak()) {
     return;
+  }
 
   // Builds the view map structure from the flagged WSEdge structure:
   //----------------------------------------------------------
@@ -626,40 +638,43 @@ void Controller::ComputeViewMap()
 
 void Controller::ComputeSteerableViewMap()
 {
-#if 0  //soc
-  if ((!_Canvas) || (!_ViewMap))
+#if 0  // soc
+  if ((!_Canvas) || (!_ViewMap)) {
     return;
+  }
 
   // Build 4 nodes containing the edges in the 4 directions
   NodeGroup *ng[Canvas::NB_STEERABLE_VIEWMAP];
   unsigned i;
-  real c = 32.0f/255.0f; // see SteerableViewMap::readSteerableViewMapPixel() for information about this 32.
+  real c =
+      32.0f /
+      255.0f;  // see SteerableViewMap::readSteerableViewMapPixel() for information about this 32.
   for (i = 0; i < Canvas::NB_STEERABLE_VIEWMAP; ++i) {
     ng[i] = new NodeGroup;
   }
   NodeShape *completeNS = new NodeShape;
-  completeNS->material().setDiffuse(c,c,c,1);
-  ng[Canvas::NB_STEERABLE_VIEWMAP-1]->AddChild(completeNS);
+  completeNS->material().setDiffuse(c, c, c, 1);
+  ng[Canvas::NB_STEERABLE_VIEWMAP - 1]->AddChild(completeNS);
   SteerableViewMap *svm = _Canvas->getSteerableViewMap();
   svm->Reset();
 
-  ViewMap::fedges_container& fedges = _ViewMap->FEdges();
+  ViewMap::fedges_container &fedges = _ViewMap->FEdges();
   LineRep *fRep;
   NodeShape *ns;
-  for (ViewMap::fedges_container::iterator f = fedges.begin(), fend = fedges.end();
-       f != fend;
-       ++f)
-  {
-    if ((*f)->viewedge()->qi() != 0)
+  for (ViewMap::fedges_container::iterator f = fedges.begin(), fend = fedges.end(); f != fend;
+       ++f) {
+    if ((*f)->viewedge()->qi() != 0) {
       continue;
+    }
     fRep = new LineRep((*f)->vertexA()->point2d(), (*f)->vertexB()->point2d());
-    completeNS->AddRep(fRep); // add to the complete map anyway
+    completeNS->AddRep(fRep);  // add to the complete map anyway
     double *oweights = svm->AddFEdge(*f);
     for (i = 0; i < (Canvas::NB_STEERABLE_VIEWMAP - 1); ++i) {
       ns = new NodeShape;
-      double wc = oweights[i]*c;
-      if (oweights[i] == 0)
+      double wc = oweights[i] * c;
+      if (oweights[i] == 0) {
         continue;
+      }
       ns->material().setDiffuse(wc, wc, wc, 1);
       ns->AddRep(fRep);
       ng[i]->AddChild(ns);
@@ -712,7 +727,6 @@ void Controller::ComputeSteerableViewMap()
     qimg.save(QString("newsteerable") + QString::number(i) + QString(".bmp"), "BMP");
 #  endif
   }
-
 
   svm->buildImagesPyramids(img, false, 0, 1.0f);
 #endif
@@ -864,8 +878,9 @@ bool Controller::getComputeSteerableViewMapFlag() const
 
 int Controller::DrawStrokes()
 {
-  if (_ViewMap == 0)
+  if (_ViewMap == 0) {
     return 0;
+  }
 
   if (G.debug & G_DEBUG_FREESTYLE) {
     cout << "\n===  Stroke drawing  ===" << endl;
@@ -1048,15 +1063,17 @@ string Controller::getModulesDir() const
 
 void Controller::resetInterpreter()
 {
-  if (_inter)
+  if (_inter) {
     _inter->reset();
+  }
 }
 
 void Controller::displayDensityCurves(int x, int y)
 {
   SteerableViewMap *svm = _Canvas->getSteerableViewMap();
-  if (!svm)
+  if (!svm) {
     return;
+  }
 
   unsigned int i, j;
   typedef vector<Vec3r> densityCurve;
@@ -1066,8 +1083,9 @@ void Controller::displayDensityCurves(int x, int y)
   // collect the curves values
   unsigned nbCurves = svm->getNumberOfOrientations() + 1;
   unsigned nbPoints = svm->getNumberOfPyramidLevels();
-  if (!nbPoints)
+  if (!nbPoints) {
     return;
+  }
 
   // build the density/nbLevels curves for each orientation
   for (i = 0; i < nbCurves; ++i) {
@@ -1084,11 +1102,14 @@ void Controller::displayDensityCurves(int x, int y)
 
   // display the curves
 #if 0
-  for (i = 0; i < nbCurves; ++i)
-    _pDensityCurvesWindow->setOrientationCurve(i, Vec2d(0, 0), Vec2d(nbPoints, 1), curves[i], "scale", "density");
-  for (i = 1; i <= 8; ++i)
-    _pDensityCurvesWindow->setLevelCurve(i, Vec2d(0, 0), Vec2d(nbCurves, 1), curvesDirection[i],
-                                         "orientation", "density");
+  for (i = 0; i < nbCurves; ++i) {
+    _pDensityCurvesWindow->setOrientationCurve(
+        i, Vec2d(0, 0), Vec2d(nbPoints, 1), curves[i], "scale", "density");
+  }
+  for (i = 1; i <= 8; ++i) {
+    _pDensityCurvesWindow->setLevelCurve(
+        i, Vec2d(0, 0), Vec2d(nbCurves, 1), curvesDirection[i], "orientation", "density");
+  }
   _pDensityCurvesWindow->show();
 #endif
 }

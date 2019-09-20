@@ -214,7 +214,8 @@ bool WM_operator_py_idname_ok_or_report(ReportList *reports,
 }
 
 /**
- * Print a string representation of the operator, with the args that it runs so python can run it again.
+ * Print a string representation of the operator,
+ * with the args that it runs so python can run it again.
  *
  * When calling from an existing wmOperator, better to use simple version:
  * `WM_operator_pystring(C, op);`
@@ -353,7 +354,8 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
    * - see if the pointers ID is in the context.
    */
 
-  /* don't get from the context store since this is normally set only for the UI and not usable elsewhere */
+  /* Don't get from the context store since this is normally
+   * set only for the UI and not usable elsewhere. */
   ListBase lb = CTX_data_dir_get_ex(C, false, true, true);
   LinkData *link;
 
@@ -362,16 +364,15 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
 
   for (link = lb.first; link; link = link->next) {
     const char *identifier = link->data;
-    PointerRNA ctx_item_ptr = {{0}}; // CTX_data_pointer_get(C, identifier); // XXX, this isnt working
+    PointerRNA ctx_item_ptr = {
+        {0}};  // CTX_data_pointer_get(C, identifier); // XXX, this isnt working
 
     if (ctx_item_ptr.type == NULL) {
       continue;
     }
 
     if (ptr->id.data == ctx_item_ptr.id.data) {
-      if ((ptr->data == ctx_item_ptr.data) &&
-          (ptr->type == ctx_item_ptr.type))
-      {
+      if ((ptr->data == ctx_item_ptr.data) && (ptr->type == ctx_item_ptr.type)) {
         /* found! */
         member_found = identifier;
         break;
@@ -690,7 +691,6 @@ void WM_operator_properties_free(PointerRNA *ptr)
 
   if (properties) {
     IDP_FreeProperty(properties);
-    MEM_freeN(properties);
     ptr->data = NULL; /* just in case */
   }
 }
@@ -753,7 +753,7 @@ int WM_menu_invoke_ex(bContext *C, wmOperator *op, int opcontext)
     return retval;
   }
   else {
-    pup = UI_popup_menu_begin(C, RNA_struct_ui_name(op->type->srna), ICON_NONE);
+    pup = UI_popup_menu_begin(C, WM_operatortype_name(op->type, op->ptr), ICON_NONE);
     layout = UI_popup_menu_layout(pup);
     /* set this so the default execution context is the same as submenus */
     uiLayoutSetOperatorContext(layout, opcontext);
@@ -778,13 +778,14 @@ struct EnumSearchMenu {
   short prv_cols, prv_rows;
 };
 
-/* generic enum search invoke popup */
+/** Generic enum search invoke popup. */
 static uiBlock *wm_enum_search_menu(bContext *C, ARegion *ar, void *arg)
 {
   struct EnumSearchMenu *search_menu = arg;
   wmWindow *win = CTX_wm_window(C);
   wmOperator *op = search_menu->op;
-  /* template_ID uses 4 * widget_unit for width, we use a bit more, some items may have a suffix to show */
+  /* template_ID uses 4 * widget_unit for width,
+   * we use a bit more, some items may have a suffix to show. */
   const int width = search_menu->use_previews ? 5 * U.widget_unit * search_menu->prv_cols :
                                                 UI_searchbox_size_x();
   const int height = search_menu->use_previews ? 5 * U.widget_unit * search_menu->prv_rows :
@@ -801,7 +802,20 @@ static uiBlock *wm_enum_search_menu(bContext *C, ARegion *ar, void *arg)
   BLI_assert(search_menu->use_previews ||
              (search_menu->prv_cols == 0 && search_menu->prv_rows == 0));
 #if 0 /* ok, this isn't so easy... */
-  uiDefBut(block, UI_BTYPE_LABEL, 0, RNA_struct_ui_name(op->type->srna), 10, 10, UI_searchbox_size_x(), UI_UNIT_Y, NULL, 0.0, 0.0, 0, 0, "");
+  uiDefBut(block,
+           UI_BTYPE_LABEL,
+           0,
+           WM_operatortype_name(op->type, op->ptr),
+           10,
+           10,
+           UI_searchbox_size_x(),
+           UI_UNIT_Y,
+           NULL,
+           0.0,
+           0.0,
+           0,
+           0,
+           "");
 #endif
   but = uiDefSearchButO_ptr(block,
                             op->type,
@@ -855,7 +869,7 @@ int WM_enum_search_invoke_previews(bContext *C, wmOperator *op, short prv_cols, 
   search_menu.prv_cols = prv_cols;
   search_menu.prv_rows = prv_rows;
 
-  UI_popup_block_invoke(C, wm_enum_search_menu, &search_menu);
+  UI_popup_block_invoke(C, wm_enum_search_menu, &search_menu, NULL);
 
   return OPERATOR_INTERFACE;
 }
@@ -864,13 +878,17 @@ int WM_enum_search_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(eve
 {
   static struct EnumSearchMenu search_menu;
   search_menu.op = op;
-  UI_popup_block_invoke(C, wm_enum_search_menu, &search_menu);
+  UI_popup_block_invoke(C, wm_enum_search_menu, &search_menu, NULL);
   return OPERATOR_INTERFACE;
 }
 
 /* Can't be used as an invoke directly, needs message arg (can be NULL) */
-int WM_operator_confirm_message_ex(
-    bContext *C, wmOperator *op, const char *title, const int icon, const char *message)
+int WM_operator_confirm_message_ex(bContext *C,
+                                   wmOperator *op,
+                                   const char *title,
+                                   const int icon,
+                                   const char *message,
+                                   const short opcontext)
 {
   uiPopupMenu *pup;
   uiLayout *layout;
@@ -885,8 +903,7 @@ int WM_operator_confirm_message_ex(
 
   pup = UI_popup_menu_begin(C, title, icon);
   layout = UI_popup_menu_layout(pup);
-  uiItemFullO_ptr(
-      layout, op->type, message, ICON_NONE, properties, WM_OP_EXEC_REGION_WIN, 0, NULL);
+  uiItemFullO_ptr(layout, op->type, message, ICON_NONE, properties, opcontext, 0, NULL);
   UI_popup_menu_end(C, pup);
 
   return OPERATOR_INTERFACE;
@@ -894,7 +911,8 @@ int WM_operator_confirm_message_ex(
 
 int WM_operator_confirm_message(bContext *C, wmOperator *op, const char *message)
 {
-  return WM_operator_confirm_message_ex(C, op, IFACE_("OK?"), ICON_QUESTION, message);
+  return WM_operator_confirm_message_ex(
+      C, op, IFACE_("OK?"), ICON_QUESTION, message, WM_OP_EXEC_REGION_WIN);
 }
 
 int WM_operator_confirm(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
@@ -1133,37 +1151,27 @@ typedef struct wmOpPopUp {
 /* Only invoked by OK button in popups created with wm_block_dialog_create() */
 static void dialog_exec_cb(bContext *C, void *arg1, void *arg2)
 {
-  wmOpPopUp *data = arg1;
-  uiBlock *block = arg2;
+  wmOperator *op;
+  {
+    /* Execute will free the operator.
+     * In this case, wm_operator_ui_popup_cancel wont run. */
+    wmOpPopUp *data = arg1;
+    op = data->op;
+    MEM_freeN(data);
+  }
 
+  uiBlock *block = arg2;
   /* Explicitly set UI_RETURN_OK flag, otherwise the menu might be canceled
    * in case WM_operator_call_ex exits/reloads the current file (T49199). */
+
   UI_popup_menu_retval_set(block, UI_RETURN_OK, true);
 
-  WM_operator_call_ex(C, data->op, true);
-
-  /* let execute handle freeing it */
-  //data->free_op = false;
-  //data->op = NULL;
-
-  /* in this case, wm_operator_ui_popup_cancel wont run */
-  MEM_freeN(data);
-
-  /* get context data *after* WM_operator_call_ex which might have closed the current file and changed context */
-  wmWindowManager *wm = CTX_wm_manager(C);
+  /* Get context data *after* WM_operator_call_ex
+   * which might have closed the current file and changed context. */
   wmWindow *win = CTX_wm_window(C);
+  UI_popup_block_close(C, win, block);
 
-  /* check window before 'block->handle' incase the
-   * popup execution closed the window and freed the block. see T44688.
-   */
-  /* Post 2.78 TODO: Check if this fix and others related to T44688 are still
-   * needed or can be improved now that requesting context data has been corrected
-   * (see above). We're close to release so not a good time for experiments.
-   * -- Julian
-   */
-  if (BLI_findindex(&wm->windows, win) != -1) {
-    UI_popup_block_close(C, win, block);
-  }
+  WM_operator_call_ex(C, op, true);
 }
 
 /* Dialogs are popups that require user verification (click OK) before exec */
@@ -1382,7 +1390,7 @@ int WM_operator_redo_popup(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  UI_popup_block_invoke(C, wm_block_create_redo, op);
+  UI_popup_block_invoke(C, wm_block_create_redo, op, NULL);
 
   return OPERATOR_CANCELLED;
 }
@@ -1459,43 +1467,113 @@ static void wm_block_splash_refreshmenu(bContext *C, void *UNUSED(arg_block), vo
   ED_region_tag_refresh_ui(ar_menu);
 }
 
-static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(arg))
+static void wm_block_splash_add_label(uiBlock *block, const char *label, int x, int *y)
 {
-  uiBlock *block;
-  uiBut *but;
+  if (!(label && label[0])) {
+    return;
+  }
+
   uiStyle *style = UI_style_get();
 
+  BLF_size(style->widgetlabel.uifont_id, style->widgetlabel.points, U.pixelsize * U.dpi);
+  int label_width = BLF_width(style->widgetlabel.uifont_id, label, strlen(label));
+  label_width = label_width + U.widget_unit;
+
+  UI_block_emboss_set(block, UI_EMBOSS_NONE);
+
+  uiBut *but = uiDefBut(block,
+                        UI_BTYPE_LABEL,
+                        0,
+                        label,
+                        x - label_width,
+                        *y,
+                        label_width,
+                        UI_UNIT_Y,
+                        NULL,
+                        0,
+                        0,
+                        0,
+                        0,
+                        NULL);
+
+  /* 1 = UI_SELECT, internal flag to draw in white. */
+  UI_but_flag_enable(but, 1);
+  UI_block_emboss_set(block, UI_EMBOSS);
+  *y -= 12 * U.dpi_fac;
+}
+
+static void wm_block_splash_add_labels(uiBlock *block, int x, int y)
+{
+  /* Version number. */
+  const char *version_suffix = NULL;
+  bool show_build_info = true;
+
+  if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "alpha")) {
+    version_suffix = " Alpha";
+  }
+  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "beta")) {
+    version_suffix = " Beta";
+  }
+  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "rc")) {
+    version_suffix = " Release Candidate";
+    show_build_info = false;
+  }
+  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "release")) {
+    version_suffix = STRINGIFY(BLENDER_VERSION_CHAR);
+    show_build_info = false;
+  }
+
+  char version_buf[256] = "\0";
+  BLI_snprintf(version_buf,
+               sizeof(version_buf),
+               "v %d.%d%s",
+               BLENDER_VERSION / 100,
+               BLENDER_VERSION % 100,
+               version_suffix);
+
+  wm_block_splash_add_label(block, version_buf, x, &y);
+
+#ifdef WITH_BUILDINFO
+  if (show_build_info) {
+    extern unsigned long build_commit_timestamp;
+    extern char build_hash[], build_commit_date[], build_commit_time[], build_branch[];
+
+    /* Date, hidden for builds made from tag. */
+    if (build_commit_timestamp != 0) {
+      char date_buf[256] = "\0";
+      BLI_snprintf(
+          date_buf, sizeof(date_buf), "Date: %s %s", build_commit_date, build_commit_time);
+      wm_block_splash_add_label(block, date_buf, x, &y);
+    }
+
+    /* Hash. */
+    char hash_buf[256] = "\0";
+    BLI_snprintf(hash_buf, sizeof(hash_buf), "Hash: %s", build_hash);
+    wm_block_splash_add_label(block, hash_buf, x, &y);
+
+    /* Branch. */
+    if (!STREQ(build_branch, "master")) {
+      char branch_buf[256] = "\0";
+      BLI_snprintf(branch_buf, sizeof(branch_buf), "Branch: %s", build_branch);
+
+      wm_block_splash_add_label(block, branch_buf, x, &y);
+    }
+  }
+#else
+  UNUSED_VARS(show_build_info);
+#endif /* WITH_BUILDINFO */
+}
+
+static ImBuf *wm_block_splash_image(void)
+{
 #ifndef WITH_HEADLESS
   extern char datatoc_splash_png[];
   extern int datatoc_splash_png_size;
-
   extern char datatoc_splash_2x_png[];
   extern int datatoc_splash_2x_png_size;
-  ImBuf *ibuf;
-#else
+
   ImBuf *ibuf = NULL;
-#endif
 
-#ifdef WITH_BUILDINFO
-  int label_delta = 0;
-  int hash_width, date_width;
-  char date_buf[128] = "\0";
-  char hash_buf[128] = "\0";
-  extern unsigned long build_commit_timestamp;
-  extern char build_hash[], build_commit_date[], build_commit_time[], build_branch[];
-
-  /* Builds made from tag only shows tag sha */
-  BLI_snprintf(hash_buf, sizeof(hash_buf), "Hash: %s", build_hash);
-  BLI_snprintf(date_buf, sizeof(date_buf), "Date: %s %s", build_commit_date, build_commit_time);
-
-  BLF_size(style->widgetlabel.uifont_id, style->widgetlabel.points, U.pixelsize * U.dpi);
-  hash_width = (int)BLF_width(style->widgetlabel.uifont_id, hash_buf, sizeof(hash_buf)) +
-               U.widget_unit;
-  date_width = (int)BLF_width(style->widgetlabel.uifont_id, date_buf, sizeof(date_buf)) +
-               U.widget_unit;
-#endif /* WITH_BUILDINFO */
-
-#ifndef WITH_HEADLESS
   if (U.dpi_fac > 1.0) {
     ibuf = IMB_ibImageFromMemory((const uchar *)datatoc_splash_2x_png,
                                  datatoc_splash_2x_png_size,
@@ -1522,7 +1600,7 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
       BLI_join_dirfile(splash_filepath,
                        sizeof(splash_filepath),
                        template_directory,
-                       (U.pixelsize == 2) ? "splash_2x.png" : "splash.png");
+                       (U.dpi_fac > 1.0) ? "splash_2x.png" : "splash.png");
       ibuf_template = IMB_loadiffname(splash_filepath, IB_rect, NULL);
       if (ibuf_template) {
         const int x_expect = ibuf->x;
@@ -1546,7 +1624,17 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
       }
     }
   }
+  return ibuf;
+#else
+  return NULL;
 #endif
+}
+
+static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(arg))
+{
+  uiBlock *block;
+  uiBut *but;
+  uiStyle *style = UI_style_get();
 
   block = UI_block_begin(C, ar, "splash", UI_EMBOSS);
 
@@ -1556,6 +1644,7 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
   UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_KEEP_OPEN | UI_BLOCK_NO_WIN_CLIP);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
+  ImBuf *ibuf = wm_block_splash_image();
   but = uiDefBut(block,
                  UI_BTYPE_IMAGE,
                  0,
@@ -1573,109 +1662,15 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
   UI_but_func_set(but, wm_block_splash_close, block, NULL);
   UI_block_func_set(block, wm_block_splash_refreshmenu, block, NULL);
 
-  /* label for 'a' bugfix releases, or 'Release Candidate 1'...
-   * avoids recreating splash for version updates */
-  const char *version_suffix = NULL;
+  int x = U.dpi_fac * 502;
+  int y = U.dpi_fac * 237;
 
-  if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "alpha")) {
-    version_suffix = " Alpha";
-  }
-  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "beta")) {
-    version_suffix = " Beta";
-  }
-  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "rc")) {
-    version_suffix = " Release Candidate";
-  }
-  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "release")) {
-    version_suffix = STRINGIFY(BLENDER_VERSION_CHAR);
-  }
-
-  char *version = BLI_sprintfN(
-      "Version %d.%d%s", BLENDER_VERSION / 100, BLENDER_VERSION % 100, version_suffix);
-
-  if (version != NULL && version[0]) {
-    /* placed after the version number in the image,
-     * placing y is tricky to match baseline */
-    /* hack to have text draw 'text_sel' */
-    UI_block_emboss_set(block, UI_EMBOSS_NONE);
-    int x = 202 * U.dpi_fac;
-    int y = 130 * U.dpi_fac;
-    int w = 240 * U.dpi_fac;
-
-    but = uiDefBut(block, UI_BTYPE_LABEL, 0, version, x, y, w, UI_UNIT_Y, NULL, 0, 0, 0, 0, NULL);
-    /* XXX, set internal flag - UI_SELECT */
-    UI_but_flag_enable(but, 1);
-    UI_block_emboss_set(block, UI_EMBOSS);
-  }
-
-  MEM_freeN(version);
-
-#ifdef WITH_BUILDINFO
-  if (build_commit_timestamp != 0) {
-    but = uiDefBut(block,
-                   UI_BTYPE_LABEL,
-                   0,
-                   date_buf,
-                   U.dpi_fac * 502 - date_width,
-                   U.dpi_fac * 237,
-                   date_width,
-                   UI_UNIT_Y,
-                   NULL,
-                   0,
-                   0,
-                   0,
-                   0,
-                   NULL);
-    /* XXX, set internal flag - UI_SELECT */
-    UI_but_flag_enable(but, 0);
-    label_delta = 12;
-  }
-  but = uiDefBut(block,
-                 UI_BTYPE_LABEL,
-                 0,
-                 hash_buf,
-                 U.dpi_fac * 502 - hash_width,
-                 U.dpi_fac * (237 - label_delta),
-                 hash_width,
-                 UI_UNIT_Y,
-                 NULL,
-                 0,
-                 0,
-                 0,
-                 0,
-                 NULL);
-  /* XXX, set internal flag - UI_SELECT */
-  UI_but_flag_enable(but, 0);
-
-  if (!STREQ(build_branch, "master")) {
-    char branch_buf[128] = "\0";
-    int branch_width;
-    BLI_snprintf(branch_buf, sizeof(branch_buf), "Branch: %s", build_branch);
-    branch_width = (int)BLF_width(style->widgetlabel.uifont_id, branch_buf, sizeof(branch_buf)) +
-                   U.widget_unit;
-    but = uiDefBut(block,
-                   UI_BTYPE_LABEL,
-                   0,
-                   branch_buf,
-                   U.dpi_fac * 502 - branch_width,
-                   U.dpi_fac * (225 - label_delta),
-                   branch_width,
-                   UI_UNIT_Y,
-                   NULL,
-                   0,
-                   0,
-                   0,
-                   0,
-                   NULL);
-    /* XXX, set internal flag - UI_SELECT */
-    UI_but_flag_enable(but, 0);
-  }
-#endif /* WITH_BUILDINFO */
+  wm_block_splash_add_labels(block, x, y);
 
   uiLayout *layout = UI_block_layout(block,
                                      UI_LAYOUT_VERTICAL,
                                      UI_LAYOUT_PANEL,
-                                     U.dpi_fac * 40,
+                                     U.dpi_fac * 26,
                                      0,
                                      U.dpi_fac * 450,
                                      U.dpi_fac * 110,
@@ -1694,7 +1689,7 @@ static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(ar
 
 static int wm_splash_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
 {
-  UI_popup_block_invoke(C, wm_block_create_splash, NULL);
+  UI_popup_block_invoke(C, wm_block_create_splash, NULL, NULL);
 
   return OPERATOR_FINISHED;
 }
@@ -1800,7 +1795,7 @@ static int wm_search_menu_invoke(bContext *C, wmOperator *UNUSED(op), const wmEv
   data.size[0] = UI_searchbox_size_x() * 2;
   data.size[1] = UI_searchbox_size_y();
 
-  UI_popup_block_invoke(C, wm_block_search_menu, &data);
+  UI_popup_block_invoke(C, wm_block_search_menu, &data, NULL);
 
   return OPERATOR_INTERFACE;
 }
@@ -1824,6 +1819,14 @@ static int wm_call_menu_exec(bContext *C, wmOperator *op)
   return UI_popup_menu_invoke(C, idname, op->reports);
 }
 
+static const char *wm_call_menu_get_name(wmOperatorType *ot, PointerRNA *ptr)
+{
+  char idname[BKE_ST_MAXNAME];
+  RNA_string_get(ptr, "name", idname);
+  MenuType *mt = WM_menutype_find(idname, true);
+  return (mt) ? mt->label : ot->name;
+}
+
 static void WM_OT_call_menu(wmOperatorType *ot)
 {
   ot->name = "Call Menu";
@@ -1832,6 +1835,7 @@ static void WM_OT_call_menu(wmOperatorType *ot)
 
   ot->exec = wm_call_menu_exec;
   ot->poll = WM_operator_winactive;
+  ot->get_name = wm_call_menu_get_name;
 
   ot->flag = OPTYPE_INTERNAL;
 
@@ -1863,6 +1867,7 @@ static void WM_OT_call_menu_pie(wmOperatorType *ot)
   ot->invoke = wm_call_pie_menu_invoke;
   ot->exec = wm_call_pie_menu_exec;
   ot->poll = WM_operator_winactive;
+  ot->get_name = wm_call_menu_get_name;
 
   ot->flag = OPTYPE_INTERNAL;
 
@@ -1878,6 +1883,14 @@ static int wm_call_panel_exec(bContext *C, wmOperator *op)
   return UI_popover_panel_invoke(C, idname, keep_open, op->reports);
 }
 
+static const char *wm_call_panel_get_name(wmOperatorType *ot, PointerRNA *ptr)
+{
+  char idname[BKE_ST_MAXNAME];
+  RNA_string_get(ptr, "name", idname);
+  PanelType *pt = WM_paneltype_find(idname, true);
+  return (pt) ? pt->label : ot->name;
+}
+
 static void WM_OT_call_panel(wmOperatorType *ot)
 {
   ot->name = "Call Panel";
@@ -1886,6 +1899,7 @@ static void WM_OT_call_panel(wmOperatorType *ot)
 
   ot->exec = wm_call_panel_exec;
   ot->poll = WM_operator_winactive;
+  ot->get_name = wm_call_panel_get_name;
 
   ot->flag = OPTYPE_INTERNAL;
 
@@ -3066,8 +3080,7 @@ static void redraw_timer_step(bContext *C,
 {
   if (type == eRTDrawRegion) {
     if (ar) {
-      ED_region_do_draw(C, ar);
-      ar->do_draw = false;
+      wm_draw_region_test(C, sa, ar);
     }
   }
   else if (type == eRTDrawRegionSwap) {
@@ -3091,8 +3104,7 @@ static void redraw_timer_step(bContext *C,
       for (ar_iter = sa_iter->regionbase.first; ar_iter; ar_iter = ar_iter->next) {
         if (ar_iter->visible) {
           CTX_wm_region_set(C, ar_iter);
-          ED_region_do_draw(C, ar_iter);
-          ar_iter->do_draw = false;
+          wm_draw_region_test(C, sa_iter, ar_iter);
         }
       }
     }
@@ -3137,6 +3149,7 @@ static int redraw_timer_exec(bContext *C, wmOperator *op)
   wmWindow *win = CTX_wm_window(C);
   ScrArea *sa = CTX_wm_area(C);
   ARegion *ar = CTX_wm_region(C);
+  wmWindowManager *wm = CTX_wm_manager(C);
   double time_start, time_delta;
   const int type = RNA_enum_get(op->ptr, "type");
   const int iter = RNA_int_get(op->ptr, "iterations");
@@ -3149,6 +3162,8 @@ static int redraw_timer_exec(bContext *C, wmOperator *op)
   WM_cursor_wait(1);
 
   time_start = PIL_check_seconds_timer();
+
+  wm_window_make_drawable(wm, win);
 
   for (a = 0; a < iter; a++) {
     redraw_timer_step(C, bmain, scene, depsgraph, win, sa, ar, type, cfra);
@@ -3314,6 +3329,22 @@ static void WM_OT_previews_ensure(wmOperatorType *ot)
 
 /* Only types supporting previews currently. */
 static const EnumPropertyItem preview_id_type_items[] = {
+    {FILTER_ID_SCE | FILTER_ID_GR | FILTER_ID_OB | FILTER_ID_MA | FILTER_ID_LA | FILTER_ID_WO |
+         FILTER_ID_TE | FILTER_ID_IM,
+     "ALL",
+     0,
+     "All Types",
+     ""},
+    {FILTER_ID_SCE | FILTER_ID_GR | FILTER_ID_OB,
+     "GEOMETRY",
+     0,
+     "All Geometry Types",
+     "Clear previews for scenes, collections and objects"},
+    {FILTER_ID_MA | FILTER_ID_LA | FILTER_ID_WO | FILTER_ID_TE | FILTER_ID_IM,
+     "SHADING",
+     0,
+     "All Shading Types",
+     "Clear previews for materiasl, lights, worlds, textures and images"},
     {FILTER_ID_SCE, "SCENE", 0, "Scenes", ""},
     {FILTER_ID_GR, "GROUP", 0, "Groups", ""},
     {FILTER_ID_OB, "OBJECT", 0, "Objects", ""},
@@ -3331,14 +3362,16 @@ static const EnumPropertyItem preview_id_type_items[] = {
 static int previews_clear_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
-  ListBase *lb[] = {&bmain->objects,
-                    &bmain->collections,
-                    &bmain->materials,
-                    &bmain->worlds,
-                    &bmain->lights,
-                    &bmain->textures,
-                    &bmain->images,
-                    NULL};
+  ListBase *lb[] = {
+      &bmain->objects,
+      &bmain->collections,
+      &bmain->materials,
+      &bmain->worlds,
+      &bmain->lights,
+      &bmain->textures,
+      &bmain->images,
+      NULL,
+  };
   int i;
 
   const int id_filters = RNA_enum_get(op->ptr, "id_type");
@@ -3349,8 +3382,14 @@ static int previews_clear_exec(bContext *C, wmOperator *op)
       continue;
     }
 
-    //      printf("%s: %d, %d, %d -> %d\n", id->name, GS(id->name), BKE_idcode_to_idfilter(GS(id->name)),
-    //                                       id_filters, BKE_idcode_to_idfilter(GS(id->name)) & id_filters);
+#if 0
+    printf("%s: %d, %d, %d -> %d\n",
+           id->name,
+           GS(id->name),
+           BKE_idcode_to_idfilter(GS(id->name)),
+           id_filters,
+           BKE_idcode_to_idfilter(GS(id->name)) & id_filters);
+#endif
 
     if (!id || !(BKE_idcode_to_idfilter(GS(id->name)) & id_filters)) {
       continue;
@@ -3480,6 +3519,8 @@ void wm_operatortypes_register(void)
   WM_operatortype_append(WM_OT_read_factory_settings);
   WM_operatortype_append(WM_OT_save_homefile);
   WM_operatortype_append(WM_OT_save_userpref);
+  WM_operatortype_append(WM_OT_read_userpref);
+  WM_operatortype_append(WM_OT_read_factory_userpref);
   WM_operatortype_append(WM_OT_userpref_autoexec_path_add);
   WM_operatortype_append(WM_OT_userpref_autoexec_path_remove);
   WM_operatortype_append(WM_OT_window_fullscreen_toggle);
@@ -3624,9 +3665,8 @@ static void gesture_box_modal_keymap(wmKeyConfig *keyconf)
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_clip_border");
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_render_border");
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_select_box");
-  WM_modalkeymap_assign(
-      keymap,
-      "VIEW3D_OT_zoom_border"); /* XXX TODO: zoom border should perhaps map rightmouse to zoom out instead of in+cancel */
+  /* XXX TODO: zoom border should perhaps map rightmouse to zoom out instead of in+cancel */
+  WM_modalkeymap_assign(keymap, "VIEW3D_OT_zoom_border");
   WM_modalkeymap_assign(keymap, "IMAGE_OT_render_border");
   WM_modalkeymap_assign(keymap, "IMAGE_OT_view_zoom_border");
   WM_modalkeymap_assign(keymap, "GPENCIL_OT_select_box");
@@ -3722,7 +3762,10 @@ const EnumPropertyItem *RNA_action_itemf(bContext *C,
       C, ptr, r_free, C ? (ID *)CTX_data_main(C)->actions.first : NULL, false, NULL, NULL);
 }
 #if 0 /* UNUSED */
-const EnumPropertyItem *RNA_action_local_itemf(bContext *C, PointerRNA *ptr, PropertyRNA *UNUSED(prop), bool *r_free)
+const EnumPropertyItem *RNA_action_local_itemf(bContext *C,
+                                               PointerRNA *ptr,
+                                               PropertyRNA *UNUSED(prop),
+                                               bool *r_free)
 {
   return rna_id_itemf(C, ptr, r_free, C ? (ID *)CTX_data_main(C)->action.first : NULL, true);
 }
@@ -3788,7 +3831,7 @@ const EnumPropertyItem *RNA_scene_without_active_itemf(bContext *C,
                       ptr,
                       r_free,
                       C ? (ID *)CTX_data_main(C)->scenes.first : NULL,
-                      true,
+                      false,
                       rna_id_enum_filter_single,
                       scene_active);
 }

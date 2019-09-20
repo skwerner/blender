@@ -66,6 +66,9 @@ typedef struct Light {
   short area_shape;
   float area_size, area_sizey, area_sizez;
 
+  float sun_angle;
+  char _pad3[4];
+
   /* texact is for buttons */
   short texact, shadhalostep;
 
@@ -96,8 +99,8 @@ typedef struct Light {
 /* flag */
 #define LA_DS_EXPAND (1 << 0)
 /* NOTE: this must have the same value as MA_DS_SHOW_TEXS,
-   * otherwise anim-editors will not read correctly
-   */
+ * otherwise anim-editors will not read correctly
+ */
 #define LA_DS_SHOW_TEXS (1 << 2)
 
 /* type */

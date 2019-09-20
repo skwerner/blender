@@ -138,7 +138,7 @@ static const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
   const char *result = _PyUnicode_AsString(py_str);
   if (result) {
     /* 99% of the time this is enough but we better support non unicode
-     * chars since blender doesnt limit this.
+     * chars since blender doesn't limit this.
      */
     return result;
   }
@@ -151,7 +151,7 @@ static const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
       return PyBytes_AS_STRING(*coerce);
     }
     else {
-      /* Clear the error, so Cycles can be at leadt used without
+      /* Clear the error, so Cycles can be at least used without
        * GPU and OSL support,
        */
       PyErr_Clear();
@@ -937,6 +937,15 @@ static PyObject *set_resumable_chunk_range_func(PyObject * /*self*/, PyObject *a
   Py_RETURN_NONE;
 }
 
+static PyObject *clear_resumable_chunk_func(PyObject * /*self*/, PyObject * /*value*/)
+{
+  VLOG(1) << "Clear resumable render";
+  BlenderSession::num_resumable_chunks = 0;
+  BlenderSession::current_resumable_chunk = 0;
+
+  Py_RETURN_NONE;
+}
+
 static PyObject *enable_print_stats_func(PyObject * /*self*/, PyObject * /*args*/)
 {
   BlenderSession::print_render_stats = true;
@@ -992,6 +1001,7 @@ static PyMethodDef methods[] = {
     /* Resumable render */
     {"set_resumable_chunk", set_resumable_chunk_func, METH_VARARGS, ""},
     {"set_resumable_chunk_range", set_resumable_chunk_range_func, METH_VARARGS, ""},
+    {"clear_resumable_chunk", clear_resumable_chunk_func, METH_NOARGS, ""},
 
     /* Compute Device selection */
     {"get_device_types", get_device_types_func, METH_VARARGS, ""},

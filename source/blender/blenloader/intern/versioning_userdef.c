@@ -19,7 +19,7 @@
  *
  * Version patch user preferences.
  */
-
+#define DNA_DEPRECATED_ALLOW
 #include <string.h>
 
 #include "BLI_math.h"
@@ -28,6 +28,7 @@
 #include "DNA_userdef_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_windowmanager_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_addon.h"
 #include "BKE_colorband.h"
@@ -42,7 +43,7 @@
 /* Disallow access to global userdef. */
 #define U (_error_)
 
-static void do_versions_theme(UserDef *userdef, bTheme *btheme)
+static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
 {
 
 #define USER_VERSION_ATLEAST(ver, subver) MAIN_VERSION_ATLEAST(userdef, ver, subver)
@@ -113,6 +114,39 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(space_info.info_info);
   }
 
+  if (!USER_VERSION_ATLEAST(280, 64)) {
+    FROM_DEFAULT_V4_UCHAR(tui.icon_scene);
+
+    if (btheme->space_view3d.obcenter_dia == 0) {
+      btheme->space_view3d.obcenter_dia = U_theme_default.space_view3d.obcenter_dia;
+    }
+
+    FROM_DEFAULT_V4_UCHAR(space_graph.text);
+    FROM_DEFAULT_V4_UCHAR(space_action.text);
+    FROM_DEFAULT_V4_UCHAR(space_nla.text);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.text);
+    FROM_DEFAULT_V4_UCHAR(space_clip.text);
+
+    FROM_DEFAULT_V4_UCHAR(space_graph.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_action.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_nla.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_clip.time_scrub_background);
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 67)) {
+    FROM_DEFAULT_V4_UCHAR(space_outliner.selected_object);
+    FROM_DEFAULT_V4_UCHAR(space_outliner.active_object);
+    FROM_DEFAULT_V4_UCHAR(space_outliner.edited_object);
+    FROM_DEFAULT_V4_UCHAR(space_outliner.row_alternate);
+  }
+
+  /**
+   * Include next version bump.
+   */
+  {
+  }
+
 #undef FROM_DEFAULT_V4_UCHAR
 
 #undef USER_VERSION_ATLEAST
@@ -157,14 +191,16 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 #define USER_VERSION_ATLEAST(ver, subver) MAIN_VERSION_ATLEAST(bmain, ver, subver)
 
   /* the UserDef struct is not corrected with do_versions() .... ugh! */
-  if (userdef->wheellinescroll == 0)
+  if (userdef->wheellinescroll == 0) {
     userdef->wheellinescroll = 3;
+  }
   if (userdef->menuthreshold1 == 0) {
     userdef->menuthreshold1 = 5;
     userdef->menuthreshold2 = 2;
   }
-  if (userdef->mixbufsize == 0)
+  if (userdef->mixbufsize == 0) {
     userdef->mixbufsize = 2048;
+  }
   if (userdef->autokey_mode == 0) {
     /* 'add/replace' but not on */
     userdef->autokey_mode = 2;
@@ -177,8 +213,9 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     userdef->gizmo_size = 75;
     userdef->gizmo_flag |= USER_GIZMO_DRAW;
   }
-  if (userdef->pad_rot_angle == 0.0f)
+  if (userdef->pad_rot_angle == 0.0f) {
     userdef->pad_rot_angle = 15.0f;
+  }
 
   /* graph editor - unselected F-Curve visibility */
   if (userdef->fcu_inactive_alpha == 0) {
@@ -197,18 +234,18 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
   /* added seam, normal color, undo */
   if (!USER_VERSION_ATLEAST(235, 0)) {
     userdef->uiflag |= USER_GLOBALUNDO;
-    if (userdef->undosteps == 0)
+    if (userdef->undosteps == 0) {
       userdef->undosteps = 32;
+    }
   }
   if (!USER_VERSION_ATLEAST(236, 0)) {
     /* illegal combo... */
-    if (userdef->flag & USER_LMOUSESELECT)
+    if (userdef->flag & USER_LMOUSESELECT) {
       userdef->flag &= ~USER_TWOBUTTONMOUSE;
+    }
   }
   if (!USER_VERSION_ATLEAST(240, 0)) {
     userdef->uiflag |= USER_PLAINMENUS;
-    if (userdef->obcenter_dia == 0)
-      userdef->obcenter_dia = 6;
   }
   if (!USER_VERSION_ATLEAST(242, 0)) {
     /* set defaults for 3D View rotating axis indicator */
@@ -216,17 +253,19 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     if (userdef->rvisize == 0) {
       userdef->rvisize = 15;
       userdef->rvibright = 8;
-      userdef->uiflag |= USER_SHOW_GIZMO_AXIS;
+      userdef->uiflag |= USER_SHOW_GIZMO_NAVIGATE;
     }
   }
   if (!USER_VERSION_ATLEAST(244, 0)) {
     /* set default number of recently-used files (if not set) */
-    if (userdef->recent_files == 0)
+    if (userdef->recent_files == 0) {
       userdef->recent_files = 10;
+    }
   }
   if (!USER_VERSION_ATLEAST(245, 3)) {
-    if (userdef->coba_weight.tot == 0)
+    if (userdef->coba_weight.tot == 0) {
       BKE_colorband_init(&userdef->coba_weight, true);
+    }
   }
   if (!USER_VERSION_ATLEAST(245, 3)) {
     userdef->flag |= USER_ADD_VIEWALIGNED | USER_ADD_EDITMODE;
@@ -242,56 +281,76 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 
   if (!USER_VERSION_ATLEAST(250, 3)) {
     /* new audio system */
-    if (userdef->audiochannels == 0)
+    if (userdef->audiochannels == 0) {
       userdef->audiochannels = 2;
-    if (userdef->audioformat == 0)
+    }
+    if (userdef->audioformat == 0) {
       userdef->audioformat = 0x24;
-    if (userdef->audiorate == 0)
+    }
+    if (userdef->audiorate == 0) {
       userdef->audiorate = 48000;
+    }
   }
 
   if (!USER_VERSION_ATLEAST(250, 8)) {
     wmKeyMap *km;
 
     for (km = userdef->user_keymaps.first; km; km = km->next) {
-      if (STREQ(km->idname, "Armature_Sketch"))
+      if (STREQ(km->idname, "Armature_Sketch")) {
         strcpy(km->idname, "Armature Sketch");
-      else if (STREQ(km->idname, "View3D"))
+      }
+      else if (STREQ(km->idname, "View3D")) {
         strcpy(km->idname, "3D View");
-      else if (STREQ(km->idname, "View3D Generic"))
+      }
+      else if (STREQ(km->idname, "View3D Generic")) {
         strcpy(km->idname, "3D View Generic");
-      else if (STREQ(km->idname, "EditMesh"))
+      }
+      else if (STREQ(km->idname, "EditMesh")) {
         strcpy(km->idname, "Mesh");
-      else if (STREQ(km->idname, "UVEdit"))
+      }
+      else if (STREQ(km->idname, "UVEdit")) {
         strcpy(km->idname, "UV Editor");
-      else if (STREQ(km->idname, "Animation_Channels"))
+      }
+      else if (STREQ(km->idname, "Animation_Channels")) {
         strcpy(km->idname, "Animation Channels");
-      else if (STREQ(km->idname, "GraphEdit Keys"))
+      }
+      else if (STREQ(km->idname, "GraphEdit Keys")) {
         strcpy(km->idname, "Graph Editor");
-      else if (STREQ(km->idname, "GraphEdit Generic"))
+      }
+      else if (STREQ(km->idname, "GraphEdit Generic")) {
         strcpy(km->idname, "Graph Editor Generic");
-      else if (STREQ(km->idname, "Action_Keys"))
+      }
+      else if (STREQ(km->idname, "Action_Keys")) {
         strcpy(km->idname, "Dopesheet");
-      else if (STREQ(km->idname, "NLA Data"))
+      }
+      else if (STREQ(km->idname, "NLA Data")) {
         strcpy(km->idname, "NLA Editor");
-      else if (STREQ(km->idname, "Node Generic"))
+      }
+      else if (STREQ(km->idname, "Node Generic")) {
         strcpy(km->idname, "Node Editor");
-      else if (STREQ(km->idname, "Logic Generic"))
+      }
+      else if (STREQ(km->idname, "Logic Generic")) {
         strcpy(km->idname, "Logic Editor");
-      else if (STREQ(km->idname, "File"))
+      }
+      else if (STREQ(km->idname, "File")) {
         strcpy(km->idname, "File Browser");
-      else if (STREQ(km->idname, "FileMain"))
+      }
+      else if (STREQ(km->idname, "FileMain")) {
         strcpy(km->idname, "File Browser Main");
-      else if (STREQ(km->idname, "FileButtons"))
+      }
+      else if (STREQ(km->idname, "FileButtons")) {
         strcpy(km->idname, "File Browser Buttons");
-      else if (STREQ(km->idname, "Buttons Generic"))
+      }
+      else if (STREQ(km->idname, "Buttons Generic")) {
         strcpy(km->idname, "Property Editor");
+      }
     }
   }
 
   if (!USER_VERSION_ATLEAST(252, 3)) {
-    if (userdef->flag & USER_LMOUSESELECT)
+    if (userdef->flag & USER_LMOUSESELECT) {
       userdef->flag &= ~USER_TWOBUTTONMOUSE;
+    }
   }
   if (!USER_VERSION_ATLEAST(252, 4)) {
     /* default new handle type is auto handles */
@@ -308,8 +367,9 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     /* if new keyframes handle default is stuff "auto", make it "auto-clamped" instead
      * was changed in 260 as part of GSoC11, but version patch was wrong
      */
-    if (userdef->keyhandles_new == HD_AUTO)
+    if (userdef->keyhandles_new == HD_AUTO) {
       userdef->keyhandles_new = HD_AUTO_ANIM;
+    }
 
     /* enable (Cycles) addon by default */
     BKE_addon_ensure(&userdef->addons, "cycles");
@@ -331,10 +391,12 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     if (userdef->v2d_min_gridsize == 0) {
       userdef->v2d_min_gridsize = 35;
     }
-    if (userdef->widget_unit == 0)
+    if (userdef->widget_unit == 0) {
       userdef->widget_unit = 20;
-    if (userdef->anisotropic_filter <= 0)
+    }
+    if (userdef->anisotropic_filter <= 0) {
       userdef->anisotropic_filter = 1;
+    }
 
     if (userdef->ndof_sensitivity == 0.0f) {
       userdef->ndof_sensitivity = 1.0f;
@@ -345,11 +407,10 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     if (userdef->ndof_orbit_sensitivity == 0.0f) {
       userdef->ndof_orbit_sensitivity = userdef->ndof_sensitivity;
 
-      if (!(userdef->flag & USER_TRACKBALL))
+      if (!(userdef->flag & USER_TRACKBALL)) {
         userdef->ndof_flag |= NDOF_TURNTABLE;
+      }
     }
-    if (userdef->tweak_threshold == 0)
-      userdef->tweak_threshold = 10;
   }
 
   /* NOTE!! from now on use userdef->versionfile and userdef->subversionfile */
@@ -491,18 +552,71 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     userdef->move_threshold = 2;
   }
 
+  if (!USER_VERSION_ATLEAST(280, 58)) {
+    if (userdef->image_draw_method != IMAGE_DRAW_METHOD_GLSL) {
+      userdef->image_draw_method = IMAGE_DRAW_METHOD_AUTO;
+    }
+  }
+
+  /* patch to set Dupli Lightprobes and Grease Pencil */
+  if (!USER_VERSION_ATLEAST(280, 58)) {
+    userdef->dupflag |= USER_DUP_LIGHTPROBE;
+    userdef->dupflag |= USER_DUP_GPENCIL;
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 60)) {
+    const float GPU_VIEWPORT_QUALITY_FXAA = 0.10f;
+    const float GPU_VIEWPORT_QUALITY_TAA8 = 0.25f;
+    const float GPU_VIEWPORT_QUALITY_TAA16 = 0.6f;
+    const float GPU_VIEWPORT_QUALITY_TAA32 = 0.8f;
+
+    if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_FXAA) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_OFF;
+    }
+    else if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_TAA8) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_FXAA;
+    }
+    else if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_TAA16) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_SAMPLES_8;
+    }
+    else if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_TAA32) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_SAMPLES_16;
+    }
+    else {
+      userdef->viewport_aa = SCE_DISPLAY_AA_SAMPLES_32;
+    }
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 62)) {
+    /* (keep this block even if it becomes empty). */
+    if (userdef->vbotimeout == 0) {
+      userdef->vbocollectrate = 60;
+      userdef->vbotimeout = 120;
+    }
+
+    if (userdef->lookdev_sphere_size == 0) {
+      userdef->lookdev_sphere_size = 150;
+    }
+
+    userdef->pref_flag |= USER_PREF_FLAG_SAVE;
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 73)) {
+    userdef->drag_threshold = 30;
+    userdef->drag_threshold_mouse = 3;
+    userdef->drag_threshold_tablet = 10;
+  }
+
   /**
    * Include next version bump.
    */
   {
-    /* (keep this block even if it becomes empty). */
+    /* pass */
   }
 
-  if (userdef->pixelsize == 0.0f)
+  if (userdef->pixelsize == 0.0f) {
     userdef->pixelsize = 1.0f;
-
-  if (userdef->image_draw_method == 0)
-    userdef->image_draw_method = IMAGE_DRAW_METHOD_2DTEXTURE;
+  }
 
   for (bTheme *btheme = userdef->themes.first; btheme; btheme = btheme->next) {
     do_versions_theme(userdef, btheme);

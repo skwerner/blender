@@ -19,7 +19,7 @@
 # <pep8 compliant>
 
 from bpy.types import Header, Menu, Panel
-from .space_dopesheet import (
+from bl_ui.space_dopesheet import (
     DopesheetFilterPopoverBase,
     dopesheet_filter,
 )
@@ -34,8 +34,7 @@ class GRAPH_HT_header(Header):
 
         st = context.space_data
 
-        row = layout.row(align=True)
-        row.template_header()
+        layout.template_header()
 
         # Now a exposed as a sub-space type
         # layout.prop(st, "mode", text="")
@@ -54,9 +53,9 @@ class GRAPH_HT_header(Header):
 
         row = layout.row(align=True)
         if st.has_ghost_curves:
-            row.operator("graph.ghost_curves_clear", text="", icon='GHOST_DISABLED')
+            row.operator("graph.ghost_curves_clear", text="", icon='X')
         else:
-            row.operator("graph.ghost_curves_create", text="", icon='GHOST_ENABLED')
+            row.operator("graph.ghost_curves_create", text="", icon='FCURVE_SNAPSHOT')
 
         layout.popover(
             panel="GRAPH_PT_filters",
@@ -94,7 +93,7 @@ class GRAPH_MT_editor_menus(Menu):
     bl_idname = "GRAPH_MT_editor_menus"
     bl_label = ""
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         layout.menu("GRAPH_MT_view")
         layout.menu("GRAPH_MT_select")
@@ -111,7 +110,7 @@ class GRAPH_MT_view(Menu):
 
         st = context.space_data
 
-        layout.operator("graph.properties", icon='MENU_PANEL')
+        layout.prop(st, "show_region_ui")
         layout.separator()
 
         layout.prop(st, "use_realtime_update")
@@ -158,7 +157,7 @@ class GRAPH_MT_view(Menu):
 class GRAPH_MT_select(Menu):
     bl_label = "Select"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("graph.select_all", text="All").action = 'SELECT'
@@ -208,7 +207,7 @@ class GRAPH_MT_marker(Menu):
     def draw(self, context):
         layout = self.layout
 
-        from .space_time import marker_menu_generic
+        from bl_ui.space_time import marker_menu_generic
         marker_menu_generic(layout, context)
 
         # TODO: pose markers for action edit mode only?
@@ -258,7 +257,7 @@ class GRAPH_MT_channel(Menu):
 class GRAPH_MT_key(Menu):
     bl_label = "Key"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.menu("GRAPH_MT_key_transform", text="Transform")
@@ -300,7 +299,7 @@ class GRAPH_MT_key(Menu):
 class GRAPH_MT_key_transform(Menu):
     bl_label = "Transform"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("transform.translate", text="Move")
@@ -312,7 +311,7 @@ class GRAPH_MT_key_transform(Menu):
 class GRAPH_MT_delete(Menu):
     bl_label = "Delete"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("graph.delete")
@@ -326,15 +325,18 @@ class GRAPH_MT_delete(Menu):
 class GRAPH_MT_context_menu(Menu):
     bl_label = "F-Curve Context Menu"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
-        layout.operator("graph.copy", text="Copy")
-        layout.operator("graph.paste", text="Paste")
-        layout.operator("graph.paste", text="Paste Flipped").flipped = True
+        layout.operator_context = 'INVOKE_DEFAULT'
+
+        layout.operator("graph.copy", text="Copy", icon='COPYDOWN')
+        layout.operator("graph.paste", text="Paste", icon='PASTEDOWN')
+        layout.operator("graph.paste", text="Paste Flipped", icon='PASTEFLIPDOWN').flipped = True
 
         layout.separator()
 
+        layout.operator_menu_enum("graph.keyframe_type", "type", text="Keyframe Type")
         layout.operator_menu_enum("graph.handle_type", "type", text="Handle Type")
         layout.operator_menu_enum("graph.interpolation_type", "type", text="Interpolation Mode")
         layout.operator_menu_enum("graph.easing_type", "type", text="Easing Type")
@@ -343,6 +345,7 @@ class GRAPH_MT_context_menu(Menu):
 
         layout.operator("graph.keyframe_insert").type = 'SEL'
         layout.operator("graph.duplicate_move")
+        layout.operator_context = 'EXEC_REGION_WIN'
         layout.operator("graph.delete")
 
         layout.separator()
@@ -366,7 +369,7 @@ class GRAPH_MT_pivot_pie(Menu):
 class GRAPH_MT_snap_pie(Menu):
     bl_label = "Snap"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         pie = layout.menu_pie()
 

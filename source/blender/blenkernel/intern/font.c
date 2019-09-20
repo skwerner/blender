@@ -69,8 +69,9 @@ void BKE_vfont_free_data(struct VFont *vfont)
 
         while (che->nurbsbase.first) {
           Nurb *nu = che->nurbsbase.first;
-          if (nu->bezt)
+          if (nu->bezt) {
             MEM_freeN(nu->bezt);
+          }
           BLI_freelinkN(&che->nurbsbase, nu);
         }
 
@@ -85,7 +86,7 @@ void BKE_vfont_free_data(struct VFont *vfont)
   }
 
   if (vfont->temp_pf) {
-    freePackedFile(vfont->temp_pf); /* NULL when the font file can't be found on disk */
+    BKE_packedfile_free(vfont->temp_pf); /* NULL when the font file can't be found on disk */
     vfont->temp_pf = NULL;
   }
 }
@@ -96,7 +97,7 @@ void BKE_vfont_free(struct VFont *vf)
   BKE_vfont_free_data(vf);
 
   if (vf->packedfile) {
-    freePackedFile(vf->packedfile);
+    BKE_packedfile_free(vf->packedfile);
     vf->packedfile = NULL;
   }
 }
@@ -113,7 +114,7 @@ void BKE_vfont_copy_data(Main *UNUSED(bmain),
   vfont_dst->temp_pf = NULL;
 
   if (vfont_dst->packedfile) {
-    vfont_dst->packedfile = dupPackedFile(vfont_dst->packedfile);
+    vfont_dst->packedfile = BKE_packedfile_duplicate(vfont_dst->packedfile);
   }
 
   if (vfont_dst->data) {
@@ -147,7 +148,7 @@ static PackedFile *get_builtin_packedfile(void)
 
     memcpy(mem, builtin_font_data, builtin_font_size);
 
-    return newPackedFileMemory(mem, builtin_font_size);
+    return BKE_packedfile_new_from_memory(mem, builtin_font_size);
   }
 }
 
@@ -182,14 +183,15 @@ static VFontData *vfont_get_data(VFont *vfont)
 
         /* We need to copy a tmp font to memory unless it is already there */
         if (vfont->temp_pf == NULL) {
-          vfont->temp_pf = dupPackedFile(pf);
+          vfont->temp_pf = BKE_packedfile_duplicate(pf);
         }
       }
       else {
-        pf = newPackedFile(NULL, vfont->name, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
+        pf = BKE_packedfile_new(NULL, vfont->name, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
 
         if (vfont->temp_pf == NULL) {
-          vfont->temp_pf = newPackedFile(NULL, vfont->name, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
+          vfont->temp_pf = BKE_packedfile_new(
+              NULL, vfont->name, ID_BLEND_PATH_FROM_GLOBAL(&vfont->id));
         }
       }
       if (!pf) {
@@ -207,7 +209,7 @@ static VFontData *vfont_get_data(VFont *vfont)
     if (pf) {
       vfont->data = BLI_vfontdata_from_freetypefont(pf);
       if (pf != vfont->packedfile) {
-        freePackedFile(pf);
+        BKE_packedfile_free(pf);
       }
     }
 
@@ -233,7 +235,7 @@ void BKE_vfont_init(VFont *vfont)
     }
 
     /* Free the packed file */
-    freePackedFile(pf);
+    BKE_packedfile_free(pf);
   }
 }
 
@@ -252,7 +254,7 @@ VFont *BKE_vfont_load(Main *bmain, const char *filepath)
   }
   else {
     BLI_split_file_part(filepath, filename, sizeof(filename));
-    pf = newPackedFile(NULL, filepath, BKE_main_blendfile_path(bmain));
+    pf = BKE_packedfile_new(NULL, filepath, BKE_main_blendfile_path(bmain));
 
     is_builtin = false;
   }
@@ -278,13 +280,13 @@ VFont *BKE_vfont_load(Main *bmain, const char *filepath)
 
       /* Do not add FO_BUILTIN_NAME to temporary listbase */
       if (!STREQ(filename, FO_BUILTIN_NAME)) {
-        vfont->temp_pf = newPackedFile(NULL, filepath, BKE_main_blendfile_path(bmain));
+        vfont->temp_pf = BKE_packedfile_new(NULL, filepath, BKE_main_blendfile_path(bmain));
       }
     }
 
     /* Free the packed file */
     if (!vfont || vfont->packedfile != pf) {
-      freePackedFile(pf);
+      BKE_packedfile_free(pf);
     }
   }
 
@@ -306,14 +308,16 @@ VFont *BKE_vfont_load_exists_ex(struct Main *bmain, const char *filepath, bool *
 
     if (BLI_path_cmp(strtest, str) == 0) {
       id_us_plus(&vfont->id); /* officially should not, it doesn't link here! */
-      if (r_exists)
+      if (r_exists) {
         *r_exists = true;
+      }
       return vfont;
     }
   }
 
-  if (r_exists)
+  if (r_exists) {
     *r_exists = false;
+  }
   return BKE_vfont_load(bmain, filepath);
 }
 
@@ -377,8 +381,9 @@ static void build_underline(Curve *cu,
   nu2->knotsu = nu2->knotsv = NULL;
   nu2->flag = CU_2D;
   nu2->charidx = charidx + 1000;
-  if (mat_nr > 0)
+  if (mat_nr > 0) {
     nu2->mat_nr = mat_nr - 1;
+  }
   nu2->pntsu = 4;
   nu2->pntsv = 1;
   nu2->orderu = 4;
@@ -444,8 +449,9 @@ static void buildchar(Curve *cu,
   int i;
 
   vfd = vfont_get_data(which_vfont(cu, info));
-  if (!vfd)
+  if (!vfd) {
     return;
+  }
 
   /* make a copy at distance ofsx, ofsy with shear */
   shear = cu->shear;
@@ -455,16 +461,18 @@ static void buildchar(Curve *cu,
   che = find_vfont_char(vfd, character);
 
   /* Select the glyph data */
-  if (che)
+  if (che) {
     nu1 = che->nurbsbase.first;
+  }
 
   /* Create the character */
   while (nu1) {
     bezt1 = nu1->bezt;
     if (bezt1) {
       nu2 = (Nurb *)MEM_mallocN(sizeof(Nurb), "duplichar_nurb");
-      if (nu2 == NULL)
+      if (nu2 == NULL) {
         break;
+      }
       memcpy(nu2, nu1, sizeof(struct Nurb));
       nu2->resolu = cu->resolu;
       nu2->bp = NULL;
@@ -558,8 +566,9 @@ int BKE_vfont_select_get(Object *ob, int *r_start, int *r_end)
   EditFont *ef = cu->editfont;
   int start, end, direction;
 
-  if ((ob->type != OB_FONT) || (ef == NULL))
+  if ((ob->type != OB_FONT) || (ef == NULL)) {
     return 0;
+  }
 
   BLI_assert(ef->len >= 0);
   BLI_assert(ef->selstart >= 0 && ef->selstart <= ef->len + 1);
@@ -666,10 +675,11 @@ enum {
  * Descent: the recommended distance below the baseline to fit most characters.
  *
  * We obtain ascent and descent from the font itself (FT_Face->ascender / face->height).
- * And in some cases it is even the same value as FT_Face->bbox.yMax/yMin (font top and bottom respectively).
+ * And in some cases it is even the same value as FT_Face->bbox.yMax/yMin
+ * (font top and bottom respectively).
  *
  * The em_height here is relative to FT_Face->bbox.
-*/
+ */
 #define ASCENT(vfd) ((vfd)->ascender * (vfd)->em_height)
 #define DESCENT(vfd) ((vfd)->em_height - ASCENT(vfd))
 
@@ -726,16 +736,19 @@ static bool vfont_to_curve(Object *ob,
   /* Set font data */
   vfont = cu->vfont;
 
-  if (cu->str == NULL)
+  if (cu->str == NULL) {
     return ok;
-  if (vfont == NULL)
+  }
+  if (vfont == NULL) {
     return ok;
+  }
 
   vfd = vfont_get_data(vfont);
 
   /* The VFont Data can not be found */
-  if (!vfd)
+  if (!vfd) {
     return ok;
+  }
 
   if (ef) {
     slen = ef->len;
@@ -765,12 +778,14 @@ static bool vfont_to_curve(Object *ob,
     mem = mem_tmp;
   }
 
-  if (cu->tb == NULL)
+  if (cu->tb == NULL) {
     cu->tb = MEM_calloc_arrayN(MAXTEXTBOX, sizeof(TextBox), "TextBox compat");
+  }
 
   if (ef != NULL && ob != NULL) {
-    if (ef->selboxes)
+    if (ef->selboxes) {
       MEM_freeN(ef->selboxes);
+    }
 
     if (BKE_vfont_select_get(ob, &selstart, &selend)) {
       ef->selboxes_len = (selend - selstart) + 1;
@@ -821,8 +836,9 @@ static bool vfont_to_curve(Object *ob,
 
     vfont = which_vfont(cu, info);
 
-    if (vfont == NULL)
+    if (vfont == NULL) {
       break;
+    }
 
     if (vfont != oldvfont) {
       vfd = vfont_get_data(vfont);
@@ -876,10 +892,12 @@ static bool vfont_to_curve(Object *ob,
         if (mem[j] == ' ' || mem[j] == '-') {
           ct -= (i - (j - 1));
           cnr -= (i - (j - 1));
-          if (mem[j] == ' ')
+          if (mem[j] == ' ') {
             wsnr--;
-          if (mem[j] == '-')
+          }
+          if (mem[j] == '-') {
             wsnr++;
+          }
           i = j - 1;
           xof = ct->xof;
           ct[1].dobreak = 1;
@@ -948,10 +966,12 @@ static bool vfont_to_curve(Object *ob,
 
       /* XXX, has been unused for years, need to check if this is useful, r4613 r5282 - campbell */
 #if 0
-      if (ascii == '\n')
+      if (ascii == '\n') {
         xof = xof_scale;
-      else
+      }
+      else {
         xof = MARGIN_X_MIN;
+      }
 #else
       xof = MARGIN_X_MIN;
 #endif
@@ -1013,8 +1033,9 @@ static bool vfont_to_curve(Object *ob,
   for (i = 0; i <= slen; i++) {
     ascii = mem[i];
     ct = &chartransdata[i];
-    if (ascii == '\n' || ct->dobreak)
+    if (ascii == '\n' || ct->dobreak) {
       cu->lines++;
+    }
   }
 
   /* linedata is now: width of line */
@@ -1085,8 +1106,9 @@ static bool vfont_to_curve(Object *ob,
           }
           ct->xof += curofs;
         }
-        if (mem[i] == '\n' || chartransdata[i].dobreak)
+        if (mem[i] == '\n' || chartransdata[i].dobreak) {
           curofs = 0;
+        }
         ct++;
       }
     }
@@ -1198,14 +1220,18 @@ static bool vfont_to_curve(Object *ob,
       maxx = maxy = -1.0e20f;
       ct = chartransdata;
       for (i = 0; i <= slen; i++, ct++) {
-        if (minx > ct->xof)
+        if (minx > ct->xof) {
           minx = ct->xof;
-        if (maxx < ct->xof)
+        }
+        if (maxx < ct->xof) {
           maxx = ct->xof;
-        if (miny > ct->yof)
+        }
+        if (miny > ct->yof) {
           miny = ct->yof;
-        if (maxy < ct->yof)
+        }
+        if (maxy < ct->yof) {
           maxy = ct->yof;
+        }
       }
 
       /* we put the x-coordinaat exact at the curve, the y is rotated */
@@ -1383,12 +1409,14 @@ static bool vfont_to_curve(Object *ob,
       }
 
       if (ob == NULL || info->mat_nr > (ob->totcol)) {
-        /* CLOG_ERROR(&LOG, "Illegal material index (%d) in text object, setting to 0", info->mat_nr); */
+        // CLOG_ERROR(
+        //     &LOG, "Illegal material index (%d) in text object, setting to 0", info->mat_nr);
         info->mat_nr = 0;
       }
       /* We do not want to see any character for \n or \r */
-      if (cha != '\n')
+      if (cha != '\n') {
         buildchar(cu, r_nubase, cha, info, ct->xof, ct->yof, ct->rot, i, font_size);
+      }
 
       if ((info->flag & CU_CHINFO_UNDERLINE) && (cha != '\n')) {
         float ulwidth, uloverlap = 0.0f;
@@ -1602,7 +1630,8 @@ bool BKE_vfont_to_curve_nubase(Object *ob, int mode, ListBase *r_nubase)
   return BKE_vfont_to_curve_ex(ob, ob->data, mode, r_nubase, NULL, NULL, NULL, NULL);
 }
 
-/** Warning: expects to have access to evaluated data (i.e. passed object should be evaluated one...). */
+/** Warning: expects to have access to evaluated data
+ * (i.e. passed object should be evaluated one...). */
 bool BKE_vfont_to_curve(Object *ob, int mode)
 {
   Curve *cu = ob->data;

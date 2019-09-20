@@ -392,7 +392,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 
   /* Is the camera already inside of a heterogenous shader? */
   for (int i = 0;
-       state.volume_stack[i].shader != SHADER_NONE && i < (volume_stack_size(&state) - 1);
+       state.volume_stack[i].shader != SHADER_NONE && i < (VOLUME_STACK_SIZE - 1);
        ++i) {
     if (volume_stack_is_heterogeneous(kg, state.volume_stack)) {
       ++volumes_entered;

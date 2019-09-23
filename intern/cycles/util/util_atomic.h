@@ -111,6 +111,12 @@ ccl_device_inline float atomic_compare_and_swap_float(volatile float *dest,
 
 #  endif /* __KERNEL_CUDA__ */
 
+#  ifdef __KERNEL_METAL__
+
+#    define atomic_add_and_fetch_float(p, x) (atomic_fetch_add_explicit((p), (float)(x), memory_order_relaxed) + (float)(x))
+
+#  endif
+
 #endif /* __KERNEL_GPU__ */
 
 #endif /* __UTIL_ATOMIC_H__ */

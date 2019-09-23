@@ -133,7 +133,7 @@ ccl_device_inline float4 svm_image_texture_read_3d(KernelGlobals *kg, int id, in
   return svm_image_texture_read(kg, info, id, offset);
 }
 
-ccl_device_inline float svm_image_texture_frac(float x, int *ix)
+ccl_device_inline float svm_image_texture_frac(float x, ccl_pointer int *ix)
 {
   int i = float_to_int(x) - ((x < 0.0f) ? 1 : 0);
   *ix = i;

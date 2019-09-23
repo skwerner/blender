@@ -17,7 +17,7 @@
 #ifndef __UTIL_TYPES_H__
 #define __UTIL_TYPES_H__
 
-#ifndef __KERNEL_OPENCL__
+#if !defined(__KERNEL_OPENCL__) && !defined(__KERNEL_METAL__)
 #  include <stdlib.h>
 #endif
 

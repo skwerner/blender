@@ -25,7 +25,7 @@ CCL_NAMESPACE_BEGIN
  * co is filled with (x, y, dx, dy).
  */
 ccl_device_inline bool get_nlm_coords_window(
-    int w, int h, int r, int stride, int4 *rect, int4 *co, int *ofs, int4 window)
+    int w, int h, int r, int stride, ccl_pointer int4 *rect, ccl_pointer int4 *co, ccl_pointer int *ofs, int4 window)
 {
   /* Determine the pixel offset that this thread should apply. */
   int s = 2 * r + 1;

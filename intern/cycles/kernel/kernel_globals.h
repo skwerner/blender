@@ -210,7 +210,7 @@ ccl_device_inline void kernel_set_buffer_info(KernelGlobals *kg)
 
 /* Interpolated lookup table access */
 
-ccl_device float lookup_table_read(KernelGlobals *kg, float x, int offset, int size)
+ccl_device float lookup_table_read(ccl_pointer KernelGlobals *kg, float x, int offset, int size)
 {
   x = saturate(x) * (size - 1);
 

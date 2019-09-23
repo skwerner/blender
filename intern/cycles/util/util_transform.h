@@ -53,7 +53,7 @@ typedef struct DecomposedTransform {
 
 /* Functions */
 
-ccl_device_inline float3 transform_point(const Transform *t, const float3 a)
+ccl_device_inline float3 transform_point(ccl_pointer const Transform *t, const float3 a)
 {
   /* TODO(sergey): Disabled for now, causes crashes in certain cases. */
 #if defined(__KERNEL_SSE__) && defined(__KERNEL_SSE2__)
@@ -82,7 +82,7 @@ ccl_device_inline float3 transform_point(const Transform *t, const float3 a)
 #endif
 }
 
-ccl_device_inline float3 transform_direction(const Transform *t, const float3 a)
+ccl_device_inline float3 transform_direction(ccl_pointer const Transform *t, const float3 a)
 {
 #if defined(__KERNEL_SSE__) && defined(__KERNEL_SSE2__)
   ssef x, y, z, w, aa;
@@ -108,7 +108,7 @@ ccl_device_inline float3 transform_direction(const Transform *t, const float3 a)
 #endif
 }
 
-ccl_device_inline float3 transform_direction_transposed(const Transform *t, const float3 a)
+ccl_device_inline float3 transform_direction_transposed(ccl_pointer const Transform *t, const float3 a)
 {
   float3 x = make_float3(t->x.x, t->y.x, t->z.x);
   float3 y = make_float3(t->x.y, t->y.y, t->z.y);
@@ -403,7 +403,7 @@ ccl_device_inline Transform transform_quick_inverse(Transform M)
   return R;
 }
 
-ccl_device_inline void transform_compose(Transform *tfm, const DecomposedTransform *decomp)
+ccl_device_inline void transform_compose(ccl_pointer Transform *tfm, ccl_pointer const DecomposedTransform *decomp)
 {
   /* rotation */
   float q0, q1, q2, q3, qda, qdb, qdc, qaa, qab, qac, qbb, qbc, qcc;
@@ -442,7 +442,7 @@ ccl_device_inline void transform_compose(Transform *tfm, const DecomposedTransfo
 }
 
 /* Interpolate from array of decomposed transforms. */
-ccl_device void transform_motion_array_interpolate(Transform *tfm,
+ccl_device void transform_motion_array_interpolate(ccl_pointer Transform *tfm,
                                                    const ccl_global DecomposedTransform *motion,
                                                    uint numsteps,
                                                    float time)

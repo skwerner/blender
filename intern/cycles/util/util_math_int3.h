@@ -27,7 +27,7 @@ CCL_NAMESPACE_BEGIN
  * Declaration.
  */
 
-#ifndef __KERNEL_OPENCL__
+#if !defined(__KERNEL_OPENCL__) && !defined(__KERNEL_METAL__)
 ccl_device_inline int3 min(int3 a, int3 b);
 ccl_device_inline int3 max(int3 a, int3 b);
 ccl_device_inline int3 clamp(const int3 &a, int mn, int mx);
@@ -38,7 +38,7 @@ ccl_device_inline int3 clamp(const int3 &a, int3 &mn, int mx);
  * Definition.
  */
 
-#ifndef __KERNEL_OPENCL__
+#if !defined(__KERNEL_OPENCL__) && !defined(__KERNEL_METAL__)
 ccl_device_inline int3 min(int3 a, int3 b)
 {
 #  if defined(__KERNEL_SSE__) && defined(__KERNEL_SSE41__)

@@ -19,7 +19,7 @@ CCL_NAMESPACE_BEGIN
 #ifdef __BAKING__
 
 ccl_device_inline void compute_light_pass(
-    KernelGlobals *kg, ShaderData *sd, PathRadiance *L, uint rng_hash, int pass_filter, int sample)
+    ccl_pointer KernelGlobals *kg, ccl_pointer ShaderData *sd, ccl_pointer PathRadiance *L, uint rng_hash, int pass_filter, int sample)
 {
   kernel_assert(kernel_data.film.use_light_pass);
 
@@ -167,8 +167,8 @@ ccl_device_inline float bake_clamp_mirror_repeat(float u, float max)
   return ((((int)fu) & 1) ? 1.0f - u : u) * max;
 }
 
-ccl_device_inline float3 kernel_bake_shader_bsdf(KernelGlobals *kg,
-                                                 ShaderData *sd,
+ccl_device_inline float3 kernel_bake_shader_bsdf(ccl_pointer KernelGlobals *kg,
+                                                 ccl_pointer ShaderData *sd,
                                                  const ShaderEvalType type)
 {
   switch (type) {
@@ -188,9 +188,9 @@ ccl_device_inline float3 kernel_bake_shader_bsdf(KernelGlobals *kg,
   }
 }
 
-ccl_device float3 kernel_bake_evaluate_direct_indirect(KernelGlobals *kg,
-                                                       ShaderData *sd,
-                                                       PathState *state,
+ccl_device float3 kernel_bake_evaluate_direct_indirect(ccl_pointer KernelGlobals *kg,
+                                                       ccl_pointer ShaderData *sd,
+                                                       ccl_pointer PathState *state,
                                                        float3 direct,
                                                        float3 indirect,
                                                        const ShaderEvalType type,
@@ -229,7 +229,7 @@ ccl_device float3 kernel_bake_evaluate_direct_indirect(KernelGlobals *kg,
   return out;
 }
 
-ccl_device void kernel_bake_evaluate(KernelGlobals *kg,
+ccl_device void kernel_bake_evaluate(ccl_pointer KernelGlobals *kg,
                                      ccl_global uint4 *input,
                                      ccl_global float4 *output,
                                      ShaderEvalType type,

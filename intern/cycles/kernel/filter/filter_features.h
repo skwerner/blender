@@ -37,9 +37,9 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device_inline void filter_get_features(int3 pixel,
                                            const ccl_global float *ccl_restrict buffer,
-                                           float *features,
+                                           ccl_pointer float *features,
                                            bool use_time,
-                                           const float *ccl_restrict mean,
+                                           ccl_pointer const float *ccl_restrict mean,
                                            int pass_stride)
 {
   features[0] = pixel.x;
@@ -64,9 +64,9 @@ ccl_device_inline void filter_get_features(int3 pixel,
 
 ccl_device_inline void filter_get_feature_scales(int3 pixel,
                                                  const ccl_global float *ccl_restrict buffer,
-                                                 float *scales,
+                                                 ccl_pointer float *scales,
                                                  bool use_time,
-                                                 const float *ccl_restrict mean,
+                                                 ccl_pointer const float *ccl_restrict mean,
                                                  int pass_stride)
 {
   scales[0] = fabsf(pixel.x - mean[0]);
@@ -84,7 +84,7 @@ ccl_device_inline void filter_get_feature_scales(int3 pixel,
   }
 }
 
-ccl_device_inline void filter_calculate_scale(float *scale, bool use_time)
+ccl_device_inline void filter_calculate_scale(ccl_pointer float *scale, bool use_time)
 {
   scale[0] = 1.0f / max(scale[0], 0.01f);
   scale[1] = 1.0f / max(scale[1], 0.01f);
@@ -104,7 +104,7 @@ ccl_device_inline float3 filter_get_color(const ccl_global float *ccl_restrict b
       ccl_get_feature(buffer, 8), ccl_get_feature(buffer, 9), ccl_get_feature(buffer, 10));
 }
 
-ccl_device_inline void design_row_add(float *design_row,
+ccl_device_inline void design_row_add(ccl_pointer float *design_row,
                                       int rank,
                                       const ccl_global float *ccl_restrict transform,
                                       int stride,
@@ -125,7 +125,7 @@ ccl_device_inline void filter_get_design_row_transform(
     const ccl_global float *ccl_restrict q_buffer,
     int pass_stride,
     int rank,
-    float *design_row,
+    ccl_pointer float *design_row,
     const ccl_global float *ccl_restrict transform,
     int stride,
     bool use_time)

@@ -33,7 +33,7 @@ typedef struct TileInfo {
   int frames[DENOISE_MAX_FRAMES];
   int num_frames;
   /* TODO(lukas): CUDA doesn't have uint64_t... */
-#ifdef __KERNEL_OPENCL__
+#if defined(__KERNEL_OPENCL__) || defined(__KERNEL_METAL__)
   ccl_global float *buffers[9];
 #else
   long long int buffers[9];
@@ -62,10 +62,10 @@ typedef struct TileInfo {
                                              id == 6 ? tile_buffer_7 : \
                                                        id == 7 ? tile_buffer_8 : tile_buffer_9)
 #else
-#  ifdef __KERNEL_CUDA__
+#  if defined(__KERNEL_CUDA__) || defined(__KERNEL_METAL__)
 #    define CCL_FILTER_TILE_INFO ccl_global TileInfo *tile_info
 #  else
-#    define CCL_FILTER_TILE_INFO TileInfo *tile_info
+#    define CCL_FILTER_TILE_INFO  TileInfo *tile_info
 #  endif
 #  define ccl_get_tile_buffer(id) (tile_info->buffers[id])
 #endif

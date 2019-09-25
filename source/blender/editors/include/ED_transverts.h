@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_transverts.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_TRANSVERTS_H__
@@ -56,7 +49,7 @@ bool ED_transverts_poll(struct bContext *C);
 enum {
 	TM_INDEX_ON      =  1,  /* tag to make trans verts */
 	TM_INDEX_OFF     =  0,  /* don't make verts */
-	TM_INDEX_SKIP    = -1   /* dont make verts (when the index values point to trans-verts) */
+	TM_INDEX_SKIP    = -1,  /* dont make verts (when the index values point to trans-verts) */
 };
 
 /* mode flags: */

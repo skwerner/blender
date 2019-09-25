@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2016, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file draw_common.h
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #ifndef __DRAW_COMMON_H__
@@ -38,16 +32,6 @@ struct Object;
 struct PTCacheEdit;
 struct ParticleSystem;
 struct ViewLayer;
-
-/**
- * Support selecting shaders with different options compiled in.
- * Needed for clipping support because it means using a separate set of shaders.
- */
-typedef enum eDRW_ShaderSlot {
-	DRW_SHADER_SLOT_DEFAULT = 0,
-	DRW_SHADER_SLOT_CLIPPED = 1,
-} eDRW_ShaderSlot;
-#define DRW_SHADER_SLOT_LEN 2
 
 #define UBO_FIRST_COLOR colorWire
 #define UBO_LAST_COLOR colorGridAxisZ
@@ -66,7 +50,7 @@ typedef struct GlobalsUboStorage {
 	float colorLibrarySelect[4];
 	float colorLibrary[4];
 	float colorTransform[4];
-	float colorLamp[4];
+	float colorLight[4];
 	float colorSpeaker[4];
 	float colorCamera[4];
 	float colorEmpty[4];
@@ -92,7 +76,7 @@ typedef struct GlobalsUboStorage {
 
 	float colorDeselect[4];
 	float colorOutline[4];
-	float colorLampNoAlpha[4];
+	float colorLightNoAlpha[4];
 
 	float colorBackground[4];
 	float colorEditMeshMiddle[4];
@@ -126,7 +110,7 @@ typedef struct GlobalsUboStorage {
 	/* NOTE! Put all color before UBO_LAST_COLOR */
 
 	/* Pack individual float at the end of the buffer to avoid alignment errors */
-	float sizeLampCenter, sizeLampCircle, sizeLampCircleShadow;
+	float sizeLightCenter, sizeLightCircle, sizeLightCircleShadow;
 	float sizeVertex, sizeEdge, sizeEdgeFix, sizeFaceDot;
 	float gridDistance, gridResolution, gridSubdivisions, gridScale;
 
@@ -140,33 +124,33 @@ void DRW_globals_free(void);
 
 void DRW_shgroup_world_clip_planes_from_rv3d(struct DRWShadingGroup *shgrp, const RegionView3D *rv3d);
 
-struct DRWShadingGroup *shgroup_dynlines_flat_color(struct DRWPass *pass);
-struct DRWShadingGroup *shgroup_dynlines_dashed_uniform_color(struct DRWPass *pass, const float color[4]);
-struct DRWShadingGroup *shgroup_dynpoints_uniform_color(struct DRWPass *pass, const float color[4], const float *size, eDRW_ShaderSlot shader_slot);
-struct DRWShadingGroup *shgroup_groundlines_uniform_color(struct DRWPass *pass, const float color[4], eDRW_ShaderSlot shader_slot);
-struct DRWShadingGroup *shgroup_groundpoints_uniform_color(struct DRWPass *pass, const float color[4], eDRW_ShaderSlot shader_slot);
-struct DRWShadingGroup *shgroup_instance_screenspace(struct DRWPass *pass, struct GPUBatch *geom, const float *size, eDRW_ShaderSlot shader_slot);
+struct DRWShadingGroup *shgroup_dynlines_flat_color(struct DRWPass *pass, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_dynlines_dashed_uniform_color(struct DRWPass *pass, const float color[4], eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_dynpoints_uniform_color(struct DRWPass *pass, const float color[4], const float *size, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_groundlines_uniform_color(struct DRWPass *pass, const float color[4], eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_groundpoints_uniform_color(struct DRWPass *pass, const float color[4], eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_screenspace(struct DRWPass *pass, struct GPUBatch *geom, const float *size, eGPUShaderConfig sh_cfg);
 struct DRWShadingGroup *shgroup_instance_solid(struct DRWPass *pass, struct GPUBatch *geom);
 struct DRWShadingGroup *shgroup_instance_wire(struct DRWPass *pass, struct GPUBatch *geom);
-struct DRWShadingGroup *shgroup_instance_screen_aligned(struct DRWPass *pass, struct GPUBatch *geom, eDRW_ShaderSlot shader_slot);
-struct DRWShadingGroup *shgroup_instance_empty_axes(struct DRWPass *pass, struct GPUBatch *geom, eDRW_ShaderSlot shader_slot);
-struct DRWShadingGroup *shgroup_instance_scaled(struct DRWPass *pass, struct GPUBatch *geom, eDRW_ShaderSlot shader_slot);
-struct DRWShadingGroup *shgroup_instance(struct DRWPass *pass, struct GPUBatch *geom, eDRW_ShaderSlot shader_slot);
-struct DRWShadingGroup *shgroup_instance_alpha(struct DRWPass *pass, struct GPUBatch *geom, eDRW_ShaderSlot shader_slot);
+struct DRWShadingGroup *shgroup_instance_screen_aligned(struct DRWPass *pass, struct GPUBatch *geom, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_empty_axes(struct DRWPass *pass, struct GPUBatch *geom, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_scaled(struct DRWPass *pass, struct GPUBatch *geom, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance(struct DRWPass *pass, struct GPUBatch *geom, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_alpha(struct DRWPass *pass, struct GPUBatch *geom, eGPUShaderConfig sh_cfg);
 struct DRWShadingGroup *shgroup_instance_outline(struct DRWPass *pass, struct GPUBatch *geom, int *baseid);
-struct DRWShadingGroup *shgroup_camera_instance(struct DRWPass *pass, struct GPUBatch *geom, eDRW_ShaderSlot shader_slot);
-struct DRWShadingGroup *shgroup_distance_lines_instance(struct DRWPass *pass, struct GPUBatch *geom, eDRW_ShaderSlot shader_slot);
-struct DRWShadingGroup *shgroup_spot_instance(struct DRWPass *pass, struct GPUBatch *geom, eDRW_ShaderSlot shader_slot);
-struct DRWShadingGroup *shgroup_instance_mball_handles(struct DRWPass *pass);
-struct DRWShadingGroup *shgroup_instance_bone_axes(struct DRWPass *pass);
-struct DRWShadingGroup *shgroup_instance_bone_envelope_distance(struct DRWPass *pass);
-struct DRWShadingGroup *shgroup_instance_bone_envelope_outline(struct DRWPass *pass);
-struct DRWShadingGroup *shgroup_instance_bone_envelope_solid(struct DRWPass *pass, bool transp);
-struct DRWShadingGroup *shgroup_instance_bone_shape_outline(struct DRWPass *pass, struct GPUBatch *geom);
-struct DRWShadingGroup *shgroup_instance_bone_shape_solid(struct DRWPass *pass, struct GPUBatch *geom, bool transp);
-struct DRWShadingGroup *shgroup_instance_bone_sphere_outline(struct DRWPass *pass);
-struct DRWShadingGroup *shgroup_instance_bone_sphere_solid(struct DRWPass *pass, bool transp);
-struct DRWShadingGroup *shgroup_instance_bone_stick(struct DRWPass *pass);
+struct DRWShadingGroup *shgroup_camera_instance(struct DRWPass *pass, struct GPUBatch *geom, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_distance_lines_instance(struct DRWPass *pass, struct GPUBatch *geom, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_spot_instance(struct DRWPass *pass, struct GPUBatch *geom, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_mball_handles(struct DRWPass *pass, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_bone_axes(struct DRWPass *pass, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_bone_envelope_distance(struct DRWPass *pass, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_bone_envelope_outline(struct DRWPass *pass, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_bone_envelope_solid(struct DRWPass *pass, bool transp, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_bone_shape_outline(struct DRWPass *pass, struct GPUBatch *geom, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_bone_shape_solid(struct DRWPass *pass, struct GPUBatch *geom, bool transp, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_bone_sphere_outline(struct DRWPass *pass, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_bone_sphere_solid(struct DRWPass *pass, bool transp, eGPUShaderConfig sh_cfg);
+struct DRWShadingGroup *shgroup_instance_bone_stick(struct DRWPass *pass, eGPUShaderConfig sh_cfg);
 struct DRWShadingGroup *shgroup_instance_bone_dof(struct DRWPass *pass, struct GPUBatch *geom);
 
 struct GPUShader *mpath_line_shader_get(void);
@@ -191,7 +175,7 @@ typedef struct DRWArmaturePasses {
 	struct DRWPass *relationship_lines;
 } DRWArmaturePasses;
 
-void DRW_shgroup_armature_object(struct Object *ob, struct ViewLayer *view_layer, struct DRWArmaturePasses passes);
+void DRW_shgroup_armature_object(struct Object *ob, struct ViewLayer *view_layer, struct DRWArmaturePasses passes, bool transp);
 void DRW_shgroup_armature_pose(struct Object *ob, struct DRWArmaturePasses passes, bool transp);
 void DRW_shgroup_armature_edit(struct Object *ob, struct DRWArmaturePasses passes, bool transp);
 
@@ -228,6 +212,8 @@ struct DRW_Global {
 
 	struct GPUTexture *ramp;
 	struct GPUTexture *weight_ramp;
+
+	struct GPUUniformBuffer *view_ubo;
 };
 extern struct DRW_Global G_draw;
 

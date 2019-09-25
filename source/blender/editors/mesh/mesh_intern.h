@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mesh/mesh_intern.h
- *  \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  */
 
 /* Internal for editmesh_xxxx.c functions */
@@ -97,6 +89,7 @@ void MESH_OT_primitive_cube_add_gizmo(struct wmOperatorType *ot);
 
 /* *** editmesh_bevel.c *** */
 void MESH_OT_bevel(struct wmOperatorType *ot);
+struct wmKeyMap *bevel_modal_keymap(struct wmKeyConfig *keyconf);
 
 /* *** editmesh_bisect.c *** */
 void MESH_OT_bisect(struct wmOperatorType *ot);

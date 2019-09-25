@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_region_menu_pie.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * Pie Menu Region
  */
@@ -81,8 +75,9 @@ static uiBlock *ui_block_func_PIE(bContext *UNUSED(C), uiPopupBlockHandle *handl
 
 	/* in some cases we create the block before the region,
 	 * so we set it delayed here if necessary */
-	if (BLI_findindex(&handle->region->uiblocks, block) == -1)
+	if (BLI_findindex(&handle->region->uiblocks, block) == -1) {
 		UI_block_region_set(block, handle->region);
+	}
 
 	UI_block_layout_resolve(block, &width, &height);
 
@@ -91,8 +86,8 @@ static uiBlock *ui_block_func_PIE(bContext *UNUSED(C), uiPopupBlockHandle *handl
 
 	block->minbounds = minwidth;
 	block->bounds = 1;
-	block->mx = 0;
-	block->my = 0;
+	block->bounds_offset[0] = 0;
+	block->bounds_offset[1] = 0;
 	block->bounds_type = UI_BLOCK_BOUNDS_PIE_CENTER;
 
 	block->pie_data.pie_center_spawned[0] = pie->mx;
@@ -140,8 +135,9 @@ uiPieMenu *UI_pie_menu_begin(struct bContext *C, const char *title, int icon, co
 				event_type = EVENT_NONE;
 				pie->block_radial->pie_data.flags |= UI_PIE_CLICK_STYLE;
 			}
-			else
+			else {
 				event_type = win->last_pie_event;
+			}
 		}
 		else {
 			event_type = event->type;

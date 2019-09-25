@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_gpu_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_GPU_TYPES_H__
@@ -53,7 +45,7 @@ typedef struct GPUSSAOSettings {
 	float attenuation;
 	/** Ray samples, we use presets here for easy control instead of. */
 	int samples;
-	int pad;
+	char _pad[4];
 } GPUSSAOSettings;
 
 typedef struct GPUFXSettings {
@@ -61,7 +53,7 @@ typedef struct GPUFXSettings {
 	GPUSSAOSettings *ssao;
 	/** #eGPUFXFlags. */
 	char fx_flag;
-	char pad[7];
+	char _pad[7];
 } GPUFXSettings;
 
 /* shaderfx enables */

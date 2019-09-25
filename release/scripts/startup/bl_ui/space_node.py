@@ -21,15 +21,21 @@ import bpy
 import nodeitems_utils
 from bpy.types import Header, Menu, Panel
 from bpy.app.translations import pgettext_iface as iface_
-from bl_operators.presets import PresetMenu
+from bl_ui.utils import PresetPanel
 from .properties_grease_pencil_common import (
-    AnnotationDrawingToolsPanel,
     AnnotationDataPanel,
     GreasePencilToolsPanel,
 )
 from .properties_material import (
     EEVEE_MATERIAL_PT_settings,
     MATERIAL_PT_viewport
+)
+from .properties_world import (
+    WORLD_PT_viewport_display
+)
+from .properties_data_light import (
+    DATA_PT_light,
+    DATA_PT_EEVEE_light,
 )
 
 
@@ -56,26 +62,36 @@ class NODE_HT_header(Header):
 
             ob = context.object
             if snode.shader_type == 'OBJECT' and ob:
+                ob_type = ob.type
 
                 NODE_MT_editor_menus.draw_collapsible(context, layout)
 
-                # No shader nodes for Eevee lamps
-                if snode_id and not (context.engine == 'BLENDER_EEVEE' and ob.type == 'LIGHT'):
+                # No shader nodes for Eevee lights
+                if snode_id and not (context.engine == 'BLENDER_EEVEE' and ob_type == 'LIGHT'):
                     row = layout.row()
                     row.prop(snode_id, "use_nodes")
 
                 layout.separator_spacer()
 
-                row = layout.row()
                 types_that_support_material = {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META', 'GPENCIL'}
                 # disable material slot buttons when pinned, cannot find correct slot within id_from (#36589)
                 # disable also when the selected object does not support materials
-                row.enabled = not snode.pin and ob.type in types_that_support_material
+                has_material_slots = not snode.pin and ob_type in types_that_support_material
+
+                if ob_type != 'LIGHT':
+                    row = layout.row()
+                    row.enabled = has_material_slots
+                    row.ui_units_x = 4
+                    row.popover(panel="NODE_PT_material_slots")
+
+                row = layout.row()
+                row.enabled = has_material_slots
+
                 # Show material.new when no active ID/slot exists
-                if not id_from and ob.type in types_that_support_material:
+                if not id_from and ob_type in types_that_support_material:
                     row.template_ID(ob, "active_material", new="material.new")
                 # Material ID, but not for Lights
-                if id_from and ob.type != 'LIGHT':
+                if id_from and ob_type != 'LIGHT':
                     row.template_ID(id_from, "active_material", new="material.new")
 
             if snode.shader_type == 'WORLD':
@@ -304,7 +320,44 @@ class NODE_MT_node(Menu):
         layout.operator("node.read_viewlayers")
 
 
-class NODE_PT_node_color_presets(PresetMenu):
+class NODE_PT_material_slots(Panel):
+    bl_space_type = "NODE_EDITOR"
+    bl_region_type = 'HEADER'
+    bl_label = "Slot"
+    bl_ui_units_x = 8
+
+    def draw_header(self, context):
+        ob = context.object
+        self.bl_label = (
+            "Slot " + str(ob.active_material_index + 1) if ob.material_slots else
+            "Slot"
+        )
+
+    # Duplicate part of 'EEVEE_MATERIAL_PT_context_material'.
+    def draw(self, context):
+        layout = self.layout
+        row = layout.row()
+        col = row.column()
+
+        ob = context.object
+        col.template_list("MATERIAL_UL_matslots", "", ob, "material_slots", ob, "active_material_index")
+
+        col = row.column(align=True)
+        col.operator("object.material_slot_add", icon='ADD', text="")
+        col.operator("object.material_slot_remove", icon='REMOVE', text="")
+
+        col.separator()
+
+        col.menu("MATERIAL_MT_context_menu", icon='DOWNARROW_HLT', text="")
+
+        if len(ob.material_slots) > 1:
+            col.separator()
+
+            col.operator("object.material_slot_move", icon='TRIA_UP', text="").direction = 'UP'
+            col.operator("object.material_slot_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
+
+
+class NODE_PT_node_color_presets(PresetPanel, Panel):
     """Predefined node color"""
     bl_label = "Color Presets"
     preset_subdir = "node_color"
@@ -312,7 +365,7 @@ class NODE_PT_node_color_presets(PresetMenu):
     preset_add_operator = "node.node_color_preset_add"
 
 
-class NODE_MT_node_color_specials(Menu):
+class NODE_MT_node_color_context_menu(Menu):
     bl_label = "Node Color Specials"
 
     def draw(self, context):
@@ -321,7 +374,7 @@ class NODE_MT_node_color_specials(Menu):
         layout.operator("node.node_copy_color", icon='COPY_ID')
 
 
-class NODE_MT_specials(Menu):
+class NODE_MT_context_menu(Menu):
     bl_label = "Node Context Menu"
 
     def draw(self, context):
@@ -418,7 +471,7 @@ class NODE_PT_active_node_color(Panel):
 
         row = layout.row()
         row.prop(node, "color", text="")
-        row.menu("NODE_MT_node_color_specials", text="", icon='DOWNARROW_HLT')
+        row.menu("NODE_MT_node_color_context_menu", text="", icon='DOWNARROW_HLT')
 
 
 class NODE_PT_active_node_properties(Panel):
@@ -453,6 +506,43 @@ class NODE_PT_active_node_properties(Panel):
             for socket in value_inputs:
                 row = layout.row()
                 socket.draw(context, row, node, iface_(socket.name, socket.bl_rna.translation_context))
+
+
+class NODE_PT_texture_mapping(Panel):
+    bl_space_type = 'NODE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "Node"
+    bl_label = "Texture Mapping"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+
+    @classmethod
+    def poll(cls, context):
+        node = context.active_node
+        return node and hasattr(node, "texture_mapping") and (context.engine in cls.COMPAT_ENGINES)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        node = context.active_node
+        mapping = node.texture_mapping
+
+        layout.prop(mapping, "vector_type")
+
+        layout.separator()
+
+        col = layout.column(align=True)
+        col.prop(mapping, "mapping_x", text="Projection X")
+        col.prop(mapping, "mapping_y", text="Y")
+        col.prop(mapping, "mapping_z", text="Z")
+
+        layout.separator()
+
+        layout.prop(mapping, "translation")
+        layout.prop(mapping, "rotation")
+        layout.prop(mapping, "scale")
 
 
 # Node Backdrop options
@@ -570,49 +660,22 @@ class NODE_PT_grease_pencil_tools(GreasePencilToolsPanel, Panel):
     # toolbar, but which may not necessarily be open
 
 
-class EEVEE_NODE_PT_material_settings(Panel):
-    bl_space_type = 'NODE_EDITOR'
-    bl_region_type = 'UI'
-    bl_category = "Node"
-    bl_label = "Settings"
-    COMPAT_ENGINES = {'BLENDER_EEVEE'}
-
-    @classmethod
-    def poll(cls, context):
-        snode = context.space_data
-        return (
-            (context.engine in cls.COMPAT_ENGINES) and
-            (snode.tree_type == 'ShaderNodeTree' and snode.id) and
-            (snode.id.bl_rna.identifier == 'Material')
-        )
-
-    def draw(self, context):
-        material = context.space_data.id
-        EEVEE_MATERIAL_PT_settings.draw_shared(self, material)
-
-
-class NODE_PT_material_viewport(Panel):
-    bl_space_type = 'NODE_EDITOR'
-    bl_region_type = 'UI'
-    bl_category = "Node"
-    bl_label = "Viewport Display"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        snode = context.space_data
-        return (
-            (snode.tree_type == 'ShaderNodeTree' and snode.id) and
-            (snode.id.bl_rna.identifier == "Material")
-        )
-
-    def draw(self, context):
-        material = context.space_data.id
-        MATERIAL_PT_viewport.draw_shared(self, material)
-
-
 def node_draw_tree_view(layout, context):
     pass
+
+
+# Adapt properties editor panel to display in node editor. We have to
+# copy the class rather than inherit due to the way bpy registration works.
+def node_panel(cls):
+    node_cls = type('NODE_' + cls.__name__, cls.__bases__, dict(cls.__dict__))
+
+    node_cls.bl_space_type = 'NODE_EDITOR'
+    node_cls.bl_region_type = 'UI'
+    node_cls.bl_category = "Node"
+    if hasattr(node_cls, 'bl_parent_id'):
+        node_cls.bl_parent_id = 'NODE_' + node_cls.bl_parent_id
+
+    return node_cls
 
 
 classes = (
@@ -622,19 +685,25 @@ classes = (
     NODE_MT_view,
     NODE_MT_select,
     NODE_MT_node,
+    NODE_MT_node_color_context_menu,
+    NODE_MT_context_menu,
+    NODE_PT_material_slots,
     NODE_PT_node_color_presets,
-    NODE_MT_node_color_specials,
-    NODE_MT_specials,
     NODE_PT_active_node_generic,
     NODE_PT_active_node_color,
     NODE_PT_active_node_properties,
+    NODE_PT_texture_mapping,
     NODE_PT_backdrop,
     NODE_PT_quality,
-    NODE_UL_interface_sockets,
     NODE_PT_grease_pencil,
     NODE_PT_grease_pencil_tools,
-    EEVEE_NODE_PT_material_settings,
-    NODE_PT_material_viewport,
+    NODE_UL_interface_sockets,
+
+    node_panel(EEVEE_MATERIAL_PT_settings),
+    node_panel(MATERIAL_PT_viewport),
+    node_panel(WORLD_PT_viewport_display),
+    node_panel(DATA_PT_light),
+    node_panel(DATA_PT_EEVEE_light),
 )
 
 

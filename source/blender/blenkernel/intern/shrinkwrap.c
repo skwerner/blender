@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Andr Pinto
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/shrinkwrap.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <string.h>
@@ -633,7 +625,6 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc)
 
 	/* auxiliary target */
 	Mesh *auxMesh = NULL;
-	bool auxMesh_free;
 	ShrinkwrapTreeData *aux_tree = NULL;
 	ShrinkwrapTreeData aux_tree_stack;
 	SpaceTransform local2aux;
@@ -663,7 +654,7 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc)
 	}
 
 	if (calc->aux_target) {
-		auxMesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(calc->aux_target, &auxMesh_free);
+		auxMesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(calc->aux_target, false);
 		if (!auxMesh)
 			return;
 		BLI_SPACE_TRANSFORM_SETUP(&local2aux, calc->ob, calc->aux_target);
@@ -691,9 +682,6 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc)
 	/* free data structures */
 	if (aux_tree) {
 		BKE_shrinkwrap_free_tree(aux_tree);
-	}
-	if (auxMesh != NULL && auxMesh_free) {
-		BKE_id_free(NULL, auxMesh);
 	}
 }
 
@@ -1294,7 +1282,6 @@ void shrinkwrapModifier_deform(
 
 	DerivedMesh *ss_mesh    = NULL;
 	ShrinkwrapCalcData calc = NULL_ShrinkwrapCalcData;
-	bool target_free = false;
 
 	/* remove loop dependencies on derived meshes (TODO should this be done elsewhere?) */
 	if (smd->target == ob) smd->target = NULL;
@@ -1312,7 +1299,7 @@ void shrinkwrapModifier_deform(
 
 	if (smd->target != NULL) {
 		Object *ob_target = DEG_get_evaluated_object(ctx->depsgraph, smd->target);
-		calc.target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, &target_free);
+		calc.target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
 
 		/* TODO there might be several "bugs" on non-uniform scales matrixs
 		 * because it will no longer be nearest surface, not sphere projection
@@ -1383,8 +1370,4 @@ void shrinkwrapModifier_deform(
 	/* free memory */
 	if (ss_mesh)
 		ss_mesh->release(ss_mesh);
-
-	if (target_free && calc.target) {
-		BKE_id_free(NULL, calc.target);
-	}
 }

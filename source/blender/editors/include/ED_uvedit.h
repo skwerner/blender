@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_uvedit.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_UVEDIT_H__
@@ -42,6 +36,7 @@ struct Main;
 struct Object;
 struct Scene;
 struct SpaceImage;
+struct ToolSettings;
 struct View3D;
 struct ViewLayer;
 struct bNode;
@@ -68,6 +63,20 @@ void ED_object_assign_active_image(struct Main *bmain, struct Object *ob, int ma
 bool ED_uvedit_test(struct Object *obedit);
 
 /* visibility and selection */
+bool uvedit_face_visible_nolocal_ex(
+        const struct ToolSettings *ts, struct BMFace *efa);
+bool uvedit_face_visible_test_ex(
+        const struct ToolSettings *ts, struct Object *obedit, struct Image *ima, struct BMFace *efa);
+bool uvedit_face_select_test_ex(
+        const struct ToolSettings *ts, struct BMFace *efa,
+        const int cd_loop_uv_offset);
+bool uvedit_edge_select_test_ex(
+        const struct ToolSettings *ts, struct BMLoop *l,
+        const int cd_loop_uv_offset);
+bool uvedit_uv_select_test_ex(
+        const struct ToolSettings *ts, struct BMLoop *l,
+        const int cd_loop_uv_offset);
+
 bool uvedit_face_visible_nolocal(
         struct Scene *scene, struct BMFace *efa);
 bool uvedit_face_visible_test(

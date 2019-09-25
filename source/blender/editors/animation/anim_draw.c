@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/anim_draw.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 #include "BLI_sys_types.h"
@@ -338,8 +331,8 @@ void ANIM_nla_mapping_apply_fcurve(AnimData *adt, FCurve *fcu, bool restore, boo
 /* Get flags used for normalization in ANIM_unit_mapping_get_factor. */
 short ANIM_get_normalization_flags(bAnimContext *ac)
 {
-	if (ac->sl->spacetype == SPACE_IPO) {
-		SpaceIpo *sipo = (SpaceIpo *) ac->sl;
+	if (ac->sl->spacetype == SPACE_GRAPH) {
+		SpaceGraph *sipo = (SpaceGraph *) ac->sl;
 		bool use_normalization = (sipo->flag & SIPO_NORMALIZE) != 0;
 		bool freeze_normalization = (sipo->flag & SIPO_NORMALIZE_FREEZE) != 0;
 		return use_normalization

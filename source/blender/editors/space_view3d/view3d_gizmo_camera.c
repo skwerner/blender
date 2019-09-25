@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_gizmo_camera.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 
@@ -65,8 +61,11 @@ struct CameraWidgetGroup {
 static bool WIDGETGROUP_camera_poll(const bContext *C, wmGizmoGroupType *UNUSED(gzgt))
 {
 	View3D *v3d = CTX_wm_view3d(C);
-	if ((v3d->flag2 & V3D_RENDER_OVERRIDE) ||
-	    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)))
+	if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)) {
+		return false;
+	}
+	if ((v3d->gizmo_show_camera & V3D_GIZMO_SHOW_CAMERA_LENS) == 0 &&
+	    (v3d->gizmo_show_camera & V3D_GIZMO_SHOW_CAMERA_DOF_DIST) == 0)
 	{
 		return false;
 	}
@@ -134,10 +133,12 @@ static void WIDGETGROUP_camera_setup(const bContext *C, wmGizmoGroup *gzgroup)
 
 static void WIDGETGROUP_camera_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 {
-	if (!gzgroup->customdata)
+	if (!gzgroup->customdata) {
 		return;
+	}
 
 	struct CameraWidgetGroup *cagzgroup = gzgroup->customdata;
+	View3D *v3d = CTX_wm_view3d(C);
 	ViewLayer *view_layer = CTX_data_view_layer(C);
 	Object *ob = OBACT(view_layer);
 	Camera *ca = ob->data;
@@ -148,7 +149,9 @@ static void WIDGETGROUP_camera_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 
 	negate_v3_v3(dir, ob->obmat[2]);
 
-	if (ca->flag & CAM_SHOWLIMITS) {
+	if ((ca->flag & CAM_SHOWLIMITS) &&
+	    (v3d->gizmo_show_camera & V3D_GIZMO_SHOW_CAMERA_DOF_DIST))
+	{
 		WM_gizmo_set_matrix_location(cagzgroup->dop_dist, ob->obmat[3]);
 		WM_gizmo_set_matrix_rotation_from_yz_axis(cagzgroup->dop_dist, ob->obmat[1], dir);
 		WM_gizmo_set_scale(cagzgroup->dop_dist, ca->drawsize);
@@ -167,6 +170,8 @@ static void WIDGETGROUP_camera_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 	const float aspy = (float)scene->r.ysch * scene->r.yasp;
 	const bool is_ortho = (ca->type == CAM_ORTHO);
 	const int sensor_fit = BKE_camera_sensor_fit(ca->sensor_fit, aspx, aspy);
+	/* Important to use camera value, not calculated fit since 'AUTO' uses width always. */
+	const float sensor_size = BKE_camera_sensor_size(ca->sensor_fit, ca->sensor_x, ca->sensor_y);
 	wmGizmo *widget = is_ortho ? cagzgroup->ortho_scale : cagzgroup->focal_len;
 	float scale_matrix;
 	if (true) {
@@ -178,7 +183,7 @@ static void WIDGETGROUP_camera_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 
 
 		/* account for lens shifting */
-		offset[0] = ((ob->size[0] > 0.0f) ? -2.0f : 2.0f) * ca->shiftx;
+		offset[0] = ((ob->scale[0] > 0.0f) ? -2.0f : 2.0f) * ca->shiftx;
 		offset[1] = 2.0f * ca->shifty;
 		offset[2] = 0.0f;
 
@@ -230,11 +235,16 @@ static void WIDGETGROUP_camera_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 		        ((range / ca->ortho_scale) * ca->drawsize) :
 		        (scale_matrix * range /
 		         /* Half sensor, intentionally use sensor from camera and not calculated above. */
-		         (0.5f * ((sensor_fit == CAMERA_SENSOR_FIT_HOR) ? ca->sensor_x : ca->sensor_y))));
+		         (0.5f * sensor_size)));
 
 		WM_gizmo_target_property_def_rna_ptr(widget, gz_prop_type, &camera_ptr, prop, -1);
 	}
 
+	/* This could be handled more elegently (split into two gizmo groups). */
+	if ((v3d->gizmo_show_camera & V3D_GIZMO_SHOW_CAMERA_LENS) == 0) {
+		WM_gizmo_set_flag(cagzgroup->focal_len, WM_GIZMO_HIDDEN, true);
+		WM_gizmo_set_flag(cagzgroup->ortho_scale, WM_GIZMO_HIDDEN, true);
+	}
 }
 
 static void WIDGETGROUP_camera_message_subscribe(
@@ -257,6 +267,7 @@ static void WIDGETGROUP_camera_message_subscribe(
 		extern PropertyRNA rna_Camera_ortho_scale;
 		extern PropertyRNA rna_Camera_sensor_fit;
 		extern PropertyRNA rna_Camera_sensor_width;
+		extern PropertyRNA rna_Camera_sensor_height;
 		extern PropertyRNA rna_Camera_shift_x;
 		extern PropertyRNA rna_Camera_shift_y;
 		extern PropertyRNA rna_Camera_type;
@@ -267,6 +278,7 @@ static void WIDGETGROUP_camera_message_subscribe(
 			&rna_Camera_ortho_scale,
 			&rna_Camera_sensor_fit,
 			&rna_Camera_sensor_width,
+			&rna_Camera_sensor_height,
 			&rna_Camera_shift_x,
 			&rna_Camera_shift_y,
 			&rna_Camera_type,
@@ -373,9 +385,7 @@ static bool WIDGETGROUP_camera_view_poll(const bContext *C, wmGizmoGroupType *UN
 	}
 
 	View3D *v3d = CTX_wm_view3d(C);
-	if ((v3d->flag2 & V3D_RENDER_OVERRIDE) ||
-	    (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)))
-	{
+	if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)) {
 		return false;
 	}
 

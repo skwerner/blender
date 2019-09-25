@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_conversions.c
- *  \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 #include <string.h>
@@ -413,15 +405,39 @@ static void createTransCursor_view3d(TransInfo *t)
 	td->ob = NULL;
 
 	unit_m3(td->mtx);
-	quat_to_mat3(td->axismtx, cursor->rotation);
+	BKE_scene_cursor_rot_to_mat3(cursor, td->axismtx);
 	normalize_m3(td->axismtx);
 	pseudoinverse_m3_m3(td->smtx, td->mtx, PSEUDOINVERSE_EPSILON);
 
 	td->loc = cursor->location;
 	copy_v3_v3(td->iloc, cursor->location);
 
-	td->ext->quat = cursor->rotation;
-	copy_qt_qt(td->ext->iquat, cursor->rotation);
+	if (cursor->rotation_mode > 0) {
+		td->ext->rot = cursor->rotation_euler;
+		td->ext->rotAxis = NULL;
+		td->ext->rotAngle = NULL;
+		td->ext->quat = NULL;
+
+		copy_v3_v3(td->ext->irot, cursor->rotation_euler);
+	}
+	else if (cursor->rotation_mode == ROT_MODE_AXISANGLE) {
+		td->ext->rot = NULL;
+		td->ext->rotAxis = cursor->rotation_axis;
+		td->ext->rotAngle = &cursor->rotation_angle;
+		td->ext->quat = NULL;
+
+		td->ext->irotAngle = cursor->rotation_angle;
+		copy_v3_v3(td->ext->irotAxis, cursor->rotation_axis);
+	}
+	else {
+		td->ext->rot = NULL;
+		td->ext->rotAxis = NULL;
+		td->ext->rotAngle = NULL;
+		td->ext->quat = cursor->rotation_quaternion;
+
+		copy_qt_qt(td->ext->iquat, cursor->rotation_quaternion);
+	}
+	td->ext->rotOrder = cursor->rotation_mode;
 }
 
 /** \} */
@@ -1871,8 +1887,8 @@ static void createTransCurveVerts(TransInfo *t)
 								td->ival = bezt->radius;
 							}
 							else if (t->mode == TFM_TILT) {
-								td->val = &(bezt->alfa);
-								td->ival = bezt->alfa;
+								td->val = &(bezt->tilt);
+								td->ival = bezt->tilt;
 							}
 							else {
 								td->val = NULL;
@@ -1982,8 +1998,8 @@ static void createTransCurveVerts(TransInfo *t)
 								td->ival = bp->radius;
 							}
 							else {
-								td->val = &(bp->alfa);
-								td->ival = bp->alfa;
+								td->val = &(bp->tilt);
+								td->ival = bp->tilt;
 							}
 
 							copy_m3_m3(td->smtx, smtx);
@@ -2239,7 +2255,7 @@ void flushTransParticles(TransInfo *t)
 		}
 
 		PE_update_object(t->depsgraph, scene, OBACT(view_layer), 1);
-		DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
+		DEG_id_tag_update(&ob->id, ID_RECALC_PSYS_REDO);
 	}
 }
 
@@ -2276,7 +2292,7 @@ static bool bmesh_test_dist_add(
 }
 
 /**
- * \param mtx: Measure disatnce in this space.
+ * \param mtx: Measure distance in this space.
  * \param dists: Store the closest connected distance to selected vertices.
  * \param index: Optionally store the original index we're measuring the distance to (can be NULL).
  */
@@ -3349,7 +3365,7 @@ void flushTransUVs(TransInfo *t)
 				td->loc2d[0] *= size[0];
 				td->loc2d[1] *= size[1];
 
-				switch(sima->pixel_snap_mode) {
+				switch (sima->pixel_snap_mode) {
 					case SI_PIXEL_SNAP_CENTER:
 						td->loc2d[0] = roundf(td->loc2d[0] - 0.5f) + 0.5f;
 						td->loc2d[1] = roundf(td->loc2d[1] - 0.5f) + 0.5f;
@@ -4516,7 +4532,7 @@ static void graph_key_shortest_dist(TransInfo *t, FCurve *fcu, TransData *td_sta
 
 static void createTransGraphEditData(bContext *C, TransInfo *t)
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	Scene *scene = t->scene;
 	ARegion *ar = t->ar;
 	View2D *v2d = &ar->v2d;
@@ -5005,7 +5021,7 @@ static void beztmap_to_data(TransInfo *t, FCurve *fcu, BeztMap *bezms, int totve
  */
 void remake_graph_transdata(TransInfo *t, ListBase *anim_data)
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	bAnimListElem *ale;
 	const bool use_handle = (sipo->flag & SIPO_NOHANDLES) == 0;
 
@@ -5039,7 +5055,7 @@ void remake_graph_transdata(TransInfo *t, ListBase *anim_data)
  */
 void flushTransGraphData(TransInfo *t)
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	TransData *td;
 	TransData2D *td2d;
 	TransDataGraph *tdg;
@@ -5790,13 +5806,34 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 	if (t->mode == TFM_DUMMY)
 		skip_invert = true;
 
+	/* NOTE: This is not really following copy-on-write design and we should not
+	 * be re-evaluating the evaluated object. But as the comment above mentioned
+	 * this is part of a hack.
+	 * More proper solution would be to make a shallow copy of the object  and
+	 * evaluate that, and access matrix of that evaluated copy of the object.
+	 * Might be more tricky than it sounds, if some logic later on accesses the
+	 * object matrix via td->ob->obmat. */
+	Object *object_eval = DEG_get_evaluated_object(t->depsgraph, ob);
 	if (skip_invert == false && constinv == false) {
-		ob->transflag |= OB_NO_CONSTRAINTS;  /* BKE_object_where_is_calc_time checks this */
-		BKE_object_where_is_calc(t->depsgraph, t->scene, ob);
-		ob->transflag &= ~OB_NO_CONSTRAINTS;
+		object_eval->transflag |= OB_NO_CONSTRAINTS;  /* BKE_object_where_is_calc checks this */
+		/* It is possible to have transform data initialization prior to a
+		 * complete dependency graph evaluated. Happens, for example, when
+		 * changing transformation mode. */
+		BKE_object_tfm_copy(object_eval, ob);
+		BKE_object_where_is_calc(t->depsgraph, t->scene, object_eval);
+		object_eval->transflag &= ~OB_NO_CONSTRAINTS;
 	}
-	else
-		BKE_object_where_is_calc(t->depsgraph, t->scene, ob);
+	else {
+		BKE_object_where_is_calc(t->depsgraph, t->scene, object_eval);
+	}
+	/* Copy newly evaluated fields to the original object, similar to how
+	 * active dependency graph will do it. */
+	copy_m4_m4(ob->obmat, object_eval->obmat);
+	/* Only copy negative scale flag, this is the only flag which is modified by
+	 * the BKE_object_where_is_calc(). The rest of the flags we need to keep,
+	 * otherwise we might loose dupli flags  (see T61787). */
+	ob->transflag &= ~OB_NEG_SCALE;
+	ob->transflag |= (object_eval->transflag & OB_NEG_SCALE);
 
 	td->ob = ob;
 
@@ -5834,8 +5871,8 @@ static void ObjectToTransData(TransInfo *t, TransData *td, Object *ob)
 	}
 	td->ext->rotOrder = ob->rotmode;
 
-	td->ext->size = ob->size;
-	copy_v3_v3(td->ext->isize, ob->size);
+	td->ext->size = ob->scale;
+	copy_v3_v3(td->ext->isize, ob->scale);
 	copy_v3_v3(td->ext->dscale, ob->dscale);
 
 	copy_v3_v3(td->center, ob->obmat[3]);
@@ -6405,7 +6442,7 @@ static void special_aftertrans_update__node(bContext *C, TransInfo *t)
 			for (node = ntree->nodes.first; node; node = node_next) {
 				node_next = node->next;
 				if (node->flag & NODE_SELECT)
-					nodeDeleteNode(bmain, ntree, node);
+					nodeRemoveNode(bmain, ntree, node, true);
 			}
 		}
 	}
@@ -6428,8 +6465,8 @@ static void special_aftertrans_update__mesh(bContext *UNUSED(C), TransInfo *t)
 				TransData *td;
 				int i;
 
-				/* rather then adjusting the selection (which the user would notice)
-				 * tag all mirrored verts, then automerge those */
+				/* Rather then adjusting the selection (which the user would notice)
+				 * tag all mirrored verts, then auto-merge those. */
 				BM_mesh_elem_hflag_disable_all(bm, BM_VERT, BM_ELEM_TAG, false);
 
 				for (i = 0, td = tc->data; i < tc->data_len; i++, td++) {
@@ -6491,8 +6528,8 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 					FOREACH_TRANS_DATA_CONTAINER (t, tc) {
 						EdgeSlideData *sld = tc->custom.mode.data;
 
-						/* free temporary faces to avoid automerging and deleting
-						 * during cleanup - psy-fi */
+						/* Free temporary faces to avoid auto-merging and deleting
+						 * during cleanup - psy-fi. */
 						freeEdgeSlideTempFaces(sld);
 					}
 				}
@@ -6659,7 +6696,7 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 
 				// XXX: BAD! this get gpencil datablocks directly from main db...
 				// but that's how this currently works :/
-				for (gpd = bmain->gpencil.first; gpd; gpd = gpd->id.next) {
+				for (gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
 					if (ID_REAL_USERS(gpd))
 						posttrans_gpd_clean(gpd);
 				}
@@ -6679,7 +6716,7 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 
 				// XXX: BAD! this get gpencil datablocks directly from main db...
 				// but that's how this currently works :/
-				for (mask = bmain->mask.first; mask; mask = mask->id.next) {
+				for (mask = bmain->masks.first; mask; mask = mask->id.next) {
 					if (ID_REAL_USERS(mask))
 						posttrans_mask_clean(mask);
 				}
@@ -6714,8 +6751,8 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 		/* clear flag that was set for time-slide drawing */
 		saction->flag &= ~SACTION_MOVING;
 	}
-	else if (t->spacetype == SPACE_IPO) {
-		SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	else if (t->spacetype == SPACE_GRAPH) {
+		SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 		bAnimContext ac;
 		const bool use_handle = (sipo->flag & SIPO_NOHANDLES) == 0;
 
@@ -6971,7 +7008,7 @@ int special_transform_moving(TransInfo *t)
 	if (t->spacetype == SPACE_SEQ) {
 		return G_TRANSFORM_SEQ;
 	}
-	else if (t->spacetype == SPACE_IPO) {
+	else if (t->spacetype == SPACE_GRAPH) {
 		return G_TRANSFORM_FCURVES;
 	}
 	else if ((t->flag & T_EDIT) || (t->flag & T_POSE)) {
@@ -8320,8 +8357,8 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 		curvemapping_initialize(ts->gp_sculpt.cur_falloff);
 	}
 
-	/* First Pass: Count the number of datapoints required for the strokes,
-	 * (and additional info about the configuration - e.g. 2D/3D?)
+	/* First Pass: Count the number of data-points required for the strokes,
+	 * (and additional info about the configuration - e.g. 2D/3D?).
 	 */
 	for (gpl = gpd->layers.first; gpl; gpl = gpl->next) {
 		/* only editable and visible layers are considered */
@@ -8443,8 +8480,9 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 					float falloff = 1.0f; /* by default no falloff */
 					if ((is_multiedit) && (use_multiframe_falloff)) {
 						/* Faloff depends on distance to active frame (relative to the overall frame range) */
-						falloff = BKE_gpencil_multiframe_falloff_calc(gpf, gpl->actframe->framenum,
-							f_init, f_end, ts->gp_sculpt.cur_falloff);
+						falloff = BKE_gpencil_multiframe_falloff_calc(
+						        gpf, gpl->actframe->framenum,
+						        f_init, f_end, ts->gp_sculpt.cur_falloff);
 					}
 
 					for (gps = gpf->strokes.first; gps; gps = gps->next) {
@@ -8529,8 +8567,14 @@ static void createTransGPencil(bContext *C, TransInfo *t)
 									 * but never for scale or mirror
 									 */
 									if ((t->mode != TFM_RESIZE) && (t->mode != TFM_MIRROR)) {
-										td->val = &pt->pressure;
-										td->ival = pt->pressure;
+										if (t->mode != TFM_GPENCIL_OPACITY) {
+											td->val = &pt->pressure;
+											td->ival = pt->pressure;
+										}
+										else {
+											td->val = &pt->strength;
+											td->ival = pt->strength;
+										}
 									}
 
 									/* screenspace needs special matrices... */
@@ -8608,6 +8652,7 @@ void createTransData(bContext *C, TransInfo *t)
 	ViewLayer *view_layer = t->view_layer;
 	Object *ob = OBACT(view_layer);
 
+	bool has_transform_context = true;
 	t->data_len_all = -1;
 
 	/* if tests must match recalcData for correct updates */
@@ -8680,6 +8725,9 @@ void createTransData(bContext *C, TransInfo *t)
 				createTransPaintCurveVerts(C, t);
 				countAndCleanTransDataContainer(t);
 			}
+			else {
+				has_transform_context = false;
+			}
 		}
 		else if (t->obedit_type == OB_MESH) {
 
@@ -8694,6 +8742,9 @@ void createTransData(bContext *C, TransInfo *t)
 				set_prop_dist(t, 1);
 				sort_trans_data_dist(t);
 			}
+		}
+		else {
+			has_transform_context = false;
 		}
 	}
 	else if (t->spacetype == SPACE_ACTION) {
@@ -8725,7 +8776,7 @@ void createTransData(bContext *C, TransInfo *t)
 		createTransSeqData(C, t);
 		countAndCleanTransDataContainer(t);
 	}
-	else if (t->spacetype == SPACE_IPO) {
+	else if (t->spacetype == SPACE_GRAPH) {
 		t->flag |= T_POINTS | T_2D_EDIT;
 		t->obedit_type = -1;
 
@@ -8773,6 +8824,9 @@ void createTransData(bContext *C, TransInfo *t)
 				set_prop_dist(t, true);
 				sort_trans_data_dist(t);
 			}
+		}
+		else {
+			has_transform_context = false;
 		}
 	}
 	else if (t->obedit_type != -1) {
@@ -8848,6 +8902,7 @@ void createTransData(bContext *C, TransInfo *t)
 	else if (ob && (ob->mode & OB_MODE_WEIGHT_PAINT) && !(t->options & CTX_PAINT_CURVE)) {
 		/* important that ob_armature can be set even when its not selected [#23412]
 		 * lines below just check is also visible */
+		has_transform_context = false;
 		Object *ob_armature = modifiers_isDeformedByArmature(ob);
 		if (ob_armature && ob_armature->mode & OB_MODE_POSE) {
 			Base *base_arm = BKE_view_layer_base_find(t->view_layer, ob_armature);
@@ -8860,12 +8915,9 @@ void createTransData(bContext *C, TransInfo *t)
 					initTransDataContainers_FromObjectData(t, ob_armature, objects, objects_len);
 					createTransPose(t);
 					countAndCleanTransDataContainer(t);
+					has_transform_context = true;
 				}
 			}
-		}
-		/* Mark as initialized if above checks fail. */
-		if (t->data_len_all == -1) {
-			t->data_len_all = 0;
 		}
 	}
 	else if (ob && (ob->mode & OB_MODE_PARTICLE_EDIT) && PE_start_edit(PE_get_current(scene, ob))) {
@@ -8885,10 +8937,16 @@ void createTransData(bContext *C, TransInfo *t)
 			createTransPaintCurveVerts(C, t);
 			countAndCleanTransDataContainer(t);
 		}
-		/* Mark as initialized if above checks fail. */
-		if (t->data_len_all == -1) {
-			t->data_len_all = 0;
+		else {
+			has_transform_context = false;
 		}
+	}
+	else if ((ob) &&
+  			 (ELEM(ob->mode, OB_MODE_PAINT_GPENCIL,
+				OB_MODE_SCULPT_GPENCIL, OB_MODE_WEIGHT_GPENCIL)))
+	{
+		/* In grease pencil all transformations must be canceled if not Object or Edit. */
+		has_transform_context = false;
 	}
 	else {
 		createTransObject(C, t);
@@ -8915,7 +8973,13 @@ void createTransData(bContext *C, TransInfo *t)
 	}
 
 	/* Check that 'countAndCleanTransDataContainer' ran. */
-	BLI_assert(t->data_len_all != -1);
+	if (has_transform_context) {
+		BLI_assert(t->data_len_all != -1);
+	}
+	else {
+		BLI_assert(t->data_len_all == -1);
+		t->data_len_all = 0;
+	}
 
 	BLI_assert((!(t->flag & T_EDIT)) == (!(t->obedit_type != -1)));
 }

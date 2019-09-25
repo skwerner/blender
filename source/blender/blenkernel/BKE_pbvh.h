@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,16 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_PBVH_H__
 #define __BKE_PBVH_H__
 
-/** \file BKE_pbvh.h
- *  \ingroup bke
- *  \brief A BVH for high poly meshes.
+/** \file
+ * \ingroup bke
+ * \brief A BVH for high poly meshes.
  */
 
 #include "BLI_bitmap.h"
@@ -129,14 +125,14 @@ bool BKE_pbvh_node_find_nearest_to_ray(
 /* Drawing */
 
 void BKE_pbvh_draw_cb(
-        PBVH *bvh, float (*planes)[4], float (*fnors)[3], bool fast, bool only_mask,
+        PBVH *bvh, float (*planes)[4], float (*fnors)[3], bool fast, bool wires, bool only_mask,
         void (*draw_fn)(void *user_data, struct GPUBatch *batch), void *user_data);
 
 /* PBVH Access */
 typedef enum {
 	PBVH_FACES,
 	PBVH_GRIDS,
-	PBVH_BMESH
+	PBVH_BMESH,
 } PBVHType;
 
 PBVHType BKE_pbvh_type(const PBVH *bvh);
@@ -354,7 +350,7 @@ void pbvh_vertex_iter_init(PBVH *bvh, PBVHNode *node,
 #define BKE_pbvh_vertex_iter_end \
 			} \
 		} \
-	}
+	} ((void)0)
 
 void BKE_pbvh_node_get_proxies(PBVHNode *node, PBVHProxyNode **proxies, int *proxy_count);
 void BKE_pbvh_node_free_proxies(PBVHNode *node);

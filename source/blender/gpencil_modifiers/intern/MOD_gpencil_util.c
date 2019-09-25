@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpencil_modifiers/intern/MOD_gpencil_util.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 
@@ -32,9 +26,10 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_utildefines.h"
+
 #include "BLI_blenlib.h"
 #include "BLI_ghash.h"
-#include "BLI_utildefines.h"
 #include "BLI_math_vector.h"
 
 #include "DNA_meshdata_types.h"
@@ -193,7 +188,7 @@ void gpencil_apply_modifier_material(
 			DEG_id_tag_update(&newmat->id, ID_RECALC_COPY_ON_WRITE);
 		}
 		/* reasign color index */
-		int idx = BKE_gpencil_get_material_index(ob, newmat);
+		int idx = BKE_gpencil_object_material_get_index(ob, newmat);
 		gps->mat_nr = idx - 1;
 	}
 	else {

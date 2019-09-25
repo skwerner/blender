@@ -15,10 +15,6 @@
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # The Original Code is Copyright (C) 2011 Blender Foundation.
-#
-# Contributor(s): Blender Foundation,
-#                 Sergey Sharybin
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -67,10 +63,15 @@ set(SRC
 	tracking_ops_intern.h
 )
 
+set(LIB
+	bf_blenkernel
+	bf_blenlib
+)
+
 add_definitions(${GL_DEFINITIONS})
 
 if(WITH_INTERNATIONAL)
 	add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-blender_add_lib(bf_editor_space_clip "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_space_clip "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

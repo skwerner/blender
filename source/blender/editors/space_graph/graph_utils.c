@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_graph/graph_utils.c
- *  \ingroup spgraph
+/** \file
+ * \ingroup spgraph
  */
 
 
@@ -64,7 +57,7 @@
 /* NOTE: Currently called from windowmanager (new drivers editor window) and RNA (mode switching) */
 void ED_drivers_editor_init(bContext *C, ScrArea *sa)
 {
-	SpaceIpo *sipo = (SpaceIpo *)sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)sa->spacedata.first;
 
 	/* Set mode */
 	sipo->mode = SIPO_MODE_DRIVERS;
@@ -147,7 +140,7 @@ bool graphop_visible_keyframes_poll(bContext *C)
 
 	/* firstly, check if in Graph Editor */
 	// TODO: also check for region?
-	if ((sa == NULL) || (sa->spacetype != SPACE_IPO))
+	if ((sa == NULL) || (sa->spacetype != SPACE_GRAPH))
 		return 0;
 
 	/* try to init Anim-Context stuff ourselves and check */
@@ -196,7 +189,7 @@ bool graphop_editable_keyframes_poll(bContext *C)
 
 	/* firstly, check if in Graph Editor */
 	// TODO: also check for region?
-	if ((sa == NULL) || (sa->spacetype != SPACE_IPO))
+	if ((sa == NULL) || (sa->spacetype != SPACE_GRAPH))
 		return 0;
 
 	/* try to init Anim-Context stuff ourselves and check */
@@ -243,7 +236,7 @@ bool graphop_active_fcurve_poll(bContext *C)
 
 	/* firstly, check if in Graph Editor */
 	// TODO: also check for region?
-	if ((sa == NULL) || (sa->spacetype != SPACE_IPO))
+	if ((sa == NULL) || (sa->spacetype != SPACE_GRAPH))
 		return 0;
 
 	/* try to init Anim-Context stuff ourselves and check */
@@ -284,7 +277,7 @@ bool graphop_selected_fcurve_poll(bContext *C)
 
 	/* firstly, check if in Graph Editor */
 	// TODO: also check for region?
-	if ((sa == NULL) || (sa->spacetype != SPACE_IPO))
+	if ((sa == NULL) || (sa->spacetype != SPACE_GRAPH))
 		return 0;
 
 	/* try to init Anim-Context stuff ourselves and check */

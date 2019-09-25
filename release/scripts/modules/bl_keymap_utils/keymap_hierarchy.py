@@ -55,6 +55,7 @@ _km_hierarchy = [
     ('Screen', 'EMPTY', 'WINDOW', [     # full screen, undo, screenshot
         ('Screen Editing', 'EMPTY', 'WINDOW', []),    # re-sizing, action corners
         ('Header', 'EMPTY', 'WINDOW', []),            # header stuff (per region)
+        ('Footer', 'EMPTY', 'WINDOW', []),            # footer stuff (per region)
     ]),
 
     ('View2D', 'EMPTY', 'WINDOW', []),    # view 2d navigation (per region)
@@ -111,6 +112,7 @@ _km_hierarchy = [
 
         ('Knife Tool Modal Map', 'EMPTY', 'WINDOW', []),
         ('Custom Normals Modal Map', 'EMPTY', 'WINDOW', []),
+        ('Bevel Modal Map', 'EMPTY', 'WINDOW', []),
         ('Paint Stroke Modal', 'EMPTY', 'WINDOW', []),
         ('Paint Curve', 'EMPTY', 'WINDOW', []),
 
@@ -202,5 +204,5 @@ _km_hierarchy = [
     ('Standard Modal Map', 'EMPTY', 'WINDOW', []),
     ('Transform Modal Map', 'EMPTY', 'WINDOW', []),
     ('Eyedropper Modal Map', 'EMPTY', 'WINDOW', []),
-    ('Eyedropper ColorBand PointSampling Map', 'EMPTY', 'WINDOW', []),
+    ('Eyedropper ColorRamp PointSampling Map', 'EMPTY', 'WINDOW', []),
 ]

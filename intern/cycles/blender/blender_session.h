@@ -90,6 +90,7 @@ public:
 	void tag_redraw();
 	void tag_update();
 	void get_status(string& status, string& substatus);
+	void get_kernel_status(string& kernel_status);
 	void get_progress(float& progress, double& total_time, double& render_time);
 	void test_cancel();
 	void update_status_progress();
@@ -151,6 +152,8 @@ public:
 	static bool print_render_stats;
 
 protected:
+	void stamp_view_layer_metadata(Scene *scene, const string& view_layer_name);
+
 	void do_write_update_render_result(BL::RenderResult& b_rr,
 	                                   BL::RenderLayer& b_rlay,
 	                                   RenderTile& rtile,

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_action/space_action.c
- *  \ingroup spaction
+/** \file
+ * \ingroup spaction
  */
 
 #include <string.h>
@@ -102,6 +95,7 @@ static SpaceLink *action_new(const ScrArea *sa, const Scene *scene)
 	saction->autosnap = SACTSNAP_FRAME;
 	saction->mode = SACTCONT_DOPESHEET;
 	saction->mode_prev = SACTCONT_DOPESHEET;
+	saction->flag = SACTION_SHOW_INTERPOLATION;
 
 	saction->ads.filterflag |= ADS_FILTER_SUMMARY;
 
@@ -250,6 +244,7 @@ static void action_main_region_draw(const bContext *C, ARegion *ar)
 	UI_view2d_view_orthoSpecial(ar, v2d, 1);
 
 	marker_flag = ((ac.markers && (ac.markers != &ac.scene->markers)) ? DRAW_MARKERS_LOCAL : 0) | DRAW_MARKERS_MARGIN;
+	if (saction->flag & SACTION_SHOW_MARKER_LINES) marker_flag |= DRAW_MARKERS_LINES;
 	ED_markers_draw(C, marker_flag);
 
 	/* caches */

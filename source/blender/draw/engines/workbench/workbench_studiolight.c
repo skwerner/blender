@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2016, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file workbench_studiolight.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  */
 #include "BKE_studiolight.h"
 
@@ -274,7 +268,7 @@ bool studiolight_camera_in_object_shadow(WORKBENCH_PrivateData *wpd, Object *ob,
 	        {oed->shadow_min[0], oed->shadow_min[1]},
 	        {oed->shadow_min[0], oed->shadow_max[1]},
 	        {oed->shadow_max[0], oed->shadow_min[1]},
-	        {oed->shadow_max[0], oed->shadow_max[1]}
+	        {oed->shadow_max[0], oed->shadow_max[1]},
 	};
 
 	for (int i = 0; i < 2; ++i) {
@@ -282,8 +276,8 @@ bool studiolight_camera_in_object_shadow(WORKBENCH_PrivateData *wpd, Object *ob,
 		for (int j = 0; j < 4; ++j) {
 			float dst = dot_v2v2(wpd->shadow_near_sides[i], pts[j]);
 			/* Do min max */
-			if (min_dst > dst) min_dst = dst;
-			if (max_dst < dst) max_dst = dst;
+			if (min_dst > dst) { min_dst = dst; }
+			if (max_dst < dst) { max_dst = dst; }
 		}
 
 		if ((wpd->shadow_near_sides[i][2] > max_dst) ||

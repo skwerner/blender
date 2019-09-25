@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 by Mike Erwin.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, Clément Foucault
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_vertex_buffer.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * GPU vertex buffer
  */
@@ -48,7 +42,7 @@ static GLenum convert_usage_type_to_gl(GPUUsageType type)
 	static const GLenum table[] = {
 		[GPU_USAGE_STREAM] = GL_STREAM_DRAW,
 		[GPU_USAGE_STATIC] = GL_STATIC_DRAW,
-		[GPU_USAGE_DYNAMIC] = GL_DYNAMIC_DRAW
+		[GPU_USAGE_DYNAMIC] = GL_DYNAMIC_DRAW,
 	};
 	return table[type];
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_info/info_ops.c
- *  \ingroup spinfo
+/** \file
+ * \ingroup spinfo
  */
 
 
@@ -130,12 +123,12 @@ static int autopack_toggle_exec(bContext *C, wmOperator *op)
 {
 	Main *bmain = CTX_data_main(C);
 
-	if (G.fileflags & G_AUTOPACK) {
-		G.fileflags &= ~G_AUTOPACK;
+	if (G.fileflags & G_FILE_AUTOPACK) {
+		G.fileflags &= ~G_FILE_AUTOPACK;
 	}
 	else {
 		packAll(bmain, op->reports, true);
-		G.fileflags |= G_AUTOPACK;
+		G.fileflags |= G_FILE_AUTOPACK;
 	}
 
 	return OPERATOR_FINISHED;
@@ -173,7 +166,7 @@ static int pack_all_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(ev
 	ImBuf *ibuf;
 
 	// first check for dirty images
-	for (ima = bmain->image.first; ima; ima = ima->id.next) {
+	for (ima = bmain->images.first; ima; ima = ima->id.next) {
 		if (BKE_image_has_loaded_ibuf(ima)) { /* XXX FIX */
 			ibuf = BKE_image_acquire_ibuf(ima, NULL, NULL);
 
@@ -218,15 +211,18 @@ static const EnumPropertyItem unpack_all_method_items[] = {
 	{PF_WRITE_ORIGINAL, "WRITE_ORIGINAL", 0, "Write files to original location (overwrite existing files)", ""},
 	{PF_KEEP, "KEEP", 0, "Disable Auto-pack, keep all packed files", ""},
 	/* {PF_ASK, "ASK", 0, "Ask for each file", ""}, */
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
 
 static int unpack_all_exec(bContext *C, wmOperator *op)
 {
 	Main *bmain = CTX_data_main(C);
 	int method = RNA_enum_get(op->ptr, "method");
 
-	if (method != PF_KEEP) unpackAll(bmain, op->reports, method);  /* XXX PF_ASK can't work here */
-	G.fileflags &= ~G_AUTOPACK;
+	if (method != PF_KEEP) {
+		unpackAll(bmain, op->reports, method);  /* XXX PF_ASK can't work here */
+	}
+	G.fileflags &= ~G_FILE_AUTOPACK;
 
 	return OPERATOR_FINISHED;
 }
@@ -243,14 +239,16 @@ static int unpack_all_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
 
 	if (!count) {
 		BKE_report(op->reports, RPT_WARNING, "No packed files to unpack");
-		G.fileflags &= ~G_AUTOPACK;
+		G.fileflags &= ~G_FILE_AUTOPACK;
 		return OPERATOR_CANCELLED;
 	}
 
-	if (count == 1)
+	if (count == 1) {
 		BLI_strncpy(title, IFACE_("Unpack 1 File"), sizeof(title));
-	else
+	}
+	else {
 		BLI_snprintf(title, sizeof(title), IFACE_("Unpack %d Files"), count);
+	}
 
 	pup = UI_popup_menu_begin(C, title, ICON_NONE);
 	layout = UI_popup_menu_layout(pup);
@@ -289,7 +287,8 @@ static const EnumPropertyItem unpack_item_method_items[] = {
 	{PF_USE_ORIGINAL, "USE_ORIGINAL", 0, "Use file in original location (create when necessary)", ""},
 	{PF_WRITE_ORIGINAL, "WRITE_ORIGINAL", 0, "Write file to original location (overwrite existing file)", ""},
 	/* {PF_ASK, "ASK", 0, "Ask for each file", ""}, */
-	{0, NULL, 0, NULL, NULL}};
+	{0, NULL, 0, NULL, NULL},
+};
 
 
 static int unpack_item_exec(bContext *C, wmOperator *op)
@@ -308,10 +307,11 @@ static int unpack_item_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 	}
 
-	if (method != PF_KEEP)
+	if (method != PF_KEEP) {
 		BKE_unpack_id(bmain, id, op->reports, method);  /* XXX PF_ASK can't work here */
+	}
 
-	G.fileflags &= ~G_AUTOPACK;
+	G.fileflags &= ~G_FILE_AUTOPACK;
 
 	return OPERATOR_FINISHED;
 }
@@ -498,19 +498,19 @@ void FILE_OT_find_missing_files(wmOperatorType *ot)
  */
 
 #define INFO_TIMEOUT        5.0f
-#define INFO_COLOR_TIMEOUT  3.0f
 #define ERROR_TIMEOUT       10.0f
-#define ERROR_COLOR_TIMEOUT 6.0f
+#define FLASH_TIMEOUT       1.0f
 #define COLLAPSE_TIMEOUT    0.25f
+#define BRIGHTEN_AMOUNT     0.1f
 static int update_reports_display_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
 {
 	wmWindowManager *wm = CTX_wm_manager(C);
 	ReportList *reports = CTX_wm_reports(C);
 	Report *report;
 	ReportTimerInfo *rti;
-	float progress = 0.0, color_progress = 0.0;
-	float neutral_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-	float timeout = 0.0, color_timeout = 0.0;
+	float target_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+	float progress = 0.0, flash_progress = 0.0;
+	float timeout = 0.0, flash_timeout = FLASH_TIMEOUT;
 	int send_note = 0;
 
 	/* escape if not our timer */
@@ -525,7 +525,6 @@ static int update_reports_display_invoke(bContext *C, wmOperator *UNUSED(op), co
 	rti = (ReportTimerInfo *)reports->reporttimer->customdata;
 
 	timeout = (report->type & RPT_ERROR_ALL) ? ERROR_TIMEOUT : INFO_TIMEOUT;
-	color_timeout = (report->type & RPT_ERROR_ALL) ? ERROR_COLOR_TIMEOUT : INFO_COLOR_TIMEOUT;
 
 	/* clear the report display after timeout */
 	if ((float)reports->reporttimer->duration > timeout) {
@@ -537,36 +536,39 @@ static int update_reports_display_invoke(bContext *C, wmOperator *UNUSED(op), co
 		return (OPERATOR_FINISHED | OPERATOR_PASS_THROUGH);
 	}
 
+	/* set target color based on report type */
+	if (report->type & RPT_ERROR_ALL) {
+		UI_GetThemeColorType3fv(TH_INFO_ERROR, SPACE_INFO, target_col);
+	}
+	else if (report->type & RPT_WARNING_ALL) {
+		UI_GetThemeColorType3fv(TH_INFO_WARNING, SPACE_INFO, target_col);
+	}
+	else if (report->type & RPT_INFO_ALL) {
+		UI_GetThemeColorType3fv(TH_INFO_INFO, SPACE_INFO, target_col);
+	}
+	target_col[3] = 0.65f;
+
 	if (rti->widthfac == 0.0f) {
-		/* initialize colors based on report type */
-		if (report->type & RPT_ERROR_ALL) {
-			rti->col[0] = 1.0f;
-			rti->col[1] = 0.2f;
-			rti->col[2] = 0.0f;
-		}
-		else if (report->type & RPT_WARNING_ALL) {
-			rti->col[0] = 1.0f;
-			rti->col[1] = 1.0f;
-			rti->col[2] = 0.0f;
-		}
-		else if (report->type & RPT_INFO_ALL) {
-			rti->col[0] = 0.3f;
-			rti->col[1] = 0.45f;
-			rti->col[2] = 0.7f;
-		}
-		rti->col[3] = 0.65f;
+		/* initialize color to a brighter shade of the target color */
+		rti->col[0] = target_col[0] + BRIGHTEN_AMOUNT;
+		rti->col[1] = target_col[1] + BRIGHTEN_AMOUNT;
+		rti->col[2] = target_col[2] + BRIGHTEN_AMOUNT;
+		rti->col[3] = 1.0f;
+
+		CLAMP3(rti->col, 0.0, 1.0);
+
 		rti->widthfac = 1.0f;
 	}
 
 	progress = powf((float)reports->reporttimer->duration / timeout, 2.0f);
-	color_progress = powf((float)reports->reporttimer->duration / color_timeout, 2.0);
+	flash_progress = powf((float)reports->reporttimer->duration / flash_timeout, 2.0);
 
 	/* save us from too many draws */
-	if (color_progress <= 1.0f) {
+	if (flash_progress <= 1.0f) {
 		send_note = 1;
 
-		/* fade colors out sharply according to progress through fade-out duration */
-		interp_v4_v4v4(rti->col, rti->col, neutral_col, color_progress);
+		/* flash report briefly according to progress through fade-out duration */
+		interp_v4_v4v4(rti->col, rti->col, target_col, flash_progress);
 	}
 
 	/* collapse report at end of timeout */

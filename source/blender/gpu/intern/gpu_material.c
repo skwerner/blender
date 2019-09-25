@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Brecht Van Lommel.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_material.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * Manages materials, lights and textures.
  */
@@ -67,7 +59,7 @@ typedef struct GPUColorBandBuilder {
 } GPUColorBandBuilder;
 
 struct GPUMaterial {
-	Scene *scene; /* DEPRECATED was only useful for lamps */
+	Scene *scene; /* DEPRECATED was only useful for lights. */
 	Material *ma;
 
 	eGPUMaterialStatus status;
@@ -173,7 +165,7 @@ static void gpu_material_ramp_texture_build(GPUMaterial *mat)
 
 	GPUColorBandBuilder *builder = mat->coba_builder;
 
-	mat->coba_tex = GPU_texture_create_1D_array(CM_TABLE + 1, builder->current_layer, GPU_RGBA16F,
+	mat->coba_tex = GPU_texture_create_1d_array(CM_TABLE + 1, builder->current_layer, GPU_RGBA16F,
 	                                            (float *)builder->pixels, NULL);
 
 	MEM_freeN(builder);
@@ -547,7 +539,7 @@ struct GPUUniformBuffer *GPU_material_sss_profile_get(GPUMaterial *material, int
 			GPU_texture_free(material->sss_tex_profile);
 		}
 
-		material->sss_tex_profile = GPU_texture_create_1D(64, GPU_RGBA16F, translucence_profile, NULL);
+		material->sss_tex_profile = GPU_texture_create_1d(64, GPU_RGBA16F, translucence_profile, NULL);
 
 		MEM_freeN(translucence_profile);
 
@@ -762,10 +754,10 @@ void GPU_materials_free(Main *bmain)
 	World *wo;
 	extern Material defmaterial;
 
-	for (ma = bmain->mat.first; ma; ma = ma->id.next)
+	for (ma = bmain->materials.first; ma; ma = ma->id.next)
 		GPU_material_free(&ma->gpumaterial);
 
-	for (wo = bmain->world.first; wo; wo = wo->id.next)
+	for (wo = bmain->worlds.first; wo; wo = wo->id.next)
 		GPU_material_free(&wo->gpumaterial);
 
 	GPU_material_free(&defmaterial.gpumaterial);

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2016, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/draw/modes/edit_text_mode.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #include "DRW_engine.h"
@@ -39,6 +33,7 @@
 #include "GPU_shader.h"
 
 #include "draw_common.h"
+#include "draw_mode_engines.h"
 
 /* *********** LISTS *********** */
 /* All lists are per viewport specific datas.
@@ -156,8 +151,10 @@ static void EDIT_TEXT_engine_init(void *vedata)
  * Assume that all Passes are NULL */
 static void EDIT_TEXT_cache_init(void *vedata)
 {
+	const DRWContextState *draw_ctx = DRW_context_state_get();
 	EDIT_TEXT_PassList *psl = ((EDIT_TEXT_Data *)vedata)->psl;
 	EDIT_TEXT_StorageList *stl = ((EDIT_TEXT_Data *)vedata)->stl;
+
 
 	if (!stl->g_data) {
 		/* Alloc transient pointers */
@@ -184,8 +181,8 @@ static void EDIT_TEXT_cache_init(void *vedata)
 		psl->text_box_pass = DRW_pass_create(
 		        "Font Text Boxes",
 		        DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH);
-		stl->g_data->box_shgrp = shgroup_dynlines_dashed_uniform_color(psl->text_box_pass, G_draw.block.colorWire);
-		stl->g_data->box_active_shgrp = shgroup_dynlines_dashed_uniform_color(psl->text_box_pass, G_draw.block.colorActive);
+		stl->g_data->box_shgrp = shgroup_dynlines_dashed_uniform_color(psl->text_box_pass, G_draw.block.colorWire, draw_ctx->sh_cfg);
+		stl->g_data->box_active_shgrp = shgroup_dynlines_dashed_uniform_color(psl->text_box_pass, G_draw.block.colorActive, draw_ctx->sh_cfg);
 	}
 }
 

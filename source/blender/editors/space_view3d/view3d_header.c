@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2004-2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_view3d/view3d_header.c
- *  \ingroup spview3d
+/** \file
+ * \ingroup spview3d
  */
 
 #include <string.h>
@@ -75,9 +68,18 @@ static void do_view3d_header_buttons(bContext *C, void *arg, int event);
 static int toggle_matcap_flip(bContext *C, wmOperator *UNUSED(op))
 {
 	View3D *v3d = CTX_wm_view3d(C);
-	v3d->shading.flag ^= V3D_SHADING_MATCAP_FLIP_X;
-	ED_view3d_shade_update(CTX_data_main(C), v3d, CTX_wm_area(C));
-	WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, v3d);
+
+	if (v3d) {
+		v3d->shading.flag ^= V3D_SHADING_MATCAP_FLIP_X;
+		ED_view3d_shade_update(CTX_data_main(C), v3d, CTX_wm_area(C));
+		WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, v3d);
+	}
+	else {
+		Scene *scene = CTX_data_scene(C);
+		scene->display.shading.flag ^= V3D_SHADING_MATCAP_FLIP_X;
+		WM_event_add_notifier(C, NC_SCENE | NA_EDITED, v3d);
+	}
+
 	return OPERATOR_FINISHED;
 }
 
@@ -90,11 +92,13 @@ void VIEW3D_OT_toggle_matcap_flip(wmOperatorType *ot)
 
 	/* api callbacks */
 	ot->exec = toggle_matcap_flip;
-	ot->poll = ED_operator_view3d_active;
 }
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
+/** \name UI Templates
+ * \{ */
 
 static void do_view3d_header_buttons(bContext *C, void *UNUSED(arg), int event)
 {
@@ -141,10 +145,10 @@ void uiTemplateEditModeSelection(uiLayout *layout, struct bContext *C)
 		                 0, 0, UI_UNIT_X, UI_UNIT_Y, &em->selectmode, 1.0, 0.0, 0, 0,
 		                 TIP_("Vertex select - Shift-Click for multiple modes, Ctrl-Click contracts selection"));
 		uiDefIconButBitS(block, UI_BTYPE_TOGGLE, SCE_SELECT_EDGE, B_SEL_EDGE, ICON_EDGESEL,
-		                 0, 0, ceilf(UI_UNIT_X - UI_DPI_FAC), UI_UNIT_Y, &em->selectmode, 1.0, 0.0, 0, 0,
+		                 0, 0, ceilf(UI_UNIT_X - U.pixelsize), UI_UNIT_Y, &em->selectmode, 1.0, 0.0, 0, 0,
 		                 TIP_("Edge select - Shift-Click for multiple modes, Ctrl-Click expands/contracts selection"));
 		uiDefIconButBitS(block, UI_BTYPE_TOGGLE, SCE_SELECT_FACE, B_SEL_FACE, ICON_FACESEL,
-		                 0, 0, ceilf(UI_UNIT_X - UI_DPI_FAC), UI_UNIT_Y, &em->selectmode, 1.0, 0.0, 0, 0,
+		                 0, 0, ceilf(UI_UNIT_X - U.pixelsize), UI_UNIT_Y, &em->selectmode, 1.0, 0.0, 0, 0,
 		                 TIP_("Face select - Shift-Click for multiple modes, Ctrl-Click expands selection"));
 	}
 }
@@ -188,3 +192,5 @@ void uiTemplateHeader3D_mode(uiLayout *layout, struct bContext *C)
 		uiTemplatePaintModeSelection(layout, C);
 	}
 }
+
+/** \} */

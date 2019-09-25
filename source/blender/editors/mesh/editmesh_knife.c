@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Joseph Eagar, Joshua Leung, Howard Trickey,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mesh/editmesh_knife.c
- *  \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  *
  * Interactive editmesh knife tool.
  */
@@ -1457,7 +1449,7 @@ static bool point_is_visible(
 
 		/* avoid projecting behind the viewpoint */
 		if (kcd->is_ortho && (kcd->vc.rv3d->persp != RV3D_CAMOB)) {
-			dist = kcd->vc.v3d->far * 2.0f;
+			dist = kcd->vc.v3d->clip_end * 2.0f;
 		}
 
 		if (kcd->vc.rv3d->rflag & RV3D_CLIPPING) {
@@ -2757,7 +2749,7 @@ wmKeyMap *knifetool_modal_keymap(wmKeyConfig *keyconf)
 		{KNF_MODAL_NEW_CUT, "NEW_CUT", 0, "End Current Cut", ""},
 		{KNF_MODAL_ADD_CUT, "ADD_CUT", 0, "Add Cut", ""},
 		{KNF_MODAL_PANNING, "PANNING", 0, "Panning", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Knife Tool Modal Map");

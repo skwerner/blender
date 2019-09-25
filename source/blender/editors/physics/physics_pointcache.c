@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 by Janne Karhu.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/physics/physics_pointcache.c
- *  \ingroup edphys
+/** \file
+ * \ingroup edphys
  */
 
 #include <stdlib.h>
@@ -288,9 +280,9 @@ void PTCACHE_OT_bake_all(wmOperatorType *ot)
 void PTCACHE_OT_free_bake_all(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Free All Physics Bakes";
+	ot->name = "Delete All Physics Bakes";
 	ot->idname = "PTCACHE_OT_free_bake_all";
-	ot->description = "Free all baked caches of all objects in the current scene";
+	ot->description = "Delete all baked caches of all objects in the current scene";
 
 	/* api callbacks */
 	ot->exec = ptcache_free_bake_all_exec;
@@ -346,8 +338,8 @@ void PTCACHE_OT_bake(wmOperatorType *ot)
 void PTCACHE_OT_free_bake(wmOperatorType *ot)
 {
 	/* identifiers */
-	ot->name = "Free Physics Bake";
-	ot->description = "Free physics bake";
+	ot->name = "Delete Physics Bake";
+	ot->description = "Delete physics bake";
 	ot->idname = "PTCACHE_OT_free_bake";
 
 	/* api callbacks */

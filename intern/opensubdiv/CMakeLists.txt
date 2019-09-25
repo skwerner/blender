@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2013, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Sergey Sharybin.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -38,6 +33,9 @@ set(SRC
 	opensubdiv_evaluator_capi.h
 	opensubdiv_gl_mesh_capi.h
 	opensubdiv_topology_refiner_capi.h
+)
+
+set(LIB
 )
 
 if(WITH_OPENSUBDIV)
@@ -127,4 +125,4 @@ else()
 	)
 endif()
 
-blender_add_lib(bf_intern_opensubdiv "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_intern_opensubdiv "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

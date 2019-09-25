@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 # Libs that adhere to strict flags
@@ -44,6 +39,10 @@ if(WITH_BULLET)
 	if(NOT WITH_SYSTEM_BULLET)
 		add_subdirectory(bullet2)
 	endif()
+endif()
+
+if(WITH_DRACO)
+	add_subdirectory(draco)
 endif()
 
 # now only available in a branch

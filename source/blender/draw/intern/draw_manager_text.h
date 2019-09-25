@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,13 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2016, Blender Foundation.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/draw/intern/draw_manager_text.h
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #ifndef __DRAW_MANAGER_TEXT_H__

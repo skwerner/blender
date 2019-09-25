@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_lattice_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_LATTICE_TYPES_H__
@@ -41,12 +33,12 @@ struct Ipo;
 struct Key;
 struct MDeformVert;
 
+#
+#
 typedef struct EditLatt {
 	struct Lattice *latt;
 
 	int shapenr;
-
-	char pad[4];
 } EditLatt;
 
 typedef struct Lattice {
@@ -54,8 +46,9 @@ typedef struct Lattice {
 	struct AnimData *adt;
 
 	short pntsu, pntsv, pntsw, flag;
-	short opntsu, opntsv, opntsw, pad2;
-	char typeu, typev, typew, pad3;
+	short opntsu, opntsv, opntsw;
+	char _pad2[3];
+	char typeu, typev, typew;
 	/** Active element index, unset with LT_ACTBP_NONE. */
 	int actbp;
 

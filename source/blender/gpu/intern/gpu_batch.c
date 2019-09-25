@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 by Mike Erwin.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_batch.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * GPU geometry batch
  * Contains VAOs + VBOs + Shader representing a drawable entity.
@@ -126,10 +120,6 @@ void GPU_batch_copy(GPUBatch *batch_dst, GPUBatch *batch_src)
 
 void GPU_batch_clear(GPUBatch *batch)
 {
-	if (batch->free_callback) {
-		batch->free_callback(batch, batch->callback_data);
-	}
-
 	if (batch->owns_flag & GPU_BATCH_OWNS_INDEX) {
 		GPU_indexbuf_discard(batch->elem);
 	}
@@ -151,6 +141,10 @@ void GPU_batch_clear(GPUBatch *batch)
 
 void GPU_batch_discard(GPUBatch *batch)
 {
+	if (batch->free_callback) {
+		batch->free_callback(batch, batch->callback_data);
+	}
+
 	GPU_batch_clear(batch);
 	MEM_freeN(batch);
 }
@@ -670,10 +664,21 @@ void GPU_draw_primitive(GPUPrimType prim_type, int v_count)
 /** \name Utilities
  * \{ */
 
+void GPU_batch_program_set_shader(GPUBatch *batch, GPUShader *shader)
+{
+	GPU_batch_program_set(batch, shader->program, shader->interface);
+}
+
+void GPU_batch_program_set_builtin_with_config(
+        GPUBatch *batch, eGPUBuiltinShader shader_id, eGPUShaderConfig sh_cfg)
+{
+	GPUShader *shader = GPU_shader_get_builtin_shader_with_config(shader_id, sh_cfg);
+	GPU_batch_program_set(batch, shader->program, shader->interface);
+}
+
 void GPU_batch_program_set_builtin(GPUBatch *batch, eGPUBuiltinShader shader_id)
 {
-	GPUShader *shader = GPU_shader_get_builtin_shader(shader_id);
-	GPU_batch_program_set(batch, shader->program, shader->interface);
+	GPU_batch_program_set_builtin_with_config(batch, shader_id, GPU_SHADER_CFG_DEFAULT);
 }
 
 /** \} */

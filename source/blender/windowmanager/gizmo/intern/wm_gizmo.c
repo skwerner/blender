@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/gizmo/intern/wm_gizmo.c
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  */
 
 #include "MEM_guardedalloc.h"
@@ -650,10 +644,12 @@ void WM_gizmo_properties_create(PointerRNA *ptr, const char *gtstring)
 {
 	const wmGizmoType *gzt = WM_gizmotype_find(gtstring, false);
 
-	if (gzt)
+	if (gzt) {
 		WM_gizmo_properties_create_ptr(ptr, (wmGizmoType *)gzt);
-	else
+	}
+	else {
 		RNA_pointer_create(NULL, &RNA_GizmoProperties, NULL, ptr);
+	}
 }
 
 /* similar to the function above except its uses ID properties
@@ -680,10 +676,12 @@ void WM_gizmo_properties_sanitize(PointerRNA *ptr, const bool no_context)
 	{
 		switch (RNA_property_type(prop)) {
 			case PROP_ENUM:
-				if (no_context)
+				if (no_context) {
 					RNA_def_property_flag(prop, PROP_ENUM_NO_CONTEXT);
-				else
+				}
+				else {
 					RNA_def_property_clear_flag(prop, PROP_ENUM_NO_CONTEXT);
+				}
 				break;
 			case PROP_POINTER:
 			{

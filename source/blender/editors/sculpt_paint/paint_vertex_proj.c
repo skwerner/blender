@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_vertex_proj.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  *
  * Utility functions for getting vertex locations while painting
  * (since they may be instanced multiple times in an evaluated mesh)
@@ -40,6 +33,7 @@
 #include "DNA_object_types.h"
 
 #include "BKE_context.h"
+#include "BKE_customdata.h"
 #include "BKE_mesh_iterators.h"
 #include "BKE_mesh_runtime.h"
 
@@ -110,7 +104,9 @@ static void vpaint_proj_dm_map_cosnos_init(
 	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 	Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 	Mesh *me = ob->data;
-	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, CD_MASK_BAREMESH | CD_MASK_ORIGINDEX);
+
+	CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH_ORIGINDEX;
+	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &cddata_masks);
 
 	memset(vp_handle->vcosnos, 0, sizeof(*vp_handle->vcosnos) * me->totvert);
 	BKE_mesh_foreach_mapped_vert(me_eval, vpaint_proj_dm_map_cosnos_init__map_cb, vp_handle, MESH_FOREACH_USE_NORMAL);
@@ -175,7 +171,9 @@ static void vpaint_proj_dm_map_cosnos_update(
 	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 	Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 	Mesh *me = ob->data;
-	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, CD_MASK_BAREMESH | CD_MASK_ORIGINDEX);
+
+	CustomData_MeshMasks cddata_masks = CD_MASK_BAREMESH_ORIGINDEX;
+	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &cddata_masks);
 
 	/* quick sanity check - we shouldn't have to run this if there are no modifiers */
 	BLI_assert(BLI_listbase_is_empty(&ob->modifiers) == false);

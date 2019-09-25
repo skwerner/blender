@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_sequencer/sequencer_intern.h
- *  \ingroup spseq
+/** \file
+ * \ingroup spseq
  */
 
 #ifndef __SEQUENCER_INTERN_H__
@@ -55,7 +48,7 @@ struct ARegion *sequencer_has_buttons_region(struct ScrArea *sa);
 
 /* sequencer_draw.c */
 void draw_timeline_seq(const struct bContext *C, struct ARegion *ar);
-void draw_image_seq(const struct bContext *C, struct Scene *scene, struct  ARegion *ar, struct SpaceSeq *sseq, int cfra, int offset, bool draw_overlay, bool draw_backdrop);
+void sequencer_draw_preview(const struct bContext *C, struct Scene *scene, struct  ARegion *ar, struct SpaceSeq *sseq, int cfra, int offset, bool draw_overlay, bool draw_backdrop);
 void color3ubv_from_seq(struct Scene *curscene, struct Sequence *seq, unsigned char col[3]);
 
 void sequencer_special_update_set(Sequence *seq);
@@ -163,18 +156,18 @@ void SEQUENCER_OT_effect_strip_add(struct wmOperatorType *ot);
 
 enum {
 	SEQ_CUT_SOFT,
-	SEQ_CUT_HARD
+	SEQ_CUT_HARD,
 };
 enum {
 	SEQ_SELECTED,
-	SEQ_UNSELECTED
+	SEQ_UNSELECTED,
 };
 
 enum {
 	SEQ_SELECT_LR_NONE = 0,
 	SEQ_SELECT_LR_MOUSE,
 	SEQ_SELECT_LR_LEFT,
-	SEQ_SELECT_LR_RIGHT
+	SEQ_SELECT_LR_RIGHT,
 };
 
 /* defines used internally */

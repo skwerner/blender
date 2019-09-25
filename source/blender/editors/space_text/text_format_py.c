@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -13,12 +11,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_text/text_format_py.c
- *  \ingroup sptext
+/** \file
+ * \ingroup sptext
  */
 
 #include <string.h>
@@ -34,9 +30,10 @@
 
 /* *** Local Functions (for format_line) *** */
 
-/* Checks the specified source string for a Python built-in function name. This
+/**
+ * Checks the specified source string for a Python built-in function name. This
  * name must start at the beginning of the source string and must be followed by
- * a non-identifier (see text_check_identifier(char)) or null character.
+ * a non-identifier (see #text_check_identifier(char)) or null character.
  *
  * If a built-in function is found, the length of the matching name is returned.
  * Otherwise, -1 is returned.
@@ -44,7 +41,6 @@
  * See:
  * http://docs.python.org/py3k/reference/lexical_analysis.html#keywords
  */
-
 static int txtfmt_py_find_builtinfunc(const char *string)
 {
 	int i, len;
@@ -58,6 +54,9 @@ static int txtfmt_py_find_builtinfunc(const char *string)
 	 *                  for kw in  __import__("keyword").kwlist
 	 *                  if kw not in {"False", "None", "True", "def", "class"}]))
 	 */
+
+	/* Keep aligned args for readability. */
+	/* clang-format off */
 
 	if      (STR_LITERAL_STARTSWITH(string, "and",      len)) i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "as",       len)) i = len;
@@ -91,6 +90,8 @@ static int txtfmt_py_find_builtinfunc(const char *string)
 	else if (STR_LITERAL_STARTSWITH(string, "yield",    len)) i = len;
 	else                                                      i = 0;
 
+	/* clang-format on */
+
 	/* If next source char is an identifier (eg. 'i' in "definite") no match */
 	if (i == 0 || text_check_identifier(string[i]))
 		return -1;
@@ -108,9 +109,14 @@ static int txtfmt_py_find_specialvar(const char *string)
 {
 	int i, len;
 
+	/* Keep aligned args for readability. */
+	/* clang-format off */
+
 	if      (STR_LITERAL_STARTSWITH(string, "def", len))   i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "class", len)) i = len;
 	else                                                   i = 0;
+
+	/* clang-format on */
 
 	/* If next source char is an identifier (eg. 'i' in "definite") no match */
 	if (i == 0 || text_check_identifier(string[i]))
@@ -120,28 +126,37 @@ static int txtfmt_py_find_specialvar(const char *string)
 
 static int txtfmt_py_find_decorator(const char *string)
 {
-	if (string[0] == '@') {
-		int i = 1;
-		/* Whitespace is ok '@  foo' */
-		while (text_check_whitespace(string[i])) {
-			i++;
-		}
-		while (text_check_identifier(string[i])) {
-			i++;
-		}
-		return i;
+	if (string[0] != '@') {
+		return -1;
 	}
-	return -1;
+	if (!text_check_identifier(string[1])) {
+		return -1;
+	}
+	/* Interpret as matrix multiplication when followed by whitespace. */
+	if (text_check_whitespace(string[1])) {
+		return -1;
+	}
+
+	int i = 1;
+	while (text_check_identifier(string[i])) {
+		i++;
+	}
+	return i;
 }
 
 static int txtfmt_py_find_bool(const char *string)
 {
 	int i, len;
 
+	/* Keep aligned args for readability. */
+	/* clang-format off */
+
 	if      (STR_LITERAL_STARTSWITH(string, "None",  len))  i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "True",  len))  i = len;
 	else if (STR_LITERAL_STARTSWITH(string, "False", len))  i = len;
 	else                                                    i = 0;
+
+	/* clang-format on */
 
 	/* If next source char is an identifier (eg. 'i' in "Nonetheless") no match */
 	if (i == 0 || text_check_identifier(string[i]))
@@ -152,10 +167,16 @@ static int txtfmt_py_find_bool(const char *string)
 static char txtfmt_py_format_identifier(const char *str)
 {
 	char fmt;
+
+	/* Keep aligned args for readability. */
+	/* clang-format off */
+
 	if      ((txtfmt_py_find_specialvar(str))   != -1) fmt = FMT_TYPE_SPECIAL;
 	else if ((txtfmt_py_find_builtinfunc(str))  != -1) fmt = FMT_TYPE_KEYWORD;
 	else if ((txtfmt_py_find_decorator(str))    != -1) fmt = FMT_TYPE_RESERVED;
 	else                                               fmt = FMT_TYPE_DEFAULT;
+
+	/* clang-format on */
 	return fmt;
 }
 
@@ -272,11 +293,16 @@ static void txtfmt_py_format_line(SpaceText *st, TextLine *line, const bool do_n
 			}
 			/* Not ws, a digit, punct, or continuing text. Must be new, check for special words */
 			else {
+				/* Keep aligned args for readability. */
+				/* clang-format off */
+
 				/* Special vars(v) or built-in keywords(b) */
 				/* keep in sync with 'txtfmt_py_format_identifier()' */
 				if      ((i = txtfmt_py_find_specialvar(str))   != -1) prev = FMT_TYPE_SPECIAL;
 				else if ((i = txtfmt_py_find_builtinfunc(str))  != -1) prev = FMT_TYPE_KEYWORD;
 				else if ((i = txtfmt_py_find_decorator(str))    != -1) prev = FMT_TYPE_DIRECTIVE;
+
+				/* clang-format on */
 
 				if (i > 0) {
 					if (prev == FMT_TYPE_DIRECTIVE) {  /* can contain utf8 */

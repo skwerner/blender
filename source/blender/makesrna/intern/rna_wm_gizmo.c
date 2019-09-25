@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/rna_wm_gizmo.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <stdlib.h>
@@ -261,7 +257,7 @@ static wmGizmo *rna_GizmoProperties_find_operator(PointerRNA *ptr)
 #endif
 
 	/* We could try workaruond this lookup, but not trivial. */
-	for (bScreen *screen = G_MAIN->screen.first; screen; screen = screen->id.next) {
+	for (bScreen *screen = G_MAIN->screens.first; screen; screen = screen->id.next) {
 		IDProperty *properties = ptr->data;
 		for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
 			for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
@@ -814,7 +810,7 @@ static StructRNA *rna_GizmoGroup_register(
 
 	wmGizmoMapType *gzmap_type = WM_gizmomaptype_ensure(&wmap_params);
 	if (gzmap_type == NULL) {
-		BKE_reportf(reports, RPT_ERROR, "Area type does not support gizmos");
+		BKE_report(reports, RPT_ERROR, "Area type does not support gizmos");
 		return NULL;
 	}
 
@@ -1019,14 +1015,14 @@ static void rna_def_gizmo(BlenderRNA *brna, PropertyRNA *cprop)
 	RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
 	parm = RNA_def_int_array(func, "location", 2, NULL, INT_MIN, INT_MAX, "Location", "Region coordinates", INT_MIN, INT_MAX);
 	RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
-	parm = RNA_def_int(func, "intersect_id", 0, 0, INT_MAX, "", "", 0, INT_MAX);
+	parm = RNA_def_int(func, "intersect_id", -1, -1, INT_MAX, "", "Use -1 to skip this gizmo", -1, INT_MAX);
 	RNA_def_function_return(func, parm);
 
 	/* wmGizmo.handler */
 	static EnumPropertyItem tweak_actions[] = {
 		{WM_GIZMO_TWEAK_PRECISE, "PRECISE", 0, "Precise", ""},
 		{WM_GIZMO_TWEAK_SNAP, "SNAP", 0, "Snap", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 	func = RNA_def_function(srna, "modal", NULL);
 	RNA_def_function_ui_description(func, "");
@@ -1307,7 +1303,7 @@ static void rna_def_gizmogroup(BlenderRNA *brna)
 		 "Show all while interacting"},
 		{WM_GIZMOGROUPTYPE_TOOL_INIT, "TOOL_INIT", 0, "Tool Init",
 		 "Postpone running until tool operator run (when used with a tool)"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 	prop = RNA_def_property(srna, "bl_options", PROP_ENUM, PROP_NONE);
 	RNA_def_property_enum_sdna(prop, NULL, "type->flag");

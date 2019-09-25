@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,13 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_TRACKING_H__
 #define __BKE_TRACKING_H__
 
-/** \file BKE_tracking.h
- *  \ingroup bke
- *  \author Sergey Sharybin
+/** \file
+ * \ingroup bke
  */
 
 struct Camera;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/transform/transform_generics.c
- *  \ingroup edtransform
+/** \file
+ * \ingroup edtransform
  */
 
 #include <string.h>
@@ -406,7 +398,7 @@ static void recalcData_actedit(TransInfo *t)
 /* helper for recalcData() - for Graph Editor transforms */
 static void recalcData_graphedit(TransInfo *t)
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	ViewLayer *view_layer = t->view_layer;
 
 	ListBase anim_data = {NULL, NULL};
@@ -953,7 +945,7 @@ static void recalcData_objects(TransInfo *t)
 
 			/* if animtimer is running, and the object already has animation data,
 			 * check if the auto-record feature means that we should record 'samples'
-			 * (i.e. uneditable animation values)
+			 * (i.e. un-editable animation values)
 			 *
 			 * context is needed for keying set poll() functions.
 			 */
@@ -1126,7 +1118,7 @@ void recalcData(TransInfo *t)
 	else if (t->spacetype == SPACE_SEQ) {
 		recalcData_sequencer(t);
 	}
-	else if (t->spacetype == SPACE_IPO) {
+	else if (t->spacetype == SPACE_GRAPH) {
 		recalcData_graphedit(t);
 	}
 	else if (t->spacetype == SPACE_NODE) {
@@ -1151,7 +1143,7 @@ void drawLine(TransInfo *t, const float center[3], const float dir[3], char axis
 		GPU_matrix_push();
 
 		copy_v3_v3(v3, dir);
-		mul_v3_fl(v3, v3d->far);
+		mul_v3_fl(v3, v3d->clip_end);
 
 		sub_v3_v3v3(v2, center, v3);
 		add_v3_v3v3(v1, center, v3);
@@ -1240,6 +1232,7 @@ void initTransDataContainers_FromObjectData(TransInfo *t, Object *obact, Object 
 			tc->mirror.axis_flag = (
 			        ((t->flag & T_NO_MIRROR) == 0) &&
 			        ((t->options & CTX_NO_MIRROR) == 0) &&
+			        (objects[i]->type == OB_MESH) &&
 			        (((Mesh *)objects[i]->data)->editflag & ME_EDIT_MIRROR_X) != 0);
 
 			if (object_mode & OB_MODE_EDIT) {
@@ -1344,6 +1337,15 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 
 	unit_m3(t->mat);
 
+	unit_m3(t->orient_matrix);
+	negate_m3(t->orient_matrix);
+	/* Leave 't->orient_matrix_is_set' to false,
+	 * so we overwrite it when we have a useful value. */
+
+	/* Default to rotate on the Z axis. */
+	t->orient_axis = 2;
+	t->orient_axis_ortho = 1;
+
 	/* if there's an event, we're modal */
 	if (event) {
 		t->flag |= T_MODAL;
@@ -1417,6 +1419,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		}
 
 		TransformOrientationSlot *orient_slot = &t->scene->orientation_slots[SCE_ORIENT_DEFAULT];
+		t->orientation.unset = V3D_ORIENT_GLOBAL;
 		t->orientation.user = orient_slot->type;
 		t->orientation.custom = BKE_scene_transform_orientation_find(t->scene, orient_slot->index_custom);
 
@@ -1427,8 +1430,8 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		        NULL);
 
 		/* Make second orientation local if both are global. */
-		if (t->orientation.user == V3D_MANIP_GLOBAL) {
-			t->orientation.user_alt = V3D_MANIP_LOCAL;
+		if (t->orientation.user == V3D_ORIENT_GLOBAL) {
+			t->orientation.user_alt = V3D_ORIENT_LOCAL;
 			t->orientation.types[0] = &t->orientation.user_alt;
 			SWAP(short *, t->orientation.types[0], t->orientation.types[1]);
 		}
@@ -1492,8 +1495,8 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		t->view = &ar->v2d;
 		t->around = V3D_AROUND_CENTER_BOUNDS;
 	}
-	else if (t->spacetype == SPACE_IPO) {
-		SpaceIpo *sipo = sa->spacedata.first;
+	else if (t->spacetype == SPACE_GRAPH) {
+		SpaceGraph *sipo = sa->spacedata.first;
 		t->view = &ar->v2d;
 		t->around = sipo->around;
 	}
@@ -1519,27 +1522,46 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 		t->around = V3D_AROUND_CENTER_BOUNDS;
 	}
 
-	if (op && ((prop = RNA_struct_find_property(op->ptr, "constraint_matrix")) &&
-	           RNA_property_is_set(op->ptr, prop)))
+	if (op && (prop = RNA_struct_find_property(op->ptr, "orient_axis"))) {
+		t->orient_axis = RNA_property_enum_get(op->ptr, prop);
+	}
+	if (op && (prop = RNA_struct_find_property(op->ptr, "orient_axis_ortho"))) {
+		t->orient_axis_ortho = RNA_property_enum_get(op->ptr, prop);
+	}
+
+	if (op && ((prop = RNA_struct_find_property(op->ptr, "orient_matrix")) &&
+	           RNA_property_is_set(op->ptr, prop)) &&
+	    ((t->flag & T_MODAL) ||
+	     /* When using redo, don't use the the custom constraint matrix
+	      * if the user selects a different orientation. */
+	     (RNA_enum_get(op->ptr, "orient_type") ==
+	      RNA_enum_get(op->ptr, "orient_matrix_type"))))
 	{
 		RNA_property_float_get_array(op->ptr, prop, &t->spacemtx[0][0]);
-		t->orientation.user = V3D_MANIP_CUSTOM_MATRIX;
+		/* Some transform modes use this to operate on an axis. */
+		t->orient_matrix_is_set = true;
+		copy_m3_m3(t->orient_matrix, t->spacemtx);
+		t->orient_matrix_is_set = true;
+		t->orientation.user = V3D_ORIENT_CUSTOM_MATRIX;
 		t->orientation.custom = 0;
+		if (t->flag & T_MODAL) {
+			RNA_enum_set(op->ptr, "orient_matrix_type", RNA_enum_get(op->ptr, "orient_type"));
+		}
 	}
-	else if (op && ((prop = RNA_struct_find_property(op->ptr, "constraint_orientation")) &&
+	else if (op && ((prop = RNA_struct_find_property(op->ptr, "orient_type")) &&
 	                RNA_property_is_set(op->ptr, prop)))
 	{
 		short orientation = RNA_property_enum_get(op->ptr, prop);
 		TransformOrientation *custom_orientation = NULL;
 
-		if (orientation >= V3D_MANIP_CUSTOM) {
-			if (orientation >= V3D_MANIP_CUSTOM + BIF_countTransformOrientation(C)) {
-				orientation = V3D_MANIP_GLOBAL;
+		if (orientation >= V3D_ORIENT_CUSTOM) {
+			if (orientation >= V3D_ORIENT_CUSTOM + BIF_countTransformOrientation(C)) {
+				orientation = V3D_ORIENT_GLOBAL;
 			}
 			else {
 				custom_orientation = BKE_scene_transform_orientation_find(
-				        t->scene, orientation - V3D_MANIP_CUSTOM);
-				orientation = V3D_MANIP_CUSTOM;
+				        t->scene, orientation - V3D_ORIENT_CUSTOM);
+				orientation = V3D_ORIENT_CUSTOM;
 			}
 		}
 
@@ -1584,7 +1606,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 			/* use settings from scene only if modal */
 			if (t->flag & T_MODAL) {
 				if ((t->options & CTX_NO_PET) == 0) {
-					if (t->spacetype == SPACE_IPO) {
+					if (t->spacetype == SPACE_GRAPH) {
 						t->flag |= initTransInfo_edit_pet_to_flag(ts->proportional_fcurve);
 					}
 					else if (t->spacetype == SPACE_ACTION) {
@@ -1725,7 +1747,7 @@ void postTrans(bContext *C, TransInfo *t)
 		FOREACH_TRANS_DATA_CONTAINER (t, tc) {
 			/* free data malloced per trans-data */
 			if (ELEM(t->obedit_type, OB_CURVE, OB_SURF) ||
-			    (t->spacetype == SPACE_IPO))
+			    (t->spacetype == SPACE_GRAPH))
 			{
 				TransData *td = tc->data;
 				for (int a = 0; a < tc->data_len; a++, td++) {
@@ -1940,7 +1962,7 @@ void calculateCenterCursor2D(TransInfo *t, float r_center[2])
 
 void calculateCenterCursorGraph2D(TransInfo *t, float r_center[2])
 {
-	SpaceIpo *sipo = (SpaceIpo *)t->sa->spacedata.first;
+	SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
 	Scene *scene = t->scene;
 
 	/* cursor is combination of current frame, and graph-editor cursor value */
@@ -2067,7 +2089,7 @@ static void calculateCenter_FromAround(TransInfo *t, int around, float r_center[
 		case V3D_AROUND_CURSOR:
 			if (ELEM(t->spacetype, SPACE_IMAGE, SPACE_CLIP))
 				calculateCenterCursor2D(t, r_center);
-			else if (t->spacetype == SPACE_IPO)
+			else if (t->spacetype == SPACE_GRAPH)
 				calculateCenterCursorGraph2D(t, r_center);
 			else
 				calculateCenterCursor(t, r_center);

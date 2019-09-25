@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/windowmanager/gizmo/WM_gizmo_api.h
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  *
  * \name Gizmo API
  * \brief API for external use of wmGizmo types.
@@ -240,6 +234,9 @@ struct wmKeyMap *WM_gizmogroup_keymap_common(
 struct wmKeyMap *WM_gizmogroup_keymap_common_select(
         const struct wmGizmoGroupType *gzgt, struct wmKeyConfig *config);
 
+void WM_gizmogroup_ensure_init(
+        const struct bContext *C, struct wmGizmoGroup *gzgroup);
+
 /* Sort utilities for use with 'BLI_listbase_sort'. */
 int WM_gizmo_cmp_temp_fl(const void *gz_a_ptr, const void *gz_b_ptr);
 int WM_gizmo_cmp_temp_fl_reverse(const void *gz_a_ptr, const void *gz_b_ptr);
@@ -249,6 +246,7 @@ int WM_gizmo_cmp_temp_fl_reverse(const void *gz_a_ptr, const void *gz_b_ptr);
 
 struct wmGizmoMap *WM_gizmomap_new_from_type(
         const struct wmGizmoMapType_Params *gzmap_params);
+void WM_gizmomap_reinit(struct wmGizmoMap *gzmap);
 const struct ListBase *WM_gizmomap_group_list(struct wmGizmoMap *gzmap);
 struct wmGizmoGroup *WM_gizmomap_group_find(
         struct wmGizmoMap *gzmap,
@@ -299,7 +297,7 @@ void WM_gizmomaptype_group_init_runtime_keymap(
 void WM_gizmomaptype_group_init_runtime(
         const struct Main *bmain, struct wmGizmoMapType *gzmap_type,
         struct wmGizmoGroupType *gzgt);
-void WM_gizmomaptype_group_init_runtime_with_region(
+wmGizmoGroup *WM_gizmomaptype_group_init_runtime_with_region(
         struct wmGizmoMapType *gzmap_type,
         struct wmGizmoGroupType *gzgt, struct ARegion *ar);
 void WM_gizmomaptype_group_unlink(

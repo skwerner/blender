@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Ray Molenkamp
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file GPU_state.h
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  */
 
 #ifndef __GPU_STATE_H__
@@ -39,7 +33,7 @@ typedef enum eGPUBlendFunction {
 /* These map directly to the GL_ filter functions, to minimize API add as needed*/
 typedef enum eGPUFilterFunction {
 	GPU_NEAREST,
-	GPU_LINEAR
+	GPU_LINEAR,
 } eGPUFilterFunction;
 
 void GPU_blend(bool enable);
@@ -51,7 +45,6 @@ void GPU_depth_range(float near, float far);
 void GPU_depth_test(bool enable);
 bool GPU_depth_test_enabled(void);
 void GPU_line_smooth(bool enable);
-void GPU_line_stipple(bool enable);
 void GPU_line_width(float width);
 void GPU_point_size(float size);
 void GPU_polygon_smooth(bool enable);

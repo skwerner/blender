@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,20 +15,16 @@
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/gpencil_modifiers/intern/MOD_gpencilnoise.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
 
 #include "BLI_utildefines.h"
+
 #include "BLI_math_vector.h"
 #include "BLI_rand.h"
 
@@ -107,18 +101,23 @@ static void deformStroke(
 	const int def_nr = defgroup_name_index(ob, mmd->vgname);
 	const float unit_v3[3] = { 1.0f, 1.0f, 1.0f };
 
-	/* Random generator, only init once. */
-	if (mmd->rng == NULL) {
+	Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
+	GpencilModifierData *md_eval = BKE_gpencil_modifiers_findByName(object_eval, md->name);
+	NoiseGpencilModifierData *mmd_eval = (NoiseGpencilModifierData *)md_eval;
+
+	/* Random generator, only init once. (it uses eval to get same value in render) */
+	if (mmd_eval->rng == NULL) {
 		uint rng_seed = (uint)(PIL_check_seconds_timer_i() & UINT_MAX);
 		rng_seed ^= POINTER_AS_UINT(mmd);
-		mmd->rng = BLI_rng_new(rng_seed);
+		mmd_eval->rng = BLI_rng_new(rng_seed);
+		mmd->rng = mmd_eval->rng;
 	}
 
 	if (!is_stroke_affected_by_modifier(
-		ob,
-		mmd->layername, mmd->pass_index, mmd->layer_pass, 1, gpl, gps,
-		mmd->flag & GP_NOISE_INVERT_LAYER, mmd->flag & GP_NOISE_INVERT_PASS,
-		mmd->flag & GP_NOISE_INVERT_LAYERPASS))
+	            ob,
+	            mmd->layername, mmd->pass_index, mmd->layer_pass, 1, gpl, gps,
+	            mmd->flag & GP_NOISE_INVERT_LAYER, mmd->flag & GP_NOISE_INVERT_PASS,
+	            mmd->flag & GP_NOISE_INVERT_LAYERPASS))
 	{
 		return;
 	}
@@ -182,7 +181,7 @@ static void deformStroke(
 			sc_diff = abs(mmd->scene_frame - sc_frame);
 			/* only recalc if the gp frame change or the number of scene frames is bigger than step */
 			if ((!gpl->actframe) || (mmd->gp_frame != gpl->actframe->framenum) ||
-				(sc_diff >= mmd->step))
+			    (sc_diff >= mmd->step))
 			{
 				vran = mmd->vrand1 = BLI_rng_get_float(mmd->rng);
 				vdir = mmd->vrand2 = BLI_rng_get_float(mmd->rng);

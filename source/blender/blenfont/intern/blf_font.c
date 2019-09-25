@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenfont/intern/blf_font.c
- *  \ingroup blf
+/** \file
+ * \ingroup blf
  *
  * Deals with drawing text to OpenGL or bitmap buffers.
  *
@@ -81,12 +74,13 @@ static SpinLock ft_lib_mutex;
 /* -------------------------------------------------------------------- */
 /** \name Glyph Batching
  * \{ */
+
 /**
  * Drawcalls are precious! make them count!
  * Since most of the Text elems are not covered by other UI elements, we can
  * group some strings together and render them in one drawcall. This behavior
- * is on demand only, between BLF_batch_start() and BLF_batch_end().
- **/
+ * is on demand only, between #BLF_batch_draw_begin() and #BLF_batch_draw_end().
+ */
 static void blf_batch_draw_init(void)
 {
 	GPUVertFormat format = {0};

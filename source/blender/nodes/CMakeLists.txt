@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -175,7 +170,7 @@ set(SRC
 	shader/nodes/node_shader_normal.c
 	shader/nodes/node_shader_normal_map.c
 	shader/nodes/node_shader_object_info.c
-	shader/nodes/node_shader_output_lamp.c
+	shader/nodes/node_shader_output_light.c
 	shader/nodes/node_shader_output_linestyle.c
 	shader/nodes/node_shader_output_material.c
 	shader/nodes/node_shader_output_world.c
@@ -263,6 +258,9 @@ set(SRC
 	intern/node_util.h
 )
 
+set(LIB
+)
+
 if(WITH_PYTHON)
 	list(APPEND INC
 		../python
@@ -294,4 +292,4 @@ if(WITH_FREESTYLE)
 	add_definitions(-DWITH_FREESTYLE)
 endif()
 
-blender_add_lib(bf_nodes "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_nodes "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

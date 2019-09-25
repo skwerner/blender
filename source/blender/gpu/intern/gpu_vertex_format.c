@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 by Mike Erwin.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, Clément Foucault
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_vertex_format.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * GPU vertex format
  */
@@ -84,7 +78,7 @@ static GLenum convert_comp_type_to_gl(GPUVertCompType type)
 
 		[GPU_COMP_F32] = GL_FLOAT,
 
-		[GPU_COMP_I10] = GL_INT_2_10_10_10_REV
+		[GPU_COMP_I10] = GL_INT_2_10_10_10_REV,
 	};
 	return table[type];
 }

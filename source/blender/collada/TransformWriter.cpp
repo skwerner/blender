@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Jan Diederich, Tod Liverseed,
- *                 Nathan Letwory
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/collada/TransformWriter.cpp
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 
@@ -77,11 +70,11 @@ void TransformWriter::add_node_transform_ob(
 
 		// factor out scale from obmat
 
-		copy_v3_v3(scale, ob->size);
+		copy_v3_v3(scale, ob->scale);
 
-		ob->size[0] = ob->size[1] = ob->size[2] = 1.0f;
+		ob->scale[0] = ob->scale[1] = ob->scale[2] = 1.0f;
 		BKE_object_to_mat4(ob, C);
-		copy_v3_v3(ob->size, scale);
+		copy_v3_v3(ob->scale, scale);
 
 		mul_m4_series(tmat, ob->parent->obmat, ob->parentinv, C);
 
@@ -98,7 +91,7 @@ void TransformWriter::add_node_transform_ob(
 	else {
 		copy_v3_v3(loc, ob->loc);
 		copy_v3_v3(rot, ob->rot);
-		copy_v3_v3(scale, ob->size);
+		copy_v3_v3(scale, ob->scale);
 	}
 
 	add_transform(node, loc, rot, scale);

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,19 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_mask_types.h
- *  \ingroup DNA
- *  \since march-2012
- *  \author Sergey Sharybin
+/** \file
+ * \ingroup DNA
  *
  * Mask data-blocks are collections of 2D curves to be used
  * for image masking in the compositor and sequencer.
@@ -58,7 +47,7 @@ typedef struct Mask {
 
 	/** For anim info. */
 	int flag;
-	int pad;
+	char _pad[4];
 } Mask;
 
 typedef struct MaskParent {
@@ -103,7 +92,7 @@ typedef struct MaskSplinePointUW {
 typedef struct MaskSplinePoint {
 	/** Actual point coordinates and it's handles . */
 	BezTriple bezt;
-	int pad;
+	char _pad[4];
 	/** Number of uv feather values. */
 	int tot_uw;
 	/** Feather UV values. */
@@ -145,7 +134,7 @@ typedef struct MaskLayerShape {
 	int    frame;
 	/** Animation flag. */
 	char   flag;
-	char   pad[7];
+	char _pad[7];
 } MaskLayerShape;
 
 /* cast to this for convenience, not saved */
@@ -177,7 +166,7 @@ typedef struct MaskLayer {
 	char   blend;
 	char   blend_flag;
 	char   falloff;
-	char   pad[7];
+	char _pad[7];
 
 	/** For animation. */
 	char   flag;

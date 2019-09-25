@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/makesrna/intern/makesrna.c
- *  \ingroup RNA
+/** \file
+ * \ingroup RNA
  */
 
 #include <float.h>
@@ -37,6 +31,7 @@
 
 #include "RNA_define.h"
 #include "RNA_types.h"
+#include "RNA_enum_types.h"
 
 #include "rna_internal.h"
 
@@ -45,6 +40,10 @@
 #    define snprintf _snprintf
 #  endif
 #endif
+
+#include "CLG_log.h"
+
+static CLG_LogRef LOG = {"makesrna"};
 
 /**
  * Variable to control debug output of makesrna.
@@ -111,15 +110,15 @@ static int replace_if_different(const char *tmpfile, const char *dep_files[])
 			if (fp_org) fclose(fp_org);                                       \
 			if (fp_new) fclose(fp_new);                                       \
 			if (remove(orgfile) != 0) {                                       \
-				fprintf(stderr, "%s:%d, Remove Error (%s): \"%s\"\n",         \
-				        __FILE__, __LINE__, strerror(errno), orgfile);        \
+				CLOG_ERROR(&LOG, "remove error (%s): \"%s\"",                 \
+				           strerror(errno), orgfile);                         \
 				return -1;                                                    \
 			}                                                                 \
 		}                                                                     \
 	}                                                                         \
 	if (rename(tmpfile, orgfile) != 0) {                                      \
-		fprintf(stderr, "%s:%d, Rename Error (%s): \"%s\" -> \"%s\"\n",       \
-		        __FILE__, __LINE__, strerror(errno), tmpfile, orgfile);       \
+		CLOG_ERROR(&LOG, "rename error (%s): \"%s\" -> \"%s\"",               \
+		           strerror(errno), tmpfile, orgfile);                        \
 		return -1;                                                            \
 	}                                                                         \
 	remove(tmpfile);                                                          \
@@ -184,7 +183,7 @@ static int replace_if_different(const char *tmpfile, const char *dep_files[])
 
 	if (fp_new == NULL) {
 		/* shouldn't happen, just to be safe */
-		fprintf(stderr, "%s:%d, open error: \"%s\"\n", __FILE__, __LINE__, tmpfile);
+		CLOG_ERROR(&LOG, "open error: \"%s\"", tmpfile);
 		fclose(fp_org);
 		return -1;
 	}
@@ -203,10 +202,12 @@ static int replace_if_different(const char *tmpfile, const char *dep_files[])
 	arr_new = MEM_mallocN(sizeof(char) * len_new, "rna_cmp_file_new");
 	arr_org = MEM_mallocN(sizeof(char) * len_org, "rna_cmp_file_org");
 
-	if (fread(arr_new, sizeof(char), len_new, fp_new) != len_new)
-		fprintf(stderr, "%s:%d, error reading file %s for comparison.\n", __FILE__, __LINE__, tmpfile);
-	if (fread(arr_org, sizeof(char), len_org, fp_org) != len_org)
-		fprintf(stderr, "%s:%d, error reading file %s for comparison.\n", __FILE__, __LINE__, orgfile);
+	if (fread(arr_new, sizeof(char), len_new, fp_new) != len_new) {
+		CLOG_ERROR(&LOG, "unable to read file %s for comparison.", tmpfile);
+	}
+	if (fread(arr_org, sizeof(char), len_org, fp_org) != len_org) {
+		CLOG_ERROR(&LOG, "unable to read file %s for comparison.", orgfile);
+	}
 
 	fclose(fp_new); fp_new = NULL;
 	fclose(fp_org); fp_org = NULL;
@@ -539,8 +540,8 @@ static char *rna_def_property_get_func(FILE *f, StructRNA *srna, PropertyRNA *pr
 
 	if (!manualfunc) {
 		if (!dp->dnastructname || !dp->dnaname) {
-			fprintf(stderr, "%s (0): %s.%s has no valid dna info.\n",
-			        __func__, srna->identifier, prop->identifier);
+			CLOG_ERROR(&LOG, "%s.%s has no valid dna info.",
+			           srna->identifier, prop->identifier);
 			DefRNA.error = 1;
 			return NULL;
 		}
@@ -551,9 +552,9 @@ static char *rna_def_property_get_func(FILE *f, StructRNA *srna, PropertyRNA *pr
 			if (prop->type == PROP_FLOAT) {
 				if (IS_DNATYPE_FLOAT_COMPAT(dp->dnatype) == 0) {
 					if (prop->subtype != PROP_COLOR_GAMMA) { /* colors are an exception. these get translated */
-						fprintf(stderr, "%s (1): %s.%s is a '%s' but wrapped as type '%s'.\n",
-						        __func__, srna->identifier, prop->identifier, dp->dnatype,
-						        RNA_property_typename(prop->type));
+						CLOG_ERROR(&LOG, "%s.%s is a '%s' but wrapped as type '%s'.",
+						           srna->identifier, prop->identifier, dp->dnatype,
+						           RNA_property_typename(prop->type));
 						DefRNA.error = 1;
 						return NULL;
 					}
@@ -561,9 +562,9 @@ static char *rna_def_property_get_func(FILE *f, StructRNA *srna, PropertyRNA *pr
 			}
 			else if (prop->type == PROP_INT || prop->type == PROP_BOOLEAN || prop->type == PROP_ENUM) {
 				if (IS_DNATYPE_INT_COMPAT(dp->dnatype) == 0) {
-					fprintf(stderr, "%s (2): %s.%s is a '%s' but wrapped as type '%s'.\n",
-					        __func__, srna->identifier, prop->identifier, dp->dnatype,
-					        RNA_property_typename(prop->type));
+					CLOG_ERROR(&LOG, "%s.%s is a '%s' but wrapped as type '%s'.",
+					           srna->identifier, prop->identifier, dp->dnatype,
+					           RNA_property_typename(prop->type));
 					DefRNA.error = 1;
 					return NULL;
 				}
@@ -839,8 +840,8 @@ static char *rna_def_property_set_func(FILE *f, StructRNA *srna, PropertyRNA *pr
 	if (!manualfunc) {
 		if (!dp->dnastructname || !dp->dnaname) {
 			if (prop->flag & PROP_EDITABLE) {
-				fprintf(stderr, "%s: %s.%s has no valid dna info.\n",
-				        __func__, srna->identifier, prop->identifier);
+				CLOG_ERROR(&LOG, "%s.%s has no valid dna info.",
+				           srna->identifier, prop->identifier);
 				DefRNA.error = 1;
 			}
 			return NULL;
@@ -1053,8 +1054,8 @@ static char *rna_def_property_length_func(FILE *f, StructRNA *srna, PropertyRNA 
 	if (prop->type == PROP_STRING) {
 		if (!manualfunc) {
 			if (!dp->dnastructname || !dp->dnaname) {
-				fprintf(stderr, "%s: %s.%s has no valid dna info.\n",
-				        __func__, srna->identifier, prop->identifier);
+				CLOG_ERROR(&LOG, "%s.%s has no valid dna info.",
+				           srna->identifier, prop->identifier);
 				DefRNA.error = 1;
 				return NULL;
 			}
@@ -1079,8 +1080,8 @@ static char *rna_def_property_length_func(FILE *f, StructRNA *srna, PropertyRNA 
 	else if (prop->type == PROP_COLLECTION) {
 		if (!manualfunc) {
 			if (prop->type == PROP_COLLECTION && (!(dp->dnalengthname || dp->dnalengthfixed) || !dp->dnaname)) {
-				fprintf(stderr, "%s: %s.%s has no valid dna info.\n",
-				        __func__, srna->identifier, prop->identifier);
+				CLOG_ERROR(&LOG, "%s.%s has no valid dna info.",
+				           srna->identifier, prop->identifier);
 				DefRNA.error = 1;
 				return NULL;
 			}
@@ -1123,8 +1124,8 @@ static char *rna_def_property_begin_func(FILE *f, StructRNA *srna, PropertyRNA *
 
 	if (!manualfunc) {
 		if (!dp->dnastructname || !dp->dnaname) {
-			fprintf(stderr, "%s: %s.%s has no valid dna info.\n",
-			        __func__, srna->identifier, prop->identifier);
+			CLOG_ERROR(&LOG, "%s.%s has no valid dna info.",
+			           srna->identifier, prop->identifier);
 			DefRNA.error = 1;
 			return NULL;
 		}
@@ -1535,8 +1536,8 @@ static void rna_def_property_funcs(FILE *f, StructRNA *srna, PropertyDefRNA *dp)
 			pprop->get = (void *)rna_def_property_get_func(f, srna, prop, dp, (const char *)pprop->get);
 			pprop->set = (void *)rna_def_property_set_func(f, srna, prop, dp, (const char *)pprop->set);
 			if (!pprop->type) {
-				fprintf(stderr, "%s: %s.%s, pointer must have a struct type.\n",
-				        __func__, srna->identifier, prop->identifier);
+				CLOG_ERROR(&LOG, "%s.%s, pointer must have a struct type.",
+				           srna->identifier, prop->identifier);
 				DefRNA.error = 1;
 			}
 			break;
@@ -1578,24 +1579,24 @@ static void rna_def_property_funcs(FILE *f, StructRNA *srna, PropertyDefRNA *dp)
 
 			if (!(prop->flag & PROP_IDPROPERTY)) {
 				if (!cprop->begin) {
-					fprintf(stderr, "%s: %s.%s, collection must have a begin function.\n",
-					        __func__, srna->identifier, prop->identifier);
+					CLOG_ERROR(&LOG, "%s.%s, collection must have a begin function.",
+					           srna->identifier, prop->identifier);
 					DefRNA.error = 1;
 				}
 				if (!cprop->next) {
-					fprintf(stderr, "%s: %s.%s, collection must have a next function.\n",
-					        __func__, srna->identifier, prop->identifier);
+					CLOG_ERROR(&LOG, "%s.%s, collection must have a next function.",
+					           srna->identifier, prop->identifier);
 					DefRNA.error = 1;
 				}
 				if (!cprop->get) {
-					fprintf(stderr, "%s: %s.%s, collection must have a get function.\n",
-					        __func__, srna->identifier, prop->identifier);
+					CLOG_ERROR(&LOG, "%s.%s, collection must have a get function.",
+					           srna->identifier, prop->identifier);
 					DefRNA.error = 1;
 				}
 			}
 			if (!cprop->item_type) {
-				fprintf(stderr, "%s: %s.%s, collection must have a struct type.\n",
-				        __func__, srna->identifier, prop->identifier);
+				CLOG_ERROR(&LOG, "%s.%s, collection must have a struct type.",
+				           srna->identifier, prop->identifier);
 				DefRNA.error = 1;
 			}
 			break;
@@ -2586,6 +2587,7 @@ static const char *rna_property_subtypename(PropertySubType type)
 		case PROP_LAYER: return "PROP_LAYER";
 		case PROP_LAYER_MEMBER: return "PROP_LAYER_MEMBER";
 		case PROP_PASSWORD: return "PROP_PASSWORD";
+		case PROP_POWER: return "PROP_POWER";
 		default:
 		{
 			/* in case we don't have a type preset that includes the subtype */
@@ -2612,6 +2614,7 @@ static const char *rna_property_subtype_unit(PropertySubType type)
 		case PROP_UNIT_VELOCITY:     return "PROP_UNIT_VELOCITY";
 		case PROP_UNIT_ACCELERATION: return "PROP_UNIT_ACCELERATION";
 		case PROP_UNIT_CAMERA:       return "PROP_UNIT_CAMERA";
+		case PROP_UNIT_POWER:        return "PROP_UNIT_POWER";
 		default:                     return "PROP_UNIT_UNKNOWN";
 	}
 }
@@ -2948,23 +2951,25 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
 
 				if (prop->flag & PROP_ENUM_FLAG) {
 					if (eprop->defaultvalue & ~totflag) {
-						fprintf(stderr, "%s: %s%s.%s, enum default includes unused bits (%d).\n",
-						        __func__, srna->identifier, errnest, prop->identifier,
+						CLOG_ERROR(&LOG, "%s%s.%s, enum default includes unused bits (%d).",
+						           srna->identifier, errnest, prop->identifier,
 						        eprop->defaultvalue & ~totflag);
 						DefRNA.error = 1;
 					}
 				}
 				else {
-					if (!defaultfound) {
-						fprintf(stderr, "%s: %s%s.%s, enum default is not in items.\n",
-						        __func__, srna->identifier, errnest, prop->identifier);
+					if (!defaultfound &&
+					    !(eprop->itemf && eprop->item == DummyRNA_NULL_items))
+					{
+						CLOG_ERROR(&LOG, "%s%s.%s, enum default is not in items.",
+						           srna->identifier, errnest, prop->identifier);
 						DefRNA.error = 1;
 					}
 				}
 			}
 			else {
-				fprintf(stderr, "%s: %s%s.%s, enum must have items defined.\n",
-				        __func__, srna->identifier, errnest, prop->identifier);
+				CLOG_ERROR(&LOG, "%s%s.%s, enum must have items defined.",
+				           srna->identifier, errnest, prop->identifier);
 				DefRNA.error = 1;
 			}
 			break;
@@ -3358,8 +3363,8 @@ static void rna_generate_struct(BlenderRNA *UNUSED(brna), StructRNA *srna, FILE 
 	fprintf(f, "\t%s,\n", rna_function_string(srna->idproperties));
 
 	if (srna->reg && !srna->refine) {
-		fprintf(stderr, "%s: %s has a register function, must also have refine function.\n",
-		        __func__, srna->identifier);
+		CLOG_ERROR(&LOG, "%s has a register function, must also have refine function.",
+		           srna->identifier);
 		DefRNA.error = 1;
 	}
 
@@ -3406,7 +3411,7 @@ static RNAProcessItem PROCESS_ITEMS[] = {
 	{"rna_gpencil.c", NULL, RNA_def_gpencil},
 	{"rna_image.c", "rna_image_api.c", RNA_def_image},
 	{"rna_key.c", NULL, RNA_def_key},
-	{"rna_lamp.c", NULL, RNA_def_light},
+	{"rna_light.c", NULL, RNA_def_light},
 	{"rna_lattice.c", "rna_lattice_api.c", RNA_def_lattice},
 	{"rna_layer.c", NULL, RNA_def_view_layer},
 	{"rna_linestyle.c", NULL, RNA_def_linestyle},
@@ -3450,7 +3455,7 @@ static RNAProcessItem PROCESS_ITEMS[] = {
 	{"rna_movieclip.c", NULL, RNA_def_movieclip},
 	{"rna_tracking.c", NULL, RNA_def_tracking},
 	{"rna_mask.c", NULL, RNA_def_mask},
-	{NULL, NULL}
+	{NULL, NULL},
 };
 
 static void rna_generate(BlenderRNA *brna, FILE *f, const char *filename, const char *api_filename)
@@ -3599,6 +3604,7 @@ static void rna_generate_header(BlenderRNA *UNUSED(brna), FILE *f)
 
 static const char *cpp_classes = ""
 "\n"
+"#include <stdlib.h> /* for malloc */\n"
 "#include <string>\n"
 "#include <string.h> /* for memcpy */\n"
 "\n"
@@ -4211,6 +4217,12 @@ int main(int argc, char **argv)
 {
 	int totblock, return_status = 0;
 
+	CLG_init();
+
+	/* Some useful defaults since this runs standalone. */
+	CLG_output_use_basename_set(true);
+	CLG_level_set(debugSRNA);
+
 	if (argc < 2) {
 		fprintf(stderr, "Usage: %s outdirectory/\n", argv[0]);
 		return_status = 1;
@@ -4222,6 +4234,8 @@ int main(int argc, char **argv)
 		makesrna_path = argv[0];
 		return_status = rna_preprocess(argv[1]);
 	}
+
+	CLG_exit();
 
 	totblock = MEM_get_memory_blocks_in_use();
 	if (totblock != 0) {

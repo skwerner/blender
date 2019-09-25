@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Esteban Tovagliari, Cedric Paille, Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #include "abc_nurbs.h"
@@ -259,10 +257,10 @@ void AbcNurbsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSele
 		}
 		catch(Alembic::Util::Exception &ex) {
 			printf("Alembic: error reading nurbs sample for '%s/%s' at time %f: %s\n",
-				   m_iobject.getFullName().c_str(),
-				   schema.getName().c_str(),
-				   sample_sel.getRequestedTime(),
-				   ex.what());
+			       m_iobject.getFullName().c_str(),
+			       schema.getName().c_str(),
+			       sample_sel.getRequestedTime(),
+			       ex.what());
 			return;
 		}
 

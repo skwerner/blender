@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Gilbert, Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/mathutils/mathutils.c
- *  \ingroup pymathutils
+/** \file
+ * \ingroup pymathutils
  */
 
 #include <Python.h>
@@ -111,15 +105,17 @@ Py_hash_t mathutils_array_hash(const float *array, size_t array_len)
 	i = 0;
 	while (--len >= 0) {
 		y = _Py_HashDouble((double)(array[i++]));
-		if (y == -1)
+		if (y == -1) {
 			return -1;
+		}
 		x = (x ^ y) * mult;
 		/* the cast might truncate len; that doesn't change hash stability */
 		mult += (Py_hash_t)(82520UL + len + len);
 	}
 	x += 97531UL;
-	if (x == (Py_uhash_t)-1)
+	if (x == (Py_uhash_t)-1) {
 		x = -2;
+	}
 	return x;
 }
 
@@ -398,8 +394,9 @@ int EXPP_VectorsAreEqual(const float *vecA, const float *vecB, int size, int flo
 {
 	int x;
 	for (x = 0; x < size; x++) {
-		if (EXPP_FloatsAreEqual(vecA[x], vecB[x], floatSteps) == 0)
+		if (EXPP_FloatsAreEqual(vecA[x], vecB[x], floatSteps) == 0) {
 			return 0;
+		}
 	}
 	return 1;
 }
@@ -431,8 +428,10 @@ unsigned char Mathutils_RegisterCallback(Mathutils_Callback *cb)
 
 	/* find the first free slot */
 	for (i = 0; mathutils_callbacks[i]; i++) {
-		if (mathutils_callbacks[i] == cb) /* already registered? */
+		if (mathutils_callbacks[i] == cb) {
+			/* already registered? */
 			return i;
+		}
 	}
 
 	BLI_assert(i + 1 < MATHUTILS_TOT_CB);
@@ -586,7 +585,7 @@ void BaseMathObject_dealloc(BaseMathObject *self)
 
 /*----------------------------MODULE INIT-------------------------*/
 static struct PyMethodDef M_Mathutils_methods[] = {
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 static struct PyModuleDef M_Mathutils_module_def = {
@@ -617,18 +616,24 @@ PyMODINIT_FUNC PyInit_mathutils(void)
 	PyObject *submodule;
 	PyObject *sys_modules = PyImport_GetModuleDict();
 
-	if (PyType_Ready(&vector_Type) < 0)
+	if (PyType_Ready(&vector_Type) < 0) {
 		return NULL;
-	if (PyType_Ready(&matrix_Type) < 0)
+	}
+	if (PyType_Ready(&matrix_Type) < 0) {
 		return NULL;
-	if (PyType_Ready(&matrix_access_Type) < 0)
+	}
+	if (PyType_Ready(&matrix_access_Type) < 0) {
 		return NULL;
-	if (PyType_Ready(&euler_Type) < 0)
+	}
+	if (PyType_Ready(&euler_Type) < 0) {
 		return NULL;
-	if (PyType_Ready(&quaternion_Type) < 0)
+	}
+	if (PyType_Ready(&quaternion_Type) < 0) {
 		return NULL;
-	if (PyType_Ready(&color_Type) < 0)
+	}
+	if (PyType_Ready(&color_Type) < 0) {
 		return NULL;
+	}
 
 	mod = PyModule_Create(&M_Mathutils_module_def);
 
@@ -661,7 +666,7 @@ PyMODINIT_FUNC PyInit_mathutils(void)
 	PyModule_AddObject(mod, "bvhtree", (submodule = PyInit_mathutils_bvhtree()));
 	PyDict_SetItem(sys_modules, PyModule_GetNameObject(submodule), submodule);
 
-	/* KDTree submodule */
+	/* KDTree_3d submodule */
 	PyModule_AddObject(mod, "kdtree", (submodule = PyInit_mathutils_kdtree()));
 	PyDict_SetItem(sys_modules, PyModule_GetNameObject(submodule), submodule);
 #endif

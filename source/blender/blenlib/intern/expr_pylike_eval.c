@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,10 @@
  *
  * The Original Code is Copyright (C) 2018 Blender Foundation, Alexander Gavrilov
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Alexander Gavrilov
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/expr_pylike_eval.c
- *  \ingroup bli
- *  \author Alexander Gavrilov
- *  \since 2018
+/** \file
+ * \ingroup bli
  *
  * Simple evaluator for a subset of Python expressions that can be
  * computed using purely double precision floating point values.
@@ -370,8 +360,8 @@ typedef struct BuiltinOpDef {
 static BuiltinOpDef builtin_ops[] = {
 	{ "radians", OPCODE_FUNC1, op_radians },
 	{ "degrees", OPCODE_FUNC1, op_degrees },
-	{ "abs", OPCODE_FUNC1, abs },
-	{ "fabs", OPCODE_FUNC1, abs },
+	{ "abs", OPCODE_FUNC1, fabs },
+	{ "fabs", OPCODE_FUNC1, fabs },
 	{ "floor", OPCODE_FUNC1, floor },
 	{ "ceil", OPCODE_FUNC1, ceil },
 	{ "trunc", OPCODE_FUNC1, trunc },
@@ -564,28 +554,32 @@ static bool parse_next_token(ExprParseState *state)
 		char *end, *out = state->tokenbuf;
 		bool is_float = false;
 
-		while (isdigit(*state->cur))
+		while (isdigit(*state->cur)) {
 			*out++ = *state->cur++;
+		}
 
 		if (*state->cur == '.') {
 			is_float = true;
 			*out++ = *state->cur++;
 
-			while (isdigit(*state->cur))
+			while (isdigit(*state->cur)) {
 				*out++ = *state->cur++;
+			}
 		}
 
 		if (ELEM(*state->cur, 'e', 'E')) {
 			is_float = true;
 			*out++ = *state->cur++;
 
-			if (ELEM(*state->cur, '+', '-'))
+			if (ELEM(*state->cur, '+', '-')) {
 				*out++ = *state->cur++;
+			}
 
 			CHECK_ERROR(isdigit(*state->cur));
 
-			while (isdigit(*state->cur))
+			while (isdigit(*state->cur)) {
 				*out++ = *state->cur++;
+			}
 		}
 
 		*out = 0;
@@ -621,8 +615,9 @@ static bool parse_next_token(ExprParseState *state)
 	if (isalpha(*state->cur) || ELEM(*state->cur, '_')) {
 		char *out = state->tokenbuf;
 
-		while (isalnum(*state->cur) || ELEM(*state->cur, '_'))
+		while (isalnum(*state->cur) || ELEM(*state->cur, '_')) {
 			*out++ = *state->cur++;
+		}
 
 		*out = 0;
 

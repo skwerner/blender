@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 by Mike Erwin.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/GPU_vertex_buffer.h
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * GPU vertex buffer
  */
@@ -49,7 +43,7 @@ typedef enum {
 	/* can be extended to support more types */
 	GPU_USAGE_STREAM,
 	GPU_USAGE_STATIC, /* do not keep data in memory */
-	GPU_USAGE_DYNAMIC
+	GPU_USAGE_DYNAMIC,
 } GPUUsageType;
 
 typedef struct GPUVertBuf {

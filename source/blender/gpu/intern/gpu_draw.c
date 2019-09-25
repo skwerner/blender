@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Brecht Van Lommel.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_draw.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * Utility functions for dealing with OpenGL texture & material context,
  * mipmap generation and light objects.
@@ -44,7 +36,7 @@
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -82,6 +74,8 @@
 #ifdef WITH_SMOKE
 #  include "smoke_API.h"
 #endif
+
+static void gpu_free_image_immediate(Image *ima);
 
 //* Checking powers of two for images since OpenGL ES requires it */
 #ifdef WITH_DDS
@@ -270,11 +264,16 @@ GPUTexture *GPU_texture_from_blender(
         Image *ima,
         ImageUser *iuser,
         int textarget,
-        bool is_data,
-        double UNUSED(time))
+        bool is_data)
 {
 	if (ima == NULL) {
 		return NULL;
+	}
+
+	/* currently, gpu refresh tagging is used by ima sequences */
+	if (ima->gpuflag & IMA_GPU_REFRESH) {
+		gpu_free_image_immediate(ima);
+		ima->gpuflag &= ~IMA_GPU_REFRESH;
 	}
 
 	/* Test if we already have a texture. */
@@ -289,12 +288,6 @@ GPUTexture *GPU_texture_from_blender(
 	if (ima->ok == 0) {
 		*tex = GPU_texture_from_bindcode(textarget, bindcode);
 		return *tex;
-	}
-
-	/* currently, tpage refresh is used by ima sequences */
-	if (ima->tpageflag & IMA_TPAGE_REFRESH) {
-		GPU_free_image(ima);
-		ima->tpageflag &= ~IMA_TPAGE_REFRESH;
 	}
 
 	/* check if we have a valid image buffer */
@@ -347,9 +340,9 @@ GPUTexture *GPU_texture_from_blender(
 	/* mark as non-color data texture */
 	if (bindcode) {
 		if (is_data)
-			ima->tpageflag |= IMA_GLBIND_IS_DATA;
+			ima->gpuflag |= IMA_GPU_IS_DATA;
 		else
-			ima->tpageflag &= ~IMA_GLBIND_IS_DATA;
+			ima->gpuflag &= ~IMA_GPU_IS_DATA;
 	}
 
 	/* clean up */
@@ -436,6 +429,28 @@ void GPU_create_gl_tex(
 {
 	ImBuf *ibuf = NULL;
 
+	if (textarget == GL_TEXTURE_2D &&
+	    is_over_resolution_limit(textarget, rectw, recth))
+	{
+		int tpx = rectw;
+		int tpy = recth;
+		rectw = smaller_power_of_2_limit(rectw);
+		recth = smaller_power_of_2_limit(recth);
+
+		if (use_high_bit_depth) {
+			ibuf = IMB_allocFromBuffer(NULL, frect, tpx, tpy);
+			IMB_scaleImBuf(ibuf, rectw, recth);
+
+			frect = ibuf->rect_float;
+		}
+		else {
+			ibuf = IMB_allocFromBuffer(rect, NULL, tpx, tpy);
+			IMB_scaleImBuf(ibuf, rectw, recth);
+
+			rect = ibuf->rect;
+		}
+	}
+
 	/* create image */
 	glGenTextures(1, (GLuint *)bind);
 	glBindTexture(textarget, *bind);
@@ -454,7 +469,7 @@ void GPU_create_gl_tex(
 			glGenerateMipmap(GL_TEXTURE_2D);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gpu_get_mipmap_filter(0));
 			if (ima)
-				ima->tpageflag |= IMA_MIPMAP_COMPLETE;
+				ima->gpuflag |= IMA_GPU_MIPMAP_COMPLETE;
 		}
 		else {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -479,7 +494,7 @@ void GPU_create_gl_tex(
 				glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, gpu_get_mipmap_filter(0));
 
 				if (ima)
-					ima->tpageflag |= IMA_MIPMAP_COMPLETE;
+					ima->gpuflag |= IMA_GPU_MIPMAP_COMPLETE;
 			}
 			else {
 				glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -604,9 +619,9 @@ void GPU_paint_set_mipmap(Main *bmain, bool mipmap)
 	GTS.texpaint = !mipmap;
 
 	if (mipmap) {
-		for (Image *ima = bmain->image.first; ima; ima = ima->id.next) {
+		for (Image *ima = bmain->images.first; ima; ima = ima->id.next) {
 			if (BKE_image_has_opengl_texture(ima)) {
-				if (ima->tpageflag & IMA_MIPMAP_COMPLETE) {
+				if (ima->gpuflag & IMA_GPU_MIPMAP_COMPLETE) {
 					if (ima->gputexture[TEXTARGET_TEXTURE_2D]) {
 						GPU_texture_bind(ima->gputexture[TEXTARGET_TEXTURE_2D], 0);
 						glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gpu_get_mipmap_filter(0));
@@ -618,12 +633,12 @@ void GPU_paint_set_mipmap(Main *bmain, bool mipmap)
 					GPU_free_image(ima);
 			}
 			else
-				ima->tpageflag &= ~IMA_MIPMAP_COMPLETE;
+				ima->gpuflag &= ~IMA_GPU_MIPMAP_COMPLETE;
 		}
 
 	}
 	else {
-		for (Image *ima = bmain->image.first; ima; ima = ima->id.next) {
+		for (Image *ima = bmain->images.first; ima; ima = ima->id.next) {
 			if (BKE_image_has_opengl_texture(ima)) {
 				if (ima->gputexture[TEXTARGET_TEXTURE_2D]) {
 					GPU_texture_bind(ima->gputexture[TEXTARGET_TEXTURE_2D], 0);
@@ -633,7 +648,7 @@ void GPU_paint_set_mipmap(Main *bmain, bool mipmap)
 				}
 			}
 			else
-				ima->tpageflag &= ~IMA_MIPMAP_COMPLETE;
+				ima->gpuflag &= ~IMA_GPU_MIPMAP_COMPLETE;
 		}
 	}
 }
@@ -701,7 +716,7 @@ static bool gpu_check_scaled_image(ImBuf *ibuf, Image *ima, float *frect, int x,
 			glGenerateMipmap(GL_TEXTURE_2D);
 		}
 		else {
-			ima->tpageflag &= ~IMA_MIPMAP_COMPLETE;
+			ima->gpuflag &= ~IMA_GPU_MIPMAP_COMPLETE;
 		}
 
 		GPU_texture_unbind(ima->gputexture[TEXTARGET_TEXTURE_2D]);
@@ -731,7 +746,7 @@ void GPU_paint_update_image(Image *ima, ImageUser *iuser, int x, int y, int w, i
 		/* if color correction is needed, we must update the part that needs updating. */
 		if (ibuf->rect_float) {
 			float *buffer = MEM_mallocN(w * h * sizeof(float) * 4, "temp_texpaint_float_buf");
-			bool is_data = (ima->tpageflag & IMA_GLBIND_IS_DATA) != 0;
+			bool is_data = (ima->gpuflag & IMA_GPU_IS_DATA) != 0;
 			IMB_partial_rect_from_float(ibuf, buffer, x, y, w, h, is_data);
 
 			if (gpu_check_scaled_image(ibuf, ima, buffer, x, y, w, h)) {
@@ -749,7 +764,7 @@ void GPU_paint_update_image(Image *ima, ImageUser *iuser, int x, int y, int w, i
 				glGenerateMipmap(GL_TEXTURE_2D);
 			}
 			else {
-				ima->tpageflag &= ~IMA_MIPMAP_COMPLETE;
+				ima->gpuflag &= ~IMA_GPU_MIPMAP_COMPLETE;
 			}
 
 			GPU_texture_unbind(ima->gputexture[TEXTARGET_TEXTURE_2D]);
@@ -786,7 +801,7 @@ void GPU_paint_update_image(Image *ima, ImageUser *iuser, int x, int y, int w, i
 			glGenerateMipmap(GL_TEXTURE_2D);
 		}
 		else {
-			ima->tpageflag &= ~IMA_MIPMAP_COMPLETE;
+			ima->gpuflag &= ~IMA_GPU_MIPMAP_COMPLETE;
 		}
 
 		GPU_texture_unbind(ima->gputexture[TEXTARGET_TEXTURE_2D]);
@@ -862,7 +877,7 @@ static GPUTexture *create_transfer_function(int type, const ColorBand *coba)
 			break;
 	}
 
-	GPUTexture *tex = GPU_texture_create_1D(TFUNC_WIDTH, GPU_RGBA8, data, NULL);
+	GPUTexture *tex = GPU_texture_create_1d(TFUNC_WIDTH, GPU_RGBA8, data, NULL);
 
 	MEM_freeN(data);
 
@@ -1074,9 +1089,9 @@ void GPU_create_smoke_velocity(SmokeModifierData *smd)
 		}
 
 		if (!sds->tex_velocity_x) {
-			sds->tex_velocity_x = GPU_texture_create_3D(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_x, NULL);
-			sds->tex_velocity_y = GPU_texture_create_3D(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_y, NULL);
-			sds->tex_velocity_z = GPU_texture_create_3D(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_z, NULL);
+			sds->tex_velocity_x = GPU_texture_create_3d(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_x, NULL);
+			sds->tex_velocity_y = GPU_texture_create_3d(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_y, NULL);
+			sds->tex_velocity_z = GPU_texture_create_3d(sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_z, NULL);
 		}
 	}
 #else // WITH_SMOKE
@@ -1126,7 +1141,7 @@ void GPU_free_unused_buffers(Main *bmain)
 		Image *ima = node->link;
 
 		/* check in case it was freed in the meantime */
-		if (bmain && BLI_findindex(&bmain->image, ima) != -1)
+		if (bmain && BLI_findindex(&bmain->images, ima) != -1)
 			GPU_free_image(ima);
 	}
 
@@ -1136,13 +1151,8 @@ void GPU_free_unused_buffers(Main *bmain)
 	BLI_thread_unlock(LOCK_OPENGL);
 }
 
-void GPU_free_image(Image *ima)
+static void gpu_free_image_immediate(Image *ima)
 {
-	if (!BLI_thread_is_main()) {
-		gpu_queue_image_for_free(ima);
-		return;
-	}
-
 	for (int i = 0; i < TEXTARGET_COUNT; i++) {
 		/* free glsl image binding */
 		if (ima->gputexture[i]) {
@@ -1151,13 +1161,23 @@ void GPU_free_image(Image *ima)
 		}
 	}
 
-	ima->tpageflag &= ~(IMA_MIPMAP_COMPLETE | IMA_GLBIND_IS_DATA);
+	ima->gpuflag &= ~(IMA_GPU_MIPMAP_COMPLETE | IMA_GPU_IS_DATA);
+}
+
+void GPU_free_image(Image *ima)
+{
+	if (!BLI_thread_is_main()) {
+		gpu_queue_image_for_free(ima);
+		return;
+	}
+
+	gpu_free_image_immediate(ima);
 }
 
 void GPU_free_images(Main *bmain)
 {
 	if (bmain) {
-		for (Image *ima = bmain->image.first; ima; ima = ima->id.next) {
+		for (Image *ima = bmain->images.first; ima; ima = ima->id.next) {
 			GPU_free_image(ima);
 		}
 	}
@@ -1167,7 +1187,7 @@ void GPU_free_images(Main *bmain)
 void GPU_free_images_anim(Main *bmain)
 {
 	if (bmain) {
-		for (Image *ima = bmain->image.first; ima; ima = ima->id.next) {
+		for (Image *ima = bmain->images.first; ima; ima = ima->id.next) {
 			if (BKE_image_is_animated(ima)) {
 				GPU_free_image(ima);
 			}
@@ -1194,7 +1214,7 @@ void GPU_free_images_old(Main *bmain)
 
 	lasttime = ctime;
 
-	Image *ima = bmain->image.first;
+	Image *ima = bmain->images.first;
 	while (ima) {
 		if ((ima->flag & IMA_NOCOLLECT) == 0 && ctime - ima->lastused > U.textimeout) {
 			/* If it's in GL memory, deallocate and set time tag to current time
@@ -1277,148 +1297,6 @@ void GPU_disable_program_point_size(void)
 /** \name Framebuffer color depth, for selection codes
  * \{ */
 
-#ifdef __APPLE__
-
-/* apple seems to round colors to below and up on some configs */
-
-static uint index_to_framebuffer(int index)
-{
-	uint i = index;
-
-	switch (GPU_color_depth()) {
-		case 12:
-			i = ((i & 0xF00) << 12) + ((i & 0xF0) << 8) + ((i & 0xF) << 4);
-			/* sometimes dithering subtracts! */
-			i |= 0x070707;
-			break;
-		case 15:
-		case 16:
-			i = ((i & 0x7C00) << 9) + ((i & 0x3E0) << 6) + ((i & 0x1F) << 3);
-			i |= 0x030303;
-			break;
-		case 24:
-			break;
-		default: /* 18 bits... */
-			i = ((i & 0x3F000) << 6) + ((i & 0xFC0) << 4) + ((i & 0x3F) << 2);
-			i |= 0x010101;
-			break;
-	}
-
-	return i;
-}
-
-#else
-
-/* this is the old method as being in use for ages.... seems to work? colors are rounded to lower values */
-
-static uint index_to_framebuffer(int index)
-{
-	uint i = index;
-
-	switch (GPU_color_depth()) {
-		case 8:
-			i = ((i & 48) << 18) + ((i & 12) << 12) + ((i & 3) << 6);
-			i |= 0x3F3F3F;
-			break;
-		case 12:
-			i = ((i & 0xF00) << 12) + ((i & 0xF0) << 8) + ((i & 0xF) << 4);
-			/* sometimes dithering subtracts! */
-			i |= 0x0F0F0F;
-			break;
-		case 15:
-		case 16:
-			i = ((i & 0x7C00) << 9) + ((i & 0x3E0) << 6) + ((i & 0x1F) << 3);
-			i |= 0x070707;
-			break;
-		case 24:
-			break;
-		default:    /* 18 bits... */
-			i = ((i & 0x3F000) << 6) + ((i & 0xFC0) << 4) + ((i & 0x3F) << 2);
-			i |= 0x030303;
-			break;
-	}
-
-	return i;
-}
-
-#endif
-
-
-void GPU_select_index_set(int index)
-{
-	const int col = index_to_framebuffer(index);
-	glColor3ub(( (col)        & 0xFF),
-	           (((col) >>  8) & 0xFF),
-	           (((col) >> 16) & 0xFF));
-}
-
-void GPU_select_index_get(int index, int *r_col)
-{
-	const int col = index_to_framebuffer(index);
-	char *c_col = (char *)r_col;
-	c_col[0] = (col & 0xFF); /* red */
-	c_col[1] = ((col >>  8) & 0xFF); /* green */
-	c_col[2] = ((col >> 16) & 0xFF); /* blue */
-	c_col[3] = 0xFF; /* alpha */
-}
-
-
-#define INDEX_FROM_BUF_8(col)     ((((col) & 0xC00000) >> 18) + (((col) & 0xC000) >> 12) + (((col) & 0xC0) >> 6))
-#define INDEX_FROM_BUF_12(col)    ((((col) & 0xF00000) >> 12) + (((col) & 0xF000) >> 8)  + (((col) & 0xF0) >> 4))
-#define INDEX_FROM_BUF_15_16(col) ((((col) & 0xF80000) >> 9)  + (((col) & 0xF800) >> 6)  + (((col) & 0xF8) >> 3))
-#define INDEX_FROM_BUF_18(col)    ((((col) & 0xFC0000) >> 6)  + (((col) & 0xFC00) >> 4)  + (((col) & 0xFC) >> 2))
-#define INDEX_FROM_BUF_24(col)      ((col) & 0xFFFFFF)
-
-int GPU_select_to_index(uint col)
-{
-	if (col == 0) {
-		return 0;
-	}
-
-	switch (GPU_color_depth()) {
-		case  8: return INDEX_FROM_BUF_8(col);
-		case 12: return INDEX_FROM_BUF_12(col);
-		case 15:
-		case 16: return INDEX_FROM_BUF_15_16(col);
-		case 24: return INDEX_FROM_BUF_24(col);
-		default: return INDEX_FROM_BUF_18(col);
-	}
-}
-
-void GPU_select_to_index_array(uint *col, const uint size)
-{
-#define INDEX_BUF_ARRAY(INDEX_FROM_BUF_BITS) \
-	for (i = size; i--; col++) { \
-		if ((c = *col)) { \
-			*col = INDEX_FROM_BUF_BITS(c); \
-		} \
-	} ((void)0)
-
-	if (size > 0) {
-		uint i, c;
-
-		switch (GPU_color_depth()) {
-			case  8:
-				INDEX_BUF_ARRAY(INDEX_FROM_BUF_8);
-				break;
-			case 12:
-				INDEX_BUF_ARRAY(INDEX_FROM_BUF_12);
-				break;
-			case 15:
-			case 16:
-				INDEX_BUF_ARRAY(INDEX_FROM_BUF_15_16);
-				break;
-			case 24:
-				INDEX_BUF_ARRAY(INDEX_FROM_BUF_24);
-				break;
-			default:
-				INDEX_BUF_ARRAY(INDEX_FROM_BUF_18);
-				break;
-		}
-	}
-
-#undef INDEX_BUF_ARRAY
-}
 
 #define STATE_STACK_DEPTH 16
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_region_color_picker.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * Color Picker Region & Color Utils
  */
@@ -184,8 +178,9 @@ static void ui_update_color_picker_buts_rgb(
 	/* this updates button strings,
 	 * is hackish... but button pointers are on stack of caller function */
 	for (bt = block->buttons.first; bt; bt = bt->next) {
-		if (bt->custom_data != cpicker)
+		if (bt->custom_data != cpicker) {
 			continue;
+		}
 
 		if (bt->rnaprop) {
 			ui_but_v3_set(bt, rgb);
@@ -207,9 +202,15 @@ static void ui_update_color_picker_buts_rgb(
 				IMB_colormanagement_scene_linear_to_srgb_v3(rgb_hex);
 			}
 
-			if (rgb_hex[0] > 1.0f) rgb_hex[0] = modf(rgb_hex[0], &intpart);
-			if (rgb_hex[1] > 1.0f) rgb_hex[1] = modf(rgb_hex[1], &intpart);
-			if (rgb_hex[2] > 1.0f) rgb_hex[2] = modf(rgb_hex[2], &intpart);
+			if (rgb_hex[0] > 1.0f) {
+				rgb_hex[0] = modf(rgb_hex[0], &intpart);
+			}
+			if (rgb_hex[1] > 1.0f) {
+				rgb_hex[1] = modf(rgb_hex[1], &intpart);
+			}
+			if (rgb_hex[2] > 1.0f) {
+				rgb_hex[2] = modf(rgb_hex[2], &intpart);
+			}
 
 			rgb_float_to_uchar(rgb_hex_uchar, rgb_hex);
 			BLI_snprintf(col, sizeof(col), "%02X%02X%02X", UNPACK3_EX((uint), rgb_hex_uchar, ));
@@ -258,8 +259,9 @@ static void ui_colorpicker_rna_cb(bContext *UNUSED(C), void *bt1, void *UNUSED(a
 		        but, but->block, but->custom_data, rgb);
 	}
 
-	if (popup)
+	if (popup) {
 		popup->menuretval = UI_RETURN_UPDATE;
+	}
 }
 
 static void ui_color_wheel_rna_cb(bContext *UNUSED(C), void *bt1, void *UNUSED(arg))
@@ -277,8 +279,9 @@ static void ui_color_wheel_rna_cb(bContext *UNUSED(C), void *bt1, void *UNUSED(a
 
 	ui_update_color_picker_buts_rgb(but, but->block, cpicker, rgb);
 
-	if (popup)
+	if (popup) {
 		popup->menuretval = UI_RETURN_UPDATE;
+	}
 }
 
 static void ui_colorpicker_hex_rna_cb(bContext *UNUSED(C), void *bt1, void *hexcl)
@@ -298,8 +301,9 @@ static void ui_colorpicker_hex_rna_cb(bContext *UNUSED(C), void *bt1, void *hexc
 
 	ui_update_color_picker_buts_rgb(but, but->block, cpicker, rgb);
 
-	if (popup)
+	if (popup) {
 		popup->menuretval = UI_RETURN_UPDATE;
+	}
 }
 
 static void ui_popup_close_cb(bContext *UNUSED(C), void *bt1, void *UNUSED(arg))
@@ -405,7 +409,7 @@ static void ui_block_colorpicker(
         uiBlock *block, uiBut *from_but, float rgba[4], bool show_picker)
 {
 	/* ePickerType */
-	static char colormode = 0;
+	static char colormode = 1;
 	uiBut *bt;
 	int width, butwidth;
 	static char hexcol[128];
@@ -595,10 +599,12 @@ static int ui_colorpicker_small_wheel_cb(const bContext *UNUSED(C), uiBlock *blo
 {
 	float add = 0.0f;
 
-	if (event->type == WHEELUPMOUSE)
+	if (event->type == WHEELUPMOUSE) {
 		add = 0.05f;
-	else if (event->type == WHEELDOWNMOUSE)
+	}
+	else if (event->type == WHEELDOWNMOUSE) {
 		add = -0.05f;
+	}
 
 	if (add != 0.0f) {
 		uiBut *but;
@@ -621,8 +627,9 @@ static int ui_colorpicker_small_wheel_cb(const bContext *UNUSED(C), uiBlock *blo
 				ui_but_v3_set(but, rgb);
 
 				ui_update_color_picker_buts_rgb(but, block, cpicker, rgb);
-				if (popup)
+				if (popup) {
 					popup->menuretval = UI_RETURN_UPDATE;
+				}
 
 				return 1;
 			}

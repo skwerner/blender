@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Brecht Van Lommel.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file GPU_texture.h
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  */
 
 #ifndef __GPU_TEXTURE_H__
@@ -42,6 +34,7 @@ struct GPUVertBuf;
 struct Image;
 struct ImageUser;
 struct PreviewImage;
+struct rcti;
 
 struct GPUFrameBuffer;
 typedef struct GPUTexture GPUTexture;
@@ -161,17 +154,17 @@ GPUTexture *GPU_texture_create_nD(
         eGPUTextureFormat tex_format, eGPUDataFormat gpu_data_format, int samples,
         const bool can_rescale, char err_out[256]);
 
-GPUTexture *GPU_texture_create_1D(
+GPUTexture *GPU_texture_create_1d(
         int w, eGPUTextureFormat data_type, const float *pixels, char err_out[256]);
-GPUTexture *GPU_texture_create_1D_array(
+GPUTexture *GPU_texture_create_1d_array(
         int w, int h, eGPUTextureFormat data_type, const float *pixels, char err_out[256]);
-GPUTexture *GPU_texture_create_2D(
+GPUTexture *GPU_texture_create_2d(
         int w, int h, eGPUTextureFormat data_type, const float *pixels, char err_out[256]);
-GPUTexture *GPU_texture_create_2D_multisample(
+GPUTexture *GPU_texture_create_2d_multisample(
         int w, int h, eGPUTextureFormat data_type, const float *pixels, int samples, char err_out[256]);
-GPUTexture *GPU_texture_create_2D_array(
+GPUTexture *GPU_texture_create_2d_array(
         int w, int h, int d, eGPUTextureFormat data_type, const float *pixels, char err_out[256]);
-GPUTexture *GPU_texture_create_3D(
+GPUTexture *GPU_texture_create_3d(
         int w, int h, int d, eGPUTextureFormat data_type, const float *pixels, char err_out[256]);
 GPUTexture *GPU_texture_create_cube(
         int w, eGPUTextureFormat data_type, const float *pixels, char err_out[256]);
@@ -182,7 +175,7 @@ GPUTexture *GPU_texture_create_buffer(
 
 GPUTexture *GPU_texture_from_bindcode(int textarget, int bindcode);
 GPUTexture *GPU_texture_from_blender(
-        struct Image *ima, struct ImageUser *iuser, int textarget, bool is_data, double time);
+        struct Image *ima, struct ImageUser *iuser, int textarget, bool is_data);
 GPUTexture *GPU_texture_from_preview(struct PreviewImage *prv, int mipmap);
 
 void GPU_texture_add_mipmap(GPUTexture *tex, eGPUDataFormat gpu_data_format, int miplvl, const void *pixels);
@@ -193,6 +186,9 @@ void GPU_texture_update_sub(
         int offset_x, int offset_y, int offset_z, int width, int height, int depth);
 
 void *GPU_texture_read(GPUTexture *tex, eGPUDataFormat gpu_data_format, int miplvl);
+void GPU_texture_read_rect(
+        GPUTexture *tex, eGPUDataFormat gpu_data_format,
+        const struct rcti *rect, void *r_buf);
 
 void GPU_invalid_tex_init(void);
 void GPU_invalid_tex_bind(int mode);

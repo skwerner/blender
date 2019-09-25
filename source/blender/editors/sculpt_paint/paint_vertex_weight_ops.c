@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_vertex_weight_ops.c
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 #include "MEM_guardedalloc.h"
@@ -144,7 +140,8 @@ void PAINT_OT_weight_from_bones(wmOperatorType *ot)
 	static const EnumPropertyItem type_items[] = {
 		{ARM_GROUPS_AUTO, "AUTOMATIC", 0, "Automatic", "Automatic weights from bones"},
 		{ARM_GROUPS_ENVELOPE, "ENVELOPES", 0, "From Envelopes", "Weights from envelopes with user defined radius"},
-		{0, NULL, 0, NULL, NULL}};
+		{0, NULL, 0, NULL, NULL},
+	};
 
 	/* identifiers */
 	ot->name = "Weight from Bones";
@@ -191,15 +188,15 @@ static int weight_sample_invoke(bContext *C, wmOperator *op, const wmEvent *even
 		ED_view3d_init_mats_rv3d(vc.obact, vc.rv3d);
 
 		if (use_vert_sel) {
-			if (ED_mesh_pick_vert(C, vc.obact, event->mval, &index, ED_MESH_PICK_DEFAULT_VERT_SIZE, true)) {
+			if (ED_mesh_pick_vert(C, vc.obact, event->mval, ED_MESH_PICK_DEFAULT_VERT_DIST, true, &index)) {
 				v_idx_best = index;
 			}
 		}
 		else {
-			if (ED_mesh_pick_face_vert(C, vc.obact, event->mval, &index, ED_MESH_PICK_DEFAULT_FACE_SIZE)) {
+			if (ED_mesh_pick_face_vert(C, vc.obact, event->mval, ED_MESH_PICK_DEFAULT_FACE_DIST, &index)) {
 				v_idx_best = index;
 			}
-			else if (ED_mesh_pick_face(C, vc.obact, event->mval, &index, ED_MESH_PICK_DEFAULT_FACE_SIZE)) {
+			else if (ED_mesh_pick_face(C, vc.obact, event->mval, ED_MESH_PICK_DEFAULT_FACE_DIST, &index)) {
 				/* this relies on knowning the internal worksings of ED_mesh_pick_face_vert() */
 				BKE_report(op->reports, RPT_WARNING, "The modifier used does not support deformed locations");
 			}
@@ -227,8 +224,8 @@ static int weight_sample_invoke(bContext *C, wmOperator *op, const wmEvent *even
 					vgroup_weight = BKE_defvert_multipaint_collective_weight(
 					        &me->dvert[v_idx_best], defbase_tot, defbase_sel, defbase_tot_sel, ts->auto_normalize);
 
-					/* if autonormalize is enabled, but weights are not normalized,
-					 * the value can exceed 1 */
+					/* If auto-normalize is enabled, but weights are not normalized,
+					 * the value can exceed 1. */
 					CLAMP(vgroup_weight, 0.0f, 1.0f);
 				}
 
@@ -315,13 +312,13 @@ static const EnumPropertyItem *weight_paint_sample_enum_itemf(
 				ED_view3d_init_mats_rv3d(vc.obact, vc.rv3d);
 
 				if (use_vert_sel) {
-					if (ED_mesh_pick_vert(C, vc.obact, mval, &index, ED_MESH_PICK_DEFAULT_VERT_SIZE, true)) {
+					if (ED_mesh_pick_vert(C, vc.obact, mval, ED_MESH_PICK_DEFAULT_VERT_DIST, true, &index)) {
 						MDeformVert *dvert = &me->dvert[index];
 						found |= weight_paint_sample_enum_itemf__helper(dvert, defbase_tot, groups);
 					}
 				}
 				else {
-					if (ED_mesh_pick_face(C, vc.obact, mval, &index, ED_MESH_PICK_DEFAULT_FACE_SIZE)) {
+					if (ED_mesh_pick_face(C, vc.obact, mval, ED_MESH_PICK_DEFAULT_FACE_DIST, &index)) {
 						const MPoly *mp = &me->mpoly[index];
 						uint fidx = mp->totloop - 1;
 
@@ -791,7 +788,11 @@ static int paint_weight_gradient_exec(bContext *C, wmOperator *op)
 	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 	Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 
-	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, scene->customdata_mask | CD_MASK_ORIGINDEX);
+	CustomData_MeshMasks cddata_masks = scene->customdata_mask;
+	cddata_masks.vmask |= CD_MASK_ORIGINDEX;
+	cddata_masks.emask |= CD_MASK_ORIGINDEX;
+	cddata_masks.pmask |= CD_MASK_ORIGINDEX;
+	Mesh *me_eval = mesh_get_eval_final(depsgraph, scene_eval, ob_eval, &cddata_masks);
 	if (data.is_init) {
 		data.vert_visit = BLI_BITMAP_NEW(me->totvert, __func__);
 
@@ -842,7 +843,7 @@ void PAINT_OT_weight_gradient(wmOperatorType *ot)
 	static const EnumPropertyItem gradient_types[] = {
 		{WPAINT_GRADIENT_TYPE_LINEAR, "LINEAR", 0, "Linear", ""},
 		{WPAINT_GRADIENT_TYPE_RADIAL, "RADIAL", 0, "Radial", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	PropertyRNA *prop;

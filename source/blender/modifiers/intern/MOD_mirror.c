@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,27 +15,18 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_mirror.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
+
+#include "BLI_math.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-
-#include "BLI_math.h"
 
 #include "BKE_library.h"
 #include "BKE_library_query.h"
@@ -78,7 +67,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 	MirrorModifierData *mmd = (MirrorModifierData *)md;
 	if (mmd->mirror_ob != NULL) {
 		DEG_add_object_relation(ctx->node, mmd->mirror_ob, DEG_OB_COMP_TRANSFORM, "Mirror Modifier");
-		DEG_add_object_relation(ctx->node, ctx->object, DEG_OB_COMP_TRANSFORM, "Mirror Modifier");
+		DEG_add_modifier_to_transform_relation(ctx->node, "Mirror Modifier");
 	}
 }
 
@@ -102,12 +91,12 @@ static Mesh *doBiscetOnMirrorPlane(
 	BMVert *v, *v_next;
 
 	bm = BKE_mesh_to_bmesh_ex(
-		mesh,
-		&(struct BMeshCreateParams){0},
-		&(struct BMeshFromMeshParams){
-			.calc_face_normal = true,
-			.cd_mask_extra = CD_MASK_ORIGINDEX,
-		});
+	        mesh,
+	        &(struct BMeshCreateParams){0},
+	        &(struct BMeshFromMeshParams){
+	            .calc_face_normal = true,
+	            .cd_mask_extra = {.vmask = CD_MASK_ORIGINDEX, .emask = CD_MASK_ORIGINDEX, .pmask = CD_MASK_ORIGINDEX},
+	        });
 
 	/* Define bisecting plane (aka mirror plane). */
 	float plane[4];
@@ -133,7 +122,7 @@ static Mesh *doBiscetOnMirrorPlane(
 		}
 	}
 
-	result = BKE_mesh_from_bmesh_for_eval_nomain(bm, 0);
+	result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL);
 	BM_mesh_free(bm);
 
 	return result;
@@ -141,7 +130,7 @@ static Mesh *doBiscetOnMirrorPlane(
 
 static Mesh *doMirrorOnAxis(
 	MirrorModifierData *mmd,
-	const ModifierEvalContext *ctx,
+	const ModifierEvalContext *UNUSED(ctx),
 	Object *ob,
 	const Mesh *mesh,
 	int axis)
@@ -170,7 +159,7 @@ static Mesh *doMirrorOnAxis(
 	unit_m4(mtx);
 	mtx[axis][axis] = -1.0f;
 
-	Object *mirror_ob = DEG_get_evaluated_object(ctx->depsgraph, mmd->mirror_ob);
+	Object *mirror_ob = mmd->mirror_ob;
 	if (mirror_ob != NULL) {
 		float tmp[4][4];
 		float itmp[4][4];
@@ -443,12 +432,6 @@ ModifierTypeInfo modifierType_Mirror = {
 
 	/* copyData */          modifier_copyData_generic,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       NULL,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
@@ -465,4 +448,5 @@ ModifierTypeInfo modifierType_Mirror = {
 	/* foreachObjectLink */ foreachObjectLink,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

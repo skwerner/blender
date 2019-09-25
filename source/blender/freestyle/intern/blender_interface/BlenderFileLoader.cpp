@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/blender_interface/BlenderFileLoader.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BlenderFileLoader.h"
@@ -64,18 +60,18 @@ NodeGroup *BlenderFileLoader::Load()
 	_viewplane_bottom = _re->viewplane.ymin;
 	_viewplane_top =    _re->viewplane.ymax;
 
-	if (_re->clipsta < 0.f) {
+	if (_re->clip_start < 0.f) {
 		// Adjust clipping start/end and set up a Z offset when the viewport preview
-		// is used with the orthographic view.  In this case, _re->clipsta is negative,
+		// is used with the orthographic view.  In this case, _re->clip_start is negative,
 		// while Freestyle assumes that imported mesh data are in the camera coordinate
 		// system with the view point located at origin [bug #36009].
 		_z_near = -0.001f;
-		_z_offset = _re->clipsta + _z_near;
-		_z_far = -_re->clipend + _z_offset;
+		_z_offset = _re->clip_start + _z_near;
+		_z_far = -_re->clip_end + _z_offset;
 	}
 	else {
-		_z_near = -_re->clipsta;
-		_z_far = -_re->clipend;
+		_z_near = -_re->clip_start;
+		_z_far = -_re->clip_end;
 		_z_offset = 0.f;
 	}
 

@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2016, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Blender Institute
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -46,6 +41,7 @@ set(INC
 
 	../../../intern/glew-mx
 	../../../intern/guardedalloc
+	../../../intern/atomic
 )
 
 set(INC_SYS
@@ -55,7 +51,6 @@ set(INC_SYS
 set(SRC
 	intern/draw_anim_viz.c
 	intern/draw_armature.c
-	intern/draw_builtin_shader.c
 	intern/draw_cache.c
 	intern/draw_cache_impl_curve.c
 	intern/draw_cache_impl_displist.c
@@ -86,7 +81,6 @@ set(SRC
 	modes/overlay_mode.c
 	modes/paint_texture_mode.c
 	modes/paint_vertex_mode.c
-	modes/paint_weight_mode.c
 	modes/particle_mode.c
 	modes/pose_mode.c
 	modes/sculpt_mode.c
@@ -135,7 +129,6 @@ set(SRC
 
 	DRW_engine.h
 	intern/DRW_render.h
-	intern/draw_builtin_shader.h
 	intern/draw_cache.h
 	intern/draw_cache_impl.h
 	intern/draw_common.h
@@ -158,13 +151,19 @@ set(SRC
 	engines/workbench/workbench_private.h
 )
 
+set(LIB
+	bf_blenkernel
+	bf_blenlib
+	bf_windowmanager
+)
+
 data_to_c_simple(engines/eevee/shaders/ambient_occlusion_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/default_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/default_world_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/background_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/concentric_samples_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/common_uniforms_lib.glsl SRC)
-data_to_c_simple(engines/eevee/shaders/lamps_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/lights_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_filter_glossy_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/lightprobe_filter_diffuse_frag.glsl SRC)
@@ -253,7 +252,6 @@ data_to_c_simple(modes/shaders/common_hair_refine_vert.glsl SRC)
 data_to_c_simple(modes/shaders/common_view_lib.glsl SRC)
 data_to_c_simple(modes/shaders/common_fxaa_lib.glsl SRC)
 data_to_c_simple(modes/shaders/common_fullscreen_vert.glsl SRC)
-data_to_c_simple(modes/shaders/common_world_clip_lib.glsl SRC)
 data_to_c_simple(modes/shaders/animviz_mpath_lines_vert.glsl SRC)
 data_to_c_simple(modes/shaders/animviz_mpath_lines_geom.glsl SRC)
 data_to_c_simple(modes/shaders/animviz_mpath_points_vert.glsl SRC)
@@ -275,11 +273,7 @@ data_to_c_simple(modes/shaders/armature_dof_vert.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_common_lib.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_frag.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_vert.glsl SRC)
-data_to_c_simple(modes/shaders/edit_mesh_overlay_geom_tri.glsl SRC)
-data_to_c_simple(modes/shaders/edit_mesh_overlay_geom_edge.glsl SRC)
-data_to_c_simple(modes/shaders/edit_mesh_overlay_points_vert.glsl SRC)
-data_to_c_simple(modes/shaders/edit_mesh_overlay_facedot_frag.glsl SRC)
-data_to_c_simple(modes/shaders/edit_mesh_overlay_facedot_vert.glsl SRC)
+data_to_c_simple(modes/shaders/edit_mesh_overlay_geom.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_mix_frag.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_facefill_vert.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_facefill_frag.glsl SRC)
@@ -367,4 +361,4 @@ if(WITH_FREESTYLE)
 	add_definitions(-DWITH_FREESTYLE)
 endif()
 
-blender_add_lib(bf_draw "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_draw "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_numinput.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_NUMINPUT_H__
@@ -78,15 +72,18 @@ enum {
 
 struct UnitSettings;
 
-/*********************** NumInput ********************************/
+/* -------------------------------------------------------------------- */
+/** \name NumInput
+ * \{ */
 
-/* There are important things to note here for code using numinput:
- * * Values passed to applyNumInput() should be valid and are stored as default ones (val_org), if it is not EDITED.
- * * bool returned by applyNumInput should be used to decide whether to apply numinput-specific post-process to data.
- * * *Once applyNumInput has been called*, hasNumInput returns a valid value to decide whether to use numinput
- *   as drawstr source or not (i.e. to call outputNumInput).
+/**
+ * There are important things to note here for code using numinput:
+ * - Values passed to #applyNumInput() should be valid and are stored as default ones (val_org), if it is not EDITED.
+ * - bool returned by #applyNumInput should be used to decide whether to apply numinput-specific post-process to data.
+ * - Once #applyNumInput has been called, #hasNumInput returns a valid value to decide whether to use numinput
+ *   as drawstr source or not (i.e. to call #outputNumInput).
  *
- * Those two steps have to be separated (so do not use a common call to hasNumInput() to do both in the same time!).
+ * Those two steps have to be separated (so do not use a common call to #hasNumInput() to do both in the same time!).
  */
 
 void initNumInput(NumInput *n);
@@ -99,5 +96,7 @@ bool handleNumInput(struct bContext *C, NumInput *n, const struct wmEvent *event
 #define NUM_MODAL_INCREMENT_DOWN 19
 
 bool user_string_to_number(bContext *C, const char *str, const struct UnitSettings *unit, int type, double *r_value);
+
+/** \} */
 
 #endif  /* __ED_NUMINPUT_H__ */

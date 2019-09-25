@@ -18,11 +18,10 @@
 
 # <pep8 compliant>
 
-import bpy
 from bpy.types import (
     Panel,
 )
-from bl_operators.presets import PresetMenu
+from bl_ui.utils import PresetPanel
 
 from .properties_physics_common import (
     point_cache_ui,
@@ -34,7 +33,7 @@ def cloth_panel_enabled(md):
     return md.point_cache.is_baked is False
 
 
-class CLOTH_PT_presets(PresetMenu):
+class CLOTH_PT_presets(PresetPanel, Panel):
     bl_label = "Cloth Presets"
     preset_subdir = "cloth"
     preset_operator = "script.execute_preset"
@@ -333,7 +332,7 @@ class PHYSICS_PT_cloth_property_weights(PhysicButtonsPanel, Panel):
         col = flow.column()
         col.prop_search(
             cloth, "vertex_group_structural_stiffness", ob, "vertex_groups",
-            text="Structural Group"
+            text="Structural Group",
         )
         col.prop(cloth, "tension_stiffness_max", text="Max Tension")
         col.prop(cloth, "compression_stiffness_max", text="Max Compression")
@@ -343,7 +342,7 @@ class PHYSICS_PT_cloth_property_weights(PhysicButtonsPanel, Panel):
         col = flow.column()
         col.prop_search(
             cloth, "vertex_group_shear_stiffness", ob, "vertex_groups",
-            text="Shear Group"
+            text="Shear Group",
         )
         col.prop(cloth, "shear_stiffness_max", text="Max Shearing")
 

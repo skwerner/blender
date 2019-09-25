@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) (C) 2009 Blender Foundation, Joshua Leung
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Joshua Leung (full recode)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_keyframes_draw.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_KEYFRAMES_DRAW_H__
@@ -112,7 +104,7 @@ typedef enum eKeyframeShapeDrawOpts {
 	/* only the inside filling */
 	KEYFRAME_SHAPE_INSIDE,
 	/* the whole thing */
-	KEYFRAME_SHAPE_BOTH
+	KEYFRAME_SHAPE_BOTH,
 } eKeyframeShapeDrawOpts;
 
 /* Handle type. */

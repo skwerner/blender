@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Alexander Pinzon
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_smooth_laplacian.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Advanced smoothing.
  */
@@ -235,13 +229,17 @@ static void init_laplacian_matrix(LaplacianSystem *sys)
 				sys->zerola[idv1] = 1;
 				sys->zerola[idv2] = 1;
 				sys->zerola[idv3] = 1;
-				if (has_4_vert) sys->zerola[idv4] = 1;
+				if (has_4_vert) {
+					sys->zerola[idv4] = 1;
+				}
 			}
 
 			sys->ring_areas[idv1] += areaf;
 			sys->ring_areas[idv2] += areaf;
 			sys->ring_areas[idv3] += areaf;
-			if (has_4_vert) sys->ring_areas[idv4] += areaf;
+			if (has_4_vert) {
+				sys->ring_areas[idv4] += areaf;
+			}
 
 			if (has_4_vert) {
 
@@ -484,9 +482,13 @@ void bmo_smooth_laplacian_vert_exec(BMesh *bm, BMOperator *op)
 	BMVert *v;
 	LaplacianSystem *sys;
 
-	if (bm->totface == 0) return;
+	if (bm->totface == 0) {
+		return;
+	}
 	sys = init_laplacian_system(bm->totedge, bm->totface, bm->totvert);
-	if (!sys) return;
+	if (!sys) {
+		return;
+	}
 	sys->bm = bm;
 	sys->op = op;
 

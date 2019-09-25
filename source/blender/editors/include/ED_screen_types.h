@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_screen_types.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_SCREEN_TYPES_H__
@@ -88,7 +81,7 @@ typedef enum {
 	AE_TOP_TO_BOTTOMRIGHT,
 	/** Region located at the top, _bottom_ edge is action zone.
 	 * Region minimized to the top left */
-	AE_BOTTOM_TO_TOPLEFT
+	AE_BOTTOM_TO_TOPLEFT,
 } AZEdge;
 
 typedef enum {

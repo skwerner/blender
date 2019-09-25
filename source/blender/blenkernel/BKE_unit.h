@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,17 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_UNIT_H__
 #define __BKE_UNIT_H__
 
-/** \file BKE_unit.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #ifdef __cplusplus
@@ -84,7 +78,8 @@ enum {
 	B_UNIT_VELOCITY         = 7,
 	B_UNIT_ACCELERATION     = 8,
 	B_UNIT_CAMERA           = 9,
-	B_UNIT_TYPE_TOT         = 10,
+	B_UNIT_POWER            = 10,
+	B_UNIT_TYPE_TOT         = 11,
 };
 
 #ifdef __cplusplus

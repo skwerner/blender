@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/gpencil_intern.h
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 #ifndef __GPENCIL_INTERN_H__
@@ -99,6 +92,7 @@ typedef struct tGPDdraw {
 	float tintcolor[4];                 /* tint color */
 	bool onion;                         /* onion flag */
 	bool custonion;                     /* use custom onion colors */
+	bool is_fill_stroke;              /* use fill tool */
 	float diff_mat[4][4];               /* matrix */
 } tGPDdraw;
 
@@ -362,7 +356,7 @@ typedef enum eGPencil_PaintModes {
 	GP_PAINTMODE_ERASER,
 	GP_PAINTMODE_DRAW_STRAIGHT,
 	GP_PAINTMODE_DRAW_POLY,
-	GP_PAINTMODE_SET_CP
+	GP_PAINTMODE_SET_CP,
 } eGPencil_PaintModes;
 
 /* maximum sizes of gp-session buffer */
@@ -396,6 +390,7 @@ void GPENCIL_OT_delete(struct wmOperatorType *ot);
 void GPENCIL_OT_dissolve(struct wmOperatorType *ot);
 void GPENCIL_OT_copy(struct wmOperatorType *ot);
 void GPENCIL_OT_paste(struct wmOperatorType *ot);
+void GPENCIL_OT_extrude(struct wmOperatorType *ot);
 
 void GPENCIL_OT_move_to_layer(struct wmOperatorType *ot);
 void GPENCIL_OT_layer_change(struct wmOperatorType *ot);
@@ -474,6 +469,7 @@ void GPENCIL_OT_stroke_split(struct wmOperatorType *ot);
 void GPENCIL_OT_stroke_smooth(struct wmOperatorType *ot);
 void GPENCIL_OT_stroke_merge(struct wmOperatorType *ot);
 void GPENCIL_OT_stroke_cutter(struct wmOperatorType *ot);
+void GPENCIL_OT_stroke_trim(struct wmOperatorType *ot);
 
 void GPENCIL_OT_brush_presets_create(struct wmOperatorType *ot);
 
@@ -500,6 +496,8 @@ void GPENCIL_OT_vertex_group_select(struct wmOperatorType *ot);
 void GPENCIL_OT_vertex_group_deselect(struct wmOperatorType *ot);
 void GPENCIL_OT_vertex_group_invert(struct wmOperatorType *ot);
 void GPENCIL_OT_vertex_group_smooth(struct wmOperatorType *ot);
+void GPENCIL_OT_vertex_group_normalize(struct wmOperatorType *ot);
+void GPENCIL_OT_vertex_group_normalize_all(struct wmOperatorType *ot);
 
 /* color handle */
 void GPENCIL_OT_lock_layer(struct wmOperatorType *ot);
@@ -550,7 +548,7 @@ typedef enum ACTFILTER_FLAGS {
 	ACTFILTER_IPOKEYS       = (1 << 4),   /* only channels referencing ipo's */
 	ACTFILTER_ONLYICU       = (1 << 5),   /* only reference ipo-curves */
 	ACTFILTER_FORDRAWING    = (1 << 6),   /* make list for interface drawing */
-	ACTFILTER_ACTGROUPED    = (1 << 7)    /* belongs to the active group */
+	ACTFILTER_ACTGROUPED    = (1 << 7),   /* belongs to the active group */
 } ACTFILTER_FLAGS;
 
 /* Action Editor - Main Data types */
@@ -558,7 +556,7 @@ typedef enum ACTCONT_TYPES {
 	ACTCONT_NONE = 0,
 	ACTCONT_ACTION,
 	ACTCONT_SHAPEKEY,
-	ACTCONT_GPENCIL
+	ACTCONT_GPENCIL,
 } ACTCONT_TYPES;
 
 /* ****************************************************** */

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/physics/particle_object.c
- *  \ingroup edphys
+/** \file
+ * \ingroup edphys
  */
 
 
@@ -58,6 +52,7 @@
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_query.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -429,10 +424,10 @@ static int dupliob_move_up_exec(bContext *C, wmOperator *UNUSED(op))
 		return OPERATOR_CANCELLED;
 
 	part = psys->part;
-	for (dw = part->dupliweights.first; dw; dw = dw->next) {
+	for (dw = part->instance_weights.first; dw; dw = dw->next) {
 		if (dw->flag & PART_DUPLIW_CURRENT && dw->prev) {
-			BLI_remlink(&part->dupliweights, dw);
-			BLI_insertlinkbefore(&part->dupliweights, dw->prev, dw);
+			BLI_remlink(&part->instance_weights, dw);
+			BLI_insertlinkbefore(&part->instance_weights, dw->prev, dw);
 
 			DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_REDO);
 			WM_event_add_notifier(C, NC_OBJECT | ND_PARTICLE, NULL);
@@ -467,12 +462,12 @@ static int copy_particle_dupliob_exec(bContext *C, wmOperator *UNUSED(op))
 	if (!psys)
 		return OPERATOR_CANCELLED;
 	part = psys->part;
-	for (dw = part->dupliweights.first; dw; dw = dw->next) {
+	for (dw = part->instance_weights.first; dw; dw = dw->next) {
 		if (dw->flag & PART_DUPLIW_CURRENT) {
 			dw->flag &= ~PART_DUPLIW_CURRENT;
 			dw = MEM_dupallocN(dw);
 			dw->flag |= PART_DUPLIW_CURRENT;
-			BLI_addhead(&part->dupliweights, dw);
+			BLI_addhead(&part->instance_weights, dw);
 
 			DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_REDO);
 			WM_event_add_notifier(C, NC_OBJECT | ND_PARTICLE, NULL);
@@ -508,15 +503,15 @@ static int remove_particle_dupliob_exec(bContext *C, wmOperator *UNUSED(op))
 		return OPERATOR_CANCELLED;
 
 	part = psys->part;
-	for (dw = part->dupliweights.first; dw; dw = dw->next) {
+	for (dw = part->instance_weights.first; dw; dw = dw->next) {
 		if (dw->flag & PART_DUPLIW_CURRENT) {
-			BLI_remlink(&part->dupliweights, dw);
+			BLI_remlink(&part->instance_weights, dw);
 			MEM_freeN(dw);
 			break;
 		}
 
 	}
-	dw = part->dupliweights.last;
+	dw = part->instance_weights.last;
 
 	if (dw)
 		dw->flag |= PART_DUPLIW_CURRENT;
@@ -554,10 +549,10 @@ static int dupliob_move_down_exec(bContext *C, wmOperator *UNUSED(op))
 		return OPERATOR_CANCELLED;
 
 	part = psys->part;
-	for (dw = part->dupliweights.first; dw; dw = dw->next) {
+	for (dw = part->instance_weights.first; dw; dw = dw->next) {
 		if (dw->flag & PART_DUPLIW_CURRENT && dw->next) {
-			BLI_remlink(&part->dupliweights, dw);
-			BLI_insertlinkafter(&part->dupliweights, dw->next, dw);
+			BLI_remlink(&part->instance_weights, dw);
+			BLI_insertlinkafter(&part->instance_weights, dw->next, dw);
 
 			DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_REDO);
 			WM_event_add_notifier(C, NC_OBJECT | ND_PARTICLE, NULL);
@@ -586,7 +581,10 @@ static void disconnect_hair(
         Depsgraph *depsgraph, Scene *scene,
         Object *ob, ParticleSystem *psys)
 {
-	ParticleSystemModifierData *psmd = psys_get_modifier(ob, psys);
+	Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
+	ParticleSystem *psys_eval = psys_eval_get(depsgraph, ob, psys);
+	ParticleSystemModifierData *psmd_eval =
+	        psys_get_modifier(object_eval, psys_eval);
 	ParticleEditSettings *pset = PE_settings(scene);
 	ParticleData *pa;
 	PTCacheEdit *edit;
@@ -611,7 +609,8 @@ static void disconnect_hair(
 			point++;
 		}
 
-		psys_mat_hair_to_global(ob, psmd->mesh_final, psys->part->from, pa, hairmat);
+		psys_mat_hair_to_global(
+		        ob, psmd_eval->mesh_final, psys->part->from, pa, hairmat);
 
 		for (k = 0, key = pa->hair; k < pa->totkey; k++, key++) {
 			mul_m4_v3(hairmat, key->co);
@@ -627,8 +626,9 @@ static void disconnect_hair(
 
 	psys->flag |= PSYS_GLOBAL_HAIR;
 
-	if (ELEM(pset->brushtype, PE_BRUSH_ADD, PE_BRUSH_PUFF))
-		pset->brushtype = PE_BRUSH_NONE;
+	if (ELEM(pset->brushtype, PE_BRUSH_ADD, PE_BRUSH_PUFF)) {
+		pset->brushtype = PE_BRUSH_COMB;
+	}
 
 	PE_update_object(depsgraph, scene, ob, 0);
 }
@@ -683,7 +683,10 @@ static bool remap_hair_emitter(
         Object *target_ob, ParticleSystem *target_psys, PTCacheEdit *target_edit,
         float from_mat[4][4], float to_mat[4][4], bool from_global, bool to_global)
 {
-	ParticleSystemModifierData *target_psmd = psys_get_modifier(target_ob, target_psys);
+	Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
+	ParticleSystem *psys_eval = psys_eval_get(depsgraph, ob, psys);
+	ParticleSystemModifierData *target_psmd =
+	        psys_get_modifier(object_eval, psys_eval);
 	ParticleData *pa, *tpa;
 	PTCacheEditPoint *edit_point;
 	PTCacheEditKey *ekey;
@@ -723,13 +726,7 @@ static bool remap_hair_emitter(
 		return false;
 	}
 	/* don't modify the original vertices */
-	BKE_id_copy_ex(
-	            NULL, &mesh->id, (ID **)&mesh,
-	            LIB_ID_CREATE_NO_MAIN |
-	            LIB_ID_CREATE_NO_USER_REFCOUNT |
-	            LIB_ID_CREATE_NO_DEG_TAG |
-	            LIB_ID_COPY_NO_PREVIEW,
-	            false);
+	BKE_id_copy_ex(NULL, &mesh->id, (ID **)&mesh, LIB_ID_COPY_LOCALIZE);
 
 	/* BMESH_ONLY, deform dm may not have tessface */
 	BKE_mesh_tessface_ensure(mesh);
@@ -1040,7 +1037,7 @@ static bool copy_particle_systems_to_object(const bContext *C,
 	ParticleSystem *psys_start = NULL, *psys, *psys_from;
 	ParticleSystem **tmp_psys;
 	Mesh *final_mesh;
-	CustomDataMask cdmask;
+	CustomData_MeshMasks cdmask = {0};
 	int i, totpsys;
 
 	if (ob_to->type != OB_MESH)
@@ -1062,7 +1059,6 @@ static bool copy_particle_systems_to_object(const bContext *C,
 
 	tmp_psys = MEM_mallocN(sizeof(ParticleSystem *) * totpsys, "temporary particle system array");
 
-	cdmask = 0;
 	for (psys_from = PSYS_FROM_FIRST, i = 0;
 	     psys_from;
 	     psys_from = PSYS_FROM_NEXT(psys_from), ++i)
@@ -1073,7 +1069,7 @@ static bool copy_particle_systems_to_object(const bContext *C,
 		if (psys_start == NULL)
 			psys_start = psys;
 
-		cdmask |= psys_emitter_customdata_mask(psys);
+		psys_emitter_customdata_mask(psys, &cdmask);
 	}
 	/* to iterate source and target psys in sync,
 	 * we need to know where the newly added psys start
@@ -1081,7 +1077,7 @@ static bool copy_particle_systems_to_object(const bContext *C,
 	psys_start = totpsys > 0 ? tmp_psys[0] : NULL;
 
 	/* Get the evaluated mesh (psys and their modifiers have not been appended yet) */
-	final_mesh = mesh_get_eval_final(depsgraph, scene, ob_to, cdmask);
+	final_mesh = mesh_get_eval_final(depsgraph, scene, ob_to, &cdmask);
 
 	/* now append psys to the object and make modifiers */
 	for (i = 0, psys_from = PSYS_FROM_FIRST;
@@ -1105,13 +1101,7 @@ static bool copy_particle_systems_to_object(const bContext *C,
 		modifier_unique_name(&ob_to->modifiers, (ModifierData *)psmd);
 
 		psmd->psys = psys;
-		BKE_id_copy_ex(
-		            NULL, &final_mesh->id, (ID **)&psmd->mesh_final,
-		            LIB_ID_CREATE_NO_MAIN |
-		            LIB_ID_CREATE_NO_USER_REFCOUNT |
-		            LIB_ID_CREATE_NO_DEG_TAG |
-		            LIB_ID_COPY_NO_PREVIEW,
-		            false);
+		BKE_id_copy_ex(NULL, &final_mesh->id, (ID **)&psmd->mesh_final, LIB_ID_COPY_LOCALIZE);
 
 		BKE_mesh_calc_normals(psmd->mesh_final);
 		BKE_mesh_tessface_ensure(psmd->mesh_final);
@@ -1227,7 +1217,7 @@ void PARTICLE_OT_copy_particle_systems(wmOperatorType *ot)
 	static const EnumPropertyItem space_items[] = {
 		{PAR_COPY_SPACE_OBJECT, "OBJECT", 0, "Object", "Copy inside each object's local space"},
 		{PAR_COPY_SPACE_WORLD, "WORLD", 0, "World", "Copy in world space"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	ot->name = "Copy Particle Systems";

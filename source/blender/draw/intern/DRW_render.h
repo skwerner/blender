@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2016, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file DRW_render.h
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 /* This is the Render Functions used by Realtime engines to draw with OpenGL */
@@ -44,7 +38,7 @@
 #include "BLT_translation.h"
 
 #include "DNA_object_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_world_types.h"
@@ -75,7 +69,7 @@ struct GPUMaterial;
 struct GPUShader;
 struct GPUTexture;
 struct GPUUniformBuffer;
-struct LampEngineData;
+struct LightEngineData;
 struct Object;
 struct ParticleSystem;
 struct RenderEngineType;
@@ -105,7 +99,7 @@ typedef char DRWViewportEmptyList;
 	DRW_VIEWPORT_LIST_SIZE(*(((ty *)NULL)->fbl)), \
 	DRW_VIEWPORT_LIST_SIZE(*(((ty *)NULL)->txl)), \
 	DRW_VIEWPORT_LIST_SIZE(*(((ty *)NULL)->psl)), \
-	DRW_VIEWPORT_LIST_SIZE(*(((ty *)NULL)->stl)) \
+	DRW_VIEWPORT_LIST_SIZE(*(((ty *)NULL)->stl)), \
 }
 
 /* Use of multisample framebuffers. */
@@ -126,7 +120,7 @@ typedef char DRWViewportEmptyList;
 		DRW_multisamples_resolve(dtxl->multisample_depth, dtxl->multisample_color, true); \
 		DRW_stats_query_end(); \
 	} \
-}
+} ((void)0)
 
 #define MULTISAMPLE_SYNC_DISABLE_NO_DEPTH(dfbl, dtxl) { \
 	if (dfbl->multisample_fb != NULL) { \
@@ -135,7 +129,7 @@ typedef char DRWViewportEmptyList;
 		DRW_multisamples_resolve(dtxl->multisample_depth, dtxl->multisample_color, false); \
 		DRW_stats_query_end(); \
 	} \
-}
+} ((void)0)
 
 
 
@@ -200,22 +194,22 @@ typedef enum {
 /* Textures from DRW_texture_pool_query_* have the options
  * DRW_TEX_FILTER for color float textures, and no options
  * for depth textures and integer textures. */
-struct GPUTexture *DRW_texture_pool_query_2D(int w, int h, eGPUTextureFormat format, DrawEngineType *engine_type);
+struct GPUTexture *DRW_texture_pool_query_2d(int w, int h, eGPUTextureFormat format, DrawEngineType *engine_type);
 
-struct GPUTexture *DRW_texture_create_1D(
+struct GPUTexture *DRW_texture_create_1d(
         int w, eGPUTextureFormat format, DRWTextureFlag flags, const float *fpixels);
-struct GPUTexture *DRW_texture_create_2D(
+struct GPUTexture *DRW_texture_create_2d(
         int w, int h, eGPUTextureFormat format, DRWTextureFlag flags, const float *fpixels);
-struct GPUTexture *DRW_texture_create_2D_array(
+struct GPUTexture *DRW_texture_create_2d_array(
         int w, int h, int d, eGPUTextureFormat format, DRWTextureFlag flags, const float *fpixels);
-struct GPUTexture *DRW_texture_create_3D(
+struct GPUTexture *DRW_texture_create_3d(
         int w, int h, int d, eGPUTextureFormat format, DRWTextureFlag flags, const float *fpixels);
 struct GPUTexture *DRW_texture_create_cube(
         int w, eGPUTextureFormat format, DRWTextureFlag flags, const float *fpixels);
 
-void DRW_texture_ensure_fullscreen_2D(
+void DRW_texture_ensure_fullscreen_2d(
         struct GPUTexture **tex, eGPUTextureFormat format, DRWTextureFlag flags);
-void DRW_texture_ensure_2D(
+void DRW_texture_ensure_2d(
         struct GPUTexture **tex, int w, int h, eGPUTextureFormat format, DRWTextureFlag flags);
 
 void DRW_texture_generate_mipmaps(struct GPUTexture *tex);
@@ -238,7 +232,7 @@ void DRW_uniformbuffer_free(struct GPUUniformBuffer *ubo);
 	} \
 } while (0)
 
-void DRW_transform_to_display(struct GPUTexture *tex, bool use_view_settings);
+void DRW_transform_to_display(struct GPUTexture *tex, bool use_view_transform, bool use_render_settings);
 void DRW_transform_none(struct GPUTexture *tex);
 void DRW_multisamples_resolve(
         struct GPUTexture *src_depth, struct GPUTexture *src_color, bool use_depth);
@@ -246,20 +240,15 @@ void DRW_multisamples_resolve(
 /* Shaders */
 struct GPUShader *DRW_shader_create(
         const char *vert, const char *geom, const char *frag, const char *defines);
-struct DRW_ShaderCreateFromArray_Params { const char **vert, **geom, **frag, **defs; };
-struct GPUShader *DRW_shader_create_from_arrays_impl(
-        const struct DRW_ShaderCreateFromArray_Params *params);
-#define DRW_shader_create_from_arrays(...) \
-	DRW_shader_create_from_arrays_impl(&(const struct DRW_ShaderCreateFromArray_Params)__VA_ARGS__)
 struct GPUShader *DRW_shader_create_with_lib(
         const char *vert, const char *geom, const char *frag, const char *lib, const char *defines);
 struct GPUShader *DRW_shader_create_with_transform_feedback(
         const char *vert, const char *geom, const char *defines,
         const eGPUShaderTFBType prim_type, const char **varying_names, const int varying_count);
-struct GPUShader *DRW_shader_create_2D(const char *frag, const char *defines);
-struct GPUShader *DRW_shader_create_3D(const char *frag, const char *defines);
+struct GPUShader *DRW_shader_create_2d(const char *frag, const char *defines);
+struct GPUShader *DRW_shader_create_3d(const char *frag, const char *defines);
 struct GPUShader *DRW_shader_create_fullscreen(const char *frag, const char *defines);
-struct GPUShader *DRW_shader_create_3D_depth_only(eDRW_ShaderSlot slot);
+struct GPUShader *DRW_shader_create_3d_depth_only(eGPUShaderConfig slot);
 struct GPUMaterial *DRW_shader_find_from_world(struct World *wo, const void *engine_type, int options, bool deferred);
 struct GPUMaterial *DRW_shader_find_from_material(struct Material *ma, const void *engine_type, int options, bool deferred);
 struct GPUMaterial *DRW_shader_create_from_world(
@@ -295,7 +284,7 @@ typedef enum {
 	DRW_STATE_OFFSET_POSITIVE = (1 << 12),
 	/** Polygon offset. Does not work with lines and points. */
 	DRW_STATE_OFFSET_NEGATIVE = (1 << 13),
-	/* DRW_STATE_STIPPLE_4     = (1 << 14), */ /* Not used */
+	DRW_STATE_WIRE_WIDE     = (1 << 14),
 	DRW_STATE_BLEND         = (1 << 15),
 	DRW_STATE_ADDITIVE      = (1 << 16),
 	DRW_STATE_MULTIPLY      = (1 << 17),
@@ -317,6 +306,8 @@ typedef enum {
 	DRW_STATE_STENCIL_NEQUAL         = (1 << 31),
 } DRWState;
 #define DRW_STATE_DEFAULT (DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_LESS_EQUAL)
+#define DRW_STATE_RASTERIZER_ENABLED (DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_STENCIL | \
+                                      DRW_STATE_WRITE_STENCIL_SHADOW_PASS | DRW_STATE_WRITE_STENCIL_SHADOW_FAIL)
 
 typedef enum {
 	DRW_ATTR_INT,
@@ -389,6 +380,7 @@ void DRW_shgroup_call_instances_add(
 void DRW_shgroup_call_object_instances_add(
         DRWShadingGroup *shgroup, struct GPUBatch *geom, struct Object *ob, uint *count);
 void DRW_shgroup_call_sculpt_add(DRWShadingGroup *shgroup, struct Object *ob, float (*obmat)[4]);
+void DRW_shgroup_call_sculpt_wires_add(DRWShadingGroup *shgroup, struct Object *ob, float (*obmat)[4]);
 void DRW_shgroup_call_generate_add(
         DRWShadingGroup *shgroup, DRWCallGenerateFn *geometry_fn, void *user_data, float (*obmat)[4]);
 void DRW_shgroup_call_dynamic_add_array(DRWShadingGroup *shgroup, const void *attr[], uint attr_len);
@@ -590,7 +582,7 @@ typedef struct DRWContextState {
 
 	eObjectMode object_mode;
 
-	eDRW_ShaderSlot shader_slot;
+	eGPUShaderConfig sh_cfg;
 
 	/** Last resort (some functions take this as an arg so we can't easily avoid).
 	 * May be NULL when used for selection or depth buffer. */
@@ -605,9 +597,5 @@ typedef struct DRWContextState {
 } DRWContextState;
 
 const DRWContextState *DRW_context_state_get(void);
-
-#define XRAY_ALPHA(v3d)   (((v3d)->shading.type == OB_WIRE) ? (v3d)->shading.xray_alpha_wire : (v3d)->shading.xray_alpha)
-#define XRAY_FLAG(v3d)    (((v3d)->shading.type == OB_WIRE) ? V3D_SHADING_XRAY_BONE : V3D_SHADING_XRAY)
-#define XRAY_ENABLED(v3d) ((((v3d)->shading.flag & XRAY_FLAG(v3d)) != 0) && (XRAY_ALPHA(v3d) < 1.0f))
 
 #endif /* __DRW_RENDER_H__ */

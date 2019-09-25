@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/physics/physics_fluid.c
- *  \ingroup edphys
+/** \file
+ * \ingroup edphys
  */
 
 #include <math.h>
@@ -53,8 +45,6 @@
 
 #include "DEG_depsgraph.h"
 
-#include "LBM_fluidsim.h"
-
 #include "ED_screen.h"
 
 #include "WM_types.h"
@@ -64,6 +54,8 @@
 
 /* enable/disable overall compilation */
 #ifdef WITH_MOD_FLUID
+
+#include "LBM_fluidsim.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_path_util.h"
@@ -218,7 +210,6 @@ static void fluidsimPrintChannel(FILE *file, float *channel, int paramsize, char
  * CHANNEL_VEC:
  * frame 1                   |frame 2
  * [dataX][dataY][dataZ][time][dataX][dataY][dataZ][time]
- *
  */
 
 static void init_time(FluidsimSettings *domainSettings, FluidAnimChannels *channels)
@@ -399,13 +390,6 @@ static void fluid_init_all_channels(bContext *C, Object *UNUSED(fsDomain), Fluid
 
 		eval_time = domainSettings->bakeStart + i;
 
-		/* XXX: This can't be used due to an anim sys optimization that ignores recalc object animation,
-		 * leaving it for the depgraph (this ignores object animation such as modifier properties though... :/ )
-		 * --> BKE_animsys_evaluate_all_animation(CTX_data_main(C), eval_time);
-		 * This doesn't work with drivers:
-		 * --> BKE_animsys_evaluate_animdata(&fsDomain->id, fsDomain->adt, eval_time, ADT_RECALC_ALL);
-		 */
-
 		/* Modifying the global scene isn't nice, but we can do it in
 		 * this part of the process before a threaded job is created */
 		scene->r.cfra = (int)eval_time;
@@ -454,7 +438,7 @@ static void fluid_init_all_channels(bContext *C, Object *UNUSED(fsDomain), Fluid
 
 			set_channel(fobj->Translation, timeAtFrame, ob->loc, i, CHANNEL_VEC);
 			set_channel(fobj->Rotation, timeAtFrame, rot_d, i, CHANNEL_VEC);
-			set_channel(fobj->Scale, timeAtFrame, ob->size, i, CHANNEL_VEC);
+			set_channel(fobj->Scale, timeAtFrame, ob->scale, i, CHANNEL_VEC);
 			set_channel(fobj->Active, timeAtFrame, &active, i, CHANNEL_FLOAT);
 			set_channel(fobj->InitialVelocity, timeAtFrame, &fluidmd->fss->iniVelx, i, CHANNEL_VEC);
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2018, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file eevee_lightcache.h
- *  \ingroup eevee
+/** \file
+ * \ingroup eevee
  */
 
 #ifndef __EEVEE_LIGHTCACHE_H__
@@ -42,8 +36,9 @@ struct ViewLayer;
 /* Light Bake */
 struct wmJob *EEVEE_lightbake_job_create(
         struct wmWindowManager *wm, struct wmWindow *win, struct Main *bmain,
-        struct ViewLayer *view_layer, struct Scene *scene, int delay);
-void *EEVEE_lightbake_job_data_alloc(struct Main *bmain, struct ViewLayer *viewlayer, struct Scene *scene, bool run_as_job);
+        struct ViewLayer *view_layer, struct Scene *scene, int delay, int frame);
+void *EEVEE_lightbake_job_data_alloc(
+        struct Main *bmain, struct ViewLayer *viewlayer, struct Scene *scene, bool run_as_job, int frame);
 void EEVEE_lightbake_job_data_free(void *custom_data);
 void EEVEE_lightbake_update(void *custom_data);
 void EEVEE_lightbake_job(void *custom_data, short *stop, short *do_update, float *progress);

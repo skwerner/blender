@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_fileselect.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_FILESELECT_H__
@@ -128,7 +121,7 @@ typedef enum FSMenuCategory {
 	FS_CATEGORY_SYSTEM,
 	FS_CATEGORY_SYSTEM_BOOKMARKS,
 	FS_CATEGORY_BOOKMARKS,
-	FS_CATEGORY_RECENT
+	FS_CATEGORY_RECENT,
 } FSMenuCategory;
 
 typedef enum FSMenuInsert {

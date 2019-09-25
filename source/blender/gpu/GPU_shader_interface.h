@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 by Mike Erwin.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/GPU_shader_interface.h
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * GPU shader interface (C --> GLSL)
  */
@@ -51,6 +45,7 @@ typedef enum {
 	GPU_UNIFORM_VIEWPROJECTION_INV,  /* mat4 ViewProjectionMatrixInverse */
 
 	GPU_UNIFORM_NORMAL,      /* mat3 NormalMatrix */
+	GPU_UNIFORM_NORMAL_INV,  /* mat3 NormalMatrixInverse */
 	GPU_UNIFORM_WORLDNORMAL, /* mat3 WorldNormalMatrix */
 	GPU_UNIFORM_CAMERATEXCO, /* vec4 CameraTexCoFactors */
 	GPU_UNIFORM_ORCO,        /* vec3 OrcoTexCoFactors[] */

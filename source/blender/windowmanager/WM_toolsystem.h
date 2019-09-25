@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __WM_TOOLSYSTEM_H__
 #define __WM_TOOLSYSTEM_H__
 
-/** \file blender/windowmanager/WM_toolsystem.h
- *  \ingroup wm
+/** \file
+ * \ingroup wm
  */
 
 /* dna-savable wmStructs here */
@@ -58,7 +54,7 @@ struct bToolRef *WM_toolsystem_ref_find(struct WorkSpace *workspace, const bTool
 bool WM_toolsystem_ref_ensure(
         struct WorkSpace *workspace, const bToolKey *tkey,
         struct bToolRef **r_tref);
-struct bToolRef *WM_toolsystem_ref_set_by_name(
+struct bToolRef *WM_toolsystem_ref_set_by_id(
         struct bContext *C, struct WorkSpace *workspace, const bToolKey *tkey,
         const char *name, bool cycle);
 

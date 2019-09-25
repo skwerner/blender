@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_immediate_util.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
  * GPU immediate mode drawing utilities
  */
@@ -148,7 +144,7 @@ void immRecti_complete(int x1, int y1, int x2, int y2, const float color[4])
  * Pack color into 3 bytes
  *
  * This define converts a numerical value to the equivalent 24-bit
- * color, while not being endian-sensitive. On little-endians, this
+ * color, while not being endian-sensitive. On little-endian, this
  * is the same as doing a 'naive' indexing, on big-endian, it is not!
  *
  * \note BGR format (i.e. 0xBBGGRR)...

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  * Making screendumps.
  */
 
-/** \file blender/editors/screen/screendump.c
- *  \ingroup edscr
+/** \file
+ * \ingroup edscr
  */
 
 
@@ -266,7 +260,7 @@ static void screenshot_draw(bContext *UNUSED(C), wmOperator *op)
 
 	/* main draw call */
 	RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-	uiDefAutoButsRNA(layout, &ptr, screenshot_draw_check_prop, NULL, UI_BUT_LABEL_ALIGN_NONE, false);
+	uiDefAutoButsRNA(layout, &ptr, screenshot_draw_check_prop, NULL, NULL, UI_BUT_LABEL_ALIGN_NONE, false);
 }
 
 static bool screenshot_poll(bContext *C)

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_clip/space_clip.c
- *  \ingroup spclip
+/** \file
+ * \ingroup spclip
  */
 
 #include <string.h>
@@ -562,6 +554,7 @@ static void clip_keymap(struct wmKeyConfig *keyconf)
 }
 
 /* DO NOT make this static, this hides the symbol and breaks API generation script. */
+extern const char *clip_context_dir[];  /* quiet warning. */
 const char *clip_context_dir[] = {"edit_movieclip", "edit_mask", NULL};
 
 static int clip_context(const bContext *C, const char *member, bContextDataResult *result)

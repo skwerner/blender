@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributors:
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/render/intern/source/bake_api.c
- *  \ingroup render
+/** \file
+ * \ingroup render
  *
  * \brief The API itself is simple. Blender sends a populated array of BakePixels to the renderer, and gets back an
  * array of floats with the result.
@@ -360,7 +354,7 @@ static bool cast_ray_highpoly(
 		mul_v3_v3fl(dyco, duco_low, pixel_low->du_dy);
 		madd_v3_v3fl(dyco, dvco_low, pixel_low->dv_dy);
 
-		/* transform from low poly to to high poly object space */
+		/* transform from low poly to high poly object space */
 		mul_mat3_m4_v3(mat_low, dxco);
 		mul_mat3_m4_v3(mat_low, dyco);
 		mul_mat3_m4_v3(highpoly[hit_mesh].imat, dxco);
@@ -368,18 +362,18 @@ static bool cast_ray_highpoly(
 
 		/* transfer position differentials */
 		float tmp[3];
-		mul_v3_v3fl(tmp, dir_high, 1.0f/dot_v3v3(dir_high, triangle_high->normal));
+		mul_v3_v3fl(tmp, dir_high, 1.0f / dot_v3v3(dir_high, triangle_high->normal));
 		madd_v3_v3fl(dxco, tmp, -dot_v3v3(dxco, triangle_high->normal));
 		madd_v3_v3fl(dyco, tmp, -dot_v3v3(dyco, triangle_high->normal));
 
 		/* compute barycentric differentials from position differentials */
 		barycentric_differentials_from_position(
-			hits[hit_mesh].co, triangle_high->mverts[0]->co,
-			triangle_high->mverts[1]->co, triangle_high->mverts[2]->co,
-			dxco, dyco, triangle_high->normal, true,
-			&pixel_high->uv[0], &pixel_high->uv[1],
-			&pixel_high->du_dx, &pixel_high->dv_dx,
-			&pixel_high->du_dy, &pixel_high->dv_dy);
+		        hits[hit_mesh].co, triangle_high->mverts[0]->co,
+		        triangle_high->mverts[1]->co, triangle_high->mverts[2]->co,
+		        dxco, dyco, triangle_high->normal, true,
+		        &pixel_high->uv[0], &pixel_high->uv[1],
+		        &pixel_high->du_dx, &pixel_high->dv_dx,
+		        &pixel_high->du_dy, &pixel_high->dv_dy);
 
 		/* verify we have valid uvs */
 		BLI_assert(pixel_high->uv[0] >= -1e-3f &&
@@ -427,10 +421,10 @@ static TriTessFace *mesh_calc_tri_tessface(
 	}
 
 	BKE_mesh_recalc_looptri(
-	            me->mloop, me->mpoly,
-	            me->mvert,
-	            me->totloop, me->totpoly,
-	            looptri);
+	        me->mloop, me->mpoly,
+	        me->mvert,
+	        me->totloop, me->totpoly,
+	        looptri);
 
 	const float *precomputed_normals = CustomData_get_layer(&me->pdata, CD_NORMAL);
 	const bool calculate_normal = precomputed_normals ? false : true;

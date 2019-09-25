@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,18 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_inset.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Inset face regions.
  * Inset individual faces.
- *
  */
 
 #include "MEM_guardedalloc.h"
@@ -181,8 +174,9 @@ static void bm_loop_customdata_merge(
 	for (layer_n = 0; layer_n < bm->ldata.totlayer; layer_n++) {
 		const int type = bm->ldata.layers[layer_n].type;
 		const int offset = bm->ldata.layers[layer_n].offset;
-		if (!CustomData_layer_has_math(&bm->ldata, layer_n))
+		if (!CustomData_layer_has_math(&bm->ldata, layer_n)) {
 			continue;
+		}
 
 		/* check we begin with merged data */
 		if ((CustomData_data_equals(

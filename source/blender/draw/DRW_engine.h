@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2016, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file DRW_engine.h
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #ifndef __DRW_ENGINE_H__
@@ -117,6 +111,7 @@ void DRW_draw_render_loop_offscreen(
         struct RenderEngineType *engine_type,
         struct ARegion *ar, struct View3D *v3d,
         const bool draw_background,
+        const bool do_color_management,
         struct GPUOffScreen *ofs,
         struct GPUViewport *viewport);
 void DRW_draw_select_loop(
@@ -127,7 +122,16 @@ void DRW_draw_select_loop(
         DRW_ObjectFilterFn object_filter_fn, void *object_filter_user_data);
 void DRW_draw_depth_loop(
         struct Depsgraph *depsgraph,
-        struct ARegion *ar, struct View3D *v3d);
+        struct ARegion *ar, struct View3D *v3d,
+        struct GPUViewport *viewport);
+void DRW_draw_depth_loop_gpencil(
+        struct Depsgraph *depsgraph,
+        struct ARegion *ar, struct View3D *v3d,
+        struct GPUViewport *viewport);
+
+void DRW_framebuffer_select_id_setup(struct ARegion *ar, const bool clear);
+void DRW_framebuffer_select_id_release(struct ARegion *ar);
+void DRW_framebuffer_select_id_read(const struct rcti *rect, uint *r_buf);
 
 /* grease pencil render */
 bool DRW_render_check_grease_pencil(struct Depsgraph *depsgraph);

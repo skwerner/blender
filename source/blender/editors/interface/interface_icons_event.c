@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/interface/interface_icons_event.c
- *  \ingroup edinterface
+/** \file
+ * \ingroup edinterface
  *
  * A special set of icons to represent input devices,
  * this is a mix of text (via fonts) and a handful of custom glyphs for special keys.
@@ -130,8 +126,8 @@ static void icon_draw_rect_input_line_prim(
         const int prim,
         const char lines[][2], int lines_len)
 {
-	glEnable(GL_LINE_SMOOTH);
-	glEnable(GL_BLEND);
+	GPU_line_smooth(true);
+	GPU_blend(true);
 	BLI_assert(ELEM(prim, GPU_PRIM_LINE_LOOP, GPU_PRIM_LINE_STRIP));
 	const uint pos_id = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 	immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
@@ -148,8 +144,8 @@ static void icon_draw_rect_input_line_prim(
 	}
 	immEnd();
 	immUnbindProgram();
-	glDisable(GL_LINE_SMOOTH);
-	glDisable(GL_BLEND);
+	GPU_line_smooth(false);
+	GPU_blend(false);
 }
 
 void icon_draw_rect_input(

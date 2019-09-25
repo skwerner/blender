@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Chingiz Dyussenov, Arystanbek Dyussenov, Nathan Letwory, Sukhitha Jayathilake.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file AnimationImporter.h
- *  \ingroup collada
+/** \file
+ * \ingroup collada
  */
 
 #ifndef __ANIMATIONIMPORTER_H__
@@ -46,7 +40,7 @@ extern "C" {
 #include "DNA_anim_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_camera_types.h"
 }
 
@@ -186,11 +180,12 @@ public:
 	// prerequisites:
 	// animlist_map - map animlist id -> animlist
 	// curve_map - map anim id -> curve(s)
-	Object *translate_animation_OLD(COLLADAFW::Node *node,
-		std::map<COLLADAFW::UniqueId, Object *>& object_map,
-		std::map<COLLADAFW::UniqueId, COLLADAFW::Node *>& root_map,
-		COLLADAFW::Transformation::TransformationType tm_type,
-		Object *par_job = NULL);
+	Object *translate_animation_OLD(
+	        COLLADAFW::Node *node,
+	        std::map<COLLADAFW::UniqueId, Object *>& object_map,
+	        std::map<COLLADAFW::UniqueId, COLLADAFW::Node *>& root_map,
+	        COLLADAFW::Transformation::TransformationType tm_type,
+	        Object *par_job = NULL);
 
 	void find_frames( std::vector<float>* frames, std::vector<FCurve*>* curves );
 	void find_frames_old( std::vector<float>* frames, COLLADAFW::Node * node, COLLADAFW::Transformation::TransformationType tm_type );

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) Blender Foundation
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/physics/intern/implicit_blender.c
- *  \ingroup bph
+/** \file
+ * \ingroup bph
  */
 
 #include "implicit.h"
@@ -501,18 +493,6 @@ BLI_INLINE void madd_m3_m3fl(float r[3][3], float m[3][3], float f)
 	r[2][2] += m[2][2] * f;
 }
 
-BLI_INLINE void madd_m3_m3m3fl(float r[3][3], float a[3][3], float b[3][3], float f)
-{
-	r[0][0] = a[0][0] + b[0][0] * f;
-	r[0][1] = a[0][1] + b[0][1] * f;
-	r[0][2] = a[0][2] + b[0][2] * f;
-	r[1][0] = a[1][0] + b[1][0] * f;
-	r[1][1] = a[1][1] + b[1][1] * f;
-	r[1][2] = a[1][2] + b[1][2] * f;
-	r[2][0] = a[2][0] + b[2][0] * f;
-	r[2][1] = a[2][1] + b[2][1] * f;
-	r[2][2] = a[2][2] + b[2][2] * f;
-}
 /////////////////////////////////////////////////////////////////
 
 ///////////////////////////

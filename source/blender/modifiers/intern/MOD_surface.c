@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,21 +15,16 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_surface.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
+
+#include "BLI_utildefines.h"
+
+#include "BLI_math.h"
 
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
@@ -44,9 +37,6 @@
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
-
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
 
 #include "MOD_modifiertypes.h"
 #include "MOD_util.h"
@@ -125,13 +115,7 @@ static void deformVerts(
 	if (mesh) {
 		/* Not possible to use get_mesh() in this case as we'll modify its vertices
 		 * and get_mesh() would return 'mesh' directly. */
-		BKE_id_copy_ex(
-		        NULL, (ID *)mesh, (ID **)&surmd->mesh,
-		        LIB_ID_CREATE_NO_MAIN |
-		        LIB_ID_CREATE_NO_USER_REFCOUNT |
-		        LIB_ID_CREATE_NO_DEG_TAG |
-		        LIB_ID_COPY_NO_PREVIEW,
-		        false);
+		BKE_id_copy_ex(NULL, (ID *)mesh, (ID **)&surmd->mesh, LIB_ID_COPY_LOCALIZE);
 	}
 	else {
 		surmd->mesh = MOD_deform_mesh_eval_get(ctx->object, NULL, NULL, NULL, numVerts, false, false);
@@ -211,12 +195,6 @@ ModifierTypeInfo modifierType_Surface = {
 
 	/* copyData */          copyData,
 
-	/* deformVerts_DM */    NULL,
-	/* deformMatrices_DM */ NULL,
-	/* deformVertsEM_DM */  NULL,
-	/* deformMatricesEM_DM*/NULL,
-	/* applyModifier_DM */  NULL,
-
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
@@ -233,4 +211,5 @@ ModifierTypeInfo modifierType_Surface = {
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

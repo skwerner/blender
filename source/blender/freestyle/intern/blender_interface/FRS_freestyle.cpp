@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/blender_interface/FRS_freestyle.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include <iostream>
@@ -346,7 +342,7 @@ static void prepare(Render *re, ViewLayer *view_layer, Depsgraph *depsgraph)
 				{FREESTYLE_FE_MATERIAL_BOUNDARY, 0},
 				{FREESTYLE_FE_CONTOUR, 0},
 				{FREESTYLE_FE_EXTERNAL_CONTOUR, 0},
-				{FREESTYLE_FE_EDGE_MARK, 0}
+				{FREESTYLE_FE_EDGE_MARK, 0},
 			};
 			int num_edge_types = sizeof(conditions) / sizeof(struct edge_type_condition);
 			if (G.debug & G_DEBUG_FREESTYLE) {
@@ -612,7 +608,7 @@ Render *FRS_do_stroke_rendering(Render *re, ViewLayer *view_layer, int render)
 	/* Create depsgraph and evaluate scene. */
 	ViewLayer *scene_view_layer = (ViewLayer*)BLI_findstring(&re->scene->view_layers, view_layer->name, offsetof(ViewLayer, name));
 	Depsgraph *depsgraph = DEG_graph_new(re->scene, scene_view_layer, DAG_EVAL_RENDER);
-	BKE_scene_graph_update_tagged(depsgraph, re->main);
+	BKE_scene_graph_update_for_newframe(depsgraph, re->main);
 
 	// prepare Freestyle:
 	//   - load mesh

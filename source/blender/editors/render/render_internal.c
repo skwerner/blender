@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,13 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/render/render_internal.c
- *  \ingroup edrend
+/** \file
+ * \ingroup edrend
  */
 
 
@@ -266,7 +261,7 @@ static void screen_render_single_layer_set(wmOperator *op, Main *mainp, ViewLaye
 		char scene_name[MAX_ID_NAME - 2];
 
 		RNA_string_get(op->ptr, "scene", scene_name);
-		scn = (Scene *)BLI_findstring(&mainp->scene, scene_name, offsetof(ID, name) + 2);
+		scn = (Scene *)BLI_findstring(&mainp->scenes, scene_name, offsetof(ID, name) + 2);
 
 		if (scn) {
 			/* camera switch wont have updated */
@@ -822,7 +817,7 @@ static void clean_viewport_memory(Main *bmain, Scene *scene)
 	Base *base;
 
 	/* Tag all the available objects. */
-	BKE_main_id_tag_listbase(&bmain->object, LIB_TAG_DOIT, true);
+	BKE_main_id_tag_listbase(&bmain->objects, LIB_TAG_DOIT, true);
 
 	/* Go over all the visible objects. */
 	for (wmWindowManager *wm = bmain->wm.first; wm; wm = wm->id.next) {
@@ -1096,7 +1091,8 @@ void RENDER_OT_shutter_curve_preset(wmOperatorType *ot)
 		{CURVE_PRESET_LINE, "LINE", 0, "Line", ""},
 		{CURVE_PRESET_ROUND, "ROUND", 0, "Round", ""},
 		{CURVE_PRESET_ROOT, "ROOT", 0, "Root", ""},
-		{0, NULL, 0, NULL, NULL}};
+		{0, NULL, 0, NULL, NULL},
+	};
 
 	ot->name = "Shutter Curve Preset";
 	ot->description = "Set shutter curve";

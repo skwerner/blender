@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,20 +12,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Bastien Montagne
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/blenloader/intern/blend_validate.c
- *  \ingroup blenloader
+/** \file
+ * \ingroup blenloader
  *
  * Utils to check/validate a Main is in sane state, only checks relations between datablocks and libraries for now.
  *
  * \note Does not *fix* anything, only reports found errors.
- *
  */
 
 #include <string.h> // for strrchr strncmp strstr
@@ -78,8 +70,8 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
 	for (Main *curmain = bmain->next; curmain != NULL; curmain = curmain->next) {
 		Library *curlib = curmain->curlib;
 		if (curlib == NULL) {
-			BKE_reportf(reports, RPT_ERROR,
-			            "Library database with NULL library datablock!");
+			BKE_report(reports, RPT_ERROR,
+			           "Library database with NULL library datablock!");
 			continue;
 		}
 
@@ -157,14 +149,16 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
 /** Check (and fix if needed) that shape key's 'from' pointer is valid. */
 bool BLO_main_validate_shapekeys(Main *bmain, ReportList *reports)
 {
+	ListBase *lb;
+	ID *id;
 	bool is_valid = true;
 
 	BKE_main_lock(bmain);
 
-	ListBase *lbarray[MAX_LIBARRAY];
-	int i = set_listbasepointers(bmain, lbarray);
-	while (i--) {
-		for (ID *id = lbarray[i]->first; id != NULL; id = id->next) {
+	FOREACH_MAIN_LISTBASE_BEGIN(bmain, lb)
+	{
+		FOREACH_MAIN_LISTBASE_ID_BEGIN(lb, id)
+		{
 			if (!BKE_key_idtype_support(GS(id->name))) {
 				break;
 			}
@@ -180,7 +174,9 @@ bool BLO_main_validate_shapekeys(Main *bmain, ReportList *reports)
 				}
 			}
 		}
+		FOREACH_MAIN_LISTBASE_ID_END;
 	}
+	FOREACH_MAIN_LISTBASE_END;
 
 	BKE_main_unlock(bmain);
 

@@ -622,8 +622,6 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.separator()
         col = layout.column()
 
-        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
-
         col.label(text="Textures:")
         row = layout.row()
         row.prop(md, "use_mirror_u", text="Flip U")
@@ -660,6 +658,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.operator("object.multires_base_apply", text="Apply Base")
         col.prop(md, "uv_smooth", text="")
         col.prop(md, "show_only_control_edges")
+        col.prop(md, "use_creases")
 
         layout.separator()
 
@@ -737,7 +736,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.separator()
 
         if md.is_cached:
-            layout.operator("object.ocean_bake", text="Free Bake").free = True
+            layout.operator("object.ocean_bake", text="Delete Bake").free = True
         else:
             layout.operator("object.ocean_bake").free = False
 
@@ -1037,6 +1036,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         sub.prop(md, "uv_smooth", text="")
 
         col.prop(md, "show_only_control_edges")
+        col.prop(md, "use_creases")
 
         if show_adaptive_options and ob.cycles.use_adaptive_subdivision:
             col = layout.column(align=True)
@@ -1366,9 +1366,12 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col = row.column()
         col.label(text="Quad Method:")
         col.prop(md, "quad_method", text="")
+        col.prop(md, "keep_custom_normals")
         col = row.column()
         col.label(text="Ngon Method:")
         col.prop(md, "ngon_method", text="")
+        col.label(text="Minimum Vertices:")
+        col.prop(md, "min_vertices", text="")
 
     def UV_WARP(self, layout, ob, md):
         split = layout.split()

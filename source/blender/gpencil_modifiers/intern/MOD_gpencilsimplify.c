@@ -1,5 +1,4 @@
-/* ***** BEGIN GPL LICENSE BLOCK *****
- *
+/*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,26 +15,21 @@
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Antonio Vazquez
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/gpencil_modifiers/intern/MOD_gpencilsimplify.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
+
+#include "BLI_utildefines.h"
 
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_vec_types.h"
-
-#include "BLI_utildefines.h"
 
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,16 +12,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * The Original Code is: all of this file.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_GPENCIL_MODIFIER_H__
 #define __BKE_GPENCIL_MODIFIER_H__
 
-/** \file BKE_gpencil_modifier.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include "DNA_gpencil_modifier_types.h"     /* needed for all enum typdefs */
@@ -170,7 +164,7 @@ typedef struct GpencilModifierTypeInfo {
 	 * This function is optional.
 	 */
 	int (*remapTime)(struct GpencilModifierData *md, struct Depsgraph *depsgraph,
-		struct Scene *scene, struct Object *ob, struct bGPDlayer *gpl, int cfra);
+	                 struct Scene *scene, struct Object *ob, struct bGPDlayer *gpl, int cfra);
 
 	/**
 	 * Initialize new instance data for this modifier type, this function

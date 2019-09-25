@@ -1,6 +1,4 @@
 /*
- * Copyright 2016, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor(s): Blender Institute
- *
+ * Copyright 2016, Blender Foundation.
  */
 
-/** \file workbench_effect_dof.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  */
 
 #include "workbench_private.h"
@@ -50,7 +47,7 @@ extern char datatoc_workbench_effect_dof_frag_glsl[];
 
 /**
  * Transform [-1..1] square to unit circle.
- **/
+ */
 static void square_to_circle(float x, float y, float *r, float *T)
 {
 	if (x > -y) {
@@ -137,7 +134,7 @@ void workbench_dof_engine_init(WORKBENCH_Data *vedata, Object *camera)
 	WORKBENCH_FramebufferList *fbl = vedata->fbl;
 
 	if ((wpd->shading.flag & V3D_SHADING_DEPTH_OF_FIELD) == 0 ||
-		(camera == NULL))
+	    (camera == NULL))
 	{
 		wpd->dof_enabled = false;
 		return;
@@ -189,13 +186,13 @@ void workbench_dof_engine_init(WORKBENCH_Data *vedata, Object *camera)
 	int shrink_w_size[2] = {shrink_h_size[0], ceilf(size[1] / 8.0f)};
 #endif
 
-	DRW_texture_ensure_2D(&txl->dof_source_tx, size[0], size[1], GPU_R11F_G11F_B10F, DRW_TEX_FILTER | DRW_TEX_MIPMAP);
-	DRW_texture_ensure_2D(&txl->coc_halfres_tx, size[0], size[1], GPU_RG8, DRW_TEX_FILTER | DRW_TEX_MIPMAP);
-	wpd->dof_blur_tx = DRW_texture_pool_query_2D(size[0], size[1], GPU_R11F_G11F_B10F, &draw_engine_workbench_solid);
+	DRW_texture_ensure_2d(&txl->dof_source_tx, size[0], size[1], GPU_R11F_G11F_B10F, DRW_TEX_FILTER | DRW_TEX_MIPMAP);
+	DRW_texture_ensure_2d(&txl->coc_halfres_tx, size[0], size[1], GPU_RG8, DRW_TEX_FILTER | DRW_TEX_MIPMAP);
+	wpd->dof_blur_tx = DRW_texture_pool_query_2d(size[0], size[1], GPU_R11F_G11F_B10F, &draw_engine_workbench_solid);
 #if 0
-	wpd->coc_temp_tx     = DRW_texture_pool_query_2D(shrink_h_size[0], shrink_h_size[1], GPU_RG8, &draw_engine_workbench_solid);
-	wpd->coc_tiles_tx[0] = DRW_texture_pool_query_2D(shrink_w_size[0], shrink_w_size[1], GPU_RG8, &draw_engine_workbench_solid);
-	wpd->coc_tiles_tx[1] = DRW_texture_pool_query_2D(shrink_w_size[0], shrink_w_size[1], GPU_RG8, &draw_engine_workbench_solid);
+	wpd->coc_temp_tx     = DRW_texture_pool_query_2d(shrink_h_size[0], shrink_h_size[1], GPU_RG8, &draw_engine_workbench_solid);
+	wpd->coc_tiles_tx[0] = DRW_texture_pool_query_2d(shrink_w_size[0], shrink_w_size[1], GPU_RG8, &draw_engine_workbench_solid);
+	wpd->coc_tiles_tx[1] = DRW_texture_pool_query_2d(shrink_w_size[0], shrink_w_size[1], GPU_RG8, &draw_engine_workbench_solid);
 #endif
 
 	GPU_framebuffer_ensure_config(&fbl->dof_downsample_fb, {
@@ -260,8 +257,8 @@ void workbench_dof_engine_init(WORKBENCH_Data *vedata, Object *camera)
 		wpd->dof_distance = -focus_dist;
 		wpd->dof_invsensorsize = full_size[0] / sensor_scaled;
 
-		wpd->dof_near_far[0] = -cam->clipsta;
-		wpd->dof_near_far[1] = -cam->clipend;
+		wpd->dof_near_far[0] = -cam->clip_start;
+		wpd->dof_near_far[1] = -cam->clip_end;
 
 		float blades = cam->gpu_dof.num_blades;
 		float rotation = cam->gpu_dof.rotation;

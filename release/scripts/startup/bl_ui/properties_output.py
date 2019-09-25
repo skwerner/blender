@@ -20,17 +20,17 @@
 # <pep8 compliant>
 import bpy
 from bpy.types import Menu, Panel, UIList
-from bl_operators.presets import PresetMenu
+from bl_ui.utils import PresetPanel
 
 
-class RENDER_PT_presets(PresetMenu):
+class RENDER_PT_presets(PresetPanel, Panel):
     bl_label = "Render Presets"
     preset_subdir = "render"
     preset_operator = "script.execute_preset"
     preset_add_operator = "render.preset_add"
 
 
-class RENDER_PT_ffmpeg_presets(PresetMenu):
+class RENDER_PT_ffmpeg_presets(PresetPanel, Panel):
     bl_label = "FFMPEG Presets"
     preset_subdir = "ffmpeg"
     preset_operator = "script.python_file_run"
@@ -124,10 +124,10 @@ class RENDER_PT_dimensions(RenderOutputButtonsPanel, Panel):
         col.prop(rd, "pixel_aspect_y", text="Y")
 
         col = layout.column(align=True)
-        col.prop(rd, "use_border", text="Border")
+        col.prop(rd, "use_border")
         sub = col.column(align=True)
         sub.active = rd.use_border
-        sub.prop(rd, "use_crop_to_border", text="Crop")
+        sub.prop(rd, "use_crop_to_border")
 
         col = layout.column(align=True)
         col.prop(scene, "frame_start", text="Frame Start")
@@ -270,9 +270,9 @@ class RENDER_PT_stamp_burn(RenderOutputButtonsPanel, Panel):
         col = layout.column()
         col.active = rd.use_stamp
         col.prop(rd, "stamp_font_size", text="Font Size")
-        col.prop(rd, "use_stamp_labels", text="Draw Labels")
         col.column().prop(rd, "stamp_foreground", slider=True)
         col.column().prop(rd, "stamp_background", slider=True)
+        col.prop(rd, "use_stamp_labels", text="Include Labels")
 
 
 class RENDER_PT_output(RenderOutputButtonsPanel, Panel):
@@ -477,15 +477,18 @@ class RENDER_PT_stereoscopy(RenderOutputButtonsPanel, Panel):
         basic_stereo = rd.views_format == 'STEREO_3D'
 
         row = layout.row()
-        row.prop(rd, "views_format", expand=True)
+        row.use_property_split = True
+        row.use_property_decorate = False
+        row.prop(rd, "views_format")
 
         if basic_stereo:
             row = layout.row()
             row.template_list("RENDER_UL_renderviews", "name", rd, "stereo_views", rd.views, "active_index", rows=2)
 
             row = layout.row()
-            row.label(text="File Suffix:")
-            row.prop(rv, "file_suffix", text="")
+            row.use_property_split = True
+            row.use_property_decorate = False
+            row.prop(rv, "file_suffix")
 
         else:
             row = layout.row()
@@ -496,8 +499,9 @@ class RENDER_PT_stereoscopy(RenderOutputButtonsPanel, Panel):
             col.operator("scene.render_view_remove", icon='REMOVE', text="")
 
             row = layout.row()
-            row.label(text="Camera Suffix:")
-            row.prop(rv, "camera_suffix", text="")
+            row.use_property_split = True
+            row.use_property_decorate = False
+            row.prop(rv, "camera_suffix")
 
 
 classes = (
@@ -506,6 +510,7 @@ classes = (
     RENDER_MT_framerate_presets,
     RENDER_PT_dimensions,
     RENDER_PT_frame_remapping,
+    RENDER_PT_stereoscopy,
     RENDER_PT_output,
     RENDER_PT_output_views,
     RENDER_PT_encoding,
@@ -515,7 +520,6 @@ classes = (
     RENDER_PT_stamp_note,
     RENDER_PT_stamp_burn,
     RENDER_UL_renderviews,
-    RENDER_PT_stereoscopy,
     RENDER_PT_post_processing,
 )
 

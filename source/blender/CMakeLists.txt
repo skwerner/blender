@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(SRC_DNA_INC
@@ -51,9 +46,9 @@ set(SRC_DNA_INC
 	${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_image_types.h
 	${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_ipo_types.h
 	${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_key_types.h
-	${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_lamp_types.h
 	${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_lattice_types.h
 	${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_layer_types.h
+	${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_light_types.h
 	${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_lightprobe_types.h
 	${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_linestyle_types.h
 	${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_listBase.h

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/BLI_dial_2d.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include "BLI_dial_2d.h"
@@ -92,10 +88,12 @@ float BLI_dial_angle(Dial *dial, const float current_position[2])
 		if ((angle * dial->last_angle < 0.0f) &&
 		    (fabsf(dial->last_angle) > (float)M_PI_2))
 		{
-			if (dial->last_angle < 0.0f)
+			if (dial->last_angle < 0.0f) {
 				dial->rotations--;
-			else
+			}
+			else {
 				dial->rotations++;
+			}
 		}
 		dial->last_angle = angle;
 

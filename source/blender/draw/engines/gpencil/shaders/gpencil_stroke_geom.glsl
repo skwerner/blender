@@ -17,7 +17,6 @@ out vec2 uvfac;
 
 #define GP_XRAY_FRONT 0
 #define GP_XRAY_3DSPACE 1
-#define GP_XRAY_BACK  2
 
 /* keep this list synchronized with list in gpencil_engine.h */
 #define GPENCIL_COLOR_SOLID   0
@@ -40,9 +39,6 @@ float getZdepth(vec4 point)
 	}
 	if (xraymode == GP_XRAY_3DSPACE) {
 		return (point.z / point.w);
-	}
-	if  (xraymode == GP_XRAY_BACK) {
-		return 0.999999;
 	}
 
 	/* in front by default */
@@ -87,6 +83,9 @@ void main(void)
 	if (sp1.y < -area.y || sp1.y > area.y) return;
 	if (sp2.x < -area.x || sp2.x > area.x) return;
 	if (sp2.y < -area.y || sp2.y > area.y) return;
+
+	/* culling behind camera */
+	if (P1.w < 0 || P2.w < 0) return;
 
 	/* determine the direction of each of the 3 segments (previous, current, next) */
 	vec2 v0 = normalize(sp1 - sp0);
@@ -162,72 +161,83 @@ void main(void)
 	}
 
 	/* generate the start endcap */
-	if ((caps_mode[0] != GPENCIL_FLATCAP) && is_equal(P0,P2) &&
-		(color_type == GPENCIL_COLOR_SOLID))
+	if ((caps_mode[0] != GPENCIL_FLATCAP) && is_equal(P0,P2))
 	{
 		vec4 cap_color = finalColor[1];
 
-		mTexCoord = vec2(2.0, 1.0);
+		mTexCoord = vec2(2.0, 0.5);
 		mColor = cap_color;
 		vec2 svn1 =  normalize(sp1 - sp2) * length_a * 4.0;
 		uvfac = vec2(0.0, 1.0);
 		gl_Position = vec4((sp1 + svn1) / Viewport, getZdepth(P1), 1.0);
 		EmitVertex();
 
-		mTexCoord = vec2(0.0, 0.0);
+		mTexCoord = vec2(0.0, -0.5);
 		mColor = cap_color;
 		uvfac = vec2(0.0, 1.0);
 		gl_Position = vec4((sp1 - (length_a * 2.0) * miter_a) / Viewport, getZdepth(P1), 1.0);
 		EmitVertex();
 
-		mTexCoord = vec2(0.0, 2.0);
+		mTexCoord = vec2(0.0, 1.5);
 		mColor = cap_color;
 		uvfac = vec2(0.0, 1.0);
 		gl_Position = vec4((sp1 + (length_a * 2.0) * miter_a) / Viewport, getZdepth(P1), 1.0);
 		EmitVertex();
 	}
 
+	float y_a = 0.0;
+	float y_b = 1.0;
+
+	/* invert uv (vertical) */
+	if (finaluvdata[2].x > 1.0) {
+		if ((finaluvdata[1].y != 0.0) && (finaluvdata[2].y != 0.0)) {
+			float d = ceil(finaluvdata[2].x) - 1.0;
+			if (floor(d / 2.0) == (d / 2.0)) {
+				y_a = 1.0;
+				y_b = 0.0;
+			}
+		}
+	}
 	/* generate the triangle strip */
 	uvfac = vec2(0.0, 0.0);
-	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(0, 0) : vec2(finaluvdata[1].x, 0);
+	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(0, 0) : vec2(finaluvdata[1].x, y_a);
 	mColor = finalColor[1];
 	gl_Position = vec4((sp1 + length_a * miter_a) / Viewport, getZdepth(P1), 1.0);
 	EmitVertex();
 
-	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(0, 1) : vec2(finaluvdata[1].x, 1);
+	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(0, 1) : vec2(finaluvdata[1].x, y_b);
 	mColor = finalColor[1];
 	gl_Position = vec4((sp1 - length_a * miter_a) / Viewport, getZdepth(P1), 1.0);
 	EmitVertex();
 
-	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(1, 0) : vec2(finaluvdata[2].x, 0);
+	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(1, 0) : vec2(finaluvdata[2].x, y_a);
 	mColor = finalColor[2];
 	gl_Position = vec4((sp2 + length_b * miter_b) / Viewport, getZdepth(P2), 1.0);
 	EmitVertex();
 
-	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(1, 1) : vec2(finaluvdata[2].x, 1);
+	mTexCoord = (color_type == GPENCIL_COLOR_SOLID) ? vec2(1, 1) : vec2(finaluvdata[2].x, y_b);
 	mColor = finalColor[2];
 	gl_Position = vec4((sp2 - length_b * miter_b) / Viewport, getZdepth(P2), 1.0);
 	EmitVertex();
 
 	/* generate the end endcap */
-	if ((caps_mode[1] != GPENCIL_FLATCAP) && is_equal(P1,P3) &&
-		(color_type == GPENCIL_COLOR_SOLID) && (finaluvdata[2].x > 0))
+	if ((caps_mode[1] != GPENCIL_FLATCAP) && is_equal(P1,P3) && (finaluvdata[2].x > 0))
 	{
 		vec4 cap_color = finalColor[2];
 
-		mTexCoord = vec2(finaluvdata[2].x, 2.0);
+		mTexCoord = vec2(finaluvdata[2].x, 1.5);
 		mColor = cap_color;
 		uvfac = vec2(finaluvdata[2].x, 1.0);
 		gl_Position = vec4((sp2 + (length_b * 2.0) * miter_b) / Viewport, getZdepth(P2), 1.0);
 		EmitVertex();
 
-		mTexCoord = vec2(finaluvdata[2].x, 0.0);
+		mTexCoord = vec2(finaluvdata[2].x, -0.5);
 		mColor = cap_color;
 		uvfac = vec2(finaluvdata[2].x, 1.0);
 		gl_Position = vec4((sp2 - (length_b * 2.0) * miter_b) / Viewport, getZdepth(P2), 1.0);
 		EmitVertex();
 
-		mTexCoord = vec2(finaluvdata[2].x + 2, 1.0);
+		mTexCoord = vec2(finaluvdata[2].x + 2, 0.5);
 		mColor = cap_color;
 		uvfac = vec2(finaluvdata[2].x, 1.0);
 		vec2 svn2 =  normalize(sp2 - sp1) * length_b * 4.0;

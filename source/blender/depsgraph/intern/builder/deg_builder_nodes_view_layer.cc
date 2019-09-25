@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation.
  * All rights reserved.
- *
- * Original Author: Joshua Leung
- * Contributor(s): Based on original depsgraph.c code - Blender Foundation (2005-2013)
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/depsgraph/intern/builder/deg_builder_nodes_view_layer.cc
- *  \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  *
  * Methods for constructing depsgraph's nodes
  */
@@ -57,12 +50,11 @@ extern "C" {
 #include "DEG_depsgraph_build.h"
 
 #include "intern/builder/deg_builder.h"
-#include "intern/nodes/deg_node.h"
-#include "intern/nodes/deg_node_component.h"
-#include "intern/nodes/deg_node_operation.h"
-#include "intern/depsgraph_types.h"
-#include "intern/depsgraph_intern.h"
-#include "util/deg_util_foreach.h"
+#include "intern/depsgraph.h"
+#include "intern/node/deg_node.h"
+#include "intern/node/deg_node_component.h"
+#include "intern/node/deg_node_operation.h"
+#include "intern/depsgraph_type.h"
 
 namespace DEG {
 
@@ -91,7 +83,8 @@ void DepsgraphNodeBuilder::build_view_layer(
 	 * only one view layer in there. */
 	view_layer_index_ = 0;
 	/* Scene ID block. */
-	add_id_node(&scene->id);
+	IDNode *id_node = add_id_node(&scene->id);
+	id_node->linked_state = linked_state;
 	/* Time source. */
 	add_time_source();
 	/* Setup currently building context. */
@@ -100,25 +93,23 @@ void DepsgraphNodeBuilder::build_view_layer(
 	/* Get pointer to a CoW version of scene ID. */
 	Scene *scene_cow = get_cow_datablock(scene);
 	/* Scene objects. */
-	int select_color = 1;
+	int select_id = 1;
 	/* NOTE: Base is used for function bindings as-is, so need to pass CoW base,
 	 * but object is expected to be an original one. Hence we go into some
-	 * tricks here iterating over the view layer.
-	 */
+	 * tricks here iterating over the view layer. */
 	int base_index = 0;
-	const int base_flag = (graph_->mode == DAG_EVAL_VIEWPORT) ?
-		BASE_ENABLED_VIEWPORT : BASE_ENABLED_RENDER;
-	LISTBASE_FOREACH(Base *, base, &view_layer->object_bases) {
+	LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
 		/* object itself */
-		const bool is_object_visible = (base->flag & base_flag);
-		if (is_object_visible) {
-			build_object(base_index,
-			             base->object,
-			             linked_state,
-			             is_object_visible);
+		if (need_pull_base_into_graph(base)) {
+			/* NOTE: We consider object visible even if it's currently
+			 * restricted by the base/restriction flags. Otherwise its drivers
+			 * will never be evaluated.
+			 *
+			 * TODO(sergey): Need to go more granular on visibility checks. */
+			build_object(base_index, base->object, linked_state, true);
 			++base_index;
 		}
-		base->object->select_color = select_color++;
+		base->object->select_id = select_id++;
 	}
 	build_layer_collections(&view_layer->layer_collections);
 	if (scene->camera != NULL) {
@@ -145,11 +136,11 @@ void DepsgraphNodeBuilder::build_view_layer(
 		build_cachefile(cachefile);
 	}
 	/* Masks. */
-	LISTBASE_FOREACH (Mask *, mask, &bmain_->mask) {
+	LISTBASE_FOREACH (Mask *, mask, &bmain_->masks) {
 		build_mask(mask);
 	}
 	/* Movie clips. */
-	LISTBASE_FOREACH (MovieClip *, clip, &bmain_->movieclip) {
+	LISTBASE_FOREACH (MovieClip *, clip, &bmain_->movieclips) {
 		build_movieclip(clip);
 	}
 	/* Material override. */
@@ -164,18 +155,15 @@ void DepsgraphNodeBuilder::build_view_layer(
 	}
 	/* Collections. */
 	add_operation_node(&scene->id,
-	                   DEG_NODE_TYPE_LAYER_COLLECTIONS,
+	                   NodeType::LAYER_COLLECTIONS,
+	                   OperationCode::VIEW_LAYER_EVAL,
 	                   function_bind(BKE_layer_eval_view_layer_indexed,
 	                                 _1,
 	                                 scene_cow,
-	                                 view_layer_index_),
-	                   DEG_OPCODE_VIEW_LAYER_EVAL);
+	                                 view_layer_index_));
 	/* Parameters evaluation for scene relations mainly. */
-	add_operation_node(&scene->id,
-	                   DEG_NODE_TYPE_PARAMETERS,
-	                   NULL,
-	                   DEG_OPCODE_PLACEHOLDER,
-	                   "Scene Eval");
+	add_operation_node(
+	        &scene->id, NodeType::PARAMETERS, OperationCode::SCENE_EVAL);
 	/* Build all set scenes. */
 	if (scene->set != NULL) {
 		ViewLayer *set_view_layer = BKE_view_layer_default_render(scene->set);

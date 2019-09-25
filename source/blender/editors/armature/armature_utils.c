@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2009 full recode.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/armature/armature_utils.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include "DNA_armature_types.h"
@@ -553,13 +547,16 @@ EditBone *make_boneList(ListBase *edbo, ListBase *bones, struct Bone *actBone)
 	return active;
 }
 
-/* This function:
- *     - sets local head/tail rest locations using parent bone's arm_mat.
- *     - calls BKE_armature_where_is_bone() which uses parent's transform (arm_mat) to define this bone's transform.
- *     - fixes (converts) EditBone roll into Bone roll.
- *     - calls again BKE_armature_where_is_bone(), since roll fiddling may have changed things for our bone...
- * Note that order is crucial here, we can only handle child if all its parents in chain have already been handled
- * (this is ensured by recursive process). */
+/**
+ * This function:
+ * - Sets local head/tail rest locations using parent bone's arm_mat.
+ * - Calls #BKE_armature_where_is_bone() which uses parent's transform (arm_mat) to define this bone's transform.
+ * - Fixes (converts) EditBone roll into Bone roll.
+ * - Calls again #BKE_armature_where_is_bone(), since roll fiddling may have changed things for our bone...
+ *
+ * \note The order is crucial here, we can only handle child
+ * if all its parents in chain have already been handled (this is ensured by recursive process).
+ */
 static void armature_finalize_restpose(ListBase *bonelist, ListBase *editbonelist)
 {
 	Bone *curBone;
@@ -736,7 +733,7 @@ void ED_armature_from_edit(Main *bmain, bArmature *arm)
 	armature_finalize_restpose(&arm->bonebase, arm->edbo);
 
 	/* so all users of this armature should get rebuilt */
-	for (obt = bmain->object.first; obt; obt = obt->id.next) {
+	for (obt = bmain->objects.first; obt; obt = obt->id.next) {
 		if (obt->data == arm) {
 			BKE_pose_rebuild(bmain, obt, arm, true);
 		}

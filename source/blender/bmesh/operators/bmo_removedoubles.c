@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_removedoubles.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Welding and merging functionality.
  */
@@ -189,7 +183,6 @@ finally:
 /**
  * \note with 'targetmap', multiple 'keys' are currently supported, though no callers should be using.
  * (because slot maps currently use GHash without the GHASH_FLAG_ALLOW_DUPES flag set)
- *
  */
 void bmo_weld_verts_exec(BMesh *bm, BMOperator *op)
 {
@@ -237,10 +230,12 @@ void bmo_weld_verts_exec(BMesh *bm, BMOperator *op)
 		const bool is_del_v2 = BMO_vert_flag_test_bool(bm, (v2 = e->v2), ELE_DEL);
 
 		if (is_del_v1 || is_del_v2) {
-			if (is_del_v1)
+			if (is_del_v1) {
 				v1 = BMO_slot_map_elem_get(slot_targetmap, v1);
-			if (is_del_v2)
+			}
+			if (is_del_v2) {
 				v2 = BMO_slot_map_elem_get(slot_targetmap, v2);
+			}
 
 			if (v1 == v2) {
 				BMO_edge_flag_enable(bm, e, EDGE_COL);
@@ -344,8 +339,9 @@ void bmo_pointmerge_facedata_exec(BMesh *bm, BMOperator *op)
 	vert_snap = BMO_slot_buffer_get_single(BMO_slot_get(op->slots_in, "vert_snap"));
 	tot = BM_vert_face_count(vert_snap);
 
-	if (!tot)
+	if (!tot) {
 		return;
+	}
 
 	fac = 1.0f / tot;
 	BM_ITER_ELEM (l, &iter, vert_snap, BM_LOOPS_OF_VERT) {
@@ -395,8 +391,9 @@ void bmo_average_vert_facedata_exec(BMesh *bm, BMOperator *op)
 		const int type = bm->ldata.layers[i].type;
 		const int offset = bm->ldata.layers[i].offset;
 
-		if (!CustomData_layer_has_math(&bm->ldata, i))
+		if (!CustomData_layer_has_math(&bm->ldata, i)) {
 			continue;
+		}
 
 		CustomData_data_initminmax(type, &min, &max);
 
@@ -481,8 +478,9 @@ void bmo_collapse_exec(BMesh *bm, BMOperator *op)
 
 		zero_v3(center);
 
-		if (!BMO_edge_flag_test(bm, e, EDGE_MARK))
+		if (!BMO_edge_flag_test(bm, e, EDGE_MARK)) {
 			continue;
+		}
 
 		BLI_assert(BLI_stack_is_empty(edge_stack));
 
@@ -605,8 +603,9 @@ void bmo_collapse_uvs_exec(BMesh *bm, BMOperator *op)
 #endif
 
 	for (i = 0; i < bm->ldata.totlayer; i++) {
-		if (CustomData_layer_has_math(&bm->ldata, i))
+		if (CustomData_layer_has_math(&bm->ldata, i)) {
 			bmo_collapsecon_do_layer(bm, i, oflag);
+		}
 	}
 
 #ifndef NDEBUG
@@ -641,9 +640,9 @@ static void bmesh_find_doubles_common(
 
 	int *duplicates = MEM_mallocN(sizeof(int) * verts_len, __func__);
 	{
-		KDTree *tree = BLI_kdtree_new(verts_len);
+		KDTree_3d *tree = BLI_kdtree_3d_new(verts_len);
 		for (int i = 0; i < verts_len; i++) {
-			BLI_kdtree_insert(tree, i, verts[i]->co);
+			BLI_kdtree_3d_insert(tree, i, verts[i]->co);
 			if (has_keep_vert && BMO_vert_flag_test(bm, verts[i], VERT_KEEP)) {
 				duplicates[i] = i;
 			}
@@ -652,9 +651,9 @@ static void bmesh_find_doubles_common(
 			}
 		}
 
-		BLI_kdtree_balance(tree);
-		found_duplicates = BLI_kdtree_calc_duplicates_fast(tree, dist, false, duplicates) != 0;
-		BLI_kdtree_free(tree);
+		BLI_kdtree_3d_balance(tree);
+		found_duplicates = BLI_kdtree_3d_calc_duplicates_fast(tree, dist, false, duplicates) != 0;
+		BLI_kdtree_3d_free(tree);
 	}
 
 	if (found_duplicates) {

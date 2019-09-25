@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Brecht Van Lommel.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file GPU_shader.h
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  */
 
 #ifndef __GPU_SHADER_H__
@@ -68,6 +60,12 @@ GPUShader *GPU_shader_create_ex(
         const char **tf_names,
         const int tf_count,
         const char *shader_name);
+struct GPU_ShaderCreateFromArray_Params { const char **vert, **geom, **frag, **defs; };
+struct GPUShader *GPU_shader_create_from_arrays_impl(
+        const struct GPU_ShaderCreateFromArray_Params *params);
+#define GPU_shader_create_from_arrays(...) \
+	GPU_shader_create_from_arrays_impl(&(const struct GPU_ShaderCreateFromArray_Params)__VA_ARGS__)
+
 void GPU_shader_free(GPUShader *shader);
 
 void GPU_shader_bind(GPUShader *shader);
@@ -316,7 +314,7 @@ typedef enum eGPUBuiltinShader {
 	/* lines */
 	GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR,
 	GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR,
-	/* lamp drawing */
+	/* light drawing */
 	GPU_SHADER_3D_GROUNDPOINT,
 	GPU_SHADER_3D_GROUNDLINE,
 	GPU_SHADER_3D_SCREENSPACE_VARIYING_COLOR,
@@ -358,9 +356,22 @@ typedef enum eGPUBuiltinShader {
 	/* Selection */
 	GPU_SHADER_3D_FLAT_SELECT_ID,
 	GPU_SHADER_3D_UNIFORM_SELECT_ID,
-
-	GPU_NUM_BUILTIN_SHADERS /* (not an actual shader) */
 } eGPUBuiltinShader;
+#define GPU_SHADER_BUILTIN_LEN (GPU_SHADER_3D_UNIFORM_SELECT_ID + 1)
+
+/** Support multiple configurations. */
+typedef enum eGPUShaderConfig {
+	GPU_SHADER_CFG_DEFAULT     = 0,
+	GPU_SHADER_CFG_CLIPPED     = 1,
+} eGPUShaderConfig;
+#define GPU_SHADER_CFG_LEN (GPU_SHADER_CFG_CLIPPED + 1)
+
+typedef struct GPUShaderConfigData {
+	const char *lib;
+	const char *def;
+} GPUShaderConfigData;
+/* gpu_shader.c */
+extern const GPUShaderConfigData GPU_shader_cfg_data[GPU_SHADER_CFG_LEN];
 
 /** Keep these in sync with:
  * - `gpu_shader_image_interlace_frag.glsl`
@@ -372,7 +383,10 @@ typedef enum eGPUInterlaceShader {
 	GPU_SHADER_INTERLACE_CHECKER           = 2,
 } eGPUInterlaceShader;
 
-GPUShader *GPU_shader_get_builtin_shader(eGPUBuiltinShader shader);
+GPUShader *GPU_shader_get_builtin_shader_with_config(
+        eGPUBuiltinShader shader, eGPUShaderConfig sh_cfg);
+GPUShader *GPU_shader_get_builtin_shader(
+        eGPUBuiltinShader shader);
 
 void GPU_shader_get_builtin_shader_code(
         eGPUBuiltinShader shader,

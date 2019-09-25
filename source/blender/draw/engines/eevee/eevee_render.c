@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2016, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file eevee_render.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  */
 
 /**
@@ -90,8 +84,8 @@ void EEVEE_render_init(EEVEE_Data *ved, RenderEngine *engine, struct Depsgraph *
 	                                      size_orig[1] + g_data->overscan_pixels * 2.0f});
 
 	/* TODO 32 bit depth */
-	DRW_texture_ensure_fullscreen_2D(&dtxl->depth, GPU_DEPTH24_STENCIL8, 0);
-	DRW_texture_ensure_fullscreen_2D(&txl->color, GPU_RGBA32F, DRW_TEX_FILTER | DRW_TEX_MIPMAP);
+	DRW_texture_ensure_fullscreen_2d(&dtxl->depth, GPU_DEPTH24_STENCIL8, 0);
+	DRW_texture_ensure_fullscreen_2d(&txl->color, GPU_RGBA32F, DRW_TEX_FILTER | DRW_TEX_MIPMAP);
 
 	GPU_framebuffer_ensure_config(&dfbl->default_fb, {
 		GPU_ATTACHMENT_TEXTURE(dtxl->depth),
@@ -175,7 +169,10 @@ void EEVEE_render_cache(
 		}
 	}
 
-	if (engine) {
+	/* Don't print dupli objects as this can be very verbose and
+	 * increase the render time on Windows because of slow windows term.
+	 * (see T59649) */
+	if (engine && (ob->base_flag & BASE_FROM_DUPLI) == 0) {
 		char info[42];
 		BLI_snprintf(info, sizeof(info), "Syncing %s", ob->id.name + 2);
 		RE_engine_update_stats(engine, NULL, info);
@@ -216,12 +213,6 @@ static void eevee_render_result_combined(
 	        vedata->stl->g_data->overscan_pixels + rect->ymin,
 	        BLI_rcti_size_x(rect), BLI_rcti_size_y(rect),
 	        4, 0, rp->rect);
-
-	/* Premult alpha */
-	int pixels_len = BLI_rcti_size_x(rect) * BLI_rcti_size_y(rect);
-	for (int i = 0; i < pixels_len * 4; i += 4) {
-		mul_v3_fl(rp->rect + i, rp->rect[i + 3]);
-	}
 }
 
 static void eevee_render_result_subsurface(
@@ -521,7 +512,7 @@ void EEVEE_render_draw(EEVEE_Data *vedata, RenderEngine *engine, RenderLayer *rl
 		/* Copy previous persmat to UBO data */
 		copy_m4_m4(sldata->common_data.prev_persmat, stl->effects->prev_persmat);
 
-		BLI_halton_3D(primes, offset, stl->effects->taa_current_sample, r);
+		BLI_halton_3d(primes, offset, stl->effects->taa_current_sample, r);
 		EEVEE_update_noise(psl, fbl, r);
 		EEVEE_temporal_sampling_matrices_calc(stl->effects, g_data->viewmat, g_data->persmat, r);
 		EEVEE_volumes_set_jitter(sldata, stl->effects->taa_current_sample - 1);
@@ -536,13 +527,17 @@ void EEVEE_render_draw(EEVEE_Data *vedata, RenderEngine *engine, RenderLayer *rl
 		DRW_viewport_matrix_override_set(g_data->viewinv, DRW_MAT_VIEWINV);
 
 		/* Refresh Probes */
-		RE_engine_update_stats(engine, NULL, "Updating Probes");
 		EEVEE_lightprobes_refresh(sldata, vedata);
 		EEVEE_lightprobes_refresh_planar(sldata, vedata);
 
-		char info[42];
-		BLI_snprintf(info, sizeof(info), "Rendering %u / %u samples", render_samples + 1, tot_sample);
-		RE_engine_update_stats(engine, NULL, info);
+		/* Don't print every samples as it can lead to bad performance. (see T59649) */
+		if ((render_samples % 25) == 0 ||
+		    (render_samples + 1) == tot_sample)
+		{
+			char info[42];
+			BLI_snprintf(info, sizeof(info), "Rendering %u / %u samples", render_samples + 1, tot_sample);
+			RE_engine_update_stats(engine, NULL, info);
+		}
 
 		/* Refresh Shadows */
 		EEVEE_lights_update(sldata, vedata);
@@ -567,6 +562,7 @@ void EEVEE_render_draw(EEVEE_Data *vedata, RenderEngine *engine, RenderLayer *rl
 		GPU_framebuffer_bind(fbl->main_fb);
 		EEVEE_draw_default_passes(psl);
 		DRW_draw_pass(psl->material_pass);
+		DRW_draw_pass(psl->material_pass_cull);
 		EEVEE_subsurface_data_render(sldata, vedata);
 		/* Effects pre-transparency */
 		EEVEE_subsurface_compute(sldata, vedata);
@@ -620,7 +616,7 @@ void EEVEE_render_update_passes(RenderEngine *engine, Scene *scene, ViewLayer *v
 		else if (channels == 3) type = SOCK_VECTOR; \
 		else type = SOCK_FLOAT; \
 		RE_engine_register_pass(engine, scene, view_layer, RE_PASSNAME_ ## name, channels, chanid, type); \
-	}
+	} ((void)0)
 
 	CHECK_PASS(Z,           1, "Z");
 	CHECK_PASS(MIST,        1, "Z");

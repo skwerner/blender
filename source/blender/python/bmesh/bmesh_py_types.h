@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_types.h
- *  \ingroup pybmesh
+/** \file
+ * \ingroup pybmesh
  */
 
 #ifndef __BMESH_PY_TYPES_H__
@@ -140,8 +134,8 @@ void BPy_BM_init_types(void);
 PyObject *BPyInit_bmesh_types(void);
 
 enum {
-	BPY_BMFLAG_NOP = 0,       /* do nothing */
-	BPY_BMFLAG_IS_WRAPPED = 1 /* the mesh is owned by editmode */
+	BPY_BMFLAG_NOP = 0,        /* do nothing */
+	BPY_BMFLAG_IS_WRAPPED = 1, /* the mesh is owned by editmode */
 };
 
 PyObject *BPy_BMesh_CreatePyObject(BMesh *bm, int flag);

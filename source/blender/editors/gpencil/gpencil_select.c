@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014, Blender Foundation
  * This is a new part of Blender
- *
- * Contributor(s): Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/gpencil/gpencil_select.c
- *  \ingroup edgpencil
+/** \file
+ * \ingroup edgpencil
  */
 
 #include <stdio.h>
@@ -108,90 +102,7 @@ static int gpencil_select_all_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 	}
 
-	/* for "toggle", test for existing selected strokes */
-	if (action == SEL_TOGGLE) {
-		action = SEL_SELECT;
-
-		CTX_DATA_BEGIN(C, bGPDstroke *, gps, editable_gpencil_strokes)
-		{
-			if (gps->flag & GP_STROKE_SELECT) {
-				action = SEL_DESELECT;
-				break; // XXX: this only gets out of the inner loop...
-			}
-		}
-		CTX_DATA_END;
-	}
-
-	/* if deselecting, we need to deselect strokes across all frames
-	 * - Currently, an exception is only given for deselection
-	 *   Selecting and toggling should only affect what's visible,
-	 *   while deselecting helps clean up unintended/forgotten
-	 *   stuff on other frames
-	 */
-	if (action == SEL_DESELECT) {
-		/* deselect strokes across editable layers
-		 * NOTE: we limit ourselves to editable layers, since once a layer is "locked/hidden
-		 *       nothing should be able to touch it
-		 */
-		CTX_DATA_BEGIN(C, bGPDlayer *, gpl, editable_gpencil_layers)
-		{
-			bGPDframe *gpf;
-
-			/* deselect all strokes on all frames */
-			for (gpf = gpl->frames.first; gpf; gpf = gpf->next) {
-				bGPDstroke *gps;
-
-				for (gps = gpf->strokes.first; gps; gps = gps->next) {
-					bGPDspoint *pt;
-					int i;
-
-					/* only edit strokes that are valid in this view... */
-					if (ED_gpencil_stroke_can_use(C, gps)) {
-						for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
-							pt->flag &= ~GP_SPOINT_SELECT;
-						}
-
-						gps->flag &= ~GP_STROKE_SELECT;
-					}
-				}
-			}
-		}
-		CTX_DATA_END;
-	}
-	else {
-		/* select or deselect all strokes */
-		CTX_DATA_BEGIN(C, bGPDstroke *, gps, editable_gpencil_strokes)
-		{
-			bGPDspoint *pt;
-			int i;
-			bool selected = false;
-
-			/* Change selection status of all points, then make the stroke match */
-			for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
-				switch (action) {
-					case SEL_SELECT:
-						pt->flag |= GP_SPOINT_SELECT;
-						break;
-					//case SEL_DESELECT:
-					//	pt->flag &= ~GP_SPOINT_SELECT;
-					//	break;
-					case SEL_INVERT:
-						pt->flag ^= GP_SPOINT_SELECT;
-						break;
-				}
-
-				if (pt->flag & GP_SPOINT_SELECT)
-					selected = true;
-			}
-
-			/* Change status of stroke */
-			if (selected)
-				gps->flag |= GP_STROKE_SELECT;
-			else
-				gps->flag &= ~GP_STROKE_SELECT;
-		}
-		CTX_DATA_END;
-	}
+	ED_gpencil_select_toggle_all(C, action);
 
 	/* updates */
 	DEG_id_tag_update(&gpd->id, ID_RECALC_GEOMETRY);
@@ -509,7 +420,7 @@ void GPENCIL_OT_select_grouped(wmOperatorType *ot)
 	static const EnumPropertyItem prop_select_grouped_types[] = {
 		{GP_SEL_SAME_LAYER, "LAYER", 0, "Layer", "Shared layers"},
 		{GP_SEL_SAME_MATERIAL, "MATERIAL", 0, "Material", "Shared materials"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -966,7 +877,7 @@ static bool gp_stroke_do_circle_sel(
 			float r_hita[3], r_hitb[3];
 			bool hit_select = (bool)(pt1->flag & GP_SPOINT_SELECT);
 			ED_gpencil_select_stroke_segment(
-				gpl, gps, pt1, hit_select, false, scale, r_hita, r_hitb);
+			        gpl, gps, pt1, hit_select, false, scale, r_hita, r_hitb);
 		}
 
 		/* Ensure that stroke selection is in sync with its points */
@@ -995,8 +906,6 @@ static int gpencil_circle_select_exec(bContext *C, wmOperator *op)
 	const int my = RNA_int_get(op->ptr, "y");
 	const int radius = RNA_int_get(op->ptr, "radius");
 
-	bool select = !RNA_boolean_get(op->ptr, "deselect");
-
 	GP_SpaceConversion gsc = {NULL};
 	/* for bounding rect around circle (for quicky intersection testing) */
 	rcti rect = {0};
@@ -1008,6 +917,14 @@ static int gpencil_circle_select_exec(bContext *C, wmOperator *op)
 	if (sa == NULL) {
 		BKE_report(op->reports, RPT_ERROR, "No active area");
 		return OPERATOR_CANCELLED;
+	}
+
+	const eSelectOp sel_op = ED_select_op_modal(
+	        RNA_enum_get(op->ptr, "mode"), WM_gesture_is_modal_first(op->customdata));
+	const bool select = (sel_op != SEL_OP_SUB);
+	if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
+		ED_gpencil_select_toggle_all(C, SEL_DESELECT);
+		changed = true;
 	}
 
 	/* init space conversion stuff */
@@ -1025,8 +942,8 @@ static int gpencil_circle_select_exec(bContext *C, wmOperator *op)
 	GP_EDITABLE_STROKES_BEGIN(gpstroke_iter, C, gpl, gps)
 	{
 		changed |= gp_stroke_do_circle_sel(
-			gpl, gps, &gsc, mx, my, radius, select, &rect,
-			gpstroke_iter.diff_mat, selectmode, scale);
+		        gpl, gps, &gsc, mx, my, radius, select, &rect,
+		        gpstroke_iter.diff_mat, selectmode, scale);
 	}
 	GP_EDITABLE_STROKES_END(gpstroke_iter);
 
@@ -1062,7 +979,8 @@ void GPENCIL_OT_select_circle(wmOperatorType *ot)
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 
 	/* properties */
-	WM_operator_properties_gesture_circle_select(ot);
+	WM_operator_properties_gesture_circle(ot);
+	WM_operator_properties_select_operation_simple(ot);
 }
 
 /** \} */
@@ -1148,7 +1066,7 @@ static int gpencil_generic_select_exec(
 						bool hit_select = (bool)(pt->flag & GP_SPOINT_SELECT);
 						float r_hita[3], r_hitb[3];
 						ED_gpencil_select_stroke_segment(
-							gpl, gps, pt, hit_select, false, scale, r_hita, r_hitb);
+						        gpl, gps, pt, hit_select, false, scale, r_hita, r_hitb);
 					}
 
 				}
@@ -1255,9 +1173,9 @@ void GPENCIL_OT_select_box(wmOperatorType *ot)
 	/* flags */
 	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
 
-	/* rna */
-	WM_operator_properties_select_operation(ot);
+	/* properties */
 	WM_operator_properties_gesture_box(ot);
+	WM_operator_properties_select_operation(ot);
 }
 
 /** \} */

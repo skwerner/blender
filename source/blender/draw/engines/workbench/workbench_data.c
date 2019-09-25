@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,10 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2018, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
+ */
+
+/** \file
+ * \ingroup draw_engine
  */
 
 #include "workbench_private.h"
@@ -48,18 +46,20 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
 	View3D *v3d = draw_ctx->v3d;
 	if (!v3d) {
 		wpd->shading = scene->display.shading;
-		wpd->use_color_view_settings = true;
+		wpd->use_color_render_settings = true;
 	}
 	else if (v3d->shading.type == OB_RENDER &&
 	         BKE_scene_uses_blender_workbench(scene))
 	{
 		wpd->shading = scene->display.shading;
-		wpd->use_color_view_settings = true;
+		wpd->use_color_render_settings = true;
 	}
 	else {
 		wpd->shading = v3d->shading;
-		wpd->use_color_view_settings = false;
+		wpd->use_color_render_settings = false;
 	}
+
+	wpd->use_color_management = BKE_scene_check_color_management_enabled(scene);
 
 	if (wpd->shading.light == V3D_LIGHTING_MATCAP) {
 		wpd->studio_light = BKE_studiolight_find(
@@ -105,8 +105,14 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
 
 		/* XXX: Really quick conversion to avoid washed out background.
 		 * Needs to be addressed properly (color managed using ocio). */
-		srgb_to_linearrgb_v3_v3(wd->background_color_high, wd->background_color_high);
-		srgb_to_linearrgb_v3_v3(wd->background_color_low, wd->background_color_low);
+		if (wpd->use_color_management) {
+			srgb_to_linearrgb_v3_v3(wd->background_color_high, wd->background_color_high);
+			srgb_to_linearrgb_v3_v3(wd->background_color_low, wd->background_color_low);
+		}
+		else {
+			copy_v3_v3(wd->background_color_high, wd->background_color_high);
+			copy_v3_v3(wd->background_color_low, wd->background_color_low);
+		}
 	}
 	else {
 		zero_v3(wd->background_color_low);
@@ -128,7 +134,12 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
 			wpd->world_clip_planes = rv3d->clip;
 			DRW_state_clip_planes_set_from_rv3d(rv3d);
 			UI_GetThemeColor4fv(TH_V3D_CLIPPING_BORDER, wpd->world_clip_planes_color);
-			srgb_to_linearrgb_v3_v3(wpd->world_clip_planes_color, wpd->world_clip_planes_color);
+			if (wpd->use_color_management) {
+				srgb_to_linearrgb_v3_v3(wpd->world_clip_planes_color, wpd->world_clip_planes_color);
+			}
+			else {
+				copy_v3_v3(wpd->world_clip_planes_color, wpd->world_clip_planes_color);
+			}
 		}
 		else {
 			wpd->world_clip_planes = NULL;
@@ -148,7 +159,7 @@ void workbench_private_data_init(WORKBENCH_PrivateData *wpd)
 		float viewvecs[3][4] = {
 		    {-1.0f, -1.0f, -1.0f, 1.0f},
 		    {1.0f, -1.0f, -1.0f, 1.0f},
-		    {-1.0f, 1.0f, -1.0f, 1.0f}
+		    {-1.0f, 1.0f, -1.0f, 1.0f},
 		};
 		int i;
 		const float *size = DRW_viewport_size_get();

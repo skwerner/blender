@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2016, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/draw/intern/draw_view.c
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  *
  * Contains dynamic drawing using immediate mode
  */
@@ -129,7 +123,7 @@ GPUBatch *DRW_draw_background_clipping_batch_from_rv3d(const RegionView3D *rv3d)
 		{4, 7, 6, 5},
 		{7, 3, 2, 6},
 		{1, 5, 6, 2},
-		{7, 4, 0, 3}
+		{7, 4, 0, 3},
 	};
 	GPUVertBuf *vbo;
 	GPUIndexBuf *el;
@@ -160,7 +154,7 @@ GPUBatch *DRW_draw_background_clipping_batch_from_rv3d(const RegionView3D *rv3d)
 static bool is_cursor_visible(const DRWContextState *draw_ctx, Scene *scene, ViewLayer *view_layer)
 {
 	View3D *v3d = draw_ctx->v3d;
-	if ((v3d->flag2 & V3D_RENDER_OVERRIDE) || (v3d->overlay.flag & V3D_OVERLAY_HIDE_CURSOR)) {
+	if ((v3d->flag2 & V3D_HIDE_OVERLAYS) || (v3d->overlay.flag & V3D_OVERLAY_HIDE_CURSOR)) {
 		return false;
 	}
 
@@ -207,20 +201,31 @@ void DRW_draw_cursor(void)
 
 	if (is_cursor_visible(draw_ctx, scene, view_layer)) {
 		int co[2];
+
+		/* Get cursor data into quaternion form */
 		const View3DCursor *cursor = &scene->cursor;
+
 		if (ED_view3d_project_int_global(
 		            ar, cursor->location, co, V3D_PROJ_TEST_NOP | V3D_PROJ_TEST_CLIP_NEAR) == V3D_PROJ_RET_OK)
 		{
 			RegionView3D *rv3d = ar->regiondata;
 
+			float cursor_quat[4];
+			BKE_scene_cursor_rot_to_quat(cursor, cursor_quat);
+
 			/* Draw nice Anti Aliased cursor. */
 			GPU_line_width(1.0f);
-			glEnable(GL_BLEND);
-			glEnable(GL_LINE_SMOOTH);
+			GPU_blend(true);
+			GPU_line_smooth(true);
 
 			float eps = 1e-5f;
 			rv3d->viewquat[0] = -rv3d->viewquat[0];
-			const bool is_aligned = compare_v4v4(cursor->rotation, rv3d->viewquat, eps);
+			bool is_aligned = compare_v4v4(cursor_quat, rv3d->viewquat, eps);
+			if (is_aligned == false) {
+				float tquat[4];
+				rotation_between_quats_to_quat(tquat, rv3d->viewquat, cursor_quat);
+				is_aligned = tquat[0] - eps < -1.0f;
+			}
 			rv3d->viewquat[0] = -rv3d->viewquat[0];
 
 			/* Draw lines */
@@ -242,12 +247,12 @@ void DRW_draw_cursor(void)
 #define CURSOR_EDGE(axis_vec, axis, sign) { \
 					CURSOR_VERT(axis_vec, axis, sign 1.0f); \
 					CURSOR_VERT(axis_vec, axis, sign 0.25f); \
-				}
+				} ((void)0)
 
 				for (int axis = 0; axis < 3; axis++) {
 					float axis_vec[3] = {0};
 					axis_vec[axis] = scale;
-					mul_qt_v3(cursor->rotation, axis_vec);
+					mul_qt_v3(cursor_quat, axis_vec);
 					CURSOR_EDGE(axis_vec, axis, +);
 					CURSOR_EDGE(axis_vec, axis, -);
 				}
@@ -272,8 +277,8 @@ void DRW_draw_cursor(void)
 
 			GPU_batch_draw(cursor_batch);
 
-			glDisable(GL_BLEND);
-			glDisable(GL_LINE_SMOOTH);
+			GPU_blend(false);
+			GPU_line_smooth(false);
 			GPU_matrix_pop();
 			GPU_matrix_projection_set(original_proj);
 		}

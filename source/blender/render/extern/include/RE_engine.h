@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file RE_engine.h
- *  \ingroup render
+/** \file
+ * \ingroup render
  */
 
 #ifndef __RE_ENGINE_H__
@@ -66,7 +58,6 @@ struct bNodeTree;
 #define RE_USE_SHADING_NODES	16
 #define RE_USE_EXCLUDE_LAYERS	32
 #define RE_USE_SAVE_BUFFERS		64
-#define RE_USE_TEXTURE_PREVIEW		128
 #define RE_USE_SHADING_NODES_CUSTOM 	256
 #define RE_USE_SPHERICAL_STEREO 512
 
@@ -108,7 +99,7 @@ typedef struct RenderEngineType {
 	ExtensionRNA ext;
 } RenderEngineType;
 
-typedef void (*update_render_passes_cb_t)(struct RenderEngine *engine, struct Scene *scene, struct ViewLayer *view_layer,
+typedef void (*update_render_passes_cb_t)(void *userdata, struct Scene *scene, struct ViewLayer *view_layer,
                                           const char *name, int channels, const char *chanid, int type);
 
 typedef struct RenderEngine {
@@ -136,6 +127,7 @@ typedef struct RenderEngine {
 	/* callback for render pass query */
 	ThreadMutex update_render_passes_mutex;
 	update_render_passes_cb_t update_render_passes_cb;
+	void *update_render_passes_data;
 
 	rctf last_viewplane;
 	rcti last_disprect;
@@ -176,7 +168,7 @@ bool RE_engine_is_external(struct Render *re);
 void RE_engine_frame_set(struct RenderEngine *engine, int frame, float subframe);
 
 void RE_engine_update_render_passes(struct RenderEngine *engine, struct Scene *scene, struct ViewLayer *view_layer,
-                                    update_render_passes_cb_t callback);
+                                    update_render_passes_cb_t callback, void *callback_data);
 void RE_engine_register_pass(struct RenderEngine *engine, struct Scene *scene, struct ViewLayer *view_layer,
                              const char *name, int channels, const char *chanid, int type);
 
@@ -190,7 +182,7 @@ bool RE_engine_is_opengl(RenderEngineType *render_type);
 
 RenderEngineType *RE_engines_find(const char *idname);
 
-rcti* RE_engine_get_current_tiles(struct Render *re, int *r_total_tiles, bool *r_needs_free);
+rcti *RE_engine_get_current_tiles(struct Render *re, int *r_total_tiles, bool *r_needs_free);
 struct RenderData *RE_engine_get_render_data(struct Render *re);
 void RE_bake_engine_set_engine_parameters(
         struct Render *re, struct Main *bmain, struct Scene *scene);

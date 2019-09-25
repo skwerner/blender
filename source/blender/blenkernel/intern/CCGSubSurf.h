@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,21 +12,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __CCGSUBSURF_H__
 #define __CCGSUBSURF_H__
 
-/** \file blender/blenkernel/intern/CCGSubSurf.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
-typedef void* CCGMeshHDL;
-typedef void* CCGVertHDL;
-typedef void* CCGEdgeHDL;
-typedef void* CCGFaceHDL;
+typedef void *CCGMeshHDL;
+typedef void *CCGVertHDL;
+typedef void *CCGEdgeHDL;
+typedef void *CCGFaceHDL;
 
 typedef struct CCGEdge CCGEdge;
 typedef struct CCGFace CCGFace;
@@ -44,7 +40,7 @@ typedef struct CCGMeshIFC {
 
 /***/
 
-typedef void* CCGAllocatorHDL;
+typedef void *CCGAllocatorHDL;
 
 typedef struct CCGAllocatorIFC {
 	void*		(*alloc)			(CCGAllocatorHDL a, int numBytes);

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/curve/editcurve_paint.c
- *  \ingroup edcurve
+/** \file
+ * \ingroup edcurve
  */
 
 #include "DNA_object_types.h"
@@ -788,13 +784,7 @@ static int curve_draw_exec(bContext *C, wmOperator *op)
 	}
 
 	/* Deselect all existing curves. */
-	{
-		ViewLayer *view_layer = CTX_data_view_layer(C);
-		uint objects_len;
-		Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, CTX_wm_view3d(C), &objects_len);
-		ED_curve_deselect_all_multi(objects, objects_len);
-		MEM_freeN(objects);
-	}
+	ED_curve_deselect_all_multi(C);
 
 	const float radius_min = cps->radius_min;
 	const float radius_max = cps->radius_max;

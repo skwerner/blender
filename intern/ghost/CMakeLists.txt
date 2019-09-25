@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -87,6 +82,12 @@ set(SRC
 	intern/GHOST_TimerTask.h
 	intern/GHOST_Window.h
 	intern/GHOST_WindowManager.h
+)
+
+set(LIB
+	bf_intern_glew_mx
+	bf_intern_string
+	${GLEW_LIBRARY}
 )
 
 if(WITH_GHOST_DEBUG)
@@ -196,6 +197,10 @@ elseif(WITH_X11)
 
 	if(WITH_GHOST_XDND)
 		add_definitions(-DWITH_XDND)
+
+		list(APPEND LIB
+			extern_xdnd
+		)
 
 		list(APPEND INC
 			../../extern/xdnd
@@ -342,4 +347,4 @@ endif()
 
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_intern_ghost "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_intern_ghost "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

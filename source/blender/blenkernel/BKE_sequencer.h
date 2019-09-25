@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,13 @@
  *
  * The Original Code is Copyright (C) 2004 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_SEQUENCER_H__
 #define __BKE_SEQUENCER_H__
 
-/** \file BKE_sequencer.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 struct Depsgraph;
@@ -129,7 +123,7 @@ enum {
 	DO_BOX_WIPE,
 	DO_CROSS_WIPE,
 	DO_IRIS_WIPE,
-	DO_CLOCK_WIPE
+	DO_CLOCK_WIPE,
 };
 
 struct SeqEffectHandle {
@@ -264,7 +258,7 @@ typedef enum {
 	SEQ_STRIPELEM_IBUF,
 	SEQ_STRIPELEM_IBUF_COMP,
 	SEQ_STRIPELEM_IBUF_STARTSTILL,
-	SEQ_STRIPELEM_IBUF_ENDSTILL
+	SEQ_STRIPELEM_IBUF_ENDSTILL,
 } eSeqStripElemIBuf;
 
 void BKE_sequencer_cache_destruct(void);
@@ -416,7 +410,7 @@ enum {
 	SEQ_SIDE_NONE = 0,
 	SEQ_SIDE_LEFT,
 	SEQ_SIDE_RIGHT,
-	SEQ_SIDE_BOTH
+	SEQ_SIDE_BOTH,
 };
 int BKE_sequencer_find_next_prev_edit(
         struct Scene *scene, int cfra, const short side,

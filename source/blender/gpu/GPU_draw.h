@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2005 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Brecht Van Lommel.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file GPU_draw.h
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  */
 
 #ifndef __GPU_DRAW_H__
@@ -107,11 +99,6 @@ void GPU_create_smoke_velocity(struct SmokeModifierData *smd);
 void GPU_free_unused_buffers(struct Main *bmain);
 
 /* utilities */
-void	GPU_select_index_set(int index);
-void	GPU_select_index_get(int index, int *r_col);
-int		GPU_select_to_index(unsigned int col);
-void	GPU_select_to_index_array(unsigned int *col, const unsigned int size);
-
 typedef enum eGPUAttrMask {
 	GPU_DEPTH_BUFFER_BIT = (1 << 0),
 	GPU_ENABLE_BIT = (1 << 1),

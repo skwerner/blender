@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/animation/fmodifier_ui.c
- *  \ingroup edanimation
+/** \file
+ * \ingroup edanimation
  */
 
 
@@ -107,7 +100,7 @@ static void delete_fmodifier_cb(bContext *C, void *ctx_v, void *fcm_v)
 	/* send notifiers */
 	// XXX for now, this is the only way to get updates in all the right places... but would be nice to have a special one in this case
 	WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
-	DEG_id_tag_update(ctx->fcurve_owner_id, ID_RECALC_COPY_ON_WRITE);
+	DEG_id_tag_update(ctx->fcurve_owner_id, ID_RECALC_ANIMATION);
 }
 
 /* --------------- */

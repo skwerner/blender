@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -71,6 +68,12 @@ set(SRC
 	object_intern.h
 )
 
+set(LIB
+	bf_blenkernel
+	bf_blenlib
+	bf_render
+)
+
 add_definitions(${GL_DEFINITIONS})
 
 if(WITH_PYTHON)
@@ -81,4 +84,4 @@ if(WITH_INTERNATIONAL)
 	add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-blender_add_lib(bf_editor_object "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_object "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

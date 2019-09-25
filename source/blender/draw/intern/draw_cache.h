@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2016, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file draw_cache.h
- *  \ingroup draw
+/** \file
+ * \ingroup draw
  */
 
 #ifndef __DRAW_CACHE_H__
@@ -45,6 +39,7 @@ struct GPUBatch *DRW_cache_cursor_get(bool crosshair_lines);
 struct GPUBatch *DRW_cache_grid_get(void);
 struct GPUBatch *DRW_cache_fullscreen_quad_get(void);
 struct GPUBatch *DRW_cache_quad_get(void);
+struct GPUBatch *DRW_cache_quad_wires_get(void);
 struct GPUBatch *DRW_cache_cube_get(void);
 struct GPUBatch *DRW_cache_sphere_get(void);
 struct GPUBatch *DRW_cache_single_vert_get(void);
@@ -86,17 +81,17 @@ struct GPUBatch *DRW_cache_field_cone_limit_get(void);
 /* Grease Pencil */
 struct GPUBatch *DRW_cache_gpencil_axes_get(void);
 
-/* Lamps */
-struct GPUBatch *DRW_cache_lamp_get(void);
-struct GPUBatch *DRW_cache_lamp_shadows_get(void);
-struct GPUBatch *DRW_cache_lamp_sunrays_get(void);
-struct GPUBatch *DRW_cache_lamp_area_square_get(void);
-struct GPUBatch *DRW_cache_lamp_area_disk_get(void);
-struct GPUBatch *DRW_cache_lamp_hemi_get(void);
-struct GPUBatch *DRW_cache_lamp_spot_get(void);
-struct GPUBatch *DRW_cache_lamp_spot_volume_get(void);
-struct GPUBatch *DRW_cache_lamp_spot_square_get(void);
-struct GPUBatch *DRW_cache_lamp_spot_square_volume_get(void);
+/* Lights */
+struct GPUBatch *DRW_cache_light_get(void);
+struct GPUBatch *DRW_cache_light_shadows_get(void);
+struct GPUBatch *DRW_cache_light_sunrays_get(void);
+struct GPUBatch *DRW_cache_light_area_square_get(void);
+struct GPUBatch *DRW_cache_light_area_disk_get(void);
+struct GPUBatch *DRW_cache_light_hemi_get(void);
+struct GPUBatch *DRW_cache_light_spot_get(void);
+struct GPUBatch *DRW_cache_light_spot_volume_get(void);
+struct GPUBatch *DRW_cache_light_spot_square_get(void);
+struct GPUBatch *DRW_cache_light_spot_square_volume_get(void);
 
 /* Camera */
 struct GPUBatch *DRW_cache_camera_get(void);
@@ -150,6 +145,7 @@ struct GPUBatch **DRW_cache_curve_surface_shaded_get(
 struct GPUBatch *DRW_cache_curve_loose_edges_get(struct Object *ob);
 struct GPUBatch *DRW_cache_curve_edge_wire_get(struct Object *ob);
 struct GPUBatch *DRW_cache_curve_face_wireframe_get(Object *ob);
+struct GPUBatch *DRW_cache_curve_edge_detection_get(struct Object *ob, bool *r_is_manifold);
 /* edit-mode */
 struct GPUBatch *DRW_cache_curve_edge_normal_get(struct Object *ob);
 struct GPUBatch *DRW_cache_curve_edge_overlay_get(struct Object *ob);
@@ -157,6 +153,7 @@ struct GPUBatch *DRW_cache_curve_vert_overlay_get(struct Object *ob, bool handle
 
 /* Font */
 struct GPUBatch *DRW_cache_text_surface_get(struct Object *ob);
+struct GPUBatch *DRW_cache_text_edge_detection_get(Object *ob, bool *r_is_manifold);
 struct GPUBatch *DRW_cache_text_loose_edges_get(struct Object *ob);
 struct GPUBatch *DRW_cache_text_edge_wire_get(struct Object *ob);
 struct GPUBatch **DRW_cache_text_surface_shaded_get(
@@ -170,6 +167,7 @@ struct GPUBatch *DRW_cache_surf_loose_edges_get(struct Object *ob);
 struct GPUBatch **DRW_cache_surf_surface_shaded_get(
         struct Object *ob, struct GPUMaterial **gpumat_array, uint gpumat_array_len);
 struct GPUBatch *DRW_cache_surf_face_wireframe_get(Object *ob);
+struct GPUBatch *DRW_cache_surf_edge_detection_get(struct Object *ob, bool *r_is_manifold);
 
 /* Lattice */
 struct GPUBatch *DRW_cache_lattice_verts_get(struct Object *ob);
@@ -193,5 +191,6 @@ struct GPUBatch *DRW_cache_particles_get_prim(int type);
 struct GPUBatch *DRW_cache_mball_surface_get(struct Object *ob);
 struct GPUBatch **DRW_cache_mball_surface_shaded_get(struct Object *ob, struct GPUMaterial **gpumat_array, uint gpumat_array_len);
 struct GPUBatch *DRW_cache_mball_face_wireframe_get(Object *ob);
+struct GPUBatch *DRW_cache_mball_edge_detection_get(struct Object *ob, bool *r_is_manifold);
 
 #endif /* __DRAW_CACHE_H__ */

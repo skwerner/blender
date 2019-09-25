@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,14 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2016, Blender Foundation.
- * Contributor(s): Blender Institute
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file basic_engine.c
- *  \ingroup draw_engine
+/** \file
+ * \ingroup draw_engine
  *
  * Simple engine for drawing color and/or depth.
  * When we only need simple flat shaders.
@@ -71,8 +65,8 @@ typedef struct BASIC_Shaders {
 /* *********** STATIC *********** */
 
 static struct {
-	BASIC_Shaders sh_data[DRW_SHADER_SLOT_LEN];
-} e_data = {NULL}; /* Engine data */
+	BASIC_Shaders sh_data[GPU_SHADER_CFG_LEN];
+} e_data = {{{NULL}}}; /* Engine data */
 
 typedef struct BASIC_PrivateData {
 	DRWShadingGroup *depth_shgrp;
@@ -85,11 +79,11 @@ typedef struct BASIC_PrivateData {
 static void basic_engine_init(void *UNUSED(vedata))
 {
 	const DRWContextState *draw_ctx = DRW_context_state_get();
-	BASIC_Shaders *sh_data = &e_data.sh_data[draw_ctx->shader_slot];
+	BASIC_Shaders *sh_data = &e_data.sh_data[draw_ctx->sh_cfg];
 
 	/* Depth prepass */
 	if (!sh_data->depth) {
-		sh_data->depth = DRW_shader_create_3D_depth_only(draw_ctx->shader_slot);
+		sh_data->depth = DRW_shader_create_3d_depth_only(draw_ctx->sh_cfg);
 	}
 }
 
@@ -99,11 +93,10 @@ static void basic_cache_init(void *vedata)
 	BASIC_StorageList *stl = ((BASIC_Data *)vedata)->stl;
 
 	const DRWContextState *draw_ctx = DRW_context_state_get();
-	BASIC_Shaders *sh_data = &e_data.sh_data[draw_ctx->shader_slot];
+	BASIC_Shaders *sh_data = &e_data.sh_data[draw_ctx->sh_cfg];
 	const RegionView3D *rv3d = draw_ctx->rv3d;
-	const bool is_clip = (rv3d->rflag & RV3D_CLIPPING) != 0;
 
-	if (is_clip) {
+	if (draw_ctx->sh_cfg == GPU_SHADER_CFG_CLIPPED) {
 		DRW_state_clip_planes_set_from_rv3d(draw_ctx->rv3d);
 	}
 
@@ -116,7 +109,7 @@ static void basic_cache_init(void *vedata)
 		psl->depth_pass = DRW_pass_create(
 		        "Depth Pass", DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL | DRW_STATE_WIRE);
 		stl->g_data->depth_shgrp = DRW_shgroup_create(sh_data->depth, psl->depth_pass);
-		if (rv3d->rflag & RV3D_CLIPPING) {
+		if (draw_ctx->sh_cfg == GPU_SHADER_CFG_CLIPPED) {
 			DRW_shgroup_world_clip_planes_from_rv3d(stl->g_data->depth_shgrp, rv3d);
 		}
 
@@ -124,7 +117,7 @@ static void basic_cache_init(void *vedata)
 		        "Depth Pass Cull",
 		        DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL | DRW_STATE_CULL_BACK);
 		stl->g_data->depth_shgrp_cull = DRW_shgroup_create(sh_data->depth, psl->depth_pass_cull);
-		if (rv3d->rflag & RV3D_CLIPPING) {
+		if (draw_ctx->sh_cfg == GPU_SHADER_CFG_CLIPPED) {
 			DRW_shgroup_world_clip_planes_from_rv3d(stl->g_data->depth_shgrp_cull, rv3d);
 		}
 	}
@@ -146,9 +139,6 @@ static void basic_cache_populate(void *vedata, Object *ob)
 		     psys != NULL;
 		     psys = psys->next)
 		{
-			if (!psys_check_enabled(ob, psys, false)) {
-				continue;
-			}
 			if (!DRW_object_is_visible_psys_in_active_context(ob, psys)) {
 				continue;
 			}
@@ -234,7 +224,7 @@ RenderEngineType DRW_engine_viewport_basic_type = {
 	BASIC_ENGINE, N_("Basic"), RE_INTERNAL,
 	NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	&draw_engine_basic_type,
-	{NULL, NULL, NULL}
+	{NULL, NULL, NULL},
 };
 
 

@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 #-----------------------------------------------------------------------------
@@ -349,6 +344,7 @@ option(WITH_LZMA          "Enable best LZMA compression, (used for pointcache)" 
 if(UNIX AND NOT APPLE)
 	option(WITH_SYSTEM_LZO    "Use the system LZO library" OFF)
 endif()
+option(WITH_DRACO         "Enable Draco mesh compression Python module (used for glTF)" ON)
 
 # Camera/motion tracking
 option(WITH_LIBMV         "Enable Libmv structure from motion library" ON)
@@ -641,6 +637,12 @@ endif()
 
 if(NOT WITH_PYTHON)
 	set(WITH_CYCLES OFF)
+	set(WITH_DRACO OFF)
+endif()
+
+if(WITH_DRACO AND NOT WITH_PYTHON_INSTALL)
+	message(STATUS "WITH_DRACO requires WITH_PYTHON_INSTALL to be ON, disabling WITH_DRACO for now")
+	set(WITH_DRACO OFF)
 endif()
 
 # enable boost for cycles, audaspace or i18n
@@ -763,8 +765,8 @@ if(WITH_PYTHON)
 	# Do this before main 'platform_*' checks,
 	# because UNIX will search for the old Python paths which may not exist.
 	# giving errors about missing paths before this case is met.
-	if(DEFINED PYTHON_VERSION AND "${PYTHON_VERSION}" VERSION_LESS "3.6")
-		message(FATAL_ERROR "At least Python 3.6 is required to build")
+	if(DEFINED PYTHON_VERSION AND "${PYTHON_VERSION}" VERSION_LESS "3.7")
+		message(FATAL_ERROR "At least Python 3.7 is required to build")
 	endif()
 
 	if(NOT EXISTS "${CMAKE_SOURCE_DIR}/release/scripts/addons/modules")
@@ -1379,6 +1381,8 @@ if(CMAKE_COMPILER_IS_GNUCC)
 	ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_SWITCH                  -Wno-switch)
 
 	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_CLASS_MEMACCESS     -Wno-class-memaccess)
+	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_COMMENT             -Wno-comment)
+	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_TYPEDEFS     -Wno-unused-local-typedefs)
 
 	if(CMAKE_COMPILER_IS_GNUCC AND (NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "7.0"))
 		ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_IMPLICIT_FALLTHROUGH    -Wno-implicit-fallthrough)
@@ -1431,6 +1435,8 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
 	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_NON_VIRTUAL_DTOR -Wno-non-virtual-dtor)
 	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_MACROS -Wno-unused-macros)
 	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_REORDER -Wno-reorder)
+	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_COMMENT -Wno-comment)
+	ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_TYPEDEFS -Wno-unused-local-typedefs)
 
 elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
 
@@ -1451,6 +1457,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		# warning level:
 		"/W3"
 		"/w34062"  # switch statement contains 'default' but no 'case' labels
+		"/w34115"  # 'type' : named type definition in parentheses
 		"/w34189"  # local variable is initialized but not referenced
 		# disable:
 		"/wd4018"  # signed/unsigned mismatch

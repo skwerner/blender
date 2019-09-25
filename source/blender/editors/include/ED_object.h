@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_object.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_OBJECT_H__
@@ -133,8 +126,7 @@ void ED_object_parent(struct Object *ob, struct Object *parent, const int type, 
 /* bitflags for enter/exit editmode */
 enum {
 	EM_FREEDATA         = (1 << 0),
-	EM_IGNORE_LAYER     = (1 << 3),
-	EM_NO_CONTEXT       = (1 << 4),
+	EM_NO_CONTEXT       = (1 << 1),
 };
 bool ED_object_editmode_exit_ex(
         struct Main *bmain, struct Scene *scene, struct Object *obedit, int flag);
@@ -160,7 +152,7 @@ void ED_object_wpaintmode_exit(struct bContext *C);
 
 void ED_object_sculptmode_enter_ex(
         struct Main *bmain, struct Depsgraph *depsgraph,
-        struct Scene *scene, struct Object *ob,
+        struct Scene *scene, struct Object *ob, const bool force_dyntopo,
         struct ReportList *reports);
 void ED_object_sculptmode_enter(struct bContext *C, struct ReportList *reports);
 void ED_object_sculptmode_exit_ex(
@@ -238,7 +230,7 @@ bool ED_object_mode_generic_has_data(
 /* object_modifier.c */
 enum {
 	MODIFIER_APPLY_DATA = 1,
-	MODIFIER_APPLY_SHAPE
+	MODIFIER_APPLY_SHAPE,
 };
 
 struct ModifierData *ED_object_modifier_add(

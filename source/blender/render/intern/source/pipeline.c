@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/render/intern/source/pipeline.c
- *  \ingroup render
+/** \file
+ * \ingroup render
  */
 
 #include <math.h>
@@ -132,7 +124,6 @@
  *
  * 5) Image Files
  * - save file or append in movie
- *
  */
 
 
@@ -363,7 +354,7 @@ Scene *RE_GetScene(Render *re)
 	return NULL;
 }
 
-void RE_SetScene(Render *re, Scene* sce)
+void RE_SetScene(Render *re, Scene *sce)
 {
 	if (re) {
 		re->scene = sce;
@@ -872,8 +863,8 @@ static void render_result_rescale(Render *re)
 				}
 			}
 
-			scale_x = (float) result->rectx / re->result->rectx;
-			scale_y = (float) result->recty / re->result->recty;
+			scale_x = (float)result->rectx / re->result->rectx;
+			scale_y = (float)result->recty / re->result->recty;
 			for (x = 0; x < re->result->rectx; ++x) {
 				for (y = 0; y < re->result->recty; ++y) {
 					int src_x = x * scale_x;
@@ -938,31 +929,31 @@ void render_update_anim_renderdata(Render *re, RenderData *rd, ListBase *render_
 	BLI_duplicatelist(&re->r.views, &rd->views);
 }
 
-void RE_SetWindow(Render *re, const rctf *viewplane, float clipsta, float clipend)
+void RE_SetWindow(Render *re, const rctf *viewplane, float clip_start, float clip_end)
 {
 	/* re->ok flag? */
 
 	re->viewplane = *viewplane;
-	re->clipsta = clipsta;
-	re->clipend = clipend;
+	re->clip_start = clip_start;
+	re->clip_end = clip_end;
 
 	perspective_m4(re->winmat,
 	               re->viewplane.xmin, re->viewplane.xmax,
-	               re->viewplane.ymin, re->viewplane.ymax, re->clipsta, re->clipend);
+	               re->viewplane.ymin, re->viewplane.ymax, re->clip_start, re->clip_end);
 
 }
 
-void RE_SetOrtho(Render *re, const rctf *viewplane, float clipsta, float clipend)
+void RE_SetOrtho(Render *re, const rctf *viewplane, float clip_start, float clip_end)
 {
 	/* re->ok flag? */
 
 	re->viewplane = *viewplane;
-	re->clipsta = clipsta;
-	re->clipend = clipend;
+	re->clip_start = clip_start;
+	re->clip_end = clip_end;
 
 	orthographic_m4(re->winmat,
 	                re->viewplane.xmin, re->viewplane.xmax,
-	                re->viewplane.ymin, re->viewplane.ymax, re->clipsta, re->clipend);
+	                re->viewplane.ymin, re->viewplane.ymax, re->clip_start, re->clip_end);
 }
 
 void RE_GetViewPlane(Render *re, rctf *r_viewplane, rcti *r_disprect)
@@ -1120,6 +1111,7 @@ static void render_result_uncrop(Render *re)
 			render_result_disprect_to_full_resolution(re);
 
 			rres = render_result_new(re, &re->disprect, 0, RR_USE_MEM, RR_ALL_LAYERS, RR_ALL_VIEWS);
+			rres->stamp_data = BKE_stamp_data_copy(re->result->stamp_data);
 
 			render_result_clone_passes(re, rres, NULL);
 
@@ -1234,7 +1226,7 @@ bool RE_allow_render_generic_object(Object *ob)
 	if (ob->transflag & OB_DUPLIPARTS) {
 		/* pass */  /* let particle system(s) handle showing vs. not showing */
 	}
-	else if ((ob->transflag & OB_DUPLI) && !(ob->transflag & OB_DUPLIFRAMES)) {
+	else if (ob->transflag & OB_DUPLI) {
 		return false;
 	}
 	return true;
@@ -1248,26 +1240,28 @@ static void ntree_render_scenes(Render *re)
 
 	if (re->scene->nodetree == NULL) return;
 
-	/* now foreach render-result node tagged we do a full render */
-	/* results are stored in a way compisitor will find it */
+	/* now foreach render-result node we do a full render */
+	/* results are stored in a way compositor will find it */
+	GSet *scenes_rendered = BLI_gset_ptr_new(__func__);
 	for (node = re->scene->nodetree->nodes.first; node; node = node->next) {
 		if (node->type == CMP_NODE_R_LAYERS && (node->flag & NODE_MUTED) == 0) {
 			if (node->id && node->id != (ID *)re->scene) {
 				Scene *scene = (Scene *)node->id;
-
-				if (render_scene_has_layers_to_render(scene, false)) {
+				if (!BLI_gset_haskey(scenes_rendered, scene) && render_scene_has_layers_to_render(scene, false)) {
 					render_scene(re, scene, cfra);
+					BLI_gset_add(scenes_rendered, scene);
 					nodeUpdate(restore_scene->nodetree, node);
 				}
 			}
 		}
 	}
+	BLI_gset_free(scenes_rendered, NULL);
 }
 
 /* bad call... need to think over proper method still */
 static void render_composit_stats(void *arg, const char *str)
 {
-	Render *re = (Render*)arg;
+	Render *re = (Render *)arg;
 
 	RenderStats i;
 	memcpy(&i, &re->i, sizeof(i));
@@ -1325,7 +1319,7 @@ static void free_all_freestyle_renders(void)
 	Render *re1;
 	LinkData *link;
 
-	for (re1= RenderGlobal.renderlist.first; re1; re1= re1->next) {
+	for (re1 = RenderGlobal.renderlist.first; re1; re1 = re1->next) {
 		for (link = (LinkData *)re1->freestyle_renders.first; link; link = link->next) {
 			Render *freestyle_render = (Render *)link->data;
 
@@ -1451,7 +1445,7 @@ static void renderresult_stampinfo(Render *re)
 
 	/* this is the basic trick to get the displayed float or char rect from render result */
 	nr = 0;
-	for (rv = re->result->views.first;rv;rv = rv->next, nr++) {
+	for (rv = re->result->views.first; rv; rv = rv->next, nr++) {
 		RE_SetActiveRenderView(re, rv->name);
 		RE_AcquireResultImage(re, &rres, nr);
 		BKE_image_stamp_buf(re->scene,
@@ -1775,7 +1769,7 @@ static bool node_tree_has_composite_output(bNodeTree *ntree)
 		if (ELEM(node->type, CMP_NODE_COMPOSITE, CMP_NODE_OUTPUT_FILE)) {
 			return true;
 		}
-		else if (node->type == NODE_GROUP) {
+		else if (ELEM(node->type, NODE_GROUP, NODE_CUSTOM_GROUP)) {
 			if (node->id) {
 				if (node_tree_has_composite_output((bNodeTree *)node->id)) {
 					return true;
@@ -2025,7 +2019,7 @@ void RE_BlenderFrame(Render *re, Main *bmain, Scene *scene, ViewLayer *single_la
 #ifdef WITH_FREESTYLE
 void RE_RenderFreestyleStrokes(Render *re, Main *bmain, Scene *scene, int render)
 {
-	re->result_ok= 0;
+	re->result_ok = 0;
 	if (render_initialize_from_main(re, &scene->r, bmain, scene, NULL, NULL, 0, 0)) {
 		if (render)
 			do_render_3d(re);
@@ -2095,6 +2089,8 @@ bool RE_WriteRenderViewsImage(ReportList *reports, RenderResult *rr, Scene *scen
 
 					ImBuf *ibuf = render_result_rect_to_ibuf(rr, rd, view_id);
 					ibuf->planes = 24;
+					IMB_colormanagement_imbuf_for_write(ibuf, true, false, &scene->view_settings,
+					                                    &scene->display_settings, &imf);
 
 					ok = render_imbuf_write_stamp_test(reports, scene, rr, ibuf, name, &imf, stamp);
 
@@ -2185,7 +2181,7 @@ bool RE_WriteRenderViewsMovie(
 			                                    &scene->display_settings, &scene->r.im_format);
 
 			ok &= mh->append_movie(movie_ctx_arr[view_id], rd, preview ? scene->r.psfra : scene->r.sfra, scene->r.cfra,
-			                       (int *) ibuf->rect, ibuf->x, ibuf->y, suffix, reports);
+			                       (int *)ibuf->rect, ibuf->x, ibuf->y, suffix, reports);
 
 			/* imbuf knows which rects are not part of ibuf */
 			IMB_freeImBuf(ibuf);
@@ -2209,7 +2205,7 @@ bool RE_WriteRenderViewsMovie(
 
 		ibuf_arr[2] = IMB_stereo3d_ImBuf(&scene->r.im_format, ibuf_arr[0], ibuf_arr[1]);
 
-		ok = mh->append_movie(movie_ctx_arr[0], rd, preview ? scene->r.psfra : scene->r.sfra, scene->r.cfra, (int *) ibuf_arr[2]->rect,
+		ok = mh->append_movie(movie_ctx_arr[0], rd, preview ? scene->r.psfra : scene->r.sfra, scene->r.cfra, (int *)ibuf_arr[2]->rect,
 		                      ibuf_arr[2]->x, ibuf_arr[2]->y, "", reports);
 
 		for (i = 0; i < 3; i++) {

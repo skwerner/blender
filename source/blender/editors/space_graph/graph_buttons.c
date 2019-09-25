@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_graph/graph_buttons.c
- *  \ingroup spgraph
+/** \file
+ * \ingroup spgraph
  */
 
 
@@ -116,7 +109,7 @@ static bool graph_panel_poll(const bContext *C, PanelType *UNUSED(pt))
 static void graph_panel_view(const bContext *C, Panel *pa)
 {
 	bScreen *sc = CTX_wm_screen(C);
-	SpaceIpo *sipo = CTX_wm_space_graph(C);
+	SpaceGraph *sipo = CTX_wm_space_graph(C);
 	Scene *scene = CTX_data_scene(C);
 	PointerRNA spaceptr, sceneptr;
 	uiLayout *col, *sub, *row;
@@ -584,7 +577,7 @@ static void driver_update_flags_cb(bContext *UNUSED(C), void *fcu_v, void *UNUSE
 /* drivers panel poll */
 static bool graph_panel_drivers_poll(const bContext *C, PanelType *UNUSED(pt))
 {
-	SpaceIpo *sipo = CTX_wm_space_graph(C);
+	SpaceGraph *sipo = CTX_wm_space_graph(C);
 
 	if (sipo->mode != SIPO_MODE_DRIVERS)
 		return 0;
@@ -825,7 +818,7 @@ static void graph_draw_driver_settings_panel(uiLayout *layout, ID *id, FCurve *f
 			uiItemL(col, IFACE_("ERROR: Invalid Python expression"), ICON_CANCEL);
 		}
 		else if (!BKE_driver_has_simple_expression(driver)) {
-			if ((G.f & G_SCRIPT_AUTOEXEC) == 0) {
+			if ((G.f & G_FLAG_SCRIPT_AUTOEXEC) == 0) {
 				/* TODO: Add button to enable? */
 				uiItemL(col, IFACE_("WARNING: Python expressions limited for security"), ICON_ERROR);
 			}

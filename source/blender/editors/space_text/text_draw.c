@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -16,16 +14,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_text/text_draw.c
- *  \ingroup sptext
+/** \file
+ * \ingroup sptext
  */
 
 #include "MEM_guardedalloc.h"
@@ -162,14 +154,19 @@ static void format_draw_color(const TextDrawContext *tdc, char formatchar)
 
 /************************** draw text *****************************/
 
-/* Notes on word-wrap
+/**
+ * Notes on word-wrap
  * --
- * All word-wrap functions follow the algorithm below to maintain consistency.
- *     line        The line to wrap (tabs converted to spaces)
- *     view_width    The maximum number of characters displayable in the region
- *                 This equals region_width/font_width for the region
- *     wrap_chars    Characters that allow wrapping. This equals [' ', '\t', '-']
+ * All word-wrap functions follow the algorithm below to maintain consistency:
+ * - line:
+ *   The line to wrap (tabs converted to spaces)
+ * - view_width:
+ *   The maximum number of characters displayable in the region
+ *   This equals region_width/font_width for the region
+ * - wrap_chars:
+ *   Characters that allow wrapping. This equals [' ', '\t', '-']
  *
+ * \code{.py}
  * def wrap(line, view_width, wrap_chars):
  *     draw_start = 0
  *     draw_end = view_width
@@ -183,7 +180,7 @@ static void format_draw_color(const TextDrawContext *tdc, char formatchar)
  *             draw_end = pos+1
  *         pos += 1
  *     print line[draw_start:]
- *
+ * \encode
  */
 
 int wrap_width(const SpaceText *st, ARegion *ar)

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 #ifndef __BKE_BLENDER_COPYBUFFER_H__
 #define __BKE_BLENDER_COPYBUFFER_H__
 
-/** \file BKE_blender_copybuffer.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #ifdef __cplusplus
@@ -37,8 +33,10 @@ struct bContext;
 void BKE_copybuffer_begin(struct Main *bmain_src);
 void BKE_copybuffer_tag_ID(struct ID *id);
 bool BKE_copybuffer_save(struct Main *bmain_src, const char *filename, struct ReportList *reports);
-bool BKE_copybuffer_read(struct Main *bmain_dst, const char *libname, struct ReportList *reports);
-bool BKE_copybuffer_paste(struct bContext *C, const char *libname, const short flag, struct ReportList *reports);
+bool BKE_copybuffer_read(
+        struct Main *bmain_dst, const char *libname, struct ReportList *reports, const unsigned int id_types_mask);
+int BKE_copybuffer_paste(
+        struct bContext *C, const char *libname, const short flag, struct ReportList *reports, const unsigned int id_types_mask);
 
 #ifdef __cplusplus
 }

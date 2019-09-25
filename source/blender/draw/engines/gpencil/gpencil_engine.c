@@ -61,6 +61,8 @@ extern char datatoc_gpencil_edit_point_geom_glsl[];
 extern char datatoc_gpencil_edit_point_frag_glsl[];
 extern char datatoc_gpencil_blend_frag_glsl[];
 
+extern char datatoc_gpu_shader_3D_smooth_color_frag_glsl[];
+
 extern char datatoc_common_colormanagement_lib_glsl[];
 extern char datatoc_common_view_lib_glsl[];
 
@@ -111,7 +113,7 @@ static void GPENCIL_create_framebuffers(void *vedata)
     const float *viewport_size = DRW_viewport_size_get();
     const int size[2] = {(int)viewport_size[0], (int)viewport_size[1]};
 
-    /* create multiframe framebuffer for AA */
+    /* create multisample framebuffer for AA */
     if ((stl->storage->framebuffer_flag & GP_FRAMEBUFFER_MULTISAMPLE) &&
         (stl->storage->multisamples > 0)) {
       gpencil_multisample_ensure(vedata, size[0], size[1]);
@@ -176,6 +178,12 @@ static void GPENCIL_create_framebuffers(void *vedata)
 
 static void GPENCIL_create_shaders(void)
 {
+  /* blank texture used if no texture defined for fill shader */
+  if (!e_data.gpencil_blank_texture) {
+    float rect[1][1][4] = {{{0.0f}}};
+    e_data.gpencil_blank_texture = DRW_texture_create_2d(
+        1, 1, GPU_RGBA8, DRW_TEX_FILTER, (float *)rect);
+  }
   /* normal fill shader */
   if (!e_data.gpencil_fill_sh) {
     e_data.gpencil_fill_sh = GPU_shader_create_from_arrays({
@@ -221,7 +229,12 @@ static void GPENCIL_create_shaders(void)
 
   /* used for edit lines for edit modes */
   if (!e_data.gpencil_line_sh) {
-    e_data.gpencil_line_sh = GPU_shader_get_builtin_shader(GPU_SHADER_3D_FLAT_COLOR);
+    e_data.gpencil_line_sh = DRW_shader_create_with_lib(
+        datatoc_gpencil_edit_point_vert_glsl,
+        NULL,
+        datatoc_gpu_shader_3D_smooth_color_frag_glsl,
+        datatoc_common_view_lib_glsl,
+        NULL);
   }
 
   /* used to filling during drawing */
@@ -279,11 +292,14 @@ static void GPENCIL_engine_free(void)
   DRW_SHADER_FREE_SAFE(e_data.gpencil_stroke_sh);
   DRW_SHADER_FREE_SAFE(e_data.gpencil_point_sh);
   DRW_SHADER_FREE_SAFE(e_data.gpencil_edit_point_sh);
+  DRW_SHADER_FREE_SAFE(e_data.gpencil_line_sh);
   DRW_SHADER_FREE_SAFE(e_data.gpencil_fullscreen_sh);
   DRW_SHADER_FREE_SAFE(e_data.gpencil_simple_fullscreen_sh);
   DRW_SHADER_FREE_SAFE(e_data.gpencil_blend_fullscreen_sh);
   DRW_SHADER_FREE_SAFE(e_data.gpencil_background_sh);
   DRW_SHADER_FREE_SAFE(e_data.gpencil_paper_sh);
+
+  DRW_TEXTURE_FREE_SAFE(e_data.gpencil_blank_texture);
 
   /* effects */
   GPENCIL_delete_fx_shaders(&e_data);
@@ -330,16 +346,10 @@ void GPENCIL_cache_init(void *vedata)
   stl->g_data->shgrps_edit_point = NULL;
 
   /* reset textures */
-  stl->g_data->gpencil_blank_texture = NULL;
   stl->g_data->batch_buffer_stroke = NULL;
   stl->g_data->batch_buffer_fill = NULL;
   stl->g_data->batch_buffer_ctrlpoint = NULL;
   stl->g_data->batch_grid = NULL;
-
-  /* blank texture used if no texture defined for fill shader */
-  float rect[1][1][4] = {{{0.0f}}};
-  stl->g_data->gpencil_blank_texture = DRW_texture_create_2d(
-      1, 1, GPU_RGBA8, DRW_TEX_FILTER, (float *)rect);
 
   if (!stl->shgroups) {
     /* Alloc maximum size because count strokes is very slow and can be very complex due onion
@@ -405,10 +415,10 @@ void GPENCIL_cache_init(void *vedata)
     }
 
     /* save simplify flags (can change while drawing, so it's better to save) */
-    stl->storage->simplify_fill = GP_SIMPLIFY_FILL(scene, stl->storage->is_playing);
-    stl->storage->simplify_modif = GP_SIMPLIFY_MODIF(scene, stl->storage->is_playing);
-    stl->storage->simplify_fx = GP_SIMPLIFY_FX(scene, stl->storage->is_playing);
-    stl->storage->simplify_blend = GP_SIMPLIFY_BLEND(scene, stl->storage->is_playing);
+    stl->storage->simplify_fill = GPENCIL_SIMPLIFY_FILL(scene, stl->storage->is_playing);
+    stl->storage->simplify_modif = GPENCIL_SIMPLIFY_MODIF(scene, stl->storage->is_playing);
+    stl->storage->simplify_fx = GPENCIL_SIMPLIFY_FX(scene, stl->storage->is_playing);
+    stl->storage->simplify_blend = GPENCIL_SIMPLIFY_BLEND(scene, stl->storage->is_playing);
 
     /* xray mode */
     if (v3d) {
@@ -430,7 +440,7 @@ void GPENCIL_cache_init(void *vedata)
       /* need the original to avoid cow overhead while drawing */
       bGPdata *gpd_orig = (bGPdata *)DEG_get_original_id(&obact_gpd->id);
       if (((gpd_orig->runtime.sbuffer_sflag & GP_STROKE_ERASER) == 0) &&
-          (gpd_orig->runtime.sbuffer_size > 0) &&
+          (gpd_orig->runtime.sbuffer_used > 0) &&
           ((gpd_orig->flag & GP_DATA_STROKE_POLYGON) == 0) && !DRW_state_is_depth() &&
           (stl->storage->background_ready == true)) {
         stl->g_data->session_flag |= GP_DRW_PAINT_PAINTING;
@@ -564,6 +574,8 @@ static void gpencil_add_draw_data(void *vedata, Object *ob)
   GPENCIL_StorageList *stl = ((GPENCIL_Data *)vedata)->stl;
   bGPdata *gpd = (bGPdata *)ob->data;
   const bool is_multiedit = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd);
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const View3D *v3d = draw_ctx->v3d;
 
   int i = stl->g_data->gp_cache_used - 1;
   tGPencilObjectCache *cache_ob = &stl->g_data->gp_object_cache[i];
@@ -580,7 +592,9 @@ static void gpencil_add_draw_data(void *vedata, Object *ob)
 
   /* FX passses */
   cache_ob->has_fx = false;
-  if ((!stl->storage->simplify_fx) && (!ELEM(cache_ob->shading_type[0], OB_WIRE, OB_SOLID)) &&
+  if ((!stl->storage->simplify_fx) &&
+      ((!ELEM(cache_ob->shading_type[0], OB_WIRE, OB_SOLID)) ||
+       ((v3d->spacetype != SPACE_VIEW3D))) &&
       (BKE_shaderfx_has_gpencil(ob))) {
     cache_ob->has_fx = true;
     if ((!stl->storage->simplify_fx) && (!is_multiedit)) {
@@ -777,8 +791,6 @@ void DRW_gpencil_free_runtime_data(void *ved)
   GPENCIL_StorageList *stl = ((GPENCIL_Data *)vedata)->stl;
 
   /* free gpu data */
-  DRW_TEXTURE_FREE_SAFE(stl->g_data->gpencil_blank_texture);
-
   GPU_BATCH_DISCARD_SAFE(stl->g_data->batch_buffer_stroke);
   MEM_SAFE_FREE(stl->g_data->batch_buffer_stroke);
 
@@ -830,76 +842,13 @@ static void gpencil_draw_pass_range(GPENCIL_FramebufferList *fbl,
 
   const bool do_antialiasing = ((!stl->storage->is_mat_preview) && (multi));
 
-  DRWShadingGroup *shgrp = init_shgrp;
-  DRWShadingGroup *from_shgrp = init_shgrp;
-  DRWShadingGroup *to_shgrp = init_shgrp;
-  int stencil_tot = 0;
-  bool do_last = true;
-
   if (do_antialiasing) {
     MULTISAMPLE_GP_SYNC_ENABLE(stl->storage->multisamples, fbl);
   }
 
-  /* Loop all shading groups to separate by stencil groups. */
-  while ((shgrp) && (shgrp != end_shgrp)) {
-    do_last = true;
-    /* Count number of groups using stencil. */
-    if (DRW_shgroup_stencil_mask_get(shgrp) != 0) {
-      stencil_tot++;
-    }
-
-    /* Draw stencil group and clear stencil bit. This is required because the number of
-     * shading groups can be greater than the limit of 255 stencil values.
-     * Only count as stencil if the shading group has an stencil value assigned. This reduces
-     * the number of clears because Dots, Fills and some Line strokes don't need stencil.
-     */
-    if (stencil_tot == 255) {
-      DRW_draw_pass_subset(GPENCIL_3D_DRAWMODE(ob, gpd) ? psl->stroke_pass_3d :
-                                                          psl->stroke_pass_2d,
-                           from_shgrp,
-                           to_shgrp);
-      /* Clear Stencil and prepare for next group. */
-      if (do_antialiasing) {
-        GPU_framebuffer_clear_stencil(fbl->multisample_fb, 0x0);
-      }
-      else {
-        GPU_framebuffer_clear_stencil(fb, 0x0);
-      }
-
-      /* Set new init group and reset. */
-      do_last = false;
-
-      shgrp = DRW_shgroup_get_next(shgrp);
-      if (shgrp) {
-        from_shgrp = to_shgrp = shgrp;
-        stencil_tot = 0;
-        if (shgrp != end_shgrp) {
-          continue;
-        }
-        else {
-          do_last = true;
-          break;
-        }
-      }
-      else {
-        /* No more groups. */
-        break;
-      }
-    }
-
-    /* Still below stencil group limit. */
-    shgrp = DRW_shgroup_get_next(shgrp);
-    if (shgrp) {
-      to_shgrp = shgrp;
-    }
-  }
-
-  /* Draw last pending groups. */
-  if (do_last) {
-    DRW_draw_pass_subset(GPENCIL_3D_DRAWMODE(ob, gpd) ? psl->stroke_pass_3d : psl->stroke_pass_2d,
-                         from_shgrp,
-                         to_shgrp);
-  }
+  DRW_draw_pass_subset(GPENCIL_3D_DRAWMODE(ob, gpd) ? psl->stroke_pass_3d : psl->stroke_pass_2d,
+                       init_shgrp,
+                       end_shgrp);
 
   if (do_antialiasing) {
     MULTISAMPLE_GP_SYNC_DISABLE(stl->storage->multisamples, fbl, fb, txl);

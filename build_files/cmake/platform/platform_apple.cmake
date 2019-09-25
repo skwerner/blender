@@ -322,7 +322,6 @@ endif()
 
 if(WITH_LLVM)
   set(LLVM_ROOT_DIR ${LIBDIR}/llvm)
-  set(LLVM_VERSION 3.4)
   if(EXISTS "${LLVM_ROOT_DIR}/bin/llvm-config")
     set(LLVM_CONFIG "${LLVM_ROOT_DIR}/bin/llvm-config")
   else()
@@ -333,6 +332,9 @@ if(WITH_LLVM)
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   execute_process(COMMAND ${LLVM_CONFIG} --prefix
       OUTPUT_VARIABLE LLVM_ROOT_DIR
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+  execute_process(COMMAND ${LLVM_CONFIG} --includedir
+      OUTPUT_VARIABLE LLVM_INCLUDE_DIRS
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   execute_process(COMMAND ${LLVM_CONFIG} --libdir
       OUTPUT_VARIABLE LLVM_LIBPATH
@@ -380,6 +382,19 @@ endif()
 if(WITH_CYCLES_EMBREE)
   find_package(Embree 3.2.4 REQUIRED)
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
+endif()
+
+if(WITH_OPENIMAGEDENOISE)
+  find_package(OpenImageDenoise)
+  find_package(TBB)
+
+  if(NOT OPENIMAGEDENOISE_FOUND)
+    set(WITH_OPENIMAGEDENOISE OFF)
+    message(STATUS "OpenImageDenoise not found")
+  elseif(NOT TBB_FOUND)
+    set(WITH_OPENIMAGEDENOISE OFF)
+    message(STATUS "TBB not found")
+  endif()
 endif()
 
 # CMake FindOpenMP doesn't know about AppleClang before 3.12, so provide custom flags.

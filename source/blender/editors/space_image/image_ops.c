@@ -556,39 +556,38 @@ static void image_zoom_apply(ViewZoomData *vpd,
                              const bool zoom_to_pos)
 {
   float factor;
+  float delta;
+
+  if (viewzoom != USER_ZOOM_SCALE) {
+    if (U.uiflag & USER_ZOOM_HORIZ) {
+      delta = (float)(x - vpd->origx);
+    }
+    else {
+      delta = (float)(y - vpd->origy);
+    }
+  }
+  else {
+    delta = x - vpd->origx + y - vpd->origy;
+  }
+
+  delta /= U.pixelsize;
+
+  if (zoom_invert) {
+    delta = -delta;
+  }
 
   if (viewzoom == USER_ZOOM_CONT) {
     double time = PIL_check_seconds_timer();
     float time_step = (float)(time - vpd->timer_lastdraw);
-    float fac;
     float zfac;
 
-    if (U.uiflag & USER_ZOOM_HORIZ) {
-      fac = (float)(x - vpd->origx);
-    }
-    else {
-      fac = (float)(y - vpd->origy);
-    }
-
-    if (zoom_invert) {
-      fac = -fac;
-    }
-
     /* oldstyle zoom */
-    zfac = 1.0f + ((fac / 20.0f) * time_step);
+    zfac = 1.0f + ((delta / 20.0f) * time_step);
     vpd->timer_lastdraw = time;
     /* this is the final zoom, but instead make it into a factor */
-    // zoom = vpd->sima->zoom * zfac;
     factor = (vpd->sima->zoom * zfac) / vpd->zoom;
   }
   else {
-    /* for now do the same things for scale and dolly */
-    float delta = x - vpd->origx + y - vpd->origy;
-
-    if (zoom_invert) {
-      delta *= -1.0f;
-    }
-
     factor = 1.0f + delta / 300.0f;
   }
 
@@ -1432,7 +1431,7 @@ static int image_open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
       Image *oldima;
 
       oldptr = RNA_property_pointer_get(&ptr, prop);
-      oldima = (Image *)oldptr.id.data;
+      oldima = (Image *)oldptr.owner_id;
       /* unlikely to fail but better avoid strange crash */
       if (oldima && GS(oldima->id.name) == ID_IM) {
         ima = oldima;
@@ -1774,6 +1773,7 @@ static int image_save_options_init(Main *bmain,
       }
       else {
         BLI_snprintf(opts->filepath, sizeof(opts->filepath), "//%s", ima->id.name + 2);
+        BLI_path_make_safe(opts->filepath);
         BLI_path_abs(opts->filepath, is_prev_save ? G.ima : BKE_main_blendfile_path(bmain));
       }
     }
@@ -2021,7 +2021,7 @@ void IMAGE_OT_save_as(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_IMAGE | FILE_TYPE_MOVIE,
                                  FILE_SPECIAL,
                                  FILE_SAVE,
-                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 }
@@ -3220,10 +3220,10 @@ static void image_sample_apply(bContext *C, wmOperator *op, const wmEvent *event
         int point = RNA_enum_get(op->ptr, "point");
 
         if (point == 1) {
-          curvemapping_set_black_white(curve_mapping, NULL, info->linearcol);
+          BKE_curvemapping_set_black_white(curve_mapping, NULL, info->linearcol);
         }
         else if (point == 0) {
-          curvemapping_set_black_white(curve_mapping, info->linearcol, NULL);
+          BKE_curvemapping_set_black_white(curve_mapping, info->linearcol, NULL);
         }
         WM_event_add_notifier(C, NC_WINDOW, NULL);
       }

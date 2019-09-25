@@ -411,7 +411,7 @@ void MESH_OT_unsubdivide(wmOperatorType *ot)
       ot->srna, "iterations", 2, 1, 1000, "Iterations", "Number of times to unsubdivide", 1, 100);
 }
 
-void EDBM_project_snap_verts(bContext *C, ARegion *ar, BMEditMesh *em)
+void EDBM_project_snap_verts(bContext *C, Depsgraph *depsgraph, ARegion *ar, BMEditMesh *em)
 {
   Main *bmain = CTX_data_main(C);
   Object *obedit = em->ob;
@@ -421,7 +421,7 @@ void EDBM_project_snap_verts(bContext *C, ARegion *ar, BMEditMesh *em)
   ED_view3d_init_mats_rv3d(obedit, ar->regiondata);
 
   struct SnapObjectContext *snap_context = ED_transform_snap_object_context_create_view3d(
-      bmain, CTX_data_scene(C), CTX_data_depsgraph(C), 0, ar, CTX_wm_view3d(C));
+      bmain, CTX_data_scene(C), depsgraph, 0, ar, CTX_wm_view3d(C));
 
   BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
     if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
@@ -436,6 +436,7 @@ void EDBM_project_snap_verts(bContext *C, ARegion *ar, BMEditMesh *em)
                                                         .use_occlusion_test = true,
                                                     },
                                                     mval,
+                                                    NULL,
                                                     NULL,
                                                     co_proj,
                                                     NULL)) {
@@ -3130,12 +3131,7 @@ static int edbm_remove_doubles_exec(bContext *C, wmOperator *op)
     BM_mesh_elem_hflag_enable_test(em->bm, htype_select, BM_ELEM_TAG, true, true, BM_ELEM_SELECT);
 
     if (use_unselected) {
-      EDBM_op_init(em, &bmop, op, "automerge verts=%hv dist=%f", BM_ELEM_SELECT, threshold);
-      BMO_op_exec(em->bm, &bmop);
-
-      if (!EDBM_op_finish(em, &bmop, op, true)) {
-        continue;
-      }
+      EDBM_automerge(obedit, false, BM_ELEM_SELECT, threshold);
     }
     else {
       EDBM_op_init(em, &bmop, op, "find_doubles verts=%hv dist=%f", BM_ELEM_SELECT, threshold);
@@ -3190,7 +3186,7 @@ void MESH_OT_remove_doubles(wmOperatorType *ot)
                          1e-6f,
                          50.0f,
                          "Merge Distance",
-                         "Minimum distance between elements to merge",
+                         "Maximum distance between elements to merge",
                          1e-5f,
                          10.0f);
   RNA_def_boolean(ot->srna,
@@ -4040,7 +4036,7 @@ static void mesh_separate_material_assign_mat_nr(Main *bmain, Object *ob, const 
       ma_obdata = NULL;
     }
 
-    BKE_material_clear_id(bmain, obdata, true);
+    BKE_material_clear_id(bmain, obdata);
     BKE_material_resize_object(bmain, ob, 1, true);
     BKE_material_resize_id(bmain, obdata, 1, true);
 
@@ -4051,7 +4047,7 @@ static void mesh_separate_material_assign_mat_nr(Main *bmain, Object *ob, const 
     id_us_plus((ID *)ma_obdata);
   }
   else {
-    BKE_material_clear_id(bmain, obdata, true);
+    BKE_material_clear_id(bmain, obdata);
     BKE_material_resize_object(bmain, ob, 0, true);
     BKE_material_resize_id(bmain, obdata, 0, true);
   }
@@ -5710,7 +5706,7 @@ void MESH_OT_dissolve_limited(wmOperatorType *ot)
                   "use_dissolve_boundaries",
                   false,
                   "All Boundaries",
-                  "Dissolve all vertices inbetween face boundaries");
+                  "Dissolve all vertices in between face boundaries");
   RNA_def_enum_flag(ot->srna,
                     "delimit",
                     rna_enum_mesh_delimit_mode_items,
@@ -5791,7 +5787,7 @@ void MESH_OT_dissolve_degenerate(wmOperatorType *ot)
                          1e-6f,
                          50.0f,
                          "Merge Distance",
-                         "Minimum distance between elements to merge",
+                         "Maximum distance between elements to merge",
                          1e-5f,
                          10.0f);
 }
@@ -7347,6 +7343,7 @@ static int mesh_symmetry_snap_exec(bContext *C, wmOperator *op)
         }
       }
     }
+    EDBM_update_generic(em, false, false);
 
     /* No need to end cache, just free the array. */
     MEM_freeN(index);
@@ -7578,7 +7575,9 @@ void MESH_OT_mark_freestyle_face(wmOperatorType *ot)
 
 #endif /* WITH_FREESTYLE */
 
-/********************** Loop normals editing tools modal map. **********************/
+/* -------------------------------------------------------------------- */
+/** \name Loop Normals Editing Tools Modal Map
+ * \{ */
 
 /* NOTE: these defines are saved in keymap files, do not change values but just add new ones */
 /* NOTE: We could add more here, like e.g. a switch between local or global coordinates of target,
@@ -8126,7 +8125,11 @@ void MESH_OT_point_normals(struct wmOperatorType *ot)
                 1.0f);
 }
 
-/********************** Split/Merge Loop Normals **********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Split/Merge Loop Normals
+ * \{ */
 
 static void normals_merge(BMesh *bm, BMLoopNorEditDataArray *lnors_ed_arr)
 {
@@ -8333,7 +8336,11 @@ void MESH_OT_split_normals(struct wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/********************** Average Loop Normals **********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Average Loop Normals
+ * \{ */
 
 enum {
   EDBM_CLNOR_AVERAGE_LOOP = 1,
@@ -8561,7 +8568,11 @@ void MESH_OT_average_normals(struct wmOperatorType *ot)
                 5);
 }
 
-/********************** Custom Normal Interface Tools **********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Custom Normal Interface Tools
+ * \{ */
 
 enum {
   EDBM_CLNOR_TOOLS_COPY = 1,
@@ -8616,7 +8627,7 @@ static int edbm_normals_tools_exec(bContext *C, wmOperator *op)
 
     switch (mode) {
       case EDBM_CLNOR_TOOLS_COPY:
-        if (bm->totfacesel == 0 || bm->totvertsel == 0) {
+        if (bm->totfacesel == 0 && bm->totvertsel == 0) {
           BM_loop_normal_editdata_array_free(lnors_ed_arr);
           continue;
         }
@@ -9013,7 +9024,11 @@ void MESH_OT_smoothen_normals(struct wmOperatorType *ot)
                 1.0f);
 }
 
-/********************** Weighted Normal Modifier Face Strength **********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Weighted Normal Modifier Face Strength
+ * \{ */
 
 static int edbm_mod_weighted_strength_exec(bContext *C, wmOperator *op)
 {
@@ -9104,3 +9119,5 @@ void MESH_OT_mod_weighted_strength(struct wmOperatorType *ot)
       "Face Strength",
       "Strength to use for assigning or selecting face influence for weighted normal modifier");
 }
+
+/** \} */

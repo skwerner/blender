@@ -47,7 +47,7 @@
 
 void node_free_curves(bNode *node)
 {
-  curvemapping_free(node->storage);
+  BKE_curvemapping_free(node->storage);
 }
 
 void node_free_standard_storage(bNode *node)
@@ -59,7 +59,7 @@ void node_free_standard_storage(bNode *node)
 
 void node_copy_curves(bNodeTree *UNUSED(dest_ntree), bNode *dest_node, const bNode *src_node)
 {
-  dest_node->storage = curvemapping_copy(src_node->storage);
+  dest_node->storage = BKE_curvemapping_copy(src_node->storage);
 }
 
 void node_copy_standard_storage(bNodeTree *UNUSED(dest_ntree),
@@ -73,7 +73,7 @@ void *node_initexec_curves(bNodeExecContext *UNUSED(context),
                            bNode *node,
                            bNodeInstanceKey UNUSED(key))
 {
-  curvemapping_initialize(node->storage);
+  BKE_curvemapping_initialize(node->storage);
   return NULL; /* unused return */
 }
 
@@ -100,7 +100,7 @@ void node_math_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int max
   BLI_strncpy(label, IFACE_(name), maxlen);
 }
 
-void node_vect_math_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int maxlen)
+void node_vector_math_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int maxlen)
 {
   const char *name;
   RNA_enum_name(rna_enum_node_vec_math_items, node->custom1, &name);
@@ -130,7 +130,7 @@ static bool node_link_socket_match(bNodeSocket *a, bNodeSocket *b)
    */
   int prefix_len = 0;
   char *ca = a->name, *cb = b->name;
-  for (; *ca != '\0' && *cb != '\0'; ++ca, ++cb) {
+  for (; *ca != '\0' && *cb != '\0'; ca++, cb++) {
     /* end of common prefix? */
     if (*ca != *cb) {
       /* prefix delimited by non-alphabetic char */
@@ -139,7 +139,7 @@ static bool node_link_socket_match(bNodeSocket *a, bNodeSocket *b)
       }
       break;
     }
-    ++prefix_len;
+    prefix_len++;
   }
   return prefix_len > 0;
 }
@@ -150,10 +150,10 @@ static int node_count_links(bNodeTree *ntree, bNodeSocket *sock)
   int count = 0;
   for (link = ntree->links.first; link; link = link->next) {
     if (link->fromsock == sock) {
-      ++count;
+      count++;
     }
     if (link->tosock == sock) {
-      ++count;
+      count++;
     }
   }
   return count;
@@ -321,7 +321,7 @@ static bNodeSocket *select_internal_link_input(bNode *node, bNodeSocket *output)
   int sel_priority = -1;
   bool sel_is_linked = false;
 
-  for (input = node->inputs.first, i = 0; input; input = input->next, ++i) {
+  for (input = node->inputs.first, i = 0; input; input = input->next, i++) {
     int priority = node_datatype_priority(input->type, output->type);
     bool is_linked = (input->link != NULL);
     bool preferred;

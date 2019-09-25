@@ -272,7 +272,9 @@ class PARTICLE_PT_emission(ParticleButtonsPanel, Panel):
         col = layout.column()
         col.active = part.emit_from == 'VERT' or part.distribution != 'GRID'
         col.prop(part, "count")
-        col.prop(psys, "seed")
+
+        if psys is not None:
+            col.prop(psys, "seed")
 
         if part.type == 'HAIR':
             col.prop(part, "hair_length")
@@ -315,7 +317,7 @@ class PARTICLE_PT_emission_source(ParticleButtonsPanel, Panel):
             col.prop(part, "invert_grid")
             col.prop(part, "hexagonal_grid")
         else:
-            col.prop(part, "use_emit_random")
+            col.prop(part, "use_emit_random", text="Random Order")
             col.prop(part, "use_even_distribution")
 
         if part.emit_from == 'FACE' or part.emit_from == 'VOLUME':
@@ -958,10 +960,10 @@ class PARTICLE_PT_physics_relations(ParticleButtonsPanel, Panel):
                 #col.alert = key.valid
                 col.prop(key, "object")
                 col.prop(key, "system", text="System")
-
-                col.active = psys.use_keyed_timing
-                col.prop(key, "time")
-                col.prop(key, "duration")
+                sub = col.column(align=True)
+                sub.active = psys.use_keyed_timing
+                sub.prop(key, "time")
+                sub.prop(key, "duration")
             elif part.physics_type == 'BOIDS':
                 sub = layout.column()
                 # doesn't work yet
@@ -1194,7 +1196,7 @@ class PARTICLE_PT_boidbrain(ParticleButtonsPanel, Panel):
                 row = layout.row()
                 row.prop(rule, "use_line")
                 sub = row.row()
-                sub.active = rule.line
+                sub.active = rule.use_line
                 sub.prop(rule, "queue_count")
             elif rule.type == 'AVERAGE_SPEED':
                 row.prop(rule, "speed", slider=True)

@@ -207,6 +207,34 @@ bool BM_vert_pair_share_face_check_cb(BMVert *v_a,
   return false;
 }
 
+BMFace *BM_vert_pair_shared_face_cb(BMVert *v_a,
+                                    BMVert *v_b,
+                                    const bool allow_adjacent,
+                                    bool (*callback)(BMFace *, BMLoop *, BMLoop *, void *userdata),
+                                    void *user_data,
+                                    BMLoop **r_l_a,
+                                    BMLoop **r_l_b)
+{
+  if (v_a->e && v_b->e) {
+    BMIter iter;
+    BMLoop *l_a, *l_b;
+
+    BM_ITER_ELEM (l_a, &iter, v_a, BM_LOOPS_OF_VERT) {
+      BMFace *f = l_a->f;
+      l_b = BM_face_vert_share_loop(f, v_b);
+      if (l_b && (allow_adjacent || !BM_loop_is_adjacent(l_a, l_b)) &&
+          callback(f, l_a, l_b, user_data)) {
+        *r_l_a = l_a;
+        *r_l_b = l_b;
+
+        return f;
+      }
+    }
+  }
+
+  return NULL;
+}
+
 /**
  * Given 2 verts, find the smallest face they share and give back both loops.
  */
@@ -1542,7 +1570,7 @@ float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, const float epsilon_sq, 
 /**
  * #BM_loop_calc_face_normal_safe_ex with pre-defined sane epsilon.
  *
- * Since this doesn't scale baed on triangle size, fixed value works well.
+ * Since this doesn't scale based on triangle size, fixed value works well.
  */
 float BM_loop_calc_face_normal_safe(const BMLoop *l, float r_normal[3])
 {

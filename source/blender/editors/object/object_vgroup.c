@@ -1139,7 +1139,7 @@ static bool vgroup_normalize(Object *ob)
   int i, dvert_tot = 0;
   const int def_nr = ob->actdef - 1;
 
-  const int use_vert_sel = vertex_group_use_vert_sel(ob);
+  const bool use_vert_sel = vertex_group_use_vert_sel(ob);
 
   if (!BLI_findlink(&ob->defbase, def_nr)) {
     return false;
@@ -1319,8 +1319,8 @@ static void moveCloserToDistanceFromPlane(Depsgraph *depsgraph,
                                           Object *ob,
                                           Mesh *me,
                                           int index,
-                                          float norm[3],
-                                          float coord[3],
+                                          const float norm[3],
+                                          const float coord[3],
                                           float d,
                                           float distToBe,
                                           float strength,
@@ -1514,7 +1514,7 @@ static void moveCloserToDistanceFromPlane(Depsgraph *depsgraph,
 static void vgroup_fix(
     const bContext *C, Scene *UNUSED(scene), Object *ob, float distToBe, float strength, float cp)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
   Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
   int i;
@@ -1623,7 +1623,7 @@ static bool vgroup_normalize_all(Object *ob,
   int i, dvert_tot = 0;
   const int def_nr = ob->actdef - 1;
 
-  const int use_vert_sel = vertex_group_use_vert_sel(ob);
+  const bool use_vert_sel = vertex_group_use_vert_sel(ob);
 
   if (subset_count == 0) {
     BKE_report(reports, RPT_ERROR, "No vertex groups to operate on");
@@ -2047,7 +2047,7 @@ static int vgroup_limit_total_subset(Object *ob,
 {
   MDeformVert *dv, **dvert_array = NULL;
   int i, dvert_tot = 0;
-  const int use_vert_sel = vertex_group_use_vert_sel(ob);
+  const bool use_vert_sel = vertex_group_use_vert_sel(ob);
   int remove_tot = 0;
 
   ED_vgroup_parray_alloc(ob->data, &dvert_array, &dvert_tot, use_vert_sel);
@@ -3794,7 +3794,7 @@ static int vgroup_sort_name(const void *def_a_ptr, const void *def_b_ptr)
   const bDeformGroup *def_a = def_a_ptr;
   const bDeformGroup *def_b = def_b_ptr;
 
-  return BLI_natstrcmp(def_a->name, def_b->name);
+  return BLI_strcasecmp_natural(def_a->name, def_b->name);
 }
 
 /**

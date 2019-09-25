@@ -510,7 +510,7 @@ void CLIP_OT_view_pan(wmOperatorType *ot)
   ot->poll = ED_space_clip_view_clip_poll;
 
   /* flags */
-  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY;
+  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY | OPTYPE_LOCK_BYPASS;
 
   /* properties */
   RNA_def_float_vector(ot->srna,
@@ -626,36 +626,37 @@ static void view_zoom_apply(
     bContext *C, ViewZoomData *vpd, wmOperator *op, const wmEvent *event, const bool zoom_to_pos)
 {
   float factor;
+  float delta;
+
+  if (U.viewzoom != USER_ZOOM_SCALE) {
+    if (U.uiflag & USER_ZOOM_HORIZ) {
+      delta = (float)(event->x - vpd->x);
+    }
+    else {
+      delta = (float)(event->y - vpd->y);
+    }
+  }
+  else {
+    delta = event->x - vpd->x + event->y - vpd->y;
+  }
+
+  delta /= U.pixelsize;
+
+  if (U.uiflag & USER_ZOOM_INVERT) {
+    delta = -delta;
+  }
 
   if (U.viewzoom == USER_ZOOM_CONT) {
     SpaceClip *sclip = CTX_wm_space_clip(C);
     double time = PIL_check_seconds_timer();
     float time_step = (float)(time - vpd->timer_lastdraw);
-    float fac;
     float zfac;
 
-    if (U.uiflag & USER_ZOOM_HORIZ) {
-      fac = (float)(event->x - vpd->x);
-    }
-    else {
-      fac = (float)(event->y - vpd->y);
-    }
-
-    if (U.uiflag & USER_ZOOM_INVERT) {
-      fac = -fac;
-    }
-
-    zfac = 1.0f + ((fac / 20.0f) * time_step);
+    zfac = 1.0f + ((delta / 20.0f) * time_step);
     vpd->timer_lastdraw = time;
     factor = (sclip->zoom * zfac) / vpd->zoom;
   }
   else {
-    float delta = event->x - vpd->x + event->y - vpd->y;
-
-    if (U.uiflag & USER_ZOOM_INVERT) {
-      delta *= -1;
-    }
-
     factor = 1.0f + delta / 300.0f;
   }
 
@@ -711,7 +712,7 @@ void CLIP_OT_view_zoom(wmOperatorType *ot)
   ot->poll = ED_space_clip_view_clip_poll;
 
   /* flags */
-  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY;
+  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY | OPTYPE_LOCK_BYPASS;
 
   /* properties */
   prop = RNA_def_float(ot->srna,
@@ -770,6 +771,9 @@ void CLIP_OT_view_zoom_in(wmOperatorType *ot)
   ot->invoke = view_zoom_in_invoke;
   ot->poll = ED_space_clip_view_clip_poll;
 
+  /* flags */
+  ot->flag |= OPTYPE_LOCK_BYPASS;
+
   /* properties */
   prop = RNA_def_float_vector(ot->srna,
                               "location",
@@ -824,6 +828,9 @@ void CLIP_OT_view_zoom_out(wmOperatorType *ot)
   ot->invoke = view_zoom_out_invoke;
   ot->poll = ED_space_clip_view_clip_poll;
 
+  /* flags */
+  ot->flag |= OPTYPE_LOCK_BYPASS;
+
   /* properties */
   prop = RNA_def_float_vector(ot->srna,
                               "location",
@@ -865,6 +872,9 @@ void CLIP_OT_view_zoom_ratio(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = view_zoom_ratio_exec;
   ot->poll = ED_space_clip_view_clip_poll;
+
+  /* flags */
+  ot->flag |= OPTYPE_LOCK_BYPASS;
 
   /* properties */
   RNA_def_float(ot->srna,
@@ -944,6 +954,9 @@ void CLIP_OT_view_all(wmOperatorType *ot)
   ot->exec = view_all_exec;
   ot->poll = ED_space_clip_view_clip_poll;
 
+  /* flags */
+  ot->flag = OPTYPE_LOCK_BYPASS;
+
   /* properties */
   prop = RNA_def_boolean(ot->srna, "fit_view", 0, "Fit View", "Fit frame to the viewport");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
@@ -975,6 +988,9 @@ void CLIP_OT_view_selected(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = view_selected_exec;
   ot->poll = ED_space_clip_view_clip_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_LOCK_BYPASS;
 }
 
 /********************** change frame operator *********************/
@@ -1115,7 +1131,7 @@ static void proxy_freejob(void *pjv)
 static int proxy_bitflag_to_array(int size_flag, int build_sizes[4], int undistort)
 {
   int build_count = 0;
-  int size_flags[2][4] = {
+  const int size_flags[2][4] = {
       {MCLIP_PROXY_SIZE_25, MCLIP_PROXY_SIZE_50, MCLIP_PROXY_SIZE_75, MCLIP_PROXY_SIZE_100},
       {MCLIP_PROXY_UNDISTORTED_SIZE_25,
        MCLIP_PROXY_UNDISTORTED_SIZE_50,
@@ -1434,7 +1450,7 @@ static void proxy_endjob(void *pjv)
 
   if (pj->clip->source == MCLIP_SRC_MOVIE) {
     /* Timecode might have changed, so do a full reload to deal with this. */
-    BKE_movieclip_reload(pj->main, pj->clip);
+    DEG_id_tag_update(&pj->clip->id, ID_RECALC_SOURCE);
   }
   else {
     /* For image sequences we'll preserve original cache. */
@@ -1459,7 +1475,7 @@ static int clip_rebuild_proxy_exec(bContext *C, wmOperator *UNUSED(op))
 
   wm_job = WM_jobs_get(CTX_wm_manager(C),
                        CTX_wm_window(C),
-                       sa,
+                       scene,
                        "Building Proxies",
                        WM_JOB_PROGRESS,
                        WM_JOB_TYPE_CLIP_BUILD_PROXY);
@@ -1588,6 +1604,9 @@ void CLIP_OT_view_ndof(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = clip_view_ndof_invoke;
   ot->poll = ED_space_clip_view_clip_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_LOCK_BYPASS;
 }
 #endif /* WITH_INPUT_NDOF */
 
@@ -1727,6 +1746,31 @@ void CLIP_OT_cursor_set(wmOperatorType *ot)
                        "Cursor location in normalized clip coordinates",
                        -10.0f,
                        10.0f);
+}
+
+/********************** Toggle lock to selection operator *********************/
+
+static int lock_selection_togglee_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  SpaceClip *space_clip = CTX_wm_space_clip(C);
+  space_clip->flag ^= SC_LOCK_SELECTION;
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_CLIP, NULL);
+  return OPERATOR_FINISHED;
+}
+
+void CLIP_OT_lock_selection_toggle(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Toggle Lock Selection";
+  ot->description = "Toggle Lock Selection option of the current clip editor";
+  ot->idname = "CLIP_OT_lock_selection_toggle";
+
+  /* api callbacks */
+  ot->poll = ED_space_clip_poll;
+  ot->exec = lock_selection_togglee_exec;
+
+  /* flags */
+  ot->flag = OPTYPE_LOCK_BYPASS;
 }
 
 /********************** macros *********************/

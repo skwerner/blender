@@ -46,7 +46,6 @@
 #include "DNA_scene_types.h"
 #include "DNA_userdef_types.h"
 #include "DNA_windowmanager_types.h"
-#include "DNA_workspace_types.h"
 
 #include "BLT_translation.h"
 
@@ -58,10 +57,6 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
-#include "BLO_readfile.h"
-
-#include "BKE_appdir.h"
-#include "BKE_blender_version.h"
 #include "BKE_brush.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
@@ -87,7 +82,6 @@
 #include "GPU_state.h"
 
 #include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 
 #include "ED_numinput.h"
 #include "ED_screen.h"
@@ -107,14 +101,17 @@
 
 #include "wm.h"
 #include "wm_draw.h"
-#include "wm_event_system.h"
 #include "wm_event_types.h"
 #include "wm_files.h"
 #include "wm_window.h"
 
 #define UNDOCUMENTED_OPERATOR_TIP N_("(undocumented operator)")
 
-/* ************ operator API, exported ********** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Operator API
+ * \{ */
 
 /* SOME_OT_op -> some.op */
 void WM_operator_py_idname(char *to, const char *from)
@@ -143,13 +140,13 @@ void WM_operator_bl_idname(char *to, const char *from)
   if (from) {
     const char *sep = strchr(from, '.');
 
-    if (sep) {
-      int ofs = (sep - from);
-
+    int from_len;
+    if (sep && (from_len = strlen(from)) < OP_MAX_TYPENAME - 3) {
+      const int ofs = (sep - from);
       memcpy(to, from, sizeof(char) * ofs);
       BLI_str_toupper_ascii(to, ofs);
-      strcpy(to + ofs, "_OT_");
-      strcpy(to + (ofs + 4), sep + 1);
+      memcpy(to + ofs, "_OT_", 4);
+      memcpy(to + (ofs + 4), sep + 1, (from_len - ofs));
     }
     else {
       /* should not happen but support just in case */
@@ -371,7 +368,7 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
       continue;
     }
 
-    if (ptr->id.data == ctx_item_ptr.id.data) {
+    if (ptr->owner_id == ctx_item_ptr.owner_id) {
       if ((ptr->data == ctx_item_ptr.data) && (ptr->type == ctx_item_ptr.type)) {
         /* found! */
         member_found = identifier;
@@ -405,13 +402,13 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
 {
   const char *member_id = NULL;
 
-  if (ptr->id.data) {
+  if (ptr->owner_id) {
 
 #  define CTX_TEST_PTR_ID(C, member, idptr) \
     { \
       const char *ctx_member = member; \
       PointerRNA ctx_item_ptr = CTX_data_pointer_get(C, ctx_member); \
-      if (ctx_item_ptr.id.data == idptr) { \
+      if (ctx_item_ptr.owner_id == idptr) { \
         member_id = ctx_member; \
         break; \
       } \
@@ -423,7 +420,7 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
       const char *ctx_member = member; \
       const char *ctx_member_full = member_full; \
       PointerRNA ctx_item_ptr = CTX_data_pointer_get(C, ctx_member); \
-      if (ctx_item_ptr.id.data && cast(ctx_item_ptr.id.data) == idptr) { \
+      if (ctx_item_ptr.owner_id && (ID *)cast(ctx_item_ptr.owner_id) == idptr) { \
         member_id = ctx_member_full; \
         break; \
       } \
@@ -450,19 +447,19 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
     } \
     (void)0
 
-    switch (GS(((ID *)ptr->id.data)->name)) {
+    switch (GS(ptr->owner_id->name)) {
       case ID_SCE: {
-        CTX_TEST_PTR_ID(C, "scene", ptr->id.data);
+        CTX_TEST_PTR_ID(C, "scene", ptr->owner_id);
         break;
       }
       case ID_OB: {
-        CTX_TEST_PTR_ID(C, "object", ptr->id.data);
+        CTX_TEST_PTR_ID(C, "object", ptr->owner_id);
         break;
       }
       /* from rna_Main_objects_new */
       case OB_DATA_SUPPORT_ID_CASE: {
 #  define ID_CAST_OBDATA(id_pt) (((Object *)(id_pt))->data)
-        CTX_TEST_PTR_ID_CAST(C, "object", "object.data", ID_CAST_OBDATA, ptr->id.data);
+        CTX_TEST_PTR_ID_CAST(C, "object", "object.data", ID_CAST_OBDATA, ptr->owner_id);
         break;
 #  undef ID_CAST_OBDATA
       }
@@ -470,18 +467,18 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
 #  define ID_CAST_OBMATACT(id_pt) \
     (give_current_material(((Object *)id_pt), ((Object *)id_pt)->actcol))
         CTX_TEST_PTR_ID_CAST(
-            C, "object", "object.active_material", ID_CAST_OBMATACT, ptr->id.data);
+            C, "object", "object.active_material", ID_CAST_OBMATACT, ptr->owner_id);
         break;
 #  undef ID_CAST_OBMATACT
       }
       case ID_WO: {
 #  define ID_CAST_SCENEWORLD(id_pt) (((Scene *)(id_pt))->world)
-        CTX_TEST_PTR_ID_CAST(C, "scene", "scene.world", ID_CAST_SCENEWORLD, ptr->id.data);
+        CTX_TEST_PTR_ID_CAST(C, "scene", "scene.world", ID_CAST_SCENEWORLD, ptr->owner_id);
         break;
 #  undef ID_CAST_SCENEWORLD
       }
       case ID_SCR: {
-        CTX_TEST_PTR_ID(C, "screen", ptr->id.data);
+        CTX_TEST_PTR_ID(C, "screen", ptr->owner_id);
 
         SpaceLink *space_data = CTX_wm_space_data(C);
 
@@ -542,7 +539,7 @@ char *WM_prop_pystring_assign(bContext *C, PointerRNA *ptr, PropertyRNA *prop, i
 
   if (lhs == NULL) {
     /* fallback to bpy.data.foo[id] if we dont find in the context */
-    lhs = RNA_path_full_property_py(ptr, prop, index);
+    lhs = RNA_path_full_property_py(CTX_data_main(C), ptr, prop, index);
   }
 
   if (!lhs) {
@@ -695,7 +692,11 @@ void WM_operator_properties_free(PointerRNA *ptr)
   }
 }
 
-/* ************ default op callbacks, exported *********** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Default Operator Callbacks
+ * \{ */
 
 void WM_operator_view3d_unit_defaults(struct bContext *C, struct wmOperator *op)
 {
@@ -849,7 +850,7 @@ static uiBlock *wm_enum_search_menu(bContext *C, ARegion *ar, void *arg)
            NULL);
 
   /* Move it downwards, mouse over button. */
-  UI_block_bounds_set_popup(block, 6, (const int[2]){0, -UI_UNIT_Y});
+  UI_block_bounds_set_popup(block, 0.3f * U.widget_unit, (const int[2]){0, -UI_UNIT_Y});
 
   UI_but_focus_on_enter_event(win, but);
 
@@ -1110,7 +1111,7 @@ static uiBlock *wm_block_create_redo(bContext *C, ARegion *ar, void *arg_op)
 
   /* if register is not enabled, the operator gets freed on OPERATOR_FINISHED
    * ui_apply_but_funcs_after calls ED_undo_operator_repeate_cb and crashes */
-  assert(op->type->flag & OPTYPE_REGISTER);
+  BLI_assert(op->type->flag & OPTYPE_REGISTER);
 
   UI_block_func_handle_set(block, wm_block_redo_cb, arg_op);
   layout = UI_block_layout(
@@ -1125,18 +1126,15 @@ static uiBlock *wm_block_create_redo(bContext *C, ARegion *ar, void *arg_op)
   if (op->type->flag & OPTYPE_MACRO) {
     for (op = op->macro.first; op; op = op->next) {
       uiTemplateOperatorPropertyButs(
-          C, layout, op, UI_BUT_LABEL_ALIGN_SPLIT_COLUMN, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
-      if (op->next) {
-        uiItemS(layout);
-      }
+          C, layout, op, UI_BUT_LABEL_ALIGN_NONE, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
     }
   }
   else {
     uiTemplateOperatorPropertyButs(
-        C, layout, op, UI_BUT_LABEL_ALIGN_SPLIT_COLUMN, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
+        C, layout, op, UI_BUT_LABEL_ALIGN_NONE, UI_TEMPLATE_OP_PROPS_SHOW_TITLE);
   }
 
-  UI_block_bounds_set_popup(block, 4, NULL);
+  UI_block_bounds_set_popup(block, 6 * U.dpi_fac, NULL);
 
   return block;
 }
@@ -1216,7 +1214,8 @@ static uiBlock *wm_block_dialog_create(bContext *C, ARegion *ar, void *userData)
   }
 
   /* center around the mouse */
-  UI_block_bounds_set_popup(block, 4, (const int[2]){data->width / -2, data->height / 2});
+  UI_block_bounds_set_popup(
+      block, 6 * U.dpi_fac, (const int[2]){data->width / -2, data->height / 2});
 
   UI_block_active_only_flagged_buttons(C, ar, block);
 
@@ -1244,7 +1243,7 @@ static uiBlock *wm_operator_ui_create(bContext *C, ARegion *ar, void *userData)
 
   UI_block_func_set(block, NULL, NULL, NULL);
 
-  UI_block_bounds_set_popup(block, 4, NULL);
+  UI_block_bounds_set_popup(block, 6 * U.dpi_fac, NULL);
 
   UI_block_active_only_flagged_buttons(C, ar, block);
 
@@ -1395,7 +1394,13 @@ int WM_operator_redo_popup(bContext *C, wmOperator *op)
   return OPERATOR_CANCELLED;
 }
 
-/* ***************** Debug menu ************************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Debug Menu Operator
+ *
+ * Set internal debug value, mainly for developers.
+ * \{ */
 
 static int wm_debug_menu_exec(bContext *C, wmOperator *op)
 {
@@ -1425,7 +1430,12 @@ static void WM_OT_debug_menu(wmOperatorType *ot)
   RNA_def_int(ot->srna, "debug_value", 0, SHRT_MIN, SHRT_MAX, "Debug Value", "", -10000, 10000);
 }
 
-/* ***************** Operator defaults ************************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Reset Defaults Operator
+ * \{ */
+
 static int wm_operator_defaults_exec(bContext *C, wmOperator *op)
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "active_operator", &RNA_Operator);
@@ -1451,260 +1461,11 @@ static void WM_OT_operator_defaults(wmOperatorType *ot)
   ot->flag = OPTYPE_INTERNAL;
 }
 
-/* ***************** Splash Screen ************************* */
+/** \} */
 
-static void wm_block_splash_close(bContext *C, void *arg_block, void *UNUSED(arg))
-{
-  wmWindow *win = CTX_wm_window(C);
-  UI_popup_block_close(C, win, arg_block);
-}
-
-static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *arg_unused);
-
-static void wm_block_splash_refreshmenu(bContext *C, void *UNUSED(arg_block), void *UNUSED(arg))
-{
-  ARegion *ar_menu = CTX_wm_menu(C);
-  ED_region_tag_refresh_ui(ar_menu);
-}
-
-static void wm_block_splash_add_label(uiBlock *block, const char *label, int x, int *y)
-{
-  if (!(label && label[0])) {
-    return;
-  }
-
-  uiStyle *style = UI_style_get();
-
-  BLF_size(style->widgetlabel.uifont_id, style->widgetlabel.points, U.pixelsize * U.dpi);
-  int label_width = BLF_width(style->widgetlabel.uifont_id, label, strlen(label));
-  label_width = label_width + U.widget_unit;
-
-  UI_block_emboss_set(block, UI_EMBOSS_NONE);
-
-  uiBut *but = uiDefBut(block,
-                        UI_BTYPE_LABEL,
-                        0,
-                        label,
-                        x - label_width,
-                        *y,
-                        label_width,
-                        UI_UNIT_Y,
-                        NULL,
-                        0,
-                        0,
-                        0,
-                        0,
-                        NULL);
-
-  /* 1 = UI_SELECT, internal flag to draw in white. */
-  UI_but_flag_enable(but, 1);
-  UI_block_emboss_set(block, UI_EMBOSS);
-  *y -= 12 * U.dpi_fac;
-}
-
-static void wm_block_splash_add_labels(uiBlock *block, int x, int y)
-{
-  /* Version number. */
-  const char *version_suffix = NULL;
-  bool show_build_info = true;
-
-  if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "alpha")) {
-    version_suffix = " Alpha";
-  }
-  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "beta")) {
-    version_suffix = " Beta";
-  }
-  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "rc")) {
-    version_suffix = " Release Candidate";
-    show_build_info = false;
-  }
-  else if (STREQ(STRINGIFY(BLENDER_VERSION_CYCLE), "release")) {
-    version_suffix = STRINGIFY(BLENDER_VERSION_CHAR);
-    show_build_info = false;
-  }
-
-  char version_buf[256] = "\0";
-  BLI_snprintf(version_buf,
-               sizeof(version_buf),
-               "v %d.%d%s",
-               BLENDER_VERSION / 100,
-               BLENDER_VERSION % 100,
-               version_suffix);
-
-  wm_block_splash_add_label(block, version_buf, x, &y);
-
-#ifdef WITH_BUILDINFO
-  if (show_build_info) {
-    extern unsigned long build_commit_timestamp;
-    extern char build_hash[], build_commit_date[], build_commit_time[], build_branch[];
-
-    /* Date, hidden for builds made from tag. */
-    if (build_commit_timestamp != 0) {
-      char date_buf[256] = "\0";
-      BLI_snprintf(
-          date_buf, sizeof(date_buf), "Date: %s %s", build_commit_date, build_commit_time);
-      wm_block_splash_add_label(block, date_buf, x, &y);
-    }
-
-    /* Hash. */
-    char hash_buf[256] = "\0";
-    BLI_snprintf(hash_buf, sizeof(hash_buf), "Hash: %s", build_hash);
-    wm_block_splash_add_label(block, hash_buf, x, &y);
-
-    /* Branch. */
-    if (!STREQ(build_branch, "master")) {
-      char branch_buf[256] = "\0";
-      BLI_snprintf(branch_buf, sizeof(branch_buf), "Branch: %s", build_branch);
-
-      wm_block_splash_add_label(block, branch_buf, x, &y);
-    }
-  }
-#else
-  UNUSED_VARS(show_build_info);
-#endif /* WITH_BUILDINFO */
-}
-
-static ImBuf *wm_block_splash_image(void)
-{
-#ifndef WITH_HEADLESS
-  extern char datatoc_splash_png[];
-  extern int datatoc_splash_png_size;
-  extern char datatoc_splash_2x_png[];
-  extern int datatoc_splash_2x_png_size;
-
-  ImBuf *ibuf = NULL;
-
-  if (U.dpi_fac > 1.0) {
-    ibuf = IMB_ibImageFromMemory((const uchar *)datatoc_splash_2x_png,
-                                 datatoc_splash_2x_png_size,
-                                 IB_rect,
-                                 NULL,
-                                 "<splash screen>");
-  }
-  else {
-    ibuf = IMB_ibImageFromMemory((const uchar *)datatoc_splash_png,
-                                 datatoc_splash_png_size,
-                                 IB_rect,
-                                 NULL,
-                                 "<splash screen>");
-  }
-
-  /* overwrite splash with template image */
-  if (U.app_template[0] != '\0') {
-    ImBuf *ibuf_template = NULL;
-    char splash_filepath[FILE_MAX];
-    char template_directory[FILE_MAX];
-
-    if (BKE_appdir_app_template_id_search(
-            U.app_template, template_directory, sizeof(template_directory))) {
-      BLI_join_dirfile(splash_filepath,
-                       sizeof(splash_filepath),
-                       template_directory,
-                       (U.dpi_fac > 1.0) ? "splash_2x.png" : "splash.png");
-      ibuf_template = IMB_loadiffname(splash_filepath, IB_rect, NULL);
-      if (ibuf_template) {
-        const int x_expect = ibuf->x;
-        const int y_expect = 250 * (int)U.dpi_fac;
-        /* don't cover the header text */
-        if (ibuf_template->x == x_expect && ibuf_template->y == y_expect) {
-          memcpy(ibuf->rect,
-                 ibuf_template->rect,
-                 ibuf_template->x * ibuf_template->y * sizeof(char[4]));
-        }
-        else {
-          CLOG_ERROR(WM_LOG_OPERATORS,
-                     "Splash expected %dx%d found %dx%d, ignoring: %s\n",
-                     x_expect,
-                     y_expect,
-                     ibuf_template->x,
-                     ibuf_template->y,
-                     splash_filepath);
-        }
-        IMB_freeImBuf(ibuf_template);
-      }
-    }
-  }
-  return ibuf;
-#else
-  return NULL;
-#endif
-}
-
-static uiBlock *wm_block_create_splash(bContext *C, ARegion *ar, void *UNUSED(arg))
-{
-  uiBlock *block;
-  uiBut *but;
-  uiStyle *style = UI_style_get();
-
-  block = UI_block_begin(C, ar, "splash", UI_EMBOSS);
-
-  /* note on UI_BLOCK_NO_WIN_CLIP, the window size is not always synchronized
-   * with the OS when the splash shows, window clipping in this case gives
-   * ugly results and clipping the splash isn't useful anyway, just disable it [#32938] */
-  UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_KEEP_OPEN | UI_BLOCK_NO_WIN_CLIP);
-  UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
-
-  ImBuf *ibuf = wm_block_splash_image();
-  but = uiDefBut(block,
-                 UI_BTYPE_IMAGE,
-                 0,
-                 "",
-                 0,
-                 0.5f * U.widget_unit,
-                 U.dpi_fac * 501,
-                 U.dpi_fac * 250,
-                 ibuf,
-                 0.0,
-                 0.0,
-                 0,
-                 0,
-                 ""); /* button owns the imbuf now */
-  UI_but_func_set(but, wm_block_splash_close, block, NULL);
-  UI_block_func_set(block, wm_block_splash_refreshmenu, block, NULL);
-
-  int x = U.dpi_fac * 502;
-  int y = U.dpi_fac * 237;
-
-  wm_block_splash_add_labels(block, x, y);
-
-  uiLayout *layout = UI_block_layout(block,
-                                     UI_LAYOUT_VERTICAL,
-                                     UI_LAYOUT_PANEL,
-                                     U.dpi_fac * 26,
-                                     0,
-                                     U.dpi_fac * 450,
-                                     U.dpi_fac * 110,
-                                     0,
-                                     style);
-
-  MenuType *mt = WM_menutype_find("WM_MT_splash", true);
-  if (mt) {
-    UI_menutype_draw(C, mt, layout);
-  }
-
-  UI_block_bounds_set_centered(block, 0);
-
-  return block;
-}
-
-static int wm_splash_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
-{
-  UI_popup_block_invoke(C, wm_block_create_splash, NULL, NULL);
-
-  return OPERATOR_FINISHED;
-}
-
-static void WM_OT_splash(wmOperatorType *ot)
-{
-  ot->name = "Splash Screen";
-  ot->idname = "WM_OT_splash";
-  ot->description = "Open the splash screen with release info";
-
-  ot->invoke = wm_splash_invoke;
-  ot->poll = WM_operator_winactive;
-}
-
-/* ***************** Search menu ************************* */
+/* -------------------------------------------------------------------- */
+/** \name Operator Search Menu
+ * \{ */
 
 struct SearchPopupInit_Data {
   int size[2];
@@ -1753,7 +1514,7 @@ static uiBlock *wm_block_search_menu(bContext *C, ARegion *ar, void *userdata)
            NULL);
 
   /* Move it downwards, mouse over button. */
-  UI_block_bounds_set_popup(block, 6, (const int[2]){0, -UI_UNIT_Y});
+  UI_block_bounds_set_popup(block, 0.3f * U.widget_unit, (const int[2]){0, -UI_UNIT_Y});
 
   return block;
 }
@@ -1824,7 +1585,8 @@ static const char *wm_call_menu_get_name(wmOperatorType *ot, PointerRNA *ptr)
   char idname[BKE_ST_MAXNAME];
   RNA_string_get(ptr, "name", idname);
   MenuType *mt = WM_menutype_find(idname, true);
-  return (mt) ? mt->label : ot->name;
+  return (mt) ? CTX_IFACE_(mt->translation_context, mt->label) :
+                CTX_IFACE_(ot->translation_context, ot->name);
 }
 
 static void WM_OT_call_menu(wmOperatorType *ot)
@@ -1888,7 +1650,8 @@ static const char *wm_call_panel_get_name(wmOperatorType *ot, PointerRNA *ptr)
   char idname[BKE_ST_MAXNAME];
   RNA_string_get(ptr, "name", idname);
   PanelType *pt = WM_paneltype_find(idname, true);
-  return (pt) ? pt->label : ot->name;
+  return (pt) ? CTX_IFACE_(pt->translation_context, pt->label) :
+                CTX_IFACE_(ot->translation_context, ot->name);
 }
 
 static void WM_OT_call_panel(wmOperatorType *ot)
@@ -1911,7 +1674,11 @@ static void WM_OT_call_panel(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-/* ************ window / screen operator definitions ************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Window/Screen Operators
+ * \{ */
 
 /* this poll functions is needed in place of WM_operator_winactive
  * while it crashes on full screen */
@@ -2000,7 +1767,11 @@ static void WM_OT_quit_blender(wmOperatorType *ot)
   ot->exec = wm_exit_blender_exec;
 }
 
-/* *********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Console Toggle Operator (WIN32 only)
+ * \{ */
 
 #if defined(WIN32)
 
@@ -2023,12 +1794,16 @@ static void WM_OT_console_toggle(wmOperatorType *ot)
 
 #endif
 
-/* ************ default paint cursors, draw always around cursor *********** */
-/*
- * - returns handler to free
- * - poll(bContext): returns 1 if draw should happen
- * - draw(bContext): drawing callback for paint cursor
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name default paint cursors, draw always around cursor
+ *
+ * - Returns handler to free.
+ * - `poll(bContext)`: returns 1 if draw should happen.
+ * - `draw(bContext)`: drawing callback for paint cursor.
+ *
+ * \{ */
 
 wmPaintCursor *WM_paint_cursor_activate(wmWindowManager *wm,
                                         short space_type,
@@ -2065,7 +1840,11 @@ bool WM_paint_cursor_end(wmWindowManager *wm, wmPaintCursor *handle)
   return false;
 }
 
-/* *********************** radial control ****************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Radial Control Operator
+ * \{ */
 
 #define WM_RADIAL_CONTROL_DISPLAY_SIZE (200 * UI_DPI_FAC)
 #define WM_RADIAL_CONTROL_DISPLAY_MIN_SIZE (35 * UI_DPI_FAC)
@@ -3029,7 +2808,13 @@ static void WM_OT_radial_control(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
-/* ************************** timer for testing ***************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Redraw Timer Operator
+ *
+ * Use for simple benchmarks.
+ * \{ */
 
 /* uses no type defines, fully local testing function anyway... ;) */
 
@@ -3157,7 +2942,10 @@ static int redraw_timer_exec(bContext *C, wmOperator *op)
   const int cfra = scene->r.cfra;
   int a, iter_steps = 0;
   const char *infostr = "";
-  struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
+
+  /* NOTE: Depsgraph is used to update scene for a new state, so no need to ensure evaluation here.
+   */
+  struct Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
 
   WM_cursor_wait(1);
 
@@ -3218,7 +3006,13 @@ static void WM_OT_redraw_timer(wmOperatorType *ot)
                 60.0);
 }
 
-/* ************************** memory statistics for testing ***************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Report Memory Statistics
+ *
+ * Use for testing/debugging.
+ * \{ */
 
 static int memory_statistics_exec(bContext *UNUSED(C), wmOperator *UNUSED(op))
 {
@@ -3235,7 +3029,13 @@ static void WM_OT_memory_statistics(wmOperatorType *ot)
   ot->exec = memory_statistics_exec;
 }
 
-/* *************************** Mat/tex/etc. previews generation ************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Data-Block Preview Generation Operator
+ *
+ * Use for material/texture/light ... etc.
+ * \{ */
 
 typedef struct PreviewsIDEnsureData {
   bContext *C;
@@ -3325,7 +3125,11 @@ static void WM_OT_previews_ensure(wmOperatorType *ot)
   ot->exec = previews_ensure_exec;
 }
 
-/* *************************** Datablocks previews clear ************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Data-Block Preview Clear Operator
+ * \{ */
 
 /* Only types supporting previews currently. */
 static const EnumPropertyItem preview_id_type_items[] = {
@@ -3424,7 +3228,11 @@ static void WM_OT_previews_clear(wmOperatorType *ot)
                                "Which data-block previews to clear");
 }
 
-/* *************************** Doc from UI ************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Doc from UI Operator
+ * \{ */
 
 static int doc_view_manual_ui_context_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -3457,8 +3265,14 @@ static void WM_OT_doc_view_manual_ui_context(wmOperatorType *ot)
   ot->exec = doc_view_manual_ui_context_exec;
 }
 
-/* ******************************************************* */
-/* toggle 3D for current window, turning it fullscreen if needed */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Toggle Stereo 3D Operator
+ *
+ * Turning it fullscreen if needed.
+ * \{ */
+
 static void WM_OT_stereo3d_set(wmOperatorType *ot)
 {
   PropertyRNA *prop;
@@ -3508,6 +3322,12 @@ static void WM_OT_stereo3d_set(wmOperatorType *ot)
                          "Right eye should see left image and vice-versa");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Operator Registration & Keymaps
+ * \{ */
 
 void wm_operatortypes_register(void)
 {
@@ -3712,10 +3532,16 @@ void wm_window_keymap(wmKeyConfig *keyconf)
   WM_keymap_fix_linking();
 }
 
-/**
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Enum Filter Functions
+ *
  * Filter functions that can be used with rna_id_itemf() below.
  * Should return false if 'id' should be excluded.
- */
+ *
+ * \{ */
+
 static bool rna_id_enum_filter_single(ID *id, void *user_data)
 {
   return (id != user_data);
@@ -3868,3 +3694,5 @@ const EnumPropertyItem *RNA_mask_local_itemf(bContext *C,
   return rna_id_itemf(
       C, ptr, r_free, C ? (ID *)CTX_data_main(C)->masks.first : NULL, true, NULL, NULL);
 }
+
+/** \} */

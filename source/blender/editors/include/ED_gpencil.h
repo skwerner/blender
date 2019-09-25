@@ -27,7 +27,6 @@
 struct ID;
 struct ListBase;
 struct PointerRNA;
-struct rcti;
 
 struct Brush;
 struct bGPDframe;
@@ -35,16 +34,15 @@ struct bGPDlayer;
 struct bGPDspoint;
 struct bGPDstroke;
 struct bGPdata;
+struct tGPspoint;
 
 struct ARegion;
 struct Depsgraph;
-struct EvaluationContext;
 struct Main;
 struct RegionView3D;
 struct ReportList;
 struct Scene;
 struct ScrArea;
-struct ToolSettings;
 struct View3D;
 struct ViewLayer;
 struct bContext;
@@ -57,8 +55,6 @@ struct bAnimContext;
 
 struct wmKeyConfig;
 struct wmOperator;
-struct wmWindow;
-struct wmWindowManager;
 
 /* ------------- Grease-Pencil Runtime Data ---------------- */
 
@@ -286,5 +282,13 @@ int ED_gpencil_select_stroke_segment(struct bGPDlayer *gpl,
                                      float r_hitb[3]);
 
 void ED_gpencil_select_toggle_all(struct bContext *C, int action);
+
+/* Ensure stroke sbuffer size is enough */
+struct tGPspoint *ED_gpencil_sbuffer_ensure(struct tGPspoint *buffer_array,
+                                            short *buffer_size,
+                                            short *buffer_used,
+                                            const bool clear);
+/* Tag all scene grease pencil object to update. */
+void ED_gpencil_tag_scene_gpencil(struct Scene *scene);
 
 #endif /*  __ED_GPENCIL_H__ */

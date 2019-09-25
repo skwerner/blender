@@ -471,12 +471,12 @@ static void rna_PopMenuEnd(bContext *C, PointerRNA *handle)
 }
 
 /* popover wrapper */
-static PointerRNA rna_PopoverBegin(bContext *C, int ui_units_x)
+static PointerRNA rna_PopoverBegin(bContext *C, int ui_units_x, bool from_active_button)
 {
   PointerRNA r_ptr;
   void *data;
 
-  data = (void *)UI_popover_begin(C, U.widget_unit * ui_units_x);
+  data = (void *)UI_popover_begin(C, U.widget_unit * ui_units_x, from_active_button);
 
   RNA_pointer_create(NULL, &RNA_UIPopover, data, &r_ptr);
 
@@ -821,6 +821,8 @@ void RNA_api_wm(StructRNA *srna)
   parm = RNA_def_pointer(func, "menu", "UIPopover", "", "");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_RNAPTR);
   RNA_def_function_return(func, parm);
+  RNA_def_boolean(
+      func, "from_active_button", 0, "Use Button", "Use the active button for positioning");
 
   /* wrap UI_popover_end */
   func = RNA_def_function(srna, "popover_end__internal", "rna_PopoverEnd");
@@ -955,6 +957,19 @@ void RNA_api_operator(StructRNA *srna)
   RNA_def_function_flag(func, FUNC_REGISTER_OPTIONAL | FUNC_ALLOW_WRITE);
   parm = RNA_def_pointer(func, "context", "Context", "", "");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+
+  /* description */
+  func = RNA_def_function(srna, "description", NULL);
+  RNA_def_function_ui_description(func, "Compute a description string that depends on parameters");
+  RNA_def_function_flag(func, FUNC_NO_SELF | FUNC_REGISTER_OPTIONAL);
+  parm = RNA_def_string(func, "result", NULL, 4096, "result", "");
+  RNA_def_parameter_clear_flags(parm, PROP_NEVER_NULL, 0);
+  RNA_def_parameter_flags(parm, PROP_THICK_WRAP, 0);
+  RNA_def_function_output(func, parm);
+  parm = RNA_def_pointer(func, "context", "Context", "", "");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+  parm = RNA_def_pointer(func, "properties", "OperatorProperties", "", "");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
 }
 
 void RNA_api_macro(StructRNA *srna)

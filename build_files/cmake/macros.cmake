@@ -352,6 +352,9 @@ function(SETUP_LIBDIRS)
     if(WITH_OPENIMAGEIO)
       link_directories(${OPENIMAGEIO_LIBPATH})
     endif()
+    if(WITH_OPENIMAGEDENOISE)
+      link_directories(${OPENIMAGEDENOISE_LIBPATH})
+    endif()
     if(WITH_OPENCOLORIO)
       link_directories(${OPENCOLORIO_LIBPATH})
     endif()
@@ -461,6 +464,9 @@ function(setup_liblinks
   endif()
   if(WITH_OPENIMAGEIO)
     target_link_libraries(${target} ${OPENIMAGEIO_LIBRARIES})
+  endif()
+  if(WITH_OPENIMAGEDENOISE)
+    target_link_libraries(${target} ${OPENIMAGEDENOISE_LIBRARIES} ${TBB_LIBRARIES})
   endif()
   if(WITH_OPENCOLORIO)
     target_link_libraries(${target} ${OPENCOLORIO_LIBRARIES})
@@ -713,7 +719,7 @@ macro(remove_strict_flags)
   endif()
 
   if(MSVC)
-    remove_cc_flag(/w34189) # Restore warn C4189 (unused variable) back to w4 
+    remove_cc_flag(/w34189) # Restore warn C4189 (unused variable) back to w4
   endif()
 
 endmacro()

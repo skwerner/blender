@@ -34,7 +34,6 @@
 #include "BLI_array_utils.h"
 #include "BLI_task.h"
 
-#include "DNA_armature_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
@@ -42,7 +41,6 @@
 #include "DNA_object_types.h"
 
 #include "RNA_access.h"
-#include "RNA_define.h"
 
 #include "BKE_brush.h"
 #include "BKE_context.h"
@@ -195,17 +193,12 @@ static bool vertex_paint_use_fast_update_check(Object *ob)
   return false;
 }
 
-static void paint_last_stroke_update(Scene *scene, ARegion *ar, const float mval[2])
+static void paint_last_stroke_update(Scene *scene, const float location[3])
 {
-  const int mval_i[2] = {mval[0], mval[1]};
-  float world[3];
-
-  if (ED_view3d_autodist_simple(ar, mval_i, world, 0, NULL)) {
-    UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
-    ups->average_stroke_counter++;
-    add_v3_v3(ups->average_stroke_accum, world);
-    ups->last_stroke_valid = true;
-  }
+  UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
+  ups->average_stroke_counter++;
+  add_v3_v3(ups->average_stroke_accum, location);
+  ups->last_stroke_valid = true;
 }
 
 /* polling - retrieve whether cursor should be set or operator should be done */
@@ -260,7 +253,7 @@ static bool weight_paint_poll_ex(bContext *C, bool check_tool)
       (BKE_paint_brush(&CTX_data_tool_settings(C)->wpaint->paint) != NULL) &&
       (sa = CTX_wm_area(C)) && (sa->spacetype == SPACE_VIEW3D)) {
     ARegion *ar = CTX_wm_region(C);
-    if (ar->regiontype == RGN_TYPE_WINDOW) {
+    if (ELEM(ar->regiontype, RGN_TYPE_WINDOW, RGN_TYPE_HUD)) {
       if (!check_tool || WM_toolsystem_active_tool_is_brush(C)) {
         return 1;
       }
@@ -1171,10 +1164,9 @@ void ED_object_vpaintmode_enter_ex(
 {
   ed_vwpaintmode_enter_generic(bmain, depsgraph, wm, scene, ob, OB_MODE_VERTEX_PAINT);
 }
-void ED_object_vpaintmode_enter(struct bContext *C)
+void ED_object_vpaintmode_enter(struct bContext *C, Depsgraph *depsgraph)
 {
   Main *bmain = CTX_data_main(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   Scene *scene = CTX_data_scene(C);
   Object *ob = CTX_data_active_object(C);
@@ -1186,10 +1178,9 @@ void ED_object_wpaintmode_enter_ex(
 {
   ed_vwpaintmode_enter_generic(bmain, depsgraph, wm, scene, ob, OB_MODE_WEIGHT_PAINT);
 }
-void ED_object_wpaintmode_enter(struct bContext *C)
+void ED_object_wpaintmode_enter(struct bContext *C, Depsgraph *depsgraph)
 {
   Main *bmain = CTX_data_main(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   Scene *scene = CTX_data_scene(C);
   Object *ob = CTX_data_active_object(C);
@@ -1301,6 +1292,9 @@ static int wpaint_mode_toggle_exec(bContext *C, wmOperator *op)
   }
   else {
     Depsgraph *depsgraph = CTX_data_depsgraph_on_load(C);
+    if (depsgraph) {
+      depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+    }
     wmWindowManager *wm = CTX_wm_manager(C);
     ED_object_wpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
     BKE_paint_toolslots_brush_validate(bmain, &ts->wpaint->paint);
@@ -1396,7 +1390,7 @@ void PAINT_OT_weight_paint_toggle(wmOperatorType *ot)
   ot->poll = paint_poll_test;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
 /** \} */
@@ -1556,7 +1550,7 @@ static bool wpaint_stroke_test_start(bContext *C, wmOperator *op, const float mo
   bool *defbase_sel;
   SculptSession *ss = ob->sculpt;
   VPaint *vp = CTX_data_tool_settings(C)->wpaint;
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
 
   if (ED_wpaint_ensure_data(C, op->reports, WPAINT_ENSURE_MIRROR, &vgroup_index) == false) {
     return false;
@@ -1609,7 +1603,7 @@ static bool wpaint_stroke_test_start(bContext *C, wmOperator *op, const float mo
   /* make mode data storage */
   wpd = MEM_callocN(sizeof(struct WPaintData), "WPaintData");
   paint_stroke_set_mode_data(stroke, wpd);
-  ED_view3d_viewcontext_init(C, &wpd->vc);
+  ED_view3d_viewcontext_init(C, &wpd->vc, depsgraph);
   view_angle_limits_init(&wpd->normal_angle_precalc,
                          vp->paint.brush->falloff_angle,
                          (vp->paint.brush->flag & BRUSH_FRONTFACE_FALLOFF) != 0);
@@ -1713,7 +1707,7 @@ static float wpaint_get_active_weight(const MDeformVert *dv, const WeightPaintIn
 
 static void do_wpaint_precompute_weight_cb_ex(void *__restrict userdata,
                                               const int n,
-                                              const ParallelRangeTLS *__restrict UNUSED(tls))
+                                              const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SculptThreadedTaskData *data = userdata;
   const MDeformVert *dv = &data->me->dvert[n];
@@ -1737,7 +1731,7 @@ static void precompute_weight_values(
       .me = me,
   };
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   BLI_task_parallel_range(0, me->totvert, &data, do_wpaint_precompute_weight_cb_ex, &settings);
 
@@ -1746,7 +1740,7 @@ static void precompute_weight_values(
 
 static void do_wpaint_brush_blur_task_cb_ex(void *__restrict userdata,
                                             const int n,
-                                            const ParallelRangeTLS *__restrict UNUSED(tls))
+                                            const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SculptThreadedTaskData *data = userdata;
   SculptSession *ss = data->ob->sculpt;
@@ -1838,7 +1832,7 @@ static void do_wpaint_brush_blur_task_cb_ex(void *__restrict userdata,
 
 static void do_wpaint_brush_smear_task_cb_ex(void *__restrict userdata,
                                              const int n,
-                                             const ParallelRangeTLS *__restrict UNUSED(tls))
+                                             const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SculptThreadedTaskData *data = userdata;
   SculptSession *ss = data->ob->sculpt;
@@ -1949,7 +1943,7 @@ static void do_wpaint_brush_smear_task_cb_ex(void *__restrict userdata,
 
 static void do_wpaint_brush_draw_task_cb_ex(void *__restrict userdata,
                                             const int n,
-                                            const ParallelRangeTLS *__restrict UNUSED(tls))
+                                            const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SculptThreadedTaskData *data = userdata;
   SculptSession *ss = data->ob->sculpt;
@@ -2022,7 +2016,7 @@ static void do_wpaint_brush_draw_task_cb_ex(void *__restrict userdata,
 }
 
 static void do_wpaint_brush_calc_average_weight_cb_ex(
-    void *__restrict userdata, const int n, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int n, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SculptThreadedTaskData *data = userdata;
   SculptSession *ss = data->ob->sculpt;
@@ -2078,7 +2072,7 @@ static void calculate_average_weight(SculptThreadedTaskData *data,
   struct WPaintAverageAccum *accum = MEM_mallocN(sizeof(*accum) * totnode, __func__);
   data->custom_data = accum;
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = ((data->sd->flags & SCULPT_USE_OPENMP) &&
                             totnode > SCULPT_THREADED_LIMIT);
@@ -2127,7 +2121,7 @@ static void wpaint_paint_leaves(bContext *C,
   /* Use this so average can modify its weight without touching the brush. */
   data.strength = BKE_brush_weight_get(scene, brush);
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   /* NOTE: current mirroring code cannot be run in parallel */
   settings.use_threading = !(me->editflag & ME_EDIT_MIRROR_X);
@@ -2350,7 +2344,7 @@ static void wpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
 
   /* calculate pivot for rotation around seletion if needed */
   /* also needed for "View Selected" on last stroke */
-  paint_last_stroke_update(scene, vc->ar, ss->cache->mouse);
+  paint_last_stroke_update(scene, ss->cache->location);
 
   BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_ALL);
 
@@ -2569,7 +2563,7 @@ void PAINT_OT_vertex_paint_toggle(wmOperatorType *ot)
   ot->poll = paint_poll_test;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
 /** \} */
@@ -2638,7 +2632,7 @@ static bool vpaint_stroke_test_start(bContext *C, struct wmOperator *op, const f
   Object *ob = CTX_data_active_object(C);
   Mesh *me;
   SculptSession *ss = ob->sculpt;
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
 
   /* context checks could be a poll() */
   me = BKE_mesh_from_object(ob);
@@ -2654,7 +2648,7 @@ static bool vpaint_stroke_test_start(bContext *C, struct wmOperator *op, const f
   /* make mode data storage */
   vpd = MEM_callocN(sizeof(*vpd), "VPaintData");
   paint_stroke_set_mode_data(stroke, vpd);
-  ED_view3d_viewcontext_init(C, &vpd->vc);
+  ED_view3d_viewcontext_init(C, &vpd->vc, depsgraph);
   view_angle_limits_init(&vpd->normal_angle_precalc,
                          vp->paint.brush->falloff_angle,
                          (vp->paint.brush->flag & BRUSH_FRONTFACE_FALLOFF) != 0);
@@ -2705,8 +2699,9 @@ static bool vpaint_stroke_test_start(bContext *C, struct wmOperator *op, const f
   return 1;
 }
 
-static void do_vpaint_brush_calc_average_color_cb_ex(
-    void *__restrict userdata, const int n, const ParallelRangeTLS *__restrict UNUSED(tls))
+static void do_vpaint_brush_calc_average_color_cb_ex(void *__restrict userdata,
+                                                     const int n,
+                                                     const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SculptThreadedTaskData *data = userdata;
   SculptSession *ss = data->ob->sculpt;
@@ -2772,7 +2767,7 @@ static float tex_color_alpha_ubyte(SculptThreadedTaskData *data,
 
 static void do_vpaint_brush_draw_task_cb_ex(void *__restrict userdata,
                                             const int n,
-                                            const ParallelRangeTLS *__restrict UNUSED(tls))
+                                            const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SculptThreadedTaskData *data = userdata;
   SculptSession *ss = data->ob->sculpt;
@@ -2871,7 +2866,7 @@ static void do_vpaint_brush_draw_task_cb_ex(void *__restrict userdata,
 
 static void do_vpaint_brush_blur_task_cb_ex(void *__restrict userdata,
                                             const int n,
-                                            const ParallelRangeTLS *__restrict UNUSED(tls))
+                                            const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SculptThreadedTaskData *data = userdata;
   SculptSession *ss = data->ob->sculpt;
@@ -2989,7 +2984,7 @@ static void do_vpaint_brush_blur_task_cb_ex(void *__restrict userdata,
 
 static void do_vpaint_brush_smear_task_cb_ex(void *__restrict userdata,
                                              const int n,
-                                             const ParallelRangeTLS *__restrict UNUSED(tls))
+                                             const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SculptThreadedTaskData *data = userdata;
   SculptSession *ss = data->ob->sculpt;
@@ -3139,7 +3134,7 @@ static void calculate_average_color(SculptThreadedTaskData *data,
   struct VPaintAverageAccum *accum = MEM_mallocN(sizeof(*accum) * totnode, __func__);
   data->custom_data = accum;
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   BLI_task_parallel_range(0, totnode, data, do_vpaint_brush_calc_average_color_cb_ex, &settings);
 
@@ -3185,7 +3180,7 @@ static void vpaint_paint_leaves(bContext *C,
       .lcol = (uint *)me->mloopcol,
       .me = me,
   };
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   switch ((eBrushVertexPaintTool)brush->vertexpaint_tool) {
     case VPAINT_TOOL_AVERAGE:
@@ -3329,7 +3324,7 @@ static void vpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
 
   /* calculate pivot for rotation around seletion if needed */
   /* also needed for "View Selected" on last stroke */
-  paint_last_stroke_update(scene, vc->ar, ss->cache->mouse);
+  paint_last_stroke_update(scene, ss->cache->location);
 
   ED_region_tag_redraw(vc->ar);
 

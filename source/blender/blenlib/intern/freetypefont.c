@@ -386,7 +386,7 @@ static int check_freetypefont(PackedFile *pf)
   err = FT_New_Memory_Face(library, pf->data, pf->size, 0, &face);
   if (err) {
     success = 0;
-    //XXX error("This is not a valid font");
+    // XXX error("This is not a valid font");
   }
   else {
     glyph_index = FT_Get_Char_Index(face, 'A');
@@ -400,7 +400,7 @@ static int check_freetypefont(PackedFile *pf)
         success = 1;
       }
       else {
-        //XXX error("Selected Font has no outline data");
+        // XXX error("Selected Font has no outline data");
         success = 0;
       }
     }
@@ -565,7 +565,7 @@ VChar *BLI_vfontchar_copy(const VChar *vchar_src, const int UNUSED(flag))
  *       between them
  * </pre>
  *
- * Each glyph's original outline points are located on a grid of indivisible units.
+ * Each glyphs original outline points are located on a grid of indivisible units.
  * The points are stored in the font file as 16-bit integer grid coordinates,
  * with the grid origin's being at (0, 0); they thus range from -16384 to 16383.
  *

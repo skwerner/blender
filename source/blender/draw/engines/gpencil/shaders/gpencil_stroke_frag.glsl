@@ -1,11 +1,18 @@
 uniform int color_type;
 uniform sampler2D myTexture;
+uniform bool myTexturePremultiplied;
 
 uniform float gradient_f;
 
 uniform vec4 colormix;
 uniform float mix_stroke_factor;
 uniform int shading_type[2];
+
+uniform int fade_layer;
+uniform float fade_layer_factor;
+uniform bool fade_ob;
+uniform vec3 fade_color;
+uniform float fade_ob_factor;
 
 in vec4 mColor;
 in vec2 mTexCoord;
@@ -47,10 +54,11 @@ void main()
   /* texture for endcaps */
   vec4 text_color;
   if (uvfac[1] == ENDCAP) {
-    text_color = texture2D(myTexture, vec2(mTexCoord.x, mTexCoord.y));
+    text_color = texture_read_as_srgb(
+        myTexture, myTexturePremultiplied, vec2(mTexCoord.x, mTexCoord.y));
   }
   else {
-    text_color = texture2D(myTexture, mTexCoord);
+    text_color = texture_read_as_srgb(myTexture, myTexturePremultiplied, mTexCoord);
   }
 
   /* texture */
@@ -83,6 +91,20 @@ void main()
   }
   */
 
-  if (fragColor.a < 0.0035)
+  if (fragColor.a < 0.0035) {
     discard;
+  }
+
+  /* Apply paper opacity */
+  if (fade_layer == 1) {
+    /* Layer is below, mix with background. */
+    fragColor.rgb = mix(fade_color.rgb, fragColor.rgb, fade_layer_factor);
+  }
+  else if (fade_layer == 2) {
+    /* Layer is above, change opacity. */
+    fragColor.a *= fade_layer_factor;
+  }
+  else if (fade_ob == true) {
+    fragColor.rgb = mix(fade_color.rgb, fragColor.rgb, fade_ob_factor);
+  }
 }

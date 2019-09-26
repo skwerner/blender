@@ -47,8 +47,8 @@ void DRW_edit_mesh_mode_text_measure_stats(ARegion *ar,
                                            Object *ob,
                                            const UnitSettings *unit)
 {
-  /* Do not use ascii when using non-default unit system, some unit chars are utf8 (micro, square, etc.).
-   * See bug #36090.
+  /* Do not use ascii when using non-default unit system, some unit chars are utf8 (micro, square,
+   * etc.). See bug #36090.
    */
   struct DRWTextStore *dt = DRW_text_cache_ensure();
   const short txt_flag = DRW_TEXT_CACHE_GLOBALSPACE | (unit->system ? 0 : DRW_TEXT_CACHE_ASCII);
@@ -66,7 +66,7 @@ void DRW_edit_mesh_mode_text_measure_stats(ARegion *ar,
   /* when 2 edge-info options are enabled, space apart */
   const bool do_edge_textpair = (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_EDGE_LEN) &&
                                 (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_EDGE_ANG);
-  const short edge_texpair_sep = (short)(5.0f * U.ui_scale);
+  const short edge_texpair_sep = (short)(5.0f * U.dpi_fac);
   float clip_planes[4][4];
   /* allow for displaying shape keys and deform mods */
   BMIter iter;
@@ -159,15 +159,14 @@ void DRW_edit_mesh_mode_text_measure_stats(ARegion *ar,
       if (BM_edge_loop_pair(eed, &l_a, &l_b)) {
         /* Draw selected edges, or edges next to selected verts while dragging. */
         if (BM_elem_flag_test(eed, BM_ELEM_SELECT) ||
-            (do_moving &&
-             (BM_elem_flag_test(eed->v1, BM_ELEM_SELECT) ||
-              BM_elem_flag_test(eed->v2, BM_ELEM_SELECT) ||
-              /* Special case, this is useful to show when verts connected to this edge
-               * via a face are being transformed. */
-              BM_elem_flag_test(l_a->next->next->v, BM_ELEM_SELECT) ||
-              BM_elem_flag_test(l_a->prev->v, BM_ELEM_SELECT) ||
-              BM_elem_flag_test(l_b->next->next->v, BM_ELEM_SELECT) ||
-              BM_elem_flag_test(l_b->prev->v, BM_ELEM_SELECT)))) {
+            (do_moving && (BM_elem_flag_test(eed->v1, BM_ELEM_SELECT) ||
+                           BM_elem_flag_test(eed->v2, BM_ELEM_SELECT) ||
+                           /* Special case, this is useful to show when verts connected
+                            * to this edge via a face are being transformed. */
+                           BM_elem_flag_test(l_a->next->next->v, BM_ELEM_SELECT) ||
+                           BM_elem_flag_test(l_a->prev->v, BM_ELEM_SELECT) ||
+                           BM_elem_flag_test(l_b->next->next->v, BM_ELEM_SELECT) ||
+                           BM_elem_flag_test(l_b->prev->v, BM_ELEM_SELECT)))) {
           float v1_clip[3], v2_clip[3];
 
           copy_v3_v3(v1, eed->v1->co);
@@ -320,7 +319,8 @@ void DRW_edit_mesh_mode_text_measure_stats(ARegion *ar,
     }
   }
 
-  /* This option is for mesh ops and addons debugging; only available in UI if Blender starts with --debug */
+  /* This option is for mesh ops and addons debugging; only available in UI if Blender starts with
+   * --debug */
   if (v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_INDICES) {
     int i;
 

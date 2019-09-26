@@ -21,9 +21,10 @@ import bpy
 from bpy.types import Panel, Menu
 from rna_prop_ui import PropertyPanel
 from bpy.app.translations import pgettext_iface as iface_
+from bpy.app.translations import contexts as i18n_contexts
 from bl_ui.utils import PresetPanel
 
-from .properties_physics_common import (
+from bl_ui.properties_physics_common import (
     point_cache_ui,
     effector_weights_ui,
     basic_force_field_settings_ui,
@@ -271,7 +272,9 @@ class PARTICLE_PT_emission(ParticleButtonsPanel, Panel):
         col = layout.column()
         col.active = part.emit_from == 'VERT' or part.distribution != 'GRID'
         col.prop(part, "count")
-        col.prop(psys, "seed")
+
+        if psys is not None:
+            col.prop(psys, "seed")
 
         if part.type == 'HAIR':
             col.prop(part, "hair_length")
@@ -314,7 +317,7 @@ class PARTICLE_PT_emission_source(ParticleButtonsPanel, Panel):
             col.prop(part, "invert_grid")
             col.prop(part, "hexagonal_grid")
         else:
-            col.prop(part, "use_emit_random")
+            col.prop(part, "use_emit_random", text="Random Order")
             col.prop(part, "use_even_distribution")
 
         if part.emit_from == 'FACE' or part.emit_from == 'VOLUME':
@@ -377,7 +380,6 @@ class PARTICLE_PT_hair_dynamics(ParticleButtonsPanel, Panel):
 
         col = layout.column()
         col.prop(cloth, "quality", text="Quality Steps", slider=True)
-        col.prop(psys.settings, "show_hair_grid", text="Display Hair Grid")
 
         layout.separator()
 
@@ -820,7 +822,7 @@ class PARTICLE_PT_physics_boids_movement(ParticleButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         part = particle_get_settings(context)
-        return part.physics_type in {'BOIDS'}
+        return part.physics_type == 'BOIDS'
 
     def draw(self, context):
         layout = self.layout
@@ -873,7 +875,7 @@ class PARTICLE_PT_physics_boids_battle(ParticleButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         part = particle_get_settings(context)
-        return part.physics_type in {'BOIDS'}
+        return part.physics_type == 'BOIDS'
 
     def draw(self, context):
         layout = self.layout
@@ -900,7 +902,7 @@ class PARTICLE_PT_physics_boids_misc(ParticleButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         part = particle_get_settings(context)
-        return part.physics_type in {'BOIDS'}
+        return part.physics_type == 'BOIDS'
 
     def draw(self, context):
         layout = self.layout
@@ -958,10 +960,10 @@ class PARTICLE_PT_physics_relations(ParticleButtonsPanel, Panel):
                 #col.alert = key.valid
                 col.prop(key, "object")
                 col.prop(key, "system", text="System")
-
-                col.active = psys.use_keyed_timing
-                col.prop(key, "time")
-                col.prop(key, "duration")
+                sub = col.column(align=True)
+                sub.active = psys.use_keyed_timing
+                sub.prop(key, "time")
+                sub.prop(key, "duration")
             elif part.physics_type == 'BOIDS':
                 sub = layout.column()
                 # doesn't work yet
@@ -1194,7 +1196,7 @@ class PARTICLE_PT_boidbrain(ParticleButtonsPanel, Panel):
                 row = layout.row()
                 row.prop(rule, "use_line")
                 sub = row.row()
-                sub.active = rule.line
+                sub.active = rule.use_line
                 sub.prop(rule, "queue_count")
             elif rule.type == 'AVERAGE_SPEED':
                 row.prop(rule, "speed", slider=True)
@@ -1232,8 +1234,7 @@ class PARTICLE_PT_render(ParticleButtonsPanel, Panel):
                 part.type == 'EMITTER' or
                 (part.render_type in {'OBJECT', 'COLLECTION'} and part.type == 'HAIR')
         ):
-            if part.render_type not in {'NONE'}:
-
+            if part.render_type != 'NONE':
                 col = layout.column(align=True)
                 col.prop(part, "particle_size", text="Scale")
                 col.prop(part, "size_random", slider=True, text="Scale Randomness")
@@ -1275,31 +1276,6 @@ class PARTICLE_PT_render_extra(ParticleButtonsPanel, Panel):
         col.prop(part, "use_dead", text="Dead")
 
 
-class PARTICLE_PT_render_line(ParticleButtonsPanel, Panel):
-    bl_label = "Line"
-    bl_parent_id = "PARTICLE_PT_render"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
-
-    @classmethod
-    def poll(cls, context):
-        part = particle_get_settings(context)
-        return part.render_type == 'LINE'
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-
-        part = particle_get_settings(context)
-
-        col = layout.column()
-
-        col.separator()
-        sub = col.column(align=True)
-        sub.prop(part, "line_length_tail", text="Length Tail")
-        sub.prop(part, "line_length_head", text="Head")
-        col.prop(part, "use_velocity_length", text="Velocity Length")
-
-
 class PARTICLE_PT_render_path(ParticleButtonsPanel, Panel):
     bl_label = "Path"
     bl_parent_id = "PARTICLE_PT_render"
@@ -1317,17 +1293,6 @@ class PARTICLE_PT_render_path(ParticleButtonsPanel, Panel):
         part = particle_get_settings(context)
 
         col = layout.column()
-
-        col.prop(part, "use_strand_primitive")
-        sub = col.column()
-        sub.active = (part.use_strand_primitive is False)
-        sub.prop(part, "use_render_adaptive")
-        sub = col.column()
-        sub.active = part.use_render_adaptive or part.use_strand_primitive is True
-        sub.prop(part, "adaptive_angle")
-        sub = col.column()
-        sub.active = (part.use_render_adaptive is True and part.use_strand_primitive is False)
-        sub.prop(part, "adaptive_pixel")
         col.prop(part, "use_hair_bspline")
         col.prop(part, "render_step", text="Steps")
 
@@ -1356,8 +1321,6 @@ class PARTICLE_PT_render_path_timing(ParticleButtonsPanel, Panel):
 
         if part.type == 'HAIR' or psys.point_cache.is_baked:
             col.prop(part, "path_start", text="Start", slider=not part.use_absolute_path_time)
-        else:
-            col.prop(part, "trail_count")
 
         col.prop(part, "path_end", text="End", slider=not part.use_absolute_path_time)
         col.prop(part, "length_random", text="Random", slider=True)
@@ -1466,34 +1429,6 @@ class PARTICLE_PT_render_collection_use_count(ParticleButtonsPanel, Panel):
             row.prop(weight, "count")
 
 
-class PARTICLE_PT_render_trails(ParticleButtonsPanel, Panel):
-    bl_label = "Trails"
-    bl_parent_id = "PARTICLE_PT_render"
-    bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
-
-    @classmethod
-    def poll(cls, context):
-        part = particle_get_settings(context)
-        return part.render_type in {'HALO', 'LINE', 'BILLBOARD'}
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-
-        part = particle_get_settings(context)
-
-        col = layout.column()
-
-        col.prop(part, "trail_count")
-
-        sub = col.column()
-        sub.active = (part.trail_count > 1)
-        sub.prop(part, "use_absolute_path_time", text="Length in Frames")
-        sub.prop(part, "path_end", text="Length", slider=not part.use_absolute_path_time)
-        sub.prop(part, "length_random", text="Random Length", slider=True)
-
-
 class PARTICLE_PT_draw(ParticleButtonsPanel, Panel):
     bl_label = "Viewport Display"
     bl_options = {'DEFAULT_CLOSED'}
@@ -1547,14 +1482,6 @@ class PARTICLE_PT_draw(ParticleButtonsPanel, Panel):
         else:
             layout.separator()
 
-        col = layout.column()
-        col.prop(part, "show_guide_hairs", text="Guide Hairs")
-        col.prop(part, "show_size")
-        col.prop(part, "show_velocity")
-        col.prop(part, "show_number")
-        if part.physics_type == 'BOIDS':
-            col.prop(part, "show_health")
-
         if context.object:
             layout.separator()
             layout.prop(context.object, "show_instancer_for_viewport", text="Show Emitter")
@@ -1562,6 +1489,7 @@ class PARTICLE_PT_draw(ParticleButtonsPanel, Panel):
 
 class PARTICLE_PT_children(ParticleButtonsPanel, Panel):
     bl_label = "Children"
+    bl_translation_context = i18n_contexts.id_particlesettings
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
@@ -1610,9 +1538,6 @@ class PARTICLE_PT_children(ParticleButtonsPanel, Panel):
             col.separator()
             col.prop(part, "child_radius", text="Radius")
             col.prop(part, "child_roundness", text="Roundness", slider=True)
-        elif part.virtual_parents > 0.0:
-            sub = col.column(align=True)
-            sub.label(text="Parting not available with virtual parents")
 
 
 class PARTICLE_PT_children_parting(ParticleButtonsPanel, Panel):
@@ -1630,13 +1555,20 @@ class PARTICLE_PT_children_parting(ParticleButtonsPanel, Panel):
         layout = self.layout
 
         part = particle_get_settings(context)
+        is_virtual = part.virtual_parents > 0.0
 
         layout.use_property_split = True
 
+        if is_virtual:
+            layout.label(text="Parting not available with virtual parents")
+
         col = layout.column()
+        col.active = not is_virtual
         col.prop(part, "child_parting_factor", text="Parting", slider=True)
-        col.prop(part, "child_parting_min", text="Min")
-        col.prop(part, "child_parting_max", text="Max")
+
+        sub = col.column(align=True)
+        sub.prop(part, "child_parting_min", text="Min")
+        sub.prop(part, "child_parting_max", text="Max")
 
 
 class PARTICLE_PT_children_clumping(ParticleButtonsPanel, Panel):
@@ -2017,9 +1949,10 @@ class PARTICLE_PT_hair_shape(ParticleButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        if context.particle_system is None:
+        psys = context.particle_system
+        if psys is None:
             return False
-        return particle_panel_poll(cls, context)
+        return particle_panel_poll(cls, context) and psys.settings.type == 'HAIR'
 
     def draw(self, context):
         layout = self.layout
@@ -2074,13 +2007,11 @@ classes = (
     PARTICLE_PT_physics_fluid_interaction,
     PARTICLE_PT_boidbrain,
     PARTICLE_PT_render,
-    PARTICLE_PT_render_line,
     PARTICLE_PT_render_path,
     PARTICLE_PT_render_path_timing,
     PARTICLE_PT_render_object,
     PARTICLE_PT_render_collection,
     PARTICLE_PT_render_collection_use_count,
-    PARTICLE_PT_render_trails,
     PARTICLE_PT_render_extra,
     PARTICLE_PT_draw,
     PARTICLE_PT_children,

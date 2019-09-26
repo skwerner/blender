@@ -27,7 +27,6 @@
 /* internal exports only */
 struct ARegion;
 struct ARegionType;
-struct ScrArea;
 struct SpaceImage;
 struct bContext;
 struct bNodeTree;
@@ -66,6 +65,7 @@ void IMAGE_OT_reload(struct wmOperatorType *ot);
 void IMAGE_OT_save(struct wmOperatorType *ot);
 void IMAGE_OT_save_as(struct wmOperatorType *ot);
 void IMAGE_OT_save_sequence(struct wmOperatorType *ot);
+void IMAGE_OT_save_all_modified(struct wmOperatorType *ot);
 void IMAGE_OT_pack(struct wmOperatorType *ot);
 void IMAGE_OT_unpack(struct wmOperatorType *ot);
 

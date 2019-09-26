@@ -77,6 +77,9 @@ static struct GPUGlobal {
    * number is factor on screen and second is off-screen */
   float dfdyfactors[2];
   float max_anisotropy;
+  /* Some Intel drivers have limited support for `GLEW_ARB_base_instance` so in
+   * these cases it is best to indicate that it is not supported. See T67951 */
+  bool glew_arb_base_instance_is_supported;
   /* Some Intel drivers have issues with using mips as framebuffer targets if
    * GL_TEXTURE_MAX_LEVEL is higher than the target mip.
    * We need a workaround in this cases. */
@@ -89,6 +92,9 @@ static struct GPUGlobal {
   /* Crappy driver don't know how to map framebuffer slot to output vars...
    * We need to have no "holes" in the output buffer slots. */
   bool unused_fb_slot_workaround;
+  /* Some crappy Intel drivers don't work well with shaders created in different
+   * rendering contexts. */
+  bool context_local_shaders_workaround;
 } GG = {1, 0};
 
 static void gpu_detect_mip_render_workaround(void)
@@ -194,6 +200,11 @@ void GPU_get_dfdy_factors(float fac[2])
   copy_v2_v2(fac, GG.dfdyfactors);
 }
 
+bool GPU_arb_base_instance_is_supported(void)
+{
+  return GG.glew_arb_base_instance_is_supported;
+}
+
 bool GPU_mip_render_workaround(void)
 {
   return GG.mip_render_workaround;
@@ -207,6 +218,11 @@ bool GPU_depth_blitting_workaround(void)
 bool GPU_unused_fb_slot_workaround(void)
 {
   return GG.unused_fb_slot_workaround;
+}
+
+bool GPU_context_local_shaders_workaround(void)
+{
+  return GG.context_local_shaders_workaround;
 }
 
 bool GPU_crappy_amd_driver(void)
@@ -243,15 +259,6 @@ void gpu_extensions_init(void)
   glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &GG.maxubosize);
 
   glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, GG.line_width_range);
-
-#ifndef NDEBUG
-  GLint ret;
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glGetFramebufferAttachmentParameteriv(
-      GL_FRAMEBUFFER, GL_FRONT_LEFT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &ret);
-  /* We expect FRONT_LEFT to be the default buffer. */
-  BLI_assert(ret == GL_FRAMEBUFFER_DEFAULT);
-#endif
 
   glGetIntegerv(GL_MAX_COLOR_TEXTURE_SAMPLES, &GG.samples_color_texture_max);
 
@@ -302,6 +309,7 @@ void gpu_extensions_init(void)
   }
   else if ((strstr(renderer, "Mesa DRI R")) ||
            (strstr(renderer, "Radeon") && strstr(vendor, "X.Org")) ||
+           (strstr(renderer, "AMD") && strstr(vendor, "X.Org")) ||
            (strstr(renderer, "Gallium ") && strstr(renderer, " on ATI ")) ||
            (strstr(renderer, "Gallium ") && strstr(renderer, " on AMD "))) {
     GG.device = GPU_DEVICE_ATI;
@@ -344,6 +352,7 @@ void gpu_extensions_init(void)
   GG.os = GPU_OS_UNIX;
 #endif
 
+  GG.glew_arb_base_instance_is_supported = GLEW_ARB_base_instance;
   gpu_detect_mip_render_workaround();
 
   if (G.debug & G_DEBUG_GPU_FORCE_WORKAROUNDS) {
@@ -356,26 +365,47 @@ void gpu_extensions_init(void)
     GG.mip_render_workaround = true;
     GG.depth_blitting_workaround = true;
     GG.unused_fb_slot_workaround = true;
+    GG.context_local_shaders_workaround = true;
   }
 
   /* df/dy calculation factors, those are dependent on driver */
+  GG.dfdyfactors[0] = 1.0;
+  GG.dfdyfactors[1] = 1.0;
+
   if ((strstr(vendor, "ATI") && strstr(version, "3.3.10750"))) {
     GG.dfdyfactors[0] = 1.0;
     GG.dfdyfactors[1] = -1.0;
   }
-  else if ((GG.device == GPU_DEVICE_INTEL) && (GG.os == GPU_OS_WIN) &&
-           (strstr(version, "4.0.0 - Build 10.18.10.3308") ||
-            strstr(version, "4.0.0 - Build 9.18.10.3186") ||
-            strstr(version, "4.0.0 - Build 9.18.10.3165") ||
-            strstr(version, "3.1.0 - Build 9.17.10.3347") ||
-            strstr(version, "3.1.0 - Build 9.17.10.4101") ||
-            strstr(version, "3.3.0 - Build 8.15.10.2618"))) {
-    GG.dfdyfactors[0] = -1.0;
-    GG.dfdyfactors[1] = 1.0;
+  else if ((GG.device == GPU_DEVICE_INTEL) && (GG.os == GPU_OS_WIN)) {
+    if (strstr(version, "4.0.0 - Build 10.18.10.3308") ||
+        strstr(version, "4.0.0 - Build 9.18.10.3186") ||
+        strstr(version, "4.0.0 - Build 9.18.10.3165") ||
+        strstr(version, "3.1.0 - Build 9.17.10.3347") ||
+        strstr(version, "3.1.0 - Build 9.17.10.4101") ||
+        strstr(version, "3.3.0 - Build 8.15.10.2618")) {
+      GG.dfdyfactors[0] = -1.0;
+      GG.dfdyfactors[1] = 1.0;
+    }
+
+    if (strstr(version, "Build 10.18.10.3") || strstr(version, "Build 10.18.10.4") ||
+        strstr(version, "Build 10.18.10.5") || strstr(version, "Build 10.18.14.4") ||
+        strstr(version, "Build 10.18.14.5")) {
+      /* Maybe not all of these drivers have problems with `GLEW_ARB_base_instance`.
+       * But it's hard to test each case. */
+      GG.glew_arb_base_instance_is_supported = false;
+      GG.context_local_shaders_workaround = true;
+    }
+
+    if (strstr(version, "Build 20.19.15.4285")) {
+      /* Somehow fixes armature display issues (see T69743). */
+      GG.context_local_shaders_workaround = true;
+    }
   }
-  else {
-    GG.dfdyfactors[0] = 1.0;
-    GG.dfdyfactors[1] = 1.0;
+  else if ((GG.device == GPU_DEVICE_ATI) && (GG.os == GPU_OS_UNIX) &&
+           (GG.driver == GPU_DRIVER_OPENSOURCE)) {
+    /* See T70187: merging vertices fail. This has been tested from 18.2.2 till 19.3.0~dev of the
+     * Mesa driver */
+    GG.unused_fb_slot_workaround = true;
   }
 
   GPU_invalid_tex_init();

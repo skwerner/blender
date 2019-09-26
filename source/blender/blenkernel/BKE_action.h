@@ -19,6 +19,7 @@
 
 #ifndef __BKE_ACTION_H__
 #define __BKE_ACTION_H__
+
 /** \file
  * \ingroup bke
  * \brief Blender kernel action and pose functionality.
@@ -160,6 +161,7 @@ void BKE_pose_copy_data(struct bPose **dst, const struct bPose *src, const bool 
 void BKE_pose_channel_copy_data(struct bPoseChannel *pchan, const struct bPoseChannel *pchan_from);
 struct bPoseChannel *BKE_pose_channel_find_name(const struct bPose *pose, const char *name);
 struct bPoseChannel *BKE_pose_channel_active(struct Object *ob);
+struct bPoseChannel *BKE_pose_channel_active_or_first_selected(struct Object *ob);
 struct bPoseChannel *BKE_pose_channel_verify(struct bPose *pose, const char *name);
 struct bPoseChannel *BKE_pose_channel_get_mirrored(const struct bPose *pose, const char *name);
 

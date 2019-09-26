@@ -161,6 +161,7 @@ void BLI_threadapi_exit(void)
 {
   if (task_scheduler) {
     BLI_task_scheduler_free(task_scheduler);
+    task_scheduler = NULL;
   }
   BLI_spin_end(&_malloc_lock);
 }
@@ -479,7 +480,7 @@ void BLI_mutex_free(ThreadMutex *mutex)
 void BLI_spin_init(SpinLock *spin)
 {
 #if defined(__APPLE__)
-  *spin = OS_SPINLOCK_INIT;
+  *spin = OS_UNFAIR_LOCK_INIT;
 #elif defined(_MSC_VER)
   *spin = 0;
 #else
@@ -490,11 +491,11 @@ void BLI_spin_init(SpinLock *spin)
 void BLI_spin_lock(SpinLock *spin)
 {
 #if defined(__APPLE__)
-  OSSpinLockLock(spin);
+  os_unfair_lock_lock(spin);
 #elif defined(_MSC_VER)
   while (InterlockedExchangeAcquire(spin, 1)) {
     while (*spin) {
-      /* Spinlock hint for processors with hyperthreading. */
+      /* Spin-lock hint for processors with hyperthreading. */
       YieldProcessor();
     }
   }
@@ -506,7 +507,7 @@ void BLI_spin_lock(SpinLock *spin)
 void BLI_spin_unlock(SpinLock *spin)
 {
 #if defined(__APPLE__)
-  OSSpinLockUnlock(spin);
+  os_unfair_lock_unlock(spin);
 #elif defined(_MSC_VER)
   _ReadWriteBarrier();
   *spin = 0;

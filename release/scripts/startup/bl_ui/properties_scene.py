@@ -26,7 +26,7 @@ from bpy.types import (
 
 from rna_prop_ui import PropertyPanel
 
-from .properties_physics_common import (
+from bl_ui.properties_physics_common import (
     point_cache_ui,
     effector_weights_ui,
 )
@@ -63,7 +63,7 @@ class SCENE_PT_scene(SceneButtonsPanel, Panel):
 
         layout.prop(scene, "camera")
         layout.prop(scene, "background_set")
-        layout.prop(scene, "active_clip")
+        layout.prop(scene, "active_clip", text="Active Clip")
 
 
 class SCENE_PT_unit(SceneButtonsPanel, Panel):

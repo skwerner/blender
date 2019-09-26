@@ -56,7 +56,8 @@ void BKE_main_free(Main *mainvar)
   ListBase *lbarray[MAX_LIBARRAY];
   int a;
 
-  /* Since we are removing whole main, no need to bother 'properly' (and slowly) removing each ID from it. */
+  /* Since we are removing whole main, no need to bother 'properly'
+   * (and slowly) removing each ID from it. */
   const int free_flag = (LIB_ID_FREE_NO_MAIN | LIB_ID_FREE_NO_UI_USER |
                          LIB_ID_FREE_NO_USER_REFCOUNT | LIB_ID_FREE_NO_DEG_TAG);
 
@@ -285,7 +286,8 @@ void BKE_main_relations_free(Main *bmain)
 /**
  * Create a GSet storing all IDs present in given \a bmain, by their pointers.
  *
- * \param gset: If not NULL, given GSet will be extended with IDs from given \a bmain, instead of creating a new one.
+ * \param gset: If not NULL, given GSet will be extended with IDs from given \a bmain,
+ * instead of creating a new one.
  */
 GSet *BKE_main_gset_create(Main *bmain, GSet *gset)
 {
@@ -348,8 +350,8 @@ ImBuf *BKE_main_thumbnail_to_imbuf(Main *bmain, BlendThumbnail *data)
   }
 
   if (data) {
-    /* Note: we cannot use IMB_allocFromBuffer(), since it tries to dupalloc passed buffer, which will fail
-     *       here (we do not want to pass the first two ints!). */
+    /* Note: we cannot use IMB_allocFromBuffer(), since it tries to dupalloc passed buffer,
+     *       which will fail here (we do not want to pass the first two ints!). */
     img = IMB_allocImBuf(
         (unsigned int)data->width, (unsigned int)data->height, 32, IB_rect | IB_metadata);
     memcpy(img->rect, data->rect, BLEN_THUMB_MEMSIZE(data->width, data->height) - sizeof(*data));
@@ -381,7 +383,8 @@ const char *BKE_main_blendfile_path(const Main *bmain)
 /**
  * Return filepath of global main #G_MAIN.
  *
- * \warning Usage is not recommended, you should always try to get a valid Main pointer from context...
+ * \warning Usage is not recommended,
+ * you should always try to get a valid Main pointer from context...
  */
 const char *BKE_main_blendfile_path_from_global(void)
 {
@@ -480,18 +483,25 @@ ListBase *which_libbase(Main *bmain, short type)
 int set_listbasepointers(Main *bmain, ListBase **lb)
 {
   /* BACKWARDS! also watch order of free-ing! (mesh<->mat), first items freed last.
-   * This is important because freeing data decreases usercounts of other datablocks,
+   * This is important because freeing data decreases user-counts of other data-blocks,
    * if this data is its self freed it can crash. */
-  lb[INDEX_ID_LI] = &(
-      bmain->libraries); /* Libraries may be accessed from pretty much any other ID... */
+
+  /* Libraries may be accessed from pretty much any other ID. */
+  lb[INDEX_ID_LI] = &(bmain->libraries);
+
   lb[INDEX_ID_IP] = &(bmain->ipo);
-  lb[INDEX_ID_AC] = &(
-      bmain->actions); /* moved here to avoid problems when freeing with animato (aligorith) */
+
+  /* Moved here to avoid problems when freeing with animato (aligorith). */
+  lb[INDEX_ID_AC] = &(bmain->actions);
+
   lb[INDEX_ID_KE] = &(bmain->shapekeys);
-  lb[INDEX_ID_PAL] = &(
-      bmain->palettes); /* referenced by gpencil, so needs to be before that to avoid crashes */
-  lb[INDEX_ID_GD] = &(
-      bmain->gpencils); /* referenced by nodes, objects, view, scene etc, before to free after. */
+
+  /* Referenced by gpencil, so needs to be before that to avoid crashes. */
+  lb[INDEX_ID_PAL] = &(bmain->palettes);
+
+  /* Referenced by nodes, objects, view, scene etc, before to free after. */
+  lb[INDEX_ID_GD] = &(bmain->gpencils);
+
   lb[INDEX_ID_NT] = &(bmain->nodetrees);
   lb[INDEX_ID_IM] = &(bmain->images);
   lb[INDEX_ID_TE] = &(bmain->textures);
@@ -499,8 +509,7 @@ int set_listbasepointers(Main *bmain, ListBase **lb)
   lb[INDEX_ID_VF] = &(bmain->fonts);
 
   /* Important!: When adding a new object type,
-   * the specific data should be inserted here
-   */
+   * the specific data should be inserted here. */
 
   lb[INDEX_ID_AR] = &(bmain->armatures);
 

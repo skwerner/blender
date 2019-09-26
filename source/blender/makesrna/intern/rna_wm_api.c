@@ -82,7 +82,7 @@ static wmKeyMap *rna_keymap_active(wmKeyMap *km, bContext *C)
 
 static void rna_keymap_restore_item_to_default(wmKeyMap *km, bContext *C, wmKeyMapItem *kmi)
 {
-  WM_keymap_restore_item_to_default(C, km, kmi);
+  WM_keymap_item_restore_to_default(C, km, kmi);
 }
 
 static void rna_Operator_report(wmOperator *op, int type, const char *msg)
@@ -228,17 +228,22 @@ static wmKeyMapItem *rna_KeyMap_item_new(wmKeyMap *km,
 
   WM_operator_bl_idname(idname_bl, idname);
 
-  if (shift)
+  if (shift) {
     modifier |= KM_SHIFT;
-  if (ctrl)
+  }
+  if (ctrl) {
     modifier |= KM_CTRL;
-  if (alt)
+  }
+  if (alt) {
     modifier |= KM_ALT;
-  if (oskey)
+  }
+  if (oskey) {
     modifier |= KM_OSKEY;
+  }
 
-  if (any)
+  if (any) {
     modifier = KM_ANY;
+  }
 
   /* create keymap item */
   kmi = WM_keymap_add_item(km, idname_bl, type, value, modifier, keymodifier);
@@ -296,24 +301,31 @@ static wmKeyMapItem *rna_KeyMap_item_new_modal(wmKeyMap *km,
     return NULL;
   }
 
-  if (shift)
+  if (shift) {
     modifier |= KM_SHIFT;
-  if (ctrl)
+  }
+  if (ctrl) {
     modifier |= KM_CTRL;
-  if (alt)
+  }
+  if (alt) {
     modifier |= KM_ALT;
-  if (oskey)
+  }
+  if (oskey) {
     modifier |= KM_OSKEY;
+  }
 
-  if (any)
+  if (any) {
     modifier = KM_ANY;
+  }
 
   /* not initialized yet, do delayed lookup */
-  if (!km->modal_items)
+  if (!km->modal_items) {
     return WM_modalkeymap_add_item_str(km, type, value, modifier, keymodifier, propvalue_str);
+  }
 
-  if (RNA_enum_value_from_id(km->modal_items, propvalue_str, &propvalue) == 0)
+  if (RNA_enum_value_from_id(km->modal_items, propvalue_str, &propvalue) == 0) {
     BKE_report(reports, RPT_WARNING, "Property value not in enumeration");
+  }
 
   return WM_modalkeymap_add_item(km, type, value, modifier, keymodifier, propvalue);
 }
@@ -382,10 +394,12 @@ static wmKeyMap *rna_keymap_find_modal(wmKeyConfig *UNUSED(keyconf), const char 
 {
   wmOperatorType *ot = WM_operatortype_find(idname, 0);
 
-  if (!ot)
+  if (!ot) {
     return NULL;
-  else
+  }
+  else {
     return ot->modalkeymap;
+  }
 }
 
 static void rna_KeyMap_remove(wmKeyConfig *keyconfig, ReportList *reports, PointerRNA *keymap_ptr)
@@ -457,12 +471,12 @@ static void rna_PopMenuEnd(bContext *C, PointerRNA *handle)
 }
 
 /* popover wrapper */
-static PointerRNA rna_PopoverBegin(bContext *C, int ui_units_x)
+static PointerRNA rna_PopoverBegin(bContext *C, int ui_units_x, bool from_active_button)
 {
   PointerRNA r_ptr;
   void *data;
 
-  data = (void *)UI_popover_begin(C, U.widget_unit * ui_units_x);
+  data = (void *)UI_popover_begin(C, U.widget_unit * ui_units_x, from_active_button);
 
   RNA_pointer_create(NULL, &RNA_UIPopover, data, &r_ptr);
 
@@ -807,6 +821,8 @@ void RNA_api_wm(StructRNA *srna)
   parm = RNA_def_pointer(func, "menu", "UIPopover", "", "");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_RNAPTR);
   RNA_def_function_return(func, parm);
+  RNA_def_boolean(
+      func, "from_active_button", 0, "Use Button", "Use the active button for positioning");
 
   /* wrap UI_popover_end */
   func = RNA_def_function(srna, "popover_end__internal", "rna_PopoverEnd");
@@ -941,6 +957,19 @@ void RNA_api_operator(StructRNA *srna)
   RNA_def_function_flag(func, FUNC_REGISTER_OPTIONAL | FUNC_ALLOW_WRITE);
   parm = RNA_def_pointer(func, "context", "Context", "", "");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+
+  /* description */
+  func = RNA_def_function(srna, "description", NULL);
+  RNA_def_function_ui_description(func, "Compute a description string that depends on parameters");
+  RNA_def_function_flag(func, FUNC_NO_SELF | FUNC_REGISTER_OPTIONAL);
+  parm = RNA_def_string(func, "result", NULL, 4096, "result", "");
+  RNA_def_parameter_clear_flags(parm, PROP_NEVER_NULL, 0);
+  RNA_def_parameter_flags(parm, PROP_THICK_WRAP, 0);
+  RNA_def_function_output(func, parm);
+  parm = RNA_def_pointer(func, "context", "Context", "", "");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+  parm = RNA_def_pointer(func, "properties", "OperatorProperties", "", "");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
 }
 
 void RNA_api_macro(StructRNA *srna)

@@ -112,6 +112,8 @@ enum {
   B_UNIT_DEF_TENTH = 2,
   /** Short unit name is case sensitive, for example to distinguish mW and MW */
   B_UNIT_DEF_CASE_SENSITIVE = 4,
+  /** Short unit name does not have space between it and preceding number */
+  B_UNIT_DEF_NO_SPACE = 8,
 };
 
 /* define a single unit */
@@ -157,12 +159,12 @@ static struct bUnitDef buMetricLenDef[] = {
 static const struct bUnitCollection buMetricLenCollection = {buMetricLenDef, 3, 0, UNIT_COLLECTION_LENGTH(buMetricLenDef)};
 
 static struct bUnitDef buImperialLenDef[] = {
-  {"mile",    "miles",    "mi",   "m",  "Miles",    "MILES",    UN_SC_MI,  0.0, B_UNIT_DEF_NONE},
+  {"mile",    "miles",    "mi",   NULL, "Miles",    "MILES",    UN_SC_MI,  0.0, B_UNIT_DEF_NONE},
   {"furlong", "furlongs", "fur",  NULL, "Furlongs", "FURLONGS", UN_SC_FUR, 0.0, B_UNIT_DEF_SUPPRESS},
   {"chain",   "chains",   "ch",   NULL, "Chains",   "CHAINS",   UN_SC_CH,  0.0, B_UNIT_DEF_SUPPRESS},
   {"yard",    "yards",    "yd",   NULL, "Yards",    "YARDS",    UN_SC_YD,  0.0, B_UNIT_DEF_SUPPRESS},
-  {"foot",    "feet",     "'",    "ft", "Feet",     "FEET",     UN_SC_FT,  0.0, B_UNIT_DEF_NONE}, /* base unit */
-  {"inch",    "inches",   "\"",   "in", "Inches",   "INCHES",   UN_SC_IN,  0.0, B_UNIT_DEF_NONE},
+  {"foot",    "feet",     "'",    "ft", "Feet",     "FEET",     UN_SC_FT,  0.0, B_UNIT_DEF_NONE | B_UNIT_DEF_NO_SPACE}, /* base unit */
+  {"inch",    "inches",   "\"",   "in", "Inches",   "INCHES",   UN_SC_IN,  0.0, B_UNIT_DEF_NONE | B_UNIT_DEF_NO_SPACE},
   {"thou",    "thou",     "thou", "mil", "Thou",    "THOU",     UN_SC_MIL, 0.0, B_UNIT_DEF_NONE}, /* plural for thou has no 's' */
   NULL_UNIT,
 };
@@ -289,10 +291,10 @@ static struct bUnitCollection buNaturalTimeCollection = {buNaturalTimeDef, 3, 0,
 
 
 static struct bUnitDef buNaturalRotDef[] = {
-  {"degree",    "degrees",     "°",  "d",   "Degrees",    "DEGREES",    M_PI / 180.0,             0.0,  B_UNIT_DEF_NONE},
+  {"degree",    "degrees",     "°",  "d",   "Degrees",    "DEGREES",    M_PI / 180.0,             0.0,  B_UNIT_DEF_NONE | B_UNIT_DEF_NO_SPACE},
   /* arcminutes/arcseconds are used in Astronomy/Navigation areas... */
-  {"arcminute", "arcminutes",  "'",  NULL,  "Arcminutes", "ARCMINUTES", (M_PI / 180.0) / 60.0,    0.0,  B_UNIT_DEF_SUPPRESS},
-  {"arcsecond", "arcseconds",  "\"", NULL,  "Arcseconds", "ARCSECONDS", (M_PI / 180.0) / 3600.0,  0.0,  B_UNIT_DEF_SUPPRESS},
+  {"arcminute", "arcminutes",  "'",  NULL,  "Arcminutes", "ARCMINUTES", (M_PI / 180.0) / 60.0,    0.0,  B_UNIT_DEF_SUPPRESS | B_UNIT_DEF_NO_SPACE},
+  {"arcsecond", "arcseconds",  "\"", NULL,  "Arcseconds", "ARCSECONDS", (M_PI / 180.0) / 3600.0,  0.0,  B_UNIT_DEF_SUPPRESS | B_UNIT_DEF_NO_SPACE},
   {"radian",    "radians",     "r",  NULL,  "Radians",    "RADIANS",    1.0,                      0.0,  B_UNIT_DEF_NONE},
 //  {"turn",      "turns",       "t",  NULL,  "Turns",      NULL, 1.0 / (M_PI * 2.0),       0.0,  B_UNIT_DEF_NONE},
   NULL_UNIT,
@@ -426,8 +428,8 @@ static size_t unit_as_string(char *str,
   value_conv = value / unit->scalar;
 
   /* Adjust precision to expected number of significant digits.
-   * Note that here, we shall not have to worry about very big/small numbers, units are expected to replace
-   * 'scientific notation' in those cases. */
+   * Note that here, we shall not have to worry about very big/small numbers, units are expected to
+   * replace 'scientific notation' in those cases. */
   prec -= integer_digits_d(value_conv);
   CLAMP(prec, 0, 6);
 
@@ -449,6 +451,11 @@ static size_t unit_as_string(char *str,
     if (i > 0 && str[i] == '.') { /* 10. -> 10 */
       str[i--] = pad;
     }
+  }
+
+  /* Now add a space for all units except foot, inch, degree, arcminute, arcsecond */
+  if (!(unit->flag & B_UNIT_DEF_NO_SPACE)) {
+    str[++i] = ' ';
   }
 
   /* Now add the suffix */
@@ -494,12 +501,12 @@ static PreferredUnits preferred_units_from_UnitSettings(const UnitSettings *sett
   return units;
 }
 
-static size_t unit_as_string_splitted(char *str,
-                                      int len_max,
-                                      double value,
-                                      int prec,
-                                      const bUnitCollection *usys,
-                                      const bUnitDef *main_unit)
+static size_t unit_as_string_split_pair(char *str,
+                                        int len_max,
+                                        double value,
+                                        int prec,
+                                        const bUnitCollection *usys,
+                                        const bUnitDef *main_unit)
 {
   const bUnitDef *unit_a, *unit_b;
   double value_a, value_b;
@@ -595,7 +602,7 @@ static size_t unit_as_string_main(char *str,
   }
 
   if (split && unit_should_be_split(type)) {
-    int length = unit_as_string_splitted(str, len_max, value, prec, usys, main_unit);
+    int length = unit_as_string_split_pair(str, len_max, value, prec, usys, main_unit);
     /* failed when length is negative, fallback to no split */
     if (length >= 0) {
       return length;
@@ -663,7 +670,7 @@ static const char *unit_find_str(const char *str, const char *substr, bool case_
         }
         /* If str_found is not a valid unit, we have to check further in the string... */
         for (str_found++; isalpha_or_utf8(*str_found); str_found++) {
-          ;
+          /* pass */
         }
         str = str_found;
       }
@@ -727,8 +734,9 @@ static int unit_scale_str(char *str,
 
     len_name = strlen(replace_str);
     len_move = (len - (found_ofs + len_name)) + 1; /* 1+ to copy the string terminator */
-    len_num = BLI_snprintf(
-        str_tmp, TEMP_STR_SIZE, "*%.9g" SEP_STR, unit->scalar / scale_pref); /* # removed later */
+
+    /* # removed later */
+    len_num = BLI_snprintf(str_tmp, TEMP_STR_SIZE, "*%.9g" SEP_STR, unit->scalar / scale_pref);
 
     if (len_num > len_max) {
       len_num = len_max;
@@ -741,8 +749,9 @@ static int unit_scale_str(char *str,
 
     if (len_move > 0) {
       /* resize the last part of the string */
-      memmove(
-          str_found + len_num, str_found + len_name, len_move); /* may grow or shrink the string */
+
+      /* May grow or shrink the string. */
+      memmove(str_found + len_num, str_found + len_name, len_move);
     }
 
     if (found_ofs + len_num > len_max) {
@@ -803,7 +812,8 @@ static const bUnitDef *unit_detect_from_str(const bUnitCollection *usys,
 {
   /* Try to find a default unit from current or previous string.
    * This allows us to handle cases like 2 + 2mm, people would expect to get 4mm, not 2.002m!
-   * Note this does not handle corner cases like 2 + 2cm + 1 + 2.5mm... We can't support everything. */
+   * Note this does not handle corner cases like 2 + 2cm + 1 + 2.5mm... We can't support
+   * everything. */
   const bUnitDef *unit = NULL;
 
   /* see which units the new value has */
@@ -889,10 +899,12 @@ bool bUnit_ReplaceString(
   /* Try to find a default unit from current or previous string. */
   default_unit = unit_detect_from_str(usys, str, str_prev);
 
-  /* We apply the default unit to the whole expression (default unit is now the reference '1.0' one). */
+  /* We apply the default unit to the whole expression (default unit is now the reference '1.0'
+   * one). */
   scale_pref_base *= default_unit->scalar;
 
-  /* Apply the default unit on the whole expression, this allows to handle nasty cases like '2+2in'. */
+  /* Apply the default unit on the whole expression, this allows to handle nasty cases like
+   * '2+2in'. */
   if (BLI_snprintf(str_tmp, sizeof(str_tmp), "(%s)*%.9g", str, default_unit->scalar) <
       sizeof(str_tmp)) {
     strncpy(str, str_tmp, len_max);
@@ -913,9 +925,9 @@ bool bUnit_ReplaceString(
 
   {
     /* try other unit systems now, so we can evaluate imperial when metric is set for eg. */
-    /* Note that checking other systems at that point means we do not support their units as 'default' one.
-     * In other words, when in metrics, typing '2+2in' will give 2 meters 2 inches, not 4 inches.
-     * I do think this is the desired behavior!
+    /* Note that checking other systems at that point means we do not support their units as
+     * 'default' one. In other words, when in metrics, typing '2+2in' will give 2 meters 2 inches,
+     * not 4 inches. I do think this is the desired behavior!
      */
     const bUnitCollection *usys_iter;
     int system_iter;

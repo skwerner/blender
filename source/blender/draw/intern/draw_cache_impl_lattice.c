@@ -340,12 +340,16 @@ static void lattice_batch_cache_init(Lattice *lt)
   cache->is_dirty = false;
 }
 
-static LatticeBatchCache *lattice_batch_cache_get(Lattice *lt)
+void DRW_lattice_batch_cache_validate(Lattice *lt)
 {
   if (!lattice_batch_cache_valid(lt)) {
     lattice_batch_cache_clear(lt);
     lattice_batch_cache_init(lt);
   }
+}
+
+static LatticeBatchCache *lattice_batch_cache_get(Lattice *lt)
+{
   return lt->batch_cache;
 }
 
@@ -416,7 +420,7 @@ static GPUVertBuf *lattice_batch_cache_get_pos(LatticeRenderData *rdata,
 
     cache->pos = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(cache->pos, vert_len);
-    for (int i = 0; i < vert_len; ++i) {
+    for (int i = 0; i < vert_len; i++) {
       const BPoint *bp = lattice_render_data_vert_bpoint(rdata, i);
       GPU_vertbuf_attr_set(cache->pos, attr_id.pos, i, bp->vec);
 
@@ -512,7 +516,7 @@ static void lattice_batch_cache_create_overlay_batches(Lattice *lt)
 
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, vert_len);
-    for (int i = 0; i < vert_len; ++i) {
+    for (int i = 0; i < vert_len; i++) {
       const BPoint *bp = lattice_render_data_vert_bpoint(rdata, i);
 
       char vflag = 0;

@@ -38,7 +38,7 @@
  *      sin, cos, tan, asin, acos, atan, atan2,
  *      exp, log, sqrt, pow, fmod
  *
- * The implementation has no global state and can be used multithreaded.
+ * The implementation has no global state and can be used multi-threaded.
  */
 
 #include <math.h>
@@ -164,7 +164,8 @@ eExprPyLike_EvalStatus BLI_expr_pylike_eval(ExprPyLike_Parsed *expr,
 #define FAIL_IF(condition) \
   if (condition) { \
     return EXPR_PYLIKE_FATAL_ERROR; \
-  }
+  } \
+  ((void)0)
 
   /* Check the stack requirement is at least remotely sane and allocate on the actual stack. */
   FAIL_IF(expr->max_stack <= 0 || expr->max_stack > 1000);
@@ -391,7 +392,8 @@ static BuiltinOpDef builtin_ops[] = {
 #define CHECK_ERROR(condition) \
   if (!(condition)) { \
     return false; \
-  }
+  } \
+  ((void)0)
 
 /* For simplicity simple token types are represented by their own character;
  * these are special identifiers for multi-character tokens. */

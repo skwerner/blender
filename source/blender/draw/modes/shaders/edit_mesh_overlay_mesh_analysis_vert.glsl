@@ -1,23 +1,35 @@
-uniform mat4 ModelViewProjectionMatrix;
-uniform mat4 ModelMatrix;
 
 in vec3 pos;
-in vec4 weight_color;
+in float weight;
 
-#ifdef FACE_COLOR
-flat out vec4 weightColor;
-#endif
+uniform sampler1D weightTex;
 
-#ifdef VERTEX_COLOR
 out vec4 weightColor;
-#endif
+
+vec3 weight_to_rgb(float t)
+{
+  if (t < 0.0) {
+    /* Minimum color, grey */
+    return vec3(0.25, 0.25, 0.25);
+  }
+  else if (t > 1.0) {
+    /* Error color */
+    return vec3(1.0, 0.0, 1.0);
+  }
+  else {
+    return texture(weightTex, t).rgb;
+  }
+}
 
 void main()
 {
-  gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
-  weightColor = vec4(weight_color.rgb, 1.0);
+  GPU_INTEL_VERTEX_SHADER_WORKAROUND
+
+  vec3 world_pos = point_object_to_world(pos);
+  gl_Position = point_world_to_ndc(world_pos);
+  weightColor = vec4(weight_to_rgb(weight), 1.0);
 
 #ifdef USE_WORLD_CLIP_PLANES
-  world_clip_planes_calc_clip_distance((ModelMatrix * vec4(pos, 1.0)).xyz);
+  world_clip_planes_calc_clip_distance(world_pos);
 #endif
 }

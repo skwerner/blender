@@ -52,12 +52,12 @@ void GPU_matrix_translate_3f(float x, float y, float z);
 void GPU_matrix_translate_3fv(const float vec[3]);
 void GPU_matrix_scale_3f(float x, float y, float z);
 void GPU_matrix_scale_3fv(const float vec[3]);
-void GPU_matrix_rotate_3f(float deg,
-                          float x,
-                          float y,
-                          float z); /* axis of rotation should be a unit vector */
-void GPU_matrix_rotate_3fv(float deg,
-                           const float axis[3]);   /* axis of rotation should be a unit vector */
+
+/* Axis of rotation should be a unit vector. */
+void GPU_matrix_rotate_3f(float deg, float x, float y, float z);
+/* Axis of rotation should be a unit vector. */
+void GPU_matrix_rotate_3fv(float deg, const float axis[3]);
+
 void GPU_matrix_rotate_axis(float deg, char axis); /* TODO: enum for axis? */
 
 void GPU_matrix_look_at(float eyeX,
@@ -96,16 +96,38 @@ void GPU_matrix_perspective_set(float fovy, float aspect, float near, float far)
 
 /* 3D Projection between Window and World Space */
 
+struct GPUMatrixUnproject_Precalc {
+  float model_inverted[4][4];
+  float view[4];
+  bool is_persp;
+  /** Result of 'projmat_dimensions'. */
+  struct {
+    float xmin, xmax;
+    float ymin, ymax;
+    float zmin, zmax;
+  } dims;
+};
+
+bool GPU_matrix_unproject_precalc(struct GPUMatrixUnproject_Precalc *unproj_precalc,
+                                  const float model[4][4],
+                                  const float proj[4][4],
+                                  const int view[4]);
+
 void GPU_matrix_project(const float world[3],
                         const float model[4][4],
                         const float proj[4][4],
                         const int view[4],
-                        float win[3]);
+                        float r_win[3]);
+
 bool GPU_matrix_unproject(const float win[3],
                           const float model[4][4],
                           const float proj[4][4],
                           const int view[4],
-                          float world[3]);
+                          float r_world[3]);
+
+void GPU_matrix_unproject_with_precalc(const struct GPUMatrixUnproject_Precalc *unproj_precalc,
+                                       const float win[3],
+                                       float r_world[3]);
 
 /* 2D Projection Matrix */
 

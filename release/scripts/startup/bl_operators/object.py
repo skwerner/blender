@@ -103,7 +103,7 @@ class SelectPattern(Operator):
         wm = context.window_manager
         return wm.invoke_props_popup(self, event)
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.prop(self, "pattern")
@@ -126,7 +126,7 @@ class SelectCamera(Operator):
     extend: BoolProperty(
         name="Extend",
         description="Extend the selection",
-        default=False
+        default=False,
     )
 
     def execute(self, context):
@@ -312,8 +312,7 @@ class SubdivisionSet(Operator):
 
 
 class ShapeTransfer(Operator):
-    """Copy another selected objects active shape to this one by """ \
-        """applying the relative offsets"""
+    """Copy the active shape key of another selected object to this one"""
 
     bl_idname = "object.shape_key_transfer"
     bl_label = "Transfer Shape Key"
@@ -576,6 +575,7 @@ class JoinUVs(Operator):
 
                                 # finally do the copy
                                 uv_other.data.foreach_set("uv", uv_array)
+                                mesh_other.update()
 
         if is_editmode:
             bpy.ops.object.mode_set(mode='EDIT', toggle=False)
@@ -586,9 +586,9 @@ class JoinUVs(Operator):
 
 
 class MakeDupliFace(Operator):
-    """Convert objects into dupli-face instanced"""
+    """Convert objects into instanced faces"""
     bl_idname = "object.make_dupli_face"
-    bl_label = "Make Dupli-Face"
+    bl_label = "Make Instance Face"
     bl_options = {'REGISTER', 'UNDO'}
 
     @staticmethod
@@ -610,7 +610,6 @@ class MakeDupliFace(Operator):
             rot = matrix.to_3x3()  # also contains scale
 
             return [(rot @ b) + trans for b in base_tri]
-        scene = context.scene
         linked = defaultdict(list)
         for obj in context.selected_objects:
             if obj.type == 'MESH':
@@ -888,14 +887,14 @@ class LoadImageAsEmpty:
 
     view_align: BoolProperty(
         name="Align to view",
-        default=True
+        default=True,
     )
 
     @classmethod
     def poll(cls, context):
         return context.mode == 'OBJECT'
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
@@ -913,10 +912,11 @@ class LoadImageAsEmpty:
             'INVOKE_REGION_WIN',
             type='IMAGE',
             location=cursor,
-            view_align=self.view_align,
+            align=('VIEW' if self.view_align else 'WORLD'),
         )
 
-        obj = context.active_object
+        view_layer = context.view_layer
+        obj = view_layer.objects.active
         obj.data = image
         obj.empty_display_size = 5.0
         self.set_settings(context, obj)

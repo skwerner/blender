@@ -118,6 +118,8 @@ NODE_DEFINE(Camera)
   stereo_eye_enum.insert("right", STEREO_RIGHT);
   SOCKET_ENUM(stereo_eye, "Stereo Eye", stereo_eye_enum, STEREO_NONE);
 
+  SOCKET_BOOLEAN(use_spherical_stereo, "Use Spherical Stereo", false);
+
   SOCKET_FLOAT(interocular_distance, "Interocular Distance", 0.065f);
   SOCKET_FLOAT(convergence_distance, "Convergence Distance", 30.0f * 0.065f);
 
@@ -563,8 +565,7 @@ float3 Camera::transform_raster_to_world(float raster_x, float raster_y)
 BoundBox Camera::viewplane_bounds_get()
 {
   /* TODO(sergey): This is all rather stupid, but is there a way to perform
-   * checks we need in a more clear and smart fasion?
-   */
+   * checks we need in a more clear and smart fashion? */
   BoundBox bounds = BoundBox::empty;
 
   if (type == CAMERA_PANORAMA) {
@@ -642,7 +643,8 @@ float Camera::world_to_raster_size(float3 P)
     float3 D = normalize(Ddiff);
     res = len(dist * dDdx - dot(dist * dDdx, D) * D);
 
-    /* Decent approx distance to frustum (doesn't handle corners correctly, but not that big of a deal) */
+    /* Decent approx distance to frustum
+     * (doesn't handle corners correctly, but not that big of a deal) */
     float f_dist = 0.0f;
 
     if (offscreen_dicing_scale > 1.0f) {
@@ -686,7 +688,8 @@ float Camera::world_to_raster_size(float3 P)
               f_dist = max(f_dist, *d);
             }
             else {
-              /* Possibly far enough behind the frustum to use distance to origin instead of edge */
+              /* Possibly far enough behind the frustum to use distance to origin instead of edge
+               */
               test_o = true;
             }
           }

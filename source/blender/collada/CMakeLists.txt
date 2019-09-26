@@ -28,10 +28,7 @@ FIND_FILE(OPENCOLLADA_ANIMATION_CLIP
     )
 
 IF(OPENCOLLADA_ANIMATION_CLIP)
-   message(STATUS "Found opencollada: ${OPENCOLLADA_ANIMATION_CLIP} ")
    add_definitions(-DWITH_OPENCOLLADA_ANIMATION_CLIP)
-ELSE()
-   message(STATUS "opencollada: Build without animation clip support")
 ENDIF()
 
 set(INC
@@ -63,6 +60,7 @@ set(SRC
   ArmatureImporter.cpp
   BCAnimationCurve.cpp
   BCAnimationSampler.cpp
+  BCMath.cpp
   BCSampleData.cpp
   BlenderContext.cpp
   CameraExporter.cpp
@@ -97,8 +95,10 @@ set(SRC
   ArmatureImporter.h
   BCAnimationCurve.h
   BCAnimationSampler.h
+  BCMath.h
   BCSampleData.h
   BlenderContext.h
+  BlenderTypes.h
   CameraExporter.h
   ControllerExporter.h
   DocumentExporter.h

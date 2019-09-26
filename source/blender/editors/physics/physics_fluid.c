@@ -46,6 +46,7 @@
 #include "DEG_depsgraph.h"
 
 #include "ED_screen.h"
+#include "ED_object.h"
 
 #include "WM_types.h"
 #include "WM_api.h"
@@ -333,6 +334,7 @@ static void free_all_fluidobject_channels(ListBase *fobjects)
 }
 
 static void fluid_init_all_channels(bContext *C,
+                                    Depsgraph *depsgraph,
                                     Object *UNUSED(fsDomain),
                                     FluidsimSettings *domainSettings,
                                     FluidAnimChannels *channels,
@@ -340,7 +342,6 @@ static void fluid_init_all_channels(bContext *C,
 {
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   Base *base;
   int i;
   int length = channels->length;
@@ -434,7 +435,8 @@ static void fluid_init_all_channels(bContext *C,
     /* now scene data should be current according to animation system, so we fill the channels */
 
     /* Domain time */
-    // TODO: have option for not running sim, time mangling, in which case second case comes in handy
+    /* TODO: have option for not running sim, time mangling,
+     * in which case second case comes in handy. */
     if (channels->DomainTime) {
       time = get_fluid_rate(domainSettings) * (float)channels->aniFrameTime;
       timeAtFrame = channels->timeAtFrame[i] + time;
@@ -512,9 +514,11 @@ static void fluid_init_all_channels(bContext *C,
   }
 }
 
-static void export_fluid_objects(const bContext *C, ListBase *fobjects, Scene *scene, int length)
+static void export_fluid_objects(Depsgraph *depsgraph,
+                                 ListBase *fobjects,
+                                 Scene *scene,
+                                 int length)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   FluidObject *fobj;
 
   for (fobj = fobjects->first; fobj; fobj = fobj->next) {
@@ -712,7 +716,7 @@ static bool fluid_init_filepaths(Main *bmain,
   /* .tmp: don't overwrite/delete original file */
   BLI_join_dirfile(targetFile, FILE_MAX, targetDir, suffixConfigTmp);
 
-  /* Ensure whole path exists and is wirtable. */
+  /* Ensure whole path exists and is writeable. */
   const bool dir_exists = BLI_dir_create_recursive(targetDir);
   const bool is_writable = BLI_file_is_writable(targetFile);
 
@@ -745,7 +749,7 @@ static bool fluid_init_filepaths(Main *bmain,
     /* .tmp: don't overwrite/delete original file */
     BLI_join_dirfile(targetFile, FILE_MAX, targetDir, suffixConfigTmp);
 
-    /* Ensure whole path exists and is wirtable. */
+    /* Ensure whole path exists and is writeable. */
     if (!BLI_dir_create_recursive(targetDir) || !BLI_file_is_writable(targetFile)) {
       BKE_reportf(reports,
                   RPT_ERROR,
@@ -920,7 +924,7 @@ static int fluidsimBake(bContext *C, ReportList *reports, Object *fsDomain, shor
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   int i;
   FluidsimSettings *domainSettings;
 
@@ -965,7 +969,7 @@ static int fluidsimBake(bContext *C, ReportList *reports, Object *fsDomain, shor
 
   /* Make sure it corresponds to startFrame setting
    * (old: noFrames = scene->r.efra - scene->r.sfra +1). */
-  ;
+
   noFrames = scene->r.efra - 0;
   if (noFrames <= 0) {
     BKE_report(reports, RPT_ERROR, "No frames to export (check your animation range settings)");
@@ -1049,11 +1053,11 @@ static int fluidsimBake(bContext *C, ReportList *reports, Object *fsDomain, shor
                            (double)noFrames;
 
   /* ******** initialize and allocate animation channels ******** */
-  fluid_init_all_channels(C, fsDomain, domainSettings, channels, fobjects);
+  fluid_init_all_channels(C, depsgraph, fsDomain, domainSettings, channels, fobjects);
 
   /* reset to original current frame */
   scene->r.cfra = origFrame;
-  ED_update_for_newframe(CTX_data_main(C), depsgraph);
+  ED_update_for_newframe(CTX_data_main(C), CTX_data_depsgraph_pointer(C));
 
   /* ******** init domain object's matrix ******** */
   copy_m4_m4(domainMat, fsDomain->obmat);
@@ -1151,7 +1155,7 @@ static int fluidsimBake(bContext *C, ReportList *reports, Object *fsDomain, shor
   elbeemAddDomain(fsset);
 
   /* ******** export all fluid objects to elbeem ******** */
-  export_fluid_objects(C, fobjects, scene, channels->length);
+  export_fluid_objects(depsgraph, fobjects, scene, channels->length);
 
   /* custom data for fluid bake job */
   fb->settings = fsset;
@@ -1215,7 +1219,7 @@ static int fluid_bake_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
     return OPERATOR_CANCELLED;
   }
 
-  if (!fluidsimBake(C, op->reports, CTX_data_active_object(C), true)) {
+  if (!fluidsimBake(C, op->reports, ED_object_context(C), true)) {
     return OPERATOR_CANCELLED;
   }
 

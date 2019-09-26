@@ -33,7 +33,6 @@ struct ListBase;
 struct MTex;
 struct Object;
 struct Paint;
-struct PaintCurve;
 struct PaintStroke;
 struct PointerRNA;
 struct RegionView3D;
@@ -279,9 +278,6 @@ struct ListBase *ED_image_undosys_step_get_tiles(struct UndoStep *us_p);
 struct ListBase *ED_image_undo_get_tiles(void);
 
 /* sculpt_uv.c */
-bool uv_sculpt_poll(struct bContext *C);
-bool uv_sculpt_keymap_poll(struct bContext *C);
-
 void SCULPT_OT_uv_sculpt_stroke(struct wmOperatorType *ot);
 
 /* paint_utils.c */

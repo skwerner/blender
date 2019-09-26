@@ -174,10 +174,10 @@ static void ui_tooltip_region_draw_cb(const bContext *UNUSED(C), ARegion *ar)
   ui_draw_tooltip_background(UI_style_get(), NULL, &bbox);
 
   /* set background_color */
-  rgb_uchar_to_float(background_color, (const uchar *)theme->inner);
+  rgb_uchar_to_float(background_color, theme->inner);
 
   /* calculate normal_color */
-  rgb_uchar_to_float(main_color, (const uchar *)theme->text);
+  rgb_uchar_to_float(main_color, theme->text);
   copy_v3_v3(active_color, main_color);
   copy_v3_v3(normal_color, main_color);
   copy_v3_v3(python_color, main_color);
@@ -396,11 +396,23 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
     else {
       /* Note, this is an exceptional case, we could even remove it
        * however there have been reports of tooltips failing, so keep it for now. */
-      expr_result = BLI_strdup("Internal error!");
+      expr_result = BLI_strdup(IFACE_("Internal error!"));
       is_error = true;
     }
 
     if (expr_result != NULL) {
+      /* NOTE: This is a very weak hack to get a valid translation most of the time...
+       * Proper way to do would be to get i18n context from the item, somehow. */
+      const char *label_str = CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, expr_result);
+      if (label_str == expr_result) {
+        label_str = IFACE_(expr_result);
+      }
+
+      if (label_str != expr_result) {
+        MEM_freeN(expr_result);
+        expr_result = BLI_strdup(label_str);
+      }
+
       uiTooltipField *field = text_field_add(data,
                                              &(uiTooltipFormat){
                                                  .style = UI_TIP_STYLE_NORMAL,
@@ -437,7 +449,7 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
     else {
       /* Note, this is an exceptional case, we could even remove it
        * however there have been reports of tooltips failing, so keep it for now. */
-      expr_result = BLI_strdup("Internal error!");
+      expr_result = BLI_strdup(TIP_("Internal error!"));
       is_error = true;
     }
 
@@ -608,6 +620,7 @@ static uiTooltipData *ui_tooltip_data_from_tool(bContext *C, uiBut *but, bool is
 
 static uiTooltipData *ui_tooltip_data_from_button(bContext *C, uiBut *but)
 {
+  uiStringInfo but_label = {BUT_GET_LABEL, NULL};
   uiStringInfo but_tip = {BUT_GET_TIP, NULL};
   uiStringInfo enum_label = {BUT_GET_RNAENUM_LABEL, NULL};
   uiStringInfo enum_tip = {BUT_GET_RNAENUM_TIP, NULL};
@@ -623,6 +636,7 @@ static uiTooltipData *ui_tooltip_data_from_button(bContext *C, uiBut *but)
 
   UI_but_string_info_get(C,
                          but,
+                         &but_label,
                          &but_tip,
                          &enum_label,
                          &enum_tip,
@@ -631,6 +645,17 @@ static uiTooltipData *ui_tooltip_data_from_button(bContext *C, uiBut *but)
                          &rna_struct,
                          &rna_prop,
                          NULL);
+
+  /* Tip Label (only for buttons not already showing the label).
+   * Check prefix instead of comparing because the button may include the shortcut. */
+  if (but_label.strinfo && !STRPREFIX(but->drawstr, but_label.strinfo)) {
+    uiTooltipField *field = text_field_add(data,
+                                           &(uiTooltipFormat){
+                                               .style = UI_TIP_STYLE_HEADER,
+                                               .color_id = UI_TIP_LC_NORMAL,
+                                           });
+    field->text = BLI_sprintfN("%s.", but_label.strinfo);
+  }
 
   /* Tip */
   if (but_tip.strinfo) {
@@ -657,7 +682,7 @@ static uiTooltipData *ui_tooltip_data_from_button(bContext *C, uiBut *but)
                                                  .style = UI_TIP_STYLE_NORMAL,
                                                  .color_id = UI_TIP_LC_NORMAL,
                                              });
-      field->text = BLI_strdup(IFACE_("(Shift-Click/Drag to select multiple)"));
+      field->text = BLI_strdup(TIP_("(Shift-Click/Drag to select multiple)"));
     }
   }
   /* Enum field label & tip */
@@ -740,8 +765,8 @@ static uiTooltipData *ui_tooltip_data_from_button(bContext *C, uiBut *but)
       }
     }
 
-    if (but->rnapoin.id.data) {
-      const ID *id = but->rnapoin.id.data;
+    if (but->rnapoin.owner_id) {
+      const ID *id = but->rnapoin.owner_id;
       if (ID_IS_LINKED(id)) {
         uiTooltipField *field = text_field_add(data,
                                                &(uiTooltipFormat){
@@ -822,7 +847,7 @@ static uiTooltipData *ui_tooltip_data_from_button(bContext *C, uiBut *but)
       }
     }
 
-    if (but->rnapoin.id.data) {
+    if (but->rnapoin.owner_id) {
       uiTooltipField *field = text_field_add(data,
                                              &(uiTooltipFormat){
                                                  .style = UI_TIP_STYLE_MONO,
@@ -835,15 +860,18 @@ static uiTooltipData *ui_tooltip_data_from_button(bContext *C, uiBut *but)
       /* move ownership (no need for re-alloc) */
       if (but->rnaprop) {
         field->text = RNA_path_full_property_py_ex(
-            &but->rnapoin, but->rnaprop, but->rnaindex, true);
+            CTX_data_main(C), &but->rnapoin, but->rnaprop, but->rnaindex, true);
       }
       else {
-        field->text = RNA_path_full_struct_py(&but->rnapoin);
+        field->text = RNA_path_full_struct_py(CTX_data_main(C), &but->rnapoin);
       }
     }
   }
 
   /* Free strinfo's... */
+  if (but_label.strinfo) {
+    MEM_freeN(but_label.strinfo);
+  }
   if (but_tip.strinfo) {
     MEM_freeN(but_tip.strinfo);
   }
@@ -883,19 +911,18 @@ static uiTooltipData *ui_tooltip_data_from_gizmo(bContext *C, wmGizmo *gz)
 
   /* Operator Actions */
   {
-    bool use_drag = gz->drag_part != -1 && gz->highlight_part != gz->drag_part;
-
+    const bool use_drag = gz->drag_part != -1 && gz->highlight_part != gz->drag_part;
     const struct {
       int part;
       const char *prefix;
     } gzop_actions[] = {
         {
             .part = gz->highlight_part,
-            .prefix = use_drag ? TIP_("Click") : NULL,
+            .prefix = use_drag ? CTX_TIP_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Click") : NULL,
         },
         {
             .part = use_drag ? gz->drag_part : -1,
-            .prefix = use_drag ? TIP_("Drag") : NULL,
+            .prefix = use_drag ? CTX_TIP_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Drag") : NULL,
         },
     };
 
@@ -905,18 +932,14 @@ static uiTooltipData *ui_tooltip_data_from_gizmo(bContext *C, wmGizmo *gz)
                                 NULL;
       if (gzop != NULL) {
         /* Description */
-        const char *info = RNA_struct_ui_description(gzop->type->srna);
-        if (!(info && info[0])) {
-          info = RNA_struct_ui_name(gzop->type->srna);
-        }
+        char *info = WM_operatortype_description(C, gzop->type, &gzop->ptr);
 
-        if (info && info[0]) {
-          char *text = NULL;
+        if (info != NULL) {
+          char *text = info;
+
           if (gzop_actions[i].prefix != NULL) {
             text = BLI_sprintfN("%s: %s", gzop_actions[i].prefix, info);
-          }
-          else {
-            text = BLI_strdup(info);
+            MEM_freeN(info);
           }
 
           if (text != NULL) {
@@ -1063,7 +1086,7 @@ static ARegion *ui_tooltip_create_with_data(bContext *C,
     field->geom.x_pos = x_pos;
   }
 
-  //fontw *= aspect;
+  // fontw *= aspect;
 
   BLF_disable(data->fstyle.uifont_id, font_flag);
   BLF_disable(blf_mono_font, font_flag);

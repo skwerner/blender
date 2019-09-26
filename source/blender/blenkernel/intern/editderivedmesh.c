@@ -399,7 +399,7 @@ static void statvis_calc_sharp(BMEditMesh *em,
   BMIter iter;
   BMesh *bm = em->bm;
   BMEdge *e;
-  //float f_no[3];
+  // float f_no[3];
   const float minmax_irange = 1.0f / (max - min);
   int i;
 
@@ -517,8 +517,8 @@ static void cage_mapped_verts_callback(void *userData,
   }
 }
 
-float (*BKE_editmesh_vertexCos_get(
-    struct Depsgraph *depsgraph, BMEditMesh *em, Scene *scene, int *r_numVerts))[3]
+float (*BKE_editmesh_vert_coords_alloc(
+    struct Depsgraph *depsgraph, BMEditMesh *em, Scene *scene, int *r_vert_len))[3]
 {
   Mesh *cage;
   BLI_bitmap *visit_bitmap;
@@ -540,8 +540,8 @@ float (*BKE_editmesh_vertexCos_get(
 
   MEM_freeN(visit_bitmap);
 
-  if (r_numVerts) {
-    *r_numVerts = em->bm->totvert;
+  if (r_vert_len) {
+    *r_vert_len = em->bm->totvert;
   }
 
   return cos_cage;

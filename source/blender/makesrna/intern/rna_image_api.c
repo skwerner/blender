@@ -36,13 +36,14 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "BKE_packedFile.h"
+
 #include "rna_internal.h" /* own include */
 
 #ifdef RNA_RUNTIME
 
 #  include <errno.h>
 #  include "BKE_image.h"
-#  include "BKE_packedFile.h"
 #  include "BKE_main.h"
 
 #  include "IMB_imbuf.h"
@@ -55,7 +56,7 @@
 
 static void rna_ImagePackedFile_save(ImagePackedFile *imapf, Main *bmain, ReportList *reports)
 {
-  if (writePackedFile(
+  if (BKE_packedfile_write_to_file(
           reports, BKE_main_blendfile_path(bmain), imapf->filepath, imapf->packedfile, 0) !=
       RET_OK) {
     BKE_reportf(reports, RPT_ERROR, "Could not save packed file to disk as '%s'", imapf->filepath);
@@ -96,8 +97,9 @@ static void rna_Image_save_render(
         BKE_reportf(reports, RPT_ERROR, "Could not write image: %s, '%s'", strerror(errno), path);
       }
 
-      if (write_ibuf != ibuf)
+      if (write_ibuf != ibuf) {
         IMB_freeImBuf(write_ibuf);
+      }
     }
 
     BKE_image_release_ibuf(image, ibuf, lock);
@@ -123,8 +125,9 @@ static void rna_Image_save(Image *image, Main *bmain, bContext *C, ReportList *r
     if (IMB_saveiff(ibuf, filename, ibuf->flags)) {
       image->type = IMA_TYPE_IMAGE;
 
-      if (image->source == IMA_SRC_GENERATED)
+      if (image->source == IMA_SRC_GENERATED) {
         image->source = IMA_SRC_FILE;
+      }
 
       IMB_colormanagement_colorspace_from_ibuf_ftype(&image->colorspace_settings, ibuf);
 
@@ -177,7 +180,7 @@ static void rna_Image_unpack(Image *image, Main *bmain, ReportList *reports, int
   }
   else {
     /* reports its own error on failure */
-    unpackImage(bmain, reports, image, method);
+    BKE_packedfile_unpack_image(bmain, reports, image, method);
   }
 }
 
@@ -196,8 +199,9 @@ static void rna_Image_update(Image *image, ReportList *reports)
     return;
   }
 
-  if (ibuf->rect)
+  if (ibuf->rect) {
     IMB_rect_from_float(ibuf);
+  }
 
   ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID;
 
@@ -211,69 +215,31 @@ static void rna_Image_scale(Image *image, ReportList *reports, int width, int he
   }
 }
 
-static int rna_Image_gl_load(Image *image, ReportList *reports, int frame, int filter, int mag)
+static int rna_Image_gl_load(Image *image, ReportList *reports, int frame)
 {
-  GPUTexture *tex = image->gputexture[TEXTARGET_TEXTURE_2D];
-  int error = GL_NO_ERROR;
-
-  if (tex)
-    return error;
-
   ImageUser iuser = {NULL};
   iuser.framenr = frame;
   iuser.ok = true;
 
-  void *lock;
-  ImBuf *ibuf = BKE_image_acquire_ibuf(image, &iuser, &lock);
+  GPUTexture *tex = GPU_texture_from_blender(image, &iuser, GL_TEXTURE_2D);
 
-  /* clean glError buffer */
-  while (glGetError() != GL_NO_ERROR) {
-  }
-
-  if (ibuf == NULL || ibuf->rect == NULL) {
-    BKE_reportf(reports, RPT_ERROR, "Image '%s' does not have any image data", image->id.name + 2);
-    BKE_image_release_ibuf(image, ibuf, lock);
+  if (tex == NULL) {
+    BKE_reportf(reports, RPT_ERROR, "Failed to load image texture '%s'", image->id.name + 2);
     return (int)GL_INVALID_OPERATION;
   }
 
-  unsigned int bindcode = 0;
-  GPU_create_gl_tex(&bindcode,
-                    ibuf->rect,
-                    ibuf->rect_float,
-                    ibuf->x,
-                    ibuf->y,
-                    GL_TEXTURE_2D,
-                    (filter != GL_NEAREST && filter != GL_LINEAR),
-                    false,
-                    image);
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, (GLint)filter);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, (GLint)mag);
-
-  /* TODO(merwin): validate input (dimensions, filter, mag) before calling OpenGL
-   *               instead of trusting input & testing for error after */
-  error = glGetError();
-
-  if (error) {
-    glDeleteTextures(1, (GLuint *)&bindcode);
-  }
-  else {
-    image->gputexture[TEXTARGET_TEXTURE_2D] = GPU_texture_from_bindcode(GL_TEXTURE_2D, bindcode);
-  }
-
-  BKE_image_release_ibuf(image, ibuf, lock);
-
-  return error;
+  return GL_NO_ERROR;
 }
 
-static int rna_Image_gl_touch(Image *image, ReportList *reports, int frame, int filter, int mag)
+static int rna_Image_gl_touch(Image *image, ReportList *reports, int frame)
 {
   int error = GL_NO_ERROR;
 
   BKE_image_tag_time(image);
 
-  if (image->gputexture[TEXTARGET_TEXTURE_2D] == NULL)
-    error = rna_Image_gl_load(image, reports, frame, filter, mag);
+  if (image->gputexture[TEXTARGET_TEXTURE_2D] == NULL) {
+    error = rna_Image_gl_load(image, reports, frame);
+  }
 
   return error;
 }
@@ -367,52 +333,20 @@ void RNA_api_image(StructRNA *srna)
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
   RNA_def_int(
       func, "frame", 0, 0, INT_MAX, "Frame", "Frame of image sequence or movie", 0, INT_MAX);
-  RNA_def_int(func,
-              "filter",
-              GL_LINEAR_MIPMAP_NEAREST,
-              -INT_MAX,
-              INT_MAX,
-              "Filter",
-              "The texture minifying function to use if the image wasn't loaded",
-              -INT_MAX,
-              INT_MAX);
-  RNA_def_int(func,
-              "mag",
-              GL_LINEAR,
-              -INT_MAX,
-              INT_MAX,
-              "Magnification",
-              "The texture magnification function to use if the image wasn't loaded",
-              -INT_MAX,
-              INT_MAX);
   /* return value */
   parm = RNA_def_int(
       func, "error", 0, -INT_MAX, INT_MAX, "Error", "OpenGL error value", -INT_MAX, INT_MAX);
   RNA_def_function_return(func, parm);
 
   func = RNA_def_function(srna, "gl_load", "rna_Image_gl_load");
-  RNA_def_function_ui_description(func, "Load the image into OpenGL graphics memory");
+  RNA_def_function_ui_description(
+      func,
+      "Load the image into an OpenGL texture. On success, image.bindcode will contain the "
+      "OpenGL texture bindcode. Colors read from the texture will be in scene linear color space "
+      "and have premultiplied or straight alpha matching the image alpha mode");
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
   RNA_def_int(
       func, "frame", 0, 0, INT_MAX, "Frame", "Frame of image sequence or movie", 0, INT_MAX);
-  RNA_def_int(func,
-              "filter",
-              GL_LINEAR_MIPMAP_NEAREST,
-              -INT_MAX,
-              INT_MAX,
-              "Filter",
-              "The texture minifying function",
-              -INT_MAX,
-              INT_MAX);
-  RNA_def_int(func,
-              "mag",
-              GL_LINEAR,
-              -INT_MAX,
-              INT_MAX,
-              "Magnification",
-              "The texture magnification function",
-              -INT_MAX,
-              INT_MAX);
   /* return value */
   parm = RNA_def_int(
       func, "error", 0, -INT_MAX, INT_MAX, "Error", "OpenGL error value", -INT_MAX, INT_MAX);

@@ -35,7 +35,6 @@
 #ifdef WIN32
 #  include <io.h>
 #  include "BLI_winstuff.h"
-#  include "BLI_callbacks.h"
 #  include "BLI_fileops_types.h"
 #  include "utf_winfunc.h"
 #  include "utfconv.h"
@@ -105,7 +104,7 @@ int BLI_file_gzip(const char *from, const char *to)
 #endif
 
 /* gzip the file in from_file and write it to memory to_mem, at most size bytes.
- * return the unziped size
+ * return the unzipped size
  */
 char *BLI_file_ungzip_to_mem(const char *from_file, int *r_size)
 {
@@ -343,7 +342,7 @@ static bool delete_recursive(const char *dir)
         err = true;
       }
     }
-    ++fl;
+    fl++;
   }
 
   if (!err && delete_unique(dir, true)) {
@@ -519,7 +518,7 @@ enum {
   /* operation requested not to perform recursive digging for current path */
   RecursiveOp_Callback_StopRecurs = 1,
 
-  /* error occured in callback and recursive walking should stop immediately */
+  /* error occurred in callback and recursive walking should stop immediately */
   RecursiveOp_Callback_Error = 2,
 };
 
@@ -771,7 +770,7 @@ int BLI_delete(const char *file, bool dir, bool recursive)
 }
 
 /**
- * Do the two paths denote the same filesystem object?
+ * Do the two paths denote the same file-system object?
  */
 static bool check_the_same(const char *path_a, const char *path_b)
 {

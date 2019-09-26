@@ -89,18 +89,18 @@ void *FastGaussianBlurOperation::initializeTileData(rcti *rect)
     this->m_sy = this->m_data.sizey * this->m_size / 2.0f;
 
     if ((this->m_sx == this->m_sy) && (this->m_sx > 0.0f)) {
-      for (c = 0; c < COM_NUM_CHANNELS_COLOR; ++c) {
+      for (c = 0; c < COM_NUM_CHANNELS_COLOR; c++) {
         IIR_gauss(copy, this->m_sx, c, 3);
       }
     }
     else {
       if (this->m_sx > 0.0f) {
-        for (c = 0; c < COM_NUM_CHANNELS_COLOR; ++c) {
+        for (c = 0; c < COM_NUM_CHANNELS_COLOR; c++) {
           IIR_gauss(copy, this->m_sx, c, 1);
         }
       }
       if (this->m_sy > 0.0f) {
-        for (c = 0; c < COM_NUM_CHANNELS_COLOR; ++c) {
+        for (c = 0; c < COM_NUM_CHANNELS_COLOR; c++) {
           IIR_gauss(copy, this->m_sy, c, 2);
         }
       }
@@ -147,7 +147,8 @@ void FastGaussianBlurOperation::IIR_gauss(MemoryBuffer *src,
   }
 
   // see "Recursive Gabor Filtering" by Young/VanVliet
-  // all factors here in double.prec. Required, because for single.prec it seems to blow up if sigma > ~200
+  // all factors here in double.prec.
+  // Required, because for single.prec it seems to blow up if sigma > ~200
   if (sigma >= 3.556f) {
     q = 0.9804f * (sigma - 3.556f) + 2.5091f;
   }
@@ -215,16 +216,16 @@ void FastGaussianBlurOperation::IIR_gauss(MemoryBuffer *src,
   W = (double *)MEM_callocN(sz * sizeof(double), "IIR_gauss W buf");
   if (xy & 1) {  // H
     int offset;
-    for (y = 0; y < src_height; ++y) {
+    for (y = 0; y < src_height; y++) {
       const int yx = y * src_width;
       offset = yx * num_channels + chan;
-      for (x = 0; x < src_width; ++x) {
+      for (x = 0; x < src_width; x++) {
         X[x] = buffer[offset];
         offset += num_channels;
       }
       YVV(src_width);
       offset = yx * num_channels + chan;
-      for (x = 0; x < src_width; ++x) {
+      for (x = 0; x < src_width; x++) {
         buffer[offset] = Y[x];
         offset += num_channels;
       }
@@ -234,15 +235,15 @@ void FastGaussianBlurOperation::IIR_gauss(MemoryBuffer *src,
     int offset;
     const int add = src_width * num_channels;
 
-    for (x = 0; x < src_width; ++x) {
+    for (x = 0; x < src_width; x++) {
       offset = x * num_channels + chan;
-      for (y = 0; y < src_height; ++y) {
+      for (y = 0; y < src_height; y++) {
         X[y] = buffer[offset];
         offset += add;
       }
       YVV(src_height);
       offset = x * num_channels + chan;
-      for (y = 0; y < src_height; ++y) {
+      for (y = 0; y < src_height; y++) {
         buffer[offset] = Y[y];
         offset += add;
       }

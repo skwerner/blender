@@ -22,6 +22,8 @@ import bpy
 from bpy.types import Menu, Panel, UIList
 from bl_ui.utils import PresetPanel
 
+from bpy.app.translations import pgettext_tip as tip_
+
 
 class RENDER_PT_presets(PresetPanel, Panel):
     bl_label = "Render Presets"
@@ -81,10 +83,10 @@ class RENDER_PT_dimensions(RenderOutputButtonsPanel, Panel):
         custom_framerate = (fps_rate not in {23.98, 24, 25, 29.97, 30, 50, 59.94, 60})
 
         if custom_framerate is True:
-            fps_label_text = f"Custom ({fps_rate!r} fps)"
+            fps_label_text = tip_("Custom (%.4g fps)") % fps_rate
             show_framerate = True
         else:
-            fps_label_text = f"{fps_rate!r} fps"
+            fps_label_text = tip_("%.4g fps") % fps_rate
             show_framerate = (preset_label == "Custom")
 
         RENDER_PT_dimensions._frame_rate_args_prev = args
@@ -374,14 +376,14 @@ class RENDER_PT_encoding_video(RenderOutputButtonsPanel, Panel):
         layout = self.layout
         ffmpeg = context.scene.render.ffmpeg
 
-        needs_codec = ffmpeg.format in {'AVI', 'QUICKTIME', 'MKV', 'OGG', 'MPEG4'}
+        needs_codec = ffmpeg.format in {'AVI', 'QUICKTIME', 'MKV', 'OGG', 'MPEG4', 'WEBM'}
         if needs_codec:
             layout.prop(ffmpeg, "codec")
 
         if needs_codec and ffmpeg.codec == 'NONE':
             return
 
-        if ffmpeg.codec in {'DNXHD'}:
+        if ffmpeg.codec == 'DNXHD':
             layout.prop(ffmpeg, "use_lossless_output")
 
         # Output quality
@@ -477,9 +479,7 @@ class RENDER_PT_stereoscopy(RenderOutputButtonsPanel, Panel):
         basic_stereo = rd.views_format == 'STEREO_3D'
 
         row = layout.row()
-        row.use_property_split = True
-        row.use_property_decorate = False
-        row.prop(rd, "views_format")
+        layout.row().prop(rd, "views_format", expand=True)
 
         if basic_stereo:
             row = layout.row()

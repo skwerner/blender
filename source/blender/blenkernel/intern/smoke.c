@@ -119,7 +119,7 @@ struct WTURBULENCE *smoke_turbulence_init(int *UNUSED(res),
 {
   return NULL;
 }
-//struct FLUID_3D *smoke_init(int *UNUSED(res), float *UNUSED(dx), float *UNUSED(dtdef), int UNUSED(use_heat), int UNUSED(use_fire), int UNUSED(use_colors)) { return NULL; }
+
 void smoke_free(struct FLUID_3D *UNUSED(fluid))
 {
 }
@@ -819,7 +819,7 @@ typedef struct ObstaclesFromDMData {
 
 static void obstacles_from_mesh_task_cb(void *__restrict userdata,
                                         const int z,
-                                        const ParallelRangeTLS *__restrict UNUSED(tls))
+                                        const TaskParallelTLS *__restrict UNUSED(tls))
 {
   ObstaclesFromDMData *data = userdata;
   SmokeDomainSettings *sds = data->sds;
@@ -914,7 +914,8 @@ static void obstacles_from_mesh(Object *coll_ob,
 
     // DG TODO
     // if (scs->type > SM_COLL_STATIC)
-    // if line above is used, the code is in trouble if the object moves but is declared as "does not move"
+    // if line above is used, the code is in trouble if the object moves
+    // but is declared as "does not move".
 
     {
       vert_vel = MEM_callocN(sizeof(float) * numverts * 3, "smoke_obs_velocity");
@@ -973,7 +974,7 @@ static void obstacles_from_mesh(Object *coll_ob,
           .velocityZ = velocityZ,
           .num_obstacles = num_obstacles,
       };
-      ParallelRangeSettings settings;
+      TaskParallelSettings settings;
       BLI_parallel_range_settings_defaults(&settings);
       settings.scheduling_mode = TASK_SCHEDULING_DYNAMIC;
       BLI_task_parallel_range(
@@ -1327,7 +1328,7 @@ typedef struct EmitFromParticlesData {
 
 static void emit_from_particles_task_cb(void *__restrict userdata,
                                         const int z,
-                                        const ParallelRangeTLS *__restrict UNUSED(tls))
+                                        const TaskParallelTLS *__restrict UNUSED(tls))
 {
   EmitFromParticlesData *data = userdata;
   SmokeFlowSettings *sfs = data->sfs;
@@ -1401,9 +1402,9 @@ static void emit_from_particles(Object *flow_ob,
                                 Scene *scene,
                                 float dt)
 {
+  /* Is particle system selected. */
   if (sfs && sfs->psys && sfs->psys->part &&
-      ELEM(sfs->psys->part->type, PART_EMITTER, PART_FLUID))  // is particle system selected
-  {
+      ELEM(sfs->psys->part->type, PART_EMITTER, PART_FLUID)) {
     ParticleSimulationData sim;
     ParticleSystem *psys = sfs->psys;
     float *particle_pos;
@@ -1427,13 +1428,13 @@ static void emit_from_particles(Object *flow_ob,
 
     /* prepare curvemapping tables */
     if ((psys->part->child_flag & PART_CHILD_USE_CLUMP_CURVE) && psys->part->clumpcurve) {
-      curvemapping_changed_all(psys->part->clumpcurve);
+      BKE_curvemapping_changed_all(psys->part->clumpcurve);
     }
     if ((psys->part->child_flag & PART_CHILD_USE_ROUGH_CURVE) && psys->part->roughcurve) {
-      curvemapping_changed_all(psys->part->roughcurve);
+      BKE_curvemapping_changed_all(psys->part->roughcurve);
     }
     if ((psys->part->child_flag & PART_CHILD_USE_TWIST_CURVE) && psys->part->twistcurve) {
-      curvemapping_changed_all(psys->part->twistcurve);
+      BKE_curvemapping_changed_all(psys->part->twistcurve);
     }
 
     /* initialize particle cache */
@@ -1566,7 +1567,7 @@ static void emit_from_particles(Object *flow_ob,
           .hr_smooth = hr_smooth,
       };
 
-      ParallelRangeSettings settings;
+      TaskParallelSettings settings;
       BLI_parallel_range_settings_defaults(&settings);
       settings.scheduling_mode = TASK_SCHEDULING_DYNAMIC;
       BLI_task_parallel_range(min[2], max[2], &data, emit_from_particles_task_cb, &settings);
@@ -1680,7 +1681,8 @@ static void sample_mesh(SmokeFlowSettings *sfs,
         interp_v3_v3v3v3(hit_normal, n1, n2, n3, weights);
         normalize_v3(hit_normal);
         /* apply normal directional and random velocity
-         * - TODO: random disabled for now since it doesn't really work well as pressure calc smoothens it out... */
+         * - TODO: random disabled for now since it doesn't really work well
+         *   as pressure calc smoothens it out. */
         velocity_map[index * 3] += hit_normal[0] * sfs->vel_normal * 0.25f;
         velocity_map[index * 3 + 1] += hit_normal[1] * sfs->vel_normal * 0.25f;
         velocity_map[index * 3 + 2] += hit_normal[2] * sfs->vel_normal * 0.25f;
@@ -1768,7 +1770,7 @@ typedef struct EmitFromDMData {
 
 static void emit_from_mesh_task_cb(void *__restrict userdata,
                                    const int z,
-                                   const ParallelRangeTLS *__restrict UNUSED(tls))
+                                   const TaskParallelTLS *__restrict UNUSED(tls))
 {
   EmitFromDMData *data = userdata;
   EmissionMap *em = data->em;
@@ -1973,7 +1975,7 @@ static void emit_from_mesh(
           .res = res,
       };
 
-      ParallelRangeSettings settings;
+      TaskParallelSettings settings;
       BLI_parallel_range_settings_defaults(&settings);
       settings.scheduling_mode = TASK_SCHEDULING_DYNAMIC;
       BLI_task_parallel_range(min[2], max[2], &data, emit_from_mesh_task_cb, &settings);
@@ -2674,7 +2676,7 @@ static void update_flowsfluids(
         float *velocity_x = smoke_get_velocity_x(sds->fluid);
         float *velocity_y = smoke_get_velocity_y(sds->fluid);
         float *velocity_z = smoke_get_velocity_z(sds->fluid);
-        //unsigned char *obstacle = smoke_get_obstacle(sds->fluid);
+        // unsigned char *obstacle = smoke_get_obstacle(sds->fluid);
         // DG TODO UNUSED unsigned char *obstacleAnim = smoke_get_obstacle_anim(sds->fluid);
         int bigres[3];
         float *velocity_map = em->velocity;
@@ -2734,7 +2736,8 @@ static void update_flowsfluids(
 
               /* loop through high res blocks if high res enabled */
               if (bigdensity) {
-                // neighbor cell emission densities (for high resolution smoke smooth interpolation)
+                /* Neighbor cell emission densities
+                 * (for high resolution smoke smooth interpolation). */
                 float c000, c001, c010, c011, c100, c101, c110, c111;
 
                 smoke_turbulence_get_res(sds->wt, bigres);
@@ -2890,7 +2893,7 @@ typedef struct UpdateEffectorsData {
 
 static void update_effectors_task_cb(void *__restrict userdata,
                                      const int x,
-                                     const ParallelRangeTLS *__restrict UNUSED(tls))
+                                     const TaskParallelTLS *__restrict UNUSED(tls))
 {
   UpdateEffectorsData *data = userdata;
   SmokeDomainSettings *sds = data->sds;
@@ -2964,7 +2967,7 @@ static void update_effectors(
     data.velocity_z = smoke_get_velocity_z(sds->fluid);
     data.obstacle = smoke_get_obstacle(sds->fluid);
 
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.scheduling_mode = TASK_SCHEDULING_DYNAMIC;
     BLI_task_parallel_range(0, sds->res[0], &data, update_effectors_task_cb, &settings);
@@ -3034,12 +3037,9 @@ static void step(Depsgraph *depsgraph,
     update_obstacles(depsgraph, ob, sds, dtSubdiv, substep, totalSubsteps);
 
     if (sds->total_cells > 1) {
-      update_effectors(
-          depsgraph,
-          scene,
-          ob,
-          sds,
-          dtSubdiv);  // DG TODO? problem --> uses forces instead of velocity, need to check how they need to be changed with variable dt
+      // DG TODO? problem --> uses forces instead of velocity,
+      // need to check how they need to be changed with variable dt.
+      update_effectors(depsgraph, scene, ob, sds, dtSubdiv);
       smoke_step(sds->fluid, gravity, dtSubdiv);
     }
   }
@@ -3352,14 +3352,16 @@ struct Mesh *smokeModifier_do(
   if (smd->type & MOD_SMOKE_TYPE_DOMAIN && smd->domain &&
       smd->domain->flags & MOD_SMOKE_ADAPTIVE_DOMAIN && smd->domain->base_res[0]) {
     result = createDomainGeometry(smd->domain, ob);
+    BKE_mesh_copy_settings(result, me);
   }
   else {
     result = BKE_mesh_copy_for_eval(me, false);
   }
-  /* XXX This is really not a nice hack, but until root of the problem is understood,
-   * this should be an acceptable workaround I think.
-   * See T58492 for details on the issue. */
-  result->texflag |= ME_AUTOSPACE;
+
+  /* Smoke simulation needs a texture space relative to the adaptive domain bounds, not the
+   * original mesh. So recompute it at this point in the modifier stack. See T58492. */
+  BKE_mesh_texspace_calc(result);
+
   return result;
 }
 
@@ -3523,7 +3525,7 @@ static void smoke_calc_transparency(SmokeDomainSettings *sds, ViewLayer *view_la
 
         // get starting cell (light pos)
         if (BLI_bvhtree_bb_raycast(bv, light, voxelCenter, pos) > FLT_EPSILON) {
-          // we're ouside -> use point on side of domain
+          // we're outside -> use point on side of domain
           cell[0] = (int)floor(pos[0]);
           cell[1] = (int)floor(pos[1]);
           cell[2] = (int)floor(pos[2]);

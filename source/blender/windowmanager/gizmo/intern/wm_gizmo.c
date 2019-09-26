@@ -30,7 +30,6 @@
 
 #include "GPU_batch.h"
 #include "GPU_glew.h"
-#include "GPU_immediate.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -443,9 +442,9 @@ bool WM_gizmo_select_set(wmGizmoMap *gzmap, wmGizmo *gz, bool select)
   return wm_gizmo_select_set_ex(gzmap, gz, select, true, true);
 }
 
-void WM_gizmo_highlight_set(wmGizmoMap *gzmap, wmGizmo *gz)
+bool WM_gizmo_highlight_set(wmGizmoMap *gzmap, wmGizmo *gz)
 {
-  wm_gizmomap_highlight_set(gzmap, NULL, gz, gz ? gz->highlight_part : 0);
+  return wm_gizmomap_highlight_set(gzmap, NULL, gz, gz ? gz->highlight_part : 0);
 }
 
 bool wm_gizmo_select_and_highlight(bContext *C, wmGizmoMap *gzmap, wmGizmo *gz)
@@ -754,7 +753,6 @@ void WM_gizmo_properties_free(PointerRNA *ptr)
 
   if (properties) {
     IDP_FreeProperty(properties);
-    MEM_freeN(properties);
     ptr->data = NULL; /* just in case */
   }
 }

@@ -35,7 +35,6 @@
 #include "ED_undo.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 
 #include "paint_intern.h"
 
@@ -122,7 +121,8 @@ static bool paintcurve_undosys_step_encode(struct bContext *C,
 static void paintcurve_undosys_step_decode(struct bContext *UNUSED(C),
                                            struct Main *UNUSED(bmain),
                                            UndoStep *us_p,
-                                           int UNUSED(dir))
+                                           int UNUSED(dir),
+                                           bool UNUSED(is_final))
 {
   PaintCurveUndoStep *us = (PaintCurveUndoStep *)us_p;
   undocurve_to_paintcurve(&us->data, us->pc);
@@ -167,6 +167,7 @@ void ED_paintcurve_undo_push_end(void)
 {
   UndoStack *ustack = ED_undo_stack_get();
   BKE_undosys_step_push(ustack, NULL, NULL);
+  WM_file_tag_modified();
 }
 
 /** \} */

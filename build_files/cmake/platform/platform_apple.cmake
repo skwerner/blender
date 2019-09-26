@@ -20,7 +20,7 @@
 
 # Libraries configuration for Apple.
 
-set(MACOSX_DEPLOYMENT_TARGET "10.9")
+set(MACOSX_DEPLOYMENT_TARGET "10.11")
 
 macro(find_package_wrapper)
 # do nothing, just satisfy the macro
@@ -181,7 +181,7 @@ endif()
 
 set(PLATFORM_CFLAGS "-pipe -funsigned-char")
 set(PLATFORM_LINKFLAGS
-  "-fexceptions -framework CoreServices -framework Foundation -framework IOKit -framework AppKit -framework Cocoa -framework Carbon -framework AudioUnit -framework AudioToolbox -framework CoreAudio"
+  "-fexceptions -framework CoreServices -framework Foundation -framework IOKit -framework AppKit -framework Cocoa -framework Carbon -framework AudioUnit -framework AudioToolbox -framework CoreAudio -framework Metal -framework QuartzCore"
 )
 
 list(APPEND PLATFORM_LINKLIBS c++)
@@ -322,7 +322,6 @@ endif()
 
 if(WITH_LLVM)
   set(LLVM_ROOT_DIR ${LIBDIR}/llvm)
-  set(LLVM_VERSION 3.4)
   if(EXISTS "${LLVM_ROOT_DIR}/bin/llvm-config")
     set(LLVM_CONFIG "${LLVM_ROOT_DIR}/bin/llvm-config")
   else()
@@ -333,6 +332,9 @@ if(WITH_LLVM)
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   execute_process(COMMAND ${LLVM_CONFIG} --prefix
       OUTPUT_VARIABLE LLVM_ROOT_DIR
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+  execute_process(COMMAND ${LLVM_CONFIG} --includedir
+      OUTPUT_VARIABLE LLVM_INCLUDE_DIRS
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   execute_process(COMMAND ${LLVM_CONFIG} --libdir
       OUTPUT_VARIABLE LLVM_LIBPATH
@@ -382,6 +384,19 @@ if(WITH_CYCLES_EMBREE)
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
 endif()
 
+if(WITH_OPENIMAGEDENOISE)
+  find_package(OpenImageDenoise)
+  find_package(TBB)
+
+  if(NOT OPENIMAGEDENOISE_FOUND)
+    set(WITH_OPENIMAGEDENOISE OFF)
+    message(STATUS "OpenImageDenoise not found")
+  elseif(NOT TBB_FOUND)
+    set(WITH_OPENIMAGEDENOISE OFF)
+    message(STATUS "TBB not found")
+  endif()
+endif()
+
 # CMake FindOpenMP doesn't know about AppleClang before 3.12, so provide custom flags.
 if(WITH_OPENMP)
   if(CMAKE_C_COMPILER_ID MATCHES "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0")
@@ -393,16 +408,13 @@ if(WITH_OPENMP)
     set(OpenMP_CXX_FLAGS "-Xclang -fopenmp -I'${LIBDIR}/openmp/include'")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L'${LIBDIR}/openmp/lib' -lomp")
 
-    # Copy libomp.dylib to allow executables like datatoc to work.
-    if(CMAKE_MAKE_PROGRAM MATCHES "xcodebuild")
-      set(OPENMP_DYLIB_AUX_PATH "${CMAKE_BINARY_DIR}/bin")
-    else()
-      set(OPENMP_DYLIB_AUX_PATH "${CMAKE_BINARY_DIR}")
-    endif()
-
+    # Copy libomp.dylib to allow executables like datatoc and tests to work.
     execute_process(
-        COMMAND mkdir -p ${OPENMP_DYLIB_AUX_PATH}/Resources/lib
-        COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${OPENMP_DYLIB_AUX_PATH}/Resources/lib/libomp.dylib)
+        COMMAND mkdir -p ${CMAKE_BINARY_DIR}/Resources/lib
+        COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/Resources/lib/libomp.dylib)
+    execute_process(
+        COMMAND mkdir -p ${CMAKE_BINARY_DIR}/bin/Resources/lib
+        COMMAND cp -p ${LIBDIR}/openmp/lib/libomp.dylib ${CMAKE_BINARY_DIR}/bin/Resources/lib/libomp.dylib)
   endif()
 endif()
 

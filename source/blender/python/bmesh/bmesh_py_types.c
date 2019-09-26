@@ -31,6 +31,7 @@
 #include "BKE_customdata.h"
 #include "BKE_global.h"
 #include "BKE_library.h"
+#include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 
 #include "DEG_depsgraph.h"
@@ -875,10 +876,20 @@ static PyGetSetDef bpy_bmface_getseters[] = {
 };
 
 static PyGetSetDef bpy_bmloop_getseters[] = {
-    /* generic */
-    /* flags are available but not used for loops. */
-    // {(char *)"select", (getter)bpy_bm_elem_hflag_get, (setter)bpy_bm_elem_hflag_set, (char *)bpy_bm_elem_select_doc, (void *)BM_ELEM_SELECT},
-    // {(char *)"hide",   (getter)bpy_bm_elem_hflag_get, (setter)bpy_bm_elem_hflag_set, (char *)bpy_bm_elem_hide_doc,   (void *)BM_ELEM_HIDDEN},
+/* generic */
+/* flags are available but not used for loops. */
+#if 0
+    {(char *)"select",
+     (getter)bpy_bm_elem_hflag_get,
+     (setter)bpy_bm_elem_hflag_set,
+     (char *)bpy_bm_elem_select_doc,
+     (void *)BM_ELEM_SELECT},
+    {(char *)"hide",
+     (getter)bpy_bm_elem_hflag_get,
+     (setter)bpy_bm_elem_hflag_set,
+     (char *)bpy_bm_elem_hide_doc,
+     (void *)BM_ELEM_HIDDEN},
+#endif
     {(char *)"tag",
      (getter)bpy_bm_elem_hflag_get,
      (setter)bpy_bm_elem_hflag_set,
@@ -1079,13 +1090,19 @@ static PyObject *bpy_bmesh_to_mesh(BPy_BMesh *self, PyObject *args)
 
   bm = self->bm;
 
-  BLI_assert(BKE_id_is_in_global_main(&me->id));
-  BM_mesh_bm_to_me(G_MAIN, /* XXX UGLY! */
-                   bm,
-                   me,
-                   (&(struct BMeshToMeshParams){
-                       .calc_object_remap = true,
-                   }));
+  struct Main *bmain = NULL;
+  struct BMeshToMeshParams params = {0};
+  if (me->id.tag & LIB_TAG_NO_MAIN) {
+    /* Mesh might be coming from a self-contained source like object.to_mesh(). No need to remap
+     * anything in this case. */
+  }
+  else {
+    BLI_assert(BKE_id_is_in_global_main(&me->id));
+    bmain = G_MAIN; /* XXX UGLY! */
+    params.calc_object_remap = true;
+  }
+
+  BM_mesh_bm_to_me(bmain, bm, me, &params);
 
   /* we could have the user do this but if they forget blender can easy crash
    * since the references arrays for the objects derived meshes are now invalid */

@@ -106,7 +106,9 @@ typedef union {
 /* temporary struct for storing transform properties */
 
 typedef struct {
+  float ob_obmat_orig[4][4];
   float ob_dims_orig[3];
+  float ob_scale_orig[3];
   float ob_dims[3];
   /* Floats only (treated as an array). */
   TransformMedian ve_median, median;
@@ -1050,6 +1052,8 @@ static void v3d_object_dimension_buts(bContext *C, uiLayout *layout, View3D *v3d
 
     BKE_object_dimensions_get(ob, tfp->ob_dims);
     copy_v3_v3(tfp->ob_dims_orig, tfp->ob_dims);
+    copy_v3_v3(tfp->ob_scale_orig, ob->scale);
+    copy_m4_m4(tfp->ob_obmat_orig, ob->obmat);
 
     uiDefBut(block,
              UI_BTYPE_LABEL,
@@ -1066,7 +1070,7 @@ static void v3d_object_dimension_buts(bContext *C, uiLayout *layout, View3D *v3d
              0,
              "");
     UI_block_align_begin(block);
-    const float lim = 10000;
+    const float lim = FLT_MAX;
     for (int i = 0; i < 3; i++) {
       uiBut *but;
       char text[3] = {'X' + i, ':', '\0'};
@@ -1095,7 +1099,8 @@ static void v3d_object_dimension_buts(bContext *C, uiLayout *layout, View3D *v3d
         axis_mask |= (1 << i);
       }
     }
-    BKE_object_dimensions_set(ob, tfp->ob_dims, axis_mask);
+    BKE_object_dimensions_set_ex(
+        ob, tfp->ob_dims, axis_mask, tfp->ob_scale_orig, tfp->ob_obmat_orig);
 
     PointerRNA obptr;
     RNA_id_pointer_create(&ob->id, &obptr);
@@ -1461,6 +1466,7 @@ static void v3d_editarmature_buts(uiLayout *layout, Object *ob)
   uiItemR(col, &eboneptr, "tail_radius", 0, IFACE_("Radius"), ICON_NONE);
 
   uiItemR(col, &eboneptr, "roll", 0, NULL, ICON_NONE);
+  uiItemR(col, &eboneptr, "length", 0, NULL, ICON_NONE);
   uiItemR(col, &eboneptr, "envelope_distance", 0, IFACE_("Envelope"), ICON_NONE);
 }
 
@@ -1605,7 +1611,7 @@ void view3d_buttons_register(ARegionType *art)
   pt = MEM_callocN(sizeof(PanelType), "spacetype view3d panel object");
   strcpy(pt->idname, "VIEW3D_PT_transform");
   strcpy(pt->label, N_("Transform")); /* XXX C panels unavailable through RNA bpy.types! */
-  strcpy(pt->category, "View");
+  strcpy(pt->category, "Item");
   strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   pt->draw = view3d_panel_transform;
   pt->poll = view3d_panel_transform_poll;
@@ -1614,7 +1620,7 @@ void view3d_buttons_register(ARegionType *art)
   pt = MEM_callocN(sizeof(PanelType), "spacetype view3d panel vgroup");
   strcpy(pt->idname, "VIEW3D_PT_vgroup");
   strcpy(pt->label, N_("Vertex Weights")); /* XXX C panels unavailable through RNA bpy.types! */
-  strcpy(pt->category, "View");
+  strcpy(pt->category, "Item");
   strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   pt->draw = view3d_panel_vgroup;
   pt->poll = view3d_panel_vgroup_poll;

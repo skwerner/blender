@@ -54,6 +54,7 @@ typedef struct TextDrawContext {
   int font_id;
   int cwidth;
   int lheight_dpi;
+  bool syntax_highlight;
 } TextDrawContext;
 
 static void text_draw_context_init(const SpaceText *st, TextDrawContext *tdc)
@@ -61,6 +62,7 @@ static void text_draw_context_init(const SpaceText *st, TextDrawContext *tdc)
   tdc->font_id = blf_mono_font;
   tdc->cwidth = 0;
   tdc->lheight_dpi = st->lheight_dpi;
+  tdc->syntax_highlight = st->showsyntax && ED_text_is_syntax_highlight_supported(st->text);
 }
 
 static void text_font_begin(const TextDrawContext *tdc)
@@ -107,11 +109,13 @@ static void txt_format_text(SpaceText *st)
 {
   TextLine *linep;
 
-  if (!st->text)
+  if (!st->text) {
     return;
+  }
 
-  for (linep = st->text->lines.first; linep; linep = linep->next)
+  for (linep = st->text->lines.first; linep; linep = linep->next) {
     txt_format_line(st, linep, 0);
+  }
 }
 #endif
 
@@ -238,7 +242,7 @@ void wrap_offset(
   }
 
   max = wrap_width(st, ar);
-  cursin = txt_utf8_offset_to_column(linein->line, cursin);
+  cursin = BLI_str_utf8_offset_to_column(linein->line, cursin);
 
   while (linep) {
     start = 0;
@@ -321,7 +325,7 @@ void wrap_offset_in_line(
   end = max;
   chop = 1;
   *offc = 0;
-  cursin = txt_utf8_offset_to_column(linein->line, cursin);
+  cursin = BLI_str_utf8_offset_to_column(linein->line, cursin);
 
   for (i = 0, j = 0; linein->line[j]; j += BLI_str_utf8_size_safe(linein->line + j)) {
     int columns = BLI_str_utf8_char_width_safe(linein->line + j); /* = 1 for tab */
@@ -416,7 +420,7 @@ static int text_draw_wrapped(const SpaceText *st,
                              const char *format,
                              int skip)
 {
-  const bool use_syntax = (st->showsyntax && format);
+  const bool use_syntax = (tdc->syntax_highlight && format);
   FlattenString fs;
   int basex, lines;
   int i, wrap, end, max, columns, padding; /* column */
@@ -512,7 +516,7 @@ static void text_draw(const SpaceText *st,
                       int y,
                       const char *format)
 {
-  const bool use_syntax = (st->showsyntax && format);
+  const bool use_syntax = (tdc->syntax_highlight && format);
   FlattenString fs;
   int columns, size, n, w = 0, padding, amount = 0;
   const char *in = NULL;
@@ -1024,23 +1028,29 @@ static void draw_documentation(const SpaceText *st, ARegion *ar)
   int i, br, lines;
   int boxw, boxh, l, x, y /* , top */ /* UNUSED */;
 
-  if (!st || !st->text)
+  if (!st || !st->text) {
     return;
-  if (!texttool_text_is_active(st->text))
+  }
+  if (!texttool_text_is_active(st->text)) {
     return;
+  }
 
   docs = texttool_docs_get();
 
-  if (!docs)
+  if (!docs) {
     return;
+  }
 
   text_draw_context_init(st, &tdc);
 
   /* Count the visible lines to the cursor */
-  for (tmp = st->text->curl, l = -st->top; tmp; tmp = tmp->prev, l++)
-    ;
-  if (l < 0)
+  for (tmp = st->text->curl, l = -st->top; tmp; tmp = tmp->prev, l++) {
+    /* pass */
+  }
+
+  if (l < 0) {
     return;
+  }
 
   if (st->showlinenrs) {
     x = st->cwidth * (st->text->curc - st->left) + TXT_OFFSET + TEXTXLOC - 4;
@@ -1089,10 +1099,12 @@ static void draw_documentation(const SpaceText *st, ARegion *ar)
   br = DOC_WIDTH;
   lines = 0;  // XXX -doc_scroll;
   for (p = docs; *p; p++) {
-    if (*p == '\r' && *(++p) != '\n')
+    if (*p == '\r' && *(++p) != '\n') {
       *(--p) = '\n'; /* Fix line endings */
-    if (*p == ' ' || *p == '\t')
+    }
+    if (*p == ' ' || *p == '\t') {
       br = i;
+    }
     else if (*p == '\n') {
       buf[i] = '\0';
       if (lines >= 0) {
@@ -1115,8 +1127,9 @@ static void draw_documentation(const SpaceText *st, ARegion *ar)
       br = DOC_WIDTH;
       lines++;
     }
-    if (lines >= DOC_HEIGHT)
+    if (lines >= DOC_HEIGHT) {
       break;
+    }
   }
 }
 #endif
@@ -1186,7 +1199,7 @@ static void draw_suggestion_list(const SpaceText *st, const TextDrawContext *tdc
 
   /* Set the top 'item' of the visible list */
   for (i = 0, item = first; i < *top && item->next; i++, item = item->next) {
-    ;
+    /* pass */
   }
 
   for (i = 0; i < SUGG_LIST_SIZE && item; i++, item = item->next) {
@@ -1372,8 +1385,8 @@ static void draw_brackets(const SpaceText *st, const TextDrawContext *tdc, ARegi
 
   char ch;
 
-  // showsyntax must be on or else the format string will be null
-  if (!text->curl || !st->showsyntax) {
+  // syntax_highlight must be on or else the format string will be null
+  if (!text->curl || !tdc->syntax_highlight) {
     return;
   }
 
@@ -1389,7 +1402,7 @@ static void draw_brackets(const SpaceText *st, const TextDrawContext *tdc, ARegi
 
   linep = startl;
   c = startc;
-  fc = txt_utf8_offset_to_index(linep->line, startc);
+  fc = BLI_str_utf8_offset_to_index(linep->line, startc);
   endl = NULL;
   endc = -1;
   find = -b;
@@ -1565,7 +1578,7 @@ void draw_text_main(SpaceText *st, ARegion *ar)
   tmp = text->lines.first;
   lineno = 0;
   for (i = 0; i < st->top && tmp; i++) {
-    if (st->showsyntax && !tmp->format) {
+    if (tdc.syntax_highlight && !tmp->format) {
       tft->format_line(st, tmp, false);
     }
 
@@ -1620,7 +1633,7 @@ void draw_text_main(SpaceText *st, ARegion *ar)
   UI_FontThemeColor(tdc.font_id, TH_TEXT);
 
   for (i = 0; y > clip_min_y && i < st->viewlines && tmp; i++, tmp = tmp->next) {
-    if (st->showsyntax && !tmp->format) {
+    if (tdc.syntax_highlight && !tmp->format) {
       tft->format_line(st, tmp, false);
     }
 
@@ -1665,12 +1678,14 @@ void draw_text_main(SpaceText *st, ARegion *ar)
 
       immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
 
+      GPU_line_width(2.0f);
+
       float viewport_size[4];
       GPU_viewport_size_get_f(viewport_size);
       immUniform2f("viewport_size", viewport_size[2] / UI_DPI_FAC, viewport_size[3] / UI_DPI_FAC);
 
-      immUniform1i("colors_len", 0); /* "simple" mode */
-      immUniformThemeColor(TH_GRID); /* same color as line number background */
+      immUniform1i("colors_len", 0);  /* "simple" mode */
+      immUniformThemeColor3(TH_GRID); /* same color as line number background */
       immUniform1f("dash_width", 2.0f);
       immUniform1f("dash_factor", 0.5f);
 

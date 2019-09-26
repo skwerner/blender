@@ -23,6 +23,8 @@
  */
 
 #include "BKE_context.h"
+#include "BKE_library.h"
+
 #include "../node_composite_util.h"
 
 /* **************** SWITCH VIEW ******************** */
@@ -114,7 +116,7 @@ static void cmp_node_switch_view_update(bNodeTree *ntree, bNode *node)
 static void init_switch_view(const bContext *C, PointerRNA *ptr)
 {
   Scene *scene = CTX_data_scene(C);
-  bNodeTree *ntree = ptr->id.data;
+  bNodeTree *ntree = (bNodeTree *)ptr->owner_id;
   bNode *node = ptr->data;
   SceneRenderView *srv;
   bNodeSocket *sock;
@@ -122,6 +124,7 @@ static void init_switch_view(const bContext *C, PointerRNA *ptr)
 
   /* store scene for updates */
   node->id = (ID *)scene;
+  id_us_plus(node->id);
 
   if (scene) {
     RenderData *rd = &scene->r;

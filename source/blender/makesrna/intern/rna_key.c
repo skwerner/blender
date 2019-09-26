@@ -87,8 +87,8 @@ static void rna_ShapeKey_name_set(PointerRNA *ptr, const char *value)
   BLI_strncpy_utf8(kb->name, value, sizeof(kb->name));
 
   /* make sure the name is truly unique */
-  if (ptr->id.data) {
-    Key *key = rna_ShapeKey_find_key(ptr->id.data);
+  if (ptr->owner_id) {
+    Key *key = rna_ShapeKey_find_key(ptr->owner_id);
     BLI_uniquename(&key->block,
                    kb,
                    CTX_DATA_(BLT_I18NCONTEXT_ID_SHAPEKEY, "Key"),
@@ -174,7 +174,7 @@ static void rna_ShapeKey_slider_max_set(PointerRNA *ptr, float value)
 
 static Mesh *rna_KeyBlock_normals_get_mesh(PointerRNA *ptr, ID *id)
 {
-  Key *key = rna_ShapeKey_find_key((id == NULL && ptr != NULL) ? ptr->id.data : id);
+  Key *key = rna_ShapeKey_find_key((id == NULL && ptr != NULL) ? ptr->owner_id : id);
   id = key ? key->from : NULL;
 
   if (id != NULL) {
@@ -288,8 +288,9 @@ PointerRNA rna_object_shapekey_index_get(ID *id, int value)
   KeyBlock *kb = NULL;
   PointerRNA ptr;
 
-  if (key && value < key->totkey)
+  if (key && value < key->totkey) {
     kb = BLI_findlink(&key->block, value);
+  }
 
   RNA_pointer_create(id, &RNA_ShapeKey, kb, &ptr);
 
@@ -302,8 +303,9 @@ int rna_object_shapekey_index_set(ID *id, PointerRNA value, int current)
 
   if (key) {
     int a = BLI_findindex(&key->block, value.data);
-    if (a != -1)
+    if (a != -1) {
       return a;
+    }
   }
 
   return current;
@@ -313,14 +315,16 @@ static PointerRNA rna_ShapeKey_relative_key_get(PointerRNA *ptr)
 {
   KeyBlock *kb = (KeyBlock *)ptr->data;
 
-  return rna_object_shapekey_index_get(ptr->id.data, kb->relative);
+  return rna_object_shapekey_index_get(ptr->owner_id, kb->relative);
 }
 
-static void rna_ShapeKey_relative_key_set(PointerRNA *ptr, PointerRNA value)
+static void rna_ShapeKey_relative_key_set(PointerRNA *ptr,
+                                          PointerRNA value,
+                                          struct ReportList *UNUSED(reports))
 {
   KeyBlock *kb = (KeyBlock *)ptr->data;
 
-  kb->relative = rna_object_shapekey_index_set(ptr->id.data, value, kb->relative);
+  kb->relative = rna_object_shapekey_index_set(ptr->owner_id, value, kb->relative);
 }
 
 static void rna_ShapeKeyPoint_co_get(PointerRNA *ptr, float *values)
@@ -561,7 +565,7 @@ static void rna_ShapeKey_data_begin_mixed(CollectionPropertyIterator *iter,
 
 static void rna_ShapeKey_data_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
-  Key *key = rna_ShapeKey_find_key(ptr->id.data);
+  Key *key = rna_ShapeKey_find_key(ptr->owner_id);
   KeyBlock *kb = (KeyBlock *)ptr->data;
   int tot = kb->totelem, size = key->elemsize;
 
@@ -598,7 +602,7 @@ static void rna_ShapeKey_data_begin(CollectionPropertyIterator *iter, PointerRNA
 
 static int rna_ShapeKey_data_length(PointerRNA *ptr)
 {
-  Key *key = rna_ShapeKey_find_key(ptr->id.data);
+  Key *key = rna_ShapeKey_find_key(ptr->owner_id);
   KeyBlock *kb = (KeyBlock *)ptr->data;
   int tot = kb->totelem;
 
@@ -611,7 +615,7 @@ static int rna_ShapeKey_data_length(PointerRNA *ptr)
 
 static PointerRNA rna_ShapeKey_data_get(CollectionPropertyIterator *iter)
 {
-  Key *key = rna_ShapeKey_find_key(iter->parent.id.data);
+  Key *key = rna_ShapeKey_find_key(iter->parent.owner_id);
   void *ptr = rna_iterator_array_get(iter);
   StructRNA *type = &RNA_ShapeKeyPoint;
 
@@ -633,7 +637,7 @@ static PointerRNA rna_ShapeKey_data_get(CollectionPropertyIterator *iter)
 
 int rna_ShapeKey_data_lookup_int(PointerRNA *ptr, int index, PointerRNA *r_ptr)
 {
-  Key *key = rna_ShapeKey_find_key(ptr->id.data);
+  Key *key = rna_ShapeKey_find_key(ptr->owner_id);
   KeyBlock *kb = (KeyBlock *)ptr->data;
   int elemsize = key->elemsize;
   char *databuf = kb->data;
@@ -668,20 +672,22 @@ int rna_ShapeKey_data_lookup_int(PointerRNA *ptr, int index, PointerRNA *r_ptr)
 static char *rna_ShapeKey_path(PointerRNA *ptr)
 {
   KeyBlock *kb = (KeyBlock *)ptr->data;
-  ID *id = ptr->id.data;
+  ID *id = ptr->owner_id;
   char name_esc[sizeof(kb->name) * 2];
 
   BLI_strescape(name_esc, kb->name, sizeof(name_esc));
 
-  if ((id) && (GS(id->name) != ID_KE))
+  if ((id) && (GS(id->name) != ID_KE)) {
     return BLI_sprintfN("shape_keys.key_blocks[\"%s\"]", name_esc);
-  else
+  }
+  else {
     return BLI_sprintfN("key_blocks[\"%s\"]", name_esc);
+  }
 }
 
 static void rna_Key_update_data(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  Key *key = ptr->id.data;
+  Key *key = (Key *)ptr->owner_id;
   Object *ob;
 
   for (ob = bmain->objects.first; ob; ob = ob->id.next) {
@@ -697,8 +703,9 @@ static KeyBlock *rna_ShapeKeyData_find_keyblock(Key *key, float *point)
   KeyBlock *kb;
 
   /* sanity checks */
-  if (ELEM(NULL, key, point))
+  if (ELEM(NULL, key, point)) {
     return NULL;
+  }
 
   /* we'll need to manually search through the keyblocks and check
    * if the point is somewhere in the middle of each block's data
@@ -749,8 +756,8 @@ static int rna_ShapeKeyPoint_get_index(Key *key, KeyBlock *kb, float *point)
 
 static char *rna_ShapeKeyPoint_path(PointerRNA *ptr)
 {
-  ID *id = (ID *)ptr->id.data;
-  Key *key = rna_ShapeKey_find_key(ptr->id.data);
+  ID *id = ptr->owner_id;
+  Key *key = rna_ShapeKey_find_key(ptr->owner_id);
   KeyBlock *kb;
   float *point = (float *)ptr->data;
 
@@ -769,13 +776,16 @@ static char *rna_ShapeKeyPoint_path(PointerRNA *ptr)
 
     BLI_strescape(name_esc_kb, kb->name, sizeof(name_esc_kb));
 
-    if (GS(id->name) == ID_KE)
+    if (GS(id->name) == ID_KE) {
       return BLI_sprintfN("key_blocks[\"%s\"].data[%d]", name_esc_kb, index);
-    else
+    }
+    else {
       return BLI_sprintfN("shape_keys.key_blocks[\"%s\"].data[%d]", name_esc_kb, index);
+    }
   }
-  else
+  else {
     return NULL; /* XXX: there's really no way to resolve this... */
+  }
 }
 
 #else
@@ -1024,6 +1034,7 @@ static void rna_def_key(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "user", PROP_POINTER, PROP_NONE);
   RNA_def_property_flag(prop, PROP_NEVER_NULL);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_NO_COMPARISON);
   RNA_def_property_pointer_sdna(prop, NULL, "from");
   RNA_def_property_ui_text(prop, "User", "Data-block using these shape keys");
 

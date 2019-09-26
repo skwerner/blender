@@ -24,7 +24,6 @@
 #ifndef __BIF_GLUTIL_H__
 #define __BIF_GLUTIL_H__
 
-struct rctf;
 struct rcti;
 
 struct ColorManagedDisplaySettings;
@@ -121,8 +120,8 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
 
 /* Image buffer drawing functions, with display transform
  *
- * The view and display settings can either be specified manually, or retrived
- * from the context with the _ctx variations.
+ * The view and display settings can either be specified manually,
+ * or retrieved from the context with the '_ctx' variations.
  *
  * For better performance clipping coordinates can be specified so parts of the
  * image outside the view are skipped. */
@@ -171,8 +170,6 @@ int ED_draw_imbuf_method(struct ImBuf *ibuf);
 
 /* OpenGL drawing utility functions. Do not use these in new code, these
  * are intended to be moved or removed in the future. */
-
-void set_inverted_drawing(int enable);
 
 /* own working polygon offset */
 float bglPolygonOffsetCalc(const float winmat[16], float viewdist, float dist);

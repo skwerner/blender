@@ -28,9 +28,9 @@ struct ARegion;
 struct ImBuf;
 struct Image;
 struct ImageUser;
+struct ReportList;
 struct Scene;
 struct SpaceImage;
-struct ToolSettings;
 struct ViewLayer;
 struct bContext;
 struct wmWindowManager;
@@ -71,9 +71,6 @@ void ED_space_image_scopes_update(const struct bContext *C,
 void ED_space_image_paint_update(struct Main *bmain,
                                  struct wmWindowManager *wm,
                                  struct Scene *scene);
-void ED_space_image_uv_sculpt_update(struct Main *bmain,
-                                     struct wmWindowManager *wm,
-                                     struct Scene *scene);
 
 void ED_image_get_uv_aspect(struct Image *ima, struct ImageUser *iuser, float *aspx, float *aspy);
 void ED_image_mouse_pos(struct SpaceImage *sima,
@@ -112,5 +109,9 @@ void ED_image_draw_info(struct Scene *scene,
                         float *zpf);
 
 bool ED_space_image_show_cache(struct SpaceImage *sima);
+
+bool ED_image_should_save_modified(const struct bContext *C);
+int ED_image_save_all_modified_info(const struct bContext *C, struct ReportList *reports);
+bool ED_image_save_all_modified(const struct bContext *C, struct ReportList *reports);
 
 #endif /* __ED_IMAGE_H__ */

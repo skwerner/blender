@@ -335,7 +335,7 @@ bool DebugInfo::graphviz_system(const ExecutionSystem *system, char *str, int ma
   int totops = system->m_operations.size();
   int totgroups = system->m_groups.size();
   std::map<NodeOperation *, std::vector<std::string>> op_groups;
-  for (int i = 0; i < totgroups; ++i) {
+  for (int i = 0; i < totgroups; i++) {
     const ExecutionGroup *group = system->m_groups[i];
 
     len += snprintf(str + len, maxlen > len ? maxlen - len : 0, "// GROUP: %d\r\n", i);
@@ -367,13 +367,17 @@ bool DebugInfo::graphviz_system(const ExecutionSystem *system, char *str, int ma
           system, operation, group, str + len, maxlen > len ? maxlen - len : 0);
     }
 
-    //      len += snprintf(str+len, maxlen>len ? maxlen-len : 0, "//  OUTPUTOPERATION: %p\r\n", group->getOutputOperation());
-    //      len += snprintf(str+len, maxlen>len ? maxlen-len : 0, " O_%p\r\n", group->getOutputOperation());
+    // len += snprintf(str+len,
+    //     maxlen>len ? maxlen-len : 0,
+    //     "//  OUTPUTOPERATION: %p\r\n", group->getOutputOperation());
+    // len += snprintf(
+    //     str+len, maxlen>len ? maxlen-len : 0,
+    //     " O_%p\r\n", group->getOutputOperation());
     len += snprintf(str + len, maxlen > len ? maxlen - len : 0, "}\r\n");
   }
 
   /* operations not included in any group */
-  for (int j = 0; j < totops; ++j) {
+  for (int j = 0; j < totops; j++) {
     NodeOperation *operation = system->m_operations[j];
     if (op_groups.find(operation) != op_groups.end()) {
       continue;
@@ -393,8 +397,8 @@ bool DebugInfo::graphviz_system(const ExecutionSystem *system, char *str, int ma
       std::vector<std::string> &read_groups = op_groups[read];
       std::vector<std::string> &write_groups = op_groups[write];
 
-      for (int k = 0; k < write_groups.size(); ++k) {
-        for (int l = 0; l < read_groups.size(); ++l) {
+      for (int k = 0; k < write_groups.size(); k++) {
+        for (int l = 0; l < read_groups.size(); l++) {
           len += snprintf(str + len,
                           maxlen > len ? maxlen - len : 0,
                           "\"O_%p%s\" -> \"O_%p%s\" [style=dotted]\r\n",
@@ -444,8 +448,8 @@ bool DebugInfo::graphviz_system(const ExecutionSystem *system, char *str, int ma
                       from,
                       to_op,
                       to);
-      for (int k = 0; k < from_groups.size(); ++k) {
-        for (int l = 0; l < to_groups.size(); ++l) {
+      for (int k = 0; k < from_groups.size(); k++) {
+        for (int l = 0; l < to_groups.size(); l++) {
           len += snprintf(str + len,
                           maxlen > len ? maxlen - len : 0,
                           "\"O_%p%s\":\"OUT_%p\":e -> \"O_%p%s\":\"IN_%p\":w",
@@ -479,7 +483,7 @@ void DebugInfo::graphviz(const ExecutionSystem *system)
 
     BLI_snprintf(basename, sizeof(basename), "compositor_%d.dot", m_file_index);
     BLI_join_dirfile(filename, sizeof(filename), BKE_tempdir_session(), basename);
-    ++m_file_index;
+    m_file_index++;
 
     FILE *fp = BLI_fopen(filename, "wb");
     fputs(str, fp);

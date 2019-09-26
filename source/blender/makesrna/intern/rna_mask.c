@@ -58,7 +58,7 @@
 
 static void rna_Mask_update_data(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  Mask *mask = ptr->id.data;
+  Mask *mask = (Mask *)ptr->owner_id;
 
   WM_main_add_notifier(NC_MASK | ND_DATA, mask);
   DEG_id_tag_update(&mask->id, 0);
@@ -116,7 +116,9 @@ static void rna_Mask_update_parent(Main *bmain, Scene *scene, PointerRNA *ptr)
 }
 
 /* note: this function exists only to avoid id refcounting */
-static void rna_MaskParent_id_set(PointerRNA *ptr, PointerRNA value)
+static void rna_MaskParent_id_set(PointerRNA *ptr,
+                                  PointerRNA value,
+                                  struct ReportList *UNUSED(reports))
 {
   MaskParent *mpar = (MaskParent *)ptr->data;
 
@@ -138,27 +140,28 @@ static void rna_MaskParent_id_type_set(PointerRNA *ptr, int value)
   mpar->id_type = value;
 
   /* clear the id-block if the type is invalid */
-  if ((mpar->id) && (GS(mpar->id->name) != mpar->id_type))
+  if ((mpar->id) && (GS(mpar->id->name) != mpar->id_type)) {
     mpar->id = NULL;
+  }
 }
 
 static void rna_Mask_layers_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
-  Mask *mask = (Mask *)ptr->id.data;
+  Mask *mask = (Mask *)ptr->owner_id;
 
   rna_iterator_listbase_begin(iter, &mask->masklayers, NULL);
 }
 
 static int rna_Mask_layer_active_index_get(PointerRNA *ptr)
 {
-  Mask *mask = (Mask *)ptr->id.data;
+  Mask *mask = (Mask *)ptr->owner_id;
 
   return mask->masklay_act;
 }
 
 static void rna_Mask_layer_active_index_set(PointerRNA *ptr, int value)
 {
-  Mask *mask = (Mask *)ptr->id.data;
+  Mask *mask = (Mask *)ptr->owner_id;
 
   mask->masklay_act = value;
 }
@@ -166,7 +169,7 @@ static void rna_Mask_layer_active_index_set(PointerRNA *ptr, int value)
 static void rna_Mask_layer_active_index_range(
     PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax)
 {
-  Mask *mask = (Mask *)ptr->id.data;
+  Mask *mask = (Mask *)ptr->owner_id;
 
   *min = 0;
   *max = max_ii(0, mask->masklay_tot - 1);
@@ -185,15 +188,17 @@ static char *rna_MaskLayer_path(PointerRNA *ptr)
 
 static PointerRNA rna_Mask_layer_active_get(PointerRNA *ptr)
 {
-  Mask *mask = (Mask *)ptr->id.data;
+  Mask *mask = (Mask *)ptr->owner_id;
   MaskLayer *masklay = BKE_mask_layer_active(mask);
 
   return rna_pointer_inherit_refine(ptr, &RNA_MaskLayer, masklay);
 }
 
-static void rna_Mask_layer_active_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Mask_layer_active_set(PointerRNA *ptr,
+                                      PointerRNA value,
+                                      struct ReportList *UNUSED(reports))
 {
-  Mask *mask = (Mask *)ptr->id.data;
+  Mask *mask = (Mask *)ptr->owner_id;
   MaskLayer *masklay = (MaskLayer *)value.data;
 
   BKE_mask_layer_active_set(mask, masklay);
@@ -208,7 +213,7 @@ static void rna_MaskLayer_splines_begin(CollectionPropertyIterator *iter, Pointe
 
 static void rna_MaskLayer_name_set(PointerRNA *ptr, const char *value)
 {
-  Mask *mask = (Mask *)ptr->id.data;
+  Mask *mask = (Mask *)ptr->owner_id;
   MaskLayer *masklay = (MaskLayer *)ptr->data;
   char oldname[sizeof(masklay->name)], newname[sizeof(masklay->name)];
 
@@ -226,16 +231,20 @@ static PointerRNA rna_MaskLayer_active_spline_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_MaskSpline, masklay->act_spline);
 }
 
-static void rna_MaskLayer_active_spline_set(PointerRNA *ptr, PointerRNA value)
+static void rna_MaskLayer_active_spline_set(PointerRNA *ptr,
+                                            PointerRNA value,
+                                            struct ReportList *UNUSED(reports))
 {
   MaskLayer *masklay = (MaskLayer *)ptr->data;
   MaskSpline *spline = (MaskSpline *)value.data;
   int index = BLI_findindex(&masklay->splines, spline);
 
-  if (index != -1)
+  if (index != -1) {
     masklay->act_spline = spline;
-  else
+  }
+  else {
     masklay->act_spline = NULL;
+  }
 }
 
 static PointerRNA rna_MaskLayer_active_spline_point_get(PointerRNA *ptr)
@@ -245,7 +254,9 @@ static PointerRNA rna_MaskLayer_active_spline_point_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_MaskSplinePoint, masklay->act_point);
 }
 
-static void rna_MaskLayer_active_spline_point_set(PointerRNA *ptr, PointerRNA value)
+static void rna_MaskLayer_active_spline_point_set(PointerRNA *ptr,
+                                                  PointerRNA value,
+                                                  struct ReportList *UNUSED(reports))
 {
   MaskLayer *masklay = (MaskLayer *)ptr->data;
   MaskSpline *spline;
@@ -340,7 +351,7 @@ static void rna_MaskSplinePoint_handle_type_set(PointerRNA *ptr, int value)
 {
   MaskSplinePoint *point = (MaskSplinePoint *)ptr->data;
   BezTriple *bezt = &point->bezt;
-  MaskSpline *spline = mask_spline_from_point((Mask *)ptr->id.data, point);
+  MaskSpline *spline = mask_spline_from_point((Mask *)ptr->owner_id, point);
 
   bezt->h1 = bezt->h2 = value;
   mask_point_check_stick(point);
@@ -359,7 +370,7 @@ static void rna_MaskSplinePoint_handle_left_type_set(PointerRNA *ptr, int value)
 {
   MaskSplinePoint *point = (MaskSplinePoint *)ptr->data;
   BezTriple *bezt = &point->bezt;
-  MaskSpline *spline = mask_spline_from_point((Mask *)ptr->id.data, point);
+  MaskSpline *spline = mask_spline_from_point((Mask *)ptr->owner_id, point);
 
   bezt->h1 = value;
   mask_point_check_stick(point);
@@ -378,7 +389,7 @@ static void rna_MaskSplinePoint_handle_right_type_set(PointerRNA *ptr, int value
 {
   MaskSplinePoint *point = (MaskSplinePoint *)ptr->data;
   BezTriple *bezt = &point->bezt;
-  MaskSpline *spline = mask_spline_from_point((Mask *)ptr->id.data, point);
+  MaskSpline *spline = mask_spline_from_point((Mask *)ptr->owner_id, point);
 
   bezt->h2 = value;
   mask_point_check_stick(point);
@@ -632,7 +643,7 @@ static void rna_def_maskParent(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, mask_id_type_items);
   RNA_def_property_enum_default(prop, ID_MC);
   RNA_def_property_enum_funcs(prop, NULL, "rna_MaskParent_id_type_set", NULL);
-  //RNA_def_property_editable_func(prop, "rna_MaskParent_id_type_editable");
+  // RNA_def_property_editable_func(prop, "rna_MaskParent_id_type_editable");
   RNA_def_property_ui_text(prop, "ID Type", "Type of ID-block that can be used");
   RNA_def_property_update(prop, 0, "rna_Mask_update_parent");
 

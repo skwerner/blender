@@ -77,16 +77,21 @@ int info_report_mask(SpaceInfo *UNUSED(sinfo))
 #if 0
   int report_mask = 0;
 
-  if (sinfo->rpt_mask & INFO_RPT_DEBUG)
+  if (sinfo->rpt_mask & INFO_RPT_DEBUG) {
     report_mask |= RPT_DEBUG_ALL;
-  if (sinfo->rpt_mask & INFO_RPT_INFO)
+  }
+  if (sinfo->rpt_mask & INFO_RPT_INFO) {
     report_mask |= RPT_INFO_ALL;
-  if (sinfo->rpt_mask & INFO_RPT_OP)
+  }
+  if (sinfo->rpt_mask & INFO_RPT_OP) {
     report_mask |= RPT_OPERATOR_ALL;
-  if (sinfo->rpt_mask & INFO_RPT_WARN)
+  }
+  if (sinfo->rpt_mask & INFO_RPT_WARN) {
     report_mask |= RPT_WARNING_ALL;
-  if (sinfo->rpt_mask & INFO_RPT_ERR)
+  }
+  if (sinfo->rpt_mask & INFO_RPT_ERR) {
     report_mask |= RPT_ERROR_ALL;
+  }
 
   return report_mask;
 #endif
@@ -194,9 +199,11 @@ void INFO_OT_select_pick(wmOperatorType *ot)
   /* ot->flag = OPTYPE_REGISTER; */
 
   /* properties */
+  PropertyRNA *prop;
   RNA_def_int(
       ot->srna, "report_index", 0, 0, INT_MAX, "Report", "Index of the report", 0, INT_MAX);
-  RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend report selection");
+  prop = RNA_def_boolean(ot->srna, "extend", false, "Extend", "Extend report selection");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
 static int report_select_all_exec(bContext *C, wmOperator *op)

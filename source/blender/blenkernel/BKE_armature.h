@@ -25,7 +25,6 @@
 
 struct Bone;
 struct Depsgraph;
-struct GHash;
 struct ListBase;
 struct Main;
 struct Object;
@@ -75,6 +74,11 @@ void BKE_armature_copy_data(struct Main *bmain,
                             const int flag);
 struct bArmature *BKE_armature_copy(struct Main *bmain, const struct bArmature *arm);
 
+void BKE_armature_copy_bone_transforms(struct bArmature *armature_dst,
+                                       const struct bArmature *armature_src);
+
+void BKE_armature_transform(struct bArmature *arm, const float mat[4][4], const bool do_props);
+
 /* Bounding box. */
 struct BoundBox *BKE_armature_boundbox_get(struct Object *ob);
 
@@ -84,16 +88,20 @@ bool BKE_pose_minmax(
 int bone_autoside_name(char name[64], int strip_number, short axis, float head, float tail);
 
 struct Bone *BKE_armature_find_bone_name(struct bArmature *arm, const char *name);
-struct GHash *BKE_armature_bone_from_name_map(struct bArmature *arm);
+
+void BKE_armature_bone_hash_make(struct bArmature *arm);
+void BKE_armature_bone_hash_free(struct bArmature *arm);
 
 bool BKE_armature_bone_flag_test_recursive(const struct Bone *bone, int flag);
+
+void BKE_armature_refresh_layer_used(struct bArmature *arm);
 
 float distfactor_to_bone(
     const float vec[3], const float b1[3], const float b2[3], float r1, float r2, float rdist);
 
 void BKE_armature_where_is(struct bArmature *arm);
 void BKE_armature_where_is_bone(struct Bone *bone,
-                                struct Bone *prevbone,
+                                const struct Bone *bone_parent,
                                 const bool use_recursion);
 void BKE_pose_clear_pointers(struct bPose *pose);
 void BKE_pose_remap_bone_pointers(struct bArmature *armature, struct bPose *pose);
@@ -144,8 +152,9 @@ void BKE_armature_mat_pose_to_bone_ex(struct Depsgraph *depsgraph,
                                       float outmat[4][4]);
 
 void BKE_pchan_mat3_to_rot(struct bPoseChannel *pchan, float mat[3][3], bool use_compat);
+void BKE_pchan_rot_to_mat3(const struct bPoseChannel *pchan, float mat[3][3]);
 void BKE_pchan_apply_mat4(struct bPoseChannel *pchan, float mat[4][4], bool use_comat);
-void BKE_pchan_to_mat4(struct bPoseChannel *pchan, float chan_mat[4][4]);
+void BKE_pchan_to_mat4(const struct bPoseChannel *pchan, float chan_mat[4][4]);
 void BKE_pchan_calc_mat(struct bPoseChannel *pchan);
 
 /* Simple helper, computes the offset bone matrix. */
@@ -173,6 +182,7 @@ void BKE_bone_parent_transform_apply(const struct BoneParentTransform *bpt,
 void BKE_bone_parent_transform_calc_from_pchan(const struct bPoseChannel *pchan,
                                                struct BoneParentTransform *r_bpt);
 void BKE_bone_parent_transform_calc_from_matrices(int bone_flag,
+                                                  int inherit_scale_mode,
                                                   const float offs_bone[4][4],
                                                   const float parent_arm_mat[4][4],
                                                   const float parent_pose_mat[4][4],

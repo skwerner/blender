@@ -25,6 +25,7 @@ set(SRC
   util_thread.cpp
   util_time.cpp
   util_transform.cpp
+  util_windows.cpp
 )
 
 set(LIB
@@ -32,7 +33,7 @@ set(LIB
 )
 
 if(WITH_CYCLES_STANDALONE)
-  if (WITH_CYCLES_STANDALONE_GUI)
+  if(WITH_CYCLES_STANDALONE_GUI)
     list(APPEND SRC
       util_view.cpp
     )
@@ -54,6 +55,7 @@ set(SRC_HEADERS
   util_boundbox.h
   util_debug.h
   util_defines.h
+  util_deque.h
   util_guarded_allocator.cpp
   util_foreach.h
   util_function.h

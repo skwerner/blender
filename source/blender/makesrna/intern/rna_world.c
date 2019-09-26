@@ -48,17 +48,17 @@
 
 static PointerRNA rna_World_lighting_get(PointerRNA *ptr)
 {
-  return rna_pointer_inherit_refine(ptr, &RNA_WorldLighting, ptr->id.data);
+  return rna_pointer_inherit_refine(ptr, &RNA_WorldLighting, ptr->owner_id);
 }
 
 static PointerRNA rna_World_mist_get(PointerRNA *ptr)
 {
-  return rna_pointer_inherit_refine(ptr, &RNA_WorldMistSettings, ptr->id.data);
+  return rna_pointer_inherit_refine(ptr, &RNA_WorldMistSettings, ptr->owner_id);
 }
 
 static void rna_World_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  World *wo = ptr->id.data;
+  World *wo = (World *)ptr->owner_id;
 
   DEG_id_tag_update(&wo->id, 0);
   WM_main_add_notifier(NC_WORLD | ND_WORLD, wo);
@@ -67,7 +67,7 @@ static void rna_World_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerR
 #  if 0
 static void rna_World_draw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  World *wo = ptr->id.data;
+  World *wo = (World *)ptr->owner_id;
 
   DEG_id_tag_update(&wo->id, 0);
   WM_main_add_notifier(NC_WORLD | ND_WORLD_DRAW, wo);
@@ -76,7 +76,7 @@ static void rna_World_draw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), Poi
 
 static void rna_World_draw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  World *wo = ptr->id.data;
+  World *wo = (World *)ptr->owner_id;
 
   DEG_id_tag_update(&wo->id, 0);
   WM_main_add_notifier(NC_WORLD | ND_WORLD_DRAW, wo);
@@ -89,8 +89,9 @@ static void rna_World_use_nodes_update(bContext *C, PointerRNA *ptr)
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
 
-  if (wrld->use_nodes && wrld->nodetree == NULL)
+  if (wrld->use_nodes && wrld->nodetree == NULL) {
     ED_node_shader_default(C, &wrld->id);
+  }
 
   DEG_relations_tag_update(bmain);
   rna_World_update(bmain, scene, ptr);

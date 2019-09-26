@@ -207,6 +207,34 @@ bool BM_vert_pair_share_face_check_cb(BMVert *v_a,
   return false;
 }
 
+BMFace *BM_vert_pair_shared_face_cb(BMVert *v_a,
+                                    BMVert *v_b,
+                                    const bool allow_adjacent,
+                                    bool (*callback)(BMFace *, BMLoop *, BMLoop *, void *userdata),
+                                    void *user_data,
+                                    BMLoop **r_l_a,
+                                    BMLoop **r_l_b)
+{
+  if (v_a->e && v_b->e) {
+    BMIter iter;
+    BMLoop *l_a, *l_b;
+
+    BM_ITER_ELEM (l_a, &iter, v_a, BM_LOOPS_OF_VERT) {
+      BMFace *f = l_a->f;
+      l_b = BM_face_vert_share_loop(f, v_b);
+      if (l_b && (allow_adjacent || !BM_loop_is_adjacent(l_a, l_b)) &&
+          callback(f, l_a, l_b, user_data)) {
+        *r_l_a = l_a;
+        *r_l_b = l_b;
+
+        return f;
+      }
+    }
+  }
+
+  return NULL;
+}
+
 /**
  * Given 2 verts, find the smallest face they share and give back both loops.
  */
@@ -311,9 +339,11 @@ float BM_loop_point_side_of_edge_test(const BMLoop *l, const float co[3])
 }
 
 /**
- * Given 2 verts, find a face they share that has the lowest angle across these verts and give back both loops.
+ * Given 2 verts,
+ * find a face they share that has the lowest angle across these verts and give back both loops.
  *
- * This can be better then #BM_vert_pair_share_face_by_len because concave splits are ranked lowest.
+ * This can be better then #BM_vert_pair_share_face_by_len
+ * because concave splits are ranked lowest.
  */
 BMFace *BM_vert_pair_share_face_by_angle(
     BMVert *v_a, BMVert *v_b, BMLoop **r_l_a, BMLoop **r_l_b, const bool allow_adjacent)
@@ -1410,7 +1440,8 @@ BMLoop *BM_face_edge_share_loop(BMFace *f, BMEdge *e)
  * BM_face_create_ngon() on an arbitrary array of verts,
  * though be sure to pick an edge which has a face.
  *
- * \note This is in fact quite a simple check, mainly include this function so the intent is more obvious.
+ * \note This is in fact quite a simple check,
+ * mainly include this function so the intent is more obvious.
  * We know these 2 verts will _always_ make up the loops edge
  */
 void BM_edge_ordered_verts_ex(const BMEdge *edge,
@@ -1507,10 +1538,13 @@ float BM_loop_calc_face_angle(const BMLoop *l)
  */
 float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, const float epsilon_sq, float r_normal[3])
 {
-  /* Note: we cannot use result of normal_tri_v3 here to detect colinear vectors (vertex on a straight line)
-   * from zero value, because it does not normalize both vectors before making crossproduct.
-   * Instead of adding two costly normalize computations, just check ourselves for colinear case. */
-  /* Note: FEPSILON might need some finer tweaking at some point? Seems to be working OK for now though. */
+  /* Note: we cannot use result of normal_tri_v3 here to detect colinear vectors
+   * (vertex on a straight line) from zero value,
+   * because it does not normalize both vectors before making cross-product.
+   * Instead of adding two costly normalize computations,
+   * just check ourselves for colinear case. */
+  /* Note: FEPSILON might need some finer tweaking at some point?
+   * Seems to be working OK for now though. */
   float v1[3], v2[3], v_tmp[3];
   sub_v3_v3v3(v1, l->prev->v->co, l->v->co);
   sub_v3_v3v3(v2, l->next->v->co, l->v->co);
@@ -1523,7 +1557,7 @@ float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, const float epsilon_sq, 
   mul_v3_v3fl(v_tmp, v2, fac);
   sub_v3_v3(v_tmp, v1);
   if (fac != 0.0f && !is_zero_v3(v1) && len_squared_v3(v_tmp) > epsilon_sq) {
-    /* Not co-linear, we can compute crossproduct and normalize it into normal. */
+    /* Not co-linear, we can compute cross-product and normalize it into normal. */
     cross_v3_v3v3(r_normal, v1, v2);
     return normalize_v3(r_normal);
   }
@@ -1536,7 +1570,7 @@ float BM_loop_calc_face_normal_safe_ex(const BMLoop *l, const float epsilon_sq, 
 /**
  * #BM_loop_calc_face_normal_safe_ex with pre-defined sane epsilon.
  *
- * Since this doesn't scale baed on triangle size, fixed value works well.
+ * Since this doesn't scale based on triangle size, fixed value works well.
  */
 float BM_loop_calc_face_normal_safe(const BMLoop *l, float r_normal[3])
 {
@@ -1920,8 +1954,9 @@ BMEdge *BM_edge_exists(BMVert *v_a, BMVert *v_b)
   BLI_assert(v_a->head.htype == BM_VERT && v_b->head.htype == BM_VERT);
 
   BM_ITER_ELEM (e, &iter, v_a, BM_EDGES_OF_VERT) {
-    if (e->v1 == v_b || e->v2 == v_b)
+    if (e->v1 == v_b || e->v2 == v_b) {
       return e;
+    }
   }
 
   return NULL;

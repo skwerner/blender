@@ -156,7 +156,6 @@ void WM_operatortype_remove_ptr(wmOperatorType *ot)
 
   if (ot->last_properties) {
     IDP_FreeProperty(ot->last_properties);
-    MEM_freeN(ot->last_properties);
   }
 
   if (ot->macro.first) {
@@ -194,7 +193,6 @@ static void operatortype_ghash_free_cb(wmOperatorType *ot)
 {
   if (ot->last_properties) {
     IDP_FreeProperty(ot->last_properties);
-    MEM_freeN(ot->last_properties);
   }
 
   if (ot->macro.first) {
@@ -221,7 +219,7 @@ void wm_operatortype_free(void)
  * #OP_PROP_TAG_ADVANCED. Previously defined ones properties not touched.
  *
  * Calling this multiple times without a call to #WM_operatortype_props_advanced_end,
- * all calls after the first one are ignored. Meaning all propereties defined after the
+ * all calls after the first one are ignored. Meaning all proprieties defined after the
  * first call are tagged as advanced.
  *
  * This doesn't do the actual tagging, #WM_operatortype_props_advanced_end does which is
@@ -229,8 +227,8 @@ void wm_operatortype_free(void)
  */
 void WM_operatortype_props_advanced_begin(wmOperatorType *ot)
 {
-  if (ot_prop_basic_count ==
-      -1) { /* Don't do anything if _begin was called before, but not _end  */
+  if (ot_prop_basic_count == -1) {
+    /* Don't do anything if _begin was called before, but not _end  */
     ot_prop_basic_count = RNA_struct_count_properties(ot->srna);
   }
 }
@@ -279,7 +277,6 @@ void WM_operatortype_last_properties_clear_all(void)
 
     if (ot->last_properties) {
       IDP_FreeProperty(ot->last_properties);
-      MEM_freeN(ot->last_properties);
       ot->last_properties = NULL;
     }
   }
@@ -433,9 +430,18 @@ static int wm_macro_modal(bContext *C, wmOperator *op, const wmEvent *event)
          * */
         if (op->opm->type->flag & OPTYPE_BLOCKING) {
           int bounds[4] = {-1, -1, -1, -1};
-          const bool wrap = ((U.uiflag & USER_CONTINUOUS_MOUSE) &&
-                             ((op->opm->flag & OP_IS_MODAL_GRAB_CURSOR) ||
-                              (op->opm->type->flag & OPTYPE_GRAB_CURSOR)));
+          int wrap = WM_CURSOR_WRAP_NONE;
+
+          if ((op->opm->flag & OP_IS_MODAL_GRAB_CURSOR) ||
+              (op->opm->type->flag & OPTYPE_GRAB_CURSOR_XY)) {
+            wrap = WM_CURSOR_WRAP_XY;
+          }
+          else if (op->opm->type->flag & OPTYPE_GRAB_CURSOR_X) {
+            wrap = WM_CURSOR_WRAP_X;
+          }
+          else if (op->opm->type->flag & OPTYPE_GRAB_CURSOR_Y) {
+            wrap = WM_CURSOR_WRAP_Y;
+          }
 
           if (wrap) {
             ARegion *ar = CTX_wm_region(C);
@@ -576,6 +582,48 @@ static void wm_operatortype_free_macro(wmOperatorType *ot)
     }
   }
   BLI_freelistN(&ot->macro);
+}
+
+const char *WM_operatortype_name(struct wmOperatorType *ot, struct PointerRNA *properties)
+{
+  const char *name = NULL;
+
+  if (ot->get_name && properties) {
+    name = ot->get_name(ot, properties);
+  }
+
+  return (name && name[0]) ? name : RNA_struct_ui_name(ot->srna);
+}
+
+char *WM_operatortype_description(struct bContext *C,
+                                  struct wmOperatorType *ot,
+                                  struct PointerRNA *properties)
+{
+  if (ot->get_description && properties) {
+    char *description = ot->get_description(C, ot, properties);
+
+    if (description) {
+      if (description[0]) {
+        return description;
+      }
+      else {
+        MEM_freeN(description);
+      }
+    }
+  }
+
+  const char *info = RNA_struct_ui_description(ot->srna);
+
+  if (!(info && info[0])) {
+    info = RNA_struct_ui_name(ot->srna);
+  }
+
+  if (info && info[0]) {
+    return BLI_strdup(info);
+  }
+  else {
+    return NULL;
+  }
 }
 
 /** \} */

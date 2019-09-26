@@ -999,8 +999,8 @@ static void paint_2d_lift_soften(
           /* subtract blurred image from normal image gives high pass filter */
           sub_v3_v3v3(outrgb, rgba, outrgb);
 
-          /* now rgba_ub contains the edge result, but this should be converted to luminance to avoid
-           * colored speckles appearing in final image, and also to check for threshold */
+          /* Now rgba_ub contains the edge result, but this should be converted to luminance to
+           * avoid colored speckles appearing in final image, and also to check for threshold. */
           outrgb[0] = outrgb[1] = outrgb[2] = IMB_colormanagement_get_luminance(outrgb);
           if (fabsf(outrgb[0]) > threshold) {
             float mask = BKE_brush_alpha_get(s->scene, s->brush);
@@ -1251,7 +1251,7 @@ typedef struct Paint2DForeachData {
 
 static void paint_2d_op_foreach_do(void *__restrict data_v,
                                    const int iter,
-                                   const ParallelRangeTLS *__restrict UNUSED(tls))
+                                   const TaskParallelTLS *__restrict UNUSED(tls))
 {
   Paint2DForeachData *data = (Paint2DForeachData *)data_v;
   paint_2d_do_making_brush(data->s,
@@ -1360,7 +1360,7 @@ static int paint_2d_op(void *state,
         data.tilex = tilex;
         data.tilew = tilew;
 
-        ParallelRangeSettings settings;
+        TaskParallelSettings settings;
         BLI_parallel_range_settings_defaults(&settings);
         BLI_task_parallel_range(tiley, tileh + 1, &data, paint_2d_op_foreach_do, &settings);
       }

@@ -39,6 +39,7 @@
 #include "BLI_task.h"
 #include "BLI_math_solvers.h"
 
+#include "BKE_context.h"
 #include "BKE_shrinkwrap.h"
 #include "BKE_cdderivedmesh.h"
 #include "BKE_DerivedMesh.h"
@@ -69,25 +70,25 @@
 #define OUT_OF_MEMORY() ((void)printf("Shrinkwrap: Out of memory\n"))
 
 typedef struct ShrinkwrapCalcData {
-  ShrinkwrapModifierData *smd;  //shrinkwrap modifier data
+  ShrinkwrapModifierData *smd;  // shrinkwrap modifier data
 
-  struct Object *ob;  //object we are applying shrinkwrap to
+  struct Object *ob;  // object we are applying shrinkwrap to
 
-  struct MVert *vert;     //Array of verts being projected (to fetch normals or other data)
-  float (*vertexCos)[3];  //vertexs being shrinkwraped
+  struct MVert *vert;     // Array of verts being projected (to fetch normals or other data)
+  float (*vertexCos)[3];  // vertexs being shrinkwraped
   int numVerts;
 
-  struct MDeformVert *dvert;  //Pointer to mdeform array
-  int vgroup;                 //Vertex group num
+  struct MDeformVert *dvert;  // Pointer to mdeform array
+  int vgroup;                 // Vertex group num
   bool invert_vgroup;         /* invert vertex group influence */
 
-  struct Mesh *target;                 //mesh we are shrinking to
-  struct SpaceTransform local2target;  //transform to move between local and target space
+  struct Mesh *target;                 // mesh we are shrinking to
+  struct SpaceTransform local2target;  // transform to move between local and target space
   struct ShrinkwrapTreeData *tree;     // mesh BVH tree data
 
   struct Object *aux_target;
 
-  float keepDist;  //Distance to keep above target surface (units are in local space)
+  float keepDist;  // Distance to keep above target surface (units are in local space)
 } ShrinkwrapCalcData;
 
 typedef struct ShrinkwrapCalcCBData {
@@ -344,7 +345,7 @@ void BKE_shrinkwrap_compute_boundary_data(struct Mesh *mesh)
  */
 static void shrinkwrap_calc_nearest_vertex_cb_ex(void *__restrict userdata,
                                                  const int i,
-                                                 const ParallelRangeTLS *__restrict tls)
+                                                 const TaskParallelTLS *__restrict tls)
 {
   ShrinkwrapCalcCBData *data = userdata;
 
@@ -375,8 +376,8 @@ static void shrinkwrap_calc_nearest_vertex_cb_ex(void *__restrict userdata,
 
   /* Use local proximity heuristics (to reduce the nearest search)
    *
-   * If we already had an hit before.. we assume this vertex is going to have a close hit to that other vertex
-   * so we can initiate the "nearest.dist" with the expected value to that last hit.
+   * If we already had an hit before.. we assume this vertex is going to have a close hit to that
+   * other vertex so we can initiate the "nearest.dist" with the expected value to that last hit.
    * This will lead in pruning of the search tree. */
   if (nearest->index != -1) {
     nearest->dist_sq = len_squared_v3v3(tmp_co, nearest->co);
@@ -416,7 +417,7 @@ static void shrinkwrap_calc_nearest_vertex(ShrinkwrapCalcData *calc)
       .calc = calc,
       .tree = calc->tree,
   };
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (calc->numVerts > BKE_MESH_OMP_LIMIT);
   settings.userdata_chunk = &nearest;
@@ -510,7 +511,7 @@ bool BKE_shrinkwrap_project_normal(char options,
 
 static void shrinkwrap_calc_normal_projection_cb_ex(void *__restrict userdata,
                                                     const int i,
-                                                    const ParallelRangeTLS *__restrict tls)
+                                                    const TaskParallelTLS *__restrict tls)
 {
   ShrinkwrapCalcCBData *data = userdata;
 
@@ -538,8 +539,9 @@ static void shrinkwrap_calc_normal_projection_cb_ex(void *__restrict userdata,
 
   if (calc->vert != NULL && calc->smd->projAxis == MOD_SHRINKWRAP_PROJECT_OVER_NORMAL) {
     /* calc->vert contains verts from evaluated mesh.  */
-    /* These coordinates are deformed by vertexCos only for normal projection (to get correct normals) */
-    /* for other cases calc->verts contains undeformed coordinates and vertexCos should be used */
+    /* These coordinates are deformed by vertexCos only for normal projection
+     * (to get correct normals) for other cases calc->verts contains undeformed coordinates and
+     * vertexCos should be used */
     copy_v3_v3(tmp_co, calc->vert[i].co);
     normal_short_to_float_v3(tmp_no, calc->vert[i].no);
   }
@@ -549,8 +551,9 @@ static void shrinkwrap_calc_normal_projection_cb_ex(void *__restrict userdata,
   }
 
   hit->index = -1;
-  hit->dist =
-      BVH_RAYCAST_DIST_MAX; /* TODO: we should use FLT_MAX here, but sweepsphere code isn't prepared for that */
+
+  /* TODO: we should use FLT_MAX here, but sweepsphere code isn't prepared for that */
+  hit->dist = BVH_RAYCAST_DIST_MAX;
 
   bool is_aux = false;
 
@@ -701,7 +704,7 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc)
       .proj_axis = proj_axis,
       .local2aux = &local2aux,
   };
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (calc->numVerts > BKE_MESH_OMP_LIMIT);
   settings.userdata_chunk = &hit;
@@ -938,7 +941,8 @@ static bool update_hit(BVHTreeNearest *nearest,
   return false;
 }
 
-/* Target projection on a non-manifold boundary edge - treats it like an infinitely thin cylinder. */
+/* Target projection on a non-manifold boundary edge -
+ * treats it like an infinitely thin cylinder. */
 static void target_project_edge(const ShrinkwrapTreeData *tree,
                                 int index,
                                 const float co[3],
@@ -1112,7 +1116,7 @@ void BKE_shrinkwrap_find_nearest_surface(struct ShrinkwrapTreeData *tree,
  */
 static void shrinkwrap_calc_nearest_surface_point_cb_ex(void *__restrict userdata,
                                                         const int i,
-                                                        const ParallelRangeTLS *__restrict tls)
+                                                        const TaskParallelTLS *__restrict tls)
 {
   ShrinkwrapCalcCBData *data = userdata;
 
@@ -1142,8 +1146,8 @@ static void shrinkwrap_calc_nearest_surface_point_cb_ex(void *__restrict userdat
 
   /* Use local proximity heuristics (to reduce the nearest search)
    *
-   * If we already had an hit before.. we assume this vertex is going to have a close hit to that other vertex
-   * so we can initiate the "nearest.dist" with the expected value to that last hit.
+   * If we already had an hit before.. we assume this vertex is going to have a close hit to that
+   * other vertex so we can initiate the "nearest.dist" with the expected value to that last hit.
    * This will lead in pruning of the search tree. */
   if (nearest->index != -1) {
     if (calc->smd->shrinkType == MOD_SHRINKWRAP_TARGET_PROJECT) {
@@ -1360,7 +1364,7 @@ static void shrinkwrap_calc_nearest_surface_point(ShrinkwrapCalcData *calc)
       .calc = calc,
       .tree = calc->tree,
   };
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (calc->numVerts > BKE_MESH_OMP_LIMIT);
   settings.userdata_chunk = &nearest;
@@ -1405,7 +1409,7 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd,
     Object *ob_target = DEG_get_evaluated_object(ctx->depsgraph, smd->target);
     calc.target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
 
-    /* TODO there might be several "bugs" on non-uniform scales matrixs
+    /* TODO there might be several "bugs" with non-uniform scales matrices
      * because it will no longer be nearest surface, not sphere projection
      * because space has been deformed */
     BLI_SPACE_TRANSFORM_SETUP(&calc.local2target, ob, ob_target);
@@ -1476,4 +1480,29 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd,
   if (ss_mesh) {
     ss_mesh->release(ss_mesh);
   }
+}
+
+void BKE_shrinkwrap_mesh_nearest_surface_deform(struct bContext *C,
+                                                Object *ob_source,
+                                                Object *ob_target)
+{
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+  struct Scene *sce = CTX_data_scene(C);
+  ShrinkwrapModifierData ssmd = {0};
+  ModifierEvalContext ctx = {depsgraph, ob_source, 0};
+  int totvert;
+
+  ssmd.target = ob_target;
+  ssmd.shrinkType = MOD_SHRINKWRAP_NEAREST_SURFACE;
+  ssmd.shrinkMode = MOD_SHRINKWRAP_ON_SURFACE;
+  ssmd.keepDist = 0.0f;
+
+  Mesh *src_me = ob_source->data;
+  float(*vertexCos)[3] = BKE_mesh_vert_coords_alloc(src_me, &totvert);
+
+  shrinkwrapModifier_deform(&ssmd, &ctx, sce, ob_source, src_me, NULL, -1, vertexCos, totvert);
+
+  BKE_mesh_vert_coords_apply(src_me, vertexCos);
+
+  MEM_freeN(vertexCos);
 }

@@ -224,7 +224,7 @@ static PreviewImage *previewimg_create_ex(size_t deferred_data_size)
     prv_img->tag |= PRV_TAG_DEFFERED;
   }
 
-  for (i = 0; i < NUM_ICON_SIZES; ++i) {
+  for (i = 0; i < NUM_ICON_SIZES; i++) {
     prv_img->flag[i] |= PRV_CHANGED;
     prv_img->changed_timestamp[i] = 0;
   }
@@ -242,7 +242,7 @@ void BKE_previewimg_freefunc(void *link)
   if (prv) {
     int i;
 
-    for (i = 0; i < NUM_ICON_SIZES; ++i) {
+    for (i = 0; i < NUM_ICON_SIZES; i++) {
       if (prv->rect[i]) {
         MEM_freeN(prv->rect[i]);
       }
@@ -278,7 +278,7 @@ void BKE_previewimg_clear_single(struct PreviewImage *prv, enum eIconSizes size)
 void BKE_previewimg_clear(struct PreviewImage *prv)
 {
   int i;
-  for (i = 0; i < NUM_ICON_SIZES; ++i) {
+  for (i = 0; i < NUM_ICON_SIZES; i++) {
     BKE_previewimg_clear_single(prv, i);
   }
 }
@@ -290,7 +290,7 @@ PreviewImage *BKE_previewimg_copy(const PreviewImage *prv)
 
   if (prv) {
     prv_img = MEM_dupallocN(prv);
-    for (i = 0; i < NUM_ICON_SIZES; ++i) {
+    for (i = 0; i < NUM_ICON_SIZES; i++) {
       if (prv->rect[i]) {
         prv_img->rect[i] = MEM_dupallocN(prv->rect[i]);
       }
@@ -300,7 +300,10 @@ PreviewImage *BKE_previewimg_copy(const PreviewImage *prv)
   return prv_img;
 }
 
-/** Duplicate preview image from \a id and clear icon_id, to be used by datablock copy functions. */
+/**
+ * Duplicate preview image from \a id and clear icon_id,
+ * to be used by datablock copy functions.
+ */
 void BKE_previewimg_id_copy(ID *new_id, const ID *old_id)
 {
   PreviewImage **old_prv_p = BKE_previewimg_id_get_p(old_id);
@@ -534,14 +537,15 @@ void BKE_icon_changed(const int icon_id)
     BLI_assert(icon->id_type != 0);
     BLI_assert(icon->obj_type == ICON_DATA_ID);
 
-    /* Do not enforce creation of previews for valid ID types using BKE_previewimg_id_ensure() here ,
-     * we only want to ensure *existing* preview images are properly tagged as changed/invalid, that's all. */
+    /* Do not enforce creation of previews for valid ID types using BKE_previewimg_id_ensure()
+     * here, we only want to ensure *existing* preview images are properly tagged as
+     * changed/invalid, that's all. */
     PreviewImage **p_prv = BKE_previewimg_id_get_p((ID *)icon->obj);
 
     /* If we have previews, they all are now invalid changed. */
     if (p_prv && *p_prv) {
       int i;
-      for (i = 0; i < NUM_ICON_SIZES; ++i) {
+      for (i = 0; i < NUM_ICON_SIZES; i++) {
         (*p_prv)->flag[i] |= PRV_CHANGED;
         (*p_prv)->changed_timestamp[i]++;
       }
@@ -676,7 +680,8 @@ int BKE_icon_preview_ensure(ID *id, PreviewImage *preview)
     return 0;
   }
 
-  /* Ensure we synchronize ID icon_id with its previewimage if available, and generate suitable 'ID' icon. */
+  /* Ensure we synchronize ID icon_id with its previewimage if available,
+   * and generate suitable 'ID' icon. */
   if (id) {
     id->icon_id = preview->icon_id;
     return icon_id_ensure_create_icon(id);

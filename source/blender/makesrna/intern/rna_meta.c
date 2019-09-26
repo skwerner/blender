@@ -89,14 +89,16 @@ static void rna_Meta_texspace_size_set(PointerRNA *ptr, const float *values)
 
 static void rna_MetaBall_update_data(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
-  MetaBall *mb = ptr->id.data;
+  MetaBall *mb = (MetaBall *)ptr->owner_id;
   Object *ob;
 
   /* cheating way for importers to avoid slow updates */
   if (mb->id.us > 0) {
-    for (ob = bmain->objects.first; ob; ob = ob->id.next)
-      if (ob->data == mb)
+    for (ob = bmain->objects.first; ob; ob = ob->id.next) {
+      if (ob->data == mb) {
         BKE_mball_properties_copy(scene, ob);
+      }
+    }
 
     DEG_id_tag_update(&mb->id, 0);
     WM_main_add_notifier(NC_GEOM | ND_DATA, mb);
@@ -156,22 +158,25 @@ static void rna_MetaBall_elements_clear(MetaBall *mb)
 
 static bool rna_Meta_is_editmode_get(PointerRNA *ptr)
 {
-  MetaBall *mb = ptr->id.data;
+  MetaBall *mb = (MetaBall *)ptr->owner_id;
   return (mb->editelems != NULL);
 }
 
 static char *rna_MetaElement_path(PointerRNA *ptr)
 {
-  MetaBall *mb = ptr->id.data;
+  MetaBall *mb = (MetaBall *)ptr->owner_id;
   MetaElem *ml = ptr->data;
   int index = -1;
 
-  if (mb->editelems)
+  if (mb->editelems) {
     index = BLI_findindex(mb->editelems, ml);
-  if (index == -1)
+  }
+  if (index == -1) {
     index = BLI_findindex(&mb->elems, ml);
-  if (index == -1)
+  }
+  if (index == -1) {
     return NULL;
+  }
 
   return BLI_sprintfN("elements[%d]", index);
 }

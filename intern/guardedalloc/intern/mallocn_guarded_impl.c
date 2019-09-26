@@ -106,8 +106,8 @@ typedef struct MemHead {
   int tag2;
   short mmap;      /* if true, memory was mmapped */
   short alignment; /* if non-zero aligned alloc was used
-                     * and alignment is stored here.
-                     */
+                    * and alignment is stored here.
+                    */
 #ifdef DEBUG_MEMCOUNTER
   int _count;
 #endif
@@ -552,7 +552,13 @@ void *MEM_guarded_malloc_arrayN(size_t len, size_t size, const char *str)
 
 void *MEM_guarded_mallocN_aligned(size_t len, size_t alignment, const char *str)
 {
-  MemHead *memh;
+  /* We only support alignment to a power of two. */
+  assert(IS_POW2(alignment));
+
+  /* Use a minimal alignment of 8. Otherwise MEM_guarded_freeN thinks it is an illegal pointer. */
+  if (alignment < 8) {
+    alignment = 8;
+  }
 
   /* It's possible that MemHead's size is not properly aligned,
    * do extra padding to deal with this.
@@ -567,13 +573,10 @@ void *MEM_guarded_mallocN_aligned(size_t len, size_t alignment, const char *str)
    */
   assert(alignment < 1024);
 
-  /* We only support alignment to a power of two. */
-  assert(IS_POW2(alignment));
-
   len = SIZET_ALIGN_4(len);
 
-  memh = (MemHead *)aligned_malloc(len + extra_padding + sizeof(MemHead) + sizeof(MemTail),
-                                   alignment);
+  MemHead *memh = (MemHead *)aligned_malloc(
+      len + extra_padding + sizeof(MemHead) + sizeof(MemTail), alignment);
 
   if (LIKELY(memh)) {
     /* We keep padding in the beginning of MemHead,

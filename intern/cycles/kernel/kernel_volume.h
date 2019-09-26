@@ -111,8 +111,8 @@ ccl_device bool volume_stack_is_heterogeneous(KernelGlobals *kg, ccl_addr_space 
     }
     else if (shader_flag & SD_NEED_ATTRIBUTES) {
       /* We want to render world or objects without any volume grids
-       * as homogenous, but can only verify this at runtime since other
-       * heterogenous volume objects may be using the same shader. */
+       * as homogeneous, but can only verify this at run-time since other
+       * heterogeneous volume objects may be using the same shader. */
       int object = stack[i].object;
       if (object != OBJECT_NONE) {
         int object_flag = kernel_tex_fetch(__object_flag, object);
@@ -187,7 +187,7 @@ ccl_device void kernel_volume_shadow_homogeneous(KernelGlobals *kg,
                                                  ShaderData *sd,
                                                  float3 *throughput)
 {
-  float3 sigma_t;
+  float3 sigma_t = make_float3(0.0f, 0.0f, 0.0f);
 
   if (volume_shader_extinction_sample(kg, sd, state, ray->P, &sigma_t))
     *throughput *= volume_color_transmittance(sigma_t, ray->t);
@@ -225,7 +225,7 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
     }
 
     float3 new_P = ray->P + ray->D * (t + step_offset);
-    float3 sigma_t;
+    float3 sigma_t = make_float3(0.0f, 0.0f, 0.0f);
 
     /* compute attenuation over segment */
     if (volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t)) {
@@ -535,7 +535,7 @@ kernel_volume_integrate_homogeneous(KernelGlobals *kg,
                                     ccl_addr_space float3 *throughput,
                                     bool probalistic_scatter)
 {
-  VolumeShaderCoefficients coeff;
+  VolumeShaderCoefficients coeff ccl_optional_struct_init;
 
   if (!volume_shader_sample(kg, sd, state, ray->P, &coeff))
     return VOLUME_PATH_MISSED;
@@ -666,13 +666,13 @@ kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
     float dt = new_t - t;
 
     /* use random position inside this segment to sample shader,
-    * for last shorter step we remap it to fit within the segment. */
+     * for last shorter step we remap it to fit within the segment. */
     if (new_t == ray->t) {
       step_offset *= (new_t - t) / step_size;
     }
 
     float3 new_P = ray->P + ray->D * (t + step_offset);
-    VolumeShaderCoefficients coeff;
+    VolumeShaderCoefficients coeff ccl_optional_struct_init;
 
     /* compute segment */
     if (volume_shader_sample(kg, sd, state, new_P, &coeff)) {
@@ -728,6 +728,7 @@ kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
         new_tp = tp * transmittance;
       }
       else {
+        transmittance = make_float3(0.0f, 0.0f, 0.0f);
         new_tp = tp;
       }
 
@@ -778,7 +779,7 @@ kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
  * ray, with the assumption that there are no surfaces blocking light
  * between the endpoints. distance sampling is used to decide if we will
  * scatter or not. */
-ccl_device_noinline VolumeIntegrateResult
+ccl_device_noinline_cpu VolumeIntegrateResult
 kernel_volume_integrate(KernelGlobals *kg,
                         ccl_addr_space PathState *state,
                         ShaderData *sd,
@@ -901,13 +902,13 @@ ccl_device void kernel_volume_decoupled_record(KernelGlobals *kg,
     float dt = new_t - t;
 
     /* use random position inside this segment to sample shader,
-    * for last shorter step we remap it to fit within the segment. */
+     * for last shorter step we remap it to fit within the segment. */
     if (new_t == ray->t) {
       step_offset *= (new_t - t) / step_size;
     }
 
     float3 new_P = ray->P + ray->D * (t + step_offset);
-    VolumeShaderCoefficients coeff;
+    VolumeShaderCoefficients coeff ccl_optional_struct_init;
 
     /* compute segment */
     if (volume_shader_sample(kg, sd, state, new_P, &coeff)) {
@@ -1058,7 +1059,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
   bool use_mis = false;
 
   /* Apply equiangular or MIS sampling only when there is a light sample
-   * and that light sample is from a light wiht a pysical position. */
+   * and that light sample is from a light with a physical position. */
   if (segment->sampling_method && ls && ls->t != FLT_MAX) {
     if (segment->sampling_method == SD_VOLUME_MIS) {
       /* multiple importance sample: randomly pick between
@@ -1127,7 +1128,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
 
     /* multiple importance sampling */
     if (use_mis) {
-      float equi_pdf = kernel_volume_equiangular_pdf(kg, ray, ls, sample_t);
+      const float equi_pdf = kernel_volume_equiangular_pdf(kg, ray, ls, sample_t);
       mis_weight = 2.0f * power_heuristic(pdf, equi_pdf);
     }
   }
@@ -1384,7 +1385,7 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
    */
   if (stack_index == 0 && kernel_data.background.volume_shader == SHADER_NONE) {
     stack[0].shader = kernel_data.background.volume_shader;
-    stack[0].object = PRIM_NONE;
+    stack[0].object = OBJECT_NONE;
     stack[1].shader = SHADER_NONE;
   }
   else {

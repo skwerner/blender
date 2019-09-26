@@ -188,11 +188,11 @@ BLI_INLINE int next_ind(int i)
 }
 
 static float compute_collision_point(float a1[3],
-                                     float a2[3],
-                                     float a3[3],
-                                     float b1[3],
-                                     float b2[3],
-                                     float b3[3],
+                                     const float a2[3],
+                                     const float a3[3],
+                                     const float b1[3],
+                                     const float b2[3],
+                                     const float b3[3],
                                      bool culling,
                                      bool use_normal,
                                      float r_a[3],
@@ -419,7 +419,7 @@ static float compute_collision_point(float a1[3],
 
 // w3 is not perfect
 static void collision_compute_barycentric(
-    float pv[3], float p1[3], float p2[3], float p3[3], float *w1, float *w2, float *w3)
+    const float pv[3], float p1[3], float p2[3], float p3[3], float *w1, float *w2, float *w3)
 {
   /* dot_v3v3 */
 #define INPR(v1, v2) ((v1)[0] * (v2)[0] + (v1)[1] * (v2)[1] + (v1)[2] * (v2)[2])
@@ -539,7 +539,8 @@ static int cloth_collision_response_static(ClothModifierData *clmd,
 
     sub_v3_v3v3(relativeVelocity, v2, v1);
 
-    /* Calculate the normal component of the relative velocity (actually only the magnitude - the direction is stored in 'normal'). */
+    /* Calculate the normal component of the relative velocity
+     * (actually only the magnitude - the direction is stored in 'normal'). */
     magrelVel = dot_v3v3(relativeVelocity, collpair->normal);
 
     /* If magrelVel < 0 the edges are approaching each other. */
@@ -557,7 +558,8 @@ static int cloth_collision_response_static(ClothModifierData *clmd,
       sub_v3_v3v3(vrel_t_pre, relativeVelocity, temp);
 
       /* Decrease in magnitude of relative tangential velocity due to coulomb friction
-       * in original formula "magrelVel" should be the "change of relative velocity in normal direction". */
+       * in original formula "magrelVel" should be the
+       * "change of relative velocity in normal direction". */
       magtangent = min_ff(collob->pd->pdef_cfrict * 0.01f * magrelVel, len_v3(vrel_t_pre));
 
       /* Apply friction impulse. */
@@ -720,7 +722,8 @@ static int cloth_selfcollision_response_static(ClothModifierData *clmd,
 
     sub_v3_v3v3(relativeVelocity, v2, v1);
 
-    /* Calculate the normal component of the relative velocity (actually only the magnitude - the direction is stored in 'normal'). */
+    /* Calculate the normal component of the relative velocity
+     * (actually only the magnitude - the direction is stored in 'normal'). */
     magrelVel = dot_v3v3(relativeVelocity, collpair->normal);
 
     /* TODO: Impulses should be weighed by mass as this is self col,
@@ -740,7 +743,8 @@ static int cloth_selfcollision_response_static(ClothModifierData *clmd,
       sub_v3_v3v3(vrel_t_pre, relativeVelocity, temp);
 
       /* Decrease in magnitude of relative tangential velocity due to coulomb friction
-       * in original formula "magrelVel" should be the "change of relative velocity in normal direction". */
+       * in original formula "magrelVel" should be the
+       * "change of relative velocity in normal direction". */
       magtangent = min_ff(clmd->coll_parms->self_friction * 0.01f * magrelVel, len_v3(vrel_t_pre));
 
       /* Apply friction impulse. */
@@ -847,7 +851,7 @@ static int cloth_selfcollision_response_static(ClothModifierData *clmd,
 
 static void cloth_collision(void *__restrict userdata,
                             const int index,
-                            const ParallelRangeTLS *__restrict UNUSED(tls))
+                            const TaskParallelTLS *__restrict UNUSED(tls))
 {
   ColDetectData *data = (ColDetectData *)userdata;
 
@@ -904,7 +908,7 @@ static void cloth_collision(void *__restrict userdata,
 
 static void cloth_selfcollision(void *__restrict userdata,
                                 const int index,
-                                const ParallelRangeTLS *__restrict UNUSED(tls))
+                                const TaskParallelTLS *__restrict UNUSED(tls))
 {
   SelfColDetectData *data = (SelfColDetectData *)userdata;
 
@@ -1150,7 +1154,7 @@ static bool cloth_bvh_objcollisions_nearcheck(ClothModifierData *clmd,
       .collided = false,
   };
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = true;
   BLI_task_parallel_range(0, numresult, &data, cloth_collision, &settings);
@@ -1170,7 +1174,7 @@ static bool cloth_bvh_selfcollisions_nearcheck(ClothModifierData *clmd,
       .collided = false,
   };
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = true;
   BLI_task_parallel_range(0, numresult, &data, cloth_selfcollision, &settings);
@@ -1495,7 +1499,7 @@ BLI_INLINE bool cloth_point_face_collision_params(const float p1[3],
 }
 
 static CollPair *cloth_point_collpair(float p1[3],
-                                      float p2[3],
+                                      const float p2[3],
                                       const MVert *mverts,
                                       int bp1,
                                       int bp2,
@@ -1548,7 +1552,8 @@ static CollPair *cloth_point_collpair(float p1[3],
   return collpair;
 }
 
-//Determines collisions on overlap, collisions are written to collpair[i] and collision+number_collision_found is returned
+/* Determines collisions on overlap,
+ * collisions are written to collpair[i] and collision+number_collision_found is returned. */
 static CollPair *cloth_point_collision(ModifierData *md1,
                                        ModifierData *md2,
                                        BVHTreeOverlap *overlap,
@@ -1696,8 +1701,11 @@ void cloth_find_point_contacts(Depsgraph *depsgraph,
           clmd, collmd, &ct->collisions, &collisions_index, result, overlap, epsilon, dt);
       ct->totcollisions = (int)(collisions_index - ct->collisions);
 
-      // resolve nearby collisions
-      //          ret += cloth_points_objcollisions_resolve(clmd, collmd, collob->pd, collisions[i], collisions_index[i], dt);
+      /* Resolve nearby collisions. */
+#if 0
+      ret += cloth_points_objcollisions_resolve(
+          clmd, collmd, collob->pd, collisions[i], collisions_index[i], dt);
+#endif
     }
 
     if (overlap) {
@@ -1734,7 +1742,7 @@ void cloth_free_contacts(ColliderContacts *collider_contacts, int totcolliders)
 {
   if (collider_contacts) {
     int i;
-    for (i = 0; i < totcolliders; ++i) {
+    for (i = 0; i < totcolliders; i++) {
       ColliderContacts *ct = collider_contacts + i;
       if (ct->collisions) {
         MEM_freeN(ct->collisions);

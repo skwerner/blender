@@ -171,6 +171,11 @@ MINLINE float interpf(float target, float origin, float fac)
   return (fac * target) + (1.0f - fac) * origin;
 }
 
+MINLINE double interpd(double target, double origin, double fac)
+{
+  return (fac * target) + (1.0f - fac) * origin;
+}
+
 /* used for zoom values*/
 MINLINE float power_of_2(float val)
 {
@@ -225,28 +230,49 @@ MINLINE unsigned power_of_2_min_u(unsigned x)
   return x - (x >> 1);
 }
 
+MINLINE unsigned int log2_floor_u(unsigned int x)
+{
+  return x <= 1 ? 0 : 1 + log2_floor_u(x >> 1);
+}
+
+MINLINE unsigned int log2_ceil_u(unsigned int x)
+{
+  if (is_power_of_2_i((int)x)) {
+    return log2_floor_u(x);
+  }
+  else {
+    return log2_floor_u(x) + 1;
+  }
+}
+
 /* rounding and clamping */
 
 #define _round_clamp_fl_impl(arg, ty, min, max) \
   { \
     float r = floorf(arg + 0.5f); \
-    if (UNLIKELY(r <= (float)min)) \
+    if (UNLIKELY(r <= (float)min)) { \
       return (ty)min; \
-    else if (UNLIKELY(r >= (float)max)) \
+    } \
+    else if (UNLIKELY(r >= (float)max)) { \
       return (ty)max; \
-    else \
+    } \
+    else { \
       return (ty)r; \
+    } \
   }
 
 #define _round_clamp_db_impl(arg, ty, min, max) \
   { \
     double r = floor(arg + 0.5); \
-    if (UNLIKELY(r <= (double)min)) \
+    if (UNLIKELY(r <= (double)min)) { \
       return (ty)min; \
-    else if (UNLIKELY(r >= (double)max)) \
+    } \
+    else if (UNLIKELY(r >= (double)max)) { \
       return (ty)max; \
-    else \
+    } \
+    else { \
       return (ty)r; \
+    } \
   }
 
 #define _round_fl_impl(arg, ty) \
@@ -338,6 +364,15 @@ MINLINE float min_ff(float a, float b)
   return (a < b) ? a : b;
 }
 MINLINE float max_ff(float a, float b)
+{
+  return (a > b) ? a : b;
+}
+
+MINLINE double min_dd(double a, double b)
+{
+  return (a < b) ? a : b;
+}
+MINLINE double max_dd(double a, double b)
 {
   return (a > b) ? a : b;
 }

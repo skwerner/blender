@@ -93,8 +93,11 @@ typedef struct DupliGenerator {
 static const DupliGenerator *get_dupli_generator(const DupliContext *ctx);
 
 /* create initial context for root object */
-static void init_context(
-    DupliContext *r_ctx, Depsgraph *depsgraph, Scene *scene, Object *ob, float space_mat[4][4])
+static void init_context(DupliContext *r_ctx,
+                         Depsgraph *depsgraph,
+                         Scene *scene,
+                         Object *ob,
+                         const float space_mat[4][4])
 {
   r_ctx->depsgraph = depsgraph;
   r_ctx->scene = scene;
@@ -118,11 +121,12 @@ static void init_context(
 
 /* create sub-context for recursive duplis */
 static void copy_dupli_context(
-    DupliContext *r_ctx, const DupliContext *ctx, Object *ob, float mat[4][4], int index)
+    DupliContext *r_ctx, const DupliContext *ctx, Object *ob, const float mat[4][4], int index)
 {
   *r_ctx = *ctx;
 
-  /* XXX annoying, previously was done by passing an ID* argument, this at least is more explicit */
+  /* XXX annoying, previously was done by passing an ID* argument,
+   * this at least is more explicit. */
   if (ctx->gen->type == OB_DUPLICOLLECTION) {
     r_ctx->collection = ctx->object->instance_collection;
   }
@@ -203,7 +207,7 @@ static DupliObject *make_dupli(const DupliContext *ctx, Object *ob, float mat[4]
  */
 static void make_recursive_duplis(const DupliContext *ctx,
                                   Object *ob,
-                                  float space_mat[4][4],
+                                  const float space_mat[4][4],
                                   int index)
 {
   /* simple preventing of too deep nested collections with MAX_DUPLI_RECUR */
@@ -397,12 +401,8 @@ static void make_child_duplis_verts(const DupliContext *ctx, void *userdata, Obj
   mul_m4_m4m4(vdd->child_imat, child->imat, ctx->object->obmat);
 
   const MVert *mvert = me_eval->mvert;
-  const int *origindex = CustomData_get_layer(&me_eval->vdata, CD_ORIGINDEX);
-
-  for (int i = 0, j = 0; i < me_eval->totvert; i++) {
-    if (origindex == NULL || origindex[i] != ORIGINDEX_NONE) {
-      vertex_dupli(vdd, j++, mvert[i].co, mvert[i].no);
-    }
+  for (int i = 0; i < me_eval->totvert; i++) {
+    vertex_dupli(vdd, i, mvert[i].co, mvert[i].no);
   }
 }
 
@@ -525,7 +525,8 @@ static void make_duplis_font(const DupliContext *ctx)
   for (a = 0; a < text_len; a++, ct++) {
 
     /* XXX That G.main is *really* ugly, but not sure what to do here...
-     * Definitively don't think it would be safe to put back Main *bmain pointer in DupliContext as done in 2.7x? */
+     * Definitively don't think it would be safe to put back Main *bmain pointer
+     * in DupliContext as done in 2.7x? */
     ob = find_family_object(G.main, cu->family, family_len, (unsigned int)text[a], family_gh);
     if (ob) {
       vec[0] = fsize * (ct->xof - xof);
@@ -760,8 +761,8 @@ static void make_duplis_particle_system(const DupliContext *ctx, ParticleSystem 
     no_draw_flag |= PARS_NO_DISP;
   }
 
-  ctime = DEG_get_ctime(
-      ctx->depsgraph); /* NOTE: in old animsys, used parent object's timeoffset... */
+  /* NOTE: in old animsys, used parent object's timeoffset... */
+  ctime = DEG_get_ctime(ctx->depsgraph);
 
   totpart = psys->totpart;
   totchild = psys->totchild;
@@ -820,8 +821,10 @@ static void make_duplis_particle_system(const DupliContext *ctx, ParticleSystem 
     /* gather list of objects or single object */
     int totcollection = 0;
 
+    const bool use_whole_collection = part->draw & PART_DRAW_WHOLE_GR;
+    const bool use_collection_count = part->draw & PART_DRAW_COUNT_GR && !use_whole_collection;
     if (part->ren_as == PART_DRAW_GR) {
-      if (part->draw & PART_DRAW_COUNT_GR) {
+      if (use_collection_count) {
         psys_find_group_weights(part);
 
         for (dw = part->instance_weights.first; dw; dw = dw->next) {
@@ -846,7 +849,7 @@ static void make_duplis_particle_system(const DupliContext *ctx, ParticleSystem 
 
       oblist = MEM_callocN((size_t)totcollection * sizeof(Object *), "dupcollection object list");
 
-      if (part->draw & PART_DRAW_COUNT_GR) {
+      if (use_collection_count) {
         a = 0;
         for (dw = part->instance_weights.first; dw; dw = dw->next) {
           FOREACH_COLLECTION_VISIBLE_OBJECT_RECURSIVE_BEGIN (
@@ -914,7 +917,7 @@ static void make_duplis_particle_system(const DupliContext *ctx, ParticleSystem 
         }
 
         /* for collections, pick the object based on settings */
-        if (part->draw & PART_DRAW_RAND_GR) {
+        if (part->draw & PART_DRAW_RAND_GR && !use_whole_collection) {
           b = BLI_rng_get_int(rng) % totcollection;
         }
         else {
@@ -988,7 +991,8 @@ static void make_duplis_particle_system(const DupliContext *ctx, ParticleSystem 
         copy_v3_v3(vec, obmat[3]);
         zero_v3(obmat[3]);
 
-        /* particle rotation uses x-axis as the aligned axis, so pre-rotate the object accordingly */
+        /* Particle rotation uses x-axis as the aligned axis,
+         * so pre-rotate the object accordingly. */
         if ((part->draw & PART_DRAW_ROTATE_OB) == 0) {
           float xvec[3], q[4], size_mat[4][4], original_size[3];
 
@@ -1079,7 +1083,7 @@ static const DupliGenerator *get_dupli_generator(const DupliContext *ctx)
 
   /* Should the dupli's be generated for this object? - Respect restrict flags */
   if (DEG_get_mode(ctx->depsgraph) == DAG_EVAL_RENDER ? (restrictflag & OB_RESTRICT_RENDER) :
-                                                        (restrictflag & OB_RESTRICT_VIEW)) {
+                                                        (restrictflag & OB_RESTRICT_VIEWPORT)) {
     return NULL;
   }
 

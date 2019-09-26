@@ -1,4 +1,3 @@
-uniform mat4 ModelViewProjectionMatrix;
 uniform vec2 Viewport;
 uniform int xraymode;
 uniform int color_type;
@@ -35,7 +34,7 @@ vec2 toScreenSpace(vec4 vertex)
 float getZdepth(vec4 point)
 {
   if (xraymode == GP_XRAY_FRONT) {
-    return min(0.000001, (point.z / point.w));
+    return min(-0.05, (point.z / point.w));
   }
   if (xraymode == GP_XRAY_3DSPACE) {
     return (point.z / point.w);
@@ -79,18 +78,23 @@ void main(void)
 
   /* culling outside viewport */
   vec2 area = Viewport * 4.0;
-  if (sp1.x < -area.x || sp1.x > area.x)
+  if (sp1.x < -area.x || sp1.x > area.x) {
     return;
-  if (sp1.y < -area.y || sp1.y > area.y)
+  }
+  if (sp1.y < -area.y || sp1.y > area.y) {
     return;
-  if (sp2.x < -area.x || sp2.x > area.x)
+  }
+  if (sp2.x < -area.x || sp2.x > area.x) {
     return;
-  if (sp2.y < -area.y || sp2.y > area.y)
+  }
+  if (sp2.y < -area.y || sp2.y > area.y) {
     return;
+  }
 
   /* culling behind camera */
-  if (P1.w < 0 || P2.w < 0)
+  if (P1.w < 0 || P2.w < 0) {
     return;
+  }
 
   /* determine the direction of each of the 3 segments (previous, current, next) */
   vec2 v0 = normalize(sp1 - sp0);
@@ -109,16 +113,20 @@ void main(void)
   /* determine the length of the miter by projecting it onto normal and then inverse it */
   float an1 = dot(miter_a, n1);
   float bn1 = dot(miter_b, n2);
-  if (an1 == 0)
+  if (an1 == 0) {
     an1 = 1;
-  if (bn1 == 0)
+  }
+  if (bn1 == 0) {
     bn1 = 1;
+  }
   float length_a = finalThickness[1] / an1;
   float length_b = finalThickness[2] / bn1;
-  if (length_a <= 0.0)
+  if (length_a <= 0.0) {
     length_a = 0.01;
-  if (length_b <= 0.0)
+  }
+  if (length_b <= 0.0) {
     length_b = 0.01;
+  }
 
   /* prevent excessively long miters at sharp corners */
   if (dot(v0, v1) < -MiterLimit) {

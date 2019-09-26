@@ -57,7 +57,7 @@ void ControllerExporter::write_bone_URLs(COLLADASW::InstanceController &ins,
                                          Object *ob_arm,
                                          Bone *bone)
 {
-  if (bc_is_root_bone(bone, this->export_settings->deform_bones_only)) {
+  if (bc_is_root_bone(bone, this->export_settings.get_deform_bones_only())) {
     std::string node_id = translate_id(id_name(ob_arm) + "_" + bone->name);
     ins.addSkeleton(COLLADABU::URI(COLLADABU::Utils::EMPTY_STRING, node_id));
   }
@@ -79,17 +79,18 @@ bool ControllerExporter::add_instance_controller(Object *ob)
   ins.setUrl(COLLADASW::URI(COLLADABU::Utils::EMPTY_STRING, controller_id));
 
   Mesh *me = (Mesh *)ob->data;
-  if (!me->dvert)
+  if (!me->dvert) {
     return false;
+  }
 
-  // write root bone URLs
+  /* write root bone URLs */
   Bone *bone;
   for (bone = (Bone *)arm->bonebase.first; bone; bone = bone->next) {
     write_bone_URLs(ins, ob_arm, bone);
   }
 
   InstanceWriter::add_material_bindings(
-      ins.getBindMaterial(), ob, this->export_settings->active_uv_only);
+      ins.getBindMaterial(), ob, this->export_settings.get_active_uv_only());
 
   ins.add();
   return true;
@@ -102,7 +103,7 @@ void ControllerExporter::export_controllers()
 
   GeometryFunctor gf;
   gf.forEachMeshObjectInExportSet<ControllerExporter>(
-      sce, *this, this->export_settings->export_set);
+      sce, *this, this->export_settings.get_export_set());
 
   closeLibrary();
 }
@@ -115,7 +116,7 @@ void ControllerExporter::operator()(Object *ob)
   if (ob_arm) {
     export_skin_controller(ob, ob_arm);
   }
-  if (key && this->export_settings->include_shapekeys) {
+  if (key && this->export_settings.get_include_shapekeys()) {
     export_morph_controller(ob, key);
   }
 }
@@ -162,17 +163,17 @@ std::string ControllerExporter::get_controller_id(Key *key, Object *ob)
   return translate_id(id_name(ob)) + MORPH_CONTROLLER_ID_SUFFIX;
 }
 
-// ob should be of type OB_MESH
-// both args are required
+/* ob should be of type OB_MESH
+ * both args are required */
 void ControllerExporter::export_skin_controller(Object *ob, Object *ob_arm)
 {
-  // joint names
-  // joint inverse bind matrices
-  // vertex weights
+  /* joint names
+   * joint inverse bind matrices
+   * vertex weights */
 
-  // input:
-  // joint names: ob -> vertex group names
-  // vertex group weights: me->dvert -> groups -> index, weight
+  /* input:
+   * joint names: ob -> vertex group names
+   * vertex group weights: me->dvert -> groups -> index, weight */
 
 #if 0
   me->dvert :
@@ -189,7 +190,7 @@ void ControllerExporter::export_skin_controller(Object *ob, Object *ob_arm)
   } MDeformWeight;
 #endif
 
-  bool use_instantiation = this->export_settings->use_object_instantiation;
+  bool use_instantiation = this->export_settings.get_use_object_instantiation();
   Mesh *me;
 
   if (((Mesh *)ob->data)->dvert == NULL) {
@@ -198,9 +199,9 @@ void ControllerExporter::export_skin_controller(Object *ob, Object *ob_arm)
 
   me = bc_get_mesh_copy(blender_context,
                         ob,
-                        this->export_settings->export_mesh_type,
-                        this->export_settings->apply_modifiers,
-                        this->export_settings->triangulate);
+                        this->export_settings.get_export_mesh_type(),
+                        this->export_settings.get_apply_modifiers(),
+                        this->export_settings.get_triangulate());
 
   std::string controller_name = id_name(ob_arm);
   std::string controller_id = get_controller_id(ob_arm, ob);
@@ -222,15 +223,17 @@ void ControllerExporter::export_skin_controller(Object *ob, Object *ob_arm)
   {
     int i, j;
 
-    // def group index -> joint index
+    /* def group index -> joint index */
     std::vector<int> joint_index_by_def_index;
     bDeformGroup *def;
 
     for (def = (bDeformGroup *)ob->defbase.first, i = 0, j = 0; def; def = def->next, i++) {
-      if (is_bone_defgroup(ob_arm, def))
+      if (is_bone_defgroup(ob_arm, def)) {
         joint_index_by_def_index.push_back(j++);
-      else
+      }
+      else {
         joint_index_by_def_index.push_back(-1);
+      }
     }
 
     int oob_counter = 0;
@@ -238,14 +241,14 @@ void ControllerExporter::export_skin_controller(Object *ob, Object *ob_arm)
       MDeformVert *vert = &me->dvert[i];
       std::map<int, float> jw;
 
-      // We're normalizing the weights later
+      /* We're normalizing the weights later */
       float sumw = 0.0f;
 
       for (j = 0; j < vert->totweight; j++) {
         int idx = vert->dw[j].def_nr;
         if (idx >= joint_index_by_def_index.size()) {
-          // XXX: Maybe better find out where and
-          //      why the Out Of Bound indexes get created ?
+          /* XXX: Maybe better find out where and
+           *      why the Out Of Bound indexes get created ? */
           oob_counter += 1;
         }
         else {
@@ -297,14 +300,14 @@ void ControllerExporter::export_skin_controller(Object *ob, Object *ob_arm)
 
 void ControllerExporter::export_morph_controller(Object *ob, Key *key)
 {
-  bool use_instantiation = this->export_settings->use_object_instantiation;
+  bool use_instantiation = this->export_settings.get_use_object_instantiation();
   Mesh *me;
 
   me = bc_get_mesh_copy(blender_context,
                         ob,
-                        this->export_settings->export_mesh_type,
-                        this->export_settings->apply_modifiers,
-                        this->export_settings->triangulate);
+                        this->export_settings.get_export_mesh_type(),
+                        this->export_settings.get_apply_modifiers(),
+                        this->export_settings.get_triangulate());
 
   std::string controller_name = id_name(ob) + "-morph";
   std::string controller_id = get_controller_id(key, ob);
@@ -331,8 +334,8 @@ void ControllerExporter::export_morph_controller(Object *ob, Key *key)
 
   BKE_id_free(NULL, me);
 
-  //support for animations
-  //can also try the base element and param alternative
+  /* support for animations
+   * can also try the base element and param alternative */
   add_weight_extras(key);
   closeMorph();
   closeController();
@@ -354,7 +357,7 @@ std::string ControllerExporter::add_morph_targets(Key *key, Object *ob)
   source.prepareToAppendValues();
 
   KeyBlock *kb = (KeyBlock *)key->block.first;
-  //skip the basis
+  /* skip the basis */
   kb = kb->next;
   for (; kb; kb = kb->next) {
     std::string geom_id = get_geometry_id(ob, false) + "_morph_" + translate_id(kb->name);
@@ -382,7 +385,7 @@ std::string ControllerExporter::add_morph_weights(Key *key, Object *ob)
   source.prepareToAppendValues();
 
   KeyBlock *kb = (KeyBlock *)key->block.first;
-  //skip the basis
+  /* skip the basis */
   kb = kb->next;
   for (; kb; kb = kb->next) {
     float weight = kb->curval;
@@ -393,18 +396,18 @@ std::string ControllerExporter::add_morph_weights(Key *key, Object *ob)
   return source_id;
 }
 
-//Added to implement support for animations.
+/* Added to implement support for animations. */
 void ControllerExporter::add_weight_extras(Key *key)
 {
-  // can also try the base element and param alternative
+  /* can also try the base element and param alternative */
   COLLADASW::BaseExtraTechnique extra;
 
   KeyBlock *kb = (KeyBlock *)key->block.first;
-  //skip the basis
+  /* skip the basis */
   kb = kb->next;
   for (; kb; kb = kb->next) {
-    // XXX why is the weight not used here and set to 0.0?
-    // float weight = kb->curval;
+    /* XXX why is the weight not used here and set to 0.0?
+     * float weight = kb->curval; */
     extra.addExtraTechniqueParameter("KHR", "morph_weights", 0.000, "MORPH_WEIGHT_TO_TARGET");
   }
 }
@@ -431,10 +434,18 @@ void ControllerExporter::add_bind_shape_mat(Object *ob)
   float f_obmat[4][4];
   BKE_object_matrix_local_get(ob, f_obmat);
 
-  //UnitConverter::mat4_to_dae_double(bind_mat, ob->obmat);
+  if (export_settings.get_apply_global_orientation()) {
+    // do nothing, rotation is going to be applied to the Data
+  }
+  else {
+    bc_add_global_transform(f_obmat, export_settings.get_global_transform());
+  }
+
+  // UnitConverter::mat4_to_dae_double(bind_mat, ob->obmat);
   UnitConverter::mat4_to_dae_double(bind_mat, f_obmat);
-  if (this->export_settings->limit_precision)
-    bc_sanitize_mat(bind_mat, LIMITTED_PRECISION);
+  if (this->export_settings.get_limit_precision()) {
+    BCMatrix::sanitize(bind_mat, LIMITTED_PRECISION);
+  }
 
   addBindShapeTransform(bind_mat);
 }
@@ -448,8 +459,9 @@ std::string ControllerExporter::add_joints_source(Object *ob_arm,
   int totjoint = 0;
   bDeformGroup *def;
   for (def = (bDeformGroup *)defbase->first; def; def = def->next) {
-    if (is_bone_defgroup(ob_arm, def))
+    if (is_bone_defgroup(ob_arm, def)) {
       totjoint++;
+    }
   }
 
   COLLADASW::NameSource source(mSW);
@@ -465,8 +477,9 @@ std::string ControllerExporter::add_joints_source(Object *ob_arm,
 
   for (def = (bDeformGroup *)defbase->first; def; def = def->next) {
     Bone *bone = get_bone_from_defgroup(ob_arm, def);
-    if (bone)
+    if (bone) {
       source.appendValues(get_joint_sid(bone));
+    }
   }
 
   source.finish();
@@ -482,14 +495,15 @@ std::string ControllerExporter::add_inv_bind_mats_source(Object *ob_arm,
 
   int totjoint = 0;
   for (bDeformGroup *def = (bDeformGroup *)defbase->first; def; def = def->next) {
-    if (is_bone_defgroup(ob_arm, def))
+    if (is_bone_defgroup(ob_arm, def)) {
       totjoint++;
+    }
   }
 
   COLLADASW::FloatSourceF source(mSW);
   source.setId(source_id);
   source.setArrayId(source_id + ARRAY_ID_SUFFIX);
-  source.setAccessorCount(totjoint);  //BLI_listbase_count(defbase));
+  source.setAccessorCount(totjoint);  // BLI_listbase_count(defbase));
   source.setAccessorStride(16);
 
   source.setParameterTypeName(&COLLADASW::CSWC::CSW_VALUE_TYPE_FLOAT4x4);
@@ -503,7 +517,7 @@ std::string ControllerExporter::add_inv_bind_mats_source(Object *ob_arm,
 
   int flag = arm->flag;
 
-  // put armature in rest position
+  /* put armature in rest position */
   if (!(arm->flag & ARM_RESTPOS)) {
     Depsgraph *depsgraph = blender_context.get_depsgraph();
     Scene *scene = blender_context.get_scene();
@@ -531,31 +545,37 @@ std::string ControllerExporter::add_inv_bind_mats_source(Object *ob_arm,
         bc_create_restpose_mat(
             this->export_settings, pchan->bone, bind_mat, pchan->bone->arm_mat, true);
 
-        // SL/OPEN_SIM COMPATIBILITY
-        if (export_settings->open_sim) {
-
+        /* SL/OPEN_SIM COMPATIBILITY */
+        if (export_settings.get_open_sim()) {
           float loc[3];
           float rot[3] = {0, 0, 0};
           float scale[3];
           bc_decompose(bind_mat, loc, NULL, NULL, scale);
 
-          // Only translations, no rotation vs armature
+          /* Only translations, no rotation vs armature */
           loc_eulO_size_to_mat4(bind_mat, loc, rot, scale, 6);
         }
       }
 
-      // make world-space matrix (bind_mat is armature-space)
+      /* make world-space matrix (bind_mat is armature-space) */
       mul_m4_m4m4(world, ob_arm->obmat, bind_mat);
+
+      if (!has_bindmat) {
+        if (export_settings.get_apply_global_orientation()) {
+          bc_apply_global_transform(world, export_settings.get_global_transform());
+        }
+      }
 
       invert_m4_m4(mat, world);
       UnitConverter::mat4_to_dae(inv_bind_mat, mat);
-      if (this->export_settings->limit_precision)
-        bc_sanitize_mat(inv_bind_mat, LIMITTED_PRECISION);
+      if (this->export_settings.get_limit_precision()) {
+        BCMatrix::sanitize(inv_bind_mat, LIMITTED_PRECISION);
+      }
       source.appendValues(inv_bind_mat);
     }
   }
 
-  // back from rest position
+  /* back from rest position */
   if (!(flag & ARM_RESTPOS)) {
     Depsgraph *depsgraph = blender_context.get_depsgraph();
     Scene *scene = blender_context.get_scene();
@@ -625,7 +645,7 @@ void ControllerExporter::add_vertex_weights_element(const std::string &weights_s
 
   weightselem.setCount(vcounts.size());
 
-  // write number of deformers per vertex
+  /* write number of deformers per vertex */
   COLLADASW::PrimitivesBase::VCountList vcountlist;
 
   vcountlist.resize(vcounts.size());
@@ -636,7 +656,7 @@ void ControllerExporter::add_vertex_weights_element(const std::string &weights_s
 
   weightselem.CloseVCountAndOpenVElement();
 
-  // write deformer index - weight index pairs
+  /* write deformer index - weight index pairs */
   int weight_index = 0;
   for (std::list<int>::const_iterator i = joints.begin(); i != joints.end(); ++i) {
     weightselem.appendValues(*i, weight_index++);

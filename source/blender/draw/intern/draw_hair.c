@@ -98,9 +98,9 @@ static GPUShader *hair_refine_shader_get(ParticleRefineShader sh)
 void DRW_hair_init(void)
 {
 #ifdef USE_TRANSFORM_FEEDBACK
-  g_tf_pass = DRW_pass_create("Update Hair Pass", DRW_STATE_TRANS_FEEDBACK);
+  g_tf_pass = DRW_pass_create("Update Hair Pass", 0);
 #else
-  g_tf_pass = DRW_pass_create("Update Hair Pass", DRW_STATE_WRITE_COLOR | DRW_STATE_POINT);
+  g_tf_pass = DRW_pass_create("Update Hair Pass", DRW_STATE_WRITE_COLOR);
 #endif
 }
 
@@ -151,13 +151,13 @@ static DRWShadingGroup *drw_shgroup_create_hair_procedural_ex(Object *object,
   }
 
   /* TODO optimize this. Only bind the ones GPUMaterial needs. */
-  for (int i = 0; i < hair_cache->num_uv_layers; ++i) {
-    for (int n = 0; n < MAX_LAYER_NAME_CT && hair_cache->uv_layer_names[i][n][0] != '\0'; ++n) {
+  for (int i = 0; i < hair_cache->num_uv_layers; i++) {
+    for (int n = 0; n < MAX_LAYER_NAME_CT && hair_cache->uv_layer_names[i][n][0] != '\0'; n++) {
       DRW_shgroup_uniform_texture(shgrp, hair_cache->uv_layer_names[i][n], hair_cache->uv_tex[i]);
     }
   }
-  for (int i = 0; i < hair_cache->num_col_layers; ++i) {
-    for (int n = 0; n < MAX_LAYER_NAME_CT && hair_cache->col_layer_names[i][n][0] != '\0'; ++n) {
+  for (int i = 0; i < hair_cache->num_col_layers; i++) {
+    for (int n = 0; n < MAX_LAYER_NAME_CT && hair_cache->col_layer_names[i][n][0] != '\0'; n++) {
       DRW_shgroup_uniform_texture(
           shgrp, hair_cache->col_layer_names[i][n], hair_cache->col_tex[i]);
     }
@@ -193,37 +193,41 @@ static DRWShadingGroup *drw_shgroup_create_hair_procedural_ex(Object *object,
   DRW_shgroup_uniform_float_copy(shgrp, "hairRadTip", part->rad_tip * part->rad_scale * 0.5f);
   DRW_shgroup_uniform_bool_copy(
       shgrp, "hairCloseTip", (part->shape_flag & PART_SHAPE_CLOSE_TIP) != 0);
-  /* TODO(fclem): Until we have a better way to cull the hair and render with orco, bypass culling test. */
-  DRW_shgroup_call_object_add_no_cull(
-      shgrp, hair_cache->final[subdiv].proc_hairs[thickness_res - 1], object);
+  /* TODO(fclem): Until we have a better way to cull the hair and render with orco, bypass culling
+   * test. */
+  GPUBatch *geom = hair_cache->final[subdiv].proc_hairs[thickness_res - 1];
+  DRW_shgroup_call_no_cull(shgrp, geom, object);
 
   /* Transform Feedback subdiv. */
   if (need_ft_update) {
     int final_points_len = hair_cache->final[subdiv].strands_res * hair_cache->strands_len;
-    GPUShader *tf_shader = hair_refine_shader_get(PART_REFINE_CATMULL_ROM);
+    if (final_points_len) {
+      GPUShader *tf_shader = hair_refine_shader_get(PART_REFINE_CATMULL_ROM);
 
 #ifdef USE_TRANSFORM_FEEDBACK
-    DRWShadingGroup *tf_shgrp = DRW_shgroup_transform_feedback_create(
-        tf_shader, g_tf_pass, hair_cache->final[subdiv].proc_buf);
+      DRWShadingGroup *tf_shgrp = DRW_shgroup_transform_feedback_create(
+          tf_shader, g_tf_pass, hair_cache->final[subdiv].proc_buf);
 #else
-    DRWShadingGroup *tf_shgrp = DRW_shgroup_create(tf_shader, g_tf_pass);
+      DRWShadingGroup *tf_shgrp = DRW_shgroup_create(tf_shader, g_tf_pass);
 
-    ParticleRefineCall *pr_call = MEM_mallocN(sizeof(*pr_call), __func__);
-    pr_call->next = g_tf_calls;
-    pr_call->vbo = hair_cache->final[subdiv].proc_buf;
-    pr_call->shgrp = tf_shgrp;
-    pr_call->vert_len = final_points_len;
-    g_tf_calls = pr_call;
-    DRW_shgroup_uniform_int(tf_shgrp, "targetHeight", &g_tf_target_height, 1);
-    DRW_shgroup_uniform_int(tf_shgrp, "targetWidth", &g_tf_target_width, 1);
-    DRW_shgroup_uniform_int(tf_shgrp, "idOffset", &g_tf_id_offset, 1);
+      ParticleRefineCall *pr_call = MEM_mallocN(sizeof(*pr_call), __func__);
+      pr_call->next = g_tf_calls;
+      pr_call->vbo = hair_cache->final[subdiv].proc_buf;
+      pr_call->shgrp = tf_shgrp;
+      pr_call->vert_len = final_points_len;
+      g_tf_calls = pr_call;
+      DRW_shgroup_uniform_int(tf_shgrp, "targetHeight", &g_tf_target_height, 1);
+      DRW_shgroup_uniform_int(tf_shgrp, "targetWidth", &g_tf_target_width, 1);
+      DRW_shgroup_uniform_int(tf_shgrp, "idOffset", &g_tf_id_offset, 1);
 #endif
 
-    DRW_shgroup_uniform_texture(tf_shgrp, "hairPointBuffer", hair_cache->point_tex);
-    DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandBuffer", hair_cache->strand_tex);
-    DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandSegBuffer", hair_cache->strand_seg_tex);
-    DRW_shgroup_uniform_int(tf_shgrp, "hairStrandsRes", &hair_cache->final[subdiv].strands_res, 1);
-    DRW_shgroup_call_procedural_points_add(tf_shgrp, final_points_len, NULL);
+      DRW_shgroup_uniform_texture(tf_shgrp, "hairPointBuffer", hair_cache->point_tex);
+      DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandBuffer", hair_cache->strand_tex);
+      DRW_shgroup_uniform_texture(tf_shgrp, "hairStrandSegBuffer", hair_cache->strand_seg_tex);
+      DRW_shgroup_uniform_int(
+          tf_shgrp, "hairStrandsRes", &hair_cache->final[subdiv].strands_res, 1);
+      DRW_shgroup_call_procedural_points(tf_shgrp, NULL, final_points_len);
+    }
   }
 
   return shgrp;
@@ -248,11 +252,11 @@ void DRW_hair_update(void)
 {
 #ifndef USE_TRANSFORM_FEEDBACK
   /**
-   * Workaround to tranform feedback not working on mac.
+   * Workaround to transform feedback not working on mac.
    * On some system it crashes (see T58489) and on some other it renders garbage (see T60171).
    *
    * So instead of using transform feedback we render to a texture,
-   * readback the result to system memory and reupload as VBO data.
+   * read back the result to system memory and re-upload as VBO data.
    * It is really not ideal performance wise, but it is the simplest
    * and the most local workaround that still uses the power of the GPU.
    */
@@ -322,7 +326,7 @@ void DRW_hair_update(void)
 
 void DRW_hair_free(void)
 {
-  for (int i = 0; i < PART_REFINE_MAX_SHADER; ++i) {
+  for (int i = 0; i < PART_REFINE_MAX_SHADER; i++) {
     DRW_SHADER_FREE_SAFE(g_refine_shaders[i]);
   }
 }

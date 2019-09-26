@@ -28,8 +28,10 @@
 #include "DRW_engine.h"
 #include "DRW_render.h"
 
+#include "BLI_assert.h"
 #include "BLI_linklist.h"
 #include "BLI_threads.h"
+#include "BLI_memblock.h"
 
 #include "GPU_batch.h"
 #include "GPU_context.h"
@@ -43,9 +45,12 @@
 /* Use draw manager to call GPU_select, see: DRW_draw_select_loop */
 #define USE_GPU_SELECT
 
+/* Use drawcall batching using instanced rendering. */
+#define USE_BATCHING 1
+
+// #define DRW_DEBUG_CULLING
 #define DRW_DEBUG_USE_UNIFORM_NAME 0
 #define DRW_UNIFORM_BUFFER_NAME 64
-#define DRW_UNIFORM_BUFFER_NAME_INC 1024
 
 /* ------------ Profiling --------------- */
 
@@ -90,105 +95,170 @@
  *                           > DRWUniform
  */
 
-/* Used by DRWCallState.flag */
-enum {
-  DRW_CALL_CULLED = (1 << 0),
-  DRW_CALL_NEGSCALE = (1 << 1),
-  DRW_CALL_BYPASS_CULLING = (1 << 2),
-};
-
-/* Used by DRWCallState.matflag */
-enum {
-  DRW_CALL_MODELINVERSE = (1 << 0),
-  DRW_CALL_MODELVIEW = (1 << 1),
-  DRW_CALL_MODELVIEWINVERSE = (1 << 2),
-  DRW_CALL_MODELVIEWPROJECTION = (1 << 3),
-  DRW_CALL_NORMALVIEW = (1 << 4),
-  DRW_CALL_NORMALVIEWINVERSE = (1 << 5),
-  DRW_CALL_NORMALWORLD = (1 << 6),
-  DRW_CALL_ORCOTEXFAC = (1 << 7),
-  DRW_CALL_EYEVEC = (1 << 8),
-  DRW_CALL_OBJECTINFO = (1 << 9),
-};
-
-typedef struct DRWCallState {
-  DRWCallVisibilityFn *visibility_cb;
-  void *user_data;
-
-  uchar flag;
-  uchar cache_id;   /* Compared with DST.state_cache_id to see if matrices are still valid. */
-  uint16_t matflag; /* Which matrices to compute. */
+typedef struct DRWCullingState {
+  uint32_t mask;
   /* Culling: Using Bounding Sphere for now for faster culling.
-   * Not ideal for planes. */
+   * Not ideal for planes. Could be extended. */
   BoundSphere bsphere;
-  /* Matrices */
+  /* Grrr only used by EEVEE. */
+  void *user_data;
+} DRWCullingState;
+
+/* Minimum max UBO size is 64KiB. We take the largest
+ * UBO struct and alloc the max number.
+ * ((1 << 16) / sizeof(DRWObjectMatrix)) = 512
+ * Keep in sync with common_view_lib.glsl */
+#define DRW_RESOURCE_CHUNK_LEN 512
+
+/**
+ * Identifier used to sort similar drawcalls together.
+ * Also used to reference elements inside memory blocks.
+ *
+ * From MSB to LSB
+ * 1 bit for negative scale.
+ * 22 bits for chunk id.
+ * 9 bits for resource id inside the chunk. (can go up to 511)
+ * |-|----------------------|---------|
+ *
+ * Use manual bit-shift and mask instead of bit-fields to avoid
+ * compiler dependent behavior that would mess the ordering of
+ * the members thus changing the sorting order.
+ */
+typedef uint32_t DRWResourceHandle;
+
+BLI_INLINE uint32_t DRW_handle_negative_scale_get(const DRWResourceHandle *handle)
+{
+  return (*handle & 0x80000000) != 0;
+}
+
+BLI_INLINE uint32_t DRW_handle_chunk_get(const DRWResourceHandle *handle)
+{
+  return (*handle & 0x7FFFFFFF) >> 9;
+}
+
+BLI_INLINE uint32_t DRW_handle_id_get(const DRWResourceHandle *handle)
+{
+  return (*handle & 0x000001FF);
+}
+
+BLI_INLINE void DRW_handle_increment(DRWResourceHandle *handle)
+{
+  *handle += 1;
+}
+
+BLI_INLINE void DRW_handle_negative_scale_enable(DRWResourceHandle *handle)
+{
+  *handle |= 0x80000000;
+}
+
+BLI_INLINE void *DRW_memblock_elem_from_handle(struct BLI_memblock *memblock,
+                                               const DRWResourceHandle *handle)
+{
+  int elem = DRW_handle_id_get(handle);
+  int chunk = DRW_handle_chunk_get(handle);
+  return BLI_memblock_elem_get(memblock, chunk, elem);
+}
+
+typedef struct DRWObjectMatrix {
   float model[4][4];
   float modelinverse[4][4];
-  float modelview[4][4];
-  float modelviewinverse[4][4];
-  float modelviewprojection[4][4];
-  float normalview[3][3];
-  float normalviewinverse[3][3];
-  float normalworld[3][3]; /* Not view dependent */
-  float orcotexfac[2][3];  /* Not view dependent */
-  float objectinfo[2];
-  float eyevec[3];
-} DRWCallState;
+} DRWObjectMatrix;
+
+typedef struct DRWObjectInfos {
+  float orcotexfac[2][4];
+  float ob_color[4];
+  float ob_index;
+  float pad; /* UNUSED*/
+  float ob_random;
+  float ob_neg_scale;
+} DRWObjectInfos;
+
+BLI_STATIC_ASSERT_ALIGN(DRWObjectMatrix, 16)
+BLI_STATIC_ASSERT_ALIGN(DRWObjectInfos, 16)
 
 typedef enum {
-  /** A single batch. */
-  DRW_CALL_SINGLE,
-  /** Like single but only draw a range of vertices/indices. */
-  DRW_CALL_RANGE,
-  /** Draw instances without any instancing attributes. */
-  DRW_CALL_INSTANCES,
-  /** Uses a callback to draw with any number of batches. */
-  DRW_CALL_GENERATE,
-  /** Generate a drawcall without any #GPUBatch. */
-  DRW_CALL_PROCEDURAL,
-} DRWCallType;
+  /* Draw Commands */
+  DRW_CMD_DRAW = 0, /* Only sortable type. Must be 0. */
+  DRW_CMD_DRAW_RANGE = 1,
+  DRW_CMD_DRAW_INSTANCE = 2,
+  DRW_CMD_DRAW_PROCEDURAL = 3,
+  /* Other Commands */
+  DRW_CMD_CLEAR = 12,
+  DRW_CMD_DRWSTATE = 13,
+  DRW_CMD_STENCIL = 14,
+  DRW_CMD_SELECTID = 15,
+  /* Needs to fit in 4bits */
+} eDRWCommandType;
 
-typedef struct DRWCall {
-  struct DRWCall *next;
-  DRWCallState *state;
+#define DRW_MAX_DRAW_CMD_TYPE DRW_CMD_DRAW_PROCEDURAL
 
-  union {
-    struct { /* type == DRW_CALL_SINGLE */
-      GPUBatch *geometry;
-      short ma_index;
-    } single;
-    struct { /* type == DRW_CALL_RANGE */
-      GPUBatch *geometry;
-      uint start, count;
-    } range;
-    struct { /* type == DRW_CALL_INSTANCES */
-      GPUBatch *geometry;
-      /* Count can be adjusted between redraw. If needed, we can add fixed count. */
-      uint *count;
-    } instances;
-    struct { /* type == DRW_CALL_GENERATE */
-      DRWCallGenerateFn *geometry_fn;
-      void *user_data;
-    } generate;
-    struct { /* type == DRW_CALL_PROCEDURAL */
-      uint vert_count;
-      GPUPrimType prim_type;
-    } procedural;
-  };
+typedef struct DRWCommandDraw {
+  GPUBatch *batch;
+  DRWResourceHandle handle;
+} DRWCommandDraw;
 
-  DRWCallType type;
-#ifdef USE_GPU_SELECT
-  int select_id;
-#endif
-} DRWCall;
+/* Assume DRWResourceHandle to be 0. */
+typedef struct DRWCommandDrawRange {
+  GPUBatch *batch;
+  uint vert_first;
+  uint vert_count;
+} DRWCommandDrawRange;
+
+typedef struct DRWCommandDrawInstance {
+  GPUBatch *batch;
+  DRWResourceHandle handle;
+  uint inst_count;
+} DRWCommandDrawInstance;
+
+typedef struct DRWCommandDrawProcedural {
+  GPUBatch *batch;
+  DRWResourceHandle handle;
+  uint vert_count;
+} DRWCommandDrawProcedural;
+
+typedef struct DRWCommandSetMutableState {
+  /** State changes (or'd or and'd with the pass's state) */
+  DRWState enable;
+  DRWState disable;
+} DRWCommandSetMutableState;
+
+typedef struct DRWCommandSetStencil {
+  uint mask;
+} DRWCommandSetStencil;
+
+typedef struct DRWCommandSetSelectID {
+  GPUVertBuf *select_buf;
+  uint select_id;
+} DRWCommandSetSelectID;
+
+typedef struct DRWCommandClear {
+  eGPUFrameBufferBits clear_channels;
+  uchar r, g, b, a; /* [0..1] for each channels. Normalized. */
+  float depth;      /* [0..1] for depth. Normalized. */
+  uchar stencil;    /* Stencil value [0..255] */
+} DRWCommandClear;
+
+typedef union DRWCommand {
+  DRWCommandDraw draw;
+  DRWCommandDrawRange range;
+  DRWCommandDrawInstance instance;
+  DRWCommandDrawProcedural procedural;
+  DRWCommandSetMutableState state;
+  DRWCommandSetStencil stencil;
+  DRWCommandSetSelectID select_id;
+  DRWCommandClear clear;
+} DRWCommand;
+
+/* Used for agregating calls into GPUVertBufs. */
+struct DRWCallBuffer {
+  GPUVertBuf *buf;
+  GPUVertBuf *buf_select;
+  int count;
+};
 
 /* Used by DRWUniform.type */
 typedef enum {
-  DRW_UNIFORM_BOOL,
-  DRW_UNIFORM_BOOL_COPY,
-  DRW_UNIFORM_SHORT_TO_INT,
-  DRW_UNIFORM_SHORT_TO_FLOAT,
-  DRW_UNIFORM_INT,
+  DRW_UNIFORM_INT = 0,
   DRW_UNIFORM_INT_COPY,
   DRW_UNIFORM_FLOAT,
   DRW_UNIFORM_FLOAT_COPY,
@@ -197,93 +267,56 @@ typedef enum {
   DRW_UNIFORM_TEXTURE_REF,
   DRW_UNIFORM_BLOCK,
   DRW_UNIFORM_BLOCK_PERSIST,
+  DRW_UNIFORM_TFEEDBACK_TARGET,
+  /** Per drawcall uniforms/UBO */
+  DRW_UNIFORM_BLOCK_OBMATS,
+  DRW_UNIFORM_BLOCK_OBINFOS,
+  DRW_UNIFORM_RESOURCE_CHUNK,
+  /** Legacy / Fallback */
+  DRW_UNIFORM_BASE_INSTANCE,
+  DRW_UNIFORM_MODEL_MATRIX,
+  DRW_UNIFORM_MODEL_MATRIX_INVERSE,
+  DRW_UNIFORM_MODELVIEWPROJECTION_MATRIX,
+  /* WARNING: set DRWUniform->type
+   * bit length accordingly. */
 } DRWUniformType;
 
 struct DRWUniform {
-  DRWUniform *next; /* single-linked list */
   union {
     /* For reference or array/vector types. */
     const void *pvalue;
     /* Single values. */
-    float fvalue;
-    int ivalue;
+    float fvalue[4];
+    int ivalue[4];
   };
-  int name_ofs; /* name offset in name buffer. */
   int location;
-  char type;      /* DRWUniformType */
-  char length;    /* cannot be more than 16 */
-  char arraysize; /* cannot be more than 16 too */
+  uint32_t type : 5;      /* DRWUniformType */
+  uint32_t length : 5;    /* cannot be more than 16 */
+  uint32_t arraysize : 5; /* cannot be more than 16 too */
+  uint32_t name_ofs : 17; /* name offset in name buffer. */
 };
-
-typedef enum {
-  DRW_SHG_NORMAL,
-  DRW_SHG_POINT_BATCH,
-  DRW_SHG_LINE_BATCH,
-  DRW_SHG_TRIANGLE_BATCH,
-  DRW_SHG_INSTANCE,
-  DRW_SHG_INSTANCE_EXTERNAL,
-  DRW_SHG_FEEDBACK_TRANSFORM,
-} DRWShadingGroupType;
 
 struct DRWShadingGroup {
   DRWShadingGroup *next;
 
-  GPUShader *shader;    /* Shader to bind */
-  DRWUniform *uniforms; /* Uniforms pointers */
+  GPUShader *shader;                /* Shader to bind */
+  struct DRWUniformChunk *uniforms; /* Uniforms pointers */
 
-  /* Watch this! Can be nasty for debugging. */
+  struct {
+    /* Chunks of draw calls. */
+    struct DRWCommandChunk *first, *last;
+  } cmd;
+
   union {
-    struct {                 /* DRW_SHG_NORMAL */
-      DRWCall *first, *last; /* Linked list of DRWCall or DRWCallDynamic depending of type */
-    } calls;
-    struct {                 /* DRW_SHG_FEEDBACK_TRANSFORM */
-      DRWCall *first, *last; /* Linked list of DRWCall or DRWCallDynamic depending of type */
-      struct GPUVertBuf *tfeedback_target; /* Transform Feedback target. */
+    struct {
+      int objectinfo;                /* Equal to 1 if the shader needs obinfos. */
+      DRWResourceHandle pass_handle; /* Memblock key to parent pass. */
     };
-    struct {                       /* DRW_SHG_***_BATCH */
-      struct GPUBatch *batch_geom; /* Result of call batching */
-      struct GPUVertBuf *batch_vbo;
-      uint primitive_count;
-    };
-    struct { /* DRW_SHG_INSTANCE[_EXTERNAL] */
-      struct GPUBatch *instance_geom;
-      struct GPUVertBuf *instance_vbo;
-      uint instance_count;
-      float instance_orcofac[2][3]; /* TODO find a better place. */
-    };
+    struct {
+      float distance;      /* Distance from camera. */
+      uint original_index; /* Original position inside the shgroup list. */
+    } z_sorting;
   };
-
-  /** State changes for this batch only (or'd with the pass's state) */
-  DRWState state_extra;
-  /** State changes for this batch only (and'd with the pass's state) */
-  DRWState state_extra_disable;
-  /** Stencil mask to use for stencil test / write operations */
-  uint stencil_mask;
-  DRWShadingGroupType type;
-
-  /* Builtin matrices locations */
-  int model;
-  int modelinverse;
-  int modelview;
-  int modelviewinverse;
-  int modelviewprojection;
-  int normalview;
-  int normalviewinverse;
-  int normalworld;
-  int orcotexfac;
-  int eye;
-  int callid;
-  int objectinfo;
-  uint16_t matflag; /* Matrices needed, same as DRWCall.flag */
-
-  DRWPass *pass_parent; /* backlink to pass we're in */
-#ifndef NDEBUG
-  char attrs_count;
-#endif
-#ifdef USE_GPU_SELECT
-  GPUVertBuf *inst_selectid;
-  int override_selectid; /* Override for single object instances. */
-#endif
 };
 
 #define MAX_PASS_NAME 32
@@ -295,15 +328,88 @@ struct DRWPass {
     DRWShadingGroup *last;
   } shgroups;
 
+  DRWResourceHandle handle;
   DRWState state;
   char name[MAX_PASS_NAME];
 };
 
-typedef struct ViewUboStorage {
-  DRWMatrixState matstate;
+/* keep in sync with viewBlock */
+typedef struct DRWViewUboStorage {
+  /* View matrices */
+  float persmat[4][4];
+  float persinv[4][4];
+  float viewmat[4][4];
+  float viewinv[4][4];
+  float winmat[4][4];
+  float wininv[4][4];
+
+  float clipplanes[6][4];
+  /* Should not be here. Not view dependent (only main view). */
   float viewcamtexcofac[4];
-  float clipplanes[2][4];
-} ViewUboStorage;
+} DRWViewUboStorage;
+
+BLI_STATIC_ASSERT_ALIGN(DRWViewUboStorage, 16)
+
+#define MAX_CULLED_VIEWS 32
+
+struct DRWView {
+  /** Parent view if this is a sub view. NULL otherwise. */
+  struct DRWView *parent;
+
+  DRWViewUboStorage storage;
+  /** Number of active clipplanes. */
+  int clip_planes_len;
+  /** Does culling result needs to be updated. */
+  bool is_dirty;
+  /** Culling */
+  uint32_t culling_mask;
+  BoundBox frustum_corners;
+  BoundSphere frustum_bsphere;
+  float frustum_planes[6][4];
+  /** Custom visibility function. */
+  DRWCallVisibilityFn *visibility_fn;
+  void *user_data;
+};
+
+/* ------------ Data Chunks --------------- */
+/**
+ * In order to keep a cache friendly data structure,
+ * we alloc most of our little data into chunks of multiple item.
+ * Iteration, allocation and memory usage are better.
+ * We loose a bit of memory by allocating more than what we need
+ * but it's counterbalanced by not needing the linked-list pointers
+ * for each item.
+ **/
+
+typedef struct DRWUniformChunk {
+  struct DRWUniformChunk *next; /* single-linked list */
+  uint32_t uniform_len;
+  uint32_t uniform_used;
+  DRWUniform uniforms[10];
+} DRWUniformChunk;
+
+typedef struct DRWCommandChunk {
+  struct DRWCommandChunk *next;
+  uint32_t command_len;
+  uint32_t command_used;
+  /* 4bits for each command. */
+  uint64_t command_type[6];
+  /* -- 64 bytes aligned -- */
+  DRWCommand commands[96];
+  /* -- 64 bytes aligned -- */
+} DRWCommandChunk;
+
+typedef struct DRWCommandSmallChunk {
+  struct DRWCommandChunk *next;
+  uint32_t command_len;
+  uint32_t command_used;
+  /* 4bits for each command. */
+  /* TODO reduce size of command_type. */
+  uint64_t command_type[6];
+  DRWCommand commands[6];
+} DRWCommandSmallChunk;
+
+BLI_STATIC_ASSERT_ALIGN(DRWCommandChunk, 16);
 
 /* ------------- DRAW DEBUG ------------ */
 
@@ -324,20 +430,35 @@ typedef struct DRWDebugSphere {
 #define DST_MAX_SLOTS 64  /* Cannot be changed without modifying RST.bound_tex_slots */
 #define MAX_CLIP_PLANES 6 /* GL_MAX_CLIP_PLANES is at least 6 */
 #define STENCIL_UNDEFINED 256
+#define DRW_DRAWLIST_LEN 256
 typedef struct DRWManager {
   /* TODO clean up this struct a bit */
   /* Cache generation */
   ViewportMemoryPool *vmempool;
   DRWInstanceDataList *idatalist;
-  DRWInstanceData *object_instance_data[MAX_INSTANCE_DATA_SIZE];
   /* State of the object being evaluated if already allocated. */
-  DRWCallState *ob_state;
-  uchar state_cache_id; /* Could be larger but 254 view changes is already a lot! */
+  DRWResourceHandle ob_handle;
+  /** True if current DST.ob_state has its matching DRWObjectInfos init. */
+  bool ob_state_obinfo_init;
+  /** Handle of current object resource in object resource arrays (DRWObjectMatrices/Infos). */
+  DRWResourceHandle resource_handle;
+  /** Handle of next DRWPass to be allocated. */
+  DRWResourceHandle pass_handle;
+
+  /** Dupli state. NULL if not dupli. */
   struct DupliObject *dupli_source;
   struct Object *dupli_parent;
+  struct Object *dupli_origin;
+  /** Ghash containing original objects. */
+  struct GHash *dupli_ghash;
+  /** TODO(fclem) try to remove usage of this. */
+  DRWInstanceData *object_instance_data[MAX_INSTANCE_DATA_SIZE];
+  /* Array of dupli_data (one for each enabled engine) to handle duplis. */
+  void **dupli_datas;
 
   /* Rendering state */
   GPUShader *shader;
+  GPUBatch *batch;
 
   /* Managed by `DRW_state_set`, `DRW_state_reset` */
   DRWState state;
@@ -352,13 +473,12 @@ typedef struct DRWManager {
   float screenvecs[2][3];
   float pixsize;
 
-  GLenum backface, frontface;
-
   struct {
     uint is_select : 1;
     uint is_depth : 1;
     uint is_image_render : 1;
     uint is_scene_render : 1;
+    uint do_color_management : 1;
     uint draw_background : 1;
     uint draw_text : 1;
   } options;
@@ -370,24 +490,18 @@ typedef struct DRWManager {
   struct DRWTextStore **text_store_p;
 
   ListBase enabled_engines; /* RenderEngineType */
+  void **vedata_array;      /* ViewportEngineData */
+  int enabled_engine_count; /* Length of enabled_engines list. */
 
   bool buffer_finish_called; /* Avoid bad usage of DRW_render_instance_buffer_finish */
 
-  /* View dependent uniforms. */
-  DRWMatrixState original_mat; /* Original rv3d matrices. */
-  int override_mat;            /* Bitflag of which matrices are overridden. */
-  int clip_planes_len;         /* Number of active clipplanes. */
-  bool dirty_mat;
-
-  /* keep in sync with viewBlock */
-  ViewUboStorage view_data;
-
-  struct {
-    float frustum_planes[6][4];
-    BoundBox frustum_corners;
-    BoundSphere frustum_bsphere;
-    bool updated;
-  } clipping;
+  DRWView *view_default;
+  DRWView *view_active;
+  DRWView *view_previous;
+  uint primary_view_ct;
+  /** TODO(fclem) Remove this. Only here to support
+   * shaders without common_view_lib.glsl */
+  DRWViewUboStorage view_storage_cpy;
 
 #ifdef USE_GPU_SELECT
   uint select_id;
@@ -402,6 +516,8 @@ typedef struct DRWManager {
   GPUContext *gpu_context;
   /** Mutex to lock the drw manager and avoid concurrent context usage. */
   TicketMutex *gl_context_mutex;
+
+  GPUDrawList *draw_list;
 
   /** GPU Resource State: Memory storage between drawing. */
   struct {
@@ -430,7 +546,7 @@ typedef struct DRWManager {
   } uniform_names;
 } DRWManager;
 
-extern DRWManager DST; /* TODO : get rid of this and allow multithreaded rendering */
+extern DRWManager DST; /* TODO: get rid of this and allow multi-threaded rendering. */
 
 /* --------------- FUNCTIONS ------------- */
 
@@ -443,8 +559,16 @@ void drw_state_set(DRWState state);
 void drw_debug_draw(void);
 void drw_debug_init(void);
 
+eDRWCommandType command_type_get(uint64_t *command_type_bits, int index);
+
+void drw_batch_cache_validate(Object *ob);
 void drw_batch_cache_generate_requested(struct Object *ob);
 
-extern struct GPUVertFormat *g_pos_format;
+void drw_resource_buffer_finish(ViewportMemoryPool *vmempool);
+
+/* Procedural Drawing */
+GPUBatch *drw_cache_procedural_points_get(void);
+GPUBatch *drw_cache_procedural_lines_get(void);
+GPUBatch *drw_cache_procedural_triangles_get(void);
 
 #endif /* __DRAW_MANAGER_H__ */

@@ -1,13 +1,4 @@
 
-uniform mat4 ModelViewProjectionMatrix;
-uniform mat4 ModelViewMatrix;
-uniform mat3 WorldNormalMatrix;
-#ifndef USE_ATTR
-uniform mat4 ModelMatrix;
-uniform mat3 NormalMatrix;
-uniform mat4 ModelMatrixInverse;
-#endif
-
 #ifndef HAIR_SHADER
 in vec3 pos;
 in vec3 nor;
@@ -16,20 +7,8 @@ in vec3 nor;
 out vec3 worldPosition;
 out vec3 viewPosition;
 
-/* Used for planar reflections */
-/* keep in sync with EEVEE_ClipPlanesUniformBuffer */
-layout(std140) uniform clip_block
-{
-  vec4 ClipPlanes[1];
-};
-
-#ifdef USE_FLAT_NORMAL
-flat out vec3 worldNormal;
-flat out vec3 viewNormal;
-#else
 out vec3 worldNormal;
 out vec3 viewNormal;
-#endif
 
 #ifdef HAIR_SHADER
 out vec3 hairTangent;
@@ -61,23 +40,21 @@ void main()
                               hairTime,
                               hairThickness,
                               hairThickTime);
-
-  gl_Position = ViewProjectionMatrix * vec4(pos, 1.0);
-  viewPosition = (ViewMatrix * vec4(pos, 1.0)).xyz;
+  worldNormal = cross(hairTangent, binor);
   worldPosition = pos;
-  hairTangent = normalize(hairTangent);
-  worldNormal = cross(binor, hairTangent);
-  viewNormal = mat3(ViewMatrix) * worldNormal;
 #else
-  gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
-  viewPosition = (ModelViewMatrix * vec4(pos, 1.0)).xyz;
-  worldPosition = (ModelMatrix * vec4(pos, 1.0)).xyz;
-  worldNormal = normalize(WorldNormalMatrix * nor);
-  viewNormal = normalize(NormalMatrix * nor);
+  worldPosition = point_object_to_world(pos);
+  worldNormal = normalize(normal_object_to_world(nor));
 #endif
 
+  /* No need to normalize since this is just a rotation. */
+  viewNormal = normal_world_to_view(worldNormal);
+
+  viewPosition = point_world_to_view(worldPosition);
+  gl_Position = point_world_to_ndc(worldPosition);
+
   /* Used for planar reflections */
-  gl_ClipDistance[0] = dot(vec4(worldPosition, 1.0), ClipPlanes[0]);
+  gl_ClipDistance[0] = dot(vec4(worldPosition, 1.0), clipPlanes[0]);
 
 #ifdef USE_ATTR
   pass_attr(pos);

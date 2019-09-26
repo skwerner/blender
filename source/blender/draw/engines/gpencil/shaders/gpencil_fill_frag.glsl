@@ -19,17 +19,24 @@ uniform int drawmode;
 uniform float layer_opacity;
 
 uniform sampler2D myTexture;
+uniform bool myTexturePremultiplied;
 uniform int texture_clamp;
 
 uniform int viewport_xray;
 uniform int shading_type[2];
 uniform vec4 wire_color;
 
+uniform int fade_layer;
+uniform float fade_layer_factor;
+uniform bool fade_ob;
+uniform vec3 fade_color;
+uniform float fade_ob_factor;
+
 /* keep this list synchronized with list in gpencil_draw_utils.c */
 #define SOLID 0
 #define GRADIENT 1
 #define RADIAL 2
-#define CHESS 3
+#define CHECKER 3
 #define TEXTURE 4
 #define PATTERN 5
 
@@ -97,10 +104,12 @@ void main()
   vec2 rot_tex = (matrot_tex * (texCoord_interp - t_center)) + t_center + texture_offset;
   vec4 tmp_color;
   tmp_color = (texture_clamp == 0) ?
-                  texture2D(myTexture, rot_tex * texture_scale) :
-                  texture2D(myTexture, clamp(rot_tex * texture_scale, 0.0, 1.0));
+                  texture_read_as_srgb(
+                      myTexture, myTexturePremultiplied, rot_tex * texture_scale) :
+                  texture_read_as_srgb(
+                      myTexture, myTexturePremultiplied, clamp(rot_tex * texture_scale, 0.0, 1.0));
   vec4 text_color = vec4(tmp_color[0], tmp_color[1], tmp_color[2], tmp_color[3] * texture_opacity);
-  vec4 chesscolor;
+  vec4 checker_color;
 
   /* wireframe with x-ray discard */
   if ((viewport_xray == 1) && (shading_type[0] == OB_WIRE)) {
@@ -149,18 +158,18 @@ void main()
                 texture_flip,
                 fragColor);
     }
-    /* chessboard */
-    if (fill_type == CHESS) {
+    /* Checkerboard */
+    if (fill_type == CHECKER) {
       vec2 pos = rot / pattern_gridsize;
       if ((fract(pos.x) < 0.5 && fract(pos.y) < 0.5) ||
           (fract(pos.x) > 0.5 && fract(pos.y) > 0.5)) {
-        chesscolor = (texture_flip == 0) ? finalColor : color2;
+        checker_color = (texture_flip == 0) ? finalColor : color2;
       }
       else {
-        chesscolor = (texture_flip == 0) ? color2 : finalColor;
+        checker_color = (texture_flip == 0) ? color2 : finalColor;
       }
       /* mix with texture */
-      fragColor = (texture_mix == 1) ? mix(chesscolor, text_color, mix_factor) : chesscolor;
+      fragColor = (texture_mix == 1) ? mix(checker_color, text_color, mix_factor) : checker_color;
       fragColor.a *= layer_opacity;
     }
     /* texture */
@@ -177,10 +186,11 @@ void main()
 
   /* set zdepth */
   if (xraymode == GP_XRAY_FRONT) {
-    gl_FragDepth = min(0.000001, (gl_FragCoord.z / gl_FragCoord.w));
+    gl_FragDepth = min(-0.05, (gl_FragCoord.z / gl_FragCoord.w));
   }
   else if (xraymode == GP_XRAY_3DSPACE) {
-    /* if 3D mode, move slightly the fill to avoid z-fighting between stroke and fill on same stroke */
+    /* if 3D mode, move slightly the fill to avoid z-fighting between stroke and fill on same
+     * stroke */
     if (drawmode == GP_DRAWMODE_3D) {
       gl_FragDepth = gl_FragCoord.z * 1.0001;
     }
@@ -206,5 +216,17 @@ void main()
     if (viewport_xray == 1) {
       fragColor.a *= 0.5;
     }
+  }
+  /* Apply paper opacity */
+  if (fade_layer == 1) {
+    /* Layer is below, mix with background. */
+    fragColor.rgb = mix(fade_color.rgb, fragColor.rgb, fade_layer_factor);
+  }
+  else if (fade_layer == 2) {
+    /* Layer is above, change opacity. */
+    fragColor.a *= fade_layer_factor;
+  }
+  else if (fade_ob == true) {
+    fragColor.rgb = mix(fade_color.rgb, fragColor.rgb, fade_ob_factor);
   }
 }

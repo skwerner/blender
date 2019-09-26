@@ -50,8 +50,8 @@ class CurvePoint_nonconst_traits : public Nonconst_traits<CurvePoint *> {
 /*                                */
 /**********************************/
 
-/*! iterator on a curve. Allows an iterating outside  initial vertices. A CurvePoint is instanciated an returned
- *  when the iterator is dereferenced.
+/*! iterator on a curve. Allows an iterating outside initial vertices. A CurvePoint is
+ * instantiated and returned when the iterator is dereferenced.
  */
 template<class Traits>
 class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Traits> {
@@ -86,7 +86,7 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
   friend class __point_iterator<CurvePoint_nonconst_traits>;
   friend class iterator;
 #endif
-  //protected:
+  // protected:
  public:
   float _CurvilinearLength;
   float _step;
@@ -119,10 +119,12 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
     _CurvilinearLength = iBrother._CurvilinearLength;
     _step = iBrother._step;
     _t = iBrother._t;
-    if (iBrother._Point == 0)
+    if (iBrother._Point == 0) {
       _Point = 0;
-    else
+    }
+    else {
       _Point = new Point(*(iBrother._Point));
+    }
     _n = iBrother._n;
     _currentn = iBrother._currentn;
   }
@@ -136,10 +138,12 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
     _CurvilinearLength = iBrother._CurvilinearLength;
     _step = iBrother._step;
     _t = iBrother._t;
-    if (iBrother._Point == 0)
+    if (iBrother._Point == 0) {
       _Point = 0;
-    else
+    }
+    else {
       _Point = new Point(*(iBrother._Point));
+    }
     _n = iBrother._n;
     _currentn = iBrother._currentn;
   }
@@ -154,10 +158,12 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
     _CurvilinearLength = iBrother._CurvilinearLength;
     _step = iBrother._step;
     _t = iBrother._t;
-    if (iBrother._Point == 0)
+    if (iBrother._Point == 0) {
       _Point = 0;
-    else
+    }
+    else {
       _Point = new Point(*(iBrother._Point));
+    }
     _n = iBrother._n;
     _currentn = iBrother._currentn;
     return *this;
@@ -165,11 +171,12 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
 
   virtual ~__point_iterator()
   {
-    if (_Point != 0)
+    if (_Point != 0) {
       delete _Point;
+    }
   }
 
-  //protected:  //FIXME
+  // protected:  //FIXME
  public:
   inline __point_iterator(vertex_container_iterator iA,
                           vertex_container_iterator iB,
@@ -243,8 +250,9 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
       delete _Point;
       _Point = 0;
     }
-    if ((_currentn < 0) || (_currentn >= _n))
+    if ((_currentn < 0) || (_currentn >= _n)) {
       return _Point;  // 0 in this case
+    }
     return (_Point = new Point(*__A, *__B, _t));
   }
 
@@ -255,15 +263,17 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
 
   virtual bool begin() const
   {
-    if ((__A == _begin) && (_t < (float)M_EPSILON))
+    if ((__A == _begin) && (_t < (float)M_EPSILON)) {
       return true;
+    }
     return false;
   }
 
   virtual bool end() const
   {
-    if ((__B == _end))
+    if ((__B == _end)) {
       return true;
+    }
     return false;
   }
 
@@ -307,7 +317,7 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
     else {
       _t = 1.0f;  // AB is a null segment, we're directly at its end
     }
-    //if normAB ~= 0, we don't change these values
+    // if normAB ~= 0, we don't change these values
     if (_t >= 1) {
       _CurvilinearLength -= normAB * (_t - 1);
       if (_currentn == _n - 1) {
@@ -334,8 +344,9 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
       --_currentn;
       --__A;
       --__B;
-      if (_currentn == _n - 1)
+      if (_currentn == _n - 1) {
         return;
+      }
     }
 
     if (0 == _step) {  // means we iterate over initial vertices
@@ -358,13 +369,16 @@ class __point_iterator : public IteratorBase<Traits, BidirectionalIteratorTag_Tr
     }
 
     // round value
-    if (fabs(_t) < (float)M_EPSILON)
+    if (fabs(_t) < (float)M_EPSILON) {
       _t = 0.0f;
+    }
     if (_t < 0) {
-      if (_currentn == 0)
+      if (_currentn == 0) {
         _CurvilinearLength = 0.0f;
-      else
+      }
+      else {
         _CurvilinearLength += normAB * (-_t);
+      }
       _t = 0.0f;
     }
   }

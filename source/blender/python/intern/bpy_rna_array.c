@@ -86,7 +86,8 @@ typedef struct ItemConvert_FuncArg {
  */
 
 /* arr[3] = x, self->arraydim is 0, lvalue_dim is 1 */
-/* Ensures that a python sequence has expected number of items/sub-items and items are of desired type. */
+/* Ensures that a python sequence has expected number of
+ * items/sub-items and items are of desired type. */
 static int validate_array_type(PyObject *seq,
                                int dim,
                                int totdim,
@@ -203,7 +204,10 @@ static int validate_array_type(PyObject *seq,
       else if (!check_item_type(item)) {
         Py_DECREF(item);
 
-        /* BLI_snprintf(error_str, error_str_size, "sequence items should be of type %s", item_type_str); */
+#if 0
+        BLI_snprintf(
+            error_str, error_str_size, "sequence items should be of type %s", item_type_str);
+#endif
         PyErr_Format(PyExc_TypeError,
                      "%s expected sequence items of type %s, not %s",
                      error_prefix,
@@ -550,8 +554,9 @@ static int py_to_array(PyObject *seq,
       /* not freeing allocated mem, RNA_parameter_list_free() will do this */
       ParameterDynAlloc *param_alloc = (ParameterDynAlloc *)param_data;
       param_alloc->array_tot = (int)totitem;
-      param_alloc->array = MEM_callocN(item_size * totitem,
-                                       "py_to_array dyn"); /* freeing param list will free */
+
+      /* freeing param list will free */
+      param_alloc->array = MEM_callocN(item_size * totitem, "py_to_array dyn");
 
       data = param_alloc->array;
     }

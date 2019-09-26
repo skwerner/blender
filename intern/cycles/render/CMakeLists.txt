@@ -14,6 +14,7 @@ set(SRC
   bake.cpp
   buffers.cpp
   camera.cpp
+  colorspace.cpp
   constant_fold.cpp
   coverage.cpp
   denoising.cpp
@@ -48,6 +49,7 @@ set(SRC_HEADERS
   background.h
   buffers.h
   camera.h
+  colorspace.h
   constant_fold.h
   coverage.h
   denoising.h
@@ -82,8 +84,6 @@ if(WITH_CYCLES_OSL)
     cycles_kernel_osl
   )
 endif()
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RTTI_DISABLE_FLAGS}")
 
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})

@@ -31,6 +31,8 @@
 #include <string.h>
 
 #include "BLI_utildefines.h"
+#include "BLI_string.h"
+#include "BLI_ghash.h"
 
 #define PACK_DEBUG 0
 
@@ -58,12 +60,6 @@ void GPU_vertformat_copy(GPUVertFormat *dest, const GPUVertFormat *src)
 {
   /* copy regular struct fields */
   memcpy(dest, src, sizeof(GPUVertFormat));
-
-  for (uint i = 0; i < dest->attr_len; i++) {
-    for (uint j = 0; j < dest->attrs[i].name_len; j++) {
-      dest->attrs[i].name[j] = (char *)dest + (src->attrs[i].name[j] - ((char *)src));
-    }
-  }
 }
 
 static GLenum convert_comp_type_to_gl(GPUVertCompType type)
@@ -122,32 +118,20 @@ uint vertex_buffer_size(const GPUVertFormat *format, uint vertex_len)
   return format->stride * vertex_len;
 }
 
-static const char *copy_attr_name(GPUVertFormat *format, const char *name, const char *suffix)
+static uchar copy_attr_name(GPUVertFormat *format, const char *name)
 {
   /* strncpy does 110% of what we need; let's do exactly 100% */
-  char *name_copy = format->names + format->name_offset;
-  uint available = GPU_VERT_ATTR_NAMES_BUF_LEN - format->name_offset;
+  uchar name_offset = format->name_offset;
+  char *name_copy = format->names + name_offset;
+  uint available = GPU_VERT_ATTR_NAMES_BUF_LEN - name_offset;
   bool terminated = false;
 
-  for (uint i = 0; i < available; ++i) {
+  for (uint i = 0; i < available; i++) {
     const char c = name[i];
     name_copy[i] = c;
     if (c == '\0') {
-      if (suffix) {
-        for (uint j = 0; j < available; ++j) {
-          const char s = suffix[j];
-          name_copy[i + j] = s;
-          if (s == '\0') {
-            terminated = true;
-            format->name_offset += (i + j + 1);
-            break;
-          }
-        }
-      }
-      else {
-        terminated = true;
-        format->name_offset += (i + 1);
-      }
+      terminated = true;
+      format->name_offset += (i + 1);
       break;
     }
   }
@@ -157,7 +141,7 @@ static const char *copy_attr_name(GPUVertFormat *format, const char *name, const
 #else
   (void)terminated;
 #endif
-  return name_copy;
+  return name_offset;
 }
 
 uint GPU_vertformat_attr_add(GPUVertFormat *format,
@@ -167,9 +151,9 @@ uint GPU_vertformat_attr_add(GPUVertFormat *format,
                              GPUVertFetchMode fetch_mode)
 {
 #if TRUST_NO_ONE
-  assert(format->name_len < GPU_VERT_ATTR_MAX_LEN); /* there's room for more */
-  assert(format->attr_len < GPU_VERT_ATTR_MAX_LEN); /* there's room for more */
-  assert(!format->packed);                          /* packed means frozen/locked */
+  assert(format->name_len < GPU_VERT_FORMAT_MAX_NAMES); /* there's room for more */
+  assert(format->attr_len < GPU_VERT_ATTR_MAX_LEN);     /* there's room for more */
+  assert(!format->packed);                              /* packed means frozen/locked */
   assert((comp_len >= 1 && comp_len <= 4) || comp_len == 8 || comp_len == 12 || comp_len == 16);
 
   switch (comp_type) {
@@ -181,8 +165,10 @@ uint GPU_vertformat_attr_add(GPUVertFormat *format,
       /* 10_10_10 format intended for normals (xyz) or colors (rgb)
        * extra component packed.w can be manually set to { -2, -1, 0, 1 } */
       assert(comp_len == 3 || comp_len == 4);
-      assert(fetch_mode ==
-             GPU_FETCH_INT_TO_FLOAT_UNIT); /* not strictly required, may relax later */
+
+      /* Not strictly required, may relax later. */
+      assert(fetch_mode == GPU_FETCH_INT_TO_FLOAT_UNIT);
+
       break;
     default:
       /* integer types can be kept as int or converted/normalized to float */
@@ -196,7 +182,7 @@ uint GPU_vertformat_attr_add(GPUVertFormat *format,
   const uint attr_id = format->attr_len++;
   GPUVertAttr *attr = &format->attrs[attr_id];
 
-  attr->name[attr->name_len++] = copy_attr_name(format, name, NULL);
+  attr->names[attr->name_len++] = copy_attr_name(format, name);
   attr->comp_type = comp_type;
   attr->gl_comp_type = convert_comp_type_to_gl(comp_type);
   attr->comp_len = (comp_type == GPU_COMP_I10) ?
@@ -213,11 +199,11 @@ void GPU_vertformat_alias_add(GPUVertFormat *format, const char *alias)
 {
   GPUVertAttr *attr = &format->attrs[format->attr_len - 1];
 #if TRUST_NO_ONE
-  assert(format->name_len < GPU_VERT_ATTR_MAX_LEN); /* there's room for more */
+  assert(format->name_len < GPU_VERT_FORMAT_MAX_NAMES); /* there's room for more */
   assert(attr->name_len < GPU_VERT_ATTR_MAX_NAMES);
 #endif
   format->name_len++; /* multiname support */
-  attr->name[attr->name_len++] = copy_attr_name(format, alias, NULL);
+  attr->names[attr->name_len++] = copy_attr_name(format, alias);
 }
 
 int GPU_vertformat_attr_id_get(const GPUVertFormat *format, const char *name)
@@ -225,7 +211,8 @@ int GPU_vertformat_attr_id_get(const GPUVertFormat *format, const char *name)
   for (int i = 0; i < format->attr_len; i++) {
     const GPUVertAttr *attr = &format->attrs[i];
     for (int j = 0; j < attr->name_len; j++) {
-      if (STREQ(name, attr->name[j])) {
+      const char *attr_name = GPU_vertformat_attr_name_get(format, attr, j);
+      if (STREQ(name, attr_name)) {
         return i;
       }
     }
@@ -233,39 +220,77 @@ int GPU_vertformat_attr_id_get(const GPUVertFormat *format, const char *name)
   return -1;
 }
 
-void GPU_vertformat_triple_load(GPUVertFormat *format)
+/* Encode 8 original bytes into 11 safe bytes. */
+static void safe_bytes(char out[11], const char data[8])
 {
-#if TRUST_NO_ONE
-  assert(!format->packed);
-  assert(format->attr_len * 3 < GPU_VERT_ATTR_MAX_LEN);
-  assert(format->name_len + format->attr_len * 3 < GPU_VERT_ATTR_MAX_LEN);
-#endif
+  char safe_chars[63] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
 
-  VertexFormat_pack(format);
-
-  uint old_attr_len = format->attr_len;
-  for (uint a_idx = 0; a_idx < old_attr_len; ++a_idx) {
-    GPUVertAttr *attr = &format->attrs[a_idx];
-    /* Duplicate attr twice */
-    for (int i = 1; i < 3; ++i) {
-      GPUVertAttr *dst_attr = &format->attrs[format->attr_len];
-      memcpy(dst_attr, attr, sizeof(GPUVertAttr));
-      /* Increase offset to the next vertex. */
-      dst_attr->offset += format->stride * i;
-      /* Only copy first name for now. */
-      dst_attr->name_len = 0;
-      dst_attr->name[dst_attr->name_len++] = copy_attr_name(
-          format, attr->name[0], (i == 1) ? "1" : "2");
-      format->attr_len++;
-    }
-
-#if TRUST_NO_ONE
-    assert(attr->name_len < GPU_VERT_ATTR_MAX_NAMES);
-#endif
-    /* Add alias to first attr. */
-    format->name_len++;
-    attr->name[attr->name_len++] = copy_attr_name(format, attr->name[0], "0");
+  uint64_t in = *(uint64_t *)data;
+  for (int i = 0; i < 11; i++) {
+    /* Encoding in base63 */
+    out[i] = safe_chars[in % 63lu];
+    in /= 63lu;
   }
+}
+
+/* Warning: Always add a prefix to the result of this function as
+ * the generated string can start with a number and not be a valid attribute name. */
+void GPU_vertformat_safe_attrib_name(const char *attrib_name,
+                                     char *r_safe_name,
+                                     uint UNUSED(max_len))
+{
+  char data[8] = {0};
+  uint len = strlen(attrib_name);
+
+  if (len > 8) {
+    /* Start with the first 4 chars of the name; */
+    for (int i = 0; i < 4; i++) {
+      data[i] = attrib_name[i];
+    }
+    /* We use a hash to identify each data layer based on its name.
+     * NOTE: This is still prone to hash collision but the risks are very low.*/
+    /* Start hashing after the first 2 chars. */
+    *(uint *)&data[4] = BLI_ghashutil_strhash_p_murmur(attrib_name + 4);
+  }
+  else {
+    /* Copy the whole name. Collision is barely possible
+     * (hash would have to be equal to the last 4 bytes). */
+    for (int i = 0; i < 8 && attrib_name[i] != '\0'; i++) {
+      data[i] = attrib_name[i];
+    }
+  }
+  /* Convert to safe bytes characters. */
+  safe_bytes(r_safe_name, data);
+  /* End the string */
+  r_safe_name[11] = '\0';
+
+  BLI_assert(GPU_MAX_SAFE_ATTRIB_NAME >= 12);
+#if 0 /* For debugging */
+  printf("%s > %lx > %s\n", attrib_name, *(uint64_t *)data, r_safe_name);
+#endif
+}
+
+/* Make attribute layout non-interleaved.
+ * Warning! This does not change data layout!
+ * Use direct buffer access to fill the data.
+ * This is for advanced usage.
+ *
+ * Deinterleaved data means all attrib data for each attrib
+ * is stored continuously like this :
+ * 000011112222
+ * instead of :
+ * 012012012012
+ *
+ * Note this is per attrib deinterleaving, NOT per component.
+ *  */
+void GPU_vertformat_deinterleave(GPUVertFormat *format)
+{
+  /* Ideally we should change the stride and offset here. This would allow
+   * us to use GPU_vertbuf_attr_set / GPU_vertbuf_attr_fill. But since
+   * we use only 11 bits for attr->offset this limits the size of the
+   * buffer considerably. So instead we do the conversion when creating
+   * bindings in create_bindings(). */
+  format->deinterleaved = true;
 }
 
 uint padding(uint offset, uint alignment)
@@ -278,10 +303,10 @@ uint padding(uint offset, uint alignment)
 static void show_pack(uint a_idx, uint sz, uint pad)
 {
   const char c = 'A' + a_idx;
-  for (uint i = 0; i < pad; ++i) {
+  for (uint i = 0; i < pad; i++) {
     putchar('-');
   }
-  for (uint i = 0; i < sz; ++i) {
+  for (uint i = 0; i < sz; i++) {
     putchar(c);
   }
 }
@@ -305,7 +330,7 @@ void VertexFormat_pack(GPUVertFormat *format)
   show_pack(0, a0->sz, 0);
 #endif
 
-  for (uint a_idx = 1; a_idx < format->attr_len; ++a_idx) {
+  for (uint a_idx = 1; a_idx < format->attr_len; a_idx++) {
     GPUVertAttr *a = &format->attrs[a_idx];
     uint mid_padding = padding(offset, attr_align(a));
     offset += mid_padding;
@@ -364,7 +389,6 @@ static uint calc_input_component_size(const GPUShaderInput *input)
 
 static void get_fetch_mode_and_comp_type(int gl_type,
                                          GPUVertCompType *r_comp_type,
-                                         uint *r_gl_comp_type,
                                          GPUVertFetchMode *r_fetch_mode)
 {
   switch (gl_type) {
@@ -382,7 +406,6 @@ static void get_fetch_mode_and_comp_type(int gl_type,
     case GL_FLOAT_MAT4x2:
     case GL_FLOAT_MAT4x3:
       *r_comp_type = GPU_COMP_F32;
-      *r_gl_comp_type = GL_FLOAT;
       *r_fetch_mode = GPU_FETCH_FLOAT;
       break;
     case GL_INT:
@@ -390,7 +413,6 @@ static void get_fetch_mode_and_comp_type(int gl_type,
     case GL_INT_VEC3:
     case GL_INT_VEC4:
       *r_comp_type = GPU_COMP_I32;
-      *r_gl_comp_type = GL_INT;
       *r_fetch_mode = GPU_FETCH_INT;
       break;
     case GL_UNSIGNED_INT:
@@ -398,7 +420,6 @@ static void get_fetch_mode_and_comp_type(int gl_type,
     case GL_UNSIGNED_INT_VEC3:
     case GL_UNSIGNED_INT_VEC4:
       *r_comp_type = GPU_COMP_U32;
-      *r_gl_comp_type = GL_UNSIGNED_INT;
       *r_fetch_mode = GPU_FETCH_INT;
       break;
     default:
@@ -421,73 +442,27 @@ void GPU_vertformat_from_interface(GPUVertFormat *format, const GPUShaderInterfa
       input = next;
       next = input->next;
 
+      /* OpenGL attributes such as `gl_VertexID` have a location of -1. */
+      if (input->location < 0) {
+        continue;
+      }
+
       format->name_len++; /* multiname support */
       format->attr_len++;
 
+      GPUVertCompType comp_type;
+      GPUVertFetchMode fetch_mode;
+      get_fetch_mode_and_comp_type(input->gl_type, &comp_type, &fetch_mode);
+
       GPUVertAttr *attr = &format->attrs[input->location];
 
-      attr->name[attr->name_len++] = copy_attr_name(
-          format, name_buffer + input->name_offset, NULL);
+      attr->names[attr->name_len++] = copy_attr_name(format, name_buffer + input->name_offset);
       attr->offset = 0; /* offsets & stride are calculated later (during pack) */
       attr->comp_len = calc_input_component_size(input);
       attr->sz = attr->comp_len * 4;
-      get_fetch_mode_and_comp_type(
-          input->gl_type, &attr->comp_type, &attr->gl_comp_type, &attr->fetch_mode);
+      attr->fetch_mode = fetch_mode;
+      attr->comp_type = comp_type;
+      attr->gl_comp_type = convert_comp_type_to_gl(comp_type);
     }
   }
-}
-
-/* OpenGL ES packs in a different order as desktop GL but component conversion is the same.
- * Of the code here, only struct GPUPackedNormal needs to change. */
-
-#define SIGNED_INT_10_MAX 511
-#define SIGNED_INT_10_MIN -512
-
-static int clampi(int x, int min_allowed, int max_allowed)
-{
-#if TRUST_NO_ONE
-  assert(min_allowed <= max_allowed);
-#endif
-  if (x < min_allowed) {
-    return min_allowed;
-  }
-  else if (x > max_allowed) {
-    return max_allowed;
-  }
-  else {
-    return x;
-  }
-}
-
-static int quantize(float x)
-{
-  int qx = x * 511.0f;
-  return clampi(qx, SIGNED_INT_10_MIN, SIGNED_INT_10_MAX);
-}
-
-static int convert_i16(short x)
-{
-  /* 16-bit signed --> 10-bit signed */
-  /* TODO: round? */
-  return x >> 6;
-}
-
-GPUPackedNormal GPU_normal_convert_i10_v3(const float data[3])
-{
-  GPUPackedNormal n = {
-      .x = quantize(data[0]),
-      .y = quantize(data[1]),
-      .z = quantize(data[2]),
-  };
-  return n;
-}
-
-GPUPackedNormal GPU_normal_convert_i10_s3(const short data[3])
-{
-  GPUPackedNormal n = {
-      .x = convert_i16(data[0]),
-      .y = convert_i16(data[1]),
-      .z = convert_i16(data[2]),
-  };
-  return n;
 }

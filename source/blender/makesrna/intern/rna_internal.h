@@ -29,15 +29,12 @@
 
 #define RNA_MAGIC ((int)~0)
 
-struct Depsgraph;
 struct FreestyleSettings;
 struct ID;
-struct IDOverrideStatic;
-struct IDOverrideStaticProperty;
-struct IDOverrideStaticPropertyOperation;
+struct IDOverrideLibrary;
+struct IDOverrideLibraryPropertyOperation;
 struct IDProperty;
 struct Main;
-struct Mesh;
 struct Object;
 struct ReportList;
 struct SDNA;
@@ -77,6 +74,11 @@ typedef struct PropertyDefRNA {
   const char *dnatype;
   int dnaarraylength;
   int dnapointerlevel;
+  /**
+   * Offset in bytes within `dnastructname`.
+   * -1 when unusable (follows pointer for e.g.). */
+  int dnaoffset;
+  int dnasize;
 
   /* for finding length of array collections */
   const char *dnalengthstructname;
@@ -116,6 +118,16 @@ typedef struct BlenderDefRNA {
   ListBase allocs;
   struct StructRNA *laststruct;
   int error, silent, preprocess, verify, animate;
+  /* Keep last. */
+#ifndef RNA_RUNTIME
+  struct {
+    /** #RNA_def_property_update */
+    struct {
+      int noteflag;
+      const char *updatefunc;
+    } property_update;
+  } fallback;
+#endif
 } BlenderDefRNA;
 
 extern BlenderDefRNA DefRNA;
@@ -211,12 +223,12 @@ bool rna_AnimaData_override_apply(struct Main *bmain,
                                   struct PointerRNA *ptr_item_local,
                                   struct PointerRNA *ptr_item_reference,
                                   struct PointerRNA *ptr_item_storage,
-                                  struct IDOverrideStaticPropertyOperation *opop);
+                                  struct IDOverrideLibraryPropertyOperation *opop);
 
 void rna_def_animviz_common(struct StructRNA *srna);
 void rna_def_motionpath_common(struct StructRNA *srna);
 
-void rna_def_bone_curved_common(struct StructRNA *srna, bool is_posebone);
+void rna_def_bone_curved_common(struct StructRNA *srna, bool is_posebone, bool is_editbone);
 
 void rna_def_texmat_common(struct StructRNA *srna, const char *texspace_editable);
 void rna_def_mtex_common(struct BlenderRNA *brna,
@@ -277,7 +289,9 @@ int rna_object_shapekey_index_set(struct ID *id, PointerRNA value, int current);
 /* ViewLayer related functions defined in rna_scene.c but required in rna_layer.c */
 void rna_def_freestyle_settings(struct BlenderRNA *brna);
 struct PointerRNA rna_FreestyleLineSet_linestyle_get(struct PointerRNA *ptr);
-void rna_FreestyleLineSet_linestyle_set(struct PointerRNA *ptr, struct PointerRNA value);
+void rna_FreestyleLineSet_linestyle_set(struct PointerRNA *ptr,
+                                        struct PointerRNA value,
+                                        struct ReportList *reports);
 struct FreestyleLineSet *rna_FreestyleSettings_lineset_add(struct ID *id,
                                                            struct FreestyleSettings *config,
                                                            struct Main *bmain,
@@ -339,9 +353,14 @@ bool rna_GPencil_datablocks_obdata_poll(struct PointerRNA *ptr, const struct Poi
 char *rna_TextureSlot_path(struct PointerRNA *ptr);
 char *rna_Node_ImageUser_path(struct PointerRNA *ptr);
 
+/* Set U.is_dirty and redraw. */
+void rna_userdef_is_dirty_update_impl(void);
+void rna_userdef_is_dirty_update(struct Main *bmain, struct Scene *scene, struct PointerRNA *ptr);
+
 /* API functions */
 
 void RNA_api_action(StructRNA *srna);
+void RNA_api_animdata(struct StructRNA *srna);
 void RNA_api_armature_edit_bone(StructRNA *srna);
 void RNA_api_bone(StructRNA *srna);
 void RNA_api_camera(StructRNA *srna);
@@ -461,7 +480,7 @@ int rna_property_override_diff_default(struct Main *bmain,
                                        const int len_a,
                                        const int len_b,
                                        const int mode,
-                                       struct IDOverrideStatic *override,
+                                       struct IDOverrideLibrary *override,
                                        const char *rna_path,
                                        const int flags,
                                        bool *r_override_changed);
@@ -476,7 +495,7 @@ bool rna_property_override_store_default(struct Main *bmain,
                                          const int len_local,
                                          const int len_reference,
                                          const int len_storage,
-                                         struct IDOverrideStaticPropertyOperation *opop);
+                                         struct IDOverrideLibraryPropertyOperation *opop);
 
 bool rna_property_override_apply_default(struct Main *bmain,
                                          struct PointerRNA *ptr_dst,
@@ -491,7 +510,7 @@ bool rna_property_override_apply_default(struct Main *bmain,
                                          struct PointerRNA *ptr_item_dst,
                                          struct PointerRNA *ptr_item_src,
                                          struct PointerRNA *ptr_item_storage,
-                                         struct IDOverrideStaticPropertyOperation *opop);
+                                         struct IDOverrideLibraryPropertyOperation *opop);
 
 /* Builtin Property Callbacks */
 
@@ -529,6 +548,11 @@ PointerRNA rna_array_lookup_int(
 
 /* Duplicated code since we can't link in blenlib */
 
+#ifndef RNA_RUNTIME
+void *rna_alloc_from_buffer(const char *buffer, int buffer_len);
+void *rna_calloc(int buffer_len);
+#endif
+
 void rna_addtail(struct ListBase *listbase, void *vlink);
 void rna_freelinkN(struct ListBase *listbase, void *vlink);
 void rna_freelistN(struct ListBase *listbase);
@@ -546,13 +570,6 @@ PointerRNA rna_pointer_inherit_refine(struct PointerRNA *ptr, struct StructRNA *
 /* Functions */
 
 int rna_parameter_size(struct PropertyRNA *parm);
-
-struct Mesh *rna_Main_meshes_new_from_object(struct Main *bmain,
-                                             struct ReportList *reports,
-                                             struct Depsgraph *depsgraph,
-                                             struct Object *ob,
-                                             bool apply_modifiers,
-                                             bool calc_undeformed);
 
 /* XXX, these should not need to be defined here~! */
 struct MTex *rna_mtex_texture_slots_add(struct ID *self,

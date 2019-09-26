@@ -79,7 +79,8 @@ typedef struct Vert2GeomData {
   float *dist[3];
 } Vert2GeomData;
 
-/* Data which is localized to each computed chunk (i.e. thread-safe, and with continuous subset of index range). */
+/** Data which is localized to each computed chunk
+ * (i.e. thread-safe, and with continuous subset of index range). */
 typedef struct Vert2GeomDataChunk {
   /* Read-only data */
   float last_hit_co[3][3];
@@ -91,7 +92,7 @@ typedef struct Vert2GeomDataChunk {
  */
 static void vert2geom_task_cb_ex(void *__restrict userdata,
                                  const int iter,
-                                 const ParallelRangeTLS *__restrict tls)
+                                 const TaskParallelTLS *__restrict tls)
 {
   Vert2GeomData *data = userdata;
   Vert2GeomDataChunk *data_chunk = tls->userdata_chunk;
@@ -110,8 +111,8 @@ static void vert2geom_task_cb_ex(void *__restrict userdata,
       /* Note that we use local proximity heuristics (to reduce the nearest search).
        *
        * If we already had an hit before in same chunk of tasks (i.e. previous vertex by index),
-       * we assume this vertex is going to have a close hit to that other vertex, so we can initiate
-       * the "nearest.dist" with the expected value to that last hit.
+       * we assume this vertex is going to have a close hit to that other vertex,
+       * so we can initiate the "nearest.dist" with the expected value to that last hit.
        * This will lead in pruning of the search tree.
        */
       nearest.dist_sq = data_chunk->is_init[i] ?
@@ -187,7 +188,7 @@ static void get_vert2geom_distance(int numVerts,
   data.dist[1] = dist_e;
   data.dist[2] = dist_f;
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (numVerts > 10000);
   settings.userdata_chunk = &data_chunk;
@@ -214,7 +215,7 @@ static void get_vert2ob_distance(
 {
   /* Vertex and ref object coordinates. */
   float v_wco[3];
-  unsigned int i = numVerts;
+  uint i = numVerts;
 
   while (i-- > 0) {
     /* Get world-coordinates of the vertex (constraints and anim included). */
@@ -240,7 +241,7 @@ static void do_map(
     Object *ob, float *weights, const int nidx, const float min_d, const float max_d, short mode)
 {
   const float range_inv = 1.0f / (max_d - min_d); /* invert since multiplication is faster */
-  unsigned int i = nidx;
+  uint i = nidx;
   if (max_d == min_d) {
     while (i-- > 0) {
       weights[i] = (weights[i] >= max_d) ? 1.0f : 0.0f; /* "Step" behavior... */
@@ -491,7 +492,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
   /* Get our vertex coordinates. */
   if (numIdx != numVerts) {
-    float(*tv_cos)[3] = BKE_mesh_vertexCos_get(mesh, NULL);
+    float(*tv_cos)[3] = BKE_mesh_vert_coords_alloc(mesh, NULL);
     v_cos = MEM_malloc_arrayN(numIdx, sizeof(float[3]), "WeightVGProximity Modifier, v_cos");
     for (i = 0; i < numIdx; i++) {
       copy_v3_v3(v_cos[i], tv_cos[indices[i]]);
@@ -499,7 +500,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     MEM_freeN(tv_cos);
   }
   else {
-    v_cos = BKE_mesh_vertexCos_get(mesh, NULL);
+    v_cos = BKE_mesh_vert_coords_alloc(mesh, NULL);
   }
 
   /* Compute wanted distances. */
@@ -579,8 +580,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
   /* If weight preview enabled... */
 #if 0 /* XXX Currently done in mod stack :/ */
-  if (do_prev)
+  if (do_prev) {
     DM_update_weight_mcol(ob, dm, 0, org_w, numIdx, indices);
+  }
 #endif
 
   /* Freeing stuff. */

@@ -269,7 +269,10 @@ struct CCGSubSurf {
 #define EDGE_getNo(e, lvl, x) ccg_edge_getNo(e, lvl, x, vertDataSize, normalDataOffset)
 #define FACE_getIFNo(f, lvl, S, x, y) \
   ccg_face_getIFNo(f, lvl, S, x, y, subdivLevels, vertDataSize, normalDataOffset)
-//#define FACE_calcIFNo(f, lvl, S, x, y, no)  _face_calcIFNo(f, lvl, S, x, y, no, subdivLevels, vertDataSize)
+#if 0
+#  define FACE_calcIFNo(f, lvl, S, x, y, no) \
+    _face_calcIFNo(f, lvl, S, x, y, no, subdivLevels, vertDataSize)
+#endif
 #define FACE_getIENo(f, lvl, S, x) \
   ccg_face_getIENo(f, lvl, S, x, subdivLevels, vertDataSize, normalDataOffset)
 #define FACE_getIECo(f, lvl, S, x) ccg_face_getIECo(f, lvl, S, x, subdivLevels, vertDataSize)
@@ -303,13 +306,13 @@ struct CCGSubSurf {
 /* * CCGSubSurf.c * */
 
 void ccgSubSurf__allFaces(CCGSubSurf *ss, CCGFace ***faces, int *numFaces, int *freeFaces);
-void ccgSubSurf__effectedFaceNeighbours(CCGSubSurf *ss,
-                                        CCGFace **faces,
-                                        int numFaces,
-                                        CCGVert ***verts,
-                                        int *numVerts,
-                                        CCGEdge ***edges,
-                                        int *numEdges);
+void ccgSubSurf__effectedFaceNeighbors(CCGSubSurf *ss,
+                                       CCGFace **faces,
+                                       int numFaces,
+                                       CCGVert ***verts,
+                                       int *numVerts,
+                                       CCGEdge ***edges,
+                                       int *numEdges);
 
 /* * CCGSubSurf_legacy.c * */
 

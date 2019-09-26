@@ -275,11 +275,8 @@ ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
 /* Equi-angular sampling as in:
  * "Importance Sampling Techniques for Path Tracing in Participating Media" */
 
-ccl_device float kernel_volume_equiangular_sample(KernelGlobals *kg,
-                                                  const Ray *ray,
-                                                  const LightSample *ls,
-                                                  float xi,
-                                                  float *pdf)
+ccl_device float kernel_volume_equiangular_sample(
+    KernelGlobals *kg, const Ray *ray, const LightSample *ls, float xi, float *pdf)
 {
   float t = ray->t;
 
@@ -316,13 +313,7 @@ ccl_device float kernel_volume_equiangular_sample(KernelGlobals *kg,
     const ccl_global KernelLight &klight = kernel_tex_fetch(__lights, ls->lamp);
     float t0, t1;
     const float3 spot_D = make_float3(klight.spot.dir[0], klight.spot.dir[1], klight.spot.dir[2]);
-    if (ray_cone_intersect(ray->P,
-                           ray->D,
-                           ls->P,
-                           spot_D,
-                           klight.spot.spot_angle,
-                           &t0,
-                           &t1)) {
+    if (ray_cone_intersect(ray->P, ray->D, ls->P, spot_D, klight.spot.spot_angle, &t0, &t1)) {
       /* If the ray origin is inside the cone, use only the first intersection. */
       if (dot(normalize(ls->P - ray->P), spot_D) > klight.spot.spot_angle) {
         t_far = min(t_far, t0);
@@ -352,7 +343,10 @@ ccl_device float kernel_volume_equiangular_sample(KernelGlobals *kg,
   return min(t, delta + t_); /* min is only for float precision errors */
 }
 
-ccl_device float kernel_volume_equiangular_pdf(KernelGlobals *kg, const Ray *ray, const LightSample *ls, float sample_t)
+ccl_device float kernel_volume_equiangular_pdf(KernelGlobals *kg,
+                                               const Ray *ray,
+                                               const LightSample *ls,
+                                               float sample_t)
 {
   float delta = dot((ls->P - ray->P), ray->D);
   float D = safe_sqrtf(len_squared(ls->P - ray->P) - delta * delta);
@@ -389,13 +383,7 @@ ccl_device float kernel_volume_equiangular_pdf(KernelGlobals *kg, const Ray *ray
     const ccl_global KernelLight &klight = kernel_tex_fetch(__lights, ls->lamp);
     float t0, t1;
     const float3 spot_D = make_float3(klight.spot.dir[0], klight.spot.dir[1], klight.spot.dir[2]);
-    if (ray_cone_intersect(ray->P,
-                           ray->D,
-                           ls->P,
-                           spot_D,
-                           klight.spot.spot_angle,
-                           &t0,
-                           &t1)) {
+    if (ray_cone_intersect(ray->P, ray->D, ls->P, spot_D, klight.spot.spot_angle, &t0, &t1)) {
       /* If the ray origin is inside the cone, use only the first intersection. */
       if (dot(normalize(ls->P - ray->P), spot_D) > klight.spot.spot_angle) {
         t_far = min(t_far, t0);

@@ -211,16 +211,8 @@ ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
         float rscatter = path_branched_rng_1D(
             kg, state->rng_hash, state, j, num_samples, PRNG_SCATTER_DISTANCE);
 
-        VolumeIntegrateResult result = kernel_volume_decoupled_scatter(kg,
-                                                                       state,
-                                                                       ray,
-                                                                       sd,
-                                                                       &tp,
-                                                                       rphase,
-                                                                       rscatter,
-                                                                       segment,
-                                                                       &ls,
-                                                                       false);
+        VolumeIntegrateResult result = kernel_volume_decoupled_scatter(
+            kg, state, ray, sd, &tp, rphase, rscatter, segment, &ls, false);
 
         if (result == VOLUME_PATH_SCATTERED) {
           /* todo: split up light_sample so we don't have to call it again with new position */

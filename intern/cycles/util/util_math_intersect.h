@@ -21,16 +21,13 @@ CCL_NAMESPACE_BEGIN
 
 /* Ray Intersection */
 
-ccl_device_inline bool ray_plane_intersect(float3 ray_P,
-                                           float3 ray_D,
-                                           float3 plane_P,
-                                           float3 plane_N,
-                                           float *isect_t)
+ccl_device_inline bool ray_plane_intersect(
+    float3 ray_P, float3 ray_D, float3 plane_P, float3 plane_N, float *isect_t)
 {
   const float det = dot(ray_D, plane_N);
   if (fabsf(det) > 1e-6f) {
     *isect_t = -(dot(ray_P, plane_N) - dot(plane_P, plane_N)) / det;
-      return true;
+    return true;
   }
   return false;
 }
@@ -292,12 +289,12 @@ ccl_device_inline bool util_solve_quadratic(float A, float B, float C, float *t0
  * http://lousodrome.net/blog/light/2017/01/03/intersection-of-a-ray-and-a-cone/
  */
 ccl_device bool ray_cone_intersect(float3 ray_P,
-                                  float3 ray_D,
-                                  float3 cone_P,
-                                  float3 cone_D,
-                                  float cos_cone_half_angle,
-                                  float *isect_t1,
-                                  float *isect_t2)
+                                   float3 ray_D,
+                                   float3 cone_P,
+                                   float3 cone_D,
+                                   float cos_cone_half_angle,
+                                   float *isect_t1,
+                                   float *isect_t2)
 {
   const float k = cos_cone_half_angle * cos_cone_half_angle;
   const float DdotV = dot(ray_D, cone_D);

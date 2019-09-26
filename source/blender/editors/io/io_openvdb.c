@@ -151,12 +151,16 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
 
   /* Try to find some default grids. */
   prop = RNA_struct_find_property(&ptr, "density");
+  PropertyRNA *flame = RNA_struct_find_property(&ptr, "flame");
   if (prop && vdbmd->numgrids > 0) {
     for (int i = 0; i < vdbmd->numgrids; ++i) {
       if (BLI_strcaseeq(vdbmd->grids[i], "density") ||
-          BLI_strcaseeq(vdbmd->grids[i], "smoke")) {
+          BLI_strcaseeq(vdbmd->grids[i], "Smoke")) {
         RNA_property_enum_set(&ptr, prop, i + 1);
-        break;
+      }
+      else if (flame && (BLI_strcaseeq(vdbmd->grids[i], "temperature") ||
+               BLI_strcaseeq(vdbmd->grids[i], "FireFuel"))) {
+        RNA_property_enum_set(&ptr, flame, i + 1);
       }
     }
   }

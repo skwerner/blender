@@ -142,6 +142,25 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
   cache->endframe -= cache->startframe - 1;
   cache->startframe = 1;
 
+  /* Make sure to trigger updates. */
+  PointerRNA ptr;
+  PropertyRNA *prop;
+  RNA_pointer_create(NULL, &RNA_OpenVDBModifier, vdbmd, &ptr);
+  prop = RNA_struct_find_property(&ptr, "filepath");
+  RNA_property_update(C, &ptr, prop);
+
+  /* Try to find some default grids. */
+  prop = RNA_struct_find_property(&ptr, "density");
+  if (prop && vdbmd->numgrids > 0) {
+    for (int i = 0; i < vdbmd->numgrids; ++i) {
+      if (BLI_strcaseeq(vdbmd->grids[i], "density") ||
+          BLI_strcaseeq(vdbmd->grids[i], "smoke")) {
+        RNA_property_enum_set(&ptr, prop, i + 1);
+        break;
+      }
+    }
+  }
+
   return OPERATOR_FINISHED;
 }
 

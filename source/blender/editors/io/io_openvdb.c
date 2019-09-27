@@ -111,7 +111,7 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
   if (!material->nodetree) {
     material->nodetree = ntreeAddTree(NULL, "Shader Nodetree", "ShaderNodeTree");
   }
-  material->use_nodes = true;  /* Create a basic volumetric shader. */
+  material->use_nodes = true; /* Create a basic volumetric shader. */
   struct bNodeTree *tree = material->nodetree;
   struct bNode *volume_shader_node = nodeAddStaticNode(C, tree, SH_NODE_VOLUME_PRINCIPLED);
   struct bNode *output_node = nodeAddStaticNode(C, tree, SH_NODE_OUTPUT_MATERIAL);
@@ -154,12 +154,11 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
   PropertyRNA *flame = RNA_struct_find_property(&ptr, "flame");
   if (prop && vdbmd->numgrids > 0) {
     for (int i = 0; i < vdbmd->numgrids; ++i) {
-      if (BLI_strcaseeq(vdbmd->grids[i], "density") ||
-          BLI_strcaseeq(vdbmd->grids[i], "Smoke")) {
+      if (BLI_strcaseeq(vdbmd->grids[i], "density") || BLI_strcaseeq(vdbmd->grids[i], "Smoke")) {
         RNA_property_enum_set(&ptr, prop, i + 1);
       }
       else if (flame && (BLI_strcaseeq(vdbmd->grids[i], "temperature") ||
-               BLI_strcaseeq(vdbmd->grids[i], "FireFuel"))) {
+                         BLI_strcaseeq(vdbmd->grids[i], "FireFuel"))) {
         RNA_property_enum_set(&ptr, flame, i + 1);
       }
     }

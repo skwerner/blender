@@ -6540,7 +6540,8 @@ static void rna_def_modifier_openvdb(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "in_memory_render", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_OPENVDB_IN_MEMORY_RENDER);
-  RNA_def_property_ui_text(prop, "In Memory Render", "Render with loading the entire volume into memory");
+  RNA_def_property_ui_text(
+      prop, "In Memory Render", "Render with loading the entire volume into memory");
 
   prop = RNA_def_property(srna, "max_density", PROP_FLOAT, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);

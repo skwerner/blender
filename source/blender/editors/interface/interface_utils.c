@@ -405,7 +405,7 @@ void ui_rna_collection_search_cb(const struct bContext *C,
   RNA_PROP_BEGIN (&data->search_ptr, itemptr, data->search_prop) {
 
     if (flag & PROP_ID_SELF_CHECK) {
-      if (itemptr.data == data->target_ptr.id.data) {
+      if (itemptr.data == data->target_ptr.owner_id) {
         continue;
       }
     }
@@ -417,8 +417,9 @@ void ui_rna_collection_search_cb(const struct bContext *C,
       }
     }
 
-    name = RNA_struct_name_get_alloc(
-        &itemptr, NULL, 0, NULL); /* could use the string length here */
+    /* Could use the string length here. */
+    name = RNA_struct_name_get_alloc(&itemptr, NULL, 0, NULL);
+
     iconid = 0;
     if (itemptr.type && RNA_struct_is_ID(itemptr.type)) {
       iconid = ui_id_icon_get(C, itemptr.data, false);
@@ -508,7 +509,8 @@ int UI_icon_from_report_type(int type)
 /********************************** Misc **************************************/
 
 /**
- * Returns the best "UI" precision for given floating value, so that e.g. 10.000001 rather gets drawn as '10'...
+ * Returns the best "UI" precision for given floating value,
+ * so that e.g. 10.000001 rather gets drawn as '10'...
  */
 int UI_calc_float_precision(int prec, double value)
 {
@@ -519,7 +521,8 @@ int UI_calc_float_precision(int prec, double value)
   BLI_assert(prec <= UI_PRECISION_FLOAT_MAX);
   BLI_assert(fabs(pow10_neg[prec] - pow(10, -prec)) < 1e-16);
 
-  /* check on the number of decimal places need to display the number, this is so 0.00001 is not displayed as 0.00,
+  /* Check on the number of decimal places need to display the number,
+   * this is so 0.00001 is not displayed as 0.00,
    * _but_, this is only for small values si 10.0001 will not get the same treatment.
    */
   value = ABS(value);
@@ -563,7 +566,7 @@ int UI_calc_float_precision(int prec, double value)
 
 bool UI_but_online_manual_id(const uiBut *but, char *r_str, size_t maxlength)
 {
-  if (but->rnapoin.id.data && but->rnapoin.data && but->rnaprop) {
+  if (but->rnapoin.owner_id && but->rnapoin.data && but->rnaprop) {
     BLI_snprintf(r_str,
                  maxlength,
                  "%s.%s",
@@ -631,8 +634,10 @@ uiButStore *UI_butstore_create(uiBlock *block)
 void UI_butstore_free(uiBlock *block, uiButStore *bs_handle)
 {
   /* Workaround for button store being moved into new block,
-   * which then can't use the previous buttons state ('ui_but_update_from_old_block' fails to find a match),
-   * keeping the active button in the old block holding a reference to the button-state in the new block: see T49034.
+   * which then can't use the previous buttons state
+   * ('ui_but_update_from_old_block' fails to find a match),
+   * keeping the active button in the old block holding a reference
+   * to the button-state in the new block: see T49034.
    *
    * Ideally we would manage moving the 'uiButStore', keeping a correct state.
    * All things considered this is the most straightforward fix - Campbell.

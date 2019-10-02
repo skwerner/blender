@@ -39,6 +39,7 @@
 #include "BKE_report.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -395,14 +396,15 @@ static int set_plane_exec(bContext *C, wmOperator *op)
   ListBase *tracksbase;
   Object *object;
   Object *camera = get_camera_with_movieclip(scene, clip);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   int tot = 0;
   float vec[3][3], mat[4][4], obmat[4][4], newmat[4][4], orig[3] = {0.0f, 0.0f, 0.0f};
   int plane = RNA_enum_get(op->ptr, "plane");
-  float rot[4][4] = {{0.0f, 0.0f, -1.0f, 0.0f},
-                     {0.0f, 1.0f, 0.0f, 0.0f},
-                     {1.0f, 0.0f, 0.0f, 0.0f},
-                     {0.0f, 0.0f, 0.0f, 1.0f}}; /* 90 degrees Y-axis rotation matrix */
+  float rot[4][4] = {
+      {0.0f, 0.0f, -1.0f, 0.0f},
+      {0.0f, 1.0f, 0.0f, 0.0f},
+      {1.0f, 0.0f, 0.0f, 0.0f},
+      {0.0f, 0.0f, 0.0f, 1.0f},
+  }; /* 90 degrees Y-axis rotation matrix */
 
   if (count_selected_bundles(C) != 3) {
     BKE_report(op->reports, RPT_ERROR, "Three tracks with bundles are needed to orient the floor");
@@ -482,7 +484,13 @@ static int set_plane_exec(bContext *C, wmOperator *op)
     BKE_object_apply_mat4(object, mat, 0, 0);
   }
 
-  BKE_object_where_is_calc(depsgraph, scene, object);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+  Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
+  BKE_object_transform_copy(object_eval, object);
+  BKE_object_where_is_calc(depsgraph, scene_eval, object_eval);
+  BKE_object_transform_copy(object, object_eval);
+
   set_axis(scene, object, clip, tracking_object, axis_track, 'X');
 
   DEG_id_tag_update(&clip->id, 0);
@@ -677,8 +685,9 @@ static int do_set_scale(bContext *C, wmOperator *op, bool scale_solution, bool a
 
       DEG_id_tag_update(&clip->id, 0);
 
-      if (object)
+      if (object) {
         DEG_id_tag_update(&object->id, ID_RECALC_TRANSFORM);
+      }
 
       WM_event_add_notifier(C, NC_MOVIECLIP | NA_EVALUATED, clip);
       WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, NULL);
@@ -698,8 +707,9 @@ static int set_scale_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(e
   SpaceClip *sc = CTX_wm_space_clip(C);
   MovieClip *clip = ED_space_clip_get_clip(sc);
 
-  if (!RNA_struct_property_is_set(op->ptr, "distance"))
+  if (!RNA_struct_property_is_set(op->ptr, "distance")) {
     RNA_float_set(op->ptr, "distance", clip->tracking.settings.dist);
+  }
 
   return set_scale_exec(C, op);
 }

@@ -49,7 +49,7 @@
 #  include <X11/extensions/XInput2.h>
 #endif
 
-//For DPI value
+// For DPI value
 #include <X11/Xresource.h>
 
 #include <cstring>
@@ -92,14 +92,10 @@ typedef struct {
 
 static XVisualInfo *x11_visualinfo_from_glx(Display *display,
                                             bool stereoVisual,
-                                            GHOST_TUns16 *r_numOfAASamples,
                                             bool needAlpha,
                                             GLXFBConfig *fbconfig)
 {
-  XVisualInfo *visual = NULL;
-  GHOST_TUns16 numOfAASamples = *r_numOfAASamples;
   int glx_major, glx_minor, glx_version; /* GLX version: major.minor */
-  GHOST_TUns16 actualSamples;
   int glx_attribs[64];
 
   *fbconfig = NULL;
@@ -117,14 +113,9 @@ static XVisualInfo *x11_visualinfo_from_glx(Display *display,
     return NULL;
   }
   glx_version = glx_major * 100 + glx_minor;
-
-  if (glx_version >= 104) {
-    actualSamples = numOfAASamples;
-  }
-  else {
-    numOfAASamples = 0;
-    actualSamples = 0;
-  }
+#ifndef WITH_X11_ALPHA
+  (void)glx_version;
+#endif
 
 #ifdef WITH_X11_ALPHA
   if (needAlpha && glx_version >= 103 &&
@@ -133,106 +124,63 @@ static XVisualInfo *x11_visualinfo_from_glx(Display *display,
       (glXGetVisualFromFBConfig ||
        (glXGetVisualFromFBConfig = (PFNGLXGETVISUALFROMFBCONFIGPROC)glXGetProcAddressARB(
             (const GLubyte *)"glXGetVisualFromFBConfig")) != NULL)) {
-    GLXFBConfig *fbconfigs;
+
+    GHOST_X11_GL_GetAttributes(glx_attribs, 64, stereoVisual, needAlpha, true);
+
     int nbfbconfig;
-    int i;
+    GLXFBConfig *fbconfigs = glXChooseFBConfig(
+        display, DefaultScreen(display), glx_attribs, &nbfbconfig);
 
-    for (;;) {
-
-      GHOST_X11_GL_GetAttributes(glx_attribs, 64, actualSamples, stereoVisual, needAlpha, true);
-
-      fbconfigs = glXChooseFBConfig(display, DefaultScreen(display), glx_attribs, &nbfbconfig);
-
-      /* Any sample level or even zero, which means oversampling disabled, is good
-       * but we need a valid visual to continue */
-      if (nbfbconfig > 0) {
-        /* take a frame buffer config that has alpha cap */
-        for (i = 0; i < nbfbconfig; i++) {
-          visual = (XVisualInfo *)glXGetVisualFromFBConfig(display, fbconfigs[i]);
-          if (!visual)
+    /* Any sample level or even zero, which means oversampling disabled, is good
+     * but we need a valid visual to continue */
+    if (nbfbconfig > 0) {
+      /* take a frame buffer config that has alpha cap */
+      for (int i = 0; i < nbfbconfig; i++) {
+        XVisualInfo *visual = (XVisualInfo *)glXGetVisualFromFBConfig(display, fbconfigs[i]);
+        if (!visual)
+          continue;
+        /* if we don't need a alpha background, the first config will do, otherwise
+         * test the alphaMask as it won't necessarily be present */
+        if (needAlpha) {
+          XRenderPictFormat *pict_format = XRenderFindVisualFormat(display, visual->visual);
+          if (!pict_format)
             continue;
-          /* if we don't need a alpha background, the first config will do, otherwise
-           * test the alphaMask as it won't necessarily be present */
-          if (needAlpha) {
-            XRenderPictFormat *pict_format = XRenderFindVisualFormat(display, visual->visual);
-            if (!pict_format)
-              continue;
-            if (pict_format->direct.alphaMask <= 0)
-              continue;
-          }
-          *fbconfig = fbconfigs[i];
-          break;
+          if (pict_format->direct.alphaMask <= 0)
+            continue;
         }
+
+        *fbconfig = fbconfigs[i];
         XFree(fbconfigs);
-        if (i < nbfbconfig) {
-          if (actualSamples < numOfAASamples) {
-            fprintf(stderr,
-                    "Warning! Unable to find a multisample pixel format that supports exactly %d "
-                    "samples. "
-                    "Substituting one that uses %d samples.\n",
-                    numOfAASamples,
-                    actualSamples);
-          }
-          break;
-        }
-        visual = NULL;
+
+        return visual;
       }
 
-      if (actualSamples == 0) {
-        /* All options exhausted, cannot continue */
-        fprintf(stderr,
-                "%s:%d: X11 glXChooseVisual() failed, "
-                "verify working openGL system!\n",
-                __FILE__,
-                __LINE__);
-
-        return NULL;
-      }
-      else {
-        --actualSamples;
-      }
+      XFree(fbconfigs);
     }
   }
   else
 #endif
   {
     /* legacy, don't use extension */
-    for (;;) {
-      GHOST_X11_GL_GetAttributes(glx_attribs, 64, actualSamples, stereoVisual, needAlpha, false);
+    GHOST_X11_GL_GetAttributes(glx_attribs, 64, stereoVisual, needAlpha, false);
 
-      visual = glXChooseVisual(display, DefaultScreen(display), glx_attribs);
+    XVisualInfo *visual = glXChooseVisual(display, DefaultScreen(display), glx_attribs);
 
-      /* Any sample level or even zero, which means oversampling disabled, is good
-       * but we need a valid visual to continue */
-      if (visual != NULL) {
-        if (actualSamples < numOfAASamples) {
-          fprintf(stderr,
-                  "Warning! Unable to find a multisample pixel format that supports exactly %d "
-                  "samples. "
-                  "Substituting one that uses %d samples.\n",
-                  numOfAASamples,
-                  actualSamples);
-        }
-        break;
-      }
-
-      if (actualSamples == 0) {
-        /* All options exhausted, cannot continue */
-        fprintf(stderr,
-                "%s:%d: X11 glXChooseVisual() failed, "
-                "verify working openGL system!\n",
-                __FILE__,
-                __LINE__);
-
-        return NULL;
-      }
-      else {
-        --actualSamples;
-      }
+    /* Any sample level or even zero, which means oversampling disabled, is good
+     * but we need a valid visual to continue */
+    if (visual != NULL) {
+      return visual;
     }
   }
-  *r_numOfAASamples = actualSamples;
-  return visual;
+
+  /* All options exhausted, cannot continue */
+  fprintf(stderr,
+          "%s:%d: X11 glXChooseVisual() failed, "
+          "verify working openGL system!\n",
+          __FILE__,
+          __LINE__);
+
+  return NULL;
 }
 
 GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
@@ -248,9 +196,8 @@ GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
                                  const bool stereoVisual,
                                  const bool exclusive,
                                  const bool alphaBackground,
-                                 const GHOST_TUns16 numOfAASamples,
                                  const bool is_debug)
-    : GHOST_Window(width, height, state, stereoVisual, exclusive, numOfAASamples),
+    : GHOST_Window(width, height, state, stereoVisual, exclusive),
       m_display(display),
       m_visualInfo(NULL),
       m_fbconfig(NULL),
@@ -271,11 +218,8 @@ GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
       m_is_debug_context(is_debug)
 {
   if (type == GHOST_kDrawingContextTypeOpenGL) {
-    m_visualInfo = x11_visualinfo_from_glx(m_display,
-                                           stereoVisual,
-                                           &m_wantNumOfAASamples,
-                                           alphaBackground,
-                                           (GLXFBConfig *)&m_fbconfig);
+    m_visualInfo = x11_visualinfo_from_glx(
+        m_display, stereoVisual, alphaBackground, (GLXFBConfig *)&m_fbconfig);
   }
   else {
     XVisualInfo tmp = {0};
@@ -1013,7 +957,7 @@ GHOST_TWindowState GHOST_WindowX11::getState() const
   state = icccmGetState();
   /*
    * In the Iconic and Withdrawn state, the window
-   * is unmaped, so only need return a Minimized state.
+   * is unmapped, so only need return a Minimized state.
    */
   if ((state == IconicState) || (state == WithdrawnState))
     state_ret = GHOST_kWindowStateMinimized;
@@ -1111,8 +1055,6 @@ GHOST_TSuccess GHOST_WindowX11::setState(GHOST_TWindowState state)
 
   return (GHOST_kFailure);
 }
-
-#include <iostream>
 
 GHOST_TSuccess GHOST_WindowX11::setOrder(GHOST_TWindowOrder order)
 {
@@ -1298,7 +1240,6 @@ GHOST_Context *GHOST_WindowX11::newDrawingContext(GHOST_TDrawingContextType type
 
     for (int minor = 5; minor >= 0; --minor) {
       context = new GHOST_ContextGLX(m_wantStereoVisual,
-                                     m_wantNumOfAASamples,
                                      m_window,
                                      m_display,
                                      (GLXFBConfig)m_fbconfig,
@@ -1316,7 +1257,6 @@ GHOST_Context *GHOST_WindowX11::newDrawingContext(GHOST_TDrawingContextType type
     }
 
     context = new GHOST_ContextGLX(m_wantStereoVisual,
-                                   m_wantNumOfAASamples,
                                    m_window,
                                    m_display,
                                    (GLXFBConfig)m_fbconfig,
@@ -1344,77 +1284,70 @@ GHOST_Context *GHOST_WindowX11::newDrawingContext(GHOST_TDrawingContextType type
   return NULL;
 }
 
-Cursor GHOST_WindowX11::getStandardCursor(GHOST_TStandardCursor g_cursor)
+GHOST_TSuccess GHOST_WindowX11::getStandardCursor(GHOST_TStandardCursor g_cursor, Cursor &xcursor)
 {
   unsigned int xcursor_id;
 
-#define GtoX(gcurs, xcurs) \
-  case gcurs: \
-    xcursor_id = xcurs
   switch (g_cursor) {
-    GtoX(GHOST_kStandardCursorRightArrow, XC_arrow);
-    break;
-    GtoX(GHOST_kStandardCursorLeftArrow, XC_top_left_arrow);
-    break;
-    GtoX(GHOST_kStandardCursorInfo, XC_hand1);
-    break;
-    GtoX(GHOST_kStandardCursorDestroy, XC_pirate);
-    break;
-    GtoX(GHOST_kStandardCursorHelp, XC_question_arrow);
-    break;
-    GtoX(GHOST_kStandardCursorCycle, XC_exchange);
-    break;
-    GtoX(GHOST_kStandardCursorSpray, XC_spraycan);
-    break;
-    GtoX(GHOST_kStandardCursorWait, XC_watch);
-    break;
-    GtoX(GHOST_kStandardCursorText, XC_xterm);
-    break;
-    GtoX(GHOST_kStandardCursorCrosshair, XC_crosshair);
-    break;
-    GtoX(GHOST_kStandardCursorUpDown, XC_sb_v_double_arrow);
-    break;
-    GtoX(GHOST_kStandardCursorLeftRight, XC_sb_h_double_arrow);
-    break;
-    GtoX(GHOST_kStandardCursorTopSide, XC_top_side);
-    break;
-    GtoX(GHOST_kStandardCursorBottomSide, XC_bottom_side);
-    break;
-    GtoX(GHOST_kStandardCursorLeftSide, XC_left_side);
-    break;
-    GtoX(GHOST_kStandardCursorRightSide, XC_right_side);
-    break;
-    GtoX(GHOST_kStandardCursorTopLeftCorner, XC_top_left_corner);
-    break;
-    GtoX(GHOST_kStandardCursorTopRightCorner, XC_top_right_corner);
-    break;
-    GtoX(GHOST_kStandardCursorBottomRightCorner, XC_bottom_right_corner);
-    break;
-    GtoX(GHOST_kStandardCursorBottomLeftCorner, XC_bottom_left_corner);
-    break;
-    GtoX(GHOST_kStandardCursorPencil, XC_pencil);
-    break;
-    GtoX(GHOST_kStandardCursorCopy, XC_arrow);
-    break;
+    case GHOST_kStandardCursorHelp:
+      xcursor_id = XC_question_arrow;
+      break;
+    case GHOST_kStandardCursorWait:
+      xcursor_id = XC_watch;
+      break;
+    case GHOST_kStandardCursorText:
+      xcursor_id = XC_xterm;
+      break;
+    case GHOST_kStandardCursorCrosshair:
+      xcursor_id = XC_crosshair;
+      break;
+    case GHOST_kStandardCursorUpDown:
+      xcursor_id = XC_sb_v_double_arrow;
+      break;
+    case GHOST_kStandardCursorLeftRight:
+      xcursor_id = XC_sb_h_double_arrow;
+      break;
+    case GHOST_kStandardCursorTopSide:
+      xcursor_id = XC_top_side;
+      break;
+    case GHOST_kStandardCursorBottomSide:
+      xcursor_id = XC_bottom_side;
+      break;
+    case GHOST_kStandardCursorLeftSide:
+      xcursor_id = XC_left_side;
+      break;
+    case GHOST_kStandardCursorRightSide:
+      xcursor_id = XC_right_side;
+      break;
+    case GHOST_kStandardCursorTopLeftCorner:
+      xcursor_id = XC_top_left_corner;
+      break;
+    case GHOST_kStandardCursorTopRightCorner:
+      xcursor_id = XC_top_right_corner;
+      break;
+    case GHOST_kStandardCursorBottomRightCorner:
+      xcursor_id = XC_bottom_right_corner;
+      break;
+    case GHOST_kStandardCursorBottomLeftCorner:
+      xcursor_id = XC_bottom_left_corner;
+      break;
+    case GHOST_kStandardCursorDefault:
+      xcursor = None;
+      return GHOST_kSuccess;
     default:
-      xcursor_id = 0;
+      xcursor = None;
+      return GHOST_kFailure;
   }
-#undef GtoX
 
-  if (xcursor_id) {
-    Cursor xcursor = m_standard_cursors[xcursor_id];
+  xcursor = m_standard_cursors[xcursor_id];
 
-    if (!xcursor) {
-      xcursor = XCreateFontCursor(m_display, xcursor_id);
+  if (!xcursor) {
+    xcursor = XCreateFontCursor(m_display, xcursor_id);
 
-      m_standard_cursors[xcursor_id] = xcursor;
-    }
-
-    return xcursor;
+    m_standard_cursors[xcursor_id] = xcursor;
   }
-  else {
-    return None;
-  }
+
+  return GHOST_kSuccess;
 }
 
 Cursor GHOST_WindowX11::getEmptyCursor()
@@ -1440,10 +1373,12 @@ GHOST_TSuccess GHOST_WindowX11::setWindowCursorVisibility(bool visible)
   Cursor xcursor;
 
   if (visible) {
-    if (m_visible_cursor)
+    if (m_visible_cursor) {
       xcursor = m_visible_cursor;
-    else
-      xcursor = getStandardCursor(getCursorShape());
+    }
+    else if (getStandardCursor(getCursorShape(), xcursor) == GHOST_kFailure) {
+      getStandardCursor(getCursorShape(), xcursor);
+    }
   }
   else {
     xcursor = getEmptyCursor();
@@ -1507,7 +1442,8 @@ GHOST_TSuccess GHOST_WindowX11::setWindowCursorGrab(GHOST_TGrabCursorMode mode)
       setWindowCursorVisibility(true);
     }
 
-    /* Almost works without but important otherwise the mouse GHOST location can be incorrect on exit */
+    /* Almost works without but important
+     * otherwise the mouse GHOST location can be incorrect on exit. */
     setCursorGrabAccum(0, 0);
     m_cursorGrabBounds.m_l = m_cursorGrabBounds.m_r = -1; /* disable */
 #ifdef GHOST_X11_GRAB
@@ -1522,7 +1458,10 @@ GHOST_TSuccess GHOST_WindowX11::setWindowCursorGrab(GHOST_TGrabCursorMode mode)
 
 GHOST_TSuccess GHOST_WindowX11::setWindowCursorShape(GHOST_TStandardCursor shape)
 {
-  Cursor xcursor = getStandardCursor(shape);
+  Cursor xcursor;
+  if (getStandardCursor(shape, xcursor) == GHOST_kFailure) {
+    getStandardCursor(GHOST_kStandardCursorDefault, xcursor);
+  }
 
   m_visible_cursor = xcursor;
 
@@ -1532,13 +1471,10 @@ GHOST_TSuccess GHOST_WindowX11::setWindowCursorShape(GHOST_TStandardCursor shape
   return GHOST_kSuccess;
 }
 
-GHOST_TSuccess GHOST_WindowX11::setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                                           GHOST_TUns8 mask[16][2],
-                                                           int hotX,
-                                                           int hotY)
+GHOST_TSuccess GHOST_WindowX11::hasCursorShape(GHOST_TStandardCursor shape)
 {
-  setWindowCustomCursorShape((GHOST_TUns8 *)bitmap, (GHOST_TUns8 *)mask, 16, 16, hotX, hotY, 0, 1);
-  return GHOST_kSuccess;
+  Cursor xcursor;
+  return getStandardCursor(shape, xcursor);
 }
 
 GHOST_TSuccess GHOST_WindowX11::setWindowCustomCursorShape(GHOST_TUns8 *bitmap,
@@ -1547,8 +1483,7 @@ GHOST_TSuccess GHOST_WindowX11::setWindowCustomCursorShape(GHOST_TUns8 *bitmap,
                                                            int sizey,
                                                            int hotX,
                                                            int hotY,
-                                                           int /*fg_color*/,
-                                                           int /*bg_color*/)
+                                                           bool /*canInvertColor*/)
 {
   Colormap colormap = DefaultColormap(m_display, m_visualInfo->screen);
   Pixmap bitmap_pix, mask_pix;

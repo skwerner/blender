@@ -85,7 +85,7 @@ void EDBM_redo_state_restore(BMBackup backup, BMEditMesh *em, int recalctess)
   tmpbm = NULL;
 
   if (recalctess) {
-    BKE_editmesh_tessface_calc(em);
+    BKE_editmesh_looptri_calc(em);
   }
 }
 
@@ -105,7 +105,7 @@ void EDBM_redo_state_free(BMBackup *backup, BMEditMesh *em, int recalctess)
   backup->bmcopy = NULL;
 
   if (recalctess && em) {
-    BKE_editmesh_tessface_calc(em);
+    BKE_editmesh_looptri_calc(em);
   }
 }
 
@@ -162,7 +162,7 @@ bool EDBM_op_finish(BMEditMesh *em, BMOperator *bmop, wmOperator *op, const bool
     /* when copying, tessellation isn't to for faster copying,
      * but means we need to re-tessellate here */
     if (em->looptris == NULL) {
-      BKE_editmesh_tessface_calc(em);
+      BKE_editmesh_looptri_calc(em);
     }
 
     if (em->ob) {
@@ -292,10 +292,6 @@ void EDBM_mesh_make(Object *ob, const int select_mode, const bool add_key_index)
   Mesh *me = ob->data;
   BMesh *bm;
 
-  if (UNLIKELY(!me->mpoly && me->totface)) {
-    BKE_mesh_convert_mfaces_to_mpolys(me);
-  }
-
   bm = BKE_mesh_to_bmesh(me,
                          ob,
                          add_key_index,
@@ -347,10 +343,6 @@ void EDBM_mesh_load(Main *bmain, Object *ob)
                        .calc_object_remap = true,
                    }));
 
-#ifdef USE_TESSFACE_DEFAULT
-  BKE_mesh_tessface_calc(me);
-#endif
-
   /* Free derived mesh. usually this would happen through depsgraph but there
    * are exceptions like file save that will not cause this, and we want to
    * avoid ending up with an invalid derived mesh then.
@@ -363,10 +355,8 @@ void EDBM_mesh_load(Main *bmain, Object *ob)
    * cycles.
    */
 #if 0
-  for (Object *other_object = bmain->objects.first;
-       other_object != NULL;
-       other_object = other_object->id.next)
-  {
+  for (Object *other_object = bmain->objects.first; other_object != NULL;
+       other_object = other_object->id.next) {
     if (other_object->data == ob->data) {
       BKE_object_free_derived_caches(other_object);
     }
@@ -575,8 +565,7 @@ UvVertMap *BM_uv_vert_map_create(BMesh *bm,
         tf_uv = (float(*)[2])BLI_buffer_reinit_data(&tf_uv_buf, vec2f, efa->len);
       }
 
-      BM_ITER_ELEM_INDEX(l, &liter, efa, BM_LOOPS_OF_FACE, i)
-      {
+      BM_ITER_ELEM_INDEX (l, &liter, efa, BM_LOOPS_OF_FACE, i) {
         buf->loop_of_poly_index = i;
         buf->poly_index = a;
         buf->separate = 0;
@@ -629,10 +618,12 @@ UvVertMap *BM_uv_vert_map_create(BMesh *bm,
 
         if (fabsf(uvdiff[0]) < limit[0] && fabsf(uvdiff[1]) < limit[1] &&
             (!use_winding || winding[iterv->poly_index] == winding[v->poly_index])) {
-          if (lastv)
+          if (lastv) {
             lastv->next = next;
-          else
+          }
+          else {
             vlist = next;
+          }
           iterv->next = newvlist;
           newvlist = iterv;
         }
@@ -725,8 +716,7 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
         tf_uv = (float(*)[2])BLI_buffer_reinit_data(&tf_uv_buf, vec2f, efa->len);
       }
 
-      BM_ITER_ELEM_INDEX(l, &liter, efa, BM_LOOPS_OF_FACE, i)
-      {
+      BM_ITER_ELEM_INDEX (l, &liter, efa, BM_LOOPS_OF_FACE, i) {
         buf->l = l;
         buf->separate = 0;
         buf->island = INVALID_ISLAND;
@@ -780,10 +770,12 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
         if (fabsf(uvdiff[0]) < STD_UV_CONNECT_LIMIT && fabsf(uvdiff[1]) < STD_UV_CONNECT_LIMIT &&
             (!use_winding ||
              winding[BM_elem_index_get(iterv->l->f)] == winding[BM_elem_index_get(v->l->f)])) {
-          if (lastv)
+          if (lastv) {
             lastv->next = next;
-          else
+          }
+          else {
             vlist = next;
+          }
           iterv->next = newvlist;
           newvlist = iterv;
         }
@@ -837,8 +829,9 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
             UvElement *element, *initelement = element_map->vert[BM_elem_index_get(l->v)];
 
             for (element = initelement; element; element = element->next) {
-              if (element->separate)
+              if (element->separate) {
                 initelement = element;
+              }
 
               if (element->l->f == efa) {
                 /* found the uv corresponding to our face and vertex.
@@ -852,8 +845,9 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
                 islandbufsize++;
 
                 for (element = initelement; element; element = element->next) {
-                  if (element->separate && element != initelement)
+                  if (element->separate && element != initelement) {
                     break;
+                  }
 
                   if (island_number[BM_elem_index_get(element->l->f)] == INVALID_ISLAND) {
                     stack[stacksize++] = element->l->f;
@@ -875,8 +869,9 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
     /* remap */
     for (i = 0; i < bm->totvert; i++) {
       /* important since we may do selection only. Some of these may be NULL */
-      if (element_map->vert[i])
+      if (element_map->vert[i]) {
         element_map->vert[i] = &islandbuf[map[element_map->vert[i] - element_map->buf]];
+      }
     }
 
     element_map->islandIndices = MEM_callocN(sizeof(*element_map->islandIndices) * nislands,
@@ -884,10 +879,12 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
     j = 0;
     for (i = 0; i < totuv; i++) {
       UvElement *element = element_map->buf[i].next;
-      if (element == NULL)
+      if (element == NULL) {
         islandbuf[map[i]].next = NULL;
-      else
+      }
+      else {
         islandbuf[map[i]].next = &islandbuf[map[element - element_map->buf]];
+      }
 
       if (islandbuf[i].island != j) {
         j++;
@@ -911,10 +908,12 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
 void BM_uv_vert_map_free(UvVertMap *vmap)
 {
   if (vmap) {
-    if (vmap->vert)
+    if (vmap->vert) {
       MEM_freeN(vmap->vert);
-    if (vmap->buf)
+    }
+    if (vmap->buf) {
       MEM_freeN(vmap->buf);
+    }
     MEM_freeN(vmap);
   }
 }
@@ -922,12 +921,15 @@ void BM_uv_vert_map_free(UvVertMap *vmap)
 void BM_uv_element_map_free(UvElementMap *element_map)
 {
   if (element_map) {
-    if (element_map->vert)
+    if (element_map->vert) {
       MEM_freeN(element_map->vert);
-    if (element_map->buf)
+    }
+    if (element_map->buf) {
       MEM_freeN(element_map->buf);
-    if (element_map->islandIndices)
+    }
+    if (element_map->islandIndices) {
       MEM_freeN(element_map->islandIndices);
+    }
     MEM_freeN(element_map);
   }
 }
@@ -1021,7 +1023,8 @@ static BMVert *cache_mirr_intptr_as_bmvert(intptr_t *index_lookup, int index)
  * \param use_select: Restrict to selected verts.
  * \param use_topology: Use topology mirror.
  * \param maxdist: Distance for close point test.
- * \param r_index: Optional array to write into, as an alternative to a customdata layer (length of total verts).
+ * \param r_index: Optional array to write into, as an alternative to a customdata layer
+ * (length of total verts).
  */
 void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
                                       const int axis,
@@ -1246,12 +1249,15 @@ bool EDBM_mesh_hide(BMEditMesh *em, bool swap)
   char hflag_swap = swap ? BM_ELEM_SELECT : 0;
   bool changed = true;
 
-  if (em->selectmode & SCE_SELECT_VERTEX)
+  if (em->selectmode & SCE_SELECT_VERTEX) {
     itermode = BM_VERTS_OF_MESH;
-  else if (em->selectmode & SCE_SELECT_EDGE)
+  }
+  else if (em->selectmode & SCE_SELECT_EDGE) {
     itermode = BM_EDGES_OF_MESH;
-  else
+  }
+  else {
     itermode = BM_FACES_OF_MESH;
+  }
 
   BM_ITER_MESH (ele, &iter, em->bm, itermode) {
     if (!BM_elem_flag_test(ele, BM_ELEM_HIDDEN)) {
@@ -1383,15 +1389,15 @@ void EDBM_stats_update(BMEditMesh *em)
 
 /* so many tools call these that we better make it a generic function.
  */
-void EDBM_update_generic(BMEditMesh *em, const bool do_tessface, const bool is_destructive)
+void EDBM_update_generic(BMEditMesh *em, const bool do_tessellation, const bool is_destructive)
 {
   Object *ob = em->ob;
   /* order of calling isn't important */
   DEG_id_tag_update(ob->data, ID_RECALC_GEOMETRY);
   WM_main_add_notifier(NC_GEOM | ND_DATA, ob->data);
 
-  if (do_tessface) {
-    BKE_editmesh_tessface_calc(em);
+  if (do_tessellation) {
+    BKE_editmesh_looptri_calc(em);
   }
 
   if (is_destructive) {

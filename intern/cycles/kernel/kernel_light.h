@@ -36,7 +36,7 @@ typedef struct LightSample {
 } LightSample;
 
 ccl_device float sphere_light_pdf(
-    float3 P, float3 *N, float3 lightP, const LightSample *ls, float radius, float invarea)
+    float3 P, const float3 *N, float3 lightP, const LightSample *ls, float radius, float invarea)
 {
   float3 wc = lightP - P;
   float dist_squared = len_squared(wc);
@@ -71,7 +71,7 @@ ccl_device float sphere_light_pdf(
 }
 
 ccl_device void sphere_light_sample(
-    float3 P, float3 *N, LightSample *ls, float radius, float randu, float randv, float invarea)
+    float3 P, const float3 *N, LightSample *ls, float radius, float randu, float randv, float invarea)
 {
   float3 wc = ls->P - P;
   float dist_squared = len_squared(wc);
@@ -292,17 +292,7 @@ ccl_device float lamp_light_pdf(KernelGlobals *kg, const float3 Ng, const float3
 
 #ifdef __BACKGROUND_MIS__
 
-/* TODO(sergey): In theory it should be all fine to use noinline for all
- * devices, but we're so close to the release so better not screw things
- * up for CPU at least.
- */
-#  ifdef __KERNEL_GPU__
-ccl_device_noinline
-#  else
-ccl_device
-#  endif
-    float3
-    background_map_sample(KernelGlobals *kg, float randu, float randv, float *pdf)
+ccl_device float3 background_map_sample(KernelGlobals *kg, float randu, float randv, float *pdf)
 {
   /* for the following, the CDF values are actually a pair of floats, with the
    * function value as X and the actual CDF as Y.  The last entry's function
@@ -384,13 +374,7 @@ ccl_device
 /* TODO(sergey): Same as above, after the release we should consider using
  * 'noinline' for all devices.
  */
-#  ifdef __KERNEL_GPU__
-ccl_device_noinline
-#  else
-ccl_device
-#  endif
-    float
-    background_map_pdf(KernelGlobals *kg, float3 direction)
+ccl_device float background_map_pdf(KernelGlobals *kg, float3 direction)
 {
   float2 uv = direction_to_equirectangular(direction);
   int res_x = kernel_data.integrator.pdf_background_res_x;
@@ -634,7 +618,8 @@ ccl_device float background_light_pdf(KernelGlobals *kg, float3 P, float3 direct
     portal_pdf = background_portal_pdf(kg, P, direction, -1, &is_possible) * portal_sampling_pdf;
     if (!is_possible) {
       /* Portal sampling is not possible here because all portals point to the wrong side.
-       * If map sampling is possible, it would be used instead, otherwise fallback sampling is used. */
+       * If map sampling is possible, it would be used instead,
+       * otherwise fallback sampling is used. */
       if (portal_sampling_pdf == 1.0f) {
         return kernel_data.integrator.pdf_lights / M_4PI_F;
       }
@@ -655,7 +640,7 @@ ccl_device float background_light_pdf(KernelGlobals *kg, float3 P, float3 direct
 /* Regular Light */
 
 ccl_device_inline bool lamp_light_sample(
-    KernelGlobals *kg, int lamp, float randu, float randv, float3 P, float3 *N, LightSample *ls)
+    KernelGlobals *kg, int lamp, float randu, float randv, float3 P, const float3 *N, LightSample *ls)
 {
   const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
   LightType type = (LightType)klight->type;
@@ -1198,7 +1183,7 @@ ccl_device int light_distribution_sample(KernelGlobals *kg, float *randu)
   int len = kernel_data.integrator.num_distribution + 1;
   float r = *randu;
 
-  while (len > 0) {
+  do {
     int half_len = len >> 1;
     int middle = first + half_len;
 
@@ -1209,7 +1194,7 @@ ccl_device int light_distribution_sample(KernelGlobals *kg, float *randu)
       first = middle + 1;
       len = len - half_len - 1;
     }
-  }
+  } while (len > 0);
 
   /* Clamping should not be needed but float rounding errors seem to
    * make this fail on rare occasions. */
@@ -1226,48 +1211,50 @@ ccl_device int light_distribution_sample(KernelGlobals *kg, float *randu)
 
 /* Generic Light */
 
-ccl_device bool light_select_reached_max_bounces(KernelGlobals *kg, int index, int bounce)
+ccl_device_inline bool light_select_reached_max_bounces(KernelGlobals *kg, int index, int bounce)
 {
   return (bounce > kernel_tex_fetch(__lights, index).max_bounces);
 }
 
 ccl_device_noinline bool light_sample(KernelGlobals *kg,
+                                      int lamp,
                                       float randu,
                                       float randv,
                                       float time,
                                       float3 P,
-                                      float3 *N,
+                                      const float3 *N,
                                       int bounce,
                                       LightSample *ls)
 {
-  /* sample index */
-  int index = light_distribution_sample(kg, &randu);
+  if (lamp < 0) {
+    /* sample index */
+    int index = light_distribution_sample(kg, &randu);
 
-  /* fetch light data */
-  const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(__light_distribution,
-                                                                              index);
-  int prim = kdistribution->prim;
+    /* fetch light data */
+    const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(
+        __light_distribution, index);
+    int prim = kdistribution->prim;
 
-  if (prim >= 0) {
-    int object = kdistribution->mesh_light.object_id;
-    int shader_flag = kdistribution->mesh_light.shader_flag;
+    if (prim >= 0) {
+      int object = kdistribution->mesh_light.object_id;
+      int shader_flag = kdistribution->mesh_light.shader_flag;
 
-    triangle_light_sample(kg, prim, object, randu, randv, time, ls, P);
-    ls->shader |= shader_flag;
-    return (ls->pdf > 0.0f);
-  }
-  else {
-    int lamp = -prim - 1;
-
-    if (UNLIKELY(light_select_reached_max_bounces(kg, lamp, bounce))) {
-      return false;
+      triangle_light_sample(kg, prim, object, randu, randv, time, ls, P);
+      ls->shader |= shader_flag;
+      return (ls->pdf > 0.0f);
     }
 
-    return lamp_light_sample(kg, lamp, randu, randv, P, N, ls);
+    lamp = -prim - 1;
   }
+
+  if (UNLIKELY(light_select_reached_max_bounces(kg, lamp, bounce))) {
+    return false;
+  }
+
+  return lamp_light_sample(kg, lamp, randu, randv, P, N, ls);
 }
 
-ccl_device int light_select_num_samples(KernelGlobals *kg, int index)
+ccl_device_inline int light_select_num_samples(KernelGlobals *kg, int index)
 {
   return kernel_tex_fetch(__lights, index).samples;
 }

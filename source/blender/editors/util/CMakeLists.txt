@@ -22,14 +22,14 @@ set(INC
   ../../blentranslation
   ../../bmesh
   ../../depsgraph
-  ../../imbuf
   ../../gpu
+  ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/clog
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -84,6 +84,7 @@ set(SRC
   ../include/ED_sound.h
   ../include/ED_space_api.h
   ../include/ED_text.h
+  ../include/ED_time_scrub_ui.h
   ../include/ED_transform.h
   ../include/ED_transform_snap_object_context.h
   ../include/ED_transverts.h

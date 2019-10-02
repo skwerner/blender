@@ -96,6 +96,11 @@ typedef struct MaterialGPencilStyle {
 
   /** Type of gradient. */
   int gradient_type;
+
+  /** Factor used to mix texture and stroke color. */
+  float mix_stroke_factor;
+  /** Mode used to align Dots and Boxes with stroke drawing path and object rotation */
+  int alignment_mode;
   char _pad[4];
 } MaterialGPencilStyle;
 
@@ -111,8 +116,8 @@ typedef enum eMaterialGPencilStyle_Flag {
   GP_STYLE_COLOR_ONIONSKIN = (1 << 3),
   /* clamp texture */
   GP_STYLE_COLOR_TEX_CLAMP = (1 << 4),
-  /* mix texture */
-  GP_STYLE_COLOR_TEX_MIX = (1 << 5),
+  /* mix fill texture */
+  GP_STYLE_FILL_TEX_MIX = (1 << 5),
   /* Flip fill colors */
   GP_STYLE_COLOR_FLIP_FILL = (1 << 6),
   /* Stroke Texture is a pattern */
@@ -121,8 +126,10 @@ typedef enum eMaterialGPencilStyle_Flag {
   GP_STYLE_STROKE_SHOW = (1 << 8),
   /* Fill  show main switch */
   GP_STYLE_FILL_SHOW = (1 << 9),
-  /* Don't rotate dots/boxes */
-  GP_STYLE_COLOR_LOCK_DOTS = (1 << 10),
+  /* mix stroke texture */
+  GP_STYLE_STROKE_TEX_MIX = (1 << 11),
+  /* disable stencil clipping (overlap) */
+  GP_STYLE_DISABLE_STENCIL = (1 << 12),
 } eMaterialGPencilStyle_Flag;
 
 typedef enum eMaterialGPencilStyle_Mode {
@@ -212,9 +219,9 @@ typedef struct Material {
                                        /* for dopesheet */
 #define MA_DS_EXPAND (1 << 1)
 /* for dopesheet (texture stack expander)
-     * NOTE: this must have the same value as other texture stacks,
-     * otherwise anim-editors will not read correctly
-     */
+ * NOTE: this must have the same value as other texture stacks,
+ * otherwise anim-editors will not read correctly
+ */
 #define MA_DS_SHOW_TEXS (1 << 2)
 
 /* ramps */
@@ -299,19 +306,19 @@ typedef struct Material {
 
 /* blend_method */
 enum {
-  MA_BM_SOLID,
-  MA_BM_ADD,
-  MA_BM_MULTIPLY,
-  MA_BM_CLIP,
-  MA_BM_HASHED,
-  MA_BM_BLEND,
+  MA_BM_SOLID = 0,
+  // MA_BM_ADD = 1, /* deprecated */
+  // MA_BM_MULTIPLY = 2,  /* deprecated */
+  MA_BM_CLIP = 3,
+  MA_BM_HASHED = 4,
+  MA_BM_BLEND = 5,
 };
 
 /* blend_flag */
 enum {
   MA_BL_HIDE_BACKFACE = (1 << 0),
   MA_BL_SS_REFRACTION = (1 << 1),
-  MA_BL_FLAG_UNUSED_2 = (1 << 2), /* cleared */
+  MA_BL_CULL_BACKFACE = (1 << 2),
   MA_BL_TRANSLUCENCY = (1 << 3),
 };
 
@@ -333,7 +340,7 @@ enum {
 enum {
   GP_STYLE_FILL_STYLE_SOLID = 0,
   GP_STYLE_FILL_STYLE_GRADIENT,
-  GP_STYLE_FILL_STYLE_CHESSBOARD,
+  GP_STYLE_FILL_STYLE_CHECKER,
   GP_STYLE_FILL_STYLE_TEXTURE,
 };
 
@@ -343,4 +350,10 @@ enum {
   GP_STYLE_GRADIENT_RADIAL,
 };
 
+/* Grease Pencil Follow Drawing Modes */
+enum {
+  GP_STYLE_FOLLOW_PATH = 0,
+  GP_STYLE_FOLLOW_OBJ,
+  GP_STYLE_FOLLOW_FIXED,
+};
 #endif

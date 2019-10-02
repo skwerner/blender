@@ -152,8 +152,9 @@ void drawSnapping(const struct bContext *C, TransInfo *t)
 {
   unsigned char col[4], selectedCol[4], activeCol[4];
 
-  if (!activeSnap(t))
+  if (!activeSnap(t)) {
     return;
+  }
 
   UI_GetThemeColor3ubv(TH_TRANSFORM, col);
   col[3] = 128;
@@ -165,7 +166,10 @@ void drawSnapping(const struct bContext *C, TransInfo *t)
   activeCol[3] = 192;
 
   if (t->spacetype == SPACE_VIEW3D) {
-    if (validSnap(t)) {
+    bool draw_target = (t->tsnap.status & TARGET_INIT) &&
+                       (t->scene->toolsettings->snap_mode & SCE_SNAP_MODE_EDGE_PERPENDICULAR);
+
+    if (draw_target || validSnap(t)) {
       TransSnapPoint *p;
       RegionView3D *rv3d = CTX_wm_region_view3d(C);
       float imat[4][4];
@@ -211,6 +215,48 @@ void drawSnapping(const struct bContext *C, TransInfo *t)
                     t->tsnap.snapPoint[1] + t->tsnap.snapNormal[1],
                     t->tsnap.snapPoint[2] + t->tsnap.snapNormal[2]);
         immEnd();
+      }
+
+      if (draw_target) {
+        /* Draw snapTarget */
+        float targ_co[3], vx[3], vy[3], v1[3], v2[3], v3[3], v4[4];
+        copy_v3_v3(targ_co, t->tsnap.snapTarget);
+        float px_size = 0.75f * size * ED_view3d_pixel_size(rv3d, targ_co);
+
+        mul_v3_v3fl(vx, imat[0], px_size);
+        mul_v3_v3fl(vy, imat[1], px_size);
+
+        add_v3_v3v3(v1, vx, vy);
+        sub_v3_v3v3(v2, vx, vy);
+        negate_v3_v3(v3, v1);
+        negate_v3_v3(v4, v2);
+
+        add_v3_v3(v1, targ_co);
+        add_v3_v3(v2, targ_co);
+        add_v3_v3(v3, targ_co);
+        add_v3_v3(v4, targ_co);
+
+        immUniformColor4ubv(col);
+        immBegin(GPU_PRIM_LINES, 4);
+        immVertex3fv(pos, v3);
+        immVertex3fv(pos, v1);
+        immVertex3fv(pos, v4);
+        immVertex3fv(pos, v2);
+        immEnd();
+
+        if (t->tsnap.snapElem & SCE_SNAP_MODE_EDGE_PERPENDICULAR) {
+          immUnbindProgram();
+
+          immBindBuiltinProgram(GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR);
+          immUniform1f("dash_width", 6.0f * U.pixelsize);
+          immUniform1f("dash_factor", 1.0f / 4.0f);
+          immUniformColor4ubv(col);
+
+          immBegin(GPU_PRIM_LINES, 2);
+          immVertex3fv(pos, targ_co);
+          immVertex3fv(pos, t->tsnap.snapPoint);
+          immEnd();
+        }
       }
 
       immUnbindProgram();
@@ -289,21 +335,23 @@ void applyProject(TransInfo *t)
     float tvec[3];
     int i;
 
-    FOREACH_TRANS_DATA_CONTAINER(t, tc)
-    {
+    FOREACH_TRANS_DATA_CONTAINER (t, tc) {
       TransData *td = tc->data;
       for (i = 0; i < tc->data_len; i++, td++) {
         float iloc[3], loc[3], no[3];
         float mval_fl[2];
 
-        if (td->flag & TD_NOACTION)
+        if (td->flag & TD_NOACTION) {
           break;
+        }
 
-        if (td->flag & TD_SKIP)
+        if (td->flag & TD_SKIP) {
           continue;
+        }
 
-        if ((t->flag & T_PROP_EDIT) && (td->factor == 0.0f))
+        if ((t->flag & T_PROP_EDIT) && (td->factor == 0.0f)) {
           continue;
+        }
 
         copy_v3_v3(iloc, td->loc);
         if (tc->use_local_mat) {
@@ -325,6 +373,7 @@ void applyProject(TransInfo *t)
                       .use_occlusion_test = false,
                   },
                   mval_fl,
+                  NULL,
                   0,
                   loc,
                   no)) {
@@ -357,7 +406,7 @@ void applyProject(TransInfo *t)
           }
         }
 
-        //XXX constraintTransLim(t, td);
+        // XXX constraintTransLim(t, td);
       }
     }
   }
@@ -369,12 +418,14 @@ void applyGridAbsolute(TransInfo *t)
   GearsType grid_action;
   int i;
 
-  if (!(activeSnap(t) && (t->tsnap.mode & (SCE_SNAP_MODE_INCREMENT | SCE_SNAP_MODE_GRID))))
+  if (!(activeSnap(t) && (t->tsnap.mode & (SCE_SNAP_MODE_INCREMENT | SCE_SNAP_MODE_GRID)))) {
     return;
+  }
 
   grid_action = BIG_GEARS;
-  if (t->modifiers & MOD_PRECISION)
+  if (t->modifiers & MOD_PRECISION) {
     grid_action = SMALL_GEARS;
+  }
 
   switch (grid_action) {
     case NO_GEARS:
@@ -388,24 +439,27 @@ void applyGridAbsolute(TransInfo *t)
       break;
   }
   /* early exit on unusable grid size */
-  if (grid_size == 0.0f)
+  if (grid_size == 0.0f) {
     return;
+  }
 
-  FOREACH_TRANS_DATA_CONTAINER(t, tc)
-  {
+  FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransData *td;
 
     for (i = 0, td = tc->data; i < tc->data_len; i++, td++) {
       float iloc[3], loc[3], tvec[3];
 
-      if (td->flag & TD_NOACTION)
+      if (td->flag & TD_NOACTION) {
         break;
+      }
 
-      if (td->flag & TD_SKIP)
+      if (td->flag & TD_SKIP) {
         continue;
+      }
 
-      if ((t->flag & T_PROP_EDIT) && (td->factor == 0.0f))
+      if ((t->flag & T_PROP_EDIT) && (td->factor == 0.0f)) {
         continue;
+      }
 
       copy_v3_v3(iloc, td->loc);
       if (tc->use_local_mat) {
@@ -543,8 +597,9 @@ static void initSnappingMode(TransInfo *t)
   }
   else {
     /* force project off when not supported */
-    if ((ts->snap_mode & SCE_SNAP_MODE_FACE) == 0)
+    if ((ts->snap_mode & SCE_SNAP_MODE_FACE) == 0) {
       t->tsnap.project = 0;
+    }
 
     t->tsnap.mode = ts->snap_mode;
   }
@@ -557,13 +612,8 @@ static void initSnappingMode(TransInfo *t)
     /* Edit mode */
     if (t->tsnap.applySnap != NULL &&  // A snapping function actually exist
         ((obedit_type != -1) &&
-         ELEM(obedit_type,
-              OB_MESH,
-              OB_ARMATURE,
-              OB_CURVE,
-              OB_LATTICE,
-              OB_MBALL)))  // Temporary limited to edit mode meshes, armature, curves, metaballs
-    {
+         /* Temporary limited to edit mode meshes, armature, curves, metaballs. */
+         ELEM(obedit_type, OB_MESH, OB_ARMATURE, OB_CURVE, OB_LATTICE, OB_MBALL))) {
       /* Exclude editmesh if using proportional edit */
       if ((obedit_type == OB_MESH) && (t->flag & T_PROP_EDIT)) {
         t->tsnap.modeSelect = SNAP_NOT_ACTIVE;
@@ -582,11 +632,18 @@ static void initSnappingMode(TransInfo *t)
     else if (t->tsnap.applySnap != NULL &&  // A snapping function actually exist
              (obedit_type == -1))           // Object Mode
     {
-      /* In "Edit Strokes" mode, Snap tool can perform snap to selected or active objects (see T49632)
-       * TODO: perform self snap in gpencil_strokes */
-      t->tsnap.modeSelect = (((t->options & (CTX_GPENCIL_STROKES | CTX_CURSOR)) != 0) ?
-                                 SNAP_ALL :
-                                 SNAP_NOT_SELECTED);
+
+      if (t->options & (CTX_GPENCIL_STROKES | CTX_CURSOR | CTX_OBMODE_XFORM_OBDATA)) {
+        /* In "Edit Strokes" mode,
+         * snap tool can perform snap to selected or active objects (see T49632)
+         * TODO: perform self snap in gpencil_strokes.
+         *
+         * When we're moving the origins, allow snapping onto our own geometry (see T69132). */
+        t->tsnap.modeSelect = SNAP_ALL;
+      }
+      else {
+        t->tsnap.modeSelect = SNAP_NOT_SELECTED;
+      }
     }
     else {
       /* Grid if snap is not possible */
@@ -852,10 +909,12 @@ static void ApplySnapTranslation(TransInfo *t, float vec[3])
 
   if (t->spacetype == SPACE_NODE) {
     char border = t->tsnap.snapNodeBorder;
-    if (border & (NODE_LEFT | NODE_RIGHT))
+    if (border & (NODE_LEFT | NODE_RIGHT)) {
       vec[0] = point[0] - t->tsnap.snapTarget[0];
-    if (border & (NODE_BOTTOM | NODE_TOP))
+    }
+    if (border & (NODE_BOTTOM | NODE_TOP)) {
       vec[1] = point[1] - t->tsnap.snapTarget[1];
+    }
   }
   else {
     if (t->spacetype == SPACE_VIEW3D) {
@@ -922,10 +981,12 @@ static float RotationBetween(TransInfo *t, const float p1[3], const float p2[3])
 
     cross_v3_v3v3(tmp, start, end);
 
-    if (dot_v3v3(tmp, axis) < 0.0f)
+    if (dot_v3v3(tmp, axis) < 0.0f) {
       angle = -acosf(dot_v3v3(start, end));
-    else
+    }
+    else {
       angle = acosf(dot_v3v3(start, end));
+    }
   }
   else {
     float mtx[3][3];
@@ -984,18 +1045,25 @@ static void CalcSnapGeometry(TransInfo *t, float *UNUSED(vec))
     float no[3];
     float mval[2];
     bool found = false;
+    short snap_elem = 0;
     float dist_px = SNAP_MIN_DISTANCE;  // Use a user defined value here
 
     mval[0] = t->mval[0];
     mval[1] = t->mval[1];
 
-    if (t->tsnap.mode & (SCE_SNAP_MODE_VERTEX | SCE_SNAP_MODE_EDGE | SCE_SNAP_MODE_FACE)) {
+    if (t->tsnap.mode & (SCE_SNAP_MODE_VERTEX | SCE_SNAP_MODE_EDGE | SCE_SNAP_MODE_FACE |
+                         SCE_SNAP_MODE_EDGE_MIDPOINT | SCE_SNAP_MODE_EDGE_PERPENDICULAR)) {
       zero_v3(no); /* objects won't set this */
-      found = snapObjectsTransform(t, mval, &dist_px, loc, no);
+      snap_elem = snapObjectsTransform(t, mval, &dist_px, loc, no);
+      found = snap_elem != 0;
     }
     if ((found == false) && (t->tsnap.mode & SCE_SNAP_MODE_VOLUME)) {
       found = peelObjectsTransform(
           t, mval, (t->settings->snap_flag & SCE_SNAP_PEEL_OBJECT) != 0, loc, no, NULL);
+
+      if (found) {
+        snap_elem = SCE_SNAP_MODE_VOLUME;
+      }
     }
 
     if (found == true) {
@@ -1007,6 +1075,8 @@ static void CalcSnapGeometry(TransInfo *t, float *UNUSED(vec))
     else {
       t->tsnap.status &= ~POINT_INIT;
     }
+
+    t->tsnap.snapElem = (char)snap_elem;
   }
   else if (t->spacetype == SPACE_IMAGE && t->obedit_type == OB_MESH) {
     if (t->tsnap.mode & SCE_SNAP_MODE_VERTEX) {
@@ -1063,23 +1133,31 @@ static void TargetSnapOffset(TransInfo *t, TransData *td)
     float height = BLI_rctf_size_y(&node->totr);
 
 #ifdef USE_NODE_CENTER
-    if (border & NODE_LEFT)
+    if (border & NODE_LEFT) {
       t->tsnap.snapTarget[0] -= 0.5f * width;
-    if (border & NODE_RIGHT)
+    }
+    if (border & NODE_RIGHT) {
       t->tsnap.snapTarget[0] += 0.5f * width;
-    if (border & NODE_BOTTOM)
+    }
+    if (border & NODE_BOTTOM) {
       t->tsnap.snapTarget[1] -= 0.5f * height;
-    if (border & NODE_TOP)
+    }
+    if (border & NODE_TOP) {
       t->tsnap.snapTarget[1] += 0.5f * height;
+    }
 #else
-    if (border & NODE_LEFT)
+    if (border & NODE_LEFT) {
       t->tsnap.snapTarget[0] -= 0.0f;
-    if (border & NODE_RIGHT)
+    }
+    if (border & NODE_RIGHT) {
       t->tsnap.snapTarget[0] += width;
-    if (border & NODE_BOTTOM)
+    }
+    if (border & NODE_BOTTOM) {
       t->tsnap.snapTarget[1] -= height;
-    if (border & NODE_TOP)
+    }
+    if (border & NODE_TOP) {
       t->tsnap.snapTarget[1] += 0.0f;
+    }
 #endif
   }
 }
@@ -1123,8 +1201,7 @@ static void TargetSnapMedian(TransInfo *t)
     t->tsnap.snapTarget[1] = 0;
     t->tsnap.snapTarget[2] = 0;
 
-    FOREACH_TRANS_DATA_CONTAINER(t, tc)
-    {
+    FOREACH_TRANS_DATA_CONTAINER (t, tc) {
       TransData *td = tc->data;
       int i;
       float v[3];
@@ -1134,12 +1211,19 @@ static void TargetSnapMedian(TransInfo *t)
         add_v3_v3(v, td->center);
       }
 
+      if (i == 0) {
+        /* Is this possible? */
+        continue;
+      }
+
+      mul_v3_fl(v, 1.0 / i);
+
       if (tc->use_local_mat) {
         mul_m4_v3(tc->mat, v);
       }
 
       add_v3_v3(t->tsnap.snapTarget, v);
-      i_accum += i;
+      i_accum++;
     }
 
     mul_v3_fl(t->tsnap.snapTarget, 1.0 / i_accum);
@@ -1160,11 +1244,14 @@ static void TargetSnapClosest(TransInfo *t)
     /* Object mode */
     if (t->flag & T_OBJECT) {
       int i;
-      FOREACH_TRANS_DATA_CONTAINER(t, tc)
-      {
+      FOREACH_TRANS_DATA_CONTAINER (t, tc) {
         TransData *td = tc->data;
         for (td = tc->data, i = 0; i < tc->data_len && td->flag & TD_SELECTED; i++, td++) {
-          struct BoundBox *bb = BKE_object_boundbox_get(td->ob);
+          const BoundBox *bb = NULL;
+
+          if ((t->options & CTX_OBMODE_XFORM_OBDATA) == 0) {
+            bb = BKE_object_boundbox_get(td->ob);
+          }
 
           /* use boundbox if possible */
           if (bb) {
@@ -1206,8 +1293,7 @@ static void TargetSnapClosest(TransInfo *t)
       }
     }
     else {
-      FOREACH_TRANS_DATA_CONTAINER(t, tc)
-      {
+      FOREACH_TRANS_DATA_CONTAINER (t, tc) {
         TransData *td = tc->data;
         int i;
         for (i = 0; i < tc->data_len && td->flag & TD_SELECTED; i++, td++) {
@@ -1238,10 +1324,10 @@ static void TargetSnapClosest(TransInfo *t)
   }
 }
 
-bool snapObjectsTransform(
+short snapObjectsTransform(
     TransInfo *t, const float mval[2], float *dist_px, float r_loc[3], float r_no[3])
 {
-  return ED_transform_snap_object_project_view3d(
+  return ED_transform_snap_object_project_view3d_ex(
       t->tsnap.object_context,
       t->scene->toolsettings->snap_mode,
       &(const struct SnapObjectParams){
@@ -1250,9 +1336,13 @@ bool snapObjectsTransform(
           .use_occlusion_test = t->scene->toolsettings->snap_mode != SCE_SNAP_MODE_FACE,
       },
       mval,
+      t->tsnap.snapTarget,
       dist_px,
       r_loc,
-      r_no);
+      r_no,
+      NULL,
+      NULL,
+      NULL);
 }
 
 /******************** PEELING *********************************/
@@ -1506,8 +1596,9 @@ void snapSequenceBounds(TransInfo *t, const int mval[2])
   int mframe;
   TransSeq *ts = TRANS_DATA_CONTAINER_FIRST_SINGLE(t)->custom.type.data;
   /* reuse increment, strictly speaking could be another snap mode, but leave as is */
-  if (!(t->modifiers & MOD_SNAP_INVERT))
+  if (!(t->modifiers & MOD_SNAP_INVERT)) {
     return;
+  }
 
   /* convert to frame range */
   UI_view2d_region_to_view(&t->ar->v2d, mval[0], mval[1], &xmouse, &ymouse);
@@ -1515,8 +1606,9 @@ void snapSequenceBounds(TransInfo *t, const int mval[2])
   /* now find the closest sequence */
   frame = BKE_sequencer_find_next_prev_edit(t->scene, mframe, SEQ_SIDE_BOTH, true, false, true);
 
-  if (!ts->snap_left)
+  if (!ts->snap_left) {
     frame = frame - (ts->max - ts->min);
+  }
 
   t->values[0] = frame - ts->min;
 }
@@ -1542,24 +1634,11 @@ static void applyGridIncrement(
     /* custom aspect for fcurve */
     if (t->spacetype == SPACE_GRAPH) {
       View2D *v2d = &t->ar->v2d;
-      View2DGrid *grid;
+      Scene *scene = t->scene;
       SpaceGraph *sipo = t->sa->spacedata.first;
-      int unity = V2D_UNIT_VALUES;
-      int unitx = (sipo->flag & SIPO_DRAWTIME) ? V2D_UNIT_SECONDS : V2D_UNIT_FRAMESCALE;
-
-      /* grid */
-      grid = UI_view2d_grid_calc(t->scene,
-                                 v2d,
-                                 unitx,
-                                 V2D_GRID_NOCLAMP,
-                                 unity,
-                                 V2D_GRID_NOCLAMP,
-                                 t->ar->winx,
-                                 t->ar->winy);
-
-      UI_view2d_grid_size(grid, &asp_local[0], &asp_local[1]);
-      UI_view2d_grid_free(grid);
-
+      asp_local[0] = UI_view2d_grid_resolution_x__frames_or_seconds(
+          v2d, scene, sipo->flag & SIPO_DRAWTIME);
+      asp_local[1] = UI_view2d_grid_resolution_y__values(v2d);
       asp = asp_local;
     }
   }

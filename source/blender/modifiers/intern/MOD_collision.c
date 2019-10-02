@@ -118,9 +118,9 @@ static void deformVerts(ModifierData *md,
 
   if (mesh_src) {
     float current_time = 0;
-    unsigned int mvert_num = 0;
+    uint mvert_num = 0;
 
-    BKE_mesh_apply_vert_coords(mesh_src, vertexCos);
+    BKE_mesh_vert_coords_apply(mesh_src, vertexCos);
     BKE_mesh_calc_normals(mesh_src);
 
     current_time = DEG_get_ctime(ctx->depsgraph);
@@ -141,8 +141,9 @@ static void deformVerts(ModifierData *md,
     }
 
     /* check if mesh has changed */
-    if (collmd->x && (mvert_num != collmd->mvert_num))
+    if (collmd->x && (mvert_num != collmd->mvert_num)) {
       freeData((ModifierData *)collmd);
+    }
 
     if (collmd->time_xnew == -1000) { /* first time */
 

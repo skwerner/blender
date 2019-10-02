@@ -92,7 +92,7 @@ static void sample_draw(const bContext *C, ARegion *ar, void *arg_info)
 static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
 {
   Main *bmain = CTX_data_main(C);
-  struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   SpaceSeq *sseq = (SpaceSeq *)CTX_wm_space_data(C);
   ARegion *ar = CTX_wm_region(C);
@@ -107,6 +107,8 @@ static void sample_apply(bContext *C, wmOperator *op, const wmEvent *event)
   }
 
   UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &fx, &fy);
+
+  fx /= scene->r.xasp / scene->r.yasp;
 
   fx += (float)scene->r.xsch / 2.0f;
   fy += (float)scene->r.ysch / 2.0f;

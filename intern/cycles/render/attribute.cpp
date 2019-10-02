@@ -48,7 +48,8 @@ void Attribute::set(ustring name_, TypeDesc type_, AttributeElement element_)
   /* string and matrix not supported! */
   assert(type == TypeDesc::TypeFloat || type == TypeDesc::TypeColor ||
          type == TypeDesc::TypePoint || type == TypeDesc::TypeVector ||
-         type == TypeDesc::TypeNormal || type == TypeDesc::TypeMatrix || type == TypeFloat2);
+         type == TypeDesc::TypeNormal || type == TypeDesc::TypeMatrix || type == TypeFloat2 ||
+         type == TypeRGBA);
 }
 
 void Attribute::resize(Mesh *mesh, AttributePrimitive prim, bool reserve_only)
@@ -250,6 +251,9 @@ void Attribute::add_with_weight(void *dst, void *src, float weight)
   }
   else if (same_storage(type, TypeDesc::TypeFloat)) {
     *((float *)dst) += *((float *)src) * weight;
+  }
+  else if (same_storage(type, TypeFloat2)) {
+    *((float2 *)dst) += *((float2 *)src) * weight;
   }
   else if (same_storage(type, TypeDesc::TypeVector)) {
     *((float4 *)dst) += *((float4 *)src) * weight;

@@ -153,7 +153,7 @@ void rgb_to_ycc(float r, float g, float b, float *ly, float *lcb, float *lcr, in
       cr = (0.5f * sr) - (0.41869f * sg) - (0.08131f * sb) + 128.0f;
       break;
     default:
-      assert(!"invalid colorspace");
+      BLI_assert(!"invalid colorspace");
       break;
   }
 
@@ -355,11 +355,11 @@ void hsv_clamp_v(float hsv[3], float v_max)
 }
 
 /**
- * We define a 'cpack' here as a (3 byte color code) number that can be expressed like 0xFFAA66 or so.
- * for that reason it is sensitive for endianness... with this function it works correctly.
+ * We define a 'cpack' here as a (3 byte color code)
+ * number that can be expressed like 0xFFAA66 or so.
+ * For that reason it is sensitive for endianness... with this function it works correctly.
  * \see #imm_cpack
  */
-
 unsigned int hsv_to_cpack(float h, float s, float v)
 {
   unsigned int r, g, b;

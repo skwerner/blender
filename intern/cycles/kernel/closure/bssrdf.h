@@ -30,6 +30,8 @@ typedef ccl_addr_space struct Bssrdf {
   float channels;
 } Bssrdf;
 
+static_assert(sizeof(ShaderClosure) >= sizeof(Bssrdf), "Bssrdf is too large!");
+
 /* Planar Truncated Gaussian
  *
  * Note how this is different from the typical gaussian, this one integrates
@@ -224,12 +226,12 @@ ccl_device float bssrdf_burley_eval(const float d, float r)
   if (r >= Rm)
     return 0.0f;
 
-  /* Burley refletance profile, equation (3).
+  /* Burley reflectance profile, equation (3).
    *
    * NOTES:
    * - Surface albedo is already included into sc->weight, no need to
    *   multiply by this term here.
-   * - This is normalized diffuse model, so the equation is mutliplied
+   * - This is normalized diffuse model, so the equation is multiplied
    *   by 2*pi, which also matches cdf().
    */
   float exp_r_3_d = expf(-r / (3.0f * d));
@@ -450,7 +452,8 @@ ccl_device void bssrdf_sample(const ShaderClosure *sc, float xi, float *r, float
   else if (bssrdf->type == CLOSURE_BSSRDF_GAUSSIAN_ID) {
     bssrdf_gaussian_sample(radius, xi, r, h);
   }
-  else { /*if(bssrdf->type == CLOSURE_BSSRDF_BURLEY_ID || bssrdf->type == CLOSURE_BSSRDF_PRINCIPLED_ID)*/
+  else { /* if (bssrdf->type == CLOSURE_BSSRDF_BURLEY_ID ||
+          *     bssrdf->type == CLOSURE_BSSRDF_PRINCIPLED_ID) */
     bssrdf_burley_sample(radius, xi, r, h);
   }
 }
@@ -466,7 +469,8 @@ ccl_device float bssrdf_channel_pdf(const Bssrdf *bssrdf, float radius, float r)
   else if (bssrdf->type == CLOSURE_BSSRDF_GAUSSIAN_ID) {
     return bssrdf_gaussian_pdf(radius, r);
   }
-  else { /*if(bssrdf->type == CLOSURE_BSSRDF_BURLEY_ID || bssrdf->type == CLOSURE_BSSRDF_PRINCIPLED_ID)*/
+  else { /* if (bssrdf->type == CLOSURE_BSSRDF_BURLEY_ID ||
+          *     bssrdf->type == CLOSURE_BSSRDF_PRINCIPLED_ID)*/
     return bssrdf_burley_pdf(radius, r);
   }
 }

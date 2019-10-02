@@ -27,8 +27,6 @@
 #include "DNA_customdata_types.h"
 #include "DNA_listBase.h"
 
-struct Image;
-
 /*tessellation face, see MLoop/MPoly for the real face data*/
 typedef struct MFace {
   unsigned int v1, v2, v3, v4;
@@ -61,8 +59,9 @@ typedef struct MVert {
   char flag, bweight;
 } MVert;
 
-/* tessellation vertex color data.
- * at the moment alpha is abused for vertex painting and not used for transparency, note that red and blue are swapped
+/** Tessellation vertex color data.
+ * at the moment alpha is abused for vertex painting and not used for transparency,
+ * note that red and blue are swapped
  */
 typedef struct MCol {
   unsigned char a, r, g, b;
@@ -87,10 +86,12 @@ typedef struct MLoop {
 } MLoop;
 
 /**
- * #MLoopTri's are lightweight triangulation data, for functionality that doesn't support ngons (#MPoly).
+ * #MLoopTri's are lightweight triangulation data,
+ * for functionality that doesn't support ngons (#MPoly).
  * This is cache data created from (#MPoly, #MLoop & #MVert arrays).
- * There is no attempt to maintain this data's validity over time, any changes to the underlying mesh
- * invalidate the #MLoopTri array, which will need to be re-calculated.
+ * There is no attempt to maintain this data's validity over time,
+ * any changes to the underlying mesh invalidate the #MLoopTri array,
+ * which will need to be re-calculated.
  *
  * Users normally access this via #BKE_mesh_runtime_looptri_ensure.
  * In rare cases its calculated directly, with #BKE_mesh_recalc_looptri.
@@ -102,7 +103,8 @@ typedef struct MLoop {
  *
  * Storing loop indices (instead of vertex indices) allows us to
  * directly access UV's, vertex-colors as well as vertices.
- * The index of the source polygon is stored as well, giving access to materials and polygon normals.
+ * The index of the source polygon is stored as well,
+ * giving access to materials and polygon normals.
  *
  * \note This data is runtime only, never written to disk.
  *
@@ -148,7 +150,8 @@ typedef struct MLoop {
  * };
  * \endcode
  *
- * It may also be useful to check whether or not two vertices of a triangle form an edge in the underlying mesh.
+ * It may also be useful to check whether or not two vertices of a triangle
+ * form an edge in the underlying mesh.
  *
  * This can be done by checking the edge of the referenced loop (#MLoop.e),
  * the winding of the #MLoopTri and the #MLoop's will always match,
@@ -182,10 +185,6 @@ typedef struct MLoopTri {
 typedef struct MVertTri {
   unsigned int tri[3];
 } MVertTri;
-
-//typedef struct MTexPoly {
-//  void *_pad;
-//} MTexPoly;
 
 typedef struct MLoopUV {
   float uv[2];
@@ -389,6 +388,7 @@ enum {
   /*  SELECT              = (1 << 0), */
   ME_VERT_TMP_TAG = (1 << 2),
   ME_HIDE = (1 << 4),
+  ME_VERT_FACEDOT = (1 << 5),
   /*  ME_VERT_MERGED      = (1 << 6), */
   ME_VERT_PBVH_UPDATE = (1 << 7),
 };

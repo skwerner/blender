@@ -82,8 +82,9 @@ static bool vertex_color_set(Object *ob, uint paintcol)
   for (i = 0; i < me->totpoly; i++, mp++) {
     MLoopCol *lcol = me->mloopcol + mp->loopstart;
 
-    if (use_face_sel && !(mp->flag & ME_FACE_SEL))
+    if (use_face_sel && !(mp->flag & ME_FACE_SEL)) {
       continue;
+    }
 
     j = 0;
     do {
@@ -151,7 +152,7 @@ static bool vertex_paint_from_weight(Object *ob)
   }
 
   /* TODO: respect selection. */
-  /* TODO: Do we want to take weights from evaluated mesh instead? 2.7x was not doing it anyway... */
+  /* TODO: Do we want to take weights from evaluated mesh instead? 2.7x was not doing it anyway. */
   mp = me->mpoly;
   vgroup_active = ob->actdef - 1;
   for (int i = 0; i < me->totpoly; i++, mp++) {
@@ -220,8 +221,9 @@ static void vertex_color_smooth_looptag(Mesh *me, bool *mlooptag)
   /* if no mloopcol: do not do */
   /* if mtexpoly: only the involved faces, otherwise all */
 
-  if (me->mloopcol == NULL || me->totvert == 0 || me->totpoly == 0)
+  if (me->mloopcol == NULL || me->totvert == 0 || me->totpoly == 0) {
     return;
+  }
 
   scol = MEM_callocN(sizeof(int) * me->totvert * 5, "scol");
 
@@ -270,7 +272,6 @@ static bool vertex_color_smooth(Object *ob)
 {
   Mesh *me;
   const MPoly *mp;
-
   int i, j;
 
   bool *mlooptag;
@@ -280,6 +281,7 @@ static bool vertex_color_smooth(Object *ob)
   }
 
   const bool use_face_sel = (me->editflag & ME_EDIT_PAINT_FACE_SEL) != 0;
+  const bool use_vert_sel = (me->editflag & ME_EDIT_PAINT_VERT_SEL) != 0;
 
   mlooptag = MEM_callocN(sizeof(bool) * me->totloop, "VPaintData mlooptag");
 
@@ -287,14 +289,19 @@ static bool vertex_color_smooth(Object *ob)
   mp = me->mpoly;
   for (i = 0; i < me->totpoly; i++, mp++) {
     const MLoop *ml = me->mloop + mp->loopstart;
-    int ml_index = mp->loopstart;
 
-    if (use_face_sel && !(mp->flag & ME_FACE_SEL))
+    if (use_face_sel && !(mp->flag & ME_FACE_SEL)) {
       continue;
-
-    for (j = 0; j < mp->totloop; j++, ml_index++, ml++) {
-      mlooptag[ml_index] = true;
     }
+
+    j = 0;
+    do {
+      if (!(use_vert_sel && !(me->mvert[ml->v].flag & SELECT))) {
+        mlooptag[mp->loopstart + j] = true;
+      }
+      ml++;
+      j++;
+    } while (j < mp->totloop);
   }
 
   /* remove stale me->mcol, will be added later */
@@ -369,19 +376,20 @@ static int vertex_color_brightness_contrast_exec(bContext *C, wmOperator *op)
     float contrast = RNA_float_get(op->ptr, "contrast");
     brightness /= 100.0f;
     float delta = contrast / 200.0f;
-    gain = 1.0f - delta * 2.0f;
     /*
      * The algorithm is by Werner D. Streidt
      * (http://visca.com/ffactory/archives/5-99/msg00021.html)
      * Extracted of OpenCV demhist.c
      */
     if (contrast > 0) {
-      gain = 1.0f / ((gain != 0.0f) ? gain : FLT_EPSILON);
+      gain = 1.0f - delta * 2.0f;
+      gain = 1.0f / max_ff(gain, FLT_EPSILON);
       offset = gain * (brightness - delta);
     }
     else {
       delta *= -1;
-      offset = gain * (brightness + delta);
+      gain = max_ff(1.0f - delta * 2.0f, 0.0f);
+      offset = gain * brightness + delta;
     }
   }
 

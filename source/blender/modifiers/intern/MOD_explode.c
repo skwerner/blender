@@ -63,7 +63,7 @@ static void freeData(ModifierData *md)
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
 {
 #if 0
-  const ExplodeModifierData *emd = (const ExplodeModifierData *) md;
+  const ExplodeModifierData *emd = (const ExplodeModifierData *)md;
 #endif
   ExplodeModifierData *temd = (ExplodeModifierData *)target;
 
@@ -129,8 +129,9 @@ static void createFacepa(ExplodeModifierData *emd, ParticleSystemModifierData *p
       for (i = 0; i < totvert; i++, dvert++) {
         float val = BLI_rng_get_float(rng);
         val = (1.0f - emd->protect) * val + emd->protect * 0.5f;
-        if (val < defvert_find_weight(dvert, defgrp_index))
+        if (val < defvert_find_weight(dvert, defgrp_index)) {
           vertpa[i] = -1;
+        }
       }
     }
   }
@@ -200,7 +201,7 @@ static void createFacepa(ExplodeModifierData *emd, ParticleSystemModifierData *p
   BLI_rng_free(rng);
 }
 
-static int edgecut_get(EdgeHash *edgehash, unsigned int v1, unsigned int v2)
+static int edgecut_get(EdgeHash *edgehash, uint v1, uint v2)
 {
   return POINTER_AS_INT(BLI_edgehash_lookup(edgehash, v1, v2));
 }
@@ -648,7 +649,7 @@ static Mesh *cutEdges(ExplodeModifierData *emd, Mesh *mesh)
   int i, v1, v2, v3, v4, esplit, v[4] = {0, 0, 0, 0}, /* To quite gcc barking... */
       uv[4] = {0, 0, 0, 0};                           /* To quite gcc barking... */
   int numlayer;
-  unsigned int ed_v1, ed_v2;
+  uint ed_v1, ed_v2;
 
   edgehash = BLI_edgehash_new(__func__);
 
@@ -716,8 +717,9 @@ static Mesh *cutEdges(ExplodeModifierData *emd, Mesh *mesh)
   BLI_edgehashIterator_free(ehi);
 
   /* count new faces due to splitting */
-  for (i = 0, fs = facesplit; i < totface; i++, fs++)
+  for (i = 0, fs = facesplit; i < totface; i++, fs++) {
     totfsplit += add_faces[*fs];
+  }
 
   split_m = BKE_mesh_new_nomain_from_template(mesh, totesplit, 0, totface + totfsplit, 0, 0);
 
@@ -741,7 +743,7 @@ static Mesh *cutEdges(ExplodeModifierData *emd, Mesh *mesh)
    * have to stop using tessface - campbell */
 
   facepa = MEM_calloc_arrayN((totface + (totfsplit * 2)), sizeof(int), "explode_facepa");
-  //memcpy(facepa, emd->facepa, totface*sizeof(int));
+  // memcpy(facepa, emd->facepa, totface*sizeof(int));
   emd->facepa = facepa;
 
   /* create new verts */
@@ -764,7 +766,7 @@ static Mesh *cutEdges(ExplodeModifierData *emd, Mesh *mesh)
 
   /* create new faces */
   curdupface = 0;  //=totface;
-  //curdupin=totesplit;
+  // curdupin=totesplit;
   for (i = 0, fs = facesplit; i < totface; i++, fs++) {
     mf = &mesh->mface[i];
 
@@ -904,7 +906,7 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
   const int *facepa = emd->facepa;
   int totdup = 0, totvert = 0, totface = 0, totpart = 0, delface = 0;
   int i, v, u;
-  unsigned int ed_v1, ed_v2, mindex = 0;
+  uint ed_v1, ed_v2, mindex = 0;
   MTFace *mtface = NULL, *mtf;
 
   totface = mesh->totface;
@@ -936,10 +938,13 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
         continue;
       }
     }
+    else {
+      pa = NULL;
+    }
 
     /* do mindex + totvert to ensure the vertex index to be the first
      * with BLI_edgehashIterator_getKey */
-    if (facepa[i] == totpart || cfra < (pars + facepa[i])->time) {
+    if (pa == NULL || cfra < pa->time) {
       mindex = totvert + totpart;
     }
     else {
@@ -1020,6 +1025,9 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
 
       mul_m4_v3(imat, vertco);
     }
+    else {
+      pa = NULL;
+    }
   }
   BLI_edgehashIterator_free(ehi);
 
@@ -1031,12 +1039,18 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
     if (facepa[i] != totpart) {
       pa = pars + facepa[i];
 
-      if (pa->alive == PARS_UNBORN && (emd->flag & eExplodeFlag_Unborn) == 0)
+      if (pa->alive == PARS_UNBORN && (emd->flag & eExplodeFlag_Unborn) == 0) {
         continue;
-      if (pa->alive == PARS_ALIVE && (emd->flag & eExplodeFlag_Alive) == 0)
+      }
+      if (pa->alive == PARS_ALIVE && (emd->flag & eExplodeFlag_Alive) == 0) {
         continue;
-      if (pa->alive == PARS_DEAD && (emd->flag & eExplodeFlag_Dead) == 0)
+      }
+      if (pa->alive == PARS_DEAD && (emd->flag & eExplodeFlag_Dead) == 0) {
         continue;
+      }
+    }
+    else {
+      pa = NULL;
     }
 
     source = mesh->mface[i];
@@ -1044,7 +1058,8 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
 
     orig_v4 = source.v4;
 
-    if (facepa[i] != totpart && cfra < pa->time) {
+    /* Same as above in the first loop over mesh's faces. */
+    if (pa == NULL || cfra < pa->time) {
       mindex = totvert + totpart;
     }
     else {
@@ -1064,7 +1079,7 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
 
     /* override uv channel for particle age */
     if (mtface) {
-      float age = (cfra - pa->time) / pa->lifetime;
+      float age = (pa != NULL) ? (cfra - pa->time) / pa->lifetime : 0.0f;
       /* Clamp to this range to avoid flipping to the other side of the coordinates. */
       CLAMP(age, 0.001f, 0.999f);
 

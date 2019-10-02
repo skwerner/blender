@@ -26,18 +26,11 @@
 
 /* ******************* Registration Function ********************** */
 
-struct ARegion;
-struct ListBase;
-struct Main;
 struct Object;
 struct SnapObjectContext;
 struct SnapObjectParams;
-struct View3D;
-struct WorkSpace;
 struct bContext;
-struct wmEvent;
 struct wmKeyConfig;
-struct wmKeyMap;
 struct wmOperatorType;
 
 void ED_keymap_transform(struct wmKeyConfig *keyconf);
@@ -97,6 +90,11 @@ enum TfmMode {
 #define CTX_PAINT_CURVE (1 << 8)
 #define CTX_GPENCIL_STROKES (1 << 9)
 #define CTX_CURSOR (1 << 10)
+/** When transforming object's, adjust the object data so it stays in the same place. */
+#define CTX_OBMODE_XFORM_OBDATA (1 << 11)
+/** Transform object parents without moving their children. */
+#define CTX_OBMODE_XFORM_SKIP_CHILDREN (1 << 12)
+#define CTX_SCULPT (1 << 13)
 
 /* Standalone call to get the transformation center corresponding to the current situation
  * returns 1 if successful, 0 otherwise (usually means there's no selection)
@@ -112,7 +110,6 @@ struct Scene;
 struct TransInfo;
 struct wmGizmoGroup;
 struct wmGizmoGroupType;
-struct wmOperator;
 
 /* UNUSED */
 // int BIF_snappingSupported(struct Object *obedit);
@@ -197,12 +194,12 @@ bool peelObjectsSnapContext(struct SnapObjectContext *sctx,
                             float r_no[3],
                             float *r_thickness);
 
-bool snapObjectsTransform(struct TransInfo *t,
-                          const float mval[2],
-                          float *dist_px,
-                          /* return args */
-                          float r_loc[3],
-                          float r_no[3]);
+short snapObjectsTransform(struct TransInfo *t,
+                           const float mval[2],
+                           float *dist_px,
+                           /* return args */
+                           float r_loc[3],
+                           float r_no[3]);
 bool snapNodesTransform(struct TransInfo *t,
                         const int mval[2],
                         /* return args */

@@ -49,7 +49,6 @@ typedef int GHOST_TInt32;
 typedef unsigned int GHOST_TUns32;
 
 typedef struct {
-  GHOST_TUns16 numOfAASamples;
   int flags;
 } GHOST_GLSettings;
 
@@ -126,9 +125,6 @@ typedef enum {
   // GHOST_kWindowStateUnModified,
 } GHOST_TWindowState;
 
-/** Constants for the answer to the blender exit request */
-typedef enum { GHOST_kExitCancel = 0, GHOST_kExitNow } GHOST_TExitRequestResponse;
-
 typedef enum { GHOST_kWindowOrderTop = 0, GHOST_kWindowOrderBottom } GHOST_TWindowOrder;
 
 typedef enum {
@@ -166,7 +162,7 @@ typedef enum {
   GHOST_kEventKeyUp,
   //  GHOST_kEventKeyAuto,
 
-  GHOST_kEventQuit,
+  GHOST_kEventQuitRequest,
 
   GHOST_kEventWindowClose,
   GHOST_kEventWindowActivate,
@@ -201,11 +197,27 @@ typedef enum {
   GHOST_kStandardCursorInfo,
   GHOST_kStandardCursorDestroy,
   GHOST_kStandardCursorHelp,
-  GHOST_kStandardCursorCycle,
-  GHOST_kStandardCursorSpray,
   GHOST_kStandardCursorWait,
   GHOST_kStandardCursorText,
   GHOST_kStandardCursorCrosshair,
+  GHOST_kStandardCursorCrosshairA,
+  GHOST_kStandardCursorCrosshairB,
+  GHOST_kStandardCursorCrosshairC,
+  GHOST_kStandardCursorPencil,
+  GHOST_kStandardCursorUpArrow,
+  GHOST_kStandardCursorDownArrow,
+  GHOST_kStandardCursorVerticalSplit,
+  GHOST_kStandardCursorHorizontalSplit,
+  GHOST_kStandardCursorEraser,
+  GHOST_kStandardCursorKnife,
+  GHOST_kStandardCursorEyedropper,
+  GHOST_kStandardCursorZoomIn,
+  GHOST_kStandardCursorZoomOut,
+  GHOST_kStandardCursorMove,
+  GHOST_kStandardCursorNSEWScroll,
+  GHOST_kStandardCursorNSScroll,
+  GHOST_kStandardCursorEWScroll,
+  GHOST_kStandardCursorStop,
   GHOST_kStandardCursorUpDown,
   GHOST_kStandardCursorLeftRight,
   GHOST_kStandardCursorTopSide,
@@ -218,7 +230,6 @@ typedef enum {
   GHOST_kStandardCursorBottomLeftCorner,
   GHOST_kStandardCursorCopy,
   GHOST_kStandardCursorCustom,
-  GHOST_kStandardCursorPencil,
 
   GHOST_kStandardCursorNumCursors
 } GHOST_TStandardCursor;
@@ -368,11 +379,22 @@ typedef enum {
 } GHOST_TKey;
 
 typedef enum {
-  GHOST_kGrabDisable = 0, /* grab not set */
-  GHOST_kGrabNormal,      /* no cursor adjustments */
-  GHOST_kGrabWrap,        /* wrap the mouse location to prevent limiting screen bounds */
-  GHOST_kGrabHide, /* hide the mouse while grabbing and restore the original location on release (numbuts) */
+  /** Grab not set. */
+  GHOST_kGrabDisable = 0,
+  /** No cursor adjustments. */
+  GHOST_kGrabNormal,
+  /** Wrap the mouse location to prevent limiting screen bounds. */
+  GHOST_kGrabWrap,
+  /** Hide the mouse while grabbing and restore the original location on release (numbuts). */
+  GHOST_kGrabHide,
 } GHOST_TGrabCursorMode;
+
+typedef enum {
+  /** Axis that cursor grab will wrap. */
+  GHOST_kGrabAxisNone = 0,
+  GHOST_kAxisX = (1 << 0),
+  GHOST_kGrabAxisY = (1 << 1),
+} GHOST_TAxisFlag;
 
 typedef void *GHOST_TEventDataPtr;
 

@@ -57,7 +57,7 @@
 static void drawObjectConstraint(TransInfo *t);
 
 /* ************************** CONSTRAINTS ************************* */
-static void constraintAutoValues(TransInfo *t, float vec[3])
+static void constraintValuesFinal(TransInfo *t, float vec[3])
 {
   int mode = t->con.mode;
   if (mode & CON_APPLY) {
@@ -129,14 +129,17 @@ static void postConstraintChecks(TransInfo *t, float vec[3], float pvec[3])
   snapGridIncrement(t, vec);
 
   if (t->flag & T_NULL_ONE) {
-    if (!(t->con.mode & CON_AXIS0))
+    if (!(t->con.mode & CON_AXIS0)) {
       vec[0] = 1.0f;
+    }
 
-    if (!(t->con.mode & CON_AXIS1))
+    if (!(t->con.mode & CON_AXIS1)) {
       vec[1] = 1.0f;
+    }
 
-    if (!(t->con.mode & CON_AXIS2))
+    if (!(t->con.mode & CON_AXIS2)) {
       vec[2] = 1.0f;
+    }
   }
 
   if (applyNumInput(&t->num, vec)) {
@@ -144,10 +147,10 @@ static void postConstraintChecks(TransInfo *t, float vec[3], float pvec[3])
     removeAspectRatio(t, vec);
   }
 
-  /* autovalues is operator param, use that directly but not if snapping is forced */
-  if (t->flag & T_AUTOVALUES && (t->tsnap.status & SNAP_FORCED) == 0) {
-    copy_v3_v3(vec, t->auto_values);
-    constraintAutoValues(t, vec);
+  /* If `t->values` is operator param, use that directly but not if snapping is forced */
+  if (t->flag & T_INPUT_IS_VALUES_FINAL && (t->tsnap.status & SNAP_FORCED) == 0) {
+    copy_v3_v3(vec, t->values);
+    constraintValuesFinal(t, vec);
     /* inverse transformation at the end */
   }
 
@@ -219,18 +222,20 @@ static void axisProjection(const TransInfo *t,
   if (angle < DEG2RADF(5.0f)) {
     project_v3_v3v3(vec, in, t->viewinv[1]);
     factor = dot_v3v3(t->viewinv[1], vec) * 2.0f;
-    /* since camera distance is quite relative, use quadratic relationship. holding shift can compensate */
-    if (factor < 0.0f)
+    /* Since camera distance is quite relative, use quadratic relationship.
+     * holding shift can compensate. */
+    if (factor < 0.0f) {
       factor *= -factor;
-    else
+    }
+    else {
       factor *= factor;
+    }
 
     /* -factor makes move down going backwards */
     normalize_v3_v3_length(out, axis, -factor);
   }
   else {
-    float v[3], i1[3], i2[3];
-    float v2[3], v4[3];
+    float v[3];
     float norm_center[3];
     float plane[3];
 
@@ -255,23 +260,28 @@ static void axisProjection(const TransInfo *t,
       }
     }
     else {
-      add_v3_v3v3(v2, t_con_center, axis);
-      add_v3_v3v3(v4, v, norm);
-
-      isect_line_line_v3(t_con_center, v2, v, v4, i1, i2);
-
-      sub_v3_v3v3(v, i2, v);
-
-      sub_v3_v3v3(out, i1, t_con_center);
+      /* Use ray-ray intersection instead of line-line because this gave
+       * precision issues adding small values to large numbers. */
+      float mul;
+      if (isect_ray_ray_v3(t_con_center, axis, v, norm, &mul, NULL)) {
+        mul_v3_v3fl(out, axis, mul);
+      }
+      else {
+        /* In practice this should never fail. */
+        BLI_assert(0);
+      }
 
       /* possible some values become nan when
        * viewpoint and object are both zero */
-      if (!isfinite(out[0]))
+      if (!isfinite(out[0])) {
         out[0] = 0.0f;
-      if (!isfinite(out[1]))
+      }
+      if (!isfinite(out[1])) {
         out[1] = 0.0f;
-      if (!isfinite(out[2]))
+      }
+      if (!isfinite(out[2])) {
         out[2] = 0.0f;
+      }
     }
   }
 }
@@ -316,7 +326,7 @@ static void planeProjection(const TransInfo *t, const float in[3], float out[3])
   sub_v3_v3v3(vec, out, in);
 
   factor = dot_v3v3(vec, norm);
-  if (fabsf(factor) <= 0.001f) {
+  if (factor == 0.0f) {
     return; /* prevent divide by zero */
   }
   factor = dot_v3v3(vec, vec) / factor;
@@ -682,17 +692,17 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
   switch (orientation) {
     case V3D_ORIENT_GLOBAL: {
       float mtx[3][3];
-      BLI_snprintf(text, sizeof(text), ftext, IFACE_("global"));
+      BLI_snprintf(text, sizeof(text), ftext, TIP_("global"));
       unit_m3(mtx);
       setConstraint(t, mtx, mode, text);
       break;
     }
     case V3D_ORIENT_LOCAL:
-      BLI_snprintf(text, sizeof(text), ftext, IFACE_("local"));
+      BLI_snprintf(text, sizeof(text), ftext, TIP_("local"));
       setLocalConstraint(t, mode, text);
       break;
     case V3D_ORIENT_NORMAL:
-      BLI_snprintf(text, sizeof(text), ftext, IFACE_("normal"));
+      BLI_snprintf(text, sizeof(text), ftext, TIP_("normal"));
       if (checkUseAxisMatrix(t)) {
         setAxisMatrixConstraint(t, mode, text);
       }
@@ -701,19 +711,19 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
       }
       break;
     case V3D_ORIENT_VIEW:
-      BLI_snprintf(text, sizeof(text), ftext, IFACE_("view"));
+      BLI_snprintf(text, sizeof(text), ftext, TIP_("view"));
       setConstraint(t, t->spacemtx, mode, text);
       break;
     case V3D_ORIENT_CURSOR:
-      BLI_snprintf(text, sizeof(text), ftext, IFACE_("cursor"));
+      BLI_snprintf(text, sizeof(text), ftext, TIP_("cursor"));
       setConstraint(t, t->spacemtx, mode, text);
       break;
     case V3D_ORIENT_GIMBAL:
-      BLI_snprintf(text, sizeof(text), ftext, IFACE_("gimbal"));
+      BLI_snprintf(text, sizeof(text), ftext, TIP_("gimbal"));
       setConstraint(t, t->spacemtx, mode, text);
       break;
     case V3D_ORIENT_CUSTOM_MATRIX:
-      BLI_snprintf(text, sizeof(text), ftext, IFACE_("custom matrix"));
+      BLI_snprintf(text, sizeof(text), ftext, TIP_("custom matrix"));
       setConstraint(t, t->spacemtx, mode, text);
       break;
     case V3D_ORIENT_CUSTOM: {
@@ -721,7 +731,7 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
       BLI_snprintf(orientation_str,
                    sizeof(orientation_str),
                    "%s \"%s\"",
-                   IFACE_("custom orientation"),
+                   TIP_("custom orientation"),
                    t->orientation.custom->name);
       BLI_snprintf(text, sizeof(text), ftext, orientation_str);
       setConstraint(t, t->spacemtx, mode, text);
@@ -740,12 +750,15 @@ void drawConstraint(TransInfo *t)
 {
   TransCon *tc = &(t->con);
 
-  if (!ELEM(t->spacetype, SPACE_VIEW3D, SPACE_IMAGE, SPACE_NODE))
+  if (!ELEM(t->spacetype, SPACE_VIEW3D, SPACE_IMAGE, SPACE_NODE)) {
     return;
-  if (!(tc->mode & CON_APPLY))
+  }
+  if (!(tc->mode & CON_APPLY)) {
     return;
-  if (t->flag & T_NO_CONSTRAINT)
+  }
+  if (t->flag & T_NO_CONSTRAINT) {
     return;
+  }
 
   if (tc->drawExtra) {
     tc->drawExtra(t);
@@ -763,8 +776,9 @@ void drawConstraint(TransInfo *t)
       drawLine(t, t->center_global, tc->mtx[2], 'Z', 0);
 
       depth_test_enabled = GPU_depth_test_enabled();
-      if (depth_test_enabled)
+      if (depth_test_enabled) {
         GPU_depth_test(false);
+      }
 
       const uint shdr_pos = GPU_vertformat_attr_add(
           immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
@@ -787,8 +801,9 @@ void drawConstraint(TransInfo *t)
 
       immUnbindProgram();
 
-      if (depth_test_enabled)
+      if (depth_test_enabled) {
         GPU_depth_test(true);
+      }
     }
 
     if (tc->mode & CON_AXIS0) {
@@ -840,22 +855,24 @@ void drawPropCircle(const struct bContext *C, TransInfo *t)
     }
 
     depth_test_enabled = GPU_depth_test_enabled();
-    if (depth_test_enabled)
+    if (depth_test_enabled) {
       GPU_depth_test(false);
+    }
 
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
 
     immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
     immUniformThemeColor(TH_GRID);
 
-    set_inverted_drawing(1);
+    GPU_logic_op_invert_set(true);
     imm_drawcircball(t->center_global, t->prop_size, imat, pos);
-    set_inverted_drawing(0);
+    GPU_logic_op_invert_set(false);
 
     immUnbindProgram();
 
-    if (depth_test_enabled)
+    if (depth_test_enabled) {
       GPU_depth_test(true);
+    }
 
     GPU_matrix_pop();
   }
@@ -873,8 +890,7 @@ static void drawObjectConstraint(TransInfo *t)
   int i;
   float tmp_axismtx[3][3];
 
-  FOREACH_TRANS_DATA_CONTAINER(t, tc)
-  {
+  FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransData *td = tc->data;
     for (i = 0; i < tc->data_len; i++, td++) {
       float co[3];
@@ -990,8 +1006,9 @@ void selectConstraint(TransInfo *t)
 
 void postSelectConstraint(TransInfo *t)
 {
-  if (!(t->con.mode & CON_SELECT))
+  if (!(t->con.mode & CON_SELECT)) {
     return;
+  }
 
   t->con.mode &= ~CON_AXIS0;
   t->con.mode &= ~CON_AXIS1;
@@ -1009,11 +1026,11 @@ static void setNearestAxis2d(TransInfo *t)
   /* no correction needed... just use whichever one is lower */
   if (abs(t->mval[0] - t->con.imval[0]) < abs(t->mval[1] - t->con.imval[1])) {
     t->con.mode |= CON_AXIS1;
-    BLI_strncpy(t->con.text, IFACE_(" along Y axis"), sizeof(t->con.text));
+    BLI_strncpy(t->con.text, TIP_(" along Y axis"), sizeof(t->con.text));
   }
   else {
     t->con.mode |= CON_AXIS0;
-    BLI_strncpy(t->con.text, IFACE_(" along X axis"), sizeof(t->con.text));
+    BLI_strncpy(t->con.text, TIP_(" along X axis"), sizeof(t->con.text));
   }
 }
 
@@ -1065,31 +1082,31 @@ static void setNearestAxis3d(TransInfo *t)
   if (len[0] <= len[1] && len[0] <= len[2]) {
     if (t->modifiers & MOD_CONSTRAINT_PLANE) {
       t->con.mode |= (CON_AXIS1 | CON_AXIS2);
-      BLI_snprintf(t->con.text, sizeof(t->con.text), IFACE_(" locking %s X axis"), t->spacename);
+      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" locking %s X axis"), t->spacename);
     }
     else {
       t->con.mode |= CON_AXIS0;
-      BLI_snprintf(t->con.text, sizeof(t->con.text), IFACE_(" along %s X axis"), t->spacename);
+      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" along %s X axis"), t->spacename);
     }
   }
   else if (len[1] <= len[0] && len[1] <= len[2]) {
     if (t->modifiers & MOD_CONSTRAINT_PLANE) {
       t->con.mode |= (CON_AXIS0 | CON_AXIS2);
-      BLI_snprintf(t->con.text, sizeof(t->con.text), IFACE_(" locking %s Y axis"), t->spacename);
+      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" locking %s Y axis"), t->spacename);
     }
     else {
       t->con.mode |= CON_AXIS1;
-      BLI_snprintf(t->con.text, sizeof(t->con.text), IFACE_(" along %s Y axis"), t->spacename);
+      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" along %s Y axis"), t->spacename);
     }
   }
   else if (len[2] <= len[1] && len[2] <= len[0]) {
     if (t->modifiers & MOD_CONSTRAINT_PLANE) {
       t->con.mode |= (CON_AXIS0 | CON_AXIS1);
-      BLI_snprintf(t->con.text, sizeof(t->con.text), IFACE_(" locking %s Z axis"), t->spacename);
+      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" locking %s Z axis"), t->spacename);
     }
     else {
       t->con.mode |= CON_AXIS2;
-      BLI_snprintf(t->con.text, sizeof(t->con.text), IFACE_(" along %s Z axis"), t->spacename);
+      BLI_snprintf(t->con.text, sizeof(t->con.text), TIP_(" along %s Z axis"), t->spacename);
     }
   }
 }
@@ -1150,14 +1167,17 @@ bool isLockConstraint(TransInfo *t)
 {
   int mode = t->con.mode;
 
-  if ((mode & (CON_AXIS0 | CON_AXIS1)) == (CON_AXIS0 | CON_AXIS1))
+  if ((mode & (CON_AXIS0 | CON_AXIS1)) == (CON_AXIS0 | CON_AXIS1)) {
     return true;
+  }
 
-  if ((mode & (CON_AXIS1 | CON_AXIS2)) == (CON_AXIS1 | CON_AXIS2))
+  if ((mode & (CON_AXIS1 | CON_AXIS2)) == (CON_AXIS1 | CON_AXIS2)) {
     return true;
+  }
 
-  if ((mode & (CON_AXIS0 | CON_AXIS2)) == (CON_AXIS0 | CON_AXIS2))
+  if ((mode & (CON_AXIS0 | CON_AXIS2)) == (CON_AXIS0 | CON_AXIS2)) {
     return true;
+  }
 
   return false;
 }
@@ -1174,21 +1194,24 @@ int getConstraintSpaceDimension(TransInfo *t)
 {
   int n = 0;
 
-  if (t->con.mode & CON_AXIS0)
+  if (t->con.mode & CON_AXIS0) {
     n++;
+  }
 
-  if (t->con.mode & CON_AXIS1)
+  if (t->con.mode & CON_AXIS1) {
     n++;
+  }
 
-  if (t->con.mode & CON_AXIS2)
+  if (t->con.mode & CON_AXIS2) {
     n++;
+  }
 
   return n;
   /*
- * Someone willing to do it cryptically could do the following instead:
- *
- * return t->con & (CON_AXIS0|CON_AXIS1|CON_AXIS2);
- *
- * Based on the assumptions that the axis flags are one after the other and start at 1
- */
+   * Someone willing to do it cryptically could do the following instead:
+   *
+   * return t->con & (CON_AXIS0|CON_AXIS1|CON_AXIS2);
+   *
+   * Based on the assumptions that the axis flags are one after the other and start at 1
+   */
 }

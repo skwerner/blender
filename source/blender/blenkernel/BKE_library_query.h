@@ -38,9 +38,12 @@ enum {
    */
   IDWALK_CB_INDIRECT_USAGE = (1 << 2),
 
-  /** That ID is used as mere sub-data by its owner
+  /**
+   * That ID is used as mere sub-data by its owner
    * (only case currently: those f***ing nodetrees in materials etc.).
-   * This means callback shall not *do* anything, only use this as informative data if it needs it. */
+   * This means callback shall not *do* anything,
+   * only use this as informative data if it needs it.
+   */
   IDWALK_CB_PRIVATE = (1 << 3),
 
   /** That ID is not really used by its owner, it's just an internal hint/helper.
@@ -48,8 +51,8 @@ enum {
    * How to handle that kind of cases totally depends on what caller code is doing... */
   IDWALK_CB_LOOPBACK = (1 << 4),
 
-  /** That ID is used as static override's reference by its owner. */
-  IDWALK_CB_STATIC_OVERRIDE_REFERENCE = (1 << 5),
+  /** That ID is used as library override's reference by its owner. */
+  IDWALK_CB_OVERRIDE_LIBRARY_REFERENCE = (1 << 5),
 
   /**
    * Adjusts #ID.us reference-count.
@@ -62,9 +65,10 @@ enum {
 
 enum {
   IDWALK_RET_NOP = 0,
-  IDWALK_RET_STOP_ITER = 1 << 0, /* Completely stop iteration. */
-  IDWALK_RET_STOP_RECURSION =
-      1 << 1, /* Stop recursion, that is, do not loop over ID used by current one. */
+  /** Completely stop iteration. */
+  IDWALK_RET_STOP_ITER = 1 << 0,
+  /** Stop recursion, that is, do not loop over ID used by current one. */
+  IDWALK_RET_STOP_RECURSION = 1 << 1,
 };
 
 /**

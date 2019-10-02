@@ -18,42 +18,22 @@
 
 # <pep8 compliant>
 
-import subprocess
+import buildbot_utils
 import os
 import sys
 
-# get builder name
-if len(sys.argv) < 2:
-    sys.stderr.write("Not enough arguments, expecting builder name\n")
-    sys.exit(1)
+def get_ctest_arguments(builder):
+    args = ['--output-on-failure']
+    if builder.platform == 'win':
+        args += ['-C', 'Release']
+    return args
 
-builder = sys.argv[1]
+def test(builder):
+    os.chdir(builder.build_dir)
 
-# we run from build/ directory
-blender_dir = '../blender.git'
+    command = builder.command_prefix  + ['ctest'] + get_ctest_arguments(builder)
+    buildbot_utils.call(command)
 
-if "cmake" in builder:
-    # cmake
-
-    print("Automated tests are still DISABLED!")
-    sys.exit(0)
-
-    build_dir = os.path.abspath(os.path.join('..', 'build', builder))
-    chroot_name = None
-    chroot_prefix = []
-
-    """
-    if builder.endswith('x86_64_cmake'):
-        chroot_name = 'buildbot_jessie_x86_64'
-    elif builder.endswith('i686_cmake'):
-        chroot_name = 'buildbot_jessie_i686'
-    if chroot_name:
-        chroot_prefix = ['schroot', '-c', chroot_name, '--']
-    """
-
-    os.chdir(build_dir)
-    retcode = subprocess.call(chroot_prefix + ['ctest', '--output-on-failure'])
-    sys.exit(retcode)
-else:
-    print("Unknown building system")
-    sys.exit(1)
+if __name__ == "__main__":
+    builder = buildbot_utils.create_builder_from_arguments()
+    test(builder)

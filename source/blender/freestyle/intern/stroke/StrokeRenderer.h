@@ -88,10 +88,12 @@ class TextureManager {
     bool operator()(const BrushTexture &bt1, const BrushTexture &bt2) const
     {
       int r = strcmp(bt1.first.c_str(), bt2.first.c_str());
-      if (r != 0)
+      if (r != 0) {
         return (r < 0);
-      else
+      }
+      else {
         return (bt1.second < bt2.second);
+      }
     }
   };
   typedef std::map<BrushTexture, unsigned, cmpBrushTexture> brushesMap;
@@ -116,7 +118,8 @@ class TextureManager {
 /*                                */
 /**********************************/
 
-/*! Class to render a stroke. Creates a triangle strip and stores it strip is lazily created at the first rendering */
+/*! Class to render a stroke. Creates a triangle strip and stores it strip is lazily created at the
+ * first rendering */
 class StrokeRenderer {
  public:
   StrokeRenderer();
@@ -130,7 +133,7 @@ class StrokeRenderer {
   // lazy, checks if it has already been done
   static bool loadTextures();
 
-  //static unsigned int getTextureIndex(unsigned int index);
+  // static unsigned int getTextureIndex(unsigned int index);
   static TextureManager *_textureManager;
 
 #ifdef WITH_CXX_GUARDEDALLOC

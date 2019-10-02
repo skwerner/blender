@@ -33,10 +33,12 @@ static void loadIdentity(double *matrix)
   // Build Identity matrix
   for (i = 0; i < 16; ++i) {
     double value;
-    if ((i % 5) == 0)
+    if ((i % 5) == 0) {
       value = 1.0;
-    else
+    }
+    else {
       value = 0;
+    }
     matrix[i] = value;
   }
 }
@@ -48,7 +50,7 @@ NodeCamera::NodeCamera(CameraType camera_type) : camera_type_(camera_type)
 }
 
 #if 0 /* UNUSED, gives warning in gcc */
-NodeCamera::NodeCamera(const NodeCamera& iBrother) : camera_type_(iBrother.camera_type_)
+NodeCamera::NodeCamera(const NodeCamera &iBrother) : camera_type_(iBrother.camera_type_)
 {
   memcpy(modelview_matrix_, iBrother.modelview_matrix_, 16 * sizeof(double));
   memcpy(projection_matrix_, iBrother.projection_matrix_, 16 * sizeof(double));

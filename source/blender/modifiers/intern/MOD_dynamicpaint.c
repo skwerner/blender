@@ -112,16 +112,17 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   return mesh;
 }
 
-static bool is_brush_cb(Object *UNUSED(ob), ModifierData *pmd)
+static bool is_brush_cb(Object *UNUSED(ob), ModifierData *md)
 {
-  return ((DynamicPaintModifierData *)pmd)->brush != NULL;
+  DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
+  return (pmd->brush != NULL && pmd->type == MOD_DYNAMICPAINT_TYPE_BRUSH);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
   /* Add relation from canvases to all brush objects. */
-  if (pmd->canvas != NULL) {
+  if (pmd->canvas != NULL && pmd->type == MOD_DYNAMICPAINT_TYPE_CANVAS) {
     for (DynamicPaintSurface *surface = pmd->canvas->surfaces.first; surface;
          surface = surface->next) {
       if (surface->effect & MOD_DPAINT_EFFECT_DO_DRIP) {
@@ -129,7 +130,8 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
             ctx->node, ctx->object, surface->effector_weights, true, 0, "Dynamic Paint Field");
       }
 
-      /* Actual code uses custom loop over group/scene without layer checks in dynamicPaint_doStep */
+      /* Actual code uses custom loop over group/scene
+       * without layer checks in dynamicPaint_doStep. */
       DEG_add_collision_relations(ctx->node,
                                   ctx->object,
                                   surface->brush_group,
@@ -167,7 +169,7 @@ static void foreachTexLink(ModifierData *UNUSED(md),
                            TexWalkFunc UNUSED(walk),
                            void *UNUSED(userData))
 {
-  //walk(userData, ob, md, ""); /* re-enable when possible */
+  // walk(userData, ob, md, ""); /* re-enable when possible */
 }
 
 ModifierTypeInfo modifierType_DynamicPaint = {

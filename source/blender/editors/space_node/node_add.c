@@ -54,8 +54,10 @@
 
 #include "node_intern.h" /* own include */
 
-/* XXX Does some additional initialization on top of nodeAddNode
- * Can be used with both custom and static nodes, if idname==NULL the static int type will be used instead.
+/**
+ * XXX Does some additional initialization on top of #nodeAddNode
+ * Can be used with both custom and static nodes,
+ * if `idname == NULL` the static int type will be used instead.
  */
 bNode *node_add_node(const bContext *C, const char *idname, int type, float locx, float locy)
 {
@@ -307,7 +309,7 @@ void NODE_OT_add_reroute(wmOperatorType *ot)
   prop = RNA_def_collection_runtime(ot->srna, "path", &RNA_OperatorMousePath, "Path", "");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
   /* internal */
-  RNA_def_int(ot->srna, "cursor", BC_CROSSCURSOR, 0, INT_MAX, "Cursor", "", 0, INT_MAX);
+  RNA_def_int(ot->srna, "cursor", WM_CURSOR_CROSS, 0, INT_MAX, "Cursor", "", 0, INT_MAX);
 }
 
 /* ****************** Add File Node Operator  ******************* */
@@ -519,7 +521,7 @@ static int new_node_tree_exec(bContext *C, wmOperator *op)
     id_us_min(&ntree->id);
 
     RNA_id_pointer_create(&ntree->id, &idptr);
-    RNA_property_pointer_set(&ptr, prop, idptr);
+    RNA_property_pointer_set(&ptr, prop, idptr, NULL);
     RNA_property_update(C, &ptr, prop);
   }
   else if (snode) {

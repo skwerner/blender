@@ -78,14 +78,6 @@ enum {
   /* warn: rest of uiBut->flag in UI_interface.h */
 };
 
-/* some buttons display icons only under special conditions
- * (e.g. 'x' icon in search menu) - used with ui_but_icon_extra_get */
-typedef enum uiButExtraIconType {
-  UI_BUT_ICONEXTRA_NONE = 1,
-  UI_BUT_ICONEXTRA_CLEAR,
-  UI_BUT_ICONEXTRA_EYEDROPPER,
-} uiButExtraIconType;
-
 /* uiBut->dragflag */
 enum {
   UI_BUT_DRAGPOIN_FREE = (1 << 0),
@@ -172,21 +164,25 @@ struct uiBut {
   /* both these values use depends on the button type
    * (polymorphic struct or union would be nicer for this stuff) */
 
-  /* (type == UI_BTYPE_HSVCUBE),    Use UI_GRAD_* values.
-   * (type == UI_BTYPE_NUM),        Use to store RNA 'step' value, for dragging and click-step.
-   * (type == UI_BTYPE_LABEL),      Use (a1 == 1.0f) to use a2 as a blending factor (wow, this is imaginative!).
-   * (type == UI_BTYPE_SCROLL)      Use as scroll size.
-   * (type == UI_BTYPE_SEARCH_MENU) Use as number or rows.
-   * (type == UI_BTYPE_COLOR)       Use as indication of color palette
-   * (type == UI_BTYPE_PROGRESS_BAR) Use to store progress (0..1).
+  /**
+   * For #uiBut.type:
+   * - UI_BTYPE_HSVCUBE:      Use UI_GRAD_* values.
+   * - UI_BTYPE_NUM:          Use to store RNA 'step' value, for dragging and click-step.
+   * - UI_BTYPE_LABEL:        Use `(a1 == 1.0f)` to use a2 as a blending factor (imaginative!).
+   * - UI_BTYPE_SCROLL:       Use as scroll size.
+   * - UI_BTYPE_SEARCH_MENU:  Use as number or rows.
+   * - UI_BTYPE_COLOR:        Use as indication of color palette.
+   * - UI_BTYPE_PROGRESS_BAR: Use to store progress (0..1).
    */
   float a1;
 
-  /* (type == UI_BTYPE_HSVCIRCLE ), Use to store the luminosity.
-   * (type == UI_BTYPE_NUM),        Use to store RNA 'precision' value, for dragging and click-step.
-   * (type == UI_BTYPE_LABEL),      If (a1 == 1.0f) use a2 as a blending factor.
-   * (type == UI_BTYPE_SEARCH_MENU) Use as number or columns.
-   * (type == UI_BTYPE_COLOR)       Use as index in palette (not so good, needs refactor)
+  /**
+   * For #uiBut.type:
+   * - UI_BTYPE_HSVCIRCLE:    Use to store the luminosity.
+   * - UI_BTYPE_NUM:          Use to store RNA 'precision' value, for dragging and click-step.
+   * - UI_BTYPE_LABEL:        If `(a1 == 1.0f)` use a2 as a blending factor.
+   * - UI_BTYPE_SEARCH_MENU:  Use as number or columns.
+   * - UI_BTYPE_COLOR:        Use as index in palette (not so good, needs refactor).
    */
   float a2;
 
@@ -258,6 +254,8 @@ struct uiBut {
   short opcontext;
   uchar menu_key; /* 'a'-'z', always lower case */
 
+  ListBase extra_op_icons; /* uiButExtraOpIcon */
+
   /* Draggable data, type is WM_DRAG_... */
   char dragtype;
   short dragflag;
@@ -288,6 +286,16 @@ typedef struct uiButTab {
   uiBut but;
   struct MenuType *menu;
 } uiButTab;
+
+/**
+ * Additional, superimposed icon for a button, invoking an operator.
+ */
+typedef struct uiButExtraOpIcon {
+  struct uiButExtraOpIcon *next, *prev;
+
+  BIFIconID icon;
+  struct wmOperatorCallParams *optype_params;
+} uiButExtraOpIcon;
 
 typedef struct ColorPicker {
   struct ColorPicker *next, *prev;
@@ -456,7 +464,12 @@ extern void ui_block_to_window_rctf(const struct ARegion *ar,
 extern float ui_block_to_window_scale(const struct ARegion *ar, uiBlock *block);
 extern void ui_window_to_block_fl(const struct ARegion *ar, uiBlock *block, float *x, float *y);
 extern void ui_window_to_block(const struct ARegion *ar, uiBlock *block, int *x, int *y);
+extern void ui_window_to_block_rctf(const struct ARegion *ar,
+                                    uiBlock *block,
+                                    rctf *rct_dst,
+                                    const rctf *rct_src);
 extern void ui_window_to_region(const ARegion *ar, int *x, int *y);
+extern void ui_window_to_region_rcti(const ARegion *ar, rcti *rect_dst, const rcti *rct_src);
 extern void ui_region_to_window(const struct ARegion *ar, int *x, int *y);
 extern void ui_region_winrct_get_no_margin(const struct ARegion *ar, struct rcti *r_rect);
 
@@ -488,12 +501,16 @@ extern bool ui_but_string_set_eval_num(struct bContext *C,
                                        const char *str,
                                        double *value) ATTR_NONNULL();
 extern int ui_but_string_get_max_length(uiBut *but);
+/* Clear & exit the active button's string. */
+extern void ui_but_active_string_clear_and_exit(struct bContext *C, uiBut *but) ATTR_NONNULL();
 extern uiBut *ui_but_drag_multi_edit_get(uiBut *but);
 
 void ui_def_but_icon(uiBut *but, const int icon, const int flag);
-extern uiButExtraIconType ui_but_icon_extra_get(uiBut *but);
+void ui_def_but_icon_clear(uiBut *but);
 
 extern void ui_but_default_set(struct bContext *C, const bool all, const bool use_afterfunc);
+
+void ui_but_extra_operator_icons_free(uiBut *but);
 
 extern void ui_but_rna_menu_convert_to_panel_type(struct uiBut *but, const char *panel_type);
 extern void ui_but_rna_menu_convert_to_menu_type(struct uiBut *but, const char *menu_type);
@@ -530,13 +547,12 @@ struct uiKeyNavLock {
 typedef uiBlock *(*uiBlockHandleCreateFunc)(struct bContext *C,
                                             struct uiPopupBlockHandle *handle,
                                             void *arg1);
-typedef void (*uiBlockHandleFreeFunc)(struct uiPopupBlockHandle *handle, void *arg1);
 
 struct uiPopupBlockCreate {
   uiBlockCreateFunc create_func;
   uiBlockHandleCreateFunc handle_create_func;
-  uiBlockHandleFreeFunc free_func;
   void *arg;
+  void (*arg_free)(void *arg);
 
   int event_xy[2];
 
@@ -653,7 +669,8 @@ uiPopupBlockHandle *ui_popup_block_create(struct bContext *C,
                                           uiBut *but,
                                           uiBlockCreateFunc create_func,
                                           uiBlockHandleCreateFunc handle_create_func,
-                                          void *arg);
+                                          void *arg,
+                                          void (*arg_free)(void *arg));
 uiPopupBlockHandle *ui_popup_menu_create(struct bContext *C,
                                          struct ARegion *butregion,
                                          uiBut *but,
@@ -731,10 +748,6 @@ void ui_draw_but_TRACKPREVIEW(ARegion *ar,
                               uiBut *but,
                               const struct uiWidgetColors *wcol,
                               const rcti *rect);
-void ui_draw_but_NODESOCKET(ARegion *ar,
-                            uiBut *but,
-                            const struct uiWidgetColors *wcol,
-                            const rcti *rect);
 
 /* interface_handlers.c */
 PointerRNA *ui_handle_afterfunc_add_operator(struct wmOperatorType *ot,
@@ -886,7 +899,6 @@ bool ui_but_is_editable(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
 bool ui_but_is_editable_as_text(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
 bool ui_but_is_toggle(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
 bool ui_but_is_interactive(const uiBut *but, const bool labeledit) ATTR_WARN_UNUSED_RESULT;
-bool ui_but_is_utf8(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
 bool ui_but_is_popover_once_compat(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
 bool ui_but_has_array_value(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
 void ui_but_pie_dir(RadialDirection dir, float vec[2]);
@@ -894,6 +906,7 @@ void ui_but_pie_dir(RadialDirection dir, float vec[2]);
 bool ui_but_is_cursor_warp(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
 
 bool ui_but_contains_pt(const uiBut *but, float mx, float my) ATTR_WARN_UNUSED_RESULT;
+bool ui_but_contains_rect(const uiBut *but, const rctf *rect);
 bool ui_but_contains_point_px_icon(const uiBut *but,
                                    struct ARegion *ar,
                                    const struct wmEvent *event) ATTR_WARN_UNUSED_RESULT;
@@ -909,6 +922,8 @@ uiBut *ui_but_find_mouse_over_ex(struct ARegion *ar,
                                  const bool labeledit) ATTR_WARN_UNUSED_RESULT;
 uiBut *ui_but_find_mouse_over(struct ARegion *ar,
                               const struct wmEvent *event) ATTR_WARN_UNUSED_RESULT;
+uiBut *ui_but_find_rect_over(const struct ARegion *ar,
+                             const rcti *rect_px) ATTR_WARN_UNUSED_RESULT;
 
 uiBut *ui_list_find_mouse_over_ex(struct ARegion *ar, int x, int y) ATTR_WARN_UNUSED_RESULT;
 
@@ -927,6 +942,10 @@ bool ui_block_is_popup_any(const uiBlock *block) ATTR_WARN_UNUSED_RESULT;
 uiBut *ui_region_find_first_but_test_flag(struct ARegion *ar, int flag_include, int flag_exclude);
 uiBut *ui_region_find_active_but(struct ARegion *ar) ATTR_WARN_UNUSED_RESULT;
 bool ui_region_contains_point_px(const struct ARegion *ar, int x, int y) ATTR_WARN_UNUSED_RESULT;
+bool ui_region_contains_rect_px(const struct ARegion *ar, const rcti *rect_px);
+
+ARegion *ui_screen_region_find_mouse_over_ex(bScreen *screen, int x, int y);
+ARegion *ui_screen_region_find_mouse_over(bScreen *screen, const struct wmEvent *event);
 
 /* interface_context_menu.c */
 bool ui_popup_context_menu_for_button(struct bContext *C, uiBut *but);
@@ -973,5 +992,8 @@ void ui_rna_collection_search_cb(const struct bContext *C,
 
 /* interface_ops.c */
 bool ui_jump_to_target_button_poll(struct bContext *C);
+
+/* interface_queries.c */
+void ui_interface_tag_script_reload_queries(void);
 
 #endif /* __INTERFACE_INTERN_H__ */

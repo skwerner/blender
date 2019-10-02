@@ -40,19 +40,22 @@ class SortedNodeCategory(NodeCategory):
 class CompositorNodeCategory(SortedNodeCategory):
     @classmethod
     def poll(cls, context):
-        return (context.space_data.tree_type == 'CompositorNodeTree')
+        return (context.space_data.type == 'NODE_EDITOR' and
+                context.space_data.tree_type == 'CompositorNodeTree')
 
 
 class ShaderNodeCategory(SortedNodeCategory):
     @classmethod
     def poll(cls, context):
-        return (context.space_data.tree_type == 'ShaderNodeTree')
+        return (context.space_data.type == 'NODE_EDITOR' and
+                context.space_data.tree_type == 'ShaderNodeTree')
 
 
 class TextureNodeCategory(SortedNodeCategory):
     @classmethod
     def poll(cls, context):
-        return context.space_data.tree_type == 'TextureNodeTree'
+        return (context.space_data.type == 'NODE_EDITOR' and
+                context.space_data.tree_type == 'TextureNodeTree')
 
 
 # menu entry for node group tools
@@ -183,9 +186,11 @@ shader_node_categories = [
         NodeItem("ShaderNodeAmbientOcclusion"),
         NodeItem("ShaderNodeObjectInfo"),
         NodeItem("ShaderNodeHairInfo"),
+        NodeItem("ShaderNodeVolumeInfo"),
         NodeItem("ShaderNodeParticleInfo"),
         NodeItem("ShaderNodeCameraData"),
         NodeItem("ShaderNodeUVMap"),
+        NodeItem("ShaderNodeVertexColor"),
         NodeItem("ShaderNodeUVAlongStroke", poll=line_style_shader_nodes_poll),
         NodeItem("NodeGroupInput", poll=group_input_output_item_poll),
     ]),
@@ -210,10 +215,10 @@ shader_node_categories = [
         NodeItem("ShaderNodeBsdfVelvet", poll=object_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeBsdfToon", poll=object_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeSubsurfaceScattering", poll=object_eevee_cycles_shader_nodes_poll),
-        NodeItem("ShaderNodeEmission", poll=object_eevee_cycles_shader_nodes_poll),
+        NodeItem("ShaderNodeEmission", poll=eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeBsdfHair", poll=object_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeBackground", poll=world_shader_nodes_poll),
-        NodeItem("ShaderNodeHoldout", poll=object_cycles_shader_nodes_poll),
+        NodeItem("ShaderNodeHoldout", poll=object_eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeVolumeAbsorption", poll=eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeVolumeScatter", poll=eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeVolumePrincipled"),
@@ -234,6 +239,7 @@ shader_node_categories = [
         NodeItem("ShaderNodeTexBrick"),
         NodeItem("ShaderNodeTexPointDensity"),
         NodeItem("ShaderNodeTexIES"),
+        NodeItem("ShaderNodeTexWhiteNoise"),
     ]),
     ShaderNodeCategory("SH_NEW_OP_COLOR", "Color", items=[
         NodeItem("ShaderNodeMixRGB"),
@@ -255,6 +261,8 @@ shader_node_categories = [
         NodeItem("ShaderNodeVectorTransform"),
     ]),
     ShaderNodeCategory("SH_NEW_CONVERTOR", "Converter", items=[
+        NodeItem("ShaderNodeMapRange"),
+        NodeItem("ShaderNodeClamp"),
         NodeItem("ShaderNodeMath"),
         NodeItem("ShaderNodeValToRGB"),
         NodeItem("ShaderNodeRGBToBW"),
@@ -347,6 +355,7 @@ compositor_node_categories = [
         NodeItem("CompositorNodeDBlur"),
         NodeItem("CompositorNodePixelate"),
         NodeItem("CompositorNodeSunBeams"),
+        NodeItem("CompositorNodeDenoise"),
     ]),
     CompositorNodeCategory("CMP_OP_VECTOR", "Vector", items=[
         NodeItem("CompositorNodeNormal"),

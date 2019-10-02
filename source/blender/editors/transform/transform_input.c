@@ -223,8 +223,9 @@ static void InputAngle(TransInfo *UNUSED(t), MouseInput *mi, const double mval[2
   float dphi;
 
   dphi = saacos((float)deler);
-  if ((dx1 * dy2 - dx2 * dy1) > 0.0)
+  if ((dx1 * dy2 - dx2 * dy1) > 0.0) {
     dphi = -dphi;
+  }
 
   /* If the angle is zero, because of lack of precision close to the 1.0 value in acos
    * approximate the angle with the opposite side of the normalized triangle
@@ -244,8 +245,9 @@ static void InputAngle(TransInfo *UNUSED(t), MouseInput *mi, const double mval[2
     dy = dy1 - dy2;
 
     dphi = sqrt(dx * dx + dy * dy);
-    if ((dx1 * dy2 - dx2 * dy1) > 0.0)
+    if ((dx1 * dy2 - dx2 * dy1) > 0.0) {
       dphi = -dphi;
+    }
   }
 
   data->angle += ((double)dphi) * (mi->precision ? (double)mi->precision_factor : 1.0);
@@ -297,7 +299,7 @@ static void calcSpringFactor(MouseInput *mi)
 
 void initMouseInputMode(TransInfo *t, MouseInput *mi, MouseInputMode mode)
 {
-  /* incase we allocate a new value */
+  /* In case we allocate a new value. */
   void *mi_data_prev = mi->data;
 
   mi->use_virtual_mval = true;
@@ -387,7 +389,7 @@ void initMouseInputMode(TransInfo *t, MouseInput *mi, MouseInputMode mode)
       /* INPUT_VECTOR, INPUT_CUSTOM_RATIO, INPUT_CUSTOM_RATIO_FLIP */
       if (t->flag & T_MODAL) {
         t->flag |= T_MODAL_CURSOR_SET;
-        WM_cursor_modal_set(win, BC_NSEW_SCROLLCURSOR);
+        WM_cursor_modal_set(win, WM_CURSOR_NSEW_SCROLL);
       }
       break;
     case HLP_SPRING:
@@ -398,7 +400,7 @@ void initMouseInputMode(TransInfo *t, MouseInput *mi, MouseInputMode mode)
     case HLP_CARROW:
       if (t->flag & T_MODAL) {
         t->flag |= T_MODAL_CURSOR_SET;
-        WM_cursor_modal_set(win, CURSOR_NONE);
+        WM_cursor_modal_set(win, WM_CURSOR_NONE);
       }
       break;
     default:

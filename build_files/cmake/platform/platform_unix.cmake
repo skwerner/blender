@@ -156,7 +156,7 @@ endif()
 # Codecs
 if(WITH_CODEC_SNDFILE)
   find_package_wrapper(SndFile)
-  if(NOT LIBSNDFILE_FOUND)
+  if(NOT SNDFILE_FOUND)
     set(WITH_CODEC_SNDFILE OFF)
   endif()
 endif()
@@ -366,6 +366,15 @@ endif()
 
 if(WITH_CYCLES_EMBREE)
   find_package(Embree 3.2.4 REQUIRED)
+endif()
+
+if(WITH_OPENIMAGEDENOISE)
+  find_package_wrapper(OpenImageDenoise)
+
+  if(NOT OPENIMAGEDENOISE_FOUND)
+    set(WITH_OPENIMAGEDENOISE OFF)
+    message(STATUS "OpenImageDenoise not found")
+  endif()
 endif()
 
 if(WITH_LLVM)

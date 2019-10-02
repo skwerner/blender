@@ -49,8 +49,9 @@
 #endif
 
 /* If UINT_MAX isn't defined, assume it's a 32-bit type.
- * This should be valid for all systems GNU cares about because that doesn't include 16-bit systems,
- * and only modern systems (that certainly have <limits.h>) have 64+-bit integral types.
+ * This should be valid for all systems GNU cares about
+ * because that doesn't include 16-bit systems, and only modern systems
+ * (that certainly have <limits.h>) have 64+-bit integral types.
  */
 
 #ifndef UINT_MAX
@@ -150,7 +151,7 @@ static void md5_process_block(const void *buffer, size_t len, struct md5_ctx *ct
      */
 #define OP(a, b, c, d, s, T) \
   a += FF(b, c, d) + (*cwp++ = SWAP(*words)) + T; \
-  ++words; \
+  words++; \
   CYCLIC(a, s); \
   a += b; \
   (void)0
@@ -359,9 +360,10 @@ int BLI_hash_md5_stream(FILE *stream, void *resblock)
   return 0;
 }
 
-/** Compute MD5 message digest for 'len' bytes beginning at 'buffer'.
- *  The result is always in little endian byte order, so that a byte-wise output yields to the wanted
- *  ASCII representation of the message digest.
+/**
+ * Compute MD5 message digest for 'len' bytes beginning at 'buffer'.
+ * The result is always in little endian byte order,
+ * so that a byte-wise output yields to the wanted ASCII representation of the message digest.
  */
 void *BLI_hash_md5_buffer(const char *buffer, size_t len, void *resblock)
 {
@@ -406,7 +408,7 @@ char *BLI_hash_md5_to_hexdigest(void *resblock, char r_hex_digest[33])
   char *q;
   short len;
 
-  for (q = r_hex_digest, p = (const unsigned char *)resblock, len = 0; len < 16; ++p, ++len) {
+  for (q = r_hex_digest, p = (const unsigned char *)resblock, len = 0; len < 16; p++, len++) {
     const unsigned char c = *p;
     *q++ = hex_map[c >> 4];
     *q++ = hex_map[c & 15];

@@ -29,20 +29,15 @@
 #include "BKE_global.h"
 #include "BKE_layer.h"
 #include "BKE_library.h"
-#include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
 #include "BLT_translation.h"
-
-#include "DNA_object_types.h"
-#include "DNA_workspace_types.h"
 
 #include "ED_object.h"
 #include "ED_render.h"
@@ -86,7 +81,7 @@ Scene *ED_scene_add(Main *bmain, bContext *C, wmWindow *win, eSceneCopyMethod me
  * \note Only call outside of area/region loops
  * \return true if successful
  */
-bool ED_scene_delete(bContext *C, Main *bmain, wmWindow *win, Scene *scene)
+bool ED_scene_delete(bContext *C, Main *bmain, Scene *scene)
 {
   Scene *scene_new;
 
@@ -94,14 +89,24 @@ bool ED_scene_delete(bContext *C, Main *bmain, wmWindow *win, Scene *scene)
   wmWindowManager *wm = bmain->wm.first;
   WM_jobs_kill_type(wm, scene, WM_JOB_TYPE_ANY);
 
-  if (scene->id.prev)
+  if (scene->id.prev) {
     scene_new = scene->id.prev;
-  else if (scene->id.next)
+  }
+  else if (scene->id.next) {
     scene_new = scene->id.next;
-  else
+  }
+  else {
     return false;
+  }
 
-  WM_window_set_active_scene(bmain, C, win, scene_new);
+  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+    if (win->parent != NULL) { /* We only care about main windows here... */
+      continue;
+    }
+    if (win->scene == scene) {
+      WM_window_set_active_scene(bmain, C, win, scene_new);
+    }
+  }
 
   BKE_id_delete(bmain, scene);
 
@@ -111,7 +116,7 @@ bool ED_scene_delete(bContext *C, Main *bmain, wmWindow *win, Scene *scene)
 /* Depsgraph updates after scene becomes active in a window. */
 void ED_scene_change_update(Main *bmain, Scene *scene, ViewLayer *layer)
 {
-  Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, layer, true);
+  Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, layer, true);
 
   BKE_scene_set_background(bmain, scene);
   DEG_graph_relations_update(depsgraph, bmain, scene, layer);
@@ -241,12 +246,13 @@ static int scene_delete_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
 
-  if (ED_scene_delete(C, CTX_data_main(C), CTX_wm_window(C), scene) == false) {
+  if (ED_scene_delete(C, CTX_data_main(C), scene) == false) {
     return OPERATOR_CANCELLED;
   }
 
-  if (G.debug & G_DEBUG)
+  if (G.debug & G_DEBUG) {
     printf("scene delete %p\n", scene);
+  }
 
   WM_event_add_notifier(C, NC_SCENE | NA_REMOVED, scene);
 

@@ -62,65 +62,45 @@
 
 static bool ED_operator_rigidbody_active_poll(bContext *C)
 {
+  Scene *scene = CTX_data_scene(C);
+  if (scene == NULL || ID_IS_LINKED(&scene->id) ||
+      (scene->rigidbody_world != NULL && scene->rigidbody_world->group != NULL &&
+       ID_IS_LINKED(&scene->rigidbody_world->group->id))) {
+    return false;
+  }
+
   if (ED_operator_object_active_editable(C)) {
     Object *ob = ED_object_active_context(C);
     return (ob && ob->rigidbody_object);
   }
-  else
+  else {
     return 0;
+  }
 }
 
 static bool ED_operator_rigidbody_add_poll(bContext *C)
 {
+  Scene *scene = CTX_data_scene(C);
+  if (scene == NULL || ID_IS_LINKED(&scene->id) ||
+      (scene->rigidbody_world != NULL && scene->rigidbody_world->group != NULL &&
+       ID_IS_LINKED(&scene->rigidbody_world->group->id))) {
+    return false;
+  }
+
   if (ED_operator_object_active_editable(C)) {
     Object *ob = ED_object_active_context(C);
     return (ob && ob->type == OB_MESH);
   }
-  else
-    return 0;
+  else {
+    return false;
+  }
 }
 
 /* ----------------- */
 
 bool ED_rigidbody_object_add(Main *bmain, Scene *scene, Object *ob, int type, ReportList *reports)
 {
-  RigidBodyWorld *rbw = BKE_rigidbody_get_world(scene);
-
-  if (ob->type != OB_MESH) {
-    BKE_report(reports, RPT_ERROR, "Can't add Rigid Body to non mesh object");
-    return false;
-  }
-
-  /* Add rigid body world and group if they don't exist for convenience */
-  if (rbw == NULL) {
-    rbw = BKE_rigidbody_create_world(scene);
-    if (rbw == NULL) {
-      BKE_report(reports, RPT_ERROR, "Can't create Rigid Body world");
-      return false;
-    }
-    BKE_rigidbody_validate_sim_world(scene, rbw, false);
-    scene->rigidbody_world = rbw;
-  }
-  if (rbw->group == NULL) {
-    rbw->group = BKE_collection_add(bmain, NULL, "RigidBodyWorld");
-    id_fake_user_set(&rbw->group->id);
-  }
-
-  /* make rigidbody object settings */
-  if (ob->rigidbody_object == NULL) {
-    ob->rigidbody_object = BKE_rigidbody_create_object(scene, ob, type);
-  }
-  ob->rigidbody_object->type = type;
-  ob->rigidbody_object->flag |= RBO_FLAG_NEEDS_VALIDATE;
-
-  /* add object to rigid body group */
-  BKE_collection_object_add(bmain, rbw->group, ob);
-
-  DEG_relations_tag_update(bmain);
-  DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
-  DEG_id_tag_update(&rbw->group->id, ID_RECALC_COPY_ON_WRITE);
-
-  return true;
+  return BKE_rigidbody_add_object(bmain, scene, ob, type, reports);
 }
 
 void ED_rigidbody_object_remove(Main *bmain, Scene *scene, Object *ob)
@@ -320,7 +300,7 @@ void RIGIDBODY_OT_objects_remove(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = rigidbody_objects_remove_exec;
-  ot->poll = ED_operator_scene_editable;
+  ot->poll = ED_operator_rigidbody_active_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -375,7 +355,7 @@ void RIGIDBODY_OT_shape_change(wmOperatorType *ot)
   /* callbacks */
   ot->invoke = WM_menu_invoke;
   ot->exec = rigidbody_objects_shape_change_exec;
-  ot->poll = ED_operator_scene_editable;
+  ot->poll = ED_operator_rigidbody_active_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -498,7 +478,7 @@ static const EnumPropertyItem *rigidbody_materials_itemf(bContext *UNUSED(C),
 
 static int rigidbody_objects_calc_mass_exec(bContext *C, wmOperator *op)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   int material = RNA_enum_get(op->ptr, "material");
   float density;
   bool changed = false;
@@ -506,8 +486,9 @@ static int rigidbody_objects_calc_mass_exec(bContext *C, wmOperator *op)
   /* get density (kg/m^3) to apply */
   if (material >= 0) {
     /* get density from table, and store in props for later repeating */
-    if (material >= NUM_RB_MATERIAL_PRESETS)
+    if (material >= NUM_RB_MATERIAL_PRESETS) {
       material = 0;
+    }
 
     density = RB_MATERIAL_DENSITY_TABLE[material].density;
     RNA_float_set(op->ptr, "density", density);
@@ -567,10 +548,10 @@ void RIGIDBODY_OT_mass_calculate(wmOperatorType *ot)
   /* callbacks */
   ot->invoke = WM_menu_invoke;  // XXX
   ot->exec = rigidbody_objects_calc_mass_exec;
-  ot->poll = ED_operator_scene_editable;
+  ot->poll = ED_operator_rigidbody_active_poll;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
   ot->prop = prop = RNA_def_enum(

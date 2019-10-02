@@ -69,10 +69,12 @@ typedef struct ConvDMStorage {
 static OpenSubdiv_SchemeType conv_dm_get_type(const OpenSubdiv_Converter *converter)
 {
   ConvDMStorage *storage = converter->user_data;
-  if (storage->ss->meshIFC.simpleSubdiv)
+  if (storage->ss->meshIFC.simpleSubdiv) {
     return OSD_SCHEME_BILINEAR;
-  else
+  }
+  else {
     return OSD_SCHEME_CATMARK;
+  }
 }
 
 static OpenSubdiv_VtxBoundaryInterpolation conv_dm_get_vtx_boundary_interpolation(
@@ -170,7 +172,7 @@ static int conv_dm_get_num_edge_faces(const OpenSubdiv_Converter *converter, int
     for (loop = 0; loop < mpoly->totloop; loop++) {
       const MLoop *mloop = &storage->mloop[mpoly->loopstart + loop];
       if (mloop->e == edge) {
-        ++num;
+        num++;
         break;
       }
     }
@@ -224,7 +226,7 @@ static int conv_dm_get_num_vert_edges(const OpenSubdiv_Converter *converter, int
   for (edge = 0; edge < dm->getNumEdges(dm); edge++) {
     const MEdge *medge = &user_data->medge[edge];
     if (medge->v1 == vert || medge->v2 == vert) {
-      ++num;
+      num++;
     }
   }
   return num;
@@ -266,7 +268,7 @@ static int conv_dm_get_num_vert_faces(const OpenSubdiv_Converter *converter, int
     for (loop = 0; loop < mpoly->totloop; loop++) {
       const MLoop *mloop = &storage->mloop[mpoly->loopstart + loop];
       if (mloop->v == vert) {
-        ++num;
+        num++;
         break;
       }
     }
@@ -355,23 +357,23 @@ static void conv_dm_precalc_uv_layer(const OpenSubdiv_Converter *converter, int 
    * The idea here is that we need to pass individual islands to OpenSubdiv.
    */
   storage->num_uvs = 0;
-  for (int island = 0; island < storage->island_store.islands_num; ++island) {
+  for (int island = 0; island < storage->island_store.islands_num; island++) {
     MeshElemMap *island_poly_map = storage->island_store.islands[island];
-    for (int poly = 0; poly < island_poly_map->count; ++poly) {
+    for (int poly = 0; poly < island_poly_map->count; poly++) {
       int poly_index = island_poly_map->indices[poly];
       /* Within the same UV island we should share UV points across
        * loops. Otherwise each poly will be subdivided individually
        * which we don't really want.
        */
       const MPoly *mpoly = &storage->mpoly[poly_index];
-      for (int loop = 0; loop < mpoly->totloop; ++loop) {
+      for (int loop = 0; loop < mpoly->totloop; loop++) {
         const MLoopUV *luv = &mloopuv[mpoly->loopstart + loop];
         bool found = false;
         /* TODO(sergey): Quite bad loop, which gives us O(N^2)
          * complexity here. But how can we do it smarter, hopefully
          * without requiring lots of additional memory.
          */
-        for (int i = 0; i < storage->num_uvs; ++i) {
+        for (int i = 0; i < storage->num_uvs; i++) {
           if (equals_v2v2(luv->uv, &storage->uvs[2 * i])) {
             storage->face_uvs[mpoly->loopstart + loop] = i;
             found = true;

@@ -148,6 +148,32 @@ ccl_device_inline Transform make_transform(float a,
   return t;
 }
 
+ccl_device_inline Transform euler_to_transform(const float3 euler)
+{
+  float cx = cosf(euler.x);
+  float cy = cosf(euler.y);
+  float cz = cosf(euler.z);
+  float sx = sinf(euler.x);
+  float sy = sinf(euler.y);
+  float sz = sinf(euler.z);
+
+  Transform t;
+  t.x.x = cy * cz;
+  t.y.x = cy * sz;
+  t.z.x = -sy;
+
+  t.x.y = sy * sx * cz - cx * sz;
+  t.y.y = sy * sx * sz + cx * cz;
+  t.z.y = cy * sx;
+
+  t.x.z = sy * cx * cz + sx * sz;
+  t.y.z = sy * cx * sz - sx * cz;
+  t.z.z = cy * cx;
+
+  t.x.w = t.y.w = t.z.w = 0.0f;
+  return t;
+}
+
 /* Constructs a coordinate frame from a normalized normal. */
 ccl_device_inline Transform make_transform_frame(float3 N)
 {
@@ -328,11 +354,11 @@ ccl_device_inline float4 quat_interpolate(float4 q1, float4 q2, float t)
 
   /* possible optimization: it might be possible to precompute theta/qperp */
 
-  if(costheta > 0.9995f) {
+  if (costheta > 0.9995f) {
     /* linear interpolation in degenerate case */
-    return normalize((1.0f - t)*q1 + t*q2);
+    return normalize((1.0f - t) * q1 + t * q2);
   }
-  else  {
+  else {
     /* slerp */
     float theta = acosf(clamp(costheta, -1.0f, 1.0f));
     float4 qperp = normalize(q2 - q1 * costheta);

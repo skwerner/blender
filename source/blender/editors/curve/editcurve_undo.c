@@ -40,9 +40,7 @@
 
 #include "DEG_depsgraph.h"
 
-#include "ED_object.h"
 #include "ED_undo.h"
-#include "ED_util.h"
 #include "ED_curve.h"
 
 #include "WM_types.h"
@@ -238,10 +236,8 @@ static bool curve_undosys_step_encode(struct bContext *C,
   return true;
 }
 
-static void curve_undosys_step_decode(struct bContext *C,
-                                      struct Main *bmain,
-                                      UndoStep *us_p,
-                                      int UNUSED(dir))
+static void curve_undosys_step_decode(
+    struct bContext *C, struct Main *bmain, UndoStep *us_p, int UNUSED(dir), bool UNUSED(is_final))
 {
   CurveUndoStep *us = (CurveUndoStep *)us_p;
 

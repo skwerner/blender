@@ -158,7 +158,7 @@ bNodeTree *ED_node_tree_get(SpaceNode *snode, int level)
 {
   bNodeTreePath *path;
   int i;
-  for (path = snode->treepath.last, i = 0; path; path = path->prev, ++i) {
+  for (path = snode->treepath.last, i = 0; path; path = path->prev, i++) {
     if (i == level) {
       return path->nodetree;
     }
@@ -171,7 +171,7 @@ int ED_node_tree_path_length(SpaceNode *snode)
   bNodeTreePath *path;
   int length = 0;
   int i;
-  for (path = snode->treepath.first, i = 0; path; path = path->next, ++i) {
+  for (path = snode->treepath.first, i = 0; path; path = path->next, i++) {
     length += strlen(path->node_name);
     if (i > 0) {
       length += 1; /* for separator char */
@@ -186,7 +186,7 @@ void ED_node_tree_path_get(SpaceNode *snode, char *value)
   int i;
 
   value[0] = '\0';
-  for (path = snode->treepath.first, i = 0; path; path = path->next, ++i) {
+  for (path = snode->treepath.first, i = 0; path; path = path->next, i++) {
     if (i == 0) {
       strcpy(value, path->node_name);
       value += strlen(path->node_name);
@@ -204,7 +204,7 @@ void ED_node_tree_path_get_fixedbuf(SpaceNode *snode, char *value, int max_lengt
   int size, i;
 
   value[0] = '\0';
-  for (path = snode->treepath.first, i = 0; path; path = path->next, ++i) {
+  for (path = snode->treepath.first, i = 0; path; path = path->next, i++) {
     if (i == 0) {
       size = BLI_strncpy_rlen(value, path->node_name, max_length);
     }
@@ -240,64 +240,6 @@ void snode_group_offset(SpaceNode *snode, float *x, float *y)
   else {
     *x = *y = 0.0f;
   }
-}
-
-/* ******************** manage regions ********************* */
-
-ARegion *node_has_buttons_region(ScrArea *sa)
-{
-  ARegion *ar, *arnew;
-
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_UI);
-  if (ar) {
-    return ar;
-  }
-
-  /* add subdiv level; after header */
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
-
-  /* is error! */
-  if (ar == NULL) {
-    return NULL;
-  }
-
-  arnew = MEM_callocN(sizeof(ARegion), "buttons for node");
-
-  BLI_insertlinkafter(&sa->regionbase, ar, arnew);
-  arnew->regiontype = RGN_TYPE_UI;
-  arnew->alignment = RGN_ALIGN_RIGHT;
-
-  arnew->flag = RGN_FLAG_HIDDEN;
-
-  return arnew;
-}
-
-ARegion *node_has_tools_region(ScrArea *sa)
-{
-  ARegion *ar, *arnew;
-
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_TOOLS);
-  if (ar) {
-    return ar;
-  }
-
-  /* add subdiv level; after header */
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
-
-  /* is error! */
-  if (ar == NULL) {
-    return NULL;
-  }
-
-  arnew = MEM_callocN(sizeof(ARegion), "node tools");
-
-  BLI_insertlinkafter(&sa->regionbase, ar, arnew);
-  arnew->regiontype = RGN_TYPE_TOOLS;
-  arnew->alignment = RGN_ALIGN_LEFT;
-
-  arnew->flag = RGN_FLAG_HIDDEN;
-
-  return arnew;
 }
 
 /* ******************** default callbacks for node space ***************** */
@@ -675,7 +617,7 @@ static void node_main_region_init(wmWindowManager *wm, ARegion *ar)
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "Node Editor", SPACE_NODE, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
   /* add drop boxes */
   lb = WM_dropboxmap_find("Node Editor", SPACE_NODE, RGN_TYPE_WINDOW);
@@ -1056,9 +998,10 @@ void ED_spacetype_node(void)
   /* regions: listview/buttons */
   art = MEM_callocN(sizeof(ARegionType), "spacetype node region");
   art->regionid = RGN_TYPE_UI;
-  art->prefsizex = 180;  // XXX
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
   art->listener = node_region_listener;
+  art->message_subscribe = ED_area_do_mgs_subscribe_for_tool_ui;
   art->init = node_buttons_region_init;
   art->draw = node_buttons_region_draw;
   BLI_addhead(&st->regiontypes, art);

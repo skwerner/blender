@@ -239,11 +239,12 @@ typedef struct PointCache {
    * buf for now it's the same for all points. Without adaptivity this can effect the perceived
    * simulation quite a bit though. If for example particles are colliding with a horizontal
    * plane (with high damping) they quickly come to a stop on the plane, however there are still
-   * forces acting on the particle (gravity and collisions), so the particle velocity isn't necessarily
-   * zero for the whole duration of the frame even if the particle seems stationary. If all simulation
-   * frames aren't cached (step > 1) these velocities are interpolated into movement for the non-cached
-   * frames. The result will look like the point is oscillating around the collision location. So for
-   * now cache step should be set to 1 for accurate reproduction of collisions.
+   * forces acting on the particle (gravity and collisions), so the particle velocity isn't
+   * necessarily zero for the whole duration of the frame even if the particle seems stationary.
+   * If all simulation frames aren't cached (step > 1) these velocities are interpolated into
+   * movement for the non-cached frames.
+   * The result will look like the point is oscillating around the collision location.
+   * So for now cache step should be set to 1 for accurate reproduction of collisions.
    */
   int step;
 
@@ -270,7 +271,7 @@ typedef struct PointCache {
 
   char name[64];
   char prev_name[64];
-  char info[64];
+  char info[128];
   /** File path, 1024 = FILE_MAX. */
   char path[1024];
 
@@ -495,6 +496,8 @@ typedef struct SoftBody {
  * so set this flag to know it's a "fake" cache */
 #define PTCACHE_FAKE_SMOKE (1 << 12)
 #define PTCACHE_IGNORE_CLEAR (1 << 13)
+
+#define PTCACHE_FLAG_INFO_DIRTY (1 << 14)
 
 /* PTCACHE_OUTDATED + PTCACHE_FRAMES_SKIPPED */
 #define PTCACHE_REDO_NEEDED 258

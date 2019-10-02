@@ -57,6 +57,7 @@
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
 #include "DNA_lightprobe_types.h"
+#include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_speaker_types.h"
@@ -164,17 +165,31 @@ void id_lib_extern(ID *id)
     BLI_assert(BKE_idcode_is_linkable(GS(id->name)));
     if (id->tag & LIB_TAG_INDIRECT) {
       id->tag &= ~LIB_TAG_INDIRECT;
+      id->flag &= ~LIB_INDIRECT_WEAK_LINK;
       id->tag |= LIB_TAG_EXTERN;
       id->lib->parent = NULL;
     }
   }
 }
 
-/* ensure we have a real user */
-/* Note: Now that we have flags, we could get rid of the 'fake_user' special case, flags are enough to ensure
- *       we always have a real user.
- *       However, ID_REAL_USERS is used in several places outside of core library.c, so think we can wait later
- *       to make this change... */
+void id_lib_indirect_weak_link(ID *id)
+{
+  if (id && ID_IS_LINKED(id)) {
+    BLI_assert(BKE_idcode_is_linkable(GS(id->name)));
+    if (id->tag & LIB_TAG_INDIRECT) {
+      id->flag |= LIB_INDIRECT_WEAK_LINK;
+    }
+  }
+}
+
+/**
+ * Ensure we have a real user
+ *
+ * \note Now that we have flags, we could get rid of the 'fake_user' special case,
+ * flags are enough to ensure we always have a real user.
+ * However, #ID_REAL_USERS is used in several places outside of core library.c,
+ * so think we can wait later to make this change.
+ */
 void id_us_ensure_real(ID *id)
 {
   if (id) {
@@ -254,7 +269,8 @@ void id_us_min(ID *id)
     }
 
     if ((id->us == limit) && (id->tag & LIB_TAG_EXTRAUSER)) {
-      /* We need an extra user here, but never actually incremented user count for it so far, do it now. */
+      /* We need an extra user here, but never actually incremented user count for it so far,
+       * do it now. */
       id_us_ensure_real(id);
     }
   }
@@ -293,7 +309,8 @@ static int id_expand_local_callback(void *UNUSED(user_data),
     return IDWALK_RET_NOP;
   }
 
-  /* Can happen that we get unlinkable ID here, e.g. with shapekey referring to itself (through drivers)...
+  /* Can happen that we get un-linkable ID here, e.g. with shape-key referring to itself
+   * (through drivers)...
    * Just skip it, shape key can only be either indirectly linked, or fully local, period.
    * And let's curse one more time that stupid useless shapekey ID type! */
   if (*id_pointer && *id_pointer != id_self && BKE_idcode_is_linkable(GS((*id_pointer)->name))) {
@@ -304,7 +321,8 @@ static int id_expand_local_callback(void *UNUSED(user_data),
 }
 
 /**
- * Expand ID usages of given id as 'extern' (and no more indirect) linked data. Used by ID copy/make_local functions.
+ * Expand ID usages of given id as 'extern' (and no more indirect) linked data.
+ * Used by ID copy/make_local functions.
  */
 void BKE_id_expand_local(Main *bmain, ID *id)
 {
@@ -323,7 +341,7 @@ void BKE_id_copy_ensure_local(Main *bmain, const ID *old_id, ID *new_id)
 }
 
 /**
- * Generic 'make local' function, works for most of datablock types...
+ * Generic 'make local' function, works for most of data-block types...
  */
 void BKE_id_make_local_generic(Main *bmain,
                                ID *id,
@@ -335,7 +353,8 @@ void BKE_id_make_local_generic(Main *bmain,
   /* - only lib users: do nothing (unless force_local is set)
    * - only local users: set flag
    * - mixed: make copy
-   * In case we make a whole lib's content local, we always want to localize, and we skip remapping (done later).
+   * In case we make a whole lib's content local,
+   * we always want to localize, and we skip remapping (done later).
    */
 
   if (!ID_IS_LINKED(id)) {
@@ -352,7 +371,8 @@ void BKE_id_make_local_generic(Main *bmain,
     else {
       ID *id_new;
 
-      /* Should not fail in expected usecases, but a few ID types cannot be copied (LIB, WM, SCR...). */
+      /* Should not fail in expected use cases,
+       * but a few ID types cannot be copied (LIB, WM, SCR...). */
       if (BKE_id_copy(bmain, id, &id_new)) {
         id_new->us = 0;
 
@@ -380,137 +400,169 @@ void BKE_id_make_local_generic(Main *bmain,
  *
  * \note Always set ID->newid pointer in case it gets duplicated...
  *
- * \param lib_local: Special flag used when making a whole library's content local, it needs specific handling.
+ * \param lib_local: Special flag used when making a whole library's content local,
+ * it needs specific handling.
  *
  * \return true if the block can be made local.
  */
 bool id_make_local(Main *bmain, ID *id, const bool test, const bool lib_local)
 {
-  /* We don't care whether ID is directly or indirectly linked in case we are making a whole lib local... */
+  /* We don't care whether ID is directly or indirectly linked
+   * in case we are making a whole lib local... */
   if (!lib_local && (id->tag & LIB_TAG_INDIRECT)) {
     return false;
   }
 
   switch ((ID_Type)GS(id->name)) {
     case ID_SCE:
-      if (!test)
+      if (!test) {
         BKE_scene_make_local(bmain, (Scene *)id, lib_local);
+      }
       return true;
     case ID_OB:
-      if (!test)
+      if (!test) {
         BKE_object_make_local(bmain, (Object *)id, lib_local);
+      }
       return true;
     case ID_ME:
-      if (!test)
+      if (!test) {
         BKE_mesh_make_local(bmain, (Mesh *)id, lib_local);
+      }
       return true;
     case ID_CU:
-      if (!test)
+      if (!test) {
         BKE_curve_make_local(bmain, (Curve *)id, lib_local);
+      }
       return true;
     case ID_MB:
-      if (!test)
+      if (!test) {
         BKE_mball_make_local(bmain, (MetaBall *)id, lib_local);
+      }
       return true;
     case ID_MA:
-      if (!test)
+      if (!test) {
         BKE_material_make_local(bmain, (Material *)id, lib_local);
+      }
       return true;
     case ID_TE:
-      if (!test)
+      if (!test) {
         BKE_texture_make_local(bmain, (Tex *)id, lib_local);
+      }
       return true;
     case ID_IM:
-      if (!test)
+      if (!test) {
         BKE_image_make_local(bmain, (Image *)id, lib_local);
+      }
       return true;
     case ID_LT:
-      if (!test)
+      if (!test) {
         BKE_lattice_make_local(bmain, (Lattice *)id, lib_local);
+      }
       return true;
     case ID_LA:
-      if (!test)
+      if (!test) {
         BKE_light_make_local(bmain, (Light *)id, lib_local);
+      }
       return true;
     case ID_CA:
-      if (!test)
+      if (!test) {
         BKE_camera_make_local(bmain, (Camera *)id, lib_local);
+      }
       return true;
     case ID_SPK:
-      if (!test)
+      if (!test) {
         BKE_speaker_make_local(bmain, (Speaker *)id, lib_local);
+      }
       return true;
     case ID_LP:
-      if (!test)
+      if (!test) {
         BKE_lightprobe_make_local(bmain, (LightProbe *)id, lib_local);
+      }
       return true;
     case ID_WO:
-      if (!test)
+      if (!test) {
         BKE_world_make_local(bmain, (World *)id, lib_local);
+      }
       return true;
     case ID_VF:
-      if (!test)
+      if (!test) {
         BKE_vfont_make_local(bmain, (VFont *)id, lib_local);
+      }
       return true;
     case ID_TXT:
-      if (!test)
+      if (!test) {
         BKE_text_make_local(bmain, (Text *)id, lib_local);
+      }
       return true;
     case ID_SO:
-      if (!test)
+      if (!test) {
         BKE_sound_make_local(bmain, (bSound *)id, lib_local);
+      }
       return true;
     case ID_GR:
-      if (!test)
+      if (!test) {
         BKE_collection_make_local(bmain, (Collection *)id, lib_local);
+      }
       return true;
     case ID_AR:
-      if (!test)
+      if (!test) {
         BKE_armature_make_local(bmain, (bArmature *)id, lib_local);
+      }
       return true;
     case ID_AC:
-      if (!test)
+      if (!test) {
         BKE_action_make_local(bmain, (bAction *)id, lib_local);
+      }
       return true;
     case ID_NT:
-      if (!test)
+      if (!test) {
         ntreeMakeLocal(bmain, (bNodeTree *)id, true, lib_local);
+      }
       return true;
     case ID_BR:
-      if (!test)
+      if (!test) {
         BKE_brush_make_local(bmain, (Brush *)id, lib_local);
+      }
       return true;
     case ID_PA:
-      if (!test)
+      if (!test) {
         BKE_particlesettings_make_local(bmain, (ParticleSettings *)id, lib_local);
+      }
       return true;
     case ID_GD:
-      if (!test)
+      if (!test) {
         BKE_gpencil_make_local(bmain, (bGPdata *)id, lib_local);
+      }
       return true;
     case ID_MC:
-      if (!test)
+      if (!test) {
         BKE_movieclip_make_local(bmain, (MovieClip *)id, lib_local);
+      }
       return true;
     case ID_MSK:
-      if (!test)
+      if (!test) {
         BKE_mask_make_local(bmain, (Mask *)id, lib_local);
+      }
       return true;
     case ID_LS:
-      if (!test)
+      if (!test) {
         BKE_linestyle_make_local(bmain, (FreestyleLineStyle *)id, lib_local);
+      }
       return true;
     case ID_PAL:
-      if (!test)
+      if (!test) {
         BKE_palette_make_local(bmain, (Palette *)id, lib_local);
+      }
       return true;
     case ID_PC:
-      if (!test)
+      if (!test) {
         BKE_paint_curve_make_local(bmain, (PaintCurve *)id, lib_local);
+      }
       return true;
     case ID_CF:
-      if (!test)
+      if (!test) {
         BKE_cachefile_make_local(bmain, (CacheFile *)id, lib_local);
+      }
       return true;
     case ID_WS:
     case ID_SCR:
@@ -569,17 +621,20 @@ bool BKE_id_copy_is_allowed(const ID *id)
 }
 
 /**
- * Generic entry point for copying a datablock (new API).
+ * Generic entry point for copying a data-block (new API).
  *
- * \note Copy is only affecting given data-block (no ID used by copied one will be affected, besides usercount).
- *       There is only one exception, if LIB_ID_COPY_ACTIONS is defined, actions used by animdata will be duplicated.
+ * \note Copy is only affecting given data-block
+ * (no ID used by copied one will be affected, besides usercount).
+ * There is only one exception, if #LIB_ID_COPY_ACTIONS is defined,
+ * actions used by animdata will be duplicated.
  *
  * \note Usercount of new copy is always set to 1.
  *
  * \param bmain: Main database, may be NULL only if LIB_ID_CREATE_NO_MAIN is specified.
- * \param id: Source datablock.
+ * \param id: Source data-block.
  * \param r_newid: Pointer to new (copied) ID pointer.
- * \param flag: Set of copy options, see DNA_ID.h enum for details (leave to zero for default, full copy).
+ * \param flag: Set of copy options, see DNA_ID.h enum for details
+ * (leave to zero for default, full copy).
  * \return False when copying that ID type is not supported, true otherwise.
  */
 bool BKE_id_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag)
@@ -807,8 +862,8 @@ void BKE_id_swap(Main *bmain, ID *id_a, ID *id_b)
   id_b->properties = id_a_back.properties;
 
   /* Swap will have broken internal references to itself, restore them. */
-  BKE_libblock_relink_ex(bmain, id_a, id_b, id_a, false);
-  BKE_libblock_relink_ex(bmain, id_b, id_a, id_b, false);
+  BKE_libblock_relink_ex(bmain, id_a, id_b, id_a, ID_REMAP_SKIP_NEVER_NULL_USAGE);
+  BKE_libblock_relink_ex(bmain, id_b, id_a, id_b, ID_REMAP_SKIP_NEVER_NULL_USAGE);
 }
 
 /** Does *not* set ID->newid pointer. */
@@ -818,7 +873,8 @@ bool id_single_user(bContext *C, ID *id, PointerRNA *ptr, PropertyRNA *prop)
   PointerRNA idptr;
 
   if (id) {
-    /* if property isn't editable, we're going to have an extra block hanging around until we save */
+    /* If property isn't editable,
+     * we're going to have an extra block hanging around until we save. */
     if (RNA_property_editable(ptr, prop)) {
       Main *bmain = CTX_data_main(C);
       /* copy animation actions too */
@@ -829,10 +885,10 @@ bool id_single_user(bContext *C, ID *id, PointerRNA *ptr, PropertyRNA *prop)
 
         /* assign copy */
         RNA_id_pointer_create(newid, &idptr);
-        RNA_property_pointer_set(ptr, prop, idptr);
+        RNA_property_pointer_set(ptr, prop, idptr, NULL);
         RNA_property_update(C, ptr, prop);
 
-        /* tag grease pencil datablock and disable onion */
+        /* tag grease pencil data-block and disable onion */
         if (GS(id->name) == ID_GD) {
           DEG_id_tag_update(id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
           DEG_id_tag_update(newid, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
@@ -876,7 +932,7 @@ static int libblock_management_us_min(void *UNUSED(user_data),
   return IDWALK_RET_NOP;
 }
 
-/** Add a 'NO_MAIN' datablock to given main (also sets usercounts of its IDs if needed). */
+/** Add a 'NO_MAIN' data-block to given main (also sets usercounts of its IDs if needed). */
 void BKE_libblock_management_main_add(Main *bmain, void *idv)
 {
   ID *id = idv;
@@ -906,7 +962,7 @@ void BKE_libblock_management_main_add(Main *bmain, void *idv)
   BKE_main_unlock(bmain);
 }
 
-/** Remove a datablock from given main (set it to 'NO_MAIN' status). */
+/** Remove a data-block from given main (set it to 'NO_MAIN' status). */
 void BKE_libblock_management_main_remove(Main *bmain, void *idv)
 {
   ID *id = idv;
@@ -1004,13 +1060,15 @@ void BKE_main_id_flag_listbase(ListBase *lb, const int flag, const bool value)
 {
   ID *id;
   if (value) {
-    for (id = lb->first; id; id = id->next)
+    for (id = lb->first; id; id = id->next) {
       id->tag |= flag;
+    }
   }
   else {
     const int nflag = ~flag;
-    for (id = lb->first; id; id = id->next)
+    for (id = lb->first; id; id = id->next) {
       id->tag &= nflag;
+    }
   }
 }
 
@@ -1075,7 +1133,7 @@ void BKE_main_lib_objects_recalc_all(Main *bmain)
 /* *********** ALLOC AND FREE *****************
  *
  * BKE_libblock_free(ListBase *lb, ID *id )
- * provide a list-basis and datablock, but only ID is read
+ * provide a list-basis and data-block, but only ID is read
  *
  * void *BKE_libblock_alloc(ListBase *lb, type, name)
  * inserts in list and returns a new ID
@@ -1083,7 +1141,7 @@ void BKE_main_lib_objects_recalc_all(Main *bmain)
  * **************************** */
 
 /**
- * Get allocation size fo a given datablock type and optionally allocation name.
+ * Get allocation size of a given data-block type and optionally allocation name.
  */
 size_t BKE_libblock_get_alloc_info(short type, const char **name)
 {
@@ -1217,15 +1275,14 @@ void BKE_libblock_init_empty(ID *id)
       break;
     case ID_OB: {
       Object *ob = (Object *)id;
-      ob->type = OB_EMPTY;
-      BKE_object_init(ob);
+      BKE_object_init(ob, OB_EMPTY);
       break;
     }
     case ID_ME:
       BKE_mesh_init((Mesh *)id);
       break;
     case ID_CU:
-      BKE_curve_init((Curve *)id);
+      BKE_curve_init((Curve *)id, 0);
       break;
     case ID_MB:
       BKE_mball_init((MetaBall *)id);
@@ -1323,7 +1380,7 @@ void BKE_libblock_init_empty(ID *id)
   }
 }
 
-/** Generic helper to create a new empty datablock of given type in given \a bmain database.
+/** Generic helper to create a new empty data-block of given type in given \a bmain database.
  *
  * \param name: can be NULL, in which case we get default name for this ID type. */
 void *BKE_id_new(Main *bmain, const short type, const char *name)
@@ -1340,7 +1397,9 @@ void *BKE_id_new(Main *bmain, const short type, const char *name)
   return id;
 }
 
-/** Generic helper to create a new temporary empty datablock of given type, *outside* of any Main database.
+/**
+ * Generic helper to create a new temporary empty data-block of given type,
+ * *outside* of any Main database.
  *
  * \param name: can be NULL, in which case we get default name for this ID type. */
 void *BKE_id_new_nomain(const short type, const char *name)
@@ -1359,20 +1418,31 @@ void *BKE_id_new_nomain(const short type, const char *name)
   return id;
 }
 
-void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int flag)
+void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int orig_flag)
 {
   ID *new_id = *r_newid;
+  int flag = orig_flag;
 
-  /* Grrrrrrrrr... Not adding 'root' nodetrees to bmain.... grrrrrrrrrrrrrrrrrrrr! */
-  /* This is taken from original ntree copy code, might be weak actually? */
-  const bool use_nodetree_alloc_exception = ((GS(id->name) == ID_NT) && (bmain != NULL) &&
-                                             (BLI_findindex(&bmain->nodetrees, id) < 0));
+  const bool is_private_id_data = (id->flag & LIB_PRIVATE_DATA) != 0;
 
   BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || bmain != NULL);
   BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || (flag & LIB_ID_CREATE_NO_ALLOCATE) == 0);
-  BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) == 0 || (flag & LIB_ID_CREATE_NO_USER_REFCOUNT) != 0);
+  if (!is_private_id_data) {
+    /* When we are handling private ID data, we might still want to manage usercounts, even though
+     * that ID data-block is actually outside of Main... */
+    BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) == 0 ||
+               (flag & LIB_ID_CREATE_NO_USER_REFCOUNT) != 0);
+  }
   /* Never implicitly copy shapekeys when generating temp data outside of Main database. */
   BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) == 0 || (flag & LIB_ID_COPY_SHAPEKEY) == 0);
+
+  /* 'Private ID' data handling. */
+  if ((bmain != NULL) && is_private_id_data) {
+    flag |= LIB_ID_CREATE_NO_MAIN;
+  }
+
+  /* The id->flag bits to copy over. */
+  const int copy_idflag_mask = LIB_PRIVATE_DATA;
 
   if ((flag & LIB_ID_CREATE_NO_ALLOCATE) != 0) {
     /* r_newid already contains pointer to allocated memory. */
@@ -1383,10 +1453,7 @@ void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int fla
     /* TODO Do we want/need to copy more from ID struct itself? */
   }
   else {
-    new_id = BKE_libblock_alloc(bmain,
-                                GS(id->name),
-                                id->name + 2,
-                                flag | (use_nodetree_alloc_exception ? LIB_ID_CREATE_NO_MAIN : 0));
+    new_id = BKE_libblock_alloc(bmain, GS(id->name), id->name + 2, flag);
   }
   BLI_assert(new_id != NULL);
 
@@ -1398,6 +1465,8 @@ void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int fla
 
     memcpy(cpn + id_offset, cp + id_offset, id_len - id_offset);
   }
+
+  new_id->flag = (new_id->flag & ~copy_idflag_mask) | (id->flag & copy_idflag_mask);
 
   if (id->properties) {
     new_id->properties = IDP_CopyProperty_ex(id->properties, flag);
@@ -1417,8 +1486,12 @@ void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int fla
 
     /* the duplicate should get a copy of the animdata */
     if ((flag & LIB_ID_COPY_NO_ANIMDATA) == 0) {
-      BLI_assert((flag & LIB_ID_COPY_ACTIONS) == 0 || (flag & LIB_ID_CREATE_NO_MAIN) == 0);
-      iat->adt = BKE_animdata_copy(bmain, iat->adt, flag);
+      /* Note that even though horrors like root nodetrees are not in bmain, the actions they use
+       * in their anim data *are* in bmain... super-mega-hooray. */
+      int animdata_flag = orig_flag;
+      BLI_assert((animdata_flag & LIB_ID_COPY_ACTIONS) == 0 ||
+                 (animdata_flag & LIB_ID_CREATE_NO_MAIN) == 0);
+      iat->adt = BKE_animdata_copy(bmain, iat->adt, animdata_flag);
     }
     else {
       iat->adt = NULL;
@@ -1452,8 +1525,9 @@ void *BKE_libblock_copy_for_localize(const ID *id)
 
 void BKE_library_free(Library *lib)
 {
-  if (lib->packedfile)
-    freePackedFile(lib->packedfile);
+  if (lib->packedfile) {
+    BKE_packedfile_free(lib->packedfile);
+  }
 }
 
 /* ***************** ID ************************ */
@@ -1501,8 +1575,9 @@ static ID *is_dupid(ListBase *lb, ID *id, const char *name)
       /* do not test alphabetic! */
       /* optimized */
       if (idtest->name[2] == name[0]) {
-        if (STREQ(name, idtest->name + 2))
+        if (STREQ(name, idtest->name + 2)) {
           break;
+        }
       }
     }
   }
@@ -1516,7 +1591,7 @@ static ID *is_dupid(ListBase *lb, ID *id, const char *name)
  *
  * Normally the ID that's being check is already in the ListBase, so ID *id
  * points at the new entry.  The Python Library module needs to know what
- * the name of a datablock will be before it is appended; in this case ID *id
+ * the name of a data-block will be before it is appended; in this case ID *id
  * id is NULL
  */
 
@@ -1537,8 +1612,9 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name)
     idtest = is_dupid(lb, id, name);
 
     /* if there is no double, done */
-    if (idtest == NULL)
+    if (idtest == NULL) {
       return false;
+    }
 
     /* we have a dup; need to make a new name */
     /* quick check so we can reuse one of first MAX_IN_USE - 1 ids if vacant */
@@ -1567,10 +1643,12 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name)
           STREQLEN(name, idtest->name + 2, left_len) &&
           (BLI_split_name_num(leftest, &nrtest, idtest->name + 2, '.') == left_len)) {
         /* will get here at least once, otherwise is_dupid call above would have returned NULL */
-        if (nrtest < MAX_IN_USE)
+        if (nrtest < MAX_IN_USE) {
           in_use[nrtest] = true; /* mark as used */
-        if (nr <= nrtest)
+        }
+        if (nr <= nrtest) {
           nr = nrtest + 1; /* track largest unused */
+        }
       }
     }
     /* At this point, 'nr' will typically be at least 1. (but not always) */
@@ -1578,9 +1656,10 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name)
 
     /* decide which value of nr to use */
     for (a = 0; a < MAX_IN_USE; a++) {
-      if (a >= nr)
+      if (a >= nr) {
         break; /* stop when we've checked up to biggest */ /* redundant check */
-      if (!in_use[a]) {                                    /* found an unused value */
+      }
+      if (!in_use[a]) { /* found an unused value */
         nr = a;
         /* can only be zero if all potential duplicate names had
          * nonzero numeric suffixes, which means name itself has
@@ -1610,8 +1689,9 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name)
         name[len--] = '\0';
         idtest = is_dupid(lb, id, name);
       }
-      if (idtest == NULL)
+      if (idtest == NULL) {
         return true;
+      }
       /* otherwise just continue and use a number suffix */
     }
 
@@ -1644,13 +1724,15 @@ bool BKE_id_new_name_validate(ListBase *lb, ID *id, const char *tname)
   char name[MAX_ID_NAME - 2];
 
   /* if library, don't rename */
-  if (ID_IS_LINKED(id))
+  if (ID_IS_LINKED(id)) {
     return false;
+  }
 
   /* if no name given, use name of current ID
    * else make a copy (tname args can be const) */
-  if (tname == NULL)
+  if (tname == NULL) {
     tname = id->name + 2;
+  }
 
   BLI_strncpy(name, tname, sizeof(name));
 
@@ -1669,11 +1751,12 @@ bool BKE_id_new_name_validate(ListBase *lb, ID *id, const char *tname)
 
   /* This was in 2.43 and previous releases
    * however all data in blender should be sorted, not just duplicate names
-   * sorting should not hurt, but noting just incase it alters the way other
-   * functions work, so sort every time */
+   * sorting should not hurt, but noting just in case it alters the way other
+   * functions work, so sort every time. */
 #if 0
-  if (result)
+  if (result) {
     id_sort_by_name(lb, id);
+  }
 #endif
 
   id_sort_by_name(lb, id);
@@ -1696,13 +1779,15 @@ void id_clear_lib_data_ex(Main *bmain, ID *id, const bool id_in_mainlist)
 
   id->lib = NULL;
   id->tag &= ~(LIB_TAG_INDIRECT | LIB_TAG_EXTERN);
+  id->flag &= ~LIB_INDIRECT_WEAK_LINK;
   if (id_in_mainlist) {
     if (BKE_id_new_name_validate(which_libbase(bmain, GS(id->name)), id, NULL)) {
       bmain->is_memfile_undo_written = false;
     }
   }
 
-  /* Internal bNodeTree blocks inside datablocks also stores id->lib, make sure this stays in sync. */
+  /* Internal bNodeTree blocks inside data-blocks also stores id->lib,
+   * make sure this stays in sync. */
   if ((ntree = ntreeFromID(id))) {
     id_clear_lib_data_ex(bmain, &ntree->id, false); /* Datablocks' nodetree is never in Main. */
   }
@@ -1723,10 +1808,62 @@ void BKE_main_id_clear_newpoins(Main *bmain)
 {
   ID *id;
 
-  FOREACH_MAIN_ID_BEGIN(bmain, id)
-  {
+  FOREACH_MAIN_ID_BEGIN (bmain, id) {
     id->newid = NULL;
     id->tag &= ~LIB_TAG_NEW;
+  }
+  FOREACH_MAIN_ID_END;
+}
+
+static int id_refcount_recompute_callback(void *user_data,
+                                          struct ID *UNUSED(id_self),
+                                          struct ID **id_pointer,
+                                          int cb_flag)
+{
+  const bool do_linked_only = (bool)POINTER_AS_INT(user_data);
+
+  if (*id_pointer == NULL) {
+    return IDWALK_RET_NOP;
+  }
+  if (do_linked_only && !ID_IS_LINKED(*id_pointer)) {
+    return IDWALK_RET_NOP;
+  }
+
+  if (cb_flag & IDWALK_CB_USER) {
+    /* Do not touch to direct/indirect linked status here... */
+    id_us_plus_no_lib(*id_pointer);
+  }
+  if (cb_flag & IDWALK_CB_USER_ONE) {
+    id_us_ensure_real(*id_pointer);
+  }
+
+  return IDWALK_RET_NOP;
+}
+
+void BKE_main_id_refcount_recompute(struct Main *bmain, const bool do_linked_only)
+{
+  ID *id;
+
+  FOREACH_MAIN_ID_BEGIN (bmain, id) {
+    if (!ID_IS_LINKED(id) && do_linked_only) {
+      continue;
+    }
+    id->us = ID_FAKE_USERS(id);
+    /* Note that we keep EXTRAUSER tag here, since some UI users may define it too... */
+    if (id->tag & LIB_TAG_EXTRAUSER) {
+      id->tag &= ~(LIB_TAG_EXTRAUSER | LIB_TAG_EXTRAUSER_SET);
+      id_us_ensure_real(id);
+    }
+  }
+  FOREACH_MAIN_ID_END;
+
+  /* Go over whole Main database to re-generate proper usercounts... */
+  FOREACH_MAIN_ID_BEGIN (bmain, id) {
+    BKE_library_foreach_ID_link(bmain,
+                                id,
+                                id_refcount_recompute_callback,
+                                POINTER_FROM_INT((int)do_linked_only),
+                                IDWALK_READONLY);
   }
   FOREACH_MAIN_ID_END;
 }
@@ -1743,19 +1880,22 @@ static void library_make_local_copying_check(ID *id,
   MainIDRelationsEntry *entry = BLI_ghash_lookup(id_relations->id_used_to_user, id);
   BLI_gset_insert(loop_tags, id);
   for (; entry != NULL; entry = entry->next) {
-    ID *par_id =
-        (ID *)entry->id_pointer; /* used_to_user stores ID pointer, not pointer to ID pointer... */
+
+    /* Used_to_user stores ID pointer, not pointer to ID pointer. */
+    ID *par_id = (ID *)entry->id_pointer;
 
     /* Our oh-so-beloved 'from' pointers... */
     if (entry->usage_flag & IDWALK_CB_LOOPBACK) {
-      /* We totally disregard Object->proxy_from 'usage' here, this one would only generate fake positives. */
+      /* We totally disregard Object->proxy_from 'usage' here,
+       * this one would only generate fake positives. */
       if (GS(par_id->name) == ID_OB) {
         BLI_assert(((Object *)par_id)->proxy_from == (Object *)id);
         continue;
       }
 
-      /* Shapekeys are considered 'private' to their owner ID here, and never tagged (since they cannot be linked),
-       * so we have to switch effective parent to their owner. */
+      /* Shapekeys are considered 'private' to their owner ID here, and never tagged
+       * (since they cannot be linked), * so we have to switch effective parent to their owner.
+       */
       if (GS(par_id->name) == ID_KE) {
         par_id = ((Key *)par_id)->from;
       }
@@ -1769,8 +1909,9 @@ static void library_make_local_copying_check(ID *id,
       if (BLI_gset_haskey(loop_tags, par_id)) {
         /* We are in a 'dependency loop' of IDs, this does not say us anything, skip it.
          * Note that this is the situation that can lead to archipelagoes of linked data-blocks
-         * (since all of them have non-local users, they would all be duplicated, leading to a loop of unused
-         * linked data-blocks that cannot be freed since they all use each other...). */
+         * (since all of them have non-local users, they would all be duplicated,
+         * leading to a loop of unused linked data-blocks that cannot be freed since they all use
+         * each other...). */
         continue;
       }
       /* Else, recursively check that user ID. */
@@ -1778,10 +1919,12 @@ static void library_make_local_copying_check(ID *id,
     }
 
     if (par_id->tag & LIB_TAG_DOIT) {
-      /* This user will be fully local in future, so far so good, nothing to do here but check next user. */
+      /* This user will be fully local in future, so far so good,
+       * nothing to do here but check next user. */
     }
     else {
-      /* This user won't be fully local in future, so current ID won't be either. And we are done checking it. */
+      /* This user won't be fully local in future, so current ID won't be either.
+       * And we are done checking it. */
       id->tag &= ~LIB_TAG_DOIT;
       break;
     }
@@ -1790,20 +1933,22 @@ static void library_make_local_copying_check(ID *id,
   BLI_gset_remove(loop_tags, id, NULL);
 }
 
-/** Make linked datablocks local.
+/** Make linked data-blocks local.
  *
  * \param bmain: Almost certainly global main.
- * \param lib: If not NULL, only make local datablocks from this library.
- * \param untagged_only: If true, only make local datablocks not tagged with LIB_TAG_PRE_EXISTING.
- * \param set_fake: If true, set fake user on all localized datablocks (except group and objects ones).
+ * \param lib: If not NULL, only make local data-blocks from this library.
+ * \param untagged_only: If true, only make local data-blocks not tagged with
+ * LIB_TAG_PRE_EXISTING.
+ * \param set_fake: If true, set fake user on all localized data-blocks
+ * (except group and objects ones).
  */
-/* Note: Old (2.77) version was simply making (tagging) datablocks as local, without actually making any check whether
- * they were also indirectly used or not...
+/* Note: Old (2.77) version was simply making (tagging) data-blocks as local,
+ * without actually making any check whether they were also indirectly used or not...
  *
- * Current version uses regular id_make_local callback, with advanced pre-processing step to detect all cases of
- * IDs currently indirectly used, but which will be used by local data only once this function is finished.
- * This allows to avoid any unneeded duplication of IDs, and hence all time lost afterwards to remove
- * orphaned linked data-blocks...
+ * Current version uses regular id_make_local callback, with advanced pre-processing step to
+ * detect all cases of IDs currently indirectly used, but which will be used by local data only
+ * once this function is finished.  This allows to avoid any unneeded duplication of IDs, and
+ * hence all time lost afterwards to remove orphaned linked data-blocks...
  */
 void BKE_library_make_local(Main *bmain,
                             const Library *lib,
@@ -1830,12 +1975,12 @@ void BKE_library_make_local(Main *bmain,
   TIMEIT_VALUE_PRINT(make_local);
 #endif
 
-  /* Step 1: Detect datablocks to make local. */
+  /* Step 1: Detect data-blocks to make local. */
   for (int a = set_listbasepointers(bmain, lbarray); a--;) {
     ID *id = lbarray[a]->first;
 
-    /* Do not explicitly make local non-linkable IDs (shapekeys, in fact), they are assumed to be handled
-     * by real datablocks responsible of them. */
+    /* Do not explicitly make local non-linkable IDs (shapekeys, in fact),
+     * they are assumed to be handled by real data-blocks responsible of them. */
     const bool do_skip = (id && !BKE_idcode_is_linkable(GS(id->name)));
 
     for (; id; id = id->next) {
@@ -1848,15 +1993,19 @@ void BKE_library_make_local(Main *bmain,
 
       if (id->lib == NULL) {
         id->tag &= ~(LIB_TAG_EXTERN | LIB_TAG_INDIRECT | LIB_TAG_NEW);
+        id->flag &= ~LIB_INDIRECT_WEAK_LINK;
       }
-      /* The check on the fourth line (LIB_TAG_PRE_EXISTING) is done so its possible to tag data you don't want to
-       * be made local, used for appending data, so any libdata already linked wont become local (very nasty
+      /* The check on the fourth line (LIB_TAG_PRE_EXISTING) is done so it's possible to tag data
+       * you don't want to be made local, used for appending data,
+       * so any libdata already linked wont become local (very nasty
        * to discover all your links are lost after appending).
        * Also, never ever make proxified objects local, would not make any sense. */
       /* Some more notes:
        *   - Shapekeys are never tagged here (since they are not linkable).
-       *   - Nodetrees used in materials etc. have to be tagged manually, since they do not exist in Main (!).
-       * This is ok-ish on 'make local' side of things (since those are handled by their 'owner' IDs),
+       *   - Nodetrees used in materials etc. have to be tagged manually,
+       *     since they do not exist in Main (!).
+       * This is ok-ish on 'make local' side of things
+       * (since those are handled by their 'owner' IDs),
        * but complicates slightly the pre-processing of relations between IDs at step 2... */
       else if (!do_skip && id->tag & (LIB_TAG_EXTERN | LIB_TAG_INDIRECT | LIB_TAG_NEW) &&
                ELEM(lib, NULL, id->lib) &&
@@ -1865,8 +2014,9 @@ void BKE_library_make_local(Main *bmain,
         BLI_linklist_prepend_arena(&todo_ids, id, linklist_mem);
         id->tag |= LIB_TAG_DOIT;
 
-        /* Tag those nasty non-ID nodetrees, but do not add them to todo list, making them local is handled
-         * by 'owner' ID. This is needed for library_make_local_copying_check() to work OK at step 2. */
+        /* Tag those nasty non-ID nodetrees,
+         * but do not add them to todo list, making them local is handled by 'owner' ID.
+         * This is needed for library_make_local_copying_check() to work OK at step 2. */
         if (ntree != NULL) {
           ntree->tag |= LIB_TAG_DOIT;
         }
@@ -1879,12 +2029,13 @@ void BKE_library_make_local(Main *bmain,
   }
 
 #ifdef DEBUG_TIME
-  printf("Step 1: Detect datablocks to make local: Done.\n");
+  printf("Step 1: Detect data-blocks to make local: Done.\n");
   TIMEIT_VALUE_PRINT(make_local);
 #endif
 
-  /* Step 2: Check which datablocks we can directly make local (because they are only used by already, or future,
-   * local data), others will need to be duplicated. */
+  /* Step 2: Check which data-blocks we can directly make local
+   * (because they are only used by already, or future, local data),
+   * others will need to be duplicated. */
   GSet *loop_tags = BLI_gset_ptr_new(__func__);
   for (LinkNode *it = todo_ids; it; it = it->next) {
     library_make_local_copying_check(it->link, loop_tags, bmain->relations, done_ids);
@@ -1897,26 +2048,33 @@ void BKE_library_make_local(Main *bmain,
   BKE_main_relations_free(bmain);
 
 #ifdef DEBUG_TIME
-  printf("Step 2: Check which datablocks we can directly make local: Done.\n");
+  printf("Step 2: Check which data-blocks we can directly make local: Done.\n");
   TIMEIT_VALUE_PRINT(make_local);
 #endif
 
   /* Step 3: Make IDs local, either directly (quick and simple), or using generic process,
-   * which involves more complex checks and might instead create a local copy of original linked ID. */
+   * which involves more complex checks and might instead
+   * create a local copy of original linked ID. */
   for (LinkNode *it = todo_ids, *it_next; it; it = it_next) {
     it_next = it->next;
     ID *id = it->link;
 
     if (id->tag & LIB_TAG_DOIT) {
-      /* We know all users of this object are local or will be made fully local, even if currently there are
-       * some indirect usages. So instead of making a copy that we'll likely get rid of later, directly make
-       * that data block local. Saves a tremendous amount of time with complex scenes... */
+      /* We know all users of this object are local or will be made fully local, even if
+       * currently there are some indirect usages. So instead of making a copy that we'll likely
+       * get rid of later, directly make that data block local.
+       * Saves a tremendous amount of time with complex scenes... */
       id_clear_lib_data_ex(bmain, id, true);
       BKE_id_expand_local(bmain, id);
       id->tag &= ~LIB_TAG_DOIT;
+
+      if (GS(id->name) == ID_OB) {
+        BKE_rigidbody_ensure_local_object(bmain, (Object *)id);
+      }
     }
     else {
-      /* In this specific case, we do want to make ID local even if it has no local usage yet... */
+      /* In this specific case, we do want to make ID local even if it has no local usage yet...
+       */
       if (GS(id->name) == ID_OB) {
         /* Special case for objects because we don't want proxy pointers to be
          * cleared yet. This will happen down the road in this function.
@@ -1928,6 +2086,10 @@ void BKE_library_make_local(Main *bmain,
       }
 
       if (id->newid) {
+        if (GS(id->newid->name) == ID_OB) {
+          BKE_rigidbody_ensure_local_object(bmain, (Object *)id->newid);
+        }
+
         /* Reuse already allocated LinkNode (transferring it from todo_ids to copied_ids). */
         BLI_linklist_prepend_nlink(&copied_ids, id, it);
       }
@@ -1946,16 +2108,19 @@ void BKE_library_make_local(Main *bmain,
   TIMEIT_VALUE_PRINT(make_local);
 #endif
 
-  /* At this point, we are done with directly made local IDs. Now we have to handle duplicated ones, since their
+  /* At this point, we are done with directly made local IDs.
+   * Now we have to handle duplicated ones, since their
    * remaining linked original counterpart may not be needed anymore... */
   todo_ids = NULL;
 
-  /* Step 4: We have to remap local usages of old (linked) ID to new (local) ID in a separated loop,
+  /* Step 4: We have to remap local usages of old (linked) ID to new (local)
+   * ID in a separated loop,
    * as lbarray ordering is not enough to ensure us we did catch all dependencies
    * (e.g. if making local a parent object before its child...). See T48907. */
-  /* TODO This is now the biggest step by far (in term of processing time). We may be able to gain here by
-   * using again main->relations mapping, but... this implies BKE_libblock_remap & co to be able to update
-   * main->relations on the fly. Have to think about it a bit more, and see whether new code is OK first, anyway. */
+  /* TODO This is now the biggest step by far (in term of processing time).
+   * We may be able to gain here by using again main->relations mapping, but...
+   * this implies BKE_libblock_remap & co to be able to update main->relations on the fly.
+   * Have to think about it a bit more, and see whether new code is OK first, anyway. */
   for (LinkNode *it = copied_ids; it; it = it->next) {
     ID *id = it->link;
 
@@ -1967,8 +2132,9 @@ void BKE_library_make_local(Main *bmain,
       BLI_ghash_insert(old_to_new_ids, id, id->newid);
     }
 
-    /* Special hack for groups... Thing is, since we can't instantiate them here, we need to ensure
-     * they remain 'alive' (only instantiation is a real group 'user'... *sigh* See T49722. */
+    /* Special hack for groups... Thing is, since we can't instantiate them here, we need to
+     * ensure they remain 'alive' (only instantiation is a real group 'user'... *sigh* See
+     * T49722. */
     if (GS(id->name) == ID_GR && (id->tag & LIB_TAG_INDIRECT) != 0) {
       id_us_ensure_real(id->newid);
     }
@@ -2036,34 +2202,16 @@ void BKE_library_make_local(Main *bmain,
 #endif
 
   /* This is probably more of a hack than something we should do here, but...
-   * Issue is, the whole copying + remapping done in complex cases above may leave pose channels of armatures
-   * in complete invalid state (more precisely, the bone pointers of the pchans - very crappy cross-datablocks
-   * relationship), se we tag it to be fully recomputed, but this does not seems to be enough in some cases,
-   * and evaluation code ends up trying to evaluate a not-yet-updated armature object's deformations.
+   * Issue is, the whole copying + remapping done in complex cases above may leave pose-channels
+   * of armatures in complete invalid state (more precisely, the bone pointers of the
+   * pose-channels - very crappy cross-data-blocks relationship), se we tag it to be fully
+   * recomputed, but this does not seems to be enough in some cases, and evaluation code ends up
+   * trying to evaluate a not-yet-updated armature object's deformations.
    * Try "make all local" in 04_01_H.lighting.blend from Agent327 without this, e.g. */
   for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
     if (ob->data != NULL && ob->type == OB_ARMATURE && ob->pose != NULL &&
         ob->pose->flag & POSE_RECALC) {
       BKE_pose_rebuild(bmain, ob, ob->data, true);
-    }
-  }
-
-  /* Reset rigid body objects. */
-  for (LinkNode *it = copied_ids; it; it = it->next) {
-    ID *id = it->link;
-    if (GS(id->name) == ID_OB) {
-      Object *ob = (Object *)id;
-
-      /* If there was ever any rigidbody settings in the object, we reset it. */
-      if (ob->rigidbody_object) {
-        for (Scene *scene_iter = bmain->scenes.first; scene_iter;
-             scene_iter = scene_iter->id.next) {
-          if (scene_iter->rigidbody_world) {
-            BKE_rigidbody_remove_object(bmain, scene_iter, ob);
-          }
-        }
-        BKE_rigidbody_free_object(ob, NULL);
-      }
     }
   }
 
@@ -2091,8 +2239,9 @@ void BLI_libblock_ensure_unique_name(Main *bmain, const char *name)
   ID *idtest;
 
   lb = which_libbase(bmain, GS(name));
-  if (lb == NULL)
+  if (lb == NULL) {
     return;
+  }
 
   /* search for id */
   idtest = BLI_findstring(lb, name + 2, offsetof(ID, name) + 2);
@@ -2119,7 +2268,8 @@ void BKE_libblock_rename(Main *bmain, ID *id, const char *name)
  *
  * \note Result is unique to a given ID type in a given Main database.
  *
- * \param name: An allocated string of minimal length MAX_ID_FULL_NAME, will be filled with generated string.
+ * \param name: An allocated string of minimal length #MAX_ID_FULL_NAME,
+ * will be filled with generated string.
  */
 void BKE_id_full_name_get(char name[MAX_ID_FULL_NAME], const ID *id)
 {
@@ -2138,16 +2288,18 @@ void BKE_id_full_name_get(char name[MAX_ID_FULL_NAME], const ID *id)
 }
 
 /**
- * Generate full name of the data-block (without ID code, but with library if any), with a 3-character prefix prepended
- * indicating whether it comes from a library, is overriding, has a fake or no user, etc.
+ * Generate full name of the data-block (without ID code, but with library if any),
+ * with a 3-character prefix prepended indicating whether it comes from a library,
+ * is overriding, has a fake or no user, etc.
  *
  * \note Result is unique to a given ID type in a given Main database.
  *
- * \param name: An allocated string of minimal length MAX_ID_FULL_NAME_UI, will be filled with generated string.
+ * \param name: An allocated string of minimal length #MAX_ID_FULL_NAME_UI,
+ * will be filled with generated string.
  */
 void BKE_id_full_name_ui_prefix_get(char name[MAX_ID_FULL_NAME_UI], const ID *id)
 {
-  name[0] = id->lib ? (ID_MISSING(id) ? 'M' : 'L') : ID_IS_STATIC_OVERRIDE(id) ? 'O' : ' ';
+  name[0] = id->lib ? (ID_MISSING(id) ? 'M' : 'L') : ID_IS_OVERRIDE_LIBRARY(id) ? 'O' : ' ';
   name[1] = (id->flag & LIB_FAKEUSER) ? 'F' : ((id->us == 0) ? '0' : ' ');
   name[2] = ' ';
 
@@ -2191,8 +2343,8 @@ void BKE_library_filepath_set(Main *bmain, Library *lib, const char *filepath)
      * outliner, and its not really supported but allow from here for now
      * since making local could cause this to be directly linked - campbell
      */
-    /* Never make paths relative to parent lib - reading code (blenloader) always set *all* lib->name relative to
-     * current main, not to their parent for indirectly linked ones. */
+    /* Never make paths relative to parent lib - reading code (blenloader) always set *all*
+     * lib->name relative to current main, not to their parent for indirectly linked ones. */
     const char *basepath = BKE_main_blendfile_path(bmain);
     BLI_path_abs(lib->filepath, basepath);
   }
@@ -2212,7 +2364,8 @@ void BKE_id_tag_clear_atomic(ID *id, int tag)
  * Main intended use is for debug asserts in places we cannot easily get rid of G_Main... */
 bool BKE_id_is_in_global_main(ID *id)
 {
-  /* We do not want to fail when id is NULL here, even though this is a bit strange behavior... */
+  /* We do not want to fail when id is NULL here, even though this is a bit strange behavior...
+   */
   return (id == NULL || BLI_findindex(which_libbase(G_MAIN, GS(id->name)), id) != -1);
 }
 
@@ -2250,7 +2403,7 @@ static int id_order_compare(const void *a, const void *b)
 }
 
 /**
- * Returns ordered list of datablocks for display in the UI.
+ * Returns ordered list of data-blocks for display in the UI.
  * Result is list of LinkData of IDs that must be freed.
  */
 void BKE_id_ordered_list(ListBase *ordered_lb, const ListBase *lb)

@@ -121,7 +121,7 @@ static void userpref_main_region_init(wmWindowManager *wm, ARegion *ar)
 
 static void userpref_main_region_draw(const bContext *C, ARegion *ar)
 {
-  ED_region_panels_ex(C, ar, NULL, U.userpref, true);
+  ED_region_panels_ex(C, ar, NULL, U.space_data.section_active, true);
 }
 
 static void userpref_operatortypes(void)
@@ -249,7 +249,7 @@ void ED_spacetype_userpref(void)
   art->init = userpref_navigation_region_init;
   art->draw = userpref_navigation_region_draw;
   art->listener = userpref_navigation_region_listener;
-  art->keymapflag = ED_KEYMAP_UI;
+  art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_NAVBAR;
 
   BLI_addhead(&st->regiontypes, art);
 

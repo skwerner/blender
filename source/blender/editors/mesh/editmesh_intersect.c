@@ -101,17 +101,19 @@ static int bm_face_isect_pair_swap(BMFace *f, void *UNUSED(user_data))
 /**
  * Use for intersect and boolean.
  */
-static void edbm_intersect_select(BMEditMesh *em)
+static void edbm_intersect_select(BMEditMesh *em, bool do_select)
 {
-  BM_mesh_elem_hflag_disable_all(em->bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_SELECT, false);
+  if (do_select) {
+    BM_mesh_elem_hflag_disable_all(em->bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_SELECT, false);
 
-  if (em->bm->selectmode & (SCE_SELECT_VERTEX | SCE_SELECT_EDGE)) {
-    BMIter iter;
-    BMEdge *e;
+    if (em->bm->selectmode & (SCE_SELECT_VERTEX | SCE_SELECT_EDGE)) {
+      BMIter iter;
+      BMEdge *e;
 
-    BM_ITER_MESH (e, &iter, em->bm, BM_EDGES_OF_MESH) {
-      if (BM_elem_flag_test(e, BM_ELEM_TAG)) {
-        BM_edge_select_set(em->bm, e, true);
+      BM_ITER_MESH (e, &iter, em->bm, BM_EDGES_OF_MESH) {
+        if (BM_elem_flag_test(e, BM_ELEM_TAG)) {
+          BM_edge_select_set(em->bm, e, true);
+        }
       }
     }
   }
@@ -210,10 +212,9 @@ static int edbm_intersect_exec(bContext *C, wmOperator *op)
           em->bm, BM_elem_cb_check_hflag_enabled_simple(const BMFace *, BM_ELEM_SELECT));
     }
 
-    if (has_isect) {
-      edbm_intersect_select(em);
-    }
-    else {
+    edbm_intersect_select(em, has_isect);
+
+    if (!has_isect) {
       isect_len++;
     }
   }
@@ -317,10 +318,9 @@ static int edbm_intersect_boolean_exec(bContext *C, wmOperator *op)
                                   boolean_operation,
                                   eps);
 
-    if (has_isect) {
-      edbm_intersect_select(em);
-    }
-    else {
+    edbm_intersect_select(em, has_isect);
+
+    if (!has_isect) {
       isect_len++;
     }
   }
@@ -512,12 +512,15 @@ static int bm_edge_sort_length_cb(const void *e_a_v, const void *e_b_v)
   const float val_a = -BM_edge_calc_length_squared(*((BMEdge **)e_a_v));
   const float val_b = -BM_edge_calc_length_squared(*((BMEdge **)e_b_v));
 
-  if (val_a > val_b)
+  if (val_a > val_b) {
     return 1;
-  else if (val_a < val_b)
+  }
+  else if (val_a < val_b) {
     return -1;
-  else
+  }
+  else {
     return 0;
+  }
 }
 
 static void bm_face_split_by_edges_island_connect(

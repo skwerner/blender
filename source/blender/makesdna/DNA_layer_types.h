@@ -45,6 +45,8 @@ typedef struct Base {
   struct Object *object;
   unsigned int lay DNA_DEPRECATED;
   int flag_legacy;
+  unsigned short local_collections_bits;
+  short _pad2[3];
 
   /* Pointer to an original base. Is initialized for evaluated view layer.
    * NOTE: Only allowed to be accessed from within active dependency graph. */
@@ -66,8 +68,12 @@ typedef struct LayerCollection {
   short flag;
   short runtime_flag;
   char _pad[4];
+
   /** Synced with collection->children. */
   ListBase layer_collections;
+
+  unsigned short local_collections_bits;
+  short _pad2[3];
 } LayerCollection;
 
 typedef struct ViewLayer {
@@ -133,7 +139,7 @@ enum {
   LAYER_COLLECTION_EXCLUDE = (1 << 4),
   LAYER_COLLECTION_HOLDOUT = (1 << 5),
   LAYER_COLLECTION_INDIRECT_ONLY = (1 << 6),
-  LAYER_COLLECTION_RESTRICT_VIEW = (1 << 7),
+  LAYER_COLLECTION_HIDE = (1 << 7),
 };
 
 /* Layer Collection->runtime_flag */

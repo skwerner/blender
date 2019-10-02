@@ -100,6 +100,8 @@ const char *operationCodeAsString(OperationCode opcode)
       return "LIGHT_PROBE_EVAL";
     case OperationCode::SPEAKER_EVAL:
       return "SPEAKER_EVAL";
+    case OperationCode::SOUND_EVAL:
+      return "SOUND_EVAL";
     case OperationCode::ARMATURE_EVAL:
       return "ARMATURE_EVAL";
     /* Pose. */
@@ -183,6 +185,9 @@ const char *operationCodeAsString(OperationCode opcode)
     /* Generic datablock. */
     case OperationCode::GENERIC_DATABLOCK_UPDATE:
       return "GENERIC_DATABLOCK_UPDATE";
+    /* Sequencer. */
+    case OperationCode::SEQUENCES_EVAL:
+      return "SEQUENCES_EVAL";
     /* instancing/duplication. */
     case OperationCode::DUPLI:
       return "DUPLI";
@@ -208,14 +213,11 @@ string OperationNode::identifier() const
  * used for logging and debug prints. */
 string OperationNode::full_identifier() const
 {
-  string owner_str = "";
-  if (owner->type == NodeType::BONE) {
-    owner_str = string(owner->owner->name) + "." + owner->name;
+  string owner_str = owner->owner->name;
+  if (owner->type == NodeType::BONE || !owner->name.empty()) {
+    owner_str += "/" + owner->name;
   }
-  else {
-    owner_str = owner->owner->name;
-  }
-  return owner_str + "." + identifier();
+  return owner_str + "/" + identifier();
 }
 
 void OperationNode::tag_update(Depsgraph *graph, eUpdateSource source)

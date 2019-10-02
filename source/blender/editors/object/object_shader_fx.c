@@ -110,8 +110,9 @@ static bool UNUSED_FUNCTION(object_has_shaderfx)(const Object *ob,
   ShaderFxData *fx;
 
   for (fx = ob->shader_fx.first; fx; fx = fx->next) {
-    if ((fx != exclude) && (fx->type == type))
+    if ((fx != exclude) && (fx->type == type)) {
       return true;
+    }
   }
 
   return false;
@@ -161,8 +162,9 @@ void ED_object_shaderfx_clear(Main *bmain, Object *ob)
   ShaderFxData *fx = ob->shader_fx.first;
   bool sort_depsgraph = false;
 
-  if (!fx)
+  if (!fx) {
     return;
+  }
 
   while (fx) {
     ShaderFxData *next_fx;
@@ -207,8 +209,9 @@ static int shaderfx_add_exec(bContext *C, wmOperator *op)
   Object *ob = ED_object_active_context(C);
   int type = RNA_enum_get(op->ptr, "type");
 
-  if (!ED_object_shaderfx_add(op->reports, bmain, scene, ob, NULL, type))
+  if (!ED_object_shaderfx_add(op->reports, bmain, scene, ob, NULL, type)) {
     return OPERATOR_CANCELLED;
+  }
 
   WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
 
@@ -226,16 +229,18 @@ static const EnumPropertyItem *shaderfx_add_itemf(bContext *C,
   const ShaderFxTypeInfo *mti;
   int totitem = 0, a;
 
-  if (!ob)
+  if (!ob) {
     return rna_enum_object_shaderfx_type_items;
+  }
 
   for (a = 0; rna_enum_object_shaderfx_type_items[a].identifier; a++) {
     fx_item = &rna_enum_object_shaderfx_type_items[a];
     if (fx_item->identifier[0]) {
       mti = BKE_shaderfxType_getInfo(fx_item->value);
 
-      if (mti->flags & eShaderFxTypeFlag_NoUserAdd)
+      if (mti->flags & eShaderFxTypeFlag_NoUserAdd) {
         continue;
+      }
     }
     else {
       group_item = fx_item;
@@ -277,32 +282,38 @@ void OBJECT_OT_shaderfx_add(wmOperatorType *ot)
   ot->prop = RNA_def_enum(
       ot->srna, "type", rna_enum_object_shaderfx_type_items, eShaderFxType_Blur, "Type", "");
   RNA_def_enum_funcs(ot->prop, shaderfx_add_itemf);
-  RNA_def_property_translation_context(ot->prop,
-                                       BLT_I18NCONTEXT_ID_ID); /* Abused, for "Light"... */
+
+  /* Abused, for "Light"... */
+  RNA_def_property_translation_context(ot->prop, BLT_I18NCONTEXT_ID_ID);
 }
 
-/************************ generic functions for operators using names and data context *********************/
+/* -------------------------------------------------------------------- */
+/** \name Generic Functions for Operators Using Names and Data Context
+ * \{ */
 
 static bool edit_shaderfx_poll_generic(bContext *C, StructRNA *rna_type, int obtype_flag)
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "shaderfx", rna_type);
-  Object *ob = (ptr.id.data) ? ptr.id.data : ED_object_active_context(C);
+  Object *ob = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
 
   if (!ptr.data) {
     CTX_wm_operator_poll_msg_set(C, "Context missing 'shaderfx'");
     return 0;
   }
 
-  if (!ob || ID_IS_LINKED(ob))
+  if (!ob || ID_IS_LINKED(ob)) {
     return 0;
-  if (obtype_flag && ((1 << ob->type) & obtype_flag) == 0)
+  }
+  if (obtype_flag && ((1 << ob->type) & obtype_flag) == 0) {
     return 0;
-  if (ptr.id.data && ID_IS_LINKED(ptr.id.data))
+  }
+  if (ptr.owner_id && ID_IS_LINKED(ptr.owner_id)) {
     return 0;
+  }
 
-  if (ID_IS_STATIC_OVERRIDE(ob)) {
-    CTX_wm_operator_poll_msg_set(C, "Cannot edit shaderfxs coming from static override");
-    return (((ShaderFxData *)ptr.data)->flag & eShaderFxFlag_StaticOverride_Local) != 0;
+  if (ID_IS_OVERRIDE_LIBRARY(ob)) {
+    CTX_wm_operator_poll_msg_set(C, "Cannot edit shaderfxs coming from library override");
+    return (((ShaderFxData *)ptr.data)->flag & eShaderFxFlag_OverrideLibrary_Local) != 0;
   }
 
   return 1;
@@ -347,11 +358,14 @@ static ShaderFxData *edit_shaderfx_property_get(wmOperator *op, Object *ob, int 
 
   fx = BKE_shaderfx_findByName(ob, shaderfx_name);
 
-  if (fx && type != 0 && fx->type != type)
+  if (fx && type != 0 && fx->type != type) {
     fx = NULL;
+  }
 
   return fx;
 }
+
+/** \} */
 
 /************************ remove shaderfx operator *********************/
 
@@ -361,8 +375,9 @@ static int shaderfx_remove_exec(bContext *C, wmOperator *op)
   Object *ob = ED_object_active_context(C);
   ShaderFxData *fx = edit_shaderfx_property_get(op, ob, 0);
 
-  if (!fx || !ED_object_shaderfx_remove(op->reports, bmain, ob, fx))
+  if (!fx || !ED_object_shaderfx_remove(op->reports, bmain, ob, fx)) {
     return OPERATOR_CANCELLED;
+  }
 
   WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
 
@@ -371,10 +386,12 @@ static int shaderfx_remove_exec(bContext *C, wmOperator *op)
 
 static int shaderfx_remove_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  if (edit_shaderfx_invoke_properties(C, op))
+  if (edit_shaderfx_invoke_properties(C, op)) {
     return shaderfx_remove_exec(C, op);
-  else
+  }
+  else {
     return OPERATOR_CANCELLED;
+  }
 }
 
 void OBJECT_OT_shaderfx_remove(wmOperatorType *ot)
@@ -399,8 +416,9 @@ static int shaderfx_move_up_exec(bContext *C, wmOperator *op)
   Object *ob = ED_object_active_context(C);
   ShaderFxData *fx = edit_shaderfx_property_get(op, ob, 0);
 
-  if (!fx || !ED_object_shaderfx_move_up(op->reports, ob, fx))
+  if (!fx || !ED_object_shaderfx_move_up(op->reports, ob, fx)) {
     return OPERATOR_CANCELLED;
+  }
 
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
@@ -410,10 +428,12 @@ static int shaderfx_move_up_exec(bContext *C, wmOperator *op)
 
 static int shaderfx_move_up_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  if (edit_shaderfx_invoke_properties(C, op))
+  if (edit_shaderfx_invoke_properties(C, op)) {
     return shaderfx_move_up_exec(C, op);
-  else
+  }
+  else {
     return OPERATOR_CANCELLED;
+  }
 }
 
 void OBJECT_OT_shaderfx_move_up(wmOperatorType *ot)
@@ -438,8 +458,9 @@ static int shaderfx_move_down_exec(bContext *C, wmOperator *op)
   Object *ob = ED_object_active_context(C);
   ShaderFxData *fx = edit_shaderfx_property_get(op, ob, 0);
 
-  if (!fx || !ED_object_shaderfx_move_down(op->reports, ob, fx))
+  if (!fx || !ED_object_shaderfx_move_down(op->reports, ob, fx)) {
     return OPERATOR_CANCELLED;
+  }
 
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
@@ -449,10 +470,12 @@ static int shaderfx_move_down_exec(bContext *C, wmOperator *op)
 
 static int shaderfx_move_down_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  if (edit_shaderfx_invoke_properties(C, op))
+  if (edit_shaderfx_invoke_properties(C, op)) {
     return shaderfx_move_down_exec(C, op);
-  else
+  }
+  else {
     return OPERATOR_CANCELLED;
+  }
 }
 
 void OBJECT_OT_shaderfx_move_down(wmOperatorType *ot)

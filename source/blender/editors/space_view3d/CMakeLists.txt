@@ -28,11 +28,14 @@ set(INC
   ../../makesdna
   ../../makesrna
   ../../render/extern/include
-  ../../windowmanager
   ../../depsgraph
-  ../../../../intern/guardedalloc
+  ../../windowmanager
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
   ../../../../intern/smoke/extern
+
+  # dna_type_offsets.h
+  ${CMAKE_CURRENT_BINARY_DIR}/../../makesdna/intern
 )
 
 set(INC_SYS
@@ -64,7 +67,6 @@ set(SRC
   view3d_project.c
   view3d_select.c
   view3d_snap.c
-  view3d_toolbar.c
   view3d_utils.c
   view3d_view.c
   view3d_walk.c
@@ -97,3 +99,6 @@ if(WITH_MOD_SMOKE)
 endif()
 
 blender_add_lib(bf_editor_space_view3d "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# Needed so we can use dna_type_offsets.h for defaults initialization.
+add_dependencies(bf_editor_space_view3d bf_dna)

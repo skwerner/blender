@@ -29,7 +29,6 @@
 #include "GPU_immediate.h"
 #include "GPU_draw.h"
 #include "GPU_select.h"
-#include "GPU_extensions.h"
 #include "GPU_glew.h"
 
 #include "MEM_guardedalloc.h"
@@ -39,6 +38,8 @@
 #include "BLI_utildefines.h"
 
 #include "PIL_time.h"
+
+#include "BKE_global.h"
 
 #include "gpu_select_private.h"
 
@@ -104,8 +105,11 @@ void gpu_select_query_begin(
   /* occlusion queries operates on fragments that pass tests and since we are interested on all
    * objects in the view frustum independently of their order, we need to disable the depth test */
   if (mode == GPU_SELECT_ALL) {
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
+    /* glQueries on Windows+Intel drivers only works with depth testing turned on.
+     * See T62947 for details */
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glDepthMask(GL_TRUE);
   }
   else if (mode == GPU_SELECT_NEAREST_FIRST_PASS) {
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -170,15 +174,8 @@ uint gpu_select_query_end(void)
 
   for (i = 0; i < g_query_state.active_query; i++) {
     uint result = 0;
-    /* Wait until the result is available. */
-    while (result == 0) {
-      glGetQueryObjectuiv(g_query_state.queries[i], GL_QUERY_RESULT_AVAILABLE, &result);
-      if (result == 0) {
-        /* (fclem) Not sure if this is better than calling
-         * glGetQueryObjectuiv() indefinitely. */
-        PIL_sleep_ms(1);
-      }
-    }
+    /* We are not using GL_QUERY_RESULT_AVAILABLE and sleep to wait for results,
+     * because it causes lagging on Windows/NVIDIA, see T61474. */
     glGetQueryObjectuiv(g_query_state.queries[i], GL_QUERY_RESULT, &result);
     if (result > 0) {
       if (g_query_state.mode != GPU_SELECT_NEAREST_SECOND_PASS) {

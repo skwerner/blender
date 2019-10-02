@@ -73,10 +73,12 @@ BLI_INLINE void copy_v3_v3_unmap(float a[3], const float b[3], const uint map[3]
 static void axis_limit(const int axis, const float limits[2], float co[3], float dcut[3])
 {
   float val = co[axis];
-  if (limits[0] > val)
+  if (limits[0] > val) {
     val = limits[0];
-  if (limits[1] < val)
+  }
+  if (limits[1] < val) {
     val = limits[1];
+  }
 
   dcut[axis] = co[axis] - val;
   co[axis] = val;
@@ -228,13 +230,16 @@ static void SimpleDeformModifier_do(SimpleDeformModifierData *smd,
   }
 
   /* Safe-check */
-  if (smd->origin == ob)
+  if (smd->origin == ob) {
     smd->origin = NULL; /* No self references */
+  }
 
-  if (smd->limit[0] < 0.0f)
+  if (smd->limit[0] < 0.0f) {
     smd->limit[0] = 0.0f;
-  if (smd->limit[0] > 1.0f)
+  }
+  if (smd->limit[0] > 1.0f) {
     smd->limit[0] = 1.0f;
+  }
 
   smd->limit[0] = min_ff(smd->limit[0], smd->limit[1]); /* Upper limit >= than lower limit */
 
@@ -346,10 +351,8 @@ static void SimpleDeformModifier_do(SimpleDeformModifierData *smd,
       simpleDeform_callback(smd_factor, deform_axis, dcut_remap, co_remap); /* apply deform */
       copy_v3_v3_unmap(co, co_remap, axis_map);
 
-      interp_v3_v3v3(vertexCos[i],
-                     vertexCos[i],
-                     co,
-                     weight); /* Use vertex weight has coef of linear interpolation */
+      /* Use vertex weight has coef of linear interpolation */
+      interp_v3_v3v3(vertexCos[i], vertexCos[i], co, weight);
 
       if (transf) {
         BLI_space_transform_invert(transf, vertexCos[i]);

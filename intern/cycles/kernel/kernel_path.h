@@ -65,25 +65,7 @@ ccl_device_forceinline bool kernel_path_scene_intersect(KernelGlobals *kg,
     ray->t = kernel_data.background.ao_distance;
   }
 
-#ifdef __HAIR__
-  float difl = 0.0f, extmax = 0.0f;
-  uint lcg_state = 0;
-
-  if (kernel_data.bvh.have_curves) {
-    if ((kernel_data.cam.resolution == 1) && (state->flag & PATH_RAY_CAMERA)) {
-      float3 pixdiff = ray->dD.dx + ray->dD.dy;
-      /*pixdiff = pixdiff - dot(pixdiff, ray.D)*ray.D;*/
-      difl = kernel_data.curve.minimum_width * len(pixdiff) * 0.5f;
-    }
-
-    extmax = kernel_data.curve.maximum_width;
-    lcg_state = lcg_state_init_addrspace(state, 0x51633e2d);
-  }
-
-  bool hit = scene_intersect(kg, *ray, visibility, isect, &lcg_state, difl, extmax);
-#else
-  bool hit = scene_intersect(kg, *ray, visibility, isect, NULL, 0.0f, 0.0f);
-#endif /* __HAIR__ */
+  bool hit = scene_intersect(kg, ray, visibility, isect);
 
 #ifdef __KERNEL_DEBUG__
   if (state->flag & PATH_RAY_CAMERA) {
@@ -110,7 +92,7 @@ ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
 #ifdef __LAMP_MIS__
   if (kernel_data.integrator.use_lamp_mis && !(state->flag & PATH_RAY_CAMERA)) {
     /* ray starting from previous non-transparent bounce */
-    Ray light_ray;
+    Ray light_ray ccl_optional_struct_init;
 
     light_ray.P = ray->P - state->ray_t * ray->D;
     state->ray_t += isect->t;
@@ -121,7 +103,7 @@ ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
     light_ray.dP = ray->dP;
 
     /* intersect with lamp */
-    float3 emission;
+    float3 emission = make_float3(0.0f, 0.0f, 0.0f);
 
     if (indirect_lamp_emission(kg, emission_sd, state, &light_ray, &emission))
       path_radiance_accum_emission(L, state, throughput, emission);
@@ -344,13 +326,19 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
   return true;
 }
 
-ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
-                                        ShaderData *sd,
-                                        ShaderData *emission_sd,
-                                        PathRadiance *L,
-                                        ccl_addr_space PathState *state,
-                                        float3 throughput,
-                                        float3 ao_alpha)
+#ifdef __KERNEL_OPTIX__
+ccl_device_inline /* inline trace calls */
+#else
+ccl_device_noinline
+#endif
+    void
+    kernel_path_ao(KernelGlobals *kg,
+                   ShaderData *sd,
+                   ShaderData *emission_sd,
+                   PathRadiance *L,
+                   ccl_addr_space PathState *state,
+                   float3 throughput,
+                   float3 ao_alpha)
 {
   PROFILING_INIT(kg, PROFILING_AO);
 
@@ -455,8 +443,8 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
         }
 
         /* path termination. this is a strange place to put the termination, it's
-     * mainly due to the mixed in MIS that we use. gives too many unneeded
-     * shader evaluations, only need emission if we are going to terminate */
+         * mainly due to the mixed in MIS that we use. gives too many unneeded
+         * shader evaluations, only need emission if we are going to terminate */
         float probability = path_state_continuation_probability(kg, state, throughput);
 
         if (probability == 0.0f) {
@@ -482,7 +470,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 #    ifdef __SUBSURFACE__
         /* bssrdf scatter to a different location on the same object, replacing
-     * the closures with a diffuse BSDF */
+         * the closures with a diffuse BSDF */
         if (sd->flag & SD_BSSRDF) {
           if (kernel_path_subsurface_scatter(
                   kg, sd, emission_sd, L, state, ray, &throughput, &ss_indirect)) {
@@ -492,12 +480,10 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 #    endif /* __SUBSURFACE__ */
 
 #    if defined(__EMISSION__)
-        if (kernel_data.integrator.use_direct_light) {
-          int all = (kernel_data.integrator.sample_all_lights_indirect) ||
-                    (state->flag & PATH_RAY_SHADOW_CATCHER);
-          kernel_branched_path_surface_connect_light(
-              kg, sd, emission_sd, state, throughput, 1.0f, L, all);
-        }
+        int all = (kernel_data.integrator.sample_all_lights_indirect) ||
+                  (state->flag & PATH_RAY_SHADOW_CATCHER);
+        kernel_branched_path_surface_connect_light(
+            kg, sd, emission_sd, state, throughput, 1.0f, L, all);
 #    endif /* defined(__EMISSION__) */
 
 #    ifdef __VOLUME__
@@ -593,8 +579,8 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
         }
 
         /* path termination. this is a strange place to put the termination, it's
-     * mainly due to the mixed in MIS that we use. gives too many unneeded
-     * shader evaluations, only need emission if we are going to terminate */
+         * mainly due to the mixed in MIS that we use. gives too many unneeded
+         * shader evaluations, only need emission if we are going to terminate */
         float probability = path_state_continuation_probability(kg, state, throughput);
 
         if (probability == 0.0f) {
@@ -608,7 +594,9 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
           throughput /= probability;
         }
 
+#  ifdef __DENOISING_FEATURES__
         kernel_update_denoising_features(kg, &sd, state, L);
+#  endif
 
 #  ifdef __AO__
         /* ambient occlusion */
@@ -619,7 +607,7 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
 
 #  ifdef __SUBSURFACE__
         /* bssrdf scatter to a different location on the same object, replacing
-     * the closures with a diffuse BSDF */
+         * the closures with a diffuse BSDF */
         if (sd.flag & SD_BSSRDF) {
           if (kernel_path_subsurface_scatter(
                   kg, &sd, emission_sd, L, state, ray, &throughput, &ss_indirect)) {
@@ -628,8 +616,10 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
         }
 #  endif /* __SUBSURFACE__ */
 
+#  ifdef __EMISSION__
         /* direct lighting */
         kernel_path_surface_connect_light(kg, &sd, emission_sd, throughput, state, L);
+#  endif /* __EMISSION__ */
 
 #  ifdef __VOLUME__
       }
@@ -671,9 +661,11 @@ ccl_device void kernel_path_trace(
 
   kernel_path_trace_setup(kg, sample, x, y, &rng_hash, &ray);
 
+#  ifndef __KERNEL_OPTIX__
   if (ray.t == 0.0f) {
     return;
   }
+#  endif
 
   /* Initialize state. */
   float3 throughput = make_float3(1.0f, 1.0f, 1.0f);
@@ -686,6 +678,13 @@ ccl_device void kernel_path_trace(
 
   PathState state;
   path_state_init(kg, emission_sd, &state, rng_hash, sample, &ray);
+
+#  ifdef __KERNEL_OPTIX__
+  /* Force struct into local memory to avoid costly spilling on trace calls. */
+  if (pass_stride < 0) /* This is never executed and just prevents the compiler from doing SROA. */
+    for (int i = 0; i < sizeof(L); ++i)
+      reinterpret_cast<unsigned char *>(&L)[-pass_stride + i] = 0;
+#  endif
 
   /* Integrate. */
   kernel_path_integrate(kg, &state, throughput, &ray, &L, buffer, emission_sd);

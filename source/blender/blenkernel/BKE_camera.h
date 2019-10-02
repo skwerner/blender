@@ -28,18 +28,14 @@
 extern "C" {
 #endif
 
-#include "DNA_vec_types.h"
-
 struct Camera;
 struct Depsgraph;
-struct GPUFXSettings;
 struct Main;
 struct Object;
 struct RegionView3D;
 struct RenderData;
 struct Scene;
 struct View3D;
-struct ViewLayer;
 struct rctf;
 
 /* Camera Datablock */
@@ -138,8 +134,6 @@ bool BKE_camera_view_frame_fit_to_coords(const struct Depsgraph *depsgraph,
                                          struct Object *camera_ob,
                                          float r_co[3],
                                          float *r_scale);
-
-void BKE_camera_to_gpu_dof(struct Object *camera, struct GPUFXSettings *r_fx_settings);
 
 /* Camera multi-view API */
 

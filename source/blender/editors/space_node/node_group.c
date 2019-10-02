@@ -197,7 +197,7 @@ static int node_group_ungroup(Main *bmain, bNodeTree *ntree, bNode *gnode)
    * - ngroup (i.e. the source NodeTree) is left unscathed
    * - temp copy. don't change ID usercount
    */
-  wgroup = ntreeCopyTree_ex(ngroup, bmain, false);
+  wgroup = ntreeCopyTree_ex_new_pointers(ngroup, bmain, false);
 
   /* Add the nodes into the ntree */
   for (node = wgroup->nodes.first; node; node = nextnode) {
@@ -298,7 +298,7 @@ static int node_group_ungroup(Main *bmain, bNodeTree *ntree, bNode *gnode)
                       tlink->fromsock,
                       link->tonode->new_node,
                       link->tosock->new_sock);
-          ++num_external_links;
+          num_external_links++;
         }
       }
 
@@ -331,7 +331,7 @@ static int node_group_ungroup(Main *bmain, bNodeTree *ntree, bNode *gnode)
                         tlink->fromsock->new_sock,
                         link->tonode,
                         link->tosock);
-            ++num_internal_links;
+            num_internal_links++;
           }
         }
       }
@@ -439,7 +439,7 @@ static int node_group_separate_selected(
 
     if (make_copy) {
       /* make a copy */
-      newnode = BKE_node_copy_ex(ngroup, node, LIB_ID_COPY_DEFAULT);
+      newnode = BKE_node_copy_store_new_pointers(ngroup, node, LIB_ID_COPY_DEFAULT);
     }
     else {
       /* use the existing node */
@@ -695,7 +695,7 @@ static int node_get_selected_minmax(bNodeTree *ntree, bNode *gnode, float *min, 
     if (node_group_make_use_node(node, gnode)) {
       nodeToView(node, 0.0f, 0.0f, &loc[0], &loc[1]);
       minmax_v2v2_v2(min, max, loc);
-      ++totselect;
+      totselect++;
     }
   }
 
@@ -717,7 +717,7 @@ static void node_group_make_insert_selected(const bContext *C, bNodeTree *ntree,
   ListBase anim_basepaths = {NULL, NULL};
   float min[2], max[2], center[2];
   int totselect;
-  bool expose_all = false;
+  bool expose_visible = false;
   bNode *input_node, *output_node;
 
   /* XXX rough guess, not nice but we don't have access to UI constants here ... */
@@ -735,7 +735,7 @@ static void node_group_make_insert_selected(const bContext *C, bNodeTree *ntree,
 
   /* auto-add interface for "solo" nodes */
   if (totselect == 1) {
-    expose_all = true;
+    expose_visible = true;
   }
 
   /* move nodes over */
@@ -823,8 +823,8 @@ static void node_group_make_insert_selected(const bContext *C, bNodeTree *ntree,
       /* update the group node and interface node sockets,
        * so the new interface socket can be linked.
        */
-      node_group_verify(ntree, gnode, (ID *)ngroup);
-      node_group_input_verify(ngroup, input_node, (ID *)ngroup);
+      node_group_update(ntree, gnode);
+      node_group_input_update(ngroup, input_node);
 
       /* create new internal link */
       input_sock = node_group_input_find_socket(input_node, iosock->identifier);
@@ -857,8 +857,8 @@ static void node_group_make_insert_selected(const bContext *C, bNodeTree *ntree,
         /* update the group node and interface node sockets,
          * so the new interface socket can be linked.
          */
-        node_group_verify(ntree, gnode, (ID *)ngroup);
-        node_group_output_verify(ngroup, output_node, (ID *)ngroup);
+        node_group_update(ntree, gnode);
+        node_group_output_update(ngroup, output_node);
 
         /* create new internal link */
         output_sock = node_group_output_find_socket(output_node, iosock->identifier);
@@ -879,8 +879,8 @@ static void node_group_make_insert_selected(const bContext *C, bNodeTree *ntree,
     }
   }
 
-  /* expose all unlinked sockets too */
-  if (expose_all) {
+  /* expose all unlinked sockets too but only the visible ones*/
+  if (expose_visible) {
     for (node = ngroup->nodes.first; node; node = node->next) {
       if (node_group_make_use_node(node, gnode)) {
         for (sock = node->inputs.first; sock; sock = sock->next) {
@@ -892,13 +892,16 @@ static void node_group_make_insert_selected(const bContext *C, bNodeTree *ntree,
               break;
             }
           }
+          if (sock->flag & (SOCK_HIDDEN | SOCK_UNAVAIL)) {
+              skip = true;
+          }
           if (skip) {
             continue;
           }
 
           iosock = ntreeAddSocketInterfaceFromSocket(ngroup, node, sock);
 
-          node_group_input_verify(ngroup, input_node, (ID *)ngroup);
+          node_group_input_update(ngroup, input_node);
 
           /* create new internal link */
           input_sock = node_group_input_find_socket(input_node, iosock->identifier);
@@ -913,13 +916,16 @@ static void node_group_make_insert_selected(const bContext *C, bNodeTree *ntree,
               skip = true;
             }
           }
+          if (sock->flag & (SOCK_HIDDEN | SOCK_UNAVAIL)) {
+              skip = true;
+          }
           if (skip) {
             continue;
           }
 
           iosock = ntreeAddSocketInterfaceFromSocket(ngroup, node, sock);
 
-          node_group_output_verify(ngroup, output_node, (ID *)ngroup);
+          node_group_output_update(ngroup, output_node);
 
           /* create new internal link */
           output_sock = node_group_output_find_socket(output_node, iosock->identifier);

@@ -55,12 +55,14 @@ PyDoc_STRVAR(Interface0DIterator_doc,
 
 static int convert_nested_it(PyObject *obj, void *v)
 {
-  if (!obj || !BPy_Iterator_Check(obj))
+  if (!obj || !BPy_Iterator_Check(obj)) {
     return 0;
+  }
   Interface0DIteratorNested *nested_it = dynamic_cast<Interface0DIteratorNested *>(
       ((BPy_Iterator *)obj)->it);
-  if (!nested_it)
+  if (!nested_it) {
     return 0;
+  }
   *((Interface0DIteratorNested **)v) = nested_it;
   return 1;
 }
@@ -178,7 +180,7 @@ static PyObject *Interface0DIterator_u_get(BPy_Interface0DIterator *self, void *
 }
 
 PyDoc_STRVAR(Interface0DIterator_at_last_doc,
-             "True if the interator points to the last valid element.\n"
+             "True if the iterator points to the last valid element.\n"
              "For its counterpart (pointing to the first valid element), use it.is_begin.\n"
              "\n"
              ":type: bool");

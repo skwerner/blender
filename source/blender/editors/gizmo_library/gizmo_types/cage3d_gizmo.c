@@ -338,10 +338,10 @@ static void gizmo_cage3d_draw_intern(
   else {
 #if 0
     const rctf _r = {
-      .xmin = -size_real[0],
-      .ymin = -size_real[1],
-      .xmax = size_real[0],
-      .ymax = size_real[1],
+        .xmin = -size_real[0],
+        .ymin = -size_real[1],
+        .xmax = size_real[0],
+        .ymax = size_real[1],
     };
 #endif
     if (draw_style == ED_GIZMO_CAGE2D_STYLE_BOX) {
@@ -358,7 +358,7 @@ static void gizmo_cage3d_draw_intern(
       bool show = false;
       if (gz->highlight_part == ED_GIZMO_CAGE3D_PART_TRANSLATE) {
         /* Only show if we're drawing the center handle
-         * otherwise the entire rectangle is the hotspot. */
+         * otherwise the entire rectangle is the hot-spot. */
         if (draw_options & ED_GIZMO_CAGE2D_DRAW_FLAG_XFORM_CENTER_HANDLE) {
           show = true;
         }
@@ -424,10 +424,10 @@ static void gizmo_cage3d_draw(const bContext *C, wmGizmo *gz)
 static int gizmo_cage3d_get_cursor(wmGizmo *gz)
 {
   if (gz->parent_gzgroup->type->flag & WM_GIZMOGROUPTYPE_3D) {
-    return BC_NSEW_SCROLLCURSOR;
+    return WM_CURSOR_NSEW_SCROLL;
   }
 
-  return CURSOR_STD;
+  return WM_CURSOR_DEFAULT;
 }
 
 typedef struct RectTransformInteraction {
@@ -470,7 +470,8 @@ static int gizmo_cage3d_modal(bContext *C,
   }
   /* For transform logic to be manageable we operate in -0.5..0.5 2D space,
    * no matter the size of the rectangle, mouse coords are scaled to unit space.
-   * The mouse coords have been projected into the matrix so we don't need to worry about axis alignment.
+   * The mouse coords have been projected into the matrix
+   * so we don't need to worry about axis alignment.
    *
    * - The cursor offset are multiplied by 'dims'.
    * - Matrix translation is also multiplied by 'dims'.
@@ -615,8 +616,9 @@ static void gizmo_cage3d_exit(bContext *C, wmGizmo *gz, const bool cancel)
 {
   RectTransformInteraction *data = gz->interaction_data;
 
-  if (!cancel)
+  if (!cancel) {
     return;
+  }
 
   wmGizmoProperty *gz_prop;
 

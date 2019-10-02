@@ -30,6 +30,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_ID.h"
+#include "DNA_defaults.h"
 
 #include "BLI_math.h"
 #include "BLI_listbase.h"
@@ -56,24 +57,7 @@ void BKE_camera_init(Camera *cam)
 {
   BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cam, id));
 
-  cam->lens = 50.0f;
-  cam->sensor_x = DEFAULT_SENSOR_WIDTH;
-  cam->sensor_y = DEFAULT_SENSOR_HEIGHT;
-  cam->clip_start = 0.1f;
-  cam->clip_end = 1000.0f;
-  cam->drawsize = 1.0f;
-  cam->ortho_scale = 6.0;
-  cam->flag |= CAM_SHOWPASSEPARTOUT;
-  cam->passepartalpha = 0.5f;
-
-  cam->gpu_dof.fstop = 128.0f;
-  cam->gpu_dof.ratio = 1.0f;
-
-  /* stereoscopy 3d */
-  cam->stereo.interocular_distance = 0.065f;
-  cam->stereo.convergence_distance = 30.f * 0.065f;
-  cam->stereo.pole_merge_angle_from = DEG2RADF(60.0f);
-  cam->stereo.pole_merge_angle_to = DEG2RADF(75.0f);
+  MEMCPY_STRUCT_AFTER(cam, DNA_struct_default_get(Camera), id);
 }
 
 void *BKE_camera_add(Main *bmain, const char *name)
@@ -88,8 +72,10 @@ void *BKE_camera_add(Main *bmain, const char *name)
 }
 
 /**
- * Only copy internal data of Camera ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Camera ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -129,22 +115,24 @@ void BKE_camera_free(Camera *ca)
 float BKE_camera_object_dof_distance(Object *ob)
 {
   Camera *cam = (Camera *)ob->data;
-  if (ob->type != OB_CAMERA)
+  if (ob->type != OB_CAMERA) {
     return 0.0f;
-  if (cam->dof_ob) {
+  }
+  if (cam->dof.focus_object) {
     float view_dir[3], dof_dir[3];
     normalize_v3_v3(view_dir, ob->obmat[2]);
-    sub_v3_v3v3(dof_dir, ob->obmat[3], cam->dof_ob->obmat[3]);
+    sub_v3_v3v3(dof_dir, ob->obmat[3], cam->dof.focus_object->obmat[3]);
     return fabsf(dot_v3v3(view_dir, dof_dir));
   }
-  return cam->dof_distance;
+  return cam->dof.focus_distance;
 }
 
 float BKE_camera_sensor_size(int sensor_fit, float sensor_x, float sensor_y)
 {
   /* sensor size used to fit to. for auto, sensor_x is both x and y. */
-  if (sensor_fit == CAMERA_SENSOR_FIT_VERT)
+  if (sensor_fit == CAMERA_SENSOR_FIT_VERT) {
     return sensor_y;
+  }
 
   return sensor_x;
 }
@@ -152,10 +140,12 @@ float BKE_camera_sensor_size(int sensor_fit, float sensor_x, float sensor_y)
 int BKE_camera_sensor_fit(int sensor_fit, float sizex, float sizey)
 {
   if (sensor_fit == CAMERA_SENSOR_FIT_AUTO) {
-    if (sizex >= sizey)
+    if (sizex >= sizey) {
       return CAMERA_SENSOR_FIT_HOR;
-    else
+    }
+    else {
       return CAMERA_SENSOR_FIT_VERT;
+    }
   }
 
   return sensor_fit;
@@ -181,15 +171,17 @@ void BKE_camera_params_init(CameraParams *params)
 
 void BKE_camera_params_from_object(CameraParams *params, const Object *ob)
 {
-  if (!ob)
+  if (!ob) {
     return;
+  }
 
   if (ob->type == OB_CAMERA) {
     /* camera object */
     Camera *cam = ob->data;
 
-    if (cam->type == CAM_ORTHO)
+    if (cam->type == CAM_ORTHO) {
       params->is_ortho = true;
+    }
     params->lens = cam->lens;
     params->ortho_scale = cam->ortho_scale;
 
@@ -207,8 +199,9 @@ void BKE_camera_params_from_object(CameraParams *params, const Object *ob)
     /* light object */
     Light *la = ob->data;
     params->lens = 16.0f / tanf(la->spotsize * 0.5f);
-    if (params->lens == 0.0f)
+    if (params->lens == 0.0f) {
       params->lens = 35.0f;
+    }
   }
   else {
     params->lens = 35.0f;
@@ -282,10 +275,12 @@ void BKE_camera_params_compute_viewplane(
   /* determine sensor fit */
   sensor_fit = BKE_camera_sensor_fit(params->sensor_fit, xasp * winx, yasp * winy);
 
-  if (sensor_fit == CAMERA_SENSOR_FIT_HOR)
+  if (sensor_fit == CAMERA_SENSOR_FIT_HOR) {
     viewfac = winx;
-  else
+  }
+  else {
     viewfac = params->ycor * winy;
+  }
 
   pixsize /= viewfac;
 
@@ -328,7 +323,7 @@ void BKE_camera_params_compute_matrix(CameraParams *params)
   rctf viewplane = params->viewplane;
 
   /* compute projection matrix */
-  if (params->is_ortho)
+  if (params->is_ortho) {
     orthographic_m4(params->winmat,
                     viewplane.xmin,
                     viewplane.xmax,
@@ -336,7 +331,8 @@ void BKE_camera_params_compute_matrix(CameraParams *params)
                     viewplane.ymax,
                     params->clip_start,
                     params->clip_end);
-  else
+  }
+  else {
     perspective_m4(params->winmat,
                    viewplane.xmin,
                    viewplane.xmax,
@@ -344,6 +340,7 @@ void BKE_camera_params_compute_matrix(CameraParams *params)
                    viewplane.ymax,
                    params->clip_start,
                    params->clip_end);
+  }
 }
 
 /***************************** Camera View Frame *****************************/
@@ -361,7 +358,7 @@ void BKE_camera_view_frame_ex(const Scene *scene,
   float facx, facy;
   float depth;
 
-  /* aspect correcton */
+  /* aspect correction */
   if (scene) {
     float aspx = (float)scene->r.xsch * scene->r.xasp;
     float aspy = (float)scene->r.ysch * scene->r.yasp;
@@ -723,8 +720,9 @@ static void camera_stereo3d_model_matrix(const Object *camera,
     size_to_mat4(sizemat, size);
   }
 
-  if (pivot == CAM_S3D_PIVOT_CENTER)
+  if (pivot == CAM_S3D_PIVOT_CENTER) {
     fac = 0.5f;
+  }
 
   fac_signed = is_left ? fac : -fac;
 
@@ -865,13 +863,16 @@ bool BKE_camera_multiview_spherical_stereo(RenderData *rd, const Object *camera)
   Camera *cam;
   const bool is_multiview = (rd && rd->scemode & R_MULTIVIEW) != 0;
 
-  if (!is_multiview)
+  if (!is_multiview) {
     return false;
+  }
 
-  if (camera->type != OB_CAMERA)
+  if (camera->type != OB_CAMERA) {
     return false;
-  else
+  }
+  else {
     cam = camera->data;
+  }
 
   if ((rd->views_format == SCE_VIEWS_FORMAT_STEREO_3D) && ELEM(cam->type, CAM_PANO, CAM_PERSP) &&
       ((cam->stereo.flag & CAM_S3D_SPHERICAL) != 0)) {
@@ -895,8 +896,9 @@ static Object *camera_multiview_advanced(Scene *scene, Object *camera, const cha
   for (srv = scene->r.views.first; srv; srv = srv->next) {
     const int len_suffix = strlen(srv->suffix);
 
-    if ((len_suffix < len_suffix_max) || (len_name < len_suffix))
+    if ((len_suffix < len_suffix_max) || (len_name < len_suffix)) {
       continue;
+    }
 
     if (STREQ(camera_name + (len_name - len_suffix), srv->suffix)) {
       BLI_snprintf(name, sizeof(name), "%.*s%s", (len_name - len_suffix), camera_name, suffix);
@@ -951,15 +953,17 @@ static float camera_stereo3d_shift_x(const Object *camera, const char *viewname)
   convergence_mode = data->stereo.convergence_mode;
   pivot = data->stereo.pivot;
 
-  if (convergence_mode != CAM_S3D_OFFAXIS)
+  if (convergence_mode != CAM_S3D_OFFAXIS) {
     return shift;
+  }
 
   if (((pivot == CAM_S3D_PIVOT_LEFT) && is_left) || ((pivot == CAM_S3D_PIVOT_RIGHT) && !is_left)) {
     return shift;
   }
 
-  if (pivot == CAM_S3D_PIVOT_CENTER)
+  if (pivot == CAM_S3D_PIVOT_CENTER) {
     fac = 0.5f;
+  }
 
   fac_signed = is_left ? fac : -fac;
   shift += ((interocular_distance / data->sensor_x) * (data->lens / convergence_distance)) *
@@ -993,18 +997,6 @@ void BKE_camera_multiview_params(RenderData *rd,
 {
   if (camera->type == OB_CAMERA) {
     params->shiftx = BKE_camera_multiview_shift_x(rd, camera, viewname);
-  }
-}
-
-void BKE_camera_to_gpu_dof(struct Object *camera, struct GPUFXSettings *r_fx_settings)
-{
-  if (camera->type == OB_CAMERA) {
-    Camera *cam = camera->data;
-    r_fx_settings->dof = &cam->gpu_dof;
-    r_fx_settings->dof->focal_length = cam->lens;
-    r_fx_settings->dof->sensor = BKE_camera_sensor_size(
-        cam->sensor_fit, cam->sensor_x, cam->sensor_y);
-    r_fx_settings->dof->focus_distance = BKE_camera_object_dof_distance(camera);
   }
 }
 

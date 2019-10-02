@@ -86,7 +86,7 @@ void AbcTransformWriter::do_write()
         m_xform, m_xform.getSchema().getTimeSampling());
   }
 
-  m_visibility.set(!(ob_eval->restrictflag & OB_RESTRICT_VIEW));
+  m_visibility.set(!(ob_eval->restrictflag & OB_RESTRICT_VIEWPORT));
 
   if (!m_first_frame && !m_is_animated) {
     return;
@@ -122,7 +122,7 @@ Imath::Box3d AbcTransformWriter::bounds()
 {
   Imath::Box3d bounds;
 
-  for (int i = 0; i < m_children.size(); ++i) {
+  for (int i = 0; i < m_children.size(); i++) {
     Imath::Box3d box(m_children[i]->bounds());
     bounds.extendBy(box);
   }

@@ -75,15 +75,10 @@ layout(std140) uniform globalsBlock
   float sizeEdgeFix;
   float sizeFaceDot;
 
-  float gridDistance;
-  float gridResolution;
-  float gridSubdivisions;
-  float gridScale;
-
   float pad_globalsBlock;
 };
 
-/* data[0] (1nd byte flags) */
+/* data[0] (1st byte flags) */
 #define FACE_ACTIVE (1 << 0)
 #define FACE_SELECTED (1 << 1)
 #define FACE_FREESTYLE (1 << 2)

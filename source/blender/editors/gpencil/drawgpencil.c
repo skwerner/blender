@@ -62,7 +62,6 @@
 #include "BIF_glutil.h"
 
 #include "GPU_immediate.h"
-#include "GPU_draw.h"
 #include "GPU_state.h"
 
 #include "ED_gpencil.h"
@@ -121,9 +120,15 @@ static void gp_set_point_uniform_color(const bGPDspoint *pt, const float ink[4])
   immUniformColor3fvAlpha(ink, alpha);
 }
 
-static void gp_set_point_varying_color(const bGPDspoint *pt, const float ink[4], uint attr_id)
+static void gp_set_point_varying_color(const bGPDspoint *pt,
+                                       const float ink[4],
+                                       uint attr_id,
+                                       bool fix_strength)
 {
   float alpha = ink[3] * pt->strength;
+  if ((fix_strength) && (alpha >= 0.1f)) {
+    alpha = 1.0f;
+  }
   CLAMP(alpha, GPENCIL_STRENGTH_MIN, 1.0f);
   immAttr4ub(attr_id, F2UB(ink[0]), F2UB(ink[1]), F2UB(ink[2]), F2UB(alpha));
 }
@@ -174,7 +179,7 @@ static void gp_draw_stroke_volumetric_2d(const bGPDspoint *points,
       format, "color", GPU_COMP_U8, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
 
   immBindBuiltinProgram(GPU_SHADER_3D_POINT_VARYING_SIZE_VARYING_COLOR);
-  GPU_enable_program_point_size();
+  GPU_program_point_size(true);
   immBegin(GPU_PRIM_POINTS, totpoints);
 
   const bGPDspoint *pt = points;
@@ -186,14 +191,14 @@ static void gp_draw_stroke_volumetric_2d(const bGPDspoint *points,
     mul_v3_m4v3(fpt, diff_mat, &pt->x);
     gp_calc_2d_stroke_fxy(fpt, sflag, offsx, offsy, winx, winy, co);
 
-    gp_set_point_varying_color(pt, ink, color);
+    gp_set_point_varying_color(pt, ink, color, false);
     immAttr1f(size, pt->pressure * thickness); /* TODO: scale based on view transform */
     immVertex2f(pos, co[0], co[1]);
   }
 
   immEnd();
   immUnbindProgram();
-  GPU_disable_program_point_size();
+  GPU_program_point_size(false);
 }
 
 /* draw a 3D stroke in "volumetric" style */
@@ -209,12 +214,12 @@ static void gp_draw_stroke_volumetric_3d(const bGPDspoint *points,
       format, "color", GPU_COMP_U8, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
 
   immBindBuiltinProgram(GPU_SHADER_3D_POINT_VARYING_SIZE_VARYING_COLOR);
-  GPU_enable_program_point_size();
+  GPU_program_point_size(true);
   immBegin(GPU_PRIM_POINTS, totpoints);
 
   const bGPDspoint *pt = points;
   for (int i = 0; i < totpoints && pt; i++, pt++) {
-    gp_set_point_varying_color(pt, ink, color);
+    gp_set_point_varying_color(pt, ink, color, false);
     /* TODO: scale based on view transform */
     immAttr1f(size, pt->pressure * thickness);
     /* we can adjust size in vertex shader based on view/projection! */
@@ -223,7 +228,7 @@ static void gp_draw_stroke_volumetric_3d(const bGPDspoint *points,
 
   immEnd();
   immUnbindProgram();
-  GPU_disable_program_point_size();
+  GPU_program_point_size(false);
 }
 
 /* --------------- Stroke Fills ----------------- */
@@ -262,8 +267,11 @@ static void gp_calc_2d_bounding_box(
 }
 
 /* calc texture coordinates using flat projected points */
-static void gp_calc_stroke_text_coordinates(
-    const float (*points2d)[2], int totpoints, float minv[2], float maxv[2], float (*r_uv)[2])
+static void gp_calc_stroke_text_coordinates(const float (*points2d)[2],
+                                            int totpoints,
+                                            const float minv[2],
+                                            float maxv[2],
+                                            float (*r_uv)[2])
 {
   float d[2];
   d[0] = maxv[0] - minv[0];
@@ -274,7 +282,8 @@ static void gp_calc_stroke_text_coordinates(
   }
 }
 
-/* Triangulate stroke for high quality fill (this is done only if cache is null or stroke was modified) */
+/* Triangulate stroke for high quality fill
+ * (this is done only if cache is null or stroke was modified). */
 static void gp_triangulate_stroke_fill(bGPDstroke *gps)
 {
   BLI_assert(gps->totpoints >= 3);
@@ -324,8 +333,9 @@ static void gp_triangulate_stroke_fill(bGPDstroke *gps)
   }
   else {
     /* No triangles needed - Free anything allocated previously */
-    if (gps->triangles)
+    if (gps->triangles) {
       MEM_freeN(gps->triangles);
+    }
 
     gps->triangles = NULL;
   }
@@ -375,7 +385,7 @@ static int gp_set_filling_texture(Image *image, short flag)
   ImBuf *ibuf;
   uint *bind = &image->bindcode[TEXTARGET_TEXTURE_2D];
   int error = GL_NO_ERROR;
-  ImageUser iuser = { NULL };
+  ImageUser iuser = {NULL};
   void *lock;
 
   iuser.ok = true;
@@ -388,8 +398,7 @@ static int gp_set_filling_texture(Image *image, short flag)
   }
 
   GPU_create_gl_tex(
-          bind, ibuf->rect, ibuf->rect_float, ibuf->x, ibuf->y, GL_TEXTURE_2D,
-          false, false, image);
+      bind, ibuf->rect, ibuf->rect_float, ibuf->x, ibuf->y, GL_TEXTURE_2D, false, false, image);
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -448,11 +457,12 @@ static void gp_draw_stroke_fill(bGPdata *gpd,
   immUniform2fv("texture_scale", gp_style->texture_scale);
   immUniform2fv("texture_offset", gp_style->texture_offset);
   immUniform1f("texture_opacity", gp_style->texture_opacity);
-  immUniform1i("t_mix", (gp_style->flag & GP_STYLE_COLOR_TEX_MIX) != 0);
+  immUniform1i("t_mix", (gp_style->flag & GP_STYLE_FILL_TEX_MIX) != 0);
   immUniform1i("t_flip", (gp_style->flag & GP_STYLE_COLOR_FLIP_FILL) != 0);
 #if 0 /* GPXX disabled, not used in annotations */
   /* image texture */
-  if ((gp_style->fill_style == GP_STYLE_FILL_STYLE_TEXTURE) || (gp_style->flag & GP_STYLE_COLOR_TEX_MIX)) {
+  if ((gp_style->fill_style == GP_STYLE_FILL_STYLE_TEXTURE) ||
+      (gp_style->flag & GP_STYLE_COLOR_TEX_MIX)) {
     gp_set_filling_texture(gp_style->ima, gp_style->flag);
   }
 #endif
@@ -574,7 +584,7 @@ static void gp_draw_stroke_3d(tGPDdraw *tgpw, short thickness, const float ink[4
   for (int i = 0; i < totpoints; i++, pt++) {
     /* first point for adjacency (not drawn) */
     if (i == 0) {
-      gp_set_point_varying_color(points, ink, attr_id.color);
+      gp_set_point_varying_color(points, ink, attr_id.color, (bool)tgpw->is_fill_stroke);
 
       if ((cyclic) && (totpoints > 2)) {
         immAttr1f(attr_id.thickness, max_ff((points + totpoints - 1)->pressure * thickness, 1.0f));
@@ -587,7 +597,7 @@ static void gp_draw_stroke_3d(tGPDdraw *tgpw, short thickness, const float ink[4
       immVertex3fv(attr_id.pos, fpt);
     }
     /* set point */
-    gp_set_point_varying_color(pt, ink, attr_id.color);
+    gp_set_point_varying_color(pt, ink, attr_id.color, (bool)tgpw->is_fill_stroke);
     immAttr1f(attr_id.thickness, max_ff(pt->pressure * thickness, 1.0f));
     mul_v3_m4v3(fpt, tgpw->diff_mat, &pt->x);
     immVertex3fv(attr_id.pos, fpt);
@@ -606,7 +616,9 @@ static void gp_draw_stroke_3d(tGPDdraw *tgpw, short thickness, const float ink[4
   }
   /* last adjacency point (not drawn) */
   else {
-    gp_set_point_varying_color(points + totpoints - 2, ink, attr_id.color);
+    gp_set_point_varying_color(
+        points + totpoints - 2, ink, attr_id.color, (bool)tgpw->is_fill_stroke);
+
     immAttr1f(attr_id.thickness, max_ff((points + totpoints - 2)->pressure * thickness, 1.0f));
     mul_v3_m4v3(fpt, tgpw->diff_mat, &(points + totpoints - 2)->x);
     immVertex3fv(attr_id.pos, fpt);
@@ -643,8 +655,8 @@ static void gp_draw_stroke_2d(const bGPDspoint *points,
 
   /* TODO: fancy++ with the magic of shaders */
 
-  /* tessellation code - draw stroke as series of connected quads (triangle strips in fact) with connection
-   * edges rotated to minimize shrinking artifacts, and rounded endcaps
+  /* tessellation code - draw stroke as series of connected quads (triangle strips in fact)
+   * with connection edges rotated to minimize shrinking artifacts, and rounded endcaps.
    */
   {
     const bGPDspoint *pt1, *pt2;
@@ -675,7 +687,8 @@ static void gp_draw_stroke_2d(const bGPDspoint *points,
       float mt[2], sc[2]; /* gradient for thickness, point for end-cap */
       float pthick;       /* thickness at segment point */
 
-      /* get x and y coordinates from point2 (point1 has already been computed in previous iteration). */
+      /* Get x and y coordinates from point2
+       * (point1 has already been computed in previous iteration). */
       mul_v3_m4v3(fpt, diff_mat, &pt2->x);
       gp_calc_2d_stroke_fxy(fpt, sflag, offsx, offsy, winx, winy, s1);
 
@@ -690,7 +703,7 @@ static void gp_draw_stroke_2d(const bGPDspoint *points,
       pthick = (pt1->pressure * thickness * scalefac);
 
       /* color of point */
-      gp_set_point_varying_color(pt1, ink, attr_id.color);
+      gp_set_point_varying_color(pt1, ink, attr_id.color, false);
 
       /* if the first segment, start of segment is segment's normal */
       if (i == 0) {
@@ -765,7 +778,7 @@ static void gp_draw_stroke_2d(const bGPDspoint *points,
         pthick = (pt2->pressure * thickness * scalefac);
 
         /* color of point */
-        gp_set_point_varying_color(pt2, ink, attr_id.color);
+        gp_set_point_varying_color(pt2, ink, attr_id.color, false);
 
         /* calculate points for end of segment */
         mt[0] = m2[0] * pthick;
@@ -816,26 +829,33 @@ static bool gp_can_draw_stroke(const bGPDstroke *gps, const int dflag)
 {
   /* skip stroke if it isn't in the right display space for this drawing context */
   /* 1) 3D Strokes */
-  if ((dflag & GP_DRAWDATA_ONLY3D) && !(gps->flag & GP_STROKE_3DSPACE))
+  if ((dflag & GP_DRAWDATA_ONLY3D) && !(gps->flag & GP_STROKE_3DSPACE)) {
     return false;
-  if (!(dflag & GP_DRAWDATA_ONLY3D) && (gps->flag & GP_STROKE_3DSPACE))
+  }
+  if (!(dflag & GP_DRAWDATA_ONLY3D) && (gps->flag & GP_STROKE_3DSPACE)) {
     return false;
+  }
 
   /* 2) Screen Space 2D Strokes */
-  if ((dflag & GP_DRAWDATA_ONLYV2D) && !(gps->flag & GP_STROKE_2DSPACE))
+  if ((dflag & GP_DRAWDATA_ONLYV2D) && !(gps->flag & GP_STROKE_2DSPACE)) {
     return false;
-  if (!(dflag & GP_DRAWDATA_ONLYV2D) && (gps->flag & GP_STROKE_2DSPACE))
+  }
+  if (!(dflag & GP_DRAWDATA_ONLYV2D) && (gps->flag & GP_STROKE_2DSPACE)) {
     return false;
+  }
 
   /* 3) Image Space (2D) */
-  if ((dflag & GP_DRAWDATA_ONLYI2D) && !(gps->flag & GP_STROKE_2DIMAGE))
+  if ((dflag & GP_DRAWDATA_ONLYI2D) && !(gps->flag & GP_STROKE_2DIMAGE)) {
     return false;
-  if (!(dflag & GP_DRAWDATA_ONLYI2D) && (gps->flag & GP_STROKE_2DIMAGE))
+  }
+  if (!(dflag & GP_DRAWDATA_ONLYI2D) && (gps->flag & GP_STROKE_2DIMAGE)) {
     return false;
+  }
 
   /* skip stroke if it doesn't have any valid data */
-  if ((gps->points == NULL) || (gps->totpoints < 1))
+  if ((gps->points == NULL) || (gps->totpoints < 1)) {
     return false;
+  }
 
   /* stroke can be drawn */
   return true;
@@ -848,10 +868,13 @@ static void gp_draw_strokes(tGPDdraw *tgpw)
   float tfill[4];
   short sthickness;
   float ink[4];
+  const bool is_unique = (tgpw->gps != NULL);
 
-  GPU_enable_program_point_size();
+  GPU_program_point_size(true);
 
-  for (bGPDstroke *gps = tgpw->t_gpf->strokes.first; gps; gps = gps->next) {
+  bGPDstroke *gps_init = (tgpw->gps) ? tgpw->gps : tgpw->t_gpf->strokes.first;
+
+  for (bGPDstroke *gps = gps_init; gps; gps = gps->next) {
     /* check if stroke can be drawn */
     if (gp_can_draw_stroke(gps, tgpw->dflag) == false) {
       continue;
@@ -868,7 +891,7 @@ static void gp_draw_strokes(tGPDdraw *tgpw)
 
     /* if disable fill, the colors with fill must be omitted too except fill boundary strokes */
     if ((tgpw->disable_fill == 1) && (gp_style->fill_rgba[3] > 0.0f) &&
-        ((gps->flag & GP_STROKE_NOFILL) == 0)) {
+        ((gps->flag & GP_STROKE_NOFILL) == 0) && (gp_style->flag & GP_STYLE_FILL_SHOW)) {
       continue;
     }
 
@@ -899,7 +922,7 @@ static void gp_draw_strokes(tGPDdraw *tgpw)
       }
 
       /* 3D Fill */
-      //if ((dflag & GP_DRAWDATA_FILL) && (gps->totpoints >= 3)) {
+      // if ((dflag & GP_DRAWDATA_FILL) && (gps->totpoints >= 3)) {
       if ((gps->totpoints >= 3) && (tgpw->disable_fill != 1)) {
         /* set color using material, tint color and opacity */
         interp_v3_v3v3(tfill, gp_style->fill_rgba, tgpw->tintcolor, tgpw->tintcolor[3]);
@@ -945,6 +968,14 @@ static void gp_draw_strokes(tGPDdraw *tgpw)
           copy_v4_v4(ink, tcolor);
         }
       }
+
+      /* if used for fill, set opacity to 1 */
+      if (tgpw->is_fill_stroke) {
+        if (ink[3] >= GPENCIL_ALPHA_OPACITY_THRESH) {
+          ink[3] = 1.0f;
+        }
+      }
+
       if (gp_style->mode == GP_STYLE_MODE_DOTS) {
         /* volumetric stroke drawing */
         if (tgpw->disable_fill != 1) {
@@ -1070,9 +1101,13 @@ static void gp_draw_strokes(tGPDdraw *tgpw)
         }
       }
     }
+    /* if only one stroke, exit from loop */
+    if (is_unique) {
+      break;
+    }
   }
 
-  GPU_disable_program_point_size();
+  GPU_program_point_size(false);
 }
 
 /* ----- General Drawing ------ */
@@ -1085,7 +1120,8 @@ void ED_gp_draw_interpolation(const bContext *C, tGPDinterpolate *tgpi, const in
   RegionView3D *rv3d = ar->regiondata;
   tGPDinterpolate_layer *tgpil;
   Object *obact = CTX_data_active_object(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  /* Drawing code is expected to run with fully evaluated depsgraph. */
+  Depsgraph *depsgraph = CTX_data_expect_evaluated_depsgraph(C);
 
   float color[4];
 
@@ -1116,6 +1152,7 @@ void ED_gp_draw_interpolation(const bContext *C, tGPDinterpolate *tgpi, const in
       tgpw.gpl = tgpil->gpl;
       tgpw.gpf = tgpil->interFrame;
       tgpw.t_gpf = tgpil->interFrame;
+      tgpw.gps = NULL;
 
       tgpw.lthick = tgpil->gpl->line_change;
       tgpw.opacity = 1.0;
@@ -1138,14 +1175,14 @@ void ED_gp_draw_fill(tGPDdraw *tgpw)
 /* draw a short status message in the top-right corner */
 static void UNUSED_FUNCTION(gp_draw_status_text)(const bGPdata *gpd, ARegion *ar)
 {
-  rcti rect;
 
   /* Cannot draw any status text when drawing OpenGL Renders */
-  if (G.f & G_FLAG_RENDER_VIEWPORT)
+  if (G.f & G_FLAG_RENDER_VIEWPORT) {
     return;
+  }
 
-  /* Get bounds of region - Necessary to avoid problems with region overlap */
-  ED_region_visible_rect(ar, &rect);
+  /* Get bounds of region - Necessary to avoid problems with region overlap. */
+  const rcti *rect = ED_region_visible_rect(ar);
 
   /* for now, this should only be used to indicate when we are in stroke editmode */
   if (gpd->flag & GP_DATA_STROKE_EDITMODE) {
@@ -1157,8 +1194,8 @@ static void UNUSED_FUNCTION(gp_draw_status_text)(const bGPdata *gpd, ARegion *ar
     BLF_width_and_height(
         font_id, printable, BLF_DRAW_STR_DUMMY_MAX, &printable_size[0], &printable_size[1]);
 
-    int xco = (rect.xmax - U.widget_unit) - (int)printable_size[0];
-    int yco = (rect.ymax - U.widget_unit);
+    int xco = (rect->xmax - U.widget_unit) - (int)printable_size[0];
+    int yco = (rect->ymax - U.widget_unit);
 
     /* text label */
     UI_FontThemeColor(font_id, TH_TEXT_HI);

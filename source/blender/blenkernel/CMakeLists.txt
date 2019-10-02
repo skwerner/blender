@@ -24,31 +24,35 @@ set(INC
   ../blenlib
   ../blenloader
   ../blentranslation
+  ../bmesh
   ../depsgraph
   ../draw
+  ../gpencil_modifiers
   ../gpu
   ../ikplugin
   ../imbuf
   ../makesdna
   ../makesrna
-  ../bmesh
   ../modifiers
-  ../gpencil_modifiers
-  ../shader_fx
   ../nodes
   ../physics
+  ../shader_fx
   ../render/extern/include
   ../../../intern/ghost
-  ../../../intern/guardedalloc
   ../../../intern/glew-mx
+  ../../../intern/guardedalloc
   ../../../intern/iksolver/extern
-  ../../../intern/memutil
-  ../../../intern/mikktspace
   ../../../intern/atomic
   ../../../intern/clog
   ../../../intern/libmv
+  ../../../intern/memutil
+  ../../../intern/mikktspace
   ../../../intern/opensubdiv
   ../../../extern/curve_fit_nd
+  ../../../intern/smoke/extern
+
+  # dna_type_offsets.h
+  ${CMAKE_CURRENT_BINARY_DIR}/../makesdna/intern
 )
 
 set(INC_SYS
@@ -57,6 +61,7 @@ set(INC_SYS
 )
 
 set(SRC
+  ${CMAKE_SOURCE_DIR}/release/datafiles/userdef/userdef_default.c
   intern/CCGSubSurf.c
   intern/CCGSubSurf_legacy.c
   intern/CCGSubSurf_opensubdiv.c
@@ -81,6 +86,7 @@ set(SRC
   intern/brush.c
   intern/bvhutils.c
   intern/cachefile.c
+  intern/callbacks.c
   intern/camera.c
   intern/cdderivedmesh.c
   intern/cloth.c
@@ -120,6 +126,7 @@ set(SRC
   intern/idprop_utils.c
   intern/image.c
   intern/image_gen.c
+  intern/image_save.c
   intern/ipo.c
   intern/key.c
   intern/keyconfig.c
@@ -148,9 +155,11 @@ set(SRC
   intern/mesh_mapping.c
   intern/mesh_merge.c
   intern/mesh_remap.c
+  intern/mesh_remesh_voxel.c
   intern/mesh_runtime.c
   intern/mesh_tangent.c
   intern/mesh_validate.c
+  intern/mirror.c
   intern/modifier.c
   intern/movieclip.c
   intern/multires.c
@@ -182,6 +191,7 @@ set(SRC
   intern/seqcache.c
   intern/seqeffects.c
   intern/seqmodifier.c
+  intern/seqprefetch.c
   intern/sequencer.c
   intern/shader_fx.c
   intern/shrinkwrap.c
@@ -196,12 +206,14 @@ set(SRC
   intern/subdiv_ccg_material.c
   intern/subdiv_converter.c
   intern/subdiv_converter_mesh.c
+  intern/subdiv_deform.c
   intern/subdiv_displacement.c
   intern/subdiv_displacement_multires.c
   intern/subdiv_eval.c
   intern/subdiv_foreach.c
   intern/subdiv_mesh.c
   intern/subdiv_stats.c
+  intern/subdiv_topology.c
   intern/subsurf_ccg.c
   intern/suggestions.c
   intern/text.c
@@ -239,6 +251,7 @@ set(SRC
   BKE_brush.h
   BKE_bvhutils.h
   BKE_cachefile.h
+  BKE_callbacks.h
   BKE_camera.h
   BKE_ccg.h
   BKE_cdderivedmesh.h
@@ -274,6 +287,7 @@ set(SRC
   BKE_idcode.h
   BKE_idprop.h
   BKE_image.h
+  BKE_image_save.h
   BKE_ipo.h
   BKE_key.h
   BKE_keyconfig.h
@@ -296,8 +310,10 @@ set(SRC
   BKE_mesh_iterators.h
   BKE_mesh_mapping.h
   BKE_mesh_remap.h
+  BKE_mesh_remesh_voxel.h
   BKE_mesh_runtime.h
   BKE_mesh_tangent.h
+  BKE_mirror.h
   BKE_modifier.h
   BKE_movieclip.h
   BKE_multires.h
@@ -327,9 +343,11 @@ set(SRC
   BKE_studiolight.h
   BKE_subdiv.h
   BKE_subdiv_ccg.h
+  BKE_subdiv_deform.h
   BKE_subdiv_eval.h
   BKE_subdiv_foreach.h
   BKE_subdiv_mesh.h
+  BKE_subdiv_topology.h
   BKE_subsurf.h
   BKE_suggestions.h
   BKE_text.h
@@ -519,9 +537,6 @@ if(WITH_MOD_FLUID)
 endif()
 
 if(WITH_MOD_SMOKE)
-  list(APPEND INC
-    ../../../intern/smoke/extern
-  )
   list(APPEND LIB
     bf_intern_smoke
   )
@@ -612,9 +627,22 @@ if(WITH_OPENVDB)
   endif()
 endif()
 
+if(WITH_QUADRIFLOW)
+  list(APPEND INC
+     ../../../intern/quadriflow
+  )
+  list(APPEND LIB
+     bf_intern_quadriflow
+  )
+  add_definitions(-DWITH_QUADRIFLOW)
+endif()
+
 ## Warnings as errors, this is too strict!
 #if(MSVC)
 #   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
 #endif()
 
 blender_add_lib(bf_blenkernel "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# Needed so we can use dna_type_offsets.h for defaults initialization.
+add_dependencies(bf_blenkernel bf_dna)

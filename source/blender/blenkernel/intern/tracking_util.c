@@ -76,8 +76,9 @@ TracksMap *tracks_map_new(const char *object_name,
 
   map->tracks = MEM_callocN(sizeof(MovieTrackingTrack) * num_tracks, "TrackingsMap tracks");
 
-  if (customdata_size)
+  if (customdata_size) {
     map->customdata = MEM_callocN(customdata_size * num_tracks, "TracksMap customdata");
+  }
 
   map->hash = BLI_ghash_ptr_new("TracksMap hash");
 
@@ -98,8 +99,9 @@ void tracks_map_get_indexed_element(TracksMap *map,
 {
   *track = &map->tracks[index];
 
-  if (map->customdata)
+  if (map->customdata) {
     *customdata = &map->customdata[index * map->customdata_size];
+  }
 }
 
 void tracks_map_insert(TracksMap *map, MovieTrackingTrack *track, void *customdata)
@@ -110,8 +112,9 @@ void tracks_map_insert(TracksMap *map, MovieTrackingTrack *track, void *customda
 
   map->tracks[map->ptr] = new_track;
 
-  if (customdata)
+  if (customdata) {
     memcpy(&map->customdata[map->ptr * map->customdata_size], customdata, map->customdata_size);
+  }
 
   BLI_ghash_insert(map->hash, &map->tracks[map->ptr], track);
 
@@ -223,14 +226,16 @@ void tracks_map_free(TracksMap *map, void (*customdata_free)(void *customdata))
   BLI_ghash_free(map->hash, NULL, NULL);
 
   for (i = 0; i < map->num_tracks; i++) {
-    if (map->customdata && customdata_free)
+    if (map->customdata && customdata_free) {
       customdata_free(&map->customdata[i * map->customdata_size]);
+    }
 
     BKE_tracking_track_free(&map->tracks[i]);
   }
 
-  if (map->customdata)
+  if (map->customdata) {
     MEM_freeN(map->customdata);
+  }
 
   MEM_freeN(map->tracks);
 
@@ -420,13 +425,16 @@ void tracking_marker_insert_disabled(MovieTrackingTrack *track,
   marker_new.flag &= ~MARKER_TRACKED;
   marker_new.flag |= MARKER_DISABLED;
 
-  if (before)
+  if (before) {
     marker_new.framenr--;
-  else
+  }
+  else {
     marker_new.framenr++;
+  }
 
-  if (overwrite || !BKE_tracking_track_has_marker_at_frame(track, marker_new.framenr))
+  if (overwrite || !BKE_tracking_track_has_marker_at_frame(track, marker_new.framenr)) {
     BKE_tracking_marker_insert(track, &marker_new);
+  }
 }
 
 /* Fill in Libmv C-API camera intrinsics options from tracking structure. */
@@ -511,8 +519,9 @@ MovieTrackingMarker *tracking_get_keyframed_marker(MovieTrackingTrack *track,
     MovieTrackingMarker *cur_marker = &track->markers[a];
     MovieTrackingMarker *next_marker = NULL;
 
-    if (next >= 0 && next < track->markersnr)
+    if (next >= 0 && next < track->markersnr) {
       next_marker = &track->markers[next];
+    }
 
     if ((cur_marker->flag & MARKER_DISABLED) == 0) {
       /* If it'll happen so we didn't find a real keyframe marker,
@@ -531,8 +540,9 @@ MovieTrackingMarker *tracking_get_keyframed_marker(MovieTrackingTrack *track,
         }
       }
       else if (next_marker->flag & MARKER_DISABLED) {
-        if (marker_keyed_fallback == NULL)
+        if (marker_keyed_fallback == NULL) {
           marker_keyed_fallback = cur_marker;
+        }
       }
 
       is_keyframed |= (cur_marker->flag & MARKER_TRACKED) == 0;
@@ -547,8 +557,9 @@ MovieTrackingMarker *tracking_get_keyframed_marker(MovieTrackingTrack *track,
     a = next;
   }
 
-  if (marker_keyed == NULL)
+  if (marker_keyed == NULL) {
     marker_keyed = marker_keyed_fallback;
+  }
 
   return marker_keyed;
 }
@@ -677,7 +688,7 @@ static ImBuf *make_grayscale_ibuf_copy(ImBuf *ibuf)
     grayscale->mall |= IB_rectfloat;
     grayscale->flags |= IB_rectfloat;
 
-    for (i = 0; i < grayscale->x * grayscale->y; ++i) {
+    for (i = 0; i < grayscale->x * grayscale->y; i++) {
       const float *pixel = ibuf->rect_float + ibuf->channels * i;
 
       grayscale->rect_float[i] = 0.2126f * pixel[0] + 0.7152f * pixel[1] + 0.0722f * pixel[2];
@@ -779,9 +790,9 @@ static ImBuf *accessor_get_ibuf(TrackingImageAccessor *accessor,
        * here. Probably Libmv is better to work in the linear space,
        * but keep sRGB space here for compatibility for now.
        */
-      for (y = 0; y < clamped_height; ++y) {
+      for (y = 0; y < clamped_height; y++) {
         int x;
-        for (x = 0; x < clamped_width; ++x) {
+        for (x = 0; x < clamped_width; x++) {
           int src_x = x + clamped_origin_x, src_y = y + clamped_origin_y;
           int dst_x = x + dst_offset_x, dst_y = y + dst_offset_y;
           int dst_index = (dst_y * width + dst_x) * 4,
@@ -927,10 +938,14 @@ static libmv_CacheKey accessor_get_mask_for_track_callback(libmv_FrameAccessorUs
   BKE_movieclip_get_size(clip, &user, &frame_width, &frame_height);
   /* Actual mask sampling. */
   MovieTrackingMarker *marker = BKE_tracking_marker_get_exact(track, frame);
-  const float region_min[2] = {region->min[0] - marker->pos[0] * frame_width,
-                               region->min[1] - marker->pos[1] * frame_height};
-  const float region_max[2] = {region->max[0] - marker->pos[0] * frame_width,
-                               region->max[1] - marker->pos[1] * frame_height};
+  const float region_min[2] = {
+      region->min[0] - marker->pos[0] * frame_width,
+      region->min[1] - marker->pos[1] * frame_height,
+  };
+  const float region_max[2] = {
+      region->max[0] - marker->pos[0] * frame_width,
+      region->max[1] - marker->pos[1] * frame_height,
+  };
   *r_destination = tracking_track_get_mask_for_region(
       frame_width, frame_height, region_min, region_max, track);
   *r_width = region->max[0] - region->min[0];

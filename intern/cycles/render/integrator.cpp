@@ -47,6 +47,10 @@ NODE_DEFINE(Integrator)
 
   SOCKET_INT(volume_max_steps, "Volume Max Steps", 1024);
   SOCKET_FLOAT(volume_step_size, "Volume Step Size", 0.1f);
+  static NodeEnum volume_integrator_enum;
+  volume_integrator_enum.insert("path", VOLUME_INTEGRATOR_RAY_MARCH);
+  volume_integrator_enum.insert("branched_path", VOLUME_INTEGRATOR_UNBIASED);
+  SOCKET_ENUM(volume_integrator, "Volume Integrator", volume_integrator_enum, VOLUME_INTEGRATOR_RAY_MARCH);
 
   SOCKET_FLOAT(volume_max_density, "Volume Max Density", 1.0f);
 

@@ -199,6 +199,12 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg,
                                                 __uint_as_float(data_subsurface_color.z),
                                                 __uint_as_float(data_subsurface_color.w));
 
+      if (kernel_data.integrator.feature_overrides & DIFFUSE_SHADERS) {
+        base_color = make_float3(0.5f, 0.5f, 0.5f);
+        subsurface_color = make_float3(0.0f, 0.0f, 0.0f);
+        subsurface = 0.0f;
+      }
+
       float3 weight = sd->svm_closure_weight * mix_weight;
 
 #  ifdef __SUBSURFACE__

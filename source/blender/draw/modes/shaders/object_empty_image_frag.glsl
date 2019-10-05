@@ -9,6 +9,7 @@ out vec4 fragColor;
 
 #ifndef USE_WIRE
 uniform sampler2D image;
+uniform bool imagePremultiplied;
 #endif
 
 uniform int depthMode;
@@ -19,7 +20,7 @@ void main()
 #ifdef USE_WIRE
   fragColor = finalColor;
 #else
-  vec4 tex_col = texture(image, texCoord_interp);
+  vec4 tex_col = texture_read_as_srgb(image, imagePremultiplied, texCoord_interp);
   fragColor = finalColor * tex_col;
 
   if (useAlphaTest) {
@@ -36,9 +37,15 @@ void main()
 
   if (depthMode == DEPTH_BACK) {
     gl_FragDepth = 0.999999;
+#ifdef USE_WIRE
+    gl_FragDepth -= 1e-5;
+#endif
   }
   else if (depthMode == DEPTH_FRONT) {
     gl_FragDepth = 0.000001;
+#ifdef USE_WIRE
+    gl_FragDepth -= 1e-5;
+#endif
   }
   else if (depthMode == DEPTH_UNCHANGED) {
     gl_FragDepth = gl_FragCoord.z;

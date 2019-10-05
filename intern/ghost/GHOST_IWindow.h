@@ -205,22 +205,23 @@ class GHOST_IWindow {
 
   /**
    * Gets the current swap interval for swapBuffers.
-   * \param intervalOut pointer to location to return swap interval (left untouched if there is an error)
+   * \param intervalOut pointer to location to return swap interval
+   * (left untouched if there is an error)
    * \return A boolean success indicator of if swap interval was successfully read.
    */
   virtual GHOST_TSuccess getSwapInterval(int &intervalOut) = 0;
-
-  /**
-   * Gets the current swap interval for swapBuffers.
-   * \return Number of AA Samples (0 if there is no multisample buffer)
-   */
-  virtual GHOST_TUns16 getNumOfAASamples() = 0;
 
   /**
    * Activates the drawing context of this window.
    * \return  A boolean success indicator.
    */
   virtual GHOST_TSuccess activateDrawingContext() = 0;
+
+  /**
+   * Gets the OpenGL framebuffer associated with the window's contents.
+   * \return The name of an OpenGL framebuffer object.
+   */
+  virtual unsigned int getDefaultFramebuffer() = 0;
 
   /**
    * Invalidates the contents of this window.
@@ -239,6 +240,8 @@ class GHOST_IWindow {
    * \param userData The window user data.
    */
   virtual void setUserData(const GHOST_TUserDataPtr userData) = 0;
+
+  virtual bool isDialog() const = 0;
 
   /**
    * Returns the tablet data (pressure etc).
@@ -279,6 +282,12 @@ class GHOST_IWindow {
   virtual GHOST_TSuccess setCursorShape(GHOST_TStandardCursor cursorShape) = 0;
 
   /**
+   * Test if the standard cursor shape is supported by current platform.
+   * \return Indication of success.
+   */
+  virtual GHOST_TSuccess hasCursorShape(GHOST_TStandardCursor cursorShape) = 0;
+
+  /**
    * Set the shape of the cursor to a custom cursor.
    * \param   bitmap  The bitmap data for the cursor.
    * \param   mask    The mask data for the cursor.
@@ -286,19 +295,13 @@ class GHOST_IWindow {
    * \param   hotY    The Y coordinate of the cursor hotspot.
    * \return  Indication of success.
    */
-  virtual GHOST_TSuccess setCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                              GHOST_TUns8 mask[16][2],
-                                              int hotX,
-                                              int hotY) = 0;
-
   virtual GHOST_TSuccess setCustomCursorShape(GHOST_TUns8 *bitmap,
                                               GHOST_TUns8 *mask,
                                               int sizex,
                                               int sizey,
                                               int hotX,
                                               int hotY,
-                                              int fg_color,
-                                              int bg_color) = 0;
+                                              bool canInvertColor) = 0;
 
   /**
    * Returns the visibility state of the cursor.
@@ -319,6 +322,7 @@ class GHOST_IWindow {
    * \return  Indication of success.
    */
   virtual GHOST_TSuccess setCursorGrab(GHOST_TGrabCursorMode /*mode*/,
+                                       GHOST_TAxisFlag /*wrap_axis*/,
                                        GHOST_Rect * /*bounds*/,
                                        GHOST_TInt32 /*mouse_ungrab_xy*/[2])
   {

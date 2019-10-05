@@ -1,7 +1,7 @@
 /*
  * compatibility macros to make every ffmpeg installation appear
  * like the most current installation (wrapping some functionality sometimes)
- * it also includes all ffmpeg header files at once, no need to do it 
+ * it also includes all ffmpeg header files at once, no need to do it
  * separately.
  *
  * Copyright (c) 2011 Peter Schlaile
@@ -136,8 +136,8 @@ int av_sample_fmt_is_planar(enum AVSampleFormat sample_fmt)
 
 #endif
 
-/* XXX TODO Probably fix to correct modern flags in code? Not sure how old FFMPEG we want to support though,
- * so for now this will do. */
+/* XXX TODO Probably fix to correct modern flags in code? Not sure how old FFMPEG we want to
+ * support though, so for now this will do. */
 
 #ifndef FF_MIN_BUFFER_SIZE
 #  ifdef AV_INPUT_BUFFER_MIN_SIZE
@@ -215,8 +215,8 @@ int av_get_cropped_height_from_codec(AVCodecContext *pCodecCtx)
   /* really bad hack to remove this dreadfull black bar at the bottom
    with Canon footage and old ffmpeg versions.
    (to fix this properly in older ffmpeg versions one has to write a new
-   demuxer...) 
-     
+   demuxer...)
+
    see the actual fix here for reference:
 
    http://git.libav.org/?p=libav.git;a=commit;h=30f515091c323da59c0f1b533703dedca2f4b95d
@@ -364,7 +364,7 @@ void avcodec_free_frame(AVFrame **frame)
 #  define avio_size url_fsize
 #endif
 
-/* there are some version inbetween, which have avio_... functions but no
+/* There are some version in between, which have avio_... functions but no
  * AVIO_FLAG_... */
 #ifndef AVIO_FLAG_WRITE
 #  define AVIO_FLAG_WRITE URL_WRONLY
@@ -528,35 +528,21 @@ bool av_check_encoded_with_ffmpeg(AVFormatContext *ctx)
   return false;
 }
 
-FFMPEG_INLINE
-AVRational av_get_r_frame_rate_compat(AVFormatContext *ctx, const AVStream *stream)
+/* Libav doesn't have av_guess_frame_rate().
+ * It was introduced in FFmpeg's lavf 55.1.100. */
+#ifdef AV_USING_LIBAV
+AVRational av_guess_frame_rate(AVFormatContext *ctx, AVStream *stream, AVFrame *frame)
 {
-  /* If the video is encoded with FFmpeg and we are decoding with FFmpeg
-   * as well it seems to be more reliable to use r_frame_rate (tbr).
-   *
-   * For other cases we fall back to avg_frame_rate (fps) when possible.
-   */
-#ifdef AV_USING_FFMPEG
-  if (av_check_encoded_with_ffmpeg(ctx)) {
-    return stream->r_frame_rate;
-  }
-#endif
-
-#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(54, 23, 1)
-  /* For until r_frame_rate was deprecated use it. */
+  (void)ctx;
+  (void)frame;
+#  if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(54, 23, 1)
+  /* For until r_frame_rate was deprecated (in Libav) use it. */
   return stream->r_frame_rate;
-#else
-#  ifdef AV_USING_FFMPEG
-  /* Some of the videos might have average frame rate set to, while the
-   * r_frame_rate will show a correct value. This happens, for example, for
-   * OGG video files saved with Blender. */
-  if (stream->avg_frame_rate.den == 0) {
-    return stream->r_frame_rate;
-  }
-#  endif
+#  else
   return stream->avg_frame_rate;
-#endif
+#  endif
 }
+#endif
 
 #if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(51, 32, 0)
 #  define AV_OPT_SEARCH_FAKE_OBJ 0

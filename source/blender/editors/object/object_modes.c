@@ -43,6 +43,7 @@
 #include "DEG_depsgraph.h"
 
 #include "ED_armature.h"
+#include "ED_gpencil.h"
 #include "ED_screen.h"
 
 #include "ED_object.h" /* own include */
@@ -54,28 +55,39 @@
 
 static const char *object_mode_op_string(eObjectMode mode)
 {
-  if (mode & OB_MODE_EDIT)
+  if (mode & OB_MODE_EDIT) {
     return "OBJECT_OT_editmode_toggle";
-  if (mode == OB_MODE_SCULPT)
+  }
+  if (mode == OB_MODE_SCULPT) {
     return "SCULPT_OT_sculptmode_toggle";
-  if (mode == OB_MODE_VERTEX_PAINT)
+  }
+  if (mode == OB_MODE_VERTEX_PAINT) {
     return "PAINT_OT_vertex_paint_toggle";
-  if (mode == OB_MODE_WEIGHT_PAINT)
+  }
+  if (mode == OB_MODE_WEIGHT_PAINT) {
     return "PAINT_OT_weight_paint_toggle";
-  if (mode == OB_MODE_TEXTURE_PAINT)
+  }
+  if (mode == OB_MODE_TEXTURE_PAINT) {
     return "PAINT_OT_texture_paint_toggle";
-  if (mode == OB_MODE_PARTICLE_EDIT)
+  }
+  if (mode == OB_MODE_PARTICLE_EDIT) {
     return "PARTICLE_OT_particle_edit_toggle";
-  if (mode == OB_MODE_POSE)
+  }
+  if (mode == OB_MODE_POSE) {
     return "OBJECT_OT_posemode_toggle";
-  if (mode == OB_MODE_EDIT_GPENCIL)
+  }
+  if (mode == OB_MODE_EDIT_GPENCIL) {
     return "GPENCIL_OT_editmode_toggle";
-  if (mode == OB_MODE_PAINT_GPENCIL)
+  }
+  if (mode == OB_MODE_PAINT_GPENCIL) {
     return "GPENCIL_OT_paintmode_toggle";
-  if (mode == OB_MODE_SCULPT_GPENCIL)
+  }
+  if (mode == OB_MODE_SCULPT_GPENCIL) {
     return "GPENCIL_OT_sculptmode_toggle";
-  if (mode == OB_MODE_WEIGHT_GPENCIL)
+  }
+  if (mode == OB_MODE_WEIGHT_GPENCIL) {
     return "GPENCIL_OT_weightmode_toggle";
+  }
   return NULL;
 }
 
@@ -86,8 +98,9 @@ static const char *object_mode_op_string(eObjectMode mode)
 bool ED_object_mode_compat_test(const Object *ob, eObjectMode mode)
 {
   if (ob) {
-    if (mode == OB_MODE_OBJECT)
+    if (mode == OB_MODE_OBJECT) {
       return true;
+    }
 
     switch (ob->type) {
       case OB_MESH:
@@ -100,16 +113,19 @@ bool ED_object_mode_compat_test(const Object *ob, eObjectMode mode)
       case OB_SURF:
       case OB_FONT:
       case OB_MBALL:
-        if (mode & (OB_MODE_EDIT))
+        if (mode & (OB_MODE_EDIT)) {
           return true;
+        }
         break;
       case OB_LATTICE:
-        if (mode & (OB_MODE_EDIT | OB_MODE_WEIGHT_PAINT))
+        if (mode & (OB_MODE_EDIT | OB_MODE_WEIGHT_PAINT)) {
           return true;
+        }
         break;
       case OB_ARMATURE:
-        if (mode & (OB_MODE_EDIT | OB_MODE_POSE))
+        if (mode & (OB_MODE_EDIT | OB_MODE_POSE)) {
           return true;
+        }
         break;
       case OB_GPENCIL:
         if (mode & (OB_MODE_EDIT | OB_MODE_EDIT_GPENCIL | OB_MODE_PAINT_GPENCIL |
@@ -155,14 +171,6 @@ void ED_object_mode_toggle(bContext *C, eObjectMode mode)
 
     if (opstring) {
       wmOperatorType *ot = WM_operatortype_find(opstring, false);
-      if (ot->flag & OPTYPE_USE_EVAL_DATA) {
-        /* We need to force refresh of depsgraph after undo step,
-         * redoing the operator *may* rely on some valid evaluated data. */
-        struct Main *bmain = CTX_data_main(C);
-        Scene *scene = CTX_data_scene(C);
-        ViewLayer *view_layer = CTX_data_view_layer(C);
-        BKE_scene_view_layer_graph_evaluated_ensure(bmain, scene, view_layer);
-      }
       WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_REGION_WIN, NULL);
     }
   }
@@ -178,9 +186,8 @@ void ED_object_mode_set(bContext *C, eObjectMode mode)
   wm->op_undo_depth--;
 }
 
-void ED_object_mode_exit(bContext *C)
+void ED_object_mode_exit(bContext *C, Depsgraph *depsgraph)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   struct Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -261,7 +268,7 @@ static bool ed_object_mode_generic_exit_ex(struct Main *bmain,
       if (only_test) {
         return true;
       }
-      ED_object_sculptmode_exit_ex(depsgraph, scene, ob);
+      ED_object_sculptmode_exit_ex(bmain, depsgraph, scene, ob);
     }
   }
   else if (ob->mode & OB_MODE_POSE) {
@@ -271,6 +278,12 @@ static bool ed_object_mode_generic_exit_ex(struct Main *bmain,
       }
       ED_object_posemode_exit_ex(bmain, ob);
     }
+  }
+  else if ((ob->type == OB_GPENCIL) && ((ob->mode & OB_MODE_OBJECT) == 0)) {
+    if (only_test) {
+      return true;
+    }
+    ED_object_gpencil_exit(bmain, ob);
   }
   else {
     if (only_test) {

@@ -19,6 +19,7 @@
 
 #ifndef __BKE_ACTION_H__
 #define __BKE_ACTION_H__
+
 /** \file
  * \ingroup bke
  * \brief Blender kernel action and pose functionality.
@@ -35,6 +36,7 @@ struct bActionGroup;
 struct bItasc;
 struct bPose;
 struct bPoseChannel;
+struct bPoseChannel_Runtime;
 
 /* Kernel prototypes */
 #ifdef __cplusplus
@@ -132,7 +134,10 @@ void action_groups_clear_tempflags(struct bAction *act);
 void BKE_pose_channel_free(struct bPoseChannel *pchan);
 void BKE_pose_channel_free_ex(struct bPoseChannel *pchan, bool do_id_user);
 
-void BKE_pose_channel_free_bbone_cache(struct bPoseChannel *pchan);
+void BKE_pose_channel_runtime_reset(struct bPoseChannel_Runtime *runtime);
+void BKE_pose_channel_runtime_free(struct bPoseChannel_Runtime *runtime);
+
+void BKE_pose_channel_free_bbone_cache(struct bPoseChannel_Runtime *runtime);
 
 void BKE_pose_channels_free(struct bPose *pose);
 void BKE_pose_channels_free_ex(struct bPose *pose, bool do_id_user);
@@ -156,6 +161,7 @@ void BKE_pose_copy_data(struct bPose **dst, const struct bPose *src, const bool 
 void BKE_pose_channel_copy_data(struct bPoseChannel *pchan, const struct bPoseChannel *pchan_from);
 struct bPoseChannel *BKE_pose_channel_find_name(const struct bPose *pose, const char *name);
 struct bPoseChannel *BKE_pose_channel_active(struct Object *ob);
+struct bPoseChannel *BKE_pose_channel_active_or_first_selected(struct Object *ob);
 struct bPoseChannel *BKE_pose_channel_verify(struct bPose *pose, const char *name);
 struct bPoseChannel *BKE_pose_channel_get_mirrored(const struct bPose *pose, const char *name);
 

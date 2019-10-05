@@ -36,6 +36,7 @@
 #include "DNA_armature_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_utildefines.h"
 #include "BLI_listbase.h"
@@ -127,13 +128,15 @@ ModifierData *modifier_new(int type)
 
   md->type = type;
   md->mode = eModifierMode_Realtime | eModifierMode_Render | eModifierMode_Expanded;
-  md->flag = eModifierFlag_StaticOverride_Local;
+  md->flag = eModifierFlag_OverrideLibrary_Local;
 
-  if (mti->flags & eModifierTypeFlag_EnableInEditmode)
+  if (mti->flags & eModifierTypeFlag_EnableInEditmode) {
     md->mode |= eModifierMode_Editmode;
+  }
 
-  if (mti->initData)
+  if (mti->initData) {
     mti->initData(md);
+  }
 
   return md;
 }
@@ -162,10 +165,12 @@ void modifier_free_ex(ModifierData *md, const int flag)
     }
   }
 
-  if (mti->freeData)
+  if (mti->freeData) {
     mti->freeData(md);
-  if (md->error)
+  }
+  if (md->error) {
     MEM_freeN(md->error);
+  }
 
   MEM_freeN(md);
 }
@@ -222,9 +227,11 @@ ModifierData *modifiers_findByType(Object *ob, ModifierType type)
 {
   ModifierData *md = ob->modifiers.first;
 
-  for (; md; md = md->next)
-    if (md->type == type)
+  for (; md; md = md->next) {
+    if (md->type == type) {
       break;
+    }
+  }
 
   return md;
 }
@@ -256,8 +263,9 @@ void modifiers_foreachObjectLink(Object *ob, ObjectWalkFunc walk, void *userData
   for (; md; md = md->next) {
     const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
 
-    if (mti->foreachObjectLink)
+    if (mti->foreachObjectLink) {
       mti->foreachObjectLink(md, ob, walk, userData);
+    }
   }
 }
 
@@ -268,8 +276,9 @@ void modifiers_foreachIDLink(Object *ob, IDWalkFunc walk, void *userData)
   for (; md; md = md->next) {
     const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
 
-    if (mti->foreachIDLink)
+    if (mti->foreachIDLink) {
       mti->foreachIDLink(md, ob, walk, userData);
+    }
     else if (mti->foreachObjectLink) {
       /* each Object can masquerade as an ID, so this should be OK */
       ObjectWalkFunc fp = (ObjectWalkFunc)walk;
@@ -285,8 +294,9 @@ void modifiers_foreachTexLink(Object *ob, TexWalkFunc walk, void *userData)
   for (; md; md = md->next) {
     const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
 
-    if (mti->foreachTexLink)
+    if (mti->foreachTexLink) {
       mti->foreachTexLink(md, ob, walk, userData);
+    }
   }
 }
 
@@ -391,8 +401,9 @@ void modifier_setError(ModifierData *md, const char *_format, ...)
   va_end(ap);
   buffer[sizeof(buffer) - 1] = '\0';
 
-  if (md->error)
+  if (md->error) {
     MEM_freeN(md->error);
+  }
 
   md->error = BLI_strdup(buffer);
 
@@ -426,28 +437,35 @@ int modifiers_getCageIndex(struct Scene *scene,
     const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
     bool supports_mapping;
 
-    if (mti->isDisabled && mti->isDisabled(scene, md, 0))
+    if (mti->isDisabled && mti->isDisabled(scene, md, 0)) {
       continue;
-    if (!(mti->flags & eModifierTypeFlag_SupportsEditmode))
+    }
+    if (!(mti->flags & eModifierTypeFlag_SupportsEditmode)) {
       continue;
-    if (md->mode & eModifierMode_DisableTemporary)
+    }
+    if (md->mode & eModifierMode_DisableTemporary) {
       continue;
+    }
 
     supports_mapping = modifier_supportsMapping(md);
     if (r_lastPossibleCageIndex && supports_mapping) {
       *r_lastPossibleCageIndex = i;
     }
 
-    if (!(md->mode & eModifierMode_Realtime))
+    if (!(md->mode & eModifierMode_Realtime)) {
       continue;
-    if (!(md->mode & eModifierMode_Editmode))
+    }
+    if (!(md->mode & eModifierMode_Editmode)) {
       continue;
+    }
 
-    if (!supports_mapping)
+    if (!supports_mapping) {
       break;
+    }
 
-    if (md->mode & eModifierMode_OnCage)
+    if (md->mode & eModifierMode_OnCage) {
       cageIndex = i;
+    }
   }
 
   return cageIndex;
@@ -484,22 +502,27 @@ bool modifiers_isParticleEnabled(Object *ob)
 /**
  * Check whether is enabled.
  *
- * \param scene: Current scene, may be NULL, in which case isDisabled callback of the modifier is never called.
+ * \param scene: Current scene, may be NULL,
+ * in which case isDisabled callback of the modifier is never called.
  */
 bool modifier_isEnabled(const struct Scene *scene, ModifierData *md, int required_mode)
 {
   const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
 
-  if ((md->mode & required_mode) != required_mode)
+  if ((md->mode & required_mode) != required_mode) {
     return false;
+  }
   if (scene != NULL && mti->isDisabled &&
-      mti->isDisabled(scene, md, required_mode == eModifierMode_Render))
+      mti->isDisabled(scene, md, required_mode == eModifierMode_Render)) {
     return false;
-  if (md->mode & eModifierMode_DisableTemporary)
+  }
+  if (md->mode & eModifierMode_DisableTemporary) {
     return false;
+  }
   if ((required_mode & eModifierMode_Editmode) &&
-      !(mti->flags & eModifierTypeFlag_SupportsEditmode))
+      !(mti->flags & eModifierTypeFlag_SupportsEditmode)) {
     return false;
+  }
 
   return true;
 }
@@ -507,13 +530,14 @@ bool modifier_isEnabled(const struct Scene *scene, ModifierData *md, int require
 CDMaskLink *modifiers_calcDataMasks(struct Scene *scene,
                                     Object *ob,
                                     ModifierData *md,
-                                    const CustomData_MeshMasks *dataMask,
+                                    CustomData_MeshMasks *final_datamask,
                                     int required_mode,
                                     ModifierData *previewmd,
                                     const CustomData_MeshMasks *previewmask)
 {
   CDMaskLink *dataMasks = NULL;
   CDMaskLink *curr, *prev;
+  bool have_deform_modifier = false;
 
   /* build a list of modifier data requirements in reverse order */
   for (; md; md = md->next) {
@@ -522,17 +546,32 @@ CDMaskLink *modifiers_calcDataMasks(struct Scene *scene,
     curr = MEM_callocN(sizeof(CDMaskLink), "CDMaskLink");
 
     if (modifier_isEnabled(scene, md, required_mode)) {
-      if (mti->requiredDataMask)
+      if (mti->type == eModifierTypeType_OnlyDeform) {
+        have_deform_modifier = true;
+      }
+
+      if (mti->requiredDataMask) {
         mti->requiredDataMask(ob, md, &curr->mask);
+      }
 
       if (previewmd == md && previewmask != NULL) {
         CustomData_MeshMasks_update(&curr->mask, previewmask);
       }
     }
 
+    if (!have_deform_modifier) {
+      /* Don't create orco layer when there is no deformation, we fall
+       * back to regular vertex coordinates */
+      curr->mask.vmask &= ~CD_MASK_ORCO;
+    }
+
     /* prepend new datamask */
     curr->next = dataMasks;
     dataMasks = curr;
+  }
+
+  if (!have_deform_modifier) {
+    final_datamask->vmask &= ~CD_MASK_ORCO;
   }
 
   /* build the list of required data masks - each mask in the list must
@@ -546,7 +585,7 @@ CDMaskLink *modifiers_calcDataMasks(struct Scene *scene,
       CustomData_MeshMasks_update(&curr->mask, &prev->mask);
     }
     else {
-      CustomData_MeshMasks_update(&curr->mask, dataMask);
+      CustomData_MeshMasks_update(&curr->mask, final_datamask);
     }
   }
 
@@ -560,13 +599,15 @@ ModifierData *modifiers_getLastPreview(struct Scene *scene, ModifierData *md, in
 {
   ModifierData *tmp_md = NULL;
 
-  if ((required_mode & ~eModifierMode_Editmode) != eModifierMode_Realtime)
+  if ((required_mode & ~eModifierMode_Editmode) != eModifierMode_Realtime) {
     return tmp_md;
+  }
 
   /* Find the latest modifier in stack generating preview. */
   for (; md; md = md->next) {
-    if (modifier_isEnabled(scene, md, required_mode) && modifier_isPreview(md))
+    if (modifier_isEnabled(scene, md, required_mode) && modifier_isPreview(md)) {
       tmp_md = md;
+    }
   }
   return tmp_md;
 }
@@ -605,10 +646,12 @@ ModifierData *modifiers_getVirtualModifierList(Object *ob,
 
   /* shape key modifier, not yet for curves */
   if (ELEM(ob->type, OB_MESH, OB_LATTICE) && BKE_key_from_object(ob)) {
-    if (ob->type == OB_MESH && (ob->shapeflag & OB_SHAPE_EDIT_MODE))
+    if (ob->type == OB_MESH && (ob->shapeflag & OB_SHAPE_EDIT_MODE)) {
       virtualModifierData->smd.modifier.mode |= eModifierMode_Editmode | eModifierMode_OnCage;
-    else
+    }
+    else {
       virtualModifierData->smd.modifier.mode &= ~eModifierMode_Editmode | eModifierMode_OnCage;
+    }
 
     virtualModifierData->smd.modifier.next = md;
     md = &virtualModifierData->smd.modifier;
@@ -630,13 +673,15 @@ Object *modifiers_isDeformedByArmature(Object *ob)
   for (; md; md = md->next) {
     if (md->type == eModifierType_Armature) {
       amd = (ArmatureModifierData *)md;
-      if (amd->object && (amd->object->flag & SELECT))
+      if (amd->object && (amd->object->base_flag & BASE_SELECTED)) {
         return amd->object;
+      }
     }
   }
 
-  if (amd) /* if were still here then return the last armature */
+  if (amd) { /* if were still here then return the last armature */
     return amd->object;
+  }
 
   return NULL;
 }
@@ -651,13 +696,15 @@ Object *modifiers_isDeformedByMeshDeform(Object *ob)
   for (; md; md = md->next) {
     if (md->type == eModifierType_MeshDeform) {
       mdmd = (MeshDeformModifierData *)md;
-      if (mdmd->object && (mdmd->object->flag & SELECT))
+      if (mdmd->object && (mdmd->object->base_flag & BASE_SELECTED)) {
         return mdmd->object;
+      }
     }
   }
 
-  if (mdmd) /* if were still here then return the last armature */
+  if (mdmd) { /* if were still here then return the last armature */
     return mdmd->object;
+  }
 
   return NULL;
 }
@@ -675,13 +722,15 @@ Object *modifiers_isDeformedByLattice(Object *ob)
   for (; md; md = md->next) {
     if (md->type == eModifierType_Lattice) {
       lmd = (LatticeModifierData *)md;
-      if (lmd->object && (lmd->object->flag & SELECT))
+      if (lmd->object && (lmd->object->base_flag & BASE_SELECTED)) {
         return lmd->object;
+      }
     }
   }
 
-  if (lmd) /* if were still here then return the last lattice */
+  if (lmd) { /* if were still here then return the last lattice */
     return lmd->object;
+  }
 
   return NULL;
 }
@@ -699,15 +748,34 @@ Object *modifiers_isDeformedByCurve(Object *ob)
   for (; md; md = md->next) {
     if (md->type == eModifierType_Curve) {
       cmd = (CurveModifierData *)md;
-      if (cmd->object && (cmd->object->flag & SELECT))
+      if (cmd->object && (cmd->object->base_flag & BASE_SELECTED)) {
         return cmd->object;
+      }
     }
   }
 
-  if (cmd) /* if were still here then return the last curve */
+  if (cmd) { /* if were still here then return the last curve */
     return cmd->object;
+  }
 
   return NULL;
+}
+
+bool modifiers_usesMultires(Object *ob)
+{
+  VirtualModifierData virtualModifierData;
+  ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+  MultiresModifierData *mmd = NULL;
+
+  for (; md; md = md->next) {
+    if (md->type == eModifierType_Multires) {
+      mmd = (MultiresModifierData *)md;
+      if (mmd->totlvl != 0) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 bool modifiers_usesArmature(Object *ob, bArmature *arm)
@@ -718,11 +786,47 @@ bool modifiers_usesArmature(Object *ob, bArmature *arm)
   for (; md; md = md->next) {
     if (md->type == eModifierType_Armature) {
       ArmatureModifierData *amd = (ArmatureModifierData *)md;
-      if (amd->object && amd->object->data == arm)
+      if (amd->object && amd->object->data == arm) {
         return true;
+      }
     }
   }
 
+  return false;
+}
+
+bool modifiers_usesSubsurfFacedots(struct Scene *scene, Object *ob)
+{
+  /* Search (backward) in the modifier stack to find if we have a subsurf modifier (enabled) before
+   * the last modifier displayed on cage (or if the subsurf is the last). */
+  VirtualModifierData virtualModifierData;
+  ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+  int cage_index = modifiers_getCageIndex(scene, ob, NULL, 1);
+  if (cage_index == -1) {
+    return false;
+  }
+  /* Find first modifier enabled on cage. */
+  for (int i = 0; md && i < cage_index; i++) {
+    md = md->next;
+  }
+  /* Now from this point, search for subsurf modifier. */
+  for (; md; md = md->prev) {
+    const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+    if (md->type == eModifierType_Subsurf) {
+      ModifierMode mode = eModifierMode_Realtime | eModifierMode_Editmode;
+      if (modifier_isEnabled(scene, md, mode)) {
+        return true;
+      }
+    }
+    else if (mti->type == eModifierTypeType_OnlyDeform) {
+      /* These modifiers do not reset the subdiv flag nor change the topology.
+       * We can still search for a subsurf modifier. */
+    }
+    else {
+      /* Other modifiers may reset the subdiv facedot flag or create. */
+      return false;
+    }
+  }
   return false;
 }
 
@@ -759,8 +863,9 @@ bool modifiers_isPreview(Object *ob)
   ModifierData *md = ob->modifiers.first;
 
   for (; md; md = md->next) {
-    if (modifier_isPreview(md))
+    if (modifier_isPreview(md)) {
       return true;
+    }
   }
 
   return false;
@@ -786,8 +891,9 @@ void test_object_modifiers(Object *ob)
   /* just multires checked for now, since only multires
    * modifies mesh data */
 
-  if (ob->type != OB_MESH)
+  if (ob->type != OB_MESH) {
     return;
+  }
 
   for (md = ob->modifiers.first; md; md = md->next) {
     if (md->type == eModifierType_Multires) {
@@ -892,10 +998,11 @@ void modwrap_deformVertsEM(ModifierData *md,
 /**
  * Get evaluated mesh for other evaluated object, which is used as an operand for the modifier,
  * e.g. second operand for boolean modifier.
- * Note that modifiers in stack always get fully evaluated COW ID pointers, never original ones. Makes things simpler.
+ * Note that modifiers in stack always get fully evaluated COW ID pointers,
+ * never original ones. Makes things simpler.
  *
- * \param get_cage_mesh Return evaluated mesh with only deforming modifiers applied
- *                      (i.e. mesh topology remains the same as original one, a.k.a. 'cage' mesh).
+ * \param get_cage_mesh: Return evaluated mesh with only deforming modifiers applied
+ * (i.e. mesh topology remains the same as original one, a.k.a. 'cage' mesh).
  */
 Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(Object *ob_eval,
                                                             const bool get_cage_mesh)
@@ -905,8 +1012,8 @@ Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(Object *ob_eval,
   if ((ob_eval->type == OB_MESH) && (ob_eval->mode & OB_MODE_EDIT)) {
     /* In EditMode, evaluated mesh is stored in BMEditMesh, not the object... */
     BMEditMesh *em = BKE_editmesh_from_object(ob_eval);
-    if (em !=
-        NULL) { /* em might not exist yet in some cases, just after loading a .blend file, see T57878. */
+    /* 'em' might not exist yet in some cases, just after loading a .blend file, see T57878. */
+    if (em != NULL) {
       me = (get_cage_mesh && em->mesh_eval_cage != NULL) ? em->mesh_eval_cage :
                                                            em->mesh_eval_final;
     }

@@ -23,10 +23,11 @@
  * or other details.
  * Typical view-control usage:
  *
- * - acquire a view-control (#ED_view3d_cameracontrol_acquire).
- * - modify ``rv3d->ofs``, ``rv3d->viewquat``.
- * - update the view data (#ED_view3d_cameracontrol_acquire) - within a loop which draws the viewport.
- * - finish and release the view-control (#ED_view3d_cameracontrol_release),
+ * - Acquire a view-control (#ED_view3d_cameracontrol_acquire).
+ * - Modify ``rv3d->ofs``, ``rv3d->viewquat``.
+ * - Update the view data (#ED_view3d_cameracontrol_acquire) -
+ *   within a loop which draws the viewport.
+ * - Finish and release the view-control (#ED_view3d_cameracontrol_release),
  *   either keeping the current view or restoring the initial view.
  *
  * Notes:
@@ -86,8 +87,7 @@ typedef struct View3DCameraControl {
   float ofs_backup[3];
   /* backup the views offset in case the user cancels flying in non camera mode */
 
-  /* backup the views quat in case the user cancels flying in non camera mode.
-   * (quat for view, eul for camera) */
+  /* backup the views quat in case the user cancels flying in non camera mode. */
   float rot_backup[4];
   /* remember if were ortho or not, only used for restoring the view if it was a ortho view */
   char persp_backup;
@@ -208,8 +208,8 @@ void ED_view3d_cameracontrol_update(View3DCameraControl *vctrl,
                                     const bool do_rotate,
                                     const bool do_translate)
 {
-  /* we are in camera view so apply the view ofs and quat to the view matrix and set the camera
-   * to the view */
+  /* We are in camera view so apply the view offset and rotation to the view matrix
+   * and set the camera to the view. */
 
   Scene *scene = vctrl->ctx_scene;
   View3D *v3d = vctrl->ctx_v3d;

@@ -52,10 +52,12 @@ static const int proxy_sizes[] = {IMB_PROXY_25, IMB_PROXY_50, IMB_PROXY_75, IMB_
 static const float proxy_fac[] = {0.25, 0.50, 0.75, 1.00};
 
 #ifdef WITH_FFMPEG
-static int tc_types[] = {IMB_TC_RECORD_RUN,
-                         IMB_TC_FREE_RUN,
-                         IMB_TC_INTERPOLATED_REC_DATE_FREE_RUN,
-                         IMB_TC_RECORD_RUN_NO_GAPS};
+static int tc_types[] = {
+    IMB_TC_RECORD_RUN,
+    IMB_TC_FREE_RUN,
+    IMB_TC_INTERPOLATED_REC_DATE_FREE_RUN,
+    IMB_TC_RECORD_RUN_NO_GAPS,
+};
 #endif
 
 #define INDEX_FILE_VERSION 1
@@ -740,7 +742,7 @@ static IndexBuildContext *index_ffmpeg_create_context(struct anim *anim,
 
   /* Find the video stream */
   context->videoStream = -1;
-  for (i = 0; i < context->iFormatCtx->nb_streams; i++)
+  for (i = 0; i < context->iFormatCtx->nb_streams; i++) {
     if (context->iFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
       if (streamcount > 0) {
         streamcount--;
@@ -749,6 +751,7 @@ static IndexBuildContext *index_ffmpeg_create_context(struct anim *anim,
       context->videoStream = i;
       break;
     }
+  }
 
   if (context->videoStream == -1) {
     avformat_close_input(&context->iFormatCtx);
@@ -865,8 +868,9 @@ static void index_rebuild_ffmpeg_proc_decoded_frame(FFmpegIndexBuilderContext *c
     if (context->tcs_in_use & tc_types[i]) {
       int tc_frameno = context->frameno;
 
-      if (tc_types[i] == IMB_TC_RECORD_RUN_NO_GAPS)
+      if (tc_types[i] == IMB_TC_RECORD_RUN_NO_GAPS) {
         tc_frameno = context->frameno_gapless;
+      }
 
       IMB_index_builder_proc_frame(context->indexer[i],
                                    curr_packet->data,
@@ -896,7 +900,7 @@ static int index_rebuild_ffmpeg(FFmpegIndexBuilderContext *context,
 
   stream_size = avio_size(context->iFormatCtx->pb);
 
-  context->frame_rate = av_q2d(av_get_r_frame_rate_compat(context->iFormatCtx, context->iStream));
+  context->frame_rate = av_q2d(av_guess_frame_rate(context->iFormatCtx, context->iStream, NULL));
   context->pts_time_base = av_q2d(context->iStream->time_base);
 
   while (av_read_frame(context->iFormatCtx, &next_packet) >= 0) {
@@ -1146,7 +1150,7 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
 
   /* Don't generate the same file twice! */
   if (file_list) {
-    for (i = 0; i < IMB_PROXY_MAX_SLOT; ++i) {
+    for (i = 0; i < IMB_PROXY_MAX_SLOT; i++) {
       IMB_Proxy_Size proxy_size = proxy_sizes[i];
       if (proxy_size & proxy_sizes_to_build) {
         char filename[FILE_MAX];
@@ -1168,7 +1172,7 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
     IMB_Proxy_Size built_proxies = IMB_anim_proxy_get_existing(anim);
     if (built_proxies != 0) {
 
-      for (i = 0; i < IMB_PROXY_MAX_SLOT; ++i) {
+      for (i = 0; i < IMB_PROXY_MAX_SLOT; i++) {
         IMB_Proxy_Size proxy_size = proxy_sizes[i];
         if (proxy_size & built_proxies) {
           char filename[FILE_MAX];
@@ -1199,8 +1203,9 @@ IndexBuildContext *IMB_anim_index_rebuild_context(struct anim *anim,
 #endif
   }
 
-  if (context)
+  if (context) {
     context->anim_type = anim->curtype;
+  }
 
   return context;
 
@@ -1340,7 +1345,7 @@ IMB_Proxy_Size IMB_anim_proxy_get_existing(struct anim *anim)
   const int num_proxy_sizes = IMB_PROXY_MAX_SLOT;
   IMB_Proxy_Size existing = 0;
   int i;
-  for (i = 0; i < num_proxy_sizes; ++i) {
+  for (i = 0; i < num_proxy_sizes; i++) {
     IMB_Proxy_Size proxy_size = proxy_sizes[i];
     char filename[FILE_MAX];
     get_proxy_filename(anim, proxy_size, filename, false);

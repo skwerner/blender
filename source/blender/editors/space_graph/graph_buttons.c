@@ -76,23 +76,30 @@ static int graph_panel_context(const bContext *C, bAnimListElem **ale, FCurve **
   bAnimContext ac;
   bAnimListElem *elem = NULL;
 
-  /* for now, only draw if we could init the anim-context info (necessary for all animation-related tools)
-   * to work correctly is able to be correctly retrieved. There's no point showing empty panels?
+  /* For now, only draw if we could init the anim-context info
+   * (necessary for all animation-related tools)
+   * to work correctly is able to be correctly retrieved.
+   * There's no point showing empty panels?
    */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return 0;
+  }
 
   /* try to find 'active' F-Curve */
   elem = get_active_fcurve_channel(&ac);
-  if (elem == NULL)
+  if (elem == NULL) {
     return 0;
+  }
 
-  if (fcu)
+  if (fcu) {
     *fcu = (FCurve *)elem->data;
-  if (ale)
+  }
+  if (ale) {
     *ale = elem;
-  else
+  }
+  else {
     MEM_freeN(elem);
+  }
 
   return 1;
 }
@@ -128,10 +135,12 @@ static void graph_panel_view(const bContext *C, Panel *pa)
   sub = uiLayoutColumn(col, true);
   uiLayoutSetActive(sub, RNA_boolean_get(&spaceptr, "show_cursor"));
   row = uiLayoutSplit(sub, 0.7f, true);
-  if (sipo->mode == SIPO_MODE_DRIVERS)
+  if (sipo->mode == SIPO_MODE_DRIVERS) {
     uiItemR(row, &spaceptr, "cursor_position_x", 0, IFACE_("Cursor X"), ICON_NONE);
-  else
+  }
+  else {
     uiItemR(row, &sceneptr, "frame_current", 0, IFACE_("Cursor X"), ICON_NONE);
+  }
   uiItemEnumO(row, "GRAPH_OT_snap", IFACE_("To Keys"), 0, "type", GRAPHKEYS_SNAP_CFRA);
 
   row = uiLayoutSplit(sub, 0.7f, true);
@@ -151,8 +160,9 @@ static void graph_panel_properties(const bContext *C, Panel *pa)
   char name[256];
   int icon = 0;
 
-  if (!graph_panel_context(C, &ale, &fcu))
+  if (!graph_panel_context(C, &ale, &fcu)) {
     return;
+  }
 
   /* F-Curve pointer */
   RNA_pointer_create(ale->id, &RNA_FCurve, fcu, &fcu_ptr);
@@ -177,8 +187,9 @@ static void graph_panel_properties(const bContext *C, Panel *pa)
     }
 
     /* icon */
-    if (ale->type == ANIMTYPE_NLACURVE)
+    if (ale->type == ANIMTYPE_NLACURVE) {
       icon = ICON_NLA;
+    }
   }
   uiItemL(col, name, icon);
 
@@ -219,8 +230,9 @@ static short get_active_fcurve_keyframe_edit(FCurve *fcu, BezTriple **bezt, BezT
   *bezt = *prevbezt = NULL;
 
   /* sanity checks */
-  if ((fcu->bezt == NULL) || (fcu->totvert == 0))
+  if ((fcu->bezt == NULL) || (fcu->totvert == 0)) {
     return 0;
+  }
 
   /* find first selected keyframe for now, and call it the active one
    * - this is a reasonable assumption, given that whenever anyone
@@ -330,8 +342,9 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
   uiLayout *col;
   uiBlock *block;
 
-  if (!graph_panel_context(C, &ale, &fcu))
+  if (!graph_panel_context(C, &ale, &fcu)) {
     return;
+  }
 
   block = uiLayoutGetBlock(layout);
   /* UI_block_func_handle_set(block, do_graph_region_buttons, NULL); */
@@ -365,8 +378,9 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
     }
 
     /* easing type */
-    if (bezt->ipo > BEZT_IPO_BEZ)
+    if (bezt->ipo > BEZT_IPO_BEZ) {
       uiItemR(col, &bezt_ptr, "easing", 0, NULL, 0);
+    }
 
     /* easing extra */
     switch (bezt->ipo) {
@@ -565,8 +579,9 @@ static void graph_panel_key_properties(const bContext *C, Panel *pa)
               IFACE_("F-Curve doesn't have any keyframes as it only contains sampled points"),
               ICON_NONE);
     }
-    else
+    else {
       uiItemL(layout, IFACE_("No active keyframe on F-Curve"), ICON_NONE);
+    }
   }
 
   MEM_freeN(ale);
@@ -693,8 +708,9 @@ static bool graph_panel_drivers_poll(const bContext *C, PanelType *UNUSED(pt))
 {
   SpaceGraph *sipo = CTX_wm_space_graph(C);
 
-  if (sipo->mode != SIPO_MODE_DRIVERS)
+  if (sipo->mode != SIPO_MODE_DRIVERS) {
     return 0;
+  }
 
   return graph_panel_context(C, NULL, NULL);
 }
@@ -845,6 +861,15 @@ static void graph_panel_driverVar__transChan(uiLayout *layout, ID *id, DriverVar
 
   sub = uiLayoutColumn(layout, true);
   uiItemR(sub, &dtar_ptr, "transform_type", 0, NULL, ICON_NONE);
+
+  if (ELEM(dtar->transChan,
+           DTAR_TRANSCHAN_ROTX,
+           DTAR_TRANSCHAN_ROTY,
+           DTAR_TRANSCHAN_ROTZ,
+           DTAR_TRANSCHAN_ROTW)) {
+    uiItemR(sub, &dtar_ptr, "rotation_mode", 0, IFACE_("Mode"), ICON_NONE);
+  }
+
   uiItemR(sub, &dtar_ptr, "transform_space", 0, IFACE_("Space"), ICON_NONE);
 }
 
@@ -869,7 +894,8 @@ static void graph_draw_driven_property_panel(uiLayout *layout, ID *id, FCurve *f
   uiLayoutSetAlignment(row, UI_LAYOUT_ALIGN_LEFT);
 
   /* -> user friendly 'name' for datablock that owns F-Curve */
-  /* XXX: Actually, we may need the datablock icons only... (e.g. right now will show bone for bone props) */
+  /* XXX: Actually, we may need the datablock icons only...
+   * (e.g. right now will show bone for bone props). */
   uiItemL(row, id->name + 2, icon);
 
   /* -> user friendly 'name' for F-Curve/driver target */
@@ -887,7 +913,7 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
   DriverVar *dvar;
 
   PointerRNA driver_ptr;
-  uiLayout *col, *row;
+  uiLayout *col, *row, *row_outer;
   uiBlock *block;
   uiBut *but;
 
@@ -915,7 +941,8 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
   uiItemS(layout);
   uiItemS(layout);
 
-  /* show expression box if doing scripted drivers, and/or error messages when invalid drivers exist */
+  /* show expression box if doing scripted drivers,
+   * and/or error messages when invalid drivers exist */
   if (driver->type == DRIVER_TYPE_PYTHON) {
     bool bpy_data_expr_error = (strstr(driver->expression, "bpy.data.") != NULL);
     bool bpy_ctx_expr_error = (strstr(driver->expression, "bpy.context.") != NULL);
@@ -934,29 +961,28 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
     block = uiLayoutGetBlock(col);
 
     if (driver->flag & DRIVER_FLAG_INVALID) {
-      uiItemL(col, IFACE_("ERROR: Invalid Python expression"), ICON_CANCEL);
+      uiItemL(col, TIP_("ERROR: Invalid Python expression"), ICON_CANCEL);
     }
     else if (!BKE_driver_has_simple_expression(driver)) {
       if ((G.f & G_FLAG_SCRIPT_AUTOEXEC) == 0) {
         /* TODO: Add button to enable? */
-        uiItemL(col, IFACE_("WARNING: Python expressions limited for security"), ICON_ERROR);
+        uiItemL(col, TIP_("Python restricted for security"), ICON_ERROR);
       }
       else {
-        uiItemL(col, IFACE_("Slow Python expression"), ICON_INFO);
+        uiItemL(col, TIP_("Slow Python expression"), ICON_INFO);
       }
     }
 
     /* Explicit bpy-references are evil. Warn about these to prevent errors */
     /* TODO: put these in a box? */
     if (bpy_data_expr_error || bpy_ctx_expr_error) {
-      uiItemL(col, IFACE_("WARNING: Driver expression may not work correctly"), ICON_HELP);
+      uiItemL(col, TIP_("WARNING: Driver expression may not work correctly"), ICON_HELP);
 
       if (bpy_data_expr_error) {
-        uiItemL(
-            col, IFACE_("TIP: Use variables instead of bpy.data paths (see below)"), ICON_ERROR);
+        uiItemL(col, TIP_("TIP: Use variables instead of bpy.data paths (see below)"), ICON_ERROR);
       }
       if (bpy_ctx_expr_error) {
-        uiItemL(col, IFACE_("TIP: bpy.context is not safe for renderfarm usage"), ICON_ERROR);
+        uiItemL(col, TIP_("TIP: bpy.context is not safe for renderfarm usage"), ICON_ERROR);
       }
     }
   }
@@ -965,8 +991,9 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
     col = uiLayoutColumn(layout, true);
     block = uiLayoutGetBlock(col);
 
-    if (driver->flag & DRIVER_FLAG_INVALID)
-      uiItemL(col, IFACE_("ERROR: Invalid target channel(s)"), ICON_ERROR);
+    if (driver->flag & DRIVER_FLAG_INVALID) {
+      uiItemL(col, TIP_("ERROR: Invalid target channel(s)"), ICON_ERROR);
+    }
 
     /* Warnings about a lack of variables
      * NOTE: The lack of variables is generally a bad thing, since it indicates
@@ -975,11 +1002,11 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
      *       property animation
      */
     if (BLI_listbase_is_empty(&driver->variables)) {
-      uiItemL(col, IFACE_("ERROR: Driver is useless without any inputs"), ICON_ERROR);
+      uiItemL(col, TIP_("ERROR: Driver is useless without any inputs"), ICON_ERROR);
 
       if (!BLI_listbase_is_empty(&fcu->modifiers)) {
-        uiItemL(col, IFACE_("TIP: Use F-Curves for procedural animation instead"), ICON_INFO);
-        uiItemL(col, IFACE_("F-Modifiers can generate curves for those too"), ICON_INFO);
+        uiItemL(col, TIP_("TIP: Use F-Curves for procedural animation instead"), ICON_INFO);
+        uiItemL(col, TIP_("F-Modifiers can generate curves for those too"), ICON_INFO);
       }
     }
   }
@@ -987,61 +1014,41 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
   uiItemS(layout);
 
   /* add/copy/paste driver variables */
-  if (is_popover) {
-    /* add driver variable - add blank */
-    row = uiLayoutRow(layout, true);
-    block = uiLayoutGetBlock(row);
-    but = uiDefIconTextBut(
-        block,
-        UI_BTYPE_BUT,
-        B_IPO_DEPCHANGE,
-        ICON_ADD,
-        IFACE_("Add Input Variable"),
-        0,
-        0,
-        10 * UI_UNIT_X,
-        UI_UNIT_Y,
-        NULL,
-        0.0,
-        0.0,
-        0,
-        0,
-        TIP_("Add a Driver Variable to keep track an input used by the driver"));
-    UI_but_func_set(but, driver_add_var_cb, driver, NULL);
+  row_outer = uiLayoutRow(layout, false);
 
+  /* add driver variable - add blank */
+  row = uiLayoutRow(row_outer, true);
+  block = uiLayoutGetBlock(row);
+  but = uiDefIconTextBut(
+      block,
+      UI_BTYPE_BUT,
+      B_IPO_DEPCHANGE,
+      ICON_ADD,
+      IFACE_("Add Input Variable"),
+      0,
+      0,
+      10 * UI_UNIT_X,
+      UI_UNIT_Y,
+      NULL,
+      0.0,
+      0.0,
+      0,
+      0,
+      TIP_("Add a Driver Variable to keep track of an input used by the driver"));
+  UI_but_func_set(but, driver_add_var_cb, driver, NULL);
+
+  if (is_popover) {
     /* add driver variable - add using eyedropper */
     /* XXX: will this operator work like this? */
     uiItemO(row, "", ICON_EYEDROPPER, "UI_OT_eyedropper_driver");
   }
-  else {
-    /* add driver variable */
-    row = uiLayoutRow(layout, false);
-    block = uiLayoutGetBlock(row);
-    but = uiDefIconTextBut(block,
-                           UI_BTYPE_BUT,
-                           B_IPO_DEPCHANGE,
-                           ICON_ADD,
-                           IFACE_("Add Input Variable"),
-                           0,
-                           0,
-                           10 * UI_UNIT_X,
-                           UI_UNIT_Y,
-                           NULL,
-                           0.0,
-                           0.0,
-                           0,
-                           0,
-                           TIP_("Driver variables ensure that all dependencies will be accounted "
-                                "for, ensuring that drivers will update correctly"));
-    UI_but_func_set(but, driver_add_var_cb, driver, NULL);
 
-    /* copy/paste (as sub-row) */
-    row = uiLayoutRow(row, true);
-    block = uiLayoutGetBlock(row);
+  /* copy/paste (as sub-row) */
+  row = uiLayoutRow(row_outer, true);
+  block = uiLayoutGetBlock(row);
 
-    uiItemO(row, "", ICON_COPYDOWN, "GRAPH_OT_driver_variables_copy");
-    uiItemO(row, "", ICON_PASTEDOWN, "GRAPH_OT_driver_variables_paste");
-  }
+  uiItemO(row, "", ICON_COPYDOWN, "GRAPH_OT_driver_variables_copy");
+  uiItemO(row, "", ICON_PASTEDOWN, "GRAPH_OT_driver_variables_paste");
 
   /* loop over targets, drawing them */
   for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
@@ -1099,7 +1106,7 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
                          0.0,
                          0.0,
                          0.0,
-                         IFACE_("Invalid variable name, click here for details"));
+                         TIP_("Invalid variable name, click here for details"));
       UI_but_func_set(but, driver_dvar_invalid_name_query_cb, dvar, NULL);  // XXX: reports?
     }
 
@@ -1117,7 +1124,7 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
                        0.0,
                        0.0,
                        0.0,
-                       IFACE_("Delete target variable"));
+                       TIP_("Delete target variable"));
     UI_but_func_set(but, driver_delete_var_cb, driver, dvar);
     UI_block_emboss_set(block, UI_EMBOSS);
 
@@ -1149,8 +1156,12 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
 
       if ((dvar->type == DVAR_TYPE_ROT_DIFF) ||
           (dvar->type == DVAR_TYPE_TRANSFORM_CHAN &&
-           dvar->targets[0].transChan >= DTAR_TRANSCHAN_ROTX &&
-           dvar->targets[0].transChan < DTAR_TRANSCHAN_SCALEX)) {
+           ELEM(dvar->targets[0].transChan,
+                DTAR_TRANSCHAN_ROTX,
+                DTAR_TRANSCHAN_ROTY,
+                DTAR_TRANSCHAN_ROTZ,
+                DTAR_TRANSCHAN_ROTW) &&
+           dvar->targets[0].rotation_mode != DTAR_ROTMODE_QUATERNION)) {
         BLI_snprintf(
             valBuf, sizeof(valBuf), "%.3f (%4.1f°)", dvar->curval, RAD2DEGF(dvar->curval));
       }
@@ -1190,14 +1201,16 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
 
 /* ----------------------------------------------------------------- */
 
-/* panel to show property driven by the driver (in Drivers Editor) - duplicates Active FCurve, but useful for clarity */
+/* Panel to show property driven by the driver (in Drivers Editor) - duplicates Active FCurve,
+ * but useful for clarity. */
 static void graph_panel_driven_property(const bContext *C, Panel *pa)
 {
   bAnimListElem *ale;
   FCurve *fcu;
 
-  if (!graph_panel_context(C, &ale, &fcu))
+  if (!graph_panel_context(C, &ale, &fcu)) {
     return;
+  }
 
   graph_draw_driven_property_panel(pa->layout, ale->id, fcu);
 
@@ -1212,8 +1225,9 @@ static void graph_panel_drivers(const bContext *C, Panel *pa)
   FCurve *fcu;
 
   /* Get settings from context */
-  if (!graph_panel_context(C, &ale, &fcu))
+  if (!graph_panel_context(C, &ale, &fcu)) {
     return;
+  }
 
   graph_draw_driver_settings_panel(pa->layout, ale->id, fcu, false);
 
@@ -1223,7 +1237,8 @@ static void graph_panel_drivers(const bContext *C, Panel *pa)
 
 /* ----------------------------------------------------------------- */
 
-/* poll to make this not show up in the graph editor, as this is only to be used as a popup elsewhere */
+/* Poll to make this not show up in the graph editor,
+ * as this is only to be used as a popup elsewhere. */
 static bool graph_panel_drivers_popover_poll(const bContext *C, PanelType *UNUSED(pt))
 {
   return ED_operator_graphedit_active((bContext *)C) == false;
@@ -1234,7 +1249,7 @@ static void graph_panel_drivers_popover(const bContext *C, Panel *pa)
 {
   uiLayout *layout = pa->layout;
 
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   PropertyRNA *prop = NULL;
   int index = -1;
   uiBut *but = NULL;
@@ -1255,8 +1270,12 @@ static void graph_panel_drivers_popover(const bContext *C, Panel *pa)
     uiLayoutSetContextFromBut(layout, but);
 
     /* Populate Panel - With a combination of the contents of the Driven and Driver panels */
-    if (fcu) {
-      ID *id = ptr.id.data;
+    if (fcu && fcu->driver) {
+      ID *id = ptr.owner_id;
+
+      PointerRNA ptr_fcurve;
+      RNA_pointer_create(id, &RNA_FCurve, fcu, &ptr_fcurve);
+      uiLayoutSetContextPointer(layout, "active_editable_fcurve", &ptr_fcurve);
 
       /* Driven Property Settings */
       uiItemL(layout, IFACE_("Driven Property:"), ICON_NONE);
@@ -1300,8 +1319,9 @@ static void graph_panel_modifiers(const bContext *C, Panel *pa)
   uiBlock *block;
   bool active;
 
-  if (!graph_panel_context(C, &ale, &fcu))
+  if (!graph_panel_context(C, &ale, &fcu)) {
     return;
+  }
 
   block = uiLayoutGetBlock(pa->layout);
   UI_block_func_handle_set(block, do_graph_region_modifier_buttons, NULL);

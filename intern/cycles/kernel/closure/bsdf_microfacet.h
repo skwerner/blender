@@ -48,6 +48,8 @@ typedef ccl_addr_space struct MicrofacetBsdf {
   float3 T;
 } MicrofacetBsdf;
 
+static_assert(sizeof(ShaderClosure) >= sizeof(MicrofacetBsdf), "MicrofacetBsdf is too large!");
+
 /* Beckmann and GGX microfacet importance sampling. */
 
 ccl_device_inline void microfacet_beckmann_sample_slopes(KernelGlobals *kg,
@@ -301,9 +303,7 @@ ccl_device int bsdf_microfacet_ggx_setup(MicrofacetBsdf *bsdf)
 
 ccl_device int bsdf_microfacet_ggx_fresnel_setup(MicrofacetBsdf *bsdf, const ShaderData *sd)
 {
-  bsdf->extra->cspec0.x = saturate(bsdf->extra->cspec0.x);
-  bsdf->extra->cspec0.y = saturate(bsdf->extra->cspec0.y);
-  bsdf->extra->cspec0.z = saturate(bsdf->extra->cspec0.z);
+  bsdf->extra->cspec0 = saturate3(bsdf->extra->cspec0);
 
   float F0 = fresnel_dielectric_cos(1.0f, bsdf->ior);
   float F = average(interpolate_fresnel_color(sd->I, bsdf->N, bsdf->ior, F0, bsdf->extra->cspec0));
@@ -319,9 +319,7 @@ ccl_device int bsdf_microfacet_ggx_fresnel_setup(MicrofacetBsdf *bsdf, const Sha
 
 ccl_device int bsdf_microfacet_ggx_clearcoat_setup(MicrofacetBsdf *bsdf, const ShaderData *sd)
 {
-  bsdf->extra->cspec0.x = saturate(bsdf->extra->cspec0.x);
-  bsdf->extra->cspec0.y = saturate(bsdf->extra->cspec0.y);
-  bsdf->extra->cspec0.z = saturate(bsdf->extra->cspec0.z);
+  bsdf->extra->cspec0 = saturate3(bsdf->extra->cspec0);
 
   float F0 = fresnel_dielectric_cos(1.0f, bsdf->ior);
   float F = average(interpolate_fresnel_color(sd->I, bsdf->N, bsdf->ior, F0, bsdf->extra->cspec0));
@@ -364,9 +362,7 @@ ccl_device int bsdf_microfacet_ggx_aniso_setup(MicrofacetBsdf *bsdf)
 
 ccl_device int bsdf_microfacet_ggx_aniso_fresnel_setup(MicrofacetBsdf *bsdf, const ShaderData *sd)
 {
-  bsdf->extra->cspec0.x = saturate(bsdf->extra->cspec0.x);
-  bsdf->extra->cspec0.y = saturate(bsdf->extra->cspec0.y);
-  bsdf->extra->cspec0.z = saturate(bsdf->extra->cspec0.z);
+  bsdf->extra->cspec0 = saturate3(bsdf->extra->cspec0);
 
   float F0 = fresnel_dielectric_cos(1.0f, bsdf->ior);
   float F = average(interpolate_fresnel_color(sd->I, bsdf->N, bsdf->ior, F0, bsdf->extra->cspec0));

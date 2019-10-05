@@ -55,6 +55,8 @@
 
 #include "../generic/python_utildefines.h"
 
+#include "DEG_depsgraph_build.h"
+
 /* for keyframes and drivers */
 static int pyrna_struct_anim_args_parse_ex(PointerRNA *ptr,
                                            const char *error_prefix,
@@ -86,7 +88,7 @@ static int pyrna_struct_anim_args_parse_ex(PointerRNA *ptr,
                    path);
       return -1;
     }
-    else if (ptr->id.data != r_ptr.id.data) {
+    else if (ptr->owner_id != r_ptr.owner_id) {
       PyErr_Format(PyExc_ValueError, "%.200s path spans ID blocks", error_prefix, path);
       return -1;
     }
@@ -261,8 +263,9 @@ static int pyrna_struct_keyframe_parse(PointerRNA *ptr,
 
   /* flag may be null (no option currently for remove keyframes e.g.). */
   if (r_options) {
-    if (pyoptions && (pyrna_set_to_enum_bitfield(
-                          rna_enum_keying_flag_items, pyoptions, r_options, error_prefix) == -1)) {
+    if (pyoptions &&
+        (pyrna_set_to_enum_bitfield(
+             rna_enum_keying_flag_items_api, pyoptions, r_options, error_prefix) == -1)) {
       return -1;
     }
 
@@ -274,7 +277,7 @@ static int pyrna_struct_keyframe_parse(PointerRNA *ptr,
 
 char pyrna_struct_keyframe_insert_doc[] =
     ".. method:: keyframe_insert(data_path, index=-1, frame=bpy.context.scene.frame_current, "
-    "group=\"\")\n"
+    "group=\"\", options=set())\n"
     "\n"
     "   Insert a keyframe on the property given, adding fcurves and animation data when "
     "necessary.\n"
@@ -291,14 +294,17 @@ char pyrna_struct_keyframe_insert_doc[] =
     "   :arg group: The name of the group the F-Curve should be added to if it doesn't exist "
     "yet.\n"
     "   :type group: str\n"
-    "   :arg options: Optional flags:\n"
+    "   :arg options: Optional set of flags:\n"
     "\n"
     "      - ``INSERTKEY_NEEDED`` Only insert keyframes where they're needed in the relevant "
     "F-Curves.\n"
     "      - ``INSERTKEY_VISUAL`` Insert keyframes based on 'visual transforms'.\n"
     "      - ``INSERTKEY_XYZ_TO_RGB`` Color for newly added transformation F-Curves (Location, "
-    "Rotation, Scale)\n"
-    "         and also Color is based on the transform axis.\n"
+    "Rotation, Scale) is based on the transform axis.\n"
+    "      - ``INSERTKEY_REPLACE`` Only replace already existing keyframes.\n"
+    "      - ``INSERTKEY_AVAILABLE`` Only insert into already existing F-Curves.\n"
+    "      - ``INSERTKEY_CYCLE_AWARE`` Take cyclic extrapolation into account "
+    "(Cycle-Aware Keying option).\n"
     "   :type flag: set\n"
     "   :return: Success of keyframe insertion.\n"
     "   :rtype: boolean\n";
@@ -331,7 +337,6 @@ PyObject *pyrna_struct_keyframe_insert(BPy_StructRNA *self, PyObject *args, PyOb
      * strips themselves. These are stored separately or else the properties will
      * not have any effect.
      */
-    struct Depsgraph *depsgraph = CTX_data_depsgraph(BPy_GetContext());
     ReportList reports;
     short result = 0;
 
@@ -351,8 +356,7 @@ PyObject *pyrna_struct_keyframe_insert(BPy_StructRNA *self, PyObject *args, PyOb
       NlaStrip *strip = (NlaStrip *)ptr.data;
       FCurve *fcu = list_find_fcurve(&strip->fcurves, RNA_property_identifier(prop), index);
 
-      result = insert_keyframe_direct(
-          depsgraph, &reports, ptr, prop, fcu, cfra, keytype, NULL, options);
+      result = insert_keyframe_direct(&reports, ptr, prop, fcu, cfra, keytype, NULL, options);
     }
     else {
       BKE_reportf(&reports, RPT_ERROR, "Could not resolve path (%s)", path_full);
@@ -366,26 +370,15 @@ PyObject *pyrna_struct_keyframe_insert(BPy_StructRNA *self, PyObject *args, PyOb
     return PyBool_FromLong(result);
   }
   else {
-    ID *id = self->ptr.id.data;
-    struct Depsgraph *depsgraph = CTX_data_depsgraph(BPy_GetContext());
+    ID *id = self->ptr.owner_id;
     ReportList reports;
     short result;
 
     BKE_reports_init(&reports, RPT_STORE);
 
     BLI_assert(BKE_id_is_in_global_main(id));
-    result = insert_keyframe(G_MAIN,
-                             depsgraph,
-                             &reports,
-                             id,
-                             NULL,
-                             group_name,
-                             path_full,
-                             index,
-                             cfra,
-                             keytype,
-                             NULL,
-                             options);
+    result = insert_keyframe(
+        G_MAIN, &reports, id, NULL, group_name, path_full, index, cfra, keytype, NULL, options);
     MEM_freeN((void *)path_full);
 
     if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1) {
@@ -458,12 +451,12 @@ PyObject *pyrna_struct_keyframe_delete(BPy_StructRNA *self, PyObject *args, PyOb
     }
 
     if (prop) {
-      ID *id = ptr.id.data;
+      ID *id = ptr.owner_id;
       NlaStrip *strip = (NlaStrip *)ptr.data;
       FCurve *fcu = list_find_fcurve(&strip->fcurves, RNA_property_identifier(prop), index);
 
-      BLI_assert(fcu !=
-                 NULL); /* NOTE: This should be true, or else we wouldn't be able to get here */
+      /* NOTE: This should be true, or else we wouldn't be able to get here. */
+      BLI_assert(fcu != NULL);
 
       if (BKE_fcurve_is_protected(fcu)) {
         BKE_reportf(
@@ -509,7 +502,7 @@ PyObject *pyrna_struct_keyframe_delete(BPy_StructRNA *self, PyObject *args, PyOb
     BKE_reports_init(&reports, RPT_STORE);
 
     result = delete_keyframe(
-        G.main, &reports, (ID *)self->ptr.id.data, NULL, group_name, path_full, index, cfra, 0);
+        G.main, &reports, (ID *)self->ptr.owner_id, NULL, group_name, path_full, index, cfra, 0);
     MEM_freeN((void *)path_full);
 
     if (BPy_reports_to_error(&reports, PyExc_RuntimeError, true) == -1) {
@@ -555,7 +548,7 @@ PyObject *pyrna_struct_driver_add(BPy_StructRNA *self, PyObject *args)
     BKE_reports_init(&reports, RPT_STORE);
 
     result = ANIM_add_driver(&reports,
-                             (ID *)self->ptr.id.data,
+                             (ID *)self->ptr.owner_id,
                              path_full,
                              index,
                              CREATEDRIVER_WITH_FMODIFIER,
@@ -566,7 +559,7 @@ PyObject *pyrna_struct_driver_add(BPy_StructRNA *self, PyObject *args)
     }
 
     if (result) {
-      ID *id = self->ptr.id.data;
+      ID *id = self->ptr.owner_id;
       AnimData *adt = BKE_animdata_from_id(id);
       FCurve *fcu;
 
@@ -586,7 +579,9 @@ PyObject *pyrna_struct_driver_add(BPy_StructRNA *self, PyObject *args)
         ret = pyrna_struct_CreatePyObject(&tptr);
       }
 
+      bContext *context = BPy_GetContext();
       WM_event_add_notifier(BPy_GetContext(), NC_ANIMATION | ND_FCURVES_ORDER, NULL);
+      DEG_relations_tag_update(CTX_data_main(context));
     }
     else {
       /* XXX, should be handled by reports, */
@@ -634,7 +629,7 @@ PyObject *pyrna_struct_driver_remove(BPy_StructRNA *self, PyObject *args)
 
     BKE_reports_init(&reports, RPT_STORE);
 
-    result = ANIM_remove_driver(&reports, (ID *)self->ptr.id.data, path_full, index, 0);
+    result = ANIM_remove_driver(&reports, (ID *)self->ptr.owner_id, path_full, index, 0);
 
     if (path != path_full) {
       MEM_freeN((void *)path_full);
@@ -644,7 +639,9 @@ PyObject *pyrna_struct_driver_remove(BPy_StructRNA *self, PyObject *args)
       return NULL;
     }
 
-    WM_event_add_notifier(BPy_GetContext(), NC_ANIMATION | ND_FCURVES_ORDER, NULL);
+    bContext *context = BPy_GetContext();
+    WM_event_add_notifier(context, NC_ANIMATION | ND_FCURVES_ORDER, NULL);
+    DEG_relations_tag_update(CTX_data_main(context));
 
     return PyBool_FromLong(result);
   }

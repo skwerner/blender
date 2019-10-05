@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
+#include "device/device.h"
+
 #include "render/background.h"
 #include "render/camera.h"
-#include "device/device.h"
+#include "render/colorspace.h"
 #include "render/graph.h"
 #include "render/integrator.h"
 #include "render/light.h"
@@ -701,6 +703,8 @@ void ShaderManager::get_requested_features(Scene *scene,
       requested_features->nodes_features |= NODE_FEATURE_BUMP;
       if (shader->displacement_method == DISPLACE_BOTH) {
         requested_features->nodes_features |= NODE_FEATURE_BUMP_STATE;
+        requested_features->max_nodes_group = max(requested_features->max_nodes_group,
+                                                  NODE_GROUP_LEVEL_1);
       }
     }
     /* On top of volume nodes, also check if we need volume sampling because
@@ -717,6 +721,8 @@ void ShaderManager::free_memory()
 #ifdef WITH_OSL
   OSLShaderManager::free_memory();
 #endif
+
+  ColorSpaceManager::free_memory();
 }
 
 float ShaderManager::linear_rgb_to_gray(float3 c)

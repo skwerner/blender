@@ -53,6 +53,7 @@ extern "C" {
 #include "COM_CropNode.h"
 #include "COM_CryptomatteNode.h"
 #include "COM_DefocusNode.h"
+#include "COM_DenoiseNode.h"
 #include "COM_DespeckleNode.h"
 #include "COM_DifferenceMatteNode.h"
 #include "COM_DilateErodeNode.h"
@@ -122,7 +123,7 @@ bool Converter::is_fast_node(bNode *b_node)
            b_node->type == CMP_NODE_BOKEHBLUR || b_node->type == CMP_NODE_GLARE ||
            b_node->type == CMP_NODE_DBLUR || b_node->type == CMP_NODE_MOVIEDISTORTION ||
            b_node->type == CMP_NODE_LENSDIST || b_node->type == CMP_NODE_DOUBLEEDGEMASK ||
-           b_node->type == CMP_NODE_DILATEERODE);
+           b_node->type == CMP_NODE_DILATEERODE || b_node->type == CMP_NODE_DENOISE);
 }
 
 Node *Converter::convert(bNode *b_node)
@@ -130,8 +131,9 @@ Node *Converter::convert(bNode *b_node)
   Node *node = NULL;
 
   /* ignore undefined nodes with missing or invalid node data */
-  if (!nodeIsRegistered(b_node))
+  if (!nodeIsRegistered(b_node)) {
     return NULL;
+  }
 
   switch (b_node->type) {
     case CMP_NODE_COMPOSITE:
@@ -401,6 +403,9 @@ Node *Converter::convert(bNode *b_node)
     case CMP_NODE_CRYPTOMATTE:
       node = new CryptomatteNode(b_node);
       break;
+    case CMP_NODE_DENOISE:
+      node = new DenoiseNode(b_node);
+      break;
   }
   return node;
 }
@@ -514,8 +519,9 @@ void Converter::convertResolution(NodeOperationBuilder &builder,
     TranslateOperation *translateOperation = new TranslateOperation();
     translateOperation->getInputSocket(1)->setResizeMode(COM_SC_NO_RESIZE);
     translateOperation->getInputSocket(2)->setResizeMode(COM_SC_NO_RESIZE);
-    if (!first)
+    if (!first) {
       first = translateOperation;
+    }
     SetValueOperation *xop = new SetValueOperation();
     xop->setValue(addX);
     builder.addLink(xop->getOutputSocket(), translateOperation->getInputSocket(1));

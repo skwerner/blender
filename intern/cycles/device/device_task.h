@@ -34,13 +34,14 @@ class Tile;
 
 class DenoiseParams {
  public:
-  /* Pixel radius for neighbouring pixels to take into account. */
+  /* Pixel radius for neighboring pixels to take into account. */
   int radius;
   /* Controls neighbor pixel weighting for the denoising filter. */
   float strength;
   /* Preserve more or less detail based on feature passes. */
   float feature_strength;
-  /* When removing pixels that don't carry information, use a relative threshold instead of an absolute one. */
+  /* When removing pixels that don't carry information,
+   * use a relative threshold instead of an absolute one. */
   bool relative_pca;
   /* How many frames before and after the current center frame are included. */
   int neighbor_frames;

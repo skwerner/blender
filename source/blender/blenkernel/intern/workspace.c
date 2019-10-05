@@ -36,6 +36,7 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
 
 #include "DEG_depsgraph.h"
@@ -43,7 +44,8 @@
 #include "MEM_guardedalloc.h"
 
 /* -------------------------------------------------------------------- */
-/* Internal utils */
+/** \name Internal Utils
+ * \{ */
 
 static void workspace_layout_name_set(WorkSpace *workspace,
                                       WorkSpaceLayout *layout,
@@ -113,9 +115,10 @@ static void *workspace_relation_get_data_matching_parent(const ListBase *relatio
 }
 
 /**
- * Checks if \a screen is already used within any workspace. A screen should never be assigned to multiple
- * WorkSpaceLayouts, but that should be ensured outside of the BKE_workspace module and without such checks.
- * Hence, this should only be used as assert check before assigining a screen to a workspace.
+ * Checks if \a screen is already used within any workspace. A screen should never be assigned to
+ * multiple WorkSpaceLayouts, but that should be ensured outside of the BKE_workspace module
+ * and without such checks.
+ * Hence, this should only be used as assert check before assigning a screen to a workspace.
  */
 #ifndef NDEBUG
 static bool workspaces_is_screen_used
@@ -133,8 +136,11 @@ static bool UNUSED_FUNCTION(workspaces_is_screen_used)
   return false;
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
-/* Create, delete, init */
+/** \name Create, Delete, Init
+ * \{ */
 
 WorkSpace *BKE_workspace_add(Main *bmain, const char *name)
 {
@@ -143,8 +149,9 @@ WorkSpace *BKE_workspace_add(Main *bmain, const char *name)
 }
 
 /**
- * The function that actually frees the workspace data (not workspace itself). It shouldn't be called
- * directly, instead #BKE_workspace_remove should be, which calls this through #BKE_id_free then.
+ * The function that actually frees the workspace data (not workspace itself).
+ * It shouldn't be called directly, instead #BKE_workspace_remove should be,
+ * which calls this through #BKE_id_free then.
  *
  * Should something like a bke_internal.h be added, this should go there!
  */
@@ -251,8 +258,11 @@ void BKE_workspace_relations_free(ListBase *relation_list)
   }
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
-/* General Utils */
+/** \name General Utils
+ * \{ */
 
 WorkSpaceLayout *BKE_workspace_layout_find(const WorkSpace *workspace, const bScreen *screen)
 {
@@ -275,7 +285,8 @@ WorkSpaceLayout *BKE_workspace_layout_find(const WorkSpace *workspace, const bSc
  * Find the layout for \a screen without knowing which workspace to look in.
  * Can also be used to find the workspace that contains \a screen.
  *
- * \param r_workspace: Optionally return the workspace that contains the looked up layout (if found).
+ * \param r_workspace: Optionally return the workspace that contains the
+ * looked up layout (if found).
  */
 WorkSpaceLayout *BKE_workspace_layout_find_global(const Main *bmain,
                                                   const bScreen *screen,
@@ -303,7 +314,8 @@ WorkSpaceLayout *BKE_workspace_layout_find_global(const Main *bmain,
 /**
  * Circular workspace layout iterator.
  *
- * \param callback: Custom function which gets executed for each layout. Can return false to stop iterating.
+ * \param callback: Custom function which gets executed for each layout.
+ * Can return false to stop iterating.
  * \param arg: Custom data passed to each \a callback call.
  *
  * \return the layout at which \a callback returned false.
@@ -344,14 +356,37 @@ void BKE_workspace_tool_remove(struct WorkSpace *workspace, struct bToolRef *tre
   }
   if (tref->properties) {
     IDP_FreeProperty(tref->properties);
-    MEM_freeN(tref->properties);
   }
   BLI_remlink(&workspace->tools, tref);
   MEM_freeN(tref);
 }
 
+bool BKE_workspace_owner_id_check(const WorkSpace *workspace, const char *owner_id)
+{
+  if ((*owner_id == '\0') || ((workspace->flags & WORKSPACE_USE_FILTER_BY_ORIGIN) == 0)) {
+    return true;
+  }
+  else {
+    /* We could use hash lookup, for now this list is highly likely under < ~16 items. */
+    return BLI_findstring(&workspace->owner_ids, owner_id, offsetof(wmOwnerID, name)) != NULL;
+  }
+}
+
+void BKE_workspace_id_tag_all_visible(Main *bmain, int tag)
+{
+  BKE_main_id_tag_listbase(&bmain->workspaces, tag, false);
+  wmWindowManager *wm = bmain->wm.first;
+  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+    WorkSpace *workspace = BKE_workspace_active_get(win->workspace_hook);
+    workspace->id.tag |= tag;
+  }
+}
+
+/** \} */
+
 /* -------------------------------------------------------------------- */
-/* Getters/Setters */
+/** \name Getters/Setters
+ * \{ */
 
 WorkSpace *BKE_workspace_active_get(WorkSpaceInstanceHook *hook)
 {
@@ -429,13 +464,4 @@ void BKE_workspace_hook_layout_for_workspace_set(WorkSpaceInstanceHook *hook,
   workspace_relation_ensure_updated(&workspace->hook_layout_relations, hook, layout);
 }
 
-bool BKE_workspace_owner_id_check(const WorkSpace *workspace, const char *owner_id)
-{
-  if ((*owner_id == '\0') || ((workspace->flags & WORKSPACE_USE_FILTER_BY_ORIGIN) == 0)) {
-    return true;
-  }
-  else {
-    /* we could use hash lookup, for now this list is highly under < ~16 items. */
-    return BLI_findstring(&workspace->owner_ids, owner_id, offsetof(wmOwnerID, name)) != NULL;
-  }
-}
+/** \} */

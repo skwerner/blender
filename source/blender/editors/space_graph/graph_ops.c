@@ -33,7 +33,6 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
-#include "BKE_sound.h"
 
 #include "UI_view2d.h"
 
@@ -48,6 +47,8 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
+
+#include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -64,8 +65,9 @@
 static bool graphview_cursor_poll(bContext *C)
 {
   /* prevent changes during render */
-  if (G.is_rendering)
+  if (G.is_rendering) {
     return 0;
+  }
 
   return ED_operator_graphedit_active(C);
 }
@@ -73,7 +75,6 @@ static bool graphview_cursor_poll(bContext *C)
 /* Set the new frame number */
 static void graphview_cursor_apply(bContext *C, wmOperator *op)
 {
-  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   SpaceGraph *sipo = CTX_wm_space_graph(C);
   /* this isn't technically "frame", but it'll do... */
@@ -104,7 +105,7 @@ static void graphview_cursor_apply(bContext *C, wmOperator *op)
     }
 
     SUBFRA = 0.0f;
-    BKE_sound_seek_scene(bmain, scene);
+    DEG_id_tag_update(&scene->id, ID_RECALC_AUDIO_SEEK);
   }
 
   /* set the cursor value */
@@ -132,8 +133,9 @@ static void graphview_cursor_setprops(bContext *C, wmOperator *op, const wmEvent
   float viewx, viewy;
 
   /* abort if not active region (should not really be possible) */
-  if (ar == NULL)
+  if (ar == NULL) {
     return;
+  }
 
   /* convert from region coordinates to View2D 'tot' space */
   UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &viewx, &viewy);
@@ -157,8 +159,9 @@ static int graphview_cursor_invoke(bContext *C, wmOperator *op, const wmEvent *e
   graphview_cursor_apply(C, op);
 
   /* Signal that a scrubbing operating is starting */
-  if (screen)
+  if (screen) {
     screen->scrubbing = true;
+  }
 
   /* add temp handler */
   WM_event_add_modal_handler(C, op);
@@ -174,8 +177,9 @@ static int graphview_cursor_modal(bContext *C, wmOperator *op, const wmEvent *ev
   /* execute the events */
   switch (event->type) {
     case ESCKEY:
-      if (screen)
+      if (screen) {
         screen->scrubbing = false;
+      }
 
       WM_event_add_notifier(C, NC_SCENE | ND_FRAME, scene);
       return OPERATOR_FINISHED;
@@ -191,8 +195,9 @@ static int graphview_cursor_modal(bContext *C, wmOperator *op, const wmEvent *ev
     case MIDDLEMOUSE:
       /* We check for either mouse-button to end, to work with all user keymaps. */
       if (event->val == KM_RELEASE) {
-        if (screen)
+        if (screen) {
           screen->scrubbing = false;
+        }
 
         WM_event_add_notifier(C, NC_SCENE | ND_FRAME, scene);
         return OPERATOR_FINISHED;
@@ -217,7 +222,7 @@ static void GRAPH_OT_cursor_set(wmOperatorType *ot)
   ot->poll = graphview_cursor_poll;
 
   /* flags */
-  ot->flag = OPTYPE_BLOCKING | OPTYPE_UNDO;
+  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_X | OPTYPE_UNDO;
 
   /* rna */
   RNA_def_float(ot->srna, "frame", 0, MINAFRAMEF, MAXFRAMEF, "Frame", "", MINAFRAMEF, MAXFRAMEF);
@@ -236,8 +241,9 @@ static int graphview_curves_hide_exec(bContext *C, wmOperator *op)
   const bool unselected = RNA_boolean_get(op->ptr, "unselected");
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get list of all channels that selection may need to be flushed to
    * - hierarchy must not affect what we have access to here...
@@ -250,10 +256,12 @@ static int graphview_curves_hide_exec(bContext *C, wmOperator *op)
    *   selected/unselected (depending on "unselected" prop)
    */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_CURVE_VISIBLE | ANIMFILTER_NODUPLIS);
-  if (unselected)
+  if (unselected) {
     filter |= ANIMFILTER_UNSEL;
-  else
+  }
+  else {
     filter |= ANIMFILTER_SEL;
+  }
 
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
@@ -261,8 +269,9 @@ static int graphview_curves_hide_exec(bContext *C, wmOperator *op)
     /* hack: skip object channels for now, since flushing those will always flush everything,
      * but they are always included */
     /* TODO: find out why this is the case, and fix that */
-    if (ale->type == ANIMTYPE_OBJECT)
+    if (ale->type == ANIMTYPE_OBJECT) {
       continue;
+    }
 
     /* change the hide setting, and unselect it... */
     ANIM_channel_setting_set(&ac, ale, ACHANNEL_SETTING_VISIBLE, ACHANNEL_SETFLAG_CLEAR);
@@ -290,8 +299,9 @@ static int graphview_curves_hide_exec(bContext *C, wmOperator *op)
        * will always flush everything, but they are always included */
 
       /* TODO: find out why this is the case, and fix that */
-      if (ale->type == ANIMTYPE_OBJECT)
+      if (ale->type == ANIMTYPE_OBJECT) {
         continue;
+      }
 
       /* change the hide setting, and unselect it... */
       ANIM_channel_setting_set(&ac, ale, ACHANNEL_SETTING_VISIBLE, ACHANNEL_SETFLAG_ADD);
@@ -341,8 +351,9 @@ static int graphview_curves_reveal_exec(bContext *C, wmOperator *op)
   const bool select = RNA_boolean_get(op->ptr, "select");
 
   /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0)
+  if (ANIM_animdata_get_context(C, &ac) == 0) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get list of all channels that selection may need to be flushed to
    * - hierarchy must not affect what we have access to here...
@@ -360,8 +371,9 @@ static int graphview_curves_reveal_exec(bContext *C, wmOperator *op)
     /* hack: skip object channels for now, since flushing those will always flush everything,
      * but they are always included. */
     /* TODO: find out why this is the case, and fix that */
-    if (ale->type == ANIMTYPE_OBJECT)
+    if (ale->type == ANIMTYPE_OBJECT) {
       continue;
+    }
 
     /* select if it is not visible */
     if (ANIM_channel_setting_get(&ac, ale, ACHANNEL_SETTING_VISIBLE) == 0) {
@@ -482,7 +494,7 @@ void ED_operatormacros_graph(void)
   WM_operatortype_macro_define(ot, "GRAPH_OT_duplicate");
   otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_transform");
   RNA_enum_set(otmacro->ptr, "mode", TFM_TIME_DUPLICATE);
-  RNA_enum_set(otmacro->ptr, "proportional", PROP_EDIT_OFF);
+  RNA_boolean_set(otmacro->ptr, "use_proportional_edit", false);
 }
 
 /* ************************** registration - keymaps **********************************/
@@ -493,9 +505,11 @@ void graphedit_keymap(wmKeyConfig *keyconf)
   WM_keymap_ensure(keyconf, "Graph Editor Generic", SPACE_GRAPH, 0);
 
   /* channels */
-  /* Channels are not directly handled by the Graph Editor module, but are inherited from the Animation module.
-   * All the relevant operations, keymaps, drawing, etc. can therefore all be found in that module instead, as these
-   * are all used for the Graph Editor too.
+  /* Channels are not directly handled by the Graph Editor module,
+   * but are inherited from the Animation module.
+   * All the relevant operations, keymaps, drawing, etc.
+   * can therefore all be found in that module instead,
+   * as these are all used for the Graph Editor too.
    */
 
   /* keyframes */

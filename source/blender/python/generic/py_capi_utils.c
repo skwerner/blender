@@ -37,7 +37,8 @@
 #include "BLI_string.h"
 
 #ifndef MATH_STANDALONE
-/* only for BLI_strncpy_wchar_from_utf8, should replace with py funcs but too late in release now */
+/* Only for BLI_strncpy_wchar_from_utf8,
+ * should replace with py funcs but too late in release now. */
 #  include "BLI_string_utf8.h"
 #endif
 
@@ -230,6 +231,37 @@ int PyC_ParseBool(PyObject *o, void *p)
   return 1;
 }
 
+/**
+ * Use with PyArg_ParseTuple's "O&" formatting.
+ */
+int PyC_ParseStringEnum(PyObject *o, void *p)
+{
+  struct PyC_StringEnum *e = p;
+  const char *value = _PyUnicode_AsString(o);
+  if (value == NULL) {
+    PyErr_Format(PyExc_ValueError, "expected a string, got %s", Py_TYPE(o)->tp_name);
+    return 0;
+  }
+  int i;
+  for (i = 0; e->items[i].id; i++) {
+    if (STREQ(e->items[i].id, value)) {
+      e->value_found = e->items[i].value;
+      return 1;
+    }
+  }
+
+  /* Set as a precaution. */
+  e->value_found = -1;
+
+  PyObject *enum_items = PyTuple_New(i);
+  for (i = 0; e->items[i].id; i++) {
+    PyTuple_SET_ITEM(enum_items, i, PyUnicode_FromString(e->items[i].id));
+  }
+  PyErr_Format(PyExc_ValueError, "expected a string in %S, got '%s'", enum_items, value);
+  Py_DECREF(enum_items);
+  return 0;
+}
+
 /* silly function, we dont use arg. just check its compatible with __deepcopy__ */
 int PyC_CheckArgs_DeepCopy(PyObject *args)
 {
@@ -273,7 +305,8 @@ void PyC_ObSpitStr(char *result, size_t result_len, PyObject *var)
     const PyTypeObject *type = Py_TYPE(var);
     PyObject *var_str = PyObject_Repr(var);
     if (var_str == NULL) {
-      /* We could print error here, but this may be used for generating errors - so don't for now. */
+      /* We could print error here,
+       * but this may be used for generating errors - so don't for now. */
       PyErr_Clear();
     }
     BLI_snprintf(result,
@@ -661,7 +694,7 @@ const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
 
   if (result) {
     /* 99% of the time this is enough but we better support non unicode
-     * chars since blender doesnt limit this */
+     * chars since blender doesn't limit this. */
     return result;
   }
   else {
@@ -765,7 +798,8 @@ void PyC_MainModule_Restore(PyObject *main_mod)
   Py_XDECREF(main_mod);
 }
 
-/* must be called before Py_Initialize, expects output of BKE_appdir_folder_id(BLENDER_PYTHON, NULL) */
+/* Must be called before Py_Initialize,
+ * expects output of BKE_appdir_folder_id(BLENDER_PYTHON, NULL). */
 void PyC_SetHomePath(const char *py_path_bundle)
 {
   if (py_path_bundle == NULL) {
@@ -803,7 +837,8 @@ void PyC_SetHomePath(const char *py_path_bundle)
   {
     static wchar_t py_path_bundle_wchar[1024];
 
-    /* cant use this, on linux gives bug: #23018, TODO: try LANG="en_US.UTF-8" /usr/bin/blender, suggested 22008 */
+    /* Can't use this, on linux gives bug: #23018,
+     * TODO: try LANG="en_US.UTF-8" /usr/bin/blender, suggested 2008 */
     /* mbstowcs(py_path_bundle_wchar, py_path_bundle, FILE_MAXDIR); */
 
     BLI_strncpy_wchar_from_utf8(

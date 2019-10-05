@@ -46,7 +46,6 @@
 #include "BKE_image.h"
 #include "BKE_material.h"
 #include "BKE_mesh_runtime.h"
-#include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_report.h"
 
@@ -72,6 +71,8 @@
 #include "BLI_sys_types.h"
 #include "ED_mesh.h" /* for face mask functions */
 
+#include "DRW_select_buffer.h"
+
 #include "WM_api.h"
 #include "WM_types.h"
 
@@ -93,14 +94,15 @@ bool paint_convert_bb_to_rect(rcti *rect,
   BLI_rcti_init_minmax(rect);
 
   /* return zero if the bounding box has non-positive volume */
-  if (bb_min[0] > bb_max[0] || bb_min[1] > bb_max[1] || bb_min[2] > bb_max[2])
+  if (bb_min[0] > bb_max[0] || bb_min[1] > bb_max[1] || bb_min[2] > bb_max[2]) {
     return 0;
+  }
 
   ED_view3d_ob_project_mat_get(rv3d, ob, projection_mat);
 
-  for (i = 0; i < 2; ++i) {
-    for (j = 0; j < 2; ++j) {
-      for (k = 0; k < 2; ++k) {
+  for (i = 0; i < 2; i++) {
+    for (j = 0; j < 2; j++) {
+      for (k = 0; k < 2; k++) {
         float vec[3], proj[2];
         int proj_i[2];
         vec[0] = i ? bb_min[0] : bb_max[0];
@@ -142,7 +144,6 @@ void paint_calc_redraw_planes(float planes[4][4],
   rect.ymax += 2;
 
   ED_view3d_clipping_calc(&bb, planes, ar, ob, &rect);
-  negate_m4(planes);
 }
 
 float paint_calc_object_space_radius(ViewContext *vc, const float center[3], float pixel_radius)
@@ -195,8 +196,9 @@ void paint_get_tex_pixel_col(const MTex *mtex,
     rgba[3] = 1.0f;
   }
 
-  if (convert_to_linear)
+  if (convert_to_linear) {
     IMB_colormanagement_colorspace_to_scene_linear_v3(rgba, colorspace);
+  }
 
   linearrgb_to_srgb_v3_v3(rgba, rgba);
 
@@ -247,7 +249,7 @@ static void imapaint_project(float matrix[4][4], const float co[3], float pco[4]
 }
 
 static void imapaint_tri_weights(float matrix[4][4],
-                                 GLint view[4],
+                                 const GLint view[4],
                                  const float v1[3],
                                  const float v2[3],
                                  const float v3[3],
@@ -382,11 +384,13 @@ static int imapaint_pick_face(ViewContext *vc,
                               unsigned int *r_index,
                               unsigned int totpoly)
 {
-  if (totpoly == 0)
+  if (totpoly == 0) {
     return 0;
+  }
 
   /* sample only on the exact position */
-  *r_index = ED_view3d_select_id_sample(vc, mval[0], mval[1]);
+  ED_view3d_select_id_validate(vc);
+  *r_index = DRW_select_buffer_sample_point(vc->depsgraph, vc->ar, vc->v3d, mval);
 
   if ((*r_index) == 0 || (*r_index) > (unsigned int)totpoly) {
     return 0;
@@ -410,18 +414,24 @@ static Image *imapaint_face_image(Object *ob, Mesh *me, int face_index)
 /* Uses symm to selectively flip any axis of a coordinate. */
 void flip_v3_v3(float out[3], const float in[3], const char symm)
 {
-  if (symm & PAINT_SYMM_X)
+  if (symm & PAINT_SYMM_X) {
     out[0] = -in[0];
-  else
+  }
+  else {
     out[0] = in[0];
-  if (symm & PAINT_SYMM_Y)
+  }
+  if (symm & PAINT_SYMM_Y) {
     out[1] = -in[1];
-  else
+  }
+  else {
     out[1] = in[1];
-  if (symm & PAINT_SYMM_Z)
+  }
+  if (symm & PAINT_SYMM_Z) {
     out[2] = -in[2];
-  else
+  }
+  else {
     out[2] = in[2];
+  }
 }
 
 void flip_qt_qt(float out[4], const float in[4], const char symm)
@@ -452,7 +462,7 @@ void paint_sample_color(
     bContext *C, ARegion *ar, int x, int y, bool texpaint_proj, bool use_palette)
 {
   Scene *scene = CTX_data_scene(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Paint *paint = BKE_paint_get_active_from_context(C);
   Palette *palette = BKE_paint_palette(paint);
   PaletteColor *color = NULL;
@@ -474,7 +484,7 @@ void paint_sample_color(
   }
 
   if (CTX_wm_view3d(C) && texpaint_proj) {
-    /* first try getting a colour directly from the mesh faces if possible */
+    /* first try getting a color directly from the mesh faces if possible */
     ViewLayer *view_layer = CTX_data_view_layer(C);
     Object *ob = OBACT(view_layer);
     Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
@@ -494,17 +504,19 @@ void paint_sample_color(
       unsigned int totpoly = me->totpoly;
 
       if (CustomData_has_layer(&me_eval->ldata, CD_MLOOPUV)) {
-        ED_view3d_viewcontext_init(C, &vc);
+        ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
         view3d_operator_needs_opengl(C);
 
         if (imapaint_pick_face(&vc, mval, &faceindex, totpoly)) {
           Image *image;
 
-          if (use_material)
+          if (use_material) {
             image = imapaint_face_image(ob_eval, me_eval, faceindex);
-          else
+          }
+          else {
             image = imapaint->canvas;
+          }
 
           if (image) {
             ImBuf *ibuf = BKE_image_acquire_ibuf(image, NULL, NULL);
@@ -517,10 +529,12 @@ void paint_sample_color(
               u = fmodf(uv[0], 1.0f);
               v = fmodf(uv[1], 1.0f);
 
-              if (u < 0.0f)
+              if (u < 0.0f) {
                 u += 1.0f;
-              if (v < 0.0f)
+              }
+              if (v < 0.0f) {
                 v += 1.0f;
+              }
 
               u = u * ibuf->x;
               v = v * ibuf->y;
@@ -563,8 +577,9 @@ void paint_sample_color(
           x + ar->winrct.xmin, y + ar->winrct.ymin, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &col);
       glReadBuffer(GL_BACK);
     }
-    else
+    else {
       return;
+    }
   }
   else {
     glReadBuffer(GL_FRONT);

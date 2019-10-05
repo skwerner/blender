@@ -62,6 +62,7 @@
 #include "BKE_deform.h"
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
+#include "BKE_fcurve.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_library.h"
@@ -120,7 +121,8 @@ void BKE_constraint_unique_name(bConstraint *con, ListBase *list)
 /* ----------------- Evaluation Loop Preparation --------------- */
 
 /* package an object/bone for use in constraint evaluation */
-/* This function MEM_calloc's a bConstraintOb struct, that will need to be freed after evaluation */
+/* This function MEM_calloc's a bConstraintOb struct,
+ * that will need to be freed after evaluation */
 bConstraintOb *BKE_constraints_make_evalob(
     Depsgraph *depsgraph, Scene *scene, Object *ob, void *subdata, short datatype)
 {
@@ -156,8 +158,9 @@ bConstraintOb *BKE_constraints_make_evalob(
         }
         copy_m4_m4(cob->matrix, ob->obmat);
       }
-      else
+      else {
         unit_m4(cob->matrix);
+      }
 
       copy_m4_m4(cob->startmat, cob->matrix);
       break;
@@ -181,8 +184,9 @@ bConstraintOb *BKE_constraints_make_evalob(
         /* matrix in world-space */
         mul_m4_m4m4(cob->matrix, ob->obmat, cob->pchan->pose_mat);
       }
-      else
+      else {
         unit_m4(cob->matrix);
+      }
 
       copy_m4_m4(cob->startmat, cob->matrix);
       break;
@@ -202,15 +206,16 @@ void BKE_constraints_clear_evalob(bConstraintOb *cob)
   float delta[4][4], imat[4][4];
 
   /* prevent crashes */
-  if (cob == NULL)
+  if (cob == NULL) {
     return;
+  }
 
   /* calculate delta of constraints evaluation */
   invert_m4_m4(imat, cob->startmat);
-  /* XXX This would seem to be in wrong order. However, it does not work in 'right' order - would be nice to
-   *     understand why premul is needed here instead of usual postmul?
-   *     In any case, we **do not get a delta** here (e.g. startmat & matrix having same location, still gives
-   *     a 'delta' with non-null translation component :/ ).*/
+  /* XXX This would seem to be in wrong order. However, it does not work in 'right' order -
+   *     would be nice to understand why premul is needed here instead of usual postmul?
+   *     In any case, we **do not get a delta** here (e.g. startmat & matrix having same location,
+   *     still gives a 'delta' with non-null translation component :/ ).*/
   mul_m4_m4m4(delta, cob->matrix, imat);
 
   /* copy matrices back to source */
@@ -256,11 +261,13 @@ void BKE_constraint_mat_convertspace(
   float imat[4][4];
 
   /* prevent crashes in these unlikely events  */
-  if (ob == NULL || mat == NULL)
+  if (ob == NULL || mat == NULL) {
     return;
+  }
   /* optimize trick - check if need to do anything */
-  if (from == to)
+  if (from == to) {
     return;
+  }
 
   /* are we dealing with pose-channels or objects */
   if (pchan) {
@@ -347,8 +354,9 @@ void BKE_constraint_mat_convertspace(
          */
         /* XXX This is actually an ugly hack, local space of a parent-less object *is* the same as
          *     global space!
-         *     Think what we want actually here is some kind of 'Final Space', i.e. once transformations
-         *     are applied - users are often confused about this too, this is not consistent with bones
+         *     Think what we want actually here is some kind of 'Final Space', i.e
+         *     . once transformations are applied - users are often confused about this too,
+         *     this is not consistent with bones
          *     local space either... Meh :|
          *     --mont29
          */
@@ -513,10 +521,12 @@ static void contarget_get_lattice_mat(Object *ob, const char *substring, float m
   copy_m4_m4(mat, ob->obmat);
 
   /* get index of vertex group */
-  if (defgroup == -1)
+  if (defgroup == -1) {
     return;
-  if (dv == NULL)
+  }
+  if (dv == NULL) {
     return;
+  }
 
   /* 1. Loop through control-points checking if in nominated vertex-group.
    * 2. If it is, add it to vec to find the average point.
@@ -534,15 +544,18 @@ static void contarget_get_lattice_mat(Object *ob, const char *substring, float m
     }
 
     /* advance pointer to coordinate data */
-    if (co)
+    if (co) {
       co += 3;
-    else
+    }
+    else {
       bp++;
+    }
   }
 
   /* find average location, then multiply by ob->obmat to find world-space location */
-  if (grouped)
+  if (grouped) {
     mul_v3_fl(vec, 1.0f / grouped);
+  }
   mul_v3_m4v3(tvec, ob->obmat, vec);
 
   /* copy new location to matrix */
@@ -638,8 +651,9 @@ static void constraint_target_to_mat4(Object *ob,
         mul_m4_m4m4(mat, ob->obmat, tempmat);
       }
     }
-    else
+    else {
       copy_m4_m4(mat, ob->obmat);
+    }
 
     /* convert matrix space as required */
     BKE_constraint_mat_convertspace(ob, pchan, mat, from, to, false);
@@ -689,7 +703,7 @@ static void default_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
                                bConstraintTarget *ct,
                                float UNUSED(ctime))
 {
-  if (VALID_CONS_TARGET(ct))
+  if (VALID_CONS_TARGET(ct)) {
     constraint_target_to_mat4(ct->tar,
                               ct->subtarget,
                               ct->matrix,
@@ -697,8 +711,10 @@ static void default_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
                               ct->space,
                               con->flag,
                               con->headtail);
-  else if (ct)
+  }
+  else if (ct) {
     unit_m4(ct->matrix);
+  }
 }
 
 /* This is a variant that extracts full transformation from B-Bone segments.
@@ -709,7 +725,7 @@ static void default_get_tarmat_full_bbone(struct Depsgraph *UNUSED(depsgraph),
                                           bConstraintTarget *ct,
                                           float UNUSED(ctime))
 {
-  if (VALID_CONS_TARGET(ct))
+  if (VALID_CONS_TARGET(ct)) {
     constraint_target_to_mat4(ct->tar,
                               ct->subtarget,
                               ct->matrix,
@@ -717,8 +733,10 @@ static void default_get_tarmat_full_bbone(struct Depsgraph *UNUSED(depsgraph),
                               ct->space,
                               con->flag | CONSTRAINT_BBONE_SHAPE_FULL,
                               con->headtail);
-  else if (ct)
+  }
+  else if (ct) {
     unit_m4(ct->matrix);
+  }
 }
 
 /* This following macro should be used for all standard single-target *_get_tars functions
@@ -905,24 +923,33 @@ static void childof_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
       mat4_to_size(sizo, invmat);
 
       /* disable channels not enabled */
-      if (!(data->flag & CHILDOF_LOCX))
+      if (!(data->flag & CHILDOF_LOCX)) {
         loc[0] = loco[0] = 0.0f;
-      if (!(data->flag & CHILDOF_LOCY))
+      }
+      if (!(data->flag & CHILDOF_LOCY)) {
         loc[1] = loco[1] = 0.0f;
-      if (!(data->flag & CHILDOF_LOCZ))
+      }
+      if (!(data->flag & CHILDOF_LOCZ)) {
         loc[2] = loco[2] = 0.0f;
-      if (!(data->flag & CHILDOF_ROTX))
+      }
+      if (!(data->flag & CHILDOF_ROTX)) {
         eul[0] = eulo[0] = 0.0f;
-      if (!(data->flag & CHILDOF_ROTY))
+      }
+      if (!(data->flag & CHILDOF_ROTY)) {
         eul[1] = eulo[1] = 0.0f;
-      if (!(data->flag & CHILDOF_ROTZ))
+      }
+      if (!(data->flag & CHILDOF_ROTZ)) {
         eul[2] = eulo[2] = 0.0f;
-      if (!(data->flag & CHILDOF_SIZEX))
+      }
+      if (!(data->flag & CHILDOF_SIZEX)) {
         size[0] = sizo[0] = 1.0f;
-      if (!(data->flag & CHILDOF_SIZEY))
+      }
+      if (!(data->flag & CHILDOF_SIZEY)) {
         size[1] = sizo[1] = 1.0f;
-      if (!(data->flag & CHILDOF_SIZEZ))
+      }
+      if (!(data->flag & CHILDOF_SIZEZ)) {
         size[2] = sizo[2] = 1.0f;
+      }
 
       /* make new target mat and offset mat */
       loc_eulO_size_to_mat4(ct->matrix, loc, eul, size, ct->rotOrder);
@@ -942,12 +969,15 @@ static void childof_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
       /* without this, changes to scale and rotation can change location
        * of a parentless bone or a disconnected bone. Even though its set
        * to zero above. */
-      if (!(data->flag & CHILDOF_LOCX))
+      if (!(data->flag & CHILDOF_LOCX)) {
         cob->matrix[3][0] = tempmat[3][0];
-      if (!(data->flag & CHILDOF_LOCY))
+      }
+      if (!(data->flag & CHILDOF_LOCY)) {
         cob->matrix[3][1] = tempmat[3][1];
-      if (!(data->flag & CHILDOF_LOCZ))
+      }
+      if (!(data->flag & CHILDOF_LOCZ)) {
         cob->matrix[3][2] = tempmat[3][2];
+      }
     }
   }
 }
@@ -1047,10 +1077,12 @@ static void vectomat(const float vec[3],
     n[1] = 0.0f;
     n[2] = 1.0f;
   }
-  if (axis > 2)
+  if (axis > 2) {
     axis -= 3;
-  else
+  }
+  else {
     negate_v3(n);
+  }
 
   /* n specifies the transformation of the track axis */
   if (flags & TARGET_Z_UP) {
@@ -1110,7 +1142,8 @@ static void trackto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
     float size[3], vec[3];
     float totmat[3][3];
 
-    /* Get size property, since ob->scale is only the object's own relative size, not its global one */
+    /* Get size property, since ob->scale is only the object's own relative size,
+     * not its global one. */
     mat4_to_size(size, cob->matrix);
 
     /* Clear the object's rotation */
@@ -1210,7 +1243,7 @@ static void kinematic_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
 {
   bKinematicConstraint *data = con->data;
 
-  if (VALID_CONS_TARGET(ct))
+  if (VALID_CONS_TARGET(ct)) {
     constraint_target_to_mat4(ct->tar,
                               ct->subtarget,
                               ct->matrix,
@@ -1218,6 +1251,7 @@ static void kinematic_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
                               ct->space,
                               con->flag,
                               con->headtail);
+  }
   else if (ct) {
     if (data->flag & CONSTRAINT_IK_AUTO) {
       Object *ob = cob->ob;
@@ -1233,8 +1267,9 @@ static void kinematic_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
         copy_v3_v3(ct->matrix[3], vec);
       }
     }
-    else
+    else {
       unit_m4(ct->matrix);
+    }
   }
 }
 
@@ -1326,12 +1361,11 @@ static void followpath_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
         Nurb *nu = cu->nurb.first;
         curvetime = cu->ctime - data->offset;
 
-        /* ctime is now a proper var setting of Curve which gets set by Animato like any other var that's animated,
-         * but this will only work if it actually is animated...
+        /* ctime is now a proper var setting of Curve which gets set by Animato like any other var
+         * that's animated, but this will only work if it actually is animated...
          *
-         * we divide the curvetime calculated in the previous step by the length of the path, to get a time
-         * factor, which then gets clamped to lie within 0.0 - 1.0 range
-         */
+         * we divide the curvetime calculated in the previous step by the length of the path,
+         * to get a time factor, which then gets clamped to lie within 0.0 - 1.0 range. */
         curvetime /= cu->pathlen;
 
         if (nu && nu->flagu & CU_NURB_CYCLIC) {
@@ -1379,8 +1413,9 @@ static void followpath_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
       }
     }
   }
-  else if (ct)
+  else if (ct) {
     unit_m4(ct->matrix);
+  }
 }
 
 static void followpath_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targets)
@@ -1404,17 +1439,21 @@ static void followpath_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *
     mul_m4_m4m4(cob->matrix, ct->matrix, obmat);
 
     /* un-apply scaling caused by path */
-    if ((data->followflag & FOLLOWPATH_RADIUS) ==
-        0) { /* XXX - assume that scale correction means that radius will have some scale error in it - Campbell */
+    if ((data->followflag & FOLLOWPATH_RADIUS) == 0) {
+      /* XXX: Assume that scale correction means that radius
+       * will have some scale error in it - Campbell. */
       float obsize[3];
 
       mat4_to_size(obsize, cob->matrix);
-      if (obsize[0])
+      if (obsize[0]) {
         mul_v3_fl(cob->matrix[0], size[0] / obsize[0]);
-      if (obsize[1])
+      }
+      if (obsize[1]) {
         mul_v3_fl(cob->matrix[1], size[1] / obsize[1]);
-      if (obsize[2])
+      }
+      if (obsize[2]) {
         mul_v3_fl(cob->matrix[2], size[2] / obsize[2]);
+      }
     }
   }
 }
@@ -1441,28 +1480,34 @@ static void loclimit_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *UN
   bLocLimitConstraint *data = con->data;
 
   if (data->flag & LIMIT_XMIN) {
-    if (cob->matrix[3][0] < data->xmin)
+    if (cob->matrix[3][0] < data->xmin) {
       cob->matrix[3][0] = data->xmin;
+    }
   }
   if (data->flag & LIMIT_XMAX) {
-    if (cob->matrix[3][0] > data->xmax)
+    if (cob->matrix[3][0] > data->xmax) {
       cob->matrix[3][0] = data->xmax;
+    }
   }
   if (data->flag & LIMIT_YMIN) {
-    if (cob->matrix[3][1] < data->ymin)
+    if (cob->matrix[3][1] < data->ymin) {
       cob->matrix[3][1] = data->ymin;
+    }
   }
   if (data->flag & LIMIT_YMAX) {
-    if (cob->matrix[3][1] > data->ymax)
+    if (cob->matrix[3][1] > data->ymax) {
       cob->matrix[3][1] = data->ymax;
+    }
   }
   if (data->flag & LIMIT_ZMIN) {
-    if (cob->matrix[3][2] < data->zmin)
+    if (cob->matrix[3][2] < data->zmin) {
       cob->matrix[3][2] = data->zmin;
+    }
   }
   if (data->flag & LIMIT_ZMAX) {
-    if (cob->matrix[3][2] > data->zmax)
+    if (cob->matrix[3][2] > data->zmax) {
       cob->matrix[3][2] = data->zmax;
+    }
   }
 }
 
@@ -1499,25 +1544,31 @@ static void rotlimit_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *UN
 
   /* limiting of euler values... */
   if (data->flag & LIMIT_XROT) {
-    if (eul[0] < data->xmin)
+    if (eul[0] < data->xmin) {
       eul[0] = data->xmin;
+    }
 
-    if (eul[0] > data->xmax)
+    if (eul[0] > data->xmax) {
       eul[0] = data->xmax;
+    }
   }
   if (data->flag & LIMIT_YROT) {
-    if (eul[1] < data->ymin)
+    if (eul[1] < data->ymin) {
       eul[1] = data->ymin;
+    }
 
-    if (eul[1] > data->ymax)
+    if (eul[1] > data->ymax) {
       eul[1] = data->ymax;
+    }
   }
   if (data->flag & LIMIT_ZROT) {
-    if (eul[2] < data->zmin)
+    if (eul[2] < data->zmin) {
       eul[2] = data->zmin;
+    }
 
-    if (eul[2] > data->zmax)
+    if (eul[2] > data->zmax) {
       eul[2] = data->zmax;
+    }
   }
 
   loc_eulO_size_to_mat4(cob->matrix, loc, eul, size, cob->rotOrder);
@@ -1549,36 +1600,45 @@ static void sizelimit_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *U
   mat4_to_size(obsize, cob->matrix);
 
   if (data->flag & LIMIT_XMIN) {
-    if (size[0] < data->xmin)
+    if (size[0] < data->xmin) {
       size[0] = data->xmin;
+    }
   }
   if (data->flag & LIMIT_XMAX) {
-    if (size[0] > data->xmax)
+    if (size[0] > data->xmax) {
       size[0] = data->xmax;
+    }
   }
   if (data->flag & LIMIT_YMIN) {
-    if (size[1] < data->ymin)
+    if (size[1] < data->ymin) {
       size[1] = data->ymin;
+    }
   }
   if (data->flag & LIMIT_YMAX) {
-    if (size[1] > data->ymax)
+    if (size[1] > data->ymax) {
       size[1] = data->ymax;
+    }
   }
   if (data->flag & LIMIT_ZMIN) {
-    if (size[2] < data->zmin)
+    if (size[2] < data->zmin) {
       size[2] = data->zmin;
+    }
   }
   if (data->flag & LIMIT_ZMAX) {
-    if (size[2] > data->zmax)
+    if (size[2] > data->zmax) {
       size[2] = data->zmax;
+    }
   }
 
-  if (obsize[0])
+  if (obsize[0]) {
     mul_v3_fl(cob->matrix[0], size[0] / obsize[0]);
-  if (obsize[1])
+  }
+  if (obsize[1]) {
     mul_v3_fl(cob->matrix[1], size[1] / obsize[1]);
-  if (obsize[2])
+  }
+  if (obsize[2]) {
     mul_v3_fl(cob->matrix[2], size[2] / obsize[2]);
+  }
 }
 
 static bConstraintTypeInfo CTI_SIZELIMIT = {
@@ -1647,28 +1707,32 @@ static void loclike_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
   if (VALID_CONS_TARGET(ct)) {
     float offset[3] = {0.0f, 0.0f, 0.0f};
 
-    if (data->flag & LOCLIKE_OFFSET)
+    if (data->flag & LOCLIKE_OFFSET) {
       copy_v3_v3(offset, cob->matrix[3]);
+    }
 
     if (data->flag & LOCLIKE_X) {
       cob->matrix[3][0] = ct->matrix[3][0];
 
-      if (data->flag & LOCLIKE_X_INVERT)
+      if (data->flag & LOCLIKE_X_INVERT) {
         cob->matrix[3][0] *= -1;
+      }
       cob->matrix[3][0] += offset[0];
     }
     if (data->flag & LOCLIKE_Y) {
       cob->matrix[3][1] = ct->matrix[3][1];
 
-      if (data->flag & LOCLIKE_Y_INVERT)
+      if (data->flag & LOCLIKE_Y_INVERT) {
         cob->matrix[3][1] *= -1;
+      }
       cob->matrix[3][1] += offset[1];
     }
     if (data->flag & LOCLIKE_Z) {
       cob->matrix[3][2] = ct->matrix[3][2];
 
-      if (data->flag & LOCLIKE_Z_INVERT)
+      if (data->flag & LOCLIKE_Z_INVERT) {
         cob->matrix[3][2] *= -1;
+      }
       cob->matrix[3][2] += offset[2];
     }
   }
@@ -1738,51 +1802,110 @@ static void rotlike_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
   bConstraintTarget *ct = targets->first;
 
   if (VALID_CONS_TARGET(ct)) {
-    float loc[3];
-    float eul[3], obeul[3];
-    float size[3];
+    float loc[3], size[3], oldrot[3][3], newrot[3][3];
+    float eul[3], obeul[3], defeul[3];
 
-    copy_v3_v3(loc, cob->matrix[3]);
-    mat4_to_size(size, cob->matrix);
+    mat4_to_loc_rot_size(loc, oldrot, size, cob->matrix);
 
-    /* to allow compatible rotations, must get both rotations in the order of the owner... */
-    mat4_to_eulO(obeul, cob->rotOrder, cob->matrix);
-    /* we must get compatible eulers from the beginning because some of them can be modified below (see bug #21875) */
-    mat4_to_compatible_eulO(eul, obeul, cob->rotOrder, ct->matrix);
+    /* Select the Euler rotation order, defaulting to the owner. */
+    short rot_order = cob->rotOrder;
 
-    if ((data->flag & ROTLIKE_X) == 0)
-      eul[0] = obeul[0];
+    if (data->euler_order != CONSTRAINT_EULER_AUTO) {
+      rot_order = data->euler_order;
+    }
+
+    /* To allow compatible rotations, must get both rotations in the order of the owner... */
+    mat4_to_eulO(obeul, rot_order, cob->matrix);
+    /* We must get compatible eulers from the beginning because
+     * some of them can be modified below (see bug T21875). */
+    mat4_to_compatible_eulO(eul, obeul, rot_order, ct->matrix);
+
+    /* Prepare the copied euler rotation. */
+    bool legacy_offset = false;
+
+    switch (data->mix_mode) {
+      case ROTLIKE_MIX_OFFSET:
+        legacy_offset = true;
+        copy_v3_v3(defeul, obeul);
+        break;
+
+      case ROTLIKE_MIX_REPLACE:
+        copy_v3_v3(defeul, obeul);
+        break;
+
+      default:
+        zero_v3(defeul);
+    }
+
+    if ((data->flag & ROTLIKE_X) == 0) {
+      eul[0] = defeul[0];
+    }
     else {
-      if (data->flag & ROTLIKE_OFFSET)
-        rotate_eulO(eul, cob->rotOrder, 'X', obeul[0]);
+      if (legacy_offset) {
+        rotate_eulO(eul, rot_order, 'X', obeul[0]);
+      }
 
-      if (data->flag & ROTLIKE_X_INVERT)
+      if (data->flag & ROTLIKE_X_INVERT) {
         eul[0] *= -1;
+      }
     }
 
-    if ((data->flag & ROTLIKE_Y) == 0)
-      eul[1] = obeul[1];
+    if ((data->flag & ROTLIKE_Y) == 0) {
+      eul[1] = defeul[1];
+    }
     else {
-      if (data->flag & ROTLIKE_OFFSET)
-        rotate_eulO(eul, cob->rotOrder, 'Y', obeul[1]);
+      if (legacy_offset) {
+        rotate_eulO(eul, rot_order, 'Y', obeul[1]);
+      }
 
-      if (data->flag & ROTLIKE_Y_INVERT)
+      if (data->flag & ROTLIKE_Y_INVERT) {
         eul[1] *= -1;
+      }
     }
 
-    if ((data->flag & ROTLIKE_Z) == 0)
-      eul[2] = obeul[2];
+    if ((data->flag & ROTLIKE_Z) == 0) {
+      eul[2] = defeul[2];
+    }
     else {
-      if (data->flag & ROTLIKE_OFFSET)
-        rotate_eulO(eul, cob->rotOrder, 'Z', obeul[2]);
+      if (legacy_offset) {
+        rotate_eulO(eul, rot_order, 'Z', obeul[2]);
+      }
 
-      if (data->flag & ROTLIKE_Z_INVERT)
+      if (data->flag & ROTLIKE_Z_INVERT) {
         eul[2] *= -1;
+      }
     }
 
-    /* good to make eulers compatible again, since we don't know how much they were changed above */
+    /* Add the euler components together if needed. */
+    if (data->mix_mode == ROTLIKE_MIX_ADD) {
+      add_v3_v3(eul, obeul);
+    }
+
+    /* Good to make eulers compatible again,
+     * since we don't know how much they were changed above. */
     compatible_eul(eul, obeul);
-    loc_eulO_size_to_mat4(cob->matrix, loc, eul, size, cob->rotOrder);
+    eulO_to_mat3(newrot, eul, rot_order);
+
+    /* Mix the rotation matrices: */
+    switch (data->mix_mode) {
+      case ROTLIKE_MIX_REPLACE:
+      case ROTLIKE_MIX_OFFSET:
+      case ROTLIKE_MIX_ADD:
+        break;
+
+      case ROTLIKE_MIX_BEFORE:
+        mul_m3_m3m3(newrot, newrot, oldrot);
+        break;
+
+      case ROTLIKE_MIX_AFTER:
+        mul_m3_m3m3(newrot, oldrot, newrot);
+        break;
+
+      default:
+        BLI_assert(false);
+    }
+
+    loc_rot_size_to_mat4(cob->matrix, loc, newrot, size);
   }
 }
 
@@ -1808,6 +1931,7 @@ static void sizelike_new_data(void *cdata)
   bSizeLikeConstraint *data = (bSizeLikeConstraint *)cdata;
 
   data->flag = SIZELIKE_X | SIZELIKE_Y | SIZELIKE_Z | SIZELIKE_MULTIPLY;
+  data->power = 1.0f;
 }
 
 static void sizelike_id_looper(bConstraint *con, ConstraintIDFunc func, void *userdata)
@@ -1852,8 +1976,42 @@ static void sizelike_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *ta
   if (VALID_CONS_TARGET(ct)) {
     float obsize[3], size[3];
 
-    mat4_to_size(size, ct->matrix);
     mat4_to_size(obsize, cob->matrix);
+
+    /* Compute one uniform scale factor to apply to all three axes. */
+    if (data->flag & SIZELIKE_UNIFORM) {
+      const int all_axes = SIZELIKE_X | SIZELIKE_Y | SIZELIKE_Z;
+      float total = 1.0f;
+
+      /* If all axes are selected, use the determinant. */
+      if ((data->flag & all_axes) == all_axes) {
+        total = fabsf(mat4_to_volume_scale(ct->matrix));
+      }
+      /* Otherwise multiply individual values. */
+      else {
+        mat4_to_size(size, ct->matrix);
+
+        if (data->flag & SIZELIKE_X) {
+          total *= size[0];
+        }
+        if (data->flag & SIZELIKE_Y) {
+          total *= size[1];
+        }
+        if (data->flag & SIZELIKE_Z) {
+          total *= size[2];
+        }
+      }
+
+      copy_v3_fl(size, cbrt(total));
+    }
+    /* Regular per-axis scaling. */
+    else {
+      mat4_to_size(size, ct->matrix);
+    }
+
+    for (int i = 0; i < 3; i++) {
+      size[i] = powf(size[i], data->power);
+    }
 
     if (data->flag & SIZELIKE_OFFSET) {
       /* Scale is a multiplicative quantity, so adding it makes no sense.
@@ -1869,13 +2027,13 @@ static void sizelike_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *ta
       }
     }
 
-    if ((data->flag & SIZELIKE_X) && (obsize[0] != 0)) {
+    if ((data->flag & (SIZELIKE_X | SIZELIKE_UNIFORM)) && (obsize[0] != 0)) {
       mul_v3_fl(cob->matrix[0], size[0] / obsize[0]);
     }
-    if ((data->flag & SIZELIKE_Y) && (obsize[1] != 0)) {
+    if ((data->flag & (SIZELIKE_Y | SIZELIKE_UNIFORM)) && (obsize[1] != 0)) {
       mul_v3_fl(cob->matrix[1], size[1] / obsize[1]);
     }
-    if ((data->flag & SIZELIKE_Z) && (obsize[2] != 0)) {
+    if ((data->flag & (SIZELIKE_Z | SIZELIKE_UNIFORM)) && (obsize[2] != 0)) {
       mul_v3_fl(cob->matrix[2], size[2] / obsize[2]);
     }
   }
@@ -1932,13 +2090,43 @@ static void translike_flush_tars(bConstraint *con, ListBase *list, bool no_copy)
   }
 }
 
-static void translike_evaluate(bConstraint *UNUSED(con), bConstraintOb *cob, ListBase *targets)
+static void translike_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targets)
 {
+  bTransLikeConstraint *data = con->data;
   bConstraintTarget *ct = targets->first;
 
   if (VALID_CONS_TARGET(ct)) {
-    /* just copy the entire transform matrix of the target */
-    copy_m4_m4(cob->matrix, ct->matrix);
+    if (data->mix_mode == TRANSLIKE_MIX_REPLACE) {
+      /* just copy the entire transform matrix of the target */
+      copy_m4_m4(cob->matrix, ct->matrix);
+    }
+    else {
+      float old_loc[3], old_rot[3][3], old_size[3];
+      float new_loc[3], new_rot[3][3], new_size[3];
+
+      /* Separate matrices so they can be combined in a way that avoids shear. */
+      mat4_to_loc_rot_size(old_loc, old_rot, old_size, cob->matrix);
+      mat4_to_loc_rot_size(new_loc, new_rot, new_size, ct->matrix);
+
+      switch (data->mix_mode) {
+        case TRANSLIKE_MIX_BEFORE:
+          mul_v3_m4v3(new_loc, ct->matrix, old_loc);
+          mul_m3_m3m3(new_rot, new_rot, old_rot);
+          mul_v3_v3(new_size, old_size);
+          break;
+
+        case TRANSLIKE_MIX_AFTER:
+          mul_v3_m4v3(new_loc, cob->matrix, new_loc);
+          mul_m3_m3m3(new_rot, old_rot, new_rot);
+          mul_v3_v3(new_size, old_size);
+          break;
+
+        default:
+          BLI_assert(false);
+      }
+
+      loc_rot_size_to_mat4(cob->matrix, new_loc, new_rot, new_size);
+    }
   }
 }
 
@@ -1963,7 +2151,7 @@ static void samevolume_new_data(void *cdata)
 {
   bSameVolumeConstraint *data = (bSameVolumeConstraint *)cdata;
 
-  data->flag = SAMEVOL_Y;
+  data->free_axis = SAMEVOL_Y;
   data->volume = 1.0f;
 }
 
@@ -1972,18 +2160,30 @@ static void samevolume_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *
   bSameVolumeConstraint *data = con->data;
 
   float volume = data->volume;
-  float fac = 1.0f, total_scale;
+  float fac = 1.0f, total_scale = 1.0f;
   float obsize[3];
 
   mat4_to_size(obsize, cob->matrix);
 
   /* calculate normalizing scale factor for non-essential values */
-  total_scale = obsize[0] * obsize[1] * obsize[2];
-  if (total_scale != 0)
+  switch (data->mode) {
+    case SAMEVOL_STRICT:
+      total_scale = obsize[0] * obsize[1] * obsize[2];
+      break;
+    case SAMEVOL_UNIFORM:
+      total_scale = pow3f(obsize[data->free_axis]);
+      break;
+    case SAMEVOL_SINGLE_AXIS:
+      total_scale = obsize[data->free_axis];
+      break;
+  }
+
+  if (total_scale != 0) {
     fac = sqrtf(volume / total_scale);
+  }
 
   /* apply scaling factor to the channels not being kept */
-  switch (data->flag) {
+  switch (data->free_axis) {
     case SAMEVOL_X:
       mul_v3_fl(cob->matrix[1], fac);
       mul_v3_fl(cob->matrix[2], fac);
@@ -2022,7 +2222,6 @@ static void pycon_free(bConstraint *con)
 
   /* id-properties */
   IDP_FreeProperty(data->prop);
-  MEM_freeN(data->prop);
 
   /* multiple targets */
   BLI_freelistN(&data->targets);
@@ -2066,8 +2265,9 @@ static void pycon_id_looper(bConstraint *con, ConstraintIDFunc func, void *userd
   bConstraintTarget *ct;
 
   /* targets */
-  for (ct = data->targets.first; ct; ct = ct->next)
+  for (ct = data->targets.first; ct; ct = ct->next) {
     func(con, (ID **)&ct->tar, false, userdata);
+  }
 
   /* script */
   func(con, (ID **)&data->text, true, userdata);
@@ -2103,12 +2303,14 @@ static void pycon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
 
     /* only execute target calculation if allowed */
 #ifdef WITH_PYTHON
-    if (G.f & G_FLAG_SCRIPT_AUTOEXEC)
+    if (G.f & G_FLAG_SCRIPT_AUTOEXEC) {
       BPY_pyconstraint_target(data, ct);
+    }
 #endif
   }
-  else if (ct)
+  else if (ct) {
     unit_m4(ct->matrix);
+  }
 }
 
 static void pycon_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targets)
@@ -2120,8 +2322,9 @@ static void pycon_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targe
   bPythonConstraint *data = con->data;
 
   /* only evaluate in python if we're allowed to do so */
-  if ((G.f & G_FLAG_SCRIPT_AUTOEXEC) == 0)
+  if ((G.f & G_FLAG_SCRIPT_AUTOEXEC) == 0) {
     return;
+  }
 
   /* Now, run the actual 'constraint' function, which should only access the matrices */
   BPY_pyconstraint_exec(data, cob, targets);
@@ -2207,15 +2410,16 @@ static void armdef_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
 }
 
 static void armdef_accumulate_matrix(float obmat[4][4],
-                                     float iobmat[4][4],
-                                     float basemat[4][4],
-                                     float bonemat[4][4],
+                                     const float iobmat[4][4],
+                                     const float basemat[4][4],
+                                     const float bonemat[4][4],
                                      float weight,
                                      float r_sum_mat[4][4],
                                      DualQuat *r_sum_dq)
 {
-  if (weight == 0.0f)
+  if (weight == 0.0f) {
     return;
+  }
 
   /* Convert the selected matrix into object space. */
   float mat[4][4];
@@ -2268,7 +2472,7 @@ static void armdef_accumulate_bone(bConstraintTarget *ct,
 
     /* The target is a B-Bone:
      * FIRST: find the segment (see b_bone_deform in armature.c)
-     * Need to transform co back to bonespace, only need y. */
+     * Need to transform co back to bone-space, only need y. */
     float y = iamat[0][1] * co[0] + iamat[1][1] * co[1] + iamat[2][1] * co[2] + iamat[3][1];
 
     /* Blend the matrix. */
@@ -2326,7 +2530,8 @@ static void armdef_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targ
     copy_v3_v3(input_co, cob->matrix[3]);
   }
 
-  /* Process all targets. */
+  /* Process all targets. This can't use ct->matrix, as armdef_get_tarmat is not
+   * called in solve for efficiency because the constraint needs bone data anyway. */
   for (bConstraintTarget *ct = targets->first; ct; ct = ct->next) {
     if (ct->weight <= 0.0f) {
       continue;
@@ -2478,11 +2683,12 @@ static void actcon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
     CLAMP(s, 0, 1);
     t = (s * (data->end - data->start)) + data->start;
 
-    if (G.debug & G_DEBUG)
+    if (G.debug & G_DEBUG) {
       printf("do Action Constraint %s - Ob %s Pchan %s\n",
              con->name,
              cob->ob->id.name + 2,
              (cob->pchan) ? cob->pchan->name : NULL);
+    }
 
     /* Get the appropriate information from the action */
     if (cob->type == CONSTRAINT_OBTYPE_OBJECT || (data->flag & ACTCON_BONE_USE_OBJECT_ACTION)) {
@@ -2498,9 +2704,9 @@ static void actcon_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
       bPose pose = {{0}};
       bPoseChannel *pchan, *tchan;
 
-      /* make a copy of the bone of interest in the temp pose before evaluating action, so that it can get set
-       * - we need to manually copy over a few settings, including rotation order, otherwise this fails
-       */
+      /* make a copy of the bone of interest in the temp pose before evaluating action,
+       * so that it can get set - we need to manually copy over a few settings,
+       * including rotation order, otherwise this fails. */
       pchan = cob->pchan;
 
       tchan = BKE_pose_channel_verify(&pose, pchan->name);
@@ -2944,8 +3150,9 @@ static void distlimit_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
       /* if inside, then move to surface */
       if (dist <= data->dist) {
         clamp_surf = 1;
-        if (dist != 0.0f)
+        if (dist != 0.0f) {
           sfac = data->dist / dist;
+        }
       }
       /* if soft-distance is enabled, start fading once owner is dist+softdist from the target */
       else if (data->flag & LIMITDIST_USESOFT) {
@@ -2958,8 +3165,9 @@ static void distlimit_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
       /* if outside, then move to surface */
       if (dist >= data->dist) {
         clamp_surf = 1;
-        if (dist != 0.0f)
+        if (dist != 0.0f) {
           sfac = data->dist / dist;
+        }
       }
       /* if soft-distance is enabled, start fading once owner is dist-soft from the target */
       else if (data->flag & LIMITDIST_USESOFT) {
@@ -2967,8 +3175,9 @@ static void distlimit_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
         if (dist >= (data->dist - data->soft)) {
           sfac = (float)(data->soft * (1.0f - expf(-(dist - data->dist) / data->soft)) +
                          data->dist);
-          if (dist != 0.0f)
+          if (dist != 0.0f) {
             sfac /= dist;
+          }
 
           clamp_surf = 1;
         }
@@ -2977,8 +3186,9 @@ static void distlimit_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
     else {
       if (IS_EQF(dist, data->dist) == 0) {
         clamp_surf = 1;
-        if (dist != 0.0f)
+        if (dist != 0.0f) {
           sfac = data->dist / dist;
+        }
       }
     }
 
@@ -3228,7 +3438,6 @@ static void minmax_new_data(void *cdata)
 
   data->minmaxflag = TRACK_Z;
   data->offset = 0.0f;
-  zero_v3(data->cache);
   data->flag = 0;
 }
 
@@ -3325,15 +3534,6 @@ static void minmax_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targ
 
     if (val1 > val2) {
       obmat[3][index] = tarmat[3][index] + data->offset;
-      if (data->flag & MINMAX_STICKY) {
-        if (data->flag & MINMAX_STUCK) {
-          copy_v3_v3(obmat[3], data->cache);
-        }
-        else {
-          copy_v3_v3(data->cache, obmat[3]);
-          data->flag |= MINMAX_STUCK;
-        }
-      }
       if (data->flag & MINMAX_USEROT) {
         /* get out of localspace */
         mul_m4_m4m4(tmat, ct->matrix, obmat);
@@ -3342,9 +3542,6 @@ static void minmax_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targ
       else {
         copy_v3_v3(cob->matrix[3], obmat[3]);
       }
-    }
-    else {
-      data->flag &= ~MINMAX_STUCK;
     }
   }
 }
@@ -3409,8 +3606,9 @@ static void clampto_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
   /* technically, this isn't really needed for evaluation, but we don't know what else
    * might end up calling this...
    */
-  if (ct)
+  if (ct) {
     unit_m4(ct->matrix);
+  }
 }
 
 static void clampto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targets)
@@ -3449,15 +3647,19 @@ static void clampto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
          * extent. Otherwise, default to the x-axis, as that is quite
          * frequently used.
          */
-        if ((size[2] > size[0]) && (size[2] > size[1]))
+        if ((size[2] > size[0]) && (size[2] > size[1])) {
           clamp_axis = CLAMPTO_Z - 1;
-        else if ((size[1] > size[0]) && (size[1] > size[2]))
+        }
+        else if ((size[1] > size[0]) && (size[1] > size[2])) {
           clamp_axis = CLAMPTO_Y - 1;
-        else
+        }
+        else {
           clamp_axis = CLAMPTO_X - 1;
+        }
       }
-      else
+      else {
         clamp_axis = data->flag - 1;
+      }
 
       /* 2. determine position relative to curve on a 0-1 scale based on bounding box */
       if (data->flag2 & CLAMPTO_CYCLIC) {
@@ -3473,7 +3675,8 @@ static void clampto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
             offset = curveMin[clamp_axis] -
                      ceilf((curveMin[clamp_axis] - ownLoc[clamp_axis]) / len) * len;
 
-            /* now, we calculate as per normal, except using offset instead of curveMin[clamp_axis] */
+            /* Now, we calculate as per normal,
+             * except using offset instead of curveMin[clamp_axis]. */
             curvetime = (ownLoc[clamp_axis] - offset) / (len);
           }
           else if (ownLoc[clamp_axis] > curveMax[clamp_axis]) {
@@ -3481,7 +3684,8 @@ static void clampto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
             offset = curveMax[clamp_axis] +
                      (int)((ownLoc[clamp_axis] - curveMax[clamp_axis]) / len) * len;
 
-            /* now, we calculate as per normal, except using offset instead of curveMax[clamp_axis] */
+            /* Now, we calculate as per normal,
+             * except using offset instead of curveMax[clamp_axis]. */
             curvetime = (ownLoc[clamp_axis] - offset) / (len);
           }
           else {
@@ -3496,15 +3700,19 @@ static void clampto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
       }
       else {
         /* no cyclic, so position is clamped to within the bounding box */
-        if (ownLoc[clamp_axis] <= curveMin[clamp_axis])
+        if (ownLoc[clamp_axis] <= curveMin[clamp_axis]) {
           curvetime = 0.0f;
-        else if (ownLoc[clamp_axis] >= curveMax[clamp_axis])
+        }
+        else if (ownLoc[clamp_axis] >= curveMax[clamp_axis]) {
           curvetime = 1.0f;
-        else if (IS_EQF((curveMax[clamp_axis] - curveMin[clamp_axis]), 0.0f) == false)
+        }
+        else if (IS_EQF((curveMax[clamp_axis] - curveMin[clamp_axis]), 0.0f) == false) {
           curvetime = (ownLoc[clamp_axis] - curveMin[clamp_axis]) /
                       (curveMax[clamp_axis] - curveMin[clamp_axis]);
-        else
+        }
+        else {
           curvetime = 0.0f;
+        }
       }
 
       /* 3. position on curve */
@@ -3545,6 +3753,11 @@ static void transform_new_data(void *cdata)
   data->map[0] = 0;
   data->map[1] = 1;
   data->map[2] = 2;
+
+  for (int i = 0; i < 3; i++) {
+    data->from_min_scale[i] = data->from_max_scale[i] = 1.0f;
+    data->to_min_scale[i] = data->to_max_scale[i] = 1.0f;
+  }
 }
 
 static void transform_id_looper(bConstraint *con, ConstraintIDFunc func, void *userdata)
@@ -3589,8 +3802,10 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
   /* only evaluate if there is a target */
   if (VALID_CONS_TARGET(ct)) {
     float *from_min, *from_max, *to_min, *to_max;
-    float loc[3], eul[3], size[3];
-    float dvec[3], sval[3];
+    float loc[3], rot[3][3], oldeul[3], size[3];
+    float newloc[3], newrot[3][3], neweul[3], newsize[3];
+    float dbuf[4], sval[3];
+    float *const dvec = dbuf + 1;
     int i;
 
     /* obtain target effect */
@@ -3599,18 +3814,18 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
         mat4_to_size(dvec, ct->matrix);
 
         if (is_negative_m4(ct->matrix)) {
-          /* Bugfix [#27886]
-           * We can't be sure which axis/axes are negative, though we know that something is negative.
-           * Assume we don't care about negativity of separate axes. <--- This is a limitation that
-           * riggers will have to live with for now.
-           */
+          /* Bugfix T27886: (this is a limitation that riggers will have to live with for now).
+           * We can't be sure which axis/axes are negative,
+           * though we know that something is negative.
+           * Assume we don't care about negativity of separate axes. */
           negate_v3(dvec);
         }
         from_min = data->from_min_scale;
         from_max = data->from_max_scale;
         break;
       case TRANS_ROTATION:
-        mat4_to_eulO(dvec, cob->rotOrder, ct->matrix);
+        BKE_driver_target_matrix_to_rot_channels(
+            ct->matrix, cob->rotOrder, data->from_rotation_mode, -1, true, dbuf);
         from_min = data->from_min_rot;
         from_max = data->from_max_rot;
         break;
@@ -3622,28 +3837,37 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
         break;
     }
 
+    /* Select the output Euler rotation order, defaulting to the owner. */
+    short rot_order = cob->rotOrder;
+
+    if (data->to == TRANS_ROTATION && data->to_euler_order != CONSTRAINT_EULER_AUTO) {
+      rot_order = data->to_euler_order;
+    }
+
     /* extract components of owner's matrix */
-    copy_v3_v3(loc, cob->matrix[3]);
-    mat4_to_eulO(eul, cob->rotOrder, cob->matrix);
-    mat4_to_size(size, cob->matrix);
+    mat4_to_loc_rot_size(loc, rot, size, cob->matrix);
 
     /* determine where in range current transforms lie */
     if (data->expo) {
       for (i = 0; i < 3; i++) {
-        if (from_max[i] - from_min[i])
+        if (from_max[i] - from_min[i]) {
           sval[i] = (dvec[i] - from_min[i]) / (from_max[i] - from_min[i]);
-        else
+        }
+        else {
           sval[i] = 0.0f;
+        }
       }
     }
     else {
       /* clamp transforms out of range */
       for (i = 0; i < 3; i++) {
         CLAMP(dvec[i], from_min[i], from_max[i]);
-        if (from_max[i] - from_min[i])
+        if (from_max[i] - from_min[i]) {
           sval[i] = (dvec[i] - from_min[i]) / (from_max[i] - from_min[i]);
-        else
+        }
+        else {
           sval[i] = 0.0f;
+        }
       }
     }
 
@@ -3653,18 +3877,42 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
         to_min = data->to_min_scale;
         to_max = data->to_max_scale;
         for (i = 0; i < 3; i++) {
-          /* multiply with original scale (so that it can still be scaled) */
-          /* size[i] *= to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i])); */
-          /* Stay absolute, else it breaks existing rigs... sigh. */
-          size[i] = to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i]));
+          newsize[i] = to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i]));
+        }
+        switch (data->mix_mode_scale) {
+          case TRANS_MIXSCALE_MULTIPLY:
+            mul_v3_v3(size, newsize);
+            break;
+          case TRANS_MIXSCALE_REPLACE:
+          default:
+            copy_v3_v3(size, newsize);
+            break;
         }
         break;
       case TRANS_ROTATION:
         to_min = data->to_min_rot;
         to_max = data->to_max_rot;
         for (i = 0; i < 3; i++) {
-          /* add to original rotation (so that it can still be rotated) */
-          eul[i] += to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i]));
+          neweul[i] = to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i]));
+        }
+        switch (data->mix_mode_rot) {
+          case TRANS_MIXROT_REPLACE:
+            eulO_to_mat3(rot, neweul, rot_order);
+            break;
+          case TRANS_MIXROT_BEFORE:
+            eulO_to_mat3(newrot, neweul, rot_order);
+            mul_m3_m3m3(rot, newrot, rot);
+            break;
+          case TRANS_MIXROT_AFTER:
+            eulO_to_mat3(newrot, neweul, rot_order);
+            mul_m3_m3m3(rot, rot, newrot);
+            break;
+          case TRANS_MIXROT_ADD:
+          default:
+            mat3_to_eulO(oldeul, rot_order, rot);
+            add_v3_v3(neweul, oldeul);
+            eulO_to_mat3(rot, neweul, rot_order);
+            break;
         }
         break;
       case TRANS_LOCATION:
@@ -3672,14 +3920,22 @@ static void transform_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *t
         to_min = data->to_min;
         to_max = data->to_max;
         for (i = 0; i < 3; i++) {
-          /* add to original location (so that it can still be moved) */
-          loc[i] += (to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i])));
+          newloc[i] = (to_min[i] + (sval[(int)data->map[i]] * (to_max[i] - to_min[i])));
+        }
+        switch (data->mix_mode_loc) {
+          case TRANS_MIXLOC_REPLACE:
+            copy_v3_v3(loc, newloc);
+            break;
+          case TRANS_MIXLOC_ADD:
+          default:
+            add_v3_v3(loc, newloc);
+            break;
         }
         break;
     }
 
     /* apply to matrix */
-    loc_eulO_size_to_mat4(cob->matrix, loc, eul, size, cob->rotOrder);
+    loc_rot_size_to_mat4(cob->matrix, loc, rot, size);
   }
 }
 
@@ -3838,9 +4094,10 @@ static void shrinkwrap_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
               break;
           }
 
-          /* transform normal into requested space */
-          /* Note that in this specific case, we need to keep scaling in non-parented 'local2world' object
-           * case, because SpaceTransform also takes it into account when handling normals. See T42447. */
+          /* Transform normal into requested space */
+          /* Note that in this specific case, we need to keep scaling in non-parented 'local2world'
+           * object case, because SpaceTransform also takes it into account when handling normals.
+           * See T42447. */
           unit_m4(mat);
           BKE_constraint_mat_convertspace(
               cob->ob, cob->pchan, mat, CONSTRAINT_SPACE_LOCAL, scon->projAxisSpace, true);
@@ -4100,8 +4357,9 @@ static void splineik_free(bConstraint *con)
   bSplineIKConstraint *data = con->data;
 
   /* binding array */
-  if (data->points)
+  if (data->points) {
     MEM_freeN(data->points);
+  }
 }
 
 static void splineik_copy(bConstraint *con, bConstraint *srccon)
@@ -4123,6 +4381,7 @@ static void splineik_new_data(void *cdata)
   data->bulge_min = 1.0f;
 
   data->yScaleMode = CONSTRAINT_SPLINEIK_YS_FIT_CURVE;
+  data->flag = CONSTRAINT_SPLINEIK_USE_ORIGINAL_SCALE;
 }
 
 static void splineik_id_looper(bConstraint *con, ConstraintIDFunc func, void *userdata)
@@ -4168,8 +4427,9 @@ static void splineik_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
   /* technically, this isn't really needed for evaluation, but we don't know what else
    * might end up calling this...
    */
-  if (ct)
+  if (ct) {
     unit_m4(ct->matrix);
+  }
 }
 
 static bConstraintTypeInfo CTI_SPLINEIK = {
@@ -4244,13 +4504,15 @@ static void pivotcon_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *ta
     /* check which range might be violated */
     if (data->rotAxis < PIVOTCON_AXIS_X) {
       /* negative rotations (data->rotAxis = 0 -> 2) */
-      if (rot[data->rotAxis] > 0.0f)
+      if (rot[data->rotAxis] > 0.0f) {
         return;
+      }
     }
     else {
       /* positive rotations (data->rotAxis = 3 -> 5 */
-      if (rot[data->rotAxis - PIVOTCON_AXIS_X] < 0.0f)
+      if (rot[data->rotAxis - PIVOTCON_AXIS_X] < 0.0f) {
         return;
+      }
     }
   }
 
@@ -4345,26 +4607,32 @@ static void followtrack_evaluate(bConstraint *con, bConstraintOb *cob, ListBase 
   float ctime = DEG_get_ctime(depsgraph);
   float framenr;
 
-  if (data->flag & FOLLOWTRACK_ACTIVECLIP)
+  if (data->flag & FOLLOWTRACK_ACTIVECLIP) {
     clip = scene->clip;
+  }
 
-  if (!clip || !data->track[0] || !camob_eval)
+  if (!clip || !data->track[0] || !camob_eval) {
     return;
+  }
 
   tracking = &clip->tracking;
 
-  if (data->object[0])
+  if (data->object[0]) {
     tracking_object = BKE_tracking_object_get_named(tracking, data->object);
-  else
+  }
+  else {
     tracking_object = BKE_tracking_object_get_camera(tracking);
+  }
 
-  if (!tracking_object)
+  if (!tracking_object) {
     return;
+  }
 
   track = BKE_tracking_track_get_named(tracking, tracking_object, data->track);
 
-  if (!track)
+  if (!track) {
     return;
+  }
 
   framenr = BKE_movieclip_remap_scene_to_clip_frame(clip, ctime);
 
@@ -4476,10 +4744,12 @@ static void followtrack_evaluate(bConstraint *con, bConstraintOb *cob, ListBase 
         vec[1] = params.ortho_scale * (pos[1] - 0.5f + params.shifty);
         vec[2] = -len;
 
-        if (aspect > 1.0f)
+        if (aspect > 1.0f) {
           vec[1] /= aspect;
-        else
+        }
+        else {
           vec[0] *= aspect;
+        }
 
         mul_v3_m4v3(disp, camob_eval->obmat, vec);
 
@@ -4496,10 +4766,12 @@ static void followtrack_evaluate(bConstraint *con, bConstraintOb *cob, ListBase 
         vec[1] = d * (2.0f * (pos[1] + params.shifty) - 1.0f);
         vec[2] = -len;
 
-        if (aspect > 1.0f)
+        if (aspect > 1.0f) {
           vec[1] /= aspect;
-        else
+        }
+        else {
           vec[0] *= aspect;
+        }
 
         mul_v3_m4v3(disp, camob_eval->obmat, vec);
 
@@ -4586,8 +4858,9 @@ static void camerasolver_evaluate(bConstraint *con, bConstraintOb *cob, ListBase
   bCameraSolverConstraint *data = con->data;
   MovieClip *clip = data->clip;
 
-  if (data->flag & CAMERASOLVER_ACTIVECLIP)
+  if (data->flag & CAMERASOLVER_ACTIVECLIP) {
     clip = scene->clip;
+  }
 
   if (clip) {
     float mat[4][4], obmat[4][4];
@@ -4646,11 +4919,13 @@ static void objectsolver_evaluate(bConstraint *con, bConstraintOb *cob, ListBase
   MovieClip *clip = data->clip;
   Object *camob = data->camera ? data->camera : scene->camera;
 
-  if (data->flag & OBJECTSOLVER_ACTIVECLIP)
+  if (data->flag & OBJECTSOLVER_ACTIVECLIP) {
     clip = scene->clip;
+  }
 
-  if (!camob || !clip)
+  if (!camob || !clip) {
     return;
+  }
 
   if (clip) {
     MovieTracking *tracking = &clip->tracking;
@@ -4718,13 +4993,9 @@ static void transformcache_evaluate(bConstraint *con, bConstraintOb *cob, ListBa
   const float frame = DEG_get_ctime(cob->depsgraph);
   const float time = BKE_cachefile_time_offset(cache_file, frame, FPS);
 
-  /* Must always load ABC handle on original. */
-  CacheFile *cache_file_orig = (CacheFile *)DEG_get_original_id(&cache_file->id);
-  BKE_cachefile_ensure_handle(G.main, cache_file_orig);
-
-  if (!data->reader) {
-    data->reader = CacheReader_open_alembic_object(
-        cache_file_orig->handle, data->reader, cob->ob, data->object_path);
+  if (!data->reader || !STREQ(data->reader_object_path, data->object_path)) {
+    STRNCPY(data->reader_object_path, data->object_path);
+    BKE_cachefile_reader_open(cache_file, &data->reader, cob->ob, data->object_path);
   }
 
   ABC_get_transform(data->reader, cob->matrix, time, cache_file->scale);
@@ -4742,12 +5013,8 @@ static void transformcache_copy(bConstraint *con, bConstraint *srccon)
 
   BLI_strncpy(dst->object_path, src->object_path, sizeof(dst->object_path));
   dst->cache_file = src->cache_file;
-
-#ifdef WITH_ALEMBIC
-  if (dst->reader) {
-    CacheReader_incref(dst->reader);
-  }
-#endif
+  dst->reader = NULL;
+  dst->reader_object_path[0] = '\0';
 }
 
 static void transformcache_free(bConstraint *con)
@@ -4755,10 +5022,8 @@ static void transformcache_free(bConstraint *con)
   bTransformCacheConstraint *data = con->data;
 
   if (data->reader) {
-#ifdef WITH_ALEMBIC
-    CacheReader_free(data->reader);
-#endif
-    data->reader = NULL;
+    BKE_cachefile_reader_free(data->cache_file, &data->reader);
+    data->reader_object_path[0] = '\0';
   }
 }
 
@@ -4858,10 +5123,12 @@ const bConstraintTypeInfo *BKE_constraint_typeinfo_from_type(int type)
 const bConstraintTypeInfo *BKE_constraint_typeinfo_get(bConstraint *con)
 {
   /* only return typeinfo for valid constraints */
-  if (con)
+  if (con) {
     return BKE_constraint_typeinfo_from_type(con->type);
-  else
+  }
+  else {
     return NULL;
+  }
 }
 
 /* ************************* General Constraints API ************************** */
@@ -4879,8 +5146,9 @@ static void con_unlink_refs_cb(bConstraint *UNUSED(con),
                                bool is_reference,
                                void *UNUSED(userData))
 {
-  if (*idpoin && is_reference)
+  if (*idpoin && is_reference) {
     id_us_min(*idpoin);
+  }
 }
 
 /**
@@ -4895,12 +5163,14 @@ void BKE_constraint_free_data_ex(bConstraint *con, bool do_id_user)
 
     if (cti) {
       /* perform any special freeing constraint may have */
-      if (cti->free_data)
+      if (cti->free_data) {
         cti->free_data(con);
+      }
 
       /* unlink the referenced resources it uses */
-      if (do_id_user && cti->id_looper)
+      if (do_id_user && cti->id_looper) {
         cti->id_looper(con, con_unlink_refs_cb, NULL);
+      }
     }
 
     /* free constraint data now */
@@ -4919,8 +5189,9 @@ void BKE_constraints_free_ex(ListBase *list, bool do_id_user)
   bConstraint *con;
 
   /* Free constraint data and also any extra data */
-  for (con = list->first; con; con = con->next)
+  for (con = list->first; con; con = con->next) {
     BKE_constraint_free_data_ex(con, do_id_user);
+  }
 
   /* Free the whole list */
   BLI_freelistN(list);
@@ -4968,9 +5239,9 @@ static bConstraint *add_new_constraint_internal(const char *name, short type)
   const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_from_type(type);
   const char *newName;
 
-  /* Set up a generic constraint datablock */
+  /* Set up a generic constraint data-block. */
   con->type = type;
-  con->flag |= CONSTRAINT_EXPAND | CONSTRAINT_STATICOVERRIDE_LOCAL;
+  con->flag |= CONSTRAINT_EXPAND | CONSTRAINT_OVERRIDE_LIBRARY_LOCAL;
   con->enforce = 1.0f;
 
   /* Determine a basic name, and info */
@@ -4979,8 +5250,9 @@ static bConstraint *add_new_constraint_internal(const char *name, short type)
     con->data = MEM_callocN(cti->size, cti->structName);
 
     /* only constraints that change any settings need this */
-    if (cti->new_data)
+    if (cti->new_data) {
       cti->new_data(con->data);
+    }
 
     /* if no name is provided, use the type of the constraint as the name */
     newName = (name && name[0]) ? name : DATA_(cti->name);
@@ -5024,8 +5296,9 @@ static bConstraint *add_new_constraint(Object *ob,
      * Armature layer, we must tag newly added constraints with a flag which allows them
      * to persist after proxy syncing has been done
      */
-    if (BKE_constraints_proxylocked_owner(ob, pchan))
+    if (BKE_constraints_proxylocked_owner(ob, pchan)) {
       con->flag |= CONSTRAINT_PROXY_LOCAL;
+    }
 
     /* make this constraint the active one */
     BKE_constraints_active_set(list, con);
@@ -5062,8 +5335,9 @@ bConstraint *BKE_constraint_add_for_pose(Object *ob,
                                          const char *name,
                                          short type)
 {
-  if (pchan == NULL)
+  if (pchan == NULL) {
     return NULL;
+  }
 
   return add_new_constraint(ob, pchan, name, type);
 }
@@ -5085,8 +5359,9 @@ void BKE_constraints_id_loop(ListBase *conlist, ConstraintIDFunc func, void *use
     const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
 
     if (cti) {
-      if (cti->id_looper)
+      if (cti->id_looper) {
         cti->id_looper(con, func, userdata);
+      }
     }
   }
 }
@@ -5099,19 +5374,24 @@ static void con_extern_cb(bConstraint *UNUSED(con),
                           bool UNUSED(is_reference),
                           void *UNUSED(userData))
 {
-  if (*idpoin && ID_IS_LINKED(*idpoin))
+  if (*idpoin && ID_IS_LINKED(*idpoin)) {
     id_lib_extern(*idpoin);
+  }
 }
 
-/* helper for BKE_constraints_copy(), to be used for making sure that usercounts of copied ID's are fixed up */
+/**
+ * Helper for #BKE_constraints_copy(),
+ * to be used for making sure that user-counts of copied ID's are fixed up.
+ */
 static void con_fix_copied_refs_cb(bConstraint *UNUSED(con),
                                    ID **idpoin,
                                    bool is_reference,
                                    void *UNUSED(userData))
 {
-  /* increment usercount if this is a reference type */
-  if ((*idpoin) && (is_reference))
+  /* Increment user-count if this is a reference type. */
+  if ((*idpoin) && (is_reference)) {
     id_us_plus(*idpoin);
+  }
 }
 
 /** Copies a single constraint's data (\a dst must already be a shallow copy of \a src). */
@@ -5128,8 +5408,9 @@ static void constraint_copy_data_ex(bConstraint *dst,
   /* only do specific constraints if required */
   if (cti) {
     /* perform custom copying operations if needed */
-    if (cti->copy_data)
+    if (cti->copy_data) {
       cti->copy_data(dst, src);
+    }
 
     /* Fix usercounts for all referenced data that need it. */
     if (cti->id_looper && (flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
@@ -5139,13 +5420,14 @@ static void constraint_copy_data_ex(bConstraint *dst,
     /* for proxies we don't want to make extern */
     if (do_extern) {
       /* go over used ID-links for this constraint to ensure that they are valid for proxies */
-      if (cti->id_looper)
+      if (cti->id_looper) {
         cti->id_looper(dst, con_extern_cb, NULL);
+      }
     }
   }
 }
 
-/** Allocate and duplicate a single constraint, ouside of any object/pose context. */
+/** Allocate and duplicate a single constraint, outside of any object/pose context. */
 bConstraint *BKE_constraint_duplicate_ex(bConstraint *src, const int flag, const bool do_extern)
 {
   bConstraint *dst = MEM_dupallocN(src);
@@ -5188,8 +5470,9 @@ bConstraint *BKE_constraints_active_get(ListBase *list)
   /* search for the first constraint with the 'active' flag set */
   if (list) {
     for (con = list->first; con; con = con->next) {
-      if (con->flag & CONSTRAINT_ACTIVE)
+      if (con->flag & CONSTRAINT_ACTIVE) {
         return con;
+      }
     }
   }
 
@@ -5204,10 +5487,12 @@ void BKE_constraints_active_set(ListBase *list, bConstraint *con)
 
   if (list) {
     for (c = list->first; c; c = c->next) {
-      if (c == con)
+      if (c == con) {
         c->flag |= CONSTRAINT_ACTIVE;
-      else
+      }
+      else {
         c->flag &= ~CONSTRAINT_ACTIVE;
+      }
     }
   }
 }
@@ -5332,7 +5617,8 @@ static bConstraint *constraint_find_original_for_update(bConstraintOb *cob, bCon
 
 /* -------- Constraints and Proxies ------- */
 
-/* Rescue all constraints tagged as being CONSTRAINT_PROXY_LOCAL (i.e. added to bone that's proxy-synced in this file) */
+/* Rescue all constraints tagged as being CONSTRAINT_PROXY_LOCAL
+ * (i.e. added to bone that's proxy-synced in this file) */
 void BKE_constraints_proxylocal_extract(ListBase *dst, ListBase *src)
 {
   bConstraint *con, *next;
@@ -5358,8 +5644,9 @@ bool BKE_constraints_proxylocked_owner(Object *ob, bPoseChannel *pchan)
       bArmature *arm = ob->data;
 
       /* On bone-level, check if bone is on proxy-protected layer */
-      if ((pchan->bone) && (pchan->bone->layer & arm->layer_protected))
+      if ((pchan->bone) && (pchan->bone->layer & arm->layer_protected)) {
         return true;
+      }
     }
     else {
       /* FIXME: constraints on object-level are not handled well yet */
@@ -5373,8 +5660,8 @@ bool BKE_constraints_proxylocked_owner(Object *ob, bPoseChannel *pchan)
 /* -------- Target-Matrix Stuff ------- */
 
 /* This function is a relic from the prior implementations of the constraints system, when all
- * constraints either had one or no targets. It used to be called during the main constraint solving
- * loop, but is now only used for the remaining cases for a few constraints.
+ * constraints either had one or no targets. It used to be called during the main constraint
+ * solving loop, but is now only used for the remaining cases for a few constraints.
  *
  * None of the actual calculations of the matrices should be done here! Also, this function is
  * not to be used by any new constraints, particularly any that have multiple targets.
@@ -5437,14 +5724,16 @@ void BKE_constraint_target_matrix_get(struct Depsgraph *depsgraph,
     ct = BLI_findlink(&targets, index);
 
     if (ct) {
-      if (cti->get_target_matrix)
+      if (cti->get_target_matrix) {
         cti->get_target_matrix(depsgraph, con, cob, ct, ctime);
+      }
       copy_m4_m4(mat, ct->matrix);
     }
 
     /* free targets + 'constraint-ob' */
-    if (cti->flush_constraint_targets)
+    if (cti->flush_constraint_targets) {
       cti->flush_constraint_targets(con, &targets, 1);
+    }
     MEM_freeN(cob);
   }
   else {
@@ -5471,16 +5760,23 @@ void BKE_constraint_targets_for_solving_get(struct Depsgraph *depsgraph,
      */
     cti->get_constraint_targets(con, targets);
 
+    /* The Armature constraint doesn't need ct->matrix for evaluate at all. */
+    if (ELEM(cti->type, CONSTRAINT_TYPE_ARMATURE)) {
+      return;
+    }
+
     /* set matrices
      * - calculate if possible, otherwise just initialize as identity matrix
      */
     if (cti->get_target_matrix) {
-      for (ct = targets->first; ct; ct = ct->next)
+      for (ct = targets->first; ct; ct = ct->next) {
         cti->get_target_matrix(depsgraph, con, cob, ct, ctime);
+      }
     }
     else {
-      for (ct = targets->first; ct; ct = ct->next)
+      for (ct = targets->first; ct; ct = ct->next) {
         unit_m4(ct->matrix);
+      }
     }
   }
 }
@@ -5503,8 +5799,9 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
   float enf;
 
   /* check that there is a valid constraint object to evaluate */
-  if (cob == NULL)
+  if (cob == NULL) {
     return;
+  }
 
   /* loop over available constraints, solving and blending them */
   for (con = conlist->first; con; con = con->next) {
@@ -5512,16 +5809,20 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
     ListBase targets = {NULL, NULL};
 
     /* these we can skip completely (invalid constraints...) */
-    if (cti == NULL)
+    if (cti == NULL) {
       continue;
-    if (con->flag & (CONSTRAINT_DISABLE | CONSTRAINT_OFF))
+    }
+    if (con->flag & (CONSTRAINT_DISABLE | CONSTRAINT_OFF)) {
       continue;
+    }
     /* these constraints can't be evaluated anyway */
-    if (cti->evaluate_constraint == NULL)
+    if (cti->evaluate_constraint == NULL) {
       continue;
+    }
     /* influence == 0 should be ignored */
-    if (con->enforce == 0.0f)
+    if (con->enforce == 0.0f) {
       continue;
+    }
 
     /* influence of constraint
      * - value should have been set from animation data already
@@ -5550,14 +5851,15 @@ void BKE_constraints_solve(struct Depsgraph *depsgraph,
     }
 
     /* move owner back into worldspace for next constraint/other business */
-    if ((con->flag & CONSTRAINT_SPACEONCE) == 0)
+    if ((con->flag & CONSTRAINT_SPACEONCE) == 0) {
       BKE_constraint_mat_convertspace(
           cob->ob, cob->pchan, cob->matrix, con->ownspace, CONSTRAINT_SPACE_WORLD, false);
+    }
 
     /* Interpolate the enforcement, to blend result of constraint into final owner transform
-     * - all this happens in worldspace to prevent any weirdness creeping in ([#26014] and [#25725]),
-     *   since some constraints may not convert the solution back to the input space before blending
-     *   but all are guaranteed to end up in good "worldspace" result
+     * - all this happens in worldspace to prevent any weirdness creeping in
+     *   (T26014 and T25725), since some constraints may not convert the solution back to the input
+     *   space before blending but all are guaranteed to end up in good "worldspace" result.
      */
     /* Note: all kind of stuff here before (caused trouble), much easier to just interpolate,
      * or did I miss something? -jahka (r.32105) */

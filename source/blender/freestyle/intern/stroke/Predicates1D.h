@@ -183,8 +183,8 @@ class FalseUP1D : public UnaryPredicate1D {
 };
 
 // QuantitativeInvisibilityUP1D
-/*! Returns true if the Quantitative Invisibility evaluated at an Interface1D, using the QuantitativeInvisibilityF1D
- *  functor, equals a certain user-defined value.
+/*! Returns true if the Quantitative Invisibility evaluated at an Interface1D, using the
+ * QuantitativeInvisibilityF1D functor, equals a certain user-defined value.
  */
 class QuantitativeInvisibilityUP1D : public UnaryPredicate1D {
  public:
@@ -206,8 +206,9 @@ class QuantitativeInvisibilityUP1D : public UnaryPredicate1D {
   int operator()(Interface1D &inter)
   {
     Functions1D::QuantitativeInvisibilityF1D func;
-    if (func(inter) < 0)
+    if (func(inter) < 0) {
       return -1;
+    }
     result = (func.result == _qi);
     return 0;
   }
@@ -234,8 +235,9 @@ class ContourUP1D : public UnaryPredicate1D {
   /*! The () operator. */
   int operator()(Interface1D &inter)
   {
-    if (_getNature(inter) < 0)
+    if (_getNature(inter) < 0) {
       return -1;
+    }
     if ((_getNature.result & Nature::SILHOUETTE) || (_getNature.result & Nature::BORDER)) {
       Interface0DIterator it = inter.verticesBegin();
       for (; !it.isEnd(); ++it) {
@@ -268,8 +270,9 @@ class ExternalContourUP1D : public UnaryPredicate1D {
   /*! The () operator. */
   int operator()(Interface1D &inter)
   {
-    if (_getNature(inter) < 0)
+    if (_getNature(inter) < 0) {
       return -1;
+    }
     if ((_getNature.result & Nature::SILHOUETTE) || (_getNature.result & Nature::BORDER)) {
       set<ViewShape *> occluded;
       Functions1D::getOccludeeF1D(inter, occluded);
@@ -344,7 +347,8 @@ class EqualToChainingTimeStampUP1D : public UnaryPredicate1D {
 };
 
 // ShapeUP1D
-/*! Returns true if the shape to which the Interface1D belongs to has the same Id as the one specified by the user. */
+/*! Returns true if the shape to which the Interface1D belongs to has the same Id as the one
+ * specified by the user. */
 class ShapeUP1D : public UnaryPredicate1D {
  private:
   Id _id;
@@ -487,7 +491,8 @@ class FalseBP1D : public BinaryPredicate1D {
 };
 
 // Length2DBP1D
-/*! Returns true if the 2D length of the Interface1D i1 is less than the 2D length of the Interface1D i2. */
+/*! Returns true if the 2D length of the Interface1D i1 is less than the 2D length of the
+ * Interface1D i2. */
 class Length2DBP1D : public BinaryPredicate1D {
  public:
   /*! Returns the string "Length2DBP1D" */
@@ -538,7 +543,8 @@ class SameShapeIdBP1D : public BinaryPredicate1D {
 };
 
 // ViewMapGradientNormBP1D
-/*! Returns true if the evaluation of the Gradient norm Function is higher for Interface1D i1 than for i2. */
+/*! Returns true if the evaluation of the Gradient norm Function is higher for Interface1D i1 than
+ * for i2. */
 class ViewMapGradientNormBP1D : public BinaryPredicate1D {
  private:
   Functions1D::GetViewMapGradientNormF1D _func;
@@ -558,11 +564,13 @@ class ViewMapGradientNormBP1D : public BinaryPredicate1D {
   /*! The () operator. */
   int operator()(Interface1D &i1, Interface1D &i2)
   {
-    if (_func(i1) < 0)
+    if (_func(i1) < 0) {
       return -1;
+    }
     real n1 = _func.result;
-    if (_func(i2) < 0)
+    if (_func(i2) < 0) {
       return -1;
+    }
     real n2 = _func.result;
     result = (n1 > n2);
     return 0;

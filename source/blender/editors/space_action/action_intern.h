@@ -28,9 +28,7 @@ struct ARegion;
 struct ARegionType;
 struct Object;
 struct Scene;
-struct ScrArea;
 struct SpaceAction;
-struct View2D;
 struct bAnimContext;
 struct bContext;
 struct wmOperatorType;
@@ -39,8 +37,6 @@ struct wmOperatorType;
 
 /* **************************************** */
 /* space_action.c / action_buttons.c */
-
-struct ARegion *action_has_buttons_region(struct ScrArea *sa);
 
 void action_buttons_register(struct ARegionType *art);
 

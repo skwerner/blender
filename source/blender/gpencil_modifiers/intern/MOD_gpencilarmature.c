@@ -107,6 +107,7 @@ static void deformStroke(GpencilModifierData *md,
                          Depsgraph *UNUSED(depsgraph),
                          Object *ob,
                          bGPDlayer *UNUSED(gpl),
+                         bGPDframe *UNUSED(gpf),
                          bGPDstroke *gps)
 {
   ArmatureGpencilModifierData *mmd = (ArmatureGpencilModifierData *)md;
@@ -126,8 +127,9 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
   bGPdata *gpd = (bGPdata *)ob->data;
   int oldframe = (int)DEG_get_ctime(depsgraph);
 
-  if (mmd->object == NULL)
+  if (mmd->object == NULL) {
     return;
+  }
 
   for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
     for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
@@ -139,7 +141,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
 
       /* compute armature effects on this frame */
       for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
-        deformStroke(md_eval, depsgraph, object_eval, gpl, gps);
+        deformStroke(md_eval, depsgraph, object_eval, gpl, gpf, gps);
       }
     }
   }
@@ -153,7 +155,11 @@ static bool isDisabled(GpencilModifierData *md, int UNUSED(userRenderParams))
 {
   ArmatureGpencilModifierData *mmd = (ArmatureGpencilModifierData *)md;
 
-  return !mmd->object;
+  /* The object type check is only needed here in case we have a placeholder
+   * object assigned (because the library containing the armature is missing).
+   *
+   * In other cases it should be impossible to have a type mismatch. */
+  return !mmd->object || mmd->object->type != OB_ARMATURE;
 }
 
 static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -197,5 +203,4 @@ GpencilModifierTypeInfo modifierType_Gpencil_Armature = {
     /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
-    /* getDuplicationFactor */ NULL,
 };

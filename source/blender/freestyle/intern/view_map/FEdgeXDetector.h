@@ -89,16 +89,19 @@ class FEdgeXDetector {
 
   /*! Sets the minimum angle for detecting crease edges
    *  \param angle:
-   *    The angular threshold in degrees (between 0 and 180) for detecting crease edges. An edge is considered
-   *    a crease edge if the angle between two faces sharing the edge is smaller than the given threshold.
+   *    The angular threshold in degrees (between 0 and 180) for detecting crease edges. An edge is
+   * considered a crease edge if the angle between two faces sharing the edge is smaller than the
+   * given threshold.
    */
   // XXX angle should be in radian...
   inline void setCreaseAngle(float angle)
   {
-    if (angle < 0.0)
+    if (angle < 0.0) {
       angle = 0.0;
-    else if (angle > 180.0)
+    }
+    else if (angle > 180.0) {
       angle = 180.0;
+    }
     angle = cos(M_PI * (180.0 - angle) / 180.0);
     if (angle != _creaseAngle) {
       _creaseAngle = angle;
@@ -211,7 +214,7 @@ class FEdgeXDetector {
 #if 0
   real _bbox_diagonal;  // diagonal of the current processed shape bbox
 #endif
-  //oldtmp values
+  // oldtmp values
   bool _computeViewIndependent;
   real _meanK1;
   real _meanKr;

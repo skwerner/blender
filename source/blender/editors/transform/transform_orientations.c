@@ -100,8 +100,9 @@ static TransformOrientation *createViewSpace(bContext *C,
   RegionView3D *rv3d = CTX_wm_region_view3d(C);
   float mat[3][3];
 
-  if (!rv3d)
+  if (!rv3d) {
     return NULL;
+  }
 
   copy_m3_m4(mat, rv3d->viewinv);
   normalize_m3(mat);
@@ -129,8 +130,9 @@ static TransformOrientation *createObjectSpace(bContext *C,
   Object *ob;
   float mat[3][3];
 
-  if (base == NULL)
+  if (base == NULL) {
     return NULL;
+  }
 
   ob = base->object;
 
@@ -309,12 +311,15 @@ void BIF_createTransformOrientation(bContext *C,
     Object *obedit = CTX_data_edit_object(C);
     Object *ob = CTX_data_active_object(C);
     if (obedit) {
-      if (obedit->type == OB_MESH)
+      if (obedit->type == OB_MESH) {
         ts = createMeshSpace(C, reports, name, overwrite);
-      else if (obedit->type == OB_ARMATURE)
+      }
+      else if (obedit->type == OB_ARMATURE) {
         ts = createBoneSpace(C, reports, name, overwrite);
-      else if (obedit->type == OB_CURVE)
+      }
+      else if (obedit->type == OB_CURVE) {
         ts = createCurveSpace(C, reports, name, overwrite);
+      }
     }
     else if (ob && (ob->mode & OB_MODE_POSE)) {
       ts = createBoneSpace(C, reports, name, overwrite);
@@ -434,25 +439,25 @@ void initTransformOrientation(bContext *C, TransInfo *t)
   switch (t->orientation.user) {
     case V3D_ORIENT_GLOBAL:
       unit_m3(t->spacemtx);
-      BLI_strncpy(t->spacename, IFACE_("global"), sizeof(t->spacename));
+      BLI_strncpy(t->spacename, TIP_("global"), sizeof(t->spacename));
       break;
 
     case V3D_ORIENT_GIMBAL:
       unit_m3(t->spacemtx);
       if (ob && gimbal_axis(ob, t->spacemtx)) {
-        BLI_strncpy(t->spacename, IFACE_("gimbal"), sizeof(t->spacename));
+        BLI_strncpy(t->spacename, TIP_("gimbal"), sizeof(t->spacename));
         break;
       }
       ATTR_FALLTHROUGH; /* no gimbal fallthrough to normal */
     case V3D_ORIENT_NORMAL:
       if (obedit || (ob && ob->mode & OB_MODE_POSE)) {
-        BLI_strncpy(t->spacename, IFACE_("normal"), sizeof(t->spacename));
+        BLI_strncpy(t->spacename, TIP_("normal"), sizeof(t->spacename));
         ED_getTransformOrientationMatrix(C, t->spacemtx, t->around);
         break;
       }
       ATTR_FALLTHROUGH; /* we define 'normal' as 'local' in Object mode */
     case V3D_ORIENT_LOCAL:
-      BLI_strncpy(t->spacename, IFACE_("local"), sizeof(t->spacename));
+      BLI_strncpy(t->spacename, TIP_("local"), sizeof(t->spacename));
 
       if (ob) {
         copy_m3_m4(t->spacemtx, ob->obmat);
@@ -469,7 +474,7 @@ void initTransformOrientation(bContext *C, TransInfo *t)
         RegionView3D *rv3d = t->ar->regiondata;
         float mat[3][3];
 
-        BLI_strncpy(t->spacename, IFACE_("view"), sizeof(t->spacename));
+        BLI_strncpy(t->spacename, TIP_("view"), sizeof(t->spacename));
         copy_m3_m4(mat, rv3d->viewinv);
         normalize_m3(mat);
         copy_m3_m3(t->spacemtx, mat);
@@ -479,13 +484,13 @@ void initTransformOrientation(bContext *C, TransInfo *t)
       }
       break;
     case V3D_ORIENT_CURSOR: {
-      BLI_strncpy(t->spacename, IFACE_("cursor"), sizeof(t->spacename));
-      ED_view3d_cursor3d_calc_mat3(t->scene, t->spacemtx);
+      BLI_strncpy(t->spacename, TIP_("cursor"), sizeof(t->spacename));
+      BKE_scene_cursor_rot_to_mat3(&t->scene->cursor, t->spacemtx);
       break;
     }
     case V3D_ORIENT_CUSTOM_MATRIX:
       /* Already set. */
-      BLI_strncpy(t->spacename, IFACE_("custom"), sizeof(t->spacename));
+      BLI_strncpy(t->spacename, TIP_("custom"), sizeof(t->spacename));
       break;
     case V3D_ORIENT_CUSTOM:
       BLI_strncpy(t->spacename, t->orientation.custom->name, sizeof(t->spacename));
@@ -780,8 +785,10 @@ int getTransformOrientation_ex(const bContext *C,
 
             if (BM_vert_edge_pair(v, &e_pair[0], &e_pair[1])) {
               bool v_pair_swap = false;
-              BMVert *v_pair[2] = {BM_edge_other_vert(e_pair[0], v),
-                                   BM_edge_other_vert(e_pair[1], v)};
+              BMVert *v_pair[2] = {
+                  BM_edge_other_vert(e_pair[0], v),
+                  BM_edge_other_vert(e_pair[1], v),
+              };
               float dir_pair[2][3];
 
               if (BM_edge_is_boundary(e_pair[0])) {
@@ -866,12 +873,15 @@ int getTransformOrientation_ex(const bContext *C,
 #define SEL_F3 (1 << 2)
 
               if (use_handle) {
-                if (bezt->f1 & SELECT)
+                if (bezt->f1 & SELECT) {
                   flag |= SEL_F1;
-                if (bezt->f2 & SELECT)
+                }
+                if (bezt->f2 & SELECT) {
                   flag |= SEL_F2;
-                if (bezt->f3 & SELECT)
+                }
+                if (bezt->f3 & SELECT) {
                   flag |= SEL_F3;
+                }
               }
               else {
                 flag = (bezt->f2 & SELECT) ? (SEL_F1 | SEL_F2 | SEL_F3) : 0;

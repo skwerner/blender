@@ -1,8 +1,5 @@
-
 /* Draw Lattice Vertices */
 
-uniform mat4 ModelViewProjectionMatrix;
-uniform mat4 ModelMatrix;
 uniform vec2 viewportSize;
 
 in vec3 pos;
@@ -25,9 +22,12 @@ vec2 proj(vec4 pos)
 
 void main()
 {
+  GPU_INTEL_VERTEX_SHADER_WORKAROUND
+
   clipCase = 0;
 
-  vec4 pPos = ModelViewProjectionMatrix * vec4(pos, 1.0);
+  vec3 world_pos = point_object_to_world(pos);
+  vec4 pPos = point_world_to_ndc(world_pos);
 
   /* only vertex position 0 is used */
   eData1 = eData2 = vec4(1e10);
@@ -35,10 +35,10 @@ void main()
 
   vertFlag = data;
 
-  gl_PointSize = sizeVertex;
+  gl_PointSize = sizeVertex * 2.0;
   gl_Position = pPos;
 
 #ifdef USE_WORLD_CLIP_PLANES
-  world_clip_planes_calc_clip_distance((ModelMatrix * vec4(pos, 1.0)).xyz);
+  world_clip_planes_calc_clip_distance(world_pos);
 #endif
 }

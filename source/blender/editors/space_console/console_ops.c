@@ -141,8 +141,9 @@ static void console_lb_debug__internal(ListBase *lb)
   ConsoleLine *cl;
 
   printf("%d: ", BLI_listbase_count(lb));
-  for (cl = lb->first; cl; cl = cl->next)
+  for (cl = lb->first; cl; cl = cl->next) {
     printf("<%s> ", cl->line);
+  }
   printf("\n");
 }
 
@@ -741,7 +742,7 @@ static int console_clear_exec(bContext *C, wmOperator *op)
 void CONSOLE_OT_clear(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Clear";
+  ot->name = "Clear All";
   ot->description = "Clear text by type";
   ot->idname = "CONSOLE_OT_clear";
 
@@ -1081,7 +1082,7 @@ typedef struct SetConsoleCursor {
 
 // TODO, cursor placement without selection
 static void console_cursor_set_to_pos(
-    SpaceConsole *sc, ARegion *ar, SetConsoleCursor *scu, int mval[2], int UNUSED(sel))
+    SpaceConsole *sc, ARegion *ar, SetConsoleCursor *scu, const int mval[2], int UNUSED(sel))
 {
   int pos;
   pos = console_char_pick(sc, ar, mval);

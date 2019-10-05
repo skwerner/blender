@@ -84,7 +84,7 @@ void ColorBlock::init(uint w, uint h, const uint *data, uint x, uint y)
   const uint bh = MIN(h - y, 4U);
 
   // Blocks that are smaller than 4x4 are handled by repeating the pixels.
-  // @@ Thats only correct when block size is 1, 2 or 4, but not with 3. :(
+  // @@ That's only correct when block size is 1, 2 or 4, but not with 3. :(
   // @@ Ideally we should zero the weights of the pixels out of range.
 
   for (uint i = 0; i < 4; i++) {
@@ -105,7 +105,7 @@ void ColorBlock::init(uint w, uint h, const float *data, uint x, uint y)
   const uint bh = MIN(h - y, 4U);
 
   // Blocks that are smaller than 4x4 are handled by repeating the pixels.
-  // @@ Thats only correct when block size is 1, 2 or 4, but not with 3. :(
+  // @@ That's only correct when block size is 1, 2 or 4, but not with 3. :(
   // @@ Ideally we should zero the weights of the pixels out of range.
 
   uint srcPlane = w * h;
@@ -130,16 +130,21 @@ void ColorBlock::init(uint w, uint h, const float *data, uint x, uint y)
 
 static inline uint8 component(Color32 c, uint i)
 {
-  if (i == 0)
+  if (i == 0) {
     return c.r;
-  if (i == 1)
+  }
+  if (i == 1) {
     return c.g;
-  if (i == 2)
+  }
+  if (i == 2) {
     return c.b;
-  if (i == 3)
+  }
+  if (i == 3) {
     return c.a;
-  if (i == 4)
+  }
+  if (i == 4) {
     return 0xFF;
+  }
   return 0;
 }
 
@@ -175,8 +180,9 @@ bool ColorBlock::isSingleColorNoAlpha() const
   Color32 c;
   int i;
   for (i = 0; i < 16; i++) {
-    if (m_color[i].a != 0)
+    if (m_color[i].a != 0) {
       c = m_color[i];
+    }
   }
 
   Color32 mask(0xFF, 0xFF, 0xFF, 0x00);
@@ -238,8 +244,9 @@ Color32 ColorBlock::averageColor() const
 bool ColorBlock::hasAlpha() const
 {
   for (uint i = 0; i < 16; i++) {
-    if (m_color[i].a != 255)
+    if (m_color[i].a != 255) {
       return true;
+    }
   }
   return false;
 }

@@ -105,14 +105,6 @@ class GHOST_System : public GHOST_ISystem {
    ***************************************************************************************/
 
   /**
-   * Inherited from GHOST_ISystem but left pure virtual
-   *
-   * virtual  GHOST_TUns8 getNumDisplays() const = 0;
-   * virtual void getMainDisplayDimensions(...) const = 0;
-   * virtual GHOST_IWindow* createWindow(..)
-   */
-
-  /**
    * Dispose a window.
    * \param   window Pointer to the window to be disposed.
    * \return  Indication of success.
@@ -137,8 +129,7 @@ class GHOST_System : public GHOST_ISystem {
   GHOST_TSuccess beginFullScreen(const GHOST_DisplaySetting &setting,
                                  GHOST_IWindow **window,
                                  const bool stereoVisual,
-                                 const bool alphaBackground,
-                                 const GHOST_TUns16 numOfAASamples = 0);
+                                 const bool alphaBackground);
 
   /**
    * Updates the resolution while in fullscreen mode.
@@ -319,15 +310,19 @@ class GHOST_System : public GHOST_ISystem {
   virtual void putClipboard(GHOST_TInt8 *buffer, bool selection) const = 0;
 
   /**
-   * Confirms quitting he program when there is just one window left open
-   * in the application
+   * Show a system message box
+   * \param title                   The title of the message box
+   * \param message                 The message to display
+   * \param link                    An optional hyperlink
+   * \param dialog_options Options  how to display the message
    */
-  virtual int confirmQuit(GHOST_IWindow *window) const;
-
-  /**
-   * Informs if the system provides native dialogs (eg. confirm quit)
-   */
-  virtual bool supportsNativeDialogs(void);
+  virtual GHOST_TSuccess showMessageBox(const char * /*title*/,
+                                        const char * /*message*/,
+                                        const char * /*link*/,
+                                        GHOST_DialogOptions /*dialog_options*/) const
+  {
+    return GHOST_kFailure;
+  };
 
  protected:
   /**
@@ -350,8 +345,7 @@ class GHOST_System : public GHOST_ISystem {
   GHOST_TSuccess createFullScreenWindow(GHOST_Window **window,
                                         const GHOST_DisplaySetting &settings,
                                         const bool stereoVisual,
-                                        const bool alphaBackground = 0,
-                                        const GHOST_TUns16 numOfAASamples = 0);
+                                        const bool alphaBackground = 0);
 
   /** The display manager (platform dependent). */
   GHOST_DisplayManager *m_displayManager;

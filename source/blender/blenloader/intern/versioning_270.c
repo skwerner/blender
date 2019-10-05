@@ -48,14 +48,13 @@
 #include "DNA_view3d_types.h"
 #include "DNA_smoke_types.h"
 #include "DNA_rigidbody_types.h"
+#include "DNA_light_types.h"
 
 #include "DNA_genfile.h"
 
 #include "BKE_animsys.h"
-#include "BKE_brush.h"
 #include "BKE_colortools.h"
 #include "BKE_fcurve.h"
-#include "BKE_gpencil.h"
 #include "BKE_main.h"
 #include "BKE_mask.h"
 #include "BKE_modifier.h"
@@ -256,8 +255,8 @@ static void do_version_action_editor_properties_region(ListBase *regionbase)
 static void do_version_bones_super_bbone(ListBase *lb)
 {
   for (Bone *bone = lb->first; bone; bone = bone->next) {
-    bone->scaleIn = 1.0f;
-    bone->scaleOut = 1.0f;
+    bone->scale_in_x = bone->scale_in_y = 1.0f;
+    bone->scale_out_x = bone->scale_out_y = 1.0f;
 
     do_version_bones_super_bbone(&bone->childbase);
   }
@@ -324,12 +323,15 @@ static void do_versions_compositor_render_passes_storage(bNode *node)
                   node_cmp_rlayers_sock_to_pass(pass_index),
                   sizeof(sockdata->pass_name));
 
-      if (pass_index == 0)
+      if (pass_index == 0) {
         sockname = "Image";
-      else if (pass_index == 1)
+      }
+      else if (pass_index == 1) {
         sockname = "Alpha";
-      else
+      }
+      else {
         sockname = node_cmp_rlayers_sock_to_pass(pass_index);
+      }
       BLI_strncpy(sock->name, sockname, sizeof(sock->name));
     }
   }
@@ -359,10 +361,12 @@ static char *replace_bbone_easing_rnapath(char *old_path)
   /* NOTE: This will break paths for any bones/custom-properties
    * which happen be named after the bbone property id's
    */
-  if (strstr(old_path, "bbone_in"))
+  if (strstr(old_path, "bbone_in")) {
     new_path = BLI_str_replaceN(old_path, "bbone_in", "bbone_easein");
-  else if (strstr(old_path, "bbone_out"))
+  }
+  else if (strstr(old_path, "bbone_out")) {
     new_path = BLI_str_replaceN(old_path, "bbone_out", "bbone_easeout");
+  }
 
   if (new_path) {
     MEM_freeN(old_path);
@@ -508,7 +512,8 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 270, 4)) {
-    /* ui_previews were not handled correctly when copying areas, leading to corrupted files (see T39847).
+    /* ui_previews were not handled correctly when copying areas,
+     * leading to corrupted files (see T39847).
      * This will always reset situation to a valid state.
      */
     bScreen *sc;
@@ -657,8 +662,9 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
     Brush *br;
     for (br = bmain->brushes.first; br; br = br->id.next) {
       if ((br->ob_mode & OB_MODE_SCULPT) &&
-          ELEM(br->sculpt_tool, SCULPT_TOOL_GRAB, SCULPT_TOOL_SNAKE_HOOK))
+          ELEM(br->sculpt_tool, SCULPT_TOOL_GRAB, SCULPT_TOOL_SNAKE_HOOK)) {
         br->alpha = 1.0f;
+      }
     }
   }
 
@@ -728,10 +734,12 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
   if (!MAIN_VERSION_ATLEAST(bmain, 273, 3)) {
     ParticleSettings *part;
     for (part = bmain->particles.first; part; part = part->id.next) {
-      if (part->clumpcurve)
+      if (part->clumpcurve) {
         part->child_flag |= PART_CHILD_USE_CLUMP_CURVE;
-      if (part->roughcurve)
+      }
+      if (part->roughcurve) {
         part->child_flag |= PART_CHILD_USE_ROUGH_CURVE;
+      }
     }
   }
 
@@ -879,7 +887,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
-    /* hysteresis setted to 10% but not actived */
+    /* hysteresis set to 10% but not activated */
     if (!DNA_struct_elem_find(fd->filesdna, "LodLevel", "int", "obhysteresis")) {
       Object *ob;
       for (ob = bmain->objects.first; ob; ob = ob->id.next) {
@@ -917,10 +925,12 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
 #define SEQ_USE_PROXY_CUSTOM_DIR (1 << 19)
 #define SEQ_USE_PROXY_CUSTOM_FILE (1 << 21)
         if (seq->strip && seq->strip->proxy && !seq->strip->proxy->storage) {
-          if (seq->flag & SEQ_USE_PROXY_CUSTOM_DIR)
+          if (seq->flag & SEQ_USE_PROXY_CUSTOM_DIR) {
             seq->strip->proxy->storage = SEQ_STORAGE_PROXY_CUSTOM_DIR;
-          if (seq->flag & SEQ_USE_PROXY_CUSTOM_FILE)
+          }
+          if (seq->flag & SEQ_USE_PROXY_CUSTOM_FILE) {
             seq->strip->proxy->storage = SEQ_STORAGE_PROXY_CUSTOM_FILE;
+          }
         }
 #undef SEQ_USE_PROXY_CUSTOM_DIR
 #undef SEQ_USE_PROXY_CUSTOM_FILE
@@ -1092,9 +1102,9 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
       Scene *scene;
       for (scene = bmain->scenes.first; scene != NULL; scene = scene->id.next) {
         CurveMapping *curve_mapping = &scene->r.mblur_shutter_curve;
-        curvemapping_set_defaults(curve_mapping, 1, 0.0f, 0.0f, 1.0f, 1.0f);
-        curvemapping_initialize(curve_mapping);
-        curvemap_reset(
+        BKE_curvemapping_set_defaults(curve_mapping, 1, 0.0f, 0.0f, 1.0f, 1.0f);
+        BKE_curvemapping_initialize(curve_mapping);
+        BKE_curvemap_reset(
             curve_mapping->cm, &curve_mapping->clipr, CURVE_PRESET_MAX, CURVEMAP_SLOPE_POS_NEG);
       }
     }
@@ -1153,18 +1163,23 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
         if (scene->gpd) {
           bGPdata *gpd = scene->gpd;
 
-          /* Copy over the settings stored in the GP datablock linked to the scene, for minimal disruption */
+          /* Copy over the settings stored in the GP data-block linked to the scene,
+           * for minimal disruption. */
           ts->gpencil_v3d_align = 0;
 
-          if (gpd->flag & GP_DATA_VIEWALIGN)
+          if (gpd->flag & GP_DATA_VIEWALIGN) {
             ts->gpencil_v3d_align |= GP_PROJECT_VIEWSPACE;
-          if (gpd->flag & GP_DATA_DEPTH_VIEW)
+          }
+          if (gpd->flag & GP_DATA_DEPTH_VIEW) {
             ts->gpencil_v3d_align |= GP_PROJECT_DEPTH_VIEW;
-          if (gpd->flag & GP_DATA_DEPTH_STROKE)
+          }
+          if (gpd->flag & GP_DATA_DEPTH_STROKE) {
             ts->gpencil_v3d_align |= GP_PROJECT_DEPTH_STROKE;
+          }
 
-          if (gpd->flag & GP_DATA_DEPTH_STROKE_ENDPOINTS)
+          if (gpd->flag & GP_DATA_DEPTH_STROKE_ENDPOINTS) {
             ts->gpencil_v3d_align |= GP_PROJECT_DEPTH_STROKE_ENDPOINTS;
+          }
         }
         else {
           /* Default to cursor for all standard 3D views */
@@ -1182,7 +1197,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
     for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
       bool enabled = false;
 
-      /* Ensure that the datablock's onionskinning toggle flag
+      /* Ensure that the datablock's onion-skinning toggle flag
        * stays in sync with the status of the actual layers
        */
       for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
@@ -1191,18 +1206,20 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
       }
 
-      if (enabled)
+      if (enabled) {
         gpd->flag |= GP_DATA_SHOW_ONIONSKINS;
-      else
+      }
+      else {
         gpd->flag &= ~GP_DATA_SHOW_ONIONSKINS;
+      }
     }
   }
   if (!MAIN_VERSION_ATLEAST(bmain, 276, 5)) {
     ListBase *lbarray[MAX_LIBARRAY];
     int a;
 
-    /* Important to clear all non-persistent flags from older versions here, otherwise they could collide
-     * with any new persistent flag we may add in the future. */
+    /* Important to clear all non-persistent flags from older versions here,
+     * otherwise they could collide with any new persistent flag we may add in the future. */
     a = set_listbasepointers(bmain, lbarray);
     while (a--) {
       for (ID *id = lbarray[a]->first; id; id = id->next) {
@@ -1324,8 +1341,8 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
         if (ob->pose) {
           for (bPoseChannel *pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
             /* see do_version_bones_super_bbone()... */
-            pchan->scaleIn = 1.0f;
-            pchan->scaleOut = 1.0f;
+            pchan->scale_in_x = pchan->scale_in_y = 1.0f;
+            pchan->scale_out_x = pchan->scale_out_y = 1.0f;
 
             /* also make sure some legacy (unused for over a decade) flags are unset,
              * so that we can reuse them for stuff that matters now...
@@ -1435,14 +1452,18 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
               copy_v4_v4(palcolor->color, gpl->color);
               copy_v4_v4(palcolor->fill, gpl->fill);
 
-              if (gpl->flag & GP_LAYER_HIDE)
+              if (gpl->flag & GP_LAYER_HIDE) {
                 palcolor->flag |= PC_COLOR_HIDE;
-              if (gpl->flag & GP_LAYER_LOCKED)
+              }
+              if (gpl->flag & GP_LAYER_LOCKED) {
                 palcolor->flag |= PC_COLOR_LOCKED;
-              if (gpl->flag & GP_LAYER_ONIONSKIN)
+              }
+              if (gpl->flag & GP_LAYER_ONIONSKIN) {
                 palcolor->flag |= PC_COLOR_ONIONSKIN;
-              if (gpl->flag & GP_LAYER_VOLUMETRIC)
+              }
+              if (gpl->flag & GP_LAYER_VOLUMETRIC) {
                 palcolor->flag |= PC_COLOR_VOLUMETRIC;
+              }
 
               /* set layer opacity to 1 */
               gpl->opacity = 1.0f;
@@ -1725,8 +1746,9 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
     if (!DNA_struct_elem_find(fd->filesdna, "Brush", "float", "falloff_angle")) {
       for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
         br->falloff_angle = DEG2RADF(80);
-        br->flag &= ~(BRUSH_FLAG_UNUSED_1 | BRUSH_FLAG_UNUSED_6 | BRUSH_FLAG_UNUSED_7 |
-                      BRUSH_FLAG_UNUSED_17 | BRUSH_FRONTFACE_FALLOFF);
+        /* These flags are used for new feautres. They are not related to falloff_angle */
+        br->flag &= ~(BRUSH_FLAG_UNUSED_1 | BRUSH_ORIGINAL_PLANE | BRUSH_GRAB_ACTIVE_VERTEX |
+                      BRUSH_SCENE_SPACING | BRUSH_FRONTFACE_FALLOFF);
       }
 
       for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {

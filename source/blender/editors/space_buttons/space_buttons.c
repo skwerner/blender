@@ -34,6 +34,7 @@
 
 #include "ED_space_api.h"
 #include "ED_screen.h"
+#include "ED_view3d.h" /* To draw toolbar UI. */
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -198,121 +199,7 @@ static void buttons_main_region_layout_properties(const bContext *C,
   }
 
   const bool vertical = true;
-  ED_region_panels_layout_ex(C, ar, contexts, sbuts->mainb, vertical);
-}
-
-static void buttons_main_region_layout_tool(const bContext *C, ARegion *ar)
-{
-  const WorkSpace *workspace = CTX_wm_workspace(C);
-  const enum eContextObjectMode mode = CTX_data_mode_enum(C);
-
-  const char *contexts_base[5] = {NULL};
-  contexts_base[0] = ".active_tool";
-  const char **contexts = &contexts_base[1];
-
-  if (workspace->tools_space_type == SPACE_VIEW3D) {
-    switch (mode) {
-      case CTX_MODE_EDIT_MESH:
-        ARRAY_SET_ITEMS(contexts, ".mesh_edit");
-        break;
-      case CTX_MODE_EDIT_CURVE:
-        ARRAY_SET_ITEMS(contexts, ".curve_edit");
-        break;
-      case CTX_MODE_EDIT_SURFACE:
-        ARRAY_SET_ITEMS(contexts, ".curve_edit");
-        break;
-      case CTX_MODE_EDIT_TEXT:
-        ARRAY_SET_ITEMS(contexts, ".text_edit");
-        break;
-      case CTX_MODE_EDIT_ARMATURE:
-        ARRAY_SET_ITEMS(contexts, ".armature_edit");
-        break;
-      case CTX_MODE_EDIT_METABALL:
-        ARRAY_SET_ITEMS(contexts, ".mball_edit");
-        break;
-      case CTX_MODE_EDIT_LATTICE:
-        ARRAY_SET_ITEMS(contexts, ".lattice_edit");
-        break;
-      case CTX_MODE_POSE:
-        ARRAY_SET_ITEMS(contexts, ".posemode");
-        break;
-      case CTX_MODE_SCULPT:
-        ARRAY_SET_ITEMS(contexts, ".paint_common", ".sculpt_mode");
-        break;
-      case CTX_MODE_PAINT_WEIGHT:
-        ARRAY_SET_ITEMS(contexts, ".paint_common", ".weightpaint");
-        break;
-      case CTX_MODE_PAINT_VERTEX:
-        ARRAY_SET_ITEMS(contexts, ".paint_common", ".vertexpaint");
-        break;
-      case CTX_MODE_PAINT_TEXTURE:
-        ARRAY_SET_ITEMS(contexts, ".paint_common", ".imagepaint");
-        break;
-      case CTX_MODE_PARTICLE:
-        ARRAY_SET_ITEMS(contexts, ".paint_common", ".particlemode");
-        break;
-      case CTX_MODE_OBJECT:
-        ARRAY_SET_ITEMS(contexts, ".objectmode");
-        break;
-      case CTX_MODE_PAINT_GPENCIL:
-        ARRAY_SET_ITEMS(contexts, ".greasepencil_paint");
-        break;
-      case CTX_MODE_SCULPT_GPENCIL:
-        ARRAY_SET_ITEMS(contexts, ".greasepencil_sculpt");
-        break;
-      case CTX_MODE_WEIGHT_GPENCIL:
-        ARRAY_SET_ITEMS(contexts, ".greasepencil_weight");
-        break;
-      default:
-        break;
-    }
-  }
-  else if (workspace->tools_space_type == SPACE_IMAGE) {
-    switch (workspace->tools_mode) {
-      case SI_MODE_VIEW:
-        break;
-      case SI_MODE_PAINT:
-        ARRAY_SET_ITEMS(contexts, ".paint_common_2d", ".imagepaint_2d");
-        break;
-      case SI_MODE_MASK:
-        break;
-      case SI_MODE_UV:
-        if (mode == CTX_MODE_EDIT_MESH) {
-          ARRAY_SET_ITEMS(contexts, ".uv_sculpt");
-        }
-        break;
-    }
-  }
-
-  /* for grease pencil we don't use tool system yet, so we need check outside
-   * workspace->tools_space_type because this value is not available
-   */
-  switch (mode) {
-    case CTX_MODE_PAINT_GPENCIL:
-      ARRAY_SET_ITEMS(contexts, ".greasepencil_paint");
-      break;
-    case CTX_MODE_SCULPT_GPENCIL:
-      ARRAY_SET_ITEMS(contexts, ".greasepencil_sculpt");
-      break;
-    case CTX_MODE_WEIGHT_GPENCIL:
-      ARRAY_SET_ITEMS(contexts, ".greasepencil_weight");
-      break;
-    case CTX_MODE_EDIT_GPENCIL:
-      ARRAY_SET_ITEMS(contexts, ".greasepencil_edit");
-      break;
-    default:
-      break;
-  }
-
-  int i = 0;
-  while (contexts_base[i]) {
-    i++;
-  }
-  BLI_assert(i < ARRAY_SIZE(contexts_base));
-  contexts_base[i] = ".workspace";
-
-  const bool vertical = true;
-  ED_region_panels_layout_ex(C, ar, contexts_base, -1, vertical);
+  ED_region_panels_layout_ex(C, ar, &ar->type->paneltypes, contexts, sbuts->mainb, vertical, NULL);
 }
 
 static void buttons_main_region_layout(const bContext *C, ARegion *ar)
@@ -321,7 +208,7 @@ static void buttons_main_region_layout(const bContext *C, ARegion *ar)
   SpaceProperties *sbuts = CTX_wm_space_properties(C);
 
   if (sbuts->mainb == BCONTEXT_TOOL) {
-    buttons_main_region_layout_tool(C, ar);
+    ED_view3d_buttons_region_layout_ex(C, ar, "Tool");
   }
   else {
     buttons_main_region_layout_properties(C, sbuts, ar);
@@ -416,9 +303,6 @@ static void buttons_header_region_message_subscribe(const bContext *UNUSED(C),
 
 static void buttons_navigation_bar_region_init(wmWindowManager *wm, ARegion *ar)
 {
-  wmKeyMap *keymap = WM_keymap_ensure(wm->defaultconf, "Property Editor", SPACE_PROPERTIES, 0);
-  WM_event_add_keymap_handler(&ar->handlers, keymap);
-
   ar->flag |= RGN_FLAG_PREFSIZE_OR_HIDDEN;
 
   ED_region_panels_init(wm, ar);
@@ -480,6 +364,7 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
       switch (wmn->data) {
         case ND_RENDER_OPTIONS:
           buttons_area_redraw(sa, BCONTEXT_RENDER);
+          buttons_area_redraw(sa, BCONTEXT_OUTPUT);
           buttons_area_redraw(sa, BCONTEXT_VIEW_LAYER);
           break;
         case ND_WORLD:
@@ -514,8 +399,6 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
           buttons_area_redraw(sa, BCONTEXT_DATA); /* autotexpace flag */
           break;
         case ND_POSE:
-          buttons_area_redraw(sa, BCONTEXT_DATA);
-          break;
         case ND_BONE_ACTIVE:
         case ND_BONE_SELECT:
           buttons_area_redraw(sa, BCONTEXT_BONE);
@@ -626,7 +509,7 @@ static void buttons_area_listener(wmWindow *UNUSED(win),
     case NC_GPENCIL:
       switch (wmn->data) {
         case ND_DATA:
-          if (ELEM(wmn->action, NA_EDITED, NA_ADDED, NA_REMOVED)) {
+          if (ELEM(wmn->action, NA_EDITED, NA_ADDED, NA_REMOVED, NA_SELECTED)) {
             ED_area_tag_redraw(sa);
           }
           break;
@@ -677,7 +560,7 @@ static void buttons_id_remap(ScrArea *UNUSED(sa), SpaceLink *slink, ID *old_id, 
     int i;
 
     for (i = 0; i < path->len; i++) {
-      if (path->ptr[i].id.data == old_id) {
+      if (path->ptr[i].owner_id == old_id) {
         break;
       }
     }
@@ -765,7 +648,7 @@ void ED_spacetype_buttons(void)
   art->regionid = RGN_TYPE_NAV_BAR;
   art->prefsizex = AREAMINX - 3; /* XXX Works and looks best,
                                   * should we update AREAMINX accordingly? */
-  art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
+  art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES | ED_KEYMAP_NAVBAR;
   art->init = buttons_navigation_bar_region_init;
   art->draw = buttons_navigation_bar_region_draw;
   art->message_subscribe = buttons_navigation_bar_region_message_subscribe;

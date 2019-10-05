@@ -54,8 +54,6 @@ typedef struct bNodeLinkDrag {
 } bNodeLinkDrag;
 
 /* space_node.c */
-ARegion *node_has_buttons_region(ScrArea *sa);
-ARegion *node_has_tools_region(ScrArea *sa);
 
 /* transform between View2Ds in the tree path */
 void snode_group_offset(struct SpaceNode *snode, float *x, float *y);
@@ -153,7 +151,16 @@ bool node_link_bezier_points(struct View2D *v2d,
                              struct bNodeLink *link,
                              float coord_array[][2],
                              int resol);
-// void node_draw_link_straight(View2D *v2d, SpaceNode *snode, bNodeLink *link, int th_col1, int do_shaded, int th_col2, int do_triple, int th_col3 );
+#if 0
+void node_draw_link_straight(View2D *v2d,
+                             SpaceNode *snode,
+                             bNodeLink *link,
+                             int th_col1,
+                             int do_shaded,
+                             int th_col2,
+                             int do_triple,
+                             int th_col3);
+#endif
 void draw_nodespace_back_pix(const struct bContext *C,
                              struct ARegion *ar,
                              struct SpaceNode *snode,

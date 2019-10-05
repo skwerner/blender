@@ -71,27 +71,30 @@
 struct wmJob {
   struct wmJob *next, *prev;
 
-  /* job originating from, keep track of this when deleting windows */
+  /** Job originating from, keep track of this when deleting windows */
   wmWindow *win;
 
-  /* should store entire own context, for start, update, free */
+  /** Should store entire own context, for start, update, free */
   void *customdata;
-  /* to prevent cpu overhead, use this one which only gets called when job really starts, not in thread */
+  /** To prevent cpu overhead,
+   * use this one which only gets called when job really starts, not in thread */
   void (*initjob)(void *);
-  /* this runs inside thread, and does full job */
+  /** This runs inside thread, and does full job */
   void (*startjob)(void *, short *stop, short *do_update, float *progress);
-  /* update gets called if thread defines so, and max once per timerstep */
-  /* it runs outside thread, blocking blender, no drawing! */
+  /** Update gets called if thread defines so, and max once per timerstep
+   * it runs outside thread, blocking blender, no drawing! */
   void (*update)(void *);
-  /* free entire customdata, doesn't run in thread */
+  /** Free entire customdata, doesn't run in thread */
   void (*free)(void *);
-  /* gets called when job is stopped, not in thread */
+  /** Gets called when job is stopped, not in thread */
   void (*endjob)(void *);
 
-  /* running jobs each have own timer */
+  /** Running jobs each have own timer */
   double timestep;
   wmTimer *wt;
-  /* the notifier event timers should send */
+  /** Only start job after specified time delay */
+  double start_delay_time;
+  /** The notifier event timers should send */
   unsigned int note, endnote;
 
   /* internal */
@@ -100,19 +103,19 @@ struct wmJob {
   short suspended, running, ready, do_update, stop, job_type;
   float progress;
 
-  /* for display in header, identification */
+  /** For display in header, identification */
   char name[128];
 
-  /* once running, we store this separately */
+  /** Once running, we store this separately */
   void *run_customdata;
   void (*run_free)(void *);
 
-  /* we use BLI_threads api, but per job only 1 thread runs */
+  /** We use BLI_threads api, but per job only 1 thread runs */
   ListBase threads;
 
   double start_time;
 
-  /* ticket mutex for main thread locking while some job accesses
+  /** Ticket mutex for main thread locking while some job accesses
    * data that the main thread might modify at the same time */
   TicketMutex *main_thread_mutex;
 };
@@ -355,6 +358,11 @@ void WM_jobs_timer(wmJob *wm_job, double timestep, unsigned int note, unsigned i
   wm_job->endnote = endnote;
 }
 
+void WM_jobs_delay_start(wmJob *wm_job, double delay_time)
+{
+  wm_job->start_delay_time = delay_time;
+}
+
 void WM_jobs_callbacks(wmJob *wm_job,
                        void (*startjob)(void *, short *, short *, float *),
                        void (*initjob)(void *),
@@ -385,9 +393,9 @@ static void wm_jobs_test_suspend_stop(wmWindowManager *wm, wmJob *test)
   bool suspend = false;
 
   /* job added with suspend flag, we wait 1 timer step before activating it */
-  if (test->flag & WM_JOB_SUSPEND) {
+  if (test->start_delay_time > 0.0) {
     suspend = true;
-    test->flag &= ~WM_JOB_SUSPEND;
+    test->start_delay_time = 0.0;
   }
   else {
     /* check other jobs */
@@ -440,6 +448,8 @@ void WM_jobs_start(wmWindowManager *wm, wmJob *wm_job)
   else {
 
     if (wm_job->customdata && wm_job->startjob) {
+      const double timestep = (wm_job->start_delay_time > 0.0) ? wm_job->start_delay_time :
+                                                                 wm_job->timestep;
 
       wm_jobs_test_suspend_stop(wm, wm_job);
 
@@ -466,8 +476,12 @@ void WM_jobs_start(wmWindowManager *wm, wmJob *wm_job)
       }
 
       /* restarted job has timer already */
+      if (wm_job->wt && (wm_job->wt->timestep > timestep)) {
+        WM_event_remove_timer(wm, wm_job->win, wm_job->wt);
+        wm_job->wt = WM_event_add_timer(wm, wm_job->win, TIMERJOBS, timestep);
+      }
       if (wm_job->wt == NULL) {
-        wm_job->wt = WM_event_add_timer(wm, wm_job->win, TIMERJOBS, wm_job->timestep);
+        wm_job->wt = WM_event_add_timer(wm, wm_job->win, TIMERJOBS, timestep);
       }
 
       wm_job->start_time = PIL_check_seconds_timer();

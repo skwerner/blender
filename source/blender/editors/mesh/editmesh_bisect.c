@@ -148,7 +148,7 @@ static int mesh_bisect_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     BisectData *opdata;
 
     opdata = MEM_mallocN(sizeof(BisectData), "inset_operator_data");
-    gesture->userdata = opdata;
+    gesture->user_data.data = opdata;
 
     opdata->backup_len = objects_len;
     opdata->backup = MEM_callocN(sizeof(*opdata->backup) * objects_len, __func__);
@@ -170,7 +170,7 @@ static int mesh_bisect_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     v3d->gizmo_flag = V3D_GIZMO_HIDE;
 
     /* Initialize modal callout. */
-    ED_workspace_status_text(C, IFACE_("LMB: Click and drag to draw cut line"));
+    ED_workspace_status_text(C, TIP_("LMB: Click and drag to draw cut line"));
   }
   MEM_freeN(objects);
   return ret;
@@ -193,7 +193,7 @@ static void edbm_bisect_exit(bContext *C, BisectData *opdata)
 static int mesh_bisect_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   wmGesture *gesture = op->customdata;
-  BisectData *opdata = gesture->userdata;
+  BisectData *opdata = gesture->user_data.data;
   BisectData opdata_back = *opdata; /* annoyance, WM_gesture_straightline_modal, frees */
   int ret;
 
@@ -202,7 +202,7 @@ static int mesh_bisect_modal(bContext *C, wmOperator *op, const wmEvent *event)
   /* update or clear modal callout */
   if (event->type == EVT_MODAL_MAP) {
     if (event->val == GESTURE_MODAL_BEGIN) {
-      ED_workspace_status_text(C, IFACE_("LMB: Release to confirm cut line"));
+      ED_workspace_status_text(C, TIP_("LMB: Release to confirm cut line"));
     }
     else {
       ED_workspace_status_text(C, NULL);
@@ -276,7 +276,7 @@ static int mesh_bisect_exec(bContext *C, wmOperator *op)
   }
 
   wmGesture *gesture = op->customdata;
-  BisectData *opdata = (gesture != NULL) ? gesture->userdata : NULL;
+  BisectData *opdata = (gesture != NULL) ? gesture->user_data.data : NULL;
 
   /* -------------------------------------------------------------------- */
   /* Modal support */
@@ -455,7 +455,7 @@ void MESH_OT_bisect(struct wmOperatorType *ot)
                 0.00001,
                 0.1);
 
-  WM_operator_properties_gesture_straightline(ot, CURSOR_EDIT);
+  WM_operator_properties_gesture_straightline(ot, WM_CURSOR_EDIT);
 
 #ifdef USE_GIZMO
   WM_gizmogrouptype_append(MESH_GGT_bisect);

@@ -111,8 +111,6 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(bContext *C,
   int totitem = 0;
   const int data_type = RNA_enum_get(ptr, "data_type");
 
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
-
   PropertyRNA *prop = RNA_struct_find_property(ptr, "use_reverse_transfer");
   const bool reverse_transfer = prop != NULL && RNA_property_boolean_get(ptr, prop);
   const int layers_select_dst = reverse_transfer ? RNA_enum_get(ptr, "layers_select_src") :
@@ -158,6 +156,7 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(bContext *C,
       Mesh *me_eval;
       int num_data, i;
 
+      Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
       Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
       Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
 
@@ -183,6 +182,7 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(bContext *C,
       Mesh *me_eval;
       int num_data, i;
 
+      Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
       Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
       Object *ob_src_eval = DEG_get_evaluated_object(depsgraph, ob_src);
 
@@ -397,7 +397,7 @@ static bool data_transfer_exec_is_object_valid(wmOperator *op,
 static int data_transfer_exec(bContext *C, wmOperator *op)
 {
   Object *ob_src = ED_object_active_context(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 
   ListBase ctx_objects;
@@ -495,11 +495,15 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
                                         NULL,
                                         false,
                                         op->reports)) {
+
+        if (data_type == DT_TYPE_LNOR && use_create) {
+          ((Mesh *)ob_dst->data)->flag |= ME_AUTOSMOOTH;
+        }
+
+        DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
         changed = true;
       }
     }
-
-    DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
 
     if (reverse_transfer) {
       SWAP(Object *, ob_src, ob_dst);
@@ -520,7 +524,8 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
 }
 
 /* Used by both OBJECT_OT_data_transfer and OBJECT_OT_datalayout_transfer */
-/* Note this context poll is only really partial, it cannot check for all possible invalid cases. */
+/* Note this context poll is only really partial,
+ * it cannot check for all possible invalid cases. */
 static bool data_transfer_poll(bContext *C)
 {
   Object *ob = ED_object_active_context(C);
@@ -612,7 +617,7 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
   ot->check = data_transfer_check;
 
   /* Flags.*/
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* Properties.*/
   prop = RNA_def_boolean(ot->srna,
@@ -759,22 +764,22 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
 
 static bool datalayout_transfer_poll(bContext *C)
 {
-  return (edit_modifier_poll_generic(C, &RNA_DataTransferModifier, (1 << OB_MESH)) ||
+  return (edit_modifier_poll_generic(C, &RNA_DataTransferModifier, (1 << OB_MESH), true) ||
           data_transfer_poll(C));
 }
 
 static int datalayout_transfer_exec(bContext *C, wmOperator *op)
 {
   Object *ob_act = ED_object_active_context(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
   DataTransferModifierData *dtmd;
 
   dtmd = (DataTransferModifierData *)edit_modifier_property_get(
       op, ob_act, eModifierType_DataTransfer);
 
-  /* If we have a modifier, we transfer data layout from this modifier's source object to active one.
-   * Else, we transfer data layout from active object to all selected ones. */
+  /* If we have a modifier, we transfer data layout from this modifier's source object to
+   * active one. Else, we transfer data layout from active object to all selected ones. */
   if (dtmd) {
     Object *ob_src = dtmd->ob_source;
     Object *ob_dst = ob_act;
@@ -841,6 +846,7 @@ static int datalayout_transfer_exec(bContext *C, wmOperator *op)
     BLI_freelistN(&ctx_objects);
   }
 
+  DEG_relations_tag_update(CTX_data_main(C));
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, NULL);
 
   return OPERATOR_FINISHED;
@@ -871,7 +877,7 @@ void OBJECT_OT_datalayout_transfer(wmOperatorType *ot)
   ot->check = data_transfer_check;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* Properties.*/
   edit_modifier_properties(ot);

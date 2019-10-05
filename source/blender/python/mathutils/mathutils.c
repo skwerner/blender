@@ -25,6 +25,7 @@
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
+#include "../generic/py_capi_utils.h"
 #include "../generic/python_utildefines.h"
 
 #ifndef MATH_STANDALONE
@@ -328,6 +329,153 @@ int mathutils_array_parse_alloc_v(float **array,
   return size;
 }
 
+/* Parse an sequence array_dim integers into array. */
+int mathutils_int_array_parse(int *array, int array_dim, PyObject *value, const char *error_prefix)
+{
+  int size, i;
+  PyObject *value_fast, **value_fast_items, *item;
+
+  if (!(value_fast = PySequence_Fast(value, error_prefix))) {
+    /* PySequence_Fast sets the error */
+    return -1;
+  }
+
+  if ((size = PySequence_Fast_GET_SIZE(value_fast)) != array_dim) {
+    PyErr_Format(PyExc_ValueError,
+                 "%.200s: sequence size is %d, expected %d",
+                 error_prefix,
+                 size,
+                 array_dim);
+    Py_DECREF(value_fast);
+    return -1;
+  }
+
+  value_fast_items = PySequence_Fast_ITEMS(value_fast);
+  i = size;
+  while (i > 0) {
+    i--;
+    if (((array[i] = PyC_Long_AsI32((item = value_fast_items[i]))) == -1) && PyErr_Occurred()) {
+      PyErr_Format(PyExc_TypeError, "%.200s: sequence index %d expected an int", error_prefix, i);
+      size = -1;
+      break;
+    }
+  }
+  Py_DECREF(value_fast);
+
+  return size;
+}
+
+/* Parse sequence of array_dim sequences of integers and return allocated result. */
+int mathutils_array_parse_alloc_vi(int **array,
+                                   int array_dim,
+                                   PyObject *value,
+                                   const char *error_prefix)
+{
+  PyObject *value_fast;
+  int i, size;
+
+  if (!(value_fast = PySequence_Fast(value, error_prefix))) {
+    /* PySequence_Fast sets the error */
+    return -1;
+  }
+
+  size = PySequence_Fast_GET_SIZE(value_fast);
+
+  if (size != 0) {
+    PyObject **value_fast_items = PySequence_Fast_ITEMS(value_fast);
+    int *ip;
+
+    ip = *array = PyMem_Malloc(size * array_dim * sizeof(int));
+
+    for (i = 0; i < size; i++, ip += array_dim) {
+      PyObject *item = value_fast_items[i];
+
+      if (mathutils_int_array_parse(ip, array_dim, item, error_prefix) == -1) {
+        PyMem_Free(*array);
+        *array = NULL;
+        size = -1;
+        break;
+      }
+    }
+  }
+
+  Py_DECREF(value_fast);
+  return size;
+}
+
+/* Parse sequence of variable-length sequences of int and return allocated
+ * triple of arrays to represent the result:
+ * The flattened sequences are put into *array.
+ * The start index of each sequence goes into start_table.
+ * The length of each index goes into len_table.
+ */
+int mathutils_array_parse_alloc_viseq(
+    int **array, int **start_table, int **len_table, PyObject *value, const char *error_prefix)
+{
+  PyObject *value_fast, *subseq;
+  int i, size, start, subseq_len;
+  int *ip;
+
+  *array = NULL;
+  *start_table = NULL;
+  *len_table = NULL;
+  if (!(value_fast = PySequence_Fast(value, error_prefix))) {
+    /* PySequence_Fast sets the error */
+    return -1;
+  }
+
+  size = PySequence_Fast_GET_SIZE(value_fast);
+
+  if (size != 0) {
+    PyObject **value_fast_items = PySequence_Fast_ITEMS(value_fast);
+
+    *start_table = PyMem_Malloc(size * sizeof(int));
+    *len_table = PyMem_Malloc(size * sizeof(int));
+
+    /* First pass to set starts and len, and calculate size of array needed */
+    start = 0;
+    for (i = 0; i < size; i++) {
+      subseq = value_fast_items[i];
+      if ((subseq_len = (int)PySequence_Size(subseq)) == -1) {
+        PyErr_Format(
+            PyExc_ValueError, "%.200s: sequence expected to have subsequences", error_prefix);
+        PyMem_Free(*start_table);
+        PyMem_Free(*len_table);
+        Py_DECREF(value_fast);
+        *start_table = NULL;
+        *len_table = NULL;
+        return -1;
+      }
+      (*start_table)[i] = start;
+      (*len_table)[i] = subseq_len;
+      start += subseq_len;
+    }
+
+    ip = *array = PyMem_Malloc(start * sizeof(int));
+
+    /* Second pass to parse the subsequences into array */
+    for (i = 0; i < size; i++) {
+      subseq = value_fast_items[i];
+      subseq_len = (*len_table)[i];
+
+      if (mathutils_int_array_parse(ip, subseq_len, subseq, error_prefix) == -1) {
+        PyMem_Free(*array);
+        PyMem_Free(*start_table);
+        PyMem_Free(*len_table);
+        *array = NULL;
+        *len_table = NULL;
+        *start_table = NULL;
+        size = -1;
+        break;
+      }
+      ip += subseq_len;
+    }
+  }
+
+  Py_DECREF(value_fast);
+  return size;
+}
+
 int mathutils_any_to_rotmat(float rmat[3][3], PyObject *value, const char *error_prefix)
 {
   if (EulerObject_Check(value)) {
@@ -381,13 +529,16 @@ int mathutils_any_to_rotmat(float rmat[3][3], PyObject *value, const char *error
 
 /* LomontRRDCompare4, Ever Faster Float Comparisons by Randy Dillon */
 /* XXX We may want to use 'safer' BLI's compare_ff_relative ultimately?
- *     LomontRRDCompare4() is an optimized version of Dawson's AlmostEqual2sComplement() (see [1] and [2]).
- *     Dawson himself now claims this is not a 'safe' thing to do (pushing ULP method beyond its limits),
- *     an recommends using work from [3] instead, which is done in BLI func...
+ * LomontRRDCompare4() is an optimized version of Dawson's AlmostEqual2sComplement()
+ * (see [1] and [2]).
+ * Dawson himself now claims this is not a 'safe' thing to do
+ * (pushing ULP method beyond its limits),
+ * an recommends using work from [3] instead, which is done in BLI func...
  *
- *     [1] http://www.randydillon.org/Papers/2007/everfast.htm
- *     [2] http://www.cygnus-software.com/papers/comparingfloats/comparingfloats.htm
- *     [3] https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/ instead
+ * [1] http://www.randydillon.org/Papers/2007/everfast.htm
+ * [2] http://www.cygnus-software.com/papers/comparingfloats/comparingfloats.htm
+ * [3] https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
+ * instead.
  */
 #define SIGNMASK(i) (-(int)(((unsigned int)(i)) >> 31))
 
@@ -437,7 +588,8 @@ PyObject *mathutils_dynstr_to_py(struct DynStr *ds)
 
 /* Mathutils Callbacks */
 
-/* for mathutils internal use only, eventually should re-alloc but to start with we only have a few users */
+/* For mathutils internal use only,
+ * eventually should re-alloc but to start with we only have a few users. */
 #define MATHUTILS_TOT_CB 17
 static Mathutils_Callback *mathutils_callbacks[MATHUTILS_TOT_CB] = {NULL};
 
@@ -662,7 +814,7 @@ PyMODINIT_FUNC PyInit_mathutils(void)
   PyDict_SetItem(sys_modules, PyModule_GetNameObject(submodule), submodule);
 
   PyModule_AddObject(mod, "interpolate", (submodule = PyInit_mathutils_interpolate()));
-  /* XXX, python doesnt do imports with this usefully yet
+  /* XXX, python doesn't do imports with this usefully yet
    * 'from mathutils.geometry import PolyFill'
    * ...fails without this. */
   PyDict_SetItem(sys_modules, PyModule_GetNameObject(submodule), submodule);

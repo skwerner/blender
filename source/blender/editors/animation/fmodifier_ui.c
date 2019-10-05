@@ -63,21 +63,36 @@
 /* UI STUFF */
 
 // XXX! --------------------------------
-/* temporary definition for limits of float number buttons (FLT_MAX tends to infinity with old system) */
+/* Temporary definition for limits of float number buttons
+ * (FLT_MAX tends to infinity with old system). */
 #define UI_FLT_MAX 10000.0f
 
 #define B_REDR 1
 #define B_FMODIFIER_REDRAW 20
 
+/* callback to update depsgraph on value changes */
+static void deg_update(bContext *C, void *owner_id, void *UNUSED(var2))
+{
+  /* send notifiers */
+  /* XXX for now, this is the only way to get updates in all the right places...
+   * but would be nice to have a special one in this case. */
+  WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
+  DEG_id_tag_update(owner_id, ID_RECALC_ANIMATION);
+}
+
 /* callback to verify modifier data */
-static void validate_fmodifier_cb(bContext *UNUSED(C), void *fcm_v, void *UNUSED(arg))
+static void validate_fmodifier_cb(bContext *C, void *fcm_v, void *owner_id)
 {
   FModifier *fcm = (FModifier *)fcm_v;
   const FModifierTypeInfo *fmi = fmodifier_get_typeinfo(fcm);
 
   /* call the verify callback on the modifier if applicable */
-  if (fmi && fmi->verify_data)
+  if (fmi && fmi->verify_data) {
     fmi->verify_data(fcm);
+  }
+  if (owner_id) {
+    deg_update(C, owner_id, NULL);
+  }
 }
 
 /* callback to remove the given modifier  */
@@ -96,12 +111,8 @@ static void delete_fmodifier_cb(bContext *C, void *ctx_v, void *fcm_v)
 
   ED_undo_push(C, "Delete F-Curve Modifier");
 
-  /* send notifiers */
-  // XXX for now, this is the only way to get updates in all the right places... but would be nice to have a special one in this case
-  WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
-  DEG_id_tag_update(ctx->fcurve_owner_id, ID_RECALC_ANIMATION);
+  deg_update(C, ctx->fcurve_owner_id, NULL);
 }
-
 /* --------------- */
 
 /* draw settings for generator modifier */
@@ -173,6 +184,7 @@ static void draw_modifier__generator(uiLayout *layout,
       /* draw polynomial order selector */
       row = uiLayoutRow(layout, false);
       block = uiLayoutGetBlock(row);
+
       but = uiDefButI(
           block,
           UI_BTYPE_NUM,
@@ -185,10 +197,10 @@ static void draw_modifier__generator(uiLayout *layout,
           &data->poly_order,
           1,
           100,
-          0,
+          1,
           0,
           TIP_("'Order' of the Polynomial (for a polynomial with n terms, 'order' is n-1)"));
-      UI_but_func_set(but, validate_fmodifier_cb, fcm, NULL);
+      UI_but_func_set(but, validate_fmodifier_cb, fcm, fcurve_owner_id);
 
       /* calculate maximum width of label for "x^n" labels */
       if (data->arraysize > 2) {
@@ -205,10 +217,13 @@ static void draw_modifier__generator(uiLayout *layout,
       row = uiLayoutRow(layout, true);
       block = uiLayoutGetBlock(row);
 
+      /* Update depsgraph when values change */
+      UI_block_func_set(block, deg_update, fcurve_owner_id, NULL);
+
       cp = data->coefficients;
       for (i = 0; (i < data->arraysize) && (cp); i++, cp++) {
         /* To align with first line... */
-        if (i)
+        if (i) {
           uiDefBut(block,
                    UI_BTYPE_LABEL,
                    1,
@@ -223,7 +238,8 @@ static void draw_modifier__generator(uiLayout *layout,
                    0,
                    0,
                    "");
-        else
+        }
+        else {
           uiDefBut(block,
                    UI_BTYPE_LABEL,
                    1,
@@ -238,6 +254,7 @@ static void draw_modifier__generator(uiLayout *layout,
                    0,
                    0,
                    "");
+        }
 
         /* coefficient */
         uiDefButF(block,
@@ -256,12 +273,15 @@ static void draw_modifier__generator(uiLayout *layout,
                   TIP_("Coefficient for polynomial"));
 
         /* 'x' param (and '+' if necessary) */
-        if (i == 0)
+        if (i == 0) {
           BLI_strncpy(xval, "", sizeof(xval));
-        else if (i == 1)
+        }
+        else if (i == 1) {
           BLI_strncpy(xval, "x", sizeof(xval));
-        else
+        }
+        else {
           BLI_snprintf(xval, sizeof(xval), "x^%u", i);
+        }
         uiDefBut(block,
                  UI_BTYPE_LABEL,
                  1,
@@ -302,6 +322,7 @@ static void draw_modifier__generator(uiLayout *layout,
       /* draw polynomial order selector */
       row = uiLayoutRow(layout, false);
       block = uiLayoutGetBlock(row);
+
       but = uiDefButI(
           block,
           UI_BTYPE_NUM,
@@ -314,19 +335,22 @@ static void draw_modifier__generator(uiLayout *layout,
           &data->poly_order,
           1,
           100,
-          0,
+          1,
           0,
           TIP_("'Order' of the Polynomial (for a polynomial with n terms, 'order' is n-1)"));
-      UI_but_func_set(but, validate_fmodifier_cb, fcm, NULL);
+      UI_but_func_set(but, validate_fmodifier_cb, fcm, fcurve_owner_id);
 
       /* draw controls for each pair of coefficients */
       row = uiLayoutRow(layout, true);
       block = uiLayoutGetBlock(row);
 
+      /* Update depsgraph when values change */
+      UI_block_func_set(block, deg_update, fcurve_owner_id, NULL);
+
       cp = data->coefficients;
       for (i = 0; (i < data->poly_order) && (cp); i++, cp += 2) {
         /* To align with first line */
-        if (i)
+        if (i) {
           uiDefBut(block,
                    UI_BTYPE_LABEL,
                    1,
@@ -341,7 +365,8 @@ static void draw_modifier__generator(uiLayout *layout,
                    0,
                    0,
                    "");
-        else
+        }
+        else {
           uiDefBut(block,
                    UI_BTYPE_LABEL,
                    1,
@@ -356,6 +381,7 @@ static void draw_modifier__generator(uiLayout *layout,
                    0,
                    0,
                    "");
+        }
         /* opening bracket */
         uiDefBut(
             block, UI_BTYPE_LABEL, 1, "(", 0, 0, UI_UNIT_X, UI_UNIT_Y, NULL, 0.0, 0.0, 0, 0, "");
@@ -427,7 +453,7 @@ static void draw_modifier__generator(uiLayout *layout,
           row = uiLayoutRow(layout, true);
           block = uiLayoutGetBlock(row);
         }
-        else
+        else {
           uiDefBut(block,
                    UI_BTYPE_LABEL,
                    1,
@@ -442,6 +468,7 @@ static void draw_modifier__generator(uiLayout *layout,
                    0,
                    0,
                    "");
+        }
       }
       break;
     }
@@ -567,15 +594,17 @@ static void fmod_envelope_addpoint_cb(bContext *C, void *fcm_dv, void *UNUSED(ar
     fedn = MEM_callocN((env->totvert + 1) * sizeof(FCM_EnvelopeData), "FCM_EnvelopeData");
 
     /* add the points that should occur before the point to be pasted */
-    if (i > 0)
+    if (i > 0) {
       memcpy(fedn, env->data, i * sizeof(FCM_EnvelopeData));
+    }
 
     /* add point to paste at index i */
     *(fedn + i) = fed;
 
     /* add the points that occur after the point to be pasted */
-    if (i < env->totvert)
+    if (i < env->totvert) {
       memcpy(fedn + i + 1, env->data + i, (env->totvert - i) * sizeof(FCM_EnvelopeData));
+    }
 
     /* replace (+ free) old with new */
     MEM_freeN(env->data);
@@ -883,10 +912,12 @@ void ANIM_uiTemplate_fmodifier_draw(uiLayout *layout,
     uiItemR(sub, &ptr, "active", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
 
     /* name */
-    if (fmi)
+    if (fmi) {
       uiItemL(sub, IFACE_(fmi->name), ICON_NONE);
-    else
+    }
+    else {
       uiItemL(sub, IFACE_("<Unknown Modifier>"), ICON_NONE);
+    }
 
     /* right-align ------------------------------------------- */
     sub = uiLayoutRow(row, true);
@@ -1023,8 +1054,9 @@ bool ANIM_fmodifiers_copy_to_buf(ListBase *modifiers, bool active)
   bool ok = true;
 
   /* sanity checks */
-  if (ELEM(NULL, modifiers, modifiers->first))
+  if (ELEM(NULL, modifiers, modifiers->first)) {
     return 0;
+  }
 
   /* copy the whole list, or just the active one? */
   if (active) {
@@ -1034,11 +1066,13 @@ bool ANIM_fmodifiers_copy_to_buf(ListBase *modifiers, bool active)
       FModifier *fcmN = copy_fmodifier(fcm);
       BLI_addtail(&fmodifier_copypaste_buf, fcmN);
     }
-    else
+    else {
       ok = 0;
+    }
   }
-  else
+  else {
     copy_fmodifiers(&fmodifier_copypaste_buf, modifiers);
+  }
 
   /* did we succeed? */
   return ok;
@@ -1053,14 +1087,16 @@ bool ANIM_fmodifiers_paste_from_buf(ListBase *modifiers, bool replace, FCurve *c
   bool ok = false;
 
   /* sanity checks */
-  if (modifiers == NULL)
+  if (modifiers == NULL) {
     return 0;
+  }
 
   bool was_cyclic = curve && BKE_fcurve_is_cyclic(curve);
 
   /* if replacing the list, free the existing modifiers */
-  if (replace)
+  if (replace) {
     free_fmodifiers(modifiers);
+  }
 
   /* now copy over all the modifiers in the buffer to the end of the list */
   for (fcm = fmodifier_copypaste_buf.first; fcm; fcm = fcm->next) {
@@ -1078,8 +1114,9 @@ bool ANIM_fmodifiers_paste_from_buf(ListBase *modifiers, bool replace, FCurve *c
   }
 
   /* adding or removing the Cycles modifier requires an update to handles */
-  if (curve && BKE_fcurve_is_cyclic(curve) != was_cyclic)
+  if (curve && BKE_fcurve_is_cyclic(curve) != was_cyclic) {
     calchandles_fcurve(curve);
+  }
 
   /* did we succeed? */
   return ok;

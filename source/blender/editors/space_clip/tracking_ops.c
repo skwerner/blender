@@ -35,7 +35,6 @@
 #include "BKE_movieclip.h"
 #include "BKE_tracking.h"
 #include "BKE_report.h"
-#include "BKE_sound.h"
 
 #include "DEG_depsgraph.h"
 
@@ -153,7 +152,7 @@ void CLIP_OT_add_marker(wmOperatorType *ot)
 
 static int add_marker_at_click_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  ED_workspace_status_text(C, IFACE_("Use LMB click to define location where place the marker"));
+  ED_workspace_status_text(C, TIP_("Use LMB click to define location where place the marker"));
 
   /* Add modal handler for ESC. */
   WM_event_add_modal_handler(C, op);
@@ -449,8 +448,8 @@ static float mouse_to_slide_zone_distance_squared(const float co[2],
                                                   int width,
                                                   int height)
 {
-  float pixel_co[2] = {co[0] * width, co[1] * height},
-        pixel_slide_zone[2] = {slide_zone[0] * width, slide_zone[1] * height};
+  const float pixel_co[2] = {co[0] * width, co[1] * height},
+              pixel_slide_zone[2] = {slide_zone[0] * width, slide_zone[1] * height};
   return SQUARE(pixel_co[0] - pixel_slide_zone[0]) + SQUARE(pixel_co[1] - pixel_slide_zone[1]);
 }
 
@@ -512,8 +511,9 @@ static bool slide_check_corners(float (*corners)[2])
   float cross = 0.0f;
   float p[2] = {0.0f, 0.0f};
 
-  if (!isect_point_quad_v2(p, corners[0], corners[1], corners[2], corners[3]))
+  if (!isect_point_quad_v2(p, corners[0], corners[1], corners[2], corners[3])) {
     return false;
+  }
 
   for (i = 0; i < 4; i++) {
     float v1[2], v2[2], cur_cross;
@@ -562,8 +562,9 @@ MovieTrackingTrack *tracking_marker_check_slide(
 
   ED_space_clip_get_size(sc, &width, &height);
 
-  if (width == 0 || height == 0)
+  if (width == 0 || height == 0) {
     return NULL;
+  }
 
   ED_clip_mouse_pos(sc, ar, event->mval, co);
 
@@ -989,7 +990,7 @@ void CLIP_OT_slide_marker(wmOperatorType *ot)
   ot->modal = slide_marker_modal;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_GRAB_CURSOR | OPTYPE_BLOCKING;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_GRAB_CURSOR_XY | OPTYPE_BLOCKING;
 
   /* properties */
   RNA_def_float_vector(ot->srna,
@@ -1297,6 +1298,12 @@ void CLIP_OT_hide_tracks_clear(wmOperatorType *ot)
 
 /********************** frame jump operator *********************/
 
+static bool frame_jump_poll(bContext *C)
+{
+  SpaceClip *space_clip = CTX_wm_space_clip(C);
+  return space_clip != NULL;
+}
+
 static int frame_jump_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
@@ -1348,7 +1355,7 @@ static int frame_jump_exec(bContext *C, wmOperator *op)
 
   if (CFRA != sc->user.framenr) {
     CFRA = sc->user.framenr;
-    BKE_sound_seek_scene(CTX_data_main(C), scene);
+    DEG_id_tag_update(&scene->id, ID_RECALC_AUDIO_SEEK);
 
     WM_event_add_notifier(C, NC_SCENE | ND_FRAME, scene);
   }
@@ -1375,7 +1382,7 @@ void CLIP_OT_frame_jump(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = frame_jump_exec;
-  ot->poll = ED_space_clip_poll;
+  ot->poll = frame_jump_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -1458,6 +1465,7 @@ static int join_tracks_exec(bContext *C, wmOperator *op)
   }
 
   BLI_gset_free(point_tracks, NULL);
+  DEG_id_tag_update(&clip->id, 0);
 
   WM_event_add_notifier(C, NC_MOVIECLIP | NA_EDITED, clip);
 
@@ -1617,6 +1625,7 @@ static int track_copy_color_exec(bContext *C, wmOperator *UNUSED(op))
     }
   }
 
+  DEG_id_tag_update(&clip->id, 0);
   WM_event_add_notifier(C, NC_MOVIECLIP | ND_DISPLAY, clip);
 
   return OPERATOR_FINISHED;
@@ -1798,6 +1807,7 @@ static int clean_tracks_exec(bContext *C, wmOperator *op)
     }
   }
 
+  DEG_id_tag_update(&clip->id, 0);
   BKE_tracking_dopesheet_tag_update(tracking);
 
   WM_event_add_notifier(C, NC_MOVIECLIP | ND_SELECT, clip);
@@ -1884,6 +1894,7 @@ static int tracking_object_new_exec(bContext *C, wmOperator *UNUSED(op))
 
   BKE_tracking_object_add(tracking, "Object");
 
+  DEG_id_tag_update(&clip->id, ID_RECALC_COPY_ON_WRITE);
   WM_event_add_notifier(C, NC_MOVIECLIP | NA_EDITED, clip);
 
   return OPERATOR_FINISHED;
@@ -1922,6 +1933,7 @@ static int tracking_object_remove_exec(bContext *C, wmOperator *op)
 
   BKE_tracking_object_delete(tracking, object);
 
+  DEG_id_tag_update(&clip->id, ID_RECALC_COPY_ON_WRITE);
   WM_event_add_notifier(C, NC_MOVIECLIP | NA_EDITED, clip);
 
   return OPERATOR_FINISHED;
@@ -2078,7 +2090,7 @@ static int keyframe_insert_exec(bContext *C, wmOperator *UNUSED(op))
 void CLIP_OT_keyframe_insert(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Insert keyframe";
+  ot->name = "Insert Keyframe";
   ot->description = "Insert a keyframe to selected tracks at current frame";
   ot->idname = "CLIP_OT_keyframe_insert";
 
@@ -2101,7 +2113,7 @@ static int keyframe_delete_exec(bContext *C, wmOperator *UNUSED(op))
 void CLIP_OT_keyframe_delete(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Delete keyframe";
+  ot->name = "Delete Keyframe";
   ot->description = "Delete a keyframe from selected tracks at current frame";
   ot->idname = "CLIP_OT_keyframe_delete";
 

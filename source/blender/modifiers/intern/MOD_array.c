@@ -121,12 +121,15 @@ static int svert_sum_cmp(const void *e1, const void *e2)
   const SortVertsElem *sv1 = e1;
   const SortVertsElem *sv2 = e2;
 
-  if (sv1->sum_co > sv2->sum_co)
+  if (sv1->sum_co > sv2->sum_co) {
     return 1;
-  else if (sv1->sum_co < sv2->sum_co)
+  }
+  else if (sv1->sum_co < sv2->sum_co) {
     return -1;
-  else
+  }
+  else {
     return 0;
+  }
 }
 
 static void svert_from_mvert(SortVertsElem *sv,
@@ -145,7 +148,8 @@ static void svert_from_mvert(SortVertsElem *sv,
 /**
  * Take as inputs two sets of verts, to be processed for detection of doubles and mapping.
  * Each set of verts is defined by its start within mverts array and its num_verts;
- * It builds a mapping for all vertices within source, to vertices within target, or -1 if no double found
+ * It builds a mapping for all vertices within source,
+ * to vertices within target, or -1 if no double found.
  * The int doubles_map[num_verts_source] array must have been allocated by caller.
  */
 static void dm_mvert_map_doubles(int *doubles_map,
@@ -217,11 +221,13 @@ static void dm_mvert_map_doubles(int *doubles_map,
       target_scan_completed = true;
       continue;
     }
-    /* Test target candidates starting at the low bound of possible doubles, ordered in terms of sumco */
+    /* Test target candidates starting at the low bound of possible doubles,
+     * ordered in terms of sumco. */
     i_target = i_target_low_bound;
     sve_target = sve_target_low_bound;
 
-    /* i_target will scan vertices in the [v_source_sumco - dist3;  v_source_sumco + dist3] range */
+    /* i_target will scan vertices in the
+     * [v_source_sumco - dist3;  v_source_sumco + dist3] range */
 
     while ((i_target < target_num_verts) && (sve_target->sum_co <= sve_source_sumco + dist3)) {
       /* Testing distance for candidate double in target */
@@ -234,8 +240,9 @@ static void dm_mvert_map_doubles(int *doubles_map,
 
         /* If target is already mapped, we only follow that mapping if final target remains
          * close enough from current vert (otherwise no mapping at all).
-         * Note that if we later find another target closer than this one, then we check it. But if other
-         * potential targets are farther, then there will be no mapping at all for this source. */
+         * Note that if we later find another target closer than this one, then we check it.
+         * But if other potential targets are farther,
+         * then there will be no mapping at all for this source. */
         while (best_target_vertex != -1 &&
                !ELEM(doubles_map[best_target_vertex], -1, best_target_vertex)) {
           if (compare_len_v3v3(mverts[sve_source->vertex_num].co,
@@ -261,9 +268,9 @@ static void dm_mvert_map_doubles(int *doubles_map,
 
 static void mesh_merge_transform(Mesh *result,
                                  Mesh *cap_mesh,
-                                 float cap_offset[4][4],
-                                 unsigned int cap_verts_index,
-                                 unsigned int cap_edges_index,
+                                 const float cap_offset[4][4],
+                                 uint cap_verts_index,
+                                 uint cap_edges_index,
                                  int cap_loops_index,
                                  int cap_polys_index,
                                  int cap_nverts,
@@ -388,7 +395,7 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
   count = amd->count;
 
   Object *start_cap_ob = amd->start_cap;
-  if (start_cap_ob && start_cap_ob != ctx->object && start_cap_ob->type == OB_MESH) {
+  if (start_cap_ob && start_cap_ob != ctx->object) {
     vgroup_start_cap_remap = BKE_object_defgroup_index_map_create(
         start_cap_ob, ctx->object, &vgroup_start_cap_remap_len);
 
@@ -401,7 +408,7 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
     }
   }
   Object *end_cap_ob = amd->end_cap;
-  if (end_cap_ob && end_cap_ob != ctx->object && end_cap_ob->type == OB_MESH) {
+  if (end_cap_ob && end_cap_ob != ctx->object) {
     vgroup_end_cap_remap = BKE_object_defgroup_index_map_create(
         end_cap_ob, ctx->object, &vgroup_end_cap_remap_len);
 
@@ -441,10 +448,12 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
     float obinv[4][4];
     float result_mat[4][4];
 
-    if (ctx->object)
+    if (ctx->object) {
       invert_m4_m4(obinv, ctx->object->obmat);
-    else
+    }
+    else {
       unit_m4(obinv);
+    }
 
     mul_m4_series(result_mat, offset, obinv, amd->offset_ob->obmat);
     copy_m4_m4(offset, result_mat);
@@ -456,13 +465,10 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
 
   if (amd->fit_type == MOD_ARR_FITCURVE && amd->curve_ob != NULL) {
     Object *curve_ob = amd->curve_ob;
-    Curve *cu = curve_ob->data;
-    if (cu) {
-      CurveCache *curve_cache = curve_ob->runtime.curve_cache;
-      if (curve_cache != NULL && curve_cache->path != NULL) {
-        float scale_fac = mat4_to_scale(curve_ob->obmat);
-        length = scale_fac * curve_cache->path->totdist;
-      }
+    CurveCache *curve_cache = curve_ob->runtime.curve_cache;
+    if (curve_cache != NULL && curve_cache->path != NULL) {
+      float scale_fac = mat4_to_scale(curve_ob->obmat);
+      length = scale_fac * curve_cache->path->totdist;
     }
   }
 
@@ -482,8 +488,9 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
     }
   }
 
-  if (count < 1)
+  if (count < 1) {
     count = 1;
+  }
 
   /* The number of verts, edges, loops, polys, before eventually merging doubles */
   result_nverts = chunk_nverts * count + start_cap_nverts + end_cap_nverts;
@@ -714,7 +721,8 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
     for (i = 0; i < result_nverts; i++) {
       int new_i = full_doubles_map[i];
       if (new_i != -1) {
-        /* We have to follow chains of doubles (merge start/end especially is likely to create some),
+        /* We have to follow chains of doubles
+         * (merge start/end especially is likely to create some),
          * those are not supported at all by BKE_mesh_merge_verts! */
         while (!ELEM(full_doubles_map[new_i], -1, new_i)) {
           new_i = full_doubles_map[new_i];
@@ -758,6 +766,31 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   return arrayModifier_doArray(amd, ctx, mesh);
 }
 
+static bool isDisabled(const struct Scene *UNUSED(scene),
+                       ModifierData *md,
+                       bool UNUSED(useRenderParams))
+{
+  ArrayModifierData *amd = (ArrayModifierData *)md;
+
+  /* The object type check is only needed here in case we have a placeholder
+   * object assigned (because the library containing the curve/mesh is missing).
+   *
+   * In other cases it should be impossible to have a type mismatch.
+   */
+
+  if (amd->curve_ob && amd->curve_ob->type != OB_CURVE) {
+    return true;
+  }
+  else if (amd->start_cap && amd->start_cap->type != OB_MESH) {
+    return true;
+  }
+  else if (amd->end_cap && amd->end_cap->type != OB_MESH) {
+    return true;
+  }
+
+  return false;
+}
+
 ModifierTypeInfo modifierType_Array = {
     /* name */ "Array",
     /* structName */ "ArrayModifierData",
@@ -778,7 +811,7 @@ ModifierTypeInfo modifierType_Array = {
     /* initData */ initData,
     /* requiredDataMask */ NULL,
     /* freeData */ NULL,
-    /* isDisabled */ NULL,
+    /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,

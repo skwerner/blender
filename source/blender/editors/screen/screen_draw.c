@@ -21,7 +21,7 @@
 #include "ED_screen.h"
 
 #include "GPU_batch_presets.h"
-#include "GPU_extensions.h"
+#include "GPU_platform.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
@@ -32,15 +32,14 @@
 #include "BLI_rect.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 
-#include "UI_interface.h"
 #include "UI_resources.h"
 
 #include "screen_intern.h"
 
 /**
- * Draw horizontal shape visualizing future joining (left as well right direction of future joining).
+ * Draw horizontal shape visualizing future joining
+ * (left as well right direction of future joining).
  */
 static void draw_horizontal_join_shape(ScrArea *sa, char dir, unsigned int pos)
 {
@@ -272,8 +271,8 @@ static GPUBatch *batch_screen_edges_get(int *corner_len)
     GPU_vertbuf_data_alloc(vbo, CORNER_RESOLUTION * 2 * 4 + 2);
 
     uint vidx = 0;
-    for (int corner = 0; corner < 4; ++corner) {
-      for (int c = 0; c < CORNER_RESOLUTION; ++c) {
+    for (int corner = 0; corner < 4; corner++) {
+      for (int c = 0; c < CORNER_RESOLUTION; c++) {
         do_vert_pair(vbo, pos, &vidx, corner, c);
       }
     }
@@ -540,7 +539,8 @@ void ED_screen_draw_split_preview(ScrArea *sa, const int dir, const float fac)
 /* Screen Thumbnail Preview */
 
 /**
- * Calculates a scale factor to squash the preview for \a screen into a rectangle of given size and aspect.
+ * Calculates a scale factor to squash the preview for \a screen into a rectangle
+ * of given size and aspect.
  */
 static void screen_preview_scale_get(
     const bScreen *screen, float size_x, float size_y, const float asp[2], float r_scale[2])
@@ -588,7 +588,8 @@ static void screen_preview_draw_areas(const bScreen *screen,
 static void screen_preview_draw(const bScreen *screen, int size_x, int size_y)
 {
   const float asp[2] = {1.0f, 0.8f}; /* square previews look a bit ugly */
-  /* could use theme color (tui.wcol_menu_item.text), but then we'd need to regenerate all previews when changing */
+  /* could use theme color (tui.wcol_menu_item.text),
+   * but then we'd need to regenerate all previews when changing. */
   const float col[4] = {1.0f, 1.0f, 1.0f, 1.0f};
   float scale[2];
 

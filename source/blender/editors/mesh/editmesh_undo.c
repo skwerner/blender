@@ -93,13 +93,13 @@ typedef struct UndoMesh {
   int selectmode;
 
   /** \note
-   * this isn't a prefect solution, if you edit keys and change shapes this works well (fixing [#32442]),
-   * but editing shape keys, going into object mode, removing or changing their order,
-   * then go back into editmode and undo will give issues - where the old index will be out of sync
-   * with the new object index.
+   * this isn't a prefect solution, if you edit keys and change shapes this works well
+   * (fixing T32442), but editing shape keys, going into object mode, removing or changing their
+   * order, then go back into editmode and undo will give issues - where the old index will be
+   * out of sync with the new object index.
    *
    * There are a few ways this could be made to work but for now its a known limitation with mixing
-   * object and editmode operations - Campbell */
+   * object and editmode operations - Campbell. */
   int shapenr;
 
 #ifdef USE_ARRAY_STORE
@@ -699,7 +699,6 @@ typedef struct MeshUndoStep_Elem {
 
 typedef struct MeshUndoStep {
   UndoStep step;
-  struct UndoIDPtrMap *id_map;
   MeshUndoStep_Elem *elems;
   uint elems_len;
 } MeshUndoStep;
@@ -741,7 +740,8 @@ static bool mesh_undosys_step_encode(struct bContext *C,
 static void mesh_undosys_step_decode(struct bContext *C,
                                      struct Main *UNUSED(bmain),
                                      UndoStep *us_p,
-                                     int UNUSED(dir))
+                                     int UNUSED(dir),
+                                     bool UNUSED(is_final))
 {
   MeshUndoStep *us = (MeshUndoStep *)us_p;
 
@@ -787,10 +787,6 @@ static void mesh_undosys_step_free(UndoStep *us_p)
     undomesh_free_data(&elem->data);
   }
   MEM_freeN(us->elems);
-
-  if (us->id_map != NULL) {
-    BKE_undosys_ID_map_destroy(us->id_map);
-  }
 }
 
 static void mesh_undosys_foreach_ID_ref(UndoStep *us_p,
@@ -802,10 +798,6 @@ static void mesh_undosys_foreach_ID_ref(UndoStep *us_p,
   for (uint i = 0; i < us->elems_len; i++) {
     MeshUndoStep_Elem *elem = &us->elems[i];
     foreach_ID_ref_fn(user_data, ((UndoRefID *)&elem->obedit_ref));
-  }
-
-  if (us->id_map != NULL) {
-    BKE_undosys_ID_map_foreach_ID_ref(us->id_map, foreach_ID_ref_fn, user_data);
   }
 }
 

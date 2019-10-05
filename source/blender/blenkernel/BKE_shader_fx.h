@@ -24,22 +24,11 @@
 #include "BLI_compiler_attrs.h"
 #include "BKE_customdata.h"
 
-struct DepsNodeHandle;
-struct Depsgraph;
-struct DerivedMesh;
 struct ID;
 struct ListBase;
-struct Main;
-struct Mesh;
 struct ModifierUpdateDepsgraphContext;
 struct Object;
-struct Scene;
 struct ShaderFxData;
-struct ViewLayer;
-struct bArmature;
-struct bGPDframe;
-struct bGPDlayer;
-struct bGPDstroke;
 
 #define SHADER_FX_ACTIVE(_fx, _is_render) \
   (((_fx->mode & eShaderFxMode_Realtime) && (_is_render == false)) || \
@@ -153,9 +142,9 @@ typedef struct ShaderFxTypeInfo {
                             void *userData);
 
   /* Should call the given walk function with a pointer to each ID
-   * pointer (i.e. each datablock pointer) that the effect data
+   * pointer (i.e. each data-block pointer) that the effect data
    * stores. This is used for linking on file load and for
-   * unlinking datablocks or forwarding datablock references.
+   * unlinking data-blocks or forwarding data-block references.
    *
    * This function is optional. If it is not present, foreachObjectLink
    * will be used.

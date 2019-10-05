@@ -227,6 +227,17 @@ ccl_device_inline float object_surface_area(KernelGlobals *kg, int object)
   return kernel_tex_fetch(__objects, object).surface_area;
 }
 
+/* Color of the object */
+
+ccl_device_inline float3 object_color(KernelGlobals *kg, int object)
+{
+  if (object == OBJECT_NONE)
+    return make_float3(0.0f, 0.0f, 0.0f);
+
+  const ccl_global KernelObject *kobject = &kernel_tex_fetch(__objects, object);
+  return make_float3(kobject->color[0], kobject->color[1], kobject->color[2]);
+}
+
 /* Pass ID number of object */
 
 ccl_device_inline float object_pass_id(KernelGlobals *kg, int object)
@@ -386,7 +397,8 @@ ccl_device float3 particle_angular_velocity(KernelGlobals *kg, int particle)
 
 ccl_device_inline float3 bvh_clamp_direction(float3 dir)
 {
-  /* clamp absolute values by exp2f(-80.0f) to avoid division by zero when calculating inverse direction */
+  /* clamp absolute values by exp2f(-80.0f) to avoid division by zero when calculating inverse
+   * direction */
 #if defined(__KERNEL_SSE__) && defined(__KERNEL_SSE2__)
   const ssef oopes(8.271806E-25f, 8.271806E-25f, 8.271806E-25f, 0.0f);
   const ssef mask = _mm_cmpgt_ps(fabs(dir), oopes);

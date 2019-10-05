@@ -54,6 +54,7 @@ typedef struct TextDrawContext {
   int font_id;
   int cwidth;
   int lheight_dpi;
+  bool syntax_highlight;
 } TextDrawContext;
 
 static void text_draw_context_init(const SpaceText *st, TextDrawContext *tdc)
@@ -61,6 +62,7 @@ static void text_draw_context_init(const SpaceText *st, TextDrawContext *tdc)
   tdc->font_id = blf_mono_font;
   tdc->cwidth = 0;
   tdc->lheight_dpi = st->lheight_dpi;
+  tdc->syntax_highlight = st->showsyntax && ED_text_is_syntax_highlight_supported(st->text);
 }
 
 static void text_font_begin(const TextDrawContext *tdc)
@@ -107,11 +109,13 @@ static void txt_format_text(SpaceText *st)
 {
   TextLine *linep;
 
-  if (!st->text)
+  if (!st->text) {
     return;
+  }
 
-  for (linep = st->text->lines.first; linep; linep = linep->next)
+  for (linep = st->text->lines.first; linep; linep = linep->next) {
     txt_format_line(st, linep, 0);
+  }
 }
 #endif
 
@@ -204,10 +208,12 @@ void wrap_offset(
 
   *offl = *offc = 0;
 
-  if (!st->text)
+  if (!st->text) {
     return;
-  if (!st->wordwrap)
+  }
+  if (!st->wordwrap) {
     return;
+  }
 
   text = st->text;
 
@@ -219,9 +225,10 @@ void wrap_offset(
 
     /* Line before top */
     if (linep == linein) {
-      if (lines <= i)
+      if (lines <= i) {
         /* no visible part of line */
         return;
+      }
     }
 
     if (i - lines < 0) {
@@ -235,7 +242,7 @@ void wrap_offset(
   }
 
   max = wrap_width(st, ar);
-  cursin = txt_utf8_offset_to_column(linein->line, cursin);
+  cursin = BLI_str_utf8_offset_to_column(linein->line, cursin);
 
   while (linep) {
     start = 0;
@@ -250,8 +257,9 @@ void wrap_offset(
       ch = linep->line[j];
       if (ch == '\t') {
         chars = st->tabnumber - i % st->tabnumber;
-        if (linep == linein && i < cursin)
+        if (linep == linein && i < cursin) {
           cursin += chars - 1;
+        }
         ch = ' ';
       }
       else {
@@ -281,14 +289,16 @@ void wrap_offset(
         else if (ch == ' ' || ch == '-') {
           end = i + 1;
           chop = 0;
-          if (linep == linein && i >= cursin)
+          if (linep == linein && i >= cursin) {
             return;
+          }
         }
         i += columns;
       }
     }
-    if (linep == linein)
+    if (linep == linein) {
       break;
+    }
     linep = linep->next;
   }
 }
@@ -302,10 +312,12 @@ void wrap_offset_in_line(
 
   *offl = *offc = 0;
 
-  if (!st->text)
+  if (!st->text) {
     return;
-  if (!st->wordwrap)
+  }
+  if (!st->wordwrap) {
     return;
+  }
 
   max = wrap_width(st, ar);
 
@@ -313,7 +325,7 @@ void wrap_offset_in_line(
   end = max;
   chop = 1;
   *offc = 0;
-  cursin = txt_utf8_offset_to_column(linein->line, cursin);
+  cursin = BLI_str_utf8_offset_to_column(linein->line, cursin);
 
   for (i = 0, j = 0; linein->line[j]; j += BLI_str_utf8_size_safe(linein->line + j)) {
     int columns = BLI_str_utf8_char_width_safe(linein->line + j); /* = 1 for tab */
@@ -322,12 +334,14 @@ void wrap_offset_in_line(
     ch = linein->line[j];
     if (ch == '\t') {
       chars = st->tabnumber - i % st->tabnumber;
-      if (i < cursin)
+      if (i < cursin) {
         cursin += chars - 1;
+      }
       ch = ' ';
     }
-    else
+    else {
       chars = 1;
+    }
 
     while (chars--) {
       if (i + columns - start > max) {
@@ -352,8 +366,9 @@ void wrap_offset_in_line(
       else if (ch == ' ' || ch == '-') {
         end = i + 1;
         chop = 0;
-        if (i >= cursin)
+        if (i >= cursin) {
           return;
+        }
       }
       i += columns;
     }
@@ -365,10 +380,12 @@ int text_get_char_pos(const SpaceText *st, const char *line, int cur)
   int a = 0, i;
 
   for (i = 0; i < cur && line[i]; i += BLI_str_utf8_size_safe(line + i)) {
-    if (line[i] == '\t')
+    if (line[i] == '\t') {
       a += st->tabnumber - a % st->tabnumber;
-    else
+    }
+    else {
       a += BLI_str_utf8_char_width_safe(line + i);
+    }
   }
   return a;
 }
@@ -379,15 +396,18 @@ static const char *txt_utf8_forward_columns(const char *str, int columns, int *p
   const char *p = str;
   while (*p) {
     col = BLI_str_utf8_char_width(p);
-    if (columns - col < 0)
+    if (columns - col < 0) {
       break;
+    }
     columns -= col;
     p += BLI_str_utf8_size_safe(p);
-    if (columns == 0)
+    if (columns == 0) {
       break;
+    }
   }
-  if (padding)
+  if (padding) {
     *padding = *p ? columns : 0;
+  }
   return p;
 }
 
@@ -400,7 +420,7 @@ static int text_draw_wrapped(const SpaceText *st,
                              const char *format,
                              int skip)
 {
-  const bool use_syntax = (st->showsyntax && format);
+  const bool use_syntax = (tdc->syntax_highlight && format);
   FlattenString fs;
   int basex, lines;
   int i, wrap, end, max, columns, padding; /* column */
@@ -414,8 +434,9 @@ static int text_draw_wrapped(const SpaceText *st,
   flatten_string(st, &fs, str);
   str = fs.buf;
   max = w / st->cwidth;
-  if (max < 8)
+  if (max < 8) {
     max = 8;
+  }
   basex = x;
   lines = 1;
 
@@ -444,8 +465,9 @@ static int text_draw_wrapped(const SpaceText *st,
       /* Draw the visible portion of text on the overshot line */
       for (a = fstart, ma = mstart; ma < mend; a++, ma += BLI_str_utf8_size_safe(str + ma)) {
         if (use_syntax) {
-          if (fmt_prev != format[a])
+          if (fmt_prev != format[a]) {
             format_draw_color(tdc, fmt_prev = format[a]);
+          }
         }
         x += text_font_draw_character_utf8(tdc, x, y, str + ma);
         fpos++;
@@ -458,8 +480,9 @@ static int text_draw_wrapped(const SpaceText *st,
       mend = txt_utf8_forward_columns(str + mend, max, &padding) - str;
       end = (wrap += max - padding);
 
-      if (y <= clip_min_y)
+      if (y <= clip_min_y) {
         break;
+      }
     }
     else if (str[mi] == ' ' || str[mi] == '-') {
       wrap = i + 1;
@@ -471,8 +494,9 @@ static int text_draw_wrapped(const SpaceText *st,
   for (a = fstart, ma = mstart; str[ma] && y > clip_min_y;
        a++, ma += BLI_str_utf8_size_safe(str + ma)) {
     if (use_syntax) {
-      if (fmt_prev != format[a])
+      if (fmt_prev != format[a]) {
         format_draw_color(tdc, fmt_prev = format[a]);
+      }
     }
 
     x += text_font_draw_character_utf8(tdc, x, y, str + ma);
@@ -492,7 +516,7 @@ static void text_draw(const SpaceText *st,
                       int y,
                       const char *format)
 {
-  const bool use_syntax = (st->showsyntax && format);
+  const bool use_syntax = (tdc->syntax_highlight && format);
   FlattenString fs;
   int columns, size, n, w = 0, padding, amount = 0;
   const char *in = NULL;
@@ -506,12 +530,14 @@ static void text_draw(const SpaceText *st,
         padding = w - cshift;
         in = str;
       }
-      else if (format)
+      else if (format) {
         format++;
+      }
     }
     if (in) {
-      if (maxwidth && w + columns > cshift + maxwidth)
+      if (maxwidth && w + columns > cshift + maxwidth) {
         break;
+      }
       amount++;
     }
 
@@ -530,8 +556,9 @@ static void text_draw(const SpaceText *st,
     char fmt_prev = 0xff;
 
     for (a = 0; a < amount; a++) {
-      if (format[a] != fmt_prev)
+      if (format[a] != fmt_prev) {
         format_draw_color(tdc, fmt_prev = format[a]);
+      }
       x += text_font_draw_character_utf8(tdc, x, y, in + str_shift);
       str_shift += BLI_str_utf8_size_safe(in + str_shift);
     }
@@ -577,8 +604,9 @@ static void text_update_drawcache(SpaceText *st, ARegion *ar)
   int full_update = 0, nlines = 0;
   Text *txt = st->text;
 
-  if (!st->drawcache)
+  if (!st->drawcache) {
     text_drawcache_init(st);
+  }
 
   text_update_character_width(st);
 
@@ -618,10 +646,12 @@ static void text_update_drawcache(SpaceText *st, ARegion *ar)
       nlines = BLI_listbase_count(&txt->lines);
       size = sizeof(int) * nlines;
 
-      if (fp)
+      if (fp) {
         fp = MEM_reallocN(fp, size);
-      else
+      }
+      else {
         fp = MEM_callocN(size, "text drawcache line_height");
+      }
 
       drawcache->valid_tail = drawcache->valid_head = 0;
       old_tail = fp + drawcache->nlines - drawcache->valid_tail;
@@ -630,8 +660,9 @@ static void text_update_drawcache(SpaceText *st, ARegion *ar)
 
       drawcache->total_lines = 0;
 
-      if (st->showlinenrs)
+      if (st->showlinenrs) {
         st->linenrs_tot = integer_digits_i(nlines);
+      }
 
       while (line) {
         if (drawcache->valid_head) { /* we're inside valid head lines */
@@ -664,8 +695,9 @@ static void text_update_drawcache(SpaceText *st, ARegion *ar)
     if (full_update || drawcache->update_flag) {
       nlines = BLI_listbase_count(&txt->lines);
 
-      if (st->showlinenrs)
+      if (st->showlinenrs) {
         st->linenrs_tot = integer_digits_i(nlines);
+      }
     }
 
     drawcache->total_lines = nlines;
@@ -692,8 +724,9 @@ static void text_update_drawcache(SpaceText *st, ARegion *ar)
 void text_drawcache_tag_update(SpaceText *st, int full)
 {
   /* this happens if text editor ops are caled from python */
-  if (st == NULL)
+  if (st == NULL) {
     return;
+  }
 
   if (st->drawcache) {
     DrawCache *drawcache = (DrawCache *)st->drawcache;
@@ -721,10 +754,12 @@ void text_drawcache_tag_update(SpaceText *st, int full)
       /* quick cache recalculation is also used in delete operator,
        * which could merge lines which are adjacent to current selection lines
        * expand recalculate area to this lines */
-      if (drawcache->valid_head > 0)
+      if (drawcache->valid_head > 0) {
         drawcache->valid_head--;
-      if (drawcache->valid_tail > 0)
+      }
+      if (drawcache->valid_tail > 0) {
         drawcache->valid_tail--;
+      }
     }
     else {
       drawcache->valid_head = 0;
@@ -740,8 +775,9 @@ void text_free_caches(SpaceText *st)
   DrawCache *drawcache = (DrawCache *)st->drawcache;
 
   if (drawcache) {
-    if (drawcache->line_height)
+    if (drawcache->line_height) {
       MEM_freeN(drawcache->line_height);
+    }
 
     MEM_freeN(drawcache);
   }
@@ -804,8 +840,9 @@ int text_get_span_wrap(const SpaceText *st, ARegion *ar, TextLine *from, TextLin
 
     /* Look forwards */
     while (tmp) {
-      if (tmp == to)
+      if (tmp == to) {
         return ret;
+      }
       ret += text_get_visible_lines(st, ar, tmp->line);
       tmp = tmp->next;
     }
@@ -876,8 +913,9 @@ static void calc_text_rcts(SpaceText *st, ARegion *ar, rcti *scroll, rcti *back)
   CLAMP(st->txtbar.ymax, pix_bottom_margin, ar->winy - pix_top_margin);
 
   st->pix_per_line = (pix_available > 0) ? (float)ltexth / pix_available : 0;
-  if (st->pix_per_line < 0.1f)
+  if (st->pix_per_line < 0.1f) {
     st->pix_per_line = 0.1f;
+  }
 
   curl_off = text_get_span_wrap(st, ar, st->text->lines.first, st->text->curl);
   sell_off = text_get_span_wrap(st, ar, st->text->lines.first, st->text->sell);
@@ -990,23 +1028,29 @@ static void draw_documentation(const SpaceText *st, ARegion *ar)
   int i, br, lines;
   int boxw, boxh, l, x, y /* , top */ /* UNUSED */;
 
-  if (!st || !st->text)
+  if (!st || !st->text) {
     return;
-  if (!texttool_text_is_active(st->text))
+  }
+  if (!texttool_text_is_active(st->text)) {
     return;
+  }
 
   docs = texttool_docs_get();
 
-  if (!docs)
+  if (!docs) {
     return;
+  }
 
   text_draw_context_init(st, &tdc);
 
   /* Count the visible lines to the cursor */
-  for (tmp = st->text->curl, l = -st->top; tmp; tmp = tmp->prev, l++)
-    ;
-  if (l < 0)
+  for (tmp = st->text->curl, l = -st->top; tmp; tmp = tmp->prev, l++) {
+    /* pass */
+  }
+
+  if (l < 0) {
     return;
+  }
 
   if (st->showlinenrs) {
     x = st->cwidth * (st->text->curc - st->left) + TXT_OFFSET + TEXTXLOC - 4;
@@ -1055,10 +1099,12 @@ static void draw_documentation(const SpaceText *st, ARegion *ar)
   br = DOC_WIDTH;
   lines = 0;  // XXX -doc_scroll;
   for (p = docs; *p; p++) {
-    if (*p == '\r' && *(++p) != '\n')
+    if (*p == '\r' && *(++p) != '\n') {
       *(--p) = '\n'; /* Fix line endings */
-    if (*p == ' ' || *p == '\t')
+    }
+    if (*p == ' ' || *p == '\t') {
       br = i;
+    }
     else if (*p == '\n') {
       buf[i] = '\0';
       if (lines >= 0) {
@@ -1081,8 +1127,9 @@ static void draw_documentation(const SpaceText *st, ARegion *ar)
       br = DOC_WIDTH;
       lines++;
     }
-    if (lines >= DOC_HEIGHT)
+    if (lines >= DOC_HEIGHT) {
       break;
+    }
   }
 }
 #endif
@@ -1098,16 +1145,19 @@ static void draw_suggestion_list(const SpaceText *st, const TextDrawContext *tdc
   const int lheight = st->lheight_dpi + TXT_LINE_SPACING;
   const int margin_x = 2;
 
-  if (!st->text)
+  if (!st->text) {
     return;
-  if (!texttool_text_is_active(st->text))
+  }
+  if (!texttool_text_is_active(st->text)) {
     return;
+  }
 
   first = texttool_suggest_first();
   last = texttool_suggest_last();
 
-  if (!first || !last)
+  if (!first || !last) {
     return;
+  }
 
   text_pop_suggest_list();
   sel = texttool_suggest_selected();
@@ -1129,8 +1179,9 @@ static void draw_suggestion_list(const SpaceText *st, const TextDrawContext *tdc
   boxw = SUGG_LIST_WIDTH * st->cwidth + 20;
   boxh = SUGG_LIST_SIZE * lheight + 8;
 
-  if (x + boxw > ar->winx)
+  if (x + boxw > ar->winx) {
     x = MAX2(0, ar->winx - boxw);
+  }
 
   /* not needed but stands out nicer */
   UI_draw_box_shadow(220, x, y - boxh, x + boxw, y);
@@ -1147,8 +1198,9 @@ static void draw_suggestion_list(const SpaceText *st, const TextDrawContext *tdc
   immUnbindProgram();
 
   /* Set the top 'item' of the visible list */
-  for (i = 0, item = first; i < *top && item->next; i++, item = item->next)
-    ;
+  for (i = 0, item = first; i < *top && item->next; i++, item = item->next) {
+    /* pass */
+  }
 
   for (i = 0; i < SUGG_LIST_SIZE && item; i++, item = item->next) {
     int len = txt_utf8_forward_columns(item->name, SUGG_LIST_WIDTH, NULL) - item->name;
@@ -1173,8 +1225,9 @@ static void draw_suggestion_list(const SpaceText *st, const TextDrawContext *tdc
     format_draw_color(tdc, item->type);
     text_draw(st, tdc, str, 0, 0, x + margin_x, y - 1, NULL);
 
-    if (item == last)
+    if (item == last) {
       break;
+    }
   }
 }
 
@@ -1307,8 +1360,9 @@ static void draw_text_decoration(SpaceText *st, ARegion *ar)
 
       y += TXT_LINE_SPACING;
       w = st->cwidth;
-      if (ch == '\t')
+      if (ch == '\t') {
         w *= st->tabnumber - (vselc + st->left) % st->tabnumber;
+      }
 
       immRecti(pos, x, y - lheight - 1, x + w, y - lheight + 1);
     }
@@ -1331,21 +1385,24 @@ static void draw_brackets(const SpaceText *st, const TextDrawContext *tdc, ARegi
 
   char ch;
 
-  // showsyntax must be on or else the format string will be null
-  if (!text->curl || !st->showsyntax)
+  // syntax_highlight must be on or else the format string will be null
+  if (!text->curl || !tdc->syntax_highlight) {
     return;
+  }
 
   startl = text->curl;
   startc = text->curc;
   b = text_check_bracket(startl->line[startc]);
-  if (b == 0 && startc > 0)
+  if (b == 0 && startc > 0) {
     b = text_check_bracket(startl->line[--startc]);
-  if (b == 0)
+  }
+  if (b == 0) {
     return;
+  }
 
   linep = startl;
   c = startc;
-  fc = txt_utf8_offset_to_index(linep->line, startc);
+  fc = BLI_str_utf8_offset_to_index(linep->line, startc);
   endl = NULL;
   endc = -1;
   find = -b;
@@ -1353,8 +1410,9 @@ static void draw_brackets(const SpaceText *st, const TextDrawContext *tdc, ARegi
 
   /* Don't highlight backets if syntax HL is off or bracket in string or comment. */
   if (!linep->format || linep->format[fc] == FMT_TYPE_STRING ||
-      linep->format[fc] == FMT_TYPE_COMMENT)
+      linep->format[fc] == FMT_TYPE_COMMENT) {
     return;
+  }
 
   if (b > 0) {
     /* opening bracket, search forward for close */
@@ -1380,8 +1438,9 @@ static void draw_brackets(const SpaceText *st, const TextDrawContext *tdc, ARegi
         fc++;
         c += BLI_str_utf8_size_safe(linep->line + c);
       }
-      if (endl)
+      if (endl) {
         break;
+      }
       linep = linep->next;
       c = 0;
       fc = 0;
@@ -1390,8 +1449,9 @@ static void draw_brackets(const SpaceText *st, const TextDrawContext *tdc, ARegi
   else {
     /* closing bracket, search backward for open */
     fc--;
-    if (c > 0)
+    if (c > 0) {
       c -= linep->line + c - BLI_str_prev_char_utf8(linep->line + c);
+    }
     while (linep) {
       while (fc >= 0) {
         if (linep->format && linep->format[fc] != FMT_TYPE_STRING &&
@@ -1410,27 +1470,34 @@ static void draw_brackets(const SpaceText *st, const TextDrawContext *tdc, ARegi
           }
         }
         fc--;
-        if (c > 0)
+        if (c > 0) {
           c -= linep->line + c - BLI_str_prev_char_utf8(linep->line + c);
+        }
       }
-      if (endl)
+      if (endl) {
         break;
+      }
       linep = linep->prev;
       if (linep) {
-        if (linep->format)
+        if (linep->format) {
           fc = strlen(linep->format) - 1;
-        else
+        }
+        else {
           fc = -1;
-        if (linep->len)
+        }
+        if (linep->len) {
           c = BLI_str_prev_char_utf8(linep->line + linep->len) - linep->line;
-        else
+        }
+        else {
           fc = -1;
+        }
       }
     }
   }
 
-  if (!endl || endc == -1)
+  if (!endl || endc == -1) {
     return;
+  }
 
   UI_FontThemeColor(tdc->font_id, TH_HILITE);
   x = st->showlinenrs ? TXT_OFFSET + TEXTXLOC : TXT_OFFSET;
@@ -1480,8 +1547,9 @@ void draw_text_main(SpaceText *st, ARegion *ar)
   int margin_column_x;
 
   /* if no text, nothing to do */
-  if (!text)
+  if (!text) {
     return;
+  }
 
   /* dpi controlled line height and font size */
   st->lheight_dpi = (U.widget_unit * st->lheight) / 20;
@@ -1498,8 +1566,9 @@ void draw_text_main(SpaceText *st, ARegion *ar)
   text_update_drawcache(st, ar);
 
   /* make sure all the positional pointers exist */
-  if (!text->curl || !text->sell || !text->lines.first || !text->lines.last)
+  if (!text->curl || !text->sell || !text->lines.first || !text->lines.last) {
     txt_clean_text(text);
+  }
 
   /* update rects for scroll */
   calc_text_rcts(st, ar, &scroll, &back); /* scroll will hold the entire bar size */
@@ -1509,8 +1578,9 @@ void draw_text_main(SpaceText *st, ARegion *ar)
   tmp = text->lines.first;
   lineno = 0;
   for (i = 0; i < st->top && tmp; i++) {
-    if (st->showsyntax && !tmp->format)
+    if (tdc.syntax_highlight && !tmp->format) {
       tft->format_line(st, tmp, false);
+    }
 
     if (st->wordwrap) {
       int lines = text_get_visible_lines_no(st, lineno);
@@ -1563,8 +1633,9 @@ void draw_text_main(SpaceText *st, ARegion *ar)
   UI_FontThemeColor(tdc.font_id, TH_TEXT);
 
   for (i = 0; y > clip_min_y && i < st->viewlines && tmp; i++, tmp = tmp->next) {
-    if (st->showsyntax && !tmp->format)
+    if (tdc.syntax_highlight && !tmp->format) {
       tft->format_line(st, tmp, false);
+    }
 
     if (st->showlinenrs && !wrap_skip) {
       /* draw line number */
@@ -1607,12 +1678,14 @@ void draw_text_main(SpaceText *st, ARegion *ar)
 
       immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
 
+      GPU_line_width(2.0f);
+
       float viewport_size[4];
       GPU_viewport_size_get_f(viewport_size);
       immUniform2f("viewport_size", viewport_size[2] / UI_DPI_FAC, viewport_size[3] / UI_DPI_FAC);
 
-      immUniform1i("colors_len", 0); /* "simple" mode */
-      immUniformThemeColor(TH_GRID); /* same color as line number background */
+      immUniform1i("colors_len", 0);  /* "simple" mode */
+      immUniformThemeColor3(TH_GRID); /* same color as line number background */
       immUniform1f("dash_width", 2.0f);
       immUniform1f("dash_factor", 0.5f);
 
@@ -1654,8 +1727,9 @@ void text_scroll_to_cursor(SpaceText *st, ARegion *ar, const bool center)
   Text *text;
   int i, x, winx = ar->winx;
 
-  if (ELEM(NULL, st, st->text, st->text->curl))
+  if (ELEM(NULL, st, st->text, st->text->curl)) {
     return;
+  }
 
   text = st->text;
 
@@ -1704,10 +1778,12 @@ void text_scroll_to_cursor(SpaceText *st, ARegion *ar, const bool center)
     }
   }
 
-  if (st->top < 0)
+  if (st->top < 0) {
     st->top = 0;
-  if (st->left < 0)
+  }
+  if (st->left < 0) {
     st->left = 0;
+  }
 
   st->scroll_accum[0] = 0.0f;
   st->scroll_accum[1] = 0.0f;
@@ -1718,8 +1794,9 @@ void text_scroll_to_cursor__area(SpaceText *st, ScrArea *sa, const bool center)
 {
   ARegion *ar;
 
-  if (ELEM(NULL, st, st->text, st->text->curl))
+  if (ELEM(NULL, st, st->text, st->text->curl)) {
     return;
+  }
 
   ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
 

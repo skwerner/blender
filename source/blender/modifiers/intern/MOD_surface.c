@@ -125,12 +125,12 @@ static void deformVerts(ModifierData *md,
   }
 
   if (surmd->mesh) {
-    unsigned int numverts = 0, i = 0;
+    uint numverts = 0, i = 0;
     int init = 0;
     float *vec;
     MVert *x, *v;
 
-    BKE_mesh_apply_vert_coords(surmd->mesh, vertexCos);
+    BKE_mesh_vert_coords_apply(surmd->mesh, vertexCos);
     BKE_mesh_calc_normals(surmd->mesh);
 
     numverts = surmd->mesh->totvert;
@@ -159,10 +159,12 @@ static void deformVerts(ModifierData *md,
       vec = surmd->mesh->mvert[i].co;
       mul_m4_v3(ctx->object->obmat, vec);
 
-      if (init)
+      if (init) {
         v->co[0] = v->co[1] = v->co[2] = 0.0f;
-      else
+      }
+      else {
         sub_v3_v3v3(v->co, vec, x->co);
+      }
 
       copy_v3_v3(x->co, vec);
     }
@@ -171,10 +173,12 @@ static void deformVerts(ModifierData *md,
 
     surmd->bvhtree = MEM_callocN(sizeof(BVHTreeFromMesh), "BVHTreeFromMesh");
 
-    if (surmd->mesh->totpoly)
+    if (surmd->mesh->totpoly) {
       BKE_bvhtree_from_mesh_get(surmd->bvhtree, surmd->mesh, BVHTREE_FROM_LOOPTRI, 2);
-    else
+    }
+    else {
       BKE_bvhtree_from_mesh_get(surmd->bvhtree, surmd->mesh, BVHTREE_FROM_EDGES, 2);
+    }
   }
 }
 

@@ -5,12 +5,10 @@ uniform vec3 color;
 out vec4 FragColor;
 
 #ifdef LOOKDEV
-uniform mat4 ProjectionMatrix;
-uniform mat4 ProjectionMatrixInverse;
-uniform mat4 ViewMatrixInverse;
 uniform mat3 StudioLightMatrix;
 uniform sampler2D image;
 uniform float studioLightBackground = 1.0;
+uniform float studioLightIntensity = 1.0;
 in vec3 viewPosition;
 
 #  define M_PI 3.14159265358979323846
@@ -54,6 +52,7 @@ void main()
 #ifdef LOOKDEV
   vec3 worldvec = background_transform_to_world(viewPosition);
   background_color = node_tex_environment_equirectangular(StudioLightMatrix * worldvec, image).rgb;
+  background_color *= studioLightIntensity;
   background_color = mix(color, background_color, studioLightBackground);
 #else
   background_color = color;

@@ -83,45 +83,33 @@ void DepsgraphRelationBuilder::build_ik_pose(Object *object,
   add_relation(init_ik_key, solver_key, "Init IK -> IK Solver");
   /* Never cleanup before solver is run. */
   add_relation(solver_key, pose_cleanup_key, "IK Solver -> Cleanup", RELATION_FLAG_GODMODE);
+  /* The ITASC solver currently accesses the target transforms in init tree :(
+   * TODO: Fix ITASC and remove this.
+   */
+  bool is_itasc = (object->pose->iksolver == IKSOLVER_ITASC);
+  OperationKey target_dependent_key = is_itasc ? init_ik_key : solver_key;
   /* IK target */
   /* TODO(sergey): This should get handled as part of the constraint code. */
   if (data->tar != NULL) {
-    /* TODO(sergey): For until we'll store partial matrices in the
-     * depsgraph, we create dependency between target object and pose eval
-     * component.
-     *
-     * This way we ensuring the whole subtree is updated from scratch
-     * without need of intermediate matrices. This is an overkill, but good
-     * enough for testing IK solver. */
-    ComponentKey pose_key(&object->id, NodeType::EVAL_POSE);
+    /* Different object - requires its transform. */
+    if (data->tar != object) {
+      ComponentKey target_key(&data->tar->id, NodeType::TRANSFORM);
+      add_relation(target_key, target_dependent_key, con->name);
+    }
+    /* Subtarget references: */
     if ((data->tar->type == OB_ARMATURE) && (data->subtarget[0])) {
-      /* TODO(sergey): This is only for until granular update stores
-       * intermediate result. */
-      if (data->tar != object) {
-        /* Different armature - can just read the results. */
-        ComponentKey target_key(&data->tar->id, NodeType::BONE, data->subtarget);
-        add_relation(target_key, pose_key, con->name);
-      }
-      else {
-        /* Same armature - we'll use the ready state only, just in case
-         * this bone is in the chain we're solving. */
-        OperationKey target_key(
-            &data->tar->id, NodeType::BONE, data->subtarget, OperationCode::BONE_DONE);
-        add_relation(target_key, solver_key, con->name);
-      }
+      /* Bone - use the final transformation. */
+      OperationKey target_key(
+          &data->tar->id, NodeType::BONE, data->subtarget, OperationCode::BONE_DONE);
+      add_relation(target_key, target_dependent_key, con->name);
     }
     else if (data->subtarget[0] && ELEM(data->tar->type, OB_MESH, OB_LATTICE)) {
       /* Vertex group target. */
       /* NOTE: for now, we don't need to represent vertex groups
        * separately. */
       ComponentKey target_key(&data->tar->id, NodeType::GEOMETRY);
-      add_relation(target_key, solver_key, con->name);
+      add_relation(target_key, target_dependent_key, con->name);
       add_customdata_mask(data->tar, DEGCustomDataMeshMasks::MaskVert(CD_MASK_MDEFORMVERT));
-    }
-    else {
-      /* Standard Object Target. */
-      ComponentKey target_key(&data->tar->id, NodeType::TRANSFORM);
-      add_relation(target_key, pose_key, con->name);
     }
     if (data->tar == object && data->subtarget[0]) {
       /* Prevent target's constraints from linking to anything from same
@@ -132,21 +120,25 @@ void DepsgraphRelationBuilder::build_ik_pose(Object *object,
   /* Pole Target. */
   /* TODO(sergey): This should get handled as part of the constraint code. */
   if (data->poletar != NULL) {
+    /* Different object - requires its transform. */
+    if (data->poletar != object) {
+      ComponentKey target_key(&data->poletar->id, NodeType::TRANSFORM);
+      add_relation(target_key, target_dependent_key, con->name);
+    }
+    /* Subtarget references: */
     if ((data->poletar->type == OB_ARMATURE) && (data->polesubtarget[0])) {
-      ComponentKey target_key(&data->poletar->id, NodeType::BONE, data->polesubtarget);
-      add_relation(target_key, solver_key, con->name);
+      /* Bone - use the final transformation. */
+      OperationKey target_key(
+          &data->poletar->id, NodeType::BONE, data->polesubtarget, OperationCode::BONE_DONE);
+      add_relation(target_key, target_dependent_key, con->name);
     }
     else if (data->polesubtarget[0] && ELEM(data->poletar->type, OB_MESH, OB_LATTICE)) {
       /* Vertex group target. */
       /* NOTE: for now, we don't need to represent vertex groups
        * separately. */
       ComponentKey target_key(&data->poletar->id, NodeType::GEOMETRY);
-      add_relation(target_key, solver_key, con->name);
+      add_relation(target_key, target_dependent_key, con->name);
       add_customdata_mask(data->poletar, DEGCustomDataMeshMasks::MaskVert(CD_MASK_MDEFORMVERT));
-    }
-    else {
-      ComponentKey target_key(&data->poletar->id, NodeType::TRANSFORM);
-      add_relation(target_key, solver_key, con->name);
     }
   }
   DEG_DEBUG_PRINTF((::Depsgraph *)graph_,
@@ -271,7 +263,7 @@ void DepsgraphRelationBuilder::build_rig(Object *object)
   add_relation(pose_init_ik_key, pose_done_key, "Pose Init IK -> Pose Cleanup");
   /* Make sure pose is up-to-date with armature updates. */
   build_armature(armature);
-  OperationKey armature_key(&armature->id, NodeType::PARAMETERS, OperationCode::ARMATURE_EVAL);
+  OperationKey armature_key(&armature->id, NodeType::ARMATURE, OperationCode::ARMATURE_EVAL);
   add_relation(armature_key, pose_init_key, "Data dependency");
   /* Run cleanup even when there are no bones. */
   add_relation(pose_init_key, pose_cleanup_key, "Init -> Cleanup");
@@ -382,7 +374,7 @@ void DepsgraphRelationBuilder::build_rig(Object *object)
      *       to done, with transitive reduction removing this one. */
     add_relation(bone_ready_key, bone_done_key, "Ready -> Done");
     /* B-Bone shape is the real final step after Done if present. */
-    if (pchan->bone != NULL && pchan->bone->segments > 1) {
+    if (check_pchan_has_bbone(object, pchan)) {
       OperationKey bone_segments_key(
           &object->id, NodeType::BONE, pchan->name, OperationCode::BONE_SEGMENTS);
       /* B-Bone shape depends on the final position of the bone. */
@@ -391,7 +383,13 @@ void DepsgraphRelationBuilder::build_rig(Object *object)
       bPoseChannel *prev, *next;
       BKE_pchan_bbone_handles_get(pchan, &prev, &next);
       if (prev) {
-        OperationKey prev_key(&object->id, NodeType::BONE, prev->name, OperationCode::BONE_DONE);
+        OperationCode opcode = OperationCode::BONE_DONE;
+        /* Inheriting parent roll requires access to prev handle's B-Bone properties. */
+        if ((pchan->bone->flag & BONE_ADD_PARENT_END_ROLL) != 0 &&
+            check_pchan_has_bbone_segments(object, prev)) {
+          opcode = OperationCode::BONE_SEGMENTS;
+        }
+        OperationKey prev_key(&object->id, NodeType::BONE, prev->name, opcode);
         add_relation(prev_key, bone_segments_key, "Prev Handle -> B-Bone Segments");
       }
       if (next) {
@@ -442,7 +440,7 @@ void DepsgraphRelationBuilder::build_proxy_rig(Object *object)
     add_relation(bone_done_key, pose_cleanup_key, "Bone Done -> Pose Cleanup");
     add_relation(bone_done_key, pose_done_key, "Bone Done -> Pose Done", RELATION_FLAG_GODMODE);
     /* Make sure bone in the proxy is not done before it's FROM is done. */
-    if (pchan->bone && pchan->bone->segments > 1) {
+    if (check_pchan_has_bbone(object, pchan)) {
       OperationKey from_bone_segments_key(
           &proxy_from->id, NodeType::BONE, pchan->name, OperationCode::BONE_SEGMENTS);
       add_relation(from_bone_segments_key,

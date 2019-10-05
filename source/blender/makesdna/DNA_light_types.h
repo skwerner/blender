@@ -34,7 +34,6 @@
 struct AnimData;
 struct CurveMapping;
 struct Ipo;
-struct MTex;
 struct bNodeTree;
 
 typedef struct Light {
@@ -59,12 +58,18 @@ typedef struct Light {
   char _pad2[2];
 
   float clipsta, clipend;
-  float bias, soft, bleedbias, bleedexp;
+  float bias;
+  float soft;      /* DEPRECATED kept for compatibility. */
+  float bleedbias; /* DEPRECATED kept for compatibility. */
+  float bleedexp;  /* DEPRECATED kept for compatibility. */
   short bufsize, samp, buffers, filtertype;
   char bufflag, buftype;
 
   short area_shape;
   float area_size, area_sizey, area_sizez;
+
+  float sun_angle;
+  char _pad3[4];
 
   /* texact is for buttons */
   short texact, shadhalostep;
@@ -80,7 +85,10 @@ typedef struct Light {
   float cascade_fade;
   int cascade_count;
 
-  float contact_dist, contact_bias, contact_spread, contact_thickness;
+  float contact_dist;
+  float contact_bias;
+  float contact_spread; /* DEPRECATED kept for compatibility. */
+  float contact_thickness;
 
   float spec_fac, att_dist;
 

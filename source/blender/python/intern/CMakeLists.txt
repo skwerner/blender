@@ -24,6 +24,7 @@ set(INC
   ../../blenlib
   ../../blenloader
   ../../blentranslation
+  ../../depsgraph
   ../../editors/include
   ../../gpu
   ../../imbuf
@@ -228,6 +229,10 @@ endif()
 
 if(WITH_OPENAL)
   add_definitions(-DWITH_OPENAL)
+endif()
+
+if(WITH_OPENSUBDIV)
+  add_definitions(-DWITH_OPENSUBDIV)
 endif()
 
 if(WITH_SDL)

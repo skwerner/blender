@@ -103,6 +103,8 @@ void *DNA_struct_reconstruct(const struct SDNA *newsdna,
 
 int DNA_elem_offset(struct SDNA *sdna, const char *stype, const char *vartype, const char *name);
 
+int DNA_elem_size_nr(const struct SDNA *sdna, short type, short name);
+
 bool DNA_struct_find(const struct SDNA *sdna, const char *stype);
 bool DNA_struct_elem_find(const struct SDNA *sdna,
                           const char *stype,
@@ -120,5 +122,16 @@ bool DNA_sdna_patch_struct_member(struct SDNA *sdna,
                                   const char *elem_new);
 
 void DNA_sdna_alias_data_ensure(struct SDNA *sdna);
+
+/* Alias lookups (using runtime struct member names). */
+int DNA_struct_alias_find_nr_ex(const struct SDNA *sdna,
+                                const char *str,
+                                unsigned int *index_last);
+int DNA_struct_alias_find_nr(const struct SDNA *sdna, const char *str);
+bool DNA_struct_alias_elem_find(const struct SDNA *sdna,
+                                const char *stype,
+                                const char *vartype,
+                                const char *name);
+void DNA_sdna_alias_data_ensure_structs_map(struct SDNA *sdna);
 
 #endif /* __DNA_GENFILE_H__ */

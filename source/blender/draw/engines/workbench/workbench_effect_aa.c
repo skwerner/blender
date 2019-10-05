@@ -40,27 +40,28 @@ void workbench_aa_create_pass(WORKBENCH_Data *vedata, GPUTexture **tx)
     wpd->is_playback = false;
   }
 
-  if (TAA_ENABLED(wpd)) {
+  if (workbench_is_taa_enabled(wpd)) {
     psl->effect_aa_pass = workbench_taa_create_pass(vedata, tx);
   }
-  else if (FXAA_ENABLED(wpd)) {
+  else if (workbench_is_fxaa_enabled(wpd)) {
     psl->effect_aa_pass = workbench_fxaa_create_pass(tx);
     effect_info->jitter_index = 0;
   }
   else {
     psl->effect_aa_pass = NULL;
+    effect_info->jitter_index = 0;
   }
 }
 
 static void workspace_aa_draw_transform(GPUTexture *tx, WORKBENCH_PrivateData *wpd)
 {
-  if (DRW_state_is_image_render()) {
-    /* Linear result for render. */
-    DRW_transform_none(tx);
-  }
-  else {
+  if (DRW_state_do_color_management()) {
     /* Display space result for viewport. */
     DRW_transform_to_display(tx, wpd->use_color_render_settings, wpd->use_color_render_settings);
+  }
+  else {
+    /* Linear result for render. */
+    DRW_transform_none(tx);
   }
 }
 
@@ -73,13 +74,13 @@ void workbench_aa_draw_pass(WORKBENCH_Data *vedata, GPUTexture *tx)
   WORKBENCH_EffectInfo *effect_info = stl->effects;
 
   DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
-  if (FXAA_ENABLED(wpd)) {
+  if (workbench_is_fxaa_enabled(wpd)) {
     GPU_framebuffer_bind(fbl->effect_fb);
     workspace_aa_draw_transform(tx, wpd);
     GPU_framebuffer_bind(dfbl->color_only_fb);
     DRW_draw_pass(psl->effect_aa_pass);
   }
-  else if (TAA_ENABLED(wpd)) {
+  else if (workbench_is_taa_enabled(wpd)) {
     /*
      * when drawing the first TAA frame, we transform directly to the
      * color_only_fb as the TAA shader is just performing a direct copy.

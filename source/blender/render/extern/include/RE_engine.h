@@ -33,7 +33,6 @@
 
 struct BakePixel;
 struct Depsgraph;
-struct IDProperty;
 struct Main;
 struct Object;
 struct Render;
@@ -55,11 +54,10 @@ struct bNodeTree;
 /* #define RE_FLAG_DEPRECATED   2 */
 #define RE_USE_PREVIEW 4
 #define RE_USE_POSTPROCESS 8
-#define RE_USE_SHADING_NODES 16
-#define RE_USE_EXCLUDE_LAYERS 32
-#define RE_USE_SAVE_BUFFERS 64
-#define RE_USE_SHADING_NODES_CUSTOM 256
-#define RE_USE_SPHERICAL_STEREO 512
+#define RE_USE_EEVEE_VIEWPORT 16
+#define RE_USE_SAVE_BUFFERS 32
+#define RE_USE_SHADING_NODES_CUSTOM 64
+#define RE_USE_SPHERICAL_STEREO 128
 
 /* RenderEngine.flag */
 #define RE_ENGINE_ANIMATION 1
@@ -93,8 +91,12 @@ typedef struct RenderEngineType {
                const int depth,
                void *result);
 
-  void (*view_update)(struct RenderEngine *engine, const struct bContext *context);
-  void (*view_draw)(struct RenderEngine *engine, const struct bContext *context);
+  void (*view_update)(struct RenderEngine *engine,
+                      const struct bContext *context,
+                      struct Depsgraph *depsgraph);
+  void (*view_draw)(struct RenderEngine *engine,
+                    const struct bContext *context,
+                    struct Depsgraph *depsgraph);
 
   void (*update_script_node)(struct RenderEngine *engine,
                              struct bNodeTree *ntree,

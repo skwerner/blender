@@ -5,14 +5,13 @@
 #define NODETREE_EXEC
 
 #ifdef MESH_SHADER
-uniform mat4 volumeObjectMatrix;
 uniform vec3 volumeOrcoLoc;
 uniform vec3 volumeOrcoSize;
 #endif
 
 flat in int slice;
 
-/* Warning: theses are not attributes, theses are global vars. */
+/* Warning: these are not attributes, these are global vars. */
 vec3 worldPosition = vec3(0.0);
 vec3 viewPosition = vec3(0.0);
 vec3 viewNormal = vec3(0.0);
@@ -33,9 +32,9 @@ void main()
   vec3 ndc_cell = volume_to_ndc((vec3(volume_cell) + volJitter.xyz) * volInvTexSize.xyz);
 
   viewPosition = get_view_space_from_depth(ndc_cell.xy, ndc_cell.z);
-  worldPosition = transform_point(ViewMatrixInverse, viewPosition);
+  worldPosition = point_view_to_world(viewPosition);
 #ifdef MESH_SHADER
-  volumeObjectLocalCoord = transform_point(volumeObjectMatrix, worldPosition);
+  volumeObjectLocalCoord = point_world_to_object(worldPosition);
   volumeObjectLocalCoord = (volumeObjectLocalCoord - volumeOrcoLoc + volumeOrcoSize) /
                            (volumeOrcoSize * 2.0);
 
@@ -51,7 +50,7 @@ void main()
 #endif
 
   volumeScattering = vec4(cl.scatter, 1.0);
-  volumeExtinction = vec4(max(vec3(1e-4), cl.absorption + cl.scatter), 1.0);
+  volumeExtinction = vec4(cl.absorption + cl.scatter, 1.0);
   volumeEmissive = vec4(cl.emission, 1.0);
 
   /* Do not add phase weight if no scattering. */

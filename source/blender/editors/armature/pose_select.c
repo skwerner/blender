@@ -40,6 +40,7 @@
 #include "BKE_object.h"
 #include "BKE_report.h"
 #include "BKE_layer.h"
+#include "BKE_modifier.h"
 
 #include "DEG_depsgraph.h"
 
@@ -53,6 +54,7 @@
 #include "ED_keyframing.h"
 #include "ED_mesh.h"
 #include "ED_object.h"
+#include "ED_outliner.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
 #include "ED_view3d.h"
@@ -71,8 +73,9 @@ static void pose_do_bone_select(bPoseChannel *pchan, const int select_mode)
   /* select pchan only if selectable, but deselect works always */
   switch (select_mode) {
     case SEL_SELECT:
-      if (!(pchan->bone->flag & BONE_UNSELECTABLE))
+      if (!(pchan->bone->flag & BONE_UNSELECTABLE)) {
         pchan->bone->flag |= BONE_SELECTED;
+      }
       break;
     case SEL_DESELECT:
       pchan->bone->flag &= ~(BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL);
@@ -110,8 +113,9 @@ void ED_pose_bone_select(Object *ob, bPoseChannel *pchan, bool select)
 
   /* sanity checks */
   // XXX: actually, we can probably still get away with no object - at most we have no updates
-  if (ELEM(NULL, ob, ob->pose, pchan, pchan->bone))
+  if (ELEM(NULL, ob, ob->pose, pchan, pchan->bone)) {
     return;
+  }
 
   arm = ob->data;
 
@@ -147,8 +151,9 @@ bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
   Object *ob = base->object;
   Bone *nearBone;
 
-  if (!ob || !ob->pose)
+  if (!ob || !ob->pose) {
     return 0;
+  }
 
   Object *ob_act = OBACT(view_layer);
   Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
@@ -178,10 +183,17 @@ bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
 
     if (!extend && !deselect && !toggle) {
       {
-        uint bases_len = 0;
-        Base **bases = BKE_object_pose_base_array_get_unique(view_layer, v3d, &bases_len);
-        ED_pose_deselect_all_multi_ex(bases, bases_len, SEL_DESELECT, true);
-        MEM_freeN(bases);
+        /* Don't use 'BKE_object_pose_base_array_get_unique'
+         * because we may be selecting from object mode. */
+        FOREACH_VISIBLE_BASE_BEGIN (view_layer, v3d, base_iter) {
+          Object *ob_iter = base_iter->object;
+          if ((ob_iter->type == OB_ARMATURE) && (ob_iter->mode & OB_MODE_POSE)) {
+            if (ED_pose_deselect_all(ob_iter, SEL_DESELECT, true)) {
+              ED_pose_bone_select_tag_update(ob_iter);
+            }
+          }
+        }
+        FOREACH_VISIBLE_BASE_END;
       }
       nearBone->flag |= (BONE_SELECTED | BONE_TIPSEL | BONE_ROOTSEL);
       arm->act_bone = nearBone;
@@ -235,6 +247,38 @@ bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
   }
 
   return nearBone != NULL;
+}
+
+/**
+ * While in weight-paint mode, a single pose may be active as well.
+ * While not common, it's possible we have multiple armatures deforming a mesh.
+ *
+ * This function de-selects all other objects, and selects the new base.
+ * It can't be set to the active object because we need
+ * to keep this set to the weight paint object.
+ */
+void ED_armature_pose_select_in_wpaint_mode(ViewLayer *view_layer, Base *base_select)
+{
+  BLI_assert(base_select && (base_select->object->type == OB_ARMATURE));
+  Object *ob_active = OBACT(view_layer);
+  BLI_assert(ob_active && (ob_active->mode & OB_MODE_WEIGHT_PAINT));
+  VirtualModifierData virtualModifierData;
+  ModifierData *md = modifiers_getVirtualModifierList(ob_active, &virtualModifierData);
+  for (; md; md = md->next) {
+    if (md->type == eModifierType_Armature) {
+      ArmatureModifierData *amd = (ArmatureModifierData *)md;
+      Object *ob_arm = amd->object;
+      if (ob_arm != NULL) {
+        Base *base_arm = BKE_view_layer_base_find(view_layer, ob_arm);
+        if ((base_arm != NULL) && (base_arm != base_select) && (base_arm->flag & BASE_SELECTED)) {
+          ED_object_base_select(base_arm, BA_DESELECT);
+        }
+      }
+    }
+  }
+  if ((base_select->flag & BASE_SELECTED) == 0) {
+    ED_object_base_select(base_select, BA_SELECT);
+  }
 }
 
 /* 'select_mode' is usual SEL_SELECT/SEL_DESELECT/SEL_TOGGLE/SEL_INVERT.
@@ -324,8 +368,9 @@ bool ED_pose_deselect_all_multi_ex(Base **bases,
 
 bool ED_pose_deselect_all_multi(bContext *C, int select_mode, const bool ignore_visibility)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
   uint bases_len = 0;
   Base **bases = BKE_view_layer_array_from_bases_in_mode(vc.view_layer,
                                                          vc.v3d,
@@ -346,16 +391,20 @@ static void selectconnected_posebonechildren(Object *ob, Bone *bone, int extend)
   Bone *curBone;
 
   /* stop when unconnected child is encountered, or when unselectable bone is encountered */
-  if (!(bone->flag & BONE_CONNECTED) || (bone->flag & BONE_UNSELECTABLE))
+  if (!(bone->flag & BONE_CONNECTED) || (bone->flag & BONE_UNSELECTABLE)) {
     return;
+  }
 
-  if (extend)
+  if (extend) {
     bone->flag &= ~BONE_SELECTED;
-  else
+  }
+  else {
     bone->flag |= BONE_SELECTED;
+  }
 
-  for (curBone = bone->childbase.first; curBone; curBone = curBone->next)
+  for (curBone = bone->childbase.first; curBone; curBone = curBone->next) {
     selectconnected_posebonechildren(ob, curBone, extend);
+  }
 }
 
 /* within active object context */
@@ -370,30 +419,39 @@ static int pose_select_connected_invoke(bContext *C, wmOperator *op, const wmEve
   Base *base = NULL;
   bone = get_nearest_bone(C, event->mval, !extend, &base);
 
-  if (!bone)
+  if (!bone) {
     return OPERATOR_CANCELLED;
+  }
 
   /* Select parents */
   for (curBone = bone; curBone; curBone = next) {
     /* ignore bone if cannot be selected */
     if ((curBone->flag & BONE_UNSELECTABLE) == 0) {
-      if (extend)
+      if (extend) {
         curBone->flag &= ~BONE_SELECTED;
-      else
+      }
+      else {
         curBone->flag |= BONE_SELECTED;
+      }
 
-      if (curBone->flag & BONE_CONNECTED)
+      if (curBone->flag & BONE_CONNECTED) {
         next = curBone->parent;
-      else
+      }
+      else {
         next = NULL;
+      }
     }
-    else
+    else {
       next = NULL;
+    }
   }
 
   /* Select children */
-  for (curBone = bone->childbase.first; curBone; curBone = next)
+  for (curBone = bone->childbase.first; curBone; curBone = next) {
     selectconnected_posebonechildren(base->object, curBone, extend);
+  }
+
+  ED_outliner_select_sync_from_pose_bone_tag(C);
 
   ED_pose_bone_select_tag_update(base->object);
 
@@ -444,8 +502,7 @@ static int pose_de_select_all_exec(bContext *C, wmOperator *op)
   Object *ob_prev = NULL;
 
   /*  Set the flags */
-  CTX_DATA_BEGIN_WITH_ID(C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob)
-  {
+  CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob) {
     bArmature *arm = ob->data;
     pose_do_bone_select(pchan, action);
 
@@ -460,6 +517,8 @@ static int pose_de_select_all_exec(bContext *C, wmOperator *op)
     }
   }
   CTX_DATA_END;
+
+  ED_outliner_select_sync_from_pose_bone_tag(C);
 
   WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, NULL);
 
@@ -506,6 +565,8 @@ static int pose_select_parent_exec(bContext *C, wmOperator *UNUSED(op))
   else {
     return OPERATOR_CANCELLED;
   }
+
+  ED_outliner_select_sync_from_pose_bone_tag(C);
 
   ED_pose_bone_select_tag_update(ob);
   return OPERATOR_FINISHED;
@@ -558,16 +619,20 @@ static int pose_select_constraint_target_exec(bContext *C, wmOperator *UNUSED(op
             }
           }
 
-          if (cti->flush_constraint_targets)
+          if (cti->flush_constraint_targets) {
             cti->flush_constraint_targets(con, &targets, 1);
+          }
         }
       }
     }
   }
   CTX_DATA_END;
 
-  if (!found)
+  if (!found) {
     return OPERATOR_CANCELLED;
+  }
+
+  ED_outliner_select_sync_from_pose_bone_tag(C);
 
   return OPERATOR_FINISHED;
 }
@@ -657,6 +722,8 @@ static int pose_select_hierarchy_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
+  ED_outliner_select_sync_from_pose_bone_tag(C);
+
   ED_pose_bone_select_tag_update(ob);
 
   return OPERATOR_FINISHED;
@@ -741,8 +808,7 @@ static bool pose_select_same_group(bContext *C, bool extend)
   group_flags = NULL;
   ob_index = -1;
   ob_prev = NULL;
-  CTX_DATA_BEGIN_WITH_ID(C, bPoseChannel *, pchan, visible_pose_bones, Object, *ob)
-  {
+  CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob) {
     if (ob != ob_prev) {
       ob_index++;
       group_flags = group_flags_array + (ob_index * groups_len);
@@ -768,8 +834,7 @@ static bool pose_select_same_group(bContext *C, bool extend)
     ob_index = -1;
     ob_prev = NULL;
     /* only if group matches (and is not selected or current bone) */
-    CTX_DATA_BEGIN_WITH_ID(C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob)
-    {
+    CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob) {
       if (ob != ob_prev) {
         ob_index++;
         group_flags = group_flags_array + (ob_index * groups_len);
@@ -824,20 +889,21 @@ static bool pose_select_same_layer(bContext *C, bool extend)
   layers = NULL;
   ob_prev = NULL;
   ob_index = -1;
-  CTX_DATA_BEGIN_WITH_ID(C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob)
-  {
+  CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob) {
     if (ob != ob_prev) {
       layers = &layers_array[++ob_index];
       ob_prev = ob;
     }
 
     /* Keep track of layers to use later? */
-    if (pchan->bone->flag & BONE_SELECTED)
+    if (pchan->bone->flag & BONE_SELECTED) {
       *layers |= pchan->bone->layer;
+    }
 
     /* Deselect all bones before selecting new ones? */
-    if ((extend == false) && (pchan->bone->flag & BONE_UNSELECTABLE) == 0)
+    if ((extend == false) && (pchan->bone->flag & BONE_UNSELECTABLE) == 0) {
       pchan->bone->flag &= ~BONE_SELECTED;
+    }
   }
   CTX_DATA_END;
 
@@ -856,8 +922,7 @@ static bool pose_select_same_layer(bContext *C, bool extend)
   /* Select bones that are on same layers as layers flag. */
   ob_prev = NULL;
   ob_index = -1;
-  CTX_DATA_BEGIN_WITH_ID(C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob)
-  {
+  CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, pchan, visible_pose_bones, Object *, ob) {
     if (ob != ob_prev) {
       layers = &layers_array[++ob_index];
       ob_prev = ob;
@@ -917,8 +982,9 @@ static bool pose_select_same_keyingset(bContext *C, ReportList *reports, bool ex
   /* if not extending selection, deselect all selected first */
   if (extend == false) {
     CTX_DATA_BEGIN (C, bPoseChannel *, pchan, visible_pose_bones) {
-      if ((pchan->bone->flag & BONE_UNSELECTABLE) == 0)
+      if ((pchan->bone->flag & BONE_UNSELECTABLE) == 0) {
         pchan->bone->flag &= ~BONE_SELECTED;
+      }
     }
     CTX_DATA_END;
   }
@@ -982,8 +1048,9 @@ static int pose_select_grouped_exec(bContext *C, wmOperator *op)
   bool changed = false;
 
   /* sanity check */
-  if (ob->pose == NULL)
+  if (ob->pose == NULL) {
     return OPERATOR_CANCELLED;
+  }
 
   /* selection types */
   switch (type) {
@@ -1005,10 +1072,14 @@ static int pose_select_grouped_exec(bContext *C, wmOperator *op)
   }
 
   /* report done status */
-  if (changed)
+  if (changed) {
+    ED_outliner_select_sync_from_pose_bone_tag(C);
+
     return OPERATOR_FINISHED;
-  else
+  }
+  else {
     return OPERATOR_CANCELLED;
+  }
 }
 
 void POSE_OT_select_grouped(wmOperatorType *ot)
@@ -1114,6 +1185,8 @@ static int pose_select_mirror_exec(bContext *C, wmOperator *op)
     DEG_id_tag_update(&arm->id, ID_RECALC_COPY_ON_WRITE);
   }
   MEM_freeN(objects);
+
+  ED_outliner_select_sync_from_pose_bone_tag(C);
 
   return OPERATOR_FINISHED;
 }

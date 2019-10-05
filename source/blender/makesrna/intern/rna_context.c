@@ -57,6 +57,10 @@ const EnumPropertyItem rna_enum_context_mode_items[] = {
 
 #ifdef RNA_RUNTIME
 
+#  ifdef WITH_PYTHON
+#    include "BPY_extern.h"
+#  endif
+
 #  include "RE_engine.h"
 
 static PointerRNA rna_Context_manager_get(PointerRNA *ptr)
@@ -135,12 +139,6 @@ static PointerRNA rna_Context_main_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_BlendData, CTX_data_main(C));
 }
 
-static PointerRNA rna_Context_depsgraph_get(PointerRNA *ptr)
-{
-  bContext *C = (bContext *)ptr->data;
-  return rna_pointer_inherit_refine(ptr, &RNA_Depsgraph, CTX_data_depsgraph(C));
-}
-
 static PointerRNA rna_Context_scene_get(PointerRNA *ptr)
 {
   bContext *C = (bContext *)ptr->data;
@@ -180,14 +178,14 @@ static PointerRNA rna_Context_collection_get(PointerRNA *ptr)
 static PointerRNA rna_Context_layer_collection_get(PointerRNA *ptr)
 {
   bContext *C = (bContext *)ptr->data;
-  ptr->id.data = CTX_data_scene(C);
+  ptr->owner_id = &CTX_data_scene(C)->id;
   return rna_pointer_inherit_refine(ptr, &RNA_LayerCollection, CTX_data_layer_collection(C));
 }
 
 static PointerRNA rna_Context_tool_settings_get(PointerRNA *ptr)
 {
   bContext *C = (bContext *)ptr->data;
-  ptr->id.data = CTX_data_scene(C);
+  ptr->owner_id = &CTX_data_scene(C)->id;
   return rna_pointer_inherit_refine(ptr, &RNA_ToolSettings, CTX_data_tool_settings(C));
 }
 
@@ -204,12 +202,33 @@ static int rna_Context_mode_get(PointerRNA *ptr)
   return CTX_data_mode_enum(C);
 }
 
+static struct Depsgraph *rna_Context_evaluated_depsgraph_get(bContext *C)
+{
+  struct Depsgraph *depsgraph;
+
+#  ifdef WITH_PYTHON
+  /* Allow drivers to be evaluated */
+  BPy_BEGIN_ALLOW_THREADS;
+#  endif
+
+  depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+
+#  ifdef WITH_PYTHON
+  BPy_END_ALLOW_THREADS;
+#  endif
+
+  return depsgraph;
+}
+
 #else
 
 void RNA_def_context(BlenderRNA *brna)
 {
   StructRNA *srna;
   PropertyRNA *prop;
+
+  FunctionRNA *func;
+  PropertyRNA *parm;
 
   srna = RNA_def_struct(brna, "Context", NULL);
   RNA_def_struct_ui_text(srna, "Context", "Current windowmanager and data context");
@@ -267,11 +286,6 @@ void RNA_def_context(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "BlendData");
   RNA_def_property_pointer_funcs(prop, "rna_Context_main_get", NULL, NULL, NULL);
 
-  prop = RNA_def_property(srna, "depsgraph", PROP_POINTER, PROP_NONE);
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  RNA_def_property_struct_type(prop, "Depsgraph");
-  RNA_def_property_pointer_funcs(prop, "rna_Context_depsgraph_get", NULL, NULL, NULL);
-
   prop = RNA_def_property(srna, "scene", PROP_POINTER, PROP_NONE);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_struct_type(prop, "Scene");
@@ -310,6 +324,16 @@ void RNA_def_context(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, rna_enum_context_mode_items);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_enum_funcs(prop, "rna_Context_mode_get", NULL, NULL);
+
+  func = RNA_def_function(srna, "evaluated_depsgraph_get", "rna_Context_evaluated_depsgraph_get");
+  RNA_def_function_ui_description(
+      func,
+      "Get the dependency graph for the current scene and view layer, to access to data-blocks "
+      "with animation and modifiers applied. If any data-blocks have been edited, the dependency "
+      "graph will be updated. This invalidates all references to evaluated data-blocks from the "
+      "dependency graph.");
+  parm = RNA_def_pointer(func, "depsgraph", "Depsgraph", "", "Evaluated dependency graph");
+  RNA_def_function_return(func, parm);
 }
 
 #endif

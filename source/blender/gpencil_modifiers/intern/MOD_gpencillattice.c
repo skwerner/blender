@@ -55,6 +55,7 @@ static void initData(GpencilModifierData *md)
   LatticeGpencilModifierData *gpmd = (LatticeGpencilModifierData *)md;
   gpmd->pass_index = 0;
   gpmd->layername[0] = '\0';
+  gpmd->materialname[0] = '\0';
   gpmd->vgname[0] = '\0';
   gpmd->object = NULL;
   gpmd->cache_data = NULL;
@@ -70,6 +71,7 @@ static void deformStroke(GpencilModifierData *md,
                          Depsgraph *UNUSED(depsgraph),
                          Object *ob,
                          bGPDlayer *gpl,
+                         bGPDframe *UNUSED(gpf),
                          bGPDstroke *gps)
 {
   LatticeGpencilModifierData *mmd = (LatticeGpencilModifierData *)md;
@@ -77,6 +79,7 @@ static void deformStroke(GpencilModifierData *md,
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
+                                      mmd->materialname,
                                       mmd->pass_index,
                                       mmd->layer_pass,
                                       1,
@@ -84,7 +87,8 @@ static void deformStroke(GpencilModifierData *md,
                                       gps,
                                       mmd->flag & GP_LATTICE_INVERT_LAYER,
                                       mmd->flag & GP_LATTICE_INVERT_PASS,
-                                      mmd->flag & GP_LATTICE_INVERT_LAYERPASS)) {
+                                      mmd->flag & GP_LATTICE_INVERT_LAYERPASS,
+                                      mmd->flag & GP_LATTICE_INVERT_MATERIAL)) {
     return;
   }
 
@@ -117,8 +121,9 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
   bGPdata *gpd = ob->data;
   int oldframe = (int)DEG_get_ctime(depsgraph);
 
-  if (mmd->object == NULL)
+  if (mmd->object == NULL) {
     return;
+  }
 
   for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
     for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
@@ -133,7 +138,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
 
       /* compute lattice effects on this frame */
       for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
-        deformStroke(md, depsgraph, ob, gpl, gps);
+        deformStroke(md, depsgraph, ob, gpl, gpf, gps);
       }
     }
   }
@@ -164,7 +169,12 @@ static bool isDisabled(GpencilModifierData *md, int UNUSED(userRenderParams))
 {
   LatticeGpencilModifierData *mmd = (LatticeGpencilModifierData *)md;
 
-  return !mmd->object;
+  /* The object type check is only needed here in case we have a placeholder
+   * object assigned (because the library containing the lattice is missing).
+   *
+   * In other cases it should be impossible to have a type mismatch.
+   */
+  return !mmd->object || mmd->object->type != OB_LATTICE;
 }
 
 static void updateDepsgraph(GpencilModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -209,5 +219,4 @@ GpencilModifierTypeInfo modifierType_Gpencil_Lattice = {
     /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
-    /* getDuplicationFactor */ NULL,
 };

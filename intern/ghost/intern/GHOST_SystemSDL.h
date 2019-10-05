@@ -77,11 +77,6 @@ class GHOST_SystemSDL : public GHOST_System {
 
   GHOST_TSuccess disposeContext(GHOST_IContext *context);
 
-  /**
-   * Informs if the system provides native dialogs (eg. confirm quit)
-   */
-  virtual bool supportsNativeDialogs(void);
-
  private:
   GHOST_TSuccess init();
 
@@ -94,6 +89,7 @@ class GHOST_SystemSDL : public GHOST_System {
                               GHOST_TDrawingContextType type,
                               GHOST_GLSettings glSettings,
                               const bool exclusive = false,
+                              const bool is_dialog = false,
                               const GHOST_TEmbedderWindowID parentWindow = 0);
 
   /* SDL specific */

@@ -169,7 +169,7 @@ void ANIM_draw_previewrange(const bContext *C, View2D *v2d, int end_frame_width)
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
     immUniformThemeColorShadeAlpha(TH_ANIM_PREVIEW_RANGE, -25, -30);
     /* XXX: Fix this hardcoded color (anim_active) */
-    //immUniformColor4f(0.8f, 0.44f, 0.1f, 0.2f);
+    // immUniformColor4f(0.8f, 0.44f, 0.1f, 0.2f);
 
     /* only draw two separate 'curtains' if there's no overlap between them */
     if (PSFRA < PEFRA + end_frame_width) {
@@ -237,12 +237,14 @@ void ANIM_draw_framerange(Scene *scene, View2D *v2d)
 AnimData *ANIM_nla_mapping_get(bAnimContext *ac, bAnimListElem *ale)
 {
   /* sanity checks */
-  if (ac == NULL)
+  if (ac == NULL) {
     return NULL;
+  }
 
   /* abort if rendering - we may get some race condition issues... */
-  if (G.is_rendering)
+  if (G.is_rendering) {
     return NULL;
+  }
 
   /* apart from strictly keyframe-related contexts, this shouldn't even happen */
   // XXX: nla and channel here may not be necessary...
@@ -255,9 +257,11 @@ AnimData *ANIM_nla_mapping_get(bAnimContext *ac, bAnimListElem *ale)
            ANIMCONT_CHANNEL)) {
     /* handling depends on the type of animation-context we've got */
     if (ale) {
-      /* NLA Control Curves occur on NLA strips, and shouldn't be subjected to this kind of mapping */
-      if (ale->type != ANIMTYPE_NLACURVE)
+      /* NLA Control Curves occur on NLA strips,
+       * and shouldn't be subjected to this kind of mapping. */
+      if (ale->type != ANIMTYPE_NLACURVE) {
         return ale->adt;
+      }
     }
   }
 
@@ -267,7 +271,8 @@ AnimData *ANIM_nla_mapping_get(bAnimContext *ac, bAnimListElem *ale)
 
 /* ------------------- */
 
-/* helper function for ANIM_nla_mapping_apply_fcurve() -> "restore", i.e. mapping points back to action-time */
+/* Helper function for ANIM_nla_mapping_apply_fcurve() -> "restore",
+ * i.e. mapping points back to action-time. */
 static short bezt_nlamapping_restore(KeyframeEditData *ked, BezTriple *bezt)
 {
   /* AnimData block providing scaling is stored in 'data', only_keys option is stored in i1 */
@@ -321,10 +326,12 @@ void ANIM_nla_mapping_apply_fcurve(AnimData *adt, FCurve *fcu, bool restore, boo
   ked.i1 = (int)only_keys;
 
   /* get editing callback */
-  if (restore)
+  if (restore) {
     map_cb = bezt_nlamapping_restore;
-  else
+  }
+  else {
     map_cb = bezt_nlamapping_apply;
+  }
 
   /* apply to F-Curve */
   ANIM_fcurve_keyframes_loop(&ked, fcu, NULL, map_cb, NULL);
@@ -353,15 +360,17 @@ static float normalization_factor_get(Scene *scene, FCurve *fcu, short flag, flo
   float factor = 1.0f, offset = 0.0f;
 
   if (flag & ANIM_UNITCONV_RESTORE) {
-    if (r_offset)
+    if (r_offset) {
       *r_offset = fcu->prev_offset;
+    }
 
     return 1.0f / fcu->prev_norm_factor;
   }
 
   if (flag & ANIM_UNITCONV_NORMALIZE_FREEZE) {
-    if (r_offset)
+    if (r_offset) {
       *r_offset = fcu->prev_offset;
+    }
     if (fcu->prev_norm_factor == 0.0f) {
       /* Happens when Auto Normalize was disabled before
        * any curves were displayed.
@@ -372,8 +381,9 @@ static float normalization_factor_get(Scene *scene, FCurve *fcu, short flag, flo
   }
 
   if (G.moving & G_TRANSFORM_FCURVES) {
-    if (r_offset)
+    if (r_offset) {
       *r_offset = fcu->prev_offset;
+    }
     if (fcu->prev_norm_factor == 0.0f) {
       /* Same as above. */
       return 1.0f;
@@ -412,23 +422,16 @@ static float normalization_factor_get(Scene *scene, FCurve *fcu, short flag, flo
       }
       else {
         const BezTriple *prev_bezt = bezt - 1;
-        if (prev_bezt->ipo == BEZT_IPO_CONST) {
-          /* Constant interpolation: previous CV value is used up
-           * to the current keyframe.
-           */
-          max_coord = max_ff(max_coord, bezt->vec[1][1]);
-          min_coord = min_ff(min_coord, bezt->vec[1][1]);
-        }
-        else if (prev_bezt->ipo == BEZT_IPO_LIN) {
-          /* Linear interpolation: min/max using both previous and
-           * and current CV.
+        if (!ELEM(prev_bezt->ipo, BEZT_IPO_BEZ, BEZT_IPO_BACK, BEZT_IPO_ELASTIC)) {
+          /* The points on the curve will lie inside the start and end points.
+           * Calculate min/max using both previous and current CV.
            */
           max_coord = max_ff(max_coord, bezt->vec[1][1]);
           min_coord = min_ff(min_coord, bezt->vec[1][1]);
           max_coord = max_ff(max_coord, prev_bezt->vec[1][1]);
           min_coord = min_ff(min_coord, prev_bezt->vec[1][1]);
         }
-        else if (prev_bezt->ipo == BEZT_IPO_BEZ) {
+        else {
           const int resol = fcu->driver ?
                                 32 :
                                 min_ii((int)(5.0f * len_v2v2(bezt->vec[1], prev_bezt->vec[1])),
@@ -438,30 +441,12 @@ static float normalization_factor_get(Scene *scene, FCurve *fcu, short flag, flo
             min_coord = min_ff(min_coord, prev_bezt->vec[1][1]);
           }
           else {
-            float data[120];
-            float v1[2], v2[2], v3[2], v4[2];
-
-            v1[0] = prev_bezt->vec[1][0];
-            v1[1] = prev_bezt->vec[1][1];
-            v2[0] = prev_bezt->vec[2][0];
-            v2[1] = prev_bezt->vec[2][1];
-
-            v3[0] = bezt->vec[0][0];
-            v3[1] = bezt->vec[0][1];
-            v4[0] = bezt->vec[1][0];
-            v4[1] = bezt->vec[1][1];
-
-            correct_bezpart(v1, v2, v3, v4);
-
-            BKE_curve_forward_diff_bezier(
-                v1[0], v2[0], v3[0], v4[0], data, resol, sizeof(float) * 3);
-            BKE_curve_forward_diff_bezier(
-                v1[1], v2[1], v3[1], v4[1], data + 1, resol, sizeof(float) * 3);
-
-            for (int j = 0; j <= resol; ++j) {
-              const float *fp = &data[j * 3];
-              max_coord = max_ff(max_coord, fp[1]);
-              min_coord = min_ff(min_coord, fp[1]);
+            float step_size = (bezt->vec[1][0] - prev_bezt->vec[1][0]) / resol;
+            for (int j = 0; j <= resol; j++) {
+              float eval_time = prev_bezt->vec[1][0] + step_size * j;
+              float eval_value = evaluate_fcurve_only_curve(fcu, eval_time);
+              max_coord = max_ff(max_coord, eval_value);
+              min_coord = min_ff(min_coord, eval_value);
             }
           }
         }
@@ -497,8 +482,9 @@ float ANIM_unit_mapping_get_factor(Scene *scene, ID *id, FCurve *fcu, short flag
     return normalization_factor_get(scene, fcu, flag, r_offset);
   }
 
-  if (r_offset)
+  if (r_offset) {
     *r_offset = 0.0f;
+  }
 
   /* sanity checks */
   if (id && fcu && fcu->rna_path) {
@@ -512,10 +498,12 @@ float ANIM_unit_mapping_get_factor(Scene *scene, ID *id, FCurve *fcu, short flag
       if (RNA_SUBTYPE_UNIT(RNA_property_subtype(prop)) == PROP_UNIT_ROTATION) {
         /* if the radians flag is not set, default to using degrees which need conversions */
         if ((scene) && (scene->unit.system_rotation == USER_UNIT_ROT_RADIANS) == 0) {
-          if (flag & ANIM_UNITCONV_RESTORE)
+          if (flag & ANIM_UNITCONV_RESTORE) {
             return DEG2RADF(1.0f); /* degrees to radians */
-          else
+          }
+          else {
             return RAD2DEGF(1.0f); /* radians to degrees */
+          }
         }
       }
 
@@ -575,8 +563,9 @@ static bool find_prev_next_keyframes(struct bContext *C, int *nextfra, int *prev
       }
       else {
         /* this changes the frame, so set the frame and we're done */
-        if (++nextcount == U.view_frame_keyframes)
+        if (++nextcount == U.view_frame_keyframes) {
           donenext = true;
+        }
       }
       cfranext = aknext->cfra;
     }
@@ -591,8 +580,9 @@ static bool find_prev_next_keyframes(struct bContext *C, int *nextfra, int *prev
       }
       else {
         /* this changes the frame, so set the frame and we're done */
-        if (++prevcount == U.view_frame_keyframes)
+        if (++prevcount == U.view_frame_keyframes) {
           doneprev = true;
+        }
       }
       cfraprev = akprev->cfra;
     }
@@ -603,15 +593,19 @@ static bool find_prev_next_keyframes(struct bContext *C, int *nextfra, int *prev
 
   /* any success? */
   if (doneprev || donenext) {
-    if (doneprev)
+    if (doneprev) {
       *prevfra = cfraprev;
-    else
+    }
+    else {
       *prevfra = CFRA - (cfranext - CFRA);
+    }
 
-    if (donenext)
+    if (donenext) {
       *nextfra = cfranext;
-    else
+    }
+    else {
       *nextfra = CFRA + (CFRA - cfraprev);
+    }
 
     return true;
   }

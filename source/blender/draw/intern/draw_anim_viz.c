@@ -139,7 +139,7 @@ static void MPATH_cache_init(void *vedata)
   }
 
   {
-    DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_POINT;
+    DRWState state = DRW_STATE_WRITE_COLOR;
     psl->points = DRW_pass_create("Motionpath Point Pass", state);
   }
 }
@@ -184,7 +184,7 @@ static void MPATH_cache_motion_path(MPATH_PassList *psl,
   struct DRWTextStore *dt = DRW_text_cache_ensure();
   int txt_flag = DRW_TEXT_CACHE_GLOBALSPACE | DRW_TEXT_CACHE_ASCII;
   int cfra = (int)DEG_get_ctime(draw_ctx->depsgraph);
-  bool sel = (pchan) ? (pchan->bone->flag & BONE_SELECTED) : (ob->flag & SELECT);
+  bool sel = (pchan) ? (pchan->bone->flag & BONE_SELECTED) : (ob->base_flag & BASE_SELECTED);
   bool show_keyframes = (avs->path_viewflag & MOTIONPATH_VIEW_KFRAS) != 0;
 
   int sfra, efra, stepsize;
@@ -215,7 +215,7 @@ static void MPATH_cache_motion_path(MPATH_PassList *psl,
       DRW_shgroup_uniform_vec3(shgrp, "customColor", mpath->color, 1);
     }
     /* Only draw the required range. */
-    DRW_shgroup_call_range_add(shgrp, mpath_batch_line_get(mpath), NULL, start_index, len);
+    DRW_shgroup_call_range(shgrp, mpath_batch_line_get(mpath), start_index, len);
   }
 
   /* Draw points. */
@@ -231,7 +231,7 @@ static void MPATH_cache_motion_path(MPATH_PassList *psl,
     DRW_shgroup_uniform_vec3(shgrp, "customColor", mpath->color, 1);
   }
   /* Only draw the required range. */
-  DRW_shgroup_call_range_add(shgrp, mpath_batch_points_get(mpath), NULL, start_index, len);
+  DRW_shgroup_call_range(shgrp, mpath_batch_points_get(mpath), start_index, len);
 
   /* Draw frame numbers at each framestep value */
   bool show_kf_no = (avs->path_viewflag & MOTIONPATH_VIEW_KFNOS) != 0;
@@ -259,7 +259,8 @@ static void MPATH_cache_motion_path(MPATH_PassList *psl,
       else if (avs->path_viewflag & MOTIONPATH_VIEW_FNUMS) {
         bMotionPathVert *mpvP = (mpv - stepsize);
         bMotionPathVert *mpvN = (mpv + stepsize);
-        /* only draw framenum if several consecutive highlighted points don't occur on same point */
+        /* only draw framenum if several consecutive highlighted points don't occur on same point
+         */
         if ((equals_v3v3(mpv->co, mpvP->co) == 0) || (equals_v3v3(mpv->co, mpvN->co) == 0)) {
           numstr_len = sprintf(numstr, " %d", frame);
           DRW_text_cache_add(dt, mpv->co, numstr, numstr_len, 0, 0, txt_flag, col);
@@ -288,10 +289,9 @@ static void MPATH_cache_populate(void *vedata, Object *ob)
       }
     }
   }
-  else {
-    if (ob->mpath) {
-      MPATH_cache_motion_path(psl, ob, NULL, &ob->avs, ob->mpath);
-    }
+
+  if (ob->mpath) {
+    MPATH_cache_motion_path(psl, ob, NULL, &ob->avs, ob->mpath);
   }
 }
 

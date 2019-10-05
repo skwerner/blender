@@ -79,7 +79,7 @@ def generate(context, space_type):
     use_release_confirm = True
 
     # Generate items when no keys are mapped.
-    use_auto_keymap_alpha = False  # Map manially in the default keymap
+    use_auto_keymap_alpha = False  # Map manually in the default key-map.
     use_auto_keymap_num = True
 
     # Temporary, only create so we can pass 'properties' to find_item_from_operator.
@@ -208,7 +208,7 @@ def generate(context, space_type):
                             properties=kmi_hack_brush_select_properties,
                             include={'KEYBOARD'},
                         )[1]
-                    elif mode == 'PARTICLE_EDIT':
+                    elif mode in {'PARTICLE_EDIT', 'SCULPT_GPENCIL'}:
                         # Doesn't use brushes
                         pass
                     else:
@@ -432,7 +432,7 @@ def generate(context, space_type):
         )
         kmi.properties.name = tap_reset_tool
 
-    if use_release_confirm:
+    if use_release_confirm and (kmi_toolbar_type is not None):
         kmi = keymap.keymap_items.new(
             "ui.button_execute",
             type=kmi_toolbar_type,

@@ -55,7 +55,7 @@
 
 static void rna_Smoke_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY);
+  DEG_id_tag_update(ptr->owner_id, ID_RECALC_GEOMETRY);
 }
 
 static void rna_Smoke_dependency_update(Main *bmain, Scene *scene, PointerRNA *ptr)
@@ -67,15 +67,16 @@ static void rna_Smoke_dependency_update(Main *bmain, Scene *scene, PointerRNA *p
 static void rna_Smoke_resetCache(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
   SmokeDomainSettings *settings = (SmokeDomainSettings *)ptr->data;
-  if (settings->smd && settings->smd->domain)
+  if (settings->smd && settings->smd->domain) {
     settings->point_cache[0]->flag |= PTCACHE_OUTDATED;
-  DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY);
+  }
+  DEG_id_tag_update(ptr->owner_id, ID_RECALC_GEOMETRY);
 }
 
 static void rna_Smoke_cachetype_set(struct PointerRNA *ptr, int value)
 {
   SmokeDomainSettings *settings = (SmokeDomainSettings *)ptr->data;
-  Object *ob = (Object *)ptr->id.data;
+  Object *ob = (Object *)ptr->owner_id;
 
   if (value != settings->cache_file_format) {
     /* Clear old caches. */
@@ -103,8 +104,9 @@ static void rna_Smoke_reset_dependency(Main *bmain, Scene *scene, PointerRNA *pt
 
   smokeModifier_reset(settings->smd);
 
-  if (settings->smd && settings->smd->domain)
+  if (settings->smd && settings->smd->domain) {
     settings->smd->domain->point_cache[0]->flag |= PTCACHE_OUTDATED;
+  }
 
   rna_Smoke_dependency_update(bmain, scene, ptr);
 }
@@ -236,10 +238,12 @@ static void rna_SmokeModifier_density_grid_get(PointerRNA *ptr, float *values)
 
   BLI_rw_mutex_lock(sds->fluid_mutex, THREAD_LOCK_READ);
 
-  if (sds->flags & MOD_SMOKE_HIGHRES && sds->wt)
+  if (sds->flags & MOD_SMOKE_HIGHRES && sds->wt) {
     density = smoke_turbulence_get_density(sds->wt);
-  else
+  }
+  else {
     density = smoke_get_density(sds->fluid);
+  }
 
   memcpy(values, density, size * sizeof(float));
 
@@ -290,16 +294,20 @@ static void rna_SmokeModifier_color_grid_get(PointerRNA *ptr, float *values)
   }
   else {
     if (sds->flags & MOD_SMOKE_HIGHRES) {
-      if (smoke_turbulence_has_colors(sds->wt))
+      if (smoke_turbulence_has_colors(sds->wt)) {
         smoke_turbulence_get_rgba(sds->wt, values, 0);
-      else
+      }
+      else {
         smoke_turbulence_get_rgba_from_density(sds->wt, sds->active_color, values, 0);
+      }
     }
     else {
-      if (smoke_has_colors(sds->fluid))
+      if (smoke_has_colors(sds->fluid)) {
         smoke_get_rgba(sds->fluid, values, 0);
-      else
+      }
+      else {
         smoke_get_rgba_from_density(sds->fluid, sds->active_color, values, 0);
+      }
     }
   }
 
@@ -319,15 +327,19 @@ static void rna_SmokeModifier_flame_grid_get(PointerRNA *ptr, float *values)
 
   BLI_rw_mutex_lock(sds->fluid_mutex, THREAD_LOCK_READ);
 
-  if (sds->flags & MOD_SMOKE_HIGHRES && sds->wt)
+  if (sds->flags & MOD_SMOKE_HIGHRES && sds->wt) {
     flame = smoke_turbulence_get_flame(sds->wt);
-  else
+  }
+  else {
     flame = smoke_get_flame(sds->fluid);
+  }
 
-  if (flame)
+  if (flame) {
     memcpy(values, flame, size * sizeof(float));
-  else
+  }
+  else {
     memset(values, 0, size * sizeof(float));
+  }
 
   BLI_rw_mutex_unlock(sds->fluid_mutex);
 #  else
@@ -463,7 +475,7 @@ static void rna_def_smoke_domain_settings(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL}};
 
   static const EnumPropertyItem smoke_cache_comp_items[] = {
-      {SM_CACHE_LIGHT, "CACHELIGHT", 0, "Light", "Fast but not so effective compression"},
+      {SM_CACHE_LIGHT, "CACHELIGHT", 0, "Lite", "Fast but not so effective compression"},
       {SM_CACHE_HEAVY, "CACHEHEAVY", 0, "Heavy", "Effective but slow compression"},
       {0, NULL, 0, NULL, NULL},
   };
@@ -576,7 +588,7 @@ static void rna_def_smoke_domain_settings(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_high_resolution", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_SMOKE_HIGHRES);
-  RNA_def_property_ui_text(prop, "High res", "Enable high resolution (using amplification)");
+  RNA_def_property_ui_text(prop, "High Res", "Enable high resolution (using amplification)");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset");
 
@@ -656,7 +668,7 @@ static void rna_def_smoke_domain_settings(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_dissolve_smoke_log", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_SMOKE_DISSOLVE_LOG);
-  RNA_def_property_ui_text(prop, "Logarithmic dissolve", "Using 1/x ");
+  RNA_def_property_ui_text(prop, "Logarithmic Dissolve", "Using 1/x ");
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_resetCache");
 
   prop = RNA_def_property(srna, "point_cache", PROP_POINTER, PROP_NONE);
@@ -1192,7 +1204,7 @@ static void rna_def_smoke_coll_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "collision_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "type");
   RNA_def_property_enum_items(prop, smoke_coll_type_items);
-  RNA_def_property_ui_text(prop, "Collision type", "Collision type");
+  RNA_def_property_ui_text(prop, "Collision Type", "Collision type");
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Smoke_reset");
 }
 

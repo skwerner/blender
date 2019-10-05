@@ -48,12 +48,17 @@ typedef enum {
 
 typedef struct GPUVertBuf {
   GPUVertFormat format;
-  uint vertex_len;   /* number of verts we want to draw */
-  uint vertex_alloc; /* number of verts data */
-  bool dirty;
+  /** Number of verts we want to draw. */
+  uint vertex_len;
+  /** Number of verts data. */
+  uint vertex_alloc;
+  /** 0 indicates not yet allocated. */
+  uint32_t vbo_id;
+  /** Usage hint for GL optimisation. */
+  uint usage : 2;
+  /** Data has been touched and need to be reuploaded to GPU. */
+  uint dirty : 1;
   unsigned char *data; /* NULL indicates data in VRAM (unmapped) */
-  uint32_t vbo_id;     /* 0 indicates not yet allocated */
-  GPUUsageType usage;  /* usage hint for GL optimisation */
 } GPUVertBuf;
 
 GPUVertBuf *GPU_vertbuf_create(GPUUsageType);
@@ -62,6 +67,7 @@ GPUVertBuf *GPU_vertbuf_create_with_format_ex(const GPUVertFormat *, GPUUsageTyp
 #define GPU_vertbuf_create_with_format(format) \
   GPU_vertbuf_create_with_format_ex(format, GPU_USAGE_STATIC)
 
+void GPU_vertbuf_clear(GPUVertBuf *verts);
 void GPU_vertbuf_discard(GPUVertBuf *);
 
 void GPU_vertbuf_init(GPUVertBuf *, GPUUsageType);
@@ -81,9 +87,10 @@ void GPU_vertbuf_data_len_set(GPUVertBuf *, uint v_len);
  * should not be a problem. */
 
 void GPU_vertbuf_attr_set(GPUVertBuf *, uint a_idx, uint v_idx, const void *data);
-void GPU_vertbuf_attr_fill(GPUVertBuf *,
-                           uint a_idx,
-                           const void *data); /* tightly packed, non interleaved input data */
+
+/* Tightly packed, non interleaved input data. */
+void GPU_vertbuf_attr_fill(GPUVertBuf *, uint a_idx, const void *data);
+
 void GPU_vertbuf_attr_fill_stride(GPUVertBuf *, uint a_idx, uint stride, const void *data);
 
 /* For low level access only */

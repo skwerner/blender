@@ -43,7 +43,7 @@
 
 #include "bmesh.h"
 
-#include "tools/bmesh_region_match.h" /* own incldue */
+#include "tools/bmesh_region_match.h" /* own include */
 
 /* avoid re-creating ghash and pools for each search */
 #define USE_WALKER_REUSE
@@ -95,13 +95,13 @@ typedef struct UUIDWalk {
   BLI_mempool *step_pool;
   BLI_mempool *step_pool_items;
 
-  /* Optionaly use face-tag to isolate search */
+  /* Optionally use face-tag to isolate search */
   bool use_face_isolate;
 
   /* Increment for each pass added */
   UUID_Int pass;
 
-  /* runtime vars, aviod re-creating each pass */
+  /* runtime vars, avoid re-creating each pass */
   struct {
     GHash *verts_uuid; /* BMVert -> UUID */
     GSet *faces_step;  /* BMFace */
@@ -854,8 +854,7 @@ static BMFace **bm_mesh_region_match_pair(
     uint i;
 
     faces_result = MEM_mallocN(sizeof(*faces_result) * (faces_result_len + 1), __func__);
-    GHASH_ITER_INDEX(gh_iter, w_dst->faces_uuid, i)
-    {
+    GHASH_ITER_INDEX (gh_iter, w_dst->faces_uuid, i) {
       BMFace *f = BLI_ghashIterator_getKey(&gh_iter);
       faces_result[i] = f;
     }
@@ -1100,7 +1099,7 @@ static BMEdge *bm_face_region_pivot_edge_find(BMFace **faces_region,
         }
       }
       else {
-        /* use incase (depth == 0), no interior verts */
+        /* Use in case (depth == 0), no interior verts. */
         e_pivot_fallback = e;
       }
     } while ((l_iter = l_iter->next) != l_first);

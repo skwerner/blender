@@ -25,9 +25,12 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_string_utils.h"
 
 #include "DNA_text_types.h"
 #include "DNA_space_types.h"
+
+#include "ED_text.h"
 
 #include "text_format.h"
 
@@ -79,8 +82,9 @@ int flatten_string(const SpaceText *st, FlattenString *fs, const char *in)
       i = st->tabnumber - (total % st->tabnumber);
       total += i;
 
-      while (i--)
+      while (i--) {
         flatten_string_append(fs, " ", r, 1);
+      }
 
       in++;
     }
@@ -99,10 +103,12 @@ int flatten_string(const SpaceText *st, FlattenString *fs, const char *in)
 
 void flatten_string_free(FlattenString *fs)
 {
-  if (fs->buf != fs->fixedbuf)
+  if (fs->buf != fs->fixedbuf) {
     MEM_freeN(fs->buf);
-  if (fs->accum != fs->fixedaccum)
+  }
+  if (fs->accum != fs->fixedaccum) {
     MEM_freeN(fs->accum);
+  }
 }
 
 /* takes a string within fs->buf and returns its length */
@@ -121,14 +127,16 @@ int text_check_format_len(TextLine *line, unsigned int len)
     if (strlen(line->format) < len) {
       MEM_freeN(line->format);
       line->format = MEM_mallocN(len + 2, "SyntaxFormat");
-      if (!line->format)
+      if (!line->format) {
         return 0;
+      }
     }
   }
   else {
     line->format = MEM_mallocN(len + 2, "SyntaxFormat");
-    if (!line->format)
+    if (!line->format) {
       return 0;
+    }
   }
 
   return 1;
@@ -218,4 +226,39 @@ TextFormatType *ED_text_format_get(Text *text)
     /* Return the "default" text format */
     return tft_lb.first;
   }
+}
+
+bool ED_text_is_syntax_highlight_supported(Text *text)
+{
+  if (text == NULL) {
+    return false;
+  }
+
+  TextFormatType *tft;
+
+  const char *text_ext = BLI_path_extension(text->id.name + 2);
+  if (text_ext == NULL) {
+    /* Extensionless datablocks are considered highlightable as Python. */
+    return true;
+  }
+  text_ext++; /* skip the '.' */
+  if (BLI_string_is_decimal(text_ext)) {
+    /* "Text.001" is treated as extensionless, and thus highlightable. */
+    return true;
+  }
+
+  /* Check all text formats in the static list */
+  for (tft = tft_lb.first; tft; tft = tft->next) {
+    /* All formats should have an ext, but just in case */
+    const char **ext;
+    for (ext = tft->ext; *ext; ext++) {
+      /* If extension matches text name, return the matching tft */
+      if (BLI_strcasecmp(text_ext, *ext) == 0) {
+        return true;
+      }
+    }
+  }
+
+  /* The filename has a non-numerical extension that we could not highlight. */
+  return false;
 }

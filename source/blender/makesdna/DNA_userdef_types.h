@@ -394,6 +394,8 @@ typedef struct ThemeSpace {
   /** NLA - warning color for duplicate instances of tweaking strip. */
   unsigned char nla_tweakdupli[4];
 
+  /** NLA "Track" */
+  unsigned char nla_track[4];
   /** NLA "Transition" strips. */
   unsigned char nla_transition[4], nla_transition_sel[4];
   /** NLA "Meta" strips. */
@@ -414,7 +416,6 @@ typedef struct ThemeSpace {
   unsigned char metadatabg[4];
   unsigned char metadatatext[4];
 
-  char _pad2[4];
 } ThemeSpace;
 
 /* set of colors for use as a custom color set for Objects/Bones wire drawing */
@@ -577,6 +578,24 @@ typedef struct UserDef_SpaceData {
   char _pad0[6];
 } UserDef_SpaceData;
 
+/**
+ * Storage for UI data that to keep it even after the window was closed. (Similar to
+ * #UserDef_SpaceData.)
+ */
+typedef struct UserDef_FileSpaceData {
+  int display_type;   /* FileSelectParams.display */
+  int thumbnail_size; /* FileSelectParams.thumbnail_size */
+  int sort_type;      /* FileSelectParams.sort */
+  int details_flags;  /* FileSelectParams.details_flags */
+  int flag;           /* FileSelectParams.flag */
+
+  char _pad[4];
+
+  /** Info used when creating the file browser in a temporary window. */
+  int temp_win_sizex;
+  int temp_win_sizey;
+} UserDef_FileSpaceData;
+
 typedef struct UserDef {
   /** UserDef has separate do-version handling, and can be read from other files. */
   int versionfile, subversionfile;
@@ -588,7 +607,8 @@ typedef struct UserDef {
   /** #eUserPref_PrefFlag preferences for the preferences. */
   char pref_flag;
   char savetime;
-  char _pad4[4];
+  char mouse_emulate_3_button_modifier;
+  char _pad4[3];
   /** FILE_MAXDIR length. */
   char tempdir[768];
   char fontdir[768];
@@ -708,11 +728,13 @@ typedef struct UserDef {
   short curssize;
   /** #eColorPicker_Types. */
   short color_picker_type;
+  /** Curve smoothing type for newly added F-Curves. */
+  char auto_smoothing_new;
   /** Interpolation mode for newly added F-Curves. */
   char ipo_new;
   /** Handle types for newly added keyframes. */
   char keyhandles_new;
-  char _pad11[3];
+  char _pad11[2];
   /** #eZoomFrame_Mode. */
   char view_frame_type;
 
@@ -823,6 +845,7 @@ typedef struct UserDef {
 
   /** The UI for the user preferences. */
   UserDef_SpaceData space_data;
+  UserDef_FileSpaceData file_space_data;
 
   /** Runtime data (keep last). */
   UserDef_Runtime runtime;
@@ -972,7 +995,11 @@ typedef enum eUserpref_UI_Flag {
   USER_ZOOM_HORIZ = (1 << 26), /* for CONTINUE and DOLLY zoom */
   USER_SPLASH_DISABLE = (1 << 27),
   USER_HIDE_RECENT = (1 << 28),
-  USER_SHOW_THUMBNAILS = (1 << 29),
+#ifdef DNA_DEPRECATED
+  USER_SHOW_THUMBNAILS =
+      (1 << 29), /* deprecated - We're just trying if there's much desire for this feature, or if
+                    we can make it go for good. Should be cleared if so - Julian, Oct. 2019 */
+#endif
   USER_SAVE_PROMPT = (1 << 30),
   USER_HIDE_SYSTEM_BOOKMARKS = (1u << 31),
 } eUserpref_UI_Flag;
@@ -1216,6 +1243,11 @@ typedef enum eUserpref_TempSpaceDisplayType {
   USER_TEMP_SPACE_DISPLAY_FULLSCREEN,
   USER_TEMP_SPACE_DISPLAY_WINDOW,
 } eUserpref_TempSpaceDisplayType;
+
+typedef enum eUserpref_EmulateMMBMod {
+  USER_EMU_MMB_MOD_ALT = 0,
+  USER_EMU_MMB_MOD_OSKEY = 1,
+} eUserpref_EmulateMMBMod;
 
 #ifdef __cplusplus
 }

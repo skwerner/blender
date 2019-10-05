@@ -2829,6 +2829,12 @@ static PackedFile *direct_link_packedfile(FileData *fd, PackedFile *oldpf)
 
   if (pf) {
     pf->data = newpackedadr(fd, pf->data);
+    if (pf->data == NULL) {
+      /* We cannot allow a PackedFile with a NULL data field,
+       * the whole code assumes this is not possible. See T70315. */
+      printf("%s: NULL packedfile data, cleaning up...\n", __func__);
+      MEM_SAFE_FREE(pf);
+    }
   }
 
   return pf;
@@ -7152,6 +7158,8 @@ static void direct_link_region(FileData *fd, ARegion *ar, int spacetype)
         rv3d->render_engine = NULL;
         rv3d->sms = NULL;
         rv3d->smooth_timer = NULL;
+
+        rv3d->rflag &= ~(RV3D_NAVIGATING | RV3D_PAINTING);
       }
     }
   }

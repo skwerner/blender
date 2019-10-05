@@ -569,6 +569,7 @@ class USERPREF_PT_animation_fcurves(PreferencePanel, Panel):
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
         flow.prop(edit, "fcurve_unselected_alpha", text="F-Curve Visibility")
+        flow.prop(edit, "fcurve_new_auto_smoothing", text="Default Smoothing Mode")
         flow.prop(edit, "keyframe_new_interpolation_type", text="Default Interpolation")
         flow.prop(edit, "keyframe_new_handle_type", text="Default Handles")
         flow.prop(edit, "use_insertkey_xyz_to_rgb", text="XYZ to RGB")
@@ -1405,7 +1406,6 @@ class USERPREF_PT_saveload_file_browser(PreferencePanel, Panel):
         flow.prop(paths, "show_hidden_files_datablocks")
         flow.prop(paths, "hide_recent_locations")
         flow.prop(paths, "hide_system_bookmarks")
-        flow.prop(paths, "show_thumbnails")
 
 
 class USERPREF_MT_ndof_settings(Menu):
@@ -1480,12 +1480,17 @@ class USERPREF_PT_input_mouse(PreferencePanel, Panel):
         return (prefs.active_section == 'INPUT')
 
     def draw_props(self, context, layout):
+        import sys
         prefs = context.preferences
         inputs = prefs.inputs
 
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
         flow.prop(inputs, "use_mouse_emulate_3_button")
+        if sys.platform[:3] != "win":
+            rowsub = flow.row()
+            rowsub.active = inputs.use_mouse_emulate_3_button
+            rowsub.prop(inputs, "mouse_emulate_3_button_modifier")
         flow.prop(inputs, "use_mouse_continuous")
         flow.prop(inputs, "use_drag_immediately")
         flow.prop(inputs, "mouse_double_click_time", text="Double Click Speed")

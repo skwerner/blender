@@ -192,24 +192,21 @@ static bool sculpt_undo_restore_coords(bContext *C, Depsgraph *depsgraph, Sculpt
       if (unode->orig_co) {
         if (ss->modifiers_active) {
           for (int i = 0; i < unode->totvert; i++) {
-            if (sculpt_undo_restore_deformed(ss, unode, i, index[i], mvert[index[i]].co)) {
-              mvert[index[i]].flag |= ME_VERT_PBVH_UPDATE;
-            }
+            sculpt_undo_restore_deformed(ss, unode, i, index[i], mvert[index[i]].co);
+            mvert[index[i]].flag |= ME_VERT_PBVH_UPDATE;
           }
         }
         else {
           for (int i = 0; i < unode->totvert; i++) {
-            if (test_swap_v3_v3(mvert[index[i]].co, unode->orig_co[i])) {
-              mvert[index[i]].flag |= ME_VERT_PBVH_UPDATE;
-            }
+            swap_v3_v3(mvert[index[i]].co, unode->orig_co[i]);
+            mvert[index[i]].flag |= ME_VERT_PBVH_UPDATE;
           }
         }
       }
       else {
         for (int i = 0; i < unode->totvert; i++) {
-          if (test_swap_v3_v3(mvert[index[i]].co, unode->co[i])) {
-            mvert[index[i]].flag |= ME_VERT_PBVH_UPDATE;
-          }
+          swap_v3_v3(mvert[index[i]].co, unode->co[i]);
+          mvert[index[i]].flag |= ME_VERT_PBVH_UPDATE;
         }
       }
     }
@@ -347,8 +344,7 @@ static void sculpt_undo_bmesh_restore_generic(bContext *C,
     BKE_pbvh_search_gather(ss->pbvh, NULL, NULL, &nodes, &totnode);
 
     TaskParallelSettings settings;
-    BLI_parallel_range_settings_defaults(&settings);
-    settings.use_threading = ((sd->flags & SCULPT_USE_OPENMP) && totnode > SCULPT_THREADED_LIMIT);
+    BKE_pbvh_parallel_range_settings(&settings, (sd->flags & SCULPT_USE_OPENMP), totnode);
     BLI_task_parallel_range(
         0, totnode, nodes, sculpt_undo_bmesh_restore_generic_task_cb, &settings);
 

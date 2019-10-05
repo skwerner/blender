@@ -113,6 +113,8 @@ class IMAGE_MT_view(Menu):
         layout.operator("image.view_all", text="Frame All")
         layout.operator("image.view_all", text="Frame All Fit").fit_view = True
 
+        layout.operator("image.view_center_cursor", text="Center View to Cursor")
+
         layout.separator()
 
         if show_render:
@@ -238,6 +240,7 @@ class IMAGE_MT_image(Menu):
             layout.separator()
 
             layout.menu("IMAGE_MT_image_invert")
+            layout.operator("image.resize", text="Resize")
 
         if ima and not show_render:
             if ima.packed_file:

@@ -113,10 +113,10 @@ void imapaint_region_tiles(
 
   IMB_rectclip(ibuf, NULL, &x, &y, &srcx, &srcy, &w, &h);
 
-  *tw = ((x + w - 1) >> IMAPAINT_TILE_BITS);
-  *th = ((y + h - 1) >> IMAPAINT_TILE_BITS);
-  *tx = (x >> IMAPAINT_TILE_BITS);
-  *ty = (y >> IMAPAINT_TILE_BITS);
+  *tw = ((x + w - 1) >> ED_IMAGE_UNDO_TILE_BITS);
+  *th = ((y + h - 1) >> ED_IMAGE_UNDO_TILE_BITS);
+  *tx = (x >> ED_IMAGE_UNDO_TILE_BITS);
+  *ty = (y >> ED_IMAGE_UNDO_TILE_BITS);
 }
 
 void ED_imapaint_dirty_region(Image *ima, ImBuf *ibuf, int x, int y, int w, int h, bool find_old)
@@ -147,11 +147,12 @@ void ED_imapaint_dirty_region(Image *ima, ImBuf *ibuf, int x, int y, int w, int 
 
   imapaint_region_tiles(ibuf, x, y, w, h, &tilex, &tiley, &tilew, &tileh);
 
-  ListBase *undo_tiles = ED_image_undo_get_tiles();
+  ListBase *undo_tiles = ED_image_paint_tile_list_get();
 
   for (ty = tiley; ty <= tileh; ty++) {
     for (tx = tilex; tx <= tilew; tx++) {
-      image_undo_push_tile(undo_tiles, ima, ibuf, &tmpibuf, tx, ty, NULL, NULL, false, find_old);
+      ED_image_paint_tile_push(
+          undo_tiles, ima, ibuf, &tmpibuf, tx, ty, NULL, NULL, false, find_old);
     }
   }
 
@@ -700,7 +701,7 @@ static int paint_invoke(bContext *C, wmOperator *op, const wmEvent *event)
                                     event->type);
 
   if ((retval = op->type->modal(C, op, event)) == OPERATOR_FINISHED) {
-    paint_stroke_data_free(op);
+    paint_stroke_free(C, op);
     return OPERATOR_FINISHED;
   }
   /* add modal handler */
@@ -1023,7 +1024,7 @@ static int sample_color_invoke(bContext *C, wmOperator *op, const wmEvent *event
                                   !RNA_boolean_get(op->ptr, "merged");
 
   paint_sample_color(C, ar, event->mval[0], event->mval[1], use_sample_texture, false);
-  WM_cursor_modal_set(win, BC_EYEDROPPER_CURSOR);
+  WM_cursor_modal_set(win, WM_CURSOR_EYEDROPPER);
 
   WM_event_add_notifier(C, NC_BRUSH | NA_EDITED, brush);
 

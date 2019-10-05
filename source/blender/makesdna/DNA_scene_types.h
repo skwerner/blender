@@ -1762,6 +1762,9 @@ typedef struct Scene {
 
   struct SceneDisplay display;
   struct SceneEEVEE eevee;
+
+  /** When we set multi orientation we put the necessary components into the gizmo. */
+  TransformOrientationSlot multi_orientation_slot[3];
 } Scene;
 
 /* **************** RENDERDATA ********************* */

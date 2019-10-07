@@ -361,7 +361,7 @@ class Device {
   {
     return NULL;
   }
-
+  
   /* OpenVDB data */
   virtual void *vdb_memory()
   {

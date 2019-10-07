@@ -42,6 +42,7 @@ struct OpenVDBReader {
   void mat4sMeta(const openvdb::Name &name, float value[4][4]) const;
 
   bool hasGrid(const openvdb::Name &name) const;
+  openvdb::GridBase::Ptr getGridMetadata(const openvdb::Name &name) const;
   openvdb::GridBase::Ptr getGrid(const openvdb::Name &name) const;
   size_t numGrids() const;
   bool hasMetadata(const openvdb::Name &name);

@@ -1224,6 +1224,16 @@ ccl_device void shader_eval_surface(KernelGlobals *kg,
 #endif
   }
 
+  if ((kernel_data.integrator.feature_overrides & DIFFUSE_SHADERS) && sd->object != OBJECT_NONE) {
+    float3 alpha = shader_bsdf_alpha(kg, sd) * make_float3(0.5f, 0.5f, 0.5f);
+    DiffuseBsdf *bsdf = (DiffuseBsdf *)bsdf_alloc(sd, sizeof(DiffuseBsdf), alpha);
+    if (bsdf != NULL) {
+      bsdf->N = sd->N;
+      sd->flag |= bsdf_diffuse_setup(bsdf);
+    }
+    return;
+  }
+
   if (sd->flag & SD_BSDF_NEEDS_LCG) {
     sd->lcg_state = lcg_state_init_addrspace(state, 0xb4bc3953);
   }
@@ -1390,6 +1400,9 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
   sd->object_flag = 0;
 
   for (int i = 0; stack[i].shader != SHADER_NONE; i++) {
+    if (stack[i].t_enter > sd->ray_length || stack[i].t_exit < sd->ray_length) {
+      continue;
+    }
     /* setup shaderdata from stack. it's mostly setup already in
      * shader_setup_from_volume, this switching should be quick */
     sd->object = stack[i].object;

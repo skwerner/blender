@@ -641,6 +641,12 @@ const EnumPropertyItem rna_enum_transform_orientation_items[] = {
      ICON_ORIENTATION_GLOBAL,
      "Axial",
      "Align the transformation axes to the world space no matter the dependencies"},
+    {V3D_ORIENT_MULTI,
+     "MULTI",
+     ICON_ORIENTATION_GIMBAL,
+     "Multi",
+     "Allows for the selection of different transform orientation for different types of "
+     "transformations"},
     // {V3D_ORIENT_CUSTOM, "CUSTOM", 0, "Custom", "Use a custom transform orientation"},
     {0, NULL, 0, NULL, NULL},
 };
@@ -1851,6 +1857,23 @@ static int rna_Scene_transform_orientation_slots_length(PointerRNA *ptr)
   Scene *scene = (Scene *)ptr->id.data;
   return ARRAY_SIZE(scene->orientation_slots);
 }
+
+/* Scene.multi_transform_orientation_slots */
+static void rna_Scene_multi_transform_orientation_slots_begin(CollectionPropertyIterator *iter,
+                                                              PointerRNA *ptr)
+{
+  Scene *scene = (Scene *)ptr->id.data;
+  TransformOrientationSlot *orient_slot = &scene->multi_orientation_slot[0];
+  rna_iterator_array_begin(
+      iter, orient_slot, sizeof(*orient_slot), ARRAY_SIZE(scene->multi_orientation_slot), 0, NULL);
+}
+
+static int rna_Scene_multi_transform_orientation_slots_length(PointerRNA *ptr)
+{
+  Scene *scene = (Scene *)ptr->id.data;
+  return ARRAY_SIZE(scene->multi_orientation_slot);
+}
+
 
 static bool rna_Scene_use_audio_get(PointerRNA *ptr)
 {
@@ -7480,6 +7503,19 @@ void RNA_def_scene(BlenderRNA *brna)
                                     NULL);
   RNA_def_property_struct_type(prop, "TransformOrientationSlot");
   RNA_def_property_ui_text(prop, "Transform Orientation Slots", "");
+
+  prop = RNA_def_property(srna, "multi_orientation_slot", PROP_COLLECTION, PROP_NONE);
+  RNA_def_property_collection_funcs(prop,
+                                    "rna_Scene_multi_transform_orientation_slots_begin",
+                                    "rna_iterator_array_next",
+                                    "rna_iterator_array_end",
+                                    "rna_iterator_array_get",
+                                    "rna_Scene_multi_transform_orientation_slots_length",
+                                    NULL,
+                                    NULL,
+                                    NULL);
+  RNA_def_property_struct_type(prop, "TransformOrientationSlot");
+  RNA_def_property_ui_text(prop, "Multi Transformation Orientation", "");
 
   /* 3D View Cursor */
   prop = RNA_def_property(srna, "cursor", PROP_POINTER, PROP_NONE);

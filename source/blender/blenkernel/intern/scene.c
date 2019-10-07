@@ -1375,6 +1375,10 @@ void BKE_scene_frame_set(struct Scene *scene, double cfra)
 
 TransformOrientationSlot *BKE_scene_orientation_slot_get(Scene *scene, int slot_index)
 {
+  if (scene->orientation_slots[1].type == V3D_ORIENT_MULTI) {
+    return &scene->multi_orientation_slot[slot_index - 1];
+  }
+
   if ((scene->orientation_slots[slot_index].flag & SELECT) == 0) {
     slot_index = SCE_ORIENT_DEFAULT;
   }
@@ -1384,7 +1388,7 @@ TransformOrientationSlot *BKE_scene_orientation_slot_get(Scene *scene, int slot_
 TransformOrientationSlot *BKE_scene_orientation_slot_get_from_flag(Scene *scene, int flag)
 {
   BLI_assert(flag && !(flag & ~(V3D_GIZMO_SHOW_OBJECT_TRANSLATE | V3D_GIZMO_SHOW_OBJECT_ROTATE |
-                                V3D_GIZMO_SHOW_OBJECT_SCALE)));
+                                V3D_GIZMO_SHOW_OBJECT_SCALE | V3D_GIZMO_MULTI_ORIENT)));
   int slot_index = SCE_ORIENT_DEFAULT;
   if (flag & V3D_GIZMO_SHOW_OBJECT_TRANSLATE) {
     slot_index = SCE_ORIENT_TRANSLATE;

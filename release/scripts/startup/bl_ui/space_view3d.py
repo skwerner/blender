@@ -5314,9 +5314,22 @@ class VIEW3D_PT_gizmo_display(Panel):
         col.active = view.show_gizmo_context
         col.label(text="Object Gizmos")
         col.prop(scene.transform_orientation_slots[1], "type", text="")
-        col.prop(view, "show_gizmo_object_translate", text="Move")
-        col.prop(view, "show_gizmo_object_rotate", text="Rotate")
-        col.prop(view, "show_gizmo_object_scale", text="Scale")
+        if (scene.transform_orientation_slots[1].type == "MULTI"):
+            subcol = col.split()
+            subcol.prop(view, "show_gizmo_object_translate", text="Move")
+            subcol.prop(scene.multi_orientation_slot[0], "type", text="")
+            subcol = col.column()
+            subcol = col.split()
+            subcol.prop(view, "show_gizmo_object_rotate", text="Rotate")
+            subcol.prop(scene.multi_orientation_slot[1], "type", text="")
+            subcol = col.column()
+            subcol = col.split()
+            subcol.prop(view, "show_gizmo_object_scale", text="Scale")
+            subcol.prop(scene.multi_orientation_slot[2], "type", text="")
+        else:
+            col.prop(view, "show_gizmo_object_translate", text="Move")
+            col.prop(view, "show_gizmo_object_rotate", text="Rotate")
+            col.prop(view, "show_gizmo_object_scale", text="Scale")
 
         layout.separator()
 

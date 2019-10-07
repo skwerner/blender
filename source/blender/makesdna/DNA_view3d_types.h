@@ -541,6 +541,7 @@ enum {
   V3D_ORIENT_GIMBAL = 4,
   V3D_ORIENT_CURSOR = 5,
   V3D_ORIENT_AXIAL  = 6,
+  V3D_ORIENT_MULTI  = 7,
   V3D_ORIENT_CUSTOM = 1024,
   /** Runtime only, never saved to DNA. */
   V3D_ORIENT_CUSTOM_MATRIX = (V3D_ORIENT_CUSTOM - 1),
@@ -560,6 +561,7 @@ enum {
   V3D_GIZMO_SHOW_OBJECT_TRANSLATE = (1 << 0),
   V3D_GIZMO_SHOW_OBJECT_ROTATE = (1 << 1),
   V3D_GIZMO_SHOW_OBJECT_SCALE = (1 << 2),
+  V3D_GIZMO_MULTI_ORIENT = (1 << 3),
 };
 /** #View3d.gizmo_show_armature */
 enum {

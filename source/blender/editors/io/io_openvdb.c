@@ -18,8 +18,10 @@
 #  include "BKE_context.h"
 #  include "BKE_global.h"
 #  include "BKE_main.h"
+#  include "BKE_material.h"
 #  include "BKE_mesh.h"
 #  include "BKE_modifier.h"
+#  include "BKE_node.h"
 #  include "BKE_object.h"
 #  include "BKE_report.h"
 
@@ -27,6 +29,8 @@
 #  include "BLI_listbase.h"
 #  include "BLI_path_util.h"
 #  include "BLI_string.h"
+
+#  include "DEG_depsgraph.h"
 
 #  include "RNA_access.h"
 
@@ -95,9 +99,34 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
   BLI_split_file_part(filepath, filename, 64);
   BLI_stringdec(filename, cachename, NULL, NULL);
 
+  /* Set up a new object and mesh to apply the OpenVDB modifier to. */
   Mesh *mesh = BKE_mesh_add(bmain, cachename);
   Object *ob = BKE_object_add(bmain, scene, viewlayer, OB_MESH, cachename);
   ob->data = mesh;
+
+  Material *material = BKE_material_add(bmain, "OpenVDB");
+  BKE_object_material_slot_add(bmain, ob);
+  assign_material(bmain, ob, material, ob->totcol, BKE_MAT_ASSIGN_EXISTING);
+
+  if (!material->nodetree) {
+    material->nodetree = ntreeAddTree(NULL, "Shader Nodetree", "ShaderNodeTree");
+  }
+  material->use_nodes = true; /* Create a basic volumetric shader. */
+  struct bNodeTree *tree = material->nodetree;
+  struct bNode *volume_shader_node = nodeAddStaticNode(C, tree, SH_NODE_VOLUME_PRINCIPLED);
+  struct bNode *output_node = nodeAddStaticNode(C, tree, SH_NODE_OUTPUT_MATERIAL);
+  if (volume_shader_node && output_node) {
+    volume_shader_node->locx = 0;
+    volume_shader_node->locy = 300;
+    volume_shader_node->flag |= NODE_SELECT;
+    output_node->locx = 300;
+    output_node->locy = 300;
+    output_node->flag |= NODE_SELECT;
+    bNodeSocket *from_socket = (bNodeSocket *)BLI_findlink(&volume_shader_node->outputs, 0);
+    bNodeSocket *to_socket = (bNodeSocket *)BLI_findlink(&output_node->inputs, 1);
+    nodeAddLink(tree, volume_shader_node, from_socket, output_node, to_socket);
+    ntreeUpdateTree(bmain, tree);
+  }
 
   ModifierData *md = modifier_new(eModifierType_OpenVDB);
   OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
@@ -112,6 +141,28 @@ static int wm_openvdb_import_exec(bContext *C, wmOperator *op)
   vdbmd->frame_offset = cache->startframe - 1;
   cache->endframe -= cache->startframe - 1;
   cache->startframe = 1;
+
+  /* Make sure to trigger updates. */
+  PointerRNA ptr;
+  PropertyRNA *prop;
+  RNA_pointer_create(NULL, &RNA_OpenVDBModifier, vdbmd, &ptr);
+  prop = RNA_struct_find_property(&ptr, "filepath");
+  RNA_property_update(C, &ptr, prop);
+
+  /* Try to find some default grids. */
+  prop = RNA_struct_find_property(&ptr, "density");
+  PropertyRNA *flame = RNA_struct_find_property(&ptr, "flame");
+  if (prop && vdbmd->numgrids > 0) {
+    for (int i = 0; i < vdbmd->numgrids; ++i) {
+      if (BLI_strcaseeq(vdbmd->grids[i], "density") || BLI_strcaseeq(vdbmd->grids[i], "Smoke")) {
+        RNA_property_enum_set(&ptr, prop, i + 1);
+      }
+      else if (flame && (BLI_strcaseeq(vdbmd->grids[i], "temperature") ||
+                         BLI_strcaseeq(vdbmd->grids[i], "FireFuel"))) {
+        RNA_property_enum_set(&ptr, flame, i + 1);
+      }
+    }
+  }
 
   return OPERATOR_FINISHED;
 }

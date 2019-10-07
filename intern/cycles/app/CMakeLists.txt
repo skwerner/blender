@@ -34,20 +34,15 @@ if(WITH_CYCLES_OSL)
   list(APPEND LIBRARIES cycles_kernel_osl)
 endif()
 
-<<<<<<< HEAD
 if(NOT CYCLES_STANDALONE_REPOSITORY)
   list(APPEND LIBRARIES bf_intern_glew_mx bf_intern_guardedalloc bf_intern_numaapi)
 endif()
 
-if(WITH_CYCLES_LOGGING)
-=======
 if(WITH_OPENVDB)
 	list(APPEND LIBRARIES cycles_kernel_vdb)
 endif()
 
-if(CYCLES_STANDALONE_REPOSITORY)
-	if(WITH_CYCLES_LOGGING)
->>>>>>> 09abd45df40... Cycles: First attempts at making OpenVDB modifier show up in render
+if(WITH_CYCLES_LOGGING)
   list(APPEND LIBRARIES
     ${GLOG_LIBRARIES}
     ${GFLAGS_LIBRARIES}

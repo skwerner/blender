@@ -240,7 +240,7 @@ typedef struct VertexSnapUserdata {
 static void VertexSnapModifier_do_task(void *__restrict userdata,
                                        const int iter,
                                        const TaskParallelTLS *__restrict UNUSED(tls))
-{
+
 	VertexSnapUserdata     *data  = (VertexSnapUserdata *)userdata;
 	VertexSnapModifierData* vmd   = data->vmd;
 	MDeformVert *dverts           = data->dverts;
@@ -385,6 +385,7 @@ static void VertexSnapModifier_do(ModifierData *md,
 	#endif
 
 	TaskParallelSettings settings;
+
 	BLI_parallel_range_settings_defaults(&settings);
 	settings.use_threading = (vertex_count > 512);
 	BLI_task_parallel_range(0, vertex_count, &data, VertexSnapModifier_do_task, &settings);

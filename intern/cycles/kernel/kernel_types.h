@@ -477,6 +477,7 @@ typedef enum DenoiseFlag {
 typedef enum FeatureOverrides {
   IGNORE_SHADERS = (1 << 0),
   IGNORE_VOLUMES = (1 << 1),
+  DIFFUSE_SHADERS = (1 << 2),
 } FeatureOverrides;
 
 #ifdef __KERNEL_DEBUG__
@@ -1036,6 +1037,12 @@ typedef ccl_addr_space struct ShaderDataTinyStorage {
 typedef struct VolumeStack {
   int object;
   int shader;
+  /* These indicate the entry and exit points of the current ray.
+   Volume shaders are only to be evaluated when the ray's t
+   overlaps the volume bounds. */
+  float t_enter;
+  float t_exit;
+  int depth;
 } VolumeStack;
 #endif
 

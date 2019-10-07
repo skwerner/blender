@@ -42,16 +42,12 @@ if(WITH_CYCLES_OSL)
     ${LLVM_LIBRARIES}
   )
 endif()
-<<<<<<< HEAD
-if(WITH_OPENCOLORIO)
-=======
 if(WITH_OPENVDB)
-	list(ALLEND ALL_CYCLES_LIBRARIES)
+	list(APPEND ALL_CYCLES_LIBRARIES)
 		cycles_kernel_vdb
 	)
 endif()
-if(WITH_IMAGE_OPENJPEG AND NOT WITH_SYSTEM_OPENJPEG)
->>>>>>> 09abd45df40... Cycles: First attempts at making OpenVDB modifier show up in render
+if(WITH_OPENCOLORIO)
   list(APPEND ALL_CYCLES_LIBRARIES
     ${OPENCOLORIO_LIBRARIES}
   )

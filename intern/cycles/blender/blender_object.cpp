@@ -486,6 +486,11 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
                                 make_float3(0.5f, 0.5f, 0.5f);
       object->dupli_uv = get_float2(b_instance.uv());
       object->random_id = b_instance.random_id();
+
+      /* Instances add @ and hex of random_id, to uniquely identify them */
+      if (scene->film->cryptomatte_passes & CRYPT_OPT_UNIQUE_OBJECTS) {
+        object->name = ustring::format("%s@%08x", object->name, object->random_id);
+      }
     }
     else {
       object->dupli_generated = make_float3(0.0f, 0.0f, 0.0f);

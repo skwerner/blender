@@ -399,6 +399,7 @@ typedef enum CryptomatteType {
   CRYPT_MATERIAL = (1 << 1),
   CRYPT_ASSET = (1 << 2),
   CRYPT_ACCURATE = (1 << 3),
+  CRYPT_UNIQUE_OBJECTS = (1 << 4),
 } CryptomatteType;
 
 typedef enum DenoisingPassOffsets {

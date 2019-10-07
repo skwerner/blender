@@ -883,6 +883,7 @@ class CYCLES_RENDER_PT_passes_crypto(CyclesButtonsPanel, Panel):
 
         row = layout.row(align=True)
         row.active = use_cpu(context)
+        row.prop(cycles_view_layer, "pass_crypto_unique_objects", text="Unique Objects")
         row.prop(cycles_view_layer, "pass_crypto_accurate", text="Accurate Mode")
 
 

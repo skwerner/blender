@@ -1702,7 +1702,7 @@ static int wm_splash_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *
   return OPERATOR_FINISHED;
 }
 
-static void WM_OT_splash(wmOperatorType *ot)
+void WM_OT_splash(wmOperatorType *ot)
 {
   ot->name = "Splash Screen";
   ot->idname = "WM_OT_splash";

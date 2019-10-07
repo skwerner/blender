@@ -240,6 +240,7 @@ typedef struct VertexSnapUserdata {
 static void VertexSnapModifier_do_task(void *__restrict userdata,
                                        const int iter,
                                        const TaskParallelTLS *__restrict UNUSED(tls))
+{
 
 	VertexSnapUserdata     *data  = (VertexSnapUserdata *)userdata;
 	VertexSnapModifierData* vmd   = data->vmd;

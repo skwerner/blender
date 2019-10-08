@@ -624,9 +624,15 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
     scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
                                                         CRYPT_ACCURATE);
   }
-  if (get_boolean(crp, "pass_crypto_unique_objects") && scene->film->cryptomatte_passes & CRYPT_OBJECT) {
+  if (get_boolean(crp, "pass_crypto_unique_objects") &&
+      scene->film->cryptomatte_passes & CRYPT_OBJECT) {
     scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
                                                         CRYPT_UNIQUE_OBJECTS);
+  }
+  if (get_boolean(crp, "pass_crypto_with_manifest") &&
+      scene->film->cryptomatte_passes != CRYPT_NONE) {
+    scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
+        CRYPT_WITH_MANIFEST);
   }
 
   return passes;

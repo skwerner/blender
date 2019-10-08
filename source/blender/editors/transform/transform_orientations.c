@@ -515,6 +515,23 @@ void initTransformOrientation(bContext *C, TransInfo *t)
           copy_m3_m4(t->spacemtx, final_orientation);
           normalize_m3(t->spacemtx);
         }
+        else if (ob->mode & OB_MODE_POSE) {
+          Scene *scene = CTX_data_scene(C);
+          const int pivot_point = scene->toolsettings->transform_pivot_point;
+          ED_getTransformOrientationMatrix(C, t->spacemtx, pivot_point);
+          //normalize_m3(t->spacemtx);
+          for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+              if (t->spacemtx[i][j] > 0) {
+                t->spacemtx[i][j] = ((t->spacemtx[i][j] - floorf(t->spacemtx[i][j])) < 1.0e-3) ? floorf(t->spacemtx[i][j]) : t->spacemtx[i][j];
+              }
+              else {
+                t->spacemtx[i][j] = ((-ceilf(t->spacemtx[i][j]) - t->spacemtx[i][j]) < 1.0e-3) ? ceilf(t->spacemtx[i][j]) : t->spacemtx[i][j];
+              }
+            }
+          }
+          break;
+        }
         else if (child_of) {
           bChildOfConstraint *data = con->data;
           if (data->tar) {

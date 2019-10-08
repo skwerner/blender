@@ -746,6 +746,22 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
         ok = true;
         break;
       }
+      else if (ob->mode & OB_MODE_POSE) {
+        ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
+        // deal with very small values - meant for numerical issues
+        for (int i = 0; i < 3;i++) {
+          for(int j = 0; j < 3; j++) {
+            if (r_mat[i][j] > 0) {
+              r_mat[i][j] = ((r_mat[i][j] - floorf(r_mat[i][j])) < 1.0e-3) ? floorf(r_mat[i][j]) : r_mat[i][j];
+            }
+            else {
+              r_mat[i][j] = ((-ceilf(r_mat[i][j]) - r_mat[i][j]) < 1.0e-3) ? ceilf(r_mat[i][j]) : r_mat[i][j];
+            }
+          }
+        }
+        ok = true;
+        break;
+      }
       else if (child_of) {
         bChildOfConstraint *data = con->data;
         if (data->tar) {

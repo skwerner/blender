@@ -70,7 +70,10 @@ enum_filter_types = (
 
 enum_volume_integrators = (
     ('VOLUME_RAY_MARCH', "Ray March", "Ray Marching"),
-    ('VOLUME_TRACKING', "Tracking", "Tracking"),
+    ('VOLUME_WOODCOCK_TRACKING', "Woodcock Tracking", "Woodcock Tracking"),
+    ('VOLUME_RATIO_TRACKING', "Ratio Tracking", "Ratio Tracking"),
+    ('VOLUME_WEIGHTED_TRACKING', "Weighted Tracking", "Weighted Tracking"),
+    ('VOLUME_SPECTRAL_TRACKING', "Spectral Tracking", "Spectral Tracking"),
 )
 
 enum_panorama_types = (

@@ -254,6 +254,39 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
   *throughput = tp;
 }
 
+/* Simple Woodcock tracking to estimate volume transmission.
+   Monochromatic.
+   Requires sigma_m to be a tight upper bound of the volume density. */
+ccl_device void kernel_volume_transmission_woodcock(KernelGlobals *kg,
+                          ccl_addr_space PathState *state,
+                          Ray *ray,
+                          ShaderData *sd,
+                          float3 *throughput)
+{
+  const float sigma_m =  kernel_data.integrator.volume_max_density;
+  float t = 0.0f;
+  float3 sigma_t;
+  float s2;
+  uint lcg_state = lcg_state_init_addrspace(state, 0x12345678);
+  for (int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
+    float s = lcg_step_float_addrspace(&lcg_state);
+    t = t - (logf(1.f - s) / sigma_m);
+    if(t >= ray->t) {
+        break;
+    }
+    s2 = lcg_step_float_addrspace(&lcg_state);
+    float3 new_P = ray->P + ray->D * t;
+    if (!volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t)) {
+      continue;
+    }
+    if (s2 < (average(sigma_t) / sigma_m)) {
+      *throughput = make_float3(0.0f, 0.0f, 0.0f);
+      break;
+    }
+  }
+  return;
+}
+
 /* Residual ratio tracking to estimate volume transmission.
  See Novak et al, 2014, "Residual Ratio Tracking for Estimating Attenuation in Participating Media."
  sigma_c should be the lower bound of the volume density,
@@ -263,14 +296,18 @@ ccl_device void kernel_volume_transmission_residual_ratio(KernelGlobals *kg,
                                                           ccl_addr_space PathState *state,
                                                           Ray *ray,
                                                           ShaderData *sd,
-                                                          float3 *throughput,
-                                                          float sigma_r,
-                                                          float sigma_c = 0.0f)
+                                                          float3 *throughput)
 {
+  /* Control variate, set to min density. */
+  const float sigma_c = 0.0f;
+  /* Residual compononent, max density - min density. */
+  const float sigma_r =  kernel_data.integrator.volume_max_density - sigma_c;
+  float3 sigma_t = make_float3(0.0f, 0.0f, 0.0f);
   float t = 0.0f;
   float T_c = expf(-sigma_c * ray->t);
-  float3 T_r = make_float3(1.0f, 1.0f, 1.0f);
-  uint lcg_state = lcg_state_init_addrspace(state, 0xabcdabcd);
+  float3 T_r = *throughput;
+
+  uint lcg_state = lcg_state_init_addrspace(state, 0x12345678);
   /* Sometimes, excessive values for ray.t come in when a volume exit intersection is missed.
    Allow for a max number of steps to prevent this from stepping towards infinite lights.
    The original algorithm would be while(true) instead of a for loop.
@@ -282,8 +319,9 @@ ccl_device void kernel_volume_transmission_residual_ratio(KernelGlobals *kg,
       break;
     }
     float3 new_P = ray->P + ray->D * t;
-    float3 sigma_t;
-    volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t);
+    if (!volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t)) {
+      continue;
+    }
     T_r = T_r * (make_float3(1.0f, 1.0f, 1.0f) -
                  (sigma_t - make_float3(sigma_c, sigma_c, sigma_c)) / sigma_r);
   }
@@ -310,9 +348,11 @@ ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
     if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_RAY_MARCH) {
       kernel_volume_shadow_heterogeneous(kg, state, ray, shadow_sd, throughput);
     }
+    else if(kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_WOODCOCK) {
+      kernel_volume_transmission_woodcock(kg, state, ray, shadow_sd, throughput);
+    }
     else {
-      kernel_volume_transmission_residual_ratio(
-          kg, state, ray, shadow_sd, throughput, kernel_data.integrator.volume_max_density);
+      kernel_volume_transmission_residual_ratio(kg, state, ray, shadow_sd, throughput);
     }
   }
   else
@@ -717,6 +757,174 @@ kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
   return VOLUME_PATH_ATTENUATED;
 }
 
+ccl_device VolumeIntegrateResult
+kernel_volume_integrate_heterogeneous_spectral_tracking(KernelGlobals *kg,
+                                               ccl_addr_space PathState *state,
+                                               Ray *ray,
+                                               ShaderData *sd,
+                                               PathRadiance *L,
+                                               ccl_addr_space float3 *throughput)
+{
+  uint lcg_state = lcg_state_init_addrspace(state, 0x0f0f0f0f);
+  float3 tp = *throughput;
+  float t = 0.0f;
+  float sigma_samp = kernel_data.integrator.volume_max_density;
+  do {
+    float s = lcg_step_float_addrspace(&lcg_state);
+    float dt = -(logf(1.f - s) / sigma_samp);
+    t = t + dt;
+    if (t > ray->t) {
+      break;
+    }
+    float3 new_P = ray->P + ray->D * t;
+    VolumeShaderCoefficients coeff;
+    if (!volume_shader_sample(kg, sd, state, new_P, &coeff)) {
+      continue;
+    }
+    float3 sigma_a = coeff.sigma_t - coeff.sigma_s;
+    float3 sigma_n = make_float3(sigma_samp, sigma_samp, sigma_samp) - coeff.sigma_t;
+
+    /* Spectral tracking, Kutz et al 2017 */
+    float pa = max3(sigma_a * tp);
+    float ps = max3(coeff.sigma_s * tp);
+    float pn = max3(sigma_n * tp);
+    const float ic = 1.0f / (pa + ps + pn);
+    pa *= ic;
+    ps *= ic;
+    pn *= ic;
+
+    float xi = lcg_step_float_addrspace(&lcg_state);
+    if (xi < 1.0f - pn) {
+      sd->P = ray->P + t * ray->D;
+      tp *= coeff.sigma_s / (sigma_samp * ps);
+      throughput->x = saturate(tp.x);
+      throughput->y = saturate(tp.y);
+      throughput->z = saturate(tp.z);
+      return VOLUME_PATH_SCATTERED;
+    }
+    else if (xi < pa) {
+      /* Absorption. */
+      tp *= sigma_a / (sigma_samp * pa);
+      break;
+    }
+    else {
+      /* continue */
+      tp *= sigma_n / (sigma_samp * pn);
+    }
+  } while (fabsf(max3(tp)) > 0.0f && t < ray->t);
+
+  throughput->x = saturate(tp.x);
+  throughput->y = saturate(tp.y);
+  throughput->z = saturate(tp.z);
+  return VOLUME_PATH_ATTENUATED;
+}
+
+/* Monochromatic Woodcock tracking. Unbiased and noisy.
+ * Emission is handled via "Line Integration for Rendering Heterogeneous Emissive Volumes",
+ * Simon et al, EGSR 2017. */
+
+ccl_device VolumeIntegrateResult
+kernel_volume_integrate_heterogeneous_woodcock_tracking(KernelGlobals *kg,
+                                               ccl_addr_space PathState *state,
+                                               Ray *ray,
+                                               ShaderData *sd,
+                                               PathRadiance *L,
+                                               ccl_addr_space float3 *throughput)
+{
+  uint lcg_state = lcg_state_init_addrspace(state, 0x12345678);
+  float t = 0.0f;
+  float sigma_m = kernel_data.integrator.volume_max_density;
+  VolumeShaderCoefficients coeff;
+
+  for (int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
+    float s = lcg_step_float_addrspace(&lcg_state);
+    float dt = - (logf(1.f - s) / sigma_m);
+    t = t + dt ;
+    if(t >= ray->t) {
+      break;
+    }
+    float s2 = lcg_step_float_addrspace(&lcg_state);
+    float3 new_P = ray->P + ray->D * t;
+    if (volume_shader_sample(kg, sd, state, new_P, &coeff)) {
+      int closure_flag = sd->flag;
+      if (L && (closure_flag & SD_EMISSION)) {
+        path_radiance_accum_emission(L, state, *throughput * dt, coeff.emission);
+      }
+      if (s2 < max3(coeff.sigma_s) / sigma_m) {
+        sd->P = new_P;
+        return VOLUME_PATH_SCATTERED;
+      }
+      else if (s2 < (max3(coeff.sigma_t) / sigma_m)) {
+        *throughput = make_float3(0.0f, 0.0f, 0.0f);
+        return VOLUME_PATH_ATTENUATED;
+      }
+    }
+  }
+  return VOLUME_PATH_ATTENUATED;
+}
+
+/* Woodcock tracking with spectral MIS. Unbiased and noisy.
+ * Emission is handled via "Line Integration for Rendering Heterogeneous Emissive Volumes",
+ * Simon et al, EGSR 2017. */
+
+ccl_device VolumeIntegrateResult
+kernel_volume_integrate_heterogeneous_woodcock_mis_tracking(KernelGlobals *kg,
+                                               ccl_addr_space PathState *state,
+                                               Ray *ray,
+                                               ShaderData *sd,
+                                               PathRadiance *L,
+                                               ccl_addr_space float3 *throughput)
+{
+  uint lcg_state = lcg_state_init_addrspace(state, 0x12345678);
+  float t = 0.0f;
+  float sigma_m = kernel_data.integrator.volume_max_density;
+  VolumeShaderCoefficients coeff;
+  float3 channel_pdf;
+  float rphase = path_state_rng_1D(kg, state, PRNG_PHASE_CHANNEL);
+  int channel = kernel_volume_sample_channel(make_float3(1.0f, 1.0f, 1.0f), make_float3(1.0f, 1.0f, 1.0f), rphase, &channel_pdf);
+  float3 tp = *throughput;
+  float3 pdf = make_float3(1.0f, 1.0f, 1.0f);
+
+  for (int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
+    float s = lcg_step_float_addrspace(&lcg_state);
+    float dt = - (logf(1.f - s) / sigma_m);
+    t = t + dt ;
+    if(t >= ray->t) {
+      break;
+    }
+    float s2 = lcg_step_float_addrspace(&lcg_state);
+    float3 new_P = ray->P + ray->D * t;
+    const float Tc = expf(-t*sigma_m);
+    coeff.sigma_t = make_float3(1.0f, 1.0f, 1.0f);
+    if (volume_shader_sample(kg, sd, state, new_P, &coeff)) {
+      int closure_flag = sd->flag;
+      if (L && (closure_flag & SD_EMISSION)) {
+        path_radiance_accum_emission(L, state, *throughput * dt, coeff.emission);
+      }
+      if (s2 < kernel_volume_channel_get(coeff.sigma_s, channel) / sigma_m) {
+        sd->P = new_P;
+        tp *= Tc * coeff.sigma_s;
+        pdf *= Tc * coeff.sigma_s;
+        *throughput = tp / average(pdf);
+        return VOLUME_PATH_SCATTERED;
+      }
+      else if (s2 < (kernel_volume_channel_get(coeff.sigma_t, channel) / sigma_m)) {
+        float3 sigma_a = coeff.sigma_t - coeff.sigma_s;
+        tp *= Tc * sigma_a;
+        pdf *= Tc * sigma_a;
+        *throughput = tp / average(pdf);
+        return VOLUME_PATH_ATTENUATED;
+      }
+    }
+
+    tp *= Tc * (make_float3(sigma_m, sigma_m, sigma_m) - coeff.sigma_t);
+    pdf *= Tc * (make_float3(sigma_m, sigma_m, sigma_m) - coeff.sigma_t);
+  }
+  *throughput = tp / average(pdf);
+  return VOLUME_PATH_MISSED;
+}
+
+
 /* The particle tracing algorithm from section 4.1 in
  "Unbiased Light Transport Estimators for Inhomogeneous Participating Media"
  Szirmay-Kalos et al, 2017 */
@@ -742,7 +950,9 @@ kernel_volume_integrate_heterogeneous_tracking(KernelGlobals *kg,
     }
     float3 new_P = ray->P + ray->D * t;
     VolumeShaderCoefficients coeff;
-    volume_shader_sample(kg, sd, state, new_P, &coeff);
+    if (!volume_shader_sample(kg, sd, state, new_P, &coeff)) {
+      continue;
+    }
     int closure_flag = sd->flag;
     float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
     int channel = (int)(rphase * 3.0f); /* TODO: better choice of channel */
@@ -808,8 +1018,15 @@ kernel_volume_integrate(KernelGlobals *kg,
   shader_setup_from_volume(kg, sd, ray);
 
   if (heterogeneous)
-    if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_UNBIASED) {
+    if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_WEIGHTED) {
       return kernel_volume_integrate_heterogeneous_tracking(kg, state, ray, sd, L, throughput);
+    }
+    else if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_SPECTRAL) {
+//      return kernel_volume_integrate_heterogeneous_woodcock_mis_tracking(kg, state, ray, sd, L, throughput);
+      return kernel_volume_integrate_heterogeneous_spectral_tracking(kg, state, ray, sd, L, throughput);
+    }
+    else if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_WOODCOCK) {
+      return kernel_volume_integrate_heterogeneous_woodcock_tracking(kg, state, ray, sd, L, throughput);
     }
     else {
       return kernel_volume_integrate_heterogeneous_distance(kg, state, ray, sd, L, throughput);
@@ -1249,7 +1466,7 @@ ccl_device bool kernel_volume_use_decoupled(KernelGlobals *kg,
   if (!kernel_data.integrator.volume_decoupled)
     return false;
 
-  if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_UNBIASED)
+  if (kernel_data.integrator.volume_integrator != VOLUME_INTEGRATOR_RAY_MARCH)
     return false;
 
 #  ifdef __KERNEL_GPU__

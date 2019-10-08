@@ -398,10 +398,14 @@ typedef enum CryptomatteType {
   CRYPT_OBJECT = (1 << 0),
   CRYPT_MATERIAL = (1 << 1),
   CRYPT_ASSET = (1 << 2),
-  CRYPT_ACCURATE = (1 << 3),
-  CRYPT_UNIQUE_OBJECTS = (1 << 4),
-  CRYPT_WITH_MANIFEST = (1 << 5),
 } CryptomatteType;
+
+typedef enum CryptomatteOption {
+  CRYPT_OPT_NONE = 0,
+  CRYPT_OPT_ACCURATE = (1 << 0),
+  CRYPT_OPT_UNIQUE_OBJECTS = (1 << 1),
+  CRYPT_OPT_WITH_MANIFEST = (1 << 2),
+} CryptomatteOption;
 
 typedef enum DenoisingPassOffsets {
   DENOISING_PASS_NORMAL = 0,
@@ -1212,6 +1216,7 @@ typedef struct KernelFilm {
   float pass_shadow_scale;
   int filter_table_offset;
   int cryptomatte_passes;
+  int cryptomatte_options;
   int cryptomatte_depth;
   int pass_cryptomatte;
 

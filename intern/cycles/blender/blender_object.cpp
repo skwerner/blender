@@ -488,7 +488,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
       object->random_id = b_instance.random_id();
 
       /* Instances add @ and hex of random_id, to uniquely identify them */
-      if (scene->film->cryptomatte_passes & CRYPT_OPT_UNIQUE_OBJECTS) {
+      if (scene->film->cryptomatte_options & CRYPT_OPT_UNIQUE_OBJECTS) {
         object->name = ustring::format("%s@%08x", object->name, object->random_id);
       }
     }

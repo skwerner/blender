@@ -422,7 +422,7 @@ void BlenderSession::stamp_view_layer_metadata(Scene *scene, const string &view_
 
   /* Write cryptomatte metadata. */
   if (scene->film->cryptomatte_passes & CRYPT_OBJECT) {
-    string manifest = scene->film->cryptomatte_passes & CRYPT_WITH_MANIFEST ?
+    string manifest = scene->film->cryptomatte_options & CRYPT_OPT_WITH_MANIFEST ?
                       scene->object_manager->get_cryptomatte_objects(scene) : "";
 
     add_cryptomatte_layer(b_rr,
@@ -430,7 +430,7 @@ void BlenderSession::stamp_view_layer_metadata(Scene *scene, const string &view_
                           manifest);
   }
   if (scene->film->cryptomatte_passes & CRYPT_MATERIAL) {
-    string manifest = scene->film->cryptomatte_passes & CRYPT_WITH_MANIFEST ?
+    string manifest = scene->film->cryptomatte_options & CRYPT_OPT_WITH_MANIFEST ?
                       scene->shader_manager->get_cryptomatte_materials(scene) : "";
 
     add_cryptomatte_layer(b_rr,
@@ -438,7 +438,7 @@ void BlenderSession::stamp_view_layer_metadata(Scene *scene, const string &view_
                           manifest);
   }
   if (scene->film->cryptomatte_passes & CRYPT_ASSET) {
-    string manifest = scene->film->cryptomatte_passes & CRYPT_WITH_MANIFEST ?
+    string manifest = scene->film->cryptomatte_options & CRYPT_OPT_WITH_MANIFEST ?
                       scene->object_manager->get_cryptomatte_assets(scene) : "";
 
     add_cryptomatte_layer(b_rr,

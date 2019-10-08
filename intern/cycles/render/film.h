@@ -79,6 +79,7 @@ class Film : public Node {
   bool use_light_visibility;
   bool use_sample_clamp;
   CryptomatteType cryptomatte_passes;
+  CryptomatteOption cryptomatte_options;
   int cryptomatte_depth;
 
   bool need_update;

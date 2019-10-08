@@ -593,6 +593,7 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
   int crypto_depth = min(16, get_int(crp, "pass_crypto_depth")) / 2;
   scene->film->cryptomatte_depth = crypto_depth;
   scene->film->cryptomatte_passes = CRYPT_NONE;
+  scene->film->cryptomatte_options = CRYPT_OPT_NONE;
   if (get_boolean(crp, "use_pass_crypto_object")) {
     for (int i = 0; i < crypto_depth; ++i) {
       string passname = cryptomatte_prefix + string_printf("Object%02d", i);
@@ -621,18 +622,18 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
                                                         CRYPT_ASSET);
   }
   if (get_boolean(crp, "pass_crypto_accurate") && scene->film->cryptomatte_passes != CRYPT_NONE) {
-    scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
-                                                        CRYPT_ACCURATE);
+    scene->film->cryptomatte_options = (CryptomatteOption)(scene->film->cryptomatte_options |
+                                                        CRYPT_OPT_ACCURATE);
   }
   if (get_boolean(crp, "pass_crypto_unique_objects") &&
       scene->film->cryptomatte_passes & CRYPT_OBJECT) {
-    scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
-                                                        CRYPT_UNIQUE_OBJECTS);
+    scene->film->cryptomatte_options = (CryptomatteOption)(scene->film->cryptomatte_options |
+                                                        CRYPT_OPT_UNIQUE_OBJECTS);
   }
   if (get_boolean(crp, "pass_crypto_with_manifest") &&
       scene->film->cryptomatte_passes != CRYPT_NONE) {
-    scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
-        CRYPT_WITH_MANIFEST);
+    scene->film->cryptomatte_options = (CryptomatteOption)(scene->film->cryptomatte_options |
+                                                        CRYPT_OPT_WITH_MANIFEST);
   }
 
   return passes;

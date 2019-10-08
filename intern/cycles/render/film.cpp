@@ -298,6 +298,7 @@ Film::Film() : Node(node_type)
   use_light_visibility = false;
   filter_table_offset = TABLE_OFFSET_INVALID;
   cryptomatte_passes = CRYPT_NONE;
+  cryptomatte_options = CRYPT_OPT_NONE;
 
   need_update = true;
 }
@@ -499,6 +500,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->mist_falloff = mist_falloff;
 
   kfilm->cryptomatte_passes = cryptomatte_passes;
+  kfilm->cryptomatte_options = cryptomatte_options;
   kfilm->cryptomatte_depth = cryptomatte_depth;
 
   pass_stride = kfilm->pass_stride;

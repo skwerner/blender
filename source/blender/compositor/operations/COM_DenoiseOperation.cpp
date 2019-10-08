@@ -30,7 +30,7 @@ DenoiseOperation::DenoiseOperation() : SingleThreadedOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addInputSocket(COM_DT_COLOR);
-  this->addInputSocket(COM_DT_COLOR);
+  this->addInputSocket(COM_DT_VECTOR);
   this->addOutputSocket(COM_DT_COLOR);
   this->m_settings = NULL;
 }
@@ -122,7 +122,7 @@ void DenoiseOperation::generateDenoise(float *data,
                     inputTileNormal->getWidth(),
                     inputTileNormal->getHeight(),
                     0,
-                    4 * sizeof(float));
+                    3 * sizeof(float));
   }
   filter.setImage("output",
                   data,
@@ -134,8 +134,8 @@ void DenoiseOperation::generateDenoise(float *data,
 
   BLI_assert(settings);
   if (settings) {
-    filter.set("hdr", settings->hdr > 0 ? true : false);
-    filter.set("srgb", settings->srgb && !(settings->hdr > 0) ? true : false);
+    filter.set("hdr", settings->hdr);
+    filter.set("srgb", false);
   }
 
   filter.commit();
@@ -147,6 +147,7 @@ void DenoiseOperation::generateDenoise(float *data,
     data[i * 4 + 3] = inputBufferColor[i * 4 + 3];
   }
 #else
+  UNUSED_VARS(inputTileAlbedo, inputTileNormal, settings);
   ::memcpy(data,
            inputBufferColor,
            inputTileColor->getWidth() * inputTileColor->getHeight() * sizeof(float) * 4);

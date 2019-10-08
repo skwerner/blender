@@ -28,6 +28,7 @@
 #include <float.h>
 
 #include "DNA_armature_types.h"
+#include "DNA_constraint_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_lattice_types.h"
@@ -43,6 +44,7 @@
 #include "BLI_string.h"
 
 #include "BKE_action.h"
+#include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_global.h"
@@ -708,6 +710,16 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
       break;
     }
     case V3D_ORIENT_AXIAL: {
+      bConstraint *con;
+      ListBase conlist = ob->constraints;
+      bool child_of = false;
+        for (con = ob->constraints.first; con; con = con->next) {
+          if (BLI_strcaseeq(con->name, "Child Of")) {
+            child_of = true;
+            break;
+          }
+      }
+
       if (ob->parent) {
         /* Copying local manipulation for bone pose mode. */
         if (ob->mode & OB_MODE_POSE) {
@@ -733,6 +745,51 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
         normalize_m3(r_mat);
         ok = true;
         break;
+      }
+      else if (ob->mode & OB_MODE_POSE) {
+        ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
+        // deal with very small values - meant for numerical issues
+        for (int i = 0; i < 3;i++) {
+          for(int j = 0; j < 3; j++) {
+            if (r_mat[i][j] > 0) {
+              r_mat[i][j] = ((r_mat[i][j] - floorf(r_mat[i][j])) < 1.0e-3) ? floorf(r_mat[i][j]) : r_mat[i][j];
+            }
+            else {
+              r_mat[i][j] = ((-ceilf(r_mat[i][j]) - r_mat[i][j]) < 1.0e-3) ? ceilf(r_mat[i][j]) : r_mat[i][j];
+            }
+          }
+        }
+        ok = true;
+        break;
+      }
+      else if (child_of) {
+        bChildOfConstraint *data = con->data;
+        if (data->tar) {
+          float target_matrix[4][4]; // parent * offset (parent inverse)
+          float final_orientation[4][4];
+          float locmat[4][4];
+          float tmat[4][4];
+            if (con->enforce == 0.0) {
+              unit_m4(final_orientation);
+            }
+            else if (con->enforce == 1.0) {
+              BKE_object_to_mat4_loc_matrix(ob, locmat);
+              mul_m4_m4m4(tmat, data->tar->obmat, data->invmat);
+              mul_m4_m4m4(final_orientation, tmat, locmat);
+            }
+            else {
+              bConstraintOb *cob;
+              Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+              cob = BKE_constraints_make_evalob(depsgraph, scene, ob, NULL, CONSTRAINT_OBTYPE_OBJECT);
+              // BKE_object_to_mat4_loc_matrix(ob, locmat);
+              mul_m4_m4m4(tmat, data->tar->obmat, data->invmat);
+              mul_m4_m4m4(final_orientation, tmat, /*locmat8*/cob->startmat);
+            }
+            copy_m3_m4(r_mat, final_orientation);
+            normalize_m3(r_mat);
+            ok = true;
+            break;
+        }
       }
       break;
     }
@@ -760,7 +817,9 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
   ScrArea *sa = CTX_wm_area(C);
   ARegion *ar = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  /* TODO(sergey): This function is used from operator's modal() and from gizmo's refresh().
+   * Is it fine to possibly evaluate dependency graph here? */
+  Depsgraph *depsgraph = CTX_data_expect_evaluated_depsgraph(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   View3D *v3d = sa->spacedata.first;
   Object *obedit = CTX_data_edit_object(C);
@@ -1177,7 +1236,7 @@ static void gizmo_get_idot(RegionView3D *rv3d, float r_idot[3])
 }
 
 static void gizmo_prepare_mat(const bContext *C,
-                              RegionView3D *rv3d,
+                              float twmat[4][4],
                               const struct TransformBounds *tbounds)
 {
   Scene *scene = CTX_data_scene(C);
@@ -1186,7 +1245,7 @@ static void gizmo_prepare_mat(const bContext *C,
   switch (scene->toolsettings->transform_pivot_point) {
     case V3D_AROUND_CENTER_BOUNDS:
     case V3D_AROUND_ACTIVE: {
-      mid_v3_v3v3(rv3d->twmat[3], tbounds->min, tbounds->max);
+      mid_v3_v3v3(twmat[3], tbounds->min, tbounds->max);
 
       if (scene->toolsettings->transform_pivot_point == V3D_AROUND_ACTIVE) {
         bGPdata *gpd = CTX_data_gpencil_data(C);
@@ -1195,17 +1254,17 @@ static void gizmo_prepare_mat(const bContext *C,
           /* pass */
         }
         else if (ob != NULL) {
-          ED_object_calc_active_center(ob, false, rv3d->twmat[3]);
+          ED_object_calc_active_center(ob, false, twmat[3]);
         }
       }
       break;
     }
     case V3D_AROUND_LOCAL_ORIGINS:
     case V3D_AROUND_CENTER_MEDIAN:
-      copy_v3_v3(rv3d->twmat[3], tbounds->center);
+      copy_v3_v3(twmat[3], tbounds->center);
       break;
     case V3D_AROUND_CURSOR:
-      copy_v3_v3(rv3d->twmat[3], scene->cursor.location);
+      copy_v3_v3(twmat[3], scene->cursor.location);
       break;
   }
 }
@@ -1550,7 +1609,7 @@ static int gizmo_modal(bContext *C,
                                         .use_only_center = true,
                                     },
                                     &tbounds)) {
-    gizmo_prepare_mat(C, rv3d, &tbounds);
+    gizmo_prepare_mat(C, rv3d->twmat, &tbounds);
     WM_gizmo_set_matrix_location(widget, rv3d->twmat[3]);
   }
 
@@ -1585,7 +1644,8 @@ static void gizmogroup_init_properties_from_twtype(wmGizmoGroup *gzgroup)
       case MAN_AXIS_SCALE_Z:
         if (axis_idx >= MAN_AXIS_RANGE_TRANS_START && axis_idx < MAN_AXIS_RANGE_TRANS_END) {
           int draw_options = 0;
-          if ((ggd->twtype & (V3D_GIZMO_SHOW_OBJECT_ROTATE | V3D_GIZMO_SHOW_OBJECT_SCALE)) == 0) {
+          if ((ggd->twtype & V3D_GIZMO_MULTI_ORIENT)||
+              (ggd->twtype & (V3D_GIZMO_SHOW_OBJECT_ROTATE | V3D_GIZMO_SHOW_OBJECT_SCALE)) == 0) {
             draw_options |= ED_GIZMO_ARROW_DRAW_FLAG_STEM;
           }
           RNA_enum_set(axis->ptr, "draw_options", draw_options);
@@ -1686,6 +1746,7 @@ static void WIDGETGROUP_gizmo_setup(const bContext *C, wmGizmoGroup *gzgroup)
   GizmoGroup *ggd = gizmogroup_init(gzgroup);
 
   gzgroup->customdata = ggd;
+  Scene *scene = CTX_data_scene(C);
 
   {
     ScrArea *sa = CTX_wm_area(C);
@@ -1710,6 +1771,9 @@ static void WIDGETGROUP_gizmo_setup(const bContext *C, wmGizmoGroup *gzgroup)
       /* Setup all gizmos, they can be toggled via 'ToolSettings.gizmo_flag' */
       ggd->twtype = V3D_GIZMO_SHOW_OBJECT_TRANSLATE | V3D_GIZMO_SHOW_OBJECT_ROTATE |
                     V3D_GIZMO_SHOW_OBJECT_SCALE;
+      if (scene->orientation_slots[1].type == V3D_ORIENT_MULTI) {
+        ggd->twtype |= V3D_GIZMO_MULTI_ORIENT;
+      }
       ggd->use_twtype_refresh = true;
     }
     BLI_assert(ggd->twtype != 0);
@@ -1730,6 +1794,12 @@ static void WIDGETGROUP_gizmo_refresh(const bContext *C, wmGizmoGroup *gzgroup)
   RegionView3D *rv3d = ar->regiondata;
   struct TransformBounds tbounds;
 
+  /* For Multi-Orientation Gizmo, keep separate matrices instead of the common rv3d->twmat. */
+  bool multi_orient = scene->orientation_slots[1].type == V3D_ORIENT_MULTI;
+  float twmat_tran[4][4];
+  float twmat_rot[4][4];
+  float twmat_scale[4][4];
+
   if (ggd->use_twtype_refresh) {
     ggd->twtype = v3d->gizmo_show_object & ggd->twtype_init;
     if (ggd->twtype != ggd->twtype_prev) {
@@ -1739,8 +1809,10 @@ static void WIDGETGROUP_gizmo_refresh(const bContext *C, wmGizmoGroup *gzgroup)
   }
 
   const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get_from_flag(
-      scene, ggd->twtype_init);
-
+      scene, multi_orient ? SCE_ORIENT_TRANSLATE : ggd->twtype_init);
+  
+  copy_m4_m4(twmat_rot, rv3d->twmat);
+  copy_m4_m4(twmat_scale, rv3d->twmat);
   /* skip, we don't draw anything anyway */
   if ((ggd->all_hidden = (ED_transform_calc_gizmo_stats(
                               C,
@@ -1753,7 +1825,36 @@ static void WIDGETGROUP_gizmo_refresh(const bContext *C, wmGizmoGroup *gzgroup)
     return;
   }
 
-  gizmo_prepare_mat(C, rv3d, &tbounds);
+  gizmo_prepare_mat(C, rv3d->twmat, &tbounds);
+  copy_m4_m4(twmat_tran, rv3d->twmat);
+
+  if (multi_orient) {
+    /* Calculate separate matrices for rotate and trasnform Gizmos. */
+    orient_slot = BKE_scene_orientation_slot_get(scene, SCE_ORIENT_ROTATE);
+    ED_transform_calc_gizmo_stats(C,
+                                  &(struct TransformCalcParams){
+                                      .use_only_center = true,
+                                      .orientation_type = orient_slot->type + 1,
+                                      .orientation_index_custom = orient_slot->index_custom,
+                                  },
+                                  &tbounds);
+    copy_m4_m4(twmat_rot, rv3d->twmat);
+    gizmo_prepare_mat(C, twmat_rot, &tbounds);
+    orient_slot = BKE_scene_orientation_slot_get(scene, SCE_ORIENT_SCALE);
+    ED_transform_calc_gizmo_stats(C,
+                                  &(struct TransformCalcParams){
+                                      .use_only_center = true,
+                                      .orientation_type = orient_slot->type + 1,
+                                      .orientation_index_custom = orient_slot->index_custom,
+                                  },
+                                  &tbounds);
+    copy_m4_m4(twmat_scale, rv3d->twmat);
+    gizmo_prepare_mat(C, twmat_scale, &tbounds);
+  }
+  else {
+    copy_m4_m4(twmat_rot, rv3d->twmat);
+    copy_m4_m4(twmat_scale, rv3d->twmat);
+  }
 
   /* *** set properties for axes *** */
 
@@ -1761,7 +1862,21 @@ static void WIDGETGROUP_gizmo_refresh(const bContext *C, wmGizmoGroup *gzgroup)
     const short axis_type = gizmo_get_axis_type(axis_idx);
     const int aidx_norm = gizmo_orientation_axis(axis_idx, NULL);
 
-    WM_gizmo_set_matrix_location(axis, rv3d->twmat[3]);
+    /* Pick the right matrix for this gizmo axis. */
+    float (*twmat)[4][4] = &rv3d->twmat;
+    switch (axis_type) {
+      case MAN_AXES_TRANSLATE:
+        twmat = &twmat_tran;
+        break;
+      case MAN_AXES_ROTATE:
+        twmat = &twmat_rot;
+        break;
+      case MAN_AXES_SCALE:
+        twmat = &twmat_scale;
+        break;
+    }
+
+    WM_gizmo_set_matrix_location(axis, (*twmat)[3]);
 
     switch (axis_idx) {
       case MAN_AXIS_TRANS_X:
@@ -1775,7 +1890,7 @@ static void WIDGETGROUP_gizmo_refresh(const bContext *C, wmGizmoGroup *gzgroup)
 
         gizmo_line_range(ggd->twtype, axis_type, &start_co[2], &len);
 
-        WM_gizmo_set_matrix_rotation_from_z_axis(axis, rv3d->twmat[aidx_norm]);
+        WM_gizmo_set_matrix_rotation_from_z_axis(axis, (*twmat)[aidx_norm]);
         RNA_float_set(axis->ptr, "length", len);
 
         if (axis_idx >= MAN_AXIS_RANGE_TRANS_START && axis_idx < MAN_AXIS_RANGE_TRANS_END) {
@@ -1791,7 +1906,7 @@ static void WIDGETGROUP_gizmo_refresh(const bContext *C, wmGizmoGroup *gzgroup)
       case MAN_AXIS_ROT_X:
       case MAN_AXIS_ROT_Y:
       case MAN_AXIS_ROT_Z:
-        WM_gizmo_set_matrix_rotation_from_z_axis(axis, rv3d->twmat[aidx_norm]);
+        WM_gizmo_set_matrix_rotation_from_z_axis(axis, (*twmat)[aidx_norm]);
         break;
       case MAN_AXIS_TRANS_XY:
       case MAN_AXIS_TRANS_YZ:
@@ -1799,8 +1914,8 @@ static void WIDGETGROUP_gizmo_refresh(const bContext *C, wmGizmoGroup *gzgroup)
       case MAN_AXIS_SCALE_XY:
       case MAN_AXIS_SCALE_YZ:
       case MAN_AXIS_SCALE_ZX: {
-        const float *y_axis = rv3d->twmat[aidx_norm - 1 < 0 ? 2 : aidx_norm - 1];
-        const float *z_axis = rv3d->twmat[aidx_norm];
+        const float *y_axis = (*twmat)[aidx_norm - 1 < 0 ? 2 : aidx_norm - 1];
+        const float *z_axis = (*twmat)[aidx_norm];
         WM_gizmo_set_matrix_rotation_from_yz_axis(axis, y_axis, z_axis);
         break;
       }
@@ -1904,6 +2019,24 @@ static void WIDGETGROUP_gizmo_invoke_prepare(const bContext *C,
 {
 
   GizmoGroup *ggd = gzgroup->customdata;
+  const int axis_idx = BLI_array_findindex(ggd->gizmos, ARRAY_SIZE(ggd->gizmos), &gz);
+  const short axis_type = gizmo_get_axis_type(axis_idx);
+
+  /* Pick the right matrix for this gizmo axis. */
+  int twtype = ggd->twtype_init;
+	if (ggd->twtype_init & V3D_GIZMO_MULTI_ORIENT) {
+    switch (axis_type) {
+      case MAN_AXES_TRANSLATE:
+        twtype = V3D_GIZMO_SHOW_OBJECT_TRANSLATE;
+        break;
+      case MAN_AXES_ROTATE:
+        twtype = V3D_GIZMO_SHOW_OBJECT_ROTATE;
+        break;
+      case MAN_AXES_SCALE:
+        twtype = V3D_GIZMO_SHOW_OBJECT_SCALE;
+        break;
+    }
+  }
 
   /* Support gizmo specific orientation. */
   if (gz != ggd->gizmos[MAN_AXIS_ROT_T]) {
@@ -1912,7 +2045,7 @@ static void WIDGETGROUP_gizmo_invoke_prepare(const bContext *C,
     PointerRNA *ptr = &gzop->ptr;
     PropertyRNA *prop_orient_type = RNA_struct_find_property(ptr, "orient_type");
     const TransformOrientationSlot *orient_slot = BKE_scene_orientation_slot_get_from_flag(
-        scene, ggd->twtype_init);
+        scene, twtype);
     if (orient_slot == &scene->orientation_slots[SCE_ORIENT_DEFAULT]) {
       RNA_property_unset(ptr, prop_orient_type);
     }
@@ -1924,7 +2057,6 @@ static void WIDGETGROUP_gizmo_invoke_prepare(const bContext *C,
   }
 
   /* Support shift click to constrain axis. */
-  const int axis_idx = BLI_array_findindex(ggd->gizmos, ARRAY_SIZE(ggd->gizmos), &gz);
   int axis = -1;
   switch (axis_idx) {
     case MAN_AXIS_TRANS_X:
@@ -2169,7 +2301,7 @@ static void WIDGETGROUP_xform_cage_refresh(const bContext *C, wmGizmoGroup *gzgr
     WM_gizmo_set_flag(gz, WM_GIZMO_HIDDEN, true);
   }
   else {
-    gizmo_prepare_mat(C, rv3d, &tbounds);
+    gizmo_prepare_mat(C, rv3d->twmat, &tbounds);
 
     WM_gizmo_set_flag(gz, WM_GIZMO_HIDDEN, false);
     WM_gizmo_set_flag(gz, WM_GIZMO_MOVE_CURSOR, true);
@@ -2357,7 +2489,7 @@ static void WIDGETGROUP_xform_shear_refresh(const bContext *C, wmGizmoGroup *gzg
     }
   }
   else {
-    gizmo_prepare_mat(C, rv3d, &tbounds);
+    gizmo_prepare_mat(C, rv3d->twmat, &tbounds);
     for (int i = 0; i < 3; i++) {
       for (int j = 0; j < 2; j++) {
         wmGizmo *gz = xgzgroup->gizmo[i][j];

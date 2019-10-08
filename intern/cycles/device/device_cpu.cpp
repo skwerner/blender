@@ -527,7 +527,6 @@ class CPUDevice : public Device {
   {
     return &oiio_globals;
   }
-
   void *vdb_memory()
   {
 #ifdef WITH_OPENVDB

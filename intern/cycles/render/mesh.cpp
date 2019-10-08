@@ -1095,6 +1095,17 @@ bool Mesh::has_true_displacement() const
   return false;
 }
 
+bool Mesh::has_voxel_attributes() const
+{
+  foreach (const Attribute &attr, attributes.attributes) {
+    if (attr.element == ATTR_ELEMENT_VOXEL) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 float Mesh::motion_time(int step) const
 {
   return (motion_steps > 1) ? 2.0f * step / (motion_steps - 1) - 1.0f : 0.0f;
@@ -2027,15 +2038,7 @@ void MeshManager::device_update_preprocess(Device *device,
 
     if (need_update && mesh->has_volume) {
       /* Create volume meshes if there is voxel data. */
-      bool has_voxel_attributes = false;
-
-      foreach (Attribute &attr, mesh->attributes.attributes) {
-        if (attr.element == ATTR_ELEMENT_VOXEL) {
-          has_voxel_attributes = true;
-        }
-      }
-
-      if (has_voxel_attributes) {
+      if (mesh->has_voxel_attributes()) {
         if (!volume_images_updated) {
           progress.set_status("Updating Meshes Volume Bounds");
           device_update_volume_images(device, dscene, scene, progress);

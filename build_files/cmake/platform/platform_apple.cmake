@@ -383,8 +383,16 @@ if(WITH_CYCLES_EMBREE)
 endif()
 
 if(WITH_OPENIMAGEDENOISE)
-  find_package(OpenImageDenoise REQUIRED)
-  find_package(TBB REQUIRED)
+  find_package(OpenImageDenoise)
+  find_package(TBB)
+
+  if(NOT OPENIMAGEDENOISE_FOUND)
+    set(WITH_OPENIMAGEDENOISE OFF)
+    message(STATUS "OpenImageDenoise not found")
+  elseif(NOT TBB_FOUND)
+    set(WITH_OPENIMAGEDENOISE OFF)
+    message(STATUS "TBB not found")
+  endif()
 endif()
 
 # CMake FindOpenMP doesn't know about AppleClang before 3.12, so provide custom flags.

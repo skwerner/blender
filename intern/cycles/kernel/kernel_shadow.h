@@ -42,6 +42,9 @@ ccl_addr_space
   PathState *ps = &volume_state->ps;
 #  endif
   *ps = *state;
+
+  kernel_volume_branch_stack(sd->ray_length, ps->volume_stack);
+
   /* We are checking for shadow on the "other" side of the surface, so need
    * to discard volume we are currently at.
    */

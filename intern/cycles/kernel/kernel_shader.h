@@ -792,8 +792,7 @@ ccl_device_inline const ShaderClosure *shader_bsdf_pick(ShaderData *sd, float *r
         if (r < next_sum) {
           sampled = i;
 
-          /* Rescale to reuse for direction sample, to better
-           * preserve stratification. */
+          /* Rescale to reuse for direction sample, to better preserve stratification. */
           *randu = (r - partial_sum) / sc->sample_weight;
           break;
         }
@@ -849,8 +848,7 @@ ccl_device_inline const ShaderClosure *shader_bssrdf_pick(ShaderData *sd,
             *throughput *= (sum_bsdf + sum_bssrdf) / sum_bssrdf;
             sampled = i;
 
-            /* Rescale to reuse for direction sample, to better
-             * preserve stratifaction. */
+            /* Rescale to reuse for direction sample, to better preserve stratification. */
             *randu = (r - partial_sum) / sc->sample_weight;
             break;
           }
@@ -1402,6 +1400,9 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
   sd->object_flag = 0;
 
   for (int i = 0; stack[i].shader != SHADER_NONE; i++) {
+    if (stack[i].t_enter > sd->ray_length || stack[i].t_exit < sd->ray_length) {
+      continue;
+    }
     /* setup shaderdata from stack. it's mostly setup already in
      * shader_setup_from_volume, this switching should be quick */
     sd->object = stack[i].object;

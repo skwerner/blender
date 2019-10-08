@@ -1037,6 +1037,12 @@ typedef ccl_addr_space struct ShaderDataTinyStorage {
 typedef struct VolumeStack {
   int object;
   int shader;
+  /* These indicate the entry and exit points of the current ray.
+   Volume shaders are only to be evaluated when the ray's t
+   overlaps the volume bounds. */
+  float t_enter;
+  float t_exit;
+  int depth;
 } VolumeStack;
 #endif
 
@@ -1551,7 +1557,7 @@ static_assert_align(KernelShader, 16);
  * Queue 1 - Active rays
  * Queue 2 - Background queue
  * Queue 3 - Shadow ray cast kernel - AO
- * Queeu 4 - Shadow ray cast kernel - direct lighting
+ * Queue 4 - Shadow ray cast kernel - direct lighting
  */
 
 /* Queue names */

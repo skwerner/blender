@@ -53,6 +53,8 @@
 
 #include "openvdb_capi.h"
 
+#include "RNA_access.h"
+
 static void initData(ModifierData *md)
 {
   OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
@@ -213,6 +215,22 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 #endif
 }
 
+static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *UNUSED(ctx))
+{
+#ifdef WITH_OPENVDB
+  OpenVDBModifierData *vdbmd = (OpenVDBModifierData *)md;
+
+  /* Make sure to trigger updates. */
+  PointerRNA ptr;
+  PropertyRNA *prop;
+  RNA_pointer_create(NULL, &RNA_OpenVDBModifier, vdbmd, &ptr);
+  prop = RNA_struct_find_property(&ptr, "filepath");
+  RNA_property_update(NULL, &ptr, prop);
+#else
+  UNUSED_VARS(md);
+#endif
+}
+
 ModifierTypeInfo modifierType_OpenVDB = {
     /* name */ "OpenVDB",
     /* structName */ "OpenVDBModifierData",
@@ -233,8 +251,8 @@ ModifierTypeInfo modifierType_OpenVDB = {
     /* requiredDataMask */ NULL,
     /* freeData */ freeData,
     /* isDisabled */ isDisabled,
-    /* updateDepsgraph */ NULL,
-    /* dependsOnTime */ dependsOnTime,
+    /* updateDepsgraph */ updateDepsgraph,
+    /* dependsOnTime */  dependsOnTime,
     /* dependsOnNormals */ NULL,
     /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,

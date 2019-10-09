@@ -729,27 +729,6 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
       break;
     case V3D_ORIENT_AXIAL:
       BLI_snprintf(text, sizeof(text), ftext, IFACE_("axial"));
-      TransDataContainer *tc = t->data_container;
-      bool child_of = false;
-      for (bConstraint *con = tc->data->ob->constraints.first; con; con->next) {
-        if (BLI_strcaseeq(con->name, "Child of")) {
-          child_of = true;
-          break;
-        }
-      }
-
-      if (child_of) {
-        setConstraint(t, t->spacemtx, mode, text);
-      }
-
-      /* Checking if the object has a parent. */
-      // if (!tc->data->ob->parent) {
-      //   float mtx[3][3];
-      //   BLI_snprintf(text, sizeof(text), ftext, IFACE_("axial"));
-      //   unit_m3(mtx);
-      //   setConstraint(t, mtx, mode, text);
-      //   break;
-      // }
       setConstraint(t, t->spacemtx, mode, text);
       break;
     case V3D_ORIENT_CUSTOM: {

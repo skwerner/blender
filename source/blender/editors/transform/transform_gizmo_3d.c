@@ -734,9 +734,11 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
 
       // This is for regular non-rig objects
       if (is_zero_v3(ob->rot)) {
+        ok = true;
         copy_m4_m4(r_mat, ob->obmat);
       }
       else {
+        ok = true;
         float mfm[4][4]; // My final matrix
         BKE_object_computing_obmat_rest(ob, mfm);
         copy_m4_m4(r_mat, mfm);

@@ -492,37 +492,44 @@ void initTransformOrientation(bContext *C, TransInfo *t)
       BKE_scene_cursor_rot_to_mat3(&t->scene->cursor, t->spacemtx);
       break;
     case V3D_ORIENT_AXIAL: {
-      BLI_strncpy(t->spacename, IFACE_("axial"), sizeof(t->spacename));
-      if (ob->mode & OB_MODE_POSE) {
-        bPoseChannel *posebone = CTX_data_active_pose_bone(C);
-        if (!posebone) {
+      BLI_strncpy(t->spacename, TIP_("axial"), sizeof(t->spacename));
+      if (ob) {
+        if (ob->mode & OB_MODE_POSE) {
+          bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+          if (!posebone) {
+            break;
+          }
+
+          //for god node (bottom of hierarchy)
+          if(!posebone->parent) {
+            
+            // works like local
+            copy_m3_m4(t->spacemtx, ob->obmat);
+            normalize_m3(t->spacemtx);
+            break;
+          }
+
+          float mat[3][3];
+          BKE_pose_computing_pchan_rest(posebone, mat);
+          copy_m3_m3(t->spacemtx, mat);
           break;
         }
 
-        //for god node (bottom of hierarchy)
-        if(!posebone->parent) {
-          // works like local
+        // This is for regular non-rig objects
+        if (is_zero_v3(ob->rot)) {
           copy_m3_m4(t->spacemtx, ob->obmat);
-          normalize_m3(t->spacemtx);
-          break;
         }
-
-        float mat[3][3];
-        BKE_pose_computing_pchan_rest(posebone, mat);
-        copy_m3_m3(t->spacemtx, mat);
+        else {
+          float mfm[4][4];
+          BKE_object_computing_obmat_rest(ob, mfm);
+          copy_m3_m4(t->spacemtx, mfm);
+        }
+        normalize_m3(t->spacemtx);
         break;
       }
-
-      // This is for regular non-rig objects
-      if (is_zero_v3(ob->rot)) {
-        copy_m3_m4(t->spacemtx, ob->obmat);
-      }
       else {
-        float mfm[4][4];
-        BKE_object_computing_obmat_rest(ob, mfm);
-        copy_m3_m4(t->spacemtx, mfm);
+        unit_m3(t->spacemtx);
       }
-      normalize_m3(t->spacemtx);
       break;
     }
     case V3D_ORIENT_CUSTOM_MATRIX:

@@ -50,7 +50,7 @@ void Coverage::init_path_trace()
 {
   kg->coverage_object = kg->coverage_material = kg->coverage_asset = NULL;
 
-  if (kernel_data.film.cryptomatte_passes & CRYPT_ACCURATE) {
+  if (kernel_data.film.cryptomatte_options & CRYPT_OPT_ACCURATE) {
     if (kernel_data.film.cryptomatte_passes & CRYPT_OBJECT) {
       coverage_object.clear();
       coverage_object.resize(tile.w * tile.h);
@@ -68,7 +68,7 @@ void Coverage::init_path_trace()
 
 void Coverage::init_pixel(int x, int y)
 {
-  if (kernel_data.film.cryptomatte_passes & CRYPT_ACCURATE) {
+  if (kernel_data.film.cryptomatte_options & CRYPT_OPT_ACCURATE) {
     const int pixel_index = tile.w * (y - tile.y) + x - tile.x;
     if (kernel_data.film.cryptomatte_passes & CRYPT_OBJECT) {
       kg->coverage_object = &coverage_object[pixel_index];
@@ -84,7 +84,7 @@ void Coverage::init_pixel(int x, int y)
 
 void Coverage::finalize_buffer(vector<CoverageMap> &coverage, const int pass_offset)
 {
-  if (kernel_data.film.cryptomatte_passes & CRYPT_ACCURATE) {
+  if (kernel_data.film.cryptomatte_options & CRYPT_OPT_ACCURATE) {
     flatten_buffer(coverage, pass_offset);
   }
   else {

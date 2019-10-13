@@ -28,6 +28,7 @@
 #include <float.h>
 
 #include "DNA_armature_types.h"
+#include "DNA_constraint_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_lattice_types.h"
@@ -43,6 +44,7 @@
 #include "BLI_string.h"
 
 #include "BKE_action.h"
+#include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_global.h"
@@ -708,6 +710,16 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
       break;
     }
     case V3D_ORIENT_AXIAL: {
+      bConstraint *con;
+      ListBase conlist = ob->constraints;
+      bool child_of = false;
+        for (con = ob->constraints.first; con; con = con->next) {
+          if (BLI_strcaseeq(con->name, "Child Of")) {
+            child_of = true;
+            break;
+          }
+      }
+
       if (ob->parent) {
         /* Copying local manipulation for bone pose mode. */
         if (ob->mode & OB_MODE_POSE) {
@@ -733,6 +745,51 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
         normalize_m3(r_mat);
         ok = true;
         break;
+      }
+      else if (ob->mode & OB_MODE_POSE) {
+        ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
+        // deal with very small values - meant for numerical issues
+        for (int i = 0; i < 3;i++) {
+          for(int j = 0; j < 3; j++) {
+            if (r_mat[i][j] > 0) {
+              r_mat[i][j] = ((r_mat[i][j] - floorf(r_mat[i][j])) < 1.0e-3) ? floorf(r_mat[i][j]) : r_mat[i][j];
+            }
+            else {
+              r_mat[i][j] = ((-ceilf(r_mat[i][j]) - r_mat[i][j]) < 1.0e-3) ? ceilf(r_mat[i][j]) : r_mat[i][j];
+            }
+          }
+        }
+        ok = true;
+        break;
+      }
+      else if (child_of) {
+        bChildOfConstraint *data = con->data;
+        if (data->tar) {
+          float target_matrix[4][4]; // parent * offset (parent inverse)
+          float final_orientation[4][4];
+          float locmat[4][4];
+          float tmat[4][4];
+            if (con->enforce == 0.0) {
+              unit_m4(final_orientation);
+            }
+            else if (con->enforce == 1.0) {
+              BKE_object_to_mat4_loc_matrix(ob, locmat);
+              mul_m4_m4m4(tmat, data->tar->obmat, data->invmat);
+              mul_m4_m4m4(final_orientation, tmat, locmat);
+            }
+            else {
+              bConstraintOb *cob;
+              Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+              cob = BKE_constraints_make_evalob(depsgraph, scene, ob, NULL, CONSTRAINT_OBTYPE_OBJECT);
+              // BKE_object_to_mat4_loc_matrix(ob, locmat);
+              mul_m4_m4m4(tmat, data->tar->obmat, data->invmat);
+              mul_m4_m4m4(final_orientation, tmat, /*locmat8*/cob->startmat);
+            }
+            copy_m3_m4(r_mat, final_orientation);
+            normalize_m3(r_mat);
+            ok = true;
+            break;
+        }
       }
       break;
     }
@@ -760,7 +817,9 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
   ScrArea *sa = CTX_wm_area(C);
   ARegion *ar = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  /* TODO(sergey): This function is used from operator's modal() and from gizmo's refresh().
+   * Is it fine to possibly evaluate dependency graph here? */
+  Depsgraph *depsgraph = CTX_data_expect_evaluated_depsgraph(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   View3D *v3d = sa->spacedata.first;
   Object *obedit = CTX_data_edit_object(C);

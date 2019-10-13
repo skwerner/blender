@@ -406,8 +406,14 @@ typedef enum CryptomatteType {
   CRYPT_OBJECT = (1 << 0),
   CRYPT_MATERIAL = (1 << 1),
   CRYPT_ASSET = (1 << 2),
-  CRYPT_ACCURATE = (1 << 3),
 } CryptomatteType;
+
+typedef enum CryptomatteOption {
+  CRYPT_OPT_NONE = 0,
+  CRYPT_OPT_ACCURATE = (1 << 0),
+  CRYPT_OPT_UNIQUE_OBJECTS = (1 << 1),
+  CRYPT_OPT_WITH_MANIFEST = (1 << 2),
+} CryptomatteOption;
 
 typedef enum DenoisingPassOffsets {
   DENOISING_PASS_NORMAL = 0,
@@ -1235,6 +1241,7 @@ typedef struct KernelFilm {
   float pass_shadow_scale;
   int filter_table_offset;
   int cryptomatte_passes;
+  int cryptomatte_options;
   int cryptomatte_depth;
   int pass_cryptomatte;
 
@@ -1557,7 +1564,7 @@ static_assert_align(KernelShader, 16);
  * Queue 1 - Active rays
  * Queue 2 - Background queue
  * Queue 3 - Shadow ray cast kernel - AO
- * Queeu 4 - Shadow ray cast kernel - direct lighting
+ * Queue 4 - Shadow ray cast kernel - direct lighting
  */
 
 /* Queue names */

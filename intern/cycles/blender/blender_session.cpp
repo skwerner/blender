@@ -398,7 +398,9 @@ static void add_cryptomatte_layer(BL::RenderResult &b_rr, string name, string ma
   render_add_metadata(b_rr, prefix + "name", name);
   render_add_metadata(b_rr, prefix + "hash", "MurmurHash3_32");
   render_add_metadata(b_rr, prefix + "conversion", "uint32_to_float32");
-  render_add_metadata(b_rr, prefix + "manifest", manifest);
+  if(!manifest.empty()) {
+    render_add_metadata(b_rr, prefix + "manifest", manifest);
+  }
 }
 
 void BlenderSession::stamp_view_layer_metadata(Scene *scene, const string &view_layer_name)
@@ -420,19 +422,28 @@ void BlenderSession::stamp_view_layer_metadata(Scene *scene, const string &view_
 
   /* Write cryptomatte metadata. */
   if (scene->film->cryptomatte_passes & CRYPT_OBJECT) {
+    string manifest = scene->film->cryptomatte_options & CRYPT_OPT_WITH_MANIFEST ?
+                      scene->object_manager->get_cryptomatte_objects(scene) : "";
+
     add_cryptomatte_layer(b_rr,
                           view_layer_name + ".CryptoObject",
-                          scene->object_manager->get_cryptomatte_objects(scene));
+                          manifest);
   }
   if (scene->film->cryptomatte_passes & CRYPT_MATERIAL) {
+    string manifest = scene->film->cryptomatte_options & CRYPT_OPT_WITH_MANIFEST ?
+                      scene->shader_manager->get_cryptomatte_materials(scene) : "";
+
     add_cryptomatte_layer(b_rr,
                           view_layer_name + ".CryptoMaterial",
-                          scene->shader_manager->get_cryptomatte_materials(scene));
+                          manifest);
   }
   if (scene->film->cryptomatte_passes & CRYPT_ASSET) {
+    string manifest = scene->film->cryptomatte_options & CRYPT_OPT_WITH_MANIFEST ?
+                      scene->object_manager->get_cryptomatte_assets(scene) : "";
+
     add_cryptomatte_layer(b_rr,
                           view_layer_name + ".CryptoAsset",
-                          scene->object_manager->get_cryptomatte_assets(scene));
+                          manifest);
   }
 
   /* Store synchronization and bare-render times. */
@@ -528,7 +539,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
     builtin_images_load();
 
     /* Attempt to free all data which is held by Blender side, since at this
-     * point we knwo that we've got everything to render current view layer.
+     * point we know that we've got everything to render current view layer.
      */
     /* At the moment we only free if we are not doing multi-view
      * (or if we are rendering the last view). See T58142/D4239 for discussion.

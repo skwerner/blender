@@ -26,6 +26,7 @@
 #include <string.h>
 #include <math.h>
 
+#include "DNA_constraint_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
@@ -57,7 +58,7 @@
 static void drawObjectConstraint(TransInfo *t);
 
 /* ************************** CONSTRAINTS ************************* */
-static void constraintAutoValues(TransInfo *t, float vec[3])
+static void constraintValuesFinal(TransInfo *t, float vec[3])
 {
   int mode = t->con.mode;
   if (mode & CON_APPLY) {
@@ -147,10 +148,10 @@ static void postConstraintChecks(TransInfo *t, float vec[3], float pvec[3])
     removeAspectRatio(t, vec);
   }
 
-  /* autovalues is operator param, use that directly but not if snapping is forced */
-  if (t->flag & T_AUTOVALUES && (t->tsnap.status & SNAP_FORCED) == 0) {
-    copy_v3_v3(vec, t->auto_values);
-    constraintAutoValues(t, vec);
+  /* If `t->values` is operator param, use that directly but not if snapping is forced */
+  if (t->flag & T_INPUT_IS_VALUES_FINAL && (t->tsnap.status & SNAP_FORCED) == 0) {
+    copy_v3_v3(vec, t->values);
+    constraintValuesFinal(t, vec);
     /* inverse transformation at the end */
   }
 
@@ -326,7 +327,7 @@ static void planeProjection(const TransInfo *t, const float in[3], float out[3])
   sub_v3_v3v3(vec, out, in);
 
   factor = dot_v3v3(vec, norm);
-  if (fabsf(factor) <= 0.001f) {
+  if (factor == 0.0f) {
     return; /* prevent divide by zero */
   }
   factor = dot_v3v3(vec, vec) / factor;
@@ -729,14 +730,26 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
     case V3D_ORIENT_AXIAL:
       BLI_snprintf(text, sizeof(text), ftext, IFACE_("axial"));
       TransDataContainer *tc = t->data_container;
-      /* Checking if the object has a parent. */
-      if (!tc->data->ob->parent) {
-        float mtx[3][3];
-        BLI_snprintf(text, sizeof(text), ftext, IFACE_("axial"));
-        unit_m3(mtx);
-        setConstraint(t, mtx, mode, text);
-        break;
+      bool child_of = false;
+      for (bConstraint *con = tc->data->ob->constraints.first; con; con->next) {
+        if (BLI_strcaseeq(con->name, "Child of")) {
+          child_of = true;
+          break;
+        }
       }
+
+      if (child_of) {
+        setConstraint(t, t->spacemtx, mode, text);
+      }
+
+      /* Checking if the object has a parent. */
+      // if (!tc->data->ob->parent) {
+      //   float mtx[3][3];
+      //   BLI_snprintf(text, sizeof(text), ftext, IFACE_("axial"));
+      //   unit_m3(mtx);
+      //   setConstraint(t, mtx, mode, text);
+      //   break;
+      // }
       setConstraint(t, t->spacemtx, mode, text);
       break;
     case V3D_ORIENT_CUSTOM: {

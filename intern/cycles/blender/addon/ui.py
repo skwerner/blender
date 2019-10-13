@@ -926,6 +926,10 @@ class CYCLES_RENDER_PT_passes_crypto(CyclesButtonsPanel, Panel):
         layout.prop(cycles_view_layer, "pass_crypto_depth", text="Levels")
 
         row = layout.row(align=True)
+        row.prop(cycles_view_layer, "pass_crypto_unique_objects", text="Unique Objects")
+        row.prop(cycles_view_layer, "pass_crypto_with_manifest", text="Manifest")
+
+        row = layout.row(align=True)
         row.active = use_cpu(context)
         row.prop(cycles_view_layer, "pass_crypto_accurate", text="Accurate Mode")
 

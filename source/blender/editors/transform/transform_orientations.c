@@ -25,6 +25,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_constraint_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_meta_types.h"
 #include "DNA_object_types.h"
@@ -41,6 +42,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_action.h"
+#include "BKE_constraint.h"
 #include "BKE_curve.h"
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
@@ -484,12 +486,19 @@ void initTransformOrientation(bContext *C, TransInfo *t)
         unit_m3(t->spacemtx);
       }
       break;
-    case V3D_ORIENT_CURSOR: {
+    case V3D_ORIENT_CURSOR:
       BLI_strncpy(t->spacename, TIP_("cursor"), sizeof(t->spacename));
       BKE_scene_cursor_rot_to_mat3(&t->scene->cursor, t->spacemtx);
       break;
-    }
-    case V3D_ORIENT_AXIAL:
+    case V3D_ORIENT_AXIAL: {
+      bConstraint *con;
+      bool child_of = false;
+      for (con = ob->constraints.first; con; con = con->next) {
+        if (BLI_strcaseeq(con->name, "Child Of")) {
+          child_of = true;
+          break;
+        }
+      }
       BLI_strncpy(t->spacename, IFACE_("axial"), sizeof(t->spacename));
 
       if (ob) {
@@ -506,11 +515,58 @@ void initTransformOrientation(bContext *C, TransInfo *t)
           copy_m3_m4(t->spacemtx, final_orientation);
           normalize_m3(t->spacemtx);
         }
+        else if (ob->mode & OB_MODE_POSE) {
+          Scene *scene = CTX_data_scene(C);
+          const int pivot_point = scene->toolsettings->transform_pivot_point;
+          ED_getTransformOrientationMatrix(C, t->spacemtx, pivot_point);
+          //normalize_m3(t->spacemtx);
+          for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+              if (t->spacemtx[i][j] > 0) {
+                t->spacemtx[i][j] = ((t->spacemtx[i][j] - floorf(t->spacemtx[i][j])) < 1.0e-3) ? floorf(t->spacemtx[i][j]) : t->spacemtx[i][j];
+              }
+              else {
+                t->spacemtx[i][j] = ((-ceilf(t->spacemtx[i][j]) - t->spacemtx[i][j]) < 1.0e-3) ? ceilf(t->spacemtx[i][j]) : t->spacemtx[i][j];
+              }
+            }
+          }
+          break;
+        }
+        else if (child_of) {
+          bChildOfConstraint *data = con->data;
+          if (data->tar) {
+            float target_matrix[4][4]; // parent * offset (parent inverse)
+            float final_orientation[4][4];
+            float locmat[4][4];
+            float tmat[4][4];
+          
+          if (con->enforce == 0.0) {
+            unit_m4(final_orientation);
+          }
+          else if (con->enforce == 1.0) {
+            BKE_object_to_mat4_loc_matrix(ob, locmat);
+            mul_m4_m4m4(tmat, data->tar->obmat, data->invmat);
+            mul_m4_m4m4(final_orientation, tmat, locmat);
+          }
+          else {
+            //BKE_object_to_mat4_loc_matrix(ob, locmat);
+            bConstraintOb *cob;
+            Scene *scene = CTX_data_scene(C);
+            Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+            cob = BKE_constraints_make_evalob(depsgraph, scene, ob, NULL, CONSTRAINT_OBTYPE_OBJECT);
+            mul_m4_m4m4(tmat, data->tar->obmat, data->invmat);
+            mul_m4_m4m4(final_orientation, tmat, /*locmat*/cob->startmat);
+          }
+          copy_m3_m4(t->spacemtx, final_orientation);
+          normalize_m3(t->spacemtx);
+          }
+        }
         else {
           unit_m3(t->spacemtx);
         }
       }
       break;
+    }
     case V3D_ORIENT_CUSTOM_MATRIX:
       /* Already set. */
       BLI_strncpy(t->spacename, TIP_("custom"), sizeof(t->spacename));

@@ -527,7 +527,6 @@ class CPUDevice : public Device {
   {
     return &oiio_globals;
   }
-
   void *vdb_memory()
   {
 #ifdef WITH_OPENVDB
@@ -852,7 +851,7 @@ class CPUDevice : public Device {
 
   void path_trace(DeviceTask &task, RenderTile &tile, KernelGlobals *kg)
   {
-    const bool use_coverage = kernel_data.film.cryptomatte_passes & CRYPT_ACCURATE;
+    const bool use_coverage = kernel_data.film.cryptomatte_options & CRYPT_OPT_ACCURATE;
 
     scoped_timer timer(&tile.buffers->render_time);
 

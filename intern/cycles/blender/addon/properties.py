@@ -1496,6 +1496,18 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         default=True,
         update=update_render_passes,
         )
+    pass_crypto_unique_objects: BoolProperty(
+        name="Cryptomatte Unique Objects",
+        description="Treat instances as unique objects in Cryptomatte pass",
+        default=False,
+        update=update_render_passes,
+    )
+    pass_crypto_with_manifest: BoolProperty(
+        name="Cryptomatte with Manifest",
+        description="Write a Cryptomatte manifest",
+        default=True,
+        update=update_render_passes,
+    )
 
     @classmethod
     def register(cls):

@@ -225,7 +225,7 @@ void read_points_sample(const std::string &iobject_full_name,
   read_mverts(config.mvert, positions, vnormals);
 
   if ((read_flag & MOD_MESHSEQ_READ_VELS) != 0) {
-    read_vels(static_cast<Mesh *>(config.user_data), sample.getVelocities(), vel_fac);
+    read_vels(static_cast<Mesh *>(config.mesh), sample.getVelocities(), vel_fac);
   }
 
   read_custom_data(iobject_full_name, prop, config, selector, id_prop, read_flag, attrs_require_coord_convert_vec);

@@ -148,6 +148,7 @@ set(SRC
   shader/nodes/node_shader_bsdf_velvet.c
   shader/nodes/node_shader_bump.c
   shader/nodes/node_shader_camera.c
+  shader/nodes/node_shader_clamp.c
   shader/nodes/node_shader_common.c
   shader/nodes/node_shader_curves.c
   shader/nodes/node_shader_displacement.c
@@ -164,6 +165,7 @@ set(SRC
   shader/nodes/node_shader_layer_weight.c
   shader/nodes/node_shader_light_falloff.c
   shader/nodes/node_shader_light_path.c
+  shader/nodes/node_shader_map_range.c
   shader/nodes/node_shader_mapping.c
   shader/nodes/node_shader_math.c
   shader/nodes/node_shader_mixRgb.c

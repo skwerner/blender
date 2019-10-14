@@ -44,6 +44,7 @@
 #include "BLI_string.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
@@ -661,18 +662,18 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
   bool ok = false;
 
   switch (orientation_type) {
-    case V3D_ORIENT_GLOBAL: {
+    case V3D_ORIENT_GLOBAL:
       break; /* nothing to do */
-    }
-    case V3D_ORIENT_GIMBAL: {
+
+    case V3D_ORIENT_GIMBAL:
       if (gimbal_axis(ob, r_mat)) {
         ok = true;
         break;
       }
       /* if not gimbal, fall through to normal */
       ATTR_FALLTHROUGH;
-    }
-    case V3D_ORIENT_NORMAL: {
+
+    case V3D_ORIENT_NORMAL:
       if (obedit || ob->mode & OB_MODE_POSE) {
         ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
         ok = true;
@@ -680,8 +681,8 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
       }
       /* no break we define 'normal' as 'local' in Object mode */
       ATTR_FALLTHROUGH;
-    }
-    case V3D_ORIENT_LOCAL: {
+
+    case V3D_ORIENT_LOCAL:
       if (ob->mode & OB_MODE_POSE) {
         /* each bone moves on its own local axis, but  to avoid confusion,
          * use the active pones axis for display [#33575], this works as expected on a single bone
@@ -695,104 +696,57 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
       normalize_m3(r_mat);
       ok = true;
       break;
-    }
-    case V3D_ORIENT_VIEW: {
+
+    case V3D_ORIENT_VIEW:
       if (rv3d != NULL) {
         copy_m3_m4(r_mat, rv3d->viewinv);
         normalize_m3(r_mat);
         ok = true;
       }
       break;
-    }
-    case V3D_ORIENT_CURSOR: {
+
+    case V3D_ORIENT_CURSOR:
       BKE_scene_cursor_rot_to_mat3(&scene->cursor, r_mat);
       ok = true;
       break;
-    }
-    case V3D_ORIENT_AXIAL: {
-      bConstraint *con;
-      ListBase conlist = ob->constraints;
-      bool child_of = false;
-        for (con = ob->constraints.first; con; con = con->next) {
-          if (BLI_strcaseeq(con->name, "Child Of")) {
-            child_of = true;
-            break;
-          }
-      }
 
-      if (ob->parent) {
-        /* Copying local manipulation for bone pose mode. */
-        if (ob->mode & OB_MODE_POSE) {
-          /* each bone moves on its own local axis, but  to avoid confusion,
-           * use the active pones axis for display [#33575], this works as expected on a single
-           * bone and users who select many bones will understand what's going on and what local
-           * means when they start transforming. */
-          ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
-          ok = true;
+    case V3D_ORIENT_AXIAL: {
+      if (ob->mode & OB_MODE_POSE) {
+        ok = true;
+        bPoseChannel *posebone = CTX_data_active_pose_bone(C);
+        if (!posebone) {
           break;
         }
 
-        float final_orientation[4][4];
+        // for god node (bottom of hierarchy)
+        if(!posebone->parent) {
+          // works like local
+          copy_m3_m4(r_mat, ob->obmat);
+          normalize_m3(r_mat);
+          break;
+        }
 
-        float tmat[4][4];
-        float locmat[4][4];
-
-        BKE_object_to_mat4_loc_matrix(ob, locmat);
-        mul_m4_m4m4(tmat, ob->parent->obmat, ob->parentinv);
-        mul_m4_m4m4(final_orientation, tmat, locmat);
-
-        copy_m3_m4(r_mat, final_orientation);
-        normalize_m3(r_mat);
-        ok = true;
+        float mat[3][3]; // Final matrix that will be put in twmat for the region view
+        BKE_pose_computing_pchan_rest(posebone, mat);
+        copy_m3_m4(r_mat, mat);
         break;
       }
-      else if (ob->mode & OB_MODE_POSE) {
-        ED_getTransformOrientationMatrix(C, r_mat, pivot_point);
-        // deal with very small values - meant for numerical issues
-        for (int i = 0; i < 3;i++) {
-          for(int j = 0; j < 3; j++) {
-            if (r_mat[i][j] > 0) {
-              r_mat[i][j] = ((r_mat[i][j] - floorf(r_mat[i][j])) < 1.0e-3) ? floorf(r_mat[i][j]) : r_mat[i][j];
-            }
-            else {
-              r_mat[i][j] = ((-ceilf(r_mat[i][j]) - r_mat[i][j]) < 1.0e-3) ? ceilf(r_mat[i][j]) : r_mat[i][j];
-            }
-          }
-        }
+
+      // This is for regular non-rig objects
+      if (is_zero_v3(ob->rot)) {
         ok = true;
-        break;
+        copy_m3_m4(r_mat, ob->obmat);
       }
-      else if (child_of) {
-        bChildOfConstraint *data = con->data;
-        if (data->tar) {
-          float target_matrix[4][4]; // parent * offset (parent inverse)
-          float final_orientation[4][4];
-          float locmat[4][4];
-          float tmat[4][4];
-            if (con->enforce == 0.0) {
-              unit_m4(final_orientation);
-            }
-            else if (con->enforce == 1.0) {
-              BKE_object_to_mat4_loc_matrix(ob, locmat);
-              mul_m4_m4m4(tmat, data->tar->obmat, data->invmat);
-              mul_m4_m4m4(final_orientation, tmat, locmat);
-            }
-            else {
-              bConstraintOb *cob;
-              Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
-              cob = BKE_constraints_make_evalob(depsgraph, scene, ob, NULL, CONSTRAINT_OBTYPE_OBJECT);
-              // BKE_object_to_mat4_loc_matrix(ob, locmat);
-              mul_m4_m4m4(tmat, data->tar->obmat, data->invmat);
-              mul_m4_m4m4(final_orientation, tmat, /*locmat8*/cob->startmat);
-            }
-            copy_m3_m4(r_mat, final_orientation);
-            normalize_m3(r_mat);
-            ok = true;
-            break;
-        }
+      else {
+        ok = true;
+        float mfm[4][4]; // My final matrix
+        BKE_object_computing_obmat_rest(ob, mfm);
+        copy_m3_m4(r_mat, mfm);
       }
+      normalize_m3(r_mat);
       break;
     }
+
     case V3D_ORIENT_CUSTOM: {
       TransformOrientation *custom_orientation = BKE_scene_transform_orientation_find(
           scene, orientation_index_custom);

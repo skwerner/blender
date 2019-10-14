@@ -155,6 +155,7 @@ void BKE_pchan_rot_to_mat3(const struct bPoseChannel *pchan, float mat[3][3]);
 void BKE_pchan_apply_mat4(struct bPoseChannel *pchan, float mat[4][4], bool use_comat);
 void BKE_pchan_to_mat4(const struct bPoseChannel *pchan, float chan_mat[4][4]);
 void BKE_pchan_calc_mat(struct bPoseChannel *pchan);
+void BKE_pose_computing_pchan_rest(struct bPoseChannel *pchan, float mat[3][3]);
 
 /* Simple helper, computes the offset bone matrix. */
 void BKE_bone_offset_matrix_get(const struct Bone *bone, float offs_bone[4][4]);

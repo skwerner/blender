@@ -316,6 +316,7 @@ void BKE_object_handle_update_ex(struct Depsgraph *depsgraph,
                                  const bool do_proxy_update);
 
 void BKE_object_sculpt_data_create(struct Object *ob);
+void BKE_object_computing_obmat_rest(struct Object *obb, float mfm[4][4]);
 
 int BKE_object_obdata_texspace_get(
     struct Object *ob, short **r_texflag, float **r_loc, float **r_size, float **r_rot);

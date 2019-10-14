@@ -721,29 +721,29 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
         // for god node (bottom of hierarchy)
         if(!posebone->parent) {
           // works like local
-          copy_m4_m4(r_mat, ob->obmat);
-          normalize_m4(r_mat);
+          copy_m3_m4(r_mat, ob->obmat);
+          normalize_m3(r_mat);
           break;
         }
 
         float mat[3][3]; // Final matrix that will be put in twmat for the region view
         BKE_pose_computing_pchan_rest(posebone, mat);
-        copy_m4_m3(r_mat, mat);
+        copy_m3_m4(r_mat, mat);
         break;
       }
 
       // This is for regular non-rig objects
       if (is_zero_v3(ob->rot)) {
         ok = true;
-        copy_m4_m4(r_mat, ob->obmat);
+        copy_m3_m4(r_mat, ob->obmat);
       }
       else {
         ok = true;
         float mfm[4][4]; // My final matrix
         BKE_object_computing_obmat_rest(ob, mfm);
-        copy_m4_m4(r_mat, mfm);
+        copy_m3_m4(r_mat, mfm);
       }
-      normalize_m4(r_mat);
+      normalize_m3(r_mat);
       break;
     }
 

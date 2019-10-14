@@ -728,7 +728,7 @@ void setUserConstraint(TransInfo *t, short orientation, int mode, const char fte
       setConstraint(t, t->spacemtx, mode, text);
       break;
     case V3D_ORIENT_AXIAL:
-      BLI_snprintf(text, sizeof(text), ftext, IFACE_("axial"));
+      BLI_snprintf(text, sizeof(text), ftext, TIP_("axial"));
       setConstraint(t, t->spacemtx, mode, text);
       break;
     case V3D_ORIENT_CUSTOM: {

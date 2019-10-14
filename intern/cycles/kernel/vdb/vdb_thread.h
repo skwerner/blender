@@ -67,11 +67,18 @@ class VDBThread {
   OpenVDBThreadData *data;
   VDBThread(OpenVDBGlobals *vdb)
   {
-    data = VDBVolume::thread_init(vdb);
+    if (vdb) {
+      data = VDBVolume::thread_init(vdb);
+    }
+    else {
+      data = NULL;
+    }
   }
   ~VDBThread()
   {
-    VDBVolume::thread_free(data);
+    if (data) {
+      VDBVolume::thread_free(data);
+    }
   }
 };
 

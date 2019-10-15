@@ -34,19 +34,16 @@ if(WITH_CYCLES_OSL)
   list(APPEND LIBRARIES cycles_kernel_osl)
 endif()
 
-if(NOT CYCLES_STANDALONE_REPOSITORY)
-  list(APPEND LIBRARIES bf_intern_glew_mx bf_intern_guardedalloc bf_intern_numaapi)
-endif()
-
 if(WITH_OPENVDB)
-	list(APPEND LIBRARIES cycles_kernel_vdb)
+  list(APPEND LIBRARIES cycles_kernel_vdb)
 endif()
 
-if(WITH_CYCLES_LOGGING)
-  list(APPEND LIBRARIES
-    ${GLOG_LIBRARIES}
-    ${GFLAGS_LIBRARIES}
-  )
+if(CYCLES_STANDALONE_REPOSITORY)
+	if(WITH_CYCLES_LOGGING)
+    list(APPEND LIBRARIES
+         ${GLOG_LIBRARIES}
+         ${GFLAGS_LIBRARIES})
+  endif()
 endif()
 
 if(WITH_CYCLES_STANDALONE AND WITH_CYCLES_STANDALONE_GUI)

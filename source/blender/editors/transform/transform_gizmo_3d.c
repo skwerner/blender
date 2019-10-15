@@ -728,7 +728,7 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
 
         float mat[3][3]; // Final matrix that will be put in twmat for the region view
         BKE_pose_computing_pchan_rest(posebone, mat);
-        copy_m3_m4(r_mat, mat);
+        copy_m3_m3(r_mat, mat);
         break;
       }
 

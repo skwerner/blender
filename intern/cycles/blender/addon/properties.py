@@ -777,7 +777,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     )
 
     diffuse_shaders: BoolProperty   (
-        name="Diffuse only Shading",
+        name="Diffuse Surface Override",
         default=False,
         description="Replace surface shading with diffuse gray, leave volume and transparency intact"
     )

@@ -832,7 +832,7 @@ bool OpenCLInfo::device_version_check(cl_device_id device, string *error)
 
 string OpenCLInfo::get_hardware_id(const string &platform_name, cl_device_id device_id)
 {
-  if (platform_name == "AMD Accelerated Parallel Processing" || platform_name == "Apple") {
+  if (platform_name == "AMD Accelerated Parallel Processing") {
     /* Use cl_amd_device_topology extension. */
     cl_char topology[24];
     if (clGetDeviceInfo(device_id, 0x4037, sizeof(topology), topology, NULL) == CL_SUCCESS &&
@@ -856,7 +856,11 @@ string OpenCLInfo::get_hardware_id(const string &platform_name, cl_device_id dev
   }
 #ifdef __APPLE__
   else if (platform_name == "Apple") {
-    return string_printf("%s:%02x", platform_name.c_str(), device_id);
+    static constexpr int CL_DEVICE_REGISTRY_ID_APPLE = 0x10000030;
+    cl_ulong registry_id;
+    if (clGetDeviceInfo(device_id, CL_DEVICE_REGISTRY_ID_APPLE, sizeof(registry_id), &registry_id, NULL)) {
+      return string_printf("%llu", registry_id);
+    }
   }
 #endif
   /* No general way to get a hardware ID from OpenCL => give up. */

@@ -1107,7 +1107,7 @@ class WM_OT_doc_view(Operator):
     bl_label = "View Documentation"
 
     doc_id: doc_id
-    if bpy.app.version_cycle in {"release", "rc"}:
+    if bpy.app.version_cycle in {"release", "rc", "beta"}:
         _prefix = ("https://docs.blender.org/api/%d.%d%s" %
                    (bpy.app.version[0], bpy.app.version[1], bpy.app.version_char))
     else:
@@ -1999,7 +1999,6 @@ class WM_OT_batch_rename(Operator):
                     descr,
                 )
 
-
         return data
 
     @staticmethod
@@ -2042,7 +2041,7 @@ class WM_OT_batch_rename(Operator):
                     if action.use_replace_regex_dst:
                         replace_dst = action.replace_dst
                     else:
-                        replace_dst = re.escape(action.replace_dst)
+                        replace_dst = action.replace_dst.replace("\\", "\\\\")
                 else:
                     replace_src = re.escape(action.replace_src)
                     replace_dst = re.escape(action.replace_dst)

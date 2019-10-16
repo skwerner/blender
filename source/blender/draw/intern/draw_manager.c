@@ -164,7 +164,7 @@ struct DRWTextStore *DRW_text_cache_ensure(void)
 
 bool DRW_object_is_renderable(const Object *ob)
 {
-  BLI_assert((ob->base_flag & BASE_VISIBLE) != 0);
+  BLI_assert((ob->base_flag & BASE_VISIBLE_DEPSGRAPH) != 0);
 
   if (ob->type == OB_MESH) {
     if ((ob == DST.draw_ctx.object_edit) || BKE_object_is_in_editmode(ob)) {
@@ -1192,7 +1192,7 @@ static bool drw_engines_draw_background(void)
   /* No draw engines draw the background. We clear the background.
    * We draw the background after drawing of the scene so the camera background
    * images can be drawn using ALPHA Under. Otherwise the background always
-   * interferred with the alpha blending */
+   * interfered with the alpha blending. */
   DRW_clear_background();
   return false;
 }
@@ -1575,20 +1575,6 @@ void DRW_draw_view(const bContext *C)
   DRW_draw_render_loop_ex(depsgraph, engine_type, ar, v3d, viewport, C);
 }
 
-static bool is_object_visible_in_viewport(View3D *v3d, Object *ob)
-{
-  if (v3d->localvd && ((v3d->local_view_uuid & ob->base_local_view_bits) == 0)) {
-    return false;
-  }
-
-  if ((v3d->flag & V3D_LOCAL_COLLECTIONS) &&
-      ((v3d->local_collections_uuid & ob->runtime.local_collections_bits) == 0)) {
-    return false;
-  }
-
-  return true;
-}
-
 /**
  * Used for both regular and off-screen drawing.
  * Need to reset DST before calling this function
@@ -1664,7 +1650,7 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
         if ((object_type_exclude_viewport & (1 << ob->type)) != 0) {
           continue;
         }
-        if (!is_object_visible_in_viewport(v3d, ob)) {
+        if (!BKE_object_is_visible_in_viewport(v3d, ob)) {
           continue;
         }
         DST.dupli_parent = data_.dupli_parent;
@@ -2364,7 +2350,7 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
                                               v3d->object_type_exclude_select);
       bool filter_exclude = false;
       DEG_OBJECT_ITER_FOR_RENDER_ENGINE_BEGIN (depsgraph, ob) {
-        if (!is_object_visible_in_viewport(v3d, ob)) {
+        if (!BKE_object_is_visible_in_viewport(v3d, ob)) {
           continue;
         }
         if ((ob->base_flag & BASE_SELECTABLE) &&
@@ -2514,7 +2500,7 @@ static void drw_draw_depth_loop_imp(struct Depsgraph *depsgraph,
       if ((object_type_exclude_viewport & (1 << ob->type)) != 0) {
         continue;
       }
-      if (!is_object_visible_in_viewport(v3d, ob)) {
+      if (!BKE_object_is_visible_in_viewport(v3d, ob)) {
         continue;
       }
       DST.dupli_parent = data_.dupli_parent;

@@ -247,13 +247,7 @@ short ED_fileselect_set_params(SpaceFile *sfile)
     }
 
     /* For now, always init filterid to 'all true' */
-    params->filter_id = FILTER_ID_AC | FILTER_ID_AR | FILTER_ID_BR | FILTER_ID_CA | FILTER_ID_CU |
-                        FILTER_ID_GD | FILTER_ID_GR | FILTER_ID_IM | FILTER_ID_LA | FILTER_ID_LS |
-                        FILTER_ID_LT | FILTER_ID_MA | FILTER_ID_MB | FILTER_ID_MC | FILTER_ID_ME |
-                        FILTER_ID_MSK | FILTER_ID_NT | FILTER_ID_OB | FILTER_ID_PA |
-                        FILTER_ID_PAL | FILTER_ID_PC | FILTER_ID_SCE | FILTER_ID_SPK |
-                        FILTER_ID_SO | FILTER_ID_TE | FILTER_ID_TXT | FILTER_ID_VF | FILTER_ID_WO |
-                        FILTER_ID_CF | FILTER_ID_WS | FILTER_ID_LP;
+    params->filter_id = FILTER_ID_ALL;
 
     if (U.uiflag & USER_HIDE_DOT) {
       params->flag |= FILE_HIDE_DOT;
@@ -362,10 +356,10 @@ void ED_fileselect_set_params_from_userdef(SpaceFile *sfile)
 
 /**
  * Update the user-preference data for the file space. In fact, this also contains some
- * non-FileSelectParams data, but it's neglectable.
+ * non-FileSelectParams data, but we can safely ignore this.
  *
- * \param temp_win_size: If the browser was opened in a temporary window, pass its size here so we
- *                       can store that in the preferences. Otherwise NULL.
+ * \param temp_win_size: If the browser was opened in a temporary window,
+ * pass its size here so we can store that in the preferences. Otherwise NULL.
  */
 void ED_fileselect_params_to_userdef(SpaceFile *sfile, int temp_win_size[2])
 {

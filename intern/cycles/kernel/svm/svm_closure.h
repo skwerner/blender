@@ -156,6 +156,7 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg,
 
       ClosureType distribution = (ClosureType)data_node2.y;
       ClosureType subsurface_method = (ClosureType)data_node2.z;
+      bool sss_diffuse_blend = data_node2.w;
 
       /* rotate tangent */
       if (anisotropic_rotation != 0.0f)
@@ -224,10 +225,18 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg,
         base_color = mixed_ss_base_color;
       }
 
+      if (sss_diffuse_blend) {
+        mixed_ss_base_color = subsurface_color;
+        subsurf_weight = weight * mixed_ss_base_color * diffuse_weight * subsurface;
+      }
+
       /* diffuse */
       if (fabsf(average(mixed_ss_base_color)) > CLOSURE_WEIGHT_CUTOFF) {
-        if (subsurface <= CLOSURE_WEIGHT_CUTOFF && diffuse_weight > CLOSURE_WEIGHT_CUTOFF) {
+        if ((subsurface <= CLOSURE_WEIGHT_CUTOFF || sss_diffuse_blend) && diffuse_weight > CLOSURE_WEIGHT_CUTOFF) {
           float3 diff_weight = weight * base_color * diffuse_weight;
+          if (sss_diffuse_blend) {
+            diff_weight *= 1.0f - subsurface;
+          }
 
           PrincipledDiffuseBsdf *bsdf = (PrincipledDiffuseBsdf *)bsdf_alloc(
               sd, sizeof(PrincipledDiffuseBsdf), diff_weight);
@@ -240,7 +249,7 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg,
             sd->flag |= bsdf_principled_diffuse_setup(bsdf);
           }
         }
-        else if (subsurface > CLOSURE_WEIGHT_CUTOFF) {
+        if (subsurface > CLOSURE_WEIGHT_CUTOFF) {
           Bssrdf *bssrdf = bssrdf_alloc(sd, subsurf_weight);
 
           if (bssrdf) {

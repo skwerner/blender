@@ -1079,6 +1079,7 @@ static void node_shader_buts_principled(uiLayout *layout, bContext *UNUSED(C), P
 {
   uiItemR(layout, ptr, "distribution", 0, "", ICON_NONE);
   uiItemR(layout, ptr, "subsurface_method", 0, "", ICON_NONE);
+  uiItemR(layout, ptr, "sss_diffuse_blend", 0, NULL, ICON_NONE);
 }
 
 static void node_shader_buts_anisotropic(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)

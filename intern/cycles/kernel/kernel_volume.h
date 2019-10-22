@@ -1188,6 +1188,7 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
       stack[0].object = PRIM_NONE;
       stack[0].t_enter = 0.0f;
       stack[0].t_exit = FLT_MAX;
+      stack[0].depth = 1;
       stack[1].shader = SHADER_NONE;
     }
     else {
@@ -1238,6 +1239,7 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
           stack[stack_index].shader = stack_sd->shader;
           stack[stack_index].t_enter = 0.0f;
           stack[stack_index].t_exit = FLT_MAX;
+          stack[stack_index].depth = 1;
           ++stack_index;
         }
       }
@@ -1286,6 +1288,7 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
         stack[stack_index].shader = stack_sd->shader;
         stack[stack_index].t_enter = 0.0f;
         stack[stack_index].t_exit = FLT_MAX;
+        stack[stack_index].depth = 1;
         ++stack_index;
       }
     }
@@ -1313,6 +1316,7 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
     stack[0].object = PRIM_NONE;
     stack[0].t_enter = 0.0f;
     stack[0].t_exit = FLT_MAX;
+    stack[0].depth = 1;
     stack[1].shader = SHADER_NONE;
   }
   else {

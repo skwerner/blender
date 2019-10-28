@@ -204,6 +204,7 @@ void VolumeManager::device_update(Device *device,
 #ifdef WITH_OPENVDB
   OpenVDBGlobals *vdb = (OpenVDBGlobals *)device->vdb_memory();
   if (!vdb) {
+    need_update = false;
     return;
   }
 

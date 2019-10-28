@@ -335,7 +335,7 @@ bool VDBVolume::sample(OpenVDBThreadData *vdb_thread,
                        float *b,
                        int sampling)
 {
-  if (vdb_thread->data.size() > vdb_index && vdb_thread->data[vdb_index]) {
+  if (vdb_thread && vdb_thread->data.size() > vdb_index && vdb_thread->data[vdb_index]) {
     return vdb_thread->data[vdb_index]->sample(x, y, z, r, g, b, sampling);
   }
   else {

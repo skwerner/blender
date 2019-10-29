@@ -474,7 +474,8 @@ const char *BKE_appdir_folder_id_ex(const int folder_id,
       if (get_path_environment(path, path_len, subfolder, "BLENDER_USER_CONFIG")) {
         break;
       }
-      if (get_path_user(path, path_len, "config", subfolder, ver)) {
+      bool get_path = get_path_user(path, path_len, "config", subfolder, ver);
+      if (get_path) {
         break;
       }
       return NULL;

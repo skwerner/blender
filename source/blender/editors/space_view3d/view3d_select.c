@@ -1487,6 +1487,9 @@ static int object_select_menu_exec(bContext *C, wmOperator *op)
   }
 
   if ((oldbasact != basact)) {
+    SpaceGraph *sipo = CTX_wm_space_graph(C);
+    Object *ob = oldbasact->object;
+
     ED_object_base_activate(C, basact);
   }
 

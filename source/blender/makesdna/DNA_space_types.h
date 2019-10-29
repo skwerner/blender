@@ -453,6 +453,8 @@ typedef enum eGraphEdit_Flag {
   SIPO_NORMALIZE_FREEZE = (1 << 15),
   /* show vertical line for every marker */
   SIPO_MARKER_LINES = (1 << 16),
+  /* deselect keyframes when selecting new objects */
+  SIPO_DESELECT_KEYFRAMES = (1 << 17),
 } eGraphEdit_Flag;
 
 /* SpaceGraph.mode (Graph Editor Mode) */

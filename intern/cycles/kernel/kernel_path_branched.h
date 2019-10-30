@@ -510,14 +510,14 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
     }
     else {
       int i = (kernel_data.background.volume_shader != SHADER_NONE) ? 1 : 0;
-      do {
+      while (i < VOLUME_STACK_SIZE && state.volume_stack[i].shader != SHADER_NONE) {
         if (state.volume_stack[i].t_exit == FLT_MAX) {
           kernel_volume_stack_remove(kg, state.volume_stack[i].object, state.volume_stack);
         }
         else {
           ++i;
         }
-      } while (i < VOLUME_STACK_SIZE && state.volume_stack[i].shader != SHADER_NONE);
+      }
     }
 
     /* Collect heterogenous volume interactions until a non-volume object is intersected

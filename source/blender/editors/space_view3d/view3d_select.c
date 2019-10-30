@@ -82,8 +82,10 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "ED_anim_api.h"
 #include "ED_armature.h"
 #include "ED_curve.h"
+#include "ED_keyframes_edit.h"
 #include "ED_lattice.h"
 #include "ED_particle.h"
 #include "ED_mesh.h"
@@ -108,6 +110,7 @@
 #include "DRW_select_buffer.h"
 
 #include "view3d_intern.h" /* own include */
+#include "../space_graph/graph_intern.h"
 
 // #include "PIL_time_utildefines.h"
 
@@ -1487,9 +1490,6 @@ static int object_select_menu_exec(bContext *C, wmOperator *op)
   }
 
   if ((oldbasact != basact)) {
-    SpaceGraph *sipo = CTX_wm_space_graph(C);
-    Object *ob = oldbasact->object;
-
     ED_object_base_activate(C, basact);
   }
 
@@ -2244,6 +2244,25 @@ static bool ed_object_select_pick(bContext *C,
       }
 
       if ((oldbasact != basact) && (is_obedit == false)) {
+        ScrArea *sa;
+        SpaceGraph *sipo;
+        for (sa = CTX_wm_area(C); sa; sa = sa->prev) {
+          if (sa->spacetype == SPACE_GRAPH) {
+            break;
+          }
+        }
+        sipo = sa->spacedata.first;
+
+        if (sipo->flag & SIPO_DESELECT_KEYFRAMES) {
+          bAnimContext ac;
+          ac.datatype = 8;
+          ac.data = sipo->ads;
+
+          // Deselect keyframes
+
+          deselect_graph_keys(&ac, 0, SELECT_SUBTRACT, true);
+        }
+
         ED_object_base_activate(C, basact); /* adds notifier */
       }
 

@@ -189,7 +189,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       vdbmd->flags |= MOD_OPENVDB_NOW_RENDERING;
     }
 
-    if ((vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) && !(ob->flag & SELECT)) {
+    if ((vdbmd->flags & MOD_OPENVDB_HIDE_UNSELECTED) && !(ob->base_flag & BASE_SELECTED)) {
       vdbmd->flags |= MOD_OPENVDB_HIDE_VOLUME;
     }
 

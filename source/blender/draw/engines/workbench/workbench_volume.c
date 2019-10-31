@@ -148,7 +148,7 @@ void workbench_volume_cache_populate(WORKBENCH_Data *vedata,
   }
 
   if (sds->vdb && ((sds->vdb->flags & MOD_OPENVDB_HIDE_VOLUME) ||
-                   ((sds->vdb->flags & MOD_OPENVDB_HIDE_UNSELECTED) && !(ob->flag & SELECT)))) {
+                   ((sds->vdb->flags & MOD_OPENVDB_HIDE_UNSELECTED) && !(ob->base_flag & BASE_SELECTED)))) {
     return;
   }
 

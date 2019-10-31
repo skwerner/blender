@@ -2469,6 +2469,7 @@ NODE_DEFINE(PrincipledBsdfNode)
   SOCKET_IN_COLOR(base_color, "Base Color", make_float3(0.8f, 0.8f, 0.8f));
   SOCKET_IN_COLOR(subsurface_color, "Subsurface Color", make_float3(0.8f, 0.8f, 0.8f));
   SOCKET_IN_FLOAT(metallic, "Metallic", 0.0f);
+  SOCKET_IN_BOOLEAN(sss_diffuse_blend, "Blend SSS+Diffuse", false);
   SOCKET_IN_FLOAT(subsurface, "Subsurface", 0.0f);
   SOCKET_IN_VECTOR(subsurface_radius, "Subsurface Radius", make_float3(0.1f, 0.1f, 0.1f));
   SOCKET_IN_FLOAT(specular, "Specular", 0.0f);
@@ -2631,7 +2632,7 @@ void PrincipledBsdfNode::compile(SVMCompiler &compiler,
                                            transmission_roughness_offset),
                     distribution,
                     subsurface_method,
-                    SVM_STACK_INVALID);
+                    sss_diffuse_blend);
 
   float3 bc_default = get_float3(base_color_in->socket_type);
 

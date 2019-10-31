@@ -545,6 +545,7 @@ static ShaderNode *add_node(Scene *scene,
         principled->subsurface_method = CLOSURE_BSSRDF_PRINCIPLED_RANDOM_WALK_ID;
         break;
     }
+    principled->sss_diffuse_blend = b_principled_node.sss_diffuse_blend();
     node = principled;
   }
   else if (b_node.is_a(&RNA_ShaderNodeBsdfTranslucent)) {

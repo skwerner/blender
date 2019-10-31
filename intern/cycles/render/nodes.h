@@ -511,6 +511,7 @@ class PrincipledBsdfNode : public BsdfBaseNode {
 
   float3 base_color;
   float3 subsurface_color, subsurface_radius;
+  bool sss_diffuse_blend;
   float metallic, subsurface, specular, roughness, specular_tint, anisotropic, sheen, sheen_tint,
       clearcoat, clearcoat_roughness, ior, transmission, anisotropic_rotation,
       transmission_roughness;

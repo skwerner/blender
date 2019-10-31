@@ -87,7 +87,7 @@ NODE_DEFINE(Integrator)
   SOCKET_ENUM(sampling_pattern, "Sampling Pattern", sampling_pattern_enum, SAMPLING_PATTERN_SOBOL);
 
   SOCKET_BOOLEAN(ignore_shaders, "Ignore Shaders", false);
-  SOCKET_BOOLEAN(diffuse_shaders, "Diffuse only Shading", false);
+  SOCKET_BOOLEAN(diffuse_shaders, "Diffuse Surface Override", false);
   SOCKET_BOOLEAN(ignore_volumes, "Ignore Volumes", false);
   SOCKET_BOOLEAN(ignore_lights, "Ignore Lights", false);
   SOCKET_BOOLEAN(ignore_shadows, "Ignore Shadows", false);

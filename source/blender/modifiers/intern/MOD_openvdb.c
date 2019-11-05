@@ -78,6 +78,8 @@ static void initData(ModifierData *md)
   vdbmd->frame_last = -1;
 
   vdbmd->flame_thickness = 1.0f;
+
+  vdbmd->flags = MOD_OPENVDB_HIDE_VOLUME;
 }
 
 static void freeData(ModifierData *md)

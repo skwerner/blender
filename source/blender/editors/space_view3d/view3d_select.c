@@ -28,6 +28,7 @@
 #include <assert.h>
 
 #include "DNA_action_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_meta_types.h"
@@ -2251,16 +2252,24 @@ static bool ed_object_select_pick(bContext *C,
             break;
           }
         }
-        sipo = sa->spacedata.first;
 
-        if (sipo->flag & SIPO_DESELECT_KEYFRAMES) {
-          bAnimContext ac;
-          ac.datatype = 8;
-          ac.data = sipo->ads;
+        if (sa != NULL) {
+          sipo = sa->spacedata.first;
+          Object *ob = oldbasact->object;
+          AnimData *ad = ob->adt;
 
-          // Deselect keyframes
+          if ((sipo->flag & SIPO_DESELECT_KEYFRAMES) && ad != NULL) {
 
-          deselect_graph_keys(&ac, 0, SELECT_SUBTRACT, true);
+            FCurve *fcu;
+            KeyframeEditData ked = {{NULL}};
+            short sel = SELECT_SUBTRACT;
+            KeyframeEditFunc sel_cb = ANIM_editkeyframes_select(sel);
+
+            for(fcu = ad->action->curves.first; fcu; fcu = fcu->next) {
+              ANIM_fcurve_keyframes_loop(&ked, fcu, NULL, sel_cb, NULL);
+              fcu->flag &= ~FCURVE_SELECTED;
+            }
+          }
         }
 
         ED_object_base_activate(C, basact); /* adds notifier */

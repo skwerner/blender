@@ -161,7 +161,8 @@ bool ED_armature_edit_deselect_all_multi_ex(struct Base **bases, uint bases_len)
 bool ED_armature_edit_deselect_all_visible_multi_ex(struct Base **bases, uint bases_len);
 bool ED_armature_edit_deselect_all_visible_multi(struct bContext *C);
 
-bool ED_armature_pose_select_pick_with_buffer(struct ViewLayer *view_layer,
+bool ED_armature_pose_select_pick_with_buffer(struct bContext *C,
+                                              struct ViewLayer *view_layer,
                                               struct View3D *v3d,
                                               struct Base *base,
                                               const unsigned int *buffer,

@@ -2139,7 +2139,8 @@ static bool ed_object_select_pick(bContext *C,
             }
           }
         }
-        else if (ED_armature_pose_select_pick_with_buffer(view_layer,
+        else if (ED_armature_pose_select_pick_with_buffer(C,
+                                                          view_layer,
                                                           v3d,
                                                           basact,
                                                           buffer,

@@ -32,6 +32,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_string.h"
 
 #include "BKE_action.h"
 #include "BKE_armature.h"
@@ -52,6 +53,7 @@
 
 #include "ED_armature.h"
 #include "ED_keyframing.h"
+#include "ED_keyframes_edit.h"
 #include "ED_mesh.h"
 #include "ED_object.h"
 #include "ED_outliner.h"
@@ -138,7 +140,8 @@ void ED_pose_bone_select(Object *ob, bPoseChannel *pchan, bool select)
 
 /* called from editview.c, for mode-less pose selection */
 /* assumes scene obact and basact is still on old situation */
-bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
+bool ED_armature_pose_select_pick_with_buffer(bContext *C,
+                                              ViewLayer *view_layer,
                                               View3D *v3d,
                                               Base *base,
                                               const unsigned int *buffer,
@@ -243,6 +246,34 @@ bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
 
       /* tag armature for copy-on-write update (since act_bone is in armature not object) */
       DEG_id_tag_update(&arm->id, ID_RECALC_COPY_ON_WRITE);
+    }
+  }
+
+  // If the space graph has 
+  if (nearBone != NULL && !(BLI_strcaseeq(nearBone->name, ob->pose->proxy_act_bone))) {
+    ScrArea *sa;
+    SpaceGraph *sipo;
+    for (sa = CTX_wm_area(C); sa; sa = sa->next) {
+      if (sa->spacetype == SPACE_GRAPH) {
+        break;
+      }
+    }
+    if (sa != NULL) {
+      sipo = sa->spacedata.first;
+      AnimData *ad = ob->adt;
+
+      if ((sipo->flag & SIPO_DESELECT_KEYFRAMES) && ad != NULL) {
+
+        FCurve *fcu;
+        KeyframeEditData ked = {{NULL}};
+        short sel = SELECT_SUBTRACT;
+        KeyframeEditFunc sel_cb = ANIM_editkeyframes_select(sel);
+
+        for(fcu = ad->action->curves.first; fcu; fcu = fcu->next) {
+          ANIM_fcurve_keyframes_loop(&ked, fcu, NULL, sel_cb, NULL);
+          fcu->flag &= ~FCURVE_SELECTED;
+        }
+      }
     }
   }
 

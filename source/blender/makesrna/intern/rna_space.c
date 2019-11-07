@@ -4946,6 +4946,11 @@ static void rna_def_space_graph(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "AutoMerge Keyframes", "Automatically merge nearby keyframes");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_GRAPH, NULL);
 
+  prop = RNA_def_property(srna, "auto_deselect_keyframes", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", SIPO_DESELECT_KEYFRAMES);
+  RNA_def_property_ui_text(prop, "Deselect Keyframes", "Automatically deselect keyframes when selecting new objects");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_GRAPH, NULL);
+
   prop = RNA_def_property(srna, "use_realtime_update", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", SIPO_NOREALTIMEUPDATES);
   RNA_def_property_ui_text(

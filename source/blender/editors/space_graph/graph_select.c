@@ -416,6 +416,50 @@ void deselect_graph_keys(bAnimContext *ac, bool test, short sel, bool do_channel
   ANIM_animdata_freelist(&anim_data);
 }
 
+/* For deselecting all keyframes when selecting new objects */
+void auto_deselect_graph_keyframes(bContext *C, Object *ob)
+{
+
+  /* Changing the context of SrcArea into SpaceGraph */
+  ScrArea *sa;
+  SpaceGraph *sipo;
+  bool found = false;
+
+  for(sa = CTX_wm_area(C); sa; sa = sa->prev) {
+    if (sa->spacetype == SPACE_GRAPH) {
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    for (sa = CTX_wm_area(C); sa; sa = sa->next) {
+      if (sa->spacetype == SPACE_GRAPH) {
+        found = true;
+        break;
+      }
+    }
+  }
+
+  if (found) {
+    sipo = sa->spacedata.first;
+    AnimData *ad = ob->adt;
+    if ((sipo->flag & SIPO_DESELECT_KEYFRAMES) && ad != NULL) {
+
+      FCurve *fcu;
+      KeyframeEditData ked = {{NULL}};
+      short sel = SELECT_SUBTRACT;
+      KeyframeEditFunc sel_cb = ANIM_editkeyframes_select(sel);
+
+      for(fcu = ad->action->curves.first; fcu; fcu = fcu->next) {
+        ANIM_fcurve_keyframes_loop(&ked, fcu, NULL, sel_cb, NULL);
+        fcu->flag &= ~FCURVE_SELECTED;
+      }
+    }
+  }
+
+}
+
 /* ------------------- */
 
 static int graphkeys_deselectall_exec(bContext *C, wmOperator *op)

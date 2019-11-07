@@ -32,6 +32,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_string.h"
 
 #include "BKE_action.h"
 #include "BKE_armature.h"
@@ -44,6 +45,8 @@
 
 #include "DEG_depsgraph.h"
 
+#include "../space_graph/graph_intern.h"
+
 #include "RNA_access.h"
 #include "RNA_define.h"
 
@@ -52,6 +55,7 @@
 
 #include "ED_armature.h"
 #include "ED_keyframing.h"
+#include "ED_keyframes_edit.h"
 #include "ED_mesh.h"
 #include "ED_object.h"
 #include "ED_outliner.h"
@@ -138,7 +142,8 @@ void ED_pose_bone_select(Object *ob, bPoseChannel *pchan, bool select)
 
 /* called from editview.c, for mode-less pose selection */
 /* assumes scene obact and basact is still on old situation */
-bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
+bool ED_armature_pose_select_pick_with_buffer(bContext *C,
+                                              ViewLayer *view_layer,
                                               View3D *v3d,
                                               Base *base,
                                               const unsigned int *buffer,
@@ -244,6 +249,11 @@ bool ED_armature_pose_select_pick_with_buffer(ViewLayer *view_layer,
       /* tag armature for copy-on-write update (since act_bone is in armature not object) */
       DEG_id_tag_update(&arm->id, ID_RECALC_COPY_ON_WRITE);
     }
+  }
+
+  // Selecting within components of a rig
+  if (nearBone != NULL && !(BLI_strcaseeq(nearBone->name, ob->pose->proxy_act_bone))) {
+    auto_deselect_graph_keyframes(C, ob);
   }
 
   return nearBone != NULL;

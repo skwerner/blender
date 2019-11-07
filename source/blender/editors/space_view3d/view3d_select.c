@@ -28,6 +28,7 @@
 #include <assert.h>
 
 #include "DNA_action_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_meta_types.h"
@@ -82,8 +83,10 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "ED_anim_api.h"
 #include "ED_armature.h"
 #include "ED_curve.h"
+#include "ED_keyframes_edit.h"
 #include "ED_lattice.h"
 #include "ED_particle.h"
 #include "ED_mesh.h"
@@ -108,6 +111,7 @@
 #include "DRW_select_buffer.h"
 
 #include "view3d_intern.h" /* own include */
+#include "../space_graph/graph_intern.h"
 
 // #include "PIL_time_utildefines.h"
 
@@ -2135,7 +2139,8 @@ static bool ed_object_select_pick(bContext *C,
             }
           }
         }
-        else if (ED_armature_pose_select_pick_with_buffer(view_layer,
+        else if (ED_armature_pose_select_pick_with_buffer(C,
+                                                          view_layer,
                                                           v3d,
                                                           basact,
                                                           buffer,
@@ -2241,6 +2246,7 @@ static bool ed_object_select_pick(bContext *C,
       }
 
       if ((oldbasact != basact) && (is_obedit == false)) {
+        auto_deselect_graph_keyframes(C, oldbasact->object);
         ED_object_base_activate(C, basact); /* adds notifier */
       }
 

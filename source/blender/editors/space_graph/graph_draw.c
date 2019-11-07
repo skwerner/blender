@@ -263,6 +263,7 @@ static void draw_fcurve_selected_handle_vertices(
 static void draw_fcurve_handle_vertices(FCurve *fcu,
                                         View2D *v2d,
                                         bool sel_handle_only,
+                                        bool de_sel_keyframes,
                                         unsigned pos)
 {
   /* smooth outlines for more consistent appearance */
@@ -274,11 +275,12 @@ static void draw_fcurve_handle_vertices(FCurve *fcu,
 
   draw_fcurve_selected_handle_vertices(fcu, v2d, false, sel_handle_only, pos);
   draw_fcurve_selected_handle_vertices(fcu, v2d, true, sel_handle_only, pos);
+  
 
   immUnbindProgram();
 }
 
-static void draw_fcurve_vertices(ARegion *ar, FCurve *fcu, bool do_handles, bool sel_handle_only)
+static void draw_fcurve_vertices(ARegion *ar, FCurve *fcu, bool do_handles, bool sel_handle_only, bool de_sel_keyframes)
 {
   View2D *v2d = &ar->v2d;
 
@@ -297,7 +299,7 @@ static void draw_fcurve_vertices(ARegion *ar, FCurve *fcu, bool do_handles, bool
   /* draw the two handles first (if they're shown, the curve doesn't
    * have just a single keyframe, and the curve is being edited) */
   if (do_handles) {
-    draw_fcurve_handle_vertices(fcu, v2d, sel_handle_only, pos);
+    draw_fcurve_handle_vertices(fcu, v2d, sel_handle_only, de_sel_keyframes, pos);
   }
 
   /* draw keyframes over the handles */
@@ -1193,7 +1195,7 @@ void graph_draw_curves(bAnimContext *ac, SpaceGraph *sipo, ARegion *ar, short se
             GPU_blend(false);
           }
 
-          draw_fcurve_vertices(ar, fcu, do_handles, (sipo->flag & SIPO_SELVHANDLESONLY));
+          draw_fcurve_vertices(ar, fcu, do_handles, (sipo->flag & SIPO_SELVHANDLESONLY), (sipo->flag & SIPO_DESELECT_KEYFRAMES));
         }
         else {
           /* samples: only draw two indicators at either end as indicators */

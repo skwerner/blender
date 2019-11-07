@@ -49,6 +49,9 @@ void graph_draw_ghost_curves(struct bAnimContext *ac, struct SpaceGraph *sipo, s
 
 void deselect_graph_keys(struct bAnimContext *ac, bool test, short sel, bool do_channels);
 
+/* for deselecting keyframes when SIPO_DESELECT_KEYFRAMES is on */
+void auto_deselect_graph_keyframes(struct bContext *C, struct Object *ob);
+
 void GRAPH_OT_select_all(struct wmOperatorType *ot);
 void GRAPH_OT_select_box(struct wmOperatorType *ot);
 void GRAPH_OT_select_lasso(struct wmOperatorType *ot);

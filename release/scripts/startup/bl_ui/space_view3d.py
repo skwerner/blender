@@ -5981,6 +5981,9 @@ class VIEW3D_PT_transform_orientations(Panel):
         orient_slot = scene.transform_orientation_slots[0]
         orientation = orient_slot.custom_orientation
 
+        if (orient_slot.type == "MULTI"):
+            pass
+
         row = layout.row()
         col = row.column()
         col.prop(orient_slot, "type", expand=True)

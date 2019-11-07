@@ -315,6 +315,22 @@ class _defs_transform:
             draw_settings=draw_settings,
         )
 
+# class _defs_orientation_transform:
+
+#     @ToolDef.from_fn
+#     def translate_orientation():
+#         def draw_settings(context, layout, _tool):
+#             pass
+#         return dict()
+
+    # @ToolDef.from_fn
+    # def rotation_orientation():
+    #     return dict()
+
+    # @ToolDef.from_fn
+    # def scale_orientation():
+    #     return dict()
+
 
 class _defs_view3d_select:
 

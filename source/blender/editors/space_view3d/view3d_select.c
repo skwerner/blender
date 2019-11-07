@@ -2246,33 +2246,7 @@ static bool ed_object_select_pick(bContext *C,
       }
 
       if ((oldbasact != basact) && (is_obedit == false)) {
-        ScrArea *sa;
-        SpaceGraph *sipo;
-        for (sa = CTX_wm_area(C); sa; sa = sa->prev) {
-          if (sa->spacetype == SPACE_GRAPH) {
-            break;
-          }
-        }
-
-        if (sa != NULL) {
-          sipo = sa->spacedata.first;
-          Object *ob = oldbasact->object;
-          AnimData *ad = ob->adt;
-
-          if ((sipo->flag & SIPO_DESELECT_KEYFRAMES) && ad != NULL) {
-
-            FCurve *fcu;
-            KeyframeEditData ked = {{NULL}};
-            short sel = SELECT_SUBTRACT;
-            KeyframeEditFunc sel_cb = ANIM_editkeyframes_select(sel);
-
-            for(fcu = ad->action->curves.first; fcu; fcu = fcu->next) {
-              ANIM_fcurve_keyframes_loop(&ked, fcu, NULL, sel_cb, NULL);
-              fcu->flag &= ~FCURVE_SELECTED;
-            }
-          }
-        }
-
+        auto_deselect_graph_keyframes(C, oldbasact->object);
         ED_object_base_activate(C, basact); /* adds notifier */
       }
 

@@ -38,6 +38,7 @@
 
 #include "BLI_utildefines.h"
 #include "BLI_listbase.h"
+#include "BLI_string.h"
 
 #include "BKE_armature.h"
 #include "BKE_collection.h"
@@ -63,6 +64,8 @@
 #include "ED_select_utils.h"
 #include "ED_sequencer.h"
 #include "ED_undo.h"
+
+#include "../space_graph/graph_intern.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -384,35 +387,10 @@ static eOLDrawState tree_element_set_active_object(bContext *C,
     }
 
     if (set != OL_SETSEL_NONE) {
-
-      ScrArea *sa;
-      SpaceGraph *sipo;
-      for (sa = CTX_wm_area(C); sa; sa = sa->next) {
-        if (sa->spacetype == SPACE_GRAPH) {
-          break;
-        }
+      if(!BLI_strcaseeq(view_layer->basact->object->id.name, base->object->id.name) || 
+          ((base->object->mode == OB_MODE_POSE) && (!BLI_strcaseeq(base->object->pose->proxy_act_bone, te->name)))) {
+        auto_deselect_graph_keyframes(C, base->object);
       }
-
-      if (sa != NULL) {
-        sipo = sa->spacedata.first;
-        Object *ob = base->object;
-        AnimData *ad = ob->adt;
-
-        if ((sipo->flag & SIPO_DESELECT_KEYFRAMES) && ad != NULL) {
-
-          FCurve *fcu;
-          KeyframeEditData ked = {{NULL}};
-          short sel = SELECT_SUBTRACT;
-          KeyframeEditFunc sel_cb = ANIM_editkeyframes_select(sel);
-
-          for(fcu = ad->action->curves.first; fcu; fcu = fcu->next) {
-            ANIM_fcurve_keyframes_loop(&ked, fcu, NULL, sel_cb, NULL);
-            fcu->flag &= ~FCURVE_SELECTED;
-          }
-        }
-      }
-
-
       ED_object_base_activate(C, base); /* adds notifier */
       DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
       WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);

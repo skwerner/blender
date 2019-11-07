@@ -45,6 +45,8 @@
 
 #include "DEG_depsgraph.h"
 
+#include "../space_graph/graph_intern.h"
+
 #include "RNA_access.h"
 #include "RNA_define.h"
 
@@ -249,32 +251,9 @@ bool ED_armature_pose_select_pick_with_buffer(bContext *C,
     }
   }
 
-  // If the space graph has 
+  // Selecting within components of a rig
   if (nearBone != NULL && !(BLI_strcaseeq(nearBone->name, ob->pose->proxy_act_bone))) {
-    ScrArea *sa;
-    SpaceGraph *sipo;
-    for (sa = CTX_wm_area(C); sa; sa = sa->next) {
-      if (sa->spacetype == SPACE_GRAPH) {
-        break;
-      }
-    }
-    if (sa != NULL) {
-      sipo = sa->spacedata.first;
-      AnimData *ad = ob->adt;
-
-      if ((sipo->flag & SIPO_DESELECT_KEYFRAMES) && ad != NULL) {
-
-        FCurve *fcu;
-        KeyframeEditData ked = {{NULL}};
-        short sel = SELECT_SUBTRACT;
-        KeyframeEditFunc sel_cb = ANIM_editkeyframes_select(sel);
-
-        for(fcu = ad->action->curves.first; fcu; fcu = fcu->next) {
-          ANIM_fcurve_keyframes_loop(&ked, fcu, NULL, sel_cb, NULL);
-          fcu->flag &= ~FCURVE_SELECTED;
-        }
-      }
-    }
+    auto_deselect_graph_keyframes(C, ob);
   }
 
   return nearBone != NULL;

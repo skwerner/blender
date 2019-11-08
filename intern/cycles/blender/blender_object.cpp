@@ -430,6 +430,12 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
     object_updated = true;
   }
 
+  float volume_step_size = get_float(cobject, "volume_step_size");
+  if (volume_step_size != object->volume_step_size) {
+    object->volume_step_size = volume_step_size;
+    object_updated = true;
+  }
+
   /* sync the asset name for Cryptomatte */
   BL::Object parent = b_ob.parent();
   ustring parent_name;

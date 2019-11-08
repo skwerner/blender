@@ -98,6 +98,7 @@ NODE_DEFINE(Object)
   SOCKET_POINT(dupli_generated, "Dupli Generated", make_float3(0.0f, 0.0f, 0.0f));
   SOCKET_POINT2(dupli_uv, "Dupli UV", make_float2(0.0f, 0.0f));
   SOCKET_TRANSFORM_ARRAY(motion, "Motion", array<Transform>());
+  SOCKET_FLOAT(volume_step_size, "Step Size", 0.0f);
 
   SOCKET_BOOLEAN(is_shadow_catcher, "Shadow Catcher", false);
 
@@ -434,6 +435,7 @@ void ObjectManager::device_update_object_transform(UpdateObjectTransformState *s
   kobject.random_number = random_number;
   kobject.particle_index = particle_index;
   kobject.motion_offset = 0;
+  kobject.volume_step_size = ob->volume_step_size;
 
   if (mesh->use_motion_blur) {
     state->have_motion = true;

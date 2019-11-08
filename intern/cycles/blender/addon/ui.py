@@ -1187,6 +1187,27 @@ def has_geometry_visibility(ob):
     return ob and ((ob.type in {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META', 'LIGHT'}) or
                     (ob.instance_type == 'COLLECTION' and ob.instance_collection))
 
+class CYCLES_OBJECT_PT_volume(CyclesButtonsPanel, Panel):
+    bl_label = "Volume"
+    bl_context = "object"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return  CyclesButtonsPanel.poll(context) and (context.object)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+        layout = self.layout
+        ob = context.object
+        cob = ob.cycles
+
+        col = flow.column()
+        col.prop(cob, "volume_step_size", text="Step Size", invert_checkbox=True, toggle=False)
+
 
 class CYCLES_OBJECT_PT_visibility(CyclesButtonsPanel, Panel):
     bl_label = "Visibility"
@@ -2244,6 +2265,7 @@ classes = (
     CYCLES_OBJECT_PT_visibility,
     CYCLES_OBJECT_PT_visibility_ray_visibility,
     CYCLES_OBJECT_PT_visibility_culling,
+    CYCLES_OBJECT_PT_volume,
     CYCLES_LIGHT_PT_preview,
     CYCLES_LIGHT_PT_light,
     CYCLES_LIGHT_PT_nodes,

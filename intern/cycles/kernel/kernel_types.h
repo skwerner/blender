@@ -1443,8 +1443,9 @@ typedef struct KernelObject {
   float surface_area;
   float pass_id;
   float random_number;
-  float color[3];
   int particle_index;
+  float color[3];
+  float volume_step_size;
 
   float dupli_generated[3];
   float dupli_uv[2];
@@ -1460,7 +1461,6 @@ typedef struct KernelObject {
   float cryptomatte_object;
   float cryptomatte_asset;
 } KernelObject;
-static_assert_align(KernelObject, 16);
 
 typedef struct KernelSpotLight {
   float radius;

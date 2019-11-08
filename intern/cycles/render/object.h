@@ -81,6 +81,9 @@ class Object : public Node {
   int motion_step(float time) const;
   void update_motion();
 
+  /* Per object step size for volume rendering. */
+  float volume_step_size;
+
   /* Check whether object is traceable and it worth adding it to
    * kernel scene.
    */

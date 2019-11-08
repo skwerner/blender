@@ -1144,6 +1144,13 @@ class CyclesObjectSettings(bpy.types.PropertyGroup):
         default=False,
     )
 
+    volume_step_size: FloatProperty(
+        name="Step Size",
+        description="Step size for volume ray marching. A value of zero means using the global default",
+        min=0, max=1000.0,
+        default=0
+    )
+
     is_holdout: BoolProperty(
         name="Holdout",
         description="Render objects as a holdout or matte, creating a "

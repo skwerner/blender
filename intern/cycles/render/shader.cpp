@@ -45,11 +45,6 @@ CCL_NAMESPACE_BEGIN
 
 thread_mutex ShaderManager::lookup_table_mutex;
 
-/* Shared Texture System */
-OIIO::TextureSystem *ShaderManager::ts_shared = NULL;
-int ShaderManager::ts_shared_users = 0;
-thread_mutex ShaderManager::ts_shared_mutex;
-
 vector<float> ShaderManager::beckmann_table;
 bool ShaderManager::beckmann_table_ready = false;
 

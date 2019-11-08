@@ -187,7 +187,7 @@ void OSLShaderManager::shading_system_init()
 
   if (ss_shared_users == 0) {
     /* Must use aligned new due to concurrent hash map. */
-    services_shared = util_aligned_new<OSLRenderServices>(ts_shared);
+    services_shared = util_aligned_new<OSLRenderServices>(ts);
 
     string shader_path = path_get("shader");
 #  ifdef _WIN32
@@ -202,7 +202,7 @@ void OSLShaderManager::shading_system_init()
     shader_path = string_to_ansi(shader_path);
 #  endif
 
-    ss_shared = new OSL::ShadingSystem(services_shared, ts_shared, &errhandler);
+    ss_shared = new OSL::ShadingSystem(services_shared, ts, &errhandler);
     ss_shared->attribute("lockgeom", 1);
     ss_shared->attribute("commonspace", "world");
     ss_shared->attribute("searchpath:shader", shader_path);

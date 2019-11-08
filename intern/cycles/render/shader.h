@@ -227,10 +227,7 @@ class ShaderManager {
   void texture_system_free();
 
   OIIO::TextureSystem *ts;
-  static OIIO::TextureSystem *ts_shared;
-  static thread_mutex ts_shared_mutex;
-  static int ts_shared_users;
-
+  
   float3 xyz_to_r;
   float3 xyz_to_g;
   float3 xyz_to_b;

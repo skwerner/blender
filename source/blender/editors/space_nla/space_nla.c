@@ -40,7 +40,7 @@
 #include "ED_anim_api.h"
 #include "ED_markers.h"
 #include "ED_screen.h"
-#include "ED_scrubbing.h"
+#include "ED_time_scrub_ui.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -48,6 +48,7 @@
 
 #include "RNA_access.h"
 
+#include "UI_interface.h"
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
@@ -70,6 +71,7 @@ static SpaceLink *nla_new(const ScrArea *sa, const Scene *scene)
 
   /* set auto-snapping settings */
   snla->autosnap = SACTSNAP_FRAME;
+  snla->flag = SNLA_SHOW_MARKER_LINES;
 
   /* header */
   ar = MEM_callocN(sizeof(ARegion), "header for nla");
@@ -117,7 +119,7 @@ static SpaceLink *nla_new(const ScrArea *sa, const Scene *scene)
 
   ar->v2d.minzoom = 0.01f;
   ar->v2d.maxzoom = 50;
-  ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
+  ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
   ar->v2d.scroll |= (V2D_SCROLL_RIGHT);
   ar->v2d.keepzoom = V2D_LOCKZOOM_Y;
   ar->v2d.keepofs = V2D_KEEPOFS_Y;
@@ -203,7 +205,7 @@ static void nla_channel_region_draw(const bContext *C, ARegion *ar)
   }
 
   /* channel filter next to scrubbing area */
-  ED_channel_search_draw(C, ar, ac.ads);
+  ED_time_scrub_channel_search_draw(C, ar, ac.ads);
 
   /* reset view matrix */
   UI_view2d_view_restore(C);
@@ -288,7 +290,7 @@ static void nla_main_region_draw(const bContext *C, ARegion *ar)
   /* reset view matrix */
   UI_view2d_view_restore(C);
 
-  ED_scrubbing_draw(ar, scene, snla->flag & SNLA_DRAWTIME, true);
+  ED_time_scrub_draw(ar, scene, snla->flag & SNLA_DRAWTIME, true);
 
   /* scrollers */
   scrollers = UI_view2d_scrollers_calc(v2d, NULL);
@@ -520,7 +522,7 @@ static void nla_channel_region_message_subscribe(const struct bContext *UNUSED(C
    * so just whitelist the entire struct for updates
    */
   {
-    wmMsgParams_RNA msg_key_params = {{{0}}};
+    wmMsgParams_RNA msg_key_params = {{0}};
     StructRNA *type_array[] = {
         &RNA_DopeSheet,
     };
@@ -641,7 +643,7 @@ void ED_spacetype_nla(void)
   /* regions: UI buttons */
   art = MEM_callocN(sizeof(ARegionType), "spacetype nla region");
   art->regionid = RGN_TYPE_UI;
-  art->prefsizex = 200;
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_UI;
   art->listener = nla_region_listener;
   art->init = nla_buttons_region_init;

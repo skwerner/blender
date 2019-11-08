@@ -123,6 +123,21 @@ void getEdgeVertices(const OpenSubdiv_TopologyRefiner *topology_refiner,
   edge_vertices_indices[1] = array[1];
 }
 
+int getNumVertexEdges(const OpenSubdiv_TopologyRefiner *topology_refiner, const int vertex_index)
+{
+  const OpenSubdiv::Far::TopologyLevel *base_level = getOSDTopologyBaseLevel(topology_refiner);
+  return base_level->GetVertexEdges(vertex_index).size();
+}
+
+void getVertexEdges(const OpenSubdiv_TopologyRefiner *topology_refiner,
+                    const int vertex_index,
+                    int *vertex_edges_indices)
+{
+  const OpenSubdiv::Far::TopologyLevel *base_level = getOSDTopologyBaseLevel(topology_refiner);
+  OpenSubdiv::Far::ConstIndexArray array = base_level->GetVertexEdges(vertex_index);
+  convertArrayToRaw(array, vertex_edges_indices);
+}
+
 int getNumFacePtexFaces(const OpenSubdiv_TopologyRefiner *topology_refiner, const int face_index)
 {
   const int num_face_vertices = topology_refiner->getNumFaceVertices(topology_refiner, face_index);
@@ -201,6 +216,8 @@ void assignFunctionPointers(OpenSubdiv_TopologyRefiner *topology_refiner)
   topology_refiner->getNumFaceEdges = getNumFaceEdges;
   topology_refiner->getFaceEdges = getFaceEdges;
   topology_refiner->getEdgeVertices = getEdgeVertices;
+  topology_refiner->getNumVertexEdges = getNumVertexEdges;
+  topology_refiner->getVertexEdges = getVertexEdges;
   // PTex face geometry.
   topology_refiner->getNumFacePtexFaces = getNumFacePtexFaces;
   topology_refiner->getNumPtexFaces = getNumPtexFaces;
@@ -378,7 +395,7 @@ bool compareCyclicBackward(const CyclicArray &array_a,
   return true;
 }
 
-// Utility function dedicated for checking whether whether verticies indices
+// Utility function dedicated for checking whether whether vertices indices
 // used by two faces match.
 // The tricky part here is that we can't trust 1:1 array match here, since it's
 // possible that OpenSubdiv oriented edges of a face to make it compatible with
@@ -386,10 +403,10 @@ bool compareCyclicBackward(const CyclicArray &array_a,
 //
 // TODO(sergey): Check whether this is needed, ot whether OpenSubdiv is only
 // creating edges in a proper orientation without modifying indices of face
-// verticies.
+// vertices.
 bool checkVerticesOfFacesMatch(const CyclicArray &indices_a, const CyclicArray &indices_b)
 {
-  if (indices_a.size() != indices_a.size()) {
+  if (indices_a.size() != indices_b.size()) {
     return false;
   }
   // "Align" the arrays so we know first matched element.
@@ -503,7 +520,7 @@ bool checkEdgeTagsMatchAutoOrient(const OpenSubdiv::Far::TopologyRefiner *topolo
   using OpenSubdiv::Far::TopologyLevel;
   const TopologyLevel &base_level = topology_refiner->GetLevel(0);
   const int num_edges = base_level.GetNumEdges();
-  // Create mapping for quick lookup of edge index from its verticies indices.
+  // Create mapping for quick lookup of edge index from its vertices indices.
   //
   // TODO(sergey): Consider caching it in some sort of wrapper around topology
   // refiner.
@@ -514,7 +531,7 @@ bool checkEdgeTagsMatchAutoOrient(const OpenSubdiv::Far::TopologyRefiner *topolo
   }
   // Compare all edges.
   for (int converter_edge_index = 0; converter_edge_index < num_edges; ++converter_edge_index) {
-    // Get edge verticies indices, and lookup corresponding edge index in the
+    // Get edge vertices indices, and lookup corresponding edge index in the
     // base topology level.
     int edge_vertices[2];
     converter->getEdgeVertices(converter, converter_edge_index, edge_vertices);
@@ -546,7 +563,7 @@ bool checkvertexSharpnessMatch(const OpenSubdiv::Far::TopologyRefiner *topology_
   using OpenSubdiv::Far::TopologyLevel;
   using OpenSubdiv::Sdc::Crease;
   const TopologyLevel &base_level = topology_refiner->GetLevel(0);
-  // Create mapping for quick lookup of edge index from its verticies indices.
+  // Create mapping for quick lookup of edge index from its vertices indices.
   //
   // TODO(sergey): Consider caching it in some sort of wrapper around topology
   // refiner.

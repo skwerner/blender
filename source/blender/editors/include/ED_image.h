@@ -28,9 +28,9 @@ struct ARegion;
 struct ImBuf;
 struct Image;
 struct ImageUser;
+struct ReportList;
 struct Scene;
 struct SpaceImage;
-struct ToolSettings;
 struct ViewLayer;
 struct bContext;
 struct wmWindowManager;
@@ -77,6 +77,7 @@ void ED_image_mouse_pos(struct SpaceImage *sima,
                         struct ARegion *ar,
                         const int mval[2],
                         float co[2]);
+void ED_image_view_center_to_point(struct SpaceImage *sima, float x, float y);
 void ED_image_point_pos(
     struct SpaceImage *sima, struct ARegion *ar, float x, float y, float *xr, float *yr);
 void ED_image_point_pos__reverse(struct SpaceImage *sima,
@@ -94,6 +95,7 @@ bool ED_space_image_paint_curve(const struct bContext *C);
 bool ED_space_image_check_show_maskedit(struct SpaceImage *sima, struct ViewLayer *view_layer);
 bool ED_space_image_maskedit_poll(struct bContext *C);
 bool ED_space_image_maskedit_mask_poll(struct bContext *C);
+bool ED_space_image_cursor_poll(struct bContext *C);
 
 void ED_image_draw_info(struct Scene *scene,
                         struct ARegion *ar,
@@ -109,5 +111,9 @@ void ED_image_draw_info(struct Scene *scene,
                         float *zpf);
 
 bool ED_space_image_show_cache(struct SpaceImage *sima);
+
+bool ED_image_should_save_modified(const struct bContext *C);
+int ED_image_save_all_modified_info(const struct bContext *C, struct ReportList *reports);
+bool ED_image_save_all_modified(const struct bContext *C, struct ReportList *reports);
 
 #endif /* __ED_IMAGE_H__ */

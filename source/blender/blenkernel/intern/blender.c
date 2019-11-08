@@ -32,7 +32,6 @@
 #include "BLI_string.h"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
-#include "BLI_callbacks.h"
 
 #include "IMB_imbuf.h"
 #include "IMB_moviecache.h"
@@ -44,6 +43,7 @@
 #include "BKE_blendfile.h"
 #include "BKE_brush.h"
 #include "BKE_cachefile.h"
+#include "BKE_callbacks.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_image.h"
@@ -95,7 +95,7 @@ void BKE_blender_free(void)
   BKE_brush_system_exit();
   RE_texture_rng_exit();
 
-  BLI_callback_global_finalize();
+  BKE_callback_global_finalize();
 
   IMB_moviecache_destruct();
 
@@ -155,7 +155,6 @@ static void keymap_item_free(wmKeyMapItem *kmi)
 {
   if (kmi->properties) {
     IDP_FreeProperty(kmi->properties);
-    MEM_freeN(kmi->properties);
   }
   if (kmi->ptr) {
     MEM_freeN(kmi->ptr);
@@ -212,7 +211,6 @@ static void userdef_free_keyconfig_prefs(UserDef *userdef)
        kpt = kpt_next) {
     kpt_next = kpt->next;
     IDP_FreeProperty(kpt->prop);
-    MEM_freeN(kpt->prop);
     MEM_freeN(kpt);
   }
   BLI_listbase_clear(&userdef->user_keyconfig_prefs);
@@ -308,6 +306,7 @@ void BKE_blender_userdef_app_template_data_swap(UserDef *userdef_a, UserDef *use
   LIST_SWAP(themes);
   LIST_SWAP(addons);
   LIST_SWAP(user_keymaps);
+  LIST_SWAP(user_keyconfig_prefs);
 
   DATA_SWAP(font_path_ui);
   DATA_SWAP(font_path_ui_mono);

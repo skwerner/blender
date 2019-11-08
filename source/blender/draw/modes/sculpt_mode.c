@@ -37,6 +37,7 @@
 #include "draw_common.h"
 #include "draw_mode_engines.h"
 
+extern char datatoc_common_view_lib_glsl[];
 extern char datatoc_sculpt_mask_vert_glsl[];
 extern char datatoc_gpu_shader_3D_smooth_color_frag_glsl[];
 
@@ -111,8 +112,11 @@ static void SCULPT_engine_init(void *vedata)
   UNUSED_VARS(txl, fbl, stl);
 
   if (!e_data.shader_mask) {
-    e_data.shader_mask = DRW_shader_create(
-        datatoc_sculpt_mask_vert_glsl, NULL, datatoc_gpu_shader_3D_smooth_color_frag_glsl, NULL);
+    e_data.shader_mask = DRW_shader_create_with_lib(datatoc_sculpt_mask_vert_glsl,
+                                                    NULL,
+                                                    datatoc_gpu_shader_3D_smooth_color_frag_glsl,
+                                                    datatoc_common_view_lib_glsl,
+                                                    NULL);
   }
 }
 
@@ -131,7 +135,7 @@ static void SCULPT_cache_init(void *vedata)
     const DRWContextState *draw_ctx = DRW_context_state_get();
     View3D *v3d = draw_ctx->v3d;
 
-    DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_EQUAL | DRW_STATE_MULTIPLY;
+    DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_EQUAL | DRW_STATE_BLEND_MUL;
     psl->pass = DRW_pass_create("Sculpt Pass", state);
 
     DRWShadingGroup *shgrp = DRW_shgroup_create(e_data.shader_mask, psl->pass);
@@ -148,13 +152,15 @@ static void SCULPT_cache_populate(void *vedata, Object *ob)
 
   UNUSED_VARS(psl, stl);
 
-  if (ob->type == OB_MESH) {
+  if (ob->sculpt) {
     const DRWContextState *draw_ctx = DRW_context_state_get();
 
-    if (ob->sculpt && (ob == draw_ctx->obact)) {
+    if ((ob == draw_ctx->obact) &&
+        (BKE_sculptsession_use_pbvh_draw(ob, draw_ctx->v3d) ||
+         !ob->sculpt->deform_modifiers_active || ob->sculpt->shapekey_active)) {
       PBVH *pbvh = ob->sculpt->pbvh;
       if (pbvh && pbvh_has_mask(pbvh)) {
-        DRW_shgroup_call_sculpt_add(stl->g_data->mask_overlay_grp, ob, false, true, false);
+        DRW_shgroup_call_sculpt(stl->g_data->mask_overlay_grp, ob, false, true, false);
       }
     }
   }

@@ -2,19 +2,12 @@
 /* Infinite grid
  * Clément Foucault */
 
-uniform mat4 ViewProjectionMatrix;
-uniform mat4 ProjectionMatrix;
-uniform vec3 cameraPos;
 uniform vec3 planeAxes;
-uniform vec4 gridSettings;
 uniform float meshSize;
 
-#define gridDistance gridSettings.x
-#define gridResolution gridSettings.y
-#define gridScale gridSettings.z
-#define gridSubdiv gridSettings.w
-
 uniform int gridFlag;
+
+#define cameraPos (ViewMatrixInverse[3].xyz)
 
 #define PLANE_XY (1 << 4)
 #define PLANE_XZ (1 << 5)

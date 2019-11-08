@@ -25,6 +25,8 @@ extern "C" {
 
 #include "BLI_compiler_attrs.h"
 
+struct wmWindowManager;
+
 /* BKE_libblock_free, delete are declared in BKE_library.h for convenience. */
 
 /* Also IDRemap->flag. */
@@ -61,8 +63,8 @@ enum {
    * is also performed. Usual nightmare...
    */
   ID_REMAP_NO_INDIRECT_PROXY_DATA_USAGE = 1 << 4,
-  /** Do not remap static override pointers. */
-  ID_REMAP_SKIP_STATIC_OVERRIDE = 1 << 5,
+  /** Do not remap library override pointers. */
+  ID_REMAP_SKIP_OVERRIDE_LIBRARY = 1 << 5,
 };
 
 /* Note: Requiring new_id to be non-null, this *may* not be the case ultimately,
@@ -83,7 +85,7 @@ void BKE_libblock_relink_ex(struct Main *bmain,
                             void *idv,
                             void *old_idv,
                             void *new_idv,
-                            const bool us_min_never_null) ATTR_NONNULL(1, 2);
+                            const short remap_flags) ATTR_NONNULL(1, 2);
 
 void BKE_libblock_relink_to_newid(struct ID *id) ATTR_NONNULL();
 

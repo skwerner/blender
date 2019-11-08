@@ -172,7 +172,7 @@ static void precalculate_effector(struct Depsgraph *depsgraph, EffectorCache *ef
     if (cu->flag & CU_PATH) {
       if (eff->ob->runtime.curve_cache == NULL || eff->ob->runtime.curve_cache->path == NULL ||
           eff->ob->runtime.curve_cache->path->data == NULL) {
-        BKE_displist_make_curveTypes(depsgraph, eff->scene, eff->ob, false, false, NULL);
+        BKE_displist_make_curveTypes(depsgraph, eff->scene, eff->ob, false, false);
       }
 
       if (eff->ob->runtime.curve_cache->path && eff->ob->runtime.curve_cache->path->data) {
@@ -1338,8 +1338,9 @@ void BKE_sim_debug_data_clear_category(const char *category)
     BLI_ghashIterator_init(&iter, _sim_debug_data->gh);
     while (!BLI_ghashIterator_done(&iter)) {
       const SimDebugElement *elem = BLI_ghashIterator_getValue(&iter);
-      BLI_ghashIterator_step(
-          &iter); /* removing invalidates the current iterator, so step before removing */
+
+      /* Removing invalidates the current iterator, so step before removing. */
+      BLI_ghashIterator_step(&iter);
 
       if (elem->category_hash == category_hash) {
         BLI_ghash_remove(_sim_debug_data->gh, elem, NULL, debug_element_free);

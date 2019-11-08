@@ -524,7 +524,7 @@ static ParamHandle *construct_param_handle_subsurfed(Scene *scene,
   smd.levels = smd_real->levels;
   smd.subdivType = smd_real->subdivType;
 
-  initialDerived = CDDM_from_editbmesh(em, false, false);
+  initialDerived = CDDM_from_editbmesh(em, false);
   derivedMesh = subsurf_make_derived_from_derived(
       initialDerived, &smd, scene, NULL, SUBSURF_IN_EDIT_MODE);
 
@@ -727,9 +727,9 @@ static void minimize_stretch_iteration(bContext *C, wmOperator *op, bool interac
     param_flush(ms->handle);
 
     if (sa) {
-      BLI_snprintf(str, sizeof(str), IFACE_("Minimize Stretch. Blend %.2f"), ms->blend);
+      BLI_snprintf(str, sizeof(str), TIP_("Minimize Stretch. Blend %.2f"), ms->blend);
       ED_area_status_text(sa, str);
-      ED_workspace_status_text(C, IFACE_("Press + and -, or scroll wheel to set blending"));
+      ED_workspace_status_text(C, TIP_("Press + and -, or scroll wheel to set blending"));
     }
 
     ms->lasttime = PIL_check_seconds_timer();
@@ -889,7 +889,7 @@ void UV_OT_minimize_stretch(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Minimize Stretch";
   ot->idname = "UV_OT_minimize_stretch";
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_GRAB_CURSOR | OPTYPE_BLOCKING;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_GRAB_CURSOR_XY | OPTYPE_BLOCKING;
   ot->description = "Reduce UV stretching by relaxing angles";
 
   /* api callbacks */
@@ -1258,7 +1258,7 @@ static void uv_map_rotation_matrix_ex(float result[4][4],
                                       float upangledeg,
                                       float sideangledeg,
                                       float radius,
-                                      float offset[4])
+                                      const float offset[4])
 {
   float rotup[4][4], rotside[4][4], viewmatrix[4][4], rotobj[4][4];
   float sideangle = 0.0f, upangle = 0.0f;
@@ -1272,10 +1272,11 @@ static void uv_map_rotation_matrix_ex(float result[4][4],
   }
 
   /* but shifting */
-  copy_v4_fl(viewmatrix[3], 0.0f);
+  zero_v3(viewmatrix[3]);
 
   /* get rotation of the current object matrix */
   copy_m4_m4(rotobj, ob->obmat);
+  zero_v3(rotobj[3]);
 
   /* but shifting */
   add_v4_v4(rotobj[3], offset);
@@ -2034,9 +2035,9 @@ void UV_OT_reset(wmOperatorType *ot)
 /****************** Sphere Project operator ***************/
 
 static void uv_sphere_project(float target[2],
-                              float source[3],
-                              float center[3],
-                              float rotmat[4][4])
+                              const float source[3],
+                              const float center[3],
+                              const float rotmat[4][4])
 {
   float pv[3];
 
@@ -2161,9 +2162,9 @@ void UV_OT_sphere_project(wmOperatorType *ot)
 /***************** Cylinder Project operator **************/
 
 static void uv_cylinder_project(float target[2],
-                                float source[3],
-                                float center[3],
-                                float rotmat[4][4])
+                                const float source[3],
+                                const float center[3],
+                                const float rotmat[4][4])
 {
   float pv[3];
 
@@ -2281,7 +2282,6 @@ static void uvedit_unwrap_cube_project(BMesh *bm,
    * component, but clusters all together around the center of map. */
 
   BM_ITER_MESH (efa, &iter, bm, BM_FACES_OF_MESH) {
-    /* tf = CustomData_bmesh_get(&em->bm->pdata, efa->head.data, CD_MTEXPOLY); */ /* UNUSED */
     if (use_select && !BM_elem_flag_test(efa, BM_ELEM_SELECT)) {
       continue;
     }

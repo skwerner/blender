@@ -220,7 +220,7 @@ typedef struct MeshCalcNormalsData {
 
 static void mesh_calc_normals_poly_cb(void *__restrict userdata,
                                       const int pidx,
-                                      const ParallelRangeTLS *__restrict UNUSED(tls))
+                                      const TaskParallelTLS *__restrict UNUSED(tls))
 {
   MeshCalcNormalsData *data = userdata;
   const MPoly *mp = &data->mpolys[pidx];
@@ -230,7 +230,7 @@ static void mesh_calc_normals_poly_cb(void *__restrict userdata,
 
 static void mesh_calc_normals_poly_prepare_cb(void *__restrict userdata,
                                               const int pidx,
-                                              const ParallelRangeTLS *__restrict UNUSED(tls))
+                                              const TaskParallelTLS *__restrict UNUSED(tls))
 {
   MeshCalcNormalsData *data = userdata;
   const MPoly *mp = &data->mpolys[pidx];
@@ -294,7 +294,7 @@ static void mesh_calc_normals_poly_prepare_cb(void *__restrict userdata,
 
 static void mesh_calc_normals_poly_finalize_cb(void *__restrict userdata,
                                                const int vidx,
-                                               const ParallelRangeTLS *__restrict UNUSED(tls))
+                                               const TaskParallelTLS *__restrict UNUSED(tls))
 {
   MeshCalcNormalsData *data = userdata;
 
@@ -321,7 +321,7 @@ void BKE_mesh_calc_normals_poly(MVert *mverts,
 {
   float(*pnors)[3] = r_polynors;
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.min_iter_per_thread = 1024;
 
@@ -446,64 +446,6 @@ void BKE_mesh_calc_normals(Mesh *mesh)
   TIMEIT_END_AVERAGED(BKE_mesh_calc_normals);
 #endif
   mesh->runtime.cd_dirty_vert &= ~CD_MASK_NORMAL;
-}
-
-void BKE_mesh_calc_normals_tessface(
-    MVert *mverts, int numVerts, const MFace *mfaces, int numFaces, float (*r_faceNors)[3])
-{
-  float(*tnorms)[3] = MEM_calloc_arrayN((size_t)numVerts, sizeof(*tnorms), "tnorms");
-  float(*fnors)[3] = (r_faceNors) ?
-                         r_faceNors :
-                         MEM_calloc_arrayN((size_t)numFaces, sizeof(*fnors), "meshnormals");
-  int i;
-
-  if (!tnorms || !fnors) {
-    goto cleanup;
-  }
-
-  for (i = 0; i < numFaces; i++) {
-    const MFace *mf = &mfaces[i];
-    float *f_no = fnors[i];
-    float *n4 = (mf->v4) ? tnorms[mf->v4] : NULL;
-    const float *c4 = (mf->v4) ? mverts[mf->v4].co : NULL;
-
-    if (mf->v4) {
-      normal_quad_v3(
-          f_no, mverts[mf->v1].co, mverts[mf->v2].co, mverts[mf->v3].co, mverts[mf->v4].co);
-    }
-    else {
-      normal_tri_v3(f_no, mverts[mf->v1].co, mverts[mf->v2].co, mverts[mf->v3].co);
-    }
-
-    accumulate_vertex_normals_v3(tnorms[mf->v1],
-                                 tnorms[mf->v2],
-                                 tnorms[mf->v3],
-                                 n4,
-                                 f_no,
-                                 mverts[mf->v1].co,
-                                 mverts[mf->v2].co,
-                                 mverts[mf->v3].co,
-                                 c4);
-  }
-
-  /* following Mesh convention; we use vertex coordinate itself for normal in this case */
-  for (i = 0; i < numVerts; i++) {
-    MVert *mv = &mverts[i];
-    float *no = tnorms[i];
-
-    if (UNLIKELY(normalize_v3(no) == 0.0f)) {
-      normalize_v3_v3(no, mv->co);
-    }
-
-    normal_float_to_short_v3(mv->no, no);
-  }
-
-cleanup:
-  MEM_freeN(tnorms);
-
-  if (fnors != r_faceNors) {
-    MEM_freeN(fnors);
-  }
 }
 
 void BKE_mesh_calc_normals_looptri(MVert *mverts,
@@ -1164,8 +1106,10 @@ static void split_loop_nor_fan_do(LoopSplitTaskDataCommon *common_data, LoopSpli
    */
   const unsigned int mv_pivot_index = ml_curr->v; /* The vertex we are "fanning" around! */
   const MVert *mv_pivot = &mverts[mv_pivot_index];
-  const MEdge *me_org =
-      &medges[ml_curr->e]; /* ml_curr would be mlfan_prev if we needed that one */
+
+  /* ml_curr would be mlfan_prev if we needed that one. */
+  const MEdge *me_org = &medges[ml_curr->e];
+
   const int *e2lfan_curr;
   float vec_curr[3], vec_prev[3], vec_org[3];
   const MLoop *mlfan_curr;
@@ -1318,7 +1262,7 @@ static void split_loop_nor_fan_do(LoopSplitTaskDataCommon *common_data, LoopSpli
           }
           // print_v2("new clnors", clnors_avg);
         }
-        /* Extra bonus: since smallstack is local to this func,
+        /* Extra bonus: since small-stack is local to this function,
          * no more need to empty it at all cost! */
 
         BKE_lnor_space_custom_data_to_normal(lnor_space, *clnor_ref, lnor);
@@ -1334,7 +1278,7 @@ static void split_loop_nor_fan_do(LoopSplitTaskDataCommon *common_data, LoopSpli
         copy_v3_v3(nor, lnor);
       }
     }
-    /* Extra bonus: since smallstack is local to this func,
+    /* Extra bonus: since small-stack is local to this funcion,
      * no more need to empty it at all cost! */
   }
 }
@@ -1387,9 +1331,11 @@ static void loop_split_worker(TaskPool *__restrict pool, void *taskdata, int UNU
 #endif
 }
 
-/* Check whether gievn loop is part of an unknown-so-far cyclic smooth fan, or not.
+/**
+ * Check whether given loop is part of an unknown-so-far cyclic smooth fan, or not.
  * Needed because cyclic smooth fans have no obvious 'entry point',
- * and yet we need to walk them once, and only once. */
+ * and yet we need to walk them once, and only once.
+ */
 static bool loop_split_generator_check_cyclic_smooth_fan(const MLoop *mloops,
                                                          const MPoly *mpolys,
                                                          const int (*edge_to_loops)[2],
@@ -2141,8 +2087,8 @@ static void mesh_set_custom_normals(Mesh *mesh, float (*r_custom_nors)[3], const
  * Higher level functions hiding most of the code needed around call to
  * #BKE_mesh_normals_loop_custom_set().
  *
- * \param r_custom_loopnors is not const, since code will replace zero_v3 normals there
- *                          with automatically computed vectors.
+ * \param r_custom_loopnors: is not const, since code will replace zero_v3 normals there
+ * with automatically computed vectors.
  */
 void BKE_mesh_set_custom_normals(Mesh *mesh, float (*r_custom_loopnors)[3])
 {
@@ -2153,8 +2099,8 @@ void BKE_mesh_set_custom_normals(Mesh *mesh, float (*r_custom_loopnors)[3])
  * Higher level functions hiding most of the code needed around call to
  * #BKE_mesh_normals_loop_custom_from_vertices_set().
  *
- * \param r_custom_loopnors is not const, since code will replace zero_v3 normals there
- *                          with automatically computed vectors.
+ * \param r_custom_loopnors: is not const, since code will replace zero_v3 normals there
+ * with automatically computed vectors.
  */
 void BKE_mesh_set_custom_normals_from_vertices(Mesh *mesh, float (*r_custom_vertnors)[3])
 {
@@ -2372,6 +2318,42 @@ float BKE_mesh_calc_poly_area(const MPoly *mpoly, const MLoop *loopstart, const 
 
     return area;
   }
+}
+
+float BKE_mesh_calc_area(const Mesh *me)
+{
+  MVert *mvert = me->mvert;
+  MLoop *mloop = me->mloop;
+  MPoly *mpoly = me->mpoly;
+
+  MPoly *mp;
+  int i = me->totpoly;
+  float total_area = 0;
+
+  for (mp = mpoly; i--; mp++) {
+    MLoop *ml_start = &mloop[mp->loopstart];
+
+    total_area += BKE_mesh_calc_poly_area(mp, ml_start, mvert);
+  }
+  return total_area;
+}
+
+float BKE_mesh_calc_poly_uv_area(const MPoly *mpoly, const MLoopUV *uv_array)
+{
+
+  int i, l_iter = mpoly->loopstart;
+  float area;
+  float(*vertexcos)[2] = BLI_array_alloca(vertexcos, (size_t)mpoly->totloop);
+
+  /* pack vertex cos into an array for area_poly_v2 */
+  for (i = 0; i < mpoly->totloop; i++, l_iter++) {
+    copy_v2_v2(vertexcos[i], uv_array[l_iter].uv);
+  }
+
+  /* finally calculate the area */
+  area = area_poly_v2((const float(*)[2])vertexcos, (unsigned int)mpoly->totloop);
+
+  return area;
 }
 
 /**
@@ -2981,14 +2963,14 @@ void BKE_mesh_tangent_loops_to_tessdata(CustomData *fdata,
  *
  * \return number of tessellation faces.
  */
-int BKE_mesh_recalc_tessellation(CustomData *fdata,
-                                 CustomData *ldata,
-                                 CustomData *pdata,
-                                 MVert *mvert,
-                                 int totface,
-                                 int totloop,
-                                 int totpoly,
-                                 const bool do_face_nor_copy)
+int BKE_mesh_tessface_calc_ex(CustomData *fdata,
+                              CustomData *ldata,
+                              CustomData *pdata,
+                              MVert *mvert,
+                              int totface,
+                              int totloop,
+                              int totpoly,
+                              const bool do_face_nor_copy)
 {
   /* use this to avoid locking pthread for _every_ polygon
    * and calling the fill function */

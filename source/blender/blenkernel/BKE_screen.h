@@ -24,7 +24,6 @@
  */
 
 struct ARegion;
-struct GPUFXSettings;
 struct Header;
 struct ID;
 struct ListBase;
@@ -35,7 +34,6 @@ struct ScrArea;
 struct ScrAreaMap;
 struct ScrVert;
 struct SpaceType;
-struct TransformOrientation;
 struct View3D;
 struct View3DShading;
 struct WorkSpace;
@@ -83,6 +81,9 @@ typedef struct SpaceType {
                    struct ScrArea *sa,
                    struct wmNotifier *wmn,
                    struct Scene *scene);
+
+  /* called when the mouse moves out of the area */
+  void (*deactivate)(struct ScrArea *sa);
 
   /* refresh context, called after filereads, ED_area_tag_refresh() */
   void (*refresh)(const struct bContext *C, struct ScrArea *sa);
@@ -205,6 +206,7 @@ typedef struct PanelType {
   short region_type;
   /* For popovers, 0 for default. */
   int ui_units_x;
+  int order;
 
   int flag;
 
@@ -346,6 +348,9 @@ void BKE_region_callback_refresh_tag_gizmomap_set(void (*callback)(struct wmGizm
 struct ARegion *BKE_area_find_region_type(const struct ScrArea *sa, int type);
 struct ARegion *BKE_area_find_region_active_win(struct ScrArea *sa);
 struct ARegion *BKE_area_find_region_xy(struct ScrArea *sa, const int regiontype, int x, int y);
+struct ARegion *BKE_screen_find_region_xy(struct bScreen *sc, const int regiontype, int x, int y)
+    ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1);
+
 struct ScrArea *BKE_screen_find_area_from_space(struct bScreen *sc,
                                                 struct SpaceLink *sl) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL(1, 2);

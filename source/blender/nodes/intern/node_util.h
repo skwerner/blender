@@ -58,10 +58,10 @@ extern void node_free_standard_storage(struct bNode *node);
 
 extern void node_copy_curves(struct bNodeTree *dest_ntree,
                              struct bNode *dest_node,
-                             struct bNode *src_node);
+                             const struct bNode *src_node);
 extern void node_copy_standard_storage(struct bNodeTree *dest_ntree,
                                        struct bNode *dest_node,
-                                       struct bNode *src_node);
+                                       const struct bNode *src_node);
 extern void *node_initexec_curves(struct bNodeExecContext *context,
                                   struct bNode *node,
                                   bNodeInstanceKey key);
@@ -71,7 +71,7 @@ extern void *node_initexec_curves(struct bNodeExecContext *context,
 void node_blend_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
 void node_image_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
 void node_math_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
-void node_vect_math_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
+void node_vector_math_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
 void node_filter_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
 
 /*** Link Handling */

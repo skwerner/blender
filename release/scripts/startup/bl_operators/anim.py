@@ -105,7 +105,7 @@ class ANIM_OT_keying_set_export(Operator):
             # - idtype_list is used to get the list of id-datablocks from
             #   bpy.data.* since this info isn't available elsewhere
             # - id.bl_rna.name gives a name suitable for UI,
-            #   with a capitalised first letter, but we need
+            #   with a capitalized first letter, but we need
             #   the plural form that's all lower case
             # - special handling is needed for "nested" ID-blocks
             #   (e.g. nodetree in Material)
@@ -191,7 +191,7 @@ class ANIM_OT_keying_set_export(Operator):
 
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
@@ -285,7 +285,7 @@ class NLA_OT_bake(Operator):
 
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         scene = context.scene
         self.frame_start = scene.frame_start
         self.frame_end = scene.frame_end
@@ -309,10 +309,10 @@ class ClearUselessActions(Operator):
     )
 
     @classmethod
-    def poll(cls, context):
+    def poll(cls, _context):
         return bool(bpy.data.actions)
 
-    def execute(self, context):
+    def execute(self, _context):
         removed = 0
 
         for action in bpy.data.actions:

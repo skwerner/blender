@@ -139,7 +139,7 @@ typedef struct Panel {
   struct uiLayout *layout;
 
   /** Defined as UI_MAX_NAME_STR. */
-  char panelname[64], tabname[64];
+  char panelname[64];
   /** Panel name is identifier for restoring location. */
   char drawname[64];
   /** Offset within the region. */
@@ -155,8 +155,6 @@ typedef struct Panel {
   short snap;
   /** Panels are aligned according to increasing sort-order. */
   int sortorder;
-  /** This panel is tabbed in *paneltab. */
-  struct Panel *paneltab;
   /** Runtime for panel manipulation. */
   void *activedata;
   /** Sub panels. */
@@ -377,6 +375,13 @@ typedef struct ScrArea {
 typedef struct ARegion_Runtime {
   /* Panel category to use between 'layout' and 'draw'. */
   const char *category;
+
+  /**
+   * The visible part of the region, use with region overlap not to draw
+   * on top of the overlapping regions.
+   *
+   * Lazy initialize, zero'd when unset, relative to #ARegion.winrct x/y min. */
+  rcti visible_rect;
 } ARegion_Runtime;
 
 typedef struct ARegion {
@@ -453,16 +458,19 @@ enum {
 #ifdef DNA_DEPRECATED_ALLOW
   AREA_TEMP_INFO = (1 << 3), /* versioned to make slot reusable */
 #endif
-  /* update size of regions within the area */
+  /** Update size of regions within the area. */
   AREA_FLAG_REGION_SIZE_UPDATE = (1 << 3),
   AREA_FLAG_ACTIVE_TOOL_UPDATE = (1 << 4),
+
   //  AREA_FLAG_UNUSED_5           = (1 << 5),
-  /* used to check if we should switch back to prevspace (of a different type) */
-  AREA_FLAG_TEMP_TYPE = (1 << 6),
-  /* for temporary fullscreens (file browser, image editor render)
-   * that are opened above user set fullscreens */
+  AREA_FLAG_UNUSED_6 = (1 << 6), /* cleared */
+
+  /**
+   * For temporary full-screens (file browser, image editor render)
+   * that are opened above user set full-screens.
+   */
   AREA_FLAG_STACKED_FULLSCREEN = (1 << 7),
-  /* update action zones (even if the mouse is not intersecting them) */
+  /** Update action zones (even if the mouse is not intersecting them). */
   AREA_FLAG_ACTIONZONES_UPDATE = (1 << 8),
 };
 
@@ -642,10 +650,21 @@ enum {
 };
 
 /** #ARegion.do_draw */
-#define RGN_DRAW 1
-#define RGN_DRAW_PARTIAL 2
-#define RGN_DRAWING 4
-#define RGN_DRAW_REFRESH_UI 8 /* re-create uiBlock's where possible */
-#define RGN_DRAW_NO_REBUILD 16
+enum {
+  /* Region must be fully redrawn. */
+  RGN_DRAW = 1,
+  /* Redraw only part of region, for sculpting and painting to get smoother
+   * stroke painting on heavy meshes. */
+  RGN_DRAW_PARTIAL = 2,
+  /* For outliner, to do faster redraw without rebuilding outliner tree.
+   * For 3D viewport, to display a new progressive render sample without
+   * while other buffers and overlays remain unchanged. */
+  RGN_DRAW_NO_REBUILD = 4,
+
+  /* Set while region is being drawn. */
+  RGN_DRAWING = 8,
+  /* For popups, to refresh UI layout along with drawing. */
+  RGN_REFRESH_UI = 16,
+};
 
 #endif /* __DNA_SCREEN_TYPES_H__ */

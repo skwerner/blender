@@ -278,7 +278,7 @@ void ED_mesh_mirrtopo_init(Mesh *me,
     }
 
     if ((tot_unique <= tot_unique_prev) && (tot_unique_edges <= tot_unique_edges_prev)) {
-      /* Finish searching for unique values when 1 loop dosn't give a
+      /* Finish searching for unique values when 1 loop doesn't give a
        * higher number of unique values compared to the previous loop. */
       break;
     }
@@ -322,7 +322,7 @@ void ED_mesh_mirrtopo_init(Mesh *me,
     BMVert **vtable = em->bm->vtable;
     for (a = 1; a <= totvert; a++) {
       // printf("I %d %ld %d\n",
-      //        (a - last), MirrTopoPairs[a].hash, MirrTopoPairs[a].v_indexs);
+      //        (a - last), MirrTopoPairs[a].hash, MirrTopoPairs[a].v_index);
       if ((a == totvert) || (topo_pairs[a - 1].hash != topo_pairs[a].hash)) {
         const int match_count = a - last;
         if (match_count == 2) {

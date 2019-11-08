@@ -61,7 +61,7 @@
 #include "BLI_strict_flags.h"
 
 /* -------------------------------------------------------------------- */
-/** \name Docstring (snippets)
+/** \name Documentation String (snippets)
  * \{ */
 
 #define PYBVH_FIND_GENERIC_DISTANCE_DOC \
@@ -1267,7 +1267,7 @@ PyTypeObject PyBVHTree_Type = {
     0,                                        /* tp_itemsize */
     /* methods */
     (destructor)py_bvhtree__tp_dealloc, /* tp_dealloc */
-    NULL,                               /* tp_print */
+    (printfunc)NULL,                    /* tp_print */
     NULL,                               /* tp_getattr */
     NULL,                               /* tp_setattr */
     NULL,                               /* tp_compare */

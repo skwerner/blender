@@ -34,8 +34,17 @@ class ConstraintButtonsPanel:
             # match enum type to our functions, avoids a lookup table.
             getattr(self, con.type)(context, box, con)
 
-            if con.type not in {'RIGID_BODY_JOINT', 'NULL'}:
+            if con.type in {'RIGID_BODY_JOINT', 'NULL'}:
+                return
+
+            if con.type in {'IK', 'SPLINE_IK'}:
+                # constraint.disable_keep_transform doesn't work well
+                # for these constraints.
                 box.prop(con, "influence")
+            else:
+                row = box.row(align=True)
+                row.prop(con, "influence")
+                row.operator("constraint.disable_keep_transform", text="", icon='CANCEL')
 
     @staticmethod
     def space_template(layout, con, target=True, owner=True):
@@ -361,6 +370,8 @@ class ConstraintButtonsPanel:
     def COPY_ROTATION(self, _context, layout, con):
         self.target_template(layout, con)
 
+        layout.prop(con, "euler_order", text="Order")
+
         split = layout.split()
 
         col = split.column()
@@ -381,7 +392,7 @@ class ConstraintButtonsPanel:
         sub.active = con.use_z
         sub.prop(con, "invert_z", text="Invert")
 
-        layout.prop(con, "use_offset")
+        layout.prop(con, "mix_mode", text="Mix")
 
         self.space_template(layout, con)
 
@@ -420,6 +431,9 @@ class ConstraintButtonsPanel:
         row.prop(con, "use_y", text="Y")
         row.prop(con, "use_z", text="Z")
 
+        layout.prop(con, "power")
+        layout.prop(con, "use_make_uniform")
+
         row = layout.row()
         row.prop(con, "use_offset")
         row = row.row()
@@ -444,6 +458,8 @@ class ConstraintButtonsPanel:
 
     def COPY_TRANSFORMS(self, _context, layout, con):
         self.target_template(layout, con)
+
+        layout.prop(con, "mix_mode", text="Mix")
 
         self.space_template(layout, con)
 
@@ -537,10 +553,7 @@ class ConstraintButtonsPanel:
     def FLOOR(self, _context, layout, con):
         self.target_template(layout, con)
 
-        row = layout.row()
-        row.prop(con, "use_sticky")
-        row.prop(con, "use_rotation")
-
+        layout.prop(con, "use_rotation")
         layout.prop(con, "offset")
 
         row = layout.row()
@@ -676,6 +689,9 @@ class ConstraintButtonsPanel:
         col.row().label(text="Source:")
         col.row().prop(con, "map_from", expand=True)
 
+        if con.map_from == 'ROTATION':
+            layout.prop(con, "from_rotation_mode", text="Mode")
+
         split = layout.split()
         ext = "" if con.map_from == 'LOCATION' else "_rot" if con.map_from == 'ROTATION' else "_scale"
 
@@ -718,6 +734,9 @@ class ConstraintButtonsPanel:
         col.label(text="Destination:")
         col.row().prop(con, "map_to", expand=True)
 
+        if con.map_to == 'ROTATION':
+            layout.prop(con, "to_euler_order", text="Order")
+
         split = layout.split()
         ext = "" if con.map_to == 'LOCATION' else "_rot" if con.map_to == 'ROTATION' else "_scale"
 
@@ -741,6 +760,8 @@ class ConstraintButtonsPanel:
         sub = col.column(align=True)
         sub.prop(con, "to_min_z" + ext, text="Min")
         sub.prop(con, "to_max_z" + ext, text="Max")
+
+        layout.prop(con, "mix_mode" + ext, text="Mix")
 
         self.space_template(layout, con)
 

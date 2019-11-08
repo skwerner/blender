@@ -58,7 +58,8 @@ GHOST_IWindow *GHOST_SystemSDL::createWindow(const STR_String &title,
                                              GHOST_TDrawingContextType type,
                                              GHOST_GLSettings glSettings,
                                              const bool exclusive,
-                                             const GHOST_TEmbedderWindowID parentWindow)
+                                             const bool /* is_dialog */,
+                                             const GHOST_IWindow *parentWindow)
 {
   GHOST_WindowSDL *window = NULL;
 
@@ -69,10 +70,10 @@ GHOST_IWindow *GHOST_SystemSDL::createWindow(const STR_String &title,
                                width,
                                height,
                                state,
-                               parentWindow,
                                type,
                                ((glSettings.flags & GHOST_glStereoVisual) != 0),
-                               exclusive);
+                               exclusive,
+                               parentWindow);
 
   if (window) {
     if (GHOST_kWindowStateFullScreen == state) {
@@ -338,9 +339,12 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
 
       break;
     }
-    case SDL_QUIT:
-      g_event = new GHOST_Event(getMilliSeconds(), GHOST_kEventQuit, NULL);
+
+    case SDL_QUIT: {
+      GHOST_IWindow *window = m_windowManager->getActiveWindow();
+      g_event = new GHOST_Event(getMilliSeconds(), GHOST_kEventQuitRequest, window);
       break;
+    }
 
     case SDL_MOUSEMOTION: {
       SDL_MouseMotionEvent &sdl_sub_evt = sdl_event->motion;
@@ -366,9 +370,9 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
         if (window->getCursorGrabBounds(bounds) == GHOST_kFailure)
           window->getClientBounds(bounds);
 
-        /* could also clamp to screen bounds
-         * wrap with a window outside the view will fail atm  */
-        bounds.wrapPoint(x_new, y_new, 8); /* offset of one incase blender is at screen bounds */
+        /* Could also clamp to screen bounds wrap with a window outside the view will fail atm.
+         * Use offset of 8 in case the window is at screen bounds. */
+        bounds.wrapPoint(x_new, y_new, 8, window->getCursorGrabAxis());
         window->getCursorGrabAccum(x_accum, y_accum);
 
         // cant use setCursorPosition because the mouse may have no focus!
@@ -716,11 +720,6 @@ void GHOST_SystemSDL::addDirtyWindow(GHOST_WindowSDL *bad_wind)
   GHOST_ASSERT((bad_wind != NULL), "addDirtyWindow() NULL ptr trapped (window)");
 
   m_dirty_windows.push_back(bad_wind);
-}
-
-bool GHOST_SystemSDL::supportsNativeDialogs(void)
-{
-  return false;
 }
 
 GHOST_TSuccess GHOST_SystemSDL::getButtons(GHOST_Buttons &buttons) const

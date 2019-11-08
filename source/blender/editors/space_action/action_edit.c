@@ -704,7 +704,6 @@ static void insert_action_keys(bAnimContext *ac, short mode)
   bAnimListElem *ale;
   int filter;
 
-  struct Depsgraph *depsgraph = ac->depsgraph;
   ReportList *reports = ac->reports;
   Scene *scene = ac->scene;
   ToolSettings *ts = scene->toolsettings;
@@ -741,7 +740,6 @@ static void insert_action_keys(bAnimContext *ac, short mode)
      */
     if (ale->id && !ale->owner) {
       insert_keyframe(ac->bmain,
-                      depsgraph,
                       reports,
                       ale->id,
                       NULL,
@@ -979,8 +977,7 @@ static bool delete_action_keys(bAnimContext *ac)
       changed = delete_fcurve_keys(fcu);
 
       /* Only delete curve too if it won't be doing anything anymore */
-      if ((fcu->totvert == 0) &&
-          (list_has_suitable_fmodifier(&fcu->modifiers, 0, FMI_TYPE_GENERATE_CURVE) == 0)) {
+      if (BKE_fcurve_is_empty(fcu)) {
         ANIM_fcurve_delete_from_animdata(ac, adt, fcu);
         ale->key_data = NULL;
       }
@@ -1666,7 +1663,7 @@ static const EnumPropertyItem prop_actkeys_snap_types[] = {
     {ACTKEYS_SNAP_CFRA,
      "CFRA",
      0,
-     "Current frame",
+     "Current Frame",
      "Snap selected keyframes to the current frame"},
     {ACTKEYS_SNAP_NEAREST_FRAME,
      "NEAREST_FRAME",
@@ -1792,17 +1789,17 @@ static const EnumPropertyItem prop_actkeys_mirror_types[] = {
     {ACTKEYS_MIRROR_CFRA,
      "CFRA",
      0,
-     "By Times over Current frame",
+     "By Times Over Current Frame",
      "Flip times of selected keyframes using the current frame as the mirror line"},
     {ACTKEYS_MIRROR_XAXIS,
      "XAXIS",
      0,
-     "By Values over Value=0",
+     "By Values Over Value=0",
      "Flip values of selected keyframes (i.e. negative values become positive, and vice versa)"},
     {ACTKEYS_MIRROR_MARKER,
      "MARKER",
      0,
-     "By Times over First Selected Marker",
+     "By Times Over First Selected Marker",
      "Flip times of selected keyframes using the first selected marker as the reference point"},
     {0, NULL, 0, NULL, NULL},
 };

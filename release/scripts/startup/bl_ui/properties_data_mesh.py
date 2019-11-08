@@ -28,8 +28,16 @@ class MESH_MT_vertex_group_context_menu(Menu):
     def draw(self, _context):
         layout = self.layout
 
-        layout.operator("object.vertex_group_sort", icon='SORTALPHA', text="Sort by Name").sort_type = 'NAME'
-        layout.operator("object.vertex_group_sort", icon='BONE_DATA', text="Sort by Bone Hierarchy").sort_type = 'BONE_HIERARCHY'
+        layout.operator(
+            "object.vertex_group_sort",
+            icon='SORTALPHA',
+            text="Sort by Name",
+        ).sort_type = 'NAME'
+        layout.operator(
+            "object.vertex_group_sort",
+            icon='BONE_DATA',
+            text="Sort by Bone Hierarchy",
+        ).sort_type = 'BONE_HIERARCHY'
         layout.separator()
         layout.operator("object.vertex_group_copy", icon='DUPLICATE')
         layout.operator("object.vertex_group_copy_to_linked")
@@ -38,7 +46,11 @@ class MESH_MT_vertex_group_context_menu(Menu):
         layout.operator("object.vertex_group_mirror", icon='ARROW_LEFTRIGHT').use_topology = False
         layout.operator("object.vertex_group_mirror", text="Mirror Vertex Group (Topology)").use_topology = True
         layout.separator()
-        layout.operator("object.vertex_group_remove_from", icon='X', text="Remove from All Groups").use_all_groups = True
+        layout.operator(
+            "object.vertex_group_remove_from",
+            icon='X',
+            text="Remove from All Groups",
+        ).use_all_groups = True
         layout.operator("object.vertex_group_remove_from", text="Clear Active Group").use_all_verts = True
         layout.operator("object.vertex_group_remove", text="Delete All Unlocked Groups").all_unlocked = True
         layout.operator("object.vertex_group_remove", text="Delete All Groups").all = True
@@ -64,8 +76,8 @@ class MESH_MT_shape_key_context_menu(Menu):
         layout.separator()
         layout.operator("object.shape_key_remove", icon='X', text="Delete All Shape Keys").all = True
         layout.separator()
-        layout.operator("object.shape_key_move", icon='TRIA_UP_BAR', text="Move To Top").type = 'TOP'
-        layout.operator("object.shape_key_move", icon='TRIA_DOWN_BAR', text="Move To Bottom").type = 'BOTTOM'
+        layout.operator("object.shape_key_move", icon='TRIA_UP_BAR', text="Move to Top").type = 'TOP'
+        layout.operator("object.shape_key_move", icon='TRIA_DOWN_BAR', text="Move to Bottom").type = 'BOTTOM'
 
 
 class MESH_UL_vgroups(UIList):
@@ -87,7 +99,7 @@ class MESH_UL_fmaps(UIList):
         fmap = item
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             layout.prop(fmap, "name", text="", emboss=False, icon='FACE_MAPS')
-        elif self.layout_type in {'GRID'}:
+        elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
 
@@ -175,13 +187,7 @@ class DATA_PT_normals(MeshButtonsPanel, Panel):
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-
-        mesh = context.mesh
-
-        col = layout.column()
-        col.prop(mesh, "show_double_sided")
+        pass
 
 
 class DATA_PT_normals_auto_smooth(MeshButtonsPanel, Panel):
@@ -263,7 +269,11 @@ class DATA_PT_vertex_groups(MeshButtonsPanel, Panel):
             col.operator("object.vertex_group_move", icon='TRIA_UP', text="").direction = 'UP'
             col.operator("object.vertex_group_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
 
-        if ob.vertex_groups and (ob.mode == 'EDIT' or (ob.mode == 'WEIGHT_PAINT' and ob.type == 'MESH' and ob.data.use_paint_mask_vertex)):
+        if (
+                ob.vertex_groups and
+                (ob.mode == 'EDIT' or
+                 (ob.mode == 'WEIGHT_PAINT' and ob.type == 'MESH' and ob.data.use_paint_mask_vertex))
+        ):
             row = layout.row()
 
             sub = row.row(align=True)
@@ -454,6 +464,32 @@ class DATA_PT_vertex_colors(MeshButtonsPanel, Panel):
         col.operator("mesh.vertex_color_remove", icon='REMOVE', text="")
 
 
+class DATA_PT_remesh(MeshButtonsPanel, Panel):
+    bl_label = "Remesh"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        row = layout.row()
+
+        mesh = context.mesh
+        row.prop(mesh, "remesh_mode", text="Mode", expand=True)
+        col = layout.column()
+        if mesh.remesh_mode == 'VOXEL':
+            col.prop(mesh, "remesh_voxel_size")
+            col.prop(mesh, "remesh_voxel_adaptivity")
+            col.prop(mesh, "use_remesh_fix_poles")
+            col.prop(mesh, "use_remesh_smooth_normals")
+            col.prop(mesh, "use_remesh_preserve_volume")
+            col.prop(mesh, "use_remesh_preserve_paint_mask")
+            col.operator("object.voxel_remesh", text="Voxel Remesh")
+        else:
+            col.operator("object.quadriflow_remesh", text="QuadriFlow Remesh")
+
+
 class DATA_PT_customdata(MeshButtonsPanel, Panel):
     bl_label = "Geometry Data"
     bl_options = {'DEFAULT_CLOSED'}
@@ -462,6 +498,7 @@ class DATA_PT_customdata(MeshButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False
 
         obj = context.object
         me = context.mesh
@@ -477,7 +514,7 @@ class DATA_PT_customdata(MeshButtonsPanel, Panel):
 
         col = layout.column()
 
-        col.enabled = (obj.mode != 'EDIT')
+        col.enabled = obj is not None and obj.mode != 'EDIT'
         col.prop(me, "use_customdata_vertex_bevel")
         col.prop(me, "use_customdata_edge_bevel")
         col.prop(me, "use_customdata_edge_crease")
@@ -506,6 +543,7 @@ classes = (
     DATA_PT_normals,
     DATA_PT_normals_auto_smooth,
     DATA_PT_texture_space,
+    DATA_PT_remesh,
     DATA_PT_customdata,
     DATA_PT_custom_props_mesh,
 )

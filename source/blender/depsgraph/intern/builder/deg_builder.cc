@@ -74,6 +74,10 @@ DepsgraphBuilder::DepsgraphBuilder(Main *bmain, Depsgraph *graph, DepsgraphBuild
 {
 }
 
+DepsgraphBuilder::~DepsgraphBuilder()
+{
+}
+
 bool DepsgraphBuilder::need_pull_base_into_graph(Base *base)
 {
   /* Simple check: enabled bases are always part of dependency graph. */
@@ -114,7 +118,10 @@ bool DepsgraphBuilder::check_pchan_has_bbone(Object *object, const bPoseChannel 
   }
   bArmature *armature = static_cast<bArmature *>(object->data);
   AnimatedPropertyID property_id(&armature->id, &RNA_Bone, pchan->bone, "bbone_segments");
-  return cache_->isPropertyAnimated(&armature->id, property_id);
+  /* Check both Object and Armature animation data, because drivers modifying Armature
+   * state could easily be created in the Object AnimData. */
+  return cache_->isPropertyAnimated(&object->id, property_id) ||
+         cache_->isPropertyAnimated(&armature->id, property_id);
 }
 
 bool DepsgraphBuilder::check_pchan_has_bbone_segments(Object *object, const bPoseChannel *pchan)
@@ -201,7 +208,7 @@ void deg_graph_build_finalize(Main *bmain, Depsgraph *graph)
   /* Re-tag IDs for update if it was tagged before the relations
    * update tag. */
   for (IDNode *id_node : graph->id_nodes) {
-    ID *id = id_node->id_orig;
+    ID *id_orig = id_node->id_orig;
     id_node->finalize_build(graph);
     int flag = 0;
     /* Tag rebuild if special evaluation flags changed. */
@@ -216,10 +223,13 @@ void deg_graph_build_finalize(Main *bmain, Depsgraph *graph)
       flag |= ID_RECALC_COPY_ON_WRITE;
       /* This means ID is being added to the dependency graph first
        * time, which is similar to "ob-visible-change" */
-      if (GS(id->name) == ID_OB) {
+      if (GS(id_orig->name) == ID_OB) {
         flag |= ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY;
       }
     }
+    /* Restore recalc flags from original ID, which could possibly contain recalc flags set by
+     * an operator and then were carried on by the undo system. */
+    flag |= id_orig->recalc;
     if (flag != 0) {
       graph_id_tag_update(bmain, graph, id_node->id_orig, flag, DEG_UPDATE_SOURCE_RELATIONS);
     }

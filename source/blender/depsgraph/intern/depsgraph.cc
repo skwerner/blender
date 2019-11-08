@@ -38,12 +38,15 @@
 extern "C" {
 #include "BKE_scene.h"
 #include "BKE_global.h"
+#include "BKE_idcode.h"
 }
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_debug.h"
 
 #include "intern/depsgraph_update.h"
+#include "intern/depsgraph_physics.h"
+#include "intern/depsgraph_registry.h"
 
 #include "intern/eval/deg_eval_copy_on_write.h"
 
@@ -54,8 +57,6 @@ extern "C" {
 #include "intern/node/deg_node_operation.h"
 #include "intern/node/deg_node_time.h"
 
-#include "intern/depsgraph_physics.h"
-
 namespace DEG {
 
 /* TODO(sergey): Find a better place for this. */
@@ -64,22 +65,26 @@ template<typename T> static void remove_from_vector(vector<T> *vector, const T &
   vector->erase(std::remove(vector->begin(), vector->end(), value), vector->end());
 }
 
-Depsgraph::Depsgraph(Scene *scene, ViewLayer *view_layer, eEvaluationMode mode)
+Depsgraph::Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluationMode mode)
     : time_source(NULL),
       need_update(true),
+      need_update_time(false),
+      bmain(bmain),
       scene(scene),
       view_layer(view_layer),
       mode(mode),
       ctime(BKE_scene_frame_get(scene)),
       scene_cow(NULL),
       is_active(false),
-      debug_is_evaluating(false)
+      is_evaluating(false),
+      is_render_pipeline_depsgraph(false)
 {
   BLI_spin_init(&lock);
   id_hash = BLI_ghash_ptr_new("Depsgraph id hash");
   entry_tags = BLI_gset_ptr_new("Depsgraph entry_tags");
   debug_flags = G.debug;
   memset(id_type_updated, 0, sizeof(id_type_updated));
+  memset(id_type_exist, 0, sizeof(id_type_exist));
   memset(physics_relations, 0, sizeof(physics_relations));
 }
 
@@ -129,6 +134,8 @@ IDNode *Depsgraph::add_id_node(ID *id, ID *id_cow_hint)
      * referencing to. */
     BLI_ghash_insert(id_hash, id, id_node);
     id_nodes.push_back(id_node);
+
+    id_type_exist[BKE_idcode_to_index(GS(id->name))] = 1;
   }
   return id_node;
 }
@@ -307,18 +314,30 @@ ID *Depsgraph::get_cow_id(const ID *id_orig) const
 /* Public Graph API */
 
 /* Initialize a new Depsgraph */
-Depsgraph *DEG_graph_new(Scene *scene, ViewLayer *view_layer, eEvaluationMode mode)
+Depsgraph *DEG_graph_new(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluationMode mode)
 {
-  DEG::Depsgraph *deg_depsgraph = OBJECT_GUARDED_NEW(DEG::Depsgraph, scene, view_layer, mode);
+  DEG::Depsgraph *deg_depsgraph = OBJECT_GUARDED_NEW(
+      DEG::Depsgraph, bmain, scene, view_layer, mode);
+  DEG::register_graph(deg_depsgraph);
   return reinterpret_cast<Depsgraph *>(deg_depsgraph);
 }
 
 /* Free graph's contents and graph itself */
 void DEG_graph_free(Depsgraph *graph)
 {
+  if (graph == NULL) {
+    return;
+  }
   using DEG::Depsgraph;
   DEG::Depsgraph *deg_depsgraph = reinterpret_cast<DEG::Depsgraph *>(graph);
+  DEG::unregister_graph(deg_depsgraph);
   OBJECT_GUARDED_DELETE(deg_depsgraph, Depsgraph);
+}
+
+bool DEG_is_evaluating(struct Depsgraph *depsgraph)
+{
+  DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(depsgraph);
+  return deg_graph->is_evaluating;
 }
 
 bool DEG_is_active(const struct Depsgraph *depsgraph)

@@ -43,7 +43,7 @@ extern "C" {
 #include "MaterialExporter.h"
 
 ImagesExporter::ImagesExporter(COLLADASW::StreamWriter *sw,
-                               const ExportSettings *export_settings,
+                               BCExportSettings &export_settings,
                                KeyImageMap &key_image_map)
     : COLLADASW::LibraryImages(sw), export_settings(export_settings), key_image_map(key_image_map)
 {
@@ -61,7 +61,7 @@ void ImagesExporter::export_UV_Image(Image *image, bool use_copies)
     return;
   }
 
-  bool is_dirty = (imbuf->userflags & IB_BITMAPDIRTY) != 0;
+  bool is_dirty = BKE_image_is_dirty(image);
 
   ImageFormatData imageFormat;
   BKE_imbuf_to_image_format(&imageFormat, imbuf);
@@ -76,7 +76,7 @@ void ImagesExporter::export_UV_Image(Image *image, bool use_copies)
   char export_file[FILE_MAX];
 
   /* Destination folder for exported assets */
-  BLI_split_dir_part(this->export_settings->filepath, export_dir, sizeof(export_dir));
+  BLI_split_dir_part(this->export_settings.get_filepath(), export_dir, sizeof(export_dir));
 
   if (is_generated || is_dirty || use_copies || is_packed) {
 
@@ -107,7 +107,7 @@ void ImagesExporter::export_UV_Image(Image *image, bool use_copies)
 
     /* make absolute source path */
     BLI_strncpy(source_path, image->name, sizeof(source_path));
-    BLI_path_abs(source_path, BKE_main_blendfile_path_from_global());
+    BLI_path_abs(source_path, ID_BLEND_PATH_FROM_GLOBAL(&image->id));
     BLI_cleanup_path(NULL, source_path);
 
     if (use_copies) {
@@ -152,7 +152,7 @@ void ImagesExporter::export_UV_Image(Image *image, bool use_copies)
 
 void ImagesExporter::exportImages(Scene *sce)
 {
-  bool use_texture_copies = this->export_settings->use_texture_copies;
+  bool use_texture_copies = this->export_settings.get_use_texture_copies();
   openLibrary();
 
   KeyImageMap::iterator iter;

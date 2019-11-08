@@ -27,8 +27,6 @@
 #include "DNA_customdata_types.h"
 #include "DNA_listBase.h"
 
-struct Image;
-
 /*tessellation face, see MLoop/MPoly for the real face data*/
 typedef struct MFace {
   unsigned int v1, v2, v3, v4;
@@ -187,10 +185,6 @@ typedef struct MLoopTri {
 typedef struct MVertTri {
   unsigned int tri[3];
 } MVertTri;
-
-// typedef struct MTexPoly {
-//  void *_pad;
-//} MTexPoly;
 
 typedef struct MLoopUV {
   float uv[2];
@@ -394,6 +388,7 @@ enum {
   /*  SELECT              = (1 << 0), */
   ME_VERT_TMP_TAG = (1 << 2),
   ME_HIDE = (1 << 4),
+  ME_VERT_FACEDOT = (1 << 5),
   /*  ME_VERT_MERGED      = (1 << 6), */
   ME_VERT_PBVH_UPDATE = (1 << 7),
 };

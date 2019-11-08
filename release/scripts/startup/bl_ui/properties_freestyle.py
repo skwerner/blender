@@ -39,6 +39,7 @@ class RenderFreestyleButtonsPanel:
 class RENDER_PT_freestyle(RenderFreestyleButtonsPanel, Panel):
     bl_label = "Freestyle"
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 10
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE'}
 
     def draw_header(self, context):
@@ -56,7 +57,7 @@ class RENDER_PT_freestyle(RenderFreestyleButtonsPanel, Panel):
 
         layout.prop(rd, "line_thickness_mode", expand=True)
 
-        if (rd.line_thickness_mode == 'ABSOLUTE'):
+        if rd.line_thickness_mode == 'ABSOLUTE':
             layout.prop(rd, "line_thickness")
 
 
@@ -66,6 +67,7 @@ class ViewLayerFreestyleButtonsPanel:
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "view_layer"
+    bl_order = 10
     # COMPAT_ENGINES must be defined in each subclass, external engines can add themselves here
 
     @classmethod

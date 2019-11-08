@@ -300,9 +300,10 @@ static void print_sparse_matrix(fmatrix3x3 *m)
 static void print_lvector(lfVector *v, int numverts)
 {
   int i;
-  for (i = 0; i < numverts; ++i) {
-    if (i > 0)
+  for (i = 0; i < numverts; i++) {
+    if (i > 0) {
       printf("\n");
+    }
 
     printf("%f,\n", v[i][0]);
     printf("%f,\n", v[i][1]);
@@ -319,12 +320,12 @@ static void print_bfmatrix(fmatrix3x3 *m)
   float *t = MEM_callocN(sizeof(float) * size * size, "bfmatrix");
   int q, i, j;
 
-  for (q = 0; q < tot; ++q) {
+  for (q = 0; q < tot; q++) {
     int k = 3 * m[q].r;
     int l = 3 * m[q].c;
 
-    for (j = 0; j < 3; ++j) {
-      for (i = 0; i < 3; ++i) {
+    for (j = 0; j < 3; j++) {
+      for (i = 0; i < 3; i++) {
         //              if (t[k + i + (l + j) * size] != 0.0f) {
         //                  printf("warning: overwriting value at %d, %d\n", m[q].r, m[q].c);
         //              }
@@ -339,13 +340,15 @@ static void print_bfmatrix(fmatrix3x3 *m)
     }
   }
 
-  for (j = 0; j < size; ++j) {
-    if (j > 0 && j % 3 == 0)
+  for (j = 0; j < size; j++) {
+    if (j > 0 && j % 3 == 0) {
       printf("\n");
+    }
 
-    for (i = 0; i < size; ++i) {
-      if (i > 0 && i % 3 == 0)
+    for (i = 0; i < size; i++) {
+      if (i > 0 && i % 3 == 0) {
         printf("  ");
+      }
 
       implicit_print_matrix_elem(t[i + j * size]);
     }
@@ -557,7 +560,7 @@ DO_INLINE fmatrix3x3 *create_bfmatrix(unsigned int verts, unsigned int springs)
   temp[0].scount = springs;
 
   /* vertex part of the matrix is diagonal blocks */
-  for (i = 0; i < verts; ++i) {
+  for (i = 0; i < verts; i++) {
     init_fmatrix(temp + i, i, i);
   }
 
@@ -608,17 +611,16 @@ DO_INLINE void initdiag_bfmatrix(fmatrix3x3 *matrix, float m3[3][3])
 /* STATUS: verified */
 DO_INLINE void mul_bfmatrix_lfvector(float (*to)[3], fmatrix3x3 *from, lfVector *fLongVector)
 {
-  unsigned int i = 0;
   unsigned int vcount = from[0].vcount;
   lfVector *temp = create_lfvector(vcount);
 
   zero_lfvector(to, vcount);
 
-#  pragma omp parallel sections private(i) if (vcount > CLOTH_OPENMP_LIMIT)
+#  pragma omp parallel sections if (vcount > CLOTH_OPENMP_LIMIT)
   {
 #  pragma omp section
     {
-      for (i = from[0].vcount; i < from[0].vcount + from[0].scount; i++) {
+      for (unsigned int i = from[0].vcount; i < from[0].vcount + from[0].scount; i++) {
         /* This is the lower triangle of the sparse matrix,
          * therefore multiplication occurs with transposed submatrices. */
         muladd_fmatrixT_fvector(to[from[i].c], from[i].m, fLongVector[from[i].r]);
@@ -626,7 +628,7 @@ DO_INLINE void mul_bfmatrix_lfvector(float (*to)[3], fmatrix3x3 *from, lfVector 
     }
 #  pragma omp section
     {
-      for (i = 0; i < from[0].vcount + from[0].scount; i++) {
+      for (unsigned int i = 0; i < from[0].vcount + from[0].scount; i++) {
         muladd_fmatrix_fvector(temp[from[i].r], from[i].m, fLongVector[from[i].c]);
       }
     }
@@ -1156,12 +1158,9 @@ bool BPH_mass_spring_solve_velocities(Implicit_Data *data, float dt, ImplicitSol
   double start = PIL_check_seconds_timer();
 #  endif
 
-  cg_filtered(data->dV,
-              data->A,
-              data->B,
-              data->z,
-              data->S,
-              result); /* conjugate gradient algorithm to solve Ax=b */
+  /* Conjugate gradient algorithm to solve Ax=b. */
+  cg_filtered(data->dV, data->A, data->B, data->z, data->S, result);
+
   // cg_filtered_pre(id->dV, id->A, id->B, id->z, id->S, id->P, id->Pinv, id->bigI);
 
 #  ifdef DEBUG_TIME
@@ -1234,10 +1233,12 @@ void BPH_mass_spring_get_motion_state(struct Implicit_Data *data,
                                       float x[3],
                                       float v[3])
 {
-  if (x)
+  if (x) {
     root_to_world_v3(data, index, x, data->X[index]);
-  if (v)
+  }
+  if (v) {
     root_to_world_v3(data, index, v, data->V[index]);
+  }
 }
 
 void BPH_mass_spring_get_position(struct Implicit_Data *data, int index, float x[3])
@@ -1288,7 +1289,7 @@ static int BPH_mass_spring_add_block(Implicit_Data *data, int v1, int v2)
 void BPH_mass_spring_clear_constraints(Implicit_Data *data)
 {
   int i, numverts = data->S[0].vcount;
-  for (i = 0; i < numverts; ++i) {
+  for (i = 0; i < numverts; i++) {
     unit_m3(data->S[i].m);
     zero_v3(data->z[i]);
   }
@@ -1596,10 +1597,12 @@ BLI_INLINE float fbstar(float length, float L, float kb, float cb)
   float tempfb_fl = kb * fb(length, L);
   float fbstar_fl = cb * (length - L);
 
-  if (tempfb_fl < fbstar_fl)
+  if (tempfb_fl < fbstar_fl) {
     return fbstar_fl;
-  else
+  }
+  else {
     return tempfb_fl;
+  }
 }
 
 // function to calculae bending spring force (taken from Choi & Co)
@@ -1926,30 +1929,38 @@ BLI_INLINE void spring_hairbend_forces(Implicit_Data *data,
   zero_v3(fk);
 
   sub_v3_v3v3(edge_ij, data->X[j], data->X[i]);
-  if (q == i)
+  if (q == i) {
     sub_v3_v3(edge_ij, dx);
-  if (q == j)
+  }
+  if (q == j) {
     add_v3_v3(edge_ij, dx);
+  }
   normalize_v3_v3(dir_ij, edge_ij);
 
   sub_v3_v3v3(edge_jk, data->X[k], data->X[j]);
-  if (q == j)
+  if (q == j) {
     sub_v3_v3(edge_jk, dx);
-  if (q == k)
+  }
+  if (q == k) {
     add_v3_v3(edge_jk, dx);
+  }
   normalize_v3_v3(dir_jk, edge_jk);
 
   sub_v3_v3v3(vel_ij, data->V[j], data->V[i]);
-  if (q == i)
+  if (q == i) {
     sub_v3_v3(vel_ij, dv);
-  if (q == j)
+  }
+  if (q == j) {
     add_v3_v3(vel_ij, dv);
+  }
 
   sub_v3_v3v3(vel_jk, data->V[k], data->V[j]);
-  if (q == j)
+  if (q == j) {
     sub_v3_v3(vel_jk, dv);
-  if (q == k)
+  }
+  if (q == k) {
     add_v3_v3(vel_jk, dv);
+  }
 
   /* bending force */
   sub_v3_v3v3(dist, goal, edge_jk);
@@ -1990,7 +2001,7 @@ BLI_INLINE void spring_hairbend_estimate_dfdx(Implicit_Data *data,
 
   /* XXX TODO offset targets to account for position dependency */
 
-  for (a = 0; a < 3; ++a) {
+  for (a = 0; a < 3; a++) {
     spring_hairbend_forces(
         data, i, j, k, goal, stiffness, damping, q, dvec_pos[a], dvec_null[a], f);
     copy_v3_v3(dfdx[a], f);
@@ -1999,7 +2010,7 @@ BLI_INLINE void spring_hairbend_estimate_dfdx(Implicit_Data *data,
         data, i, j, k, goal, stiffness, damping, q, dvec_neg[a], dvec_null[a], f);
     sub_v3_v3(dfdx[a], f);
 
-    for (b = 0; b < 3; ++b) {
+    for (b = 0; b < 3; b++) {
       dfdx[a][b] /= delta;
     }
   }
@@ -2029,7 +2040,7 @@ BLI_INLINE void spring_hairbend_estimate_dfdv(Implicit_Data *data,
 
   /* XXX TODO offset targets to account for position dependency */
 
-  for (a = 0; a < 3; ++a) {
+  for (a = 0; a < 3; a++) {
     spring_hairbend_forces(
         data, i, j, k, goal, stiffness, damping, q, dvec_null[a], dvec_pos[a], f);
     copy_v3_v3(dfdv[a], f);
@@ -2038,7 +2049,7 @@ BLI_INLINE void spring_hairbend_estimate_dfdv(Implicit_Data *data,
         data, i, j, k, goal, stiffness, damping, q, dvec_null[a], dvec_neg[a], f);
     sub_v3_v3(dfdv[a], f);
 
-    for (b = 0; b < 3; ++b) {
+    for (b = 0; b < 3; b++) {
       dfdv[a][b] /= delta;
     }
   }

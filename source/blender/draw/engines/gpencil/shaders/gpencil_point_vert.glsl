@@ -1,5 +1,3 @@
-uniform mat4 ModelViewProjectionMatrix;
-uniform mat4 ProjectionMatrix;
 
 uniform float pixsize; /* rv3d->pixsize */
 uniform int keep_size;
@@ -8,6 +6,7 @@ uniform float pixfactor;
 uniform int viewport_xray;
 uniform int shading_type[2];
 uniform vec4 wire_color;
+uniform mat4 gpModelMatrix;
 
 in vec3 pos;
 in vec4 color;
@@ -32,8 +31,8 @@ float defaultpixsize = pixsize * (1000.0 / pixfactor);
 
 void main()
 {
-  gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
-  finalprev_pos = ModelViewProjectionMatrix * vec4(prev_pos, 1.0);
+  gl_Position = point_world_to_ndc((gpModelMatrix * vec4(pos, 1.0)).xyz);
+  finalprev_pos = point_world_to_ndc((gpModelMatrix * vec4(prev_pos, 1.0)).xyz);
   finalColor = color;
 
   if (keep_size == TRUE) {

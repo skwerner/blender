@@ -95,13 +95,14 @@ static void rna_uiItemR(uiLayout *layout,
                         int icon,
                         bool expand,
                         bool slider,
-                        bool toggle,
+                        int toggle,
                         bool icon_only,
                         bool event,
                         bool full_event,
                         bool emboss,
                         int index,
-                        int icon_value)
+                        int icon_value,
+                        bool invert_checkbox)
 {
   PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
   int flag = 0;
@@ -120,11 +121,17 @@ static void rna_uiItemR(uiLayout *layout,
 
   flag |= (slider) ? UI_ITEM_R_SLIDER : 0;
   flag |= (expand) ? UI_ITEM_R_EXPAND : 0;
-  flag |= (toggle) ? UI_ITEM_R_TOGGLE : 0;
+  if (toggle == 1) {
+    flag |= UI_ITEM_R_TOGGLE;
+  }
+  else if (toggle == 0) {
+    flag |= UI_ITEM_R_ICON_NEVER;
+  }
   flag |= (icon_only) ? UI_ITEM_R_ICON_ONLY : 0;
   flag |= (event) ? UI_ITEM_R_EVENT : 0;
   flag |= (full_event) ? UI_ITEM_R_FULL_EVENT : 0;
   flag |= (emboss) ? 0 : UI_ITEM_R_NO_BG;
+  flag |= (invert_checkbox) ? UI_ITEM_R_CHECKBOX_INVERT : 0;
 
   uiItemFullR(layout, ptr, prop, index, 0, flag, name, icon);
 }
@@ -472,6 +479,14 @@ static void rna_uiTemplatePathBuilder(uiLayout *layout,
   uiTemplatePathBuilder(layout, ptr, propname, root_ptr, name);
 }
 
+static void rna_uiTemplateEventFromKeymapItem(
+    uiLayout *layout, wmKeyMapItem *kmi, const char *name, const char *text_ctxt, bool translate)
+{
+  /* Get translated name (label). */
+  name = rna_translate_ui_text(name, text_ctxt, NULL, NULL, translate);
+  uiTemplateEventFromKeymapItem(layout, name, kmi, true);
+}
+
 static int rna_ui_get_rnaptr_icon(bContext *C, PointerRNA *ptr_icon)
 {
   return UI_rnaptr_icon_get(C, ptr_icon, RNA_struct_ui_icon(ptr_icon->type), false);
@@ -771,7 +786,17 @@ void RNA_api_ui_layout(StructRNA *srna)
   api_ui_item_common(func);
   RNA_def_boolean(func, "expand", false, "", "Expand button to show more detail");
   RNA_def_boolean(func, "slider", false, "", "Use slider widget for numeric values");
-  RNA_def_boolean(func, "toggle", false, "", "Use toggle widget for boolean values");
+  RNA_def_int(func,
+              "toggle",
+              -1,
+              -1,
+              1,
+              "",
+              "Use toggle widget for boolean values, "
+              "or a checkbox when disabled "
+              "(the default is -1 which uses toggle only when an icon is displayed)",
+              -1,
+              1);
   RNA_def_boolean(func, "icon_only", false, "", "Draw only icons in buttons, no text");
   RNA_def_boolean(func, "event", false, "", "Use button to input key events");
   RNA_def_boolean(
@@ -779,6 +804,7 @@ void RNA_api_ui_layout(StructRNA *srna)
   RNA_def_boolean(func, "emboss", true, "", "Draw the button itself, not just the icon/text");
   RNA_def_int(func,
               "index",
+              /* RNA_NO_INDEX == -1 */
               -1,
               -2,
               INT_MAX,
@@ -786,9 +812,10 @@ void RNA_api_ui_layout(StructRNA *srna)
               "The index of this button, when set a single member of an array can be accessed, "
               "when set to -1 all array members are used",
               -2,
-              INT_MAX); /* RNA_NO_INDEX == -1 */
+              INT_MAX);
   parm = RNA_def_property(func, "icon_value", PROP_INT, PROP_UNSIGNED);
   RNA_def_property_ui_text(parm, "Icon Value", "Override automatic icon of the item");
+  RNA_def_boolean(func, "invert_checkbox", false, "", "Draw checkbox value inverted");
 
   func = RNA_def_function(srna, "props_enum", "uiItemsEnumR");
   api_ui_item_rna_common(func);
@@ -1500,6 +1527,22 @@ void RNA_api_ui_layout(StructRNA *srna)
   RNA_def_int(func, "rows", 5, 1, INT_MAX, "", "Maximum number of items to show", 1, INT_MAX);
   parm = RNA_def_int(func, "found", 0, 0, INT_MAX, "", "Number of items drawn", 0, INT_MAX);
   RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(srna, "template_file_select_path", "uiTemplateFileSelectPath");
+  RNA_def_function_ui_description(func,
+                                  "Item. A text button to set the active file browser path.");
+  parm = RNA_def_pointer(func, "params", "FileSelectParams", "", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  RNA_def_function_flag(func, FUNC_USE_CONTEXT);
+
+  func = RNA_def_function(
+      srna, "template_event_from_keymap_item", "rna_uiTemplateEventFromKeymapItem");
+  RNA_def_function_ui_description(func, "Display keymap item as icons/text");
+  parm = RNA_def_property(func, "item", PROP_POINTER, PROP_NONE);
+  RNA_def_property_struct_type(parm, "KeyMapItem");
+  RNA_def_property_ui_text(parm, "Item", "");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+  api_ui_item_common_text(func);
 }
 
 #endif

@@ -31,7 +31,12 @@ struct Subdiv;
 
 /* Returns true if evaluator is ready for use. */
 bool BKE_subdiv_eval_begin(struct Subdiv *subdiv);
-bool BKE_subdiv_eval_update_from_mesh(struct Subdiv *subdiv, const struct Mesh *mesh);
+
+/* coarse_vertex_cos is an optional argument which allows to override coordinates of the coarse
+ * mesh. */
+bool BKE_subdiv_eval_update_from_mesh(struct Subdiv *subdiv,
+                                      const struct Mesh *mesh,
+                                      const float (*coarse_vertex_cos)[3]);
 
 /* Makes sure displacement evaluator is initialized.
  *
@@ -73,8 +78,8 @@ void BKE_subdiv_eval_face_varying(struct Subdiv *subdiv,
 /* NOTE: Expects derivatives to be correct.
  *
  * TODO(sergey): This is currently used together with
- * BKE_subdiv_eval_final_point() which cas easily evaluate derivatives.
- * Would be nice to have dispalcement evaluation function which does not require
+ * BKE_subdiv_eval_final_point() which can easily evaluate derivatives.
+ * Would be nice to have displacement evaluation function which does not require
  * knowing derivatives ahead of a time. */
 void BKE_subdiv_eval_displacement(struct Subdiv *subdiv,
                                   const int ptex_face_index,

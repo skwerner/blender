@@ -38,7 +38,6 @@ struct MaskSplinePoint;
 struct MaskSplinePointUW;
 struct MovieClip;
 struct MovieClipUser;
-struct Scene;
 
 /* mask_ops.c */
 typedef enum {
@@ -171,9 +170,6 @@ void BKE_mask_coord_to_image(struct Image *image,
 
 /* parenting */
 
-void BKE_mask_update_display(struct Mask *mask, float ctime);
-
-void BKE_mask_evaluate_all_masks(struct Main *bmain, float ctime, const bool do_newframe);
 void BKE_mask_evaluate(struct Mask *mask, const float ctime, const bool do_newframe);
 void BKE_mask_layer_evaluate(struct MaskLayer *masklay, const float ctime, const bool do_newframe);
 void BKE_mask_parent_init(struct MaskParent *parent);

@@ -43,6 +43,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_anim.h"
 #include "BKE_animsys.h"
 #include "BKE_constraint.h"
@@ -235,9 +236,9 @@ void action_group_colors_sync(bActionGroup *grp, const bActionGroup *ref_grp)
        */
       else if (grp->cs.solid[0] == 0) {
         /* define for setting colors in theme below */
-        rgba_char_args_set(grp->cs.solid, 0xff, 0x00, 0x00, 255);
-        rgba_char_args_set(grp->cs.select, 0x81, 0xe6, 0x14, 255);
-        rgba_char_args_set(grp->cs.active, 0x18, 0xb6, 0xe0, 255);
+        rgba_uchar_args_set(grp->cs.solid, 0xff, 0x00, 0x00, 255);
+        rgba_uchar_args_set(grp->cs.select, 0x81, 0xe6, 0x14, 255);
+        rgba_uchar_args_set(grp->cs.active, 0x18, 0xb6, 0xe0, 255);
       }
     }
   }
@@ -525,6 +526,38 @@ bPoseChannel *BKE_pose_channel_active(Object *ob)
 }
 
 /**
+ * Use this when detecting the "other selected bone",
+ * when we have multiple armatures in pose mode.
+ *
+ * In this case the active-selected is an obvious choice when finding the target for a
+ * constraint for eg. however from the users perspective the active pose bone of the
+ * active object is the _real_ active bone, so any other non-active selected bone
+ * is a candidate for being the other selected bone, see: T58447.
+ */
+bPoseChannel *BKE_pose_channel_active_or_first_selected(struct Object *ob)
+{
+  bArmature *arm = (ob) ? ob->data : NULL;
+
+  if (ELEM(NULL, ob, ob->pose, arm)) {
+    return NULL;
+  }
+
+  bPoseChannel *pchan = BKE_pose_channel_active(ob);
+  if (pchan && (pchan->bone->flag & BONE_SELECTED) && PBONE_VISIBLE(arm, pchan->bone)) {
+    return pchan;
+  }
+
+  for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
+    if (pchan->bone != NULL) {
+      if ((pchan->bone->flag & BONE_SELECTED) && PBONE_VISIBLE(arm, pchan->bone)) {
+        return pchan;
+      }
+    }
+  }
+  return NULL;
+}
+
+/**
  * \see #ED_armature_ebone_get_mirrored (edit-mode, matching function)
  */
 bPoseChannel *BKE_pose_channel_get_mirrored(const bPose *pose, const char *name)
@@ -729,6 +762,21 @@ void BKE_pose_channels_hash_free(bPose *pose)
   }
 }
 
+static void pose_channels_remove_internal_links(Object *ob, bPoseChannel *unlinked_pchan)
+{
+  LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
+    if (pchan->bbone_prev == unlinked_pchan) {
+      pchan->bbone_prev = NULL;
+    }
+    if (pchan->bbone_next == unlinked_pchan) {
+      pchan->bbone_next = NULL;
+    }
+    if (pchan->custom_tx == unlinked_pchan) {
+      pchan->custom_tx = NULL;
+    }
+  }
+}
+
 /**
  * Selectively remove pose channels.
  */
@@ -747,6 +795,7 @@ void BKE_pose_channels_remove(Object *ob,
       if (filter_fn(pchan->name, user_data)) {
         /* Bone itself is being removed */
         BKE_pose_channel_free(pchan);
+        pose_channels_remove_internal_links(ob, pchan);
         if (ob->pose->chanhash) {
           BLI_ghash_remove(ob->pose->chanhash, pchan->name, NULL, NULL);
         }
@@ -822,7 +871,6 @@ void BKE_pose_channel_free_ex(bPoseChannel *pchan, bool do_id_user)
 
   if (pchan->prop) {
     IDP_FreeProperty(pchan->prop);
-    MEM_freeN(pchan->prop);
   }
 
   /* Cached data, for new draw manager rendering code. */
@@ -964,7 +1012,6 @@ void BKE_pose_channel_copy_data(bPoseChannel *pchan, const bPoseChannel *pchan_f
   if (pchan->prop) {
     /* unlikely but possible it exists */
     IDP_FreeProperty(pchan->prop);
-    MEM_freeN(pchan->prop);
     pchan->prop = NULL;
   }
   if (pchan_from->prop) {
@@ -978,6 +1025,7 @@ void BKE_pose_channel_copy_data(bPoseChannel *pchan, const bPoseChannel *pchan_f
   }
 
   pchan->custom_scale = pchan_from->custom_scale;
+  pchan->drawflag = pchan_from->drawflag;
 }
 
 /* checks for IK constraint, Spline IK, and also for Follow-Path constraint.
@@ -1372,9 +1420,7 @@ short action_get_item_transforms(bAction *act, Object *ob, bPoseChannel *pchan, 
 
       if ((curves) || (flags & ACT_TRANS_PROP) == 0) {
         /* custom properties only */
-        pPtr = strstr(
-            bPtr,
-            "[\""); /* extra '"' comment here to keep my texteditor functionlist working :) */
+        pPtr = strstr(bPtr, "[\"");
         if (pPtr) {
           flags |= ACT_TRANS_PROP;
 
@@ -1426,7 +1472,7 @@ void BKE_pose_rest(bPose *pose)
   }
 }
 
-void BKE_pose_copyesult_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
+void BKE_pose_copy_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
 {
   copy_m4_m4(pchanto->pose_mat, pchanfrom->pose_mat);
   copy_m4_m4(pchanto->chan_mat, pchanfrom->chan_mat);
@@ -1477,7 +1523,7 @@ bool BKE_pose_copy_result(bPose *to, bPose *from)
   for (pchanfrom = from->chanbase.first; pchanfrom; pchanfrom = pchanfrom->next) {
     pchanto = BKE_pose_channel_find_name(to, pchanfrom->name);
     if (pchanto != NULL) {
-      BKE_pose_copyesult_pchan_result(pchanto, pchanfrom);
+      BKE_pose_copy_pchan_result(pchanto, pchanfrom);
     }
   }
   return true;
@@ -1523,8 +1569,8 @@ void what_does_obaction(
   workob->constraints.first = ob->constraints.first;
   workob->constraints.last = ob->constraints.last;
 
-  workob->pose =
-      pose; /* need to set pose too, since this is used for both types of Action Constraint */
+  /* Need to set pose too, since this is used for both types of Action Constraint. */
+  workob->pose = pose;
   if (pose) {
     /* This function is most likely to be used with a temporary pose with a single bone in there.
      * For such cases it makes no sense to create hash since it'll only waste CPU ticks on memory
@@ -1564,6 +1610,6 @@ void what_does_obaction(
     adt.action = act;
 
     /* execute effects of Action on to workob (or it's PoseChannels) */
-    BKE_animsys_evaluate_animdata(NULL, NULL, &workob->id, &adt, cframe, ADT_RECALC_ANIM);
+    BKE_animsys_evaluate_animdata(NULL, &workob->id, &adt, cframe, ADT_RECALC_ANIM, false);
   }
 }

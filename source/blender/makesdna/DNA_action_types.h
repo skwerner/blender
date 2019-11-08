@@ -512,6 +512,12 @@ typedef enum ePose_Flags {
   POSE_FLAG_DEPRECATED = (1 << 6), /* deprecated. */
   /* pose constraint flags needs to be updated */
   POSE_CONSTRAINTS_NEED_UPDATE_FLAGS = (1 << 7),
+  /* Use auto IK in pose mode */
+  POSE_AUTO_IK = (1 << 8),
+  /* Use x-axis mirror in pose mode */
+  POSE_MIRROR_EDIT = (1 << 9),
+  /* Use relative mirroring in mirror mode */
+  POSE_MIRROR_RELATIVE = (1 << 10),
 } ePose_Flags;
 
 /* IK Solvers ------------------------------------ */
@@ -766,6 +772,7 @@ typedef enum eDopeSheet_FilterFlag {
 /* DopeSheet filter-flags - Overflow (filterflag2) */
 typedef enum eDopeSheet_FilterFlag2 {
   ADS_FILTER_NOCACHEFILES = (1 << 1),
+  ADS_FILTER_NOMOVIECLIPS = (1 << 2),
 } eDopeSheet_FilterFlag2;
 
 /* DopeSheet general flags */
@@ -840,8 +847,7 @@ typedef enum eSAction_Flag {
   SACTION_POSEMARKERS_SHOW = (1 << 6),
   /* don't draw action channels using group colors (where applicable) */
   SACTION_NODRAWGCOLORS = (1 << 7),
-  /* don't draw current frame number beside frame indicator */
-  SACTION_NODRAWCFRANUM = (1 << 8),
+  /* SACTION_NODRAWCFRANUM = (1 << 8), DEPRECATED */
   /* don't perform realtime updates */
   SACTION_NOREALTIMEUPDATES = (1 << 10),
   /* move markers as well as keyframes */

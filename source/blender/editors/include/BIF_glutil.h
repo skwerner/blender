@@ -24,7 +24,6 @@
 #ifndef __BIF_GLUTIL_H__
 #define __BIF_GLUTIL_H__
 
-struct rctf;
 struct rcti;
 
 struct ColorManagedDisplaySettings;
@@ -171,8 +170,6 @@ int ED_draw_imbuf_method(struct ImBuf *ibuf);
 
 /* OpenGL drawing utility functions. Do not use these in new code, these
  * are intended to be moved or removed in the future. */
-
-void set_inverted_drawing(int enable);
 
 /* own working polygon offset */
 float bglPolygonOffsetCalc(const float winmat[16], float viewdist, float dist);

@@ -38,6 +38,7 @@
 
 #include "BKE_action.h"
 #include "BKE_animsys.h"
+#include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
@@ -63,13 +64,22 @@
 
 #include "armature_intern.h"
 
-/* *************************************** Join *************************************** */
-/* NOTE: no operator define here as this is exported to the Object-level operator */
+/* -------------------------------------------------------------------- */
+/** \name Edit Armature Join
+ *
+ * \note No operator define here as this is exported to the Object-level operator.
+ * \{ */
 
-static void joined_armature_fix_links_constraints(
-    Object *tarArm, Object *srcArm, bPoseChannel *pchan, EditBone *curbone, ListBase *lb)
+static void joined_armature_fix_links_constraints(Main *bmain,
+                                                  Object *ob,
+                                                  Object *tarArm,
+                                                  Object *srcArm,
+                                                  bPoseChannel *pchan,
+                                                  EditBone *curbone,
+                                                  ListBase *lb)
 {
   bConstraint *con;
+  bool changed = false;
 
   for (con = lb->first; con; con = con->next) {
     const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
@@ -84,10 +94,12 @@ static void joined_armature_fix_links_constraints(
         if (ct->tar == srcArm) {
           if (ct->subtarget[0] == '\0') {
             ct->tar = tarArm;
+            changed = true;
           }
           else if (STREQ(ct->subtarget, pchan->name)) {
             ct->tar = tarArm;
             BLI_strncpy(ct->subtarget, curbone->name, sizeof(ct->subtarget));
+            changed = true;
           }
         }
       }
@@ -104,13 +116,21 @@ static void joined_armature_fix_links_constraints(
       if (data->act) {
         BKE_action_fix_paths_rename(
             &tarArm->id, data->act, "pose.bones[", pchan->name, curbone->name, 0, 0, false);
+
+        DEG_id_tag_update_ex(bmain, &data->act->id, ID_RECALC_COPY_ON_WRITE);
       }
     }
+  }
+
+  if (changed) {
+    DEG_id_tag_update_ex(bmain, &ob->id, ID_RECALC_COPY_ON_WRITE);
   }
 }
 
 /* userdata for joined_armature_fix_animdata_cb() */
 typedef struct tJoinArmature_AdtFixData {
+  Main *bmain;
+
   Object *srcArm;
   Object *tarArm;
 
@@ -129,6 +149,7 @@ static void joined_armature_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data
   ID *dst_id = &afd->tarArm->id;
 
   GHashIterator gh_iter;
+  bool changed = false;
 
   /* Fix paths - If this is the target object, it will have some "dirty" paths */
   if ((id == src_id) && strstr(fcu->rna_path, "pose.bones[")) {
@@ -141,6 +162,8 @@ static void joined_armature_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data
       if (!STREQ(old_name, new_name) && strstr(fcu->rna_path, old_name)) {
         fcu->rna_path = BKE_animsys_fix_rna_path_rename(
             id, fcu->rna_path, "pose.bones", old_name, new_name, 0, 0, false);
+
+        changed = true;
 
         /* we don't want to apply a second remapping on this driver now,
          * so stop trying names, but keep fixing drivers
@@ -162,6 +185,8 @@ static void joined_armature_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data
         /* change the ID's used... */
         if (dtar->id == src_id) {
           dtar->id = dst_id;
+
+          changed = true;
 
           /* also check on the subtarget...
            * XXX: We duplicate the logic from drivers_path_rename_fix() here, with our own
@@ -193,6 +218,10 @@ static void joined_armature_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data
       DRIVER_TARGETS_LOOPER_END;
     }
   }
+
+  if (changed) {
+    DEG_id_tag_update_ex(afd->bmain, id, ID_RECALC_COPY_ON_WRITE);
+  }
 }
 
 /* Helper function for armature joining - link fixing */
@@ -210,13 +239,14 @@ static void joined_armature_fix_links(
       pose = ob->pose;
       for (pchant = pose->chanbase.first; pchant; pchant = pchant->next) {
         joined_armature_fix_links_constraints(
-            tarArm, srcArm, pchan, curbone, &pchant->constraints);
+            bmain, ob, tarArm, srcArm, pchan, curbone, &pchant->constraints);
       }
     }
 
     /* fix object-level constraints */
     if (ob != srcArm) {
-      joined_armature_fix_links_constraints(tarArm, srcArm, pchan, curbone, &ob->constraints);
+      joined_armature_fix_links_constraints(
+          bmain, ob, tarArm, srcArm, pchan, curbone, &ob->constraints);
     }
 
     /* See if an object is parented to this armature */
@@ -231,6 +261,8 @@ static void joined_armature_fix_links(
 
       /* make tar armature be new parent */
       ob->parent = tarArm;
+
+      DEG_id_tag_update_ex(bmain, &ob->id, ID_RECALC_COPY_ON_WRITE);
     }
   }
 }
@@ -286,6 +318,7 @@ int join_armature_exec(bContext *C, wmOperator *op)
       BLI_assert(ob_active->data != ob_iter->data);
 
       /* init callback data for fixing up AnimData links later */
+      afd.bmain = bmain;
       afd.srcArm = ob_iter;
       afd.tarArm = ob_active;
       afd.names_map = BLI_ghash_str_new("join_armature_adt_fix");
@@ -397,13 +430,18 @@ int join_armature_exec(bContext *C, wmOperator *op)
   ED_armature_from_edit(bmain, arm);
   ED_armature_edit_free(arm);
 
+  BKE_armature_refresh_layer_used(arm);
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
 
   return OPERATOR_FINISHED;
 }
 
-/* *********************************** Separate *********************************************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Armature Separate
+ * \{ */
 
 /* Helper function for armature separating - link fixing */
 static void separated_armature_fix_links(Main *bmain, Object *origArm, Object *newArm)
@@ -642,6 +680,9 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
 
     ED_armature_to_edit(obedit->data);
 
+    ED_armature_edit_refresh_layer_used(obedit->data);
+    BKE_armature_refresh_layer_used(newob->data);
+
     /* parents tips remain selected when connected children are removed. */
     ED_armature_edit_deselect_all(obedit);
 
@@ -678,7 +719,11 @@ void ARMATURE_OT_separate(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ********************************* Parenting ************************************************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Armature Parenting
+ * \{ */
 
 /* armature parenting options */
 #define ARM_PAR_CONNECT 1
@@ -973,3 +1018,5 @@ void ARMATURE_OT_parent_clear(wmOperatorType *ot)
                           "ClearType",
                           "What way to clear parenting");
 }
+
+/** \} */

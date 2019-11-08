@@ -39,7 +39,7 @@ class Chain : public Curve {
       _fedgeB;  // the last FEdge of the ViewEdge passed to the last call for push_viewedge_back().
 
  public:
-  /*! Defult constructor. */
+  /*! Default constructor. */
   Chain() : Curve()
   {
     _splittingId = 0;
@@ -65,8 +65,9 @@ class Chain : public Curve {
   {
     // only the last splitted deletes this id
     if (_splittingId) {
-      if (*_splittingId == _Id)
+      if (*_splittingId == _Id) {
         delete _splittingId;
+      }
     }
   }
 

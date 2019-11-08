@@ -153,29 +153,6 @@ struct RenderData;
 struct RenderPass;
 struct RenderResult;
 
-/* ima->source; where image comes from */
-#define IMA_SRC_CHECK 0
-#define IMA_SRC_FILE 1
-#define IMA_SRC_SEQUENCE 2
-#define IMA_SRC_MOVIE 3
-#define IMA_SRC_GENERATED 4
-#define IMA_SRC_VIEWER 5
-
-/* ima->type, how to handle/generate it */
-#define IMA_TYPE_IMAGE 0
-#define IMA_TYPE_MULTILAYER 1
-/* generated */
-#define IMA_TYPE_UV_TEST 2
-/* viewers */
-#define IMA_TYPE_R_RESULT 4
-#define IMA_TYPE_COMPOSITE 5
-
-enum {
-  IMA_GENTYPE_BLANK = 0,
-  IMA_GENTYPE_GRID = 1,
-  IMA_GENTYPE_GRID_COLOR = 2,
-};
-
 /* ima->ok */
 #define IMA_OK 1
 #define IMA_OK_LOADED 2
@@ -228,7 +205,8 @@ struct Image *BKE_image_add_generated(struct Main *bmain,
                                       int floatbuf,
                                       short gen_type,
                                       const float color[4],
-                                      const bool stereo3d);
+                                      const bool stereo3d,
+                                      const bool is_data);
 /* adds image from imbuf, owns imbuf */
 struct Image *BKE_image_add_from_imbuf(struct Main *bmain, struct ImBuf *ibuf, const char *name);
 
@@ -240,6 +218,7 @@ void BKE_image_signal(struct Main *bmain, struct Image *ima, struct ImageUser *i
 void BKE_image_walk_all_users(const struct Main *mainp,
                               void *customdata,
                               void callback(struct Image *ima,
+                                            struct ID *iuser_id,
                                             struct ImageUser *iuser,
                                             void *customdata));
 
@@ -251,7 +230,7 @@ void BKE_image_verify_viewer_views(const struct RenderData *rd,
                                    struct ImageUser *iuser);
 
 /* called on frame change or before render */
-void BKE_image_user_frame_calc(struct ImageUser *iuser, int cfra);
+void BKE_image_user_frame_calc(struct Image *ima, struct ImageUser *iuser, int cfra);
 int BKE_image_user_frame_get(const struct ImageUser *iuser, int cfra, bool *r_is_in_range);
 void BKE_image_user_file_path(struct ImageUser *iuser, struct Image *ima, char *path);
 void BKE_image_editors_update_frame(const struct Main *bmain, int cfra);
@@ -330,22 +309,28 @@ void BKE_image_get_aspect(struct Image *image, float *aspx, float *aspy);
 /* image_gen.c */
 void BKE_image_buf_fill_color(
     unsigned char *rect, float *rect_float, int width, int height, const float color[4]);
-void BKE_image_buf_fill_checker(unsigned char *rect, float *rect_float, int height, int width);
+void BKE_image_buf_fill_checker(unsigned char *rect, float *rect_float, int width, int height);
 void BKE_image_buf_fill_checker_color(unsigned char *rect,
                                       float *rect_float,
-                                      int height,
-                                      int width);
+                                      int width,
+                                      int height);
 
 /* Cycles hookup */
 unsigned char *BKE_image_get_pixels_for_frame(struct Image *image, int frame);
 float *BKE_image_get_float_pixels_for_frame(struct Image *image, int frame);
 
+/* Image modifications */
+bool BKE_image_is_dirty(struct Image *image);
+void BKE_image_mark_dirty(struct Image *image, struct ImBuf *ibuf);
+bool BKE_image_buffer_format_writable(struct ImBuf *ibuf);
+bool BKE_image_is_dirty_writable(struct Image *image, bool *is_format_writable);
+
 /* Guess offset for the first frame in the sequence */
 int BKE_image_sequence_guess_offset(struct Image *image);
 bool BKE_image_has_anim(struct Image *image);
 bool BKE_image_has_packedfile(struct Image *image);
+bool BKE_image_has_filepath(struct Image *ima);
 bool BKE_image_is_animated(struct Image *image);
-bool BKE_image_is_dirty(struct Image *image);
 void BKE_image_file_format_set(struct Image *image,
                                int ftype,
                                const struct ImbFormatOptions *options);

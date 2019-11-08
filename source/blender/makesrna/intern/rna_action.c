@@ -59,10 +59,12 @@ static void rna_ActionGroup_channels_next(CollectionPropertyIterator *iter)
   bActionGroup *grp = fcu->grp;
 
   /* only continue if the next F-Curve (if existent) belongs in the same group */
-  if ((fcu->next) && (fcu->next->grp == grp))
+  if ((fcu->next) && (fcu->next->grp == grp)) {
     internal->link = (Link *)fcu->next;
-  else
+  }
+  else {
     internal->link = NULL;
+  }
 
   iter->valid = (internal->link != NULL);
 }
@@ -112,8 +114,9 @@ static FCurve *rna_Action_fcurve_new(bAction *act,
                                      int index,
                                      const char *group)
 {
-  if (group && group[0] == '\0')
+  if (group && group[0] == '\0') {
     group = NULL;
+  }
 
   if (data_path[0] == '\0') {
     BKE_report(reports, RPT_ERROR, "F-Curve data path empty, invalid argument");
@@ -214,7 +217,9 @@ static PointerRNA rna_Action_active_pose_marker_get(PointerRNA *ptr)
       ptr, &RNA_TimelineMarker, BLI_findlink(&act->markers, act->active_marker - 1));
 }
 
-static void rna_Action_active_pose_marker_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Action_active_pose_marker_set(PointerRNA *ptr,
+                                              PointerRNA value,
+                                              struct ReportList *UNUSED(reports))
 {
   bAction *act = (bAction *)ptr->data;
   act->active_marker = BLI_findindex(&act->markers, value.data) + 1;
@@ -244,25 +249,27 @@ static void rna_Action_active_pose_marker_index_range(
 static void rna_Action_frame_range_get(PointerRNA *ptr, float *values)
 { /* don't include modifiers because they too easily can have very large
    * ranges: MINAFRAMEF to MAXFRAMEF. */
-  calc_action_range(ptr->id.data, values, values + 1, false);
+  calc_action_range((bAction *)ptr->owner_id, values, values + 1, false);
 }
 
 /* Used to check if an action (value pointer)
  * is suitable to be assigned to the ID-block that is ptr. */
 bool rna_Action_id_poll(PointerRNA *ptr, PointerRNA value)
 {
-  ID *srcId = (ID *)ptr->id.data;
-  bAction *act = (bAction *)value.id.data;
+  ID *srcId = ptr->owner_id;
+  bAction *act = (bAction *)value.owner_id;
 
   if (act) {
     /* there can still be actions that will have undefined id-root
      * (i.e. floating "action-library" members) which we will not
      * be able to resolve an idroot for automatically, so let these through
      */
-    if (act->idroot == 0)
+    if (act->idroot == 0) {
       return 1;
-    else if (srcId)
+    }
+    else if (srcId) {
       return GS(srcId->name) == act->idroot;
+    }
   }
 
   return 0;
@@ -273,15 +280,16 @@ bool rna_Action_id_poll(PointerRNA *ptr, PointerRNA value)
 bool rna_Action_actedit_assign_poll(PointerRNA *ptr, PointerRNA value)
 {
   SpaceAction *saction = (SpaceAction *)ptr->data;
-  bAction *act = (bAction *)value.id.data;
+  bAction *act = (bAction *)value.owner_id;
 
   if (act) {
     /* there can still be actions that will have undefined id-root
      * (i.e. floating "action-library" members) which we will not
      * be able to resolve an idroot for automatically, so let these through
      */
-    if (act->idroot == 0)
+    if (act->idroot == 0) {
       return 1;
+    }
 
     if (saction) {
       if (saction->mode == SACTCONT_ACTION) {
@@ -298,6 +306,11 @@ bool rna_Action_actedit_assign_poll(PointerRNA *ptr, PointerRNA value)
   return 0;
 }
 
+static char *rna_DopeSheet_path(PointerRNA *UNUSED(ptr))
+{
+  return BLI_strdup("dopesheet");
+}
+
 #else
 
 static void rna_def_dopesheet(BlenderRNA *brna)
@@ -307,6 +320,7 @@ static void rna_def_dopesheet(BlenderRNA *brna)
 
   srna = RNA_def_struct(brna, "DopeSheet", NULL);
   RNA_def_struct_sdna(srna, "bDopeSheet");
+  RNA_def_struct_path_func(srna, "rna_DopeSheet_path");
   RNA_def_struct_ui_text(
       srna, "Dope Sheet", "Settings for filtering the channels shown in animation editors");
 
@@ -339,7 +353,7 @@ static void rna_def_dopesheet(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "filterflag", ADS_FILTER_INCL_HIDDEN);
   RNA_def_property_ui_text(
       prop, "Display Hidden", "Include channels from objects/bone that are not visible");
-  RNA_def_property_ui_icon(prop, ICON_GHOST_ENABLED, 0);
+  RNA_def_property_ui_icon(prop, ICON_OBJECT_HIDDEN, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 
   prop = RNA_def_property(srna, "use_datablock_sort", PROP_BOOLEAN, PROP_NONE);
@@ -561,6 +575,13 @@ static void rna_def_dopesheet(BlenderRNA *brna)
       "Display Grease Pencil",
       "Include visualization of Grease Pencil related animation data and frames");
   RNA_def_property_ui_icon(prop, ICON_OUTLINER_OB_GREASEPENCIL, 0);
+  RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
+
+  prop = RNA_def_property(srna, "show_movieclips", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_negative_sdna(prop, NULL, "filterflag2", ADS_FILTER_NOMOVIECLIPS);
+  RNA_def_property_ui_text(
+      prop, "Display Movie Clips", "Include visualization of movie clip related animation data");
+  RNA_def_property_ui_icon(prop, ICON_TRACKER, 0);
   RNA_def_property_update(prop, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
 
   /* GPencil Mode Settings */

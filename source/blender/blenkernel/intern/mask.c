@@ -225,6 +225,16 @@ MaskLayer *BKE_mask_layer_copy(const MaskLayer *masklay)
     MaskSpline *spline_new = BKE_mask_spline_copy(spline);
 
     BLI_addtail(&masklay_new->splines, spline_new);
+
+    if (spline == masklay->act_spline) {
+      masklay_new->act_spline = spline_new;
+    }
+
+    if (masklay->act_point >= spline->points &&
+        masklay->act_point < spline->points + spline->tot_point) {
+      const size_t point_index = masklay->act_point - spline->points;
+      masklay_new->act_point = spline_new->points + point_index;
+    }
   }
 
   /* correct animation */
@@ -882,8 +892,8 @@ void BKE_mask_copy_data(Main *UNUSED(bmain),
 {
   BLI_listbase_clear(&mask_dst->masklayers);
 
-  BKE_mask_layer_copy_list(&mask_dst->masklayers,
-                           &mask_src->masklayers); /* TODO add unused flag to those as well. */
+  /* TODO add unused flag to those as well. */
+  BKE_mask_layer_copy_list(&mask_dst->masklayers, &mask_src->masklayers);
 
   /* enable fake user by default */
   id_fake_user_set(&mask_dst->id);
@@ -1459,22 +1469,6 @@ void BKE_mask_evaluate(Mask *mask, const float ctime, const bool do_newframe)
   }
 }
 
-/* the purpose of this function is to ensure spline->points_deform is never out of date.
- * for now re-evaluate all. eventually this might work differently */
-void BKE_mask_update_display(Mask *mask, float ctime)
-{
-  BKE_mask_evaluate(mask, ctime, false);
-}
-
-void BKE_mask_evaluate_all_masks(Main *bmain, float ctime, const bool do_newframe)
-{
-  Mask *mask;
-
-  for (mask = bmain->masks.first; mask; mask = mask->id.next) {
-    BKE_mask_evaluate(mask, ctime, do_newframe);
-  }
-}
-
 void BKE_mask_parent_init(MaskParent *parent)
 {
   parent->id_type = ID_MC;
@@ -1634,7 +1628,9 @@ MaskLayerShape *BKE_mask_layer_shape_find_frame(MaskLayer *masklay, const int fr
   return NULL;
 }
 
-/* when returning 2 - the frame isnt found but before/after frames are */
+/**
+ * When returning 2 - the frame isn't found but before/after frames are.
+ */
 int BKE_mask_layer_shape_find_frame_range(MaskLayer *masklay,
                                           const float frame,
                                           MaskLayerShape **r_masklay_shape_a,
@@ -1772,10 +1768,10 @@ static void interp_weights_uv_v2_calc(float r_uv[2],
 {
   float pt_on_line[2];
   r_uv[0] = closest_to_line_v2(pt_on_line, pt, pt_a, pt_b);
+
   r_uv[1] = (len_v2v2(pt_on_line, pt) / len_v2v2(pt_a, pt_b)) *
-            ((line_point_side_v2(pt_a, pt_b, pt) < 0.0f) ?
-                 -1.0f :
-                 1.0f); /* this line only sets the sign */
+            /* This line only sets the sign. */
+            ((line_point_side_v2(pt_a, pt_b, pt) < 0.0f) ? -1.0f : 1.0f);
 }
 
 static void interp_weights_uv_v2_apply(const float uv[2],

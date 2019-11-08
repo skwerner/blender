@@ -285,12 +285,12 @@ bool BLI_rcti_isect_segment(const rcti *rect, const int s1[2], const int s2[2])
     return false;
   }
 
-  /* if either points intersect then we definetly intersect */
+  /* if either points intersect then we definitely intersect */
   if (BLI_rcti_isect_pt_v(rect, s1) || BLI_rcti_isect_pt_v(rect, s2)) {
     return true;
   }
   else {
-    /* both points are outside but may insersect the rect */
+    /* both points are outside but may intersect the rect */
     int tvec1[2];
     int tvec2[2];
     /* diagonal: [/] */
@@ -332,12 +332,12 @@ bool BLI_rctf_isect_segment(const rctf *rect, const float s1[2], const float s2[
     return false;
   }
 
-  /* if either points intersect then we definetly intersect */
+  /* if either points intersect then we definitely intersect */
   if (BLI_rctf_isect_pt_v(rect, s1) || BLI_rctf_isect_pt_v(rect, s2)) {
     return true;
   }
   else {
-    /* both points are outside but may insersect the rect */
+    /* both points are outside but may intersect the rect */
     float tvec1[2];
     float tvec2[2];
     /* diagonal: [/] */
@@ -641,6 +641,25 @@ void BLI_rctf_scale(rctf *rect, const float scale)
   rect->ymin = cent_y - size_y_half;
   rect->xmax = cent_x + size_x_half;
   rect->ymax = cent_y + size_y_half;
+}
+
+void BLI_rctf_pad_y(rctf *rect,
+                    const float boundary_size,
+                    const float pad_min,
+                    const float pad_max)
+{
+  BLI_assert(pad_max >= 0.0f);
+  BLI_assert(pad_min >= 0.0f);
+  BLI_assert(boundary_size > 0.0f);
+
+  float total_pad = pad_max + pad_min;
+  if (total_pad == 0.0f) {
+    return;
+  }
+
+  float total_extend = BLI_rctf_size_y(rect) * total_pad / (boundary_size - total_pad);
+  rect->ymax += total_extend * (pad_max / total_pad);
+  rect->ymin -= total_extend * (pad_min / total_pad);
 }
 
 void BLI_rctf_interp(rctf *rect, const rctf *rect_a, const rctf *rect_b, const float fac)

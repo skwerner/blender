@@ -280,11 +280,11 @@ static void knife_update_header(bContext *C, wmOperator *op, KnifeTool_OpData *k
 
   BLI_snprintf(header,
                sizeof(header),
-               IFACE_("%s: confirm, %s: cancel, "
-                      "%s: start/define cut, %s: close cut, %s: new cut, "
-                      "%s: midpoint snap (%s), %s: ignore snap (%s), "
-                      "%s: angle constraint (%s), %s: cut through (%s), "
-                      "%s: panning"),
+               TIP_("%s: confirm, %s: cancel, "
+                    "%s: start/define cut, %s: close cut, %s: new cut, "
+                    "%s: midpoint snap (%s), %s: ignore snap (%s), "
+                    "%s: angle constraint (%s), %s: cut through (%s), "
+                    "%s: panning"),
                WM_MODALKEY(KNF_MODAL_CONFIRM),
                WM_MODALKEY(KNF_MODAL_CANCEL),
                WM_MODALKEY(KNF_MODAL_ADD_CUT),
@@ -1156,19 +1156,20 @@ static void knifetool_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar), void 
 
     GPUBatch *batch = GPU_batch_create_ex(GPU_PRIM_POINTS, vert, NULL, GPU_BATCH_OWNS_VBO);
     GPU_batch_program_set_builtin(batch, GPU_SHADER_3D_UNIFORM_COLOR);
+    GPU_batch_bind(batch);
 
     /* draw any snapped verts first */
     rgba_uchar_to_float(fcol, kcd->colors.point_a);
     GPU_batch_uniform_4fv(batch, "color", fcol);
     GPU_matrix_bind(batch->interface);
     GPU_point_size(11);
-    GPU_batch_draw_range_ex(batch, 0, v - 1, false);
+    GPU_batch_draw_advanced(batch, 0, v - 1, 0, 0);
 
     /* now draw the rest */
     rgba_uchar_to_float(fcol, kcd->colors.curpoint_a);
     GPU_batch_uniform_4fv(batch, "color", fcol);
     GPU_point_size(7);
-    GPU_batch_draw_range_ex(batch, vs + 1, kcd->totlinehit - (vs + 1), false);
+    GPU_batch_draw_advanced(batch, vs + 1, kcd->totlinehit - (vs + 1), 0, 0);
 
     GPU_batch_program_use_end(batch);
     GPU_batch_discard(batch);
@@ -2657,7 +2658,7 @@ static void knifetool_init_bmbvh(KnifeTool_OpData *kcd)
   Object *obedit_eval = (Object *)DEG_get_evaluated_id(kcd->vc.depsgraph, &kcd->em->ob->id);
   BMEditMesh *em_eval = BKE_editmesh_from_object(obedit_eval);
 
-  kcd->cagecos = (const float(*)[3])BKE_editmesh_vertexCos_get(
+  kcd->cagecos = (const float(*)[3])BKE_editmesh_vert_coords_alloc(
       kcd->vc.depsgraph, em_eval, scene_eval, NULL);
 
   kcd->bmbvh = BKE_bmbvh_new_from_editmesh(
@@ -2776,7 +2777,7 @@ static int knifetool_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   op->flag |= OP_IS_MODAL_CURSOR_REGION;
 
   /* add a modal handler for this operator - handles loop selection */
-  WM_cursor_modal_set(CTX_wm_window(C), BC_KNIFECURSOR);
+  WM_cursor_modal_set(CTX_wm_window(C), WM_CURSOR_KNIFE);
   WM_event_add_modal_handler(C, op);
 
   knifetool_update_mval_i(kcd, event->mval);
@@ -2803,8 +2804,8 @@ wmKeyMap *knifetool_modal_keymap(wmKeyConfig *keyconf)
   static const EnumPropertyItem modal_items[] = {
       {KNF_MODAL_CANCEL, "CANCEL", 0, "Cancel", ""},
       {KNF_MODAL_CONFIRM, "CONFIRM", 0, "Confirm", ""},
-      {KNF_MODAL_MIDPOINT_ON, "SNAP_MIDPOINTS_ON", 0, "Snap To Midpoints On", ""},
-      {KNF_MODAL_MIDPOINT_OFF, "SNAP_MIDPOINTS_OFF", 0, "Snap To Midpoints Off", ""},
+      {KNF_MODAL_MIDPOINT_ON, "SNAP_MIDPOINTS_ON", 0, "Snap to Midpoints On", ""},
+      {KNF_MODAL_MIDPOINT_OFF, "SNAP_MIDPOINTS_OFF", 0, "Snap to Midpoints Off", ""},
       {KNF_MODEL_IGNORE_SNAP_ON, "IGNORE_SNAP_ON", 0, "Ignore Snapping On", ""},
       {KNF_MODEL_IGNORE_SNAP_OFF, "IGNORE_SNAP_OFF", 0, "Ignore Snapping Off", ""},
       {KNF_MODAL_ANGLE_SNAP_TOGGLE, "ANGLE_SNAP_TOGGLE", 0, "Toggle Angle Snapping", ""},
@@ -2948,7 +2949,7 @@ static int knifetool_modal(bContext *C, wmOperator *op, const wmEvent *event)
       case KNF_MODAL_ADD_CUT_CLOSED:
         if (kcd->mode == MODE_DRAGGING) {
 
-          /* shouldn't be possible with default key-layout, just incase... */
+          /* Shouldn't be possible with default key-layout, just in case. */
           if (kcd->is_drag_hold) {
             kcd->is_drag_hold = false;
             knifetool_update_mval(kcd, kcd->curr.mval);

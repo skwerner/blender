@@ -29,12 +29,10 @@
 
 struct Mesh;
 struct MultiresModifierData;
-struct Object;
 struct OpenSubdiv_Converter;
 struct OpenSubdiv_Evaluator;
 struct OpenSubdiv_TopologyRefiner;
 struct Subdiv;
-struct SubdivToMeshSettings;
 
 typedef enum eSubdivVtxBoundaryInterpolation {
   /* Do not interpolate boundaries. */
@@ -107,7 +105,7 @@ typedef struct SubdivStats {
   double begin_timestamp_[NUM_SUBDIV_STATS_VALUES];
 } SubdivStats;
 
-/* Functor which evaluates dispalcement at a given (u, v) of given ptex face. */
+/* Functor which evaluates displacement at a given (u, v) of given ptex face. */
 typedef struct SubdivDisplacement {
   /* Initialize displacement evaluator.
    *
@@ -142,7 +140,7 @@ typedef struct SubdivDisplacement {
 
 /* This structure contains everything needed to construct subdivided surface.
  * It does not specify storage, memory layout or anything else.
- * It is possible to create different storages (like, grid based CPU side
+ * It is possible to create different storage's (like, grid based CPU side
  * buffers, GPU subdivision mesh, CPU side fully qualified mesh) from the same
  * Subdiv structure. */
 typedef struct Subdiv {
@@ -205,7 +203,7 @@ Subdiv *BKE_subdiv_new_from_mesh(const SubdivSettings *settings, const struct Me
  * new one is created from scratch.
  *
  * NOTE: It is allowed to pass NULL as an existing subdivision surface
- * descriptor. This will create enw descriptor without any extra checks.
+ * descriptor. This will create a new descriptor without any extra checks.
  */
 Subdiv *BKE_subdiv_update_from_converter(Subdiv *subdiv,
                                          const SubdivSettings *settings,

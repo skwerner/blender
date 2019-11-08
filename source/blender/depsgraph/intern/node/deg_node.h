@@ -27,7 +27,8 @@
 
 #include "BLI_utildefines.h"
 
-struct GHash;
+#include "DEG_depsgraph_build.h"
+
 struct ID;
 struct Scene;
 
@@ -94,7 +95,8 @@ enum class NodeType {
   OBJECT_FROM_LAYER,
   /* Audio-related evaluation. */
   AUDIO,
-  /* Un-interestying datablock, which is a part of dependency graph, but does
+  ARMATURE,
+  /* Un-interesting data-block, which is a part of dependency graph, but does
    * not have very distinctive update procedure.  */
   GENERIC_DATABLOCK,
 
@@ -128,6 +130,12 @@ enum class NodeType {
   NUM_TYPES,
 };
 const char *nodeTypeAsString(NodeType type);
+
+NodeType nodeTypeFromSceneComponent(eDepsSceneComponentType component_type);
+eDepsSceneComponentType nodeTypeToSceneComponent(NodeType type);
+
+NodeType nodeTypeFromObjectComponent(eDepsObjectComponentType component_type);
+eDepsObjectComponentType nodeTypeToObjectComponent(NodeType type);
 
 /* All nodes in Depsgraph are descended from this. */
 struct Node {

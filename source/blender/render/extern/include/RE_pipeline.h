@@ -28,11 +28,9 @@
 #include "DNA_vec_types.h"
 #include "DEG_depsgraph.h"
 
-struct Depsgraph;
 struct Image;
 struct ImageFormatData;
 struct Main;
-struct NodeBlurData;
 struct Object;
 struct RenderData;
 struct RenderResult;
@@ -41,7 +39,6 @@ struct Scene;
 struct StampData;
 struct ViewLayer;
 struct bMovieHandle;
-struct bNodeTree;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 /* this include is what is exposed of render to outside world */
@@ -100,16 +97,6 @@ typedef struct RenderLayer {
   char name[RE_MAXNAME];
   int layflag, passflag, pass_xor;
 
-  /* MULTIVIEW_TODO: acolrect and scolrect are not supported by multiview at the moment.
-   * If they are really required they should be in RenderView instead */
-
-  /** 4 float, optional transparent buffer, needs storage for display updates */
-  float *acolrect;
-  /** 4 float, optional strand buffer, needs storage for display updates */
-  float *scolrect;
-  /** 4 char, optional color managed display buffer which is used when
-   * Save Buffer is enabled to display combined pass of the screen. */
-  int *display_buffer;
   int rectx, recty;
 
   /** Optional saved endresult on disk. */
@@ -266,7 +253,7 @@ void RE_SetView(struct Render *re, float mat[4][4]);
 /* get current view and window transform */
 void RE_GetViewPlane(struct Render *re, rctf *r_viewplane, rcti *r_disprect);
 
-/* set the render threads based on the commandline and autothreads setting */
+/* set the render threads based on the command-line and autothreads setting */
 void RE_init_threadcount(Render *re);
 
 bool RE_WriteRenderViewsImage(struct ReportList *reports,

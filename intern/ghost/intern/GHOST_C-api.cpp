@@ -47,6 +47,18 @@ GHOST_TSuccess GHOST_DisposeSystem(GHOST_SystemHandle systemhandle)
   return system->disposeSystem();
 }
 
+void GHOST_ShowMessageBox(GHOST_SystemHandle systemhandle,
+                          const char *title,
+                          const char *message,
+                          const char *help_label,
+                          const char *continue_label,
+                          const char *link,
+                          GHOST_DialogOptions dialog_options)
+{
+  GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
+  system->showMessageBox(title, message, help_label, continue_label, link, dialog_options);
+}
+
 GHOST_EventConsumerHandle GHOST_CreateEventConsumer(GHOST_EventCallbackProcPtr eventCallback,
                                                     GHOST_TUserDataPtr userdata)
 {
@@ -140,7 +152,33 @@ GHOST_WindowHandle GHOST_CreateWindow(GHOST_SystemHandle systemhandle,
   GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
 
   return (GHOST_WindowHandle)system->createWindow(
-      title, left, top, width, height, state, type, glSettings, false);
+      title, left, top, width, height, state, type, glSettings, false, false);
+}
+
+GHOST_WindowHandle GHOST_CreateDialogWindow(GHOST_SystemHandle systemhandle,
+                                            GHOST_WindowHandle parent_windowhandle,
+                                            const char *title,
+                                            GHOST_TInt32 left,
+                                            GHOST_TInt32 top,
+                                            GHOST_TUns32 width,
+                                            GHOST_TUns32 height,
+                                            GHOST_TWindowState state,
+                                            GHOST_TDrawingContextType type,
+                                            GHOST_GLSettings glSettings)
+{
+  GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
+
+  return (GHOST_WindowHandle)system->createWindow(title,
+                                                  left,
+                                                  top,
+                                                  width,
+                                                  height,
+                                                  state,
+                                                  type,
+                                                  glSettings,
+                                                  false,
+                                                  true,
+                                                  (GHOST_IWindow *)parent_windowhandle);
 }
 
 GHOST_TUserDataPtr GHOST_GetWindowUserData(GHOST_WindowHandle windowhandle)
@@ -154,6 +192,13 @@ void GHOST_SetWindowUserData(GHOST_WindowHandle windowhandle, GHOST_TUserDataPtr
   GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
 
   window->setUserData(userdata);
+}
+
+int GHOST_IsDialogWindow(GHOST_WindowHandle windowhandle)
+{
+  GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
+
+  return (int)window->isDialog();
 }
 
 GHOST_TSuccess GHOST_DisposeWindow(GHOST_SystemHandle systemhandle,
@@ -264,30 +309,26 @@ GHOST_TSuccess GHOST_SetCursorShape(GHOST_WindowHandle windowhandle,
   return window->setCursorShape(cursorshape);
 }
 
-GHOST_TSuccess GHOST_SetCustomCursorShape(GHOST_WindowHandle windowhandle,
-                                          GHOST_TUns8 bitmap[16][2],
-                                          GHOST_TUns8 mask[16][2],
-                                          int hotX,
-                                          int hotY)
+GHOST_TSuccess GHOST_HasCursorShape(GHOST_WindowHandle windowhandle,
+                                    GHOST_TStandardCursor cursorshape)
 {
   GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
 
-  return window->setCustomCursorShape(bitmap, mask, hotX, hotY);
+  return window->hasCursorShape(cursorshape);
 }
 
-GHOST_TSuccess GHOST_SetCustomCursorShapeEx(GHOST_WindowHandle windowhandle,
-                                            GHOST_TUns8 *bitmap,
-                                            GHOST_TUns8 *mask,
-                                            int sizex,
-                                            int sizey,
-                                            int hotX,
-                                            int hotY,
-                                            int fg_color,
-                                            int bg_color)
+GHOST_TSuccess GHOST_SetCustomCursorShape(GHOST_WindowHandle windowhandle,
+                                          GHOST_TUns8 *bitmap,
+                                          GHOST_TUns8 *mask,
+                                          int sizex,
+                                          int sizey,
+                                          int hotX,
+                                          int hotY,
+                                          GHOST_TUns8 canInvertColor)
 {
   GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
 
-  return window->setCustomCursorShape(bitmap, mask, sizex, sizey, hotX, hotY, fg_color, bg_color);
+  return window->setCustomCursorShape(bitmap, mask, sizex, sizey, hotX, hotY, canInvertColor);
 }
 
 int GHOST_GetCursorVisibility(GHOST_WindowHandle windowhandle)
@@ -324,6 +365,7 @@ GHOST_TSuccess GHOST_SetCursorPosition(GHOST_SystemHandle systemhandle,
 
 GHOST_TSuccess GHOST_SetCursorGrab(GHOST_WindowHandle windowhandle,
                                    GHOST_TGrabCursorMode mode,
+                                   GHOST_TAxisFlag wrap_axis,
                                    int bounds[4],
                                    const int mouse_ungrab_xy[2])
 {
@@ -340,7 +382,7 @@ GHOST_TSuccess GHOST_SetCursorGrab(GHOST_WindowHandle windowhandle,
   }
 
   return window->setCursorGrab(
-      mode, bounds ? &bounds_rect : NULL, mouse_ungrab_xy ? mouse_xy : NULL);
+      mode, wrap_axis, bounds ? &bounds_rect : NULL, mouse_ungrab_xy ? mouse_xy : NULL);
 }
 
 GHOST_TSuccess GHOST_GetModifierKeyState(GHOST_SystemHandle systemhandle,
@@ -621,8 +663,13 @@ GHOST_TSuccess GHOST_ActivateWindowDrawingContext(GHOST_WindowHandle windowhandl
 GHOST_TSuccess GHOST_ActivateOpenGLContext(GHOST_ContextHandle contexthandle)
 {
   GHOST_IContext *context = (GHOST_IContext *)contexthandle;
-
-  return context->activateDrawingContext();
+  if (context) {
+    return context->activateDrawingContext();
+  }
+  else {
+    GHOST_PRINT("GHOST_ActivateOpenGLContext: Context not valid");
+    return GHOST_kFailure;
+  }
 }
 
 GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthandle)
@@ -630,6 +677,13 @@ GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthandle)
   GHOST_IContext *context = (GHOST_IContext *)contexthandle;
 
   return context->releaseDrawingContext();
+}
+
+unsigned int GHOST_GetDefaultOpenGLFramebuffer(GHOST_WindowHandle windowhandle)
+{
+  GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
+
+  return window->getDefaultFramebuffer();
 }
 
 GHOST_TSuccess GHOST_InvalidateWindow(GHOST_WindowHandle windowhandle)
@@ -786,18 +840,6 @@ int GHOST_toggleConsole(int action)
 {
   GHOST_ISystem *system = GHOST_ISystem::getSystem();
   return system->toggleConsole(action);
-}
-
-int GHOST_SupportsNativeDialogs(void)
-{
-  GHOST_ISystem *system = GHOST_ISystem::getSystem();
-  return system->supportsNativeDialogs();
-}
-
-int GHOST_confirmQuit(GHOST_WindowHandle windowhandle)
-{
-  GHOST_ISystem *system = GHOST_ISystem::getSystem();
-  return system->confirmQuit((GHOST_IWindow *)windowhandle);
 }
 
 int GHOST_UseNativePixels(void)

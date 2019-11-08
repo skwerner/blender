@@ -39,7 +39,7 @@ namespace Freestyle {
 
 class GaussianFilter {
  protected:
-  /* The mask is a symetrical 2d array (with respect to the middle point).
+  /* The mask is a symmetrical 2d array (with respect to the middle point).
    * Thus, M(i,j) = M(-i,j) = M(i,-j) = M(-i,-j).
    * For this reason, to represent a NxN array (N odd), we only store a ((N+1)/2)x((N+1)/2) array.
    */
@@ -134,11 +134,13 @@ template<class Map> float GaussianFilter::getSmoothedPixel(Map *map, int x, int 
   // Current pixel is x,y
   // Sum surrounding pixels L value:
   for (int i = -_bound; i <= _bound; ++i) {
-    if ((y + i < 0) || (y + i >= h))
+    if ((y + i < 0) || (y + i >= h)) {
       continue;
+    }
     for (int j = -_bound; j <= _bound; ++j) {
-      if ((x + j < 0) || (x + j >= w))
+      if ((x + j < 0) || (x + j >= w)) {
         continue;
+      }
 
       float tmpL = map->pixel(x + j, y + i);
       float m = _mask[abs(i) * _storedMaskSize + abs(j)];

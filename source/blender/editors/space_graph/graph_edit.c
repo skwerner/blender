@@ -55,6 +55,7 @@
 #include "DEG_depsgraph_build.h"
 
 #include "UI_view2d.h"
+#include "UI_interface.h"
 
 #include "ED_anim_api.h"
 #include "ED_keyframing.h"
@@ -282,10 +283,18 @@ static int graphkeys_viewall(bContext *C,
                              do_sel_only,
                              include_handles);
 
+  /* Give some more space at the borders. */
   BLI_rctf_scale(&cur_new, 1.1f);
 
-  UI_view2d_smooth_view(C, ac.ar, &cur_new, smooth_viewtx);
+  /* Take regions into account, that could block the view. */
+  float pad_top = UI_TIME_SCRUB_MARGIN_Y;
+  float pad_bottom = 0;
+  if (!BLI_listbase_is_empty(ED_context_get_markers(C))) {
+    pad_bottom = UI_MARKER_MARGIN_Y;
+  }
+  BLI_rctf_pad_y(&cur_new, ac.ar->sizey * UI_DPI_FAC, pad_bottom, pad_top);
 
+  UI_view2d_smooth_view(C, ac.ar, &cur_new, smooth_viewtx);
   return OPERATOR_FINISHED;
 }
 
@@ -595,7 +604,6 @@ static void insert_graph_keys(bAnimContext *ac, eGraphKeys_InsertKey_Types mode)
 
   ReportList *reports = ac->reports;
   SpaceGraph *sipo = (SpaceGraph *)ac->sl;
-  struct Depsgraph *depsgraph = ac->depsgraph;
   Scene *scene = ac->scene;
   ToolSettings *ts = scene->toolsettings;
   short flag = 0;
@@ -687,7 +695,6 @@ static void insert_graph_keys(bAnimContext *ac, eGraphKeys_InsertKey_Types mode)
        */
       if (ale->id && !ale->owner && !fcu->driver) {
         insert_keyframe(ac->bmain,
-                        depsgraph,
                         reports,
                         ale->id,
                         NULL,
@@ -1172,9 +1179,7 @@ static bool delete_graph_keys(bAnimContext *ac)
     }
 
     /* Only delete curve too if it won't be doing anything anymore */
-    if ((fcu->totvert == 0) &&
-        (list_has_suitable_fmodifier(&fcu->modifiers, 0, FMI_TYPE_GENERATE_CURVE) == 0) &&
-        (fcu->driver == NULL)) {
+    if (BKE_fcurve_is_empty(fcu)) {
       ANIM_fcurve_delete_from_animdata(ac, adt, fcu);
       ale->key_data = NULL;
     }
@@ -1533,7 +1538,7 @@ void GRAPH_OT_sound_bake(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_SOUND | FILE_TYPE_MOVIE,
                                  FILE_SPECIAL,
                                  FILE_OPENFILE,
-                                 WM_FILESEL_FILEPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
   RNA_def_float(ot->srna,
@@ -2501,28 +2506,28 @@ static const EnumPropertyItem prop_graphkeys_mirror_types[] = {
     {GRAPHKEYS_MIRROR_CFRA,
      "CFRA",
      0,
-     "By Times over Current Frame",
+     "By Times Over Current Frame",
      "Flip times of selected keyframes using the current frame as the mirror line"},
     {GRAPHKEYS_MIRROR_VALUE,
      "VALUE",
      0,
-     "By Values over Cursor Value",
+     "By Values Over Cursor Value",
      "Flip values of selected keyframes using the cursor value (Y/Horizontal component) as the "
      "mirror line"},
     {GRAPHKEYS_MIRROR_YAXIS,
      "YAXIS",
      0,
-     "By Times over Time=0",
+     "By Times Over Time=0",
      "Flip times of selected keyframes, effectively reversing the order they appear in"},
     {GRAPHKEYS_MIRROR_XAXIS,
      "XAXIS",
      0,
-     "By Values over Value=0",
+     "By Values Over Value=0",
      "Flip values of selected keyframes (i.e. negative values become positive, and vice versa)"},
     {GRAPHKEYS_MIRROR_MARKER,
      "MARKER",
      0,
-     "By Times over First Selected Marker",
+     "By Times Over First Selected Marker",
      "Flip times of selected keyframes using the first selected marker as the reference point"},
     {0, NULL, 0, NULL, NULL},
 };
@@ -2820,6 +2825,7 @@ void GRAPH_OT_fmodifier_add(wmOperatorType *ot)
 
   /* id-props */
   prop = RNA_def_enum(ot->srna, "type", rna_enum_fmodifier_type_items, 0, "Type", "");
+  RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_ACTION);
   RNA_def_enum_funcs(prop, graph_fmodifier_itemf);
   ot->prop = prop;
 
@@ -2987,29 +2993,15 @@ void GRAPH_OT_fmodifier_paste(wmOperatorType *ot)
 
 static int graph_driver_vars_copy_exec(bContext *C, wmOperator *op)
 {
-  bAnimContext ac;
-  bAnimListElem *ale;
   bool ok = false;
 
-  /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0) {
-    return OPERATOR_CANCELLED;
-  }
-
-  /* clear buffer first */
-  ANIM_driver_vars_copybuf_free();
-
-  /* get the active F-Curve */
-  ale = get_active_fcurve_channel(&ac);
+  PointerRNA ptr = CTX_data_pointer_get_type(C, "active_editable_fcurve", &RNA_FCurve);
 
   /* if this exists, call the copy driver vars API function */
-  if (ale && ale->data) {
-    FCurve *fcu = (FCurve *)ale->data;
+  FCurve *fcu = (FCurve *)ptr.data;
 
+  if (fcu) {
     ok = ANIM_driver_vars_copy(op->reports, fcu);
-
-    /* free temp data now */
-    MEM_freeN(ale);
   }
 
   /* successful or not? */
@@ -3026,11 +3018,11 @@ void GRAPH_OT_driver_variables_copy(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Copy Driver Variables";
   ot->idname = "GRAPH_OT_driver_variables_copy";
-  ot->description = "Copy the driver variables of the active F-Curve";
+  ot->description = "Copy the driver variables of the active driver";
 
   /* api callbacks */
   ot->exec = graph_driver_vars_copy_exec;
-  ot->poll = graphop_active_fcurve_poll;
+  ot->poll = graphop_active_editable_fcurve_ctx_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -3040,33 +3032,17 @@ void GRAPH_OT_driver_variables_copy(wmOperatorType *ot)
 
 static int graph_driver_vars_paste_exec(bContext *C, wmOperator *op)
 {
-  bAnimContext ac;
-
-  ListBase anim_data = {NULL, NULL};
-  bAnimListElem *ale;
-  int filter;
-
   const bool replace = RNA_boolean_get(op->ptr, "replace");
   bool ok = false;
 
-  /* get editor data */
-  if (ANIM_animdata_get_context(C, &ac) == 0) {
-    return OPERATOR_CANCELLED;
+  PointerRNA ptr = CTX_data_pointer_get_type(C, "active_editable_fcurve", &RNA_FCurve);
+
+  /* if this exists, call the paste driver vars API function */
+  FCurve *fcu = (FCurve *)ptr.data;
+
+  if (fcu) {
+    ok = ANIM_driver_vars_paste(op->reports, fcu, replace);
   }
-
-  /* filter data */
-  filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_ACTIVE | ANIMFILTER_FOREDIT |
-            ANIMFILTER_NODUPLIS);
-  ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
-
-  /* paste variables */
-  for (ale = anim_data.first; ale; ale = ale->next) {
-    FCurve *fcu = (FCurve *)ale->data;
-    ok |= ANIM_driver_vars_paste(op->reports, fcu, replace);
-  }
-
-  /* cleanup */
-  ANIM_animdata_freelist(&anim_data);
 
   /* successful or not? */
   if (ok) {
@@ -3092,7 +3068,7 @@ void GRAPH_OT_driver_variables_paste(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = graph_driver_vars_paste_exec;
-  ot->poll = graphop_active_fcurve_poll;
+  ot->poll = graphop_active_editable_fcurve_ctx_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

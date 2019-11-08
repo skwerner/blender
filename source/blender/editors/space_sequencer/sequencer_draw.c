@@ -38,12 +38,14 @@
 #include "DNA_space_types.h"
 #include "DNA_userdef_types.h"
 #include "DNA_sound_types.h"
+#include "DNA_anim_types.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_sequencer.h"
 #include "BKE_sound.h"
 #include "BKE_scene.h"
+#include "BKE_fcurve.h"
 
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
@@ -60,7 +62,7 @@
 #include "ED_mask.h"
 #include "ED_sequencer.h"
 #include "ED_screen.h"
-#include "ED_scrubbing.h"
+#include "ED_time_scrub_ui.h"
 #include "ED_space_api.h"
 
 #include "BIF_glutil.h"
@@ -70,6 +72,7 @@
 #include "UI_view2d.h"
 
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -251,18 +254,15 @@ static void drawseqwave(View2D *v2d,
     float yscale = (y2 - y1) / 2.0f;
     float samplestep;
     float startsample, endsample;
+    float volume = seq->volume;
     float value1, value2;
     bSound *sound = seq->sound;
+    FCurve *fcu = id_data_find_fcurve(&scene->id, seq, &RNA_Sequence, "volume", 0, NULL);
 
     SoundWaveform *waveform;
 
     if (length < 2) {
       return;
-    }
-
-    if (!sound->spinlock) {
-      sound->spinlock = MEM_mallocN(sizeof(SpinLock), "sound_spinlock");
-      BLI_spin_init(sound->spinlock);
     }
 
     BLI_spin_lock(sound->spinlock);
@@ -334,8 +334,12 @@ static void drawseqwave(View2D *v2d,
         value2 = (1.0f - f) * value2 + f * waveform->data[p * 3 + 4];
       }
 
-      value1 *= seq->volume;
-      value2 *= seq->volume;
+      if (fcu && !BKE_fcurve_is_empty(fcu)) {
+        float evaltime = x1_offset + (i * stepsize);
+        volume = evaluate_fcurve(fcu, evaltime);
+      }
+      value1 *= volume;
+      value2 *= volume;
 
       if (value2 > 1 || value1 < -1) {
         immAttr4f(col, 1.0f, 0.0f, 0.0f, 0.5f);
@@ -961,7 +965,7 @@ static void draw_seq_strip(const bContext *C,
   x1 = seq->startdisp + handsize_clamped;
   x2 = seq->enddisp - handsize_clamped;
 
-  float scroller_vert_xoffs = (V2D_SCROLL_WIDTH_TEXT + SEQ_SCROLLER_TEXT_OFFSET) * pixelx;
+  float scroller_vert_xoffs = (V2D_SCROLL_HANDLE_WIDTH + SEQ_SCROLLER_TEXT_OFFSET) * pixelx;
 
   /* info text on the strip */
   if (x1 < v2d->cur.xmin + scroller_vert_xoffs) {
@@ -1042,9 +1046,8 @@ ImBuf *sequencer_ibuf_get(struct Main *bmain,
       bmain, depsgraph, scene, rectx, recty, proxy_size, false, &context);
   context.view_id = BKE_scene_multiview_view_id_get(&scene->r, viewname);
 
-  /* sequencer could start rendering, in this case we need to be sure it wouldn't be canceled
-   * by Esc pressed somewhere in the past
-   */
+  /* Sequencer could start rendering, in this case we need to be sure it wouldn't be canceled
+   * by Escape pressed somewhere in the past. */
   G.is_break = false;
 
   /* Rendering can change OGL context. Save & Restore framebuffer. */
@@ -1121,8 +1124,7 @@ static void sequencer_display_size(Scene *scene, float r_viewrect[2])
   r_viewrect[0] = (float)scene->r.xsch;
   r_viewrect[1] = (float)scene->r.ysch;
 
-  /* Aspect ratio seems to have no effect on output image*/
-  /* r_viewrect[0] *= scene->r.xasp / scene->r.yasp; */
+  r_viewrect[0] *= scene->r.xasp / scene->r.yasp;
 }
 
 static void sequencer_draw_gpencil(const bContext *C)
@@ -1221,6 +1223,14 @@ void sequencer_draw_maskedit(const bContext *C, Scene *scene, ARegion *ar, Space
   }
 }
 #endif
+
+/* Force redraw, when prefetching and using cache view. */
+static void seq_prefetch_wm_notify(const bContext *C, Scene *scene)
+{
+  if (BKE_sequencer_prefetch_need_redraw(CTX_data_main(C), scene)) {
+    WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, NULL);
+  }
+}
 
 static void *sequencer_OCIO_transform_ibuf(
     const bContext *C, ImBuf *ibuf, bool *glsl_used, int *format, int *type)
@@ -1544,7 +1554,7 @@ void sequencer_draw_preview(const bContext *C,
                             bool draw_backdrop)
 {
   struct Main *bmain = CTX_data_main(C);
-  struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  struct Depsgraph *depsgraph = CTX_data_expect_evaluated_depsgraph(C);
   struct View2D *v2d = &ar->v2d;
   struct ImBuf *ibuf = NULL;
   struct ImBuf *scope = NULL;
@@ -1611,6 +1621,7 @@ void sequencer_draw_preview(const bContext *C,
   }
 
   UI_view2d_view_restore(C);
+  seq_prefetch_wm_notify(C, scene);
 }
 
 #if 0
@@ -1756,8 +1767,8 @@ static void draw_seq_strips(const bContext *C, Editing *ed, ARegion *ar)
 static void seq_draw_sfra_efra(Scene *scene, View2D *v2d)
 {
   const Editing *ed = BKE_sequencer_editing_get(scene, false);
-  const int frame_sta = PSFRA;
-  const int frame_end = PEFRA + 1;
+  const int frame_sta = scene->r.sfra;
+  const int frame_end = scene->r.efra + 1;
 
   GPU_blend(true);
 
@@ -1822,7 +1833,7 @@ typedef struct CacheDrawData {
 
 /* Called as a callback */
 static bool draw_cache_view_cb(
-    void *userdata, struct Sequence *seq, int cfra, int cache_type, float UNUSED(cost))
+    void *userdata, struct Sequence *seq, int nfra, int cache_type, float UNUSED(cost))
 {
   CacheDrawData *drawdata = userdata;
   const bContext *C = drawdata->C;
@@ -1848,7 +1859,7 @@ static bool draw_cache_view_cb(
         color[2] = 0.2f;
         stripe_ht = UI_view2d_region_to_view_y(v2d, 4.0f * UI_DPI_FAC * U.pixelsize) -
                     v2d->cur.ymin;
-        stripe_bot = UI_view2d_region_to_view_y(v2d, V2D_SCROLL_HEIGHT_TEXT);
+        stripe_bot = UI_view2d_region_to_view_y(v2d, V2D_SCROLL_HANDLE_HEIGHT);
         stripe_top = stripe_bot + stripe_ht;
         break;
       }
@@ -1900,8 +1911,12 @@ static bool draw_cache_view_cb(
       else {
         return false;
       }
+
+    default:
+      return false;
   }
 
+  int cfra = seq->start + nfra;
   immUniformColor4f(color[0], color[1], color[2], color[3]);
   immRectf(pos, cfra, stripe_bot, cfra + 1, stripe_top);
 
@@ -1922,12 +1937,16 @@ static void draw_cache_view(const bContext *C)
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
-  float stripe_bot, stripe_top, stripe_offs;
+  float stripe_bot, stripe_top;
+  float stripe_offs = UI_view2d_region_to_view_y(v2d, 1.0f) - v2d->cur.ymin;
   float stripe_ht = UI_view2d_region_to_view_y(v2d, 4.0f * UI_DPI_FAC * U.pixelsize) -
                     v2d->cur.ymin;
 
+  CLAMP_MAX(stripe_ht, 0.2f);
+  CLAMP_MIN(stripe_offs, stripe_ht / 2);
+
   if (scene->ed->cache_flag & SEQ_CACHE_VIEW_FINAL_OUT) {
-    stripe_bot = UI_view2d_region_to_view_y(v2d, V2D_SCROLL_HEIGHT_TEXT);
+    stripe_bot = UI_view2d_region_to_view_y(v2d, V2D_SCROLL_HANDLE_HEIGHT);
     stripe_top = stripe_bot + stripe_ht;
     float bg_color[4] = {1.0f, 0.4f, 0.2f, 0.1f};
 
@@ -1943,10 +1962,6 @@ static void draw_cache_view(const bContext *C)
     if (seq->startdisp > v2d->cur.xmax || seq->enddisp < v2d->cur.xmin) {
       continue;
     }
-
-    CLAMP_MAX(stripe_ht, 0.2f);
-    stripe_offs = UI_view2d_region_to_view_y(v2d, 1.0f) - v2d->cur.ymin;
-    CLAMP_MIN(stripe_offs, stripe_ht / 2);
 
     stripe_bot = seq->machine + SEQ_STRIP_OFSBOTTOM + stripe_offs;
     stripe_top = stripe_bot + stripe_ht;
@@ -1999,6 +2014,8 @@ void draw_timeline_seq(const bContext *C, ARegion *ar)
   short cfra_flag = 0;
   float col[3];
 
+  seq_prefetch_wm_notify(C, scene);
+
   /* clear and setup matrix */
   UI_GetThemeColor3fv(TH_BACK, col);
   if (ed && ed->metastack.first) {
@@ -2036,8 +2053,6 @@ void draw_timeline_seq(const bContext *C, ARegion *ar)
   if (ed) {
     /* draw the data */
     draw_seq_strips(C, ed, ar);
-    draw_cache_view(C);
-
     /* text draw cached (for sequence names), in pixelspace now */
     UI_view2d_text_cache_draw(ar);
   }
@@ -2057,8 +2072,12 @@ void draw_timeline_seq(const bContext *C, ARegion *ar)
   }
   ED_markers_draw(C, marker_draw_flag);
 
-  /* preview range */
   UI_view2d_view_ortho(v2d);
+  /* draw cache on top of markers area */
+  if (ed) {
+    draw_cache_view(C);
+  }
+  /* preview range */
   ANIM_draw_previewrange(C, v2d, 1);
 
   /* overlap playhead */
@@ -2068,9 +2087,11 @@ void draw_timeline_seq(const bContext *C, ARegion *ar)
                         scene->r.cfra + scene->ed->over_ofs;
 
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-    immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+    immBindBuiltinProgram(GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR);
 
-    immUniformColor3f(0.2f, 0.2f, 0.2f);
+    immUniform1f("dash_width", 20.0f * U.pixelsize);
+    immUniform1f("dash_factor", 0.5f);
+    immUniformThemeColor(TH_CFRAME);
 
     immBegin(GPU_PRIM_LINES, 2);
     immVertex2f(pos, cfra_over, v2d->cur.ymin);
@@ -2087,7 +2108,7 @@ void draw_timeline_seq(const bContext *C, ARegion *ar)
   UI_view2d_view_restore(C);
 
   /* scrubbing region */
-  ED_scrubbing_draw(ar, scene, !(sseq->flag & SEQ_DRAWFRAMES), true);
+  ED_time_scrub_draw(ar, scene, !(sseq->flag & SEQ_DRAWFRAMES), true);
 
   /* scrollers */
   scrollers = UI_view2d_scrollers_calc(v2d, NULL);
@@ -2095,5 +2116,13 @@ void draw_timeline_seq(const bContext *C, ARegion *ar)
   UI_view2d_scrollers_free(scrollers);
 
   /* channel numbers */
-  UI_view2d_draw_scale_y__block(ar, v2d, &v2d->vert, TH_SCROLL_TEXT);
+  {
+    rcti rect;
+    BLI_rcti_init(&rect,
+                  0,
+                  15 * UI_DPI_FAC,
+                  15 * UI_DPI_FAC,
+                  UI_DPI_FAC * ar->sizey - UI_TIME_SCRUB_MARGIN_Y);
+    UI_view2d_draw_scale_y__block(ar, v2d, &rect, TH_SCROLL_TEXT);
+  }
 }

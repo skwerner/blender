@@ -30,8 +30,6 @@
 
 struct ARegion;
 struct AnimData;
-struct CurveMapping;
-struct GHash;
 struct MDeformVert;
 
 #define GP_DEFAULT_PIX_FACTOR 1.0f
@@ -50,6 +48,14 @@ typedef struct bGPDcontrolpoint {
   /** Radius. */
   int size;
 } bGPDcontrolpoint;
+
+typedef struct bGPDspoint_Runtime {
+  /** Original point (used to dereference evaluated data) */
+  struct bGPDspoint *pt_orig;
+  /** Original index array position */
+  int idx_orig;
+  char _pad0[4];
+} bGPDspoint_Runtime;
 
 /* Grease-Pencil Annotations - 'Stroke Point'
  * -> Coordinates may either be 2d or 3d depending on settings at the time
@@ -72,6 +78,10 @@ typedef struct bGPDspoint {
   float uv_fac;
   /** Uv rotation for dot mode. */
   float uv_rot;
+
+  /** Runtime data */
+  char _pad2[4];
+  bGPDspoint_Runtime runtime;
 } bGPDspoint;
 
 /* bGPDspoint->flag */
@@ -148,8 +158,7 @@ typedef struct bGPDpalette {
 /* bGPDpalette->flag */
 typedef enum eGPDpalette_Flag {
   /* palette is active */
-  A,
-  PL_PALETTE_ACTIVE = (1 << 0)
+  PL_PALETTE_ACTIVE = (1 << 0),
 } eGPDpalette_Flag;
 
 /* ***************************************** */
@@ -157,20 +166,26 @@ typedef enum eGPDpalette_Flag {
 
 /* Runtime temp data for bGPDstroke */
 typedef struct bGPDstroke_Runtime {
-  /* runtime final colors (result of original colors and modifiers) */
+  /** runtime final colors (result of original colors and modifiers) */
   float tmp_stroke_rgba[4];
+
+  /** runtime final fill colors (result of original colors and modifiers) */
   float tmp_fill_rgba[4];
 
-  /* temporary layer name only used during copy/paste to put the stroke in the original layer */
+  /** temporary layer name only used during copy/paste to put the stroke in the original layer */
   char tmp_layerinfo[128];
 
   /** Runtime falloff factor (only for transform). */
   float multi_frame_falloff;
+  char _pad[4];
+
+  /** Original stroke (used to dereference evaluated data) */
+  struct bGPDstroke *gps_orig;
 } bGPDstroke_Runtime;
 
 /* Grease-Pencil Annotations - 'Stroke'
  * -> A stroke represents a (simplified version) of the curve
- *    drawn by the user in one 'mousedown'->'mouseup' operation
+ *    drawn by the user in one 'mouse-down'->'mouse-up' operation
  */
 typedef struct bGPDstroke {
   struct bGPDstroke *next, *prev;
@@ -211,7 +226,6 @@ typedef struct bGPDstroke {
   void *_pad3;
 
   bGPDstroke_Runtime runtime;
-  char _pad2[4];
 } bGPDstroke;
 
 /* bGPDstroke->flag */
@@ -251,7 +265,7 @@ typedef enum eGPDstroke_Caps {
 /* Runtime temp data for bGPDframe */
 typedef struct bGPDframe_Runtime {
   /** Parent matrix for drawing. */
-  float viewmatrix[4][4];
+  float parent_obmat[4][4];
 } bGPDframe_Runtime;
 
 /* Grease-Pencil Annotations - 'Frame'
@@ -387,6 +401,8 @@ typedef enum eGPDlayer_Flag {
   GP_LAYER_USE_MASK = (1 << 13),
   /* Flag used to display in Paint mode only layers with keyframe */
   GP_LAYER_SOLO_MODE = (1 << 4),
+  /* Ruler Layer */
+  GP_LAYER_IS_RULER = (1 << 14),
 } eGPDlayer_Flag;
 
 /* bGPDlayer->onion_flag */
@@ -397,7 +413,7 @@ typedef enum eGPDlayer_OnionFlag {
 
 /* layer blend_mode */
 typedef enum eGPLayerBlendModes {
-  eGplBlendMode_Normal = 0,
+  eGplBlendMode_Regular = 0,
   eGplBlendMode_Overlay = 1,
   eGplBlendMode_Add = 2,
   eGplBlendMode_Subtract = 3,
@@ -412,7 +428,7 @@ typedef enum eGPLayerBlendModes {
 typedef struct bGPdata_Runtime {
   /** Last region where drawing was originated. */
   struct ARegion *ar;
-  /** Stroke buffer (can hold GP_STROKE_BUFFER_MAX). */
+  /** Stroke buffer. */
   void *sbuffer;
 
   /* GP Object drawing */
@@ -431,15 +447,16 @@ typedef struct bGPdata_Runtime {
    * - buffer must be initialized before use, but freed after
    *   whole paint operation is over
    */
-  /** Number of elements currently in cache. */
-  short sbuffer_size;
   /** Flags for stroke that cache represents. */
   short sbuffer_sflag;
-  char _pad[6];
+  /** Number of elements currently used in cache. */
+  int sbuffer_used;
+  /** Number of total elements available in cache. */
+  int sbuffer_size;
 
   /** Number of control-points for stroke. */
   int tot_cp_points;
-  char _pad1_[4];
+  char _pad_[4];
   /** Array of control-points for stroke. */
   bGPDcontrolpoint *cp_points;
 } bGPdata_Runtime;
@@ -457,7 +474,7 @@ typedef struct bGPgrid {
 
 /* Grease-Pencil Annotations - 'DataBlock' */
 typedef struct bGPdata {
-  /** Grease Pencil data is a datablock. */
+  /** Grease Pencil data is a data-block. */
   ID id;
   /** Animation data - for animating draw settings. */
   struct AnimData *adt;
@@ -465,9 +482,8 @@ typedef struct bGPdata {
   /* Grease-Pencil data */
   /** BGPDlayers. */
   ListBase layers;
-  /** Settings for this datablock. */
+  /** Settings for this data-block. */
   int flag;
-
   char _pad1[4];
 
   /* Palettes */
@@ -518,7 +534,8 @@ typedef struct bGPdata {
 
   /** Draw mode for strokes (eGP_DrawMode). */
   short draw_mode;
-  char _pad3[2];
+  /** Keyframe type for onion filter  (eBezTriple_KeyframeType plus All option) */
+  short onion_keytype;
 
   bGPgrid grid;
 
@@ -531,9 +548,9 @@ typedef struct bGPdata {
  *       changes made during the porting process.
  */
 typedef enum eGPdata_Flag {
-  /* datablock is used for "annotations"
+  /* data-block is used for "annotations"
    * NOTE: This flag used to be used in 2.4x, but should hardly ever have been set.
-   *       We can use this freely now, as all GP datablocks from pre-2.8 will get
+   *       We can use this freely now, as all GP data-blocks from pre-2.8 will get
    *       set on file load (as many old use cases are for "annotations" only)
    */
   GP_DATA_ANNOTATIONS = (1 << 0),
@@ -649,6 +666,8 @@ typedef enum eGP_DrawMode {
   ((gpd) && (gpd->flag & \
              (GP_DATA_STROKE_EDITMODE | GP_DATA_STROKE_SCULPTMODE | GP_DATA_STROKE_WEIGHTMODE)))
 #define GPENCIL_PAINT_MODE(gpd) ((gpd) && (gpd->flag & (GP_DATA_STROKE_PAINTMODE)))
+#define GPENCIL_SCULPT_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_SCULPTMODE))
+#define GPENCIL_WEIGHT_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_WEIGHTMODE))
 #define GPENCIL_SCULPT_OR_WEIGHT_MODE(gpd) \
   ((gpd) && (gpd->flag & (GP_DATA_STROKE_SCULPTMODE | GP_DATA_STROKE_WEIGHTMODE)))
 #define GPENCIL_NONE_EDIT_MODE(gpd) \

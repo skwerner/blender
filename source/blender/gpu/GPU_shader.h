@@ -58,6 +58,10 @@ GPUShader *GPU_shader_create_ex(const char *vertexcode,
                                 const char **tf_names,
                                 const int tf_count,
                                 const char *shader_name);
+GPUShader *GPU_shader_load_from_binary(const char *binary,
+                                       const int binary_format,
+                                       const int binary_len,
+                                       const char *shname);
 struct GPU_ShaderCreateFromArray_Params {
   const char **vert, **geom, **frag, **defs;
 };
@@ -95,15 +99,13 @@ void GPU_shader_uniform_int(GPUShader *shader, int location, int value);
 
 int GPU_shader_get_attribute(GPUShader *shader, const char *name);
 
+char *GPU_shader_get_binary(GPUShader *shader, uint *r_binary_format, int *r_binary_len);
+
 /* Builtin/Non-generated shaders */
 typedef enum eGPUBuiltinShader {
   /* specialized drawing */
   GPU_SHADER_TEXT,
   GPU_SHADER_TEXT_SIMPLE,
-  GPU_SHADER_EDGES_FRONT_BACK_PERSP,
-  GPU_SHADER_EDGES_FRONT_BACK_ORTHO,
-  GPU_SHADER_EDGES_OVERLAY_SIMPLE,
-  GPU_SHADER_EDGES_OVERLAY,
   GPU_SHADER_KEYFRAME_DIAMOND,
   GPU_SHADER_SIMPLE_LIGHTING,
   GPU_SHADER_SIMPLE_LIGHTING_FLAT_COLOR,
@@ -160,7 +162,6 @@ typedef enum eGPUBuiltinShader {
   GPU_SHADER_3D_UNIFORM_COLOR,
   /* Sets Z-depth to 1.0 (draw onto background). */
   GPU_SHADER_3D_UNIFORM_COLOR_BACKGROUND,
-  GPU_SHADER_3D_UNIFORM_COLOR_INSTANCE,
   /**
    * Take a 3D position and color for each vertex without color interpolation.
    *
@@ -354,11 +355,8 @@ typedef enum eGPUBuiltinShader {
   GPU_SHADER_2D_UV_FACES,
   GPU_SHADER_2D_UV_FACES_STRETCH_AREA,
   GPU_SHADER_2D_UV_FACES_STRETCH_ANGLE,
-  /* Selection */
-  GPU_SHADER_3D_FLAT_SELECT_ID,
-  GPU_SHADER_3D_UNIFORM_SELECT_ID,
 } eGPUBuiltinShader;
-#define GPU_SHADER_BUILTIN_LEN (GPU_SHADER_3D_UNIFORM_SELECT_ID + 1)
+#define GPU_SHADER_BUILTIN_LEN (GPU_SHADER_2D_UV_FACES_STRETCH_ANGLE + 1)
 
 /** Support multiple configurations. */
 typedef enum eGPUShaderConfig {
@@ -398,7 +396,9 @@ void GPU_shader_free_builtin_shaders(void);
 
 /* Vertex attributes for shaders */
 
-#define GPU_MAX_ATTR 32
+/* Hardware limit is 16. Position attribute is always needed so we reduce to 15.
+ * This makes sure the GPUVertexFormat name buffer does not overflow. */
+#define GPU_MAX_ATTR 15
 
 typedef struct GPUVertAttrLayers {
   struct {

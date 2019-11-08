@@ -94,8 +94,9 @@ EIGEN_DONT_INLINE void constrained_conjugate_gradient(const MatrixType &mat,
     residual -= alpha * tmp;             // update residue
 
     residualNorm2 = residual.squaredNorm();
-    if (residualNorm2 < threshold)
+    if (residualNorm2 < threshold) {
       break;
+    }
 
     z = precond.solve(residual);  // approximately solve for "A z = residual"
 
@@ -282,7 +283,7 @@ class ConstrainedConjugateGradient
     m_iterations = Base::maxIterations();
     m_error = Base::m_tolerance;
 
-    for (int j = 0; j < b.cols(); ++j) {
+    for (int j = 0; j < b.cols(); j++) {
       m_iterations = Base::maxIterations();
       m_error = Base::m_tolerance;
 

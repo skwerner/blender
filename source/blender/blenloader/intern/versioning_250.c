@@ -67,7 +67,6 @@
 #include "BKE_global.h"  // for G
 #include "BKE_library.h"
 #include "BKE_main.h"
-#include "BKE_mesh.h"  // for ME_ defines (patching)
 #include "BKE_modifier.h"
 #include "BKE_multires.h"
 #include "BKE_particle.h"
@@ -285,8 +284,8 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
         memcpy(&ar->v2d, &sipo->v2d, sizeof(View2D));
 
         /* init mainarea view2d */
-        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
-        ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_SCALE_VERTICAL);
+        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
+        ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_VERTICAL_HANDLES);
 
         ar->v2d.min[0] = FLT_MIN;
         ar->v2d.min[1] = FLT_MIN;
@@ -304,7 +303,7 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
         ar->v2d.tot.ymin = (float)(-sa->winy) / 3.0f;
         ar->v2d.tot.ymax = 0.0f;
 
-        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
+        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
         ar->v2d.scroll |= (V2D_SCROLL_RIGHT);
         ar->v2d.align = V2D_ALIGN_NO_POS_Y;
         ar->v2d.flag |= V2D_VIEWSYNC_AREA_VERTICAL;
@@ -330,7 +329,7 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
 
         ar->v2d.minzoom = 0.01f;
         ar->v2d.maxzoom = 50;
-        ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
+        ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
         ar->v2d.scroll |= (V2D_SCROLL_RIGHT);
         ar->v2d.keepzoom = V2D_LOCKZOOM_Y;
         ar->v2d.align = V2D_ALIGN_NO_POS_Y;
@@ -349,8 +348,8 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
         SpaceSeq *sseq = (SpaceSeq *)sl;
         memcpy(&ar->v2d, &sseq->v2d, sizeof(View2D));
 
-        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
-        ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_SCALE_VERTICAL);
+        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
+        ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_VERTICAL_HANDLES);
         ar->v2d.align = V2D_ALIGN_NO_NEG_Y;
         ar->v2d.flag |= V2D_IS_INITIALISED;
         break;
@@ -960,7 +959,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
         bPoseChannel *pchan;
 
         for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
-          /* just need to initalise rotation axis properly... */
+          /* just need to initialise rotation axis properly... */
           pchan->rotAxis[1] = 1.0f;
         }
       }
@@ -1555,7 +1554,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
         for (sl = sa->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_IMAGE) {
             SpaceImage *sima = (SpaceImage *)sl;
-            scopes_new(&sima->scopes);
+            BKE_scopes_new(&sima->scopes);
           }
         }
       }
@@ -1659,8 +1658,8 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     }
 
     for (tex = bmain->textures.first; tex; tex = tex->id.next) {
-      /* if youre picky, this isn't correct until we do a version bump
-       * since you could set saturation to be 0.0*/
+      /* If you're picky, this isn't correct until we do a version bump
+       * since you could set saturation to be 0.0. */
       if (tex->saturation == 0.0f) {
         tex->saturation = 1.0f;
       }
@@ -1674,15 +1673,13 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     }
 
     for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
-      if (scene) {
-        Sequence *seq;
-        SEQ_BEGIN (scene->ed, seq) {
-          if (seq->sat == 0.0f) {
-            seq->sat = 1.0f;
-          }
+      Sequence *seq;
+      SEQ_BEGIN (scene->ed, seq) {
+        if (seq->sat == 0.0f) {
+          seq->sat = 1.0f;
         }
-        SEQ_END;
       }
+      SEQ_END;
     }
 
     /* GSOC 2010 Sculpt - New settings for Brush */
@@ -1697,7 +1694,7 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
 
       /* will have no effect */
       if (brush->alpha == 0) {
-        brush->alpha = 0.5f;
+        brush->alpha = 1.0f;
       }
 
       /* bad radius */
@@ -2030,8 +2027,8 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
         }
       }
 
-      /* Externl group node socket need to adjust their own_index to point at
-       * associated ntree inputs/outputs internal sockets. This happens in
+      /* External group node socket need to adjust their own_index to point at
+       * associated 'ntree' inputs/outputs internal sockets. This happens in
        * do_versions_after_linking_250, after lib linking. */
     }
   }
@@ -2080,11 +2077,12 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if (bmain->versionfile < 256 || (bmain->versionfile == 256 && bmain->subversionfile < 6)) {
-    Mesh *me;
-
-    for (me = bmain->meshes.first; me; me = me->id.next) {
-      BKE_mesh_calc_normals_tessface(me->mvert, me->totvert, me->mface, me->totface, NULL);
+  if (0) {
+    if (bmain->versionfile < 256 || (bmain->versionfile == 256 && bmain->subversionfile < 6)) {
+      for (Mesh *me = bmain->meshes.first; me; me = me->id.next) {
+        /* Vertex normal calculation from legacy 'MFace' has been removed.
+         * update after calculating polygons in file reading code instead. */
+      }
     }
   }
 

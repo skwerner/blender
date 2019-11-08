@@ -601,7 +601,6 @@ static IDProperty *idp_from_PyMapping(const char *name, PyObject *ob)
     pval = PySequence_GetItem(vals, i);
     if (BPy_IDProperty_Map_ValidateAndCreate(key, prop, pval) == false) {
       IDP_FreeProperty(prop);
-      MEM_freeN(prop);
       Py_XDECREF(keys);
       Py_XDECREF(vals);
       Py_XDECREF(key);
@@ -689,8 +688,9 @@ bool BPy_IDProperty_Map_ValidateAndCreate(PyObject *name_obj, IDProperty *group,
       /* Preserve prev/next links!!! See T42593. */
       prop->prev = prop_exist->prev;
       prop->next = prop_exist->next;
+      prop->flag = prop_exist->flag;
 
-      IDP_FreeProperty(prop_exist);
+      IDP_FreePropertyContent(prop_exist);
       *prop_exist = *prop;
       MEM_freeN(prop);
     }
@@ -897,7 +897,7 @@ static PyObject *BPy_IDGroup_pop(BPy_IDProperty *self, PyObject *args)
 
   pyform = BPy_IDGroup_MapDataToPy(idprop);
   if (pyform == NULL) {
-    /* ok something bad happened with the pyobject,
+    /* ok something bad happened with the #PyObject,
      * so don't remove the prop from the group.  if pyform is
      * NULL, then it already should have raised an exception.*/
     return NULL;
@@ -1172,7 +1172,7 @@ PyTypeObject BPy_IDGroup_Type = {
     /* Methods to implement standard operations */
 
     NULL,                       /* destructor tp_dealloc; */
-    NULL,                       /* printfunc tp_print; */
+    (printfunc)NULL,            /* printfunc tp_print; */
     NULL,                       /* getattrfunc tp_getattr; */
     NULL,                       /* setattrfunc tp_setattr; */
     NULL,                       /* cmpfunc tp_compare; */
@@ -1429,8 +1429,9 @@ static int BPy_IDArray_ass_slice(BPy_IDArray *self, int begin, int end, PyObject
   size = (end - begin);
   alloc_len = size * elem_size;
 
-  vec = MEM_mallocN(alloc_len,
-                    "array assignment"); /* NOTE: we count on int/float being the same size here */
+  /* NOTE: we count on int/float being the same size here */
+  vec = MEM_mallocN(alloc_len, "array assignment");
+
   if (PyC_AsArray(vec, seq, size, py_type, is_double, "slice assignment: ") == -1) {
     MEM_freeN(vec);
     return -1;
@@ -1576,7 +1577,7 @@ PyTypeObject BPy_IDArray_Type = {
     /* Methods to implement standard operations */
 
     NULL,                       /* destructor tp_dealloc; */
-    NULL,                       /* printfunc tp_print; */
+    (printfunc)NULL,            /* printfunc tp_print; */
     NULL,                       /* getattrfunc tp_getattr; */
     NULL,                       /* setattrfunc tp_setattr; */
     NULL,                       /* cmpfunc tp_compare; */
@@ -1691,7 +1692,7 @@ PyTypeObject BPy_IDGroup_Iter_Type = {
     /* Methods to implement standard operations */
 
     NULL,                        /* destructor tp_dealloc; */
-    NULL,                        /* printfunc tp_print; */
+    (printfunc)NULL,             /* printfunc tp_print; */
     NULL,                        /* getattrfunc tp_getattr; */
     NULL,                        /* setattrfunc tp_setattr; */
     NULL,                        /* cmpfunc tp_compare; */

@@ -128,7 +128,7 @@ int EEVEE_bloom_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
 
     /* Downsample buffers */
     copy_v2_v2_int(texsize, blitsize);
-    for (int i = 0; i < effects->bloom_iteration_len; ++i) {
+    for (int i = 0; i < effects->bloom_iteration_len; i++) {
       texsize[0] /= 2;
       texsize[1] /= 2;
 
@@ -147,7 +147,7 @@ int EEVEE_bloom_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
 
     /* Upsample buffers */
     copy_v2_v2_int(texsize, blitsize);
-    for (int i = 0; i < effects->bloom_iteration_len - 1; ++i) {
+    for (int i = 0; i < effects->bloom_iteration_len - 1; i++) {
       texsize[0] /= 2;
       texsize[1] /= 2;
 
@@ -167,7 +167,7 @@ int EEVEE_bloom_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
   /* Cleanup to release memory */
   GPU_FRAMEBUFFER_FREE_SAFE(fbl->bloom_blit_fb);
 
-  for (int i = 0; i < MAX_BLOOM_STEP - 1; ++i) {
+  for (int i = 0; i < MAX_BLOOM_STEP - 1; i++) {
     GPU_FRAMEBUFFER_FREE_SAFE(fbl->bloom_down_fb[i]);
     GPU_FRAMEBUFFER_FREE_SAFE(fbl->bloom_accum_fb[i]);
   }
@@ -186,7 +186,7 @@ static DRWShadingGroup *eevee_create_bloom_pass(const char *name,
   *pass = DRW_pass_create(name, DRW_STATE_WRITE_COLOR);
 
   DRWShadingGroup *grp = DRW_shgroup_create(sh, *pass);
-  DRW_shgroup_call_add(grp, quad, NULL);
+  DRW_shgroup_call(grp, quad, NULL);
   DRW_shgroup_uniform_texture_ref(grp, "sourceBuffer", &effects->unf_source_buffer);
   DRW_shgroup_uniform_vec2(grp, "sourceBufferTexelSize", effects->unf_source_texel_size, 1);
   if (upsample) {
@@ -207,9 +207,9 @@ void EEVEE_bloom_cache_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *ved
     /**  Bloom algorithm
      *
      * Overview:
-     * - Downsample the color buffer doing a small blur during each step.
-     * - Accumulate bloom color using previously downsampled color buffers
-     *   and do an upsample blur for each new accumulated layer.
+     * - Down-sample the color buffer doing a small blur during each step.
+     * - Accumulate bloom color using previously down-sampled color buffers
+     *   and do an up-sample blur for each new accumulated layer.
      * - Finally add accumulation buffer onto the source color buffer.
      *
      *  [1/1] is original copy resolution (can be half or quarter res for performance)
@@ -288,7 +288,7 @@ void EEVEE_bloom_draw(EEVEE_Data *vedata)
 
     last = effects->bloom_downsample[0];
 
-    for (int i = 1; i < effects->bloom_iteration_len; ++i) {
+    for (int i = 1; i < effects->bloom_iteration_len; i++) {
       copy_v2_v2(effects->unf_source_texel_size, effects->downsamp_texel_size[i - 1]);
       effects->unf_source_buffer = last;
 
@@ -300,7 +300,7 @@ void EEVEE_bloom_draw(EEVEE_Data *vedata)
     }
 
     /* Upsample and accumulate */
-    for (int i = effects->bloom_iteration_len - 2; i >= 0; --i) {
+    for (int i = effects->bloom_iteration_len - 2; i >= 0; i--) {
       copy_v2_v2(effects->unf_source_texel_size, effects->downsamp_texel_size[i]);
       effects->unf_source_buffer = effects->bloom_downsample[i];
       effects->unf_base_buffer = last;
@@ -324,7 +324,7 @@ void EEVEE_bloom_draw(EEVEE_Data *vedata)
 
 void EEVEE_bloom_free(void)
 {
-  for (int i = 0; i < 2; ++i) {
+  for (int i = 0; i < 2; i++) {
     DRW_SHADER_FREE_SAFE(e_data.bloom_blit_sh[i]);
     DRW_SHADER_FREE_SAFE(e_data.bloom_downsample_sh[i]);
     DRW_SHADER_FREE_SAFE(e_data.bloom_upsample_sh[i]);

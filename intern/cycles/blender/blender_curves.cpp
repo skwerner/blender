@@ -656,7 +656,7 @@ static void ExportCurveSegments(Scene *scene, Mesh *mesh, ParticleCurveData *CDa
       }
 
       if (attr_random != NULL) {
-        attr_random->add(hash_int_01(num_curves));
+        attr_random->add(hash_uint2_to_float(num_curves, 0));
       }
 
       mesh->add_curve(num_keys, CData->psys_shader[sys]);
@@ -978,7 +978,7 @@ void BlenderSync::sync_curves(
   /* obtain general settings */
   const bool use_curves = scene->curve_system_manager->use_curves;
 
-  if (!(use_curves && b_ob.mode() != b_ob.mode_PARTICLE_EDIT)) {
+  if (!(use_curves && b_ob.mode() != b_ob.mode_PARTICLE_EDIT && b_ob.mode() != b_ob.mode_EDIT)) {
     if (!motion)
       mesh->compute_bounds();
     return;

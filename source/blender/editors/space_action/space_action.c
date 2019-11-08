@@ -45,15 +45,15 @@
 #include "WM_types.h"
 #include "WM_message.h"
 
+#include "UI_interface.h"
 #include "UI_resources.h"
 #include "UI_view2d.h"
-#include "UI_interface.h"
 
 #include "ED_space_api.h"
 #include "ED_screen.h"
 #include "ED_anim_api.h"
 #include "ED_markers.h"
-#include "ED_scrubbing.h"
+#include "ED_time_scrub_ui.h"
 
 #include "action_intern.h" /* own include */
 #include "GPU_framebuffer.h"
@@ -71,7 +71,7 @@ static SpaceLink *action_new(const ScrArea *sa, const Scene *scene)
   saction->autosnap = SACTSNAP_FRAME;
   saction->mode = SACTCONT_DOPESHEET;
   saction->mode_prev = SACTCONT_DOPESHEET;
-  saction->flag = SACTION_SHOW_INTERPOLATION;
+  saction->flag = SACTION_SHOW_INTERPOLATION | SACTION_SHOW_MARKER_LINES;
 
   saction->ads.filterflag |= ADS_FILTER_SUMMARY;
 
@@ -127,7 +127,7 @@ static SpaceLink *action_new(const ScrArea *sa, const Scene *scene)
 
   ar->v2d.minzoom = 0.01f;
   ar->v2d.maxzoom = 50;
-  ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
+  ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
   ar->v2d.scroll |= (V2D_SCROLL_RIGHT);
   ar->v2d.keepzoom = V2D_LOCKZOOM_Y;
   ar->v2d.keepofs = V2D_KEEPOFS_Y;
@@ -237,7 +237,7 @@ static void action_main_region_draw(const bContext *C, ARegion *ar)
   UI_view2d_view_restore(C);
 
   /* scrubbing region */
-  ED_scrubbing_draw(ar, scene, saction->flag & SACTION_DRAWTIME, true);
+  ED_time_scrub_draw(ar, scene, saction->flag & SACTION_DRAWTIME, true);
 
   /* scrollers */
   scrollers = UI_view2d_scrollers_calc(v2d, NULL);
@@ -281,7 +281,7 @@ static void action_channel_region_draw(const bContext *C, ARegion *ar)
   }
 
   /* channel filter next to scrubbing area */
-  ED_channel_search_draw(C, ar, ac.ads);
+  ED_time_scrub_channel_search_draw(C, ar, ac.ads);
 
   /* reset view matrix */
   UI_view2d_view_restore(C);
@@ -373,7 +373,7 @@ static void saction_channel_region_message_subscribe(const struct bContext *UNUS
    * so just whitelist the entire structs for updates
    */
   {
-    wmMsgParams_RNA msg_key_params = {{{0}}};
+    wmMsgParams_RNA msg_key_params = {{0}};
     StructRNA *type_array[] = {
         &RNA_DopeSheet, /* dopesheet filters */
 
@@ -899,7 +899,7 @@ void ED_spacetype_action(void)
   /* regions: UI buttons */
   art = MEM_callocN(sizeof(ARegionType), "spacetype action region");
   art->regionid = RGN_TYPE_UI;
-  art->prefsizex = 200;
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_UI;
   art->listener = action_region_listener;
   art->init = action_buttons_area_init;

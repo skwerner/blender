@@ -23,19 +23,23 @@ from bpy.types import (
     Menu,
     Panel,
 )
-from .properties_paint_common import (
+from bl_ui.properties_paint_common import (
     UnifiedPaintPanel,
 )
-from .properties_grease_pencil_common import (
+from bl_ui.properties_grease_pencil_common import (
     AnnotationDataPanel,
     AnnotationOnionSkin,
     GreasePencilMaterialsPanel,
 )
+from bl_ui.space_toolsystem_common import (
+    ToolActivePanelHelper,
+)
 from bpy.app.translations import contexts as i18n_contexts
+
 
 class VIEW3D_HT_tool_header(Header):
     bl_space_type = 'VIEW_3D'
-    bl_region_type = "TOOL_HEADER"
+    bl_region_type = 'TOOL_HEADER'
 
     def draw(self, context):
         layout = self.layout
@@ -58,7 +62,7 @@ class VIEW3D_HT_tool_header(Header):
 
         # Active Tool
         # -----------
-        from .space_toolsystem_common import ToolSelectPanelHelper
+        from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
         tool = ToolSelectPanelHelper.draw_active_tool_header(
             context, layout,
             tool_key=('VIEW_3D', tool_mode),
@@ -75,19 +79,21 @@ class VIEW3D_HT_tool_header(Header):
         if draw_fn is not None:
             draw_fn(context, layout, tool)
 
+        popover_kw = {"space_type": 'VIEW_3D', "region_type": 'UI', "category": "Tool"}
+
         # Note: general mode options should be added to 'draw_mode_settings'.
         if tool_mode == 'SCULPT':
             if (tool is not None) and tool.has_datablock:
-                layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".paint_common", category="")
+                layout.popover_group(context=".paint_common", **popover_kw)
         elif tool_mode == 'PAINT_VERTEX':
             if (tool is not None) and tool.has_datablock:
-                layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".paint_common", category="")
+                layout.popover_group(context=".paint_common", **popover_kw)
         elif tool_mode == 'PAINT_WEIGHT':
             if (tool is not None) and tool.has_datablock:
-                layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".paint_common", category="")
+                layout.popover_group(context=".paint_common", **popover_kw)
         elif tool_mode == 'PAINT_TEXTURE':
             if (tool is not None) and tool.has_datablock:
-                layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".paint_common", category="")
+                layout.popover_group(context=".paint_common", **popover_kw)
         elif tool_mode == 'EDIT_ARMATURE':
             pass
         elif tool_mode == 'EDIT_CURVE':
@@ -99,52 +105,99 @@ class VIEW3D_HT_tool_header(Header):
         elif tool_mode == 'PARTICLE':
             # Disable, only shows "Brush" panel, which is already in the top-bar.
             # if tool.has_datablock:
-            #     layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".paint_common", category="")
+            #     layout.popover_group(context=".paint_common", **popover_kw)
             pass
         elif tool_mode == 'PAINT_GPENCIL':
             if (tool is not None) and tool.has_datablock:
-                layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".greasepencil_paint", category="")
+                layout.popover_group(context=".greasepencil_paint", **popover_kw)
         elif tool_mode == 'SCULPT_GPENCIL':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".greasepencil_sculpt", category="")
+            layout.popover_group(context=".greasepencil_sculpt", **popover_kw)
         elif tool_mode == 'WEIGHT_GPENCIL':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".greasepencil_weight", category="")
+            layout.popover_group(context=".greasepencil_weight", **popover_kw)
 
     def draw_mode_settings(self, context):
         layout = self.layout
+        mode_string = context.mode
 
-        # Active Tool
-        # -----------
-        from .space_toolsystem_common import ToolSelectPanelHelper
-        tool = ToolSelectPanelHelper.tool_active_from_context(context)
-        tool_mode = context.mode if tool is None else tool.mode
+        def row_for_mirror():
+            row = layout.row(align=True)
+            row.label(icon='MOD_MIRROR')
+            sub = row.row(align=True)
+            sub.scale_x = 0.6
+            return row, sub
 
-        if tool_mode == 'SCULPT':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".sculpt_mode", category="")
-        elif tool_mode == 'PAINT_VERTEX':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".vertexpaint", category="")
-        elif tool_mode == 'PAINT_WEIGHT':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".weightpaint", category="")
-        elif tool_mode == 'PAINT_TEXTURE':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".imagepaint", category="")
-        elif tool_mode == 'EDIT_TEXT':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".text_edit", category="")
-        elif tool_mode == 'EDIT_ARMATURE':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".armature_edit", category="")
-        elif tool_mode == 'EDIT_METABALL':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".mball_edit", category="")
-        elif tool_mode == 'EDIT_LATTICE':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".lattice_edit", category="")
-        elif tool_mode == 'EDIT_CURVE':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".curve_edit", category="")
-        elif tool_mode == 'EDIT_MESH':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".mesh_edit", category="")
-        elif tool_mode == 'POSE':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".posemode", category="")
-        elif tool_mode == 'PARTICLE':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".particlemode", category="")
-        elif tool_mode == 'OBJECT':
-            layout.popover_group(space_type='PROPERTIES', region_type='WINDOW', context=".objectmode", category="")
-        elif tool_mode in {'PAINT_GPENCIL', 'EDIT_GPENCIL', 'SCULPT_GPENCIL', 'WEIGHT_GPENCIL'}:
+        if mode_string == 'EDIT_MESH':
+            _row, sub = row_for_mirror()
+            sub.prop(context.object.data, "use_mirror_x", text="X", toggle=True)
+            sub.prop(context.object.data, "use_mirror_y", text="Y", toggle=True)
+            sub.prop(context.object.data, "use_mirror_z", text="Z", toggle=True)
+            tool_settings = context.tool_settings
+            layout.prop(tool_settings, "use_mesh_automerge", text="")
+        elif mode_string == 'EDIT_ARMATURE':
+            _row, sub = row_for_mirror()
+            sub.prop(context.object.data, "use_mirror_x", text="X", toggle=True)
+        elif mode_string == 'POSE':
+            _row, sub = row_for_mirror()
+            sub.prop(context.object.pose, "use_mirror_x", text="X", toggle=True)
+        elif mode_string == 'PAINT_WEIGHT':
+            row, sub = row_for_mirror()
+            wpaint = context.tool_settings.weight_paint
+            sub.prop(wpaint, "use_symmetry_x", text="X", toggle=True)
+            sub.prop(wpaint, "use_symmetry_y", text="Y", toggle=True)
+            sub.prop(wpaint, "use_symmetry_z", text="Z", toggle=True)
+            row.popover(panel="VIEW3D_PT_tools_weightpaint_symmetry_for_topbar", text="")
+        elif mode_string == 'SCULPT':
+            row, sub = row_for_mirror()
+            sculpt = context.tool_settings.sculpt
+            sub.prop(sculpt, "use_symmetry_x", text="X", toggle=True)
+            sub.prop(sculpt, "use_symmetry_y", text="Y", toggle=True)
+            sub.prop(sculpt, "use_symmetry_z", text="Z", toggle=True)
+            row.popover(panel="VIEW3D_PT_sculpt_symmetry_for_topbar", text="")
+        elif mode_string == 'PAINT_TEXTURE':
+            _row, sub = row_for_mirror()
+            ipaint = context.tool_settings.image_paint
+            sub.prop(ipaint, "use_symmetry_x", text="X", toggle=True)
+            sub.prop(ipaint, "use_symmetry_y", text="Y", toggle=True)
+            sub.prop(ipaint, "use_symmetry_z", text="Z", toggle=True)
+            # No need for a popover, the panel only has these options.
+        elif mode_string == 'PAINT_VERTEX':
+            row, sub = row_for_mirror()
+            vpaint = context.tool_settings.vertex_paint
+            sub.prop(vpaint, "use_symmetry_x", text="X", toggle=True)
+            sub.prop(vpaint, "use_symmetry_y", text="Y", toggle=True)
+            sub.prop(vpaint, "use_symmetry_z", text="Z", toggle=True)
+            row.popover(panel="VIEW3D_PT_tools_vertexpaint_symmetry_for_topbar", text="")
+
+        # Expand panels from the side-bar as popovers.
+        popover_kw = {"space_type": 'VIEW_3D', "region_type": 'UI', "category": "Tool"}
+
+        if mode_string == 'SCULPT':
+            layout.popover_group(context=".sculpt_mode", **popover_kw)
+        elif mode_string == 'PAINT_VERTEX':
+            layout.popover_group(context=".vertexpaint", **popover_kw)
+        elif mode_string == 'PAINT_WEIGHT':
+            layout.popover_group(context=".weightpaint", **popover_kw)
+        elif mode_string == 'PAINT_TEXTURE':
+            layout.popover_group(context=".imagepaint", **popover_kw)
+        elif mode_string == 'EDIT_TEXT':
+            layout.popover_group(context=".text_edit", **popover_kw)
+        elif mode_string == 'EDIT_ARMATURE':
+            layout.popover_group(context=".armature_edit", **popover_kw)
+        elif mode_string == 'EDIT_METABALL':
+            layout.popover_group(context=".mball_edit", **popover_kw)
+        elif mode_string == 'EDIT_LATTICE':
+            layout.popover_group(context=".lattice_edit", **popover_kw)
+        elif mode_string == 'EDIT_CURVE':
+            layout.popover_group(context=".curve_edit", **popover_kw)
+        elif mode_string == 'EDIT_MESH':
+            layout.popover_group(context=".mesh_edit", **popover_kw)
+        elif mode_string == 'POSE':
+            layout.popover_group(context=".posemode", **popover_kw)
+        elif mode_string == 'PARTICLE':
+            layout.popover_group(context=".particlemode", **popover_kw)
+        elif mode_string == 'OBJECT':
+            layout.popover_group(context=".objectmode", **popover_kw)
+        elif mode_string in {'PAINT_GPENCIL', 'EDIT_GPENCIL', 'SCULPT_GPENCIL', 'WEIGHT_GPENCIL'}:
             # Grease pencil layer.
             gpl = context.active_gpencil_layer
             if gpl and gpl.info is not None:
@@ -177,7 +230,7 @@ class _draw_tool_settings_context_mode:
         if brush is None:
             return
 
-        from .properties_paint_common import (
+        from bl_ui.properties_paint_common import (
             brush_basic_sculpt_settings,
         )
         brush_basic_sculpt_settings(layout, context, brush, compact=True)
@@ -194,7 +247,7 @@ class _draw_tool_settings_context_mode:
         if brush is None:
             return
 
-        from .properties_paint_common import (
+        from bl_ui.properties_paint_common import (
             UnifiedPaintPanel,
             brush_basic_texpaint_settings,
         )
@@ -215,7 +268,7 @@ class _draw_tool_settings_context_mode:
         if brush is None:
             return
 
-        from .properties_paint_common import (
+        from bl_ui.properties_paint_common import (
             UnifiedPaintPanel,
             brush_basic_vpaint_settings,
         )
@@ -235,7 +288,7 @@ class _draw_tool_settings_context_mode:
         if brush is None:
             return
 
-        from .properties_paint_common import brush_basic_wpaint_settings
+        from bl_ui.properties_paint_common import brush_basic_wpaint_settings
         brush_basic_wpaint_settings(layout, context, brush, compact=True)
 
     @staticmethod
@@ -245,7 +298,14 @@ class _draw_tool_settings_context_mode:
 
         # is_paint = True
         # FIXME: tools must use their own UI drawing!
-        if tool.idname in {"builtin.line", "builtin.box", "builtin.circle", "builtin.arc", "builtin.curve"}:
+        if tool.idname in {
+                "builtin.line",
+                "builtin.box",
+                "builtin.circle",
+                "builtin.arc",
+                "builtin.curve",
+                "builtin.polyline",
+        }:
             # is_paint = False
             pass
         elif tool.idname == "Cutter":
@@ -295,31 +355,10 @@ class _draw_tool_settings_context_mode:
         if context.object and brush.gpencil_tool in {'FILL', 'DRAW'}:
             draw_color_selector()
 
-        from .properties_paint_common import (
+        from bl_ui.properties_paint_common import (
             brush_basic_gpencil_paint_settings,
         )
-        brush_basic_gpencil_paint_settings(layout, context, brush, compact=True)
-
-        # FIXME: tools must use their own UI drawing!
-        if tool.idname in {"builtin.arc", "builtin.curve", "builtin.line", "builtin.box", "builtin.circle"}:
-            settings = context.tool_settings.gpencil_sculpt
-            row = layout.row(align=True)
-            row.prop(settings, "use_thickness_curve", text="", icon='CURVE_DATA')
-            sub = row.row(align=True)
-            sub.active = settings.use_thickness_curve
-            sub.popover(
-                panel="TOPBAR_PT_gpencil_primitive",
-                text="Thickness Profile",
-            )
-
-        if brush.gpencil_tool == 'FILL':
-            settings = context.tool_settings.gpencil_sculpt
-            row = layout.row(align=True)
-            sub = row.row(align=True)
-            sub.popover(
-                panel="TOPBAR_PT_gpencil_fill",
-                text="Fill Options",
-            )
+        brush_basic_gpencil_paint_settings(layout, context, brush, tool, compact=True, is_toolbar=True)
 
     @staticmethod
     def SCULPT_GPENCIL(context, layout, tool):
@@ -329,7 +368,7 @@ class _draw_tool_settings_context_mode:
         settings = tool_settings.gpencil_sculpt
         brush = settings.brush
 
-        from .properties_paint_common import (
+        from bl_ui.properties_paint_common import (
             brush_basic_gpencil_sculpt_settings,
         )
         brush_basic_gpencil_sculpt_settings(layout, context, brush, compact=True)
@@ -342,7 +381,7 @@ class _draw_tool_settings_context_mode:
         settings = tool_settings.gpencil_sculpt
         brush = settings.brush
 
-        from .properties_paint_common import (
+        from bl_ui.properties_paint_common import (
             brush_basic_gpencil_weight_settings,
         )
         brush_basic_gpencil_weight_settings(layout, context, brush, compact=True)
@@ -414,13 +453,7 @@ class VIEW3D_HT_header(Header):
 
         # Pivot
         if object_mode in {'OBJECT', 'EDIT', 'EDIT_GPENCIL', 'SCULPT_GPENCIL'} or has_pose_mode:
-            layout.prop_with_popover(
-                tool_settings,
-                "transform_pivot_point",
-                text="",
-                icon_only=True,
-                panel="VIEW3D_PT_pivot_point",
-            )
+            layout.prop(tool_settings, "transform_pivot_point", text="", icon_only=True)
 
         # Snap
         show_snap = False
@@ -434,7 +467,7 @@ class VIEW3D_HT_header(Header):
                 show_snap = True
             else:
 
-                from .properties_paint_common import UnifiedPaintPanel
+                from bl_ui.properties_paint_common import UnifiedPaintPanel
                 paint_settings = UnifiedPaintPanel.paint_settings(context)
 
                 if paint_settings:
@@ -495,37 +528,6 @@ class VIEW3D_HT_header(Header):
                 panel="VIEW3D_PT_proportional_edit",
             )
 
-        # grease pencil
-        if object_mode == 'PAINT_GPENCIL':
-            layout.prop_with_popover(
-                tool_settings,
-                "gpencil_stroke_placement_view3d",
-                text="",
-                panel="VIEW3D_PT_gpencil_origin",
-            )
-
-        if object_mode in {'PAINT_GPENCIL', 'SCULPT_GPENCIL'}:
-            layout.prop_with_popover(
-                tool_settings.gpencil_sculpt,
-                "lock_axis",
-                text="",
-                panel="VIEW3D_PT_gpencil_lock",
-            )
-
-        if object_mode == 'PAINT_GPENCIL':
-            # FIXME: this is bad practice!
-            # Tool options are to be displayed in the topbar.
-            if context.workspace.tools.from_space_view3d_mode(object_mode).idname == "builtin_brush.Draw":
-                settings = tool_settings.gpencil_sculpt.guide
-                row = layout.row(align=True)
-                row.prop(settings, "use_guide", text="", icon='GRID')
-                sub = row.row(align=True)
-                sub.active = settings.use_guide
-                sub.popover(
-                    panel="VIEW3D_PT_gpencil_guide",
-                    text="Guides",
-                )
-
     def draw(self, context):
         layout = self.layout
 
@@ -582,17 +584,20 @@ class VIEW3D_HT_header(Header):
                 sub.separator(factor=0.4)
                 sub.prop(tool_settings, "use_gpencil_draw_additive", text="", icon='FREEZE')
 
+            # Select mode for Editing
             if gpd.use_stroke_edit_mode:
                 row = layout.row(align=True)
-                row.prop(tool_settings, "gpencil_selectmode", text="", expand=True)
+                row.prop(tool_settings, "gpencil_selectmode_edit", text="", expand=True)
+
+            # Select mode for Sculpt
+            if gpd.is_stroke_sculpt_mode:
+                row = layout.row(align=True)
+                row.prop(tool_settings, "use_gpencil_select_mask_point", text="")
+                row.prop(tool_settings, "use_gpencil_select_mask_stroke", text="")
+                row.prop(tool_settings, "use_gpencil_select_mask_segment", text="")
 
             if gpd.use_stroke_edit_mode or gpd.is_stroke_sculpt_mode or gpd.is_stroke_weight_mode:
                 row = layout.row(align=True)
-
-                if gpd.is_stroke_sculpt_mode:
-                    row.prop(tool_settings.gpencil_sculpt, "use_select_mask", text="")
-                    row.separator()
-
                 row.prop(gpd, "use_multiedit", text="", icon='GP_MULTIFRAME_EDITING')
 
                 sub = row.row(align=True)
@@ -604,8 +609,6 @@ class VIEW3D_HT_header(Header):
 
             if gpd.use_stroke_edit_mode:
                 row = layout.row(align=True)
-                row.prop(tool_settings.gpencil_sculpt, "use_select_mask", text="")
-
                 row.popover(
                     panel="VIEW3D_PT_tools_grease_pencil_interpolate",
                     text="Interpolate",
@@ -617,7 +620,41 @@ class VIEW3D_HT_header(Header):
 
         layout.separator_spacer()
 
-        if not show_region_tool_header:
+        if object_mode in {'PAINT_GPENCIL', 'SCULPT_GPENCIL'}:
+            # Grease pencil
+            if object_mode == 'PAINT_GPENCIL':
+                layout.prop_with_popover(
+                    tool_settings,
+                    "gpencil_stroke_placement_view3d",
+                    text="",
+                    panel="VIEW3D_PT_gpencil_origin",
+                )
+
+            if object_mode in {'PAINT_GPENCIL', 'SCULPT_GPENCIL'}:
+                layout.prop_with_popover(
+                    tool_settings.gpencil_sculpt,
+                    "lock_axis",
+                    text="",
+                    panel="VIEW3D_PT_gpencil_lock",
+                )
+
+            if object_mode == 'PAINT_GPENCIL':
+                # FIXME: this is bad practice!
+                # Tool options are to be displayed in the topbar.
+                if context.workspace.tools.from_space_view3d_mode(object_mode).idname == "builtin_brush.Draw":
+                    settings = tool_settings.gpencil_sculpt.guide
+                    row = layout.row(align=True)
+                    row.prop(settings, "use_guide", text="", icon='GRID')
+                    sub = row.row(align=True)
+                    sub.active = settings.use_guide
+                    sub.popover(
+                        panel="VIEW3D_PT_gpencil_guide",
+                        text="Guides",
+                    )
+
+            layout.separator_spacer()
+        elif not show_region_tool_header:
+            # Transform settings depending on tool header visibility
             VIEW3D_HT_header.draw_xform_template(layout, context)
 
             layout.separator_spacer()
@@ -648,12 +685,20 @@ class VIEW3D_HT_header(Header):
         sub.popover(panel="VIEW3D_PT_overlay", text="")
 
         row = layout.row()
-        row.active = (shading.type in {'WIREFRAME', 'SOLID'}) or object_mode in {'EDIT'}
+        row.active = (object_mode == 'EDIT') or (shading.type in {'WIREFRAME', 'SOLID'})
 
-        if shading.type == 'WIREFRAME':
-            row.prop(shading, "show_xray_wireframe", text="", icon='XRAY')
-        else:
-            row.prop(shading, "show_xray", text="", icon='XRAY')
+        # While exposing 'shading.show_xray(_wireframe)' is correct.
+        # this hides the key shortcut from users: T70433.
+        row.operator(
+            "view3d.toggle_xray",
+            text="",
+            icon='XRAY',
+            depress=getattr(
+                shading,
+                "show_xray_wireframe" if shading.type == 'WIREFRAME' else
+                "show_xray"
+            ),
+        )
 
         row = layout.row(align=True)
         row.prop(shading, "type", text="", expand=True)
@@ -674,13 +719,20 @@ class VIEW3D_MT_editor_menus(Menu):
         mode_string = context.mode
         edit_object = context.edit_object
         gp_edit = obj and obj.mode in {'EDIT_GPENCIL', 'PAINT_GPENCIL', 'SCULPT_GPENCIL', 'WEIGHT_GPENCIL'}
+        ts = context.scene.tool_settings
 
         layout.menu("VIEW3D_MT_view")
 
         # Select Menu
         if gp_edit:
             if mode_string not in {'PAINT_GPENCIL', 'WEIGHT_GPENCIL'}:
-                layout.menu("VIEW3D_MT_select_gpencil")
+                if mode_string == 'SCULPT_GPENCIL' and \
+                    (ts.use_gpencil_select_mask_point or
+                     ts.use_gpencil_select_mask_stroke or
+                     ts.use_gpencil_select_mask_segment):
+                    layout.menu("VIEW3D_MT_select_gpencil")
+                elif mode_string == 'EDIT_GPENCIL':
+                    layout.menu("VIEW3D_MT_select_gpencil")
         elif mode_string in {'PAINT_WEIGHT', 'PAINT_VERTEX', 'PAINT_TEXTURE'}:
             mesh = obj.data
             if mesh.use_paint_mask:
@@ -693,23 +745,25 @@ class VIEW3D_MT_editor_menus(Menu):
         if gp_edit:
             pass
         elif mode_string == 'OBJECT':
-            layout.menu("VIEW3D_MT_add", text="Add")
+            layout.menu("VIEW3D_MT_add", text="Add", text_ctxt=i18n_contexts.operator_default)
         elif mode_string == 'EDIT_MESH':
-            layout.menu("VIEW3D_MT_mesh_add", text="Add")
+            layout.menu("VIEW3D_MT_mesh_add", text="Add", text_ctxt=i18n_contexts.operator_default)
         elif mode_string == 'EDIT_CURVE':
-            layout.menu("VIEW3D_MT_curve_add", text="Add")
+            layout.menu("VIEW3D_MT_curve_add", text="Add", text_ctxt=i18n_contexts.operator_default)
         elif mode_string == 'EDIT_SURFACE':
-            layout.menu("VIEW3D_MT_surface_add", text="Add")
+            layout.menu("VIEW3D_MT_surface_add", text="Add", text_ctxt=i18n_contexts.operator_default)
         elif mode_string == 'EDIT_METABALL':
-            layout.menu("VIEW3D_MT_metaball_add", text="Add")
+            layout.menu("VIEW3D_MT_metaball_add", text="Add", text_ctxt=i18n_contexts.operator_default)
         elif mode_string == 'EDIT_ARMATURE':
-            layout.menu("TOPBAR_MT_edit_armature_add", text="Add")
+            layout.menu("TOPBAR_MT_edit_armature_add", text="Add", text_ctxt=i18n_contexts.operator_default)
 
         if gp_edit:
             if obj and obj.mode == 'PAINT_GPENCIL':
                 layout.menu("VIEW3D_MT_paint_gpencil")
             elif obj and obj.mode == 'EDIT_GPENCIL':
                 layout.menu("VIEW3D_MT_edit_gpencil")
+                layout.menu("VIEW3D_MT_edit_gpencil_stroke")
+                layout.menu("VIEW3D_MT_edit_gpencil_point")
             elif obj and obj.mode == 'WEIGHT_GPENCIL':
                 layout.menu("VIEW3D_MT_weight_gpencil")
 
@@ -728,10 +782,9 @@ class VIEW3D_MT_editor_menus(Menu):
         elif obj:
             if mode_string != 'PAINT_TEXTURE':
                 layout.menu("VIEW3D_MT_%s" % mode_string.lower())
-            if mode_string in {'SCULPT', 'PAINT_VERTEX', 'PAINT_WEIGHT', 'PAINT_TEXTURE'}:
-                layout.menu("VIEW3D_MT_brush")
             if mode_string == 'SCULPT':
-                layout.menu("VIEW3D_MT_hide_mask")
+                layout.menu("VIEW3D_MT_mask")
+
         else:
             layout.menu("VIEW3D_MT_object")
 
@@ -902,10 +955,15 @@ class VIEW3D_MT_snap(Menu):
 class VIEW3D_MT_uv_map(Menu):
     bl_label = "UV Mapping"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
 
+        tool_settings = context.tool_settings
+
         layout.operator("uv.unwrap")
+        layout.prop(tool_settings, "use_edge_path_live_unwrap")
+
+        layout.separator()
 
         layout.operator_context = 'INVOKE_DEFAULT'
         layout.operator("uv.smart_project")
@@ -947,6 +1005,7 @@ class VIEW3D_MT_view(Menu):
 
         layout.prop(view, "show_region_toolbar")
         layout.prop(view, "show_region_ui")
+        layout.prop(view, "show_region_tool_header")
         layout.prop(view, "show_region_hud")
 
         layout.separator()
@@ -1056,7 +1115,7 @@ class VIEW3D_MT_view_navigation(Menu):
 
         layout.operator("view3d.zoom", text="Zoom In").delta = 1
         layout.operator("view3d.zoom", text="Zoom Out").delta = -1
-        layout.operator("view3d.zoom_border", text="Zoom Border...")
+        layout.operator("view3d.zoom_border", text="Zoom Region...")
         layout.operator("view3d.zoom_camera_1_to_1", text="Zoom Camera 1:1")
 
         layout.separator()
@@ -1497,8 +1556,6 @@ class VIEW3D_MT_edit_text_context_menu(Menu):
     def draw(self, _context):
         layout = self.layout
 
-        layout = self.layout
-
         layout.operator_context = 'INVOKE_DEFAULT'
 
         layout.operator("font.text_cut", text="Cut")
@@ -1522,6 +1579,11 @@ class VIEW3D_MT_select_edit_text(Menu):
     def draw(self, _context):
         layout = self.layout
 
+        layout.operator("ed.undo")
+        layout.operator("ed.redo")
+
+        layout.separator()
+
         layout.operator("font.text_cut", text="Cut")
         layout.operator("font.text_copy", text="Copy", icon='COPYDOWN')
         layout.operator("font.text_paste", text="Paste", icon='PASTEDOWN')
@@ -1534,7 +1596,14 @@ class VIEW3D_MT_select_edit_text(Menu):
 
         layout.operator("font.select_all")
 
-        layout.menu("VIEW3D_MT_edit_font")
+        layout.separator()
+
+        layout.operator("font.case_set", text="To Uppercase").case = 'UPPER'
+        layout.operator("font.case_set", text="To Lowercase").case = 'LOWER'
+
+        layout.separator()
+
+        layout.menu("VIEW3D_MT_edit_text_chars")
 
 
 class VIEW3D_MT_select_edit_metaball(Menu):
@@ -1861,6 +1930,7 @@ class VIEW3D_MT_metaball_add(Menu):
 class TOPBAR_MT_edit_curve_add(Menu):
     bl_idname = "TOPBAR_MT_edit_curve_add"
     bl_label = "Add"
+    bl_translation_context = i18n_contexts.operator_default
 
     def draw(self, context):
         is_surf = context.active_object.type == 'SURFACE'
@@ -1930,6 +2000,7 @@ class VIEW3D_MT_camera_add(Menu):
 
 class VIEW3D_MT_add(Menu):
     bl_label = "Add"
+    bl_translation_context = i18n_contexts.operator_default
 
     def draw(self, context):
         layout = self.layout
@@ -2023,6 +2094,9 @@ class VIEW3D_MT_object_relations(Menu):
         layout = self.layout
 
         layout.operator("object.proxy_make", text="Make Proxy...")
+
+        if bpy.app.use_override_library:
+            layout.operator("object.make_override_library", text="Make Library Override...")
 
         layout.operator("object.make_dupli_face")
 
@@ -2139,7 +2213,7 @@ class VIEW3D_MT_object_rigid_body(Menu):
         layout.operator("rigidbody.mass_calculate", text="Calculate Mass")
         layout.operator("rigidbody.object_settings_copy", text="Copy from Active")
         layout.operator("object.visual_transform_apply", text="Apply Transformation")
-        layout.operator("rigidbody.bake_to_keyframes", text="Bake To Keyframes")
+        layout.operator("rigidbody.bake_to_keyframes", text="Bake to Keyframes")
 
         layout.separator()
 
@@ -2170,7 +2244,6 @@ class VIEW3D_MT_object_context_menu(Menu):
         view = context.space_data
 
         obj = context.object
-        is_eevee = context.scene.render.engine == 'BLENDER_EEVEE'
 
         selected_objects_len = len(context.selected_objects)
 
@@ -2179,7 +2252,7 @@ class VIEW3D_MT_object_context_menu(Menu):
         '''
         if selected_objects_len == 0:
 
-            layout.menu("VIEW3D_MT_add", text="Add")
+            layout.menu("VIEW3D_MT_add", text="Add", text_ctxt=i18n_contexts.operator_default)
             layout.operator("view3d.pastebuffer", text="Paste Objects", icon='PASTEDOWN')
 
             return
@@ -2225,13 +2298,13 @@ class VIEW3D_MT_object_context_menu(Menu):
                 props.input_scale = 0.01
                 props.header_text = "Camera Lens Scale: %.3f"
 
-            if not obj.data.dof_object:
+            if not obj.data.dof.focus_object:
                 if view and view.camera == obj and view.region_3d.view_perspective == 'CAMERA':
                     props = layout.operator("ui.eyedropper_depth", text="DOF Distance (Pick)")
                 else:
                     props = layout.operator("wm.context_modal_mouse", text="DOF Distance")
                     props.data_path_iter = "selected_editable_objects"
-                    props.data_path_item = "data.dof_distance"
+                    props.data_path_item = "data.dof.focus_distance"
                     props.input_scale = 0.02
                     props.header_text = "DOF Distance: %.3f"
 
@@ -2255,14 +2328,15 @@ class VIEW3D_MT_object_context_menu(Menu):
             layout.separator()
 
             layout.operator("object.convert", text="Convert to Mesh").target = 'MESH'
+            layout.operator("object.convert", text="Convert to Grease Pencil").target = 'GPENCIL'
             layout.operator_menu_enum("object.origin_set", text="Set Origin", property="type")
 
             layout.separator()
 
         elif obj.type == 'GPENCIL':
             layout.operator("gpencil.convert", text="Convert to Path").type = 'PATH'
-            layout.operator("gpencil.convert", text="Convert to Bezier Curves").type = 'CURVE'
-            layout.operator("gpencil.convert", text="Convert to Mesh").type = 'POLY'
+            layout.operator("gpencil.convert", text="Convert to Bezier Curve").type = 'CURVE'
+            layout.operator("gpencil.convert", text="Convert to Polygon Curve").type = 'POLY'
 
             layout.operator_menu_enum("object.origin_set", text="Set Origin", property="type")
 
@@ -2284,29 +2358,10 @@ class VIEW3D_MT_object_context_menu(Menu):
 
             layout.operator_context = 'INVOKE_REGION_WIN'
 
-            emission_node = None
-            if light.node_tree:
-                for node in light.node_tree.nodes:
-                    if getattr(node, "type", None) == 'EMISSION':
-                        emission_node = node
-                        break
-
-            if is_eevee and not emission_node:
-                props = layout.operator("wm.context_modal_mouse", text="Energy")
-                props.data_path_iter = "selected_editable_objects"
-                props.data_path_item = "data.energy"
-                props.header_text = "Light Energy: %.3f"
-
-            if emission_node is not None:
-                props = layout.operator("wm.context_modal_mouse", text="Energy")
-                props.data_path_iter = "selected_editable_objects"
-                props.data_path_item = (
-                    "data.node_tree"
-                    ".nodes[\"" + emission_node.name + "\"]"
-                    ".inputs[\"Strength\"].default_value"
-                )
-                props.header_text = "Light Energy: %.3f"
-                props.input_scale = 0.1
+            props = layout.operator("wm.context_modal_mouse", text="Power")
+            props.data_path_iter = "selected_editable_objects"
+            props.data_path_item = "data.energy"
+            props.header_text = "Light Power: %.3f"
 
             if light.type == 'AREA':
                 props = layout.operator("wm.context_modal_mouse", text="Size X")
@@ -2320,11 +2375,17 @@ class VIEW3D_MT_object_context_menu(Menu):
                     props.data_path_item = "data.size_y"
                     props.header_text = "Light Size Y: %.3f"
 
-            elif light.type in {'SPOT', 'POINT', 'SUN'}:
+            elif light.type in {'SPOT', 'POINT'}:
                 props = layout.operator("wm.context_modal_mouse", text="Radius")
                 props.data_path_iter = "selected_editable_objects"
                 props.data_path_item = "data.shadow_soft_size"
                 props.header_text = "Light Radius: %.3f"
+
+            elif light.type == 'SUN':
+                props = layout.operator("wm.context_modal_mouse", text="Angle")
+                props.data_path_iter = "selected_editable_objects"
+                props.data_path_item = "data.angle"
+                props.header_text = "Light Angle: %.3f"
 
             if light.type == 'SPOT':
                 layout.separator()
@@ -2455,8 +2516,15 @@ class VIEW3D_MT_object_parent(Menu):
 
     def draw(self, _context):
         layout = self.layout
+        operator_context_default = layout.operator_context
 
         layout.operator_enum("object.parent_set", "type")
+
+        layout.separator()
+
+        layout.operator_context = 'EXEC_DEFAULT'
+        layout.operator("object.parent_no_inverse_set")
+        layout.operator_context = operator_context_default
 
         layout.separator()
 
@@ -2588,64 +2656,6 @@ class VIEW3D_MT_make_links(Menu):
         layout.operator("object.join_uvs")  # stupid place to add this!
 
 
-class VIEW3D_MT_brush(Menu):
-    bl_label = "Brush"
-
-    def draw(self, context):
-        layout = self.layout
-
-        tool_settings = context.tool_settings
-        settings = UnifiedPaintPanel.paint_settings(context)
-        brush = getattr(settings, "brush", None)
-
-        ups = tool_settings.unified_paint_settings
-        layout.prop(ups, "use_unified_size", text="Unified Size")
-        layout.prop(ups, "use_unified_strength", text="Unified Strength")
-        if context.image_paint_object or context.vertex_paint_object:
-            layout.prop(ups, "use_unified_color", text="Unified Color")
-        layout.separator()
-
-        # skip if no active brush
-        if not brush:
-            layout.label(text="No Brushes currently available", icon='INFO')
-            return
-
-        # brush paint modes
-        layout.menu("VIEW3D_MT_brush_paint_modes")
-
-        # brush tool
-        if context.sculpt_object:
-            layout.operator("brush.reset")
-            layout.prop_menu_enum(brush, "sculpt_tool")
-        elif context.image_paint_object:
-            layout.prop_menu_enum(brush, "image_tool")
-        elif context.vertex_paint_object:
-            layout.prop_menu_enum(brush, "vertex_tool")
-        elif context.weight_paint_object:
-            layout.prop_menu_enum(brush, "weight_tool")
-
-        # TODO: still missing a lot of brush options here
-
-        # sculpt options
-        if context.sculpt_object:
-
-            sculpt_tool = brush.sculpt_tool
-
-            layout.separator()
-            layout.operator_menu_enum("brush.curve_preset", "shape", text="Curve Preset")
-            layout.separator()
-
-            if sculpt_tool != 'GRAB':
-                layout.prop_menu_enum(brush, "stroke_method")
-
-                if sculpt_tool in {'DRAW', 'PINCH', 'INFLATE', 'LAYER', 'CLAY'}:
-                    layout.prop_menu_enum(brush, "direction")
-
-                if sculpt_tool == 'LAYER':
-                    layout.prop(brush, "use_persistent")
-                    layout.operator("sculpt.set_persistent_base")
-
-
 class VIEW3D_MT_brush_paint_modes(Menu):
     bl_label = "Enabled Modes"
 
@@ -2691,7 +2701,7 @@ class VIEW3D_MT_hook(Menu):
         layout.operator("object.hook_add_selob").use_bone = False
         layout.operator("object.hook_add_selob", text="Hook to Selected Object Bone").use_bone = True
 
-        if [mod.type == 'HOOK' for mod in context.active_object.modifiers]:
+        if any([mod.type == 'HOOK' for mod in context.active_object.modifiers]):
             layout.separator()
 
             layout.operator_menu_enum("object.hook_assign", "modifier")
@@ -2731,6 +2741,27 @@ class VIEW3D_MT_vertex_group(Menu):
             layout.operator_menu_enum("object.vertex_group_set_active", "group", text="Set Active Group")
             layout.operator("object.vertex_group_remove", text="Remove Active Group").all = False
             layout.operator("object.vertex_group_remove", text="Remove All Groups").all = True
+
+
+class VIEW3D_MT_gpencil_vertex_group(Menu):
+    bl_label = "Vertex Groups"
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.operator_context = 'EXEC_AREA'
+        ob = context.active_object
+
+        layout.operator("object.vertex_group_add", text="Add New Group")
+        ob = context.active_object
+        if ob.vertex_groups.active:
+            layout.separator()
+
+            layout.operator("gpencil.vertex_group_assign", text="Assign")
+            layout.operator("gpencil.vertex_group_remove_from", text="Remove")
+
+            layout.operator("gpencil.vertex_group_select", text="Select")
+            layout.operator("gpencil.vertex_group_deselect", text="Deselect")
 
 
 class VIEW3D_MT_paint_weight(Menu):
@@ -2781,39 +2812,6 @@ class VIEW3D_MT_paint_weight(Menu):
 class VIEW3D_MT_sculpt(Menu):
     bl_label = "Sculpt"
 
-    def draw(self, context):
-        layout = self.layout
-
-        tool_settings = context.tool_settings
-        sculpt = tool_settings.sculpt
-
-        layout.operator("sculpt.dynamic_topology_toggle", text="Toggle Dynamic Topology")
-
-        layout.separator()
-
-        layout.prop(sculpt, "use_symmetry_x")
-        layout.prop(sculpt, "use_symmetry_y")
-        layout.prop(sculpt, "use_symmetry_z")
-
-        layout.separator()
-
-        layout.prop(sculpt, "lock_x")
-        layout.prop(sculpt, "lock_y")
-        layout.prop(sculpt, "lock_z")
-
-        layout.separator()
-
-        layout.prop(sculpt, "use_threaded", text="Threaded Sculpt")
-        layout.prop(sculpt, "show_low_resolution")
-        layout.prop(sculpt, "show_brush")
-        layout.prop(sculpt, "use_deform_only")
-        layout.prop(sculpt, "show_diffuse_color")
-        layout.prop(sculpt, "show_mask")
-
-
-class VIEW3D_MT_hide_mask(Menu):
-    bl_label = "Hide/Mask"
-
     def draw(self, _context):
         layout = self.layout
 
@@ -2821,19 +2819,28 @@ class VIEW3D_MT_hide_mask(Menu):
         props.action = 'SHOW'
         props.area = 'ALL'
 
-        props = layout.operator("paint.hide_show", text="Hide Bounding Box")
-        props.action = 'HIDE'
-        props.area = 'INSIDE'
-
         props = layout.operator("paint.hide_show", text="Show Bounding Box")
         props.action = 'SHOW'
         props.area = 'INSIDE'
 
-        props = layout.operator("paint.hide_show", text="Hide Masked")
-        props.area = 'MASKED'
+        props = layout.operator("paint.hide_show", text="Hide Bounding Box")
         props.action = 'HIDE'
+        props.area = 'INSIDE'
+
+        props = layout.operator("paint.hide_show", text="Hide Masked")
+        props.action = 'HIDE'
+        props.area = 'MASKED'
 
         layout.separator()
+
+        layout.menu("VIEW3D_MT_sculpt_set_pivot", text="Set Pivot")
+
+
+class VIEW3D_MT_mask(Menu):
+    bl_label = "Mask"
+
+    def draw(self, _context):
+        layout = self.layout
 
         props = layout.operator("paint.mask_flood_fill", text="Invert Mask")
         props.mode = 'INVERT'
@@ -2848,6 +2855,76 @@ class VIEW3D_MT_hide_mask(Menu):
 
         props = layout.operator("view3d.select_box", text="Box Mask")
         props = layout.operator("paint.mask_lasso_gesture", text="Lasso Mask")
+
+        layout.separator()
+
+        props = layout.operator("sculpt.mask_filter", text='Smooth Mask')
+        props.filter_type = 'SMOOTH'
+        props.auto_iteration_count = True
+
+        props = layout.operator("sculpt.mask_filter", text='Sharpen Mask')
+        props.filter_type = 'SHARPEN'
+        props.auto_iteration_count = True
+
+        props = layout.operator("sculpt.mask_filter", text='Grow Mask')
+        props.filter_type = 'GROW'
+        props.auto_iteration_count = True
+
+        props = layout.operator("sculpt.mask_filter", text='Shrink Mask')
+        props.filter_type = 'SHRINK'
+        props.auto_iteration_count = True
+
+        props = layout.operator("sculpt.mask_filter", text='Increase Contrast')
+        props.filter_type = 'CONTRAST_INCREASE'
+        props.auto_iteration_count = False
+
+        props = layout.operator("sculpt.mask_filter", text='Decrease Contrast')
+        props.filter_type = 'CONTRAST_DECREASE'
+        props.auto_iteration_count = False
+
+        layout.separator()
+
+        props = layout.operator("sculpt.mask_expand", text="Expand Mask By Topology")
+        props.use_normals = False
+        props.keep_previous_mask = False
+        props.invert = True
+        props.smooth_iterations = 2
+
+        props = layout.operator("sculpt.mask_expand", text="Expand Mask By Curvature")
+        props.use_normals = True
+        props.keep_previous_mask = True
+        props.invert = False
+        props.smooth_iterations = 0
+
+        layout.separator()
+
+        props = layout.operator("mesh.paint_mask_extract", text="Mask Extract")
+
+        layout.separator()
+
+        props = layout.operator("sculpt.dirty_mask", text='Dirty Mask')
+
+
+class VIEW3D_MT_sculpt_set_pivot(Menu):
+    bl_label = "Sculpt Set Pivot"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        props = layout.operator("sculpt.set_pivot_position", text="Pivot to Origin")
+        props.mode = 'ORIGIN'
+
+        props = layout.operator("sculpt.set_pivot_position", text="Pivot to Unmasked")
+        props.mode = 'UNMASKED'
+
+        props = layout.operator("sculpt.set_pivot_position", text="Pivot to Mask Border")
+        props.mode = 'BORDER'
+
+        props = layout.operator("sculpt.set_pivot_position", text="Pivot to Active Vertex")
+        props.mode = 'ACTIVE'
+
+        props = layout.operator("sculpt.set_pivot_position", text="Pivot to Surface Under Cursor")
+        props.mode = 'SURFACE'
 
 
 class VIEW3D_MT_particle(Menu):
@@ -3135,7 +3212,8 @@ class VIEW3D_MT_pose_apply(Menu):
     def draw(self, _context):
         layout = self.layout
 
-        layout.operator("pose.armature_apply")
+        layout.operator("pose.armature_apply").selected = False
+        layout.operator("pose.armature_apply", text="Apply Selected as Rest Pose").selected = True
         layout.operator("pose.visual_transform_apply")
 
         layout.separator()
@@ -3168,11 +3246,6 @@ class VIEW3D_MT_pose_context_menu(Menu):
 
         layout.separator()
 
-        layout.operator("pose.paths_calculate", text="Calculate")
-        layout.operator("pose.paths_clear", text="Clear")
-
-        layout.separator()
-
         layout.operator("pose.push")
         layout.operator("pose.relax")
         layout.operator("pose.breakdown")
@@ -3201,7 +3274,7 @@ class BoneOptions:
             "use_deform",
             "use_envelope_multiply",
             "use_inherit_rotation",
-            "use_inherit_scale",
+            "inherit_scale",
         ]
 
         if context.mode == 'EDIT_ARMATURE':
@@ -3316,7 +3389,7 @@ class VIEW3D_MT_edit_mesh_context_menu(Menu):
         '''
         # If nothing is selected
         if not (selected_verts_len or selected_edges_len or selected_faces_len):
-            layout.menu("VIEW3D_MT_mesh_add", text="Add")
+            layout.menu("VIEW3D_MT_mesh_add", text="Add", text_ctxt=i18n_contexts.operator_default)
 
             return
         '''
@@ -3396,9 +3469,11 @@ class VIEW3D_MT_edit_mesh_context_menu(Menu):
 
             col.operator("mesh.loopcut_slide")
             col.operator("mesh.offset_edge_loops_slide")
+
+            col.separator()
+
             col.operator("mesh.knife_tool")
             col.operator("mesh.bisect")
-            col.operator("mesh.bridge_edge_loops", text="Bridge Edge Loops")
 
             col.separator()
 
@@ -3750,6 +3825,7 @@ class VIEW3D_MT_edit_mesh_faces(Menu):
 
         layout.menu("VIEW3D_MT_edit_mesh_faces_data")
 
+
 class VIEW3D_MT_edit_mesh_normals_select_strength(Menu):
     bl_label = "Select by Face Strength"
 
@@ -3767,6 +3843,7 @@ class VIEW3D_MT_edit_mesh_normals_select_strength(Menu):
         op = layout.operator("mesh.mod_weighted_strength", text="Strong")
         op.set = False
         op.face_strength = 'STRONG'
+
 
 class VIEW3D_MT_edit_mesh_normals_set_strength(Menu):
     bl_label = "Select by Face Strength"
@@ -3786,31 +3863,45 @@ class VIEW3D_MT_edit_mesh_normals_set_strength(Menu):
         op.set = True
         op.face_strength = 'STRONG'
 
+
+class VIEW3D_MT_edit_mesh_normals_average(Menu):
+    bl_label = "Average"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("mesh.average_normals", text="Custom Normal").average_type = 'CUSTOM_NORMAL'
+        layout.operator("mesh.average_normals", text="Face Area").average_type = 'FACE_AREA'
+        layout.operator("mesh.average_normals", text="Corner Angle").average_type = 'CORNER_ANGLE'
+
+
 class VIEW3D_MT_edit_mesh_normals(Menu):
     bl_label = "Normals"
 
     def draw(self, _context):
         layout = self.layout
 
+        layout.operator("mesh.flip_normals", text="Flip")
         layout.operator("mesh.normals_make_consistent", text="Recalculate Outside").inside = False
         layout.operator("mesh.normals_make_consistent", text="Recalculate Inside").inside = True
 
         layout.separator()
 
-        layout.operator("mesh.flip_normals", text="Flip")
         layout.operator("mesh.set_normals_from_faces", text="Set From Faces")
-        layout.operator("transform.rotate_normal", text="Rotate")
-        layout.operator("mesh.point_normals", text="Point to Target")
+
+        layout.operator_context = 'INVOKE_REGION_WIN'
+        layout.operator("transform.rotate_normal", text="Rotate...")
+        layout.operator("mesh.point_normals", text="Point to Target...")
+        layout.operator_context = 'EXEC_DEFAULT'
+
         layout.operator("mesh.merge_normals", text="Merge")
         layout.operator("mesh.split_normals", text="Split")
-        layout.operator("mesh.average_normals", text="Average")
+        layout.menu("VIEW3D_MT_edit_mesh_normals_average", text="Average")
 
         layout.separator()
 
         layout.operator("mesh.normals_tools", text="Copy Vectors").mode = 'COPY'
         layout.operator("mesh.normals_tools", text="Paste Vectors").mode = 'PASTE'
-        layout.operator("mesh.normals_tools", text="Add Vectors").mode = 'ADD'
-        layout.operator("mesh.normals_tools", text="Multiply Vectors").mode = 'MULTIPLY'
 
         layout.operator("mesh.smoothen_normals", text="Smoothen Vectors")
         layout.operator("mesh.normals_tools", text="Reset Vectors").mode = 'RESET'
@@ -3929,7 +4020,9 @@ class VIEW3D_MT_edit_gpencil_delete(Menu):
 
         layout.separator()
 
-        layout.operator("gpencil.active_frames_delete_all")
+        layout.operator("gpencil.delete", text="Delete Active Keyframe (Active Layer)").type = 'FRAME'
+        layout.operator("gpencil.active_frames_delete_all", text="Delete Active Keyframes (All Layers)")
+
 # Edit Curve
 # draw_curve is used by VIEW3D_MT_edit_curve and VIEW3D_MT_edit_surface
 
@@ -4112,17 +4205,10 @@ class VIEW3D_MT_edit_font(Menu):
     def draw(self, _context):
         layout = self.layout
 
-        layout.operator("font.style_toggle", text="Toggle Bold").style = 'BOLD'
-        layout.operator("font.style_toggle", text="Toggle Italic").style = 'ITALIC'
-
-        layout.separator()
-
-        layout.operator("font.style_toggle", text="Toggle Underline").style = 'UNDERLINE'
-        layout.operator("font.style_toggle", text="Toggle Small Caps").style = 'SMALL_CAPS'
-
-        layout.separator()
-
-        layout.menu("VIEW3D_MT_edit_text_chars")
+        layout.operator("font.style_toggle", text="Toggle Bold", icon='BOLD').style = 'BOLD'
+        layout.operator("font.style_toggle", text="Toggle Italic", icon='ITALIC').style = 'ITALIC'
+        layout.operator("font.style_toggle", text="Toggle Underline", icon='UNDERLINE').style = 'UNDERLINE'
+        layout.operator("font.style_toggle", text="Toggle Small Caps", icon='SMALL_CAPS').style = 'SMALL_CAPS'
 
 
 class VIEW3D_MT_edit_text_chars(Menu):
@@ -4371,7 +4457,7 @@ class VIEW3D_MT_edit_armature_delete(Menu):
         layout.operator("armature.dissolve", text="Dissolve Bones")
 
 
-# ********** Grease Pencil Stroke menus **********
+# ********** Grease Pencil menus **********
 class VIEW3D_MT_gpencil_autoweights(Menu):
     bl_label = "Generate Weights"
 
@@ -4388,10 +4474,11 @@ class VIEW3D_MT_gpencil_simplify(Menu):
         layout = self.layout
         layout.operator("gpencil.stroke_simplify_fixed", text="Fixed")
         layout.operator("gpencil.stroke_simplify", text="Adaptive")
+        layout.operator("gpencil.stroke_sample", text="Sample")
 
 
 class VIEW3D_MT_paint_gpencil(Menu):
-    bl_label = "Strokes"
+    bl_label = "Draw"
 
     def draw(self, _context):
 
@@ -4402,8 +4489,8 @@ class VIEW3D_MT_paint_gpencil(Menu):
 
         layout.separator()
 
-        layout.operator("gpencil.delete", text="Delete Frame").type = 'FRAME'
-        layout.operator("gpencil.active_frames_delete_all")
+        layout.menu("VIEW3D_MT_edit_gpencil_showhide")
+        layout.menu("GPENCIL_MT_cleanup")
 
 
 class VIEW3D_MT_assign_material(Menu):
@@ -4412,11 +4499,13 @@ class VIEW3D_MT_assign_material(Menu):
     def draw(self, context):
         layout = self.layout
         ob = context.active_object
+        mat_active = ob.active_material
 
         for slot in ob.material_slots:
             mat = slot.material
             if mat:
-                layout.operator("gpencil.stroke_change_color", text=mat.name).material = mat.name
+                layout.operator("gpencil.stroke_change_color", text=mat.name,
+                                icon='LAYER_ACTIVE' if mat == mat_active else 'BLANK1').material = mat.name
 
 
 class VIEW3D_MT_gpencil_copy_layer(Menu):
@@ -4442,14 +4531,13 @@ class VIEW3D_MT_gpencil_copy_layer(Menu):
 
 
 class VIEW3D_MT_edit_gpencil(Menu):
-    bl_label = "Strokes"
+    bl_label = "Grease Pencil"
 
     def draw(self, _context):
         layout = self.layout
 
         layout.menu("VIEW3D_MT_edit_gpencil_transform")
-
-        layout.separator()
+        layout.menu("VIEW3D_MT_mirror")
         layout.menu("GPENCIL_MT_snap")
 
         layout.separator()
@@ -4461,42 +4549,81 @@ class VIEW3D_MT_edit_gpencil(Menu):
 
         # Cut, Copy, Paste
         layout.operator("gpencil.duplicate_move", text="Duplicate")
+        layout.operator("gpencil.stroke_split", text="Split")
         layout.operator("gpencil.copy", text="Copy", icon='COPYDOWN')
-        layout.operator("gpencil.paste", text="Paste", icon='PASTEDOWN').type = 'COPY'
-        layout.operator("gpencil.paste", text="Paste & Merge").type = 'MERGE'
+        layout.operator("gpencil.paste", text="Paste", icon='PASTEDOWN').type = 'ACTIVE'
+        layout.operator("gpencil.paste", text="Paste by Layer").type = 'LAYER'
 
         layout.separator()
 
-        layout.operator("gpencil.stroke_smooth", text="Smooth")
-        layout.operator("gpencil.stroke_subdivide", text="Subdivide")
+        layout.menu("VIEW3D_MT_weight_gpencil")
+
+        layout.separator()
+
+        layout.menu("VIEW3D_MT_edit_gpencil_showhide")
+
+        layout.operator_menu_enum("gpencil.stroke_separate", "mode")
+        layout.menu("GPENCIL_MT_cleanup")
+
+        layout.separator()
+
+        # Remove
+        layout.menu("VIEW3D_MT_edit_gpencil_delete")
+
+
+class VIEW3D_MT_edit_gpencil_stroke(Menu):
+    bl_label = "Stroke"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("gpencil.stroke_subdivide", text="Subdivide").only_selected = False
         layout.menu("VIEW3D_MT_gpencil_simplify")
         layout.operator("gpencil.stroke_trim", text="Trim")
 
         layout.separator()
 
-        layout.operator_menu_enum("gpencil.stroke_separate", "mode", text="Separate...")
-        layout.operator("gpencil.stroke_split", text="Split")
-        layout.operator("gpencil.stroke_merge", text="Merge")
-        layout.operator_menu_enum("gpencil.stroke_join", "type", text="Join...")
-        layout.operator("gpencil.stroke_flip", text="Flip Direction")
+        layout.operator_menu_enum("gpencil.stroke_join", "type", text="Join")
 
         layout.separator()
 
-        layout.operator_menu_enum("gpencil.move_to_layer", "layer", text="Move to Layer")
+        layout.menu("GPENCIL_MT_move_to_layer")
         layout.menu("VIEW3D_MT_assign_material")
-        layout.operator_menu_enum("gpencil.stroke_arrange", "direction", text="Arrange Strokes...")
+        layout.operator("gpencil.set_active_material", text="Set as Active Material")
+        layout.operator_menu_enum("gpencil.stroke_arrange", "direction", text="Arrange Strokes")
 
         layout.separator()
 
         # Convert
+        op = layout.operator("gpencil.stroke_cyclical_set", text="Close")
+        op.type = 'CLOSE'
+        op.geometry = True
         layout.operator("gpencil.stroke_cyclical_set", text="Toggle Cyclic").type = 'TOGGLE'
-        layout.operator_menu_enum("gpencil.stroke_caps_set", text="Toggle Caps...", property="type")
+        layout.operator_menu_enum("gpencil.stroke_caps_set", text="Toggle Caps", property="type")
+        layout.operator("gpencil.stroke_flip", text="Switch Direction")
+
+
+class VIEW3D_MT_edit_gpencil_point(Menu):
+    bl_label = "Point"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("gpencil.extrude_move", text="Extrude Points")
 
         layout.separator()
 
-        # Remove
-        layout.menu("GPENCIL_MT_cleanup")
-        layout.menu("VIEW3D_MT_edit_gpencil_delete")
+        layout.operator("gpencil.stroke_smooth", text="Smooth Points").only_selected = True
+
+        layout.separator()
+
+        layout.operator("gpencil.stroke_merge", text="Merge Points")
+
+        # TODO: add new RIP operator
+
+        layout.separator()
+
+        layout.menu("VIEW3D_MT_gpencil_vertex_group")
 
 
 class VIEW3D_MT_weight_gpencil(Menu):
@@ -4509,10 +4636,12 @@ class VIEW3D_MT_weight_gpencil(Menu):
         layout.operator("gpencil.vertex_group_normalize", text="Normalize")
 
         layout.separator()
+
         layout.operator("gpencil.vertex_group_invert", text="Invert")
         layout.operator("gpencil.vertex_group_smooth", text="Smooth")
 
         layout.separator()
+
         layout.menu("VIEW3D_MT_gpencil_autoweights")
 
 
@@ -4527,12 +4656,18 @@ class VIEW3D_MT_gpencil_animation(Menu):
     def draw(self, _context):
         layout = self.layout
 
-        layout.operator("gpencil.blank_frame_add")
-        layout.operator("gpencil.active_frames_delete_all", text="Delete Frame(s)")
+        layout.operator("gpencil.blank_frame_add", text="Insert Blank Keyframe (Active Layer)")
+        layout.operator("gpencil.blank_frame_add", text="Insert Blank Keyframe (All Layers)").all_layers = True
 
         layout.separator()
-        layout.operator("gpencil.frame_duplicate", text="Duplicate Active Frame")
-        layout.operator("gpencil.frame_duplicate", text="Duplicate All Layers").mode = 'ALL'
+
+        layout.operator("gpencil.frame_duplicate", text="Duplicate Active Keyframe (Active Layer)")
+        layout.operator("gpencil.frame_duplicate", text="Duplicate Active Keyframe (All Layers)").mode = 'ALL'
+
+        layout.separator()
+
+        layout.operator("gpencil.delete", text="Delete Active Keyframe (Active Layer)").type = 'FRAME'
+        layout.operator("gpencil.active_frames_delete_all", text="Delete Active Keyframes (All Layers)")
 
 
 class VIEW3D_MT_edit_gpencil_transform(Menu):
@@ -4552,9 +4687,19 @@ class VIEW3D_MT_edit_gpencil_transform(Menu):
         layout.operator("transform.tosphere", text="To Sphere")
         layout.operator("transform.transform", text="Shrink Fatten").mode = 'GPENCIL_SHRINKFATTEN'
 
+
+class VIEW3D_MT_edit_gpencil_showhide(Menu):
+    bl_label = "Show/hide"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("gpencil.reveal", text="Show All Layers")
+
         layout.separator()
 
-        layout.operator("gpencil.reproject")
+        layout.operator("gpencil.hide", text="Hide Active Layer").unselected = False
+        layout.operator("gpencil.hide", text="Hide Inactive Layers").unselected = True
 
 
 class VIEW3D_MT_edit_gpencil_interpolate(Menu):
@@ -4588,6 +4733,25 @@ class VIEW3D_MT_view_pie(Menu):
         pie.operator_enum("view3d.view_axis", "type")
         pie.operator("view3d.view_camera", text="View Camera", icon='CAMERA_DATA')
         pie.operator("view3d.view_selected", text="View Selected", icon='ZOOM_SELECTED')
+
+
+class VIEW3D_MT_transform_gizmo_pie(Menu):
+    bl_label = "View"
+
+    def draw(self, context):
+        layout = self.layout
+
+        pie = layout.menu_pie()
+        # 1: Left
+        pie.operator("view3d.transform_gizmo_set", text="Move").type = {'TRANSLATE'}
+        # 2: Right
+        pie.operator("view3d.transform_gizmo_set", text="Rotate").type = {'ROTATE'}
+        # 3: Down
+        pie.operator("view3d.transform_gizmo_set", text="Scale").type = {'SCALE'}
+        # 4: Up
+        pie.prop(context.space_data, "show_gizmo", text="Show Gizmos", icon='GIZMO')
+        # 5: Up/Left
+        pie.operator("view3d.transform_gizmo_set", text="All").type = {'TRANSLATE', 'ROTATE', 'SCALE'}
 
 
 class VIEW3D_MT_shading_pie(Menu):
@@ -4676,14 +4840,22 @@ class VIEW3D_MT_snap_pie(Menu):
         layout = self.layout
         pie = layout.menu_pie()
 
-        pie.operator("view3d.snap_cursor_to_grid", text="Cursor to Grid", icon='PIVOT_CURSOR')
+        pie.operator("view3d.snap_cursor_to_grid", text="Cursor to Grid", icon='CURSOR')
         pie.operator("view3d.snap_selected_to_grid", text="Selection to Grid", icon='RESTRICT_SELECT_OFF')
-        pie.operator("view3d.snap_cursor_to_selected", text="Cursor to Selected", icon='PIVOT_CURSOR')
-        pie.operator("view3d.snap_selected_to_cursor", text="Selection to Cursor", icon='RESTRICT_SELECT_OFF').use_offset = False
-        pie.operator("view3d.snap_selected_to_cursor", text="Selection to Cursor (Keep Offset)", icon='RESTRICT_SELECT_OFF').use_offset = True
+        pie.operator("view3d.snap_cursor_to_selected", text="Cursor to Selected", icon='CURSOR')
+        pie.operator(
+            "view3d.snap_selected_to_cursor",
+            text="Selection to Cursor",
+            icon='RESTRICT_SELECT_OFF',
+        ).use_offset = False
+        pie.operator(
+            "view3d.snap_selected_to_cursor",
+            text="Selection to Cursor (Keep Offset)",
+            icon='RESTRICT_SELECT_OFF',
+        ).use_offset = True
         pie.operator("view3d.snap_selected_to_active", text="Selection to Active", icon='RESTRICT_SELECT_OFF')
-        pie.operator("view3d.snap_cursor_to_center", text="Cursor to World Origin", icon='PIVOT_CURSOR')
-        pie.operator("view3d.snap_cursor_to_active", text="Cursor to Active", icon='PIVOT_CURSOR')
+        pie.operator("view3d.snap_cursor_to_center", text="Cursor to World Origin", icon='CURSOR')
+        pie.operator("view3d.snap_cursor_to_active", text="Cursor to Active", icon='CURSOR')
 
 
 class VIEW3D_MT_proportional_editing_falloff_pie(Menu):
@@ -4697,27 +4869,65 @@ class VIEW3D_MT_proportional_editing_falloff_pie(Menu):
         pie.prop(tool_settings, "proportional_edit_falloff", expand=True)
 
 
+class VIEW3D_MT_sculpt_mask_edit_pie(Menu):
+    bl_label = "Mask Edit"
+
+    def draw(self, _context):
+        layout = self.layout
+        pie = layout.menu_pie()
+
+        op = pie.operator("paint.mask_flood_fill", text='Invert Mask')
+        op.mode = 'INVERT'
+        op = pie.operator("paint.mask_flood_fill", text='Clear Mask')
+        op.mode = 'VALUE'
+        op = pie.operator("sculpt.mask_filter", text='Smooth Mask')
+        op.filter_type = 'SMOOTH'
+        op.auto_iteration_count = True
+        op = pie.operator("sculpt.mask_filter", text='Sharpen Mask')
+        op.filter_type = 'SHARPEN'
+        op.auto_iteration_count = True
+        op = pie.operator("sculpt.mask_filter", text='Grow Mask')
+        op.filter_type = 'GROW'
+        op.auto_iteration_count = True
+        op = pie.operator("sculpt.mask_filter", text='Shrink Mask')
+        op.filter_type = 'SHRINK'
+        op.auto_iteration_count = True
+        op = pie.operator("sculpt.mask_filter", text='Increase Contrast')
+        op.filter_type = 'CONTRAST_INCREASE'
+        op.auto_iteration_count = False
+        op = pie.operator("sculpt.mask_filter", text='Decrease Contrast')
+        op.filter_type = 'CONTRAST_DECREASE'
+        op.auto_iteration_count = False
+
+
 # ********** Panel **********
 
 
-class VIEW3D_PT_active_tool(Panel):
+class VIEW3D_PT_active_tool(Panel, ToolActivePanelHelper):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_label = "Active Tool"
     bl_category = "Tool"
-    # bl_context = ".active_tool"  # dot on purpose (access from tool settings)
+    # See comment below.
+    # bl_options = {'HIDE_HEADER'}
 
-    def draw(self, context):
-        layout = self.layout
+    # Don't show in properties editor.
+    @classmethod
+    def poll(cls, context):
+        return context.area.type == 'VIEW_3D'
 
-        # Panel display of topbar tool settings.
-        # currently displays in tool settings, keep here since the same functionality is used for the topbar.
 
-        layout.use_property_split = True
-        layout.use_property_decorate = False
+# FIXME(campbell): remove this second panel once 'HIDE_HEADER' works with category tabs,
+# Currently pinning allows ordering headerless panels below panels with headers.
+class VIEW3D_PT_active_tool_duplicate(Panel, ToolActivePanelHelper):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Tool"
+    bl_options = {'HIDE_HEADER'}
 
-        from .space_toolsystem_common import ToolSelectPanelHelper
-        ToolSelectPanelHelper.draw_active_tool_header(context, layout, show_tool_name=True)
+    # Only show in properties editor.
+    @classmethod
+    def poll(cls, context):
+        return context.area.type != 'VIEW_3D'
 
 
 class VIEW3D_PT_view3d_properties(Panel):
@@ -4825,7 +5035,7 @@ class VIEW3D_PT_collections(Panel):
     bl_label = "Collections"
     bl_options = {'DEFAULT_CLOSED'}
 
-    def _draw_collection(self, layout, view_layer, collection, index):
+    def _draw_collection(self, layout, view_layer, use_local_collections, collection, index):
         need_separator = index
         for child in collection.children:
             index += 1
@@ -4851,6 +5061,7 @@ class VIEW3D_PT_collections(Panel):
                 pass
 
             row = layout.row()
+            row.use_property_decorate = False
             sub = row.split(factor=0.98)
             subrow = sub.row()
             subrow.alignment = 'LEFT'
@@ -4861,11 +5072,18 @@ class VIEW3D_PT_collections(Panel):
             sub = row.split()
             subrow = sub.row(align=True)
             subrow.alignment = 'RIGHT'
-            subrow.active = collection.is_visible  # Parent collection runtime visibility
-            subrow.prop(child, "hide_viewport", text="", emboss=False)
+            if not use_local_collections:
+                subrow.active = collection.is_visible  # Parent collection runtime visibility
+                subrow.prop(child, "hide_viewport", text="", emboss=False)
+            else:
+                subrow.active = collection.visible_get()  # Parent collection runtime visibility
+                icon = 'HIDE_OFF' if child.visible_get() else 'HIDE_ON'
+                props = subrow.operator("object.hide_collection", text="", icon=icon, emboss=False)
+                props.collection_index = index
+                props.toggle = True
 
         for child in collection.children:
-            index = self._draw_collection(layout, view_layer, child, index)
+            index = self._draw_collection(layout, view_layer, use_local_collections, child, index)
 
         return index
 
@@ -4873,11 +5091,17 @@ class VIEW3D_PT_collections(Panel):
         layout = self.layout
         layout.use_property_split = False
 
+        view = context.space_data
         view_layer = context.view_layer
-        # We pass index 0 here beause the index is increased
+
+        layout.use_property_split = True
+        layout.prop(view, "use_local_collections")
+        layout.separator()
+
+        # We pass index 0 here because the index is increased
         # so the first real index is 1
         # And we start with index as 1 because we skip the master collection
-        self._draw_collection(layout, view_layer, view_layer.layer_collection, 0)
+        self._draw_collection(layout, view_layer, view.use_local_collections, view_layer.layer_collection, 0)
 
 
 class VIEW3D_PT_object_type_visibility(Panel):
@@ -4901,7 +5125,7 @@ class VIEW3D_PT_object_type_visibility(Panel):
             ("curve", "Curve"),
             ("surf", "Surface"),
             ("meta", "Meta"),
-            ("font", "Font"),
+            ("font", "Text"),
             ("grease_pencil", "Grease Pencil"),
             (None, None),
             # Other
@@ -4964,7 +5188,8 @@ class VIEW3D_PT_shading_lighting(Panel):
     @classmethod
     def poll(cls, context):
         shading = VIEW3D_PT_shading.get_shading(context)
-        return shading.type in {'SOLID', 'MATERIAL'}
+        engine = context.scene.render.engine
+        return shading.type in {'SOLID', 'MATERIAL'} or engine == 'BLENDER_EEVEE' and shading.type == 'RENDERED'
 
     def draw(self, context):
         layout = self.layout
@@ -4989,7 +5214,13 @@ class VIEW3D_PT_shading_lighting(Panel):
                     sub.scale_y = 0.6  # smaller studiolight preview
                     sub.template_icon_view(shading, "studio_light", scale_popup=3.0)
                 else:
-                    sub.prop(system, "use_studio_light_edit", text="Disable Studio Light Edit", icon='NONE', toggle=True)
+                    sub.prop(
+                        system,
+                        "use_studio_light_edit",
+                        text="Disable Studio Light Edit",
+                        icon='NONE',
+                        toggle=True,
+                    )
 
                 col = split.column()
                 col.operator("preferences.studiolight_show", emboss=False, text="", icon='PREFERENCES')
@@ -5006,7 +5237,6 @@ class VIEW3D_PT_shading_lighting(Panel):
 
             elif shading.light == 'MATCAP':
                 sub.scale_y = 0.6  # smaller matcap preview
-
                 sub.template_icon_view(shading, "studio_light", scale_popup=3.0)
 
                 col = split.column()
@@ -5016,8 +5246,30 @@ class VIEW3D_PT_shading_lighting(Panel):
         elif shading.type == 'MATERIAL':
             col.prop(shading, "use_scene_lights")
             col.prop(shading, "use_scene_world")
+            col = layout.column()
+            split = col.split(factor=0.9)
 
             if not shading.use_scene_world:
+                col = split.column()
+                sub = col.row()
+                sub.scale_y = 0.6
+                sub.template_icon_view(shading, "studio_light", scale_popup=3)
+
+                col = split.column()
+                col.operator("preferences.studiolight_show", emboss=False, text="", icon='PREFERENCES')
+
+                split = layout.split(factor=0.9)
+                col = split.column()
+                col.prop(shading, "studiolight_rotate_z", text="Rotation")
+                col.prop(shading, "studiolight_intensity")
+                col.prop(shading, "studiolight_background_alpha")
+                col = split.column()  # to align properly with above
+
+        elif shading.type == 'RENDERED':
+            col.prop(shading, "use_scene_lights_render")
+            col.prop(shading, "use_scene_world_render")
+
+            if not shading.use_scene_world_render:
                 col = layout.column()
                 split = col.split(factor=0.9)
 
@@ -5029,12 +5281,12 @@ class VIEW3D_PT_shading_lighting(Panel):
                 col = split.column()
                 col.operator("preferences.studiolight_show", emboss=False, text="", icon='PREFERENCES')
 
-                if shading.selected_studio_light.type == 'WORLD':
-                    split = layout.split(factor=0.9)
-                    col = split.column()
-                    col.prop(shading, "studiolight_rotate_z", text="Rotation")
-                    col.prop(shading, "studiolight_background_alpha")
-                    col = split.column()  # to align properly with above
+                split = layout.split(factor=0.9)
+                col = split.column()
+                col.prop(shading, "studiolight_rotate_z", text="Rotation")
+                col.prop(shading, "studiolight_intensity")
+                col.prop(shading, "studiolight_background_alpha")
+                col = split.column()  # to align properly with above
 
 
 class VIEW3D_PT_shading_color(Panel):
@@ -5081,6 +5333,11 @@ class VIEW3D_PT_shading_options(Panel):
     bl_label = "Options"
     bl_parent_id = 'VIEW3D_PT_shading'
 
+    @classmethod
+    def poll(cls, context):
+        shading = VIEW3D_PT_shading.get_shading(context)
+        return shading.type in {'WIREFRAME', 'SOLID'}
+
     def draw(self, context):
         layout = self.layout
 
@@ -5088,7 +5345,7 @@ class VIEW3D_PT_shading_options(Panel):
 
         col = layout.column()
 
-        if shading.type != 'WIREFRAME':
+        if shading.type == 'SOLID':
             col.prop(shading, "show_backface_culling")
 
         row = col.row(align=True)
@@ -5103,7 +5360,7 @@ class VIEW3D_PT_shading_options(Panel):
             sub = row.row()
             sub.active = shading.show_xray
             sub.prop(shading, "xray_alpha", text="X-Ray")
-            #X-ray mode is off when alpha is 1.0
+            # X-ray mode is off when alpha is 1.0
             xray_active = shading.show_xray and shading.xray_alpha != 1
 
             row = col.row(align=True)
@@ -5155,8 +5412,10 @@ class VIEW3D_PT_shading_options(Panel):
             sub.active = shading.show_object_outline
             sub.prop(shading, "object_outline_color", text="")
 
+        if shading.type == 'SOLID':
             col = layout.column()
-            if (shading.light == 'STUDIO') and (shading.type != 'WIREFRAME'):
+            if shading.light in {'STUDIO', 'MATCAP'}:
+                col.active = shading.selected_studio_light.has_specular_highlight_pass
                 col.prop(shading, "show_specular_highlight", text="Specular Lighting")
 
 
@@ -5258,6 +5517,8 @@ class VIEW3D_PT_overlay_guides(Panel):
         layout = self.layout
 
         view = context.space_data
+        scene = context.scene
+
         overlay = view.overlay
         shading = view.shading
         display_all = overlay.show_overlays
@@ -5271,14 +5532,22 @@ class VIEW3D_PT_overlay_guides(Panel):
         row = sub.row()
         row_el = row.column()
         row_el.prop(overlay, "show_ortho_grid", text="Grid")
-        grid_active = view.region_quadviews or (view.region_3d.is_orthographic_side_view and not view.region_3d.is_perspective)
+        grid_active = (
+            view.region_quadviews or
+            (view.region_3d.is_orthographic_side_view and not view.region_3d.is_perspective)
+        )
         row_el.active = grid_active
         row.prop(overlay, "show_floor", text="Floor")
 
         if overlay.show_floor or overlay.show_ortho_grid:
             sub = col.row(align=True)
-            sub.active = (overlay.show_floor and not view.region_3d.is_orthographic_side_view) or (overlay.show_ortho_grid and grid_active)
+            sub.active = (
+                (overlay.show_floor and not view.region_3d.is_orthographic_side_view) or
+                (overlay.show_ortho_grid and grid_active)
+            )
             sub.prop(overlay, "grid_scale", text="Scale")
+            sub = sub.row(align=True)
+            sub.active = scene.unit_settings.system == 'NONE'
             sub.prop(overlay, "grid_subdivisions", text="Subdivisions")
 
         sub = split.column()
@@ -5414,6 +5683,7 @@ class VIEW3D_PT_overlay_edit_mesh(Panel):
         layout = self.layout
 
         view = context.space_data
+        shading = view.shading
         overlay = view.overlay
         display_all = overlay.show_overlays
 
@@ -5423,6 +5693,7 @@ class VIEW3D_PT_overlay_edit_mesh(Panel):
         split = col.split()
 
         sub = split.column()
+        sub.active = not ((shading.type == 'WIREFRAME') or shading.show_xray)
         sub.prop(overlay, "show_edges", text="Edges")
         sub = split.column()
         sub.prop(overlay, "show_faces", text="Faces")
@@ -5434,6 +5705,10 @@ class VIEW3D_PT_overlay_edit_mesh(Panel):
         row.prop(overlay, "show_edge_sharp", text="Sharp", text_ctxt=i18n_contexts.plural, toggle=True)
         row.prop(overlay, "show_edge_bevel_weight", text="Bevel", toggle=True)
         row.prop(overlay, "show_edge_seams", text="Seams", toggle=True)
+
+        if context.preferences.view.show_developer_ui:
+            col.label(text="Developer")
+            col.prop(overlay, "show_extra_indices", text="Indices")
 
 
 class VIEW3D_PT_overlay_edit_mesh_shading(Panel):
@@ -5450,6 +5725,7 @@ class VIEW3D_PT_overlay_edit_mesh_shading(Panel):
         layout = self.layout
 
         view = context.space_data
+        shading = view.shading
         overlay = view.overlay
         tool_settings = context.tool_settings
         display_all = overlay.show_overlays
@@ -5467,12 +5743,21 @@ class VIEW3D_PT_overlay_edit_mesh_shading(Panel):
             sub = row.row()
             sub.prop(tool_settings, "vertex_group_user", expand=True)
 
-        col.prop(overlay, "show_statvis", text="Mesh Analysis")
+        if shading.type == 'WIREFRAME':
+            xray = shading.show_xray_wireframe and shading.xray_alpha_wireframe < 1.0
+        elif shading.type == 'SOLID':
+            xray = shading.show_xray and shading.xray_alpha < 1.0
+        else:
+            xray = False
+        statvis_active = not xray
+        row = col.row()
+        row.active = statvis_active
+        row.prop(overlay, "show_statvis", text="Mesh Analysis")
         if overlay.show_statvis:
             col = col.column()
+            col.active = statvis_active
 
             sub = col.split()
-            sub.active = overlay.show_statvis
             sub.label(text="Type")
             sub.prop(statvis, "type", text="")
 
@@ -5585,29 +5870,6 @@ class VIEW3D_PT_overlay_edit_mesh_freestyle(Panel):
         row.prop(overlay, "show_freestyle_face_marks", text="Face Marks")
 
 
-class VIEW3D_PT_overlay_edit_mesh_developer(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'HEADER'
-    bl_parent_id = 'VIEW3D_PT_overlay_edit_mesh'
-    bl_label = "Developer"
-
-    @classmethod
-    def poll(cls, context):
-        return context.mode == 'EDIT_MESH' and context.preferences.view.show_developer_ui
-
-    def draw(self, context):
-        layout = self.layout
-
-        view = context.space_data
-        overlay = view.overlay
-        display_all = overlay.show_overlays
-
-        col = layout.column()
-        col.active = display_all
-
-        col.prop(overlay, "show_extra_indices", text="Indices")
-
-
 class VIEW3D_PT_overlay_edit_curve(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'HEADER'
@@ -5659,8 +5921,6 @@ class VIEW3D_PT_overlay_sculpt(Panel):
         view = context.space_data
         overlay = view.overlay
 
-        layout.prop(sculpt, "show_diffuse_color")
-
         row = layout.row(align=True)
         row.prop(sculpt, "show_mask", text="")
         sub = row.row()
@@ -5703,23 +5963,36 @@ class VIEW3D_PT_overlay_pose(Panel):
             row.prop(overlay, "show_xray_bone")
 
 
-class VIEW3D_PT_overlay_paint(Panel):
+class VIEW3D_PT_overlay_texture_paint(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'HEADER'
     bl_parent_id = 'VIEW3D_PT_overlay'
-    bl_label = ""
+    bl_label = "Texture Paint"
 
     @classmethod
     def poll(cls, context):
-        return context.mode in {'PAINT_WEIGHT', 'PAINT_VERTEX', 'PAINT_TEXTURE'}
+        return context.mode == 'PAINT_TEXTURE'
 
-    def draw_header(self, context):
+    def draw(self, context):
         layout = self.layout
-        layout.label(text={
-            'PAINT_TEXTURE': "Texture Paint",
-            'PAINT_VERTEX': "Vertex Paint",
-            'PAINT_WEIGHT': "Weight Paint",
-        }[context.mode])
+        view = context.space_data
+        overlay = view.overlay
+        display_all = overlay.show_overlays
+
+        col = layout.column()
+        col.active = display_all
+        col.prop(overlay, "texture_paint_mode_opacity")
+
+
+class VIEW3D_PT_overlay_vertex_paint(Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'HEADER'
+    bl_parent_id = 'VIEW3D_PT_overlay'
+    bl_label = "Vertex Paint"
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'PAINT_VERTEX'
 
     def draw(self, context):
         layout = self.layout
@@ -5730,44 +6003,37 @@ class VIEW3D_PT_overlay_paint(Panel):
         col = layout.column()
         col.active = display_all
 
-        col.prop(overlay, {
-            'PAINT_TEXTURE': "texture_paint_mode_opacity",
-            'PAINT_VERTEX': "vertex_paint_mode_opacity",
-            'PAINT_WEIGHT': "weight_paint_mode_opacity",
-        }[context.mode], text="Opacity")
-
-        if context.mode == 'PAINT_WEIGHT':
-            row = col.split(factor=0.33)
-            row.label(text="Zero Weights")
-            sub = row.row()
-            sub.prop(context.tool_settings, "vertex_group_user", expand=True)
-
-            col.prop(overlay, "show_wpaint_contours")
-
-        if context.mode in {'PAINT_WEIGHT', 'PAINT_VERTEX'}:
-            col.prop(overlay, "show_paint_wire")
+        col.prop(overlay, "vertex_paint_mode_opacity", text="Opacity")
+        col.prop(overlay, "show_paint_wire")
 
 
-class VIEW3D_PT_pivot_point(Panel):
+class VIEW3D_PT_overlay_weight_paint(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'HEADER'
-    bl_label = "Pivot Point"
-    bl_ui_units_x = 8
+    bl_parent_id = 'VIEW3D_PT_overlay'
+    bl_label = "Weight Paint"
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'PAINT_WEIGHT'
 
     def draw(self, context):
-        tool_settings = context.tool_settings
-        obj = context.active_object
-        mode = context.mode
-
         layout = self.layout
+        view = context.space_data
+        overlay = view.overlay
+        display_all = overlay.show_overlays
+
         col = layout.column()
-        col.label(text="Pivot Point")
-        col.prop(tool_settings, "transform_pivot_point", expand=True)
+        col.active = display_all
 
-        if (obj is None) or (mode in {'OBJECT', 'POSE', 'WEIGHT_PAINT'}):
-            col.separator()
+        col.prop(overlay, "weight_paint_mode_opacity", text="Opacity")
+        row = col.split(factor=0.33)
+        row.label(text="Zero Weights")
+        sub = row.row()
+        sub.prop(context.tool_settings, "vertex_group_user", expand=True)
 
-            col.prop(tool_settings, "use_transform_pivot_point_align")
+        col.prop(overlay, "show_wpaint_contours")
+        col.prop(overlay, "show_paint_wire")
 
 
 class VIEW3D_PT_snapping(Panel):
@@ -5783,7 +6049,7 @@ class VIEW3D_PT_snapping(Panel):
 
         layout = self.layout
         col = layout.column()
-        col.label(text="Snapping")
+        col.label(text="Snap to")
         col.prop(tool_settings, "snap_elements", expand=True)
 
         col.separator()
@@ -5791,9 +6057,11 @@ class VIEW3D_PT_snapping(Panel):
             col.prop(tool_settings, "use_snap_grid_absolute")
 
         if snap_elements != {'INCREMENT'}:
-            col.label(text="Target")
+            col.label(text="Snap with")
             row = col.row(align=True)
             row.prop(tool_settings, "snap_target", expand=True)
+
+            col.prop(tool_settings, "use_snap_backface_culling")
 
             if obj:
                 if object_mode == 'EDIT':
@@ -5918,27 +6186,28 @@ class VIEW3D_PT_gpencil_guide(Panel):
         col.active = settings.use_guide
         col.prop(settings, "type", expand=True)
 
-        if settings.type in {'PARALLEL'}:
+        if settings.type in {'ISO', 'PARALLEL', 'RADIAL'}:
             col.prop(settings, "angle")
             row = col.row(align=True)
 
         col.prop(settings, "use_snapping")
         if settings.use_snapping:
 
-            if settings.type in {'RADIAL'}:
+            if settings.type == 'RADIAL':
                 col.prop(settings, "angle_snap")
             else:
                 col.prop(settings, "spacing")
 
-        col.label(text="Reference Point")
-        row = col.row(align=True)
-        row.prop(settings, "reference_point", expand=True)
-        if settings.reference_point in {'CUSTOM'}:
-            col.prop(settings, "location", text="Custom Location")
-        if settings.reference_point in {'OBJECT'}:
-            col.prop(settings, "reference_object", text="Object Location")
-            if not settings.reference_object:
-                col.label(text="No object selected, using cursor")
+        if settings.type in {'CIRCULAR', 'RADIAL'} or settings.use_snapping:
+            col.label(text="Reference Point")
+            row = col.row(align=True)
+            row.prop(settings, "reference_point", expand=True)
+            if settings.reference_point == 'CUSTOM':
+                col.prop(settings, "location", text="Custom Location")
+            elif settings.reference_point == 'OBJECT':
+                col.prop(settings, "reference_object", text="Object Location")
+                if not settings.reference_object:
+                    col.label(text="No object selected, using cursor")
 
 
 class VIEW3D_PT_overlay_gpencil_options(Panel):
@@ -5976,17 +6245,17 @@ class VIEW3D_PT_overlay_gpencil_options(Panel):
         sub.prop(overlay, "gpencil_grid_opacity", text="Canvas", slider=True)
 
         row = col.row()
-        row.prop(overlay, "use_gpencil_paper", text="")
+        row.prop(overlay, "use_gpencil_fade_layers", text="")
         sub = row.row()
-        sub.active = overlay.use_gpencil_paper
-        sub.prop(overlay, "gpencil_paper_opacity", text="Fade 3D Objects", slider=True)
+        sub.active = overlay.use_gpencil_fade_layers
+        sub.prop(overlay, "gpencil_fade_layer", text="Fade Layers", slider=True)
 
-        if context.object.mode == 'PAINT_GPENCIL':
-            row = col.row()
-            row.prop(overlay, "use_gpencil_fade_layers", text="")
-            sub = row.row()
-            sub.active = overlay.use_gpencil_fade_layers
-            sub.prop(overlay, "gpencil_fade_layer", text="Fade Layers", slider=True)
+        row = col.row()
+        row.prop(overlay, "use_gpencil_paper", text="")
+        sub = row.row(align=True)
+        sub.active = overlay.use_gpencil_paper
+        sub.prop(overlay, "gpencil_paper_opacity", text="Fade Objects", slider=True)
+        sub.prop(overlay, "use_gpencil_fade_objects", text="", icon='OUTLINER_OB_GREASEPENCIL')
 
         if context.object.mode in {'EDIT_GPENCIL', 'SCULPT_GPENCIL', 'WEIGHT_GPENCIL'}:
             layout.prop(overlay, "use_gpencil_edit_lines", text="Edit Lines")
@@ -6150,64 +6419,122 @@ class VIEW3D_PT_gpencil_multi_frame(Panel):
 
 
 class VIEW3D_MT_gpencil_edit_context_menu(Menu):
-    bl_label = "Edit Context Menu"
+    bl_label = ""
 
     def draw(self, context):
+
+        is_point_mode = context.tool_settings.gpencil_selectmode_edit == 'POINT'
+        is_stroke_mode = context.tool_settings.gpencil_selectmode_edit == 'STROKE'
+        is_segment_mode = context.tool_settings.gpencil_selectmode_edit == 'SEGMENT'
+
         layout = self.layout
-        is_3d_view = context.space_data.type == 'VIEW_3D'
 
         layout.operator_context = 'INVOKE_REGION_WIN'
 
-        # Add
-        layout.operator("gpencil.stroke_subdivide", text="Subdivide")
+        row = layout.row()
 
-        layout.separator()
+        if is_point_mode or is_segment_mode:
+            col = row.column()
 
-        # Transform
-        layout.operator("transform.transform", text="Shrink/Fatten").mode = 'GPENCIL_SHRINKFATTEN'
-        layout.operator("gpencil.stroke_smooth", text="Smooth")
-        layout.operator("gpencil.stroke_trim", text="Trim")
+            col.label(text="Point Context Menu", icon='GP_SELECT_POINTS')
+            col.separator()
 
-        layout.separator()
+            # Additive Operators
+            col.operator("gpencil.stroke_subdivide", text="Subdivide").only_selected = True
 
-        # Modify
-        layout.menu("VIEW3D_MT_assign_material")
-        layout.operator_menu_enum("gpencil.stroke_arrange", "direction", text="Arrange Strokes")
-        layout.operator("gpencil.stroke_flip", text="Flip Direction")
-        layout.operator_menu_enum("gpencil.stroke_caps_set", text="Toggle Caps", property="type")
+            col.separator()
 
-        layout.separator()
+            col.operator("gpencil.extrude_move", text="Extrude Points")
 
-        layout.operator("gpencil.duplicate_move", text="Duplicate")
-        layout.operator("gpencil.copy", text="Copy", icon='COPYDOWN')
-        layout.operator("gpencil.paste", text="Paste", icon='PASTEDOWN').type = 'COPY'
-        layout.operator("gpencil.paste", text="Paste & Merge").type = 'MERGE'
-        layout.menu("VIEW3D_MT_gpencil_copy_layer")
-        layout.operator("gpencil.frame_duplicate", text="Duplicate Active Frame")
-        layout.operator("gpencil.frame_duplicate", text="Duplicate Active Frame All Layers").mode = 'ALL'
+            col.separator()
 
-        layout.separator()
+            # Deform Operators
+            col.operator("gpencil.stroke_smooth", text="Smooth Points").only_selected = True
+            col.operator("transform.bend", text="Bend")
+            col.operator("transform.shear", text="Shear")
+            col.operator("transform.tosphere", text="To Sphere")
+            col.operator("transform.transform", text="Shrink Fatten").mode = 'GPENCIL_SHRINKFATTEN'
 
-        layout.operator("gpencil.stroke_join", text="Join").type = 'JOIN'
-        layout.operator("gpencil.stroke_join", text="Join & Copy").type = 'JOINCOPY'
-        layout.menu("GPENCIL_MT_separate", text="Separate")
-        layout.operator("gpencil.stroke_split", text="Split")
+            col.separator()
 
-        layout.separator()
+            col.menu("VIEW3D_MT_mirror", text="Mirror Points")
+            col.menu("VIEW3D_MT_snap", text="Snap Points")
 
-        layout.menu("VIEW3D_MT_mirror")
-        layout.menu("VIEW3D_MT_snap")
+            col.separator()
 
-        layout.separator()
+            # Duplicate operators
+            col.operator("gpencil.duplicate_move", text="Duplicate")
+            col.operator("gpencil.copy", text="Copy", icon='COPYDOWN')
+            col.operator("gpencil.paste", text="Paste", icon='PASTEDOWN').type = 'ACTIVE'
+            col.operator("gpencil.paste", text="Paste by Layer").type = 'LAYER'
 
-        # Remove
-        if is_3d_view:
-            layout.menu("GPENCIL_MT_cleanup")
+            col.separator()
 
-        layout.operator("gpencil.stroke_simplify_fixed", text="Simplify")
-        layout.operator("gpencil.stroke_simplify", text="Simplify Adaptive")
-        layout.operator("gpencil.stroke_merge", text="Merge")
-        layout.menu("VIEW3D_MT_edit_gpencil_delete")
+            # Removal Operators
+            col.operator("gpencil.stroke_merge", text="Merge Points")
+            col.operator("gpencil.stroke_merge_by_distance").use_unselected = False
+            col.operator("gpencil.stroke_split", text="Split")
+            col.operator("gpencil.stroke_separate", text="Separate").mode = 'POINT'
+
+            col.separator()
+
+            col.operator("gpencil.delete", text="Delete Points").type = 'POINTS'
+            col.operator("gpencil.dissolve", text="Dissolve Points").type = 'POINTS'
+            col.operator("gpencil.dissolve", text="Dissolve Between").type = 'BETWEEN'
+            col.operator("gpencil.dissolve", text="Dissolve Unselected").type = 'UNSELECT'
+
+        if is_stroke_mode:
+
+            col = row.column()
+            col.label(text="Stroke Context Menu", icon='GP_SELECT_STROKES')
+            col.separator()
+
+            # Main Strokes Operators
+            col.operator("gpencil.stroke_subdivide", text="Subdivide").only_selected = False
+            col.menu("VIEW3D_MT_gpencil_simplify")
+            col.operator("gpencil.stroke_trim", text="Trim")
+
+            col.separator()
+
+            col.operator("gpencil.stroke_smooth", text="Smooth Stroke").only_selected = False
+            col.operator("transform.transform", text="Shrink Fatten").mode = 'GPENCIL_SHRINKFATTEN'
+
+            col.separator()
+
+            # Layer and Materials operators
+            col.menu("GPENCIL_MT_move_to_layer")
+            col.menu("VIEW3D_MT_assign_material")
+            col.operator("gpencil.set_active_material", text="Set as Active Material")
+            col.operator_menu_enum("gpencil.stroke_arrange", "direction", text="Arrange Strokes")
+
+            col.separator()
+
+            col.menu("VIEW3D_MT_mirror", text="Mirror Stroke")
+            col.menu("VIEW3D_MT_snap", text="Snap Stroke")
+
+            col.separator()
+
+            # Duplicate operators
+            col.operator("gpencil.duplicate_move", text="Duplicate")
+            col.operator("gpencil.copy", text="Copy", icon='COPYDOWN')
+            col.operator("gpencil.paste", text="Paste", icon='PASTEDOWN').type = 'ACTIVE'
+            col.operator("gpencil.paste", text="Paste by Layer").type = 'LAYER'
+
+            col.separator()
+
+            # Removal Operators
+            col.operator("gpencil.stroke_merge_by_distance").use_unselected = True
+            col.operator_menu_enum("gpencil.stroke_join", "type", text="Join")
+            col.operator("gpencil.stroke_split", text="Split")
+            col.operator("gpencil.stroke_separate", text="Separate").mode = 'STROKE'
+
+            col.separator()
+
+            col.operator("gpencil.delete", text="Delete Strokes").type = 'STROKES'
+
+            col.separator()
+
+            col.operator("gpencil.reproject", text="Reproject Strokes")
 
 
 class VIEW3D_PT_gpencil_sculpt_context_menu(Panel):
@@ -6232,14 +6559,18 @@ class VIEW3D_PT_gpencil_sculpt_context_menu(Panel):
 
         layout.operator_context = 'INVOKE_REGION_WIN'
 
-        layout.operator("gpencil.blank_frame_add", text="Insert Blank", icon='ADD')
-        layout.operator("gpencil.frame_duplicate", text="Duplicate Active", icon='DUPLICATE')
-        layout.operator("gpencil.frame_duplicate", text="Duplicate for All Layers", icon='DUPLICATE').mode = 'ALL'
+        layout.operator("gpencil.blank_frame_add", text="Insert Blank in Active Layer", icon='ADD')
+        layout.operator("gpencil.blank_frame_add", text="Insert Blank in All Layers", icon='ADD').all_layers = True
 
         layout.separator()
 
-        layout.operator("gpencil.delete", text="Delete Active", icon='REMOVE').type = 'FRAME'
-        layout.operator("gpencil.active_frames_delete_all", text="Delete All Active Layers", icon='REMOVE')
+        layout.operator("gpencil.frame_duplicate", text="Duplicate Active Layer", icon='DUPLICATE')
+        layout.operator("gpencil.frame_duplicate", text="Duplicate All Layers", icon='DUPLICATE').mode = 'ALL'
+
+        layout.separator()
+
+        layout.operator("gpencil.delete", text="Delete Active Layer", icon='REMOVE').type = 'FRAME'
+        layout.operator("gpencil.active_frames_delete_all", text="Delete All Layers", icon='REMOVE')
 
 
 class VIEW3D_PT_gpencil_draw_context_menu(Panel):
@@ -6265,14 +6596,18 @@ class VIEW3D_PT_gpencil_draw_context_menu(Panel):
 
         layout.operator_context = 'INVOKE_REGION_WIN'
 
-        layout.operator("gpencil.blank_frame_add", text="Insert Blank", icon='ADD')
-        layout.operator("gpencil.frame_duplicate", text="Duplicate Active", icon='DUPLICATE')
-        layout.operator("gpencil.frame_duplicate", text="Duplicate for All Layers", icon='DUPLICATE').mode = 'ALL'
+        layout.operator("gpencil.blank_frame_add", text="Insert Blank in Active Layer", icon='ADD')
+        layout.operator("gpencil.blank_frame_add", text="Insert Blank in All Layers", icon='ADD').all_layers = True
 
         layout.separator()
 
-        layout.operator("gpencil.delete", text="Delete Active", icon='REMOVE').type = 'FRAME'
-        layout.operator("gpencil.active_frames_delete_all", text="Delete All Active Layers", icon='REMOVE')
+        layout.operator("gpencil.frame_duplicate", text="Duplicate Active Layer", icon='DUPLICATE')
+        layout.operator("gpencil.frame_duplicate", text="Duplicate All Layers", icon='DUPLICATE').mode = 'ALL'
+
+        layout.separator()
+
+        layout.operator("gpencil.delete", text="Delete Active Layer", icon='REMOVE').type = 'FRAME'
+        layout.operator("gpencil.active_frames_delete_all", text="Delete All Layers", icon='REMOVE')
 
 
 class VIEW3D_PT_paint_vertex_context_menu(Panel):
@@ -6450,14 +6785,15 @@ classes = (
     VIEW3D_MT_object_showhide,
     VIEW3D_MT_make_single_user,
     VIEW3D_MT_make_links,
-    VIEW3D_MT_brush,
     VIEW3D_MT_brush_paint_modes,
     VIEW3D_MT_paint_vertex,
     VIEW3D_MT_hook,
     VIEW3D_MT_vertex_group,
+    VIEW3D_MT_gpencil_vertex_group,
     VIEW3D_MT_paint_weight,
     VIEW3D_MT_sculpt,
-    VIEW3D_MT_hide_mask,
+    VIEW3D_MT_sculpt_set_pivot,
+    VIEW3D_MT_mask,
     VIEW3D_MT_particle,
     VIEW3D_MT_particle_context_menu,
     VIEW3D_MT_particle_showhide,
@@ -6489,6 +6825,7 @@ classes = (
     VIEW3D_MT_edit_mesh_normals,
     VIEW3D_MT_edit_mesh_normals_select_strength,
     VIEW3D_MT_edit_mesh_normals_set_strength,
+    VIEW3D_MT_edit_mesh_normals_average,
     VIEW3D_MT_edit_mesh_shading,
     VIEW3D_MT_edit_mesh_weights,
     VIEW3D_MT_edit_mesh_clean,
@@ -6498,7 +6835,10 @@ classes = (
     VIEW3D_MT_paint_gpencil,
     VIEW3D_MT_assign_material,
     VIEW3D_MT_edit_gpencil,
+    VIEW3D_MT_edit_gpencil_stroke,
+    VIEW3D_MT_edit_gpencil_point,
     VIEW3D_MT_edit_gpencil_delete,
+    VIEW3D_MT_edit_gpencil_showhide,
     VIEW3D_MT_weight_gpencil,
     VIEW3D_MT_gpencil_animation,
     VIEW3D_MT_gpencil_simplify,
@@ -6528,13 +6868,16 @@ classes = (
     VIEW3D_MT_edit_gpencil_interpolate,
     VIEW3D_MT_object_mode_pie,
     VIEW3D_MT_view_pie,
+    VIEW3D_MT_transform_gizmo_pie,
     VIEW3D_MT_shading_pie,
     VIEW3D_MT_shading_ex_pie,
     VIEW3D_MT_pivot_pie,
     VIEW3D_MT_snap_pie,
     VIEW3D_MT_orientations_pie,
     VIEW3D_MT_proportional_editing_falloff_pie,
+    VIEW3D_MT_sculpt_mask_edit_pie,
     VIEW3D_PT_active_tool,
+    VIEW3D_PT_active_tool_duplicate,
     VIEW3D_PT_view3d_properties,
     VIEW3D_PT_view3d_lock,
     VIEW3D_PT_view3d_cursor,
@@ -6562,12 +6905,12 @@ classes = (
     VIEW3D_PT_overlay_edit_mesh_measurement,
     VIEW3D_PT_overlay_edit_mesh_normals,
     VIEW3D_PT_overlay_edit_mesh_freestyle,
-    VIEW3D_PT_overlay_edit_mesh_developer,
     VIEW3D_PT_overlay_edit_curve,
-    VIEW3D_PT_overlay_paint,
+    VIEW3D_PT_overlay_texture_paint,
+    VIEW3D_PT_overlay_vertex_paint,
+    VIEW3D_PT_overlay_weight_paint,
     VIEW3D_PT_overlay_pose,
     VIEW3D_PT_overlay_sculpt,
-    VIEW3D_PT_pivot_point,
     VIEW3D_PT_snapping,
     VIEW3D_PT_proportional_edit,
     VIEW3D_PT_gpencil_origin,

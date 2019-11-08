@@ -27,25 +27,19 @@
 
 struct ARegion;
 struct DRWInstanceDataList;
-struct DRWPass;
 struct Depsgraph;
 struct DrawEngineType;
 struct GPUMaterial;
 struct GPUOffScreen;
 struct GPUViewport;
 struct ID;
-struct IDProperty;
 struct Main;
-struct Material;
 struct Object;
 struct RenderEngine;
 struct RenderEngineType;
 struct Scene;
 struct View3D;
-struct ViewContext;
 struct ViewLayer;
-struct ViewportEngineData;
-struct WorkSpace;
 struct bContext;
 struct rcti;
 
@@ -127,7 +121,8 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
 void DRW_draw_depth_loop(struct Depsgraph *depsgraph,
                          struct ARegion *ar,
                          struct View3D *v3d,
-                         struct GPUViewport *viewport);
+                         struct GPUViewport *viewport,
+                         bool use_opengl_context);
 void DRW_draw_depth_loop_gpencil(struct Depsgraph *depsgraph,
                                  struct ARegion *ar,
                                  struct View3D *v3d,
@@ -135,10 +130,10 @@ void DRW_draw_depth_loop_gpencil(struct Depsgraph *depsgraph,
 void DRW_draw_depth_object(struct ARegion *ar,
                            struct GPUViewport *viewport,
                            struct Object *object);
-
-void DRW_framebuffer_select_id_setup(struct ARegion *ar, const bool clear);
-void DRW_framebuffer_select_id_release(struct ARegion *ar);
-void DRW_framebuffer_select_id_read(const struct rcti *rect, uint *r_buf);
+void DRW_draw_select_id(struct Depsgraph *depsgraph,
+                        struct ARegion *ar,
+                        struct View3D *v3d,
+                        const struct rcti *rect);
 
 /* grease pencil render */
 bool DRW_render_check_grease_pencil(struct Depsgraph *depsgraph);
@@ -146,7 +141,6 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
 void DRW_gpencil_freecache(struct Object *ob);
 
 /* This is here because GPUViewport needs it */
-void DRW_pass_free(struct DRWPass *pass);
 struct DRWInstanceDataList *DRW_instance_data_list_create(void);
 void DRW_instance_data_list_free(struct DRWInstanceDataList *idatalist);
 
@@ -164,8 +158,8 @@ void DRW_opengl_context_disable_ex(bool restore);
 
 void DRW_opengl_render_context_enable(void *re_gl_context);
 void DRW_opengl_render_context_disable(void *re_gl_context);
-void DRW_gawain_render_context_enable(void *re_gpu_context);
-void DRW_gawain_render_context_disable(void *re_gpu_context);
+void DRW_gpu_render_context_enable(void *re_gpu_context);
+void DRW_gpu_render_context_disable(void *re_gpu_context);
 
 void DRW_deferred_shader_remove(struct GPUMaterial *mat);
 

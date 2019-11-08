@@ -42,11 +42,13 @@ set(SRC
   intern/builder/deg_builder_map.cc
   intern/builder/deg_builder_nodes.cc
   intern/builder/deg_builder_nodes_rig.cc
+  intern/builder/deg_builder_nodes_scene.cc
   intern/builder/deg_builder_nodes_view_layer.cc
   intern/builder/deg_builder_pchanmap.cc
   intern/builder/deg_builder_relations.cc
   intern/builder/deg_builder_relations_keys.cc
   intern/builder/deg_builder_relations_rig.cc
+  intern/builder/deg_builder_relations_scene.cc
   intern/builder/deg_builder_relations_view_layer.cc
   intern/builder/deg_builder_rna.cc
   intern/builder/deg_builder_transitive.cc
@@ -71,6 +73,7 @@ set(SRC
   intern/depsgraph_query.cc
   intern/depsgraph_query_foreach.cc
   intern/depsgraph_query_iter.cc
+  intern/depsgraph_registry.cc
   intern/depsgraph_tag.cc
   intern/depsgraph_type.cc
   intern/depsgraph_update.cc
@@ -105,6 +108,7 @@ set(SRC
   intern/node/deg_node_time.h
   intern/depsgraph.h
   intern/depsgraph_physics.h
+  intern/depsgraph_registry.h
   intern/depsgraph_tag.h
   intern/depsgraph_type.h
   intern/depsgraph_update.h
@@ -112,12 +116,5 @@ set(SRC
 
 set(LIB
 )
-
-if(WITH_BOOST)
-  list(APPEND INC_SYS
-    ${BOOST_INCLUDE_DIR}
-  )
-  add_definitions(-DHAVE_BOOST_FUNCTION_BINDINGS)
-endif()
 
 blender_add_lib(bf_depsgraph "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

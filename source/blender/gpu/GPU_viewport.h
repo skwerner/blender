@@ -37,12 +37,20 @@ typedef struct GPUViewport GPUViewport;
 
 /* Contains memory pools information */
 typedef struct ViewportMemoryPool {
-  struct BLI_mempool *calls;
-  struct BLI_mempool *states;
-  struct BLI_mempool *shgroups;
-  struct BLI_mempool *uniforms;
-  struct BLI_mempool *passes;
-  struct BLI_mempool *images;
+  struct BLI_memblock *commands;
+  struct BLI_memblock *commands_small;
+  struct BLI_memblock *callbuffers;
+  struct BLI_memblock *obmats;
+  struct BLI_memblock *obinfos;
+  struct BLI_memblock *cullstates;
+  struct BLI_memblock *shgroups;
+  struct BLI_memblock *uniforms;
+  struct BLI_memblock *views;
+  struct BLI_memblock *passes;
+  struct BLI_memblock *images;
+  struct GPUUniformBuffer **matrices_ubo;
+  struct GPUUniformBuffer **obinfos_ubo;
+  uint ubo_len;
 } ViewportMemoryPool;
 
 /* All FramebufferLists are just the same pointers with different names */
@@ -118,7 +126,7 @@ GPUTexture *GPU_viewport_color_texture(GPUViewport *viewport);
 GPUTexture *GPU_viewport_texture_pool_query(
     GPUViewport *viewport, void *engine, int width, int height, int format);
 
-bool GPU_viewport_engines_data_validate(GPUViewport *viewport, unsigned int hash);
+bool GPU_viewport_engines_data_validate(GPUViewport *viewport, void **engine_handle_array);
 void GPU_viewport_cache_release(GPUViewport *viewport);
 
 #endif  // __GPU_VIEWPORT_H__

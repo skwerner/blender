@@ -24,20 +24,40 @@ from bpy.types import (
     Panel,
 )
 from bpy.app.translations import pgettext_iface as iface_
+from bpy.app.translations import contexts as i18n_contexts
 
 
 class USERPREF_HT_header(Header):
     bl_space_type = 'PREFERENCES'
 
-    def draw(self, _context):
+    @staticmethod
+    def draw_buttons(layout, context):
+        prefs = context.preferences
+
+        layout.scale_x = 1.0
+        layout.scale_y = 1.0
+        layout.operator_context = 'EXEC_AREA'
+
+        row = layout.row()
+        row.menu("USERPREF_MT_save_load", text="", icon='COLLAPSEMENU')
+
+        if prefs.use_preferences_save and (not bpy.app.use_userpref_skip_save_on_exit):
+            pass
+        else:
+            # Show '*' to let users know the preferences have been modified.
+            row.operator(
+                "wm.save_userpref",
+                text="Save Preferences{:s}".format(" *" if prefs.is_dirty else ""),
+            )
+
+    def draw(self, context):
         layout = self.layout
         layout.operator_context = 'EXEC_AREA'
 
         layout.template_header()
 
         layout.separator_spacer()
-
-        layout.operator("wm.save_userpref")
+        self.draw_buttons(layout, context)
 
 
 class USERPREF_PT_navigation_bar(Panel):
@@ -58,6 +78,31 @@ class USERPREF_PT_navigation_bar(Panel):
         col.prop(prefs, "active_section", expand=True)
 
 
+class USERPREF_MT_save_load(Menu):
+    bl_label = "Save & Load"
+
+    def draw(self, context):
+        layout = self.layout
+
+        prefs = context.preferences
+
+        row = layout.row()
+        row.active = not bpy.app.use_userpref_skip_save_on_exit
+        row.prop(prefs, "use_preferences_save", text="Auto-Save Preferences")
+
+        layout.separator()
+
+        layout.operator_context = 'EXEC_AREA'
+        if prefs.use_preferences_save:
+            layout.operator("wm.save_userpref", text="Save Preferences")
+        sub_revert = layout.column(align=True)
+        sub_revert.active = prefs.is_dirty
+        sub_revert.operator("wm.read_userpref", text="Revert to Saved Preferences")
+
+        layout.operator_context = 'INVOKE_AREA'
+        layout.operator("wm.read_factory_userpref", text="Load Factory Preferences")
+
+
 class USERPREF_PT_save_preferences(Panel):
     bl_label = "Save Preferences"
     bl_space_type = 'PREFERENCES'
@@ -73,14 +118,14 @@ class USERPREF_PT_save_preferences(Panel):
 
         return False
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
         layout.operator_context = 'EXEC_AREA'
 
         layout.scale_x = 1.3
         layout.scale_y = 1.3
 
-        layout.operator("wm.save_userpref")
+        USERPREF_HT_header.draw_buttons(layout, context)
 
 
 # Panel mix-in.
@@ -169,6 +214,7 @@ class USERPREF_PT_interface_text(PreferencePanel, Panel):
 
 class USERPREF_PT_interface_translation(PreferencePanel, Panel):
     bl_label = "Translation"
+    bl_translation_context = i18n_contexts.id_windowmanager
 
     @classmethod
     def poll(cls, context):
@@ -213,9 +259,30 @@ class USERPREF_PT_interface_editors(PreferencePanel, Panel):
 
         flow.prop(system, "use_region_overlap")
         flow.prop(view, "show_layout_ui", text="Corner Splitting")
+        flow.prop(view, "show_navigate_ui")
         flow.prop(view, "color_picker_type")
         flow.row().prop(view, "header_align")
         flow.prop(view, "factor_display_type")
+
+
+class USERPREF_PT_interface_temporary_windows(PreferencePanel, Panel):
+    bl_label = "Temporary Windows"
+    bl_parent_id = "USERPREF_PT_interface_editors"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'INTERFACE')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(view, "render_display_type", text="Render in")
+        flow.prop(view, "filebrowser_display_type", text="File Browser")
 
 
 class USERPREF_PT_interface_menus(Panel):
@@ -316,7 +383,7 @@ class USERPREF_PT_edit_objects_duplicate_data(PreferencePanel, Panel):
         col.prop(edit, "use_duplicate_action", text="Action")
         col.prop(edit, "use_duplicate_armature", text="Armature")
         col.prop(edit, "use_duplicate_curve", text="Curve")
-        # col.prop(edit, "use_duplicate_fcurve", text="F-Curve")
+        # col.prop(edit, "use_duplicate_fcurve", text="F-Curve")  # Not implemented.
         col.prop(edit, "use_duplicate_light", text="Light")
         col.prop(edit, "use_duplicate_lightprobe", text="Light Probe")
         col = flow.column()
@@ -327,7 +394,7 @@ class USERPREF_PT_edit_objects_duplicate_data(PreferencePanel, Panel):
         col = flow.column()
         col.prop(edit, "use_duplicate_surface", text="Surface")
         col.prop(edit, "use_duplicate_text", text="Text")
-        col.prop(edit, "use_duplicate_texture", text="Texture")
+        # col.prop(edit, "use_duplicate_texture", text="Texture")  # Not implemented.
         col.prop(edit, "use_duplicate_grease_pencil", text="Grease Pencil")
 
 
@@ -384,7 +451,6 @@ class USERPREF_PT_edit_annotations(PreferencePanel, Panel):
 
         flow.prop(edit, "grease_pencil_default_color", text="Default Color")
         flow.prop(edit, "grease_pencil_eraser_radius", text="Eraser Radius")
-        flow.prop(edit, "use_grease_pencil_simplify_stroke", text="Simplify Stroke")
 
 
 class USERPREF_PT_edit_weight_paint(PreferencePanel, Panel):
@@ -503,6 +569,7 @@ class USERPREF_PT_animation_fcurves(PreferencePanel, Panel):
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
         flow.prop(edit, "fcurve_unselected_alpha", text="F-Curve Visibility")
+        flow.prop(edit, "fcurve_new_auto_smoothing", text="Default Smoothing Mode")
         flow.prop(edit, "keyframe_new_interpolation_type", text="Default Interpolation")
         flow.prop(edit, "keyframe_new_handle_type", text="Default Handles")
         flow.prop(edit, "use_insertkey_xyz_to_rgb", text="XYZ to RGB")
@@ -581,7 +648,7 @@ class USERPREF_PT_viewport_display(PreferencePanel, Panel):
 
         col = flow.column()
         col.prop(view, "gizmo_size")
-        col.prop(view, "lookdev_ball_size")
+        col.prop(view, "lookdev_sphere_size")
 
         flow.separator()
 
@@ -589,10 +656,8 @@ class USERPREF_PT_viewport_display(PreferencePanel, Panel):
         col.prop(view, "mini_axis_type", text="3D Viewport Axis")
 
         if view.mini_axis_type == 'MINIMAL':
-            sub = col.column()
-            sub.active = view.mini_axis_type == 'MINIMAL'
-            sub.prop(view, "mini_axis_size", text="Size")
-            sub.prop(view, "mini_axis_brightness", text="Brightness")
+            col.prop(view, "mini_axis_size", text="Size")
+            col.prop(view, "mini_axis_brightness", text="Brightness")
 
 
 class USERPREF_PT_viewport_quality(PreferencePanel, Panel):
@@ -609,7 +674,7 @@ class USERPREF_PT_viewport_quality(PreferencePanel, Panel):
 
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        flow.prop(system, "gpu_viewport_quality")
+        flow.prop(system, "viewport_aa")
         flow.prop(system, "multi_sample", text="Multisampling")
         flow.prop(system, "gpencil_multi_sample", text="Grease Pencil Multisampling")
         flow.prop(system, "use_edit_mode_smooth_wire")
@@ -770,31 +835,51 @@ class PreferenceThemeWidgetColorPanel:
 
         layout.use_property_split = True
 
-        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+        flow = layout.grid_flow(row_major=False, columns=2, even_columns=True, even_rows=False, align=False)
 
-        col = flow.column()
-        col.prop(widget_style, "outline")
-        col.prop(widget_style, "item", slider=True)
-        col.prop(widget_style, "inner", slider=True)
-        col.prop(widget_style, "inner_sel", slider=True)
-
-        col = flow.column()
+        col = flow.column(align=True)
         col.prop(widget_style, "text")
-        col.prop(widget_style, "text_sel")
+        col.prop(widget_style, "text_sel", text="Selected")
+        col.prop(widget_style, "item", slider=True)
+
+        col = flow.column(align=True)
+        col.prop(widget_style, "inner", slider=True)
+        col.prop(widget_style, "inner_sel", text="Selected", slider=True)
+        col.prop(widget_style, "outline")
+
+        col.separator()
+
         col.prop(widget_style, "roundness")
-
-        col = flow.column()
-        col.prop(widget_style, "show_shaded")
-
-        colsub = col.column()
-        colsub.active = widget_style.show_shaded
-        colsub.prop(widget_style, "shadetop")
-        colsub.prop(widget_style, "shadedown")
 
     @classmethod
     def poll(cls, context):
         prefs = context.preferences
         return (prefs.active_section == 'THEMES')
+
+
+class PreferenceThemeWidgetShadePanel:
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'WINDOW'
+
+    def draw(self, context):
+        theme = context.preferences.themes[0]
+        ui = theme.user_interface
+        widget_style = getattr(ui, self.wcol)
+        layout = self.layout
+
+        layout.use_property_split = True
+
+        col = layout.column(align=True)
+        col.active = widget_style.show_shaded
+        col.prop(widget_style, "shadetop", text="Shade Top")
+        col.prop(widget_style, "shadedown", text="Down")
+
+    def draw_header(self, context):
+        theme = context.preferences.themes[0]
+        ui = theme.user_interface
+        widget_style = getattr(ui, self.wcol)
+
+        self.layout.prop(widget_style, "show_shaded", text="")
 
 
 class USERPREF_PT_theme_interface_state(PreferencePanel, Panel):
@@ -887,11 +972,14 @@ class USERPREF_PT_theme_interface_icons(PreferencePanel, Panel):
 
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
+        flow.prop(ui, "icon_scene")
         flow.prop(ui, "icon_collection")
         flow.prop(ui, "icon_object")
         flow.prop(ui, "icon_object_data")
         flow.prop(ui, "icon_modifier")
         flow.prop(ui, "icon_shading")
+        flow.prop(ui, "icon_folder")
+        flow.prop(ui, "icon_border_intensity")
 
 
 class USERPREF_PT_theme_text_style(PreferencePanel, Panel):
@@ -1087,6 +1175,15 @@ class ThemeGenericClassGenerator():
                 "bl_label": name,
                 "bl_options": {'DEFAULT_CLOSED'},
                 "draw": PreferenceThemeWidgetColorPanel.draw,
+                "wcol": wcol,
+            })
+
+            panel_shade_id = "USERPREF_PT_theme_interface_shade_" + wcol
+            yield type(panel_shade_id, (PreferenceThemeWidgetShadePanel, Panel), {
+                "bl_label": "Shaded",
+                "bl_options": {'DEFAULT_CLOSED'},
+                "bl_parent_id": panel_id,
+                "draw": PreferenceThemeWidgetShadePanel.draw,
                 "wcol": wcol,
             })
 
@@ -1309,7 +1406,6 @@ class USERPREF_PT_saveload_file_browser(PreferencePanel, Panel):
         flow.prop(paths, "show_hidden_files_datablocks")
         flow.prop(paths, "hide_recent_locations")
         flow.prop(paths, "hide_system_bookmarks")
-        flow.prop(paths, "show_thumbnails")
 
 
 class USERPREF_MT_ndof_settings(Menu):
@@ -1384,17 +1480,24 @@ class USERPREF_PT_input_mouse(PreferencePanel, Panel):
         return (prefs.active_section == 'INPUT')
 
     def draw_props(self, context, layout):
+        import sys
         prefs = context.preferences
         inputs = prefs.inputs
 
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
         flow.prop(inputs, "use_mouse_emulate_3_button")
+        if sys.platform[:3] != "win":
+            rowsub = flow.row()
+            rowsub.active = inputs.use_mouse_emulate_3_button
+            rowsub.prop(inputs, "mouse_emulate_3_button_modifier")
         flow.prop(inputs, "use_mouse_continuous")
         flow.prop(inputs, "use_drag_immediately")
+        flow.prop(inputs, "mouse_double_click_time", text="Double Click Speed")
+        flow.prop(inputs, "drag_threshold_mouse")
+        flow.prop(inputs, "drag_threshold_tablet")
         flow.prop(inputs, "drag_threshold")
         flow.prop(inputs, "move_threshold")
-        flow.prop(inputs, "mouse_double_click_time", text="Double Click Speed")
 
 
 class USERPREF_PT_navigation_orbit(PreferencePanel, Panel):
@@ -1414,6 +1517,11 @@ class USERPREF_PT_navigation_orbit(PreferencePanel, Panel):
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
         flow.row().prop(inputs, "view_rotate_method", expand=True)
+        if inputs.view_rotate_method == 'TURNTABLE':
+            flow.prop(inputs, "view_rotate_sensitivity_turntable")
+        else:
+            flow.prop(inputs, "view_rotate_sensitivity_trackball")
+
         flow.prop(inputs, "use_rotate_around_active")
         flow.prop(inputs, "use_auto_perspective")
         flow.prop(inputs, "use_mouse_depth_navigate")
@@ -1690,6 +1798,7 @@ class USERPREF_PT_addons(Panel):
         row.operator("preferences.addon_refresh", icon='FILE_REFRESH', text="Refresh")
 
         row = layout.row()
+        row.prop(context.preferences.view, "show_addons_enabled_only")
         row.prop(context.window_manager, "addon_filter", text="")
         row.prop(context.window_manager, "addon_search", text="", icon='VIEWZOOM')
 
@@ -1716,6 +1825,7 @@ class USERPREF_PT_addons(Panel):
                 "(see console for details)",
             )
 
+        show_enabled_only = context.preferences.view.show_addons_enabled_only
         filter = context.window_manager.addon_filter
         search = context.window_manager.addon_search.lower()
         support = context.window_manager.addon_support
@@ -1732,13 +1842,15 @@ class USERPREF_PT_addons(Panel):
                 continue
 
             # check if addon should be visible with current filters
-            if (
-                    (filter == "All") or
-                    (filter == info["category"]) or
-                    (filter == "Enabled" and is_enabled) or
-                    (filter == "Disabled" and not is_enabled) or
-                    (filter == "User" and (mod.__file__.startswith(addon_user_dirs)))
-            ):
+            is_visible = (
+                (filter == "All") or
+                (filter == info["category"]) or
+                (filter == "User" and (mod.__file__.startswith(addon_user_dirs)))
+            )
+            if show_enabled_only:
+                is_visible = is_visible and is_enabled
+
+            if is_visible:
                 if search and search not in info["name"].lower():
                     if info["author"]:
                         if search not in info["author"].lower():
@@ -1829,13 +1941,18 @@ class USERPREF_PT_addons(Panel):
                             ).url = info["wiki_url"]
                         # Only add "Report a Bug" button if tracker_url is set
                         # or the add-on is bundled (use official tracker then).
-                        if info.get("tracker_url") or not user_addon:
+                        if info.get("tracker_url"):
                             sub.operator(
                                 "wm.url_open", text="Report a Bug", icon='URL',
-                            ).url = info.get(
-                                "tracker_url",
-                                "https://developer.blender.org/maniphest/task/edit/form/2",
+                            ).url = info["tracker_url"]
+                        elif not user_addon:
+                            addon_info = ("Name: {} {}\nAuthor: {}\n").format(
+                                info["name"], info["version"], info["author"])
+                            props = sub.operator(
+                                "wm.url_open_preset", text="Report a Bug", icon='URL',
                             )
+                            props.type = 'BUG_ADDON'
+                            props.id = addon_info
                         if user_addon:
                             sub.operator(
                                 "preferences.addon_remove", text="Remove", icon='CANCEL',
@@ -2023,9 +2140,11 @@ classes = (
     USERPREF_HT_header,
     USERPREF_PT_navigation_bar,
     USERPREF_PT_save_preferences,
+    USERPREF_MT_save_load,
 
     USERPREF_PT_interface_display,
     USERPREF_PT_interface_editors,
+    USERPREF_PT_interface_temporary_windows,
     USERPREF_PT_interface_translation,
     USERPREF_PT_interface_text,
     USERPREF_PT_interface_menus,

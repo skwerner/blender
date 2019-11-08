@@ -186,7 +186,7 @@ static void bm_loop_customdata_merge(BMesh *bm,
                                 BM_ELEM_CD_GET_VOID_P(l_a_outer, offset),
                                 BM_ELEM_CD_GET_VOID_P(l_b_outer, offset)) == true)
 
-    /* epsilon for comparing UV's is too big, gives noticable problems */
+    /* Epsilon for comparing UV's is too big, gives noticeable problems. */
 #  if 0
         &&
         /* check if the data ends up diverged */
@@ -549,7 +549,7 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
   SplitEdgeInfo *es;
 
   /* Interpolation Vars */
-  /* an array alligned with faces but only fill items which are used. */
+  /* an array aligned with faces but only fill items which are used. */
   InterpFace **iface_array = NULL;
   int iface_array_len;
   MemArena *interp_arena = NULL;
@@ -588,7 +588,7 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
         /* tag if boundary is enabled */
         (use_boundary && BM_edge_is_boundary(e) && BM_elem_flag_test(e->l->f, BM_ELEM_TAG)) ||
 
-        /* tag if edge is an interior edge inbetween a tagged and untagged face */
+        /* tag if edge is an interior edge in between a tagged and untagged face */
         (bm_edge_is_mixed_face_tag(e->l))) {
       /* tag */
       BM_elem_flag_enable(e->v1, BM_ELEM_TAG);

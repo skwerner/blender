@@ -26,35 +26,36 @@
  * FILE FORMAT
  * ===========
  *
- * IFF-style structure  (but not IFF compatible!)
+ * IFF-style structure (but not IFF compatible!)
  *
- * start file:
+ * Start file:
  * <pre>
- *     BLENDER_V100    12 bytes  (version 1.00)
- *                     V = big endian, v = little endian
- *                     _ = 4 byte pointer, - = 8 byte pointer
+ * `BLENDER_V100`  `12` bytes  (version 1.00 is just an example).
+ *                 `V` = big endian, `v` = little endian.
+ *                 `_` = 4 byte pointer, `-` = 8 byte pointer.
  * </pre>
  *
- * datablocks: (also see struct #BHead).
+ * data-blocks: (also see struct #BHead).
  * <pre>
- *     <bh.code>           4 chars
- *     <bh.len>            int,  len data after BHead
- *     <bh.old>            void,  old pointer
- *     <bh.SDNAnr>         int
- *     <bh.nr>             int, in case of array: number of structs
- *     data
- *     ...
- *     ...
+ * `bh.code`       `char[4]` see `BLO_blend_defs.h` for a list of known types.
+ * `bh.len`        `int32` length data after #BHead in bytes.
+ * `bh.old`        `void *` old pointer (the address at the time of writing the file).
+ * `bh.SDNAnr`     `int32` struct index of structs stored in #DNA1 data.
+ * `bh.nr`         `int32` in case of array: number of structs.
+ * data
+ * ...
+ * ...
  * </pre>
  *
  * Almost all data in Blender are structures. Each struct saved
  * gets a BHead header.  With BHead the struct can be linked again
- * and compared with StructDNA .
+ * and compared with #StructDNA.
+
  * WRITE
  * =====
  *
  * Preferred writing order: (not really a must, but why would you do it random?)
- * Any case: direct data is ALWAYS after the lib block
+ * Any case: direct data is ALWAYS after the lib block.
  *
  * (Local file data)
  * - for each LibBlock
@@ -157,7 +158,6 @@
 #include "BKE_layer.h"
 #include "BKE_library_override.h"
 #include "BKE_main.h"
-#include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_node.h"
 #include "BKE_pointcache.h"
@@ -553,10 +553,8 @@ static void writestruct_id(
   writestruct_at_address_id(wd, filecode, structname, nr, adr, adr);
 }
 
-static void writedata(WriteData *wd,
-                      int filecode,
-                      int len,
-                      const void *adr) /* do not use for structs */
+/* do not use for structs */
+static void writedata(WriteData *wd, int filecode, int len, const void *adr)
 {
   BHead bh;
 
@@ -708,15 +706,16 @@ static void write_iddata(void *wd, const ID *id)
     IDP_WriteProperty(id->properties, wd);
   }
 
-  if (id->override_static) {
-    writestruct(wd, DATA, IDOverrideStatic, 1, id->override_static);
+  if (id->override_library) {
+    writestruct(wd, DATA, IDOverrideLibrary, 1, id->override_library);
 
-    writelist(wd, DATA, IDOverrideStaticProperty, &id->override_static->properties);
-    for (IDOverrideStaticProperty *op = id->override_static->properties.first; op; op = op->next) {
+    writelist(wd, DATA, IDOverrideLibraryProperty, &id->override_library->properties);
+    for (IDOverrideLibraryProperty *op = id->override_library->properties.first; op;
+         op = op->next) {
       writedata(wd, DATA, strlen(op->rna_path) + 1, op->rna_path);
 
-      writelist(wd, DATA, IDOverrideStaticPropertyOperation, &op->operations);
-      for (IDOverrideStaticPropertyOperation *opop = op->operations.first; opop;
+      writelist(wd, DATA, IDOverrideLibraryPropertyOperation, &op->operations);
+      for (IDOverrideLibraryPropertyOperation *opop = op->operations.first; opop;
            opop = opop->next) {
         if (opop->subitem_reference_name) {
           writedata(
@@ -1039,7 +1038,7 @@ static void write_nodetree_nolib(WriteData *wd, bNodeTree *ntree)
         /* pass */
       }
       else if ((ntree->type == NTREE_COMPOSIT) && (node->type == CMP_NODE_GLARE)) {
-        /* Simple forward compat for fix for T50736.
+        /* Simple forward compatibility for fix for T50736.
          * Not ideal (there is no ideal solution here), but should do for now. */
         NodeGlare *ndg = node->storage;
         /* Not in undo case. */
@@ -1143,9 +1142,12 @@ typedef struct RenderInfo {
   char scene_name[MAX_ID_NAME - 2];
 } RenderInfo;
 
-/* was for historic render-deamon feature,
- * now write because it can be easily extracted without
- * reading the whole blend file */
+/**
+ * This was originally added for the historic render-daemon feature,
+ * now write because it can be easily extracted without reading the whole blend file.
+ *
+ * See: `release/scripts/modules/blend_render_info.py`
+ */
 static void write_renderinfo(WriteData *wd, Main *mainvar)
 {
   bScreen *curscreen;
@@ -2012,7 +2014,7 @@ static void write_mdisps(WriteData *wd, int count, MDisps *mdlist, int external)
     int i;
 
     writestruct(wd, DATA, MDisps, count, mdlist);
-    for (i = 0; i < count; ++i) {
+    for (i = 0; i < count; i++) {
       MDisps *md = &mdlist[i];
       if (md->disps) {
         if (!external) {
@@ -2033,7 +2035,7 @@ static void write_grid_paint_mask(WriteData *wd, int count, GridPaintMask *grid_
     int i;
 
     writestruct(wd, DATA, GridPaintMask, count, grid_paint_mask);
-    for (i = 0; i < count; ++i) {
+    for (i = 0; i < count; i++) {
       GridPaintMask *gpm = &grid_paint_mask[i];
       if (gpm->data) {
         const int gridsize = BKE_ccg_gridsize(gpm->level);
@@ -2354,7 +2356,7 @@ static void write_light(WriteData *wd, Light *la)
 
 static void write_collection_nolib(WriteData *wd, Collection *collection)
 {
-  /* Shared function for collection datablocks and scene master collection. */
+  /* Shared function for collection data-blocks and scene master collection. */
   write_previews(wd, collection->preview);
 
   for (CollectionObject *cob = collection->gobject.first; cob; cob = cob->next) {
@@ -2408,6 +2410,13 @@ static void write_view_settings(WriteData *wd, ColorManagedViewSettings *view_se
 {
   if (view_settings->curve_mapping) {
     write_curvemapping(wd, view_settings->curve_mapping);
+  }
+}
+
+static void write_view3dshading(WriteData *wd, View3DShading *shading)
+{
+  if (shading->prop) {
+    IDP_WriteProperty(shading->prop, wd);
   }
 }
 
@@ -2469,7 +2478,7 @@ static void write_lightcache(WriteData *wd, LightCache *cache)
 
   if (cache->cube_mips) {
     writestruct(wd, DATA, LightCacheTexture, cache->mips_len, cache->cube_mips);
-    for (int i = 0; i < cache->mips_len; ++i) {
+    for (int i = 0; i < cache->mips_len; i++) {
       write_lightcache_texture(wd, &cache->cube_mips[i]);
     }
   }
@@ -2580,13 +2589,13 @@ static void write_scene(WriteData *wd, Scene *sce)
 
         Strip *strip = seq->strip;
         writestruct(wd, DATA, Strip, 1, strip);
-        if (seq->flag & SEQ_USE_CROP && strip->crop) {
+        if (strip->crop) {
           writestruct(wd, DATA, StripCrop, 1, strip->crop);
         }
-        if (seq->flag & SEQ_USE_TRANSFORM && strip->transform) {
+        if (strip->transform) {
           writestruct(wd, DATA, StripTransform, 1, strip->transform);
         }
-        if (seq->flag & SEQ_USE_PROXY && strip->proxy) {
+        if (strip->proxy) {
           writestruct(wd, DATA, StripProxy, 1, strip->proxy);
         }
         if (seq->type == SEQ_TYPE_IMAGE) {
@@ -2681,6 +2690,8 @@ static void write_scene(WriteData *wd, Scene *sce)
     writestruct(wd, DATA, LightCache, 1, sce->eevee.light_cache);
     write_lightcache(wd, sce->eevee.light_cache);
   }
+
+  write_view3dshading(wd, &sce->display.shading);
 
   /* Freed on doversion. */
   BLI_assert(sce->layer_properties == NULL);
@@ -2842,12 +2853,7 @@ static void write_area_regions(WriteData *wd, ScrArea *area)
         writestruct(wd, DATA, View3D, 1, v3d->localvd);
       }
 
-      if (v3d->fx_settings.ssao) {
-        writestruct(wd, DATA, GPUSSAOSettings, 1, v3d->fx_settings.ssao);
-      }
-      if (v3d->fx_settings.dof) {
-        writestruct(wd, DATA, GPUDOFSettings, 1, v3d->fx_settings.dof);
-      }
+      write_view3dshading(wd, &v3d->shading);
     }
     else if (sl->spacetype == SPACE_GRAPH) {
       SpaceGraph *sipo = (SpaceGraph *)sl;
@@ -3625,7 +3631,9 @@ static void write_libraries(WriteData *wd, Main *main)
       found_one = false;
       while (!found_one && tot--) {
         for (id = lbarray[tot]->first; id; id = id->next) {
-          if (id->us > 0 && (id->tag & LIB_TAG_EXTERN)) {
+          if (id->us > 0 &&
+              ((id->tag & LIB_TAG_EXTERN) ||
+               ((id->tag & LIB_TAG_INDIRECT) && (id->flag & LIB_INDIRECT_WEAK_LINK)))) {
             found_one = true;
             break;
           }
@@ -3655,7 +3663,9 @@ static void write_libraries(WriteData *wd, Main *main)
       /* Write link placeholders for all direct linked IDs. */
       while (a--) {
         for (id = lbarray[a]->first; id; id = id->next) {
-          if (id->us > 0 && (id->tag & LIB_TAG_EXTERN)) {
+          if (id->us > 0 &&
+              ((id->tag & LIB_TAG_EXTERN) ||
+               ((id->tag & LIB_TAG_INDIRECT) && (id->flag & LIB_INDIRECT_WEAK_LINK)))) {
             if (!BKE_idcode_is_linkable(GS(id->name))) {
               printf(
                   "ERROR: write file: data-block '%s' from lib '%s' is not linkable "
@@ -3775,11 +3785,10 @@ static bool write_file_handle(Main *mainvar,
    * avoid thumbnail detecting changes because of this. */
   mywrite_flush(wd);
 
-  OverrideStaticStorage *override_storage = wd->use_memfile ?
-                                                NULL :
-                                                BKE_override_static_operations_store_initialize();
+  OverrideLibraryStorage *override_storage =
+      wd->use_memfile ? NULL : BKE_override_library_operations_store_initialize();
 
-  /* This outer loop allows to save first datablocks from real mainvar,
+  /* This outer loop allows to save first data-blocks from real mainvar,
    * then the temp ones from override process,
    * if needed, without duplicating whole code. */
   Main *bmain = mainvar;
@@ -3799,10 +3808,10 @@ static bool write_file_handle(Main *mainvar,
         BLI_assert(
             (id->tag & (LIB_TAG_NO_MAIN | LIB_TAG_NO_USER_REFCOUNT | LIB_TAG_NOT_ALLOCATED)) == 0);
 
-        const bool do_override = !ELEM(override_storage, NULL, bmain) && id->override_static;
+        const bool do_override = !ELEM(override_storage, NULL, bmain) && id->override_library;
 
         if (do_override) {
-          BKE_override_static_operations_store_start(bmain, override_storage, id);
+          BKE_override_library_operations_store_start(bmain, override_storage, id);
         }
 
         switch ((ID_Type)GS(id->name)) {
@@ -3922,7 +3931,7 @@ static bool write_file_handle(Main *mainvar,
         }
 
         if (do_override) {
-          BKE_override_static_operations_store_end(override_storage, id);
+          BKE_override_library_operations_store_end(override_storage, id);
         }
       }
 
@@ -3931,7 +3940,7 @@ static bool write_file_handle(Main *mainvar,
   } while ((bmain != override_storage) && (bmain = override_storage));
 
   if (override_storage) {
-    BKE_override_static_operations_store_finalize(override_storage);
+    BKE_override_library_operations_store_finalize(override_storage);
     override_storage = NULL;
   }
 

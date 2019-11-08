@@ -55,7 +55,6 @@
 #include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
-#include "BKE_scene.h"
 
 #include "BKE_idcode.h"
 
@@ -464,6 +463,8 @@ static int wm_link_append_exec(bContext *C, wmOperator *op)
   if (lapp_data->num_items == 0) {
     /* Early out in case there is nothing to link. */
     wm_link_append_data_free(lapp_data);
+    /* Clear pre existing tag. */
+    BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, false);
     return OPERATOR_CANCELLED;
   }
 
@@ -559,7 +560,7 @@ static void wm_link_append_properties_common(wmOperatorType *ot, bool is_link)
 
 void WM_OT_link(wmOperatorType *ot)
 {
-  ot->name = "Link from Library";
+  ot->name = "Link";
   ot->idname = "WM_OT_link";
   ot->description = "Link from a Library .blend file";
 
@@ -574,7 +575,7 @@ void WM_OT_link(wmOperatorType *ot)
                                  FILE_LOADLIB,
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILENAME |
-                                     WM_FILESEL_RELPATH | WM_FILESEL_FILES,
+                                     WM_FILESEL_RELPATH | WM_FILESEL_FILES | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 
@@ -583,7 +584,7 @@ void WM_OT_link(wmOperatorType *ot)
 
 void WM_OT_append(wmOperatorType *ot)
 {
-  ot->name = "Append from Library";
+  ot->name = "Append";
   ot->idname = "WM_OT_append";
   ot->description = "Append from a Library .blend file";
 
@@ -598,7 +599,7 @@ void WM_OT_append(wmOperatorType *ot)
                                  FILE_LOADLIB,
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_DIRECTORY | WM_FILESEL_FILENAME |
-                                     WM_FILESEL_FILES,
+                                     WM_FILESEL_FILES | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 
@@ -616,9 +617,49 @@ void WM_OT_append(wmOperatorType *ot)
       "Localize all appended data, including those indirectly linked from other libraries");
 }
 
-/** \name Reload/relocate libraries.
+/** \name Append single datablock and return it.
+ *
+ * Used for appending workspace from startup files.
  *
  * \{ */
+
+ID *WM_file_append_datablock(bContext *C,
+                             const char *filepath,
+                             const short id_code,
+                             const char *id_name)
+{
+  Main *bmain = CTX_data_main(C);
+
+  /* Tag everything so we can make local only the new datablock. */
+  BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, true);
+
+  /* Define working data, with just the one item we want to append. */
+  WMLinkAppendData *lapp_data = wm_link_append_data_new(0);
+
+  wm_link_append_data_library_add(lapp_data, filepath);
+  WMLinkAppendDataItem *item = wm_link_append_data_item_add(lapp_data, id_name, id_code, NULL);
+  BLI_BITMAP_ENABLE(item->libraries, 0);
+
+  /* Link datablock. */
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  View3D *v3d = CTX_wm_view3d(C);
+  wm_link_do(lapp_data, NULL, bmain, scene, view_layer, v3d);
+
+  /* Get linked datablock and free working data. */
+  ID *id = item->new_id;
+  wm_link_append_data_free(lapp_data);
+
+  /* Make datablock local. */
+  BKE_library_make_local(bmain, NULL, NULL, true, false);
+
+  /* Clear pre existing tag. */
+  BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, false);
+
+  return id;
+}
+
+/** \} */
 
 static int wm_lib_relocate_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
@@ -729,7 +770,10 @@ static void lib_relocate_do(Main *bmain,
     }
     if (new_id) {
 #ifdef PRINT_DEBUG
-      printf("before remap, old_id users: %d, new_id users: %d\n", old_id->us, new_id->us);
+      printf("before remap of %s, old_id users: %d, new_id users: %d\n",
+             old_id->name,
+             old_id->us,
+             new_id->us);
 #endif
       BKE_libblock_remap_locked(bmain, old_id, new_id, remap_flags);
 
@@ -739,7 +783,10 @@ static void lib_relocate_do(Main *bmain,
       }
 
 #ifdef PRINT_DEBUG
-      printf("after remap, old_id users: %d, new_id users: %d\n", old_id->us, new_id->us);
+      printf("after remap of %s, old_id users: %d, new_id users: %d\n",
+             old_id->name,
+             old_id->us,
+             new_id->us);
 #endif
 
       /* In some cases, new_id might become direct link, remove parent of library in this case. */

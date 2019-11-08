@@ -36,7 +36,7 @@
 #include "DNA_space_types.h"
 
 #include "GPU_extensions.h"
-#include "GPU_context.h"
+#include "GPU_platform.h"
 #include "GPU_matrix.h"
 #include "GPU_shader.h"
 #include "GPU_texture.h"
@@ -139,23 +139,11 @@ extern char datatoc_gpu_shader_2D_edituvs_edges_vert_glsl[];
 extern char datatoc_gpu_shader_2D_edituvs_faces_vert_glsl[];
 extern char datatoc_gpu_shader_2D_edituvs_stretch_vert_glsl[];
 
-extern char datatoc_gpu_shader_3D_selection_id_vert_glsl[];
-extern char datatoc_gpu_shader_selection_id_frag_glsl[];
-
 extern char datatoc_gpu_shader_2D_line_dashed_uniform_color_vert_glsl[];
 extern char datatoc_gpu_shader_2D_line_dashed_frag_glsl[];
 extern char datatoc_gpu_shader_2D_line_dashed_geom_glsl[];
-extern char datatoc_gpu_shader_3D_line_dashed_uniform_color_legacy_vert_glsl[];
 extern char datatoc_gpu_shader_3D_line_dashed_uniform_color_vert_glsl[];
 
-extern char datatoc_gpu_shader_edges_front_back_persp_vert_glsl[];
-extern char datatoc_gpu_shader_edges_front_back_persp_geom_glsl[];
-extern char datatoc_gpu_shader_edges_front_back_persp_legacy_vert_glsl[];
-extern char datatoc_gpu_shader_edges_front_back_ortho_vert_glsl[];
-extern char datatoc_gpu_shader_edges_overlay_vert_glsl[];
-extern char datatoc_gpu_shader_edges_overlay_geom_glsl[];
-extern char datatoc_gpu_shader_edges_overlay_simple_geom_glsl[];
-extern char datatoc_gpu_shader_edges_overlay_frag_glsl[];
 extern char datatoc_gpu_shader_text_vert_glsl[];
 extern char datatoc_gpu_shader_text_geom_glsl[];
 extern char datatoc_gpu_shader_text_frag_glsl[];
@@ -261,6 +249,9 @@ static void gpu_shader_standard_extensions(char defines[MAX_EXT_DEFINE_LENGTH])
     /* a #version 400 feature, but we use #version 330 maximum so use extension */
     strcat(defines, "#extension GL_ARB_texture_query_lod: enable\n");
   }
+  if (GLEW_ARB_shader_draw_parameters) {
+    strcat(defines, "#extension GL_ARB_shader_draw_parameters : enable\n");
+  }
 }
 
 static void gpu_shader_standard_defines(char defines[MAX_DEFINE_LENGTH])
@@ -268,6 +259,9 @@ static void gpu_shader_standard_defines(char defines[MAX_DEFINE_LENGTH])
   /* some useful defines to detect GPU type */
   if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_ANY, GPU_DRIVER_ANY)) {
     strcat(defines, "#define GPU_ATI\n");
+    if (GPU_crappy_amd_driver()) {
+      strcat(defines, "#define GPU_DEPRECATED_AMD_DRIVER\n");
+    }
   }
   else if (GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_ANY, GPU_DRIVER_ANY)) {
     strcat(defines, "#define GPU_NVIDIA\n");
@@ -287,6 +281,22 @@ static void gpu_shader_standard_defines(char defines[MAX_DEFINE_LENGTH])
     strcat(defines, "#define OS_UNIX\n");
   }
 
+  float derivatives_factors[2];
+  GPU_get_dfdy_factors(derivatives_factors);
+  if (derivatives_factors[0] == 1.0f) {
+    strcat(defines, "#define DFDX_SIGN 1.0\n");
+  }
+  else {
+    strcat(defines, "#define DFDX_SIGN -1.0\n");
+  }
+
+  if (derivatives_factors[1] == 1.0f) {
+    strcat(defines, "#define DFDY_SIGN 1.0\n");
+  }
+  else {
+    strcat(defines, "#define DFDY_SIGN -1.0\n");
+  }
+
   return;
 }
 
@@ -299,6 +309,36 @@ GPUShader *GPU_shader_create(const char *vertexcode,
 {
   return GPU_shader_create_ex(
       vertexcode, fragcode, geocode, libcode, defines, GPU_SHADER_TFB_NONE, NULL, 0, shname);
+}
+
+GPUShader *GPU_shader_load_from_binary(const char *binary,
+                                       const int binary_format,
+                                       const int binary_len,
+                                       const char *shname)
+{
+  BLI_assert(GL_ARB_get_program_binary);
+  int success;
+  int program = glCreateProgram();
+
+  glProgramBinary(program, binary_format, binary, binary_len);
+  glGetProgramiv(program, GL_LINK_STATUS, &success);
+
+  if (success) {
+    GPUShader *shader = MEM_callocN(sizeof(*shader), __func__);
+    shader->interface = GPU_shaderinterface_create(program);
+    shader->program = program;
+
+#ifndef NDEBUG
+    BLI_snprintf(shader->name, sizeof(shader->name), "%s_%u", shname, g_shaderid++);
+#else
+    UNUSED_VARS(shname);
+#endif
+
+    return shader;
+  }
+
+  glDeleteProgram(program);
+  return NULL;
 }
 
 #define DEBUG_SHADER_NONE ""
@@ -729,23 +769,28 @@ void GPU_shader_uniform_vector(
     return;
   }
 
-  if (length == 1) {
-    glUniform1fv(location, arraysize, value);
-  }
-  else if (length == 2) {
-    glUniform2fv(location, arraysize, value);
-  }
-  else if (length == 3) {
-    glUniform3fv(location, arraysize, value);
-  }
-  else if (length == 4) {
-    glUniform4fv(location, arraysize, value);
-  }
-  else if (length == 9) {
-    glUniformMatrix3fv(location, arraysize, 0, value);
-  }
-  else if (length == 16) {
-    glUniformMatrix4fv(location, arraysize, 0, value);
+  switch (length) {
+    case 1:
+      glUniform1fv(location, arraysize, value);
+      break;
+    case 2:
+      glUniform2fv(location, arraysize, value);
+      break;
+    case 3:
+      glUniform3fv(location, arraysize, value);
+      break;
+    case 4:
+      glUniform4fv(location, arraysize, value);
+      break;
+    case 9:
+      glUniformMatrix3fv(location, arraysize, 0, value);
+      break;
+    case 16:
+      glUniformMatrix4fv(location, arraysize, 0, value);
+      break;
+    default:
+      BLI_assert(0);
+      break;
   }
 }
 
@@ -756,17 +801,22 @@ void GPU_shader_uniform_vector_int(
     return;
   }
 
-  if (length == 1) {
-    glUniform1iv(location, arraysize, value);
-  }
-  else if (length == 2) {
-    glUniform2iv(location, arraysize, value);
-  }
-  else if (length == 3) {
-    glUniform3iv(location, arraysize, value);
-  }
-  else if (length == 4) {
-    glUniform4iv(location, arraysize, value);
+  switch (length) {
+    case 1:
+      glUniform1iv(location, arraysize, value);
+      break;
+    case 2:
+      glUniform2iv(location, arraysize, value);
+      break;
+    case 3:
+      glUniform3iv(location, arraysize, value);
+      break;
+    case 4:
+      glUniform4iv(location, arraysize, value);
+      break;
+    default:
+      BLI_assert(0);
+      break;
   }
 }
 
@@ -814,6 +864,23 @@ int GPU_shader_get_attribute(GPUShader *shader, const char *name)
   return attr ? attr->location : -1;
 }
 
+char *GPU_shader_get_binary(GPUShader *shader, uint *r_binary_format, int *r_binary_len)
+{
+  BLI_assert(GLEW_ARB_get_program_binary);
+  char *r_binary;
+  int binary_len = 0;
+
+  glGetProgramiv(shader->program, GL_PROGRAM_BINARY_LENGTH, &binary_len);
+  r_binary = MEM_mallocN(binary_len, __func__);
+  glGetProgramBinary(shader->program, binary_len, NULL, r_binary_format, r_binary);
+
+  if (r_binary_len) {
+    *r_binary_len = binary_len;
+  }
+
+  return r_binary;
+}
+
 static const GPUShaderStages builtin_shader_stages[GPU_SHADER_BUILTIN_LEN] = {
     [GPU_SHADER_TEXT] =
         {
@@ -831,30 +898,6 @@ static const GPUShaderStages builtin_shader_stages[GPU_SHADER_BUILTIN_LEN] = {
         {
             .vert = datatoc_gpu_shader_keyframe_diamond_vert_glsl,
             .frag = datatoc_gpu_shader_keyframe_diamond_frag_glsl,
-        },
-    /*  This version is magical but slow!  */
-    [GPU_SHADER_EDGES_FRONT_BACK_PERSP] =
-        {
-            .vert = datatoc_gpu_shader_edges_front_back_persp_vert_glsl,
-            .geom = datatoc_gpu_shader_edges_front_back_persp_geom_glsl,
-            .frag = datatoc_gpu_shader_flat_color_frag_glsl,
-        },
-    [GPU_SHADER_EDGES_FRONT_BACK_ORTHO] =
-        {
-            .vert = datatoc_gpu_shader_edges_front_back_ortho_vert_glsl,
-            .frag = datatoc_gpu_shader_flat_color_frag_glsl,
-        },
-    [GPU_SHADER_EDGES_OVERLAY_SIMPLE] =
-        {
-            .vert = datatoc_gpu_shader_3D_vert_glsl,
-            .geom = datatoc_gpu_shader_edges_overlay_simple_geom_glsl,
-            .frag = datatoc_gpu_shader_edges_overlay_frag_glsl,
-        },
-    [GPU_SHADER_EDGES_OVERLAY] =
-        {
-            .vert = datatoc_gpu_shader_edges_overlay_vert_glsl,
-            .geom = datatoc_gpu_shader_edges_overlay_geom_glsl,
-            .frag = datatoc_gpu_shader_edges_overlay_frag_glsl,
         },
     [GPU_SHADER_SIMPLE_LIGHTING] =
         {
@@ -1288,18 +1331,6 @@ static const GPUShaderStages builtin_shader_stages[GPU_SHADER_BUILTIN_LEN] = {
             .defs = "#define STRETCH_ANGLE\n",
         },
 
-    [GPU_SHADER_3D_FLAT_SELECT_ID] =
-        {
-            .vert = datatoc_gpu_shader_3D_selection_id_vert_glsl,
-            .frag = datatoc_gpu_shader_selection_id_frag_glsl,
-        },
-    [GPU_SHADER_3D_UNIFORM_SELECT_ID] =
-        {
-            .vert = datatoc_gpu_shader_3D_selection_id_vert_glsl,
-            .frag = datatoc_gpu_shader_selection_id_frag_glsl,
-            .defs = "#define UNIFORM_ID\n",
-        },
-
     [GPU_SHADER_GPENCIL_STROKE] =
         {
             .vert = datatoc_gpu_shader_gpencil_stroke_vert_glsl,
@@ -1322,27 +1353,7 @@ GPUShader *GPU_shader_get_builtin_shader_with_config(eGPUBuiltinShader shader,
   GPUShader **sh_p = &builtin_shaders[sh_cfg][shader];
 
   if (*sh_p == NULL) {
-    GPUShaderStages stages_legacy = {NULL};
     const GPUShaderStages *stages = &builtin_shader_stages[shader];
-
-    if (shader == GPU_SHADER_EDGES_FRONT_BACK_PERSP) {
-      /* TODO: remove after switch to core profile (maybe) */
-      if (!GLEW_VERSION_3_2) {
-        stages_legacy.vert = datatoc_gpu_shader_edges_front_back_persp_legacy_vert_glsl;
-        stages_legacy.frag = datatoc_gpu_shader_flat_color_alpha_test_0_frag_glsl;
-        stages = &stages_legacy;
-      }
-    }
-    else if (shader == GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR) {
-      /* Dashed need geometry shader, which are not supported by legacy OpenGL,
-       * fallback to solid lines. */
-      /* TODO: remove after switch to core profile (maybe) */
-      if (!GLEW_VERSION_3_2) {
-        stages_legacy.vert = datatoc_gpu_shader_3D_line_dashed_uniform_color_legacy_vert_glsl;
-        stages_legacy.frag = datatoc_gpu_shader_2D_line_dashed_frag_glsl;
-        stages = &stages_legacy;
-      }
-    }
 
     /* common case */
     if (sh_cfg == GPU_SHADER_CFG_DEFAULT) {
@@ -1362,13 +1373,15 @@ GPUShader *GPU_shader_get_builtin_shader_with_config(eGPUBuiltinShader shader,
                       GPU_SHADER_3D_POINT_UNIFORM_SIZE_UNIFORM_COLOR_AA,
                       GPU_SHADER_3D_SCREENSPACE_VARIYING_COLOR,
                       GPU_SHADER_3D_INSTANCE_SCREEN_ALIGNED,
+
                       GPU_SHADER_3D_GROUNDLINE,
                       GPU_SHADER_3D_GROUNDPOINT,
                       GPU_SHADER_DISTANCE_LINES,
-                      GPU_SHADER_INSTANCE_EDGES_VARIYING_COLOR,
-                      GPU_SHADER_3D_FLAT_SELECT_ID,
-                      GPU_SHADER_3D_UNIFORM_SELECT_ID) ||
-                 ELEM(shader, GPU_SHADER_3D_FLAT_COLOR, GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR));
+                      GPU_SHADER_INSTANCE_EDGES_VARIYING_COLOR) ||
+                 ELEM(shader,
+                      GPU_SHADER_3D_FLAT_COLOR,
+                      GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR,
+                      GPU_SHADER_INSTANCE_VARIYING_ID_VARIYING_SIZE));
       const char *world_clip_lib = datatoc_gpu_shader_cfg_world_clip_lib_glsl;
       const char *world_clip_def = "#define USE_WORLD_CLIP_PLANES\n";
       /* In rare cases geometry shaders calculate clipping themselves. */

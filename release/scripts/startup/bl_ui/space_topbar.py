@@ -38,8 +38,6 @@ class TOPBAR_HT_upper_bar(Header):
         window = context.window
         screen = context.screen
 
-        layout.operator("wm.splash", text="", icon='BLENDER', emboss=False)
-
         TOPBAR_MT_editor_menus.draw_collapsible(context, layout)
 
         layout.separator()
@@ -122,8 +120,8 @@ class TOPBAR_PT_gpencil_layers(Panel):
 
             srow = col.row(align=True)
             srow.prop(gpl, "opacity", text="Opacity", slider=True)
-            srow.prop(gpl, "clamp_layer", text="",
-                      icon='MOD_MASK' if gpl.clamp_layer else 'LAYER_ACTIVE')
+            srow.prop(gpl, "mask_layer", text="",
+                      icon='MOD_MASK' if gpl.mask_layer else 'LAYER_ACTIVE')
 
             srow = col.row(align=True)
             srow.prop(gpl, "use_solo_mode", text="Show Only On Keyframed")
@@ -156,8 +154,14 @@ class TOPBAR_MT_editor_menus(Menu):
     bl_idname = "TOPBAR_MT_editor_menus"
     bl_label = ""
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
+
+        if context.area.show_menus:
+            layout.menu("TOPBAR_MT_app", text="", icon='BLENDER')
+        else:
+            layout.menu("TOPBAR_MT_app", text="Blender")
+
         layout.menu("TOPBAR_MT_file")
         layout.menu("TOPBAR_MT_edit")
 
@@ -165,6 +169,27 @@ class TOPBAR_MT_editor_menus(Menu):
 
         layout.menu("TOPBAR_MT_window")
         layout.menu("TOPBAR_MT_help")
+
+
+class TOPBAR_MT_app(Menu):
+    bl_label = "Blender"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("wm.splash")
+
+        layout.separator()
+
+        layout.menu("TOPBAR_MT_app_support")
+
+        layout.separator()
+
+        layout.menu("TOPBAR_MT_app_about")
+
+        layout.separator()
+
+        layout.operator("preferences.app_template_install", text="Install Application Template...")
 
 
 class TOPBAR_MT_file(Menu):
@@ -178,8 +203,7 @@ class TOPBAR_MT_file(Menu):
         layout.operator("wm.open_mainfile", text="Open...", icon='FILE_FOLDER')
         layout.menu("TOPBAR_MT_file_open_recent")
         layout.operator("wm.revert_mainfile")
-        layout.operator("wm.recover_last_session")
-        layout.operator("wm.recover_auto_save", text="Recover Auto Save...")
+        layout.menu("TOPBAR_MT_file_recover")
 
         layout.separator()
 
@@ -190,29 +214,6 @@ class TOPBAR_MT_file(Menu):
         layout.operator("wm.save_as_mainfile", text="Save As...")
         layout.operator_context = 'INVOKE_AREA'
         layout.operator("wm.save_as_mainfile", text="Save Copy...").copy = True
-
-        layout.separator()
-        layout.operator_context = 'INVOKE_AREA'
-
-        if any(bpy.utils.app_template_paths()):
-            app_template = context.preferences.app_template
-        else:
-            app_template = None
-
-        if app_template:
-            layout.label(text=bpy.path.display_name(app_template, has_ext=False))
-            layout.operator("wm.save_homefile")
-            layout.operator(
-                "wm.read_factory_settings",
-                text="Load Factory Settings",
-            ).app_template = app_template
-        else:
-            layout.operator("wm.save_homefile")
-            layout.operator("wm.read_factory_settings")
-
-        layout.separator()
-
-        layout.operator("preferences.app_template_install", text="Install Application Template...")
 
         layout.separator()
 
@@ -232,9 +233,10 @@ class TOPBAR_MT_file(Menu):
 
         layout.separator()
 
-        layout.operator_context = 'EXEC_AREA'
-        if bpy.data.is_dirty:
-            layout.operator_context = 'INVOKE_SCREEN'  # quit dialog
+        layout.menu("TOPBAR_MT_file_defaults")
+
+        layout.separator()
+
         layout.operator("wm.quit_blender", text="Quit", icon='QUIT')
 
 
@@ -301,6 +303,74 @@ class TOPBAR_MT_file_new(Menu):
 
     def draw(self, context):
         TOPBAR_MT_file_new.draw_ex(self.layout, context)
+
+
+class TOPBAR_MT_file_recover(Menu):
+    bl_label = "Recover"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("wm.recover_last_session", text="Last Session")
+        layout.operator("wm.recover_auto_save", text="Auto Save...")
+
+
+class TOPBAR_MT_file_defaults(Menu):
+    bl_label = "Defaults"
+
+    def draw(self, context):
+        layout = self.layout
+        prefs = context.preferences
+
+        layout.operator_context = 'INVOKE_AREA'
+
+        if any(bpy.utils.app_template_paths()):
+            app_template = prefs.app_template
+        else:
+            app_template = None
+
+        if app_template:
+            layout.label(text=bpy.path.display_name(app_template, has_ext=False))
+
+        layout.operator("wm.save_homefile")
+        props = layout.operator("wm.read_factory_settings")
+        if app_template:
+            props.app_template = app_template
+
+
+class TOPBAR_MT_app_about(Menu):
+    bl_label = "About"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("wm.url_open_preset", text="Release Notes", icon='URL').type = 'RELEASE_NOTES'
+
+        layout.separator()
+
+        layout.operator("wm.url_open_preset", text="Blender Website", icon='URL').type = 'BLENDER'
+        layout.operator("wm.url_open_preset", text="Credits", icon='URL').type = 'CREDITS'
+
+        layout.separator()
+
+        layout.operator(
+            "wm.url_open", text="License", icon='URL',
+        ).url = "https://www.blender.org/about/license/"
+
+
+class TOPBAR_MT_app_support(Menu):
+    bl_label = "Support Blender"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("wm.url_open_preset", text="Development Fund", icon='FUND').type = 'FUND'
+
+        layout.separator()
+
+        layout.operator(
+            "wm.url_open", text="Blender Store", icon='URL',
+        ).url = "https://store.blender.org"
 
 
 class TOPBAR_MT_templates_more(Menu):
@@ -395,7 +465,6 @@ class TOPBAR_MT_render(Menu):
 
         layout.operator("render.view_show", text="View Render")
         layout.operator("render.play_rendered_anim", text="View Animation")
-        layout.prop_menu_enum(rd, "display_mode", text="Display Mode")
 
         layout.separator()
 
@@ -434,6 +503,8 @@ class TOPBAR_MT_edit(Menu):
         props = layout.operator("wm.call_panel", text="Rename Active Item...")
         props.name = "TOPBAR_PT_name"
         props.keep_open = False
+
+        layout.operator("wm.batch_rename")
 
         layout.separator()
 
@@ -487,21 +558,18 @@ class TOPBAR_MT_help(Menu):
     bl_label = "Help"
 
     def draw(self, context):
-        # If 'url_prefill_from_blender' becomes slow it could be made into a separate operator
-        # to avoid constructing the bug report just to show this menu.
-        from bl_ui_utils.bug_report_url import url_prefill_from_blender
-
         layout = self.layout
 
         show_developer = context.preferences.view.show_developer_ui
 
-        layout.operator(
-            "wm.url_open", text="Manual", icon='HELP',
-        ).url = "https://docs.blender.org/manual/en/dev/"
+        layout.operator("wm.url_open_preset", text="Manual", icon='HELP').type = 'MANUAL'
 
         layout.operator(
-            "wm.url_open", text="Report a Bug", icon='URL',
-        ).url = url_prefill_from_blender()
+            "wm.url_open", text="Tutorials", icon='URL',
+        ).url = "https://www.blender.org/tutorials"
+        layout.operator(
+            "wm.url_open", text="Support", icon='URL',
+        ).url = "https://www.blender.org/support"
 
         layout.separator()
 
@@ -510,46 +578,28 @@ class TOPBAR_MT_help(Menu):
         ).url = "https://www.blender.org/community/"
         layout.operator(
             "wm.url_open", text="Developer Community", icon='URL',
-        ).url = "https://www.blender.org/get-involved/developers/"
+        ).url = "https://devtalk.blender.org"
 
         layout.separator()
 
         layout.operator(
-            "wm.url_open", text="Blender Website", icon='URL',
-        ).url = "https://www.blender.org"
-        layout.operator(
-            "wm.url_open", text="Release Notes", icon='URL',
-        ).url = "https://www.blender.org/download/releases/%d-%d/" % bpy.app.version[:2]
-        layout.operator(
-            "wm.url_open", text="Credits", icon='URL',
-        ).url = "https://www.blender.org/about/credits/"
-
-        layout.separator()
-
-        layout.operator(
-            "wm.url_open", text="Blender Store", icon='URL',
-        ).url = "https://store.blender.org"
-        layout.operator(
-            "wm.url_open", text="Development Fund", icon='URL',
-        ).url = "https://fund.blender.org"
-        layout.operator(
-            "wm.url_open", text="Donate", icon='URL',
-        ).url = "https://www.blender.org/foundation/donation-payment/"
-
-        layout.separator()
+            "wm.url_open", text="Python API Reference", icon='URL',
+        ).url = bpy.types.WM_OT_doc_view._prefix
 
         if show_developer:
             layout.operator(
-                "wm.url_open", text="Python API Reference", icon='URL',
-            ).url = bpy.types.WM_OT_doc_view._prefix
+                "wm.url_open", text="Developer Documentation", icon='URL',
+            ).url = "https://wiki.blender.org/wiki/Main_Page"
 
             layout.operator("wm.operator_cheat_sheet", icon='TEXT')
 
-        layout.operator("wm.sysinfo")
+        layout.separator()
+
+        layout.operator("wm.url_open_preset", text="Report a Bug", icon='URL').type = 'BUG'
 
         layout.separator()
 
-        layout.operator("wm.splash", icon='BLENDER')
+        layout.operator("wm.sysinfo")
 
 
 class TOPBAR_MT_file_context_menu(Menu):
@@ -599,33 +649,6 @@ class TOPBAR_MT_workspace_menu(Menu):
         props.direction = 'PREV'
         props = layout.operator("screen.workspace_cycle", text="Next Workspace")
         props.direction = 'NEXT'
-
-
-class TOPBAR_PT_active_tool(Panel):
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_category = ""
-    bl_context = ".active_tool"  # dot on purpose (access from tool settings)
-    bl_label = "Active Tool"
-    bl_options = {'HIDE_HEADER'}
-
-    def draw(self, context):
-        layout = self.layout
-        tool_mode = context.mode
-
-        # Panel display of topbar tool settings.
-        # currently displays in tool settings, keep here since the same functionality is used for the topbar.
-
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-
-        from .space_toolsystem_common import ToolSelectPanelHelper
-        ToolSelectPanelHelper.draw_active_tool_header(
-            context,
-            layout,
-            show_tool_name=True,
-            tool_key=('VIEW_3D', tool_mode),
-        )
 
 
 # Grease Pencil Object - Primitive curve
@@ -733,8 +756,13 @@ classes = (
     TOPBAR_MT_file_context_menu,
     TOPBAR_MT_workspace_menu,
     TOPBAR_MT_editor_menus,
+    TOPBAR_MT_app,
+    TOPBAR_MT_app_about,
+    TOPBAR_MT_app_support,
     TOPBAR_MT_file,
     TOPBAR_MT_file_new,
+    TOPBAR_MT_file_recover,
+    TOPBAR_MT_file_defaults,
     TOPBAR_MT_templates_more,
     TOPBAR_MT_file_import,
     TOPBAR_MT_file_export,
@@ -744,7 +772,6 @@ classes = (
     TOPBAR_MT_render,
     TOPBAR_MT_window,
     TOPBAR_MT_help,
-    TOPBAR_PT_active_tool,
     TOPBAR_PT_gpencil_layers,
     TOPBAR_PT_gpencil_primitive,
     TOPBAR_PT_gpencil_fill,

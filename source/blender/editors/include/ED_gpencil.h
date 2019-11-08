@@ -27,7 +27,6 @@
 struct ID;
 struct ListBase;
 struct PointerRNA;
-struct rcti;
 
 struct Brush;
 struct bGPDframe;
@@ -35,16 +34,15 @@ struct bGPDlayer;
 struct bGPDspoint;
 struct bGPDstroke;
 struct bGPdata;
+struct tGPspoint;
 
 struct ARegion;
 struct Depsgraph;
-struct EvaluationContext;
 struct Main;
 struct RegionView3D;
 struct ReportList;
 struct Scene;
 struct ScrArea;
-struct ToolSettings;
 struct View3D;
 struct ViewLayer;
 struct bContext;
@@ -57,8 +55,6 @@ struct bAnimContext;
 
 struct wmKeyConfig;
 struct wmOperator;
-struct wmWindow;
-struct wmWindowManager;
 
 /* ------------- Grease-Pencil Runtime Data ---------------- */
 
@@ -75,7 +71,14 @@ typedef struct tGPspoint {
   float uv_rot;   /* uv rotation for dor mode */
   float rnd[3];   /* rnd value */
   bool rnd_dirty; /* rnd flag */
+  short tflag;    /* Internal flag */
 } tGPspoint;
+
+/* tGPspoint->flag */
+typedef enum etGPspoint_tFlag {
+  /* Created by Fake event (used when mouse/pen move very fast while drawing). */
+  GP_TPOINT_FAKE = (1 << 0),
+} etGPspoint_tFlag;
 
 /* used to sort by zdepth gpencil objects in viewport */
 /* TODO: this could be a system parameter in userprefs screen */
@@ -187,6 +190,12 @@ bool ED_gpencil_add_armature_weights(const struct bContext *C,
                                      struct Object *ob_arm,
                                      int mode);
 
+/* Add Lattice modifier using Parent operator */
+bool ED_gpencil_add_lattice_modifier(const struct bContext *C,
+                                     struct ReportList *reports,
+                                     struct Object *ob,
+                                     struct Object *ob_latt);
+
 /* keep this aligned with gpencil_armature enum */
 #define GP_PAR_ARMATURE_NAME 0
 #define GP_PAR_ARMATURE_AUTO 1
@@ -220,6 +229,7 @@ struct Object *ED_gpencil_add_object(struct bContext *C,
 void ED_gpencil_add_defaults(struct bContext *C, struct Object *ob);
 /* set object modes */
 void ED_gpencil_setup_modes(struct bContext *C, struct bGPdata *gpd, int newmode);
+bool ED_object_gpencil_exit(struct Main *bmain, struct Object *ob);
 
 void ED_gp_project_stroke_to_plane(const struct Scene *scene,
                                    const struct Object *ob,
@@ -279,5 +289,13 @@ int ED_gpencil_select_stroke_segment(struct bGPDlayer *gpl,
                                      float r_hitb[3]);
 
 void ED_gpencil_select_toggle_all(struct bContext *C, int action);
+
+/* Ensure stroke sbuffer size is enough */
+struct tGPspoint *ED_gpencil_sbuffer_ensure(struct tGPspoint *buffer_array,
+                                            int *buffer_size,
+                                            int *buffer_used,
+                                            const bool clear);
+/* Tag all scene grease pencil object to update. */
+void ED_gpencil_tag_scene_gpencil(struct Scene *scene);
 
 #endif /*  __ED_GPENCIL_H__ */

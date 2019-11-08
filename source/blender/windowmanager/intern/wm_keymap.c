@@ -310,6 +310,7 @@ bool WM_keyconfig_remove(wmWindowManager *wm, wmKeyConfig *keyconf)
   if (BLI_findindex(&wm->keyconfigs, keyconf) != -1) {
     if (STREQLEN(U.keyconfigstr, keyconf->idname, sizeof(U.keyconfigstr))) {
       BLI_strncpy(U.keyconfigstr, wm->defaultconf->idname, sizeof(U.keyconfigstr));
+      U.runtime.is_dirty = true;
       WM_keyconfig_update_tag(NULL, NULL);
     }
 
@@ -360,6 +361,9 @@ void WM_keyconfig_set_active(wmWindowManager *wm, const char *idname)
   WM_keyconfig_update(wm);
 
   BLI_strncpy(U.keyconfigstr, idname, sizeof(U.keyconfigstr));
+  if (wm->initialized & WM_KEYCONFIG_IS_INITIALIZED) {
+    U.runtime.is_dirty = true;
+  }
 
   WM_keyconfig_update_tag(NULL, NULL);
   WM_keyconfig_update(wm);
@@ -459,7 +463,7 @@ bool WM_keymap_poll(bContext *C, wmKeyMap *keymap)
 
   if (UNLIKELY(BLI_listbase_is_empty(&keymap->items))) {
     /* Empty key-maps may be missing more there may be a typo in the name.
-     * Warn early to avoid loosing time investigating each case. */
+     * Warn early to avoid losing time investigating each case. */
     CLOG_WARN(WM_LOG_KEYMAPS, "empty keymap '%s'", keymap->idname);
   }
 
@@ -1087,17 +1091,21 @@ static void wm_user_modal_keymap_set_items(wmWindowManager *wm, wmKeyMap *km)
 /** \name Text from Key Events
  * \{ */
 
-static const char *key_event_icon_or_text(const int font_id, const char *text, const char *icon)
+static const char *key_event_glyph_or_text(const int font_id,
+                                           const char *text,
+                                           const char *single_glyph)
 {
-  BLI_assert(icon == NULL || (BLI_strlen_utf8(icon) == 1));
-  return (icon && BLF_has_glyph(font_id, BLI_str_utf8_as_unicode(icon))) ? icon : text;
+  BLI_assert(single_glyph == NULL || (BLI_strlen_utf8(single_glyph) == 1));
+  return (single_glyph && BLF_has_glyph(font_id, BLI_str_utf8_as_unicode(single_glyph))) ?
+             single_glyph :
+             text;
 }
 
 const char *WM_key_event_string(const short type, const bool compact)
 {
   if (compact) {
     /* String storing a single unicode character or NULL. */
-    const char *icon_glyph = NULL;
+    const char *single_glyph = NULL;
     int font_id = BLF_default();
     const enum {
       UNIX,
@@ -1118,9 +1126,10 @@ const char *WM_key_event_string(const short type, const bool compact)
       case LEFTSHIFTKEY:
       case RIGHTSHIFTKEY: {
         if (platform == MACOS) {
-          icon_glyph = "\xe2\x87\xa7";
+          single_glyph = "\xe2\x87\xa7";
         }
-        return key_event_icon_or_text(font_id, IFACE_("Shift"), icon_glyph);
+        return key_event_glyph_or_text(
+            font_id, CTX_IFACE_(BLT_I18NCONTEXT_ID_WINDOWMANAGER, "Shift"), single_glyph);
       }
       case LEFTCTRLKEY:
       case RIGHTCTRLKEY:
@@ -1131,45 +1140,45 @@ const char *WM_key_event_string(const short type, const bool compact)
       case LEFTALTKEY:
       case RIGHTALTKEY: {
         if (platform == MACOS) {
-          icon_glyph = "\xe2\x8c\xa5";
+          single_glyph = "\xe2\x8c\xa5";
         }
-        return key_event_icon_or_text(font_id, IFACE_("Alt"), icon_glyph);
+        return key_event_glyph_or_text(font_id, IFACE_("Alt"), single_glyph);
       }
       case OSKEY: {
         if (platform == MACOS) {
-          return key_event_icon_or_text(font_id, IFACE_("Cmd"), "\xe2\x8c\x98");
+          return key_event_glyph_or_text(font_id, IFACE_("Cmd"), "\xe2\x8c\x98");
         }
         else if (platform == MSWIN) {
-          return key_event_icon_or_text(font_id, IFACE_("Win"), "\xe2\x8a\x9e");
+          return key_event_glyph_or_text(font_id, IFACE_("Win"), "\xe2\x8a\x9e");
         }
         return IFACE_("OSkey");
       } break;
       case TABKEY: {
         if (platform == MACOS) {
-          icon_glyph = "\xe2\x86\xb9";
+          single_glyph = "\xe2\x86\xb9";
         }
-        return key_event_icon_or_text(font_id, IFACE_("Tab"), icon_glyph);
+        return key_event_glyph_or_text(font_id, IFACE_("Tab"), single_glyph);
       }
       case BACKSPACEKEY:
-        return key_event_icon_or_text(font_id, IFACE_("Bksp"), "\xe2\x8c\xab");
+        return key_event_glyph_or_text(font_id, IFACE_("Bksp"), "\xe2\x8c\xab");
       case ESCKEY:
-        return key_event_icon_or_text(font_id, IFACE_("Esc"), NULL /* "\xe2\x8e\x8b" */);
+        return key_event_glyph_or_text(font_id, IFACE_("Esc"), NULL /* "\xe2\x8e\x8b" */);
       case RETKEY: {
         if (platform == MACOS) {
-          icon_glyph = "\xe2\x8f\x8e";
+          single_glyph = "\xe2\x8f\x8e";
         }
-        return key_event_icon_or_text(font_id, IFACE_("Enter"), icon_glyph);
+        return key_event_glyph_or_text(font_id, IFACE_("Enter"), single_glyph);
       }
       case SPACEKEY:
-        return key_event_icon_or_text(font_id, IFACE_("Space"), NULL /* "\xe2\x90\xa3" */);
+        return key_event_glyph_or_text(font_id, IFACE_("Space"), NULL /* "\xe2\x90\xa3" */);
       case LEFTARROWKEY:
-        return key_event_icon_or_text(font_id, IFACE_("Left"), "\xe2\x86\x90");
+        return key_event_glyph_or_text(font_id, IFACE_("Left"), "\xe2\x86\x90");
       case UPARROWKEY:
-        return key_event_icon_or_text(font_id, IFACE_("Up"), "\xe2\x86\x91");
+        return key_event_glyph_or_text(font_id, IFACE_("Up"), "\xe2\x86\x91");
       case RIGHTARROWKEY:
-        return key_event_icon_or_text(font_id, IFACE_("Right"), "\xe2\x86\x92");
+        return key_event_glyph_or_text(font_id, IFACE_("Right"), "\xe2\x86\x92");
       case DOWNARROWKEY:
-        return key_event_icon_or_text(font_id, IFACE_("Down"), "\xe2\x86\x93");
+        return key_event_glyph_or_text(font_id, IFACE_("Down"), "\xe2\x86\x93");
     }
   }
 
@@ -1407,7 +1416,6 @@ static wmKeyMapItem *wm_keymap_item_find_in_keymap(wmKeyMap *keymap,
               }
 
               IDP_FreeProperty(properties_default);
-              MEM_freeN(properties_default);
             }
           }
         }
@@ -1581,7 +1589,6 @@ static wmKeyMapItem *wm_keymap_item_find(const bContext *C,
       }
 
       IDP_FreeProperty(properties_temp);
-      MEM_freeN(properties_temp);
     }
   }
 
@@ -1620,7 +1627,6 @@ static wmKeyMapItem *wm_keymap_item_find(const bContext *C,
         }
 
         IDP_FreeProperty(properties_default);
-        MEM_freeN(properties_default);
       }
     }
   }
@@ -2017,7 +2023,6 @@ void WM_keymap_item_restore_to_default(bContext *C, wmKeyMap *keymap, wmKeyMapIt
     if (orig->properties) {
       if (kmi->properties) {
         IDP_FreeProperty(kmi->properties);
-        MEM_freeN(kmi->properties);
         kmi->properties = NULL;
       }
 

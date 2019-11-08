@@ -555,8 +555,10 @@ int BKE_fcm_envelope_find_index(FCM_EnvelopeData array[],
    */
   for (loopbreaker = 0; (start <= end) && (loopbreaker < maxloop); loopbreaker++) {
     /* compute and get midpoint */
-    int mid = start + ((end - start) /
-                       2); /* we calculate the midpoint this way to avoid int overflows... */
+
+    /* we calculate the midpoint this way to avoid int overflows... */
+    int mid = start + ((end - start) / 2);
+
     float midfra = array[mid].time;
 
     /* check if exactly equal to midpoint */
@@ -819,7 +821,7 @@ static void fcm_noise_evaluate(
   FMod_Noise *data = (FMod_Noise *)fcm->data;
   float noise;
 
-  /* generate noise using good ol' Blender Noise
+  /* generate noise using good old Blender Noise
    * - 0.1 is passed as the 'z' value, otherwise evaluation fails for size = phase = 1
    *   with evaltime being an integer (which happens when evaluating on frame by frame basis)
    */
@@ -867,7 +869,6 @@ static void fcm_python_free(FModifier *fcm)
 
   /* id-properties */
   IDP_FreeProperty(data->prop);
-  MEM_freeN(data->prop);
 }
 
 static void fcm_python_new_data(void *mdata)
@@ -1419,7 +1420,7 @@ static float eval_fmodifier_influence(FModifier *fcm, float evaltime)
  *   several times by modifiers requesting the time be modified, as the final result
  *   would have required using the modified time
  * - modifiers only ever receive the unmodified time, as subsequent modifiers should be
- *   working on the 'global' result of the modified curve, not some localised segment,
+ *   working on the 'global' result of the modified curve, not some localized segment,
  *   so nevaltime gets set to whatever the last time-modifying modifier likes...
  * - we start from the end of the stack, as only the last one matters for now
  *

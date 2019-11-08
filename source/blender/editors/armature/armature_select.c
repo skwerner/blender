@@ -46,6 +46,7 @@
 
 #include "ED_armature.h"
 #include "ED_object.h"
+#include "ED_outliner.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
 #include "ED_view3d.h"
@@ -70,7 +71,7 @@ Base *ED_armature_base_and_ebone_from_select_buffer(Base **bases,
   EditBone *ebone = NULL;
   /* TODO(campbell): optimize, eg: sort & binary search. */
   for (uint base_index = 0; base_index < bases_len; base_index++) {
-    if (bases[base_index]->object->select_id == hit_object) {
+    if (bases[base_index]->object->runtime.select_id == hit_object) {
       base = bases[base_index];
       break;
     }
@@ -94,7 +95,7 @@ Object *ED_armature_object_and_ebone_from_select_buffer(Object **objects,
   EditBone *ebone = NULL;
   /* TODO(campbell): optimize, eg: sort & binary search. */
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
-    if (objects[ob_index]->select_id == hit_object) {
+    if (objects[ob_index]->runtime.select_id == hit_object) {
       ob = objects[ob_index];
       break;
     }
@@ -118,7 +119,7 @@ Base *ED_armature_base_and_bone_from_select_buffer(Base **bases,
   Bone *bone = NULL;
   /* TODO(campbell): optimize, eg: sort & binary search. */
   for (uint base_index = 0; base_index < bases_len; base_index++) {
-    if (bases[base_index]->object->select_id == hit_object) {
+    if (bases[base_index]->object->runtime.select_id == hit_object) {
       base = bases[base_index];
       break;
     }
@@ -250,12 +251,13 @@ void *get_bone_from_selectbuffer(Base **bases,
 /* x and y are mouse coords (area space) */
 void *get_nearest_bone(bContext *C, const int xy[2], bool findunsel, Base **r_base)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   rcti rect;
   unsigned int buffer[MAXPICKBUF];
   short hits;
 
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   // rect.xmin = ... mouseco!
   rect.xmin = rect.xmax = xy[0];
@@ -300,6 +302,7 @@ static int armature_select_linked_invoke(bContext *C, wmOperator *op, const wmEv
   const bool sel = !RNA_boolean_get(op->ptr, "deselect");
 
   view3d_operator_needs_opengl(C);
+  BKE_object_update_select_id(CTX_data_main(C));
 
   Base *base = NULL;
   bone = get_nearest_bone(C, event->mval, true, &base);
@@ -354,6 +357,8 @@ static int armature_select_linked_invoke(bContext *C, wmOperator *op, const wmEv
       bone = NULL;
     }
   }
+
+  ED_outliner_select_sync_from_edit_bone_tag(C);
 
   ED_armature_edit_sync_selection(arm->edbo);
 
@@ -644,8 +649,9 @@ bool ED_armature_edit_deselect_all_visible_multi_ex(struct Base **bases, uint ba
 
 bool ED_armature_edit_deselect_all_visible_multi(bContext *C)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
   uint bases_len = 0;
   Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
       vc.view_layer, vc.v3d, &bases_len);
@@ -670,12 +676,13 @@ static int ebone_select_flag(EditBone *ebone)
 bool ED_armature_edit_select_pick(
     bContext *C, const int mval[2], bool extend, bool deselect, bool toggle)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   EditBone *nearBone = NULL;
   int selmask;
   Base *basact = NULL;
 
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
   vc.mval[0] = mval[0];
   vc.mval[1] = mval[1];
 
@@ -1026,6 +1033,8 @@ static int armature_de_select_all_exec(bContext *C, wmOperator *op)
   }
   CTX_DATA_END;
 
+  ED_outliner_select_sync_from_edit_bone_tag(C);
+
   WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, NULL);
 
   return OPERATOR_FINISHED;
@@ -1147,6 +1156,8 @@ static int armature_de_select_more_exec(bContext *C, wmOperator *UNUSED(op))
     WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
   }
   MEM_freeN(objects);
+
+  ED_outliner_select_sync_from_edit_bone_tag(C);
   return OPERATOR_FINISHED;
 }
 
@@ -1177,6 +1188,8 @@ static int armature_de_select_less_exec(bContext *C, wmOperator *UNUSED(op))
     WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
   }
   MEM_freeN(objects);
+
+  ED_outliner_select_sync_from_edit_bone_tag(C);
   return OPERATOR_FINISHED;
 }
 
@@ -1568,6 +1581,8 @@ static int armature_select_similar_exec(bContext *C, wmOperator *op)
 
 #undef STRUCT_SIZE_AND_OFFSET
 
+  ED_outliner_select_sync_from_edit_bone_tag(C);
+
   return OPERATOR_FINISHED;
 }
 
@@ -1662,6 +1677,8 @@ static int armature_select_hierarchy_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
+  ED_outliner_select_sync_from_edit_bone_tag(C);
+
   ED_armature_edit_sync_selection(arm->edbo);
 
   WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
@@ -1747,6 +1764,8 @@ static int armature_select_mirror_exec(bContext *C, wmOperator *op)
       arm->act_edbone = ebone_mirror_act;
     }
 
+    ED_outliner_select_sync_from_edit_bone_tag(C);
+
     ED_armature_edit_sync_selection(arm->edbo);
 
     WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, ob);
@@ -1817,6 +1836,7 @@ static int armature_shortest_path_pick_invoke(bContext *C, wmOperator *op, const
   Base *base_dst = NULL;
 
   view3d_operator_needs_opengl(C);
+  BKE_object_update_select_id(CTX_data_main(C));
 
   ebone_src = arm->act_edbone;
   ebone_dst = get_nearest_bone(C, event->mval, false, &base_dst);
@@ -1874,6 +1894,7 @@ static int armature_shortest_path_pick_invoke(bContext *C, wmOperator *op, const
 
   if (changed) {
     arm->act_edbone = ebone_dst;
+    ED_outliner_select_sync_from_edit_bone_tag(C);
     ED_armature_edit_sync_selection(arm->edbo);
     WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, obedit);
 

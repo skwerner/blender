@@ -59,7 +59,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_origin_set);
 
   WM_operatortype_append(OBJECT_OT_mode_set);
-  WM_operatortype_append(OBJECT_OT_mode_set_or_submode);
+  WM_operatortype_append(OBJECT_OT_mode_set_with_submode);
   WM_operatortype_append(OBJECT_OT_editmode_toggle);
   WM_operatortype_append(OBJECT_OT_posemode_toggle);
   WM_operatortype_append(OBJECT_OT_proxy_make);
@@ -78,7 +78,7 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_track_set);
   WM_operatortype_append(OBJECT_OT_track_clear);
   WM_operatortype_append(OBJECT_OT_make_local);
-  WM_operatortype_append(OBJECT_OT_make_override_static);
+  WM_operatortype_append(OBJECT_OT_make_override_library);
   WM_operatortype_append(OBJECT_OT_make_single_user);
   WM_operatortype_append(OBJECT_OT_make_links_scene);
   WM_operatortype_append(OBJECT_OT_make_links_data);
@@ -257,6 +257,9 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_hide_view_clear);
   WM_operatortype_append(OBJECT_OT_hide_view_set);
   WM_operatortype_append(OBJECT_OT_hide_collection);
+
+  WM_operatortype_append(OBJECT_OT_voxel_remesh);
+  WM_operatortype_append(OBJECT_OT_quadriflow_remesh);
 }
 
 void ED_operatormacros_object(void)

@@ -48,6 +48,7 @@ UNDO_REF_ID_TYPE(Mesh);
 UNDO_REF_ID_TYPE(Object);
 UNDO_REF_ID_TYPE(Scene);
 UNDO_REF_ID_TYPE(Text);
+UNDO_REF_ID_TYPE(Image);
 
 typedef struct UndoStack {
   ListBase steps;
@@ -101,12 +102,13 @@ typedef struct UndoType {
    * None of these callbacks manage list add/removal.
    *
    * Note that 'step_encode_init' is optional,
-   * some undo types need to perform operatons before undo push finishes.
+   * some undo types need to perform operations before undo push finishes.
    */
   void (*step_encode_init)(struct bContext *C, UndoStep *us);
 
   bool (*step_encode)(struct bContext *C, struct Main *bmain, UndoStep *us);
-  void (*step_decode)(struct bContext *C, struct Main *bmain, UndoStep *us, int dir);
+  void (*step_decode)(
+      struct bContext *C, struct Main *bmain, UndoStep *us, int dir, bool is_final);
 
   /**
    * \note When freeing all steps,
@@ -122,7 +124,7 @@ typedef struct UndoType {
   int step_size;
 } UndoType;
 
-/* expose since we need to perform operations on spesific undo types (rarely). */
+/* Expose since we need to perform operations on specific undo types (rarely). */
 extern const UndoType *BKE_UNDOSYS_TYPE_IMAGE;
 extern const UndoType *BKE_UNDOSYS_TYPE_MEMFILE;
 extern const UndoType *BKE_UNDOSYS_TYPE_PAINTCURVE;
@@ -192,24 +194,6 @@ void BKE_undosys_foreach_ID_ref(UndoStack *ustack,
                                 UndoTypeForEachIDRefFn foreach_ID_ref_fn,
                                 void *user_data);
 #endif
-
-/* Use when the undo step stores many arbitrary pointers. */
-struct UndoIDPtrMap;
-struct UndoIDPtrMap *BKE_undosys_ID_map_create(void);
-void BKE_undosys_ID_map_destroy(struct UndoIDPtrMap *map);
-void BKE_undosys_ID_map_add(struct UndoIDPtrMap *map, ID *id);
-struct ID *BKE_undosys_ID_map_lookup(const struct UndoIDPtrMap *map, const struct ID *id_src);
-
-void BKE_undosys_ID_map_add_with_prev(struct UndoIDPtrMap *map,
-                                      struct ID *id,
-                                      struct ID **id_prev);
-struct ID *BKE_undosys_ID_map_lookup_with_prev(const struct UndoIDPtrMap *map,
-                                               struct ID *id_src,
-                                               struct ID *id_prev_match[2]);
-
-void BKE_undosys_ID_map_foreach_ID_ref(struct UndoIDPtrMap *map,
-                                       UndoTypeForEachIDRefFn foreach_ID_ref_fn,
-                                       void *user_data);
 
 void BKE_undosys_print(UndoStack *ustack);
 

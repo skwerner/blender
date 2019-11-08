@@ -429,19 +429,29 @@ void node_select_single(bContext *C, bNode *node)
   WM_event_add_notifier(C, NC_NODE | NA_SELECTED, NULL);
 }
 
-static int node_mouse_select(Main *bmain,
-                             SpaceNode *snode,
-                             ARegion *ar,
+static int node_mouse_select(bContext *C,
+                             wmOperator *op,
                              const int mval[2],
-                             const bool extend,
-                             const bool socket_select,
-                             const bool deselect_all)
+                             bool wait_to_deselect_others)
 {
+  Main *bmain = CTX_data_main(C);
+  SpaceNode *snode = CTX_wm_space_node(C);
+  ARegion *ar = CTX_wm_region(C);
   bNode *node, *tnode;
   bNodeSocket *sock = NULL;
   bNodeSocket *tsock;
   float cursor[2];
-  bool selected = false;
+  int ret_value = OPERATOR_CANCELLED;
+
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+  /* always do socket_select when extending selection. */
+  const bool socket_select = extend || RNA_boolean_get(op->ptr, "socket_select");
+  const bool deselect_all = RNA_boolean_get(op->ptr, "deselect_all");
+
+  /* These cases are never modal. */
+  if (extend || socket_select) {
+    wait_to_deselect_others = false;
+  }
 
   /* get mouse coordinates in view2d space */
   UI_view2d_region_to_view(&ar->v2d, mval[0], mval[1], &cursor[0], &cursor[1]);
@@ -452,7 +462,7 @@ static int node_mouse_select(Main *bmain,
       /* NOTE: SOCK_IN does not take into account the extend case...
        * This feature is not really used anyway currently? */
       node_socket_toggle(node, sock, true);
-      selected = true;
+      ret_value = OPERATOR_FINISHED;
     }
     else if (node_find_indicated_socket(snode, &node, &sock, cursor, SOCK_OUT)) {
       if (sock->flag & SELECT) {
@@ -460,7 +470,7 @@ static int node_mouse_select(Main *bmain,
           node_socket_deselect(node, sock, true);
         }
         else {
-          selected = true;
+          ret_value = OPERATOR_FINISHED;
         }
       }
       else {
@@ -485,7 +495,7 @@ static int node_mouse_select(Main *bmain,
           }
         }
         node_socket_select(node, sock);
-        selected = true;
+        ret_value = OPERATOR_FINISHED;
       }
     }
   }
@@ -501,91 +511,86 @@ static int node_mouse_select(Main *bmain,
         if (!((node->flag & SELECT) && (node->flag & NODE_ACTIVE) == 0)) {
           node_toggle(node);
         }
-        selected = true;
+        ret_value = OPERATOR_FINISHED;
       }
     }
-    else {
-      if (node != NULL || deselect_all) {
+    else if (deselect_all && node == NULL) {
+      /* Deselect in empty space. */
+      for (tnode = snode->edittree->nodes.first; tnode; tnode = tnode->next) {
+        nodeSetSelected(tnode, false);
+      }
+      ret_value = OPERATOR_FINISHED;
+    }
+    else if (node != NULL) {
+      /* When clicking on an already selected node, we want to wait to deselect
+       * others and allow the user to start moving the node without that. */
+      if (wait_to_deselect_others && (node->flag & SELECT)) {
+        ret_value = OPERATOR_RUNNING_MODAL;
+      }
+      else {
+        nodeSetSelected(node, true);
+
         for (tnode = snode->edittree->nodes.first; tnode; tnode = tnode->next) {
-          nodeSetSelected(tnode, false);
+          if (tnode != node) {
+            nodeSetSelected(tnode, false);
+          }
         }
-        selected = true;
-        if (node != NULL) {
-          nodeSetSelected(node, true);
-        }
+
+        ret_value = OPERATOR_FINISHED;
       }
     }
   }
 
   /* update node order */
-  if (selected) {
-    if (node != NULL) {
+  if (ret_value != OPERATOR_CANCELLED) {
+    if (node != NULL && ret_value != OPERATOR_RUNNING_MODAL) {
       ED_node_set_active(bmain, snode->edittree, node);
     }
     ED_node_set_active_viewer_key(snode);
     ED_node_sort(snode->edittree);
+
+    WM_event_add_notifier(C, NC_NODE | NA_SELECTED, NULL);
   }
 
-  return selected;
+  return ret_value;
 }
 
 static int node_select_exec(bContext *C, wmOperator *op)
 {
-  Main *bmain = CTX_data_main(C);
-  SpaceNode *snode = CTX_wm_space_node(C);
-  ARegion *ar = CTX_wm_region(C);
-  int mval[2];
+  const bool wait_to_deselect_others = RNA_boolean_get(op->ptr, "wait_to_deselect_others");
 
   /* get settings from RNA properties for operator */
+  int mval[2];
   mval[0] = RNA_int_get(op->ptr, "mouse_x");
   mval[1] = RNA_int_get(op->ptr, "mouse_y");
 
-  const bool extend = RNA_boolean_get(op->ptr, "extend");
-  /* always do socket_select when extending selection. */
-  const bool socket_select = extend || RNA_boolean_get(op->ptr, "socket_select");
-  const bool deselect_all = RNA_boolean_get(op->ptr, "deselect_all");
-
   /* perform the select */
-  if (node_mouse_select(bmain, snode, ar, mval, extend, socket_select, deselect_all)) {
-    /* send notifiers */
-    WM_event_add_notifier(C, NC_NODE | NA_SELECTED, NULL);
+  const int ret_value = node_mouse_select(C, op, mval, wait_to_deselect_others);
 
-    /* allow tweak event to work too */
-    return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
-  }
-  else {
-    /* allow tweak event to work too */
-    return OPERATOR_CANCELLED | OPERATOR_PASS_THROUGH;
-  }
-}
-
-static int node_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
-{
-  RNA_int_set(op->ptr, "mouse_x", event->mval[0]);
-  RNA_int_set(op->ptr, "mouse_y", event->mval[1]);
-
-  return node_select_exec(C, op);
+  /* allow tweak event to work too */
+  return ret_value | OPERATOR_PASS_THROUGH;
 }
 
 void NODE_OT_select(wmOperatorType *ot)
 {
+  PropertyRNA *prop;
+
   /* identifiers */
   ot->name = "Select";
   ot->idname = "NODE_OT_select";
   ot->description = "Select the node under the cursor";
 
   /* api callbacks */
-  ot->invoke = node_select_invoke;
   ot->exec = node_select_exec;
+  ot->invoke = WM_generic_select_invoke;
+  ot->modal = WM_generic_select_modal;
   ot->poll = ED_operator_node_active;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  PropertyRNA *prop;
-  RNA_def_int(ot->srna, "mouse_x", 0, INT_MIN, INT_MAX, "Mouse X", "", INT_MIN, INT_MAX);
-  RNA_def_int(ot->srna, "mouse_y", 0, INT_MIN, INT_MAX, "Mouse Y", "", INT_MIN, INT_MAX);
+  WM_operator_properties_generic_select(ot);
   RNA_def_boolean(ot->srna, "extend", false, "Extend", "");
   RNA_def_boolean(ot->srna, "socket_select", false, "Socket Select", "");
   prop = RNA_def_boolean(ot->srna,
@@ -1159,8 +1164,18 @@ static uiBlock *node_find_menu(bContext *C, ARegion *ar, void *arg_op)
   UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_MOVEMOUSE_QUIT | UI_BLOCK_SEARCH_MENU);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
-  but = uiDefSearchBut(
-      block, search, 0, ICON_VIEWZOOM, sizeof(search), 10, 10, 9 * UI_UNIT_X, UI_UNIT_Y, 0, 0, "");
+  but = uiDefSearchBut(block,
+                       search,
+                       0,
+                       ICON_VIEWZOOM,
+                       sizeof(search),
+                       10,
+                       10,
+                       UI_searchbox_size_x(),
+                       UI_UNIT_Y,
+                       0,
+                       0,
+                       "");
   UI_but_func_search_set(but, NULL, node_find_cb, op->type, false, node_find_call_cb, NULL);
   UI_but_flag_enable(but, UI_BUT_ACTIVATE_ON_INIT);
 
@@ -1181,14 +1196,14 @@ static uiBlock *node_find_menu(bContext *C, ARegion *ar, void *arg_op)
            NULL);
 
   /* Move it downwards, mouse over button. */
-  UI_block_bounds_set_popup(block, 6, (const int[2]){0, -UI_UNIT_Y});
+  UI_block_bounds_set_popup(block, 0.3f * U.widget_unit, (const int[2]){0, -UI_UNIT_Y});
 
   return block;
 }
 
 static int node_find_node_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  UI_popup_block_invoke(C, node_find_menu, op);
+  UI_popup_block_invoke(C, node_find_menu, op, NULL);
   return OPERATOR_CANCELLED;
 }
 

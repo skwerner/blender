@@ -139,15 +139,19 @@ def create(engine, data, region=None, v3d=None, rv3d=None, preview_osl=False):
 
     data = data.as_pointer()
     prefs = bpy.context.preferences.as_pointer()
+    screen = 0
     if region:
+        screen = region.id_data.as_pointer()
         region = region.as_pointer()
     if v3d:
+        screen = screen or v3d.id_data.as_pointer()
         v3d = v3d.as_pointer()
     if rv3d:
+        screen = screen or rv3d.id_data.as_pointer()
         rv3d = rv3d.as_pointer()
 
     engine.session = _cycles.create(
-            engine.as_pointer(), prefs, data, region, v3d, rv3d, preview_osl)
+            engine.as_pointer(), prefs, data, screen, region, v3d, rv3d, preview_osl)
 
 
 def free(engine):
@@ -258,13 +262,13 @@ def register_passes(engine, scene, srl):
 
     if crl.use_pass_crypto_object:
         for i in range(0, crl.pass_crypto_depth, 2):
-            engine.register_pass(scene, srl, "CryptoObject" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
+            engine.register_pass(scene, srl, "CryptoObject" + '{:02d}'.format(i//2), 4, "RGBA", 'COLOR')
     if crl.use_pass_crypto_material:
         for i in range(0, crl.pass_crypto_depth, 2):
-            engine.register_pass(scene, srl, "CryptoMaterial" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
+            engine.register_pass(scene, srl, "CryptoMaterial" + '{:02d}'.format(i//2), 4, "RGBA", 'COLOR')
     if srl.cycles.use_pass_crypto_asset:
         for i in range(0, srl.cycles.pass_crypto_depth, 2):
-            engine.register_pass(scene, srl, "CryptoAsset" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
+            engine.register_pass(scene, srl, "CryptoAsset" + '{:02d}'.format(i//2), 4, "RGBA", 'COLOR')
 
     if crl.use_denoising or crl.denoising_store_passes:
         engine.register_pass(scene, srl, "Noisy Image", 4, "RGBA", 'COLOR')

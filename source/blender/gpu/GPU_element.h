@@ -30,26 +30,25 @@
 
 #define GPU_TRACK_INDEX_RANGE 1
 
-#define GPU_PRIM_RESTART 0xFFFFFFFF
-
 typedef enum {
-  GPU_INDEX_U8, /* GL has this, Vulkan does not */
   GPU_INDEX_U16,
   GPU_INDEX_U32,
 } GPUIndexBufType;
 
 typedef struct GPUIndexBuf {
+  uint index_start;
   uint index_len;
+  bool is_subrange;
 #if GPU_TRACK_INDEX_RANGE
   GPUIndexBufType index_type;
   uint32_t gl_index_type;
-  uint min_index;
-  uint max_index;
   uint base_index;
 #endif
   uint32_t ibo_id; /* 0 indicates not yet sent to VRAM */
-  void *data;      /* non-NULL indicates not yet sent to VRAM */
-  bool use_prim_restart;
+  union {
+    void *data;              /* non-NULL indicates not yet sent to VRAM */
+    struct GPUIndexBuf *src; /* if is_subrange is true, this is the source buffer. */
+  };
 } GPUIndexBuf;
 
 void GPU_indexbuf_use(GPUIndexBuf *);
@@ -61,12 +60,10 @@ typedef struct GPUIndexBufBuilder {
   uint index_len;
   GPUPrimType prim_type;
   uint *data;
-  bool use_prim_restart;
 } GPUIndexBufBuilder;
 
 /* supports all primitive types. */
-void GPU_indexbuf_init_ex(
-    GPUIndexBufBuilder *, GPUPrimType, uint index_len, uint vertex_len, bool use_prim_restart);
+void GPU_indexbuf_init_ex(GPUIndexBufBuilder *, GPUPrimType, uint index_len, uint vertex_len);
 
 /* supports only GPU_PRIM_POINTS, GPU_PRIM_LINES and GPU_PRIM_TRIS. */
 void GPU_indexbuf_init(GPUIndexBufBuilder *, GPUPrimType, uint prim_len, uint vertex_len);
@@ -79,8 +76,20 @@ void GPU_indexbuf_add_line_verts(GPUIndexBufBuilder *, uint v1, uint v2);
 void GPU_indexbuf_add_tri_verts(GPUIndexBufBuilder *, uint v1, uint v2, uint v3);
 void GPU_indexbuf_add_line_adj_verts(GPUIndexBufBuilder *, uint v1, uint v2, uint v3, uint v4);
 
+void GPU_indexbuf_set_point_vert(GPUIndexBufBuilder *builder, uint elem, uint v1);
+void GPU_indexbuf_set_line_verts(GPUIndexBufBuilder *builder, uint elem, uint v1, uint v2);
+void GPU_indexbuf_set_tri_verts(GPUIndexBufBuilder *builder, uint elem, uint v1, uint v2, uint v3);
+
+/* Skip primitive rendering at the given index. */
+void GPU_indexbuf_set_point_restart(GPUIndexBufBuilder *builder, uint elem);
+void GPU_indexbuf_set_line_restart(GPUIndexBufBuilder *builder, uint elem);
+void GPU_indexbuf_set_tri_restart(GPUIndexBufBuilder *builder, uint elem);
+
 GPUIndexBuf *GPU_indexbuf_build(GPUIndexBufBuilder *);
 void GPU_indexbuf_build_in_place(GPUIndexBufBuilder *, GPUIndexBuf *);
+
+/* Create a subrange of an existing indexbuffer. */
+GPUIndexBuf *GPU_indexbuf_create_subrange(GPUIndexBuf *ibo, uint start, uint length);
 
 void GPU_indexbuf_discard(GPUIndexBuf *);
 

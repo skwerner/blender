@@ -232,6 +232,8 @@ static void distribute_grid(Mesh *mesh, ParticleSystem *psys)
 
           /* lets intersect the faces */
           for (i = 0; i < totface; i++, mface++) {
+            ParticleData *pa1 = NULL, *pa2 = NULL;
+
             copy_v3_v3(v1, mvert[mface->v1].co);
             copy_v3_v3(v2, mvert[mface->v2].co);
             copy_v3_v3(v3, mvert[mface->v3].co);
@@ -239,24 +241,32 @@ static void distribute_grid(Mesh *mesh, ParticleSystem *psys)
             bool intersects_tri = isect_ray_tri_watertight_v3(
                 co1, &isect_precalc, v1, v2, v3, &lambda, NULL);
             if (intersects_tri) {
-              if (from == PART_FROM_FACE) {
-                (pa + (int)(lambda * size[a]) * a0mul)->flag &= ~PARS_UNEXIST;
-              }
-              else { /* store number of intersections */
-                (pa + (int)(lambda * size[a]) * a0mul)->hair_index++;
-              }
+              pa1 = (pa + (int)(lambda * size[a]) * a0mul);
             }
 
             if (mface->v4 && (!intersects_tri || from == PART_FROM_VOLUME)) {
               copy_v3_v3(v4, mvert[mface->v4].co);
 
               if (isect_ray_tri_watertight_v3(co1, &isect_precalc, v1, v3, v4, &lambda, NULL)) {
-                if (from == PART_FROM_FACE) {
-                  (pa + (int)(lambda * size[a]) * a0mul)->flag &= ~PARS_UNEXIST;
-                }
-                else {
-                  (pa + (int)(lambda * size[a]) * a0mul)->hair_index++;
-                }
+                pa2 = (pa + (int)(lambda * size[a]) * a0mul);
+              }
+            }
+
+            if (pa1) {
+              if (from == PART_FROM_FACE) {
+                pa1->flag &= ~PARS_UNEXIST;
+              }
+              else { /* store number of intersections */
+                pa1->hair_index++;
+              }
+            }
+
+            if (pa2 && pa2 != pa1) {
+              if (from == PART_FROM_FACE) {
+                pa2->flag &= ~PARS_UNEXIST;
+              }
+              else { /* store number of intersections */
+                pa2->hair_index++;
               }
             }
           }
@@ -777,17 +787,17 @@ static void exec_distribute_parent(TaskPool *__restrict UNUSED(pool),
   pa = psys->particles + task->begin;
   switch (psys->part->from) {
     case PART_FROM_FACE:
-      for (p = task->begin; p < task->end; ++p, ++pa) {
+      for (p = task->begin; p < task->end; p++, pa++) {
         distribute_from_faces_exec(task, pa, p);
       }
       break;
     case PART_FROM_VOLUME:
-      for (p = task->begin; p < task->end; ++p, ++pa) {
+      for (p = task->begin; p < task->end; p++, pa++) {
         distribute_from_volume_exec(task, pa, p);
       }
       break;
     case PART_FROM_VERT:
-      for (p = task->begin; p < task->end; ++p, ++pa) {
+      for (p = task->begin; p < task->end; p++, pa++) {
         distribute_from_verts_exec(task, pa, p);
       }
       break;
@@ -805,11 +815,11 @@ static void exec_distribute_child(TaskPool *__restrict UNUSED(pool),
 
   /* RNG skipping at the beginning */
   cpa = psys->child;
-  for (p = 0; p < task->begin; ++p, ++cpa) {
+  for (p = 0; p < task->begin; p++, cpa++) {
     BLI_rng_skip(task->rng, PSYS_RND_DIST_SKIP);
   }
 
-  for (; p < task->end; ++p, ++cpa) {
+  for (; p < task->end; p++, cpa++) {
     distribute_children_exec(task, cpa, p);
   }
 }
@@ -1331,7 +1341,7 @@ static void distribute_particles_on_dm(ParticleSimulationData *sim, int from)
 
   totpart = (from == PART_FROM_CHILD ? sim->psys->totchild : sim->psys->totpart);
   psys_tasks_create(&ctx, 0, totpart, &tasks, &numtasks);
-  for (i = 0; i < numtasks; ++i) {
+  for (i = 0; i < numtasks; i++) {
     ParticleTask *task = &tasks[i];
 
     psys_task_init_distribute(task, sim);

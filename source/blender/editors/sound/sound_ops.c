@@ -62,6 +62,8 @@
 #  include <AUD_Special.h>
 #endif
 
+#include "DEG_depsgraph_query.h"
+
 #include "ED_sound.h"
 #include "ED_util.h"
 
@@ -88,7 +90,6 @@ static int sound_open_exec(bContext *C, wmOperator *op)
   bSound *sound;
   PropertyPointerRNA *pprop;
   PointerRNA idptr;
-  AUD_SoundInfo info;
   Main *bmain = CTX_data_main(C);
 
   RNA_string_get(op->ptr, "filepath", path);
@@ -98,33 +99,12 @@ static int sound_open_exec(bContext *C, wmOperator *op)
     sound_open_init(C, op);
   }
 
-  if (sound->playback_handle == NULL) {
-    if (op->customdata) {
-      MEM_freeN(op->customdata);
-    }
-    BKE_id_free(bmain, sound);
-    BKE_report(op->reports, RPT_ERROR, "Unsupported audio format");
-    return OPERATOR_CANCELLED;
-  }
-
-  info = AUD_getInfo(sound->playback_handle);
-
-  if (info.specs.channels == AUD_CHANNELS_INVALID) {
-    BKE_id_free(bmain, sound);
-    if (op->customdata) {
-      MEM_freeN(op->customdata);
-    }
-    BKE_report(op->reports, RPT_ERROR, "Unsupported audio format");
-    return OPERATOR_CANCELLED;
-  }
-
   if (RNA_boolean_get(op->ptr, "mono")) {
     sound->flags |= SOUND_FLAGS_MONO;
-    BKE_sound_load(bmain, sound);
   }
 
   if (RNA_boolean_get(op->ptr, "cache")) {
-    BKE_sound_cache(sound);
+    sound->flags |= SOUND_FLAGS_CACHING;
   }
 
   /* hook into UI */
@@ -136,9 +116,11 @@ static int sound_open_exec(bContext *C, wmOperator *op)
     id_us_min(&sound->id);
 
     RNA_id_pointer_create(&sound->id, &idptr);
-    RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr);
+    RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr, NULL);
     RNA_property_update(C, &pprop->ptr, pprop->prop);
   }
+
+  DEG_relations_tag_update(bmain);
 
   MEM_freeN(op->customdata);
   return OPERATOR_FINISHED;
@@ -291,8 +273,11 @@ static void sound_update_animation_flags(Scene *scene)
 
 static int sound_update_animation_flags_exec(bContext *C, wmOperator *UNUSED(op))
 {
+  Scene *scene = CTX_data_scene(C);
+
   BKE_main_id_tag_idcode(CTX_data_main(C), ID_SCE, LIB_TAG_DOIT, false);
   sound_update_animation_flags(CTX_data_scene(C));
+  DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
   return OPERATOR_FINISHED;
 }
 
@@ -323,7 +308,9 @@ static int sound_bake_animation_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
-  struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  /* NOTE: We will be forcefully evaluating dependency graph at every frame, so no need to ensure
+   * current scene state is evaluated as it will be lost anyway. */
+  struct Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   int oldfra = scene->r.cfra;
   int cfra;
 
@@ -361,8 +348,9 @@ static int sound_mixdown_exec(bContext *C, wmOperator *op)
 #ifdef WITH_AUDASPACE
   char path[FILE_MAX];
   char filename[FILE_MAX];
-  Scene *scene;
-  Main *bmain;
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+  Main *bmain = CTX_data_main(C);
   int split;
 
   int bitrate, accuracy;
@@ -380,18 +368,20 @@ static int sound_mixdown_exec(bContext *C, wmOperator *op)
   container = RNA_enum_get(op->ptr, "container");
   codec = RNA_enum_get(op->ptr, "codec");
   split = RNA_boolean_get(op->ptr, "split_channels");
-  scene = CTX_data_scene(C);
-  bmain = CTX_data_main(C);
-  specs.channels = scene->r.ffcodecdata.audio_channels;
-  specs.rate = scene->r.ffcodecdata.audio_mixrate;
+  specs.channels = scene_eval->r.ffcodecdata.audio_channels;
+  specs.rate = scene_eval->r.ffcodecdata.audio_mixrate;
 
   BLI_strncpy(filename, path, sizeof(filename));
   BLI_path_abs(filename, BKE_main_blendfile_path(bmain));
 
+  const double fps = (((double)scene_eval->r.frs_sec) / (double)scene_eval->r.frs_sec_base);
+  const int start_frame = scene_eval->r.sfra;
+  const int end_frame = scene_eval->r.efra;
+
   if (split) {
-    result = AUD_mixdown_per_channel(scene->sound_scene,
-                                     SFRA * specs.rate / FPS,
-                                     (EFRA - SFRA + 1) * specs.rate / FPS,
+    result = AUD_mixdown_per_channel(scene_eval->sound_scene,
+                                     start_frame * specs.rate / fps,
+                                     (end_frame - start_frame + 1) * specs.rate / fps,
                                      accuracy,
                                      filename,
                                      specs,
@@ -400,9 +390,9 @@ static int sound_mixdown_exec(bContext *C, wmOperator *op)
                                      bitrate);
   }
   else {
-    result = AUD_mixdown(scene->sound_scene,
-                         SFRA * specs.rate / FPS,
-                         (EFRA - SFRA + 1) * specs.rate / FPS,
+    result = AUD_mixdown(scene_eval->sound_scene,
+                         start_frame * specs.rate / fps,
+                         (end_frame - start_frame + 1) * specs.rate / fps,
                          accuracy,
                          filename,
                          specs,
@@ -411,7 +401,7 @@ static int sound_mixdown_exec(bContext *C, wmOperator *op)
                          bitrate);
   }
 
-  BKE_sound_reset_scene_specs(scene);
+  BKE_sound_reset_scene_specs(scene_eval);
 
   if (result) {
     BKE_report(op->reports, RPT_ERROR, result);
@@ -723,7 +713,7 @@ static void SOUND_OT_mixdown(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_SOUND,
                                  FILE_SPECIAL,
                                  FILE_SAVE,
-                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 #ifdef WITH_AUDASPACE
@@ -780,7 +770,8 @@ static int sound_pack_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  sound->packedfile = newPackedFile(op->reports, sound->name, ID_BLEND_PATH(bmain, &sound->id));
+  sound->packedfile = BKE_packedfile_new(
+      op->reports, sound->name, ID_BLEND_PATH(bmain, &sound->id));
   BKE_sound_load(bmain, sound);
 
   return OPERATOR_FINISHED;
@@ -826,7 +817,7 @@ static int sound_unpack_exec(bContext *C, wmOperator *op)
                "AutoPack is enabled, so image will be packed again on file save");
   }
 
-  unpackSound(bmain, op->reports, sound, method);
+  BKE_packedfile_unpack_sound(bmain, op->reports, sound, method);
 
   return OPERATOR_FINISHED;
 }

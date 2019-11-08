@@ -51,6 +51,7 @@
 #include "BKE_writeavi.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "DRW_engine.h"
 
@@ -114,7 +115,6 @@ typedef struct OGLRender {
 
   GPUOffScreen *ofs;
   int ofs_samples;
-  bool ofs_full_samples;
   int sizex, sizey;
   int write_still;
 
@@ -273,7 +273,7 @@ static void screen_opengl_views_setup(OGLRender *oglrender)
 
 static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, RenderResult *rr)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = oglrender->scene;
   ARegion *ar = oglrender->ar;
   View3D *v3d = oglrender->v3d;
@@ -331,8 +331,9 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
       GPU_clear_color(0.0f, 0.0f, 0.0f, 0.0f);
       GPU_clear(GPU_COLOR_BIT | GPU_DEPTH_BIT);
 
-      wmOrtho2(0, sizex, 0, sizey);
-      GPU_matrix_translate_2f(sizex / 2, sizey / 2);
+      GPU_matrix_reset();
+      wmOrtho2(0, scene->r.xsch, 0, scene->r.ysch);
+      GPU_matrix_translate_2f(scene->r.xsch / 2, scene->r.ysch / 2);
 
       G.f |= G_FLAG_RENDER_VIEWPORT;
       ED_annotation_draw_ex(scene, gpd, sizex, sizey, scene->r.cfra, SPACE_SEQ);
@@ -356,9 +357,6 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
     ImBuf *ibuf_view;
     const int alpha_mode = (draw_sky) ? R_ADDSKY : R_ALPHAPREMUL;
 
-    unsigned int draw_flags = V3D_OFSDRAW_NONE;
-    draw_flags |= (oglrender->ofs_full_samples) ? V3D_OFSDRAW_USE_FULL_SAMPLE : 0;
-
     if (view_context) {
       ibuf_view = ED_view3d_draw_offscreen_imbuf(depsgraph,
                                                  scene,
@@ -368,7 +366,6 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
                                                  sizex,
                                                  sizey,
                                                  IB_rectfloat,
-                                                 draw_flags,
                                                  alpha_mode,
                                                  oglrender->ofs_samples,
                                                  viewname,
@@ -381,7 +378,6 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
       }
     }
     else {
-      draw_flags |= V3D_OFSDRAW_SHOW_ANNOTATION;
       ibuf_view = ED_view3d_draw_offscreen_imbuf_simple(depsgraph,
                                                         scene,
                                                         NULL,
@@ -390,7 +386,7 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
                                                         oglrender->sizex,
                                                         oglrender->sizey,
                                                         IB_rectfloat,
-                                                        draw_flags,
+                                                        V3D_OFSDRAW_SHOW_ANNOTATION,
                                                         alpha_mode,
                                                         oglrender->ofs_samples,
                                                         viewname,
@@ -532,6 +528,7 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
   const bool is_animation = RNA_boolean_get(op->ptr, "animation");
   const bool is_sequencer = RNA_boolean_get(op->ptr, "sequencer");
   const bool is_write_still = RNA_boolean_get(op->ptr, "write_still");
+  const int samples = U.ogl_multisamples;
   char err_out[256] = "unknown";
 
   if (G.background) {
@@ -576,7 +573,7 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
 
   /* corrects render size with actual size, not every card supports non-power-of-two dimensions */
   DRW_opengl_context_enable(); /* Offscreen creation needs to be done in DRW context. */
-  ofs = GPU_offscreen_create(sizex, sizey, 0, true, true, err_out);
+  ofs = GPU_offscreen_create(sizex, sizey, samples, true, true, err_out);
   DRW_opengl_context_disable();
 
   if (!ofs) {
@@ -595,8 +592,11 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
   oglrender->scene = scene;
   oglrender->workspace = workspace;
   oglrender->view_layer = CTX_data_view_layer(C);
-  oglrender->depsgraph = CTX_data_depsgraph(C);
+  /* NOTE: The depsgraph is not only used to update scene for a new frames, but also to initialize
+   * output video handles, which does need evaluated scene. */
+  oglrender->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   oglrender->cfrao = scene->r.cfra;
+  oglrender->ofs_samples = samples;
 
   oglrender->write_still = is_write_still && !is_animation;
   oglrender->is_animation = is_animation;
@@ -802,11 +802,12 @@ static bool screen_opengl_render_anim_initialize(bContext *C, wmOperator *op)
     oglrender->movie_ctx_arr = MEM_mallocN(sizeof(void *) * oglrender->totvideos, "Movies");
 
     for (i = 0; i < oglrender->totvideos; i++) {
+      Scene *scene_eval = DEG_get_evaluated_scene(oglrender->depsgraph);
       const char *suffix = BKE_scene_multiview_view_id_suffix_get(&scene->r, i);
 
       oglrender->movie_ctx_arr[i] = oglrender->mh->context_create();
       if (!oglrender->mh->start_movie(oglrender->movie_ctx_arr[i],
-                                      scene,
+                                      scene_eval,
                                       &scene->r,
                                       oglrender->sizex,
                                       oglrender->sizey,

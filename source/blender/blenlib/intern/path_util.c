@@ -618,14 +618,14 @@ void BLI_path_rel(char *file, const char *relfile)
      */
     if (*q != '/') {
       while ((q >= file) && (*q != '/')) {
-        --q;
-        --p;
+        q--;
+        p--;
       }
     }
     else if (*p != '/') {
       while ((p >= temp) && (*p != '/')) {
-        --p;
-        --q;
+        p--;
+        q--;
       }
     }
 
@@ -1037,7 +1037,7 @@ bool BLI_path_abs(char *path, const char *basepath)
    * in this case, there is no use in trying C:/ since it
    * will never exist on a unix os.
    *
-   * Add a / prefix and lowercase the driveletter, remove the :
+   * Add a '/' prefix and lowercase the drive-letter, remove the ':'.
    * C:\foo.JPG -> /c/foo.JPG */
 
   if (isalpha(tmp[0]) && tmp[1] == ':' && (tmp[2] == '\\' || tmp[2] == '/')) {
@@ -1552,7 +1552,7 @@ bool BLI_path_extension_glob_validate(char *ext_fnmatch)
     only_wildcards = true;
   }
   /* Only one group in the pattern, so even if its only made of wildcard(s),
-   * it is assumed vaid. */
+   * it is assumed valid. */
   return false;
 }
 
@@ -1682,6 +1682,24 @@ void BLI_split_dir_part(const char *string, char *dir, const size_t dirlen)
 void BLI_split_file_part(const char *string, char *file, const size_t filelen)
 {
   BLI_split_dirfile(string, NULL, file, 0, filelen);
+}
+
+/**
+ * Returns a pointer to the last extension (e.g. the position of the last period).
+ * Returns NULL if there is no extension.
+ */
+const char *BLI_path_extension(const char *filepath)
+{
+  const char *extension = strrchr(filepath, '.');
+  if (extension == NULL) {
+    return NULL;
+  }
+  if (BLI_first_slash(extension) != NULL) {
+    /* There is a path separator in the extension, so the '.' was found in a
+     * directory component and not in the filename. */
+    return NULL;
+  }
+  return extension;
 }
 
 /**
@@ -1855,7 +1873,10 @@ const char *BLI_path_basename(const char *path)
  *
  * Ignores multiple slashes at any point in the path (including start/end).
  */
-bool BLI_path_name_at_index(const char *path, const int index, int *r_offset, int *r_len)
+bool BLI_path_name_at_index(const char *__restrict path,
+                            const int index,
+                            int *__restrict r_offset,
+                            int *__restrict r_len)
 {
   if (index >= 0) {
     int index_step = 0;

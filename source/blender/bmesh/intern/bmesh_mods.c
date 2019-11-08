@@ -128,8 +128,9 @@ bool BM_disk_dissolve(BMesh *bm, BMVert *v)
     BMLoop *l_a = BM_face_vert_share_loop(e->l->f, v);
     BMLoop *l_b = (e->l->v == v) ? e->l->next : e->l;
 
-    if (!BM_face_split(bm, e->l->f, l_a, l_b, NULL, NULL, false))
+    if (!BM_face_split(bm, e->l->f, l_a, l_b, NULL, NULL, false)) {
       return false;
+    }
 
     if (!BM_disk_dissolve(bm, v)) {
       return false;
@@ -1028,7 +1029,7 @@ BMEdge *BM_edge_rotate(BMesh *bm, BMEdge *e, const bool ccw, const short check_f
   /* Rotate The Edge */
 
   /* first create the new edge, this is so we can copy the customdata from the old one
-   * if splice if disabled, always add in a new edge even if theres one there. */
+   * if splice if disabled, always add in a new edge even if there's one there. */
   e_new = BM_edge_create(
       bm, v1, v2, e, (check_flag & BM_EDGEROT_CHECK_SPLICE) ? BM_CREATE_NO_DOUBLE : BM_CREATE_NOP);
 

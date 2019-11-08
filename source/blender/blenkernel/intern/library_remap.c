@@ -191,7 +191,7 @@ static int foreach_libblock_remap_callback(void *user_data, ID *id_self, ID **id
       new_id = NULL;
     }
 
-    const bool is_reference = (cb_flag & IDWALK_CB_STATIC_OVERRIDE_REFERENCE) != 0;
+    const bool is_reference = (cb_flag & IDWALK_CB_OVERRIDE_LIBRARY_REFERENCE) != 0;
     const bool is_indirect = (cb_flag & IDWALK_CB_INDIRECT_USAGE) != 0;
     const bool skip_indirect = (id_remap_data->flag & ID_REMAP_SKIP_INDIRECT_USAGE) != 0;
     /* Note: proxy usage implies LIB_TAG_EXTERN, so on this aspect it is direct,
@@ -202,7 +202,7 @@ static int foreach_libblock_remap_callback(void *user_data, ID *id_self, ID **id
     const bool is_obj_editmode = (is_obj && BKE_object_is_in_editmode((Object *)id));
     const bool is_never_null = ((cb_flag & IDWALK_CB_NEVER_NULL) && (new_id == NULL) &&
                                 (id_remap_data->flag & ID_REMAP_FORCE_NEVER_NULL_USAGE) == 0);
-    const bool skip_reference = (id_remap_data->flag & ID_REMAP_SKIP_STATIC_OVERRIDE) != 0;
+    const bool skip_reference = (id_remap_data->flag & ID_REMAP_SKIP_OVERRIDE_LIBRARY) != 0;
     const bool skip_never_null = (id_remap_data->flag & ID_REMAP_SKIP_NEVER_NULL_USAGE) != 0;
 
 #ifdef DEBUG_PRINT
@@ -266,8 +266,8 @@ static int foreach_libblock_remap_callback(void *user_data, ID *id_self, ID **id
       }
       if (cb_flag & IDWALK_CB_USER) {
         /* NOTE: We don't user-count IDs which are not in the main database.
-         * This is because in certain conditions we can have datablocks in
-         * the main which are referencing datablocks outside of it.
+         * This is because in certain conditions we can have data-blocks in
+         * the main which are referencing data-blocks outside of it.
          * For example, BKE_mesh_new_from_object() called on an evaluated
          * object will cause such situation.
          */
@@ -286,6 +286,13 @@ static int foreach_libblock_remap_callback(void *user_data, ID *id_self, ID **id
       }
       if (!is_indirect || is_obj_proxy) {
         id_remap_data->status |= ID_REMAP_IS_LINKED_DIRECT;
+      }
+      /* We need to remap proxy_from pointer of remapped proxy... sigh. */
+      if (is_obj_proxy && new_id != NULL) {
+        Object *ob = (Object *)id;
+        if (ob->proxy == (Object *)new_id) {
+          ob->proxy->proxy_from = ob;
+        }
       }
     }
   }
@@ -368,6 +375,11 @@ static void libblock_remap_data_postprocess_collection_update(Main *bmain,
      * I'd consider optimizing that whole collection remapping process a TODO for later. */
     BKE_collections_child_remove_nulls(bmain, NULL /*old_collection*/);
   }
+  else {
+    /* Temp safe fix, but a "tad" brute force... We should probably be able to use parents from
+     * old_collection instead? */
+    BKE_main_collections_parent_relations_rebuild(bmain);
+  }
 
   BKE_main_collection_sync_remap(bmain);
 }
@@ -377,7 +389,7 @@ static void libblock_remap_data_postprocess_obdata_relink(Main *bmain, Object *o
   if (ob->data == new_id) {
     switch (GS(new_id->name)) {
       case ID_ME:
-        multires_force_update(ob);
+        multires_force_sculpt_rebuild(ob);
         break;
       case ID_CU:
         BKE_curve_type_test(ob);
@@ -397,7 +409,7 @@ static void libblock_remap_data_postprocess_nodetree_update(Main *bmain, ID *new
 }
 
 /**
- * Execute the 'data' part of the remapping (that is, all ID pointers from other ID datablocks).
+ * Execute the 'data' part of the remapping (that is, all ID pointers from other ID data-blocks).
  *
  * Behavior differs depending on whether given \a id is NULL or not:
  * - \a id NULL: \a old_id must be non-NULL, \a new_id may be NULL (unlinking \a old_id) or not
@@ -407,14 +419,14 @@ static void libblock_remap_data_postprocess_nodetree_update(Main *bmain, ID *new
  * - \a id is non-NULL:
  *   + If \a old_id is NULL, \a new_id must also be NULL,
  *     and all ID pointers from \a id are cleared
- *     (i.e. \a id does not references any other datablock anymore).
+ *     (i.e. \a id does not references any other data-block anymore).
  *   + If \a old_id is non-NULL, behavior is as with a NULL \a id, but only within given \a id.
  *
  * \param bmain: the Main data storage to operate on (must never be NULL).
- * \param id: the datablock to operate on
+ * \param id: the data-block to operate on
  * (can be NULL, in which case we operate over all IDs from given bmain).
- * \param old_id: the datablock to dereference (may be NULL if \a id is non-NULL).
- * \param new_id: the new datablock to replace \a old_id references with (may be NULL).
+ * \param old_id: the data-block to dereference (may be NULL if \a id is non-NULL).
+ * \param new_id: the new data-block to replace \a old_id references with (may be NULL).
  * \param r_id_remap_data: if non-NULL, the IDRemap struct to use
  * (uselful to retrieve info about remapping process).
  */
@@ -472,7 +484,7 @@ static void libblock_remap_data(
     FOREACH_MAIN_ID_END;
   }
 
-  /* XXX We may not want to always 'transfer' fakeuser from old to new id...
+  /* XXX We may not want to always 'transfer' fake-user from old to new id...
    *     Think for now it's desired behavior though,
    *     we can always add an option (flag) to control this later if needed. */
   if (old_id && (old_id->flag & LIB_FAKEUSER)) {
@@ -485,6 +497,7 @@ static void libblock_remap_data(
   if (new_id && (new_id->tag & LIB_TAG_INDIRECT) &&
       (r_id_remap_data->status & ID_REMAP_IS_LINKED_DIRECT)) {
     new_id->tag &= ~LIB_TAG_INDIRECT;
+    new_id->flag &= ~LIB_INDIRECT_WEAK_LINK;
     new_id->tag |= LIB_TAG_EXTERN;
   }
 
@@ -640,12 +653,11 @@ void BKE_libblock_unlink(Main *bmain,
  *     ... sigh
  */
 void BKE_libblock_relink_ex(
-    Main *bmain, void *idv, void *old_idv, void *new_idv, const bool us_min_never_null)
+    Main *bmain, void *idv, void *old_idv, void *new_idv, const short remap_flags)
 {
   ID *id = idv;
   ID *old_id = old_idv;
   ID *new_id = new_idv;
-  int remap_flags = us_min_never_null ? 0 : ID_REMAP_SKIP_NEVER_NULL_USAGE;
 
   /* No need to lock here, we are only affecting given ID, not bmain database. */
 
@@ -740,12 +752,12 @@ void BKE_libblock_relink_to_newid(ID *id)
 void BKE_libblock_free_data(ID *id, const bool do_id_user)
 {
   if (id->properties) {
-    IDP_FreeProperty_ex(id->properties, do_id_user);
+    IDP_FreePropertyContent_ex(id->properties, do_id_user);
     MEM_freeN(id->properties);
   }
 
-  if (id->override_static) {
-    BKE_override_static_free(&id->override_static);
+  if (id->override_library) {
+    BKE_override_library_free(&id->override_library, do_id_user);
   }
 
   /* XXX TODO remove animdata handling from each type's freeing func,
@@ -933,7 +945,7 @@ void BKE_id_free_ex(Main *bmain, void *idv, int flag, const bool use_flag_from_i
 #endif
 
   if ((flag & LIB_ID_FREE_NO_USER_REFCOUNT) == 0) {
-    BKE_libblock_relink_ex(bmain, id, NULL, NULL, true);
+    BKE_libblock_relink_ex(bmain, id, NULL, NULL, 0);
   }
 
   BKE_libblock_free_datablock(id, flag);
@@ -1079,7 +1091,7 @@ static void id_delete(Main *bmain, const bool do_tagged_deletion)
             bmain, id, NULL, ID_REMAP_FLAG_NEVER_NULL_USAGE | ID_REMAP_FORCE_NEVER_NULL_USAGE);
         /* Since we removed ID from Main,
          * we also need to unlink its own other IDs usages ourself. */
-        BKE_libblock_relink_ex(bmain, id, NULL, NULL, true);
+        BKE_libblock_relink_ex(bmain, id, NULL, NULL, 0);
         /* Now we can safely mark that ID as not being in Main database anymore. */
         id->tag |= LIB_TAG_NO_MAIN;
         /* This is needed because we may not have remapped usages

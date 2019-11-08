@@ -1,7 +1,4 @@
 
-uniform mat4 ModelViewProjectionMatrix;
-uniform mat4 ModelMatrix;
-
 in vec3 pos;
 in vec4 nor; /* flag stored in w */
 
@@ -16,7 +13,8 @@ void main()
   bool is_select = false;
   bool is_hidden = false;
 #endif
-  gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+  vec3 world_pos = point_object_to_world(pos);
+  gl_Position = point_world_to_ndc(world_pos);
   /* Add offset in Z to avoid zfighting and render selected wires on top. */
   /* TODO scale this bias using znear and zfar range. */
   gl_Position.z -= (is_select ? 2e-4 : 1e-4);
@@ -34,18 +32,23 @@ void main()
 
 #ifdef USE_SELECT
   finalColor = (is_select) ? colSel : colorWire;
+  finalColor.a = nor.w;
 #else
 #  ifdef VERTEX_MODE
-  finalColor = colorWire;
+  finalColor.xyz = colorWire.xyz;
+  finalColor.a = 1.0;
 #  else
   /* Weight paint needs a light color to contrasts with dark weights. */
-  finalColor.xyz = vec3(0.8, 0.8, 0.8);
+  finalColor = vec4(1, 1, 1, 0.2);
 #  endif
 #endif
 
-  finalColor.a = nor.w;
+  /* Needed for Radeon (TM) RX 480 Graphics. */
+#if defined(GPU_ATI)
+  gl_PointSize = sizeVertex * 2.0;
+#endif
 
 #ifdef USE_WORLD_CLIP_PLANES
-  world_clip_planes_calc_clip_distance((ModelMatrix * vec4(pos, 1.0)).xyz);
+  world_clip_planes_calc_clip_distance(world_pos);
 #endif
 }

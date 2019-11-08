@@ -19,11 +19,14 @@
 # <pep8 compliant>
 
 # for full docs see...
-# https://docs.blender.org/manual/en/dev/editors/uv_image/uv/editing/unwrapping/mapping_types.html#follow-active-quads
+# https://docs.blender.org/manual/en/latest/editors/uv_image/uv/editing/unwrapping/mapping_types.html#follow-active-quads
 
 import bpy
 from bpy.types import Operator
 
+from bpy.props import (
+    EnumProperty,
+)
 
 STATUS_OK = (1 << 0)
 STATUS_ERR_ACTIVE_FACE = (1 << 1)
@@ -31,7 +34,7 @@ STATUS_ERR_NOT_SELECTED = (1 << 2)
 STATUS_ERR_NOT_QUAD = (1 << 3)
 
 
-def extend(obj, operator, EXTEND_MODE):
+def extend(obj, EXTEND_MODE):
     import bmesh
     me = obj.data
 
@@ -119,7 +122,7 @@ def extend(obj, operator, EXTEND_MODE):
         l_b_inner[:] = l_a_inner
         l_b_outer[:] = l_a_inner + ((l_a_inner - l_a_outer) * fac)
 
-    def apply_uv(f_prev, l_prev, f_next):
+    def apply_uv(_f_prev, l_prev, _f_next):
         l_a = [None, None, None, None]
         l_b = [None, None, None, None]
 
@@ -232,7 +235,7 @@ def main(context, operator):
     for ob in ob_list:
         num_meshes += 1
 
-        ret = extend(ob, operator, operator.properties.mode)
+        ret = extend(ob, operator.properties.mode)
         if ret != STATUS_OK:
             num_errors += 1
             status |= ret
@@ -253,7 +256,7 @@ class FollowActiveQuads(Operator):
     bl_label = "Follow Active Quads"
     bl_options = {'REGISTER', 'UNDO'}
 
-    mode: bpy.props.EnumProperty(
+    mode: EnumProperty(
         name="Edge Length Mode",
         description="Method to space UV edge loops",
         items=(
@@ -272,7 +275,7 @@ class FollowActiveQuads(Operator):
         main(context, self)
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
         return wm.invoke_props_dialog(self)
 

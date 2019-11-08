@@ -27,6 +27,8 @@
 #include "BLI_blenlib.h"
 #include "BLI_dlrbTree.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_object_types.h"
@@ -366,30 +368,14 @@ static void pose_slide_apply_val(tPoseSlideOp *pso, FCurve *fcu, Object *ob, flo
   switch (pso->mode) {
     case POSESLIDE_PUSH: /* make the current pose more pronounced */
     {
-      /* perform a weighted average here, favoring the middle pose
-       * - numerator should be larger than denominator to 'expand' the result
-       * - perform this weighting a number of times given by the percentage...
-       */
-      /* TODO: maybe a sensitivity ctrl on top of this is needed */
-      int iters = (int)ceil(10.0f * pso->percentage);
-
-      while (iters-- > 0) {
-        (*val) = (-((sVal * w2) + (eVal * w1)) + ((*val) * 6.0f)) / 5.0f;
-      }
+      /* Slide the pose away from the breakdown pose in the timeline */
+      (*val) -= ((sVal * w2) + (eVal * w1) - (*val)) * pso->percentage;
       break;
     }
     case POSESLIDE_RELAX: /* make the current pose more like its surrounding ones */
     {
-      /* perform a weighted average here, favoring the middle pose
-       * - numerator should be smaller than denominator to 'relax' the result
-       * - perform this weighting a number of times given by the percentage...
-       */
-      /* TODO: maybe a sensitivity ctrl on top of this is needed */
-      int iters = (int)ceil(10.0f * pso->percentage);
-
-      while (iters-- > 0) {
-        (*val) = (((sVal * w2) + (eVal * w1)) + ((*val) * 5.0f)) / 6.0f;
-      }
+      /* Slide the pose towards the breakdown pose in the timeline */
+      (*val) += ((sVal * w2) + (eVal * w1) - (*val)) * pso->percentage;
       break;
     }
     case POSESLIDE_BREAKDOWN: /* make the current pose slide around between the endpoints */
@@ -440,7 +426,7 @@ static void pose_slide_apply_props(tPoseSlideOp *pso,
                                    tPChanFCurveLink *pfl,
                                    const char prop_prefix[])
 {
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   LinkData *ld;
   int len = strlen(pfl->pchan_path);
 
@@ -582,7 +568,7 @@ static void pose_slide_apply_quat(tPoseSlideOp *pso, tPChanFCurveLink *pfl)
 
     /* perform blending */
     if (pso->mode == POSESLIDE_BREAKDOWN) {
-      /* Just perform the interpol between quat_prev and
+      /* Just perform the interpolation between quat_prev and
        * quat_next using pso->percentage as a guide. */
       interp_qt_qtqt(quat_final, quat_prev, quat_next, pso->percentage);
     }
@@ -829,35 +815,35 @@ static void pose_slide_draw_status(tPoseSlideOp *pso)
 
   switch (pso->mode) {
     case POSESLIDE_PUSH:
-      strcpy(mode_str, "Push Pose");
+      strcpy(mode_str, TIP_("Push Pose"));
       break;
     case POSESLIDE_RELAX:
-      strcpy(mode_str, "Relax Pose");
+      strcpy(mode_str, TIP_("Relax Pose"));
       break;
     case POSESLIDE_BREAKDOWN:
-      strcpy(mode_str, "Breakdown");
+      strcpy(mode_str, TIP_("Breakdown"));
       break;
 
     default:
       /* unknown */
-      strcpy(mode_str, "Sliding-Tool");
+      strcpy(mode_str, TIP_("Sliding-Tool"));
       break;
   }
 
   switch (pso->axislock) {
     case PS_LOCK_X:
-      BLI_strncpy(axis_str, "[X]/Y/Z axis only (X to clear)", sizeof(axis_str));
+      BLI_strncpy(axis_str, TIP_("[X]/Y/Z axis only (X to clear)"), sizeof(axis_str));
       break;
     case PS_LOCK_Y:
-      BLI_strncpy(axis_str, "X/[Y]/Z axis only (Y to clear)", sizeof(axis_str));
+      BLI_strncpy(axis_str, TIP_("X/[Y]/Z axis only (Y to clear)"), sizeof(axis_str));
       break;
     case PS_LOCK_Z:
-      BLI_strncpy(axis_str, "X/Y/[Z] axis only (Z to clear)", sizeof(axis_str));
+      BLI_strncpy(axis_str, TIP_("X/Y/[Z] axis only (Z to clear)"), sizeof(axis_str));
       break;
 
     default:
       if (ELEM(pso->channels, PS_TFM_LOC, PS_TFM_ROT, PS_TFM_SIZE)) {
-        BLI_strncpy(axis_str, "X/Y/Z = Axis Constraint", sizeof(axis_str));
+        BLI_strncpy(axis_str, TIP_("X/Y/Z = Axis Constraint"), sizeof(axis_str));
       }
       else {
         axis_str[0] = '\0';
@@ -869,31 +855,34 @@ static void pose_slide_draw_status(tPoseSlideOp *pso)
     case PS_TFM_LOC:
       BLI_snprintf(limits_str,
                    sizeof(limits_str),
-                   "[G]/R/S/B/C - Location only (G to clear) | %s",
+                   TIP_("[G]/R/S/B/C - Location only (G to clear) | %s"),
                    axis_str);
       break;
     case PS_TFM_ROT:
       BLI_snprintf(limits_str,
                    sizeof(limits_str),
-                   "G/[R]/S/B/C - Rotation only (R to clear) | %s",
+                   TIP_("G/[R]/S/B/C - Rotation only (R to clear) | %s"),
                    axis_str);
       break;
     case PS_TFM_SIZE:
-      BLI_snprintf(
-          limits_str, sizeof(limits_str), "G/R/[S]/B/C - Scale only (S to clear) | %s", axis_str);
+      BLI_snprintf(limits_str,
+                   sizeof(limits_str),
+                   TIP_("G/R/[S]/B/C - Scale only (S to clear) | %s"),
+                   axis_str);
       break;
     case PS_TFM_BBONE_SHAPE:
       BLI_strncpy(limits_str,
-                  "G/R/S/[B]/C - Bendy Bone properties only (B to clear) | %s",
+                  TIP_("G/R/S/[B]/C - Bendy Bone properties only (B to clear) | %s"),
                   sizeof(limits_str));
       break;
     case PS_TFM_PROPS:
       BLI_strncpy(limits_str,
-                  "G/R/S/B/[C] - Custom Properties only (C to clear) | %s",
+                  TIP_("G/R/S/B/[C] - Custom Properties only (C to clear) | %s"),
                   sizeof(limits_str));
       break;
     default:
-      BLI_strncpy(limits_str, "G/R/S/B/C - Limit to Transform/Property Set", sizeof(limits_str));
+      BLI_strncpy(
+          limits_str, TIP_("G/R/S/B/C - Limit to Transform/Property Set"), sizeof(limits_str));
       break;
   }
 
@@ -998,7 +987,7 @@ static int pose_slide_invoke_common(bContext *C, wmOperator *op, tPoseSlideOp *p
   pose_slide_refresh(C, pso);
 
   /* set cursor to indicate modal */
-  WM_cursor_modal_set(win, BC_EW_SCROLLCURSOR);
+  WM_cursor_modal_set(win, WM_CURSOR_EW_SCROLL);
 
   /* header print */
   pose_slide_draw_status(pso);
@@ -1117,7 +1106,7 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
       break;
     }
 
-    /* Percentage Chane... */
+    /* Percentage Change... */
     case MOUSEMOVE: /* calculate new position */
     {
       /* only handle mousemove if not doing numinput */
@@ -1368,7 +1357,7 @@ void POSE_OT_push(wmOperatorType *ot)
   ot->poll = ED_operator_posemode;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
   /* Properties */
   pose_slide_opdef_properties(ot);
@@ -1430,7 +1419,7 @@ void POSE_OT_relax(wmOperatorType *ot)
   ot->poll = ED_operator_posemode;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
   /* Properties */
   pose_slide_opdef_properties(ot);
@@ -1491,7 +1480,7 @@ void POSE_OT_push_rest(wmOperatorType *ot)
   ot->poll = ED_operator_posemode;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
   /* Properties */
   pose_slide_opdef_properties(ot);
@@ -1553,7 +1542,7 @@ void POSE_OT_relax_rest(wmOperatorType *ot)
   ot->poll = ED_operator_posemode;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
   /* Properties */
   pose_slide_opdef_properties(ot);
@@ -1615,7 +1604,7 @@ void POSE_OT_breakdown(wmOperatorType *ot)
   ot->poll = ED_operator_posemode;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
   /* Properties */
   pose_slide_opdef_properties(ot);
@@ -2020,7 +2009,7 @@ void POSE_OT_propagate(wmOperatorType *ot)
   ot->poll = ED_operator_posemode; /* XXX: needs selected bones! */
 
   /* flag */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_USE_EVAL_DATA;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
   /* TODO: add "fade out" control for tapering off amount of propagation as time goes by? */

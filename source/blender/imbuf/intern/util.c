@@ -252,6 +252,8 @@ static int isffmpeg(const char *filename)
   if (BLI_path_extension_check_n(filename,
                                  ".swf",
                                  ".jpg",
+                                 ".jp2",
+                                 ".j2c",
                                  ".png",
                                  ".dds",
                                  ".tga",
@@ -285,12 +287,13 @@ static int isffmpeg(const char *filename)
 
   /* Find the first video stream */
   videoStream = -1;
-  for (i = 0; i < pFormatCtx->nb_streams; i++)
+  for (i = 0; i < pFormatCtx->nb_streams; i++) {
     if (pFormatCtx->streams[i] && pFormatCtx->streams[i]->codec &&
         (pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)) {
       videoStream = i;
       break;
     }
+  }
 
   if (videoStream == -1) {
     avformat_close_input(&pFormatCtx);
@@ -388,7 +391,7 @@ bool IMB_isanim(const char *filename)
   return (type && type != ANIM_SEQUENCE);
 }
 
-bool IMB_isfloat(ImBuf *ibuf)
+bool IMB_isfloat(const ImBuf *ibuf)
 {
   const ImFileType *type;
 

@@ -59,6 +59,9 @@
 #include "ED_screen.h"
 #include "ED_util.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
 #include "armature_intern.h"
 
 /* ********************************************** */
@@ -68,7 +71,15 @@
  * that are bone-parented to armature */
 static void applyarmature_fix_boneparents(const bContext *C, Scene *scene, Object *armob)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  /* Depsgraph has been ensured to be evaluated at the beginning of the operator.
+   *
+   * Must not evaluate depsgraph here yet, since this will ruin object matrix which we want to
+   * preserve after other changes has been done in the operator.
+   *
+   * TODO(sergey): This seems very similar to `ignore_parent_tx()`, which was now ensured to work
+   * quite reliably. Can we de-duplicate the code? Or at least verify we don't need an extra logic
+   * in this function. */
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   Main *bmain = CTX_data_main(C);
   Object workob, *ob;
 
@@ -87,11 +98,251 @@ static void applyarmature_fix_boneparents(const bContext *C, Scene *scene, Objec
   }
 }
 
+/* Sets the bone head, tail and roll to match the supplied parameters. */
+static void applyarmature_set_edit_position(EditBone *curbone,
+                                            const float pose_mat[4][4],
+                                            const float new_tail[3],
+                                            float r_new_arm_mat[4][4])
+{
+  /* Simply copy the head/tail values from pchan over to curbone. */
+  copy_v3_v3(curbone->head, pose_mat[3]);
+  copy_v3_v3(curbone->tail, new_tail);
+
+  /* Fix roll:
+   * 1. find auto-calculated roll value for this bone now
+   * 2. remove this from the 'visual' y-rotation
+   */
+  {
+    float premat[3][3], pmat[3][3];
+    float delta[3];
+
+    /* Obtain new auto y-rotation. */
+    sub_v3_v3v3(delta, curbone->tail, curbone->head);
+
+    copy_m3_m4(pmat, pose_mat);
+    mat3_vec_to_roll(pmat, delta, &curbone->roll);
+
+    /* Compute new rest pose matrix if requested. */
+    if (r_new_arm_mat) {
+      vec_roll_to_mat3(delta, curbone->roll, premat);
+      copy_m4_m3(r_new_arm_mat, premat);
+      copy_v3_v3(r_new_arm_mat[3], pose_mat[3]);
+    }
+  }
+}
+
+/* Copy properties over from pchan to curbone and reset channels. */
+static void applyarmature_transfer_properties(EditBone *curbone,
+                                              bPoseChannel *pchan,
+                                              const bPoseChannel *pchan_eval)
+{
+  /* Combine pose and rest values for bendy bone settings,
+   * then clear the pchan values (so we don't get a double-up).
+   */
+  if (pchan->bone->segments > 1) {
+    /* Combine rest/pose values. */
+    curbone->curve_in_x += pchan_eval->curve_in_x;
+    curbone->curve_in_y += pchan_eval->curve_in_y;
+    curbone->curve_out_x += pchan_eval->curve_out_x;
+    curbone->curve_out_y += pchan_eval->curve_out_y;
+    curbone->roll1 += pchan_eval->roll1;
+    curbone->roll2 += pchan_eval->roll2;
+    curbone->ease1 += pchan_eval->ease1;
+    curbone->ease2 += pchan_eval->ease2;
+
+    curbone->scale_in_x *= pchan_eval->scale_in_x;
+    curbone->scale_in_y *= pchan_eval->scale_in_y;
+    curbone->scale_out_x *= pchan_eval->scale_out_x;
+    curbone->scale_out_y *= pchan_eval->scale_out_y;
+
+    /* Reset pose values. */
+    pchan->curve_in_x = pchan->curve_out_x = 0.0f;
+    pchan->curve_in_y = pchan->curve_out_y = 0.0f;
+    pchan->roll1 = pchan->roll2 = 0.0f;
+    pchan->ease1 = pchan->ease2 = 0.0f;
+    pchan->scale_in_x = pchan->scale_in_y = 1.0f;
+    pchan->scale_out_x = pchan->scale_out_y = 1.0f;
+  }
+
+  /* Clear transform values for pchan. */
+  zero_v3(pchan->loc);
+  zero_v3(pchan->eul);
+  unit_qt(pchan->quat);
+  unit_axis_angle(pchan->rotAxis, &pchan->rotAngle);
+  pchan->size[0] = pchan->size[1] = pchan->size[2] = 1.0f;
+
+  /* Set anim lock. */
+  curbone->flag |= BONE_UNKEYED;
+}
+
+/* Adjust the current edit position of the bone using the pose space matrix. */
+static void applyarmature_adjust_edit_position(bArmature *arm,
+                                               bPoseChannel *pchan,
+                                               const float delta_mat[4][4],
+                                               float r_new_arm_mat[4][4])
+{
+  EditBone *curbone = ED_armature_ebone_find_name(arm->edbo, pchan->name);
+  float delta[3], new_tail[3], premat[3][3], new_pose[4][4];
+
+  /* Current orientation matrix. */
+  sub_v3_v3v3(delta, curbone->tail, curbone->head);
+  vec_roll_to_mat3(delta, curbone->roll, premat);
+
+  /* New location and orientation. */
+  mul_m4_m4m3(new_pose, delta_mat, premat);
+  mul_v3_m4v3(new_pose[3], delta_mat, curbone->head);
+  mul_v3_m4v3(new_tail, delta_mat, curbone->tail);
+
+  applyarmature_set_edit_position(curbone, new_pose, new_tail, r_new_arm_mat);
+}
+
+/* Data about parent position for Apply To Selected mode. */
+typedef struct ApplyArmature_ParentState {
+  Bone *bone;
+
+  /* New rest position of the bone with scale included. */
+  float new_rest_mat[4][4];
+  /* New arm_mat of the bone == new_rest_mat without scale. */
+  float new_arm_mat[4][4];
+} ApplyArmature_ParentState;
+
+/* Recursive walk for Apply To Selected mode; pstate NULL unless child of an applied bone. */
+static void applyarmature_process_selected_rec(bArmature *arm,
+                                               bPose *pose,
+                                               bPose *pose_eval,
+                                               Bone *bone,
+                                               ListBase *selected,
+                                               ApplyArmature_ParentState *pstate)
+{
+  bPoseChannel *pchan = BKE_pose_channel_find_name(pose, bone->name);
+  const bPoseChannel *pchan_eval = BKE_pose_channel_find_name(pose_eval, bone->name);
+
+  if (!pchan || !pchan_eval) {
+    return;
+  }
+
+  ApplyArmature_ParentState new_pstate = {.bone = bone};
+
+  if (BLI_findptr(selected, pchan, offsetof(CollectionPointerLink, ptr.data))) {
+    /* SELECTED BONE: Snap to final pose transform minus unapplied parent effects.
+     *
+     * I.e. bone position with accumulated parent effects but no local
+     * transformation will match the original final pose_mat.
+     *
+     * Pose channels are reset as expected.
+     */
+    EditBone *curbone = ED_armature_ebone_find_name(arm->edbo, pchan->name);
+    BoneParentTransform invparent;
+    float new_tail[3];
+
+    if (pchan->parent) {
+      BoneParentTransform old_bpt, new_bpt;
+      float offs_bone[4][4];
+
+      /* Parent effects on the bone transform that have to be removed. */
+      BKE_bone_offset_matrix_get(bone, offs_bone);
+      BKE_bone_parent_transform_calc_from_matrices(bone->flag,
+                                                   bone->inherit_scale_mode,
+                                                   offs_bone,
+                                                   bone->parent->arm_mat,
+                                                   pchan_eval->parent->pose_mat,
+                                                   &old_bpt);
+
+      /* Applied parent effects that have to be kept, if any. */
+      float(*new_parent_pose)[4] = pstate ? pstate->new_rest_mat : bone->parent->arm_mat;
+      BKE_bone_parent_transform_calc_from_matrices(bone->flag,
+                                                   bone->inherit_scale_mode,
+                                                   offs_bone,
+                                                   bone->parent->arm_mat,
+                                                   new_parent_pose,
+                                                   &new_bpt);
+
+      BKE_bone_parent_transform_invert(&old_bpt);
+      BKE_bone_parent_transform_combine(&new_bpt, &old_bpt, &invparent);
+    }
+    else {
+      BKE_bone_parent_transform_clear(&invparent);
+    }
+
+    /* Apply change without inherited unapplied parent transformations. */
+    BKE_bone_parent_transform_apply(&invparent, pchan_eval->pose_mat, new_pstate.new_rest_mat);
+
+    copy_v3_fl3(new_tail, 0.0, bone->length, 0.0);
+    mul_m4_v3(new_pstate.new_rest_mat, new_tail);
+
+    applyarmature_set_edit_position(
+        curbone, new_pstate.new_rest_mat, new_tail, new_pstate.new_arm_mat);
+    applyarmature_transfer_properties(curbone, pchan, pchan_eval);
+
+    pstate = &new_pstate;
+  }
+  else if (pstate) {
+    /* UNSELECTED CHILD OF SELECTED: Include applied parent effects.
+     *
+     * The inherited transform of applied (selected) bones is baked
+     * into the rest pose so that the final bone position doesn't
+     * change.
+     *
+     * Pose channels are not changed, with the exception of the inherited
+     * applied parent scale being baked into the location pose channel.
+     */
+    BoneParentTransform bpt;
+    float offs_bone[4][4], delta[4][4], old_chan_loc[3];
+
+    /* Include applied parent effects. */
+    BKE_bone_offset_matrix_get(bone, offs_bone);
+    BKE_bone_parent_transform_calc_from_matrices(bone->flag,
+                                                 bone->inherit_scale_mode,
+                                                 offs_bone,
+                                                 pstate->bone->arm_mat,
+                                                 pstate->new_rest_mat,
+                                                 &bpt);
+
+    unit_m4(new_pstate.new_rest_mat);
+    BKE_bone_parent_transform_apply(&bpt, new_pstate.new_rest_mat, new_pstate.new_rest_mat);
+
+    /* Bone location channel in pose space relative to bone head. */
+    mul_v3_mat3_m4v3(old_chan_loc, bpt.loc_mat, pchan_eval->loc);
+
+    /* Apply the change to the rest bone position. */
+    invert_m4_m4(delta, bone->arm_mat);
+    mul_m4_m4m4(delta, new_pstate.new_rest_mat, delta);
+
+    applyarmature_adjust_edit_position(arm, pchan, delta, new_pstate.new_arm_mat);
+
+    /* Location pose channel has to be updated, because it is affected
+     * by parent scaling, and the rest pose has no scale by definition. */
+    if (!(bone->flag & BONE_CONNECTED) && !is_zero_v3(old_chan_loc)) {
+      float inv_parent_arm[4][4];
+
+      /* Compute the channel coordinate space matrices for the new rest state. */
+      invert_m4_m4(inv_parent_arm, pstate->new_arm_mat);
+      mul_m4_m4m4(offs_bone, inv_parent_arm, new_pstate.new_arm_mat);
+      BKE_bone_parent_transform_calc_from_matrices(bone->flag,
+                                                   bone->inherit_scale_mode,
+                                                   offs_bone,
+                                                   pstate->new_arm_mat,
+                                                   pstate->new_arm_mat,
+                                                   &bpt);
+
+      /* Re-apply the location to keep the final effect. */
+      invert_m4(bpt.loc_mat);
+      mul_v3_mat3_m4v3(pchan->loc, bpt.loc_mat, old_chan_loc);
+    }
+
+    pstate = &new_pstate;
+  }
+
+  for (Bone *child = bone->childbase.first; child; child = child->next) {
+    applyarmature_process_selected_rec(arm, pose, pose_eval, child, selected, pstate);
+  }
+}
+
 /* set the current pose as the restpose */
 static int apply_armature_pose2bones_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   // must be active object, not edit-object
   Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
@@ -99,7 +350,9 @@ static int apply_armature_pose2bones_exec(bContext *C, wmOperator *op)
   bArmature *arm = BKE_armature_from_object(ob);
   bPose *pose;
   bPoseChannel *pchan;
-  EditBone *curbone;
+  ListBase selected_bones;
+
+  const bool use_selected = RNA_boolean_get(op->ptr, "selected");
 
   /* don't check if editmode (should be done by caller) */
   if (ob->type != OB_ARMATURE) {
@@ -119,80 +372,37 @@ static int apply_armature_pose2bones_exec(bContext *C, wmOperator *op)
                "transforms stored are relative to the old rest pose");
   }
 
+  /* Find selected bones before switching to edit mode. */
+  if (use_selected) {
+    CTX_data_selected_pose_bones(C, &selected_bones);
+
+    if (!selected_bones.first) {
+      return OPERATOR_CANCELLED;
+    }
+  }
+
   /* Get editbones of active armature to alter */
   ED_armature_to_edit(arm);
 
   /* get pose of active object and move it out of posemode */
   pose = ob->pose;
 
-  for (pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
-    const bPoseChannel *pchan_eval = BKE_pose_channel_find_name(ob_eval->pose, pchan->name);
-    curbone = ED_armature_ebone_find_name(arm->edbo, pchan->name);
-
-    /* simply copy the head/tail values from pchan over to curbone */
-    copy_v3_v3(curbone->head, pchan_eval->pose_head);
-    copy_v3_v3(curbone->tail, pchan_eval->pose_tail);
-
-    /* fix roll:
-     * 1. find auto-calculated roll value for this bone now
-     * 2. remove this from the 'visual' y-rotation
-     */
-    {
-      float premat[3][3], imat[3][3], pmat[3][3], tmat[3][3];
-      float delta[3], eul[3];
-
-      /* obtain new auto y-rotation */
-      sub_v3_v3v3(delta, curbone->tail, curbone->head);
-      vec_roll_to_mat3(delta, 0.0f, premat);
-      invert_m3_m3(imat, premat);
-
-      /* get pchan 'visual' matrix */
-      copy_m3_m4(pmat, pchan_eval->pose_mat);
-
-      /* remove auto from visual and get euler rotation */
-      mul_m3_m3m3(tmat, imat, pmat);
-      mat3_to_eul(eul, tmat);
-
-      /* just use this euler-y as new roll value */
-      curbone->roll = eul[1];
+  if (use_selected) {
+    /* The selected only mode requires a recursive walk to handle parent-child relations. */
+    for (Bone *bone = arm->bonebase.first; bone; bone = bone->next) {
+      applyarmature_process_selected_rec(arm, pose, ob_eval->pose, bone, &selected_bones, NULL);
     }
 
-    /* combine pose and rest values for bendy bone settings,
-     * then clear the pchan values (so we don't get a double-up)
-     */
-    if (pchan->bone->segments > 1) {
-      /* combine rest/pose values  */
-      curbone->curve_in_x += pchan_eval->curve_in_x;
-      curbone->curve_in_y += pchan_eval->curve_in_y;
-      curbone->curve_out_x += pchan_eval->curve_out_x;
-      curbone->curve_out_y += pchan_eval->curve_out_y;
-      curbone->roll1 += pchan_eval->roll1;
-      curbone->roll2 += pchan_eval->roll2;
-      curbone->ease1 += pchan_eval->ease1;
-      curbone->ease2 += pchan_eval->ease2;
-      curbone->scale_in_x *= pchan_eval->scale_in_x;
-      curbone->scale_in_y *= pchan_eval->scale_in_y;
-      curbone->scale_out_x *= pchan_eval->scale_out_x;
-      curbone->scale_out_y *= pchan_eval->scale_out_y;
+    BLI_freelistN(&selected_bones);
+  }
+  else {
+    for (pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
+      const bPoseChannel *pchan_eval = BKE_pose_channel_find_name(ob_eval->pose, pchan->name);
+      EditBone *curbone = ED_armature_ebone_find_name(arm->edbo, pchan->name);
 
-      /* reset pose values */
-      pchan->curve_in_x = pchan->curve_out_x = 0.0f;
-      pchan->curve_in_y = pchan->curve_out_y = 0.0f;
-      pchan->roll1 = pchan->roll2 = 0.0f;
-      pchan->ease1 = pchan->ease2 = 0.0f;
-      pchan->scale_in_x = pchan->scale_in_y = 1.0f;
-      pchan->scale_out_x = pchan->scale_out_y = 1.0f;
+      applyarmature_set_edit_position(curbone, pchan_eval->pose_mat, pchan_eval->pose_tail, NULL);
+      applyarmature_transfer_properties(curbone, pchan, pchan_eval);
     }
-
-    /* clear transform values for pchan */
-    zero_v3(pchan->loc);
-    zero_v3(pchan->eul);
-    unit_qt(pchan->quat);
-    unit_axis_angle(pchan->rotAxis, &pchan->rotAngle);
-    pchan->size[0] = pchan->size[1] = pchan->size[2] = 1.0f;
-
-    /* set anim lock */
-    curbone->flag |= BONE_UNKEYED;
   }
 
   /* convert editbones back to bones, and then free the edit-data */
@@ -212,6 +422,17 @@ static int apply_armature_pose2bones_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
+static void apply_armature_pose2bones_ui(bContext *C, wmOperator *op)
+{
+  uiLayout *layout = op->layout;
+  wmWindowManager *wm = CTX_wm_manager(C);
+  PointerRNA ptr;
+
+  RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
+
+  uiItemR(layout, &ptr, "selected", 0, NULL, ICON_NONE);
+}
+
 void POSE_OT_armature_apply(wmOperatorType *ot)
 {
   /* identifiers */
@@ -222,9 +443,16 @@ void POSE_OT_armature_apply(wmOperatorType *ot)
   /* callbacks */
   ot->exec = apply_armature_pose2bones_exec;
   ot->poll = ED_operator_posemode;
+  ot->ui = apply_armature_pose2bones_ui;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_boolean(ot->srna,
+                  "selected",
+                  false,
+                  "Selected Only",
+                  "Only apply the selected bones (with propagation to children)");
 }
 
 /* set the current pose as the restpose */
@@ -232,7 +460,7 @@ static int pose_visual_transform_apply_exec(bContext *C, wmOperator *UNUSED(op))
 {
   ViewLayer *view_layer = CTX_data_view_layer(C);
   View3D *v3d = CTX_wm_view3d(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
 
   FOREACH_OBJECT_IN_MODE_BEGIN (view_layer, v3d, OB_ARMATURE, OB_MODE_POSE, ob) {
     /* loop over all selected pchans
@@ -315,16 +543,14 @@ static void set_pose_keys(Object *ob)
  * \param chan: Bone that pose to paste comes from
  * \param selOnly: Only paste on selected bones
  * \param flip: Flip on x-axis
- * \return Whether the bone that we pasted to if we succeeded
+ * \return The channel of the bone that was pasted to, or NULL if no paste was performed.
  */
 static bPoseChannel *pose_bone_do_paste(Object *ob,
                                         bPoseChannel *chan,
                                         const bool selOnly,
                                         const bool flip)
 {
-  bPoseChannel *pchan;
   char name[MAXBONENAME];
-  short paste_ok;
 
   /* get the name - if flipping, we must flip this first */
   if (flip) {
@@ -339,131 +565,126 @@ static bPoseChannel *pose_bone_do_paste(Object *ob,
    *  2) if selection-masking is on, channel is selected -
    *     only selected bones get pasted on, allowing making both sides symmetrical.
    */
-  pchan = BKE_pose_channel_find_name(ob->pose, name);
-
-  if (selOnly) {
-    paste_ok = ((pchan) && (pchan->bone->flag & BONE_SELECTED));
+  bPoseChannel *pchan = BKE_pose_channel_find_name(ob->pose, name);
+  if (pchan == NULL) {
+    return NULL;
   }
-  else {
-    paste_ok = (pchan != NULL);
+  if (selOnly && (pchan->bone->flag & BONE_SELECTED) == 0) {
+    return NULL;
   }
 
-  /* continue? */
-  if (paste_ok) {
-    /* only loc rot size
-     * - only copies transform info for the pose
-     */
-    copy_v3_v3(pchan->loc, chan->loc);
-    copy_v3_v3(pchan->size, chan->size);
-    pchan->flag = chan->flag;
+  /* only loc rot size
+   * - only copies transform info for the pose
+   */
+  copy_v3_v3(pchan->loc, chan->loc);
+  copy_v3_v3(pchan->size, chan->size);
+  pchan->flag = chan->flag;
 
-    /* check if rotation modes are compatible (i.e. do they need any conversions) */
-    if (pchan->rotmode == chan->rotmode) {
-      /* copy the type of rotation in use */
-      if (pchan->rotmode > 0) {
-        copy_v3_v3(pchan->eul, chan->eul);
-      }
-      else if (pchan->rotmode == ROT_MODE_AXISANGLE) {
-        copy_v3_v3(pchan->rotAxis, chan->rotAxis);
-        pchan->rotAngle = chan->rotAngle;
-      }
-      else {
-        copy_qt_qt(pchan->quat, chan->quat);
-      }
-    }
-    else if (pchan->rotmode > 0) {
-      /* quat/axis-angle to euler */
-      if (chan->rotmode == ROT_MODE_AXISANGLE) {
-        axis_angle_to_eulO(pchan->eul, pchan->rotmode, chan->rotAxis, chan->rotAngle);
-      }
-      else {
-        quat_to_eulO(pchan->eul, pchan->rotmode, chan->quat);
-      }
+  /* check if rotation modes are compatible (i.e. do they need any conversions) */
+  if (pchan->rotmode == chan->rotmode) {
+    /* copy the type of rotation in use */
+    if (pchan->rotmode > 0) {
+      copy_v3_v3(pchan->eul, chan->eul);
     }
     else if (pchan->rotmode == ROT_MODE_AXISANGLE) {
-      /* quat/euler to axis angle */
-      if (chan->rotmode > 0) {
-        eulO_to_axis_angle(pchan->rotAxis, &pchan->rotAngle, chan->eul, chan->rotmode);
-      }
-      else {
-        quat_to_axis_angle(pchan->rotAxis, &pchan->rotAngle, chan->quat);
-      }
+      copy_v3_v3(pchan->rotAxis, chan->rotAxis);
+      pchan->rotAngle = chan->rotAngle;
     }
     else {
-      /* euler/axis-angle to quat */
-      if (chan->rotmode > 0) {
-        eulO_to_quat(pchan->quat, chan->eul, chan->rotmode);
-      }
-      else {
-        axis_angle_to_quat(pchan->quat, chan->rotAxis, pchan->rotAngle);
-      }
+      copy_qt_qt(pchan->quat, chan->quat);
     }
-
-    /* B-Bone posing options should also be included... */
-    pchan->curve_in_x = chan->curve_in_x;
-    pchan->curve_in_y = chan->curve_in_y;
-    pchan->curve_out_x = chan->curve_out_x;
-    pchan->curve_out_y = chan->curve_out_y;
-
-    pchan->roll1 = chan->roll1;
-    pchan->roll2 = chan->roll2;
-    pchan->ease1 = chan->ease1;
-    pchan->ease2 = chan->ease2;
-    pchan->scale_in_x = chan->scale_in_x;
-    pchan->scale_in_y = chan->scale_in_y;
-    pchan->scale_out_x = chan->scale_out_x;
-    pchan->scale_out_y = chan->scale_out_y;
-
-    /* paste flipped pose? */
-    if (flip) {
-      pchan->loc[0] *= -1;
-
-      pchan->curve_in_x *= -1;
-      pchan->curve_out_x *= -1;
-      pchan->roll1 *= -1;  // XXX?
-      pchan->roll2 *= -1;  // XXX?
-
-      /* has to be done as eulers... */
-      if (pchan->rotmode > 0) {
-        pchan->eul[1] *= -1;
-        pchan->eul[2] *= -1;
-      }
-      else if (pchan->rotmode == ROT_MODE_AXISANGLE) {
-        float eul[3];
-
-        axis_angle_to_eulO(eul, EULER_ORDER_DEFAULT, pchan->rotAxis, pchan->rotAngle);
-        eul[1] *= -1;
-        eul[2] *= -1;
-        eulO_to_axis_angle(pchan->rotAxis, &pchan->rotAngle, eul, EULER_ORDER_DEFAULT);
-      }
-      else {
-        float eul[3];
-
-        normalize_qt(pchan->quat);
-        quat_to_eul(eul, pchan->quat);
-        eul[1] *= -1;
-        eul[2] *= -1;
-        eul_to_quat(pchan->quat, eul);
-      }
+  }
+  else if (pchan->rotmode > 0) {
+    /* quat/axis-angle to euler */
+    if (chan->rotmode == ROT_MODE_AXISANGLE) {
+      axis_angle_to_eulO(pchan->eul, pchan->rotmode, chan->rotAxis, chan->rotAngle);
     }
-
-    /* ID properties */
-    if (chan->prop) {
-      if (pchan->prop) {
-        /* if we have existing properties on a bone, just copy over the values of
-         * matching properties (i.e. ones which will have some impact) on to the
-         * target instead of just blinding replacing all [
-         */
-        IDP_SyncGroupValues(pchan->prop, chan->prop);
-      }
-      else {
-        /* no existing properties, so assume that we want copies too? */
-        pchan->prop = IDP_CopyProperty(chan->prop);
-      }
+    else {
+      quat_to_eulO(pchan->eul, pchan->rotmode, chan->quat);
+    }
+  }
+  else if (pchan->rotmode == ROT_MODE_AXISANGLE) {
+    /* quat/euler to axis angle */
+    if (chan->rotmode > 0) {
+      eulO_to_axis_angle(pchan->rotAxis, &pchan->rotAngle, chan->eul, chan->rotmode);
+    }
+    else {
+      quat_to_axis_angle(pchan->rotAxis, &pchan->rotAngle, chan->quat);
+    }
+  }
+  else {
+    /* euler/axis-angle to quat */
+    if (chan->rotmode > 0) {
+      eulO_to_quat(pchan->quat, chan->eul, chan->rotmode);
+    }
+    else {
+      axis_angle_to_quat(pchan->quat, chan->rotAxis, pchan->rotAngle);
     }
   }
 
-  /* return whether paste went ahead */
+  /* B-Bone posing options should also be included... */
+  pchan->curve_in_x = chan->curve_in_x;
+  pchan->curve_in_y = chan->curve_in_y;
+  pchan->curve_out_x = chan->curve_out_x;
+  pchan->curve_out_y = chan->curve_out_y;
+
+  pchan->roll1 = chan->roll1;
+  pchan->roll2 = chan->roll2;
+  pchan->ease1 = chan->ease1;
+  pchan->ease2 = chan->ease2;
+  pchan->scale_in_x = chan->scale_in_x;
+  pchan->scale_in_y = chan->scale_in_y;
+  pchan->scale_out_x = chan->scale_out_x;
+  pchan->scale_out_y = chan->scale_out_y;
+
+  /* paste flipped pose? */
+  if (flip) {
+    pchan->loc[0] *= -1;
+
+    pchan->curve_in_x *= -1;
+    pchan->curve_out_x *= -1;
+    pchan->roll1 *= -1;  // XXX?
+    pchan->roll2 *= -1;  // XXX?
+
+    /* has to be done as eulers... */
+    if (pchan->rotmode > 0) {
+      pchan->eul[1] *= -1;
+      pchan->eul[2] *= -1;
+    }
+    else if (pchan->rotmode == ROT_MODE_AXISANGLE) {
+      float eul[3];
+
+      axis_angle_to_eulO(eul, EULER_ORDER_DEFAULT, pchan->rotAxis, pchan->rotAngle);
+      eul[1] *= -1;
+      eul[2] *= -1;
+      eulO_to_axis_angle(pchan->rotAxis, &pchan->rotAngle, eul, EULER_ORDER_DEFAULT);
+    }
+    else {
+      float eul[3];
+
+      normalize_qt(pchan->quat);
+      quat_to_eul(eul, pchan->quat);
+      eul[1] *= -1;
+      eul[2] *= -1;
+      eul_to_quat(pchan->quat, eul);
+    }
+  }
+
+  /* ID properties */
+  if (chan->prop) {
+    if (pchan->prop) {
+      /* if we have existing properties on a bone, just copy over the values of
+       * matching properties (i.e. ones which will have some impact) on to the
+       * target instead of just blinding replacing all [
+       */
+      IDP_SyncGroupValues(pchan->prop, chan->prop);
+    }
+    else {
+      /* no existing properties, so assume that we want copies too? */
+      pchan->prop = IDP_CopyProperty(chan->prop);
+    }
+  }
+
   return pchan;
 }
 
@@ -490,7 +711,9 @@ static int pose_copy_exec(bContext *C, wmOperator *op)
    */
   Main *temp_bmain = BKE_main_new();
   Object ob_copy = *ob;
+  ob_copy.adt = NULL;
   bArmature arm_copy = *((bArmature *)ob->data);
+  arm_copy.adt = NULL;
   ob_copy.data = &arm_copy;
   BLI_addtail(&temp_bmain->objects, &ob_copy);
   BLI_addtail(&temp_bmain->armatures, &arm_copy);
@@ -601,7 +824,7 @@ static int pose_paste_exec(bContext *C, wmOperator *op)
 
   /* Recalculate paths if any of the bones have paths... */
   if ((ob->pose->avs.path_bakeflag & MOTIONPATH_BAKE_HAS_PATHS)) {
-    ED_pose_recalculate_paths(C, scene, ob, false);
+    ED_pose_recalculate_paths(C, scene, ob, POSE_PATH_CALC_RANGE_FULL);
   }
 
   /* Notifiers for updates, */
@@ -820,6 +1043,7 @@ static int pose_clear_transform_generic_exec(bContext *C,
                                              void (*clear_func)(bPoseChannel *),
                                              const char default_ksName[])
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   bool changed_multi = false;
 
@@ -835,8 +1059,8 @@ static int pose_clear_transform_generic_exec(bContext *C,
   ViewLayer *view_layer = CTX_data_view_layer(C);
   View3D *v3d = CTX_wm_view3d(C);
   FOREACH_OBJECT_IN_MODE_BEGIN (view_layer, v3d, OB_ARMATURE, OB_MODE_POSE, ob_iter) {
-    Object *ob_eval = DEG_get_evaluated_object(
-        CTX_data_depsgraph(C), ob_iter);  // XXX: UGLY HACK (for autokey + clear transforms)
+    // XXX: UGLY HACK (for autokey + clear transforms)
+    Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob_iter);
     ListBase dsources = {NULL, NULL};
     bool changed = false;
 
@@ -881,7 +1105,7 @@ static int pose_clear_transform_generic_exec(bContext *C,
 
         /* now recalculate paths */
         if ((ob_iter->pose->avs.path_bakeflag & MOTIONPATH_BAKE_HAS_PATHS)) {
-          ED_pose_recalculate_paths(C, scene, ob_iter, false);
+          ED_pose_recalculate_paths(C, scene, ob_iter, POSE_PATH_CALC_RANGE_FULL);
         }
 
         BLI_freelistN(&dsources);
@@ -1011,7 +1235,7 @@ static int pose_clear_user_transforms_exec(bContext *C, wmOperator *op)
       workob.adt = ob->adt;
       workob.pose = dummyPose;
 
-      BKE_animsys_evaluate_animdata(NULL, scene, &workob.id, workob.adt, cframe, ADT_RECALC_ANIM);
+      BKE_animsys_evaluate_animdata(scene, &workob.id, workob.adt, cframe, ADT_RECALC_ANIM, false);
 
       /* copy back values, but on selected bones only  */
       for (pchan = dummyPose->chanbase.first; pchan; pchan = pchan->next) {
@@ -1022,7 +1246,6 @@ static int pose_clear_user_transforms_exec(bContext *C, wmOperator *op)
       for (pchan = dummyPose->chanbase.first; pchan; pchan = pchan->next) {
         if (pchan->prop) {
           IDP_FreeProperty(pchan->prop);
-          MEM_freeN(pchan->prop);
         }
       }
 

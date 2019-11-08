@@ -471,14 +471,6 @@ void psys_thread_context_init(ParticleThreadContext *ctx, ParticleSimulationData
   ctx->ma = give_current_material(sim->ob, sim->psys->part->omat);
 }
 
-#define MAX_PARTICLES_PER_TASK \
-  256 /* XXX arbitrary - maybe use at least number of points instead for better balancing? */
-
-BLI_INLINE int ceil_ii(int a, int b)
-{
-  return (a + b - 1) / b;
-}
-
 void psys_tasks_create(ParticleThreadContext *ctx,
                        int startpart,
                        int endpart,
@@ -486,7 +478,7 @@ void psys_tasks_create(ParticleThreadContext *ctx,
                        int *r_numtasks)
 {
   ParticleTask *tasks;
-  int numtasks = ceil_ii((endpart - startpart), MAX_PARTICLES_PER_TASK);
+  int numtasks = min_ii(BLI_system_thread_count() * 4, endpart - startpart);
   float particles_per_task = (float)(endpart - startpart) / (float)numtasks, p, pnext;
   int i;
 
@@ -509,7 +501,7 @@ void psys_tasks_free(ParticleTask *tasks, int numtasks)
   int i;
 
   /* threads */
-  for (i = 0; i < numtasks; ++i) {
+  for (i = 0; i < numtasks; i++) {
     if (tasks[i].rng) {
       BLI_rng_free(tasks[i].rng);
     }
@@ -571,13 +563,13 @@ void psys_thread_context_free(ParticleThreadContext *ctx)
   BLI_kdtree_3d_free(ctx->tree);
 
   if (ctx->clumpcurve != NULL) {
-    curvemapping_free(ctx->clumpcurve);
+    BKE_curvemapping_free(ctx->clumpcurve);
   }
   if (ctx->roughcurve != NULL) {
-    curvemapping_free(ctx->roughcurve);
+    BKE_curvemapping_free(ctx->roughcurve);
   }
   if (ctx->twistcurve != NULL) {
-    curvemapping_free(ctx->twistcurve);
+    BKE_curvemapping_free(ctx->twistcurve);
   }
 }
 
@@ -1703,7 +1695,7 @@ typedef struct SPHRangeData {
 
 static void sph_evaluate_func(BVHTree *tree,
                               ParticleSystem **psys,
-                              float co[3],
+                              const float co[3],
                               SPHRangeData *pfr,
                               float interaction_radius,
                               BVHTree_RangeQuery callback)
@@ -1966,10 +1958,10 @@ static void sphclassical_density_accum_cb(void *userdata,
   pfr->data[1] += q / npa->sphdensity;
 }
 
-static void sphclassical_neighbour_accum_cb(void *userdata,
-                                            int index,
-                                            const float co[3],
-                                            float UNUSED(squared_dist))
+static void sphclassical_neighbor_accum_cb(void *userdata,
+                                           int index,
+                                           const float co[3],
+                                           float UNUSED(squared_dist))
 {
   SPHRangeData *pfr = (SPHRangeData *)userdata;
   ParticleData *npa = pfr->npsys->particles + index;
@@ -2039,7 +2031,7 @@ static void sphclassical_force_cb(void *sphdata_v,
   pfr.pa = pa;
 
   sph_evaluate_func(
-      NULL, psys, state->co, &pfr, interaction_radius, sphclassical_neighbour_accum_cb);
+      NULL, psys, state->co, &pfr, interaction_radius, sphclassical_neighbor_accum_cb);
   pressure = stiffness * (pow7f(pa->sphdensity / rest_density) - 1.0f);
 
   /* multiply by mass so that we return a force, not accel */
@@ -2505,7 +2497,7 @@ static float collision_point_distance_with_normal(
   return 0;
 }
 static void collision_point_on_surface(
-    float p[3], ParticleCollisionElement *pce, float fac, ParticleCollision *col, float *co)
+    const float p[3], ParticleCollisionElement *pce, float fac, ParticleCollision *col, float *co)
 {
   collision_interpolate_element(pce, 0.f, fac, col);
 
@@ -3498,10 +3490,10 @@ static void do_hair_dynamics(ParticleSimulationData *sim)
   psys->clmd->sim_parms->effector_weights = psys->part->effector_weights;
 
   BKE_id_copy_ex(NULL, &psys->hair_in_mesh->id, (ID **)&psys->hair_out_mesh, LIB_ID_COPY_LOCALIZE);
-  deformedVerts = BKE_mesh_vertexCos_get(psys->hair_out_mesh, NULL);
+  deformedVerts = BKE_mesh_vert_coords_alloc(psys->hair_out_mesh, NULL);
   clothModifier_do(
       psys->clmd, sim->depsgraph, sim->scene, sim->ob, psys->hair_in_mesh, deformedVerts);
-  BKE_mesh_apply_vert_coords(psys->hair_out_mesh, deformedVerts);
+  BKE_mesh_vert_coords_apply(psys->hair_out_mesh, deformedVerts);
 
   MEM_freeN(deformedVerts);
 
@@ -3693,7 +3685,7 @@ typedef struct DynamicStepSolverTaskData {
 
 static void dynamics_step_sph_ddr_task_cb_ex(void *__restrict userdata,
                                              const int p,
-                                             const ParallelRangeTLS *__restrict tls)
+                                             const TaskParallelTLS *__restrict tls)
 {
   DynamicStepSolverTaskData *data = userdata;
   ParticleSimulationData *sim = data->sim;
@@ -3728,7 +3720,7 @@ static void dynamics_step_sph_ddr_task_cb_ex(void *__restrict userdata,
 }
 
 static void dynamics_step_sph_classical_basic_integrate_task_cb_ex(
-    void *__restrict userdata, const int p, const ParallelRangeTLS *__restrict UNUSED(tls))
+    void *__restrict userdata, const int p, const TaskParallelTLS *__restrict UNUSED(tls))
 {
   DynamicStepSolverTaskData *data = userdata;
   ParticleSimulationData *sim = data->sim;
@@ -3744,7 +3736,7 @@ static void dynamics_step_sph_classical_basic_integrate_task_cb_ex(
 }
 
 static void dynamics_step_sph_classical_calc_density_task_cb_ex(
-    void *__restrict userdata, const int p, const ParallelRangeTLS *__restrict tls)
+    void *__restrict userdata, const int p, const TaskParallelTLS *__restrict tls)
 {
   DynamicStepSolverTaskData *data = userdata;
   ParticleSimulationData *sim = data->sim;
@@ -3761,8 +3753,9 @@ static void dynamics_step_sph_classical_calc_density_task_cb_ex(
   sphclassical_calc_dens(pa, pa->state.time, sphdata);
 }
 
-static void dynamics_step_sph_classical_integrate_task_cb_ex(
-    void *__restrict userdata, const int p, const ParallelRangeTLS *__restrict tls)
+static void dynamics_step_sph_classical_integrate_task_cb_ex(void *__restrict userdata,
+                                                             const int p,
+                                                             const TaskParallelTLS *__restrict tls)
 {
   DynamicStepSolverTaskData *data = userdata;
   ParticleSimulationData *sim = data->sim;
@@ -3971,7 +3964,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
         /* Apply SPH forces using double-density relaxation algorithm
          * (Clavat et. al.) */
 
-        ParallelRangeSettings settings;
+        TaskParallelSettings settings;
         BLI_parallel_range_settings_defaults(&settings);
         settings.use_threading = (psys->totpart > 100);
         settings.userdata_chunk = &sphdata;
@@ -3988,7 +3981,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
          * this algorithm is separated into distinct loops. */
 
         {
-          ParallelRangeSettings settings;
+          TaskParallelSettings settings;
           BLI_parallel_range_settings_defaults(&settings);
           settings.use_threading = (psys->totpart > 100);
           BLI_task_parallel_range(0,
@@ -4002,7 +3995,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
         /* Note that we could avoid copying sphdata for each thread here (it's only read here),
          * but doubt this would gain us anything except confusion... */
         {
-          ParallelRangeSettings settings;
+          TaskParallelSettings settings;
           BLI_parallel_range_settings_defaults(&settings);
           settings.use_threading = (psys->totpart > 100);
           settings.userdata_chunk = &sphdata;
@@ -4016,7 +4009,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
 
         /* do global forces & effectors */
         {
-          ParallelRangeSettings settings;
+          TaskParallelSettings settings;
           BLI_parallel_range_settings_defaults(&settings);
           settings.use_threading = (psys->totpart > 100);
           settings.userdata_chunk = &sphdata;
@@ -4670,7 +4663,7 @@ void particle_system_update(struct Depsgraph *depsgraph,
           hcfra = 100.0f * (float)i / (float)psys->part->hair_step;
           if ((part->flag & PART_HAIR_REGROW) == 0) {
             BKE_animsys_evaluate_animdata(
-                depsgraph, scene, &part_local->id, part_local->adt, hcfra, ADT_RECALC_ANIM);
+                scene, &part_local->id, part_local->adt, hcfra, ADT_RECALC_ANIM, false);
           }
           system_step(&sim, hcfra, use_render_params);
           psys->cfra = hcfra;

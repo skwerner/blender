@@ -39,10 +39,8 @@ struct Depsgraph;
 struct IDProperty;
 struct Main;
 struct MenuType;
-struct PropertyRNA;
 struct Scene;
 struct SpaceLink;
-struct ViewLayer;
 struct WorkSpace;
 struct WorkSpaceInstanceHook;
 struct bContext;
@@ -50,7 +48,6 @@ struct bScreen;
 struct rcti;
 struct uiBlock;
 struct uiLayout;
-struct wmEvent;
 struct wmKeyConfig;
 struct wmMsgBus;
 struct wmMsgSubscribeKey;
@@ -69,11 +66,12 @@ void ED_region_do_listen(struct wmWindow *win,
 void ED_region_do_layout(struct bContext *C, struct ARegion *ar);
 void ED_region_do_draw(struct bContext *C, struct ARegion *ar);
 void ED_region_exit(struct bContext *C, struct ARegion *ar);
+void ED_region_remove(struct bContext *C, struct ScrArea *sa, struct ARegion *ar);
 void ED_region_pixelspace(struct ARegion *ar);
 void ED_region_update_rect(struct ARegion *ar);
 void ED_region_init(struct ARegion *ar);
 void ED_region_tag_redraw(struct ARegion *ar);
-void ED_region_tag_redraw_partial(struct ARegion *ar, const struct rcti *rct);
+void ED_region_tag_redraw_partial(struct ARegion *ar, const struct rcti *rct, bool rebuild);
 void ED_region_tag_redraw_overlay(struct ARegion *ar);
 void ED_region_tag_redraw_no_rebuild(struct ARegion *ar);
 void ED_region_tag_refresh_ui(struct ARegion *ar);
@@ -87,9 +85,12 @@ void ED_region_panels_ex(const struct bContext *C,
 void ED_region_panels(const struct bContext *C, struct ARegion *ar);
 void ED_region_panels_layout_ex(const struct bContext *C,
                                 struct ARegion *ar,
+                                struct ListBase *paneltypes,
                                 const char *contexts[],
                                 int contextnr,
-                                const bool vertical);
+                                const bool vertical,
+                                const char *category_override);
+
 void ED_region_panels_layout(const struct bContext *C, struct ARegion *ar);
 void ED_region_panels_draw(const struct bContext *C, struct ARegion *ar);
 
@@ -121,7 +122,8 @@ void ED_region_image_metadata_draw(
 void ED_region_image_metadata_panel_draw(struct ImBuf *ibuf, struct uiLayout *layout);
 void ED_region_grid_draw(struct ARegion *ar, float zoomx, float zoomy);
 float ED_region_blend_alpha(struct ARegion *ar);
-void ED_region_visible_rect(struct ARegion *ar, struct rcti *rect);
+void ED_region_visible_rect_calc(struct ARegion *ar, struct rcti *rect);
+const rcti *ED_region_visible_rect(ARegion *ar);
 bool ED_region_is_overlap(int spacetype, int regiontype);
 
 int ED_region_snap_size_test(const struct ARegion *ar);
@@ -237,6 +239,15 @@ struct ScrArea *ED_screen_state_toggle(struct bContext *C,
                                        struct wmWindow *win,
                                        struct ScrArea *sa,
                                        const short state);
+ScrArea *ED_screen_temp_space_open(struct bContext *C,
+                                   const char *title,
+                                   int x,
+                                   int y,
+                                   int sizex,
+                                   int sizey,
+                                   eSpace_Type space_type,
+                                   int display_type,
+                                   bool dialog);
 void ED_screens_header_tools_menu_create(struct bContext *C, struct uiLayout *layout, void *arg);
 void ED_screens_footer_tools_menu_create(struct bContext *C, struct uiLayout *layout, void *arg);
 void ED_screens_navigation_bar_tools_menu_create(struct bContext *C,
@@ -334,6 +345,7 @@ bool ED_operator_object_active(struct bContext *C);
 bool ED_operator_object_active_editable(struct bContext *C);
 bool ED_operator_object_active_editable_mesh(struct bContext *C);
 bool ED_operator_object_active_editable_font(struct bContext *C);
+bool ED_operator_editable_mesh(struct bContext *C);
 bool ED_operator_editmesh(struct bContext *C);
 bool ED_operator_editmesh_view3d(struct bContext *C);
 bool ED_operator_editmesh_region_view3d(struct bContext *C);
@@ -392,13 +404,10 @@ void ED_screen_user_menu_register(void);
 
 /* Cache display helpers */
 
-void ED_region_cache_draw_background(const struct ARegion *ar);
+void ED_region_cache_draw_background(struct ARegion *ar);
 void ED_region_cache_draw_curfra_label(const int framenr, const float x, const float y);
-void ED_region_cache_draw_cached_segments(const struct ARegion *ar,
-                                          const int num_segments,
-                                          const int *points,
-                                          const int sfra,
-                                          const int efra);
+void ED_region_cache_draw_cached_segments(
+    struct ARegion *ar, const int num_segments, const int *points, const int sfra, const int efra);
 
 /* area_utils.c */
 void ED_region_generic_tools_region_message_subscribe(const struct bContext *C,
@@ -436,11 +445,13 @@ enum {
   ED_KEYMAP_GIZMO = (1 << 2),
   ED_KEYMAP_TOOL = (1 << 3),
   ED_KEYMAP_VIEW2D = (1 << 4),
-  ED_KEYMAP_ANIMATION = (1 << 5),
-  ED_KEYMAP_FRAMES = (1 << 6),
-  ED_KEYMAP_HEADER = (1 << 7),
-  ED_KEYMAP_GPENCIL = (1 << 8),
+  ED_KEYMAP_MARKERS = (1 << 5),
+  ED_KEYMAP_ANIMATION = (1 << 6),
+  ED_KEYMAP_FRAMES = (1 << 7),
+  ED_KEYMAP_HEADER = (1 << 8),
   ED_KEYMAP_FOOTER = (1 << 9),
+  ED_KEYMAP_GPENCIL = (1 << 10),
+  ED_KEYMAP_NAVBAR = (1 << 11),
 };
 
 /* SCREEN_OT_space_context_cycle direction */

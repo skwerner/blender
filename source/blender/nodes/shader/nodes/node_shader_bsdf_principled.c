@@ -24,7 +24,17 @@
 static bNodeSocketTemplate sh_node_bsdf_principled_in[] = {
     {SOCK_RGBA, 1, N_("Base Color"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
     {SOCK_FLOAT, 1, N_("Subsurface"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_VECTOR, 1, N_("Subsurface Radius"), 1.0f, 0.2f, 0.1f, 0.0f, 0.0f, 100.0f},
+    {SOCK_VECTOR,
+     1,
+     N_("Subsurface Radius"),
+     1.0f,
+     0.2f,
+     0.1f,
+     0.0f,
+     0.0f,
+     100.0f,
+     PROP_NONE,
+     SOCK_COMPACT},
     {SOCK_RGBA, 1, N_("Subsurface Color"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
     {SOCK_FLOAT, 1, N_("Metallic"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
     {SOCK_FLOAT, 1, N_("Specular"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
@@ -39,6 +49,8 @@ static bNodeSocketTemplate sh_node_bsdf_principled_in[] = {
     {SOCK_FLOAT, 1, N_("IOR"), 1.45f, 0.0f, 0.0f, 0.0f, 0.0f, 1000.0f},
     {SOCK_FLOAT, 1, N_("Transmission"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
     {SOCK_FLOAT, 1, N_("Transmission Roughness"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_RGBA, 1, N_("Emission"), 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, 1, N_("Alpha"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
     {SOCK_VECTOR,
      1,
      N_("Normal"),
@@ -99,30 +111,36 @@ static int node_shader_gpu_bsdf_principled(GPUMaterial *mat,
   GPUNodeLink *sss_scale;
 
   /* Normals */
-  if (!in[17].link) {
-    GPU_link(mat, "world_normals_get", &in[17].link);
+  if (!in[19].link) {
+    GPU_link(mat, "world_normals_get", &in[19].link);
   }
 
   /* Clearcoat Normals */
-  if (!in[18].link) {
-    GPU_link(mat, "world_normals_get", &in[18].link);
+  if (!in[20].link) {
+    GPU_link(mat, "world_normals_get", &in[20].link);
   }
 
+#if 0 /* Not used at the moment. */
   /* Tangents */
-  if (!in[19].link) {
+  if (!in[21].link) {
     GPUNodeLink *orco = GPU_attribute(CD_ORCO, "");
-    GPU_link(mat, "tangent_orco_z", orco, &in[19].link);
+    GPU_link(mat, "tangent_orco_z", orco, &in[21].link);
     GPU_link(mat,
              "node_tangent",
-             GPU_builtin(GPU_VIEW_NORMAL),
-             in[19].link,
+             GPU_builtin(GPU_WORLD_NORMAL),
+             in[21].link,
              GPU_builtin(GPU_OBJECT_MATRIX),
-             GPU_builtin(GPU_INVERSE_VIEW_MATRIX),
-             &in[19].link);
+             &in[21].link);
   }
+#endif
+
+  bool use_diffuse = socket_not_one(4) && socket_not_one(15);
+  bool use_subsurf = socket_not_zero(1) && use_diffuse && node->sss_id > 0;
+  bool use_refract = socket_not_one(4) && socket_not_zero(15);
+  bool use_clear = socket_not_zero(12);
 
   /* SSS Profile */
-  if (node->sss_id == 1) {
+  if (use_subsurf) {
     static short profile = SHD_SUBSURFACE_BURLEY;
     bNodeSocket *socket = BLI_findlink(&node->original->inputs, 2);
     bNodeSocketValueRGBA *socket_data = socket->default_value;
@@ -136,11 +154,6 @@ static int node_shader_gpu_bsdf_principled(GPUMaterial *mat,
   else {
     GPU_link(mat, "set_rgb_one", &sss_scale);
   }
-
-  bool use_diffuse = socket_not_one(4) && socket_not_one(15);
-  bool use_subsurf = socket_not_zero(1) && use_diffuse;
-  bool use_refract = socket_not_one(4) && socket_not_zero(15);
-  bool use_clear = socket_not_zero(12);
 
   /* Due to the manual effort done per config, we only optimize the most common permutations. */
   char *node_name;
@@ -163,7 +176,7 @@ static int node_shader_gpu_bsdf_principled(GPUMaterial *mat,
   else if (use_subsurf && use_diffuse && !use_refract && !use_clear) {
     static char name[] = "node_bsdf_principled_subsurface";
     node_name = name;
-    flag = GPU_MATFLAG_DIFFUSE | GPU_MATFLAG_SSS | GPU_MATFLAG_GLOSSY;
+    flag = GPU_MATFLAG_DIFFUSE | GPU_MATFLAG_GLOSSY;
   }
   else if (!use_subsurf && !use_diffuse && use_refract && !use_clear && !socket_not_zero(4)) {
     static char name[] = "node_bsdf_principled_glass";
@@ -173,7 +186,11 @@ static int node_shader_gpu_bsdf_principled(GPUMaterial *mat,
   else {
     static char name[] = "node_bsdf_principled";
     node_name = name;
-    flag = GPU_MATFLAG_DIFFUSE | GPU_MATFLAG_GLOSSY | GPU_MATFLAG_SSS | GPU_MATFLAG_REFRACT;
+    flag = GPU_MATFLAG_DIFFUSE | GPU_MATFLAG_GLOSSY | GPU_MATFLAG_REFRACT;
+  }
+
+  if (use_subsurf) {
+    flag |= GPU_MATFLAG_SSS;
   }
 
   GPU_material_flag_set(mat, flag);

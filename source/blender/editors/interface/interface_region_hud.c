@@ -27,6 +27,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_screen_types.h"
 #include "DNA_userdef_types.h"
 
 #include "BLI_string.h"
@@ -56,16 +57,32 @@
 /* -------------------------------------------------------------------- */
 /** \name Utilities
  * \{ */
+struct HudRegionData {
+  short regionid;
+};
 
-static bool last_redo_poll(const bContext *C)
+static bool last_redo_poll(const bContext *C, short region_type)
 {
   wmOperator *op = WM_operator_last_redo(C);
   if (op == NULL) {
     return false;
   }
+
   bool success = false;
-  if (WM_operator_repeat_check(C, op) && WM_operator_check_ui_empty(op->type) == false) {
-    success = WM_operator_poll((bContext *)C, op->type);
+  {
+    /* Make sure that we are using the same region type as the original
+     * operator call. Otherwise we would be polling the operator with the
+     * wrong context.
+     */
+    ScrArea *sa = CTX_wm_area(C);
+    ARegion *ar_op = (region_type != -1) ? BKE_area_find_region_type(sa, region_type) : NULL;
+    ARegion *ar_prev = CTX_wm_region(C);
+    CTX_wm_region_set((bContext *)C, ar_op);
+
+    if (WM_operator_repeat_check(C, op) && WM_operator_check_ui_empty(op->type) == false) {
+      success = WM_operator_poll((bContext *)C, op->type);
+    }
+    CTX_wm_region_set((bContext *)C, ar_prev);
   }
   return success;
 }
@@ -86,13 +103,21 @@ static void hud_region_hide(ARegion *ar)
 
 static bool hud_panel_operator_redo_poll(const bContext *C, PanelType *UNUSED(pt))
 {
-  return last_redo_poll(C);
+  ScrArea *sa = CTX_wm_area(C);
+  ARegion *ar = BKE_area_find_region_type(sa, RGN_TYPE_HUD);
+  if (ar != NULL) {
+    struct HudRegionData *hrd = ar->regiondata;
+    if (hrd != NULL) {
+      return last_redo_poll(C, hrd->regionid);
+    }
+  }
+  return false;
 }
 
 static void hud_panel_operator_redo_draw_header(const bContext *C, Panel *pa)
 {
   wmOperator *op = WM_operator_last_redo(C);
-  BLI_strncpy(pa->drawname, RNA_struct_ui_name(op->type->srna), sizeof(pa->drawname));
+  BLI_strncpy(pa->drawname, WM_operatortype_name(op->type, op->ptr), sizeof(pa->drawname));
 }
 
 static void hud_panel_operator_redo_draw(const bContext *C, Panel *pa)
@@ -131,10 +156,6 @@ static void hud_panels_register(ARegionType *art, int space_type, int region_typ
 /** \name Callbacks for Floating Region
  * \{ */
 
-struct HudRegionData {
-  short regionid;
-};
-
 static void hud_region_init(wmWindowManager *wm, ARegion *ar)
 {
   ED_region_panels_init(wm, ar);
@@ -149,21 +170,8 @@ static void hud_region_free(ARegion *ar)
 
 static void hud_region_layout(const bContext *C, ARegion *ar)
 {
-  bool ok = false;
-
-  {
-    struct HudRegionData *hrd = ar->regiondata;
-    if (hrd != NULL) {
-      ScrArea *sa = CTX_wm_area(C);
-      ARegion *ar_op = (hrd->regionid != -1) ? BKE_area_find_region_type(sa, hrd->regionid) : NULL;
-      ARegion *ar_prev = CTX_wm_region(C);
-      CTX_wm_region_set((bContext *)C, ar_op);
-      ok = last_redo_poll(C);
-      CTX_wm_region_set((bContext *)C, ar_prev);
-    }
-  }
-
-  if (!ok) {
+  struct HudRegionData *hrd = ar->regiondata;
+  if (hrd == NULL || !last_redo_poll(C, hrd->regionid)) {
     ED_region_tag_redraw(ar);
     hud_region_hide(ar);
     return;
@@ -231,6 +239,11 @@ ARegionType *ED_area_type_hud(int space_type)
   art->init = hud_region_init;
   art->free = hud_region_free;
 
+  /* We need to indicate a preferred size to avoid false `RGN_FLAG_TOO_SMALL`
+   * the first time the region is created. */
+  art->prefsizex = AREAMINX;
+  art->prefsizey = HEADERY;
+
   hud_panels_register(art, space_type, art->regionid);
 
   art->lock = 1; /* can become flag, see BKE_spacedata_draw_locks */
@@ -295,7 +308,9 @@ void ED_area_type_hud_ensure(bContext *C, ScrArea *sa)
 
   bool init = false;
   bool was_hidden = ar == NULL || ar->visible == false;
-  if (!last_redo_poll(C)) {
+  ARegion *ar_op = CTX_wm_region(C);
+  BLI_assert((ar_op == NULL) || (ar_op->regiontype != RGN_TYPE_HUD));
+  if (!last_redo_poll(C, ar_op ? ar_op->regiontype : -1)) {
     if (ar) {
       ED_region_tag_redraw(ar);
       hud_region_hide(ar);
@@ -322,8 +337,6 @@ void ED_area_type_hud_ensure(bContext *C, ScrArea *sa)
   }
 
   {
-    ARegion *ar_op = CTX_wm_region(C);
-    BLI_assert((ar_op == NULL) || (ar_op->regiontype != RGN_TYPE_HUD));
     struct HudRegionData *hrd = ar->regiondata;
     if (hrd == NULL) {
       hrd = MEM_callocN(sizeof(*hrd), __func__);

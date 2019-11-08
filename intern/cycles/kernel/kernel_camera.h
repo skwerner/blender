@@ -128,7 +128,7 @@ ccl_device void camera_sample_perspective(KernelGlobals *kg,
 #ifdef __RAY_DIFFERENTIALS__
     /* Ray differentials, computed from scratch using the raster coordinates
      * because we don't want to be affected by depth of field. We compute
-     * ray origin and direction for the center and two neighbouring pixels
+     * ray origin and direction for the center and two neighboring pixels
      * and simply take their differences. */
     float3 Pnostereo = transform_point(&cameratoworld, make_float3(0.0f, 0.0f, 0.0f));
 
@@ -237,7 +237,9 @@ ccl_device void camera_sample_orthographic(KernelGlobals *kg,
 /* Panorama Camera */
 
 ccl_device_inline void camera_sample_panorama(ccl_constant KernelCamera *cam,
+#ifdef __CAMERA_MOTION__
                                               const ccl_global DecomposedTransform *cam_motion,
+#endif
                                               float raster_x,
                                               float raster_y,
                                               float lens_u,
@@ -303,7 +305,7 @@ ccl_device_inline void camera_sample_panorama(ccl_constant KernelCamera *cam,
 #ifdef __RAY_DIFFERENTIALS__
   /* Ray differentials, computed from scratch using the raster coordinates
    * because we don't want to be affected by depth of field. We compute
-   * ray origin and direction for the center and two neighbouring pixels
+   * ray origin and direction for the center and two neighboring pixels
    * and simply take their differences. */
   float3 Pcenter = Pcamera;
   float3 Dcenter = panorama_to_direction(cam, Pcenter.x, Pcenter.y);
@@ -377,9 +379,9 @@ ccl_device_inline void camera_sample(KernelGlobals *kg,
     const int shutter_table_offset = kernel_data.cam.shutter_table_offset;
     ray->time = lookup_table_read(kg, time, shutter_table_offset, SHUTTER_TABLE_SIZE);
     /* TODO(sergey): Currently single rolling shutter effect type only
-     * where scanlines are acquired from top to bottom and whole scanline
+     * where scan-lines are acquired from top to bottom and whole scanline
      * is acquired at once (no delay in acquisition happens between pixels
-     * of single scanline).
+     * of single scan-line).
      *
      * Might want to support more models in the future.
      */
@@ -413,8 +415,12 @@ ccl_device_inline void camera_sample(KernelGlobals *kg,
     camera_sample_orthographic(kg, raster_x, raster_y, lens_u, lens_v, ray);
   }
   else {
+#ifdef __CAMERA_MOTION__
     const ccl_global DecomposedTransform *cam_motion = kernel_tex_array(__camera_motion);
     camera_sample_panorama(&kernel_data.cam, cam_motion, raster_x, raster_y, lens_u, lens_v, ray);
+#else
+    camera_sample_panorama(&kernel_data.cam, raster_x, raster_y, lens_u, lens_v, ray);
+#endif
   }
 }
 

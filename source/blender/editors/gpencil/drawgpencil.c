@@ -62,7 +62,6 @@
 #include "BIF_glutil.h"
 
 #include "GPU_immediate.h"
-#include "GPU_draw.h"
 #include "GPU_state.h"
 
 #include "ED_gpencil.h"
@@ -180,7 +179,7 @@ static void gp_draw_stroke_volumetric_2d(const bGPDspoint *points,
       format, "color", GPU_COMP_U8, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
 
   immBindBuiltinProgram(GPU_SHADER_3D_POINT_VARYING_SIZE_VARYING_COLOR);
-  GPU_enable_program_point_size();
+  GPU_program_point_size(true);
   immBegin(GPU_PRIM_POINTS, totpoints);
 
   const bGPDspoint *pt = points;
@@ -199,7 +198,7 @@ static void gp_draw_stroke_volumetric_2d(const bGPDspoint *points,
 
   immEnd();
   immUnbindProgram();
-  GPU_disable_program_point_size();
+  GPU_program_point_size(false);
 }
 
 /* draw a 3D stroke in "volumetric" style */
@@ -215,7 +214,7 @@ static void gp_draw_stroke_volumetric_3d(const bGPDspoint *points,
       format, "color", GPU_COMP_U8, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
 
   immBindBuiltinProgram(GPU_SHADER_3D_POINT_VARYING_SIZE_VARYING_COLOR);
-  GPU_enable_program_point_size();
+  GPU_program_point_size(true);
   immBegin(GPU_PRIM_POINTS, totpoints);
 
   const bGPDspoint *pt = points;
@@ -229,7 +228,7 @@ static void gp_draw_stroke_volumetric_3d(const bGPDspoint *points,
 
   immEnd();
   immUnbindProgram();
-  GPU_disable_program_point_size();
+  GPU_program_point_size(false);
 }
 
 /* --------------- Stroke Fills ----------------- */
@@ -268,8 +267,11 @@ static void gp_calc_2d_bounding_box(
 }
 
 /* calc texture coordinates using flat projected points */
-static void gp_calc_stroke_text_coordinates(
-    const float (*points2d)[2], int totpoints, float minv[2], float maxv[2], float (*r_uv)[2])
+static void gp_calc_stroke_text_coordinates(const float (*points2d)[2],
+                                            int totpoints,
+                                            const float minv[2],
+                                            float maxv[2],
+                                            float (*r_uv)[2])
 {
   float d[2];
   d[0] = maxv[0] - minv[0];
@@ -866,8 +868,9 @@ static void gp_draw_strokes(tGPDdraw *tgpw)
   float tfill[4];
   short sthickness;
   float ink[4];
+  const bool is_unique = (tgpw->gps != NULL);
 
-  GPU_enable_program_point_size();
+  GPU_program_point_size(true);
 
   bGPDstroke *gps_init = (tgpw->gps) ? tgpw->gps : tgpw->t_gpf->strokes.first;
 
@@ -888,7 +891,7 @@ static void gp_draw_strokes(tGPDdraw *tgpw)
 
     /* if disable fill, the colors with fill must be omitted too except fill boundary strokes */
     if ((tgpw->disable_fill == 1) && (gp_style->fill_rgba[3] > 0.0f) &&
-        ((gps->flag & GP_STROKE_NOFILL) == 0)) {
+        ((gps->flag & GP_STROKE_NOFILL) == 0) && (gp_style->flag & GP_STYLE_FILL_SHOW)) {
       continue;
     }
 
@@ -1099,12 +1102,12 @@ static void gp_draw_strokes(tGPDdraw *tgpw)
       }
     }
     /* if only one stroke, exit from loop */
-    if (tgpw->gps) {
+    if (is_unique) {
       break;
     }
   }
 
-  GPU_disable_program_point_size();
+  GPU_program_point_size(false);
 }
 
 /* ----- General Drawing ------ */
@@ -1117,7 +1120,8 @@ void ED_gp_draw_interpolation(const bContext *C, tGPDinterpolate *tgpi, const in
   RegionView3D *rv3d = ar->regiondata;
   tGPDinterpolate_layer *tgpil;
   Object *obact = CTX_data_active_object(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  /* Drawing code is expected to run with fully evaluated depsgraph. */
+  Depsgraph *depsgraph = CTX_data_expect_evaluated_depsgraph(C);
 
   float color[4];
 
@@ -1171,15 +1175,14 @@ void ED_gp_draw_fill(tGPDdraw *tgpw)
 /* draw a short status message in the top-right corner */
 static void UNUSED_FUNCTION(gp_draw_status_text)(const bGPdata *gpd, ARegion *ar)
 {
-  rcti rect;
 
   /* Cannot draw any status text when drawing OpenGL Renders */
   if (G.f & G_FLAG_RENDER_VIEWPORT) {
     return;
   }
 
-  /* Get bounds of region - Necessary to avoid problems with region overlap */
-  ED_region_visible_rect(ar, &rect);
+  /* Get bounds of region - Necessary to avoid problems with region overlap. */
+  const rcti *rect = ED_region_visible_rect(ar);
 
   /* for now, this should only be used to indicate when we are in stroke editmode */
   if (gpd->flag & GP_DATA_STROKE_EDITMODE) {
@@ -1191,8 +1194,8 @@ static void UNUSED_FUNCTION(gp_draw_status_text)(const bGPdata *gpd, ARegion *ar
     BLF_width_and_height(
         font_id, printable, BLF_DRAW_STR_DUMMY_MAX, &printable_size[0], &printable_size[1]);
 
-    int xco = (rect.xmax - U.widget_unit) - (int)printable_size[0];
-    int yco = (rect.ymax - U.widget_unit);
+    int xco = (rect->xmax - U.widget_unit) - (int)printable_size[0];
+    int yco = (rect->ymax - U.widget_unit);
 
     /* text label */
     UI_FontThemeColor(font_id, TH_TEXT_HI);

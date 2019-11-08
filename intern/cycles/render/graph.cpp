@@ -127,6 +127,13 @@ ShaderOutput *ShaderNode::output(ustring name)
   return NULL;
 }
 
+void ShaderNode::remove_input(ShaderInput *input)
+{
+  assert(input->link == NULL);
+  delete input;
+  inputs.erase(remove(inputs.begin(), inputs.end(), input), inputs.end());
+}
+
 void ShaderNode::attributes(Shader *shader, AttributeRequestSet *attributes)
 {
   foreach (ShaderInput *input, inputs) {
@@ -297,6 +304,28 @@ void ShaderGraph::disconnect(ShaderInput *to)
   from->links.erase(remove(from->links.begin(), from->links.end(), to), from->links.end());
 }
 
+void ShaderGraph::relink(ShaderInput *from, ShaderInput *to)
+{
+  ShaderOutput *out = from->link;
+  if (out) {
+    disconnect(from);
+    connect(out, to);
+  }
+  to->parent->copy_value(to->socket_type, *(from->parent), from->socket_type);
+}
+
+void ShaderGraph::relink(ShaderOutput *from, ShaderOutput *to)
+{
+  /* Copy because disconnect modifies this list. */
+  vector<ShaderInput *> outputs = from->links;
+
+  foreach (ShaderInput *sock, outputs) {
+    disconnect(sock);
+    if (to)
+      connect(to, sock);
+  }
+}
+
 void ShaderGraph::relink(ShaderNode *node, ShaderOutput *from, ShaderOutput *to)
 {
   simplified = false;
@@ -320,6 +349,7 @@ void ShaderGraph::relink(ShaderNode *node, ShaderOutput *from, ShaderOutput *to)
 void ShaderGraph::simplify(Scene *scene)
 {
   if (!simplified) {
+    expand();
     default_inputs(scene->shader_manager->use_osl());
     clean(scene);
     refine_bump_nodes();
@@ -784,6 +814,14 @@ void ShaderGraph::clean(Scene *scene)
   nodes = newnodes;
 }
 
+void ShaderGraph::expand()
+{
+  /* Call expand on all nodes, to generate additional nodes. */
+  foreach (ShaderNode *node, nodes) {
+    node->expand(this);
+  }
+}
+
 void ShaderGraph::default_inputs(bool do_osl)
 {
   /* nodes can specify default texture coordinates, for now we give
@@ -965,8 +1003,12 @@ void ShaderGraph::add_differentials()
        * that does three transforms at a time. */
       MappingNode *mapping1 = new MappingNode;
       MappingNode *mapping2 = new MappingNode;
-      mapping1->tex_mapping = ((ImageTextureNode *)node)->tex_mapping;
-      mapping2->tex_mapping = ((ImageTextureNode *)node)->tex_mapping;
+      mapping1->location = ((ImageTextureNode *)node)->tex_mapping.translation;
+      mapping1->rotation = ((ImageTextureNode *)node)->tex_mapping.rotation;
+      mapping1->scale = ((ImageTextureNode *)node)->tex_mapping.scale;
+      mapping2->location = ((ImageTextureNode *)node)->tex_mapping.translation;
+      mapping2->rotation = ((ImageTextureNode *)node)->tex_mapping.rotation;
+      mapping2->scale = ((ImageTextureNode *)node)->tex_mapping.scale;
       add(mapping1);
       add(mapping2);
       connect(out_dx, mapping1->input("Vector"));
@@ -1025,7 +1067,7 @@ void ShaderGraph::bump_from_displacement(bool use_object_space)
   foreach (NodePair &pair, nodes_dy)
     pair.second->bump = SHADER_BUMP_DY;
 
-  /* add set normal node and connect the bump normal ouput to the set normal
+  /* add set normal node and connect the bump normal output to the set normal
    * output, so it can finally set the shader normal, note we are only doing
    * this for bump from displacement, this will be the only bump allowed to
    * overwrite the shader normal */

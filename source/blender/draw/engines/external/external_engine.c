@@ -28,6 +28,8 @@
 #include "DNA_screen_types.h"
 #include "DNA_view3d_types.h"
 
+#include "BKE_object.h"
+
 #include "ED_screen.h"
 
 #include "GPU_matrix.h"
@@ -88,10 +90,8 @@ typedef struct EXTERNAL_PrivateData {
 
   /* Do we need to update the depth or can we reuse the last calculated texture. */
   bool update_depth;
-  bool view_updated;
 
-  float last_mat[4][4];
-  float curr_mat[4][4];
+  float last_persmat[4][4];
 } EXTERNAL_PrivateData; /* Transient data */
 
 /* Functions */
@@ -100,7 +100,7 @@ static void external_engine_init(void *vedata)
 {
   EXTERNAL_StorageList *stl = ((EXTERNAL_Data *)vedata)->stl;
   const DRWContextState *draw_ctx = DRW_context_state_get();
-  RegionView3D *rv3d = draw_ctx->rv3d;
+  ARegion *ar = draw_ctx->ar;
 
   /* Depth prepass */
   if (!e_data.depth_sh) {
@@ -111,29 +111,12 @@ static void external_engine_init(void *vedata)
     /* Alloc transient pointers */
     stl->g_data = MEM_mallocN(sizeof(*stl->g_data), __func__);
     stl->g_data->update_depth = true;
-    stl->g_data->view_updated = false;
   }
 
-  if (stl->g_data->update_depth == false) {
-    if (rv3d && rv3d->rflag & RV3D_NAVIGATING) {
-      stl->g_data->update_depth = true;
-    }
-  }
-
-  if (stl->g_data->view_updated) {
+  /* Progressive render samples are tagged with no rebuild, in that case we
+   * can skip updating the depth buffer */
+  if (!(ar && (ar->do_draw & RGN_DRAW_NO_REBUILD))) {
     stl->g_data->update_depth = true;
-    stl->g_data->view_updated = false;
-  }
-
-  {
-    float view[4][4];
-    float win[4][4];
-    DRW_viewport_matrix_get(view, DRW_MAT_VIEW);
-    DRW_viewport_matrix_get(win, DRW_MAT_WIN);
-    mul_m4_m4m4(stl->g_data->curr_mat, view, win);
-    if (!equals_m4m4(stl->g_data->curr_mat, stl->g_data->last_mat)) {
-      stl->g_data->update_depth = true;
-    }
   }
 }
 
@@ -175,7 +158,8 @@ static void external_cache_populate(void *vedata, Object *ob)
 {
   EXTERNAL_StorageList *stl = ((EXTERNAL_Data *)vedata)->stl;
 
-  if (!DRW_object_is_renderable(ob)) {
+  if (!(DRW_object_is_renderable(ob) &&
+        DRW_object_visibility_in_active_context(ob) & OB_VISIBLE_SELF)) {
     return;
   }
 
@@ -191,7 +175,7 @@ static void external_cache_populate(void *vedata, Object *ob)
     struct GPUBatch *geom = DRW_cache_object_surface_get(ob);
     if (geom) {
       /* Depth Prepass */
-      DRW_shgroup_call_add(stl->g_data->depth_shgrp, geom, ob->obmat);
+      DRW_shgroup_call(stl->g_data->depth_shgrp, geom, ob);
     }
   }
 }
@@ -221,18 +205,20 @@ static void external_draw_scene_do(void *vedata)
     RenderEngine *engine = RE_engine_create_ex(engine_type, true);
     engine->tile_x = scene->r.tilex;
     engine->tile_y = scene->r.tiley;
-    engine_type->view_update(engine, draw_ctx->evil_C);
+    engine_type->view_update(engine, draw_ctx->evil_C, draw_ctx->depsgraph);
     rv3d->render_engine = engine;
   }
 
   /* Rendered draw. */
   GPU_matrix_push_projection();
+  GPU_matrix_push();
   ED_region_pixelspace(ar);
 
   /* Render result draw. */
   type = rv3d->render_engine->type;
-  type->view_draw(rv3d->render_engine, draw_ctx->evil_C);
+  type->view_draw(rv3d->render_engine, draw_ctx->evil_C, draw_ctx->depsgraph);
 
+  GPU_matrix_pop();
   GPU_matrix_pop_projection();
 
   /* Set render info. */
@@ -270,17 +256,6 @@ static void external_draw_scene(void *vedata)
     // copy tmp buffer to default
     GPU_framebuffer_blit(fbl->depth_buffer_fb, 0, dfbl->depth_only_fb, 0, GPU_DEPTH_BIT);
   }
-
-  copy_m4_m4(stl->g_data->last_mat, stl->g_data->curr_mat);
-}
-
-static void external_view_update(void *vedata)
-{
-  EXTERNAL_Data *data = vedata;
-  EXTERNAL_StorageList *stl = data->stl;
-  if (stl && stl->g_data) {
-    stl->g_data->view_updated = true;
-  }
 }
 
 static void external_engine_free(void)
@@ -302,7 +277,7 @@ static DrawEngineType draw_engine_external_type = {
     &external_cache_finish,
     NULL,
     &external_draw_scene,
-    &external_view_update,
+    NULL,
     NULL,
     NULL,
 };

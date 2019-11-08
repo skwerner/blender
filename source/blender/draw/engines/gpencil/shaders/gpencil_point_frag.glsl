@@ -1,6 +1,7 @@
 uniform int color_type;
 uniform int mode;
 uniform sampler2D myTexture;
+uniform bool myTexturePremultiplied;
 
 uniform float gradient_f;
 uniform vec2 gradient_s;
@@ -12,6 +13,12 @@ uniform int shading_type[2];
 in vec4 mColor;
 in vec2 mTexCoord;
 out vec4 fragColor;
+
+uniform int fade_layer;
+uniform float fade_layer_factor;
+uniform bool fade_ob;
+uniform vec3 fade_color;
+uniform float fade_ob_factor;
 
 #define texture2D texture
 
@@ -65,15 +72,13 @@ void main()
     }
   }
 
-  vec4 tmp_color = texture2D(myTexture, mTexCoord);
-
   /* Solid */
   if ((color_type == GPENCIL_COLOR_SOLID) || (no_texture)) {
     fragColor = mColor;
   }
   /* texture */
   if ((color_type == GPENCIL_COLOR_TEXTURE) && (!no_texture)) {
-    vec4 text_color = texture2D(myTexture, mTexCoord);
+    vec4 text_color = texture_read_as_srgb(myTexture, myTexturePremultiplied, mTexCoord);
     if (mix_stroke_factor > 0.0) {
       fragColor.rgb = mix(text_color.rgb, colormix.rgb, mix_stroke_factor);
       fragColor.a = text_color.a;
@@ -87,7 +92,7 @@ void main()
   }
   /* pattern */
   if ((color_type == GPENCIL_COLOR_PATTERN) && (!no_texture)) {
-    vec4 text_color = texture2D(myTexture, mTexCoord);
+    vec4 text_color = texture_read_as_srgb(myTexture, myTexturePremultiplied, mTexCoord);
     fragColor = mColor;
     /* mult both alpha factor to use strength factor with color alpha limit */
     fragColor.a = min(text_color.a * mColor.a, mColor.a);
@@ -104,5 +109,18 @@ void main()
 
   if (fragColor.a < 0.0035) {
     discard;
+  }
+
+  /* Apply paper opacity */
+  if (fade_layer == 1) {
+    /* Layer is below, mix with background. */
+    fragColor.rgb = mix(fade_color.rgb, fragColor.rgb, fade_layer_factor);
+  }
+  else if (fade_layer == 2) {
+    /* Layer is above, change opacity. */
+    fragColor.a *= fade_layer_factor;
+  }
+  else if (fade_ob == true) {
+    fragColor.rgb = mix(fade_color.rgb, fragColor.rgb, fade_ob_factor);
   }
 }

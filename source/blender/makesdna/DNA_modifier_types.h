@@ -29,8 +29,6 @@
  */
 
 struct Mesh;
-struct Scene;
-struct Subdiv;
 
 typedef enum ModifierType {
   eModifierType_None = 0,
@@ -121,7 +119,7 @@ typedef struct ModifierData {
 
 typedef enum {
   /* This modifier has been inserted in local override, and hence can be fully edited. */
-  eModifierFlag_StaticOverride_Local = (1 << 0),
+  eModifierFlag_OverrideLibrary_Local = (1 << 0),
   /* This modifier does not own its caches, but instead shares them with another modifier. */
   eModifierFlag_SharedCaches = (1 << 1),
 } ModifierFlag;
@@ -1117,7 +1115,13 @@ typedef struct SolidifyModifierData {
   float offset_fac_vg;
   /** Clamp offset based on surrounding geometry. */
   float offset_clamp;
-  char _pad[4];
+  char mode;
+
+  /** Variables for #MOD_SOLIDIFY_MODE_NONMANIFOLD. */
+  char nonmanifold_offset_mode;
+  char nonmanifold_boundary_mode;
+
+  char _pad;
   float crease_inner;
   float crease_outer;
   float crease_rim;
@@ -1126,6 +1130,7 @@ typedef struct SolidifyModifierData {
   short mat_ofs_rim;
 } SolidifyModifierData;
 
+/** #SolidifyModifierData.flag */
 enum {
   MOD_SOLIDIFY_RIM = (1 << 0),
   MOD_SOLIDIFY_EVEN = (1 << 1),
@@ -1136,6 +1141,27 @@ enum {
 #endif
   MOD_SOLIDIFY_FLIP = (1 << 5),
   MOD_SOLIDIFY_NOSHELL = (1 << 6),
+  MOD_SOLIDIFY_OFFSET_ANGLE_CLAMP = (1 << 7),
+};
+
+/** #SolidifyModifierData.mode */
+enum {
+  MOD_SOLIDIFY_MODE_EXTRUDE = 0,
+  MOD_SOLIDIFY_MODE_NONMANIFOLD = 1,
+};
+
+/** #SolidifyModifierData.nonmanifold_offset_mode */
+enum {
+  MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_FIXED = 0,
+  MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_EVEN = 1,
+  MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_CONSTRAINTS = 2,
+};
+
+/** #SolidifyModifierData.nonmanifold_boundary_mode */
+enum {
+  MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_NONE = 0,
+  MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_ROUND = 1,
+  MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_FLAT = 2,
 };
 
 typedef struct ScrewModifierData {
@@ -1596,6 +1622,19 @@ enum {
   MOD_LAPLACIANSMOOTH_NORMALIZED = (1 << 5),
 };
 
+typedef struct CorrectiveSmoothDeltaCache {
+  /* delta's between the original positions and the smoothed positions */
+  float (*deltas)[3];
+  unsigned int totverts;
+
+  /* Value of settings when creating the cache.
+   * These are used to check if the cache should be recomputed. */
+  float lambda;
+  short repeat, flag;
+  char smooth_type, rest_source;
+  char _pad[2];
+} CorrectiveSmoothDeltaCache;
+
 typedef struct CorrectiveSmoothModifierData {
   ModifierData modifier;
 
@@ -1614,11 +1653,8 @@ typedef struct CorrectiveSmoothModifierData {
   /** MAX_VGROUP_NAME. */
   char defgrp_name[64];
 
-  /* runtime-only cache (delta's between),
-   * delta's between the original positions and the smoothed positions */
-  float (*delta_cache)[3];
-  unsigned int delta_cache_num;
-  char _pad2[4];
+  /* runtime-only cache */
+  CorrectiveSmoothDeltaCache delta_cache;
 } CorrectiveSmoothModifierData;
 
 enum {

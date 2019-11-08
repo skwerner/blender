@@ -30,6 +30,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_ID.h"
+#include "DNA_defaults.h"
 
 #include "BLI_math.h"
 #include "BLI_listbase.h"
@@ -56,24 +57,7 @@ void BKE_camera_init(Camera *cam)
 {
   BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cam, id));
 
-  cam->lens = 50.0f;
-  cam->sensor_x = DEFAULT_SENSOR_WIDTH;
-  cam->sensor_y = DEFAULT_SENSOR_HEIGHT;
-  cam->clip_start = 0.1f;
-  cam->clip_end = 1000.0f;
-  cam->drawsize = 1.0f;
-  cam->ortho_scale = 6.0;
-  cam->flag |= CAM_SHOWPASSEPARTOUT;
-  cam->passepartalpha = 0.5f;
-
-  cam->gpu_dof.fstop = 128.0f;
-  cam->gpu_dof.ratio = 1.0f;
-
-  /* stereoscopy 3d */
-  cam->stereo.interocular_distance = 0.065f;
-  cam->stereo.convergence_distance = 30.f * 0.065f;
-  cam->stereo.pole_merge_angle_from = DEG2RADF(60.0f);
-  cam->stereo.pole_merge_angle_to = DEG2RADF(75.0f);
+  MEMCPY_STRUCT_AFTER(cam, DNA_struct_default_get(Camera), id);
 }
 
 void *BKE_camera_add(Main *bmain, const char *name)
@@ -134,13 +118,13 @@ float BKE_camera_object_dof_distance(Object *ob)
   if (ob->type != OB_CAMERA) {
     return 0.0f;
   }
-  if (cam->dof_ob) {
+  if (cam->dof.focus_object) {
     float view_dir[3], dof_dir[3];
     normalize_v3_v3(view_dir, ob->obmat[2]);
-    sub_v3_v3v3(dof_dir, ob->obmat[3], cam->dof_ob->obmat[3]);
+    sub_v3_v3v3(dof_dir, ob->obmat[3], cam->dof.focus_object->obmat[3]);
     return fabsf(dot_v3v3(view_dir, dof_dir));
   }
-  return cam->dof_distance;
+  return cam->dof.focus_distance;
 }
 
 float BKE_camera_sensor_size(int sensor_fit, float sensor_x, float sensor_y)
@@ -374,7 +358,7 @@ void BKE_camera_view_frame_ex(const Scene *scene,
   float facx, facy;
   float depth;
 
-  /* aspect correcton */
+  /* aspect correction */
   if (scene) {
     float aspx = (float)scene->r.xsch * scene->r.xasp;
     float aspy = (float)scene->r.ysch * scene->r.yasp;
@@ -1013,18 +997,6 @@ void BKE_camera_multiview_params(RenderData *rd,
 {
   if (camera->type == OB_CAMERA) {
     params->shiftx = BKE_camera_multiview_shift_x(rd, camera, viewname);
-  }
-}
-
-void BKE_camera_to_gpu_dof(struct Object *camera, struct GPUFXSettings *r_fx_settings)
-{
-  if (camera->type == OB_CAMERA) {
-    Camera *cam = camera->data;
-    r_fx_settings->dof = &cam->gpu_dof;
-    r_fx_settings->dof->focal_length = cam->lens;
-    r_fx_settings->dof->sensor = BKE_camera_sensor_size(
-        cam->sensor_fit, cam->sensor_x, cam->sensor_y);
-    r_fx_settings->dof->focus_distance = BKE_camera_object_dof_distance(camera);
   }
 }
 

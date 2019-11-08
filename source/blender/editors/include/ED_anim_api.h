@@ -25,6 +25,7 @@
 #define __ED_ANIM_API_H__
 
 struct AnimData;
+struct Depsgraph;
 struct ID;
 struct ListBase;
 
@@ -84,8 +85,6 @@ typedef struct bAnimContext {
   /** dopesheet data for editor (or which is being used) */
   struct bDopeSheet *ads;
 
-  /** active dependency graph */
-  struct Depsgraph *depsgraph;
   /** Current Main */
   struct Main *bmain;
   /** active scene */
@@ -404,7 +403,7 @@ typedef enum eAnimFilter_Flags {
 
 /* channel heights */
 #define ACHANNEL_FIRST_TOP(ac) \
-  (UI_view2d_scale_get_y(&(ac)->ar->v2d) * -UI_SCRUBBING_MARGIN_Y - ACHANNEL_SKIP)
+  (UI_view2d_scale_get_y(&(ac)->ar->v2d) * -UI_TIME_SCRUB_MARGIN_Y - ACHANNEL_SKIP)
 #define ACHANNEL_HEIGHT(ac) (0.8f * (ac)->yscale_fac * U.widget_unit)
 #define ACHANNEL_SKIP (0.1f * U.widget_unit)
 #define ACHANNEL_STEP(ac) (ACHANNEL_HEIGHT(ac) + ACHANNEL_SKIP)
@@ -422,7 +421,7 @@ typedef enum eAnimFilter_Flags {
 
 /* NLA channel heights */
 #define NLACHANNEL_FIRST_TOP(ac) \
-  (UI_view2d_scale_get_y(&(ac)->ar->v2d) * -UI_SCRUBBING_MARGIN_Y - NLACHANNEL_SKIP)
+  (UI_view2d_scale_get_y(&(ac)->ar->v2d) * -UI_TIME_SCRUB_MARGIN_Y - NLACHANNEL_SKIP)
 #define NLACHANNEL_HEIGHT(snla) \
   ((snla && (snla->flag & SNLA_NOSTRIPCURVES)) ? (0.8f * U.widget_unit) : (1.2f * U.widget_unit))
 #define NLACHANNEL_SKIP (0.1f * U.widget_unit)
@@ -760,12 +759,15 @@ float ANIM_unit_mapping_get_factor(
  */
 #define ACHANNEL_SET_FLAG(channel, smode, sflag) \
   { \
-    if (smode == ACHANNEL_SETFLAG_INVERT) \
+    if (smode == ACHANNEL_SETFLAG_INVERT) { \
       (channel)->flag ^= (sflag); \
-    else if (smode == ACHANNEL_SETFLAG_ADD) \
+    } \
+    else if (smode == ACHANNEL_SETFLAG_ADD) { \
       (channel)->flag |= (sflag); \
-    else \
+    } \
+    else { \
       (channel)->flag &= ~(sflag); \
+    } \
   } \
   ((void)0)
 
@@ -776,12 +778,15 @@ float ANIM_unit_mapping_get_factor(
  */
 #define ACHANNEL_SET_FLAG_NEG(channel, smode, sflag) \
   { \
-    if (smode == ACHANNEL_SETFLAG_INVERT) \
+    if (smode == ACHANNEL_SETFLAG_INVERT) { \
       (channel)->flag ^= (sflag); \
-    else if (smode == ACHANNEL_SETFLAG_ADD) \
+    } \
+    else if (smode == ACHANNEL_SETFLAG_ADD) { \
       (channel)->flag &= ~(sflag); \
-    else \
+    } \
+    else { \
       (channel)->flag |= (sflag); \
+    } \
   } \
   ((void)0)
 
@@ -829,12 +834,28 @@ void ED_drivers_editor_init(struct bContext *C, struct ScrArea *sa);
 
 /* ************************************************ */
 
+typedef enum eAnimvizCalcRange {
+  /* Update motion paths at the current frame only. */
+  ANIMVIZ_CALC_RANGE_CURRENT_FRAME,
+
+  /* Try to limit updates to a close neighborhood of the current frame. */
+  ANIMVIZ_CALC_RANGE_CHANGED,
+
+  /* Update an entire range of the motion paths. */
+  ANIMVIZ_CALC_RANGE_FULL,
+} eAnimvizCalcRange;
+
+struct Depsgraph *animviz_depsgraph_build(struct Main *bmain,
+                                          struct Scene *scene,
+                                          struct ViewLayer *view_layer,
+                                          struct ListBase *targets);
+
 void animviz_calc_motionpaths(struct Depsgraph *depsgraph,
                               struct Main *bmain,
                               struct Scene *scene,
                               ListBase *targets,
-                              bool restore,
-                              bool current_frame_only);
+                              eAnimvizCalcRange range,
+                              bool restore);
 
 void animviz_get_object_motionpaths(struct Object *ob, ListBase *targets);
 

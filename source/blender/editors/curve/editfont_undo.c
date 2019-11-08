@@ -29,7 +29,6 @@
 
 #include "DNA_curve_types.h"
 #include "DNA_object_types.h"
-#include "DNA_scene_types.h"
 
 #include "BKE_context.h"
 #include "BKE_font.h"
@@ -39,7 +38,6 @@
 
 #include "ED_object.h"
 #include "ED_curve.h"
-#include "ED_util.h"
 
 #include "WM_types.h"
 #include "WM_api.h"
@@ -62,7 +60,7 @@ typedef struct UndoFont {
   wchar_t *textbuf;
   struct CharInfo *textbufinfo;
 
-  int len, pos;
+  int len, pos, selstart, selend;
 
 #ifdef USE_ARRAY_STORE
   struct {
@@ -241,9 +239,9 @@ static void undofont_to_editfont(UndoFont *uf, Curve *cu)
   memcpy(ef->textbufinfo, uf->textbufinfo, final_size);
 
   ef->pos = uf->pos;
+  ef->selstart = uf->selstart;
+  ef->selend = uf->selend;
   ef->len = uf->len;
-
-  ef->selstart = ef->selend = 0;
 
 #ifdef USE_ARRAY_STORE
   uf_arraystore_expand_clear(uf);
@@ -269,6 +267,8 @@ static void *undofont_from_editfont(UndoFont *uf, Curve *cu)
   memcpy(uf->textbufinfo, ef->textbufinfo, final_size);
 
   uf->pos = ef->pos;
+  uf->selstart = ef->selstart;
+  uf->selend = ef->selend;
   uf->len = ef->len;
 
 #ifdef USE_ARRAY_STORE
@@ -356,7 +356,8 @@ static bool font_undosys_step_encode(struct bContext *C,
 static void font_undosys_step_decode(struct bContext *C,
                                      struct Main *UNUSED(bmain),
                                      UndoStep *us_p,
-                                     int UNUSED(dir))
+                                     int UNUSED(dir),
+                                     bool UNUSED(is_final))
 {
   /* TODO(campbell): undo_system: use low-level API to set mode. */
   ED_object_mode_set(C, OB_MODE_EDIT);

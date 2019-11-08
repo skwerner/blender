@@ -46,8 +46,6 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "GPU_draw.h"
-
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
@@ -77,7 +75,7 @@ void paintface_flush_flags(struct bContext *C, Object *ob, short flag)
     BKE_mesh_flush_select_from_polys(me);
   }
 
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 
   if (ob_eval == NULL) {
@@ -439,74 +437,6 @@ bool paintface_mouse_select(
   paintface_flush_flags(C, ob, SELECT);
   ED_region_tag_redraw(CTX_wm_region(C));  // XXX - should redraw all 3D views
   return true;
-}
-
-bool do_paintface_box_select(ViewContext *vc, const rcti *rect, int sel_op)
-{
-  Object *ob = vc->obact;
-  Mesh *me;
-
-  me = BKE_mesh_from_object(ob);
-  if ((me == NULL) || (me->totpoly == 0)) {
-    return false;
-  }
-
-  bool changed = false;
-  if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
-    changed |= paintface_deselect_all_visible(vc->C, vc->obact, SEL_DESELECT, false);
-  }
-
-  if (BLI_rcti_is_empty(rect)) {
-    /* pass */
-  }
-  else {
-    MPoly *mpoly;
-    uint *rt;
-    int a, index;
-
-    char *selar = MEM_callocN(me->totpoly + 1, "selar");
-
-    uint buf_len;
-    uint *buf = ED_view3d_select_id_read_rect(vc, rect, &buf_len);
-
-    rt = buf;
-
-    a = buf_len;
-    while (a--) {
-      if (*rt) {
-        index = *rt;
-        if (index <= me->totpoly) {
-          selar[index] = 1;
-        }
-      }
-      rt++;
-    }
-
-    mpoly = me->mpoly;
-    for (a = 1; a <= me->totpoly; a++, mpoly++) {
-      if ((mpoly->flag & ME_HIDE) == 0) {
-        const bool is_select = mpoly->flag & ME_FACE_SEL;
-        const bool is_inside = (selar[a] != 0);
-        const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
-        if (sel_op_result != -1) {
-          SET_FLAG_FROM_TEST(mpoly->flag, sel_op_result, ME_FACE_SEL);
-          changed = true;
-        }
-      }
-    }
-
-    MEM_freeN(buf);
-    MEM_freeN(selar);
-
-#ifdef __APPLE__
-    glReadBuffer(GL_BACK);
-#endif
-  }
-
-  if (changed) {
-    paintface_flush_flags(vc->C, vc->obact, SELECT);
-  }
-  return changed;
 }
 
 /*  (similar to void paintface_flush_flags(Object *ob))

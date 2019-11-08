@@ -25,6 +25,7 @@
 #include "BKE_armature.h"
 #include "BKE_action.h"
 #include "BKE_context.h"
+#include "BKE_layer.h"
 #include "BKE_object.h"
 
 #include "DNA_object_types.h"
@@ -220,6 +221,7 @@ void VIEW3D_GGT_armature_spline(wmGizmoGroupType *gzgt)
 
   gzgt->poll = WIDGETGROUP_armature_spline_poll;
   gzgt->setup = WIDGETGROUP_armature_spline_setup;
+  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_maybe_drag;
   gzgt->refresh = WIDGETGROUP_armature_spline_refresh;
 }
 

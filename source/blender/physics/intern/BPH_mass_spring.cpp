@@ -119,8 +119,9 @@ void BKE_cloth_solver_set_positions(ClothModifierData *clmd)
       ClothHairData *root = &cloth_hairdata[i];
       BPH_mass_spring_set_rest_transform(id, i, root->rot);
     }
-    else
+    else {
       BPH_mass_spring_set_rest_transform(id, i, I3);
+    }
 
     BPH_mass_spring_set_motion_state(id, i, verts[i].x, verts[i].v);
   }
@@ -145,12 +146,14 @@ static bool collision_response(ClothModifierData *clmd,
 
   zero_v3(r_impulse);
 
-  if (margin_distance > 0.0f)
+  if (margin_distance > 0.0f) {
     return false; /* XXX tested before already? */
+  }
 
   /* only handle static collisions here */
-  if (collpair->flag & COLLISION_IN_FUTURE)
+  if (collpair->flag & COLLISION_IN_FUTURE) {
     return false;
+  }
 
   /* velocity */
   copy_v3_v3(v1, cloth->verts[index].v);
@@ -228,9 +231,9 @@ static void cloth_setup_constraints(ClothModifierData *clmd,
     verts[v].impulse_count = 0;
   }
 
-  for (i = 0; i < totcolliders; ++i) {
+  for (i = 0; i < totcolliders; i++) {
     ColliderContacts *ct = &contacts[i];
-    for (j = 0; j < ct->totcollisions; ++j) {
+    for (j = 0; j < ct->totcollisions; j++) {
       CollPair *collpair = &ct->collisions[j];
       // float restitution = (1.0f - clmd->coll_parms->damping) * (1.0f - ct->ob->pd->pdef_sbdamp);
       float restitution = 0.0f;
@@ -238,18 +241,21 @@ static void cloth_setup_constraints(ClothModifierData *clmd,
       float impulse[3];
 
       /* pinned verts handled separately */
-      if (verts[v].flags & CLOTH_VERT_FLAG_PINNED)
+      if (verts[v].flags & CLOTH_VERT_FLAG_PINNED) {
         continue;
+      }
 
       /* XXX cheap way of avoiding instability from multiple collisions in the same step
        * this should eventually be supported ...
        */
-      if (verts[v].impulse_count > 0)
+      if (verts[v].impulse_count > 0) {
         continue;
+      }
 
       /* calculate collision response */
-      if (!collision_response(clmd, ct->collmd, collpair, dt, restitution, impulse))
+      if (!collision_response(clmd, ct->collmd, collpair, dt, restitution, impulse)) {
         continue;
+      }
 
       BPH_mass_spring_add_constraint_ndof2(data, v, collpair->normal, impulse);
       ++verts[v].impulse_count;
@@ -297,8 +303,10 @@ static int UNUSED_FUNCTION(cloth_calc_helper_forces)(Object *UNUSED(ob),
       float len, c, l, vec[3];
 
       spring = (ClothSpring *)node->link;
-      if (spring->type != CLOTH_SPRING_TYPE_STRUCTURAL && spring->type != CLOTH_SPRING_TYPE_SHEAR)
+      if (spring->type != CLOTH_SPRING_TYPE_STRUCTURAL &&
+          spring->type != CLOTH_SPRING_TYPE_SHEAR) {
         continue;
+      }
 
       v1 = spring->ij;
       v2 = spring->kl;
@@ -310,8 +318,9 @@ static int UNUSED_FUNCTION(cloth_calc_helper_forces)(Object *UNUSED(ob),
       normalize_v3(vec);
 
       c = (len - spring->restlen);
-      if (c == 0.0f)
+      if (c == 0.0f) {
         continue;
+      }
 
       l = c / ((1.0f / masses[v1]) + (1.0f / masses[v2]));
 
@@ -384,7 +393,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s)
     if (s->type & CLOTH_SPRING_TYPE_SEWING) {
       /* TODO: verify, half verified (couldn't see error)
        * sewing springs usually have a large distance at first so clamp the force so we don't get
-       * tunnelling through colission objects */
+       * tunneling through collision objects. */
       BPH_mass_spring_force_spring_linear(data,
                                           s->ij,
                                           s->kl,
@@ -596,8 +605,9 @@ static void cloth_calc_force(
             BPH_mass_spring_force_edge_wind(
                 data, spring->ij, spring->kl, hair_ij->radius, hair_kl->radius, winvec);
           }
-          else
+          else {
             BPH_mass_spring_force_edge_wind(data, spring->ij, spring->kl, 1.0f, 1.0f, winvec);
+          }
         }
       }
 #else
@@ -609,8 +619,9 @@ static void cloth_calc_force(
           ClothHairData *hair = &hairdata[i];
           BPH_mass_spring_force_vertex_wind(data, i, hair->radius, winvec);
         }
-        else
+        else {
           BPH_mass_spring_force_vertex_wind(data, i, 1.0f, winvec);
+        }
       }
 #endif
     }
@@ -650,8 +661,9 @@ BLI_INLINE LinkNode *hair_spring_next(LinkNode *spring_link)
   LinkNode *next = spring_link->next;
   if (next) {
     ClothSpring *next_spring = (ClothSpring *)next->link;
-    if (next_spring->type == CLOTH_SPRING_TYPE_STRUCTURAL && next_spring->kl == spring->ij)
+    if (next_spring->type == CLOTH_SPRING_TYPE_STRUCTURAL && next_spring->kl == spring->ij) {
       return next;
+    }
   }
   return NULL;
 }
@@ -767,10 +779,12 @@ static void cloth_continuum_fill_grid(HairGrid *grid, Cloth *cloth)
   link = cloth->springs;
   while (link) {
     ClothSpring *spring = (ClothSpring *)link->link;
-    if (spring->type == CLOTH_SPRING_TYPE_STRUCTURAL)
+    if (spring->type == CLOTH_SPRING_TYPE_STRUCTURAL) {
       link = cloth_continuum_add_hair_segments(grid, cell_scale, cell_offset, cloth, link);
-    else
+    }
+    else {
       link = link->next;
+    }
   }
 #endif
   BPH_hair_volume_normalize_vertex_grid(grid);
@@ -853,8 +867,8 @@ static void cloth_continuum_step(ClothModifierData *clmd, float dt)
                           clmd->hair_grid_min[(axis + 2) % 3];
 
       BKE_sim_debug_data_clear_category(clmd->debug_data, "grid velocity");
-      for (j = 0; j < size; ++j) {
-        for (i = 0; i < size; ++i) {
+      for (j = 0; j < size; j++) {
+        for (i = 0; i < size; i++) {
           float x[3], v[3], gvel[3], gvel_smooth[3], gdensity;
 
           madd_v3_v3v3fl(x, offset, a, (float)i / (float)(size - 1));
@@ -948,8 +962,9 @@ static void cloth_calc_volume_force(ClothModifierData *clmd)
     for (i = 0; i < mvert_num; i++, vert++) {
       float x[3], v[3], f[3], dfdx[3][3], dfdv[3][3];
 
-      if (vert->solver_index < 0)
+      if (vert->solver_index < 0) {
         continue;
+      }
 
       /* calculate volumetric forces */
       BPH_mass_spring_get_motion_state(data, vert->solver_index, x, v);
@@ -975,11 +990,13 @@ static void cloth_solve_collisions(
   int i;
 
   if (!(clmd->coll_parms->flags &
-        (CLOTH_COLLSETTINGS_FLAG_ENABLED | CLOTH_COLLSETTINGS_FLAG_SELF)))
+        (CLOTH_COLLSETTINGS_FLAG_ENABLED | CLOTH_COLLSETTINGS_FLAG_SELF))) {
     return;
+  }
 
-  if (!clmd->clothObject->bvhtree)
+  if (!clmd->clothObject->bvhtree) {
     return;
+  }
 
   BPH_mass_spring_solve_positions(id, dt);
 
@@ -997,8 +1014,9 @@ static void cloth_solve_collisions(
                           step / clmd->sim_parms->timescale,
                           dt / clmd->sim_parms->timescale)) {
     for (i = 0; i < mvert_num; i++) {
-      if ((clmd->sim_parms->vgroup_mass > 0) && (verts[i].flags & CLOTH_VERT_FLAG_PINNED))
+      if ((clmd->sim_parms->vgroup_mass > 0) && (verts[i].flags & CLOTH_VERT_FLAG_PINNED)) {
         continue;
+      }
 
       BPH_mass_spring_get_new_velocity(id, i, verts[i].tv);
       madd_v3_v3fl(verts[i].tv, verts[i].dcvel, time_multiplier);
@@ -1069,9 +1087,10 @@ int BPH_cloth_solve(
 
   BKE_sim_debug_data_clear_category("collision");
 
-  if (!clmd->solver_result)
+  if (!clmd->solver_result) {
     clmd->solver_result = (ClothSolverResult *)MEM_callocN(sizeof(ClothSolverResult),
                                                            "cloth solver result");
+  }
   cloth_clear_result(clmd);
 
   if (clmd->sim_parms->vgroup_mass > 0) { /* Do goal stuff. */
@@ -1092,6 +1111,12 @@ int BPH_cloth_solve(
     ImplicitSolverResult result;
 
     if (is_hair) {
+      /* copy velocities for collision */
+      for (i = 0; i < mvert_num; i++) {
+        BPH_mass_spring_get_motion_state(id, i, NULL, verts[i].tv);
+        copy_v3_v3(verts[i].v, verts[i].tv);
+      }
+
       /* determine contact points */
       if (clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_ENABLED) {
         cloth_find_point_contacts(depsgraph, ob, clmd, 0.0f, tf, &contacts, &totcolliders);

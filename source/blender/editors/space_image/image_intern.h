@@ -27,7 +27,6 @@
 /* internal exports only */
 struct ARegion;
 struct ARegionType;
-struct ScrArea;
 struct SpaceImage;
 struct bContext;
 struct bNodeTree;
@@ -45,10 +44,12 @@ void draw_image_sample_line(struct SpaceImage *sima);
 
 /* image_ops.c */
 bool space_image_main_region_poll(struct bContext *C);
+bool space_image_view_center_cursor_poll(struct bContext *C);
 
 void IMAGE_OT_view_all(struct wmOperatorType *ot);
 void IMAGE_OT_view_pan(struct wmOperatorType *ot);
 void IMAGE_OT_view_selected(struct wmOperatorType *ot);
+void IMAGE_OT_view_center_cursor(struct wmOperatorType *ot);
 void IMAGE_OT_view_zoom(struct wmOperatorType *ot);
 void IMAGE_OT_view_zoom_in(struct wmOperatorType *ot);
 void IMAGE_OT_view_zoom_out(struct wmOperatorType *ot);
@@ -66,10 +67,12 @@ void IMAGE_OT_reload(struct wmOperatorType *ot);
 void IMAGE_OT_save(struct wmOperatorType *ot);
 void IMAGE_OT_save_as(struct wmOperatorType *ot);
 void IMAGE_OT_save_sequence(struct wmOperatorType *ot);
+void IMAGE_OT_save_all_modified(struct wmOperatorType *ot);
 void IMAGE_OT_pack(struct wmOperatorType *ot);
 void IMAGE_OT_unpack(struct wmOperatorType *ot);
 
 void IMAGE_OT_invert(struct wmOperatorType *ot);
+void IMAGE_OT_resize(struct wmOperatorType *ot);
 
 void IMAGE_OT_cycle_render_slot(struct wmOperatorType *ot);
 void IMAGE_OT_clear_render_slot(struct wmOperatorType *ot);

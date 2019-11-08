@@ -491,6 +491,19 @@ bool DenoiseTask::load_input_pixels(int layer)
       }
     }
 
+    /* Highlight compression */
+    data = buffer_data + 8;
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        int idx = INPUT_NUM_CHANNELS * (y * w + x);
+        float3 color = make_float3(data[idx], data[idx + 1], data[idx + 2]);
+        color = color_highlight_compress(color, NULL);
+        data[idx] = color.x;
+        data[idx + 1] = color.y;
+        data[idx + 2] = color.z;
+      }
+    }
+
     buffer_data += frame_stride;
   }
 
@@ -853,8 +866,10 @@ Denoiser::Denoiser(DeviceInfo &device_info)
   TaskScheduler::init();
 
   /* Initialize device. */
-  DeviceRequestedFeatures req;
   device = Device::create(device_info, stats, profiler, true);
+
+  DeviceRequestedFeatures req;
+  req.use_denoising = true;
   device->load_kernels(req);
 }
 

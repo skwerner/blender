@@ -19,7 +19,7 @@
  *
  * Version patch user preferences.
  */
-
+#define DNA_DEPRECATED_ALLOW
 #include <string.h>
 
 #include "BLI_math.h"
@@ -28,11 +28,14 @@
 #include "DNA_userdef_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_windowmanager_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_space_types.h"
+#include "DNA_anim_types.h"
 
 #include "BKE_addon.h"
 #include "BKE_colorband.h"
-#include "BKE_idprop.h"
 #include "BKE_main.h"
+#include "BKE_idprop.h"
 #include "BKE_keyconfig.h"
 
 #include "BLO_readfile.h" /* Own include. */
@@ -42,7 +45,7 @@
 /* Disallow access to global userdef. */
 #define U (_error_)
 
-static void do_versions_theme(UserDef *userdef, bTheme *btheme)
+static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
 {
 
 #define USER_VERSION_ATLEAST(ver, subver) MAIN_VERSION_ATLEAST(userdef, ver, subver)
@@ -50,12 +53,12 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
     memcpy(btheme, &U_theme_default, sizeof(*btheme));
   }
 
-#define FROM_DEFAULT_V4_UCHAR(member) copy_v4_v4_char(btheme->member, U_theme_default.member)
+#define FROM_DEFAULT_V4_UCHAR(member) copy_v4_v4_uchar(btheme->member, U_theme_default.member)
 
   if (!USER_VERSION_ATLEAST(280, 25)) {
-    copy_v4_v4_char(btheme->space_action.anim_preview_range, btheme->space_action.anim_active);
-    copy_v4_v4_char(btheme->space_nla.anim_preview_range, btheme->space_nla.anim_active);
-    copy_v4_v4_char(btheme->space_graph.anim_preview_range, btheme->space_action.anim_active);
+    copy_v4_v4_uchar(btheme->space_action.anim_preview_range, btheme->space_action.anim_active);
+    copy_v4_v4_uchar(btheme->space_nla.anim_preview_range, btheme->space_nla.anim_active);
+    copy_v4_v4_uchar(btheme->space_graph.anim_preview_range, btheme->space_action.anim_active);
   }
 
   if (!USER_VERSION_ATLEAST(280, 26)) {
@@ -101,8 +104,8 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
 
   if (!USER_VERSION_ATLEAST(280, 40)) {
     FROM_DEFAULT_V4_UCHAR(space_preferences.navigation_bar);
-    copy_v4_v4_char(btheme->space_preferences.execution_buts,
-                    btheme->space_preferences.navigation_bar);
+    copy_v4_v4_uchar(btheme->space_preferences.execution_buts,
+                     btheme->space_preferences.navigation_bar);
   }
 
   if (!USER_VERSION_ATLEAST(280, 41)) {
@@ -113,10 +116,9 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(space_info.info_info);
   }
 
-  /**
-   * Include next version bump.
-   */
-  {
+  if (!USER_VERSION_ATLEAST(280, 64)) {
+    FROM_DEFAULT_V4_UCHAR(tui.icon_scene);
+
     if (btheme->space_view3d.obcenter_dia == 0) {
       btheme->space_view3d.obcenter_dia = U_theme_default.space_view3d.obcenter_dia;
     }
@@ -127,11 +129,38 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(space_sequencer.text);
     FROM_DEFAULT_V4_UCHAR(space_clip.text);
 
-    FROM_DEFAULT_V4_UCHAR(space_graph.scrubbing_background);
-    FROM_DEFAULT_V4_UCHAR(space_action.scrubbing_background);
-    FROM_DEFAULT_V4_UCHAR(space_nla.scrubbing_background);
-    FROM_DEFAULT_V4_UCHAR(space_sequencer.scrubbing_background);
-    FROM_DEFAULT_V4_UCHAR(space_clip.scrubbing_background);
+    FROM_DEFAULT_V4_UCHAR(space_graph.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_action.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_nla.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_clip.time_scrub_background);
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 67)) {
+    FROM_DEFAULT_V4_UCHAR(space_outliner.selected_object);
+    FROM_DEFAULT_V4_UCHAR(space_outliner.active_object);
+    FROM_DEFAULT_V4_UCHAR(space_outliner.edited_object);
+    FROM_DEFAULT_V4_UCHAR(space_outliner.row_alternate);
+  }
+
+  if (!USER_VERSION_ATLEAST(281, 3)) {
+    FROM_DEFAULT_V4_UCHAR(space_outliner.selected_highlight);
+    FROM_DEFAULT_V4_UCHAR(space_outliner.active);
+  }
+
+  if (!USER_VERSION_ATLEAST(281, 14)) {
+    FROM_DEFAULT_V4_UCHAR(space_file.execution_buts);
+    FROM_DEFAULT_V4_UCHAR(tui.icon_folder);
+    FROM_DEFAULT_V4_UCHAR(space_clip.path_keyframe_before);
+    FROM_DEFAULT_V4_UCHAR(space_clip.path_keyframe_after);
+    copy_v4_v4_uchar(btheme->space_nla.nla_track, btheme->space_nla.header);
+  }
+
+  /**
+   * Include next version bump.
+   */
+  {
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.anim_preview_range);
   }
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -169,6 +198,18 @@ static void do_version_select_mouse(UserDef *userdef, wmKeyMapItem *kmi)
     default:
       break;
   }
+}
+
+static bool keymap_item_has_invalid_wm_context_data_path(wmKeyMapItem *kmi,
+                                                         void *UNUSED(user_data))
+{
+  if (STRPREFIX(kmi->idname, "WM_OT_context_") && kmi->properties) {
+    IDProperty *idprop = IDP_GetPropertyFromGroup(kmi->properties, "data_path");
+    if (idprop && (idprop->type == IDP_STRING) && STRPREFIX(idprop->data.pointer, "(null)")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /* patching UserDef struct and Themes */
@@ -240,7 +281,7 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     if (userdef->rvisize == 0) {
       userdef->rvisize = 15;
       userdef->rvibright = 8;
-      userdef->uiflag |= USER_SHOW_GIZMO_AXIS;
+      userdef->uiflag |= USER_SHOW_GIZMO_NAVIGATE;
     }
   }
   if (!USER_VERSION_ATLEAST(244, 0)) {
@@ -357,9 +398,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     if (userdef->keyhandles_new == HD_AUTO) {
       userdef->keyhandles_new = HD_AUTO_ANIM;
     }
-
-    /* enable (Cycles) addon by default */
-    BKE_addon_ensure(&userdef->addons, "cycles");
   }
 
   if (!USER_VERSION_ATLEAST(267, 0)) {
@@ -397,9 +435,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
       if (!(userdef->flag & USER_TRACKBALL)) {
         userdef->ndof_flag |= NDOF_TURNTABLE;
       }
-    }
-    if (userdef->tweak_threshold == 0) {
-      userdef->tweak_threshold = 10;
     }
   }
 
@@ -554,19 +589,87 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     userdef->dupflag |= USER_DUP_GPENCIL;
   }
 
-  /**
-   * Include next version bump.
-   */
-  {
+  if (!USER_VERSION_ATLEAST(280, 60)) {
+    const float GPU_VIEWPORT_QUALITY_FXAA = 0.10f;
+    const float GPU_VIEWPORT_QUALITY_TAA8 = 0.25f;
+    const float GPU_VIEWPORT_QUALITY_TAA16 = 0.6f;
+    const float GPU_VIEWPORT_QUALITY_TAA32 = 0.8f;
+
+    if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_FXAA) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_OFF;
+    }
+    else if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_TAA8) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_FXAA;
+    }
+    else if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_TAA16) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_SAMPLES_8;
+    }
+    else if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_TAA32) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_SAMPLES_16;
+    }
+    else {
+      userdef->viewport_aa = SCE_DISPLAY_AA_SAMPLES_32;
+    }
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 62)) {
     /* (keep this block even if it becomes empty). */
     if (userdef->vbotimeout == 0) {
       userdef->vbocollectrate = 60;
       userdef->vbotimeout = 120;
     }
 
-    if (userdef->lookdev_ball_size == 0) {
-      userdef->lookdev_ball_size = 150;
+    if (userdef->lookdev_sphere_size == 0) {
+      userdef->lookdev_sphere_size = 150;
     }
+
+    userdef->pref_flag |= USER_PREF_FLAG_SAVE;
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 73)) {
+    userdef->drag_threshold = 30;
+    userdef->drag_threshold_mouse = 3;
+    userdef->drag_threshold_tablet = 10;
+  }
+
+  if (!USER_VERSION_ATLEAST(281, 9)) {
+    /* X3D is no longer enabled by default. */
+    BKE_addon_remove_safe(&userdef->addons, "io_scene_x3d");
+  }
+
+  if (!USER_VERSION_ATLEAST(281, 12)) {
+    userdef->render_display_type = USER_RENDER_DISPLAY_WINDOW;
+    userdef->filebrowser_display_type = USER_TEMP_SPACE_DISPLAY_WINDOW;
+  }
+
+  if (!USER_VERSION_ATLEAST(281, 13)) {
+    userdef->auto_smoothing_new = FCURVE_SMOOTH_CONT_ACCEL;
+
+    if (userdef->file_space_data.display_type == FILE_DEFAULTDISPLAY) {
+      memcpy(
+          &userdef->file_space_data, &U_default.file_space_data, sizeof(userdef->file_space_data));
+    }
+  }
+
+  if (!USER_VERSION_ATLEAST(281, 16)) {
+    BKE_keyconfig_pref_filter_items(userdef,
+                                    &((struct wmKeyConfigFilterItemParams){
+                                        .check_item = true,
+                                        .check_diff_item_add = true,
+                                    }),
+                                    keymap_item_has_invalid_wm_context_data_path,
+                                    NULL);
+  }
+
+  if (!USER_VERSION_ATLEAST(282, 1)) {
+    userdef->file_space_data.filter_id = U_default.file_space_data.filter_id;
+  }
+
+  /**
+   * Include next version bump.
+   */
+  {
+    /* pass */
   }
 
   if (userdef->pixelsize == 0.0f) {

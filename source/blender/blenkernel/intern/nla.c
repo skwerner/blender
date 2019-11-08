@@ -51,10 +51,7 @@
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_nla.h"
-
-#ifdef WITH_AUDASPACE
-#  include <AUD_Special.h>
-#endif
+#include "BKE_sound.h"
 
 #include "RNA_access.h"
 #include "nla_private.h"
@@ -392,7 +389,7 @@ NlaStrip *BKE_nlastack_add_strip(AnimData *adt, bAction *act)
 }
 
 /* Add a NLA Strip referencing the given speaker's sound */
-NlaStrip *BKE_nla_add_soundstrip(Scene *scene, Speaker *speaker)
+NlaStrip *BKE_nla_add_soundstrip(Main *bmain, Scene *scene, Speaker *speaker)
 {
   NlaStrip *strip = MEM_callocN(sizeof(NlaStrip), "NlaSoundStrip");
 
@@ -401,17 +398,17 @@ NlaStrip *BKE_nla_add_soundstrip(Scene *scene, Speaker *speaker)
    */
 #ifdef WITH_AUDASPACE
   if (speaker->sound) {
-    AUD_SoundInfo info = AUD_getInfo(speaker->sound->playback_handle);
-
-    strip->end = (float)ceil((double)info.length * FPS);
+    SoundInfo info;
+    if (BKE_sound_info_get(bmain, speaker->sound, &info)) {
+      strip->end = (float)ceil((double)info.length * FPS);
+    }
   }
   else
 #endif
   {
     strip->end = 10.0f;
     /* quiet compiler warnings */
-    (void)scene;
-    (void)speaker;
+    UNUSED_VARS(bmain, scene, speaker);
   }
 
   /* general settings */
@@ -451,8 +448,9 @@ static float nlastrip_get_frame_actionclip(NlaStrip *strip, float cframe, short 
   if (IS_EQF(strip->scale, 0.0f)) {
     strip->scale = 1.0f;
   }
-  scale = fabsf(
-      strip->scale); /* scale must be positive - we've got a special flag for reversing */
+
+  /* Scale must be positive - we've got a special flag for reversing. */
+  scale = fabsf(strip->scale);
 
   /* length of referenced action */
   actlength = strip->actend - strip->actstart;
@@ -1283,9 +1281,9 @@ static void nlastrip_fix_resize_overlaps(NlaStrip *strip)
          * then offset everything else by the remaining defict to give the strip room
          */
         nls->start = nls->end - 1.0f;
-        offset = ceilf(
-            strip->end -
-            nls->start); /* XXX: review whether preventing fractionals is good here... */
+
+        /* XXX: review whether preventing fractionals is good here... */
+        offset = ceilf(strip->end - nls->start);
 
         /* apply necessary offset to ensure that the strip has enough space */
         for (; nls; nls = nls->next) {
@@ -1332,9 +1330,9 @@ static void nlastrip_fix_resize_overlaps(NlaStrip *strip)
          * then offset everything else by the remaining defict to give the strip room
          */
         nls->end = nls->start + 1.0f;
-        offset = ceilf(
-            nls->end -
-            strip->start); /* XXX: review whether preventing fractionals is good here... */
+
+        /* XXX: review whether preventing fractionals is good here... */
+        offset = ceilf(nls->end - strip->start);
 
         /* apply necessary offset to ensure that the strip has enough space */
         for (; nls; nls = nls->next) {
@@ -1490,7 +1488,7 @@ void BKE_nlastrip_validate_fcurves(NlaStrip *strip)
 
       /* set default flags */
       fcu->flag = (FCURVE_VISIBLE | FCURVE_SELECTED);
-      fcu->auto_smoothing = FCURVE_SMOOTH_CONT_ACCEL;
+      fcu->auto_smoothing = U.auto_smoothing_new;
 
       /* store path - make copy, and store that */
       fcu->rna_path = BLI_strdupn("influence", 9);
@@ -1517,7 +1515,7 @@ void BKE_nlastrip_validate_fcurves(NlaStrip *strip)
 
       /* set default flags */
       fcu->flag = (FCURVE_VISIBLE | FCURVE_SELECTED);
-      fcu->auto_smoothing = FCURVE_SMOOTH_CONT_ACCEL;
+      fcu->auto_smoothing = U.auto_smoothing_new;
 
       /* store path - make copy, and store that */
       fcu->rna_path = BLI_strdupn("strip_time", 10);
@@ -1859,7 +1857,7 @@ bool BKE_nla_action_stash(AnimData *adt)
   BLI_assert(nlt != NULL);
 
   /* We need to ensure that if there wasn't any previous instance,
-   * it must go to tbe bottom of the stack. */
+   * it must go to be bottom of the stack. */
   if (prev_track == NULL) {
     BLI_remlink(&adt->nla_tracks, nlt);
     BLI_addhead(&adt->nla_tracks, nlt);

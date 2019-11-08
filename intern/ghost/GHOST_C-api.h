@@ -33,7 +33,7 @@ extern "C" {
 /**
  * Creates a "handle" for a C++ GHOST object.
  * A handle is just an opaque pointer to an empty struct.
- * In the API the pointer is casted to the actual C++ class.
+ * In the API the pointer is cast to the actual C++ class.
  * The 'name' argument to the macro is the name of the handle to create.
  */
 
@@ -64,6 +64,25 @@ extern GHOST_SystemHandle GHOST_CreateSystem(void);
  * \return An indication of success.
  */
 extern GHOST_TSuccess GHOST_DisposeSystem(GHOST_SystemHandle systemhandle);
+
+/**
+ * Show a system message box to the user
+ * \param systemhandle    The handle to the system
+ * \param title           Title of the message box
+ * \param message         Message of the message box
+ * \param help_label      Text to show on the help button that opens a link
+ * \param continue_label  Text to show on the ok button that continues
+ * \param link            Optional (hyper)link to a webpage to show when pressing help
+ * \param dialog_options  Options to configure the message box.
+ * \return void.
+ */
+extern void GHOST_ShowMessageBox(GHOST_SystemHandle systemhandle,
+                                 const char *title,
+                                 const char *message,
+                                 const char *help_label,
+                                 const char *continue_label,
+                                 const char *link,
+                                 GHOST_DialogOptions dialog_options);
 
 /**
  * Creates an event consumer object
@@ -176,10 +195,22 @@ extern GHOST_WindowHandle GHOST_CreateWindow(GHOST_SystemHandle systemhandle,
                                              GHOST_TDrawingContextType type,
                                              GHOST_GLSettings glSettings);
 
+extern GHOST_WindowHandle GHOST_CreateDialogWindow(GHOST_SystemHandle systemhandle,
+                                                   GHOST_WindowHandle parent_windowhandle,
+                                                   const char *title,
+                                                   GHOST_TInt32 left,
+                                                   GHOST_TInt32 top,
+                                                   GHOST_TUns32 width,
+                                                   GHOST_TUns32 height,
+                                                   GHOST_TWindowState state,
+                                                   GHOST_TDrawingContextType type,
+                                                   GHOST_GLSettings glSettings);
+
 /**
  * Create a new offscreen context.
  * Never explicitly delete the context, use disposeContext() instead.
  * \param systemhandle The handle to the system
+ * \param platform_support_callback An optional callback to check platform support
  * \return A handle to the new context ( == NULL if creation failed).
  */
 extern GHOST_ContextHandle GHOST_CreateOpenGLContext(GHOST_SystemHandle systemhandle);
@@ -206,6 +237,8 @@ extern GHOST_TUserDataPtr GHOST_GetWindowUserData(GHOST_WindowHandle windowhandl
  * \param userdata The window user data.
  */
 extern void GHOST_SetWindowUserData(GHOST_WindowHandle windowhandle, GHOST_TUserDataPtr userdata);
+
+extern int GHOST_IsDialogWindow(GHOST_WindowHandle windowhandle);
 
 /**
  * Dispose a window.
@@ -316,7 +349,8 @@ extern GHOST_TSuccess GHOST_EndProgressBar(GHOST_WindowHandle windowhandle);
 extern GHOST_TStandardCursor GHOST_GetCursorShape(GHOST_WindowHandle windowhandle);
 
 /**
- * Set the shape of the cursor.
+ * Set the shape of the cursor. If the shape is not supported by the platform,
+ * it will use the default cursor instead.
  * \param windowhandle The handle to the window
  * \param cursorshape The new cursor shape type id.
  * \return Indication of success.
@@ -325,19 +359,12 @@ extern GHOST_TSuccess GHOST_SetCursorShape(GHOST_WindowHandle windowhandle,
                                            GHOST_TStandardCursor cursorshape);
 
 /**
- * Set the shape of the cursor to a custom cursor.
- * \param windowhandle The handle to the window
- * \param bitmap The bitmap data for the cursor.
- * \param  mask The mask data for the cursor.
- * \param hotX The X coordinate of the cursor hotspot.
- * \param hotY The Y coordinate of the cursor hotspot.
+ * Test if the standard cursor shape is supported by current platform.
  * \return Indication of success.
  */
-extern GHOST_TSuccess GHOST_SetCustomCursorShape(GHOST_WindowHandle windowhandle,
-                                                 GHOST_TUns8 bitmap[16][2],
-                                                 GHOST_TUns8 mask[16][2],
-                                                 int hotX,
-                                                 int hotY);
+extern GHOST_TSuccess GHOST_HasCursorShape(GHOST_WindowHandle windowhandle,
+                                           GHOST_TStandardCursor cursorshape);
+
 /**
  * Set the shape of the cursor to a custom cursor of specified size.
  * \param windowhandle The handle to the window
@@ -347,18 +374,17 @@ extern GHOST_TSuccess GHOST_SetCustomCursorShape(GHOST_WindowHandle windowhandle
  * \param sizey The height of the cursor
  * \param hotX The X coordinate of the cursor hotspot.
  * \param hotY The Y coordinate of the cursor hotspot.
- * \param   fg_color, bg_color  Colors of the cursor
+ * \param canInvertColor Let macOS invert cursor color to match platform convention.
  * \return Indication of success.
  */
-extern GHOST_TSuccess GHOST_SetCustomCursorShapeEx(GHOST_WindowHandle windowhandle,
-                                                   GHOST_TUns8 *bitmap,
-                                                   GHOST_TUns8 *mask,
-                                                   int sizex,
-                                                   int sizey,
-                                                   int hotX,
-                                                   int hotY,
-                                                   int fg_color,
-                                                   int bg_color);
+extern GHOST_TSuccess GHOST_SetCustomCursorShape(GHOST_WindowHandle windowhandle,
+                                                 GHOST_TUns8 *bitmap,
+                                                 GHOST_TUns8 *mask,
+                                                 int sizex,
+                                                 int sizey,
+                                                 int hotX,
+                                                 int hotY,
+                                                 GHOST_TUns8 canInvertColor);
 
 /**
  * Returns the visibility state of the cursor.
@@ -410,6 +436,7 @@ extern GHOST_TSuccess GHOST_SetCursorPosition(GHOST_SystemHandle systemhandle,
  */
 extern GHOST_TSuccess GHOST_SetCursorGrab(GHOST_WindowHandle windowhandle,
                                           GHOST_TGrabCursorMode mode,
+                                          GHOST_TAxisFlag warp_axis,
                                           int bounds[4],
                                           const int mouse_ungrab_xy[2]);
 
@@ -445,8 +472,8 @@ extern GHOST_TSuccess GHOST_GetButtonState(GHOST_SystemHandle systemhandle,
  ***************************************************************************************/
 
 /**
- * Sets 3D mouse deadzone
- * \param deadzone Deadzone of the 3D mouse (both for rotation and pan) relative to full range
+ * Sets 3D mouse dead-zone.
+ * \param deadzone: Dead-zone of the 3D mouse (both for rotation and pan) relative to full range.
  */
 extern void GHOST_setNDOFDeadZone(float deadzone);
 #endif
@@ -491,7 +518,7 @@ extern GHOST_TEventDataPtr GHOST_GetEventData(GHOST_EventHandle eventhandle);
 
 /**
  * Returns the timer callback.
- * \param timertaskhandle The handle to the timertask
+ * \param timertaskhandle The handle to the timer-task.
  * \return The timer callback.
  */
 extern GHOST_TimerProcPtr GHOST_GetTimerProc(GHOST_TimerTaskHandle timertaskhandle);
@@ -721,6 +748,11 @@ extern GHOST_TSuccess GHOST_ActivateOpenGLContext(GHOST_ContextHandle contexthan
 extern GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthandle);
 
 /**
+ * Get the OpenGL framebuffer handle that serves as a default framebuffer.
+ */
+extern unsigned int GHOST_GetDefaultOpenGLFramebuffer(GHOST_WindowHandle windwHandle);
+
+/**
  * Set which tablet API to use. Only affects Windows, other platforms have a single API.
  * \param systemhandle The handle to the system
  * \param api Enum indicating which API to use.
@@ -904,17 +936,6 @@ extern void GHOST_putClipboard(GHOST_TInt8 *buffer, int selection);
  * \return current status (1 -visible, 0 - hidden)
  */
 extern int GHOST_toggleConsole(int action);
-
-/**
- * Confirms quitting he program when there is just one window left open
- * in the application
- */
-extern int GHOST_confirmQuit(GHOST_WindowHandle windowhandle);
-
-/**
- * Informs if the system provides native dialogs (eg. confirm quit)
- */
-extern int GHOST_SupportsNativeDialogs(void);
 
 /**
  * Use native pixel size (MacBook pro 'retina'), if supported.

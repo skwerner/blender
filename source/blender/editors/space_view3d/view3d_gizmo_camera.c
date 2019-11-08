@@ -24,6 +24,7 @@
 
 #include "BKE_camera.h"
 #include "BKE_context.h"
+#include "BKE_layer.h"
 
 #include "DNA_object_types.h"
 #include "DNA_camera_types.h"
@@ -100,7 +101,7 @@ static void WIDGETGROUP_camera_setup(const bContext *C, wmGizmoGroup *gzgroup)
     wmGizmo *gz;
     gz = cagzgroup->dop_dist = WM_gizmo_new_ptr(gzt_arrow, gzgroup, NULL);
     RNA_enum_set(gz->ptr, "draw_style", ED_GIZMO_ARROW_STYLE_CROSS);
-    WM_gizmo_set_flag(gz, WM_GIZMO_DRAW_HOVER, true);
+    WM_gizmo_set_flag(gz, WM_GIZMO_DRAW_HOVER | WM_GIZMO_DRAW_NO_SCALE, true);
 
     UI_GetThemeColor3fv(TH_GIZMO_A, gz->color);
     UI_GetThemeColor3fv(TH_GIZMO_HI, gz->color_hi);
@@ -152,9 +153,11 @@ static void WIDGETGROUP_camera_refresh(const bContext *C, wmGizmoGroup *gzgroup)
     WM_gizmo_set_scale(cagzgroup->dop_dist, ca->drawsize);
     WM_gizmo_set_flag(cagzgroup->dop_dist, WM_GIZMO_HIDDEN, false);
 
-    /* need to set property here for undo. TODO would prefer to do this in _init */
+    /* Need to set property here for undo. TODO would prefer to do this in _init */
+    PointerRNA camera_dof_ptr;
+    RNA_pointer_create(&ca->id, &RNA_CameraDOFSettings, &ca->dof, &camera_dof_ptr);
     WM_gizmo_target_property_def_rna(
-        cagzgroup->dop_dist, "offset", &camera_ptr, "dof_distance", -1);
+        cagzgroup->dop_dist, "offset", &camera_dof_ptr, "focus_distance", -1);
   }
   else {
     WM_gizmo_set_flag(cagzgroup->dop_dist, WM_GIZMO_HIDDEN, true);
@@ -262,7 +265,7 @@ static void WIDGETGROUP_camera_message_subscribe(const bContext *C,
   };
 
   {
-    extern PropertyRNA rna_Camera_dof_distance;
+    extern PropertyRNA rna_CameraDOFSettings_focus_distance;
     extern PropertyRNA rna_Camera_display_size;
     extern PropertyRNA rna_Camera_ortho_scale;
     extern PropertyRNA rna_Camera_sensor_fit;
@@ -273,7 +276,7 @@ static void WIDGETGROUP_camera_message_subscribe(const bContext *C,
     extern PropertyRNA rna_Camera_type;
     extern PropertyRNA rna_Camera_lens;
     const PropertyRNA *props[] = {
-        &rna_Camera_dof_distance,
+        &rna_CameraDOFSettings_focus_distance,
         &rna_Camera_display_size,
         &rna_Camera_ortho_scale,
         &rna_Camera_sensor_fit,
@@ -315,6 +318,7 @@ void VIEW3D_GGT_camera(wmGizmoGroupType *gzgt)
 
   gzgt->poll = WIDGETGROUP_camera_poll;
   gzgt->setup = WIDGETGROUP_camera_setup;
+  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_maybe_drag;
   gzgt->refresh = WIDGETGROUP_camera_refresh;
   gzgt->message_subscribe = WIDGETGROUP_camera_message_subscribe;
 }
@@ -436,7 +440,8 @@ static void WIDGETGROUP_camera_view_draw_prepare(const bContext *C, wmGizmoGroup
   struct CameraViewWidgetGroup *viewgroup = gzgroup->customdata;
 
   ARegion *ar = CTX_wm_region(C);
-  struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  /* Drawing code should happen with fully evaluated graph. */
+  struct Depsgraph *depsgraph = CTX_data_expect_evaluated_depsgraph(C);
   RegionView3D *rv3d = ar->regiondata;
   if (rv3d->persp == RV3D_CAMOB) {
     Scene *scene = CTX_data_scene(C);

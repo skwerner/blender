@@ -29,7 +29,6 @@ struct ImBuf;
 struct Main;
 struct Mask;
 struct MovieClip;
-struct Scene;
 struct SpaceClip;
 struct bContext;
 struct bScreen;
@@ -68,6 +67,7 @@ void ED_clip_update_frame(const struct Main *mainp, int cfra);
 bool ED_clip_view_selection(const struct bContext *C, struct ARegion *ar, bool fit);
 
 void ED_clip_select_all(struct SpaceClip *sc, int action, bool *r_has_selection);
+bool ED_clip_can_select(struct bContext *C);
 
 void ED_clip_point_undistorted_pos(struct SpaceClip *sc, const float co[2], float r_co[2]);
 void ED_clip_point_stable_pos(

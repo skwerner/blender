@@ -32,7 +32,6 @@ struct Depsgraph;
 struct EnumPropertyItem;
 struct GridPaintMask;
 struct ImagePool;
-struct MFace;
 struct MLoop;
 struct MLoopTri;
 struct MVert;
@@ -47,13 +46,13 @@ struct Palette;
 struct PaletteColor;
 struct ReportList;
 struct Scene;
-struct Sculpt;
 struct StrokeCache;
 struct SubdivCCG;
 struct SubdivCCG;
 struct Tex;
 struct ToolSettings;
 struct UnifiedPaintSettings;
+struct View3D;
 struct ViewLayer;
 struct bContext;
 struct bToolRef;
@@ -221,7 +220,7 @@ typedef struct SculptSession {
   struct MPoly *mpoly;
   struct MLoop *mloop;
   int totvert, totpoly;
-  struct KeyBlock *kb;
+  struct KeyBlock *shapekey_active;
   float *vmask;
 
   /* Mesh connectivity */
@@ -241,17 +240,13 @@ typedef struct SculptSession {
 
   /* PBVH acceleration structure */
   struct PBVH *pbvh;
-  bool show_diffuse_color;
   bool show_mask;
 
   /* Painting on deformed mesh */
-  bool modifiers_active;       /* object is deformed with some modifiers */
-  float (*orig_cos)[3];        /* coords of undeformed mesh */
-  float (*deform_cos)[3];      /* coords of deformed mesh but without stroke displacement */
-  float (*deform_imats)[3][3]; /* crazyspace deformation matrices */
-
-  /* Partial redraw */
-  bool partial_redraw;
+  bool deform_modifiers_active; /* object is deformed with some modifiers */
+  float (*orig_cos)[3];         /* coords of undeformed mesh */
+  float (*deform_cos)[3];       /* coords of deformed mesh but without stroke displacement */
+  float (*deform_imats)[3][3];  /* crazyspace deformation matrices */
 
   /* Used to cache the render of the active texture */
   unsigned int texcache_side, *texcache, texcache_actual;
@@ -261,6 +256,30 @@ typedef struct SculptSession {
   float (*layer_co)[3]; /* Copy of the mesh vertices' locations */
 
   struct StrokeCache *cache;
+  struct FilterCache *filter_cache;
+
+  /* Cursor data and active vertex for tools */
+  int active_vertex_index;
+
+  float cursor_radius;
+  float cursor_location[3];
+  float cursor_normal[3];
+  float cursor_view_normal[3];
+  struct RegionView3D *rv3d;
+
+  /* Dynamic mesh preview */
+  int *preview_vert_index_list;
+  int preview_vert_index_count;
+  float pose_origin[3];
+
+  /* Transform operator */
+  float pivot_pos[3];
+  float pivot_rot[4];
+  float pivot_scale[3];
+
+  float init_pivot_pos[3];
+  float init_pivot_rot[4];
+  float init_pivot_scale[3];
 
   union {
     struct {
@@ -294,12 +313,14 @@ void BKE_sculptsession_free_deformMats(struct SculptSession *ss);
 void BKE_sculptsession_free_vwpaint_data(struct SculptSession *ss);
 void BKE_sculptsession_bm_to_me(struct Object *ob, bool reorder);
 void BKE_sculptsession_bm_to_me_for_render(struct Object *object);
-void BKE_sculpt_update_mesh_elements(struct Depsgraph *depsgraph,
-                                     struct Scene *scene,
-                                     struct Sculpt *sd,
-                                     struct Object *ob,
-                                     bool need_pmap,
-                                     bool need_mask);
+
+void BKE_sculpt_update_object_for_edit(struct Depsgraph *depsgraph,
+                                       struct Object *ob_orig,
+                                       bool need_pmap,
+                                       bool need_mask);
+void BKE_sculpt_update_object_before_eval(struct Object *ob_eval);
+void BKE_sculpt_update_object_after_eval(struct Depsgraph *depsgraph, struct Object *ob_eval);
+
 struct MultiresModifierData *BKE_sculpt_multires_active(struct Scene *scene, struct Object *ob);
 int BKE_sculpt_mask_layers_ensure(struct Object *ob, struct MultiresModifierData *mmd);
 void BKE_sculpt_toolsettings_data_ensure(struct Scene *scene);
@@ -307,6 +328,8 @@ void BKE_sculpt_toolsettings_data_ensure(struct Scene *scene);
 struct PBVH *BKE_sculpt_object_pbvh_ensure(struct Depsgraph *depsgraph, struct Object *ob);
 
 void BKE_sculpt_bvh_update_from_ccg(struct PBVH *pbvh, struct SubdivCCG *subdiv_ccg);
+
+bool BKE_sculptsession_use_pbvh_draw(const struct Object *ob, const struct View3D *v3d);
 
 enum {
   SCULPT_MASK_LAYER_CALC_VERT = (1 << 0),

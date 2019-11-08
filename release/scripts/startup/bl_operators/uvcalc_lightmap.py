@@ -233,15 +233,16 @@ class prettyface:
         return self.width, self.height
 
 
-def lightmap_uvpack(meshes,
-                    PREF_SEL_ONLY=True,
-                    PREF_NEW_UVLAYER=False,
-                    PREF_PACK_IN_ONE=False,
-                    PREF_APPLY_IMAGE=False,
-                    PREF_IMG_PX_SIZE=512,
-                    PREF_BOX_DIV=8,
-                    PREF_MARGIN_DIV=512
-                    ):
+def lightmap_uvpack(
+        meshes,
+        PREF_SEL_ONLY=True,
+        PREF_NEW_UVLAYER=False,
+        PREF_PACK_IN_ONE=False,
+        PREF_APPLY_IMAGE=False,
+        PREF_IMG_PX_SIZE=512,
+        PREF_BOX_DIV=8,
+        PREF_MARGIN_DIV=512,
+):
     """
     BOX_DIV if the maximum division of the UV map that
     a box may be consolidated into.
@@ -564,7 +565,12 @@ def unwrap(operator, context, **kwargs):
         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
     # define list of meshes
-    meshes = list({me for obj in context.selected_objects if obj.type == 'MESH' for me in (obj.data,) if me.polygons and me.library is None})
+    meshes = list({
+        me for obj in context.selected_objects
+        if obj.type == 'MESH'
+        for me in (obj.data,)
+        if me.polygons and me.library is None
+    })
 
     if not meshes:
         operator.report({'ERROR'}, "No mesh object")
@@ -686,7 +692,7 @@ class LightMapPack(Operator):
 
         return unwrap(self, context, **kwargs)
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
         return wm.invoke_props_dialog(self)
 

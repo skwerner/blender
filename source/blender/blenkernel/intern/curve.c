@@ -36,6 +36,7 @@
 #include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_material_types.h"
+#include "DNA_defaults.h"
 
 /* for dereferencing pointers */
 #include "DNA_key_types.h"
@@ -54,6 +55,7 @@
 #include "BKE_material.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "CLG_log.h"
 
@@ -140,34 +142,16 @@ void BKE_curve_free(Curve *cu)
   MEM_SAFE_FREE(cu->mat);
   MEM_SAFE_FREE(cu->str);
   MEM_SAFE_FREE(cu->strinfo);
-  MEM_SAFE_FREE(cu->bb);
   MEM_SAFE_FREE(cu->tb);
 }
 
-void BKE_curve_init(Curve *cu)
+void BKE_curve_init(Curve *cu, const short curve_type)
 {
-  /* BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cu, id)); */ /* cu->type is already initialized... */
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cu, id));
 
-  copy_v3_fl(cu->size, 1.0f);
-  cu->flag = CU_DEFORM_BOUNDS_OFF | CU_PATH_RADIUS;
-  cu->pathlen = 100;
-  cu->resolu = cu->resolv = (cu->type == OB_SURF) ? 4 : 12;
-  cu->width = 1.0;
-  cu->wordspace = 1.0;
-  cu->spacing = cu->linedist = 1.0;
-  cu->fsize = 1.0;
-  cu->ulheight = 0.05;
-  cu->texflag = CU_AUTOSPACE;
-  cu->smallcaps_scale = 0.75f;
-  /* XXX: this one seems to be the best one in most cases, at least for curve deform... */
-  cu->twist_mode = CU_TWIST_MINIMUM;
-  cu->bevfac1 = 0.0f;
-  cu->bevfac2 = 1.0f;
-  cu->bevfac1_mapping = CU_BEVFAC_MAP_RESOLU;
-  cu->bevfac2_mapping = CU_BEVFAC_MAP_RESOLU;
-  cu->bevresol = 4;
+  MEMCPY_STRUCT_AFTER(cu, DNA_struct_default_get(Curve), id);
 
-  cu->bb = BKE_boundbox_alloc_unit();
+  cu->type = curve_type;
 
   if (cu->type == OB_FONT) {
     cu->flag |= CU_FRONT | CU_BACK;
@@ -181,6 +165,9 @@ void BKE_curve_init(Curve *cu)
     cu->tb = MEM_calloc_arrayN(MAXTEXTBOX, sizeof(TextBox), "textbox");
     cu->tb[0].w = cu->tb[0].h = 0.0;
   }
+  else if (cu->type == OB_SURF) {
+    cu->resolv = 4;
+  }
 }
 
 Curve *BKE_curve_add(Main *bmain, const char *name, int type)
@@ -188,9 +175,8 @@ Curve *BKE_curve_add(Main *bmain, const char *name, int type)
   Curve *cu;
 
   cu = BKE_libblock_alloc(bmain, ID_CU, name, 0);
-  cu->type = type;
 
-  BKE_curve_init(cu);
+  BKE_curve_init(cu, type);
 
   return cu;
 }
@@ -215,7 +201,6 @@ void BKE_curve_copy_data(Main *bmain, Curve *cu_dst, const Curve *cu_src, const 
   cu_dst->str = MEM_dupallocN(cu_src->str);
   cu_dst->strinfo = MEM_dupallocN(cu_src->strinfo);
   cu_dst->tb = MEM_dupallocN(cu_src->tb);
-  cu_dst->bb = MEM_dupallocN(cu_src->bb);
   cu_dst->batch_cache = NULL;
 
   if (cu_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
@@ -302,41 +287,6 @@ void BKE_curve_type_test(Object *ob)
   }
 }
 
-void BKE_curve_boundbox_calc(Curve *cu, float r_loc[3], float r_size[3])
-{
-  BoundBox *bb;
-  float min[3], max[3];
-  float mloc[3], msize[3];
-
-  if (cu->bb == NULL) {
-    cu->bb = MEM_callocN(sizeof(BoundBox), "boundbox");
-  }
-  bb = cu->bb;
-
-  if (!r_loc) {
-    r_loc = mloc;
-  }
-  if (!r_size) {
-    r_size = msize;
-  }
-
-  INIT_MINMAX(min, max);
-  if (!BKE_curve_minmax(cu, true, min, max)) {
-    min[0] = min[1] = min[2] = -1.0f;
-    max[0] = max[1] = max[2] = 1.0f;
-  }
-
-  mid_v3_v3v3(r_loc, min, max);
-
-  r_size[0] = (max[0] - min[0]) / 2.0f;
-  r_size[1] = (max[1] - min[1]) / 2.0f;
-  r_size[2] = (max[2] - min[2]) / 2.0f;
-
-  BKE_boundbox_init_from_minmax(bb, min, max);
-
-  bb->flag &= ~BOUNDBOX_DIRTY;
-}
-
 BoundBox *BKE_curve_boundbox_get(Object *ob)
 {
   /* This is Object-level data access,
@@ -360,13 +310,23 @@ BoundBox *BKE_curve_boundbox_get(Object *ob)
 
 void BKE_curve_texspace_calc(Curve *cu)
 {
-  float loc[3], size[3];
-  int a;
-
-  BKE_curve_boundbox_calc(cu, loc, size);
-
   if (cu->texflag & CU_AUTOSPACE) {
-    for (a = 0; a < 3; a++) {
+    float min[3], max[3];
+
+    INIT_MINMAX(min, max);
+    if (!BKE_curve_minmax(cu, true, min, max)) {
+      min[0] = min[1] = min[2] = -1.0f;
+      max[0] = max[1] = max[2] = 1.0f;
+    }
+
+    float loc[3], size[3];
+    mid_v3_v3v3(loc, min, max);
+
+    size[0] = (max[0] - min[0]) / 2.0f;
+    size[1] = (max[1] - min[1]) / 2.0f;
+    size[2] = (max[2] - min[2]) / 2.0f;
+
+    for (int a = 0; a < 3; a++) {
       if (size[a] == 0.0f) {
         size[a] = 1.0f;
       }
@@ -380,27 +340,28 @@ void BKE_curve_texspace_calc(Curve *cu)
 
     copy_v3_v3(cu->loc, loc);
     copy_v3_v3(cu->size, size);
-    zero_v3(cu->rot);
+
+    cu->texflag |= CU_AUTOSPACE_EVALUATED;
   }
 }
 
-BoundBox *BKE_curve_texspace_get(Curve *cu, float r_loc[3], float r_rot[3], float r_size[3])
+void BKE_curve_texspace_ensure(Curve *cu)
 {
-  if (cu->bb == NULL || (cu->bb->flag & BOUNDBOX_DIRTY)) {
+  if ((cu->texflag & CU_AUTOSPACE) && !(cu->texflag & CU_AUTOSPACE_EVALUATED)) {
     BKE_curve_texspace_calc(cu);
   }
+}
+
+void BKE_curve_texspace_get(Curve *cu, float r_loc[3], float r_size[3])
+{
+  BKE_curve_texspace_ensure(cu);
 
   if (r_loc) {
     copy_v3_v3(r_loc, cu->loc);
   }
-  if (r_rot) {
-    copy_v3_v3(r_rot, cu->rot);
-  }
   if (r_size) {
     copy_v3_v3(r_size, cu->size);
   }
-
-  return cu->bb;
 }
 
 bool BKE_nurbList_index_get_co(ListBase *nurb, const int index, float r_co[3])
@@ -696,7 +657,7 @@ float BKE_nurb_calc_length(const Nurb *nu, int resolution)
     a = nu->pntsu - 1;
     bp = nu->bp;
     if (nu->flagu & CU_NURB_CYCLIC) {
-      ++a;
+      a++;
       prevbp = nu->bp + (nu->pntsu - 1);
     }
     else {
@@ -707,7 +668,7 @@ float BKE_nurb_calc_length(const Nurb *nu, int resolution)
     while (a--) {
       length += len_v3v3(prevbp->vec, bp->vec);
       prevbp = bp;
-      ++bp;
+      bp++;
     }
   }
   else if (nu->type == CU_BEZIER) {
@@ -715,12 +676,12 @@ float BKE_nurb_calc_length(const Nurb *nu, int resolution)
     a = nu->pntsu - 1;
     bezt = nu->bezt;
     if (nu->flagu & CU_NURB_CYCLIC) {
-      ++a;
+      a++;
       prevbezt = nu->bezt + (nu->pntsu - 1);
     }
     else {
       prevbezt = bezt;
-      ++bezt;
+      bezt++;
     }
 
     while (a--) {
@@ -747,7 +708,7 @@ float BKE_nurb_calc_length(const Nurb *nu, int resolution)
         }
       }
       prevbezt = bezt;
-      ++bezt;
+      bezt++;
     }
 
     MEM_freeN(points);
@@ -1737,241 +1698,9 @@ static void forward_diff_bezier_cotangent(const float p0[3],
   }
 }
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-
-float *BKE_curve_surf_make_orco(Object *ob)
-{
-  /* Note: this function is used in convertblender only atm, so
-   * suppose nonzero curve's render resolution should always be used */
-  Curve *cu = ob->data;
-  Nurb *nu;
-  int a, b, tot = 0;
-  int sizeu, sizev;
-  int resolu, resolv;
-  float *fp, *coord_array;
-
-  /* first calculate the size of the datablock */
-  nu = cu->nurb.first;
-  while (nu) {
-    /* as we want to avoid the seam in a cyclic nurbs
-     * texture wrapping, reserve extra orco data space to save these extra needed
-     * vertex based UV coordinates for the meridian vertices.
-     * Vertices on the 0/2pi boundary are not duplicated inside the displist but later in
-     * the renderface/vert construction.
-     *
-     * See also convertblender.c: init_render_surf()
-     */
-
-    resolu = cu->resolu_ren ? cu->resolu_ren : nu->resolu;
-    resolv = cu->resolv_ren ? cu->resolv_ren : nu->resolv;
-
-    sizeu = nu->pntsu * resolu;
-    sizev = nu->pntsv * resolv;
-    if (nu->flagu & CU_NURB_CYCLIC) {
-      sizeu++;
-    }
-    if (nu->flagv & CU_NURB_CYCLIC) {
-      sizev++;
-    }
-    if (nu->pntsv > 1) {
-      tot += sizeu * sizev;
-    }
-
-    nu = nu->next;
-  }
-  /* makeNurbfaces wants zeros */
-  fp = coord_array = MEM_calloc_arrayN(tot, 3 * sizeof(float), "make_orco");
-
-  nu = cu->nurb.first;
-  while (nu) {
-    resolu = cu->resolu_ren ? cu->resolu_ren : nu->resolu;
-    resolv = cu->resolv_ren ? cu->resolv_ren : nu->resolv;
-
-    if (nu->pntsv > 1) {
-      sizeu = nu->pntsu * resolu;
-      sizev = nu->pntsv * resolv;
-
-      if (nu->flagu & CU_NURB_CYCLIC) {
-        sizeu++;
-      }
-      if (nu->flagv & CU_NURB_CYCLIC) {
-        sizev++;
-      }
-
-      if (cu->flag & CU_UV_ORCO) {
-        for (b = 0; b < sizeu; b++) {
-          for (a = 0; a < sizev; a++) {
-
-            if (sizev < 2) {
-              fp[0] = 0.0f;
-            }
-            else {
-              fp[0] = -1.0f + 2.0f * ((float)a) / (sizev - 1);
-            }
-
-            if (sizeu < 2) {
-              fp[1] = 0.0f;
-            }
-            else {
-              fp[1] = -1.0f + 2.0f * ((float)b) / (sizeu - 1);
-            }
-
-            fp[2] = 0.0;
-
-            fp += 3;
-          }
-        }
-      }
-      else {
-        int size = (nu->pntsu * resolu) * (nu->pntsv * resolv) * 3 * sizeof(float);
-        float *_tdata = MEM_mallocN(size, "temp data");
-        float *tdata = _tdata;
-
-        BKE_nurb_makeFaces(nu, tdata, 0, resolu, resolv);
-
-        for (b = 0; b < sizeu; b++) {
-          int use_b = b;
-          if (b == sizeu - 1 && (nu->flagu & CU_NURB_CYCLIC)) {
-            use_b = false;
-          }
-
-          for (a = 0; a < sizev; a++) {
-            int use_a = a;
-            if (a == sizev - 1 && (nu->flagv & CU_NURB_CYCLIC)) {
-              use_a = false;
-            }
-
-            tdata = _tdata + 3 * (use_b * (nu->pntsv * resolv) + use_a);
-
-            fp[0] = (tdata[0] - cu->loc[0]) / cu->size[0];
-            fp[1] = (tdata[1] - cu->loc[1]) / cu->size[1];
-            fp[2] = (tdata[2] - cu->loc[2]) / cu->size[2];
-            fp += 3;
-          }
-        }
-
-        MEM_freeN(_tdata);
-      }
-    }
-    nu = nu->next;
-  }
-
-  return coord_array;
-}
-
-/* NOTE: This routine is tied to the order of vertex
- * built by displist and as passed to the renderer.
- */
-float *BKE_curve_make_orco(Depsgraph *depsgraph, Scene *scene, Object *ob, int *r_numVerts)
-{
-  Curve *cu = ob->data;
-  DispList *dl;
-  int u, v, numVerts;
-  float *fp, *coord_array;
-  ListBase disp = {NULL, NULL};
-
-  BKE_displist_make_curveTypes_forOrco(depsgraph, scene, ob, &disp, NULL);
-
-  numVerts = 0;
-  for (dl = disp.first; dl; dl = dl->next) {
-    if (dl->type == DL_INDEX3) {
-      numVerts += dl->nr;
-    }
-    else if (dl->type == DL_SURF) {
-      /* convertblender.c uses the Surface code for creating renderfaces when cyclic U only
-       * (closed circle beveling)
-       */
-      if (dl->flag & DL_CYCL_U) {
-        if (dl->flag & DL_CYCL_V) {
-          numVerts += (dl->parts + 1) * (dl->nr + 1);
-        }
-        else {
-          numVerts += dl->parts * (dl->nr + 1);
-        }
-      }
-      else if (dl->flag & DL_CYCL_V) {
-        numVerts += (dl->parts + 1) * dl->nr;
-      }
-      else {
-        numVerts += dl->parts * dl->nr;
-      }
-    }
-  }
-
-  if (r_numVerts) {
-    *r_numVerts = numVerts;
-  }
-
-  fp = coord_array = MEM_malloc_arrayN(numVerts, 3 * sizeof(float), "cu_orco");
-  for (dl = disp.first; dl; dl = dl->next) {
-    if (dl->type == DL_INDEX3) {
-      for (u = 0; u < dl->nr; u++, fp += 3) {
-        if (cu->flag & CU_UV_ORCO) {
-          fp[0] = 2.0f * u / (dl->nr - 1) - 1.0f;
-          fp[1] = 0.0;
-          fp[2] = 0.0;
-        }
-        else {
-          copy_v3_v3(fp, &dl->verts[u * 3]);
-
-          fp[0] = (fp[0] - cu->loc[0]) / cu->size[0];
-          fp[1] = (fp[1] - cu->loc[1]) / cu->size[1];
-          fp[2] = (fp[2] - cu->loc[2]) / cu->size[2];
-        }
-      }
-    }
-    else if (dl->type == DL_SURF) {
-      int sizeu = dl->nr, sizev = dl->parts;
-
-      /* exception as handled in convertblender.c too */
-      if (dl->flag & DL_CYCL_U) {
-        sizeu++;
-        if (dl->flag & DL_CYCL_V) {
-          sizev++;
-        }
-      }
-      else if (dl->flag & DL_CYCL_V) {
-        sizev++;
-      }
-
-      for (u = 0; u < sizev; u++) {
-        for (v = 0; v < sizeu; v++, fp += 3) {
-          if (cu->flag & CU_UV_ORCO) {
-            fp[0] = 2.0f * u / (sizev - 1) - 1.0f;
-            fp[1] = 2.0f * v / (sizeu - 1) - 1.0f;
-            fp[2] = 0.0;
-          }
-          else {
-            const float *vert;
-            int realv = v % dl->nr;
-            int realu = u % dl->parts;
-
-            vert = dl->verts + 3 * (dl->nr * realu + realv);
-            copy_v3_v3(fp, vert);
-
-            fp[0] = (fp[0] - cu->loc[0]) / cu->size[0];
-            fp[1] = (fp[1] - cu->loc[1]) / cu->size[1];
-            fp[2] = (fp[2] - cu->loc[2]) / cu->size[2];
-          }
-        }
-      }
-    }
-  }
-
-  BKE_displist_free(&disp);
-
-  return coord_array;
-}
-
 /* ***************** BEVEL ****************** */
 
-void BKE_curve_bevel_make(Depsgraph *depsgraph,
-                          Scene *scene,
-                          Object *ob,
-                          ListBase *disp,
-                          const bool for_render,
-                          const bool use_render_resolution,
-                          LinkNode *ob_cyclic_list)
+void BKE_curve_bevel_make(Object *ob, ListBase *disp)
 {
   DispList *dl, *dlnew;
   Curve *bevcu, *cu;
@@ -1995,26 +1724,7 @@ void BKE_curve_bevel_make(Depsgraph *depsgraph,
       facx = cu->bevobj->scale[0];
       facy = cu->bevobj->scale[1];
 
-      if (for_render) {
-        if (BLI_linklist_index(ob_cyclic_list, cu->bevobj) == -1) {
-          BKE_displist_make_curveTypes_forRender(depsgraph,
-                                                 scene,
-                                                 cu->bevobj,
-                                                 &bevdisp,
-                                                 NULL,
-                                                 false,
-                                                 use_render_resolution,
-                                                 &(LinkNode){
-                                                     .link = ob,
-                                                     .next = ob_cyclic_list,
-                                                 });
-          dl = bevdisp.first;
-        }
-        else {
-          dl = NULL;
-        }
-      }
-      else if (cu->bevobj->runtime.curve_cache) {
+      if (cu->bevobj->runtime.curve_cache) {
         dl = cu->bevobj->runtime.curve_cache->disp.first;
       }
       else {
@@ -2068,8 +1778,9 @@ void BKE_curve_bevel_make(Depsgraph *depsgraph,
     fp[3] = fp[4] = 0.0;
     fp[5] = cu->ext1;
   }
-  else if ((cu->flag & (CU_FRONT | CU_BACK)) == 0 &&
-           cu->ext1 == 0.0f) { /* we make a full round bevel in that case */
+  else if ((cu->flag & (CU_FRONT | CU_BACK)) == 0 && cu->ext1 == 0.0f) {
+    /* We make a full round bevel in that case. */
+
     nr = 4 + 2 * cu->bevresol;
 
     dl = MEM_callocN(sizeof(DispList), "makebevelcurve p1");
@@ -2406,8 +2117,8 @@ static void tilt_bezpart(BezTriple *prevbezt,
 
   for (a = 0; a < resolu; a++, fac += dfac) {
     if (tilt_array) {
-      if (nu->tilt_interp ==
-          KEY_CU_EASE) { /* May as well support for tilt also 2.47 ease interp */
+      if (nu->tilt_interp == KEY_CU_EASE) {
+        /* May as well support for tilt also 2.47 ease interp. */
         *tilt_array = prevbezt->tilt +
                       (bezt->tilt - prevbezt->tilt) * (3.0f * fac * fac - 2.0f * fac * fac * fac);
       }
@@ -2631,7 +2342,7 @@ static void make_bevel_list_3D_minimum_twist(BevList *bl)
   nr = bl->nr;
   while (nr--) {
 
-    if (nr + 4 > bl->nr) { /* first time and second time, otherwise first point adjusts last */
+    if (nr + 3 > bl->nr) { /* first time and second time, otherwise first point adjusts last */
       vec_to_quat(bevp1->quat, bevp1->dir, 5, 1);
     }
     else {
@@ -2986,8 +2697,10 @@ void BKE_curve_bevelList_make(Object *ob, ListBase *nurbs, bool for_render)
 
     /* check if we will calculate tilt data */
     do_tilt = CU_DO_TILT(cu, nu);
-    do_radius = CU_DO_RADIUS(
-        cu, nu); /* normal display uses the radius, better just to calculate them */
+
+    /* Normal display uses the radius, better just to calculate them. */
+    do_radius = CU_DO_RADIUS(cu, nu);
+
     do_weight = true;
 
     /* check we are a single point? also check we are not a surface and that the orderu is sane,
@@ -4853,18 +4566,13 @@ void BKE_nurb_direction_switch(Nurb *nu)
   }
 }
 
-float (*BKE_curve_nurbs_vertexCos_get(ListBase *lb, int *r_numVerts))[3]
+void BKE_curve_nurbs_vert_coords_get(ListBase *lb, float (*vert_coords)[3], int vert_len)
 {
-  int i, numVerts = *r_numVerts = BKE_nurbList_verts_count(lb);
-  float *co, (*cos)[3] = MEM_malloc_arrayN(numVerts, sizeof(*cos), "cu_vcos");
-  Nurb *nu;
-
-  co = cos[0];
-  for (nu = lb->first; nu; nu = nu->next) {
+  float *co = vert_coords[0];
+  for (Nurb *nu = lb->first; nu; nu = nu->next) {
     if (nu->type == CU_BEZIER) {
       BezTriple *bezt = nu->bezt;
-
-      for (i = 0; i < nu->pntsu; i++, bezt++) {
+      for (int i = 0; i < nu->pntsu; i++, bezt++) {
         copy_v3_v3(co, bezt->vec[0]);
         co += 3;
         copy_v3_v3(co, bezt->vec[1]);
@@ -4875,20 +4583,31 @@ float (*BKE_curve_nurbs_vertexCos_get(ListBase *lb, int *r_numVerts))[3]
     }
     else {
       BPoint *bp = nu->bp;
-
-      for (i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
+      for (int i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
         copy_v3_v3(co, bp->vec);
         co += 3;
       }
     }
   }
-
-  return cos;
+  BLI_assert(co == vert_coords[vert_len]);
+  UNUSED_VARS_NDEBUG(vert_len);
 }
 
-void BK_curve_nurbs_vertexCos_apply(ListBase *lb, float (*vertexCos)[3])
+float (*BKE_curve_nurbs_vert_coords_alloc(ListBase *lb, int *r_vert_len))[3]
 {
-  const float *co = vertexCos[0];
+  const int vert_len = BKE_nurbList_verts_count(lb);
+  float(*vert_coords)[3] = MEM_malloc_arrayN(vert_len, sizeof(*vert_coords), __func__);
+  BKE_curve_nurbs_vert_coords_get(lb, vert_coords, vert_len);
+  *r_vert_len = vert_len;
+  return vert_coords;
+}
+
+void BKE_curve_nurbs_vert_coords_apply_with_mat4(ListBase *lb,
+                                                 const float (*vert_coords)[3],
+                                                 const float mat[4][4],
+                                                 const bool constrain_2d)
+{
+  const float *co = vert_coords[0];
   Nurb *nu;
   int i;
 
@@ -4897,6 +4616,44 @@ void BK_curve_nurbs_vertexCos_apply(ListBase *lb, float (*vertexCos)[3])
       BezTriple *bezt = nu->bezt;
 
       for (i = 0; i < nu->pntsu; i++, bezt++) {
+        mul_v3_m4v3(bezt->vec[0], mat, co);
+        co += 3;
+        mul_v3_m4v3(bezt->vec[1], mat, co);
+        co += 3;
+        mul_v3_m4v3(bezt->vec[2], mat, co);
+        co += 3;
+      }
+    }
+    else {
+      BPoint *bp = nu->bp;
+
+      for (i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
+        mul_v3_m4v3(bp->vec, mat, co);
+        co += 3;
+      }
+    }
+
+    if (constrain_2d) {
+      if (nu->flag & CU_2D) {
+        BKE_nurb_test_2d(nu);
+      }
+    }
+
+    calchandlesNurb_intern(nu, true);
+  }
+}
+
+void BKE_curve_nurbs_vert_coords_apply(ListBase *lb,
+                                       const float (*vert_coords)[3],
+                                       const bool constrain_2d)
+{
+  const float *co = vert_coords[0];
+
+  for (Nurb *nu = lb->first; nu; nu = nu->next) {
+    if (nu->type == CU_BEZIER) {
+      BezTriple *bezt = nu->bezt;
+
+      for (int i = 0; i < nu->pntsu; i++, bezt++) {
         copy_v3_v3(bezt->vec[0], co);
         co += 3;
         copy_v3_v3(bezt->vec[1], co);
@@ -4908,9 +4665,15 @@ void BK_curve_nurbs_vertexCos_apply(ListBase *lb, float (*vertexCos)[3])
     else {
       BPoint *bp = nu->bp;
 
-      for (i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
+      for (int i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
         copy_v3_v3(bp->vec, co);
         co += 3;
+      }
+    }
+
+    if (constrain_2d) {
+      if (nu->flag & CU_2D) {
+        BKE_nurb_test_2d(nu);
       }
     }
 
@@ -4918,18 +4681,17 @@ void BK_curve_nurbs_vertexCos_apply(ListBase *lb, float (*vertexCos)[3])
   }
 }
 
-float (*BKE_curve_nurbs_keyVertexCos_get(ListBase *lb, float *key))[3]
+float (*BKE_curve_nurbs_key_vert_coords_alloc(ListBase *lb, float *key, int *r_vert_len))[3]
 {
-  int i, numVerts = BKE_nurbList_verts_count(lb);
-  float *co, (*cos)[3] = MEM_malloc_arrayN(numVerts, sizeof(*cos), "cu_vcos");
-  Nurb *nu;
+  int vert_len = BKE_nurbList_verts_count(lb);
+  float(*cos)[3] = MEM_malloc_arrayN(vert_len, sizeof(*cos), __func__);
 
-  co = cos[0];
-  for (nu = lb->first; nu; nu = nu->next) {
+  float *co = cos[0];
+  for (Nurb *nu = lb->first; nu; nu = nu->next) {
     if (nu->type == CU_BEZIER) {
       BezTriple *bezt = nu->bezt;
 
-      for (i = 0; i < nu->pntsu; i++, bezt++) {
+      for (int i = 0; i < nu->pntsu; i++, bezt++) {
         copy_v3_v3(co, &key[0]);
         co += 3;
         copy_v3_v3(co, &key[3]);
@@ -4942,18 +4704,18 @@ float (*BKE_curve_nurbs_keyVertexCos_get(ListBase *lb, float *key))[3]
     else {
       BPoint *bp = nu->bp;
 
-      for (i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
+      for (int i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
         copy_v3_v3(co, key);
         co += 3;
         key += KEYELEM_FLOAT_LEN_BPOINT;
       }
     }
   }
-
+  *r_vert_len = vert_len;
   return cos;
 }
 
-void BKE_curve_nurbs_keyVertexTilts_apply(ListBase *lb, float *key)
+void BKE_curve_nurbs_key_vert_tilts_apply(ListBase *lb, float *key)
 {
   Nurb *nu;
   int i;
@@ -4980,7 +4742,7 @@ void BKE_curve_nurbs_keyVertexTilts_apply(ListBase *lb, float *key)
   }
 }
 
-bool BKE_nurb_check_valid_u(struct Nurb *nu)
+bool BKE_nurb_check_valid_u(const Nurb *nu)
 {
   if (nu->pntsu <= 1) {
     return false;
@@ -4992,8 +4754,8 @@ bool BKE_nurb_check_valid_u(struct Nurb *nu)
   if (nu->pntsu < nu->orderu) {
     return false;
   }
-  if (((nu->flagu & CU_NURB_CYCLIC) == 0) &&
-      (nu->flagu & CU_NURB_BEZIER)) { /* Bezier U Endpoints */
+  if (((nu->flagu & CU_NURB_CYCLIC) == 0) && (nu->flagu & CU_NURB_BEZIER)) {
+    /* Bezier U Endpoints */
     if (nu->orderu == 4) {
       if (nu->pntsu < 5) {
         return false; /* bezier with 4 orderu needs 5 points */
@@ -5007,7 +4769,7 @@ bool BKE_nurb_check_valid_u(struct Nurb *nu)
   }
   return true;
 }
-bool BKE_nurb_check_valid_v(struct Nurb *nu)
+bool BKE_nurb_check_valid_v(const Nurb *nu)
 {
   if (nu->pntsv <= 1) {
     return false;
@@ -5019,8 +4781,8 @@ bool BKE_nurb_check_valid_v(struct Nurb *nu)
   if (nu->pntsv < nu->orderv) {
     return false;
   }
-  if (((nu->flagv & CU_NURB_CYCLIC) == 0) &&
-      (nu->flagv & CU_NURB_BEZIER)) { /* Bezier V Endpoints */
+  if (((nu->flagv & CU_NURB_CYCLIC) == 0) && (nu->flagv & CU_NURB_BEZIER)) {
+    /* Bezier V Endpoints */
     if (nu->orderv == 4) {
       if (nu->pntsv < 5) {
         return false; /* bezier with 4 orderu needs 5 points */
@@ -5035,7 +4797,7 @@ bool BKE_nurb_check_valid_v(struct Nurb *nu)
   return true;
 }
 
-bool BKE_nurb_check_valid_uv(struct Nurb *nu)
+bool BKE_nurb_check_valid_uv(const Nurb *nu)
 {
   if (!BKE_nurb_check_valid_u(nu)) {
     return false;
@@ -5562,6 +5324,32 @@ void BKE_curve_material_index_remove(Curve *cu, int index)
   }
 }
 
+bool BKE_curve_material_index_used(Curve *cu, int index)
+{
+  const int curvetype = BKE_curve_type_get(cu);
+
+  if (curvetype == OB_FONT) {
+    struct CharInfo *info = cu->strinfo;
+    int i;
+    for (i = cu->len_wchar - 1; i >= 0; i--, info++) {
+      if (info->mat_nr == index) {
+        return true;
+      }
+    }
+  }
+  else {
+    Nurb *nu;
+
+    for (nu = cu->nurb.first; nu; nu = nu->next) {
+      if (nu->mat_nr == index) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 void BKE_curve_material_index_clear(Curve *cu)
 {
   const int curvetype = BKE_curve_type_get(cu);
@@ -5682,8 +5470,14 @@ void BKE_curve_rect_from_textbox(const struct Curve *cu,
 void BKE_curve_eval_geometry(Depsgraph *depsgraph, Curve *curve)
 {
   DEG_debug_print_eval(depsgraph, __func__, curve->id.name, curve);
-  if (curve->bb == NULL || (curve->bb->flag & BOUNDBOX_DIRTY)) {
-    BKE_curve_texspace_calc(curve);
+  BKE_curve_texspace_calc(curve);
+  if (DEG_is_active(depsgraph)) {
+    Curve *curve_orig = (Curve *)DEG_get_original_id(&curve->id);
+    if (curve->texflag & CU_AUTOSPACE_EVALUATED) {
+      curve_orig->texflag |= CU_AUTOSPACE_EVALUATED;
+      copy_v3_v3(curve_orig->loc, curve->loc);
+      copy_v3_v3(curve_orig->size, curve->size);
+    }
   }
 }
 

@@ -116,8 +116,11 @@ bool BKE_movieclip_put_frame_if_possible(struct MovieClip *clip,
                                          struct MovieClipUser *user,
                                          struct ImBuf *ibuf);
 
-/* Evaluation. */
-void BKE_movieclip_eval_update(struct Depsgraph *depsgraph, struct MovieClip *clip);
+/* Dependency graph evaluation. */
+
+void BKE_movieclip_eval_update(struct Depsgraph *depsgraph,
+                               struct Main *bmain,
+                               struct MovieClip *clip);
 void BKE_movieclip_eval_selection_update(struct Depsgraph *depsgraph, struct MovieClip *clip);
 
 /* caching flags */

@@ -120,8 +120,9 @@ static void freeData(ModifierData *md)
   OceanModifierData *omd = (OceanModifierData *)md;
 
   BKE_ocean_free(omd->ocean);
-  if (omd->oceancache)
+  if (omd->oceancache) {
     BKE_ocean_free_cache(omd->oceancache);
+  }
 #else  /* WITH_OCEANSIM */
   /* unused */
   (void)md;
@@ -195,7 +196,7 @@ typedef struct GenerateOceanGeometryData {
 
 static void generate_ocean_geometry_vertices(void *__restrict userdata,
                                              const int y,
-                                             const ParallelRangeTLS *__restrict UNUSED(tls))
+                                             const TaskParallelTLS *__restrict UNUSED(tls))
 {
   GenerateOceanGeometryData *gogd = userdata;
   int x;
@@ -211,7 +212,7 @@ static void generate_ocean_geometry_vertices(void *__restrict userdata,
 
 static void generate_ocean_geometry_polygons(void *__restrict userdata,
                                              const int y,
-                                             const ParallelRangeTLS *__restrict UNUSED(tls))
+                                             const TaskParallelTLS *__restrict UNUSED(tls))
 {
   GenerateOceanGeometryData *gogd = userdata;
   int x;
@@ -240,7 +241,7 @@ static void generate_ocean_geometry_polygons(void *__restrict userdata,
 
 static void generate_ocean_geometry_uvs(void *__restrict userdata,
                                         const int y,
-                                        const ParallelRangeTLS *__restrict UNUSED(tls))
+                                        const TaskParallelTLS *__restrict UNUSED(tls))
 {
   GenerateOceanGeometryData *gogd = userdata;
   int x;
@@ -267,7 +268,7 @@ static void generate_ocean_geometry_uvs(void *__restrict userdata,
   }
 }
 
-static Mesh *generate_ocean_geometry(OceanModifierData *omd)
+static Mesh *generate_ocean_geometry(OceanModifierData *omd, Mesh *mesh_orig)
 {
   Mesh *result;
 
@@ -295,12 +296,13 @@ static Mesh *generate_ocean_geometry(OceanModifierData *omd)
   gogd.sy /= gogd.ry;
 
   result = BKE_mesh_new_nomain(num_verts, 0, 0, num_polys * 4, num_polys);
+  BKE_mesh_copy_settings(result, mesh_orig);
 
   gogd.mverts = result->mvert;
   gogd.mpolys = result->mpoly;
   gogd.mloops = result->mloop;
 
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = use_threading;
 
@@ -376,7 +378,7 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
   }
 
   if (omd->geometry_mode == MOD_OCEAN_GEOM_GENERATE) {
-    result = generate_ocean_geometry(omd);
+    result = generate_ocean_geometry(omd, mesh);
     BKE_mesh_ensure_normals(result);
   }
   else if (omd->geometry_mode == MOD_OCEAN_GEOM_DISPLACE) {

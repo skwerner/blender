@@ -60,6 +60,9 @@ typedef struct Bone {
 
   int flag;
 
+  char inherit_scale_mode;
+  char _pad[7];
+
   float arm_head[3];
   /**  head/tail in Armature Space (rest pos). */
   float arm_tail[3];
@@ -104,7 +107,11 @@ typedef struct bArmature {
   struct AnimData *adt;
 
   ListBase bonebase;
-  ListBase chainbase;
+
+  /** Ghash for quicker lookups of bones by name. */
+  struct GHash *bonehash;
+  void *_pad1;
+
   /** Editbone listbase, we use pointer so we can check state. */
   ListBase *edbo;
 
@@ -121,9 +128,7 @@ typedef struct bArmature {
 
   int flag;
   int drawtype;
-  /** How vertex deformation is handled in the ge. */
-  int gevertdeformer;
-  char _pad[4];
+
   short deformflag;
   short pathflag;
 
@@ -143,10 +148,10 @@ typedef enum eArmature_Flag {
   ARM_DRAWNAMES = (1 << 3),
   ARM_POSEMODE = (1 << 4),
   ARM_FLAG_UNUSED_5 = (1 << 5), /* cleared */
-  ARM_DELAYDEFORM = (1 << 6),
-  ARM_MIRROR_RELATIVE = (1 << 7),
+  ARM_FLAG_UNUSED_6 = (1 << 6), /* cleared */
+  ARM_FLAG_UNUSED_7 = (1 << 7),
   ARM_MIRROR_EDIT = (1 << 8),
-  ARM_AUTO_IK = (1 << 9),
+  ARM_FLAG_UNUSED_9 = (1 << 9),
   /** made option negative, for backwards compat */
   ARM_NO_CUSTOM = (1 << 10),
   /** draw custom colors  */
@@ -167,12 +172,6 @@ typedef enum eArmature_Drawtype {
   ARM_ENVELOPE = 3,
   ARM_WIRE = 4,
 } eArmature_Drawtype;
-
-/* armature->gevertdeformer */
-typedef enum eArmature_VertDeformer {
-  ARM_VDEF_BLENDER = 0,
-  ARM_VDEF_BGE_CPU = 1,
-} eArmature_VertDeformer;
 
 /* armature->deformflag */
 typedef enum eArmature_DeformFlag {
@@ -225,8 +224,10 @@ typedef enum eBone_Flag {
   BONE_UNKEYED = (1 << 13),
   /** set to prevent hinge child bones from influencing the transform center */
   BONE_HINGE_CHILD_TRANSFORM = (1 << 14),
+#ifdef DNA_DEPRECATED
   /** No parent scale */
   BONE_NO_SCALE = (1 << 15),
+#endif
   /** hidden bone when drawing PoseChannels (for ghost drawing) */
   BONE_HIDDEN_PG = (1 << 16),
   /** bone should be drawn as OB_WIRE, regardless of draw-types of view+armature */
@@ -245,8 +246,24 @@ typedef enum eBone_Flag {
   BONE_RELATIVE_PARENTING = (1 << 23),
   /** it will add the parent end roll to the inroll */
   BONE_ADD_PARENT_END_ROLL = (1 << 24),
+  /** this bone was transformed by the mirror function */
+  BONE_TRANSFORM_MIRROR = (1 << 25),
 
 } eBone_Flag;
+
+/* bone->inherit_scale_mode */
+typedef enum eBone_InheritScaleMode {
+  /* Inherit all scale and shear. */
+  BONE_INHERIT_SCALE_FULL = 0,
+  /* Inherit scale, but remove final shear. */
+  BONE_INHERIT_SCALE_FIX_SHEAR,
+  /* Inherit average scale. */
+  BONE_INHERIT_SCALE_AVERAGE,
+  /* Inherit no scale or shear. */
+  BONE_INHERIT_SCALE_NONE,
+  /* Inherit effects of shear on parent (same as old disabled Inherit Scale). */
+  BONE_INHERIT_SCALE_NONE_LEGACY,
+} eBone_InheritScaleMode;
 
 /* bone->bbone_prev_type, bbone_next_type */
 typedef enum eBone_BBoneHandleType {

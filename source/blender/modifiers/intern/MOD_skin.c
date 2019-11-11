@@ -58,6 +58,7 @@
 #include "BLI_bitmap.h"
 #include "BLI_heap_simple.h"
 #include "BLI_math.h"
+#include "BLI_math_geom.h"
 #include "BLI_stack.h"
 
 #include "DNA_mesh_types.h"
@@ -86,7 +87,7 @@ typedef enum {
   CAP_START = 1,
   CAP_END = 2,
   SEAM_FRAME = 4,
-  ROOT = 8,
+  FLIP_NORMAL = 8,
 } SkinNodeFlag;
 
 typedef struct Frame {
@@ -102,7 +103,7 @@ typedef struct Frame {
     int corner;
     /* checked to avoid chaining.
      * (merging when we're already been referenced), see T39775 */
-    unsigned int is_target : 1;
+    uint is_target : 1;
   } merge[4];
 
   /* For hull frames, whether each vertex is detached or not */
@@ -513,12 +514,18 @@ static void end_node_frames(int v,
       negate_v3(mat[0]);
     }
 
-    /* End frame */
-    create_frame(&skin_nodes[v].frames[0], mvert[v].co, rad, mat, 0);
-  }
+    Frame *frame = &skin_nodes[v].frames[0];
 
-  if (nodes[v].flag & MVERT_SKIN_ROOT) {
-    skin_nodes[v].flag |= ROOT;
+    /* End frame */
+    create_frame(frame, mvert[v].co, rad, mat, 0);
+
+    /* The caps might need to have their normals inverted. So check if they
+     * need to be flipped when creating faces. */
+    float normal[3];
+    normal_quad_v3(normal, frame->co[0], frame->co[1], frame->co[2], frame->co[3]);
+    if (dot_v3v3(mat[0], normal) < 0.0f) {
+      skin_nodes[v].flag |= FLIP_NORMAL;
+    }
   }
 }
 
@@ -857,7 +864,7 @@ static Mesh *subdivide_base(Mesh *orig)
   }
 
   /* Per edge, store how many subdivisions are needed */
-  edge_subd = MEM_calloc_arrayN(totorigedge, sizeof(int), "edge_subd");
+  edge_subd = MEM_calloc_arrayN((uint)totorigedge, sizeof(int), "edge_subd");
   for (i = 0, totsubd = 0; i < totorigedge; i++) {
     edge_subd[i] += calc_edge_subdivisions(origvert, orignode, &origedge[i], degree);
     BLI_assert(edge_subd[i] >= 0);
@@ -1216,7 +1223,7 @@ static BMFace *skin_hole_target_face(BMesh *bm, Frame *frame)
   }
 
   /* This case is unlikely now, but could still happen. Should look
-     * into splitting edges to make new faces. */
+   * into splitting edges to make new faces. */
 #if PRINT_HOLE_INFO
   if (!f) {
     printf("no good face found\n");
@@ -1511,7 +1518,7 @@ static void skin_update_merged_vertices(SkinNode *skin_nodes, int totvert)
 {
   int v;
 
-  for (v = 0; v < totvert; ++v) {
+  for (v = 0; v < totvert; v++) {
     SkinNode *sn = &skin_nodes[v];
     int i, j;
 
@@ -1559,7 +1566,7 @@ static void skin_output_end_nodes(SkinOutput *so, SkinNode *skin_nodes, int totv
 {
   int v;
 
-  for (v = 0; v < totvert; ++v) {
+  for (v = 0; v < totvert; v++) {
     SkinNode *sn = &skin_nodes[v];
     /* Assuming here just two frames */
     if (sn->flag & SEAM_FRAME) {
@@ -1577,7 +1584,7 @@ static void skin_output_end_nodes(SkinOutput *so, SkinNode *skin_nodes, int totv
     }
 
     if (sn->flag & CAP_START) {
-      if (sn->flag & ROOT) {
+      if (sn->flag & FLIP_NORMAL) {
         add_poly(so,
                  sn->frames[0].verts[0],
                  sn->frames[0].verts[1],
@@ -1762,7 +1769,7 @@ static BMesh *build_skin(SkinNode *skin_nodes,
   skin_merge_close_frame_verts(skin_nodes, totvert, emap, medge);
 
   /* Write out all frame vertices to the mesh */
-  for (v = 0; v < totvert; ++v) {
+  for (v = 0; v < totvert; v++) {
     if (skin_nodes[v].totframe) {
       output_frames(so.bm, &skin_nodes[v], input_dvert ? &input_dvert[v] : NULL);
     }
@@ -1864,7 +1871,7 @@ static Mesh *base_skin(Mesh *origmesh, SkinModifierData *smd)
     return NULL;
   }
 
-  result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL);
+  result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL, origmesh);
   BM_mesh_free(bm);
 
   result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;

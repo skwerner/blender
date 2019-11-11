@@ -50,8 +50,8 @@
 
 /* Maps new_w weights in place, using either one of the predefined functions, or a custom curve.
  * Return values are in new_w.
- * If indices is not NULL, it must be a table of same length as org_w and new_w, mapping to the real
- * vertex index (in case the weight tables do not cover the whole vertices...).
+ * If indices is not NULL, it must be a table of same length as org_w and new_w,
+ * mapping to the real vertex index (in case the weight tables do not cover the whole vertices...).
  * cmap might be NULL, in which case curve mapping mode will return unmodified data.
  */
 void weightvg_do_map(int num, float *new_w, short falloff_type, CurveMapping *cmap, RNG *rng)
@@ -72,18 +72,18 @@ void weightvg_do_map(int num, float *new_w, short falloff_type, CurveMapping *cm
   }
 
   if (cmap && falloff_type == MOD_WVG_MAPPING_CURVE) {
-    curvemapping_initialize(cmap);
+    BKE_curvemapping_initialize(cmap);
   }
 
   /* Map each weight (vertex) to its new value, accordingly to the chosen mode. */
-  for (i = 0; i < num; ++i) {
+  for (i = 0; i < num; i++) {
     float fac = new_w[i];
 
     /* Code borrowed from the warp modifier. */
     /* Closely matches PROP_SMOOTH and similar. */
     switch (falloff_type) {
       case MOD_WVG_MAPPING_CURVE:
-        fac = curvemapping_evaluateF(cmap, 0, fac);
+        fac = BKE_curvemapping_evaluateF(cmap, 0, fac);
         break;
       case MOD_WVG_MAPPING_SHARP:
         fac = fac * fac;
@@ -111,9 +111,10 @@ void weightvg_do_map(int num, float *new_w, short falloff_type, CurveMapping *cm
 
 /* Applies new_w weights to org_w ones, using either a texture, vgroup or constant value as factor.
  * Return values are in org_w.
- * If indices is not NULL, it must be a table of same length as org_w and new_w, mapping to the real
- * vertex index (in case the weight tables do not cover the whole vertices...).
- * XXX The standard "factor" value is assumed in [0.0, 1.0] range. Else, weird results might appear.
+ * If indices is not NULL, it must be a table of same length as org_w and new_w,
+ * mapping to the real vertex index (in case the weight tables do not cover the whole vertices...).
+ * XXX The standard "factor" value is assumed in [0.0, 1.0] range.
+ * Else, weird results might appear.
  */
 void weightvg_do_mask(const ModifierEvalContext *ctx,
                       const int num,
@@ -163,7 +164,7 @@ void weightvg_do_mask(const ModifierEvalContext *ctx,
     MOD_init_texture(&t_map, ctx);
 
     /* For each weight (vertex), make the mix between org and new weights. */
-    for (i = 0; i < num; ++i) {
+    for (i = 0; i < num; i++) {
       int idx = indices ? indices[i] : i;
       TexResult texres;
       float hsv[3]; /* For HSV color space. */

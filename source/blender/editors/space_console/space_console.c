@@ -26,6 +26,7 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_global.h"
 #include "BKE_context.h"
 #include "BKE_screen.h"
 
@@ -77,7 +78,7 @@ static SpaceLink *console_new(const ScrArea *UNUSED(area), const Scene *UNUSED(s
   ar->v2d.minzoom = ar->v2d.maxzoom = 1.0f;
 
   /* for now, aspect ratio should be maintained, and zoom is clamped within sane default limits */
-  //ar->v2d.keepzoom = (V2D_KEEPASPECT|V2D_LIMITZOOM);
+  // ar->v2d.keepzoom = (V2D_KEEPASPECT|V2D_LIMITZOOM);
 
   return (SpaceLink *)sconsole;
 }
@@ -148,11 +149,11 @@ static void console_main_region_init(wmWindowManager *wm, ARegion *ar)
 static void console_cursor(wmWindow *win, ScrArea *sa, ARegion *ar)
 {
   SpaceText *st = sa->spacedata.first;
-  int wmcursor = BC_TEXTEDITCURSOR;
+  int wmcursor = WM_CURSOR_TEXT_EDIT;
 
   if (st->text &&
       BLI_rcti_isect_pt(&st->txtbar, win->eventstate->x - ar->winrct.xmin, st->txtbar.ymin)) {
-    wmcursor = CURSOR_STD;
+    wmcursor = WM_CURSOR_DEFAULT;
   }
 
   WM_cursor_set(win, wmcursor);
@@ -173,7 +174,7 @@ static void id_drop_copy(wmDrag *drag, wmDropBox *drop)
   ID *id = WM_drag_ID(drag, 0);
 
   /* copy drag path to properties */
-  char *text = RNA_path_full_ID_py(id);
+  char *text = RNA_path_full_ID_py(G_MAIN, id);
   RNA_string_set(drop->ptr, "text", text);
   MEM_freeN(text);
 }
@@ -231,9 +232,8 @@ static void console_main_region_draw(const bContext *C, ARegion *ar)
   UI_view2d_view_restore(C);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, NULL, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_GRID_CLAMP);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
+  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_draw(v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 }
 

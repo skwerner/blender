@@ -33,8 +33,8 @@
 class CompositorContext {
  private:
   /**
-   * \brief The rendering field describes if we are rendering (F12) or if we are editing (Node editor)
-   * This field is initialized in ExecutionSystem and must only be read from that point on.
+   * \brief The rendering field describes if we are rendering (F12) or if we are editing (Node
+   * editor) This field is initialized in ExecutionSystem and must only be read from that point on.
    * \see ExecutionSystem
    */
   bool m_rendering;
@@ -215,7 +215,7 @@ class CompositorContext {
   }
 
   /**
-   * \brief get the current framenumber of the scene in this context
+   * \brief get the current frame-number of the scene in this context
    */
   int getFramenumber() const;
 

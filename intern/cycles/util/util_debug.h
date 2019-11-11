@@ -33,6 +33,8 @@ class DebugFlags {
   /* Use static BVH in viewport, to match final render exactly. */
   bool viewport_static_bvh;
 
+  bool running_inside_blender;
+
   /* Descriptor of CPU feature-set to be used. */
   struct CPU {
     CPU();
@@ -97,6 +99,17 @@ class DebugFlags {
     bool split_kernel;
   };
 
+  /* Descriptor of OptiX feature-set to be used. */
+  struct OptiX {
+    OptiX();
+
+    /* Reset flags to their defaults. */
+    void reset();
+
+    /* Number of CUDA streams to launch kernels concurrently from. */
+    int cuda_streams;
+  };
+
   /* Descriptor of OpenCL feature-set to be used. */
   struct OpenCL {
     OpenCL();
@@ -141,7 +154,8 @@ class DebugFlags {
     /* Use debug version of the kernel. */
     bool debug;
 
-    /* TODO(mai): Currently this is only for OpenCL, but we should have it implemented for all devices. */
+    /* TODO(mai): Currently this is only for OpenCL, but we should have it implemented for all
+     * devices. */
     /* Artificial memory limit in bytes (0 if disabled). */
     size_t mem_limit;
   };
@@ -161,6 +175,9 @@ class DebugFlags {
 
   /* Requested CUDA flags. */
   CUDA cuda;
+
+  /* Requested OptiX flags. */
+  OptiX optix;
 
   /* Requested OpenCL flags. */
   OpenCL opencl;

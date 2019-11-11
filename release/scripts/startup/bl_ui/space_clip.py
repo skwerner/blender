@@ -22,7 +22,7 @@ import bpy
 from bpy.types import Panel, Header, Menu, UIList
 from bpy.app.translations import pgettext_iface as iface_
 from bl_ui.utils import PresetPanel
-from .properties_grease_pencil_common import (
+from bl_ui.properties_grease_pencil_common import (
     AnnotationDrawingToolsPanel,
     AnnotationDataPanel,
 )
@@ -82,7 +82,7 @@ class CLIP_PT_marker_display(Panel):
 
         if view.mode != 'MASK':
             col.prop(view, "show_bundles", text="3D Markers")
-        col.prop(view, "show_tiny_markers", text="Draw Thin")
+        col.prop(view, "show_tiny_markers", text="Display Thin")
 
 
 class CLIP_PT_clip_display(Panel):
@@ -106,7 +106,7 @@ class CLIP_PT_clip_display(Panel):
         row.separator()
         row.prop(sc, "use_grayscale_preview", text="B/W", toggle=True)
         row.separator()
-        row.prop(sc, "use_mute_footage", text="", icon='VISIBLE_IPO_ON', toggle=True)
+        row.prop(sc, "use_mute_footage", text="", icon='HIDE_OFF', toggle=True)
 
         layout.separator()
 
@@ -180,8 +180,6 @@ class CLIP_HT_header(Header):
             active_object = tracking.objects.active
 
             if sc.view == 'CLIP':
-                layout.template_running_jobs()
-
                 r = active_object.reconstruction
 
                 if r.is_valid and sc.view == 'CLIP':
@@ -202,19 +200,12 @@ class CLIP_HT_header(Header):
 
                 row = layout.row(align=True)
 
-                if sc.show_filters:
-                    row.prop(sc, "show_filters", icon='DISCLOSURE_TRI_DOWN',
-                             text="Filters")
+                sub = row.row(align=True)
+                sub.active = clip.tracking.reconstruction.is_valid
+                sub.prop(sc, "show_graph_frames", icon='SEQUENCE', text="")
 
-                    sub = row.row(align=True)
-                    sub.active = clip.tracking.reconstruction.is_valid
-                    sub.prop(sc, "show_graph_frames", icon='SEQUENCE', text="")
-
-                    row.prop(sc, "show_graph_tracks_motion", icon='GRAPH', text="")
-                    row.prop(sc, "show_graph_tracks_error", icon='ANIM', text="")
-                else:
-                    row.prop(sc, "show_filters", icon='DISCLOSURE_TRI_RIGHT',
-                             text="Filters")
+                row.prop(sc, "show_graph_tracks_motion", icon='GRAPH', text="")
+                row.prop(sc, "show_graph_tracks_error", icon='ANIM', text="")
 
             elif sc.view == 'DOPESHEET':
                 dopesheet = tracking.dopesheet
@@ -472,17 +463,17 @@ class CLIP_PT_tools_tracking(CLIP_PT_tracking_panel, Panel):
         row = layout.row(align=True)
         row.label(text="Track:")
 
-        props = row.operator("clip.track_markers", text="", icon='FRAME_PREV')
+        props = row.operator("clip.track_markers", text="", icon='TRACKING_BACKWARDS_SINGLE')
         props.backwards = True
         props.sequence = False
         props = row.operator("clip.track_markers", text="",
-                             icon='PLAY_REVERSE')
+                             icon='TRACKING_BACKWARDS')
         props.backwards = True
         props.sequence = True
-        props = row.operator("clip.track_markers", text="", icon='PLAY')
+        props = row.operator("clip.track_markers", text="", icon='TRACKING_FORWARDS')
         props.backwards = False
         props.sequence = True
-        props = row.operator("clip.track_markers", text="", icon='FRAME_NEXT')
+        props = row.operator("clip.track_markers", text="", icon='TRACKING_FORWARDS_SINGLE')
         props.backwards = False
         props.sequence = False
 
@@ -491,10 +482,10 @@ class CLIP_PT_tools_tracking(CLIP_PT_tracking_panel, Panel):
         row.label(text="Clear:")
         row.scale_x = 2.0
 
-        props = row.operator("clip.clear_track_path", text="", icon='BACK')
+        props = row.operator("clip.clear_track_path", text="", icon='TRACKING_CLEAR_BACKWARDS')
         props.action = 'UPTO'
 
-        props = row.operator("clip.clear_track_path", text="", icon='FORWARD')
+        props = row.operator("clip.clear_track_path", text="", icon='TRACKING_CLEAR_FORWARDS')
         props.action = 'REMAINED'
 
         col = layout.column()
@@ -502,10 +493,10 @@ class CLIP_PT_tools_tracking(CLIP_PT_tracking_panel, Panel):
         row.label(text="Refine:")
         row.scale_x = 2.0
 
-        props = row.operator("clip.refine_markers", text="", icon='LOOP_BACK')
+        props = row.operator("clip.refine_markers", text="", icon='TRACKING_REFINE_BACKWARDS')
         props.backwards = True
 
-        props = row.operator("clip.refine_markers", text="", icon='LOOP_FORWARDS')
+        props = row.operator("clip.refine_markers", text="", icon='TRACKING_REFINE_FORWARDS')
         props.backwards = False
 
         col = layout.column(align=True)
@@ -1008,7 +999,7 @@ class CLIP_PT_stabilization(CLIP_PT_reconstruction_panel, Panel):
             sub.menu('CLIP_MT_stabilize_2d_context_menu', text="",
                      icon='DOWNARROW_HLT')
 
-            # Usually we don't hide things from iterface, but here every pixel of
+            # Usually we don't hide things from interface, but here every pixel of
             # vertical space is precious.
             if stab.use_stabilize_rotation:
                 box.label(text="Tracks For Rotation / Scale")
@@ -1113,13 +1104,14 @@ class CLIP_PT_proxy(CLIP_PT_clip_view_panel, Panel):
 # -----------------------------------------------------------------------------
 # Mask (similar code in space_image.py, keep in sync)
 
-from .properties_mask_common import (
+from bl_ui.properties_mask_common import (
     MASK_PT_mask,
     MASK_PT_layers,
     MASK_PT_spline,
     MASK_PT_point,
     MASK_PT_display,
     MASK_PT_transforms,
+    MASK_PT_tools
 )
 
 
@@ -1158,6 +1150,11 @@ class CLIP_PT_tools_mask_transforms(MASK_PT_transforms, Panel):
     bl_region_type = 'TOOLS'
     bl_category = "Mask"
 
+
+class CLIP_PT_tools_mask_tools(MASK_PT_tools, Panel):
+    bl_space_type = 'CLIP_EDITOR'
+    bl_region_type = 'TOOLS'
+    bl_category = "Mask"
 
 # --- end mask ---
 
@@ -1205,7 +1202,7 @@ class CLIP_PT_tools_scenesetup(Panel):
 
 
 # Grease Pencil properties
-class CLIP_PT_grease_pencil(AnnotationDataPanel, CLIP_PT_clip_view_panel, Panel):
+class CLIP_PT_annotation(AnnotationDataPanel, CLIP_PT_clip_view_panel, Panel):
     bl_space_type = 'CLIP_EDITOR'
     bl_region_type = 'UI'
     bl_category = "Annotation"
@@ -1219,6 +1216,25 @@ class CLIP_PT_grease_pencil(AnnotationDataPanel, CLIP_PT_clip_view_panel, Panel)
 class CLIP_PT_tools_grease_pencil_draw(AnnotationDrawingToolsPanel, Panel):
     bl_space_type = 'CLIP_EDITOR'
     bl_region_type = 'TOOLS'
+
+
+class CLIP_MT_view_zoom(Menu):
+    bl_label = "Fractional Zoom"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        ratios = ((1, 8), (1, 4), (1, 2), (1, 1), (2, 1), (4, 1), (8, 1))
+
+        for i, (a, b) in enumerate(ratios):
+            if i in {3, 4}:  # Draw separators around Zoom 1:1.
+                layout.separator()
+
+            layout.operator(
+                "clip.view_zoom_ratio",
+                text=iface_(f"Zoom {a:d}:{b:d}"),
+                translate=False,
+            ).ratio = a / b
 
 
 class CLIP_MT_view(Menu):
@@ -1239,22 +1255,20 @@ class CLIP_MT_view(Menu):
             layout.operator("clip.view_selected")
             layout.operator("clip.view_all")
             layout.operator("clip.view_all", text="View Fit").fit_view = True
+            layout.operator("clip.view_center_cursor")
 
             layout.separator()
+
             layout.operator("clip.view_zoom_in")
             layout.operator("clip.view_zoom_out")
 
             layout.separator()
+
             layout.prop(sc, "show_metadata")
+
             layout.separator()
 
-            ratios = ((1, 8), (1, 4), (1, 2), (1, 1), (2, 1), (4, 1), (8, 1))
-
-            text = iface_("Zoom %d:%d")
-            for a, b in ratios:
-                layout.operator("clip.view_zoom_ratio",
-                                text=text % (a, b),
-                                translate=False).ratio = a / b
+            layout.menu("CLIP_MT_view_zoom")
         else:
             if sc.view == 'GRAPH':
                 layout.operator_context = 'INVOKE_REGION_PREVIEW'
@@ -1429,34 +1443,92 @@ class CLIP_MT_select_grouped(Menu):
         layout.operator_enum("clip.select_grouped", "group")
 
 
+class CLIP_MT_mask_handle_type_menu(Menu):
+    bl_label = "Set Handle Type"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator_enum("mask.handle_type_set", "type")
+
+
 class CLIP_MT_tracking_context_menu(Menu):
-    bl_label = "Specials"
+    bl_label = "Context Menu"
 
     @classmethod
     def poll(cls, context):
         return context.space_data.clip
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
 
-        layout.operator("clip.disable_markers",
-                        text="Enable Markers").action = 'ENABLE'
+        mode = context.space_data.mode
 
-        layout.operator("clip.disable_markers",
-                        text="Disable Markers").action = 'DISABLE'
+        if mode == 'TRACKING':
 
-        layout.separator()
-        layout.operator("clip.set_origin")
+            layout.operator("clip.track_settings_to_track")
+            layout.operator("clip.track_settings_as_default")
 
-        layout.separator()
-        layout.operator("clip.hide_tracks")
-        layout.operator("clip.hide_tracks_clear", text="Show Tracks")
+            layout.separator()
 
-        layout.separator()
-        layout.operator("clip.lock_tracks", text="Lock Tracks").action = 'LOCK'
+            layout.operator("clip.track_copy_color")
 
-        layout.operator("clip.lock_tracks",
-                        text="Unlock Tracks").action = 'UNLOCK'
+            layout.separator()
+
+            layout.operator("clip.copy_tracks", icon='COPYDOWN')
+            layout.operator("clip.paste_tracks", icon='PASTEDOWN')
+
+            layout.separator()
+
+            layout.operator("clip.disable_markers",
+                            text="Disable Markers").action = 'DISABLE'
+            layout.operator("clip.disable_markers",
+                            text="Enable Markers").action = 'ENABLE'
+
+            layout.separator()
+
+            layout.operator("clip.hide_tracks")
+            layout.operator("clip.hide_tracks_clear", text="Show Tracks")
+
+            layout.separator()
+
+            layout.operator("clip.lock_tracks", text="Lock Tracks").action = 'LOCK'
+            layout.operator("clip.lock_tracks",
+                            text="Unlock Tracks").action = 'UNLOCK'
+
+            layout.separator()
+
+            layout.operator("clip.join_tracks")
+
+            layout.separator()
+
+            layout.operator("clip.delete_track")
+
+        elif mode == 'MASK':
+
+            layout.menu("CLIP_MT_mask_handle_type_menu")
+            layout.operator("mask.switch_direction")
+            layout.operator("mask.cyclic_toggle")
+
+            layout.separator()
+
+            layout.operator("mask.copy_splines", icon='COPYDOWN')
+            layout.operator("mask.paste_splines", icon='PASTEDOWN')
+
+            layout.separator()
+
+            layout.operator("mask.shape_key_rekey", text="Re-key Shape Points")
+            layout.operator("mask.feather_weight_clear")
+            layout.operator("mask.shape_key_feather_reset", text="Reset Feather Animation")
+
+            layout.separator()
+
+            layout.operator("mask.parent_set")
+            layout.operator("mask.parent_clear")
+
+            layout.separator()
+
+            layout.operator("mask.delete")
 
 
 class CLIP_PT_camera_presets(PresetPanel, Panel):
@@ -1543,9 +1615,9 @@ class CLIP_MT_marker_pie(Menu):
         # Make Settings Default
         pie.operator("clip.track_settings_as_default", icon='SETTINGS')
         if track_active:
-        # Use Normalization
+            # Use Normalization
             pie.prop(track_active, "use_normalization", text="Normalization")
-        # Use Brute Force
+            # Use Brute Force
             pie.prop(track_active, "use_brute", text="Use Brute Force")
             # Match Keyframe
             prop = pie.operator("wm.context_set_enum", text="Match Previous", icon='KEYFRAME_HLT')
@@ -1566,12 +1638,9 @@ class CLIP_MT_tracking_pie(Menu):
         space = context.space_data
         return space.mode == 'TRACKING' and space.clip
 
-    def draw(self, context):
-        space = context.space_data
-        clip = space.clip
-        act_track = clip.tracking.tracks.active
-
+    def draw(self, _context):
         layout = self.layout
+
         pie = layout.menu_pie()
         # Track Backwards
         prop = pie.operator("clip.track_markers", icon='TRACKING_BACKWARDS')
@@ -1582,7 +1651,7 @@ class CLIP_MT_tracking_pie(Menu):
         prop.backwards = False
         prop.sequence = True
         # Disable Marker
-        pie.operator("clip.disable_markers", icon="VISIBLE_IPO_ON").action = 'TOGGLE'
+        pie.operator("clip.disable_markers", icon='HIDE_OFF').action = 'TOGGLE'
         # Detect Features
         pie.operator("clip.detect_features", icon='ZOOM_SELECTED')
         # Clear Path Backwards
@@ -1620,11 +1689,17 @@ class CLIP_MT_solving_pie(Menu):
         # create Plane Track
         pie.operator("clip.create_plane_track", icon='MATPLANE')
         # Set Keyframe A
-        pie.operator("clip.set_solver_keyframe", text="Set Keyframe A",
-                    icon='KEYFRAME').keyframe = 'KEYFRAME_A'
+        pie.operator(
+            "clip.set_solver_keyframe",
+            text="Set Keyframe A",
+            icon='KEYFRAME',
+        ).keyframe = 'KEYFRAME_A'
         # Set Keyframe B
-        pie.operator("clip.set_solver_keyframe", text="Set Keyframe B",
-                    icon='KEYFRAME').keyframe = 'KEYFRAME_B'
+        pie.operator(
+            "clip.set_solver_keyframe",
+            text="Set Keyframe B",
+            icon='KEYFRAME',
+        ).keyframe = 'KEYFRAME_B'
         # Clean Tracks
         prop = pie.operator("clip.clean_tracks", icon='X')
         # Filter Tracks
@@ -1642,7 +1717,7 @@ class CLIP_MT_reconstruction_pie(Menu):
         space = context.space_data
         return space.mode == 'TRACKING' and space.clip
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         pie = layout.menu_pie()
         # Set Active Clip As Viewport Background
@@ -1661,7 +1736,6 @@ class CLIP_MT_reconstruction_pie(Menu):
         pie.operator("clip.set_scale", text="Set Scale", icon='ARROW_LEFTRIGHT')
         # Apply Solution Scale
         pie.operator("clip.apply_solution_scale", icon='ARROW_LEFTRIGHT')
-
 
 
 classes = (
@@ -1701,9 +1775,11 @@ classes = (
     CLIP_PT_active_mask_spline,
     CLIP_PT_active_mask_point,
     CLIP_PT_tools_mask_transforms,
+    CLIP_PT_tools_mask_tools,
     CLIP_PT_tools_scenesetup,
-    CLIP_PT_grease_pencil,
+    CLIP_PT_annotation,
     CLIP_PT_tools_grease_pencil_draw,
+    CLIP_MT_view_zoom,
     CLIP_MT_view,
     CLIP_MT_clip,
     CLIP_MT_proxy,
@@ -1722,7 +1798,8 @@ classes = (
     CLIP_MT_marker_pie,
     CLIP_MT_tracking_pie,
     CLIP_MT_reconstruction_pie,
-    CLIP_MT_solving_pie
+    CLIP_MT_solving_pie,
+    CLIP_MT_mask_handle_type_menu
 )
 
 if __name__ == "__main__":  # only for live edit.

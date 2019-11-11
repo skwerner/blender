@@ -198,14 +198,14 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
 #    endif /* __VOLUME__ */
 
 /* bounce off surface and integrate indirect light */
-ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGlobals *kg,
-                                                                     ShaderData *sd,
-                                                                     ShaderData *indirect_sd,
-                                                                     ShaderData *emission_sd,
-                                                                     float3 throughput,
-                                                                     float num_samples_adjust,
-                                                                     PathState *state,
-                                                                     PathRadiance *L)
+ccl_device_noinline_cpu void kernel_branched_path_surface_indirect_light(KernelGlobals *kg,
+                                                                         ShaderData *sd,
+                                                                         ShaderData *indirect_sd,
+                                                                         ShaderData *emission_sd,
+                                                                         float3 throughput,
+                                                                         float num_samples_adjust,
+                                                                         PathState *state,
+                                                                         PathRadiance *L)
 {
   float sum_sample_weight = 0.0f;
 #    ifdef __DENOISING_FEATURES__
@@ -428,8 +428,8 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
       /* transparency termination */
       if (state.flag & PATH_RAY_TRANSPARENT) {
         /* path termination. this is a strange place to put the termination, it's
-       * mainly due to the mixed in MIS that we use. gives too many unneeded
-       * shader evaluations, only need emission if we are going to terminate */
+         * mainly due to the mixed in MIS that we use. gives too many unneeded
+         * shader evaluations, only need emission if we are going to terminate */
         float probability = path_state_continuation_probability(kg, &state, throughput);
 
         if (probability == 0.0f) {
@@ -445,7 +445,9 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
         }
       }
 
+#    ifdef __DENOISING_FEATURES__
       kernel_update_denoising_features(kg, &sd, &state, L);
+#    endif
 
 #    ifdef __AO__
       /* ambient occlusion */

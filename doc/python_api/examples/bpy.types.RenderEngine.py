@@ -55,10 +55,9 @@ class CustomRenderEngine(bpy.types.RenderEngine):
     # whenever the scene or 3D viewport changes. This method is where data
     # should be read from Blender in the same thread. Typically a render
     # thread will be started to do the work while keeping Blender responsive.
-    def view_update(self, context):
+    def view_update(self, context, depsgraph):
         region = context.region
         view3d = context.space_data
-        depsgraph = context.depsgraph
         scene = depsgraph.scene
 
         # Get viewport dimensions
@@ -80,11 +79,11 @@ class CustomRenderEngine(bpy.types.RenderEngine):
                 print("Datablock updated: ", update.id.name)
 
             # Test if any material was added, removed or changed.
-            if depsgraph.id_type_update('MATERIAL'):
+            if depsgraph.id_type_updated('MATERIAL'):
                 print("Materials updated")
 
         # Loop over all object instances in the scene.
-        if first_time or depsgraph.id_type_update('OBJECT'):
+        if first_time or depsgraph.id_type_updated('OBJECT'):
             for instance in depsgraph.object_instances:
                 pass
 
@@ -93,9 +92,8 @@ class CustomRenderEngine(bpy.types.RenderEngine):
     # with OpenGL, and not perform other expensive work.
     # Blender will draw overlays for selection and editing on top of the
     # rendered image automatically.
-    def view_draw(self, context):
+    def view_draw(self, context, depsgraph):
         region = context.region
-        depsgraph = context.depsgraph
         scene = depsgraph.scene
 
         # Get viewport dimensions
@@ -103,7 +101,7 @@ class CustomRenderEngine(bpy.types.RenderEngine):
 
         # Bind shader that converts from scene linear to display space,
         bgl.glEnable(bgl.GL_BLEND)
-        bgl.glBlendFunc(bgl.GL_ONE, bgl.GL_ONE_MINUS_SRC_ALPHA);
+        bgl.glBlendFunc(bgl.GL_ONE, bgl.GL_ONE_MINUS_SRC_ALPHA)
         self.bind_display_space_shader(scene)
 
         if not self.draw_data or self.draw_data.dimensions != dimensions:
@@ -137,18 +135,18 @@ class CustomDrawData:
         # Bind shader that converts from scene linear to display space,
         # use the scene's color management settings.
         shader_program = bgl.Buffer(bgl.GL_INT, 1)
-        bgl.glGetIntegerv(bgl.GL_CURRENT_PROGRAM, shader_program);
+        bgl.glGetIntegerv(bgl.GL_CURRENT_PROGRAM, shader_program)
 
         # Generate vertex array
         self.vertex_array = bgl.Buffer(bgl.GL_INT, 1)
         bgl.glGenVertexArrays(1, self.vertex_array)
         bgl.glBindVertexArray(self.vertex_array[0])
 
-        texturecoord_location = bgl.glGetAttribLocation(shader_program[0], "texCoord");
-        position_location = bgl.glGetAttribLocation(shader_program[0], "pos");
+        texturecoord_location = bgl.glGetAttribLocation(shader_program[0], "texCoord")
+        position_location = bgl.glGetAttribLocation(shader_program[0], "pos")
 
-        bgl.glEnableVertexAttribArray(texturecoord_location);
-        bgl.glEnableVertexAttribArray(position_location);
+        bgl.glEnableVertexAttribArray(texturecoord_location)
+        bgl.glEnableVertexAttribArray(position_location)
 
         # Generate geometry buffers for drawing textured quad
         position = [0.0, 0.0, width, 0.0, width, height, 0.0, height]
@@ -180,7 +178,7 @@ class CustomDrawData:
         bgl.glActiveTexture(bgl.GL_TEXTURE0)
         bgl.glBindTexture(bgl.GL_TEXTURE_2D, self.texture[0])
         bgl.glBindVertexArray(self.vertex_array[0])
-        bgl.glDrawArrays(bgl.GL_TRIANGLE_FAN, 0, 4);
+        bgl.glDrawArrays(bgl.GL_TRIANGLE_FAN, 0, 4)
         bgl.glBindVertexArray(0)
         bgl.glBindTexture(bgl.GL_TEXTURE_2D, 0)
 
@@ -203,12 +201,14 @@ def get_panels():
 
     return panels
 
+
 def register():
     # Register the RenderEngine
     bpy.utils.register_class(CustomRenderEngine)
 
     for panel in get_panels():
         panel.COMPAT_ENGINES.add('CUSTOM')
+
 
 def unregister():
     bpy.utils.unregister_class(CustomRenderEngine)

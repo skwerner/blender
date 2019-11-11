@@ -42,6 +42,7 @@
 #include "ED_screen.h"
 #include "ED_anim_api.h"
 #include "ED_markers.h"
+#include "ED_time_scrub_ui.h"
 
 #include "GPU_immediate.h"
 #include "GPU_state.h"
@@ -57,6 +58,7 @@
 
 #include "UI_resources.h"
 #include "UI_view2d.h"
+#include "UI_interface.h"
 
 #include "graph_intern.h"  // own include
 
@@ -79,7 +81,7 @@ static SpaceLink *graph_new(const ScrArea *UNUSED(sa), const Scene *scene)
 
   /* settings for making it easier by default to just see what you're interested in tweaking */
   sipo->ads->filterflag |= ADS_FILTER_ONLYSEL;
-  sipo->flag |= SIPO_SELVHANDLESONLY;
+  sipo->flag |= SIPO_SELVHANDLESONLY | SIPO_MARKER_LINES;
 
   /* header */
   ar = MEM_callocN(sizeof(ARegion), "header for graphedit");
@@ -124,8 +126,8 @@ static SpaceLink *graph_new(const ScrArea *UNUSED(sa), const Scene *scene)
   ar->v2d.max[0] = MAXFRAMEF;
   ar->v2d.max[1] = FLT_MAX;
 
-  ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
-  ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_SCALE_VERTICAL);
+  ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
+  ar->v2d.scroll |= (V2D_SCROLL_RIGHT | V2D_SCROLL_VERTICAL_HANDLES);
 
   ar->v2d.keeptot = 0;
 
@@ -198,10 +200,9 @@ static void graph_main_region_draw(const bContext *C, ARegion *ar)
   Scene *scene = CTX_data_scene(C);
   bAnimContext ac;
   View2D *v2d = &ar->v2d;
-  View2DGrid *grid;
   View2DScrollers *scrollers;
   float col[3];
-  short unitx = 0, unity = V2D_UNIT_VALUES, cfra_flag = 0;
+  short cfra_flag = 0;
 
   /* clear and setup matrix */
   UI_GetThemeColor3fv(TH_BACK, col);
@@ -211,18 +212,9 @@ static void graph_main_region_draw(const bContext *C, ARegion *ar)
   UI_view2d_view_ortho(v2d);
 
   /* grid */
-  unitx = ((sipo->mode == SIPO_MODE_ANIMATION) && (sipo->flag & SIPO_DRAWTIME)) ?
-              V2D_UNIT_SECONDS :
-              V2D_UNIT_FRAMESCALE;
-  grid = UI_view2d_grid_calc(CTX_data_scene(C),
-                             v2d,
-                             unitx,
-                             V2D_GRID_NOCLAMP,
-                             unity,
-                             V2D_GRID_NOCLAMP,
-                             ar->winx,
-                             ar->winy);
-  UI_view2d_grid_draw(v2d, grid, V2D_GRIDLINES_ALL);
+  bool display_seconds = (sipo->mode == SIPO_MODE_ANIMATION) && (sipo->flag & SIPO_DRAWTIME);
+  UI_view2d_draw_lines_x__frames_or_seconds(v2d, scene, display_seconds);
+  UI_view2d_draw_lines_y__values(v2d);
 
   ED_region_draw_cb_draw(C, ar, REGION_DRAW_PRE_VIEW);
 
@@ -237,8 +229,8 @@ static void graph_main_region_draw(const bContext *C, ARegion *ar)
     graph_draw_ghost_curves(&ac, sipo, ar);
 
     /* draw curves twice - unselected, then selected, so that the are fewer occlusion problems */
-    graph_draw_curves(&ac, sipo, ar, grid, 0);
-    graph_draw_curves(&ac, sipo, ar, grid, 1);
+    graph_draw_curves(&ac, sipo, ar, 0);
+    graph_draw_curves(&ac, sipo, ar, 1);
 
     /* XXX the slow way to set tot rect... but for nice sliders needed (ton) */
     get_graph_keyframe_extents(
@@ -247,9 +239,6 @@ static void graph_main_region_draw(const bContext *C, ARegion *ar)
     v2d->tot.xmin -= 10.0f;
     v2d->tot.xmax += 10.0f;
   }
-
-  /* only free grid after drawing data, as we need to use it to determine sampling rate */
-  UI_view2d_grid_free(grid);
 
   if (((sipo->flag & SIPO_NODRAWCURSOR) == 0) || (sipo->mode == SIPO_MODE_DRIVERS)) {
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -304,16 +293,20 @@ static void graph_main_region_draw(const bContext *C, ARegion *ar)
   }
 
   /* markers */
-  UI_view2d_view_orthoSpecial(ar, v2d, 1);
-  int marker_draw_flag = DRAW_MARKERS_MARGIN;
-  if (sipo->flag & SIPO_MARKER_LINES) {
-    marker_draw_flag |= DRAW_MARKERS_LINES;
+  if (sipo->mode != SIPO_MODE_DRIVERS) {
+    UI_view2d_view_orthoSpecial(ar, v2d, 1);
+    int marker_draw_flag = DRAW_MARKERS_MARGIN;
+    if (sipo->flag & SIPO_MARKER_LINES) {
+      marker_draw_flag |= DRAW_MARKERS_LINES;
+    }
+    ED_markers_draw(C, marker_draw_flag);
   }
-  ED_markers_draw(C, marker_draw_flag);
 
   /* preview range */
-  UI_view2d_view_ortho(v2d);
-  ANIM_draw_previewrange(C, v2d, 0);
+  if (sipo->mode != SIPO_MODE_DRIVERS) {
+    UI_view2d_view_ortho(v2d);
+    ANIM_draw_previewrange(C, v2d, 0);
+  }
 
   /* callback */
   UI_view2d_view_ortho(v2d);
@@ -322,17 +315,24 @@ static void graph_main_region_draw(const bContext *C, ARegion *ar)
   /* reset view matrix */
   UI_view2d_view_restore(C);
 
+  /* time-scrubbing */
+  ED_time_scrub_draw(ar, scene, display_seconds, false);
+
   /* scrollers */
   // FIXME: args for scrollers depend on the type of data being shown...
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, NULL, unitx, V2D_GRID_NOCLAMP, unity, V2D_GRID_NOCLAMP);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
+  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_draw(v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 
-  /* draw current frame number-indicator on top of scrollers */
-  if ((sipo->mode != SIPO_MODE_DRIVERS) && ((sipo->flag & SIPO_NODRAWCFRANUM) == 0)) {
-    UI_view2d_view_orthoSpecial(ar, v2d, 1);
-    ANIM_draw_cfra_number(C, v2d, cfra_flag);
+  /* scale numbers */
+  {
+    rcti rect;
+    BLI_rcti_init(&rect,
+                  0,
+                  15 * UI_DPI_FAC,
+                  15 * UI_DPI_FAC,
+                  UI_DPI_FAC * ar->sizey - UI_TIME_SCRUB_MARGIN_Y);
+    UI_view2d_draw_scale_y__values(ar, v2d, &rect, TH_SCROLL_TEXT);
   }
 }
 
@@ -377,13 +377,15 @@ static void graph_channel_region_draw(const bContext *C, ARegion *ar)
     graph_draw_channel_names((bContext *)C, &ac, ar);
   }
 
+  /* channel filter next to scrubbing area */
+  ED_time_scrub_channel_search_draw(C, ar, ac.ads);
+
   /* reset view matrix */
   UI_view2d_view_restore(C);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, NULL, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
+  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_draw(v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 }
 
@@ -527,7 +529,7 @@ static void graph_region_message_subscribe(const struct bContext *UNUSED(C),
    * so just whitelist the entire structs for updates
    */
   {
-    wmMsgParams_RNA msg_key_params = {{{0}}};
+    wmMsgParams_RNA msg_key_params = {{0}};
     StructRNA *type_array[] = {
         &RNA_DopeSheet, /* dopesheet filters */
 
@@ -627,7 +629,7 @@ static void graph_listener(wmWindow *UNUSED(win),
       break;
 
       // XXX: restore the case below if not enough updates occur...
-      //default:
+      // default:
       //  if (wmn->data == ND_KEYS)
       //      ED_area_tag_redraw(sa);
   }
@@ -860,7 +862,7 @@ void ED_spacetype_ipo(void)
   art->draw = graph_main_region_draw;
   art->listener = graph_region_listener;
   art->message_subscribe = graph_region_message_subscribe;
-  art->keymapflag = ED_KEYMAP_VIEW2D | ED_KEYMAP_MARKERS | ED_KEYMAP_ANIMATION | ED_KEYMAP_FRAMES;
+  art->keymapflag = ED_KEYMAP_VIEW2D | ED_KEYMAP_ANIMATION | ED_KEYMAP_FRAMES;
 
   BLI_addhead(&st->regiontypes, art);
 
@@ -891,7 +893,7 @@ void ED_spacetype_ipo(void)
   /* regions: UI buttons */
   art = MEM_callocN(sizeof(ARegionType), "spacetype graphedit region");
   art->regionid = RGN_TYPE_UI;
-  art->prefsizex = 200;
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
   art->listener = graph_region_listener;
   art->init = graph_buttons_region_init;

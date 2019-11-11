@@ -46,10 +46,9 @@ namespace Freestyle {
 
 namespace ViewVertexInternal {
 
-/*! Class representing an iterator over oriented ViewEdges around a ViewVertex. This iterator allows a CCW iteration
- *  (in the image plane).
- *  An instance of an orientedViewEdgeIterator can only be obtained from a ViewVertex by calling edgesBegin()
- *  or edgesEnd().
+/*! Class representing an iterator over oriented ViewEdges around a ViewVertex. This iterator
+ * allows a CCW iteration (in the image plane). An instance of an orientedViewEdgeIterator can only
+ * be obtained from a ViewVertex by calling edgesBegin() or edgesEnd().
  */
 class orientedViewEdgeIterator : public Iterator {
  public:
@@ -127,22 +126,28 @@ class orientedViewEdgeIterator : public Iterator {
   }
 
  public:
-  /*! Tells whether the ViewEdge pointed by this iterator is the first one of the iteration list or not. */
+  /*! Tells whether the ViewEdge pointed by this iterator is the first one of the iteration list or
+   * not. */
   virtual bool isBegin() const
   {
-    if (_Nature & Nature::T_VERTEX)
+    if (_Nature & Nature::T_VERTEX) {
       return (_tvertex_iter == _tbegin);
-    else
+    }
+    else {
       return (_nontvertex_iter == _begin);
+    }
   }
 
-  /*! Tells whether the ViewEdge pointed by this iterator is after the last one of the iteration list or not. */
+  /*! Tells whether the ViewEdge pointed by this iterator is after the last one of the iteration
+   * list or not. */
   virtual bool isEnd() const
   {
-    if (_Nature & Nature::T_VERTEX)
+    if (_Nature & Nature::T_VERTEX) {
       return (_tvertex_iter == _tend);
-    else
+    }
+    else {
       return (_nontvertex_iter == _end);
+    }
   }
 
   // operators
@@ -167,10 +172,12 @@ class orientedViewEdgeIterator : public Iterator {
   /*! operator != */
   virtual bool operator!=(const orientedViewEdgeIterator &b) const
   {
-    if (_Nature & Nature::T_VERTEX)
+    if (_Nature & Nature::T_VERTEX) {
       return (_tvertex_iter != b._tvertex_iter);
-    else
+    }
+    else {
       return (_nontvertex_iter != b._nontvertex_iter);
+    }
   }
 
   /*! operator == */
@@ -185,11 +192,13 @@ class orientedViewEdgeIterator : public Iterator {
    */
   virtual ViewVertex::directedViewEdge &operator*() const
   {
-    if (_Nature & Nature::T_VERTEX)
-      //return _tvertex_iter;
+    if (_Nature & Nature::T_VERTEX) {
+      // return _tvertex_iter;
       return **_tvertex_iter;
-    else
+    }
+    else {
       return (*_nontvertex_iter);
+    }
   }
   /*! Returns a pointer to the pointed orientedViewEdge.
    * Can't be called in the scripting language.
@@ -209,8 +218,9 @@ class orientedViewEdgeIterator : public Iterator {
       if (_tvertex_iter != _tend) {
         // FIXME : pquoi deja ?
         ViewVertex::directedViewEdge tmp2 = (**_tvertex_iter);
-        if (tmp2.first == tmp.first)
+        if (tmp2.first == tmp.first) {
           ++_tvertex_iter;
+        }
       }
     }
     else {
@@ -378,8 +388,9 @@ class SVertexIterator : public Interface0DIteratorNested {
   virtual bool operator==(const Interface0DIteratorNested &it) const
   {
     const SVertexIterator *it_exact = dynamic_cast<const SVertexIterator *>(&it);
-    if (!it_exact)
+    if (!it_exact) {
       return false;
+    }
     return (_vertex == it_exact->_vertex);
   }
 
@@ -406,8 +417,8 @@ class SVertexIterator : public Interface0DIteratorNested {
 ///////////////////////////////////////////////////////////
 
 /*! Base class for iterators over ViewEdges of the ViewMap Graph.
- *  Basically the "increment()" operator of this class should be able to take the decision of "where" (on which
- *  ViewEdge) to go when pointing on a given ViewEdge.
+ *  Basically the "increment()" operator of this class should be able to take the decision of
+ * "where" (on which ViewEdge) to go when pointing on a given ViewEdge.
  *  ::Caution::: the dereferencing operator returns a *pointer* to the pointed ViewEdge.
  */
 class ViewEdgeIterator : public Iterator {
@@ -416,8 +427,9 @@ class ViewEdgeIterator : public Iterator {
    *  \param begin:
    *    The ViewEdge from where to start the iteration.
    *  \param orientation:
-   *    If true, we'll look for the next ViewEdge among the ViewEdges that surround the ending ViewVertex of begin.
-   *    If false, we'll search over the ViewEdges surrounding the ending ViewVertex of begin.
+   *    If true, we'll look for the next ViewEdge among the ViewEdges that surround the ending
+   *    ViewVertex of begin. If false, we'll search over the ViewEdges surrounding the ending
+   *    ViewVertex of begin.
    */
   ViewEdgeIterator(ViewEdge *begin = NULL, bool orientation = true)
   {

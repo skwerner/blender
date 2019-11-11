@@ -35,7 +35,8 @@ extern "C" {
  * \ingroup Memory
  */
 typedef enum MemoryBufferState {
-  /** \brief memory has been allocated on creator device and CPU machine, but kernel has not been executed */
+  /** \brief memory has been allocated on creator device and CPU machine,
+   * but kernel has not been executed */
   COM_MB_ALLOCATED = 1,
   /** \brief memory is available for use, content has been created */
   COM_MB_AVAILABLE = 2,
@@ -72,7 +73,7 @@ class MemoryBuffer {
   rcti m_rect;
 
   /**
-   * brief refers to the chunknumber within the executiongroup where related to the MemoryProxy
+   * brief refers to the chunk-number within the execution-group where related to the MemoryProxy
    * \see memoryProxy
    */
   unsigned int m_chunkNumber;

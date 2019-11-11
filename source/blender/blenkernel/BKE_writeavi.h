@@ -53,13 +53,10 @@ typedef struct bMovieHandle {
                       const char *suffix,
                       struct ReportList *reports);
   void (*end_movie)(void *context_v);
-  int (*get_next_frame)(void *context_v,
-                        struct RenderData *rd,
-                        struct ReportList *reports); /* optional */
-  void (*get_movie_path)(char *string,
-                         struct RenderData *rd,
-                         bool preview,
-                         const char *suffix); /* optional */
+
+  /* Optional function. */
+  void (*get_movie_path)(char *string, struct RenderData *rd, bool preview, const char *suffix);
+
   void *(*context_create)(void);
   void (*context_free)(void *context_v);
 } bMovieHandle;

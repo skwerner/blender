@@ -1,5 +1,6 @@
 
 uniform mat4 ViewProjectionMatrix;
+
 uniform int baseId;
 
 /* ---- Instantiated Attrs ---- */
@@ -18,6 +19,11 @@ flat out uint finalId;
 
 void main()
 {
-  gl_Position = ViewProjectionMatrix * InstanceModelMatrix * vec4(pos * size, 1.0);
+  vec4 wPos = InstanceModelMatrix * vec4(pos * size, 1.0);
+  gl_Position = ViewProjectionMatrix * wPos;
   finalId = uint(baseId + callId);
+
+#ifdef USE_WORLD_CLIP_PLANES
+  world_clip_planes_calc_clip_distance(wPos.xyz);
+#endif
 }

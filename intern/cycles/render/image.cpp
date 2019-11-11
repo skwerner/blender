@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-#include "device/device.h"
 #include "render/image.h"
+#include "device/device.h"
+#include "render/colorspace.h"
 #include "render/scene.h"
 #include "render/stats.h"
 
 #include "util/util_foreach.h"
+#include "util/util_image_impl.h"
 #include "util/util_logging.h"
 #include "util/util_path.h"
 #include "util/util_progress.h"
@@ -183,12 +185,46 @@ bool ImageManager::get_image_metadata(int flat_slot, ImageMetaData &metadata)
   return false;
 }
 
+void ImageManager::metadata_detect_colorspace(ImageMetaData &metadata, const char *file_format)
+{
+  /* Convert used specified color spaces to one we know how to handle. */
+  metadata.colorspace = ColorSpaceManager::detect_known_colorspace(
+      metadata.colorspace, file_format, metadata.is_float || metadata.is_half);
+
+  if (metadata.colorspace == u_colorspace_raw) {
+    /* Nothing to do. */
+  }
+  else if (metadata.colorspace == u_colorspace_srgb) {
+    /* Keep sRGB colorspace stored as sRGB, to save memory and/or loading time
+     * for the common case of 8bit sRGB images like PNG. */
+    metadata.compress_as_srgb = true;
+  }
+  else {
+    /* Always compress non-raw 8bit images as scene linear + sRGB, as a
+     * heuristic to keep memory usage the same without too much data loss
+     * due to quantization in common cases. */
+    metadata.compress_as_srgb = (metadata.type == IMAGE_DATA_TYPE_BYTE ||
+                                 metadata.type == IMAGE_DATA_TYPE_BYTE4);
+
+    /* If colorspace conversion needed, use half instead of short so we can
+     * represent HDR values that might result from conversion. */
+    if (metadata.type == IMAGE_DATA_TYPE_USHORT) {
+      metadata.type = IMAGE_DATA_TYPE_HALF;
+    }
+    else if (metadata.type == IMAGE_DATA_TYPE_USHORT4) {
+      metadata.type = IMAGE_DATA_TYPE_HALF4;
+    }
+  }
+}
+
 bool ImageManager::get_image_metadata(const string &filename,
                                       const string &grid_name,
                                       void *builtin_data,
+                                      ustring colorspace,
                                       ImageMetaData &metadata)
 {
-  memset(&metadata, 0, sizeof(metadata));
+  metadata = ImageMetaData();
+  metadata.colorspace = colorspace;
 
   if (builtin_data) {
     if (builtin_image_info_cb) {
@@ -199,12 +235,13 @@ bool ImageManager::get_image_metadata(const string &filename,
     }
 
     if (metadata.is_float) {
-      metadata.is_linear = true;
       metadata.type = (metadata.channels > 1) ? IMAGE_DATA_TYPE_FLOAT4 : IMAGE_DATA_TYPE_FLOAT;
     }
     else {
       metadata.type = (metadata.channels > 1) ? IMAGE_DATA_TYPE_BYTE4 : IMAGE_DATA_TYPE_BYTE;
     }
+
+    metadata_detect_colorspace(metadata, "");
 
     return true;
   }
@@ -260,41 +297,25 @@ bool ImageManager::get_image_metadata(const string &filename,
   metadata.width = spec.width;
   metadata.height = spec.height;
   metadata.depth = spec.depth;
+  metadata.compress_as_srgb = false;
 
   /* Check the main format, and channel formats. */
   size_t channel_size = spec.format.basesize();
 
   if (spec.format.is_floating_point()) {
     metadata.is_float = true;
-    metadata.is_linear = true;
   }
 
   for (size_t channel = 0; channel < spec.channelformats.size(); channel++) {
     channel_size = max(channel_size, spec.channelformats[channel].basesize());
     if (spec.channelformats[channel].is_floating_point()) {
       metadata.is_float = true;
-      metadata.is_linear = true;
     }
   }
 
   /* check if it's half float */
   if (spec.format == TypeDesc::HALF) {
     metadata.is_half = true;
-  }
-
-  /* basic color space detection, not great but better than nothing
-   * before we do OpenColorIO integration */
-  if (metadata.is_float) {
-    string colorspace = spec.get_string_attribute("oiio:ColorSpace");
-
-    metadata.is_linear = !(
-        colorspace == "sRGB" || colorspace == "GammaCorrected" ||
-        (colorspace == "" &&
-         (strcmp(in->format_name(), "png") == 0 || strcmp(in->format_name(), "tiff") == 0 ||
-          strcmp(in->format_name(), "dpx") == 0 || strcmp(in->format_name(), "jpeg2000") == 0)));
-  }
-  else {
-    metadata.is_linear = false;
   }
 
   /* set type and channels */
@@ -313,6 +334,8 @@ bool ImageManager::get_image_metadata(const string &filename,
     metadata.type = (metadata.channels > 1) ? IMAGE_DATA_TYPE_BYTE4 : IMAGE_DATA_TYPE_BYTE;
   }
 
+  metadata_detect_colorspace(metadata, in->format_name());
+
   in->close();
 
   return true;
@@ -324,11 +347,13 @@ static bool image_equals(ImageManager::Image *image,
                          void *builtin_data,
                          InterpolationType interpolation,
                          ExtensionType extension,
-                         bool use_alpha)
+                         ImageAlphaType alpha_type,
+                         ustring colorspace)
 {
   return image->filename == filename && image->grid_name == grid_name &&
          image->builtin_data == builtin_data && image->interpolation == interpolation &&
-         image->extension == extension && image->use_alpha == use_alpha;
+         image->extension == extension && image->alpha_type == alpha_type &&
+         image->colorspace == colorspace;
 }
 
 int ImageManager::add_image(const string &filename,
@@ -338,7 +363,8 @@ int ImageManager::add_image(const string &filename,
                             float frame,
                             InterpolationType interpolation,
                             ExtensionType extension,
-                            bool use_alpha,
+                            ImageAlphaType alpha_type,
+                            ustring colorspace,
                             bool is_volume,
                             float isovalue,
                             ImageMetaData &metadata)
@@ -346,7 +372,7 @@ int ImageManager::add_image(const string &filename,
   Image *img;
   size_t slot;
 
-  get_image_metadata(filename, grid_name, builtin_data, metadata);
+  get_image_metadata(filename, grid_name, builtin_data, colorspace, metadata);
   ImageDataType type = metadata.type;
 
   thread_scoped_lock device_lock(device_mutex);
@@ -364,14 +390,20 @@ int ImageManager::add_image(const string &filename,
   /* Find existing image. */
   for (slot = 0; slot < images[type].size(); slot++) {
     img = images[type][slot];
-    if (img && image_equals(
-                   img, filename, grid_name, builtin_data, interpolation, extension, use_alpha)) {
+
+    if (img &&
+        image_equals(
+            img, grid_name, filename, builtin_data, interpolation, extension, alpha_type, colorspace)) {
       if (img->frame != frame) {
         img->frame = frame;
         img->need_load = true;
       }
-      if (img->use_alpha != use_alpha) {
-        img->use_alpha = use_alpha;
+      if (img->alpha_type != alpha_type) {
+        img->alpha_type = alpha_type;
+        img->need_load = true;
+      }
+      if (img->colorspace != colorspace) {
+        img->colorspace = colorspace;
         img->need_load = true;
       }
       if (!(img->metadata == metadata)) {
@@ -422,7 +454,8 @@ int ImageManager::add_image(const string &filename,
   img->interpolation = interpolation;
   img->extension = extension;
   img->users = 1;
-  img->use_alpha = use_alpha;
+  img->alpha_type = alpha_type;
+  img->colorspace = colorspace;
   img->is_volume = is_volume;
   img->isovalue = isovalue;
   img->mem = NULL;
@@ -434,6 +467,17 @@ int ImageManager::add_image(const string &filename,
   need_update = true;
 
   return type_index_to_flattened_slot(slot, type);
+}
+
+void ImageManager::add_image_user(int flat_slot)
+{
+  ImageDataType type;
+  int slot = flattened_slot_to_type_index(flat_slot, &type);
+
+  Image *image = images[type][slot];
+  assert(image && image->users >= 1);
+
+  image->users++;
 }
 
 void ImageManager::remove_image(int flat_slot)
@@ -459,7 +503,8 @@ void ImageManager::remove_image(const string &filename,
                                 void *builtin_data,
                                 InterpolationType interpolation,
                                 ExtensionType extension,
-                                bool use_alpha)
+                                ImageAlphaType alpha_type,
+                                ustring colorspace)
 {
   size_t slot;
 
@@ -471,7 +516,8 @@ void ImageManager::remove_image(const string &filename,
                                              builtin_data,
                                              interpolation,
                                              extension,
-                                             use_alpha)) {
+                                             alpha_type,
+                                             colorspace)) {
         remove_image(type_index_to_flattened_slot(slot, (ImageDataType)type));
         return;
       }
@@ -488,7 +534,8 @@ void ImageManager::tag_reload_image(const string &filename,
                                     void *builtin_data,
                                     InterpolationType interpolation,
                                     ExtensionType extension,
-                                    bool use_alpha)
+                                    ImageAlphaType alpha_type,
+                                    ustring colorspace)
 {
   for (size_t type = 0; type < IMAGE_DATA_NUM_TYPES; type++) {
     for (size_t slot = 0; slot < images[type].size(); slot++) {
@@ -498,7 +545,8 @@ void ImageManager::tag_reload_image(const string &filename,
                                              builtin_data,
                                              interpolation,
                                              extension,
-                                             use_alpha)) {
+                                             alpha_type,
+                                             colorspace)) {
         images[type][slot]->need_load = true;
         break;
       }
@@ -527,6 +575,14 @@ bool ImageManager::allocate_grid_info(Device *device,
   tex_img->grid_info = static_cast<void *>(tex_info);
 
   return true;
+}
+
+static bool image_associate_alpha(ImageManager::Image *img)
+{
+  /* For typical RGBA images we let OIIO convert to associated alpha,
+   * but some types we want to leave the RGB channels untouched. */
+  return !(ColorSpaceManager::colorspace_is_data(img->colorspace) ||
+           img->alpha_type == IMAGE_ALPHA_IGNORE || img->alpha_type == IMAGE_ALPHA_CHANNEL_PACKED);
 }
 
 bool ImageManager::file_load_image_generic(Image *img, unique_ptr<ImageInput> *in)
@@ -565,8 +621,9 @@ bool ImageManager::file_load_image_generic(Image *img, unique_ptr<ImageInput> *i
     ImageSpec spec = ImageSpec();
     ImageSpec config = ImageSpec();
 
-    if (img->use_alpha == false)
+    if (!image_associate_alpha(img)) {
       config.attribute("oiio:UnassociatedAlpha", 1);
+    }
 
     if (!(*in)->open(img->filename, spec, config)) {
       return false;
@@ -760,17 +817,18 @@ void ImageManager::file_load_image(Device *device,
   int depth = img->metadata.depth;
   int components = img->metadata.channels;
 
+  /* Read pixels. */
+  vector<StorageType> pixels_storage;
+  StorageType *pixels;
   size_t num_pixels = ((size_t)width) * height * depth;
   size_t max_size = max(max(width, height), depth);
   if (max_size == 0) {
-    /* Don't bother with invalid images. */
+    /* Don't bother with empty images. */
     file_load_failed<DeviceType>(img, type, tex_img);
     return;
   }
 
-  /* Allocate storage for the image. */
-  vector<StorageType> pixels_storage;
-  StorageType *pixels;
+  /* Allocate memory as needed, may be smaller to resize down. */
   if (texture_limit > 0 && max_size > texture_limit) {
     pixels_storage.resize(num_pixels * 4);
     pixels = &pixels_storage[0];
@@ -786,15 +844,16 @@ void ImageManager::file_load_image(Device *device,
     return;
   }
 
-  /* Read RGBA pixels. */
   bool cmyk = false;
   if (in) {
+    /* Read pixels through OpenImageIO. */
     StorageType *readpixels = pixels;
     vector<StorageType> tmppixels;
     if (components > 4) {
       tmppixels.resize(((size_t)width) * height * components);
       readpixels = &tmppixels[0];
     }
+
     if (depth <= 1) {
       size_t scanlinesize = ((size_t)width) * components * sizeof(StorageType);
       in->read_image(FileFormat,
@@ -806,6 +865,7 @@ void ImageManager::file_load_image(Device *device,
     else {
       in->read_image(FileFormat, (uchar *)readpixels);
     }
+
     if (components > 4) {
       size_t dimensions = ((size_t)width) * height;
       for (size_t i = dimensions - 1, pixel = 0; pixel < dimensions; pixel++, i--) {
@@ -816,15 +876,18 @@ void ImageManager::file_load_image(Device *device,
       }
       tmppixels.clear();
     }
+
     cmyk = strcmp(in->format_name(), "jpeg") == 0 && components == 4;
     in->close();
   }
   else {
+    /* Read pixels through callback. */
     if (FileFormat == TypeDesc::FLOAT) {
       builtin_image_float_pixels_cb(img->filename,
                                     img->builtin_data,
                                     (float *)&pixels[0],
                                     num_pixels * components,
+                                    image_associate_alpha(img),
                                     img->metadata.builtin_free_cache);
     }
     else if (FileFormat == TypeDesc::UINT8) {
@@ -832,6 +895,7 @@ void ImageManager::file_load_image(Device *device,
                               img->builtin_data,
                               (uchar *)&pixels[0],
                               num_pixels * components,
+                              image_associate_alpha(img),
                               img->metadata.builtin_free_cache);
     }
     else {
@@ -839,16 +903,16 @@ void ImageManager::file_load_image(Device *device,
     }
   }
 
-  /* Check if we actually have a float4 slot, in case components == 1,
-   * but device doesn't support single channel textures.
-   */
+  /* The kernel can handle 1 and 4 channel images. Anything that is not a single
+   * channel image is converted to RGBA format. */
   bool is_rgba = (type == IMAGE_DATA_TYPE_FLOAT4 || type == IMAGE_DATA_TYPE_HALF4 ||
                   type == IMAGE_DATA_TYPE_BYTE4 || type == IMAGE_DATA_TYPE_USHORT4);
+
   if (is_rgba) {
     const StorageType one = util_image_cast_from_float<StorageType>(1.0f);
 
     if (cmyk) {
-      /* CMYK */
+      /* CMYK to RGBA. */
       for (size_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         float c = util_image_cast_to_float(pixels[i * 4 + 0]);
         float m = util_image_cast_to_float(pixels[i * 4 + 1]);
@@ -861,7 +925,7 @@ void ImageManager::file_load_image(Device *device,
       }
     }
     else if (components == 2) {
-      /* grayscale + alpha */
+      /* Grayscale + alpha to RGBA. */
       for (size_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = pixels[i * 2 + 1];
         pixels[i * 4 + 2] = pixels[i * 2 + 0];
@@ -870,7 +934,7 @@ void ImageManager::file_load_image(Device *device,
       }
     }
     else if (components == 3) {
-      /* RGB */
+      /* RGB to RGBA. */
       for (size_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = one;
         pixels[i * 4 + 2] = pixels[i * 3 + 2];
@@ -879,7 +943,7 @@ void ImageManager::file_load_image(Device *device,
       }
     }
     else if (components == 1) {
-      /* grayscale */
+      /* Grayscale to RGBA. */
       for (size_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = one;
         pixels[i * 4 + 2] = pixels[i];
@@ -887,10 +951,19 @@ void ImageManager::file_load_image(Device *device,
         pixels[i * 4 + 0] = pixels[i];
       }
     }
-    if (img->use_alpha == false) {
+
+    /* Disable alpha if requested by the user. */
+    if (img->alpha_type == IMAGE_ALPHA_IGNORE) {
       for (size_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = one;
       }
+    }
+
+    if (img->metadata.colorspace != u_colorspace_raw &&
+        img->metadata.colorspace != u_colorspace_srgb) {
+      /* Convert to scene linear. */
+      ColorSpaceManager::to_scene_linear(
+          img->metadata.colorspace, pixels, width, height, depth, img->metadata.compress_as_srgb);
     }
   }
 
@@ -898,8 +971,7 @@ void ImageManager::file_load_image(Device *device,
   if (FileFormat == TypeDesc::FLOAT) {
     /* For RGBA buffers we put all channels to 0 if either of them is not
      * finite. This way we avoid possible artifacts caused by fully changed
-     * hue.
-     */
+     * hue. */
     if (is_rgba) {
       for (size_t i = 0; i < num_pixels; i += 4) {
         StorageType *pixel = &pixels[i * 4];
@@ -1013,16 +1085,9 @@ void ImageManager::file_load_image(Device *device,
     }
   }
 
-  memcpy(texture_pixels, pixels, tex_img->memory_size());
-
   tex_img->dense_width = width;
   tex_img->dense_height = height;
   tex_img->dense_depth = depth;
-
-  img->mem = tex_img;
-
-  thread_scoped_lock device_lock(device_mutex);
-  tex_img->copy_to_device();
 }
 
 void ImageManager::device_load_image(

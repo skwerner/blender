@@ -71,7 +71,7 @@ GPUFrameBuffer *GPU_framebuffer_active_get(void);
     } \
   } while (0)
 
-/* Framebuffer setup : You need to call GPU_framebuffer_bind for theses
+/* Framebuffer setup : You need to call GPU_framebuffer_bind for these
  * to be effective. */
 
 void GPU_framebuffer_texture_attach(GPUFrameBuffer *fb, struct GPUTexture *tex, int slot, int mip);
@@ -209,6 +209,7 @@ void GPU_offscreen_viewport_data_get(GPUOffScreen *ofs,
                                      struct GPUTexture **r_depth);
 
 void GPU_clear_color(float red, float green, float blue, float alpha);
+void GPU_clear_depth(float depth);
 void GPU_clear(eGPUFrameBufferBits flags);
 
 #ifdef __cplusplus

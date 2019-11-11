@@ -54,6 +54,8 @@
 #include "BKE_workspace.h"
 #include "BKE_material.h"
 
+#include "DEG_depsgraph.h"
+
 #include "ED_armature.h"
 #include "ED_buttons.h"
 #include "ED_image.h"
@@ -97,7 +99,7 @@ void ED_editors_init_for_undo(Main *bmain)
 
 void ED_editors_init(bContext *C)
 {
-  struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  struct Depsgraph *depsgraph = CTX_data_expect_evaluated_depsgraph(C);
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   wmWindowManager *wm = CTX_wm_manager(C);
@@ -115,59 +117,63 @@ void ED_editors_init(bContext *C)
    * e.g. linked objects we have to ensure that they are actually the
    * active object in this scene. */
   Object *obact = CTX_data_active_object(C);
-  if (obact != NULL) {
-    for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
-      int mode = ob->mode;
-      if (mode == OB_MODE_OBJECT) {
-        continue;
+  for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+    int mode = ob->mode;
+    if (mode == OB_MODE_OBJECT) {
+      continue;
+    }
+    else if (BKE_object_has_mode_data(ob, mode)) {
+      continue;
+    }
+    else if (ob->type == OB_GPENCIL) {
+      /* For multi-edit mode we may already have mode data (grease pencil does not need it).
+       * However we may have a non-active object stuck in a greasepencil edit mode. */
+      if (ob != obact) {
+        ob->mode = OB_MODE_OBJECT;
+        DEG_id_tag_update(&ob->id, ID_RECALC_COPY_ON_WRITE);
       }
-      else if (BKE_object_has_mode_data(ob, mode)) {
-        continue;
-      }
-      else if (ob->type == OB_GPENCIL) {
-        /* For multi-edit mode we may already have mode data.
-         * (grease pencil does not need it) */
-        continue;
-      }
+      continue;
+    }
 
-      ID *ob_data = ob->data;
-      ob->mode = OB_MODE_OBJECT;
-      if ((ob->type == obact->type) && !ID_IS_LINKED(ob) && !(ob_data && ID_IS_LINKED(ob_data))) {
-        if (mode == OB_MODE_EDIT) {
-          ED_object_editmode_enter_ex(bmain, scene, ob, 0);
-        }
-        else if (mode == OB_MODE_POSE) {
-          ED_object_posemode_enter_ex(bmain, ob);
-        }
-        else if (mode & OB_MODE_ALL_SCULPT) {
-          if (obact == ob) {
-            if (mode == OB_MODE_SCULPT) {
-              ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, true, reports);
-            }
-            else if (mode == OB_MODE_VERTEX_PAINT) {
-              ED_object_vpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
-            }
-            else if (mode == OB_MODE_WEIGHT_PAINT) {
-              ED_object_wpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
-            }
-            else {
-              BLI_assert(0);
-            }
+    ID *ob_data = ob->data;
+    ob->mode = OB_MODE_OBJECT;
+    DEG_id_tag_update(&ob->id, ID_RECALC_COPY_ON_WRITE);
+    if (obact && (ob->type == obact->type) && !ID_IS_LINKED(ob) &&
+        !(ob_data && ID_IS_LINKED(ob_data))) {
+      if (mode == OB_MODE_EDIT) {
+        ED_object_editmode_enter_ex(bmain, scene, ob, 0);
+      }
+      else if (mode == OB_MODE_POSE) {
+        ED_object_posemode_enter_ex(bmain, ob);
+      }
+      else if (mode & OB_MODE_ALL_SCULPT) {
+        if (obact == ob) {
+          if (mode == OB_MODE_SCULPT) {
+            ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, true, reports);
+          }
+          else if (mode == OB_MODE_VERTEX_PAINT) {
+            ED_object_vpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+          }
+          else if (mode == OB_MODE_WEIGHT_PAINT) {
+            ED_object_wpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
           }
           else {
-            /* Create data for non-active objects which need it for
-             * mode-switching but don't yet support multi-editing. */
-            if (mode & OB_MODE_ALL_SCULPT) {
-              ob->mode = mode;
-              BKE_object_sculpt_data_create(ob);
-            }
+            BLI_assert(0);
           }
         }
         else {
-          /* TODO(campbell): avoid operator calls. */
-          if (obact == ob) {
-            ED_object_mode_toggle(C, mode);
+          /* Create data for non-active objects which need it for
+           * mode-switching but don't yet support multi-editing. */
+          if (mode & OB_MODE_ALL_SCULPT) {
+            ob->mode = mode;
+            BKE_object_sculpt_data_create(ob);
           }
+        }
+      }
+      else {
+        /* TODO(campbell): avoid operator calls. */
+        if (obact == ob) {
+          ED_object_mode_toggle(C, mode);
         }
       }
     }
@@ -224,7 +230,7 @@ void ED_editors_exit(Main *bmain, bool do_undo_system)
 
 /* flush any temp data from object editing to DNA before writing files,
  * rendering, copying, etc. */
-bool ED_editors_flush_edits(Main *bmain, bool for_render)
+bool ED_editors_flush_edits_ex(Main *bmain, bool for_render, bool check_needs_flush)
 {
   bool has_edited = false;
   Object *ob;
@@ -238,8 +244,17 @@ bool ED_editors_flush_edits(Main *bmain, bool for_render)
        * Auto-save prevents this from happening but scripts
        * may cause a flush on saving: T53986. */
       if ((ob->sculpt && ob->sculpt->cache) == 0) {
+
+        {
+          char *needs_flush_ptr = &ob->sculpt->needs_flush_to_id;
+          if (check_needs_flush && (*needs_flush_ptr == 0)) {
+            continue;
+          }
+          *needs_flush_ptr = 0;
+        }
+
         /* flush multires changes (for sculpt) */
-        multires_force_update(ob);
+        multires_flush_sculpt_updates(ob);
         has_edited = true;
 
         if (for_render) {
@@ -254,13 +269,29 @@ bool ED_editors_flush_edits(Main *bmain, bool for_render)
       }
     }
     else if (ob->mode & OB_MODE_EDIT) {
+
+      char *needs_flush_ptr = BKE_object_data_editmode_flush_ptr_get(ob->data);
+      if (needs_flush_ptr != NULL) {
+        if (check_needs_flush && (*needs_flush_ptr == 0)) {
+          continue;
+        }
+        *needs_flush_ptr = 0;
+      }
+
       /* get editmode results */
       has_edited = true;
       ED_object_editmode_load(bmain, ob);
     }
   }
 
+  bmain->is_memfile_undo_flush_needed = false;
+
   return has_edited;
+}
+
+bool ED_editors_flush_edits(Main *bmain, bool for_render)
+{
+  return ED_editors_flush_edits_ex(bmain, for_render, false);
 }
 
 /* ***** XXX: functions are using old blender names, cleanup later ***** */
@@ -320,31 +351,31 @@ void unpack_menu(bContext *C,
     BLI_split_file_part(abs_name, fi, sizeof(fi));
     BLI_snprintf(local_name, sizeof(local_name), "//%s/%s", folder, fi);
     if (!STREQ(abs_name, local_name)) {
-      switch (checkPackedFile(BKE_main_blendfile_path(bmain), local_name, pf)) {
-        case PF_NOFILE:
-          BLI_snprintf(line, sizeof(line), IFACE_("Create %s"), local_name);
+      switch (BKE_packedfile_compare_to_file(BKE_main_blendfile_path(bmain), local_name, pf)) {
+        case PF_CMP_NOFILE:
+          BLI_snprintf(line, sizeof(line), TIP_("Create %s"), local_name);
           uiItemFullO_ptr(layout, ot, line, ICON_NONE, NULL, WM_OP_EXEC_DEFAULT, 0, &props_ptr);
           RNA_enum_set(&props_ptr, "method", PF_WRITE_LOCAL);
           RNA_string_set(&props_ptr, "id", id_name);
 
           break;
-        case PF_EQUAL:
-          BLI_snprintf(line, sizeof(line), IFACE_("Use %s (identical)"), local_name);
-          //uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_USE_LOCAL);
+        case PF_CMP_EQUAL:
+          BLI_snprintf(line, sizeof(line), TIP_("Use %s (identical)"), local_name);
+          // uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_USE_LOCAL);
           uiItemFullO_ptr(layout, ot, line, ICON_NONE, NULL, WM_OP_EXEC_DEFAULT, 0, &props_ptr);
           RNA_enum_set(&props_ptr, "method", PF_USE_LOCAL);
           RNA_string_set(&props_ptr, "id", id_name);
 
           break;
-        case PF_DIFFERS:
-          BLI_snprintf(line, sizeof(line), IFACE_("Use %s (differs)"), local_name);
-          //uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_USE_LOCAL);
+        case PF_CMP_DIFFERS:
+          BLI_snprintf(line, sizeof(line), TIP_("Use %s (differs)"), local_name);
+          // uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_USE_LOCAL);
           uiItemFullO_ptr(layout, ot, line, ICON_NONE, NULL, WM_OP_EXEC_DEFAULT, 0, &props_ptr);
           RNA_enum_set(&props_ptr, "method", PF_USE_LOCAL);
           RNA_string_set(&props_ptr, "id", id_name);
 
-          BLI_snprintf(line, sizeof(line), IFACE_("Overwrite %s"), local_name);
-          //uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_WRITE_LOCAL);
+          BLI_snprintf(line, sizeof(line), TIP_("Overwrite %s"), local_name);
+          // uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_WRITE_LOCAL);
           uiItemFullO_ptr(layout, ot, line, ICON_NONE, NULL, WM_OP_EXEC_DEFAULT, 0, &props_ptr);
           RNA_enum_set(&props_ptr, "method", PF_WRITE_LOCAL);
           RNA_string_set(&props_ptr, "id", id_name);
@@ -353,30 +384,30 @@ void unpack_menu(bContext *C,
     }
   }
 
-  switch (checkPackedFile(BKE_main_blendfile_path(bmain), abs_name, pf)) {
-    case PF_NOFILE:
-      BLI_snprintf(line, sizeof(line), IFACE_("Create %s"), abs_name);
-      //uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_WRITE_ORIGINAL);
+  switch (BKE_packedfile_compare_to_file(BKE_main_blendfile_path(bmain), abs_name, pf)) {
+    case PF_CMP_NOFILE:
+      BLI_snprintf(line, sizeof(line), TIP_("Create %s"), abs_name);
+      // uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_WRITE_ORIGINAL);
       uiItemFullO_ptr(layout, ot, line, ICON_NONE, NULL, WM_OP_EXEC_DEFAULT, 0, &props_ptr);
       RNA_enum_set(&props_ptr, "method", PF_WRITE_ORIGINAL);
       RNA_string_set(&props_ptr, "id", id_name);
       break;
-    case PF_EQUAL:
-      BLI_snprintf(line, sizeof(line), IFACE_("Use %s (identical)"), abs_name);
-      //uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_USE_ORIGINAL);
+    case PF_CMP_EQUAL:
+      BLI_snprintf(line, sizeof(line), TIP_("Use %s (identical)"), abs_name);
+      // uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_USE_ORIGINAL);
       uiItemFullO_ptr(layout, ot, line, ICON_NONE, NULL, WM_OP_EXEC_DEFAULT, 0, &props_ptr);
       RNA_enum_set(&props_ptr, "method", PF_USE_ORIGINAL);
       RNA_string_set(&props_ptr, "id", id_name);
       break;
-    case PF_DIFFERS:
-      BLI_snprintf(line, sizeof(line), IFACE_("Use %s (differs)"), abs_name);
-      //uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_USE_ORIGINAL);
+    case PF_CMP_DIFFERS:
+      BLI_snprintf(line, sizeof(line), TIP_("Use %s (differs)"), abs_name);
+      // uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_USE_ORIGINAL);
       uiItemFullO_ptr(layout, ot, line, ICON_NONE, NULL, WM_OP_EXEC_DEFAULT, 0, &props_ptr);
       RNA_enum_set(&props_ptr, "method", PF_USE_ORIGINAL);
       RNA_string_set(&props_ptr, "id", id_name);
 
-      BLI_snprintf(line, sizeof(line), IFACE_("Overwrite %s"), abs_name);
-      //uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_WRITE_ORIGINAL);
+      BLI_snprintf(line, sizeof(line), TIP_("Overwrite %s"), abs_name);
+      // uiItemEnumO_ptr(layout, ot, line, 0, "method", PF_WRITE_ORIGINAL);
       uiItemFullO_ptr(layout, ot, line, ICON_NONE, NULL, WM_OP_EXEC_DEFAULT, 0, &props_ptr);
       RNA_enum_set(&props_ptr, "method", PF_WRITE_ORIGINAL);
       RNA_string_set(&props_ptr, "id", id_name);

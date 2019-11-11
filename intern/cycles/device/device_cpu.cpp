@@ -114,6 +114,12 @@ template<typename F> class KernelFunctions {
       architecture_name = "SSE2";
       kernel = kernel_sse2;
     }
+#else
+    {
+      /* Dummy to prevent the architecture if below become
+       * conditional when WITH_CYCLES_OPTIMIZED_KERNEL_SSE2
+       * is not defined. */
+    }
 #endif
 
     if (strcmp(architecture_name, logged_architecture) != 0) {
@@ -332,9 +338,11 @@ class CPUDevice : public Device {
     if (DebugFlags().cpu.has_sse2() && system_cpu_support_sse2()) {
       bvh_layout_mask |= BVH_LAYOUT_BVH4;
     }
+#if defined(__x86_64__) || defined(_M_X64)
     if (DebugFlags().cpu.has_avx2() && system_cpu_support_avx2()) {
       bvh_layout_mask |= BVH_LAYOUT_BVH8;
     }
+#endif
 #ifdef WITH_EMBREE
     bvh_layout_mask |= BVH_LAYOUT_EMBREE;
 #endif /* WITH_EMBREE */
@@ -1007,14 +1015,11 @@ class CPUDevice : public Device {
 
   void thread_shader(DeviceTask &task)
   {
-    KernelGlobals kg = kernel_globals;
+    KernelGlobals *kg = new KernelGlobals(thread_kernel_globals_init());
 
-#ifdef WITH_OSL
-    OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
-#endif
     for (int sample = 0; sample < task.num_samples; sample++) {
       for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)
-        shader_kernel()(&kg,
+        shader_kernel()(kg,
                         (uint4 *)task.shader_input,
                         (float4 *)task.shader_output,
                         task.shader_eval_type,
@@ -1029,9 +1034,8 @@ class CPUDevice : public Device {
       task.update_progress(NULL);
     }
 
-#ifdef WITH_OSL
-    OSLShader::thread_free(&kg);
-#endif
+    thread_kernel_globals_free(kg);
+    delete kg;
   }
 
   int get_split_task_count(DeviceTask &task)

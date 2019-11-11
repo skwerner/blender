@@ -166,8 +166,8 @@ typedef struct tagPOINTER_TOUCH_INFO {
 } POINTER_TOUCH_INFO;
 
 /*
-  * Macros to retrieve information from pointer input message parameters
-  */
+ * Macros to retrieve information from pointer input message parameters
+ */
 #define GET_POINTERID_WPARAM(wParam) (LOWORD(wParam))
 #define IS_POINTER_FLAG_SET_WPARAM(wParam, flag) (((DWORD)HIWORD(wParam) & (flag)) == (flag))
 #define IS_POINTER_NEW_WPARAM(wParam) IS_POINTER_FLAG_SET_WPARAM(wParam, POINTER_MESSAGE_FLAG_NEW)
@@ -235,8 +235,9 @@ class GHOST_WindowWin32 : public GHOST_Window {
                     GHOST_TDrawingContextType type = GHOST_kDrawingContextTypeNone,
                     bool wantStereoVisual = false,
                     bool alphaBackground = false,
-                    GHOST_TEmbedderWindowID parentWindowHwnd = 0,
-                    bool is_debug = false);
+                    GHOST_WindowWin32 *parentWindow = 0,
+                    bool is_debug = false,
+                    bool dialog = false);
 
   /**
    * Destructor.
@@ -270,7 +271,8 @@ class GHOST_WindowWin32 : public GHOST_Window {
 
   /**
    * Returns the window rectangle dimensions.
-   * The dimensions are given in screen coordinates that are relative to the upper-left corner of the screen.
+   * The dimensions are given in screen coordinates that are
+   * relative to the upper-left corner of the screen.
    * \param bounds The bounding rectangle of the window.
    */
   void getWindowBounds(GHOST_Rect &bounds) const;
@@ -380,11 +382,14 @@ class GHOST_WindowWin32 : public GHOST_Window {
    */
   void lostMouseCapture();
 
+  bool isDialog() const;
+
   /**
    * Loads the windows equivalent of a standard GHOST cursor.
    * \param visible       Flag for cursor visibility.
    * \param cursorShape   The cursor shape.
    */
+  HCURSOR getStandardCursor(GHOST_TStandardCursor shape) const;
   void loadCursor(bool visible, GHOST_TStandardCursor cursorShape) const;
 
   const GHOST_TabletData *GetTabletData()
@@ -455,24 +460,19 @@ class GHOST_WindowWin32 : public GHOST_Window {
    * native window system calls.
    */
   GHOST_TSuccess setWindowCursorShape(GHOST_TStandardCursor shape);
+  GHOST_TSuccess hasCursorShape(GHOST_TStandardCursor shape);
 
   /**
    * Sets the cursor shape on the window using
    * native window system calls.
    */
-  GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                            GHOST_TUns8 mask[16][2],
-                                            int hotX,
-                                            int hotY);
-
   GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 *bitmap,
                                             GHOST_TUns8 *mask,
                                             int sizex,
                                             int sizey,
                                             int hotX,
                                             int hotY,
-                                            int fg_color,
-                                            int bg_color);
+                                            bool canInvertColor);
 
   /** Pointer to system */
   GHOST_SystemWin32 *m_system;
@@ -531,8 +531,7 @@ class GHOST_WindowWin32 : public GHOST_Window {
   GHOST_WIN32_GetPointerPenInfo m_fpGetPointerPenInfo;
   GHOST_WIN32_GetPointerTouchInfo m_fpGetPointerTouchInfo;
 
-  /** Hwnd to parent window */
-  GHOST_TEmbedderWindowID m_parentWindowHwnd;
+  HWND m_parentWindowHwnd;
 
 #ifdef WITH_INPUT_IME
   /** Handle input method editors event */

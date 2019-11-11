@@ -206,23 +206,24 @@ static void acf_generic_channel_color(bAnimContext *ac, bAnimListElem *ale, floa
    * - only use group colors if allowed to, and if actually feasible
    */
   if (showGroupColors && (grp) && (grp->customCol)) {
-    unsigned char cp[3];
+    uchar cp[3];
 
     if (indent == 2) {
-      copy_v3_v3_char((char *)cp, grp->cs.solid);
+      copy_v3_v3_uchar(cp, grp->cs.solid);
     }
     else if (indent == 1) {
-      copy_v3_v3_char((char *)cp, grp->cs.select);
+      copy_v3_v3_uchar(cp, grp->cs.select);
     }
     else {
-      copy_v3_v3_char((char *)cp, grp->cs.active);
+      copy_v3_v3_uchar(cp, grp->cs.active);
     }
 
     /* copy the colors over, transforming from bytes to floats */
     rgb_uchar_to_float(r_color, cp);
   }
   else {
-    // FIXME: what happens when the indention is 1 greater than what it should be (due to grouping)?
+    /* FIXME: what happens when the indention is 1 greater than what it should be
+     * (due to grouping)? */
     int colOfs = 10 - 10 * indent;
     UI_GetThemeColorShade3fv(TH_SHADE2, colOfs, r_color);
   }
@@ -360,7 +361,7 @@ static short acf_generic_group_offset(bAnimContext *ac, bAnimListElem *ale)
       offset += (short)(0.7f * U.widget_unit);
 
       /* If not in Action Editor mode, action-groups (and their children)
-     * must carry some offset too. */
+       * must carry some offset too. */
     }
     else if (ac->datatype != ANIMCONT_ACTION) {
       offset += (short)(0.7f * U.widget_unit);
@@ -484,14 +485,8 @@ static void acf_summary_backdrop(bAnimContext *ac, bAnimListElem *ale, float ymi
 static void acf_summary_name(bAnimListElem *UNUSED(ale), char *name)
 {
   if (name) {
-    BLI_strncpy(name, IFACE_("Dope Sheet Summary"), ANIM_CHAN_NAME_SIZE);
+    BLI_strncpy(name, IFACE_("Summary"), ANIM_CHAN_NAME_SIZE);
   }
-}
-
-// FIXME: this is really a temp icon I think
-static int acf_summary_icon(bAnimListElem *UNUSED(ale))
-{
-  return ICON_BORDERMOVE;
 }
 
 /* check if some setting exists for this channel */
@@ -556,7 +551,7 @@ static bAnimChannelType ACF_SUMMARY = {
 
     acf_summary_name, /* name */
     NULL,             /* name prop */
-    acf_summary_icon, /* icon */
+    NULL,             /* icon */
 
     acf_summary_setting_valid, /* has setting */
     acf_summary_setting_flag,  /* flag for setting */
@@ -855,10 +850,10 @@ static void acf_group_color(bAnimContext *ac, bAnimListElem *ale, float r_color[
 
     /* highlight only for active */
     if (ale->flag & AGRP_ACTIVE) {
-      copy_v3_v3_char((char *)cp, agrp->cs.select);
+      copy_v3_v3_uchar(cp, agrp->cs.select);
     }
     else {
-      copy_v3_v3_char((char *)cp, agrp->cs.solid);
+      copy_v3_v3_uchar(cp, agrp->cs.solid);
     }
 
     /* copy the colors over, transforming from bytes to floats */
@@ -3416,7 +3411,7 @@ static void acf_nlatrack_color(bAnimContext *UNUSED(ac), bAnimListElem *ale, flo
   }
 
   /* set color for nla track */
-  UI_GetThemeColorShade3fv(TH_HEADER, ((nonSolo == false) ? 20 : -20), r_color);
+  UI_GetThemeColorShade3fv(TH_NLA_TRACK, ((nonSolo == false) ? 20 : -20), r_color);
 }
 
 /* name for nla track entries */
@@ -4345,7 +4340,6 @@ static void achannel_setting_slider_cb(bContext *C, void *id_poin, void *fcu_poi
   AnimData *adt = BKE_animdata_from_id(id);
   FCurve *fcu = (FCurve *)fcu_poin;
 
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   ReportList *reports = CTX_wm_reports(C);
   Scene *scene = CTX_data_scene(C);
   ToolSettings *ts = scene->toolsettings;
@@ -4361,7 +4355,7 @@ static void achannel_setting_slider_cb(bContext *C, void *id_poin, void *fcu_poi
 
   /* Get NLA context for value remapping */
   NlaKeyframingContext *nla_context = BKE_animsys_get_nla_keyframing_context(
-      &nla_cache, depsgraph, &id_ptr, adt, (float)CFRA);
+      &nla_cache, &id_ptr, adt, (float)CFRA, false);
 
   /* get current frame and apply NLA-mapping to it (if applicable) */
   cfra = BKE_nla_tweakedit_remap(adt, (float)CFRA, NLATIME_CONVERT_UNMAP);
@@ -4378,7 +4372,7 @@ static void achannel_setting_slider_cb(bContext *C, void *id_poin, void *fcu_poi
 
     /* insert a keyframe for this F-Curve */
     done = insert_keyframe_direct(
-        depsgraph, reports, ptr, prop, fcu, cfra, ts->keyframe_type, nla_context, flag);
+        reports, ptr, prop, fcu, cfra, ts->keyframe_type, nla_context, flag);
 
     if (done) {
       if (adt->action != NULL) {
@@ -4400,7 +4394,6 @@ static void achannel_setting_slider_shapekey_cb(bContext *C, void *key_poin, voi
   KeyBlock *kb = (KeyBlock *)kb_poin;
   char *rna_path = BKE_keyblock_curval_rnapath_get(key, kb);
 
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   ReportList *reports = CTX_wm_reports(C);
   Scene *scene = CTX_data_scene(C);
   ToolSettings *ts = scene->toolsettings;
@@ -4416,7 +4409,7 @@ static void achannel_setting_slider_shapekey_cb(bContext *C, void *key_poin, voi
 
   /* Get NLA context for value remapping */
   NlaKeyframingContext *nla_context = BKE_animsys_get_nla_keyframing_context(
-      &nla_cache, depsgraph, &id_ptr, key->adt, (float)CFRA);
+      &nla_cache, &id_ptr, key->adt, (float)CFRA, false);
 
   /* get current frame and apply NLA-mapping to it (if applicable) */
   cfra = BKE_nla_tweakedit_remap(key->adt, (float)CFRA, NLATIME_CONVERT_UNMAP);
@@ -4438,7 +4431,7 @@ static void achannel_setting_slider_shapekey_cb(bContext *C, void *key_poin, voi
 
     /* insert a keyframe for this F-Curve */
     done = insert_keyframe_direct(
-        depsgraph, reports, ptr, prop, fcu, cfra, ts->keyframe_type, nla_context, flag);
+        reports, ptr, prop, fcu, cfra, ts->keyframe_type, nla_context, flag);
 
     if (done) {
       WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
@@ -4465,7 +4458,6 @@ static void achannel_setting_slider_nla_curve_cb(bContext *C,
   PropertyRNA *prop;
   int index;
 
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   ReportList *reports = CTX_wm_reports(C);
   Scene *scene = CTX_data_scene(C);
   ToolSettings *ts = scene->toolsettings;
@@ -4490,8 +4482,7 @@ static void achannel_setting_slider_nla_curve_cb(bContext *C,
     }
 
     /* insert a keyframe for this F-Curve */
-    done = insert_keyframe_direct(
-        depsgraph, reports, ptr, prop, fcu, cfra, ts->keyframe_type, NULL, flag);
+    done = insert_keyframe_direct(reports, ptr, prop, fcu, cfra, ts->keyframe_type, NULL, flag);
 
     if (done) {
       WM_event_add_notifier(C, NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
@@ -4525,8 +4516,8 @@ static void draw_setting_widget(bAnimContext *ac,
   /* get the base icon for the setting */
   switch (setting) {
     case ACHANNEL_SETTING_VISIBLE: /* visibility eyes */
-      //icon = ((enabled) ? ICON_VISIBLE_IPO_ON : ICON_VISIBLE_IPO_OFF);
-      icon = ICON_VISIBLE_IPO_OFF;
+      // icon = ((enabled) ? ICON_HIDE_OFF : ICON_HIDE_ON);
+      icon = ICON_HIDE_ON;
 
       if (ELEM(ale->type, ANIMTYPE_FCURVE, ANIMTYPE_NLACURVE)) {
         tooltip = TIP_("F-Curve is visible in Graph Editor for editing");
@@ -4550,13 +4541,13 @@ static void draw_setting_widget(bAnimContext *ac,
       break;
 
     case ACHANNEL_SETTING_EXPAND: /* expanded triangle */
-      //icon = ((enabled) ? ICON_TRIA_DOWN : ICON_TRIA_RIGHT);
+      // icon = ((enabled) ? ICON_TRIA_DOWN : ICON_TRIA_RIGHT);
       icon = ICON_TRIA_RIGHT;
       tooltip = TIP_("Make channels grouped under this channel visible");
       break;
 
     case ACHANNEL_SETTING_SOLO: /* NLA Tracks only */
-      //icon = ((enabled) ? ICON_SOLO_OFF : ICON_SOLO_ON);
+      // icon = ((enabled) ? ICON_SOLO_OFF : ICON_SOLO_ON);
       icon = ICON_SOLO_OFF;
       tooltip = TIP_(
           "NLA Track is the only one evaluated in this animation data-block, with all others "
@@ -4567,7 +4558,7 @@ static void draw_setting_widget(bAnimContext *ac,
 
     case ACHANNEL_SETTING_PROTECT: /* protected lock */
       // TODO: what about when there's no protect needed?
-      //icon = ((enabled) ? ICON_LOCKED : ICON_UNLOCKED);
+      // icon = ((enabled) ? ICON_LOCKED : ICON_UNLOCKED);
       icon = ICON_UNLOCKED;
 
       if (ale->datatype != ALE_NLASTRIP) {
@@ -4598,7 +4589,7 @@ static void draw_setting_widget(bAnimContext *ac,
       break;
 
     case ACHANNEL_SETTING_PINNED: /* pin icon */
-      //icon = ((enabled) ? ICON_PINNED : ICON_UNPINNED);
+      // icon = ((enabled) ? ICON_PINNED : ICON_UNPINNED);
       icon = ICON_UNPINNED;
 
       if (ale->type == ANIMTYPE_NLAACTION) {
@@ -4856,7 +4847,7 @@ void ANIM_channel_draw_widgets(const bContext *C,
 
   /* step 4) draw text - check if renaming widget is in use... */
   if (is_being_renamed) {
-    PointerRNA ptr = {{NULL}};
+    PointerRNA ptr = {NULL};
     PropertyRNA *prop = NULL;
 
     /* draw renaming widget if we can get RNA pointer for it

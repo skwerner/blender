@@ -209,7 +209,8 @@ static void tracking_tracks_copy(ListBase *tracks_dst,
   }
 }
 
-/* copy the whole list of plane tracks (need whole MovieTracking structures due to embedded pointers to tracks).
+/* Copy the whole list of plane tracks
+ * (need whole MovieTracking structures due to embedded pointers to tracks).
  * WARNING: implies tracking_[dst/src] and their tracks have already been copied. */
 static void tracking_plane_tracks_copy(ListBase *plane_tracks_list_dst,
                                        const ListBase *plane_tracks_list_src,
@@ -321,7 +322,8 @@ void BKE_tracking_copy(MovieTracking *tracking_dst,
   /* Warning! Will override tracks_mapping. */
   tracking_objects_copy(&tracking_dst->objects, &tracking_src->objects, tracks_mapping, flag);
 
-  /* Those remaining are runtime data, they will be reconstructed as needed, do not bother copying them. */
+  /* Those remaining are runtime data, they will be reconstructed as needed,
+   * do not bother copying them. */
   tracking_dst->dopesheet.ok = false;
   BLI_listbase_clear(&tracking_dst->dopesheet.channels);
   BLI_listbase_clear(&tracking_dst->dopesheet.coverage_segments);
@@ -1841,18 +1843,18 @@ void BKE_tracking_plane_marker_get_subframe_corners(MovieTrackingPlaneTrack *pla
     MovieTrackingPlaneMarker *marker_next = marker + 1;
     if (marker_next->framenr == marker->framenr + 1) {
       float fac = (framenr - (int)framenr) / (marker_next->framenr - marker->framenr);
-      for (i = 0; i < 4; ++i) {
+      for (i = 0; i < 4; i++) {
         interp_v2_v2v2(corners[i], marker->corners[i], marker_next->corners[i], fac);
       }
     }
     else {
-      for (i = 0; i < 4; ++i) {
+      for (i = 0; i < 4; i++) {
         copy_v2_v2(corners[i], marker->corners[i]);
       }
     }
   }
   else {
-    for (i = 0; i < 4; ++i) {
+    for (i = 0; i < 4; i++) {
       copy_v2_v2(corners[i], marker->corners[i]);
     }
   }
@@ -2093,7 +2095,8 @@ static void reconstructed_camera_scale_set(MovieTrackingObject *object, float ma
 void BKE_tracking_camera_shift_get(
     MovieTracking *tracking, int winx, int winy, float *shiftx, float *shifty)
 {
-  /* indeed in both of cases it should be winx -- it's just how camera shift works for blender's camera */
+  /* Indeed in both of cases it should be winx -
+   * it's just how camera shift works for blender's camera. */
   *shiftx = (0.5f * winx - tracking->camera.principal[0]) / winx;
   *shifty = (0.5f * winy - tracking->camera.principal[1]) / winx;
 }

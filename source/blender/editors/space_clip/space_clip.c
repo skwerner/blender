@@ -47,6 +47,7 @@
 #include "ED_mask.h"
 #include "ED_space_api.h"
 #include "ED_screen.h"
+#include "ED_time_scrub_ui.h"
 #include "ED_select_utils.h"
 #include "ED_clip.h"
 #include "ED_transform.h"
@@ -94,7 +95,7 @@ static void init_preview_region(const Scene *scene,
 
     ar->v2d.minzoom = 0.01f;
     ar->v2d.maxzoom = 50;
-    ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
+    ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
     ar->v2d.scroll |= (V2D_SCROLL_RIGHT);
     ar->v2d.keepzoom = V2D_LOCKZOOM_Y;
     ar->v2d.keepofs = V2D_KEEPOFS_Y;
@@ -115,8 +116,8 @@ static void init_preview_region(const Scene *scene,
     ar->v2d.max[0] = MAXFRAMEF;
     ar->v2d.max[1] = FLT_MAX;
 
-    ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
-    ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_SCALE_VERTICAL);
+    ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
+    ar->v2d.scroll |= (V2D_SCROLL_RIGHT | V2D_SCROLL_VERTICAL_HANDLES);
 
     ar->v2d.minzoom = 0.0f;
     ar->v2d.maxzoom = 0.0f;
@@ -249,7 +250,7 @@ static SpaceLink *clip_new(const ScrArea *sa, const Scene *scene)
   sc->zoom = 1.0f;
   sc->path_length = 20;
   sc->scopes.track_preview_height = 120;
-  sc->around = V3D_AROUND_LOCAL_ORIGINS;
+  sc->around = V3D_AROUND_CENTER_MEDIAN;
 
   /* header */
   ar = MEM_callocN(sizeof(ARegion), "header for clip");
@@ -419,6 +420,14 @@ static void clip_listener(wmWindow *UNUSED(win), ScrArea *sa, wmNotifier *wmn, S
         ED_area_tag_redraw(sa);
       }
       break;
+    case NC_WM:
+      switch (wmn->data) {
+        case ND_FILEREAD:
+        case ND_UNDO:
+          clip_area_sync_frame_from_scene(sa, scene);
+          break;
+      }
+      break;
   }
 }
 
@@ -434,6 +443,7 @@ static void clip_operatortypes(void)
   WM_operatortype_append(CLIP_OT_view_zoom_ratio);
   WM_operatortype_append(CLIP_OT_view_all);
   WM_operatortype_append(CLIP_OT_view_selected);
+  WM_operatortype_append(CLIP_OT_view_center_cursor);
   WM_operatortype_append(CLIP_OT_change_frame);
   WM_operatortype_append(CLIP_OT_rebuild_proxy);
   WM_operatortype_append(CLIP_OT_mode_set);
@@ -443,6 +453,7 @@ static void clip_operatortypes(void)
   WM_operatortype_append(CLIP_OT_prefetch);
   WM_operatortype_append(CLIP_OT_set_scene_frames);
   WM_operatortype_append(CLIP_OT_cursor_set);
+  WM_operatortype_append(CLIP_OT_lock_selection_toggle);
 
   /* ** tracking_ops.c ** */
 
@@ -547,17 +558,17 @@ static void clip_operatortypes(void)
 
 static void clip_keymap(struct wmKeyConfig *keyconf)
 {
-  /* ******** Global hotkeys avalaible for all regions ******** */
+  /* ******** Global hotkeys available for all regions ******** */
   WM_keymap_ensure(keyconf, "Clip", SPACE_CLIP, 0);
 
-  /* ******** Hotkeys avalaible for main region only ******** */
+  /* ******** Hotkeys available for main region only ******** */
   WM_keymap_ensure(keyconf, "Clip Editor", SPACE_CLIP, 0);
   //  keymap->poll = ED_space_clip_tracking_poll;
 
-  /* ******** Hotkeys avalaible for preview region only ******** */
+  /* ******** Hotkeys available for preview region only ******** */
   WM_keymap_ensure(keyconf, "Clip Graph Editor", SPACE_CLIP, 0);
 
-  /* ******** Hotkeys avalaible for channels region only ******** */
+  /* ******** Hotkeys available for channels region only ******** */
   WM_keymap_ensure(keyconf, "Clip Dopesheet Editor", SPACE_CLIP, 0);
 }
 
@@ -801,6 +812,19 @@ static void clip_refresh(const bContext *C, ScrArea *sa)
   BKE_movieclip_user_set_frame(&sc->user, scene->r.cfra);
 }
 
+static void CLIP_GGT_navigate(wmGizmoGroupType *gzgt)
+{
+  VIEW2D_GGT_navigate_impl(gzgt, "CLIP_GGT_navigate");
+}
+
+static void clip_gizmos(void)
+{
+  wmGizmoMapType *gzmap_type = WM_gizmomaptype_ensure(
+      &(const struct wmGizmoMapType_Params){SPACE_CLIP, RGN_TYPE_WINDOW});
+
+  WM_gizmogrouptype_append_and_link(gzmap_type, CLIP_GGT_navigate);
+}
+
 /********************* main region ********************/
 
 /* sets up the fields of the View2D from zoom and offset */
@@ -925,7 +949,8 @@ static void clip_main_region_draw(const bContext *C, ARegion *ar)
       ScrArea *sa = CTX_wm_area(C);
       int mask_width, mask_height;
       ED_mask_get_size(sa, &mask_width, &mask_height);
-      ED_mask_draw_region(mask,
+      ED_mask_draw_region(CTX_data_expect_evaluated_depsgraph(C),
+                          mask,
                           ar,
                           sc->mask_info.draw_flag,
                           sc->mask_info.draw_type,
@@ -971,6 +996,8 @@ static void clip_main_region_draw(const bContext *C, ARegion *ar)
     /* draw Grease Pencil - screen space only */
     clip_draw_grease_pencil((bContext *)C, false);
   }
+
+  WM_gizmomap_draw(ar->gizmo_map, C, WM_GIZMOMAP_DRAWSTEP_2D);
 }
 
 static void clip_main_region_listener(wmWindow *UNUSED(win),
@@ -1001,8 +1028,12 @@ static void clip_preview_region_init(wmWindowManager *wm, ARegion *ar)
   UI_view2d_region_reinit(&ar->v2d, V2D_COMMONVIEW_CUSTOM, ar->winx, ar->winy);
 
   /* own keymap */
+
   keymap = WM_keymap_ensure(wm->defaultconf, "Clip", SPACE_CLIP, 0);
   WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
+
+  keymap = WM_keymap_ensure(wm->defaultconf, "Clip Time Scrub", SPACE_CLIP, RGN_TYPE_PREVIEW);
+  WM_event_add_keymap_handler_poll(&ar->handlers, keymap, ED_time_scrub_event_in_region);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "Clip Graph Editor", SPACE_CLIP, 0);
   WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
@@ -1017,7 +1048,6 @@ static void graph_region_draw(const bContext *C, ARegion *ar)
   View2DScrollers *scrollers;
   SpaceClip *sc = CTX_wm_space_clip(C);
   Scene *scene = CTX_data_scene(C);
-  short unitx, unity;
   short cfra_flag = 0;
 
   if (sc->flag & SC_LOCK_TIMECURSOR) {
@@ -1042,20 +1072,24 @@ static void graph_region_draw(const bContext *C, ARegion *ar)
   /* reset view matrix */
   UI_view2d_view_restore(C);
 
+  /* time-scrubbing */
+  ED_time_scrub_draw(ar, scene, sc->flag & SC_SHOW_SECONDS, true);
+
   /* scrollers */
-  unitx = (sc->flag & SC_SHOW_SECONDS) ? V2D_UNIT_SECONDS : V2D_UNIT_FRAMES;
-  unity = V2D_UNIT_VALUES;
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, NULL, unitx, V2D_GRID_NOCLAMP, unity, V2D_GRID_NOCLAMP);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
+  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_draw(v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 
-  /* current frame indicator */
-  if (sc->flag & SC_SHOW_SECONDS) {
-    cfra_flag |= DRAWCFRA_UNIT_SECONDS;
+  /* scale indicators */
+  {
+    rcti rect;
+    BLI_rcti_init(&rect,
+                  0,
+                  15 * UI_DPI_FAC,
+                  15 * UI_DPI_FAC,
+                  UI_DPI_FAC * ar->sizey - UI_TIME_SCRUB_MARGIN_Y);
+    UI_view2d_draw_scale_y__values(ar, v2d, &rect, TH_TEXT);
   }
-  UI_view2d_view_orthoSpecial(ar, v2d, 1);
-  ANIM_draw_cfra_number(C, v2d, cfra_flag);
 }
 
 static void dopesheet_region_draw(const bContext *C, ARegion *ar)
@@ -1064,9 +1098,8 @@ static void dopesheet_region_draw(const bContext *C, ARegion *ar)
   SpaceClip *sc = CTX_wm_space_clip(C);
   MovieClip *clip = ED_space_clip_get_clip(sc);
   View2D *v2d = &ar->v2d;
-  View2DGrid *grid;
   View2DScrollers *scrollers;
-  short unit = 0, cfra_flag = 0;
+  short cfra_flag = 0;
 
   if (clip) {
     BKE_tracking_dopesheet_update(&clip->tracking);
@@ -1079,11 +1112,7 @@ static void dopesheet_region_draw(const bContext *C, ARegion *ar)
   UI_view2d_view_ortho(v2d);
 
   /* time grid */
-  unit = (sc->flag & SC_SHOW_SECONDS) ? V2D_UNIT_SECONDS : V2D_UNIT_FRAMES;
-  grid = UI_view2d_grid_calc(
-      scene, v2d, unit, V2D_GRID_CLAMP, V2D_ARG_DUMMY, V2D_ARG_DUMMY, ar->winx, ar->winy);
-  UI_view2d_grid_draw(v2d, grid, V2D_GRIDLINES_ALL);
-  UI_view2d_grid_free(grid);
+  UI_view2d_draw_lines_x__discrete_frames_or_seconds(v2d, scene, sc->flag & SC_SHOW_SECONDS);
 
   /* data... */
   clip_draw_dopesheet_main(sc, ar, scene);
@@ -1097,15 +1126,13 @@ static void dopesheet_region_draw(const bContext *C, ARegion *ar)
   /* reset view matrix */
   UI_view2d_view_restore(C);
 
-  /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, NULL, unit, V2D_GRID_CLAMP, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
+  /* time-scrubbing */
+  ED_time_scrub_draw(ar, scene, sc->flag & SC_SHOW_SECONDS, true);
 
-  /* current frame number indicator */
-  UI_view2d_view_orthoSpecial(ar, v2d, 1);
-  ANIM_draw_cfra_number(C, v2d, cfra_flag);
+  /* scrollers */
+  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_draw(v2d, scrollers);
+  UI_view2d_scrollers_free(scrollers);
 }
 
 static void clip_preview_region_draw(const bContext *C, ARegion *ar)
@@ -1199,7 +1226,7 @@ static void clip_header_region_listener(wmWindow *UNUSED(win),
       switch (wmn->data) {
         /* for proportional editmode only */
         case ND_TOOLSETTINGS:
-          /* TODO - should do this when in mask mode only but no datas available */
+          /* TODO - should do this when in mask mode only but no data available */
           // if (sc->mode == SC_MODE_MASKEDIT)
           {
             ED_region_tag_redraw(ar);
@@ -1342,6 +1369,7 @@ void ED_spacetype_clip(void)
   st->keymap = clip_keymap;
   st->listener = clip_listener;
   st->context = clip_context;
+  st->gizmos = clip_gizmos;
   st->dropboxes = clip_dropboxes;
   st->refresh = clip_refresh;
   st->id_remap = clip_id_remap;
@@ -1352,7 +1380,7 @@ void ED_spacetype_clip(void)
   art->init = clip_main_region_init;
   art->draw = clip_main_region_draw;
   art->listener = clip_main_region_listener;
-  art->keymapflag = ED_KEYMAP_FRAMES | ED_KEYMAP_UI | ED_KEYMAP_GPENCIL;
+  art->keymapflag = ED_KEYMAP_GIZMO | ED_KEYMAP_FRAMES | ED_KEYMAP_UI | ED_KEYMAP_GPENCIL;
 
   BLI_addhead(&st->regiontypes, art);
 
@@ -1370,7 +1398,7 @@ void ED_spacetype_clip(void)
   /* regions: properties */
   art = MEM_callocN(sizeof(ARegionType), "spacetype clip region properties");
   art->regionid = RGN_TYPE_UI;
-  art->prefsizex = UI_COMPACT_PANEL_WIDTH;
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_FRAMES | ED_KEYMAP_UI;
   art->init = clip_properties_region_init;
   art->draw = clip_properties_region_draw;
@@ -1381,7 +1409,7 @@ void ED_spacetype_clip(void)
   /* regions: tools */
   art = MEM_callocN(sizeof(ARegionType), "spacetype clip region tools");
   art->regionid = RGN_TYPE_TOOLS;
-  art->prefsizex = UI_COMPACT_PANEL_WIDTH;
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_FRAMES | ED_KEYMAP_UI;
   art->listener = clip_props_region_listener;
   art->init = clip_tools_region_init;

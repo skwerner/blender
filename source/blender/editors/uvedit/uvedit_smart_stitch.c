@@ -290,7 +290,7 @@ static void stitch_preview_delete(StitchPreviewer *stitch_preview)
 /* This function updates the header of the UV editor when the stitch tool updates its settings */
 static void stitch_update_header(StitchStateContainer *ssc, bContext *C)
 {
-  const char *str = IFACE_(
+  const char *str = TIP_(
       "Mode(TAB) %s, "
       "(S)nap %s, "
       "(M)idpoints %s, "
@@ -305,7 +305,7 @@ static void stitch_update_header(StitchStateContainer *ssc, bContext *C)
     BLI_snprintf(msg,
                  sizeof(msg),
                  str,
-                 ssc->mode == STITCH_VERT ? IFACE_("Vertex") : IFACE_("Edge"),
+                 ssc->mode == STITCH_VERT ? TIP_("Vertex") : TIP_("Edge"),
                  WM_bool_as_string(ssc->snap_islands),
                  WM_bool_as_string(ssc->midpoints),
                  ssc->limit_dist,
@@ -1808,7 +1808,7 @@ static void stitch_draw(const bContext *UNUSED(C), ARegion *UNUSED(ar), void *ar
         GPU_vertbuf_attr_set(
             vbo_line, pos_id, line_idx++, &stitch_preview->preview_polys[index + 2]);
 
-        for (j = 1; j < stitch_preview->uvs_per_polygon[i] - 1; ++j) {
+        for (j = 1; j < stitch_preview->uvs_per_polygon[i] - 1; j++) {
           GPU_vertbuf_attr_set(vbo, pos_id, tri_idx++, &stitch_preview->preview_polys[index]);
           GPU_vertbuf_attr_set(
               vbo, pos_id, tri_idx++, &stitch_preview->preview_polys[index + (j + 0) * 2]);

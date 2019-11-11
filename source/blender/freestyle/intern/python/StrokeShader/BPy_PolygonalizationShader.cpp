@@ -63,13 +63,14 @@ static int PolygonalizationShader___init__(BPy_PolygonalizationShader *self,
   static const char *kwlist[] = {"error", NULL};
   float f;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "f", (char **)kwlist, &f))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "f", (char **)kwlist, &f)) {
     return -1;
+  }
   self->py_ss.ss = new StrokeShaders::PolygonalizationShader(f);
   return 0;
 }
 
-/*-----------------------BPy_PolygonalizationShader type definition ------------------------------*/
+/*-----------------------BPy_PolygonalizationShader type definition -----------------------------*/
 
 PyTypeObject PolygonalizationShader_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "PolygonalizationShader", /* tp_name */

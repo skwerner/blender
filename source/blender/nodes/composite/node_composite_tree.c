@@ -95,15 +95,17 @@ static void free_cache(bNodeTree *ntree)
 }
 
 /* local tree then owns all compbufs */
-static void localize(bNodeTree *UNUSED(localtree), bNodeTree *ntree)
+static void localize(bNodeTree *localtree, bNodeTree *ntree)
 {
-  bNode *node;
-  bNodeSocket *sock;
 
-  for (node = ntree->nodes.first; node; node = node->next) {
+  bNode *node = ntree->nodes.first;
+  bNode *local_node = localtree->nodes.first;
+  while (node != NULL) {
+    local_node->original = node;
+
     /* ensure new user input gets handled ok */
     node->need_exec = 0;
-    node->new_node->original = node;
+    local_node->original = node;
 
     /* move over the compbufs */
     /* right after ntreeCopyTree() oldsock pointers are valid */
@@ -111,19 +113,29 @@ static void localize(bNodeTree *UNUSED(localtree), bNodeTree *ntree)
     if (ELEM(node->type, CMP_NODE_VIEWER, CMP_NODE_SPLITVIEWER)) {
       if (node->id) {
         if (node->flag & NODE_DO_OUTPUT) {
-          node->new_node->id = (ID *)node->id;
+          local_node->id = (ID *)node->id;
         }
         else {
-          node->new_node->id = NULL;
+          local_node->id = NULL;
         }
       }
     }
 
-    for (sock = node->outputs.first; sock; sock = sock->next) {
-      sock->new_sock->cache = sock->cache;
-      sock->cache = NULL;
-      sock->new_sock->new_sock = sock;
+    bNodeSocket *output_sock = node->outputs.first;
+    bNodeSocket *local_output_sock = local_node->outputs.first;
+    while (output_sock != NULL) {
+      local_output_sock->cache = output_sock->cache;
+      output_sock->cache = NULL;
+      /* This is actually link to original: someone was just lazy enough and tried to save few
+       * bytes in the cost of readability. */
+      local_output_sock->new_sock = output_sock;
+
+      output_sock = output_sock->next;
+      local_output_sock = local_output_sock->next;
     }
+
+    node = node->next;
+    local_node = local_node->next;
   }
 }
 
@@ -247,11 +259,12 @@ void ntreeCompositExecTree(Scene *scene,
 
 /* Update the outputs of the render layer nodes.
  * Since the outputs depend on the render engine, this part is a bit complex:
- * - ntreeCompositUpdateRLayers is called and loops over all render layer nodes
- * - Each render layer node calls the update function of the render engine that's used for its scene
- * - The render engine calls RE_engine_register_pass for each pass
- * - RE_engine_register_pass calls ntreeCompositRegisterPass,
- *   which calls node_cmp_rlayers_register_pass for every render layer node
+ * - ntreeCompositUpdateRLayers is called and loops over all render layer nodes.
+ * - Each render layer node calls the update function of the
+ *   render engine that's used for its scene.
+ * - The render engine calls RE_engine_register_pass for each pass.
+ * - RE_engine_register_pass calls ntreeCompositRegisterPass,.
+ *   which calls node_cmp_rlayers_register_pass for every render layer node.
  */
 void ntreeCompositUpdateRLayers(bNodeTree *ntree)
 {
@@ -292,7 +305,9 @@ void ntreeCompositTagRender(Scene *curscene)
 
   /* XXX Think using G_MAIN here is valid, since you want to update current file's scene nodes,
    * not the ones in temp main generated for rendering?
-   * This is still rather weak though, ideally render struct would store own main AND original G_MAIN... */
+   * This is still rather weak though,
+   * ideally render struct would store own main AND original G_MAIN. */
+
   for (sce = G_MAIN->scenes.first; sce; sce = sce->id.next) {
     if (sce->nodetree) {
       bNode *node;

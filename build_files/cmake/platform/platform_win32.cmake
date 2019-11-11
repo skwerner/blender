@@ -30,14 +30,30 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
   set(MSVC_CLANG On)
   set(VC_TOOLS_DIR $ENV{VCToolsRedistDir} CACHE STRING "Location of the msvc redistributables")
   set(MSVC_REDIST_DIR ${VC_TOOLS_DIR})
-  if (DEFINED MSVC_REDIST_DIR)
+  if(DEFINED MSVC_REDIST_DIR)
     file(TO_CMAKE_PATH ${MSVC_REDIST_DIR} MSVC_REDIST_DIR)
   else()
     message("Unable to detect the Visual Studio redist directory, copying of the runtime dlls will not work, try running from the visual studio developer prompt.")
   endif()
+  # 1) CMake has issues detecting openmp support in clang-cl so we have to provide
+  #    the right switches here.
+  # 2) While the /openmp switch *should* work, it currently doesn't as for clang 9.0.0
+  if(WITH_OPENMP)
+    set(OPENMP_CUSTOM ON)
+    set(OPENMP_FOUND ON)
+    set(OpenMP_C_FLAGS "/clang:-fopenmp")
+    set(OpenMP_CXX_FLAGS "/clang:-fopenmp")
+    GET_FILENAME_COMPONENT(LLVMROOT "[HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\LLVM\\LLVM;]" ABSOLUTE CACHE)
+    set(CLANG_OPENMP_DLL "${LLVMROOT}/bin/libomp.dll")
+    set(CLANG_OPENMP_LIB "${LLVMROOT}/lib/libomp.lib")
+    if(NOT EXISTS "${CLANG_OPENMP_DLL}")
+      message(FATAL_ERROR "Clang OpenMP library (${CLANG_OPENMP_DLL}) not found.")
+    endif()
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \"${CLANG_OPENMP_LIB}\"")
+  endif()
 endif()
 
-set_property(GLOBAL PROPERTY USE_FOLDERS ${WINDOWS_USE_VISUAL_STUDIO_FOLDERS})
+set_property(GLOBAL PROPERTY USE_FOLDERS ${WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS})
 
 if(NOT WITH_PYTHON_MODULE)
   set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT blender)
@@ -96,7 +112,7 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /SAFESEH:NO")
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO")
 
 list(APPEND PLATFORM_LINKLIBS
-  ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32
+  ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32 Comctl32
   advapi32 shfolder shell32 ole32 oleaut32 uuid psapi Dbghelp
 )
 
@@ -131,21 +147,27 @@ if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARN_FLAGS} /nologo /J /Gd /EHsc -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference ")
   set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference")
 else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /nologo /J /Gd /MP /EHsc")
-  set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd /MP")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /nologo /J /Gd /MP /EHsc /bigobj")
+  set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd /MP /bigobj")
 endif()
 
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /MT")
-set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} /MT")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MT")
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /MT")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd /ZI")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MDd /ZI")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MD")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /MD")
+set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} /MD")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MD")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /MD")
+
+# JMC is available on msvc 15.8 (1915) and up
+if(MSVC_VERSION GREATER 1914 AND NOT MSVC_CLANG)
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /JMC")
+endif()
 
 set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152 /INCREMENTAL:NO ")
-set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcmrt.lib /NODEFAULTLIB:msvcurt.lib /NODEFAULTLIB:msvcrtd.lib ")
+set(PLATFORM_LINKFLAGS_RELEASE "/NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrtd.lib")
+set(PLATFORM_LINKFLAGS_DEBUG "${PLATFORM_LINKFLAGS_DEBUG} /IGNORE:4099 /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:libcmtd.lib")
 
 # Ignore meaningless for us linker warnings.
 set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /ignore:4049 /ignore:4217 /ignore:4221")
@@ -157,8 +179,6 @@ else()
   set(PLATFORM_LINKFLAGS "/MACHINE:IX86 /LARGEADDRESSAWARE ${PLATFORM_LINKFLAGS}")
 endif()
 
-set(PLATFORM_LINKFLAGS_DEBUG "${PLATFORM_LINKFLAGS_DEBUG} /IGNORE:4099 /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libc.lib")
-
 if(NOT DEFINED LIBDIR)
 
   # Setup 64bit and 64bit windows systems
@@ -166,28 +186,30 @@ if(NOT DEFINED LIBDIR)
     message(STATUS "64 bit compiler detected.")
     set(LIBDIR_BASE "win64")
   else()
-    message(STATUS "32 bit compiler detected.")
-    set(LIBDIR_BASE "windows")
+    message(FATAL_ERROR "32 bit compiler detected, blender no longer provides pre-build libraries for 32 bit windows, please set the LIBDIR cmake variable to your own library folder")
   endif()
   # Can be 1910..1912
   if(MSVC_VERSION GREATER 1919)
     message(STATUS "Visual Studio 2019 detected.")
-    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc14)
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc15)
   elseif(MSVC_VERSION GREATER 1909)
     message(STATUS "Visual Studio 2017 detected.")
-    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc14)
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc15)
   elseif(MSVC_VERSION EQUAL 1900)
     message(STATUS "Visual Studio 2015 detected.")
-    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc14)
-  else()
-    message(STATUS "Visual Studio 2013 detected.")
-    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc12)
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc15)
   endif()
 else()
   message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
 endif()
 if(NOT EXISTS "${LIBDIR}/")
-  message(FATAL_ERROR "Windows requires pre-compiled libs at: '${LIBDIR}'")
+  message(FATAL_ERROR "\n\nWindows requires pre-compiled libs at: '${LIBDIR}'. Please run `make update` in the blender source folder to obtain them.")
+endif()
+
+# Mark libdir as system headers with a lower warn level, to resolve some warnings
+# that we have very little control over
+if(MSVC_VERSION GREATER_EQUAL 1914 AND NOT MSVC_CLANG)
+  add_compile_options(/experimental:external /external:templates- /external:I "${LIBDIR}" /external:W0)
 endif()
 
 # Add each of our libraries to our cmake_prefix_path so find_package() could work
@@ -337,15 +359,13 @@ if(WITH_PYTHON)
   set(PYTHON_VERSION 3.7) # CACHE STRING)
 
   string(REPLACE "." "" _PYTHON_VERSION_NO_DOTS ${PYTHON_VERSION})
-  # Use shared libs for vc2008 and vc2010 until we actually have vc2010 libs
-  set(PYTHON_LIBRARY ${LIBDIR}/python/lib/python${_PYTHON_VERSION_NO_DOTS}.lib)
-  set(PYTHON_LIBRARY_DEBUG ${LIBDIR}/python/lib/python${_PYTHON_VERSION_NO_DOTS}_d.lib)
+  set(PYTHON_LIBRARY ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/libs/python${_PYTHON_VERSION_NO_DOTS}.lib)
+  set(PYTHON_LIBRARY_DEBUG ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/libs/python${_PYTHON_VERSION_NO_DOTS}_d.lib)
 
+  set(PYTHON_INCLUDE_DIR ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/include)
+  set(PYTHON_NUMPY_INCLUDE_DIRS ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/lib/site-packages/numpy/core/include)
+  set(NUMPY_FOUND On)
   unset(_PYTHON_VERSION_NO_DOTS)
-
-  # Shared includes for both vc2008 and vc2010
-  set(PYTHON_INCLUDE_DIR ${LIBDIR}/python/include/python${PYTHON_VERSION})
-
   # uncached vars
   set(PYTHON_INCLUDE_DIRS "${PYTHON_INCLUDE_DIR}")
   set(PYTHON_LIBRARIES debug "${PYTHON_LIBRARY_DEBUG}" optimized "${PYTHON_LIBRARY}" )
@@ -373,11 +393,8 @@ if(WITH_BOOST)
     set(BOOST_INCLUDE_DIR ${BOOST}/include)
     set(BOOST_LIBPATH ${BOOST}/lib)
     if(CMAKE_CL_64)
-      set(BOOST_POSTFIX "vc140-mt-s-x64-1_68.lib")
-      set(BOOST_DEBUG_POSTFIX "vc140-mt-sgd-x64-1_68.lib")
-    else()
-      set(BOOST_POSTFIX "vc140-mt-s-x32-1_68.lib")
-      set(BOOST_DEBUG_POSTFIX "vc140-mt-sgd-x32-1_68.lib")
+      set(BOOST_POSTFIX "vc141-mt-x64-1_68.lib")
+      set(BOOST_DEBUG_POSTFIX "vc141-mt-gd-x64-1_68.lib")
     endif()
     set(BOOST_LIBRARIES
       optimized ${BOOST_LIBPATH}/libboost_date_time-${BOOST_POSTFIX}
@@ -413,7 +430,7 @@ endif()
 
 if(WITH_OPENIMAGEIO)
   windows_find_package(OpenImageIO)
-  set(OPENIMAGEIO ${LIBDIR}/openimageio)
+  set(OPENIMAGEIO ${LIBDIR}/OpenImageIO)
   set(OPENIMAGEIO_LIBPATH ${OPENIMAGEIO}/lib)
   set(OPENIMAGEIO_INCLUDE_DIRS ${OPENIMAGEIO}/include)
   set(OIIO_OPTIMIZED optimized ${OPENIMAGEIO_LIBPATH}/OpenImageIO.lib optimized ${OPENIMAGEIO_LIBPATH}/OpenImageIO_Util.lib)
@@ -454,14 +471,14 @@ if(WITH_LLVM)
 endif()
 
 if(WITH_OPENCOLORIO)
-  set(OPENCOLORIO ${LIBDIR}/opencolorio)
+  set(OPENCOLORIO ${LIBDIR}/OpenColorIO)
   set(OPENCOLORIO_INCLUDE_DIRS ${OPENCOLORIO}/include)
-  set(OPENCOLORIO_LIBPATH ${LIBDIR}/opencolorio/lib)
+  set(OPENCOLORIO_LIBPATH ${OPENCOLORIO}/lib)
   set(OPENCOLORIO_LIBRARIES
     optimized ${OPENCOLORIO_LIBPATH}/OpenColorIO.lib
     optimized ${OPENCOLORIO_LIBPATH}/tinyxml.lib
     optimized ${OPENCOLORIO_LIBPATH}/libyaml-cpp.lib
-    debug ${OPENCOLORIO_LIBPATH}/OpenColorIO_d.lib
+    debug ${OPENCOLORIO_LIBPATH}/OpencolorIO_d.lib
     debug ${OPENCOLORIO_LIBPATH}/tinyxml_d.lib
     debug ${OPENCOLORIO_LIBPATH}/libyaml-cpp_d.lib
   )
@@ -470,13 +487,25 @@ endif()
 
 if(WITH_OPENVDB)
   set(BLOSC_LIBRARIES optimized ${LIBDIR}/blosc/lib/libblosc.lib debug ${LIBDIR}/blosc/lib/libblosc_d.lib)
-  set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/tbb_debug.lib)
-  set(TBB_INCLUDE_DIR ${LIBDIR}/tbb/include)
-  set(OPENVDB ${LIBDIR}/openvdb)
-  set(OPENVDB_LIBPATH ${LIBDIR}/openvdb/lib)
-  set(OPENVDB_INCLUDE_DIRS ${OPENVDB}/include ${TBB_INCLUDE_DIR})
-  set(OPENVDB_LIBRARIES optimized ${OPENVDB_LIBPATH}/openvdb.lib debug ${OPENVDB_LIBPATH}/openvdb_d.lib ${TBB_LIBRARIES} ${BLOSC_LIBRARIES})
+  set(OPENVDB ${LIBDIR}/openVDB)
+  set(OPENVDB_LIBPATH ${OPENVDB}/lib)
+  set(OPENVDB_INCLUDE_DIRS ${OPENVDB}/include)
+  set(OPENVDB_LIBRARIES optimized ${OPENVDB_LIBPATH}/openvdb.lib debug ${OPENVDB_LIBPATH}/openvdb_d.lib ${BLOSC_LIBRARIES})
   set(OPENVDB_DEFINITIONS -DNOMINMAX)
+endif()
+
+if(WITH_OPENIMAGEDENOISE)
+  set(OPENIMAGEDENOISE ${LIBDIR}/OpenImageDenoise)
+  set(OPENIMAGEDENOISE_LIBPATH ${LIBDIR}/OpenImageDenoise/lib)
+  set(OPENIMAGEDENOISE_INCLUDE_DIRS ${OPENIMAGEDENOISE}/include)
+  set(OPENIMAGEDENOISE_LIBRARIES
+    optimized ${OPENIMAGEDENOISE_LIBPATH}/OpenImageDenoise.lib
+    optimized ${OPENIMAGEDENOISE_LIBPATH}/common.lib
+    optimized ${OPENIMAGEDENOISE_LIBPATH}/mkldnn.lib
+    debug ${OPENIMAGEDENOISE_LIBPATH}/OpenImageDenoise_d.lib
+    debug ${OPENIMAGEDENOISE_LIBPATH}/common_d.lib
+    debug ${OPENIMAGEDENOISE_LIBPATH}/mkldnn_d.lib)
+  set(OPENIMAGEDENOISE_DEFINITIONS)
 endif()
 
 if(WITH_ALEMBIC)
@@ -484,7 +513,7 @@ if(WITH_ALEMBIC)
   set(ALEMBIC_INCLUDE_DIR ${ALEMBIC}/include)
   set(ALEMBIC_INCLUDE_DIRS ${ALEMBIC_INCLUDE_DIR})
   set(ALEMBIC_LIBPATH ${ALEMBIC}/lib)
-  set(ALEMBIC_LIBRARIES optimized ${ALEMBIC}/lib/alembic.lib debug ${ALEMBIC}/lib/alembic_d.lib)
+  set(ALEMBIC_LIBRARIES optimized ${ALEMBIC}/lib/Alembic.lib debug ${ALEMBIC}/lib/Alembic_d.lib)
   set(ALEMBIC_FOUND 1)
 endif()
 
@@ -540,10 +569,25 @@ if(WITH_SYSTEM_AUDASPACE)
   set(AUDASPACE_PY_LIBRARIES ${LIBDIR}/audaspace/lib/audaspace-py.lib)
 endif()
 
+if(WITH_TBB)
+  set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/tbb_debug.lib)
+  set(TBB_INCLUDE_DIR ${LIBDIR}/tbb/include)
+  set(TBB_INCLUDE_DIRS ${TBB_INCLUDE_DIR})
+else()
+  if(WITH_OPENIMAGEDENOISE)
+    message(STATUS "TBB disabled, also disabling OpenImageDenoise")
+    set(WITH_OPENIMAGEDENOISE OFF)
+  endif()
+  if(WITH_OPENVDB)
+    message(STATUS "TBB disabled, also disabling OpenVDB")
+    set(WITH_OPENVDB OFF)
+  endif()
+endif()
+
 # used in many places so include globally, like OpenGL
 blender_include_dirs_sys("${PTHREADS_INCLUDE_DIRS}")
 
-#find signtool
+# Find signtool.
 set(ProgramFilesX86_NAME "ProgramFiles(x86)") #env dislikes the ( )
 find_program(SIGNTOOL_EXE signtool
   HINTS
@@ -637,7 +681,7 @@ if(WITH_CYCLES_EMBREE)
   endif()
 endif()
 
-if (WINDOWS_PYTHON_DEBUG)
+if(WINDOWS_PYTHON_DEBUG)
   # Include the system scripts in the blender_python_system_scripts project.
   FILE(GLOB_RECURSE inFiles "${CMAKE_SOURCE_DIR}/release/scripts/*.*" )
   ADD_CUSTOM_TARGET(blender_python_system_scripts SOURCES ${inFiles})

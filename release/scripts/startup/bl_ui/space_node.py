@@ -21,19 +21,22 @@ import bpy
 import nodeitems_utils
 from bpy.types import Header, Menu, Panel
 from bpy.app.translations import pgettext_iface as iface_
+from bpy.app.translations import contexts as i18n_contexts
 from bl_ui.utils import PresetPanel
-from .properties_grease_pencil_common import (
+from bl_ui.properties_grease_pencil_common import (
     AnnotationDataPanel,
-    GreasePencilToolsPanel,
 )
-from .properties_material import (
+from bl_ui.space_toolsystem_common import (
+    ToolActivePanelHelper,
+)
+from bl_ui.properties_material import (
     EEVEE_MATERIAL_PT_settings,
     MATERIAL_PT_viewport
 )
-from .properties_world import (
+from bl_ui.properties_world import (
     WORLD_PT_viewport_display
 )
-from .properties_data_light import (
+from bl_ui.properties_data_light import (
     DATA_PT_light,
     DATA_PT_EEVEE_light,
 )
@@ -50,6 +53,7 @@ class NODE_HT_header(Header):
         snode_id = snode.id
         id_from = snode.id_from
         tool_settings = context.tool_settings
+        is_compositor = snode.tree_type == 'CompositorNodeTree'
 
         layout.template_header()
 
@@ -146,12 +150,6 @@ class NODE_HT_header(Header):
             if snode_id:
                 layout.prop(snode_id, "use_nodes")
 
-            layout.prop(snode, "use_auto_render")
-            layout.prop(snode, "show_backdrop")
-            if snode.show_backdrop:
-                row = layout.row(align=True)
-                row.prop(snode, "backdrop_channels", text="", expand=True)
-
         else:
             # Custom node tree is edited as independent ID block
             NODE_MT_editor_menus.draw_collapsible(context, layout)
@@ -160,12 +158,25 @@ class NODE_HT_header(Header):
 
             layout.template_ID(snode, "node_tree", new="node.new_node_tree")
 
-        layout.prop(snode, "pin", text="")
+        # Put pin next to ID block
+        if not is_compositor:
+            layout.prop(snode, "pin", text="", emboss=False)
+
         layout.separator_spacer()
 
-        layout.template_running_jobs()
+        # Put pin on the right for Compositing
+        if is_compositor:
+            layout.prop(snode, "pin", text="", emboss=False)
 
         layout.operator("node.tree_path_parent", text="", icon='FILE_PARENT')
+
+        # Backdrop
+        if is_compositor:
+            row = layout.row(align=True)
+            row.prop(snode, "show_backdrop", toggle=True)
+            sub = row.row(align=True)
+            sub.active = snode.show_backdrop
+            sub.prop(snode, "backdrop_channels", icon_only=True, text="", expand=True)
 
         # Snap
         row = layout.row(align=True)
@@ -190,6 +201,7 @@ class NODE_MT_editor_menus(Menu):
 class NODE_MT_add(bpy.types.Menu):
     bl_space_type = 'NODE_EDITOR'
     bl_label = "Add"
+    bl_translation_context = i18n_contexts.operator_default
 
     def draw(self, context):
         layout = self.layout
@@ -319,11 +331,17 @@ class NODE_MT_node(Menu):
         layout.operator("node.read_viewlayers")
 
 
+class NODE_PT_active_tool(ToolActivePanelHelper, Panel):
+    bl_space_type = 'NODE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "Tool"
+
+
 class NODE_PT_material_slots(Panel):
-    bl_space_type = "NODE_EDITOR"
+    bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'HEADER'
     bl_label = "Slot"
-    bl_ui_units_x = 8
+    bl_ui_units_x = 12
 
     def draw_header(self, context):
         ob = context.object
@@ -354,6 +372,12 @@ class NODE_PT_material_slots(Panel):
 
             col.operator("object.material_slot_move", icon='TRIA_UP', text="").direction = 'UP'
             col.operator("object.material_slot_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
+
+        if ob.mode == 'EDIT':
+            row = layout.row(align=True)
+            row.operator("object.material_slot_assign", text="Assign")
+            row.operator("object.material_slot_select", text="Select")
+            row.operator("object.material_slot_deselect", text="Deselect")
 
 
 class NODE_PT_node_color_presets(PresetPanel, Panel):
@@ -394,6 +418,9 @@ class NODE_MT_context_menu(Menu):
         # If something is selected
         layout.operator_context = 'INVOKE_DEFAULT'
         layout.operator("node.duplicate_move")
+        props = layout.operator("wm.call_panel", text="Rename...")
+        props.name = "TOPBAR_PT_name"
+        props.keep_open = False
         layout.operator("node.delete")
         layout.operator("node.clipboard_copy", text="Copy")
         layout.operator("node.clipboard_paste", text="Paste")
@@ -428,7 +455,7 @@ class NODE_MT_context_menu(Menu):
 class NODE_PT_active_node_generic(Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "Item"
     bl_label = "Node"
 
     @classmethod
@@ -446,7 +473,7 @@ class NODE_PT_active_node_generic(Panel):
 class NODE_PT_active_node_color(Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "Item"
     bl_label = "Color"
     bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = 'NODE_PT_active_node_generic'
@@ -476,10 +503,9 @@ class NODE_PT_active_node_color(Panel):
 class NODE_PT_active_node_properties(Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "Item"
     bl_label = "Properties"
     bl_options = {'DEFAULT_CLOSED'}
-    bl_parent_id = 'NODE_PT_active_node_generic'
 
     @classmethod
     def poll(cls, context):
@@ -510,7 +536,7 @@ class NODE_PT_active_node_properties(Panel):
 class NODE_PT_texture_mapping(Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "Item"
     bl_label = "Texture Mapping"
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
@@ -548,7 +574,7 @@ class NODE_PT_texture_mapping(Panel):
 class NODE_PT_backdrop(Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "View"
     bl_label = "Backdrop"
 
     @classmethod
@@ -563,6 +589,7 @@ class NODE_PT_backdrop(Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False
 
         snode = context.space_data
         layout.active = snode.show_backdrop
@@ -583,7 +610,7 @@ class NODE_PT_backdrop(Panel):
 class NODE_PT_quality(bpy.types.Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "Options"
     bl_label = "Performance"
 
     @classmethod
@@ -594,6 +621,7 @@ class NODE_PT_quality(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False
 
         snode = context.space_data
         tree = snode.node_tree
@@ -608,6 +636,8 @@ class NODE_PT_quality(bpy.types.Panel):
         col.prop(tree, "use_groupnode_buffer")
         col.prop(tree, "use_two_pass")
         col.prop(tree, "use_viewer_border")
+        col.separator()
+        col.prop(snode, "use_auto_render")
 
 
 class NODE_UL_interface_sockets(bpy.types.UIList):
@@ -634,10 +664,10 @@ class NODE_UL_interface_sockets(bpy.types.UIList):
 
 
 # Grease Pencil properties
-class NODE_PT_grease_pencil(AnnotationDataPanel, Panel):
+class NODE_PT_annotation(AnnotationDataPanel, Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
-    bl_category = "Node"
+    bl_category = "View"
     bl_options = {'DEFAULT_CLOSED'}
 
     # NOTE: this is just a wrapper around the generic GP Panel
@@ -648,17 +678,6 @@ class NODE_PT_grease_pencil(AnnotationDataPanel, Panel):
         return snode is not None and snode.node_tree is not None
 
 
-class NODE_PT_grease_pencil_tools(GreasePencilToolsPanel, Panel):
-    bl_space_type = 'NODE_EDITOR'
-    bl_region_type = 'UI'
-    bl_category = "Node"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    # NOTE: this is just a wrapper around the generic GP tools panel
-    # It contains access to some essential tools usually found only in
-    # toolbar, but which may not necessarily be open
-
-
 def node_draw_tree_view(_layout, _context):
     pass
 
@@ -666,11 +685,16 @@ def node_draw_tree_view(_layout, _context):
 # Adapt properties editor panel to display in node editor. We have to
 # copy the class rather than inherit due to the way bpy registration works.
 def node_panel(cls):
-    node_cls = type('NODE_' + cls.__name__, cls.__bases__, dict(cls.__dict__))
+    node_cls_dict = cls.__dict__.copy()
+
+    # Needed for re-registration.
+    node_cls_dict.pop("bl_rna", None)
+
+    node_cls = type('NODE_' + cls.__name__, cls.__bases__, node_cls_dict)
 
     node_cls.bl_space_type = 'NODE_EDITOR'
     node_cls.bl_region_type = 'UI'
-    node_cls.bl_category = "Node"
+    node_cls.bl_category = "Options"
     if hasattr(node_cls, 'bl_parent_id'):
         node_cls.bl_parent_id = 'NODE_' + node_cls.bl_parent_id
 
@@ -692,10 +716,10 @@ classes = (
     NODE_PT_active_node_color,
     NODE_PT_active_node_properties,
     NODE_PT_texture_mapping,
+    NODE_PT_active_tool,
     NODE_PT_backdrop,
     NODE_PT_quality,
-    NODE_PT_grease_pencil,
-    NODE_PT_grease_pencil_tools,
+    NODE_PT_annotation,
     NODE_UL_interface_sockets,
 
     node_panel(EEVEE_MATERIAL_PT_settings),

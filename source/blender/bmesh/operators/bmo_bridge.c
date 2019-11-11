@@ -59,7 +59,7 @@ static void bm_bridge_splice_loops(BMesh *bm,
 
 /* get the 2 loops matching 2 verts.
  * first attempt to get the face corners that use the edge defined by v1 & v2,
- * if that fails just get any loop thats on the vert (the first one) */
+ * if that fails just get any loop that's on the vert (the first one) */
 static void bm_vert_loop_pair(BMesh *bm, BMVert *v1, BMVert *v2, BMLoop **l1, BMLoop **l2)
 {
   BMEdge *e = BM_edge_exists(v1, v2);
@@ -211,8 +211,11 @@ static void bridge_loop_pair(BMesh *bm,
        * +--------+  +--------+
        * </pre>
        *
-       * When loops are aligned to the direction between the loops values of 'dir_a/b' is degenerate,
-       * in this case compare the original directions (before they were corrected by 'el_dir'), see: T43013
+       * When loops are aligned to the direction between
+       * the loops values of 'dir_a/b' is degenerate,
+       * in this case compare the original directions
+       * (before they were corrected by 'el_dir'),
+       * see: T43013
        */
       test_a = dir_a_orig;
       test_b = dir_b_orig;
@@ -397,7 +400,7 @@ static void bridge_loop_pair(BMesh *bm,
       f_example = l_a ? l_a->f : (l_b ? l_b->f : NULL);
 
       if (v_b != v_b_next) {
-        BMVert *v_arr[4] = {v_a, v_b, v_b_next, v_a_next};
+        BMVert *v_arr[4] = {v_b, v_b_next, v_a_next, v_a};
         f = BM_face_exists(v_arr, 4);
         if (f == NULL) {
           /* copy if loop data if its is missing on one ring */
@@ -422,7 +425,7 @@ static void bridge_loop_pair(BMesh *bm,
         }
       }
       else {
-        BMVert *v_arr[3] = {v_a, v_b, v_a_next};
+        BMVert *v_arr[3] = {v_b, v_a_next, v_a};
         f = BM_face_exists(v_arr, 3);
         if (f == NULL) {
           /* fan-fill a triangle */
@@ -512,7 +515,7 @@ static void bridge_loop_pair(BMesh *bm,
     }
 
     BMO_op_exec(bm, &op_sub);
-    /* there may also be tagged faces that didnt rotate, mark input */
+    /* there may also be tagged faces that didn't rotate, mark input */
 
     if (use_edgeout) {
       BMOIter siter;

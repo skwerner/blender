@@ -191,7 +191,7 @@ void ntreeCompositOutputFileSetLayer(bNode *node, bNodeSocket *sock, const char 
 static void init_output_file(const bContext *C, PointerRNA *ptr)
 {
   Scene *scene = CTX_data_scene(C);
-  bNodeTree *ntree = ptr->id.data;
+  bNodeTree *ntree = (bNodeTree *)ptr->owner_id;
   bNode *node = ptr->data;
   NodeImageMultiFile *nimf = MEM_callocN(sizeof(NodeImageMultiFile), "node image multi file");
   ImageFormatData *format = NULL;
@@ -228,7 +228,9 @@ static void free_output_file(bNode *node)
   MEM_freeN(node->storage);
 }
 
-static void copy_output_file(bNodeTree *UNUSED(dest_ntree), bNode *dest_node, bNode *src_node)
+static void copy_output_file(bNodeTree *UNUSED(dest_ntree),
+                             bNode *dest_node,
+                             const bNode *src_node)
 {
   bNodeSocket *src_sock, *dest_sock;
 

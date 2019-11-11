@@ -18,10 +18,12 @@
  * \ingroup bli
  */
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "BLI_utildefines.h"
+#include "BLI_math_base.h"
 #include "BLI_system.h"
 #include "BLI_string.h"
 
@@ -31,7 +33,10 @@
 #if defined(WIN32)
 #  include <intrin.h>
 #  include <windows.h>
+#  pragma warning(push)
+#  pragma warning(disable : 4091)
 #  include <dbghelp.h>
+#  pragma warning(pop)
 #else
 #  include <execinfo.h>
 #  include <unistd.h>
@@ -120,7 +125,7 @@ void BLI_system_backtrace(FILE *fp)
   for (i = 0; i < nframes; i++) {
     SymFromAddr(process, (DWORD64)(stack[i]), 0, symbolinfo);
 
-    fprintf(fp, "%u: %s - 0x%0X\n", nframes - i - 1, symbolinfo->Name, symbolinfo->Address);
+    fprintf(fp, "%u: %s - 0x%0llX\n", nframes - i - 1, symbolinfo->Name, symbolinfo->Address);
   }
 
   MEM_freeN(symbolinfo);
@@ -174,6 +179,19 @@ char *BLI_cpu_brand_string(void)
   return NULL;
 }
 
+int BLI_cpu_support_sse41(void)
+{
+  int result[4], num;
+  __cpuid(result, 0);
+  num = result[0];
+
+  if (num >= 1) {
+    __cpuid(result, 0x00000001);
+    return (result[2] & ((int)1 << 19)) != 0;
+  }
+  return 0;
+}
+
 void BLI_hostname_get(char *buffer, size_t bufsize)
 {
 #ifndef WIN32
@@ -188,4 +206,21 @@ void BLI_hostname_get(char *buffer, size_t bufsize)
     strncpy(buffer, "-unknown-", bufsize);
   }
 #endif
+}
+
+size_t BLI_system_memory_max_in_megabytes(void)
+{
+  /* Maximum addressable bytes on this platform.
+   *
+   * NOTE: Due to the shift arithmetic this is a half of the memory. */
+  const size_t limit_bytes_half = (((size_t)1) << ((sizeof(size_t) * 8) - 1));
+  /* Convert it to megabytes and return. */
+  return (limit_bytes_half >> 20) * 2;
+}
+
+int BLI_system_memory_max_in_megabytes_int(void)
+{
+  const size_t limit_megabytes = BLI_system_memory_max_in_megabytes();
+  /* NOTE: The result will fit into integer. */
+  return (int)min_zz(limit_megabytes, (size_t)INT_MAX);
 }

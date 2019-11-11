@@ -48,11 +48,11 @@
 #include "BLI_timecode.h"
 #include "BLI_fileops.h"
 #include "BLI_threads.h"
-#include "BLI_callbacks.h"
 
 #include "BLT_translation.h"
 
 #include "BKE_animsys.h" /* <------ should this be here?, needed for sequencer update */
+#include "BKE_callbacks.h"
 #include "BKE_camera.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h" /* XXX needed by wm_window.h */
@@ -74,6 +74,7 @@
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_debug.h"
 #include "DEG_depsgraph_query.h"
 
 #include "PIL_time.h"
@@ -133,6 +134,24 @@ static struct {
   ListBase renderlist;
 } RenderGlobal = {{NULL, NULL}};
 
+/* ********* callbacks ******** */
+
+static void render_callback_exec_null(Render *re, Main *bmain, eCbEvent evt)
+{
+  if (re->r.scemode & R_BUTS_PREVIEW) {
+    return;
+  }
+  BKE_callback_exec_null(bmain, evt);
+}
+
+static void render_callback_exec_id(Render *re, Main *bmain, ID *id, eCbEvent evt)
+{
+  if (re->r.scemode & R_BUTS_PREVIEW) {
+    return;
+  }
+  BKE_callback_exec_id(bmain, id, evt);
+}
+
 /* ********* alloc and free ******** */
 
 static int do_write_image_or_movie(Render *re,
@@ -180,22 +199,22 @@ static void stats_background(void *UNUSED(arg), RenderStats *rs)
   megs_peak_memory = (peak_memory) / (1024.0 * 1024.0);
 
   fprintf(stdout,
-          IFACE_("Fra:%d Mem:%.2fM (%.2fM, Peak %.2fM) "),
+          TIP_("Fra:%d Mem:%.2fM (%.2fM, Peak %.2fM) "),
           rs->cfra,
           megs_used_memory,
           mmap_used_memory,
           megs_peak_memory);
 
   if (rs->curfield) {
-    fprintf(stdout, IFACE_("Field %d "), rs->curfield);
+    fprintf(stdout, TIP_("Field %d "), rs->curfield);
   }
   if (rs->curblur) {
-    fprintf(stdout, IFACE_("Blur %d "), rs->curblur);
+    fprintf(stdout, TIP_("Blur %d "), rs->curblur);
   }
 
   BLI_timecode_string_from_time_simple(
       info_time_str, sizeof(info_time_str), PIL_check_seconds_timer() - rs->starttime);
-  fprintf(stdout, IFACE_("| Time:%s | "), info_time_str);
+  fprintf(stdout, TIP_("| Time:%s | "), info_time_str);
 
   if (rs->infostr) {
     fprintf(stdout, "%s", rs->infostr);
@@ -203,7 +222,7 @@ static void stats_background(void *UNUSED(arg), RenderStats *rs)
   else {
     if (rs->tothalo) {
       fprintf(stdout,
-              IFACE_("Sce: %s Ve:%d Fa:%d Ha:%d La:%d"),
+              TIP_("Sce: %s Ve:%d Fa:%d Ha:%d La:%d"),
               rs->scene_name,
               rs->totvert,
               rs->totface,
@@ -212,7 +231,7 @@ static void stats_background(void *UNUSED(arg), RenderStats *rs)
     }
     else {
       fprintf(stdout,
-              IFACE_("Sce: %s Ve:%d Fa:%d La:%d"),
+              TIP_("Sce: %s Ve:%d Fa:%d La:%d"),
               rs->scene_name,
               rs->totvert,
               rs->totface,
@@ -225,7 +244,7 @@ static void stats_background(void *UNUSED(arg), RenderStats *rs)
 
   /* NOTE: using G_MAIN seems valid here???
    * Not sure it's actually even used anyway, we could as well pass NULL? */
-  BLI_callback_exec(G_MAIN, NULL, BLI_CB_EVT_RENDER_STATS);
+  BKE_callback_exec_null(G_MAIN, BKE_CB_EVT_RENDER_STATS);
 
   fputc('\n', stdout);
   fflush(stdout);
@@ -641,7 +660,7 @@ void RE_FreeRender(Render *re)
   BLI_freelistN(&re->view_layers);
   BLI_freelistN(&re->r.views);
 
-  curvemapping_free_data(&re->r.mblur_shutter_curve);
+  BKE_curvemapping_free_data(&re->r.mblur_shutter_curve);
 
   /* main dbase can already be invalid now, some database-free code checks it */
   re->main = NULL;
@@ -771,12 +790,12 @@ static void re_init_resolution(Render *re, Render *source, int winx, int winy, r
 void render_copy_renderdata(RenderData *to, RenderData *from)
 {
   BLI_freelistN(&to->views);
-  curvemapping_free_data(&to->mblur_shutter_curve);
+  BKE_curvemapping_free_data(&to->mblur_shutter_curve);
 
   *to = *from;
 
   BLI_duplicatelist(&to->views, &from->views);
-  curvemapping_copy_data(&to->mblur_shutter_curve, &from->mblur_shutter_curve);
+  BKE_curvemapping_copy_data(&to->mblur_shutter_curve, &from->mblur_shutter_curve);
 }
 
 /* what doesn't change during entire render sequence */
@@ -925,8 +944,8 @@ static void render_result_rescale(Render *re)
 
       scale_x = (float)result->rectx / re->result->rectx;
       scale_y = (float)result->recty / re->result->recty;
-      for (x = 0; x < re->result->rectx; ++x) {
-        for (y = 0; y < re->result->recty; ++y) {
+      for (x = 0; x < re->result->rectx; x++) {
+        for (y = 0; y < re->result->recty; y++) {
           int src_x = x * scale_x;
           int src_y = y * scale_y;
           int dst_index = y * re->result->rectx + x;
@@ -1115,7 +1134,7 @@ void *RE_gl_context_get(Render *re)
 void *RE_gpu_context_get(Render *re)
 {
   if (re->gpu_context == NULL) {
-    re->gpu_context = GPU_context_create();
+    re->gpu_context = GPU_context_create(0);
   }
   return re->gpu_context;
 }
@@ -1430,10 +1449,10 @@ static void free_all_freestyle_renders(void)
 /* returns fully composited render-result on given time step (in RenderData) */
 static void do_render_composite(Render *re)
 {
-  bNodeTree *ntree = re->scene->nodetree;
+  bNodeTree *ntree = re->pipeline_scene_eval->nodetree;
   int update_newframe = 0;
 
-  if (composite_needs_render(re->scene, 1)) {
+  if (composite_needs_render(re->pipeline_scene_eval, 1)) {
     /* save memory... free all cached images */
     ntreeFreeCache(ntree);
 
@@ -1471,7 +1490,7 @@ static void do_render_composite(Render *re)
   if (!re->test_break(re->tbh)) {
 
     if (ntree) {
-      ntreeCompositTagRender(re->scene);
+      ntreeCompositTagRender(re->pipeline_scene_eval);
     }
 
     if (ntree && re->scene->use_nodes && re->r.scemode & R_DOCOMP) {
@@ -1494,7 +1513,7 @@ static void do_render_composite(Render *re)
 
         RenderView *rv;
         for (rv = re->result->views.first; rv; rv = rv->next) {
-          ntreeCompositExecTree(re->scene,
+          ntreeCompositExecTree(re->pipeline_scene_eval,
                                 ntree,
                                 &re->r,
                                 true,
@@ -1595,12 +1614,8 @@ static void do_render_seq(Render *re)
   tot_views = BKE_scene_multiview_num_views_get(&re->r);
   ibuf_arr = MEM_mallocN(sizeof(ImBuf *) * tot_views, "Sequencer Views ImBufs");
 
-  /* TODO(sergey): Currently depsgraph is only used to check whether it is an active
-   * edit window or not to deal with unkeyed changes. We don't have depsgraph here yet,
-   * but we also dont' deal with unkeyed changes. But still nice to get proper depsgraph
-   * within tjhe render pipeline, somehow.
-   */
-  BKE_sequencer_new_render_data(re->main, NULL, re->scene, re_x, re_y, 100, true, &context);
+  BKE_sequencer_new_render_data(
+      re->main, re->pipeline_depsgraph, re->scene, re_x, re_y, 100, true, &context);
 
   /* the renderresult gets destroyed during the rendering, so we first collect all ibufs
    * and then we populate the final renderesult */
@@ -1613,7 +1628,7 @@ static void do_render_seq(Render *re)
       ibuf_arr[view_id] = IMB_dupImBuf(out);
       IMB_metadata_copy(ibuf_arr[view_id], out);
       IMB_freeImBuf(out);
-      BKE_sequencer_imbuf_from_sequencer_space(re->scene, ibuf_arr[view_id]);
+      BKE_sequencer_imbuf_from_sequencer_space(re->pipeline_scene_eval, ibuf_arr[view_id]);
     }
     else {
       ibuf_arr[view_id] = NULL;
@@ -1640,10 +1655,10 @@ static void do_render_seq(Render *re)
         BKE_stamp_info_from_imbuf(rr, ibuf_arr[view_id]);
       }
 
-      if (recurs_depth == 0) { /* with nested scenes, only free on toplevel... */
-        Editing *ed = re->scene->ed;
+      if (recurs_depth == 0) { /* With nested scenes, only free on top-level. */
+        Editing *ed = re->pipeline_scene_eval->ed;
         if (ed) {
-          BKE_sequencer_free_imbuf(re->scene, &ed->seqbase, true);
+          BKE_sequencer_free_imbuf(re->pipeline_scene_eval, &ed->seqbase, true);
         }
       }
       IMB_freeImBuf(ibuf_arr[view_id]);
@@ -1683,7 +1698,6 @@ static void do_render_all_options(Render *re)
 {
   Object *camera;
   bool render_seq = false;
-  int cfra = re->r.cfra;
 
   re->current_scene_update(re->suh, re->scene);
 
@@ -1693,17 +1707,7 @@ static void do_render_all_options(Render *re)
 
   /* ensure no images are in memory from previous animated sequences */
   BKE_image_all_free_anim_ibufs(re->main, re->r.cfra);
-  BKE_sequencer_all_free_anim_ibufs(re->main, re->r.cfra);
-
-  /* Update for sequencer and compositing animation.
-   * TODO: ideally we would create a depsgraph with a copy of the scene
-   * like the render engine, but sequencer and compositing do not (yet?)
-   * work with copy-on-write. */
-  BKE_animsys_evaluate_all_animation(re->main, NULL, re->scene, (float)cfra);
-
-  /* Update for masks
-   * (these do not use animsys but own lighter weight structure to define animation). */
-  BKE_mask_evaluate_all_masks(re->main, (float)cfra, true);
+  BKE_sequencer_all_free_anim_ibufs(re->scene, re->r.cfra);
 
   if (RE_engine_render(re, 1)) {
     /* in this case external render overrides all */
@@ -1967,7 +1971,7 @@ static void update_physics_cache(Render *re,
   baker.bmain = re->main;
   baker.scene = scene;
   baker.view_layer = view_layer;
-  baker.depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
+  baker.depsgraph = BKE_scene_get_depsgraph(re->main, scene, view_layer, true);
   baker.bake = 0;
   baker.render = 1;
   baker.anim_init = 1;
@@ -1988,7 +1992,7 @@ const char *RE_GetActiveRenderView(Render *re)
 
 /* evaluating scene options for general Blender render */
 static int render_initialize_from_main(Render *re,
-                                       RenderData *rd,
+                                       const RenderData *rd,
                                        Main *bmain,
                                        Scene *scene,
                                        ViewLayer *single_layer,
@@ -2006,8 +2010,8 @@ static int render_initialize_from_main(Render *re,
   winx = (rd->size * rd->xsch) / 100;
   winy = (rd->size * rd->ysch) / 100;
 
-  /* We always render smaller part, inserting it in larger image is compositor bizz,
-   * it uses disprect for it. */
+  /* We always render smaller part, inserting it in larger image is compositor business,
+   * it uses 'disprect' for it. */
   if (scene->r.mode & R_BORDER) {
     disprect.xmin = rd->border.xmin * winx;
     disprect.xmax = rd->border.xmax * winx;
@@ -2071,16 +2075,40 @@ void RE_SetReports(Render *re, ReportList *reports)
   re->reports = reports;
 }
 
-/* general Blender frame render call */
-void RE_BlenderFrame(Render *re,
-                     Main *bmain,
-                     Scene *scene,
-                     ViewLayer *single_layer,
-                     Object *camera_override,
-                     int frame,
-                     const bool write_still)
+static void render_update_depsgraph(Render *re)
 {
-  BLI_callback_exec(re->main, (ID *)scene, BLI_CB_EVT_RENDER_INIT);
+  Scene *scene = re->scene;
+  DEG_evaluate_on_framechange(re->main, re->pipeline_depsgraph, CFRA);
+  BKE_scene_update_sound(re->pipeline_depsgraph, re->main);
+}
+
+static void render_init_depsgraph(Render *re)
+{
+  Scene *scene = re->scene;
+  ViewLayer *view_layer = BKE_view_layer_default_render(re->scene);
+
+  re->pipeline_depsgraph = DEG_graph_new(re->main, scene, view_layer, DAG_EVAL_RENDER);
+  DEG_debug_name_set(re->pipeline_depsgraph, "RENDER PIPELINE");
+
+  /* Make sure there is a correct evaluated scene pointer. */
+  DEG_graph_build_for_render_pipeline(re->pipeline_depsgraph, re->main, scene, view_layer);
+
+  /* Update immediately so we have proper evaluated scene. */
+  render_update_depsgraph(re);
+
+  re->pipeline_scene_eval = DEG_get_evaluated_scene(re->pipeline_depsgraph);
+}
+
+/* general Blender frame render call */
+void RE_RenderFrame(Render *re,
+                    Main *bmain,
+                    Scene *scene,
+                    ViewLayer *single_layer,
+                    Object *camera_override,
+                    int frame,
+                    const bool write_still)
+{
+  render_callback_exec_id(re, re->main, &scene->id, BKE_CB_EVT_RENDER_INIT);
 
   /* Ugly global still...
    * is to prevent preview events and signal subsurfs etc to make full resol. */
@@ -2090,25 +2118,28 @@ void RE_BlenderFrame(Render *re,
 
   if (render_initialize_from_main(
           re, &scene->r, bmain, scene, single_layer, camera_override, 0, 0)) {
+    const RenderData rd = scene->r;
     MEM_reset_peak_memory();
 
-    BLI_callback_exec(re->main, (ID *)scene, BLI_CB_EVT_RENDER_PRE);
+    render_callback_exec_id(re, re->main, &scene->id, BKE_CB_EVT_RENDER_PRE);
+
+    render_init_depsgraph(re);
 
     do_render_all_options(re);
 
     if (write_still && !G.is_break) {
-      if (BKE_imtype_is_movie(scene->r.im_format.imtype)) {
+      if (BKE_imtype_is_movie(rd.im_format.imtype)) {
         /* operator checks this but in case its called from elsewhere */
         printf("Error: cant write single images with a movie format!\n");
       }
       else {
         char name[FILE_MAX];
         BKE_image_path_from_imformat(name,
-                                     scene->r.pic,
+                                     rd.pic,
                                      BKE_main_blendfile_path(bmain),
                                      scene->r.cfra,
-                                     &scene->r.im_format,
-                                     (scene->r.scemode & R_EXTENSION) != 0,
+                                     &rd.im_format,
+                                     (rd.scemode & R_EXTENSION) != 0,
                                      false,
                                      NULL);
 
@@ -2117,17 +2148,19 @@ void RE_BlenderFrame(Render *re,
       }
     }
 
-    BLI_callback_exec(re->main, (ID *)scene, BLI_CB_EVT_RENDER_POST); /* keep after file save */
+    /* keep after file save */
+    render_callback_exec_id(re, re->main, &scene->id, BKE_CB_EVT_RENDER_POST);
     if (write_still) {
-      BLI_callback_exec(re->main, (ID *)scene, BLI_CB_EVT_RENDER_WRITE);
+      render_callback_exec_id(re, re->main, &scene->id, BKE_CB_EVT_RENDER_WRITE);
     }
   }
 
-  BLI_callback_exec(
-      re->main, (ID *)scene, G.is_break ? BLI_CB_EVT_RENDER_CANCEL : BLI_CB_EVT_RENDER_COMPLETE);
+  render_callback_exec_id(re,
+                          re->main,
+                          &scene->id,
+                          G.is_break ? BKE_CB_EVT_RENDER_CANCEL : BKE_CB_EVT_RENDER_COMPLETE);
 
-  /* Destroy the opengl context in the correct thread. */
-  RE_gl_context_destroy(re);
+  RE_CleanAfterRender(re);
 
   /* UGLY WARNING */
   G.is_rendering = false;
@@ -2416,7 +2449,7 @@ static int do_write_image_or_movie(Render *re,
 
   /* NOTE: using G_MAIN seems valid here???
    * Not sure it's actually even used anyway, we could as well pass NULL? */
-  BLI_callback_exec(G_MAIN, NULL, BLI_CB_EVT_RENDER_STATS);
+  render_callback_exec_null(re, G_MAIN, BKE_CB_EVT_RENDER_STATS);
 
   BLI_timecode_string_from_time_simple(name, sizeof(name), re->i.lastframetime - render_time);
   printf(" (Saving: %s)\n", name);
@@ -2427,7 +2460,10 @@ static int do_write_image_or_movie(Render *re,
   return ok;
 }
 
-static void get_videos_dimensions(Render *re, RenderData *rd, size_t *r_width, size_t *r_height)
+static void get_videos_dimensions(const Render *re,
+                                  const RenderData *rd,
+                                  size_t *r_width,
+                                  size_t *r_height)
 {
   size_t width, height;
   if (re->r.mode & R_BORDER) {
@@ -2461,30 +2497,34 @@ static void re_movie_free_all(Render *re, bMovieHandle *mh, int totvideos)
 }
 
 /* saves images to disk */
-void RE_BlenderAnim(Render *re,
-                    Main *bmain,
-                    Scene *scene,
-                    ViewLayer *single_layer,
-                    Object *camera_override,
-                    int sfra,
-                    int efra,
-                    int tfra)
+void RE_RenderAnim(Render *re,
+                   Main *bmain,
+                   Scene *scene,
+                   ViewLayer *single_layer,
+                   Object *camera_override,
+                   int sfra,
+                   int efra,
+                   int tfra)
 {
-  RenderData rd = scene->r;
+  /* Call hooks before taking a copy of scene->r, so user can alter the render settings prior to
+   * copying (e.g. alter the output path). */
+  render_callback_exec_id(re, re->main, &scene->id, BKE_CB_EVT_RENDER_INIT);
+
+  const RenderData rd = scene->r;
   bMovieHandle *mh = NULL;
-  int cfrao = scene->r.cfra;
+  const int cfrao = rd.cfra;
   int nfra, totrendered = 0, totskipped = 0;
   const int totvideos = BKE_scene_multiview_num_videos_get(&rd);
-  const bool is_movie = BKE_imtype_is_movie(scene->r.im_format.imtype);
-  const bool is_multiview_name = ((scene->r.scemode & R_MULTIVIEW) != 0 &&
-                                  (scene->r.im_format.views_format == R_IMF_VIEWS_INDIVIDUAL));
-
-  BLI_callback_exec(re->main, (ID *)scene, BLI_CB_EVT_RENDER_INIT);
+  const bool is_movie = BKE_imtype_is_movie(rd.im_format.imtype);
+  const bool is_multiview_name = ((rd.scemode & R_MULTIVIEW) != 0 &&
+                                  (rd.im_format.views_format == R_IMF_VIEWS_INDIVIDUAL));
 
   /* do not fully call for each frame, it initializes & pops output window */
   if (!render_initialize_from_main(re, &rd, bmain, scene, single_layer, camera_override, 0, 1)) {
     return;
   }
+
+  render_init_depsgraph(re);
 
   if (is_movie) {
     size_t width, height;
@@ -2493,7 +2533,7 @@ void RE_BlenderAnim(Render *re,
 
     get_videos_dimensions(re, &rd, &width, &height);
 
-    mh = BKE_movie_handle_get(scene->r.im_format.imtype);
+    mh = BKE_movie_handle_get(rd.im_format.imtype);
     if (mh == NULL) {
       BKE_report(re->reports, RPT_ERROR, "Movie format unsupported");
       return;
@@ -2506,8 +2546,14 @@ void RE_BlenderAnim(Render *re,
 
       re->movie_ctx_arr[i] = mh->context_create();
 
-      if (!mh->start_movie(
-              re->movie_ctx_arr[i], scene, &re->r, width, height, re->reports, false, suffix)) {
+      if (!mh->start_movie(re->movie_ctx_arr[i],
+                           re->pipeline_scene_eval,
+                           &re->r,
+                           width,
+                           height,
+                           re->reports,
+                           false,
+                           suffix)) {
         is_error = true;
         break;
       }
@@ -2516,6 +2562,7 @@ void RE_BlenderAnim(Render *re,
     if (is_error) {
       /* report is handled above */
       re_movie_free_all(re, mh, i + 1);
+      RE_CleanAfterRender(re);
       return;
     }
   }
@@ -2530,24 +2577,7 @@ void RE_BlenderAnim(Render *re,
     for (nfra = sfra, scene->r.cfra = sfra; scene->r.cfra <= efra; scene->r.cfra++) {
       char name[FILE_MAX];
 
-      /* Special case for 'mh->get_next_frame'
-       * this overrides regular frame stepping logic */
-      if (mh && mh->get_next_frame) {
-        while (G.is_break == false) {
-          int nfra_test = mh->get_next_frame(re->movie_ctx_arr[0], &re->r, re->reports);
-          if (nfra_test >= 0 && nfra_test >= sfra && nfra_test <= efra) {
-            nfra = nfra_test;
-            break;
-          }
-          else {
-            if (re->test_break(re->tbh)) {
-              G.is_break = true;
-            }
-          }
-        }
-      }
-
-      /* Here is a feedback loop exists -- render initialization requires updated
+      /* A feedback loop exists here -- render initialization requires updated
        * render layers settings which could be animated, but scene evaluation for
        * the frame happens later because it depends on what layers are visible to
        * render engine.
@@ -2561,13 +2591,10 @@ void RE_BlenderAnim(Render *re,
       {
         float ctime = BKE_scene_frame_get(scene);
         AnimData *adt = BKE_animdata_from_id(&scene->id);
-        /* TODO(sergey): Currently depsgraph is only used to check whether it is an active
-         * edit window or not to deal with unkeyed changes. We don't have depsgraph here yet,
-         * but we also dont' deal with unkeyed changes. But still nice to get proper depsgraph
-         * within tjhe render pipeline, somehow.
-         */
-        BKE_animsys_evaluate_animdata(NULL, scene, &scene->id, adt, ctime, ADT_RECALC_ALL);
+        BKE_animsys_evaluate_animdata(scene, &scene->id, adt, ctime, ADT_RECALC_ALL, false);
       }
+
+      render_update_depsgraph(re);
 
       /* only border now, todo: camera lens. (ton) */
       render_initialize_from_main(re, &rd, bmain, scene, single_layer, camera_override, 1, 0);
@@ -2582,18 +2609,18 @@ void RE_BlenderAnim(Render *re,
 
       /* Touch/NoOverwrite options are only valid for image's */
       if (is_movie == false) {
-        if (scene->r.mode & (R_NO_OVERWRITE | R_TOUCH)) {
+        if (rd.mode & (R_NO_OVERWRITE | R_TOUCH)) {
           BKE_image_path_from_imformat(name,
-                                       scene->r.pic,
+                                       rd.pic,
                                        BKE_main_blendfile_path(bmain),
                                        scene->r.cfra,
-                                       &scene->r.im_format,
-                                       (scene->r.scemode & R_EXTENSION) != 0,
+                                       &rd.im_format,
+                                       (rd.scemode & R_EXTENSION) != 0,
                                        true,
                                        NULL);
         }
 
-        if (scene->r.mode & R_NO_OVERWRITE) {
+        if (rd.mode & R_NO_OVERWRITE) {
           if (!is_multiview_name) {
             if (BLI_exists(name)) {
               printf("skipping existing frame \"%s\"\n", name);
@@ -2626,7 +2653,7 @@ void RE_BlenderAnim(Render *re,
           }
         }
 
-        if (scene->r.mode & R_TOUCH) {
+        if (rd.mode & R_TOUCH) {
           if (!is_multiview_name) {
             if (!BLI_exists(name)) {
               BLI_make_existing_file(name); /* makes the dir if its not there */
@@ -2655,8 +2682,8 @@ void RE_BlenderAnim(Render *re,
 
       re->r.cfra = scene->r.cfra; /* weak.... */
 
-      /* run callbacs before rendering, before the scene is updated */
-      BLI_callback_exec(re->main, (ID *)scene, BLI_CB_EVT_RENDER_PRE);
+      /* run callbacks before rendering, before the scene is updated */
+      render_callback_exec_id(re, re->main, &scene->id, BKE_CB_EVT_RENDER_PRE);
 
       do_render_all_options(re);
       totrendered++;
@@ -2675,7 +2702,7 @@ void RE_BlenderAnim(Render *re,
       if (G.is_break == true) {
         /* remove touched file */
         if (is_movie == false) {
-          if ((scene->r.mode & R_TOUCH)) {
+          if ((rd.mode & R_TOUCH)) {
             if (!is_multiview_name) {
               if ((BLI_file_size(name) == 0)) {
                 /* BLI_exists(name) is implicit */
@@ -2706,9 +2733,9 @@ void RE_BlenderAnim(Render *re,
       }
 
       if (G.is_break == false) {
-        BLI_callback_exec(
-            re->main, (ID *)scene, BLI_CB_EVT_RENDER_POST); /* keep after file save */
-        BLI_callback_exec(re->main, (ID *)scene, BLI_CB_EVT_RENDER_WRITE);
+        /* keep after file save */
+        render_callback_exec_id(re, re->main, &scene->id, BKE_CB_EVT_RENDER_POST);
+        render_callback_exec_id(re, re->main, &scene->id, BKE_CB_EVT_RENDER_WRITE);
       }
     }
   }
@@ -2726,12 +2753,13 @@ void RE_BlenderAnim(Render *re,
 
   re->flag &= ~R_ANIMATION;
 
-  BLI_callback_exec(
-      re->main, (ID *)scene, G.is_break ? BLI_CB_EVT_RENDER_CANCEL : BLI_CB_EVT_RENDER_COMPLETE);
-  BKE_sound_reset_scene_specs(scene);
+  render_callback_exec_id(re,
+                          re->main,
+                          &scene->id,
+                          G.is_break ? BKE_CB_EVT_RENDER_CANCEL : BKE_CB_EVT_RENDER_COMPLETE);
+  BKE_sound_reset_scene_specs(re->pipeline_scene_eval);
 
-  /* Destroy the opengl context in the correct thread. */
-  RE_gl_context_destroy(re);
+  RE_CleanAfterRender(re);
 
   /* UGLY WARNING */
   G.is_rendering = false;
@@ -2754,6 +2782,17 @@ void RE_PreviewRender(Render *re, Main *bmain, Scene *sce)
   RE_SetCamera(re, camera);
 
   do_render_3d(re);
+}
+
+void RE_CleanAfterRender(Render *re)
+{
+  /* Destroy the opengl context in the correct thread. */
+  RE_gl_context_destroy(re);
+  if (re->pipeline_depsgraph != NULL) {
+    DEG_graph_free(re->pipeline_depsgraph);
+  }
+  re->pipeline_depsgraph = NULL;
+  re->pipeline_scene_eval = NULL;
 }
 
 /* note; repeated win/disprect calc... solve that nicer, also in compo */

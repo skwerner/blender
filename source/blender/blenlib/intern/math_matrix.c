@@ -28,7 +28,9 @@
 
 #include "BLI_strict_flags.h"
 
-#include "eigen_capi.h"
+#ifndef MATH_STANDALONE
+#  include "eigen_capi.h"
+#endif
 
 /********************************* Init **************************************/
 
@@ -71,6 +73,15 @@ void unit_m4(float m[4][4])
   m[3][0] = m[3][1] = m[3][2] = 0.0f;
 }
 
+void unit_m4_db(double m[4][4])
+{
+  m[0][0] = m[1][1] = m[2][2] = m[3][3] = 1.0f;
+  m[0][1] = m[0][2] = m[0][3] = 0.0f;
+  m[1][0] = m[1][2] = m[1][3] = 0.0f;
+  m[2][0] = m[2][1] = m[2][3] = 0.0f;
+  m[3][0] = m[3][1] = m[3][2] = 0.0f;
+}
+
 void copy_m2_m2(float m1[2][2], const float m2[2][2])
 {
   memcpy(m1, m2, sizeof(float[2][2]));
@@ -85,6 +96,11 @@ void copy_m3_m3(float m1[3][3], const float m2[3][3])
 void copy_m4_m4(float m1[4][4], const float m2[4][4])
 {
   memcpy(m1, m2, sizeof(float[4][4]));
+}
+
+void copy_m4_m4_db(double m1[4][4], const double m2[4][4])
+{
+  memcpy(m1, m2, sizeof(double[4][4]));
 }
 
 void copy_m3_m4(float m1[3][3], const float m2[4][4])
@@ -125,6 +141,29 @@ void copy_m4_m3(float m1[4][4], const float m2[3][3]) /* no clear */
   m1[3][1] = 0.0f;
   m1[3][2] = 0.0f;
   m1[3][3] = 1.0f;
+}
+
+void copy_m4d_m4(double m1[4][4], const float m2[4][4])
+{
+  m1[0][0] = m2[0][0];
+  m1[0][1] = m2[0][1];
+  m1[0][2] = m2[0][2];
+  m1[0][3] = m2[0][3];
+
+  m1[1][0] = m2[1][0];
+  m1[1][1] = m2[1][1];
+  m1[1][2] = m2[1][2];
+  m1[1][3] = m2[1][3];
+
+  m1[2][0] = m2[2][0];
+  m1[2][1] = m2[2][1];
+  m1[2][2] = m2[2][2];
+  m1[2][3] = m2[2][3];
+
+  m1[3][0] = m2[3][0];
+  m1[3][1] = m2[3][1];
+  m1[3][2] = m2[3][2];
+  m1[3][3] = m2[3][3];
 }
 
 void copy_m3_m3d(float R[3][3], const double A[3][3])
@@ -229,6 +268,61 @@ void mul_m4_m4m4_uniq(float R[4][4], const float A[4][4], const float B[4][4])
   R[3][2] = B[3][0] * A[0][2] + B[3][1] * A[1][2] + B[3][2] * A[2][2] + B[3][3] * A[3][2];
   R[3][3] = B[3][0] * A[0][3] + B[3][1] * A[1][3] + B[3][2] * A[2][3] + B[3][3] * A[3][3];
 #endif
+}
+
+void mul_m4_m4m4_db_uniq(double R[4][4], const double A[4][4], const double B[4][4])
+{
+  BLI_assert(R != A && R != B);
+
+  /* matrix product: R[j][k] = A[j][i] . B[i][k] */
+
+  R[0][0] = B[0][0] * A[0][0] + B[0][1] * A[1][0] + B[0][2] * A[2][0] + B[0][3] * A[3][0];
+  R[0][1] = B[0][0] * A[0][1] + B[0][1] * A[1][1] + B[0][2] * A[2][1] + B[0][3] * A[3][1];
+  R[0][2] = B[0][0] * A[0][2] + B[0][1] * A[1][2] + B[0][2] * A[2][2] + B[0][3] * A[3][2];
+  R[0][3] = B[0][0] * A[0][3] + B[0][1] * A[1][3] + B[0][2] * A[2][3] + B[0][3] * A[3][3];
+
+  R[1][0] = B[1][0] * A[0][0] + B[1][1] * A[1][0] + B[1][2] * A[2][0] + B[1][3] * A[3][0];
+  R[1][1] = B[1][0] * A[0][1] + B[1][1] * A[1][1] + B[1][2] * A[2][1] + B[1][3] * A[3][1];
+  R[1][2] = B[1][0] * A[0][2] + B[1][1] * A[1][2] + B[1][2] * A[2][2] + B[1][3] * A[3][2];
+  R[1][3] = B[1][0] * A[0][3] + B[1][1] * A[1][3] + B[1][2] * A[2][3] + B[1][3] * A[3][3];
+
+  R[2][0] = B[2][0] * A[0][0] + B[2][1] * A[1][0] + B[2][2] * A[2][0] + B[2][3] * A[3][0];
+  R[2][1] = B[2][0] * A[0][1] + B[2][1] * A[1][1] + B[2][2] * A[2][1] + B[2][3] * A[3][1];
+  R[2][2] = B[2][0] * A[0][2] + B[2][1] * A[1][2] + B[2][2] * A[2][2] + B[2][3] * A[3][2];
+  R[2][3] = B[2][0] * A[0][3] + B[2][1] * A[1][3] + B[2][2] * A[2][3] + B[2][3] * A[3][3];
+
+  R[3][0] = B[3][0] * A[0][0] + B[3][1] * A[1][0] + B[3][2] * A[2][0] + B[3][3] * A[3][0];
+  R[3][1] = B[3][0] * A[0][1] + B[3][1] * A[1][1] + B[3][2] * A[2][1] + B[3][3] * A[3][1];
+  R[3][2] = B[3][0] * A[0][2] + B[3][1] * A[1][2] + B[3][2] * A[2][2] + B[3][3] * A[3][2];
+  R[3][3] = B[3][0] * A[0][3] + B[3][1] * A[1][3] + B[3][2] * A[2][3] + B[3][3] * A[3][3];
+}
+
+void mul_m4db_m4db_m4fl_uniq(double R[4][4], const double A[4][4], const float B[4][4])
+{
+  /* Remove second check since types don't match. */
+  BLI_assert(R != A /* && R != B */);
+
+  /* matrix product: R[j][k] = A[j][i] . B[i][k] */
+
+  R[0][0] = B[0][0] * A[0][0] + B[0][1] * A[1][0] + B[0][2] * A[2][0] + B[0][3] * A[3][0];
+  R[0][1] = B[0][0] * A[0][1] + B[0][1] * A[1][1] + B[0][2] * A[2][1] + B[0][3] * A[3][1];
+  R[0][2] = B[0][0] * A[0][2] + B[0][1] * A[1][2] + B[0][2] * A[2][2] + B[0][3] * A[3][2];
+  R[0][3] = B[0][0] * A[0][3] + B[0][1] * A[1][3] + B[0][2] * A[2][3] + B[0][3] * A[3][3];
+
+  R[1][0] = B[1][0] * A[0][0] + B[1][1] * A[1][0] + B[1][2] * A[2][0] + B[1][3] * A[3][0];
+  R[1][1] = B[1][0] * A[0][1] + B[1][1] * A[1][1] + B[1][2] * A[2][1] + B[1][3] * A[3][1];
+  R[1][2] = B[1][0] * A[0][2] + B[1][1] * A[1][2] + B[1][2] * A[2][2] + B[1][3] * A[3][2];
+  R[1][3] = B[1][0] * A[0][3] + B[1][1] * A[1][3] + B[1][2] * A[2][3] + B[1][3] * A[3][3];
+
+  R[2][0] = B[2][0] * A[0][0] + B[2][1] * A[1][0] + B[2][2] * A[2][0] + B[2][3] * A[3][0];
+  R[2][1] = B[2][0] * A[0][1] + B[2][1] * A[1][1] + B[2][2] * A[2][1] + B[2][3] * A[3][1];
+  R[2][2] = B[2][0] * A[0][2] + B[2][1] * A[1][2] + B[2][2] * A[2][2] + B[2][3] * A[3][2];
+  R[2][3] = B[2][0] * A[0][3] + B[2][1] * A[1][3] + B[2][2] * A[2][3] + B[2][3] * A[3][3];
+
+  R[3][0] = B[3][0] * A[0][0] + B[3][1] * A[1][0] + B[3][2] * A[2][0] + B[3][3] * A[3][0];
+  R[3][1] = B[3][0] * A[0][1] + B[3][1] * A[1][1] + B[3][2] * A[2][1] + B[3][3] * A[3][1];
+  R[3][2] = B[3][0] * A[0][2] + B[3][1] * A[1][2] + B[3][2] * A[2][2] + B[3][3] * A[3][2];
+  R[3][3] = B[3][0] * A[0][3] + B[3][1] * A[1][3] + B[3][2] * A[2][3] + B[3][3] * A[3][3];
 }
 
 void mul_m4_m4_pre(float R[4][4], const float A[4][4])
@@ -604,6 +698,26 @@ void mul_v3_m4v3(float r[3], const float mat[4][4], const float vec[3])
   r[2] = x * mat[0][2] + y * mat[1][2] + mat[2][2] * vec[2] + mat[3][2];
 }
 
+void mul_v3_m4v3_db(double r[3], const double mat[4][4], const double vec[3])
+{
+  const double x = vec[0];
+  const double y = vec[1];
+
+  r[0] = x * mat[0][0] + y * mat[1][0] + mat[2][0] * vec[2] + mat[3][0];
+  r[1] = x * mat[0][1] + y * mat[1][1] + mat[2][1] * vec[2] + mat[3][1];
+  r[2] = x * mat[0][2] + y * mat[1][2] + mat[2][2] * vec[2] + mat[3][2];
+}
+void mul_v4_m4v3_db(double r[4], const double mat[4][4], const double vec[3])
+{
+  const double x = vec[0];
+  const double y = vec[1];
+
+  r[0] = x * mat[0][0] + y * mat[1][0] + mat[2][0] * vec[2] + mat[3][0];
+  r[1] = x * mat[0][1] + y * mat[1][1] + mat[2][1] * vec[2] + mat[3][1];
+  r[2] = x * mat[0][2] + y * mat[1][2] + mat[2][2] * vec[2] + mat[3][2];
+  r[3] = x * mat[0][3] + y * mat[1][3] + mat[2][3] * vec[2] + mat[3][3];
+}
+
 void mul_v2_m4v3(float r[2], const float mat[4][4], const float vec[3])
 {
   const float x = vec[0];
@@ -625,7 +739,7 @@ void mul_m2v2(const float mat[2][2], float vec[2])
   mul_v2_m2v2(vec, mat, vec);
 }
 
-/* same as mul_m4_v3() but doesnt apply translation component */
+/** Same as #mul_m4_v3() but doesn't apply translation component. */
 void mul_mat3_m4_v3(const float mat[4][4], float vec[3])
 {
   const float x = vec[0];
@@ -640,6 +754,16 @@ void mul_v3_mat3_m4v3(float r[3], const float mat[4][4], const float vec[3])
 {
   const float x = vec[0];
   const float y = vec[1];
+
+  r[0] = x * mat[0][0] + y * mat[1][0] + mat[2][0] * vec[2];
+  r[1] = x * mat[0][1] + y * mat[1][1] + mat[2][1] * vec[2];
+  r[2] = x * mat[0][2] + y * mat[1][2] + mat[2][2] * vec[2];
+}
+
+void mul_v3_mat3_m4v3_db(double r[3], const double mat[4][4], const double vec[3])
+{
+  const double x = vec[0];
+  const double y = vec[1];
 
   r[0] = x * mat[0][0] + y * mat[1][0] + mat[2][0] * vec[2];
   r[1] = x * mat[0][1] + y * mat[1][1] + mat[2][1] * vec[2];
@@ -931,6 +1055,13 @@ float determinant_m3_array(const float m[3][3])
           m[2][0] * (m[0][1] * m[1][2] - m[0][2] * m[1][1]));
 }
 
+float determinant_m4_mat3_array(const float m[4][4])
+{
+  return (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+          m[1][0] * (m[0][1] * m[2][2] - m[0][2] * m[2][1]) +
+          m[2][0] * (m[0][1] * m[1][2] - m[0][2] * m[1][1]));
+}
+
 bool invert_m3_ex(float m[3][3], const float epsilon)
 {
   float tmp[3][3];
@@ -1011,11 +1142,97 @@ bool invert_m4(float m[4][4])
   return success;
 }
 
+/**
+ * Computes the inverse of mat and puts it in inverse.
+ * Uses Gaussian Elimination with partial (maximal column) pivoting.
+ * \return true on success (i.e. can always find a pivot) and false on failure.
+ * Mark Segal - 1992.
+ *
+ * \note this has worse performance than #EIG_invert_m4_m4 (Eigen), but e.g.
+ * for non-invertible scale matrices, finding a partial solution can
+ * be useful to have a valid local transform center, see T57767.
+ */
+bool invert_m4_m4_fallback(float inverse[4][4], const float mat[4][4])
+{
+#ifndef MATH_STANDALONE
+  if (EIG_invert_m4_m4(inverse, mat)) {
+    return true;
+  }
+#endif
+
+  int i, j, k;
+  double temp;
+  float tempmat[4][4];
+  float max;
+  int maxj;
+
+  BLI_assert(inverse != mat);
+
+  /* Set inverse to identity */
+  for (i = 0; i < 4; i++) {
+    for (j = 0; j < 4; j++) {
+      inverse[i][j] = 0;
+    }
+  }
+  for (i = 0; i < 4; i++) {
+    inverse[i][i] = 1;
+  }
+
+  /* Copy original matrix so we don't mess it up */
+  for (i = 0; i < 4; i++) {
+    for (j = 0; j < 4; j++) {
+      tempmat[i][j] = mat[i][j];
+    }
+  }
+
+  for (i = 0; i < 4; i++) {
+    /* Look for row with max pivot */
+    max = fabsf(tempmat[i][i]);
+    maxj = i;
+    for (j = i + 1; j < 4; j++) {
+      if (fabsf(tempmat[j][i]) > max) {
+        max = fabsf(tempmat[j][i]);
+        maxj = j;
+      }
+    }
+    /* Swap rows if necessary */
+    if (maxj != i) {
+      for (k = 0; k < 4; k++) {
+        SWAP(float, tempmat[i][k], tempmat[maxj][k]);
+        SWAP(float, inverse[i][k], inverse[maxj][k]);
+      }
+    }
+
+    if (UNLIKELY(tempmat[i][i] == 0.0f)) {
+      return false; /* No non-zero pivot */
+    }
+    temp = (double)tempmat[i][i];
+    for (k = 0; k < 4; k++) {
+      tempmat[i][k] = (float)((double)tempmat[i][k] / temp);
+      inverse[i][k] = (float)((double)inverse[i][k] / temp);
+    }
+    for (j = 0; j < 4; j++) {
+      if (j != i) {
+        temp = tempmat[j][i];
+        for (k = 0; k < 4; k++) {
+          tempmat[j][k] -= (float)((double)tempmat[i][k] * temp);
+          inverse[j][k] -= (float)((double)inverse[i][k] * temp);
+        }
+      }
+    }
+  }
+  return true;
+}
+
 bool invert_m4_m4(float inverse[4][4], const float mat[4][4])
 {
+#ifndef MATH_STANDALONE
   /* Use optimized matrix inverse from Eigen, since performance
    * impact of this function is significant in complex rigs. */
   return EIG_invert_m4_m4(inverse, mat);
+#else
+  return invert_m4_m4_fallback(inverse, mat);
+#endif
 }
 
 /****************************** Linear Algebra *******************************/
@@ -1307,6 +1524,111 @@ void orthogonalize_m4(float mat[4][4], int axis)
   mul_v3_fl(mat[2], size[2]);
 }
 
+/** Make an orthonormal basis around v1 in a way that is stable and symmetric. */
+static void orthogonalize_stable(float v1[3], float v2[3], float v3[3], bool normalize)
+{
+  /* Make secondary axis vectors orthogonal to the primary via
+   * plane projection, which preserves the determinant. */
+  float len_sq_v1 = len_squared_v3(v1);
+
+  if (len_sq_v1 > 0.0f) {
+    madd_v3_v3fl(v2, v1, -dot_v3v3(v2, v1) / len_sq_v1);
+    madd_v3_v3fl(v3, v1, -dot_v3v3(v3, v1) / len_sq_v1);
+
+    if (normalize) {
+      mul_v3_fl(v1, 1.0f / sqrtf(len_sq_v1));
+    }
+  }
+
+  /* Make secondary axis vectors orthogonal relative to each other. */
+  float norm_v2[3], norm_v3[3], tmp[3];
+  float length_v2 = normalize_v3_v3(norm_v2, v2);
+  float length_v3 = normalize_v3_v3(norm_v3, v3);
+  float cos_angle = dot_v3v3(norm_v2, norm_v3);
+  float abs_cos_angle = fabsf(cos_angle);
+
+  /* Apply correction if the shear angle is significant, and not degenerate. */
+  if (abs_cos_angle > 1e-4f && abs_cos_angle < 1.0f - FLT_EPSILON) {
+    /* Adjust v2 by half of the necessary angle correction.
+     * Thus the angle change is the same for both axis directions. */
+    float angle = acosf(cos_angle);
+    float target_angle = angle + ((float)M_PI_2 - angle) / 2;
+
+    madd_v3_v3fl(norm_v2, norm_v3, -cos_angle);
+    mul_v3_fl(norm_v2, sinf(target_angle) / len_v3(norm_v2));
+    madd_v3_v3fl(norm_v2, norm_v3, cosf(target_angle));
+
+    /* Make v3 orthogonal. */
+    cross_v3_v3v3(tmp, norm_v2, norm_v3);
+    cross_v3_v3v3(norm_v3, tmp, norm_v2);
+    normalize_v3(norm_v3);
+
+    /* Re-apply scale, preserving area and proportion. */
+    if (!normalize) {
+      float scale_fac = sqrtf(sinf(angle));
+      mul_v3_v3fl(v2, norm_v2, length_v2 * scale_fac);
+      mul_v3_v3fl(v3, norm_v3, length_v3 * scale_fac);
+    }
+  }
+
+  if (normalize) {
+    copy_v3_v3(v2, norm_v2);
+    copy_v3_v3(v3, norm_v3);
+  }
+}
+
+/**
+ * Make an orthonormal matrix around the selected axis of the given matrix,
+ * in a way that is symmetric and stable to variations in the input, and
+ * preserving the value of the determinant, i.e. the overall volume change.
+ *
+ * \param axis: Axis to build the orthonormal basis around.
+ * \param normalize: Normalize the matrix instead of preserving volume.
+ */
+void orthogonalize_m3_stable(float R[3][3], int axis, bool normalize)
+{
+  switch (axis) {
+    case 0:
+      orthogonalize_stable(R[0], R[1], R[2], normalize);
+      break;
+    case 1:
+      orthogonalize_stable(R[1], R[0], R[2], normalize);
+      break;
+    case 2:
+      orthogonalize_stable(R[2], R[0], R[1], normalize);
+      break;
+    default:
+      BLI_assert(0);
+      break;
+  }
+}
+
+/**
+ * Make an orthonormal matrix around the selected axis of the given matrix,
+ * in a way that is symmetric and stable to variations in the input, and
+ * preserving the value of the determinant, i.e. the overall volume change.
+ *
+ * \param axis: Axis to build the orthonormal basis around.
+ * \param normalize: Normalize the matrix instead of preserving volume.
+ */
+void orthogonalize_m4_stable(float R[4][4], int axis, bool normalize)
+{
+  switch (axis) {
+    case 0:
+      orthogonalize_stable(R[0], R[1], R[2], normalize);
+      break;
+    case 1:
+      orthogonalize_stable(R[1], R[0], R[2], normalize);
+      break;
+    case 2:
+      orthogonalize_stable(R[2], R[0], R[1], normalize);
+      break;
+    default:
+      BLI_assert(0);
+      break;
+  }
+}
+
 bool is_orthogonal_m3(const float m[3][3])
 {
   int i, j;
@@ -1359,10 +1681,11 @@ bool is_orthonormal_m4(const float m[4][4])
   if (is_orthogonal_m4(m)) {
     int i;
 
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < 4; i++) {
       if (fabsf(dot_v4v4(m[i], m[i]) - 1) > 1e-5f) {
         return false;
       }
+    }
 
     return true;
   }
@@ -1641,9 +1964,39 @@ void mat4_to_size(float size[3], const float mat[4][4])
   size[2] = len_v3(mat[2]);
 }
 
-/* this gets the average scale of a matrix, only use when your scaling
+/** Extract scale factors from the matrix, with correction to ensure
+ *  exact volume in case of a sheared matrix. */
+void mat4_to_size_fix_shear(float size[3], const float mat[4][4])
+{
+  mat4_to_size(size, mat);
+
+  float volume = size[0] * size[1] * size[2];
+
+  if (volume != 0.0f) {
+    mul_v3_fl(size, cbrtf(fabsf(mat4_to_volume_scale(mat) / volume)));
+  }
+}
+
+/**
+ * This computes the overall volume scale factor of a transformation matrix.
+ * For an orthogonal matrix, it is the product of all three scale values.
+ * Returns a negative value if the transform is flipped by negative scale.
+ */
+float mat3_to_volume_scale(const float mat[3][3])
+{
+  return determinant_m3_array(mat);
+}
+
+float mat4_to_volume_scale(const float mat[4][4])
+{
+  return determinant_m4_mat3_array(mat);
+}
+
+/**
+ * This gets the average scale of a matrix, only use when your scaling
  * data that has no idea of scale axis, examples are bone-envelope-radius
- * and curve radius */
+ * and curve radius.
+ */
 float mat3_to_scale(const float mat[3][3])
 {
   /* unit length vector */
@@ -1786,7 +2139,7 @@ void rotate_m4(float mat[4][4], const char axis, const float angle)
   const float angle_cos = cosf(angle);
   const float angle_sin = sinf(angle);
 
-  assert(axis >= 'X' && axis <= 'Z');
+  BLI_assert(axis >= 'X' && axis <= 'Z');
 
   switch (axis) {
     case 'X':
@@ -1816,6 +2169,14 @@ void rotate_m4(float mat[4][4], const char axis, const float angle)
       BLI_assert(0);
       break;
   }
+}
+
+/** Scale a matrix in-place. */
+void rescale_m4(float mat[4][4], const float scale[3])
+{
+  mul_v3_fl(mat[0], scale[0]);
+  mul_v3_fl(mat[1], scale[1]);
+  mul_v3_fl(mat[2], scale[2]);
 }
 
 /**
@@ -2003,10 +2364,26 @@ bool equals_m4m4(const float mat1[4][4], const float mat2[4][4])
           equals_v4v4(mat1[2], mat2[2]) && equals_v4v4(mat1[3], mat2[3]));
 }
 
-/* make a 4x4 matrix out of 3 transform components */
-/* matrices are made in the order: scale * rot * loc */
-/* TODO: need to have a version that allows for rotation order... */
+/**
+ * Make a 4x4 matrix out of 3 transform components.
+ * Matrices are made in the order: `scale * rot * loc`
+ */
+void loc_rot_size_to_mat4(float mat[4][4],
+                          const float loc[3],
+                          const float rot[3][3],
+                          const float size[3])
+{
+  copy_m4_m3(mat, rot);
+  rescale_m4(mat, size);
+  copy_v3_v3(mat[3], loc);
+}
 
+/**
+ * Make a 4x4 matrix out of 3 transform components.
+ * Matrices are made in the order: `scale * rot * loc`
+ *
+ * TODO: need to have a version that allows for rotation order...
+ */
 void loc_eul_size_to_mat4(float mat[4][4],
                           const float loc[3],
                           const float eul[3],
@@ -2031,9 +2408,10 @@ void loc_eul_size_to_mat4(float mat[4][4],
   mat[3][2] = loc[2];
 }
 
-/* make a 4x4 matrix out of 3 transform components */
-
-/* matrices are made in the order: scale * rot * loc */
+/**
+ * Make a 4x4 matrix out of 3 transform components.
+ * Matrices are made in the order: `scale * rot * loc`
+ */
 void loc_eulO_size_to_mat4(float mat[4][4],
                            const float loc[3],
                            const float eul[3],
@@ -2059,9 +2437,10 @@ void loc_eulO_size_to_mat4(float mat[4][4],
   mat[3][2] = loc[2];
 }
 
-/* make a 4x4 matrix out of 3 transform components */
-
-/* matrices are made in the order: scale * rot * loc */
+/**
+ * Make a 4x4 matrix out of 3 transform components.
+ * Matrices are made in the order: `scale * rot * loc`
+ */
 void loc_quat_size_to_mat4(float mat[4][4],
                            const float loc[3],
                            const float quat[4],

@@ -72,6 +72,7 @@ struct uiPopover {
   uiBlock *block;
   uiLayout *layout;
   uiBut *but;
+  ARegion *butregion;
 
   /* Needed for keymap removal. */
   wmWindow *window;
@@ -244,7 +245,7 @@ static uiBlock *ui_block_func_POPOVER(bContext *C, uiPopupBlockHandle *handle, v
   return block;
 }
 
-static void ui_block_free_func_POPOVER(uiPopupBlockHandle *UNUSED(handle), void *arg_pup)
+static void ui_block_free_func_POPOVER(void *arg_pup)
 {
   uiPopover *pup = arg_pup;
   if (pup->keymap != NULL) {
@@ -257,6 +258,8 @@ static void ui_block_free_func_POPOVER(uiPopupBlockHandle *UNUSED(handle), void 
 uiPopupBlockHandle *ui_popover_panel_create(
     bContext *C, ARegion *butregion, uiBut *but, uiMenuCreateFunc menu_func, void *arg)
 {
+  wmWindow *window = CTX_wm_window(C);
+
   /* Create popover, buttons are created from callback. */
   uiPopover *pup = MEM_callocN(sizeof(uiPopover), __func__);
   pup->but = but;
@@ -271,19 +274,22 @@ uiPopupBlockHandle *ui_popover_panel_create(
   pup->menu_arg = arg;
 
 #ifdef USE_UI_POPOVER_ONCE
-  pup->is_once = true;
+  {
+    /* Ideally this would be passed in. */
+    const wmEvent *event = window->eventstate;
+    pup->is_once = (event->type == LEFTMOUSE) && (event->val == KM_PRESS);
+  }
 #endif
 
   /* Create popup block. */
   uiPopupBlockHandle *handle;
-  handle = ui_popup_block_create(C, butregion, but, NULL, ui_block_func_POPOVER, pup);
-  handle->popup_create_vars.free_func = ui_block_free_func_POPOVER;
+  handle = ui_popup_block_create(
+      C, butregion, but, NULL, ui_block_func_POPOVER, pup, ui_block_free_func_POPOVER);
   handle->can_refresh = true;
 
   /* Add handlers. If attached to a button, the button will already
    * add a modal handler and pass on events. */
   if (!but) {
-    wmWindow *window = CTX_wm_window(C);
     UI_popup_handlers_add(C, &window->modalhandlers, handle, 0);
     WM_event_add_mousemove(C);
     handle->popup = true;
@@ -320,7 +326,7 @@ int UI_popover_panel_invoke(bContext *C, const char *idname, bool keep_open, Rep
     block = pup->block;
   }
   else {
-    uiPopover *pup = UI_popover_begin(C, U.widget_unit * pt->ui_units_x);
+    uiPopover *pup = UI_popover_begin(C, U.widget_unit * pt->ui_units_x, false);
     layout = UI_popover_layout(pup);
     UI_paneltype_draw(C, pt, layout);
     UI_popover_end(C, pup, NULL);
@@ -328,7 +334,8 @@ int UI_popover_panel_invoke(bContext *C, const char *idname, bool keep_open, Rep
   }
 
   if (block) {
-    UI_block_active_only_flagged_buttons(C, CTX_wm_region(C), block);
+    uiPopupBlockHandle *handle = block->handle;
+    UI_block_active_only_flagged_buttons(C, handle->region, block);
   }
   return OPERATOR_INTERFACE;
 }
@@ -341,8 +348,11 @@ int UI_popover_panel_invoke(bContext *C, const char *idname, bool keep_open, Rep
 
 /**
  * Only return handler, and set optional title.
+ *
+ * \param from_active_button: Use the active button for positioning,
+ * use when the popover is activated from an operator instead of directly from the button.
  */
-uiPopover *UI_popover_begin(bContext *C, int ui_size_x)
+uiPopover *UI_popover_begin(bContext *C, int ui_size_x, bool from_active_button)
 {
   uiPopover *pup = MEM_callocN(sizeof(uiPopover), "popover menu");
   if (ui_size_x == 0) {
@@ -350,7 +360,21 @@ uiPopover *UI_popover_begin(bContext *C, int ui_size_x)
   }
   pup->ui_size_x = ui_size_x;
 
-  /* Opertor context default same as menus, change if needed. */
+  ARegion *butregion = NULL;
+  uiBut *but = NULL;
+
+  if (from_active_button) {
+    butregion = CTX_wm_region(C);
+    but = UI_region_active_but_get(butregion);
+    if (but == NULL) {
+      butregion = NULL;
+    }
+  }
+
+  pup->but = but;
+  pup->butregion = butregion;
+
+  /* Operator context default same as menus, change if needed. */
   ui_popover_create_block(C, pup, WM_OP_EXEC_REGION_WIN);
 
   /* create in advance so we can let buttons point to retval already */
@@ -381,8 +405,8 @@ void UI_popover_end(bContext *C, uiPopover *pup, wmKeyMap *keymap)
     WM_event_set_keymap_handler_post_callback(pup->keymap_handler, popover_keymap_fn, pup);
   }
 
-  handle = ui_popup_block_create(C, NULL, NULL, NULL, ui_block_func_POPOVER, pup);
-  handle->popup_create_vars.free_func = ui_block_free_func_POPOVER;
+  handle = ui_popup_block_create(
+      C, pup->butregion, pup->but, NULL, ui_block_func_POPOVER, pup, ui_block_free_func_POPOVER);
 
   /* Add handlers. */
   UI_popup_handlers_add(C, &window->modalhandlers, handle, 0);
@@ -399,7 +423,7 @@ void UI_popover_end(bContext *C, uiPopover *pup, wmKeyMap *keymap)
 
   /* TODO(campbell): we may want to make this configurable.
    * The begin/end stype of calling popups doesn't allow to 'can_refresh' to be set.
-   * For now close this style of popvers when accessed. */
+   * For now close this style of popovers when accessed. */
   UI_block_flag_disable(pup->block, UI_BLOCK_KEEP_OPEN);
 
   /* panels are created flipped (from event handling pov) */

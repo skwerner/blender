@@ -44,7 +44,6 @@ extern const EnumPropertyItem rna_enum_metaelem_type_items[];
 
 extern const EnumPropertyItem rna_enum_proportional_falloff_items[];
 extern const EnumPropertyItem rna_enum_proportional_falloff_curve_only_items[];
-extern const EnumPropertyItem rna_enum_proportional_editing_items[];
 extern const EnumPropertyItem rna_enum_snap_target_items[];
 extern const EnumPropertyItem rna_enum_snap_element_items[];
 extern const EnumPropertyItem rna_enum_snap_node_element_items[];
@@ -91,12 +90,15 @@ extern const EnumPropertyItem rna_enum_color_sets_items[];
 extern const EnumPropertyItem rna_enum_beztriple_keyframe_type_items[];
 extern const EnumPropertyItem rna_enum_beztriple_interpolation_mode_items[];
 extern const EnumPropertyItem rna_enum_beztriple_interpolation_easing_items[];
+extern const EnumPropertyItem rna_enum_fcurve_auto_smoothing_items[];
 extern const EnumPropertyItem rna_enum_keyframe_handle_type_items[];
+extern const EnumPropertyItem rna_enum_driver_target_rotation_mode_items[];
 
 extern const EnumPropertyItem rna_enum_keyblock_type_items[];
 
 extern const EnumPropertyItem rna_enum_keyingset_path_grouping_items[];
 extern const EnumPropertyItem rna_enum_keying_flag_items[];
+extern const EnumPropertyItem rna_enum_keying_flag_items_api[];
 
 extern const EnumPropertyItem rna_enum_keyframe_paste_offset_items[];
 extern const EnumPropertyItem rna_enum_keyframe_paste_merge_items[];
@@ -115,6 +117,7 @@ extern const EnumPropertyItem rna_enum_operator_return_items[];
 extern const EnumPropertyItem rna_enum_operator_property_tags[];
 
 extern const EnumPropertyItem rna_enum_brush_sculpt_tool_items[];
+extern const EnumPropertyItem rna_enum_brush_uv_sculpt_tool_items[];
 extern const EnumPropertyItem rna_enum_brush_vertex_tool_items[];
 extern const EnumPropertyItem rna_enum_brush_weight_tool_items[];
 extern const EnumPropertyItem rna_enum_brush_gpencil_types_items[];
@@ -182,6 +185,7 @@ extern const EnumPropertyItem rna_enum_file_sort_items[];
 extern const EnumPropertyItem rna_enum_node_socket_in_out_items[];
 
 extern const EnumPropertyItem rna_enum_node_math_items[];
+extern const EnumPropertyItem rna_enum_mapping_type_items[];
 extern const EnumPropertyItem rna_enum_node_vec_math_items[];
 extern const EnumPropertyItem rna_enum_node_filter_items[];
 

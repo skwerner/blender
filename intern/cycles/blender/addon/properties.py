@@ -68,11 +68,6 @@ enum_filter_types = (
     ('BLACKMAN_HARRIS', "Blackman-Harris", "Blackman-Harris filter"),
 )
 
-enum_aperture_types = (
-    ('RADIUS', "Radius", "Directly change the size of the aperture"),
-    ('FSTOP', "F-stop", "Change the size of the aperture by f-stop"),
-)
-
 enum_panorama_types = (
     ('EQUIRECTANGULAR', "Equirectangular", "Render the scene with a spherical camera, also known as Lat Long panorama"),
     ('FISHEYE_EQUIDISTANT', "Fisheye Equidistant", "Ideal for fulldomes, ignore the sensor dimensions"),
@@ -142,6 +137,7 @@ enum_world_mis = (
 enum_device_type = (
     ('CPU', "CPU", "CPU", 0),
     ('CUDA', "CUDA", "CUDA", 1),
+    ('OPTIX', "OptiX", "OptiX", 3),
     ('OPENCL', "OpenCL", "OpenCL", 2)
 )
 
@@ -154,6 +150,44 @@ enum_texture_limit = (
     ('2048', "2048", "Limit texture size to 2048 pixels", 5),
     ('4096', "4096", "Limit texture size to 4096 pixels", 6),
     ('8192', "8192", "Limit texture size to 8192 pixels", 7),
+)
+
+enum_view3d_shading_render_pass= (
+    ('', "General", ""),
+
+    ('COMBINED', "Combined", "Show the Combined Render pass", 1),
+    ('EMISSION', "Emission", "Show the Emission render pass", 33),
+    ('BACKGROUND', "Background", "Show the Background render pass", 34),
+    ('AO', "Ambient Occlusion", "Show the Ambient Occlusion render pass", 35),
+
+    ('', "Light", ""),
+
+    ('DIFFUSE_DIRECT', "Diffuse Direct", "Show the Diffuse Direct render pass", 38),
+    ('DIFFUSE_INDIRECT', "Diffuse Indirect", "Show the Diffuse Indirect render pass", 39),
+    ('DIFFUSE_COLOR', "Diffuse Color", "Show the Diffuse Color render pass", 40),
+
+    ('GLOSSY_DIRECT', "Glossy Direct", "Show the Glossy Direct render pass", 41),
+    ('GLOSSY_INDIRECT', "Glossy Indirect", "Show the Glossy Indirect render pass", 42),
+    ('GLOSSY_COLOR', "Glossy Color", "Show the Glossy Color render pass", 43),
+
+    ('', "", ""),
+
+    ('TRANSMISSION_DIRECT', "Transmission Direct", "Show the Transmission Direct render pass", 44),
+    ('TRANSMISSION_INDIRECT', "Transmission Indirect", "Show the Transmission Indirect render pass", 45),
+    ('TRANSMISSION_COLOR', "Transmission Color", "Show the Transmission Color render pass", 46),
+
+    ('SUBSURFACE_DIRECT', "Subsurface Direct", "Show the Subsurface Direct render pass", 47),
+    ('SUBSURFACE_INDIRECT', "Subsurface Indirect", "Show the Subsurface Indirect render pass", 48),
+    ('SUBSURFACE_COLOR', "Subsurface Color", "Show the Subsurface Color render pass", 49),
+
+    ('VOLUME_DIRECT', "Volume Direct", "Show the Volume Direct render pass", 50),
+    ('VOLUME_INDIRECT', "Volume Indirect", "Show the Volume Indirect render pass", 51),
+
+    ('', "Data", ""),
+
+    ('NORMAL', "Normal", "Show the Normal render pass", 3),
+    ('UV', "UV", "Show the UV render pass", 4),
+    ('MIST', "Mist", "Show the Mist render pass", 32),
 )
 
 
@@ -296,6 +330,21 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=0.01,
     )
 
+    min_light_bounces: IntProperty(
+            name="Min Light Bounces",
+            description="Minimum number of light bounces. Setting this higher reduces noise in the first bounces, "
+                        "but can also be less efficient for more complex geometry like hair and volumes",
+            min=0, max=1024,
+            default=0,
+    )
+    min_transparent_bounces: IntProperty(
+            name="Min Transparent Bounces",
+            description="Minimum number of transparent bounces. Setting this higher reduces noise in the first bounces, "
+                        "but can also be less efficient for more complex geometry like hair and volumes",
+            min=0, max=1024,
+            default=0,
+    )
+
     caustics_reflective: BoolProperty(
         name="Reflective Caustics",
         description="Use reflective caustics, resulting in a brighter image (more noise but added realism)",
@@ -416,11 +465,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Image brightness scale",
         min=0.0, max=10.0,
         default=1.0,
-    )
-    film_transparent: BoolProperty(
-        name="Transparent",
-        description="World background is transparent, for compositing the render over another background",
-        default=False,
     )
     film_transparent_glass: BoolProperty(
         name="Transparent Glass",
@@ -697,6 +741,8 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     debug_use_cuda_adaptive_compile: BoolProperty(name="Adaptive Compile", default=False)
     debug_use_cuda_split_kernel: BoolProperty(name="Split Kernel", default=False)
 
+    debug_optix_cuda_streams: IntProperty(name="CUDA Streams", default=1, min=1)
+
     debug_opencl_kernel_type: EnumProperty(
         name="OpenCL Kernel Type",
         default='DEFAULT',
@@ -747,49 +793,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
 
 class CyclesCameraSettings(bpy.types.PropertyGroup):
 
-    aperture_type: EnumProperty(
-        name="Aperture Type",
-        description="Use f-stop number or aperture radius",
-        items=enum_aperture_types,
-        default='RADIUS',
-    )
-    aperture_fstop: FloatProperty(
-        name="Aperture f-stop",
-        description="F-stop ratio (lower numbers give more defocus, higher numbers give a sharper image)",
-        min=0.0, soft_min=0.1, soft_max=64.0,
-        default=5.6,
-        step=10,
-        precision=1,
-    )
-    aperture_size: FloatProperty(
-        name="Aperture Size",
-        description="Radius of the aperture for depth of field (higher values give more defocus)",
-        min=0.0, soft_max=10.0,
-        default=0.0,
-        step=1,
-        precision=4,
-        subtype='DISTANCE',
-    )
-    aperture_blades: IntProperty(
-        name="Aperture Blades",
-        description="Number of blades in aperture for polygonal bokeh (at least 3)",
-        min=0, max=100,
-        default=0,
-    )
-    aperture_rotation: FloatProperty(
-        name="Aperture Rotation",
-        description="Rotation of blades in aperture",
-        soft_min=-pi, soft_max=pi,
-        subtype='ANGLE',
-        default=0,
-    )
-    aperture_ratio: FloatProperty(
-        name="Aperture Ratio",
-        description="Distortion to simulate anamorphic lens bokeh",
-        min=0.01, soft_min=1.0, soft_max=2.0,
-        default=1.0,
-        precision=4,
-    )
     panorama_type: EnumProperty(
         name="Panorama Type",
         description="Distortion to use for the calculation",
@@ -954,7 +957,7 @@ class CyclesLightSettings(bpy.types.PropertyGroup):
 class CyclesWorldSettings(bpy.types.PropertyGroup):
 
     sampling_method: EnumProperty(
-        name="Sampling method",
+        name="Sampling Method",
         description="How to sample the background light",
         items=enum_world_mis,
         default='AUTOMATIC',
@@ -1334,12 +1337,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         subtype="PIXEL",
     )
     denoising_relative_pca: BoolProperty(
-        name="Relative filter",
+        name="Relative Filter",
         description="When removing pixels that don't carry information, use a relative threshold instead of an absolute one (can help to reduce artifacts, but might cause detail loss around edges)",
         default=False,
     )
     denoising_store_passes: BoolProperty(
-        name="Store denoising passes",
+        name="Store Denoising Passes",
         description="Store the denoising feature passes and the noisy image",
         default=False,
         update=update_render_passes,
@@ -1406,10 +1409,12 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
     def get_device_types(self, context):
         import _cycles
-        has_cuda, has_opencl = _cycles.get_device_types()
+        has_cuda, has_optix, has_opencl = _cycles.get_device_types()
         list = [('NONE', "None", "Don't use compute device", 0)]
         if has_cuda:
             list.append(('CUDA', "CUDA", "Use CUDA for GPU acceleration", 1))
+        if has_optix:
+            list.append(('OPTIX', "OptiX", "Use OptiX for GPU acceleration", 3))
         if has_opencl:
             list.append(('OPENCL', "OpenCL", "Use OpenCL for GPU acceleration", 2))
         return list
@@ -1430,7 +1435,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
     def update_device_entries(self, device_list):
         for device in device_list:
-            if not device[1] in {'CUDA', 'OPENCL', 'CPU'}:
+            if not device[1] in {'CUDA', 'OPTIX', 'OPENCL', 'CPU'}:
                 continue
             # Try to find existing Device entry
             entry = self.find_existing_device_entry(device)
@@ -1445,8 +1450,8 @@ class CyclesPreferences(bpy.types.AddonPreferences):
                 # Update name in case it changed
                 entry.name = device[0]
 
-    # Gets all devices types by default.
-    def get_devices(self, compute_device_type=''):
+    # Gets all devices types for a compute device type.
+    def get_devices_for_type(self, compute_device_type):
         import _cycles
         # Layout of the device tuples: (Name, Type, Persistent ID)
         device_list = _cycles.available_devices(compute_device_type)
@@ -1455,20 +1460,25 @@ class CyclesPreferences(bpy.types.AddonPreferences):
         # hold pointers to a resized array.
         self.update_device_entries(device_list)
         # Sort entries into lists
-        cuda_devices = []
-        opencl_devices = []
+        devices = []
         cpu_devices = []
         for device in device_list:
             entry = self.find_existing_device_entry(device)
-            if entry.type == 'CUDA':
-                cuda_devices.append(entry)
-            elif entry.type == 'OPENCL':
-                opencl_devices.append(entry)
+            if entry.type == compute_device_type:
+                devices.append(entry)
             elif entry.type == 'CPU':
                 cpu_devices.append(entry)
         # Extend all GPU devices with CPU.
-        cuda_devices.extend(cpu_devices)
-        opencl_devices.extend(cpu_devices)
+        if compute_device_type in ('CUDA', 'OPENCL'):
+            devices.extend(cpu_devices)
+        return devices
+
+    # For backwards compatibility, only returns CUDA and OpenCL but still
+    # refreshes all devices.
+    def get_devices(self, compute_device_type=''):
+        cuda_devices = self.get_devices_for_type('CUDA')
+        self.get_devices_for_type('OPTIX')
+        opencl_devices = self.get_devices_for_type('OPENCL')
         return cuda_devices, opencl_devices
 
     def get_num_gpu_devices(self):
@@ -1496,7 +1506,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
                 break
 
         if not found_device:
-            col = box.column(align=True);
+            col = box.column(align=True)
             col.label(text="No compatible GPUs found for path tracing", icon='INFO')
             col.label(text="Cycles will render on the CPU", icon='BLANK1')
             return
@@ -1504,19 +1514,36 @@ class CyclesPreferences(bpy.types.AddonPreferences):
         for device in devices:
             box.prop(device, "use", text=device.name)
 
+        if device_type == 'OPTIX':
+            col = box.column(align=True)
+            col.label(text="OptiX support is experimental", icon='INFO')
+            col.label(text="Not all Cycles features are supported yet", icon='BLANK1')
+
+
     def draw_impl(self, layout, context):
         row = layout.row()
         row.prop(self, "compute_device_type", expand=True)
 
-        cuda_devices, opencl_devices = self.get_devices(self.compute_device_type)
+        devices = self.get_devices_for_type(self.compute_device_type)
         row = layout.row()
         if self.compute_device_type == 'CUDA':
-            self._draw_devices(row, 'CUDA', cuda_devices)
+            self._draw_devices(row, 'CUDA', devices)
+        elif self.compute_device_type == 'OPTIX':
+            self._draw_devices(row, 'OPTIX', devices)
         elif self.compute_device_type == 'OPENCL':
-            self._draw_devices(row, 'OPENCL', opencl_devices)
+            self._draw_devices(row, 'OPENCL', devices)
 
     def draw(self, context):
         self.draw_impl(self.layout, context)
+
+
+class CyclesView3DShadingSettings(bpy.types.PropertyGroup):
+    render_pass: EnumProperty(
+        name="Render Pass",
+        description="Render pass to show in the 3D Viewport",
+        items=enum_view3d_shading_render_pass,
+        default='COMBINED',
+    )
 
 
 def register():
@@ -1532,6 +1559,12 @@ def register():
     bpy.utils.register_class(CyclesDeviceSettings)
     bpy.utils.register_class(CyclesPreferences)
     bpy.utils.register_class(CyclesRenderLayerSettings)
+    bpy.utils.register_class(CyclesView3DShadingSettings)
+
+    bpy.types.View3DShading.cycles = bpy.props.PointerProperty(
+        name="Cycles Settings",
+        type=CyclesView3DShadingSettings,
+    )
 
 
 def unregister():
@@ -1547,3 +1580,4 @@ def unregister():
     bpy.utils.unregister_class(CyclesDeviceSettings)
     bpy.utils.unregister_class(CyclesPreferences)
     bpy.utils.unregister_class(CyclesRenderLayerSettings)
+    bpy.utils.unregister_class(CyclesView3DShadingSettings)

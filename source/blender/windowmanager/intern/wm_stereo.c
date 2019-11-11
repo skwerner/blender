@@ -43,7 +43,6 @@
 #include "ED_screen.h"
 
 #include "GPU_immediate.h"
-#include "GPU_framebuffer.h"
 #include "GPU_texture.h"
 
 #include "WM_api.h"
@@ -165,7 +164,7 @@ void wm_stereo3d_draw_sidebyside(wmWindow *win, int view)
       soffx = 0;
     }
   }
-  else {  //RIGHT_LEFT_ID
+  else {  // RIGHT_LEFT_ID
     if (cross_eyed) {
       soffx = 0;
     }

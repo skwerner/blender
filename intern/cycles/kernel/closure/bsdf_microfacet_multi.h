@@ -16,7 +16,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Most of the code is based on the supplemental implementations from https://eheitzresearch.wordpress.com/240-2/. */
+/* Most of the code is based on the supplemental implementations from
+ * https://eheitzresearch.wordpress.com/240-2/. */
 
 /* === GGX Microfacet distribution functions === */
 
@@ -80,7 +81,8 @@ ccl_device_forceinline float2 mf_sampleP22_11(const float cosI,
     return make_float2(slopeX, -slopeY);
 }
 
-/* Visible normal sampling for the GGX distribution (based on page 7 of the supplemental implementation). */
+/* Visible normal sampling for the GGX distribution
+ * (based on page 7 of the supplemental implementation). */
 ccl_device_forceinline float3 mf_sample_vndf(const float3 wi,
                                              const float2 alpha,
                                              const float randx,
@@ -134,7 +136,8 @@ ccl_device_forceinline float3 mf_eval_phase_glossy(const float3 w,
   return make_float3(phase, phase, phase);
 }
 
-/* Phase function for dielectric transmissive materials, including both reflection and refraction according to the dielectric fresnel term. */
+/* Phase function for dielectric transmissive materials, including both reflection and refraction
+ * according to the dielectric fresnel term. */
 ccl_device_forceinline float3 mf_sample_phase_glass(
     const float3 wi, const float eta, const float3 wm, const float randV, bool *outside)
 {
@@ -227,7 +230,8 @@ ccl_device_forceinline float mf_G1(const float3 w, const float C1, const float l
   return powf(C1, lambda);
 }
 
-/* Sampling from the visible height distribution (based on page 17 of the supplemental implementation). */
+/* Sampling from the visible height distribution (based on page 17 of the supplemental
+ * implementation). */
 ccl_device_forceinline bool mf_sample_height(
     const float3 w, float *h, float *C1, float *G1, float *lambda, const float U)
 {
@@ -254,7 +258,8 @@ ccl_device_forceinline bool mf_sample_height(
 }
 
 /* === PDF approximations for the different phase functions. ===
- * As explained in bsdf_microfacet_multi_impl.h, using approximations with MIS still produces an unbiased result. */
+ * As explained in bsdf_microfacet_multi_impl.h, using approximations with MIS still produces an
+ * unbiased result. */
 
 /* Approximation for the albedo of the single-scattering GGX distribution,
  * the missing energy is then approximated as a diffuse reflection for the PDF. */
@@ -342,7 +347,8 @@ ccl_device_forceinline float mf_glass_pdf(const float3 wi,
   }
 }
 
-/* === Actual random walk implementations, one version of mf_eval and mf_sample per phase function. === */
+/* === Actual random walk implementations === */
+/* One version of mf_eval and mf_sample per phase function. */
 
 #define MF_NAME_JOIN(x, y) x##_##y
 #define MF_NAME_EVAL(x, y) MF_NAME_JOIN(x, y)
@@ -372,12 +378,8 @@ ccl_device int bsdf_microfacet_multi_ggx_common_setup(MicrofacetBsdf *bsdf)
 {
   bsdf->alpha_x = clamp(bsdf->alpha_x, 1e-4f, 1.0f);
   bsdf->alpha_y = clamp(bsdf->alpha_y, 1e-4f, 1.0f);
-  bsdf->extra->color.x = saturate(bsdf->extra->color.x);
-  bsdf->extra->color.y = saturate(bsdf->extra->color.y);
-  bsdf->extra->color.z = saturate(bsdf->extra->color.z);
-  bsdf->extra->cspec0.x = saturate(bsdf->extra->cspec0.x);
-  bsdf->extra->cspec0.y = saturate(bsdf->extra->cspec0.y);
-  bsdf->extra->cspec0.z = saturate(bsdf->extra->cspec0.z);
+  bsdf->extra->color = saturate3(bsdf->extra->color);
+  bsdf->extra->cspec0 = saturate3(bsdf->extra->cspec0);
 
   return SD_BSDF | SD_BSDF_HAS_EVAL | SD_BSDF_NEEDS_LCG;
 }
@@ -562,9 +564,7 @@ ccl_device int bsdf_microfacet_multi_ggx_glass_setup(MicrofacetBsdf *bsdf)
   bsdf->alpha_x = clamp(bsdf->alpha_x, 1e-4f, 1.0f);
   bsdf->alpha_y = bsdf->alpha_x;
   bsdf->ior = max(0.0f, bsdf->ior);
-  bsdf->extra->color.x = saturate(bsdf->extra->color.x);
-  bsdf->extra->color.y = saturate(bsdf->extra->color.y);
-  bsdf->extra->color.z = saturate(bsdf->extra->color.z);
+  bsdf->extra->color = saturate3(bsdf->extra->color);
 
   bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID;
 
@@ -577,12 +577,8 @@ ccl_device int bsdf_microfacet_multi_ggx_glass_fresnel_setup(MicrofacetBsdf *bsd
   bsdf->alpha_x = clamp(bsdf->alpha_x, 1e-4f, 1.0f);
   bsdf->alpha_y = bsdf->alpha_x;
   bsdf->ior = max(0.0f, bsdf->ior);
-  bsdf->extra->color.x = saturate(bsdf->extra->color.x);
-  bsdf->extra->color.y = saturate(bsdf->extra->color.y);
-  bsdf->extra->color.z = saturate(bsdf->extra->color.z);
-  bsdf->extra->cspec0.x = saturate(bsdf->extra->cspec0.x);
-  bsdf->extra->cspec0.y = saturate(bsdf->extra->cspec0.y);
-  bsdf->extra->cspec0.z = saturate(bsdf->extra->cspec0.z);
+  bsdf->extra->color = saturate3(bsdf->extra->color);
+  bsdf->extra->cspec0 = saturate3(bsdf->extra->cspec0);
 
   bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_FRESNEL_ID;
 

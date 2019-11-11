@@ -41,7 +41,6 @@ if(WIN32)
     -DCLEW_LIBRARY=${LIBDIR}/clew/lib/clew${LIBEXT}
     -DCUEW_INCLUDE_DIR=${LIBDIR}/cuew/include
     -DCUEW_LIBRARY=${LIBDIR}/cuew/lib/cuew${LIBEXT}
-    -DCMAKE_EXE_LINKER_FLAGS_RELEASE=libcmt.lib
   )
   if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8")
     set(OPENSUBDIV_EXTRA_ARGS
@@ -70,7 +69,6 @@ ExternalProject_Add(external_opensubdiv
   DOWNLOAD_DIR ${DOWNLOAD_DIR}
   URL_HASH MD5=${OPENSUBDIV_Hash}
   PREFIX ${BUILD_DIR}/opensubdiv
-  PATCH_COMMAND ${PATCH_CMD} --verbose -p 1 -N -d ${BUILD_DIR}/opensubdiv/src/external_opensubdiv < ${PATCH_DIR}/opensubdiv.diff
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LIBDIR}/opensubdiv -Wno-dev ${DEFAULT_CMAKE_FLAGS} ${OPENSUBDIV_EXTRA_ARGS}
   INSTALL_DIR ${LIBDIR}/opensubdiv
 )

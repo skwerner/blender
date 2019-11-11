@@ -37,6 +37,8 @@
 #include "GPU_batch.h"
 #include "GPU_extensions.h"
 
+#include "draw_cache_inline.h"
+
 #include "draw_cache_impl.h" /* own include */
 
 static int dl_vert_len(const DispList *dl)
@@ -64,7 +66,7 @@ static int dl_tri_len(const DispList *dl)
   return 0;
 }
 
-/* see: displist_get_allverts */
+/* see: displist_vert_coords_alloc */
 static int curve_render_surface_vert_len_get(const ListBase *lb)
 {
   int vert_len = 0;
@@ -402,7 +404,6 @@ void DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv(ListBase *lb,
         &format_pos_nor, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
     attr_id.nor = GPU_vertformat_attr_add(
         &format_pos_nor, "nor", GPU_COMP_I10, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
-    GPU_vertformat_triple_load(&format_pos_nor);
     /* UVs are in [0..1] range. We can compress them. */
     attr_id.uv = GPU_vertformat_attr_add(
         &format_uv, "u", GPU_COMP_I16, 2, GPU_FETCH_INT_TO_FLOAT_UNIT);
@@ -692,7 +693,7 @@ void DRW_displist_indexbuf_create_edges_adjacency_lines(struct ListBase *lb,
     v_idx += dl_vert_len(dl);
   }
 
-  /* Create edges for remaning non manifold edges. */
+  /* Create edges for remaining non manifold edges. */
   EdgeHashIterator *ehi;
   for (ehi = BLI_edgehashIterator_new(eh); BLI_edgehashIterator_isDone(ehi) == false;
        BLI_edgehashIterator_step(ehi)) {

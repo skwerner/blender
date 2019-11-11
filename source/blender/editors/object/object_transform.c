@@ -47,15 +47,18 @@
 #include "BKE_mball.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
+#include "BKE_scene.h"
 #include "BKE_report.h"
 #include "BKE_editmesh.h"
 #include "BKE_multires.h"
 #include "BKE_armature.h"
 #include "BKE_lattice.h"
+#include "BKE_library.h"
 #include "BKE_tracking.h"
 #include "BKE_gpencil.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "RNA_define.h"
 #include "RNA_access.h"
@@ -74,7 +77,9 @@
 
 #include "object_intern.h"
 
-/*************************** Clear Transformation ****************************/
+/* -------------------------------------------------------------------- */
+/** \name Clear Transformation Utilities
+ * \{ */
 
 /* clear location of object */
 static void object_clear_loc(Object *ob, const bool clear_delta)
@@ -281,8 +286,6 @@ static void object_clear_scale(Object *ob, const bool clear_delta)
   }
 }
 
-/* --------------- */
-
 /* generic exec for clear-transform operators */
 static int object_clear_transform_generic_exec(bContext *C,
                                                wmOperator *op,
@@ -326,7 +329,11 @@ static int object_clear_transform_generic_exec(bContext *C,
   return OPERATOR_FINISHED;
 }
 
-/* --------------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Location Operator
+ * \{ */
 
 static int object_location_clear_exec(bContext *C, wmOperator *op)
 {
@@ -356,6 +363,12 @@ void OBJECT_OT_location_clear(wmOperatorType *ot)
       "Clear delta location in addition to clearing the normal location transform");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Rotation Operator
+ * \{ */
+
 static int object_rotation_clear_exec(bContext *C, wmOperator *op)
 {
   return object_clear_transform_generic_exec(C, op, object_clear_rot, ANIM_KS_ROTATION_ID);
@@ -383,6 +396,12 @@ void OBJECT_OT_rotation_clear(wmOperatorType *ot)
       "Clear Delta",
       "Clear delta rotation in addition to clearing the normal rotation transform");
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Scale Operator
+ * \{ */
 
 static int object_scale_clear_exec(bContext *C, wmOperator *op)
 {
@@ -412,7 +431,11 @@ void OBJECT_OT_scale_clear(wmOperatorType *ot)
       "Clear delta scale in addition to clearing the normal scale transform");
 }
 
-/* --------------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Origin Operator
+ * \{ */
 
 static int object_origin_clear_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -454,24 +477,89 @@ void OBJECT_OT_origin_clear(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/*************************** Apply Transformation ****************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Apply Transformation Operator
+ * \{ */
 
 /* use this when the loc/size/rot of the parent has changed but the children
  * should stay in the same place, e.g. for apply-size-rot or object center */
-static void ignore_parent_tx(const bContext *C, Main *bmain, Scene *scene, Object *ob)
+static void ignore_parent_tx(Main *bmain, Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
   Object workob;
   Object *ob_child;
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 
   /* a change was made, adjust the children to compensate */
   for (ob_child = bmain->objects.first; ob_child; ob_child = ob_child->id.next) {
     if (ob_child->parent == ob) {
-      BKE_object_apply_mat4(ob_child, ob_child->obmat, true, false);
-      BKE_object_workob_calc_parent(depsgraph, scene, ob_child, &workob);
+      Object *ob_child_eval = DEG_get_evaluated_object(depsgraph, ob_child);
+      BKE_object_apply_mat4(ob_child_eval, ob_child_eval->obmat, true, false);
+      BKE_object_workob_calc_parent(depsgraph, scene, ob_child_eval, &workob);
       invert_m4_m4(ob_child->parentinv, workob.obmat);
+      /* Copy result of BKE_object_apply_mat4(). */
+      BKE_object_transform_copy(ob_child, ob_child_eval);
+      /* Make sure evaluated object is in a consistent state with the original one.
+       * It might be needed for applying transform on its children. */
+      copy_m4_m4(ob_child_eval->parentinv, ob_child->parentinv);
+      BKE_object_eval_transform_all(depsgraph, scene_eval, ob_child_eval);
+      /* Tag for update.
+       * This is because parent matrix did change, so in theory the child object might now be
+       * evaluated to a different location in another editing context. */
+      DEG_id_tag_update(&ob_child->id, ID_RECALC_TRANSFORM);
     }
   }
+}
+
+static void append_sorted_object_parent_hierarchy(Object *root_object,
+                                                  Object *object,
+                                                  Object **sorted_objects,
+                                                  int *object_index)
+{
+  if (object->parent != NULL && object->parent != root_object) {
+    append_sorted_object_parent_hierarchy(
+        root_object, object->parent, sorted_objects, object_index);
+  }
+  if (object->id.tag & LIB_TAG_DOIT) {
+    sorted_objects[*object_index] = object;
+    (*object_index)++;
+    object->id.tag &= ~LIB_TAG_DOIT;
+  }
+}
+
+static Object **sorted_selected_editable_objects(bContext *C, int *r_num_objects)
+{
+  Main *bmain = CTX_data_main(C);
+
+  /* Count all objects, but also tag all the selected ones. */
+  BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
+  int num_objects = 0;
+  CTX_DATA_BEGIN (C, Object *, object, selected_editable_objects) {
+    object->id.tag |= LIB_TAG_DOIT;
+    num_objects++;
+  }
+  CTX_DATA_END;
+  if (num_objects == 0) {
+    *r_num_objects = 0;
+    return NULL;
+  }
+
+  /* Append all the objects. */
+  Object **sorted_objects = MEM_malloc_arrayN(num_objects, sizeof(Object *), "sorted objects");
+  int object_index = 0;
+  CTX_DATA_BEGIN (C, Object *, object, selected_editable_objects) {
+    if ((object->id.tag & LIB_TAG_DOIT) == 0) {
+      continue;
+    }
+    append_sorted_object_parent_hierarchy(object, object, sorted_objects, &object_index);
+  }
+  CTX_DATA_END;
+
+  *r_num_objects = num_objects;
+
+  return sorted_objects;
 }
 
 static int apply_objects_internal(bContext *C,
@@ -483,7 +571,7 @@ static int apply_objects_internal(bContext *C,
 {
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   float rsmat[3][3], obmat[3][3], iobmat[3][3], mat[4][4], scale;
   bool changed = true;
 
@@ -617,7 +705,14 @@ static int apply_objects_internal(bContext *C,
   changed = false;
 
   /* now execute */
-  CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
+  int num_objects;
+  Object **objects = sorted_selected_editable_objects(C, &num_objects);
+  if (objects == NULL) {
+    return OPERATOR_CANCELLED;
+  }
+
+  for (int object_index = 0; object_index < num_objects; object_index++) {
+    Object *ob = objects[object_index];
 
     /* calculate rotation/scale matrix */
     if (apply_scale && apply_rot) {
@@ -673,7 +768,8 @@ static int apply_objects_internal(bContext *C,
       BKE_mesh_calc_normals(me);
     }
     else if (ob->type == OB_ARMATURE) {
-      ED_armature_transform_apply(bmain, ob, mat, do_props);
+      bArmature *arm = ob->data;
+      BKE_armature_transform(arm, mat, do_props);
     }
     else if (ob->type == OB_LATTICE) {
       Lattice *lt = ob->data;
@@ -779,18 +875,24 @@ static int apply_objects_internal(bContext *C,
       unit_axis_angle(ob->rotAxis, &ob->rotAngle);
     }
 
-    BKE_object_where_is_calc(depsgraph, scene, ob);
+    Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+    BKE_object_transform_copy(ob_eval, ob);
+
+    BKE_object_where_is_calc(depsgraph, scene, ob_eval);
     if (ob->type == OB_ARMATURE) {
-      BKE_pose_where_is(depsgraph, scene, ob); /* needed for bone parents */
+      /* needed for bone parents */
+      BKE_armature_copy_bone_transforms(ob_eval->data, ob->data);
+      BKE_pose_where_is(depsgraph, scene, ob_eval);
     }
 
-    ignore_parent_tx(C, bmain, scene, ob);
+    ignore_parent_tx(bmain, depsgraph, scene, ob);
 
     DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
 
     changed = true;
   }
-  CTX_DATA_END;
+
+  MEM_freeN(objects);
 
   if (!changed) {
     BKE_report(reports, RPT_WARNING, "Objects have no data to transform");
@@ -804,13 +906,14 @@ static int apply_objects_internal(bContext *C,
 static int visual_transform_apply_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   bool changed = false;
 
   CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
-    BKE_object_where_is_calc(depsgraph, scene, ob);
-    BKE_object_apply_mat4(ob, ob->obmat, true, true);
-    BKE_object_where_is_calc(depsgraph, scene, ob);
+    Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+    BKE_object_where_is_calc(depsgraph, scene, ob_eval);
+    BKE_object_apply_mat4(ob_eval, ob_eval->obmat, true, true);
+    BKE_object_transform_copy(ob, ob_eval);
 
     /* update for any children that may get moved */
     DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
@@ -882,7 +985,11 @@ void OBJECT_OT_transform_apply(wmOperatorType *ot)
                   "Modify properties such as curve vertex radius, font size and bone envelope");
 }
 
-/********************* Set Object Center ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Set Object Center Operator
+ * \{ */
 
 enum {
   GEOMETRY_TO_ORIGIN = 0,
@@ -898,15 +1005,11 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   Object *obact = CTX_data_active_object(C);
   Object *obedit = CTX_data_edit_object(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *tob;
   float cent[3], cent_neg[3], centn[3];
   const float *cursor = scene->cursor.location;
   int centermode = RNA_enum_get(op->ptr, "type");
-
-  ListBase ctx_data_list;
-  CollectionPointerLink *ctx_ob;
-  CollectionPointerLink *ctx_ob_act = NULL;
 
   /* keep track of what is changed */
   int tot_change = 0, tot_lib_error = 0, tot_multiuser_arm_error = 0;
@@ -976,21 +1079,22 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
     }
   }
 
-  CTX_data_selected_editable_objects(C, &ctx_data_list);
+  int num_objects;
+  Object **objects = sorted_selected_editable_objects(C, &num_objects);
+  if (objects == NULL) {
+    return OPERATOR_CANCELLED;
+  }
 
   /* reset flags */
-  for (ctx_ob = ctx_data_list.first; ctx_ob; ctx_ob = ctx_ob->next) {
-    Object *ob = ctx_ob->ptr.data;
+  for (int object_index = 0; object_index < num_objects; object_index++) {
+    Object *ob = objects[object_index];
     ob->flag &= ~OB_DONE;
 
     /* move active first */
     if (ob == obact) {
-      ctx_ob_act = ctx_ob;
+      memmove(&objects[1], objects, object_index * sizeof(Object *));
+      objects[0] = ob;
     }
-  }
-
-  if (ctx_ob_act) {
-    BLI_listbase_rotate_first(&ctx_data_list, (LinkData *)ctx_ob_act);
   }
 
   for (tob = bmain->objects.first; tob; tob = tob->id.next) {
@@ -1002,8 +1106,8 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
     }
   }
 
-  for (ctx_ob = ctx_data_list.first; ctx_ob; ctx_ob = ctx_ob->next) {
-    Object *ob = ctx_ob->ptr.data;
+  for (int object_index = 0; object_index < num_objects; object_index++) {
+    Object *ob = objects[object_index];
 
     if ((ob->flag & OB_DONE) == 0) {
       bool do_inverse_offset = false;
@@ -1077,7 +1181,8 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
       else if (ELEM(ob->type, OB_CURVE, OB_SURF)) {
         Curve *cu = ob->data;
 
-        if (centermode == ORIGIN_TO_CURSOR) { /* done */
+        if (centermode == ORIGIN_TO_CURSOR) {
+          /* done */
         }
         else if (around == V3D_AROUND_CENTER_MEDIAN) {
           BKE_curve_center_median(cu, cent);
@@ -1153,10 +1258,13 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
           arm->id.tag |= LIB_TAG_DOIT;
           /* do_inverse_offset = true; */ /* docenter_armature() handles this */
 
-          BKE_object_where_is_calc(depsgraph, scene, ob);
-          BKE_pose_where_is(depsgraph, scene, ob); /* needed for bone parents */
+          Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+          BKE_object_transform_copy(ob_eval, ob);
+          BKE_armature_copy_bone_transforms(ob_eval->data, ob->data);
+          BKE_object_where_is_calc(depsgraph, scene, ob_eval);
+          BKE_pose_where_is(depsgraph, scene, ob_eval); /* needed for bone parents */
 
-          ignore_parent_tx(C, bmain, scene, ob);
+          ignore_parent_tx(bmain, depsgraph, scene, ob);
 
           if (obedit) {
             break;
@@ -1166,7 +1274,8 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
       else if (ob->type == OB_MBALL) {
         MetaBall *mb = ob->data;
 
-        if (centermode == ORIGIN_TO_CURSOR) { /* done */
+        if (centermode == ORIGIN_TO_CURSOR) {
+          /* done */
         }
         else if (around == V3D_AROUND_CENTER_MEDIAN) {
           BKE_mball_center_median(mb, cent);
@@ -1192,7 +1301,8 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
       else if (ob->type == OB_LATTICE) {
         Lattice *lt = ob->data;
 
-        if (centermode == ORIGIN_TO_CURSOR) { /* done */
+        if (centermode == ORIGIN_TO_CURSOR) {
+          /* done */
         }
         else if (around == V3D_AROUND_CENTER_MEDIAN) {
           BKE_lattice_center_median(lt, cent);
@@ -1245,11 +1355,6 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
               invert_m4_m4(inverse_diff_mat, diff_mat);
               for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
                 for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
-                  /* skip strokes that are invalid for current view */
-                  if (ED_gpencil_stroke_can_use(C, gps) == false) {
-                    continue;
-                  }
-
                   for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
                     float mpt[3];
                     mul_v3_m4v3(mpt, inverse_diff_mat, &pt->x);
@@ -1259,12 +1364,13 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
                 }
               }
             }
-            DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
-
             tot_change++;
             if (centermode == ORIGIN_TO_GEOMETRY) {
               copy_v3_v3(ob->loc, gpcenter);
             }
+            DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+            DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
+
             ob->id.tag |= LIB_TAG_DOIT;
             do_inverse_offset = true;
           }
@@ -1278,7 +1384,6 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 
       /* offset other selected objects */
       if (do_inverse_offset && (centermode != GEOMETRY_TO_ORIGIN)) {
-        CollectionPointerLink *ctx_link_other;
         float obmat[4][4];
 
         /* was the object data modified
@@ -1290,21 +1395,24 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
 
         add_v3_v3(ob->loc, centn);
 
-        BKE_object_where_is_calc(depsgraph, scene, ob);
+        Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+        BKE_object_transform_copy(ob_eval, ob);
+        BKE_object_where_is_calc(depsgraph, scene, ob_eval);
         if (ob->type == OB_ARMATURE) {
-          BKE_pose_where_is(depsgraph, scene, ob); /* needed for bone parents */
+          /* needed for bone parents */
+          BKE_armature_copy_bone_transforms(ob_eval->data, ob->data);
+          BKE_pose_where_is(depsgraph, scene, ob_eval);
         }
 
-        ignore_parent_tx(C, bmain, scene, ob);
+        ignore_parent_tx(bmain, depsgraph, scene, ob);
 
         /* other users? */
-        //CTX_DATA_BEGIN (C, Object *, ob_other, selected_editable_objects)
+        // CTX_DATA_BEGIN (C, Object *, ob_other, selected_editable_objects)
         //{
 
         /* use existing context looper */
-        for (ctx_link_other = ctx_data_list.first; ctx_link_other;
-             ctx_link_other = ctx_link_other->next) {
-          Object *ob_other = ctx_link_other->ptr.data;
+        for (int other_object_index = 0; other_object_index < num_objects; other_object_index++) {
+          Object *ob_other = objects[other_object_index];
 
           if ((ob_other->flag & OB_DONE) == 0 &&
               ((ob->data && (ob->data == ob_other->data)) ||
@@ -1316,24 +1424,32 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
             mul_v3_mat3_m4v3(centn, ob_other->obmat, cent); /* omit translation part */
             add_v3_v3(ob_other->loc, centn);
 
-            BKE_object_where_is_calc(depsgraph, scene, ob_other);
+            Object *ob_other_eval = DEG_get_evaluated_object(depsgraph, ob_other);
+            BKE_object_transform_copy(ob_other_eval, ob_other);
+            BKE_object_where_is_calc(depsgraph, scene, ob_other_eval);
             if (ob_other->type == OB_ARMATURE) {
               /* needed for bone parents */
-              BKE_pose_where_is(depsgraph, scene, ob_other);
+              BKE_armature_copy_bone_transforms(ob_eval->data, ob->data);
+              BKE_pose_where_is(depsgraph, scene, ob_other_eval);
             }
-            ignore_parent_tx(C, bmain, scene, ob_other);
+            ignore_parent_tx(bmain, depsgraph, scene, ob_other);
           }
         }
-        //CTX_DATA_END;
+        // CTX_DATA_END;
       }
     }
   }
-  BLI_freelistN(&ctx_data_list);
+  MEM_freeN(objects);
 
   for (tob = bmain->objects.first; tob; tob = tob->id.next) {
     if (tob->data && (((ID *)tob->data)->tag & LIB_TAG_DOIT)) {
       BKE_object_batch_cache_dirty_tag(tob);
       DEG_id_tag_update(&tob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+    }
+    /* special support for dupligroups */
+    else if (tob->instance_collection && tob->instance_collection->id.tag & LIB_TAG_DOIT) {
+      DEG_id_tag_update(&tob->id, ID_RECALC_TRANSFORM);
+      DEG_id_tag_update(&tob->instance_collection->id, ID_RECALC_COPY_ON_WRITE);
     }
   }
 
@@ -1420,10 +1536,12 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
   RNA_def_enum(ot->srna, "center", prop_set_bounds_types, V3D_AROUND_CENTER_MEDIAN, "Center", "");
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
 /** \name Transform Axis Target
  *
- * Note this is an experemental operator to point lights/cameras at objects.
+ * Note this is an experimental operator to point lights/cameras at objects.
  * We may re-work how this behaves based on user feedback.
  * - campbell.
  * \{ */
@@ -1561,7 +1679,7 @@ static void object_apply_location(Object *ob, const float loc[3])
 }
 
 static void object_orient_to_location(Object *ob,
-                                      float rot_orig[3][3],
+                                      const float rot_orig[3][3],
                                       const float axis[3],
                                       const float location[3])
 {
@@ -1597,8 +1715,9 @@ static void object_transform_axis_target_cancel(bContext *C, wmOperator *op)
 
 static int object_transform_axis_target_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   if (vc.obact == NULL || !object_is_target_compat(vc.obact)) {
     /* Falls back to texture space transform. */

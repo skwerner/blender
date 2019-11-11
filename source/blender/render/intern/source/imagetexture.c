@@ -233,7 +233,7 @@ int imagewrap(Tex *tex,
 
   /* keep this before interpolation [#29761] */
   if (ima) {
-    if ((tex->imaflag & TEX_USEALPHA) && (ima->flag & IMA_IGNORE_ALPHA) == 0) {
+    if ((tex->imaflag & TEX_USEALPHA) && (ima->alpha_mode != IMA_ALPHA_IGNORE)) {
       if ((tex->imaflag & TEX_CALCALPHA) == 0) {
         texres->talpha = true;
       }
@@ -267,7 +267,7 @@ int imagewrap(Tex *tex,
 
   if (texres->nor) {
     if (tex->imaflag & TEX_NORMALMAP) {
-      /* qdn: normal from color
+      /* Normal from color:
        * The invert of the red channel is to make
        * the normal map compliant with the outside world.
        * It needs to be done because in Blender
@@ -514,8 +514,8 @@ static float clipy_rctf(rctf *rf, float y1, float y2)
 
 static void boxsampleclip(struct ImBuf *ibuf, rctf *rf, TexResult *texres)
 {
-  /* sample box, is clipped already, and minx etc. have been set at ibuf size.
-   * Enlarge with antialiased edges of the pixels */
+  /* Sample box, is clipped already, and minx etc. have been set at ibuf size.
+   * Enlarge with anti-aliased edges of the pixels. */
 
   float muly, mulx, div, col[4];
   int x, y, startx, endx, starty, endy;
@@ -842,8 +842,8 @@ static void area_sample(TexResult *texr, ImBuf *ibuf, float fx, float fy, afdata
   xsd = 1.f / xsam;
   ysd = 1.f / ysam;
   texr->tr = texr->tg = texr->tb = texr->ta = 0.f;
-  for (ys = 0; ys < ysam; ++ys) {
-    for (xs = 0; xs < xsam; ++xs) {
+  for (ys = 0; ys < ysam; ys++) {
+    for (xs = 0; xs < xsam; xs++) {
       const float su = (xs + ((ys & 1) + 0.5f) * 0.5f) * xsd - 0.5f;
       const float sv = (ys + ((xs & 1) + 0.5f) * 0.5f) * ysd - 0.5f;
       const float pu = fx + su * AFD->dxt[0] + sv * AFD->dyt[0];
@@ -947,7 +947,7 @@ static void alpha_clip_aniso(
   float alphaclip;
   rctf rf;
 
-  /* TXF apha: we're doing the same alphaclip here as boxsample, but i'm doubting
+  /* TXF alpha: we're doing the same alpha-clip here as box-sample, but I'm doubting
    * if this is actually correct for the all the filtering algorithms .. */
 
   if (!(extflag == TXC_REPT || extflag == TXC_EXTD)) {
@@ -1056,7 +1056,7 @@ static int imagewraposa_aniso(Tex *tex,
   image_mipmap_test(tex, ibuf);
 
   if (ima) {
-    if ((tex->imaflag & TEX_USEALPHA) && (ima->flag & IMA_IGNORE_ALPHA) == 0) {
+    if ((tex->imaflag & TEX_USEALPHA) && (ima->alpha_mode != IMA_ALPHA_IGNORE)) {
       if ((tex->imaflag & TEX_CALCALPHA) == 0) {
         texres->talpha = 1;
       }
@@ -1512,7 +1512,7 @@ int imagewraposa(Tex *tex,
   image_mipmap_test(tex, ibuf);
 
   if (ima) {
-    if ((tex->imaflag & TEX_USEALPHA) && (ima->flag & IMA_IGNORE_ALPHA) == 0) {
+    if ((tex->imaflag & TEX_USEALPHA) && (ima->alpha_mode != IMA_ALPHA_IGNORE)) {
       if ((tex->imaflag & TEX_CALCALPHA) == 0) {
         texres->talpha = true;
       }
@@ -1781,8 +1781,8 @@ int imagewraposa(Tex *tex,
 
     if (texres->nor && (tex->imaflag & TEX_NORMALMAP) == 0) {
       /* a bit extra filter */
-      //minx*= 1.35f;
-      //miny*= 1.35f;
+      // minx*= 1.35f;
+      // miny*= 1.35f;
 
       boxsample(
           curibuf, fx - minx, fy - miny, fx + minx, fy + miny, texres, imaprepeat, imapextend);
@@ -2005,8 +2005,8 @@ void ibuf_sample(ImBuf *ibuf, float fx, float fy, float dx, float dy, float resu
   AFD.dxt[1] = dx;
   AFD.dyt[0] = dy;
   AFD.dyt[1] = dy;
-  //copy_v2_v2(AFD.dxt, dx);
-  //copy_v2_v2(AFD.dyt, dy);
+  // copy_v2_v2(AFD.dxt, dx);
+  // copy_v2_v2(AFD.dyt, dy);
 
   AFD.intpol = 1;
   AFD.extflag = TXC_EXTD;

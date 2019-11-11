@@ -21,6 +21,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
+#include "BKE_layer.h"
 #include "BKE_object.h"
 
 #include "DNA_object_types.h"
@@ -117,6 +118,7 @@ void VIEW3D_GGT_force_field(wmGizmoGroupType *gzgt)
 
   gzgt->poll = WIDGETGROUP_forcefield_poll;
   gzgt->setup = WIDGETGROUP_forcefield_setup;
+  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_maybe_drag;
   gzgt->refresh = WIDGETGROUP_forcefield_refresh;
 }
 

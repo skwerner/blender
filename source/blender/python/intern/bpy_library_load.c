@@ -19,9 +19,9 @@
  *
  * This file exposed blend file library appending/linking to python, typically
  * this would be done via RNA api but in this case a hand written python api
- * allows us to use pythons context manager (__enter__ and __exit__).
+ * allows us to use Python's context manager (`__enter__` and `__exit__`).
  *
- * Everything here is exposed via bpy.data.libraries.load(...) which returns
+ * Everything here is exposed via `bpy.data.libraries.load(...)` which returns
  * a context manager.
  */
 
@@ -92,7 +92,7 @@ static PyTypeObject bpy_lib_Type = {
     0,                                        /* tp_itemsize */
     /* methods */
     (destructor)bpy_lib_dealloc, /* tp_dealloc */
-    NULL,                        /* printfunc tp_print; */
+    (printfunc)NULL,             /* printfunc tp_print; */
     NULL,                        /* getattrfunc tp_getattr; */
     NULL,                        /* setattrfunc tp_setattr; */
     NULL,

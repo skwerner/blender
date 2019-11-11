@@ -29,16 +29,18 @@
 #include <deque>
 #include <cmath>
 
-#include "BKE_object.h"
-
 #include "BLI_utildefines.h"
 #include "BLI_listbase.h"
 #include "BLI_math_vector.h"
 #include "BLI_task.h"
 #include "BLI_ghash.h"
 
+#include "BKE_object.h"
+#include "BKE_scene.h"
+
 extern "C" {
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "DRW_engine.h"
 } /* extern "C" */
@@ -53,10 +55,11 @@ extern "C" {
 #include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
+#include "intern/node/deg_node_time.h"
 
 #include "intern/eval/deg_eval_copy_on_write.h"
 
-// Invalidate datablock data when update is flushed on it.
+// Invalidate data-block data when update is flushed on it.
 //
 // The idea of this is to help catching cases when area is accessing data which
 // is not yet evaluated, which could happen due to missing relations. The issue
@@ -84,18 +87,9 @@ typedef std::deque<OperationNode *> FlushQueue;
 
 namespace {
 
-void flush_init_operation_node_func(void *__restrict data_v,
-                                    const int i,
-                                    const ParallelRangeTLS *__restrict /*tls*/)
-{
-  Depsgraph *graph = (Depsgraph *)data_v;
-  OperationNode *node = graph->operations[i];
-  node->scheduled = false;
-}
-
 void flush_init_id_node_func(void *__restrict data_v,
                              const int i,
-                             const ParallelRangeTLS *__restrict /*tls*/)
+                             const TaskParallelTLS *__restrict /*tls*/)
 {
   Depsgraph *graph = (Depsgraph *)data_v;
   IDNode *id_node = graph->id_nodes[i];
@@ -107,16 +101,13 @@ void flush_init_id_node_func(void *__restrict data_v,
 
 BLI_INLINE void flush_prepare(Depsgraph *graph)
 {
-  {
-    const int num_operations = graph->operations.size();
-    ParallelRangeSettings settings;
-    BLI_parallel_range_settings_defaults(&settings);
-    settings.min_iter_per_thread = 1024;
-    BLI_task_parallel_range(0, num_operations, graph, flush_init_operation_node_func, &settings);
+  for (OperationNode *node : graph->operations) {
+    node->scheduled = false;
   }
+
   {
     const int num_id_nodes = graph->id_nodes.size();
-    ParallelRangeSettings settings;
+    TaskParallelSettings settings;
     BLI_parallel_range_settings_defaults(&settings);
     settings.min_iter_per_thread = 1024;
     BLI_task_parallel_range(0, num_id_nodes, graph, flush_init_id_node_func, &settings);
@@ -187,6 +178,10 @@ BLI_INLINE OperationNode *flush_schedule_children(OperationNode *op_node, FlushQ
     if (rel->flag & RELATION_FLAG_NO_FLUSH) {
       continue;
     }
+    if (op_node->flag & DEPSOP_FLAG_USER_MODIFIED) {
+      IDNode *id_node = op_node->owner->owner;
+      id_node->is_user_modified = true;
+    }
     /* Relation only allows flushes on user changes, but the node was not
      * affected by user. */
     if ((rel->flag & RELATION_FLAG_FLUSH_USER_EDIT_ONLY) &&
@@ -234,10 +229,6 @@ void flush_editors_id_update(Depsgraph *graph, const DEGEditorUpdateContext *upd
     /* TODO(sergey): Do we need to pass original or evaluated ID here? */
     ID *id_orig = id_node->id_orig;
     ID *id_cow = id_node->id_cow;
-    /* Copy tag from original data to CoW storage.
-     * This is because DEG_id_tag_update() sets tags on original
-     * data. */
-    id_cow->recalc |= (id_orig->recalc & ID_RECALC_ALL);
     /* Gather recalc flags from all changed components. */
     GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
       if (comp_node->custom_flags != COMPONENT_STATE_DONE) {
@@ -254,19 +245,19 @@ void flush_editors_id_update(Depsgraph *graph, const DEGEditorUpdateContext *upd
                      id_orig->name,
                      (unsigned int)id_cow->recalc);
 
-    /* Inform editors. Only if the datablock is being evaluated a second
+    /* Inform editors. Only if the data-block is being evaluated a second
      * time, to distinguish between user edits and initial evaluation when
-     * the datablock becomes visible.
+     * the data-block becomes visible.
      *
-     * TODO: image datablocks do not use COW, so might not be detected
+     * TODO: image data-blocks do not use COW, so might not be detected
      * correctly. */
     if (deg_copy_on_write_is_expanded(id_cow)) {
-      if (graph->is_active) {
+      if (graph->is_active && id_node->is_user_modified) {
         deg_editors_id_update(update_ctx, id_orig);
       }
       /* ID may need to get its auto-override operations refreshed. */
-      if (ID_IS_STATIC_OVERRIDE_AUTO(id_orig)) {
-        id_orig->tag |= LIB_TAG_OVERRIDESTATIC_AUTOREFRESH;
+      if (ID_IS_OVERRIDE_LIBRARY_AUTO(id_orig)) {
+        id_orig->tag |= LIB_TAG_OVERRIDE_LIBRARY_AUTOREFRESH;
       }
       /* Inform draw engines that something was changed. */
       flush_engine_data_update(id_cow);
@@ -348,6 +339,13 @@ void deg_graph_flush_updates(Main *bmain, Depsgraph *graph)
   BLI_assert(bmain != NULL);
   BLI_assert(graph != NULL);
   /* Nothing to update, early out. */
+  if (graph->need_update_time) {
+    const Scene *scene_orig = graph->scene;
+    const float ctime = BKE_scene_frame_get(scene_orig);
+    DEG::TimeSourceNode *time_source = graph->find_time_source();
+    graph->ctime = ctime;
+    time_source->tag_update(graph, DEG::DEG_UPDATE_SOURCE_TIME);
+  }
   if (BLI_gset_len(graph->entry_tags) == 0) {
     return;
   }
@@ -385,27 +383,13 @@ void deg_graph_flush_updates(Main *bmain, Depsgraph *graph)
   invalidate_tagged_evaluated_data(graph);
 }
 
-static void graph_clear_operation_func(void *__restrict data_v,
-                                       const int i,
-                                       const ParallelRangeTLS *__restrict /*tls*/)
-{
-  Depsgraph *graph = (Depsgraph *)data_v;
-  OperationNode *node = graph->operations[i];
-  /* Clear node's "pending update" settings. */
-  node->flag &= ~(DEPSOP_FLAG_DIRECTLY_MODIFIED | DEPSOP_FLAG_NEEDS_UPDATE |
-                  DEPSOP_FLAG_USER_MODIFIED);
-}
-
 /* Clear tags from all operation nodes. */
 void deg_graph_clear_tags(Depsgraph *graph)
 {
   /* Go over all operation nodes, clearing tags. */
-  {
-    const int num_operations = graph->operations.size();
-    ParallelRangeSettings settings;
-    BLI_parallel_range_settings_defaults(&settings);
-    settings.min_iter_per_thread = 1024;
-    BLI_task_parallel_range(0, num_operations, graph, graph_clear_operation_func, &settings);
+  for (OperationNode *node : graph->operations) {
+    node->flag &= ~(DEPSOP_FLAG_DIRECTLY_MODIFIED | DEPSOP_FLAG_NEEDS_UPDATE |
+                    DEPSOP_FLAG_USER_MODIFIED);
   }
   /* Clear any entry tags which haven't been flushed. */
   BLI_gset_clear(graph->entry_tags, NULL);

@@ -29,36 +29,28 @@
 
 #include "DNA_object_types.h"
 #include "DNA_armature_types.h"
-#include "DNA_brush_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 #include "DNA_windowmanager_types.h"
-#include "DNA_workspace_types.h"
 
 #include "BLI_utildefines.h"
 
-#include "BKE_brush.h"
 #include "BKE_context.h"
 #include "BKE_object.h"
 #include "BKE_action.h"
 #include "BKE_armature.h"
-#include "BKE_paint.h"
 #include "BKE_gpencil.h"
 #include "BKE_layer.h"
 #include "BKE_sequencer.h"
-#include "BKE_workspace.h"
-
-#include "DEG_depsgraph.h"
 
 #include "RNA_access.h"
 
 #include "ED_armature.h"
 #include "ED_gpencil.h"
 #include "ED_anim_api.h"
-#include "ED_uvedit.h"
 
 #include "WM_api.h"
 #include "UI_interface.h"
@@ -69,15 +61,10 @@ const char *screen_context_dir[] = {
     "scene",
     "view_layer",
     "visible_objects",
-    "visible_bases",
     "selectable_objects",
-    "selectable_bases",
     "selected_objects",
-    "selected_bases",
     "editable_objects",
-    "editable_bases",
     "selected_editable_objects",
-    "selected_editable_bases",
     "objects_in_mode",
     "objects_in_mode_unique_data",
     "visible_bones",
@@ -89,7 +76,6 @@ const char *screen_context_dir[] = {
     "selected_pose_bones_from_active_object",
     "active_bone",
     "active_pose_bone",
-    "active_base",
     "active_object",
     "object",
     "edit_object",
@@ -98,7 +84,6 @@ const char *screen_context_dir[] = {
     "weight_paint_object",
     "image_paint_object",
     "particle_edit_object",
-    "uv_sculpt_object",
     "pose_object",
     "sequences",
     "selected_sequences",
@@ -111,7 +96,11 @@ const char *screen_context_dir[] = {
     "active_gpencil_layer",
     "active_gpencil_frame",
     "active_operator",
+    "visible_fcurves",
+    "editable_fcurves",
+    "selected_visible_fcurves",
     "selected_editable_fcurves",
+    "active_editable_fcurve",
     NULL,
 };
 
@@ -175,52 +164,6 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
     for (Base *base = view_layer->object_bases.first; base; base = base->next) {
       if (BASE_EDITABLE(v3d, base)) {
         CTX_data_id_list_add(result, &base->object->id);
-      }
-    }
-    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
-  }
-  else if (CTX_data_equals(member, "visible_bases")) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-      if (BASE_VISIBLE(v3d, base)) {
-        CTX_data_list_add(result, &scene->id, &RNA_ObjectBase, base);
-      }
-    }
-    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
-  }
-  else if (CTX_data_equals(member, "selectable_bases")) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-      if (BASE_SELECTABLE(v3d, base)) {
-        CTX_data_list_add(result, &scene->id, &RNA_ObjectBase, base);
-      }
-    }
-    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
-  }
-  else if (CTX_data_equals(member, "selected_bases")) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-      if (BASE_SELECTED(v3d, base)) {
-        CTX_data_list_add(result, &scene->id, &RNA_ObjectBase, base);
-      }
-    }
-    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
-  }
-  else if (CTX_data_equals(member, "selected_editable_bases")) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-      if (BASE_SELECTED_EDITABLE(v3d, base)) {
-        CTX_data_list_add(result, &scene->id, &RNA_ObjectBase, base);
-      }
-    }
-    CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
-  }
-  else if (CTX_data_equals(member, "editable_bases")) {
-    /* Visible + Editable, but not necessarily selected */
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-      if (BASE_EDITABLE(v3d, base)) {
-        CTX_data_list_add(result, &scene->id, &RNA_ObjectBase, base);
       }
     }
     CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
@@ -456,13 +399,6 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
       return 1;
     }
   }
-  else if (CTX_data_equals(member, "active_base")) {
-    if (view_layer->basact) {
-      CTX_data_pointer_set(result, &scene->id, &RNA_ObjectBase, view_layer->basact);
-    }
-
-    return 1;
-  }
   else if (CTX_data_equals(member, "active_object")) {
     if (obact) {
       CTX_data_id_pointer_set(result, &obact->id);
@@ -518,22 +454,6 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
       CTX_data_id_pointer_set(result, &obact->id);
     }
 
-    return 1;
-  }
-  else if (CTX_data_equals(member, "uv_sculpt_object")) {
-    /* TODO(campbell): most likely we change rules for uv_sculpt. */
-    if (obact && (obact->mode & OB_MODE_EDIT)) {
-      const ToolSettings *ts = scene->toolsettings;
-      if (ts->use_uv_sculpt) {
-        if (ED_uvedit_test(obedit)) {
-          WorkSpace *workspace = CTX_wm_workspace(C);
-          if ((workspace->tools_space_type == SPACE_IMAGE) &&
-              (workspace->tools_mode == SI_MODE_UV)) {
-            CTX_data_id_pointer_set(result, &obact->id);
-          }
-        }
-      }
-    }
     return 1;
   }
   else if (CTX_data_equals(member, "pose_object")) {
@@ -605,7 +525,7 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
     gpd_ptr = ED_gpencil_data_get_pointers_direct((ID *)sc, sa, scene, obact, &ptr);
 
     if (gpd_ptr) {
-      CTX_data_pointer_set(result, ptr.id.data, ptr.type, ptr.data);
+      CTX_data_pointer_set(result, ptr.owner_id, ptr.type, ptr.data);
       return 1;
     }
   }
@@ -730,29 +650,59 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
       return 1;
     }
   }
-  else if (CTX_data_equals(member, "selected_editable_fcurves")) {
+  else if (CTX_data_equals(member, "editable_fcurves") ||
+           CTX_data_equals(member, "visible_fcurves") ||
+           CTX_data_equals(member, "selected_editable_fcurves") ||
+           CTX_data_equals(member, "selected_visible_fcurves")) {
     bAnimContext ac;
 
     if (ANIM_animdata_get_context(C, &ac) && ELEM(ac.spacetype, SPACE_ACTION, SPACE_GRAPH)) {
-      bAnimListElem *ale;
       ListBase anim_data = {NULL, NULL};
 
-      int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_FOREDIT | ANIMFILTER_NODUPLIS |
-                    ANIMFILTER_SEL) |
+      int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_NODUPLIS) |
                    (ac.spacetype == SPACE_GRAPH ? ANIMFILTER_CURVE_VISIBLE :
                                                   ANIMFILTER_LIST_VISIBLE);
 
+      if (strstr(member, "editable_")) {
+        filter |= ANIMFILTER_FOREDIT;
+      }
+      if (STRPREFIX(member, "selected_")) {
+        filter |= ANIMFILTER_SEL;
+      }
+
       ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
-      for (ale = anim_data.first; ale; ale = ale->next) {
-        if (ale->type == ANIMTYPE_FCURVE) {
-          CTX_data_list_add(result, ale->id, &RNA_FCurve, ale->data);
+      for (bAnimListElem *ale = anim_data.first; ale; ale = ale->next) {
+        if (ELEM(ale->type, ANIMTYPE_FCURVE, ANIMTYPE_NLACURVE)) {
+          CTX_data_list_add(result, ale->fcurve_owner_id, &RNA_FCurve, ale->data);
         }
       }
 
       ANIM_animdata_freelist(&anim_data);
 
       CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
+      return 1;
+    }
+  }
+  else if (CTX_data_equals(member, "active_editable_fcurve")) {
+    bAnimContext ac;
+
+    if (ANIM_animdata_get_context(C, &ac) && ELEM(ac.spacetype, SPACE_GRAPH)) {
+      ListBase anim_data = {NULL, NULL};
+
+      int filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_ACTIVE | ANIMFILTER_FOREDIT |
+                    ANIMFILTER_CURVE_VISIBLE);
+
+      ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
+
+      for (bAnimListElem *ale = anim_data.first; ale; ale = ale->next) {
+        if (ELEM(ale->type, ANIMTYPE_FCURVE, ANIMTYPE_NLACURVE)) {
+          CTX_data_pointer_set(result, ale->fcurve_owner_id, &RNA_FCurve, ale->data);
+          break;
+        }
+      }
+
+      ANIM_animdata_freelist(&anim_data);
       return 1;
     }
   }

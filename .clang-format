@@ -98,9 +98,8 @@ SpaceInEmptyParentheses: false
 # Note that this doesn't work for C-style comments.
 SpacesBeforeTrailingComments: 2
 
-# Don't reflow comments, let developers define line breaks.
-# Enabling breaks some ascii art.
-ReflowComments: false
+# Reflow comments, developers must disable formatting as with code to override this.
+ReflowComments: true
 
 # Never use tabs for indentation.
 # Note: TabWidth and IndentWidth must be the same, or strange things happen.
@@ -184,7 +183,6 @@ ForEachMacros:
   - DEG_OBJECT_ITER_FOR_RENDER_ENGINE_BEGIN
   - DRIVER_TARGETS_LOOPER_BEGIN
   - DRIVER_TARGETS_USED_LOOPER_BEGIN
-  - FAKE_SELECT_MODE_BEGIN
   - FOREACH_BASE_IN_EDIT_MODE_BEGIN
   - FOREACH_BASE_IN_MODE_BEGIN
   - FOREACH_BEGIN
@@ -223,10 +221,23 @@ ForEachMacros:
   - ITER_BEGIN
   - ITER_PIXELS
   - ITER_SLOTS
+  - ITER_SLOTS_BEGIN
+  - LOOP_EDITED_POINTS
+  - LOOP_KEYS
+  - LOOP_POINTS
+  - LOOP_SELECTED_KEYS
+  - LOOP_SELECTED_POINTS
+  - LOOP_TAGGED_KEYS
+  - LOOP_TAGGED_POINTS
+  - LOOP_UNSELECTED_POINTS
+  - LOOP_VISIBLE_KEYS
+  - LOOP_VISIBLE_POINTS
   - LISTBASE_CIRCULAR_BACKWARD_BEGIN
   - LISTBASE_CIRCULAR_FORWARD_BEGIN
   - LISTBASE_FOREACH
+  - LISTBASE_FOREACH_BACKWARD
   - LISTBASE_FOREACH_MUTABLE
+  - LISTBASE_FOREACH_BACKWARD_MUTABLE
   - MAN2D_ITER_AXES_BEGIN
   - MAN_ITER_AXES_BEGIN
   - NODE_INSTANCE_HASH_ITER
@@ -238,11 +249,12 @@ ForEachMacros:
   - RNA_BEGIN
   - RNA_PROP_BEGIN
   - RNA_STRUCT_BEGIN
+  - RNA_STRUCT_BEGIN_SKIP_RNA_TYPE
   - SEQP_BEGIN
   - SEQ_BEGIN
   - foreach
 
-# Use once we bump the minimum verison to version 8.
+# Use once we bump the minimum version to version 8.
 # # Without this string literals that in-line 'STRINGIFY' behave strangely (a bug?).
 # StatementMacros:
 #   - PyObject_VAR_HEAD

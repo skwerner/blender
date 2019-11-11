@@ -83,15 +83,16 @@ static int GetDirectionalViewMapDensityF1D___init__(BPy_GetDirectionalViewMapDen
   float f = 2.0;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "II|O!f", (char **)kwlist, &u1, &u2, &IntegrationType_Type, &obj, &f))
+          args, kwds, "II|O!f", (char **)kwlist, &u1, &u2, &IntegrationType_Type, &obj, &f)) {
     return -1;
+  }
   IntegrationType t = (obj) ? IntegrationType_from_BPy_IntegrationType(obj) : MEAN;
   self->py_uf1D_double.uf1D_double = new Functions1D::GetDirectionalViewMapDensityF1D(
       u1, u2, t, f);
   return 0;
 }
 
-/*-----------------------BPy_GetDirectionalViewMapDensityF1D type definition ------------------------------*/
+/*-----------------------BPy_GetDirectionalViewMapDensityF1D type definition --------------------*/
 
 PyTypeObject GetDirectionalViewMapDensityF1D_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "GetDirectionalViewMapDensityF1D", /* tp_name */

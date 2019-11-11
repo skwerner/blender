@@ -36,6 +36,8 @@
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 #include "BLI_string.h"
+#include "BLI_string_utils.h"
+#include "BLI_ghash.h"
 
 #include "BKE_main.h"
 #include "BKE_node.h"
@@ -76,25 +78,9 @@ struct GPUMaterial {
   ListBase inputs; /* GPUInput */
   GPUVertAttrLayers attrs;
   int builtins;
-  int alpha, obcolalpha;
-  int dynproperty;
-
-  /* for passing uniforms */
-  int viewmatloc, invviewmatloc;
-  int obmatloc, invobmatloc;
-  int localtoviewmatloc, invlocaltoviewmatloc;
-  int obcolloc, obautobumpscaleloc;
-  int cameratexcofacloc;
-
-  int partscalarpropsloc;
-  int partcoloc;
-  int partvel;
-  int partangvel;
-
-  int objectinfoloc;
 
   /* XXX: Should be in Material. But it depends on the output node
-   * used and since the output selection is difference for GPUMaterial...
+   * used and since the output selection is different for GPUMaterial...
    */
   int domain;
 
@@ -117,6 +103,8 @@ struct GPUMaterial {
   GPUTexture *coba_tex; /* 1D Texture array containing all color bands. */
   GPUColorBandBuilder *coba_builder;
 
+  GSet *used_libraries;
+
 #ifndef NDEBUG
   char name[64];
 #endif
@@ -125,7 +113,6 @@ struct GPUMaterial {
 enum {
   GPU_DOMAIN_SURFACE = (1 << 0),
   GPU_DOMAIN_VOLUME = (1 << 1),
-  GPU_DOMAIN_SSS = (1 << 2),
 };
 
 /* Functions */
@@ -199,6 +186,8 @@ static void gpu_material_free_single(GPUMaterial *material)
   if (material->coba_tex != NULL) {
     GPU_texture_free(material->coba_tex);
   }
+
+  BLI_gset_free(material->used_libraries, NULL);
 }
 
 void GPU_material_free(ListBase *gpumaterial)
@@ -231,6 +220,12 @@ ListBase *GPU_material_get_inputs(GPUMaterial *material)
   return &material->inputs;
 }
 
+/* Return can be NULL if it's a world material. */
+Material *GPU_material_get_material(GPUMaterial *material)
+{
+  return material->ma;
+}
+
 GPUUniformBuffer *GPU_material_uniform_buffer_get(GPUMaterial *material)
 {
   return material->ubo;
@@ -256,7 +251,10 @@ typedef struct GPUSssKernelData {
   float kernel[SSS_SAMPLES][4];
   float param[3], max_radius;
   int samples;
+  int pad[3];
 } GPUSssKernelData;
+
+BLI_STATIC_ASSERT_ALIGN(GPUSssKernelData, 16)
 
 static void sss_calculate_offsets(GPUSssKernelData *kd, int count, float exponent)
 {
@@ -335,7 +333,7 @@ static float eval_integral(float x0, float x1, short falloff_type, float sharpne
   const float step = range / INTEGRAL_RESOLUTION;
   float integral = 0.0f;
 
-  for (int i = 0; i < INTEGRAL_RESOLUTION; ++i) {
+  for (int i = 0; i < INTEGRAL_RESOLUTION; i++) {
     float x = x0 + range * ((float)i + 0.5f) / (float)INTEGRAL_RESOLUTION;
     float y = eval_profile(x, falloff_type, sharpness, param);
     integral += y * step;
@@ -346,7 +344,7 @@ static float eval_integral(float x0, float x1, short falloff_type, float sharpne
 #undef INTEGRAL_RESOLUTION
 
 static void compute_sss_kernel(
-    GPUSssKernelData *kd, float radii[3], int sample_len, int falloff_type, float sharpness)
+    GPUSssKernelData *kd, const float radii[3], int sample_len, int falloff_type, float sharpness)
 {
   float rad[3];
   /* Minimum radius */
@@ -416,7 +414,7 @@ static void compute_sss_kernel(
     sum[2] += kd->kernel[i][2];
   }
 
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 3; i++) {
     if (sum[i] > 0.0f) {
       /* Normalize */
       for (int j = 0; j < sample_len; j++) {
@@ -452,7 +450,7 @@ static void compute_sss_translucence_kernel(const GPUSssKernelData *kd,
   *output = (float *)texels;
 
   /* Last texel should be black, hence the - 1. */
-  for (int i = 0; i < resolution - 1; ++i) {
+  for (int i = 0; i < resolution - 1; i++) {
     /* Distance from surface. */
     float d = kd->max_radius * ((float)i + 0.00001f) / ((float)resolution);
 
@@ -589,6 +587,11 @@ void gpu_material_add_node(GPUMaterial *material, GPUNode *node)
   BLI_addtail(&material->nodes, node);
 }
 
+GSet *gpu_material_used_libraries(GPUMaterial *material)
+{
+  return material->used_libraries;
+}
+
 /* Return true if the material compilation has not yet begin or begin. */
 eGPUMaterialStatus GPU_material_status(GPUMaterial *mat)
 {
@@ -596,15 +599,6 @@ eGPUMaterialStatus GPU_material_status(GPUMaterial *mat)
 }
 
 /* Code generation */
-
-bool GPU_material_do_color_management(GPUMaterial *mat)
-{
-  if (!BKE_scene_check_color_management_enabled(mat->scene)) {
-    return false;
-  }
-
-  return true;
-}
 
 bool GPU_material_use_domain_surface(GPUMaterial *mat)
 {
@@ -623,7 +617,7 @@ void GPU_material_flag_set(GPUMaterial *mat, eGPUMatFlag flag)
 
 bool GPU_material_flag_get(GPUMaterial *mat, eGPUMatFlag flag)
 {
-  return (mat->flag & flag);
+  return (mat->flag & flag) != 0;
 }
 
 GPUMaterial *GPU_material_from_nodetree_find(ListBase *gpumaterials,
@@ -646,6 +640,7 @@ GPUMaterial *GPU_material_from_nodetree_find(ListBase *gpumaterials,
  * so only do this when they are needed.
  */
 GPUMaterial *GPU_material_from_nodetree(Scene *scene,
+                                        struct Material *ma,
                                         struct bNodeTree *ntree,
                                         ListBase *gpumaterials,
                                         const void *engine_type,
@@ -664,6 +659,7 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
 
   /* allocate material */
   GPUMaterial *mat = MEM_callocN(sizeof(GPUMaterial), "GPUMaterial");
+  mat->ma = ma;
   mat->scene = scene;
   mat->engine_type = engine_type;
   mat->options = options;
@@ -673,20 +669,26 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
   UNUSED_VARS(name);
 #endif
 
+  mat->used_libraries = BLI_gset_new(
+      BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, "GPUMaterial.used_libraries");
+
   /* localize tree to create links for reroute and mute */
   bNodeTree *localtree = ntreeLocalize(ntree);
   ntreeGPUMaterialNodes(localtree, mat, &has_surface_output, &has_volume_output);
 
   gpu_material_ramp_texture_build(mat);
 
-  if (has_surface_output) {
-    mat->domain |= GPU_DOMAIN_SURFACE;
-  }
-  if (has_volume_output) {
-    mat->domain |= GPU_DOMAIN_VOLUME;
-  }
+  SET_FLAG_FROM_TEST(mat->domain, has_surface_output, GPU_DOMAIN_SURFACE);
+  SET_FLAG_FROM_TEST(mat->domain, has_volume_output, GPU_DOMAIN_VOLUME);
 
   if (mat->outlink) {
+    /* HACK: this is only for eevee. We add the define here after the nodetree evaluation. */
+    if (GPU_material_flag_get(mat, GPU_MATFLAG_SSS)) {
+      defines = BLI_string_joinN(defines,
+                                 "#ifndef USE_ALPHA_BLEND\n"
+                                 "#  define USE_SSS\n"
+                                 "#endif\n");
+    }
     /* Prune the unused nodes and extract attributes before compiling so the
      * generated VBOs are ready to accept the future shader. */
     GPU_nodes_prune(&mat->nodes, mat->outlink);
@@ -701,6 +703,10 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
                                   geom_code,
                                   frag_lib,
                                   defines);
+
+    if (GPU_material_flag_get(mat, GPU_MATFLAG_SSS)) {
+      MEM_freeN((char *)defines);
+    }
 
     if (mat->pass == NULL) {
       /* We had a cache hit and the shader has already failed to compile. */
@@ -740,23 +746,25 @@ GPUMaterial *GPU_material_from_nodetree(Scene *scene,
 
 void GPU_material_compile(GPUMaterial *mat)
 {
-  /* Only run once! */
+  bool success;
+
   BLI_assert(mat->status == GPU_MAT_QUEUED);
   BLI_assert(mat->pass);
 
   /* NOTE: The shader may have already been compiled here since we are
    * sharing GPUShader across GPUMaterials. In this case it's a no-op. */
 #ifndef NDEBUG
-  GPU_pass_compile(mat->pass, mat->name);
+  success = GPU_pass_compile(mat->pass, mat->name);
 #else
-  GPU_pass_compile(mat->pass, __func__);
+  success = GPU_pass_compile(mat->pass, __func__);
 #endif
 
-  GPUShader *sh = GPU_pass_shader_get(mat->pass);
-
-  if (sh != NULL) {
-    mat->status = GPU_MAT_SUCCESS;
-    GPU_nodes_extract_dynamic_inputs(sh, &mat->inputs, &mat->nodes);
+  if (success) {
+    GPUShader *sh = GPU_pass_shader_get(mat->pass);
+    if (sh != NULL) {
+      mat->status = GPU_MAT_SUCCESS;
+      GPU_nodes_extract_dynamic_inputs(sh, &mat->inputs, &mat->nodes);
+    }
   }
   else {
     mat->status = GPU_MAT_FAILED;

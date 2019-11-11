@@ -142,11 +142,14 @@ ImBuf *ED_space_image_acquire_buffer(SpaceImage *sima, void **r_lock)
 
   if (sima && sima->image) {
 #if 0
-    if (sima->image->type == IMA_TYPE_R_RESULT && BIF_show_render_spare())
+    if (sima->image->type == IMA_TYPE_R_RESULT && BIF_show_render_spare()) {
       return BIF_render_spare_imbuf();
+    }
     else
 #endif
-    ibuf = BKE_image_acquire_ibuf(sima->image, &sima->iuser, r_lock);
+    {
+      ibuf = BKE_image_acquire_ibuf(sima->image, &sima->iuser, r_lock);
+    }
 
     if (ibuf) {
       if (ibuf->rect || ibuf->rect_float) {
@@ -298,6 +301,18 @@ void ED_image_mouse_pos(SpaceImage *sima, ARegion *ar, const int mval[2], float 
   co[1] = ((mval[1] - sy) / zoomy) / height;
 }
 
+void ED_image_view_center_to_point(SpaceImage *sima, float x, float y)
+{
+  int width, height;
+  float aspx, aspy;
+
+  ED_space_image_get_size(sima, &width, &height);
+  ED_space_image_get_aspect(sima, &aspx, &aspy);
+
+  sima->xof = (x - 0.5f) * width * aspx;
+  sima->yof = (y - 0.5f) * height * aspy;
+}
+
 void ED_image_point_pos(SpaceImage *sima, ARegion *ar, float x, float y, float *xr, float *yr)
 {
   int sx, sy, width, height;
@@ -382,10 +397,10 @@ void ED_space_image_scopes_update(const struct bContext *C,
     }
   }
 
-  scopes_update(&sima->scopes,
-                ibuf,
-                use_view_settings ? &scene->view_settings : NULL,
-                &scene->display_settings);
+  BKE_scopes_update(&sima->scopes,
+                    ibuf,
+                    use_view_settings ? &scene->view_settings : NULL,
+                    &scene->display_settings);
 }
 
 bool ED_space_image_show_render(SpaceImage *sima)
@@ -472,4 +487,10 @@ bool ED_space_image_maskedit_mask_poll(bContext *C)
   }
 
   return false;
+}
+
+bool ED_space_image_cursor_poll(bContext *C)
+{
+  return ED_operator_uvedit_space_image(C) || ED_space_image_maskedit_poll(C) ||
+         ED_space_image_paint_curve(C);
 }

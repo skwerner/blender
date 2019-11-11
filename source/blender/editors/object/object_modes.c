@@ -43,6 +43,7 @@
 #include "DEG_depsgraph.h"
 
 #include "ED_armature.h"
+#include "ED_gpencil.h"
 #include "ED_screen.h"
 
 #include "ED_object.h" /* own include */
@@ -170,14 +171,6 @@ void ED_object_mode_toggle(bContext *C, eObjectMode mode)
 
     if (opstring) {
       wmOperatorType *ot = WM_operatortype_find(opstring, false);
-      if (ot->flag & OPTYPE_USE_EVAL_DATA) {
-        /* We need to force refresh of depsgraph after undo step,
-         * redoing the operator *may* rely on some valid evaluated data. */
-        struct Main *bmain = CTX_data_main(C);
-        Scene *scene = CTX_data_scene(C);
-        ViewLayer *view_layer = CTX_data_view_layer(C);
-        BKE_scene_view_layer_graph_evaluated_ensure(bmain, scene, view_layer);
-      }
       WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_REGION_WIN, NULL);
     }
   }
@@ -193,9 +186,8 @@ void ED_object_mode_set(bContext *C, eObjectMode mode)
   wm->op_undo_depth--;
 }
 
-void ED_object_mode_exit(bContext *C)
+void ED_object_mode_exit(bContext *C, Depsgraph *depsgraph)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
   struct Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -276,7 +268,7 @@ static bool ed_object_mode_generic_exit_ex(struct Main *bmain,
       if (only_test) {
         return true;
       }
-      ED_object_sculptmode_exit_ex(depsgraph, scene, ob);
+      ED_object_sculptmode_exit_ex(bmain, depsgraph, scene, ob);
     }
   }
   else if (ob->mode & OB_MODE_POSE) {
@@ -286,6 +278,12 @@ static bool ed_object_mode_generic_exit_ex(struct Main *bmain,
       }
       ED_object_posemode_exit_ex(bmain, ob);
     }
+  }
+  else if ((ob->type == OB_GPENCIL) && ((ob->mode & OB_MODE_OBJECT) == 0)) {
+    if (only_test) {
+      return true;
+    }
+    ED_object_gpencil_exit(bmain, ob);
   }
   else {
     if (only_test) {

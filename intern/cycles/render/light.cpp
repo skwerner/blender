@@ -114,6 +114,8 @@ NODE_DEFINE(Light)
   type_enum.insert("spot", LIGHT_SPOT);
   SOCKET_ENUM(type, "Type", type_enum, LIGHT_POINT);
 
+  SOCKET_COLOR(strength, "Strength", make_float3(1.0f, 1.0f, 1.0f));
+
   SOCKET_POINT(co, "Co", make_float3(0.0f, 0.0f, 0.0f));
 
   SOCKET_VECTOR(dir, "Dir", make_float3(0.0f, 0.0f, 0.0f));
@@ -162,6 +164,9 @@ void Light::tag_update(Scene *scene)
 
 bool Light::has_contribution(Scene *scene)
 {
+  if (strength == make_float3(0.0f, 0.0f, 0.0f)) {
+    return false;
+  }
   if (is_portal) {
     return false;
   }
@@ -216,13 +221,11 @@ void LightManager::disable_ineffective_light(Scene *scene)
      */
     Shader *shader = (scene->background->shader) ? scene->background->shader :
                                                    scene->default_background;
-    bool disable_mis = !(has_portal || shader->has_surface_spatial_varying);
-    if (disable_mis) {
-      VLOG(1) << "Background MIS has been disabled.\n";
-      foreach (Light *light, scene->lights) {
-        if (light->type == LIGHT_BACKGROUND) {
-          light->is_enabled = false;
-        }
+    const bool disable_mis = !(has_portal || shader->has_surface_spatial_varying);
+    VLOG_IF(1, disable_mis) << "Background MIS has been disabled.\n";
+    foreach (Light *light, scene->lights) {
+      if (light->type == LIGHT_BACKGROUND) {
+        light->is_enabled = !disable_mis;
       }
     }
   }
@@ -393,11 +396,18 @@ void LightManager::device_update_distribution(Device *,
     distribution[offset].lamp.size = light->size;
     totarea += lightarea;
 
-    if (light->size > 0.0f && light->use_mis)
-      use_lamp_mis = true;
-    if (light->type == LIGHT_BACKGROUND) {
+    if (light->type == LIGHT_DISTANT) {
+      use_lamp_mis |= (light->angle > 0.0f && light->use_mis);
+    }
+    else if (light->type == LIGHT_POINT || light->type == LIGHT_SPOT) {
+      use_lamp_mis |= (light->size > 0.0f && light->use_mis);
+    }
+    else if (light->type == LIGHT_AREA) {
+      use_lamp_mis |= light->use_mis;
+    }
+    else if (light->type == LIGHT_BACKGROUND) {
       num_background_lights++;
-      background_mis = light->use_mis;
+      background_mis |= light->use_mis;
     }
 
     light_index++;
@@ -672,7 +682,6 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
     float3 co = light->co;
     Shader *shader = (light->shader) ? light->shader : scene->default_light;
     int shader_id = scene->shader_manager->get_shader_id(shader);
-    int samples = light->samples;
     int max_bounces = light->max_bounces;
     float random = (float)light->random_id * (1.0f / (float)0xFFFFFFFF);
 
@@ -697,7 +706,10 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
     }
 
     klights[light_index].type = light->type;
-    klights[light_index].samples = samples;
+    klights[light_index].samples = light->samples;
+    klights[light_index].strength[0] = light->strength.x;
+    klights[light_index].strength[1] = light->strength.y;
+    klights[light_index].strength[2] = light->strength.z;
 
     if (light->type == LIGHT_POINT) {
       shader_id &= ~SHADER_AREA_LIGHT;
@@ -718,8 +730,8 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
     else if (light->type == LIGHT_DISTANT) {
       shader_id &= ~SHADER_AREA_LIGHT;
 
-      float radius = light->size;
-      float angle = atanf(radius);
+      float angle = light->angle / 2.0f;
+      float radius = tanf(angle);
       float cosangle = cosf(angle);
       float area = M_PI_F * radius * radius;
       float invarea = (area > 0.0f) ? 1.0f / area : 1.0f;
@@ -930,7 +942,7 @@ void LightManager::tag_update(Scene * /*scene*/)
   need_update = true;
 }
 
-int LightManager::add_ies_from_file(ustring filename)
+int LightManager::add_ies_from_file(const string &filename)
 {
   string content;
 
@@ -939,10 +951,10 @@ int LightManager::add_ies_from_file(ustring filename)
     content = "\n";
   }
 
-  return add_ies(ustring(content));
+  return add_ies(content);
 }
 
-int LightManager::add_ies(ustring content)
+int LightManager::add_ies(const string &content)
 {
   uint hash = hash_string(content.c_str());
 

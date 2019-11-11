@@ -40,7 +40,7 @@ set(OSL_EXTRA_ARGS
   -DBoost_COMPILER:STRING=${BOOST_COMPILER_STRING}
   -DBoost_USE_MULTITHREADED=ON
   -DBoost_USE_STATIC_LIBS=ON
-  -DBoost_USE_STATIC_RUNTIME=ON
+  -DBoost_USE_STATIC_RUNTIME=OFF
   -DBOOST_ROOT=${LIBDIR}/boost
   -DBOOST_LIBRARYDIR=${LIBDIR}/boost/lib/
   -DBoost_NO_SYSTEM_PATHS=ON
@@ -87,6 +87,7 @@ elseif(APPLE)
   set(OSL_EXTRA_ARGS
     ${OSL_EXTRA_ARGS}
     -DHIDE_SYMBOLS=OFF
+    -DPUGIXML_HOME=${LIBDIR}/pugixml
   )
 endif()
 
@@ -111,8 +112,16 @@ add_dependencies(
   external_zlib
   external_flexbison
   external_openimageio
-  external_pugixml
 )
+
+if(UNIX AND NOT APPLE)
+  # Rely on PugiXML compiled with OpenImageIO
+else()
+  add_dependencies(
+    external_osl
+    external_pugixml
+  )
+endif()
 
 if(WIN32)
   if(BUILD_MODE STREQUAL Release)

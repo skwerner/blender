@@ -43,9 +43,27 @@ ccl_device uchar4 color_float_to_byte(float3 c)
   return make_uchar4(r, g, b, 0);
 }
 
+ccl_device uchar4 color_float4_to_uchar4(float4 c)
+{
+  uchar r, g, b, a;
+
+  r = float_to_byte(c.x);
+  g = float_to_byte(c.y);
+  b = float_to_byte(c.z);
+  a = float_to_byte(c.w);
+
+  return make_uchar4(r, g, b, a);
+}
+
 ccl_device_inline float3 color_byte_to_float(uchar4 c)
 {
   return make_float3(c.x * (1.0f / 255.0f), c.y * (1.0f / 255.0f), c.z * (1.0f / 255.0f));
+}
+
+ccl_device_inline float4 color_uchar4_to_float4(uchar4 c)
+{
+  return make_float4(
+      c.x * (1.0f / 255.0f), c.y * (1.0f / 255.0f), c.z * (1.0f / 255.0f), c.w * (1.0f / 255.0f));
 }
 
 ccl_device float color_srgb_to_linear(float c)
@@ -167,7 +185,8 @@ ccl_device float3 xyY_to_xyz(float x, float y, float Y)
 #ifdef __KERNEL_SSE2__
 /*
  * Calculate initial guess for arg^exp based on float representation
- * This method gives a constant bias, which can be easily compensated by multiplication with bias_coeff.
+ * This method gives a constant bias,
+ * which can be easily compensated by multiplication with bias_coeff.
  * Gives better results for exponents near 1 (e. g. 4/5).
  * exp = exponent, encoded as uint32_t
  * e2coeff = 2^(127/exponent - 127) * bias_coeff^(1/exponent), encoded as uint32_t
@@ -235,6 +254,12 @@ ccl_device float3 color_linear_to_srgb_v3(float3 c)
       color_linear_to_srgb(c.x), color_linear_to_srgb(c.y), color_linear_to_srgb(c.z));
 }
 
+ccl_device float4 color_linear_to_srgb_v4(float4 c)
+{
+  return make_float4(
+      color_linear_to_srgb(c.x), color_linear_to_srgb(c.y), color_linear_to_srgb(c.z), c.w);
+}
+
 ccl_device float4 color_srgb_to_linear_v4(float4 c)
 {
 #ifdef __KERNEL_SSE2__
@@ -248,6 +273,20 @@ ccl_device float4 color_srgb_to_linear_v4(float4 c)
   return make_float4(
       color_srgb_to_linear(c.x), color_srgb_to_linear(c.y), color_srgb_to_linear(c.z), c.w);
 #endif
+}
+
+ccl_device float3 color_highlight_compress(float3 color, float3 *variance)
+{
+  color += make_float3(1.0f, 1.0f, 1.0f);
+  if (variance) {
+    *variance *= sqr3(make_float3(1.0f, 1.0f, 1.0f) / color);
+  }
+  return log3(color);
+}
+
+ccl_device float3 color_highlight_uncompress(float3 color)
+{
+  return exp3(color) - make_float3(1.0f, 1.0f, 1.0f);
 }
 
 CCL_NAMESPACE_END

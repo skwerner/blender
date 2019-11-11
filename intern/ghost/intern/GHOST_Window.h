@@ -68,8 +68,10 @@ class GHOST_Window : public GHOST_IWindow {
    * virtual  GHOST_TSuccess setClientWidth(GHOST_TUns32 width) = 0;
    * virtual  GHOST_TSuccess setClientHeight(GHOST_TUns32 height) = 0;
    * virtual  GHOST_TSuccess setClientSize(GHOST_TUns32 width, GHOST_TUns32 height) = 0;
-   * virtual  void screenToClient(GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
-   * virtual  void clientToScreen(GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
+   * virtual void screenToClient(
+   *     GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
+   * virtual void clientToScreen(
+   *     GHOST_TInt32 inX, GHOST_TInt32 inY, GHOST_TInt32& outX, GHOST_TInt32& outY) const = 0;
    * virtual GHOST_TWindowState getState() const = 0;
    * virtual GHOST_TSuccess setState(GHOST_TWindowState state) = 0;
    * virtual GHOST_TSuccess setOrder(GHOST_TWindowOrder order) = 0;
@@ -107,6 +109,11 @@ class GHOST_Window : public GHOST_IWindow {
    */
   inline GHOST_TStandardCursor getCursorShape() const;
 
+  inline bool isDialog() const
+  {
+    return false;
+  }
+
   /**
    * Set the shape of the cursor.
    * \param   cursorShape: The new cursor shape type id.
@@ -122,19 +129,13 @@ class GHOST_Window : public GHOST_IWindow {
    * \param   hotY    The Y coordinate of the cursor hotspot.
    * \return  Indication of success.
    */
-  GHOST_TSuccess setCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                      GHOST_TUns8 mask[16][2],
-                                      int hotX,
-                                      int hotY);
-
   GHOST_TSuccess setCustomCursorShape(GHOST_TUns8 *bitmap,
                                       GHOST_TUns8 *mask,
                                       int sizex,
                                       int sizey,
                                       int hotX,
                                       int hotY,
-                                      int fg_color,
-                                      int bg_color);
+                                      bool canInvertColor);
 
   /**
    * Returns the visibility state of the cursor.
@@ -143,6 +144,7 @@ class GHOST_Window : public GHOST_IWindow {
   inline bool getCursorVisibility() const;
   inline GHOST_TGrabCursorMode getCursorGrabMode() const;
   inline bool getCursorGrabModeIsWarp() const;
+  inline GHOST_TAxisFlag getCursorGrabAxis() const;
   inline void getCursorGrabInitPos(GHOST_TInt32 &x, GHOST_TInt32 &y) const;
   inline void getCursorGrabAccum(GHOST_TInt32 &x, GHOST_TInt32 &y) const;
   inline void setCursorGrabAccum(GHOST_TInt32 x, GHOST_TInt32 y);
@@ -160,6 +162,7 @@ class GHOST_Window : public GHOST_IWindow {
    * \return  Indication of success.
    */
   GHOST_TSuccess setCursorGrab(GHOST_TGrabCursorMode mode,
+                               GHOST_TAxisFlag wrap_axis,
                                GHOST_Rect *bounds,
                                GHOST_TInt32 mouse_ungrab_xy[2]);
 
@@ -258,6 +261,12 @@ class GHOST_Window : public GHOST_IWindow {
   GHOST_TSuccess updateDrawingContext();
 
   /**
+   * Gets the OpenGL framebuffer associated with the window's contents.
+   * \return The ID of an OpenGL framebuffer object.
+   */
+  virtual unsigned int getDefaultFramebuffer();
+
+  /**
    * Returns the window user data.
    * \return The window user data.
    */
@@ -337,19 +346,13 @@ class GHOST_Window : public GHOST_IWindow {
    * Sets the cursor shape on the window using
    * native window system calls.
    */
-  virtual GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                                    GHOST_TUns8 mask[16][2],
-                                                    int hotX,
-                                                    int hotY) = 0;
-
   virtual GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 *bitmap,
                                                     GHOST_TUns8 *mask,
                                                     int szx,
                                                     int szy,
                                                     int hotX,
                                                     int hotY,
-                                                    int fg,
-                                                    int bg) = 0;
+                                                    bool canInvertColor) = 0;
 
   GHOST_TSuccess releaseNativeHandles();
 
@@ -364,6 +367,9 @@ class GHOST_Window : public GHOST_IWindow {
 
   /** The current grabbed state of the cursor */
   GHOST_TGrabCursorMode m_cursorGrab;
+
+  /** Grab cursor axis.*/
+  GHOST_TAxisFlag m_cursorGrabAxis;
 
   /** Initial grab location. */
   GHOST_TInt32 m_cursorGrabInitPos[2];
@@ -422,6 +428,11 @@ inline GHOST_TGrabCursorMode GHOST_Window::getCursorGrabMode() const
 inline bool GHOST_Window::getCursorGrabModeIsWarp() const
 {
   return (m_cursorGrab == GHOST_kGrabWrap) || (m_cursorGrab == GHOST_kGrabHide);
+}
+
+inline GHOST_TAxisFlag GHOST_Window::getCursorGrabAxis() const
+{
+  return m_cursorGrabAxis;
 }
 
 inline void GHOST_Window::getCursorGrabInitPos(GHOST_TInt32 &x, GHOST_TInt32 &y) const

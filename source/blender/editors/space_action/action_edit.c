@@ -132,7 +132,8 @@ static int act_markers_make_local_exec(bContext *C, wmOperator *UNUSED(op))
     }
   }
 
-  /* now enable the "show posemarkers only" setting, so that we can see that something did happen */
+  /* Now enable the "show posemarkers only" setting,
+   * so that we can see that something did happen */
   sact->flag |= SACTION_POSEMARKERS_SHOW;
 
   /* notifiers - both sets, as this change affects both */
@@ -324,24 +325,23 @@ static bool actkeys_channels_get_selected_extents(bAnimContext *ac, float *min, 
 
   /* NOTE: not bool, since we want prioritise individual channels over expanders */
   short found = 0;
-  float y;
 
   /* get all items - we need to do it this way */
   filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_LIST_CHANNELS);
   ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
 
   /* loop through all channels, finding the first one that's selected */
-  y = (float)ACHANNEL_FIRST(ac);
+  float ymax = ACHANNEL_FIRST_TOP(ac);
 
-  for (ale = anim_data.first; ale; ale = ale->next) {
+  for (ale = anim_data.first; ale; ale = ale->next, ymax -= ACHANNEL_STEP(ac)) {
     const bAnimChannelType *acf = ANIM_channel_get_typeinfo(ale);
 
     /* must be selected... */
     if (acf && acf->has_setting(ac, ale, ACHANNEL_SETTING_SELECT) &&
         ANIM_channel_setting_get(ac, ale, ACHANNEL_SETTING_SELECT)) {
       /* update best estimate */
-      *min = (float)(y - ACHANNEL_HEIGHT_HALF(ac));
-      *max = (float)(y + ACHANNEL_HEIGHT_HALF(ac));
+      *min = ymax - ACHANNEL_HEIGHT(ac);
+      *max = ymax;
 
       /* is this high enough priority yet? */
       found = acf->channel_role;
@@ -353,9 +353,6 @@ static bool actkeys_channels_get_selected_extents(bAnimContext *ac, float *min, 
         break;
       }
     }
-
-    /* adjust y-position for next one */
-    y -= ACHANNEL_STEP(ac);
   }
 
   /* free all temp data */
@@ -707,7 +704,6 @@ static void insert_action_keys(bAnimContext *ac, short mode)
   bAnimListElem *ale;
   int filter;
 
-  struct Depsgraph *depsgraph = ac->depsgraph;
   ReportList *reports = ac->reports;
   Scene *scene = ac->scene;
   ToolSettings *ts = scene->toolsettings;
@@ -733,15 +729,17 @@ static void insert_action_keys(bAnimContext *ac, short mode)
     FCurve *fcu = (FCurve *)ale->key_data;
     float cfra = (float)CFRA;
 
-    /* read value from property the F-Curve represents, or from the curve only?
-     * - ale->id != NULL:    Typically, this means that we have enough info to try resolving the path
-     * - ale->owner != NULL: If this is set, then the path may not be resolvable from the ID alone,
-     *                       so it's easier for now to just read the F-Curve directly.
-     *                       (TODO: add the full-blown PointerRNA relative parsing case here...)
+    /* Read value from property the F-Curve represents, or from the curve only?
+     * - ale->id != NULL:
+     *   Typically, this means that we have enough info to try resolving the path.
+     *
+     * - ale->owner != NULL:
+     *   If this is set, then the path may not be resolvable from the ID alone,
+     *   so it's easier for now to just read the F-Curve directly.
+     *   (TODO: add the full-blown PointerRNA relative parsing case here...)
      */
     if (ale->id && !ale->owner) {
       insert_keyframe(ac->bmain,
-                      depsgraph,
                       reports,
                       ale->id,
                       NULL,
@@ -979,8 +977,7 @@ static bool delete_action_keys(bAnimContext *ac)
       changed = delete_fcurve_keys(fcu);
 
       /* Only delete curve too if it won't be doing anything anymore */
-      if ((fcu->totvert == 0) &&
-          (list_has_suitable_fmodifier(&fcu->modifiers, 0, FMI_TYPE_GENERATE_CURVE) == 0)) {
+      if (BKE_fcurve_is_empty(fcu)) {
         ANIM_fcurve_delete_from_animdata(ac, adt, fcu);
         ale->key_data = NULL;
       }
@@ -1099,7 +1096,7 @@ void ACTION_OT_clean(wmOperatorType *ot)
   ot->description = "Simplify F-Curves by removing closely spaced keyframes";
 
   /* api callbacks */
-  //ot->invoke =  // XXX we need that number popup for this!
+  // ot->invoke =  // XXX we need that number popup for this!
   ot->exec = actkeys_clean_exec;
   ot->poll = ED_operator_action_active;
 
@@ -1666,7 +1663,7 @@ static const EnumPropertyItem prop_actkeys_snap_types[] = {
     {ACTKEYS_SNAP_CFRA,
      "CFRA",
      0,
-     "Current frame",
+     "Current Frame",
      "Snap selected keyframes to the current frame"},
     {ACTKEYS_SNAP_NEAREST_FRAME,
      "NEAREST_FRAME",
@@ -1792,17 +1789,17 @@ static const EnumPropertyItem prop_actkeys_mirror_types[] = {
     {ACTKEYS_MIRROR_CFRA,
      "CFRA",
      0,
-     "By Times over Current frame",
+     "By Times Over Current Frame",
      "Flip times of selected keyframes using the current frame as the mirror line"},
     {ACTKEYS_MIRROR_XAXIS,
      "XAXIS",
      0,
-     "By Values over Value=0",
+     "By Values Over Value=0",
      "Flip values of selected keyframes (i.e. negative values become positive, and vice versa)"},
     {ACTKEYS_MIRROR_MARKER,
      "MARKER",
      0,
-     "By Times over First Selected Marker",
+     "By Times Over First Selected Marker",
      "Flip times of selected keyframes using the first selected marker as the reference point"},
     {0, NULL, 0, NULL, NULL},
 };

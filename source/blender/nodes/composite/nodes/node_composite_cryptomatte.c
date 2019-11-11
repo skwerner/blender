@@ -60,10 +60,10 @@ static void cryptomatte_add(NodeCryptomatte *n, float f)
     while (start < end) {
       /* Ignore leading whitespace. */
       while (start < end && n->matte_id[start] == ' ') {
-        ++start;
+        start++;
       }
 
-      /* Find the next seprator. */
+      /* Find the next separator. */
       char *token_end = strchr(n->matte_id + start, ',');
       if (token_end == NULL || token_end == n->matte_id + start) {
         token_end = n->matte_id + end;
@@ -71,7 +71,8 @@ static void cryptomatte_add(NodeCryptomatte *n, float f)
       /* Be aware that token_len still contains any trailing white space. */
       token_len = token_end - (n->matte_id + start);
 
-      /* If this has a leading bracket, assume a raw floating point number and look for the closing bracket. */
+      /* If this has a leading bracket,
+       * assume a raw floating point number and look for the closing bracket. */
       if (n->matte_id[start] == '<') {
         if (strncmp(n->matte_id + start, number, strlen(number)) == 0) {
           /* This number is already there, so continue. */
@@ -138,10 +139,10 @@ static void cryptomatte_remove(NodeCryptomatte *n, float f)
     bool skip = false;
     /* Ignore leading whitespace or commas. */
     while (start < end && ((n->matte_id[start] == ' ') || (n->matte_id[start] == ','))) {
-      ++start;
+      start++;
     }
 
-    /* Find the next seprator. */
+    /* Find the next separator. */
     char *token_end = strchr(n->matte_id + start + 1, ',');
     if (token_end == NULL || token_end == n->matte_id + start) {
       token_end = n->matte_id + end;
@@ -152,7 +153,8 @@ static void cryptomatte_remove(NodeCryptomatte *n, float f)
     if (token_len == 1) {
       skip = true;
     }
-    /* If this has a leading bracket, assume a raw floating point number and look for the closing bracket. */
+    /* If this has a leading bracket,
+     * assume a raw floating point number and look for the closing bracket. */
     else if (n->matte_id[start] == '<') {
       if (strncmp(n->matte_id + start, number, strlen(number)) == 0) {
         /* This number is already there, so skip it. */
@@ -271,7 +273,9 @@ static void node_free_cryptomatte(bNode *node)
   }
 }
 
-static void node_copy_cryptomatte(bNodeTree *UNUSED(dest_ntree), bNode *dest_node, bNode *src_node)
+static void node_copy_cryptomatte(bNodeTree *UNUSED(dest_ntree),
+                                  bNode *dest_node,
+                                  const bNode *src_node)
 {
   NodeCryptomatte *src_nc = src_node->storage;
   NodeCryptomatte *dest_nc = MEM_dupallocN(src_nc);

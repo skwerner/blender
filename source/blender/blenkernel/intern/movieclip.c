@@ -53,6 +53,7 @@
 
 #include "BKE_animsys.h"
 #include "BKE_colortools.h"
+#include "BKE_global.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_movieclip.h"
@@ -66,6 +67,8 @@
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
+
+#include "GPU_texture.h"
 
 #ifdef WITH_OPENEXR
 #  include "intern/openexr/openexr_multi.h"
@@ -148,9 +151,8 @@ static void get_sequence_fname(const MovieClip *clip, const int framenr, char *n
   BLI_strncpy(name, clip->name, sizeof(clip->name));
   BLI_stringdec(name, head, tail, &numlen);
 
-  /* movieclips always points to first image from sequence,
-   * autoguess offset for now. could be something smarter in the future
-   */
+  /* Movie-clips always points to first image from sequence, auto-guess offset for now.
+   * Could be something smarter in the future. */
   offset = sequence_guess_offset(clip->name, strlen(head), numlen);
 
   if (numlen) {
@@ -407,8 +409,8 @@ typedef struct MovieClipCache {
 
     /* cache for undistorted shot */
     float principal[2];
-    float polynomial_k1, polynomial_k2, polynomial_k3;
-    float division_k1, division_k2;
+    float polynomial_k1;
+    float division_k1;
     short distortion_model;
     bool undistortion_used;
 
@@ -1354,6 +1356,17 @@ static void free_buffers(MovieClip *clip)
     IMB_free_anim(clip->anim);
     clip->anim = NULL;
   }
+
+  MovieClip_RuntimeGPUTexture *tex;
+  for (tex = clip->runtime.gputextures.first; tex; tex = tex->next) {
+    for (int i = 0; i < TEXTARGET_COUNT; i++) {
+      if (tex->gputexture[i] != NULL) {
+        GPU_texture_free(tex->gputexture[i]);
+        tex->gputexture[i] = NULL;
+      }
+    }
+  }
+  BLI_freelistN(&clip->runtime.gputextures);
 }
 
 void BKE_movieclip_clear_cache(MovieClip *clip)
@@ -1515,7 +1528,7 @@ static void movieclip_build_proxy_ibuf(
     scaleibuf->planes = 24;
   }
 
-  /* TODO: currently the most weak part of multithreaded proxies,
+  /* TODO: currently the most weak part of multi-threaded proxies,
    *       could be solved in a way that thread only prepares memory
    *       buffer and write to disk happens separately
    */
@@ -1619,8 +1632,10 @@ void BKE_movieclip_free(MovieClip *clip)
 }
 
 /**
- * Only copy internal data of MovieClip ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of MovieClip ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -1758,13 +1773,32 @@ static void movieclip_selection_synchronize(MovieClip *clip_dst, const MovieClip
   }
 }
 
-void BKE_movieclip_eval_update(struct Depsgraph *depsgraph, MovieClip *clip)
+static void movieclip_eval_update_reload(struct Depsgraph *depsgraph, Main *bmain, MovieClip *clip)
 {
-  DEG_debug_print_eval(depsgraph, __func__, clip->id.name, clip);
+  BKE_movieclip_reload(bmain, clip);
+  if (DEG_is_active(depsgraph)) {
+    MovieClip *clip_orig = (MovieClip *)DEG_get_original_id(&clip->id);
+    BKE_movieclip_reload(bmain, clip_orig);
+  }
+}
+
+static void movieclip_eval_update_generic(struct Depsgraph *depsgraph, MovieClip *clip)
+{
   BKE_tracking_dopesheet_tag_update(&clip->tracking);
   if (DEG_is_active(depsgraph)) {
     MovieClip *clip_orig = (MovieClip *)DEG_get_original_id(&clip->id);
     BKE_tracking_dopesheet_tag_update(&clip_orig->tracking);
+  }
+}
+
+void BKE_movieclip_eval_update(struct Depsgraph *depsgraph, Main *bmain, MovieClip *clip)
+{
+  DEG_debug_print_eval(depsgraph, __func__, clip->id.name, clip);
+  if (clip->id.recalc & ID_RECALC_SOURCE) {
+    movieclip_eval_update_reload(depsgraph, bmain, clip);
+  }
+  else {
+    movieclip_eval_update_generic(depsgraph, clip);
   }
 }
 

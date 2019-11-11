@@ -61,7 +61,6 @@
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
-#include "GPU_select.h"
 #include "GPU_state.h"
 
 #include "BLF_api.h"
@@ -113,6 +112,13 @@ typedef struct RulerInfo {
   wmWindow *win;
   ScrArea *sa;
   ARegion *ar; /* re-assigned every modal update */
+
+  /* Track changes in state. */
+  struct {
+    bool do_snap;
+    bool do_thickness;
+  } drag_state_prev;
+
 } RulerInfo;
 
 /* -------------------------------------------------------------------- */
@@ -280,8 +286,14 @@ static void ruler_state_set(bContext *C, RulerInfo *ruler_info, int state)
     /* pass */
   }
   else if (state == RULER_STATE_DRAG) {
+    memset(&ruler_info->drag_state_prev, 0x0, sizeof(ruler_info->drag_state_prev));
     ruler_info->snap_context = ED_transform_snap_object_context_create_view3d(
-        bmain, CTX_data_scene(C), CTX_data_depsgraph(C), 0, ruler_info->ar, CTX_wm_view3d(C));
+        bmain,
+        CTX_data_scene(C),
+        CTX_data_ensure_evaluated_depsgraph(C),
+        0,
+        ruler_info->ar,
+        CTX_wm_view3d(C));
   }
   else {
     BLI_assert(0);
@@ -330,6 +342,7 @@ static bool view3d_ruler_item_mousemove(RulerInfo *ruler_info,
                                                       .use_object_edit_cage = true,
                                                   },
                                                   mval_fl,
+                                                  NULL,
                                                   &dist_px,
                                                   co,
                                                   ray_normal)) {
@@ -350,16 +363,31 @@ static bool view3d_ruler_item_mousemove(RulerInfo *ruler_info,
     }
     else if (do_snap) {
       const float mval_fl[2] = {UNPACK2(mval)};
+      float *prev_point = NULL;
+
+      if (inter->co_index != 1) {
+        if (ruler_item->flag & RULERITEM_USE_ANGLE) {
+          prev_point = ruler_item->co[1];
+        }
+        else if (inter->co_index == 0) {
+          prev_point = ruler_item->co[2];
+        }
+        else {
+          prev_point = ruler_item->co[0];
+        }
+      }
 
       if (ED_transform_snap_object_project_view3d(
               ruler_info->snap_context,
-              (SCE_SNAP_MODE_VERTEX | SCE_SNAP_MODE_EDGE | SCE_SNAP_MODE_FACE),
+              (SCE_SNAP_MODE_VERTEX | SCE_SNAP_MODE_EDGE | SCE_SNAP_MODE_FACE |
+               SCE_SNAP_MODE_EDGE_MIDPOINT | SCE_SNAP_MODE_EDGE_PERPENDICULAR),
               &(const struct SnapObjectParams){
                   .snap_select = SNAP_ALL,
                   .use_object_edit_cage = true,
                   .use_occlusion_test = true,
               },
               mval_fl,
+              prev_point,
               &dist_px,
               co,
               NULL)) {
@@ -378,6 +406,17 @@ static bool view3d_ruler_item_mousemove(RulerInfo *ruler_info,
 /* -------------------------------------------------------------------- */
 /** \name Ruler/Grease Pencil Conversion
  * \{ */
+
+/* Helper: Find the layer created as ruler. */
+static bGPDlayer *view3d_ruler_layer_get(bGPdata *gpd)
+{
+  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+    if (gpl->flag & GP_LAYER_IS_RULER) {
+      return gpl;
+    }
+  }
+  return NULL;
+}
 
 #define RULER_ID "RulerData3D"
 static bool view3d_ruler_to_gpencil(bContext *C, wmGizmoGroup *gzgroup)
@@ -399,12 +438,12 @@ static bool view3d_ruler_to_gpencil(bContext *C, wmGizmoGroup *gzgroup)
   }
   gpd = scene->gpd;
 
-  gpl = BLI_findstring(&gpd->layers, ruler_name, offsetof(bGPDlayer, info));
+  gpl = view3d_ruler_layer_get(gpd);
   if (gpl == NULL) {
     gpl = BKE_gpencil_layer_addnew(gpd, ruler_name, false);
     copy_v4_v4(gpl->color, U.gpencil_new_layer_col);
     gpl->thickness = 1;
-    gpl->flag |= GP_LAYER_HIDE;
+    gpl->flag |= GP_LAYER_HIDE | GP_LAYER_IS_RULER;
   }
 
   gpf = BKE_gpencil_layer_getframe(gpl, CFRA, GP_GETFRAME_ADD_NEW);
@@ -457,8 +496,7 @@ static bool view3d_ruler_from_gpencil(const bContext *C, wmGizmoGroup *gzgroup)
 
   if (scene->gpd) {
     bGPDlayer *gpl;
-    const char *ruler_name = RULER_ID;
-    gpl = BLI_findstring(&scene->gpd->layers, ruler_name, offsetof(bGPDlayer, info));
+    gpl = view3d_ruler_layer_get(scene->gpd);
     if (gpl) {
       bGPDframe *gpf;
       gpf = BKE_gpencil_layer_getframe(gpl, CFRA, GP_GETFRAME_USE_PREV);
@@ -563,6 +601,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
         (float *)(float[][4]){{0.67f, 0.67f, 0.67f, 1.0f}, {col[0], col[1], col[2], col[3]}},
         2);
     immUniform1f("dash_width", 6.0f);
+    immUniform1f("dash_factor", 0.5f);
 
     immBegin(GPU_PRIM_LINE_STRIP, 3);
 
@@ -725,6 +764,7 @@ static void gizmo_ruler_draw(const bContext *C, wmGizmo *gz)
         (float *)(float[][4]){{0.67f, 0.67f, 0.67f, 1.0f}, {col[0], col[1], col[2], col[3]}},
         2);
     immUniform1f("dash_width", 6.0f);
+    immUniform1f("dash_factor", 0.5f);
 
     immBegin(GPU_PRIM_LINES, 2);
 
@@ -855,27 +895,43 @@ static int gizmo_ruler_test_select(bContext *UNUSED(C), wmGizmo *gz, const int m
 static int gizmo_ruler_modal(bContext *C,
                              wmGizmo *gz,
                              const wmEvent *event,
-                             eWM_GizmoFlagTweak UNUSED(tweak_flag))
+                             eWM_GizmoFlagTweak tweak_flag)
 {
   bool do_draw = false;
   int exit_code = OPERATOR_RUNNING_MODAL;
   RulerInfo *ruler_info = gz->parent_gzgroup->customdata;
   RulerItem *ruler_item = (RulerItem *)gz;
   ARegion *ar = CTX_wm_region(C);
+  bool do_cursor_update = false;
 
   ruler_info->ar = ar;
 
   switch (event->type) {
     case MOUSEMOVE: {
-      if (ruler_info->state == RULER_STATE_DRAG) {
-        if (view3d_ruler_item_mousemove(
-                ruler_info, ruler_item, event->mval, event->shift != 0, event->ctrl != 0)) {
-          do_draw = true;
-        }
-      }
+      do_cursor_update = true;
       break;
     }
   }
+
+  const bool do_snap = tweak_flag & WM_GIZMO_TWEAK_SNAP;
+  const bool do_thickness = tweak_flag & WM_GIZMO_TWEAK_PRECISE;
+  if ((ruler_info->drag_state_prev.do_snap != do_snap) ||
+      (ruler_info->drag_state_prev.do_thickness != do_thickness)) {
+    do_cursor_update = true;
+  }
+
+  if (do_cursor_update) {
+    if (ruler_info->state == RULER_STATE_DRAG) {
+      if (view3d_ruler_item_mousemove(
+              ruler_info, ruler_item, event->mval, do_thickness, do_snap)) {
+        do_draw = true;
+      }
+    }
+  }
+
+  ruler_info->drag_state_prev.do_snap = do_snap;
+  ruler_info->drag_state_prev.do_thickness = do_thickness;
+
   if (do_draw) {
     ED_region_tag_redraw(ar);
   }
@@ -918,8 +974,7 @@ static int gizmo_ruler_invoke(bContext *C, wmGizmo *gz, const wmEvent *event)
       }
 
       /* update the new location */
-      view3d_ruler_item_mousemove(
-          ruler_info, ruler_item_pick, event->mval, event->shift != 0, event->ctrl != 0);
+      view3d_ruler_item_mousemove(ruler_info, ruler_item_pick, event->mval, false, false);
     }
   }
   else {
@@ -968,9 +1023,9 @@ static void gizmo_ruler_exit(bContext *C, wmGizmo *gz, const bool cancel)
 static int gizmo_ruler_cursor_get(wmGizmo *gz)
 {
   if (gz->highlight_part == PART_LINE) {
-    return BC_CROSSCURSOR;
+    return WM_CURSOR_CROSS;
   }
-  return BC_NSEW_SCROLLCURSOR;
+  return WM_CURSOR_NSEW_SCROLL;
 }
 
 void VIEW3D_GT_ruler_item(wmGizmoType *gzt)
@@ -1128,6 +1183,10 @@ static int view3d_ruler_remove_invoke(bContext *C, wmOperator *op, const wmEvent
       else {
         ruler_item_remove(C, gzgroup, ruler_item);
       }
+
+      /* Update the annotation layer. */
+      view3d_ruler_to_gpencil(C, gzgroup);
+
       ED_region_tag_redraw(ar);
       return OPERATOR_FINISHED;
     }

@@ -1,21 +1,29 @@
 
-uniform mat4 ModelViewMatrix;
-uniform mat4 ModelViewProjectionMatrix;
-uniform mat4 ModelMatrix;
-
 in vec3 pos;
 
-out vec4 pPos;
+#ifdef USE_GEOM
 out vec3 vPos;
+out int objectId_g;
+#  define objectId objectId_g
+#else
+
+flat out int objectId;
+#endif
 
 void main()
 {
-  vPos = (ModelViewMatrix * vec4(pos, 1.0)).xyz;
-  pPos = ModelViewProjectionMatrix * vec4(pos, 1.0);
+  vec3 world_pos = point_object_to_world(pos);
+#ifdef USE_GEOM
+  vPos = point_world_to_view(world_pos);
+#endif
+  gl_Position = point_world_to_ndc(world_pos);
   /* Small bias to always be on top of the geom. */
-  pPos.z -= 1e-3;
+  gl_Position.z -= 1e-3;
+
+  /* ID 0 is nothing (background) */
+  objectId = resource_handle + 1;
 
 #ifdef USE_WORLD_CLIP_PLANES
-  world_clip_planes_calc_clip_distance((ModelMatrix * vec4(pos, 1.0)).xyz);
+  world_clip_planes_calc_clip_distance(world_pos);
 #endif
 }

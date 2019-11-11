@@ -66,7 +66,7 @@ typedef struct LaplacianSystem {
   float (*co)[3];           /* Original vertex coordinates */
   float (*no)[3];           /* Original vertex normal */
   float (*delta)[3];        /* Differential Coordinates */
-  unsigned int (*tris)[3];  /* Copy of MLoopTri (tessellation triangle) v1-v3 */
+  uint (*tris)[3];          /* Copy of MLoopTri (tessellation triangle) v1-v3 */
   int *index_anchors;       /* Static vertex index list */
   int *unit_verts;          /* Unit vectors of projected edges onto the plane orthogonal to n */
   int *ringf_indices;       /* Indices of faces per vertex */
@@ -153,7 +153,7 @@ static void createFaceRingMap(const int mvert_tot,
   for (i = 0, mlt = mlooptri; i < mtri_tot; i++, mlt++) {
 
     for (j = 0; j < 3; j++) {
-      const unsigned int v_index = mloop[mlt->tri[j]].v;
+      const uint v_index = mloop[mlt->tri[j]].v;
       map[v_index].count++;
       totalr++;
     }
@@ -167,7 +167,7 @@ static void createFaceRingMap(const int mvert_tot,
   }
   for (i = 0, mlt = mlooptri; i < mtri_tot; i++, mlt++) {
     for (j = 0; j < 3; j++) {
-      const unsigned int v_index = mloop[mlt->tri[j]].v;
+      const uint v_index = mloop[mlt->tri[j]].v;
       map[v_index].indices[map[v_index].count] = i;
       map[v_index].count++;
     }
@@ -214,7 +214,8 @@ static void createVertRingMap(const int mvert_tot,
 }
 
 /**
- * This method computes the Laplacian Matrix and Differential Coordinates for all vertex in the mesh.
+ * This method computes the Laplacian Matrix and Differential Coordinates
+ * for all vertex in the mesh..
  * The Linear system is LV = d
  * Where L is Laplacian Matrix, V as the vertices in Mesh, d is the differential coordinates
  * The Laplacian Matrix is computes as a
@@ -227,18 +228,21 @@ static void createVertRingMap(const int mvert_tot,
  * Where :
  * di is the Differential Coordinate i
  * sum (Wij) is the sum of all weights between vertex Vi and its vertices neighbors (Vj)
- * sum (Wij * Vj) is the sum of the product between vertex neighbor Vj and weight Wij for all neighborhood.
+ * sum (Wij * Vj) is the sum of the product between vertex neighbor Vj and weight Wij
+ *                for all neighborhood.
  *
  * This Laplacian Matrix is described in the paper:
- * Desbrun M. et.al, Implicit fairing of irregular meshes using diffusion and curvature flow, SIGGRAPH '99, pag 317-324,
- * New York, USA
+ * Desbrun M. et.al, Implicit fairing of irregular meshes using diffusion and curvature flow,
+ * SIGGRAPH '99, page 317-324, New York, USA
  *
- * The computation of Laplace Beltrami operator on Hybrid Triangle/Quad Meshes is described in the paper:
- * Pinzon A., Romero E., Shape Inflation With an Adapted Laplacian Operator For Hybrid Quad/Triangle Meshes,
+ * The computation of Laplace Beltrami operator on Hybrid Triangle/Quad Meshes is described in the
+ * paper: Pinzon A., Romero E., Shape Inflation With an Adapted Laplacian Operator For
+ * Hybrid Quad/Triangle Meshes,
  * Conference on Graphics Patterns and Images, SIBGRAPI, 2013
  *
  * The computation of Differential Coordinates is described in the paper:
- * Sorkine, O. Laplacian Surface Editing. Proceedings of the EUROGRAPHICS/ACM SIGGRAPH Symposium on Geometry Processing,
+ * Sorkine, O. Laplacian Surface Editing.
+ * Proceedings of the EUROGRAPHICS/ACM SIGGRAPH Symposium on Geometry Processing,
  * 2004. p. 179-188.
  */
 static void initLaplacianMatrix(LaplacianSystem *sys)
@@ -249,7 +253,7 @@ static void initLaplacianMatrix(LaplacianSystem *sys)
   int idv[3];
 
   for (ti = 0; ti < sys->total_tris; ti++) {
-    const unsigned int *vidt = sys->tris[ti];
+    const uint *vidt = sys->tris[ti];
     const float *co[3];
 
     co[0] = sys->co[vidt[0]];
@@ -348,7 +352,7 @@ static void rotateDifferentialCoordinates(LaplacianSystem *sys)
     zero_v3(ni);
     num_fni = sys->ringf_map[i].count;
     for (fi = 0; fi < num_fni; fi++) {
-      const unsigned int *vin;
+      const uint *vin;
       fidn = sys->ringf_map[i].indices;
       vin = sys->tris[fidn[fi]];
       for (j = 0; j < 3; j++) {
@@ -667,8 +671,9 @@ static void LaplacianDeformModifier_do(
               &lmd->modifier, "Edges changed from %d to %d", sys->total_edges, mesh->totedge);
         }
         else if (sysdif == LAPDEFORM_SYSTEM_CHANGE_NOT_VALID_GROUP) {
-          modifier_setError(
-              &lmd->modifier, "Vertex group '%s' is not valid", sys->anchor_grp_name);
+          modifier_setError(&lmd->modifier,
+                            "Vertex group '%s' is not valid, or maybe empty",
+                            sys->anchor_grp_name);
         }
       }
     }
@@ -679,7 +684,8 @@ static void LaplacianDeformModifier_do(
   }
   else {
     if (!isValidVertexGroup(lmd, ob, mesh)) {
-      modifier_setError(&lmd->modifier, "Vertex group '%s' is not valid", lmd->anchor_grp_name);
+      modifier_setError(
+          &lmd->modifier, "Vertex group '%s' is not valid, or maybe empty", lmd->anchor_grp_name);
       lmd->flag &= ~MOD_LAPLACIANDEFORM_BIND;
     }
     else if (lmd->total_verts > 0 && lmd->total_verts == numVerts) {

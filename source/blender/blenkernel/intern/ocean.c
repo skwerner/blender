@@ -116,7 +116,8 @@ typedef struct Ocean {
   /* two dimensional arrays of float */
   double *_disp_y; /* init w   sim w via plan? */
   double *_N_x;    /* init w   sim w via plan? */
-  /* all member of this array has same values, so convert this array to a float to reduce memory usage (MEM01)*/
+  /* all member of this array has same values,
+   * so convert this array to a float to reduce memory usage (MEM01). */
   /*float * _N_y; */
   double _N_y;     /*          sim w ********* can be rearranged? */
   double *_N_z;    /* init w   sim w via plan? */
@@ -148,9 +149,9 @@ static float nextfr(RNG *rng, float min, float max)
 
 static float gaussRand(RNG *rng)
 {
-  /* Note: to avoid numerical problems with very small numbers, we make these variables singe-precision floats,
-   * but later we call the double-precision log() and sqrt() functions instead of logf() and sqrtf().
-   */
+  /* Note: to avoid numerical problems with very small numbers, we make these variables
+   * singe-precision floats, but later we call the double-precision log() and sqrt() functions
+   * instead of logf() and sqrtf(). */
   float x;
   float y;
   float length2;
@@ -464,9 +465,8 @@ void BKE_ocean_eval_xz_catrom(struct Ocean *oc, struct OceanResult *ocr, float x
   BKE_ocean_eval_uv_catrom(oc, ocr, x / oc->_Lx, z / oc->_Lz);
 }
 
-/* note that this doesn't wrap properly for i, j < 0, but its not really meant for that being just a way to get
- * the raw data out to save in some image format.
- */
+/* note that this doesn't wrap properly for i, j < 0, but its not really meant for that being
+ * just a way to get the raw data out to save in some image format. */
 void BKE_ocean_eval_ij(struct Ocean *oc, struct OceanResult *ocr, int i, int j)
 {
   BLI_rw_mutex_lock(&oc->oceanmutex, THREAD_LOCK_READ);
@@ -510,7 +510,7 @@ typedef struct OceanSimulateData {
 
 static void ocean_compute_htilda(void *__restrict userdata,
                                  const int i,
-                                 const ParallelRangeTLS *__restrict UNUSED(tls))
+                                 const TaskParallelTLS *__restrict UNUSED(tls))
 {
   OceanSimulateData *osd = userdata;
   const Ocean *o = osd->o;
@@ -519,8 +519,9 @@ static void ocean_compute_htilda(void *__restrict userdata,
 
   int j;
 
-  /* note the <= _N/2 here, see the fftw doco about the mechanics of the complex->real fft storage */
-  for (j = 0; j <= o->_N / 2; ++j) {
+  /* Note the <= _N/2 here, see the FFTW documentation
+   * about the mechanics of the complex->real fft storage. */
+  for (j = 0; j <= o->_N / 2; j++) {
     fftw_complex exp_param1;
     fftw_complex exp_param2;
     fftw_complex conj_param;
@@ -559,8 +560,8 @@ static void ocean_compute_displacement_x(TaskPool *__restrict pool,
   const float chop_amount = osd->chop_amount;
   int i, j;
 
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j <= o->_N / 2; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j <= o->_N / 2; j++) {
       fftw_complex mul_param;
       fftw_complex minus_i;
 
@@ -590,8 +591,8 @@ static void ocean_compute_displacement_z(TaskPool *__restrict pool,
   const float chop_amount = osd->chop_amount;
   int i, j;
 
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j <= o->_N / 2; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j <= o->_N / 2; j++) {
       fftw_complex mul_param;
       fftw_complex minus_i;
 
@@ -620,8 +621,8 @@ static void ocean_compute_jacobian_jxx(TaskPool *__restrict pool,
   const float chop_amount = osd->chop_amount;
   int i, j;
 
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j <= o->_N / 2; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j <= o->_N / 2; j++) {
       fftw_complex mul_param;
 
       /* init_complex(mul_param, -scale, 0); */
@@ -639,8 +640,8 @@ static void ocean_compute_jacobian_jxx(TaskPool *__restrict pool,
   }
   fftw_execute(o->_Jxx_plan);
 
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j < o->_N; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j < o->_N; j++) {
       o->_Jxx[i * o->_N + j] += 1.0;
     }
   }
@@ -655,8 +656,8 @@ static void ocean_compute_jacobian_jzz(TaskPool *__restrict pool,
   const float chop_amount = osd->chop_amount;
   int i, j;
 
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j <= o->_N / 2; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j <= o->_N / 2; j++) {
       fftw_complex mul_param;
 
       /* init_complex(mul_param, -scale, 0); */
@@ -674,8 +675,8 @@ static void ocean_compute_jacobian_jzz(TaskPool *__restrict pool,
   }
   fftw_execute(o->_Jzz_plan);
 
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j < o->_N; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j < o->_N; j++) {
       o->_Jzz[i * o->_N + j] += 1.0;
     }
   }
@@ -690,8 +691,8 @@ static void ocean_compute_jacobian_jxz(TaskPool *__restrict pool,
   const float chop_amount = osd->chop_amount;
   int i, j;
 
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j <= o->_N / 2; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j <= o->_N / 2; j++) {
       fftw_complex mul_param;
 
       /* init_complex(mul_param, -scale, 0); */
@@ -718,8 +719,8 @@ static void ocean_compute_normal_x(TaskPool *__restrict pool,
   const Ocean *o = osd->o;
   int i, j;
 
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j <= o->_N / 2; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j <= o->_N / 2; j++) {
       fftw_complex mul_param;
 
       init_complex(mul_param, 0.0, -1.0);
@@ -739,8 +740,8 @@ static void ocean_compute_normal_z(TaskPool *__restrict pool,
   const Ocean *o = osd->o;
   int i, j;
 
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j <= o->_N / 2; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j <= o->_N / 2; j++) {
       fftw_complex mul_param;
 
       init_complex(mul_param, 0.0, -1.0);
@@ -770,14 +771,15 @@ void BKE_ocean_simulate(struct Ocean *o, float t, float scale, float chop_amount
 
   BLI_rw_mutex_lock(&o->oceanmutex, THREAD_LOCK_WRITE);
 
-  /* Note about multi-threading here: we have to run a first set of computations (htilda one) before we can run
-   * all others, since they all depend on it.
-   * So we make a first parallelized forloop run for htilda, and then pack all other computations into
-   * a set of parallel tasks.
-   * This is not optimal in all cases, but remains reasonably simple and should be OK most of the time. */
+  /* Note about multi-threading here: we have to run a first set of computations (htilda one)
+   * before we can run all others, since they all depend on it.
+   * So we make a first parallelized forloop run for htilda,
+   * and then pack all other computations into a set of parallel tasks.
+   * This is not optimal in all cases,
+   * but remains reasonably simple and should be OK most of the time. */
 
   /* compute a new htilda */
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (o->_M > 16);
   BLI_task_parallel_range(0, o->_M, &osd, ocean_compute_htilda, &settings);
@@ -827,8 +829,8 @@ static void set_height_normalize_factor(struct Ocean *oc)
 
   BLI_rw_mutex_lock(&oc->oceanmutex, THREAD_LOCK_READ);
 
-  for (i = 0; i < oc->_M; ++i) {
-    for (j = 0; j < oc->_N; ++j) {
+  for (i = 0; i < oc->_M; i++) {
+    for (j = 0; j < oc->_N; j++) {
       if (max_h < fabs(oc->_disp_y[i * oc->_N + j])) {
         max_h = fabs(oc->_disp_y[i * oc->_N + j]);
       }
@@ -957,28 +959,28 @@ void BKE_ocean_init(struct Ocean *o,
   }
 
   /* the +ve components and DC */
-  for (i = 0; i <= o->_M / 2; ++i) {
+  for (i = 0; i <= o->_M / 2; i++) {
     o->_kx[i] = 2.0f * (float)M_PI * i / o->_Lx;
   }
 
   /* the -ve components */
-  for (i = o->_M - 1, ii = 0; i > o->_M / 2; --i, ++ii) {
+  for (i = o->_M - 1, ii = 0; i > o->_M / 2; i--, ii++) {
     o->_kx[i] = -2.0f * (float)M_PI * ii / o->_Lx;
   }
 
   /* the +ve components and DC */
-  for (i = 0; i <= o->_N / 2; ++i) {
+  for (i = 0; i <= o->_N / 2; i++) {
     o->_kz[i] = 2.0f * (float)M_PI * i / o->_Lz;
   }
 
   /* the -ve components */
-  for (i = o->_N - 1, ii = 0; i > o->_N / 2; --i, ++ii) {
+  for (i = o->_N - 1, ii = 0; i > o->_N / 2; i--, ii++) {
     o->_kz[i] = -2.0f * (float)M_PI * ii / o->_Lz;
   }
 
   /* pre-calculate the k matrix */
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j <= o->_N / 2; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j <= o->_N / 2; j++) {
       o->_k[i * (1 + o->_N / 2) + j] = sqrt(o->_kx[i] * o->_kx[i] + o->_kz[j] * o->_kz[j]);
     }
   }
@@ -986,8 +988,8 @@ void BKE_ocean_init(struct Ocean *o,
   /*srand(seed);*/
   rng = BLI_rng_new(seed);
 
-  for (i = 0; i < o->_M; ++i) {
-    for (j = 0; j < o->_N; ++j) {
+  for (i = 0; i < o->_M; i++) {
+    for (j = 0; j < o->_N; j++) {
       float r1 = gaussRand(rng);
       float r2 = gaussRand(rng);
 
@@ -1342,7 +1344,8 @@ void BKE_ocean_simulate_cache(struct OceanCache *och, int frame)
     return;
   }
 
-  /* use default color spaces since we know for sure cache files were saved with default settings too */
+  /* Use default color spaces since we know for sure cache
+   * files were saved with default settings too. */
 
   cache_filename(string, och->bakepath, och->relbase, frame, CACHE_TYPE_DISPLACE);
   och->ibufs_disp[f] = IMB_loadiffname(string, 0, NULL);
@@ -1374,7 +1377,7 @@ void BKE_ocean_bake(struct Ocean *o,
   int res_x = och->resolution_x;
   int res_y = och->resolution_y;
   char string[FILE_MAX];
-  //RNG *rng;
+  // RNG *rng;
 
   if (!o) {
     return;
@@ -1387,7 +1390,7 @@ void BKE_ocean_bake(struct Ocean *o,
     prev_foam = NULL;
   }
 
-  //rng = BLI_rng_new(0);
+  // rng = BLI_rng_new(0);
 
   /* setup image format */
   imf.imtype = R_IMF_IMTYPE_OPENEXR;
@@ -1429,9 +1432,9 @@ void BKE_ocean_bake(struct Ocean *o,
 
           /* pr = pr * och->foam_fade; */ /* overall fade */
 
-          /* remember ocean coord sys is Y up!
-           * break up the foam where height (Y) is low (wave valley), and X and Z displacement is greatest
-           */
+          /* Remember ocean coord sys is Y up!
+           * break up the foam where height (Y) is low (wave valley),
+           * and X and Z displacement is greatest. */
 
           neg_disp = ocr.disp[1] < 0.0f ? 1.0f + ocr.disp[1] : 1.0f;
           neg_disp = neg_disp < 0.0f ? 0.0f : neg_disp;
@@ -1494,12 +1497,12 @@ void BKE_ocean_bake(struct Ocean *o,
       if (prev_foam) {
         MEM_freeN(prev_foam);
       }
-      //BLI_rng_free(rng);
+      // BLI_rng_free(rng);
       return;
     }
   }
 
-  //BLI_rng_free(rng);
+  // BLI_rng_free(rng);
   if (prev_foam) {
     MEM_freeN(prev_foam);
   }

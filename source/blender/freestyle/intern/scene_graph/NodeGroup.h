@@ -20,7 +20,8 @@
 /** \file
  * \ingroup freestyle
  * \brief Class to represent a group node. This node can contains several children.
- * \brief It also contains a transform matrix indicating the transform state of the underlying children.
+ * \brief It also contains a transform matrix indicating the transform state of the underlying
+ * children.
  */
 
 #include <vector>
@@ -53,7 +54,7 @@ class NodeGroup : public Node {
   /*! Detaches all the children */
   virtual void DetachChildren();
 
-  /*! Detached the sepcified child */
+  /*! Detached the specified child */
   virtual void DetachChild(Node *iChild);
 
   /*! Retrieve children */

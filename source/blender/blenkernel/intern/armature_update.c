@@ -165,7 +165,8 @@ static void splineik_init_tree_from_pchan(Scene *UNUSED(scene),
   CLAMP_MIN(ikData->points[segcount], 0.0f);
 
   /* make a new Spline-IK chain, and store it in the IK chains */
-  /* TODO: we should check if there is already an IK chain on this, since that would take precedence... */
+  /* TODO: we should check if there is already an IK chain on this,
+   * since that would take precedence... */
   {
     /* make new tree */
     tSplineIK_Tree *tree = MEM_callocN(sizeof(tSplineIK_Tree), "SplineIK Tree");
@@ -199,7 +200,8 @@ static void splineik_init_tree(Scene *scene, Object *ob, float UNUSED(ctime))
 {
   bPoseChannel *pchan;
 
-  /* find the tips of Spline IK chains, which are simply the bones which have been tagged as such */
+  /* find the tips of Spline IK chains,
+   * which are simply the bones which have been tagged as such */
   for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
     if (pchan->constflag & PCHAN_HAS_SPLINEIK) {
       splineik_init_tree_from_pchan(scene, ob, pchan);
@@ -271,11 +273,12 @@ static void splineik_evaluate_bone(
   /* first, adjust the point positions on the curve */
   float curveLen = tree->points[index] - tree->points[index + 1];
   float pointStart = state->curve_position;
+  float poseScale = len_v3v3(poseHead, poseTail) / pchan->bone->length;
   float baseScale = 1.0f;
 
   if (ikData->yScaleMode == CONSTRAINT_SPLINEIK_YS_ORIGINAL) {
     /* Carry over the bone Y scale to the curve range. */
-    baseScale = len_v3v3(poseHead, poseTail) / pchan->bone->length;
+    baseScale = poseScale;
   }
 
   float pointEnd = pointStart + curveLen * baseScale * state->curve_scale;
@@ -330,18 +333,20 @@ static void splineik_evaluate_bone(
     }
   }
 
-  /* step 2: determine the implied transform from these endpoints
-   *     - splineVec: the vector direction that the spline applies on the bone
-   *     - scaleFac: the factor that the bone length is scaled by to get the desired amount
+  /* Step 2: determine the implied transform from these endpoints.
+   * - splineVec: the vector direction that the spline applies on the bone.
+   * - scaleFac: the factor that the bone length is scaled by to get the desired amount.
    */
   sub_v3_v3v3(splineVec, poseTail, poseHead);
   scaleFac = len_v3(splineVec) / pchan->bone->length;
 
-  /* Adjust the scale factor towards the neutral state when rolling off the curve end. */
-  scaleFac = interpf(scaleFac, baseScale, tailBlendFac);
+  /* Extrapolate the full length of the bone as it rolls off the end of the curve. */
+  scaleFac = (tailBlendFac < 1e-5f) ? baseScale : scaleFac / tailBlendFac;
 
-  /* step 3: compute the shortest rotation needed to map from the bone rotation to the current axis
-   *      - this uses the same method as is used for the Damped Track Constraint (see the code there for details)
+  /* Step 3: compute the shortest rotation needed
+   * to map from the bone rotation to the current axis.
+   * - this uses the same method as is used for the Damped Track Constraint
+   *   (see the code there for details).
    */
   {
     float dmat[3][3], rmat[3][3];
@@ -353,7 +358,8 @@ static void splineik_evaluate_bone(
     mul_m3_m4m4(basePoseMat, state->locrot_offset, pchan->pose_mat);
     normalize_m3_m3(rmat, basePoseMat);
 
-    /* also, normalize the orientation imposed by the bone, now that we've extracted the scale factor */
+    /* Also, normalize the orientation imposed by the bone,
+     * now that we've extracted the scale factor. */
     normalize_v3(splineVec);
 
     /* calculate smallest axis-angle rotation necessary for getting from the
@@ -375,12 +381,12 @@ static void splineik_evaluate_bone(
      */
     axis_angle_to_mat3(dmat, raxis, rangle);
 
-    /* combine these rotations so that the y-axis of the bone is now aligned as the spline dictates,
-     * while still maintaining roll control from the existing bone animation
-     */
+    /* Combine these rotations so that the y-axis of the bone is now aligned as the
+     * spline dictates, while still maintaining roll control from the existing bone animation. */
     mul_m3_m3m3(poseMat, dmat, rmat);
-    normalize_m3(
-        poseMat); /* attempt to reduce shearing, though I doubt this'll really help too much now... */
+
+    /* attempt to reduce shearing, though I doubt this'll really help too much now... */
+    normalize_m3(poseMat);
 
     mul_m3_m3m3(basePoseMat, dmat, basePoseMat);
 
@@ -389,24 +395,31 @@ static void splineik_evaluate_bone(
   }
 
   /* step 4: set the scaling factors for the axes */
-  {
-    /* only multiply the y-axis by the scaling factor to get nice volume-preservation */
-    mul_v3_fl(poseMat[1], scaleFac);
 
-    /* set the scaling factors of the x and z axes from... */
+  /* Always multiply the y-axis by the scaling factor to get the correct length. */
+  mul_v3_fl(poseMat[1], scaleFac);
+
+  /* After that, apply x/z scaling modes. */
+  if (ikData->xzScaleMode != CONSTRAINT_SPLINEIK_XZS_NONE) {
+    /* First, apply the original scale if enabled. */
+    if (ikData->xzScaleMode == CONSTRAINT_SPLINEIK_XZS_ORIGINAL ||
+        (ikData->flag & CONSTRAINT_SPLINEIK_USE_ORIGINAL_SCALE) != 0) {
+      float scale;
+
+      /* x-axis scale */
+      scale = len_v3(pchan->pose_mat[0]);
+      mul_v3_fl(poseMat[0], scale);
+      /* z-axis scale */
+      scale = len_v3(pchan->pose_mat[2]);
+      mul_v3_fl(poseMat[2], scale);
+
+      /* Adjust the scale factor used for volume preservation
+       * to consider the pre-IK scaling as the initial volume. */
+      scaleFac /= poseScale;
+    }
+
+    /* Apply volume preservation. */
     switch (ikData->xzScaleMode) {
-      case CONSTRAINT_SPLINEIK_XZS_ORIGINAL: {
-        /* original scales get used */
-        float scale;
-
-        /* x-axis scale */
-        scale = len_v3(pchan->pose_mat[0]);
-        mul_v3_fl(poseMat[0], scale);
-        /* z-axis scale */
-        scale = len_v3(pchan->pose_mat[2]);
-        mul_v3_fl(poseMat[2], scale);
-        break;
-      }
       case CONSTRAINT_SPLINEIK_XZS_INVERSE: {
         /* old 'volume preservation' method using the inverse scale */
         float scale;
@@ -478,14 +491,14 @@ static void splineik_evaluate_bone(
         break;
       }
     }
+  }
 
-    /* finally, multiply the x and z scaling by the radius of the curve too,
-     * to allow automatic scales to get tweaked still
-     */
-    if ((ikData->flag & CONSTRAINT_SPLINEIK_NO_CURVERAD) == 0) {
-      mul_v3_fl(poseMat[0], radius);
-      mul_v3_fl(poseMat[2], radius);
-    }
+  /* Finally, multiply the x and z scaling by the radius of the curve too,
+   * to allow automatic scales to get tweaked still.
+   */
+  if ((ikData->flag & CONSTRAINT_SPLINEIK_NO_CURVERAD) == 0) {
+    mul_v3_fl(poseMat[0], radius);
+    mul_v3_fl(poseMat[2], radius);
   }
 
   /* Blend the scaling of the matrix according to the influence. */
@@ -539,7 +552,8 @@ static void splineik_execute_tree(
   while ((tree = pchan_root->siktree.first) != NULL) {
     int i;
 
-    /* Firstly, calculate the bone matrix the standard way, since this is needed for roll control. */
+    /* Firstly, calculate the bone matrix the standard way,
+     * since this is needed for roll control. */
     for (i = tree->chainlen - 1; i >= 0; i--) {
       BKE_pose_where_is_bone(depsgraph, scene, ob, tree->chain[i], ctime, 1);
     }
@@ -549,8 +563,8 @@ static void splineik_execute_tree(
 
     if (splineik_evaluate_init(tree, &state)) {
       /* Walk over each bone in the chain, calculating the effects of spline IK
-       *     - the chain is traversed in the opposite order to storage order (i.e. parent to children)
-       *       so that dependencies are correct
+       * - the chain is traversed in the opposite order to storage order (i.e. parent to children)
+       *   so that dependencies are correct
        */
       for (i = tree->chainlen - 1; i >= 0; i--) {
         bPoseChannel *pchan = tree->chain[i];
@@ -629,6 +643,10 @@ void BKE_pose_eval_init(struct Depsgraph *depsgraph, Scene *UNUSED(scene), Objec
   }
 
   BLI_assert(pose->chan_array != NULL || BLI_listbase_is_empty(&pose->chanbase));
+
+  if (object->proxy != NULL) {
+    object->proxy->proxy_from = object;
+  }
 }
 
 void BKE_pose_eval_init_ik(struct Depsgraph *depsgraph, Scene *scene, Object *object)
@@ -710,6 +728,26 @@ void BKE_pose_constraints_evaluate(struct Depsgraph *depsgraph,
   }
 }
 
+static void pose_channel_flush_to_orig_if_needed(struct Depsgraph *depsgraph,
+                                                 struct Object *object,
+                                                 bPoseChannel *pchan)
+{
+  if (!DEG_is_active(depsgraph)) {
+    return;
+  }
+  const bArmature *armature = (bArmature *)object->data;
+  if (armature->edbo != NULL) {
+    return;
+  }
+  bPoseChannel *pchan_orig = pchan->orig_pchan;
+  /* TODO(sergey): Using BKE_pose_copy_pchan_result() introduces T70901, but why? */
+  copy_m4_m4(pchan_orig->pose_mat, pchan->pose_mat);
+  copy_m4_m4(pchan_orig->chan_mat, pchan->chan_mat);
+  copy_v3_v3(pchan_orig->pose_head, pchan->pose_mat[3]);
+  copy_m4_m4(pchan_orig->constinv, pchan->constinv);
+  copy_v3_v3(pchan_orig->pose_tail, pchan->pose_tail);
+}
+
 void BKE_pose_bone_done(struct Depsgraph *depsgraph, struct Object *object, int pchan_index)
 {
   const bArmature *armature = (bArmature *)object->data;
@@ -727,13 +765,9 @@ void BKE_pose_bone_done(struct Depsgraph *depsgraph, struct Object *object, int 
       mat4_to_dquat(&pchan->runtime.deform_dual_quat, pchan->bone->arm_mat, pchan->chan_mat);
     }
   }
-  if (DEG_is_active(depsgraph) && armature->edbo == NULL) {
+  pose_channel_flush_to_orig_if_needed(depsgraph, object, pchan);
+  if (DEG_is_active(depsgraph)) {
     bPoseChannel *pchan_orig = pchan->orig_pchan;
-    copy_m4_m4(pchan_orig->pose_mat, pchan->pose_mat);
-    copy_m4_m4(pchan_orig->chan_mat, pchan->chan_mat);
-    copy_v3_v3(pchan_orig->pose_head, pchan->pose_mat[3]);
-    copy_m4_m4(pchan_orig->constinv, pchan->constinv);
-    BKE_pose_where_is_bone_tail(pchan_orig);
     if (pchan->bone == NULL || pchan->bone->segments <= 1) {
       BKE_pose_channel_free_bbone_cache(&pchan_orig->runtime);
     }
@@ -873,9 +907,10 @@ void BKE_pose_eval_proxy_copy_bone(struct Depsgraph *depsgraph, Object *object, 
   }
   BLI_assert(ID_IS_LINKED(object) && object->proxy_from != NULL);
   bPoseChannel *pchan = pose_pchan_get_indexed(object, pchan_index);
+  BLI_assert(pchan != NULL);
   DEG_debug_print_eval_subdata(
       depsgraph, __func__, object->id.name, object, "pchan", pchan->name, pchan);
-  /* TODO(sergey): Use indexec lookup, once it's guaranteed to be kept
+  /* TODO(sergey): Use indexed lookup, once it's guaranteed to be kept
    * around for the time while proxies are evaluating.
    */
 #if 0
@@ -883,9 +918,16 @@ void BKE_pose_eval_proxy_copy_bone(struct Depsgraph *depsgraph, Object *object, 
 #else
   bPoseChannel *pchan_from = BKE_pose_channel_find_name(object->proxy_from->pose, pchan->name);
 #endif
-  BLI_assert(pchan != NULL);
-  BLI_assert(pchan_from != NULL);
-  BKE_pose_copyesult_pchan_result(pchan, pchan_from);
+  if (pchan_from == NULL) {
+    printf(
+        "WARNING: Could not find bone %s in linked ID anymore... "
+        "You should delete and re-generate your proxy.\n",
+        pchan->name);
+    return;
+  }
+  BKE_pose_copy_pchan_result(pchan, pchan_from);
   copy_dq_dq(&pchan->runtime.deform_dual_quat, &pchan_from->runtime.deform_dual_quat);
   BKE_pchan_bbone_segments_cache_copy(pchan, pchan_from);
+
+  pose_channel_flush_to_orig_if_needed(depsgraph, object, pchan);
 }

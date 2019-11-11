@@ -43,18 +43,14 @@
 static int mask_parent_clear_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Mask *mask = CTX_data_edit_mask(C);
-  MaskLayer *masklay;
 
-  for (masklay = mask->masklayers.first; masklay; masklay = masklay->next) {
-    MaskSpline *spline;
-    int i;
-
-    if (masklay->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+  for (MaskLayer *mask_layer = mask->masklayers.first; mask_layer; mask_layer = mask_layer->next) {
+    if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
       continue;
     }
 
-    for (spline = masklay->splines.first; spline; spline = spline->next) {
-      for (i = 0; i < spline->tot_point; i++) {
+    for (MaskSpline *spline = mask_layer->splines.first; spline; spline = spline->next) {
+      for (int i = 0; i < spline->tot_point; i++) {
         MaskSplinePoint *point = &spline->points[i];
 
         if (MASKPOINT_ISSEL_ANY(point)) {
@@ -89,7 +85,6 @@ void MASK_OT_parent_clear(wmOperatorType *ot)
 static int mask_parent_set_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Mask *mask = CTX_data_edit_mask(C);
-  MaskLayer *masklay;
 
   /* parent info */
   SpaceClip *sc = CTX_wm_space_clip(C);
@@ -141,16 +136,13 @@ static int mask_parent_set_exec(bContext *C, wmOperator *UNUSED(op))
     return OPERATOR_CANCELLED;
   }
 
-  for (masklay = mask->masklayers.first; masklay; masklay = masklay->next) {
-    MaskSpline *spline;
-    int i;
-
-    if (masklay->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+  for (MaskLayer *mask_layer = mask->masklayers.first; mask_layer; mask_layer = mask_layer->next) {
+    if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
       continue;
     }
 
-    for (spline = masklay->splines.first; spline; spline = spline->next) {
-      for (i = 0; i < spline->tot_point; i++) {
+    for (MaskSpline *spline = mask_layer->splines.first; spline; spline = spline->next) {
+      for (int i = 0; i < spline->tot_point; i++) {
         MaskSplinePoint *point = &spline->points[i];
 
         if (MASKPOINT_ISSEL_ANY(point)) {
@@ -184,7 +176,7 @@ void MASK_OT_parent_set(wmOperatorType *ot)
   ot->idname = "MASK_OT_parent_set";
 
   /* api callbacks */
-  //ot->invoke = mask_parent_set_invoke;
+  // ot->invoke = mask_parent_set_invoke;
   ot->exec = mask_parent_set_exec;
 
   ot->poll = ED_space_clip_maskedit_mask_poll;

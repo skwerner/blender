@@ -38,6 +38,7 @@ bool Device::need_devices_update = true;
 thread_mutex Device::device_mutex;
 vector<DeviceInfo> Device::opencl_devices;
 vector<DeviceInfo> Device::cuda_devices;
+vector<DeviceInfo> Device::optix_devices;
 vector<DeviceInfo> Device::cpu_devices;
 vector<DeviceInfo> Device::network_devices;
 uint Device::devices_initialized_mask = 0;
@@ -287,7 +288,8 @@ void Device::draw_pixels(device_memory &rgba,
   }
 
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-  /* invalidate old contents - avoids stalling if buffer is still waiting in queue to be rendered */
+  /* invalidate old contents - avoids stalling if buffer is still waiting in queue to be rendered
+   */
   glBufferData(GL_ARRAY_BUFFER, 16 * sizeof(float), NULL, GL_STREAM_DRAW);
 
   float *vpointer = (float *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
@@ -378,6 +380,14 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
         device = NULL;
       break;
 #endif
+#ifdef WITH_OPTIX
+    case DEVICE_OPTIX:
+      if (device_optix_init())
+        device = device_optix_create(info, stats, profiler, background);
+      else
+        device = NULL;
+      break;
+#endif
 #ifdef WITH_MULTI
     case DEVICE_MULTI:
       device = device_multi_create(info, stats, profiler, background);
@@ -409,6 +419,8 @@ DeviceType Device::type_from_string(const char *name)
     return DEVICE_CPU;
   else if (strcmp(name, "CUDA") == 0)
     return DEVICE_CUDA;
+  else if (strcmp(name, "OPTIX") == 0)
+    return DEVICE_OPTIX;
   else if (strcmp(name, "OPENCL") == 0)
     return DEVICE_OPENCL;
   else if (strcmp(name, "NETWORK") == 0)
@@ -425,6 +437,8 @@ string Device::string_from_type(DeviceType type)
     return "CPU";
   else if (type == DEVICE_CUDA)
     return "CUDA";
+  else if (type == DEVICE_OPTIX)
+    return "OPTIX";
   else if (type == DEVICE_OPENCL)
     return "OPENCL";
   else if (type == DEVICE_NETWORK)
@@ -441,6 +455,9 @@ vector<DeviceType> Device::available_types()
   types.push_back(DEVICE_CPU);
 #ifdef WITH_CUDA
   types.push_back(DEVICE_CUDA);
+#endif
+#ifdef WITH_OPTIX
+  types.push_back(DEVICE_OPTIX);
 #endif
 #ifdef WITH_OPENCL
   types.push_back(DEVICE_OPENCL);
@@ -482,6 +499,20 @@ vector<DeviceInfo> Device::available_devices(uint mask)
       devices_initialized_mask |= DEVICE_MASK_CUDA;
     }
     foreach (DeviceInfo &info, cuda_devices) {
+      devices.push_back(info);
+    }
+  }
+#endif
+
+#ifdef WITH_OPTIX
+  if (mask & DEVICE_MASK_OPTIX) {
+    if (!(devices_initialized_mask & DEVICE_MASK_OPTIX)) {
+      if (device_optix_init()) {
+        device_optix_info(optix_devices);
+      }
+      devices_initialized_mask |= DEVICE_MASK_OPTIX;
+    }
+    foreach (DeviceInfo &info, optix_devices) {
       devices.push_back(info);
     }
   }
@@ -612,6 +643,7 @@ void Device::free_memory()
 {
   devices_initialized_mask = 0;
   cuda_devices.free_memory();
+  optix_devices.free_memory();
   opencl_devices.free_memory();
   cpu_devices.free_memory();
   network_devices.free_memory();

@@ -43,6 +43,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_anim.h"
 #include "BKE_animsys.h"
 #include "BKE_constraint.h"
@@ -115,8 +116,10 @@ void BKE_action_free(bAction *act)
 /* .................................. */
 
 /**
- * Only copy internal data of Action ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Action ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -139,8 +142,11 @@ void BKE_action_copy_data(Main *UNUSED(bmain),
 
   for (fcu_src = act_src->curves.first; fcu_src; fcu_src = fcu_src->next) {
     /* duplicate F-Curve */
-    fcu_dst = copy_fcurve(
-        fcu_src); /* XXX TODO pass subdata flag? But surprisingly does not seem to be doing any ID refcounting... */
+
+    /* XXX TODO pass subdata flag?
+     * But surprisingly does not seem to be doing any ID refcounting... */
+    fcu_dst = copy_fcurve(fcu_src);
+
     BLI_addtail(&act_dst->curves, fcu_dst);
 
     /* fix group links (kindof bad list-in-list search, but this is the most reliable way) */
@@ -230,9 +236,9 @@ void action_group_colors_sync(bActionGroup *grp, const bActionGroup *ref_grp)
        */
       else if (grp->cs.solid[0] == 0) {
         /* define for setting colors in theme below */
-        rgba_char_args_set(grp->cs.solid, 0xff, 0x00, 0x00, 255);
-        rgba_char_args_set(grp->cs.select, 0x81, 0xe6, 0x14, 255);
-        rgba_char_args_set(grp->cs.active, 0x18, 0xb6, 0xe0, 255);
+        rgba_uchar_args_set(grp->cs.solid, 0xff, 0x00, 0x00, 255);
+        rgba_uchar_args_set(grp->cs.select, 0x81, 0xe6, 0x14, 255);
+        rgba_uchar_args_set(grp->cs.active, 0x18, 0xb6, 0xe0, 255);
       }
     }
   }
@@ -309,12 +315,13 @@ void action_groups_add_channel(bAction *act, bActionGroup *agrp, FCurve *fcurve)
     /* firstly, link this F-Curve to the group */
     agrp->channels.first = agrp->channels.last = fcurve;
 
-    /* step through the groups preceding this one, finding the F-Curve there to attach this one after */
+    /* Step through the groups preceding this one,
+     * finding the F-Curve there to attach this one after. */
     for (grp = agrp->prev; grp; grp = grp->prev) {
-      /* if this group has F-Curves, we want weave the given one in right after the last channel there,
-       * but via the Action's list not this group's list
+      /* if this group has F-Curves, we want weave the given one in right after the last channel
+       * there, but via the Action's list not this group's list
        * - this is so that the F-Curve is in the right place in the Action,
-       *   but won't be included in the previous group
+       *   but won't be included in the previous group.
        */
       if (grp->channels.last) {
         /* once we've added, break here since we don't need to search any further... */
@@ -323,9 +330,9 @@ void action_groups_add_channel(bAction *act, bActionGroup *agrp, FCurve *fcurve)
       }
     }
 
-    /* if grp is NULL, that means we fell through, and this F-Curve should be added as the new first
-     * since group is (effectively) the first group. Thus, the existing first F-Curve becomes the
-     * second in the chain, etc. etc.
+    /* If grp is NULL, that means we fell through, and this F-Curve should be added as the new
+     * first since group is (effectively) the first group. Thus, the existing first F-Curve becomes
+     * the second in the chain, etc. etc.
      */
     if (grp == NULL) {
       BLI_insertlinkbefore(&act->curves, act->curves.first, fcurve);
@@ -519,6 +526,38 @@ bPoseChannel *BKE_pose_channel_active(Object *ob)
 }
 
 /**
+ * Use this when detecting the "other selected bone",
+ * when we have multiple armatures in pose mode.
+ *
+ * In this case the active-selected is an obvious choice when finding the target for a
+ * constraint for eg. however from the users perspective the active pose bone of the
+ * active object is the _real_ active bone, so any other non-active selected bone
+ * is a candidate for being the other selected bone, see: T58447.
+ */
+bPoseChannel *BKE_pose_channel_active_or_first_selected(struct Object *ob)
+{
+  bArmature *arm = (ob) ? ob->data : NULL;
+
+  if (ELEM(NULL, ob, ob->pose, arm)) {
+    return NULL;
+  }
+
+  bPoseChannel *pchan = BKE_pose_channel_active(ob);
+  if (pchan && (pchan->bone->flag & BONE_SELECTED) && PBONE_VISIBLE(arm, pchan->bone)) {
+    return pchan;
+  }
+
+  for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
+    if (pchan->bone != NULL) {
+      if ((pchan->bone->flag & BONE_SELECTED) && PBONE_VISIBLE(arm, pchan->bone)) {
+        return pchan;
+      }
+    }
+  }
+  return NULL;
+}
+
+/**
  * \see #ED_armature_ebone_get_mirrored (edit-mode, matching function)
  */
 bPoseChannel *BKE_pose_channel_get_mirrored(const bPose *pose, const char *name)
@@ -606,7 +645,8 @@ void BKE_pose_copy_data_ex(bPose **dst,
           &listb, &pchan->constraints, flag, true);  // BKE_constraints_copy NULLs listb
       pchan->constraints = listb;
 
-      /* XXX: This is needed for motionpath drawing to work. Dunno why it was setting to null before... */
+      /* XXX: This is needed for motionpath drawing to work.
+       * Dunno why it was setting to null before... */
       pchan->mpath = animviz_copy_motionpath(pchan->mpath);
     }
 
@@ -722,6 +762,21 @@ void BKE_pose_channels_hash_free(bPose *pose)
   }
 }
 
+static void pose_channels_remove_internal_links(Object *ob, bPoseChannel *unlinked_pchan)
+{
+  LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
+    if (pchan->bbone_prev == unlinked_pchan) {
+      pchan->bbone_prev = NULL;
+    }
+    if (pchan->bbone_next == unlinked_pchan) {
+      pchan->bbone_next = NULL;
+    }
+    if (pchan->custom_tx == unlinked_pchan) {
+      pchan->custom_tx = NULL;
+    }
+  }
+}
+
 /**
  * Selectively remove pose channels.
  */
@@ -740,6 +795,7 @@ void BKE_pose_channels_remove(Object *ob,
       if (filter_fn(pchan->name, user_data)) {
         /* Bone itself is being removed */
         BKE_pose_channel_free(pchan);
+        pose_channels_remove_internal_links(ob, pchan);
         if (ob->pose->chanhash) {
           BLI_ghash_remove(ob->pose->chanhash, pchan->name, NULL, NULL);
         }
@@ -815,7 +871,6 @@ void BKE_pose_channel_free_ex(bPoseChannel *pchan, bool do_id_user)
 
   if (pchan->prop) {
     IDP_FreeProperty(pchan->prop);
-    MEM_freeN(pchan->prop);
   }
 
   /* Cached data, for new draw manager rendering code. */
@@ -957,7 +1012,6 @@ void BKE_pose_channel_copy_data(bPoseChannel *pchan, const bPoseChannel *pchan_f
   if (pchan->prop) {
     /* unlikely but possible it exists */
     IDP_FreeProperty(pchan->prop);
-    MEM_freeN(pchan->prop);
     pchan->prop = NULL;
   }
   if (pchan_from->prop) {
@@ -971,6 +1025,7 @@ void BKE_pose_channel_copy_data(bPoseChannel *pchan, const bPoseChannel *pchan_f
   }
 
   pchan->custom_scale = pchan_from->custom_scale;
+  pchan->drawflag = pchan_from->drawflag;
 }
 
 /* checks for IK constraint, Spline IK, and also for Follow-Path constraint.
@@ -1287,7 +1342,8 @@ short action_get_item_transforms(bAction *act, Object *ob, bPoseChannel *pchan, 
   for (fcu = act->curves.first; fcu; fcu = fcu->next) {
     const char *bPtr = NULL, *pPtr = NULL;
 
-    /* if enough flags have been found, we can stop checking unless we're also getting the curves */
+    /* If enough flags have been found,
+     * we can stop checking unless we're also getting the curves. */
     if ((flags == ACT_TRANS_ALL) && (curves == NULL)) {
       break;
     }
@@ -1364,9 +1420,7 @@ short action_get_item_transforms(bAction *act, Object *ob, bPoseChannel *pchan, 
 
       if ((curves) || (flags & ACT_TRANS_PROP) == 0) {
         /* custom properties only */
-        pPtr = strstr(
-            bPtr,
-            "[\""); /* extra '"' comment here to keep my texteditor functionlist working :) */
+        pPtr = strstr(bPtr, "[\"");
         if (pPtr) {
           flags |= ACT_TRANS_PROP;
 
@@ -1418,7 +1472,7 @@ void BKE_pose_rest(bPose *pose)
   }
 }
 
-void BKE_pose_copyesult_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
+void BKE_pose_copy_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
 {
   copy_m4_m4(pchanto->pose_mat, pchanfrom->pose_mat);
   copy_m4_m4(pchanto->chan_mat, pchanfrom->chan_mat);
@@ -1469,7 +1523,7 @@ bool BKE_pose_copy_result(bPose *to, bPose *from)
   for (pchanfrom = from->chanbase.first; pchanfrom; pchanfrom = pchanfrom->next) {
     pchanto = BKE_pose_channel_find_name(to, pchanfrom->name);
     if (pchanto != NULL) {
-      BKE_pose_copyesult_pchan_result(pchanto, pchanfrom);
+      BKE_pose_copy_pchan_result(pchanto, pchanfrom);
     }
   }
   return true;
@@ -1515,8 +1569,8 @@ void what_does_obaction(
   workob->constraints.first = ob->constraints.first;
   workob->constraints.last = ob->constraints.last;
 
-  workob->pose =
-      pose; /* need to set pose too, since this is used for both types of Action Constraint */
+  /* Need to set pose too, since this is used for both types of Action Constraint. */
+  workob->pose = pose;
   if (pose) {
     /* This function is most likely to be used with a temporary pose with a single bone in there.
      * For such cases it makes no sense to create hash since it'll only waste CPU ticks on memory
@@ -1531,14 +1585,12 @@ void what_does_obaction(
   }
 
   BLI_strncpy(workob->parsubstr, ob->parsubstr, sizeof(workob->parsubstr));
-  BLI_strncpy(
-      workob->id.name,
-      "OB<ConstrWorkOb>",
-      sizeof(
-          workob->id
-              .name)); /* we don't use real object name, otherwise RNA screws with the real thing */
 
-  /* if we're given a group to use, it's likely to be more efficient (though a bit more dangerous) */
+  /* we don't use real object name, otherwise RNA screws with the real thing */
+  BLI_strncpy(workob->id.name, "OB<ConstrWorkOb>", sizeof(workob->id.name));
+
+  /* If we're given a group to use, it's likely to be more efficient
+   * (though a bit more dangerous). */
   if (agrp) {
     /* specifically evaluate this group only */
     PointerRNA id_ptr;
@@ -1558,6 +1610,6 @@ void what_does_obaction(
     adt.action = act;
 
     /* execute effects of Action on to workob (or it's PoseChannels) */
-    BKE_animsys_evaluate_animdata(NULL, NULL, &workob->id, &adt, cframe, ADT_RECALC_ANIM);
+    BKE_animsys_evaluate_animdata(NULL, &workob->id, &adt, cframe, ADT_RECALC_ANIM, false);
   }
 }

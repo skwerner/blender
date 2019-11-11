@@ -23,6 +23,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_global.h"
+#include "BKE_object.h"
 
 #include <sstream>
 
@@ -98,14 +99,11 @@ NodeGroup *BlenderFileLoader::Load()
       continue;
     }
 
-    bool apply_modifiers = false;
-    bool calc_undeformed = false;
-    Mesh *mesh = BKE_mesh_new_from_object(
-        _depsgraph, _re->main, _re->scene, ob, apply_modifiers, calc_undeformed);
+    Mesh *mesh = BKE_object_to_mesh(NULL, ob, false);
 
     if (mesh) {
       insertShapeNode(ob, mesh, ++id);
-      BKE_id_free_ex(_re->main, &mesh->id, LIB_ID_FREE_NO_UI_USER, true);
+      BKE_object_to_mesh_clear(ob);
     }
   }
   DEG_OBJECT_ITER_END;
@@ -158,16 +156,20 @@ int BlenderFileLoader::countClippedFaces(float v1[3], float v2[3], float v3[3], 
       numTris = 2;  // tetragon
       break;
     case 2:
-      if (sum == 0)
+      if (sum == 0) {
         numTris = 3;  // pentagon
-      else
+      }
+      else {
         numTris = 1;  // triangle
+      }
       break;
     case 3:
-      if (sum == 3 || sum == -3)
+      if (sum == 3 || sum == -3) {
         numTris = 0;
-      else
+      }
+      else {
         numTris = 2;  // tetragon
+      }
       break;
   }
   return numTris;
@@ -190,8 +192,9 @@ void BlenderFileLoader::clipLine(float v1[3], float v2[3], float c[3], float z)
     q = v1;
   }
   double d[3];
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < 3; i++) {
     d[i] = q[i] - p[i];
+  }
   double t = (z - p[2]) / d[2];
   c[0] = p[0] + t * d[0];
   c[1] = p[1] + t * d[1];
@@ -305,17 +308,20 @@ void BlenderFileLoader::addTriangle(struct LoaderState *ls,
 
     // update the bounding box
     for (j = 0; j < 3; j++) {
-      if (ls->minBBox[j] > ls->pv[j])
+      if (ls->minBBox[j] > ls->pv[j]) {
         ls->minBBox[j] = ls->pv[j];
+      }
 
-      if (ls->maxBBox[j] < ls->pv[j])
+      if (ls->maxBBox[j] < ls->pv[j]) {
         ls->maxBBox[j] = ls->pv[j];
+      }
     }
 
 #if 0
     len = len_v3v3(fv[i], fv[(i + 1) % 3]);
-    if (_minEdgeSize > len)
+    if (_minEdgeSize > len) {
       _minEdgeSize = len;
+    }
 #endif
 
     *ls->pvi = ls->currentIndex;
@@ -331,14 +337,18 @@ void BlenderFileLoader::addTriangle(struct LoaderState *ls,
     ls->pmi++;
   }
 
-  if (fm)
+  if (fm) {
     marks |= IndexedFaceSet::FACE_MARK;
-  if (em1)
+  }
+  if (em1) {
     marks |= IndexedFaceSet::EDGE_MARK_V1V2;
-  if (em2)
+  }
+  if (em2) {
     marks |= IndexedFaceSet::EDGE_MARK_V2V3;
-  if (em3)
+  }
+  if (em3) {
     marks |= IndexedFaceSet::EDGE_MARK_V3V1;
+  }
   *(ls->pm++) = marks;
 }
 
@@ -545,8 +555,9 @@ void BlenderFileLoader::insertShapeNode(Object *ob, Mesh *me, int id)
     }
 
     unsigned int numTris = countClippedFaces(v1, v2, v3, clip);
-    if (numTris == 0)
+    if (numTris == 0) {
       continue;
+    }
 
     bool fm = (ffa) ? (ffa[lt->poly].flag & FREESTYLE_FACE_MARK) != 0 : false;
     bool em1 = false, em2 = false, em3 = false;
@@ -690,8 +701,9 @@ void BlenderFileLoader::insertShapeNode(Object *ob, Mesh *me, int id)
     detri.v = zero;
     detri.n = 0;
     for (unsigned int j = 0; j < viSize; j += 3) {
-      if (i == j)
+      if (i == j) {
         continue;
+      }
       vi0 = cleanVIndices[j];
       vi1 = cleanVIndices[j + 1];
       vi2 = cleanVIndices[j + 2];

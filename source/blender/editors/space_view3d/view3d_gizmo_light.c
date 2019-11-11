@@ -22,6 +22,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
+#include "BKE_layer.h"
 #include "BKE_object.h"
 
 #include "DEG_depsgraph.h"
@@ -114,6 +115,7 @@ void VIEW3D_GGT_light_spot(wmGizmoGroupType *gzgt)
 
   gzgt->poll = WIDGETGROUP_light_spot_poll;
   gzgt->setup = WIDGETGROUP_light_spot_setup;
+  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_maybe_drag;
   gzgt->refresh = WIDGETGROUP_light_spot_refresh;
 }
 
@@ -230,6 +232,7 @@ void VIEW3D_GGT_light_area(wmGizmoGroupType *gzgt)
 
   gzgt->poll = WIDGETGROUP_light_area_poll;
   gzgt->setup = WIDGETGROUP_light_area_setup;
+  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_maybe_drag;
   gzgt->refresh = WIDGETGROUP_light_area_refresh;
 }
 
@@ -317,6 +320,7 @@ void VIEW3D_GGT_light_target(wmGizmoGroupType *gzgt)
 
   gzgt->poll = WIDGETGROUP_light_target_poll;
   gzgt->setup = WIDGETGROUP_light_target_setup;
+  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_maybe_drag;
   gzgt->draw_prepare = WIDGETGROUP_light_target_draw_prepare;
 }
 

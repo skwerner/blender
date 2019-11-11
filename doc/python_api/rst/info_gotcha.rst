@@ -40,7 +40,7 @@ In most cases you can figure out what context an operator needs
 simply be seeing how it's used in Blender and thinking about what it does.
 
 Unfortunately if you're still stuck - the only way to **really** know
-whats going on is to read the source code for the poll function and see what its checking.
+what's going on is to read the source code for the poll function and see what its checking.
 
 For Python operators it's not so hard to find the source
 since it's included with Blender and the source file/line is included in the operator reference docs.
@@ -102,16 +102,16 @@ To avoid expensive recalculations every time a property is modified,
 Blender defers making the actual calculations until they are needed.
 
 However, while the script runs you may want to access the updated values.
-In this case you need to call :class:`bpy.types.Scene.update` after modifying values, for example:
+In this case you need to call :class:`bpy.types.ViewLayer.update` after modifying values, for example:
 
 .. code-block:: python
 
    bpy.context.object.location = 1, 2, 3
-   bpy.context.scene.update()
+   bpy.context.view_layer.update()
 
 
 Now all dependent data (child objects, modifiers, drivers... etc)
-has been recalculated and is available to the script.
+has been recalculated and is available to the script within active view layer.
 
 
 Can I redraw during the script?
@@ -125,7 +125,7 @@ While a script executes Blender waits for it to finish and is effectively locked
 while in this state Blender won't redraw or respond to user input.
 Normally this is not such a problem because scripts distributed with Blender
 tend not to run for an extended period of time,
-nevertheless scripts *can* take ages to execute and its nice to see whats going on in the view port.
+nevertheless scripts *can* take ages to execute and its nice to see what's going on in the view port.
 
 Tools that lock Blender in a loop and redraw are highly discouraged
 since they conflict with Blenders ability to run multiple operators

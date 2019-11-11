@@ -85,7 +85,7 @@ static struct IDNameLib_TypeMap *main_idmap_from_idcode(struct IDNameLib_Map *id
  *
  * \note When used during undo/redo, there is no guaranty that ID pointers from UI area
  *       are not pointing to freed memory (when some IDs have been deleted). To avoid crashes
- *       in those cases, one can provide the 'old' (aka current) Main databse as reference.
+ *       in those cases, one can provide the 'old' (aka current) Main database as reference.
  *       #BKE_main_idmap_lookup_id will then check that given ID does exist in \a old_bmain
  *       before trying to use it.
  *
@@ -182,7 +182,8 @@ ID *BKE_main_idmap_lookup(struct IDNameLib_Map *id_map,
 ID *BKE_main_idmap_lookup_id(struct IDNameLib_Map *id_map, const ID *id)
 {
   /* When used during undo/redo, this function cannot assume that given id points to valid memory
-   * (i.e. has not been freed), so it has to check that it does exist in 'old' (aka current) Main database.
+   * (i.e. has not been freed),
+   * so it has to check that it does exist in 'old' (aka current) Main database.
    * Otherwise, we cannot provide new ID pointer that way (would crash accessing freed memory
    * when trying to get ID name).
    */

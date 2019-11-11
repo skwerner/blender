@@ -113,11 +113,11 @@ static void animedit_get_yscale_factor(bAnimContext *ac)
    */
   ac->yscale_fac = btheme->space_action.keyframe_scale_fac;
 
-  /* clamp to avoid problems with uninitialised values... */
+  /* clamp to avoid problems with uninitialized values... */
   if (ac->yscale_fac < 0.1f) {
     ac->yscale_fac = 1.0f;
   }
-  //printf("yscale_fac = %f\n", ac->yscale_fac);
+  // printf("yscale_fac = %f\n", ac->yscale_fac);
 }
 
 /* ----------- Private Stuff - Action Editor ------------- */
@@ -136,7 +136,7 @@ static Key *actedit_get_shapekeys(bAnimContext *ac)
   }
 
   /* XXX pinning is not available in 'ShapeKey' mode... */
-  //if (saction->pin) return NULL;
+  // if (saction->pin) return NULL;
 
   /* shapekey data is stored with geometry data */
   key = BKE_key_from_object(ob);
@@ -218,7 +218,7 @@ static bool actedit_get_context(bAnimContext *ac, SpaceAction *saction)
     {
       /* TODO, other methods to get the mask */
       // Sequence *seq = BKE_sequencer_active_get(ac->scene);
-      //MovieClip *clip = ac->scene->clip;
+      // MovieClip *clip = ac->scene->clip;
       //          struct Mask *mask = seq ? seq->mask : NULL;
 
       /* update scene-pointer (no need to check for pinning yet, as not implemented) */
@@ -412,7 +412,6 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
   if (scene) {
     ac->markers = ED_context_get_markers(C);
   }
-  ac->depsgraph = CTX_data_depsgraph(C);
   ac->view_layer = CTX_data_view_layer(C);
   ac->obact = (ac->view_layer->basact) ? ac->view_layer->basact->object : NULL;
   ac->sa = sa;
@@ -425,7 +424,8 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
   animedit_get_yscale_factor(ac);
 
   /* get data context info */
-  // XXX: if the below fails, try to grab this info from context instead... (to allow for scripting)
+  /* XXX: if the below fails, try to grab this info from context instead...
+   * (to allow for scripting). */
   return ANIM_animdata_context_getdata(ac);
 }
 
@@ -454,10 +454,12 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
   { \
     int _filter = filter_mode; \
     short _doSubChannels = 0; \
-    if (!(filter_mode & ANIMFILTER_LIST_VISIBLE) || (expanded_check)) \
+    if (!(filter_mode & ANIMFILTER_LIST_VISIBLE) || (expanded_check)) { \
       _doSubChannels = 1; \
-    else if (!(filter_mode & ANIMFILTER_LIST_CHANNELS)) \
+    } \
+    else if (!(filter_mode & ANIMFILTER_LIST_CHANNELS)) { \
       _doSubChannels = 2; \
+    } \
     else { \
       filter_mode |= ANIMFILTER_TMP_PEEK; \
     } \
@@ -486,7 +488,8 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
  * Quick macro to test for all three above usability tests, performing the appropriate provided
  * action for each when the AnimData context is appropriate.
  *
- * Priority order for this goes (most important, to least): AnimData blocks, NLA, Drivers, Keyframes.
+ * Priority order for this goes (most important, to least):
+ * AnimData blocks, NLA, Drivers, Keyframes.
  *
  * For this to work correctly,
  * a standard set of data needs to be available within the scope that this
@@ -511,7 +514,7 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
  * 2A) nla tracks: include animdata block's data as there are NLA tracks+strips there
  * 2B) actions to convert to nla: include animdata block's data as there is an action that can be
  *     converted to a new NLA strip, and the filtering options allow this
- * 2C) allow non-animated datablocks to be included so that datablocks can be added
+ * 2C) allow non-animated data-blocks to be included so that data-blocks can be added
  * 3) drivers: include drivers from animdata block (for Drivers mode in Graph Editor)
  * 4A) nla strip keyframes: these are the per-strip controls for time and influence
  * 4B) normal keyframes: only when there is an active action
@@ -582,7 +585,8 @@ bool ANIM_animdata_get_context(const bContext *C, bAnimContext *ac)
 #define ANIMCHANNEL_ACTIVEOK(ale) \
   (!(filter_mode & ANIMFILTER_ACTIVE) || !(ale->adt) || (ale->adt->flag & ADT_UI_ACTIVE))
 
-/* quick macro to test if an anim-channel (F-Curve, Group, etc.) is selected in an acceptable way */
+/* Quick macro to test if an anim-channel (F-Curve, Group, etc.)
+ * is selected in an acceptable way. */
 #define ANIMCHANNEL_SELOK(test_func) \
   (!(filter_mode & (ANIMFILTER_SEL | ANIMFILTER_UNSEL)) || \
    ((filter_mode & ANIMFILTER_SEL) && test_func) || \
@@ -626,9 +630,8 @@ static bAnimListElem *make_new_animlistelem(void *data,
     /* do specifics */
     switch (datatype) {
       case ANIMTYPE_SUMMARY: {
-        /* nothing to include for now... this is just a dummy wrappy around all the other channels
-         * in the DopeSheet, and gets included at the start of the list
-         */
+        /* Nothing to include for now... this is just a dummy wrapper around
+         * all the other channels in the DopeSheet, and gets included at the start of the list. */
         ale->key_data = NULL;
         ale->datatype = ALE_ALL;
         break;
@@ -1210,12 +1213,13 @@ static FCurve *animfilter_fcurve_next(bDopeSheet *ads,
    */
   for (fcu = first; ((fcu) && (fcu->grp == grp)); fcu = fcu->next) {
     /* special exception for Pose-Channel/Sequence-Strip/Node Based F-Curves:
-     * - the 'Only Selected' and 'Include Hidden' data filters should be applied to sub-ID data which
-     *   can be independently selected/hidden, such as Pose-Channels, Sequence Strips, and Nodes.
-     *   Since these checks were traditionally done as first check for objects, we do the same here
-     * - we currently use an 'approximate' method for getting these F-Curves that doesn't require
-     *   carefully checking the entire path
-     * - this will also affect things like Drivers, and also works for Bone Constraints
+     * - The 'Only Selected' and 'Include Hidden' data filters should be applied to sub-ID data
+     *   which can be independently selected/hidden, such as Pose-Channels, Sequence Strips,
+     *   and Nodes. Since these checks were traditionally done as first check for objects,
+     *   we do the same here.
+     * - We currently use an 'approximate' method for getting these F-Curves that doesn't require
+     *   carefully checking the entire path.
+     * - This will also affect things like Drivers, and also works for Bone Constraints.
      */
     if (ads && owner_id) {
       if ((filter_mode & ANIMFILTER_TMP_IGNORE_ONLYSEL) == 0) {
@@ -1320,7 +1324,7 @@ static size_t animfilter_act_group(bAnimContext *ac,
   ListBase tmp_data = {NULL, NULL};
   size_t tmp_items = 0;
   size_t items = 0;
-  //int ofilter = filter_mode;
+  // int ofilter = filter_mode;
 
   /* if we care about the selection status of the channels,
    * but the group isn't expanded (1)...
@@ -1380,7 +1384,7 @@ static size_t animfilter_act_group(bAnimContext *ac,
     /* add this group as a channel first */
     if (filter_mode & ANIMFILTER_LIST_CHANNELS) {
       /* restore original filter mode so that this next step works ok... */
-      //filter_mode = ofilter;
+      // filter_mode = ofilter;
 
       /* filter selection of channel specially here again,
        * since may be open and not subject to previous test */
@@ -1498,7 +1502,8 @@ static size_t animfilter_nla(bAnimContext *UNUSED(ac),
       next = nlt->next;
     }
 
-    /* if we're in NLA-tweakmode, don't show this track if it was disabled (due to tweaking) for now
+    /* if we're in NLA-tweakmode, don't show this track if it was disabled
+     * (due to tweaking) for now:
      * - active track should still get shown though (even though it has disabled flag set)
      */
     // FIXME: the channels after should still get drawn, just 'differently',
@@ -1611,7 +1616,7 @@ static size_t animfilter_block_data(
   AnimData *adt = BKE_animdata_from_id(id);
   size_t items = 0;
 
-  /* image object datablocks have no anim-data so check for NULL */
+  /* image object data-blocks have no anim-data so check for NULL */
   if (adt) {
     IdAdtTemplate *iat = (IdAdtTemplate *)id;
 
@@ -1697,7 +1702,7 @@ static size_t animdata_filter_shapekey(bAnimContext *ac,
   return items;
 }
 
-/* Helper for Grease Pencil - layers within a datablock */
+/* Helper for Grease Pencil - layers within a data-block. */
 static size_t animdata_filter_gpencil_layers_data(ListBase *anim_data,
                                                   bDopeSheet *ads,
                                                   bGPdata *gpd,
@@ -1730,7 +1735,7 @@ static size_t animdata_filter_gpencil_layers_data(ListBase *anim_data,
   return items;
 }
 
-/* Helper for Grease Pencil - Grease Pencil datablock - GP Frames */
+/* Helper for Grease Pencil - Grease Pencil data-block - GP Frames. */
 static size_t animdata_filter_gpencil_data(ListBase *anim_data,
                                            bDopeSheet *ads,
                                            bGPdata *gpd,
@@ -1739,8 +1744,8 @@ static size_t animdata_filter_gpencil_data(ListBase *anim_data,
   size_t items = 0;
 
   /* When asked from "AnimData" blocks (i.e. the top-level containers for normal animation),
-   * for convenience, this will return GP Datablocks instead. This may cause issues down
-   * the track, but for now, this will do...
+   * for convenience, this will return GP Data-blocks instead.
+   * This may cause issues down the track, but for now, this will do.
    */
   if (filter_mode & ANIMFILTER_ANIMDATA) {
     /* just add GPD as a channel - this will add everything needed */
@@ -1774,7 +1779,7 @@ static size_t animdata_filter_gpencil_data(ListBase *anim_data,
   return items;
 }
 
-/* Grab all Grease Pencil datablocks in file */
+/* Grab all Grease Pencil data-blocks in file. */
 // TODO: should this be amalgamated with the dopesheet filtering code?
 static size_t animdata_filter_gpencil(bAnimContext *ac,
                                       ListBase *anim_data,
@@ -1811,24 +1816,25 @@ static size_t animdata_filter_gpencil(bAnimContext *ac,
          */
         if ((filter_mode & ANIMFILTER_DATA_VISIBLE) &&
             !(ads->filterflag & ADS_FILTER_INCL_HIDDEN)) {
-          /* layer visibility - we check both object and base, since these may not be in sync yet */
-          if ((base->flag & BASE_VISIBLE) == 0) {
+          /* Layer visibility - we check both object and base,
+           * since these may not be in sync yet. */
+          if ((base->flag & BASE_VISIBLE_DEPSGRAPH) == 0) {
             continue;
           }
 
           /* outliner restrict-flag */
-          if (ob->restrictflag & OB_RESTRICT_VIEW) {
+          if (ob->restrictflag & OB_RESTRICT_VIEWPORT) {
             continue;
           }
         }
 
-        /* check selection and object type filters */
-        if ((ads->filterflag & ADS_FILTER_ONLYSEL) &&
-            !((base->flag & BASE_SELECTED) /*|| (base == scene->basact)*/)) {
-          /* only selected should be shown */
-          continue;
+        /* check selection and object type filters only for Object mode */
+        if (ob->mode == OB_MODE_OBJECT) {
+          if ((ads->filterflag & ADS_FILTER_ONLYSEL) && !((base->flag & BASE_SELECTED))) {
+            /* only selected should be shown */
+            continue;
+          }
         }
-
         /* check if object belongs to the filtering group if option to filter
          * objects by the grouped status is on
          * - used to ease the process of doing multiple-character choreographies
@@ -1839,7 +1845,7 @@ static size_t animdata_filter_gpencil(bAnimContext *ac,
           }
         }
 
-        /* finally, include this object's grease pencil datablock */
+        /* finally, include this object's grease pencil data-block. */
         /* XXX: Should we store these under expanders per item? */
         items += animdata_filter_gpencil_data(anim_data, ads, ob->data, filter_mode);
       }
@@ -1848,7 +1854,7 @@ static size_t animdata_filter_gpencil(bAnimContext *ac,
   else {
     bGPdata *gpd;
 
-    /* Grab all Grease Pencil datablocks directly from main,
+    /* Grab all Grease Pencil data-blocks directly from main,
      * but only those that seem to be useful somewhere */
     for (gpd = ac->bmain->gpencils.first; gpd; gpd = gpd->id.next) {
       /* only show if gpd is used by something... */
@@ -1856,7 +1862,7 @@ static size_t animdata_filter_gpencil(bAnimContext *ac,
         continue;
       }
 
-      /* add GP frames from this datablock */
+      /* add GP frames from this data-block. */
       items += animdata_filter_gpencil_data(anim_data, ads, gpd, filter_mode);
     }
   }
@@ -1975,7 +1981,7 @@ static size_t animdata_filter_mask(Main *bmain,
   Mask *mask;
   size_t items = 0;
 
-  /* for now, grab mask datablocks directly from main */
+  /* For now, grab mask data-blocks directly from main. */
   // XXX: this is not good...
   for (mask = bmain->masks.first; mask; mask = mask->id.next) {
     ListBase tmp_data = {NULL, NULL};
@@ -1996,7 +2002,7 @@ static size_t animdata_filter_mask(Main *bmain,
     if (tmp_items) {
       /* include data-expand widget first */
       if (filter_mode & ANIMFILTER_LIST_CHANNELS) {
-        /* add mask datablock as channel too (if for drawing, and it has layers) */
+        /* add mask data-block as channel too (if for drawing, and it has layers) */
         ANIMCHANNEL_NEW_CHANNEL(mask, ANIMTYPE_MASKDATABLOCK, NULL, NULL);
       }
 
@@ -2223,7 +2229,8 @@ static size_t animdata_filter_ds_textures(
     }
   }
 
-  /* firstly check that we actuallly have some textures, by gathering all textures in a temp list */
+  /* Firstly check that we actually have some textures,
+   * by gathering all textures in a temp list. */
   for (a = 0; a < MAX_MTEX; a++) {
     Tex *tex = (mtex[a]) ? mtex[a]->tex : NULL;
 
@@ -2393,7 +2400,8 @@ static size_t animdata_filter_ds_modifiers(
   /* 1) create a temporary "context" containing all the info we have here to pass to the callback
    *    use to walk through the dependencies of the modifiers
    *
-   * ! Assumes that all other unspecified values (i.e. accumulation buffers) are zero'd out properly
+   * Assumes that all other unspecified values (i.e. accumulation buffers)
+   * are zero'd out properly!
    */
   afm.ac = ac;
   afm.ads = ads;
@@ -2915,7 +2923,8 @@ static size_t animdata_filter_dopesheet_scene(
       tmp_items += animdata_filter_ds_gpencil(ac, &tmp_data, ads, gpd, filter_mode);
     }
 
-    /* TODO: one day, when sequencer becomes its own datatype, perhaps it should be included here */
+    /* TODO: one day, when sequencer becomes its own datatype,
+     * perhaps it should be included here. */
   }
   END_ANIMFILTER_SUBCHANNELS;
 
@@ -3008,18 +3017,18 @@ static bool animdata_filter_base_is_ok(bDopeSheet *ads, Base *base, int filter_m
    */
   if ((filter_mode & ANIMFILTER_DATA_VISIBLE) && !(ads->filterflag & ADS_FILTER_INCL_HIDDEN)) {
     /* layer visibility - we check both object and base, since these may not be in sync yet */
-    if ((base->flag & BASE_VISIBLE) == 0) {
+    if ((base->flag & BASE_VISIBLE_DEPSGRAPH) == 0) {
       return false;
     }
 
     /* outliner restrict-flag */
-    if (ob->restrictflag & OB_RESTRICT_VIEW) {
+    if (ob->restrictflag & OB_RESTRICT_VIEWPORT) {
       return false;
     }
   }
 
   /* if only F-Curves with visible flags set can be shown, check that
-   * datablock hasn't been set to invisible
+   * data-block hasn't been set to invisible.
    */
   if (filter_mode & ANIMFILTER_CURVE_VISIBLE) {
     if ((ob->adt) && (ob->adt->flag & ADT_CURVES_NOT_VISIBLE)) {
@@ -3140,7 +3149,9 @@ static size_t animdata_filter_dopesheet(bAnimContext *ac,
   }
 
   /* movie clip's animation */
-  items += animdata_filter_dopesheet_movieclips(ac, anim_data, ads, filter_mode);
+  if (!(ads->filterflag2 & ADS_FILTER_NOMOVIECLIPS) && !(ads->filterflag & ADS_FILTER_ONLYSEL)) {
+    items += animdata_filter_dopesheet_movieclips(ac, anim_data, ads, filter_mode);
+  }
 
   /* Scene-linked animation - e.g. world, compositing nodes, scene anim
    * (including sequencer currently). */
@@ -3148,7 +3159,8 @@ static size_t animdata_filter_dopesheet(bAnimContext *ac,
 
   /* If filtering for channel drawing, we want the objects in alphabetical order,
    * to make it easier to predict where items are in the hierarchy
-   * - This order only really matters if we need to show all channels in the list (e.g. for drawing)
+   * - This order only really matters
+   *   if we need to show all channels in the list (e.g. for drawing).
    *   (XXX: What about lingering "active" flags? The order may now become unpredictable)
    * - Don't do this if this behavior has been turned off (i.e. due to it being too slow)
    * - Don't do this if there's just a single object
@@ -3320,7 +3332,8 @@ static size_t animdata_filter_remove_duplis(ListBase *anim_data)
 
     /* check if hash has any record of an entry like this
      * - just use ale->data for now, though it would be nicer to involve
-     *   ale->type in combination too to capture corner cases (where same data performs differently)
+     *   ale->type in combination too to capture corner cases
+     *   (where same data performs differently)
      */
     if (BLI_gset_add(gs, ale->data)) {
       /* this entry is 'unique' and can be kept */
@@ -3439,7 +3452,8 @@ size_t ANIM_animdata_filter(bAnimContext *ac,
         break;
       }
 
-      /* Timeline Mode - Basically the same as dopesheet, except we only have the summary for now */
+      /* Timeline Mode - Basically the same as dopesheet,
+       * except we only have the summary for now */
       case ANIMCONT_TIMELINE: {
         /* the DopeSheet editor is the primary place where the DopeSheet summaries are useful */
         if (animdata_filter_dopesheet_summary(ac, anim_data, filter_mode, &items)) {

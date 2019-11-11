@@ -31,6 +31,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
+#include "BLI_threads.h"
 #include "BLI_math.h"
 
 #include "BKE_animsys.h"
@@ -42,6 +43,7 @@
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
 #include "BKE_effect.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_image.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
@@ -139,7 +141,7 @@ void BKE_object_eval_transform_final(Depsgraph *depsgraph, Object *ob)
 {
   DEG_debug_print_eval(depsgraph, __func__, ob->id.name, ob);
   /* Make sure inverse matrix is always up to date. This way users of it
-   * do not need to worry about relcalculating it. */
+   * do not need to worry about recalculating it. */
   invert_m4_m4(ob->imat, ob->obmat);
   /* Set negative scale flag in object. */
   if (is_negative_m4(ob->obmat)) {
@@ -168,13 +170,16 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
 
       CustomData_MeshMasks cddata_masks = scene->customdata_mask;
       CustomData_MeshMasks_update(&cddata_masks, &CD_MASK_BAREMESH);
+      if (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER) {
+        /* Make sure Freestyle edge/face marks appear in DM for render (see T40315). */
 #ifdef WITH_FREESTYLE
-      /* make sure Freestyle edge/face marks appear in DM for render (see T40315) */
-      if (DEG_get_mode(depsgraph) != DAG_EVAL_VIEWPORT) {
         cddata_masks.emask |= CD_MASK_FREESTYLE_EDGE;
         cddata_masks.pmask |= CD_MASK_FREESTYLE_FACE;
-      }
 #endif
+        /* Always compute UVs, vertex colors as orcos for render. */
+        cddata_masks.lmask |= CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL;
+        cddata_masks.vmask |= CD_MASK_ORCO;
+      }
       if (em) {
         makeDerivedMesh(depsgraph, scene, ob, em, &cddata_masks); /* was CD_MASK_BAREMESH */
       }
@@ -202,12 +207,17 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
 
     case OB_CURVE:
     case OB_SURF:
-    case OB_FONT:
-      BKE_displist_make_curveTypes(depsgraph, scene, ob, false, false, NULL);
+    case OB_FONT: {
+      bool for_render = (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
+      BKE_displist_make_curveTypes(depsgraph, scene, ob, for_render, false);
       break;
+    }
 
     case OB_LATTICE:
       BKE_lattice_modifiers_calc(depsgraph, scene, ob);
+      break;
+    case OB_GPENCIL:
+      BKE_gpencil_modifiers_calc(depsgraph, scene, ob);
       break;
   }
 
@@ -388,6 +398,21 @@ void BKE_object_data_select_update(Depsgraph *depsgraph, ID *object_data)
   }
 }
 
+void BKE_object_select_update(Depsgraph *depsgraph, Object *object)
+{
+  DEG_debug_print_eval(depsgraph, __func__, object->id.name, object);
+  if (object->type == OB_MESH && !object->runtime.is_mesh_eval_owned) {
+    Mesh *mesh_input = object->runtime.mesh_orig;
+    Mesh_Runtime *mesh_runtime = &mesh_input->runtime;
+    BLI_mutex_lock(mesh_runtime->eval_mutex);
+    BKE_object_data_select_update(depsgraph, object->data);
+    BLI_mutex_unlock(mesh_runtime->eval_mutex);
+  }
+  else {
+    BKE_object_data_select_update(depsgraph, object->data);
+  }
+}
+
 void BKE_object_eval_eval_base_flags(Depsgraph *depsgraph,
                                      Scene *scene,
                                      const int view_layer_index,
@@ -411,13 +436,13 @@ void BKE_object_eval_eval_base_flags(Depsgraph *depsgraph,
   BKE_base_eval_flags(base);
 
   /* For render, compute base visibility again since BKE_base_eval_flags
-   * assumed viewport visibility. Selectability does not matter here. */
+   * assumed viewport visibility. Select-ability does not matter here. */
   if (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER) {
     if (base->flag & BASE_ENABLED_RENDER) {
-      base->flag |= BASE_VISIBLE;
+      base->flag |= BASE_VISIBLE_DEPSGRAPH;
     }
     else {
-      base->flag &= ~BASE_VISIBLE;
+      base->flag &= ~BASE_VISIBLE_DEPSGRAPH;
     }
   }
 
@@ -428,6 +453,7 @@ void BKE_object_eval_eval_base_flags(Depsgraph *depsgraph,
     object->base_flag &= ~(BASE_SELECTED | BASE_SELECTABLE);
   }
   object->base_local_view_bits = base->local_view_bits;
+  object->runtime.local_collections_bits = base->local_collections_bits;
 
   if (object->mode == OB_MODE_PARTICLE_EDIT) {
     for (ParticleSystem *psys = object->particlesystem.first; psys != NULL; psys = psys->next) {

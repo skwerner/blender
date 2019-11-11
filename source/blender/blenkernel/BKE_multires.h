@@ -49,10 +49,12 @@ void multires_customdata_delete(struct Mesh *me);
 
 void multires_set_tot_level(struct Object *ob, struct MultiresModifierData *mmd, int lvl);
 
-void multires_mark_as_modified(struct Object *ob, enum MultiresModifiedFlags flags);
+void multires_mark_as_modified(struct Depsgraph *depsgraph,
+                               struct Object *object,
+                               enum MultiresModifiedFlags flags);
 
-void multires_force_update(struct Object *ob);
-void multires_force_render_update(struct Object *ob);
+void multires_flush_sculpt_updates(struct Object *ob);
+void multires_force_sculpt_rebuild(struct Object *ob);
 void multires_force_external_reload(struct Object *ob);
 
 /* internal, only called in subsurf_ccg.c */

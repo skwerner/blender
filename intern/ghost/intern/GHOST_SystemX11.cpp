@@ -88,8 +88,8 @@
 /* see [#34039] Fix Alt key glitch on Unity desktop */
 #define USE_UNITY_WORKAROUND
 
-/* Fix 'shortcut' part of keyboard reading code only ever using first defined keymap instead of active one.
- * See T47228 and D1746 */
+/* Fix 'shortcut' part of keyboard reading code only ever using first defined keymap
+ * instead of active one. See T47228 and D1746 */
 #define USE_NON_LATIN_KB_WORKAROUND
 
 static GHOST_TKey ghost_key_from_keysym(const KeySym key);
@@ -314,7 +314,8 @@ void GHOST_SystemX11::getAllDisplayDimensions(GHOST_TUns32 &width, GHOST_TUns32 
  * Create a new window.
  * The new window is added to the list of windows managed.
  * Never explicitly delete the window, use disposeWindow() instead.
- * \param   title   The name of the window (displayed in the title bar of the window if the OS supports it).
+ * \param   title   The name of the window
+ * (displayed in the title bar of the window if the OS supports it).
  * \param   left    The coordinate of the left edge of the window.
  * \param   top     The coordinate of the top edge of the window.
  * \param   width   The width the window.
@@ -323,7 +324,7 @@ void GHOST_SystemX11::getAllDisplayDimensions(GHOST_TUns32 &width, GHOST_TUns32 
  * \param   type    The type of drawing context installed in this window.
  * \param glSettings: Misc OpenGL settings.
  * \param exclusive: Use to show the window ontop and ignore others (used fullscreen).
- * \param   parentWindow    Parent (embedder) window
+ * \param   parentWindow    Parent window
  * \return  The new window (or 0 if creation failed).
  */
 GHOST_IWindow *GHOST_SystemX11::createWindow(const STR_String &title,
@@ -335,7 +336,8 @@ GHOST_IWindow *GHOST_SystemX11::createWindow(const STR_String &title,
                                              GHOST_TDrawingContextType type,
                                              GHOST_GLSettings glSettings,
                                              const bool exclusive,
-                                             const GHOST_TEmbedderWindowID parentWindow)
+                                             const bool is_dialog,
+                                             const GHOST_IWindow *parentWindow)
 {
   GHOST_WindowX11 *window = NULL;
 
@@ -350,8 +352,9 @@ GHOST_IWindow *GHOST_SystemX11::createWindow(const STR_String &title,
                                width,
                                height,
                                state,
-                               parentWindow,
+                               (GHOST_WindowX11 *)parentWindow,
                                type,
+                               is_dialog,
                                ((glSettings.flags & GHOST_glStereoVisual) != 0),
                                exclusive,
                                ((glSettings.flags & GHOST_glAlphaBackground) != 0),
@@ -373,11 +376,6 @@ GHOST_IWindow *GHOST_SystemX11::createWindow(const STR_String &title,
     }
   }
   return window;
-}
-
-bool GHOST_SystemX11::supportsNativeDialogs(void)
-{
-  return false;
 }
 
 /**
@@ -872,9 +870,10 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
         if (window->getCursorGrabBounds(bounds) == GHOST_kFailure)
           window->getClientBounds(bounds);
 
-        /* could also clamp to screen bounds
-         * wrap with a window outside the view will fail atm  */
-        bounds.wrapPoint(x_new, y_new, 8); /* offset of one incase blender is at screen bounds */
+        /* Could also clamp to screen bounds wrap with a window outside the view will fail atm.
+         * Use offset of 8 in case the window is at screen bounds. */
+        bounds.wrapPoint(x_new, y_new, 8, window->getCursorGrabAxis());
+
         window->getCursorGrabAccum(x_accum, y_accum);
 
         if (x_new != xme.x_root || y_new != xme.y_root) {
@@ -944,18 +943,19 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
        *     - Fallback to XLookupString to get a key_sym from active user-defined keymap.
        *
        * Note that:
-       *     - This effectively 'lock' main number keys to always output number events (except when using alt-gr).
-       *     - This enforces users to use an ascii-compatible keymap with Blender - but at least it gives
-       *       predictable and consistent results.
+       *     - This effectively 'lock' main number keys to always output number events
+       *       (except when using alt-gr).
+       *     - This enforces users to use an ascii-compatible keymap with Blender -
+       *       but at least it gives predictable and consistent results.
        *
-       * Also, note that nothing in XLib sources [1] makes it obvious why those two functions give different
-       * key_sym results...
+       * Also, note that nothing in XLib sources [1] makes it obvious why those two functions give
+       * different key_sym results...
        *
        * [1] http://cgit.freedesktop.org/xorg/lib/libX11/tree/src/KeyBind.c
        */
       KeySym key_sym_str;
-      /* Mode_switch 'modifier' is AltGr - when this one or Shift are enabled, we do not want to apply
-       * that 'forced number' hack. */
+      /* Mode_switch 'modifier' is AltGr - when this one or Shift are enabled,
+       * we do not want to apply that 'forced number' hack. */
       const unsigned int mode_switch_mask = XkbKeysymToModifiers(xke->display, XK_Mode_switch);
       const unsigned int number_hack_forbidden_kmods_mask = mode_switch_mask | ShiftMask;
       if ((xke->keycode >= 10 && xke->keycode < 20) &&
@@ -973,8 +973,8 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
         ascii = '\0';
       }
 
-      /* Only allow a limited set of keys from XLookupKeysym, all others we take from XLookupString,
-       * unless it gives unknown key... */
+      /* Only allow a limited set of keys from XLookupKeysym,
+       * all others we take from XLookupString, unless it gives unknown key... */
       gkey = ghost_key_from_keysym_or_keycode(key_sym, m_xkb_descr, xke->keycode);
       switch (gkey) {
         case GHOST_kKeyRightAlt:
@@ -1181,7 +1181,8 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
       XFocusChangeEvent &xfe = xe->xfocus;
 
       /* TODO: make sure this is the correct place for activate/deactivate */
-      // printf("X: focus %s for window %d\n", xfe.type == FocusIn ? "in" : "out", (int) xfe.window);
+      // printf("X: focus %s for window %d\n",
+      //        xfe.type == FocusIn ? "in" : "out", (int) xfe.window);
 
       /* May have to look at the type of event and filter some out. */
 
@@ -1233,7 +1234,8 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
       }
       else {
 #ifdef WITH_XDND
-        /* try to handle drag event (if there's no such events, GHOST_HandleClientMessage will return zero) */
+        /* try to handle drag event
+         * (if there's no such events, GHOST_HandleClientMessage will return zero) */
         if (window->getDropTarget()->GHOST_HandleClientMessage(xe) == false) {
           /* Unknown client message, ignore */
         }
@@ -1267,7 +1269,8 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
             getMilliSeconds(), GHOST_kEventCursorMove, window, xce.x_root, xce.y_root);
       }
 
-      // printf("X: %s window %d\n", xce.type == EnterNotify ? "entering" : "leaving", (int) xce.window);
+      // printf("X: %s window %d\n",
+      //        xce.type == EnterNotify ? "entering" : "leaving", (int) xce.window);
 
       if (xce.type == EnterNotify)
         m_windowManager->setActiveWindow(window);
@@ -1394,9 +1397,10 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
            * around tablet surface */
           window->GetTabletData()->Active = xtablet.mode;
 
-          /* Note: This event might be generated with incomplete dataset (don't exactly know why, looks like in
-           *       some cases, if the value does not change, it is not included in subsequent XDeviceMotionEvent
-           *       events). So we have to check which values this event actually contains!
+          /* Note: This event might be generated with incomplete dataset
+           * (don't exactly know why, looks like in some cases, if the value does not change,
+           * it is not included in subsequent XDeviceMotionEvent events).
+           * So we have to check which values this event actually contains!
            */
 
 #  define AXIS_VALUE_GET(axis, val) \
@@ -1411,8 +1415,9 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
            * but I got garbage data without it. Found it in the xidump.c source --matt
            *
            * The '& 0xffff' just truncates the value to its two lowest bytes, this probably means
-           * some drivers do not properly set the whole int value? Since we convert to float afterward,
-           * I don't think we need to cast to short here, but do not have a device to check this. --mont29
+           * some drivers do not properly set the whole int value? Since we convert to float
+           * afterward, I don't think we need to cast to short here, but do not have a device to
+           * check this. --mont29
            */
           if (AXIS_VALUE_GET(3, axis_value)) {
             window->GetTabletData()->Xtilt = (short)(axis_value & 0xffff) /
@@ -2140,6 +2145,222 @@ void GHOST_SystemX11::putClipboard(GHOST_TInt8 *buffer, bool selection) const
   }
 }
 
+/** \name Message Box
+ * \{ */
+class DialogData {
+ public:
+  /* Width of the dialog */
+  uint width;
+  /* Heigth of the dialog */
+  uint height;
+  /* Default padding (x direction) between controls and edge of dialog */
+  uint padding_x;
+  /* Default padding (y direction) between controls and edge of dialog */
+  uint padding_y;
+  /* Width of a single button */
+  uint button_width;
+  /* Height of a single button */
+  uint button_height;
+  /* Inset of a button to its text */
+  uint button_inset_x;
+  /* Size of the border of the button */
+  uint button_border_size;
+  /* Height of a line of text */
+  uint line_height;
+  /* offset of the text inside the button */
+  uint button_text_offset_y;
+
+  /* Construct a new DialogData with the default settings */
+  DialogData()
+      : width(640),
+        height(175),
+        padding_x(10),
+        padding_y(5),
+        button_width(130),
+        button_height(24),
+        button_inset_x(10),
+        button_border_size(1),
+        line_height(16)
+  {
+    button_text_offset_y = button_height - line_height;
+  }
+
+  void drawButton(Display *display,
+                  Window &window,
+                  GC &borderGC,
+                  GC &buttonGC,
+                  uint button_num,
+                  const char *label)
+  {
+    XFillRectangle(display,
+                   window,
+                   borderGC,
+                   width - (padding_x + button_width) * button_num,
+                   height - padding_y - button_height,
+                   button_width,
+                   button_height);
+
+    XFillRectangle(display,
+                   window,
+                   buttonGC,
+                   width - (padding_x + button_width) * button_num + button_border_size,
+                   height - padding_y - button_height + button_border_size,
+                   button_width - button_border_size * 2,
+                   button_height - button_border_size * 2);
+
+    XDrawString(display,
+                window,
+                borderGC,
+                width - (padding_x + button_width) * button_num + button_inset_x,
+                height - padding_y - button_text_offset_y,
+                label,
+                strlen(label));
+  }
+
+  /* Is the mouse inside the given button */
+  bool isInsideButton(XEvent &e, uint button_num)
+  {
+    return ((e.xmotion.y > height - padding_y - button_height) &&
+            (e.xmotion.y < height - padding_y) &&
+            (e.xmotion.x > width - (padding_x + button_width) * button_num) &&
+            (e.xmotion.x < width - padding_x - (padding_x + button_width) * (button_num - 1)));
+  }
+};
+
+static void split(const char *text, const char *seps, char ***str, int *count)
+{
+  char *tok, *data;
+  int i;
+  *count = 0;
+
+  data = strdup(text);
+  for (tok = strtok(data, seps); tok != NULL; tok = strtok(NULL, seps))
+    (*count)++;
+  free(data);
+
+  data = strdup(text);
+  *str = (char **)malloc((size_t)(*count) * sizeof(char *));
+  for (i = 0, tok = strtok(data, seps); tok != NULL; tok = strtok(NULL, seps), i++)
+    (*str)[i] = strdup(tok);
+  free(data);
+}
+
+GHOST_TSuccess GHOST_SystemX11::showMessageBox(const char *title,
+                                               const char *message,
+                                               const char *help_label,
+                                               const char *continue_label,
+                                               const char *link,
+                                               GHOST_DialogOptions) const
+{
+  char **text_splitted = NULL;
+  int textLines = 0;
+  split(message, "\n", &text_splitted, &textLines);
+
+  DialogData dialog_data;
+  XSizeHints hints;
+
+  Window window;
+  XEvent e;
+  int screen = DefaultScreen(m_display);
+  window = XCreateSimpleWindow(m_display,
+                               RootWindow(m_display, screen),
+                               0,
+                               0,
+                               dialog_data.width,
+                               dialog_data.height,
+                               1,
+                               BlackPixel(m_display, screen),
+                               WhitePixel(m_display, screen));
+
+  /* Window Should not be resizable */
+  {
+    hints.flags = PSize | PMinSize | PMaxSize;
+    hints.min_width = hints.max_width = hints.base_width = dialog_data.width;
+    hints.min_height = hints.max_height = hints.base_height = dialog_data.height;
+    XSetWMNormalHints(m_display, window, &hints);
+  }
+
+  /* Set title */
+  {
+    Atom wm_Name = XInternAtom(m_display, "_NET_WM_NAME", False);
+    Atom utf8Str = XInternAtom(m_display, "UTF8_STRING", False);
+
+    Atom winType = XInternAtom(m_display, "_NET_WM_WINDOW_TYPE", False);
+    Atom typeDialog = XInternAtom(m_display, "_NET_WM_WINDOW_TYPE_DIALOG", False);
+
+    XChangeProperty(m_display,
+                    window,
+                    wm_Name,
+                    utf8Str,
+                    8,
+                    PropModeReplace,
+                    (const unsigned char *)title,
+                    (int)strlen(title));
+
+    XChangeProperty(
+        m_display, window, winType, XA_ATOM, 32, PropModeReplace, (unsigned char *)&typeDialog, 1);
+  }
+
+  /* Create buttons GC */
+  XGCValues buttonBorderGCValues;
+  buttonBorderGCValues.foreground = BlackPixel(m_display, screen);
+  buttonBorderGCValues.background = WhitePixel(m_display, screen);
+  XGCValues buttonGCValues;
+  buttonGCValues.foreground = WhitePixel(m_display, screen);
+  buttonGCValues.background = BlackPixel(m_display, screen);
+
+  GC buttonBorderGC = XCreateGC(m_display, window, GCForeground, &buttonBorderGCValues);
+  GC buttonGC = XCreateGC(m_display, window, GCForeground, &buttonGCValues);
+
+  XSelectInput(m_display, window, ExposureMask | ButtonPressMask | ButtonReleaseMask);
+  XMapWindow(m_display, window);
+
+  while (1) {
+    XNextEvent(m_display, &e);
+    if (e.type == Expose) {
+      for (int i = 0; i < textLines; i++) {
+        XDrawString(m_display,
+                    window,
+                    DefaultGC(m_display, screen),
+                    dialog_data.padding_x,
+                    dialog_data.padding_x + (i + 1) * dialog_data.line_height,
+                    text_splitted[i],
+                    (int)strlen(text_splitted[i]));
+      }
+      dialog_data.drawButton(m_display, window, buttonBorderGC, buttonGC, 1, continue_label);
+      if (strlen(link)) {
+        dialog_data.drawButton(m_display, window, buttonBorderGC, buttonGC, 2, help_label);
+      }
+    }
+    else if (e.type == ButtonRelease) {
+      if (dialog_data.isInsideButton(e, 1)) {
+        break;
+      }
+      else if (dialog_data.isInsideButton(e, 2)) {
+        if (strlen(link)) {
+          string cmd = "xdg-open \"" + string(link) + "\"";
+          if (system(cmd.c_str()) != 0) {
+            GHOST_PRINTF("GHOST_SystemX11::showMessageBox: Unable to run system command [%s]",
+                         cmd);
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  for (int i = 0; i < textLines; i++) {
+    free(text_splitted[i]);
+  }
+  free(text_splitted);
+
+  XDestroyWindow(m_display, window);
+  XFreeGC(m_display, buttonBorderGC);
+  XFreeGC(m_display, buttonGC);
+  return GHOST_kSuccess;
+}
+/* \} */
+
 #ifdef WITH_XDND
 GHOST_TSuccess GHOST_SystemX11::pushDragDropEvent(GHOST_TEventType eventType,
                                                   GHOST_TDragnDropTypes draggedObjectType,
@@ -2191,23 +2412,28 @@ int GHOST_X11_ApplicationIOErrorHandler(Display * /*display*/)
 
 #ifdef WITH_X11_XINPUT
 
+static bool is_filler_char(char c)
+{
+  return isspace(c) || c == '_' || c == '-' || c == ';' || c == ':';
+}
+
 /* These C functions are copied from Wine 3.12's wintab.c */
 static bool match_token(const char *haystack, const char *needle)
 {
-  const char *p, *q;
-  for (p = haystack; *p;) {
-    while (*p && isspace(*p))
-      p++;
-    if (!*p)
+  const char *h, *n;
+  for (h = haystack; *h;) {
+    while (*h && is_filler_char(*h))
+      h++;
+    if (!*h)
       break;
 
-    for (q = needle; *q && *p && tolower(*p) == tolower(*q); q++)
-      p++;
-    if (!*q && (isspace(*p) || !*p))
+    for (n = needle; *n && *h && tolower(*h) == tolower(*n); n++)
+      h++;
+    if (!*n && (is_filler_char(*h) || !*h))
       return true;
 
-    while (*p && !isspace(*p))
-      p++;
+    while (*h && !is_filler_char(*h))
+      h++;
   }
   return false;
 }
@@ -2277,7 +2503,7 @@ void GHOST_SystemX11::refreshXInputDevices()
                                                   NULL;
         GHOST_TTabletMode tablet_mode = tablet_mode_from_name(device_info[i].name, device_type);
 
-        //              printf("Tablet type:'%s', name:'%s', index:%d\n", device_type, device_info[i].name, i);
+        // printf("Tablet type:'%s', name:'%s', index:%d\n", device_type, device_info[i].name, i);
 
         if (device_type) {
           XFree((void *)device_type);
@@ -2295,26 +2521,30 @@ void GHOST_SystemX11::refreshXInputDevices()
           /* Find how many pressure levels tablet has */
           XAnyClassPtr ici = device_info[i].inputclassinfo;
 
-          for (int j = 0; j < xtablet.Device->num_classes; ++j) {
-            if (ici->c_class == ValuatorClass) {
-              XValuatorInfo *xvi = (XValuatorInfo *)ici;
-              xtablet.PressureLevels = xvi->axes[2].max_value;
+          if (ici != NULL) {
+            for (int j = 0; j < xtablet.Device->num_classes; ++j) {
+              if (ici->c_class == ValuatorClass) {
+                XValuatorInfo *xvi = (XValuatorInfo *)ici;
+                if (xvi->axes != NULL) {
+                  xtablet.PressureLevels = xvi->axes[2].max_value;
 
-              if (xvi->num_axes > 3) {
-                /* this is assuming that the tablet has the same tilt resolution in both
-                 * positive and negative directions. It would be rather weird if it didn't.. */
-                xtablet.XtiltLevels = xvi->axes[3].max_value;
-                xtablet.YtiltLevels = xvi->axes[4].max_value;
-              }
-              else {
-                xtablet.XtiltLevels = 0;
-                xtablet.YtiltLevels = 0;
+                  if (xvi->num_axes > 3) {
+                    /* this is assuming that the tablet has the same tilt resolution in both
+                     * positive and negative directions. It would be rather weird if it didn't.. */
+                    xtablet.XtiltLevels = xvi->axes[3].max_value;
+                    xtablet.YtiltLevels = xvi->axes[4].max_value;
+                  }
+                  else {
+                    xtablet.XtiltLevels = 0;
+                    xtablet.YtiltLevels = 0;
+                  }
+
+                  break;
+                }
               }
 
-              break;
+              ici = (XAnyClassPtr)(((char *)ici) + ici->length);
             }
-
-            ici = (XAnyClassPtr)(((char *)ici) + ici->length);
           }
 
           m_xtablets.push_back(xtablet);

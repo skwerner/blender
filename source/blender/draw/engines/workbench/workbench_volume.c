@@ -27,6 +27,7 @@
 
 #include "BLI_rand.h"
 #include "BLI_dynstr.h"
+#include "BLI_string_utils.h"
 
 #include "DNA_modifier_types.h"
 #include "DNA_object_force_types.h"
@@ -45,14 +46,14 @@ enum {
 static struct {
   struct GPUShader *volume_sh[VOLUME_SH_MAX];
   struct GPUShader *volume_coba_sh;
-  struct GPUShader *volume_slice_sh;
-  struct GPUShader *volume_slice_coba_sh;
   struct GPUTexture *dummy_tex;
   struct GPUTexture *dummy_coba_tex;
 } e_data = {{NULL}};
 
 extern char datatoc_workbench_volume_vert_glsl[];
 extern char datatoc_workbench_volume_frag_glsl[];
+extern char datatoc_common_view_lib_glsl[];
+extern char datatoc_gpu_shader_common_obinfos_lib_glsl[];
 
 static GPUShader *volume_shader_get(bool slice, bool coba, bool cubic)
 {
@@ -77,9 +78,16 @@ static GPUShader *volume_shader_get(bool slice, bool coba, bool cubic)
     char *defines = BLI_dynstr_get_cstring(ds);
     BLI_dynstr_free(ds);
 
-    e_data.volume_sh[id] = DRW_shader_create(
-        datatoc_workbench_volume_vert_glsl, NULL, datatoc_workbench_volume_frag_glsl, defines);
+    char *libs = BLI_string_joinN(datatoc_common_view_lib_glsl,
+                                  datatoc_gpu_shader_common_obinfos_lib_glsl);
 
+    e_data.volume_sh[id] = DRW_shader_create_with_lib(datatoc_workbench_volume_vert_glsl,
+                                                      NULL,
+                                                      datatoc_workbench_volume_frag_glsl,
+                                                      libs,
+                                                      defines);
+
+    MEM_freeN(libs);
     MEM_freeN(defines);
   }
 
@@ -97,7 +105,7 @@ void workbench_volume_engine_init(void)
 
 void workbench_volume_engine_free(void)
 {
-  for (int i = 0; i < VOLUME_SH_MAX; ++i) {
+  for (int i = 0; i < VOLUME_SH_MAX; i++) {
     DRW_SHADER_FREE_SAFE(e_data.volume_sh[i]);
   }
   DRW_TEXTURE_FREE_SAFE(e_data.dummy_tex);
@@ -107,7 +115,7 @@ void workbench_volume_engine_free(void)
 void workbench_volume_cache_init(WORKBENCH_Data *vedata)
 {
   vedata->psl->volume_pass = DRW_pass_create(
-      "Volumes", DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_PREMUL | DRW_STATE_CULL_FRONT);
+      "Volumes", DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ALPHA_PREMUL | DRW_STATE_CULL_FRONT);
 }
 
 void workbench_volume_cache_populate(WORKBENCH_Data *vedata,
@@ -150,14 +158,14 @@ void workbench_volume_cache_populate(WORKBENCH_Data *vedata,
 
   if (use_slice) {
     float invviewmat[4][4];
-    DRW_viewport_matrix_get(invviewmat, DRW_MAT_VIEWINV);
+    DRW_view_viewmat_get(NULL, invviewmat, true);
 
     const int axis = (sds->slice_axis == SLICE_AXIS_AUTO) ?
                          axis_dominant_v3_single(invviewmat[2]) :
                          sds->slice_axis - 1;
     float dim[3];
     BKE_object_dimensions_get(ob, dim);
-    /* 0.05f to acheive somewhat the same opacity as the full view.  */
+    /* 0.05f to achieve somewhat the same opacity as the full view.  */
     float step_length = max_ff(1e-16f, dim[axis] * 0.05f);
 
     grp = DRW_shgroup_create(sh, vedata->psl->volume_pass);
@@ -207,10 +215,10 @@ void workbench_volume_cache_populate(WORKBENCH_Data *vedata,
   DRW_shgroup_uniform_float_copy(grp, "densityScale", 10.0f * sds->display_thickness);
 
   if (use_slice) {
-    DRW_shgroup_call_object_add(grp, DRW_cache_quad_get(), ob);
+    DRW_shgroup_call(grp, DRW_cache_quad_get(), ob);
   }
   else {
-    DRW_shgroup_call_object_add(grp, DRW_cache_cube_get(), ob);
+    DRW_shgroup_call(grp, DRW_cache_cube_get(), ob);
   }
 
   BLI_addtail(&wpd->smoke_domains, BLI_genericNodeN(smd));

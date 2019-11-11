@@ -46,11 +46,13 @@
 
 /* Batch's only (free'd as an array) */
 static struct DRWShapeCache {
+  GPUBatch *drw_procedural_verts;
+  GPUBatch *drw_procedural_lines;
+  GPUBatch *drw_procedural_tris;
   GPUBatch *drw_single_vertice;
   GPUBatch *drw_cursor;
   GPUBatch *drw_cursor_only_circle;
   GPUBatch *drw_fullscreen_quad;
-  GPUBatch *drw_fullscreen_quad_texcoord;
   GPUBatch *drw_quad;
   GPUBatch *drw_quad_wires;
   GPUBatch *drw_grid;
@@ -69,8 +71,6 @@ static struct DRWShapeCache {
   GPUBatch *drw_empty_capsule_body;
   GPUBatch *drw_empty_capsule_cap;
   GPUBatch *drw_empty_cone;
-  GPUBatch *drw_arrows;
-  GPUBatch *drw_axis_names;
   GPUBatch *drw_image_plane;
   GPUBatch *drw_image_plane_wire;
   GPUBatch *drw_field_wind;
@@ -96,7 +96,6 @@ static struct DRWShapeCache {
   GPUBatch *drw_bone_octahedral_wire;
   GPUBatch *drw_bone_box;
   GPUBatch *drw_bone_box_wire;
-  GPUBatch *drw_bone_wire_wire;
   GPUBatch *drw_bone_envelope;
   GPUBatch *drw_bone_envelope_outline;
   GPUBatch *drw_bone_point;
@@ -108,7 +107,6 @@ static struct DRWShapeCache {
   GPUBatch *drw_camera;
   GPUBatch *drw_camera_frame;
   GPUBatch *drw_camera_tria;
-  GPUBatch *drw_camera_focus;
   GPUBatch *drw_particle_cross;
   GPUBatch *drw_particle_circle;
   GPUBatch *drw_particle_axis;
@@ -136,6 +134,54 @@ void DRW_shape_cache_reset(void)
     batch++;
   }
 }
+
+/* -------------------------------------------------------------------- */
+/** \name Procedural Batches
+ * \{ */
+
+GPUBatch *drw_cache_procedural_points_get(void)
+{
+  if (!SHC.drw_procedural_verts) {
+    /* TODO(fclem) get rid of this dummy VBO. */
+    GPUVertFormat format = {0};
+    GPU_vertformat_attr_add(&format, "dummy", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
+    GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
+    GPU_vertbuf_data_alloc(vbo, 1);
+
+    SHC.drw_procedural_verts = GPU_batch_create_ex(GPU_PRIM_POINTS, vbo, NULL, GPU_BATCH_OWNS_VBO);
+  }
+  return SHC.drw_procedural_verts;
+}
+
+GPUBatch *drw_cache_procedural_lines_get(void)
+{
+  if (!SHC.drw_procedural_lines) {
+    /* TODO(fclem) get rid of this dummy VBO. */
+    GPUVertFormat format = {0};
+    GPU_vertformat_attr_add(&format, "dummy", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
+    GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
+    GPU_vertbuf_data_alloc(vbo, 1);
+
+    SHC.drw_procedural_lines = GPU_batch_create_ex(GPU_PRIM_LINES, vbo, NULL, GPU_BATCH_OWNS_VBO);
+  }
+  return SHC.drw_procedural_lines;
+}
+
+GPUBatch *drw_cache_procedural_triangles_get(void)
+{
+  if (!SHC.drw_procedural_tris) {
+    /* TODO(fclem) get rid of this dummy VBO. */
+    GPUVertFormat format = {0};
+    GPU_vertformat_attr_add(&format, "dummy", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
+    GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
+    GPU_vertbuf_data_alloc(vbo, 1);
+
+    SHC.drw_procedural_tris = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
+  }
+  return SHC.drw_procedural_tris;
+}
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Helper functions
@@ -245,15 +291,15 @@ static GPUVertBuf *sphere_wire_vbo(const float rad)
 
   /* a single ring of vertices */
   float p[NSEGMENTS][2];
-  for (int i = 0; i < NSEGMENTS; ++i) {
+  for (int i = 0; i < NSEGMENTS; i++) {
     float angle = 2 * M_PI * ((float)i / (float)NSEGMENTS);
     p[i][0] = rad * cosf(angle);
     p[i][1] = rad * sinf(angle);
   }
 
-  for (int axis = 0; axis < 3; ++axis) {
-    for (int i = 0; i < NSEGMENTS; ++i) {
-      for (int j = 0; j < 2; ++j) {
+  for (int axis = 0; axis < 3; axis++) {
+    for (int i = 0; i < NSEGMENTS; i++) {
+      for (int j = 0; j < 2; j++) {
         float cv[2], v[3];
 
         cv[0] = p[(i + j) % NSEGMENTS][0];
@@ -296,12 +342,13 @@ GPUBatch *DRW_cache_fullscreen_quad_get(void)
       attr_id.pos = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
       attr_id.uvs = GPU_vertformat_attr_add(&format, "uvs", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
       GPU_vertformat_alias_add(&format, "texCoord");
+      GPU_vertformat_alias_add(&format, "orco"); /* Fix driver bug (see T70004) */
     }
 
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, 3);
 
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 3; i++) {
       GPU_vertbuf_attr_set(vbo, attr_id.pos, i, pos[i]);
       GPU_vertbuf_attr_set(vbo, attr_id.uvs, i, uvs[i]);
     }
@@ -331,7 +378,7 @@ GPUBatch *DRW_cache_quad_get(void)
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, 4);
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 4; i++) {
       GPU_vertbuf_attr_set(vbo, attr_id.pos, i, pos[i]);
       GPU_vertbuf_attr_set(vbo, attr_id.uvs, i, uvs[i]);
     }
@@ -386,8 +433,8 @@ GPUBatch *DRW_cache_grid_get(void)
     GPU_vertbuf_data_alloc(vbo, 8 * 8 * 2 * 3);
 
     uint v_idx = 0;
-    for (int i = 0; i < 8; ++i) {
-      for (int j = 0; j < 8; ++j) {
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j < 8; j++) {
         float pos0[2] = {(float)i / 8.0f, (float)j / 8.0f};
         float pos1[2] = {(float)(i + 1) / 8.0f, (float)j / 8.0f};
         float pos2[2] = {(float)i / 8.0f, (float)(j + 1) / 8.0f};
@@ -459,7 +506,7 @@ GPUBatch *DRW_cache_cube_get(void)
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, 36);
 
-    for (int i = 0; i < 36; ++i) {
+    for (int i = 0; i < 36; i++) {
       GPU_vertbuf_attr_set(vbo, attr_id.pos, i, verts[indices[i]]);
     }
 
@@ -498,7 +545,7 @@ GPUBatch *DRW_cache_empty_cube_get(void)
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, 24);
 
-    for (int i = 0; i < 24; ++i) {
+    for (int i = 0; i < 24; i++) {
       GPU_vertbuf_attr_set(vbo, attr_id.pos, i, verts[indices[i]]);
     }
 
@@ -541,7 +588,7 @@ GPUBatch *DRW_cache_circle_get(void)
 GPUBatch *DRW_cache_square_get(void)
 {
   if (!SHC.drw_square) {
-    float p[4][3] = {
+    const float p[4][3] = {
         {1.0f, 0.0f, 1.0f}, {1.0f, 0.0f, -1.0f}, {-1.0f, 0.0f, -1.0f}, {-1.0f, 0.0f, 1.0f}};
 
     /* Position Only 3D format */
@@ -700,7 +747,7 @@ GPUBatch *DRW_cache_gpencil_axes_get(void)
     }
 
     /* draw cube */
-    for (int i = 0; i < 24; ++i) {
+    for (int i = 0; i < 24; i++) {
       GPU_vertbuf_attr_set(vbo, pos_id, i + 6, verts[indices[i]]);
     }
 
@@ -931,7 +978,7 @@ GPUBatch *DRW_cache_empty_cone_get(void)
   if (!SHC.drw_empty_cone) {
     /* a single ring of vertices */
     float p[NSEGMENTS][2];
-    for (int i = 0; i < NSEGMENTS; ++i) {
+    for (int i = 0; i < NSEGMENTS; i++) {
       float angle = 2 * M_PI * ((float)i / (float)NSEGMENTS);
       p[i][0] = cosf(angle);
       p[i][1] = sinf(angle);
@@ -949,7 +996,7 @@ GPUBatch *DRW_cache_empty_cone_get(void)
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, NSEGMENTS * 4);
 
-    for (int i = 0; i < NSEGMENTS; ++i) {
+    for (int i = 0; i < NSEGMENTS; i++) {
       float cv[2], v[3];
       cv[0] = p[(i) % NSEGMENTS][0];
       cv[1] = p[(i) % NSEGMENTS][1];
@@ -981,7 +1028,7 @@ GPUBatch *DRW_cache_empty_cylinder_get(void)
   if (!SHC.drw_empty_cylinder) {
     /* a single ring of vertices */
     float p[NSEGMENTS][2];
-    for (int i = 0; i < NSEGMENTS; ++i) {
+    for (int i = 0; i < NSEGMENTS; i++) {
       float angle = 2 * M_PI * ((float)i / (float)NSEGMENTS);
       p[i][0] = cosf(angle);
       p[i][1] = sinf(angle);
@@ -999,7 +1046,7 @@ GPUBatch *DRW_cache_empty_cylinder_get(void)
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, NSEGMENTS * 6);
 
-    for (int i = 0; i < NSEGMENTS; ++i) {
+    for (int i = 0; i < NSEGMENTS; i++) {
       float cv[2], pv[2], v[3];
       cv[0] = p[(i) % NSEGMENTS][0];
       cv[1] = p[(i) % NSEGMENTS][1];
@@ -1070,7 +1117,7 @@ GPUBatch *DRW_cache_empty_capsule_cap_get(void)
   if (!SHC.drw_empty_capsule_cap) {
     /* a single ring of vertices */
     float p[NSEGMENTS][2];
-    for (int i = 0; i < NSEGMENTS; ++i) {
+    for (int i = 0; i < NSEGMENTS; i++) {
       float angle = 2 * M_PI * ((float)i / (float)NSEGMENTS);
       p[i][0] = cosf(angle);
       p[i][1] = sinf(angle);
@@ -1090,7 +1137,7 @@ GPUBatch *DRW_cache_empty_capsule_cap_get(void)
 
     /* Base circle */
     int vidx = 0;
-    for (int i = 0; i < NSEGMENTS; ++i) {
+    for (int i = 0; i < NSEGMENTS; i++) {
       float v[3] = {0.0f, 0.0f, 0.0f};
       copy_v2_v2(v, p[(i) % NSEGMENTS]);
       GPU_vertbuf_attr_set(vbo, attr_id.pos, vidx++, v);
@@ -1098,7 +1145,7 @@ GPUBatch *DRW_cache_empty_capsule_cap_get(void)
       GPU_vertbuf_attr_set(vbo, attr_id.pos, vidx++, v);
     }
 
-    for (int i = 0; i < NSEGMENTS / 2; ++i) {
+    for (int i = 0; i < NSEGMENTS / 2; i++) {
       float v[3] = {0.0f, 0.0f, 0.0f};
       int ci = i % NSEGMENTS;
       int pi = (i + 1) % NSEGMENTS;
@@ -1639,7 +1686,7 @@ GPUBatch *DRW_cache_light_spot_get(void)
     float n[NSEGMENTS][3];
     float neg[NSEGMENTS][3];
     float half_angle = 2 * M_PI / ((float)NSEGMENTS * 2);
-    for (int i = 0; i < NSEGMENTS; ++i) {
+    for (int i = 0; i < NSEGMENTS; i++) {
       float angle = 2 * M_PI * ((float)i / (float)NSEGMENTS);
       p[i][0] = cosf(angle);
       p[i][1] = sinf(angle);
@@ -1664,7 +1711,7 @@ GPUBatch *DRW_cache_light_spot_get(void)
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, NSEGMENTS * 4);
 
-    for (int i = 0; i < NSEGMENTS; ++i) {
+    for (int i = 0; i < NSEGMENTS; i++) {
       float cv[2], v[3];
       cv[0] = p[i % NSEGMENTS][0];
       cv[1] = p[i % NSEGMENTS][1];
@@ -1706,7 +1753,7 @@ GPUBatch *DRW_cache_light_spot_volume_get(void)
   if (!SHC.drw_light_spot_volume) {
     /* a single ring of vertices */
     float p[NSEGMENTS][2];
-    for (int i = 0; i < NSEGMENTS; ++i) {
+    for (int i = 0; i < NSEGMENTS; i++) {
       float angle = 2 * M_PI * ((float)i / (float)NSEGMENTS);
       p[i][0] = cosf(angle);
       p[i][1] = sinf(angle);
@@ -1724,7 +1771,7 @@ GPUBatch *DRW_cache_light_spot_volume_get(void)
     GPU_vertbuf_data_alloc(vbo, NSEGMENTS * 3);
 
     uint v_idx = 0;
-    for (int i = 0; i < NSEGMENTS; ++i) {
+    for (int i = 0; i < NSEGMENTS; i++) {
       float cv[2], v[3];
 
       ARRAY_SET_ITEMS(v, 0.0f, 0.0f, 0.0f);
@@ -1750,7 +1797,7 @@ GPUBatch *DRW_cache_light_spot_volume_get(void)
 GPUBatch *DRW_cache_light_spot_square_get(void)
 {
   if (!SHC.drw_light_spot_square) {
-    float p[5][3] = {
+    const float p[5][3] = {
         {0.0f, 0.0f, 0.0f},
         {1.0f, 1.0f, -1.0f},
         {1.0f, -1.0f, -1.0f},
@@ -1773,7 +1820,7 @@ GPUBatch *DRW_cache_light_spot_square_get(void)
     GPU_vertbuf_data_alloc(vbo, 16);
 
     /* piramid sides */
-    for (int i = 1; i <= 4; ++i) {
+    for (int i = 1; i <= 4; i++) {
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, p[0]);
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, p[i]);
 
@@ -1789,7 +1836,7 @@ GPUBatch *DRW_cache_light_spot_square_get(void)
 GPUBatch *DRW_cache_light_spot_square_volume_get(void)
 {
   if (!SHC.drw_light_spot_square_volume) {
-    float p[5][3] = {
+    const float p[5][3] = {
         {0.0f, 0.0f, 0.0f},
         {1.0f, 1.0f, -1.0f},
         {1.0f, -1.0f, -1.0f},
@@ -1812,7 +1859,7 @@ GPUBatch *DRW_cache_light_spot_square_volume_get(void)
     GPU_vertbuf_data_alloc(vbo, 12);
 
     /* piramid sides */
-    for (int i = 1; i <= 4; ++i) {
+    for (int i = 1; i <= 4; i++) {
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, p[0]);
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, p[((i + 1) % 4) + 1]);
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, p[(i % 4) + 1]);
@@ -1901,7 +1948,7 @@ GPUBatch *DRW_cache_lightprobe_cube_get(void)
     int v_idx = 0;
     const float sin_pi_3 = 0.86602540378f;
     const float cos_pi_3 = 0.5f;
-    float v[7][3] = {
+    const float v[7][3] = {
         {0.0f, 1.0f, 0.0f},
         {sin_pi_3, cos_pi_3, 0.0f},
         {sin_pi_3, -cos_pi_3, 0.0f},
@@ -1923,7 +1970,7 @@ GPUBatch *DRW_cache_lightprobe_cube_get(void)
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, (6 + 3) * 2);
 
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 6; i++) {
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, v[i]);
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, v[(i + 1) % 6]);
     }
@@ -1970,7 +2017,7 @@ GPUBatch *DRW_cache_lightprobe_grid_get(void)
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, (6 * 2 + 3) * 2);
 
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 6; i++) {
       float tmp_v1[3], tmp_v2[3], tmp_tr[3];
       copy_v3_v3(tmp_v1, v[i]);
       copy_v3_v3(tmp_v2, v[(i + 1) % 6]);
@@ -1978,7 +2025,7 @@ GPUBatch *DRW_cache_lightprobe_grid_get(void)
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, tmp_v2);
 
       /* Internal wires. */
-      for (int j = 1; j < 2; ++j) {
+      for (int j = 1; j < 2; j++) {
         mul_v3_v3fl(tmp_tr, v[(i / 2) * 2 + 1], -0.5f * j);
         add_v3_v3v3(tmp_v1, v[i], tmp_tr);
         add_v3_v3v3(tmp_v2, v[(i + 1) % 6], tmp_tr);
@@ -2006,7 +2053,7 @@ GPUBatch *DRW_cache_lightprobe_planar_get(void)
   if (!SHC.drw_lightprobe_planar) {
     int v_idx = 0;
     const float sin_pi_3 = 0.86602540378f;
-    float v[4][3] = {
+    const float v[4][3] = {
         {0.0f, 0.5f, 0.0f},
         {sin_pi_3, 0.0f, 0.0f},
         {0.0f, -0.5f, 0.0f},
@@ -2025,7 +2072,7 @@ GPUBatch *DRW_cache_lightprobe_planar_get(void)
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, 4 * 2);
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 4; i++) {
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, v[i]);
       GPU_vertbuf_attr_set(vbo, attr_id.pos, v_idx++, v[(i + 1) % 4]);
     }
@@ -2163,7 +2210,7 @@ GPUBatch *DRW_cache_bone_octahedral_get(void)
     GPU_vertbuf_data_alloc(vbo, 24);
 
     for (int i = 0; i < 8; i++) {
-      for (int j = 0; j < 3; ++j) {
+      for (int j = 0; j < 3; j++) {
         GPU_vertbuf_attr_set(vbo, attr_id.nor, v_idx, bone_octahedral_solid_normals[i]);
         GPU_vertbuf_attr_set(vbo,
                              attr_id.snor,
@@ -2656,10 +2703,10 @@ GPUBatch *DRW_cache_bone_stick_get(void)
     GPU_vertbuf_data_alloc(vbo, vcount);
 
     GPUIndexBufBuilder elb;
-    GPU_indexbuf_init_ex(&elb, GPU_PRIM_TRI_FAN, (CIRCLE_RESOL + 2) * 2 + 6 + 2, vcount, true);
+    GPU_indexbuf_init_ex(&elb, GPU_PRIM_TRI_FAN, (CIRCLE_RESOL + 2) * 2 + 6 + 2, vcount);
 
     /* head/tail points */
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 2; i++) {
       /* center vertex */
       copy_v2_fl(pos, 0.0f);
       flag = (i == 0) ? POS_HEAD : POS_TAIL;
@@ -2684,7 +2731,7 @@ GPUBatch *DRW_cache_bone_stick_get(void)
 
     /* Bone rectangle */
     pos[0] = 0.0f;
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 6; i++) {
       pos[1] = (i == 0 || i == 3) ? 0.0f : ((i < 3) ? 1.0f : -1.0f);
       flag = ((i < 2 || i > 4) ? POS_HEAD : POS_TAIL) | ((i == 0 || i == 3) ? 0 : COL_WIRE) |
              COL_BONE | POS_BONE;
@@ -2845,8 +2892,8 @@ GPUBatch *DRW_cache_bone_arrows_get(void)
       set_bone_axis_vert(vbo, attr_id.axis, attr_id.pos, attr_id.col, &v, &a, pos, c);
 
       /* Axis end marker */
-      for (int j = 1; j < MARKER_FILL_LAYER + 1; ++j) {
-        for (int i = 0; i < MARKER_LEN; ++i) {
+      for (int j = 1; j < MARKER_FILL_LAYER + 1; j++) {
+        for (int i = 0; i < MARKER_LEN; i++) {
           float tmp[2];
           mul_v2_v2fl(tmp, axis_marker[i], j / (float)MARKER_FILL_LAYER);
           set_bone_axis_vert(vbo, attr_id.axis, attr_id.pos, attr_id.col, &v, &a, tmp, c);
@@ -2873,8 +2920,8 @@ GPUBatch *DRW_cache_bone_arrows_get(void)
       /* Axis name shadows */
       copy_v3_fl(c, 0.0f);
       c[axis] = 0.3f;
-      for (int j = 0; j < SHADOW_RES; ++j) {
-        for (int i = 0; i < axis_v_len; ++i) {
+      for (int j = 0; j < SHADOW_RES; j++) {
+        for (int i = 0; i < axis_v_len; i++) {
           float tmp[2];
           add_v2_v2v2(tmp, axis_verts[i], axis_name_shadow[j]);
           set_bone_axis_vert(vbo, attr_id.axis, attr_id.pos, attr_id.col, &v, &a, tmp, c);
@@ -2884,7 +2931,7 @@ GPUBatch *DRW_cache_bone_arrows_get(void)
       /* Axis name */
       copy_v3_fl(c, 0.1f);
       c[axis] = 1.0f;
-      for (int i = 0; i < axis_v_len; ++i) {
+      for (int i = 0; i < axis_v_len; i++) {
         set_bone_axis_vert(vbo, attr_id.axis, attr_id.pos, attr_id.col, &v, &a, axis_verts[i], c);
       }
     }
@@ -2939,12 +2986,12 @@ GPUBatch *DRW_cache_bone_dof_sphere_get(void)
     GPU_vertbuf_data_alloc(vbo, n * n * 6 * 4);
 
     uint v = 0;
-    for (q = 0; q < 4; ++q) {
+    for (q = 0; q < 4; q++) {
       pz = 0.0f;
-      for (i = 1; i < n; ++i) {
+      for (i = 1; i < n; i++) {
         z = staticSine[i];
         px = 0.0f;
-        for (j = 1; j <= (n - i); ++j) {
+        for (j = 1; j <= (n - i); j++) {
           x = staticSine[j];
           if (j == n - i) {
             set_vert(px, z, q);
@@ -2965,7 +3012,7 @@ GPUBatch *DRW_cache_bone_dof_sphere_get(void)
         pz = z;
       }
     }
-    /* TODO alloc right count from the begining. */
+    /* TODO allocate right count from the beginning. */
     GPU_vertbuf_data_resize(vbo, v);
 
     SHC.drw_bone_dof_sphere = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
@@ -3017,7 +3064,8 @@ GPUBatch *DRW_cache_bone_dof_lines_get(void)
  * We could make these more generic functions.
  * although filling 1d lines is not common.
  *
- * \note Use x coordinate to identify the vertex the vertex shader take care to place it appropriately.
+ * \note Use x coordinate to identify the vertex the vertex shader take care to place it
+ * appropriately.
  */
 
 static const float camera_coords_frame_bounds[5] = {
@@ -3287,14 +3335,6 @@ GPUBatch *DRW_cache_mesh_surface_mesh_analysis_get(Object *ob)
 {
   BLI_assert(ob->type == OB_MESH);
   return DRW_mesh_batch_cache_get_edit_mesh_analysis(ob->data);
-}
-
-void DRW_cache_mesh_sculpt_coords_ensure(Object *ob)
-{
-  BLI_assert(ob->type == OB_MESH);
-
-  Mesh *me = ob->data;
-  DRW_mesh_cache_sculpt_coords_ensure(me);
 }
 
 /** \} */
@@ -3887,13 +3927,13 @@ GPUBatch *DRW_cache_cursor_get(bool crosshair_lines)
     }
 
     GPUIndexBufBuilder elb;
-    GPU_indexbuf_init_ex(&elb, GPU_PRIM_LINE_STRIP, index_len, vert_len, true);
+    GPU_indexbuf_init_ex(&elb, GPU_PRIM_LINE_STRIP, index_len, vert_len);
 
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, vert_len);
 
     int v = 0;
-    for (int i = 0; i < segments; ++i) {
+    for (int i = 0; i < segments; i++) {
       float angle = (float)(2 * M_PI) * ((float)i / (float)segments);
       float x = f10 * cosf(angle);
       float y = f10 * sinf(angle);
@@ -3957,79 +3997,43 @@ GPUBatch *DRW_cache_cursor_get(bool crosshair_lines)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Batch Cache Impl. common
+/** \name Batch Cache Implementation (common)
  * \{ */
 
-GPUBatch *DRW_batch_request(GPUBatch **batch)
+void drw_batch_cache_validate(Object *ob)
 {
-  /* XXX TODO(fclem): We are writting to batch cache here. Need to make this thread safe. */
-  if (*batch == NULL) {
-    *batch = MEM_callocN(sizeof(GPUBatch), "GPUBatch");
+  struct Mesh *mesh_eval = ob->runtime.mesh_eval;
+  switch (ob->type) {
+    case OB_MESH:
+      DRW_mesh_batch_cache_validate((Mesh *)ob->data);
+      break;
+    case OB_CURVE:
+    case OB_FONT:
+    case OB_SURF:
+      if (mesh_eval != NULL) {
+        DRW_mesh_batch_cache_validate(mesh_eval);
+      }
+      DRW_curve_batch_cache_validate((Curve *)ob->data);
+      break;
+    case OB_MBALL:
+      DRW_mball_batch_cache_validate((MetaBall *)ob->data);
+      break;
+    case OB_LATTICE:
+      DRW_lattice_batch_cache_validate((Lattice *)ob->data);
+      break;
+    default:
+      break;
   }
-  return *batch;
-}
-
-bool DRW_batch_requested(GPUBatch *batch, int prim_type)
-{
-  /* Batch has been requested if it has been created but not initialized. */
-  if (batch != NULL && batch->verts[0] == NULL) {
-    /* HACK. We init without a valid VBO and let the first vbo binding
-     * fill verts[0]. */
-    GPU_batch_init_ex(batch, prim_type, (GPUVertBuf *)1, NULL, 0);
-    batch->verts[0] = NULL;
-    return true;
-  }
-  return false;
-}
-
-void DRW_ibo_request(GPUBatch *batch, GPUIndexBuf **ibo)
-{
-  if (*ibo == NULL) {
-    *ibo = MEM_callocN(sizeof(GPUIndexBuf), "GPUIndexBuf");
-  }
-  GPU_batch_vao_cache_clear(batch);
-  batch->elem = *ibo;
-}
-
-bool DRW_ibo_requested(GPUIndexBuf *ibo)
-{
-  /* TODO do not rely on data uploaded. This prevents multithreading.
-   * (need access to a gl context) */
-  return (ibo != NULL && ibo->ibo_id == 0 && ibo->data == NULL);
-}
-
-void DRW_vbo_request(GPUBatch *batch, GPUVertBuf **vbo)
-{
-  if (*vbo == NULL) {
-    *vbo = MEM_callocN(sizeof(GPUVertBuf), "GPUVertBuf");
-  }
-  /* HACK set first vbo if not init. */
-  if (batch->verts[0] == NULL) {
-    GPU_batch_vao_cache_clear(batch);
-    batch->verts[0] = *vbo;
-  }
-  else {
-    /* HACK: bypass assert */
-    int vbo_vert_len = (*vbo)->vertex_len;
-    (*vbo)->vertex_len = batch->verts[0]->vertex_len;
-    GPU_batch_vertbuf_add(batch, *vbo);
-    (*vbo)->vertex_len = vbo_vert_len;
-  }
-}
-
-bool DRW_vbo_requested(GPUVertBuf *vbo)
-{
-  return (vbo != NULL && vbo->format.attr_len == 0);
 }
 
 void drw_batch_cache_generate_requested(Object *ob)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
-  const ToolSettings *ts = draw_ctx->scene->toolsettings;
+  const Scene *scene = draw_ctx->scene;
   const enum eContextObjectMode mode = CTX_data_mode_enum_ex(
       draw_ctx->object_edit, draw_ctx->obact, draw_ctx->object_mode);
   const bool is_paint_mode = ELEM(
-      mode, CTX_MODE_PAINT_TEXTURE, CTX_MODE_PAINT_VERTEX, CTX_MODE_PAINT_WEIGHT);
+      mode, CTX_MODE_SCULPT, CTX_MODE_PAINT_TEXTURE, CTX_MODE_PAINT_VERTEX, CTX_MODE_PAINT_WEIGHT);
 
   const bool use_hide = ((ob->type == OB_MESH) &&
                          ((is_paint_mode && (ob == draw_ctx->obact) &&
@@ -4039,13 +4043,13 @@ void drw_batch_cache_generate_requested(Object *ob)
   struct Mesh *mesh_eval = ob->runtime.mesh_eval;
   switch (ob->type) {
     case OB_MESH:
-      DRW_mesh_batch_cache_create_requested(ob, (Mesh *)ob->data, ts, is_paint_mode, use_hide);
+      DRW_mesh_batch_cache_create_requested(ob, (Mesh *)ob->data, scene, is_paint_mode, use_hide);
       break;
     case OB_CURVE:
     case OB_FONT:
     case OB_SURF:
       if (mesh_eval) {
-        DRW_mesh_batch_cache_create_requested(ob, mesh_eval, ts, is_paint_mode, use_hide);
+        DRW_mesh_batch_cache_create_requested(ob, mesh_eval, scene, is_paint_mode, use_hide);
       }
       DRW_curve_batch_cache_create_requested(ob);
       break;

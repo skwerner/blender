@@ -56,15 +56,10 @@
 
 static int context_menu_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *UNUSED(event))
 {
-  const ARegion *ar = CTX_wm_region(C);
   uiPopupMenu *pup = UI_popup_menu_begin(C, IFACE_("Context Menu"), ICON_NONE);
   uiLayout *layout = UI_popup_menu_layout(pup);
 
   uiItemM(layout, "INFO_MT_area", NULL, ICON_NONE);
-  if (ar->regiontype == RGN_TYPE_NAV_BAR) {
-    ED_screens_navigation_bar_tools_menu_create(C, layout, NULL);
-  }
-
   UI_popup_menu_end(C, pup);
 
   return OPERATOR_INTERFACE;
@@ -108,7 +103,7 @@ static int file_browse_exec(bContext *C, wmOperator *op)
   /* add slash for directories, important for some properties */
   if (RNA_property_subtype(fbo->prop) == PROP_DIRPATH) {
     const bool is_relative = RNA_boolean_get(op->ptr, "relative_path");
-    id = fbo->ptr.id.data;
+    id = fbo->ptr.owner_id;
 
     BLI_strncpy(path, str, FILE_MAX);
     BLI_path_abs(path, id ? ID_BLEND_PATH(bmain, id) : BKE_main_blendfile_path(bmain));

@@ -40,7 +40,7 @@ typedef struct SubDParams {
   int smooth_falloff;
   float fractal;
   float along_normal;
-  //int beauty;
+  // int beauty;
   bool use_smooth;
   bool use_smooth_even;
   bool use_sphere;
@@ -138,7 +138,7 @@ static BMEdge *connect_smallest_face(BMesh *bm, BMVert *v_a, BMVert *v_b, BMFace
    * multiple faces yet.  that might require a convexity test to figure out which
    * face is "best" and who knows what for non-manifold conditions.
    *
-   * note: we allow adjacent here, since theres no chance this happens.
+   * note: we allow adjacent here, since there's no chance this happens.
    */
   f = BM_vert_pair_share_face_by_len(v_a, v_b, &l_a, &l_b, true);
 
@@ -391,7 +391,7 @@ static BMVert *bm_subdivide_edge_addvert(BMesh *bm,
   /* offset for smooth or sphere or fractal */
   alter_co(v_new, e_orig, params, factor_subd, v_a, v_b);
 
-#if 0  //BMESH_TODO
+#if 0  // BMESH_TODO
   /* clip if needed by mirror modifier */
   if (edge->v1->f2) {
     if (edge->v1->f2 & edge->v2->f2 & 1) {

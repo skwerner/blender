@@ -18,7 +18,7 @@
 
 set(TBB_EXTRA_ARGS
   -DTBB_BUILD_SHARED=Off
-  -DTBB_BUILD_TBBMALLOC=Off
+  -DTBB_BUILD_TBBMALLOC=On
   -DTBB_BUILD_TBBMALLOC_PROXY=Off
   -DTBB_BUILD_STATIC=On
 )
@@ -35,7 +35,7 @@ ExternalProject_Add(external_tbb
   INSTALL_DIR ${LIBDIR}/tbb
 )
 
-if (WIN32)
+if(WIN32)
   if(BUILD_MODE STREQUAL Release)
     ExternalProject_Add_Step(external_tbb after_install
       COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/tbb/lib/tbb_static.lib ${HARVEST_TARGET}/tbb/lib/tbb.lib

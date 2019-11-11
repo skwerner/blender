@@ -21,7 +21,7 @@
 #include "ED_screen.h"
 
 #include "GPU_batch_presets.h"
-#include "GPU_extensions.h"
+#include "GPU_platform.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
@@ -32,15 +32,14 @@
 #include "BLI_rect.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 
-#include "UI_interface.h"
 #include "UI_resources.h"
 
 #include "screen_intern.h"
 
 /**
- * Draw horizontal shape visualizing future joining (left as well right direction of future joining).
+ * Draw horizontal shape visualizing future joining
+ * (left as well right direction of future joining).
  */
 static void draw_horizontal_join_shape(ScrArea *sa, char dir, unsigned int pos)
 {
@@ -272,8 +271,8 @@ static GPUBatch *batch_screen_edges_get(int *corner_len)
     GPU_vertbuf_data_alloc(vbo, CORNER_RESOLUTION * 2 * 4 + 2);
 
     uint vidx = 0;
-    for (int corner = 0; corner < 4; ++corner) {
-      for (int c = 0; c < CORNER_RESOLUTION; ++c) {
+    for (int corner = 0; corner < 4; corner++) {
+      for (int c = 0; c < CORNER_RESOLUTION; c++) {
         do_vert_pair(vbo, pos, &vidx, corner, c);
       }
     }

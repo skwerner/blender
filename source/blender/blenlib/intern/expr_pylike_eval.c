@@ -38,7 +38,7 @@
  *      sin, cos, tan, asin, acos, atan, atan2,
  *      exp, log, sqrt, pow, fmod
  *
- * The implementation has no global state and can be used multithreaded.
+ * The implementation has no global state and can be used multi-threaded.
  */
 
 #include <math.h>
@@ -164,7 +164,8 @@ eExprPyLike_EvalStatus BLI_expr_pylike_eval(ExprPyLike_Parsed *expr,
 #define FAIL_IF(condition) \
   if (condition) { \
     return EXPR_PYLIKE_FATAL_ERROR; \
-  }
+  } \
+  ((void)0)
 
   /* Check the stack requirement is at least remotely sane and allocate on the actual stack. */
   FAIL_IF(expr->max_stack <= 0 || expr->max_stack > 1000);
@@ -356,6 +357,13 @@ typedef struct BuiltinOpDef {
   void *funcptr;
 } BuiltinOpDef;
 
+#ifdef _MSC_VER
+/* Prevent MSVC from inlining calls to ceil/floor so the table below can get a function pointer to
+ * them. */
+#  pragma function(ceil)
+#  pragma function(floor)
+#endif
+
 static BuiltinOpDef builtin_ops[] = {
     {"radians", OPCODE_FUNC1, op_radians},
     {"degrees", OPCODE_FUNC1, op_degrees},
@@ -391,7 +399,8 @@ static BuiltinOpDef builtin_ops[] = {
 #define CHECK_ERROR(condition) \
   if (!(condition)) { \
     return false; \
-  }
+  } \
+  ((void)0)
 
 /* For simplicity simple token types are represented by their own character;
  * these are special identifiers for multi-character tokens. */
@@ -502,7 +511,9 @@ static bool parse_add_func(ExprParseState *state, eOpCode code, int args, void *
       if (jmp_gap >= 1 && prev_ops[-1].opcode == OPCODE_CONST) {
         UnaryOpFunc func = funcptr;
 
-        double result = func(prev_ops[-1].arg.dval);
+        /* volatile because some compilers overly aggressive optimize this call out.
+         * see D6012 for details. */
+        volatile double result = func(prev_ops[-1].arg.dval);
 
         if (fetestexcept(FE_DIVBYZERO | FE_INVALID) == 0) {
           prev_ops[-1].arg.dval = result;
@@ -518,7 +529,9 @@ static bool parse_add_func(ExprParseState *state, eOpCode code, int args, void *
           prev_ops[-1].opcode == OPCODE_CONST) {
         BinaryOpFunc func = funcptr;
 
-        double result = func(prev_ops[-2].arg.dval, prev_ops[-1].arg.dval);
+        /* volatile because some compilers overly aggressive optimize this call out.
+         * see D6012 for details. */
+        volatile double result = func(prev_ops[-2].arg.dval, prev_ops[-1].arg.dval);
 
         if (fetestexcept(FE_DIVBYZERO | FE_INVALID) == 0) {
           prev_ops[-2].arg.dval = result;

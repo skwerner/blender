@@ -23,18 +23,14 @@
 #ifndef __DRAW_CACHE_IMPL_H__
 #define __DRAW_CACHE_IMPL_H__
 
-struct CurveCache;
 struct GPUBatch;
 struct GPUIndexBuf;
 struct GPUMaterial;
-struct GPUTexture;
 struct GPUVertBuf;
 struct ListBase;
 struct ModifierData;
 struct PTCacheEdit;
 struct ParticleSystem;
-struct SpaceImage;
-struct ToolSettings;
 
 struct Curve;
 struct Lattice;
@@ -44,15 +40,19 @@ struct bGPdata;
 
 /* Expose via BKE callbacks */
 void DRW_mball_batch_cache_dirty_tag(struct MetaBall *mb, int mode);
+void DRW_mball_batch_cache_validate(struct MetaBall *mb);
 void DRW_mball_batch_cache_free(struct MetaBall *mb);
 
 void DRW_curve_batch_cache_dirty_tag(struct Curve *cu, int mode);
+void DRW_curve_batch_cache_validate(struct Curve *cu);
 void DRW_curve_batch_cache_free(struct Curve *cu);
 
 void DRW_mesh_batch_cache_dirty_tag(struct Mesh *me, int mode);
+void DRW_mesh_batch_cache_validate(struct Mesh *me);
 void DRW_mesh_batch_cache_free(struct Mesh *me);
 
 void DRW_lattice_batch_cache_dirty_tag(struct Lattice *lt, int mode);
+void DRW_lattice_batch_cache_validate(struct Lattice *lt);
 void DRW_lattice_batch_cache_free(struct Lattice *lt);
 
 void DRW_particle_batch_cache_dirty_tag(struct ParticleSystem *psys, int mode);
@@ -115,7 +115,7 @@ struct GPUBatch *DRW_lattice_batch_cache_get_edit_verts(struct Lattice *lt);
 /* Mesh */
 void DRW_mesh_batch_cache_create_requested(struct Object *ob,
                                            struct Mesh *me,
-                                           const struct ToolSettings *ts,
+                                           const struct Scene *scene,
                                            const bool is_paint_mode,
                                            const bool use_hide);
 
@@ -139,8 +139,10 @@ struct GPUBatch *DRW_mesh_batch_cache_get_surface_weights(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_triangles(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_vertices(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_edges(struct Mesh *me);
+struct GPUBatch *DRW_mesh_batch_cache_get_edit_vnors(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_lnors(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_facedots(struct Mesh *me);
+struct GPUBatch *DRW_mesh_batch_cache_get_edit_skin_roots(struct Mesh *me);
 /* edit-mesh selection */
 struct GPUBatch *DRW_mesh_batch_cache_get_triangles_with_select_id(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_facedots_with_select_id(struct Mesh *me);
@@ -149,8 +151,10 @@ struct GPUBatch *DRW_mesh_batch_cache_get_verts_with_select_id(struct Mesh *me);
 /* Object mode Wireframe overlays */
 struct GPUBatch *DRW_mesh_batch_cache_get_wireframes_face(struct Mesh *me);
 /* edit-mesh UV editor */
-struct GPUBatch *DRW_mesh_batch_cache_get_edituv_faces_strech_area(struct Mesh *me);
-struct GPUBatch *DRW_mesh_batch_cache_get_edituv_faces_strech_angle(struct Mesh *me);
+struct GPUBatch *DRW_mesh_batch_cache_get_edituv_faces_stretch_area(struct Mesh *me,
+                                                                    float **tot_area,
+                                                                    float **tot_uv_area);
+struct GPUBatch *DRW_mesh_batch_cache_get_edituv_faces_stretch_angle(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edituv_faces(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edituv_edges(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edituv_verts(struct Mesh *me);
@@ -158,8 +162,6 @@ struct GPUBatch *DRW_mesh_batch_cache_get_edituv_facedots(struct Mesh *me);
 /* For Image UV editor. */
 struct GPUBatch *DRW_mesh_batch_cache_get_uv_edges(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_mesh_analysis(struct Mesh *me);
-
-void DRW_mesh_cache_sculpt_coords_ensure(struct Mesh *me);
 
 /* Edit mesh bitflags (is this the right place?) */
 enum {
@@ -203,22 +205,5 @@ struct GPUBatch *DRW_particles_batch_cache_get_edit_inner_points(struct Object *
 struct GPUBatch *DRW_particles_batch_cache_get_edit_tip_points(struct Object *object,
                                                                struct ParticleSystem *psys,
                                                                struct PTCacheEdit *edit);
-
-/* Common */
-#define DRW_ADD_FLAG_FROM_VBO_REQUEST(flag, vbo, value) \
-  (flag |= DRW_vbo_requested(vbo) ? (value) : 0)
-#define DRW_ADD_FLAG_FROM_IBO_REQUEST(flag, ibo, value) \
-  (flag |= DRW_ibo_requested(ibo) ? (value) : 0)
-
-/* Test and assign NULL if test fails */
-#define DRW_TEST_ASSIGN_VBO(v) (v = (DRW_vbo_requested(v) ? (v) : NULL))
-#define DRW_TEST_ASSIGN_IBO(v) (v = (DRW_ibo_requested(v) ? (v) : NULL))
-
-struct GPUBatch *DRW_batch_request(struct GPUBatch **batch);
-bool DRW_batch_requested(struct GPUBatch *batch, int prim_type);
-void DRW_ibo_request(struct GPUBatch *batch, struct GPUIndexBuf **ibo);
-bool DRW_ibo_requested(struct GPUIndexBuf *ibo);
-void DRW_vbo_request(struct GPUBatch *batch, struct GPUVertBuf **vbo);
-bool DRW_vbo_requested(struct GPUVertBuf *vbo);
 
 #endif /* __DRAW_CACHE_IMPL_H__ */

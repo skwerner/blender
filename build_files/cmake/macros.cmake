@@ -147,9 +147,9 @@ function(blender_include_dirs
     get_filename_component(_ABS_INC ${_INC} ABSOLUTE)
     list(APPEND _ALL_INCS ${_ABS_INC})
     # for checking for invalid includes, disable for regular use
-    ##if(NOT EXISTS "${_ABS_INC}/")
-    ##  message(FATAL_ERROR "Include not found: ${_ABS_INC}/")
-    ##endif()
+    # if(NOT EXISTS "${_ABS_INC}/")
+    #   message(FATAL_ERROR "Include not found: ${_ABS_INC}/")
+    # endif()
   endforeach()
   include_directories(${_ALL_INCS})
 endfunction()
@@ -162,9 +162,9 @@ function(blender_include_dirs_sys
   foreach(_INC ${ARGV})
     get_filename_component(_ABS_INC ${_INC} ABSOLUTE)
     list(APPEND _ALL_INCS ${_ABS_INC})
-    ##if(NOT EXISTS "${_ABS_INC}/")
-    ##  message(FATAL_ERROR "Include not found: ${_ABS_INC}/")
-    ##endif()
+    # if(NOT EXISTS "${_ABS_INC}/")
+    #   message(FATAL_ERROR "Include not found: ${_ABS_INC}/")
+    # endif()
   endforeach()
   include_directories(SYSTEM ${_ALL_INCS})
 endfunction()
@@ -173,21 +173,38 @@ function(blender_source_group
   sources
   )
 
-  # Group by location on disk
-  source_group("Source Files" FILES CMakeLists.txt)
+  # if enabled, use the sources directories as filters.
+  if(WINDOWS_USE_VISUAL_STUDIO_SOURCE_FOLDERS)
+    foreach(_SRC ${sources})
+      # remove ../'s
+      get_filename_component(_SRC_DIR ${_SRC} REALPATH)
+      get_filename_component(_SRC_DIR ${_SRC_DIR} DIRECTORY)
+      string(FIND ${_SRC_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/" _pos)
+      if(NOT _pos EQUAL -1)
+        string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}/" "" GROUP_ID ${_SRC_DIR})
+        string(REPLACE "/" "\\" GROUP_ID ${GROUP_ID})
+        source_group("${GROUP_ID}" FILES ${_SRC})
+      endif()
+      unset(_pos)
+    endforeach()
+  else()
+    # Group by location on disk
+    source_group("Source Files" FILES CMakeLists.txt)
+    foreach(_SRC ${sources})
+      get_filename_component(_SRC_EXT ${_SRC} EXT)
+      if((${_SRC_EXT} MATCHES ".h") OR
+         (${_SRC_EXT} MATCHES ".hpp") OR
+         (${_SRC_EXT} MATCHES ".hh"))
 
-  foreach(_SRC ${sources})
-    get_filename_component(_SRC_EXT ${_SRC} EXT)
-    if((${_SRC_EXT} MATCHES ".h") OR
-       (${_SRC_EXT} MATCHES ".hpp") OR
-       (${_SRC_EXT} MATCHES ".hh"))
-
-      set(GROUP_ID "Header Files")
-    else()
-      set(GROUP_ID "Source Files")
-    endif()
-    source_group("${GROUP_ID}" FILES ${_SRC})
-  endforeach()
+        set(GROUP_ID "Header Files")
+      elseif(${_SRC_EXT} MATCHES ".glsl$")
+        set(GROUP_ID "Shaders")
+      else()
+        set(GROUP_ID "Source Files")
+      endif()
+      source_group("${GROUP_ID}" FILES ${_SRC})
+    endforeach()
+  endif()
 endfunction()
 
 
@@ -234,16 +251,16 @@ function(blender_add_lib__impl
 
   add_library(${name} ${sources})
 
-  if (NOT "${library_deps}" STREQUAL "")
-    target_link_libraries(${name} "${library_deps}")
+  if(NOT "${library_deps}" STREQUAL "")
+    target_link_libraries(${name} INTERFACE "${library_deps}")
   endif()
 
   # works fine without having the includes
   # listed is helpful for IDE's (QtCreator/MSVC)
   blender_source_group("${sources}")
 
-  #if enabled, set the FOLDER property for visual studio projects
-  if(WINDOWS_USE_VISUAL_STUDIO_FOLDERS)
+  # if enabled, set the FOLDER property for visual studio projects
+  if(WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS)
     get_filename_component(FolderDir ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
     string(REPLACE ${CMAKE_SOURCE_DIR} "" FolderDir ${FolderDir})
     set_target_properties(${name} PROPERTIES FOLDER ${FolderDir})
@@ -285,6 +302,26 @@ function(blender_add_lib
   set_property(GLOBAL APPEND PROPERTY BLENDER_LINK_LIBS ${name})
 endfunction()
 
+# Ninja only: assign 'heavy pool' to some targets that are especially RAM-consuming to build.
+function(setup_heavy_lib_pool)
+  if(WITH_NINJA_POOL_JOBS AND NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS)
+    if(WITH_CYCLES)
+      list(APPEND _HEAVY_LIBS "cycles_device" "cycles_kernel")
+    endif()
+    if(WITH_LIBMV)
+      list(APPEND _HEAVY_LIBS "bf_intern_libmv")
+    endif()
+    if(WITH_OPENVDB)
+      list(APPEND _HEAVY_LIBS "bf_intern_openvdb")
+    endif()
+
+    foreach(TARGET ${_HEAVY_LIBS})
+      if(TARGET ${TARGET})
+        set_property(TARGET ${TARGET} PROPERTY JOB_POOL_COMPILE compile_heavy_job_pool)
+      endif()
+    endforeach()
+  endif()
+endfunction()
 
 function(SETUP_LIBDIRS)
 
@@ -315,6 +352,9 @@ function(SETUP_LIBDIRS)
     if(WITH_OPENIMAGEIO)
       link_directories(${OPENIMAGEIO_LIBPATH})
     endif()
+    if(WITH_OPENIMAGEDENOISE)
+      link_directories(${OPENIMAGEDENOISE_LIBPATH})
+    endif()
     if(WITH_OPENCOLORIO)
       link_directories(${OPENCOLORIO_LIBPATH})
     endif()
@@ -335,7 +375,7 @@ function(SETUP_LIBDIRS)
     endif()
     if(WITH_OPENCOLLADA)
       link_directories(${OPENCOLLADA_LIBPATH})
-      ## Never set
+      # # Never set
       # link_directories(${PCRE_LIBPATH})
       # link_directories(${EXPAT_LIBPATH})
     endif()
@@ -356,6 +396,7 @@ endfunction()
 
 macro(setup_platform_linker_flags)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}")
   set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}")
 endmacro()
 
@@ -365,12 +406,15 @@ function(setup_liblinks
 
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
   set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
 
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
   set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
+  set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
 
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
   set(CMAKE_MODULE_LINKER_FLAGS_DEBUG "${CMAKE_MODULE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
+  set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${CMAKE_MODULE_LINKER_FLAGS_RELEASE} ${PLATFORM_LINKFLAGS_RELEASE}" PARENT_SCOPE)
 
   # jemalloc must be early in the list, to be before pthread (see T57998)
   if(WITH_MEM_JEMALLOC)
@@ -420,10 +464,16 @@ function(setup_liblinks
     target_link_libraries(${target} ${OSL_LIBRARIES})
   endif()
   if(WITH_OPENVDB)
-    target_link_libraries(${target} ${OPENVDB_LIBRARIES} ${TBB_LIBRARIES} ${BLOSC_LIBRARIES})
+    target_link_libraries(${target} ${OPENVDB_LIBRARIES} ${BLOSC_LIBRARIES})
   endif()
   if(WITH_OPENIMAGEIO)
     target_link_libraries(${target} ${OPENIMAGEIO_LIBRARIES})
+  endif()
+  if(WITH_OPENIMAGEDENOISE)
+    target_link_libraries(${target} ${OPENIMAGEDENOISE_LIBRARIES})
+  endif()
+  if(WITH_TBB)
+    target_link_libraries(${target} ${TBB_LIBRARIES})
   endif()
   if(WITH_OPENCOLORIO)
     target_link_libraries(${target} ${OPENCOLORIO_LIBRARIES})
@@ -523,11 +573,11 @@ function(setup_liblinks
     ${ZLIB_LIBRARIES}
   )
 
-  #system libraries with no dependencies such as platform link libs or opengl should go last
+  # System libraries with no dependencies such as platform link libs or opengl should go last.
   target_link_libraries(${target}
       ${BLENDER_GL_LIBRARIES})
 
-  #target_link_libraries(${target} ${PLATFORM_LINKLIBS} ${CMAKE_DL_LIBS})
+  # target_link_libraries(${target} ${PLATFORM_LINKLIBS} ${CMAKE_DL_LIBS})
   target_link_libraries(${target} ${PLATFORM_LINKLIBS})
 endfunction()
 
@@ -676,7 +726,7 @@ macro(remove_strict_flags)
   endif()
 
   if(MSVC)
-    # TODO
+    remove_cc_flag(/w34189) # Restore warn C4189 (unused variable) back to w4
   endif()
 
 endmacro()
@@ -918,6 +968,7 @@ function(delayed_install
     endif()
     set_property(GLOBAL APPEND PROPERTY DELAYED_INSTALL_DESTINATIONS ${destination})
   endforeach()
+  unset(f)
 endfunction()
 
 # note this is a function instead of a macro so that ${BUILD_TYPE} in targetdir
@@ -1020,7 +1071,7 @@ function(data_to_c_simple_icons
   add_custom_command(
     OUTPUT  ${_file_from} ${_file_to}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${_file_to_path}
-    #COMMAND python3 ${CMAKE_SOURCE_DIR}/source/blender/datatoc/datatoc_icon.py ${_path_from_abs} ${_file_from}
+    # COMMAND python3 ${CMAKE_SOURCE_DIR}/source/blender/datatoc/datatoc_icon.py ${_path_from_abs} ${_file_from}
     COMMAND "$<TARGET_FILE:datatoc_icon>" ${_path_from_abs} ${_file_from}
     COMMAND "$<TARGET_FILE:datatoc>" ${_file_from} ${_file_to}
     DEPENDS
@@ -1165,7 +1216,9 @@ macro(openmp_delayload
   )
     if(MSVC)
       if(WITH_OPENMP)
-        if(MSVC_VERSION EQUAL 1800)
+        if(MSVC_CLANG)
+          set(OPENMP_DLL_NAME "libomp")
+        elseif(MSVC_VERSION EQUAL 1800)
           set(OPENMP_DLL_NAME "vcomp120")
         else()
           set(OPENMP_DLL_NAME "vcomp140")
@@ -1198,5 +1251,28 @@ macro(WINDOWS_SIGN_TARGET target)
         VERBATIM
       )
     endif()
+  endif()
+endmacro()
+
+macro(blender_precompile_headers target cpp header)
+  if(MSVC)
+    # get the name for the pch output file
+    get_filename_component( pchbase ${cpp} NAME_WE )
+    set( pchfinal "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/${pchbase}.pch" )
+
+    # mark the cpp as the one outputting the pch
+    set_property(SOURCE ${cpp} APPEND PROPERTY OBJECT_OUTPUTS "${pchfinal}")
+
+    # get all sources for the target
+    get_target_property(sources ${target} SOURCES)
+
+    # make all sources depend on the pch to enforce the build order
+    foreach(src ${sources})
+      set_property(SOURCE ${src} APPEND PROPERTY OBJECT_DEPENDS "${pchfinal}")
+    endforeach()
+
+    target_sources(${target} PRIVATE ${cpp} ${header})
+    set_target_properties(${target} PROPERTIES COMPILE_FLAGS "/Yu${header} /Fp${pchfinal} /FI${header}")
+    set_source_files_properties(${cpp} PROPERTIES COMPILE_FLAGS "/Yc${header} /Fp${pchfinal}")
   endif()
 endmacro()

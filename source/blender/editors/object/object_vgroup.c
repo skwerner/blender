@@ -58,6 +58,8 @@
 #include "BKE_lattice.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_query.h"
 
 #include "DNA_armature_types.h"
 #include "RNA_access.h"
@@ -781,79 +783,63 @@ static void vgroup_operator_subset_select_props(wmOperatorType *ot, bool use_act
 static void ED_vgroup_nr_vert_add(
     Object *ob, const int def_nr, const int vertnum, const float weight, const int assignmode)
 {
-  /* add the vert to the deform group with the
-   * specified number
-   */
+  /* Add the vert to the deform group with the specified number. */
   MDeformVert *dvert = NULL;
   int tot;
 
-  /* get the vert */
+  /* Get the vert. */
   BKE_object_defgroup_array_get(ob->data, &dvert, &tot);
 
   if (dvert == NULL) {
     return;
   }
 
-  /* check that vertnum is valid before trying to get the relevant dvert */
+  /* Check that vertnum is valid before trying to get the relevant dvert. */
   if ((vertnum < 0) || (vertnum >= tot)) {
     return;
   }
 
-  if (dvert) {
-    MDeformVert *dv = &dvert[vertnum];
-    MDeformWeight *dw;
+  MDeformVert *dv = &dvert[vertnum];
+  MDeformWeight *dw;
 
-    /* Lets first check to see if this vert is
-     * already in the weight group -- if so
-     * lets update it
-     */
+  /* Lets first check to see if this vert is already in the weight group - if so lets update it. */
+  dw = defvert_find_index(dv, def_nr);
 
-    dw = defvert_find_index(dv, def_nr);
-
-    if (dw) {
-      switch (assignmode) {
-        case WEIGHT_REPLACE:
-          dw->weight = weight;
-          break;
-        case WEIGHT_ADD:
-          dw->weight += weight;
-          if (dw->weight >= 1.0f) {
-            dw->weight = 1.0f;
-          }
-          break;
-        case WEIGHT_SUBTRACT:
-          dw->weight -= weight;
-          /* if the weight is zero or less than
-           * remove the vert from the deform group
-           */
-          if (dw->weight <= 0.0f) {
-            defvert_remove_group(dv, dw);
-          }
-          break;
-      }
+  if (dw) {
+    switch (assignmode) {
+      case WEIGHT_REPLACE:
+        dw->weight = weight;
+        break;
+      case WEIGHT_ADD:
+        dw->weight += weight;
+        if (dw->weight >= 1.0f) {
+          dw->weight = 1.0f;
+        }
+        break;
+      case WEIGHT_SUBTRACT:
+        dw->weight -= weight;
+        /* If the weight is zero or less than remove the vert from the deform group. */
+        if (dw->weight <= 0.0f) {
+          defvert_remove_group(dv, dw);
+        }
+        break;
     }
-    else {
-      /* if the vert wasn't in the deform group then
-       * we must take a different form of action ...
-       */
+  }
+  else {
+    /* If the vert wasn't in the deform group then we must take a different form of action. */
 
-      switch (assignmode) {
-        case WEIGHT_SUBTRACT:
-          /* if we are subtracting then we don't
-           * need to do anything
-           */
-          return;
+    switch (assignmode) {
+      case WEIGHT_SUBTRACT:
+        /* If we are subtracting then we don't need to do anything. */
+        return;
 
-        case WEIGHT_REPLACE:
-        case WEIGHT_ADD:
-          /* if we are doing an additive assignment, then
-           * we need to create the deform weight
-           */
+      case WEIGHT_REPLACE:
+      case WEIGHT_ADD:
+        /* If we are doing an additive assignment, then we need to create the deform weight. */
 
-          /* we checked if the vertex was added before so no need to test again, simply add */
-          defvert_add_index_notest(dv, def_nr, weight);
-          break;
-      }
+        /* We checked if the vertex was added before so no need to test again, simply add. */
+        defvert_add_index_notest(dv, def_nr, weight);
+        break;
     }
   }
 }
@@ -893,7 +879,8 @@ void ED_vgroup_vert_remove(Object *ob, bDeformGroup *dg, int vertnum)
    * deform group.
    */
 
-  /* TODO, this is slow in a loop, better pass def_nr directly, but leave for later... - campbell */
+  /* TODO(campbell): This is slow in a loop, better pass def_nr directly,
+   * but leave for later. */
   const int def_nr = BLI_findindex(&ob->defbase, dg);
 
   if (def_nr != -1) {
@@ -1136,7 +1123,7 @@ static bool vgroup_normalize(Object *ob)
   int i, dvert_tot = 0;
   const int def_nr = ob->actdef - 1;
 
-  const int use_vert_sel = vertex_group_use_vert_sel(ob);
+  const bool use_vert_sel = vertex_group_use_vert_sel(ob);
 
   if (!BLI_findlink(&ob->defbase, def_nr)) {
     return false;
@@ -1297,7 +1284,7 @@ static void getVerticalAndHorizontalChange(const float norm[3],
   dists[index] = dot_v3v3(norm, end) + d;
   /* vertical change */
   changes[index][0] = dists[index] - distToStart;
-  //printf("vc %f %f\n", distance(end, projB, 3) - distance(start, projA, 3), changes[index][0]);
+  // printf("vc %f %f\n", distance(end, projB, 3) - distance(start, projA, 3), changes[index][0]);
   /* horizontal change */
   changes[index][1] = len_v3v3(projA, projB);
 }
@@ -1312,21 +1299,26 @@ static void getVerticalAndHorizontalChange(const float norm[3],
  * coord is a point on the plane
  */
 static void moveCloserToDistanceFromPlane(Depsgraph *depsgraph,
-                                          Scene *scene,
+                                          Scene *UNUSED(scene),
                                           Object *ob,
                                           Mesh *me,
                                           int index,
-                                          float norm[3],
-                                          float coord[3],
+                                          const float norm[3],
+                                          const float coord[3],
                                           float d,
                                           float distToBe,
                                           float strength,
                                           float cp)
 {
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+  Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
+  Mesh *mesh_eval = (Mesh *)object_eval->data;
+
   Mesh *me_deform;
-  MDeformWeight *dw;
+  MDeformWeight *dw, *dw_eval;
   MVert m;
   MDeformVert *dvert = me->dvert + index;
+  MDeformVert *dvert_eval = mesh_eval->dvert + index;
   int totweight = dvert->totweight;
   float oldw = 0;
   float oldPos[3] = {0};
@@ -1347,7 +1339,7 @@ static void moveCloserToDistanceFromPlane(Depsgraph *depsgraph,
   float originalDistToBe = distToBe;
   do {
     wasChange = false;
-    me_deform = mesh_get_eval_deform(depsgraph, scene, ob, &CD_MASK_BAREMESH);
+    me_deform = mesh_get_eval_deform(depsgraph, scene_eval, object_eval, &CD_MASK_BAREMESH);
     m = me_deform->mvert[index];
     copy_v3_v3(oldPos, m.co);
     distToStart = dot_v3v3(norm, oldPos) + d;
@@ -1358,6 +1350,7 @@ static void moveCloserToDistanceFromPlane(Depsgraph *depsgraph,
     for (i = 0; i < totweight; i++) {
       dwIndices[i] = i;
       dw = (dvert->dw + i);
+      dw_eval = (dvert_eval->dw + i);
       vc = hc = 0;
       if (!dw->weight) {
         changes[i][0] = 0;
@@ -1369,7 +1362,7 @@ static void moveCloserToDistanceFromPlane(Depsgraph *depsgraph,
         if (me_deform) {
           /* DO NOT try to do own cleanup here, this is call for dramatic failures and bugs!
            * Better to over-free and recompute a bit. */
-          BKE_object_free_derived_caches(ob);
+          BKE_object_free_derived_caches(object_eval);
         }
         oldw = dw->weight;
         if (k) {
@@ -1387,11 +1380,13 @@ static void moveCloserToDistanceFromPlane(Depsgraph *depsgraph,
         if (dw->weight > 1) {
           dw->weight = 1;
         }
-        me_deform = mesh_get_eval_deform(depsgraph, scene, ob, &CD_MASK_BAREMESH);
+        dw_eval->weight = dw->weight;
+        me_deform = mesh_get_eval_deform(depsgraph, scene_eval, object_eval, &CD_MASK_BAREMESH);
         m = me_deform->mvert[index];
         getVerticalAndHorizontalChange(
             norm, d, coord, oldPos, distToStart, m.co, changes, dists, i);
         dw->weight = oldw;
+        dw_eval->weight = oldw;
         if (!k) {
           vc = changes[i][0];
           hc = changes[i][1];
@@ -1486,7 +1481,7 @@ static void moveCloserToDistanceFromPlane(Depsgraph *depsgraph,
       if (me_deform) {
         /* DO NOT try to do own cleanup here, this is call for dramatic failures and bugs!
          * Better to over-free and recompute a bit. */
-        BKE_object_free_derived_caches(ob);
+        BKE_object_free_derived_caches(object_eval);
       }
     }
   } while (wasChange && ((distToStart - distToBe) / fabsf(distToStart - distToBe) ==
@@ -1501,9 +1496,11 @@ static void moveCloserToDistanceFromPlane(Depsgraph *depsgraph,
 /* this is used to try to smooth a surface by only adjusting the nonzero weights of a vertex
  * but it could be used to raise or lower an existing 'bump.' */
 static void vgroup_fix(
-    const bContext *C, Scene *scene, Object *ob, float distToBe, float strength, float cp)
+    const bContext *C, Scene *UNUSED(scene), Object *ob, float distToBe, float strength, float cp)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+  Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
   int i;
 
   Mesh *me = ob->data;
@@ -1520,7 +1517,8 @@ static void vgroup_fix(
         MVert *p = MEM_callocN(sizeof(MVert) * (count), "deformedPoints");
         int k;
 
-        Mesh *me_deform = mesh_get_eval_deform(depsgraph, scene, ob, &CD_MASK_BAREMESH);
+        Mesh *me_deform = mesh_get_eval_deform(
+            depsgraph, scene_eval, object_eval, &CD_MASK_BAREMESH);
         k = count;
         while (k--) {
           p[k] = me_deform->mvert[verts[k]];
@@ -1538,7 +1536,7 @@ static void vgroup_fix(
             d = -dot_v3v3(norm, coord);
             /* dist = (dot_v3v3(norm, m.co) + d); */ /* UNUSED */
             moveCloserToDistanceFromPlane(
-                depsgraph, scene, ob, me, i, norm, coord, d, distToBe, strength, cp);
+                depsgraph, scene_eval, object_eval, me, i, norm, coord, d, distToBe, strength, cp);
           }
         }
 
@@ -1609,7 +1607,7 @@ static bool vgroup_normalize_all(Object *ob,
   int i, dvert_tot = 0;
   const int def_nr = ob->actdef - 1;
 
-  const int use_vert_sel = vertex_group_use_vert_sel(ob);
+  const bool use_vert_sel = vertex_group_use_vert_sel(ob);
 
   if (subset_count == 0) {
     BKE_report(reports, RPT_ERROR, "No vertex groups to operate on");
@@ -2033,7 +2031,7 @@ static int vgroup_limit_total_subset(Object *ob,
 {
   MDeformVert *dv, **dvert_array = NULL;
   int i, dvert_tot = 0;
-  const int use_vert_sel = vertex_group_use_vert_sel(ob);
+  const bool use_vert_sel = vertex_group_use_vert_sel(ob);
   int remove_tot = 0;
 
   ED_vgroup_parray_alloc(ob->data, &dvert_array, &dvert_tot, use_vert_sel);
@@ -2435,8 +2433,9 @@ void ED_vgroup_mirror(Object *ob,
   /* disabled, confusing when you have an active pose bone */
 #if 0
   /* flip active group index */
-  if (flip_vgroups && flip_map[def_nr] >= 0)
+  if (flip_vgroups && flip_map[def_nr] >= 0) {
     ob->actdef = flip_map[def_nr] + 1;
+  }
 #endif
 
 cleanup:
@@ -2701,6 +2700,7 @@ static int vertex_group_add_exec(bContext *C, wmOperator *UNUSED(op))
   Object *ob = ED_object_context(C);
 
   BKE_object_defgroup_add(ob);
+  DEG_relations_tag_update(CTX_data_main(C));
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GEOM | ND_VERTEX_GROUP, ob->data);
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
@@ -2738,6 +2738,7 @@ static int vertex_group_remove_exec(bContext *C, wmOperator *op)
   }
 
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  DEG_relations_tag_update(CTX_data_main(C));
   WM_event_add_notifier(C, NC_GEOM | ND_VERTEX_GROUP, ob->data);
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
@@ -2941,6 +2942,7 @@ static int vertex_group_copy_exec(bContext *C, wmOperator *UNUSED(op))
 
   vgroup_duplicate(ob);
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  DEG_relations_tag_update(CTX_data_main(C));
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
   WM_event_add_notifier(C, NC_GEOM | ND_VERTEX_GROUP, ob->data);
 
@@ -3260,9 +3262,18 @@ static int vertex_group_smooth_exec(bContext *C, wmOperator *op)
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *ob_ctx = ED_object_context(C);
 
-  uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_mode_unique_data(
-      view_layer, CTX_wm_view3d(C), &objects_len, ob_ctx->mode);
+  uint objects_len;
+  Object **objects;
+  if (ob_ctx->mode == OB_MODE_WEIGHT_PAINT) {
+    /* Until weight paint supports multi-edit, use only the active. */
+    objects_len = 1;
+    objects = &ob_ctx;
+  }
+  else {
+    objects = BKE_view_layer_array_from_objects_in_mode_unique_data(
+        view_layer, CTX_wm_view3d(C), &objects_len, ob_ctx->mode);
+  }
+
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *ob = objects[ob_index];
 
@@ -3278,7 +3289,9 @@ static int vertex_group_smooth_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
     WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
   }
-  MEM_freeN(objects);
+  if (objects != &ob_ctx) {
+    MEM_freeN(objects);
+  }
 
   return OPERATOR_FINISHED;
 }
@@ -3471,6 +3484,7 @@ static int vertex_group_mirror_exec(bContext *C, wmOperator *op)
   ED_mesh_report_mirror(op, totmirr, totfail);
 
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  DEG_relations_tag_update(CTX_data_main(C));
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
 
@@ -3559,6 +3573,7 @@ static int vertex_group_copy_to_selected_exec(bContext *C, wmOperator *op)
     if (obact != ob) {
       if (ED_vgroup_array_copy(ob, obact)) {
         DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+        DEG_relations_tag_update(CTX_data_main(C));
         WM_event_add_notifier(C, NC_GEOM | ND_VERTEX_GROUP, ob);
         changed_tot++;
       }
@@ -3763,7 +3778,7 @@ static int vgroup_sort_name(const void *def_a_ptr, const void *def_b_ptr)
   const bDeformGroup *def_a = def_a_ptr;
   const bDeformGroup *def_b = def_b_ptr;
 
-  return BLI_natstrcmp(def_a->name, def_b->name);
+  return BLI_strcasecmp_natural(def_a->name, def_b->name);
 }
 
 /**

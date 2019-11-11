@@ -43,8 +43,8 @@ struct ExportSettings {
   ExportSettings();
 
   Scene *scene;
-  ViewLayer *
-      view_layer;  // Scene layer to export; all its objects will be exported, unless selected_only=true
+  /** Scene layer to export; all its objects will be exported, unless selected_only=true. */
+  ViewLayer *view_layer;
   Depsgraph *depsgraph;
   SimpleLogger logger;
 
@@ -104,7 +104,7 @@ class AbcExporter {
   AbcExporter(Main *bmain, const char *filename, ExportSettings &settings);
   ~AbcExporter();
 
-  void operator()(float &progress, bool &was_canceled);
+  void operator()(short *do_update, float *progress, bool *was_canceled);
 
  protected:
   void getShutterSamples(unsigned int nr_of_samples,

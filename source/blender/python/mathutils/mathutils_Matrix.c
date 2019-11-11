@@ -585,6 +585,34 @@ static PyObject *C_Matrix_Translation(PyObject *cls, PyObject *value)
 
   return Matrix_CreatePyObject(&mat[0][0], 4, 4, (PyTypeObject *)cls);
 }
+/* ----------------------------------mathutils.Matrix.Diagonal() ------------- */
+PyDoc_STRVAR(C_Matrix_Diagonal_doc,
+             ".. classmethod:: Diagonal(vector)\n"
+             "\n"
+             "   Create a diagonal (scaling) matrix using the values from the vector.\n"
+             "\n"
+             "   :arg vector: The vector of values for the diagonal.\n"
+             "   :type vector: :class:`Vector`\n"
+             "   :return: A diagonal matrix.\n"
+             "   :rtype: :class:`Matrix`\n");
+static PyObject *C_Matrix_Diagonal(PyObject *cls, PyObject *value)
+{
+  float mat[16] = {0.0f};
+  float vec[4];
+
+  int size = mathutils_array_parse(
+      vec, 2, 4, value, "mathutils.Matrix.Diagonal(vector), invalid vector arg");
+
+  if (size == -1) {
+    return NULL;
+  }
+
+  for (int i = 0; i < size; i++) {
+    mat[size * i + i] = vec[i];
+  }
+
+  return Matrix_CreatePyObject(mat, size, size, (PyTypeObject *)cls);
+}
 /* ----------------------------------mathutils.Matrix.Scale() ------------- */
 /* mat is a 1D array of floats - row[0][0], row[0][1], row[1][0], etc. */
 PyDoc_STRVAR(C_Matrix_Scale_doc,
@@ -1072,7 +1100,8 @@ static void matrix_invert_safe_internal(const MatrixObject *self, float *r_mat)
   if (det == 0.0f) {
     const float eps = PSEUDOINVERSE_EPSILON;
 
-    /* We will copy self->matrix into r_mat (if needed), and modify it in place to add diagonal epsilon. */
+    /* We will copy self->matrix into r_mat (if needed),
+     * and modify it in place to add diagonal epsilon. */
     in_mat = r_mat;
 
     switch (self->num_col) {
@@ -2505,7 +2534,7 @@ static PyObject *Matrix_mul(PyObject *m1, PyObject *m2)
   return NULL;
 }
 /*------------------------obj *= obj------------------------------
- * Inplace element-wise multiplication */
+ * In place element-wise multiplication */
 static PyObject *Matrix_imul(PyObject *m1, PyObject *m2)
 {
   float scalar;
@@ -2538,7 +2567,7 @@ static PyObject *Matrix_imul(PyObject *m1, PyObject *m2)
     mul_vn_vn(mat1->matrix, mat2->matrix, mat1->num_col * mat1->num_row);
 #else
     PyErr_Format(PyExc_TypeError,
-                 "Inplace element-wise multiplication: "
+                 "In place element-wise multiplication: "
                  "not supported between '%.200s' and '%.200s' types",
                  Py_TYPE(m1)->tp_name,
                  Py_TYPE(m2)->tp_name);
@@ -2551,7 +2580,7 @@ static PyObject *Matrix_imul(PyObject *m1, PyObject *m2)
   }
   else {
     PyErr_Format(PyExc_TypeError,
-                 "Inplace element-wise multiplication: "
+                 "In place element-wise multiplication: "
                  "not supported between '%.200s' and '%.200s' types",
                  Py_TYPE(m1)->tp_name,
                  Py_TYPE(m2)->tp_name);
@@ -2639,7 +2668,7 @@ static PyObject *Matrix_matmul(PyObject *m1, PyObject *m2)
   return NULL;
 }
 /*------------------------obj @= obj------------------------------
- * inplace matrix multiplication */
+ * In place matrix multiplication */
 static PyObject *Matrix_imatmul(PyObject *m1, PyObject *m2)
 {
   MatrixObject *mat1 = NULL, *mat2 = NULL;
@@ -2686,7 +2715,7 @@ static PyObject *Matrix_imatmul(PyObject *m1, PyObject *m2)
   }
   else {
     PyErr_Format(PyExc_TypeError,
-                 "Inplace matrix multiplication: "
+                 "In place matrix multiplication: "
                  "not supported between '%.200s' and '%.200s' types",
                  Py_TYPE(m1)->tp_name,
                  Py_TYPE(m2)->tp_name);
@@ -3084,6 +3113,7 @@ static struct PyMethodDef Matrix_methods[] = {
     {"Rotation", (PyCFunction)C_Matrix_Rotation, METH_VARARGS | METH_CLASS, C_Matrix_Rotation_doc},
     {"Scale", (PyCFunction)C_Matrix_Scale, METH_VARARGS | METH_CLASS, C_Matrix_Scale_doc},
     {"Shear", (PyCFunction)C_Matrix_Shear, METH_VARARGS | METH_CLASS, C_Matrix_Shear_doc},
+    {"Diagonal", (PyCFunction)C_Matrix_Diagonal, METH_O | METH_CLASS, C_Matrix_Diagonal_doc},
     {"Translation",
      (PyCFunction)C_Matrix_Translation,
      METH_O | METH_CLASS,
@@ -3111,7 +3141,7 @@ PyTypeObject matrix_Type = {
     sizeof(MatrixObject),                    /*tp_basicsize*/
     0,                                       /*tp_itemsize*/
     (destructor)BaseMathObject_dealloc,      /*tp_dealloc*/
-    NULL,                                    /*tp_print*/
+    (printfunc)NULL,                         /*tp_print*/
     NULL,                                    /*tp_getattr*/
     NULL,                                    /*tp_setattr*/
     NULL,                                    /*tp_compare*/
@@ -3502,7 +3532,7 @@ PyTypeObject matrix_access_Type = {
     sizeof(MatrixAccessObject),                              /*tp_basicsize*/
     0,                                                       /*tp_itemsize*/
     (destructor)MatrixAccess_dealloc,                        /*tp_dealloc*/
-    NULL,                                                    /*tp_print*/
+    (printfunc)NULL,                                         /*tp_print*/
     NULL,                                                    /*tp_getattr*/
     NULL,                                                    /*tp_setattr*/
     NULL,                                                    /*tp_compare*/

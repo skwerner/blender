@@ -279,7 +279,7 @@ void image_load_preprocess(openvdb::GridBase::Ptr grid_base,
 
   for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
     const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
-    const T *data = leaf->buffer().data();
+    const auto data = leaf->buffer().data();
 
     for (int i = 0; i < TILE_SIZE * TILE_SIZE * TILE_SIZE; ++i) {
       if (gte_any(data[i], threshold)) {
@@ -363,7 +363,7 @@ void image_load_dense(openvdb::GridBase::Ptr grid_base,
 
   for (typename GridType::TreeType::LeafCIter iter = grid->tree().cbeginLeaf(); iter; ++iter) {
     const typename GridType::TreeType::LeafNodeType *leaf = iter.getLeaf();
-    const T *leaf_data = leaf->buffer().data();
+    const auto leaf_data = leaf->buffer().data();
     const math::Coord tile_start = leaf->getNodeBoundingBox().getStart();
     const math::Coord tile_dim = get_tile_dim(tile_start, resolution, remainder);
 
@@ -418,7 +418,7 @@ void image_load_sparse(openvdb::GridBase::Ptr grid_base,
 
     float *data_tile = data + sparse_indexes->at(tile_index);
     const math::Coord tile_dim = get_tile_dim(tile_start, resolution, remainder);
-    const T *leaf_tile = leaf->buffer().data();
+    const auto leaf_tile = leaf->buffer().data();
 
     for (int k = 0; k < tile_dim.z(); ++k) {
       for (int j = 0; j < tile_dim.y(); ++j) {
@@ -472,7 +472,7 @@ void image_load_sparse_pad(openvdb::GridBase::Ptr grid_base,
       continue;
     }
 
-    const T *leaf_tile = leaf->buffer().data();
+    const auto leaf_tile = leaf->buffer().data();
     const int2 bound_x = padded_tile_bound(
         sparse_indexes, tile_start.x(), resolution.x(), tile_index);
 

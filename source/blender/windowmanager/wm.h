@@ -61,7 +61,7 @@ void wm_operatortypes_register(void);
 
 /* wm_gesture.c */
 void wm_gesture_draw(struct wmWindow *win);
-int wm_gesture_evaluate(wmGesture *gesture);
+int wm_gesture_evaluate(wmGesture *gesture, const struct wmEvent *event);
 void wm_gesture_tag_redraw(bContext *C);
 
 /* wm_gesture_ops.c */
@@ -77,6 +77,9 @@ void wm_autosave_timer_ended(wmWindowManager *wm);
 void wm_autosave_delete(void);
 void wm_autosave_read(bContext *C, struct ReportList *reports);
 void wm_autosave_location(char *filepath);
+
+/* wm_splash_screen.c */
+void WM_OT_splash(wmOperatorType *ot);
 
 /* wm_stereo.c */
 void wm_stereo3d_draw_interlace(wmWindow *win, struct ARegion *ar);

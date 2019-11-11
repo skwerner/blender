@@ -101,13 +101,22 @@ typedef struct bConstraintTypeInfo {
   void (*id_looper)(struct bConstraint *con, ConstraintIDFunc func, void *userdata);
   /** copy any special data that is allocated separately (optional) */
   void (*copy_data)(struct bConstraint *con, struct bConstraint *src);
-  /** set settings for data that will be used for bConstraint.data (memory already allocated using MEM_callocN) */
+  /**
+   * Set settings for data that will be used for #bConstraint.data
+   * (memory already allocated using #MEM_callocN).
+   */
   void (*new_data)(void *cdata);
 
   /* target handling function pointers */
-  /** for multi-target constraints: return that list; otherwise make a temporary list (returns number of targets) */
+  /**
+   * For multi-target constraints: return that list;
+   * otherwise make a temporary list (returns number of targets).
+   */
   int (*get_constraint_targets)(struct bConstraint *con, struct ListBase *list);
-  /** for single-target constraints only: flush data back to source data, and the free memory used */
+  /**
+   * For single-target constraints only:
+   * flush data back to source data, and the free memory used.
+   */
   void (*flush_constraint_targets)(struct bConstraint *con, struct ListBase *list, bool no_copy);
 
   /* evaluation */
@@ -182,12 +191,8 @@ struct bConstraintOb *BKE_constraints_make_evalob(struct Depsgraph *depsgraph,
                                                   short datatype);
 void BKE_constraints_clear_evalob(struct bConstraintOb *cob);
 
-void BKE_constraint_mat_convertspace(struct Object *ob,
-                                     struct bPoseChannel *pchan,
-                                     float mat[4][4],
-                                     short from,
-                                     short to,
-                                     const bool keep_scale);
+void BKE_constraint_mat_convertspace(
+    struct Object *ob, struct bPoseChannel *pchan, float mat[4][4], short from, short to);
 
 void BKE_constraint_target_matrix_get(struct Depsgraph *depsgraph,
                                       struct Scene *scene,

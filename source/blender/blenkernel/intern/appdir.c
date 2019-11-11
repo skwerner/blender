@@ -30,6 +30,7 @@
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
+#include "BLI_string_utf8.h"
 
 #include "BKE_blender_version.h"
 #include "BKE_appdir.h" /* own include */
@@ -55,8 +56,9 @@
 #  ifdef WITH_BINRELOC
 #    include "binreloc.h"
 #  endif
-#  include <unistd.h> /* mkdtemp on OSX (and probably all *BSD?), not worth making specific check for this OS. */
-#endif                /* WIN32 */
+/* mkdtemp on OSX (and probably all *BSD?), not worth making specific check for this OS. */
+#  include <unistd.h>
+#endif /* WIN32 */
 
 /* local */
 static CLG_LogRef LOG = {"bke.appdir"};
@@ -108,7 +110,7 @@ const char *BKE_appdir_folder_default(void)
 
 // #define PATH_DEBUG
 
-/* returns a formatted representation of the specified version number. Non-reentrant! */
+/* returns a formatted representation of the specified version number. Non-re-entrant! */
 static char *blender_version_decimal(const int ver)
 {
   static char version_str[5];
@@ -156,7 +158,7 @@ static bool test_path(char *targetpath,
 #ifdef PATH_DEBUG
     printf("\t%s missing: %s\n", __func__, targetpath);
 #endif
-    //targetpath[0] = '\0';
+    // targetpath[0] = '\0';
     return false;
   }
 }
@@ -222,9 +224,11 @@ static bool get_path_local(char *targetpath,
     relfolder[0] = '\0';
   }
 
-  /* try EXECUTABLE_DIR/2.5x/folder_name - new default directory for local blender installed files */
+  /* Try EXECUTABLE_DIR/2.5x/folder_name -
+   * new default directory for local blender installed files. */
 #ifdef __APPLE__
-  /* due new codesign situation in OSX > 10.9.5 we must move the blender_version dir with contents to Resources */
+  /* Due new codesign situation in OSX > 10.9.5
+   * we must move the blender_version dir with contents to Resources. */
   char osx_resourses[FILE_MAX];
   BLI_snprintf(osx_resourses, sizeof(osx_resourses), "%s../Resources", bprogdir);
   /* Remove the '/../' added above. */
@@ -835,6 +839,26 @@ bool BKE_appdir_app_template_id_search(const char *app_template, char *path, siz
   return false;
 }
 
+bool BKE_appdir_app_template_has_userpref(const char *app_template)
+{
+  /* Test if app template provides a userpref.blend.
+   * If not, we will share user preferences with the rest of Blender. */
+  if (!app_template && app_template[0]) {
+    return false;
+  }
+
+  char app_template_path[FILE_MAX];
+  if (!BKE_appdir_app_template_id_search(
+          app_template, app_template_path, sizeof(app_template_path))) {
+    return false;
+  }
+
+  char userpref_path[FILE_MAX];
+  BLI_path_join(
+      userpref_path, sizeof(userpref_path), app_template_path, BLENDER_USERPREF_FILE, NULL);
+  return BLI_exists(userpref_path);
+}
+
 void BKE_appdir_app_templates(ListBase *templates)
 {
   BLI_listbase_clear(templates);
@@ -1000,4 +1024,21 @@ void BKE_tempdir_session_purge(void)
   if (btempdir_session[0] && BLI_is_dir(btempdir_session)) {
     BLI_delete(btempdir_session, true, true);
   }
+}
+
+/* Gets a good default directory for fonts */
+bool BKE_appdir_font_folder_default(char *dir)
+{
+  bool success = false;
+#ifdef WIN32
+  wchar_t wpath[FILE_MAXDIR];
+  success = SHGetSpecialFolderPathW(0, wpath, CSIDL_FONTS, 0);
+  if (success) {
+    wcscat(wpath, L"\\");
+    BLI_strncpy_wchar_as_utf8(dir, wpath, FILE_MAXDIR);
+  }
+#endif
+  /* TODO: Values for other platforms. */
+  UNUSED_VARS(dir);
+  return success;
 }

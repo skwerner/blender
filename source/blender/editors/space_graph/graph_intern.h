@@ -26,9 +26,7 @@
 
 struct ARegion;
 struct ARegionType;
-struct ScrArea;
 struct SpaceGraph;
-struct View2DGrid;
 struct bAnimContext;
 struct bAnimListElem;
 struct bContext;
@@ -42,7 +40,6 @@ void graph_draw_channel_names(struct bContext *C, struct bAnimContext *ac, struc
 void graph_draw_curves(struct bAnimContext *ac,
                        struct SpaceGraph *sipo,
                        struct ARegion *ar,
-                       struct View2DGrid *grid,
                        short sel);
 void graph_draw_ghost_curves(struct bAnimContext *ac, struct SpaceGraph *sipo, struct ARegion *ar);
 
@@ -170,6 +167,7 @@ struct bAnimListElem *get_active_fcurve_channel(struct bAnimContext *ac);
 bool graphop_visible_keyframes_poll(struct bContext *C);
 bool graphop_editable_keyframes_poll(struct bContext *C);
 bool graphop_active_fcurve_poll(struct bContext *C);
+bool graphop_active_editable_fcurve_ctx_poll(struct bContext *C);
 bool graphop_selected_fcurve_poll(struct bContext *C);
 
 /* ***************************************** */

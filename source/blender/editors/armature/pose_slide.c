@@ -27,6 +27,8 @@
 #include "BLI_blenlib.h"
 #include "BLI_dlrbTree.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_object_types.h"
@@ -134,6 +136,8 @@ typedef enum ePoseSlide_Modes {
   POSESLIDE_PUSH = 0,  /* exaggerate the pose... */
   POSESLIDE_RELAX,     /* soften the pose... */
   POSESLIDE_BREAKDOWN, /* slide between the endpoint poses, finding a 'soft' spot */
+  POSESLIDE_PUSH_REST,
+  POSESLIDE_RELAX_REST,
 } ePoseSlide_Modes;
 
 /* Transforms/Channels to Affect */
@@ -335,12 +339,6 @@ static void pose_slide_apply_val(tPoseSlideOp *pso, FCurve *fcu, Object *ob, flo
   /* next/end */
   eVal = evaluate_fcurve(fcu, nextFrameF);
 
-  /* if both values are equal, don't do anything */
-  if (IS_EQF(sVal, eVal)) {
-    (*val) = sVal;
-    return;
-  }
-
   /* calculate the relative weights of the endpoints */
   if (pso->mode == POSESLIDE_BREAKDOWN) {
     /* get weights from the percentage control */
@@ -362,37 +360,22 @@ static void pose_slide_apply_val(tPoseSlideOp *pso, FCurve *fcu, Object *ob, flo
     w2 = (w2 / wtot);
   }
 
-  /* depending on the mode, calculate the new value
-   * - in all of these, the start+end values are multiplied by w2 and w1 (respectively),
-   *   since multiplication in another order would decrease the value the current frame is closer to
+  /* Depending on the mode, calculate the new value:
+   * - In all of these, the start+end values are multiplied by w2 and w1 (respectively),
+   *   since multiplication in another order would decrease
+   *   the value the current frame is closer to.
    */
   switch (pso->mode) {
     case POSESLIDE_PUSH: /* make the current pose more pronounced */
     {
-      /* perform a weighted average here, favoring the middle pose
-       * - numerator should be larger than denominator to 'expand' the result
-       * - perform this weighting a number of times given by the percentage...
-       */
-      /* TODO: maybe a sensitivity ctrl on top of this is needed */
-      int iters = (int)ceil(10.0f * pso->percentage);
-
-      while (iters-- > 0) {
-        (*val) = (-((sVal * w2) + (eVal * w1)) + ((*val) * 6.0f)) / 5.0f;
-      }
+      /* Slide the pose away from the breakdown pose in the timeline */
+      (*val) -= ((sVal * w2) + (eVal * w1) - (*val)) * pso->percentage;
       break;
     }
     case POSESLIDE_RELAX: /* make the current pose more like its surrounding ones */
     {
-      /* perform a weighted average here, favoring the middle pose
-       * - numerator should be smaller than denominator to 'relax' the result
-       * - perform this weighting a number of times given by the percentage...
-       */
-      /* TODO: maybe a sensitivity ctrl on top of this is needed */
-      int iters = (int)ceil(10.0f * pso->percentage);
-
-      while (iters-- > 0) {
-        (*val) = (((sVal * w2) + (eVal * w1)) + ((*val) * 5.0f)) / 6.0f;
-      }
+      /* Slide the pose towards the breakdown pose in the timeline */
+      (*val) += ((sVal * w2) + (eVal * w1) - (*val)) * pso->percentage;
       break;
     }
     case POSESLIDE_BREAKDOWN: /* make the current pose slide around between the endpoints */
@@ -443,7 +426,7 @@ static void pose_slide_apply_props(tPoseSlideOp *pso,
                                    tPChanFCurveLink *pfl,
                                    const char prop_prefix[])
 {
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   LinkData *ld;
   int len = strlen(pfl->pchan_path);
 
@@ -509,7 +492,7 @@ static void pose_slide_apply_props(tPoseSlideOp *pso,
 
           default:
             /* cannot handle */
-            //printf("Cannot Pose Slide non-numerical property\n");
+            // printf("Cannot Pose Slide non-numerical property\n");
             break;
         }
       }
@@ -585,7 +568,7 @@ static void pose_slide_apply_quat(tPoseSlideOp *pso, tPChanFCurveLink *pfl)
 
     /* perform blending */
     if (pso->mode == POSESLIDE_BREAKDOWN) {
-      /* Just perform the interpol between quat_prev and
+      /* Just perform the interpolation between quat_prev and
        * quat_next using pso->percentage as a guide. */
       interp_qt_qtqt(quat_final, quat_prev, quat_next, pso->percentage);
     }
@@ -630,6 +613,103 @@ static void pose_slide_apply_quat(tPoseSlideOp *pso, tPChanFCurveLink *pfl)
 
   /* free the path now */
   MEM_freeN(path);
+}
+
+static void pose_slide_rest_pose_apply_vec3(tPoseSlideOp *pso, float vec[3], float default_value)
+{
+  /* We only slide to the rest pose. So only use the default rest pose value */
+  const int lock = pso->axislock;
+  for (int idx = 0; idx < 3; idx++) {
+    if ((lock == 0) || ((lock & PS_LOCK_X) && (idx == 0)) || ((lock & PS_LOCK_Y) && (idx == 1)) ||
+        ((lock & PS_LOCK_Z) && (idx == 2))) {
+      float diff_val = default_value - vec[idx];
+      if (pso->mode == POSESLIDE_RELAX_REST) {
+        vec[idx] += pso->percentage * diff_val;
+      }
+      else {
+        /* Push */
+        vec[idx] -= pso->percentage * diff_val;
+      }
+    }
+  }
+}
+
+static void pose_slide_rest_pose_apply_other_rot(tPoseSlideOp *pso, float vec[4], bool quat)
+{
+  /* We only slide to the rest pose. So only use the default rest pose value */
+  float default_values[] = {1.0f, 0.0f, 0.0f, 0.0f};
+  if (!quat) {
+    /* Axis Angle */
+    default_values[0] = 0.0f;
+    default_values[2] = 1.0f;
+  }
+  for (int idx = 0; idx < 4; idx++) {
+    float diff_val = default_values[idx] - vec[idx];
+    if (pso->mode == POSESLIDE_RELAX_REST) {
+      vec[idx] += pso->percentage * diff_val;
+    }
+    else {
+      /* Push */
+      vec[idx] -= pso->percentage * diff_val;
+    }
+  }
+}
+
+/* apply() - perform the pose sliding between the current pose and the rest pose */
+static void pose_slide_rest_pose_apply(bContext *C, tPoseSlideOp *pso)
+{
+  tPChanFCurveLink *pfl;
+
+  /* for each link, handle each set of transforms */
+  for (pfl = pso->pfLinks.first; pfl; pfl = pfl->next) {
+    /* valid transforms for each PoseChannel should have been noted already
+     * - sliding the pose should be a straightforward exercise for location+rotation,
+     *   but rotations get more complicated since we may want to use quaternion blending
+     *   for quaternions instead...
+     */
+    bPoseChannel *pchan = pfl->pchan;
+
+    if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_LOC) && (pchan->flag & POSE_LOC)) {
+      /* calculate these for the 'location' vector, and use location curves */
+      pose_slide_rest_pose_apply_vec3(pso, pchan->loc, 0.0f);
+    }
+
+    if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_SIZE) && (pchan->flag & POSE_SIZE)) {
+      /* calculate these for the 'scale' vector, and use scale curves */
+      pose_slide_rest_pose_apply_vec3(pso, pchan->size, 1.0f);
+    }
+
+    if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_ROT) && (pchan->flag & POSE_ROT)) {
+      /* everything depends on the rotation mode */
+      if (pchan->rotmode > 0) {
+        /* eulers - so calculate these for the 'eul' vector, and use euler_rotation curves */
+        pose_slide_rest_pose_apply_vec3(pso, pchan->eul, 0.0f);
+      }
+      else if (pchan->rotmode == ROT_MODE_AXISANGLE) {
+        pose_slide_rest_pose_apply_other_rot(pso, pchan->quat, false);
+      }
+      else {
+        /* quaternions - use quaternion blending */
+        pose_slide_rest_pose_apply_other_rot(pso, pchan->quat, true);
+      }
+    }
+
+    if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_BBONE_SHAPE) && (pchan->flag & POSE_BBONE_SHAPE)) {
+      /* bbone properties - they all start a "bbone_" prefix */
+      // TODO Not implemented
+      // pose_slide_apply_props(pso, pfl, "bbone_");
+    }
+
+    if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_PROPS) && (pfl->oldprops)) {
+      /* Not strictly a transform, but custom properties contribute
+       * to the pose produced in many rigs (e.g. the facial rigs used in Sintel). */
+      // TODO Not implemented
+      // pose_slide_apply_props(pso, pfl, "[\""); /* dummy " for texteditor bugs */
+    }
+  }
+
+  /* depsgraph updates + redraws */
+  pose_slide_refresh(C, pso);
 }
 
 /* apply() - perform the pose sliding based on weighting various poses */
@@ -698,9 +778,8 @@ static void pose_slide_apply(bContext *C, tPoseSlideOp *pso)
     }
 
     if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_PROPS) && (pfl->oldprops)) {
-      /* not strictly a transform, but custom properties contribute to the pose produced in many rigs
-       * (e.g. the facial rigs used in Sintel)
-       */
+      /* Not strictly a transform, but custom properties contribute
+       * to the pose produced in many rigs (e.g. the facial rigs used in Sintel). */
       pose_slide_apply_props(pso, pfl, "[\""); /* dummy " for texteditor bugs */
     }
   }
@@ -736,35 +815,35 @@ static void pose_slide_draw_status(tPoseSlideOp *pso)
 
   switch (pso->mode) {
     case POSESLIDE_PUSH:
-      strcpy(mode_str, "Push Pose");
+      strcpy(mode_str, TIP_("Push Pose"));
       break;
     case POSESLIDE_RELAX:
-      strcpy(mode_str, "Relax Pose");
+      strcpy(mode_str, TIP_("Relax Pose"));
       break;
     case POSESLIDE_BREAKDOWN:
-      strcpy(mode_str, "Breakdown");
+      strcpy(mode_str, TIP_("Breakdown"));
       break;
 
     default:
       /* unknown */
-      strcpy(mode_str, "Sliding-Tool");
+      strcpy(mode_str, TIP_("Sliding-Tool"));
       break;
   }
 
   switch (pso->axislock) {
     case PS_LOCK_X:
-      BLI_strncpy(axis_str, "[X]/Y/Z axis only (X to clear)", sizeof(axis_str));
+      BLI_strncpy(axis_str, TIP_("[X]/Y/Z axis only (X to clear)"), sizeof(axis_str));
       break;
     case PS_LOCK_Y:
-      BLI_strncpy(axis_str, "X/[Y]/Z axis only (Y to clear)", sizeof(axis_str));
+      BLI_strncpy(axis_str, TIP_("X/[Y]/Z axis only (Y to clear)"), sizeof(axis_str));
       break;
     case PS_LOCK_Z:
-      BLI_strncpy(axis_str, "X/Y/[Z] axis only (Z to clear)", sizeof(axis_str));
+      BLI_strncpy(axis_str, TIP_("X/Y/[Z] axis only (Z to clear)"), sizeof(axis_str));
       break;
 
     default:
       if (ELEM(pso->channels, PS_TFM_LOC, PS_TFM_ROT, PS_TFM_SIZE)) {
-        BLI_strncpy(axis_str, "X/Y/Z = Axis Constraint", sizeof(axis_str));
+        BLI_strncpy(axis_str, TIP_("X/Y/Z = Axis Constraint"), sizeof(axis_str));
       }
       else {
         axis_str[0] = '\0';
@@ -776,31 +855,34 @@ static void pose_slide_draw_status(tPoseSlideOp *pso)
     case PS_TFM_LOC:
       BLI_snprintf(limits_str,
                    sizeof(limits_str),
-                   "[G]/R/S/B/C - Location only (G to clear) | %s",
+                   TIP_("[G]/R/S/B/C - Location only (G to clear) | %s"),
                    axis_str);
       break;
     case PS_TFM_ROT:
       BLI_snprintf(limits_str,
                    sizeof(limits_str),
-                   "G/[R]/S/B/C - Rotation only (R to clear) | %s",
+                   TIP_("G/[R]/S/B/C - Rotation only (R to clear) | %s"),
                    axis_str);
       break;
     case PS_TFM_SIZE:
-      BLI_snprintf(
-          limits_str, sizeof(limits_str), "G/R/[S]/B/C - Scale only (S to clear) | %s", axis_str);
+      BLI_snprintf(limits_str,
+                   sizeof(limits_str),
+                   TIP_("G/R/[S]/B/C - Scale only (S to clear) | %s"),
+                   axis_str);
       break;
     case PS_TFM_BBONE_SHAPE:
       BLI_strncpy(limits_str,
-                  "G/R/S/[B]/C - Bendy Bone properties only (B to clear) | %s",
+                  TIP_("G/R/S/[B]/C - Bendy Bone properties only (B to clear) | %s"),
                   sizeof(limits_str));
       break;
     case PS_TFM_PROPS:
       BLI_strncpy(limits_str,
-                  "G/R/S/B/[C] - Custom Properties only (C to clear) | %s",
+                  TIP_("G/R/S/B/[C] - Custom Properties only (C to clear) | %s"),
                   sizeof(limits_str));
       break;
     default:
-      BLI_strncpy(limits_str, "G/R/S/B/C - Limit to Transform/Property Set", sizeof(limits_str));
+      BLI_strncpy(
+          limits_str, TIP_("G/R/S/B/C - Limit to Transform/Property Set"), sizeof(limits_str));
       break;
   }
 
@@ -894,13 +976,18 @@ static int pose_slide_invoke_common(bContext *C, wmOperator *op, tPoseSlideOp *p
 
   /* initial apply for operator... */
   /* TODO: need to calculate percentage for initial round too... */
-  pose_slide_apply(C, pso);
+  if (pso->mode != POSESLIDE_PUSH_REST && pso->mode != POSESLIDE_RELAX_REST) {
+    pose_slide_apply(C, pso);
+  }
+  else {
+    pose_slide_rest_pose_apply(C, pso);
+  }
 
   /* depsgraph updates + redraws */
   pose_slide_refresh(C, pso);
 
   /* set cursor to indicate modal */
-  WM_cursor_modal_set(win, BC_EW_SCROLLCURSOR);
+  WM_cursor_modal_set(win, WM_CURSOR_EW_SCROLL);
 
   /* header print */
   pose_slide_draw_status(pso);
@@ -982,38 +1069,44 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
     case LEFTMOUSE: /* confirm */
     case RETKEY:
     case PADENTER: {
-      /* return to normal cursor and header status */
-      ED_area_status_text(pso->sa, NULL);
-      WM_cursor_modal_restore(win);
+      if (event->val == KM_PRESS) {
+        /* return to normal cursor and header status */
+        ED_area_status_text(pso->sa, NULL);
+        WM_cursor_modal_restore(win);
 
-      /* insert keyframes as required... */
-      pose_slide_autoKeyframe(C, pso);
-      pose_slide_exit(op);
+        /* insert keyframes as required... */
+        pose_slide_autoKeyframe(C, pso);
+        pose_slide_exit(op);
 
-      /* done! */
-      return OPERATOR_FINISHED;
+        /* done! */
+        return OPERATOR_FINISHED;
+      }
+      break;
     }
 
     case ESCKEY: /* cancel */
     case RIGHTMOUSE: {
-      /* return to normal cursor and header status */
-      ED_area_status_text(pso->sa, NULL);
-      WM_cursor_modal_restore(win);
+      if (event->val == KM_PRESS) {
+        /* return to normal cursor and header status */
+        ED_area_status_text(pso->sa, NULL);
+        WM_cursor_modal_restore(win);
 
-      /* reset transforms back to original state */
-      pose_slide_reset(pso);
+        /* reset transforms back to original state */
+        pose_slide_reset(pso);
 
-      /* depsgraph updates + redraws */
-      pose_slide_refresh(C, pso);
+        /* depsgraph updates + redraws */
+        pose_slide_refresh(C, pso);
 
-      /* clean up temp data */
-      pose_slide_exit(op);
+        /* clean up temp data */
+        pose_slide_exit(op);
 
-      /* canceled! */
-      return OPERATOR_CANCELLED;
+        /* canceled! */
+        return OPERATOR_CANCELLED;
+      }
+      break;
     }
 
-    /* Percentage Chane... */
+    /* Percentage Change... */
     case MOUSEMOVE: /* calculate new position */
     {
       /* only handle mousemove if not doing numinput */
@@ -1122,7 +1215,12 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
     pose_slide_reset(pso);
 
     /* apply... */
-    pose_slide_apply(C, pso);
+    if (pso->mode != POSESLIDE_PUSH_REST && pso->mode != POSESLIDE_RELAX_REST) {
+      pose_slide_apply(C, pso);
+    }
+    else {
+      pose_slide_rest_pose_apply(C, pso);
+    }
   }
 
   /* still running... */
@@ -1140,7 +1238,12 @@ static void pose_slide_cancel(bContext *UNUSED(C), wmOperator *op)
 static int pose_slide_exec_common(bContext *C, wmOperator *op, tPoseSlideOp *pso)
 {
   /* settings should have been set up ok for applying, so just apply! */
-  pose_slide_apply(C, pso);
+  if (pso->mode != POSESLIDE_PUSH_REST && pso->mode != POSESLIDE_RELAX_REST) {
+    pose_slide_apply(C, pso);
+  }
+  else {
+    pose_slide_rest_pose_apply(C, pso);
+  }
 
   /* insert keyframes if needed */
   pose_slide_autoKeyframe(C, pso);
@@ -1162,8 +1265,8 @@ static void pose_slide_opdef_properties(wmOperatorType *ot)
                            1.0f,
                            "Percentage",
                            "Weighting factor for which keyframe is favored more",
-                           0.3,
-                           0.7);
+                           0.0,
+                           1.0);
 
   RNA_def_int(ot->srna,
               "prev_frame",
@@ -1200,7 +1303,7 @@ static void pose_slide_opdef_properties(wmOperatorType *ot)
 
 /* ------------------------------------ */
 
-/* invoke() - for 'push' mode */
+/* invoke() - for 'push from breakdown' mode */
 static int pose_slide_push_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   tPoseSlideOp *pso;
@@ -1242,9 +1345,9 @@ static int pose_slide_push_exec(bContext *C, wmOperator *op)
 void POSE_OT_push(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Push Pose";
+  ot->name = "Push Pose from Breakdown";
   ot->idname = "POSE_OT_push";
-  ot->description = "Exaggerate the current pose";
+  ot->description = "Exaggerate the current pose in regards to the breakdown pose";
 
   /* callbacks */
   ot->exec = pose_slide_push_exec;
@@ -1262,7 +1365,7 @@ void POSE_OT_push(wmOperatorType *ot)
 
 /* ........................ */
 
-/* invoke() - for 'relax' mode */
+/* invoke() - for 'relax to breakdown' mode */
 static int pose_slide_relax_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   tPoseSlideOp *pso;
@@ -1304,13 +1407,136 @@ static int pose_slide_relax_exec(bContext *C, wmOperator *op)
 void POSE_OT_relax(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Relax Pose";
+  ot->name = "Relax Pose to Breakdown";
   ot->idname = "POSE_OT_relax";
-  ot->description = "Make the current pose more similar to its surrounding ones";
+  ot->description = "Make the current pose more similar to its breakdown pose";
 
   /* callbacks */
   ot->exec = pose_slide_relax_exec;
   ot->invoke = pose_slide_relax_invoke;
+  ot->modal = pose_slide_modal;
+  ot->cancel = pose_slide_cancel;
+  ot->poll = ED_operator_posemode;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
+
+  /* Properties */
+  pose_slide_opdef_properties(ot);
+}
+
+/* ........................ */
+/* invoke() - for 'push from rest pose' mode */
+static int pose_slide_push_rest_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  tPoseSlideOp *pso;
+
+  /* initialize data  */
+  if (pose_slide_init(C, op, POSESLIDE_PUSH_REST) == 0) {
+    pose_slide_exit(op);
+    return OPERATOR_CANCELLED;
+  }
+  else {
+    pso = op->customdata;
+  }
+
+  /* initialise percentage so that it won't pop on first mouse move */
+  pose_slide_mouse_update_percentage(pso, op, event);
+
+  /* do common setup work */
+  return pose_slide_invoke_common(C, op, pso);
+}
+
+/* exec() - for push */
+static int pose_slide_push_rest_exec(bContext *C, wmOperator *op)
+{
+  tPoseSlideOp *pso;
+
+  /* initialize data (from RNA-props) */
+  if (pose_slide_init(C, op, POSESLIDE_PUSH_REST) == 0) {
+    pose_slide_exit(op);
+    return OPERATOR_CANCELLED;
+  }
+  else {
+    pso = op->customdata;
+  }
+
+  /* do common exec work */
+  return pose_slide_exec_common(C, op, pso);
+}
+
+void POSE_OT_push_rest(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Push Pose from Rest Pose";
+  ot->idname = "POSE_OT_push_rest";
+  ot->description = "Push the current pose further away from the rest pose";
+
+  /* callbacks */
+  ot->exec = pose_slide_push_rest_exec;
+  ot->invoke = pose_slide_push_rest_invoke;
+  ot->modal = pose_slide_modal;
+  ot->cancel = pose_slide_cancel;
+  ot->poll = ED_operator_posemode;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
+
+  /* Properties */
+  pose_slide_opdef_properties(ot);
+}
+
+/* ........................ */
+
+/* invoke() - for 'relax' mode */
+static int pose_slide_relax_rest_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+{
+  tPoseSlideOp *pso;
+
+  /* initialize data  */
+  if (pose_slide_init(C, op, POSESLIDE_RELAX_REST) == 0) {
+    pose_slide_exit(op);
+    return OPERATOR_CANCELLED;
+  }
+  else {
+    pso = op->customdata;
+  }
+
+  /* initialise percentage so that it won't pop on first mouse move */
+  pose_slide_mouse_update_percentage(pso, op, event);
+
+  /* do common setup work */
+  return pose_slide_invoke_common(C, op, pso);
+}
+
+/* exec() - for relax */
+static int pose_slide_relax_rest_exec(bContext *C, wmOperator *op)
+{
+  tPoseSlideOp *pso;
+
+  /* initialize data (from RNA-props) */
+  if (pose_slide_init(C, op, POSESLIDE_RELAX_REST) == 0) {
+    pose_slide_exit(op);
+    return OPERATOR_CANCELLED;
+  }
+  else {
+    pso = op->customdata;
+  }
+
+  /* do common exec work */
+  return pose_slide_exec_common(C, op, pso);
+}
+
+void POSE_OT_relax_rest(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Relax Pose to Rest Pose";
+  ot->idname = "POSE_OT_relax_rest";
+  ot->description = "Make the current pose more similar to the rest pose";
+
+  /* callbacks */
+  ot->exec = pose_slide_relax_rest_exec;
+  ot->invoke = pose_slide_relax_rest_invoke;
   ot->modal = pose_slide_modal;
   ot->cancel = pose_slide_cancel;
   ot->poll = ED_operator_posemode;

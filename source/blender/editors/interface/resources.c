@@ -83,12 +83,12 @@ void ui_resources_free(void)
 const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
 {
   ThemeSpace *ts = NULL;
-  static char error[4] = {240, 0, 240, 255};
-  static char alert[4] = {240, 60, 60, 255};
-  static char headerdesel[4] = {0, 0, 0, 255};
-  static char back[4] = {0, 0, 0, 255};
-  static char setting = 0;
-  const char *cp = error;
+  static uchar error[4] = {240, 0, 240, 255};
+  static uchar alert[4] = {240, 60, 60, 255};
+  static uchar headerdesel[4] = {0, 0, 0, 255};
+  static uchar back[4] = {0, 0, 0, 255};
+  static uchar setting = 0;
+  const uchar *cp = error;
 
   /* ensure we're not getting a color after running BKE_blender_userdef_free */
   BLI_assert(BLI_findindex(&U.themes, theme_active) != -1);
@@ -186,7 +186,7 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
             cp = ts->button;
           }
 
-          copy_v4_v4_char(back, cp);
+          copy_v4_v4_uchar(back, cp);
           if (!ED_region_is_overlap(spacetype, theme_regionid)) {
             back[3] = 255;
           }
@@ -247,8 +247,7 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           cp = ts->header;
           break;
         case TH_HEADERDESEL:
-          /* we calculate a dynamic builtin header deselect color,
-           * also for pulldowns... */
+          /* We calculate a dynamic builtin header deselect color, also for pull-downs. */
           cp = ts->header;
           headerdesel[0] = cp[0] > 10 ? cp[0] - 10 : 0;
           headerdesel[1] = cp[1] > 10 ? cp[1] - 10 : 0;
@@ -309,6 +308,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
         case TH_GRID:
           cp = ts->grid;
           break;
+        case TH_TIME_SCRUB_BACKGROUND:
+          cp = ts->time_scrub_background;
+          break;
         case TH_VIEW_OVERLAY:
           cp = ts->view_overlay;
           break;
@@ -365,6 +367,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           break;
         case TH_OUTLINE_WIDTH:
           cp = &ts->outline_width;
+          break;
+        case TH_OBCENTER_DIA:
+          cp = &ts->obcenter_dia;
           break;
         case TH_EDGE:
           cp = ts->edge;
@@ -773,6 +778,12 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
         case TH_PATH_AFTER:
           cp = ts->path_after;
           break;
+        case TH_PATH_KEYFRAME_BEFORE:
+          cp = ts->path_keyframe_before;
+          break;
+        case TH_PATH_KEYFRAME_AFTER:
+          cp = ts->path_keyframe_after;
+          break;
         case TH_CAMERA_PATH:
           cp = ts->camera_path;
           break;
@@ -786,6 +797,26 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
 
         case TH_SELECT_HIGHLIGHT:
           cp = ts->selected_highlight;
+          break;
+
+        case TH_SELECT_ACTIVE:
+          cp = ts->active;
+          break;
+
+        case TH_SELECTED_OBJECT:
+          cp = ts->selected_object;
+          break;
+
+        case TH_ACTIVE_OBJECT:
+          cp = ts->active_object;
+          break;
+
+        case TH_EDITED_OBJECT:
+          cp = ts->edited_object;
+          break;
+
+        case TH_ROW_ALTERNATE:
+          cp = ts->row_alternate;
           break;
 
         case TH_SKIN_ROOT:
@@ -809,6 +840,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           cp = ts->nla_tweakdupli;
           break;
 
+        case TH_NLA_TRACK:
+          cp = ts->nla_track;
+          break;
         case TH_NLA_TRANSITION:
           cp = ts->nla_transition;
           break;
@@ -861,6 +895,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           cp = btheme->tui.gizmo_b;
           break;
 
+        case TH_ICON_SCENE:
+          cp = btheme->tui.icon_scene;
+          break;
         case TH_ICON_COLLECTION:
           cp = btheme->tui.icon_collection;
           break;
@@ -875,6 +912,19 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           break;
         case TH_ICON_SHADING:
           cp = btheme->tui.icon_shading;
+          break;
+        case TH_ICON_FOLDER:
+          cp = btheme->tui.icon_folder;
+          break;
+        case TH_ICON_FUND: {
+          /* Development fund icon color is not part of theme. */
+          static const uchar red[4] = {204, 48, 72, 255};
+          cp = red;
+          break;
+        }
+
+        case TH_SCROLL_TEXT:
+          cp = btheme->tui.wcol_scroll.text;
           break;
 
         case TH_INFO_SELECTED:
@@ -1210,7 +1260,7 @@ void UI_GetThemeColorShadeAlpha4fv(int colorid, int coloffset, int alphaoffset, 
   b = coloffset + (int)cp[2];
   CLAMP(b, 0, 255);
   a = alphaoffset + (int)cp[3];
-  CLAMP(b, 0, 255);
+  CLAMP(a, 0, 255);
 
   col[0] = ((float)r) / 255.0f;
   col[1] = ((float)g) / 255.0f;
@@ -1343,25 +1393,28 @@ void UI_GetThemeColorType4ubv(int colorid, int spacetype, uchar col[4])
   col[3] = cp[3];
 }
 
-bool UI_GetIconThemeColor4fv(int colorid, float col[4])
+bool UI_GetIconThemeColor4ubv(int colorid, uchar col[4])
 {
   if (colorid == 0) {
     return false;
   }
-
-  /* Only colored icons in outliner and popups, overall UI is intended
-   * to stay monochrome and out of the way except a few places where it
-   * is important to communicate different data types. */
-  if (!((theme_spacetype == SPACE_OUTLINER) || (theme_regionid == RGN_TYPE_TEMPORARY))) {
+  else if (colorid == TH_ICON_FUND) {
+    /* Always color development fund icon. */
+  }
+  else if (!((theme_spacetype == SPACE_OUTLINER && theme_regionid == RGN_TYPE_WINDOW) ||
+             (theme_spacetype == SPACE_PROPERTIES && theme_regionid == RGN_TYPE_NAV_BAR) ||
+             (theme_spacetype == SPACE_FILE && theme_regionid == RGN_TYPE_WINDOW))) {
+    /* Only colored icons in specific places, overall UI is intended
+     * to stay monochrome and out of the way except a few places where it
+     * is important to communicate different data types. */
     return false;
   }
 
-  const uchar *cp;
-  cp = UI_ThemeGetColorPtr(theme_active, theme_spacetype, colorid);
-  col[0] = ((float)cp[0]) / 255.0f;
-  col[1] = ((float)cp[1]) / 255.0f;
-  col[2] = ((float)cp[2]) / 255.0f;
-  col[3] = ((float)cp[3]) / 255.0f;
+  const uchar *cp = UI_ThemeGetColorPtr(theme_active, theme_spacetype, colorid);
+  col[0] = cp[0];
+  col[1] = cp[1];
+  col[2] = cp[2];
+  col[3] = cp[3];
 
   return true;
 }

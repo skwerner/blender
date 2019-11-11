@@ -36,13 +36,14 @@
 
 #define WORKBENCH_ENGINE "BLENDER_WORKBENCH"
 #define M_GOLDEN_RATION_CONJUGATE 0.618033988749895
-#define MAX_COMPOSITE_SHADERS (1 << 6)
+#define MAX_COMPOSITE_SHADERS (1 << 7)
 #define MAX_PREPASS_SHADERS (1 << 7)
-#define MAX_ACCUM_SHADERS (1 << 6)
+#define MAX_ACCUM_SHADERS (1 << 7)
 #define MAX_CAVITY_SHADERS (1 << 3)
 
 #define TEXTURE_DRAWING_ENABLED(wpd) (wpd->shading.color_type == V3D_SHADING_TEXTURE_COLOR)
 #define VERTEX_COLORS_ENABLED(wpd) (wpd->shading.color_type == V3D_SHADING_VERTEX_COLOR)
+#define MATERIAL_COLORS_ENABLED(wpd) (wpd->shading.color_type == V3D_SHADING_MATERIAL_COLOR)
 #define FLAT_ENABLED(wpd) (wpd->shading.light == V3D_LIGHTING_FLAT)
 #define STUDIOLIGHT_ENABLED(wpd) (wpd->shading.light == V3D_LIGHTING_STUDIO)
 #define MATCAP_ENABLED(wpd) (wpd->shading.light == V3D_LIGHTING_MATCAP)
@@ -74,26 +75,11 @@
         V3D_SHADING_VERTEX_COLOR))
 
 #define IS_NAVIGATING(wpd) \
-  ((DRW_context_state_get()->rv3d) && (DRW_context_state_get()->rv3d->rflag & RV3D_NAVIGATING))
-#define FXAA_ENABLED(wpd) \
-  ((!DRW_state_is_opengl_render()) && \
-   (IN_RANGE(wpd->preferences->gpu_viewport_quality, \
-             GPU_VIEWPORT_QUALITY_FXAA, \
-             GPU_VIEWPORT_QUALITY_TAA8) || \
-    ((IS_NAVIGATING(wpd) || wpd->is_playback) && \
-     (wpd->preferences->gpu_viewport_quality >= GPU_VIEWPORT_QUALITY_TAA8))))
-#define TAA_ENABLED(wpd) \
-  ((DRW_state_is_image_render() && DRW_context_state_get()->scene->r.mode & R_OSA) || \
-   (!DRW_state_is_image_render() && \
-    wpd->preferences->gpu_viewport_quality >= GPU_VIEWPORT_QUALITY_TAA8 && !IS_NAVIGATING(wpd) && \
-    !wpd->is_playback))
-#define SPECULAR_HIGHLIGHT_ENABLED(wpd) \
-  (STUDIOLIGHT_ENABLED(wpd) && (wpd->shading.flag & V3D_SHADING_SPECULAR_HIGHLIGHT) && \
-   (!STUDIOLIGHT_TYPE_MATCAP_ENABLED(wpd)))
+  ((DRW_context_state_get()->rv3d) && \
+   (DRW_context_state_get()->rv3d->rflag & (RV3D_NAVIGATING | RV3D_PAINTING)))
+
 #define OBJECT_OUTLINE_ENABLED(wpd) (wpd->shading.flag & V3D_SHADING_OBJECT_OUTLINE)
 #define OBJECT_ID_PASS_ENABLED(wpd) (OBJECT_OUTLINE_ENABLED(wpd) || CURVATURE_ENABLED(wpd))
-#define MATDATA_PASS_ENABLED(wpd) \
-  (wpd->shading.color_type != V3D_SHADING_SINGLE_COLOR || MATCAP_ENABLED(wpd))
 #define NORMAL_VIEWPORT_COMP_PASS_ENABLED(wpd) \
   (MATCAP_ENABLED(wpd) || STUDIOLIGHT_ENABLED(wpd) || SHADOW_ENABLED(wpd))
 #define NORMAL_VIEWPORT_PASS_ENABLED(wpd) \
@@ -208,7 +194,8 @@ typedef struct WORKBENCH_UBO_World {
   float background_alpha;
   float curvature_ridge;
   float curvature_valley;
-  int pad[3];
+  float background_dither_factor;
+  int pad[2];
 } WORKBENCH_UBO_World;
 BLI_STATIC_ASSERT_ALIGN(WORKBENCH_UBO_World, 16)
 
@@ -219,12 +206,14 @@ typedef struct WORKBENCH_PrivateData {
   struct GPUShader *prepass_hair_sh;
   struct GPUShader *prepass_uniform_sh;
   struct GPUShader *prepass_uniform_hair_sh;
+  struct GPUShader *prepass_textured_sh;
   struct GPUShader *composite_sh;
   struct GPUShader *background_sh;
   struct GPUShader *transparent_accum_sh;
   struct GPUShader *transparent_accum_hair_sh;
   struct GPUShader *transparent_accum_uniform_sh;
   struct GPUShader *transparent_accum_uniform_hair_sh;
+  struct GPUShader *transparent_accum_textured_sh;
   View3DShading shading;
   StudioLight *studio_light;
   const UserDef *preferences;
@@ -284,24 +273,18 @@ typedef struct WORKBENCH_PrivateData {
 } WORKBENCH_PrivateData; /* Transient data */
 
 typedef struct WORKBENCH_EffectInfo {
-  float override_persmat[4][4];
-  float override_persinv[4][4];
-  float override_winmat[4][4];
-  float override_wininv[4][4];
+  /** View */
+  struct DRWView *view;
+  /** Last projection matrix to see if view is still valid. */
   float last_mat[4][4];
-  float curr_mat[4][4];
   int jitter_index;
   float taa_mix_factor;
   bool view_updated;
 } WORKBENCH_EffectInfo;
 
 typedef struct WORKBENCH_MaterialData {
-  float base_color[3];
-  float diffuse_color[3];
-  float specular_color[3];
-  float metallic;
-  float roughness;
-  int object_id;
+  float base_color[3], metallic;
+  float roughness, alpha;
   int color_type;
   int interp;
   Image *ima;
@@ -322,9 +305,114 @@ typedef struct WORKBENCH_ObjectData {
   float shadow_min[3], shadow_max[3];
   BoundBox shadow_bbox;
   bool shadow_bbox_dirty;
-
-  int object_id;
 } WORKBENCH_ObjectData;
+
+/* inline helper functions */
+BLI_INLINE bool workbench_is_specular_highlight_enabled(WORKBENCH_PrivateData *wpd)
+{
+  if ((wpd->shading.flag & V3D_SHADING_SPECULAR_HIGHLIGHT)) {
+    if (STUDIOLIGHT_ENABLED(wpd) || MATCAP_ENABLED(wpd)) {
+      return (wpd->studio_light->flag & STUDIOLIGHT_SPECULAR_HIGHLIGHT_PASS) != 0;
+    }
+  }
+  return false;
+}
+
+BLI_INLINE bool workbench_is_taa_enabled(WORKBENCH_PrivateData *wpd)
+{
+  if (DRW_state_is_image_render()) {
+    const DRWContextState *draw_ctx = DRW_context_state_get();
+    if (draw_ctx->v3d) {
+      return draw_ctx->scene->display.viewport_aa > SCE_DISPLAY_AA_FXAA;
+    }
+    else {
+      return draw_ctx->scene->display.render_aa > SCE_DISPLAY_AA_FXAA;
+    }
+  }
+  else {
+    return !(IS_NAVIGATING(wpd) || wpd->is_playback) &&
+           wpd->preferences->viewport_aa > SCE_DISPLAY_AA_FXAA;
+  }
+}
+
+BLI_INLINE bool workbench_is_fxaa_enabled(WORKBENCH_PrivateData *wpd)
+{
+  if (DRW_state_is_image_render()) {
+    const DRWContextState *draw_ctx = DRW_context_state_get();
+    if (draw_ctx->v3d) {
+      return draw_ctx->scene->display.viewport_aa == SCE_DISPLAY_AA_FXAA;
+    }
+    else {
+      return draw_ctx->scene->display.render_aa == SCE_DISPLAY_AA_FXAA;
+    }
+  }
+  else {
+    if (wpd->preferences->viewport_aa == SCE_DISPLAY_AA_FXAA) {
+      return true;
+    }
+
+    /* when navigating or animation playback use FXAA if scene uses TAA. */
+    return (IS_NAVIGATING(wpd) || wpd->is_playback) &&
+           wpd->preferences->viewport_aa > SCE_DISPLAY_AA_FXAA;
+  }
+}
+
+/** Is texture paint mode enabled (globally) */
+BLI_INLINE bool workbench_is_in_texture_paint_mode(void)
+{
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  return draw_ctx->object_mode == OB_MODE_TEXTURE_PAINT;
+}
+
+/** Is texture paint mode active for the given object */
+BLI_INLINE bool workbench_is_object_in_texture_paint_mode(Object *ob)
+{
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  if (ob->type == OB_MESH && (draw_ctx->obact == ob)) {
+    const enum eContextObjectMode mode = CTX_data_mode_enum_ex(
+        draw_ctx->object_edit, draw_ctx->obact, draw_ctx->object_mode);
+    return (mode == CTX_MODE_PAINT_TEXTURE);
+  }
+
+  return false;
+}
+
+BLI_INLINE bool workbench_is_matdata_pass_enabled(WORKBENCH_PrivateData *wpd)
+{
+  return (wpd->shading.color_type != V3D_SHADING_SINGLE_COLOR || MATCAP_ENABLED(wpd)) ||
+         workbench_is_in_texture_paint_mode();
+}
+
+/**
+ * Get the default texture format to be used by the color and history buffers.
+ *
+ * Use GPU_RGBA16F for final renderings and for drawing textures. This
+ * allows displaying HDRI textures. Vertex Colors uses GPU_RGBA16 to resolve
+ * color banding issues (T66100). All other modes use GPU_RGBA8 to reduce
+ * bandwidth and gpu memory.
+ */
+BLI_INLINE eGPUTextureFormat workbench_color_texture_format(const WORKBENCH_PrivateData *wpd)
+{
+  eGPUTextureFormat result;
+  if (DRW_state_is_image_render() || workbench_is_in_texture_paint_mode() ||
+      TEXTURE_DRAWING_ENABLED(wpd)) {
+    result = GPU_RGBA16F;
+  }
+  else if (VERTEX_COLORS_ENABLED(wpd)) {
+    result = GPU_RGBA16;
+  }
+  else {
+    result = GPU_RGBA8;
+  }
+  return result;
+}
+
+BLI_INLINE bool workbench_background_dither_factor(const WORKBENCH_PrivateData *wpd)
+{
+  /* Only apply dithering when rendering on a RGBA8 texture.
+   * The dithering will remove banding when using a gradient as background */
+  return workbench_color_texture_format(wpd) == GPU_RGBA8;
+}
 
 /* workbench_deferred.c */
 void workbench_deferred_engine_init(WORKBENCH_Data *vedata);
@@ -355,8 +443,7 @@ WORKBENCH_MaterialData *workbench_forward_get_or_create_material_data(WORKBENCH_
                                                                       Image *ima,
                                                                       ImageUser *iuser,
                                                                       int color_type,
-                                                                      int interp,
-                                                                      bool is_sculpt_mode);
+                                                                      int interp);
 
 /* workbench_effect_aa.c */
 void workbench_aa_create_pass(WORKBENCH_Data *vedata, GPUTexture **tx);
@@ -375,6 +462,7 @@ void workbench_taa_draw_scene_start(WORKBENCH_Data *vedata);
 void workbench_taa_draw_scene_end(WORKBENCH_Data *vedata);
 void workbench_taa_view_updated(WORKBENCH_Data *vedata);
 int workbench_taa_calculate_num_iterations(WORKBENCH_Data *vedata);
+int workbench_num_viewport_rendering_iterations(WORKBENCH_Data *vedata);
 
 /* workbench_effect_dof.c */
 void workbench_dof_engine_init(WORKBENCH_Data *vedata, Object *camera);
@@ -388,29 +476,32 @@ void workbench_dof_draw_pass(WORKBENCH_Data *vedata);
 int workbench_material_determine_color_type(WORKBENCH_PrivateData *wpd,
                                             Image *ima,
                                             Object *ob,
-                                            bool is_sculpt_mode);
+                                            bool use_sculpt_pbvh);
 void workbench_material_get_image_and_mat(
     Object *ob, int mat_nr, Image **r_image, ImageUser **r_iuser, int *r_interp, Material **r_mat);
 char *workbench_material_build_defines(WORKBENCH_PrivateData *wpd,
                                        bool is_uniform_color,
-                                       bool is_hair);
+                                       bool is_hair,
+                                       bool is_texture_painting);
 void workbench_material_update_data(WORKBENCH_PrivateData *wpd,
                                     Object *ob,
                                     Material *mat,
-                                    WORKBENCH_MaterialData *data);
+                                    WORKBENCH_MaterialData *data,
+                                    int color_type);
 uint workbench_material_get_hash(WORKBENCH_MaterialData *material_template, bool is_ghost);
 int workbench_material_get_composite_shader_index(WORKBENCH_PrivateData *wpd);
 int workbench_material_get_prepass_shader_index(WORKBENCH_PrivateData *wpd,
                                                 bool is_uniform_color,
-                                                bool is_hair);
+                                                bool is_hair,
+                                                bool is_texture_painting);
 int workbench_material_get_accum_shader_index(WORKBENCH_PrivateData *wpd,
                                               bool is_uniform_color,
-                                              bool is_hair);
+                                              bool is_hair,
+                                              bool is_texture_painting);
 void workbench_material_shgroup_uniform(WORKBENCH_PrivateData *wpd,
                                         DRWShadingGroup *grp,
                                         WORKBENCH_MaterialData *material,
                                         Object *ob,
-                                        const bool use_metallic,
                                         const bool deferred,
                                         const int interp);
 void workbench_material_copy(WORKBENCH_MaterialData *dest_material,

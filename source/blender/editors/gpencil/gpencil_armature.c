@@ -15,11 +15,12 @@
  *
  * The Original Code is Copyright (C) 2018, Blender Foundation
  * This is a new part of Blender
- * Operators for dealing with armatures and GP datablocks
  */
 
 /** \file
  * \ingroup edgpencil
+ *
+ * Operators for dealing with armatures and GP data-blocks.
  */
 
 #include <stdio.h>
@@ -357,12 +358,8 @@ static void gpencil_add_verts_to_dgroups(
 
   /* loop all strokes */
   for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-    bGPDframe *init_gpf = gpl->actframe;
+    bGPDframe *init_gpf = (is_multiedit) ? gpl->frames.first : gpl->actframe;
     bGPDspoint *pt = NULL;
-
-    if (is_multiedit) {
-      init_gpf = gpl->frames.first;
-    }
 
     for (bGPDframe *gpf = init_gpf; gpf; gpf = gpf->next) {
       if ((gpf == gpl->actframe) || ((gpf->flag & GP_FRAME_SELECT) && (is_multiedit))) {
@@ -480,6 +477,8 @@ static void gpencil_object_vgroup_calc_from_armature(const bContext *C,
      */
     gpencil_add_verts_to_dgroups(C, ob, ob_arm, ratio, decay);
   }
+
+  DEG_relations_tag_update(CTX_data_main(C));
 }
 
 bool ED_gpencil_add_armature_weights(
@@ -555,7 +554,7 @@ static bool gpencil_generate_weights_poll(bContext *C)
 
 static int gpencil_generate_weights_exec(bContext *C, wmOperator *op)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *ob = CTX_data_active_object(C);
   Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);

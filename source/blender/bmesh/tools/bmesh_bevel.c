@@ -131,22 +131,36 @@ typedef struct ProfileSpacing {
 
 /* An element in a cyclic boundary of a Vertex Mesh (VMesh) */
 typedef struct BoundVert {
-  struct BoundVert *next, *prev; /* in CCW order */
+  /** In CCW order. */
+  struct BoundVert *next, *prev;
   NewVert nv;
-  EdgeHalf *efirst; /* first of edges attached here: in CCW order */
+  /** First of edges attached here: in CCW order. */
+  EdgeHalf *efirst;
   EdgeHalf *elast;
-  EdgeHalf *eon;  /* the "edge between" that this is on, in offset_on_edge_between case */
-  EdgeHalf *ebev; /* beveled edge whose left side is attached here, if any */
-  int index;      /* used for vmesh indexing */
-  float sinratio; /* when eon set, ratio of sines of angles to eon edge */
-  struct BoundVert *adjchain; /* adjustment chain or cycle link pointer */
-  Profile profile;            /* edge profile between this and next BoundVert */
-  bool any_seam;              /* are any of the edges attached here seams? */
-  bool visited;               /* used during delta adjust pass */
-  bool is_arc_start;          /* this boundvert begins an arc profile */
-  bool is_patch_start;        /* this boundvert begins a patch profile */
-  int seam_len; /* length of seam starting from current boundvert to next boundvert with ccw ordering */
-  int sharp_len; /* Same as seam_len but defines length of sharp edges */
+  /** The "edge between" that this is on, in offset_on_edge_between case. */
+  EdgeHalf *eon;
+  /** Beveled edge whose left side is attached here, if any. */
+  EdgeHalf *ebev;
+  /** Used for vmesh indexing. */
+  int index;
+  /** When eon set, ratio of sines of angles to eon edge. */
+  float sinratio;
+  /** Adjustment chain or cycle link pointer. */
+  struct BoundVert *adjchain;
+  /** Edge profile between this and next BoundVert. */
+  Profile profile;
+  /** Are any of the edges attached here seams? */
+  bool any_seam;
+  /** Used during delta adjust pass */
+  bool visited;
+  /** This boundvert begins an arc profile */
+  bool is_arc_start;
+  /** This boundvert begins a patch profile */
+  bool is_patch_start;
+  /** Length of seam starting from current boundvert to next boundvert with ccw ordering */
+  int seam_len;
+  /** Same as seam_len but defines length of sharp edges */
+  int sharp_len;
   //  int _pad;
 } BoundVert;
 
@@ -167,78 +181,122 @@ typedef struct VMesh {
 
 /* Data for a vertex involved in a bevel */
 typedef struct BevVert {
-  BMVert *v;     /* original mesh vertex */
-  int edgecount; /* total number of edges around the vertex (excluding wire edges if edge beveling) */
-  int selcount;        /* number of selected edges around the vertex */
-  int wirecount;       /* count of wire edges */
-  float offset;        /* offset for this vertex, if vertex_only bevel */
-  bool any_seam;       /* any seams on attached edges? */
-  bool visited;        /* used in graph traversal */
-  EdgeHalf *edges;     /* array of size edgecount; CCW order from vertex normal side */
-  BMEdge **wire_edges; /* array of size wirecount of wire edges */
-  VMesh *vmesh;        /* mesh structure for replacing vertex */
+  /** Original mesh vertex */
+  BMVert *v;
+  /** Total number of edges around the vertex (excluding wire edges if edge beveling) */
+  int edgecount;
+  /** Number of selected edges around the vertex */
+  int selcount;
+  /** Count of wire edges */
+  int wirecount;
+  /** Offset for this vertex, if vertex_only bevel */
+  float offset;
+  /** Any seams on attached edges? */
+  bool any_seam;
+  /** Used in graph traversal */
+  bool visited;
+  /** Array of size edgecount; CCW order from vertex normal side */
+  EdgeHalf *edges;
+  /** Array of size wirecount of wire edges */
+  BMEdge **wire_edges;
+  /** Mesh structure for replacing vertex */
+  VMesh *vmesh;
 } BevVert;
 
 /* face classification: note depend on F_RECON > F_EDGE > F_VERT */
 typedef enum {
-  F_NONE,  /* used when there is no face at all */
-  F_ORIG,  /* original face, not touched */
-  F_VERT,  /* face for construction aroun a vert */
-  F_EDGE,  /* face for a beveled edge */
-  F_RECON, /* reconstructed original face with some new verts */
+  /** Used when there is no face at all */
+  F_NONE,
+  /** Original face, not touched */
+  F_ORIG,
+  /** Face for construction aroun a vert */
+  F_VERT,
+  /** Face for a beveled edge */
+  F_EDGE,
+  /** Reconstructed original face with some new verts */
+  F_RECON,
 } FKind;
 
-// static const char* fkind_names[] = {"F_NONE", "F_ORIG", "F_VERT", "F_EDGE", "F_RECON"}; /* DEBUG */
+#if 0
+static const char* fkind_names[] = {"F_NONE", "F_ORIG", "F_VERT", "F_EDGE", "F_RECON"}; /* DEBUG */
+#endif
 
 /* Bevel parameters and state */
 typedef struct BevelParams {
-  GHash *vert_hash; /* records BevVerts made: key BMVert*, value BevVert* */
-  GHash *face_hash; /* records new faces: key BMFace*, value one of {VERT/EDGE/RECON}_POLY */
-  MemArena *
-      mem_arena; /* use for all allocs while bevel runs, if we need to free we can switch to mempool */
-  ProfileSpacing pro_spacing; /* parameter values for evenly spaced profiles */
+  /** Records BevVerts made: key BMVert*, value BevVert* */
+  GHash *vert_hash;
+  /** Records new faces: key BMFace*, value one of {VERT/EDGE/RECON}_POLY */
+  GHash *face_hash;
+  /** Use for all allocs while bevel runs, if we need to free we can switch to mempool. */
+  MemArena *mem_arena;
+  /** Parameter values for evenly spaced profiles. */
+  ProfileSpacing pro_spacing;
 
-  float offset;        /* blender units to offset each side of a beveled edge */
-  int offset_type;     /* how offset is measured; enum defined in bmesh_operators.h */
-  int seg;             /* number of segments in beveled edge profile */
-  float profile;       /* user profile setting */
-  float pro_super_r;   /* superellipse parameter for edge profile */
-  bool vertex_only;    /* bevel vertices only */
-  bool use_weights;    /* bevel amount affected by weights on edges or verts */
-  bool loop_slide;     /* should bevel prefer to slide along edges rather than keep widths spec? */
-  bool limit_offset;   /* should offsets be limited by collisions? */
-  bool offset_adjust;  /* should offsets be adjusted to try to get even widths? */
-  bool mark_seam;      /* should we propagate seam edge markings? */
-  bool mark_sharp;     /* should we propagate sharp edge markings? */
-  bool harden_normals; /* should we harden normals? */
-  const struct MDeformVert *dvert; /* vertex group array, maybe set if vertex_only */
-  int vertex_group;                /* vertex group index, maybe set if vertex_only */
-  int mat_nr; /* if >= 0, material number for bevel; else material comes from adjacent faces */
-  int face_strength_mode; /* setting face strength if > 0 */
-  int miter_outer;        /* what kind of miter pattern to use on reflex angles */
-  int miter_inner;        /* what kind of miter pattern to use on non-reflex angles */
-  float spread;           /* amount to spread when doing inside miter */
-  float smoothresh;       /* mesh's smoothresh, used if hardening */
+  /** Blender units to offset each side of a beveled edge. */
+  float offset;
+  /** How offset is measured; enum defined in bmesh_operators.h */
+  int offset_type;
+  /** Number of segments in beveled edge profile. */
+  int seg;
+  /** User profile setting. */
+  float profile;
+  /** Superellipse parameter for edge profile. */
+  float pro_super_r;
+  /** Bevel vertices only. */
+  bool vertex_only;
+  /** Bevel amount affected by weights on edges or verts. */
+  bool use_weights;
+  /** Should bevel prefer to slide along edges rather than keep widths spec? */
+  bool loop_slide;
+  /** Should offsets be limited by collisions? */
+  bool limit_offset;
+  /** Should offsets be adjusted to try to get even widths? */
+  bool offset_adjust;
+  /** Should we propagate seam edge markings? */
+  bool mark_seam;
+  /** Should we propagate sharp edge markings? */
+  bool mark_sharp;
+  /** Should we harden normals? */
+  bool harden_normals;
+  /** Vertex group array, maybe set if vertex_only. */
+  const struct MDeformVert *dvert;
+  /** Vertex group index, maybe set if vertex_only. */
+  int vertex_group;
+  /** If >= 0, material number for bevel; else material comes from adjacent faces. */
+  int mat_nr;
+  /** Setting face strength if > 0. */
+  int face_strength_mode;
+  /** What kind of miter pattern to use on reflex angles. */
+  int miter_outer;
+  /** What kind of miter pattern to use on non-reflex angles. */
+  int miter_inner;
+  /** Amount to spread when doing inside miter. */
+  float spread;
+  /** Mesh's smoothresh, used if hardening. */
+  float smoothresh;
 } BevelParams;
 
 // #pragma GCC diagnostic ignored "-Wpadded"
 
 // #include "bevdebug.c"
 
-/* some flags to re-enable old behavior for a while, in case fixes broke things not caught by regression tests */
+/* Some flags to re-enable old behavior for a while,
+ * in case fixes broke things not caught by regression tests. */
 static int bev_debug_flags = 0;
 #define DEBUG_OLD_PLANE_SPECIAL (bev_debug_flags & 1)
 #define DEBUG_OLD_PROJ_TO_PERP_PLANE (bev_debug_flags & 2)
 #define DEBUG_OLD_FLAT_MID (bev_debug_flags & 4)
 
-/* use the unused _BM_ELEM_TAG_ALT flag to flag the 'long' loops (parallel to beveled edge) of edge-polygons */
+/* use the unused _BM_ELEM_TAG_ALT flag to flag the 'long' loops (parallel to beveled edge)
+ * of edge-polygons. */
 #define BM_ELEM_LONG_TAG (1 << 6)
 
 /* these flag values will get set on geom we want to return in 'out' slots for edges and verts */
 #define EDGE_OUT 4
 #define VERT_OUT 8
 
-/* If we're called from the modifier, tool flags aren't available, but don't need output geometry */
+/* If we're called from the modifier, tool flags aren't available,
+ * but don't need output geometry. */
 static void flag_out_edge(BMesh *bm, BMEdge *bme)
 {
   if (bm->use_toolflags) {
@@ -622,7 +680,8 @@ static bool contig_ldata_across_loops(BMesh *bm, BMLoop *l1, BMLoop *l2, int lay
       type, (char *)l1->head.data + offset, (char *)l2->head.data + offset);
 }
 
-/* Are all loop layers with have math (e.g., UVs) contiguous from face f1 to face f2 across edge e? */
+/* Are all loop layers with have math (e.g., UVs)
+ * contiguous from face f1 to face f2 across edge e? */
 static bool contig_ldata_across_edge(BMesh *bm, BMEdge *e, BMFace *f1, BMFace *f2)
 {
   BMLoop *lef1, *lef2;
@@ -867,8 +926,8 @@ static bool point_between_edges(float co[3], BMVert *v, BMFace *f, EdgeHalf *e1,
  * but if the offsets are not equal (allowing for this, as bevel modifier has edge weights that may
  * lead to different offsets) then meeting point can be found be intersecting offset lines.
  * If making the meeting point significantly changes the left or right offset from the user spec,
- * record the change in offset_l (or offset_r); later we can tell that a change has happened because
- * the offset will differ from its original value in offset_l_spec (or offset_r_spec).
+ * record the change in offset_l (or offset_r); later we can tell that a change has happened
+ * because the offset will differ from its original value in offset_l_spec (or offset_r_spec).
  */
 static void offset_meet(
     EdgeHalf *e1, EdgeHalf *e2, BMVert *v, BMFace *f, bool edges_between, float meetco[3])
@@ -1024,7 +1083,8 @@ static void offset_meet(
   }
 }
 
-/* chosen so that 1/sin(BEVEL_GOOD_ANGLE) is about 4, giving that expansion factor to bevel width */
+/* Chosen so that 1/sin(BEVEL_GOOD_ANGLE) is about 4,
+ * giving that expansion factor to bevel width. */
 #define BEVEL_GOOD_ANGLE 0.25f
 
 /* Calculate the meeting point between e1 and e2 (one of which should have zero offsets),
@@ -1196,6 +1256,9 @@ static void set_profile_params(BevelParams *bp, BevVert *bv, BoundVert *bndv)
     pro->super_r = bp->pro_super_r;
     /* projection direction is direction of the edge */
     sub_v3_v3v3(pro->proj_dir, e->e->v1->co, e->e->v2->co);
+    if (e->is_rev) {
+      negate_v3(pro->proj_dir);
+    }
     normalize_v3(pro->proj_dir);
     project_to_edge(e->e, co1, co2, pro->midco);
     if (DEBUG_OLD_PROJ_TO_PERP_PLANE) {
@@ -1294,7 +1357,7 @@ static void set_profile_params(BevelParams *bp, BevVert *bv, BoundVert *bndv)
     copy_v3_v3(pro->plane_co, co1);
   }
   else if (bndv->is_arc_start) {
-    /* assume pro->midco was alredy set */
+    /* assume pro->midco was already set */
     copy_v3_v3(pro->coa, co1);
     copy_v3_v3(pro->cob, co2);
     pro->super_r = PRO_CIRCLE_R;
@@ -1315,22 +1378,31 @@ static void set_profile_params(BevelParams *bp, BevVert *bv, BoundVert *bndv)
   }
 }
 
-/* Move the profile plane for bndv to the plane containing e1 and e2, which share a vert */
-static void move_profile_plane(BoundVert *bndv, EdgeHalf *e1, EdgeHalf *e2)
+/* Maybe move the profile plane for bndv->ebev to the plane its profile's coa, cob and the
+ * original beveled vert, bmv. This will usually be the plane containing its adjacent
+ * non-beveled edges, but sometimes coa and cob are not on those edges.
+ */
+static void move_profile_plane(BoundVert *bndv, BMVert *bmv)
 {
-  float d1[3], d2[3], no[3], no2[3], dot;
+  float d1[3], d2[3], no[3], no2[3], no3[3], dot2, dot3;
+  Profile *pro = &bndv->profile;
 
-  /* only do this if projecting, and e1, e2, and proj_dir are not coplanar */
-  if (is_zero_v3(bndv->profile.proj_dir)) {
+  /* only do this if projecting, and coa, cob, and proj_dir are not coplanar */
+  if (is_zero_v3(pro->proj_dir)) {
     return;
   }
-  sub_v3_v3v3(d1, e1->e->v1->co, e1->e->v2->co);
-  sub_v3_v3v3(d2, e2->e->v1->co, e2->e->v2->co);
+  sub_v3_v3v3(d1, bmv->co, pro->coa);
+  normalize_v3(d1);
+  sub_v3_v3v3(d2, bmv->co, pro->cob);
+  normalize_v3(d2);
   cross_v3_v3v3(no, d1, d2);
-  cross_v3_v3v3(no2, d1, bndv->profile.proj_dir);
-  if (normalize_v3(no) > BEVEL_EPSILON_BIG && normalize_v3(no2) > BEVEL_EPSILON_BIG) {
-    dot = fabsf(dot_v3v3(no, no2));
-    if (fabsf(dot - 1.0f) > BEVEL_EPSILON_BIG) {
+  cross_v3_v3v3(no2, d1, pro->proj_dir);
+  cross_v3_v3v3(no3, d2, pro->proj_dir);
+  if (normalize_v3(no) > BEVEL_EPSILON_BIG && normalize_v3(no2) > BEVEL_EPSILON_BIG &&
+      normalize_v3(no3) > BEVEL_EPSILON_BIG) {
+    dot2 = dot_v3v3(no, no2);
+    dot3 = dot_v3v3(no, no3);
+    if (fabsf(dot2) < (1 - BEVEL_EPSILON_BIG) && fabsf(dot3) < (1 - BEVEL_EPSILON_BIG)) {
       copy_v3_v3(bndv->profile.plane_no, no);
     }
   }
@@ -1761,6 +1833,10 @@ static void bevel_extend_edge_data(BevVert *bv)
 {
   VMesh *vm = bv->vmesh;
 
+  if (vm->mesh_kind == M_TRI_FAN) {
+    return;
+  }
+
   BoundVert *bcur = bv->vmesh->boundstart, *start = bcur;
 
   do {
@@ -1780,7 +1856,8 @@ static void bevel_extend_edge_data(BevVert *bv)
         for (int k = 1; k < vm->seg; k++) {
           v2 = mesh_vert(vm, i % vm->count, 0, k)->v;
 
-          /* Here v1 & v2 are current and next BMverts, we find common edge and set its edge data */
+          /* Here v1 & v2 are current and next BMverts,
+           * we find common edge and set its edge data. */
           e = v1->e;
           while (e->v1 != v2 && e->v2 != v2) {
             if (e->v1 == v1) {
@@ -1794,7 +1871,7 @@ static void bevel_extend_edge_data(BevVert *bv)
           v1 = v2;
         }
         BMVert *v3 = mesh_vert(vm, (i + 1) % vm->count, 0, 0)->v;
-        e = v1->e;  //Do same as above for first and last vert
+        e = v1->e;  // Do same as above for first and last vert
         while (e->v1 != v3 && e->v2 != v3) {
           if (e->v1 == v1) {
             e = e->v1_disk_link.next;
@@ -1918,14 +1995,16 @@ static void bevel_harden_normals(BMesh *bm, BevelParams *bp)
 
   /* If there is not already a custom split normal layer then making one (with BM_lnorspace_update)
    * will not respect the autosmooth angle between smooth faces. To get that to happen, we have
-   * to mark the sharpen the edges that are only sharp because of the angle test -- otherwise would be smooth.
+   * to mark the sharpen the edges that are only sharp because
+   * of the angle test -- otherwise would be smooth.
    */
   if (cd_clnors_offset == -1) {
     BM_edges_sharp_from_angle_set(bm, bp->smoothresh);
     bevel_edges_sharp_boundary(bm, bp);
   }
 
-  /* ensure that bm->lnor_spacearr has properly stored loop normals; side effect: ensures loop indices */
+  /* Ensure that bm->lnor_spacearr has properly stored loop normals;
+   * side effect: ensures loop indices. */
   BM_lnorspace_update(bm);
 
   if (cd_clnors_offset == -1) {
@@ -2103,10 +2182,11 @@ static int count_bound_vert_seams(BevVert *bv)
   }
 
   ans = 0;
-  for (i = 0; i < bv->edgecount; i++)
+  for (i = 0; i < bv->edgecount; i++) {
     if (bv->edges[i].is_seam) {
       ans++;
     }
+  }
   return ans;
 }
 
@@ -2215,7 +2295,7 @@ static void build_boundary_terminal_edge(BevelParams *bp,
     else {
       adjust_bound_vert(e->rightv, co);
     }
-    /* make artifical extra point along unbeveled edge, and form triangle */
+    /* make artificial extra point along unbeveled edge, and form triangle */
     slide_dist(e->next, bv->v, e->offset_l, co);
     if (construct) {
       v = add_new_bound_vert(mem_arena, vm, co);
@@ -2277,7 +2357,7 @@ static void build_boundary_terminal_edge(BevelParams *bp,
     /* special case: snap profile to plane of adjacent two edges */
     v = vm->boundstart;
     BLI_assert(v->ebev != NULL);
-    move_profile_plane(v, v->efirst, v->next->elast);
+    move_profile_plane(v, bv->v);
     calculate_profile(bp, v);
   }
 
@@ -2975,7 +3055,7 @@ static void adjust_the_cycle_or_chain(BoundVert *vstart, bool iscycle)
  * on loop slide edges, the widths at each end could be different.
  *
  * It turns out that the dependent offsets either form chains or
- * cycles, and we can process each of those separatey.
+ * cycles, and we can process each of those separately.
  */
 static void adjust_offsets(BevelParams *bp, BMesh *bm)
 {
@@ -3042,6 +3122,7 @@ static void adjust_offsets(BevelParams *bp, BMesh *bm)
       }
       if (!iscycle) {
         /* right->left direction, changing vchainstart at each step */
+        v->adjchain = NULL;
         v = vchainstart;
         bvcur = bv;
         do {
@@ -3121,7 +3202,7 @@ static BoundVert *pipe_test(BevVert *bv)
   /* check face planes: all should have normals perpendicular to epipe */
   for (e = &bv->edges[0]; e != &bv->edges[bv->edgecount]; e++) {
     if (e->fnext) {
-      if (dot_v3v3(dir1, e->fnext->no) > BEVEL_EPSILON_BIG) {
+      if (fabsf(dot_v3v3(dir1, e->fnext->no)) > BEVEL_EPSILON_BIG) {
         return NULL;
       }
     }
@@ -3143,7 +3224,8 @@ static VMesh *new_adj_vmesh(MemArena *mem_arena, int count, int seg, BoundVert *
   return vm;
 }
 
-/* VMesh verts for vertex i have data for (i, 0 <= j <= ns2, 0 <= k <= ns), where ns2 = floor(nseg / 2).
+/* VMesh verts for vertex i have data for (i, 0 <= j <= ns2, 0 <= k <= ns),
+ * where ns2 = floor(nseg / 2).
  * But these overlap data from previous and next i: there are some forced equivalences.
  * Let's call these indices the canonical ones: we will just calculate data for these
  *    0 <= j <= ns2, 0 <= k < ns2  (for odd ns2)
@@ -3756,7 +3838,7 @@ static VMesh *make_cube_corner_adj_vmesh(BevelParams *bp)
 /* Is this a good candidate for using tri_corner_adj_vmesh? */
 static int tri_corner_test(BevelParams *bp, BevVert *bv)
 {
-  float ang, totang, angdiff;
+  float ang, absang, totang, angdiff;
   EdgeHalf *e;
   int i;
   int in_plane_e = 0;
@@ -3771,10 +3853,11 @@ static int tri_corner_test(BevelParams *bp, BevVert *bv)
   for (i = 0; i < bv->edgecount; i++) {
     e = &bv->edges[i];
     ang = BM_edge_calc_face_angle_signed_ex(e->e, 0.0f);
-    if (ang <= M_PI_4) {
+    absang = fabsf(ang);
+    if (absang <= M_PI_4) {
       in_plane_e++;
     }
-    else if (ang >= 3.0f * (float)M_PI_4) {
+    else if (absang >= 3.0f * (float)M_PI_4) {
       return -1;
     }
     totang += ang;
@@ -3782,7 +3865,7 @@ static int tri_corner_test(BevelParams *bp, BevVert *bv)
   if (in_plane_e != bv->edgecount - 3) {
     return -1;
   }
-  angdiff = fabsf(totang - 3.0f * (float)M_PI_2);
+  angdiff = fabsf(fabsf(totang) - 3.0f * (float)M_PI_2);
   if ((bp->pro_super_r == PRO_SQUARE_R && angdiff > (float)M_PI / 16.0f) ||
       (angdiff > (float)M_PI_4)) {
     return -1;
@@ -4148,13 +4231,15 @@ static void closer_v3_v3v3v3(float r[3], float a[3], float b[3], float v[3])
 }
 
 /* Special case of VMesh when profile == 1 and there are 3 or more beveled edges.
- * We want the effect of parallel offset lines (n/2 of them) on each side of the center, for even n.
- * Wherever they intersect with each other between two successive beveled edges, those intersections
- * are part of the vmesh rings.
+ * We want the effect of parallel offset lines (n/2 of them)
+ * on each side of the center, for even n.
+ * Wherever they intersect with each other between two successive beveled edges,
+ * those intersections are part of the vmesh rings.
  * We have to move the boundary edges too -- the usual method is to make one profile plane between
- * successive BoundVerts, but for the effect we want here, there will be two planes, one on each side
- * of the original edge.
- * At the moment, this is not called for odd number of segments, though code does something if it is.
+ * successive BoundVerts, but for the effect we want here, there will be two planes,
+ * one on each side of the original edge.
+ * At the moment, this is not called for odd number of segments,
+ * though code does something if it is.
  */
 static VMesh *square_out_adj_vmesh(BevelParams *bp, BevVert *bv)
 {
@@ -4574,8 +4659,9 @@ static void bevel_build_rings(BevelParams *bp, BMesh *bm, BevVert *bv)
 /* If we make a poly out of verts around bv, snapping to rep frep, will uv poly have zero area?
  * The uv poly is made by snapping all outside-of-frep vertices to the closest edge in frep.
  * Assume that this function is called when the only inside-of-frep vertex is vm->boundstart.
- * The poly will have zero area if the distance of that first vertex to some edge e is zero, and all
- * the other vertices snap to e or snap to an edge at a point that is essentially on e too.  */
+ * The poly will have zero area if the distance of that first vertex to some edge e is zero,
+ * and all the other vertices snap to e or snap to an edge
+ * at a point that is essentially on e too. */
 static bool is_bad_uv_poly(BevVert *bv, BMFace *frep)
 {
   BoundVert *v;
@@ -4958,7 +5044,8 @@ static int bevel_edge_order_extend(BMesh *bm, BevVert *bv, int i)
   }
   /* at this point we should be back at invariant on entrance: path up to j */
   if (bestj > j) {
-    /* save_path should have from j + 1 to bestj inclusive edges to add to edges[] before returning */
+    /* save_path should have from j + 1 to bestj inclusive
+     * edges to add to edges[] before returning. */
     for (k = j + 1; k <= bestj; k++) {
       BLI_assert(save_path[k - (j + 1)] != NULL);
       bv->edges[k].e = save_path[k - (j + 1)];
@@ -4978,9 +5065,10 @@ static int bevel_edge_order_extend(BMesh *bm, BevVert *bv, int i)
  * Assume the first edge is already in bv->edges[0].e and it is tagged. */
 #ifdef FASTER_FASTORDER
 /* The alternative older code is O(n^2) where n = # of edges incident to bv->v.
- * This implementation is O(n * m) where m = average number of faces attached to an edge incident to bv->v,
- * which is almost certainly a small constant except in very strange cases. But this code produces different
- * choices of ordering than the legacy system, leading to differences in vertex orders etc. in user models,
+ * This implementation is O(n * m) where m = average number of faces attached to an edge incident
+ * to bv->v, which is almost certainly a small constant except in very strange cases.
+ * But this code produces different choices of ordering than the legacy system,
+ * leading to differences in vertex orders etc. in user models,
  * so for now will continue to use the legacy code. */
 static bool fast_bevel_edge_order(BevVert *bv)
 {
@@ -5153,6 +5241,7 @@ static BevVert *bevel_vert_construct(BMesh *bm, BevelParams *bp, BMVert *v)
   BMIter iter;
   EdgeHalf *e;
   float weight, z;
+  float vert_axis[3] = {0, 0, 0};
   int i, ccw_test_sum;
   int nsel = 0;
   int ntot = 0;
@@ -5221,21 +5310,6 @@ static BevVert *bevel_vert_construct(BMesh *bm, BevelParams *bp, BMVert *v)
   bv->vmesh = (VMesh *)BLI_memarena_alloc(bp->mem_arena, sizeof(VMesh));
   bv->vmesh->seg = bp->seg;
 
-  if (bp->vertex_only) {
-    /* if weighted, modify offset by weight */
-    if (bp->dvert != NULL && bp->vertex_group != -1) {
-      weight = defvert_find_weight(bp->dvert + BM_elem_index_get(v), bp->vertex_group);
-      if (weight <= 0.0f) {
-        BM_elem_flag_disable(v, BM_ELEM_TAG);
-        return NULL;
-      }
-      bv->offset *= weight;
-    }
-    else if (bp->use_weights) {
-      weight = BM_elem_float_data_get(&bm->vdata, v, CD_BWEIGHT);
-      bv->offset *= weight;
-    }
-  }
   BLI_ghash_insert(bp->vert_hash, v, bv);
 
   find_bevel_edge_order(bm, bv, first_bme);
@@ -5279,6 +5353,28 @@ static BevVert *bevel_vert_construct(BMesh *bm, BevelParams *bp, BMVert *v)
       if (ntot % 2 == 1) {
         i = ntot / 2;
         SWAP(BMFace *, bv->edges[i].fprev, bv->edges[i].fnext);
+      }
+    }
+  }
+
+  if (bp->vertex_only) {
+    /* if weighted, modify offset by weight */
+    if (bp->dvert != NULL && bp->vertex_group != -1) {
+      weight = defvert_find_weight(bp->dvert + BM_elem_index_get(v), bp->vertex_group);
+      bv->offset *= weight;
+    }
+    else if (bp->use_weights) {
+      weight = BM_elem_float_data_get(&bm->vdata, v, CD_BWEIGHT);
+      bv->offset *= weight;
+    }
+    /* Find center axis. Note: Don't use vert normal, can give unwanted results. */
+    if (ELEM(bp->offset_type, BEVEL_AMT_WIDTH, BEVEL_AMT_DEPTH)) {
+      float edge_dir[3];
+      for (i = 0, e = bv->edges; i < ntot; i++, e++) {
+        v2 = BM_edge_other_vert(e->e, bv->v);
+        sub_v3_v3v3(edge_dir, bv->v->co, v2->co);
+        normalize_v3(edge_dir);
+        add_v3_v3v3(vert_axis, vert_axis, edge_dir);
       }
     }
   }
@@ -5342,13 +5438,41 @@ static BevVert *bevel_vert_construct(BMesh *bm, BevelParams *bp, BMVert *v)
     }
     else if (bp->vertex_only) {
       /* Weight has already been applied to bv->offset, if present.
-       * Transfer to e->offset_[lr]_spec and treat percent as special case */
-      if (bp->offset_type == BEVEL_AMT_PERCENT) {
-        v2 = BM_edge_other_vert(e->e, bv->v);
-        e->offset_l_spec = BM_edge_calc_length(e->e) * bv->offset / 100.0f;
-      }
-      else {
-        e->offset_l_spec = bv->offset;
+       * Transfer to e->offset_[lr]_spec according to offset_type. */
+      float edge_dir[3];
+      switch (bp->offset_type) {
+        case BEVEL_AMT_OFFSET: {
+          e->offset_l_spec = bv->offset;
+          break;
+        }
+        case BEVEL_AMT_WIDTH: {
+          v2 = BM_edge_other_vert(e->e, bv->v);
+          sub_v3_v3v3(edge_dir, bv->v->co, v2->co);
+          z = fabsf(2.0f * sinf(angle_v3v3(vert_axis, edge_dir)));
+          if (z < BEVEL_EPSILON) {
+            e->offset_l_spec = 0.01f * bp->offset; /* undefined behavior, so tiny bevel. */
+          }
+          else {
+            e->offset_l_spec = bp->offset / z;
+          }
+          break;
+        }
+        case BEVEL_AMT_DEPTH: {
+          v2 = BM_edge_other_vert(e->e, bv->v);
+          sub_v3_v3v3(edge_dir, bv->v->co, v2->co);
+          z = fabsf(cosf(angle_v3v3(vert_axis, edge_dir)));
+          if (z < BEVEL_EPSILON) {
+            e->offset_l_spec = 0.01f * bp->offset; /* undefined behavior, so tiny bevel. */
+          }
+          else {
+            e->offset_l_spec = bp->offset / z;
+          }
+          break;
+        }
+        case BEVEL_AMT_PERCENT: {
+          e->offset_l_spec = BM_edge_calc_length(e->e) * bv->offset / 100.0f;
+          break;
+        }
       }
       e->offset_r_spec = e->offset_l_spec;
     }

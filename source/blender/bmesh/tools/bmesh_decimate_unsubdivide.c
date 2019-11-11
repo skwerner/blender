@@ -231,7 +231,7 @@ void BM_mesh_decimate_unsubdivide_ex(BMesh *bm, const int iterations, const bool
           if (BMO_vert_flag_test(bm, v, ELE_VERT_TAG))
 #endif
           {
-            /* check again incase the topology changed */
+            /* Check again in case the topology changed. */
             if (bm_vert_dissolve_fan_test(v)) {
               v_first = v;
             }
@@ -264,7 +264,7 @@ void BM_mesh_decimate_unsubdivide_ex(BMesh *bm, const int iterations, const bool
           }
           else {
             /* works better to allow these verts to be checked again */
-            //BM_elem_index_set(v, VERT_INDEX_IGNORE);  /* set_dirty! */
+            // BM_elem_index_set(v, VERT_INDEX_IGNORE);  /* set_dirty! */
           }
         }
       }

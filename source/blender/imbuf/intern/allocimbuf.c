@@ -197,6 +197,17 @@ void IMB_freezbuffloatImBuf(ImBuf *ibuf)
   ibuf->mall &= ~IB_zbuffloat;
 }
 
+/** Free all pixel data (assosiated with image size). */
+void imb_freerectImbuf_all(ImBuf *ibuf)
+{
+  imb_freerectImBuf(ibuf);
+  imb_freerectfloatImBuf(ibuf);
+  imb_freetilesImBuf(ibuf);
+  IMB_freezbufImBuf(ibuf);
+  IMB_freezbuffloatImBuf(ibuf);
+  freeencodedbufferImBuf(ibuf);
+}
+
 void IMB_freeImBuf(ImBuf *ibuf)
 {
   if (ibuf) {
@@ -212,12 +223,7 @@ void IMB_freeImBuf(ImBuf *ibuf)
     BLI_spin_unlock(&refcounter_spin);
 
     if (needs_free) {
-      imb_freerectImBuf(ibuf);
-      imb_freerectfloatImBuf(ibuf);
-      imb_freetilesImBuf(ibuf);
-      IMB_freezbufImBuf(ibuf);
-      IMB_freezbuffloatImBuf(ibuf);
-      freeencodedbufferImBuf(ibuf);
+      imb_freerectImbuf_all(ibuf);
       IMB_metadata_free(ibuf->metadata);
       colormanage_cache_free(ibuf);
 
@@ -428,7 +434,8 @@ bool imb_addrectImBuf(ImBuf *ibuf)
 struct ImBuf *IMB_allocFromBuffer(const unsigned int *rect,
                                   const float *rectf,
                                   unsigned int w,
-                                  unsigned int h)
+                                  unsigned int h,
+                                  unsigned int channels)
 {
   ImBuf *ibuf = NULL;
 
@@ -438,6 +445,7 @@ struct ImBuf *IMB_allocFromBuffer(const unsigned int *rect,
 
   ibuf = IMB_allocImBuf(w, h, 32, 0);
 
+  ibuf->channels = channels;
   if (rectf) {
     ibuf->rect_float = MEM_dupallocN(rectf);
     ibuf->flags |= IB_rectfloat;
@@ -493,11 +501,12 @@ bool IMB_initImBuf(
   ibuf->y = y;
   ibuf->planes = planes;
   ibuf->ftype = IMB_FTYPE_PNG;
-  ibuf->foptions.quality =
-      15;             /* the 15 means, set compression to low ratio but not time consuming */
-  ibuf->channels = 4; /* float option, is set to other values when buffers get assigned */
-  ibuf->ppm[0] = ibuf->ppm[1] = IMB_DPI_DEFAULT /
-                                0.0254f; /* IMB_DPI_DEFAULT -> pixels-per-meter */
+  /* The '15' means, set compression to low ratio but not time consuming. */
+  ibuf->foptions.quality = 15;
+  /* float option, is set to other values when buffers get assigned. */
+  ibuf->channels = 4;
+  /* IMB_DPI_DEFAULT -> pixels-per-meter. */
+  ibuf->ppm[0] = ibuf->ppm[1] = IMB_DPI_DEFAULT / 0.0254f;
 
   if (flags & IB_rect) {
     if (imb_addrectImBuf(ibuf) == false) {
@@ -616,6 +625,38 @@ ImBuf *IMB_dupImBuf(const ImBuf *ibuf1)
   *ibuf2 = tbuf;
 
   return (ibuf2);
+}
+
+size_t IMB_get_size_in_memory(ImBuf *ibuf)
+{
+  int a;
+  size_t size = 0, channel_size = 0;
+
+  size += sizeof(ImBuf);
+
+  if (ibuf->rect) {
+    channel_size += sizeof(char);
+  }
+
+  if (ibuf->rect_float) {
+    channel_size += sizeof(float);
+  }
+
+  size += channel_size * ibuf->x * ibuf->y * ibuf->channels;
+
+  if (ibuf->miptot) {
+    for (a = 0; a < ibuf->miptot; a++) {
+      if (ibuf->mipmap[a]) {
+        size += IMB_get_size_in_memory(ibuf->mipmap[a]);
+      }
+    }
+  }
+
+  if (ibuf->tiles) {
+    size += sizeof(unsigned int) * ibuf->ytiles * ibuf->xtiles;
+  }
+
+  return size;
 }
 
 #if 0 /* remove? - campbell */

@@ -177,9 +177,11 @@ class DATA_PT_geometry_curve(CurveButtonsPanelCurve, Panel):
 
         col.prop(curve, "taper_object")
 
-        sub = col.column()
-        sub.active = curve.taper_object is not None
-        sub.prop(curve, "use_map_taper")
+        if type(curve) is not TextCurve:
+            # This setting makes no sense for texts, since we have no control over start/end of the bevel object curve.
+            sub = col.column()
+            sub.active = curve.taper_object is not None
+            sub.prop(curve, "use_map_taper")
 
 
 class DATA_PT_geometry_curve_bevel(CurveButtonsPanelCurve, Panel):
@@ -330,7 +332,8 @@ class DATA_PT_font(CurveButtonsPanelText, Panel):
         layout = self.layout
 
         text = context.curve
-        char = context.curve.edit_format
+        char = text.edit_format
+        mode = context.mode
 
         row = layout.split(factor=0.25)
         row.label(text="Regular")
@@ -345,13 +348,14 @@ class DATA_PT_font(CurveButtonsPanelText, Panel):
         row.label(text="Bold & Italic")
         row.template_ID(text, "font_bold_italic", open="font.open", unlink="font.unlink")
 
-        layout.separator()
+        if mode == 'EDIT_TEXT':
+            layout.separator()
 
-        row = layout.row(align=True)
-        row.prop(char, "use_bold", toggle=True)
-        row.prop(char, "use_italic", toggle=True)
-        row.prop(char, "use_underline", toggle=True)
-        row.prop(char, "use_small_caps", toggle=True)
+            row = layout.row(align=True)
+            row.prop(char, "use_bold", toggle=True)
+            row.prop(char, "use_italic", toggle=True)
+            row.prop(char, "use_underline", toggle=True)
+            row.prop(char, "use_small_caps", toggle=True)
 
 
 class DATA_PT_font_transform(CurveButtonsPanelText, Panel):

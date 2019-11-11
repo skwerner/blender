@@ -111,7 +111,7 @@ void ViewerOperation::executeRegion(rcti *rect, unsigned int /*tileNumber*/)
       offset++;
       offset4 += 4;
     }
-    if (isBreaked()) {
+    if (isBraked()) {
       breaked = true;
     }
     offset += offsetadd;
@@ -190,8 +190,7 @@ void ViewerOperation::updateImage(rcti *rect)
                                     rect->xmin,
                                     rect->ymin,
                                     rect->xmax,
-                                    rect->ymax,
-                                    false);
+                                    rect->ymax);
 
   this->updateDraw();
 }

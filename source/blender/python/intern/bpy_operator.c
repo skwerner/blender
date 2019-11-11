@@ -252,8 +252,9 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
       ReportList *reports;
 
       reports = MEM_mallocN(sizeof(ReportList), "wmOperatorReportList");
-      BKE_reports_init(reports,
-                       RPT_STORE | RPT_OP_HOLD); /* own so these don't move into global reports */
+
+      /* Own so these don't move into global reports. */
+      BKE_reports_init(reports, RPT_STORE | RPT_OP_HOLD);
 
 #ifdef BPY_RELEASE_GIL
       /* release GIL, since a thread could be started from an operator
@@ -314,8 +315,9 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
     return NULL;
   }
 
-  /* when calling  bpy.ops.wm.read_factory_settings() bpy.data's main pointer is freed by clear_globals(),
-   * further access will crash blender. setting context is not needed in this case, only calling because this
+  /* When calling  bpy.ops.wm.read_factory_settings() bpy.data's main pointer
+   * is freed by clear_globals(), further access will crash blender.
+   * Setting context is not needed in this case, only calling because this
    * function corrects bpy.data (internal Main pointer) */
   BPY_modules_update(C);
 

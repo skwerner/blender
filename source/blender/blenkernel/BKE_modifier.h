@@ -35,7 +35,6 @@ struct Mesh;
 struct ModifierData;
 struct Object;
 struct Scene;
-struct ViewLayer;
 struct bArmature;
 
 typedef enum {
@@ -49,7 +48,9 @@ typedef enum {
    */
   eModifierTypeType_OnlyDeform,
 
+  /* Modifier adds geometry. */
   eModifierTypeType_Constructive,
+  /* Modifier can add and remove geometry. */
   eModifierTypeType_Nonconstructive,
 
   /* both deformVerts & applyModifier are valid calls
@@ -83,8 +84,8 @@ typedef enum {
    */
   eModifierTypeFlag_RequiresOriginalData = (1 << 5),
 
-  /* For modifiers that support pointcache, so we can check to see if it has files we need to deal with
-   */
+  /* For modifiers that support pointcache,
+   * so we can check to see if it has files we need to deal with. */
   eModifierTypeFlag_UsesPointCache = (1 << 6),
 
   /* For physics modifiers, max one per type */
@@ -293,9 +294,9 @@ typedef struct ModifierTypeInfo {
                             void *userData);
 
   /* Should call the given walk function with a pointer to each ID
-   * pointer (i.e. each datablock pointer) that the modifier data
+   * pointer (i.e. each data-block pointer) that the modifier data
    * stores. This is used for linking on file load and for
-   * unlinking datablocks or forwarding datablock references.
+   * unlinking data-blocks or forwarding data-block references.
    *
    * This function is optional. If it is not present, foreachObjectLink
    * will be used.
@@ -317,14 +318,14 @@ typedef struct ModifierTypeInfo {
                          TexWalkFunc walk,
                          void *userData);
 
-  /* Free given runtime data.
+  /* Free given run-time data.
    *
    * This data is coming from a modifier of the corresponding type, but actual
    * modifier data is not known here.
    *
    * Notes:
    *  - The data itself is to be de-allocated as well.
-   *  - This calback is allowed to receive NULL pointer as a data, so it's
+   *  - This callback is allowed to receive NULL pointer as a data, so it's
    *    more like "ensure the data is freed".
    */
   void (*freeRuntimeData)(void *runtime_data);
@@ -381,7 +382,9 @@ struct Object *modifiers_isDeformedByArmature(struct Object *ob);
 struct Object *modifiers_isDeformedByMeshDeform(struct Object *ob);
 struct Object *modifiers_isDeformedByLattice(struct Object *ob);
 struct Object *modifiers_isDeformedByCurve(struct Object *ob);
+bool modifiers_usesMultires(struct Object *ob);
 bool modifiers_usesArmature(struct Object *ob, struct bArmature *arm);
+bool modifiers_usesSubsurfFacedots(struct Scene *scene, struct Object *ob);
 bool modifiers_isCorrectableDeformed(struct Scene *scene, struct Object *ob);
 void modifier_freeTemporaryData(struct ModifierData *md);
 bool modifiers_isPreview(struct Object *ob);
@@ -391,15 +394,15 @@ typedef struct CDMaskLink {
   struct CustomData_MeshMasks mask;
 } CDMaskLink;
 
-/* Calculates and returns a linked list of CustomData_MeshMasks indicating the
- * data required by each modifier in the stack pointed to by md for correct
- * evaluation, assuming the data indicated by dataMask is required at the
- * end of the stack.
+/* Calculates and returns a linked list of CustomData_MeshMasks and modified
+ * final datamask, indicating the data required by each modifier in the stack
+ * pointed to by md for correct evaluation, assuming the data indicated by
+ * final_datamask is required at the end of the stack.
  */
 struct CDMaskLink *modifiers_calcDataMasks(struct Scene *scene,
                                            struct Object *ob,
                                            struct ModifierData *md,
-                                           const struct CustomData_MeshMasks *dataMask,
+                                           struct CustomData_MeshMasks *final_datamask,
                                            int required_mode,
                                            ModifierData *previewmd,
                                            const struct CustomData_MeshMasks *previewmask);

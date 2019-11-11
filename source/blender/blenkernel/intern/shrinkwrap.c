@@ -39,6 +39,7 @@
 #include "BLI_task.h"
 #include "BLI_math_solvers.h"
 
+#include "BKE_context.h"
 #include "BKE_shrinkwrap.h"
 #include "BKE_cdderivedmesh.h"
 #include "BKE_DerivedMesh.h"
@@ -69,25 +70,25 @@
 #define OUT_OF_MEMORY() ((void)printf("Shrinkwrap: Out of memory\n"))
 
 typedef struct ShrinkwrapCalcData {
-  ShrinkwrapModifierData *smd;  //shrinkwrap modifier data
+  ShrinkwrapModifierData *smd;  // shrinkwrap modifier data
 
-  struct Object *ob;  //object we are applying shrinkwrap to
+  struct Object *ob;  // object we are applying shrinkwrap to
 
-  struct MVert *vert;     //Array of verts being projected (to fetch normals or other data)
-  float (*vertexCos)[3];  //vertexs being shrinkwraped
+  struct MVert *vert;     // Array of verts being projected (to fetch normals or other data)
+  float (*vertexCos)[3];  // vertexs being shrinkwraped
   int numVerts;
 
-  struct MDeformVert *dvert;  //Pointer to mdeform array
-  int vgroup;                 //Vertex group num
+  struct MDeformVert *dvert;  // Pointer to mdeform array
+  int vgroup;                 // Vertex group num
   bool invert_vgroup;         /* invert vertex group influence */
 
-  struct Mesh *target;                 //mesh we are shrinking to
-  struct SpaceTransform local2target;  //transform to move between local and target space
+  struct Mesh *target;                 // mesh we are shrinking to
+  struct SpaceTransform local2target;  // transform to move between local and target space
   struct ShrinkwrapTreeData *tree;     // mesh BVH tree data
 
   struct Object *aux_target;
 
-  float keepDist;  //Distance to keep above target surface (units are in local space)
+  float keepDist;  // Distance to keep above target surface (units are in local space)
 } ShrinkwrapCalcData;
 
 typedef struct ShrinkwrapCalcCBData {
@@ -344,7 +345,7 @@ void BKE_shrinkwrap_compute_boundary_data(struct Mesh *mesh)
  */
 static void shrinkwrap_calc_nearest_vertex_cb_ex(void *__restrict userdata,
                                                  const int i,
-                                                 const ParallelRangeTLS *__restrict tls)
+                                                 const TaskParallelTLS *__restrict tls)
 {
   ShrinkwrapCalcCBData *data = userdata;
 
@@ -375,8 +376,8 @@ static void shrinkwrap_calc_nearest_vertex_cb_ex(void *__restrict userdata,
 
   /* Use local proximity heuristics (to reduce the nearest search)
    *
-   * If we already had an hit before.. we assume this vertex is going to have a close hit to that other vertex
-   * so we can initiate the "nearest.dist" with the expected value to that last hit.
+   * If we already had an hit before.. we assume this vertex is going to have a close hit to that
+   * other vertex so we can initiate the "nearest.dist" with the expected value to that last hit.
    * This will lead in pruning of the search tree. */
   if (nearest->index != -1) {
     nearest->dist_sq = len_squared_v3v3(tmp_co, nearest->co);
@@ -416,7 +417,7 @@ static void shrinkwrap_calc_nearest_vertex(ShrinkwrapCalcData *calc)
       .calc = calc,
       .tree = calc->tree,
   };
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (calc->numVerts > BKE_MESH_OMP_LIMIT);
   settings.userdata_chunk = &nearest;
@@ -510,7 +511,7 @@ bool BKE_shrinkwrap_project_normal(char options,
 
 static void shrinkwrap_calc_normal_projection_cb_ex(void *__restrict userdata,
                                                     const int i,
-                                                    const ParallelRangeTLS *__restrict tls)
+                                                    const TaskParallelTLS *__restrict tls)
 {
   ShrinkwrapCalcCBData *data = userdata;
 
@@ -538,8 +539,9 @@ static void shrinkwrap_calc_normal_projection_cb_ex(void *__restrict userdata,
 
   if (calc->vert != NULL && calc->smd->projAxis == MOD_SHRINKWRAP_PROJECT_OVER_NORMAL) {
     /* calc->vert contains verts from evaluated mesh.  */
-    /* These coordinates are deformed by vertexCos only for normal projection (to get correct normals) */
-    /* for other cases calc->verts contains undeformed coordinates and vertexCos should be used */
+    /* These coordinates are deformed by vertexCos only for normal projection
+     * (to get correct normals) for other cases calc->verts contains undeformed coordinates and
+     * vertexCos should be used */
     copy_v3_v3(tmp_co, calc->vert[i].co);
     normal_short_to_float_v3(tmp_no, calc->vert[i].no);
   }
@@ -549,8 +551,9 @@ static void shrinkwrap_calc_normal_projection_cb_ex(void *__restrict userdata,
   }
 
   hit->index = -1;
-  hit->dist =
-      BVH_RAYCAST_DIST_MAX; /* TODO: we should use FLT_MAX here, but sweepsphere code isn't prepared for that */
+
+  /* TODO: we should use FLT_MAX here, but sweepsphere code isn't prepared for that */
+  hit->dist = BVH_RAYCAST_DIST_MAX;
 
   bool is_aux = false;
 
@@ -701,7 +704,7 @@ static void shrinkwrap_calc_normal_projection(ShrinkwrapCalcData *calc)
       .proj_axis = proj_axis,
       .local2aux = &local2aux,
   };
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (calc->numVerts > BKE_MESH_OMP_LIMIT);
   settings.userdata_chunk = &hit;
@@ -863,9 +866,9 @@ static bool target_project_solve_point_tri(const float *vtri_co[3],
 {
   float x[3], tmp[3];
   float dist = sqrtf(hit_dist_sq);
-  float epsilon = dist * 1.0e-5f;
-
-  CLAMP_MIN(epsilon, 1.0e-5f);
+  float magnitude_estimate = dist + len_manhattan_v3(vtri_co[0]) + len_manhattan_v3(vtri_co[1]) +
+                             len_manhattan_v3(vtri_co[2]);
+  float epsilon = magnitude_estimate * 1.0e-6f;
 
   /* Initial solution vector: barycentric weights plus distance along normal. */
   interp_weights_tri_v3(x, UNPACK3(vtri_co), hit_co);
@@ -926,7 +929,7 @@ static bool update_hit(BVHTreeNearest *nearest,
   if (dist_sq < nearest->dist_sq) {
 #ifdef TRACE_TARGET_PROJECT
     printf(
-        "===> %d (%.3f,%.3f,%.3f) %g < %g\n", index, UNPACK3(hit_co), dist_sq, nearest->dist_sq);
+        "#=#=#> %d (%.3f,%.3f,%.3f) %g < %g\n", index, UNPACK3(hit_co), dist_sq, nearest->dist_sq);
 #endif
     nearest->index = index;
     nearest->dist_sq = dist_sq;
@@ -938,7 +941,8 @@ static bool update_hit(BVHTreeNearest *nearest,
   return false;
 }
 
-/* Target projection on a non-manifold boundary edge - treats it like an infinitely thin cylinder. */
+/* Target projection on a non-manifold boundary edge -
+ * treats it like an infinitely thin cylinder. */
 static void target_project_edge(const ShrinkwrapTreeData *tree,
                                 int index,
                                 const float co[3],
@@ -1084,14 +1088,14 @@ void BKE_shrinkwrap_find_nearest_surface(struct ShrinkwrapTreeData *tree,
 
   if (type == MOD_SHRINKWRAP_TARGET_PROJECT) {
 #ifdef TRACE_TARGET_PROJECT
-    printf("====== TARGET PROJECT START ======\n");
+    printf("\n====== TARGET PROJECT START ======\n");
 #endif
 
     BLI_bvhtree_find_nearest_ex(
         tree->bvh, co, nearest, mesh_looptri_target_project, tree, BVH_NEAREST_OPTIMAL_ORDER);
 
 #ifdef TRACE_TARGET_PROJECT
-    printf("====== TARGET PROJECT END: %d %g ======\n", nearest->index, nearest->dist_sq);
+    printf("====== TARGET PROJECT END: %d %g ======\n\n", nearest->index, nearest->dist_sq);
 #endif
 
     if (nearest->index < 0) {
@@ -1112,7 +1116,7 @@ void BKE_shrinkwrap_find_nearest_surface(struct ShrinkwrapTreeData *tree,
  */
 static void shrinkwrap_calc_nearest_surface_point_cb_ex(void *__restrict userdata,
                                                         const int i,
-                                                        const ParallelRangeTLS *__restrict tls)
+                                                        const TaskParallelTLS *__restrict tls)
 {
   ShrinkwrapCalcCBData *data = userdata;
 
@@ -1142,8 +1146,8 @@ static void shrinkwrap_calc_nearest_surface_point_cb_ex(void *__restrict userdat
 
   /* Use local proximity heuristics (to reduce the nearest search)
    *
-   * If we already had an hit before.. we assume this vertex is going to have a close hit to that other vertex
-   * so we can initiate the "nearest.dist" with the expected value to that last hit.
+   * If we already had an hit before.. we assume this vertex is going to have a close hit to that
+   * other vertex so we can initiate the "nearest.dist" with the expected value to that last hit.
    * This will lead in pruning of the search tree. */
   if (nearest->index != -1) {
     if (calc->smd->shrinkType == MOD_SHRINKWRAP_TARGET_PROJECT) {
@@ -1256,7 +1260,10 @@ static void shrinkwrap_snap_with_side(float r_point_co[3],
                                       float forcesign,
                                       bool forcesnap)
 {
-  float dist = len_v3v3(point_co, hit_co);
+  float delta[3];
+  sub_v3_v3v3(delta, point_co, hit_co);
+
+  float dist = len_v3(delta);
 
   /* If exactly on the surface, push out along normal */
   if (dist < FLT_EPSILON) {
@@ -1269,13 +1276,28 @@ static void shrinkwrap_snap_with_side(float r_point_co[3],
   }
   /* Move to the correct side if needed */
   else {
-    float delta[3];
-    sub_v3_v3v3(delta, point_co, hit_co);
-    float dsign = signf(dot_v3v3(delta, hit_no) * forcesign);
+    float dsign = signf(dot_v3v3(delta, hit_no));
+
+    if (forcesign == 0.0f) {
+      forcesign = dsign;
+    }
 
     /* If on the wrong side or too close, move to correct */
-    if (forcesnap || dsign * dist < goal_dist) {
-      interp_v3_v3v3(r_point_co, point_co, hit_co, (dist - goal_dist * dsign) / dist);
+    if (forcesnap || dsign * dist * forcesign < goal_dist) {
+      mul_v3_fl(delta, dsign / dist);
+
+      /* At very small distance, blend in the hit normal to stabilize math. */
+      float dist_epsilon = (fabsf(goal_dist) + len_manhattan_v3(hit_co)) * 1e-4f;
+
+      if (dist < dist_epsilon) {
+#ifdef TRACE_TARGET_PROJECT
+        printf("zero_factor %g = %g / %g\n", dist / dist_epsilon, dist, dist_epsilon);
+#endif
+
+        interp_v3_v3v3(delta, hit_no, delta, dist / dist_epsilon);
+      }
+
+      madd_v3_v3v3fl(r_point_co, hit_co, delta, goal_dist * forcesign);
     }
     else {
       copy_v3_v3(r_point_co, point_co);
@@ -1300,13 +1322,13 @@ void BKE_shrinkwrap_snap_point_to_surface(const struct ShrinkwrapTreeData *tree,
                                           const float point_co[3],
                                           float r_point_co[3])
 {
-  float dist, tmp[3];
+  float tmp[3];
 
   switch (mode) {
     /* Offsets along the line between point_co and hit_co. */
     case MOD_SHRINKWRAP_ON_SURFACE:
-      if (goal_dist != 0 && (dist = len_v3v3(point_co, hit_co)) > FLT_EPSILON) {
-        interp_v3_v3v3(r_point_co, point_co, hit_co, (dist - goal_dist) / dist);
+      if (goal_dist != 0) {
+        shrinkwrap_snap_with_side(r_point_co, point_co, hit_co, hit_no, goal_dist, 0, true);
       }
       else {
         copy_v3_v3(r_point_co, hit_co);
@@ -1360,7 +1382,7 @@ static void shrinkwrap_calc_nearest_surface_point(ShrinkwrapCalcData *calc)
       .calc = calc,
       .tree = calc->tree,
   };
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (calc->numVerts > BKE_MESH_OMP_LIMIT);
   settings.userdata_chunk = &nearest;
@@ -1405,7 +1427,7 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd,
     Object *ob_target = DEG_get_evaluated_object(ctx->depsgraph, smd->target);
     calc.target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
 
-    /* TODO there might be several "bugs" on non-uniform scales matrixs
+    /* TODO there might be several "bugs" with non-uniform scales matrices
      * because it will no longer be nearest surface, not sphere projection
      * because space has been deformed */
     BLI_SPACE_TRANSFORM_SETUP(&calc.local2target, ob, ob_target);
@@ -1476,4 +1498,66 @@ void shrinkwrapModifier_deform(ShrinkwrapModifierData *smd,
   if (ss_mesh) {
     ss_mesh->release(ss_mesh);
   }
+}
+
+void BKE_shrinkwrap_mesh_nearest_surface_deform(struct bContext *C,
+                                                Object *ob_source,
+                                                Object *ob_target)
+{
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+  struct Scene *sce = CTX_data_scene(C);
+  ShrinkwrapModifierData ssmd = {0};
+  ModifierEvalContext ctx = {depsgraph, ob_source, 0};
+  int totvert;
+
+  ssmd.target = ob_target;
+  ssmd.shrinkType = MOD_SHRINKWRAP_NEAREST_SURFACE;
+  ssmd.shrinkMode = MOD_SHRINKWRAP_ON_SURFACE;
+  ssmd.keepDist = 0.0f;
+
+  Mesh *src_me = ob_source->data;
+  float(*vertexCos)[3] = BKE_mesh_vert_coords_alloc(src_me, &totvert);
+
+  shrinkwrapModifier_deform(&ssmd, &ctx, sce, ob_source, src_me, NULL, -1, vertexCos, totvert);
+
+  BKE_mesh_vert_coords_apply(src_me, vertexCos);
+
+  MEM_freeN(vertexCos);
+}
+
+void BKE_shrinkwrap_remesh_target_project(Mesh *src_me, Mesh *target_me, Object *ob_target)
+{
+  ShrinkwrapModifierData ssmd = {0};
+  int totvert;
+
+  ssmd.target = ob_target;
+  ssmd.shrinkType = MOD_SHRINKWRAP_PROJECT;
+  ssmd.shrinkMode = MOD_SHRINKWRAP_ON_SURFACE;
+  ssmd.shrinkOpts = MOD_SHRINKWRAP_PROJECT_ALLOW_NEG_DIR | MOD_SHRINKWRAP_PROJECT_ALLOW_POS_DIR;
+  ssmd.keepDist = 0.0f;
+  ssmd.projLimit = target_me->remesh_voxel_size;
+
+  float(*vertexCos)[3] = BKE_mesh_vert_coords_alloc(src_me, &totvert);
+
+  ShrinkwrapCalcData calc = NULL_ShrinkwrapCalcData;
+
+  calc.smd = &ssmd;
+  calc.numVerts = src_me->totvert;
+  calc.vertexCos = vertexCos;
+  calc.vgroup = -1;
+  calc.target = target_me;
+  calc.keepDist = ssmd.keepDist;
+  calc.vert = src_me->mvert;
+  BLI_SPACE_TRANSFORM_SETUP(&calc.local2target, ob_target, ob_target);
+
+  ShrinkwrapTreeData tree;
+  if (BKE_shrinkwrap_init_tree(&tree, calc.target, ssmd.shrinkType, ssmd.shrinkMode, false)) {
+    calc.tree = &tree;
+    TIMEIT_BENCH(shrinkwrap_calc_normal_projection(&calc), deform_project);
+    BKE_shrinkwrap_free_tree(&tree);
+  }
+
+  BKE_mesh_vert_coords_apply(src_me, vertexCos);
+
+  MEM_freeN(vertexCos);
 }

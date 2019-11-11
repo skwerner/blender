@@ -35,6 +35,7 @@
 #include "GPU_framebuffer.h"
 #include "GPU_glew.h"
 #include "GPU_texture.h"
+#include "GPU_platform.h"
 
 #include "intern/gpu_private.h"
 
@@ -68,15 +69,15 @@ static struct GPUGlobal {
   GLint maxubosize;
   GLint maxubobinds;
   int samples_color_texture_max;
-  eGPUDeviceType device;
-  eGPUOSType os;
-  eGPUDriverType driver;
   float line_width_range[2];
   /* workaround for different calculation of dfdy factors on GPUs. Some GPUs/drivers
    * calculate dfdy in shader differently when drawing to an offscreen buffer. First
    * number is factor on screen and second is off-screen */
   float dfdyfactors[2];
   float max_anisotropy;
+  /* Some Intel drivers have limited support for `GLEW_ARB_base_instance` so in
+   * these cases it is best to indicate that it is not supported. See T67951 */
+  bool glew_arb_base_instance_is_supported;
   /* Some Intel drivers have issues with using mips as framebuffer targets if
    * GL_TEXTURE_MAX_LEVEL is higher than the target mip.
    * We need a workaround in this cases. */
@@ -89,6 +90,9 @@ static struct GPUGlobal {
   /* Crappy driver don't know how to map framebuffer slot to output vars...
    * We need to have no "holes" in the output buffer slots. */
   bool unused_fb_slot_workaround;
+  /* Some crappy Intel drivers don't work well with shaders created in different
+   * rendering contexts. */
+  bool context_local_shaders_workaround;
 } GG = {1, 0};
 
 static void gpu_detect_mip_render_workaround(void)
@@ -118,13 +122,6 @@ static void gpu_detect_mip_render_workaround(void)
 
   MEM_freeN(data);
   GPU_texture_free(tex);
-}
-
-/* GPU Types */
-
-bool GPU_type_matches(eGPUDeviceType device, eGPUOSType os, eGPUDriverType driver)
-{
-  return (GG.device & device) && (GG.os & os) && (GG.driver & driver);
 }
 
 /* GPU Extensions */
@@ -194,6 +191,11 @@ void GPU_get_dfdy_factors(float fac[2])
   copy_v2_v2(fac, GG.dfdyfactors);
 }
 
+bool GPU_arb_base_instance_is_supported(void)
+{
+  return GG.glew_arb_base_instance_is_supported;
+}
+
 bool GPU_mip_render_workaround(void)
 {
   return GG.mip_render_workaround;
@@ -207,6 +209,11 @@ bool GPU_depth_blitting_workaround(void)
 bool GPU_unused_fb_slot_workaround(void)
 {
   return GG.unused_fb_slot_workaround;
+}
+
+bool GPU_context_local_shaders_workaround(void)
+{
+  return GG.context_local_shaders_workaround;
 }
 
 bool GPU_crappy_amd_driver(void)
@@ -244,26 +251,13 @@ void gpu_extensions_init(void)
 
   glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, GG.line_width_range);
 
-#ifndef NDEBUG
-  GLint ret;
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glGetFramebufferAttachmentParameteriv(
-      GL_FRAMEBUFFER, GL_FRONT_LEFT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &ret);
-  /* We expect FRONT_LEFT to be the default buffer. */
-  BLI_assert(ret == GL_FRAMEBUFFER_DEFAULT);
-#endif
-
   glGetIntegerv(GL_MAX_COLOR_TEXTURE_SAMPLES, &GG.samples_color_texture_max);
 
   const char *vendor = (const char *)glGetString(GL_VENDOR);
   const char *renderer = (const char *)glGetString(GL_RENDERER);
   const char *version = (const char *)glGetString(GL_VERSION);
 
-  if (strstr(vendor, "ATI") || strstr(vendor, "AMD")) {
-    GG.device = GPU_DEVICE_ATI;
-    GG.driver = GPU_DRIVER_OFFICIAL;
-
-#ifdef _WIN32
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_WIN, GPU_DRIVER_OFFICIAL)) {
     if (strstr(version, "4.5.13399") || strstr(version, "4.5.13417") ||
         strstr(version, "4.5.13422")) {
       /* The renderers include:
@@ -275,75 +269,16 @@ void gpu_extensions_init(void)
 
       GG.unused_fb_slot_workaround = true;
     }
-#endif
+  }
 
-#if defined(__APPLE__)
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_MAC, GPU_DRIVER_OFFICIAL)) {
     if (strstr(renderer, "AMD Radeon Pro") || strstr(renderer, "AMD Radeon R9") ||
         strstr(renderer, "AMD Radeon RX")) {
       GG.depth_blitting_workaround = true;
     }
-#endif
-  }
-  else if (strstr(vendor, "NVIDIA")) {
-    GG.device = GPU_DEVICE_NVIDIA;
-    GG.driver = GPU_DRIVER_OFFICIAL;
-  }
-  else if (strstr(vendor, "Intel") ||
-           /* src/mesa/drivers/dri/intel/intel_context.c */
-           strstr(renderer, "Mesa DRI Intel") || strstr(renderer, "Mesa DRI Mobile Intel")) {
-    GG.device = GPU_DEVICE_INTEL;
-    GG.driver = GPU_DRIVER_OFFICIAL;
-
-    if (strstr(renderer, "UHD Graphics") ||
-        /* Not UHD but affected by the same bugs. */
-        strstr(renderer, "HD Graphics 530") || strstr(renderer, "Kaby Lake GT2")) {
-      GG.device |= GPU_DEVICE_INTEL_UHD;
-    }
-  }
-  else if ((strstr(renderer, "Mesa DRI R")) ||
-           (strstr(renderer, "Radeon") && strstr(vendor, "X.Org")) ||
-           (strstr(renderer, "Gallium ") && strstr(renderer, " on ATI ")) ||
-           (strstr(renderer, "Gallium ") && strstr(renderer, " on AMD "))) {
-    GG.device = GPU_DEVICE_ATI;
-    GG.driver = GPU_DRIVER_OPENSOURCE;
-  }
-  else if (strstr(renderer, "Nouveau") || strstr(vendor, "nouveau")) {
-    GG.device = GPU_DEVICE_NVIDIA;
-    GG.driver = GPU_DRIVER_OPENSOURCE;
-  }
-  else if (strstr(vendor, "Mesa")) {
-    GG.device = GPU_DEVICE_SOFTWARE;
-    GG.driver = GPU_DRIVER_SOFTWARE;
-  }
-  else if (strstr(vendor, "Microsoft")) {
-    GG.device = GPU_DEVICE_SOFTWARE;
-    GG.driver = GPU_DRIVER_SOFTWARE;
-  }
-  else if (strstr(renderer, "Apple Software Renderer")) {
-    GG.device = GPU_DEVICE_SOFTWARE;
-    GG.driver = GPU_DRIVER_SOFTWARE;
-  }
-  else if (strstr(renderer, "llvmpipe")) {
-    GG.device = GPU_DEVICE_SOFTWARE;
-    GG.driver = GPU_DRIVER_SOFTWARE;
-  }
-  else {
-    printf("Warning: Could not find a matching GPU name. Things may not behave as expected.\n");
-    printf("Detected OpenGL configuration:\n");
-    printf("Vendor: %s\n", vendor);
-    printf("Renderer: %s\n", renderer);
-    GG.device = GPU_DEVICE_ANY;
-    GG.driver = GPU_DRIVER_ANY;
   }
 
-#ifdef _WIN32
-  GG.os = GPU_OS_WIN;
-#elif defined(__APPLE__)
-  GG.os = GPU_OS_MAC;
-#else
-  GG.os = GPU_OS_UNIX;
-#endif
-
+  GG.glew_arb_base_instance_is_supported = GLEW_ARB_base_instance;
   gpu_detect_mip_render_workaround();
 
   if (G.debug & G_DEBUG_GPU_FORCE_WORKAROUNDS) {
@@ -356,26 +291,47 @@ void gpu_extensions_init(void)
     GG.mip_render_workaround = true;
     GG.depth_blitting_workaround = true;
     GG.unused_fb_slot_workaround = true;
+    GG.context_local_shaders_workaround = GLEW_ARB_get_program_binary;
   }
 
   /* df/dy calculation factors, those are dependent on driver */
-  if ((strstr(vendor, "ATI") && strstr(version, "3.3.10750"))) {
+  GG.dfdyfactors[0] = 1.0;
+  GG.dfdyfactors[1] = 1.0;
+
+  if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_ANY, GPU_DRIVER_ANY) &&
+      strstr(version, "3.3.10750")) {
     GG.dfdyfactors[0] = 1.0;
     GG.dfdyfactors[1] = -1.0;
   }
-  else if ((GG.device == GPU_DEVICE_INTEL) && (GG.os == GPU_OS_WIN) &&
-           (strstr(version, "4.0.0 - Build 10.18.10.3308") ||
-            strstr(version, "4.0.0 - Build 9.18.10.3186") ||
-            strstr(version, "4.0.0 - Build 9.18.10.3165") ||
-            strstr(version, "3.1.0 - Build 9.17.10.3347") ||
-            strstr(version, "3.1.0 - Build 9.17.10.4101") ||
-            strstr(version, "3.3.0 - Build 8.15.10.2618"))) {
-    GG.dfdyfactors[0] = -1.0;
-    GG.dfdyfactors[1] = 1.0;
+  else if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_ANY)) {
+    if (strstr(version, "4.0.0 - Build 10.18.10.3308") ||
+        strstr(version, "4.0.0 - Build 9.18.10.3186") ||
+        strstr(version, "4.0.0 - Build 9.18.10.3165") ||
+        strstr(version, "3.1.0 - Build 9.17.10.3347") ||
+        strstr(version, "3.1.0 - Build 9.17.10.4101") ||
+        strstr(version, "3.3.0 - Build 8.15.10.2618")) {
+      GG.dfdyfactors[0] = -1.0;
+      GG.dfdyfactors[1] = 1.0;
+    }
+
+    if (strstr(version, "Build 10.18.10.3") || strstr(version, "Build 10.18.10.4") ||
+        strstr(version, "Build 10.18.10.5") || strstr(version, "Build 10.18.14.4") ||
+        strstr(version, "Build 10.18.14.5")) {
+      /* Maybe not all of these drivers have problems with `GLEW_ARB_base_instance`.
+       * But it's hard to test each case. */
+      GG.glew_arb_base_instance_is_supported = false;
+      GG.context_local_shaders_workaround = true;
+    }
+
+    if (strstr(version, "Build 20.19.15.4285")) {
+      /* Somehow fixes armature display issues (see T69743). */
+      GG.context_local_shaders_workaround = true;
+    }
   }
-  else {
-    GG.dfdyfactors[0] = 1.0;
-    GG.dfdyfactors[1] = 1.0;
+  else if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE)) {
+    /* See T70187: merging vertices fail. This has been tested from 18.2.2 till 19.3.0~dev of the
+     * Mesa driver */
+    GG.unused_fb_slot_workaround = true;
   }
 
   GPU_invalid_tex_init();

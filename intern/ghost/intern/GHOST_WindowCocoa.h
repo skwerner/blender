@@ -32,8 +32,10 @@
 #include "GHOST_Window.h"
 #include "STR_String.h"
 
-@class CocoaWindow;
+@class CAMetalLayer;
+@class CocoaMetalView;
 @class CocoaOpenGLView;
+@class CocoaWindow;
 @class NSCursor;
 @class NSScreen;
 
@@ -64,7 +66,9 @@ class GHOST_WindowCocoa : public GHOST_Window {
                     GHOST_TWindowState state,
                     GHOST_TDrawingContextType type = GHOST_kDrawingContextTypeNone,
                     const bool stereoVisual = false,
-                    bool is_debug = false);
+                    bool is_debug = false,
+                    bool dialog = false,
+                    GHOST_WindowCocoa *parentWindow = 0);
 
   /**
    * Destructor.
@@ -98,7 +102,8 @@ class GHOST_WindowCocoa : public GHOST_Window {
 
   /**
    * Returns the window rectangle dimensions.
-   * The dimensions are given in screen coordinates that are relative to the upper-left corner of the screen.
+   * The dimensions are given in screen coordinates that are
+   * relative to the upper-left corner of the screen.
    * \param bounds The bounding rectangle of the window.
    */
   void getWindowBounds(GHOST_Rect &bounds) const;
@@ -212,7 +217,10 @@ class GHOST_WindowCocoa : public GHOST_Window {
    */
   GHOST_TSuccess setOrder(GHOST_TWindowOrder order);
 
+  NSCursor *getStandardCursor(GHOST_TStandardCursor cursor) const;
   void loadCursor(bool visible, GHOST_TStandardCursor cursor) const;
+
+  bool isDialog() const;
 
   const GHOST_TabletData *GetTabletData()
   {
@@ -293,6 +301,7 @@ class GHOST_WindowCocoa : public GHOST_Window {
    * native window system calls.
    */
   GHOST_TSuccess setWindowCursorShape(GHOST_TStandardCursor shape);
+  GHOST_TSuccess hasCursorShape(GHOST_TStandardCursor shape);
 
   /**
    * Sets the cursor shape on the window using
@@ -304,19 +313,15 @@ class GHOST_WindowCocoa : public GHOST_Window {
                                             int sizey,
                                             int hotX,
                                             int hotY,
-                                            int fg_color,
-                                            int bg_color);
+                                            bool canInvertColor);
 
-  GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                            GHOST_TUns8 mask[16][2],
-                                            int hotX,
-                                            int hotY);
-
-  /** The window containing the OpenGL view */
+  /** The window containing the view */
   CocoaWindow *m_window;
 
-  /** The openGL view */
+  /** The view, either Metal or OpenGL */
   CocoaOpenGLView *m_openGLView;
+  CocoaMetalView *m_metalView;
+  CAMetalLayer *m_metalLayer;
 
   /** The mother SystemCocoa class to send events */
   GHOST_SystemCocoa *m_systemCocoa;
@@ -327,6 +332,7 @@ class GHOST_WindowCocoa : public GHOST_Window {
 
   bool m_immediateDraw;
   bool m_debug_context;  // for debug messages during context setup
+  bool m_is_dialog;
 };
 
 #endif  // __GHOST_WINDOWCOCOA_H__

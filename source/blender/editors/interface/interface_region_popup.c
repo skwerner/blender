@@ -375,12 +375,12 @@ static void ui_block_region_refresh(const bContext *C, ARegion *ar)
   ARegion *ctx_region = CTX_wm_region(C);
   uiBlock *block;
 
-  if (ar->do_draw & RGN_DRAW_REFRESH_UI) {
+  if (ar->do_draw & RGN_REFRESH_UI) {
     ScrArea *handle_ctx_area;
     ARegion *handle_ctx_region;
     uiBlock *block_next;
 
-    ar->do_draw &= ~RGN_DRAW_REFRESH_UI;
+    ar->do_draw &= ~RGN_REFRESH_UI;
     for (block = ar->uiblocks.first; block; block = block_next) {
       block_next = block->next;
       uiPopupBlockHandle *handle = block->handle;
@@ -690,9 +690,11 @@ uiBlock *ui_popup_block_refresh(bContext *C,
     /* Avoid menu moving down and losing cursor focus by keeping it at
      * the same height. */
     if (handle->refresh && handle->prev_block_rect.ymax > block->rect.ymax) {
-      float offset = handle->prev_block_rect.ymax - block->rect.ymax;
-      UI_block_translate(block, 0, offset);
-      block->rect.ymin = handle->prev_block_rect.ymin;
+      if (block->bounds_type != UI_BLOCK_BOUNDS_POPUP_CENTER) {
+        float offset = handle->prev_block_rect.ymax - block->rect.ymax;
+        UI_block_translate(block, 0, offset);
+        block->rect.ymin = handle->prev_block_rect.ymin;
+      }
     }
 
     handle->prev_block_rect = block->rect;
@@ -748,7 +750,8 @@ uiPopupBlockHandle *ui_popup_block_create(bContext *C,
                                           uiBut *but,
                                           uiBlockCreateFunc create_func,
                                           uiBlockHandleCreateFunc handle_create_func,
-                                          void *arg)
+                                          void *arg,
+                                          void (*arg_free)(void *arg))
 {
   wmWindow *window = CTX_wm_window(C);
   uiBut *activebut = UI_context_active_but_get(C);
@@ -762,7 +765,7 @@ uiPopupBlockHandle *ui_popup_block_create(bContext *C,
     UI_but_tooltip_timer_remove(C, activebut);
   }
   /* standard cursor by default */
-  WM_cursor_set(window, CURSOR_STD);
+  WM_cursor_set(window, WM_CURSOR_DEFAULT);
 
   /* create handle */
   handle = MEM_callocN(sizeof(uiPopupBlockHandle), "uiPopupBlockHandle");
@@ -771,10 +774,11 @@ uiPopupBlockHandle *ui_popup_block_create(bContext *C,
   handle->ctx_area = CTX_wm_area(C);
   handle->ctx_region = CTX_wm_region(C);
 
-  /* store vars to refresh popup (RGN_DRAW_REFRESH_UI) */
+  /* store vars to refresh popup (RGN_REFRESH_UI) */
   handle->popup_create_vars.create_func = create_func;
   handle->popup_create_vars.handle_create_func = handle_create_func;
   handle->popup_create_vars.arg = arg;
+  handle->popup_create_vars.arg_free = arg_free;
   handle->popup_create_vars.but = but;
   handle->popup_create_vars.butregion = but ? butregion : NULL;
   copy_v2_v2_int(handle->popup_create_vars.event_xy, &window->eventstate->x);
@@ -820,8 +824,8 @@ void ui_popup_block_free(bContext *C, uiPopupBlockHandle *handle)
     }
   }
 
-  if (handle->popup_create_vars.free_func) {
-    handle->popup_create_vars.free_func(handle, handle->popup_create_vars.arg);
+  if (handle->popup_create_vars.arg_free) {
+    handle->popup_create_vars.arg_free(handle->popup_create_vars.arg);
   }
 
   ui_popup_block_remove(C, handle);

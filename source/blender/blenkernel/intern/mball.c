@@ -39,6 +39,7 @@
 #include "DNA_object_types.h"
 #include "DNA_meta_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_defaults.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
@@ -79,12 +80,7 @@ void BKE_mball_init(MetaBall *mb)
 {
   BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(mb, id));
 
-  mb->size[0] = mb->size[1] = mb->size[2] = 1.0;
-  mb->texflag = MB_AUTOSPACE;
-
-  mb->wiresize = 0.4f;
-  mb->rendersize = 0.2f;
-  mb->thresh = 0.6f;
+  MEMCPY_STRUCT_AFTER(mb, DNA_struct_default_get(MetaBall), id);
 }
 
 MetaBall *BKE_mball_add(Main *bmain, const char *name)
@@ -99,8 +95,10 @@ MetaBall *BKE_mball_add(Main *bmain, const char *name)
 }
 
 /**
- * Only copy internal data of MetaBall ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of MetaBall ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -238,7 +236,8 @@ BoundBox *BKE_mball_boundbox_get(Object *ob)
     return ob->runtime.bb;
   }
 
-  /* This should always only be called with evaluated objects, but currently RNA is a problem here... */
+  /* This should always only be called with evaluated objects,
+   * but currently RNA is a problem here... */
   if (ob->runtime.curve_cache != NULL) {
     BKE_mball_texspace_calc(ob);
   }
@@ -283,12 +282,15 @@ float *BKE_mball_make_orco(Object *ob, ListBase *dispbase)
 
 /* Note on mball basis stuff 2.5x (this is a can of worms)
  * This really needs a rewrite/refactor its totally broken in anything other then basic cases
- * Multiple Scenes + Set Scenes & mixing mball basis SHOULD work but fails to update the depsgraph on rename
- * and linking into scenes or removal of basis mball. so take care when changing this code.
+ * Multiple Scenes + Set Scenes & mixing mball basis SHOULD work but fails to update the depsgraph
+ * on rename and linking into scenes or removal of basis mball.
+ * So take care when changing this code.
  *
- * Main idiot thing here is that the system returns find_basis_mball() objects which fail a is_basis_mball() test.
+ * Main idiot thing here is that the system returns find_basis_mball()
+ * objects which fail a is_basis_mball() test.
  *
- * Not only that but the depsgraph and their areas depend on this behavior!, so making small fixes here isn't worth it.
+ * Not only that but the depsgraph and their areas depend on this behavior!,
+ * so making small fixes here isn't worth it.
  * - Campbell
  */
 
@@ -358,12 +360,13 @@ bool BKE_mball_is_any_unselected(const MetaBall *mb)
   return false;
 }
 
-/* \brief copy some properties from object to other metaball object with same base name
+/**
+ * \brief copy some properties from object to other metaball object with same base name
  *
- * When some properties (wiresize, threshold, update flags) of metaball are changed, then this properties
- * are copied to all metaballs in same "group" (metaballs with same base name: MBall,
+ * When some properties (wiresize, threshold, update flags) of metaball are changed, then this
+ * properties are copied to all metaballs in same "group" (metaballs with same base name: MBall,
  * MBall.001, MBall.002, etc). The most important is to copy properties to the base metaball,
- * because this metaball influence polygonisation of metaballs. */
+ * because this metaball influence polygonization of metaballs. */
 void BKE_mball_properties_copy(Scene *scene, Object *active_object)
 {
   Scene *sce_iter = scene;
@@ -427,7 +430,8 @@ Object *BKE_mball_basis_find(Scene *scene, Object *basis)
         if (ob != bob) {
           BLI_split_name_num(obname, &obnr, ob->id.name + 2, '.');
 
-          /* object ob has to be in same "group" ... it means, that it has to have same base of its name */
+          /* Object ob has to be in same "group" ... it means,
+           * that it has to have same base of its name. */
           if (STREQ(obname, basisname)) {
             if (obnr < basisnr) {
               basis = ob;
@@ -518,7 +522,7 @@ bool BKE_mball_center_bounds(const MetaBall *mb, float r_cent[3])
   return false;
 }
 
-void BKE_mball_transform(MetaBall *mb, float mat[4][4], const bool do_props)
+void BKE_mball_transform(MetaBall *mb, const float mat[4][4], const bool do_props)
 {
   float quat[4];
   const float scale = mat4_to_scale(mat);

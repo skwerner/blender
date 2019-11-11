@@ -16,6 +16,7 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
+#
 # ***** END GPL LICENSE BLOCK *****
 
 #-----------------------------------------------------------------------------
@@ -182,6 +183,8 @@ if(UNIX AND NOT APPLE)
   set(_init_SDL                            OFF)
   set(_init_FFTW3                          OFF)
   set(_init_OPENSUBDIV                     OFF)
+  set(_init_OPENVDB                        OFF)
+  set(_init_OPENIMAGEDENOISE               OFF)
 elseif(WIN32)
   set(_init_JACK                           OFF)
 elseif(APPLE)
@@ -237,11 +240,12 @@ option(WITH_OPENCOLORIO   "Enable OpenColorIO color management" ${_init_OPENCOLO
 
 # Compositor
 option(WITH_COMPOSITOR         "Enable the tile based nodal compositor" ON)
+option(WITH_OPENIMAGEDENOISE   "Enable the OpenImageDenoise compositing node" ${_init_OPENIMAGEDENOISE})
 
 option(WITH_OPENSUBDIV    "Enable OpenSubdiv for surface subdivision" ${_init_OPENSUBDIV})
 
-option(WITH_OPENVDB       "Enable features relying on OpenVDB" OFF)
-option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" OFF)
+option(WITH_OPENVDB       "Enable features relying on OpenVDB" ${_init_OPENVDB})
+option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if OpenVDB was built with blosc support" ${_init_OPENVDB})
 option(WITH_OPENVDB_3_ABI_COMPATIBLE "Assume OpenVDB library has been compiled with version 3 ABI compatibility" OFF)
 mark_as_advanced(WITH_OPENVDB_3_ABI_COMPATIBLE)
 
@@ -259,6 +263,8 @@ endif()
 # Misc...
 option(WITH_HEADLESS      "Build without graphical support (renderfarm, server mode only)" OFF)
 mark_as_advanced(WITH_HEADLESS)
+
+option(WITH_QUADRIFLOW    "Build with quadriflow remesher support" ON)
 
 option(WITH_AUDASPACE    "Build with blenders audio library (only disable if you know what you're doing!)" ON)
 option(WITH_SYSTEM_AUDASPACE "Build with external audaspace library installed on the system (only enable if you know what you're doing!)" OFF)
@@ -413,12 +419,15 @@ unset(PLATFORM_DEFAULT)
 option(WITH_CYCLES_LOGGING  "Build Cycles with logging support" ON)
 option(WITH_CYCLES_DEBUG    "Build Cycles with extra debug capabilities" OFF)
 option(WITH_CYCLES_NATIVE_ONLY  "Build Cycles with native kernel only (which fits current CPU, use for development only)" OFF)
+option(WITH_CYCLES_KERNEL_ASAN  "Build Cycles kernels with address sanitizer when WITH_COMPILER_ASAN is on, even if it's very slow" OFF)
+mark_as_advanced(WITH_CYCLES_KERNEL_ASAN)
 mark_as_advanced(WITH_CYCLES_CUBIN_COMPILER)
 mark_as_advanced(WITH_CYCLES_LOGGING)
 mark_as_advanced(WITH_CYCLES_DEBUG)
 mark_as_advanced(WITH_CYCLES_NATIVE_ONLY)
 
 option(WITH_CYCLES_DEVICE_CUDA              "Enable Cycles CUDA compute support" ON)
+option(WITH_CYCLES_DEVICE_OPTIX             "Enable Cycles OptiX support" OFF)
 option(WITH_CYCLES_DEVICE_OPENCL            "Enable Cycles OpenCL compute support" ON)
 option(WITH_CYCLES_NETWORK              "Enable Cycles compute over network support (EXPERIMENTAL and unfinished)" OFF)
 mark_as_advanced(WITH_CYCLES_DEVICE_CUDA)
@@ -452,13 +461,13 @@ mark_as_advanced(WITH_CXX_GUARDEDALLOC)
 option(WITH_ASSERT_ABORT "Call abort() when raising an assertion through BLI_assert()" ON)
 mark_as_advanced(WITH_ASSERT_ABORT)
 
-option(WITH_BOOST                   "Enable features depending on boost" ON)
+option(WITH_BOOST "Enable features depending on boost" ON)
+option(WITH_TBB   "Enable features depending on TBB (OpenVDB, OpenImageDenoise, sculpt multithreading)" ON)
 
 # Unit testsing
 option(WITH_GTESTS "Enable GTest unit testing" OFF)
 option(WITH_OPENGL_RENDER_TESTS "Enable OpenGL render related unit testing (Experimental)" OFF)
 option(WITH_OPENGL_DRAW_TESTS "Enable OpenGL UI drawing related unit testing (Experimental)" OFF)
-
 
 # Documentation
 if(UNIX AND NOT APPLE)
@@ -471,7 +480,7 @@ endif()
 option(WITH_OPENGL              "When off limits visibility of the opengl headers to just bf_gpu and gawain (temporary option for development purposes)" ON)
 option(WITH_GLEW_ES             "Switches to experimental copy of GLEW that has support for OpenGL ES. (temporary option for development purposes)" OFF)
 option(WITH_GL_EGL              "Use the EGL OpenGL system library instead of the platform specific OpenGL system library (CGL, glX, or WGL)"       OFF)
-option(WITH_GL_PROFILE_ES20     "Support using OpenGL ES 2.0. (thru either EGL or the AGL/WGL/XGL 'es20' profile)"                                  OFF)
+option(WITH_GL_PROFILE_ES20     "Support using OpenGL ES 2.0. (through either EGL or the AGL/WGL/XGL 'es20' profile)"                               OFF)
 
 mark_as_advanced(
   WITH_OPENGL
@@ -558,11 +567,27 @@ if(WIN32)
   set(WINDOWS_CODESIGN_PFX_PASSWORD CACHE STRING  "password for pfx file used for codesigning.")
   mark_as_advanced(WINDOWS_CODESIGN_PFX_PASSWORD)
 
-  option(WINDOWS_USE_VISUAL_STUDIO_FOLDERS "Organize the visual studio project according to source folders." ON)
-  mark_as_advanced(WINDOWS_USE_VISUAL_STUDIO_FOLDERS)
+  option(WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS "Organize the visual studio projects according to source folder structure." ON)
+  mark_as_advanced(WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS)
+
+  option(WINDOWS_USE_VISUAL_STUDIO_SOURCE_FOLDERS "Organize the source files in filters matching the source folders." ON)
+  mark_as_advanced(WINDOWS_USE_VISUAL_STUDIO_SOURCE_FOLDERS)
 
   option(WINDOWS_PYTHON_DEBUG "Include the files needed for debugging python scripts with visual studio 2017+." OFF)
   mark_as_advanced(WINDOWS_PYTHON_DEBUG)
+endif()
+
+# The following only works with the Ninja generator in CMake >= 3.0.
+if("${CMAKE_GENERATOR}" MATCHES "Ninja")
+  option(WITH_NINJA_POOL_JOBS
+         "Enable Ninja pools of jobs, to try to ease building on machines with 16GB of RAM or less (if not yet defined, will try to set best values based on detected machine specifications)."
+         OFF)
+  mark_as_advanced(WITH_NINJA_POOL_JOBS)
+endif()
+
+if(UNIX AND NOT APPLE)
+  option(WITH_CXX11_ABI "Use native C++11 ABI of compiler" ON)
+  mark_as_advanced(WITH_CXX11_ABI)
 endif()
 
 # avoid using again
@@ -657,6 +682,7 @@ if(NOT WITH_BOOST)
   set_and_warn(WITH_INTERNATIONAL  OFF)
   set_and_warn(WITH_OPENVDB        OFF)
   set_and_warn(WITH_OPENCOLORIO    OFF)
+  set_and_warn(WITH_QUADRIFLOW     OFF)
 elseif(WITH_CYCLES OR WITH_OPENIMAGEIO OR WITH_INTERNATIONAL OR
        WITH_OPENVDB OR WITH_OPENCOLORIO)
   # Keep enabled
@@ -729,21 +755,19 @@ endif()
 # Auto-enable CUDA dynload if toolkit is not found.
 if(NOT WITH_CUDA_DYNLOAD)
   find_package(CUDA)
-  if (NOT CUDA_FOUND)
+  if(NOT CUDA_FOUND)
     message("CUDA toolkit not found, using dynamic runtime loading of libraries instead")
     set(WITH_CUDA_DYNLOAD ON)
   endif()
 endif()
 
 #-----------------------------------------------------------------------------
-# Check for valid directories
-# ... a partial checkout may cause this.
-#
-# note: we need to check for a known subdir in both cases.
-#       since uninitialized git submodules will give blank dirs
+# Check check if submodules are cloned
 
 if(WITH_INTERNATIONAL)
-  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/release/datafiles/locale/languages")
+  file(GLOB RESULT "${CMAKE_SOURCE_DIR}/release/datafiles/locale")
+  list(LENGTH RESULT DIR_LEN)
+  if(DIR_LEN EQUAL 0)
     message(WARNING
       "Translation path '${CMAKE_SOURCE_DIR}/release/datafiles/locale' is missing, "
       "This is a 'git submodule', which are known not to work with bridges to other version "
@@ -765,7 +789,9 @@ if(WITH_PYTHON)
     message(FATAL_ERROR "At least Python 3.7 is required to build")
   endif()
 
-  if(NOT EXISTS "${CMAKE_SOURCE_DIR}/release/scripts/addons/modules")
+  file(GLOB RESULT "${CMAKE_SOURCE_DIR}/release/scripts/addons")
+  list(LENGTH RESULT DIR_LEN)
+  if(DIR_LEN EQUAL 0)
     message(WARNING
       "Addons path '${CMAKE_SOURCE_DIR}/release/scripts/addons' is missing, "
       "This is a 'git submodule', which are known not to work with bridges to other version "
@@ -804,19 +830,13 @@ set(PLATFORM_LINKLIBS "")
 set(PLATFORM_LINKFLAGS "")
 set(PLATFORM_LINKFLAGS_DEBUG "")
 
-if (NOT CMAKE_BUILD_TYPE MATCHES "Release")
+if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
   if(WITH_COMPILER_ASAN)
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${COMPILER_ASAN_CFLAGS}")
     set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CFLAGS}")
 
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${COMPILER_ASAN_CXXFLAGS}")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} ${COMPILER_ASAN_CXXFLAGS}")
-    if(WITH_CYCLES_OSL)
-      # With OSL, Cycles disables rtti in some modules, wich then breaks at linking
-      # when trying to use vptr sanitizer (included into 'undefined' general option).
-      set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-sanitize=vptr")
-      set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-sanitize=vptr")
-    endif()
     if(MSVC)
       set(COMPILER_ASAN_LINKER_FLAGS "/FUNCTIONPADMIN:6")
     endif()
@@ -827,7 +847,7 @@ if (NOT CMAKE_BUILD_TYPE MATCHES "Release")
 endif()
 
 #-----------------------------------------------------------------------------
-#Platform specifics
+# Platform specifics
 
 if(WITH_X11)
   find_package(X11 REQUIRED)
@@ -841,7 +861,8 @@ if(WITH_X11)
     if(X11_Xinput_LIB)
       list(APPEND PLATFORM_LINKLIBS ${X11_Xinput_LIB})
     else()
-      set(WITH_X11_XINPUT OFF)
+      message(FATAL_ERROR "LibXi not found. Disable WITH_X11_XINPUT if you
+      want to build without tablet support")
     endif()
   endif()
 
@@ -852,7 +873,8 @@ if(WITH_X11)
     if(X11_Xxf86vmode_LIB)
       list(APPEND PLATFORM_LINKLIBS ${X11_Xxf86vmode_LIB})
     else()
-      set(WITH_X11_XF86VMODE OFF)
+      message(FATAL_ERROR "libXxf86vm not found. Disable WITH_X11_XF86VMODE if you
+      want to build without")
     endif()
   endif()
 
@@ -860,7 +882,8 @@ if(WITH_X11)
     if(X11_Xfixes_LIB)
       list(APPEND PLATFORM_LINKLIBS ${X11_Xfixes_LIB})
     else()
-      set(WITH_X11_XFIXES OFF)
+      message(FATAL_ERROR "libXfixes not found. Disable WITH_X11_XFIXES if you
+      want to build without")
     endif()
   endif()
 
@@ -870,7 +893,8 @@ if(WITH_X11)
     if(X11_Xrender_LIB)
       list(APPEND PLATFORM_LINKLIBS ${X11_Xrender_LIB})
     else()
-      set(WITH_X11_ALPHA OFF)
+      message(FATAL_ERROR "libXrender not found. Disable WITH_X11_ALPHA if you
+      want to build without")
     endif()
   endif()
 
@@ -954,9 +978,9 @@ if(MSVC)
   # for some reason this fails on msvc
   add_definitions(-D__LITTLE_ENDIAN__)
 
-# OSX-Note: as we do cross-compiling with specific set architecture,
-# endianess-detection and auto-setting is counterproductive
-# so we just set endianness according CMAKE_OSX_ARCHITECTURES
+  # OSX-Note: as we do cross-compiling with specific set architecture,
+  # endianess-detection and auto-setting is counterproductive
+  # so we just set endianness according CMAKE_OSX_ARCHITECTURES
 
 elseif(CMAKE_OSX_ARCHITECTURES MATCHES i386 OR CMAKE_OSX_ARCHITECTURES MATCHES x86_64)
   add_definitions(-D__LITTLE_ENDIAN__)
@@ -1287,6 +1311,76 @@ if(WITH_LIBMV)
 endif()
 
 #-----------------------------------------------------------------------------
+# Extra limits to number of jobs running in parallel for some kind os tasks.
+# Only supported by Ninja build system currently.
+if("${CMAKE_GENERATOR}" MATCHES "Ninja" AND WITH_NINJA_POOL_JOBS)
+  if(NOT NINJA_MAX_NUM_PARALLEL_COMPILE_JOBS AND
+     NOT NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS AND
+     NOT NINJA_MAX_NUM_PARALLEL_LINK_JOBS)
+    # Try to define good default values.
+    # Max mem of heavy cpp files compilation: about 2.5GB
+    # Max mem during linking: about 3.3GB
+    cmake_host_system_information(RESULT _NUM_CORES QUERY NUMBER_OF_LOGICAL_CORES)
+    # Note: this gives mem in MB.
+    cmake_host_system_information(RESULT _TOT_MEM QUERY TOTAL_PHYSICAL_MEMORY)
+
+    # Heuristics... the more cores we have, the more free mem we have to keep for the non-heavy tasks too.
+    if(${_TOT_MEM} LESS 8000 AND ${_NUM_CORES} GREATER 2)
+      set(_compile_heavy_jobs "1")
+    elseif(${_TOT_MEM} LESS 16000 AND ${_NUM_CORES} GREATER 4)
+      set(_compile_heavy_jobs "2")
+    elseif(${_TOT_MEM} LESS 24000 AND ${_NUM_CORES} GREATER 8)
+      set(_compile_heavy_jobs "3")
+    elseif(${_TOT_MEM} LESS 32000 AND ${_NUM_CORES} GREATER 16)
+      set(_compile_heavy_jobs "4")
+    elseif(${_TOT_MEM} LESS 64000 AND ${_NUM_CORES} GREATER 32)
+      set(_compile_heavy_jobs "8")
+    else()
+      set(_compile_heavy_jobs "")
+    endif()
+
+    set(NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS "${_compile_heavy_jobs}" CACHE STRING
+        "Define the maximum number of concurrent heavy compilation jobs, for ninja build system (used for some targets which cpp files can take several GB each during compilation)." FORCE)
+    mark_as_advanced(NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS)
+    set(_compile_heavy_jobs)
+
+    # Only set regular compile jobs if we set heavy jobs, otherwise default (using all cores) if fine.
+    if(NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS)
+      math(EXPR _compile_jobs "${_NUM_CORES} - 1")
+    else()
+      set(_compile_jobs "")
+    endif()
+    set(NINJA_MAX_NUM_PARALLEL_COMPILE_JOBS "${_compile_jobs}" CACHE STRING
+        "Define the maximum number of concurrent compilation jobs, for ninja build system." FORCE)
+    mark_as_advanced(NINJA_MAX_NUM_PARALLEL_COMPILE_JOBS)
+    set(_compile_jobs)
+
+    # In practice, even when there is RAM available, this proves to be quicker than running in parallel
+    # (due to slow disks accesses).
+    set(NINJA_MAX_NUM_PARALLEL_LINK_JOBS "1" CACHE STRING
+        "Define the maximum number of concurrent link jobs, for ninja build system." FORCE)
+    mark_as_advanced(NINJA_MAX_NUM_PARALLEL_LINK_JOBS)
+
+    set(_NUM_CORES)
+    set(_TOT_MEM)
+  endif()
+
+  if(NINJA_MAX_NUM_PARALLEL_COMPILE_JOBS)
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS compile_job_pool=${NINJA_MAX_NUM_PARALLEL_COMPILE_JOBS})
+    set(CMAKE_JOB_POOL_COMPILE compile_job_pool)
+  endif()
+
+  if(NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS)
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS compile_heavy_job_pool=${NINJA_MAX_NUM_PARALLEL_COMPILE_HEAVY_JOBS})
+  endif()
+
+  if(NINJA_MAX_NUM_PARALLEL_LINK_JOBS)
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS link_job_pool=${NINJA_MAX_NUM_PARALLEL_LINK_JOBS})
+    set(CMAKE_JOB_POOL_LINK link_job_pool)
+  endif()
+endif()
+
+#-----------------------------------------------------------------------------
 # Extra compile flags
 
 if(CMAKE_COMPILER_IS_GNUCC)
@@ -1307,12 +1401,15 @@ if(CMAKE_COMPILER_IS_GNUCC)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_LOGICAL_OP -Wlogical-op)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_UNDEF -Wundef)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_INIT_SELF -Winit-self)  # needs -Wuninitialized
-  ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_NO_NULL -Wnonnull)  # C only
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_MISSING_INCLUDE_DIRS -Wmissing-include-dirs)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_NO_DIV_BY_ZERO -Wno-div-by-zero)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_TYPE_LIMITS -Wtype-limits)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_FORMAT_SIGN -Wformat-signedness)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_RESTRICT -Wrestrict)
+
+  # C-only.
+  ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_NO_NULL -Wnonnull)
+  ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_ABSOLUTE_VALUE -Wabsolute-value)
 
   # gcc 4.2 gives annoying warnings on every file with this
   if(NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.3")
@@ -1346,7 +1443,6 @@ if(CMAKE_COMPILER_IS_GNUCC)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_NO_DIV_BY_ZERO -Wno-div-by-zero)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_TYPE_LIMITS -Wtype-limits)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_ERROR_RETURN_TYPE  -Werror=return-type)
-  ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_ERROR_IMPLICIT_FUNCTION_DECLARATION -Werror=implicit-function-declaration)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_NO_CHAR_SUBSCRIPTS -Wno-char-subscripts)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_NO_UNKNOWN_PRAGMAS -Wno-unknown-pragmas)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_POINTER_ARITH -Wpointer-arith)
@@ -1474,6 +1570,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
     "/wd4800"  # forcing value to bool 'true' or 'false'
     "/wd4828"  # The file contains a character that is illegal
     "/wd4996"  # identifier was declared deprecated
+    "/wd4661"  # no suitable definition provided for explicit template instantiation request
     # errors:
     "/we4013"  # 'function' undefined; assuming extern returning int
     "/we4133"  # incompatible pointer types
@@ -1482,7 +1579,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
 
   if(MSVC_VERSION GREATER_EQUAL 1911)
     # see https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/c5038?view=vs-2017
-    set(_WARNINGS "${_WARNINGS} /w35038") #order of initialisation in c++ constructors
+    set(_WARNINGS "${_WARNINGS} /w35038") # order of initialization in c++ constructors
   endif()
 
   string(REPLACE ";" " " _WARNINGS "${_WARNINGS}")
@@ -1522,15 +1619,19 @@ if(WITH_PYTHON)
   endif()
 endif()
 
-if(
+if(MSVC)
+  # MSVC needs to be tested first, since clang on windows will
+  # match the compiler test below but clang-cl does not accept -std=c++11
+  # since it is on by default and cannot be turned off.
+  #
+  # Nothing special is needed, C++11 features are available by default.
+elseif(
   CMAKE_COMPILER_IS_GNUCC OR
   CMAKE_C_COMPILER_ID MATCHES "Clang" OR
   CMAKE_C_COMPILER_ID MATCHES "Intel"
 )
   # TODO(sergey): Do we want c++11 or gnu-c++11 here?
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-elseif(MSVC)
-  # Nothing special is needed, C++11 features are available by default.
 else()
   message(FATAL_ERROR "Unknown compiler ${CMAKE_C_COMPILER_ID}, can't enable C++11 build")
 endif()
@@ -1544,6 +1645,12 @@ if(
 )
   # Use C11 + GNU extensions, works with GCC, Clang, ICC
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu11")
+endif()
+
+if(UNIX AND NOT APPLE)
+  if(NOT WITH_CXX11_ABI)
+    set(PLATFORM_CFLAGS "${PLATFORM_CFLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+  endif()
 endif()
 
 # Include warnings first, so its possible to disable them with user defined flags
@@ -1622,6 +1729,11 @@ add_subdirectory(tests)
 
 
 #-----------------------------------------------------------------------------
+# Define 'heavy' submodules (for Ninja builder when using pools).
+setup_heavy_lib_pool()
+
+
+#-----------------------------------------------------------------------------
 # CPack for generating packages
 include(build_files/cmake/packaging.cmake)
 
@@ -1673,8 +1785,10 @@ if(FIRST_RUN)
   info_cfg_option(WITH_CYCLES)
   info_cfg_option(WITH_FREESTYLE)
   info_cfg_option(WITH_OPENCOLORIO)
+  info_cfg_option(WITH_OPENIMAGEDENOISE)
   info_cfg_option(WITH_OPENVDB)
   info_cfg_option(WITH_ALEMBIC)
+  info_cfg_option(WITH_QUADRIFLOW)
 
   info_cfg_text("Compiler Options:")
   info_cfg_option(WITH_BUILDINFO)

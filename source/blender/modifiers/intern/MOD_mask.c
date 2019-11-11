@@ -105,9 +105,10 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
 
   /* Overview of Method:
-   * 1. Get the vertices that are in the vertexgroup of interest
-   * 2. Filter out unwanted geometry (i.e. not in vertexgroup), by populating mappings with new vs old indices
-   * 3. Make a new mesh containing only the mapping data
+   * 1. Get the vertices that are in the vertexgroup of interest.
+   * 2. Filter out unwanted geometry (i.e. not in vertexgroup),
+   *    by populating mappings with new vs old indices.
+   * 3. Make a new mesh containing only the mapping data.
    */
 
   /* get original number of verts, edges, and faces */
@@ -137,9 +138,10 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       return mesh;
     }
 
-    /* determine whether each vertexgroup is associated with a selected bone or not
-     * - each cell is a boolean saying whether bone corresponding to the ith group is selected
-     * - groups that don't match a bone are treated as not existing (along with the corresponding ungrouped verts)
+    /* Determine whether each vertex-group is associated with a selected bone or not:
+     * - Each cell is a boolean saying whether bone corresponding to the i'th group selected.
+     * - Groups that don't match a bone are treated as not existing
+     *   (along with the corresponding un-grouped verts).
      */
     bone_select_array = MEM_malloc_arrayN((size_t)defbase_tot, sizeof(char), "mask array");
 
@@ -154,10 +156,11 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       }
     }
 
-    /* verthash gives mapping from original vertex indices to the new indices (including selected matches only)
+    /* verthash gives mapping from original vertex indices to the new indices
+     * (including selected matches only):
      * key = oldindex, value = newindex
      */
-    vertHash = BLI_ghash_int_new_ex("mask vert gh", (unsigned int)maxVerts);
+    vertHash = BLI_ghash_int_new_ex("mask vert gh", (uint)maxVerts);
 
     /* add vertices which exist in vertexgroups into vertHash for filtering
      * - dv = for each vertex, what vertexgroups does it belong to
@@ -201,7 +204,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     }
 
     /* hashes for quickly providing a mapping from old to new - use key=oldindex, value=newindex */
-    vertHash = BLI_ghash_int_new_ex("mask vert2 bh", (unsigned int)maxVerts);
+    vertHash = BLI_ghash_int_new_ex("mask vert2 bh", (uint)maxVerts);
 
     /* add vertices which exist in vertexgroup into ghash for filtering */
     for (i = 0, dv = dvert; i < maxVerts; i++, dv++) {
@@ -217,8 +220,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
 
   /* hashes for quickly providing a mapping from old to new - use key=oldindex, value=newindex */
-  edgeHash = BLI_ghash_int_new_ex("mask ed2 gh", (unsigned int)maxEdges);
-  polyHash = BLI_ghash_int_new_ex("mask fa2 gh", (unsigned int)maxPolys);
+  edgeHash = BLI_ghash_int_new_ex("mask ed2 gh", (uint)maxEdges);
+  polyHash = BLI_ghash_int_new_ex("mask fa2 gh", (uint)maxPolys);
 
   mvert_src = mesh->mvert;
   medge_src = mesh->medge;
@@ -341,6 +344,20 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   return result;
 }
 
+static bool isDisabled(const struct Scene *UNUSED(scene),
+                       ModifierData *md,
+                       bool UNUSED(useRenderParams))
+{
+  MaskModifierData *mmd = (MaskModifierData *)md;
+
+  /* The object type check is only needed here in case we have a placeholder
+   * object assigned (because the library containing the armature is missing).
+   *
+   * In other cases it should be impossible to have a type mismatch.
+   */
+  return mmd->ob_arm && mmd->ob_arm->type != OB_ARMATURE;
+}
+
 ModifierTypeInfo modifierType_Mask = {
     /* name */ "Mask",
     /* structName */ "MaskModifierData",
@@ -360,7 +377,7 @@ ModifierTypeInfo modifierType_Mask = {
     /* initData */ NULL,
     /* requiredDataMask */ requiredDataMask,
     /* freeData */ NULL,
-    /* isDisabled */ NULL,
+    /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,

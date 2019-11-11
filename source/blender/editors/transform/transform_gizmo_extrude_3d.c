@@ -385,7 +385,8 @@ static void gizmo_mesh_extrude_draw_prepare(const bContext *C, wmGizmoGroup *gzg
 
 static void gizmo_mesh_extrude_invoke_prepare(const bContext *UNUSED(C),
                                               wmGizmoGroup *gzgroup,
-                                              wmGizmo *gz)
+                                              wmGizmo *gz,
+                                              const wmEvent *UNUSED(event))
 {
   GizmoExtrudeGroup *ggd = gzgroup->customdata;
   if (ELEM(gz, ggd->adjust[0], ggd->adjust[1])) {
@@ -462,13 +463,14 @@ void VIEW3D_GGT_xform_extrude(struct wmGizmoGroupType *gzgt)
 
   gzgt->poll = ED_gizmo_poll_or_unlink_delayed_from_tool;
   gzgt->setup = gizmo_mesh_extrude_setup;
+  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_maybe_drag;
   gzgt->refresh = gizmo_mesh_extrude_refresh;
   gzgt->draw_prepare = gizmo_mesh_extrude_draw_prepare;
   gzgt->invoke_prepare = gizmo_mesh_extrude_invoke_prepare;
   gzgt->message_subscribe = gizmo_mesh_extrude_message_subscribe;
 
   static const EnumPropertyItem axis_type_items[] = {
-      {EXTRUDE_AXIS_NORMAL, "NORMAL", 0, "Regular", "Only show normal axis"},
+      {EXTRUDE_AXIS_NORMAL, "NORMAL", 0, "Normal", "Only show normal axis"},
       {EXTRUDE_AXIS_XYZ, "XYZ", 0, "XYZ", "Follow scene orientation"},
       {0, NULL, 0, NULL, NULL},
   };

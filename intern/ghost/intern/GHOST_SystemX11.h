@@ -78,7 +78,7 @@ class GHOST_SystemX11 : public GHOST_System {
  public:
   /**
    * Constructor
-   * this class should only be instanciated by GHOST_ISystem.
+   * this class should only be instantiated by GHOST_ISystem.
    */
 
   GHOST_SystemX11();
@@ -89,11 +89,6 @@ class GHOST_SystemX11 : public GHOST_System {
   ~GHOST_SystemX11();
 
   GHOST_TSuccess init();
-
-  /**
-   * Informs if the system provides native dialogs (eg. confirm quit)
-   */
-  virtual bool supportsNativeDialogs(void);
 
   /**
    * \section Interface Inherited from GHOST_ISystem
@@ -128,7 +123,8 @@ class GHOST_SystemX11 : public GHOST_System {
    * Create a new window.
    * The new window is added to the list of windows managed.
    * Never explicitly delete the window, use disposeWindow() instead.
-   * \param   title   The name of the window (displayed in the title bar of the window if the OS supports it).
+   * \param   title   The name of the window
+   * (displayed in the title bar of the window if the OS supports it).
    * \param   left        The coordinate of the left edge of the window.
    * \param   top     The coordinate of the top edge of the window.
    * \param   width       The width the window.
@@ -150,7 +146,8 @@ class GHOST_SystemX11 : public GHOST_System {
                               GHOST_TDrawingContextType type,
                               GHOST_GLSettings glSettings,
                               const bool exclusive = false,
-                              const GHOST_TEmbedderWindowID parentWindow = 0);
+                              const bool is_dialog = false,
+                              const GHOST_IWindow *parentWindow = 0);
 
   /**
    * Create a new offscreen context.
@@ -236,12 +233,28 @@ class GHOST_SystemX11 : public GHOST_System {
    */
   void putClipboard(GHOST_TInt8 *buffer, bool selection) const;
 
+  /**
+   * Show a system message box
+   * \param title                   The title of the message box
+   * \param message                 The message to display
+   * \param help_label              Help button label
+   * \param continue_label          Continue button label
+   * \param link                    An optional hyperlink
+   * \param dialog_options Options  how to display the message
+   */
+  GHOST_TSuccess showMessageBox(const char *title,
+                                const char *message,
+                                const char *help_label,
+                                const char *continue_label,
+                                const char *link,
+                                GHOST_DialogOptions dialog_options) const;
 #ifdef WITH_XDND
   /**
    * Creates a drag'n'drop event and pushes it immediately onto the event queue.
    * Called by GHOST_DropTargetX11 class.
    * \param eventType The type of drag'n'drop event
-   * \param draggedObjectType The type object concerned (currently array of file names, string, ?bitmap)
+   * \param draggedObjectType The type object concerned
+   * (currently array of file names, string, ?bitmap)
    * \param mouseX x mouse coordinate (in window coordinates)
    * \param mouseY y mouse coordinate
    * \param window The window on which the event occurred

@@ -25,6 +25,7 @@
 
 #include <string.h>
 
+#include "render/colorspace.h"
 #include "render/mesh.h"
 #include "render/object.h"
 #include "render/scene.h"
@@ -55,10 +56,6 @@
 #include "kernel/kernel_accumulate.h"
 #include "kernel/kernel_shader.h"
 
-#ifdef WITH_PTEX
-#  include <Ptexture.h>
-#endif
-
 CCL_NAMESPACE_BEGIN
 
 /* RenderServices implementation */
@@ -84,6 +81,7 @@ ustring OSLRenderServices::u_screen("screen");
 ustring OSLRenderServices::u_raster("raster");
 ustring OSLRenderServices::u_ndc("NDC");
 ustring OSLRenderServices::u_object_location("object:location");
+ustring OSLRenderServices::u_object_color("object:color");
 ustring OSLRenderServices::u_object_index("object:index");
 ustring OSLRenderServices::u_geom_dupli_generated("geom:dupli_generated");
 ustring OSLRenderServices::u_geom_dupli_uv("geom:dupli_uv");
@@ -124,34 +122,17 @@ ustring OSLRenderServices::u_I("I");
 ustring OSLRenderServices::u_u("u");
 ustring OSLRenderServices::u_v("v");
 ustring OSLRenderServices::u_empty;
-ustring OSLRenderServices::u_at_bevel("@bevel");
-ustring OSLRenderServices::u_at_ao("@ao");
 
-OSLRenderServices::OSLRenderServices()
+OSLRenderServices::OSLRenderServices(OSL::TextureSystem *texture_system)
+    : texture_system(texture_system)
 {
-  kernel_globals = NULL;
-  osl_ts = NULL;
-
-#ifdef WITH_PTEX
-  size_t maxmem = 16384 * 1024;
-  ptex_cache = PtexCache::create(0, maxmem);
-#endif
 }
 
 OSLRenderServices::~OSLRenderServices()
 {
-  if (osl_ts) {
-    VLOG(2) << "OSL texture system stats:\n" << osl_ts->getstats();
+  if (texture_system) {
+    VLOG(2) << "OSL texture system stats:\n" << texture_system->getstats();
   }
-#ifdef WITH_PTEX
-  ptex_cache->release();
-#endif
-}
-
-void OSLRenderServices::thread_init(KernelGlobals *kernel_globals_, OSL::TextureSystem *osl_ts_)
-{
-  kernel_globals = kernel_globals_;
-  osl_ts = osl_ts_;
 }
 
 bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg,
@@ -233,7 +214,8 @@ bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg,
                                    ustring from,
                                    float time)
 {
-  KernelGlobals *kg = kernel_globals;
+  ShaderData *sd = (ShaderData *)(sg->renderstate);
+  KernelGlobals *kg = sd->osl_globals;
 
   if (from == u_ndc) {
     copy_matrix(result, kernel_data.cam.ndctoworld);
@@ -264,7 +246,8 @@ bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg,
                                            ustring to,
                                            float time)
 {
-  KernelGlobals *kg = kernel_globals;
+  ShaderData *sd = (ShaderData *)(sg->renderstate);
+  KernelGlobals *kg = sd->osl_globals;
 
   if (to == u_ndc) {
     copy_matrix(result, kernel_data.cam.worldtondc);
@@ -354,7 +337,8 @@ bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg,
 
 bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg, OSL::Matrix44 &result, ustring from)
 {
-  KernelGlobals *kg = kernel_globals;
+  ShaderData *sd = (ShaderData *)(sg->renderstate);
+  KernelGlobals *kg = sd->osl_globals;
 
   if (from == u_ndc) {
     copy_matrix(result, kernel_data.cam.ndctoworld);
@@ -380,7 +364,8 @@ bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg,
                                            OSL::Matrix44 &result,
                                            ustring to)
 {
-  KernelGlobals *kg = kernel_globals;
+  ShaderData *sd = (ShaderData *)(sg->renderstate);
+  KernelGlobals *kg = sd->osl_globals;
 
   if (to == u_ndc) {
     copy_matrix(result, kernel_data.cam.worldtondc);
@@ -496,6 +481,65 @@ static bool set_attribute_float3(float3 f, TypeDesc type, bool derivatives, void
   fv[2] = make_float3(0.0f, 0.0f, 0.0f);
 
   return set_attribute_float3(fv, type, derivatives, val);
+}
+
+/* Attributes with the TypeRGBA type descriptor should be retrieved and stored
+ * in a float array of size 4 (e.g. node_vertex_color.osl), this array have
+ * a type descriptor TypeFloatArray4. If the storage is not a TypeFloatArray4,
+ * we either store the first three components in a vector, store the average of
+ * the components in a float, or fail the retrieval and do nothing. We allow
+ * this for the correct operation of the Attribute node.
+ */
+
+static bool set_attribute_float4(float4 f[3], TypeDesc type, bool derivatives, void *val)
+{
+  float *fval = (float *)val;
+  if (type == TypeFloatArray4) {
+    fval[0] = f[0].x;
+    fval[1] = f[0].y;
+    fval[2] = f[0].z;
+    fval[3] = f[0].w;
+
+    if (derivatives) {
+      fval[4] = f[1].x;
+      fval[5] = f[1].y;
+      fval[6] = f[1].z;
+      fval[7] = f[1].w;
+
+      fval[8] = f[2].x;
+      fval[9] = f[2].y;
+      fval[10] = f[2].z;
+      fval[11] = f[2].w;
+    }
+    return true;
+  }
+  else if (type == TypeDesc::TypePoint || type == TypeDesc::TypeVector ||
+           type == TypeDesc::TypeNormal || type == TypeDesc::TypeColor) {
+    fval[0] = f[0].x;
+    fval[1] = f[0].y;
+    fval[2] = f[0].z;
+
+    if (derivatives) {
+      fval[3] = f[1].x;
+      fval[4] = f[1].y;
+      fval[5] = f[1].z;
+
+      fval[6] = f[2].x;
+      fval[7] = f[2].y;
+      fval[8] = f[2].z;
+    }
+    return true;
+  }
+  else if (type == TypeDesc::TypeFloat) {
+    fval[0] = average(float4_to_float3(f[0]));
+
+    if (derivatives) {
+      fval[1] = average(float4_to_float3(f[1]));
+      fval[2] = average(float4_to_float3(f[2]));
+    }
+    return true;
+  }
+  return false;
 }
 
 static bool set_attribute_float(float f[3], TypeDesc type, bool derivatives, void *val)
@@ -633,7 +677,7 @@ static bool get_primitive_attribute(KernelGlobals *kg,
     return set_attribute_float3(fval, type, derivatives, val);
   }
   else if (attr.type == TypeFloat2) {
-    float2 fval[2];
+    float2 fval[3];
     fval[0] = primitive_attribute_float2(
         kg, sd, attr.desc, (derivatives) ? &fval[1] : NULL, (derivatives) ? &fval[2] : NULL);
     return set_attribute_float2(fval, type, derivatives, val);
@@ -643,6 +687,12 @@ static bool get_primitive_attribute(KernelGlobals *kg,
     fval[0] = primitive_attribute_float(
         kg, sd, attr.desc, (derivatives) ? &fval[1] : NULL, (derivatives) ? &fval[2] : NULL);
     return set_attribute_float(fval, type, derivatives, val);
+  }
+  else if (attr.type == TypeRGBA) {
+    float4 fval[3];
+    fval[0] = primitive_attribute_float4(
+        kg, sd, attr.desc, (derivatives) ? &fval[1] : NULL, (derivatives) ? &fval[2] : NULL);
+    return set_attribute_float4(fval, type, derivatives, val);
   }
   else {
     return false;
@@ -684,6 +734,10 @@ bool OSLRenderServices::get_object_standard_attribute(
     float3 f = object_location(kg, sd);
     return set_attribute_float3(f, type, derivatives, val);
   }
+  else if (name == u_object_color) {
+    float3 f = object_color(kg, sd->object);
+    return set_attribute_float3(f, type, derivatives, val);
+  }
   else if (name == u_object_index) {
     float f = object_pass_id(kg, sd->object);
     return set_attribute_float(f, type, derivatives, val);
@@ -713,7 +767,7 @@ bool OSLRenderServices::get_object_standard_attribute(
   }
   else if (name == u_particle_random) {
     int particle_id = object_particle_id(kg, sd->object);
-    float f = hash_int_01(particle_index(kg, particle_id));
+    float f = hash_uint2_to_float(particle_index(kg, particle_id), 0);
     return set_attribute_float(f, type, derivatives, val);
   }
 
@@ -956,19 +1010,44 @@ bool OSLRenderServices::get_userdata(
 
 TextureSystem::TextureHandle *OSLRenderServices::get_texture_handle(ustring filename)
 {
-  if (filename.length() && filename[0] == '@') {
-    /* Dummy, we don't use texture handles for builtin textures but need
-     * to tell the OSL runtime optimizer that this is a valid texture. */
+  OSLTextureHandleMap::iterator it = textures.find(filename);
+
+  /* For non-OIIO textures, just return a pointer to our own OSLTextureHandle. */
+  if (it != textures.end()) {
+    if (it->second->type != OSLTextureHandle::OIIO) {
+      return (TextureSystem::TextureHandle *)it->second.get();
+    }
+  }
+
+  /* Get handle from OpenImageIO. */
+  OSL::TextureSystem *ts = texture_system;
+  TextureSystem::TextureHandle *handle = ts->get_texture_handle(filename);
+  if (handle == NULL) {
     return NULL;
   }
-  else {
-    return texturesys()->get_texture_handle(filename);
+
+  /* Insert new OSLTextureHandle if needed. */
+  if (it == textures.end()) {
+    textures.insert(filename, new OSLTextureHandle(OSLTextureHandle::OIIO));
+    it = textures.find(filename);
   }
+
+  /* Assign OIIO texture handle and return. */
+  it->second->oiio_handle = handle;
+  return (TextureSystem::TextureHandle *)it->second.get();
 }
 
 bool OSLRenderServices::good(TextureSystem::TextureHandle *texture_handle)
 {
-  return texturesys()->good(texture_handle);
+  OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
+
+  if (handle->oiio_handle) {
+    OSL::TextureSystem *ts = texture_system;
+    return ts->good(handle->oiio_handle);
+  }
+  else {
+    return true;
+  }
 }
 
 bool OSLRenderServices::texture(ustring filename,
@@ -988,69 +1067,28 @@ bool OSLRenderServices::texture(ustring filename,
                                 float *dresultdt,
                                 ustring *errormessage)
 {
-  OSL::TextureSystem *ts = osl_ts;
+  OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
+  OSLTextureHandle::Type texture_type = (handle) ? handle->type : OSLTextureHandle::OIIO;
   ShaderData *sd = (ShaderData *)(sg->renderstate);
-  KernelGlobals *kg = sd->osl_globals;
-
-  if (texture_thread_info == NULL) {
-    OSLThreadData *tdata = kg->osl_tdata;
-    texture_thread_info = tdata->oiio_thread_info;
-  }
-
-#ifdef WITH_PTEX
-  /* todo: this is just a quick hack, only works with particular files and options */
-  if (string_endswith(filename.string(), ".ptx")) {
-    float2 uv;
-    int faceid;
-
-    if (!primitive_ptex(kg, sd, &uv, &faceid))
-      return false;
-
-    float u = uv.x;
-    float v = uv.y;
-    float dudx = 0.0f;
-    float dvdx = 0.0f;
-    float dudy = 0.0f;
-    float dvdy = 0.0f;
-
-    Ptex::String error;
-    PtexPtr<PtexTexture> r(ptex_cache->get(filename.c_str(), error));
-
-    if (!r) {
-      //std::cerr << error.c_str() << std::endl;
-      return false;
-    }
-
-    bool mipmaplerp = false;
-    float sharpness = 1.0f;
-    PtexFilter::Options opts(PtexFilter::f_bicubic, mipmaplerp, sharpness);
-    PtexPtr<PtexFilter> f(PtexFilter::getFilter(r, opts));
-
-    f->eval(result, options.firstchannel, nchannels, faceid, u, v, dudx, dvdx, dudy, dvdy);
-
-    for (int c = r->numChannels(); c < nchannels; c++)
-      result[c] = result[0];
-
-    return true;
-  }
-#endif
+  KernelGlobals *kernel_globals = sd->osl_globals;
   bool status = false;
 
-  if (filename.length() && filename[0] == '@') {
-    if (filename == u_at_bevel) {
+  switch (texture_type) {
+    case OSLTextureHandle::BEVEL: {
       /* Bevel shader hack. */
       if (nchannels >= 3) {
         PathState *state = sd->osl_path_state;
         int num_samples = (int)s;
         float radius = t;
-        float3 N = svm_bevel(kg, sd, state, radius, num_samples);
+        float3 N = svm_bevel(kernel_globals, sd, state, radius, num_samples);
         result[0] = N.x;
         result[1] = N.y;
         result[2] = N.z;
         status = true;
       }
+      break;
     }
-    else if (filename == u_at_ao) {
+    case OSLTextureHandle::AO: {
       /* AO shader hack. */
       PathState *state = sd->osl_path_state;
       int num_samples = (int)s;
@@ -1066,19 +1104,13 @@ bool OSLRenderServices::texture(ustring filename,
       if ((int)options.tblur) {
         flags |= NODE_AO_GLOBAL_RADIUS;
       }
-      result[0] = svm_ao(kg, sd, N, state, radius, num_samples, flags);
+      result[0] = svm_ao(kernel_globals, sd, N, state, radius, num_samples, flags);
       status = true;
+      break;
     }
-    else if (filename[1] == 'l') {
-      /* IES light. */
-      int slot = atoi(filename.c_str() + 2);
-      result[0] = kernel_ies_interp(kg, slot, s, t);
-      status = true;
-    }
-    else {
+    case OSLTextureHandle::SVM: {
       /* Packed texture. */
-      int slot = atoi(filename.c_str() + 2);
-      float4 rgba = kernel_tex_image_interp(kg, slot, s, 1.0f - t);
+      float4 rgba = kernel_tex_image_interp(kernel_globals, handle->svm_slot, s, 1.0f - t);
 
       result[0] = rgba[0];
       if (nchannels > 1)
@@ -1088,37 +1120,62 @@ bool OSLRenderServices::texture(ustring filename,
       if (nchannels > 3)
         result[3] = rgba[3];
       status = true;
+      break;
     }
-  }
-  else {
-    if (texture_handle != NULL) {
-      status = ts->texture(texture_handle,
-                           texture_thread_info,
-                           options,
-                           s,
-                           t,
-                           dsdx,
-                           dtdx,
-                           dsdy,
-                           dtdy,
-                           nchannels,
-                           result,
-                           dresultds,
-                           dresultdt);
+    case OSLTextureHandle::IES: {
+      /* IES light. */
+      result[0] = kernel_ies_interp(kernel_globals, handle->svm_slot, s, t);
+      status = true;
+      break;
     }
-    else {
-      status = ts->texture(filename,
-                           options,
-                           s,
-                           t,
-                           dsdx,
-                           dtdx,
-                           dsdy,
-                           dtdy,
-                           nchannels,
-                           result,
-                           dresultds,
-                           dresultdt);
+    case OSLTextureHandle::OIIO: {
+      /* OpenImageIO texture cache. */
+      OSL::TextureSystem *ts = texture_system;
+
+      if (handle && handle->oiio_handle) {
+        if (texture_thread_info == NULL) {
+          OSLThreadData *tdata = kernel_globals->osl_tdata;
+          texture_thread_info = tdata->oiio_thread_info;
+        }
+
+        status = ts->texture(handle->oiio_handle,
+                             texture_thread_info,
+                             options,
+                             s,
+                             t,
+                             dsdx,
+                             dtdx,
+                             dsdy,
+                             dtdy,
+                             nchannels,
+                             result,
+                             dresultds,
+                             dresultdt);
+      }
+      else {
+        status = ts->texture(filename,
+                             options,
+                             s,
+                             t,
+                             dsdx,
+                             dtdx,
+                             dsdy,
+                             dtdy,
+                             nchannels,
+                             result,
+                             dresultds,
+                             dresultdt);
+      }
+
+      if (!status) {
+        /* This might be slow, but prevents error messages leak and
+         * other nasty stuff happening. */
+        ts->geterror();
+      }
+      else if (handle && handle->processor) {
+        ColorSpaceManager::to_scene_linear(handle->processor, result, nchannels);
+      }
+      break;
     }
   }
 
@@ -1131,11 +1188,6 @@ bool OSLRenderServices::texture(ustring filename,
       if (nchannels == 4)
         result[3] = 1.0f;
     }
-    /* This might be slow, but prevents error messages leak and
-     * other nasty stuff happening.
-     */
-    string err = ts->geterror();
-    (void)err;
   }
 
   return status;
@@ -1157,56 +1209,83 @@ bool OSLRenderServices::texture3d(ustring filename,
                                   float *dresultdr,
                                   ustring *errormessage)
 {
-  OSL::TextureSystem *ts = osl_ts;
-  ShaderData *sd = (ShaderData *)(sg->renderstate);
-  KernelGlobals *kg = sd->osl_globals;
+  OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
+  OSLTextureHandle::Type texture_type = (handle) ? handle->type : OSLTextureHandle::OIIO;
+  bool status = false;
 
-  if (texture_thread_info == NULL) {
-    OSLThreadData *tdata = kg->osl_tdata;
-    texture_thread_info = tdata->oiio_thread_info;
-  }
+  switch (texture_type) {
+    case OSLTextureHandle::SVM: {
+      /* Packed texture. */
+      ShaderData *sd = (ShaderData *)(sg->renderstate);
+      KernelGlobals *kernel_globals = sd->osl_globals;
+      int slot = handle->svm_slot;
+      float4 rgba = kernel_tex_image_interp_3d(
+          kernel_globals, slot, P.x, P.y, P.z, INTERPOLATION_NONE);
 
-  bool status;
-  if (filename.length() && filename[0] == '@') {
-    int slot = atoi(filename.c_str() + 1);
-    float4 rgba = kernel_tex_image_interp_3d(kg, slot, P.x, P.y, P.z, INTERPOLATION_NONE);
-
-    result[0] = rgba[0];
-    if (nchannels > 1)
-      result[1] = rgba[1];
-    if (nchannels > 2)
-      result[2] = rgba[2];
-    if (nchannels > 3)
-      result[3] = rgba[3];
-    status = true;
-  }
-  else {
-    if (texture_handle != NULL) {
-      status = ts->texture3d(texture_handle,
-                             texture_thread_info,
-                             options,
-                             P,
-                             dPdx,
-                             dPdy,
-                             dPdz,
-                             nchannels,
-                             result,
-                             dresultds,
-                             dresultdt,
-                             dresultdr);
+      result[0] = rgba[0];
+      if (nchannels > 1)
+        result[1] = rgba[1];
+      if (nchannels > 2)
+        result[2] = rgba[2];
+      if (nchannels > 3)
+        result[3] = rgba[3];
+      status = true;
+      break;
     }
-    else {
-      status = ts->texture3d(filename,
-                             options,
-                             P,
-                             dPdx,
-                             dPdy,
-                             dPdz,
-                             nchannels,
-                             result,
-                             dresultds,
-                             dresultdt,
-                             dresultdr);
+    case OSLTextureHandle::OIIO: {
+      /* OpenImageIO texture cache. */
+      OSL::TextureSystem *ts = texture_system;
+
+      if (handle && handle->oiio_handle) {
+        if (texture_thread_info == NULL) {
+          ShaderData *sd = (ShaderData *)(sg->renderstate);
+          KernelGlobals *kernel_globals = sd->osl_globals;
+          OSLThreadData *tdata = kernel_globals->osl_tdata;
+          texture_thread_info = tdata->oiio_thread_info;
+        }
+
+        status = ts->texture3d(handle->oiio_handle,
+                               texture_thread_info,
+                               options,
+                               P,
+                               dPdx,
+                               dPdy,
+                               dPdz,
+                               nchannels,
+                               result,
+                               dresultds,
+                               dresultdt,
+                               dresultdr);
+      }
+      else {
+        status = ts->texture3d(filename,
+                               options,
+                               P,
+                               dPdx,
+                               dPdy,
+                               dPdz,
+                               nchannels,
+                               result,
+                               dresultds,
+                               dresultdt,
+                               dresultdr);
+      }
+
+      if (!status) {
+        /* This might be slow, but prevents error messages leak and
+         * other nasty stuff happening. */
+        ts->geterror();
+      }
+      else if (handle && handle->processor) {
+        ColorSpaceManager::to_scene_linear(handle->processor, result, nchannels);
+      }
+      break;
+    }
+    case OSLTextureHandle::IES:
+    case OSLTextureHandle::AO:
+    case OSLTextureHandle::BEVEL: {
+      status = false;
+      break;
     }
   }
 
@@ -1219,18 +1298,13 @@ bool OSLRenderServices::texture3d(ustring filename,
       if (nchannels == 4)
         result[3] = 1.0f;
     }
-    /* This might be slow, but prevents error messages leak and
-     * other nasty stuff happening.
-     */
-    string err = ts->geterror();
-    (void)err;
   }
 
   return status;
 }
 
 bool OSLRenderServices::environment(ustring filename,
-                                    TextureHandle *th,
+                                    TextureHandle *texture_handle,
                                     TexturePerthread *thread_info,
                                     TextureOpt &options,
                                     OSL::ShaderGlobals *sg,
@@ -1243,21 +1317,33 @@ bool OSLRenderServices::environment(ustring filename,
                                     float *dresultdt,
                                     ustring *errormessage)
 {
-  OSL::TextureSystem *ts = osl_ts;
+  OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
+  OSL::TextureSystem *ts = texture_system;
+  bool status = false;
 
-  if (thread_info == NULL) {
-    ShaderData *sd = (ShaderData *)(sg->renderstate);
-    KernelGlobals *kg = sd->osl_globals;
-    OSLThreadData *tdata = kg->osl_tdata;
-    thread_info = tdata->oiio_thread_info;
+  if (handle && handle->oiio_handle) {
+    if (thread_info == NULL) {
+      ShaderData *sd = (ShaderData *)(sg->renderstate);
+      KernelGlobals *kernel_globals = sd->osl_globals;
+      OSLThreadData *tdata = kernel_globals->osl_tdata;
+      thread_info = tdata->oiio_thread_info;
+    }
+
+    status = ts->environment(handle->oiio_handle,
+                             thread_info,
+                             options,
+                             R,
+                             dRdx,
+                             dRdy,
+                             nchannels,
+                             result,
+                             dresultds,
+                             dresultdt);
   }
-
-  if (th == NULL) {
-    th = ts->get_texture_handle(filename, thread_info);
+  else {
+    status = ts->environment(
+        filename, options, R, dRdx, dRdy, nchannels, result, dresultds, dresultdt);
   }
-
-  bool status = ts->environment(
-      th, thread_info, options, R, dRdx, dRdy, nchannels, result, dresultds, dresultdt);
 
   if (!status) {
     if (nchannels == 3 || nchannels == 4) {
@@ -1269,26 +1355,31 @@ bool OSLRenderServices::environment(ustring filename,
         result[3] = 1.0f;
     }
   }
+  else if (handle && handle->processor) {
+    ColorSpaceManager::to_scene_linear(handle->processor, result, nchannels);
+  }
 
   return status;
 }
 
 bool OSLRenderServices::get_texture_info(OSL::ShaderGlobals *sg,
                                          ustring filename,
-                                         TextureHandle *th,
+                                         TextureHandle *texture_handle,
                                          int subimage,
                                          ustring dataname,
                                          TypeDesc datatype,
                                          void *data)
 {
-  OSL::TextureSystem *ts = osl_ts;
-  if (filename.length() && filename[0] == '@') {
-    /* Special builtin textures. */
+  OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
+
+  /* No texture info for other texture types. */
+  if (handle && handle->type != OSLTextureHandle::OIIO) {
     return false;
   }
-  else {
-    return ts->get_texture_info(filename, subimage, dataname, datatype, data);
-  }
+
+  /* Get texture info from OpenImageIO. */
+  OSL::TextureSystem *ts = texture_system;
+  return ts->get_texture_info(filename, subimage, dataname, datatype, data);
 }
 
 int OSLRenderServices::pointcloud_search(OSL::ShaderGlobals *sg,
@@ -1371,9 +1462,16 @@ bool OSLRenderServices::trace(TraceOpt &options,
   tracedata->init = true;
   tracedata->sd.osl_globals = sd->osl_globals;
 
+  KernelGlobals *kg = sd->osl_globals;
+
+  /* Can't raytrace from shaders like displacement, before BVH exists. */
+  if (kernel_data.bvh.bvh_layout == BVH_LAYOUT_NONE) {
+    return false;
+  }
+
   /* Raytrace, leaving out shadow opaque to avoid early exit. */
   uint visibility = PATH_RAY_ALL_VISIBILITY - PATH_RAY_SHADOW_OPAQUE;
-  return scene_intersect(sd->osl_globals, ray, visibility, &tracedata->isect);
+  return scene_intersect(kg, &ray, visibility, &tracedata->isect);
 }
 
 bool OSLRenderServices::getmessage(OSL::ShaderGlobals *sg,

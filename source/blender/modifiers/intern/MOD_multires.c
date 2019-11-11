@@ -38,6 +38,7 @@
 #include "BKE_paint.h"
 #include "BKE_subdiv.h"
 #include "BKE_subdiv_ccg.h"
+#include "BKE_subdiv_deform.h"
 #include "BKE_subdiv_mesh.h"
 #include "BKE_subsurf.h"
 
@@ -168,6 +169,10 @@ static Mesh *multires_as_ccg(MultiresModifierData *mmd,
 static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result = mesh;
+#if !defined(WITH_OPENSUBDIV)
+  modifier_setError(md, "Disabled, built without OpenSubdiv");
+  return result;
+#endif
   MultiresModifierData *mmd = (MultiresModifierData *)md;
   SubdivSettings subdiv_settings;
   BKE_multires_subdiv_settings_init(&subdiv_settings, mmd);
@@ -185,7 +190,10 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
    * accessible via MVert. For this reason we do not evaluate multires to
    * grids when orco is requested. */
   const bool for_orco = (ctx->flag & MOD_APPLY_ORCO) != 0;
-  if ((ctx->object->mode & OB_MODE_SCULPT) && !for_orco) {
+  /* Needed when rendering or baking will in sculpt mode. */
+  const bool for_render = (ctx->flag & MOD_APPLY_RENDER) != 0;
+
+  if ((ctx->object->mode & OB_MODE_SCULPT) && !for_orco && !for_render) {
     /* NOTE: CCG takes ownership over Subdiv. */
     result = multires_as_ccg(mmd, ctx, mesh, subdiv);
     result->runtime.subdiv_ccg_tot_level = mmd->totlvl;
@@ -195,7 +203,14 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
      * Annoying and not so much black-boxed as far as sculpting goes, and
      * surely there is a better way of solving this. */
     if (ctx->object->sculpt != NULL) {
-      ctx->object->sculpt->subdiv_ccg = result->runtime.subdiv_ccg;
+      SculptSession *sculpt_session = ctx->object->sculpt;
+      sculpt_session->subdiv_ccg = result->runtime.subdiv_ccg;
+      sculpt_session->multires = mmd;
+      sculpt_session->totvert = mesh->totvert;
+      sculpt_session->totpoly = mesh->totpoly;
+      sculpt_session->mvert = NULL;
+      sculpt_session->mpoly = NULL;
+      sculpt_session->mloop = NULL;
     }
     /* NOTE: CCG becomes an owner of Subdiv descriptor, so can not share
      * this pointer. Not sure if it's needed, but might have a second look
@@ -213,6 +228,42 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   return result;
 }
 
+static void deformMatrices(ModifierData *md,
+                           const ModifierEvalContext *UNUSED(ctx),
+                           Mesh *mesh,
+                           float (*vertex_cos)[3],
+                           float (*deform_matrices)[3][3],
+                           int num_verts)
+
+{
+#if !defined(WITH_OPENSUBDIV)
+  modifier_setError(md, "Disabled, built without OpenSubdiv");
+  return;
+#endif
+
+  /* Subsurf does not require extra space mapping, keep matrices as is. */
+  (void)deform_matrices;
+
+  MultiresModifierData *mmd = (MultiresModifierData *)md;
+  SubdivSettings subdiv_settings;
+  BKE_multires_subdiv_settings_init(&subdiv_settings, mmd);
+  if (subdiv_settings.level == 0) {
+    return;
+  }
+  BKE_subdiv_settings_validate_for_mesh(&subdiv_settings, mesh);
+  MultiresRuntimeData *runtime_data = multires_ensure_runtime(mmd);
+  Subdiv *subdiv = subdiv_descriptor_ensure(mmd, &subdiv_settings, mesh);
+  if (subdiv == NULL) {
+    /* Happens on bad topology, ut also on empty input mesh. */
+    return;
+  }
+  BKE_subdiv_displacement_attach_from_multires(subdiv, mesh, mmd);
+  BKE_subdiv_deform_coarse_vertices(subdiv, mesh, vertex_cos, num_verts);
+  if (subdiv != runtime_data->subdiv) {
+    BKE_subdiv_free(subdiv);
+  }
+}
+
 ModifierTypeInfo modifierType_Multires = {
     /* name */ "Multires",
     /* structName */ "MultiresModifierData",
@@ -224,7 +275,7 @@ ModifierTypeInfo modifierType_Multires = {
     /* copyData */ copyData,
 
     /* deformVerts */ NULL,
-    /* deformMatrices */ NULL,
+    /* deformMatrices */ deformMatrices,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
     /* applyModifier */ applyModifier,

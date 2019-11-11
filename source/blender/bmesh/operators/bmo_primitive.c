@@ -807,6 +807,7 @@ void BM_mesh_calc_uvs_grid(BMesh *bm,
 
   const float dx = 1.0f / (float)(x_segments - 1);
   const float dy = 1.0f / (float)(y_segments - 1);
+  const float dx_wrap = 1.0 - (dx / 2.0f);
   float x = 0.0f;
   float y = dy;
 
@@ -844,7 +845,7 @@ void BM_mesh_calc_uvs_grid(BMesh *bm,
     }
 
     x += dx;
-    if (x >= 1.0f) {
+    if (x >= dx_wrap) {
       x = 0.0f;
       y += dy;
     }
@@ -941,8 +942,8 @@ void bmo_create_uvsphere_exec(BMesh *bm, BMOperator *op)
     BMLoop *l;
     BMIter fiter, liter;
 
-    /* We cannot tag faces for UVs computing above, so we have to do it now, based on all its vertices
-     * being tagged. */
+    /* We cannot tag faces for UVs computing above,
+     * so we have to do it now, based on all its vertices being tagged. */
     BM_ITER_MESH (f, &fiter, bm, BM_FACES_OF_MESH) {
       bool valid = true;
 
@@ -1091,7 +1092,7 @@ static void bm_mesh_calc_uvs_sphere_face(BMFace *f, const int cd_loop_uv_offset)
     float z = l->v->co[2];
     float len = len_v3(l->v->co);
 
-    /* Use neigboring point to compute angle for poles. */
+    /* Use neighboring point to compute angle for poles. */
     float theta;
     if (f->len == 3 && fabsf(x) < 0.0001f && fabsf(y) < 0.0001f) {
       theta = atan2f(avgy, avgx);
@@ -1506,7 +1507,7 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
     BMO_op_callf(bm, op->flag, "dissolve_faces faces=%ff", FACE_NEW);
   }
 
-  BMO_op_callf(bm, op->flag, "remove_doubles verts=%fv dist=%f", VERT_MARK, 0.000001);
+  BMO_op_callf(bm, op->flag, "remove_doubles verts=%fv dist=%f", VERT_MARK, 0.0000005 * depth);
   BMO_slot_buffer_from_enabled_flag(bm, op, op->slots_out, "verts.out", BM_VERT, VERT_MARK);
 }
 
@@ -1537,7 +1538,8 @@ void BM_mesh_calc_uvs_cone(BMesh *bm,
   const float uv_width = 1.0f / (float)segments;
   const float uv_height = cap_ends ? 0.5f : 1.0f;
 
-  /* Note that all this allows us to handle all cases (real cone, truncated cone, with or without ends capped)
+  /* Note that all this allows us to handle all cases
+   * (real cone, truncated cone, with or without ends capped)
    * with a single common code. */
   const float uv_center_y = cap_ends ? 0.25f : 0.5f;
   const float uv_center_x_top = cap_ends ? 0.25f : 0.5f;
@@ -1558,9 +1560,10 @@ void BM_mesh_calc_uvs_cone(BMesh *bm,
   float inv_mat[4][4];
   int loop_index;
 
-  mul_mat3_m4_v3(
-      mat, local_up); /* transform the upvector like we did the cone itself, without location. */
-  normalize_v3(local_up); /* remove global scaling... */
+  /* Transform the upvector like we did the cone itself, without location. */
+  mul_mat3_m4_v3(mat, local_up);
+  /* Remove global scaling... */
+  normalize_v3(local_up);
 
   invert_m4_m4(inv_mat, mat);
 
@@ -1601,7 +1604,8 @@ void BM_mesh_calc_uvs_cone(BMesh *bm,
       }
     }
     else {
-      /* top or bottom face - so unwrap it by transforming back to a circle and using the X/Y coords */
+      /* Top or bottom face - so unwrap it by transforming
+       * back to a circle and using the X/Y coords. */
       BM_face_normal_update(f);
 
       BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {

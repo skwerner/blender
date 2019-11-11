@@ -138,13 +138,21 @@ static void deformVerts(ModifierData *md,
     }
     /* TODO(sergey): This is not how particles were working prior to copy on
      * write, but now evaluation is similar to case when one duplicates the
-     * object. In that case particles were doing reset here. */
-    psys->recalc |= ID_RECALC_PSYS_RESET;
+     * object. In that case particles were doing reset here.
+     *
+     * Don't do reset when entering particle edit mode, as that will destroy the edit mode data.
+     * Shouldn't be an issue, since particles are supposed to be evaluated once prior to entering
+     * edit mode anyway.
+     * Could in theory be an issue when everything is done in a script, but then solution is
+     * not known to me. */
+    if (ctx->object->mode != OB_MODE_PARTICLE_EDIT) {
+      psys->recalc |= ID_RECALC_PSYS_RESET;
+    }
   }
 
   /* make new mesh */
   psmd->mesh_final = BKE_mesh_copy_for_eval(mesh_src, false);
-  BKE_mesh_apply_vert_coords(psmd->mesh_final, vertexCos);
+  BKE_mesh_vert_coords_apply(psmd->mesh_final, vertexCos);
   BKE_mesh_calc_normals(psmd->mesh_final);
 
   BKE_mesh_tessface_ensure(psmd->mesh_final);
@@ -160,7 +168,7 @@ static void deformVerts(ModifierData *md,
 
       if (em) {
         /* In edit mode get directly from the edit mesh. */
-        psmd->mesh_original = BKE_mesh_from_bmesh_for_eval_nomain(em->bm, NULL);
+        psmd->mesh_original = BKE_mesh_from_bmesh_for_eval_nomain(em->bm, NULL, mesh);
       }
       else {
         /* Otherwise get regular mesh. */
@@ -193,10 +201,10 @@ static void deformVerts(ModifierData *md,
                          psmd->mesh_final->totedge != psmd->totdmedge ||
                          psmd->mesh_final->totface != psmd->totdmface)) {
     psys->recalc |= ID_RECALC_PSYS_RESET;
-    psmd->totdmvert = psmd->mesh_final->totvert;
-    psmd->totdmedge = psmd->mesh_final->totedge;
-    psmd->totdmface = psmd->mesh_final->totface;
   }
+  psmd->totdmvert = psmd->mesh_final->totvert;
+  psmd->totdmedge = psmd->mesh_final->totedge;
+  psmd->totdmface = psmd->mesh_final->totface;
 
   if (!(ctx->object->transflag & OB_NO_PSYS_UPDATE)) {
     struct Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);

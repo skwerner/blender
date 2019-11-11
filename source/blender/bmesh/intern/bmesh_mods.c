@@ -128,8 +128,9 @@ bool BM_disk_dissolve(BMesh *bm, BMVert *v)
     BMLoop *l_a = BM_face_vert_share_loop(e->l->f, v);
     BMLoop *l_b = (e->l->v == v) ? e->l->next : e->l;
 
-    if (!BM_face_split(bm, e->l->f, l_a, l_b, NULL, NULL, false))
+    if (!BM_face_split(bm, e->l->f, l_a, l_b, NULL, NULL, false)) {
       return false;
+    }
 
     if (!BM_disk_dissolve(bm, v)) {
       return false;
@@ -322,13 +323,14 @@ BMFace *BM_face_split(BMesh *bm,
  *
  * Like BM_face_split, but with an edge split by \a n intermediate points with given coordinates.
  *
- * \param bm: The bmesh
- * \param f: the original face
- * \param l_a, l_b: Vertices which define the split edge, must be different
- * \param cos: Array of coordinates for intermediate points
- * \param n: Length of \a cos (must be > 0)
- * \param r_l: pointer which will receive the BMLoop for the first split edge (from \a l_a) in the new face
- * \param example: Edge used for attributes of splitting edge, if non-NULL
+ * \param bm: The bmesh.
+ * \param f: the original face.
+ * \param l_a, l_b: Vertices which define the split edge, must be different.
+ * \param cos: Array of coordinates for intermediate points.
+ * \param n: Length of \a cos (must be > 0).
+ * \param r_l: pointer which will receive the BMLoop.
+ * for the first split edge (from \a l_a) in the new face.
+ * \param example: Edge used for attributes of splitting edge, if non-NULL.
  *
  * \return Pointer to the newly created face representing one side of the split
  * if the split is successful (and the original original face will be the
@@ -370,7 +372,8 @@ BMFace *BM_face_split_n(BMesh *bm,
 #else
   f_new = bmesh_kernel_split_face_make_edge(bm, f, l_a, l_b, &l_new, example, false);
 #endif
-  /* bmesh_kernel_split_face_make_edge returns in 'l_new' a Loop for f_new going from 'v_a' to 'v_b'.
+  /* bmesh_kernel_split_face_make_edge returns in 'l_new'
+   * a Loop for f_new going from 'v_a' to 'v_b'.
    * The radial_next is for 'f' and goes from 'v_b' to 'v_a'  */
 
   if (f_new) {
@@ -378,7 +381,8 @@ BMFace *BM_face_split_n(BMesh *bm,
     for (i = 0; i < n; i++) {
       v_new = bmesh_kernel_split_edge_make_vert(bm, v_b, e, &e_new);
       BLI_assert(v_new != NULL);
-      /* bmesh_kernel_split_edge_make_vert returns in 'e_new' the edge going from 'v_new' to 'v_b' */
+      /* bmesh_kernel_split_edge_make_vert returns in 'e_new'
+       * the edge going from 'v_new' to 'v_b'. */
       copy_v3_v3(v_new->co, cos[i]);
 
       /* interpolate the loop data for the loops with (v == v_new), using orig face */
@@ -1025,7 +1029,7 @@ BMEdge *BM_edge_rotate(BMesh *bm, BMEdge *e, const bool ccw, const short check_f
   /* Rotate The Edge */
 
   /* first create the new edge, this is so we can copy the customdata from the old one
-   * if splice if disabled, always add in a new edge even if theres one there. */
+   * if splice if disabled, always add in a new edge even if there's one there. */
   e_new = BM_edge_create(
       bm, v1, v2, e, (check_flag & BM_EDGEROT_CHECK_SPLICE) ? BM_CREATE_NO_DOUBLE : BM_CREATE_NOP);
 

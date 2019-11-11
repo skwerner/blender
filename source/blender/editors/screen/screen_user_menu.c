@@ -52,27 +52,43 @@
 #include "RNA_access.h"
 
 /* -------------------------------------------------------------------- */
+/** \name Internal Utilities
+ * \{ */
+
+static const char *screen_menu_context_string(const bContext *C, const SpaceLink *sl)
+{
+  if (sl->spacetype == SPACE_NODE) {
+    const SpaceNode *snode = (const SpaceNode *)sl;
+    return snode->tree_idname;
+  }
+  return CTX_data_mode_string(C);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Menu Type
  * \{ */
 
 bUserMenu **ED_screen_user_menus_find(const bContext *C, uint *r_len)
 {
   SpaceLink *sl = CTX_wm_space_data(C);
-  const char *context = CTX_data_mode_string(C);
 
   if (sl == NULL) {
     *r_len = 0;
     return NULL;
   }
 
+  const char *context_mode = CTX_data_mode_string(C);
+  const char *context = screen_menu_context_string(C, sl);
   uint array_len = 3;
   bUserMenu **um_array = MEM_calloc_arrayN(array_len, sizeof(*um_array), __func__);
   um_array[0] = BKE_blender_user_menu_find(&U.user_menus, sl->spacetype, context);
   um_array[1] = (sl->spacetype != SPACE_TOPBAR) ?
-                    BKE_blender_user_menu_find(&U.user_menus, SPACE_TOPBAR, context) :
+                    BKE_blender_user_menu_find(&U.user_menus, SPACE_TOPBAR, context_mode) :
                     NULL;
   um_array[2] = (sl->spacetype == SPACE_VIEW3D) ?
-                    BKE_blender_user_menu_find(&U.user_menus, SPACE_PROPERTIES, context) :
+                    BKE_blender_user_menu_find(&U.user_menus, SPACE_PROPERTIES, context_mode) :
                     NULL;
 
   *r_len = array_len;
@@ -82,7 +98,7 @@ bUserMenu **ED_screen_user_menus_find(const bContext *C, uint *r_len)
 bUserMenu *ED_screen_user_menu_ensure(bContext *C)
 {
   SpaceLink *sl = CTX_wm_space_data(C);
-  const char *context = CTX_data_mode_string(C);
+  const char *context = screen_menu_context_string(C, sl);
   return BKE_blender_user_menu_ensure(&U.user_menus, sl->spacetype, context);
 }
 
@@ -194,6 +210,10 @@ void ED_screen_user_menu_item_remove(ListBase *lb, bUserMenuItem *umi)
 
 static void screen_user_menu_draw(const bContext *C, Menu *menu)
 {
+  /* Enable when we have the ability to edit menus. */
+  const bool show_missing = false;
+  char label[512];
+
   uint um_array_len;
   bUserMenu **um_array = ED_screen_user_menus_find(C, &um_array_len);
   bool is_empty = true;
@@ -206,15 +226,32 @@ static void screen_user_menu_draw(const bContext *C, Menu *menu)
       const char *ui_name = umi->ui_name[0] ? umi->ui_name : NULL;
       if (umi->type == USER_MENU_TYPE_OPERATOR) {
         bUserMenuItem_Op *umi_op = (bUserMenuItem_Op *)umi;
-        IDProperty *prop = umi_op->prop ? IDP_CopyProperty(umi_op->prop) : NULL;
-        uiItemFullO(
-            menu->layout, umi_op->op_idname, ui_name, ICON_NONE, prop, umi_op->opcontext, 0, NULL);
-        is_empty = false;
+        wmOperatorType *ot = WM_operatortype_find(umi_op->op_idname, false);
+        if (ot != NULL) {
+          IDProperty *prop = umi_op->prop ? IDP_CopyProperty(umi_op->prop) : NULL;
+          uiItemFullO_ptr(menu->layout, ot, ui_name, ICON_NONE, prop, umi_op->opcontext, 0, NULL);
+          is_empty = false;
+        }
+        else {
+          if (show_missing) {
+            SNPRINTF(label, "Missing: %s", umi_op->op_idname);
+            uiItemL(menu->layout, label, ICON_NONE);
+          }
+        }
       }
       else if (umi->type == USER_MENU_TYPE_MENU) {
         bUserMenuItem_Menu *umi_mt = (bUserMenuItem_Menu *)umi;
-        uiItemM(menu->layout, umi_mt->mt_idname, ui_name, ICON_NONE);
-        is_empty = false;
+        MenuType *mt = WM_menutype_find(umi_mt->mt_idname, false);
+        if (mt != NULL) {
+          uiItemM_ptr(menu->layout, mt, ui_name, ICON_NONE);
+          is_empty = false;
+        }
+        else {
+          if (show_missing) {
+            SNPRINTF(label, "Missing: %s", umi_mt->mt_idname);
+            uiItemL(menu->layout, label, ICON_NONE);
+          }
+        }
       }
       else if (umi->type == USER_MENU_TYPE_PROP) {
         bUserMenuItem_Prop *umi_pr = (bUserMenuItem_Prop *)umi;
@@ -252,9 +289,10 @@ static void screen_user_menu_draw(const bContext *C, Menu *menu)
           }
         }
         if (!ok) {
-          char label[512];
-          SNPRINTF(label, "Missing: %s.%s", umi_pr->context_data_path, umi_pr->prop_id);
-          uiItemL(menu->layout, label, ICON_NONE);
+          if (show_missing) {
+            SNPRINTF(label, "Missing: %s.%s", umi_pr->context_data_path, umi_pr->prop_id);
+            uiItemL(menu->layout, label, ICON_NONE);
+          }
         }
       }
       else if (umi->type == USER_MENU_TYPE_SEP) {
@@ -267,8 +305,8 @@ static void screen_user_menu_draw(const bContext *C, Menu *menu)
   }
 
   if (is_empty) {
-    uiItemL(menu->layout, IFACE_("No menu items found"), ICON_NONE);
-    uiItemL(menu->layout, IFACE_("Right click on buttons to add them to this menu"), ICON_NONE);
+    uiItemL(menu->layout, TIP_("No menu items found"), ICON_NONE);
+    uiItemL(menu->layout, TIP_("Right click on buttons to add them to this menu"), ICON_NONE);
   }
 }
 
@@ -276,7 +314,7 @@ void ED_screen_user_menu_register(void)
 {
   MenuType *mt = MEM_callocN(sizeof(MenuType), __func__);
   strcpy(mt->idname, "SCREEN_MT_user_menu");
-  strcpy(mt->label, "Quick Favorites");
+  strcpy(mt->label, N_("Quick Favorites"));
   strcpy(mt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   mt->draw = screen_user_menu_draw;
   WM_menutype_add(mt);

@@ -29,9 +29,11 @@
 
 #include "BLT_translation.h"
 
-#include "BLI_listbase.h"
-#include "BLI_string.h"
 #include "BLI_utildefines.h"
+#include "BLI_ghash.h"
+#include "BLI_listbase.h"
+#include "BLI_rect.h"
+#include "BLI_string.h"
 
 #include "DNA_object_types.h"
 
@@ -169,18 +171,10 @@ void RE_engine_free(RenderEngine *engine)
 
 static RenderPart *get_part_from_result(Render *re, RenderResult *result)
 {
-  RenderPart *pa;
+  rcti key = result->tilerect;
+  BLI_rcti_translate(&key, re->disprect.xmin, re->disprect.ymin);
 
-  for (pa = re->parts.first; pa; pa = pa->next) {
-    if (result->tilerect.xmin == pa->disprect.xmin - re->disprect.xmin &&
-        result->tilerect.ymin == pa->disprect.ymin - re->disprect.ymin &&
-        result->tilerect.xmax == pa->disprect.xmax - re->disprect.xmin &&
-        result->tilerect.ymax == pa->disprect.ymax - re->disprect.ymin) {
-      return pa;
-    }
-  }
-
-  return NULL;
+  return BLI_ghash_lookup(re->parts, &key);
 }
 
 RenderResult *RE_engine_begin_result(
@@ -246,6 +240,7 @@ void RE_engine_update_result(RenderEngine *engine, RenderResult *result)
   Render *re = engine->re;
 
   if (result) {
+    render_result_merge(re->result, result);
     result->renlay = result->layers.first; /* weak, draws first layer always */
     re->display_update(re->duh, result, NULL);
   }
@@ -294,6 +289,7 @@ void RE_engine_end_result(
     if (re->result->do_exr_tile) {
       if (!cancel && merge_results) {
         render_result_exr_file_merge(re->result, result, re->viewname);
+        render_result_merge(re->result, result);
       }
     }
     else if (!(re->test_break(re->tbh) && (re->r.scemode & R_BUTS_PREVIEW))) {
@@ -458,7 +454,6 @@ rcti *RE_engine_get_current_tiles(Render *re, int *r_total_tiles, bool *r_needs_
 {
   static rcti tiles_static[BLENDER_MAX_THREADS];
   const int allocation_step = BLENDER_MAX_THREADS;
-  RenderPart *pa;
   int total_tiles = 0;
   rcti *tiles = tiles_static;
   int allocation_size = BLENDER_MAX_THREADS;
@@ -467,13 +462,15 @@ rcti *RE_engine_get_current_tiles(Render *re, int *r_total_tiles, bool *r_needs_
 
   *r_needs_free = false;
 
-  if (re->engine && (re->engine->flag & RE_ENGINE_HIGHLIGHT_TILES) == 0) {
+  if (!re->parts || (re->engine && (re->engine->flag & RE_ENGINE_HIGHLIGHT_TILES) == 0)) {
     *r_total_tiles = 0;
     BLI_rw_mutex_unlock(&re->partsmutex);
     return NULL;
   }
 
-  for (pa = re->parts.first; pa; pa = pa->next) {
+  GHashIterator pa_iter;
+  GHASH_ITER (pa_iter, re->parts) {
+    RenderPart *pa = BLI_ghashIterator_getValue(&pa_iter);
     if (pa->status == PART_STATUS_IN_PROGRESS) {
       if (total_tiles >= allocation_size) {
         /* Just in case we're using crazy network rendering with more
@@ -512,10 +509,19 @@ static void engine_depsgraph_init(RenderEngine *engine, ViewLayer *view_layer)
   Main *bmain = engine->re->main;
   Scene *scene = engine->re->scene;
 
-  engine->depsgraph = DEG_graph_new(scene, view_layer, DAG_EVAL_RENDER);
+  engine->depsgraph = DEG_graph_new(bmain, scene, view_layer, DAG_EVAL_RENDER);
   DEG_debug_name_set(engine->depsgraph, "RENDER");
 
-  BKE_scene_graph_update_for_newframe(engine->depsgraph, bmain);
+  if (engine->re->r.scemode & R_BUTS_PREVIEW) {
+    Depsgraph *depsgraph = engine->depsgraph;
+    DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
+    DEG_evaluate_on_framechange(bmain, depsgraph, CFRA);
+    DEG_ids_check_recalc(bmain, depsgraph, scene, view_layer, true);
+    DEG_ids_clear_recalc(bmain, depsgraph);
+  }
+  else {
+    BKE_scene_graph_update_for_newframe(engine->depsgraph, bmain);
+  }
 }
 
 static void engine_depsgraph_free(RenderEngine *engine)
@@ -872,8 +878,6 @@ void RE_engine_free_blender_memory(RenderEngine *engine)
   /* Weak way to save memory, but not crash grease pencil.
    *
    * TODO(sergey): Find better solution for this.
-   * TODO(sergey): Try to find solution which does not involve looping over
-   * all the objects.
    */
   if (DRW_render_check_grease_pencil(engine->depsgraph)) {
     return;

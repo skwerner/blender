@@ -96,9 +96,8 @@ static void outliner_main_region_draw(const bContext *C, ARegion *ar)
   UI_view2d_view_restore(C);
 
   /* scrollers */
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, NULL, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
+  scrollers = UI_view2d_scrollers_calc(v2d, NULL);
+  UI_view2d_scrollers_draw(v2d, scrollers);
   UI_view2d_scrollers_free(scrollers);
 }
 
@@ -132,6 +131,9 @@ static void outliner_main_region_listener(wmWindow *UNUSED(win),
           ED_region_tag_redraw(ar);
           break;
       }
+      if (wmn->action & NA_EDITED) {
+        ED_region_tag_redraw(ar);
+      }
       break;
     case NC_OBJECT:
       switch (wmn->data) {
@@ -146,13 +148,8 @@ static void outliner_main_region_listener(wmWindow *UNUSED(win),
           ED_region_tag_redraw(ar);
           break;
         case ND_CONSTRAINT:
-          switch (wmn->action) {
-            case NA_ADDED:
-            case NA_REMOVED:
-            case NA_RENAME:
-              ED_region_tag_redraw(ar);
-              break;
-          }
+          /* all constraint actions now, for reordering */
+          ED_region_tag_redraw(ar);
           break;
         case ND_MODIFIER:
           /* all modifier actions now */
@@ -232,6 +229,11 @@ static void outliner_main_region_listener(wmWindow *UNUSED(win),
         ED_region_tag_redraw(ar);
       }
       break;
+    case NC_TEXT:
+      if (ELEM(wmn->action, NA_ADDED, NA_REMOVED)) {
+        ED_region_tag_redraw(ar);
+      }
+      break;
   }
 }
 
@@ -303,6 +305,10 @@ static SpaceLink *outliner_new(const ScrArea *UNUSED(area), const Scene *UNUSED(
   soutliner = MEM_callocN(sizeof(SpaceOutliner), "initoutliner");
   soutliner->spacetype = SPACE_OUTLINER;
   soutliner->filter_id_type = ID_GR;
+  soutliner->show_restrict_flags = SO_RESTRICT_ENABLE | SO_RESTRICT_HIDE;
+  soutliner->outlinevis = SO_VIEW_LAYER;
+  soutliner->sync_select_dirty |= WM_OUTLINER_SYNC_SELECT_FROM_ALL;
+  soutliner->flag |= SO_SYNC_SELECT;
 
   /* header */
   ar = MEM_callocN(sizeof(ARegion), "header for outliner");
@@ -348,6 +354,9 @@ static SpaceLink *outliner_duplicate(SpaceLink *sl)
   soutlinern->treestore = NULL;
   soutlinern->treehash = NULL;
 
+  soutlinern->flag |= (soutliner->flag & SO_SYNC_SELECT);
+  soutlinern->sync_select_dirty = WM_OUTLINER_SYNC_SELECT_FROM_ALL;
+
   return (SpaceLink *)soutlinern;
 }
 
@@ -384,6 +393,14 @@ static void outliner_id_remap(ScrArea *UNUSED(sa), SpaceLink *slink, ID *old_id,
   }
 }
 
+static void outliner_deactivate(struct ScrArea *sa)
+{
+  /* Remove hover highlights */
+  SpaceOutliner *soops = sa->spacedata.first;
+  outliner_flag_set(&soops->tree, TSE_HIGHLIGHTED, false);
+  ED_region_tag_redraw(BKE_area_find_region_type(sa, RGN_TYPE_WINDOW));
+}
+
 /* only called once, from space_api/spacetypes.c */
 void ED_spacetype_outliner(void)
 {
@@ -401,11 +418,12 @@ void ED_spacetype_outliner(void)
   st->keymap = outliner_keymap;
   st->dropboxes = outliner_dropboxes;
   st->id_remap = outliner_id_remap;
+  st->deactivate = outliner_deactivate;
 
   /* regions: main window */
   art = MEM_callocN(sizeof(ARegionType), "spacetype outliner region");
   art->regionid = RGN_TYPE_WINDOW;
-  art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES;
+  art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_VIEW2D;
 
   art->init = outliner_main_region_init;
   art->draw = outliner_main_region_draw;
@@ -418,7 +436,7 @@ void ED_spacetype_outliner(void)
   art = MEM_callocN(sizeof(ARegionType), "spacetype outliner header region");
   art->regionid = RGN_TYPE_HEADER;
   art->prefsizey = HEADERY;
-  art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_VIEW2D | ED_KEYMAP_FRAMES | ED_KEYMAP_HEADER;
+  art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_VIEW2D | ED_KEYMAP_HEADER;
 
   art->init = outliner_header_region_init;
   art->draw = outliner_header_region_draw;

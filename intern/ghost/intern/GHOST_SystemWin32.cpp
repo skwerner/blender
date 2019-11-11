@@ -28,12 +28,21 @@
 #  define _WIN32_IE 0x0501 /* shipped before XP, so doesn't impose additional requirements */
 #endif
 
+/* clang-format off */
+#pragma comment(linker,"\"/manifestdependency:type='win32' \
+name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
+processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+/* clang-format on */
+
+#include <commctrl.h>
 #include <shlobj.h>
 #include <tlhelp32.h>
 #include <psapi.h>
+#include <shellapi.h>
 #include <windowsx.h>
 
 #include "utfconv.h"
+#include "utf_winfunc.h"
 
 #include "GHOST_DisplayManagerWin32.h"
 #include "GHOST_EventButton.h"
@@ -266,7 +275,8 @@ GHOST_IWindow *GHOST_SystemWin32::createWindow(const STR_String &title,
                                                GHOST_TDrawingContextType type,
                                                GHOST_GLSettings glSettings,
                                                const bool exclusive,
-                                               const GHOST_TEmbedderWindowID parentWindow)
+                                               const bool is_dialog,
+                                               const GHOST_IWindow *parentWindow)
 {
   GHOST_WindowWin32 *window = new GHOST_WindowWin32(
       this,
@@ -279,8 +289,9 @@ GHOST_IWindow *GHOST_SystemWin32::createWindow(const STR_String &title,
       type,
       ((glSettings.flags & GHOST_glStereoVisual) != 0),
       ((glSettings.flags & GHOST_glAlphaBackground) != 0),
-      parentWindow,
-      ((glSettings.flags & GHOST_glDebugContext) != 0));
+      (GHOST_WindowWin32 *)parentWindow,
+      ((glSettings.flags & GHOST_glDebugContext) != 0),
+      is_dialog);
 
   if (window->getValid()) {
     // Store the pointer to the window
@@ -356,18 +367,13 @@ GHOST_IContext *GHOST_SystemWin32::createOffscreenContext()
     goto finished;
   }
   else {
-    MessageBox(NULL,
-               "A graphics card and driver with support for OpenGL 3.3 or higher is required.\n"
-               "Installing the latest driver for your graphics card may resolve the issue.\n\n"
-               "The program will now close.",
-               "Blender - Unsupported Graphics Card or Driver",
-               MB_OK | MB_ICONERROR);
     delete context;
-    exit();
+    return NULL;
   }
 
 #elif defined(WITH_GL_PROFILE_COMPAT)
-  // ask for 2.1 context, driver gives any GL version >= 2.1 (hopefully the latest compatibility profile)
+  // ask for 2.1 context, driver gives any GL version >= 2.1
+  // (hopefully the latest compatibility profile)
   // 2.1 ignores the profile bit & is incompatible with core profile
   context = new GHOST_ContextWGL(false,
                                  true,
@@ -513,6 +519,7 @@ GHOST_TSuccess GHOST_SystemWin32::getButtons(GHOST_Buttons &buttons) const
 GHOST_TSuccess GHOST_SystemWin32::init()
 {
   GHOST_TSuccess success = GHOST_System::init();
+  InitCommonControls();
 
   /* Disable scaling on high DPI displays on Vista */
   HMODULE
@@ -933,10 +940,9 @@ GHOST_EventCursor *GHOST_SystemWin32::processCursorEvent(GHOST_TEventType type,
       window->getClientBounds(bounds);
     }
 
-    /* could also clamp to screen bounds
-     * wrap with a window outside the view will fail atm  */
-
-    bounds.wrapPoint(x_new, y_new, 2); /* offset of one incase blender is at screen bounds */
+    /* Could also clamp to screen bounds wrap with a window outside the view will fail atm.
+     * Use offset of 8 in case the window is at screen bounds. */
+    bounds.wrapPoint(x_new, y_new, 2, window->getCursorGrabAxis());
 
     window->getCursorGrabAccum(x_accum, y_accum);
     if (x_new != x_screen || y_new != y_screen) {
@@ -999,9 +1005,11 @@ GHOST_EventKey *GHOST_SystemWin32::processKeyEvent(GHOST_WindowWin32 *window, RA
     int r;
     GetKeyboardState((PBYTE)state);
 
-    // don't call ToUnicodeEx on dead keys as it clears the buffer and so won't allow diacritical composition.
+    // Don't call ToUnicodeEx on dead keys as it clears the buffer and so won't allow diacritical
+    // composition.
     if (MapVirtualKeyW(vk, 2) != 0) {
-      // todo: ToUnicodeEx can respond with up to 4 utf16 chars (only 2 here). Could be up to 24 utf8 bytes.
+      // todo: ToUnicodeEx can respond with up to 4 utf16 chars (only 2 here).
+      // Could be up to 24 utf8 bytes.
       if ((r = ToUnicodeEx(
                vk, raw.data.keyboard.MakeCode, state, utf16, 2, 0, system->m_keylayout))) {
         if ((r > 0 && r < 3)) {
@@ -1191,7 +1199,7 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
           if (wParam == RIM_INPUTSINK) {
             if (GetFocus() != hwnd)  // WM_INPUT message not for this window
               return 0;
-          }  //else wParam == RIM_INPUT
+          }  // else wParam == RIM_INPUT
 
           RAWINPUT raw;
           RAWINPUT *raw_ptr = &raw;
@@ -1433,8 +1441,8 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
         ////////////////////////////////////////////////////////////////////////
         case WM_NCMOUSEMOVE:
         /* The WM_NCMOUSEMOVE message is posted to a window when the cursor is moved
-         * within the nonclient area of the window. This message is posted to the window
-         * that contains the cursor. If a window has captured the mouse, this message is not posted.
+         * within the non-client area of the window. This message is posted to the window that
+         * contains the cursor. If a window has captured the mouse, this message is not posted.
          */
         case WM_NCHITTEST:
           /* The WM_NCHITTEST message is sent to a window when the cursor moves, or
@@ -1448,16 +1456,17 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
         // Window events, processed
         ////////////////////////////////////////////////////////////////////////
         case WM_CLOSE:
-          /* The WM_CLOSE message is sent as a signal that a window or an application should terminate. */
+          /* The WM_CLOSE message is sent as a signal that a window
+           * or an application should terminate. */
           event = processWindowEvent(GHOST_kEventWindowClose, window);
           break;
         case WM_ACTIVATE:
-          /* The WM_ACTIVATE message is sent to both the window being activated and the window being
-           * deactivated. If the windows use the same input queue, the message is sent synchronously,
-           * first to the window procedure of the top-level window being deactivated, then to the window
-           * procedure of the top-level window being activated. If the windows use different input queues,
-           * the message is sent asynchronously, so the window is activated immediately.
-           */
+          /* The WM_ACTIVATE message is sent to both the window being activated and the window
+           * being deactivated. If the windows use the same input queue, the message is sent
+           * synchronously, first to the window procedure of the top-level window being
+           * deactivated, then to the window procedure of the top-level window being activated.
+           * If the windows use different input queues, the message is sent asynchronously,
+           * so the window is activated immediately. */
           {
             GHOST_ModifierKeys modifiers;
             modifiers.clear();
@@ -1467,7 +1476,7 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
                                                         GHOST_kEventWindowDeactivate,
                                        window);
             /* WARNING: Let DefWindowProc handle WM_ACTIVATE, otherwise WM_MOUSEWHEEL
-           * will not be dispatched to OUR active window if we minimize one of OUR windows. */
+             * will not be dispatched to OUR active window if we minimize one of OUR windows. */
             if (LOWORD(wParam) == WA_INACTIVE)
               window->lostMouseCapture();
             window->processWin32TabletActivateEvent(GET_WM_ACTIVATE_STATE(wParam, lParam));
@@ -1519,7 +1528,8 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
            * to perform any move or size change processing during the WM_WINDOWPOSCHANGED
            * message without calling DefWindowProc.
            */
-          /* we get first WM_SIZE before we fully init. So, do not dispatch before we continiously resizng */
+          /* we get first WM_SIZE before we fully init.
+           * So, do not dispatch before we continuously resizing. */
           if (window->m_inLiveResize) {
             system->pushEvent(processWindowEvent(GHOST_kEventWindowSize, window));
             system->dispatchEvents();
@@ -1553,9 +1563,10 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
 
           break;
         case WM_DPICHANGED:
-          /* The WM_DPICHANGED message is sent when the effective dots per inch (dpi) for a window has changed.
-           * The DPI is the scale factor for a window. There are multiple events that can cause the DPI to
-           * change such as when the window is moved to a monitor with a different DPI.
+          /* The WM_DPICHANGED message is sent when the effective dots per inch (dpi) for a
+           * window has changed. The DPI is the scale factor for a window. There are multiple
+           * events that can cause the DPI to change such as when the window is moved to a monitor
+           * with a different DPI.
            */
           {
             // The suggested new size and position of the window.
@@ -1594,31 +1605,33 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
          * invalidated portion of a window for painting.
          */
         case WM_NCPAINT:
-        /* An application sends the WM_NCPAINT message to a window when its frame must be painted. */
+        /* An application sends the WM_NCPAINT message to a window
+         * when its frame must be painted. */
         case WM_NCACTIVATE:
-        /* The WM_NCACTIVATE message is sent to a window when its nonclient area needs to be changed
-         * to indicate an active or inactive state.
-         */
+        /* The WM_NCACTIVATE message is sent to a window when its non-client area needs to be
+         * changed to indicate an active or inactive state. */
         case WM_DESTROY:
-        /* The WM_DESTROY message is sent when a window is being destroyed. It is sent to the window
-         * procedure of the window being destroyed after the window is removed from the screen.
-         * This message is sent first to the window being destroyed and then to the child windows
-         * (if any) as they are destroyed. During the processing of the message, it can be assumed
-         * that all child windows still exist.
-         */
+        /* The WM_DESTROY message is sent when a window is being destroyed. It is sent to the
+         * window procedure of the window being destroyed after the window is removed from the
+         * screen. This message is sent first to the window being destroyed and then to the child
+         * windows (if any) as they are destroyed. During the processing of the message, it can
+         * be assumed that all child windows still exist. */
         case WM_NCDESTROY:
-          /* The WM_NCDESTROY message informs a window that its nonclient area is being destroyed. The
-           * DestroyWindow function sends the WM_NCDESTROY message to the window following the WM_DESTROY
-           * message. WM_DESTROY is used to free the allocated memory object associated with the window.
+          /* The WM_NCDESTROY message informs a window that its non-client area is being
+           * destroyed. The DestroyWindow function sends the WM_NCDESTROY message to the window
+           * following the WM_DESTROY message. WM_DESTROY is used to free the allocated memory
+           * object associated with the window.
            */
           break;
         case WM_KILLFOCUS:
-          /* The WM_KILLFOCUS message is sent to a window immediately before it loses the keyboard focus.
-           * We want to prevent this if a window is still active and it loses focus to nowhere*/
+          /* The WM_KILLFOCUS message is sent to a window immediately before it loses the
+           * keyboard focus. We want to prevent this if a window is still active and it loses
+           * focus to nowhere. */
           if (!wParam && hwnd == ::GetActiveWindow())
             ::SetFocus(hwnd);
         case WM_SHOWWINDOW:
-        /* The WM_SHOWWINDOW message is sent to a window when the window is about to be hidden or shown. */
+        /* The WM_SHOWWINDOW message is sent to a window when the window is
+         * about to be hidden or shown. */
         case WM_WINDOWPOSCHANGING:
         /* The WM_WINDOWPOSCHANGING message is sent to a window whose size, position, or place in
          * the Z order is about to change as a result of a call to the SetWindowPos function or
@@ -1767,6 +1780,57 @@ void GHOST_SystemWin32::putClipboard(GHOST_TInt8 *buffer, bool selection) const
   }
 }
 
+/** \name Message Box
+ * \{ */
+GHOST_TSuccess GHOST_SystemWin32::showMessageBox(const char *title,
+                                                 const char *message,
+                                                 const char *help_label,
+                                                 const char *continue_label,
+                                                 const char *link,
+                                                 GHOST_DialogOptions dialog_options) const
+{
+  const wchar_t *title_16 = alloc_utf16_from_8(title, 0);
+  const wchar_t *message_16 = alloc_utf16_from_8(message, 0);
+  const wchar_t *help_label_16 = alloc_utf16_from_8(help_label, 0);
+  const wchar_t *continue_label_16 = alloc_utf16_from_8(continue_label, 0);
+
+  int nButtonPressed = 0;
+  TASKDIALOGCONFIG config = {0};
+  const TASKDIALOG_BUTTON buttons[] = {{IDOK, help_label_16}, {IDCONTINUE, continue_label_16}};
+
+  config.cbSize = sizeof(config);
+  config.hInstance = 0;
+  config.dwCommonButtons = 0;
+  config.pszMainIcon = (dialog_options & GHOST_DialogError ?
+                            TD_ERROR_ICON :
+                            dialog_options & GHOST_DialogWarning ? TD_WARNING_ICON :
+                                                                   TD_INFORMATION_ICON);
+  config.pszWindowTitle = L"Blender";
+  config.pszMainInstruction = title_16;
+  config.pszContent = message_16;
+  config.pButtons = (link) ? buttons : buttons + 1;
+  config.cButtons = (link) ? 2 : 1;
+
+  TaskDialogIndirect(&config, &nButtonPressed, NULL, NULL);
+  switch (nButtonPressed) {
+    case IDOK:
+      ShellExecute(NULL, "open", link, NULL, NULL, SW_SHOWNORMAL);
+      break;
+    case IDCONTINUE:
+      break;
+    default:
+      break;  // should never happen
+  }
+
+  free((void *)title_16);
+  free((void *)message_16);
+  free((void *)help_label_16);
+  free((void *)continue_label_16);
+
+  return GHOST_kSuccess;
+}
+/* \} */
+
 static DWORD GetParentProcessID(void)
 {
   HANDLE snapshot;
@@ -1863,12 +1927,4 @@ int GHOST_SystemWin32::toggleConsole(int action)
   }
 
   return m_consoleStatus;
-}
-
-int GHOST_SystemWin32::confirmQuit(GHOST_IWindow *window) const
-{
-  return (MessageBox(window ? ((GHOST_WindowWin32 *)window)->getHWND() : 0,
-                     "Some changes have not been saved.\nDo you really want to quit?",
-                     "Exit Blender",
-                     MB_OKCANCEL | MB_ICONWARNING | MB_TOPMOST) == IDOK);
 }

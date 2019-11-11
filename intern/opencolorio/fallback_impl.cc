@@ -283,7 +283,7 @@ const char *FallbackImpl::configGetDisplay(OCIO_ConstConfigRcPtr * /*config*/, i
 const char *FallbackImpl::configGetDefaultView(OCIO_ConstConfigRcPtr * /*config*/,
                                                const char * /*display*/)
 {
-  return "Default";
+  return "Standard";
 }
 
 int FallbackImpl::configGetNumViews(OCIO_ConstConfigRcPtr * /*config*/, const char * /*display*/)
@@ -296,7 +296,7 @@ const char *FallbackImpl::configGetView(OCIO_ConstConfigRcPtr * /*config*/,
                                         int index)
 {
   if (index == 0) {
-    return "Default";
+    return "Standard";
   }
   return NULL;
 }
@@ -361,6 +361,25 @@ int FallbackImpl::colorSpaceIsInvertible(OCIO_ConstColorSpaceRcPtr * /*cs*/)
 int FallbackImpl::colorSpaceIsData(OCIO_ConstColorSpaceRcPtr * /*cs*/)
 {
   return 0;
+}
+
+void FallbackImpl::colorSpaceIsBuiltin(OCIO_ConstConfigRcPtr * /*config*/,
+                                       OCIO_ConstColorSpaceRcPtr *cs,
+                                       bool &is_scene_linear,
+                                       bool &is_srgb)
+{
+  if (cs == COLORSPACE_LINEAR) {
+    is_scene_linear = true;
+    is_srgb = false;
+  }
+  else if (cs == COLORSPACE_SRGB) {
+    is_scene_linear = false;
+    is_srgb = true;
+  }
+  else {
+    is_scene_linear = false;
+    is_srgb = false;
+  }
 }
 
 void FallbackImpl::colorSpaceRelease(OCIO_ConstColorSpaceRcPtr * /*cs*/)

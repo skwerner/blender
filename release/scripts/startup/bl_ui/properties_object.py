@@ -17,7 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
-from .properties_animviz import (
+from bl_ui.properties_animviz import (
     MotionPathButtonsPanel,
     MotionPathButtonsPanel_display,
 )
@@ -54,11 +54,9 @@ class OBJECT_PT_transform(ObjectButtonsPanel, Panel):
         layout = self.layout
         layout.use_property_split = True
 
-        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
-
         ob = context.object
 
-        col = flow.column()
+        col = layout.column()
         row = col.row(align=True)
         row.prop(ob, "location")
         row.use_property_decorate = False
@@ -66,7 +64,7 @@ class OBJECT_PT_transform(ObjectButtonsPanel, Panel):
 
         rotation_mode = ob.rotation_mode
         if rotation_mode == 'QUATERNION':
-            col = flow.column()
+            col = layout.column()
             row = col.row(align=True)
             row.prop(ob, "rotation_quaternion", text="Rotation")
             sub = row.column(align=True)
@@ -74,7 +72,7 @@ class OBJECT_PT_transform(ObjectButtonsPanel, Panel):
             sub.prop(ob, "lock_rotation_w", text="", emboss=False, icon='DECORATE_UNLOCKED')
             sub.prop(ob, "lock_rotation", text="", emboss=False, icon='DECORATE_UNLOCKED')
         elif rotation_mode == 'AXIS_ANGLE':
-            col = flow.column()
+            col = layout.column()
             row = col.row(align=True)
             row.prop(ob, "rotation_axis_angle", text="Rotation")
 
@@ -83,21 +81,20 @@ class OBJECT_PT_transform(ObjectButtonsPanel, Panel):
             sub.prop(ob, "lock_rotation_w", text="", emboss=False, icon='DECORATE_UNLOCKED')
             sub.prop(ob, "lock_rotation", text="", emboss=False, icon='DECORATE_UNLOCKED')
         else:
-            col = flow.column()
+            col = layout.column()
             row = col.row(align=True)
             row.prop(ob, "rotation_euler", text="Rotation")
             row.use_property_decorate = False
             row.prop(ob, "lock_rotation", text="", emboss=False, icon='DECORATE_UNLOCKED')
+        row = layout.row(align=True)
+        row.prop(ob, "rotation_mode", text="Mode")
+        row.label(text="", icon='BLANK1')
 
-        col = flow.column()
+        col = layout.column()
         row = col.row(align=True)
         row.prop(ob, "scale")
         row.use_property_decorate = False
         row.prop(ob, "lock_scale", text="", emboss=False, icon='DECORATE_UNLOCKED')
-
-        row = layout.row(align=True)
-        row.prop(ob, "rotation_mode")
-        row.label(text="", icon='BLANK1')
 
 
 class OBJECT_PT_delta_transform(ObjectButtonsPanel, Panel):
@@ -108,24 +105,21 @@ class OBJECT_PT_delta_transform(ObjectButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
-        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=True, align=False)
 
         ob = context.object
 
-        col = flow.column()
-        col.prop(ob, "delta_location")
+        col = layout.column()
+        col.prop(ob, "delta_location", text="Location")
 
-        col = flow.column()
         rotation_mode = ob.rotation_mode
         if rotation_mode == 'QUATERNION':
             col.prop(ob, "delta_rotation_quaternion", text="Rotation")
         elif rotation_mode == 'AXIS_ANGLE':
-            col.label(text="Not for Axis-Angle")
+            pass
         else:
-            col.prop(ob, "delta_rotation_euler", text="Delta Rotation")
+            col.prop(ob, "delta_rotation_euler", text="Rotation")
 
-        col = flow.column()
-        col.prop(ob, "delta_scale")
+        col.prop(ob, "delta_scale", text="Scale")
 
 
 class OBJECT_PT_relations(ObjectButtonsPanel, Panel):
@@ -212,6 +206,7 @@ class OBJECT_PT_collections(ObjectButtonsPanel, Panel):
 class OBJECT_PT_display(ObjectButtonsPanel, Panel):
     bl_label = "Viewport Display"
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 10
 
     def draw(self, context):
         layout = self.layout
@@ -377,6 +372,31 @@ class OBJECT_PT_motion_paths_display(MotionPathButtonsPanel_display, Panel):
         self.draw_settings(context, avs, mpath)
 
 
+class OBJECT_PT_visibility(ObjectButtonsPanel, Panel):
+    bl_label = "Visibility"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.object) and (context.engine in cls.COMPAT_ENGINES)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+        layout = self.layout
+        ob = context.object
+
+        col = flow.column()
+        col.prop(ob, "hide_viewport", text="Show in Viewports", toggle=False, invert_checkbox=True)
+        col = flow.column()
+        col.prop(ob, "hide_render", text="Show in Renders", toggle=False, invert_checkbox=True)
+        col = flow.column()
+        col.prop(ob, "hide_select", text="Selectable", toggle=False, invert_checkbox=True)
+
+
 class OBJECT_PT_custom_props(ObjectButtonsPanel, PropertyPanel, Panel):
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
     _context_path = "object"
@@ -396,6 +416,7 @@ classes = (
     OBJECT_PT_motion_paths_display,
     OBJECT_PT_display,
     OBJECT_PT_display_bounds,
+    OBJECT_PT_visibility,
     OBJECT_PT_custom_props,
 )
 

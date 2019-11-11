@@ -36,14 +36,14 @@ class FrsMaterial {
   /*! Default constructor */
   inline FrsMaterial();
 
-  /*! Builds a Material from its line, diffuse, ambiant, specular, emissive
+  /*! Builds a Material from its line, diffuse, ambient, specular, emissive
    *  colors, a shininess coefficient and line color priority.
    *    \param iLine:
    *      A 4 element float-array containing the line color.
    *    \param iDiffuse:
    *      A 4 element float-array containing the diffuse color.
    *    \param iAmbiant:
-   *      A 4 element float-array containing the ambiant color.
+   *      A 4 element float-array containing the ambient color.
    *    \param iSpecular:
    *      A 4 element float-array containing the specular color.
    *    \param iEmission:
@@ -159,31 +159,31 @@ class FrsMaterial {
     return Specular[3];
   }
 
-  /*! Returns the ambiant color as a 4 float array */
+  /*! Returns the ambient color as a 4 float array */
   inline const float *ambient() const
   {
     return Ambient;
   }
 
-  /*! Returns the red component of the ambiant color */
+  /*! Returns the red component of the ambient color */
   inline const float ambientR() const
   {
     return Ambient[0];
   }
 
-  /*! Returns the green component of the ambiant color */
+  /*! Returns the green component of the ambient color */
   inline const float ambientG() const
   {
     return Ambient[1];
   }
 
-  /*! Returns the blue component of the ambiant color */
+  /*! Returns the blue component of the ambient color */
   inline const float ambientB() const
   {
     return Ambient[2];
   }
 
-  /*! Returns the alpha component of the ambiant color */
+  /*! Returns the alpha component of the ambient color */
   inline const float ambientA() const
   {
     return Ambient[3];
@@ -267,7 +267,7 @@ class FrsMaterial {
    */
   inline void setSpecular(const float r, const float g, const float b, const float a);
 
-  /*! Sets the ambiant color.
+  /*! Sets the ambient color.
    *    \param r:
    *      Red component
    *    \param g:
@@ -445,22 +445,29 @@ FrsMaterial &FrsMaterial::operator=(const FrsMaterial &m)
 
 bool FrsMaterial::operator!=(const FrsMaterial &m) const
 {
-  if (Shininess != m.shininess())
+  if (Shininess != m.shininess()) {
     return true;
-  if (Priority != m.priority())
+  }
+  if (Priority != m.priority()) {
     return true;
+  }
 
   for (int i = 0; i < 4; i++) {
-    if (Line[i] != m.line()[i])
+    if (Line[i] != m.line()[i]) {
       return true;
-    if (Diffuse[i] != m.diffuse()[i])
+    }
+    if (Diffuse[i] != m.diffuse()[i]) {
       return true;
-    if (Specular[i] != m.specular()[i])
+    }
+    if (Specular[i] != m.specular()[i]) {
       return true;
-    if (Ambient[i] != m.ambient()[i])
+    }
+    if (Ambient[i] != m.ambient()[i]) {
       return true;
-    if (Emission[i] != m.emission()[i])
+    }
+    if (Emission[i] != m.emission()[i]) {
       return true;
+    }
   }
 
   return false;

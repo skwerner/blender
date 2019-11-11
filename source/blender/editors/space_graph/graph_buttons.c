@@ -861,6 +861,15 @@ static void graph_panel_driverVar__transChan(uiLayout *layout, ID *id, DriverVar
 
   sub = uiLayoutColumn(layout, true);
   uiItemR(sub, &dtar_ptr, "transform_type", 0, NULL, ICON_NONE);
+
+  if (ELEM(dtar->transChan,
+           DTAR_TRANSCHAN_ROTX,
+           DTAR_TRANSCHAN_ROTY,
+           DTAR_TRANSCHAN_ROTZ,
+           DTAR_TRANSCHAN_ROTW)) {
+    uiItemR(sub, &dtar_ptr, "rotation_mode", 0, IFACE_("Mode"), ICON_NONE);
+  }
+
   uiItemR(sub, &dtar_ptr, "transform_space", 0, IFACE_("Space"), ICON_NONE);
 }
 
@@ -904,7 +913,7 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
   DriverVar *dvar;
 
   PointerRNA driver_ptr;
-  uiLayout *col, *row;
+  uiLayout *col, *row, *row_outer;
   uiBlock *block;
   uiBut *but;
 
@@ -952,29 +961,28 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
     block = uiLayoutGetBlock(col);
 
     if (driver->flag & DRIVER_FLAG_INVALID) {
-      uiItemL(col, IFACE_("ERROR: Invalid Python expression"), ICON_CANCEL);
+      uiItemL(col, TIP_("ERROR: Invalid Python expression"), ICON_CANCEL);
     }
     else if (!BKE_driver_has_simple_expression(driver)) {
       if ((G.f & G_FLAG_SCRIPT_AUTOEXEC) == 0) {
         /* TODO: Add button to enable? */
-        uiItemL(col, IFACE_("WARNING: Python expressions limited for security"), ICON_ERROR);
+        uiItemL(col, TIP_("Python restricted for security"), ICON_ERROR);
       }
       else {
-        uiItemL(col, IFACE_("Slow Python expression"), ICON_INFO);
+        uiItemL(col, TIP_("Slow Python expression"), ICON_INFO);
       }
     }
 
     /* Explicit bpy-references are evil. Warn about these to prevent errors */
     /* TODO: put these in a box? */
     if (bpy_data_expr_error || bpy_ctx_expr_error) {
-      uiItemL(col, IFACE_("WARNING: Driver expression may not work correctly"), ICON_HELP);
+      uiItemL(col, TIP_("WARNING: Driver expression may not work correctly"), ICON_HELP);
 
       if (bpy_data_expr_error) {
-        uiItemL(
-            col, IFACE_("TIP: Use variables instead of bpy.data paths (see below)"), ICON_ERROR);
+        uiItemL(col, TIP_("TIP: Use variables instead of bpy.data paths (see below)"), ICON_ERROR);
       }
       if (bpy_ctx_expr_error) {
-        uiItemL(col, IFACE_("TIP: bpy.context is not safe for renderfarm usage"), ICON_ERROR);
+        uiItemL(col, TIP_("TIP: bpy.context is not safe for renderfarm usage"), ICON_ERROR);
       }
     }
   }
@@ -984,7 +992,7 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
     block = uiLayoutGetBlock(col);
 
     if (driver->flag & DRIVER_FLAG_INVALID) {
-      uiItemL(col, IFACE_("ERROR: Invalid target channel(s)"), ICON_ERROR);
+      uiItemL(col, TIP_("ERROR: Invalid target channel(s)"), ICON_ERROR);
     }
 
     /* Warnings about a lack of variables
@@ -994,11 +1002,11 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
      *       property animation
      */
     if (BLI_listbase_is_empty(&driver->variables)) {
-      uiItemL(col, IFACE_("ERROR: Driver is useless without any inputs"), ICON_ERROR);
+      uiItemL(col, TIP_("ERROR: Driver is useless without any inputs"), ICON_ERROR);
 
       if (!BLI_listbase_is_empty(&fcu->modifiers)) {
-        uiItemL(col, IFACE_("TIP: Use F-Curves for procedural animation instead"), ICON_INFO);
-        uiItemL(col, IFACE_("F-Modifiers can generate curves for those too"), ICON_INFO);
+        uiItemL(col, TIP_("TIP: Use F-Curves for procedural animation instead"), ICON_INFO);
+        uiItemL(col, TIP_("F-Modifiers can generate curves for those too"), ICON_INFO);
       }
     }
   }
@@ -1006,61 +1014,41 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
   uiItemS(layout);
 
   /* add/copy/paste driver variables */
-  if (is_popover) {
-    /* add driver variable - add blank */
-    row = uiLayoutRow(layout, true);
-    block = uiLayoutGetBlock(row);
-    but = uiDefIconTextBut(
-        block,
-        UI_BTYPE_BUT,
-        B_IPO_DEPCHANGE,
-        ICON_ADD,
-        IFACE_("Add Input Variable"),
-        0,
-        0,
-        10 * UI_UNIT_X,
-        UI_UNIT_Y,
-        NULL,
-        0.0,
-        0.0,
-        0,
-        0,
-        TIP_("Add a Driver Variable to keep track an input used by the driver"));
-    UI_but_func_set(but, driver_add_var_cb, driver, NULL);
+  row_outer = uiLayoutRow(layout, false);
 
+  /* add driver variable - add blank */
+  row = uiLayoutRow(row_outer, true);
+  block = uiLayoutGetBlock(row);
+  but = uiDefIconTextBut(
+      block,
+      UI_BTYPE_BUT,
+      B_IPO_DEPCHANGE,
+      ICON_ADD,
+      IFACE_("Add Input Variable"),
+      0,
+      0,
+      10 * UI_UNIT_X,
+      UI_UNIT_Y,
+      NULL,
+      0.0,
+      0.0,
+      0,
+      0,
+      TIP_("Add a Driver Variable to keep track of an input used by the driver"));
+  UI_but_func_set(but, driver_add_var_cb, driver, NULL);
+
+  if (is_popover) {
     /* add driver variable - add using eyedropper */
     /* XXX: will this operator work like this? */
     uiItemO(row, "", ICON_EYEDROPPER, "UI_OT_eyedropper_driver");
   }
-  else {
-    /* add driver variable */
-    row = uiLayoutRow(layout, false);
-    block = uiLayoutGetBlock(row);
-    but = uiDefIconTextBut(block,
-                           UI_BTYPE_BUT,
-                           B_IPO_DEPCHANGE,
-                           ICON_ADD,
-                           IFACE_("Add Input Variable"),
-                           0,
-                           0,
-                           10 * UI_UNIT_X,
-                           UI_UNIT_Y,
-                           NULL,
-                           0.0,
-                           0.0,
-                           0,
-                           0,
-                           TIP_("Driver variables ensure that all dependencies will be accounted "
-                                "for, ensuring that drivers will update correctly"));
-    UI_but_func_set(but, driver_add_var_cb, driver, NULL);
 
-    /* copy/paste (as sub-row) */
-    row = uiLayoutRow(row, true);
-    block = uiLayoutGetBlock(row);
+  /* copy/paste (as sub-row) */
+  row = uiLayoutRow(row_outer, true);
+  block = uiLayoutGetBlock(row);
 
-    uiItemO(row, "", ICON_COPYDOWN, "GRAPH_OT_driver_variables_copy");
-    uiItemO(row, "", ICON_PASTEDOWN, "GRAPH_OT_driver_variables_paste");
-  }
+  uiItemO(row, "", ICON_COPYDOWN, "GRAPH_OT_driver_variables_copy");
+  uiItemO(row, "", ICON_PASTEDOWN, "GRAPH_OT_driver_variables_paste");
 
   /* loop over targets, drawing them */
   for (dvar = driver->variables.first; dvar; dvar = dvar->next) {
@@ -1118,7 +1106,7 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
                          0.0,
                          0.0,
                          0.0,
-                         IFACE_("Invalid variable name, click here for details"));
+                         TIP_("Invalid variable name, click here for details"));
       UI_but_func_set(but, driver_dvar_invalid_name_query_cb, dvar, NULL);  // XXX: reports?
     }
 
@@ -1136,7 +1124,7 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
                        0.0,
                        0.0,
                        0.0,
-                       IFACE_("Delete target variable"));
+                       TIP_("Delete target variable"));
     UI_but_func_set(but, driver_delete_var_cb, driver, dvar);
     UI_block_emboss_set(block, UI_EMBOSS);
 
@@ -1168,8 +1156,12 @@ static void graph_draw_driver_settings_panel(uiLayout *layout,
 
       if ((dvar->type == DVAR_TYPE_ROT_DIFF) ||
           (dvar->type == DVAR_TYPE_TRANSFORM_CHAN &&
-           dvar->targets[0].transChan >= DTAR_TRANSCHAN_ROTX &&
-           dvar->targets[0].transChan < DTAR_TRANSCHAN_SCALEX)) {
+           ELEM(dvar->targets[0].transChan,
+                DTAR_TRANSCHAN_ROTX,
+                DTAR_TRANSCHAN_ROTY,
+                DTAR_TRANSCHAN_ROTZ,
+                DTAR_TRANSCHAN_ROTW) &&
+           dvar->targets[0].rotation_mode != DTAR_ROTMODE_QUATERNION)) {
         BLI_snprintf(
             valBuf, sizeof(valBuf), "%.3f (%4.1f°)", dvar->curval, RAD2DEGF(dvar->curval));
       }
@@ -1257,7 +1249,7 @@ static void graph_panel_drivers_popover(const bContext *C, Panel *pa)
 {
   uiLayout *layout = pa->layout;
 
-  PointerRNA ptr = {{NULL}};
+  PointerRNA ptr = {NULL};
   PropertyRNA *prop = NULL;
   int index = -1;
   uiBut *but = NULL;
@@ -1279,7 +1271,11 @@ static void graph_panel_drivers_popover(const bContext *C, Panel *pa)
 
     /* Populate Panel - With a combination of the contents of the Driven and Driver panels */
     if (fcu && fcu->driver) {
-      ID *id = ptr.id.data;
+      ID *id = ptr.owner_id;
+
+      PointerRNA ptr_fcurve;
+      RNA_pointer_create(id, &RNA_FCurve, fcu, &ptr_fcurve);
+      uiLayoutSetContextPointer(layout, "active_editable_fcurve", &ptr_fcurve);
 
       /* Driven Property Settings */
       uiItemL(layout, IFACE_("Driven Property:"), ICON_NONE);

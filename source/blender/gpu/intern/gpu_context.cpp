@@ -36,6 +36,7 @@
 
 #include "gpu_batch_private.h"
 #include "gpu_context_private.h"
+#include "gpu_matrix_private.h"
 
 #include <vector>
 #include <string.h>
@@ -64,12 +65,14 @@ static std::mutex orphans_mutex;
 
 struct GPUContext {
   GLuint default_vao;
+  GLuint default_framebuffer;
   GPUFrameBuffer *current_fbo;
   std::unordered_set<GPUBatch *> batches; /* Batches that have VAOs from this context */
 #ifdef DEBUG
   std::unordered_set<GPUFrameBuffer *>
       framebuffers; /* Framebuffers that have FBO from this context */
 #endif
+  struct GPUMatrixState *matrix_state;
   std::vector<GLuint> orphaned_vertarray_ids;
   std::vector<GLuint> orphaned_framebuffer_ids;
   std::mutex orphans_mutex; /* todo: try spinlock instead */
@@ -87,12 +90,7 @@ struct GPUContext {
   }
 };
 
-#if defined(_MSC_VER) && (_MSC_VER == 1800)
-#  define thread_local __declspec(thread)
-thread_local GPUContext *active_ctx = NULL;
-#else
 static thread_local GPUContext *active_ctx = NULL;
-#endif
 
 static void orphans_add(GPUContext *ctx, std::vector<GLuint> *orphan_list, GLuint id)
 {
@@ -105,9 +103,11 @@ static void orphans_add(GPUContext *ctx, std::vector<GLuint> *orphan_list, GLuin
 
 static void orphans_clear(GPUContext *ctx)
 {
-  BLI_assert(ctx); /* need at least an active context */
-  BLI_assert(pthread_equal(pthread_self(),
-                           ctx->thread)); /* context has been activated by another thread! */
+  /* need at least an active context */
+  BLI_assert(ctx);
+
+  /* context has been activated by another thread! */
+  BLI_assert(pthread_equal(pthread_self(), ctx->thread));
 
   ctx->orphans_mutex.lock();
   if (!ctx->orphaned_vertarray_ids.empty()) {
@@ -137,11 +137,13 @@ static void orphans_clear(GPUContext *ctx)
   orphans_mutex.unlock();
 }
 
-GPUContext *GPU_context_create(void)
+GPUContext *GPU_context_create(GLuint default_framebuffer)
 {
   /* BLI_assert(thread_is_main()); */
   GPUContext *ctx = new GPUContext;
   glGenVertexArrays(1, &ctx->default_vao);
+  ctx->default_framebuffer = default_framebuffer;
+  ctx->matrix_state = GPU_matrix_state_create();
   GPU_context_active_set(ctx);
   return ctx;
 }
@@ -162,6 +164,7 @@ void GPU_context_discard(GPUContext *ctx)
     /* this removes the array entry */
     GPU_batch_vao_cache_clear(*ctx->batches.begin());
   }
+  GPU_matrix_state_discard(ctx->matrix_state);
   glDeleteVertexArrays(1, &ctx->default_vao);
   delete ctx;
   active_ctx = NULL;
@@ -199,6 +202,14 @@ GLuint GPU_vao_default(void)
   BLI_assert(pthread_equal(
       pthread_self(), active_ctx->thread)); /* context has been activated by another thread! */
   return active_ctx->default_vao;
+}
+
+GLuint GPU_framebuffer_default(void)
+{
+  BLI_assert(active_ctx); /* need at least an active context */
+  BLI_assert(pthread_equal(
+      pthread_self(), active_ctx->thread)); /* context has been activated by another thread! */
+  return active_ctx->default_framebuffer;
 }
 
 GLuint GPU_vao_alloc(void)
@@ -327,4 +338,10 @@ void gpu_context_active_framebuffer_set(GPUContext *ctx, GPUFrameBuffer *fb)
 GPUFrameBuffer *gpu_context_active_framebuffer_get(GPUContext *ctx)
 {
   return ctx->current_fbo;
+}
+
+struct GPUMatrixState *gpu_context_active_matrix_state_get()
+{
+  BLI_assert(active_ctx);
+  return active_ctx->matrix_state;
 }

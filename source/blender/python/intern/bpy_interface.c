@@ -80,7 +80,8 @@ CLG_LOGREF_DECLARE_GLOBAL(BPY_LOG_RNA, "bpy.rna");
 
 /* for internal use, when starting and ending python scripts */
 
-/* in case a python script triggers another python call, stop bpy_context_clear from invalidating */
+/* In case a python script triggers another python call,
+ * stop bpy_context_clear from invalidating. */
 static int py_call_level = 0;
 
 // #define TIME_PY_RUN // simple python tests. prints on exit.
@@ -456,7 +457,7 @@ static bool python_script_exec(
 
       fn_dummy_py = PyC_UnicodeFromByte(fn_dummy);
 
-      buf = txt_to_buf(text);
+      buf = txt_to_buf(text, NULL);
       text->compiled = Py_CompileStringObject(buf, fn_dummy_py, Py_file_input, NULL, -1);
       MEM_freeN(buf);
 
@@ -806,8 +807,8 @@ int BPY_context_member_get(bContext *C, const char *member, bContextDataResult *
   else if (BPy_StructRNA_Check(item)) {
     ptr = &(((BPy_StructRNA *)item)->ptr);
 
-    //result->ptr = ((BPy_StructRNA *)item)->ptr;
-    CTX_data_pointer_set(result, ptr->id.data, ptr->type, ptr->data);
+    // result->ptr = ((BPy_StructRNA *)item)->ptr;
+    CTX_data_pointer_set(result, ptr->owner_id, ptr->type, ptr->data);
     CTX_data_type_set(result, CTX_DATA_TYPE_POINTER);
     done = true;
   }
@@ -833,7 +834,7 @@ int BPY_context_member_get(bContext *C, const char *member, bContextDataResult *
           BLI_addtail(&result->list, link);
 #endif
           ptr = &(((BPy_StructRNA *)list_item)->ptr);
-          CTX_data_list_add(result, ptr->id.data, ptr->type, ptr->data);
+          CTX_data_list_add(result, ptr->owner_id, ptr->type, ptr->data);
         }
         else {
           CLOG_INFO(BPY_LOG_CONTEXT,

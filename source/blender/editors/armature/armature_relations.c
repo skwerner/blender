@@ -38,6 +38,7 @@
 
 #include "BKE_action.h"
 #include "BKE_animsys.h"
+#include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
@@ -63,13 +64,22 @@
 
 #include "armature_intern.h"
 
-/* *************************************** Join *************************************** */
-/* NOTE: no operator define here as this is exported to the Object-level operator */
+/* -------------------------------------------------------------------- */
+/** \name Edit Armature Join
+ *
+ * \note No operator define here as this is exported to the Object-level operator.
+ * \{ */
 
-static void joined_armature_fix_links_constraints(
-    Object *tarArm, Object *srcArm, bPoseChannel *pchan, EditBone *curbone, ListBase *lb)
+static void joined_armature_fix_links_constraints(Main *bmain,
+                                                  Object *ob,
+                                                  Object *tarArm,
+                                                  Object *srcArm,
+                                                  bPoseChannel *pchan,
+                                                  EditBone *curbone,
+                                                  ListBase *lb)
 {
   bConstraint *con;
+  bool changed = false;
 
   for (con = lb->first; con; con = con->next) {
     const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
@@ -84,10 +94,12 @@ static void joined_armature_fix_links_constraints(
         if (ct->tar == srcArm) {
           if (ct->subtarget[0] == '\0') {
             ct->tar = tarArm;
+            changed = true;
           }
           else if (STREQ(ct->subtarget, pchan->name)) {
             ct->tar = tarArm;
             BLI_strncpy(ct->subtarget, curbone->name, sizeof(ct->subtarget));
+            changed = true;
           }
         }
       }
@@ -104,13 +116,21 @@ static void joined_armature_fix_links_constraints(
       if (data->act) {
         BKE_action_fix_paths_rename(
             &tarArm->id, data->act, "pose.bones[", pchan->name, curbone->name, 0, 0, false);
+
+        DEG_id_tag_update_ex(bmain, &data->act->id, ID_RECALC_COPY_ON_WRITE);
       }
     }
+  }
+
+  if (changed) {
+    DEG_id_tag_update_ex(bmain, &ob->id, ID_RECALC_COPY_ON_WRITE);
   }
 }
 
 /* userdata for joined_armature_fix_animdata_cb() */
 typedef struct tJoinArmature_AdtFixData {
+  Main *bmain;
+
   Object *srcArm;
   Object *tarArm;
 
@@ -129,6 +149,7 @@ static void joined_armature_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data
   ID *dst_id = &afd->tarArm->id;
 
   GHashIterator gh_iter;
+  bool changed = false;
 
   /* Fix paths - If this is the target object, it will have some "dirty" paths */
   if ((id == src_id) && strstr(fcu->rna_path, "pose.bones[")) {
@@ -141,6 +162,8 @@ static void joined_armature_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data
       if (!STREQ(old_name, new_name) && strstr(fcu->rna_path, old_name)) {
         fcu->rna_path = BKE_animsys_fix_rna_path_rename(
             id, fcu->rna_path, "pose.bones", old_name, new_name, 0, 0, false);
+
+        changed = true;
 
         /* we don't want to apply a second remapping on this driver now,
          * so stop trying names, but keep fixing drivers
@@ -162,6 +185,8 @@ static void joined_armature_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data
         /* change the ID's used... */
         if (dtar->id == src_id) {
           dtar->id = dst_id;
+
+          changed = true;
 
           /* also check on the subtarget...
            * XXX: We duplicate the logic from drivers_path_rename_fix() here, with our own
@@ -193,6 +218,10 @@ static void joined_armature_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data
       DRIVER_TARGETS_LOOPER_END;
     }
   }
+
+  if (changed) {
+    DEG_id_tag_update_ex(afd->bmain, id, ID_RECALC_COPY_ON_WRITE);
+  }
 }
 
 /* Helper function for armature joining - link fixing */
@@ -210,13 +239,14 @@ static void joined_armature_fix_links(
       pose = ob->pose;
       for (pchant = pose->chanbase.first; pchant; pchant = pchant->next) {
         joined_armature_fix_links_constraints(
-            tarArm, srcArm, pchan, curbone, &pchant->constraints);
+            bmain, ob, tarArm, srcArm, pchan, curbone, &pchant->constraints);
       }
     }
 
     /* fix object-level constraints */
     if (ob != srcArm) {
-      joined_armature_fix_links_constraints(tarArm, srcArm, pchan, curbone, &ob->constraints);
+      joined_armature_fix_links_constraints(
+          bmain, ob, tarArm, srcArm, pchan, curbone, &ob->constraints);
     }
 
     /* See if an object is parented to this armature */
@@ -231,6 +261,8 @@ static void joined_armature_fix_links(
 
       /* make tar armature be new parent */
       ob->parent = tarArm;
+
+      DEG_id_tag_update_ex(bmain, &ob->id, ID_RECALC_COPY_ON_WRITE);
     }
   }
 }
@@ -286,6 +318,7 @@ int join_armature_exec(bContext *C, wmOperator *op)
       BLI_assert(ob_active->data != ob_iter->data);
 
       /* init callback data for fixing up AnimData links later */
+      afd.bmain = bmain;
       afd.srcArm = ob_iter;
       afd.tarArm = ob_active;
       afd.names_map = BLI_ghash_str_new("join_armature_adt_fix");
@@ -296,7 +329,7 @@ int join_armature_exec(bContext *C, wmOperator *op)
       /* Get Pose of current armature */
       opose = ob_iter->pose;
       ob_iter->mode &= ~OB_MODE_POSE;
-      //BASACT->flag &= ~OB_MODE_POSE;
+      // BASACT->flag &= ~OB_MODE_POSE;
 
       /* Find the difference matrix */
       invert_m4_m4(oimat, ob_active->obmat);
@@ -397,13 +430,18 @@ int join_armature_exec(bContext *C, wmOperator *op)
   ED_armature_from_edit(bmain, arm);
   ED_armature_edit_free(arm);
 
+  BKE_armature_refresh_layer_used(arm);
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
 
   return OPERATOR_FINISHED;
 }
 
-/* *********************************** Separate *********************************************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Armature Separate
+ * \{ */
 
 /* Helper function for armature separating - link fixing */
 static void separated_armature_fix_links(Main *bmain, Object *origArm, Object *newArm)
@@ -432,9 +470,10 @@ static void separated_armature_fix_links(Main *bmain, Object *origArm, Object *n
             cti->get_constraint_targets(con, &targets);
 
             for (ct = targets.first; ct; ct = ct->next) {
-              /* any targets which point to original armature are redirected to the new one only if:
-               * - the target isn't origArm/newArm itself
-               * - the target is one that can be found in newArm/origArm
+              /* Any targets which point to original armature
+               * are redirected to the new one only if:
+               * - The target isn't origArm/newArm itself.
+               * - The target is one that can be found in newArm/origArm.
                */
               if (ct->subtarget[0] != 0) {
                 if (ct->tar == origArm) {
@@ -611,7 +650,7 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
     oldob = obedit;
     oldbase = base_iter;
     oldob->mode &= ~OB_MODE_POSE;
-    //oldbase->flag &= ~OB_POSEMODE;
+    // oldbase->flag &= ~OB_POSEMODE;
 
     ED_armature_from_edit(bmain, obedit->data);
     ED_armature_edit_free(obedit->data);
@@ -640,6 +679,9 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
     obedit = oldob;
 
     ED_armature_to_edit(obedit->data);
+
+    ED_armature_edit_refresh_layer_used(obedit->data);
+    BKE_armature_refresh_layer_used(newob->data);
 
     /* parents tips remain selected when connected children are removed. */
     ED_armature_edit_deselect_all(obedit);
@@ -677,7 +719,11 @@ void ARMATURE_OT_separate(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ********************************* Parenting ************************************************* */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Armature Parenting
+ * \{ */
 
 /* armature parenting options */
 #define ARM_PAR_CONNECT 1
@@ -763,11 +809,11 @@ static int armature_parent_set_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
   else if (arm->flag & ARM_MIRROR_EDIT) {
-    /* For X-Axis Mirror Editing option, we may need a mirror copy of actbone
-     * - if there's a mirrored copy of selbone, try to find a mirrored copy of actbone
+    /* For X-Axis Mirror Editing option, we may need a mirror copy of actbone:
+     * - If there's a mirrored copy of selbone, try to find a mirrored copy of actbone
      *   (i.e.  selbone="child.L" and actbone="parent.L", find "child.R" and "parent.R").
-     * This is useful for arm-chains, for example parenting lower arm to upper arm
-     * - if there's no mirrored copy of actbone (i.e. actbone = "parent.C" or "parent")
+     *   This is useful for arm-chains, for example parenting lower arm to upper arm.
+     * - If there's no mirrored copy of actbone (i.e. actbone = "parent.C" or "parent")
      *   then just use actbone. Useful when doing upper arm to spine.
      */
     actmirb = ED_armature_ebone_get_mirrored(arm->edbo, actbone);
@@ -776,10 +822,22 @@ static int armature_parent_set_exec(bContext *C, wmOperator *op)
     }
   }
 
-  /* if there is only 1 selected bone, we assume that that is the active bone,
-   * since a user will need to have clicked on a bone (thus selecting it) to make it active
-   */
-  if (CTX_DATA_COUNT(C, selected_editable_bones) <= 1) {
+  /* If there is only 1 selected bone, we assume that that is the active bone,
+   * since a user will need to have clicked on a bone (thus selecting it) to make it active. */
+  bool is_active_only_selected = false;
+  if (actbone->flag & BONE_SELECTED) {
+    is_active_only_selected = true;
+    for (EditBone *ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+      if (EBONE_EDITABLE(ebone) && (ebone->flag & BONE_SELECTED)) {
+        if (ebone != actbone) {
+          is_active_only_selected = false;
+          break;
+        }
+      }
+    }
+  }
+
+  if (is_active_only_selected) {
     /* When only the active bone is selected, and it has a parent,
      * connect it to the parent, as that is the only possible outcome.
      */
@@ -792,26 +850,31 @@ static int armature_parent_set_exec(bContext *C, wmOperator *op)
     }
   }
   else {
-    /* Parent 'selected' bones to the active one
-     * - the context iterator contains both selected bones and their mirrored copies,
-     *   so we assume that unselected bones are mirrored copies of some selected bone
-     * - since the active one (and/or its mirror) will also be selected, we also need
+    /* Parent 'selected' bones to the active one:
+     * - The context iterator contains both selected bones and their mirrored copies,
+     *   so we assume that unselected bones are mirrored copies of some selected bone.
+     * - Since the active one (and/or its mirror) will also be selected, we also need
      *   to check that we are not trying to operate on them, since such an operation
-     *   would cause errors
+     *   would cause errors.
      */
 
-    /* parent selected bones to the active one */
-    CTX_DATA_BEGIN (C, EditBone *, ebone, selected_editable_bones) {
-      if (ELEM(ebone, actbone, actmirb) == 0) {
-        if (ebone->flag & BONE_SELECTED) {
+    /* Parent selected bones to the active one. */
+    for (EditBone *ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+      if (EBONE_EDITABLE(ebone) && (ebone->flag & BONE_SELECTED)) {
+        if (ebone != actbone) {
           bone_connect_to_new_parent(arm->edbo, ebone, actbone, val);
         }
-        else {
-          bone_connect_to_new_parent(arm->edbo, ebone, actmirb, val);
+
+        if (arm->flag & ARM_MIRROR_EDIT) {
+          EditBone *ebone_mirror = ED_armature_ebone_get_mirrored(arm->edbo, ebone);
+          if (ebone_mirror && (ebone_mirror->flag & BONE_SELECTED) == 0) {
+            if (ebone_mirror != actmirb) {
+              bone_connect_to_new_parent(arm->edbo, ebone_mirror, actmirb, val);
+            }
+          }
         }
       }
     }
-    CTX_DATA_END;
   }
 
   /* note, notifier might evolve */
@@ -824,25 +887,29 @@ static int armature_parent_set_invoke(bContext *C,
                                       wmOperator *UNUSED(op),
                                       const wmEvent *UNUSED(event))
 {
-  EditBone *actbone = CTX_data_active_bone(C);
-  uiPopupMenu *pup = UI_popup_menu_begin(
-      C, CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Make Parent"), ICON_NONE);
-  uiLayout *layout = UI_popup_menu_layout(pup);
-  int allchildbones = 0;
-
-  CTX_DATA_BEGIN (C, EditBone *, ebone, selected_editable_bones) {
-    if (ebone != actbone) {
-      if (ebone->parent != actbone) {
-        allchildbones = 1;
+  bool all_childbones = false;
+  {
+    Object *ob = CTX_data_edit_object(C);
+    bArmature *arm = ob->data;
+    EditBone *actbone = arm->act_edbone;
+    for (EditBone *ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+      if (EBONE_EDITABLE(ebone) && (ebone->flag & BONE_SELECTED)) {
+        if (ebone != actbone) {
+          if (ebone->parent != actbone) {
+            all_childbones = true;
+            break;
+          }
+        }
       }
     }
   }
-  CTX_DATA_END;
 
+  uiPopupMenu *pup = UI_popup_menu_begin(
+      C, CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Make Parent"), ICON_NONE);
+  uiLayout *layout = UI_popup_menu_layout(pup);
   uiItemEnumO(layout, "ARMATURE_OT_parent_set", NULL, 0, "type", ARM_PAR_CONNECT);
-
-  /* ob becomes parent, make the associated menus */
-  if (allchildbones) {
+  if (all_childbones) {
+    /* Object becomes parent, make the associated menus. */
     uiItemEnumO(layout, "ARMATURE_OT_parent_set", NULL, 0, "type", ARM_PAR_OFFSET);
   }
 
@@ -951,3 +1018,5 @@ void ARMATURE_OT_parent_clear(wmOperatorType *ot)
                           "ClearType",
                           "What way to clear parenting");
 }
+
+/** \} */

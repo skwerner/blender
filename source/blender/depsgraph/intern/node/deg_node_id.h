@@ -26,6 +26,8 @@
 #include "intern/node/deg_node.h"
 #include "BLI_sys_types.h"
 
+struct GHash;
+
 namespace DEG {
 
 struct ComponentNode;
@@ -95,6 +97,12 @@ struct IDNode : public Node {
   /* For the collection type of ID, denotes whether collection was fully
    * recursed into. */
   bool is_collection_fully_expanded;
+
+  /* Is used to figure out whether object came to the dependency graph via a base. */
+  bool has_base;
+
+  /* Accumulated flag from operation. Is initialized and used during updates flush. */
+  bool is_user_modified;
 
   IDComponentsMask visible_components_mask;
   IDComponentsMask previously_visible_components_mask;

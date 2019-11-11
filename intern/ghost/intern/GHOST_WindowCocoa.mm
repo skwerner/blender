@@ -29,6 +29,8 @@
 #endif
 
 #include <Cocoa/Cocoa.h>
+#include <QuartzCore/QuartzCore.h>
+#include <Metal/Metal.h>
 
 #include <sys/sysctl.h>
 
@@ -115,7 +117,8 @@
   //Send event only once, at end of resize operation (when user has released mouse button)
   systemCocoa->handleWindowEvent(GHOST_kEventWindowSize, associatedWindow);
   //}
-  /* Live resize, send event, gets handled in wm_window.c. Needed because live resize runs in a modal loop, not letting main loop run */
+  /* Live resize, send event, gets handled in wm_window.c.
+   * Needed because live resize runs in a modal loop, not letting main loop run */
   if ([[notification object] inLiveResize]) {
     systemCocoa->dispatchEvents();
   }
@@ -136,7 +139,8 @@
 @end
 
 #pragma mark NSWindow subclass
-//We need to subclass it to tell that even borderless (fullscreen), it can become key (receive user events)
+// We need to subclass it to tell that even borderless (fullscreen),
+// it can become key (receive user events)
 @interface CocoaWindow : NSWindow
 {
   GHOST_SystemCocoa *systemCocoa;
@@ -162,7 +166,8 @@
 
 - (BOOL)canBecomeKeyWindow
 {
-  return YES;
+  /* Don't make other windows active when a dialog window is open. */
+  return (associatedWindow->isDialog() || !systemCocoa->hasDialogWindow());
 }
 
 //The drag'n'drop dragging destination methods
@@ -260,261 +265,18 @@
 
 @end
 
-#pragma mark NSOpenGLView subclass
-//We need to subclass it in order to give Cocoa the feeling key events are trapped
-@interface CocoaOpenGLView : NSOpenGLView <NSTextInput>
-{
-  GHOST_SystemCocoa *systemCocoa;
-  GHOST_WindowCocoa *associatedWindow;
+/* NSView for handling input and drawing. */
+#define COCOA_VIEW_CLASS CocoaOpenGLView
+#define COCOA_VIEW_BASE_CLASS NSOpenGLView
+#include "GHOST_WindowViewCocoa.h"
+#undef COCOA_VIEW_CLASS
+#undef COCOA_VIEW_BASE_CLASS
 
-  bool composing;
-  NSString *composing_text;
-
-  bool immediate_draw;
-}
-- (void)setSystemAndWindowCocoa:(GHOST_SystemCocoa *)sysCocoa
-                    windowCocoa:(GHOST_WindowCocoa *)winCocoa;
-@end
-
-@implementation CocoaOpenGLView
-
-- (void)setSystemAndWindowCocoa:(GHOST_SystemCocoa *)sysCocoa
-                    windowCocoa:(GHOST_WindowCocoa *)winCocoa
-{
-  systemCocoa = sysCocoa;
-  associatedWindow = winCocoa;
-
-  composing = false;
-  composing_text = nil;
-
-  immediate_draw = false;
-}
-
-- (BOOL)acceptsFirstResponder
-{
-  return YES;
-}
-
-// The trick to prevent Cocoa from complaining (beeping)
-- (void)keyDown:(NSEvent *)event
-{
-  systemCocoa->handleKeyEvent(event);
-
-  /* Start or continue composing? */
-  if ([[event characters] length] == 0 || [[event charactersIgnoringModifiers] length] == 0 ||
-      composing) {
-    composing = YES;
-
-    // interpret event to call insertText
-    NSMutableArray *events;
-    events = [[NSMutableArray alloc] initWithCapacity:1];
-    [events addObject:event];
-    [self interpretKeyEvents:events];  // calls insertText
-    [events removeObject:event];
-    [events release];
-    return;
-  }
-}
-
-- (void)keyUp:(NSEvent *)event
-{
-  systemCocoa->handleKeyEvent(event);
-}
-
-- (void)flagsChanged:(NSEvent *)event
-{
-  systemCocoa->handleKeyEvent(event);
-}
-
-- (void)mouseDown:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)mouseUp:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)rightMouseDown:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)rightMouseUp:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)mouseMoved:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)mouseDragged:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)rightMouseDragged:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)scrollWheel:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)otherMouseDown:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)otherMouseUp:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)otherMouseDragged:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)magnifyWithEvent:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)rotateWithEvent:(NSEvent *)event
-{
-  systemCocoa->handleMouseEvent(event);
-}
-
-- (void)tabletPoint:(NSEvent *)event
-{
-  systemCocoa->handleTabletEvent(event, [event type]);
-}
-
-- (void)tabletProximity:(NSEvent *)event
-{
-  systemCocoa->handleTabletEvent(event, [event type]);
-}
-
-- (BOOL)isOpaque
-{
-  return YES;
-}
-
-- (void)drawRect:(NSRect)rect
-{
-  if ([self inLiveResize]) {
-    /* Don't redraw while in live resize */
-  }
-  else {
-    [super drawRect:rect];
-    systemCocoa->handleWindowEvent(GHOST_kEventWindowUpdate, associatedWindow);
-
-    /* For some cases like entering fullscreen we need to redraw immediately
-     * so our window does not show blank during the animation */
-    if (associatedWindow->getImmediateDraw())
-      systemCocoa->dispatchEvents();
-  }
-}
-
-// Text input
-
-- (void)composing_free
-{
-  composing = NO;
-
-  if (composing_text) {
-    [composing_text release];
-    composing_text = nil;
-  }
-}
-
-- (void)insertText:(id)chars
-{
-  [self composing_free];
-}
-
-- (void)setMarkedText:(id)chars selectedRange:(NSRange)range
-{
-  [self composing_free];
-  if ([chars length] == 0)
-    return;
-
-  // start composing
-  composing = YES;
-  composing_text = [chars copy];
-
-  // if empty, cancel
-  if ([composing_text length] == 0)
-    [self composing_free];
-}
-
-- (void)unmarkText
-{
-  [self composing_free];
-}
-
-- (BOOL)hasMarkedText
-{
-  return (composing) ? YES : NO;
-}
-
-- (void)doCommandBySelector:(SEL)selector
-{
-}
-
-- (BOOL)isComposing
-{
-  return composing;
-}
-
-- (NSInteger)conversationIdentifier
-{
-  return (NSInteger)self;
-}
-
-- (NSAttributedString *)attributedSubstringFromRange:(NSRange)range
-{
-  return [NSAttributedString new];  // XXX does this leak?
-}
-
-- (NSRange)markedRange
-{
-  unsigned int length = (composing_text) ? [composing_text length] : 0;
-
-  if (composing)
-    return NSMakeRange(0, length);
-
-  return NSMakeRange(NSNotFound, 0);
-}
-
-- (NSRange)selectedRange
-{
-  unsigned int length = (composing_text) ? [composing_text length] : 0;
-  return NSMakeRange(0, length);
-}
-
-- (NSRect)firstRectForCharacterRange:(NSRange)range
-{
-  return NSZeroRect;
-}
-
-- (NSUInteger)characterIndexForPoint:(NSPoint)point
-{
-  return NSNotFound;
-}
-
-- (NSArray *)validAttributesForMarkedText
-{
-  return [NSArray array];  // XXX does this leak?
-}
-
-@end
+#define COCOA_VIEW_CLASS CocoaMetalView
+#define COCOA_VIEW_BASE_CLASS NSView
+#include "GHOST_WindowViewCocoa.h"
+#undef COCOA_VIEW_CLASS
+#undef COCOA_VIEW_BASE_CLASS
 
 #pragma mark initialization / finalization
 
@@ -529,18 +291,24 @@ GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
                                      GHOST_TWindowState state,
                                      GHOST_TDrawingContextType type,
                                      const bool stereoVisual,
-                                     bool is_debug)
+                                     bool is_debug,
+                                     bool is_dialog,
+                                     GHOST_WindowCocoa *parentWindow)
     : GHOST_Window(width, height, state, stereoVisual, false),
+      m_openGLView(nil),
+      m_metalView(nil),
+      m_metalLayer(nil),
+      m_systemCocoa(systemCocoa),
       m_customCursor(0),
-      m_debug_context(is_debug)
+      m_immediateDraw(false),
+      m_debug_context(is_debug),
+      m_is_dialog(is_dialog)
 {
-  m_systemCocoa = systemCocoa;
   m_fullScreen = false;
-  m_immediateDraw = false;
 
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 
-  //Creates the window
+  // Creates the window
   NSRect rect;
   NSSize minSize;
 
@@ -549,12 +317,16 @@ GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
   rect.size.width = width;
   rect.size.height = height;
 
-  m_window = [[CocoaWindow alloc]
-      initWithContentRect:rect
-                styleMask:NSTitledWindowMask | NSClosableWindowMask | NSResizableWindowMask |
-                          NSMiniaturizableWindowMask
-                  backing:NSBackingStoreBuffered
-                    defer:NO];
+  NSWindowStyleMask styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
+                                NSWindowStyleMaskResizable;
+  if (!is_dialog) {
+    styleMask |= NSWindowStyleMaskMiniaturizable;
+  }
+
+  m_window = [[CocoaWindow alloc] initWithContentRect:rect
+                                            styleMask:styleMask
+                                              backing:NSBackingStoreBuffered
+                                                defer:NO];
 
   if (m_window == nil) {
     [pool drain];
@@ -563,26 +335,49 @@ GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
 
   [m_window setSystemAndWindowCocoa:systemCocoa windowCocoa:this];
 
-  //Forbid to resize the window below the blender defined minimum one
+  // Forbid to resize the window below the blender defined minimum one
   minSize.width = 320;
   minSize.height = 240;
   [m_window setContentMinSize:minSize];
 
-  //Creates the OpenGL View inside the window
-  m_openGLView = [[CocoaOpenGLView alloc] initWithFrame:rect];
+  // Create NSView inside the window
+  id<MTLDevice> metalDevice = MTLCreateSystemDefaultDevice();
+  NSView *view;
+
+  if (metalDevice) {
+    // Create metal layer and view if supported
+    m_metalLayer = [[CAMetalLayer alloc] init];
+    [m_metalLayer setEdgeAntialiasingMask:0];
+    [m_metalLayer setMasksToBounds:NO];
+    [m_metalLayer setOpaque:YES];
+    [m_metalLayer setFramebufferOnly:YES];
+    [m_metalLayer setPresentsWithTransaction:NO];
+    [m_metalLayer removeAllAnimations];
+    [m_metalLayer setDevice:metalDevice];
+
+    m_metalView = [[CocoaMetalView alloc] initWithFrame:rect];
+    [m_metalView setWantsLayer:YES];
+    [m_metalView setLayer:m_metalLayer];
+    [m_metalView setSystemAndWindowCocoa:systemCocoa windowCocoa:this];
+    view = m_metalView;
+  }
+  else {
+    // Fallback to OpenGL view if there is no Metal support
+    m_openGLView = [[CocoaOpenGLView alloc] initWithFrame:rect];
+    [m_openGLView setSystemAndWindowCocoa:systemCocoa windowCocoa:this];
+    view = m_openGLView;
+  }
 
   if (m_systemCocoa->m_nativePixel) {
     // Needs to happen early when building with the 10.14 SDK, otherwise
     // has no effect until resizeing the window.
-    if ([m_openGLView respondsToSelector:@selector(setWantsBestResolutionOpenGLSurface:)]) {
-      [m_openGLView setWantsBestResolutionOpenGLSurface:YES];
+    if ([view respondsToSelector:@selector(setWantsBestResolutionOpenGLSurface:)]) {
+      [view setWantsBestResolutionOpenGLSurface:YES];
     }
   }
 
-  [m_openGLView setSystemAndWindowCocoa:systemCocoa windowCocoa:this];
-
-  [m_window setContentView:m_openGLView];
-  [m_window setInitialFirstResponder:m_openGLView];
+  [m_window setContentView:view];
+  [m_window setInitialFirstResponder:view];
 
   [m_window makeKeyAndOrderFront:nil];
 
@@ -600,8 +395,8 @@ GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
 
   [m_window setAcceptsMouseMovedEvents:YES];
 
-  NSView *view = [m_window contentView];
-  [view setAcceptsTouchEvents:YES];
+  NSView *contentview = [m_window contentView];
+  [contentview setAcceptsTouchEvents:YES];
 
   [m_window registerForDraggedTypes:[NSArray arrayWithObjects:NSFilenamesPboardType,
                                                               NSStringPboardType,
@@ -614,6 +409,10 @@ GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
 
   if (state == GHOST_kWindowStateFullScreen)
     setState(GHOST_kWindowStateFullScreen);
+
+  if (is_dialog && parentWindow) {
+    [parentWindow->getCocoaWindow() addChildWindow:m_window ordered:NSWindowAbove];
+  }
 
   setNativePixelSize();
 
@@ -631,7 +430,18 @@ GHOST_WindowCocoa::~GHOST_WindowCocoa()
 
   releaseNativeHandles();
 
-  [m_openGLView release];
+  if (m_openGLView) {
+    [m_openGLView release];
+    m_openGLView = nil;
+  }
+  if (m_metalView) {
+    [m_metalView release];
+    m_metalView = nil;
+  }
+  if (m_metalLayer) {
+    [m_metalLayer release];
+    m_metalLayer = nil;
+  }
 
   if (m_window) {
     [m_window close];
@@ -655,7 +465,8 @@ GHOST_WindowCocoa::~GHOST_WindowCocoa()
 
 bool GHOST_WindowCocoa::getValid() const
 {
-  return GHOST_Window::getValid() && m_window != NULL && m_openGLView != NULL;
+  NSView *view = (m_openGLView) ? m_openGLView : m_metalView;
+  return GHOST_Window::getValid() && m_window != NULL && view != NULL;
 }
 
 void *GHOST_WindowCocoa::getOSWindow() const
@@ -670,7 +481,7 @@ void GHOST_WindowCocoa::setTitle(const STR_String &title)
 
   NSString *windowTitle = [[NSString alloc] initWithCString:title encoding:NSUTF8StringEncoding];
 
-  //Set associated file if applicable
+  // Set associated file if applicable
   if (windowTitle && [windowTitle hasPrefix:@"Blender"]) {
     NSRange fileStrRange;
     NSString *associatedFileName;
@@ -684,9 +495,6 @@ void GHOST_WindowCocoa::setTitle(const STR_String &title)
       associatedFileName = [windowTitle substringWithRange:fileStrRange];
       [m_window setTitle:[associatedFileName lastPathComponent]];
 
-      //Blender used file open/save functions converte file names into legal URL ones
-      associatedFileName = [associatedFileName
-          stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
       @try {
         [m_window setRepresentedFilename:associatedFileName];
       }
@@ -751,11 +559,9 @@ void GHOST_WindowCocoa::getClientBounds(GHOST_Rect &bounds) const
 
   NSRect screenSize = [[m_window screen] visibleFrame];
 
-  //Max window contents as screen size (excluding title bar...)
-  NSRect contentRect = [CocoaWindow
-      contentRectForFrameRect:screenSize
-                    styleMask:(NSTitledWindowMask | NSClosableWindowMask |
-                               NSMiniaturizableWindowMask | NSResizableWindowMask)];
+  // Max window contents as screen size (excluding title bar...)
+  NSRect contentRect = [CocoaWindow contentRectForFrameRect:screenSize
+                                                  styleMask:[m_window styleMask]];
 
   rect = [m_window contentRectForFrameRect:[m_window frame]];
 
@@ -823,7 +629,7 @@ GHOST_TWindowState GHOST_WindowCocoa::getState() const
 
   NSUInteger masks = [m_window styleMask];
 
-  if (masks & NSFullScreenWindowMask) {
+  if (masks & NSWindowStyleMaskFullScreen) {
     // Lion style fullscreen
     if (!m_immediateDraw) {
       state = GHOST_kWindowStateFullScreen;
@@ -922,7 +728,8 @@ NSScreen *GHOST_WindowCocoa::getScreen()
 /* called for event, when window leaves monitor to another */
 void GHOST_WindowCocoa::setNativePixelSize(void)
 {
-  NSRect backingBounds = [m_openGLView convertRectToBacking:[m_openGLView bounds]];
+  NSView *view = (m_openGLView) ? m_openGLView : m_metalView;
+  NSRect backingBounds = [view convertRectToBacking:[view bounds]];
 
   GHOST_Rect rect;
   getClientBounds(rect);
@@ -934,7 +741,7 @@ void GHOST_WindowCocoa::setNativePixelSize(void)
  * \note Fullscreen switch is not actual fullscreen with display capture.
  * As this capture removes all OS X window manager features.
  *
- * Instead, the menu bar and the dock are hidden, and the window is made borderless and enlarged.
+ * Instead, the menu bar and the dock are hidden, and the window is made border-less and enlarged.
  * Thus, process switch, exposé, spaces, ... still work in fullscreen mode
  */
 GHOST_TSuccess GHOST_WindowCocoa::setState(GHOST_TWindowState state)
@@ -951,7 +758,7 @@ GHOST_TSuccess GHOST_WindowCocoa::setState(GHOST_TWindowState state)
     case GHOST_kWindowStateFullScreen: {
       NSUInteger masks = [m_window styleMask];
 
-      if (!(masks & NSFullScreenWindowMask)) {
+      if (!(masks & NSWindowStyleMaskFullScreen)) {
         [m_window toggleFullScreen:nil];
       }
       break;
@@ -961,7 +768,7 @@ GHOST_TSuccess GHOST_WindowCocoa::setState(GHOST_TWindowState state)
       NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
       NSUInteger masks = [m_window styleMask];
 
-      if (masks & NSFullScreenWindowMask) {
+      if (masks & NSWindowStyleMaskFullScreen) {
         // Lion style fullscreen
         [m_window toggleFullScreen:nil];
       }
@@ -999,7 +806,7 @@ GHOST_TSuccess GHOST_WindowCocoa::setOrder(GHOST_TWindowOrder order)
 
     [m_window orderBack:nil];
 
-    //Check for other blender opened windows and make the frontmost key
+    // Check for other blender opened windows and make the frontmost key
     windowsList = [NSApp orderedWindows];
     if ([windowsList count]) {
       [[windowsList objectAtIndex:0] makeKeyAndOrderFront:nil];
@@ -1016,21 +823,8 @@ GHOST_Context *GHOST_WindowCocoa::newDrawingContext(GHOST_TDrawingContextType ty
 {
   if (type == GHOST_kDrawingContextTypeOpenGL) {
 
-    GHOST_Context *context = new GHOST_ContextCGL(m_wantStereoVisual,
-                                                  m_window,
-                                                  m_openGLView,
-
-#if defined(WITH_GL_PROFILE_CORE)
-                                                  GL_CONTEXT_CORE_PROFILE_BIT,
-                                                  3,
-                                                  3,
-#else
-                                                  0,  // no profile bit
-                                                  2,
-                                                  1,
-#endif
-                                                  GHOST_OPENGL_CGL_CONTEXT_FLAGS,
-                                                  GHOST_OPENGL_CGL_RESET_NOTIFICATION_STRATEGY);
+    GHOST_Context *context = new GHOST_ContextCGL(
+        m_wantStereoVisual, m_metalView, m_metalLayer, m_openGLView);
 
     if (context->initializeDrawingContext())
       return context;
@@ -1047,7 +841,8 @@ GHOST_TSuccess GHOST_WindowCocoa::invalidate()
 {
   GHOST_ASSERT(getValid(), "GHOST_WindowCocoa::invalidate(): window invalid");
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-  [m_openGLView setNeedsDisplay:YES];
+  NSView *view = (m_openGLView) ? m_openGLView : m_metalView;
+  [view setNeedsDisplay:YES];
   [pool drain];
   return GHOST_kSuccess;
 }
@@ -1066,7 +861,7 @@ GHOST_TSuccess GHOST_WindowCocoa::setProgressBar(float progress)
 
     [[NSImage imageNamed:@"NSApplicationIcon"] drawAtPoint:NSZeroPoint
                                                   fromRect:NSZeroRect
-                                                 operation:NSCompositeSourceOver
+                                                 operation:NSCompositingOperationSourceOver
                                                   fraction:1.0];
 
     // Track & Outline
@@ -1119,7 +914,7 @@ GHOST_TSuccess GHOST_WindowCocoa::endProgressBar()
   [dockIcon lockFocus];
   [[NSImage imageNamed:@"NSApplicationIcon"] drawAtPoint:NSZeroPoint
                                                 fromRect:NSZeroRect
-                                               operation:NSCompositeSourceOver
+                                               operation:NSCompositingOperationSourceOver
                                                 fraction:1.0];
   [dockIcon unlockFocus];
   [NSApp setApplicationIconImage:dockIcon];
@@ -1140,12 +935,107 @@ GHOST_TSuccess GHOST_WindowCocoa::endProgressBar()
 
 #pragma mark Cursor handling
 
-void GHOST_WindowCocoa::loadCursor(bool visible, GHOST_TStandardCursor cursor) const
+static NSCursor *getImageCursor(GHOST_TStandardCursor shape, NSString *name, NSPoint hotspot)
+{
+  static NSCursor *cursors[(int)GHOST_kStandardCursorNumCursors] = {0};
+  static bool loaded[(int)GHOST_kStandardCursorNumCursors] = {false};
+
+  const int index = (int)shape;
+  if (!loaded[index]) {
+    /* Load image from file in application Resources folder. */
+    @autoreleasepool {
+      NSImage *image = [NSImage imageNamed:name];
+      if (image != NULL) {
+        cursors[index] = [[NSCursor alloc] initWithImage:image hotSpot:hotspot];
+      }
+    }
+
+    loaded[index] = true;
+  }
+
+  return cursors[index];
+}
+
+NSCursor *GHOST_WindowCocoa::getStandardCursor(GHOST_TStandardCursor shape) const
+{
+  switch (shape) {
+    case GHOST_kStandardCursorCustom:
+      if (m_customCursor) {
+        return m_customCursor;
+      }
+      else {
+        return NULL;
+      }
+    case GHOST_kStandardCursorDestroy:
+      return [NSCursor disappearingItemCursor];
+    case GHOST_kStandardCursorText:
+      return [NSCursor IBeamCursor];
+    case GHOST_kStandardCursorCrosshair:
+      return [NSCursor crosshairCursor];
+    case GHOST_kStandardCursorUpDown:
+      return [NSCursor resizeUpDownCursor];
+    case GHOST_kStandardCursorLeftRight:
+      return [NSCursor resizeLeftRightCursor];
+    case GHOST_kStandardCursorTopSide:
+      return [NSCursor resizeUpCursor];
+    case GHOST_kStandardCursorBottomSide:
+      return [NSCursor resizeDownCursor];
+    case GHOST_kStandardCursorLeftSide:
+      return [NSCursor resizeLeftCursor];
+    case GHOST_kStandardCursorRightSide:
+      return [NSCursor resizeRightCursor];
+    case GHOST_kStandardCursorCopy:
+      return [NSCursor dragCopyCursor];
+    case GHOST_kStandardCursorStop:
+      return [NSCursor operationNotAllowedCursor];
+    case GHOST_kStandardCursorMove:
+      return [NSCursor pointingHandCursor];
+    case GHOST_kStandardCursorDefault:
+      return [NSCursor arrowCursor];
+    case GHOST_kStandardCursorKnife:
+      return getImageCursor(shape, @"knife.pdf", NSMakePoint(6, 24));
+    case GHOST_kStandardCursorEraser:
+      return getImageCursor(shape, @"eraser.pdf", NSMakePoint(6, 24));
+    case GHOST_kStandardCursorPencil:
+      return getImageCursor(shape, @"pen.pdf", NSMakePoint(6, 24));
+    case GHOST_kStandardCursorEyedropper:
+      return getImageCursor(shape, @"eyedropper.pdf", NSMakePoint(6, 24));
+    case GHOST_kStandardCursorZoomIn:
+      return getImageCursor(shape, @"zoomin.pdf", NSMakePoint(8, 7));
+    case GHOST_kStandardCursorZoomOut:
+      return getImageCursor(shape, @"zoomout.pdf", NSMakePoint(8, 7));
+    case GHOST_kStandardCursorNSEWScroll:
+      return getImageCursor(shape, @"scrollnsew.pdf", NSMakePoint(16, 16));
+    case GHOST_kStandardCursorNSScroll:
+      return getImageCursor(shape, @"scrollns.pdf", NSMakePoint(16, 16));
+    case GHOST_kStandardCursorEWScroll:
+      return getImageCursor(shape, @"scrollew.pdf", NSMakePoint(16, 16));
+    case GHOST_kStandardCursorUpArrow:
+      return getImageCursor(shape, @"arrowup.pdf", NSMakePoint(16, 16));
+    case GHOST_kStandardCursorDownArrow:
+      return getImageCursor(shape, @"arrowdown.pdf", NSMakePoint(16, 16));
+    case GHOST_kStandardCursorLeftArrow:
+      return getImageCursor(shape, @"arrowleft.pdf", NSMakePoint(16, 16));
+    case GHOST_kStandardCursorRightArrow:
+      return getImageCursor(shape, @"arrowright.pdf", NSMakePoint(16, 16));
+    case GHOST_kStandardCursorVerticalSplit:
+      return getImageCursor(shape, @"splitv.pdf", NSMakePoint(16, 16));
+    case GHOST_kStandardCursorHorizontalSplit:
+      return getImageCursor(shape, @"splith.pdf", NSMakePoint(16, 16));
+    case GHOST_kStandardCursorCrosshairA:
+      return getImageCursor(shape, @"paint_cursor_cross.pdf", NSMakePoint(16, 15));
+    case GHOST_kStandardCursorCrosshairB:
+      return getImageCursor(shape, @"paint_cursor_dot.pdf", NSMakePoint(16, 15));
+    case GHOST_kStandardCursorCrosshairC:
+      return getImageCursor(shape, @"crossc.pdf", NSMakePoint(16, 16));
+    default:
+      return NULL;
+  }
+}
+
+void GHOST_WindowCocoa::loadCursor(bool visible, GHOST_TStandardCursor shape) const
 {
   static bool systemCursorVisible = true;
-
-  NSCursor *tmpCursor = nil;
-
   if (visible != systemCursorVisible) {
     if (visible) {
       [NSCursor unhide];
@@ -1157,57 +1047,17 @@ void GHOST_WindowCocoa::loadCursor(bool visible, GHOST_TStandardCursor cursor) c
     }
   }
 
-  if (cursor == GHOST_kStandardCursorCustom && m_customCursor) {
-    tmpCursor = m_customCursor;
+  NSCursor *cursor = getStandardCursor(shape);
+  if (cursor == NULL) {
+    cursor = getStandardCursor(GHOST_kStandardCursorDefault);
   }
-  else {
-    switch (cursor) {
-      case GHOST_kStandardCursorDestroy:
-        tmpCursor = [NSCursor disappearingItemCursor];
-        break;
-      case GHOST_kStandardCursorText:
-        tmpCursor = [NSCursor IBeamCursor];
-        break;
-      case GHOST_kStandardCursorCrosshair:
-        tmpCursor = [NSCursor crosshairCursor];
-        break;
-      case GHOST_kStandardCursorUpDown:
-        tmpCursor = [NSCursor resizeUpDownCursor];
-        break;
-      case GHOST_kStandardCursorLeftRight:
-        tmpCursor = [NSCursor resizeLeftRightCursor];
-        break;
-      case GHOST_kStandardCursorTopSide:
-        tmpCursor = [NSCursor resizeUpCursor];
-        break;
-      case GHOST_kStandardCursorBottomSide:
-        tmpCursor = [NSCursor resizeDownCursor];
-        break;
-      case GHOST_kStandardCursorLeftSide:
-        tmpCursor = [NSCursor resizeLeftCursor];
-        break;
-      case GHOST_kStandardCursorRightSide:
-        tmpCursor = [NSCursor resizeRightCursor];
-        break;
-      case GHOST_kStandardCursorRightArrow:
-      case GHOST_kStandardCursorInfo:
-      case GHOST_kStandardCursorLeftArrow:
-      case GHOST_kStandardCursorHelp:
-      case GHOST_kStandardCursorCycle:
-      case GHOST_kStandardCursorSpray:
-      case GHOST_kStandardCursorWait:
-      case GHOST_kStandardCursorTopLeftCorner:
-      case GHOST_kStandardCursorTopRightCorner:
-      case GHOST_kStandardCursorBottomRightCorner:
-      case GHOST_kStandardCursorBottomLeftCorner:
-      case GHOST_kStandardCursorCopy:
-      case GHOST_kStandardCursorDefault:
-      default:
-        tmpCursor = [NSCursor arrowCursor];
-        break;
-    };
-  }
-  [tmpCursor set];
+
+  [cursor set];
+}
+
+bool GHOST_WindowCocoa::isDialog() const
+{
+  return m_is_dialog;
 }
 
 GHOST_TSuccess GHOST_WindowCocoa::setWindowCursorVisibility(bool visible)
@@ -1227,7 +1077,7 @@ GHOST_TSuccess GHOST_WindowCocoa::setWindowCursorGrab(GHOST_TGrabCursorMode mode
   GHOST_TSuccess err = GHOST_kSuccess;
 
   if (mode != GHOST_kGrabDisable) {
-    //No need to perform grab without warp as it is always on in OS X
+    // No need to perform grab without warp as it is always on in OS X
     if (mode != GHOST_kGrabNormal) {
       NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 
@@ -1238,7 +1088,7 @@ GHOST_TSuccess GHOST_WindowCocoa::setWindowCursorGrab(GHOST_TGrabCursorMode mode
         setWindowCursorVisibility(false);
       }
 
-      //Make window key if it wasn't to get the mouse move events
+      // Make window key if it wasn't to get the mouse move events
       [m_window makeKeyWindow];
 
       [pool drain];
@@ -1250,7 +1100,8 @@ GHOST_TSuccess GHOST_WindowCocoa::setWindowCursorGrab(GHOST_TGrabCursorMode mode
       setWindowCursorVisibility(true);
     }
 
-    /* Almost works without but important otherwise the mouse GHOST location can be incorrect on exit */
+    /* Almost works without but important otherwise the mouse GHOST location
+     * can be incorrect on exit. */
     setCursorGrabAccum(0, 0);
     m_cursorGrabBounds.m_l = m_cursorGrabBounds.m_r = -1; /* disable */
   }
@@ -1261,17 +1112,20 @@ GHOST_TSuccess GHOST_WindowCocoa::setWindowCursorShape(GHOST_TStandardCursor sha
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 
-  if (m_customCursor) {
-    [m_customCursor release];
-    m_customCursor = nil;
-  }
-
   if ([m_window isVisible]) {
     loadCursor(getCursorVisibility(), shape);
   }
 
   [pool drain];
   return GHOST_kSuccess;
+}
+
+GHOST_TSuccess GHOST_WindowCocoa::hasCursorShape(GHOST_TStandardCursor shape)
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  GHOST_TSuccess success = (getStandardCursor(shape)) ? GHOST_kSuccess : GHOST_kFailure;
+  [pool drain];
+  return success;
 }
 
 /** Reverse the bits in a GHOST_TUns8
@@ -1300,8 +1154,7 @@ GHOST_TSuccess GHOST_WindowCocoa::setWindowCustomCursorShape(GHOST_TUns8 *bitmap
                                                              int sizey,
                                                              int hotX,
                                                              int hotY,
-                                                             int fg_color,
-                                                             int bg_color)
+                                                             bool canInvertColor)
 {
   int y, nbUns16;
   NSPoint hotSpotPoint;
@@ -1334,12 +1187,18 @@ GHOST_TSuccess GHOST_WindowCocoa::setWindowCustomCursorShape(GHOST_TUns8 *bitmap
 
   for (y = 0; y < nbUns16; y++) {
 #if !defined(__LITTLE_ENDIAN__)
-    cursorBitmap[y] = ~uns16ReverseBits((bitmap[2 * y] << 0) | (bitmap[2 * y + 1] << 8));
+    cursorBitmap[y] = uns16ReverseBits((bitmap[2 * y] << 0) | (bitmap[2 * y + 1] << 8));
     cursorBitmap[nbUns16 + y] = uns16ReverseBits((mask[2 * y] << 0) | (mask[2 * y + 1] << 8));
 #else
-    cursorBitmap[y] = ~uns16ReverseBits((bitmap[2 * y + 1] << 0) | (bitmap[2 * y] << 8));
+    cursorBitmap[y] = uns16ReverseBits((bitmap[2 * y + 1] << 0) | (bitmap[2 * y] << 8));
     cursorBitmap[nbUns16 + y] = uns16ReverseBits((mask[2 * y + 1] << 0) | (mask[2 * y] << 8));
 #endif
+
+    /* Flip white cursor with black outline to black cursor with white outline
+     * to match macOS platform conventions. */
+    if (canInvertColor) {
+      cursorBitmap[y] = ~cursorBitmap[y];
+    }
   }
 
   imSize.width = sizex;
@@ -1350,7 +1209,7 @@ GHOST_TSuccess GHOST_WindowCocoa::setWindowCustomCursorShape(GHOST_TUns8 *bitmap
   hotSpotPoint.x = hotX;
   hotSpotPoint.y = hotY;
 
-  //foreground and background color parameter is not handled for now (10.6)
+  // foreground and background color parameter is not handled for now (10.6)
   m_customCursor = [[NSCursor alloc] initWithImage:cursorImage hotSpot:hotSpotPoint];
 
   [cursorImageRep release];
@@ -1361,13 +1220,4 @@ GHOST_TSuccess GHOST_WindowCocoa::setWindowCustomCursorShape(GHOST_TUns8 *bitmap
   }
   [pool drain];
   return GHOST_kSuccess;
-}
-
-GHOST_TSuccess GHOST_WindowCocoa::setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                                             GHOST_TUns8 mask[16][2],
-                                                             int hotX,
-                                                             int hotY)
-{
-  return setWindowCustomCursorShape(
-      (GHOST_TUns8 *)bitmap, (GHOST_TUns8 *)mask, 16, 16, hotX, hotY, 0, 1);
 }

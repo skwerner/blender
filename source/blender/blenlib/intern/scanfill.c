@@ -632,7 +632,7 @@ static unsigned int scanfill(ScanFillContext *sf_ctx, PolyFill *pf, const int fl
       ed2 = ed1->next;
 
       /* commented out... the ESC here delivers corrupted memory
-       * (and doesnt work during grab) */
+       * (and doesn't work during grab). */
       /* if (callLocalInterruptCallBack()) break; */
       if (totface >= maxface) {
         /* printf("Fill error: endless loop. Escaped at vert %d,  tot: %d.\n", a, verts); */
@@ -907,7 +907,7 @@ unsigned int BLI_scanfill_calc_ex(ScanFillContext *sf_ctx, const int flag, const
       return 0;
     }
 
-    axis_dominant_v3_to_m3(mat_2d, n);
+    axis_dominant_v3_to_m3_negate(mat_2d, n);
   }
 
   /* STEP 1: COUNT POLYS */

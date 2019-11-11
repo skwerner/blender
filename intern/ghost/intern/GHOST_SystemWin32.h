@@ -29,10 +29,6 @@
 #  error WIN32 only!
 #endif  // WIN32
 
-/* require Windows XP or newer */
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x501
-
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <ole2.h>  // for drag-n-drop
@@ -102,7 +98,8 @@ class GHOST_SystemWin32 : public GHOST_System {
    * Create a new window.
    * The new window is added to the list of windows managed.
    * Never explicitly delete the window, use disposeWindow() instead.
-   * \param   title   The name of the window (displayed in the title bar of the window if the OS supports it).
+   * \param   title   The name of the window
+   * (displayed in the title bar of the window if the OS supports it).
    * \param   left    The coordinate of the left edge of the window.
    * \param   top     The coordinate of the top edge of the window.
    * \param   width   The width the window.
@@ -111,7 +108,7 @@ class GHOST_SystemWin32 : public GHOST_System {
    * \param   type    The type of drawing context installed in this window.
    * \param glSettings: Misc OpenGL settings.
    * \param exclusive: Use to show the window ontop and ignore others (used fullscreen).
-   * \param   parentWindow    Parent (embedder) window
+   * \param   parentWindow    Parent window
    * \return  The new window (or 0 if creation failed).
    */
   GHOST_IWindow *createWindow(const STR_String &title,
@@ -123,7 +120,8 @@ class GHOST_SystemWin32 : public GHOST_System {
                               GHOST_TDrawingContextType type,
                               GHOST_GLSettings glSettings,
                               const bool exclusive = false,
-                              const GHOST_TEmbedderWindowID parentWindow = 0);
+                              const bool is_dialog = false,
+                              const GHOST_IWindow *parentWindow = 0);
 
   /**
    * Create a new offscreen context.
@@ -203,13 +201,30 @@ class GHOST_SystemWin32 : public GHOST_System {
   void putClipboard(GHOST_TInt8 *buffer, bool selection) const;
 
   /**
+   * Show a system message box
+   * \param title                   The title of the message box
+   * \param message                 The message to display
+   * \param help_label              Help button label
+   * \param continue_label          Continue button label
+   * \param link                    An optional hyperlink
+   * \param dialog_options Options  how to display the message
+   */
+  GHOST_TSuccess showMessageBox(const char *title,
+                                const char *message,
+                                const char *help_label,
+                                const char *continue_label,
+                                const char *link,
+                                GHOST_DialogOptions dialog_options) const;
+
+  /**
    * Creates a drag'n'drop event and pushes it immediately onto the event queue.
    * Called by GHOST_DropTargetWin32 class.
-   * \param eventType The type of drag'n'drop event
-   * \param draggedObjectType The type object concerned (currently array of file names, string, ?bitmap)
-   * \param mouseX x mouse coordinate (in window coordinates)
-   * \param mouseY y mouse coordinate
-   * \param window The window on which the event occurred
+   * \param eventType: The type of drag'n'drop event
+   * \param draggedObjectType: The type object concerned
+   * (currently array of file names, string, ?bitmap)
+   * \param mouseX: x mouse coordinate (in window coordinates)
+   * \param mouseY: y mouse coordinate
+   * \param window: The window on which the event occurred
    * \return Indication whether the event was handled.
    */
   static GHOST_TSuccess pushDragDropEvent(GHOST_TEventType eventType,
@@ -218,12 +233,6 @@ class GHOST_SystemWin32 : public GHOST_System {
                                           int mouseX,
                                           int mouseY,
                                           void *data);
-
-  /**
-   * Confirms quitting he program when there is just one window left open
-   * in the application
-   */
-  int confirmQuit(GHOST_IWindow *window) const;
 
  protected:
   /**

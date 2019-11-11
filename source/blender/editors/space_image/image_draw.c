@@ -156,9 +156,8 @@ void ED_image_draw_info(Scene *scene,
   char str[256];
   int dx = 6;
   /* local coordinate visible rect inside region, to accommodate overlapping ui */
-  rcti rect;
-  ED_region_visible_rect(ar, &rect);
-  const int ymin = rect.ymin;
+  const rcti *rect = ED_region_visible_rect(ar);
+  const int ymin = rect->ymin;
   const int dy = ymin + 0.3f * UI_UNIT_Y;
 
   /* text colors */
@@ -673,7 +672,7 @@ void draw_image_grease_pencil(bContext *C, bool onlyv2d)
   }
   else {
     /* assume that UI_view2d_restore(C) has been called... */
-    //SpaceImage *sima = (SpaceImage *)CTX_wm_space_data(C);
+    // SpaceImage *sima = (SpaceImage *)CTX_wm_space_data(C);
 
     /* draw grease-pencil ('screen' strokes) */
     ED_annotation_draw_view2d(C, 0);
@@ -699,6 +698,7 @@ void draw_image_sample_line(SpaceImage *sima)
     immUniformArray4fv(
         "colors", (float *)(float[][4]){{1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f, 1.0f}}, 2);
     immUniform1f("dash_width", 2.0f);
+    immUniform1f("dash_factor", 0.5f);
 
     immBegin(GPU_PRIM_LINES, 2);
     immVertex2fv(shdr_dashed_pos, hist->co[0]);
@@ -795,6 +795,11 @@ void draw_image_main(const bContext *C, ARegion *ar)
   /* retrieve the image and information about it */
   ima = ED_space_image(sima);
   ED_space_image_get_zoom(sima, ar, &zoomx, &zoomy);
+
+  /* Tag image as in active use for garbage collector. */
+  if (ima) {
+    BKE_image_tag_time(ima);
+  }
 
   show_viewer = (ima && ima->source == IMA_SRC_VIEWER) != 0;
   show_render = (show_viewer && ima->type == IMA_TYPE_R_RESULT) != 0;
@@ -896,6 +901,10 @@ void draw_image_cache(const bContext *C, ARegion *ar)
     mask = ED_space_image_get_mask(sima);
   }
 
+  /* Local coordinate visible rect inside region, to accommodate overlapping ui. */
+  const rcti *rect_visible = ED_region_visible_rect(ar);
+  const int region_bottom = rect_visible->ymin;
+
   GPU_blend(true);
   GPU_blend_set_func_separate(
       GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
@@ -923,10 +932,10 @@ void draw_image_cache(const bContext *C, ARegion *ar)
       immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
   immUniformThemeColor(TH_CFRAME);
-  immRecti(pos, x, 0, x + ceilf(framelen), 8 * UI_DPI_FAC);
+  immRecti(pos, x, region_bottom, x + ceilf(framelen), region_bottom + 8 * UI_DPI_FAC);
   immUnbindProgram();
 
-  ED_region_cache_draw_curfra_label(cfra, x, 8.0f * UI_DPI_FAC);
+  ED_region_cache_draw_curfra_label(cfra, x, region_bottom + 8.0f * UI_DPI_FAC);
 
   if (mask != NULL) {
     ED_mask_draw_frames(mask, ar, cfra, sfra, efra);

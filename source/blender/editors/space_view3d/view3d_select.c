@@ -2246,7 +2246,9 @@ static bool ed_object_select_pick(bContext *C,
       }
 
       if ((oldbasact != basact) && (is_obedit == false)) {
-        auto_deselect_graph_keyframes(C, oldbasact->object);
+        if (oldbasact) {
+          auto_deselect_graph_keyframes(C, oldbasact->object);
+        }
         ED_object_base_activate(C, basact); /* adds notifier */
       }
 

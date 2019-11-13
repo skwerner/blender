@@ -387,9 +387,11 @@ static eOLDrawState tree_element_set_active_object(bContext *C,
     }
 
     if (set != OL_SETSEL_NONE) {
-      if(!BLI_strcaseeq(view_layer->basact->object->id.name, base->object->id.name) || 
-          ((base->object->mode == OB_MODE_POSE) && (!BLI_strcaseeq(base->object->pose->proxy_act_bone, te->name)))) {
-        auto_deselect_graph_keyframes(C, base->object);
+      if (view_layer->basact->object && base->object) {
+        if(!BLI_strcaseeq(view_layer->basact->object->id.name, base->object->id.name) || 
+            ((base->object->mode == OB_MODE_POSE) && (!BLI_strcaseeq(base->object->pose->proxy_act_bone, te->name)))) {
+          auto_deselect_graph_keyframes(C, base->object);
+        }
       }
       ED_object_base_activate(C, base); /* adds notifier */
       DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);

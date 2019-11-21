@@ -105,7 +105,7 @@ class EEVEE_MATERIAL_PT_context_material(MaterialButtonsPanel, Panel):
         if ob:
             is_sortable = len(ob.material_slots) > 1
             rows = 3
-            if (is_sortable):
+            if is_sortable:
                 rows = 5
 
             row = layout.row()
@@ -209,9 +209,11 @@ class EEVEE_MATERIAL_PT_settings(MaterialButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False
 
         mat = context.material
 
+        layout.prop(mat, "use_backface_culling")
         layout.prop(mat, "blend_method")
         layout.prop(mat, "shadow_method")
 
@@ -232,6 +234,7 @@ class MATERIAL_PT_viewport(MaterialButtonsPanel, Panel):
     bl_label = "Viewport Display"
     bl_context = "material"
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 10
 
     @classmethod
     def poll(cls, context):

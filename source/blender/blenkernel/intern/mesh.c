@@ -50,6 +50,7 @@
 #include "BKE_editmesh.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 enum {
   MESHCMP_DVERT_WEIGHTMISMATCH = 1,
@@ -522,6 +523,8 @@ void BKE_mesh_init(Mesh *me)
   CustomData_reset(&me->fdata);
   CustomData_reset(&me->pdata);
   CustomData_reset(&me->ldata);
+
+  BKE_mesh_runtime_reset(me);
 }
 
 Mesh *BKE_mesh_add(Main *bmain, const char *name)
@@ -536,8 +539,10 @@ Mesh *BKE_mesh_add(Main *bmain, const char *name)
 }
 
 /**
- * Only copy internal data of Mesh ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Mesh ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -553,8 +558,9 @@ void BKE_mesh_copy_data(Main *bmain, Mesh *me_dst, const Mesh *me_src, const int
   /* XXX WHAT? Why? Comment, please! And pretty sure this is not valid for regular Mesh copying? */
   me_dst->runtime.is_original = false;
 
-  const bool do_tessface = ((me_src->totface != 0) &&
-                            (me_src->totpoly == 0)); /* only do tessface if we have no polys */
+  /* Only do tessface if we have no polys. */
+  const bool do_tessface = ((me_src->totface != 0) && (me_src->totpoly == 0));
+
   CustomData_MeshMasks mask = CD_MASK_MESH;
 
   if (me_src->id.tag & LIB_TAG_NO_MAIN) {
@@ -659,6 +665,7 @@ static Mesh *mesh_new_nomain_from_template_ex(const Mesh *me_src,
 
   me_dst->cd_flag = me_src->cd_flag;
   me_dst->editflag = me_src->editflag;
+  me_dst->texflag = me_src->texflag;
 
   CustomData_copy(&me_src->vdata, &me_dst->vdata, mask.vmask, CD_CALLOC, verts_len);
   CustomData_copy(&me_src->edata, &me_dst->edata, mask.emask, CD_CALLOC, edges_len);
@@ -926,7 +933,8 @@ void BKE_mesh_texspace_calc(Mesh *me)
 
 BoundBox *BKE_mesh_boundbox_get(Object *ob)
 {
-  /* This is Object-level data access, DO NOT touch to Mesh's bb, would be totally thread-unsafe. */
+  /* This is Object-level data access,
+   * DO NOT touch to Mesh's bb, would be totally thread-unsafe. */
   if (ob->runtime.bb == NULL || ob->runtime.bb->flag & BOUNDBOX_DIRTY) {
     Mesh *me = ob->data;
     float min[3], max[3];
@@ -1064,7 +1072,8 @@ int test_index_face(MFace *mface, CustomData *fdata, int mfindex, int nr)
     nr--;
   }
 
-  /* check corrupt cases, bow-tie geometry, cant handle these because edge data wont exist so just return 0 */
+  /* Check corrupt cases, bow-tie geometry,
+   * cant handle these because edge data wont exist so just return 0. */
   if (nr == 3) {
     if (
         /* real edges */
@@ -1363,7 +1372,8 @@ void BKE_mesh_transform(Mesh *me, float mat[4][4], bool do_keys)
   }
 
   /* don't update normals, caller can do this explicitly.
-   * We do update loop normals though, those may not be auto-generated (see e.g. STL import script)! */
+   * We do update loop normals though, those may not be auto-generated
+   * (see e.g. STL import script)! */
   if (lnors) {
     float m3[3][3];
 
@@ -1640,8 +1650,9 @@ void BKE_mesh_apply_vert_normals(Mesh *mesh, short (*vertNormals)[3])
 /**
  * Compute 'split' (aka loop, or per face corner's) normals.
  *
- * \param r_lnors_spacearr: Allows to get computed loop normal space array. That data, among other things,
- *                         contains 'smooth fan' info, useful e.g. to split geometry along sharp edges...
+ * \param r_lnors_spacearr: Allows to get computed loop normal space array.
+ * That data, among other things, contains 'smooth fan' info, useful e.g.
+ * to split geometry along sharp edges...
  */
 void BKE_mesh_calc_normals_split_ex(Mesh *mesh, MLoopNorSpaceArray *r_lnors_spacearr)
 {
@@ -1651,7 +1662,8 @@ void BKE_mesh_calc_normals_split_ex(Mesh *mesh, MLoopNorSpaceArray *r_lnors_spac
   bool free_polynors = false;
 
   /* Note that we enforce computing clnors when the clnor space array is requested by caller here.
-   * However, we obviously only use the autosmooth angle threshold only in case autosmooth is enabled. */
+   * However, we obviously only use the autosmooth angle threshold
+   * only in case autosmooth is enabled. */
   const bool use_split_normals = (r_lnors_spacearr != NULL) || ((mesh->flag & ME_AUTOSMOOTH) != 0);
   const float split_angle = (mesh->flag & ME_AUTOSMOOTH) != 0 ? mesh->smoothresh : (float)M_PI;
 
@@ -1668,7 +1680,8 @@ void BKE_mesh_calc_normals_split_ex(Mesh *mesh, MLoopNorSpaceArray *r_lnors_spac
   clnors = CustomData_get_layer(&mesh->ldata, CD_CUSTOMLOOPNORMAL);
 
   if (CustomData_has_layer(&mesh->pdata, CD_NORMAL)) {
-    /* This assume that layer is always up to date, not sure this is the case (esp. in Edit mode?)... */
+    /* This assume that layer is always up to date, not sure this is the case
+     * (esp. in Edit mode?)... */
     polynors = CustomData_get_layer(&mesh->pdata, CD_NORMAL);
     free_polynors = false;
   }
@@ -1738,8 +1751,9 @@ static int split_faces_prepare_new_verts(const Mesh *mesh,
                                          SplitFaceNewVert **new_verts,
                                          MemArena *memarena)
 {
-  /* This is now mandatory, trying to do the job in simple way without that data is doomed to fail, even when only
-   * dealing with smooth/flat faces one can find cases that no simple algorithm can handle properly. */
+  /* This is now mandatory, trying to do the job in simple way without that data is doomed to fail,
+   * even when only dealing with smooth/flat faces one can find cases that no simple algorithm
+   * can handle properly. */
   BLI_assert(lnors_spacearr != NULL);
 
   const int loops_len = mesh->totloop;
@@ -1785,8 +1799,9 @@ static int split_faces_prepare_new_verts(const Mesh *mesh,
       if (!vert_used) {
         BLI_BITMAP_ENABLE(verts_used, vert_idx);
         /* We need to update that vertex's normal here, we won't go over it again. */
-        /* This is important! *DO NOT* set vnor to final computed lnor, vnor should always be defined to
-         * 'automatic normal' value computed from its polys, not some custom normal.
+        /* This is important! *DO NOT* set vnor to final computed lnor,
+         * vnor should always be defined to 'automatic normal' value computed from its polys,
+         * not some custom normal.
          * Fortunately, that's the loop normal space's 'lnor' reference vector. ;) */
         normal_float_to_short_v3(mvert[vert_idx].no, (*lnor_space)->vec_lnor);
       }
@@ -1938,8 +1953,9 @@ void BKE_mesh_split_faces(Mesh *mesh, bool free_loop_normals)
       mesh, &lnors_spacearr, &new_verts, memarena);
 
   if (num_new_verts > 0) {
-    /* Reminder: beyond this point, there is no way out, mesh is in invalid state (due to early-reassignment of
-     * loops' vertex and edge indices to new, to-be-created split ones). */
+    /* Reminder: beyond this point, there is no way out, mesh is in invalid state
+     * (due to early-reassignment of loops' vertex and edge indices to new,
+     * to-be-created split ones). */
 
     const int num_new_edges = split_faces_prepare_new_edges(mesh, &new_edges, memarena);
     /* We can have to split a vertex without having to add a single new edge... */
@@ -1982,10 +1998,29 @@ void BKE_mesh_split_faces(Mesh *mesh, bool free_loop_normals)
 void BKE_mesh_eval_geometry(Depsgraph *depsgraph, Mesh *mesh)
 {
   DEG_debug_print_eval(depsgraph, __func__, mesh->id.name, mesh);
-  if (mesh->bb == NULL || (mesh->bb->flag & BOUNDBOX_DIRTY)) {
-    BKE_mesh_texspace_calc(mesh);
-  }
+  BKE_mesh_texspace_calc(mesh);
   /* Clear autospace flag in evaluated mesh, so that texspace does not get recomputed when bbox is
    * (e.g. after modifiers, etc.) */
   mesh->texflag &= ~ME_AUTOSPACE;
+  /* We are here because something did change in the mesh. This means we can not trust the existing
+   * evaluated mesh, and we don't know what parts of the mesh did change. So we simply delete the
+   * evaluated mesh and let objects to re-create it with updated settings. */
+  if (mesh->runtime.mesh_eval != NULL) {
+    mesh->runtime.mesh_eval->edit_mesh = NULL;
+    BKE_id_free(NULL, mesh->runtime.mesh_eval);
+    mesh->runtime.mesh_eval = NULL;
+  }
+  if (DEG_is_active(depsgraph)) {
+    Mesh *mesh_orig = (Mesh *)DEG_get_original_id(&mesh->id);
+    BoundBox *bb = mesh->bb;
+    if (bb != NULL) {
+      if (mesh_orig->bb == NULL) {
+        mesh_orig->bb = MEM_mallocN(sizeof(*mesh_orig->bb), __func__);
+      }
+      *mesh_orig->bb = *bb;
+      copy_v3_v3(mesh_orig->loc, mesh->loc);
+      copy_v3_v3(mesh_orig->size, mesh->size);
+      copy_v3_v3(mesh_orig->rot, mesh->rot);
+    }
+  }
 }

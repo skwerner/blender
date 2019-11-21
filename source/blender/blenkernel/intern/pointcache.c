@@ -293,7 +293,8 @@ static int ptcache_particle_write(int index, void *psys_v, void **data, int cfra
     PTCACHE_DATA_FROM(data, BPHYS_DATA_BOIDS, &boid->data);
   }
 
-  /* return flag 1+1=2 for newly born particles to copy exact birth location to previously cached frame */
+  /* Return flag 1+1=2 for newly born particles
+   * to copy exact birth location to previously cached frame. */
   return 1 + (pa->state.time >= pa->time && pa->prev_state.time <= pa->time);
 }
 static void ptcache_particle_read(
@@ -630,7 +631,7 @@ static int ptcache_smoke_write(PTCacheFile *pf, void *smoke_v)
     unsigned int in_len = sizeof(float) * (unsigned int)res;
     unsigned char *out = (unsigned char *)MEM_callocN(LZO_OUT_LEN(in_len) * 4,
                                                       "pointcache_lzo_buffer");
-    //int mode = res >= 1000000 ? 2 : 1;
+    // int mode = res >= 1000000 ? 2 : 1;
     int mode = 1;  // light
     if (sds->cache_comp == SM_CACHE_HEAVY) {
       mode = 2;  // heavy
@@ -703,7 +704,7 @@ static int ptcache_smoke_write(PTCacheFile *pf, void *smoke_v)
 
     smoke_turbulence_get_res(sds->wt, res_big_array);
     res_big = res_big_array[0] * res_big_array[1] * res_big_array[2];
-    //mode =  res_big >= 1000000 ? 2 : 1;
+    // mode =  res_big >= 1000000 ? 2 : 1;
     mode = 1;  // light
     if (sds->cache_high_comp == SM_CACHE_HEAVY) {
       mode = 2;  // heavy
@@ -1589,7 +1590,7 @@ void BKE_ptcache_id_from_softbody(PTCacheID *pid, Object *ob, SoftBody *sb)
 
   pid->stack_index = pid->cache->index;
 
-  pid->default_step = 10;
+  pid->default_step = 1;
   pid->max_step = 20;
   pid->file_type = PTCACHE_FILE_PTCACHE;
 }
@@ -1654,7 +1655,7 @@ void BKE_ptcache_id_from_particles(PTCacheID *pid, Object *ob, ParticleSystem *p
 
   pid->info_types = (1 << BPHYS_DATA_TIMES);
 
-  pid->default_step = 10;
+  pid->default_step = 1;
   pid->max_step = 20;
   pid->file_type = PTCACHE_FILE_PTCACHE;
 }
@@ -2285,7 +2286,7 @@ static int ptcache_file_compressed_write(
     r = LzmaCompress(out,
                      &out_len,
                      in,
-                     in_len,  //assume sizeof(char)==1....
+                     in_len,  // assume sizeof(char)==1....
                      props,
                      &sizeOfIt,
                      5,
@@ -3340,7 +3341,7 @@ int BKE_ptcache_write(PTCacheID *pid, unsigned int cfra)
 
   return !error;
 }
-/* youll need to close yourself after!
+/* you'll need to close yourself after!
  * mode - PTCACHE_CLEAR_ALL,
  */
 
@@ -4481,13 +4482,13 @@ void BKE_ptcache_update_info(PTCacheID *pid)
 
     /* smoke doesn't use frame 0 as info frame so can't check based on totpoint */
     if (pid->type == PTCACHE_TYPE_SMOKE_DOMAIN && totframes) {
-      BLI_snprintf(cache->info, sizeof(cache->info), IFACE_("%i frames found!"), totframes);
+      BLI_snprintf(cache->info, sizeof(cache->info), TIP_("%i frames found!"), totframes);
     }
     else if (totframes && cache->totpoint) {
-      BLI_snprintf(cache->info, sizeof(cache->info), IFACE_("%i points found!"), cache->totpoint);
+      BLI_snprintf(cache->info, sizeof(cache->info), TIP_("%i points found!"), cache->totpoint);
     }
     else {
-      BLI_strncpy(cache->info, IFACE_("No valid data to read!"), sizeof(cache->info));
+      BLI_strncpy(cache->info, TIP_("No valid data to read!"), sizeof(cache->info));
     }
     return;
   }
@@ -4498,10 +4499,10 @@ void BKE_ptcache_update_info(PTCacheID *pid)
 
       if (cache->totpoint > totpoint) {
         BLI_snprintf(
-            mem_info, sizeof(mem_info), IFACE_("%i cells + High Resolution cached"), totpoint);
+            mem_info, sizeof(mem_info), TIP_("%i cells + High Resolution cached"), totpoint);
       }
       else {
-        BLI_snprintf(mem_info, sizeof(mem_info), IFACE_("%i cells cached"), totpoint);
+        BLI_snprintf(mem_info, sizeof(mem_info), TIP_("%i cells cached"), totpoint);
       }
     }
     else {
@@ -4513,7 +4514,7 @@ void BKE_ptcache_update_info(PTCacheID *pid)
         }
       }
 
-      BLI_snprintf(mem_info, sizeof(mem_info), IFACE_("%i frames on disk"), totframes);
+      BLI_snprintf(mem_info, sizeof(mem_info), TIP_("%i frames on disk"), totframes);
     }
   }
   else {
@@ -4543,18 +4544,18 @@ void BKE_ptcache_update_info(PTCacheID *pid)
 
     BLI_snprintf(mem_info,
                  sizeof(mem_info),
-                 IFACE_("%s frames in memory (%s)"),
+                 TIP_("%s frames in memory (%s)"),
                  formatted_tot,
                  formatted_mem);
   }
 
   if (cache->flag & PTCACHE_OUTDATED) {
-    BLI_snprintf(cache->info, sizeof(cache->info), IFACE_("%s, cache is outdated!"), mem_info);
+    BLI_snprintf(cache->info, sizeof(cache->info), TIP_("%s, cache is outdated!"), mem_info);
   }
   else if (cache->flag & PTCACHE_FRAMES_SKIPPED) {
     BLI_snprintf(cache->info,
                  sizeof(cache->info),
-                 IFACE_("%s, not exact since frame %i"),
+                 TIP_("%s, not exact since frame %i"),
                  mem_info,
                  cache->last_exact);
   }

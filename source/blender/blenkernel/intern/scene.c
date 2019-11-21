@@ -37,6 +37,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_sequence_types.h"
+#include "DNA_sound_types.h"
 #include "DNA_space_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_windowmanager_types.h"
@@ -225,8 +226,10 @@ void BKE_toolsettings_free(ToolSettings *toolsettings)
 }
 
 /**
- * Only copy internal data of Scene ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Scene ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -306,8 +309,7 @@ void BKE_scene_copy_data(Main *bmain, Scene *sce_dst, const Scene *sce_src, cons
                                                             flag_subdata);
   }
 
-  /* before scene copy */
-  BKE_sound_create_scene(sce_dst);
+  BKE_sound_reset_scene_runtime(sce_dst);
 
   /* Copy sequencer, this is local data! */
   if (sce_src->ed) {
@@ -397,8 +399,7 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
       sce_copy->r.ffcodecdata.properties = IDP_CopyProperty(sce->r.ffcodecdata.properties);
     }
 
-    /* before scene copy */
-    BKE_sound_create_scene(sce_copy);
+    BKE_sound_reset_scene_runtime(sce_copy);
 
     /* grease pencil */
     sce_copy->gpd = NULL;
@@ -412,7 +413,7 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
     id_us_min(&sce_copy->id);
     id_us_ensure_real(&sce_copy->id);
 
-    /* Extra actions, most notably SCE_FULL_COPY also duplicates several 'children' datablocks... */
+    /* Extra actions, most notably SCE_FULL_COPY also duplicates several 'children' datablocks. */
 
     if (type == SCE_COPY_FULL) {
       /* Copy Freestyle LineStyle datablocks. */
@@ -495,7 +496,6 @@ void BKE_scene_free_ex(Scene *sce, const bool do_id_user)
   }
   if (sce->r.ffcodecdata.properties) {
     IDP_FreeProperty(sce->r.ffcodecdata.properties);
-    MEM_freeN(sce->r.ffcodecdata.properties);
     sce->r.ffcodecdata.properties = NULL;
   }
 
@@ -564,7 +564,7 @@ void BKE_scene_init(Scene *sce)
   sce->cursor.rotation_quaternion[0] = 1.0f;
   sce->cursor.rotation_axis[1] = 1.0f;
 
-  sce->r.mode = R_OSA;
+  sce->r.mode = 0;
   sce->r.cfra = 1;
   sce->r.sfra = 1;
   sce->r.efra = 250;
@@ -765,9 +765,9 @@ void BKE_scene_init(Scene *sce)
   BLI_strncpy(sce->r.pic, U.renderdir, sizeof(sce->r.pic));
 
   BLI_rctf_init(&sce->r.safety, 0.1f, 0.9f, 0.1f, 0.9f);
-  sce->r.osa = 8;
 
-  /* note; in header_info.c the scene copy happens..., if you add more to renderdata it has to be checked there */
+  /* Note; in header_info.c the scene copy happens...,
+   * if you add more to renderdata it has to be checked there. */
 
   /* multiview - stereo */
   BKE_scene_add_render_view(sce, STEREO_LEFT_NAME);
@@ -778,7 +778,7 @@ void BKE_scene_init(Scene *sce)
   srv = sce->r.views.last;
   BLI_strncpy(srv->suffix, STEREO_RIGHT_SUFFIX, sizeof(srv->suffix));
 
-  BKE_sound_create_scene(sce);
+  BKE_sound_reset_scene_runtime(sce);
 
   /* color management */
   colorspace_name = IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_DEFAULT_SEQUENCER);
@@ -902,6 +902,9 @@ void BKE_scene_init(Scene *sce)
   sce->display.matcap_ssao_attenuation = 1.0f;
   sce->display.matcap_ssao_samples = 16;
 
+  sce->display.render_aa = SCE_DISPLAY_AA_SAMPLES_8;
+  sce->display.viewport_aa = SCE_DISPLAY_AA_FXAA;
+
   /* OpenGL Render. */
   BKE_screen_view3d_shading_init(&sce->display.shading);
 
@@ -912,7 +915,7 @@ void BKE_scene_init(Scene *sce)
   sce->eevee.gi_cubemap_draw_size = 0.3f;
   sce->eevee.gi_irradiance_draw_size = 0.1f;
   sce->eevee.gi_irradiance_smoothing = 0.1f;
-  sce->eevee.gi_filter_quality = 1.0f;
+  sce->eevee.gi_filter_quality = 3.0f;
 
   sce->eevee.taa_samples = 16;
   sce->eevee.taa_render_samples = 64;
@@ -1006,7 +1009,8 @@ Object *BKE_scene_object_find_by_name(Scene *scene, const char *name)
 }
 
 /**
- * Sets the active scene, mainly used when running in background mode (``--scene`` command line argument).
+ * Sets the active scene, mainly used when running in background mode
+ * (``--scene`` command line argument).
  * This is also called to set the scene directly, bypassing windowing code.
  * Otherwise #WM_window_set_active_scene is used when changing scenes by the user.
  */
@@ -1031,7 +1035,8 @@ void BKE_scene_set_background(Main *bmain, Scene *scene)
       BKE_scene_object_base_flag_sync_from_base(base);
     }
   }
-  /* no full animation update, this to enable render code to work (render code calls own animation updates) */
+  /* No full animation update, this to enable render code to work
+   * (render code calls own animation updates). */
 }
 
 /* called from creator_args.c */
@@ -1048,7 +1053,8 @@ Scene *BKE_scene_set_name(Main *bmain, const char *name)
   return NULL;
 }
 
-/* Used by metaballs, return *all* objects (including duplis) existing in the scene (including scene's sets) */
+/* Used by metaballs, return *all* objects (including duplis)
+ * existing in the scene (including scene's sets). */
 int BKE_scene_base_iter_next(
     Depsgraph *depsgraph, SceneBaseIter *iter, Scene **scene, int val, Base **base, Object **ob)
 {
@@ -1334,8 +1340,10 @@ bool BKE_scene_validate_setscene(Main *bmain, Scene *sce)
   return true;
 }
 
-/* This function is needed to cope with fractional frames - including two Blender rendering features
- * mblur (motion blur that renders 'subframes' and blurs them together), and fields rendering.
+/**
+ * This function is needed to cope with fractional frames - including two Blender rendering
+ * features mblur (motion blur that renders 'subframes' and blurs them together),
+ * and fields rendering.
  */
 float BKE_scene_frame_get(const Scene *scene)
 {
@@ -1498,11 +1506,42 @@ static void prepare_mesh_for_viewport_render(Main *bmain, const ViewLayer *view_
   }
 }
 
+void BKE_scene_update_sound(Depsgraph *depsgraph, Main *bmain)
+{
+  Scene *scene = DEG_get_evaluated_scene(depsgraph);
+  const int recalc = scene->id.recalc;
+  BKE_sound_ensure_scene(scene);
+  if (recalc & ID_RECALC_AUDIO_SEEK) {
+    BKE_sound_seek_scene(bmain, scene);
+  }
+  if (recalc & ID_RECALC_AUDIO_FPS) {
+    BKE_sound_update_fps(bmain, scene);
+  }
+  if (recalc & ID_RECALC_AUDIO_VOLUME) {
+    BKE_sound_set_scene_volume(scene, scene->audio.volume);
+  }
+  if (recalc & ID_RECALC_AUDIO_MUTE) {
+    const bool is_mute = (scene->audio.flag & AUDIO_MUTE);
+    BKE_sound_mute_scene(scene, is_mute);
+  }
+  if (recalc & ID_RECALC_AUDIO_LISTENER) {
+    BKE_sound_update_scene_listener(scene);
+  }
+  BKE_sound_update_scene(depsgraph, scene);
+}
+
 /* TODO(sergey): This actually should become view_layer_graph or so.
  * Same applies to update_for_newframe.
+ *
+ * If only_if_tagged is truth then the function will do nothing if the dependency graph is up
+ * to date already.
  */
-void BKE_scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain)
+static void scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain, bool only_if_tagged)
 {
+  if (only_if_tagged && DEG_is_fully_evaluated(depsgraph)) {
+    return;
+  }
+
   Scene *scene = DEG_get_input_scene(depsgraph);
   ViewLayer *view_layer = DEG_get_input_view_layer(depsgraph);
 
@@ -1526,10 +1565,9 @@ void BKE_scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain)
    * by depgraph or manual, no layer check here, gets correct flushed.
    */
   DEG_evaluate_on_refresh(depsgraph);
-  /* Update sound system animation (TODO, move to depsgraph). */
-  BKE_sound_update_scene(bmain, scene);
-
-  /* Notify python about depsgraph update */
+  /* Update sound system. */
+  BKE_scene_update_sound(depsgraph, bmain);
+  /* Notify python about depsgraph update. */
   if (run_callbacks) {
     BLI_callback_exec(bmain, &scene->id, BLI_CB_EVT_DEPSGRAPH_UPDATE_POST);
   }
@@ -1537,6 +1575,16 @@ void BKE_scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain)
   DEG_ids_check_recalc(bmain, depsgraph, scene, view_layer, false);
   /* Clear recalc flags. */
   DEG_ids_clear_recalc(bmain, depsgraph);
+}
+
+void BKE_scene_graph_update_tagged(Depsgraph *depsgraph, Main *bmain)
+{
+  scene_graph_update_tagged(depsgraph, bmain, false);
+}
+
+void BKE_scene_graph_evaluated_ensure(Depsgraph *depsgraph, Main *bmain)
+{
+  scene_graph_update_tagged(depsgraph, bmain, true);
 }
 
 /* applies changes right away, does all sets too */
@@ -1557,15 +1605,6 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
   BKE_image_editors_update_frame(bmain, scene->r.cfra);
   BKE_sound_set_cfra(scene->r.cfra);
   DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
-  /* Update animated cache files for modifiers.
-   *
-   * TODO(sergey): Make this a depsgraph node?
-   */
-  BKE_cachefile_update_frame(bmain,
-                             depsgraph,
-                             scene,
-                             ctime,
-                             (((double)scene->r.frs_sec) / (double)scene->r.frs_sec_base));
 #ifdef POSE_ANIMATION_WORKAROUND
   scene_armature_depsgraph_workaround(bmain, depsgraph);
 #endif
@@ -1573,8 +1612,8 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
    * by depgraph or manual, no layer check here, gets correct flushed.
    */
   DEG_evaluate_on_framechange(bmain, depsgraph, ctime);
-  /* Update sound system animation (TODO, move to depsgraph). */
-  BKE_sound_update_scene(bmain, scene);
+  /* Update sound system animation. */
+  BKE_scene_update_sound(depsgraph, bmain);
   /* Notify editors and python about recalc. */
   BLI_callback_exec(bmain, &scene->id, BLI_CB_EVT_FRAME_CHANGE_POST);
   /* Inform editors about possible changes. */
@@ -1585,8 +1624,8 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
 
 /** Ensures given scene/view_layer pair has a valid, up-to-date depsgraph.
  *
- * \warning Sets matching depsgraph as active, so should only be called from the active editing context
- *          (usually, from operators).
+ * \warning Sets matching depsgraph as active,
+ * so should only be called from the active editing context (usually, from operators).
  */
 void BKE_scene_view_layer_graph_evaluated_ensure(Main *bmain, Scene *scene, ViewLayer *view_layer)
 {
@@ -1743,31 +1782,20 @@ void BKE_scene_base_flag_to_objects(ViewLayer *view_layer)
   }
 }
 
+/**
+ * Synchronize object base flags
+ *
+ * This is usually handled by the depsgraph.
+ * However, in rare occasions we need to use the latest object flags
+ * before depsgraph is fully updated.
+ *
+ * It should (ideally) only run for copy-on-written objects since this is
+ * runtime data generated per-viewlayer.
+ */
 void BKE_scene_object_base_flag_sync_from_base(Base *base)
 {
   Object *ob = base->object;
-
-  ob->flag = base->flag;
-
-  if ((base->flag & BASE_SELECTED) != 0) {
-    ob->flag |= SELECT;
-  }
-  else {
-    ob->flag &= ~SELECT;
-  }
-}
-
-void BKE_scene_object_base_flag_sync_from_object(Base *base)
-{
-  Object *ob = base->object;
-  base->flag = ob->flag;
-
-  if ((ob->flag & SELECT) != 0 && (base->flag & BASE_SELECTABLE) != 0) {
-    base->flag |= BASE_SELECTED;
-  }
-  else {
-    base->flag &= ~BASE_SELECTED;
-  }
+  ob->base_flag = base->flag;
 }
 
 void BKE_scene_disable_color_management(Scene *scene)
@@ -1836,8 +1864,9 @@ int BKE_render_preview_pixel_size(const RenderData *r)
   return r->preview_pixel_size;
 }
 
-/* Apply the needed correction factor to value, based on unit_type (only length-related are affected currently)
- * and unit->scale_length.
+/**
+ * Apply the needed correction factor to value, based on unit_type
+ * (only length-related are affected currently) and unit->scale_length.
  */
 double BKE_scene_unit_scale(const UnitSettings *unit, const int unit_type, double value)
 {
@@ -2227,6 +2256,7 @@ void BKE_scene_free_depsgraph_hash(Scene *scene)
     return;
   }
   BLI_ghash_free(scene->depsgraph_hash, depsgraph_key_free, depsgraph_key_value_free);
+  scene->depsgraph_hash = NULL;
 }
 
 /* Query depsgraph for a specific contexts. */
@@ -2298,7 +2328,8 @@ TransformOrientation *BKE_scene_transform_orientation_find(const Scene *scene, c
 }
 
 /**
- * \return the index that \a orientation has within \a scene's transform-orientation list or -1 if not found.
+ * \return the index that \a orientation has within \a scene's transform-orientation list
+ * or -1 if not found.
  */
 int BKE_scene_transform_orientation_get_index(const Scene *scene,
                                               const TransformOrientation *orientation)
@@ -2394,4 +2425,88 @@ void BKE_scene_cursor_quat_to_rot(View3DCursor *cursor, const float quat[4], boo
   }
 }
 
+void BKE_scene_cursor_to_mat4(const View3DCursor *cursor, float mat[4][4])
+{
+  float mat3[3][3];
+  BKE_scene_cursor_rot_to_mat3(cursor, mat3);
+  copy_m4_m3(mat, mat3);
+  copy_v3_v3(mat[3], cursor->location);
+}
+
+void BKE_scene_cursor_from_mat4(View3DCursor *cursor, const float mat[4][4], bool use_compat)
+{
+  float mat3[3][3];
+  copy_m3_m4(mat3, mat);
+  BKE_scene_cursor_mat3_to_rot(cursor, mat3, use_compat);
+  copy_v3_v3(cursor->location, mat[3]);
+}
+
 /** \} */
+
+/* Dependency graph evaluation. */
+
+static void scene_sequencer_disable_sound_strips(Scene *scene)
+{
+  if (scene->sound_scene == NULL) {
+    return;
+  }
+  Sequence *seq;
+  SEQ_BEGIN (scene->ed, seq) {
+    if (seq->scene_sound != NULL) {
+      BKE_sound_remove_scene_sound(scene, seq->scene_sound);
+      seq->scene_sound = NULL;
+    }
+  }
+  SEQ_END;
+}
+
+void BKE_scene_eval_sequencer_sequences(Depsgraph *depsgraph, Scene *scene)
+{
+  DEG_debug_print_eval(depsgraph, __func__, scene->id.name, scene);
+  if (scene->ed == NULL) {
+    return;
+  }
+  BKE_sound_ensure_scene(scene);
+  Sequence *seq;
+  SEQ_BEGIN (scene->ed, seq) {
+    if (seq->scene_sound == NULL) {
+      if (seq->sound != NULL) {
+        if (seq->scene_sound == NULL) {
+          seq->scene_sound = BKE_sound_add_scene_sound_defaults(scene, seq);
+        }
+      }
+      else if (seq->type == SEQ_TYPE_SCENE) {
+        if (seq->scene != NULL) {
+          BKE_sound_ensure_scene(seq->scene);
+          seq->scene_sound = BKE_sound_scene_add_scene_sound_defaults(scene, seq);
+        }
+      }
+    }
+    if (seq->scene_sound != NULL) {
+      /* Make sure changing volume via sequence's properties panel works correct.
+       *
+       * Ideally, the entire BKE_scene_update_sound() will happen from a dependency graph, so
+       * then it is no longer needed to do such manual forced updates. */
+      if (seq->type == SEQ_TYPE_SCENE && seq->scene != NULL) {
+        BKE_sound_set_scene_volume(seq->scene, seq->scene->audio.volume);
+        if ((seq->flag & SEQ_SCENE_STRIPS) == 0) {
+          scene_sequencer_disable_sound_strips(seq->scene);
+        }
+      }
+      if (seq->sound != NULL) {
+        if (scene->id.recalc & ID_RECALC_AUDIO || seq->sound->id.recalc & ID_RECALC_AUDIO) {
+          BKE_sound_update_scene_sound(seq->scene_sound, seq->sound);
+        }
+      }
+      BKE_sound_set_scene_sound_volume(
+          seq->scene_sound, seq->volume, (seq->flag & SEQ_AUDIO_VOLUME_ANIMATED) != 0);
+      BKE_sound_set_scene_sound_pitch(
+          seq->scene_sound, seq->pitch, (seq->flag & SEQ_AUDIO_PITCH_ANIMATED) != 0);
+      BKE_sound_set_scene_sound_pan(
+          seq->scene_sound, seq->pan, (seq->flag & SEQ_AUDIO_PAN_ANIMATED) != 0);
+    }
+  }
+  SEQ_END;
+  BKE_sequencer_update_muting(scene->ed);
+  BKE_sequencer_update_sound_bounds_all(scene);
+}

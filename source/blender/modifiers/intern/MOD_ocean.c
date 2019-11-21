@@ -120,8 +120,9 @@ static void freeData(ModifierData *md)
   OceanModifierData *omd = (OceanModifierData *)md;
 
   BKE_ocean_free(omd->ocean);
-  if (omd->oceancache)
+  if (omd->oceancache) {
     BKE_ocean_free_cache(omd->oceancache);
+  }
 #else  /* WITH_OCEANSIM */
   /* unused */
   (void)md;
@@ -434,7 +435,8 @@ static Mesh *doOcean(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mes
 
   /* displace the geometry */
 
-  /* Note: tried to parallelized that one and previous foam loop, but gives 20% slower results... odd. */
+  /* Note: tried to parallelized that one and previous foam loop,
+   * but gives 20% slower results... odd. */
   {
     const int num_verts = result->totvert;
 

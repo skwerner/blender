@@ -356,7 +356,9 @@ static PointerRNA rna_LineStyle_active_texture_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_Texture, tex);
 }
 
-static void rna_LineStyle_active_texture_set(PointerRNA *ptr, PointerRNA value)
+static void rna_LineStyle_active_texture_set(PointerRNA *ptr,
+                                             PointerRNA value,
+                                             struct ReportList *UNUSED(reports))
 {
   FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->id.data;
 
@@ -375,8 +377,9 @@ static void rna_LineStyle_use_nodes_update(bContext *C, PointerRNA *ptr)
 {
   FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->data;
 
-  if (linestyle->use_nodes && linestyle->nodetree == NULL)
+  if (linestyle->use_nodes && linestyle->nodetree == NULL) {
     BKE_linestyle_default_shader(C, linestyle);
+  }
 
   rna_LineStyle_update(CTX_data_main(C), CTX_data_scene(C), ptr);
 }

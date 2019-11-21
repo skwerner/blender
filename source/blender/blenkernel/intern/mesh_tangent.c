@@ -116,7 +116,8 @@ static void set_tspace(const SMikkTSpaceContext *pContext,
 }
 
 /**
- * Compute simplified tangent space normals, i.e. tangent vector + sign of bi-tangent one, which combined with
+ * Compute simplified tangent space normals, i.e.
+ * tangent vector + sign of bi-tangent one, which combined with
  * split normals can be used to recreate the full tangent space.
  * Note: * The mesh should be made of only tris and quads!
  */
@@ -284,7 +285,7 @@ static void dm_ts_GetPosition(const SMikkTSpaceContext *pContext,
                               const int face_num,
                               const int vert_index)
 {
-  //assert(vert_index >= 0 && vert_index < 4);
+  // assert(vert_index >= 0 && vert_index < 4);
   SGLSLMeshToTangent *pMesh = pContext->m_pUserData;
   const MLoopTri *lt;
   uint loop_index;
@@ -318,7 +319,7 @@ static void dm_ts_GetTextureCoordinate(const SMikkTSpaceContext *pContext,
                                        const int face_num,
                                        const int vert_index)
 {
-  //assert(vert_index >= 0 && vert_index < 4);
+  // assert(vert_index >= 0 && vert_index < 4);
   SGLSLMeshToTangent *pMesh = pContext->m_pUserData;
   const MLoopTri *lt;
   uint loop_index;
@@ -357,7 +358,7 @@ static void dm_ts_GetNormal(const SMikkTSpaceContext *pContext,
                             const int face_num,
                             const int vert_index)
 {
-  //assert(vert_index >= 0 && vert_index < 4);
+  // assert(vert_index >= 0 && vert_index < 4);
   SGLSLMeshToTangent *pMesh = (SGLSLMeshToTangent *)pContext->m_pUserData;
   const MLoopTri *lt;
   uint loop_index;
@@ -420,7 +421,7 @@ static void dm_ts_SetTSpace(const SMikkTSpaceContext *pContext,
                             const int face_num,
                             const int vert_index)
 {
-  //assert(vert_index >= 0 && vert_index < 4);
+  // assert(vert_index >= 0 && vert_index < 4);
   SGLSLMeshToTangent *pMesh = (SGLSLMeshToTangent *)pContext->m_pUserData;
   const MLoopTri *lt;
   uint loop_index;
@@ -487,7 +488,8 @@ void BKE_mesh_add_loop_tangent_named_layer_for_uv(CustomData *uv_data,
 }
 
 /**
- * Here we get some useful information such as active uv layer name and search if it is already in tangent_names.
+ * Here we get some useful information such as active uv layer name and
+ * search if it is already in tangent_names.
  * Also, we calculate tangent_mask that works as a descriptor of tangents state.
  * If tangent_mask has changed, then recalculate tangents.
  */
@@ -677,9 +679,8 @@ void BKE_mesh_calc_loop_tangent_ex(const MVert *mvert,
         mesh2tangent->mpoly = mpoly;
         mesh2tangent->mloop = mloop;
         mesh2tangent->looptri = looptri;
-        /* Note, we assume we do have tessellated loop normals at this point (in case it is object-enabled),
-         * have to check this is valid...
-         */
+        /* Note, we assume we do have tessellated loop normals at this point
+         * (in case it is object-enabled), have to check this is valid. */
         mesh2tangent->precomputedLoopNormals = loop_normals;
         mesh2tangent->precomputedFaceNormals = poly_normals;
 

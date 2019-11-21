@@ -236,10 +236,13 @@ static void ui_popup_block_position(wmWindow *window,
   }
 
   /* Compute offset based on direction. */
-  int offset_x = 0, offset_y = 0;
+  float offset_x = 0, offset_y = 0;
+
+  /* Ensure buttons don't come between the parent button and the popup, see: T63566. */
+  const float offset_overlap = max_ff(U.pixelsize, 1.0f);
 
   if (dir1 == UI_DIR_LEFT) {
-    offset_x = butrct.xmin - block->rect.xmax;
+    offset_x = (butrct.xmin - block->rect.xmax) + offset_overlap;
     if (dir2 == UI_DIR_UP) {
       offset_y = butrct.ymin - block->rect.ymin - center_y - UI_MENU_PADDING;
     }
@@ -248,7 +251,7 @@ static void ui_popup_block_position(wmWindow *window,
     }
   }
   else if (dir1 == UI_DIR_RIGHT) {
-    offset_x = butrct.xmax - block->rect.xmin;
+    offset_x = (butrct.xmax - block->rect.xmin) - offset_overlap;
     if (dir2 == UI_DIR_UP) {
       offset_y = butrct.ymin - block->rect.ymin - center_y - UI_MENU_PADDING;
     }
@@ -257,7 +260,7 @@ static void ui_popup_block_position(wmWindow *window,
     }
   }
   else if (dir1 == UI_DIR_UP) {
-    offset_y = butrct.ymax - block->rect.ymin;
+    offset_y = (butrct.ymax - block->rect.ymin) - offset_overlap;
     if (dir2 == UI_DIR_RIGHT) {
       offset_x = butrct.xmax - block->rect.xmax + center_x;
     }
@@ -271,7 +274,7 @@ static void ui_popup_block_position(wmWindow *window,
     }
   }
   else if (dir1 == UI_DIR_DOWN) {
-    offset_y = butrct.ymin - block->rect.ymax;
+    offset_y = (butrct.ymin - block->rect.ymax) + offset_overlap;
     if (dir2 == UI_DIR_RIGHT) {
       offset_x = butrct.xmax - block->rect.xmax + center_x;
     }
@@ -372,12 +375,12 @@ static void ui_block_region_refresh(const bContext *C, ARegion *ar)
   ARegion *ctx_region = CTX_wm_region(C);
   uiBlock *block;
 
-  if (ar->do_draw & RGN_DRAW_REFRESH_UI) {
+  if (ar->do_draw & RGN_REFRESH_UI) {
     ScrArea *handle_ctx_area;
     ARegion *handle_ctx_region;
     uiBlock *block_next;
 
-    ar->do_draw &= ~RGN_DRAW_REFRESH_UI;
+    ar->do_draw &= ~RGN_REFRESH_UI;
     for (block = ar->uiblocks.first; block; block = block_next) {
       block_next = block->next;
       uiPopupBlockHandle *handle = block->handle;
@@ -745,7 +748,8 @@ uiPopupBlockHandle *ui_popup_block_create(bContext *C,
                                           uiBut *but,
                                           uiBlockCreateFunc create_func,
                                           uiBlockHandleCreateFunc handle_create_func,
-                                          void *arg)
+                                          void *arg,
+                                          void (*arg_free)(void *arg))
 {
   wmWindow *window = CTX_wm_window(C);
   uiBut *activebut = UI_context_active_but_get(C);
@@ -768,10 +772,11 @@ uiPopupBlockHandle *ui_popup_block_create(bContext *C,
   handle->ctx_area = CTX_wm_area(C);
   handle->ctx_region = CTX_wm_region(C);
 
-  /* store vars to refresh popup (RGN_DRAW_REFRESH_UI) */
+  /* store vars to refresh popup (RGN_REFRESH_UI) */
   handle->popup_create_vars.create_func = create_func;
   handle->popup_create_vars.handle_create_func = handle_create_func;
   handle->popup_create_vars.arg = arg;
+  handle->popup_create_vars.arg_free = arg_free;
   handle->popup_create_vars.but = but;
   handle->popup_create_vars.butregion = but ? butregion : NULL;
   copy_v2_v2_int(handle->popup_create_vars.event_xy, &window->eventstate->x);
@@ -817,8 +822,8 @@ void ui_popup_block_free(bContext *C, uiPopupBlockHandle *handle)
     }
   }
 
-  if (handle->popup_create_vars.free_func) {
-    handle->popup_create_vars.free_func(handle, handle->popup_create_vars.arg);
+  if (handle->popup_create_vars.arg_free) {
+    handle->popup_create_vars.arg_free(handle->popup_create_vars.arg);
   }
 
   ui_popup_block_remove(C, handle);

@@ -1,5 +1,3 @@
-uniform mat4 ModelViewProjectionMatrix;
-uniform mat4 ProjectionMatrix;
 
 uniform float pixsize; /* rv3d->pixsize */
 uniform int keep_size;
@@ -32,8 +30,8 @@ float defaultpixsize = pixsize * (1000.0 / pixfactor);
 
 void main()
 {
-  gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
-  finalprev_pos = ModelViewProjectionMatrix * vec4(prev_pos, 1.0);
+  gl_Position = point_object_to_ndc(pos);
+  finalprev_pos = point_object_to_ndc(prev_pos);
   finalColor = color;
 
   if (keep_size == TRUE) {
@@ -42,7 +40,7 @@ void main()
   else {
     float size = (ProjectionMatrix[3][3] == 0.0) ? (thickness / (gl_Position.z * defaultpixsize)) :
                                                    (thickness / defaultpixsize);
-    finalThickness = max(size * objscale, 4.0); /* minimum 4 pixels */
+    finalThickness = max(size * objscale, 0.5); /* set a minimum size */
   }
 
   /* for wireframe override size and color */

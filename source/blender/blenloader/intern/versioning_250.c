@@ -277,7 +277,7 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
         ar->v2d.keepzoom |= (V2D_LOCKZOOM_X | V2D_LOCKZOOM_Y | V2D_KEEPASPECT);
         ar->v2d.keeptot = V2D_KEEPTOT_STRICT;
         ar->v2d.minzoom = ar->v2d.maxzoom = 1.0f;
-        //ar->v2d.flag |= V2D_IS_INITIALISED;
+        // ar->v2d.flag |= V2D_IS_INITIALISED;
         break;
       }
       case SPACE_GRAPH: {
@@ -285,8 +285,8 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
         memcpy(&ar->v2d, &sipo->v2d, sizeof(View2D));
 
         /* init mainarea view2d */
-        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
-        ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_SCALE_VERTICAL);
+        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
+        ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_VERTICAL_HANDLES);
 
         ar->v2d.min[0] = FLT_MIN;
         ar->v2d.min[1] = FLT_MIN;
@@ -294,7 +294,7 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
         ar->v2d.max[0] = MAXFRAMEF;
         ar->v2d.max[1] = FLT_MAX;
 
-        //ar->v2d.flag |= V2D_IS_INITIALISED;
+        // ar->v2d.flag |= V2D_IS_INITIALISED;
         break;
       }
       case SPACE_NLA: {
@@ -304,7 +304,7 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
         ar->v2d.tot.ymin = (float)(-sa->winy) / 3.0f;
         ar->v2d.tot.ymax = 0.0f;
 
-        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
+        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
         ar->v2d.scroll |= (V2D_SCROLL_RIGHT);
         ar->v2d.align = V2D_ALIGN_NO_POS_Y;
         ar->v2d.flag |= V2D_VIEWSYNC_AREA_VERTICAL;
@@ -330,7 +330,7 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
 
         ar->v2d.minzoom = 0.01f;
         ar->v2d.maxzoom = 50;
-        ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
+        ar->v2d.scroll = (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
         ar->v2d.scroll |= (V2D_SCROLL_RIGHT);
         ar->v2d.keepzoom = V2D_LOCKZOOM_Y;
         ar->v2d.align = V2D_ALIGN_NO_POS_Y;
@@ -349,8 +349,8 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
         SpaceSeq *sseq = (SpaceSeq *)sl;
         memcpy(&ar->v2d, &sseq->v2d, sizeof(View2D));
 
-        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_SCALE_HORIZONTAL);
-        ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_SCALE_VERTICAL);
+        ar->v2d.scroll |= (V2D_SCROLL_BOTTOM | V2D_SCROLL_HORIZONTAL_HANDLES);
+        ar->v2d.scroll |= (V2D_SCROLL_LEFT | V2D_SCROLL_VERTICAL_HANDLES);
         ar->v2d.align = V2D_ALIGN_NO_NEG_Y;
         ar->v2d.flag |= V2D_IS_INITIALISED;
         break;
@@ -386,7 +386,7 @@ static void area_add_window_regions(ScrArea *sa, SpaceLink *sl, ListBase *lb)
         SpaceText *st = (SpaceText *)sl;
         st->flags |= ST_FIND_WRAP;
       }
-        //case SPACE_XXX: // FIXME... add other ones
+        // case SPACE_XXX: // FIXME... add other ones
         //  memcpy(&ar->v2d, &((SpaceXxx *)sl)->v2d, sizeof(View2D));
         //  break;
     }
@@ -645,8 +645,8 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     Tex *tx;
     ParticleSettings *part;
     Object *ob;
-    //PTCacheID *pid;
-    //ListBase pidlist;
+    // PTCacheID *pid;
+    // ListBase pidlist;
 
     bSound *sound;
     Sequence *seq;
@@ -756,12 +756,12 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     /* set old pointcaches to have disk cache flag */
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
 
-      //BKE_ptcache_ids_from_object(&pidlist, ob);
+      // BKE_ptcache_ids_from_object(&pidlist, ob);
 
-      //for (pid = pidlist.first; pid; pid = pid->next)
+      // for (pid = pidlist.first; pid; pid = pid->next)
       //  pid->cache->flag |= PTCACHE_DISK_CACHE;
 
-      //BLI_freelistN(&pidlist);
+      // BLI_freelistN(&pidlist);
     }
 
     /* type was a mixed flag & enum. move the 2d flag elsewhere */
@@ -780,18 +780,18 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     Tex *tex;
     Scene *sce;
     ToolSettings *ts;
-    //PTCacheID *pid;
-    //ListBase pidlist;
+    // PTCacheID *pid;
+    // ListBase pidlist;
 
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-      //BKE_ptcache_ids_from_object(&pidlist, ob);
+      // BKE_ptcache_ids_from_object(&pidlist, ob);
 
-      //for (pid = pidlist.first; pid; pid = pid->next) {
+      // for (pid = pidlist.first; pid; pid = pid->next) {
       //  if (BLI_listbase_is_empty(pid->ptcaches))
       //      pid->ptcaches->first = pid->ptcaches->last = pid->cache;
       //}
 
-      //BLI_freelistN(&pidlist);
+      // BLI_freelistN(&pidlist);
 
       if (ob->type == OB_MESH) {
         Mesh *me = blo_do_versions_newlibadr(fd, lib, ob->data);
@@ -1659,8 +1659,8 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
     }
 
     for (tex = bmain->textures.first; tex; tex = tex->id.next) {
-      /* if youre picky, this isn't correct until we do a version bump
-       * since you could set saturation to be 0.0*/
+      /* If you're picky, this isn't correct until we do a version bump
+       * since you could set saturation to be 0.0. */
       if (tex->saturation == 0.0f) {
         tex->saturation = 1.0f;
       }
@@ -2030,12 +2030,9 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
         }
       }
 
-      /* XXX The external group node sockets needs to adjust their own_index to point at
-       * associated ntree inputs/outputs internal sockets. However, this can only happen
-       * after lib-linking (needs access to internal node group tree)!
-       * Setting a temporary flag here, actual do_versions happens in lib_verify_nodetree.
-       */
-      ntree->flag |= NTREE_DO_VERSIONS_GROUP_EXPOSE_2_56_2;
+      /* External group node socket need to adjust their own_index to point at
+       * associated 'ntree' inputs/outputs internal sockets. This happens in
+       * do_versions_after_linking_250, after lib linking. */
     }
   }
 
@@ -2294,5 +2291,61 @@ void blo_do_versions_250(FileData *fd, Library *lib, Main *bmain)
         part->time_flag &= ~PART_TIME_AUTOSF;
       }
     }
+  }
+}
+
+/* updates group node socket identifier so that
+ * external links to/from the group node are preserved.
+ */
+static void lib_node_do_versions_group_indices(bNode *gnode)
+{
+  bNodeTree *ngroup = (bNodeTree *)gnode->id;
+  bNodeSocket *sock;
+  bNodeLink *link;
+
+  for (sock = gnode->outputs.first; sock; sock = sock->next) {
+    int old_index = sock->to_index;
+
+    for (link = ngroup->links.first; link; link = link->next) {
+      if (link->tonode == NULL && link->fromsock->own_index == old_index) {
+        strcpy(sock->identifier, link->fromsock->identifier);
+        /* deprecated */
+        sock->own_index = link->fromsock->own_index;
+        sock->to_index = 0;
+        sock->groupsock = NULL;
+      }
+    }
+  }
+  for (sock = gnode->inputs.first; sock; sock = sock->next) {
+    int old_index = sock->to_index;
+
+    for (link = ngroup->links.first; link; link = link->next) {
+      if (link->fromnode == NULL && link->tosock->own_index == old_index) {
+        strcpy(sock->identifier, link->tosock->identifier);
+        /* deprecated */
+        sock->own_index = link->tosock->own_index;
+        sock->to_index = 0;
+        sock->groupsock = NULL;
+      }
+    }
+  }
+}
+
+void do_versions_after_linking_250(Main *bmain)
+{
+  if (bmain->versionfile < 256 || (bmain->versionfile == 256 && bmain->subversionfile < 2)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      /* updates external links for all group nodes in a tree */
+      bNode *node;
+      for (node = ntree->nodes.first; node; node = node->next) {
+        if (node->type == NODE_GROUP) {
+          bNodeTree *ngroup = (bNodeTree *)node->id;
+          if (ngroup) {
+            lib_node_do_versions_group_indices(node);
+          }
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
   }
 }

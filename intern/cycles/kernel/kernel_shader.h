@@ -687,7 +687,7 @@ ccl_device_inline const ShaderClosure *shader_bsdf_pick(ShaderData *sd, float *r
           sampled = i;
 
           /* Rescale to reuse for direction sample, to better
-           * preserve stratifaction. */
+           * preserve stratification. */
           *randu = (r - partial_sum) / sc->sample_weight;
           break;
         }
@@ -1092,7 +1092,7 @@ ccl_device void shader_eval_surface(KernelGlobals *kg,
 
 #ifdef __OSL__
   if (kg->osl) {
-    if (sd->object == OBJECT_NONE) {
+    if (sd->object == OBJECT_NONE && sd->lamp == LAMP_NONE) {
       OSLShader::eval_background(kg, sd, state, path_flag);
     }
     else {

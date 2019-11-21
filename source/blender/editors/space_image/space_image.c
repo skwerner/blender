@@ -140,6 +140,7 @@ static SpaceLink *image_new(const ScrArea *UNUSED(area), const Scene *UNUSED(sce
   BLI_addtail(&simage->regionbase, ar);
   ar->regiontype = RGN_TYPE_TOOL_HEADER;
   ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
+  ar->flag = RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER;
 
   /* header */
   ar = MEM_callocN(sizeof(ARegion), "header for image");
@@ -223,6 +224,7 @@ static void image_operatortypes(void)
   WM_operatortype_append(IMAGE_OT_save);
   WM_operatortype_append(IMAGE_OT_save_as);
   WM_operatortype_append(IMAGE_OT_save_sequence);
+  WM_operatortype_append(IMAGE_OT_save_all_modified);
   WM_operatortype_append(IMAGE_OT_pack);
   WM_operatortype_append(IMAGE_OT_unpack);
 
@@ -290,8 +292,7 @@ static void image_refresh(const bContext *C, ScrArea *sa)
   Image *ima;
 
   ima = ED_space_image(sima);
-
-  BKE_image_user_frame_calc(&sima->iuser, scene->r.cfra);
+  BKE_image_user_frame_calc(ima, &sima->iuser, scene->r.cfra);
 
   /* check if we have to set the image from the editmesh */
   if (ima && (ima->source == IMA_SRC_VIEWER && sima->mode == SI_MODE_MASK)) {
@@ -459,13 +460,24 @@ static void IMAGE_GGT_gizmo2d(wmGizmoGroupType *gzgt)
 
   gzgt->poll = ED_widgetgroup_gizmo2d_poll;
   gzgt->setup = ED_widgetgroup_gizmo2d_setup;
+  gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_maybe_drag;
   gzgt->refresh = ED_widgetgroup_gizmo2d_refresh;
   gzgt->draw_prepare = ED_widgetgroup_gizmo2d_draw_prepare;
 }
 
+static void IMAGE_GGT_navigate(wmGizmoGroupType *gzgt)
+{
+  VIEW2D_GGT_navigate_impl(gzgt, "IMAGE_GGT_navigate");
+}
+
 static void image_widgets(void)
 {
+  wmGizmoMapType *gzmap_type = WM_gizmomaptype_ensure(
+      &(const struct wmGizmoMapType_Params){SPACE_IMAGE, RGN_TYPE_WINDOW});
+
   WM_gizmogrouptype_append(IMAGE_GGT_gizmo2d);
+
+  WM_gizmogrouptype_append_and_link(gzmap_type, IMAGE_GGT_navigate);
 }
 
 /************************** main region ***************************/
@@ -536,29 +548,26 @@ static void image_main_region_init(wmWindowManager *wm, ARegion *ar)
 
   /* mask polls mode */
   keymap = WM_keymap_ensure(wm->defaultconf, "Mask Editing", 0, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
   /* image paint polls for mode */
   keymap = WM_keymap_ensure(wm->defaultconf, "Curve", 0, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "Paint Curve", 0, 0);
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "Image Paint", 0, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "UV Editor", 0, 0);
-  WM_event_add_keymap_handler(&ar->handlers, keymap);
-
-  keymap = WM_keymap_ensure(wm->defaultconf, "UV Sculpt", 0, 0);
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 
   /* own keymaps */
   keymap = WM_keymap_ensure(wm->defaultconf, "Image Generic", SPACE_IMAGE, 0);
   WM_event_add_keymap_handler(&ar->handlers, keymap);
   keymap = WM_keymap_ensure(wm->defaultconf, "Image", SPACE_IMAGE, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 }
 
 static void image_main_region_draw(const bContext *C, ARegion *ar)
@@ -569,30 +578,31 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
   Object *obedit = CTX_data_edit_object(C);
   Depsgraph *depsgraph = CTX_data_depsgraph(C);
   Mask *mask = NULL;
-  bool curve = false;
+  bool show_uvedit = false;
+  bool show_curve = false;
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   View2D *v2d = &ar->v2d;
-  //View2DScrollers *scrollers;
+  // View2DScrollers *scrollers;
   float col[3];
 
   /* XXX This is in order to draw UI batches with the DRW
    * olg context since we now use it for drawing the entire area */
   gpu_batch_presets_reset();
 
-  /* TODO(fclem) port to draw manager and remove the depth buffer allocation. */
   GPUViewport *viewport =
       ar->draw_buffer->viewport[ar->draw_buffer->stereo ? sima->iuser.multiview_eye : 0];
   DefaultFramebufferList *fbl = GPU_viewport_framebuffer_list_get(viewport);
-  GPU_framebuffer_bind(fbl->color_only_fb);
+  GPU_framebuffer_bind(fbl->default_fb);
 
   /* XXX not supported yet, disabling for now */
   scene->r.scemode &= ~R_COMP_CROP;
 
   /* clear and setup matrix */
   UI_GetThemeColor3fv(TH_BACK, col);
-  GPU_clear_color(col[0], col[1], col[2], 0.0);
+  GPU_clear_color(col[0], col[1], col[2], 0.0f);
   GPU_clear(GPU_COLOR_BIT);
+  GPU_depth_test(false);
 
   image_user_refresh_scene(C, sima);
 
@@ -607,17 +617,17 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
 
   ED_region_draw_cb_draw(C, ar, REGION_DRAW_PRE_VIEW);
 
-  ED_uvedit_draw_main(sima, ar, scene, view_layer, obedit, obact, depsgraph);
+  ED_uvedit_draw_main(sima, scene, view_layer, obedit, obact, depsgraph);
 
   /* check for mask (delay draw) */
   if (ED_space_image_show_uvedit(sima, obedit)) {
-    /* pass */
+    show_uvedit = true;
   }
   else if (sima->mode == SI_MODE_MASK) {
     mask = ED_space_image_get_mask(sima);
   }
   else if (ED_space_image_paint_curve(C)) {
-    curve = true;
+    show_curve = true;
   }
 
   ED_region_draw_cb_draw(C, ar, REGION_DRAW_POST_VIEW);
@@ -658,7 +668,8 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
       BLI_thread_unlock(LOCK_DRAW_IMAGE);
     }
 
-    ED_mask_draw_region(mask,
+    ED_mask_draw_region(depsgraph,
+                        mask,
                         ar,
                         sima->mask_info.draw_flag,
                         sima->mask_info.draw_type,
@@ -671,12 +682,9 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
                         false,
                         NULL,
                         C);
-
-    UI_view2d_view_ortho(v2d);
-    ED_image_draw_cursor(ar, sima->cursor);
-    UI_view2d_view_restore(C);
   }
-  else if (curve) {
+
+  if (show_uvedit || mask || show_curve) {
     UI_view2d_view_ortho(v2d);
     ED_image_draw_cursor(ar, sima->cursor);
     UI_view2d_view_restore(C);
@@ -685,14 +693,6 @@ static void image_main_region_draw(const bContext *C, ARegion *ar)
   WM_gizmomap_draw(ar->gizmo_map, C, WM_GIZMOMAP_DRAWSTEP_2D);
 
   draw_image_cache(C, ar);
-
-  /* scrollers? */
-#if 0
-  scrollers = UI_view2d_scrollers_calc(
-      C, v2d, V2D_UNIT_VALUES, V2D_GRID_CLAMP, V2D_ARG_DUMMY, V2D_ARG_DUMMY);
-  UI_view2d_scrollers_draw(C, v2d, scrollers);
-  UI_view2d_scrollers_free(scrollers);
-#endif
 }
 
 static void image_main_region_listener(
@@ -750,6 +750,33 @@ static void image_buttons_region_init(wmWindowManager *wm, ARegion *ar)
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 }
 
+static void image_buttons_region_layout(const bContext *C, ARegion *ar)
+{
+  const enum eContextObjectMode mode = CTX_data_mode_enum(C);
+  const char *contexts_base[3] = {NULL};
+
+  const char **contexts = contexts_base;
+
+  SpaceImage *sima = CTX_wm_space_image(C);
+  switch (sima->mode) {
+    case SI_MODE_VIEW:
+      break;
+    case SI_MODE_PAINT:
+      ARRAY_SET_ITEMS(contexts, ".paint_common_2d", ".imagepaint_2d");
+      break;
+    case SI_MODE_MASK:
+      break;
+    case SI_MODE_UV:
+      if (mode == CTX_MODE_EDIT_MESH) {
+        ARRAY_SET_ITEMS(contexts, ".uv_sculpt");
+      }
+      break;
+  }
+
+  const bool vertical = true;
+  ED_region_panels_layout_ex(C, ar, &ar->type->paneltypes, contexts_base, -1, vertical, NULL);
+}
+
 static void image_buttons_region_draw(const bContext *C, ARegion *ar)
 {
   SpaceImage *sima = CTX_wm_space_image(C);
@@ -776,7 +803,8 @@ static void image_buttons_region_draw(const bContext *C, ARegion *ar)
   }
   ED_space_image_release_buffer(sima, ibuf, lock);
 
-  ED_region_panels(C, ar);
+  /* Layout handles details. */
+  ED_region_panels_draw(C, ar);
 }
 
 static void image_buttons_region_listener(wmWindow *UNUSED(win),
@@ -812,6 +840,11 @@ static void image_buttons_region_listener(wmWindow *UNUSED(win),
       break;
     case NC_GPENCIL:
       if (ELEM(wmn->action, NA_EDITED, NA_SELECTED)) {
+        ED_region_tag_redraw(ar);
+      }
+      break;
+    case NC_BRUSH:
+      if (wmn->action == NA_EDITED) {
         ED_region_tag_redraw(ar);
       }
       break;
@@ -918,6 +951,11 @@ static void image_header_region_listener(wmWindow *UNUSED(win),
           break;
       }
       break;
+    case NC_BRUSH:
+      if (wmn->action == NA_EDITED) {
+        ED_region_tag_redraw(ar);
+      }
+      break;
   }
 }
 
@@ -1017,10 +1055,12 @@ void ED_spacetype_image(void)
   /* regions: listview/buttons/scopes */
   art = MEM_callocN(sizeof(ARegionType), "spacetype image region");
   art->regionid = RGN_TYPE_UI;
-  art->prefsizex = 220;  // XXX
+  art->prefsizex = UI_SIDEBAR_PANEL_WIDTH;
   art->keymapflag = ED_KEYMAP_UI | ED_KEYMAP_FRAMES;
   art->listener = image_buttons_region_listener;
+  art->message_subscribe = ED_area_do_mgs_subscribe_for_tool_ui;
   art->init = image_buttons_region_init;
+  art->layout = image_buttons_region_layout;
   art->draw = image_buttons_region_draw;
   BLI_addhead(&st->regiontypes, art);
 

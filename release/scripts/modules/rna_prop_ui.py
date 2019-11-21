@@ -168,7 +168,7 @@ def rna_idprop_ui_create(
 
     prop_path = rna_idprop_quote_path(prop)
 
-    item.property_overridable_static_set(prop_path, overridable)
+    item.property_overridable_library_set(prop_path, overridable)
 
     return rna_ui
 
@@ -280,10 +280,11 @@ class PropertyPanel:
     """
     bl_label = "Custom Properties"
     bl_options = {'DEFAULT_CLOSED'}
+    bl_order = 1000 # Order panel after all others
 
     @classmethod
     def poll(cls, context):
-        rna_item, context_member = rna_idprop_context_value(context, cls._context_path, cls._property_type)
+        rna_item, _context_member = rna_idprop_context_value(context, cls._context_path, cls._property_type)
         return bool(rna_item)
 
     """

@@ -273,9 +273,9 @@ static void text_main_region_init(wmWindowManager *wm, ARegion *ar)
 
   /* own keymap */
   keymap = WM_keymap_ensure(wm->defaultconf, "Text Generic", SPACE_TEXT, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
   keymap = WM_keymap_ensure(wm->defaultconf, "Text", SPACE_TEXT, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 
   /* add drop boxes */
   lb = WM_dropboxmap_find("Text", SPACE_TEXT, RGN_TYPE_WINDOW);
@@ -287,7 +287,7 @@ static void text_main_region_draw(const bContext *C, ARegion *ar)
 {
   /* draw entirely, view changes should be handled here */
   SpaceText *st = CTX_wm_space_text(C);
-  //View2D *v2d = &ar->v2d;
+  // View2D *v2d = &ar->v2d;
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
@@ -394,7 +394,7 @@ static void text_properties_region_init(wmWindowManager *wm, ARegion *ar)
 
   /* own keymaps */
   keymap = WM_keymap_ensure(wm->defaultconf, "Text Generic", SPACE_TEXT, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 }
 
 static void text_properties_region_draw(const bContext *C, ARegion *ar)

@@ -47,6 +47,7 @@
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_query.h"
 
 #include "ED_mesh.h"
 #include "ED_screen.h"
@@ -83,10 +84,8 @@ static int surface_slot_add_exec(bContext *C, wmOperator *UNUSED(op))
     return OPERATOR_CANCELLED;
   }
 
-  /* set preview for this surface only and set active */
   canvas->active_sur = 0;
   for (surface = surface->prev; surface; surface = surface->prev) {
-    surface->flags &= ~MOD_DPAINT_PREVIEW;
     canvas->active_sur++;
   }
 
@@ -136,7 +135,6 @@ static int surface_slot_remove_exec(bContext *C, wmOperator *UNUSED(op))
     id++;
   }
 
-  dynamicPaint_resetPreview(canvas);
   DEG_id_tag_update(&obj_ctx->id, ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, obj_ctx);
 
@@ -258,11 +256,13 @@ static int output_toggle_exec(bContext *C, wmOperator *op)
     else if (surface->type == MOD_DPAINT_SURFACE_T_WEIGHT) {
       if (!exists) {
         BKE_object_defgroup_add_name(ob, name);
+        DEG_relations_tag_update(CTX_data_main(C));
       }
       else {
         bDeformGroup *defgroup = defgroup_find_name(ob, name);
         if (defgroup) {
           BKE_object_defgroup_remove(ob, defgroup);
+          DEG_relations_tag_update(CTX_data_main(C));
         }
       }
     }
@@ -361,6 +361,7 @@ static void dynamicPaint_bakeImageSequence(DynamicPaintBakeJob *job)
   DynamicPaintSurface *surface = job->surface;
   Object *cObject = job->ob;
   DynamicPaintCanvasSettings *canvas = surface->canvas;
+  Scene *input_scene = DEG_get_input_scene(job->depsgraph);
   Scene *scene = job->scene;
   int frame = 1, orig_frame;
   int frames;
@@ -376,8 +377,8 @@ static void dynamicPaint_bakeImageSequence(DynamicPaintBakeJob *job)
 
   /* Set frame to start point (also inits modifier data) */
   frame = surface->start_frame;
-  orig_frame = scene->r.cfra;
-  scene->r.cfra = (int)frame;
+  orig_frame = input_scene->r.cfra;
+  input_scene->r.cfra = (int)frame;
   ED_update_for_newframe(job->bmain, job->depsgraph);
 
   /* Init surface */
@@ -403,7 +404,7 @@ static void dynamicPaint_bakeImageSequence(DynamicPaintBakeJob *job)
     *(job->progress) = progress;
 
     /* calculate a frame */
-    scene->r.cfra = (int)frame;
+    input_scene->r.cfra = (int)frame;
     ED_update_for_newframe(job->bmain, job->depsgraph);
     if (!dynamicPaint_calculateFrame(surface, job->depsgraph, scene, cObject, frame)) {
       job->success = 0;
@@ -439,7 +440,8 @@ static void dynamicPaint_bakeImageSequence(DynamicPaintBakeJob *job)
     }
   }
 
-  scene->r.cfra = orig_frame;
+  input_scene->r.cfra = orig_frame;
+  ED_update_for_newframe(job->bmain, job->depsgraph);
 }
 
 static void dpaint_bake_startjob(void *customdata, short *stop, short *do_update, float *progress)
@@ -471,25 +473,26 @@ static void dpaint_bake_startjob(void *customdata, short *stop, short *do_update
  */
 static int dynamicpaint_bake_exec(struct bContext *C, struct wmOperator *op)
 {
-  DynamicPaintModifierData *pmd = NULL;
-  DynamicPaintCanvasSettings *canvas;
-  Object *ob = ED_object_context(C);
-  Scene *scene = CTX_data_scene(C);
+  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Object *ob_ = ED_object_context(C);
+  Object *object_eval = DEG_get_evaluated_object(depsgraph, ob_);
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 
   DynamicPaintSurface *surface;
 
   /*
    * Get modifier data
    */
-  pmd = (DynamicPaintModifierData *)modifiers_findByType(ob, eModifierType_DynamicPaint);
-  if (!pmd) {
+  DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)modifiers_findByType(
+      object_eval, eModifierType_DynamicPaint);
+  if (pmd == NULL) {
     BKE_report(op->reports, RPT_ERROR, "Bake failed: no Dynamic Paint modifier found");
     return OPERATOR_CANCELLED;
   }
 
   /* Make sure we're dealing with a canvas */
-  canvas = pmd->canvas;
-  if (!canvas) {
+  DynamicPaintCanvasSettings *canvas = pmd->canvas;
+  if (canvas == NULL) {
     BKE_report(op->reports, RPT_ERROR, "Bake failed: invalid canvas");
     return OPERATOR_CANCELLED;
   }
@@ -501,15 +504,15 @@ static int dynamicpaint_bake_exec(struct bContext *C, struct wmOperator *op)
 
   DynamicPaintBakeJob *job = MEM_mallocN(sizeof(DynamicPaintBakeJob), "DynamicPaintBakeJob");
   job->bmain = CTX_data_main(C);
-  job->scene = scene;
+  job->scene = scene_eval;
   job->depsgraph = CTX_data_depsgraph(C);
-  job->ob = ob;
+  job->ob = object_eval;
   job->canvas = canvas;
   job->surface = surface;
 
   wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
                               CTX_wm_window(C),
-                              scene,
+                              CTX_data_scene(C),
                               "Dynamic Paint Bake",
                               WM_JOB_PROGRESS,
                               WM_JOB_TYPE_DPAINT_BAKE);

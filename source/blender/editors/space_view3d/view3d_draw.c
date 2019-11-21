@@ -105,7 +105,8 @@ void ED_view3d_update_viewmat(Depsgraph *depsgraph,
                               ARegion *ar,
                               float viewmat[4][4],
                               float winmat[4][4],
-                              const rcti *rect)
+                              const rcti *rect,
+                              bool offscreen)
 {
   RegionView3D *rv3d = ar->regiondata;
 
@@ -138,7 +139,7 @@ void ED_view3d_update_viewmat(Depsgraph *depsgraph,
   /* calculate GLSL view dependent values */
 
   /* store window coordinates scaling/offset */
-  if (rv3d->persp == RV3D_CAMOB && v3d->camera) {
+  if (!offscreen && rv3d->persp == RV3D_CAMOB && v3d->camera) {
     rctf cameraborder;
     ED_view3d_calc_camera_border(scene, depsgraph, ar, v3d, rv3d, &cameraborder, false);
     rv3d->viewcamtexcofac[0] = (float)ar->winx / BLI_rctf_size_x(&cameraborder);
@@ -168,7 +169,13 @@ void ED_view3d_update_viewmat(Depsgraph *depsgraph,
     v2[2] = rv3d->persmat[2][1];
 
     len_px = 2.0f / sqrtf(min_ff(len_squared_v3(v1), len_squared_v3(v2)));
-    len_sc = (float)MAX2(ar->winx, ar->winy);
+
+    if (rect) {
+      len_sc = (float)max_ii(BLI_rcti_size_x(rect), BLI_rcti_size_y(rect));
+    }
+    else {
+      len_sc = (float)MAX2(ar->winx, ar->winy);
+    }
 
     rv3d->pixsize = len_px / len_sc;
   }
@@ -184,7 +191,22 @@ static void view3d_main_region_setup_view(Depsgraph *depsgraph,
 {
   RegionView3D *rv3d = ar->regiondata;
 
-  ED_view3d_update_viewmat(depsgraph, scene, v3d, ar, viewmat, winmat, rect);
+  ED_view3d_update_viewmat(depsgraph, scene, v3d, ar, viewmat, winmat, rect, false);
+
+  /* set for opengl */
+  GPU_matrix_projection_set(rv3d->winmat);
+  GPU_matrix_set(rv3d->viewmat);
+}
+
+static void view3d_main_region_setup_offscreen(Depsgraph *depsgraph,
+                                               Scene *scene,
+                                               View3D *v3d,
+                                               ARegion *ar,
+                                               float viewmat[4][4],
+                                               float winmat[4][4])
+{
+  RegionView3D *rv3d = ar->regiondata;
+  ED_view3d_update_viewmat(depsgraph, scene, v3d, ar, viewmat, winmat, NULL, true);
 
   /* set for opengl */
   GPU_matrix_projection_set(rv3d->winmat);
@@ -758,15 +780,12 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *ar, View3D *v3d, bool a
 
   short flag = v3d->flag;
   float glalphaclip = U.glalphaclip;
-  int obcenter_dia = U.obcenter_dia;
   /* temp set drawtype to solid */
   /* Setting these temporarily is not nice */
   v3d->flag &= ~V3D_SELECT_OUTLINE;
 
   /* not that nice but means we wont zoom into billboards */
   U.glalphaclip = alphaoverride ? 0.5f : glalphaclip;
-
-  U.obcenter_dia = 0;
 
   /* Tools may request depth outside of regular drawing code. */
   UI_Theme_Store(&theme_state);
@@ -785,7 +804,11 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *ar, View3D *v3d, bool a
   GPU_depth_test(true);
 
   GPUViewport *viewport = WM_draw_region_get_viewport(ar, 0);
-  DRW_draw_depth_loop(depsgraph, ar, v3d, viewport);
+  /* When Blender is starting, a click event can trigger a depth test while the viewport is not
+   * yet available. */
+  if (viewport != NULL) {
+    DRW_draw_depth_loop(depsgraph, ar, v3d, viewport);
+  }
 
   if (rv3d->rflag & RV3D_CLIPPING) {
     ED_view3d_clipping_disable();
@@ -797,7 +820,6 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *ar, View3D *v3d, bool a
 
   U.glalphaclip = glalphaclip;
   v3d->flag = flag;
-  U.obcenter_dia = obcenter_dia;
 
   UI_Theme_Restore(&theme_state);
 }
@@ -1362,13 +1384,19 @@ void view3d_draw_region_info(const bContext *C, ARegion *ar)
 
   BLF_batch_draw_begin();
 
-  if ((U.uiflag & USER_SHOW_GIZMO_AXIS) ||
-      /* No need to display gizmo and this info. */
-      (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_NAVIGATE))) {
+  if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_NAVIGATE)) {
     /* pass */
   }
   else {
-    draw_view_axis(rv3d, &rect);
+    switch ((eUserpref_MiniAxisType)U.mini_axis_type) {
+      case USER_MINI_AXIS_TYPE_GIZMO:
+        /* The gizmo handles it's own drawing. */
+        break;
+      case USER_MINI_AXIS_TYPE_MINIMAL:
+        draw_view_axis(rv3d, &rect);
+      case USER_MINI_AXIS_TYPE_NONE:
+        break;
+    }
   }
 
   int xoffset = rect.xmin + U.widget_unit;
@@ -1435,13 +1463,16 @@ RenderEngineType *ED_view3d_engine_type(Scene *scene, int drawtype)
 {
   /*
    * Temporary viewport draw modes until we have a proper system.
-   * all modes are done in the draw manager, except
-   * cycles material as it is an external render engine.
+   * all modes are done in the draw manager, except external render
+   * engines like Cycles.
    */
-  if (strcmp(scene->r.engine, RE_engine_id_CYCLES) == 0 && drawtype == OB_MATERIAL) {
+  RenderEngineType *type = RE_engines_find(scene->r.engine);
+  if (drawtype == OB_MATERIAL && (type->flag & RE_USE_EEVEE_VIEWPORT)) {
     return RE_engines_find(RE_engine_id_BLENDER_EEVEE);
   }
-  return RE_engines_find(scene->r.engine);
+  else {
+    return type;
+  }
 }
 
 void view3d_main_region_draw(const bContext *C, ARegion *ar)
@@ -1484,14 +1515,14 @@ static void view3d_stereo3d_setup_offscreen(Depsgraph *depsgraph,
     const bool is_left = STREQ(viewname, STEREO_LEFT_NAME);
 
     BKE_camera_multiview_view_matrix(&scene->r, v3d->camera, is_left, viewmat);
-    view3d_main_region_setup_view(depsgraph, scene, v3d, ar, viewmat, winmat, NULL);
+    view3d_main_region_setup_offscreen(depsgraph, scene, v3d, ar, viewmat, winmat);
   }
   else { /* SCE_VIEWS_FORMAT_MULTIVIEW */
     float viewmat[4][4];
     Object *camera = BKE_camera_multiview_render(scene, v3d->camera, viewname);
 
     BKE_camera_multiview_view_matrix(&scene->r, camera, false, viewmat);
-    view3d_main_region_setup_view(depsgraph, scene, v3d, ar, viewmat, winmat, NULL);
+    view3d_main_region_setup_offscreen(depsgraph, scene, v3d, ar, viewmat, winmat);
   }
 }
 
@@ -1507,7 +1538,6 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
                               bool do_sky,
                               bool UNUSED(is_persp),
                               const char *viewname,
-                              GPUFXSettings *UNUSED(fx_settings),
                               const bool do_color_management,
                               GPUOffScreen *ofs,
                               GPUViewport *viewport)
@@ -1550,7 +1580,7 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
     view3d_stereo3d_setup_offscreen(depsgraph, scene, v3d, ar, winmat, viewname);
   }
   else {
-    view3d_main_region_setup_view(depsgraph, scene, v3d, ar, viewmat, winmat, NULL);
+    view3d_main_region_setup_offscreen(depsgraph, scene, v3d, ar, viewmat, winmat);
   }
 
   /* main drawing call */
@@ -1584,7 +1614,6 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
                                       int sizex,
                                       int sizey,
                                       uint flag,
-                                      uint draw_flags,
                                       int alpha_mode,
                                       int samples,
                                       const char *viewname,
@@ -1594,10 +1623,8 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
 {
   RegionView3D *rv3d = ar->regiondata;
   const bool draw_sky = (alpha_mode == R_ADDSKY);
-  const bool use_full_sample = (draw_flags & V3D_OFSDRAW_USE_FULL_SAMPLE);
 
   /* view state */
-  GPUFXSettings fx_settings = v3d->fx_settings;
   bool is_ortho = false;
   float winmat[4][4];
 
@@ -1617,7 +1644,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
 
   if (own_ofs) {
     /* bind */
-    ofs = GPU_offscreen_create(sizex, sizey, use_full_sample ? 0 : samples, true, false, err_out);
+    ofs = GPU_offscreen_create(sizex, sizey, samples, true, false, err_out);
     if (ofs == NULL) {
       DRW_opengl_context_disable();
       return NULL;
@@ -1643,8 +1670,6 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
     BKE_camera_multiview_params(&scene->r, &params, camera_eval, viewname);
     BKE_camera_params_compute_viewplane(&params, sizex, sizey, scene->r.xasp, scene->r.yasp);
     BKE_camera_params_compute_matrix(&params);
-
-    BKE_camera_to_gpu_dof(camera, &fx_settings);
 
     is_ortho = params.is_ortho;
     copy_m4_m4(winmat, params.winmat);
@@ -1675,123 +1700,28 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
     }
   }
 
-  if ((samples && use_full_sample) == 0) {
-    const bool do_color_management = (ibuf->rect_float == NULL);
-    /* Single-pass render, common case */
-    ED_view3d_draw_offscreen(depsgraph,
-                             scene,
-                             drawtype,
-                             v3d,
-                             ar,
-                             sizex,
-                             sizey,
-                             NULL,
-                             winmat,
-                             draw_sky,
-                             !is_ortho,
-                             viewname,
-                             &fx_settings,
-                             do_color_management,
-                             ofs,
-                             NULL);
+  const bool do_color_management = (ibuf->rect_float == NULL);
+  ED_view3d_draw_offscreen(depsgraph,
+                           scene,
+                           drawtype,
+                           v3d,
+                           ar,
+                           sizex,
+                           sizey,
+                           NULL,
+                           winmat,
+                           draw_sky,
+                           !is_ortho,
+                           viewname,
+                           do_color_management,
+                           ofs,
+                           NULL);
 
-    if (ibuf->rect_float) {
-      GPU_offscreen_read_pixels(ofs, GL_FLOAT, ibuf->rect_float);
-    }
-    else if (ibuf->rect) {
-      GPU_offscreen_read_pixels(ofs, GL_UNSIGNED_BYTE, ibuf->rect);
-    }
+  if (ibuf->rect_float) {
+    GPU_offscreen_read_pixels(ofs, GL_FLOAT, ibuf->rect_float);
   }
-  else {
-    /* Multi-pass render, use accumulation buffer & jitter for 'full' oversampling.
-     * Use because OpenGL may use a lower quality MSAA, and only over-sample edges. */
-    static float jit_ofs[32][2];
-    float winmat_jitter[4][4];
-    float *rect_temp = (ibuf->rect_float) ?
-                           ibuf->rect_float :
-                           MEM_mallocN(sizex * sizey * sizeof(float[4]), "rect_temp");
-    float *accum_buffer = MEM_mallocN(sizex * sizey * sizeof(float[4]), "accum_buffer");
-    GPUViewport *viewport = GPU_viewport_create_from_offscreen(ofs);
-
-    BLI_jitter_init(jit_ofs, samples);
-
-    /* first sample buffer, also initializes 'rv3d->persmat' */
-    ED_view3d_draw_offscreen(depsgraph,
-                             scene,
-                             drawtype,
-                             v3d,
-                             ar,
-                             sizex,
-                             sizey,
-                             NULL,
-                             winmat,
-                             draw_sky,
-                             !is_ortho,
-                             viewname,
-                             &fx_settings,
-                             false,
-                             ofs,
-                             viewport);
-    GPU_offscreen_read_pixels(ofs, GL_FLOAT, accum_buffer);
-
-    /* skip the first sample */
-    for (int j = 1; j < samples; j++) {
-      copy_m4_m4(winmat_jitter, winmat);
-      window_translate_m4(winmat_jitter,
-                          rv3d->persmat,
-                          (jit_ofs[j][0] * 2.0f) / sizex,
-                          (jit_ofs[j][1] * 2.0f) / sizey);
-
-      ED_view3d_draw_offscreen(depsgraph,
-                               scene,
-                               drawtype,
-                               v3d,
-                               ar,
-                               sizex,
-                               sizey,
-                               NULL,
-                               winmat_jitter,
-                               draw_sky,
-                               !is_ortho,
-                               viewname,
-                               &fx_settings,
-                               false,
-                               ofs,
-                               viewport);
-      GPU_offscreen_read_pixels(ofs, GL_FLOAT, rect_temp);
-
-      uint i = sizex * sizey * 4;
-      while (i--) {
-        accum_buffer[i] += rect_temp[i];
-      }
-    }
-
-    {
-      /* don't free data owned by 'ofs' */
-      GPU_viewport_clear_from_offscreen(viewport);
-      GPU_viewport_free(viewport);
-    }
-
-    if (ibuf->rect_float == NULL) {
-      MEM_freeN(rect_temp);
-    }
-
-    if (ibuf->rect_float) {
-      float *rect_float = ibuf->rect_float;
-      uint i = sizex * sizey * 4;
-      while (i--) {
-        rect_float[i] = accum_buffer[i] / samples;
-      }
-    }
-    else {
-      uchar *rect_ub = (uchar *)ibuf->rect;
-      uint i = sizex * sizey * 4;
-      while (i--) {
-        rect_ub[i] = (uchar)(255.0f * accum_buffer[i] / samples);
-      }
-    }
-
-    MEM_freeN(accum_buffer);
+  else if (ibuf->rect) {
+    GPU_offscreen_read_pixels(ofs, GL_UNSIGNED_BYTE, ibuf->rect);
   }
 
   /* unbind */
@@ -1824,6 +1754,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
  */
 ImBuf *ED_view3d_draw_offscreen_imbuf_simple(Depsgraph *depsgraph,
                                              Scene *scene,
+                                             View3DShading *shading_override,
                                              int drawtype,
                                              Object *camera,
                                              int width,
@@ -1846,21 +1777,24 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(Depsgraph *depsgraph,
   ar.regiontype = RGN_TYPE_WINDOW;
 
   v3d.camera = camera;
+  View3DShading *source_shading_settings = &scene->display.shading;
+  if (draw_flags & V3D_OFSDRAW_OVERRIDE_SCENE_SETTINGS && shading_override != NULL) {
+    source_shading_settings = shading_override;
+  }
+  memcpy(&v3d.shading, source_shading_settings, sizeof(View3DShading));
   v3d.shading.type = drawtype;
+
+  if (drawtype == OB_MATERIAL) {
+    v3d.shading.flag = V3D_SHADING_SCENE_WORLD | V3D_SHADING_SCENE_LIGHTS;
+  }
+
   v3d.flag2 = V3D_HIDE_OVERLAYS;
 
-  if (draw_flags & V3D_OFSDRAW_USE_GPENCIL) {
+  if (draw_flags & V3D_OFSDRAW_SHOW_ANNOTATION) {
     v3d.flag2 |= V3D_SHOW_ANNOTATION;
   }
 
   v3d.shading.background_type = V3D_SHADING_BACKGROUND_WORLD;
-
-  if (draw_flags & V3D_OFSDRAW_USE_CAMERA_DOF) {
-    if (camera->type == OB_CAMERA) {
-      v3d.fx_settings.dof = &((Camera *)camera->data)->gpu_dof;
-      v3d.fx_settings.fx_flag |= GPU_FX_FLAG_DOF;
-    }
-  }
 
   rv3d.persp = RV3D_CAMOB;
 
@@ -1896,7 +1830,6 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(Depsgraph *depsgraph,
                                         width,
                                         height,
                                         flag,
-                                        draw_flags,
                                         alpha_mode,
                                         samples,
                                         viewname,

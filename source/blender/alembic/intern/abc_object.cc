@@ -263,9 +263,6 @@ void AbcObjectReader::setupObjectTransform(const float time)
 
     data->cache_file = m_settings->cache_file;
     id_us_plus(&data->cache_file->id);
-
-    data->reader = reinterpret_cast<CacheReader *>(this);
-    this->incref();
   }
 }
 
@@ -364,9 +361,6 @@ void AbcObjectReader::addCacheModifier()
   id_us_plus(&mcmd->cache_file->id);
 
   BLI_strncpy(mcmd->object_path, m_iobject.getFullName().c_str(), FILE_MAX);
-
-  mcmd->reader = reinterpret_cast<CacheReader *>(this);
-  this->incref();
 }
 
 chrono_t AbcObjectReader::minTime() const

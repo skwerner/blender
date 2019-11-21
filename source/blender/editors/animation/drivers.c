@@ -182,7 +182,7 @@ static int add_driver_with_target(ReportList *UNUSED(reports),
 
     /* Set driver expression, so that the driver works out of the box
      *
-     * The following checks define a bit of "autodetection magic" we use
+     * The following checks define a bit of "auto-detection magic" we use
      * to ensure that the drivers will behave as expected out of the box
      * when faced with properties with different units.
      */
@@ -1140,7 +1140,7 @@ void ANIM_OT_driver_button_remove(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = remove_driver_button_exec;
-  //op->poll = ??? // TODO: need to have some driver to be able to do this...
+  // op->poll = ??? // TODO: need to have some driver to be able to do this...
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1177,7 +1177,7 @@ void ANIM_OT_driver_button_edit(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = edit_driver_button_exec;
-  //op->poll = ??? // TODO: need to have some driver to be able to do this...
+  // op->poll = ??? // TODO: need to have some driver to be able to do this...
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1221,7 +1221,7 @@ void ANIM_OT_copy_driver_button(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = copy_driver_button_exec;
-  //op->poll = ??? // TODO: need to have some driver to be able to do this...
+  // op->poll = ??? // TODO: need to have some driver to be able to do this...
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1249,7 +1249,8 @@ static int paste_driver_button_exec(bContext *C, wmOperator *op)
       UI_context_update_anim_flag(C);
 
       DEG_relations_tag_update(CTX_data_main(C));
-      DEG_id_tag_update(ptr.id.data, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+
+      DEG_id_tag_update(ptr.id.data, ID_RECALC_ANIMATION);
 
       WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME_PROP, NULL);  // XXX
 
@@ -1270,7 +1271,7 @@ void ANIM_OT_paste_driver_button(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = paste_driver_button_exec;
-  //op->poll = ??? // TODO: need to have some driver to be able to do this...
+  // op->poll = ??? // TODO: need to have some driver to be able to do this...
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_INTERNAL;

@@ -82,10 +82,11 @@ typedef struct EditBone {
 
   /* Bendy-Bone parameters */
   float roll1, roll2;
-  float curveOutX, curveOutY;
-  float curveInX, curveInY;
+  float curve_in_x, curve_in_y;
+  float curve_out_x, curve_out_y;
   float ease1, ease2;
-  float scaleIn, scaleOut;
+  float scale_in_x, scale_in_y;
+  float scale_out_x, scale_out_y;
 
   /** for envelope scaling */
   float oldlength;
@@ -169,6 +170,10 @@ bool ED_armature_pose_select_pick_with_buffer(struct ViewLayer *view_layer,
                                               bool deselect,
                                               bool toggle,
                                               bool do_nearest);
+
+void ED_armature_pose_select_in_wpaint_mode(struct ViewLayer *view_layer,
+                                            struct Base *base_select);
+
 bool ED_armature_edit_select_pick(
     struct bContext *C, const int mval[2], bool extend, bool deselect, bool toggle);
 
@@ -182,6 +187,8 @@ EditBone *ED_armature_ebone_find_name(const struct ListBase *edbo, const char *n
 EditBone *ED_armature_ebone_get_mirrored(const struct ListBase *edbo, EditBone *ebo);
 void ED_armature_edit_sync_selection(struct ListBase *edbo);
 void ED_armature_edit_validate_active(struct bArmature *arm);
+
+void ED_armature_edit_refresh_layer_used(struct bArmature *arm);
 
 struct Base *ED_armature_base_and_ebone_from_select_buffer(struct Base **bases,
                                                            uint bases_len,
@@ -215,6 +222,9 @@ void ED_armature_ebone_to_mat4(EditBone *ebone, float mat[4][4]);
 void ED_armature_ebone_from_mat3(EditBone *ebone, float mat[3][3]);
 void ED_armature_ebone_from_mat4(EditBone *ebone, float mat[4][4]);
 
+void ED_armature_ebone_transform_mirror_update(struct bArmature *arm,
+                                               EditBone *ebo,
+                                               bool check_select);
 void ED_armature_edit_transform_mirror_update(struct Object *obedit);
 void ED_armature_origin_set(
     struct Main *bmain, struct Object *ob, const float cursor[3], int centermode, int around);

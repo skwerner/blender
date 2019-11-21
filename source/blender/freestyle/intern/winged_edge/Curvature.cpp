@@ -62,8 +62,9 @@ static bool angle_obtuse(WVertex *v, WFace *f)
 static bool triangle_obtuse(WVertex *, WFace *f)
 {
   bool b = false;
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < 3; i++) {
     b = b || ((f->getEdgeList()[i]->GetVec() * f->getEdgeList()[(i + 1) % 3]->GetVec()) < 0);
+  }
   return b;
 }
 
@@ -78,9 +79,11 @@ static real cotan(WVertex *vo, WVertex *v1, WVertex *v2)
   udotv = u * v;
   denom = sqrt(u.squareNorm() * v.squareNorm() - udotv * udotv);
 
-  /* denom can be zero if u==v.  Returning 0 is acceptable, based on the callers of this function below. */
-  if (denom == 0.0)
+  /* denom can be zero if u==v.  Returning 0 is acceptable, based on the callers of this function
+   * below. */
+  if (denom == 0.0) {
     return 0.0;
+  }
   return (udotv / denom);
 }
 
@@ -109,9 +112,9 @@ static real angle_from_cotan(WVertex *vo, WVertex *v1, WVertex *v2)
  *  Computes the Discrete Mean Curvature Normal approximation at @v.
  *  The mean curvature at @v is half the magnitude of the vector @Kh.
  *
- *  Note: the normal computed is not unit length, and may point either into or out of the surface, depending on
- *  the curvature at @v. It is the responsibility of the caller of the function to use the mean curvature normal
- *  appropriately.
+ *  Note: the normal computed is not unit length, and may point either into or out of the surface,
+ * depending on the curvature at @v. It is the responsibility of the caller of the function to use
+ * the mean curvature normal appropriately.
  *
  *  This approximation is from the paper:
  *      Discrete Differential-Geometry Operators for Triangulated 2-Manifolds
@@ -119,32 +122,36 @@ static real angle_from_cotan(WVertex *vo, WVertex *v1, WVertex *v2)
  *      VisMath '02, Berlin (Germany)
  *      http://www-grail.usc.edu/pubs.html
  *
- *  Returns: %true if the operator could be evaluated, %false if the evaluation failed for some reason (@v is
- *  boundary or is the endpoint of a non-manifold edge.)
+ *  Returns: %true if the operator could be evaluated, %false if the evaluation failed for some
+ * reason (@v is boundary or is the endpoint of a non-manifold edge.)
  */
 bool gts_vertex_mean_curvature_normal(WVertex *v, Vec3r &Kh)
 {
   real area = 0.0;
 
-  if (!v)
+  if (!v) {
     return false;
+  }
 
   /* this operator is not defined for boundary edges */
-  if (v->isBoundary())
+  if (v->isBoundary()) {
     return false;
+  }
 
   WVertex::incoming_edge_iterator itE;
 
-  for (itE = v->incoming_edges_begin(); itE != v->incoming_edges_end(); itE++)
+  for (itE = v->incoming_edges_begin(); itE != v->incoming_edges_end(); itE++) {
     area += (*itE)->GetaFace()->getArea();
+  }
 
   Kh = Vec3r(0.0, 0.0, 0.0);
 
   for (itE = v->incoming_edges_begin(); itE != v->incoming_edges_end(); itE++) {
     WOEdge *e = (*itE)->getPrevOnFace();
 #if 0
-    if ((e->GetaVertex() == v) || (e->GetbVertex() == v))
+    if ((e->GetaVertex() == v) || (e->GetbVertex() == v)) {
       cerr << "BUG ";
+    }
 #endif
     WVertex *v1 = e->GetaVertex();
     WVertex *v2 = e->GetbVertex();
@@ -181,18 +188,20 @@ bool gts_vertex_mean_curvature_normal(WVertex *v, Vec3r &Kh)
  *      VisMath '02, Berlin (Germany)
  *      http://www-grail.usc.edu/pubs.html
  *
- *  Returns: %true if the operator could be evaluated, %false if the evaluation failed for some reason (@v is
- * boundary or is the endpoint of a non-manifold edge.)
+ *  Returns: %true if the operator could be evaluated, %false if the evaluation failed for some
+ * reason (@v is boundary or is the endpoint of a non-manifold edge.)
  */
 bool gts_vertex_gaussian_curvature(WVertex *v, real *Kg)
 {
   real area = 0.0;
   real angle_sum = 0.0;
 
-  if (!v)
+  if (!v) {
     return false;
-  if (!Kg)
+  }
+  if (!Kg) {
     return false;
+  }
 
   /* this operator is not defined for boundary edges */
   if (v->isBoundary()) {
@@ -223,7 +232,8 @@ bool gts_vertex_gaussian_curvature(WVertex *v, real *Kg)
  *  @K1: first principal curvature.
  *  @K2: second principal curvature.
  *
- *  Computes the principal curvatures at a point given the mean and Gaussian curvatures at that point.
+ *  Computes the principal curvatures at a point given the mean and Gaussian curvatures at that
+ * point.
  *
  *  The mean curvature can be computed as one-half the magnitude of the vector computed by
  *  gts_vertex_mean_curvature_normal().
@@ -234,11 +244,13 @@ void gts_vertex_principal_curvatures(real Kh, real Kg, real *K1, real *K2)
 {
   real temp = Kh * Kh - Kg;
 
-  if (!K1 || !K2)
+  if (!K1 || !K2) {
     return;
+  }
 
-  if (temp < 0.0)
+  if (temp < 0.0) {
     temp = 0.0;
+  }
   temp = sqrt(temp);
   *K1 = Kh + temp;
   *K2 = Kh - temp;
@@ -275,12 +287,12 @@ static void eigenvector(real a, real b, real c, Vec3r e)
  *  @e1: first principal curvature direction (direction of largest curvature).
  *  @e2: second principal curvature direction.
  *
- *  Computes the principal curvature directions at a point given @Kh and @Kg, the mean curvature normal and
- *  Gaussian curvatures at that point, computed with gts_vertex_mean_curvature_normal() and
- *  gts_vertex_gaussian_curvature(), respectively.
+ *  Computes the principal curvature directions at a point given @Kh and @Kg, the mean curvature
+ * normal and Gaussian curvatures at that point, computed with gts_vertex_mean_curvature_normal()
+ * and gts_vertex_gaussian_curvature(), respectively.
  *
- *  Note that this computation is very approximate and tends to be unstable. Smoothing of the surface or the principal
- *  directions may be necessary to achieve reasonable results.
+ *  Note that this computation is very approximate and tends to be unstable. Smoothing of the
+ * surface or the principal directions may be necessary to achieve reasonable results.
  */
 void gts_vertex_principal_directions(WVertex *v, Vec3r Kh, real Kg, Vec3r &e1, Vec3r &e2)
 {
@@ -306,26 +318,30 @@ void gts_vertex_principal_directions(WVertex *v, Vec3r Kh, real Kg, Vec3r &e1, V
     Kh.normalize();
   }
   else {
-    /* This vertex is a point of zero mean curvature (flat or saddle point). Compute a normal by averaging
-     * the adjacent triangles
+    /* This vertex is a point of zero mean curvature (flat or saddle point). Compute a normal by
+     * averaging the adjacent triangles
      */
     N[0] = N[1] = N[2] = 0.0;
 
-    for (itE = v->incoming_edges_begin(); itE != v->incoming_edges_end(); itE++)
+    for (itE = v->incoming_edges_begin(); itE != v->incoming_edges_end(); itE++) {
       N = Vec3r(N + (*itE)->GetaFace()->GetNormal());
+    }
     real normN = N.norm();
-    if (normN <= 0.0)
+    if (normN <= 0.0) {
       return;
+    }
     N.normalize();
   }
 
   /* construct a basis from N: */
   /* set basis1 to any component not the largest of N */
   basis1[0] = basis1[1] = basis1[2] = 0.0;
-  if (fabs(N[0]) > fabs(N[1]))
+  if (fabs(N[0]) > fabs(N[1])) {
     basis1[1] = 1.0;
-  else
+  }
+  else {
     basis1[0] = 1.0;
+  }
 
   /* make basis2 orthogonal to N */
   basis2 = (N ^ basis1);
@@ -350,12 +366,14 @@ void gts_vertex_principal_directions(WVertex *v, Vec3r Kh, real Kg, Vec3r &e1, V
     WFace *f1, *f2;
     real weight, kappa, d1, d2;
     Vec3r vec_edge;
-    if (!*itE)
+    if (!*itE) {
       continue;
+    }
     e = *itE;
 
-    /* since this vertex passed the tests in gts_vertex_mean_curvature_normal(), this should be true. */
-    //g_assert(gts_edge_face_number (e, s) == 2);
+    /* since this vertex passed the tests in gts_vertex_mean_curvature_normal(), this should be
+     * true. */
+    // g_assert(gts_edge_face_number (e, s) == 2);
 
     /* identify the two triangles bordering e in s */
     f1 = e->GetaFace();
@@ -365,17 +383,18 @@ void gts_vertex_principal_directions(WVertex *v, Vec3r Kh, real Kg, Vec3r &e1, V
      *     B = [ a b ; b c ].
      *  The computations here are from section 5 of [Meyer et al 2002].
      *
-     *  The first step is to calculate the linear equations governing the values of (a,b,c). These can be computed
-     *  by setting the derivatives of the error E to zero (section 5.3).
+     *  The first step is to calculate the linear equations governing the values of (a,b,c). These
+     * can be computed by setting the derivatives of the error E to zero (section 5.3).
      *
-     *  Since a + c = norm(Kh), we only compute the linear equations for dE/da and dE/db. (NB: [Meyer et al 2002]
-     *  has the equation a + b = norm(Kh), but I'm almost positive this is incorrect).
+     *  Since a + c = norm(Kh), we only compute the linear equations for dE/da and dE/db. (NB:
+     * [Meyer et al 2002] has the equation a + b = norm(Kh), but I'm almost positive this is
+     * incorrect).
      *
-     *  Note that the w_ij (defined in section 5.2) are all scaled by (1/8*A_mixed). We drop this uniform scale
-     *  factor because the solution of the linear equations doesn't rely on it.
+     *  Note that the w_ij (defined in section 5.2) are all scaled by (1/8*A_mixed). We drop this
+     * uniform scale factor because the solution of the linear equations doesn't rely on it.
      *
-     *  The terms of the linear equations are xterm_dy with x in {a,b,c} and y in {a,b}. There are also const_dy
-     *  terms that are the constant factors in the equations.
+     *  The terms of the linear equations are xterm_dy with x in {a,b,c} and y in {a,b}. There are
+     * also const_dy terms that are the constant factors in the equations.
      */
 
     /* find the vector from v along edge e */
@@ -389,8 +408,9 @@ void gts_vertex_principal_directions(WVertex *v, Vec3r Kh, real Kg, Vec3r &e1, V
 
     /* section 5.2 */
 
-    /* I don't like performing a minimization where some of the weights can be negative (as can be the case
-     *  if f1 or f2 are obtuse). To ensure all-positive weights, we check for obtuseness. */
+    /* I don't like performing a minimization where some of the weights can be negative (as can be
+     * the case if f1 or f2 are obtuse). To ensure all-positive weights, we check for obtuseness.
+     */
     weight = 0.0;
     if (!triangle_obtuse(v, f1)) {
       weight += ve2 *
@@ -471,12 +491,14 @@ void gts_vertex_principal_directions(WVertex *v, Vec3r Kh, real Kg, Vec3r &e1, V
     eig[1] = 0.0;
   }
 
-  /* Although the eigenvectors of B are good estimates of the principal directions, it seems that which one is
-   * attached to which curvature direction is a bit arbitrary. This may be a bug in my implementation, or just
-   * a side-effect of the inaccuracy of B due to the discrete nature of the sampling.
+  /* Although the eigenvectors of B are good estimates of the principal directions, it seems that
+   * which one is attached to which curvature direction is a bit arbitrary. This may be a bug in my
+   * implementation, or just a side-effect of the inaccuracy of B due to the discrete nature of the
+   * sampling.
    *
-   * To overcome this behavior, we'll evaluate which assignment best matches the given eigenvectors by comparing
-   * the curvature estimates computed above and the curvatures calculated from the discrete differential operators.
+   * To overcome this behavior, we'll evaluate which assignment best matches the given eigenvectors
+   * by comparing the curvature estimates computed above and the curvatures calculated from the
+   * discrete differential operators.
    */
 
   gts_vertex_principal_curvatures(0.5 * normKh, Kg, &K1, &K2);
@@ -583,8 +605,9 @@ static bool sphere_clip_vector(const Vec3r &O, real r, const Vec3r &P, Vec3r &V)
 void compute_curvature_tensor(WVertex *start, real radius, NormalCycle &nc)
 {
   // in case we have a non-manifold vertex, skip it...
-  if (start->isBoundary())
+  if (start->isBoundary()) {
     return;
+  }
 
   std::set<WVertex *> vertices;
   const Vec3r &O = start->GetVertex();
@@ -594,8 +617,9 @@ void compute_curvature_tensor(WVertex *start, real radius, NormalCycle &nc)
   while (!S.empty()) {
     WVertex *v = S.top();
     S.pop();
-    if (v->isBoundary())
+    if (v->isBoundary()) {
       continue;
+    }
     const Vec3r &P = v->GetVertex();
     WVertex::incoming_edge_iterator woeit = v->incoming_edges_begin();
     WVertex::incoming_edge_iterator woeitend = v->incoming_edges_end();
@@ -623,8 +647,9 @@ void compute_curvature_tensor(WVertex *start, real radius, NormalCycle &nc)
 void compute_curvature_tensor_one_ring(WVertex *start, NormalCycle &nc)
 {
   // in case we have a non-manifold vertex, skip it...
-  if (start->isBoundary())
+  if (start->isBoundary()) {
     return;
+  }
 
   WVertex::incoming_edge_iterator woeit = start->incoming_edges_begin();
   WVertex::incoming_edge_iterator woeitend = start->incoming_edges_end();

@@ -225,6 +225,16 @@ MaskLayer *BKE_mask_layer_copy(const MaskLayer *masklay)
     MaskSpline *spline_new = BKE_mask_spline_copy(spline);
 
     BLI_addtail(&masklay_new->splines, spline_new);
+
+    if (spline == masklay->act_spline) {
+      masklay_new->act_spline = spline_new;
+    }
+
+    if (masklay->act_point >= spline->points &&
+        masklay->act_point < spline->points + spline->tot_point) {
+      const size_t point_index = masklay->act_point - spline->points;
+      masklay_new->act_point = spline_new->points + point_index;
+    }
   }
 
   /* correct animation */
@@ -273,7 +283,10 @@ MaskSpline *BKE_mask_spline_add(MaskLayer *masklay)
   spline->tot_point = 1;
 
   /* cyclic shapes are more usually used */
-  // spline->flag |= MASK_SPLINE_CYCLIC; // disable because its not so nice for drawing. could be done differently
+  /* Disable because its not so nice for drawing. could be done differently. */
+#if 0
+  spline->flag |= MASK_SPLINE_CYCLIC;
+#endif
 
   spline->weight_interp = MASK_SPLINE_INTERP_EASE;
 
@@ -863,8 +876,10 @@ Mask *BKE_mask_copy_nolib(Mask *mask)
 }
 
 /**
- * Only copy internal data of Mask ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Mask ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -1223,7 +1238,7 @@ static void mask_calc_point_handle(MaskSplinePoint *point,
 {
   BezTriple *bezt = &point->bezt;
   BezTriple *bezt_prev = NULL, *bezt_next = NULL;
-  //int handle_type = bezt->h1;
+  // int handle_type = bezt->h1;
 
   if (point_prev) {
     bezt_prev = &point_prev->bezt;
@@ -1452,13 +1467,6 @@ void BKE_mask_evaluate(Mask *mask, const float ctime, const bool do_newframe)
   for (masklay = mask->masklayers.first; masklay; masklay = masklay->next) {
     BKE_mask_layer_evaluate(masklay, ctime, do_newframe);
   }
-}
-
-/* the purpose of this function is to ensure spline->points_deform is never out of date.
- * for now re-evaluate all. eventually this might work differently */
-void BKE_mask_update_display(Mask *mask, float ctime)
-{
-  BKE_mask_evaluate(mask, ctime, false);
 }
 
 void BKE_mask_evaluate_all_masks(Main *bmain, float ctime, const bool do_newframe)
@@ -1802,7 +1810,8 @@ void BKE_mask_layer_shape_changed_add(MaskLayer *masklay,
 
   if (BKE_mask_layer_shape_spline_from_index(masklay, index, &spline, &spline_point_index)) {
     /* sanity check */
-    /* the point has already been removed in this array so subtract one when comparing with the shapes */
+    /* The point has already been removed in this array
+     * so subtract one when comparing with the shapes. */
     int tot = BKE_mask_layer_shape_totvert(masklay) - 1;
 
     /* for interpolation */

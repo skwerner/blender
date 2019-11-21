@@ -450,32 +450,6 @@ static eOLDrawState tree_element_active_material(bContext *C,
   return OL_DRAWSEL_NONE;
 }
 
-static eOLDrawState tree_element_active_light(bContext *UNUSED(C),
-                                              Scene *UNUSED(scene),
-                                              ViewLayer *view_layer,
-                                              SpaceOutliner *soops,
-                                              TreeElement *te,
-                                              const eOLSetState set)
-{
-  Object *ob;
-
-  /* we search for the object parent */
-  ob = (Object *)outliner_search_back(soops, te, ID_OB);
-  if (ob == NULL || ob != OBACT(view_layer)) {
-    /* just paranoia */
-    return OL_DRAWSEL_NONE;
-  }
-
-  if (set != OL_SETSEL_NONE) {
-    // XXX      extern_set_butspace(F5KEY, 0);
-  }
-  else {
-    return OL_DRAWSEL_NORMAL;
-  }
-
-  return OL_DRAWSEL_NONE;
-}
-
 static eOLDrawState tree_element_active_camera(bContext *UNUSED(C),
                                                Scene *scene,
                                                ViewLayer *UNUSED(sl),
@@ -1041,8 +1015,6 @@ eOLDrawState tree_element_active(bContext *C,
       return tree_element_active_material(C, scene, view_layer, soops, te, set);
     case ID_WO:
       return tree_element_active_world(C, scene, view_layer, soops, te, set);
-    case ID_LA:
-      return tree_element_active_light(C, scene, view_layer, soops, te, set);
     case ID_TXT:
       return tree_element_active_text(C, scene, view_layer, soops, te, set);
     case ID_CA:
@@ -1160,7 +1132,7 @@ static void do_outliner_item_activate_tree_element(bContext *C,
         WM_window_set_active_scene(CTX_data_main(C), C, CTX_wm_window(C), (Scene *)tselem->id);
       }
     }
-    else if (te->idcode == ID_GR) {
+    else if ((te->idcode == ID_GR) && (soops->outlinevis != SO_VIEW_LAYER)) {
       Collection *gr = (Collection *)tselem->id;
 
       if (extend) {
@@ -1271,8 +1243,7 @@ static bool outliner_is_co_within_restrict_columns(const SpaceOutliner *soops,
                                                    const ARegion *ar,
                                                    float view_co_x)
 {
-  return ((soops->outlinevis != SO_DATA_API) && !(soops->flag & SO_HIDE_RESTRICTCOLS) &&
-          (view_co_x > ar->v2d.cur.xmax - OL_TOG_RESTRICT_VIEWX));
+  return (view_co_x > ar->v2d.cur.xmax - outliner_restrict_columns_width(soops));
 }
 
 /**
@@ -1297,10 +1268,11 @@ void outliner_item_do_activate_from_tree_element(
  *
  * May expend/collapse branches or activate items.
  * */
-int outliner_item_do_activate_from_cursor(bContext *C,
-                                          const int mval[2],
-                                          bool extend,
-                                          bool recursive)
+static int outliner_item_do_activate_from_cursor(bContext *C,
+                                                 const int mval[2],
+                                                 const bool extend,
+                                                 const bool recursive,
+                                                 const bool deselect_all)
 {
   ARegion *ar = CTX_wm_region(C);
   SpaceOutliner *soops = CTX_wm_space_outliner(C);
@@ -1315,7 +1287,10 @@ int outliner_item_do_activate_from_cursor(bContext *C,
   }
 
   if (!(te = outliner_find_item_at_y(soops, &soops->tree, view_mval[1]))) {
-    /* skip */
+    if (deselect_all) {
+      outliner_flag_set(&soops->tree, TSE_SELECTED, false);
+      changed = true;
+    }
   }
   else if (outliner_item_is_co_within_close_toggle(te, view_mval[0])) {
     outliner_item_toggle_closed(te, extend);
@@ -1351,9 +1326,10 @@ int outliner_item_do_activate_from_cursor(bContext *C,
 /* event can enterkey, then it opens/closes */
 static int outliner_item_activate_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  bool extend = RNA_boolean_get(op->ptr, "extend");
-  bool recursive = RNA_boolean_get(op->ptr, "recursive");
-  return outliner_item_do_activate_from_cursor(C, event->mval, extend, recursive);
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+  const bool recursive = RNA_boolean_get(op->ptr, "recursive");
+  const bool deselect_all = RNA_boolean_get(op->ptr, "deselect_all");
+  return outliner_item_do_activate_from_cursor(C, event->mval, extend, recursive, deselect_all);
 }
 
 void OUTLINER_OT_item_activate(wmOperatorType *ot)
@@ -1366,8 +1342,15 @@ void OUTLINER_OT_item_activate(wmOperatorType *ot)
 
   ot->poll = ED_operator_outliner_active;
 
+  PropertyRNA *prop;
   RNA_def_boolean(ot->srna, "extend", true, "Extend", "Extend selection for activation");
   RNA_def_boolean(ot->srna, "recursive", false, "Recursive", "Select Objects and their children");
+  prop = RNA_def_boolean(ot->srna,
+                         "deselect_all",
+                         false,
+                         "Deselect On Nothing",
+                         "Deselect all when nothing under the cursor");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
 /* ****************************************************** */

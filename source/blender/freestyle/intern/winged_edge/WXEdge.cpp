@@ -70,8 +70,9 @@ void WXFaceLayer::RetrieveCuspEdgesIndices(vector<int> &oCuspEdges)
 WXSmoothEdge *WXFaceLayer::BuildSmoothEdge()
 {
   // if the smooth edge has already been built: exit
-  if (_pSmoothEdge)
+  if (_pSmoothEdge) {
     return _pSmoothEdge;
+  }
   float ta, tb;
   WOEdge *woea(0), *woeb(0);
   bool ok = false;
@@ -87,12 +88,14 @@ WXSmoothEdge *WXFaceLayer::BuildSmoothEdge()
     //-----------------------------
     // We retrieve the 2 edges for which we have opposite signs for each extremity
     RetrieveCuspEdgesIndices(cuspEdgesIndices);
-    if (cuspEdgesIndices.size() != 2)  // we necessarly have 2 cusp edges
+    if (cuspEdgesIndices.size() != 2) {  // we necessarly have 2 cusp edges
       return 0;
+    }
 
     // let us determine which cusp edge corresponds to the starting:
-    // We can do that because we defined that a silhouette edge had the back facing part on its right.
-    // So if the WOEdge woea is such that woea[0].dotp > 0 and woea[1].dotp < 0, it is the starting edge.
+    // We can do that because we defined that a silhouette edge had the back facing part on its
+    // right. So if the WOEdge woea is such that woea[0].dotp > 0 and woea[1].dotp < 0, it is the
+    // starting edge.
     //-------------------------------------------
 
     if (_DotP[cuspEdgesIndices[0]] > 0.0f) {
@@ -114,7 +117,8 @@ WXSmoothEdge *WXFaceLayer::BuildSmoothEdge()
     ok = true;
   }
   else if (_nNullDotP == 1) {
-    // that means that we have exactly one of the 2 extremities of our silhouette edge is a vertex of the mesh
+    // that means that we have exactly one of the 2 extremities of our silhouette edge is a vertex
+    // of the mesh
     if ((_nPosDotP == 2) || (_nPosDotP == 0)) {
       _pSmoothEdge = NULL;
       return _pSmoothEdge;
@@ -177,10 +181,12 @@ WXSmoothEdge *WXFaceLayer::BuildSmoothEdge()
     _pSmoothEdge->setTb(tb);
     if (_Nature & Nature::SILHOUETTE) {
       if (_nNullDotP != 2) {
-        if (_DotP[_ClosestPointIndex] + 0.01f > 0.0f)
+        if (_DotP[_ClosestPointIndex] + 0.01f > 0.0f) {
           _pSmoothEdge->setFront(true);
-        else
+        }
+        else {
           _pSmoothEdge->setFront(false);
+        }
       }
     }
   }
@@ -193,7 +199,8 @@ WXSmoothEdge *WXFaceLayer::BuildSmoothEdge()
       if ((front()) ^
           (bface->front())) {  // fA->front XOR fB->front (true if one is 0 and the other is 1)
         // that means that the edge i of the face is a silhouette edge
-        // CHECK FIRST WHETHER THE EXACTSILHOUETTEEDGE HAS NOT YET BEEN BUILT ON THE OTHER FACE (1 is enough).
+        // CHECK FIRST WHETHER THE EXACTSILHOUETTEEDGE HAS
+        // NOT YET BEEN BUILT ON THE OTHER FACE (1 is enough).
         if (((WSExactFace *)bface)->exactSilhouetteEdge()) {
           // that means that this silhouette edge has already been built
           return ((WSExactFace *)bface)->exactSilhouetteEdge();
@@ -204,19 +211,23 @@ WXSmoothEdge *WXFaceLayer::BuildSmoothEdge()
         if (!front()) {  // is it in the right order ?
           // the order of the WOEdge index is wrong
           woea = _OEdgeList[(i + 1) % numberOfEdges()];
-          if (0 == i)
+          if (0 == i) {
             woeb = _OEdgeList[numberOfEdges() - 1];
-          else
+          }
+          else {
             woeb = _OEdgeList[(i - 1)];
+          }
           ta = 0.0f;
           tb = 1.0f;
         }
         else {
           // the order of the WOEdge index is good
-          if (0 == i)
+          if (0 == i) {
             woea = _OEdgeList[numberOfEdges() - 1];
-          else
+          }
+          else {
             woea = _OEdgeList[(i - 1)];
+          }
           woeb = _OEdgeList[(i + 1) % numberOfEdges()];
           ta = 1.0f;
           tb = 0.0f;
@@ -263,8 +274,9 @@ WFace *WXShape::MakeFace(vector<WVertex *> &iVertexList,
                          unsigned iMaterialIndex)
 {
   WFace *face = WShape::MakeFace(iVertexList, iFaceEdgeMarksList, iMaterialIndex);
-  if (!face)
+  if (!face) {
     return NULL;
+  }
 
   Vec3f center;
   for (vector<WVertex *>::iterator wv = iVertexList.begin(), wvend = iVertexList.end();

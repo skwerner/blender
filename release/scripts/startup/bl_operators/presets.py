@@ -209,10 +209,10 @@ class AddPresetBase:
 
         return {'FINISHED'}
 
-    def check(self, context):
+    def check(self, _context):
         self.name = self.as_filename(self.name.strip())
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         if not (self.remove_active or self.remove_name):
             wm = context.window_manager
             return wm.invoke_props_dialog(self)
@@ -436,7 +436,7 @@ class AddPresetTrackingCamera(AddPresetBase, Operator):
         name="Include Focal Length",
         description="Include focal length into the preset",
         options={'SKIP_SAVE'},
-        default=True
+        default=True,
     )
 
     @property
@@ -535,7 +535,7 @@ class AddPresetKeyconfig(AddPresetBase, Operator):
     preset_menu = "USERPREF_MT_keyconfigs"
     preset_subdir = "keyconfig"
 
-    def add(self, context, filepath):
+    def add(self, _context, filepath):
         bpy.ops.preferences.keyconfig_export(filepath=filepath)
         bpy.utils.keyconfig_set(filepath)
 
@@ -670,6 +670,9 @@ class AddPresetGpencilMaterial(AddPresetBase, Operator):
         "gpcolor.stroke_image",
         "gpcolor.pixel_size",
         "gpcolor.use_stroke_pattern",
+		"gpcolor.use_stroke_texture_mix",
+		"gpcolor.mix_stroke_factor",
+		"gpcolor.alignment_mode",
         "gpcolor.fill_style",
         "gpcolor.fill_color",
         "gpcolor.fill_image",
@@ -688,7 +691,7 @@ class AddPresetGpencilMaterial(AddPresetBase, Operator):
         "gpcolor.texture_angle",
         "gpcolor.texture_opacity",
         "gpcolor.texture_clamp",
-        "gpcolor.texture_mix",
+        "gpcolor.use_fill_texture_mix",
         "gpcolor.mix_factor",
         "gpcolor.show_stroke",
         "gpcolor.show_fill",

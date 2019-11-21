@@ -317,10 +317,11 @@ typedef struct bPoseChannel {
    * and are applied on top of the copies in pchan->bone
    */
   float roll1, roll2;
-  float curveInX, curveInY;
-  float curveOutX, curveOutY;
+  float curve_in_x, curve_in_y;
+  float curve_out_x, curve_out_y;
   float ease1, ease2;
-  float scaleIn, scaleOut;
+  float scale_in_x, scale_in_y;
+  float scale_out_x, scale_out_y;
 
   /** B-Bone custom handles; set on read file or rebuild pose based on pchan->bone data. */
   struct bPoseChannel *bbone_prev;
@@ -511,6 +512,12 @@ typedef enum ePose_Flags {
   POSE_FLAG_DEPRECATED = (1 << 6), /* deprecated. */
   /* pose constraint flags needs to be updated */
   POSE_CONSTRAINTS_NEED_UPDATE_FLAGS = (1 << 7),
+  /* Use auto IK in pose mode */
+  POSE_AUTO_IK = (1 << 8),
+  /* Use x-axis mirror in pose mode */
+  POSE_MIRROR_EDIT = (1 << 9),
+  /* Use relative mirroring in mirror mode */
+  POSE_MIRROR_RELATIVE = (1 << 10),
 } ePose_Flags;
 
 /* IK Solvers ------------------------------------ */
@@ -765,6 +772,7 @@ typedef enum eDopeSheet_FilterFlag {
 /* DopeSheet filter-flags - Overflow (filterflag2) */
 typedef enum eDopeSheet_FilterFlag2 {
   ADS_FILTER_NOCACHEFILES = (1 << 1),
+  ADS_FILTER_NOMOVIECLIPS = (1 << 2),
 } eDopeSheet_FilterFlag2;
 
 /* DopeSheet general flags */
@@ -830,11 +838,11 @@ typedef enum eSAction_Flag {
   /* draw time in seconds instead of time in frames */
   SACTION_DRAWTIME = (1 << 2),
   /* don't filter action channels according to visibility */
-  //SACTION_NOHIDE = (1 << 3), // XXX deprecated... old animation system
+  // SACTION_NOHIDE = (1 << 3), // XXX deprecated... old animation system
   /* don't kill overlapping keyframes after transform */
   SACTION_NOTRANSKEYCULL = (1 << 4),
   /* don't include keyframes that are out of view */
-  //SACTION_HORIZOPTIMISEON = (1 << 5), // XXX deprecated... old irrelevant trick
+  // SACTION_HORIZOPTIMISEON = (1 << 5), // XXX deprecated... old irrelevant trick
   /* show pose-markers (local to action) in Action Editor mode  */
   SACTION_POSEMARKERS_SHOW = (1 << 6),
   /* don't draw action channels using group colors (where applicable) */

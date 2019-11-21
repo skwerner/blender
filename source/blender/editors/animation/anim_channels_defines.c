@@ -222,7 +222,8 @@ static void acf_generic_channel_color(bAnimContext *ac, bAnimListElem *ale, floa
     rgb_uchar_to_float(r_color, cp);
   }
   else {
-    // FIXME: what happens when the indention is 1 greater than what it should be (due to grouping)?
+    /* FIXME: what happens when the indention is 1 greater than what it should be
+     * (due to grouping)? */
     int colOfs = 10 - 10 * indent;
     UI_GetThemeColorShade3fv(TH_SHADE2, colOfs, r_color);
   }
@@ -360,7 +361,7 @@ static short acf_generic_group_offset(bAnimContext *ac, bAnimListElem *ale)
       offset += (short)(0.7f * U.widget_unit);
 
       /* If not in Action Editor mode, action-groups (and their children)
-     * must carry some offset too. */
+       * must carry some offset too. */
     }
     else if (ac->datatype != ANIMCONT_ACTION) {
       offset += (short)(0.7f * U.widget_unit);
@@ -484,14 +485,8 @@ static void acf_summary_backdrop(bAnimContext *ac, bAnimListElem *ale, float ymi
 static void acf_summary_name(bAnimListElem *UNUSED(ale), char *name)
 {
   if (name) {
-    BLI_strncpy(name, IFACE_("Dope Sheet Summary"), ANIM_CHAN_NAME_SIZE);
+    BLI_strncpy(name, IFACE_("Summary"), ANIM_CHAN_NAME_SIZE);
   }
-}
-
-// FIXME: this is really a temp icon I think
-static int acf_summary_icon(bAnimListElem *UNUSED(ale))
-{
-  return ICON_BORDERMOVE;
 }
 
 /* check if some setting exists for this channel */
@@ -556,7 +551,7 @@ static bAnimChannelType ACF_SUMMARY = {
 
     acf_summary_name, /* name */
     NULL,             /* name prop */
-    acf_summary_icon, /* icon */
+    NULL,             /* icon */
 
     acf_summary_setting_valid, /* has setting */
     acf_summary_setting_flag,  /* flag for setting */
@@ -4525,8 +4520,8 @@ static void draw_setting_widget(bAnimContext *ac,
   /* get the base icon for the setting */
   switch (setting) {
     case ACHANNEL_SETTING_VISIBLE: /* visibility eyes */
-      //icon = ((enabled) ? ICON_VISIBLE_IPO_ON : ICON_VISIBLE_IPO_OFF);
-      icon = ICON_VISIBLE_IPO_OFF;
+      // icon = ((enabled) ? ICON_HIDE_OFF : ICON_HIDE_ON);
+      icon = ICON_HIDE_ON;
 
       if (ELEM(ale->type, ANIMTYPE_FCURVE, ANIMTYPE_NLACURVE)) {
         tooltip = TIP_("F-Curve is visible in Graph Editor for editing");
@@ -4550,13 +4545,13 @@ static void draw_setting_widget(bAnimContext *ac,
       break;
 
     case ACHANNEL_SETTING_EXPAND: /* expanded triangle */
-      //icon = ((enabled) ? ICON_TRIA_DOWN : ICON_TRIA_RIGHT);
+      // icon = ((enabled) ? ICON_TRIA_DOWN : ICON_TRIA_RIGHT);
       icon = ICON_TRIA_RIGHT;
       tooltip = TIP_("Make channels grouped under this channel visible");
       break;
 
     case ACHANNEL_SETTING_SOLO: /* NLA Tracks only */
-      //icon = ((enabled) ? ICON_SOLO_OFF : ICON_SOLO_ON);
+      // icon = ((enabled) ? ICON_SOLO_OFF : ICON_SOLO_ON);
       icon = ICON_SOLO_OFF;
       tooltip = TIP_(
           "NLA Track is the only one evaluated in this animation data-block, with all others "
@@ -4567,7 +4562,7 @@ static void draw_setting_widget(bAnimContext *ac,
 
     case ACHANNEL_SETTING_PROTECT: /* protected lock */
       // TODO: what about when there's no protect needed?
-      //icon = ((enabled) ? ICON_LOCKED : ICON_UNLOCKED);
+      // icon = ((enabled) ? ICON_LOCKED : ICON_UNLOCKED);
       icon = ICON_UNLOCKED;
 
       if (ale->datatype != ALE_NLASTRIP) {
@@ -4598,7 +4593,7 @@ static void draw_setting_widget(bAnimContext *ac,
       break;
 
     case ACHANNEL_SETTING_PINNED: /* pin icon */
-      //icon = ((enabled) ? ICON_PINNED : ICON_UNPINNED);
+      // icon = ((enabled) ? ICON_PINNED : ICON_UNPINNED);
       icon = ICON_UNPINNED;
 
       if (ale->type == ANIMTYPE_NLAACTION) {

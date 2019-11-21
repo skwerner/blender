@@ -130,6 +130,7 @@ enum {
   TE_FREE_NAME = (1 << 3),
   TE_DISABLED = (1 << 4),
   TE_DRAGGING = (1 << 5),
+  TE_CHILD_NOT_IN_COLLECTION = (1 << 6),
 };
 
 /* button events */
@@ -155,11 +156,9 @@ typedef enum {
 /* size constants */
 #define OL_Y_OFFSET 2
 
-#define OL_TOG_RESTRICT_SELECTX (UI_UNIT_X * 3.0f + V2D_SCROLL_WIDTH)
-#define OL_TOG_RESTRICT_VIEWX (UI_UNIT_X * 2.0f + V2D_SCROLL_WIDTH)
-#define OL_TOG_RESTRICT_RENDERX (UI_UNIT_X + V2D_SCROLL_WIDTH)
-
-#define OL_TOGW OL_TOG_RESTRICT_SELECTX
+#define OL_TOG_USER_BUTS_USERS (UI_UNIT_X * 2.0f + V2D_SCROLL_WIDTH)
+#define OL_TOG_USER_BUTS_STATUS (UI_UNIT_X * 3.0f + V2D_SCROLL_WIDTH)
+#define OL_TOG_USER_BUTS_FAKEUSER (UI_UNIT_X + V2D_SCROLL_WIDTH)
 
 #define OL_RNA_COLX (UI_UNIT_X * 15)
 #define OL_RNA_COL_SIZEX (UI_UNIT_X * 7.5f)
@@ -180,7 +179,7 @@ typedef enum {
  * - Flag options defined in DNA_outliner_types.h
  * - SO_SEARCH_RECURSIVE defined in DNA_space_types.h
  *
- * - NOT in datablocks view - searching all datablocks takes way too long
+ * - NOT in data-blocks view - searching all data-blocks takes way too long
  *   to be useful
  * - not searching into RNA items helps but isn't the complete solution
  */
@@ -216,6 +215,14 @@ void draw_outliner(const struct bContext *C);
 
 TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te);
 
+void outliner_collection_isolate_flag(struct Scene *scene,
+                                      struct ViewLayer *view_layer,
+                                      struct LayerCollection *layer_collection,
+                                      struct Collection *collection,
+                                      struct PropertyRNA *layer_or_collection_prop,
+                                      const char *propname,
+                                      const bool value);
+
 /* outliner_select.c -------------------------------------------- */
 eOLDrawState tree_element_type_active(struct bContext *C,
                                       struct Scene *scene,
@@ -235,10 +242,6 @@ eOLDrawState tree_element_active(struct bContext *C,
 
 void outliner_item_do_activate_from_tree_element(
     struct bContext *C, TreeElement *te, TreeStoreElem *tselem, bool extend, bool recursive);
-int outliner_item_do_activate_from_cursor(struct bContext *C,
-                                          const int mval[2],
-                                          bool extend,
-                                          bool recursive);
 
 void outliner_item_select(struct SpaceOutliner *soops,
                           const struct TreeElement *te,
@@ -452,5 +455,6 @@ bool outliner_tree_traverse(const SpaceOutliner *soops,
                             int filter_tselem_flag,
                             TreeTraversalFunc func,
                             void *customdata);
+float outliner_restrict_columns_width(const struct SpaceOutliner *soops);
 
 #endif /* __OUTLINER_INTERN_H__ */

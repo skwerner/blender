@@ -1042,33 +1042,33 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
             if (sbuts->mainb == BUTS_LAMP) {
               sbuts->mainb = CONTEXT_SHADING;
-              //sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_LAMP;
+              // sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_LAMP;
             }
             else if (sbuts->mainb == BUTS_MAT) {
               sbuts->mainb = CONTEXT_SHADING;
-              //sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_MAT;
+              // sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_MAT;
             }
             else if (sbuts->mainb == BUTS_TEX) {
               sbuts->mainb = CONTEXT_SHADING;
-              //sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_TEX;
+              // sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_TEX;
             }
             else if (sbuts->mainb == BUTS_ANIM) {
               sbuts->mainb = CONTEXT_OBJECT;
             }
             else if (sbuts->mainb == BUTS_WORLD) {
               sbuts->mainb = CONTEXT_SCENE;
-              //sbuts->tab[CONTEXT_SCENE] = TAB_SCENE_WORLD;
+              // sbuts->tab[CONTEXT_SCENE] = TAB_SCENE_WORLD;
             }
             else if (sbuts->mainb == BUTS_RENDER) {
               sbuts->mainb = CONTEXT_SCENE;
-              //sbuts->tab[CONTEXT_SCENE] = TAB_SCENE_RENDER;
+              // sbuts->tab[CONTEXT_SCENE] = TAB_SCENE_RENDER;
             }
             else if (sbuts->mainb == BUTS_FPAINT) {
               sbuts->mainb = CONTEXT_EDITING;
             }
             else if (sbuts->mainb == BUTS_RADIO) {
               sbuts->mainb = CONTEXT_SHADING;
-              //sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_RAD;
+              // sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_RAD;
             }
             else if (sbuts->mainb == BUTS_CONSTRAINT) {
               sbuts->mainb = CONTEXT_OBJECT;
@@ -1738,17 +1738,6 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         bConstraint *curcon;
         for (curcon = list->first; curcon; curcon = curcon->next) {
           switch (curcon->type) {
-            case CONSTRAINT_TYPE_MINMAX: {
-              bMinMaxConstraint *data = curcon->data;
-              if (data->sticky == 1) {
-                data->flag |= MINMAX_STICKY;
-              }
-              else {
-                data->flag &= ~MINMAX_STICKY;
-              }
-
-              break;
-            }
             case CONSTRAINT_TYPE_ROTLIKE: {
               bRotateLikeConstraint *data = curcon->data;
 
@@ -1770,16 +1759,6 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
           for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
             for (curcon = pchan->constraints.first; curcon; curcon = curcon->next) {
               switch (curcon->type) {
-                case CONSTRAINT_TYPE_MINMAX: {
-                  bMinMaxConstraint *data = curcon->data;
-                  if (data->sticky == 1) {
-                    data->flag |= MINMAX_STICKY;
-                  }
-                  else {
-                    data->flag &= ~MINMAX_STICKY;
-                  }
-                  break;
-                }
                 case CONSTRAINT_TYPE_KINEMATIC: {
                   bKinematicConstraint *data = curcon->data;
                   if (!(data->flag & CONSTRAINT_IK_POS)) {

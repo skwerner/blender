@@ -105,8 +105,10 @@ void cloth_init(ClothModifierData *clmd)
   clmd->sim_parms->maxspringlen = 10;
   clmd->sim_parms->vgroup_mass = 0;
   clmd->sim_parms->vgroup_shrink = 0;
-  clmd->sim_parms->shrink_min =
-      0.0f; /* min amount the fabric will shrink by 0.0 = no shrinking, 1.0 = shrink to nothing*/
+
+  /* Min amount the fabric will shrink by 0.0 = no shrinking, 1.0 = shrink to nothing. */
+  clmd->sim_parms->shrink_min = 0.0f;
+
   clmd->sim_parms->avg_spring_len = 0.0;
   clmd->sim_parms->presets = 2;       /* cotton as start setting */
   clmd->sim_parms->timescale = 1.0f;  /* speed factor, describes how fast cloth moves */
@@ -432,9 +434,9 @@ void clothModifier_do(ClothModifierData *clmd,
   else if (cache_result == PTCACHE_READ_OLD) {
     BKE_cloth_solver_set_positions(clmd);
   }
-  else if (/*ob->id.lib ||*/ (
-      cache->flag &
-      PTCACHE_BAKED)) { /* 2.4x disabled lib, but this can be used in some cases, testing further - campbell */
+  else if (
+      /* 2.4x disabled lib, but this can be used in some cases, testing further - campbell */
+      /*ob->id.lib ||*/ (cache->flag & PTCACHE_BAKED)) {
     /* if baked and nothing in cache, do nothing */
     BKE_ptcache_invalidate(cache);
     return;
@@ -722,7 +724,8 @@ static void cloth_apply_vgroup(ClothModifierData *clmd, Mesh *mesh)
           }
           if (clmd->sim_parms->vgroup_shrink > 0) {
             if (dvert->dw[j].def_nr == (clmd->sim_parms->vgroup_shrink - 1)) {
-              /* Used for linear interpolation between min and max shrink factor based on weight. */
+              /* Used for linear interpolation between min and max
+               * shrink factor based on weight. */
               verts->shrink_factor = dvert->dw[j].weight;
             }
           }
@@ -1148,7 +1151,8 @@ static void cloth_update_springs(ClothModifierData *clmd)
       spring->lin_stiffness = (v1->bend_stiff + v2->bend_stiff) / 2.0f;
     }
     else if (spring->type == CLOTH_SPRING_TYPE_GOAL) {
-      /* Warning: Appending NEW goal springs does not work because implicit solver would need reset! */
+      /* Warning: Appending NEW goal springs does not work
+       * because implicit solver would need reset! */
 
       /* Activate / Deactivate existing springs */
       if ((!(cloth->verts[spring->ij].flags & CLOTH_VERT_FLAG_PINNED)) &&
@@ -1730,8 +1734,9 @@ static int cloth_build_springs(ClothModifierData *clmd, Mesh *mesh)
   cloth_free_edgelist(edgelist, mvert_num);
 
 #if 0
-  if (G.debug_value > 0)
+  if (G.debug_value > 0) {
     printf("avg_len: %f\n", clmd->sim_parms->avg_spring_len);
+  }
 #endif
 
   return 1;

@@ -96,6 +96,12 @@ struct IDNode : public Node {
    * recursed into. */
   bool is_collection_fully_expanded;
 
+  /* Is used to figure out whether object came to the dependency graph via a base. */
+  bool has_base;
+
+  /* Accumulated flag from operation. Is initialized and used during updates flush. */
+  bool is_user_modified;
+
   IDComponentsMask visible_components_mask;
   IDComponentsMask previously_visible_components_mask;
 

@@ -172,7 +172,7 @@ static void precalculate_effector(struct Depsgraph *depsgraph, EffectorCache *ef
     if (cu->flag & CU_PATH) {
       if (eff->ob->runtime.curve_cache == NULL || eff->ob->runtime.curve_cache->path == NULL ||
           eff->ob->runtime.curve_cache->path->data == NULL) {
-        BKE_displist_make_curveTypes(depsgraph, eff->scene, eff->ob, false, false, NULL);
+        BKE_displist_make_curveTypes(depsgraph, eff->scene, eff->ob, false, false);
       }
 
       if (eff->ob->runtime.curve_cache->path && eff->ob->runtime.curve_cache->path->data) {
@@ -646,8 +646,8 @@ int get_effector_data(EffectorCache *eff,
   float cfra = DEG_get_ctime(eff->depsgraph);
   int ret = 0;
 
-  /* In case surface object is in Edit mode when loading the .blend, surface modifier is never executed
-   * and bvhtree never built, see T48415. */
+  /* In case surface object is in Edit mode when loading the .blend,
+   * surface modifier is never executed and bvhtree never built, see T48415. */
   if (eff->pd && eff->pd->shape == PFIELD_SHAPE_SURFACE && eff->surmd && eff->surmd->bvhtree) {
     /* closest point in the object surface is an effector */
     float vec[3];
@@ -698,7 +698,7 @@ int get_effector_data(EffectorCache *eff,
       ret = psys_get_particle_state(&sim, *efd->index, &state, 0);
 
       /* TODO */
-      //if (eff->pd->forcefiled == PFIELD_HARMONIC && ret==0) {
+      // if (eff->pd->forcefiled == PFIELD_HARMONIC && ret==0) {
       //  if (pa->dietime < eff->psys->cfra)
       //      eff->flag |= PE_VELOCITY_TO_IMPULSE;
       //}
@@ -750,7 +750,8 @@ int get_effector_data(EffectorCache *eff,
     sub_v3_v3v3(efd->vec_to_point, point->loc, efd->loc);
     efd->distance = len_v3(efd->vec_to_point);
 
-    /* rest length for harmonic effector, will have to see later if this could be extended to other effectors */
+    /* Rest length for harmonic effector,
+     * will have to see later if this could be extended to other effectors. */
     if (eff->pd && eff->pd->forcefield == PFIELD_HARMONIC && eff->pd->f_size) {
       mul_v3_fl(efd->vec_to_point, (efd->distance - eff->pd->f_size) / efd->distance);
     }

@@ -58,6 +58,8 @@ extern "C" {
 #include "DNA_object_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_sequence_types.h"
+#include "DNA_sound_types.h"
 #include "DNA_speaker_types.h"
 #include "DNA_texture_types.h"
 #include "DNA_world_types.h"
@@ -74,6 +76,7 @@ extern "C" {
 #include "BKE_fcurve.h"
 #include "BKE_image.h"
 #include "BKE_key.h"
+#include "BKE_layer.h"
 #include "BKE_material.h"
 #include "BKE_mball.h"
 #include "BKE_modifier.h"
@@ -83,6 +86,7 @@ extern "C" {
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_rigidbody.h"
+#include "BKE_sequencer.h"
 #include "BKE_shader_fx.h"
 #include "BKE_shrinkwrap.h"
 #include "BKE_sound.h"
@@ -196,21 +200,17 @@ static OperationCode bone_target_opcode(ID *target,
   return OperationCode::BONE_DONE;
 }
 
-static bool bone_has_segments(Object *object, const char *bone_name)
+static bool object_have_geometry_component(const Object *object)
 {
-  /* Proxies don't have BONE_SEGMENTS */
-  if (ID_IS_LINKED(object) && object->proxy_from != NULL) {
-    return false;
-  }
-  /* Only B-Bones have segments. */
-  bPoseChannel *pchan = BKE_pose_channel_find_name(object->pose, bone_name);
-  return pchan && pchan->bone && pchan->bone->segments > 1;
+  return ELEM(object->type, OB_MESH, OB_CURVE, OB_FONT, OB_SURF, OB_MBALL, OB_LATTICE, OB_GPENCIL);
 }
 
 /* **** General purpose functions ****  */
 
-DepsgraphRelationBuilder::DepsgraphRelationBuilder(Main *bmain, Depsgraph *graph)
-    : DepsgraphBuilder(bmain, graph), scene_(NULL), rna_node_query_(graph)
+DepsgraphRelationBuilder::DepsgraphRelationBuilder(Main *bmain,
+                                                   Depsgraph *graph,
+                                                   DepsgraphBuilderCache *cache)
+    : DepsgraphBuilder(bmain, graph, cache), scene_(NULL), rna_node_query_(graph, this)
 {
 }
 
@@ -379,6 +379,14 @@ void DepsgraphRelationBuilder::add_particle_forcefield_relations(const Operation
 {
   ListBase *relations = build_effector_relations(graph_, eff->group);
 
+  /* Make sure physics effects like wind are properly re-evaluating the modifier stack. */
+  if (!BLI_listbase_is_empty(relations)) {
+    TimeSourceKey time_src_key;
+    ComponentKey geometry_key(&object->id, NodeType::GEOMETRY);
+    add_relation(
+        time_src_key, geometry_key, "Effector Time -> Particle", RELATION_CHECK_BEFORE_ADD);
+  }
+
   LISTBASE_FOREACH (EffectorRelation *, relation, relations) {
     if (relation->ob != object) {
       /* Relation to forcefield object, optionally including geometry. */
@@ -496,11 +504,17 @@ void DepsgraphRelationBuilder::build_id(ID *id)
     case ID_SPK:
       build_speaker((Speaker *)id);
       break;
+    case ID_SO:
+      build_sound((bSound *)id);
+      break;
     case ID_TXT:
       /* Not a part of dependency graph. */
       break;
     case ID_CF:
       build_cachefile((CacheFile *)id);
+      break;
+    case ID_SCE:
+      build_scene_parameters((Scene *)id);
       break;
     default:
       fprintf(stderr, "Unhandled ID %s\n", id->name);
@@ -568,6 +582,7 @@ void DepsgraphRelationBuilder::build_object(Base *base, Object *object)
       &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_LOCAL);
   OperationKey parent_transform_key(
       &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_PARENT);
+  OperationKey transform_eval_key(&object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_EVAL);
   OperationKey final_transform_key(
       &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_FINAL);
   OperationKey ob_eval_key(&object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_EVAL);
@@ -643,16 +658,18 @@ void DepsgraphRelationBuilder::build_object(Base *base, Object *object)
   }
   /* Proxy object to copy from. */
   if (object->proxy_from != NULL) {
+    /* Object is linked here (comes from the library). */
     build_object(NULL, object->proxy_from);
     ComponentKey ob_transform_key(&object->proxy_from->id, NodeType::TRANSFORM);
     ComponentKey proxy_transform_key(&object->id, NodeType::TRANSFORM);
     add_relation(ob_transform_key, proxy_transform_key, "Proxy Transform");
   }
-  if (object->proxy_group != NULL) {
+  if (object->proxy_group != NULL && object->proxy_group != object->proxy) {
+    /* Object is local here (local in .blend file, users interacts with it). */
     build_object(NULL, object->proxy_group);
     OperationKey proxy_group_eval_key(
         &object->proxy_group->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_EVAL);
-    add_relation(proxy_group_eval_key, final_transform_key, "Proxy Group Transform");
+    add_relation(proxy_group_eval_key, transform_eval_key, "Proxy Group Transform");
   }
   /* Object dupligroup. */
   if (object->instance_collection != NULL) {
@@ -742,6 +759,12 @@ void DepsgraphRelationBuilder::build_object_data(Object *object)
     add_relation(key_key, geometry_key, "Shapekeys");
     build_nested_shapekey(&object->id, key);
   }
+  /* Materials. */
+  Material ***materials_ptr = give_matarar(object);
+  if (materials_ptr != NULL) {
+    short *num_materials_ptr = give_totcolp(object);
+    build_materials(*materials_ptr, *num_materials_ptr);
+  }
 }
 
 void DepsgraphRelationBuilder::build_object_data_camera(Object *object)
@@ -775,9 +798,9 @@ void DepsgraphRelationBuilder::build_object_data_speaker(Object *object)
 {
   Speaker *speaker = (Speaker *)object->data;
   build_speaker(speaker);
-  OperationKey probe_key(&speaker->id, NodeType::PARAMETERS, OperationCode::SPEAKER_EVAL);
-  OperationKey object_key(&object->id, NodeType::PARAMETERS, OperationCode::SPEAKER_EVAL);
-  add_relation(probe_key, object_key, "Speaker Update");
+  ComponentKey speaker_key(&speaker->id, NodeType::AUDIO);
+  ComponentKey object_key(&object->id, NodeType::AUDIO);
+  add_relation(speaker_key, object_key, "Speaker Update");
 }
 
 void DepsgraphRelationBuilder::build_object_parent(Object *object)
@@ -863,7 +886,7 @@ void DepsgraphRelationBuilder::build_object_parent(Object *object)
   if (object->type == OB_MBALL && parent->transflag & OB_DUPLI) {
     ComponentKey parent_geometry_key(parent_id, NodeType::GEOMETRY);
     /* NOTE: Metaballs are evaluating geometry only after their transform,
-     * so we onl;y hook up to transform channel here. */
+     * so we only hook up to transform channel here. */
     add_relation(parent_geometry_key, ob_key, "Parent");
   }
 
@@ -894,6 +917,13 @@ void DepsgraphRelationBuilder::build_object_pointcache(Object *object)
       OperationKey transform_key(
           &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_SIMULATION_INIT);
       add_relation(point_cache_key, transform_key, "Point Cache -> Rigid Body");
+      /* Manual changes to effectors need to invalidate simulation. */
+      OperationKey rigidbody_rebuild_key(
+          &scene_->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_REBUILD);
+      add_relation(rigidbody_rebuild_key,
+                   point_cache_key,
+                   "Rigid Body Rebuild -> Point Cache Reset",
+                   RELATION_FLAG_FLUSH_USER_EDIT_ONLY);
     }
     else {
       flag = FLAG_GEOMETRY;
@@ -1017,7 +1047,7 @@ void DepsgraphRelationBuilder::build_constraints(ID *id,
           }
           /* if needs bbone shape, reference the segment computation */
           if (BKE_constraint_target_uses_bbone(con, ct) &&
-              bone_has_segments(ct->tar, ct->subtarget)) {
+              check_pchan_has_bbone_segments(ct->tar, ct->subtarget)) {
             opcode = OperationCode::BONE_SEGMENTS;
           }
           OperationKey target_key(&ct->tar->id, NodeType::BONE, ct->subtarget, opcode);
@@ -1189,13 +1219,16 @@ void DepsgraphRelationBuilder::build_animdata_curves_targets(ID *id,
     }
     graph_->add_new_relation(
         operation_from, operation_to, "Animation -> Prop", RELATION_CHECK_BEFORE_ADD);
-    /* It is possible that animation is writing to a nested ID datablock,
+    /* It is possible that animation is writing to a nested ID data-block,
      * need to make sure animation is evaluated after target ID is copied. */
     const IDNode *id_node_from = operation_from->owner->owner;
     const IDNode *id_node_to = operation_to->owner->owner;
     if (id_node_from != id_node_to) {
       ComponentKey cow_key(id_node_to->id_orig, NodeType::COPY_ON_WRITE);
-      add_relation(cow_key, adt_key, "Animated CoW -> Animation", RELATION_CHECK_BEFORE_ADD);
+      add_relation(cow_key,
+                   adt_key,
+                   "Animated CoW -> Animation",
+                   RELATION_CHECK_BEFORE_ADD | RELATION_FLAG_NO_FLUSH);
     }
   }
 }
@@ -1330,55 +1363,71 @@ void DepsgraphRelationBuilder::build_driver(ID *id, FCurve *fcu)
 
 void DepsgraphRelationBuilder::build_driver_data(ID *id, FCurve *fcu)
 {
-  OperationKey driver_key(id,
-                          NodeType::PARAMETERS,
-                          OperationCode::DRIVER,
-                          fcu->rna_path ? fcu->rna_path : "",
-                          fcu->array_index);
-  const char *rna_path = fcu->rna_path ? fcu->rna_path : "";
-  if (GS(id->name) == ID_AR && strstr(rna_path, "bones[")) {
+  /* Validate the RNA path pointer just in case. */
+  const char *rna_path = fcu->rna_path;
+  if (rna_path == NULL || rna_path[0] == '\0') {
+    return;
+  }
+  /* Parse the RNA path to find the target property pointer. */
+  RNAPathKey property_entry_key(id, rna_path, RNAPointerSource::ENTRY);
+  if (RNA_pointer_is_null(&property_entry_key.ptr)) {
+    /* TODO(sergey): This would only mean that driver is broken.
+     * so we can't create relation anyway. However, we need to avoid
+     * adding drivers which are known to be buggy to a dependency
+     * graph, in order to save computational power. */
+    return;
+  }
+  OperationKey driver_key(
+      id, NodeType::PARAMETERS, OperationCode::DRIVER, rna_path, fcu->array_index);
+  /* If the target of the driver is a Bone property, find the Armature data,
+   * and then link the driver to all pose bone evaluation components that use
+   * it. This is necessary to provide more granular dependencies specifically for
+   * Bone objects, because the armature data doesn't have per-bone components,
+   * and generic add_relation can only add one link. */
+  ID *id_ptr = (ID *)property_entry_key.ptr.id.data;
+  bool is_bone = id_ptr && property_entry_key.ptr.type == &RNA_Bone;
+  /* If the Bone property is referenced via obj.pose.bones[].bone,
+   * the RNA pointer refers to the Object ID, so skip to data. */
+  if (is_bone && GS(id_ptr->name) == ID_OB) {
+    id_ptr = (ID *)((Object *)id_ptr)->data;
+  }
+  if (is_bone && GS(id_ptr->name) == ID_AR) {
     /* Drivers on armature-level bone settings (i.e. bbone stuff),
      * which will affect the evaluation of corresponding pose bones. */
-    IDNode *arm_node = graph_->find_id_node(id);
-    char *bone_name = BLI_str_quoted_substrN(rna_path, "bones[");
-    if (arm_node != NULL && bone_name != NULL) {
+    Bone *bone = (Bone *)property_entry_key.ptr.data;
+    if (bone != NULL) {
       /* Find objects which use this, and make their eval callbacks
        * depend on this. */
-      for (Relation *rel : arm_node->outlinks) {
-        IDNode *to_node = (IDNode *)rel->to;
-        /* We only care about objects with pose data which use this. */
+      for (IDNode *to_node : graph_->id_nodes) {
         if (GS(to_node->id_orig->name) == ID_OB) {
           Object *object = (Object *)to_node->id_orig;
-          // NOTE: object->pose may be NULL
-          bPoseChannel *pchan = BKE_pose_channel_find_name(object->pose, bone_name);
-          if (pchan != NULL) {
-            OperationKey bone_key(
-                &object->id, NodeType::BONE, pchan->name, OperationCode::BONE_LOCAL);
-            add_relation(driver_key, bone_key, "Arm Bone -> Driver -> Bone");
+          /* We only care about objects with pose data which use this. */
+          if (object->data == id_ptr && object->pose != NULL) {
+            bPoseChannel *pchan = BKE_pose_channel_find_name(object->pose, bone->name);
+            if (pchan != NULL) {
+              OperationKey bone_key(
+                  &object->id, NodeType::BONE, pchan->name, OperationCode::BONE_LOCAL);
+              add_relation(driver_key, bone_key, "Arm Bone -> Driver -> Bone");
+            }
           }
         }
       }
-      /* Free temp data. */
-      MEM_freeN(bone_name);
-      bone_name = NULL;
+      /* Make the driver depend on COW, similar to the generic case below. */
+      if (id_ptr != id) {
+        ComponentKey cow_key(id_ptr, NodeType::COPY_ON_WRITE);
+        add_relation(cow_key, driver_key, "Driven CoW -> Driver", RELATION_CHECK_BEFORE_ADD);
+      }
     }
     else {
       fprintf(stderr, "Couldn't find armature bone name for driver path - '%s'\n", rna_path);
     }
   }
-  else if (rna_path != NULL && rna_path[0] != '\0') {
-    RNAPathKey property_entry_key(id, rna_path, RNAPointerSource::ENTRY);
-    if (RNA_pointer_is_null(&property_entry_key.ptr)) {
-      /* TODO(sergey): This would only mean that driver is broken.
-       * so we can't create relation anyway. However, we need to avoid
-       * adding drivers which are known to be buggy to a dependency
-       * graph, in order to save computational power. */
-      return;
-    }
+  else {
+    /* If it's not a Bone, handle the generic single dependency case. */
     add_relation(driver_key, property_entry_key, "Driver -> Driven Property");
     /* Similar to the case with f-curves, driver might drive a nested
-     * datablock, which means driver execution should wait for that
-     * datablock to be copied. */
+     * data-block, which means driver execution should wait for that
+     * data-block to be copied. */
     {
       PointerRNA id_ptr;
       PointerRNA ptr;
@@ -1411,27 +1460,34 @@ void DepsgraphRelationBuilder::build_driver_variables(ID *id, FCurve *fcu)
   LISTBASE_FOREACH (DriverVar *, dvar, &driver->variables) {
     /* Only used targets. */
     DRIVER_TARGETS_USED_LOOPER_BEGIN (dvar) {
-      if (dtar->id == NULL) {
+      ID *target_id = dtar->id;
+      if (target_id == NULL) {
         continue;
       }
-      build_id(dtar->id);
-      build_driver_id_property(dtar->id, dtar->rna_path);
-      /* Initialize relations coming to proxy_from. */
-      Object *proxy_from = NULL;
-      if ((GS(dtar->id->name) == ID_OB) && (((Object *)dtar->id)->proxy_from != NULL)) {
-        proxy_from = ((Object *)dtar->id)->proxy_from;
-        build_id(&proxy_from->id);
+      build_id(target_id);
+      build_driver_id_property(target_id, dtar->rna_path);
+      /* Look up the proxy - matches dtar_id_ensure_proxy_from during evaluation. */
+      Object *object = NULL;
+      if (GS(target_id->name) == ID_OB) {
+        object = (Object *)target_id;
+        if (object->proxy_from != NULL) {
+          /* Redirect the target to the proxy, like in evaluation. */
+          object = object->proxy_from;
+          target_id = &object->id;
+          /* Prepare the redirected target. */
+          build_id(target_id);
+          build_driver_id_property(target_id, dtar->rna_path);
+        }
       }
       /* Special handling for directly-named bones. */
-      if ((dtar->flag & DTAR_FLAG_STRUCT_REF) && (((Object *)dtar->id)->type == OB_ARMATURE) &&
+      if ((dtar->flag & DTAR_FLAG_STRUCT_REF) && (object && object->type == OB_ARMATURE) &&
           (dtar->pchan_name[0])) {
-        Object *object = (Object *)dtar->id;
         bPoseChannel *target_pchan = BKE_pose_channel_find_name(object->pose, dtar->pchan_name);
         if (target_pchan == NULL) {
           continue;
         }
         OperationKey variable_key(
-            dtar->id, NodeType::BONE, target_pchan->name, OperationCode::BONE_DONE);
+            target_id, NodeType::BONE, target_pchan->name, OperationCode::BONE_DONE);
         if (is_same_bone_dependency(variable_key, self_key)) {
           continue;
         }
@@ -1439,17 +1495,17 @@ void DepsgraphRelationBuilder::build_driver_variables(ID *id, FCurve *fcu)
       }
       else if (dtar->flag & DTAR_FLAG_STRUCT_REF) {
         /* Get node associated with the object's transforms. */
-        if (dtar->id == id) {
+        if (target_id == id) {
           /* Ignore input dependency if we're driving properties of
            * the same ID, otherwise we'll be ending up in a cyclic
            * dependency here. */
           continue;
         }
-        OperationKey target_key(dtar->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_FINAL);
+        OperationKey target_key(target_id, NodeType::TRANSFORM, OperationCode::TRANSFORM_FINAL);
         add_relation(target_key, driver_key, "Target -> Driver");
       }
       else if (dtar->rna_path != NULL && dtar->rna_path[0] != '\0') {
-        RNAPathKey variable_exit_key(dtar->id, dtar->rna_path, RNAPointerSource::EXIT);
+        RNAPathKey variable_exit_key(target_id, dtar->rna_path, RNAPointerSource::EXIT);
         if (RNA_pointer_is_null(&variable_exit_key.ptr)) {
           continue;
         }
@@ -1458,12 +1514,6 @@ void DepsgraphRelationBuilder::build_driver_variables(ID *id, FCurve *fcu)
           continue;
         }
         add_relation(variable_exit_key, driver_key, "RNA Target -> Driver");
-        if (proxy_from != NULL) {
-          RNAPathKey proxy_from_variable_key(
-              &proxy_from->id, dtar->rna_path, RNAPointerSource::EXIT);
-          RNAPathKey variable_entry_key(dtar->id, dtar->rna_path, RNAPointerSource::ENTRY);
-          add_relation(proxy_from_variable_key, variable_entry_key, "Proxy From -> Variable");
-        }
       }
       else {
         /* If rna_path is NULL, and DTAR_FLAG_STRUCT_REF isn't set, this
@@ -1566,8 +1616,7 @@ void DepsgraphRelationBuilder::build_rigidbody(Scene *scene)
           &object->id, NodeType::TRANSFORM, OperationCode::RIGIDBODY_TRANSFORM_COPY);
       /* Rigid body synchronization depends on the actual simulation. */
       add_relation(rb_simulate_key, rb_transform_copy_key, "Rigidbody Sim Eval -> RBO Sync");
-      /* Simulation uses object transformation after parenting and solving
-       * contraints. */
+      /* Simulation uses object transformation after parenting and solving constraints. */
       OperationKey object_transform_simulation_init_key(
           &object->id, NodeType::TRANSFORM, OperationCode::TRANSFORM_SIMULATION_INIT);
       OperationKey object_transform_eval_key(
@@ -1817,11 +1866,11 @@ void DepsgraphRelationBuilder::build_shapekeys(Key *key)
  *   Therefore, each user of a piece of shared geometry data ends up evaluating
  *   its own version of the stuff, complete with whatever modifiers it may use.
  *
- * - The datablocks for the geometry data - "obdata" (e.g. ID_ME, ID_CU, ID_LT.)
+ * - The data-blocks for the geometry data - "obdata" (e.g. ID_ME, ID_CU, ID_LT.)
  *   are used for
  *     1) calculating the bounding boxes of the geometry data,
  *     2) aggregating inward links from other objects (e.g. for text on curve)
- *        and also for the links coming from the shapekey datablocks
+ *        and also for the links coming from the shapekey data-blocks
  * - Animation/Drivers affecting the parameters of the geometry are made to
  *   trigger updates on the obdata geometry component, which then trigger
  *   downstream re-evaluation of the individual instances of this geometry. */
@@ -1840,7 +1889,7 @@ void DepsgraphRelationBuilder::build_object_data_geometry(Object *object)
   /* Special case: modifiers evaluation queries scene for various things like
    * data mask to be used. We add relation here to ensure object is never
    * evaluated prior to Scene's CoW is ready. */
-  OperationKey scene_key(&scene_->id, NodeType::LAYER_COLLECTIONS, OperationCode::VIEW_LAYER_EVAL);
+  OperationKey scene_key(&scene_->id, NodeType::PARAMETERS, OperationCode::SCENE_EVAL);
   Relation *rel = add_relation(scene_key, obdata_ubereval_key, "CoW Relation");
   rel->flag |= RELATION_FLAG_NO_FLUSH;
   /* Modifiers */
@@ -1899,20 +1948,7 @@ void DepsgraphRelationBuilder::build_object_data_geometry(Object *object)
     }
   }
   /* Materials. */
-  if (object->totcol) {
-    for (int a = 1; a <= object->totcol; a++) {
-      Material *ma = give_current_material(object, a);
-      if (ma != NULL) {
-        build_material(ma);
-
-        if (object->type == OB_MESH) {
-          OperationKey material_key(&ma->id, NodeType::SHADING, OperationCode::MATERIAL_UPDATE);
-          OperationKey shading_key(&object->id, NodeType::SHADING, OperationCode::SHADING);
-          add_relation(material_key, shading_key, "Material Update");
-        }
-      }
-    }
-  }
+  build_materials(object->mat, object->totcol);
   /* Geometry collision. */
   if (ELEM(object->type, OB_MESH, OB_CURVE, OB_LATTICE)) {
     // add geometry collider relations
@@ -1923,12 +1959,6 @@ void DepsgraphRelationBuilder::build_object_data_geometry(Object *object)
     OperationKey obdata_ubereval_key(
         &object->id, NodeType::GEOMETRY, OperationCode::GEOMETRY_EVAL);
     add_relation(geom_init_key, obdata_ubereval_key, "Object Geometry UberEval");
-    if (object->totcol != 0 && object->type == OB_MESH) {
-      ComponentKey object_shading_key(&object->id, NodeType::SHADING);
-      Relation *rel = add_relation(
-          obdata_ubereval_key, object_shading_key, "Object Geometry batch Update");
-      rel->flag |= RELATION_FLAG_NO_FLUSH;
-    }
   }
   if (object->type == OB_MBALL) {
     Object *mom = BKE_mball_basis_find(scene_, object);
@@ -1957,7 +1987,7 @@ void DepsgraphRelationBuilder::build_object_data_geometry(Object *object)
         &object->id, NodeType::GEOMETRY, OperationCode::GEOMETRY_EVAL);
     add_relation(time_key, obdata_ubereval_key, "Legacy particle time");
   }
-  /* Object data datablock. */
+  /* Object data data-block. */
   build_object_data_geometry_datablock((ID *)object->data);
   Key *key = BKE_key_from_object(object);
   if (key != NULL) {
@@ -1970,10 +2000,18 @@ void DepsgraphRelationBuilder::build_object_data_geometry(Object *object)
     }
   }
   /* Syncronization back to original object. */
-  ComponentKey final_geometry_jey(&object->id, NodeType::GEOMETRY);
+  ComponentKey final_geometry_key(&object->id, NodeType::GEOMETRY);
   OperationKey synchronize_key(
       &object->id, NodeType::SYNCHRONIZATION, OperationCode::SYNCHRONIZE_TO_ORIGINAL);
-  add_relation(final_geometry_jey, synchronize_key, "Synchronize to Original");
+  add_relation(final_geometry_key, synchronize_key, "Synchronize to Original");
+  /* Batch cache. */
+  OperationKey object_data_select_key(
+      obdata, NodeType::BATCH_CACHE, OperationCode::GEOMETRY_SELECT_UPDATE);
+  OperationKey object_select_key(
+      &object->id, NodeType::BATCH_CACHE, OperationCode::GEOMETRY_SELECT_UPDATE);
+  add_relation(object_data_select_key, object_select_key, "Data Selection -> Object Selection");
+  add_relation(
+      geom_key, object_select_key, "Object Geometry -> Select Update", RELATION_FLAG_NO_FLUSH);
 }
 
 void DepsgraphRelationBuilder::build_object_data_geometry_datablock(ID *obdata)
@@ -2067,10 +2105,12 @@ void DepsgraphRelationBuilder::build_camera(Camera *camera)
   if (built_map_.checkIsBuiltAndTag(camera)) {
     return;
   }
+  build_animdata(&camera->id);
   build_parameters(&camera->id);
-  if (camera->dof_ob != NULL) {
+  if (camera->dof.focus_object != NULL) {
+    build_object(NULL, camera->dof.focus_object);
     ComponentKey camera_parameters_key(&camera->id, NodeType::PARAMETERS);
-    ComponentKey dof_ob_key(&camera->dof_ob->id, NodeType::TRANSFORM);
+    ComponentKey dof_ob_key(&camera->dof.focus_object->id, NodeType::TRANSFORM);
     add_relation(dof_ob_key, camera_parameters_key, "Camera DOF");
   }
 }
@@ -2081,6 +2121,7 @@ void DepsgraphRelationBuilder::build_light(Light *lamp)
   if (built_map_.checkIsBuiltAndTag(lamp)) {
     return;
   }
+  build_animdata(&lamp->id);
   build_parameters(&lamp->id);
   /* light's nodetree */
   if (lamp->nodetree != NULL) {
@@ -2112,28 +2153,51 @@ void DepsgraphRelationBuilder::build_nodetree(bNodeTree *ntree)
     ID_Type id_type = GS(id->name);
     if (id_type == ID_MA) {
       build_material((Material *)bnode->id);
+      ComponentKey material_key(id, NodeType::SHADING);
+      add_relation(material_key, shading_key, "Material -> Node");
     }
     else if (id_type == ID_TE) {
       build_texture((Tex *)bnode->id);
+      ComponentKey texture_key(id, NodeType::GENERIC_DATABLOCK);
+      add_relation(texture_key, shading_key, "Texture -> Node");
     }
     else if (id_type == ID_IM) {
       build_image((Image *)bnode->id);
+      ComponentKey image_key(id, NodeType::GENERIC_DATABLOCK);
+      add_relation(image_key, shading_key, "Image -> Node");
     }
     else if (id_type == ID_OB) {
       build_object(NULL, (Object *)id);
+      ComponentKey object_transform_key(id, NodeType::TRANSFORM);
+      add_relation(object_transform_key, shading_key, "Object Transform -> Node");
+      if (object_have_geometry_component(reinterpret_cast<Object *>(id))) {
+        ComponentKey object_geometry_key(id, NodeType::GEOMETRY);
+        add_relation(object_geometry_key, shading_key, "Object Geometry -> Node");
+      }
     }
     else if (id_type == ID_SCE) {
-      /* Scenes are used by compositor trees, and handled by render
-       * pipeline. No need to build dependencies for them here. */
+      Scene *node_scene = (Scene *)id;
+      build_scene_parameters(node_scene);
+      /* Camera is used by defocus node.
+       *
+       * On the one hand it's annoying to always pull it in, but on another hand it's also annoying
+       * to have hardcoded node-type exception here. */
+      if (node_scene->camera != NULL) {
+        build_object(NULL, node_scene->camera);
+      }
     }
     else if (id_type == ID_TXT) {
       /* Ignore script nodes. */
     }
     else if (id_type == ID_MSK) {
       build_mask((Mask *)id);
+      OperationKey mask_key(id, NodeType::PARAMETERS, OperationCode::MASK_EVAL);
+      add_relation(mask_key, shading_key, "Mask -> Node");
     }
     else if (id_type == ID_MC) {
       build_movieclip((MovieClip *)id);
+      OperationKey clip_key(id, NodeType::PARAMETERS, OperationCode::MOVIECLIP_EVAL);
+      add_relation(clip_key, shading_key, "Clip -> Node");
     }
     else if (ELEM(bnode->type, NODE_GROUP, NODE_CUSTOM_GROUP)) {
       bNodeTree *group_ntree = (bNodeTree *)id;
@@ -2179,6 +2243,16 @@ void DepsgraphRelationBuilder::build_material(Material *material)
   }
 }
 
+void DepsgraphRelationBuilder::build_materials(Material **materials, int num_materials)
+{
+  for (int i = 0; i < num_materials; ++i) {
+    if (materials[i] == NULL) {
+      continue;
+    }
+    build_material(materials[i]);
+  }
+}
+
 /* Recursively build graph for texture */
 void DepsgraphRelationBuilder::build_texture(Tex *texture)
 {
@@ -2212,12 +2286,6 @@ void DepsgraphRelationBuilder::build_image(Image *image)
   build_parameters(&image->id);
 }
 
-void DepsgraphRelationBuilder::build_compositor(Scene *scene)
-{
-  /* For now, just a plain wrapper? */
-  build_nodetree(scene->nodetree);
-}
-
 void DepsgraphRelationBuilder::build_gpencil(bGPdata *gpd)
 {
   if (built_map_.checkIsBuiltAndTag(gpd)) {
@@ -2243,6 +2311,14 @@ void DepsgraphRelationBuilder::build_cachefile(CacheFile *cache_file)
     ComponentKey datablock_key(&cache_file->id, NodeType::CACHE);
     add_relation(animation_key, datablock_key, "Datablock Animation");
   }
+
+  /* Cache file updates */
+  if (cache_file->is_sequence) {
+    OperationKey cache_update_key(
+        &cache_file->id, NodeType::CACHE, OperationCode::FILE_CACHE_UPDATE);
+    TimeSourceKey time_src_key;
+    add_relation(time_src_key, cache_update_key, "TimeSrc -> Cache File Eval");
+  }
 }
 
 void DepsgraphRelationBuilder::build_mask(Mask *mask)
@@ -2259,8 +2335,26 @@ void DepsgraphRelationBuilder::build_mask(Mask *mask)
   TimeSourceKey time_src_key;
   add_relation(time_src_key, mask_animation_key, "TimeSrc -> Mask Animation");
   /* Final mask evaluation. */
-  ComponentKey parameters_key(mask_id, NodeType::PARAMETERS);
-  add_relation(mask_animation_key, parameters_key, "Mask Animation -> Mask Eval");
+  OperationKey mask_eval_key(mask_id, NodeType::PARAMETERS, OperationCode::MASK_EVAL);
+  add_relation(mask_animation_key, mask_eval_key, "Mask Animation -> Mask Eval");
+  /* Build parents. */
+  LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
+    LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
+      for (int i = 0; i < spline->tot_point; i++) {
+        MaskSplinePoint *point = &spline->points[i];
+        MaskParent *parent = &point->parent;
+        if (parent == NULL || parent->id == NULL) {
+          continue;
+        }
+        build_id(parent->id);
+        if (parent->id_type == ID_MC) {
+          OperationKey movieclip_eval_key(
+              parent->id, NodeType::PARAMETERS, OperationCode::MOVIECLIP_EVAL);
+          add_relation(movieclip_eval_key, mask_eval_key, "Movie Clip -> Mask Eval");
+        }
+      }
+    }
+  }
 }
 
 void DepsgraphRelationBuilder::build_movieclip(MovieClip *clip)
@@ -2289,6 +2383,78 @@ void DepsgraphRelationBuilder::build_speaker(Speaker *speaker)
   }
   build_animdata(&speaker->id);
   build_parameters(&speaker->id);
+  if (speaker->sound != NULL) {
+    build_sound(speaker->sound);
+    ComponentKey speaker_key(&speaker->id, NodeType::AUDIO);
+    ComponentKey sound_key(&speaker->sound->id, NodeType::AUDIO);
+    add_relation(sound_key, speaker_key, "Sound -> Speaker");
+  }
+}
+
+void DepsgraphRelationBuilder::build_sound(bSound *sound)
+{
+  if (built_map_.checkIsBuiltAndTag(sound)) {
+    return;
+  }
+  build_animdata(&sound->id);
+  build_parameters(&sound->id);
+}
+
+void DepsgraphRelationBuilder::build_scene_sequencer(Scene *scene)
+{
+  if (scene->ed == NULL) {
+    return;
+  }
+  build_scene_audio(scene);
+  ComponentKey scene_audio_key(&scene->id, NodeType::AUDIO);
+  /* Make sure dependencies from sequences data goes to the sequencer evaluation. */
+  ComponentKey sequencer_key(&scene->id, NodeType::SEQUENCER);
+  Sequence *seq;
+  bool has_audio_strips = false;
+  SEQ_BEGIN (scene->ed, seq) {
+    if (seq->sound != NULL) {
+      build_sound(seq->sound);
+      ComponentKey sound_key(&seq->sound->id, NodeType::AUDIO);
+      add_relation(sound_key, sequencer_key, "Sound -> Sequencer");
+      has_audio_strips = true;
+    }
+    if (seq->scene != NULL) {
+      build_scene_parameters(seq->scene);
+      /* This is to support 3D audio. */
+      has_audio_strips = true;
+    }
+    if (seq->type == SEQ_TYPE_SCENE && seq->scene != NULL) {
+      if (seq->flag & SEQ_SCENE_STRIPS) {
+        build_scene_sequencer(seq->scene);
+        ComponentKey sequence_scene_audio_key(&seq->scene->id, NodeType::AUDIO);
+        add_relation(sequence_scene_audio_key, sequencer_key, "Sequence Scene Audio -> Sequencer");
+        ComponentKey sequence_scene_key(&seq->scene->id, NodeType::SEQUENCER);
+        add_relation(sequence_scene_key, sequencer_key, "Sequence Scene -> Sequencer");
+      }
+      ViewLayer *sequence_view_layer = BKE_view_layer_default_render(seq->scene);
+      build_scene_speakers(seq->scene, sequence_view_layer);
+    }
+    /* TODO(sergey): Movie clip, camera, mask. */
+  }
+  SEQ_END;
+  if (has_audio_strips) {
+    add_relation(sequencer_key, scene_audio_key, "Sequencer -> Audio");
+  }
+}
+
+void DepsgraphRelationBuilder::build_scene_audio(Scene * /*scene*/)
+{
+}
+
+void DepsgraphRelationBuilder::build_scene_speakers(Scene * /*scene*/, ViewLayer *view_layer)
+{
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
+    Object *object = base->object;
+    if (object->type != OB_SPEAKER || !need_pull_base_into_graph(base)) {
+      continue;
+    }
+    build_object(NULL, base->object);
+  }
 }
 
 void DepsgraphRelationBuilder::build_copy_on_write_relations()
@@ -2350,7 +2516,12 @@ void DepsgraphRelationBuilder::build_copy_on_write_relations(IDNode *id_node)
       continue;
     }
     int rel_flag = (RELATION_FLAG_NO_FLUSH | RELATION_FLAG_GODMODE);
-    if (id_type == ID_ME && comp_node->type == NodeType::GEOMETRY) {
+    if ((id_type == ID_ME && comp_node->type == NodeType::GEOMETRY) ||
+        (id_type == ID_CF && comp_node->type == NodeType::CACHE)) {
+      rel_flag &= ~RELATION_FLAG_NO_FLUSH;
+    }
+    /* TODO(sergey): Needs better solution for this. */
+    if (id_type == ID_SO) {
       rel_flag &= ~RELATION_FLAG_NO_FLUSH;
     }
     /* Notes on exceptions:
@@ -2406,7 +2577,7 @@ void DepsgraphRelationBuilder::build_copy_on_write_relations(IDNode *id_node)
     }
     GHASH_FOREACH_END();
     /* NOTE: We currently ignore implicit relations to an external
-     * datablocks for copy-on-write operations. This means, for example,
+     * data-blocks for copy-on-write operations. This means, for example,
      * copy-on-write component of Object will not wait for copy-on-write
      * component of it's Mesh. This is because pointers are all known
      * already so remapping will happen all correct. And then If some object

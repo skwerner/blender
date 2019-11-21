@@ -20,14 +20,15 @@ set(INC
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
-  ../../imbuf
   ../../gpu
+  ../../depsgraph
+  ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../windowmanager
   ../../../../intern/atomic
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS

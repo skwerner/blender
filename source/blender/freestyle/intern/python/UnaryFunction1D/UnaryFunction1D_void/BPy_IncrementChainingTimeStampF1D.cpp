@@ -53,13 +53,14 @@ static int IncrementChainingTimeStampF1D___init__(BPy_IncrementChainingTimeStamp
 {
   static const char *kwlist[] = {NULL};
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist)) {
     return -1;
+  }
   self->py_uf1D_void.uf1D_void = new Functions1D::IncrementChainingTimeStampF1D();
   return 0;
 }
 
-/*-----------------------BPy_IncrementChainingTimeStampF1D type definition ------------------------------*/
+/*-----------------------BPy_IncrementChainingTimeStampF1D type definition ----------------------*/
 
 PyTypeObject IncrementChainingTimeStampF1D_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "IncrementChainingTimeStampF1D", /* tp_name */

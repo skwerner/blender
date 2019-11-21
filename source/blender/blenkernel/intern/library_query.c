@@ -352,8 +352,8 @@ static void library_foreach_ID_as_subdata_link(ID **id_pp,
   BLI_assert(id == *id_pp);
 
   if (flag & IDWALK_RECURSE) {
-    /* Defer handling into main loop, recursively calling BKE_library_foreach_ID_link in IDWALK_RECURSE case is
-     * troublesome, see T49553. */
+    /* Defer handling into main loop, recursively calling BKE_library_foreach_ID_link in
+     * IDWALK_RECURSE case is troublesome, see T49553. */
     if (BLI_gset_add(data->ids_handled, id)) {
       BLI_LINKSTACK_PUSH(data->ids_todo, id);
     }
@@ -402,8 +402,8 @@ static void library_foreach_ID_link(Main *bmain,
 
     /* inherit_data is non-NULL when this function is called for some sub-data ID
      * (like root nodetree of a material).
-     * In that case, we do not want to generate those 'generic flags' from our current sub-data ID (the node tree),
-     * but re-use those generated for the 'owner' ID (the material)... */
+     * In that case, we do not want to generate those 'generic flags' from our current sub-data ID
+     * (the node tree), but re-use those generated for the 'owner' ID (the material). */
     if (inherit_data == NULL) {
       data.cb_flag = ID_IS_LINKED(id) ? IDWALK_CB_INDIRECT_USAGE : 0;
       /* When an ID is not in Main database, it should never refcount IDs it is using.
@@ -416,10 +416,11 @@ static void library_foreach_ID_link(Main *bmain,
     }
 
     if (bmain != NULL && bmain->relations != NULL && (flag & IDWALK_READONLY)) {
-      /* Note that this is minor optimization, even in worst cases (like id being an object with lots of
-       * drivers and constraints and modifiers, or material etc. with huge node tree),
-       * but we might as well use it (Main->relations is always assumed valid, it's responsibility of code
-       * creating it to free it, especially if/when it starts modifying Main database). */
+      /* Note that this is minor optimization, even in worst cases (like id being an object with
+       * lots of drivers and constraints and modifiers, or material etc. with huge node tree),
+       * but we might as well use it (Main->relations is always assumed valid,
+       * it's responsibility of code creating it to free it,
+       * especially if/when it starts modifying Main database). */
       MainIDRelationsEntry *entry = BLI_ghash_lookup(bmain->relations->id_user_to_used, id);
       for (; entry != NULL; entry = entry->next) {
         FOREACH_CALLBACK_INVOKE_ID_PP(&data, entry->id_pointer, entry->usage_flag);
@@ -427,11 +428,11 @@ static void library_foreach_ID_link(Main *bmain,
       continue;
     }
 
-    if (id->override_static != NULL) {
-      CALLBACK_INVOKE_ID(id->override_static->reference,
-                         IDWALK_CB_USER | IDWALK_CB_STATIC_OVERRIDE_REFERENCE);
-      CALLBACK_INVOKE_ID(id->override_static->storage,
-                         IDWALK_CB_USER | IDWALK_CB_STATIC_OVERRIDE_REFERENCE);
+    if (id->override_library != NULL) {
+      CALLBACK_INVOKE_ID(id->override_library->reference,
+                         IDWALK_CB_USER | IDWALK_CB_OVERRIDE_LIBRARY_REFERENCE);
+      CALLBACK_INVOKE_ID(id->override_library->storage,
+                         IDWALK_CB_USER | IDWALK_CB_OVERRIDE_LIBRARY_REFERENCE);
     }
 
     library_foreach_idproperty_ID_link(&data, id->properties, IDWALK_CB_USER);
@@ -455,6 +456,7 @@ static void library_foreach_ID_link(Main *bmain,
         CALLBACK_INVOKE(scene->world, IDWALK_CB_USER);
         CALLBACK_INVOKE(scene->set, IDWALK_CB_NEVER_SELF);
         CALLBACK_INVOKE(scene->clip, IDWALK_CB_USER);
+        CALLBACK_INVOKE(scene->gpd, IDWALK_CB_USER);
         CALLBACK_INVOKE(scene->r.bake.cage_object, IDWALK_CB_NOP);
         if (scene->nodetree) {
           /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
@@ -590,12 +592,12 @@ static void library_foreach_ID_link(Main *bmain,
         CALLBACK_INVOKE(object->parent, IDWALK_CB_NEVER_SELF);
         CALLBACK_INVOKE(object->track, IDWALK_CB_NEVER_SELF);
         /* object->proxy is refcounted, but not object->proxy_group... *sigh* */
-        CALLBACK_INVOKE(object->proxy, IDWALK_CB_NEVER_SELF);
+        CALLBACK_INVOKE(object->proxy, IDWALK_CB_USER | IDWALK_CB_NEVER_SELF);
         CALLBACK_INVOKE(object->proxy_group, IDWALK_CB_NOP);
 
         /* Special case!
-         * Since this field is set/owned by 'user' of this ID (and not ID itself), it is only indirect usage
-         * if proxy object is linked... Twisted. */
+         * Since this field is set/owned by 'user' of this ID (and not ID itself),
+         * it is only indirect usage if proxy object is linked... Twisted. */
         if (object->proxy_from) {
           data.cb_flag = ID_IS_LINKED(object->proxy_from) ? IDWALK_CB_INDIRECT_USAGE : 0;
         }
@@ -754,7 +756,7 @@ static void library_foreach_ID_link(Main *bmain,
 
       case ID_CA: {
         Camera *camera = (Camera *)id;
-        CALLBACK_INVOKE(camera->dof_ob, IDWALK_CB_NOP);
+        CALLBACK_INVOKE(camera->dof.focus_object, IDWALK_CB_NOP);
         for (CameraBGImage *bgpic = camera->bg_images.first; bgpic; bgpic = bgpic->next) {
           if (bgpic->source == CAM_BGIMG_SOURCE_IMAGE) {
             CALLBACK_INVOKE(bgpic->ima, IDWALK_CB_USER);
@@ -1018,7 +1020,8 @@ static void library_foreach_ID_link(Main *bmain,
           bScreen *screen = BKE_workspace_layout_screen_get(layout);
 
           /* CALLBACK_INVOKE expects an actual pointer, not a variable holding the pointer.
-           * However we can't access layout->screen here since we are outside the workspace project. */
+           * However we can't access layout->screen here
+           * since we are outside the workspace project. */
           CALLBACK_INVOKE(screen, IDWALK_CB_USER);
           /* allow callback to set a different screen */
           BKE_workspace_layout_screen_set(layout, screen);
@@ -1071,7 +1074,7 @@ FOREACH_FINALIZE:
 #undef FOREACH_CALLBACK_INVOKE
 
 /**
- * Loop over all of the ID's this datablock links to.
+ * Loop over all of the ID's this data-block links to.
  */
 void BKE_library_foreach_ID_link(
     Main *bmain, ID *id, LibraryIDLinkCallback callback, void *user_data, int flag)
@@ -1094,13 +1097,14 @@ void BKE_library_update_ID_link_user(ID *id_dst, ID *id_src, const int cb_flag)
 }
 
 /**
- * Say whether given \a id_type_owner can use (in any way) a datablock of \a id_type_used.
+ * Say whether given \a id_type_owner can use (in any way) a data-block of \a id_type_used.
  *
- * This is a 'simplified' abstract version of #BKE_library_foreach_ID_link() above, quite useful to reduce
- * useless iterations in some cases.
+ * This is a 'simplified' abstract version of #BKE_library_foreach_ID_link() above,
+ * quite useful to reduce* useless iterations in some cases.
  */
-/* XXX This has to be fully rethink, basing check on ID type is not really working anymore (and even worth once
- *     IDProps will support ID pointers), we'll have to do some quick checks on IDs themselves... */
+/* XXX This has to be fully rethink, basing check on ID type is not really working anymore
+ * (and even worth once IDProps will support ID pointers),
+ * we'll have to do some quick checks on IDs themselves... */
 bool BKE_library_id_can_use_idtype(ID *id_owner, const short id_type_used)
 {
   /* any type of ID can be used in custom props. */
@@ -1120,7 +1124,8 @@ bool BKE_library_id_can_use_idtype(ID *id_owner, const short id_type_used)
   }
 
   if (BKE_animdata_from_id(id_owner)) {
-    return true; /* AnimationData can use virtually any kind of datablocks, through drivers especially. */
+    /* AnimationData can use virtually any kind of data-blocks, through drivers especially. */
+    return true;
   }
 
   switch ((ID_Type)id_type_owner) {
@@ -1267,8 +1272,8 @@ static int foreach_libblock_id_users_callback(void *user_data,
 /**
  * Return the number of times given \a id_user uses/references \a id_used.
  *
- * \note This only checks for pointer references of an ID, shallow usages (like e.g. by RNA paths, as done
- *       for FCurves) are not detected at all.
+ * \note This only checks for pointer references of an ID, shallow usages
+ * (like e.g. by RNA paths, as done for FCurves) are not detected at all.
  *
  * \param id_user: the ID which is supposed to use (reference) \a id_used.
  * \param id_used: the ID which is supposed to be used (referenced) by \a id_user.
@@ -1339,7 +1344,8 @@ bool BKE_library_ID_is_indirectly_used(Main *bmain, void *idv)
 }
 
 /**
- * Combine #BKE_library_ID_is_locally_used() and #BKE_library_ID_is_indirectly_used() in a single call.
+ * Combine #BKE_library_ID_is_locally_used() and #BKE_library_ID_is_indirectly_used()
+ * in a single call.
  */
 void BKE_library_ID_test_usages(Main *bmain, void *idv, bool *is_used_local, bool *is_used_linked)
 {
@@ -1390,7 +1396,8 @@ static int foreach_libblock_used_linked_data_tag_clear_cb(void *user_data,
       return IDWALK_RET_NOP;
     }
 
-    /* If checked id is used by an assumed used ID, then it is also used and not part of any linked archipelago. */
+    /* If checked id is used by an assumed used ID,
+     * then it is also used and not part of any linked archipelago. */
     if (!(self_id->tag & LIB_TAG_DOIT) && ((*id_p)->tag & LIB_TAG_DOIT)) {
       (*id_p)->tag &= ~LIB_TAG_DOIT;
       *is_changed = true;
@@ -1401,12 +1408,13 @@ static int foreach_libblock_used_linked_data_tag_clear_cb(void *user_data,
 }
 
 /**
- * Detect orphaned linked data blocks (i.e. linked data not used (directly or indirectly) in any way by any local data),
- * including complex cases like 'linked archipelagoes', i.e. linked datablocks that use each other in loops,
- * which prevents their deletion by 'basic' usage checks...
+ * Detect orphaned linked data blocks (i.e. linked data not used (directly or indirectly)
+ * in any way by any local data), including complex cases like 'linked archipelagoes', i.e.
+ * linked data-blocks that use each other in loops,
+ * which prevents their deletion by 'basic' usage checks.
  *
- * \param do_init_tag: if \a true, all linked data are checked, if \a false, only linked datablocks already tagged with
- *                    LIB_TAG_DOIT are checked.
+ * \param do_init_tag: if \a true, all linked data are checked, if \a false,
+ * only linked data-blocks already tagged with #LIB_TAG_DOIT are checked.
  */
 void BKE_library_unused_linked_data_set_tag(Main *bmain, const bool do_init_tag)
 {
@@ -1438,10 +1446,12 @@ void BKE_library_unused_linked_data_set_tag(Main *bmain, const bool do_init_tag)
 }
 
 /**
- * Untag linked data blocks used by other untagged linked datablocks.
- * Used to detect datablocks that we can forcefully make local (instead of copying them to later get rid of original):
- * All datablocks we want to make local are tagged by caller, after this function has ran caller knows datablocks still
- * tagged can directly be made local, since they are only used by other datablocks that will also be made fully local.
+ * Untag linked data blocks used by other untagged linked data-blocks.
+ * Used to detect data-blocks that we can forcefully make local
+ * (instead of copying them to later get rid of original):
+ * All data-blocks we want to make local are tagged by caller,
+ * after this function has ran caller knows data-blocks still tagged can directly be made local,
+ * since they are only used by other data-blocks that will also be made fully local.
  */
 void BKE_library_indirectly_used_data_tag_clear(Main *bmain)
 {

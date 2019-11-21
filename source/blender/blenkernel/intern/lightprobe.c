@@ -45,7 +45,7 @@ void BKE_lightprobe_init(LightProbe *probe)
   probe->vis_blur = 0.2f;
   probe->intensity = 1.0f;
 
-  probe->flag = LIGHTPROBE_FLAG_SHOW_INFLUENCE | LIGHTPROBE_FLAG_SHOW_DATA;
+  probe->flag = LIGHTPROBE_FLAG_SHOW_INFLUENCE;
 }
 
 void *BKE_lightprobe_add(Main *bmain, const char *name)
@@ -60,8 +60,10 @@ void *BKE_lightprobe_add(Main *bmain, const char *name)
 }
 
 /**
- * Only copy internal data of LightProbe ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of #LightProbe ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *

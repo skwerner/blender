@@ -42,12 +42,6 @@ struct bNodeTreeExec;
 struct bNodeType;
 struct uiBlock;
 
-/* In writefile.c: write deprecated DNA data,
- * to ensure forward compatibility in 2.6x versions.
- * Will be removed eventually.
- */
-#define USE_NODE_COMPAT_CUSTOMNODES
-
 #define NODE_MAXSTR 64
 
 typedef struct bNodeStack {
@@ -167,8 +161,8 @@ typedef enum eNodeSocketDrawShape {
 
 /* socket side (input/output) */
 typedef enum eNodeSocketInOut {
-  SOCK_IN = 1,
-  SOCK_OUT = 2,
+  SOCK_IN = 1 << 0,
+  SOCK_OUT = 1 << 1,
 } eNodeSocketInOut;
 
 /* sock->flag, first bit is select */
@@ -485,9 +479,6 @@ typedef struct bNodeTree {
   int (*test_break)(void *);
   void (*update_draw)(void *);
   void *tbh, *prh, *sdh, *udh;
-
-  void *duplilock;
-
 } bNodeTree;
 
 /* ntree->type, index */
@@ -509,17 +500,6 @@ typedef struct bNodeTree {
 
 /* tree is localized copy, free when deleting node groups */
 /* #define NTREE_IS_LOCALIZED           (1 << 5) */
-
-/* XXX not nice, but needed as a temporary flags
- * for group updates after library linking.
- */
-
-/* changes from r35033 */
-#define NTREE_DO_VERSIONS_GROUP_EXPOSE_2_56_2 (1 << 10)
-/* custom_nodes branch: remove links to node tree sockets */
-#define NTREE_DO_VERSIONS_CUSTOMNODES_GROUP (1 << 11)
-/* custom_nodes branch: create group input/output nodes */
-#define NTREE_DO_VERSIONS_CUSTOMNODES_GROUP_CREATE_INTERFACE (1 << 12)
 
 /* ntree->update */
 typedef enum eNodeTreeUpdate {
@@ -849,7 +829,7 @@ typedef struct NodeTexSky {
 typedef struct NodeTexImage {
   NodeTexBase base;
   ImageUser iuser;
-  int color_space;
+  int color_space DNA_DEPRECATED;
   int projection;
   float projection_blend;
   int interpolation;
@@ -870,7 +850,7 @@ typedef struct NodeTexBrick {
 typedef struct NodeTexEnvironment {
   NodeTexBase base;
   ImageUser iuser;
-  int color_space;
+  int color_space DNA_DEPRECATED;
   int projection;
   int interpolation;
   char _pad[4];
@@ -1137,10 +1117,6 @@ typedef struct NodeCryptomatte {
 /* sky texture */
 #define SHD_SKY_OLD 0
 #define SHD_SKY_NEW 1
-
-/* image/environment texture */
-#define SHD_COLORSPACE_NONE 0
-#define SHD_COLORSPACE_COLOR 1
 
 /* environment texture */
 #define SHD_PROJ_EQUIRECTANGULAR 0

@@ -71,6 +71,7 @@
 
 #include "BLI_sys_types.h"
 #include "ED_mesh.h" /* for face mask functions */
+#include "ED_select_buffer_utils.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -389,7 +390,8 @@ static int imapaint_pick_face(ViewContext *vc,
   }
 
   /* sample only on the exact position */
-  *r_index = ED_view3d_select_id_sample(vc, mval[0], mval[1]);
+  ED_view3d_select_id_validate(vc);
+  *r_index = ED_select_buffer_sample_point(mval);
 
   if ((*r_index) == 0 || (*r_index) > (unsigned int)totpoly) {
     return 0;
@@ -483,7 +485,7 @@ void paint_sample_color(
   }
 
   if (CTX_wm_view3d(C) && texpaint_proj) {
-    /* first try getting a colour directly from the mesh faces if possible */
+    /* first try getting a color directly from the mesh faces if possible */
     ViewLayer *view_layer = CTX_data_view_layer(C);
     Object *ob = OBACT(view_layer);
     Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);

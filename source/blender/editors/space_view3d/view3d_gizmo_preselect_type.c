@@ -21,7 +21,7 @@
  *
  * Use for tools to hover over data before activation.
  *
- * \note This is a slight mis-use of gizmo's, since clicking performs no action.
+ * \note This is a slight misuse of gizmo's, since clicking performs no action.
  */
 
 #include "MEM_guardedalloc.h"
@@ -304,15 +304,14 @@ static int gizmo_preselect_edgering_test_select(bContext *C, wmGizmo *gz, const 
   em_setup_viewcontext(C, &vc);
   copy_v2_v2_int(vc.mval, mval);
 
-  for (uint base_index = 0; base_index < gz_ring->bases_len; base_index++) {
-    Object *ob_iter = gz_ring->bases[base_index]->object;
-    ED_view3d_viewcontext_init_object(&vc, ob_iter);
-    BMEdge *eed_test = EDBM_edge_find_nearest_ex(&vc, &best.dist, NULL, false, false, NULL);
-    if (eed_test) {
-      best.ob = ob_iter;
-      best.eed = eed_test;
-      best.base_index = base_index;
-    }
+  uint base_index;
+  BMEdge *eed_test = EDBM_edge_find_nearest_ex(
+      &vc, &best.dist, NULL, false, false, NULL, gz_ring->bases, gz_ring->bases_len, &base_index);
+
+  if (eed_test) {
+    best.ob = gz_ring->bases[base_index]->object;
+    best.eed = eed_test;
+    best.base_index = base_index;
   }
 
   BMesh *bm = NULL;

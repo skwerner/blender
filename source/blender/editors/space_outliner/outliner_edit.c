@@ -88,6 +88,11 @@
 
 static int outliner_highlight_update(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
 {
+  /* stop highlighting if out of area */
+  if (!ED_screen_area_active(C)) {
+    return OPERATOR_PASS_THROUGH;
+  }
+
   /* Drag and drop does own highlighting. */
   wmWindowManager *wm = CTX_wm_manager(C);
   if (wm->drags.first) {
@@ -1025,8 +1030,8 @@ int common_restrict_check(bContext *C, Object *ob)
   Object *obedit = CTX_data_edit_object(C);
   if (obedit && obedit == ob) {
     /* found object is hidden, reset */
-    if (ob->restrictflag & OB_RESTRICT_VIEW) {
-      ob->restrictflag &= ~OB_RESTRICT_VIEW;
+    if (ob->restrictflag & OB_RESTRICT_VIEWPORT) {
+      ob->restrictflag &= ~OB_RESTRICT_VIEWPORT;
     }
     /* found object is unselectable, reset */
     if (ob->restrictflag & OB_RESTRICT_SELECT) {
@@ -1307,19 +1312,22 @@ static TreeElement *outliner_find_name(
     if (found) {
       /* name is right, but is element the previous one? */
       if (prev) {
-        if ((te != prev) && (*prevFound))
+        if ((te != prev) && (*prevFound)) {
           return te;
+        }
         if (te == prev) {
           *prevFound = 1;
         }
       }
-      else
+      else {
         return te;
+      }
     }
 
     tes = outliner_find_name(soops, &te->subtree, name, flags, prev, prevFound);
-    if (tes)
+    if (tes) {
       return tes;
+    }
   }
 
   /* nothing valid found */
@@ -1367,8 +1375,9 @@ static void outliner_find_panel(
     tselem = TREESTORE(te);
     if (tselem) {
       /* expand branches so that it will be visible, we need to get correct coordinates */
-      if (outliner_open_back(soops, te))
+      if (outliner_open_back(soops, te)) {
         outliner_set_coordinates(ar, soops);
+      }
 
       /* deselect all visible, and select found element */
       outliner_flag_set(soops, &soops->tree, TSE_SELECTED, 0);
@@ -1376,8 +1385,9 @@ static void outliner_find_panel(
 
       /* make te->ys center of view */
       ytop = (int)(te->ys + BLI_rctf_size_y(&ar->v2d.mask) / 2);
-      if (ytop > 0)
+      if (ytop > 0) {
         ytop = 0;
+      }
       ar->v2d.cur.ymax = (float)ytop;
       ar->v2d.cur.ymin = (float)(ytop - BLI_rctf_size_y(&ar->v2d.mask));
 
@@ -1634,7 +1644,8 @@ static void tree_element_to_path(TreeElement *te,
     /* check if we're looking for first ID, or appending to path */
     if (*id) {
       /* just 'append' property to path
-       * - to prevent memory leaks, we must write to newpath not path, then free old path + swap them
+       * - to prevent memory leaks, we must write to newpath not path,
+       *   then free old path + swap them.
        */
       if (tse->type == TSE_RNA_PROPERTY) {
         if (RNA_property_type(prop) == PROP_POINTER) {

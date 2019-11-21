@@ -372,10 +372,10 @@ static bool gp_stroke_filtermval(tGPsdata *p, const float mval[2], float mvalo[2
     return true;
 
     /* Check if the distance since the last point is significant enough:
-   * - Prevents points being added too densely
-   * - Distance here doesn't use sqrt to prevent slowness.
-   *   We should still be safe from overflows though.
-   */
+     * - Prevents points being added too densely
+     * - Distance here doesn't use sqrt to prevent slowness.
+     *   We should still be safe from overflows though.
+     */
   }
   else if ((dx * dx + dy * dy) > MIN_EUCLIDEAN_PX * MIN_EUCLIDEAN_PX) {
     return true;
@@ -1130,8 +1130,9 @@ static void gp_stroke_newfrombuffer(tGPsdata *p)
         }
       }
       else {
-        if ((ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE_ENDPOINTS) ||
-            (ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE_FIRST)) {
+        if ((ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE) &&
+            ((ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE_ENDPOINTS) ||
+             (ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE_FIRST))) {
           int first_valid = 0;
           int last_valid = 0;
 
@@ -1205,10 +1206,9 @@ static void gp_stroke_newfrombuffer(tGPsdata *p)
       gp_randomize_stroke(gps, brush, p->rng);
     }
 
-    /* smooth stroke after subdiv - only if there's something to do
-     * for each iteration, the factor is reduced to get a better smoothing without changing too much
-     * the original stroke
-     */
+    /* Smooth stroke after subdiv - only if there's something to do for each iteration,
+     * the factor is reduced to get a better smoothing
+     * without changing too much the original stroke. */
     if ((brush->gpencil_settings->flag & GP_BRUSH_GROUP_SETTINGS) &&
         (brush->gpencil_settings->draw_smoothfac > 0.0f)) {
       float reduce = 0.0f;
@@ -1217,7 +1217,7 @@ static void gp_stroke_newfrombuffer(tGPsdata *p)
           BKE_gpencil_smooth_stroke(gps, i, brush->gpencil_settings->draw_smoothfac - reduce);
           BKE_gpencil_smooth_stroke_strength(gps, i, brush->gpencil_settings->draw_smoothfac);
         }
-        reduce += 0.25f;  // reduce the factor
+        reduce += 0.25f; /* reduce the factor */
       }
     }
     /* smooth thickness */
@@ -1820,7 +1820,7 @@ static void gp_init_drawing_brush(bContext *C, tGPsdata *p)
   Paint *paint = &ts->gp_paint->paint;
   bool changed = false;
   /* if not exist, create a new one */
-  if (paint->brush == NULL) {
+  if ((paint->brush == NULL) || (paint->brush->gpencil_settings == NULL)) {
     /* create new brushes */
     BKE_brush_gpencil_presets(C);
     changed = true;
@@ -2320,14 +2320,13 @@ static void gpencil_draw_eraser(bContext *UNUSED(C), int x, int y, void *p_ptr)
     immUniform1f("dash_width", 12.0f);
     immUniform1f("dash_factor", 0.5f);
 
-    imm_draw_circle_wire_2d(
-        shdr_pos,
-        x,
-        y,
-        p->radius,
-        /* XXX Dashed shader gives bad results with sets of small segments currently,
-         *     temp hack around the issue. :( */
-        max_ii(8, p->radius / 2)); /* was fixed 40 */
+    imm_draw_circle_wire_2d(shdr_pos,
+                            x,
+                            y,
+                            p->radius,
+                            /* XXX Dashed shader gives bad results with sets of small segments
+                             * currently, temp hack around the issue. :( */
+                            max_ii(8, p->radius / 2)); /* was fixed 40 */
 
     immUnbindProgram();
 
@@ -2394,11 +2393,6 @@ static void gpencil_draw_exit(bContext *C, wmOperator *op)
       WM_cursor_modal_restore(CTX_wm_window(C));
     }
     else {
-      /* or restore paint if 3D view */
-      if ((p) && (p->paintmode == GP_PAINTMODE_ERASER)) {
-        WM_cursor_modal_set(p->win, CURSOR_STD);
-      }
-
       /* drawing batch cache is dirty now */
       bGPdata *gpd = CTX_data_gpencil_data(C);
       if (gpd) {
@@ -2411,8 +2405,6 @@ static void gpencil_draw_exit(bContext *C, wmOperator *op)
     gpencil_undo_finish();
 
     /* cleanup */
-    WM_cursor_modal_set(p->win, CURSOR_STD);
-
     gp_paint_cleanup(p);
     gp_session_cleanup(p);
     ED_gpencil_toggle_brush_cursor(C, true, NULL);
@@ -2480,6 +2472,10 @@ static int gpencil_draw_init(bContext *C, wmOperator *op, const wmEvent *event)
 /* ensure that the correct cursor icon is set */
 static void gpencil_draw_cursor_set(tGPsdata *p)
 {
+  UNUSED_VARS(p);
+  return;
+  /* Disable while we get a better cursor handling for direct input devices (Cintiq/Ipad)*/
+#if 0
   Brush *brush = p->brush;
   if ((p->paintmode == GP_PAINTMODE_ERASER) || (brush->gpencil_tool == GPAINT_TOOL_ERASE)) {
     WM_cursor_modal_set(p->win, BC_CROSSCURSOR); /* XXX need a better cursor */
@@ -2487,6 +2483,7 @@ static void gpencil_draw_cursor_set(tGPsdata *p)
   else {
     WM_cursor_modal_set(p->win, CURSOR_NONE);
   }
+#endif
 }
 
 /* update UI indicators of status, including cursor and header prints */
@@ -2500,22 +2497,21 @@ static void gpencil_draw_status_indicators(bContext *C, tGPsdata *p)
         case GP_PAINTMODE_ERASER: {
           ED_workspace_status_text(
               C,
-              IFACE_("Grease Pencil Erase Session: Hold and drag LMB or RMB to erase | "
-                     "ESC/Enter to end  (or click outside this area)"));
+              TIP_("Grease Pencil Erase Session: Hold and drag LMB or RMB to erase | "
+                   "ESC/Enter to end  (or click outside this area)"));
           break;
         }
         case GP_PAINTMODE_DRAW_STRAIGHT: {
-          ED_workspace_status_text(
-              C,
-              IFACE_("Grease Pencil Line Session: Hold and drag LMB to draw | "
-                     "ESC/Enter to end  (or click outside this area)"));
+          ED_workspace_status_text(C,
+                                   TIP_("Grease Pencil Line Session: Hold and drag LMB to draw | "
+                                        "ESC/Enter to end  (or click outside this area)"));
           break;
         }
         case GP_PAINTMODE_SET_CP: {
           ED_workspace_status_text(
               C,
-              IFACE_("Grease Pencil Guides: LMB click and release to place reference point | "
-                     "Esc/RMB to cancel"));
+              TIP_("Grease Pencil Guides: LMB click and release to place reference point | "
+                   "Esc/RMB to cancel"));
           break;
         }
         case GP_PAINTMODE_DRAW: {
@@ -2523,26 +2519,26 @@ static void gpencil_draw_status_indicators(bContext *C, tGPsdata *p)
           if (guide->use_guide) {
             ED_workspace_status_text(
                 C,
-                IFACE_("Grease Pencil Freehand Session: Hold and drag LMB to draw | "
-                       "M key to flip guide | O key to move reference point"));
+                TIP_("Grease Pencil Freehand Session: Hold and drag LMB to draw | "
+                     "M key to flip guide | O key to move reference point"));
           }
           else {
             ED_workspace_status_text(
-                C, IFACE_("Grease Pencil Freehand Session: Hold and drag LMB to draw"));
+                C, TIP_("Grease Pencil Freehand Session: Hold and drag LMB to draw"));
           }
           break;
         }
         case GP_PAINTMODE_DRAW_POLY: {
           ED_workspace_status_text(
               C,
-              IFACE_("Grease Pencil Poly Session: LMB click to place next stroke vertex | "
-                     "Release Shift/ESC/Enter to end  (or click outside this area)"));
+              TIP_("Grease Pencil Poly Session: LMB click to place next stroke vertex | "
+                   "Release Shift/ESC/Enter to end (or click outside this area)"));
           break;
         }
         default: /* unhandled future cases */
         {
           ED_workspace_status_text(
-              C, IFACE_("Grease Pencil Session: ESC/Enter to end   (or click outside this area)"));
+              C, TIP_("Grease Pencil Session: ESC/Enter to end (or click outside this area)"));
           break;
         }
       }
@@ -2718,6 +2714,8 @@ static void gpencil_draw_apply_event(
   PointerRNA itemptr;
   float mousef[2];
   int tablet = 0;
+  bool is_speed_guide = ((guide->use_guide) &&
+                         (p->brush && (p->brush->gpencil_tool == GPAINT_TOOL_DRAW)));
 
   /* convert from window-space to area-space mouse coordinates
    * add any x,y override position for fake events
@@ -2727,7 +2725,7 @@ static void gpencil_draw_apply_event(
   p->shift = event->shift;
 
   /* verify direction for straight lines */
-  if ((guide->use_guide) ||
+  if ((is_speed_guide) ||
       ((event->alt > 0) && (RNA_boolean_get(op->ptr, "disable_straight") == false))) {
     if (p->straight == 0) {
       int dx = (int)fabsf(p->mval[0] - p->mvali[0]);
@@ -2825,7 +2823,7 @@ static void gpencil_draw_apply_event(
     /* special exception for grid snapping
      * it requires direction which needs at least two points
      */
-    if (!ELEM(p->paintmode, GP_PAINTMODE_ERASER, GP_PAINTMODE_SET_CP) && guide->use_guide &&
+    if (!ELEM(p->paintmode, GP_PAINTMODE_ERASER, GP_PAINTMODE_SET_CP) && is_speed_guide &&
         guide->use_snapping && (guide->type == GP_GUIDE_GRID)) {
       p->flags |= GP_PAINTFLAG_REQ_VECTOR;
     }
@@ -2853,9 +2851,9 @@ static void gpencil_draw_apply_event(
   }
 
   /* check if stroke is straight or guided */
-  if ((p->paintmode != GP_PAINTMODE_ERASER) && ((p->straight) || (guide->use_guide))) {
+  if ((p->paintmode != GP_PAINTMODE_ERASER) && ((p->straight) || (is_speed_guide))) {
     /* guided stroke */
-    if (guide->use_guide) {
+    if (is_speed_guide) {
       switch (guide->type) {
         default:
         case GP_GUIDE_CIRCULAR: {
@@ -3474,7 +3472,8 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
 
-  /* we don't pass on key events, GP is used with key-modifiers - prevents Dkey to insert drivers */
+  /* We don't pass on key events, GP is used with key-modifiers -
+   * prevents Dkey to insert drivers. */
   if (ISKEYBOARD(event->type)) {
     if (ELEM(event->type, LEFTARROWKEY, DOWNARROWKEY, RIGHTARROWKEY, UPARROWKEY, ZKEY)) {
       /* allow some keys:
@@ -3506,10 +3505,12 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
 
-  //printf("\tGP - handle modal event...\n");
+  // printf("\tGP - handle modal event...\n");
 
-  /* exit painting mode (and/or end current stroke)
-   * NOTE: cannot do RIGHTMOUSE (as is standard for canceling) as that would break polyline [#32647]
+  /* Exit painting mode (and/or end current stroke).
+   *
+   * NOTE: cannot do RIGHTMOUSE (as is standard for canceling)
+   * as that would break polyline T32647.
    */
   /* if polyline and release shift must cancel */
   if ((ELEM(event->type, RETKEY, PADENTER, ESCKEY, SPACEKEY, EKEY)) ||
@@ -3707,7 +3708,7 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
       /* handle drawing event */
       /* printf("\t\tGP - add point\n"); */
 
-      if (((p->flags & GP_PAINTFLAG_FIRSTRUN) == 0)) {
+      if (((p->flags & GP_PAINTFLAG_FIRSTRUN) == 0) && (p->paintmode != GP_PAINTMODE_ERASER)) {
         gpencil_add_missing_events(C, op, event, p);
       }
 

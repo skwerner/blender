@@ -103,7 +103,7 @@ typedef struct SPHData {
   struct EdgeHash *eh;
   float *gravity;
   float hfac;
-  /* Average distance to neighbours (other particles in the support domain),
+  /* Average distance to neighbors (other particles in the support domain),
    * for calculating the Courant number (adaptive time step). */
   int pass;
   float element_size;
@@ -201,21 +201,24 @@ typedef struct ParticleCollisionElement {
   short inv_nor, inside;
 } ParticleCollisionElement;
 
-/* container for moving data between deflet_particle and particle_intersect_face */
+/** Container for moving data between deflet_particle and particle_intersect_face. */
 typedef struct ParticleCollision {
   struct Object *current;
   struct Object *hit;
   struct Object *skip[PARTICLE_COLLISION_MAX_COLLISIONS + 1];
   struct Object *emitter;
 
-  struct CollisionModifierData *md;  // collision modifier for current object;
+  /** Collision modifier for current object. */
+  struct CollisionModifierData *md;
 
-  float f;  // time factor of previous collision, needed for substracting face velocity
+  /** Time factor of previous collision, needed for substracting face velocity. */
+  float f;
   float fac1, fac2;
 
   float cfra, old_cfra;
 
-  float original_ray_length;  //original length of co2-co1, needed for collision time evaluation
+  /** Original length of co2-co1, needed for collision time evaluation. */
+  float original_ray_length;
 
   int skip_count;
 
@@ -260,7 +263,7 @@ BLI_INLINE float psys_frand(ParticleSystem *psys, unsigned int seed)
   /* XXX far from ideal, this simply scrambles particle random numbers a bit
    * to avoid obvious correlations.
    * Can't use previous psys->frand arrays because these require initialization
-   * inside psys_check_enabled, which wreaks havok in multithreaded depgraph updates.
+   * inside psys_check_enabled, which wreaks havoc in multi-threaded depgraph updates.
    */
   unsigned int offset = PSYS_FRAND_SEED_OFFSET[psys->seed % PSYS_FRAND_COUNT];
   unsigned int multiplier = PSYS_FRAND_SEED_MULTIPLIER[psys->seed % PSYS_FRAND_COUNT];

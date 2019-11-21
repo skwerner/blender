@@ -44,6 +44,7 @@
 #include "DNA_world_types.h"
 
 #include "GPU_framebuffer.h"
+#include "GPU_primitive.h"
 #include "GPU_texture.h"
 #include "GPU_shader.h"
 
@@ -82,6 +83,10 @@ typedef struct DRWInterface DRWInterface;
 typedef struct DRWPass DRWPass;
 typedef struct DRWShadingGroup DRWShadingGroup;
 typedef struct DRWUniform DRWUniform;
+typedef struct DRWView DRWView;
+
+/* Opaque type to avoid usage as a DRWCall but it is exactly the same thing. */
+typedef struct DRWCallBuffer DRWCallBuffer;
 
 /* TODO Put it somewhere else? */
 typedef struct BoundSphere {
@@ -105,7 +110,7 @@ typedef char DRWViewportEmptyList;
 /* Use of multisample framebuffers. */
 #define MULTISAMPLE_SYNC_ENABLE(dfbl, dtxl) \
   { \
-    if (dfbl->multisample_fb != NULL) { \
+    if (dfbl->multisample_fb != NULL && DRW_state_is_fbo()) { \
       DRW_stats_query_start("Multisample Blit"); \
       GPU_framebuffer_bind(dfbl->multisample_fb); \
       /* TODO clear only depth but need to do alpha to coverage for transparencies. */ \
@@ -117,7 +122,7 @@ typedef char DRWViewportEmptyList;
 
 #define MULTISAMPLE_SYNC_DISABLE(dfbl, dtxl) \
   { \
-    if (dfbl->multisample_fb != NULL) { \
+    if (dfbl->multisample_fb != NULL && DRW_state_is_fbo()) { \
       DRW_stats_query_start("Multisample Resolve"); \
       GPU_framebuffer_bind(dfbl->default_fb); \
       DRW_multisamples_resolve(dtxl->multisample_depth, dtxl->multisample_color, true); \
@@ -128,7 +133,7 @@ typedef char DRWViewportEmptyList;
 
 #define MULTISAMPLE_SYNC_DISABLE_NO_DEPTH(dfbl, dtxl) \
   { \
-    if (dfbl->multisample_fb != NULL) { \
+    if (dfbl->multisample_fb != NULL && DRW_state_is_fbo()) { \
       DRW_stats_query_start("Multisample Resolve"); \
       GPU_framebuffer_bind(dfbl->default_fb); \
       DRW_multisamples_resolve(dtxl->multisample_depth, dtxl->multisample_color, false); \
@@ -309,48 +314,62 @@ void DRW_shader_free(struct GPUShader *shader);
 /* Batches */
 
 typedef enum {
+  /** Write mask */
   DRW_STATE_WRITE_DEPTH = (1 << 0),
   DRW_STATE_WRITE_COLOR = (1 << 1),
-  DRW_STATE_DEPTH_ALWAYS = (1 << 2),
-  DRW_STATE_DEPTH_LESS = (1 << 3),
-  DRW_STATE_DEPTH_LESS_EQUAL = (1 << 4),
-  DRW_STATE_DEPTH_EQUAL = (1 << 5),
-  DRW_STATE_DEPTH_GREATER = (1 << 6),
-  DRW_STATE_DEPTH_GREATER_EQUAL = (1 << 7),
-  DRW_STATE_CULL_BACK = (1 << 8),
-  DRW_STATE_CULL_FRONT = (1 << 9),
-  DRW_STATE_WIRE = (1 << 10),
-  DRW_STATE_POINT = (1 << 11),
-  /** Polygon offset. Does not work with lines and points. */
-  DRW_STATE_OFFSET_POSITIVE = (1 << 12),
-  /** Polygon offset. Does not work with lines and points. */
-  DRW_STATE_OFFSET_NEGATIVE = (1 << 13),
-  DRW_STATE_WIRE_WIDE = (1 << 14),
-  DRW_STATE_BLEND = (1 << 15),
-  DRW_STATE_ADDITIVE = (1 << 16),
-  DRW_STATE_MULTIPLY = (1 << 17),
-  /* DRW_STATE_TRANSMISSION  = (1 << 18), */ /* Not used */
-  DRW_STATE_CLIP_PLANES = (1 << 19),
-  /** Same as DRW_STATE_ADDITIVE but let alpha accumulate without premult. */
-  DRW_STATE_ADDITIVE_FULL = (1 << 20),
-  /** Use that if color is already premult by alpha. */
-  DRW_STATE_BLEND_PREMUL = (1 << 21),
-  DRW_STATE_WIRE_SMOOTH = (1 << 22),
-  DRW_STATE_TRANS_FEEDBACK = (1 << 23),
-  DRW_STATE_BLEND_OIT = (1 << 24),
-  DRW_STATE_FIRST_VERTEX_CONVENTION = (1 << 25),
+  DRW_STATE_WRITE_STENCIL = (1 << 2),
+  DRW_STATE_WRITE_STENCIL_SHADOW_PASS = (1 << 3),
+  DRW_STATE_WRITE_STENCIL_SHADOW_FAIL = (1 << 4),
 
-  DRW_STATE_WRITE_STENCIL = (1 << 27),
-  DRW_STATE_WRITE_STENCIL_SHADOW_PASS = (1 << 28),
-  DRW_STATE_WRITE_STENCIL_SHADOW_FAIL = (1 << 29),
-  DRW_STATE_STENCIL_EQUAL = (1 << 30),
-  DRW_STATE_STENCIL_NEQUAL = (1 << 31),
+  /** Depth test */
+  DRW_STATE_DEPTH_ALWAYS = (1 << 5),
+  DRW_STATE_DEPTH_LESS = (1 << 6),
+  DRW_STATE_DEPTH_LESS_EQUAL = (1 << 7),
+  DRW_STATE_DEPTH_EQUAL = (1 << 8),
+  DRW_STATE_DEPTH_GREATER = (1 << 9),
+  DRW_STATE_DEPTH_GREATER_EQUAL = (1 << 10),
+  /** Culling test */
+  DRW_STATE_CULL_BACK = (1 << 11),
+  DRW_STATE_CULL_FRONT = (1 << 12),
+  /** Stencil test */
+  DRW_STATE_STENCIL_ALWAYS = (1 << 13),
+  DRW_STATE_STENCIL_EQUAL = (1 << 14),
+  DRW_STATE_STENCIL_NEQUAL = (1 << 15),
+
+  /** Blend state */
+  DRW_STATE_BLEND_ADD = (1 << 16),
+  /** Same as additive but let alpha accumulate without premult. */
+  DRW_STATE_BLEND_ADD_FULL = (1 << 17),
+  /** Standard alpha blending. */
+  DRW_STATE_BLEND_ALPHA = (1 << 18),
+  /** Use that if color is already premult by alpha. */
+  DRW_STATE_BLEND_ALPHA_PREMUL = (1 << 19),
+  DRW_STATE_BLEND_ALPHA_UNDER_PREMUL = (1 << 20),
+  DRW_STATE_BLEND_OIT = (1 << 21),
+  DRW_STATE_BLEND_MUL = (1 << 22),
+  /** Use dual source blending. WARNING: Only one color buffer allowed. */
+  DRW_STATE_BLEND_CUSTOM = (1 << 23),
+
+  DRW_STATE_CLIP_PLANES = (1 << 28),
+  DRW_STATE_WIRE_SMOOTH = (1 << 29),
+  DRW_STATE_FIRST_VERTEX_CONVENTION = (1 << 30),
+  /** DO NOT USE. Assumed always enabled. Only used internally. */
+  DRW_STATE_PROGRAM_POINT_SIZE = (1u << 31),
 } DRWState;
+
 #define DRW_STATE_DEFAULT \
   (DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_LESS_EQUAL)
 #define DRW_STATE_RASTERIZER_ENABLED \
   (DRW_STATE_WRITE_DEPTH | DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_STENCIL | \
    DRW_STATE_WRITE_STENCIL_SHADOW_PASS | DRW_STATE_WRITE_STENCIL_SHADOW_FAIL)
+#define DRW_STATE_DEPTH_TEST_ENABLED \
+  (DRW_STATE_DEPTH_ALWAYS | DRW_STATE_DEPTH_LESS | DRW_STATE_DEPTH_LESS_EQUAL | \
+   DRW_STATE_DEPTH_EQUAL | DRW_STATE_DEPTH_GREATER | DRW_STATE_DEPTH_GREATER_EQUAL)
+#define DRW_STATE_STENCIL_TEST_ENABLED \
+  (DRW_STATE_STENCIL_ALWAYS | DRW_STATE_STENCIL_EQUAL | DRW_STATE_STENCIL_NEQUAL)
+#define DRW_STATE_WRITE_STENCIL_ENABLED \
+  (DRW_STATE_WRITE_STENCIL | DRW_STATE_WRITE_STENCIL_SHADOW_PASS | \
+   DRW_STATE_WRITE_STENCIL_SHADOW_FAIL)
 
 typedef enum {
   DRW_ATTR_INT,
@@ -377,96 +396,77 @@ struct GPUVertFormat *DRW_shgroup_instance_format_array(const DRWInstanceAttrFor
 DRWShadingGroup *DRW_shgroup_create(struct GPUShader *shader, DRWPass *pass);
 DRWShadingGroup *DRW_shgroup_create_sub(DRWShadingGroup *shgroup);
 DRWShadingGroup *DRW_shgroup_material_create(struct GPUMaterial *material, DRWPass *pass);
-DRWShadingGroup *DRW_shgroup_material_instance_create(struct GPUMaterial *material,
-                                                      DRWPass *pass,
-                                                      struct GPUBatch *geom,
-                                                      struct Object *ob,
-                                                      struct GPUVertFormat *format);
-DRWShadingGroup *DRW_shgroup_material_empty_tri_batch_create(struct GPUMaterial *material,
-                                                             DRWPass *pass,
-                                                             int size);
-DRWShadingGroup *DRW_shgroup_instance_create(struct GPUShader *shader,
-                                             DRWPass *pass,
-                                             struct GPUBatch *geom,
-                                             struct GPUVertFormat *format);
-DRWShadingGroup *DRW_shgroup_point_batch_create(struct GPUShader *shader, DRWPass *pass);
-DRWShadingGroup *DRW_shgroup_line_batch_create_with_format(struct GPUShader *shader,
-                                                           DRWPass *pass,
-                                                           struct GPUVertFormat *format);
-DRWShadingGroup *DRW_shgroup_line_batch_create(struct GPUShader *shader, DRWPass *pass);
-DRWShadingGroup *DRW_shgroup_empty_tri_batch_create(struct GPUShader *shader,
-                                                    DRWPass *pass,
-                                                    int size);
 DRWShadingGroup *DRW_shgroup_transform_feedback_create(struct GPUShader *shader,
                                                        DRWPass *pass,
                                                        struct GPUVertBuf *tf_target);
 
-typedef void(DRWCallGenerateFn)(DRWShadingGroup *shgroup,
-                                void (*draw_fn)(DRWShadingGroup *shgroup, struct GPUBatch *geom),
-                                void *user_data);
-
 /* return final visibility */
 typedef bool(DRWCallVisibilityFn)(bool vis_in, void *user_data);
 
-void DRW_shgroup_instance_batch(DRWShadingGroup *shgroup, struct GPUBatch *batch);
+void DRW_shgroup_call_ex(DRWShadingGroup *shgroup,
+                         Object *ob,
+                         float (*obmat)[4],
+                         struct GPUBatch *geom,
+                         uint v_sta,
+                         uint v_ct,
+                         bool bypass_culling,
+                         void *user_data);
 
-void DRW_shgroup_call_add(DRWShadingGroup *shgroup, struct GPUBatch *geom, float (*obmat)[4]);
-void DRW_shgroup_call_range_add(
-    DRWShadingGroup *shgroup, struct GPUBatch *geom, float (*obmat)[4], uint v_sta, uint v_count);
-void DRW_shgroup_call_procedural_points_add(DRWShadingGroup *shgroup,
-                                            uint point_len,
-                                            float (*obmat)[4]);
-void DRW_shgroup_call_procedural_lines_add(DRWShadingGroup *shgroup,
-                                           uint line_count,
-                                           float (*obmat)[4]);
-void DRW_shgroup_call_procedural_triangles_add(DRWShadingGroup *shgroup,
-                                               uint tria_count,
-                                               float (*obmat)[4]);
-void DRW_shgroup_call_object_procedural_triangles_culled_add(DRWShadingGroup *shgroup,
-                                                             uint tria_count,
-                                                             struct Object *ob);
-void DRW_shgroup_call_object_add_ex(DRWShadingGroup *shgroup,
-                                    struct GPUBatch *geom,
-                                    struct Object *ob,
-                                    struct Material *ma,
-                                    bool bypass_culling);
-#define DRW_shgroup_call_object_add(shgroup, geom, ob) \
-  DRW_shgroup_call_object_add_ex(shgroup, geom, ob, NULL, false)
-#define DRW_shgroup_call_object_add_no_cull(shgroup, geom, ob) \
-  DRW_shgroup_call_object_add_ex(shgroup, geom, ob, NULL, true)
-void DRW_shgroup_call_object_add_with_callback(DRWShadingGroup *shgroup,
-                                               struct GPUBatch *geom,
-                                               struct Object *ob,
-                                               struct Material *ma,
-                                               DRWCallVisibilityFn *callback,
-                                               void *user_data);
-/* Used for drawing a batch with instancing without instance attributes. */
-void DRW_shgroup_call_instances_add(DRWShadingGroup *shgroup,
-                                    struct GPUBatch *geom,
-                                    float (*obmat)[4],
-                                    uint *count);
-void DRW_shgroup_call_object_instances_add(DRWShadingGroup *shgroup,
-                                           struct GPUBatch *geom,
-                                           struct Object *ob,
-                                           uint *count);
-void DRW_shgroup_call_sculpt_add(DRWShadingGroup *shgroup, struct Object *ob, float (*obmat)[4]);
-void DRW_shgroup_call_sculpt_wires_add(DRWShadingGroup *shgroup,
-                                       struct Object *ob,
-                                       float (*obmat)[4]);
-void DRW_shgroup_call_generate_add(DRWShadingGroup *shgroup,
-                                   DRWCallGenerateFn *geometry_fn,
-                                   void *user_data,
-                                   float (*obmat)[4]);
-void DRW_shgroup_call_dynamic_add_array(DRWShadingGroup *shgroup,
-                                        const void *attr[],
-                                        uint attr_len);
-#define DRW_shgroup_call_dynamic_add(shgroup, ...) \
+/* If ob is NULL, unit modelmatrix is assumed and culling is bypassed. */
+#define DRW_shgroup_call(shgrp, geom, ob) \
+  DRW_shgroup_call_ex(shgrp, ob, NULL, geom, 0, 0, false, NULL)
+
+/* Same as DRW_shgroup_call but override the obmat. Not culled. */
+#define DRW_shgroup_call_obmat(shgrp, geom, obmat) \
+  DRW_shgroup_call_ex(shgrp, NULL, obmat, geom, 0, 0, false, NULL)
+
+/* TODO(fclem) remove this when we have DRWView */
+/* user_data is used by DRWCallVisibilityFn defined in DRWView. */
+#define DRW_shgroup_call_with_callback(shgrp, geom, ob, user_data) \
+  DRW_shgroup_call_ex(shgrp, ob, NULL, geom, 0, 0, false, user_data)
+
+/* Same as DRW_shgroup_call but bypass culling even if ob is not NULL. */
+#define DRW_shgroup_call_no_cull(shgrp, geom, ob) \
+  DRW_shgroup_call_ex(shgrp, ob, NULL, geom, 0, 0, true, NULL)
+
+/* Only draw a certain range of geom. */
+#define DRW_shgroup_call_range(shgrp, geom, ob, v_sta, v_ct) \
+  DRW_shgroup_call_ex(shgrp, ob, NULL, geom, v_sta, v_ct, false, NULL)
+
+/* Same as DRW_shgroup_call_range but override the obmat. Special for gpencil. */
+#define DRW_shgroup_call_range_obmat(shgrp, geom, obmat, v_sta, v_ct) \
+  DRW_shgroup_call_ex(shgrp, NULL, obmat, geom, v_sta, v_ct, false, NULL)
+
+void DRW_shgroup_call_procedural_points(DRWShadingGroup *sh, Object *ob, uint point_ct);
+void DRW_shgroup_call_procedural_lines(DRWShadingGroup *sh, Object *ob, uint line_ct);
+void DRW_shgroup_call_procedural_triangles(DRWShadingGroup *sh, Object *ob, uint tri_ct);
+
+void DRW_shgroup_call_instances(DRWShadingGroup *shgroup,
+                                Object *ob,
+                                struct GPUBatch *geom,
+                                uint count);
+void DRW_shgroup_call_instances_with_attribs(DRWShadingGroup *shgroup,
+                                             Object *ob,
+                                             struct GPUBatch *geom,
+                                             struct GPUBatch *inst_attributes);
+
+void DRW_shgroup_call_sculpt(DRWShadingGroup *sh, Object *ob, bool wire, bool mask, bool vcol);
+void DRW_shgroup_call_sculpt_with_materials(DRWShadingGroup **sh, Object *ob, bool vcol);
+
+DRWCallBuffer *DRW_shgroup_call_buffer(DRWShadingGroup *shading_group,
+                                       struct GPUVertFormat *format,
+                                       GPUPrimType prim_type);
+DRWCallBuffer *DRW_shgroup_call_buffer_instance(DRWShadingGroup *shading_group,
+                                                struct GPUVertFormat *format,
+                                                struct GPUBatch *geom);
+
+void DRW_buffer_add_entry_array(DRWCallBuffer *buffer, const void *attr[], uint attr_len);
+
+#define DRW_buffer_add_entry(buffer, ...) \
   do { \
     const void *array[] = {__VA_ARGS__}; \
-    DRW_shgroup_call_dynamic_add_array(shgroup, array, (sizeof(array) / sizeof(*array))); \
+    DRW_buffer_add_entry_array(buffer, array, (sizeof(array) / sizeof(*array))); \
   } while (0)
-
-uint DRW_shgroup_get_instance_count(const DRWShadingGroup *shgroup);
 
 void DRW_shgroup_state_enable(DRWShadingGroup *shgroup, DRWState state);
 void DRW_shgroup_state_disable(DRWShadingGroup *shgroup, DRWState state);
@@ -503,14 +503,6 @@ void DRW_shgroup_uniform_vec4(DRWShadingGroup *shgroup,
                               const char *name,
                               const float *value,
                               int arraysize);
-void DRW_shgroup_uniform_short_to_int(DRWShadingGroup *shgroup,
-                                      const char *name,
-                                      const short *value,
-                                      int arraysize);
-void DRW_shgroup_uniform_short_to_float(DRWShadingGroup *shgroup,
-                                        const char *name,
-                                        const short *value,
-                                        int arraysize);
 /* Boolean are expected to be 4bytes longs for opengl! */
 void DRW_shgroup_uniform_bool(DRWShadingGroup *shgroup,
                               const char *name,
@@ -538,11 +530,18 @@ void DRW_shgroup_uniform_mat4(DRWShadingGroup *shgroup, const char *name, const 
 void DRW_shgroup_uniform_int_copy(DRWShadingGroup *shgroup, const char *name, const int value);
 void DRW_shgroup_uniform_bool_copy(DRWShadingGroup *shgroup, const char *name, const bool value);
 void DRW_shgroup_uniform_float_copy(DRWShadingGroup *shgroup, const char *name, const float value);
+void DRW_shgroup_uniform_vec2_copy(DRWShadingGroup *shgroup, const char *name, const float *value);
 
 bool DRW_shgroup_is_empty(DRWShadingGroup *shgroup);
 
+/* TODO: workaround functions waiting for the clearing operation to be available inside the
+ * shgroups. */
+DRWShadingGroup *DRW_shgroup_get_next(DRWShadingGroup *shgroup);
+uint DRW_shgroup_stencil_mask_get(DRWShadingGroup *shgroup);
+
 /* Passes */
 DRWPass *DRW_pass_create(const char *name, DRWState state);
+/* TODO Replace with passes inheritance. */
 void DRW_pass_state_set(DRWPass *pass, DRWState state);
 void DRW_pass_state_add(DRWPass *pass, DRWState state);
 void DRW_pass_state_remove(DRWPass *pass, DRWState state);
@@ -553,51 +552,61 @@ void DRW_pass_sort_shgroup_z(DRWPass *pass);
 
 bool DRW_pass_is_empty(DRWPass *pass);
 
-/* Viewport */
-typedef enum {
-  /* keep in sync with the union struct DRWMatrixState. */
-  DRW_MAT_PERS = 0,
-  DRW_MAT_PERSINV,
-  DRW_MAT_VIEW,
-  DRW_MAT_VIEWINV,
-  DRW_MAT_WIN,
-  DRW_MAT_WININV,
+#define DRW_PASS_CREATE(pass, state) (pass = DRW_pass_create(#pass, state))
 
-  DRW_MAT_COUNT,  // Don't use this.
-} DRWViewportMatrixType;
+/* Views */
+DRWView *DRW_view_create(const float viewmat[4][4],
+                         const float winmat[4][4],
+                         const float (*culling_viewmat)[4],
+                         const float (*culling_winmat)[4],
+                         DRWCallVisibilityFn *visibility_fn);
+DRWView *DRW_view_create_sub(const DRWView *parent_view,
+                             const float viewmat[4][4],
+                             const float winmat[4][4]);
 
-typedef struct DRWMatrixState {
-  union {
-    float mat[DRW_MAT_COUNT][4][4];
-    struct {
-      /* keep in sync with the enum DRWViewportMatrixType. */
-      float persmat[4][4];
-      float persinv[4][4];
-      float viewmat[4][4];
-      float viewinv[4][4];
-      float winmat[4][4];
-      float wininv[4][4];
-    };
-  };
-} DRWMatrixState;
+void DRW_view_update(DRWView *view,
+                     const float viewmat[4][4],
+                     const float winmat[4][4],
+                     const float (*culling_viewmat)[4],
+                     const float (*culling_winmat)[4]);
+void DRW_view_update_sub(DRWView *view, const float viewmat[4][4], const float winmat[4][4]);
 
-void DRW_viewport_matrix_get(float mat[4][4], DRWViewportMatrixType type);
-void DRW_viewport_matrix_get_all(DRWMatrixState *state);
-void DRW_viewport_matrix_override_set(const float mat[4][4], DRWViewportMatrixType type);
-void DRW_viewport_matrix_override_set_all(DRWMatrixState *state);
-void DRW_viewport_matrix_override_unset(DRWViewportMatrixType type);
-void DRW_viewport_matrix_override_unset_all(void);
+const DRWView *DRW_view_default_get(void);
+void DRW_view_default_set(DRWView *view);
 
-/* These are in view-space so negative if in perspective.
+void DRW_view_set_active(DRWView *view);
+
+void DRW_view_clip_planes_set(DRWView *view, float (*planes)[4], int plane_len);
+void DRW_view_camtexco_set(DRWView *view, float texco[4]);
+
+/* For all getters, if view is NULL, default view is assumed. */
+void DRW_view_winmat_get(const DRWView *view, float mat[4][4], bool inverse);
+void DRW_view_viewmat_get(const DRWView *view, float mat[4][4], bool inverse);
+void DRW_view_persmat_get(const DRWView *view, float mat[4][4], bool inverse);
+
+void DRW_view_frustum_corners_get(const DRWView *view, BoundBox *corners);
+void DRW_view_frustum_planes_get(const DRWView *view, float planes[6][4]);
+
+/* These are in view-space, so negative if in perspective.
  * Extract near and far clip distance from the projection matrix. */
-float DRW_viewport_near_distance_get(void);
-float DRW_viewport_far_distance_get(void);
+float DRW_view_near_distance_get(const DRWView *view);
+float DRW_view_far_distance_get(const DRWView *view);
+bool DRW_view_is_persp_get(const DRWView *view);
+
+/* Culling, return true if object is inside view frustum. */
+bool DRW_culling_sphere_test(const DRWView *view, const BoundSphere *bsphere);
+bool DRW_culling_box_test(const DRWView *view, const BoundBox *bbox);
+bool DRW_culling_plane_test(const DRWView *view, const float plane[4]);
+
+void DRW_culling_frustum_corners_get(const DRWView *view, BoundBox *corners);
+void DRW_culling_frustum_planes_get(const DRWView *view, float planes[6][4]);
+
+/* Viewport */
 
 const float *DRW_viewport_size_get(void);
 const float *DRW_viewport_invert_size_get(void);
 const float *DRW_viewport_screenvecs_get(void);
 const float *DRW_viewport_pixelsize_get(void);
-bool DRW_viewport_is_persp_get(void);
 
 struct DefaultFramebufferList *DRW_viewport_framebuffer_list_get(void);
 struct DefaultTextureList *DRW_viewport_texture_list_get(void);
@@ -635,6 +644,7 @@ DrawData *DRW_drawdata_ensure(ID *id,
                               size_t size,
                               DrawDataInitCb init_cb,
                               DrawDataFreeCb free_cb);
+void **DRW_duplidata_get(void *vedata);
 
 /* Settings */
 bool DRW_object_is_renderable(const struct Object *ob);
@@ -659,20 +669,6 @@ void DRW_state_reset_ex(DRWState state);
 void DRW_state_reset(void);
 void DRW_state_lock(DRWState state);
 
-void DRW_state_invert_facing(void);
-
-void DRW_state_clip_planes_len_set(uint plane_len);
-void DRW_state_clip_planes_reset(void);
-void DRW_state_clip_planes_set_from_rv3d(struct RegionView3D *rv3d);
-
-/* Culling, return true if object is inside view frustum. */
-bool DRW_culling_sphere_test(BoundSphere *bsphere);
-bool DRW_culling_box_test(BoundBox *bbox);
-bool DRW_culling_plane_test(float plane[4]);
-
-void DRW_culling_frustum_corners_get(BoundBox *corners);
-void DRW_culling_frustum_planes_get(float planes[6][4]);
-
 /* Selection */
 void DRW_select_load_id(uint id);
 
@@ -682,6 +678,7 @@ bool DRW_state_is_fbo(void);
 bool DRW_state_is_select(void);
 bool DRW_state_is_depth(void);
 bool DRW_state_is_image_render(void);
+bool DRW_state_do_color_management(void);
 bool DRW_state_is_scene_render(void);
 bool DRW_state_is_opengl_render(void);
 bool DRW_state_is_playback(void);

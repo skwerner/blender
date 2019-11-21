@@ -130,10 +130,11 @@ static void gpencil_vbo_ensure_size(GpencilBatchCacheElem *be, int totvertex)
 }
 
 /* create batch geometry data for points stroke shader */
-void DRW_gpencil_get_point_geom(GpencilBatchCacheElem *be,
-                                bGPDstroke *gps,
-                                short thickness,
-                                const float ink[4])
+void gpencil_get_point_geom(GpencilBatchCacheElem *be,
+                            bGPDstroke *gps,
+                            short thickness,
+                            const float ink[4],
+                            const int alignment_mode)
 {
   int totvertex = gps->totpoints;
   if (be->vbo == NULL) {
@@ -176,32 +177,44 @@ void DRW_gpencil_get_point_geom(GpencilBatchCacheElem *be,
 
     /* use previous point to determine stroke direction */
     bGPDspoint *pt2 = NULL;
-    if (i == 0) {
-      if (gps->totpoints > 1) {
-        /* extrapolate a point before first point */
-        float fpt[3];
-        pt2 = &gps->points[1];
-        interp_v3_v3v3(fpt, &pt2->x, &pt->x, 1.5f);
-        GPU_vertbuf_attr_set(be->vbo, be->prev_pos_id, be->vbo_len, fpt);
-      }
-      else {
-        GPU_vertbuf_attr_set(be->vbo, be->prev_pos_id, be->vbo_len, &pt->x);
-      }
+    float fpt[3];
+    if (alignment_mode != GP_STYLE_FOLLOW_PATH) {
+      /* add small offset to get a vector */
+      copy_v3_v3(fpt, &pt->x);
+      fpt[0] += 0.00001f;
+      fpt[1] += 0.00001f;
+      GPU_vertbuf_attr_set(be->vbo, be->prev_pos_id, be->vbo_len, fpt);
     }
     else {
-      pt2 = &gps->points[i - 1];
-      GPU_vertbuf_attr_set(be->vbo, be->prev_pos_id, be->vbo_len, &pt2->x);
+      if (i == 0) {
+        if (gps->totpoints > 1) {
+          /* extrapolate a point before first point */
+          pt2 = &gps->points[1];
+          interp_v3_v3v3(fpt, &pt2->x, &pt->x, 1.5f);
+          GPU_vertbuf_attr_set(be->vbo, be->prev_pos_id, be->vbo_len, fpt);
+        }
+        else {
+          /* add small offset to get a vector */
+          copy_v3_v3(fpt, &pt->x);
+          fpt[0] += 0.00001f;
+          fpt[1] += 0.00001f;
+          GPU_vertbuf_attr_set(be->vbo, be->prev_pos_id, be->vbo_len, fpt);
+        }
+      }
+      else {
+        pt2 = &gps->points[i - 1];
+        GPU_vertbuf_attr_set(be->vbo, be->prev_pos_id, be->vbo_len, &pt2->x);
+      }
     }
-
     be->vbo_len++;
   }
 }
 
 /* create batch geometry data for stroke shader */
-void DRW_gpencil_get_stroke_geom(struct GpencilBatchCacheElem *be,
-                                 bGPDstroke *gps,
-                                 short thickness,
-                                 const float ink[4])
+void gpencil_get_stroke_geom(struct GpencilBatchCacheElem *be,
+                             bGPDstroke *gps,
+                             short thickness,
+                             const float ink[4])
 {
   bGPDspoint *points = gps->points;
   int totpoints = gps->totpoints;
@@ -306,17 +319,17 @@ void DRW_gpencil_get_stroke_geom(struct GpencilBatchCacheElem *be,
 }
 
 /* create batch geometry data for stroke shader */
-void DRW_gpencil_get_fill_geom(struct GpencilBatchCacheElem *be,
-                               Object *ob,
-                               bGPDstroke *gps,
-                               const float color[4])
+void gpencil_get_fill_geom(struct GpencilBatchCacheElem *be,
+                           Object *ob,
+                           bGPDstroke *gps,
+                           const float color[4])
 {
   BLI_assert(gps->totpoints >= 3);
 
   /* Calculate triangles cache for filling area (must be done only after changes) */
   if ((gps->flag & GP_STROKE_RECALC_GEOMETRY) || (gps->tot_triangles == 0) ||
       (gps->triangles == NULL)) {
-    DRW_gpencil_triangulate_stroke_fill(ob, gps);
+    gpencil_triangulate_stroke_fill(ob, gps);
   }
 
   BLI_assert(gps->tot_triangles >= 1);
@@ -352,7 +365,7 @@ void DRW_gpencil_get_fill_geom(struct GpencilBatchCacheElem *be,
 }
 
 /* create batch geometry data for current buffer stroke shader */
-GPUBatch *DRW_gpencil_get_buffer_stroke_geom(bGPdata *gpd, short thickness)
+GPUBatch *gpencil_get_buffer_stroke_geom(bGPdata *gpd, short thickness)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
   Scene *scene = draw_ctx->scene;
@@ -454,7 +467,7 @@ GPUBatch *DRW_gpencil_get_buffer_stroke_geom(bGPdata *gpd, short thickness)
 }
 
 /* create batch geometry data for current buffer point shader */
-GPUBatch *DRW_gpencil_get_buffer_point_geom(bGPdata *gpd, short thickness)
+GPUBatch *gpencil_get_buffer_point_geom(bGPdata *gpd, short thickness)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
   Scene *scene = draw_ctx->scene;
@@ -537,7 +550,7 @@ GPUBatch *DRW_gpencil_get_buffer_point_geom(bGPdata *gpd, short thickness)
 }
 
 /* create batch geometry data for current buffer control point shader */
-GPUBatch *DRW_gpencil_get_buffer_ctrlpoint_geom(bGPdata *gpd)
+GPUBatch *gpencil_get_buffer_ctrlpoint_geom(bGPdata *gpd)
 {
   bGPDcontrolpoint *cps = gpd->runtime.cp_points;
   int totpoints = gpd->runtime.tot_cp_points;
@@ -601,7 +614,7 @@ GPUBatch *DRW_gpencil_get_buffer_ctrlpoint_geom(bGPdata *gpd)
 }
 
 /* create batch geometry data for current buffer fill shader */
-GPUBatch *DRW_gpencil_get_buffer_fill_geom(bGPdata *gpd)
+GPUBatch *gpencil_get_buffer_fill_geom(bGPdata *gpd)
 {
   if (gpd == NULL) {
     return NULL;
@@ -630,8 +643,9 @@ GPUBatch *DRW_gpencil_get_buffer_fill_geom(bGPdata *gpd)
   float(*points2d)[2] = MEM_mallocN(sizeof(*points2d) * totpoints, __func__);
 
   /* Convert points to array and triangulate
-   * Here a cache is not used because while drawing the information changes all the time, so the cache
-   * would be recalculated constantly, so it is better to do direct calculation for each function call
+   * Here a cache is not used because while drawing the information changes all the time, so the
+   * cache would be recalculated constantly, so it is better to do direct calculation for each
+   * function call
    */
   for (int i = 0; i < totpoints; i++) {
     const tGPspoint *pt = &points[i];
@@ -680,10 +694,10 @@ GPUBatch *DRW_gpencil_get_buffer_fill_geom(bGPdata *gpd)
 }
 
 /* Draw selected verts for strokes being edited */
-void DRW_gpencil_get_edit_geom(struct GpencilBatchCacheElem *be,
-                               bGPDstroke *gps,
-                               float alpha,
-                               short dflag)
+void gpencil_get_edit_geom(struct GpencilBatchCacheElem *be,
+                           bGPDstroke *gps,
+                           float alpha,
+                           short dflag)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
   Object *ob = draw_ctx->obact;
@@ -783,10 +797,10 @@ void DRW_gpencil_get_edit_geom(struct GpencilBatchCacheElem *be,
 }
 
 /* Draw lines for strokes being edited */
-void DRW_gpencil_get_edlin_geom(struct GpencilBatchCacheElem *be,
-                                bGPDstroke *gps,
-                                float alpha,
-                                short UNUSED(dflag))
+void gpencil_get_edlin_geom(struct GpencilBatchCacheElem *be,
+                            bGPDstroke *gps,
+                            float alpha,
+                            short UNUSED(dflag))
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
   Object *ob = draw_ctx->obact;
@@ -882,7 +896,7 @@ static void set_grid_point(GPUVertBuf *vbo,
 }
 
 /* Draw grid lines */
-GPUBatch *DRW_gpencil_get_grid(Object *ob)
+GPUBatch *gpencil_get_grid(Object *ob)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
   Scene *scene = draw_ctx->scene;

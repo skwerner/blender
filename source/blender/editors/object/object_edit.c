@@ -288,9 +288,7 @@ static int object_hide_collection_exec(bContext *C, wmOperator *op)
 
   DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
 
-  if (BKE_layer_collection_isolate(scene, view_layer, lc, extend)) {
-    DEG_relations_tag_update(CTX_data_main(C));
-  }
+  BKE_layer_collection_isolate(scene, view_layer, lc, extend);
 
   WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
 
@@ -314,7 +312,7 @@ void ED_collection_hide_menu_draw(const bContext *C, uiLayout *layout)
       continue;
     }
 
-    if (lc->collection->flag & COLLECTION_RESTRICT_VIEW) {
+    if (lc->collection->flag & COLLECTION_RESTRICT_VIEWPORT) {
       continue;
     }
 
@@ -703,8 +701,6 @@ static int editmode_toggle_exec(bContext *C, wmOperator *op)
     }
   }
 
-  ED_space_image_uv_sculpt_update(bmain, CTX_wm_manager(C), scene);
-
   WM_msg_publish_rna_prop(mbus, &obact->id, obact, Object, mode);
 
   if (G.background == false) {
@@ -724,7 +720,7 @@ static bool editmode_toggle_poll(bContext *C)
   }
 
   /* if hidden but in edit mode, we still display */
-  if ((ob->restrictflag & OB_RESTRICT_VIEW) && !(ob->mode & OB_MODE_EDIT)) {
+  if ((ob->restrictflag & OB_RESTRICT_VIEWPORT) && !(ob->mode & OB_MODE_EDIT)) {
     return 0;
   }
 
@@ -872,6 +868,8 @@ static int forcefield_toggle_exec(bContext *C, wmOperator *UNUSED(op))
   ED_object_check_force_modifiers(CTX_data_main(C), CTX_data_scene(C), ob);
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
   WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
+
+  DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
 
   return OPERATOR_FINISHED;
 }
@@ -1420,7 +1418,7 @@ void OBJECT_OT_mode_set(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = object_mode_set_exec;
 
-  ot->poll = object_mode_set_poll;  //ED_operator_object_active_editable;
+  ot->poll = object_mode_set_poll;  // ED_operator_object_active_editable;
 
   /* flags */
   ot->flag = 0; /* no register/undo here, leave it to operators being called */
@@ -1446,7 +1444,7 @@ void OBJECT_OT_mode_set_or_submode(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = object_mode_set_exec;
 
-  ot->poll = object_mode_set_poll;  //ED_operator_object_active_editable;
+  ot->poll = object_mode_set_poll;  // ED_operator_object_active_editable;
 
   /* flags */
   ot->flag = 0; /* no register/undo here, leave it to operators being called */
@@ -1608,6 +1606,7 @@ static void move_to_collection_menu_create(bContext *UNUSED(C), uiLayout *layout
   MoveToCollectionData *menu = menu_v;
   const char *name = BKE_collection_ui_name_get(menu->collection);
 
+  UI_block_flag_enable(uiLayoutGetBlock(layout), UI_BLOCK_IS_FLIP);
   uiItemIntO(layout, name, ICON_NONE, menu->ot->idname, "collection_index", menu->index);
   uiItemS(layout);
 
@@ -1712,7 +1711,7 @@ void OBJECT_OT_move_to_collection(wmOperatorType *ot)
 
   /* identifiers */
   ot->name = "Move to Collection";
-  ot->description = "Move objects to a scene collection";
+  ot->description = "Move objects to a collection";
   ot->idname = "OBJECT_OT_move_to_collection";
 
   /* api callbacks */
@@ -1781,4 +1780,5 @@ void OBJECT_OT_link_to_collection(wmOperatorType *ot)
                         "Name",
                         "Name of the newly added collection");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+  ot->prop = prop;
 }

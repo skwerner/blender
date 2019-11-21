@@ -44,14 +44,15 @@ enum eWM_EventHandlerType {
   WM_HANDLER_TYPE_KEYMAP,
 };
 
+typedef bool (*EventHandlerPoll)(const ARegion *ar, const wmEvent *event);
+
 typedef struct wmEventHandler {
   struct wmEventHandler *next, *prev;
 
   enum eWM_EventHandlerType type;
   char flag; /* WM_HANDLER_BLOCKING, ... */
 
-  /** Optional local and windowspace bb. */
-  const rcti *bblocal, *bbwin;
+  EventHandlerPoll poll;
 } wmEventHandler;
 
 /** Run after the keymap item runs. */
@@ -137,10 +138,9 @@ void wm_event_free_handler(wmEventHandler *handler);
 /* goes over entire hierarchy:  events -> window -> screen -> area -> region */
 void wm_event_do_handlers(bContext *C);
 
-void wm_event_add_ghostevent(
-    wmWindowManager *wm, wmWindow *win, int type, int time, void *customdata);
+void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void *customdata);
 
-void wm_event_do_depsgraph(bContext *C);
+void wm_event_do_depsgraph(bContext *C, bool is_after_open_file);
 void wm_event_do_refresh_wm_and_depsgraph(bContext *C);
 void wm_event_do_notifiers(bContext *C);
 

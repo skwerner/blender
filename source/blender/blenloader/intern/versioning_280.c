@@ -30,6 +30,7 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
+#include "DNA_anim_types.h"
 #include "DNA_object_types.h"
 #include "DNA_camera_types.h"
 #include "DNA_cloth_types.h"
@@ -56,11 +57,13 @@
 #include "DNA_text_types.h"
 
 #include "BKE_action.h"
+#include "BKE_animsys.h"
 #include "BKE_cloth.h"
 #include "BKE_collection.h"
 #include "BKE_constraint.h"
 #include "BKE_colortools.h"
 #include "BKE_customdata.h"
+#include "BKE_fcurve.h"
 #include "BKE_freestyle.h"
 #include "BKE_gpencil.h"
 #include "BKE_idprop.h"
@@ -418,10 +421,13 @@ static void do_version_layers_to_collections(Main *bmain, Scene *scene)
 
           Collection *collection = BKE_collection_add(bmain, collection_master, name);
           collection->id.lib = scene->id.lib;
+          if (collection->id.lib != NULL) {
+            collection->id.tag |= LIB_TAG_INDIRECT;
+          }
           collections[layer] = collection;
 
           if (!(scene->lay & (1 << layer))) {
-            collection->flag |= COLLECTION_RESTRICT_VIEW | COLLECTION_RESTRICT_RENDER;
+            collection->flag |= COLLECTION_RESTRICT_VIEWPORT | COLLECTION_RESTRICT_RENDER;
           }
         }
 
@@ -621,6 +627,113 @@ static ARegion *do_versions_add_region(int regiontype, const char *name)
   return ar;
 }
 
+static void do_version_bones_split_bbone_scale(ListBase *lb)
+{
+  for (Bone *bone = lb->first; bone; bone = bone->next) {
+    bone->scale_in_y = bone->scale_in_x;
+    bone->scale_out_y = bone->scale_out_x;
+
+    do_version_bones_split_bbone_scale(&bone->childbase);
+  }
+}
+
+static bool replace_bbone_scale_rnapath(char **p_old_path)
+{
+  char *old_path = *p_old_path;
+
+  if (old_path == NULL) {
+    return false;
+  }
+
+  if (BLI_str_endswith(old_path, "bbone_scalein") ||
+      BLI_str_endswith(old_path, "bbone_scaleout")) {
+    *p_old_path = BLI_strdupcat(old_path, "x");
+
+    MEM_freeN(old_path);
+    return true;
+  }
+
+  return false;
+}
+
+static void do_version_bbone_scale_fcurve_fix(ListBase *curves, FCurve *fcu)
+{
+  /* Update driver variable paths. */
+  if (fcu->driver) {
+    LISTBASE_FOREACH (DriverVar *, dvar, &fcu->driver->variables) {
+      DRIVER_TARGETS_LOOPER_BEGIN (dvar) {
+        replace_bbone_scale_rnapath(&dtar->rna_path);
+      }
+      DRIVER_TARGETS_LOOPER_END;
+    }
+  }
+
+  /* Update F-Curve's path. */
+  if (replace_bbone_scale_rnapath(&fcu->rna_path)) {
+    /* If matched, duplicate the curve and tweak name. */
+    FCurve *second = copy_fcurve(fcu);
+
+    second->rna_path[strlen(second->rna_path) - 1] = 'y';
+
+    BLI_insertlinkafter(curves, fcu, second);
+
+    /* Add to the curve group. */
+    second->grp = fcu->grp;
+
+    if (fcu->grp != NULL && fcu->grp->channels.last == fcu) {
+      fcu->grp->channels.last = second;
+    }
+  }
+}
+
+static void do_version_bbone_scale_animdata_cb(ID *UNUSED(id),
+                                               AnimData *adt,
+                                               void *UNUSED(wrapper_data))
+{
+  LISTBASE_FOREACH_MUTABLE (FCurve *, fcu, &adt->drivers) {
+    do_version_bbone_scale_fcurve_fix(&adt->drivers, fcu);
+  }
+}
+
+static void do_version_constraints_maintain_volume_mode_uniform(ListBase *lb)
+{
+  for (bConstraint *con = lb->first; con; con = con->next) {
+    if (con->type == CONSTRAINT_TYPE_SAMEVOL) {
+      bSameVolumeConstraint *data = (bSameVolumeConstraint *)con->data;
+      data->mode = SAMEVOL_UNIFORM;
+    }
+  }
+}
+
+static void do_version_constraints_copy_scale_power(ListBase *lb)
+{
+  for (bConstraint *con = lb->first; con; con = con->next) {
+    if (con->type == CONSTRAINT_TYPE_SIZELIKE) {
+      bSizeLikeConstraint *data = (bSizeLikeConstraint *)con->data;
+      data->power = 1.0f;
+    }
+  }
+}
+
+static void do_versions_seq_alloc_transform_and_crop(ListBase *seqbase)
+{
+  for (Sequence *seq = seqbase->first; seq != NULL; seq = seq->next) {
+    if (ELEM(seq->type, SEQ_TYPE_SOUND_RAM, SEQ_TYPE_SOUND_HD) == 0) {
+      if (seq->strip->transform == NULL) {
+        seq->strip->transform = MEM_callocN(sizeof(struct StripTransform), "StripTransform");
+      }
+
+      if (seq->strip->crop == NULL) {
+        seq->strip->crop = MEM_callocN(sizeof(struct StripCrop), "StripCrop");
+      }
+
+      if (seq->seqbase.first != NULL) {
+        do_versions_seq_alloc_transform_and_crop(&seq->seqbase);
+      }
+    }
+  }
+}
+
 void do_versions_after_linking_280(Main *bmain)
 {
   bool use_collection_compat_28 = true;
@@ -634,7 +747,7 @@ void do_versions_after_linking_280(Main *bmain)
       /* Add fake user for all existing groups. */
       id_fake_user_set(&collection->id);
 
-      if (collection->flag & (COLLECTION_RESTRICT_VIEW | COLLECTION_RESTRICT_RENDER)) {
+      if (collection->flag & (COLLECTION_RESTRICT_VIEWPORT | COLLECTION_RESTRICT_RENDER)) {
         continue;
       }
 
@@ -660,7 +773,8 @@ void do_versions_after_linking_280(Main *bmain)
             char name[MAX_ID_NAME];
             BLI_snprintf(name, sizeof(name), DATA_("Hidden %d"), coll_idx + 1);
             *collection_hidden = BKE_collection_add(bmain, collection, name);
-            (*collection_hidden)->flag |= COLLECTION_RESTRICT_VIEW | COLLECTION_RESTRICT_RENDER;
+            (*collection_hidden)->flag |= COLLECTION_RESTRICT_VIEWPORT |
+                                          COLLECTION_RESTRICT_RENDER;
           }
 
           BKE_collection_object_add(bmain, *collection_hidden, ob);
@@ -670,7 +784,7 @@ void do_versions_after_linking_280(Main *bmain)
     }
 
     /* We need to assign lib pointer to generated hidden collections *after* all have been created,
-     * otherwise we'll end up with several datablocks sharing same name/library,
+     * otherwise we'll end up with several data-blocks sharing same name/library,
      * which is FORBIDDEN!
      * Note: we need this to be recursive,
      * since a child collection may be sorted before its parent in bmain. */
@@ -755,7 +869,6 @@ void do_versions_after_linking_280(Main *bmain)
       for (SceneRenderLayer *srl = scene->r.layers.first; srl; srl = srl->next) {
         if (srl->prop) {
           IDP_FreeProperty(srl->prop);
-          MEM_freeN(srl->prop);
         }
         BKE_freestyle_config_free(&srl->freestyleConfig, true);
       }
@@ -990,6 +1103,32 @@ void do_versions_after_linking_280(Main *bmain)
       BKE_rigidbody_constraints_collection_validate(scene, rbw);
     }
   }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 280, 69)) {
+    /* Unify DOF settings (EEVEE part only) */
+    const int SCE_EEVEE_DOF_ENABLED = (1 << 7);
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      if (STREQ(scene->r.engine, RE_engine_id_BLENDER_EEVEE)) {
+        if (scene->eevee.flag & SCE_EEVEE_DOF_ENABLED) {
+          Object *cam_ob = scene->camera;
+          if (cam_ob && cam_ob->type == OB_CAMERA) {
+            Camera *cam = cam_ob->data;
+            cam->dof.flag |= CAM_DOF_ENABLED;
+          }
+        }
+      }
+    }
+
+    LISTBASE_FOREACH (Camera *, camera, &bmain->cameras) {
+      camera->dof.focus_object = camera->dof_ob;
+      camera->dof.focus_distance = camera->dof_distance;
+      camera->dof.aperture_fstop = camera->gpu_dof.fstop;
+      camera->dof.aperture_rotation = camera->gpu_dof.rotation;
+      camera->dof.aperture_ratio = camera->gpu_dof.ratio;
+      camera->dof.aperture_blades = camera->gpu_dof.num_blades;
+      camera->dof_ob = NULL;
+    }
+  }
 }
 
 /* NOTE: This version patch is intended for versions < 2.52.2,
@@ -1004,6 +1143,14 @@ static void do_versions_seq_unique_name_all_strips(Scene *sce, ListBase *seqbase
       do_versions_seq_unique_name_all_strips(sce, &seq->seqbase);
     }
   }
+}
+
+static void do_versions_seq_set_cache_defaults(Editing *ed)
+{
+  ed->cache_flag = SEQ_CACHE_STORE_FINAL_OUT;
+  ed->cache_flag |= SEQ_CACHE_VIEW_FINAL_OUT;
+  ed->cache_flag |= SEQ_CACHE_VIEW_ENABLE;
+  ed->recycle_max_cost = 10.0f;
 }
 
 void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
@@ -1033,12 +1180,11 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
     /* MTexPoly now removed. */
     if (DNA_struct_find(fd->filesdna, "MTexPoly")) {
-      const int cd_mtexpoly = 15; /* CD_MTEXPOLY, deprecated */
       for (Mesh *me = bmain->meshes.first; me; me = me->id.next) {
         /* If we have UV's, so this file will have MTexPoly layers too! */
         if (me->mloopuv != NULL) {
           CustomData_update_typemap(&me->pdata);
-          CustomData_free_layers(&me->pdata, cd_mtexpoly, me->totpoly);
+          CustomData_free_layers(&me->pdata, CD_MTEXPOLY, me->totpoly);
           BKE_mesh_update_customdata_pointers(me, false);
         }
       }
@@ -1208,6 +1354,16 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
                            CURVE_PRESET_GAUSS,
                            CURVEMAP_SLOPE_POSITIVE);
           }
+        }
+      }
+    }
+
+    /* 2.79 style Maintain Volume mode. */
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      do_version_constraints_maintain_volume_mode_uniform(&ob->constraints);
+      if (ob->pose) {
+        LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
+          do_version_constraints_maintain_volume_mode_uniform(&pchan->constraints);
         }
       }
     }
@@ -1558,10 +1714,10 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     } \
   } \
   ((void)0)
-
+        const int SCE_EEVEE_DOF_ENABLED = (1 << 7);
         IDProperty *props = IDP_GetPropertyFromGroup(scene->layer_properties,
                                                      RE_engine_id_BLENDER_EEVEE);
-        EEVEE_GET_BOOL(props, volumetric_enable, SCE_EEVEE_VOLUMETRIC_ENABLED);
+        // EEVEE_GET_BOOL(props, volumetric_enable, SCE_EEVEE_VOLUMETRIC_ENABLED);
         EEVEE_GET_BOOL(props, volumetric_lights, SCE_EEVEE_VOLUMETRIC_LIGHTS);
         EEVEE_GET_BOOL(props, volumetric_shadows, SCE_EEVEE_VOLUMETRIC_SHADOWS);
         EEVEE_GET_BOOL(props, gtao_enable, SCE_EEVEE_GTAO_ENABLED);
@@ -1572,7 +1728,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         EEVEE_GET_BOOL(props, motion_blur_enable, SCE_EEVEE_MOTION_BLUR_ENABLED);
         EEVEE_GET_BOOL(props, shadow_high_bitdepth, SCE_EEVEE_SHADOW_HIGH_BITDEPTH);
         EEVEE_GET_BOOL(props, taa_reprojection, SCE_EEVEE_TAA_REPROJECTION);
-        EEVEE_GET_BOOL(props, sss_enable, SCE_EEVEE_SSS_ENABLED);
+        // EEVEE_GET_BOOL(props, sss_enable, SCE_EEVEE_SSS_ENABLED);
         EEVEE_GET_BOOL(props, sss_separate_albedo, SCE_EEVEE_SSS_SEPARATE_ALBEDO);
         EEVEE_GET_BOOL(props, ssr_enable, SCE_EEVEE_SSR_ENABLED);
         EEVEE_GET_BOOL(props, ssr_refraction, SCE_EEVEE_SSR_REFRACTION);
@@ -1626,7 +1782,6 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
         /* Cleanup. */
         IDP_FreeProperty(scene->layer_properties);
-        MEM_freeN(scene->layer_properties);
         scene->layer_properties = NULL;
 
 #undef EEVEE_GET_FLOAT_ARRAY
@@ -2198,18 +2353,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
             if (sl->spacetype == SPACE_VIEW3D) {
               View3D *v3d = (View3D *)sl;
-              v3d->shading.xray_alpha_wire = 0.5f;
-            }
-          }
-        }
-      }
-
-      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
-        for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-          for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
-            if (sl->spacetype == SPACE_VIEW3D) {
-              View3D *v3d = (View3D *)sl;
-              v3d->shading.flag |= V3D_SHADING_XRAY_BONE;
+              v3d->shading.flag |= V3D_SHADING_XRAY_WIREFRAME;
             }
           }
         }
@@ -2597,13 +2741,6 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     for (Camera *ca = bmain->cameras.first; ca; ca = ca->id.next) {
       ca->drawsize *= 2.0f;
     }
-    for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
-      if (ob->type != OB_EMPTY) {
-        if (UNLIKELY(ob->transflag & OB_DUPLICOLLECTION)) {
-          BKE_object_type_set_empty_for_versioning(ob);
-        }
-      }
-    }
 
     /* Grease pencil primitive curve */
     if (!DNA_struct_elem_find(
@@ -2737,7 +2874,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
 
     for (Material *mat = bmain->materials.first; mat; mat = mat->id.next) {
-      mat->blend_flag &= ~(MA_BL_FLAG_UNUSED_2);
+      mat->blend_flag &= ~(1 << 2); /* UNUSED */
     }
   }
 
@@ -2930,8 +3067,8 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
 
     LISTBASE_FOREACH (bArmature *, arm, &bmain->armatures) {
-      arm->flag &= ~(ARM_FLAG_UNUSED_1 | ARM_FLAG_UNUSED_5 | ARM_FLAG_UNUSED_7 |
-                     ARM_FLAG_UNUSED_12);
+      arm->flag &= ~(ARM_FLAG_UNUSED_1 | ARM_FLAG_UNUSED_5 | ARM_FLAG_UNUSED_6 |
+                     ARM_FLAG_UNUSED_7 | ARM_FLAG_UNUSED_12);
     }
 
     LISTBASE_FOREACH (Text *, text, &bmain->texts) {
@@ -3157,21 +3294,27 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
           ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
           /* All spaces that use tools must be eventually added. */
+          ARegion *ar = NULL;
           if (ELEM(sl->spacetype, SPACE_VIEW3D, SPACE_IMAGE) &&
-              (do_versions_find_region_or_null(regionbase, RGN_TYPE_TOOL_HEADER) == NULL)) {
+              ((ar = do_versions_find_region_or_null(regionbase, RGN_TYPE_TOOL_HEADER)) == NULL)) {
             /* Add tool header. */
-            ARegion *ar = do_versions_add_region(RGN_TYPE_TOOL_HEADER, "tool header");
+            ar = do_versions_add_region(RGN_TYPE_TOOL_HEADER, "tool header");
             ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
 
             ARegion *ar_header = do_versions_find_region(regionbase, RGN_TYPE_HEADER);
             BLI_insertlinkbefore(regionbase, ar_header, ar);
+            /* Hide by default, enable for painting workspaces (startup only). */
+            ar->flag |= RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER;
+          }
+          if (ar != NULL) {
+            SET_FLAG_FROM_TEST(ar->flag, ar->flag & RGN_FLAG_HIDDEN_BY_USER, RGN_FLAG_HIDDEN);
           }
         }
       }
     }
   }
 
-  {
+  if (!MAIN_VERSION_ATLEAST(bmain, 280, 60)) {
     if (!DNA_struct_elem_find(fd->filesdna, "bSplineIKConstraint", "short", "yScaleMode")) {
       for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
         if (ob->pose) {
@@ -3202,7 +3345,195 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
       }
     }
+    if (!DNA_struct_elem_find(fd->filesdna, "SceneDisplay", "char", "render_aa")) {
+      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+        scene->display.render_aa = SCE_DISPLAY_AA_SAMPLES_8;
+        scene->display.viewport_aa = SCE_DISPLAY_AA_FXAA;
+      }
+    }
 
+    /* Split bbone_scalein/bbone_scaleout into x and y fields. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bPoseChannel", "float", "scale_out_y")) {
+      /* Update armature data and pose channels. */
+      LISTBASE_FOREACH (bArmature *, arm, &bmain->armatures) {
+        do_version_bones_split_bbone_scale(&arm->bonebase);
+      }
+
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        if (ob->pose) {
+          LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
+            pchan->scale_in_y = pchan->scale_in_x;
+            pchan->scale_out_y = pchan->scale_out_x;
+          }
+        }
+      }
+
+      /* Update action curves and drivers. */
+      LISTBASE_FOREACH (bAction *, act, &bmain->actions) {
+        LISTBASE_FOREACH_MUTABLE (FCurve *, fcu, &act->curves) {
+          do_version_bbone_scale_fcurve_fix(&act->curves, fcu);
+        }
+      }
+
+      BKE_animdata_main_cb(bmain, do_version_bbone_scale_animdata_cb, NULL);
+    }
+
+    for (Scene *sce = bmain->scenes.first; sce != NULL; sce = sce->id.next) {
+      if (sce->ed != NULL) {
+        do_versions_seq_set_cache_defaults(sce->ed);
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 280, 61)) {
+    /* Added a power option to Copy Scale. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bSizeLikeConstraint", "float", "power")) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        do_version_constraints_copy_scale_power(&ob->constraints);
+        if (ob->pose) {
+          LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
+            do_version_constraints_copy_scale_power(&pchan->constraints);
+          }
+        }
+      }
+    }
+
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+        for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+          if (ELEM(sl->spacetype, SPACE_CLIP, SPACE_GRAPH, SPACE_SEQ)) {
+            ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+
+            ARegion *ar = NULL;
+            if (sl->spacetype == SPACE_CLIP) {
+              if (((SpaceClip *)sl)->view == SC_VIEW_GRAPH) {
+                ar = do_versions_find_region(regionbase, RGN_TYPE_PREVIEW);
+              }
+            }
+            else {
+              ar = do_versions_find_region(regionbase, RGN_TYPE_WINDOW);
+            }
+
+            if (ar != NULL) {
+              ar->v2d.scroll &= ~V2D_SCROLL_LEFT;
+              ar->v2d.scroll |= V2D_SCROLL_RIGHT;
+            }
+          }
+        }
+      }
+    }
+
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      for (ScrArea *area = screen->areabase.first; area; area = area->next) {
+        for (SpaceLink *sl = area->spacedata.first; sl; sl = sl->next) {
+          if (sl->spacetype != SPACE_OUTLINER) {
+            continue;
+          }
+          SpaceOutliner *so = (SpaceOutliner *)sl;
+          so->filter &= ~SO_FLAG_UNUSED_1;
+          so->show_restrict_flags = SO_RESTRICT_ENABLE | SO_RESTRICT_HIDE;
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 280, 69)) {
+    LISTBASE_FOREACH (bArmature *, arm, &bmain->armatures) {
+      arm->flag &= ~(ARM_FLAG_UNUSED_7 | ARM_FLAG_UNUSED_9);
+    }
+
+    /* Initializes sun lights with the new angular diameter property */
+    if (!DNA_struct_elem_find(fd->filesdna, "Light", "float", "sun_angle")) {
+      LISTBASE_FOREACH (Light *, light, &bmain->lights) {
+        light->sun_angle = 2.0f * atanf(light->area_size);
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 280, 70)) {
+    /* New image alpha modes. */
+    LISTBASE_FOREACH (Image *, image, &bmain->images) {
+      const int IMA_IGNORE_ALPHA = (1 << 12);
+      if (image->flag & IMA_IGNORE_ALPHA) {
+        image->alpha_mode = IMA_ALPHA_IGNORE;
+        image->flag &= ~IMA_IGNORE_ALPHA;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 280, 71)) {
+    /* This assumes the Blender builtin config. Depending on the OCIO
+     * environment variable for versioning is weak, and these deprecated view
+     * transforms and look names don't seem to exist in other commonly used
+     * OCIO configs so .blend files created for those would be unaffected. */
+    for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+      ColorManagedViewSettings *view_settings;
+      view_settings = &scene->view_settings;
+
+      if (STREQ(view_settings->view_transform, "Default")) {
+        STRNCPY(view_settings->view_transform, "Standard");
+      }
+      else if (STREQ(view_settings->view_transform, "RRT") ||
+               STREQ(view_settings->view_transform, "Film")) {
+        STRNCPY(view_settings->view_transform, "Filmic");
+      }
+      else if (STREQ(view_settings->view_transform, "Log")) {
+        STRNCPY(view_settings->view_transform, "Filmic Log");
+      }
+
+      if (STREQ(view_settings->look, "Filmic - Base Contrast")) {
+        STRNCPY(view_settings->look, "None");
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 280, 74)) {
+    for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+      if (scene->ed != NULL) {
+        do_versions_seq_alloc_transform_and_crop(&scene->ed->seqbase);
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 280, 75)) {
+    for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+      if (scene->master_collection != NULL) {
+        scene->master_collection->flag &= ~(COLLECTION_RESTRICT_VIEWPORT |
+                                            COLLECTION_RESTRICT_SELECT |
+                                            COLLECTION_RESTRICT_RENDER);
+      }
+
+      UnitSettings *unit = &scene->unit;
+      if (unit->system == USER_UNIT_NONE) {
+        unit->length_unit = (char)USER_UNIT_ADAPTIVE;
+        unit->mass_unit = (char)USER_UNIT_ADAPTIVE;
+      }
+
+      RenderData *render_data = &scene->r;
+      switch (render_data->ffcodecdata.ffmpeg_preset) {
+        case FFM_PRESET_ULTRAFAST:
+        case FFM_PRESET_SUPERFAST:
+          render_data->ffcodecdata.ffmpeg_preset = FFM_PRESET_REALTIME;
+          break;
+        case FFM_PRESET_VERYFAST:
+        case FFM_PRESET_FASTER:
+        case FFM_PRESET_FAST:
+        case FFM_PRESET_MEDIUM:
+          render_data->ffcodecdata.ffmpeg_preset = FFM_PRESET_GOOD;
+          break;
+        case FFM_PRESET_SLOW:
+        case FFM_PRESET_SLOWER:
+        case FFM_PRESET_VERYSLOW:
+          render_data->ffcodecdata.ffmpeg_preset = FFM_PRESET_BEST;
+      }
+    }
+
+    LISTBASE_FOREACH (bArmature *, arm, &bmain->armatures) {
+      arm->flag &= ~(ARM_FLAG_UNUSED_6);
+    }
+  }
+
+  {
     /* Versioning code until next subversion bump goes here. */
   }
 }

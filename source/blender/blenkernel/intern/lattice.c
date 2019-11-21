@@ -32,6 +32,7 @@
 #include "BLI_listbase.h"
 #include "BLI_bitmap.h"
 #include "BLI_math.h"
+#include "BLI_task.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -268,8 +269,10 @@ Lattice *BKE_lattice_add(Main *bmain, const char *name)
 }
 
 /**
- * Only copy internal data of Lattice ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Lattice ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -681,8 +684,8 @@ static bool calc_curve_deform(
 
     if (cd->no_rot_axis) { /* set by caller */
 
-      /* this is not exactly the same as 2.4x, since the axis is having rotation removed rather than
-       * changing the axis before calculating the tilt but serves much the same purpose */
+      /* This is not exactly the same as 2.4x, since the axis is having rotation removed rather
+       * than changing the axis before calculating the tilt but serves much the same purpose. */
       float dir_flat[3] = {0, 0, 0}, q[4];
       copy_v3_v3(dir_flat, dir);
       dir_flat[cd->no_rot_axis - 1] = 0.0f;
@@ -699,8 +702,10 @@ static bool calc_curve_deform(
      *
      * The way 'co' is copied to 'cent' may seem to have no meaning, but it does.
      *
-     * Use a curve modifier to stretch a cube out, color each side RGB, positive side light, negative dark.
-     * view with X up (default), from the angle that you can see 3 faces RGB colors (light), anti-clockwise
+     * Use a curve modifier to stretch a cube out, color each side RGB,
+     * positive side light, negative dark.
+     * view with X up (default), from the angle that you can see 3 faces RGB colors (light),
+     * anti-clockwise
      * Notice X,Y,Z Up all have light colors and each ordered CCW.
      *
      * Now for Neg Up XYZ, the colors are all dark, and ordered clockwise - Campbell
@@ -874,6 +879,31 @@ void curve_deform_vector(
   mul_m4_v3(cd.objectspace, vec);
 }
 
+typedef struct LatticeDeformUserdata {
+  LatticeDeformData *lattice_deform_data;
+  float (*vertexCos)[3];
+  MDeformVert *dvert;
+  int defgrp_index;
+  float fac;
+} LatticeDeformUserdata;
+
+static void lattice_deform_vert_task(void *__restrict userdata,
+                                     const int index,
+                                     const ParallelRangeTLS *__restrict UNUSED(tls))
+{
+  const LatticeDeformUserdata *data = userdata;
+
+  if (data->dvert != NULL) {
+    const float weight = defvert_find_weight(data->dvert + index, data->defgrp_index);
+    if (weight > 0.0f) {
+      calc_latt_deform(data->lattice_deform_data, data->vertexCos[index], weight * data->fac);
+    }
+  }
+  else {
+    calc_latt_deform(data->lattice_deform_data, data->vertexCos[index], data->fac);
+  }
+}
+
 void lattice_deform_verts(Object *laOb,
                           Object *target,
                           Mesh *mesh,
@@ -885,7 +915,6 @@ void lattice_deform_verts(Object *laOb,
   LatticeDeformData *lattice_deform_data;
   MDeformVert *dvert = NULL;
   int defgrp_index = -1;
-  int a;
 
   if (laOb->type != OB_LATTICE) {
     return;
@@ -912,20 +941,18 @@ void lattice_deform_verts(Object *laOb,
       }
     }
   }
-  if (dvert) {
-    MDeformVert *dvert_iter;
-    for (a = 0, dvert_iter = dvert; a < numVerts; a++, dvert_iter++) {
-      const float weight = defvert_find_weight(dvert_iter, defgrp_index);
-      if (weight > 0.0f) {
-        calc_latt_deform(lattice_deform_data, vertexCos[a], weight * fac);
-      }
-    }
-  }
-  else {
-    for (a = 0; a < numVerts; a++) {
-      calc_latt_deform(lattice_deform_data, vertexCos[a], fac);
-    }
-  }
+
+  LatticeDeformUserdata data = {.lattice_deform_data = lattice_deform_data,
+                                .vertexCos = vertexCos,
+                                .dvert = dvert,
+                                .defgrp_index = defgrp_index,
+                                .fac = fac};
+
+  ParallelRangeSettings settings;
+  BLI_parallel_range_settings_defaults(&settings);
+  settings.min_iter_per_thread = 32;
+  BLI_task_parallel_range(0, numVerts, &data, lattice_deform_vert_task, &settings);
+
   end_latt_deform(lattice_deform_data);
 }
 
@@ -1061,7 +1088,8 @@ void BKE_lattice_vertexcos_apply(struct Object *ob, float (*vertexCos)[3])
 void BKE_lattice_modifiers_calc(struct Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
   Lattice *lt = ob->data;
-  /* Get vertex coordinates from the original copy; otherwise we get already-modified coordinates. */
+  /* Get vertex coordinates from the original copy;
+   * otherwise we get already-modified coordinates. */
   Object *ob_orig = DEG_get_original_object(ob);
   VirtualModifierData virtualModifierData;
   ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);

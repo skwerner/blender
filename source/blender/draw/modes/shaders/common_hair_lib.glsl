@@ -38,8 +38,8 @@ uniform usamplerBuffer hairStrandBuffer;    /* R32UI */
 uniform usamplerBuffer hairStrandSegBuffer; /* R16UI */
 
 /* Not used, use one buffer per uv layer */
-//uniform samplerBuffer hairUVBuffer; /* RG32F */
-//uniform samplerBuffer hairColBuffer; /* RGBA16 linear color */
+// uniform samplerBuffer hairUVBuffer; /* RG32F */
+// uniform samplerBuffer hairColBuffer; /* RGBA16 linear color */
 
 /* -- Subdivision stage -- */
 /**
@@ -160,9 +160,9 @@ void hair_get_pos_tan_binor_time(bool is_persp,
   }
 
   wpos = (hairDupliMatrix * vec4(wpos, 1.0)).xyz;
-  wtan = mat3(hairDupliMatrix) * wtan;
+  wtan = -normalize(mat3(hairDupliMatrix) * wtan);
 
-  vec3 camera_vec = (is_persp) ? wpos - camera_pos : -camera_z;
+  vec3 camera_vec = (is_persp) ? camera_pos - wpos : camera_z;
   wbinor = normalize(cross(camera_vec, wtan));
 
   thickness = hair_shaperadius(hairRadShape, hairRadRoot, hairRadTip, time);

@@ -431,8 +431,6 @@ set(ICON_NAMES
   key_hlt
   mute_ipo_off
   mute_ipo_on
-  visible_ipo_off
-  visible_ipo_on
   driver
   solo_off
   solo_on
@@ -569,9 +567,9 @@ set(ICON_NAMES
   loop_forwards
   back
   forward
+  file_cache
   file_volume
-  alembic
-  volume
+  file_3d
   file_hidden
   file_backup
   disk_drive
@@ -737,6 +735,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.pose.relax
   ops.sculpt.border_hide
   ops.sculpt.border_mask
+  ops.sculpt.lasso_mask
   ops.transform.bone_envelope
   ops.transform.bone_size
   ops.transform.edge_slide

@@ -32,6 +32,7 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"
 
@@ -87,8 +88,11 @@ static void cmp_node_image_add_pass_output(bNodeTree *ntree,
 
   if (sock_index < 0) {
     /* The first 31 sockets always are the legacy hardcoded sockets.
-     * Any dynamically allocated sockets follow afterwards, and are sorted in the order in which they were stored in the RenderResult.
-     * Therefore, we remember the index of the last matched socket. New sockets are placed behind the previously traversed one, but always after the first 31. */
+     * Any dynamically allocated sockets follow afterwards,
+     * and are sorted in the order in which they were stored in the RenderResult.
+     * Therefore, we remember the index of the last matched socket.
+     * New sockets are placed behind the previously traversed one,
+     * but always after the first 31. */
     int after_index = *prev_index;
     if (is_rlayers && after_index < 30) {
       after_index = 30;
@@ -340,7 +344,8 @@ static void cmp_node_rlayer_create_outputs(bNodeTree *ntree,
                                  &prev_index);
 }
 
-/* XXX make this into a generic socket verification function for dynamic socket replacement (multilayer, groups, static templates) */
+/* XXX make this into a generic socket verification function for dynamic socket replacement
+ * (multilayer, groups, static templates) */
 static void cmp_node_image_verify_outputs(bNodeTree *ntree, bNode *node, bool rlayer)
 {
   bNodeSocket *sock, *sock_next;
@@ -363,7 +368,8 @@ static void cmp_node_image_verify_outputs(bNodeTree *ntree, bNode *node, bool rl
    * Another important detail comes from compatibility with the older socket model, where there
    * was a fixed socket per pass type that was just hidden or not. Therefore, older versions expect
    * the first 31 passes to belong to a specific pass type.
-   * So, we keep those 31 always allocated before the others as well, even if they have no links attached. */
+   * So, we keep those 31 always allocated before the others as well,
+   * even if they have no links attached. */
   sock_index = 0;
   for (sock = node->outputs.first; sock; sock = sock_next, sock_index++) {
     sock_next = sock->next;
@@ -427,15 +433,17 @@ static void node_composit_free_image(bNode *node)
 
 static void node_composit_copy_image(bNodeTree *UNUSED(dest_ntree),
                                      bNode *dest_node,
-                                     bNode *src_node)
+                                     const bNode *src_node)
 {
-  bNodeSocket *sock;
-
   dest_node->storage = MEM_dupallocN(src_node->storage);
 
-  /* copy extra socket info */
-  for (sock = src_node->outputs.first; sock; sock = sock->next) {
-    sock->new_sock->storage = MEM_dupallocN(sock->storage);
+  const bNodeSocket *src_output_sock = src_node->outputs.first;
+  bNodeSocket *dest_output_sock = dest_node->outputs.first;
+  while (dest_output_sock != NULL) {
+    dest_output_sock->storage = MEM_dupallocN(src_output_sock->storage);
+
+    src_output_sock = src_output_sock->next;
+    dest_output_sock = dest_output_sock->next;
   }
 }
 
@@ -446,7 +454,7 @@ void register_node_type_cmp_image(void)
   cmp_node_type_base(&ntype, CMP_NODE_IMAGE, "Image", NODE_CLASS_INPUT, NODE_PREVIEW);
   node_type_init(&ntype, node_composit_init_image);
   node_type_storage(&ntype, "ImageUser", node_composit_free_image, node_composit_copy_image);
-  node_type_update(&ntype, cmp_node_image_update, NULL);
+  node_type_update(&ntype, cmp_node_image_update);
   node_type_label(&ntype, node_image_label);
 
   nodeRegisterType(&ntype);
@@ -507,6 +515,7 @@ static void node_composit_init_rlayers(const bContext *C, PointerRNA *ptr)
   int sock_index = 0;
 
   node->id = &scene->id;
+  id_us_plus(node->id);
 
   for (bNodeSocket *sock = node->outputs.first; sock; sock = sock->next, sock_index++) {
     NodeImageLayer *sockdata = MEM_callocN(sizeof(NodeImageLayer), "node image layer");
@@ -551,16 +560,17 @@ static void node_composit_free_rlayers(bNode *node)
 }
 
 static void node_composit_copy_rlayers(bNodeTree *UNUSED(dest_ntree),
-                                       bNode *UNUSED(dest_node),
-                                       bNode *src_node)
+                                       bNode *dest_node,
+                                       const bNode *src_node)
 {
-  bNodeSocket *sock;
-
   /* copy extra socket info */
-  for (sock = src_node->outputs.first; sock; sock = sock->next) {
-    if (sock->storage) {
-      sock->new_sock->storage = MEM_dupallocN(sock->storage);
-    }
+  const bNodeSocket *src_output_sock = src_node->outputs.first;
+  bNodeSocket *dest_output_sock = dest_node->outputs.first;
+  while (dest_output_sock != NULL) {
+    dest_output_sock->storage = MEM_dupallocN(src_output_sock->storage);
+
+    src_output_sock = src_output_sock->next;
+    dest_output_sock = dest_output_sock->next;
   }
 }
 
@@ -580,7 +590,7 @@ void register_node_type_cmp_rlayers(void)
   ntype.initfunc_api = node_composit_init_rlayers;
   ntype.poll = node_composit_poll_rlayers;
   node_type_storage(&ntype, NULL, node_composit_free_rlayers, node_composit_copy_rlayers);
-  node_type_update(&ntype, cmp_node_rlayers_update, NULL);
+  node_type_update(&ntype, cmp_node_rlayers_update);
   node_type_init(&ntype, node_cmp_rlayers_outputs);
   node_type_size_preset(&ntype, NODE_SIZE_LARGE);
 

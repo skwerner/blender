@@ -276,7 +276,8 @@ typedef enum eAnim_Update_Flags {
 typedef enum eAnimFilter_Flags {
   /** data which channel represents is fits the dopesheet filters
    * (i.e. scene visibility criteria) */
-  // XXX: it's hard to think of any examples where this *ISN'T* the case... perhaps becomes implicit?
+  /* XXX: it's hard to think of any examples where this *ISN'T* the case...
+   * perhaps becomes implicit?. */
   ANIMFILTER_DATA_VISIBLE = (1 << 0),
   /** channel is visible within the channel-list hierarchy
    * (i.e. F-Curves within Groups in ActEdit) */
@@ -402,11 +403,14 @@ typedef enum eAnimFilter_Flags {
 /* -------------- Channel Defines -------------- */
 
 /* channel heights */
-#define ACHANNEL_FIRST(ac) (-0.8f * (ac)->yscale_fac * U.widget_unit)
+#define ACHANNEL_FIRST_TOP(ac) \
+  (UI_view2d_scale_get_y(&(ac)->ar->v2d) * -UI_TIME_SCRUB_MARGIN_Y - ACHANNEL_SKIP)
 #define ACHANNEL_HEIGHT(ac) (0.8f * (ac)->yscale_fac * U.widget_unit)
-#define ACHANNEL_HEIGHT_HALF(ac) (0.4f * (ac)->yscale_fac * U.widget_unit)
 #define ACHANNEL_SKIP (0.1f * U.widget_unit)
 #define ACHANNEL_STEP(ac) (ACHANNEL_HEIGHT(ac) + ACHANNEL_SKIP)
+/* Additional offset to give some room at the end. */
+#define ACHANNEL_TOT_HEIGHT(ac, item_amount) \
+  (-ACHANNEL_FIRST_TOP(ac) + ACHANNEL_STEP(ac) * (item_amount + 1))
 
 /* channel widths */
 #define ACHANNEL_NAMEWIDTH (10 * U.widget_unit)
@@ -417,13 +421,15 @@ typedef enum eAnimFilter_Flags {
 /* -------------- NLA Channel Defines -------------- */
 
 /* NLA channel heights */
-#define NLACHANNEL_FIRST (-0.8f * U.widget_unit)
+#define NLACHANNEL_FIRST_TOP(ac) \
+  (UI_view2d_scale_get_y(&(ac)->ar->v2d) * -UI_TIME_SCRUB_MARGIN_Y - NLACHANNEL_SKIP)
 #define NLACHANNEL_HEIGHT(snla) \
   ((snla && (snla->flag & SNLA_NOSTRIPCURVES)) ? (0.8f * U.widget_unit) : (1.2f * U.widget_unit))
-#define NLACHANNEL_HEIGHT_HALF(snla) \
-  ((snla && (snla->flag & SNLA_NOSTRIPCURVES)) ? (0.4f * U.widget_unit) : (0.6f * U.widget_unit))
 #define NLACHANNEL_SKIP (0.1f * U.widget_unit)
 #define NLACHANNEL_STEP(snla) (NLACHANNEL_HEIGHT(snla) + NLACHANNEL_SKIP)
+/* Additional offset to give some room at the end. */
+#define NLACHANNEL_TOT_HEIGHT(ac, item_amount) \
+  (-NLACHANNEL_FIRST_TOP(ac) + NLACHANNEL_STEP(((SpaceNla *)(ac)->sl)) * (item_amount + 1))
 
 /* channel widths */
 #define NLACHANNEL_NAMEWIDTH (10 * U.widget_unit)
@@ -611,6 +617,9 @@ void ANIM_set_active_channel(bAnimContext *ac,
  * as appropriate according to animation context */
 void ANIM_fcurve_delete_from_animdata(bAnimContext *ac, struct AnimData *adt, struct FCurve *fcu);
 
+/* Unlink the action from animdata if it's empty. */
+bool ANIM_remove_empty_action_from_animdata(struct AnimData *adt);
+
 /* ************************************************ */
 /* DRAWING API */
 /* anim_draw.c */
@@ -751,12 +760,15 @@ float ANIM_unit_mapping_get_factor(
  */
 #define ACHANNEL_SET_FLAG(channel, smode, sflag) \
   { \
-    if (smode == ACHANNEL_SETFLAG_INVERT) \
+    if (smode == ACHANNEL_SETFLAG_INVERT) { \
       (channel)->flag ^= (sflag); \
-    else if (smode == ACHANNEL_SETFLAG_ADD) \
+    } \
+    else if (smode == ACHANNEL_SETFLAG_ADD) { \
       (channel)->flag |= (sflag); \
-    else \
+    } \
+    else { \
       (channel)->flag &= ~(sflag); \
+    } \
   } \
   ((void)0)
 
@@ -767,12 +779,15 @@ float ANIM_unit_mapping_get_factor(
  */
 #define ACHANNEL_SET_FLAG_NEG(channel, smode, sflag) \
   { \
-    if (smode == ACHANNEL_SETFLAG_INVERT) \
+    if (smode == ACHANNEL_SETFLAG_INVERT) { \
       (channel)->flag ^= (sflag); \
-    else if (smode == ACHANNEL_SETFLAG_ADD) \
+    } \
+    else if (smode == ACHANNEL_SETFLAG_ADD) { \
       (channel)->flag &= ~(sflag); \
-    else \
+    } \
+    else { \
       (channel)->flag |= (sflag); \
+    } \
   } \
   ((void)0)
 

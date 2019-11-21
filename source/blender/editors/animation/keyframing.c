@@ -532,7 +532,7 @@ int insert_vert_fcurve(
    *                 introduced discontinuities in how the param worked. */
   beztr.back = 1.70158f;
 
-  /* "elastic" easing - values here were hand-optimised for a default duration of
+  /* "elastic" easing - values here were hand-optimized for a default duration of
    *                    ~10 frames (typical mograph motion length) */
   beztr.amplitude = 0.8f;
   beztr.period = 4.1f;
@@ -1071,7 +1071,10 @@ static float *visualkey_get_values(Depsgraph *depsgraph,
 
 /* ------------------------- Insert Key API ------------------------- */
 
-/* Retrieve current property values to keyframe, possibly applying NLA correction when necessary. */
+/**
+ * Retrieve current property values to keyframe,
+ * possibly applying NLA correction when necessary.
+ */
 static float *get_keyframe_values(Depsgraph *depsgraph,
                                   ReportList *reports,
                                   PointerRNA ptr,
@@ -1304,8 +1307,8 @@ static bool insert_keyframe_fcurve_value(Main *bmain,
    * - if we're replacing keyframes only, DO NOT create new F-Curves if they do not exist yet
    *   but still try to get the F-Curve if it exists...
    */
-  FCurve *fcu = verify_fcurve(
-      bmain, act, group, ptr, rna_path, array_index, (flag & INSERTKEY_REPLACE) == 0);
+  bool can_create_curve = (flag & (INSERTKEY_REPLACE | INSERTKEY_AVAILABLE)) == 0;
+  FCurve *fcu = verify_fcurve(bmain, act, group, ptr, rna_path, array_index, can_create_curve);
 
   /* we may not have a F-Curve when we're replacing only... */
   if (fcu) {
@@ -1429,7 +1432,7 @@ short insert_keyframe(Main *bmain,
     /* Key the entire array. */
     if (array_index == -1 || force_all) {
       /* In force mode, if any of the curves succeeds, drop the replace mode and restart. */
-      if (force_all && (flag & INSERTKEY_REPLACE) != 0) {
+      if (force_all && (flag & (INSERTKEY_REPLACE | INSERTKEY_AVAILABLE)) != 0) {
         int exclude = -1;
 
         for (array_index = 0; array_index < value_count; array_index++) {
@@ -1452,7 +1455,7 @@ short insert_keyframe(Main *bmain,
         }
 
         if (exclude != -1) {
-          flag &= ~INSERTKEY_REPLACE;
+          flag &= ~(INSERTKEY_REPLACE | INSERTKEY_AVAILABLE);
 
           for (array_index = 0; array_index < value_count; array_index++) {
             if (array_index != exclude) {
@@ -1554,8 +1557,7 @@ static bool delete_keyframe_fcurve(AnimData *adt, FCurve *fcu, float cfra)
     delete_fcurve_key(fcu, i, 1);
 
     /* Only delete curve too if it won't be doing anything anymore */
-    if ((fcu->totvert == 0) &&
-        (list_has_suitable_fmodifier(&fcu->modifiers, 0, FMI_TYPE_GENERATE_CURVE) == 0)) {
+    if (BKE_fcurve_is_empty(fcu)) {
       ANIM_fcurve_delete_from_animdata(NULL, adt, fcu);
     }
 
@@ -1954,7 +1956,7 @@ static int insert_key_menu_invoke(bContext *C, wmOperator *op, const wmEvent *UN
     uiLayout *layout;
 
     /* call the menu, which will call this operator again, hence the canceled */
-    pup = UI_popup_menu_begin(C, RNA_struct_ui_name(op->type->srna), ICON_NONE);
+    pup = UI_popup_menu_begin(C, WM_operatortype_name(op->type, op->ptr), ICON_NONE);
     layout = UI_popup_menu_layout(pup);
     uiItemsEnumO(layout, "ANIM_OT_keyframe_insert_menu", "type");
     UI_popup_menu_end(C, pup);
@@ -2032,7 +2034,7 @@ static int delete_key_exec(bContext *C, wmOperator *op)
     int type = RNA_property_enum_get(op->ptr, op->type->prop);
     ks = ANIM_keyingset_get_from_enum_type(scene, type);
     if (ks == NULL) {
-      BKE_report(op->reports, RPT_ERROR, "No active keying set");
+      BKE_report(op->reports, RPT_ERROR, "No active Keying Set");
       return OPERATOR_CANCELLED;
     }
   }
@@ -2042,7 +2044,7 @@ static int delete_key_exec(bContext *C, wmOperator *op)
     ks = ANIM_keyingset_get_from_idname(scene, type_id);
 
     if (ks == NULL) {
-      BKE_reportf(op->reports, RPT_ERROR, "No active keying set '%s' not found", type_id);
+      BKE_reportf(op->reports, RPT_ERROR, "Active Keying Set '%s' not found", type_id);
       return OPERATOR_CANCELLED;
     }
   }
@@ -2205,6 +2207,11 @@ static int clear_anim_v3d_exec(bContext *C, wmOperator *UNUSED(op))
           DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
           changed = true;
         }
+      }
+
+      /* Delete the action itself if it is empty. */
+      if (ANIM_remove_empty_action_from_animdata(adt)) {
+        changed = true;
       }
     }
   }
@@ -2787,8 +2794,10 @@ bool fcurve_is_changed(PointerRNA ptr, PropertyRNA *prop, FCurve *fcu, float fra
   return !compare_ff_relative(fcurve_val, cur_val, FLT_EPSILON, 64);
 }
 
-/* Checks whether an Action has a keyframe for a given frame
- * Since we're only concerned whether a keyframe exists, we can simply loop until a match is found...
+/**
+ * Checks whether an Action has a keyframe for a given frame
+ * Since we're only concerned whether a keyframe exists,
+ * we can simply loop until a match is found.
  */
 static bool action_frame_has_keyframe(bAction *act, float frame, short filter)
 {
@@ -2991,7 +3000,7 @@ static KeyingSet *keyingset_get_from_op_with_error(wmOperator *op, PropertyRNA *
     int type = RNA_property_enum_get(op->ptr, prop);
     ks = ANIM_keyingset_get_from_enum_type(scene, type);
     if (ks == NULL) {
-      BKE_report(op->reports, RPT_ERROR, "No active keying set");
+      BKE_report(op->reports, RPT_ERROR, "No active Keying Set");
     }
   }
   else if (prop_type == PROP_STRING) {

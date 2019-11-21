@@ -256,8 +256,8 @@ static void do_version_action_editor_properties_region(ListBase *regionbase)
 static void do_version_bones_super_bbone(ListBase *lb)
 {
   for (Bone *bone = lb->first; bone; bone = bone->next) {
-    bone->scaleIn = 1.0f;
-    bone->scaleOut = 1.0f;
+    bone->scale_in_x = bone->scale_in_y = 1.0f;
+    bone->scale_out_x = bone->scale_out_y = 1.0f;
 
     do_version_bones_super_bbone(&bone->childbase);
   }
@@ -1168,15 +1168,19 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
            * for minimal disruption. */
           ts->gpencil_v3d_align = 0;
 
-          if (gpd->flag & GP_DATA_VIEWALIGN)
+          if (gpd->flag & GP_DATA_VIEWALIGN) {
             ts->gpencil_v3d_align |= GP_PROJECT_VIEWSPACE;
-          if (gpd->flag & GP_DATA_DEPTH_VIEW)
+          }
+          if (gpd->flag & GP_DATA_DEPTH_VIEW) {
             ts->gpencil_v3d_align |= GP_PROJECT_DEPTH_VIEW;
-          if (gpd->flag & GP_DATA_DEPTH_STROKE)
+          }
+          if (gpd->flag & GP_DATA_DEPTH_STROKE) {
             ts->gpencil_v3d_align |= GP_PROJECT_DEPTH_STROKE;
+          }
 
-          if (gpd->flag & GP_DATA_DEPTH_STROKE_ENDPOINTS)
+          if (gpd->flag & GP_DATA_DEPTH_STROKE_ENDPOINTS) {
             ts->gpencil_v3d_align |= GP_PROJECT_DEPTH_STROKE_ENDPOINTS;
+          }
         }
         else {
           /* Default to cursor for all standard 3D views */
@@ -1194,7 +1198,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
     for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
       bool enabled = false;
 
-      /* Ensure that the datablock's onionskinning toggle flag
+      /* Ensure that the datablock's onion-skinning toggle flag
        * stays in sync with the status of the actual layers
        */
       for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
@@ -1338,8 +1342,8 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
         if (ob->pose) {
           for (bPoseChannel *pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
             /* see do_version_bones_super_bbone()... */
-            pchan->scaleIn = 1.0f;
-            pchan->scaleOut = 1.0f;
+            pchan->scale_in_x = pchan->scale_in_y = 1.0f;
+            pchan->scale_out_x = pchan->scale_out_y = 1.0f;
 
             /* also make sure some legacy (unused for over a decade) flags are unset,
              * so that we can reuse them for stuff that matters now...

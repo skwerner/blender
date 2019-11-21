@@ -295,9 +295,6 @@ wmKeyMap *WM_keymap_guess_opname(const bContext *C, const char *opname)
       case CTX_MODE_SCULPT:
         km = WM_keymap_find_all(C, "Sculpt", 0, 0);
         break;
-      case CTX_MODE_EDIT_MESH:
-        km = WM_keymap_find_all(C, "UV Sculpt", 0, 0);
-        break;
       default:
         break;
     }
@@ -452,6 +449,46 @@ wmKeyMap *WM_keymap_guess_opname(const bContext *C, const char *opname)
   }
 
   return km;
+}
+
+static bool wm_keymap_item_uses_modifier(wmKeyMapItem *kmi, const int event_modifier)
+{
+  if (kmi->ctrl != KM_ANY) {
+    if ((kmi->ctrl == KM_NOTHING) != ((event_modifier & KM_CTRL) == 0)) {
+      return false;
+    }
+  }
+
+  if (kmi->alt != KM_ANY) {
+    if ((kmi->alt == KM_NOTHING) != ((event_modifier & KM_ALT) == 0)) {
+      return false;
+    }
+  }
+
+  if (kmi->shift != KM_ANY) {
+    if ((kmi->shift == KM_NOTHING) != ((event_modifier & KM_SHIFT) == 0)) {
+      return false;
+    }
+  }
+
+  if (kmi->oskey != KM_ANY) {
+    if ((kmi->oskey == KM_NOTHING) != ((event_modifier & KM_OSKEY) == 0)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool WM_keymap_uses_event_modifier(wmKeyMap *keymap, const int event_modifier)
+{
+  for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+    if ((kmi->flag & KMI_INACTIVE) == 0) {
+      if (wm_keymap_item_uses_modifier(kmi, event_modifier)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 void WM_keymap_fix_linking(void)

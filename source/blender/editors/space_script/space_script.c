@@ -47,7 +47,7 @@
 #include "script_intern.h"  // own include
 #include "GPU_framebuffer.h"
 
-//static script_run_python(char *funcname, )
+// static script_run_python(char *funcname, )
 
 /* ******************** default callbacks for script space ***************** */
 
@@ -116,7 +116,7 @@ static void script_main_region_init(wmWindowManager *wm, ARegion *ar)
 
   /* own keymap */
   keymap = WM_keymap_ensure(wm->defaultconf, "Script", SPACE_SCRIPT, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&ar->handlers, keymap);
 }
 
 static void script_main_region_draw(const bContext *C, ARegion *ar)

@@ -75,7 +75,9 @@ void BKE_blender_free(void)
 {
   /* samples are in a global list..., also sets G_MAIN->sound->sample NULL */
 
-  BKE_studiolight_free(); /* needs to run before main free as wm is still referenced for icons preview jobs */
+  /* Needs to run before main free as wm is still referenced for icons preview jobs. */
+  BKE_studiolight_free();
+
   BKE_main_free(G_MAIN);
   G_MAIN = NULL;
 
@@ -95,7 +97,6 @@ void BKE_blender_free(void)
 
   BLI_callback_global_finalize();
 
-  BKE_sequencer_cache_destruct();
   IMB_moviecache_destruct();
 
   free_nodesystem();
@@ -154,7 +155,6 @@ static void keymap_item_free(wmKeyMapItem *kmi)
 {
   if (kmi->properties) {
     IDP_FreeProperty(kmi->properties);
-    MEM_freeN(kmi->properties);
   }
   if (kmi->ptr) {
     MEM_freeN(kmi->ptr);
@@ -211,7 +211,6 @@ static void userdef_free_keyconfig_prefs(UserDef *userdef)
        kpt = kpt_next) {
     kpt_next = kpt->next;
     IDP_FreeProperty(kpt->prop);
-    MEM_freeN(kpt->prop);
     MEM_freeN(kpt);
   }
   BLI_listbase_clear(&userdef->user_keyconfig_prefs);

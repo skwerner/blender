@@ -132,6 +132,9 @@ static Mesh *mesh_remove_doubles_on_axis(Mesh *result,
       tot_doubles += 1;
       copy_v3_v3(mvert_new[i].co, axis_co);
     }
+    else {
+      mvert_new[i].flag &= ~ME_VERT_TMP_TAG & 0xFF;
+    }
   }
 
   if (tot_doubles != 0) {
@@ -322,8 +325,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
         cross_v3_v3v3(axis_tmp, cross1, c2);
         normalize_v3(axis_tmp);
 
-        if (len_v3v3(axis_tmp, axis_vec) > 1.0f)
+        if (len_v3v3(axis_tmp, axis_vec) > 1.0f) {
           angle = -angle;
+        }
       }
     }
 #endif
@@ -345,8 +349,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   /* multiplying the steps is a bit tricky, this works best */
   step_tot = ((step_tot + 1) * ltmd->iter) - (ltmd->iter - 1);
 
-  /* will the screw be closed?
-   * Note! smaller then FLT_EPSILON * 100 gives problems with float precision so its never closed. */
+  /* Will the screw be closed?
+   * Note! smaller then `FLT_EPSILON * 100`
+   * gives problems with float precision so its never closed. */
   if (fabsf(screw_ofs) <= (FLT_EPSILON * 100.0f) &&
       fabsf(fabsf(angle) - ((float)M_PI * 2.0f)) <= (FLT_EPSILON * 100.0f)) {
     close = 1;
@@ -436,6 +441,10 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     med_new->v2 = med_orig->v2;
     med_new->crease = med_orig->crease;
     med_new->flag = med_orig->flag & ~ME_LOOSEEDGE;
+    /* Tag mvert as not loose.
+     * NOTE: ME_VERT_TMP_TAG is given to be cleared by BKE_mesh_new_nomain_from_template. */
+    mvert_new[med_orig->v1].flag |= ME_VERT_TMP_TAG;
+    mvert_new[med_orig->v2].flag |= ME_VERT_TMP_TAG;
   }
 
   /* build polygon -> edge map */
@@ -493,7 +502,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
      */
 
     vert_connect = MEM_malloc_arrayN(totvert, sizeof(ScrewVertConnect), "ScrewVertConnect");
-    //vert_connect = (ScrewVertConnect *) &medge_new[totvert];  /* skip the first slice of verts */
+    /* skip the first slice of verts. */
+    // vert_connect = (ScrewVertConnect *) &medge_new[totvert];
     vc = vert_connect;
 
     /* Copy Vert Locations */
@@ -605,7 +615,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
               /*printf("\t\tVERT: %i\n", lt_iter.v);*/
               if (lt_iter.v_poin->flag) {
                 /*printf("\t\t\tBreaking Found end\n");*/
-                //endpoints[0] = endpoints[1] = SV_UNUSED;
+                // endpoints[0] = endpoints[1] = SV_UNUSED;
                 ed_loop_closed = 1; /* circle */
                 break;
               }
@@ -689,8 +699,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
             /* switch the flip option if set
              * note: flip is now done at face level so copying vgroup slizes is easier */
 #if 0
-            if (do_flip)
+            if (do_flip) {
               ed_loop_flip = !ed_loop_flip;
+            }
 #endif
 
             if (angle < 0.0f) {
@@ -895,6 +906,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       med_new->v1 = varray_stride + j;
       med_new->v2 = med_new->v1 - totvert;
       med_new->flag = ME_EDGEDRAW | ME_EDGERENDER;
+      if ((mv_new_base->flag & ME_VERT_TMP_TAG) == 0) {
+        med_new->flag |= ME_LOOSEEDGE;
+      }
       med_new++;
     }
   }
@@ -913,6 +927,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       med_new->v1 = i;
       med_new->v2 = varray_stride + i;
       med_new->flag = ME_EDGEDRAW | ME_EDGERENDER;
+      if ((mvert_new[i].flag & ME_VERT_TMP_TAG) == 0) {
+        med_new->flag |= ME_LOOSEEDGE;
+      }
       med_new++;
     }
   }

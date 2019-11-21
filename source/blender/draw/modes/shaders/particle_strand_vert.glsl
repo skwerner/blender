@@ -1,6 +1,4 @@
 
-uniform mat4 ModelViewProjectionMatrix;
-
 in vec3 pos;
 in float color;
 
@@ -45,29 +43,29 @@ vec3 weight_to_rgb(float weight)
   return r_rgb;
 }
 
-#define DECOMPRESS_RANGE 1.0039
-
 void main()
 {
-  gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+  vec3 world_pos = point_object_to_world(pos);
+  gl_Position = point_world_to_ndc(world_pos);
 
 #ifdef USE_WEIGHT
-  finalColor = vec4(weight_to_rgb(color * DECOMPRESS_RANGE), 1.0);
+  finalColor = vec4(weight_to_rgb(color), 1.0);
 #else
   finalColor = mix(colorWire, colorEdgeSelect, color);
 #endif
 
 #ifdef USE_POINTS
-  gl_PointSize = sizeVertex;
+  float size = sizeVertex * 2.0;
+  gl_PointSize = size;
 
   /* calculate concentric radii in pixels */
-  float radius = 0.5 * sizeVertex;
+  float radius = sizeVertex;
 
   /* start at the outside and progress toward the center */
   radii[0] = radius;
   radii[1] = radius - 1.0;
 
   /* convert to PointCoord units */
-  radii /= sizeVertex;
+  radii /= size;
 #endif
 }

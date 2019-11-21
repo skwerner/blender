@@ -73,7 +73,7 @@ void ED_region_pixelspace(struct ARegion *ar);
 void ED_region_update_rect(struct ARegion *ar);
 void ED_region_init(struct ARegion *ar);
 void ED_region_tag_redraw(struct ARegion *ar);
-void ED_region_tag_redraw_partial(struct ARegion *ar, const struct rcti *rct);
+void ED_region_tag_redraw_partial(struct ARegion *ar, const struct rcti *rct, bool rebuild);
 void ED_region_tag_redraw_overlay(struct ARegion *ar);
 void ED_region_tag_redraw_no_rebuild(struct ARegion *ar);
 void ED_region_tag_refresh_ui(struct ARegion *ar);
@@ -87,9 +87,12 @@ void ED_region_panels_ex(const struct bContext *C,
 void ED_region_panels(const struct bContext *C, struct ARegion *ar);
 void ED_region_panels_layout_ex(const struct bContext *C,
                                 struct ARegion *ar,
+                                struct ListBase *paneltypes,
                                 const char *contexts[],
                                 int contextnr,
-                                const bool vertical);
+                                const bool vertical,
+                                const char *category_override);
+
 void ED_region_panels_layout(const struct bContext *C, struct ARegion *ar);
 void ED_region_panels_draw(const struct bContext *C, struct ARegion *ar);
 
@@ -142,6 +145,13 @@ void ED_area_do_mgs_subscribe_for_tool_header(const struct bContext *C,
                                               struct ScrArea *sa,
                                               struct ARegion *ar,
                                               struct wmMsgBus *mbus);
+void ED_area_do_mgs_subscribe_for_tool_ui(const struct bContext *C,
+                                          struct WorkSpace *workspace,
+                                          struct Scene *scene,
+                                          struct bScreen *screen,
+                                          struct ScrArea *sa,
+                                          struct ARegion *ar,
+                                          struct wmMsgBus *mbus);
 
 /* message bus */
 void ED_region_message_subscribe(struct bContext *C,
@@ -327,6 +337,7 @@ bool ED_operator_object_active(struct bContext *C);
 bool ED_operator_object_active_editable(struct bContext *C);
 bool ED_operator_object_active_editable_mesh(struct bContext *C);
 bool ED_operator_object_active_editable_font(struct bContext *C);
+bool ED_operator_editable_mesh(struct bContext *C);
 bool ED_operator_editmesh(struct bContext *C);
 bool ED_operator_editmesh_view3d(struct bContext *C);
 bool ED_operator_editmesh_region_view3d(struct bContext *C);
@@ -413,6 +424,9 @@ bool ED_region_overlap_isect_xy_with_margin(const ARegion *ar,
                                             const int event_xy[2],
                                             const int margin);
 
+bool ED_region_panel_category_gutter_calc_rect(const ARegion *ar, rcti *r_ar_gutter);
+bool ED_region_panel_category_gutter_isect_xy(const ARegion *ar, const int event_xy[2]);
+
 bool ED_region_contains_xy(const struct ARegion *ar, const int event_xy[2]);
 
 /* interface_region_hud.c */
@@ -430,8 +444,9 @@ enum {
   ED_KEYMAP_ANIMATION = (1 << 6),
   ED_KEYMAP_FRAMES = (1 << 7),
   ED_KEYMAP_HEADER = (1 << 8),
-  ED_KEYMAP_GPENCIL = (1 << 9),
-  ED_KEYMAP_FOOTER = (1 << 10),
+  ED_KEYMAP_FOOTER = (1 << 9),
+  ED_KEYMAP_GPENCIL = (1 << 10),
+  ED_KEYMAP_NAVBAR = (1 << 11),
 };
 
 /* SCREEN_OT_space_context_cycle direction */

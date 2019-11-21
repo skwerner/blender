@@ -19,7 +19,7 @@
  *
  * Version patch user preferences.
  */
-
+#define DNA_DEPRECATED_ALLOW
 #include <string.h>
 
 #include "BLI_math.h"
@@ -28,6 +28,7 @@
 #include "DNA_userdef_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_windowmanager_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_addon.h"
 #include "BKE_colorband.h"
@@ -42,7 +43,7 @@
 /* Disallow access to global userdef. */
 #define U (_error_)
 
-static void do_versions_theme(UserDef *userdef, bTheme *btheme)
+static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
 {
 
 #define USER_VERSION_ATLEAST(ver, subver) MAIN_VERSION_ATLEAST(userdef, ver, subver)
@@ -111,6 +112,39 @@ static void do_versions_theme(UserDef *userdef, bTheme *btheme)
 
   if (!USER_VERSION_ATLEAST(280, 52)) {
     FROM_DEFAULT_V4_UCHAR(space_info.info_info);
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 64)) {
+    FROM_DEFAULT_V4_UCHAR(tui.icon_scene);
+
+    if (btheme->space_view3d.obcenter_dia == 0) {
+      btheme->space_view3d.obcenter_dia = U_theme_default.space_view3d.obcenter_dia;
+    }
+
+    FROM_DEFAULT_V4_UCHAR(space_graph.text);
+    FROM_DEFAULT_V4_UCHAR(space_action.text);
+    FROM_DEFAULT_V4_UCHAR(space_nla.text);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.text);
+    FROM_DEFAULT_V4_UCHAR(space_clip.text);
+
+    FROM_DEFAULT_V4_UCHAR(space_graph.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_action.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_nla.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.time_scrub_background);
+    FROM_DEFAULT_V4_UCHAR(space_clip.time_scrub_background);
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 67)) {
+    FROM_DEFAULT_V4_UCHAR(space_outliner.selected_object);
+    FROM_DEFAULT_V4_UCHAR(space_outliner.active_object);
+    FROM_DEFAULT_V4_UCHAR(space_outliner.edited_object);
+    FROM_DEFAULT_V4_UCHAR(space_outliner.row_alternate);
+  }
+
+  /**
+   * Include next version bump.
+   */
+  {
   }
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -212,9 +246,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
   }
   if (!USER_VERSION_ATLEAST(240, 0)) {
     userdef->uiflag |= USER_PLAINMENUS;
-    if (userdef->obcenter_dia == 0) {
-      userdef->obcenter_dia = 6;
-    }
   }
   if (!USER_VERSION_ATLEAST(242, 0)) {
     /* set defaults for 3D View rotating axis indicator */
@@ -222,7 +253,7 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     if (userdef->rvisize == 0) {
       userdef->rvisize = 15;
       userdef->rvibright = 8;
-      userdef->uiflag |= USER_SHOW_GIZMO_AXIS;
+      userdef->uiflag |= USER_SHOW_GIZMO_NAVIGATE;
     }
   }
   if (!USER_VERSION_ATLEAST(244, 0)) {
@@ -380,9 +411,6 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
         userdef->ndof_flag |= NDOF_TURNTABLE;
       }
     }
-    if (userdef->tweak_threshold == 0) {
-      userdef->tweak_threshold = 10;
-    }
   }
 
   /* NOTE!! from now on use userdef->versionfile and userdef->subversionfile */
@@ -530,15 +558,60 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     }
   }
 
-  /**
-   * Include next version bump.
-   */
-  {
+  /* patch to set Dupli Lightprobes and Grease Pencil */
+  if (!USER_VERSION_ATLEAST(280, 58)) {
+    userdef->dupflag |= USER_DUP_LIGHTPROBE;
+    userdef->dupflag |= USER_DUP_GPENCIL;
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 60)) {
+    const float GPU_VIEWPORT_QUALITY_FXAA = 0.10f;
+    const float GPU_VIEWPORT_QUALITY_TAA8 = 0.25f;
+    const float GPU_VIEWPORT_QUALITY_TAA16 = 0.6f;
+    const float GPU_VIEWPORT_QUALITY_TAA32 = 0.8f;
+
+    if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_FXAA) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_OFF;
+    }
+    else if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_TAA8) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_FXAA;
+    }
+    else if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_TAA16) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_SAMPLES_8;
+    }
+    else if (userdef->gpu_viewport_quality <= GPU_VIEWPORT_QUALITY_TAA32) {
+      userdef->viewport_aa = SCE_DISPLAY_AA_SAMPLES_16;
+    }
+    else {
+      userdef->viewport_aa = SCE_DISPLAY_AA_SAMPLES_32;
+    }
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 62)) {
     /* (keep this block even if it becomes empty). */
     if (userdef->vbotimeout == 0) {
       userdef->vbocollectrate = 60;
       userdef->vbotimeout = 120;
     }
+
+    if (userdef->lookdev_sphere_size == 0) {
+      userdef->lookdev_sphere_size = 150;
+    }
+
+    userdef->pref_flag |= USER_PREF_FLAG_SAVE;
+  }
+
+  if (!USER_VERSION_ATLEAST(280, 73)) {
+    userdef->drag_threshold = 30;
+    userdef->drag_threshold_mouse = 3;
+    userdef->drag_threshold_tablet = 10;
+  }
+
+  /**
+   * Include next version bump.
+   */
+  {
+    /* pass */
   }
 
   if (userdef->pixelsize == 0.0f) {

@@ -54,12 +54,12 @@ typedef struct EXTERNAL_StorageList {
 } EXTERNAL_StorageList;
 
 typedef struct EXTERNAL_FramebufferList {
-  struct GPUFrameBuffer *default_fb;
+  struct GPUFrameBuffer *depth_buffer_fb;
 } EXTERNAL_FramebufferList;
 
 typedef struct EXTERNAL_TextureList {
   /* default */
-  struct GPUTexture *depth;
+  struct GPUTexture *depth_buffer_tx;
 } EXTERNAL_TextureList;
 
 typedef struct EXTERNAL_PassList {
@@ -80,19 +80,41 @@ typedef struct EXTERNAL_Data {
 static struct {
   /* Depth Pre Pass */
   struct GPUShader *depth_sh;
+  bool draw_depth;
 } e_data = {NULL}; /* Engine data */
 
 typedef struct EXTERNAL_PrivateData {
   DRWShadingGroup *depth_shgrp;
+
+  /* Do we need to update the depth or can we reuse the last calculated texture. */
+  bool update_depth;
+
+  float last_persmat[4][4];
 } EXTERNAL_PrivateData; /* Transient data */
 
 /* Functions */
 
-static void external_engine_init(void *UNUSED(vedata))
+static void external_engine_init(void *vedata)
 {
+  EXTERNAL_StorageList *stl = ((EXTERNAL_Data *)vedata)->stl;
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  ARegion *ar = draw_ctx->ar;
+
   /* Depth prepass */
   if (!e_data.depth_sh) {
     e_data.depth_sh = DRW_shader_create_3d_depth_only(GPU_SHADER_CFG_DEFAULT);
+  }
+
+  if (!stl->g_data) {
+    /* Alloc transient pointers */
+    stl->g_data = MEM_mallocN(sizeof(*stl->g_data), __func__);
+    stl->g_data->update_depth = true;
+  }
+
+  /* Progressive render samples are tagged with no rebuild, in that case we
+   * can skip updating the depth buffer */
+  if (!(ar && (ar->do_draw & RGN_DRAW_NO_REBUILD))) {
+    stl->g_data->update_depth = true;
   }
 }
 
@@ -100,10 +122,16 @@ static void external_cache_init(void *vedata)
 {
   EXTERNAL_PassList *psl = ((EXTERNAL_Data *)vedata)->psl;
   EXTERNAL_StorageList *stl = ((EXTERNAL_Data *)vedata)->stl;
+  EXTERNAL_TextureList *txl = ((EXTERNAL_Data *)vedata)->txl;
+  EXTERNAL_FramebufferList *fbl = ((EXTERNAL_Data *)vedata)->fbl;
 
-  if (!stl->g_data) {
-    /* Alloc transient pointers */
-    stl->g_data = MEM_mallocN(sizeof(*stl->g_data), __func__);
+  {
+    DRW_texture_ensure_fullscreen_2d(&txl->depth_buffer_tx, GPU_DEPTH24_STENCIL8, 0);
+
+    GPU_framebuffer_ensure_config(&fbl->depth_buffer_fb,
+                                  {
+                                      GPU_ATTACHMENT_TEXTURE(txl->depth_buffer_tx),
+                                  });
   }
 
   /* Depth Pass */
@@ -111,6 +139,16 @@ static void external_cache_init(void *vedata)
     psl->depth_pass = DRW_pass_create("Depth Pass",
                                       DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL);
     stl->g_data->depth_shgrp = DRW_shgroup_create(e_data.depth_sh, psl->depth_pass);
+  }
+
+  /* Do not draw depth pass when overlays are turned off. */
+  e_data.draw_depth = false;
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const View3D *v3d = draw_ctx->v3d;
+  if (v3d->flag2 & V3D_HIDE_OVERLAYS) {
+    /* mark `update_depth` for when overlays are turned on again. */
+    stl->g_data->update_depth = true;
+    return;
   }
 }
 
@@ -122,10 +160,20 @@ static void external_cache_populate(void *vedata, Object *ob)
     return;
   }
 
-  struct GPUBatch *geom = DRW_cache_object_surface_get(ob);
-  if (geom) {
-    /* Depth Prepass */
-    DRW_shgroup_call_add(stl->g_data->depth_shgrp, geom, ob->obmat);
+  /* Do not draw depth pass when overlays are turned off. */
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const View3D *v3d = draw_ctx->v3d;
+  if (v3d->flag2 & V3D_HIDE_OVERLAYS) {
+    return;
+  }
+
+  if (stl->g_data->update_depth) {
+    e_data.draw_depth = true;
+    struct GPUBatch *geom = DRW_cache_object_surface_get(ob);
+    if (geom) {
+      /* Depth Prepass */
+      DRW_shgroup_call(stl->g_data->depth_shgrp, geom, ob);
+    }
   }
 }
 
@@ -154,18 +202,20 @@ static void external_draw_scene_do(void *vedata)
     RenderEngine *engine = RE_engine_create_ex(engine_type, true);
     engine->tile_x = scene->r.tilex;
     engine->tile_y = scene->r.tiley;
-    engine_type->view_update(engine, draw_ctx->evil_C);
+    engine_type->view_update(engine, draw_ctx->evil_C, draw_ctx->depsgraph);
     rv3d->render_engine = engine;
   }
 
   /* Rendered draw. */
   GPU_matrix_push_projection();
+  GPU_matrix_push();
   ED_region_pixelspace(ar);
 
   /* Render result draw. */
   type = rv3d->render_engine->type;
-  type->view_draw(rv3d->render_engine, draw_ctx->evil_C);
+  type->view_draw(rv3d->render_engine, draw_ctx->evil_C, draw_ctx->depsgraph);
 
+  GPU_matrix_pop();
   GPU_matrix_pop_projection();
 
   /* Set render info. */
@@ -181,7 +231,10 @@ static void external_draw_scene_do(void *vedata)
 static void external_draw_scene(void *vedata)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
+  EXTERNAL_StorageList *stl = ((EXTERNAL_Data *)vedata)->stl;
   EXTERNAL_PassList *psl = ((EXTERNAL_Data *)vedata)->psl;
+  EXTERNAL_FramebufferList *fbl = ((EXTERNAL_Data *)vedata)->fbl;
+  const DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
 
   /* Will be NULL during OpenGL render.
    * OpenGL render is used for quick preview (thumbnails or sequencer preview)
@@ -189,7 +242,17 @@ static void external_draw_scene(void *vedata)
   if (draw_ctx->evil_C) {
     external_draw_scene_do(vedata);
   }
-  DRW_draw_pass(psl->depth_pass);
+
+  if (e_data.draw_depth) {
+    DRW_draw_pass(psl->depth_pass);
+    // copy result to tmp buffer
+    GPU_framebuffer_blit(dfbl->depth_only_fb, 0, fbl->depth_buffer_fb, 0, GPU_DEPTH_BIT);
+    stl->g_data->update_depth = false;
+  }
+  else {
+    // copy tmp buffer to default
+    GPU_framebuffer_blit(fbl->depth_buffer_fb, 0, dfbl->depth_only_fb, 0, GPU_DEPTH_BIT);
+  }
 }
 
 static void external_engine_free(void)
@@ -216,7 +279,8 @@ static DrawEngineType draw_engine_external_type = {
     NULL,
 };
 
-/* Note: currently unused, we should not register unless we want to see this when debugging the view. */
+/* Note: currently unused,
+ * we should not register unless we want to see this when debugging the view. */
 
 RenderEngineType DRW_engine_viewport_external_type = {
     NULL,

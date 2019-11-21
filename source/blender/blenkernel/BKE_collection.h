@@ -161,6 +161,11 @@ bool BKE_collection_move(struct Main *bmain,
 
 bool BKE_collection_find_cycle(struct Collection *new_ancestor, struct Collection *collection);
 
+bool BKE_collection_has_collection(struct Collection *parent, struct Collection *collection);
+
+void BKE_collection_parent_relations_rebuild(struct Collection *collection);
+void BKE_main_collections_parent_relations_rebuild(struct Main *bmain);
+
 /* Iteration callbacks. */
 
 typedef void (*BKE_scene_objects_Cb)(struct Object *ob, void *data);
@@ -171,11 +176,13 @@ typedef void (*BKE_scene_collections_Cb)(struct Collection *ob, void *data);
 #define FOREACH_COLLECTION_VISIBLE_OBJECT_RECURSIVE_BEGIN(_collection, _object, _mode) \
   { \
     int _base_flag = (_mode == DAG_EVAL_VIEWPORT) ? BASE_ENABLED_VIEWPORT : BASE_ENABLED_RENDER; \
+    int _object_restrict_flag = (_mode == DAG_EVAL_VIEWPORT) ? OB_RESTRICT_VIEWPORT : \
+                                                               OB_RESTRICT_RENDER; \
     int _base_id = 0; \
     for (Base *_base = (Base *)BKE_collection_object_cache_get(_collection).first; _base; \
          _base = _base->next, _base_id++) { \
-      if (_base->flag & _base_flag) { \
-        Object *_object = _base->object;
+      Object *_object = _base->object; \
+      if ((_base->flag & _base_flag) && (_object->restrictflag & _object_restrict_flag) == 0) {
 
 #define FOREACH_COLLECTION_VISIBLE_OBJECT_RECURSIVE_END \
   } \

@@ -77,23 +77,24 @@ class GHOST_Rect {
 
   /**
    * Sets all members of the rectangle.
-   * \param   l   requested left coordinate of the rectangle
-   * \param   t   requested top coordinate of the rectangle
-   * \param   r   requested right coordinate of the rectangle
-   * \param   b   requested bottom coordinate of the rectangle
+   * \param l: requested left coordinate of the rectangle.
+   * \param t: requested top coordinate of the rectangle.
+   * \param r: requested right coordinate of the rectangle.
+   * \param b: requested bottom coordinate of the rectangle.
    */
   virtual inline void set(GHOST_TInt32 l, GHOST_TInt32 t, GHOST_TInt32 r, GHOST_TInt32 b);
 
   /**
    * Returns whether this rectangle is empty.
    * Empty rectangles are rectangles that have width==0 and/or height==0.
-   * \return  boolean value (true==empty rectangle)
+   * \return boolean value (true==empty rectangle)
    */
   virtual inline bool isEmpty() const;
 
   /**
    * Returns whether this rectangle is valid.
-   * Valid rectangles are rectangles that have m_l <= m_r and m_t <= m_b. Thus, empty rectangles are valid.
+   * Valid rectangles are rectangles that have m_l <= m_r and m_t <= m_b.
+   * Thus, empty rectangles are valid.
    * \return  boolean value (true==valid rectangle)
    */
   virtual inline bool isValid() const;
@@ -101,30 +102,33 @@ class GHOST_Rect {
   /**
    * Grows (or shrinks the rectangle).
    * The method avoids negative insets making the rectangle invalid
-   * \param   i   The amount of offset given to each extreme (negative values shrink the rectangle).
+   * \param i: The amount of offset given to each extreme (negative values shrink the rectangle).
    */
   virtual void inset(GHOST_TInt32 i);
 
   /**
    * Does a union of the rectangle given and this rectangle.
    * The result is stored in this rectangle.
-   * \param   r   The rectangle that is input for the union operation.
+   * \param r: The rectangle that is input for the union operation.
    */
   virtual inline void unionRect(const GHOST_Rect &r);
 
   /**
    * Grows the rectangle to included a point.
-   * \param   x   The x-coordinate of the point.
-   * \param   y   The y-coordinate of the point.
+   * \param x: The x-coordinate of the point.
+   * \param y: The y-coordinate of the point.
    */
   virtual inline void unionPoint(GHOST_TInt32 x, GHOST_TInt32 y);
 
   /**
    * Grows the rectangle to included a point.
-   * \param   x   The x-coordinate of the point.
-   * \param   y   The y-coordinate of the point.
+   * \param x   The x-coordinate of the point.
+   * \param y   The y-coordinate of the point.
    */
-  virtual inline void wrapPoint(GHOST_TInt32 &x, GHOST_TInt32 &y, GHOST_TInt32 ofs);
+  virtual inline void wrapPoint(GHOST_TInt32 &x,
+                                GHOST_TInt32 &y,
+                                GHOST_TInt32 ofs,
+                                GHOST_TAxisFlag axis);
 
   /**
    * Returns whether the point is inside this rectangle.
@@ -235,8 +239,11 @@ inline void GHOST_Rect::unionPoint(GHOST_TInt32 x, GHOST_TInt32 y)
   if (y > m_b)
     m_b = y;
 }
-#include <stdio.h>
-inline void GHOST_Rect::wrapPoint(GHOST_TInt32 &x, GHOST_TInt32 &y, GHOST_TInt32 ofs)
+
+inline void GHOST_Rect::wrapPoint(GHOST_TInt32 &x,
+                                  GHOST_TInt32 &y,
+                                  GHOST_TInt32 ofs,
+                                  GHOST_TAxisFlag axis)
 {
   GHOST_TInt32 w = getWidth();
   GHOST_TInt32 h = getHeight();
@@ -246,14 +253,18 @@ inline void GHOST_Rect::wrapPoint(GHOST_TInt32 &x, GHOST_TInt32 &y, GHOST_TInt32
     return;
   }
 
-  while (x - ofs < m_l)
-    x += w - (ofs * 2);
-  while (y - ofs < m_t)
-    y += h - (ofs * 2);
-  while (x + ofs > m_r)
-    x -= w - (ofs * 2);
-  while (y + ofs > m_b)
-    y -= h - (ofs * 2);
+  if (axis & GHOST_kAxisX) {
+    while (x - ofs < m_l)
+      x += w - (ofs * 2);
+    while (x + ofs > m_r)
+      x -= w - (ofs * 2);
+  }
+  if (axis & GHOST_kGrabAxisY) {
+    while (y - ofs < m_t)
+      y += h - (ofs * 2);
+    while (y + ofs > m_b)
+      y -= h - (ofs * 2);
+  }
 }
 
 inline bool GHOST_Rect::isInside(GHOST_TInt32 x, GHOST_TInt32 y) const

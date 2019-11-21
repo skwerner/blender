@@ -45,10 +45,12 @@ void Chain::push_viewedge_back(ViewEdge *iViewEdge, bool orientation)
 
   if (!_Vertices.empty()) {
     previous = _Vertices.back()->point2d();
-    if (orientation)
+    if (orientation) {
       ++v;
-    else
+    }
+    else {
       --v;
+    }
     // Ensure the continuity of underlying FEdges
     CurvePoint *cp =
         _Vertices.back();  // assumed to be instantiated as new CurvePoint(iSVertex, 0, 0.f);
@@ -69,14 +71,16 @@ void Chain::push_viewedge_back(ViewEdge *iViewEdge, bool orientation)
     Curve::push_vertex_back(*v);
     //_Length += (current - previous).norm();
     previous = current;
-    if (orientation)
+    if (orientation) {
       ++v;
-    else
+    }
+    else {
       --v;
+    }
   } while ((v != vend) && (v != vfirst));
 
   if (v == vfirst) {
-    //Add last one:
+    // Add last one:
     current = (*v)->point2d();
     Curve::push_vertex_back(*v);
     //_Length += (current - previous).norm();
@@ -105,10 +109,12 @@ void Chain::push_viewedge_front(ViewEdge *iViewEdge, bool orientation)
 
   if (!_Vertices.empty()) {
     previous = _Vertices.front()->point2d();
-    if (orientation)
+    if (orientation) {
       ++v;
-    else
+    }
+    else {
       --v;
+    }
     // Ensure the continuity of underlying FEdges
     CurvePoint *cp =
         _Vertices.front();  // assumed to be instantiated as new CurvePoint(iSVertex, 0, 0.f);
@@ -131,21 +137,24 @@ void Chain::push_viewedge_front(ViewEdge *iViewEdge, bool orientation)
     Curve::push_vertex_front((*v));
     //_Length += (current - previous).norm();
     previous = current;
-    if (orientation)
+    if (orientation) {
       ++v;
-    else
+    }
+    else {
       --v;
+    }
   } while ((v != vend) && (v != vfirst));
 
   if (v == vfirst) {
-    //Add last one:
+    // Add last one:
     current = (*v)->point2d();
     Curve::push_vertex_front(*v);
     //_Length += (current - previous).norm();
   }
 
-  if (!_fedgeB)
+  if (!_fedgeB) {
     _fedgeB = (orientation) ? iViewEdge->fedgeB() : iViewEdge->fedgeA();
+  }
 }
 
 } /* namespace Freestyle */

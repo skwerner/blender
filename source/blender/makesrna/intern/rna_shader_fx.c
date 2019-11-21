@@ -185,7 +185,8 @@ static void shaderfx_object_set(Object *self, Object **ob_p, int type, PointerRN
 }
 
 #  define RNA_FX_OBJECT_SET(_type, _prop, _obtype) \
-    static void rna_##_type##ShaderFx_##_prop##_set(PointerRNA *ptr, PointerRNA value) \
+    static void rna_##_type##ShaderFx_##_prop##_set( \
+        PointerRNA *ptr, PointerRNA value, struct ReportList *UNUSED(reports)) \
     { \
       _type##ShaderFxData *tmd = (_type##ShaderFxData *)ptr->data; \
       shaderfx_object_set(ptr->id.data, &tmd->_prop, _obtype, value); \
@@ -674,13 +675,13 @@ void RNA_def_shader_fx(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "mode", eShaderFxMode_Realtime);
   RNA_def_property_ui_text(prop, "Realtime", "Display effect in viewport");
   RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);
-  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_ShaderFx_update");
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_VIEW_ON, 1);
 
   prop = RNA_def_property(srna, "show_render", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "mode", eShaderFxMode_Render);
-  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Render", "Use effect during render");
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_RENDER_ON, 1);
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, NULL);
@@ -694,7 +695,7 @@ void RNA_def_shader_fx(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_expanded", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_flag(prop, PROP_NO_DEG_UPDATE);
   RNA_def_property_boolean_sdna(prop, NULL, "mode", eShaderFxMode_Expanded);
-  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_STATIC);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Expanded", "Set effect expanded in the user interface");
   RNA_def_property_ui_icon(prop, ICON_DISCLOSURE_TRI_RIGHT, 1);
 

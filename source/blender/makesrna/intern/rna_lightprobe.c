@@ -77,7 +77,7 @@ static void rna_def_lightprobe(BlenderRNA *brna)
   srna = RNA_def_struct(brna, "LightProbe", "ID");
   RNA_def_struct_ui_text(
       srna, "LightProbe", "Light Probe data-block for lighting capture objects");
-  RNA_def_struct_ui_icon(srna, ICON_OUTLINER_OB_LIGHTPROBE);
+  RNA_def_struct_ui_icon(srna, ICON_OUTLINER_DATA_LIGHTPROBE);
 
   prop = RNA_def_property(srna, "type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, lightprobe_type_items);
@@ -225,8 +225,9 @@ static void rna_def_lightprobe(BlenderRNA *brna)
   /* Data preview */
   prop = RNA_def_property(srna, "show_data", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", LIGHTPROBE_FLAG_SHOW_DATA);
-  RNA_def_property_ui_text(
-      prop, "Show Data", "Show captured lighting data into the 3D view for debugging purpose");
+  RNA_def_property_ui_text(prop,
+                           "Show Preview Plane",
+                           "Show captured lighting data into the 3D view for debugging purpose");
   RNA_def_property_update(prop, NC_MATERIAL | ND_SHADING, NULL);
 
   /* common */

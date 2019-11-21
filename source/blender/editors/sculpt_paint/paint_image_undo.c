@@ -349,7 +349,9 @@ static void image_undo_restore_list(ListBase *lb, struct UndoIDPtrMap *id_map)
 
     undo_copy_tile(tile, tmpibuf, ibuf, RESTORE_COPY);
 
+    BKE_image_mark_dirty(ima, ibuf);
     GPU_free_image(ima); /* force OpenGL reload */
+
     if (ibuf->rect_float) {
       ibuf->userflags |= IB_RECT_INVALID; /* force recreate of char rect */
     }
@@ -538,10 +540,8 @@ static void image_undosys_step_decode_redo(ImageUndoStep *us)
   }
 }
 
-static void image_undosys_step_decode(struct bContext *C,
-                                      struct Main *bmain,
-                                      UndoStep *us_p,
-                                      int dir)
+static void image_undosys_step_decode(
+    struct bContext *C, struct Main *bmain, UndoStep *us_p, int dir, bool UNUSED(is_final))
 {
   ImageUndoStep *us = (ImageUndoStep *)us_p;
 #if 0

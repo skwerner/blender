@@ -62,6 +62,7 @@ struct bConstraint;
 struct bGPdata;
 struct bNodeTree;
 struct bPoseChannel;
+struct bSound;
 
 struct PropertyRNA;
 
@@ -69,6 +70,7 @@ namespace DEG {
 
 struct ComponentNode;
 struct Depsgraph;
+class DepsgraphBuilderCache;
 struct IDNode;
 struct Node;
 struct OperationNode;
@@ -76,7 +78,7 @@ struct TimeSourceNode;
 
 class DepsgraphNodeBuilder : public DepsgraphBuilder {
  public:
-  DepsgraphNodeBuilder(Main *bmain, Depsgraph *graph);
+  DepsgraphNodeBuilder(Main *bmain, Depsgraph *graph, DepsgraphBuilderCache *cache);
   ~DepsgraphNodeBuilder();
 
   /* For given original ID get ID which is created by CoW system. */
@@ -150,6 +152,11 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
       ID *id, NodeType comp_type, OperationCode opcode, const char *name = "", int name_tag = -1);
 
   void build_id(ID *id);
+
+  void build_scene_render(Scene *scene, ViewLayer *view_layer);
+  void build_scene_parameters(Scene *scene);
+  void build_scene_compositor(Scene *scene);
+
   void build_layer_collections(ListBase *lb);
   void build_view_layer(Scene *scene,
                         ViewLayer *view_layer,
@@ -195,16 +202,20 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   void build_light(Light *lamp);
   void build_nodetree(bNodeTree *ntree);
   void build_material(Material *ma);
+  void build_materials(Material **materials, int num_materials);
   void build_texture(Tex *tex);
   void build_image(Image *image);
   void build_world(World *world);
-  void build_compositor(Scene *scene);
   void build_gpencil(bGPdata *gpd);
   void build_cachefile(CacheFile *cache_file);
   void build_mask(Mask *mask);
   void build_movieclip(MovieClip *clip);
   void build_lightprobe(LightProbe *probe);
   void build_speaker(Speaker *speaker);
+  void build_sound(bSound *sound);
+  void build_scene_sequencer(Scene *scene);
+  void build_scene_audio(Scene *scene);
+  void build_scene_speakers(Scene *scene, ViewLayer *view_layer);
 
   /* Per-ID information about what was already in the dependency graph.
    * Allows to re-use certain values, to speed up following evaluation. */

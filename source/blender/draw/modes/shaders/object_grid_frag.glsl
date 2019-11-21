@@ -8,10 +8,7 @@ in vec3 local_pos;
 
 out vec4 FragColor;
 
-uniform mat4 ProjectionMatrix;
-uniform vec3 cameraPos;
 uniform vec3 planeAxes;
-uniform vec3 eye;
 uniform vec4 gridSettings;
 uniform float meshSize;
 uniform float lineKernel = 0.0;
@@ -22,6 +19,8 @@ uniform sampler2D depthBuffer;
 #define gridResolution gridSettings.y
 #define gridScale gridSettings.z
 #define gridSubdiv gridSettings.w
+
+#define cameraPos (ViewMatrixInverse[3].xyz)
 
 uniform int gridFlag;
 
@@ -40,8 +39,8 @@ uniform int gridFlag;
  * We want to know how much a pixel is covered by a line.
  * We replace the square pixel with acircle of the same area and try to find the intersection area.
  * The area we search is the circular segment. https://en.wikipedia.org/wiki/Circular_segment
- * The formula for the area uses inverse trig function and is quite complexe.
- * Instead, we approximate it by using the smoothstep function and a 1.05 factor to the disc radius.
+ * The formula for the area uses inverse trig function and is quite complexe. Instead,
+ * we approximate it by using the smoothstep function and a 1.05 factor to the disc radius.
  */
 #define DISC_RADIUS (M_1_SQRTPI * 1.05)
 #define GRID_LINE_SMOOTH_START (0.5 - DISC_RADIUS)
@@ -109,7 +108,7 @@ void main()
     dist = 1.0; /* avoid branch after */
 
     if ((gridFlag & PLANE_XY) != 0) {
-      float angle = 1.0 - abs(eye.z);
+      float angle = 1.0 - abs(ViewMatrixInverse[2].z);
       dist = 1.0 + angle * 2.0;
       angle *= angle;
       fade *= 1.0 - angle * angle;

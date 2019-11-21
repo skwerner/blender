@@ -55,6 +55,8 @@
 
 #include "../generic/python_utildefines.h"
 
+#include "DEG_depsgraph_build.h"
+
 /* for keyframes and drivers */
 static int pyrna_struct_anim_args_parse_ex(PointerRNA *ptr,
                                            const char *error_prefix,
@@ -261,8 +263,9 @@ static int pyrna_struct_keyframe_parse(PointerRNA *ptr,
 
   /* flag may be null (no option currently for remove keyframes e.g.). */
   if (r_options) {
-    if (pyoptions && (pyrna_set_to_enum_bitfield(
-                          rna_enum_keying_flag_items, pyoptions, r_options, error_prefix) == -1)) {
+    if (pyoptions &&
+        (pyrna_set_to_enum_bitfield(
+             rna_enum_keying_flag_items_api, pyoptions, r_options, error_prefix) == -1)) {
       return -1;
     }
 
@@ -297,8 +300,11 @@ char pyrna_struct_keyframe_insert_doc[] =
     "F-Curves.\n"
     "      - ``INSERTKEY_VISUAL`` Insert keyframes based on 'visual transforms'.\n"
     "      - ``INSERTKEY_XYZ_TO_RGB`` Color for newly added transformation F-Curves (Location, "
-    "Rotation, Scale)\n"
-    "         and also Color is based on the transform axis.\n"
+    "Rotation, Scale) is based on the transform axis.\n"
+    "      - ``INSERTKEY_REPLACE`` Only replace already exising keyframes.\n"
+    "      - ``INSERTKEY_AVAILABLE`` Only insert into already existing F-Curves.\n"
+    "      - ``INSERTKEY_CYCLE_AWARE`` Take cyclic extrapolation into account "
+    "(Cycle-Aware Keying option).\n"
     "   :type flag: set\n"
     "   :return: Success of keyframe insertion.\n"
     "   :rtype: boolean\n";
@@ -586,7 +592,9 @@ PyObject *pyrna_struct_driver_add(BPy_StructRNA *self, PyObject *args)
         ret = pyrna_struct_CreatePyObject(&tptr);
       }
 
+      bContext *context = BPy_GetContext();
       WM_event_add_notifier(BPy_GetContext(), NC_ANIMATION | ND_FCURVES_ORDER, NULL);
+      DEG_relations_tag_update(CTX_data_main(context));
     }
     else {
       /* XXX, should be handled by reports, */
@@ -644,7 +652,9 @@ PyObject *pyrna_struct_driver_remove(BPy_StructRNA *self, PyObject *args)
       return NULL;
     }
 
-    WM_event_add_notifier(BPy_GetContext(), NC_ANIMATION | ND_FCURVES_ORDER, NULL);
+    bContext *context = BPy_GetContext();
+    WM_event_add_notifier(context, NC_ANIMATION | ND_FCURVES_ORDER, NULL);
+    DEG_relations_tag_update(CTX_data_main(context));
 
     return PyBool_FromLong(result);
   }

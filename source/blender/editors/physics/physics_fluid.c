@@ -46,6 +46,7 @@
 #include "DEG_depsgraph.h"
 
 #include "ED_screen.h"
+#include "ED_object.h"
 
 #include "WM_types.h"
 #include "WM_api.h"
@@ -434,7 +435,8 @@ static void fluid_init_all_channels(bContext *C,
     /* now scene data should be current according to animation system, so we fill the channels */
 
     /* Domain time */
-    // TODO: have option for not running sim, time mangling, in which case second case comes in handy
+    /* TODO: have option for not running sim, time mangling,
+     * in which case second case comes in handy. */
     if (channels->DomainTime) {
       time = get_fluid_rate(domainSettings) * (float)channels->aniFrameTime;
       timeAtFrame = channels->timeAtFrame[i] + time;
@@ -965,7 +967,7 @@ static int fluidsimBake(bContext *C, ReportList *reports, Object *fsDomain, shor
 
   /* Make sure it corresponds to startFrame setting
    * (old: noFrames = scene->r.efra - scene->r.sfra +1). */
-  ;
+
   noFrames = scene->r.efra - 0;
   if (noFrames <= 0) {
     BKE_report(reports, RPT_ERROR, "No frames to export (check your animation range settings)");
@@ -1215,7 +1217,7 @@ static int fluid_bake_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(
     return OPERATOR_CANCELLED;
   }
 
-  if (!fluidsimBake(C, op->reports, CTX_data_active_object(C), true)) {
+  if (!fluidsimBake(C, op->reports, ED_object_context(C), true)) {
     return OPERATOR_CANCELLED;
   }
 

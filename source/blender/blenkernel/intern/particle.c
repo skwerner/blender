@@ -387,8 +387,11 @@ void psys_find_group_weights(ParticleSettings *part)
   /* Find object pointers based on index. If the collection is linked from
    * another library linking may not have the object pointers available on
    * file load, so we have to retrieve them later. See T49273. */
-  const ListBase instance_collection_objects = BKE_collection_object_cache_get(
-      part->instance_collection);
+  ListBase instance_collection_objects = {NULL, NULL};
+
+  if (part->instance_collection) {
+    instance_collection_objects = BKE_collection_object_cache_get(part->instance_collection);
+  }
 
   for (ParticleDupliWeight *dw = part->instance_weights.first; dw; dw = dw->next) {
     if (dw->ob == NULL) {
@@ -477,7 +480,9 @@ static void fluid_free_settings(SPHFluidSettings *fluid)
   }
 }
 
-/** Free (or release) any data used by this particle settings (does not free the partsett itself). */
+/**
+ * Free (or release) any data used by this particle settings (does not free the partsett itself).
+ */
 void BKE_particlesettings_free(ParticleSettings *part)
 {
   int a;
@@ -603,7 +608,8 @@ void psys_free_particles(ParticleSystem *psys)
   PARTICLE_P;
 
   if (psys->particles) {
-    /* Even though psys->part should never be NULL, this can happen as an exception during deletion.
+    /* Even though psys->part should never be NULL,
+     * this can happen as an exception during deletion.
      * See ID_REMAP_SKIP/FORCE/FLAG_NEVER_NULL_USAGE in BKE_library_remap. */
     if (psys->part && psys->part->type == PART_HAIR) {
       LOOP_PARTICLES
@@ -846,8 +852,12 @@ typedef struct ParticleInterpolationData {
   float birthtime, dietime;
   int bspline;
 } ParticleInterpolationData;
-/* Assumes pointcache->mem_cache exists, so for disk cached particles call psys_make_temp_pointcache() before use */
-/* It uses ParticleInterpolationData->pm to store the current memory cache frame so it's thread safe. */
+/**
+ * Assumes pointcache->mem_cache exists, so for disk cached particles
+ * call #psys_make_temp_pointcache() before use.
+ * It uses #ParticleInterpolationData.pm to store the current memory cache frame
+ * so it's thread safe.
+ */
 static void get_pointcache_keys_for_time(Object *UNUSED(ob),
                                          PointCache *cache,
                                          PTCacheMem **cur,
@@ -1194,7 +1204,8 @@ static void do_particle_interpolation(ParticleSystem *psys,
     interp_qt_qtqt(result->rot, keys[1].rot, keys[2].rot, keytime);
   }
 
-  /* now we should have in chronologiacl order k1<=k2<=t<=k3<=k4 with keytime between [0, 1]->[k2, k3] (k1 & k4 used for cardinal & bspline interpolation)*/
+  /* Now we should have in chronologiacl order k1<=k2<=t<=k3<=k4 with keytime between
+   * [0, 1]->[k2, k3] (k1 & k4 used for cardinal & bspline interpolation). */
   psys_interpolate_particle((pind->keyed || pind->cache || point_vel) ?
                                 -1 /* signal for cubic interpolation */
                                 :
@@ -1538,7 +1549,7 @@ int psys_particle_dm_face_lookup(Mesh *mesh_final,
   if (osface_final == NULL) {
     /* Assume we don't need osface_final data, and we get a direct 1-1 mapping... */
     if (findex_orig < totface_final) {
-      //printf("\tNO CD_ORIGSPACE, assuming not needed\n");
+      // printf("\tNO CD_ORIGSPACE, assuming not needed\n");
       return findex_orig;
     }
     else {
@@ -1574,7 +1585,8 @@ int psys_particle_dm_face_lookup(Mesh *mesh_final,
   }
   else { /* if we have no node, try every face */
     for (int findex_dst = 0; findex_dst < totface_final; findex_dst++) {
-      /* If current tessface from 'final' DM and orig tessface (given by index) map to the same orig poly... */
+      /* If current tessface from 'final' DM and orig tessface (given by index)
+       * map to the same orig poly. */
       if (BKE_mesh_origindex_mface_mpoly(index_mf_to_mpoly, index_mp_to_orig, findex_dst) ==
           pindex_orig) {
         faceuv = osface_final[findex_dst].uv;
@@ -1633,7 +1645,7 @@ static int psys_map_index_on_dm(Mesh *mesh,
      * to their new location, which means a different index, and for faces
      * also a new face interpolation weights */
     if (from == PART_FROM_VERT) {
-      if (index_dmcache == DMCACHE_NOTFOUND || index_dmcache > mesh->totvert) {
+      if (index_dmcache == DMCACHE_NOTFOUND || index_dmcache >= mesh->totvert) {
         return 0;
       }
 
@@ -2090,7 +2102,7 @@ int do_guides(Depsgraph *depsgraph,
 
       add_v3_v3(vec_to_point, guidevec);
 
-      //sub_v3_v3v3(pa_loc, pa_loc, pa_zero);
+      // sub_v3_v3v3(pa_loc, pa_loc, pa_zero);
       madd_v3_v3fl(effect, vec_to_point, data->strength);
       madd_v3_v3fl(veffect, guidedir, data->strength);
       totstrength += data->strength;
@@ -2106,7 +2118,7 @@ int do_guides(Depsgraph *depsgraph,
       mul_v3_fl(effect, 1.0f / totstrength);
     }
     CLAMP(totstrength, 0.0f, 1.0f);
-    //add_v3_v3(effect, pa_zero);
+    // add_v3_v3(effect, pa_zero);
     interp_v3_v3v3(state->co, state->co, effect, totstrength);
 
     normalize_v3(veffect);
@@ -2245,7 +2257,8 @@ void psys_find_parents(ParticleSimulationData *sim, const bool use_render_params
     psys_particle_on_emitter(
         sim->psmd, from, cpa->num, DMCACHE_ISCHILD, cpa->fuv, cpa->foffset, co, 0, 0, 0, orco);
 
-    /* Check if particle doesn't exist because of texture influence. Insert only existing particles into kdtree. */
+    /* Check if particle doesn't exist because of texture influence.
+     * Insert only existing particles into kdtree. */
     get_cpa_texture(sim->psmd->mesh_final,
                     psys,
                     part,
@@ -2463,7 +2476,8 @@ static void psys_thread_create_path(ParticleTask *task,
           const ParticleCacheKey *key_w_last = pcache_key_segment_endpoint_safe(key[w]);
           float d;
           if (part->flag & PART_CHILD_LONG_HAIR) {
-            /* For long hair use tip distance/root distance as parting factor instead of root to tip angle. */
+            /* For long hair use tip distance/root distance as parting
+             * factor instead of root to tip angle. */
             float d1 = len_v3v3(key[0]->co, key[w]->co);
             float d2 = len_v3v3(key_0_last->co, key_w_last->co);
 
@@ -2676,7 +2690,8 @@ static void psys_thread_create_path(ParticleTask *task,
       pa = &psys->particles[cpa->parent];
       par = pcache[cpa->parent];
 
-      /* If particle is unexisting, try to pick a viable parent from particles used for interpolation. */
+      /* If particle is unexisting, try to pick a viable parent from particles
+       * used for interpolation. */
       for (k = 0; k < 4 && pa && (pa->flag & PARS_UNEXIST); k++) {
         if (cpa->pa[k] >= 0) {
           pa = &psys->particles[cpa->pa[k]];
@@ -3276,6 +3291,10 @@ void psys_cache_edit_paths(Depsgraph *depsgraph,
   int segments = 1 << pset->draw_step;
   int totpart = edit->totpoint, recalc_set = 0;
 
+  if (edit->psmd_eval == NULL) {
+    return;
+  }
+
   segments = MAX2(segments, 4);
 
   if (!cache || edit->totpoint != edit->totcached) {
@@ -3741,8 +3760,10 @@ void BKE_particlesettings_twist_curve_init(ParticleSettings *part)
 }
 
 /**
- * Only copy internal data of ParticleSettings ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of ParticleSettings ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -4324,7 +4345,7 @@ void psys_get_particle_on_path(ParticleSimulationData *sim,
     }
   }
   else if (totchild) {
-    //invert_m4_m4(imat, ob->obmat);
+    // invert_m4_m4(imat, ob->obmat);
 
     /* interpolate childcache directly if it exists */
     if (psys->childcache) {
@@ -4368,10 +4389,11 @@ void psys_get_particle_on_path(ParticleSimulationData *sim,
         psys_particle_on_emitter(
             psmd, cpa_from, cpa_num, DMCACHE_ISCHILD, cpa->fuv, foffset, co, 0, 0, 0, orco);
 
-        /* we need to save the actual root position of the child for positioning it accurately to the surface of the emitter */
-        //copy_v3_v3(cpa_1st, co);
+        /* We need to save the actual root position of the child for
+         * positioning it accurately to the surface of the emitter. */
+        // copy_v3_v3(cpa_1st, co);
 
-        //mul_m4_v3(ob->obmat, cpa_1st);
+        // mul_m4_v3(ob->obmat, cpa_1st);
 
         pa = psys->particles + cpa->parent;
 
@@ -4455,7 +4477,7 @@ void psys_get_particle_on_path(ParticleSimulationData *sim,
           w++;
         }
         /* apply offset for correct positioning */
-        //add_v3_v3(state->co, cpa_1st);
+        // add_v3_v3(state->co, cpa_1st);
       }
       else {
         /* offset the child from the parent position */
@@ -4614,7 +4636,8 @@ int psys_get_particle_state(ParticleSimulationData *sim, int p, ParticleKey *sta
         /* let's interpolate to try to be as accurate as possible */
         if (pa->state.time + 2.f >= state->time && pa->prev_state.time - 2.f <= state->time) {
           if (pa->prev_state.time >= pa->state.time || pa->prev_state.time < 0.f) {
-            /* prev_state is wrong so let's not use it, this can happen at frames 1, 0 or particle birth */
+            /* prev_state is wrong so let's not use it,
+             * this can happen at frames 1, 0 or particle birth. */
             dfra = state->time - pa->state.time;
 
             copy_particle_key(state, &pa->state, 1);
@@ -4655,7 +4678,8 @@ int psys_get_particle_state(ParticleSimulationData *sim, int p, ParticleKey *sta
           madd_v3_v3v3fl(state->co, state->co, state->vel, dfra / frs_sec);
         }
         else {
-          /* extrapolating over big ranges is not accurate so let's just give something close to reasonable back */
+          /* Extrapolating over big ranges is not accurate
+           * so let's just give something close to reasonable back. */
           copy_particle_key(state, &pa->state, 0);
         }
       }

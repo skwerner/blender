@@ -208,7 +208,7 @@ static const char *dropbox_active(bContext *C,
           if (drop->poll(C, drag, event, &tooltip)) {
             /* XXX Doing translation here might not be ideal, but later we have no more
              *     access to ot (and hence op context)... */
-            return (tooltip) ? tooltip : RNA_struct_ui_name(drop->ot->srna);
+            return (tooltip) ? tooltip : WM_operatortype_name(drop->ot, drop->ptr);
           }
         }
       }
@@ -442,7 +442,7 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
         drag_rect_minmax(rect, x, y, x + iconsize, y + iconsize);
       }
       else {
-        UI_icon_draw_aspect(x, y, drag->icon, 1.0f / UI_DPI_FAC, 0.8, text_col);
+        UI_icon_draw_ex(x, y, drag->icon, U.inv_dpi_fac, 0.8, 0.0f, text_col, false);
       }
     }
 

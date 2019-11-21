@@ -622,8 +622,10 @@ bGPDlayer *BKE_gpencil_layer_duplicate(const bGPDlayer *gpl_src)
 }
 
 /**
- * Only copy internal data of GreasePencil ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of GreasePencil ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
@@ -1107,7 +1109,8 @@ Material *BKE_gpencil_object_material_new(Main *bmain, Object *ob, const char *n
 /* Returns the material for a brush with respect to its pinned state. */
 Material *BKE_gpencil_object_material_get_from_brush(Object *ob, Brush *brush)
 {
-  if ((brush) && (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED)) {
+  if ((brush) && (brush->gpencil_settings) &&
+      (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED)) {
     Material *ma = BKE_gpencil_brush_material_get(brush);
     return ma;
   }
@@ -1159,12 +1162,20 @@ Material *BKE_gpencil_object_material_ensure_from_active_input_brush(Main *bmain
   return BKE_gpencil_object_material_ensure_from_active_input_material(bmain, ob);
 }
 
-/* Guaranteed to return a material assigned to object. Returns never NULL. Only use this for materials unrelated to user input */
+/**
+ * Guaranteed to return a material assigned to object. Returns never NULL.
+ * Only use this for materials unrelated to user input.
+ */
 Material *BKE_gpencil_object_material_ensure_from_active_input_material(Main *bmain, Object *ob)
 {
   Material *ma = give_current_material(ob, ob->actcol);
   if (ma) {
     return ma;
+  }
+  /* If the slot is empty, remove because will be added again,
+   * if not, we will get an empty slot. */
+  if ((ob->totcol > 0) && (ob->actcol == ob->totcol)) {
+    BKE_object_material_slot_remove(bmain, ob);
   }
   return BKE_gpencil_object_material_new(bmain, ob, "Material", NULL);
 }
@@ -1313,6 +1324,7 @@ void BKE_gpencil_transform(bGPdata *gpd, float mat[4][4])
     return;
   }
 
+  const float scalef = mat4_to_scale(mat);
   for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
     /* FIXME: For now, we just skip parented layers.
      * Otherwise, we have to update each frame to find
@@ -1329,6 +1341,7 @@ void BKE_gpencil_transform(bGPdata *gpd, float mat[4][4])
 
         for (pt = gps->points, i = 0; i < gps->totpoints; pt++, i++) {
           mul_m4_v3(mat, &pt->x);
+          pt->pressure *= scalef;
         }
 
         /* TODO: Do we need to do this? distortion may mean we need to re-triangulate */
@@ -1416,9 +1429,11 @@ bool BKE_gpencil_smooth_stroke(bGPDstroke *gps, int i, float inf)
   }
 
   /* Compute smoothed coordinate by taking the ones nearby */
-  /* XXX: This is potentially slow, and suffers from accumulation error as earlier points are handled before later ones */
+  /* XXX: This is potentially slow,
+   *      and suffers from accumulation error as earlier points are handled before later ones. */
   {
-    // XXX: this is hardcoded to look at 2 points on either side of the current one (i.e. 5 items total)
+    /* XXX: this is hardcoded to look at 2 points on either side of the current one
+     * (i.e. 5 items total). */
     const int steps = 2;
     const float average_fac = 1.0f / (float)(steps * 2 + 1);
     int step;
@@ -1427,8 +1442,9 @@ bool BKE_gpencil_smooth_stroke(bGPDstroke *gps, int i, float inf)
     madd_v3_v3fl(sco, &pt->x, average_fac);
 
     /* n-steps before/after current point */
-    // XXX: review how the endpoints are treated by this algorithm
-    // XXX: falloff measures should also introduce some weighting variations, so that further-out points get less weight
+    /* XXX: review how the endpoints are treated by this algorithm. */
+    /* XXX: falloff measures should also introduce some weighting variations,
+     *      so that further-out points get less weight. */
     for (step = 1; step <= steps; step++) {
       bGPDspoint *pt1, *pt2;
       int before = i - step;
@@ -1631,33 +1647,15 @@ float BKE_gpencil_multiframe_falloff_calc(
   return value;
 }
 
-/* remove strokes using a material */
-void BKE_gpencil_material_index_remove(bGPdata *gpd, int index)
+/* reassign strokes using a material */
+void BKE_gpencil_material_index_reassign(bGPdata *gpd, int totcol, int index)
 {
-  bGPDstroke *gps, *gpsn;
-
   for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
     for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
-      for (gps = gpf->strokes.first; gps; gps = gpsn) {
-        gpsn = gps->next;
-        if (gps->mat_nr == index) {
-          if (gps->points) {
-            MEM_freeN(gps->points);
-          }
-          if (gps->dvert) {
-            BKE_gpencil_free_stroke_weights(gps);
-            MEM_freeN(gps->dvert);
-          }
-          if (gps->triangles) {
-            MEM_freeN(gps->triangles);
-          }
-          BLI_freelinkN(&gpf->strokes, gps);
-        }
-        else {
-          /* reassign strokes */
-          if (gps->mat_nr > index) {
-            gps->mat_nr--;
-          }
+      for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+        /* reassign strokes */
+        if ((gps->mat_nr > index) || (gps->mat_nr > totcol - 1)) {
+          gps->mat_nr--;
         }
       }
     }
@@ -1961,4 +1959,84 @@ bool BKE_gpencil_trim_stroke(bGPDstroke *gps)
     MEM_SAFE_FREE(old_dvert);
   }
   return intersect;
+}
+
+/**
+ * Close stroke
+ * \param gps: Stroke to close
+ */
+bool BKE_gpencil_close_stroke(bGPDstroke *gps)
+{
+  bGPDspoint *pt1 = NULL;
+  bGPDspoint *pt2 = NULL;
+
+  /* Only can close a stroke with 3 points or more. */
+  if (gps->totpoints < 3) {
+    return false;
+  }
+
+  /* Calc average distance between points to get same level of sampling. */
+  float dist_tot = 0.0f;
+  for (int i = 0; i < gps->totpoints - 1; i++) {
+    pt1 = &gps->points[i];
+    pt2 = &gps->points[i + 1];
+    dist_tot += len_v3v3(&pt1->x, &pt2->x);
+  }
+  /* Calc the average distance. */
+  float dist_avg = dist_tot / (gps->totpoints - 1);
+
+  /* Calc distance between last and first point. */
+  pt1 = &gps->points[gps->totpoints - 1];
+  pt2 = &gps->points[0];
+  float dist_close = len_v3v3(&pt1->x, &pt2->x);
+
+  /* Calc number of points required using the average distance. */
+  int tot_newpoints = MAX2(dist_close / dist_avg, 1);
+
+  /* Resize stroke array. */
+  int old_tot = gps->totpoints;
+  gps->totpoints += tot_newpoints;
+  gps->points = MEM_recallocN(gps->points, sizeof(*gps->points) * gps->totpoints);
+  if (gps->dvert != NULL) {
+    gps->dvert = MEM_recallocN(gps->dvert, sizeof(*gps->dvert) * gps->totpoints);
+  }
+
+  /* Generate new points */
+  pt1 = &gps->points[old_tot - 1];
+  pt2 = &gps->points[0];
+  bGPDspoint *pt = &gps->points[old_tot];
+  for (int i = 1; i < tot_newpoints + 1; i++, pt++) {
+    float step = ((float)i / (float)tot_newpoints);
+    /* Clamp last point to be near, but not on top of first point. */
+    CLAMP(step, 0.0f, 0.99f);
+
+    /* Average point. */
+    interp_v3_v3v3(&pt->x, &pt1->x, &pt2->x, step);
+    pt->pressure = interpf(pt2->pressure, pt1->pressure, step);
+    pt->strength = interpf(pt2->strength, pt1->strength, step);
+    pt->flag = 0;
+
+    /* Set weights. */
+    if (gps->dvert != NULL) {
+      MDeformVert *dvert1 = &gps->dvert[old_tot - 1];
+      MDeformWeight *dw1 = defvert_verify_index(dvert1, 0);
+      float weight_1 = dw1 ? dw1->weight : 0.0f;
+
+      MDeformVert *dvert2 = &gps->dvert[0];
+      MDeformWeight *dw2 = defvert_verify_index(dvert2, 0);
+      float weight_2 = dw2 ? dw2->weight : 0.0f;
+
+      MDeformVert *dvert_final = &gps->dvert[old_tot + i - 1];
+      dvert_final->totweight = 0;
+      MDeformWeight *dw = defvert_verify_index(dvert_final, 0);
+      if (dvert_final->dw) {
+        dw->weight = interpf(weight_2, weight_1, step);
+      }
+    }
+  }
+
+  /* Enable cyclic flag. */
+  gps->flag |= GP_STROKE_CYCLIC;
+
+  return true;
 }

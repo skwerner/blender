@@ -193,18 +193,6 @@ static void panel_list_copy(ListBase *newlb, const ListBase *lb)
   Panel *pa = lb->first;
   for (; newpa; newpa = newpa->next, pa = pa->next) {
     newpa->activedata = NULL;
-
-    Panel *newpatab = newlb->first;
-    Panel *patab = lb->first;
-    while (newpatab) {
-      if (newpa->paneltab == patab) {
-        newpa->paneltab = newpatab;
-        break;
-      }
-      newpatab = newpatab->next;
-      patab = patab->next;
-    }
-
     panel_list_copy(&newpa->children, &pa->children);
   }
 }
@@ -308,7 +296,8 @@ void BKE_spacedata_draw_locks(int set)
 }
 
 /**
- * Version of #BKE_area_find_region_type that also works if \a slink is not the active space of \a sa.
+ * Version of #BKE_area_find_region_type that also works if \a slink
+ * is not the active space of \a sa.
  */
 ARegion *BKE_spacedata_find_region_type(const SpaceLink *slink, const ScrArea *sa, int region_type)
 {
@@ -438,7 +427,6 @@ void BKE_area_region_free(SpaceType *st, ARegion *ar)
     }
     if (uilst->properties) {
       IDP_FreeProperty(uilst->properties);
-      MEM_freeN(uilst->properties);
     }
   }
 
@@ -750,6 +738,23 @@ ARegion *BKE_area_find_region_xy(ScrArea *sa, const int regiontype, int x, int y
 }
 
 /**
+ * \note This is only for screen level regions (typically menus/popups).
+ */
+ARegion *BKE_screen_find_region_xy(bScreen *sc, const int regiontype, int x, int y)
+{
+  ARegion *ar_found = NULL;
+  for (ARegion *ar = sc->regionbase.first; ar; ar = ar->next) {
+    if ((regiontype == RGN_TYPE_ANY) || (ar->regiontype == regiontype)) {
+      if (BLI_rcti_isect_pt(&ar->winrct, x, y)) {
+        ar_found = ar;
+        break;
+      }
+    }
+  }
+  return ar_found;
+}
+
+/**
  * \note, ideally we can get the area from the context,
  * there are a few places however where this isn't practical.
  */
@@ -851,13 +856,14 @@ void BKE_screen_view3d_shading_init(View3DShading *shading)
 
   shading->type = OB_SOLID;
   shading->prev_type = OB_SOLID;
-  shading->flag = V3D_SHADING_SPECULAR_HIGHLIGHT | V3D_SHADING_XRAY_BONE;
+  shading->flag = V3D_SHADING_SPECULAR_HIGHLIGHT | V3D_SHADING_XRAY_WIREFRAME;
   shading->light = V3D_LIGHTING_STUDIO;
   shading->shadow_intensity = 0.5f;
   shading->xray_alpha = 0.5f;
-  shading->xray_alpha_wire = 0.5f;
+  shading->xray_alpha_wire = 0.0f;
   shading->cavity_valley_factor = 1.0f;
   shading->cavity_ridge_factor = 1.0f;
+  shading->cavity_type = V3D_SHADING_CAVITY_CURVATURE;
   shading->curvature_ridge_factor = 1.0f;
   shading->curvature_valley_factor = 1.0f;
   copy_v3_fl(shading->single_color, 0.8f);

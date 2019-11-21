@@ -98,6 +98,25 @@ static bool wm_scene_is_visible(wmWindowManager *wm, Scene *scene)
   return false;
 }
 
+static void setup_app_userdef(BlendFileData *bfd)
+{
+  if (bfd->user) {
+    /* only here free userdef themes... */
+    BKE_blender_userdef_data_set_and_free(bfd->user);
+    bfd->user = NULL;
+
+    /* Security issue: any blend file could include a USER block.
+     *
+     * Currently we load prefs from BLENDER_STARTUP_FILE and later on load BLENDER_USERPREF_FILE,
+     * to load the preferences defined in the users home dir.
+     *
+     * This means we will never accidentally (or maliciously)
+     * enable scripts auto-execution by loading a '.blend' file.
+     */
+    U.flag |= USER_SCRIPT_AUTOEXEC_DISABLE;
+  }
+}
+
 /**
  * Context matching, handle no-ui case
  *
@@ -152,7 +171,8 @@ static void setup_app_data(bContext *C,
   /* no load screens? */
   if (mode != LOAD_UI) {
     /* Logic for 'track_undo_scene' is to keep using the scene which the active screen has,
-     * as long as the scene associated with the undo operation is visible in one of the open windows.
+     * as long as the scene associated with the undo operation is visible
+     * in one of the open windows.
      *
      * - 'curscreen->scene' - scene the user is currently looking at.
      * - 'bfd->curscene' - scene undo-step was created in.
@@ -234,25 +254,9 @@ static void setup_app_data(bContext *C,
   RNA_property_update_cache_free();
 
   bmain = G_MAIN = bfd->main;
+  bfd->main = NULL;
 
   CTX_data_main_set(C, bmain);
-
-  if (bfd->user) {
-
-    /* only here free userdef themes... */
-    BKE_blender_userdef_data_set_and_free(bfd->user);
-    bfd->user = NULL;
-
-    /* Security issue: any blend file could include a USER block.
-     *
-     * Currently we load prefs from BLENDER_STARTUP_FILE and later on load BLENDER_USERPREF_FILE,
-     * to load the preferences defined in the users home dir.
-     *
-     * This means we will never accidentally (or maliciously)
-     * enable scripts auto-execution by loading a '.blend' file.
-     */
-    U.flag |= USER_SCRIPT_AUTOEXEC_DISABLE;
-  }
 
   /* case G_FILE_NO_UI or no screens in file */
   if (mode != LOAD_UI) {
@@ -356,7 +360,29 @@ static void setup_app_data(bContext *C,
     RE_FreeAllPersistentData();
   }
 
-  MEM_freeN(bfd);
+  if (mode == LOAD_UNDO) {
+    /* In undo/redo case, we do a whole lot of magic tricks to avoid having to re-read linked
+     * data-blocks from libraries (since those are not supposed to change). Unfortunately, that
+     * means that we do not reset their user count, however we do increase that one when doing
+     * lib_link on local IDs using linked ones.
+     * There is no real way to predict amount of changes here, so we have to fully redo
+     * refcounting . */
+    BLE_main_id_refcount_recompute(bmain, true);
+  }
+}
+
+static void setup_app_blend_file_data(bContext *C,
+                                      BlendFileData *bfd,
+                                      const char *filepath,
+                                      const struct BlendFileReadParams *params,
+                                      ReportList *reports)
+{
+  if ((params->skip_flags & BLO_READ_SKIP_USERDEF) == 0) {
+    setup_app_userdef(bfd);
+  }
+  if ((params->skip_flags & BLO_READ_SKIP_DATA) == 0) {
+    setup_app_data(C, bfd, filepath, params->is_startup, reports);
+  }
 }
 
 static int handle_subversion_warning(Main *main, ReportList *reports)
@@ -399,7 +425,8 @@ int BKE_blendfile_read(bContext *C,
       retval = BKE_BLENDFILE_READ_FAIL;
     }
     else {
-      setup_app_data(C, bfd, filepath, params->is_startup, reports);
+      setup_app_blend_file_data(C, bfd, filepath, params, reports);
+      BLO_blendfiledata_free(bfd);
     }
   }
   else {
@@ -421,9 +448,13 @@ bool BKE_blendfile_read_from_memory(bContext *C,
   bfd = BLO_read_from_memory(filebuf, filelength, params->skip_flags, reports);
   if (bfd) {
     if (update_defaults) {
-      BLO_update_defaults_startup_blend(bfd->main, NULL);
+      if ((params->skip_flags & BLO_READ_SKIP_DATA) == 0) {
+        BLO_update_defaults_startup_blend(bfd->main, NULL);
+      }
     }
-    setup_app_data(C, bfd, "<memory2>", params->is_startup, reports);
+
+    setup_app_blend_file_data(C, bfd, "<memory2>", params, reports);
+    BLO_blendfiledata_free(bfd);
   }
   else {
     BKE_reports_prepend(reports, "Loading failed: ");
@@ -452,7 +483,8 @@ bool BKE_blendfile_read_from_memfile(bContext *C,
       BKE_id_free(bfd->main, bfd->main->screens.first);
     }
 
-    setup_app_data(C, bfd, "<memory1>", params->is_startup, reports);
+    setup_app_blend_file_data(C, bfd, "<memory1>", params, reports);
+    BLO_blendfiledata_free(bfd);
   }
   else {
     BKE_reports_prepend(reports, "Loading failed: ");
@@ -565,6 +597,63 @@ bool BKE_blendfile_userdef_write_app_template(const char *filepath, ReportList *
   return ok;
 }
 
+bool BKE_blendfile_userdef_write_all(ReportList *reports)
+{
+  char filepath[FILE_MAX];
+  const char *cfgdir;
+  bool ok = true;
+  const bool use_template_userpref = BKE_appdir_app_template_has_userpref(U.app_template);
+
+  if ((cfgdir = BKE_appdir_folder_id_create(BLENDER_USER_CONFIG, NULL))) {
+    bool ok_write;
+    BLI_path_join(filepath, sizeof(filepath), cfgdir, BLENDER_USERPREF_FILE, NULL);
+
+    printf("Writing userprefs: '%s' ", filepath);
+    if (use_template_userpref) {
+      ok_write = BKE_blendfile_userdef_write_app_template(filepath, reports);
+    }
+    else {
+      ok_write = BKE_blendfile_userdef_write(filepath, reports);
+    }
+
+    if (ok_write) {
+      printf("ok\n");
+    }
+    else {
+      printf("fail\n");
+      ok = false;
+    }
+  }
+  else {
+    BKE_report(reports, RPT_ERROR, "Unable to create userpref path");
+  }
+
+  if (use_template_userpref) {
+    if ((cfgdir = BKE_appdir_folder_id_create(BLENDER_USER_CONFIG, U.app_template))) {
+      /* Also save app-template prefs */
+      BLI_path_join(filepath, sizeof(filepath), cfgdir, BLENDER_USERPREF_FILE, NULL);
+
+      printf("Writing userprefs app-template: '%s' ", filepath);
+      if (BKE_blendfile_userdef_write(filepath, reports) != 0) {
+        printf("ok\n");
+      }
+      else {
+        printf("fail\n");
+        ok = false;
+      }
+    }
+    else {
+      BKE_report(reports, RPT_ERROR, "Unable to create app-template userpref path");
+      ok = false;
+    }
+  }
+
+  if (ok) {
+    U.runtime.is_dirty = false;
+  }
+  return ok;
+}
+
 WorkspaceConfigFileData *BKE_blendfile_workspace_config_read(const char *filepath,
                                                              const void *filebuf,
                                                              int filelength,
@@ -581,9 +670,14 @@ WorkspaceConfigFileData *BKE_blendfile_workspace_config_read(const char *filepat
   }
 
   if (bfd) {
-    workspace_config = MEM_mallocN(sizeof(*workspace_config), __func__);
+    workspace_config = MEM_callocN(sizeof(*workspace_config), __func__);
     workspace_config->main = bfd->main;
-    workspace_config->workspaces = bfd->main->workspaces;
+
+    /* Only 2.80+ files have actual workspaces, don't try to use screens
+     * from older versions. */
+    if (bfd->main->versionfile >= 280) {
+      workspace_config->workspaces = bfd->main->workspaces;
+    }
 
     MEM_freeN(bfd);
   }
@@ -693,13 +787,13 @@ bool BKE_blendfile_write_partial(Main *bmain_src,
 
   /* Backup paths because remap relative will overwrite them.
    *
-   * NOTE: we do this only on the list of datablocks that we are writing
+   * NOTE: we do this only on the list of data-blocks that we are writing
    * because the restored full list is not guaranteed to be in the same
    * order as before, as expected by BKE_bpath_list_restore.
    *
    * This happens because id_sort_by_name does not take into account
    * string case or the library name, so the order is not strictly
-   * defined for two linked datablocks with the same name! */
+   * defined for two linked data-blocks with the same name! */
   if (write_flags & G_FILE_RELATIVE_REMAP) {
     path_list_backup = BKE_bpath_list_backup(bmain_dst, path_list_flag);
   }

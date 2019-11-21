@@ -781,6 +781,52 @@ static void recalcData_spaceclip(TransInfo *t)
   }
 }
 
+/**
+ * if pose bone (partial) selected, copy data.
+ * context; posemode armature, with mirror editing enabled.
+ *
+ * \param pid: Optional, apply relative transform when set.
+ */
+static void pose_transform_mirror_update(Object *ob, PoseInitData_Mirror *pid)
+{
+  float flip_mtx[4][4];
+  unit_m4(flip_mtx);
+  flip_mtx[0][0] = -1;
+
+  for (bPoseChannel *pchan_orig = ob->pose->chanbase.first; pchan_orig;
+       pchan_orig = pchan_orig->next) {
+    /* no layer check, correct mirror is more important */
+    if (pchan_orig->bone->flag & BONE_TRANSFORM) {
+      bPoseChannel *pchan = BKE_pose_channel_get_mirrored(ob->pose, pchan_orig->name);
+
+      if (pchan) {
+        /* also do bbone scaling */
+        pchan->bone->xwidth = pchan_orig->bone->xwidth;
+        pchan->bone->zwidth = pchan_orig->bone->zwidth;
+
+        /* we assume X-axis flipping for now */
+        pchan->curve_in_x = pchan_orig->curve_in_x * -1;
+        pchan->curve_out_x = pchan_orig->curve_out_x * -1;
+        pchan->roll1 = pchan_orig->roll1 * -1;  // XXX?
+        pchan->roll2 = pchan_orig->roll2 * -1;  // XXX?
+
+        float pchan_mtx_final[4][4];
+        BKE_pchan_to_mat4(pchan_orig, pchan_mtx_final);
+        mul_m4_m4m4(pchan_mtx_final, pchan_mtx_final, flip_mtx);
+        mul_m4_m4m4(pchan_mtx_final, flip_mtx, pchan_mtx_final);
+        if (pid) {
+          mul_m4_m4m4(pchan_mtx_final, pid->offset_mtx, pchan_mtx_final);
+          pid++;
+        }
+        BKE_pchan_apply_mat4(pchan, pchan_mtx_final, false);
+
+        /* set flag to let autokeyframe know to keyframe the mirrred bone */
+        pchan->bone->flag |= BONE_TRANSFORM_MIRROR;
+      }
+    }
+  }
+}
+
 /* helper for recalcData() - for object transforms, typically in the 3D view */
 static void recalcData_objects(TransInfo *t)
 {
@@ -968,12 +1014,52 @@ static void recalcData_objects(TransInfo *t)
       }
     }
   }
+  else if (t->flag & T_POSE && (t->mode == TFM_BONESIZE)) {
+    /* Handle the exception where for TFM_BONESIZE in edit mode we pretend to be
+     * in pose mode (to use bone orientation matrix),
+     * in that case we have to do mirroring as well. */
+    FOREACH_TRANS_DATA_CONTAINER (t, tc) {
+      Object *ob = tc->poseobj;
+      bArmature *arm = ob->data;
+      if (ob->mode == OB_MODE_EDIT) {
+        if (arm->flag & ARM_MIRROR_EDIT) {
+          if (t->state != TRANS_CANCEL) {
+            ED_armature_edit_transform_mirror_update(ob);
+          }
+          else {
+            restoreBones(tc);
+          }
+        }
+      }
+      else if (ob->mode == OB_MODE_POSE) {
+        /* actually support TFM_BONESIZE in posemode as well */
+        DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+        bPose *pose = ob->pose;
+        if (arm->flag & ARM_MIRROR_EDIT || pose->flag & POSE_MIRROR_EDIT) {
+          pose_transform_mirror_update(ob, NULL);
+        }
+      }
+    }
+  }
   else if (t->flag & T_POSE) {
     GSet *motionpath_updates = BLI_gset_ptr_new("motionpath updates");
 
     FOREACH_TRANS_DATA_CONTAINER (t, tc) {
       Object *ob = tc->poseobj;
-      bArmature *arm = ob->data;
+      bPose *pose = ob->pose;
+
+      if (pose->flag & POSE_MIRROR_EDIT) {
+        if (t->state != TRANS_CANCEL) {
+          PoseInitData_Mirror *pid = NULL;
+          if (pose->flag & POSE_MIRROR_RELATIVE) {
+            pid = tc->custom.type.data;
+          }
+          pose_transform_mirror_update(ob, pid);
+        }
+        else {
+          restoreMirrorPoseBones(tc);
+        }
+      }
 
       /* if animtimer is running, and the object already has animation data,
        * check if the auto-record feature means that we should record 'samples'
@@ -996,15 +1082,7 @@ static void recalcData_objects(TransInfo *t)
         BLI_gset_insert(motionpath_updates, ob);
       }
 
-      /* old optimize trick... this enforces to bypass the depgraph */
-      if (!(arm->flag & ARM_DELAYDEFORM)) {
-        DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY); /* sets recalc flags */
-        /* transformation of pose may affect IK tree, make sure it is rebuilt */
-        BIK_clear_data(ob->pose);
-      }
-      else {
-        BKE_pose_where_is(t->depsgraph, t->scene, ob);
-      }
+      DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
     }
 
     /* Update motion paths once for all transformed bones in an object. */
@@ -1093,19 +1171,13 @@ static void recalcData_sequencer(TransInfo *t)
     Sequence *seq = tdsq->seq;
 
     if (seq != seq_prev) {
-      if (BKE_sequence_tx_fullupdate_test(seq)) {
-        /* A few effect strip types need a complete recache on transform. */
-        BKE_sequence_invalidate_cache(t->scene, seq);
-      }
-      else {
-        BKE_sequence_invalidate_dependent(t->scene, seq);
-      }
+      BKE_sequence_invalidate_cache_composite(t->scene, seq);
     }
 
     seq_prev = seq;
   }
 
-  BKE_sequencer_preprocessed_cache_cleanup();
+  DEG_id_tag_update(&t->scene->id, ID_RECALC_SEQUENCER_STRIPS);
 
   flushTransSeq(t);
 }
@@ -1225,16 +1297,17 @@ void resetTransRestrictions(TransInfo *t)
 
 static int initTransInfo_edit_pet_to_flag(const int proportional)
 {
-  switch (proportional) {
-    case PROP_EDIT_ON:
-      return T_PROP_EDIT;
-    case PROP_EDIT_CONNECTED:
-      return T_PROP_EDIT | T_PROP_CONNECTED;
-    case PROP_EDIT_PROJECTED:
-      return T_PROP_EDIT | T_PROP_PROJECTED;
-    default:
-      return 0;
+  int flag = 0;
+  if (proportional & PROP_EDIT_USE) {
+    flag |= T_PROP_EDIT;
   }
+  if (proportional & PROP_EDIT_CONNECTED) {
+    flag |= T_PROP_CONNECTED;
+  }
+  if (proportional & PROP_EDIT_PROJECTED) {
+    flag |= T_PROP_PROJECTED;
+  }
+  return flag;
 }
 
 void initTransDataContainers_FromObjectData(TransInfo *t,
@@ -1294,7 +1367,9 @@ void initTransDataContainers_FromObjectData(TransInfo *t,
         BLI_assert((t->flag & T_2D_EDIT) == 0);
         copy_m4_m4(tc->mat, objects[i]->obmat);
         copy_m3_m4(tc->mat3, tc->mat);
-        invert_m4_m4(tc->imat, tc->mat);
+        /* for non-invertible scale matrices, invert_m4_m4_fallback()
+         * can still provide a valid pivot */
+        invert_m4_m4_fallback(tc->imat, tc->mat);
         invert_m3_m3(tc->imat3, tc->mat3);
         normalize_m3_m3(tc->mat3_unit, tc->mat3);
       }
@@ -1637,9 +1712,19 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   }
 
   /* setting PET flag only if property exist in operator. Otherwise, assume it's not supported */
-  if (op && (prop = RNA_struct_find_property(op->ptr, "proportional"))) {
+  if (op && (prop = RNA_struct_find_property(op->ptr, "use_proportional_edit"))) {
     if (RNA_property_is_set(op->ptr, prop)) {
-      t->flag |= initTransInfo_edit_pet_to_flag(RNA_property_enum_get(op->ptr, prop));
+      int proportional = 0;
+      if (RNA_property_boolean_get(op->ptr, prop)) {
+        proportional |= PROP_EDIT_USE;
+        if (RNA_boolean_get(op->ptr, "use_proportional_connected")) {
+          proportional |= PROP_EDIT_CONNECTED;
+        }
+        if (RNA_boolean_get(op->ptr, "use_proportional_projected")) {
+          proportional |= PROP_EDIT_PROJECTED;
+        }
+      }
+      t->flag |= initTransInfo_edit_pet_to_flag(proportional);
     }
     else {
       /* use settings from scene only if modal */
@@ -1652,16 +1737,16 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
             t->flag |= initTransInfo_edit_pet_to_flag(ts->proportional_action);
           }
           else if (t->obedit_type != -1) {
-            t->flag |= initTransInfo_edit_pet_to_flag(ts->proportional);
+            t->flag |= initTransInfo_edit_pet_to_flag(ts->proportional_edit);
           }
           else if (t->options & CTX_GPENCIL_STROKES) {
-            t->flag |= initTransInfo_edit_pet_to_flag(ts->proportional);
+            t->flag |= initTransInfo_edit_pet_to_flag(ts->proportional_edit);
           }
           else if (t->options & CTX_MASK) {
             if (ts->proportional_mask) {
               t->flag |= T_PROP_EDIT;
 
-              if (ts->proportional == PROP_EDIT_CONNECTED) {
+              if (ts->proportional_edit & PROP_EDIT_CONNECTED) {
                 t->flag |= T_PROP_CONNECTED;
               }
             }

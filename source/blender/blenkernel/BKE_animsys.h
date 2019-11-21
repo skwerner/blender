@@ -95,7 +95,8 @@ void BKE_animdata_merge_copy(struct Main *bmain,
 /* ************************************* */
 /* KeyingSets API */
 
-/* Used to create a new 'custom' KeyingSet for the user, that will be automatically added to the stack */
+/* Used to create a new 'custom' KeyingSet for the user,
+ * that will be automatically added to the stack */
 struct KeyingSet *BKE_keyingset_add(
     struct ListBase *list, const char idname[], const char name[], short flag, short keyingflag);
 
@@ -169,7 +170,7 @@ void BKE_animdata_fix_paths_rename_all(struct ID *ref_id,
                                        const char *newName);
 
 /* Fix the path after removing elements that are not ID (e.g., node).
- * Returen truth if any animation data was affected. */
+ * Return true if any animation data was affected. */
 bool BKE_animdata_fix_paths_remove(struct ID *id, const char *path);
 
 /* -------------------------------------- */

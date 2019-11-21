@@ -26,6 +26,8 @@
 
 #include "BKE_object.h"
 
+#include "DEG_depsgraph_query.h"
+
 #include "ED_mball.h"
 
 /* If builtin shaders are needed */
@@ -86,18 +88,10 @@ typedef struct EDIT_METABALL_Data {
 typedef struct EDIT_METABALL_PrivateData {
   /* This keeps the references of the shading groups for
    * easy access in EDIT_METABALL_cache_populate() */
-  DRWShadingGroup *group;
+  DRWCallBuffer *group;
 } EDIT_METABALL_PrivateData; /* Transient data */
 
 /* *********** FUNCTIONS *********** */
-
-static void EDIT_METABALL_engine_init(void *UNUSED(vedata))
-{
-  const DRWContextState *draw_ctx = DRW_context_state_get();
-  if (draw_ctx->sh_cfg == GPU_SHADER_CFG_CLIPPED) {
-    DRW_state_clip_planes_set_from_rv3d(draw_ctx->rv3d);
-  }
-}
 
 /* Here init all passes and shading groups
  * Assume that all Passes are NULL */
@@ -115,23 +109,23 @@ static void EDIT_METABALL_cache_init(void *vedata)
   {
     /* Create a pass */
     DRWState state = (DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL |
-                      DRW_STATE_BLEND | DRW_STATE_WIRE);
+                      DRW_STATE_BLEND_ALPHA);
     psl->pass = DRW_pass_create("My Pass", state);
 
     /* Create a shadingGroup using a function in draw_common.c or custom one */
-    stl->g_data->group = shgroup_instance_mball_handles(psl->pass, draw_ctx->sh_cfg);
+    stl->g_data->group = buffer_instance_mball_handles(psl->pass, draw_ctx->sh_cfg);
   }
 }
 
 /* Add geometry to shadingGroups. Execute for each objects */
 static void EDIT_METABALL_cache_populate(void *vedata, Object *ob)
 {
-  //EDIT_METABALL_PassList *psl = ((EDIT_METABALL_Data *)vedata)->psl;
+  // EDIT_METABALL_PassList *psl = ((EDIT_METABALL_Data *)vedata)->psl;
   EDIT_METABALL_StorageList *stl = ((EDIT_METABALL_Data *)vedata)->stl;
 
   if (ob->type == OB_MBALL) {
     const DRWContextState *draw_ctx = DRW_context_state_get();
-    DRWShadingGroup *group = stl->g_data->group;
+    DRWCallBuffer *group = stl->g_data->group;
 
     if ((ob == draw_ctx->object_edit) || BKE_object_is_in_editmode(ob)) {
       MetaBall *mb = ob->data;
@@ -160,7 +154,8 @@ static void EDIT_METABALL_cache_populate(void *vedata, Object *ob)
         copy_v3_v3(draw_scale_xform[2], scamat[2]);
       }
 
-      int select_id = ob->select_id;
+      const Object *orig_object = DEG_get_original_object(ob);
+      int select_id = orig_object->runtime.select_id;
       for (MetaElem *ml = mb->editelems->first; ml != NULL; ml = ml->next, select_id += 0x10000) {
         float world_pos[3];
         mul_v3_m4v3(world_pos, ob->obmat, &ml->x);
@@ -181,7 +176,7 @@ static void EDIT_METABALL_cache_populate(void *vedata, Object *ob)
           DRW_select_load_id(select_id | MBALLSEL_RADIUS);
         }
 
-        DRW_shgroup_call_dynamic_add(group, draw_scale_xform, &ml->rad, color);
+        DRW_buffer_add_entry(group, draw_scale_xform, &ml->rad, color);
 
         if ((ml->flag & SELECT) && !(ml->flag & MB_SCALE_RAD)) {
           color = col_stiffness_select;
@@ -194,7 +189,7 @@ static void EDIT_METABALL_cache_populate(void *vedata, Object *ob)
           DRW_select_load_id(select_id | MBALLSEL_STIFF);
         }
 
-        DRW_shgroup_call_dynamic_add(group, draw_scale_xform, &draw_stiffness_radius, color);
+        DRW_buffer_add_entry(group, draw_scale_xform, &draw_stiffness_radius, color);
       }
     }
   }
@@ -206,11 +201,6 @@ static void EDIT_METABALL_draw_scene(void *vedata)
   EDIT_METABALL_PassList *psl = ((EDIT_METABALL_Data *)vedata)->psl;
   /* render passes on default framebuffer. */
   DRW_draw_pass(psl->pass);
-
-  /* If you changed framebuffer, double check you rebind
-   * the default one with its textures attached before finishing */
-
-  DRW_state_clip_planes_reset();
 }
 
 /* Cleanup when destroying the engine.
@@ -229,7 +219,7 @@ DrawEngineType draw_engine_edit_metaball_type = {
     NULL,
     N_("EditMetaballMode"),
     &EDIT_METABALL_data_size,
-    &EDIT_METABALL_engine_init,
+    NULL,
     &EDIT_METABALL_engine_free,
     &EDIT_METABALL_cache_init,
     &EDIT_METABALL_cache_populate,

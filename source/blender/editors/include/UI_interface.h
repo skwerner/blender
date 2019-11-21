@@ -228,6 +228,7 @@ enum {
 
 #define UI_PANEL_WIDTH 340
 #define UI_COMPACT_PANEL_WIDTH 160
+#define UI_SIDEBAR_PANEL_WIDTH 220
 #define UI_NAVIGATION_REGION_WIDTH UI_COMPACT_PANEL_WIDTH
 #define UI_NARROW_NAVIGATION_REGION_WIDTH 100
 
@@ -280,6 +281,9 @@ enum {
 
   /** Value is animated, but the current value differs from the animated one. */
   UI_BUT_ANIMATED_CHANGED = 1 << 25,
+
+  /* Draw the checkbox buttons inverted. */
+  UI_BUT_CHECKBOX_INVERT = 1 << 26,
 };
 
 /* scale fixed button widths by this to account for DPI */
@@ -520,6 +524,7 @@ bool UI_but_is_tool(const uiBut *but);
 #define UI_but_is_decorator(but) ((but)->func == ui_but_anim_decorate_cb)
 
 bool UI_block_is_empty(const uiBlock *block);
+bool UI_block_can_add_separator(const uiBlock *block);
 
 /* interface_region_menu_popup.c */
 /**
@@ -593,9 +598,16 @@ struct uiLayout *UI_pie_menu_layout(struct uiPieMenu *pie);
 typedef uiBlock *(*uiBlockCreateFunc)(struct bContext *C, struct ARegion *ar, void *arg1);
 typedef void (*uiBlockCancelFunc)(struct bContext *C, void *arg1);
 
-void UI_popup_block_invoke(struct bContext *C, uiBlockCreateFunc func, void *arg);
-void UI_popup_block_invoke_ex(
-    struct bContext *C, uiBlockCreateFunc func, void *arg, const char *opname, int opcontext);
+void UI_popup_block_invoke(struct bContext *C,
+                           uiBlockCreateFunc func,
+                           void *arg,
+                           void (*arg_free)(void *arg));
+void UI_popup_block_invoke_ex(struct bContext *C,
+                              uiBlockCreateFunc func,
+                              void *arg,
+                              void (*arg_free)(void *arg),
+                              const char *opname,
+                              int opcontext);
 void UI_popup_block_ex(struct bContext *C,
                        uiBlockCreateFunc func,
                        uiBlockHandleFunc popup_func,
@@ -640,6 +652,7 @@ enum {
   UI_BLOCK_THEME_STYLE_POPUP = 1,
 };
 void UI_block_theme_style_set(uiBlock *block, char theme_style);
+char UI_block_emboss_get(uiBlock *block);
 void UI_block_emboss_set(uiBlock *block, char dt);
 
 void UI_block_free(const struct bContext *C, uiBlock *block);
@@ -710,7 +723,7 @@ bool UI_block_active_only_flagged_buttons(const struct bContext *C,
                                           struct ARegion *ar,
                                           struct uiBlock *block);
 
-void UI_but_execute(const struct bContext *C, uiBut *but);
+void UI_but_execute(const struct bContext *C, struct ARegion *ar, uiBut *but);
 
 bool UI_but_online_manual_id(const uiBut *but,
                              char *r_str,
@@ -1617,17 +1630,18 @@ struct Panel *UI_panel_begin(struct ScrArea *sa,
                              struct PanelType *pt,
                              struct Panel *pa,
                              bool *r_open);
-void UI_panel_end(uiBlock *block, int width, int height);
+void UI_panel_end(uiBlock *block, int width, int height, bool open);
 void UI_panels_scale(struct ARegion *ar, float new_width);
 void UI_panel_label_offset(struct uiBlock *block, int *r_x, int *r_y);
 int UI_panel_size_y(const struct Panel *pa);
 
-bool UI_panel_category_is_visible(struct ARegion *ar);
+bool UI_panel_category_is_visible(const struct ARegion *ar);
 void UI_panel_category_add(struct ARegion *ar, const char *name);
 struct PanelCategoryDyn *UI_panel_category_find(struct ARegion *ar, const char *idname);
 struct PanelCategoryStack *UI_panel_category_active_find(struct ARegion *ar, const char *idname);
 const char *UI_panel_category_active_get(struct ARegion *ar, bool set_fallback);
 void UI_panel_category_active_set(struct ARegion *ar, const char *idname);
+void UI_panel_category_active_set_default(struct ARegion *ar, const char *idname);
 struct PanelCategoryDyn *UI_panel_category_find_mouse_over_ex(struct ARegion *ar,
                                                               const int x,
                                                               const int y);
@@ -1701,14 +1715,28 @@ enum {
   UI_ITEM_O_RETURN_PROPS = 1 << 0,
   UI_ITEM_R_EXPAND = 1 << 1,
   UI_ITEM_R_SLIDER = 1 << 2,
+  /**
+   * Use for booleans, causes the button to draw with an outline (emboss),
+   * instead of text with a checkbox.
+   * This is implied when toggle buttons have an icon
+   * unless #UI_ITEM_R_ICON_NEVER flag is set.
+   */
   UI_ITEM_R_TOGGLE = 1 << 3,
-  UI_ITEM_R_ICON_ONLY = 1 << 4,
-  UI_ITEM_R_EVENT = 1 << 5,
-  UI_ITEM_R_FULL_EVENT = 1 << 6,
-  UI_ITEM_R_NO_BG = 1 << 7,
-  UI_ITEM_R_IMMEDIATE = 1 << 8,
-  UI_ITEM_O_DEPRESS = 1 << 9,
-  UI_ITEM_R_COMPACT = 1 << 10,
+  /**
+   * Don't attempt to use an icon when the icon is set to #ICON_NONE.
+   *
+   * Use for boolean's, causes the buttons to always show as a checkbox
+   * even when there is an icon (which would normally show the button as a toggle).
+   */
+  UI_ITEM_R_ICON_NEVER = 1 << 4,
+  UI_ITEM_R_ICON_ONLY = 1 << 5,
+  UI_ITEM_R_EVENT = 1 << 6,
+  UI_ITEM_R_FULL_EVENT = 1 << 7,
+  UI_ITEM_R_NO_BG = 1 << 8,
+  UI_ITEM_R_IMMEDIATE = 1 << 9,
+  UI_ITEM_O_DEPRESS = 1 << 10,
+  UI_ITEM_R_COMPACT = 1 << 11,
+  UI_ITEM_R_CHECKBOX_INVERT = 1 << 12,
 };
 
 #define UI_HEADER_OFFSET ((void)0, 0.4f * UI_UNIT_X)
@@ -2223,6 +2251,7 @@ void uiItemL(uiLayout *layout, const char *name, int icon); /* label */
 /* label icon for dragging */
 void uiItemLDrag(uiLayout *layout, struct PointerRNA *ptr, const char *name, int icon);
 /* menu */
+void uiItemM_ptr(uiLayout *layout, struct MenuType *mt, const char *name, int icon);
 void uiItemM(uiLayout *layout, const char *menuname, const char *name, int icon);
 /* menu contents */
 void uiItemMContents(uiLayout *layout, const char *menuname);

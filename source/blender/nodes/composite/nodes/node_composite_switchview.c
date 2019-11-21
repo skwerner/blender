@@ -23,6 +23,8 @@
  */
 
 #include "BKE_context.h"
+#include "BKE_library.h"
+
 #include "../node_composite_util.h"
 
 /* **************** SWITCH VIEW ******************** */
@@ -122,6 +124,7 @@ static void init_switch_view(const bContext *C, PointerRNA *ptr)
 
   /* store scene for updates */
   node->id = (ID *)scene;
+  id_us_plus(node->id);
 
   if (scene) {
     RenderData *rd = &scene->r;
@@ -148,7 +151,7 @@ void register_node_type_cmp_switch_view(void)
 
   ntype.initfunc_api = init_switch_view;
 
-  node_type_update(&ntype, cmp_node_switch_view_update, NULL);
+  node_type_update(&ntype, cmp_node_switch_view_update);
 
   nodeRegisterType(&ntype);
 }

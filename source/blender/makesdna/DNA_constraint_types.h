@@ -289,14 +289,16 @@ typedef struct bLocateLikeConstraint {
 typedef struct bSizeLikeConstraint {
   struct Object *tar;
   int flag;
-  int reserved1;
+  float power;
   /** MAX_ID_NAME-2. */
   char subtarget[64];
 } bSizeLikeConstraint;
 
 /* Maintain Volume Constraint */
 typedef struct bSameVolumeConstraint {
-  int flag;
+  char free_axis;
+  char mode;
+  char _pad[2];
   float volume;
 } bSameVolumeConstraint;
 
@@ -313,12 +315,9 @@ typedef struct bMinMaxConstraint {
   int minmaxflag;
   float offset;
   int flag;
-  /** For backward compatibility. */
-  short sticky, stuck;
-  char _pad[4];
-  float cache[3];
   /** MAX_ID_NAME-2. */
   char subtarget[64];
+  int _pad;
 } bMinMaxConstraint;
 
 /* Action Constraint */
@@ -593,9 +592,12 @@ typedef struct bObjectSolverConstraint {
 /* Transform matrix cache constraint */
 typedef struct bTransformCacheConstraint {
   struct CacheFile *cache_file;
-  struct CacheReader *reader;
   /** FILE_MAX. */
   char object_path[1024];
+
+  /* Runtime. */
+  struct CacheReader *reader;
+  char reader_object_path[1024];
 } bTransformCacheConstraint;
 
 /* ------------------------------------------ */
@@ -686,7 +688,7 @@ typedef enum eBConstraint_Flags {
   /* use bbone curve shape when calculating headtail values (also used by dependency graph!) */
   CONSTRAINT_BBONE_SHAPE = (1 << 10),
   /* That constraint has been inserted in local override (i.e. it can be fully edited!). */
-  CONSTRAINT_STATICOVERRIDE_LOCAL = (1 << 11),
+  CONSTRAINT_OVERRIDE_LIBRARY_LOCAL = (1 << 11),
   /* use full transformation (not just segment locations) - only set at runtime  */
   CONSTRAINT_BBONE_SHAPE_FULL = (1 << 12),
 } eBConstraint_Flags;
@@ -755,12 +757,22 @@ typedef enum eTransform_ToFrom {
   TRANS_SCALE = 2,
 } eTransform_ToFrom;
 
-/* bSameVolumeConstraint.flag */
-typedef enum eSameVolume_Modes {
+/* bSameVolumeConstraint.free_axis */
+typedef enum eSameVolume_Axis {
   SAMEVOL_X = 0,
   SAMEVOL_Y = 1,
   SAMEVOL_Z = 2,
-} eSameVolume_Modes;
+} eSameVolume_Axis;
+
+/* bSameVolumeConstraint.mode */
+typedef enum eSameVolume_Mode {
+  /* Strictly maintain the volume, overriding non-free axis scale. */
+  SAMEVOL_STRICT = 0,
+  /* Maintain the volume when scale is uniform, pass non-uniform other axis scale through. */
+  SAMEVOL_UNIFORM = 1,
+  /* Maintain the volume when scaled only on the free axis, pass other axis scale through. */
+  SAMEVOL_SINGLE_AXIS = 2,
+} eSameVolume_Mode;
 
 /* bActionConstraint.flag */
 typedef enum eActionConstraint_Flags {
@@ -891,6 +903,9 @@ typedef enum eSplineIK_Flags {
   /* for "volumetric" xz scale mode, limit the minimum or maximum scale values */
   CONSTRAINT_SPLINEIK_USE_BULGE_MIN = (1 << 5),
   CONSTRAINT_SPLINEIK_USE_BULGE_MAX = (1 << 6),
+
+  /* apply volume preservation over original scaling of the bone */
+  CONSTRAINT_SPLINEIK_USE_ORIGINAL_SCALE = (1 << 7),
 } eSplineIK_Flags;
 
 /* bSplineIKConstraint->xzScaleMode */
@@ -927,8 +942,8 @@ typedef enum eArmature_Flags {
 
 /* MinMax (floor) flags */
 typedef enum eFloor_Flags {
-  MINMAX_STICKY = (1 << 0),
-  MINMAX_STUCK = (1 << 1),
+  /* MINMAX_STICKY = (1 << 0), */ /* Deprecated. */
+  /* MINMAX_STUCK = (1 << 1), */  /* Deprecated. */
   MINMAX_USEROT = (1 << 2),
 } eFloor_Flags;
 

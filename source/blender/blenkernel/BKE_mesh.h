@@ -123,10 +123,12 @@ struct Mesh *BKE_mesh_new_nomain_from_template(const struct Mesh *me_src,
                                                int loops_len,
                                                int polys_len);
 
-/* Performs copy for use during evaluation, optional referencing original arrays to reduce memory. */
+/* Performs copy for use during evaluation,
+ * optional referencing original arrays to reduce memory. */
 struct Mesh *BKE_mesh_copy_for_eval(struct Mesh *source, bool reference);
 
-/* These functions construct a new Mesh, contrary to BKE_mesh_from_nurbs which modifies ob itself. */
+/* These functions construct a new Mesh,
+ * contrary to BKE_mesh_from_nurbs which modifies ob itself. */
 struct Mesh *BKE_mesh_new_nomain_from_curve(struct Object *ob);
 struct Mesh *BKE_mesh_new_nomain_from_curve_displist(struct Object *ob, struct ListBase *dispbase);
 
@@ -206,16 +208,28 @@ float (*BKE_mesh_vertexCos_get(const struct Mesh *me, int *r_numVerts))[3];
 
 void BKE_mesh_split_faces(struct Mesh *mesh, bool free_loop_normals);
 
+/* Create new mesh from the given object at its current state.
+ * The owner of this mesh is unknown, it is up to the caller to decide.
+ *
+ * If preserve_all_data_layers is truth then the modifier stack is re-evaluated to ensure it
+ * preserves all possible custom data layers.
+ *
+ * NOTE: Dependency graph argument is required when preserve_all_data_layers is truth, and is
+ * ignored otherwise. */
 struct Mesh *BKE_mesh_new_from_object(struct Depsgraph *depsgraph,
-                                      struct Main *bmain,
-                                      struct Scene *sce,
-                                      struct Object *ob,
-                                      const bool apply_modifiers,
-                                      const bool calc_undeformed);
+                                      struct Object *object,
+                                      bool preserve_all_data_layers);
+
+/* This is a version of BKE_mesh_new_from_object() which stores mesh in the given main database. */
+struct Mesh *BKE_mesh_new_from_object_to_bmain(struct Main *bmain,
+                                               struct Depsgraph *depsgraph,
+                                               struct Object *object,
+                                               bool preserve_all_data_layers);
+
 struct Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
                                                   struct Scene *scene,
-                                                  struct Object *ob,
-                                                  struct ModifierData *md,
+                                                  struct Object *ob_eval,
+                                                  struct ModifierData *md_eval,
                                                   int build_shapekey_layers);
 
 /* Copies a nomain-Mesh into an existing Mesh. */
@@ -669,10 +683,9 @@ void BKE_mesh_eval_geometry(struct Depsgraph *depsgraph, struct Mesh *mesh);
 /* Draw Cache */
 enum {
   BKE_MESH_BATCH_DIRTY_ALL = 0,
-  BKE_MESH_BATCH_DIRTY_MAYBE_ALL,
   BKE_MESH_BATCH_DIRTY_SELECT,
+  BKE_MESH_BATCH_DIRTY_SELECT_PAINT,
   BKE_MESH_BATCH_DIRTY_SHADING,
-  BKE_MESH_BATCH_DIRTY_SCULPT_COORDS,
   BKE_MESH_BATCH_DIRTY_UVEDIT_ALL,
   BKE_MESH_BATCH_DIRTY_UVEDIT_SELECT,
 };

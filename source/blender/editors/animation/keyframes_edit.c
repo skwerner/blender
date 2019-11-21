@@ -240,7 +240,8 @@ static short ob_keyframes_loop(KeyframeEditData *ked,
   filter = ANIMFILTER_DATA_VISIBLE;  // curves only
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
-  /* loop through each F-Curve, applying the operation as required, but stopping on the first one */
+  /* Loop through each F-Curve, applying the operation as required,
+   * but stopping on the first one. */
   for (ale = anim_data.first; ale; ale = ale->next) {
     if (ANIM_fcurve_keyframes_loop(ked, (FCurve *)ale->data, key_ok, key_cb, fcu_cb)) {
       ret = 1;
@@ -288,7 +289,8 @@ static short scene_keyframes_loop(KeyframeEditData *ked,
   filter = ANIMFILTER_DATA_VISIBLE;  // curves only
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
-  /* loop through each F-Curve, applying the operation as required, but stopping on the first one */
+  /* Loop through each F-Curve, applying the operation as required,
+   * but stopping on the first one. */
   for (ale = anim_data.first; ale; ale = ale->next) {
     if (ANIM_fcurve_keyframes_loop(ked, (FCurve *)ale->data, key_ok, key_cb, fcu_cb)) {
       ret = 1;
@@ -332,7 +334,7 @@ static short summary_keyframes_loop(KeyframeEditData *ked,
       case ALE_FCURVE:
       default: {
         if (ked && ked->iterflags) {
-          /* make backups of the current values, so that a localised fix
+          /* make backups of the current values, so that a localized fix
            * (e.g. NLA time remapping) can be applied to these values
            */
           float f1 = ked->f1;

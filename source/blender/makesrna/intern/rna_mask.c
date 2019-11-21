@@ -116,7 +116,9 @@ static void rna_Mask_update_parent(Main *bmain, Scene *scene, PointerRNA *ptr)
 }
 
 /* note: this function exists only to avoid id refcounting */
-static void rna_MaskParent_id_set(PointerRNA *ptr, PointerRNA value)
+static void rna_MaskParent_id_set(PointerRNA *ptr,
+                                  PointerRNA value,
+                                  struct ReportList *UNUSED(reports))
 {
   MaskParent *mpar = (MaskParent *)ptr->data;
 
@@ -138,8 +140,9 @@ static void rna_MaskParent_id_type_set(PointerRNA *ptr, int value)
   mpar->id_type = value;
 
   /* clear the id-block if the type is invalid */
-  if ((mpar->id) && (GS(mpar->id->name) != mpar->id_type))
+  if ((mpar->id) && (GS(mpar->id->name) != mpar->id_type)) {
     mpar->id = NULL;
+  }
 }
 
 static void rna_Mask_layers_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
@@ -191,7 +194,9 @@ static PointerRNA rna_Mask_layer_active_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_MaskLayer, masklay);
 }
 
-static void rna_Mask_layer_active_set(PointerRNA *ptr, PointerRNA value)
+static void rna_Mask_layer_active_set(PointerRNA *ptr,
+                                      PointerRNA value,
+                                      struct ReportList *UNUSED(reports))
 {
   Mask *mask = (Mask *)ptr->id.data;
   MaskLayer *masklay = (MaskLayer *)value.data;
@@ -226,16 +231,20 @@ static PointerRNA rna_MaskLayer_active_spline_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_MaskSpline, masklay->act_spline);
 }
 
-static void rna_MaskLayer_active_spline_set(PointerRNA *ptr, PointerRNA value)
+static void rna_MaskLayer_active_spline_set(PointerRNA *ptr,
+                                            PointerRNA value,
+                                            struct ReportList *UNUSED(reports))
 {
   MaskLayer *masklay = (MaskLayer *)ptr->data;
   MaskSpline *spline = (MaskSpline *)value.data;
   int index = BLI_findindex(&masklay->splines, spline);
 
-  if (index != -1)
+  if (index != -1) {
     masklay->act_spline = spline;
-  else
+  }
+  else {
     masklay->act_spline = NULL;
+  }
 }
 
 static PointerRNA rna_MaskLayer_active_spline_point_get(PointerRNA *ptr)
@@ -245,7 +254,9 @@ static PointerRNA rna_MaskLayer_active_spline_point_get(PointerRNA *ptr)
   return rna_pointer_inherit_refine(ptr, &RNA_MaskSplinePoint, masklay->act_point);
 }
 
-static void rna_MaskLayer_active_spline_point_set(PointerRNA *ptr, PointerRNA value)
+static void rna_MaskLayer_active_spline_point_set(PointerRNA *ptr,
+                                                  PointerRNA value,
+                                                  struct ReportList *UNUSED(reports))
 {
   MaskLayer *masklay = (MaskLayer *)ptr->data;
   MaskSpline *spline;
@@ -632,7 +643,7 @@ static void rna_def_maskParent(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, mask_id_type_items);
   RNA_def_property_enum_default(prop, ID_MC);
   RNA_def_property_enum_funcs(prop, NULL, "rna_MaskParent_id_type_set", NULL);
-  //RNA_def_property_editable_func(prop, "rna_MaskParent_id_type_editable");
+  // RNA_def_property_editable_func(prop, "rna_MaskParent_id_type_editable");
   RNA_def_property_ui_text(prop, "ID Type", "Type of ID-block that can be used");
   RNA_def_property_update(prop, 0, "rna_Mask_update_parent");
 

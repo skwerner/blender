@@ -175,7 +175,8 @@ static TreeElement *outliner_drop_insert_find(bContext *C,
     }
   }
   else {
-    /* mouse doesn't hover any item (ignoring x-axis), so it's either above list bounds or below. */
+    /* Mouse doesn't hover any item (ignoring x-axis),
+     * so it's either above list bounds or below. */
     TreeElement *first = soops->tree.first;
     TreeElement *last = soops->tree.last;
 
@@ -801,7 +802,7 @@ static bool collection_drop_poll(bContext *C,
     if (!data.from || event->ctrl) {
       tselem->flag |= TSE_DRAG_INTO;
       changed = true;
-      *tooltip = IFACE_("Link inside Collection");
+      *tooltip = TIP_("Link inside Collection");
     }
     else {
       switch (data.insert_type) {

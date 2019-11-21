@@ -98,9 +98,8 @@ SpaceInEmptyParentheses: false
 # Note that this doesn't work for C-style comments.
 SpacesBeforeTrailingComments: 2
 
-# Don't reflow comments, let developers define line breaks.
-# Enabling breaks some ascii art.
-ReflowComments: false
+# Reflow comments, developers must disable formatting as with code to override this.
+ReflowComments: true
 
 # Never use tabs for indentation.
 # Note: TabWidth and IndentWidth must be the same, or strange things happen.
@@ -184,7 +183,6 @@ ForEachMacros:
   - DEG_OBJECT_ITER_FOR_RENDER_ENGINE_BEGIN
   - DRIVER_TARGETS_LOOPER_BEGIN
   - DRIVER_TARGETS_USED_LOOPER_BEGIN
-  - FAKE_SELECT_MODE_BEGIN
   - FOREACH_BASE_IN_EDIT_MODE_BEGIN
   - FOREACH_BASE_IN_MODE_BEGIN
   - FOREACH_BEGIN
@@ -238,6 +236,7 @@ ForEachMacros:
   - RNA_BEGIN
   - RNA_PROP_BEGIN
   - RNA_STRUCT_BEGIN
+  - RNA_STRUCT_BEGIN_SKIP_RNA_TYPE
   - SEQP_BEGIN
   - SEQ_BEGIN
   - foreach

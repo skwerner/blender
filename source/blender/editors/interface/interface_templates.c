@@ -298,7 +298,7 @@ static void template_ID_set_property_cb(bContext *C, void *arg_template, void *i
     PointerRNA idptr;
 
     RNA_id_pointer_create(item, &idptr);
-    RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr);
+    RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr, NULL);
     RNA_property_update(C, &template_ui->ptr, template_ui->prop);
   }
 }
@@ -489,7 +489,7 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
       break;
     case UI_ID_DELETE:
       memset(&idptr, 0, sizeof(idptr));
-      RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr);
+      RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr, NULL);
       RNA_property_update(C, &template_ui->ptr, template_ui->prop);
 
       if (id && CTX_wm_window(C)->eventstate->shift) {
@@ -515,8 +515,8 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
     case UI_ID_LOCAL:
       if (id) {
         Main *bmain = CTX_data_main(C);
-        if (BKE_override_static_is_enabled() && CTX_wm_window(C)->eventstate->shift) {
-          ID *override_id = BKE_override_static_create_from_id(bmain, id);
+        if (BKE_override_library_is_enabled() && CTX_wm_window(C)->eventstate->shift) {
+          ID *override_id = BKE_override_library_create_from_id(bmain, id);
           if (override_id != NULL) {
             BKE_main_id_clear_newpoins(bmain);
 
@@ -532,16 +532,16 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
             idptr = RNA_property_pointer_get(&template_ui->ptr, template_ui->prop);
           }
         }
-        RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr);
+        RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr, NULL);
         RNA_property_update(C, &template_ui->ptr, template_ui->prop);
       }
       break;
     case UI_ID_OVERRIDE:
-      if (id && id->override_static) {
-        BKE_override_static_free(&id->override_static);
+      if (id && id->override_library) {
+        BKE_override_library_free(&id->override_library);
         /* reassign to get get proper updates/notifiers */
         idptr = RNA_property_pointer_get(&template_ui->ptr, template_ui->prop);
-        RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr);
+        RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr, NULL);
         RNA_property_update(C, &template_ui->ptr, template_ui->prop);
       }
       break;
@@ -798,7 +798,7 @@ static void template_ID(bContext *C,
     char name[UI_MAX_NAME_STR];
     const bool user_alert = (id->us <= 0);
 
-    //text_idbutton(id, name);
+    // text_idbutton(id, name);
     name[0] = '\0';
     but = uiDefButR(block,
                     UI_BTYPE_TEXT,
@@ -856,9 +856,9 @@ static void template_ID(bContext *C,
                            0,
                            0,
                            0,
-                           BKE_override_static_is_enabled() ?
+                           BKE_override_library_is_enabled() ?
                                TIP_("Direct linked library data-block, click to make local, "
-                                    "Shift + Click to create a static override") :
+                                    "Shift + Click to create a library override") :
                                TIP_("Direct linked library data-block, click to make local"));
         if (disabled) {
           UI_but_flag_enable(but, UI_BUT_DISABLED);
@@ -869,22 +869,21 @@ static void template_ID(bContext *C,
         }
       }
     }
-    else if (ID_IS_STATIC_OVERRIDE(id)) {
-      but = uiDefIconBut(
-          block,
-          UI_BTYPE_BUT,
-          0,
-          ICON_LIBRARY_DATA_OVERRIDE,
-          0,
-          0,
-          UI_UNIT_X,
-          UI_UNIT_Y,
-          NULL,
-          0,
-          0,
-          0,
-          0,
-          TIP_("Static override of linked library data-block, click to make fully local"));
+    else if (ID_IS_OVERRIDE_LIBRARY(id)) {
+      but = uiDefIconBut(block,
+                         UI_BTYPE_BUT,
+                         0,
+                         ICON_LIBRARY_DATA_OVERRIDE,
+                         0,
+                         0,
+                         UI_UNIT_X,
+                         UI_UNIT_Y,
+                         NULL,
+                         0,
+                         0,
+                         0,
+                         0,
+                         TIP_("Library override of linked data-block, click to make fully local"));
       UI_but_funcN_set(
           but, template_id_cb, MEM_dupallocN(template_ui), POINTER_FROM_INT(UI_ID_OVERRIDE));
     }
@@ -953,7 +952,7 @@ static void template_ID(bContext *C,
 
   /* Due to space limit in UI - skip the "open" icon for packed data, and allow to unpack.
    * Only for images, sound and fonts */
-  if (id && BKE_pack_check(id)) {
+  if (id && BKE_packedfile_id_check(id)) {
     but = uiDefIconButO(block,
                         UI_BTYPE_BUT,
                         "FILE_OT_unpack_item",
@@ -1455,7 +1454,7 @@ static void template_search_handle_cb(bContext *C, void *arg_template, void *ite
   PointerRNA item_ptr;
 
   RNA_pointer_create(NULL, type, item, &item_ptr);
-  RNA_property_pointer_set(&coll_search->target_ptr, coll_search->target_prop, item_ptr);
+  RNA_property_pointer_set(&coll_search->target_ptr, coll_search->target_prop, item_ptr, NULL);
   RNA_property_update(C, &coll_search->target_ptr, coll_search->target_prop);
 }
 
@@ -1723,7 +1722,7 @@ void uiTemplatePathBuilder(uiLayout *layout,
 
 /************************ Modifier Template *************************/
 
-#define ERROR_LIBDATA_MESSAGE IFACE_("Can't edit external library data")
+#define ERROR_LIBDATA_MESSAGE TIP_("Can't edit external library data")
 
 static void modifiers_convertToReal(bContext *C, void *ob_v, void *md_v)
 {
@@ -2355,7 +2354,7 @@ void uiTemplateOperatorRedoProperties(uiLayout *layout, const bContext *C)
   /* Repeat button with operator name as text. */
   uiItemFullO(layout,
               "SCREEN_OT_repeat_last",
-              RNA_struct_ui_name(op->type->srna),
+              WM_operatortype_name(op->type, op->ptr),
               ICON_NONE,
               NULL,
               WM_OP_INVOKE_DEFAULT,
@@ -2441,24 +2440,11 @@ static uiLayout *draw_constraint(uiLayout *layout, Object *ob, bConstraint *con)
 
   /* open/close */
   UI_block_emboss_set(block, UI_EMBOSS_NONE);
-  uiItemR(row, &ptr, "show_expanded", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
-  UI_block_emboss_set(block, UI_EMBOSS);
+  uiItemR(row, &ptr, "show_expanded", 0, "", ICON_NONE);
 
-  /* name */
-  uiDefBut(block,
-           UI_BTYPE_LABEL,
-           0,
-           typestr,
-           xco + 0.5f * UI_UNIT_X,
-           yco,
-           5 * UI_UNIT_X,
-           0.9f * UI_UNIT_Y,
-           NULL,
-           0.0,
-           0.0,
-           0.0,
-           0.0,
-           "");
+  /* constraint-type icon */
+  uiItemL(row, "", RNA_struct_ui_icon(ptr.type));
+  UI_block_emboss_set(block, UI_EMBOSS);
 
   if (con->flag & CONSTRAINT_DISABLE) {
     uiLayoutSetRedAlert(row, true);
@@ -2563,7 +2549,7 @@ static uiLayout *draw_constraint(uiLayout *layout, Object *ob, bConstraint *con)
 
   /* Set but-locks for protected settings (magic numbers are used here!) */
   if (proxy_protected) {
-    UI_block_lock_set(block, true, IFACE_("Cannot edit Proxy-Protected Constraint"));
+    UI_block_lock_set(block, true, TIP_("Cannot edit Proxy-Protected Constraint"));
   }
 
   /* Draw constraint data */
@@ -3092,7 +3078,7 @@ static void colorband_update_cb(bContext *UNUSED(C), void *bt_v, void *coba_v)
   uiBut *bt = bt_v;
   ColorBand *coba = coba_v;
 
-  /* sneaky update here, we need to sort the colorband points to be in order,
+  /* Sneaky update here, we need to sort the color-band points to be in order,
    * however the RNA pointer then is wrong, so we update it */
   BKE_colorband_update_sort(coba);
   bt->rnapoin.data = coba->data + coba->cur;
@@ -4042,6 +4028,11 @@ static uiBlock *curvemap_brush_tools_func(bContext *C, ARegion *ar, void *cumap_
   return curvemap_tools_func(C, ar, cumap_v, false, UICURVE_FUNC_RESET_NEG);
 }
 
+static uiBlock *curvemap_brush_tools_negslope_func(bContext *C, ARegion *ar, void *cumap_v)
+{
+  return curvemap_tools_func(C, ar, cumap_v, false, UICURVE_FUNC_RESET_POS);
+}
+
 static void curvemap_buttons_redraw(bContext *C, void *UNUSED(arg1), void *UNUSED(arg2))
 {
   ED_region_tag_redraw(CTX_wm_region(C));
@@ -4217,7 +4208,19 @@ static void curvemap_buttons_layout(uiLayout *layout,
                     TIP_("Zoom out"));
   UI_but_func_set(bt, curvemap_buttons_zoom_out, cumap, NULL);
 
-  if (brush) {
+  if (brush && neg_slope) {
+    bt = uiDefIconBlockBut(block,
+                           curvemap_brush_tools_negslope_func,
+                           cumap,
+                           0,
+                           ICON_DOWNARROW_HLT,
+                           0,
+                           0,
+                           dx,
+                           dx,
+                           TIP_("Tools"));
+  }
+  else if (brush) {
     bt = uiDefIconBlockBut(block,
                            curvemap_brush_tools_func,
                            cumap,
@@ -4282,7 +4285,7 @@ static void curvemap_buttons_layout(uiLayout *layout,
   UI_block_funcN_set(block, rna_update_cb, MEM_dupallocN(cb), NULL);
 
   /* curve itself */
-  size = uiLayoutGetWidth(layout);
+  size = max_ii(uiLayoutGetWidth(layout), UI_UNIT_X);
   row = uiLayoutRow(layout, false);
   uiDefBut(
       block, UI_BTYPE_CURVE, 0, "", 0, 0, size, 8.0f * UI_UNIT_X, cumap, 0.0f, 1.0f, bg, 0, "");
@@ -4997,7 +5000,7 @@ static void uilist_filter_items_default(struct uiList *ui_list,
             dyn_data->items_shown++;
             do_order = order_by_name;
           }
-          //printf("%s: '%s' matches '%s'\n", __func__, name, filter);
+          // printf("%s: '%s' matches '%s'\n", __func__, name, filter);
         }
         else if (filter_exclude) {
           dyn_data->items_shown++;
@@ -5321,16 +5324,16 @@ void uiTemplateList(uiLayout *layout,
       dyn_data->items_len = dyn_data->items_shown = RNA_property_collection_length(dataptr, prop);
     }
     else {
-      //printf("%s: filtering...\n", __func__);
+      // printf("%s: filtering...\n", __func__);
       filter_items(ui_list, C, dataptr, propname);
-      //printf("%s: filtering done.\n", __func__);
+      // printf("%s: filtering done.\n", __func__);
     }
 
     items_shown = dyn_data->items_shown;
     if (items_shown >= 0) {
       bool activei_mapping_pending = true;
       items_ptr = MEM_mallocN(sizeof(_uilist_item) * items_shown, __func__);
-      //printf("%s: items shown: %d.\n", __func__, items_shown);
+      // printf("%s: items shown: %d.\n", __func__, items_shown);
       RNA_PROP_BEGIN (dataptr, itemptr, prop) {
         if (!dyn_data->items_filter_flags ||
             ((dyn_data->items_filter_flags[i] & UILST_FLT_ITEM) ^ filter_exclude)) {
@@ -5342,7 +5345,7 @@ void uiTemplateList(uiLayout *layout,
           else {
             ii = order_reverse ? items_shown - ++idx : idx++;
           }
-          //printf("%s: ii: %d\n", __func__, ii);
+          // printf("%s: ii: %d\n", __func__, ii);
           items_ptr[ii].item = itemptr;
           items_ptr[ii].org_idx = i;
           items_ptr[ii].flt_flag = dyn_data->items_filter_flags ? dyn_data->items_filter_flags[i] :
@@ -5911,7 +5914,7 @@ eAutoPropButsReturn uiTemplateOperatorPropertyButs(const bContext *C,
   }
 
   if (flag & UI_TEMPLATE_OP_PROPS_SHOW_TITLE) {
-    uiItemL(layout, RNA_struct_ui_name(op->type->srna), ICON_NONE);
+    uiItemL(layout, WM_operatortype_name(op->type, op->ptr), ICON_NONE);
   }
 
   /* menu */
@@ -6447,7 +6450,7 @@ static void template_keymap_item_properties(uiLayout *layout, const char *title,
 
   flow = uiLayoutColumnFlow(layout, 2, false);
 
-  RNA_STRUCT_BEGIN (ptr, prop) {
+  RNA_STRUCT_BEGIN_SKIP_RNA_TYPE (ptr, prop) {
     const bool is_set = RNA_property_is_set(ptr, prop);
     uiBut *but;
 
@@ -6711,17 +6714,18 @@ void uiTemplateCacheFile(uiLayout *layout, bContext *C, PointerRNA *ptr, const c
   uiItemR(row, &fileptr, "override_frame", 0, "Override Frame", ICON_NONE);
 
   row = uiLayoutRow(layout, false);
-  uiLayoutSetEnabled(row, RNA_boolean_get(&fileptr, "override_frame"));
+  uiLayoutSetActive(row, RNA_boolean_get(&fileptr, "override_frame"));
   uiItemR(row, &fileptr, "frame", 0, "Frame", ICON_NONE);
 
   row = uiLayoutRow(layout, false);
   uiItemR(row, &fileptr, "frame_offset", 0, "Frame Offset", ICON_NONE);
+  uiLayoutSetActive(row, !RNA_boolean_get(&fileptr, "is_sequence"));
 
   row = uiLayoutRow(layout, false);
   uiItemL(row, IFACE_("Manual Transform:"), ICON_NONE);
 
   row = uiLayoutRow(layout, false);
-  uiLayoutSetEnabled(row, (sbuts->mainb == BCONTEXT_CONSTRAINT));
+  uiLayoutSetActive(row, (sbuts->mainb == BCONTEXT_CONSTRAINT));
   uiItemR(row, &fileptr, "scale", 0, "Scale", ICON_NONE);
 
   /* TODO: unused for now, so no need to expose. */
@@ -6743,12 +6747,17 @@ int uiTemplateRecentFiles(uiLayout *layout, int rows)
 
   for (recent = G.recent_files.first, i = 0; (i < rows) && (recent); recent = recent->next, i++) {
     const char *filename = BLI_path_basename(recent->filepath);
-    uiItemStringO(layout,
-                  filename,
-                  BLO_has_bfile_extension(filename) ? ICON_FILE_BLEND : ICON_FILE_BACKUP,
-                  "WM_OT_open_mainfile",
-                  "filepath",
-                  recent->filepath);
+    PointerRNA ptr;
+    uiItemFullO(layout,
+                "WM_OT_open_mainfile",
+                filename,
+                BLO_has_bfile_extension(filename) ? ICON_FILE_BLEND : ICON_FILE_BACKUP,
+                NULL,
+                WM_OP_INVOKE_DEFAULT,
+                0,
+                &ptr);
+    RNA_string_set(&ptr, "filepath", recent->filepath);
+    RNA_boolean_set(&ptr, "display_file_selector", false);
   }
 
   return i;

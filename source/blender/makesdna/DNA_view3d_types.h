@@ -419,7 +419,7 @@ enum {
   V3D_SHADING_CAVITY = (1 << 5),
   V3D_SHADING_MATCAP_FLIP_X = (1 << 6),
   V3D_SHADING_SCENE_WORLD = (1 << 7),
-  V3D_SHADING_XRAY_BONE = (1 << 8),
+  V3D_SHADING_XRAY_WIREFRAME = (1 << 8),
   V3D_SHADING_WORLD_ORIENTATION = (1 << 9),
   V3D_SHADING_BACKFACE_CULLING = (1 << 10),
   V3D_SHADING_DEPTH_OF_FIELD = (1 << 11),
@@ -432,6 +432,11 @@ enum {
   V3D_SHADING_SINGLE_COLOR = 2,
   V3D_SHADING_TEXTURE_COLOR = 3,
   V3D_SHADING_OBJECT_COLOR = 4,
+  V3D_SHADING_VERTEX_COLOR = 5,
+
+  /* Is used to display the object using the error color. For example when in
+   * solid texture paint mode without any textures configured */
+  V3D_SHADING_ERROR_COLOR = 999,
 };
 
 /** #View3DShading.background_type */
@@ -578,6 +583,13 @@ enum {
   /** Also used for ortho size. */
   V3D_GIZMO_SHOW_CAMERA_LENS = (1 << 0),
   V3D_GIZMO_SHOW_CAMERA_DOF_DIST = (1 << 2),
+};
+
+/** Settings for offscreen rendering */
+enum {
+  V3D_OFSDRAW_NONE = (0),
+  V3D_OFSDRAW_SHOW_ANNOTATION = (1 << 0),
+  V3D_OFSDRAW_OVERRIDE_SCENE_SETTINGS = (1 << 1),
 };
 
 #define RV3D_CAMZOOM_MIN -30

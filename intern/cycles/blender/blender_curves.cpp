@@ -766,7 +766,7 @@ static void ExportCurveSegmentsMotion(Mesh *mesh, ParticleCurveData *CData, int 
         }
       }
       else {
-        /* Number of keys has changed. Genereate an interpolated version
+        /* Number of keys has changed. Generate an interpolated version
          * to preserve motion blur. */
         const float step_size = num_center_curve_keys > 1 ? 1.0f / (num_center_curve_keys - 1) :
                                                             0.0f;
@@ -897,8 +897,6 @@ void BlenderSync::sync_curve_settings()
   CurveSystemManager prev_curve_system_manager = *curve_system_manager;
 
   curve_system_manager->use_curves = get_boolean(csscene, "use_curves");
-  curve_system_manager->minimum_width = get_float(csscene, "minimum_width");
-  curve_system_manager->maximum_width = get_float(csscene, "maximum_width");
 
   curve_system_manager->primitive = (CurvePrimitiveType)get_enum(
       csscene, "primitive", CURVE_NUM_PRIMITIVE_TYPES, CURVE_LINE_SEGMENTS);
@@ -980,7 +978,7 @@ void BlenderSync::sync_curves(
   /* obtain general settings */
   const bool use_curves = scene->curve_system_manager->use_curves;
 
-  if (!(use_curves && b_ob.mode() != b_ob.mode_PARTICLE_EDIT)) {
+  if (!(use_curves && b_ob.mode() != b_ob.mode_PARTICLE_EDIT && b_ob.mode() != b_ob.mode_EDIT)) {
     if (!motion)
       mesh->compute_bounds();
     return;

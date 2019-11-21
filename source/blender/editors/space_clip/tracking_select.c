@@ -37,9 +37,10 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_clip.h"
+#include "ED_mask.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
-#include "ED_clip.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -263,7 +264,7 @@ static MovieTrackingPlaneTrack *find_nearest_plane_track(SpaceClip *sc,
   return plane_track;
 }
 
-void ed_tracking_delect_all_tracks(ListBase *tracks_base)
+void ed_tracking_deselect_all_tracks(ListBase *tracks_base)
 {
   MovieTrackingTrack *track;
   for (track = tracks_base->first; track != NULL; track = track->next) {
@@ -271,7 +272,7 @@ void ed_tracking_delect_all_tracks(ListBase *tracks_base)
   }
 }
 
-void ed_tracking_delect_all_plane_tracks(ListBase *plane_tracks_base)
+void ed_tracking_deselect_all_plane_tracks(ListBase *plane_tracks_base)
 {
   MovieTrackingPlaneTrack *plane_track;
   for (plane_track = plane_tracks_base->first; plane_track != NULL;
@@ -280,7 +281,7 @@ void ed_tracking_delect_all_plane_tracks(ListBase *plane_tracks_base)
   }
 }
 
-static int mouse_select(bContext *C, float co[2], int extend)
+static int mouse_select(bContext *C, float co[2], const bool extend, const bool deselect_all)
 {
   SpaceClip *sc = CTX_wm_space_clip(C);
   MovieClip *clip = ED_space_clip_get_clip(sc);
@@ -295,6 +296,15 @@ static int mouse_select(bContext *C, float co[2], int extend)
   track = find_nearest_track(sc, tracksbase, co, &distance_to_track);
   plane_track = find_nearest_plane_track(sc, plane_tracks_base, co, &distance_to_plane_track);
 
+  /* Do not select beyond some reasonable distance, that is useless and
+   * prevents the 'deselect on nothing' behavior. */
+  if (distance_to_track > 0.05f) {
+    track = NULL;
+  }
+  if (distance_to_plane_track > 0.05f) {
+    plane_track = NULL;
+  }
+
   /* Between track and plane we choose closest to the mouse for selection here. */
   if (track && plane_track) {
     if (distance_to_track < distance_to_plane_track) {
@@ -305,11 +315,11 @@ static int mouse_select(bContext *C, float co[2], int extend)
     }
   }
 
-  if (!extend) {
-    ed_tracking_delect_all_plane_tracks(plane_tracks_base);
-  }
-
   if (track) {
+    if (!extend) {
+      ed_tracking_deselect_all_plane_tracks(plane_tracks_base);
+    }
+
     int area = track_mouse_area(C, co, track);
 
     if (!extend || !TRACK_VIEW_SELECTED(sc, track)) {
@@ -337,7 +347,7 @@ static int mouse_select(bContext *C, float co[2], int extend)
   }
   else if (plane_track) {
     if (!extend) {
-      ed_tracking_delect_all_tracks(tracksbase);
+      ed_tracking_deselect_all_tracks(tracksbase);
     }
 
     if (PLANE_TRACK_VIEW_SELECTED(plane_track)) {
@@ -351,6 +361,12 @@ static int mouse_select(bContext *C, float co[2], int extend)
 
     clip->tracking.act_track = NULL;
     clip->tracking.act_plane_track = plane_track;
+  }
+  else if (deselect_all) {
+    ed_tracking_deselect_all_tracks(tracksbase);
+    ed_tracking_deselect_all_plane_tracks(plane_tracks_base);
+    /* Mask as well if we are in combined mask / track view. */
+    ED_mask_deselect_all(C);
   }
 
   if (!extend) {
@@ -380,12 +396,12 @@ static bool select_poll(bContext *C)
 static int select_exec(bContext *C, wmOperator *op)
 {
   float co[2];
-  int extend;
 
   RNA_float_get_array(op->ptr, "location", co);
-  extend = RNA_boolean_get(op->ptr, "extend");
+  const bool extend = RNA_boolean_get(op->ptr, "extend");
+  const bool deselect_all = RNA_boolean_get(op->ptr, "deselect_all");
 
-  return mouse_select(C, co, extend);
+  return mouse_select(C, co, extend, deselect_all);
 }
 
 static int select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -433,11 +449,19 @@ void CLIP_OT_select(wmOperatorType *ot)
   ot->flag = OPTYPE_UNDO;
 
   /* properties */
+  PropertyRNA *prop;
   RNA_def_boolean(ot->srna,
                   "extend",
                   0,
                   "Extend",
                   "Extend selection rather than clearing the existing selection");
+  prop = RNA_def_boolean(ot->srna,
+                         "deselect_all",
+                         false,
+                         "Deselect On Nothing",
+                         "Deselect all when nothing under the cursor");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
   RNA_def_float_vector(
       ot->srna,
       "location",
@@ -449,6 +473,12 @@ void CLIP_OT_select(wmOperatorType *ot)
       "Mouse location in normalized coordinates, 0.0 to 1.0 is within the image bounds",
       -100.0f,
       100.0f);
+}
+
+bool ED_clip_can_select(bContext *C)
+{
+  /* To avoid conflicts with mask select deselect all in empty space. */
+  return select_poll(C);
 }
 
 /********************** box select operator *********************/

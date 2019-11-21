@@ -47,6 +47,7 @@
 #include "BKE_colorband.h"
 #include "BKE_context.h"
 #include "BKE_brush.h"
+#include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -154,7 +155,7 @@ void ED_imapaint_dirty_region(Image *ima, ImBuf *ibuf, int x, int y, int w, int 
     }
   }
 
-  ibuf->userflags |= IB_BITMAPDIRTY;
+  BKE_image_mark_dirty(ima, ibuf);
 
   if (tmpibuf) {
     IMB_freeImBuf(tmpibuf);
@@ -652,16 +653,18 @@ static void paint_stroke_done(const bContext *C, struct PaintStroke *stroke)
 
   /* duplicate warning, see texpaint_init */
 #if 0
-  if (pop->s.warnmultifile)
+  if (pop->s.warnmultifile) {
     BKE_reportf(op->reports,
                 RPT_WARNING,
                 "Image requires 4 color channels to paint: %s",
                 pop->s.warnmultifile);
-  if (pop->s.warnpackedfile)
+  }
+  if (pop->s.warnpackedfile) {
     BKE_reportf(op->reports,
                 RPT_WARNING,
                 "Packed MultiLayer files cannot be painted: %s",
                 pop->s.warnpackedfile);
+  }
 #endif
   MEM_freeN(pop);
 }
@@ -949,10 +952,10 @@ static void sample_color_update_header(SampleColorData *data, bContext *C)
   if (sa) {
     BLI_snprintf(msg,
                  sizeof(msg),
-                 IFACE_("Sample color for %s"),
+                 TIP_("Sample color for %s"),
                  !data->sample_palette ?
-                     IFACE_("Brush. Use Left Click to sample for palette instead") :
-                     IFACE_("Palette. Use Left Click to sample more colors"));
+                     TIP_("Brush. Use Left Click to sample for palette instead") :
+                     TIP_("Palette. Use Left Click to sample more colors"));
     ED_workspace_status_text(C, msg);
   }
 }

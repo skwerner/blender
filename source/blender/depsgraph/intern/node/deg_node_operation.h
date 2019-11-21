@@ -100,12 +100,13 @@ enum class OperationCode {
   /* Evaluation of geometry is completely done.. */
   GEOMETRY_EVAL_DONE,
   /* Evaluation of a shape key.
-   * NOTE: Currently only for object data datablocks. */
+   * NOTE: Currently only for object data data-blocks. */
   GEOMETRY_SHAPEKEY,
 
   /* Object data. --------------------------------------------------------- */
   LIGHT_PROBE_EVAL,
   SPEAKER_EVAL,
+  SOUND_EVAL,
   ARMATURE_EVAL,
 
   /* Pose. ---------------------------------------------------------------- */
@@ -184,11 +185,15 @@ enum class OperationCode {
   /* Images. -------------------------------------------------------------- */
   IMAGE_ANIMATION,
 
-  /* Synchronization clips. ----------------------------------------------- */
+  /* Synchronization. ----------------------------------------------------- */
   SYNCHRONIZE_TO_ORIGINAL,
 
-  /* Generic datablock ---------------------------------------------------- */
+  /* Generic data-block --------------------------------------------------- */
   GENERIC_DATABLOCK_UPDATE,
+
+  /* Sequencer. ----------------------------------------------------------- */
+
+  SEQUENCES_EVAL,
 
   /* Duplication/instancing system. --------------------------------------- */
   DUPLI,

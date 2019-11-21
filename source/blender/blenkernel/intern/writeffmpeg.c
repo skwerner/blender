@@ -25,12 +25,6 @@
 
 #  include <stdlib.h>
 
-#  include <libavformat/avformat.h>
-#  include <libavcodec/avcodec.h>
-#  include <libavutil/rational.h>
-#  include <libavutil/samplefmt.h>
-#  include <libswscale/swscale.h>
-
 #  include "MEM_guardedalloc.h"
 
 #  include "DNA_scene_types.h"
@@ -42,6 +36,7 @@
 #    include <AUD_Special.h>
 #  endif
 
+#  include "BLI_math_base.h"
 #  include "BLI_utildefines.h"
 
 #  include "BKE_global.h"
@@ -54,6 +49,14 @@
 #  include "BKE_writeffmpeg.h"
 
 #  include "IMB_imbuf.h"
+
+/* This needs to be included after BLI_math_base.h otherwise it will redefine some math defines
+ * like M_SQRT1_2 leading to warnings with MSVC */
+#  include <libavformat/avformat.h>
+#  include <libavcodec/avcodec.h>
+#  include <libavutil/rational.h>
+#  include <libavutil/samplefmt.h>
+#  include <libswscale/swscale.h>
 
 #  include "ffmpeg_compat.h"
 
@@ -588,9 +591,21 @@ static AVStream *alloc_video_stream(FFMpegContext *context,
     c->time_base.den = rd->frs_sec;
     c->time_base.num = (int)rd->frs_sec_base;
   }
+  else if (compare_ff(rd->frs_sec_base, 1.001f, 0.000001f)) {
+    /* This converts xx/1.001 (which is used in presets) to xx000/1001 (which is used in the rest
+     * of the world, including FFmpeg). */
+    c->time_base.den = (int)(rd->frs_sec * 1000);
+    c->time_base.num = (int)(rd->frs_sec_base * 1000);
+  }
   else {
-    c->time_base.den = rd->frs_sec * 100000;
-    c->time_base.num = ((double)rd->frs_sec_base) * 100000;
+    /* This calculates a fraction (DENUM_MAX / num) which approximates the scene frame rate
+     * (frs_sec / frs_sec_base). It uses the maximum denominator allowed by FFmpeg.
+     */
+    const double DENUM_MAX = (codec_id == AV_CODEC_ID_MPEG4) ? (1UL << 16) - 1 : (1UL << 31) - 1;
+    const double num = (DENUM_MAX / (double)rd->frs_sec) * rd->frs_sec_base;
+
+    c->time_base.den = (int)DENUM_MAX;
+    c->time_base.num = (int)num;
   }
 
   c->gop_size = context->ffmpeg_gop_size;
@@ -637,7 +652,7 @@ static AVStream *alloc_video_stream(FFMpegContext *context,
   }
 
   /* Deprecated and not doing anything since July 2015, deleted in recent ffmpeg */
-  //c->me_method = ME_EPZS;
+  // c->me_method = ME_EPZS;
 
   codec = avcodec_find_encoder(c->codec_id);
   if (!codec) {
@@ -681,9 +696,9 @@ static AVStream *alloc_video_stream(FFMpegContext *context,
   }
 
   if (codec_id == AV_CODEC_ID_QTRLE) {
-    if (rd->im_format.planes == R_IMF_PLANES_RGBA) {
-      c->pix_fmt = AV_PIX_FMT_ARGB;
-    }
+    /* Always write to ARGB. The default pixel format of QTRLE is RGB24, which uses 3 bytes per
+     * pixels, which breaks the export. */
+    c->pix_fmt = AV_PIX_FMT_ARGB;
   }
 
   if (codec_id == AV_CODEC_ID_PNG) {
@@ -787,15 +802,16 @@ static AVStream *alloc_audio_stream(FFMpegContext *context,
 
   codec = avcodec_find_encoder(c->codec_id);
   if (!codec) {
-    //XXX error("Couldn't find a valid audio codec");
+    // XXX error("Couldn't find a valid audio codec");
     return NULL;
   }
 
   if (codec->sample_fmts) {
-    /* check if the preferred sample format for this codec is supported.
-     * this is because, depending on the version of libav, and with the whole ffmpeg/libav fork situation,
-     * you have various implementations around. float samples in particular are not always supported.
-     */
+    /* Check if the preferred sample format for this codec is supported.
+     * this is because, depending on the version of libav,
+     * and with the whole ffmpeg/libav fork situation,
+     * you have various implementations around.
+     * Float samples in particular are not always supported. */
     const enum AVSampleFormat *p = codec->sample_fmts;
     for (; *p != -1; p++) {
       if (*p == st->codec->sample_fmt) {
@@ -830,7 +846,7 @@ static AVStream *alloc_audio_stream(FFMpegContext *context,
   set_ffmpeg_properties(rd, c, "audio", &opts);
 
   if (avcodec_open2(c, codec, &opts) < 0) {
-    //XXX error("Couldn't initialize audio codec");
+    // XXX error("Couldn't initialize audio codec");
     BLI_strncpy(error, IMB_ffmpeg_last_error(), error_size);
     av_dict_free(&opts);
     return NULL;
@@ -1522,7 +1538,6 @@ static IDProperty *BKE_ffmpeg_property_add(RenderData *rd,
           (char
                *)"                                                                               ";
       val.string.len = 80;
-      /*      val.str = (char *)"                                                                               ";*/
       idp_type = IDP_STRING;
       break;
     case AV_OPT_TYPE_CONST:
@@ -1616,7 +1631,7 @@ static void ffmpeg_set_expert_options(RenderData *rd)
   int codec_id = rd->ffcodecdata.codec;
 
   if (rd->ffcodecdata.properties) {
-    IDP_FreeProperty(rd->ffcodecdata.properties);
+    IDP_FreePropertyContent(rd->ffcodecdata.properties);
   }
 
   if (codec_id == AV_CODEC_ID_H264) {
@@ -1636,7 +1651,9 @@ static void ffmpeg_set_expert_options(RenderData *rd)
      * The other options were taken from the libx264-default.preset
      * included in the ffmpeg distribution.
      */
-    //      ffmpeg_property_add_string(rd, "video", "flags:loop"); // this breaks compatibility for QT
+
+    /* This breaks compatibility for QT. */
+    // BKE_ffmpeg_property_add_string(rd, "video", "flags:loop");
     BKE_ffmpeg_property_add_string(rd, "video", "cmp:chroma");
     BKE_ffmpeg_property_add_string(rd, "video", "partitions:parti4x4");  // Deprecated.
     BKE_ffmpeg_property_add_string(rd, "video", "partitions:partp8x8");  // Deprecated.
@@ -1678,7 +1695,7 @@ void BKE_ffmpeg_preset_set(RenderData *rd, int preset)
   int isntsc = (rd->frs_sec != 25);
 
   if (rd->ffcodecdata.properties) {
-    IDP_FreeProperty(rd->ffcodecdata.properties);
+    IDP_FreePropertyContent(rd->ffcodecdata.properties);
   }
 
   switch (preset) {

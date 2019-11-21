@@ -137,10 +137,7 @@ static void image_buffer_rect_update(RenderJob *rj,
   ColorManagedViewSettings *view_settings;
   ColorManagedDisplaySettings *display_settings;
 
-  /* Exception for exr tiles -- display buffer conversion happens here,
-   * NOT in the color management pipeline.
-   */
-  if (ibuf->userflags & IB_DISPLAY_BUFFER_INVALID && rr->do_exr_tile == false) {
+  if (ibuf->userflags & IB_DISPLAY_BUFFER_INVALID) {
     /* The whole image buffer it so be color managed again anyway. */
     return;
   }
@@ -248,17 +245,8 @@ static void image_buffer_rect_update(RenderJob *rj,
     linear_offset_y = 0;
   }
 
-  if (rr->do_exr_tile) {
-    /* We don't support changing color management settings during rendering
-     * when using Save Buffers option.
-     */
-    view_settings = &rj->view_settings;
-    display_settings = &rj->display_settings;
-  }
-  else {
-    view_settings = &scene->view_settings;
-    display_settings = &scene->display_settings;
-  }
+  view_settings = &scene->view_settings;
+  display_settings = &scene->display_settings;
 
   IMB_partial_display_buffer_update(ibuf,
                                     rectf,
@@ -271,8 +259,7 @@ static void image_buffer_rect_update(RenderJob *rj,
                                     rxmin,
                                     rymin,
                                     rxmin + xmax,
-                                    rymin + ymax,
-                                    rr->do_exr_tile);
+                                    rymin + ymax);
 }
 
 /* ****************************** render invoking ***************** */
@@ -356,26 +343,25 @@ static int screen_render_exec(bContext *C, wmOperator *op)
 
   /* cleanup sequencer caches before starting user triggered render.
    * otherwise, invalidated cache entries can make their way into
-   * the output rendering. We can't put that into RE_BlenderFrame,
+   * the output rendering. We can't put that into RE_RenderFrame,
    * since sequence rendering can call that recursively... (peter) */
-  BKE_sequencer_cache_cleanup();
+  BKE_sequencer_cache_cleanup(scene);
 
   RE_SetReports(re, op->reports);
 
   BLI_threaded_malloc_begin();
   if (is_animation) {
-    RE_BlenderAnim(re,
-                   mainp,
-                   scene,
-                   single_layer,
-                   camera_override,
-                   scene->r.sfra,
-                   scene->r.efra,
-                   scene->r.frame_step);
+    RE_RenderAnim(re,
+                  mainp,
+                  scene,
+                  single_layer,
+                  camera_override,
+                  scene->r.sfra,
+                  scene->r.efra,
+                  scene->r.frame_step);
   }
   else {
-    RE_BlenderFrame(
-        re, mainp, scene, single_layer, camera_override, scene->r.cfra, is_write_still);
+    RE_RenderFrame(re, mainp, scene, single_layer, camera_override, scene->r.cfra, is_write_still);
   }
   BLI_threaded_malloc_end();
 
@@ -419,21 +405,21 @@ static void make_renderinfo_string(const RenderStats *rs,
 
   /* local view */
   if (rs->localview) {
-    spos += sprintf(spos, "%s | ", IFACE_("3D Local View"));
+    spos += sprintf(spos, "%s | ", TIP_("3D Local View"));
   }
   else if (v3d_override) {
-    spos += sprintf(spos, "%s | ", IFACE_("3D View"));
+    spos += sprintf(spos, "%s | ", TIP_("3D View"));
   }
 
   /* frame number */
-  spos += sprintf(spos, IFACE_("Frame:%d "), (scene->r.cfra));
+  spos += sprintf(spos, TIP_("Frame:%d "), (scene->r.cfra));
 
   /* previous and elapsed time */
   BLI_timecode_string_from_time_simple(info_time_str, sizeof(info_time_str), rs->lastframetime);
 
   if (rs->infostr && rs->infostr[0]) {
     if (rs->lastframetime != 0.0) {
-      spos += sprintf(spos, IFACE_("| Last:%s "), info_time_str);
+      spos += sprintf(spos, TIP_("| Last:%s "), info_time_str);
     }
     else {
       spos += sprintf(spos, "| ");
@@ -446,7 +432,7 @@ static void make_renderinfo_string(const RenderStats *rs,
     spos += sprintf(spos, "| ");
   }
 
-  spos += sprintf(spos, IFACE_("Time:%s "), info_time_str);
+  spos += sprintf(spos, TIP_("Time:%s "), info_time_str);
 
   /* statistics */
   if (rs->statstr) {
@@ -460,43 +446,43 @@ static void make_renderinfo_string(const RenderStats *rs,
     }
 
     if (rs->totvert) {
-      spos += sprintf(spos, IFACE_("Ve:%d "), rs->totvert);
+      spos += sprintf(spos, TIP_("Ve:%d "), rs->totvert);
     }
     if (rs->totface) {
-      spos += sprintf(spos, IFACE_("Fa:%d "), rs->totface);
+      spos += sprintf(spos, TIP_("Fa:%d "), rs->totface);
     }
     if (rs->tothalo) {
-      spos += sprintf(spos, IFACE_("Ha:%d "), rs->tothalo);
+      spos += sprintf(spos, TIP_("Ha:%d "), rs->tothalo);
     }
     if (rs->totstrand) {
-      spos += sprintf(spos, IFACE_("St:%d "), rs->totstrand);
+      spos += sprintf(spos, TIP_("St:%d "), rs->totstrand);
     }
     if (rs->totlamp) {
-      spos += sprintf(spos, IFACE_("Li:%d "), rs->totlamp);
+      spos += sprintf(spos, TIP_("Li:%d "), rs->totlamp);
     }
 
     if (rs->mem_peak == 0.0f) {
       spos += sprintf(spos,
-                      IFACE_("| Mem:%.2fM (%.2fM, Peak %.2fM) "),
+                      TIP_("| Mem:%.2fM (%.2fM, Peak %.2fM) "),
                       megs_used_memory,
                       mmap_used_memory,
                       megs_peak_memory);
     }
     else {
-      spos += sprintf(spos, IFACE_("| Mem:%.2fM, Peak: %.2fM "), rs->mem_used, rs->mem_peak);
+      spos += sprintf(spos, TIP_("| Mem:%.2fM, Peak: %.2fM "), rs->mem_used, rs->mem_peak);
     }
 
     if (rs->curfield) {
-      spos += sprintf(spos, IFACE_("Field %d "), rs->curfield);
+      spos += sprintf(spos, TIP_("Field %d "), rs->curfield);
     }
     if (rs->curblur) {
-      spos += sprintf(spos, IFACE_("Blur %d "), rs->curblur);
+      spos += sprintf(spos, TIP_("Blur %d "), rs->curblur);
     }
   }
 
   /* full sample */
   if (rs->curfsa) {
-    spos += sprintf(spos, IFACE_("| Full Sample %d "), rs->curfsa);
+    spos += sprintf(spos, TIP_("| Full Sample %d "), rs->curfsa);
   }
 
   /* extra info */
@@ -642,7 +628,7 @@ static void image_rect_update(void *rjv, RenderResult *rr, volatile rcti *renrec
      * this case GLSL doesn't have original float buffer to
      * operate with.
      */
-    if (rr->do_exr_tile || !rj->supports_glsl_draw || ibuf->channels == 1 ||
+    if (!rj->supports_glsl_draw || ibuf->channels == 1 ||
         ED_draw_imbuf_method(ibuf) != IMAGE_DRAW_METHOD_GLSL) {
       image_buffer_rect_update(rj, rr, ibuf, &rj->iuser, renrect, viewname);
     }
@@ -671,23 +657,23 @@ static void render_startjob(void *rjv, short *stop, short *do_update, float *pro
   RE_SetReports(rj->re, rj->reports);
 
   if (rj->anim) {
-    RE_BlenderAnim(rj->re,
+    RE_RenderAnim(rj->re,
+                  rj->main,
+                  rj->scene,
+                  rj->single_layer,
+                  rj->camera_override,
+                  rj->scene->r.sfra,
+                  rj->scene->r.efra,
+                  rj->scene->r.frame_step);
+  }
+  else {
+    RE_RenderFrame(rj->re,
                    rj->main,
                    rj->scene,
                    rj->single_layer,
                    rj->camera_override,
-                   rj->scene->r.sfra,
-                   rj->scene->r.efra,
-                   rj->scene->r.frame_step);
-  }
-  else {
-    RE_BlenderFrame(rj->re,
-                    rj->main,
-                    rj->scene,
-                    rj->single_layer,
-                    rj->camera_override,
-                    rj->scene->r.cfra,
-                    rj->write_still);
+                   rj->scene->r.cfra,
+                   rj->write_still);
   }
 
   RE_SetReports(rj->re, NULL);
@@ -928,7 +914,6 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   wmJob *wm_job;
   RenderJob *rj;
   Image *ima;
-  int jobflag;
   const bool is_animation = RNA_boolean_get(op->ptr, "animation");
   const bool is_write_still = RNA_boolean_get(op->ptr, "write_still");
   const bool use_viewport = RNA_boolean_get(op->ptr, "use_viewport");
@@ -976,9 +961,9 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
 
   /* cleanup sequencer caches before starting user triggered render.
    * otherwise, invalidated cache entries can make their way into
-   * the output rendering. We can't put that into RE_BlenderFrame,
+   * the output rendering. We can't put that into RE_RenderFrame,
    * since sequence rendering can call that recursively... (peter) */
-  BKE_sequencer_cache_cleanup();
+  BKE_sequencer_cache_cleanup(scene);
 
   // store spare
   // get view3d layer, local layer, make this nice api call to render
@@ -986,12 +971,6 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
 
   /* ensure at least 1 area shows result */
   sa = render_view_open(C, event->x, event->y, op->reports);
-
-  jobflag = WM_JOB_EXCL_RENDER | WM_JOB_PRIORITY | WM_JOB_PROGRESS;
-
-  if (RNA_struct_property_is_set(op->ptr, "layer")) {
-    jobflag |= WM_JOB_SUSPEND;
-  }
 
   /* job custom data */
   rj = MEM_callocN(sizeof(RenderJob), "render job");
@@ -1052,11 +1031,19 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
     name = "Render";
   }
 
-  wm_job = WM_jobs_get(
-      CTX_wm_manager(C), CTX_wm_window(C), scene, name, jobflag, WM_JOB_TYPE_RENDER);
+  wm_job = WM_jobs_get(CTX_wm_manager(C),
+                       CTX_wm_window(C),
+                       scene,
+                       name,
+                       WM_JOB_EXCL_RENDER | WM_JOB_PRIORITY | WM_JOB_PROGRESS,
+                       WM_JOB_TYPE_RENDER);
   WM_jobs_customdata_set(wm_job, rj, render_freejob);
   WM_jobs_timer(wm_job, 0.2, NC_SCENE | ND_RENDER_RESULT, 0);
   WM_jobs_callbacks(wm_job, render_startjob, NULL, NULL, render_endjob);
+
+  if (RNA_struct_property_is_set(op->ptr, "layer")) {
+    WM_jobs_delay_start(wm_job, 0.2);
+  }
 
   /* get a render result image, and make sure it is empty */
   ima = BKE_image_verify_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
@@ -1115,7 +1102,10 @@ void RENDER_OT_render(wmOperatorType *ot)
   ot->cancel = screen_render_cancel;
   ot->exec = screen_render_exec;
 
-  /*ot->poll = ED_operator_screenactive;*/ /* this isn't needed, causes failer in background mode */
+  /* this isn't needed, causes failer in background mode */
+#if 0
+  ot->poll = ED_operator_screenactive;
+#endif
 
   prop = RNA_def_boolean(ot->srna,
                          "animation",

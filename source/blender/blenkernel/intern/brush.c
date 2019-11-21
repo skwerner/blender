@@ -73,8 +73,8 @@ static void brush_defaults(Brush *brush)
   brush->topology_rake_factor = 0.0f;
   brush->crease_pinch_factor = 0.5f;
   brush->sculpt_plane = SCULPT_DISP_DIR_AREA;
-  brush->plane_offset =
-      0.0f; /* how far above or below the plane that is found by averaging the faces */
+  /* How far above or below the plane that is found by averaging the faces. */
+  brush->plane_offset = 0.0f;
   brush->plane_trim = 0.5f;
   brush->clone.alpha = 0.5f;
   brush->normal_weight = 0.0f;
@@ -82,7 +82,8 @@ static void brush_defaults(Brush *brush)
   brush->flag |= BRUSH_ALPHA_PRESSURE;
 
   /* BRUSH PAINT TOOL SETTINGS */
-  brush->rgb[0] = 1.0f; /* default rgb color of the brush when painting - white */
+  /* Default rgb color of the brush when painting - white. */
+  brush->rgb[0] = 1.0f;
   brush->rgb[1] = 1.0f;
   brush->rgb[2] = 1.0f;
 
@@ -90,13 +91,14 @@ static void brush_defaults(Brush *brush)
 
   /* BRUSH STROKE SETTINGS */
   brush->flag |= (BRUSH_SPACE | BRUSH_SPACE_ATTEN);
-  brush->spacing =
-      10; /* how far each brush dot should be spaced as a percentage of brush diameter */
+  /* How far each brush dot should be spaced as a percentage of brush diameter. */
+  brush->spacing = 10;
 
   brush->smooth_stroke_radius = 75;
   brush->smooth_stroke_factor = 0.9f;
 
-  brush->rate = 0.1f; /* time delay between dots of paint or sculpting when doing airbrush mode */
+  /* Time delay between dots of paint or sculpting when doing airbrush mode. */
+  brush->rate = 0.1f;
 
   brush->jitter = 0.0f;
 
@@ -140,12 +142,16 @@ void BKE_brush_init(Brush *brush)
 
   brush->sculpt_tool = SCULPT_TOOL_DRAW; /* sculpting defaults to the draw tool for new brushes */
 
+  /* A kernel radius of 1 has almost no effect (T63233). */
+  brush->blur_kernel_radius = 2;
+
   /* the default alpha falloff curve */
   BKE_brush_curve_preset(brush, CURVE_PRESET_SMOOTH);
 }
 
 /**
- * \note Resulting brush will have two users: one as a fake user, another is assumed to be used by the caller.
+ * \note Resulting brush will have two users: one as a fake user,
+ * another is assumed to be used by the caller.
  */
 Brush *BKE_brush_add(Main *bmain, const char *name, const eObjectMode ob_mode)
 {
@@ -497,9 +503,46 @@ void BKE_brush_gpencil_presets(bContext *C)
   brush->gpencil_settings->gradient_s[0] = 1.0f;
   brush->gpencil_settings->gradient_s[1] = 1.0f;
 
+  /* Soft brush */
+  brush = BKE_brush_add_gpencil(bmain, ts, "Draw Soft");
+  deft = brush; /* save default brush */
+  brush->size = 300.0f;
+  brush->gpencil_settings->flag |= (GP_BRUSH_USE_PRESSURE | GP_BRUSH_ENABLE_CURSOR);
+  brush->gpencil_settings->draw_sensitivity = 1.0f;
+
+  brush->gpencil_settings->draw_strength = 0.4f;
+  brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+
+  brush->gpencil_settings->draw_random_press = 0.0f;
+  brush->gpencil_settings->draw_random_strength = 0.0f;
+
+  brush->gpencil_settings->draw_jitter = 0.0f;
+  brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+
+  brush->gpencil_settings->draw_angle = 0.0f;
+  brush->gpencil_settings->draw_angle_factor = 0.0f;
+
+  brush->gpencil_settings->input_samples = 10;
+  brush->gpencil_settings->active_smooth = 0.98f;
+  brush->gpencil_settings->draw_smoothfac = 0.1f;
+  brush->gpencil_settings->draw_smoothlvl = 1;
+  brush->gpencil_settings->draw_subdivide = 1;
+  brush->gpencil_settings->thick_smoothfac = 1.0f;
+  brush->gpencil_settings->thick_smoothlvl = 3;
+  brush->gpencil_settings->draw_random_sub = 0.0f;
+  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_MARKER;
+  brush->gpencil_tool = GPAINT_TOOL_DRAW;
+
+  brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
+  brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
+
+  brush->gpencil_settings->gradient_f = 0.211f;
+  brush->gpencil_settings->gradient_s[0] = 1.0f;
+  brush->gpencil_settings->gradient_s[1] = 0.91f;
+
   /* Fill brush */
   brush = BKE_brush_add_gpencil(bmain, ts, "Fill Area");
-  brush->size = 1.0f;
+  brush->size = 20.0f;
   brush->gpencil_settings->flag |= GP_BRUSH_ENABLE_CURSOR;
   brush->gpencil_settings->draw_sensitivity = 1.0f;
   brush->gpencil_settings->fill_leak = 3;
@@ -581,8 +624,10 @@ struct Brush *BKE_brush_first_search(struct Main *bmain, const eObjectMode ob_mo
 }
 
 /**
- * Only copy internal data of Brush ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
+ * Only copy internal data of Brush ID from source
+ * to already allocated/initialized destination.
+ * You probably never want to use that directly,
+ * use #BKE_id_copy or #BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *

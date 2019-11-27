@@ -1212,8 +1212,11 @@ class CYCLES_OBJECT_PT_visibility(CyclesButtonsPanel, Panel):
         col = flow.column()
         col.prop(ob, "hide_select", text="Selectable", invert_checkbox=True, toggle=False)
 
+        cob = ob.cycles
+        col = flow.column()
+        col.prop(cob, "terminator_offset")
+        
         if has_geometry_visibility(ob):
-            cob = ob.cycles
             col = flow.column()
             col.prop(cob, "is_shadow_catcher")
             col = flow.column()

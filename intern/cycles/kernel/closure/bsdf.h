@@ -100,27 +100,27 @@ ccl_device_inline float bump_shadowing_term(float3 Ng, float3 N, float3 I)
  * Copyright (c) 2019 Francois Beaune, The appleseedhq Organization */
 ccl_device_inline float shift_cos_in(const float cos_in, const float correction_factor)
 {
-    assert(std::abs(cos_in) <= 1.0f);
-    assert(correction_factor >= 0.0f && correction_factor < 1.0f);
+  assert(fabsf(cos_in) <= 1.0f);
+  assert(correction_factor >= 0.0f && correction_factor < 1.0f);
 
-    if (correction_factor == 0.0f)
-        return cos_in;
+  if (correction_factor == 0.0f)
+    return cos_in;
 
-    const float angle = fast_acosf(cos_in);
-    const float frequency_multiplier = 1.0f / (1.0f - correction_factor);
-    return max(cosf(angle * frequency_multiplier), 0.0f);
+  const float angle = fast_acosf(cos_in);
+  const float frequency_multiplier = 1.0f / (1.0f - correction_factor);
+  return max(cosf(angle * frequency_multiplier), 0.0f);
 }
 
 ccl_device_inline float shift_cos_in_fast(const float cos_in, const float frequency_multiplier)
 {
-    assert(fabsf(cos_in) <= 1.0f);
-    assert(frequency_multiplier >= 1.0f);
+  assert(fabsf(cos_in) <= 1.0f);
+  assert(frequency_multiplier >= 1.0f);
 
-    if (frequency_multiplier == 1.0f)
-        return cos_in;
+  if (frequency_multiplier == 1.0f)
+    return cos_in;
 
-    const float angle = fast_acosf(cos_in);
-    return max(cosf(angle * frequency_multiplier), 0.0f);
+  const float angle = fast_acosf(cos_in);
+  return max(cosf(angle * frequency_multiplier), 0.0f);
 }
 
 ccl_device_inline int bsdf_sample(KernelGlobals *kg,
@@ -480,7 +480,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
     }
     if (!(label & LABEL_TRANSMIT) && !isequal_float3(sd->Ng, sd->N)) {
       const float frequency_multiplier = kernel_tex_fetch(__objects, sd->object).terminator_offset;
-      if(frequency_multiplier > 0.0f) {
+      if (frequency_multiplier > 0.0f) {
         *eval *= shift_cos_in_fast(dot(*omega_in, sd->N), frequency_multiplier);
       }
     }
@@ -601,8 +601,9 @@ ccl_device_inline
         eval *= bump_shadowing_term(sd->N, sc->N, omega_in);
       }
       if (!isequal_float3(sd->Ng, sd->N)) {
-        const float frequency_multiplier = kernel_tex_fetch(__objects, sd->object).terminator_offset;
-        if(frequency_multiplier > 0.0f) {
+        const float frequency_multiplier =
+            kernel_tex_fetch(__objects, sd->object).terminator_offset;
+        if (frequency_multiplier > 0.0f) {
           eval *= shift_cos_in_fast(dot(omega_in, sd->N), frequency_multiplier);
         }
       }
@@ -698,8 +699,9 @@ ccl_device_inline
         eval *= bump_shadowing_term(-sd->N, sc->N, omega_in);
       }
       if (isequal_float3(sd->Ng, sd->N)) {
-        const float frequency_multiplier = kernel_tex_fetch(__objects, sd->object).terminator_offset;
-        if(frequency_multiplier > 0.0f) {
+        const float frequency_multiplier =
+            kernel_tex_fetch(__objects, sd->object).terminator_offset;
+        if (frequency_multiplier > 0.0f) {
           eval *= shift_cos_in_fast(dot(omega_in, -sd->N), frequency_multiplier);
         }
       }

@@ -431,10 +431,10 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   }
 
   float terminator_offset = get_float(cobject, "terminator_offset");
-   if (terminator_offset != object->terminator_offset) {
-     object->terminator_offset = terminator_offset;
-     object_updated = true;
-   }
+  if (terminator_offset != object->terminator_offset) {
+    object->terminator_offset = terminator_offset;
+    object_updated = true;
+  }
 
   /* sync the asset name for Cryptomatte */
   BL::Object parent = b_ob.parent();

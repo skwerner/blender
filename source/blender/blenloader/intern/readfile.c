@@ -74,6 +74,7 @@
 #include "DNA_object_types.h"
 #include "DNA_packedFile_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_curveprofile_types.h"
 #include "DNA_lightprobe_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_text_types.h"
@@ -132,6 +133,7 @@
 #include "BKE_paint.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
+#include "BKE_curveprofile.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
@@ -156,6 +158,9 @@
 #include "readfile.h"
 
 #include <errno.h>
+
+/* Make preferences read-only. */
+#define U (*((const UserDef *)&U))
 
 /**
  * READ
@@ -2618,10 +2623,13 @@ static void lib_link_id(FileData *fd, Main *main)
     ID *id;
 
     for (id = lb->first; id; id = id->next) {
-      if (id->override_library) {
-        id->override_library->reference = newlibadr_us(
-            fd, id->lib, id->override_library->reference);
-        id->override_library->storage = newlibadr_us(fd, id->lib, id->override_library->storage);
+      if (id->tag & LIB_TAG_NEED_LINK) {
+        if (id->override_library) {
+          id->override_library->reference = newlibadr_us(
+              fd, id->lib, id->override_library->reference);
+          id->override_library->storage = newlibadr_us(fd, id->lib, id->override_library->storage);
+        }
+        /* DO NOT clear LIB_TAG_NEED_LINK here, it is used again by per-ID-type linkers. */
       }
     }
   }
@@ -2663,6 +2671,7 @@ static void direct_link_id(FileData *fd, ID *id)
   if (id->override_library) {
     id->override_library = newdataadr(fd, id->override_library);
     link_list_ex(fd, &id->override_library->properties, direct_link_id_override_property_cb);
+    id->override_library->runtime = NULL;
   }
 
   DrawDataList *drawdata = DRW_drawdatalist_from_id(id);
@@ -2690,6 +2699,19 @@ static void direct_link_curvemapping(FileData *fd, CurveMapping *cumap)
     cumap->cm[a].table = NULL;
     cumap->cm[a].premultable = NULL;
   }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Read CurveProfile
+ * \{ */
+
+static void direct_link_curveprofile(FileData *fd, CurveProfile *profile)
+{
+  profile->path = newdataadr(fd, profile->path);
+  profile->table = NULL;
+  profile->segments = NULL;
 }
 
 /** \} */
@@ -3862,6 +3884,8 @@ static void direct_link_armature(FileData *fd, bArmature *arm)
   link_list(fd, &arm->bonebase);
   arm->bonehash = NULL;
   arm->edbo = NULL;
+  /* Must always be cleared (armatures don't have their own edit-data). */
+  arm->needs_flush_to_id = 0;
 
   arm->adt = newdataadr(fd, arm->adt);
   direct_link_animdata(fd, arm->adt);
@@ -4079,6 +4103,8 @@ static void direct_link_mball(FileData *fd, MetaBall *mb)
 
   BLI_listbase_clear(&mb->disp);
   mb->editelems = NULL;
+  /* Must always be cleared (meta's don't have their own edit-data). */
+  mb->needs_flush_to_id = 0;
   /*  mb->edit_elems.first= mb->edit_elems.last= NULL;*/
   mb->lastelem = NULL;
   mb->batch_cache = NULL;
@@ -5795,6 +5821,13 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb)
         }
       }
     }
+    else if (md->type == eModifierType_Bevel) {
+      BevelModifierData *bmd = (BevelModifierData *)md;
+      bmd->custom_profile = newdataadr(fd, bmd->custom_profile);
+      if (bmd->custom_profile) {
+        direct_link_curveprofile(fd, bmd->custom_profile);
+      }
+    }
   }
 }
 
@@ -6751,6 +6784,13 @@ static void direct_link_scene(FileData *fd, Scene *sce)
     if (sce->toolsettings->gp_sculpt.cur_primitive) {
       direct_link_curvemapping(fd, sce->toolsettings->gp_sculpt.cur_primitive);
     }
+
+    /* Relink toolsettings curve profile */
+    sce->toolsettings->custom_bevel_profile_preset = newdataadr(
+        fd, sce->toolsettings->custom_bevel_profile_preset);
+    if (sce->toolsettings->custom_bevel_profile_preset) {
+      direct_link_curveprofile(fd, sce->toolsettings->custom_bevel_profile_preset);
+    }
   }
 
   if (sce->ed) {
@@ -7258,13 +7298,6 @@ static void direct_link_area(FileData *fd, ScrArea *area)
       }
       v3d->shading.prev_type = OB_SOLID;
 
-      if (v3d->fx_settings.dof) {
-        v3d->fx_settings.dof = newdataadr(fd, v3d->fx_settings.dof);
-      }
-      if (v3d->fx_settings.ssao) {
-        v3d->fx_settings.ssao = newdataadr(fd, v3d->fx_settings.ssao);
-      }
-
       direct_link_view3dshading(fd, &v3d->shading);
 
       blo_do_versions_view3d_split_250(v3d, &sl->regionbase);
@@ -7343,10 +7376,7 @@ static void direct_link_area(FileData *fd, ScrArea *area)
     }
     else if (sl->spacetype == SPACE_TEXT) {
       SpaceText *st = (SpaceText *)sl;
-
-      st->drawcache = NULL;
-      st->scroll_accum[0] = 0.0f;
-      st->scroll_accum[1] = 0.0f;
+      memset(&st->runtime, 0, sizeof(st->runtime));
     }
     else if (sl->spacetype == SPACE_SEQ) {
       SpaceSeq *sseq = (SpaceSeq *)sl;
@@ -8240,9 +8270,9 @@ void blo_lib_link_restore(Main *oldmain,
   }
 
   /* Restore all ID pointers in Main database itself
-   * (especially IDProperties might point to some worspace of other 'weirdly unchanged' ID
+   * (especially IDProperties might point to some word-space of other 'weirdly unchanged' ID
    * pointers, see T69146).
-   * Note that this will re;ap again a few pointers in workspaces or so,
+   * Note that this will re-apply again a few pointers in workspaces or so,
    * but since we are remapping final ones already set above,
    * that is just some minor harmless double-processing. */
   lib_link_main_data_restore(id_map, newmain);
@@ -10101,7 +10131,7 @@ static void expand_doit_library(void *fdhandle, Main *mainvar, void *old)
     }
     else {
       /* Convert any previously read weak link to regular link
-       * to signal that we want to read this datablock. */
+       * to signal that we want to read this data-block. */
       if (id->tag & LIB_TAG_ID_LINK_PLACEHOLDER) {
         id->flag &= ~LIB_INDIRECT_WEAK_LINK;
       }
@@ -10151,7 +10181,7 @@ static void expand_doit_library(void *fdhandle, Main *mainvar, void *old)
     }
     else {
       /* Convert any previously read weak link to regular link
-       * to signal that we want to read this datablock. */
+       * to signal that we want to read this data-block. */
       if (id->tag & LIB_TAG_ID_LINK_PLACEHOLDER) {
         id->flag &= ~LIB_INDIRECT_WEAK_LINK;
       }
@@ -12002,7 +12032,7 @@ static void read_libraries(FileData *basefd, ListBase *mainlist)
 
   Main *main_newid = BKE_main_new();
   for (Main *mainptr = mainl->next; mainptr; mainptr = mainptr->next) {
-    /* Drop weak links for which no datablock was found. */
+    /* Drop weak links for which no data-block was found. */
     read_library_clear_weak_links(basefd, mainlist, mainptr);
 
     /* Do versioning for newly added linked data-locks. If no data-locks

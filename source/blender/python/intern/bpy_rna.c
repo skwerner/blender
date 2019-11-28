@@ -932,8 +932,8 @@ static PyObject *pyrna_struct_repr(BPy_StructRNA *self)
     ID *real_id = NULL;
     path = RNA_path_from_real_ID_to_struct(G_MAIN, &self->ptr, &real_id);
     if (path != NULL) {
-      /* real_id may be NULL in some cases, although the only valid one is evaluated data,
-       * which should have been catched already above.
+      /* 'real_id' may be NULL in some cases, although the only valid one is evaluated data,
+       * which should have already been caught above.
        * So assert, but handle it without crashing for release builds. */
       BLI_assert(real_id != NULL);
 
@@ -2596,7 +2596,8 @@ static PyObject *pyrna_prop_collection_subscript_slice(BPy_PropertyRNA *self,
   return list;
 }
 
-/** TODO - dimensions
+/**
+ * TODO - dimensions
  * \note Could also use pyrna_prop_array_to_py_index(self, count) in a loop, but it's much slower
  * since at the moment it reads (and even allocates) the entire array for each index.
  */
@@ -6237,10 +6238,10 @@ PyTypeObject pyrna_struct_meta_idprop_Type = {
 
     0, /* tp_itemsize */
     /* methods */
-    NULL, /* tp_dealloc */
-    NULL, /* printfunc tp_print; */
-    NULL, /* getattrfunc tp_getattr; */
-    NULL, /* setattrfunc tp_setattr; */
+    NULL,            /* tp_dealloc */
+    (printfunc)NULL, /* printfunc tp_print; */
+    NULL,            /* getattrfunc tp_getattr; */
+    NULL,            /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */ /* deprecated in Python 3.0! */
     NULL,            /* tp_repr */
@@ -6319,7 +6320,7 @@ PyTypeObject pyrna_struct_Type = {
     0,                                           /* tp_itemsize */
     /* methods */
     (destructor)pyrna_struct_dealloc, /* tp_dealloc */
-    NULL,                             /* printfunc tp_print; */
+    (printfunc)NULL,                  /* printfunc tp_print; */
     NULL,                             /* getattrfunc tp_getattr; */
     NULL,                             /* setattrfunc tp_setattr; */
     NULL,
@@ -6408,7 +6409,7 @@ PyTypeObject pyrna_prop_Type = {
     0,                                         /* tp_itemsize */
     /* methods */
     (destructor)pyrna_prop_dealloc, /* tp_dealloc */
-    NULL,                           /* printfunc tp_print; */
+    (printfunc)NULL,                /* printfunc tp_print; */
     NULL,                           /* getattrfunc tp_getattr; */
     NULL,                           /* setattrfunc tp_setattr; */
     NULL,
@@ -6492,7 +6493,7 @@ PyTypeObject pyrna_prop_array_Type = {
     0,                                               /* tp_itemsize */
     /* methods */
     (destructor)pyrna_prop_array_dealloc, /* tp_dealloc */
-    NULL,                                 /* printfunc tp_print; */
+    (printfunc)NULL,                      /* printfunc tp_print; */
     NULL,                                 /* getattrfunc tp_getattr; */
     NULL,                                 /* setattrfunc tp_setattr; */
     NULL,
@@ -6575,7 +6576,7 @@ PyTypeObject pyrna_prop_collection_Type = {
     0,                                                    /* tp_itemsize */
     /* methods */
     (destructor)pyrna_prop_dealloc, /* tp_dealloc */
-    NULL,                           /* printfunc tp_print; */
+    (printfunc)NULL,                /* printfunc tp_print; */
     NULL,                           /* getattrfunc tp_getattr; */
     NULL,                           /* setattrfunc tp_setattr; */
     NULL,
@@ -6661,7 +6662,7 @@ static PyTypeObject pyrna_prop_collection_idprop_Type = {
     0,                                                           /* tp_itemsize */
     /* methods */
     (destructor)pyrna_prop_dealloc, /* tp_dealloc */
-    NULL,                           /* printfunc tp_print; */
+    (printfunc)NULL,                /* printfunc tp_print; */
     NULL,                           /* getattrfunc tp_getattr; */
     NULL,                           /* setattrfunc tp_setattr; */
     NULL,
@@ -6746,10 +6747,10 @@ PyTypeObject pyrna_func_Type = {
     sizeof(BPy_FunctionRNA),                   /* tp_basicsize */
     0,                                         /* tp_itemsize */
     /* methods */
-    NULL, /* tp_dealloc */
-    NULL, /* printfunc tp_print; */
-    NULL, /* getattrfunc tp_getattr; */
-    NULL, /* setattrfunc tp_setattr; */
+    NULL,            /* tp_dealloc */
+    (printfunc)NULL, /* printfunc tp_print; */
+    NULL,            /* getattrfunc tp_getattr; */
+    NULL,            /* setattrfunc tp_setattr; */
     NULL,
     /* tp_compare */           /* DEPRECATED in Python 3.0! */
     (reprfunc)pyrna_func_repr, /* tp_repr */
@@ -6843,7 +6844,7 @@ static PyTypeObject pyrna_prop_collection_iter_Type = {
     0,                                                         /* tp_itemsize */
     /* methods */
     (destructor)pyrna_prop_collection_iter_dealloc, /* tp_dealloc */
-    NULL,                                           /* printfunc tp_print; */
+    (printfunc)NULL,                                /* printfunc tp_print; */
     NULL,                                           /* getattrfunc tp_getattr; */
     NULL,                                           /* setattrfunc tp_setattr; */
     NULL,
@@ -8684,10 +8685,12 @@ static PyObject *pyrna_register_class(PyObject *UNUSED(self), PyObject *py_class
     return NULL;
   }
 
-  /* Call classed register method. */
+  /* Call classed register method.
+   * Note that zero falls through, no attribute, no error. */
   switch (_PyObject_LookupAttr(py_class, bpy_intern_str_register, &py_cls_meth)) {
     case 1: {
       PyObject *ret = PyObject_CallObject(py_cls_meth, NULL);
+      Py_DECREF(py_cls_meth);
       if (ret) {
         Py_DECREF(ret);
       }
@@ -8790,10 +8793,12 @@ static PyObject *pyrna_unregister_class(PyObject *UNUSED(self), PyObject *py_cla
     return NULL;
   }
 
-  /* Call classed unregister method. */
+  /* Call classed unregister method.
+   * Note that zero falls through, no attribute, no error. */
   switch (_PyObject_LookupAttr(py_class, bpy_intern_str_unregister, &py_cls_meth)) {
     case 1: {
       PyObject *ret = PyObject_CallObject(py_cls_meth, NULL);
+      Py_DECREF(py_cls_meth);
       if (ret) {
         Py_DECREF(ret);
       }

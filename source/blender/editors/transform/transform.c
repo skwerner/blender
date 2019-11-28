@@ -72,7 +72,6 @@
 #include "ED_keyframing.h"
 #include "ED_screen.h"
 #include "ED_space_api.h"
-#include "ED_markers.h"
 #include "ED_view3d.h"
 #include "ED_mesh.h"
 #include "ED_clip.h"
@@ -96,6 +95,7 @@
 
 #include "transform.h"
 #include "transform_convert.h"
+#include "transform_snap.h"
 
 /* Disabling, since when you type you know what you are doing,
  * and being able to set it to zero is handy. */
@@ -2133,7 +2133,7 @@ void saveTransform(bContext *C, TransInfo *t, wmOperator *op)
         else if (t->options & CTX_MASK) {
           ts->proportional_mask = proportional != 0;
         }
-        else {
+        else if ((t->options & CTX_CURSOR) == 0) {
           ts->proportional_objects = proportional != 0;
         }
       }
@@ -2346,9 +2346,11 @@ bool initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     }
   }
 
-  Object *ob = CTX_data_active_object(C);
-  if (ob && ob->mode == OB_MODE_SCULPT && ob->sculpt) {
-    options |= CTX_SCULPT;
+  if (CTX_wm_view3d(C) != NULL) {
+    Object *ob = CTX_data_active_object(C);
+    if (ob && ob->mode == OB_MODE_SCULPT && ob->sculpt) {
+      options |= CTX_SCULPT;
+    }
   }
 
   t->options = options;
@@ -2357,6 +2359,7 @@ bool initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 
   /* Needed to translate tweak events to mouse buttons. */
   t->launch_event = event ? WM_userdef_event_type_from_keymap_type(event->type) : -1;
+  t->is_launch_event_tweak = event ? ISTWEAK(event->type) : false;
 
   /* XXX Remove this when wm_operator_call_internal doesn't use window->eventstate
    * (which can have type = 0) */
@@ -2413,7 +2416,7 @@ bool initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 
   createTransData(C, t);  // make TransData structs from selection
 
-  if (t->options & CTX_SCULPT) {
+  if ((t->options & CTX_SCULPT) && !(t->options & CTX_PAINT_CURVE)) {
     ED_sculpt_init_transform(C);
   }
 
@@ -7574,20 +7577,27 @@ static void drawEdgeSlide(TransInfo *t)
         }
         immEnd();
 
-        immUniformThemeColorShadeAlpha(TH_SELECT, -30, alpha_shade);
-        GPU_point_size(ctrl_size);
-        immBegin(GPU_PRIM_POINTS, 1);
-        if (slp->flipped) {
-          if (curr_sv->v_side[1]) {
-            immVertex3fv(pos, curr_sv->v_side[1]->co);
+        {
+          float *co_test = NULL;
+          if (slp->flipped) {
+            if (curr_sv->v_side[1]) {
+              co_test = curr_sv->v_side[1]->co;
+            }
+          }
+          else {
+            if (curr_sv->v_side[0]) {
+              co_test = curr_sv->v_side[0]->co;
+            }
+          }
+
+          if (co_test != NULL) {
+            immUniformThemeColorShadeAlpha(TH_SELECT, -30, alpha_shade);
+            GPU_point_size(ctrl_size);
+            immBegin(GPU_PRIM_POINTS, 1);
+            immVertex3fv(pos, co_test);
+            immEnd();
           }
         }
-        else {
-          if (curr_sv->v_side[0]) {
-            immVertex3fv(pos, curr_sv->v_side[0]->co);
-          }
-        }
-        immEnd();
 
         immUniformThemeColorShadeAlpha(TH_SELECT, 255, alpha_shade);
         GPU_point_size(guide_size);
@@ -8879,38 +8889,7 @@ static short getAnimEdit_SnapMode(TransInfo *t)
 static void doAnimEdit_SnapFrame(
     TransInfo *t, TransData *td, TransData2D *td2d, AnimData *adt, short autosnap)
 {
-  /* snap key to nearest frame or second? */
-  if (ELEM(autosnap, SACTSNAP_FRAME, SACTSNAP_SECOND)) {
-    const Scene *scene = t->scene;
-    const double secf = FPS;
-    double val;
-
-    /* convert frame to nla-action time (if needed) */
-    if (adt) {
-      val = BKE_nla_tweakedit_remap(adt, *(td->val), NLATIME_CONVERT_MAP);
-    }
-    else {
-      val = *(td->val);
-    }
-
-    /* do the snapping to nearest frame/second */
-    if (autosnap == SACTSNAP_FRAME) {
-      val = floorf(val + 0.5);
-    }
-    else if (autosnap == SACTSNAP_SECOND) {
-      val = (float)(floor((val / secf) + 0.5) * secf);
-    }
-
-    /* convert frame out of nla-action time */
-    if (adt) {
-      *(td->val) = BKE_nla_tweakedit_remap(adt, val, NLATIME_CONVERT_UNMAP);
-    }
-    else {
-      *(td->val) = val;
-    }
-  }
-  /* snap key to nearest marker? */
-  else if (autosnap == SACTSNAP_MARKER) {
+  if (ELEM(autosnap, SACTSNAP_FRAME, SACTSNAP_SECOND, SACTSNAP_MARKER)) {
     float val;
 
     /* convert frame to nla-action time (if needed) */
@@ -8921,9 +8900,7 @@ static void doAnimEdit_SnapFrame(
       val = *(td->val);
     }
 
-    /* snap to nearest marker */
-    // TODO: need some more careful checks for where data comes from
-    val = (float)ED_markers_find_nearest_marker_time(&t->scene->markers, val);
+    snapFrameTransform(t, autosnap, true, val, &val);
 
     /* convert frame out of nla-action time */
     if (adt) {
@@ -8991,36 +8968,23 @@ static void headerTimeTranslate(TransInfo *t, char str[UI_MAX_DRAW_STR])
     outputNumInput(&(t->num), tvec, &t->scene->unit);
   }
   else {
-    const Scene *scene = t->scene;
     const short autosnap = getAnimEdit_SnapMode(t);
-    const double secf = FPS;
     float val = t->values_final[0];
 
-    /* apply snapping + frame->seconds conversions */
-    if (autosnap == SACTSNAP_STEP) {
-      /* frame step */
-      val = floorf(val + 0.5f);
-    }
-    else if (autosnap == SACTSNAP_TSTEP) {
-      /* second step */
-      val = floorf((double)val / secf + 0.5);
-    }
-    else if (autosnap == SACTSNAP_SECOND) {
-      /* nearest second */
-      val = (float)((double)val / secf);
-    }
+    float snap_val;
+    snapFrameTransform(t, autosnap, false, val, &snap_val);
 
     if (autosnap == SACTSNAP_FRAME) {
-      BLI_snprintf(&tvec[0], NUM_STR_REP_LEN, "%d.00 (%.4f)", (int)val, val);
+      BLI_snprintf(&tvec[0], NUM_STR_REP_LEN, "%.2f (%.4f)", snap_val, val);
     }
     else if (autosnap == SACTSNAP_SECOND) {
-      BLI_snprintf(&tvec[0], NUM_STR_REP_LEN, "%d.00 sec (%.4f)", (int)val, val);
+      BLI_snprintf(&tvec[0], NUM_STR_REP_LEN, "%.2f sec (%.4f)", snap_val, val);
     }
     else if (autosnap == SACTSNAP_TSTEP) {
-      BLI_snprintf(&tvec[0], NUM_STR_REP_LEN, "%.4f sec", val);
+      BLI_snprintf(&tvec[0], NUM_STR_REP_LEN, "%.4f sec", snap_val);
     }
     else {
-      BLI_snprintf(&tvec[0], NUM_STR_REP_LEN, "%.4f", val);
+      BLI_snprintf(&tvec[0], NUM_STR_REP_LEN, "%.4f", snap_val);
     }
   }
 

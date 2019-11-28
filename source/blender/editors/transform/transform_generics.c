@@ -111,6 +111,7 @@
 
 #include "transform.h"
 #include "transform_convert.h"
+#include "transform_snap.h"
 
 /* ************************** Functions *************************** */
 
@@ -447,7 +448,7 @@ static void recalcData_graphedit(TransInfo *t)
       dosort++;
     }
     else {
-      calchandles_fcurve(fcu);
+      calchandles_fcurve_ex(fcu, BEZT_FLAG_TEMP_TAG);
     }
 
     /* set refresh tags for objects using this animation,
@@ -791,6 +792,12 @@ static void pose_transform_mirror_update(Object *ob, PoseInitData_Mirror *pid)
   float flip_mtx[4][4];
   unit_m4(flip_mtx);
   flip_mtx[0][0] = -1;
+
+  for (bPoseChannel *pchan_orig = ob->pose->chanbase.first; pchan_orig;
+       pchan_orig = pchan_orig->next) {
+    /* Clear the MIRROR flag from previous runs */
+    pchan_orig->bone->flag &= ~BONE_TRANSFORM_MIRROR;
+  }
 
   for (bPoseChannel *pchan_orig = ob->pose->chanbase.first; pchan_orig;
        pchan_orig = pchan_orig->next) {
@@ -1409,8 +1416,8 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 {
   Scene *sce = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  const eObjectMode object_mode = OBACT(view_layer) ? OBACT(view_layer)->mode : OB_MODE_OBJECT;
-  const short object_type = OBACT(view_layer) ? OBACT(view_layer)->type : -1;
+  Object *obact = OBACT(view_layer);
+  const eObjectMode object_mode = obact ? obact->mode : OB_MODE_OBJECT;
   ToolSettings *ts = CTX_data_tool_settings(C);
   ARegion *ar = CTX_wm_region(C);
   ScrArea *sa = CTX_wm_area(C);
@@ -1430,9 +1437,13 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 
   t->flag = 0;
 
-  t->obedit_type = ((object_mode == OB_MODE_EDIT) || (object_mode == OB_MODE_EDIT_GPENCIL)) ?
-                       object_type :
-                       -1;
+  if (obact && !(t->options & (CTX_CURSOR | CTX_TEXTURE)) &&
+      ELEM(object_mode, OB_MODE_EDIT, OB_MODE_EDIT_GPENCIL)) {
+    t->obedit_type = obact->type;
+  }
+  else {
+    t->obedit_type = -1;
+  }
 
   /* Many kinds of transform only use a single handle. */
   if (t->data_container == NULL) {
@@ -1666,7 +1677,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
       ((prop = RNA_struct_find_property(op->ptr, "orient_matrix")) &&
        RNA_property_is_set(op->ptr, prop)) &&
       ((t->flag & T_MODAL) ||
-       /* When using redo, don't use the the custom constraint matrix
+       /* When using redo, don't use the custom constraint matrix
         * if the user selects a different orientation. */
        (RNA_enum_get(op->ptr, "orient_type") == RNA_enum_get(op->ptr, "orient_matrix_type")))) {
     RNA_property_float_get_array(op->ptr, prop, &t->spacemtx[0][0]);
@@ -1708,7 +1719,8 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   }
   else {
     /* Release confirms preference should not affect node editor (T69288, T70504). */
-    if (ISMOUSE(t->launch_event) && ((U.flag & USER_RELEASECONFIRM) || (t->spacetype == SPACE_NODE))) {
+    if (ISMOUSE(t->launch_event) &&
+        ((U.flag & USER_RELEASECONFIRM) || (t->spacetype == SPACE_NODE))) {
       /* Global "release confirm" on mouse bindings */
       t->flag |= T_RELEASE_CONFIRM;
     }
@@ -1768,7 +1780,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
               }
             }
           }
-          else if ((t->obedit_type == -1) && ts->proportional_objects) {
+          else if (!(t->options & CTX_CURSOR) && ts->proportional_objects) {
             t->flag |= T_PROP_EDIT;
           }
         }

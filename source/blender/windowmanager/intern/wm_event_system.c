@@ -2401,13 +2401,9 @@ static int wm_handler_fileselect_do(bContext *C,
 
           if (screen->temp && (file_sa->spacetype == SPACE_FILE)) {
             int win_size[2];
-
-            /* Get DPI/pixelsize independent size to be stored in preferences. */
-            WM_window_set_dpi(temp_win); /* Ensure the DPI is taken from the right window. */
-            win_size[0] = WM_window_pixels_x(temp_win) / UI_DPI_FAC;
-            win_size[1] = WM_window_pixels_y(temp_win) / UI_DPI_FAC;
-
-            ED_fileselect_params_to_userdef(file_sa->spacedata.first, win_size);
+            bool is_maximized;
+            ED_fileselect_window_params_get(temp_win, win_size, &is_maximized);
+            ED_fileselect_params_to_userdef(file_sa->spacedata.first, win_size, is_maximized);
 
             if (BLI_listbase_is_single(&file_sa->spacedata)) {
               BLI_assert(ctx_win != temp_win);
@@ -2437,7 +2433,7 @@ static int wm_handler_fileselect_do(bContext *C,
         }
 
         if (!temp_win && ctx_sa->full) {
-          ED_fileselect_params_to_userdef(ctx_sa->spacedata.first, NULL);
+          ED_fileselect_params_to_userdef(ctx_sa->spacedata.first, NULL, false);
           ED_screen_full_prevspace(C, ctx_sa);
         }
       }
@@ -3725,7 +3721,7 @@ wmEventHandler_Keymap *WM_event_add_keymap_handler(ListBase *handlers, wmKeyMap 
   return handler;
 }
 
-/** Follow #wmEventHandler_KeymapDynamicFn signiture. */
+/** Follow #wmEventHandler_KeymapDynamicFn signature. */
 wmKeyMap *WM_event_get_keymap_from_toolsystem(wmWindowManager *wm, wmEventHandler_Keymap *handler)
 {
   ScrArea *sa = handler->dynamic.user_data;
@@ -5002,6 +4998,19 @@ wmKeyMap *WM_event_get_keymap_from_handler(wmWindowManager *wm, wmEventHandler_K
   return keymap;
 }
 
+wmKeyMapItem *WM_event_match_keymap_item(bContext *C, wmKeyMap *keymap, const wmEvent *event)
+{
+  for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+    if (wm_eventmatch(event, kmi)) {
+      wmOperatorType *ot = WM_operatortype_find(kmi->idname, 0);
+      if (WM_operator_poll_context(C, ot, WM_OP_INVOKE_DEFAULT)) {
+        return kmi;
+      }
+    }
+  }
+  return NULL;
+}
+
 static wmKeyMapItem *wm_kmi_from_event(bContext *C,
                                        wmWindowManager *wm,
                                        ListBase *handlers,
@@ -5017,13 +5026,9 @@ static wmKeyMapItem *wm_kmi_from_event(bContext *C,
         wmEventHandler_Keymap *handler = (wmEventHandler_Keymap *)handler_base;
         wmKeyMap *keymap = WM_event_get_keymap_from_handler(wm, handler);
         if (keymap && WM_keymap_poll(C, keymap)) {
-          for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
-            if (wm_eventmatch(event, kmi)) {
-              wmOperatorType *ot = WM_operatortype_find(kmi->idname, 0);
-              if (WM_operator_poll_context(C, ot, WM_OP_INVOKE_DEFAULT)) {
-                return kmi;
-              }
-            }
+          wmKeyMapItem *kmi = WM_event_match_keymap_item(C, keymap, event);
+          if (kmi != NULL) {
+            return kmi;
           }
         }
       }
@@ -5318,17 +5323,7 @@ bool WM_window_modal_keymap_status_draw(bContext *UNUSED(C), wmWindow *win, uiLa
           /* Assume release events just disable something which was toggled on. */
           continue;
         }
-        int icon_mod[4];
-#ifdef WITH_HEADLESS
-        int icon = 0;
-#else
-        int icon = UI_icon_from_keymap_item(kmi, icon_mod);
-#endif
-        if (icon != 0) {
-          for (int j = 0; j < ARRAY_SIZE(icon_mod) && icon_mod[j]; j++) {
-            uiItemL(row, "", icon_mod[j]);
-          }
-          uiItemL(row, items[i].name, icon);
+        if (uiTemplateEventFromKeymapItem(row, items[i].name, kmi, false)) {
           show_text = false;
         }
       }

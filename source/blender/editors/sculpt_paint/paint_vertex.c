@@ -1522,7 +1522,7 @@ static void vwpaint_update_cache_variants(bContext *C, VPaint *vp, Object *ob, P
     }
   }
 
-  if (BKE_brush_use_size_pressure(scene, brush) &&
+  if (BKE_brush_use_size_pressure(brush) &&
       paint_supports_dynamic_size(brush, PAINT_MODE_SCULPT)) {
     cache->radius = cache->initial_radius * cache->pressure;
   }
@@ -1684,11 +1684,9 @@ static void get_brush_alpha_data(const Scene *scene,
                                  float *r_brush_alpha_pressure)
 {
   *r_brush_size_pressure = BKE_brush_size_get(scene, brush) *
-                           (BKE_brush_use_size_pressure(scene, brush) ? ss->cache->pressure :
-                                                                        1.0f);
+                           (BKE_brush_use_size_pressure(brush) ? ss->cache->pressure : 1.0f);
   *r_brush_alpha_value = BKE_brush_alpha_get(scene, brush);
-  *r_brush_alpha_pressure = (BKE_brush_use_alpha_pressure(scene, brush) ? ss->cache->pressure :
-                                                                          1.0f);
+  *r_brush_alpha_pressure = (BKE_brush_use_alpha_pressure(brush) ? ss->cache->pressure : 1.0f);
 }
 
 static float wpaint_get_active_weight(const MDeformVert *dv, const WeightPaintInfo *wpi)
@@ -2072,9 +2070,9 @@ static void calculate_average_weight(SculptThreadedTaskData *data,
   struct WPaintAverageAccum *accum = MEM_mallocN(sizeof(*accum) * totnode, __func__);
   data->custom_data = accum;
 
-  TaskParallelSettings settings;
+  PBVHParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, (data->sd->flags & SCULPT_USE_OPENMP), totnode);
-  BLI_task_parallel_range(0, totnode, data, do_wpaint_brush_calc_average_weight_cb_ex, &settings);
+  BKE_pbvh_parallel_range(0, totnode, data, do_wpaint_brush_calc_average_weight_cb_ex, &settings);
 
   uint accum_len = 0;
   double accum_weight = 0.0;
@@ -2120,22 +2118,22 @@ static void wpaint_paint_leaves(bContext *C,
   data.strength = BKE_brush_weight_get(scene, brush);
 
   /* NOTE: current mirroring code cannot be run in parallel */
-  TaskParallelSettings settings;
+  PBVHParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, !(me->editflag & ME_EDIT_MIRROR_X), totnode);
 
   switch ((eBrushWeightPaintTool)brush->weightpaint_tool) {
     case WPAINT_TOOL_AVERAGE:
       calculate_average_weight(&data, nodes, totnode);
-      BLI_task_parallel_range(0, totnode, &data, do_wpaint_brush_draw_task_cb_ex, &settings);
+      BKE_pbvh_parallel_range(0, totnode, &data, do_wpaint_brush_draw_task_cb_ex, &settings);
       break;
     case WPAINT_TOOL_SMEAR:
-      BLI_task_parallel_range(0, totnode, &data, do_wpaint_brush_smear_task_cb_ex, &settings);
+      BKE_pbvh_parallel_range(0, totnode, &data, do_wpaint_brush_smear_task_cb_ex, &settings);
       break;
     case WPAINT_TOOL_BLUR:
-      BLI_task_parallel_range(0, totnode, &data, do_wpaint_brush_blur_task_cb_ex, &settings);
+      BKE_pbvh_parallel_range(0, totnode, &data, do_wpaint_brush_blur_task_cb_ex, &settings);
       break;
     case WPAINT_TOOL_DRAW:
-      BLI_task_parallel_range(0, totnode, &data, do_wpaint_brush_draw_task_cb_ex, &settings);
+      BKE_pbvh_parallel_range(0, totnode, &data, do_wpaint_brush_draw_task_cb_ex, &settings);
       break;
   }
 }
@@ -2341,7 +2339,7 @@ static void wpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
 
   /* calculate pivot for rotation around seletion if needed */
   /* also needed for "View Selected" on last stroke */
-  paint_last_stroke_update(scene, ss->cache->location);
+  paint_last_stroke_update(scene, ss->cache->true_location);
 
   BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_ALL);
 
@@ -3126,9 +3124,9 @@ static void calculate_average_color(SculptThreadedTaskData *data,
   struct VPaintAverageAccum *accum = MEM_mallocN(sizeof(*accum) * totnode, __func__);
   data->custom_data = accum;
 
-  TaskParallelSettings settings;
+  PBVHParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, totnode);
-  BLI_task_parallel_range(0, totnode, data, do_vpaint_brush_calc_average_color_cb_ex, &settings);
+  BKE_pbvh_parallel_range(0, totnode, data, do_vpaint_brush_calc_average_color_cb_ex, &settings);
 
   uint accum_len = 0;
   uint accum_value[3] = {0};
@@ -3172,21 +3170,21 @@ static void vpaint_paint_leaves(bContext *C,
       .lcol = (uint *)me->mloopcol,
       .me = me,
   };
-  TaskParallelSettings settings;
+  PBVHParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, totnode);
   switch ((eBrushVertexPaintTool)brush->vertexpaint_tool) {
     case VPAINT_TOOL_AVERAGE:
       calculate_average_color(&data, nodes, totnode);
-      BLI_task_parallel_range(0, totnode, &data, do_vpaint_brush_draw_task_cb_ex, &settings);
+      BKE_pbvh_parallel_range(0, totnode, &data, do_vpaint_brush_draw_task_cb_ex, &settings);
       break;
     case VPAINT_TOOL_BLUR:
-      BLI_task_parallel_range(0, totnode, &data, do_vpaint_brush_blur_task_cb_ex, &settings);
+      BKE_pbvh_parallel_range(0, totnode, &data, do_vpaint_brush_blur_task_cb_ex, &settings);
       break;
     case VPAINT_TOOL_SMEAR:
-      BLI_task_parallel_range(0, totnode, &data, do_vpaint_brush_smear_task_cb_ex, &settings);
+      BKE_pbvh_parallel_range(0, totnode, &data, do_vpaint_brush_smear_task_cb_ex, &settings);
       break;
     case VPAINT_TOOL_DRAW:
-      BLI_task_parallel_range(0, totnode, &data, do_vpaint_brush_draw_task_cb_ex, &settings);
+      BKE_pbvh_parallel_range(0, totnode, &data, do_vpaint_brush_draw_task_cb_ex, &settings);
       break;
   }
 }
@@ -3316,7 +3314,7 @@ static void vpaint_stroke_update_step(bContext *C, struct PaintStroke *stroke, P
 
   /* calculate pivot for rotation around seletion if needed */
   /* also needed for "View Selected" on last stroke */
-  paint_last_stroke_update(scene, ss->cache->location);
+  paint_last_stroke_update(scene, ss->cache->true_location);
 
   ED_region_tag_redraw(vc->ar);
 

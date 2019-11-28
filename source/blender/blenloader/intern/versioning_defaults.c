@@ -27,6 +27,7 @@
 #include "BLI_system.h"
 
 #include "DNA_camera_types.h"
+#include "DNA_curveprofile_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
@@ -46,12 +47,17 @@
 #include "BKE_layer.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
+#include "BKE_mesh.h"
 #include "BKE_node.h"
 #include "BKE_paint.h"
 #include "BKE_screen.h"
 #include "BKE_workspace.h"
+#include "BKE_curveprofile.h"
 
 #include "BLO_readfile.h"
+
+/* Make preferences read-only, use versioning_userdef.c. */
+#define U (*((const UserDef *)&U))
 
 /**
  * Rename if the ID doesn't exist.
@@ -230,6 +236,25 @@ void BLO_update_defaults_workspace(WorkSpace *workspace, const char *app_templat
     if (STREQ(workspace->id.name + 2, "Drawing")) {
       workspace->object_mode = OB_MODE_PAINT_GPENCIL;
     }
+
+    /* For Sculpting template. */
+    if (STREQ(workspace->id.name + 2, "Sculpting")) {
+      for (WorkSpaceLayout *layout = layouts->first; layout; layout = layout->next) {
+        bScreen *screen = layout->screen;
+        if (screen) {
+          for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+            for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+              if (sa->spacetype == SPACE_VIEW3D) {
+                View3D *v3d = sa->spacedata.first;
+                v3d->shading.flag &= ~V3D_SHADING_CAVITY;
+                copy_v3_fl(v3d->shading.single_color, 1.0f);
+                STRNCPY(v3d->shading.matcap, "basic_1");
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
 
@@ -303,6 +328,11 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
     for (int i = 0; i < ARRAY_SIZE(uv_values); i++) {
       copy_v2_v2(me->mloopuv[i].uv, uv_values[i]);
     }
+  }
+
+  /* Make sure that the curve profile is initialized */
+  if (ts->custom_bevel_profile_preset == NULL) {
+    ts->custom_bevel_profile_preset = BKE_curveprofile_add(PROF_PRESET_LINE);
   }
 }
 
@@ -385,6 +415,13 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
   for (Mesh *mesh = bmain->meshes.first; mesh; mesh = mesh->id.next) {
     /* Match default for new meshes. */
     mesh->smoothresh = DEG2RADF(30);
+
+    /* For Sculpting template. */
+    if (app_template && STREQ(app_template, "Sculpting")) {
+      mesh->remesh_voxel_size = 0.035f;
+      mesh->flag |= ME_REMESH_FIX_POLES | ME_REMESH_REPROJECT_VOLUME;
+      BKE_mesh_smooth_flag_set(mesh, false);
+    }
   }
 
   for (Camera *camera = bmain->cameras.first; camera; camera = camera->id.next) {
@@ -435,6 +472,9 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
      * Note that sculpt is an exception,
      * it's values are overwritten by #BKE_brush_sculpt_reset below. */
     brush->alpha = 1.0;
+
+    /* Enable antialiasing by default */
+    brush->sampling_flag |= BRUSH_PAINT_ANTIALIASING;
   }
 
   {
@@ -470,6 +510,14 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
       brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
       id_us_min(&brush->id);
       brush->sculpt_tool = SCULPT_TOOL_POSE;
+    }
+
+    brush_name = "Multiplane Scrape";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_MULTIPLANE_SCRAPE;
     }
 
     brush_name = "Simplify";

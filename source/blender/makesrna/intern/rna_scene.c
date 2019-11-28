@@ -2684,7 +2684,7 @@ static void rna_def_tool_settings(BlenderRNA *brna)
   PropertyRNA *prop;
 
   /* the construction of this enum is quite special - everything is stored as bitflags,
-   * with 1st position only for for on/off (and exposed as boolean), while others are mutually
+   * with 1st position only for on/off (and exposed as boolean), while others are mutually
    * exclusive options but which will only have any effect when autokey is enabled
    */
   static const EnumPropertyItem auto_key_items[] = {
@@ -3035,6 +3035,11 @@ static void rna_def_tool_settings(BlenderRNA *brna)
                            "Project individual elements on the surface of other objects");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL); /* header redraw */
 
+  prop = RNA_def_property(srna, "use_snap_backface_culling", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "snap_flag", SCE_SNAP_BACKFACE_CULLING);
+  RNA_def_property_ui_text(prop, "Backface Culling", "Exclude back facing geometry from snapping");
+  RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL); /* header redraw */
+
   prop = RNA_def_property(srna, "use_snap_self", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "snap_flag", SCE_SNAP_NO_SELF);
   RNA_def_property_ui_text(prop, "Project onto Self", "Snap onto itself (Edit Mode Only)");
@@ -3302,6 +3307,12 @@ static void rna_def_tool_settings(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_NEVER_NULL);
   RNA_def_property_struct_type(prop, "MeshStatVis");
   RNA_def_property_ui_text(prop, "Mesh Statistics Visualization", NULL);
+
+  /* CurveProfile */
+  prop = RNA_def_property(srna, "custom_bevel_profile_preset", PROP_POINTER, PROP_NONE);
+  RNA_def_property_pointer_sdna(prop, NULL, "custom_bevel_profile_preset");
+  RNA_def_property_struct_type(prop, "CurveProfile");
+  RNA_def_property_ui_text(prop, "Curve Profile Widget", "Used for defining a profile's path");
 }
 
 static void rna_def_unified_paint_settings(BlenderRNA *brna)
@@ -3399,17 +3410,6 @@ static void rna_def_unified_paint_settings(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "secondary_rgb");
   RNA_def_property_ui_text(prop, "Secondary Color", "");
   RNA_def_property_update(prop, 0, "rna_UnifiedPaintSettings_update");
-
-  prop = RNA_def_property(srna, "use_pressure_size", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", UNIFIED_PAINT_BRUSH_SIZE_PRESSURE);
-  RNA_def_property_ui_icon(prop, ICON_STYLUS_PRESSURE, 0);
-  RNA_def_property_ui_text(prop, "Size Pressure", "Enable tablet pressure sensitivity for size");
-
-  prop = RNA_def_property(srna, "use_pressure_strength", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", UNIFIED_PAINT_BRUSH_ALPHA_PRESSURE);
-  RNA_def_property_ui_icon(prop, ICON_STYLUS_PRESSURE, 0);
-  RNA_def_property_ui_text(
-      prop, "Strength Pressure", "Enable tablet pressure sensitivity for strength");
 
   prop = RNA_def_property(srna, "use_locked_size", PROP_ENUM, PROP_NONE); /* as an enum */
   RNA_def_property_enum_bitflag_sdna(prop, NULL, "flag");
@@ -4802,66 +4802,6 @@ static void rna_def_bake_data(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
 }
 
-static void rna_def_gpu_ssao_fx(BlenderRNA *brna)
-{
-  StructRNA *srna;
-  PropertyRNA *prop;
-
-  srna = RNA_def_struct(brna, "GPUSSAOSettings", NULL);
-  RNA_def_struct_ui_text(
-      srna, "GPU SSAO", "Settings for GPU based screen space ambient occlusion");
-
-  prop = RNA_def_property(srna, "factor", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_ui_text(prop, "Strength", "Strength of the SSAO effect");
-  RNA_def_property_range(prop, 0.0f, 250.0f);
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
-
-  prop = RNA_def_property(srna, "distance_max", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_ui_text(
-      prop, "Distance", "Distance of object that contribute to the SSAO effect");
-  RNA_def_property_range(prop, 0.0f, 100000.0f);
-  RNA_def_property_ui_range(prop, 0.0f, 100.0f, 1, 3);
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
-
-  prop = RNA_def_property(srna, "attenuation", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_ui_text(prop, "Attenuation", "Attenuation constant");
-  RNA_def_property_range(prop, 1.0f, 100000.0f);
-  RNA_def_property_ui_range(prop, 1.0f, 100.0f, 1, 3);
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
-
-  prop = RNA_def_property(srna, "samples", PROP_INT, PROP_NONE);
-  RNA_def_property_ui_text(prop, "Samples", "Number of samples");
-  RNA_def_property_range(prop, 1, 500);
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
-
-  prop = RNA_def_property(srna, "color", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_ui_text(prop, "Color", "Color for screen space ambient occlusion effect");
-  RNA_def_property_range(prop, 0.0f, 1.0f);
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
-}
-
-static void rna_def_gpu_fx(BlenderRNA *brna)
-{
-  StructRNA *srna;
-  PropertyRNA *prop;
-
-  rna_def_gpu_ssao_fx(brna);
-
-  srna = RNA_def_struct(brna, "GPUFXSettings", NULL);
-  RNA_def_struct_ui_text(srna, "GPU FX Settings", "Settings for GPU based compositing");
-
-  prop = RNA_def_property(srna, "ssao", PROP_POINTER, PROP_NONE);
-  RNA_def_property_flag(prop, PROP_NEVER_NULL);
-  RNA_def_property_struct_type(prop, "GPUSSAOSettings");
-  RNA_def_property_ui_text(prop, "Screen Space Ambient Occlusion settings", "");
-
-  prop = RNA_def_property(srna, "use_ssao", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "fx_flag", GPU_FX_FLAG_SSAO);
-  RNA_def_property_ui_text(
-      prop, "SSAO", "Use screen space ambient occlusion of field on viewport");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
-}
-
 static void rna_def_view_layers(BlenderRNA *brna, PropertyRNA *cprop)
 {
   StructRNA *srna;
@@ -5683,7 +5623,8 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "frs_sec_base");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_range(prop, 1e-5f, 1e6f);
-  RNA_def_property_ui_range(prop, 0.1f, 120.0f, 2, -1);
+  /* Important to show at least 3 decimal points because multiple presets set this to 1.001. */
+  RNA_def_property_ui_range(prop, 0.1f, 120.0f, 2, 3);
   RNA_def_property_ui_text(prop, "FPS Base", "Framerate base");
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_Scene_fps_update");
 
@@ -7546,7 +7487,6 @@ void RNA_def_scene(BlenderRNA *brna)
   RNA_define_animate_sdna(true);
   /* *** Animated *** */
   rna_def_scene_render_data(brna);
-  rna_def_gpu_fx(brna);
   rna_def_scene_render_view(brna);
 
   /* Scene API */

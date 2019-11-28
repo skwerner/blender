@@ -102,6 +102,7 @@ set(SRC
   engines/eevee/eevee_motion_blur.c
   engines/eevee/eevee_occlusion.c
   engines/eevee/eevee_render.c
+  engines/eevee/eevee_renderpasses.c
   engines/eevee/eevee_sampling.c
   engines/eevee/eevee_screen_raytrace.c
   engines/eevee/eevee_shaders.c
@@ -221,6 +222,7 @@ data_to_c_simple(engines/eevee/shaders/irradiance_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/octahedron_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/bsdf_sampling_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/raytrace_lib.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/renderpass_postprocess_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/ltc_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/ssr_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/update_noise_frag.glsl SRC)
@@ -293,6 +295,7 @@ data_to_c_simple(modes/shaders/edit_mesh_overlay_facefill_vert.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_facefill_frag.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_mesh_analysis_frag.glsl SRC)
 data_to_c_simple(modes/shaders/edit_mesh_overlay_mesh_analysis_vert.glsl SRC)
+data_to_c_simple(modes/shaders/edit_mesh_skin_root_vert.glsl SRC)
 data_to_c_simple(modes/shaders/edit_curve_overlay_handle_vert.glsl SRC)
 data_to_c_simple(modes/shaders/edit_curve_overlay_handle_geom.glsl SRC)
 data_to_c_simple(modes/shaders/edit_curve_overlay_loosevert_vert.glsl SRC)

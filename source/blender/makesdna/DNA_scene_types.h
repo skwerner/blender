@@ -33,13 +33,13 @@
 extern "C" {
 #endif
 
-#include "DNA_color_types.h"      /* color management */
+#include "DNA_color_types.h" /* color management */
+#include "DNA_curveprofile_types.h"
 #include "DNA_customdata_types.h" /* Scene's runtime cddata masks. */
 #include "DNA_vec_types.h"
 #include "DNA_listBase.h"
 #include "DNA_ID.h"
 #include "DNA_freestyle_types.h"
-#include "DNA_gpu_types.h"
 #include "DNA_collection_types.h"
 #include "DNA_layer_types.h"
 #include "DNA_material_types.h"
@@ -51,6 +51,7 @@ struct Brush;
 struct Collection;
 struct ColorSpace;
 struct CurveMapping;
+struct CurveProfile;
 struct CustomData_MeshMasks;
 struct Editing;
 struct Image;
@@ -399,7 +400,7 @@ typedef enum eStereo3dInterlaceType {
 typedef struct ImageFormatData {
   /**
    * R_IMF_IMTYPE_PNG, R_...
-   * \note, video types should only ever be set from this structure when used from RenderData.
+   * \note Video types should only ever be set from this structure when used from #RenderData.
    */
   char imtype;
   /**
@@ -482,13 +483,23 @@ typedef struct ImageFormatData {
 #define R_IMF_FLAG_PREVIEW_JPG (1 << 1) /* was R_PREVIEW_JPG */
 
 /* return values from BKE_imtype_valid_depths, note this is depts per channel */
-#define R_IMF_CHAN_DEPTH_1 (1 << 0)  /* 1bits  (unused) */
-#define R_IMF_CHAN_DEPTH_8 (1 << 1)  /* 8bits  (default) */
-#define R_IMF_CHAN_DEPTH_10 (1 << 2) /* 10bits (uncommon, Cineon/DPX support) */
-#define R_IMF_CHAN_DEPTH_12 (1 << 3) /* 12bits (uncommon, jp2/DPX support) */
-#define R_IMF_CHAN_DEPTH_16 (1 << 4) /* 16bits (tiff, halff float exr) */
-#define R_IMF_CHAN_DEPTH_24 (1 << 5) /* 24bits (unused) */
-#define R_IMF_CHAN_DEPTH_32 (1 << 6) /* 32bits (full float exr) */
+/* ImageFormatData.depth */
+typedef enum eImageFormatDepth {
+  /* 1bits  (unused) */
+  R_IMF_CHAN_DEPTH_1 = (1 << 0),
+  /* 8bits  (default) */
+  R_IMF_CHAN_DEPTH_8 = (1 << 1),
+  /* 10bits (uncommon, Cineon/DPX support) */
+  R_IMF_CHAN_DEPTH_10 = (1 << 2),
+  /* 12bits (uncommon, jp2/DPX support) */
+  R_IMF_CHAN_DEPTH_12 = (1 << 3),
+  /* 16bits (tiff, half float exr) */
+  R_IMF_CHAN_DEPTH_16 = (1 << 4),
+  /* 24bits (unused) */
+  R_IMF_CHAN_DEPTH_24 = (1 << 5),
+  /* 32bits (full float exr) */
+  R_IMF_CHAN_DEPTH_32 = (1 << 6),
+} eImageFormatDepth;
 
 /* ImageFormatData.planes */
 #define R_IMF_PLANES_RGB 24
@@ -1287,14 +1298,11 @@ typedef enum {
   UNIFIED_PAINT_WEIGHT = (1 << 5),
   UNIFIED_PAINT_COLOR = (1 << 6),
 
-  /* only used if unified size is enabled, mirrors the brush flags
-   * BRUSH_LOCK_SIZE and BRUSH_SIZE_PRESSURE */
+  /* only used if unified size is enabled, mirrors the brush flag BRUSH_LOCK_SIZE */
   UNIFIED_PAINT_BRUSH_LOCK_SIZE = (1 << 2),
-  UNIFIED_PAINT_BRUSH_SIZE_PRESSURE = (1 << 3),
+  UNIFIED_PAINT_FLAG_UNUSED_0 = (1 << 3),
 
-  /* only used if unified alpha is enabled, mirrors the brush flag
-   * BRUSH_ALPHA_PRESSURE */
-  UNIFIED_PAINT_BRUSH_ALPHA_PRESSURE = (1 << 4),
+  UNIFIED_PAINT_FLAG_UNUSED_1 = (1 << 4),
 } eUnifiedPaintSettingsFlags;
 
 typedef struct CurvePaintSettings {
@@ -1516,6 +1524,11 @@ typedef struct ToolSettings {
   /* Normal Editing */
   float normal_vector[3];
   char _pad6[4];
+
+  /* Custom Curve Profile for bevel tool:
+   * Temporary until there is a proper preset system that stores the profiles or maybe stores
+   * entire bevel configurations. */
+  struct CurveProfile *custom_bevel_profile_preset;
 } ToolSettings;
 
 /* *************************************************************** */
@@ -1976,14 +1989,7 @@ extern const char *RE_engine_id_CYCLES;
 #define MINAFRAME -1048574
 #define MINAFRAMEF -1048574.0f
 
-#define BASE_VISIBLE(v3d, base) \
-  (((v3d == NULL) || ((v3d)->localvd == NULL) || \
-    ((v3d)->local_view_uuid & (base)->local_view_bits)) && \
-   ((v3d == NULL) || (((v3d)->flag & V3D_LOCAL_COLLECTIONS) == 0) || \
-    ((v3d)->local_collections_uuid & (base)->local_collections_bits)) && \
-   ((v3d == NULL) || \
-    (((1 << (base)->object->type) & (v3d)->object_type_exclude_viewport) == 0)) && \
-   (((base)->flag & BASE_VISIBLE) != 0))
+#define BASE_VISIBLE(v3d, base) BKE_base_is_visible(v3d, base)
 #define BASE_SELECTABLE(v3d, base) \
   (BASE_VISIBLE(v3d, base) && \
    ((v3d == NULL) || (((1 << (base)->object->type) & (v3d)->object_type_exclude_select) == 0)) && \
@@ -2043,6 +2049,7 @@ enum {
 #define SCE_SNAP_PROJECT (1 << 3)
 #define SCE_SNAP_NO_SELF (1 << 4)
 #define SCE_SNAP_ABS_GRID (1 << 5)
+#define SCE_SNAP_BACKFACE_CULLING (1 << 6)
 
 /* ToolSettings.snap_target */
 #define SCE_SNAP_TARGET_CLOSEST 0

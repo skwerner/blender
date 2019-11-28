@@ -34,6 +34,7 @@
   { \
     .blend = 0, \
     .flag = (BRUSH_ALPHA_PRESSURE | BRUSH_SPACE | BRUSH_SPACE_ATTEN), \
+    .sampling_flag = (BRUSH_PAINT_ANTIALIASING), \
  \
     .ob_mode = OB_MODE_ALL_PAINT, \
  \
@@ -71,6 +72,10 @@
  \
     .jitter = 0.0f, \
  \
+    /* Dash */ \
+    .dash_ratio = 1.0f, \
+    .dash_samples = 20, \
+ \
     .texture_sample_bias = 0, /* value to added to texture samples */ \
     .texture_overlay_alpha = 33, \
     .mask_overlay_alpha = 33, \
@@ -90,6 +95,7 @@
  \
     /* sculpting defaults to the draw tool for new brushes */ \
     .sculpt_tool = SCULPT_TOOL_DRAW, \
+    .pose_smooth_iterations = 4, \
  \
     /* A kernel radius of 1 has almost no effect (T63233). */ \
     .blur_kernel_radius = 2, \

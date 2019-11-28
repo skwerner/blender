@@ -59,6 +59,11 @@ typedef int (*GHOST_EventCallbackProcPtr)(GHOST_EventHandle event, GHOST_TUserDa
 extern GHOST_SystemHandle GHOST_CreateSystem(void);
 
 /**
+ * Specifies whether debug messages are to be enabled for the specific system handle.
+ */
+extern void GHOST_SystemInitDebug(GHOST_SystemHandle systemhandle, int is_debug_enabled);
+
+/**
  * Disposes the one and only system.
  * \param systemhandle The handle to the system
  * \return An indication of success.
@@ -70,6 +75,8 @@ extern GHOST_TSuccess GHOST_DisposeSystem(GHOST_SystemHandle systemhandle);
  * \param systemhandle    The handle to the system
  * \param title           Title of the message box
  * \param message         Message of the message box
+ * \param help_label      Text to show on the help button that opens a link
+ * \param continue_label  Text to show on the ok button that continues
  * \param link            Optional (hyper)link to a webpage to show when pressing help
  * \param dialog_options  Options to configure the message box.
  * \return void.
@@ -77,6 +84,8 @@ extern GHOST_TSuccess GHOST_DisposeSystem(GHOST_SystemHandle systemhandle);
 extern void GHOST_ShowMessageBox(GHOST_SystemHandle systemhandle,
                                  const char *title,
                                  const char *message,
+                                 const char *help_label,
+                                 const char *continue_label,
                                  const char *link,
                                  GHOST_DialogOptions dialog_options);
 

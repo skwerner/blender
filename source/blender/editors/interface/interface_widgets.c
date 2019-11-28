@@ -184,6 +184,18 @@ static void color_ensure_contrast_v3(uchar cp[3], const uchar cp_other[3], int c
   }
 }
 
+static void color_mul_hsl_v3(uchar ch[3], float h_factor, float s_factor, float l_factor)
+{
+  float rgb[3], hsl[3];
+  rgb_uchar_to_float(rgb, ch);
+  rgb_to_hsl_v(rgb, hsl);
+  hsl[0] *= h_factor;
+  hsl[1] *= s_factor;
+  hsl[2] *= l_factor;
+  hsl_to_rgb_v(hsl, rgb);
+  rgb_float_to_uchar(ch, rgb);
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -237,8 +249,9 @@ typedef struct uiWidgetBase {
   uiWidgetBaseParameters uniform_params;
 } uiWidgetBase;
 
-/** uiWidgetType: for time being only for visual appearance,
- * later, a handling callback can be added too
+/**
+ * For time being only for visual appearance,
+ * later, a handling callback can be added too.
  */
 typedef struct uiWidgetType {
 
@@ -2150,7 +2163,8 @@ static void widget_draw_text(const uiFontStyle *fstyle,
   /* text button selection, cursor, composite underline */
   if (but->editstr && but->pos != -1) {
     int but_pos_ofs;
-    int tx, ty;
+    /* Shape of the cursor for drawing. */
+    rcti but_cursor_shape;
 
     /* text button selection */
     if ((but->selend - but->selsta) > 0) {
@@ -2178,9 +2192,9 @@ static void widget_draw_text(const uiFontStyle *fstyle,
         immUniformColor4ubv(wcol->item);
         immRecti(pos,
                  rect->xmin + selsta_draw,
-                 rect->ymin + 2,
+                 rect->ymin + U.pixelsize,
                  min_ii(rect->xmin + selwidth_draw, rect->xmax - 2),
-                 rect->ymax - 2);
+                 rect->ymax - U.pixelsize);
 
         immUnbindProgram();
       }
@@ -2213,13 +2227,19 @@ static void widget_draw_text(const uiFontStyle *fstyle,
           immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
       immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
-      immUniformColor3f(0.2f, 0.6f, 0.9f);
+      immUniformThemeColor(TH_WIDGET_TEXT_CURSOR);
 
-      tx = rect->xmin + t + 2;
-      ty = rect->ymin + 2;
+      but_cursor_shape.xmin = (rect->xmin + t) - U.pixelsize;
+      but_cursor_shape.ymin = rect->ymin + U.pixelsize;
+      but_cursor_shape.xmax = (rect->xmin + t) + U.pixelsize;
+      but_cursor_shape.ymax = rect->ymax - U.pixelsize;
 
       /* draw cursor */
-      immRecti(pos, rect->xmin + t, ty, tx, rect->ymax - 2);
+      immRecti(pos,
+               but_cursor_shape.xmin,
+               but_cursor_shape.ymin,
+               but_cursor_shape.xmax,
+               but_cursor_shape.ymax);
 
       immUnbindProgram();
     }
@@ -2228,7 +2248,7 @@ static void widget_draw_text(const uiFontStyle *fstyle,
     if (ime_data && ime_data->composite_len) {
       /* ime cursor following */
       if (but->pos >= but->ofs) {
-        ui_but_ime_reposition(but, tx + 5, ty + 3, false);
+        ui_but_ime_reposition(but, but_cursor_shape.xmax + 5, but_cursor_shape.ymin + 3, false);
       }
 
       /* composite underline */
@@ -2573,11 +2593,12 @@ static void ui_widget_color_disabled(uiWidgetType *wt)
   wt->wcol_theme = &wcol_theme_s;
 }
 
-static void widget_active_color(uchar cp[3])
+static void widget_active_color(uiWidgetColors *wcol)
 {
-  cp[0] = cp[0] >= 240 ? 255 : cp[0] + 15;
-  cp[1] = cp[1] >= 240 ? 255 : cp[1] + 15;
-  cp[2] = cp[2] >= 240 ? 255 : cp[2] + 15;
+  bool dark = (rgb_to_grayscale_byte(wcol->text) > rgb_to_grayscale_byte(wcol->inner));
+  color_mul_hsl_v3(wcol->inner, 1.0f, 1.15f, dark ? 1.2f : 1.1f);
+  color_mul_hsl_v3(wcol->outline, 1.0f, 1.15f, 1.15f);
+  color_mul_hsl_v3(wcol->text, 1.0f, 1.15f, dark ? 1.25f : 0.8f);
 }
 
 static const uchar *widget_color_blend_from_flags(const uiWidgetStateColors *wcol_state,
@@ -2641,10 +2662,10 @@ static void widget_state(uiWidgetType *wt, int state, int drawflag)
     if (color_blend != NULL) {
       color_blend_v3_v3(wt->wcol.inner, color_blend, wcol_state->blend);
     }
+  }
 
-    if (state & UI_ACTIVE) { /* mouse over? */
-      widget_active_color(wt->wcol.inner);
-    }
+  if (state & UI_ACTIVE) {
+    widget_active_color(&wt->wcol);
   }
 
   if (state & UI_BUT_REDALERT) {
@@ -3403,7 +3424,7 @@ static void widget_numbut_draw(
     wcol_zone = *wcol;
     copy_v3_v3_uchar(wcol_zone.item, wcol->text);
     if (state & UI_STATE_ACTIVE_LEFT) {
-      widget_active_color(wcol_zone.inner);
+      widget_active_color(&wcol_zone);
     }
 
     rect_zone = *rect;
@@ -3423,7 +3444,7 @@ static void widget_numbut_draw(
     wcol_zone = *wcol;
     copy_v3_v3_uchar(wcol_zone.item, wcol->text);
     if (state & UI_STATE_ACTIVE_RIGHT) {
-      widget_active_color(wcol_zone.inner);
+      widget_active_color(&wcol_zone);
     }
 
     rect_zone = *rect;
@@ -3442,7 +3463,7 @@ static void widget_numbut_draw(
     wcol_zone = *wcol;
     copy_v3_v3_uchar(wcol_zone.item, wcol->text);
     if (!(state & (UI_STATE_ACTIVE_LEFT | UI_STATE_ACTIVE_RIGHT))) {
-      widget_active_color(wcol_zone.inner);
+      widget_active_color(&wcol_zone);
     }
 
     rect_zone = *rect;
@@ -4761,6 +4782,10 @@ void ui_draw_but(const bContext *C, ARegion *ar, uiStyle *style, uiBut *but, rct
         ui_draw_but_CURVE(ar, but, &tui->wcol_regular, rect);
         break;
 
+      case UI_BTYPE_CURVEPROFILE:
+        ui_draw_but_CURVEPROFILE(ar, but, &tui->wcol_regular, rect);
+        break;
+
       case UI_BTYPE_PROGRESS_BAR:
         wt = widget_type(UI_WTYPE_PROGRESSBAR);
         fstyle = &style->widgetlabel;
@@ -4911,9 +4936,10 @@ static void ui_draw_popover_back_impl(const uiWidgetColors *wcol,
 {
   /* tsk, this isn't nice. */
   const float unit_half = unit_size / 2;
-  const float cent_x = mval_origin ?
-                       CLAMPIS(mval_origin[0], rect->xmin + unit_size, rect->xmax - unit_size) :
-                       BLI_rcti_cent_x(rect);
+  const float cent_x = mval_origin ? CLAMPIS(mval_origin[0],
+                                             rect->xmin + unit_size,
+                                             rect->xmax - unit_size) :
+                                     BLI_rcti_cent_x(rect);
   rect->ymax -= unit_half;
   rect->ymin += unit_half;
 

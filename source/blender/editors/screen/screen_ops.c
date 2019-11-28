@@ -1353,6 +1353,8 @@ static int area_dupli_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
   newwin->scene = scene;
 
+  STRNCPY(newwin->view_layer_name, win->view_layer_name);
+
   BKE_workspace_active_set(newwin->workspace_hook, workspace);
   /* allocs new screen and adds to newly created window, using window size */
   layout_new = ED_workspace_layout_add(
@@ -2119,7 +2121,7 @@ static void area_split_preview_update_cursor(bContext *C, wmOperator *op)
 {
   wmWindow *win = CTX_wm_window(C);
   int dir = RNA_enum_get(op->ptr, "direction");
-  WM_cursor_set(win, (dir == 'n' || dir == 's') ? WM_CURSOR_H_SPLIT : WM_CURSOR_V_SPLIT);
+  WM_cursor_set(win, dir == 'h' ? WM_CURSOR_H_SPLIT : WM_CURSOR_V_SPLIT);
 }
 
 /* UI callback, adds new handler */
@@ -3946,7 +3948,7 @@ static int region_toggle_exec(bContext *C, wmOperator *op)
     region = CTX_wm_region(C);
   }
 
-  if (region) {
+  if (region && (region->alignment != RGN_ALIGN_NONE)) {
     ED_region_toggle_hidden(C, region);
   }
   ED_region_tag_redraw(region);
@@ -4261,8 +4263,7 @@ static int match_region_with_redraws(int spacetype,
         break;
       case SPACE_ACTION:
         /* if only 1 window or 3d windows, we do timeline too
-         * NOTE: Now we do do action editor in all these cases, since timeline is here
-         */
+         * NOTE: Now we do action editor in all these cases, since timeline is here. */
         if ((redraws & (TIME_ALL_ANIM_WIN | TIME_REGION | TIME_ALL_3D_WIN)) || from_anim_edit) {
           return 1;
         }

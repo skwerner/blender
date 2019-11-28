@@ -28,6 +28,10 @@
 /* For embedding CCGKey in iterator. */
 #include "BKE_ccg.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct BMLog;
 struct BMesh;
 struct CCGElem;
@@ -36,6 +40,7 @@ struct CustomData;
 struct DMFlagMat;
 struct GPU_PBVH_Buffers;
 struct IsectRayPrecalc;
+struct Mesh;
 struct MLoop;
 struct MLoopTri;
 struct MPoly;
@@ -44,6 +49,7 @@ struct PBVH;
 struct PBVHNode;
 struct SubdivCCG;
 struct TaskParallelSettings;
+struct TaskParallelTLS;
 
 typedef struct PBVH PBVH;
 typedef struct PBVHNode PBVHNode;
@@ -89,6 +95,7 @@ typedef void (*BKE_pbvh_SearchNearestCallback)(PBVHNode *node, void *data, float
 
 PBVH *BKE_pbvh_new(void);
 void BKE_pbvh_build_mesh(PBVH *bvh,
+                         const struct Mesh *mesh,
                          const struct MPoly *mpoly,
                          const struct MLoop *mloop,
                          struct MVert *verts,
@@ -273,7 +280,7 @@ bool BKE_pbvh_node_frustum_exclude_AABB(PBVHNode *node, void *frustum);
 struct GSet *BKE_pbvh_bmesh_node_unique_verts(PBVHNode *node);
 struct GSet *BKE_pbvh_bmesh_node_other_verts(PBVHNode *node);
 struct GSet *BKE_pbvh_bmesh_node_faces(PBVHNode *node);
-void BKE_pbvh_bmesh_node_save_orig(PBVHNode *node);
+void BKE_pbvh_bmesh_node_save_orig(struct BMesh *bm, PBVHNode *node);
 void BKE_pbvh_bmesh_after_stroke(PBVH *bvh);
 
 /* Update Bounding Box/Redraw and clear flags */
@@ -430,14 +437,39 @@ void BKE_pbvh_node_get_bm_orco_data(PBVHNode *node,
 
 bool BKE_pbvh_node_vert_update_check_any(PBVH *bvh, PBVHNode *node);
 
-void BKE_pbvh_parallel_range_settings(struct TaskParallelSettings *settings,
-                                      bool use_threading,
-                                      int totnode);
-
 // void BKE_pbvh_node_BB_reset(PBVHNode *node);
 // void BKE_pbvh_node_BB_expand(PBVHNode *node, float co[3]);
 
 bool pbvh_has_mask(PBVH *bvh);
 void pbvh_show_mask_set(PBVH *bvh, bool show_mask);
+
+/* Parallelization */
+typedef void (*PBVHParallelRangeFunc)(void *__restrict userdata,
+                                      const int iter,
+                                      const struct TaskParallelTLS *__restrict tls);
+typedef void (*PBVHParallelReduceFunc)(const void *__restrict userdata,
+                                       void *__restrict chunk_join,
+                                       void *__restrict chunk);
+
+typedef struct PBVHParallelSettings {
+  bool use_threading;
+  void *userdata_chunk;
+  size_t userdata_chunk_size;
+  PBVHParallelReduceFunc func_reduce;
+} PBVHParallelSettings;
+
+void BKE_pbvh_parallel_range_settings(struct PBVHParallelSettings *settings,
+                                      bool use_threading,
+                                      int totnode);
+
+void BKE_pbvh_parallel_range(const int start,
+                             const int stop,
+                             void *userdata,
+                             PBVHParallelRangeFunc func,
+                             const struct PBVHParallelSettings *settings);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_PBVH_H__ */

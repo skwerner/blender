@@ -700,7 +700,7 @@ bool GHOST_SystemX11::processEvents(bool waitForEvent)
 
               for (int i = 0; i < (sizeof(modifiers) / sizeof(*modifiers)); i++) {
                 KeyCode kc = XKeysymToKeycode(m_display, modifiers[i]);
-                if (((xevent.xkeymap.key_vector[kc >> 3] >> (kc & 7)) & 1) != 0) {
+                if (kc != 0 && ((xevent.xkeymap.key_vector[kc >> 3] >> (kc & 7)) & 1) != 0) {
                   pushEvent(new GHOST_EventKey(getMilliSeconds(),
                                                GHOST_kEventKeyDown,
                                                window,
@@ -2176,7 +2176,7 @@ class DialogData {
         height(175),
         padding_x(10),
         padding_y(5),
-        button_width(50),
+        button_width(130),
         button_height(24),
         button_inset_x(10),
         button_border_size(1),
@@ -2247,6 +2247,8 @@ static void split(const char *text, const char *seps, char ***str, int *count)
 
 GHOST_TSuccess GHOST_SystemX11::showMessageBox(const char *title,
                                                const char *message,
+                                               const char *help_label,
+                                               const char *continue_label,
                                                const char *link,
                                                GHOST_DialogOptions) const
 {
@@ -2325,20 +2327,24 @@ GHOST_TSuccess GHOST_SystemX11::showMessageBox(const char *title,
                     text_splitted[i],
                     (int)strlen(text_splitted[i]));
       }
-      dialog_data.drawButton(m_display, window, buttonBorderGC, buttonGC, 1, "Ok");
+      dialog_data.drawButton(m_display, window, buttonBorderGC, buttonGC, 1, continue_label);
       if (strlen(link)) {
-        dialog_data.drawButton(m_display, window, buttonBorderGC, buttonGC, 2, "Help");
+        dialog_data.drawButton(m_display, window, buttonBorderGC, buttonGC, 2, help_label);
       }
     }
     else if (e.type == ButtonRelease) {
       if (dialog_data.isInsideButton(e, 1)) {
         break;
       }
-      else if (strlen(link) && dialog_data.isInsideButton(e, 2)) {
-        string cmd = "xdg-open \"" + string(link) + "\"";
-        if (system(cmd.c_str()) != 0) {
-          GHOST_PRINTF("GHOST_SystemX11::showMessageBox: Unable to run system command [%s]", cmd);
+      else if (dialog_data.isInsideButton(e, 2)) {
+        if (strlen(link)) {
+          string cmd = "xdg-open \"" + string(link) + "\"";
+          if (system(cmd.c_str()) != 0) {
+            GHOST_PRINTF("GHOST_SystemX11::showMessageBox: Unable to run system command [%s]",
+                         cmd);
+          }
         }
+        break;
       }
     }
   }
@@ -2377,6 +2383,11 @@ GHOST_TSuccess GHOST_SystemX11::pushDragDropEvent(GHOST_TEventType eventType,
  */
 int GHOST_X11_ApplicationErrorHandler(Display *display, XErrorEvent *event)
 {
+  GHOST_ISystem *system = GHOST_ISystem::getSystem();
+  if (!system->isDebugEnabled()) {
+    return 0;
+  }
+
   char error_code_str[512];
 
   XGetErrorText(display, event->error_code, error_code_str, sizeof(error_code_str));
@@ -2398,6 +2409,11 @@ int GHOST_X11_ApplicationErrorHandler(Display *display, XErrorEvent *event)
 
 int GHOST_X11_ApplicationIOErrorHandler(Display * /*display*/)
 {
+  GHOST_ISystem *system = GHOST_ISystem::getSystem();
+  if (!system->isDebugEnabled()) {
+    return 0;
+  }
+
   fprintf(stderr, "Ignoring Xlib error: error IO\n");
 
   /* No exit! - but keep lint happy */

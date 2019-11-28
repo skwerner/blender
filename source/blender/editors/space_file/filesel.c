@@ -103,10 +103,9 @@ short ED_fileselect_set_params(SpaceFile *sfile)
                       sizeof(sfile->params->dir),
                       sizeof(sfile->params->file));
     sfile->params->filter_glob[0] = '\0';
-    /* set the default thumbnails size */
     sfile->params->thumbnail_size = U_default.file_space_data.thumbnail_size;
-    /* Show size column by default. */
     sfile->params->details_flags = U_default.file_space_data.details_flags;
+    sfile->params->filter_id = U_default.file_space_data.filter_id;
   }
 
   params = sfile->params;
@@ -246,15 +245,6 @@ short ED_fileselect_set_params(SpaceFile *sfile)
       }
     }
 
-    /* For now, always init filterid to 'all true' */
-    params->filter_id = FILTER_ID_AC | FILTER_ID_AR | FILTER_ID_BR | FILTER_ID_CA | FILTER_ID_CU |
-                        FILTER_ID_GD | FILTER_ID_GR | FILTER_ID_IM | FILTER_ID_LA | FILTER_ID_LS |
-                        FILTER_ID_LT | FILTER_ID_MA | FILTER_ID_MB | FILTER_ID_MC | FILTER_ID_ME |
-                        FILTER_ID_MSK | FILTER_ID_NT | FILTER_ID_OB | FILTER_ID_PA |
-                        FILTER_ID_PAL | FILTER_ID_PC | FILTER_ID_SCE | FILTER_ID_SPK |
-                        FILTER_ID_SO | FILTER_ID_TE | FILTER_ID_TXT | FILTER_ID_VF | FILTER_ID_WO |
-                        FILTER_ID_CF | FILTER_ID_WS | FILTER_ID_LP;
-
     if (U.uiflag & USER_HIDE_DOT) {
       params->flag |= FILE_HIDE_DOT;
     }
@@ -335,6 +325,17 @@ short ED_fileselect_set_params(SpaceFile *sfile)
 /* The subset of FileSelectParams.flag items we store into preferences. */
 #define PARAMS_FLAGS_REMEMBERED (FILE_HIDE_DOT | FILE_SORT_INVERT)
 
+void ED_fileselect_window_params_get(const wmWindow *win, int win_size[2], bool *is_maximized)
+{
+  /* Get DPI/pixelsize independent size to be stored in preferences. */
+  WM_window_set_dpi(win); /* Ensure the DPI is taken from the right window. */
+
+  win_size[0] = WM_window_pixels_x(win) / UI_DPI_FAC;
+  win_size[1] = WM_window_pixels_y(win) / UI_DPI_FAC;
+
+  *is_maximized = WM_window_is_maximized(win);
+}
+
 void ED_fileselect_set_params_from_userdef(SpaceFile *sfile)
 {
   wmOperator *op = sfile->op;
@@ -354,6 +355,7 @@ void ED_fileselect_set_params_from_userdef(SpaceFile *sfile)
   }
   sfile->params->thumbnail_size = sfile_udata->thumbnail_size;
   sfile->params->details_flags = sfile_udata->details_flags;
+  sfile->params->filter_id = sfile_udata->filter_id;
 
   /* Combine flags we take from params with the flags we take from userdef. */
   sfile->params->flag = (sfile->params->flag & ~PARAMS_FLAGS_REMEMBERED) |
@@ -362,12 +364,14 @@ void ED_fileselect_set_params_from_userdef(SpaceFile *sfile)
 
 /**
  * Update the user-preference data for the file space. In fact, this also contains some
- * non-FileSelectParams data, but it's neglectable.
+ * non-FileSelectParams data, but we can safely ignore this.
  *
- * \param temp_win_size: If the browser was opened in a temporary window, pass its size here so we
- *                       can store that in the preferences. Otherwise NULL.
+ * \param temp_win_size: If the browser was opened in a temporary window,
+ * pass its size here so we can store that in the preferences. Otherwise NULL.
  */
-void ED_fileselect_params_to_userdef(SpaceFile *sfile, int temp_win_size[2])
+void ED_fileselect_params_to_userdef(SpaceFile *sfile,
+                                     int temp_win_size[2],
+                                     const bool is_maximized)
 {
   UserDef_FileSpaceData *sfile_udata_new = &U.file_space_data;
   UserDef_FileSpaceData sfile_udata_old = U.file_space_data;
@@ -377,8 +381,9 @@ void ED_fileselect_params_to_userdef(SpaceFile *sfile, int temp_win_size[2])
   sfile_udata_new->sort_type = sfile->params->sort;
   sfile_udata_new->details_flags = sfile->params->details_flags;
   sfile_udata_new->flag = sfile->params->flag & PARAMS_FLAGS_REMEMBERED;
+  sfile_udata_new->filter_id = sfile->params->filter_id;
 
-  if (temp_win_size) {
+  if (temp_win_size && !is_maximized) {
     sfile_udata_new->temp_win_sizex = temp_win_size[0];
     sfile_udata_new->temp_win_sizey = temp_win_size[1];
   }
@@ -966,15 +971,16 @@ void ED_fileselect_exit(wmWindowManager *wm, ScrArea *sa, SpaceFile *sfile)
   }
   if (sfile->op) {
     wmWindow *temp_win = WM_window_is_temp_screen(wm->winactive) ? wm->winactive : NULL;
-    int win_size[2];
-
     if (temp_win) {
-      /* Get DPI/pixelsize independent size to be stored in preferences. */
-      WM_window_set_dpi(temp_win); /* Ensure the DPI is taken from the right window. */
-      win_size[0] = WM_window_pixels_x(temp_win) / UI_DPI_FAC;
-      win_size[1] = WM_window_pixels_y(temp_win) / UI_DPI_FAC;
+      int win_size[2];
+      bool is_maximized;
+
+      ED_fileselect_window_params_get(temp_win, win_size, &is_maximized);
+      ED_fileselect_params_to_userdef(sfile, win_size, is_maximized);
     }
-    ED_fileselect_params_to_userdef(sfile, temp_win ? win_size : NULL);
+    else {
+      ED_fileselect_params_to_userdef(sfile, NULL, false);
+    }
 
     WM_event_fileselect_event(wm, sfile->op, EVT_FILESELECT_EXTERNAL_CANCEL);
     sfile->op = NULL;

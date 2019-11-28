@@ -157,6 +157,13 @@ static void rna_Sequence_invalidate_composite_update(Main *UNUSED(bmain),
   }
 }
 
+static void rna_Sequence_scene_switch_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  rna_Sequence_invalidate_raw_update(bmain, scene, ptr);
+  DEG_id_tag_update(&scene->id, ID_RECALC_AUDIO | ID_RECALC_SEQUENCER_STRIPS);
+  DEG_relations_tag_update(bmain);
+}
+
 static void rna_Sequence_use_sequence(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
   /* General update callback. */
@@ -2225,9 +2232,9 @@ static void rna_def_scene(BlenderRNA *brna)
   RNA_def_struct_sdna(srna, "Sequence");
 
   prop = RNA_def_property(srna, "scene", PROP_POINTER, PROP_NONE);
-  RNA_def_property_flag(prop, PROP_EDITABLE);
+  RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
   RNA_def_property_ui_text(prop, "Scene", "Scene that this sequence uses");
-  RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_raw_update");
+  RNA_def_property_update(prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_scene_switch_update");
 
   prop = RNA_def_property(srna, "scene_camera", PROP_POINTER, PROP_NONE);
   RNA_def_property_flag(prop, PROP_EDITABLE);
@@ -2692,16 +2699,17 @@ static void rna_def_gaussian_blur(StructRNA *srna)
 
 static void rna_def_text(StructRNA *srna)
 {
+  /* Avoid text icons because they imply this aligns within a frame, see: T71082 */
   static const EnumPropertyItem text_align_x_items[] = {
-      {SEQ_TEXT_ALIGN_X_LEFT, "LEFT", ICON_ALIGN_LEFT, "Left", ""},
-      {SEQ_TEXT_ALIGN_X_CENTER, "CENTER", ICON_ALIGN_CENTER, "Center", ""},
-      {SEQ_TEXT_ALIGN_X_RIGHT, "RIGHT", ICON_ALIGN_RIGHT, "Right", ""},
+      {SEQ_TEXT_ALIGN_X_LEFT, "LEFT", 0, "Left", ""},
+      {SEQ_TEXT_ALIGN_X_CENTER, "CENTER", 0, "Center", ""},
+      {SEQ_TEXT_ALIGN_X_RIGHT, "RIGHT", 0, "Right", ""},
       {0, NULL, 0, NULL, NULL},
   };
   static const EnumPropertyItem text_align_y_items[] = {
-      {SEQ_TEXT_ALIGN_Y_TOP, "TOP", ICON_ALIGN_TOP, "Top", ""},
-      {SEQ_TEXT_ALIGN_Y_CENTER, "CENTER", ICON_ALIGN_MIDDLE, "Center", ""},
-      {SEQ_TEXT_ALIGN_Y_BOTTOM, "BOTTOM", ICON_ALIGN_BOTTOM, "Bottom", ""},
+      {SEQ_TEXT_ALIGN_Y_TOP, "TOP", 0, "Top", ""},
+      {SEQ_TEXT_ALIGN_Y_CENTER, "CENTER", 0, "Center", ""},
+      {SEQ_TEXT_ALIGN_Y_BOTTOM, "BOTTOM", 0, "Bottom", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -2758,7 +2766,7 @@ static void rna_def_text(StructRNA *srna)
   RNA_def_property_enum_sdna(prop, NULL, "align");
   RNA_def_property_enum_items(prop, text_align_x_items);
   RNA_def_property_ui_text(
-      prop, "Align X", "Align the text along the X axis, relative to the text midpoint");
+      prop, "Align X", "Align the text along the X axis, relative to the text bounds");
   RNA_def_property_update(
       prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_preprocessed_update");
 
@@ -2766,7 +2774,7 @@ static void rna_def_text(StructRNA *srna)
   RNA_def_property_enum_sdna(prop, NULL, "align_y");
   RNA_def_property_enum_items(prop, text_align_y_items);
   RNA_def_property_ui_text(
-      prop, "Align Y", "Align the image along the Y axis, relative to the text midpoint");
+      prop, "Align Y", "Align the text along the Y axis, relative to the text bounds");
   RNA_def_property_update(
       prop, NC_SCENE | ND_SEQUENCER, "rna_Sequence_invalidate_preprocessed_update");
 

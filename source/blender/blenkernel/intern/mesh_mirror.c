@@ -30,7 +30,7 @@
 #include "BKE_library.h"
 #include "BKE_library_query.h"
 #include "BKE_mesh.h"
-#include "BKE_mirror.h"
+#include "BKE_mesh_mirror.h"
 #include "BKE_modifier.h"
 #include "BKE_deform.h"
 
@@ -41,11 +41,11 @@
 
 #include "MOD_modifiertypes.h"
 
-Mesh *BKE_mirror_bisect_on_mirror_plane(MirrorModifierData *mmd,
-                                        const Mesh *mesh,
-                                        int axis,
-                                        const float plane_co[3],
-                                        float plane_no[3])
+Mesh *BKE_mesh_mirror_bisect_on_mirror_plane(MirrorModifierData *mmd,
+                                             const Mesh *mesh,
+                                             int axis,
+                                             const float plane_co[3],
+                                             float plane_no[3])
 {
   bool do_bisect_flip_axis = ((axis == 0 && mmd->flag & MOD_MIR_BISECT_FLIP_AXIS_X) ||
                               (axis == 1 && mmd->flag & MOD_MIR_BISECT_FLIP_AXIS_Y) ||
@@ -97,11 +97,11 @@ Mesh *BKE_mirror_bisect_on_mirror_plane(MirrorModifierData *mmd,
   return result;
 }
 
-Mesh *BKE_mirror_apply_mirror_on_axis(MirrorModifierData *mmd,
-                                      const ModifierEvalContext *UNUSED(ctx),
-                                      Object *ob,
-                                      const Mesh *mesh,
-                                      int axis)
+Mesh *BKE_mesh_mirror_apply_mirror_on_axis(MirrorModifierData *mmd,
+                                           const ModifierEvalContext *UNUSED(ctx),
+                                           Object *ob,
+                                           const Mesh *mesh,
+                                           int axis)
 {
   const float tolerance_sq = mmd->tolerance * mmd->tolerance;
   const bool do_vtargetmap = (mmd->flag & MOD_MIR_NO_MERGE) == 0;
@@ -157,7 +157,7 @@ Mesh *BKE_mirror_apply_mirror_on_axis(MirrorModifierData *mmd,
 
   Mesh *mesh_bisect = NULL;
   if (do_bisect) {
-    mesh_bisect = BKE_mirror_bisect_on_mirror_plane(mmd, mesh, axis, plane_co, plane_no);
+    mesh_bisect = BKE_mesh_mirror_bisect_on_mirror_plane(mmd, mesh, axis, plane_co, plane_no);
     mesh = mesh_bisect;
   }
 
@@ -169,13 +169,13 @@ Mesh *BKE_mirror_apply_mirror_on_axis(MirrorModifierData *mmd,
   result = BKE_mesh_new_nomain_from_template(
       mesh, maxVerts * 2, maxEdges * 2, 0, maxLoops * 2, maxPolys * 2);
 
-  /*copy customdata to original geometry*/
+  /* Copy custom-data to original geometry. */
   CustomData_copy_data(&mesh->vdata, &result->vdata, 0, 0, maxVerts);
   CustomData_copy_data(&mesh->edata, &result->edata, 0, 0, maxEdges);
   CustomData_copy_data(&mesh->ldata, &result->ldata, 0, 0, maxLoops);
   CustomData_copy_data(&mesh->pdata, &result->pdata, 0, 0, maxPolys);
 
-  /* Subsurf for eg won't have mesh data in the custom data arrays.
+  /* Subsurf for eg won't have mesh data in the custom-data arrays.
    * now add mvert/medge/mpoly layers. */
   if (!CustomData_has_layer(&mesh->vdata, CD_MVERT)) {
     memcpy(result->mvert, mesh->mvert, sizeof(*result->mvert) * mesh->totvert);
@@ -188,8 +188,8 @@ Mesh *BKE_mirror_apply_mirror_on_axis(MirrorModifierData *mmd,
     memcpy(result->mpoly, mesh->mpoly, sizeof(*result->mpoly) * mesh->totpoly);
   }
 
-  /* copy customdata to new geometry,
-   * copy from its self because this data may have been created in the checks above */
+  /* Copy custom-data to new geometry,
+   * copy from its self because this data may have been created in the checks above. */
   CustomData_copy_data(&result->vdata, &result->vdata, 0, maxVerts, maxVerts);
   CustomData_copy_data(&result->edata, &result->edata, 0, maxEdges, maxEdges);
   /* loops are copied later */
@@ -321,6 +321,12 @@ Mesh *BKE_mirror_apply_mirror_on_axis(MirrorModifierData *mmd,
     MLoopNorSpaceArray lnors_spacearr = {NULL};
     float(*poly_normals)[3] = MEM_mallocN(sizeof(*poly_normals) * totpoly, __func__);
 
+    /* The transform matrix of a normal must be
+     * the transpose of inverse of transform matrix of the geometry... */
+    float mtx_nor[4][4];
+    invert_m4_m4(mtx_nor, mtx);
+    transpose_m4(mtx_nor);
+
     /* calculate custom normals into loop_normals, then mirror first half into second half */
 
     BKE_mesh_calc_normals_poly(result->mvert,
@@ -361,7 +367,7 @@ Mesh *BKE_mirror_apply_mirror_on_axis(MirrorModifierData *mmd,
           mirrorj += mpmirror->totloop - (j - mp->loopstart);
         }
         copy_v3_v3(loop_normals[mirrorj], loop_normals[j]);
-        loop_normals[mirrorj][axis] = -loop_normals[j][axis];
+        mul_m4_v3(mtx_nor, loop_normals[mirrorj]);
         BKE_lnor_space_custom_normal_to_data(
             lnors_spacearr.lspacearr[mirrorj], loop_normals[mirrorj], clnors[mirrorj]);
       }

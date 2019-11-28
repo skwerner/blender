@@ -38,18 +38,15 @@ blender_include_dirs(
 )
 
 set(LIB
-  bf_blenloader
   bf_blenkernel
-  bf_blenlib
+  bf_blenloader
   bf_depsgraph
   bf_dna
-  bf_editor_datafiles
   bf_imbuf
   bf_intern_clog
   bf_intern_guardedalloc
   bf_intern_memutil
   bf_intern_opencolorio
-  bf_python
   bf_render
   bf_rna
   bf_windowmanager
@@ -81,8 +78,17 @@ if(WITH_CODEC_FFMPEG)
   add_definitions(-DWITH_FFMPEG)
 endif()
 
+if(WITH_TBB)
+  blender_include_dirs(${TBB_INCLUDE_DIRS})
+  link_directories(${LIBDIR}/tbb/lib)
+endif()
+
+
 if(WITH_PYTHON)
   blender_include_dirs(../blender/python)
+  list(APPEND LIB
+    bf_python
+  )
   add_definitions(-DWITH_PYTHON)
 
   if(WITH_PYTHON_SECURITY)
@@ -271,7 +277,6 @@ if(WITH_PYTHON_MODULE)
 
 else()
   add_executable(blender ${EXETYPE} ${SRC})
-  WINDOWS_SIGN_TARGET(blender)
 endif()
 
 if(WITH_BUILDINFO)
@@ -513,6 +518,16 @@ if(UNIX AND NOT APPLE)
       DESTINATION "."
     )
 
+    if(EXISTS ${LIBDIR}/mesa)
+      install(DIRECTORY ${LIBDIR}/mesa/lib DESTINATION ".")
+
+      install(
+        PROGRAMS
+        ${CMAKE_SOURCE_DIR}/release/bin/blender-softwaregl
+        DESTINATION "."
+      )
+    endif()
+
     set(BLENDER_TEXT_FILES_DESTINATION ".")
   else()
     # main blender binary
@@ -674,6 +689,13 @@ elseif(WIN32)
 
   set(BLENDER_TEXT_FILES_DESTINATION ".")
 
+  if(WITH_OPENMP AND MSVC_CLANG)
+    install(
+          FILES ${CLANG_OPENMP_DLL}
+          DESTINATION "."
+    )
+  endif()
+
   if(WITH_PYTHON)
     string(REPLACE "." "" _PYTHON_VERSION_NO_DOTS ${PYTHON_VERSION})
 
@@ -789,6 +811,23 @@ elseif(WIN32)
     )
   endif()
 
+  if(WITH_TBB_MALLOC_PROXY)
+    install(
+      FILES
+        ${LIBDIR}/tbb/lib/tbbmalloc.dll
+        ${LIBDIR}/tbb/lib/tbbmalloc_proxy.dll
+      DESTINATION "."
+      CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
+    )
+    install(
+      FILES
+        ${LIBDIR}/tbb/lib/debug/tbbmalloc.dll
+        ${LIBDIR}/tbb/lib/debug/tbbmalloc_proxy.dll
+      DESTINATION "."
+      CONFIGURATIONS Debug
+    )
+  endif()
+
   if(WITH_CODEC_SNDFILE)
     install(
       FILES ${LIBDIR}/sndfile/lib/libsndfile-1.dll
@@ -837,8 +876,10 @@ elseif(WIN32)
     )
   endif()
 elseif(APPLE)
-  # Uppercase name for app bundle
-  set_target_properties(blender PROPERTIES OUTPUT_NAME Blender)
+  if(NOT WITH_PYTHON_MODULE)
+    # Uppercase name for app bundle
+    set_target_properties(blender PROPERTIES OUTPUT_NAME Blender)
+  endif()
 
   # handy install macro to exclude files, we use \$ escape for the "to"
   # argument when calling so ${BUILD_TYPE} does not get expanded
@@ -1023,7 +1064,7 @@ setup_liblinks(blender)
 # vcpkg substitutes our libs with theirs, which will cause issues when you
 # you run these builds on other systems due to missing dlls. So we opt out
 # the use of vcpkg
-if (WIN32)
+if(WIN32)
   set_target_properties(blender PROPERTIES VS_GLOBAL_VcpkgEnabled "false")
 endif()
 
@@ -1041,4 +1082,11 @@ if(WIN32 AND NOT WITH_PYTHON_MODULE)
     PROPERTIES
       VS_USER_PROPS "blender.Cpp.user.props"
   )
+endif()
+
+# -----------------------------------------------------------------------------
+# Post-install script
+
+if(POSTINSTALL_SCRIPT)
+  install(SCRIPT ${POSTINSTALL_SCRIPT})
 endif()

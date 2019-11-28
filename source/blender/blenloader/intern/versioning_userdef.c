@@ -35,6 +35,7 @@
 #include "BKE_addon.h"
 #include "BKE_colorband.h"
 #include "BKE_main.h"
+#include "BKE_idprop.h"
 #include "BKE_keyconfig.h"
 
 #include "BLO_readfile.h" /* Own include. */
@@ -147,15 +148,21 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(space_outliner.active);
   }
 
-  /**
-   * Include next version bump.
-   */
-  {
+  if (!USER_VERSION_ATLEAST(281, 14)) {
     FROM_DEFAULT_V4_UCHAR(space_file.execution_buts);
     FROM_DEFAULT_V4_UCHAR(tui.icon_folder);
     FROM_DEFAULT_V4_UCHAR(space_clip.path_keyframe_before);
     FROM_DEFAULT_V4_UCHAR(space_clip.path_keyframe_after);
     copy_v4_v4_uchar(btheme->space_nla.nla_track, btheme->space_nla.header);
+  }
+
+  /**
+   * Include next version bump.
+   */
+  {
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.anim_preview_range);
+    FROM_DEFAULT_V4_UCHAR(space_text.line_numbers);
+    FROM_DEFAULT_V4_UCHAR(tui.widget_text_cursor);
   }
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -193,6 +200,18 @@ static void do_version_select_mouse(UserDef *userdef, wmKeyMapItem *kmi)
     default:
       break;
   }
+}
+
+static bool keymap_item_has_invalid_wm_context_data_path(wmKeyMapItem *kmi,
+                                                         void *UNUSED(user_data))
+{
+  if (STRPREFIX(kmi->idname, "WM_OT_context_") && kmi->properties) {
+    IDProperty *idprop = IDP_GetPropertyFromGroup(kmi->properties, "data_path");
+    if (idprop && (idprop->type == IDP_STRING) && STRPREFIX(idprop->data.pointer, "(null)")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /* patching UserDef struct and Themes */
@@ -634,10 +653,31 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     }
   }
 
+  if (!USER_VERSION_ATLEAST(281, 16)) {
+    BKE_keyconfig_pref_filter_items(userdef,
+                                    &((struct wmKeyConfigFilterItemParams){
+                                        .check_item = true,
+                                        .check_diff_item_add = true,
+                                    }),
+                                    keymap_item_has_invalid_wm_context_data_path,
+                                    NULL);
+  }
+
+  if (!USER_VERSION_ATLEAST(282, 1)) {
+    userdef->file_space_data.filter_id = U_default.file_space_data.filter_id;
+  }
+
   /**
    * Include next version bump.
    */
   {
+    if (userdef->view_rotate_sensitivity_turntable == 0.0f) {
+      userdef->view_rotate_sensitivity_turntable = DEG2RADF(0.4f);
+      userdef->view_rotate_sensitivity_trackball = 1.0f;
+    }
+    if (userdef->scrollback == 0) {
+      userdef->scrollback = U_default.scrollback;
+    }
     /* pass */
   }
 

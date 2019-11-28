@@ -409,9 +409,12 @@ def km_window(params):
         items.extend([
             ("wm.doc_view_manual_ui_context", {"type": 'F1', "value": 'PRESS'}, None),
             op_panel("TOPBAR_PT_name", {"type": 'F2', "value": 'PRESS'}, [("keep_open", False)]),
-            ("wm.batch_rename", {"type": 'F2', "value": 'PRESS', "alt": True}, None),
+            ("wm.batch_rename", {"type": 'F2', "value": 'PRESS', "ctrl": True}, None),
             ("wm.search_menu", {"type": 'F3', "value": 'PRESS'}, None),
             op_menu("TOPBAR_MT_file_context_menu", {"type": 'F4', "value": 'PRESS'}),
+            # Alt as "Leader-Key".
+            ("wm.toolbar_prompt", {"type": 'LEFT_ALT', "value": 'CLICK'}, None),
+            ("wm.toolbar_prompt", {"type": 'RIGHT_ALT', "value": 'CLICK'}, None),
         ])
 
         if params.spacebar_action == 'TOOL':
@@ -1408,13 +1411,9 @@ def km_graph_editor(params):
          {"properties": [("mode", 'RIGHT'), ("extend", False)]}),
         *_template_items_select_actions(params, "graph.select_all"),
         ("graph.select_box", {"type": 'B', "value": 'PRESS'},
-         {"properties": [("axis_range", False), ("include_handles", False)]}),
+         {"properties": [("axis_range", False)]}),
         ("graph.select_box", {"type": 'B', "value": 'PRESS', "alt": True},
-         {"properties": [("axis_range", True), ("include_handles", False)]}),
-        ("graph.select_box", {"type": 'B', "value": 'PRESS', "ctrl": True},
-         {"properties": [("axis_range", False), ("include_handles", True)]}),
-        ("graph.select_box", {"type": 'B', "value": 'PRESS', "ctrl": True, "alt": True},
-         {"properties": [("axis_range", True), ("include_handles", True)]}),
+         {"properties": [("axis_range", True)]}),
         ("graph.select_box", {"type": params.select_tweak, "value": 'ANY'},
          {"properties": [("tweak", True), ("mode", 'SET')]}),
         ("graph.select_box", {"type": params.select_tweak, "value": 'ANY', "shift": True},
@@ -1793,6 +1792,9 @@ def km_file_browser(params):
          {"properties": [("data_path", 'space_data.params.show_hidden')]}),
         ("file.directory_new", {"type": 'I', "value": 'PRESS'},
          {"properties": [("confirm", False)]}),
+        ("file.rename", {"type": 'F2', "value": 'PRESS'}, None),
+        ("file.delete", {"type": 'X', "value": 'PRESS'}, None),
+        ("file.delete", {"type": 'DEL', "value": 'PRESS'}, None),
         ("file.smoothscroll", {"type": 'TIMER1', "value": 'ANY', "any": True}, None),
         ("file.bookmark_add", {"type": 'B', "value": 'PRESS', "ctrl": True}, None),
         ("file.filenum", {"type": 'NUMPAD_PLUS', "value": 'PRESS'},
@@ -2219,7 +2221,7 @@ def km_text(params):
          {"properties": [("direction", 'UP')]}),
         ("text.move_lines", {"type": 'DOWN_ARROW', "value": 'PRESS', "shift": True, "ctrl": True},
          {"properties": [("direction", 'DOWN')]}),
-        ("text.indent", {"type": 'TAB', "value": 'PRESS'}, None),
+        ("text.indent_or_autocomplete", {"type": 'TAB', "value": 'PRESS'}, None),
         ("text.unindent", {"type": 'TAB', "value": 'PRESS', "shift": True}, None),
         ("text.comment_toggle", {"type": 'SLASH', "value": 'PRESS', "ctrl": True}, None),
         ("text.move", {"type": 'HOME', "value": 'PRESS'},
@@ -2291,15 +2293,12 @@ def km_text(params):
         ("text.scroll", {"type": 'TRACKPADPAN', "value": 'ANY'}, None),
         ("text.selection_set", {"type": 'EVT_TWEAK_L', "value": 'ANY'}, None),
         ("text.cursor_set", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-        ("text.selection_set", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True},
-         {"properties": [("select", True)]}),
         ("text.scroll", {"type": 'WHEELUPMOUSE', "value": 'PRESS'},
          {"properties": [("lines", -1)]}),
         ("text.scroll", {"type": 'WHEELDOWNMOUSE', "value": 'PRESS'},
          {"properties": [("lines", 1)]}),
         ("text.line_break", {"type": 'RET', "value": 'PRESS'}, None),
         ("text.line_break", {"type": 'NUMPAD_ENTER', "value": 'PRESS'}, None),
-        ("text.autocomplete", {"type": 'SPACE', "value": 'PRESS', "ctrl": True}, None),
         ("text.line_number", {"type": 'TEXTINPUT', "value": 'ANY', "any": True}, None),
         op_menu("TEXT_MT_context_menu", {"type": 'RIGHTMOUSE', "value": 'PRESS'}),
         ("text.insert", {"type": 'TEXTINPUT', "value": 'ANY', "any": True}, None),
@@ -2529,7 +2528,6 @@ def km_console(params):
          {"properties": [("interactive", True)]}),
         ("console.execute", {"type": 'NUMPAD_ENTER', "value": 'PRESS'},
          {"properties": [("interactive", True)]}),
-        ("console.autocomplete", {"type": 'SPACE', "value": 'PRESS', "ctrl": True}, None),
         ("console.copy_as_script", {"type": 'C', "value": 'PRESS', "shift": True, "ctrl": True}, None),
         ("console.copy", {"type": 'C', "value": 'PRESS', "ctrl": True}, None),
         ("console.paste", {"type": 'V', "value": 'PRESS', "ctrl": True}, None),
@@ -2537,9 +2535,9 @@ def km_console(params):
         ("console.select_word", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
         ("console.insert", {"type": 'TAB', "value": 'PRESS', "ctrl": True},
          {"properties": [("text", '\t')]}),
-        ("console.indent", {"type": 'TAB', "value": 'PRESS'}, None),
+        ("console.indent_or_autocomplete", {"type": 'TAB', "value": 'PRESS'}, None),
         ("console.unindent", {"type": 'TAB', "value": 'PRESS', "shift": True}, None),
-        op_menu("CONSOLE_MT_context_menu", params.context_menu_event),
+        op_menu("CONSOLE_MT_context_menu", {"type": 'RIGHTMOUSE', "value": 'PRESS'}),
         ("console.insert", {"type": 'TEXTINPUT', "value": 'ANY', "any": True}, None),
     ])
 
@@ -3170,9 +3168,6 @@ def km_grease_pencil_stroke_paint_draw_brush(params):
         # Draw - straight lines
         ("gpencil.draw", {"type": 'LEFTMOUSE', "value": 'PRESS', "alt": True},
          {"properties": [("mode", 'DRAW_STRAIGHT'), ("wait_for_input", False)]}),
-        # Draw - poly lines
-        ("gpencil.draw", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True, "alt": True},
-         {"properties": [("mode", 'DRAW_POLY'), ("wait_for_input", False)]}),
         # Erase
         ("gpencil.draw", {"type": 'LEFTMOUSE', "value": 'PRESS', "ctrl": True},
          {"properties": [("mode", 'ERASER'), ("wait_for_input", False)]}),
@@ -4677,6 +4672,8 @@ def km_bevel_modal_map(_params):
         ("MARK_SHARP_TOGGLE", {"type": 'K', "value": 'PRESS', "any": True}, None),
         ("OUTER_MITER_CHANGE", {"type": 'O', "value": 'PRESS', "any": True}, None),
         ("INNER_MITER_CHANGE", {"type": 'I', "value": 'PRESS', "any": True}, None),
+        ("CUSTOM_PROFILE_TOGGLE", {"type": 'Z', "value": 'PRESS', "any": True}, None),
+        ("VERTEX_MESH_CHANGE", {"type": 'N', "value": 'PRESS', "any": True}, None),
     ])
 
     return keymap
@@ -4949,6 +4946,7 @@ def km_popup_toolbar(_params):
         "Toolbar Popup",
         {"space_type": 'EMPTY', "region_type": 'TEMPORARY'},
         {"items": [
+            op_tool("builtin.cursor", {"type": 'SPACE', "value": 'PRESS'}),
             op_tool("builtin.select", {"type": 'W', "value": 'PRESS'}),
             op_tool("builtin.select_lasso", {"type": 'L', "value": 'PRESS'}),
             op_tool("builtin.transform", {"type": 'T', "value": 'PRESS'}),
@@ -5521,7 +5519,7 @@ def km_3d_view_tool_edit_mesh_smooth(params):
         {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
         {"items": [
             ("mesh.vertices_smooth", {"type": params.tool_tweak, "value": 'ANY'},
-             {"properties": [("factor", 0.0)]}),
+             {"properties": [("factor", 0.0), ("wait_for_input", False)]}),
         ]},
     )
 
@@ -5532,7 +5530,7 @@ def km_3d_view_tool_edit_mesh_randomize(params):
         {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
         {"items": [
             ("transform.vertex_random", {"type": params.tool_tweak, "value": 'ANY'},
-             {"properties": [("offset", 0.0)]}),
+             {"properties": [("offset", 0.0), ("wait_for_input", False)]}),
         ]},
     )
 
@@ -5672,7 +5670,7 @@ def km_3d_view_tool_edit_curve_randomize(params):
         {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
         {"items": [
             ("transform.vertex_random", {"type": params.tool_tweak, "value": 'ANY'},
-             {"properties": [("offset", 0.0)]}),
+             {"properties": [("offset", 0.0), ("wait_for_input", False)]}),
         ]},
     )
 
@@ -5793,6 +5791,19 @@ def km_3d_view_tool_paint_gpencil_line(params):
         ]},
     )
 
+def km_3d_view_tool_paint_gpencil_polyline(params):
+    return (
+        "3D View Tool: Paint Gpencil, Polyline",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("gpencil.primitive", {"type": params.tool_tweak, "value": 'ANY'},
+             {"properties": [("type", 'POLYLINE'), ("wait_for_input", False)]}),
+            ("gpencil.primitive", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True},
+             {"properties": [("type", 'POLYLINE'), ("wait_for_input", False)]}),
+            # Lasso select
+            ("gpencil.select_lasso", {"type": params.action_tweak, "value": 'ANY', "ctrl": True, "alt": True}, None),
+        ]},
+    )
 
 def km_3d_view_tool_paint_gpencil_box(params):
     return (
@@ -5866,6 +5877,18 @@ def km_3d_view_tool_paint_gpencil_cutter(params):
             ("gpencil.stroke_cutter", {"type": params.tool_mouse, "value": 'PRESS'}, None),
             # Lasso select
             ("gpencil.select_lasso", {"type": params.action_tweak, "value": 'ANY', "ctrl": True, "alt": True}, None),
+        ]},
+    )
+
+
+def km_3d_view_tool_paint_gpencil_eyedropper(params):
+    return (
+        "3D View Tool: Paint Gpencil, Eyedropper",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("ui.eyedropper_gpencil_color", {"type": params.tool_mouse, "value": 'PRESS'}, None),
+            ("ui.eyedropper_gpencil_color", {"type": params.tool_mouse, "value": 'PRESS', "shift": True}, None),
+            ("ui.eyedropper_gpencil_color", {"type": params.tool_mouse, "value": 'PRESS', "shift": True, "ctrl": True}, None),
         ]},
     )
 
@@ -6202,11 +6225,13 @@ def generate_keymaps(params=None):
         km_3d_view_tool_paint_weight_sample_vertex_group(params),
         km_3d_view_tool_paint_weight_gradient(params),
         km_3d_view_tool_paint_gpencil_line(params),
+        km_3d_view_tool_paint_gpencil_polyline(params),
         km_3d_view_tool_paint_gpencil_box(params),
         km_3d_view_tool_paint_gpencil_circle(params),
         km_3d_view_tool_paint_gpencil_arc(params),
         km_3d_view_tool_paint_gpencil_curve(params),
         km_3d_view_tool_paint_gpencil_cutter(params),
+        km_3d_view_tool_paint_gpencil_eyedropper(params),
         km_3d_view_tool_edit_gpencil_select(params),
         km_3d_view_tool_edit_gpencil_select_box(params),
         km_3d_view_tool_edit_gpencil_select_circle(params),

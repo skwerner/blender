@@ -48,7 +48,9 @@ typedef enum {
    */
   eModifierTypeType_OnlyDeform,
 
+  /* Modifier adds geometry. */
   eModifierTypeType_Constructive,
+  /* Modifier can add and remove geometry. */
   eModifierTypeType_Nonconstructive,
 
   /* both deformVerts & applyModifier are valid calls
@@ -415,7 +417,7 @@ typedef struct VirtualModifierData {
   ShapeKeyModifierData smd;
 } VirtualModifierData;
 
-struct ModifierData *modifiers_getVirtualModifierList(struct Object *ob,
+struct ModifierData *modifiers_getVirtualModifierList(const struct Object *ob,
                                                       struct VirtualModifierData *data);
 
 /* ensure modifier correctness when changing ob->data */

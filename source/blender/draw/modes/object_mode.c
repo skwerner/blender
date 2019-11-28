@@ -510,12 +510,13 @@ static void OBJECT_engine_init(void *vedata)
                                                     NULL,
                                                     datatoc_gpu_shader_flat_color_frag_glsl,
                                                     datatoc_common_view_lib_glsl,
-                                                    NULL);
+                                                    "#define IN_PLACE_INSTANCES\n");
 
     sh_data->part_axis = DRW_shader_create_with_lib(datatoc_object_particle_prim_vert_glsl,
                                                     NULL,
                                                     datatoc_gpu_shader_flat_color_frag_glsl,
                                                     datatoc_common_view_lib_glsl,
+                                                    "#define IN_PLACE_INSTANCES\n"
                                                     "#define USE_AXIS\n");
 
     sh_data->part_dot = DRW_shader_create_with_lib(datatoc_object_particle_dot_vert_glsl,
@@ -1235,22 +1236,42 @@ static void DRW_shgroup_camera_background_images(OBJECT_Shaders *sh_data,
       uv2img_space[1][1] = image_height;
 
       const float fit_scale = image_aspect / camera_aspect;
-      img2cam_space[0][0] = 1.0 / image_width;
-      img2cam_space[1][1] = 1.0 / fit_scale / image_height;
+      if (camera_aspect < image_aspect) {
+        img2cam_space[0][0] = 1.0 / (1.0 / fit_scale) / image_width;
+        img2cam_space[1][1] = 1.0 / image_height;
+      }
+      else {
+        img2cam_space[0][0] = 1.0 / image_width;
+        img2cam_space[1][1] = 1.0 / fit_scale / image_height;
+      }
 
       /* Update scaling based on image and camera framing */
       float scale_x = bgpic->scale;
       float scale_y = bgpic->scale;
 
+      float scale_x_offset = image_width;
+      float scale_y_offset = image_height;
+      if (image_aspect > 1.0f) {
+        scale_x_offset /= image_aspect;
+        if (camera_aspect > 1.0f) {
+          scale_x_offset *= min_ff(image_aspect, camera_aspect);
+          scale_y_offset *= min_ff(image_aspect, camera_aspect);
+        }
+      }
+      else {
+        scale_y_offset *= image_aspect;
+        if (camera_aspect < 1.0f) {
+          scale_x_offset /= max_ff(image_aspect, camera_aspect);
+          scale_y_offset /= max_ff(image_aspect, camera_aspect);
+        }
+      }
+
       if (bgpic->flag & CAM_BGIMG_FLAG_CAMERA_ASPECT) {
         if (bgpic->flag & CAM_BGIMG_FLAG_CAMERA_CROP) {
-          if (image_aspect > camera_aspect) {
-            scale_x *= fit_scale;
-            scale_y *= fit_scale;
-          }
+          /* pass */
         }
         else {
-          if (image_aspect > camera_aspect) {
+          if (camera_aspect < image_aspect) {
             scale_x /= fit_scale;
             scale_y /= fit_scale;
           }
@@ -1262,7 +1283,12 @@ static void DRW_shgroup_camera_background_images(OBJECT_Shaders *sh_data,
       }
       else {
         /* Stretch image to camera aspect */
-        scale_y /= 1.0 / fit_scale;
+        if (camera_aspect < image_aspect) {
+          scale_x /= fit_scale;
+        }
+        else {
+          scale_y *= fit_scale;
+        }
       }
 
       // scale image to match the desired aspect ratio
@@ -1270,8 +1296,8 @@ static void DRW_shgroup_camera_background_images(OBJECT_Shaders *sh_data,
       scale_m4[1][1] = scale_y;
 
       /* Translate */
-      translate_m4[3][0] = image_width * bgpic->offset[0] * 2.0f;
-      translate_m4[3][1] = image_height * bgpic->offset[1] * 2.0f;
+      translate_m4[3][0] = bgpic->offset[0] * 2.0f * scale_x_offset;
+      translate_m4[3][1] = bgpic->offset[1] * 2.0f * scale_y_offset;
 
       mul_m4_series(bg_data->transform_mat,
                     win_m4_translate,
@@ -2074,7 +2100,8 @@ static void camera_view3d_stereoscopy_display_extra(OBJECT_ShadingGroupList *sgl
     if (cam->stereo.convergence_mode == CAM_S3D_OFFAXIS) {
       const float shift_x = ((BKE_camera_multiview_shift_x(&scene->r, ob, viewnames[eye]) -
                               cam->shiftx) *
-                             (drawsize * scale[0] * fac));
+                             (drawsize * scale[0] * fac)) *
+                            (cam->stereo.pivot == CAM_S3D_PIVOT_CENTER ? 1.0f : 2.0f);
 
       for (int i = 0; i < 4; i++) {
         cam->runtime.drw_corners[eye][i][0] += shift_x;
@@ -2668,12 +2695,21 @@ static void DRW_shgroup_volume_extra(OBJECT_ShadingGroupList *sgl,
   DRW_object_wire_theme_get(ob, view_layer, &color);
 
   /* Small cube showing voxel size. */
+  float min[3];
+  madd_v3fl_v3fl_v3fl_v3i(min, sds->p0, sds->cell_size, sds->res_min);
   float voxel_cubemat[4][4] = {{0.0f}};
-  voxel_cubemat[0][0] = 1.0f / (float)sds->res[0];
-  voxel_cubemat[1][1] = 1.0f / (float)sds->res[1];
-  voxel_cubemat[2][2] = 1.0f / (float)sds->res[2];
+  /* scale small cube to voxel size */
+  voxel_cubemat[0][0] = 1.0f / (float)sds->base_res[0];
+  voxel_cubemat[1][1] = 1.0f / (float)sds->base_res[1];
+  voxel_cubemat[2][2] = 1.0f / (float)sds->base_res[2];
   voxel_cubemat[3][0] = voxel_cubemat[3][1] = voxel_cubemat[3][2] = -1.0f;
   voxel_cubemat[3][3] = 1.0f;
+  /* translate small cube to corner */
+  voxel_cubemat[3][0] = min[0];
+  voxel_cubemat[3][1] = min[1];
+  voxel_cubemat[3][2] = min[2];
+  voxel_cubemat[3][3] = 1.0f;
+  /* move small cube into the domain (otherwise its centered on vertex of domain object) */
   translate_m4(voxel_cubemat, 1.0f, 1.0f, 1.0f);
   mul_m4_m4m4(voxel_cubemat, ob->obmat, voxel_cubemat);
 
@@ -2709,6 +2745,9 @@ static void DRW_shgroup_volume_extra(OBJECT_ShadingGroupList *sgl,
   DRW_shgroup_uniform_texture(grp, "velocityZ", sds->tex_velocity_z);
   DRW_shgroup_uniform_float_copy(grp, "displaySize", sds->vector_scale);
   DRW_shgroup_uniform_float_copy(grp, "slicePosition", sds->slice_depth);
+  DRW_shgroup_uniform_vec3_copy(grp, "cellSize", sds->cell_size);
+  DRW_shgroup_uniform_vec3_copy(grp, "domainOriginOffset", sds->p0);
+  DRW_shgroup_uniform_ivec3_copy(grp, "adaptiveCellOffset", sds->res_min);
   DRW_shgroup_uniform_int_copy(grp, "sliceAxis", slice_axis);
   DRW_shgroup_call_procedural_lines(grp, ob, line_count);
 
@@ -3111,7 +3150,8 @@ static void DRW_shgroup_texture_space(OBJECT_ShadingGroupList *sgl, Object *ob, 
   DRW_buffer_add_entry(sgl->texspace, color, &one, tmp);
 }
 
-static void DRW_shgroup_bounds(OBJECT_ShadingGroupList *sgl, Object *ob, int theme_id)
+static void DRW_shgroup_bounds(
+    OBJECT_ShadingGroupList *sgl, Object *ob, int theme_id, char boundtype, bool around_origin)
 {
   float color[4], center[3], size[3], tmp[4][4], final_mat[4][4], one = 1.0f;
   BoundBox bb_local;
@@ -3137,10 +3177,16 @@ static void DRW_shgroup_bounds(OBJECT_ShadingGroupList *sgl, Object *ob, int the
   }
 
   UI_GetThemeColor4fv(theme_id, color);
-  BKE_boundbox_calc_center_aabb(bb, center);
   BKE_boundbox_calc_size_aabb(bb, size);
 
-  switch (ob->boundtype) {
+  if (around_origin) {
+    zero_v3(center);
+  }
+  else {
+    BKE_boundbox_calc_center_aabb(bb, center);
+  }
+
+  switch (boundtype) {
     case OB_BOUND_BOX:
       size_to_mat4(tmp, size);
       copy_v3_v3(tmp[3], center);
@@ -3189,6 +3235,27 @@ static void DRW_shgroup_bounds(OBJECT_ShadingGroupList *sgl, Object *ob, int the
       tmp[2][2] = max_ff(0.0f, size[2] * 2.0f - size[0] * 2.0f);
       mul_m4_m4m4(final_mat, ob->obmat, tmp);
       DRW_buffer_add_entry(sgl->empties.capsule_body, color, &one, final_mat);
+      break;
+  }
+}
+
+static void DRW_shgroup_collision(OBJECT_ShadingGroupList *sgl, Object *ob, int theme_id)
+{
+  switch (ob->rigidbody_object->shape) {
+    case RB_SHAPE_BOX:
+      DRW_shgroup_bounds(sgl, ob, theme_id, OB_BOUND_BOX, true);
+      break;
+    case RB_SHAPE_SPHERE:
+      DRW_shgroup_bounds(sgl, ob, theme_id, OB_BOUND_SPHERE, true);
+      break;
+    case RB_SHAPE_CONE:
+      DRW_shgroup_bounds(sgl, ob, theme_id, OB_BOUND_CONE, true);
+      break;
+    case RB_SHAPE_CYLINDER:
+      DRW_shgroup_bounds(sgl, ob, theme_id, OB_BOUND_CYLINDER, true);
+      break;
+    case RB_SHAPE_CAPSULE:
+      DRW_shgroup_bounds(sgl, ob, theme_id, OB_BOUND_CAPSULE, true);
       break;
   }
 }
@@ -3541,6 +3608,10 @@ static void OBJECT_cache_populate(void *vedata, Object *ob)
         if (hide_object_extra) {
           break;
         }
+        if ((ob->base_flag & BASE_FROM_DUPLI) && (ob->transflag & OB_DUPLICOLLECTION) &&
+            ob->instance_collection) {
+          break;
+        }
         DRW_shgroup_empty(sh_data, sgl, ob, view_layer, rv3d, draw_ctx->sh_cfg);
         break;
       case OB_SPEAKER:
@@ -3618,7 +3689,7 @@ static void OBJECT_cache_populate(void *vedata, Object *ob)
     if (theme_id == TH_UNDEFINED) {
       theme_id = DRW_object_wire_theme_get(ob, view_layer, NULL);
     }
-    DRW_shgroup_bounds(sgl, ob, theme_id);
+    DRW_shgroup_bounds(sgl, ob, theme_id, ob->boundtype, false);
   }
 
   /* Helpers for when we're transforming origins. */
@@ -3677,7 +3748,7 @@ static void OBJECT_cache_populate(void *vedata, Object *ob)
     /* Don't draw bounding box again if draw type is bound box. */
     if ((ob->dtx & OB_DRAWBOUNDOX) && (ob->dt != OB_BOUNDBOX) &&
         !ELEM(ob->type, OB_LAMP, OB_CAMERA, OB_EMPTY, OB_SPEAKER, OB_LIGHTPROBE)) {
-      DRW_shgroup_bounds(sgl, ob, theme_id);
+      DRW_shgroup_bounds(sgl, ob, theme_id, ob->boundtype, false);
     }
 
     if (ob->dtx & OB_AXIS) {
@@ -3685,6 +3756,10 @@ static void OBJECT_cache_populate(void *vedata, Object *ob)
       DRW_object_wire_theme_get(ob, view_layer, &color);
 
       DRW_buffer_add_entry(sgl->empties.empty_axes, color, &axes_size, ob->obmat);
+    }
+
+    if (ob->rigidbody_object) {
+      DRW_shgroup_collision(sgl, ob, theme_id);
     }
 
     if ((md = modifiers_findByType(ob, eModifierType_Smoke)) &&

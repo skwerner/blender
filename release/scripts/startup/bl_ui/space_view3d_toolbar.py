@@ -43,7 +43,6 @@ class VIEW3D_MT_brush_context_menu(Menu):
     def draw(self, context):
         layout = self.layout
 
-        tool_settings = context.tool_settings
         settings = UnifiedPaintPanel.paint_settings(context)
         brush = getattr(settings, "brush", None)
 
@@ -427,10 +426,25 @@ class VIEW3D_PT_tools_brush(Panel, View3DPaintPanel):
             elif brush.sculpt_tool == 'POSE':
                 row = col.row()
                 row.prop(brush, "pose_offset")
+                row = col.row()
+                row.prop(brush, "pose_smooth_iterations")
+            elif brush.sculpt_tool == 'SCRAPE':
+                row = col.row()
+                row.prop(brush, "invert_to_scrape_fill", text = "Invert to Fill")
+            elif brush.sculpt_tool == 'FILL':
+                row = col.row()
+                row.prop(brush, "invert_to_scrape_fill", text = "Invert to Scrape")
             elif brush.sculpt_tool == 'GRAB':
                 col.separator()
                 row = col.row()
                 row.prop(brush, "use_grab_active_vertex")
+            elif brush.sculpt_tool == 'MULTIPLANE_SCRAPE':
+                row = col.row()
+                row.prop(brush, "multiplane_scrape_angle")
+                row = col.row()
+                row.prop(brush, "use_multiplane_scrape_dynamic")
+                row = col.row()
+                row.prop(brush, "show_multiplane_scrape_planes_preview")
 
             # topology_rake_factor
             if (
@@ -454,7 +468,7 @@ class VIEW3D_PT_tools_brush(Panel, View3DPaintPanel):
             # crease_pinch_factor
             if capabilities.has_pinch_factor:
                 row = col.row(align=True)
-                if (brush.sculpt_tool in ('BLOB', 'SNAKE_HOOK')):
+                if brush.sculpt_tool in {'BLOB', 'SNAKE_HOOK'}:
                     row.prop(brush, "crease_pinch_factor", slider=True, text="Magnify")
                 else:
                     row.prop(brush, "crease_pinch_factor", slider=True, text="Pinch")
@@ -504,7 +518,7 @@ class VIEW3D_PT_tools_brush(Panel, View3DPaintPanel):
         # Texture Paint Mode #
 
         elif context.image_paint_object and brush:
-            brush_texpaint_common(self, context, layout, brush, settings, True)
+            brush_texpaint_common(self, context, layout, brush, settings, projpaint=True)
 
         # Weight Paint Mode #
         elif context.weight_paint_object and brush:
@@ -552,15 +566,15 @@ class VIEW3D_PT_tools_brush_color(Panel, View3DPaintPanel):
         brush = settings.brush
 
         if context.vertex_paint_object:
-            brush_texpaint_common_color(self, context, layout, brush, settings, True)
+            brush_texpaint_common_color(self, context, layout, brush, settings, projpaint=True)
 
         else:
             layout.prop(brush, "color_type", expand=True)
 
             if brush.color_type == 'COLOR':
-                brush_texpaint_common_color(self, context, layout, brush, settings, True)
+                brush_texpaint_common_color(self, context, layout, brush, settings, projpaint=True)
             elif brush.color_type == 'GRADIENT':
-                brush_texpaint_common_gradient(self, context, layout, brush, settings, True)
+                brush_texpaint_common_gradient(self, context, layout, brush, settings, projpaint=True)
 
 
 class VIEW3D_PT_tools_brush_swatches(Panel, View3DPaintPanel):
@@ -614,7 +628,7 @@ class VIEW3D_PT_tools_brush_clone(Panel, View3DPaintPanel):
 
         layout.active = settings.use_clone_layer
 
-        brush_texpaint_common_clone(self, context, layout, brush, settings, True)
+        brush_texpaint_common_clone(self, context, layout, brush, settings, projpaint=True)
 
 
 class VIEW3D_PT_tools_brush_options(Panel, View3DPaintPanel):
@@ -636,7 +650,7 @@ class VIEW3D_PT_tools_brush_options(Panel, View3DPaintPanel):
         col = layout.column()
 
         if context.image_paint_object and brush:
-            brush_texpaint_common_options(self, context, layout, brush, settings, True)
+            brush_texpaint_common_options(self, context, layout, brush, settings, projpaint=True)
 
         elif context.sculpt_object and brush:
             col.prop(brush, "use_automasking_topology")
@@ -973,10 +987,14 @@ class VIEW3D_PT_tools_brush_stroke(Panel, View3DPaintPanel):
             row = col.row(align=True)
             row.prop(brush, "spacing", text="Spacing")
             row.prop(brush, "use_pressure_spacing", toggle=True, text="")
+            col.prop(brush, "dash_ratio")
+            col.prop(brush, "dash_samples")
 
         if brush.use_line or brush.use_curve:
             row = col.row(align=True)
             row.prop(brush, "spacing", text="Spacing")
+            col.prop(brush, "dash_ratio")
+            col.prop(brush, "dash_samples")
 
         if brush.use_curve:
             col.template_ID(brush, "paint_curve", new="paintcurve.new")
@@ -1175,7 +1193,8 @@ class VIEW3D_PT_sculpt_dyntopo(Panel, View3DPaintPanel):
         if sculpt.detail_type_method in {'CONSTANT', 'MANUAL'}:
             row = sub.row(align=True)
             row.prop(sculpt, "constant_detail_resolution")
-            row.operator("sculpt.sample_detail_size", text="", icon='EYEDROPPER')
+            props = row.operator("sculpt.sample_detail_size", text="", icon='EYEDROPPER')
+            props.mode = 'DYNTOPO'
         elif (sculpt.detail_type_method == 'BRUSH'):
             sub.prop(sculpt, "detail_percent")
         else:
@@ -1234,12 +1253,15 @@ class VIEW3D_PT_sculpt_voxel_remesh(Panel, View3DPaintPanel):
 
         col = layout.column()
         mesh = context.active_object.data
-        col.prop(mesh, "remesh_voxel_size")
+        row = col.row(align=True)
+        row.prop(mesh, "remesh_voxel_size")
+        props = row.operator("sculpt.sample_detail_size", text="", icon='EYEDROPPER')
+        props.mode = 'VOXEL'
         col.prop(mesh, "remesh_voxel_adaptivity")
-        col.prop(mesh, "remesh_fix_poles")
-        col.prop(mesh, "remesh_smooth_normals")
-        col.prop(mesh, "remesh_preserve_volume")
-        col.prop(mesh, "remesh_preserve_paint_mask")
+        col.prop(mesh, "use_remesh_fix_poles")
+        col.prop(mesh, "use_remesh_smooth_normals")
+        col.prop(mesh, "use_remesh_preserve_volume")
+        col.prop(mesh, "use_remesh_preserve_paint_mask")
         col.operator("object.voxel_remesh", text="Remesh")
 
 # TODO, move to space_view3d.py
@@ -1873,7 +1895,8 @@ class VIEW3D_PT_tools_grease_pencil_brush(View3DPanel, Panel):
                 from bl_ui.properties_paint_common import (
                     brush_basic_gpencil_paint_settings,
                 )
-                brush_basic_gpencil_paint_settings(layout, context, brush, compact=True)
+                tool = context.workspace.tools.from_space_view3d_mode(context.mode, create=False)
+                brush_basic_gpencil_paint_settings(layout, context, brush, tool, compact=True, is_toolbar=False)
 
 
 # Grease Pencil drawing brushes options

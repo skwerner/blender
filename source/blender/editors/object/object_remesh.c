@@ -44,7 +44,7 @@
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
-#include "BKE_mirror.h"
+#include "BKE_mesh_mirror.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
@@ -113,15 +113,21 @@ static int voxel_remesh_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  if (ob->mode == OB_MODE_SCULPT) {
-    ED_sculpt_undo_geometry_begin(ob);
+  float isovalue = 0.0f;
+  if (mesh->flag & ME_REMESH_REPROJECT_VOLUME) {
+    isovalue = mesh->remesh_voxel_size * 0.3f;
   }
 
   new_mesh = BKE_mesh_remesh_voxel_to_mesh_nomain(
-      mesh, mesh->remesh_voxel_size, mesh->remesh_voxel_adaptivity);
+      mesh, mesh->remesh_voxel_size, mesh->remesh_voxel_adaptivity, isovalue);
 
   if (!new_mesh) {
+    BKE_report(op->reports, RPT_ERROR, "Voxel remesher failed to create mesh.");
     return OPERATOR_CANCELLED;
+  }
+
+  if (ob->mode == OB_MODE_SCULPT) {
+    ED_sculpt_undo_geometry_begin(ob, op->type->name);
   }
 
   if (mesh->flag & ME_REMESH_FIX_POLES && mesh->remesh_voxel_adaptivity <= 0.0f) {
@@ -136,7 +142,7 @@ static int voxel_remesh_exec(bContext *C, wmOperator *op)
 
   if (mesh->flag & ME_REMESH_REPROJECT_PAINT_MASK) {
     BKE_mesh_runtime_clear_geometry(mesh);
-    BKE_remesh_reproject_paint_mask(new_mesh, mesh);
+    BKE_mesh_remesh_reproject_paint_mask(new_mesh, mesh);
   }
 
   BKE_mesh_nomain_to_mesh(new_mesh, mesh, ob, &CD_MASK_MESH, true);
@@ -219,7 +225,6 @@ static bool mesh_is_manifold_consistent(Mesh *mesh)
 
   bool is_manifold_consistent = true;
   const MLoop *mloop = mesh->mloop;
-  const MPoly *mpoly = mesh->mpoly;
   char *edge_faces = (char *)MEM_callocN(mesh->totedge * sizeof(char), "remesh_manifold_check");
   int *edge_vert = (int *)MEM_malloc_arrayN(
       mesh->totedge, sizeof(unsigned int), "remesh_consistent_check");
@@ -228,25 +233,21 @@ static bool mesh_is_manifold_consistent(Mesh *mesh)
     edge_vert[i] = -1;
   }
 
-  for (unsigned int poly_index = 0; poly_index < mesh->totpoly && is_manifold_consistent;
-       poly_index++) {
-    const MPoly *poly = &mpoly[poly_index];
-    for (unsigned int corner = 0; corner < poly->totloop; corner++) {
-      const MLoop *loop = &mloop[poly->loopstart + corner];
-      edge_faces[loop->e] += 1;
-      if (edge_faces[loop->e] > 2) {
-        is_manifold_consistent = false;
-        break;
-      }
+  for (unsigned int loop_idx = 0; loop_idx < mesh->totloop; loop_idx++) {
+    const MLoop *loop = &mloop[loop_idx];
+    edge_faces[loop->e] += 1;
+    if (edge_faces[loop->e] > 2) {
+      is_manifold_consistent = false;
+      break;
+    }
 
-      if (edge_vert[loop->e] == -1) {
-        edge_vert[loop->e] = loop->v;
-      }
-      else if (edge_vert[loop->e] == loop->v) {
-        /* Mesh has flips in the surface so it is non consistent */
-        is_manifold_consistent = false;
-        break;
-      }
+    if (edge_vert[loop->e] == -1) {
+      edge_vert[loop->e] = loop->v;
+    }
+    else if (edge_vert[loop->e] == loop->v) {
+      /* Mesh has flips in the surface so it is non consistent */
+      is_manifold_consistent = false;
+      break;
     }
   }
 
@@ -327,7 +328,8 @@ static Mesh *remesh_symmetry_bisect(Main *bmain, Mesh *mesh, eSymmetryAxes symme
       zero_v3(plane_no);
       plane_no[axis] = -1.0f;
       mesh_bisect_temp = mesh_bisect;
-      mesh_bisect = BKE_mirror_bisect_on_mirror_plane(&mmd, mesh_bisect, axis, plane_co, plane_no);
+      mesh_bisect = BKE_mesh_mirror_bisect_on_mirror_plane(
+          &mmd, mesh_bisect, axis, plane_co, plane_no);
       if (mesh_bisect_temp != mesh_bisect) {
         BKE_id_free(bmain, mesh_bisect_temp);
       }
@@ -356,7 +358,7 @@ static Mesh *remesh_symmetry_mirror(Object *ob, Mesh *mesh, eSymmetryAxes symmet
       mmd.flag = 0;
       mmd.flag &= MOD_MIR_AXIS_X << i;
       mesh_mirror_temp = mesh_mirror;
-      mesh_mirror = BKE_mirror_apply_mirror_on_axis(&mmd, NULL, ob, mesh_mirror, axis);
+      mesh_mirror = BKE_mesh_mirror_apply_mirror_on_axis(&mmd, NULL, ob, mesh_mirror, axis);
       if (mesh_mirror_temp != mesh_mirror) {
         BKE_id_free(NULL, mesh_mirror_temp);
       }
@@ -407,7 +409,7 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
 
   BKE_id_free(qj->bmain, bisect_mesh);
 
-  if (!new_mesh) {
+  if (new_mesh == NULL) {
     *do_update = true;
     *stop = 0;
     if (qj->success == 1) {
@@ -418,17 +420,15 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
   }
 
   /* Mirror the Quadriflow result to build the final mesh */
-  if (new_mesh) {
-    new_mesh = remesh_symmetry_mirror(qj->owner, new_mesh, qj->symmetry_axes);
-  }
+  new_mesh = remesh_symmetry_mirror(qj->owner, new_mesh, qj->symmetry_axes);
 
   if (ob->mode == OB_MODE_SCULPT) {
-    ED_sculpt_undo_geometry_begin(ob);
+    ED_sculpt_undo_geometry_begin(ob, "QuadriFlow Remesh");
   }
 
   if (qj->preserve_paint_mask) {
     BKE_mesh_runtime_clear_geometry(mesh);
-    BKE_remesh_reproject_paint_mask(new_mesh, mesh);
+    BKE_mesh_remesh_reproject_paint_mask(new_mesh, mesh);
   }
 
   BKE_mesh_nomain_to_mesh(new_mesh, mesh, ob, &CD_MASK_MESH, true);

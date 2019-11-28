@@ -16,6 +16,7 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
+#
 # ***** END GPL LICENSE BLOCK *****
 
 #-----------------------------------------------------------------------------
@@ -169,6 +170,14 @@ option_defaults_init(
   _init_OPENSUBDIV
 )
 
+# TBB malloc is only supported on for windows currently
+if(WIN32)
+  set(_init_TBB_MALLOC_PROXY ON)
+else()
+  set(_init_TBB_MALLOC_PROXY OFF)
+endif()
+
+
 # customize...
 if(UNIX AND NOT APPLE)
   # some of these libraries are problematic on Linux
@@ -306,8 +315,6 @@ endif()
 option(WITH_MOD_FLUID           "Enable Elbeem Modifier (Fluid Simulation)" ON)
 option(WITH_MOD_SMOKE           "Enable Smoke Modifier (Smoke Simulation)" ON)
 option(WITH_MOD_REMESH          "Enable Remesh Modifier" ON)
-# option(WITH_MOD_CLOTH_ELTOPO    "Enable Experimental cloth solver" OFF)  # this is now only available in a branch
-# mark_as_advanced(WITH_MOD_CLOTH_ELTOPO)
 option(WITH_MOD_OCEANSIM        "Enable Ocean Modifier" OFF)
 
 # Image format support
@@ -370,7 +377,6 @@ if(WIN32)
   option(WITH_INPUT_IME "Enable Input Method Editor (IME) for complex Asian character input" ON)
 endif()
 option(WITH_INPUT_NDOF "Enable NDOF input devices (SpaceNavigator and friends)" ${_init_INPUT_NDOF})
-option(WITH_RAYOPTIMIZATION "Enable use of SIMD (SSE) optimizations for the raytracer" ON)
 if(UNIX AND NOT APPLE)
   option(WITH_INSTALL_PORTABLE "Install redistributeable runtime, otherwise install into CMAKE_INSTALL_PREFIX" ON)
   option(WITH_STATIC_LIBS "Try to link with static libraries, as much as possible, to make blender more portable across distributions" OFF)
@@ -460,13 +466,14 @@ mark_as_advanced(WITH_CXX_GUARDEDALLOC)
 option(WITH_ASSERT_ABORT "Call abort() when raising an assertion through BLI_assert()" ON)
 mark_as_advanced(WITH_ASSERT_ABORT)
 
-option(WITH_BOOST                   "Enable features depending on boost" ON)
+option(WITH_BOOST "Enable features depending on boost" ON)
+option(WITH_TBB   "Enable features depending on TBB (OpenVDB, OpenImageDenoise, sculpt multithreading)" ON)
+option(WITH_TBB_MALLOC_PROXY "Enable the TBB malloc replacement" ${_init_TBB_MALLOC_PROXY})
 
 # Unit testsing
 option(WITH_GTESTS "Enable GTest unit testing" OFF)
 option(WITH_OPENGL_RENDER_TESTS "Enable OpenGL render related unit testing (Experimental)" OFF)
 option(WITH_OPENGL_DRAW_TESTS "Enable OpenGL UI drawing related unit testing (Experimental)" OFF)
-
 
 # Documentation
 if(UNIX AND NOT APPLE)
@@ -557,15 +564,6 @@ if(WIN32)
   option(WITH_WINDOWS_FIND_MODULES "Use find_package to locate libraries" OFF)
   mark_as_advanced(WITH_WINDOWS_FIND_MODULES)
 
-  option(WITH_WINDOWS_CODESIGN "Use signtool to sign the final binary." OFF)
-  mark_as_advanced(WITH_WINDOWS_CODESIGN)
-
-  set(WINDOWS_CODESIGN_PFX CACHE FILEPATH  "Path to pfx file to use for codesigning.")
-  mark_as_advanced(WINDOWS_CODESIGN_PFX)
-
-  set(WINDOWS_CODESIGN_PFX_PASSWORD CACHE STRING  "password for pfx file used for codesigning.")
-  mark_as_advanced(WINDOWS_CODESIGN_PFX_PASSWORD)
-
   option(WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS "Organize the visual studio projects according to source folder structure." ON)
   mark_as_advanced(WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS)
 
@@ -583,6 +581,15 @@ if("${CMAKE_GENERATOR}" MATCHES "Ninja")
          OFF)
   mark_as_advanced(WITH_NINJA_POOL_JOBS)
 endif()
+
+if(UNIX AND NOT APPLE)
+  option(WITH_CXX11_ABI "Use native C++11 ABI of compiler" ON)
+  mark_as_advanced(WITH_CXX11_ABI)
+endif()
+
+# Installation process.
+option(POSTINSTALL_SCRIPT "Run given CMake script after installation process" OFF)
+mark_as_advanced(POSTINSTALL_SCRIPT)
 
 # avoid using again
 option_defaults_clear()
@@ -841,7 +848,7 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
 endif()
 
 #-----------------------------------------------------------------------------
-#Platform specifics
+# Platform specifics
 
 if(WITH_X11)
   find_package(X11 REQUIRED)
@@ -1183,6 +1190,7 @@ if(WITH_SYSTEM_GLEW)
     message(FATAL_ERROR "GLEW is required to build Blender. Install it or disable WITH_SYSTEM_GLEW.")
   endif()
 
+  set(GLEW_INCLUDE_PATH "${GLEW_INCLUDE_DIR}")
   set(BLENDER_GLEW_LIBRARIES ${GLEW_LIBRARY})
 else()
   if(WITH_GLEW_ES)
@@ -1395,12 +1403,15 @@ if(CMAKE_COMPILER_IS_GNUCC)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_LOGICAL_OP -Wlogical-op)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_UNDEF -Wundef)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_INIT_SELF -Winit-self)  # needs -Wuninitialized
-  ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_NO_NULL -Wnonnull)  # C only
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_MISSING_INCLUDE_DIRS -Wmissing-include-dirs)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_NO_DIV_BY_ZERO -Wno-div-by-zero)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_TYPE_LIMITS -Wtype-limits)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_FORMAT_SIGN -Wformat-signedness)
   ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_RESTRICT -Wrestrict)
+
+  # C-only.
+  ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_NO_NULL -Wnonnull)
+  ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_ABSOLUTE_VALUE -Wabsolute-value)
 
   # gcc 4.2 gives annoying warnings on every file with this
   if(NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.3")
@@ -1570,7 +1581,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
 
   if(MSVC_VERSION GREATER_EQUAL 1911)
     # see https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/c5038?view=vs-2017
-    set(_WARNINGS "${_WARNINGS} /w35038") #order of initialisation in c++ constructors
+    set(_WARNINGS "${_WARNINGS} /w35038") # order of initialization in c++ constructors
   endif()
 
   string(REPLACE ";" " " _WARNINGS "${_WARNINGS}")
@@ -1636,6 +1647,12 @@ if(
 )
   # Use C11 + GNU extensions, works with GCC, Clang, ICC
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu11")
+endif()
+
+if(UNIX AND NOT APPLE)
+  if(NOT WITH_CXX11_ABI)
+    set(PLATFORM_CFLAGS "${PLATFORM_CFLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+  endif()
 endif()
 
 # Include warnings first, so its possible to disable them with user defined flags
@@ -1778,7 +1795,6 @@ if(FIRST_RUN)
   info_cfg_text("Compiler Options:")
   info_cfg_option(WITH_BUILDINFO)
   info_cfg_option(WITH_OPENMP)
-  info_cfg_option(WITH_RAYOPTIMIZATION)
 
   info_cfg_text("System Options:")
   info_cfg_option(WITH_INSTALL_PORTABLE)

@@ -27,7 +27,6 @@ class FILEBROWSER_HT_header(Header):
         layout = self.layout
 
         st = context.space_data
-        params = st.params
 
         if st.active_operator is None:
             layout.template_header()
@@ -57,7 +56,6 @@ class FILEBROWSER_PT_display(Panel):
 
         space = context.space_data
         params = space.params
-        is_lib_browser = params.use_library_browsing
 
         layout.label(text="Display as")
         layout.column().prop(params, "display_type", expand=True)
@@ -158,7 +156,8 @@ class FILEBROWSER_PT_filter(Panel):
 
 
 def panel_poll_is_upper_region(region):
-    # The upper region is left-aligned, the lower is split into it then. Note that after "Flip Regions" it's right-aligned.
+    # The upper region is left-aligned, the lower is split into it then.
+    # Note that after "Flip Regions" it's right-aligned.
     return region.alignment in {'LEFT', 'RIGHT'}
 
 
@@ -433,9 +432,8 @@ class FILEBROWSER_MT_view(Menu):
 class FILEBROWSER_MT_select(Menu):
     bl_label = "Select"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
-        st = context.space_data
 
         layout.operator("file.select_all", text="All").action = 'SELECT'
         layout.operator("file.select_all", text="None").action = 'DESELECT'
@@ -469,7 +467,12 @@ class FILEBROWSER_MT_context_menu(Menu):
         layout.separator()
 
         layout.operator("file.rename", text="Rename")
-        # layout.operator("file.delete")
+        sub = layout.row()
+        sub.operator_context = 'EXEC_DEFAULT'
+        sub.operator("file.delete", text="Delete")
+
+        layout.separator()
+
         sub = layout.row()
         sub.operator_context = 'EXEC_DEFAULT'
         sub.operator("file.directory_new", text="New Folder")
@@ -503,5 +506,6 @@ classes = (
 
 if __name__ == "__main__":  # only for live edit.
     from bpy.utils import register_class
+
     for cls in classes:
         register_class(cls)

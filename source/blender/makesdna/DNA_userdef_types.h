@@ -38,8 +38,10 @@ struct ColorBand;
 
 #define MAX_STYLE_NAME 64
 
-/** default offered by Blender.
- * #uiFont.uifont_id */
+/**
+ * Default offered by Blender.
+ * #uiFont.uifont_id
+ */
 typedef enum eUIFont_ID {
   UIFONT_DEFAULT = 0,
   /*  UIFONT_BITMAP   = 1 */ /* UNUSED */
@@ -171,7 +173,7 @@ typedef struct ThemeUI {
 
   float icon_alpha;
   float icon_saturation;
-  char _pad[4];
+  unsigned char widget_text_cursor[4];
 
   /* Axis Colors */
   unsigned char xaxis[4], yaxis[4], zaxis[4];
@@ -319,6 +321,9 @@ typedef struct ThemeSpace {
   unsigned char syntaxb[4], syntaxn[4];  // in nodespace used for color input
   unsigned char syntaxv[4], syntaxc[4];  // in nodespace used for converter group
   unsigned char syntaxd[4], syntaxr[4];  // in nodespace used for distort
+
+  unsigned char line_numbers[4];
+  char _pad6[4];
 
   unsigned char nodeclass_output[4], nodeclass_filter[4];
   unsigned char nodeclass_vector[4], nodeclass_texture[4];
@@ -588,13 +593,22 @@ typedef struct UserDef_FileSpaceData {
   int sort_type;      /* FileSelectParams.sort */
   int details_flags;  /* FileSelectParams.details_flags */
   int flag;           /* FileSelectParams.flag */
-
-  char _pad[4];
+  int filter_id;      /* FileSelectParams.filter_id */
 
   /** Info used when creating the file browser in a temporary window. */
   int temp_win_sizex;
   int temp_win_sizey;
 } UserDef_FileSpaceData;
+
+/**
+ * Store UI data here instead of the space
+ * since the space is typically a window which is freed.
+ */
+typedef struct UserDef_Experimental {
+  /** #eUserPref_Experimental_Flag options. */
+  int flag;
+  char _pad0[4];
+} UserDef_Experimental;
 
 typedef struct UserDef {
   /** UserDef has separate do-version handling, and can be read from other files. */
@@ -847,6 +861,8 @@ typedef struct UserDef {
   UserDef_SpaceData space_data;
   UserDef_FileSpaceData file_space_data;
 
+  UserDef_Experimental experimental;
+
   /** Runtime data (keep last). */
   UserDef_Runtime runtime;
 } UserDef;
@@ -879,6 +895,7 @@ typedef enum eUserPref_Section {
   USER_SECTION_ANIMATION = 13,
   USER_SECTION_NAVIGATION = 14,
   USER_SECTION_FILE_PATHS = 15,
+  USER_SECTION_EXPERIMENTAL = 16,
 } eUserPref_Section;
 
 /** #UserDef_SpaceData.flag (State of the user preferences UI). */
@@ -887,6 +904,11 @@ typedef enum eUserPref_SpaceData_Flag {
   USER_SPACEDATA_INPUT_HIDE_UI_KEYCONFIG = (1 << 0),
   USER_SPACEDATA_ADDONS_SHOW_ONLY_ENABLED = (1 << 1),
 } eUserPref_SpaceData_Flag;
+
+/** #UserDef_Experimental.flag. */
+typedef enum eUserPref_Experimental_Flag {
+  USER_EXPERIMENTAL_ALL = (1 << 0),
+} eUserPref_Experimental_Flag;
 
 /** #UserDef.flag */
 typedef enum eUserPref_Flag {
@@ -1004,9 +1026,11 @@ typedef enum eUserpref_UI_Flag {
   USER_HIDE_SYSTEM_BOOKMARKS = (1u << 31),
 } eUserpref_UI_Flag;
 
-/** #UserDef.uiflag2
+/**
+ * #UserDef.uiflag2
  *
- * \note don't add new flags here, use 'uiflag' which has flags free. */
+ * \note don't add new flags here, use 'uiflag' which has flags free.
+ */
 typedef enum eUserpref_UI_Flag2 {
   USER_UIFLAG2_UNUSED_0 = (1 << 0), /* cleared */
   USER_REGION_OVERLAP = (1 << 1),
@@ -1032,8 +1056,10 @@ typedef enum eUserpref_APP_Flag {
   USER_APP_LOCK_UI_LAYOUT = (1 << 0),
 } eUserpref_APP_Flag;
 
-/** Auto-Keying mode.
- * #UserDef.autokey_mode */
+/**
+ * Auto-Keying mode.
+ * #UserDef.autokey_mode
+ */
 typedef enum eAutokey_Mode {
   /* AUTOKEY_ON is a bitflag */
   AUTOKEY_ON = 1,
@@ -1044,15 +1070,18 @@ typedef enum eAutokey_Mode {
   AUTOKEY_MODE_EDITKEYS = 5,
 } eAutokey_Mode;
 
-/** Zoom to frame mode.
- * #UserDef.view_frame_type */
+/**
+ * Zoom to frame mode.
+ * #UserDef.view_frame_type
+ */
 typedef enum eZoomFrame_Mode {
   ZOOM_FRAME_MODE_KEEP_RANGE = 0,
   ZOOM_FRAME_MODE_SECONDS = 1,
   ZOOM_FRAME_MODE_KEYFRAMES = 2,
 } eZoomFrame_Mode;
 
-/** Auto-Keying flag
+/**
+ * Auto-Keying flag
  * #UserDef.autokey_flag (not strictly used when autokeying only -
  * is also used when keyframing these days).
  * \note #eAutokey_Flag is used with a macro, search for lines like IS_AUTOKEY_FLAG(INSERTAVAIL).
@@ -1091,9 +1120,9 @@ typedef enum eDupli_ID_Flags {
   USER_DUP_FONT = (1 << 3),
   USER_DUP_MBALL = (1 << 4),
   USER_DUP_LAMP = (1 << 5),
-  USER_DUP_IPO = (1 << 6),
+  /* USER_DUP_FCURVE = (1 << 6), */ /* UNUSED, keep because we may implement. */
   USER_DUP_MAT = (1 << 7),
-  USER_DUP_TEX = (1 << 8),
+  /* USER_DUP_TEX = (1 << 8), */ /* UNUSED, keep because we may implement. */
   USER_DUP_ARM = (1 << 9),
   USER_DUP_ACT = (1 << 10),
   USER_DUP_PSYS = (1 << 11),
@@ -1101,16 +1130,20 @@ typedef enum eDupli_ID_Flags {
   USER_DUP_GPENCIL = (1 << 13),
 } eDupli_ID_Flags;
 
-/** Max anti alias draw method
- * #UserDef.gpu_viewport_antialias */
+/**
+ * Max anti alias draw method
+ * #UserDef.gpu_viewport_antialias
+ */
 typedef enum eOpenGL_AntiAliasMethod {
   USER_AA_NONE = 0,
   USER_AA_FXAA = 1,
   USER_AA_TAA8 = 2,
 } eOpenGL_AntiAliasMethod;
 
-/** Text draw options
- * #UserDef.text_render */
+/**
+ * Text draw options
+ * #UserDef.text_render
+ */
 typedef enum eText_Draw_Options {
   USER_TEXT_DISABLE_AA = (1 << 0),
 
@@ -1119,8 +1152,10 @@ typedef enum eText_Draw_Options {
   USER_TEXT_HINTING_FULL = (1 << 3),
 } eText_Draw_Options;
 
-/** Grease Pencil Settings.
- * #UserDef.gp_settings */
+/**
+ * Grease Pencil Settings.
+ * #UserDef.gp_settings
+ */
 typedef enum eGP_UserdefSettings {
   GP_PAINT_UNUSED_0 = (1 << 0),
 } eGP_UserdefSettings;
@@ -1129,8 +1164,10 @@ enum {
   USER_GIZMO_DRAW = (1 << 0),
 };
 
-/** Color Picker Types.
- * #UserDef.color_picker_type */
+/**
+ * Color Picker Types.
+ * #UserDef.color_picker_type
+ */
 typedef enum eColorPicker_Types {
   USER_CP_CIRCLE_HSV = 0,
   USER_CP_SQUARE_SV = 1,
@@ -1139,8 +1176,10 @@ typedef enum eColorPicker_Types {
   USER_CP_CIRCLE_HSL = 4,
 } eColorPicker_Types;
 
-/** Timecode display styles
- * #UserDef.timecode_style */
+/**
+ * Timecode display styles
+ * #UserDef.timecode_style
+ */
 typedef enum eTimecodeStyles {
   /**
    * As little info as is necessary to show relevant info with '+' to denote the frames

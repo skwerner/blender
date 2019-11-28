@@ -502,9 +502,10 @@ bool BKE_pose_channels_is_valid(const bPose *pose)
 #endif
 
 /**
- * Find the active posechannel for an object (we can't just use pose, as layer info is in armature)
+ * Find the active pose-channel for an object
+ * (we can't just use pose, as layer info is in armature)
  *
- * \note: Object, not bPose is used here, as we need layer info from Armature)
+ * \note #Object, not #bPose is used here, as we need layer info from Armature.
  */
 bPoseChannel *BKE_pose_channel_active(Object *ob)
 {
@@ -1472,7 +1473,7 @@ void BKE_pose_rest(bPose *pose)
   }
 }
 
-void BKE_pose_copyesult_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
+void BKE_pose_copy_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
 {
   copy_m4_m4(pchanto->pose_mat, pchanfrom->pose_mat);
   copy_m4_m4(pchanto->chan_mat, pchanfrom->chan_mat);
@@ -1523,7 +1524,7 @@ bool BKE_pose_copy_result(bPose *to, bPose *from)
   for (pchanfrom = from->chanbase.first; pchanfrom; pchanfrom = pchanfrom->next) {
     pchanto = BKE_pose_channel_find_name(to, pchanfrom->name);
     if (pchanto != NULL) {
-      BKE_pose_copyesult_pchan_result(pchanto, pchanfrom);
+      BKE_pose_copy_pchan_result(pchanto, pchanfrom);
     }
   }
   return true;

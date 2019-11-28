@@ -194,7 +194,8 @@ typedef struct WORKBENCH_UBO_World {
   float background_alpha;
   float curvature_ridge;
   float curvature_valley;
-  int pad[3];
+  float background_dither_factor;
+  int pad[2];
 } WORKBENCH_UBO_World;
 BLI_STATIC_ASSERT_ALIGN(WORKBENCH_UBO_World, 16)
 
@@ -216,6 +217,11 @@ typedef struct WORKBENCH_PrivateData {
   View3DShading shading;
   StudioLight *studio_light;
   const UserDef *preferences;
+  /* Does this instance owns the `world_ubo` field.
+   * Normally the field is borrowed from `WORKBENCH_WorldData`. In case that
+   * there is no World attached to the scene the UBO cannot be cached and should
+   * be freed after using. */
+  bool is_world_ubo_owner;
   struct GPUUniformBuffer *world_ubo;
   struct DRWShadingGroup *shadow_shgrp;
   struct DRWShadingGroup *depth_shgrp;
@@ -305,6 +311,12 @@ typedef struct WORKBENCH_ObjectData {
   BoundBox shadow_bbox;
   bool shadow_bbox_dirty;
 } WORKBENCH_ObjectData;
+
+typedef struct WORKBENCH_WorldData {
+  DrawData dd;
+  /* The cached `GPUUniformBuffer`, that is reused between draw calls. */
+  struct GPUUniformBuffer *world_ubo;
+} WORKBENCH_WorldData;
 
 /* inline helper functions */
 BLI_INLINE bool workbench_is_specular_highlight_enabled(WORKBENCH_PrivateData *wpd)
@@ -404,6 +416,13 @@ BLI_INLINE eGPUTextureFormat workbench_color_texture_format(const WORKBENCH_Priv
     result = GPU_RGBA8;
   }
   return result;
+}
+
+BLI_INLINE bool workbench_background_dither_factor(const WORKBENCH_PrivateData *wpd)
+{
+  /* Only apply dithering when rendering on a RGBA8 texture.
+   * The dithering will remove banding when using a gradient as background */
+  return workbench_color_texture_format(wpd) == GPU_RGBA8;
 }
 
 /* workbench_deferred.c */
@@ -518,8 +537,7 @@ bool studiolight_camera_in_object_shadow(WORKBENCH_PrivateData *wpd,
 void workbench_effect_info_init(WORKBENCH_EffectInfo *effect_info);
 void workbench_private_data_init(WORKBENCH_PrivateData *wpd);
 void workbench_private_data_free(WORKBENCH_PrivateData *wpd);
-void workbench_private_data_get_light_direction(WORKBENCH_PrivateData *wpd,
-                                                float r_light_direction[3]);
+void workbench_private_data_get_light_direction(float r_light_direction[3]);
 
 /* workbench_volume.c */
 void workbench_volume_engine_init(void);

@@ -114,7 +114,7 @@ if(WIN32)
   include(cmake/tinyxml.cmake)
   include(cmake/yamlcpp.cmake)
   # LCMS is an OCIO dep, but only if you build the apps, leaving it here for convenience
-  #include(cmake/lcms.cmake)
+  # include(cmake/lcms.cmake)
 
 endif()
 
@@ -156,6 +156,11 @@ if(UNIX)
   include(cmake/lzma.cmake)
   include(cmake/ssl.cmake)
   include(cmake/sqlite.cmake)
+endif()
+
+if(UNIX AND NOT APPLE)
+  include(cmake/libglu.cmake)
+  include(cmake/mesa.cmake)
 endif()
 
 include(cmake/harvest.cmake)

@@ -28,7 +28,9 @@
 
 #include "BLI_strict_flags.h"
 
-#include "eigen_capi.h"
+#ifndef MATH_STANDALONE
+#  include "eigen_capi.h"
+#endif
 
 /********************************* Init **************************************/
 
@@ -1152,9 +1154,11 @@ bool invert_m4(float m[4][4])
  */
 bool invert_m4_m4_fallback(float inverse[4][4], const float mat[4][4])
 {
+#ifndef MATH_STANDALONE
   if (EIG_invert_m4_m4(inverse, mat)) {
     return true;
   }
+#endif
 
   int i, j, k;
   double temp;
@@ -1222,9 +1226,13 @@ bool invert_m4_m4_fallback(float inverse[4][4], const float mat[4][4])
 
 bool invert_m4_m4(float inverse[4][4], const float mat[4][4])
 {
+#ifndef MATH_STANDALONE
   /* Use optimized matrix inverse from Eigen, since performance
    * impact of this function is significant in complex rigs. */
   return EIG_invert_m4_m4(inverse, mat);
+#else
+  return invert_m4_m4_fallback(inverse, mat);
+#endif
 }
 
 /****************************** Linear Algebra *******************************/
@@ -1956,8 +1964,10 @@ void mat4_to_size(float size[3], const float mat[4][4])
   size[2] = len_v3(mat[2]);
 }
 
-/** Extract scale factors from the matrix, with correction to ensure
- *  exact volume in case of a sheared matrix. */
+/**
+ * Extract scale factors from the matrix, with correction to ensure
+ * exact volume in case of a sheared matrix.
+ */
 void mat4_to_size_fix_shear(float size[3], const float mat[4][4])
 {
   mat4_to_size(size, mat);

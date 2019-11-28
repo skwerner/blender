@@ -1478,7 +1478,8 @@ static void emit_from_particles(Object *flow_ob,
         }
       }
 
-      state.time = DEG_get_ctime(depsgraph); /* use depsgraph time */
+      /* DEG_get_ctime(depsgraph) does not give subframe time */
+      state.time = BKE_scene_frame_get(scene);
       if (psys_get_particle_state(&sim, p, &state, 0) == 0) {
         continue;
       }
@@ -2527,17 +2528,13 @@ static void update_flowsfluids(
       }
       /* sample subframes */
       else {
-#  if 0
         int scene_frame = (int)DEG_get_ctime(depsgraph);
-#  endif
         // float scene_subframe = scene->r.subframe;  // UNUSED
         int subframe;
         for (subframe = 0; subframe <= subframes; subframe++) {
           EmissionMap em_temp = {NULL};
           float sample_size = 1.0f / (float)(subframes + 1);
-#  if 0
           float prev_frame_pos = sample_size * (float)(subframe + 1);
-#  endif
           float sdt = dt * sample_size;
           int hires_multiplier = 1;
 
@@ -2545,8 +2542,6 @@ static void update_flowsfluids(
             hires_multiplier = sds->amplify + 1;
           }
 
-          /* TODO: setting the scene frame no longer works with the new depsgraph. */
-#  if 0
           /* set scene frame to match previous frame + subframe
            * or use current frame for last sample */
           if (subframe < subframes) {
@@ -2557,7 +2552,12 @@ static void update_flowsfluids(
             scene->r.cfra = scene_frame;
             scene->r.subframe = 0.0f;
           }
-#  endif
+
+          /* update flow object frame */
+          BLI_mutex_lock(&object_update_lock);
+          BKE_object_modifier_update_subframe(
+              depsgraph, scene, collob, true, 5, BKE_scene_frame_get(scene), eModifierType_Smoke);
+          BLI_mutex_unlock(&object_update_lock);
 
           if (sfs->source == MOD_SMOKE_FLOW_SOURCE_PARTICLES) {
             /* emit_from_particles() updates timestep internally */
@@ -2567,12 +2567,6 @@ static void update_flowsfluids(
             }
           }
           else { /* MOD_SMOKE_FLOW_SOURCE_MESH */
-            /* update flow object frame */
-            BLI_mutex_lock(&object_update_lock);
-            BKE_object_modifier_update_subframe(
-                depsgraph, scene, collob, true, 5, DEG_get_ctime(depsgraph), eModifierType_Smoke);
-            BLI_mutex_unlock(&object_update_lock);
-
             /* apply flow */
             emit_from_mesh(collob, sds, sfs, &em_temp, sdt);
           }

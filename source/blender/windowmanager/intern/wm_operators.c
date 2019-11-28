@@ -429,21 +429,11 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
     } \
     (void)0
 
-#  define CTX_TEST_PTR_DATA_TYPE(C, member, rna_type, rna_ptr, dataptr_cmp) \
+#  define TEST_PTR_DATA_TYPE(member, rna_type, rna_ptr, dataptr_cmp) \
     { \
       const char *ctx_member = member; \
-      if (RNA_struct_is_a((ptr)->type, &(rna_type)) && (ptr)->data == (dataptr_cmp)) { \
+      if (RNA_struct_is_a((rna_ptr)->type, &(rna_type)) && (rna_ptr)->data == (dataptr_cmp)) { \
         member_id = ctx_member; \
-        break; \
-      } \
-    } \
-    (void)0
-
-#  define CTX_TEST_SPACE_TYPE(space_data_type, member_full, dataptr_cmp) \
-    { \
-      const char *ctx_member_full = member_full; \
-      if (space_data->spacetype == space_data_type && ptr->data == dataptr_cmp) { \
-        member_id = ctx_member_full; \
         break; \
       } \
     } \
@@ -484,19 +474,50 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
 
         SpaceLink *space_data = CTX_wm_space_data(C);
 
-        CTX_TEST_PTR_DATA_TYPE(C, "space_data", RNA_Space, ptr, space_data);
-        CTX_TEST_PTR_DATA_TYPE(C, "space_data", RNA_View3DOverlay, ptr, space_data);
-        CTX_TEST_PTR_DATA_TYPE(C, "space_data", RNA_View3DShading, ptr, space_data);
-        CTX_TEST_PTR_DATA_TYPE(C, "area", RNA_Area, ptr, CTX_wm_area(C));
-        CTX_TEST_PTR_DATA_TYPE(C, "region", RNA_Region, ptr, CTX_wm_region(C));
+        TEST_PTR_DATA_TYPE("space_data", RNA_Space, ptr, space_data);
+        TEST_PTR_DATA_TYPE("area", RNA_Area, ptr, CTX_wm_area(C));
+        TEST_PTR_DATA_TYPE("region", RNA_Region, ptr, CTX_wm_region(C));
 
-        CTX_TEST_SPACE_TYPE(SPACE_IMAGE, "space_data.uv_editor", space_data);
-        CTX_TEST_SPACE_TYPE(
-            SPACE_VIEW3D, "space_data.fx_settings", &(CTX_wm_view3d(C)->fx_settings));
-        CTX_TEST_SPACE_TYPE(SPACE_NLA, "space_data.dopesheet", CTX_wm_space_nla(C)->ads);
-        CTX_TEST_SPACE_TYPE(SPACE_GRAPH, "space_data.dopesheet", CTX_wm_space_graph(C)->ads);
-        CTX_TEST_SPACE_TYPE(SPACE_ACTION, "space_data.dopesheet", &(CTX_wm_space_action(C)->ads));
-        CTX_TEST_SPACE_TYPE(SPACE_FILE, "space_data.params", CTX_wm_space_file(C)->params);
+        switch (space_data->spacetype) {
+          case SPACE_VIEW3D: {
+            const View3D *v3d = (View3D *)space_data;
+            const View3DShading *shading = &v3d->shading;
+
+            TEST_PTR_DATA_TYPE("space_data", RNA_View3DOverlay, ptr, v3d);
+            TEST_PTR_DATA_TYPE("space_data", RNA_View3DShading, ptr, shading);
+            break;
+          }
+          case SPACE_GRAPH: {
+            const SpaceGraph *sipo = (SpaceGraph *)space_data;
+            const bDopeSheet *ads = sipo->ads;
+            TEST_PTR_DATA_TYPE("space_data", RNA_DopeSheet, ptr, ads);
+            break;
+          }
+          case SPACE_FILE: {
+            const SpaceFile *sfile = (SpaceFile *)space_data;
+            const FileSelectParams *params = sfile->params;
+            TEST_PTR_DATA_TYPE("space_data", RNA_FileSelectParams, ptr, params);
+            break;
+          }
+          case SPACE_IMAGE: {
+            const SpaceImage *sima = (SpaceImage *)space_data;
+            TEST_PTR_DATA_TYPE("space_data", RNA_SpaceUVEditor, ptr, sima);
+            break;
+          }
+          case SPACE_NLA: {
+            const SpaceNla *snla = (SpaceNla *)space_data;
+            const bDopeSheet *ads = snla->ads;
+            TEST_PTR_DATA_TYPE("space_data", RNA_DopeSheet, ptr, ads);
+            break;
+          }
+          case SPACE_ACTION: {
+            const SpaceAction *sact = (SpaceAction *)space_data;
+            const bDopeSheet *ads = &sact->ads;
+            TEST_PTR_DATA_TYPE("space_data", RNA_DopeSheet, ptr, ads);
+            break;
+          }
+        }
+
         break;
       }
       default:
@@ -504,7 +525,7 @@ static const char *wm_context_member_from_ptr(bContext *C, const PointerRNA *ptr
     }
 #  undef CTX_TEST_PTR_ID
 #  undef CTX_TEST_PTR_ID_CAST
-#  undef CTX_TEST_SPACE_TYPE
+#  undef TEST_PTR_DATA_TYPE
   }
 
   return member_id;
@@ -623,11 +644,13 @@ void WM_operator_properties_sanitize(PointerRNA *ptr, const bool no_context)
   RNA_STRUCT_END;
 }
 
-/** set all props to their default,
+/**
+ * Set all props to their default.
+ *
  * \param do_update: Only update un-initialized props.
  *
- * \note, there's nothing specific to operators here.
- * this could be made a general function.
+ * \note There's nothing specific to operators here.
+ * This could be made a general function.
  */
 bool WM_operator_properties_default(PointerRNA *ptr, const bool do_update)
 {
@@ -700,6 +723,13 @@ void WM_operator_properties_free(PointerRNA *ptr)
 /** \name Default Operator Callbacks
  * \{ */
 
+/**
+ * Helper to get select and tweak-transform to work conflict free and as desired. See
+ * #WM_operator_properties_generic_select() for details.
+ *
+ * To be used together with #WM_generic_select_invoke() and
+ * #WM_operator_properties_generic_select().
+ */
 int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   PropertyRNA *wait_to_deselect_prop = RNA_struct_find_property(op->ptr,
@@ -763,9 +793,16 @@ int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
 
-  return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
+  return OPERATOR_RUNNING_MODAL | OPERATOR_PASS_THROUGH;
 }
 
+/**
+ * Helper to get select and tweak-transform to work conflict free and as desired. See
+ * #WM_operator_properties_generic_select() for details.
+ *
+ * To be used together with #WM_generic_select_modal() and
+ * #WM_operator_properties_generic_select().
+ */
 int WM_generic_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   RNA_int_set(op->ptr, "mouse_x", event->mval[0]);
@@ -2633,7 +2670,8 @@ static int radial_control_modal(bContext *C, wmOperator *op, const wmEvent *even
 {
   RadialControl *rc = op->customdata;
   float new_value, dist = 0.0f, zoom[2];
-  float delta[2], ret = OPERATOR_RUNNING_MODAL;
+  float delta[2];
+  int ret = OPERATOR_RUNNING_MODAL;
   bool snap;
   float angle_precision = 0.0f;
   const bool has_numInput = hasNumInput(&rc->num_input);
@@ -2835,6 +2873,16 @@ static int radial_control_modal(bContext *C, wmOperator *op, const wmEvent *even
   ED_region_tag_redraw(CTX_wm_region(C));
   radial_control_update_header(op, C);
 
+  if (ret & OPERATOR_FINISHED) {
+    wmWindowManager *wm = CTX_wm_manager(C);
+    if (wm->op_undo_depth == 0) {
+      ID *id = rc->ptr.owner_id;
+      if (ED_undo_is_legacy_compatible_for_property(C, id)) {
+        ED_undo_push(C, op->type->name);
+      }
+    }
+  }
+
   if (ret != OPERATOR_RUNNING_MODAL) {
     radial_control_cancel(C, op);
   }
@@ -2852,7 +2900,7 @@ static void WM_OT_radial_control(wmOperatorType *ot)
   ot->modal = radial_control_modal;
   ot->cancel = radial_control_cancel;
 
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_BLOCKING;
 
   /* all paths relative to the context */
   PropertyRNA *prop;

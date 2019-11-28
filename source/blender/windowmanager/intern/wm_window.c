@@ -257,6 +257,8 @@ void wm_window_free(bContext *C, wmWindowManager *wm, wmWindow *win)
     MEM_freeN(win->cursor_keymap_status);
   }
 
+  WM_gestures_free_all(win);
+
   wm_event_free_all(win);
 
   wm_ghostwindow_destroy(wm, win);
@@ -494,7 +496,7 @@ void wm_window_title(wmWindowManager *wm, wmWindow *win)
   }
 }
 
-void WM_window_set_dpi(wmWindow *win)
+void WM_window_set_dpi(const wmWindow *win)
 {
   float auto_dpi = GHOST_GetDPIHint(win->ghostwin);
 
@@ -1638,6 +1640,7 @@ void wm_ghost_init(bContext *C)
     }
 
     g_system = GHOST_CreateSystem();
+    GHOST_SystemInitDebug(g_system, G.debug & G_DEBUG_GHOST);
 
     if (C != NULL) {
       GHOST_AddEventConsumer(g_system, consumer);
@@ -2186,9 +2189,14 @@ void WM_window_screen_rect_calc(const wmWindow *win, rcti *r_rect)
   *r_rect = screen_rect;
 }
 
-bool WM_window_is_fullscreen(wmWindow *win)
+bool WM_window_is_fullscreen(const wmWindow *win)
 {
   return win->windowstate == GHOST_kWindowStateFullScreen;
+}
+
+bool WM_window_is_maximized(const wmWindow *win)
+{
+  return win->windowstate == GHOST_kWindowStateMaximized;
 }
 
 /** \} */
@@ -2435,10 +2443,12 @@ void WM_opengl_context_release(void *context)
 
 void WM_ghost_show_message_box(const char *title,
                                const char *message,
+                               const char *help_label,
+                               const char *continue_label,
                                const char *link,
                                GHOST_DialogOptions dialog_options)
 {
   BLI_assert(g_system);
-  GHOST_ShowMessageBox(g_system, title, message, link, dialog_options);
+  GHOST_ShowMessageBox(g_system, title, message, help_label, continue_label, link, dialog_options);
 }
 /** \} */

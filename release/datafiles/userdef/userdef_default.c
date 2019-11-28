@@ -153,7 +153,8 @@ const UserDef U_default = {
     .ndof_sensitivity = 1.0,
     .ndof_orbit_sensitivity = 1.0,
     .ndof_deadzone = 0.1,
-    .ndof_flag = (NDOF_LOCK_HORIZON | NDOF_SHOULD_PAN | NDOF_SHOULD_ZOOM | NDOF_SHOULD_ROTATE),
+    .ndof_flag = (NDOF_MODE_ORBIT | NDOF_LOCK_HORIZON | NDOF_SHOULD_PAN | NDOF_SHOULD_ZOOM |
+                  NDOF_SHOULD_ROTATE),
     .ogl_multisamples = 0,
     .image_draw_method = IMAGE_DRAW_METHOD_AUTO,
     .glalphaclip = 0.004,
@@ -213,6 +214,7 @@ const UserDef U_default = {
             .sort_type = FILE_SORT_ALPHA,
             .details_flags = FILE_DETAILS_SIZE | FILE_DETAILS_DATETIME,
             .flag = FILE_HIDE_DOT,
+            .filter_id = FILTER_ID_ALL,
 
             .temp_win_sizex = 1020,
             .temp_win_sizey = 600,

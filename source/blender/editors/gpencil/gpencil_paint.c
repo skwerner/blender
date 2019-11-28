@@ -837,6 +837,11 @@ static short gp_stroke_addpoint(
     gpd->runtime.sbuffer = ED_gpencil_sbuffer_ensure(
         gpd->runtime.sbuffer, &gpd->runtime.sbuffer_size, &gpd->runtime.sbuffer_used, false);
 
+    /* Check the buffer was created. */
+    if (gpd->runtime.sbuffer == NULL) {
+      return GP_STROKEADD_INVALID;
+    }
+
     /* get pointer to destination point */
     pt = ((tGPspoint *)(gpd->runtime.sbuffer) + gpd->runtime.sbuffer_used);
 
@@ -3291,7 +3296,8 @@ static void gpencil_guide_event_handling(bContext *C,
 
   /* Enter or exit set center point mode */
   if ((event->type == OKEY) && (event->val == KM_RELEASE)) {
-    if (p->paintmode == GP_PAINTMODE_DRAW && guide->reference_point != GP_GUIDE_REF_OBJECT) {
+    if ((p->paintmode == GP_PAINTMODE_DRAW) && guide->use_guide &&
+        (guide->reference_point != GP_GUIDE_REF_OBJECT)) {
       add_notifier = true;
       p->paintmode = GP_PAINTMODE_SET_CP;
       ED_gpencil_toggle_brush_cursor(C, false, NULL);
@@ -3660,7 +3666,6 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
   tGPsdata *p = op->customdata;
   ToolSettings *ts = CTX_data_tool_settings(C);
   GP_Sculpt_Guide *guide = &p->scene->toolsettings->gp_sculpt.guide;
-  tGPspoint *points = (tGPspoint *)p->gpd->runtime.sbuffer;
 
   /* default exit state - pass through to support MMB view nav, etc. */
   int estate = OPERATOR_PASS_THROUGH;
@@ -3710,6 +3715,7 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
     if (drawmode) {
       p->status = GP_STATUS_IDLING;
       p->paintmode = GP_PAINTMODE_DRAW;
+      WM_cursor_modal_restore(p->win);
       ED_gpencil_toggle_brush_cursor(C, true, NULL);
       DEG_id_tag_update(&p->scene->id, ID_RECALC_COPY_ON_WRITE);
     }
@@ -3969,6 +3975,7 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
       int size_after = p->gpd->runtime.sbuffer_used;
 
       /* Last point of the event is always real (not fake). */
+      tGPspoint *points = (tGPspoint *)p->gpd->runtime.sbuffer;
       tGPspoint *pt = &points[size_after - 1];
       pt->tflag &= ~GP_TPOINT_FAKE;
 

@@ -776,7 +776,7 @@ typedef struct wmOperatorType {
 } wmOperatorType;
 
 /**
- * Wrapper to reference a wmOperatorType together with some set properties and othere relevant
+ * Wrapper to reference a #wmOperatorType together with some set properties and other relevant
  * information to invoke the operator in a customizable way.
  */
 typedef struct wmOperatorCallParams {
@@ -894,6 +894,8 @@ typedef struct wmDropBox {
 typedef struct wmTooltipState {
   /** Create tooltip on this event. */
   struct wmTimer *timer;
+  /** The area the tooltip is created in. */
+  struct ScrArea *area_from;
   /** The region the tooltip is created in. */
   struct ARegion *region_from;
   /** The tooltip region. */

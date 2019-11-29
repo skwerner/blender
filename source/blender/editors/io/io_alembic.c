@@ -127,7 +127,7 @@ static int wm_alembic_export_exec(bContext *C, wmOperator *op)
       .apply_subdiv = RNA_boolean_get(op->ptr, "apply_subdiv"),
       .curves_as_mesh = RNA_boolean_get(op->ptr, "curves_as_mesh"),
       .flatten_hierarchy = RNA_boolean_get(op->ptr, "flatten"),
-      .visible_layers_only = RNA_boolean_get(op->ptr, "visible_layers_only"),
+      .visible_objects_only = RNA_boolean_get(op->ptr, "visible_objects_only"),
       .renderable_only = RNA_boolean_get(op->ptr, "renderable_only"),
       .face_sets = RNA_boolean_get(op->ptr, "face_sets"),
       .use_subdiv_schema = RNA_boolean_get(op->ptr, "subdiv_schema"),
@@ -209,7 +209,7 @@ static void ui_alembic_export_settings(uiLayout *layout, PointerRNA *imfptr)
   uiItemR(row, imfptr, "renderable_only", 0, NULL, ICON_NONE);
 
   row = uiLayoutRow(box, false);
-  uiItemR(row, imfptr, "visible_layers_only", 0, NULL, ICON_NONE);
+  uiItemR(row, imfptr, "visible_objects_only", 0, NULL, ICON_NONE);
 
   row = uiLayoutRow(box, false);
   uiItemR(row, imfptr, "flatten", 0, NULL, ICON_NONE);
@@ -392,10 +392,10 @@ void WM_OT_alembic_export(wmOperatorType *ot)
                   "Export only objects marked renderable in the outliner");
 
   RNA_def_boolean(ot->srna,
-                  "visible_layers_only",
+                  "visible_objects_only",
                   0,
-                  "Visible Layers Only",
-                  "Export only objects in visible layers");
+                  "Visible Objects Only",
+                  "Export only objects that are visible");
 
   RNA_def_boolean(ot->srna,
                   "flatten",
@@ -604,6 +604,9 @@ static void ui_alembic_import_settings(uiLayout *layout, PointerRNA *imfptr)
   uiItemL(row, IFACE_("Options:"), ICON_NONE);
 
   row = uiLayoutRow(box, false);
+  uiItemR(row, imfptr, "relative_path", 0, NULL, ICON_NONE);
+
+  row = uiLayoutRow(box, false);
   uiItemR(row, imfptr, "set_frame_range", 0, NULL, ICON_NONE);
 
   row = uiLayoutRow(box, false);
@@ -691,7 +694,7 @@ void WM_OT_alembic_import(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_ALEMBIC,
                                  FILE_BLENDER,
                                  FILE_SAVE,
-                                 WM_FILESEL_FILEPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 

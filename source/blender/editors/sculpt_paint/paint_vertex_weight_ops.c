@@ -24,13 +24,8 @@
 #include "BLI_math.h"
 #include "BLI_bitmap.h"
 
-#include "IMB_imbuf.h"
-#include "IMB_imbuf_types.h"
-#include "IMB_colormanagement.h"
-
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_particle_types.h"
 #include "DNA_brush_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -44,7 +39,6 @@
 #include "BKE_deform.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_iterators.h"
-#include "BKE_mesh_mapping.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
 #include "BKE_object_deform.h"
@@ -178,11 +172,12 @@ void PAINT_OT_weight_from_bones(wmOperatorType *ot)
 /* note: we cant sample frontbuf, weight colors are interpolated too unpredictable */
 static int weight_sample_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   Mesh *me;
   bool changed = false;
 
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
   me = BKE_mesh_from_object(vc.obact);
 
   if (me && me->dvert && vc.v3d && vc.rv3d && (vc.obact->actdef != 0)) {
@@ -308,10 +303,11 @@ static const EnumPropertyItem *weight_paint_sample_enum_itemf(bContext *C,
   if (C) {
     wmWindow *win = CTX_wm_window(C);
     if (win && win->eventstate) {
+      Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
       ViewContext vc;
       Mesh *me;
 
-      ED_view3d_viewcontext_init(C, &vc);
+      ED_view3d_viewcontext_init(C, &vc, depsgraph);
       me = BKE_mesh_from_object(vc.obact);
 
       if (me && me->dvert && vc.v3d && vc.rv3d && vc.obact->defbase.first) {
@@ -379,8 +375,9 @@ static const EnumPropertyItem *weight_paint_sample_enum_itemf(bContext *C,
 static int weight_sample_group_exec(bContext *C, wmOperator *op)
 {
   int type = RNA_enum_get(op->ptr, "group");
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   BLI_assert(type + 1 >= 0);
   vc.obact->actdef = type + 1;
@@ -668,13 +665,15 @@ static void gradientVertInit__mapFunc(void *userData,
    * the screen coords of the verts need to be cached because
    * updating the mesh may move them about (entering feedback loop) */
   if (BLI_BITMAP_TEST(grad_data->vert_visit, index)) {
-    copy_v2_fl(vs->sco, FLT_MAX);
+    /* Do not copy FLT_MAX here, for generative modifiers we are getting here
+     * multiple times with the same orig index. */
     return;
   }
 
   if (ED_view3d_project_float_object(
           grad_data->ar, co, vs->sco, V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_NEAR) !=
       V3D_PROJ_RET_OK) {
+    copy_v2_fl(vs->sco, FLT_MAX);
     return;
   }
 
@@ -885,7 +884,7 @@ void PAINT_OT_weight_gradient(wmOperatorType *ot)
   prop = RNA_def_enum(ot->srna, "type", gradient_types, 0, "Type", "");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
-  WM_operator_properties_gesture_straightline(ot, CURSOR_EDIT);
+  WM_operator_properties_gesture_straightline(ot, WM_CURSOR_EDIT);
 }
 
 /** \} */

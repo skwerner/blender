@@ -80,10 +80,10 @@
 #include "IMB_imbuf_types.h"
 #include "IMB_thumbs.h"
 
-#include "BIF_gl.h"
 #include "BIF_glutil.h"
 
 #include "GPU_shader.h"
+#include "GPU_glew.h"
 
 #include "RE_pipeline.h"
 #include "RE_engine.h"
@@ -115,7 +115,7 @@ ImBuf *get_brush_icon(Brush *brush)
         // first use the path directly to try and load the file
 
         BLI_strncpy(path, brush->icon_filepath, sizeof(brush->icon_filepath));
-        BLI_path_abs(path, BKE_main_blendfile_path_from_global());
+        BLI_path_abs(path, ID_BLEND_PATH_FROM_GLOBAL(&brush->id));
 
         /* use default colorspaces for brushes */
         brush->icon_imbuf = IMB_loadiffname(path, flags, NULL);
@@ -474,7 +474,7 @@ static Scene *preview_prepare_scene(
             }
           }
           else if (base->object->type == OB_LAMP) {
-            base->flag |= BASE_VISIBLE;
+            base->flag |= BASE_VISIBLE_DEPSGRAPH;
           }
         }
       }

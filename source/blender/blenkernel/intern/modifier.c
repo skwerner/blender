@@ -612,10 +612,9 @@ ModifierData *modifiers_getLastPreview(struct Scene *scene, ModifierData *md, in
   return tmp_md;
 }
 
-/* NOTE: This is to support old files from before Blender supported modifiers,
- * in some cases versioning code updates these so for new files this will
- * return an empty list. */
-ModifierData *modifiers_getVirtualModifierList(Object *ob,
+/* This is to include things that are not modifiers in the evaluation of the modifier stack, for
+ * example parenting to an armature. */
+ModifierData *modifiers_getVirtualModifierList(const Object *ob,
                                                VirtualModifierData *virtualModifierData)
 {
   ModifierData *md;
@@ -759,6 +758,23 @@ Object *modifiers_isDeformedByCurve(Object *ob)
   }
 
   return NULL;
+}
+
+bool modifiers_usesMultires(Object *ob)
+{
+  VirtualModifierData virtualModifierData;
+  ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+  MultiresModifierData *mmd = NULL;
+
+  for (; md; md = md->next) {
+    if (md->type == eModifierType_Multires) {
+      mmd = (MultiresModifierData *)md;
+      if (mmd->totlvl != 0) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 bool modifiers_usesArmature(Object *ob, bArmature *arm)

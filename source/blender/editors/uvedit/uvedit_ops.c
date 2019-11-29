@@ -1478,6 +1478,8 @@ static int uv_select_more_less(bContext *C, const bool select)
   Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data_with_uvs(
       view_layer, ((View3D *)NULL), &objects_len);
 
+  const bool is_uv_face_selectmode = (ts->uv_selectmode == UV_SELECT_FACE);
+
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *obedit = objects[ob_index];
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
@@ -1499,7 +1501,7 @@ static int uv_select_more_less(bContext *C, const bool select)
       continue;
     }
 
-    if (ts->uv_selectmode == UV_SELECT_FACE) {
+    if (is_uv_face_selectmode) {
 
       /* clear tags */
       BM_mesh_elem_hflag_disable_all(em->bm, BM_FACE, BM_ELEM_TAG, false);
@@ -1562,8 +1564,14 @@ static int uv_select_more_less(bContext *C, const bool select)
     }
 
     if (changed) {
-      /* Select tagged loops. */
-      uv_select_flush_from_tag_loop(sima, scene, obedit, select);
+      if (is_uv_face_selectmode) {
+        /* Select tagged faces. */
+        uv_select_flush_from_tag_face(sima, scene, obedit, select);
+      }
+      else {
+        /* Select tagged loops. */
+        uv_select_flush_from_tag_loop(sima, scene, obedit, select);
+      }
       DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
       WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
     }
@@ -4872,12 +4880,6 @@ static void UV_OT_reveal(wmOperatorType *ot)
 /** \name Set 2D Cursor Operator
  * \{ */
 
-static bool uv_set_2d_cursor_poll(bContext *C)
-{
-  return ED_operator_uvedit_space_image(C) || ED_space_image_maskedit_poll(C) ||
-         ED_space_image_paint_curve(C);
-}
-
 static int uv_set_2d_cursor_exec(bContext *C, wmOperator *op)
 {
   SpaceImage *sima = CTX_wm_space_image(C);
@@ -4923,7 +4925,7 @@ static void UV_OT_cursor_set(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = uv_set_2d_cursor_exec;
   ot->invoke = uv_set_2d_cursor_invoke;
-  ot->poll = uv_set_2d_cursor_poll;
+  ot->poll = ED_space_image_cursor_poll;
 
   /* properties */
   RNA_def_float_vector(ot->srna,

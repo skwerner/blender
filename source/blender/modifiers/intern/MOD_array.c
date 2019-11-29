@@ -80,15 +80,12 @@ static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk,
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   ArrayModifierData *amd = (ArrayModifierData *)md;
+  bool need_transform_dependency = false;
   if (amd->start_cap != NULL) {
-    DEG_add_object_relation(
-        ctx->node, amd->start_cap, DEG_OB_COMP_TRANSFORM, "Array Modifier Start Cap");
     DEG_add_object_relation(
         ctx->node, amd->start_cap, DEG_OB_COMP_GEOMETRY, "Array Modifier Start Cap");
   }
   if (amd->end_cap != NULL) {
-    DEG_add_object_relation(
-        ctx->node, amd->end_cap, DEG_OB_COMP_TRANSFORM, "Array Modifier End Cap");
     DEG_add_object_relation(
         ctx->node, amd->end_cap, DEG_OB_COMP_GEOMETRY, "Array Modifier End Cap");
   }
@@ -100,8 +97,12 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   if (amd->offset_ob != NULL) {
     DEG_add_object_relation(
         ctx->node, amd->offset_ob, DEG_OB_COMP_TRANSFORM, "Array Modifier Offset");
+    need_transform_dependency = true;
   }
-  DEG_add_modifier_to_transform_relation(ctx->node, "Array Modifier");
+
+  if (need_transform_dependency) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "Array Modifier");
+  }
 }
 
 BLI_INLINE float sum_v3(const float v[3])
@@ -269,8 +270,8 @@ static void dm_mvert_map_doubles(int *doubles_map,
 static void mesh_merge_transform(Mesh *result,
                                  Mesh *cap_mesh,
                                  const float cap_offset[4][4],
-                                 unsigned int cap_verts_index,
-                                 unsigned int cap_edges_index,
+                                 uint cap_verts_index,
+                                 uint cap_edges_index,
                                  int cap_loops_index,
                                  int cap_polys_index,
                                  int cap_nverts,

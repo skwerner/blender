@@ -221,7 +221,7 @@ static int copy_as_driver_button_exec(bContext *C, wmOperator *op)
 static void UI_OT_copy_as_driver_button(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Copy As New Driver";
+  ot->name = "Copy as New Driver";
   ot->idname = "UI_OT_copy_as_driver_button";
   ot->description =
       "Create a new driver with this property as input, and copy it to the "
@@ -453,7 +453,7 @@ static int unset_property_button_exec(bContext *C, wmOperator *UNUSED(op))
 static void UI_OT_unset_property_button(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Unset property";
+  ot->name = "Unset Property";
   ot->idname = "UI_OT_unset_property_button";
   ot->description = "Clear the property and use default or generated value in operators";
 
@@ -852,10 +852,10 @@ bool UI_context_copy_to_selected_list(bContext *C,
 }
 
 /**
- * called from both exec & poll
+ * Called from both exec & poll.
  *
- * \note: normally we wouldn't call a loop from within a poll function,
- * However this is a special case, and for regular poll calls, getting
+ * \note Normally we wouldn't call a loop from within a poll function,
+ * however this is a special case, and for regular poll calls, getting
  * the context from the button will fail early.
  */
 static bool copy_to_selected_button(bContext *C, bool all, bool poll)
@@ -944,7 +944,7 @@ static int copy_to_selected_button_exec(bContext *C, wmOperator *op)
 static void UI_OT_copy_to_selected_button(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Copy To Selected";
+  ot->name = "Copy to Selected";
   ot->idname = "UI_OT_copy_to_selected_button";
   ot->description = "Copy property from this object to selected objects or bones";
 
@@ -1092,7 +1092,7 @@ static int jump_to_target_button_exec(bContext *C, wmOperator *UNUSED(op))
 static void UI_OT_jump_to_target_button(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Jump To Target";
+  ot->name = "Jump to Target";
   ot->idname = "UI_OT_jump_to_target_button";
   ot->description = "Switch to the target object or bone";
 
@@ -1323,8 +1323,9 @@ static void UI_OT_editsource(wmOperatorType *ot)
 
 /**
  * EditTranslation utility funcs and operator,
- * \note: this includes utility functions and button matching checks.
- * this only works in conjunction with a py operator!
+ *
+ * \note this includes utility functions and button matching checks.
+ * this only works in conjunction with a Python operator!
  */
 static void edittranslation_find_po_file(const char *root,
                                          const char *uilng,
@@ -1751,6 +1752,7 @@ void ED_operatortypes_ui(void)
   WM_operatortype_append(UI_OT_eyedropper_id);
   WM_operatortype_append(UI_OT_eyedropper_depth);
   WM_operatortype_append(UI_OT_eyedropper_driver);
+  WM_operatortype_append(UI_OT_eyedropper_gpencil_color);
 }
 
 /**

@@ -22,6 +22,7 @@ from bpy.types import Operator
 
 from bpy.props import (
     BoolProperty,
+    EnumProperty,
     FloatProperty,
     IntProperty,
 )
@@ -125,7 +126,7 @@ def add_uvs(mesh, minor_seg, major_seg):
 
 
 class AddTorus(Operator, object_utils.AddObjectHelper):
-    """Add a torus mesh"""
+    """Construct a torus mesh"""
     bl_idname = "mesh.primitive_torus_add"
     bl_label = "Add Torus"
     bl_options = {'REGISTER', 'UNDO', 'PRESET'}
@@ -147,7 +148,7 @@ class AddTorus(Operator, object_utils.AddObjectHelper):
         min=3, max=256,
         default=12,
     )
-    mode: bpy.props.EnumProperty(
+    mode: EnumProperty(
         name="Torus Dimensions",
         items=(
             ('MAJOR_MINOR', "Major/Minor",

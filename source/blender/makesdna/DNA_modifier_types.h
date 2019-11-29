@@ -377,10 +377,11 @@ typedef struct BevelModifierData {
   short mat;
   short edge_flags;
   short face_str_mode;
-  /* patterns to use for mitering non-reflex and reflex miter edges */
+  /** Patterns to use for mitering non-reflex and reflex miter edges */
   short miter_inner;
   short miter_outer;
-  char _pad0[2];
+  /** The method to use for creating >2-way intersections */
+  short vmesh_method;
   /** Controls profile shape (0->1, .5 is round). */
   float profile;
   /** if the MOD_BEVEL_ANGLE is set,
@@ -390,6 +391,10 @@ typedef struct BevelModifierData {
   /** if the MOD_BEVEL_VWEIGHT option is set,
    * this will be the name of the vert group, MAX_VGROUP_NAME */
   char defgrp_name[64];
+
+  /** Curve info for the custom profile */
+  struct CurveProfile *custom_profile;
+
 } BevelModifierData;
 
 /* BevelModifierData->flags and BevelModifierData->lim_flags */
@@ -399,8 +404,8 @@ enum {
   MOD_BEVEL_ANGLE = (1 << 3),
   MOD_BEVEL_WEIGHT = (1 << 4),
   MOD_BEVEL_VGROUP = (1 << 5),
-  /*  unused                  = (1 << 7), */
-  /*  unused                  = (1 << 8), */
+  MOD_BEVEL_CUSTOM_PROFILE = (1 << 7),
+  MOD_BEVEL_SAMPLE_STRAIGHT = (1 << 8),
   /*  unused                  = (1 << 9), */
   /*  unused                  = (1 << 10), */
   /*  unused                  = (1 << 11), */
@@ -437,6 +442,12 @@ enum {
   MOD_BEVEL_MITER_SHARP,
   MOD_BEVEL_MITER_PATCH,
   MOD_BEVEL_MITER_ARC,
+};
+
+/* BevelModifier->vmesh_method */
+enum {
+  MOD_BEVEL_VMESH_ADJ,
+  MOD_BEVEL_VMESH_CUTOFF,
 };
 
 typedef struct SmokeModifierData {
@@ -1115,7 +1126,13 @@ typedef struct SolidifyModifierData {
   float offset_fac_vg;
   /** Clamp offset based on surrounding geometry. */
   float offset_clamp;
-  char _pad[4];
+  char mode;
+
+  /** Variables for #MOD_SOLIDIFY_MODE_NONMANIFOLD. */
+  char nonmanifold_offset_mode;
+  char nonmanifold_boundary_mode;
+
+  char _pad;
   float crease_inner;
   float crease_outer;
   float crease_rim;
@@ -1124,6 +1141,7 @@ typedef struct SolidifyModifierData {
   short mat_ofs_rim;
 } SolidifyModifierData;
 
+/** #SolidifyModifierData.flag */
 enum {
   MOD_SOLIDIFY_RIM = (1 << 0),
   MOD_SOLIDIFY_EVEN = (1 << 1),
@@ -1134,6 +1152,27 @@ enum {
 #endif
   MOD_SOLIDIFY_FLIP = (1 << 5),
   MOD_SOLIDIFY_NOSHELL = (1 << 6),
+  MOD_SOLIDIFY_OFFSET_ANGLE_CLAMP = (1 << 7),
+};
+
+/** #SolidifyModifierData.mode */
+enum {
+  MOD_SOLIDIFY_MODE_EXTRUDE = 0,
+  MOD_SOLIDIFY_MODE_NONMANIFOLD = 1,
+};
+
+/** #SolidifyModifierData.nonmanifold_offset_mode */
+enum {
+  MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_FIXED = 0,
+  MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_EVEN = 1,
+  MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_CONSTRAINTS = 2,
+};
+
+/** #SolidifyModifierData.nonmanifold_boundary_mode */
+enum {
+  MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_NONE = 0,
+  MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_ROUND = 1,
+  MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_FLAT = 2,
 };
 
 typedef struct ScrewModifierData {
@@ -1594,6 +1633,19 @@ enum {
   MOD_LAPLACIANSMOOTH_NORMALIZED = (1 << 5),
 };
 
+typedef struct CorrectiveSmoothDeltaCache {
+  /* delta's between the original positions and the smoothed positions */
+  float (*deltas)[3];
+  unsigned int totverts;
+
+  /* Value of settings when creating the cache.
+   * These are used to check if the cache should be recomputed. */
+  float lambda;
+  short repeat, flag;
+  char smooth_type, rest_source;
+  char _pad[2];
+} CorrectiveSmoothDeltaCache;
+
 typedef struct CorrectiveSmoothModifierData {
   ModifierData modifier;
 
@@ -1612,11 +1664,8 @@ typedef struct CorrectiveSmoothModifierData {
   /** MAX_VGROUP_NAME. */
   char defgrp_name[64];
 
-  /* runtime-only cache (delta's between),
-   * delta's between the original positions and the smoothed positions */
-  float (*delta_cache)[3];
-  unsigned int delta_cache_num;
-  char _pad2[4];
+  /* runtime-only cache */
+  CorrectiveSmoothDeltaCache delta_cache;
 } CorrectiveSmoothModifierData;
 
 enum {

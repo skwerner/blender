@@ -766,6 +766,7 @@ class CLIP_PT_plane_track(CLIP_PT_tracking_panel, Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
 
         clip = context.space_data.clip
         active_track = clip.tracking.plane_tracks.active
@@ -777,7 +778,8 @@ class CLIP_PT_plane_track(CLIP_PT_tracking_panel, Panel):
 
         layout.prop(active_track, "name")
         layout.prop(active_track, "use_auto_keying")
-        layout.prop(active_track, "image")
+        layout.template_ID(
+            active_track, "image", new="image.new", open="image.open")
 
         row = layout.row()
         row.active = active_track.image is not None
@@ -1221,7 +1223,7 @@ class CLIP_PT_tools_grease_pencil_draw(AnnotationDrawingToolsPanel, Panel):
 class CLIP_MT_view_zoom(Menu):
     bl_label = "Fractional Zoom"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         ratios = ((1, 8), (1, 4), (1, 2), (1, 1), (2, 1), (4, 1), (8, 1))
@@ -1255,6 +1257,7 @@ class CLIP_MT_view(Menu):
             layout.operator("clip.view_selected")
             layout.operator("clip.view_all")
             layout.operator("clip.view_all", text="View Fit").fit_view = True
+            layout.operator("clip.view_center_cursor")
 
             layout.separator()
 

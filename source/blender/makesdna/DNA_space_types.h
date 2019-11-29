@@ -79,6 +79,22 @@ typedef struct SpaceLink {
   char _pad0[6];
 } SpaceLink;
 
+/* SpaceLink.link_flag */
+enum {
+  /**
+   * The space is not a regular one opened through the editor menu (for example) but spawned by an
+   * operator to fulfill some task and then disappear again.
+   * Can typically be cancelled using Escape, but that is handled on the editor level. */
+  SPACE_FLAG_TYPE_TEMPORARY = (1 << 0),
+  /**
+   * Used to mark a space as active but "overlapped" by temporary full-screen spaces. Without this
+   * we wouldn't be able to restore the correct active space after closing temp full-screens
+   * reliably if the same space type is opened twice in a full-screen stack (see T19296). We don't
+   * actually open the same space twice, we have to pretend it is by managing area order carefully.
+   */
+  SPACE_FLAG_TYPE_WAS_ACTIVE = (1 << 1),
+};
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -467,6 +483,13 @@ typedef enum eGraphEdit_Runtime_Flag {
   SIPO_RUNTIME_FLAG_NEED_CHAN_SYNC = (1 << 0),
   /** Temporary flag to force fcurves to recalculate colors. */
   SIPO_RUNTIME_FLAG_NEED_CHAN_SYNC_COLOR = (1 << 1),
+
+  /**
+   * These flags are for the mouse-select code to communicate with the transform code. Click
+   * dragging (tweaking) a handle sets the according left/right flag which transform code uses then
+   * to limit translation to this side. */
+  SIPO_RUNTIME_FLAG_TWEAK_HANDLES_LEFT = (1 << 2),
+  SIPO_RUNTIME_FLAG_TWEAK_HANDLES_RIGHT = (1 << 3),
 } eGraphEdit_Runtime_Flag;
 
 /** \} */
@@ -676,11 +699,9 @@ typedef struct FileSelectParams {
   short sort;
   /** Display mode flag. */
   short display;
-  short display_previous;
   /** Details toggles (file size, creation date, etc.) */
   char details_flags;
-  /* The type of file action (opening or saving) */
-  char action_type; /* eFileSel_Action */
+  char _pad2[3];
   /** Filter when (flags & FILE_FILTER) is true. */
   int filter;
 
@@ -797,7 +818,8 @@ typedef enum eFileSel_Params_Flag {
   FILE_PARAMS_FLAG_UNUSED_9 = (1 << 9), /* cleared */
   FILE_GROUP_INSTANCE = (1 << 10),
   FILE_SORT_INVERT = (1 << 11),
-  FILE_HIDE_TOOL_PROPS = (1 << 12)
+  FILE_HIDE_TOOL_PROPS = (1 << 12),
+  FILE_CHECK_EXISTING = (1 << 13),
 } eFileSel_Params_Flag;
 
 /* sfile->params->rename_flag */
@@ -951,7 +973,8 @@ typedef struct FileDirEntry {
   int act_variant;
 } FileDirEntry;
 
-/** Array of direntries.
+/**
+ * Array of direntries.
  *
  * This struct is used in various, different contexts.
  *
@@ -1144,6 +1167,41 @@ typedef enum eSpaceImage_OtherUVFilter {
 /** \name Text Editor
  * \{ */
 
+typedef struct SpaceText_Runtime {
+
+  /** Actual line height, scaled by dpi. */
+  int lheight_px;
+
+  /** Runtime computed, character width. */
+  int cwidth_px;
+
+  /** The handle of the scroll-bar which can be clicked and dragged. */
+  struct rcti scroll_region_handle;
+  /** The region for selected text to show in the scrolling area. */
+  struct rcti scroll_region_select;
+
+  /** Number of digits to show in the line numbers column (when enabled). */
+  int line_number_display_digits;
+
+  /** Number of lines this window can display (even when they aren't used). */
+  int viewlines;
+
+  /** Use for drawing scroll-bar & calculating scroll operator motion scaling. */
+  float scroll_px_per_line;
+
+  /**
+   * Run-time for scroll increments smaller than a line (smooth scroll).
+   * Values must be between zero and the line, column width: (cwidth, TXT_LINE_HEIGHT(st)).
+   */
+  int scroll_ofs_px[2];
+
+  char _pad1[4];
+
+  /** Cache for faster drawing. */
+  void *drawcache;
+
+} SpaceText_Runtime;
+
 /* Text Editor */
 typedef struct SpaceText {
   SpaceLink *next, *prev;
@@ -1156,30 +1214,26 @@ typedef struct SpaceText {
 
   struct Text *text;
 
-  int top, viewlines;
-  short flags, menunr;
+  int top, left;
+  char _pad1[4];
+
+  short flags;
 
   /** User preference, is font_size! */
   short lheight;
-  /**
-   * Runtime computed, character width
-   * and the number of chars to use when showing line numbers.
-   */
-  char cwidth, linenrs_tot;
-  int left;
-  int showlinenrs;
+
   int tabnumber;
 
-  short showsyntax;
-  short line_hlight;
-  short overwrite;
+  /* Booleans */
+  char wordwrap;
+  char doplugins;
+  char showlinenrs;
+  char showsyntax;
+  char line_hlight;
+  char overwrite;
   /** Run python while editing, evil. */
-  short live_edit;
-  float pix_per_line;
-
-  struct rcti txtscroll, txtbar;
-
-  int wordwrap, doplugins;
+  char live_edit;
+  char _pad2[1];
 
   /** ST_MAX_FIND_STR. */
   char findstr[256];
@@ -1188,23 +1242,18 @@ typedef struct SpaceText {
 
   /** Column number to show right margin at. */
   short margin_column;
-  /** Actual lineheight, dpi controlled. */
-  short lheight_dpi;
-  char _pad[4];
+  char _pad3[2];
 
-  /** Cache for faster drawing. */
-  void *drawcache;
-
-  /** Runtime, for scroll increments smaller than a line. */
-  float scroll_accum[2];
+  /** Keep last. */
+  SpaceText_Runtime runtime;
 } SpaceText;
 
 /* SpaceText flags (moved from DNA_text_types.h) */
 typedef enum eSpaceText_Flags {
   /* scrollable */
   ST_SCROLL_SELECT = (1 << 0),
-  /* clear namespace after script execution (BPY_main.c) */
-  ST_CLEAR_NAMESPACE = (1 << 4),
+
+  ST_FLAG_UNUSED_4 = (1 << 4), /* dirty */
 
   ST_FIND_WRAP = (1 << 5),
   ST_FIND_ALL = (1 << 6),

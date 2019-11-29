@@ -21,7 +21,7 @@
 #include "ED_screen.h"
 
 #include "GPU_batch_presets.h"
-#include "GPU_extensions.h"
+#include "GPU_platform.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
@@ -32,9 +32,7 @@
 #include "BLI_rect.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 
-#include "UI_interface.h"
 #include "UI_resources.h"
 
 #include "screen_intern.h"

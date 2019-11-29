@@ -346,6 +346,8 @@ typedef enum {
   /** sphere widget (used to input a unit-vector, aka normal) */
   UI_BTYPE_UNITVEC = 31 << 9,
   UI_BTYPE_CURVE = 32 << 9,
+  /** Profile editing widget */
+  UI_BTYPE_CURVEPROFILE = 33 << 9,
   UI_BTYPE_LISTBOX = 36 << 9,
   UI_BTYPE_LISTROW = 37 << 9,
   UI_BTYPE_HSVCIRCLE = 38 << 9,
@@ -524,6 +526,7 @@ bool UI_but_is_tool(const uiBut *but);
 bool UI_but_is_utf8(const uiBut *but);
 #define UI_but_is_decorator(but) ((but)->func == ui_but_anim_decorate_cb)
 
+bool UI_block_is_empty_ex(const uiBlock *block, const bool skip_title);
 bool UI_block_is_empty(const uiBlock *block);
 bool UI_block_can_add_separator(const uiBlock *block);
 
@@ -1810,6 +1813,7 @@ void uiLayoutSetActivateInit(uiLayout *layout, bool active);
 void uiLayoutSetEnabled(uiLayout *layout, bool enabled);
 void uiLayoutSetRedAlert(uiLayout *layout, bool redalert);
 void uiLayoutSetAlignment(uiLayout *layout, char alignment);
+void uiLayoutSetFixedSize(uiLayout *layout, bool fixed_size);
 void uiLayoutSetKeepAspect(uiLayout *layout, bool keepaspect);
 void uiLayoutSetScaleX(uiLayout *layout, float scale);
 void uiLayoutSetScaleY(uiLayout *layout, float scale);
@@ -1827,6 +1831,7 @@ bool uiLayoutGetActivateInit(uiLayout *layout);
 bool uiLayoutGetEnabled(uiLayout *layout);
 bool uiLayoutGetRedAlert(uiLayout *layout);
 int uiLayoutGetAlignment(uiLayout *layout);
+bool uiLayoutGetFixedSize(uiLayout *layout);
 bool uiLayoutGetKeepAspect(uiLayout *layout);
 int uiLayoutGetWidth(uiLayout *layout);
 float uiLayoutGetScaleX(uiLayout *layout);
@@ -1870,7 +1875,8 @@ void uiTemplateID(uiLayout *layout,
                   const char *openop,
                   const char *unlinkop,
                   int filter,
-                  const bool live_icon);
+                  const bool live_icon,
+                  const char *text);
 void uiTemplateIDBrowse(uiLayout *layout,
                         struct bContext *C,
                         struct PointerRNA *ptr,
@@ -1878,7 +1884,8 @@ void uiTemplateIDBrowse(uiLayout *layout,
                         const char *newop,
                         const char *openop,
                         const char *unlinkop,
-                        int filter);
+                        int filter,
+                        const char *text);
 void uiTemplateIDPreview(uiLayout *layout,
                          struct bContext *C,
                          struct PointerRNA *ptr,
@@ -1970,6 +1977,7 @@ void uiTemplateCurveMapping(uiLayout *layout,
                             bool brush,
                             bool neg_slope,
                             bool tone);
+void uiTemplateCurveProfile(uiLayout *layout, struct PointerRNA *ptr, const char *propname);
 void uiTemplateColorPicker(uiLayout *layout,
                            struct PointerRNA *ptr,
                            const char *propname,
@@ -2018,6 +2026,12 @@ void uiTemplateEditModeSelection(uiLayout *layout, struct bContext *C);
 void uiTemplateReportsBanner(uiLayout *layout, struct bContext *C);
 void uiTemplateInputStatus(uiLayout *layout, struct bContext *C);
 void uiTemplateKeymapItemProperties(uiLayout *layout, struct PointerRNA *ptr);
+
+bool uiTemplateEventFromKeymapItem(struct uiLayout *layout,
+                                   const char *text,
+                                   const struct wmKeyMapItem *kmi,
+                                   bool text_fallback);
+
 void uiTemplateComponentMenu(uiLayout *layout,
                              struct PointerRNA *ptr,
                              const char *propname,
@@ -2258,6 +2272,7 @@ void uiItemsFullEnumO_items(uiLayout *layout,
                             int totitem);
 
 void uiItemL(uiLayout *layout, const char *name, int icon); /* label */
+uiLayout *uiItemL_respect_property_split(uiLayout *layout, const char *text, int icon);
 /* label icon for dragging */
 void uiItemLDrag(uiLayout *layout, struct PointerRNA *ptr, const char *name, int icon);
 /* menu */
@@ -2450,6 +2465,8 @@ void UI_widgetbase_draw_cache_end(void);
 /* Use for resetting the theme. */
 void UI_theme_init_default(void);
 void UI_style_init_default(void);
+
+void UI_interface_tag_script_reload(void);
 
 /* Special drawing for toolbar, mainly workarounds for inflexible icon sizing. */
 #define USE_UI_TOOLBAR_HACK

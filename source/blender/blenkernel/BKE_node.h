@@ -74,7 +74,9 @@ struct uiLayout;
 /** \name Node Type Definitions
  * \{ */
 
-/** Compact definition of a node socket.
+/**
+ * \brief Compact definition of a node socket.
+ *
  * Can be used to quickly define a list of static sockets for a node,
  * which are added to each new node of that type.
  *
@@ -95,7 +97,9 @@ typedef struct bNodeSocketTemplate {
   char identifier[64];      /* generated from name */
 } bNodeSocketTemplate;
 
-/** Defines a socket type.
+/**
+ * \brief Defines a socket type.
+ *
  * Defines the appearance and behavior of a socket in the UI.
  */
 typedef struct bNodeSocketType {
@@ -155,7 +159,9 @@ typedef int (*NodeGPUExecFunction)(struct GPUMaterial *mat,
                                    struct GPUNodeStack *in,
                                    struct GPUNodeStack *out);
 
-/** Defines a node type.
+/**
+ * \brief Defines a node type.
+ *
  * Initial attributes and constants for a node as well as callback functions
  * implementing the node behavior.
  */
@@ -591,6 +597,11 @@ void nodeChainIter(const bNodeTree *ntree,
                    bool (*callback)(bNode *, bNode *, void *, const bool),
                    void *userdata,
                    const bool reversed);
+void nodeChainIterBackwards(const bNodeTree *ntree,
+                            const bNode *node_start,
+                            bool (*callback)(bNode *, bNode *, void *),
+                            void *userdata,
+                            int recursion_lvl);
 void nodeParentsIter(bNode *node, bool (*callback)(bNode *, void *), void *userdata);
 
 struct bNodeLink *nodeFindLink(struct bNodeTree *ntree,

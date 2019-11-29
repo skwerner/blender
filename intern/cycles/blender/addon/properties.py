@@ -957,7 +957,7 @@ class CyclesLightSettings(bpy.types.PropertyGroup):
 class CyclesWorldSettings(bpy.types.PropertyGroup):
 
     sampling_method: EnumProperty(
-        name="Sampling method",
+        name="Sampling Method",
         description="How to sample the background light",
         items=enum_world_mis,
         default='AUTOMATIC',
@@ -1331,12 +1331,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         subtype="PIXEL",
     )
     denoising_relative_pca: BoolProperty(
-        name="Relative filter",
+        name="Relative Filter",
         description="When removing pixels that don't carry information, use a relative threshold instead of an absolute one (can help to reduce artifacts, but might cause detail loss around edges)",
         default=False,
     )
     denoising_store_passes: BoolProperty(
-        name="Store denoising passes",
+        name="Store Denoising Passes",
         description="Store the denoising feature passes and the noisy image",
         default=False,
         update=update_render_passes,
@@ -1467,9 +1467,11 @@ class CyclesPreferences(bpy.types.AddonPreferences):
             devices.extend(cpu_devices)
         return devices
 
-    # For backwards compatibility, only has CUDA and OpenCL.
+    # For backwards compatibility, only returns CUDA and OpenCL but still
+    # refreshes all devices.
     def get_devices(self, compute_device_type=''):
         cuda_devices = self.get_devices_for_type('CUDA')
+        self.get_devices_for_type('OPTIX')
         opencl_devices = self.get_devices_for_type('OPENCL')
         return cuda_devices, opencl_devices
 

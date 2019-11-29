@@ -179,7 +179,7 @@ static void validate_object_select_id(
     return;
   }
 
-  if (obact_eval && ((obact_eval->base_flag & BASE_VISIBLE) != 0)) {
+  if (obact_eval && ((obact_eval->base_flag & BASE_VISIBLE_DEPSGRAPH) != 0)) {
     Base *base = BKE_view_layer_base_find(view_layer, obact);
     DRW_select_buffer_context_create(&base, 1, -1);
   }
@@ -226,7 +226,7 @@ void ED_view3d_backbuf_depth_validate(ViewContext *vc)
     ARegion *ar = vc->ar;
     Object *obact_eval = DEG_get_evaluated_object(vc->depsgraph, vc->obact);
 
-    if (obact_eval && ((obact_eval->base_flag & BASE_VISIBLE) != 0)) {
+    if (obact_eval && ((obact_eval->base_flag & BASE_VISIBLE_DEPSGRAPH) != 0)) {
       GPUViewport *viewport = WM_draw_region_get_viewport(ar, 0);
       DRW_draw_depth_object(vc->ar, viewport, obact_eval);
     }
@@ -382,6 +382,14 @@ void ED_view3d_datamask(const bContext *C,
   if (ELEM(v3d->shading.type, OB_TEXTURE, OB_MATERIAL, OB_RENDER)) {
     r_cddata_masks->lmask |= CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL;
     r_cddata_masks->vmask |= CD_MASK_ORCO;
+  }
+  else if (v3d->shading.type == OB_SOLID) {
+    if (v3d->shading.color_type == V3D_SHADING_TEXTURE_COLOR) {
+      r_cddata_masks->lmask |= CD_MASK_MLOOPUV;
+    }
+    if (v3d->shading.color_type == V3D_SHADING_VERTEX_COLOR) {
+      r_cddata_masks->lmask |= CD_MASK_MLOOPCOL;
+    }
   }
 
   if ((CTX_data_mode_enum(C) == CTX_MODE_EDIT_MESH) &&

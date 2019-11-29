@@ -99,6 +99,8 @@ bool BKE_object_is_mode_compat(const struct Object *ob, eObjectMode object_mode)
 
 bool BKE_object_data_is_in_editmode(const struct ID *id);
 
+char *BKE_object_data_editmode_flush_ptr_get(struct ID *id);
+
 void BKE_object_update_select_id(struct Main *bmain);
 
 typedef enum eObjectVisibilityResult {
@@ -321,8 +323,10 @@ void BKE_object_handle_update_ex(struct Depsgraph *depsgraph,
 
 void BKE_object_sculpt_data_create(struct Object *ob);
 
-int BKE_object_obdata_texspace_get(
-    struct Object *ob, short **r_texflag, float **r_loc, float **r_size, float **r_rot);
+int BKE_object_obdata_texspace_get(struct Object *ob,
+                                   short **r_texflag,
+                                   float **r_loc,
+                                   float **r_size);
 
 struct Mesh *BKE_object_get_evaluated_mesh(const struct Depsgraph *depsgraph, struct Object *ob);
 struct Mesh *BKE_object_get_final_mesh(struct Object *object);
@@ -341,11 +345,12 @@ bool BKE_object_shapekey_free(struct Main *bmain, struct Object *ob);
 bool BKE_object_flag_test_recursive(const struct Object *ob, short flag);
 
 bool BKE_object_is_child_recursive(const struct Object *ob_parent, const struct Object *ob_child);
-bool BKE_object_is_animated(struct Scene *scene, struct Object *ob);
 
 /* return ModifierMode flag */
 int BKE_object_is_modified(struct Scene *scene, struct Object *ob);
 int BKE_object_is_deform_modified(struct Scene *scene, struct Object *ob);
+
+bool BKE_object_moves_in_time(const struct Object *object, bool recurse_parent);
 
 int BKE_object_scenes_users_get(struct Main *bmain, struct Object *ob);
 

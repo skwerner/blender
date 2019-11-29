@@ -142,7 +142,6 @@ void BKE_curve_free(Curve *cu)
   MEM_SAFE_FREE(cu->mat);
   MEM_SAFE_FREE(cu->str);
   MEM_SAFE_FREE(cu->strinfo);
-  MEM_SAFE_FREE(cu->bb);
   MEM_SAFE_FREE(cu->tb);
 }
 
@@ -153,8 +152,6 @@ void BKE_curve_init(Curve *cu, const short curve_type)
   MEMCPY_STRUCT_AFTER(cu, DNA_struct_default_get(Curve), id);
 
   cu->type = curve_type;
-
-  cu->bb = BKE_boundbox_alloc_unit();
 
   if (cu->type == OB_FONT) {
     cu->flag |= CU_FRONT | CU_BACK;
@@ -204,7 +201,6 @@ void BKE_curve_copy_data(Main *bmain, Curve *cu_dst, const Curve *cu_src, const 
   cu_dst->str = MEM_dupallocN(cu_src->str);
   cu_dst->strinfo = MEM_dupallocN(cu_src->strinfo);
   cu_dst->tb = MEM_dupallocN(cu_src->tb);
-  cu_dst->bb = MEM_dupallocN(cu_src->bb);
   cu_dst->batch_cache = NULL;
 
   if (cu_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
@@ -291,41 +287,6 @@ void BKE_curve_type_test(Object *ob)
   }
 }
 
-void BKE_curve_boundbox_calc(Curve *cu, float r_loc[3], float r_size[3])
-{
-  BoundBox *bb;
-  float min[3], max[3];
-  float mloc[3], msize[3];
-
-  if (cu->bb == NULL) {
-    cu->bb = MEM_callocN(sizeof(BoundBox), "boundbox");
-  }
-  bb = cu->bb;
-
-  if (!r_loc) {
-    r_loc = mloc;
-  }
-  if (!r_size) {
-    r_size = msize;
-  }
-
-  INIT_MINMAX(min, max);
-  if (!BKE_curve_minmax(cu, true, min, max)) {
-    min[0] = min[1] = min[2] = -1.0f;
-    max[0] = max[1] = max[2] = 1.0f;
-  }
-
-  mid_v3_v3v3(r_loc, min, max);
-
-  r_size[0] = (max[0] - min[0]) / 2.0f;
-  r_size[1] = (max[1] - min[1]) / 2.0f;
-  r_size[2] = (max[2] - min[2]) / 2.0f;
-
-  BKE_boundbox_init_from_minmax(bb, min, max);
-
-  bb->flag &= ~BOUNDBOX_DIRTY;
-}
-
 BoundBox *BKE_curve_boundbox_get(Object *ob)
 {
   /* This is Object-level data access,
@@ -349,13 +310,23 @@ BoundBox *BKE_curve_boundbox_get(Object *ob)
 
 void BKE_curve_texspace_calc(Curve *cu)
 {
-  float loc[3], size[3];
-  int a;
-
-  BKE_curve_boundbox_calc(cu, loc, size);
-
   if (cu->texflag & CU_AUTOSPACE) {
-    for (a = 0; a < 3; a++) {
+    float min[3], max[3];
+
+    INIT_MINMAX(min, max);
+    if (!BKE_curve_minmax(cu, true, min, max)) {
+      min[0] = min[1] = min[2] = -1.0f;
+      max[0] = max[1] = max[2] = 1.0f;
+    }
+
+    float loc[3], size[3];
+    mid_v3_v3v3(loc, min, max);
+
+    size[0] = (max[0] - min[0]) / 2.0f;
+    size[1] = (max[1] - min[1]) / 2.0f;
+    size[2] = (max[2] - min[2]) / 2.0f;
+
+    for (int a = 0; a < 3; a++) {
       if (size[a] == 0.0f) {
         size[a] = 1.0f;
       }
@@ -369,27 +340,28 @@ void BKE_curve_texspace_calc(Curve *cu)
 
     copy_v3_v3(cu->loc, loc);
     copy_v3_v3(cu->size, size);
-    zero_v3(cu->rot);
+
+    cu->texflag |= CU_AUTOSPACE_EVALUATED;
   }
 }
 
-BoundBox *BKE_curve_texspace_get(Curve *cu, float r_loc[3], float r_rot[3], float r_size[3])
+void BKE_curve_texspace_ensure(Curve *cu)
 {
-  if (cu->bb == NULL || (cu->bb->flag & BOUNDBOX_DIRTY)) {
+  if ((cu->texflag & CU_AUTOSPACE) && !(cu->texflag & CU_AUTOSPACE_EVALUATED)) {
     BKE_curve_texspace_calc(cu);
   }
+}
+
+void BKE_curve_texspace_get(Curve *cu, float r_loc[3], float r_size[3])
+{
+  BKE_curve_texspace_ensure(cu);
 
   if (r_loc) {
     copy_v3_v3(r_loc, cu->loc);
   }
-  if (r_rot) {
-    copy_v3_v3(r_rot, cu->rot);
-  }
   if (r_size) {
     copy_v3_v3(r_size, cu->size);
   }
-
-  return cu->bb;
 }
 
 bool BKE_nurbList_index_get_co(ListBase *nurb, const int index, float r_co[3])
@@ -3229,6 +3201,7 @@ void BKE_curve_bevelList_make(Object *ob, ListBase *nurbs, bool for_render)
 static void calchandleNurb_intern(BezTriple *bezt,
                                   const BezTriple *prev,
                                   const BezTriple *next,
+                                  eBezTriple_Flag handle_sel_flag,
                                   bool is_fcurve,
                                   bool skip_align,
                                   char fcurve_smoothing)
@@ -3430,7 +3403,7 @@ static void calchandleNurb_intern(BezTriple *bezt,
 
   len_ratio = len_a / len_b;
 
-  if (bezt->f1 & SELECT) {                               /* order of calculation */
+  if (bezt->f1 & handle_sel_flag) {                      /* order of calculation */
     if (ELEM(bezt->h2, HD_ALIGN, HD_ALIGN_DOUBLESIDE)) { /* aligned */
       if (len_a > eps) {
         len = 1.0f / len_ratio;
@@ -3471,7 +3444,7 @@ static void calchandleNurb_intern(BezTriple *bezt,
 #undef p2_h2
 }
 
-static void calchandlesNurb_intern(Nurb *nu, bool skip_align)
+static void calchandlesNurb_intern(Nurb *nu, eBezTriple_Flag handle_sel_flag, bool skip_align)
 {
   BezTriple *bezt, *prev, *next;
   int a;
@@ -3494,7 +3467,7 @@ static void calchandlesNurb_intern(Nurb *nu, bool skip_align)
   next = bezt + 1;
 
   while (a--) {
-    calchandleNurb_intern(bezt, prev, next, 0, skip_align, 0);
+    calchandleNurb_intern(bezt, prev, next, handle_sel_flag, 0, skip_align, 0);
     prev = bezt;
     if (a == 1) {
       if (nu->flagu & CU_NURB_CYCLIC) {
@@ -4066,15 +4039,36 @@ void BKE_nurb_handle_smooth_fcurve(BezTriple *bezt, int total, bool cycle)
   }
 }
 
+/**
+ * Recalculate the handles of a nurb bezier-triple. Acts based on handle selection with `SELECT`
+ * flag. To use a different flag, use #BKE_nurb_handle_calc_ex().
+ */
 void BKE_nurb_handle_calc(
     BezTriple *bezt, BezTriple *prev, BezTriple *next, const bool is_fcurve, const char smoothing)
 {
-  calchandleNurb_intern(bezt, prev, next, is_fcurve, false, smoothing);
+  calchandleNurb_intern(bezt, prev, next, SELECT, is_fcurve, false, smoothing);
+}
+
+/**
+ * Variant of #BKE_nurb_handle_calc() that allows calculating based on a different select flag.
+ *
+ * \param sel_flag: The flag (bezt.f1/2/3) value to use to determine selection. Usually `SELECT`,
+ *                  but may want to use a different one at times (if caller does not operate on
+ *                  selection).
+ */
+void BKE_nurb_handle_calc_ex(BezTriple *bezt,
+                             BezTriple *prev,
+                             BezTriple *next,
+                             const eBezTriple_Flag__Alias handle_sel_flag,
+                             const bool is_fcurve,
+                             const char smoothing)
+{
+  calchandleNurb_intern(bezt, prev, next, handle_sel_flag, is_fcurve, false, smoothing);
 }
 
 void BKE_nurb_handles_calc(Nurb *nu) /* first, if needed, set handle flags */
 {
-  calchandlesNurb_intern(nu, false);
+  calchandlesNurb_intern(nu, SELECT, false);
 }
 
 /**
@@ -4129,11 +4123,21 @@ void BKE_nurb_handle_calc_simple_auto(Nurb *nu, BezTriple *bezt)
 }
 
 /**
+ * Update selected handle types to ensure valid state, e.g. deduce "Auto" types to concrete ones.
+ * Thereby \a sel_flag defines what qualifies as selected.
  * Use when something has changed handle positions.
  *
  * The caller needs to recalculate handles.
+ *
+ * \param sel_flag: The flag (bezt.f1/2/3) value to use to determine selection. Usually `SELECT`,
+ *                  but may want to use a different one at times (if caller does not operate on
+ *                  selection).
+ * \param use_handle: Check selection state of individual handles, otherwise always update both
+ *                    handles if the key is selected.
  */
-void BKE_nurb_bezt_handle_test(BezTriple *bezt, const bool use_handle)
+void BKE_nurb_bezt_handle_test(BezTriple *bezt,
+                               const eBezTriple_Flag__Alias sel_flag,
+                               const bool use_handle)
 {
   short flag = 0;
 
@@ -4142,18 +4146,18 @@ void BKE_nurb_bezt_handle_test(BezTriple *bezt, const bool use_handle)
 #define SEL_F3 (1 << 2)
 
   if (use_handle) {
-    if (bezt->f1 & SELECT) {
+    if (bezt->f1 & sel_flag) {
       flag |= SEL_F1;
     }
-    if (bezt->f2 & SELECT) {
+    if (bezt->f2 & sel_flag) {
       flag |= SEL_F2;
     }
-    if (bezt->f3 & SELECT) {
+    if (bezt->f3 & sel_flag) {
       flag |= SEL_F3;
     }
   }
   else {
-    flag = (bezt->f2 & SELECT) ? (SEL_F1 | SEL_F2 | SEL_F3) : 0;
+    flag = (bezt->f2 & sel_flag) ? (SEL_F1 | SEL_F2 | SEL_F3) : 0;
   }
 
   /* check for partial selection */
@@ -4194,7 +4198,7 @@ void BKE_nurb_handles_test(Nurb *nu, const bool use_handle)
   bezt = nu->bezt;
   a = nu->pntsu;
   while (a--) {
-    BKE_nurb_bezt_handle_test(bezt, use_handle);
+    BKE_nurb_bezt_handle_test(bezt, SELECT, use_handle);
     bezt++;
   }
 
@@ -4667,7 +4671,7 @@ void BKE_curve_nurbs_vert_coords_apply_with_mat4(ListBase *lb,
       }
     }
 
-    calchandlesNurb_intern(nu, true);
+    calchandlesNurb_intern(nu, SELECT, true);
   }
 }
 
@@ -4705,7 +4709,7 @@ void BKE_curve_nurbs_vert_coords_apply(ListBase *lb,
       }
     }
 
-    calchandlesNurb_intern(nu, true);
+    calchandlesNurb_intern(nu, SELECT, true);
   }
 }
 
@@ -5501,15 +5505,10 @@ void BKE_curve_eval_geometry(Depsgraph *depsgraph, Curve *curve)
   BKE_curve_texspace_calc(curve);
   if (DEG_is_active(depsgraph)) {
     Curve *curve_orig = (Curve *)DEG_get_original_id(&curve->id);
-    BoundBox *bb = curve->bb;
-    if (bb != NULL) {
-      if (curve_orig->bb == NULL) {
-        curve_orig->bb = MEM_mallocN(sizeof(*curve_orig->bb), __func__);
-      }
-      *curve_orig->bb = *bb;
+    if (curve->texflag & CU_AUTOSPACE_EVALUATED) {
+      curve_orig->texflag |= CU_AUTOSPACE_EVALUATED;
       copy_v3_v3(curve_orig->loc, curve->loc);
       copy_v3_v3(curve_orig->size, curve->size);
-      copy_v3_v3(curve_orig->rot, curve->rot);
     }
   }
 }

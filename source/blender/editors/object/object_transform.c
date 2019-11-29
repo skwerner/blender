@@ -1550,8 +1550,10 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
 #define USE_RELATIVE_ROTATION
 /** Disable overlays, ignoring user setting (light wire gets in the way). */
 #define USE_RENDER_OVERRIDE
-/** Calculate a depth if the cursor isn't already over a depth
- * (not essential but feels buggy without). */
+/**
+ * Calculate a depth if the cursor isn't already over a depth
+ * (not essential but feels buggy without).
+ */
 #define USE_FAKE_DEPTH_INIT
 
 struct XFormAxisItem {
@@ -1715,8 +1717,9 @@ static void object_transform_axis_target_cancel(bContext *C, wmOperator *op)
 
 static int object_transform_axis_target_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   if (vc.obact == NULL || !object_is_target_compat(vc.obact)) {
     /* Falls back to texture space transform. */

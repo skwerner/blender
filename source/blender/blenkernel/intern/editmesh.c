@@ -32,6 +32,8 @@
 #include "BKE_editmesh.h"
 #include "BKE_cdderivedmesh.h"
 #include "BKE_library.h"
+#include "BKE_mesh.h"
+#include "BKE_object.h"
 
 BMEditMesh *BKE_editmesh_create(BMesh *bm, const bool do_tessellate)
 {
@@ -51,6 +53,7 @@ BMEditMesh *BKE_editmesh_copy(BMEditMesh *em)
   *em_copy = *em;
 
   em_copy->mesh_eval_cage = em_copy->mesh_eval_final = NULL;
+  em_copy->bb_cage = NULL;
 
   em_copy->derivedVertColor = NULL;
   em_copy->derivedVertColorLen = 0;
@@ -151,6 +154,8 @@ void BKE_editmesh_free_derivedmesh(BMEditMesh *em)
     BKE_id_free(NULL, em->mesh_eval_final);
   }
   em->mesh_eval_cage = em->mesh_eval_final = NULL;
+
+  MEM_SAFE_FREE(em->bb_cage);
 }
 
 /*does not free the BMEditMesh struct itself*/
@@ -211,20 +216,7 @@ void BKE_editmesh_color_ensure(BMEditMesh *em, const char htype)
 
 float (*BKE_editmesh_vert_coords_alloc_orco(BMEditMesh *em, int *r_vert_len))[3]
 {
-  BMIter iter;
-  BMVert *eve;
-  float(*orco)[3];
-  int i;
-
-  orco = MEM_mallocN(em->bm->totvert * sizeof(*orco), __func__);
-
-  BM_ITER_MESH_INDEX (eve, &iter, em->bm, BM_VERTS_OF_MESH, i) {
-    copy_v3_v3(orco[i], eve->co);
-  }
-
-  *r_vert_len = em->bm->totvert;
-
-  return orco;
+  return BM_mesh_vert_coords_alloc(em->bm, r_vert_len);
 }
 
 void BKE_editmesh_lnorspace_update(BMEditMesh *em)
@@ -256,4 +248,20 @@ void BKE_editmesh_ensure_autosmooth(BMEditMesh *em)
     me->flag |= ME_AUTOSMOOTH;
     BKE_editmesh_lnorspace_update(em);
   }
+}
+
+BoundBox *BKE_editmesh_cage_boundbox_get(BMEditMesh *em)
+{
+  if (em->bb_cage == NULL) {
+    float min[3], max[3];
+    INIT_MINMAX(min, max);
+    if (em->mesh_eval_cage) {
+      BKE_mesh_minmax(em->mesh_eval_cage, min, max);
+    }
+
+    em->bb_cage = MEM_callocN(sizeof(BoundBox), "BMEditMesh.bb_cage");
+    BKE_boundbox_init_from_minmax(em->bb_cage, min, max);
+  }
+
+  return em->bb_cage;
 }

@@ -47,6 +47,7 @@
 
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h"
+#include "GPU_platform.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
 #include "GPU_state.h"
@@ -292,7 +293,8 @@ static int node_resize_area_default(bNode *node, int x, int y)
 
 static void node_draw_buttons_group(uiLayout *layout, bContext *C, PointerRNA *ptr)
 {
-  uiTemplateIDBrowse(layout, C, ptr, "node_tree", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL);
+  uiTemplateIDBrowse(
+      layout, C, ptr, "node_tree", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL, NULL);
 }
 
 /* XXX Does a bounding box update by iterating over all children.
@@ -769,7 +771,8 @@ static void node_shader_buts_tex_image(uiLayout *layout, bContext *C, PointerRNA
                "IMAGE_OT_open",
                NULL,
                UI_TEMPLATE_ID_FILTER_ALL,
-               false);
+               false,
+               NULL);
   uiItemR(layout, ptr, "interpolation", 0, "", ICON_NONE);
   uiItemR(layout, ptr, "projection", 0, "", ICON_NONE);
 
@@ -805,7 +808,8 @@ static void node_shader_buts_tex_environment(uiLayout *layout, bContext *C, Poin
                "IMAGE_OT_open",
                NULL,
                UI_TEMPLATE_ID_FILTER_ALL,
-               false);
+               false,
+               NULL);
 
   uiItemR(layout, ptr, "interpolation", 0, "", ICON_NONE);
   uiItemR(layout, ptr, "projection", 0, "", ICON_NONE);
@@ -815,51 +819,8 @@ static void node_shader_buts_tex_environment(uiLayout *layout, bContext *C, Poin
 
 static void node_shader_buts_tex_environment_ex(uiLayout *layout, bContext *C, PointerRNA *ptr)
 {
-  PointerRNA imaptr = RNA_pointer_get(ptr, "image");
   PointerRNA iuserptr = RNA_pointer_get(ptr, "image_user");
-  Image *ima = imaptr.data;
-
-  uiLayoutSetContextPointer(layout, "image_user", &iuserptr);
-  uiTemplateID(layout,
-               C,
-               ptr,
-               "image",
-               "IMAGE_OT_new",
-               "IMAGE_OT_open",
-               NULL,
-               UI_TEMPLATE_ID_FILTER_ALL,
-               false);
-
-  if (!ima) {
-    return;
-  }
-
-  uiItemR(layout, &imaptr, "source", 0, IFACE_("Source"), ICON_NONE);
-
-  if (!(ELEM(ima->source, IMA_SRC_GENERATED, IMA_SRC_VIEWER))) {
-    uiLayout *row = uiLayoutRow(layout, true);
-    const bool is_packed = BKE_image_has_packedfile(ima);
-
-    if (is_packed) {
-      uiItemO(row, "", ICON_PACKAGE, "image.unpack");
-    }
-    else {
-      uiItemO(row, "", ICON_UGLYPACKAGE, "image.pack");
-    }
-
-    row = uiLayoutRow(row, true);
-    uiLayoutSetEnabled(row, !is_packed);
-    uiItemR(row, &imaptr, "filepath", 0, "", ICON_NONE);
-    uiItemO(row, "", ICON_FILE_REFRESH, "image.reload");
-  }
-
-  /* multilayer? */
-  if (ima->type == IMA_TYPE_MULTILAYER && ima->rr) {
-    uiTemplateImageLayers(layout, C, ima, iuserptr.data);
-  }
-  else if (ima->source != IMA_SRC_GENERATED) {
-    uiTemplateImageInfo(layout, C, ima, iuserptr.data);
-  }
+  uiTemplateImage(layout, C, ptr, "image", &iuserptr, 0, 0);
 
   uiItemR(layout, ptr, "interpolation", 0, IFACE_("Interpolation"), ICON_NONE);
   uiItemR(layout, ptr, "projection", 0, IFACE_("Projection"), ICON_NONE);
@@ -1379,7 +1340,8 @@ static void node_composit_buts_image(uiLayout *layout, bContext *C, PointerRNA *
                "IMAGE_OT_open",
                NULL,
                UI_TEMPLATE_ID_FILTER_ALL,
-               false);
+               false,
+               NULL);
   if (!node->id) {
     return;
   }
@@ -1411,7 +1373,7 @@ static void node_composit_buts_viewlayers(uiLayout *layout, bContext *C, Pointer
   const char *layer_name;
   char scene_name[MAX_ID_NAME - 2];
 
-  uiTemplateID(layout, C, ptr, "scene", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
+  uiTemplateID(layout, C, ptr, "scene", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
 
   if (!node->id) {
     return;
@@ -1531,7 +1493,7 @@ static void node_composit_buts_defocus(uiLayout *layout, bContext *C, PointerRNA
   col = uiLayoutColumn(layout, false);
   uiItemR(col, ptr, "use_preview", 0, NULL, ICON_NONE);
 
-  uiTemplateID(layout, C, ptr, "scene", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
+  uiTemplateID(layout, C, ptr, "scene", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
 
   col = uiLayoutColumn(layout, false);
   uiItemR(col, ptr, "use_zbuffer", 0, NULL, ICON_NONE);
@@ -2149,7 +2111,7 @@ static void node_composit_buts_ycc(uiLayout *layout, bContext *UNUSED(C), Pointe
 static void node_composit_buts_movieclip(uiLayout *layout, bContext *C, PointerRNA *ptr)
 {
   uiTemplateID(
-      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
+      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
 }
 
 static void node_composit_buts_movieclip_ex(uiLayout *layout, bContext *C, PointerRNA *ptr)
@@ -2158,7 +2120,7 @@ static void node_composit_buts_movieclip_ex(uiLayout *layout, bContext *C, Point
   PointerRNA clipptr;
 
   uiTemplateID(
-      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
+      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
 
   if (!node->id) {
     return;
@@ -2174,7 +2136,7 @@ static void node_composit_buts_stabilize2d(uiLayout *layout, bContext *C, Pointe
   bNode *node = ptr->data;
 
   uiTemplateID(
-      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
+      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
 
   if (!node->id) {
     return;
@@ -2200,7 +2162,7 @@ static void node_composit_buts_moviedistortion(uiLayout *layout, bContext *C, Po
   bNode *node = ptr->data;
 
   uiTemplateID(
-      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
+      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
 
   if (!node->id) {
     return;
@@ -2523,7 +2485,7 @@ static void node_composit_buts_mask(uiLayout *layout, bContext *C, PointerRNA *p
 {
   bNode *node = ptr->data;
 
-  uiTemplateID(layout, C, ptr, "mask", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
+  uiTemplateID(layout, C, ptr, "mask", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
   uiItemR(layout, ptr, "use_feather", 0, NULL, ICON_NONE);
 
   uiItemR(layout, ptr, "size_source", 0, "", ICON_NONE);
@@ -2544,7 +2506,7 @@ static void node_composit_buts_keyingscreen(uiLayout *layout, bContext *C, Point
 {
   bNode *node = ptr->data;
 
-  uiTemplateID(layout, C, ptr, "clip", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
+  uiTemplateID(layout, C, ptr, "clip", NULL, NULL, NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
 
   if (node->id) {
     MovieClip *clip = (MovieClip *)node->id;
@@ -2581,7 +2543,7 @@ static void node_composit_buts_trackpos(uiLayout *layout, bContext *C, PointerRN
   bNode *node = ptr->data;
 
   uiTemplateID(
-      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
+      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
 
   if (node->id) {
     MovieClip *clip = (MovieClip *)node->id;
@@ -2622,7 +2584,7 @@ static void node_composit_buts_planetrackdeform(uiLayout *layout, bContext *C, P
   NodePlaneTrackDeformData *data = node->storage;
 
   uiTemplateID(
-      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false);
+      layout, C, ptr, "clip", NULL, "CLIP_OT_open", NULL, UI_TEMPLATE_ID_FILTER_ALL, false, NULL);
 
   if (node->id) {
     MovieClip *clip = (MovieClip *)node->id;
@@ -3055,7 +3017,8 @@ static void node_texture_buts_image(uiLayout *layout, bContext *C, PointerRNA *p
                "IMAGE_OT_open",
                NULL,
                UI_TEMPLATE_ID_FILTER_ALL,
-               false);
+               false,
+               NULL);
 }
 
 static void node_texture_buts_image_ex(uiLayout *layout, bContext *C, PointerRNA *ptr)

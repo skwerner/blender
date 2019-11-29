@@ -389,7 +389,7 @@ static void libblock_remap_data_postprocess_obdata_relink(Main *bmain, Object *o
   if (ob->data == new_id) {
     switch (GS(new_id->name)) {
       case ID_ME:
-        multires_force_update(ob);
+        multires_force_sculpt_rebuild(ob);
         break;
       case ID_CU:
         BKE_curve_type_test(ob);
@@ -497,6 +497,7 @@ static void libblock_remap_data(
   if (new_id && (new_id->tag & LIB_TAG_INDIRECT) &&
       (r_id_remap_data->status & ID_REMAP_IS_LINKED_DIRECT)) {
     new_id->tag &= ~LIB_TAG_INDIRECT;
+    new_id->flag &= ~LIB_INDIRECT_WEAK_LINK;
     new_id->tag |= LIB_TAG_EXTERN;
   }
 
@@ -635,7 +636,8 @@ void BKE_libblock_unlink(Main *bmain,
   BKE_main_unlock(bmain);
 }
 
-/** Similar to libblock_remap, but only affects IDs used by given \a idv ID.
+/**
+ * Similar to libblock_remap, but only affects IDs used by given \a idv ID.
  *
  * \param old_idv: Unlike BKE_libblock_remap, can be NULL,
  * in which case all ID usages by given \a idv will be cleared.
@@ -676,7 +678,8 @@ void BKE_libblock_relink_ex(
    * Maybe we should do a per-ID callback for this instead?
    */
   switch (GS(id->name)) {
-    case ID_SCE: {
+    case ID_SCE:
+    case ID_GR: {
       if (old_id) {
         switch (GS(old_id->name)) {
           case ID_OB:
@@ -706,6 +709,8 @@ void BKE_libblock_relink_ex(
     default:
       break;
   }
+
+  DEG_relations_tag_update(bmain);
 }
 
 static int id_relink_to_newid_looper(void *UNUSED(user_data),

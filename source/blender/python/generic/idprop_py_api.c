@@ -688,6 +688,7 @@ bool BPy_IDProperty_Map_ValidateAndCreate(PyObject *name_obj, IDProperty *group,
       /* Preserve prev/next links!!! See T42593. */
       prop->prev = prop_exist->prev;
       prop->next = prop_exist->next;
+      prop->flag = prop_exist->flag;
 
       IDP_FreePropertyContent(prop_exist);
       *prop_exist = *prop;
@@ -896,7 +897,7 @@ static PyObject *BPy_IDGroup_pop(BPy_IDProperty *self, PyObject *args)
 
   pyform = BPy_IDGroup_MapDataToPy(idprop);
   if (pyform == NULL) {
-    /* ok something bad happened with the pyobject,
+    /* ok something bad happened with the #PyObject,
      * so don't remove the prop from the group.  if pyform is
      * NULL, then it already should have raised an exception.*/
     return NULL;
@@ -1171,7 +1172,7 @@ PyTypeObject BPy_IDGroup_Type = {
     /* Methods to implement standard operations */
 
     NULL,                       /* destructor tp_dealloc; */
-    NULL,                       /* printfunc tp_print; */
+    (printfunc)NULL,            /* printfunc tp_print; */
     NULL,                       /* getattrfunc tp_getattr; */
     NULL,                       /* setattrfunc tp_setattr; */
     NULL,                       /* cmpfunc tp_compare; */
@@ -1576,7 +1577,7 @@ PyTypeObject BPy_IDArray_Type = {
     /* Methods to implement standard operations */
 
     NULL,                       /* destructor tp_dealloc; */
-    NULL,                       /* printfunc tp_print; */
+    (printfunc)NULL,            /* printfunc tp_print; */
     NULL,                       /* getattrfunc tp_getattr; */
     NULL,                       /* setattrfunc tp_setattr; */
     NULL,                       /* cmpfunc tp_compare; */
@@ -1691,7 +1692,7 @@ PyTypeObject BPy_IDGroup_Iter_Type = {
     /* Methods to implement standard operations */
 
     NULL,                        /* destructor tp_dealloc; */
-    NULL,                        /* printfunc tp_print; */
+    (printfunc)NULL,             /* printfunc tp_print; */
     NULL,                        /* getattrfunc tp_getattr; */
     NULL,                        /* setattrfunc tp_setattr; */
     NULL,                        /* cmpfunc tp_compare; */

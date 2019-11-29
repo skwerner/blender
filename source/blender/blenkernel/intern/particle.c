@@ -2965,7 +2965,7 @@ void psys_cache_paths(ParticleSimulationData *sim, float cfra, const bool use_re
     /*--get the first data points--*/
     init_particle_interpolation(sim->ob, sim->psys, pa, &pind);
 
-    /* hairmat is needed for for non-hair particle too so we get proper rotations */
+    /* 'hairmat' is needed for non-hair particle too so we get proper rotations. */
     psys_mat_hair_to_global(sim->ob, psmd->mesh_final, psys->part->from, pa, hairmat);
     copy_v3_v3(rotmat[0], hairmat[2]);
     copy_v3_v3(rotmat[1], hairmat[1]);
@@ -4068,9 +4068,7 @@ void psys_get_texture(
                                    0,
                                    texvec);
 
-          if (me->bb == NULL || (me->bb->flag & BOUNDBOX_DIRTY)) {
-            BKE_mesh_texspace_calc(me);
-          }
+          BKE_mesh_texspace_ensure(me);
           sub_v3_v3(texvec, me->loc);
           if (me->size[0] != 0.0f) {
             texvec[0] /= me->size[0];

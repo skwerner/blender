@@ -274,6 +274,7 @@ struct uiBut {
   float *editvec;
   void *editcoba;
   void *editcumap;
+  void *editprofile;
 
   uiButPushedStateFunc pushed_state_func;
   void *pushed_state_arg;
@@ -740,6 +741,10 @@ void ui_draw_but_CURVE(ARegion *ar,
                        uiBut *but,
                        const struct uiWidgetColors *wcol,
                        const rcti *rect);
+void ui_draw_but_CURVEPROFILE(ARegion *ar,
+                              uiBut *but,
+                              const struct uiWidgetColors *wcol,
+                              const rcti *rect);
 void ui_draw_but_IMAGE(ARegion *ar,
                        uiBut *but,
                        const struct uiWidgetColors *wcol,
@@ -971,6 +976,9 @@ void UI_OT_eyedropper_depth(struct wmOperatorType *ot);
 /* interface_eyedropper_driver.c */
 void UI_OT_eyedropper_driver(struct wmOperatorType *ot);
 
+/* interface_eyedropper_gpencil_color.c */
+void UI_OT_eyedropper_gpencil_color(struct wmOperatorType *ot);
+
 /* interface_util.c */
 
 /**
@@ -992,5 +1000,8 @@ void ui_rna_collection_search_cb(const struct bContext *C,
 
 /* interface_ops.c */
 bool ui_jump_to_target_button_poll(struct bContext *C);
+
+/* interface_queries.c */
+void ui_interface_tag_script_reload_queries(void);
 
 #endif /* __INTERFACE_INTERN_H__ */

@@ -41,6 +41,7 @@
 
 #include "eevee_private.h"
 #include "GPU_draw.h"
+#include "GPU_extensions.h"
 #include "GPU_texture.h"
 #include "GPU_material.h"
 
@@ -54,7 +55,6 @@ static struct {
   struct GPUShader *volumetric_integration_sh;
   struct GPUShader *volumetric_resolve_sh;
 
-  GPUTexture *color_src;
   GPUTexture *depth_src;
 
   GPUTexture *dummy_density;
@@ -82,7 +82,9 @@ extern char datatoc_volumetric_integration_frag_glsl[];
 extern char datatoc_volumetric_lib_glsl[];
 extern char datatoc_common_fullscreen_vert_glsl[];
 
-#define USE_VOLUME_OPTI (GLEW_ARB_shader_image_load_store && GLEW_ARB_shading_language_420pack)
+#define USE_VOLUME_OPTI \
+  (GLEW_ARB_shader_image_load_store && GLEW_ARB_shading_language_420pack && \
+   !GPU_crappy_amd_driver())
 
 static void eevee_create_shader_volumes(void)
 {
@@ -255,7 +257,7 @@ void EEVEE_volumes_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
   if (DRW_view_is_persp_get(NULL)) {
     float sample_distribution = scene_eval->eevee.volumetric_sample_distribution;
-    sample_distribution = 4.0f * (1.00001f - sample_distribution);
+    sample_distribution = 4.0f * (max_ff(1.0f - sample_distribution, 1e-2f));
 
     const float clip_start = common_data->view_vecs[0][2];
     /* Negate */
@@ -413,7 +415,7 @@ void EEVEE_volumes_cache_object_add(EEVEE_ViewLayerData *sldata,
 
   DRWShadingGroup *grp = DRW_shgroup_material_create(mat, vedata->psl->volumetric_objects_ps);
 
-  BKE_mesh_texspace_get_reference((struct Mesh *)ob->data, NULL, &texcoloc, NULL, &texcosize);
+  BKE_mesh_texspace_get_reference((struct Mesh *)ob->data, NULL, &texcoloc, &texcosize);
 
   /* TODO(fclem) remove those "unnecessary" UBOs */
   DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
@@ -632,7 +634,7 @@ void EEVEE_volumes_compute(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
       int tex_transmit = GPU_texture_opengl_bindcode(txl->volume_transmit_history);
       /* TODO(fclem) Encapsulate these GL calls into DRWManager. */
       glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-      /* Subtility here! we need to tell the GL that the texture is layered (GL_TRUE)
+      /* Subtlety here! we need to tell the GL that the texture is layered (GL_TRUE)
        * in order to bind the full 3D texture and not just a 2D slice. */
       glBindImageTexture(0, tex_scatter, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R11F_G11F_B10F);
       glBindImageTexture(1, tex_transmit, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R11F_G11F_B10F);

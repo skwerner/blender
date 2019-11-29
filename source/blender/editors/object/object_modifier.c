@@ -677,7 +677,7 @@ static int modifier_apply_obdata(
 
     /* Multires: ensure that recent sculpting is applied */
     if (md_eval->type == eModifierType_Multires) {
-      multires_force_update(ob);
+      multires_force_sculpt_rebuild(ob);
     }
 
     if (mmd && mmd->totlvl && mti->type == eModifierTypeType_OnlyDeform) {
@@ -923,6 +923,7 @@ bool edit_modifier_poll_generic(bContext *C,
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "modifier", rna_type);
   Object *ob = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
+  ModifierData *mod = ptr.data; /* May be NULL. */
 
   if (!ob || ID_IS_LINKED(ob)) {
     return 0;
@@ -935,8 +936,10 @@ bool edit_modifier_poll_generic(bContext *C,
   }
 
   if (ID_IS_OVERRIDE_LIBRARY(ob)) {
-    CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers coming from library override");
-    return (((ModifierData *)ptr.data)->flag & eModifierFlag_OverrideLibrary_Local) != 0;
+    if ((mod != NULL) && (mod->flag & eModifierFlag_OverrideLibrary_Local) == 0) {
+      CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers coming from library override");
+      return 0;
+    }
   }
 
   if (!is_editmode_allowed && CTX_data_edit_object(C) != NULL) {
@@ -2022,7 +2025,7 @@ static int correctivesmooth_bind_exec(bContext *C, wmOperator *op)
   is_bind = (csmd->bind_coords != NULL);
 
   MEM_SAFE_FREE(csmd->bind_coords);
-  MEM_SAFE_FREE(csmd->delta_cache);
+  MEM_SAFE_FREE(csmd->delta_cache.deltas);
 
   if (is_bind) {
     /* toggle off */

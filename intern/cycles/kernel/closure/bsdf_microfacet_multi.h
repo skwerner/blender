@@ -378,12 +378,8 @@ ccl_device int bsdf_microfacet_multi_ggx_common_setup(MicrofacetBsdf *bsdf)
 {
   bsdf->alpha_x = clamp(bsdf->alpha_x, 1e-4f, 1.0f);
   bsdf->alpha_y = clamp(bsdf->alpha_y, 1e-4f, 1.0f);
-  bsdf->extra->color.x = saturate(bsdf->extra->color.x);
-  bsdf->extra->color.y = saturate(bsdf->extra->color.y);
-  bsdf->extra->color.z = saturate(bsdf->extra->color.z);
-  bsdf->extra->cspec0.x = saturate(bsdf->extra->cspec0.x);
-  bsdf->extra->cspec0.y = saturate(bsdf->extra->cspec0.y);
-  bsdf->extra->cspec0.z = saturate(bsdf->extra->cspec0.z);
+  bsdf->extra->color = saturate3(bsdf->extra->color);
+  bsdf->extra->cspec0 = saturate3(bsdf->extra->cspec0);
 
   return SD_BSDF | SD_BSDF_HAS_EVAL | SD_BSDF_NEEDS_LCG;
 }
@@ -406,9 +402,7 @@ ccl_device int bsdf_microfacet_multi_ggx_aniso_fresnel_setup(MicrofacetBsdf *bsd
 
   bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID;
 
-  float F0 = fresnel_dielectric_cos(1.0f, bsdf->ior);
-  float F = average(interpolate_fresnel_color(sd->I, bsdf->N, bsdf->ior, F0, bsdf->extra->cspec0));
-  bsdf->sample_weight *= F;
+  bsdf_microfacet_fresnel_color(sd, bsdf);
 
   return bsdf_microfacet_multi_ggx_common_setup(bsdf);
 }
@@ -428,9 +422,7 @@ ccl_device int bsdf_microfacet_multi_ggx_fresnel_setup(MicrofacetBsdf *bsdf, con
 
   bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID;
 
-  float F0 = fresnel_dielectric_cos(1.0f, bsdf->ior);
-  float F = average(interpolate_fresnel_color(sd->I, bsdf->N, bsdf->ior, F0, bsdf->extra->cspec0));
-  bsdf->sample_weight *= F;
+  bsdf_microfacet_fresnel_color(sd, bsdf);
 
   return bsdf_microfacet_multi_ggx_common_setup(bsdf);
 }
@@ -568,9 +560,7 @@ ccl_device int bsdf_microfacet_multi_ggx_glass_setup(MicrofacetBsdf *bsdf)
   bsdf->alpha_x = clamp(bsdf->alpha_x, 1e-4f, 1.0f);
   bsdf->alpha_y = bsdf->alpha_x;
   bsdf->ior = max(0.0f, bsdf->ior);
-  bsdf->extra->color.x = saturate(bsdf->extra->color.x);
-  bsdf->extra->color.y = saturate(bsdf->extra->color.y);
-  bsdf->extra->color.z = saturate(bsdf->extra->color.z);
+  bsdf->extra->color = saturate3(bsdf->extra->color);
 
   bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID;
 
@@ -583,18 +573,12 @@ ccl_device int bsdf_microfacet_multi_ggx_glass_fresnel_setup(MicrofacetBsdf *bsd
   bsdf->alpha_x = clamp(bsdf->alpha_x, 1e-4f, 1.0f);
   bsdf->alpha_y = bsdf->alpha_x;
   bsdf->ior = max(0.0f, bsdf->ior);
-  bsdf->extra->color.x = saturate(bsdf->extra->color.x);
-  bsdf->extra->color.y = saturate(bsdf->extra->color.y);
-  bsdf->extra->color.z = saturate(bsdf->extra->color.z);
-  bsdf->extra->cspec0.x = saturate(bsdf->extra->cspec0.x);
-  bsdf->extra->cspec0.y = saturate(bsdf->extra->cspec0.y);
-  bsdf->extra->cspec0.z = saturate(bsdf->extra->cspec0.z);
+  bsdf->extra->color = saturate3(bsdf->extra->color);
+  bsdf->extra->cspec0 = saturate3(bsdf->extra->cspec0);
 
   bsdf->type = CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_FRESNEL_ID;
 
-  float F0 = fresnel_dielectric_cos(1.0f, bsdf->ior);
-  float F = average(interpolate_fresnel_color(sd->I, bsdf->N, bsdf->ior, F0, bsdf->extra->cspec0));
-  bsdf->sample_weight *= F;
+  bsdf_microfacet_fresnel_color(sd, bsdf);
 
   return SD_BSDF | SD_BSDF_HAS_EVAL | SD_BSDF_NEEDS_LCG;
 }

@@ -29,6 +29,7 @@
 
 #include "DNA_anim_types.h"
 #include "DNA_collection_types.h"
+#include "DNA_curveprofile_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_node_types.h"
@@ -80,6 +81,7 @@
 #include "BKE_node.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
+#include "BKE_curveprofile.h"
 #include "BKE_rigidbody.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
@@ -182,6 +184,8 @@ ToolSettings *BKE_toolsettings_copy(ToolSettings *toolsettings, const int flag)
   /* duplicate Grease Pencil multiframe fallof */
   ts->gp_sculpt.cur_falloff = BKE_curvemapping_copy(ts->gp_sculpt.cur_falloff);
   ts->gp_sculpt.cur_primitive = BKE_curvemapping_copy(ts->gp_sculpt.cur_primitive);
+
+  ts->custom_bevel_profile_preset = BKE_curveprofile_copy(ts->custom_bevel_profile_preset);
   return ts;
 }
 
@@ -222,6 +226,10 @@ void BKE_toolsettings_free(ToolSettings *toolsettings)
   }
   if (toolsettings->gp_sculpt.cur_primitive) {
     BKE_curvemapping_free(toolsettings->gp_sculpt.cur_primitive);
+  }
+
+  if (toolsettings->custom_bevel_profile_preset) {
+    BKE_curveprofile_free(toolsettings->custom_bevel_profile_preset);
   }
 
   MEM_freeN(toolsettings);
@@ -316,6 +324,10 @@ void BKE_scene_copy_data(Main *bmain, Scene *sce_dst, const Scene *sce_src, cons
     /* intentionally check sce_dst not sce_src. */ /* XXX ??? comment outdated... */
     sce_dst->r.ffcodecdata.properties = IDP_CopyProperty_ex(sce_src->r.ffcodecdata.properties,
                                                             flag_subdata);
+  }
+
+  if (sce_src->display.shading.prop) {
+    sce_dst->display.shading.prop = IDP_CopyProperty(sce_src->display.shading.prop);
   }
 
   BKE_sound_reset_scene_runtime(sce_dst);
@@ -725,6 +737,9 @@ void BKE_scene_init(Scene *sce)
     copy_v3_v3(gp_brush->curcolor_sub, curcolor_sub);
   }
 
+  /* Curve Profile */
+  sce->toolsettings->custom_bevel_profile_preset = BKE_curveprofile_add(PROF_PRESET_LINE);
+
   for (int i = 0; i < ARRAY_SIZE(sce->orientation_slots); i++) {
     sce->orientation_slots[i].index_custom = -1;
   }
@@ -1004,19 +1019,19 @@ Object *BKE_scene_camera_switch_find(Scene *scene)
 }
 #endif
 
-int BKE_scene_camera_switch_update(Scene *scene)
+bool BKE_scene_camera_switch_update(Scene *scene)
 {
 #ifdef DURIAN_CAMERA_SWITCH
   Object *camera = BKE_scene_camera_switch_find(scene);
-  if (camera) {
+  if (camera && (camera != scene->camera)) {
     scene->camera = camera;
     DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
-    return 1;
+    return true;
   }
 #else
   (void)scene;
 #endif
-  return 0;
+  return false;
 }
 
 char *BKE_scene_find_marker_name(Scene *scene, int frame)
@@ -1072,15 +1087,18 @@ int BKE_scene_frame_snap_by_seconds(Scene *scene, double interval_in_seconds, in
   return (delta_prev < delta_next) ? second_prev : second_next;
 }
 
-void BKE_scene_remove_rigidbody_object(struct Main *bmain, Scene *scene, Object *ob)
+void BKE_scene_remove_rigidbody_object(struct Main *bmain,
+                                       Scene *scene,
+                                       Object *ob,
+                                       const bool free_us)
 {
   /* remove rigid body constraint from world before removing object */
   if (ob->rigidbody_constraint) {
-    BKE_rigidbody_remove_constraint(scene, ob);
+    BKE_rigidbody_remove_constraint(bmain, scene, ob, free_us);
   }
   /* remove rigid body object from world before removing object */
   if (ob->rigidbody_object) {
-    BKE_rigidbody_remove_object(bmain, scene, ob);
+    BKE_rigidbody_remove_object(bmain, scene, ob, free_us);
   }
 }
 
@@ -1266,6 +1284,7 @@ static void prepare_mesh_for_viewport_render(Main *bmain, const ViewLayer *view_
                          mesh,
                          (&(struct BMeshToMeshParams){
                              .calc_object_remap = true,
+                             .update_shapekey_indices = true,
                          }));
         DEG_id_tag_update(&mesh->id, 0);
       }
@@ -1415,7 +1434,8 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
   }
 }
 
-/** Ensures given scene/view_layer pair has a valid, up-to-date depsgraph.
+/**
+ * Ensures given scene/view_layer pair has a valid, up-to-date depsgraph.
  *
  * \warning Sets matching depsgraph as active,
  * so should only be called from the active editing context (usually, from operators).
@@ -1670,6 +1690,8 @@ double BKE_scene_unit_scale(const UnitSettings *unit, const int unit_type, doubl
 
   switch (unit_type) {
     case B_UNIT_LENGTH:
+    case B_UNIT_VELOCITY:
+    case B_UNIT_ACCELERATION:
       return value * (double)unit->scale_length;
     case B_UNIT_AREA:
     case B_UNIT_POWER:

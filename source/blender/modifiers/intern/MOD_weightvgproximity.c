@@ -79,8 +79,10 @@ typedef struct Vert2GeomData {
   float *dist[3];
 } Vert2GeomData;
 
-/** Data which is localized to each computed chunk
- * (i.e. thread-safe, and with continuous subset of index range). */
+/**
+ * Data which is localized to each computed chunk
+ * (i.e. thread-safe, and with continuous subset of index range).
+ */
 typedef struct Vert2GeomDataChunk {
   /* Read-only data */
   float last_hit_co[3][3];
@@ -215,7 +217,7 @@ static void get_vert2ob_distance(
 {
   /* Vertex and ref object coordinates. */
   float v_wco[3];
-  unsigned int i = numVerts;
+  uint i = numVerts;
 
   while (i-- > 0) {
     /* Get world-coordinates of the vertex (constraints and anim included). */
@@ -241,7 +243,7 @@ static void do_map(
     Object *ob, float *weights, const int nidx, const float min_d, const float max_d, short mode)
 {
   const float range_inv = 1.0f / (max_d - min_d); /* invert since multiplication is faster */
-  unsigned int i = nidx;
+  uint i = nidx;
   if (max_d == min_d) {
     while (i-- > 0) {
       weights[i] = (weights[i] >= max_d) ? 1.0f : 0.0f; /* "Step" behavior... */

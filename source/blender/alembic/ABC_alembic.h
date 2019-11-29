@@ -27,6 +27,7 @@ extern "C" {
 
 struct CacheReader;
 struct ListBase;
+struct Main;
 struct Mesh;
 struct Object;
 struct Scene;
@@ -58,7 +59,7 @@ struct AlembicExportParams {
   bool apply_subdiv;
   bool curves_as_mesh;
   bool flatten_hierarchy;
-  bool visible_layers_only;
+  bool visible_objects_only;
   bool renderable_only;
   bool face_sets;
   bool use_subdiv_schema;
@@ -103,7 +104,9 @@ bool ABC_import(struct bContext *C,
                 bool validate_meshes,
                 bool as_background_job);
 
-AbcArchiveHandle *ABC_create_handle(const char *filename, struct ListBase *object_paths);
+AbcArchiveHandle *ABC_create_handle(struct Main *bmain,
+                                    const char *filename,
+                                    struct ListBase *object_paths);
 
 void ABC_free_handle(AbcArchiveHandle *handle);
 

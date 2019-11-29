@@ -645,6 +645,8 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.sculpt.clay_strips
   brush.sculpt.crease
   brush.sculpt.draw
+  brush.sculpt.draw_sharp
+  brush.sculpt.elastic_deform
   brush.sculpt.fill
   brush.sculpt.flatten
   brush.sculpt.grab
@@ -653,6 +655,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.sculpt.mask
   brush.sculpt.nudge
   brush.sculpt.pinch
+  brush.sculpt.pose
   brush.sculpt.rotate
   brush.sculpt.scrape
   brush.sculpt.simplify
@@ -690,6 +693,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.gpencil.primitive_circle
   ops.gpencil.primitive_curve
   ops.gpencil.primitive_line
+  ops.gpencil.primitive_polyline
   ops.gpencil.radius
   ops.gpencil.sculpt_clone
   ops.gpencil.sculpt_grab
@@ -725,6 +729,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.mesh.spin.duplicate
   ops.mesh.vertices_smooth
   ops.node.links_cut
+  ops.paint.eyedropper_add
   ops.paint.vertex_color_fill
   ops.paint.weight_fill
   ops.paint.weight_gradient
@@ -736,6 +741,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.sculpt.border_hide
   ops.sculpt.border_mask
   ops.sculpt.lasso_mask
+  ops.sculpt.mesh_filter
   ops.transform.bone_envelope
   ops.transform.bone_size
   ops.transform.edge_slide
@@ -773,20 +779,20 @@ if(WITH_BLENDER)
     data_to_c_simple(../../../../release/datafiles/splash.png SRC)
     data_to_c_simple(../../../../release/datafiles/splash_2x.png SRC)
     # XXX These are handy, but give nasty "false changes" in svn :/
-    #svg_to_png(../../../../release/datafiles/blender_icons.svg
-               #../../../../release/datafiles/blender_icons16.png
-               #90 SRC)
+    # svg_to_png(../../../../release/datafiles/blender_icons.svg
+    #            ../../../../release/datafiles/blender_icons16.png
+    #            90 SRC)
 
     data_to_c_simple_icons(../../../../release/datafiles/blender_icons16 "icon16_" "${ICON_NAMES}" SRC)
-    #data_to_c_simple(../../../../release/datafiles/blender_icons16.png SRC)
-    #svg_to_png(../../../../release/datafiles/blender_icons.svg
-               #../../../../release/datafiles/blender_icons32.png
-               #180 SRC)
+    # data_to_c_simple(../../../../release/datafiles/blender_icons16.png SRC)
+    # svg_to_png(../../../../release/datafiles/blender_icons.svg
+    #            ../../../../release/datafiles/blender_icons32.png
+    #            180 SRC)
     data_to_c_simple_icons(../../../../release/datafiles/blender_icons32 "icon32_" "${ICON_NAMES}" SRC)
-    #data_to_c_simple(../../../../release/datafiles/blender_icons32.png SRC)
-    #svg_to_png(../../../../release/datafiles/prvicons.svg
-               #../../../../release/datafiles/prvicons.png
-               #90 SRC)
+    # data_to_c_simple(../../../../release/datafiles/blender_icons32.png SRC)
+    # svg_to_png(../../../../release/datafiles/prvicons.svg
+    #            ../../../../release/datafiles/prvicons.png
+    #            90 SRC)
     data_to_c_simple(../../../../release/datafiles/prvicons.png SRC)
 
     # brushes

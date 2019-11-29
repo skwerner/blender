@@ -136,6 +136,7 @@ typedef enum ThemeColorID {
   TH_SYNTAX_D,
   TH_SYNTAX_N,
   TH_SYNTAX_S,
+  TH_LINENUMBERS,
 
   TH_BONE_SOLID,
   TH_BONE_POSE,
@@ -234,6 +235,8 @@ typedef enum ThemeColorID {
   TH_DIS_MARKER,
   TH_PATH_BEFORE,
   TH_PATH_AFTER,
+  TH_PATH_KEYFRAME_BEFORE,
+  TH_PATH_KEYFRAME_AFTER,
   TH_CAMERA_PATH,
   TH_LOCK_MARKER,
 
@@ -281,6 +284,7 @@ typedef enum ThemeColorID {
   TH_NLA_TWEAK,       /* 'tweaking' track in NLA */
   TH_NLA_TWEAK_DUPLI, /* error/warning flag for other strips referencing dupli strip */
 
+  TH_NLA_TRACK,
   TH_NLA_TRANSITION,
   TH_NLA_TRANSITION_SEL,
   TH_NLA_META,
@@ -289,7 +293,7 @@ typedef enum ThemeColorID {
   TH_NLA_SOUND_SEL,
 
   TH_WIDGET_EMBOSS,
-
+  TH_WIDGET_TEXT_CURSOR,
   TH_EDITOR_OUTLINE,
 
   TH_AXIS_X, /* X/Y/Z Axis */

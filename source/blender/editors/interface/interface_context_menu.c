@@ -63,7 +63,14 @@
 static IDProperty *shortcut_property_from_rna(bContext *C, uiBut *but)
 {
   /* Compute data path from context to property. */
+
+  /* If this returns null, we won't be able to bind shortcuts to these RNA properties.
+   * Support can be added at #wm_context_member_from_ptr. */
   const char *member_id = WM_context_member_from_ptr(C, &but->rnapoin);
+  if (member_id == NULL) {
+    return NULL;
+  }
+
   const char *data_path = RNA_path_from_ID_to_struct(&but->rnapoin);
   const char *member_id_data_path = member_id;
 
@@ -90,27 +97,35 @@ static IDProperty *shortcut_property_from_rna(bContext *C, uiBut *but)
   return prop;
 }
 
-static const char *shortcut_get_operator_property(bContext *C, uiBut *but, IDProperty **prop)
+static const char *shortcut_get_operator_property(bContext *C, uiBut *but, IDProperty **r_prop)
 {
   if (but->optype) {
     /* Operator */
-    *prop = (but->opptr && but->opptr->data) ? IDP_CopyProperty(but->opptr->data) : NULL;
+    *r_prop = (but->opptr && but->opptr->data) ? IDP_CopyProperty(but->opptr->data) : NULL;
     return but->optype->idname;
   }
   else if (but->rnaprop) {
-    if (RNA_property_type(but->rnaprop) == PROP_BOOLEAN) {
+    const PropertyType rnaprop_type = RNA_property_type(but->rnaprop);
+
+    if (rnaprop_type == PROP_BOOLEAN) {
       /* Boolean */
-      *prop = shortcut_property_from_rna(C, but);
+      *r_prop = shortcut_property_from_rna(C, but);
+      if (*r_prop == NULL) {
+        return NULL;
+      }
       return "WM_OT_context_toggle";
     }
-    else if (RNA_property_type(but->rnaprop) == PROP_ENUM) {
+    else if (rnaprop_type == PROP_ENUM) {
       /* Enum */
-      *prop = shortcut_property_from_rna(C, but);
+      *r_prop = shortcut_property_from_rna(C, but);
+      if (*r_prop == NULL) {
+        return NULL;
+      }
       return "WM_OT_context_menu_enum";
     }
   }
 
-  *prop = NULL;
+  *r_prop = NULL;
   return NULL;
 }
 
@@ -899,13 +914,13 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 
     if (is_array_component) {
       uiItemBooleanO(layout,
-                     CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy All To Selected"),
+                     CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy All to Selected"),
                      ICON_NONE,
                      "UI_OT_copy_to_selected_button",
                      "all",
                      true);
       uiItemBooleanO(layout,
-                     CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy Single To Selected"),
+                     CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy Single to Selected"),
                      ICON_NONE,
                      "UI_OT_copy_to_selected_button",
                      "all",
@@ -913,7 +928,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
     }
     else {
       uiItemBooleanO(layout,
-                     CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy To Selected"),
+                     CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy to Selected"),
                      ICON_NONE,
                      "UI_OT_copy_to_selected_button",
                      "all",
@@ -928,7 +943,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
     if (ptr->owner_id && !is_whole_array &&
         ELEM(type, PROP_BOOLEAN, PROP_INT, PROP_FLOAT, PROP_ENUM)) {
       uiItemO(layout,
-              CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy As New Driver"),
+              CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy as New Driver"),
               ICON_NONE,
               "UI_OT_copy_as_driver_button");
     }
@@ -950,7 +965,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
           but->search_func == ui_rna_collection_search_cb)) &&
         ui_jump_to_target_button_poll(C)) {
       uiItemO(layout,
-              CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Jump To Target"),
+              CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Jump to Target"),
               ICON_NONE,
               "UI_OT_jump_to_target_button");
       uiItemS(layout);

@@ -99,6 +99,7 @@ set(SRC
   intern/crazyspace.c
   intern/curve.c
   intern/curve_decimate.c
+  intern/curveprofile.c
   intern/customdata.c
   intern/customdata_file.c
   intern/data_transfer.c
@@ -128,6 +129,7 @@ set(SRC
   intern/image_gen.c
   intern/image_save.c
   intern/ipo.c
+  intern/kelvinlet.c
   intern/key.c
   intern/keyconfig.c
   intern/lattice.c
@@ -154,6 +156,7 @@ set(SRC
   intern/mesh_iterators.c
   intern/mesh_mapping.c
   intern/mesh_merge.c
+  intern/mesh_mirror.c
   intern/mesh_remap.c
   intern/mesh_remesh_voxel.c
   intern/mesh_runtime.c
@@ -182,15 +185,16 @@ set(SRC
   intern/particle_system.c
   intern/pbvh.c
   intern/pbvh_bmesh.c
+  intern/pbvh_parallel.cc
   intern/pointcache.c
   intern/report.c
   intern/rigidbody.c
   intern/scene.c
   intern/screen.c
   intern/seqcache.c
-  intern/seqprefetch.c
   intern/seqeffects.c
   intern/seqmodifier.c
+  intern/seqprefetch.c
   intern/sequencer.c
   intern/shader_fx.c
   intern/shrinkwrap.c
@@ -205,15 +209,17 @@ set(SRC
   intern/subdiv_ccg_material.c
   intern/subdiv_converter.c
   intern/subdiv_converter_mesh.c
+  intern/subdiv_deform.c
   intern/subdiv_displacement.c
   intern/subdiv_displacement_multires.c
   intern/subdiv_eval.c
   intern/subdiv_foreach.c
   intern/subdiv_mesh.c
   intern/subdiv_stats.c
+  intern/subdiv_topology.c
   intern/subsurf_ccg.c
-  intern/suggestions.c
   intern/text.c
+  intern/text_suggestions.c
   intern/texture.c
   intern/tracking.c
   intern/tracking_auto.c
@@ -261,6 +267,7 @@ set(SRC
   BKE_context.h
   BKE_crazyspace.h
   BKE_curve.h
+  BKE_curveprofile.h
   BKE_customdata.h
   BKE_customdata_file.h
   BKE_data_transfer.h
@@ -286,6 +293,7 @@ set(SRC
   BKE_image.h
   BKE_image_save.h
   BKE_ipo.h
+  BKE_kelvinlet.h
   BKE_key.h
   BKE_keyconfig.h
   BKE_lattice.h
@@ -306,6 +314,7 @@ set(SRC
   BKE_mesh.h
   BKE_mesh_iterators.h
   BKE_mesh_mapping.h
+  BKE_mesh_mirror.h
   BKE_mesh_remap.h
   BKE_mesh_remesh_voxel.h
   BKE_mesh_runtime.h
@@ -339,12 +348,14 @@ set(SRC
   BKE_studiolight.h
   BKE_subdiv.h
   BKE_subdiv_ccg.h
+  BKE_subdiv_deform.h
   BKE_subdiv_eval.h
   BKE_subdiv_foreach.h
   BKE_subdiv_mesh.h
+  BKE_subdiv_topology.h
   BKE_subsurf.h
-  BKE_suggestions.h
   BKE_text.h
+  BKE_text_suggestions.h
   BKE_texture.h
   BKE_tracking.h
   BKE_undo_system.h
@@ -387,8 +398,6 @@ set(LIB
   bf_modifiers
   bf_nodes
   bf_physics
-  bf_python
-  bf_python_bmesh
   bf_rna
   bf_shader_fx
 )
@@ -432,14 +441,6 @@ if(WITH_BULLET)
   )
   add_definitions(-DWITH_BULLET)
 endif()
-
-#if(WITH_MOD_CLOTH_ELTOPO)
-#   list(APPEND INC
-#       ../../../extern/eltopo
-#       ../../../extern/eltopo/eltopo3d
-#   )
-#   add_definitions(-DWITH_ELTOPO)
-#endif()
 
 if(WITH_IMAGE_OPENEXR)
   add_definitions(-DWITH_OPENEXR)
@@ -501,6 +502,10 @@ endif()
 if(WITH_PYTHON)
   list(APPEND INC
     ../python
+  )
+  list(APPEND LIB
+    bf_python
+    bf_python_bmesh
   )
   add_definitions(-DWITH_PYTHON)
 
@@ -631,10 +636,18 @@ if(WITH_QUADRIFLOW)
   add_definitions(-DWITH_QUADRIFLOW)
 endif()
 
-## Warnings as errors, this is too strict!
-#if(MSVC)
-#   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
-#endif()
+if(WITH_TBB)
+  add_definitions(-DWITH_TBB)
+
+  list(APPEND INC_SYS
+    ${TBB_INCLUDE_DIRS}
+  )
+endif()
+
+# # Warnings as errors, this is too strict!
+# if(MSVC)
+#    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
+# endif()
 
 blender_add_lib(bf_blenkernel "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 

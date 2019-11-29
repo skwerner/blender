@@ -75,7 +75,8 @@
         V3D_SHADING_VERTEX_COLOR))
 
 #define IS_NAVIGATING(wpd) \
-  ((DRW_context_state_get()->rv3d) && (DRW_context_state_get()->rv3d->rflag & RV3D_NAVIGATING))
+  ((DRW_context_state_get()->rv3d) && \
+   (DRW_context_state_get()->rv3d->rflag & (RV3D_NAVIGATING | RV3D_PAINTING)))
 
 #define OBJECT_OUTLINE_ENABLED(wpd) (wpd->shading.flag & V3D_SHADING_OBJECT_OUTLINE)
 #define OBJECT_ID_PASS_ENABLED(wpd) (OBJECT_OUTLINE_ENABLED(wpd) || CURVATURE_ENABLED(wpd))
@@ -193,7 +194,8 @@ typedef struct WORKBENCH_UBO_World {
   float background_alpha;
   float curvature_ridge;
   float curvature_valley;
-  int pad[3];
+  float background_dither_factor;
+  int pad[2];
 } WORKBENCH_UBO_World;
 BLI_STATIC_ASSERT_ALIGN(WORKBENCH_UBO_World, 16)
 
@@ -215,6 +217,11 @@ typedef struct WORKBENCH_PrivateData {
   View3DShading shading;
   StudioLight *studio_light;
   const UserDef *preferences;
+  /* Does this instance owns the `world_ubo` field.
+   * Normally the field is borrowed from `WORKBENCH_WorldData`. In case that
+   * there is no World attached to the scene the UBO cannot be cached and should
+   * be freed after using. */
+  bool is_world_ubo_owner;
   struct GPUUniformBuffer *world_ubo;
   struct DRWShadingGroup *shadow_shgrp;
   struct DRWShadingGroup *depth_shgrp;
@@ -281,13 +288,8 @@ typedef struct WORKBENCH_EffectInfo {
 } WORKBENCH_EffectInfo;
 
 typedef struct WORKBENCH_MaterialData {
-  float base_color[3];
-  float diffuse_color[3];
-  float specular_color[3];
-  float alpha;
-  float metallic;
-  float roughness;
-  int object_id;
+  float base_color[3], metallic;
+  float roughness, alpha;
   int color_type;
   int interp;
   Image *ima;
@@ -308,9 +310,13 @@ typedef struct WORKBENCH_ObjectData {
   float shadow_min[3], shadow_max[3];
   BoundBox shadow_bbox;
   bool shadow_bbox_dirty;
-
-  int object_id;
 } WORKBENCH_ObjectData;
+
+typedef struct WORKBENCH_WorldData {
+  DrawData dd;
+  /* The cached `GPUUniformBuffer`, that is reused between draw calls. */
+  struct GPUUniformBuffer *world_ubo;
+} WORKBENCH_WorldData;
 
 /* inline helper functions */
 BLI_INLINE bool workbench_is_specular_highlight_enabled(WORKBENCH_PrivateData *wpd)
@@ -412,6 +418,13 @@ BLI_INLINE eGPUTextureFormat workbench_color_texture_format(const WORKBENCH_Priv
   return result;
 }
 
+BLI_INLINE bool workbench_background_dither_factor(const WORKBENCH_PrivateData *wpd)
+{
+  /* Only apply dithering when rendering on a RGBA8 texture.
+   * The dithering will remove banding when using a gradient as background */
+  return workbench_color_texture_format(wpd) == GPU_RGBA8;
+}
+
 /* workbench_deferred.c */
 void workbench_deferred_engine_init(WORKBENCH_Data *vedata);
 void workbench_deferred_engine_free(void);
@@ -500,7 +513,6 @@ void workbench_material_shgroup_uniform(WORKBENCH_PrivateData *wpd,
                                         DRWShadingGroup *grp,
                                         WORKBENCH_MaterialData *material,
                                         Object *ob,
-                                        const bool use_metallic,
                                         const bool deferred,
                                         const int interp);
 void workbench_material_copy(WORKBENCH_MaterialData *dest_material,
@@ -525,8 +537,7 @@ bool studiolight_camera_in_object_shadow(WORKBENCH_PrivateData *wpd,
 void workbench_effect_info_init(WORKBENCH_EffectInfo *effect_info);
 void workbench_private_data_init(WORKBENCH_PrivateData *wpd);
 void workbench_private_data_free(WORKBENCH_PrivateData *wpd);
-void workbench_private_data_get_light_direction(WORKBENCH_PrivateData *wpd,
-                                                float r_light_direction[3]);
+void workbench_private_data_get_light_direction(float r_light_direction[3]);
 
 /* workbench_volume.c */
 void workbench_volume_engine_init(void);

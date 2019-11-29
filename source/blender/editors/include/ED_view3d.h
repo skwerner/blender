@@ -67,8 +67,6 @@ struct wmOperatorType;
 struct wmWindow;
 struct wmWindowManager;
 
-enum eGPUFXFlags;
-
 /* for derivedmesh drawing callbacks, for view3d_select, .... */
 typedef struct ViewContext {
   struct bContext *C;
@@ -521,7 +519,9 @@ int view3d_opengl_select(struct ViewContext *vc,
 
 /* view3d_select.c */
 float ED_view3d_select_dist_px(void);
-void ED_view3d_viewcontext_init(struct bContext *C, struct ViewContext *vc);
+void ED_view3d_viewcontext_init(struct bContext *C,
+                                struct ViewContext *vc,
+                                struct Depsgraph *depsgraph);
 void ED_view3d_viewcontext_init_object(struct ViewContext *vc, struct Object *obact);
 void view3d_operator_needs_opengl(const struct bContext *C);
 void view3d_region_operator_needs_opengl(struct wmWindow *win, struct ARegion *ar);

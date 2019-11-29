@@ -56,13 +56,11 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_keyframes_edit.h"
 #include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_transform.h"
 #include "ED_transform_snap_object_context.h"
 #include "ED_types.h"
-#include "ED_util.h"
 #include "ED_view3d.h"
 #include "ED_curve.h"
 
@@ -3343,7 +3341,8 @@ void CURVE_OT_reveal(wmOperatorType *ot)
 
 /********************** subdivide operator *********************/
 
-/** Divide the line segments associated with the currently selected
+/**
+ * Divide the line segments associated with the currently selected
  * curve nodes (Bezier or NURB). If there are no valid segment
  * selections within the current selection, nothing happens.
  */
@@ -4876,6 +4875,7 @@ void CURVE_OT_make_segment(wmOperatorType *ot)
 bool ED_curve_editnurb_select_pick(
     bContext *C, const int mval[2], bool extend, bool deselect, bool toggle)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   Nurb *nu;
   BezTriple *bezt = NULL;
@@ -4884,7 +4884,7 @@ bool ED_curve_editnurb_select_pick(
   short hand;
 
   view3d_operator_needs_opengl(C);
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
   copy_v2_v2_int(vc.mval, mval);
 
   if (ED_curve_pick_vert(&vc, 1, &nu, &bezt, &bp, &hand, &basact)) {
@@ -5635,9 +5635,10 @@ static int add_vertex_exec(bContext *C, wmOperator *op)
 
 static int add_vertex_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
 
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   if (vc.rv3d && !RNA_struct_property_is_set(op->ptr, "location")) {
     Curve *cu;
@@ -7136,7 +7137,6 @@ static int match_texture_space_exec(bContext *C, wmOperator *UNUSED(op))
 
   copy_v3_v3(curve->loc, loc);
   copy_v3_v3(curve->size, size);
-  zero_v3(curve->rot);
 
   curve->texflag &= ~CU_AUTOSPACE;
 

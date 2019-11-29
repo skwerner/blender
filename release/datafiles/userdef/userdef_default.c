@@ -21,6 +21,8 @@
 
 #include "DNA_userdef_types.h"
 #include "DNA_curve_types.h"
+#include "DNA_space_types.h"
+#include "DNA_anim_types.h"
 
 #include "BLI_math_rotation.h"
 
@@ -137,6 +139,7 @@ const UserDef U_default = {
     .glreslimit = 0,
     .curssize = 0,
     .color_picker_type = USER_CP_CIRCLE_HSV,
+    .auto_smoothing_new = FCURVE_SMOOTH_CONT_ACCEL,
     .ipo_new = BEZT_IPO_BEZ,
     .keyhandles_new = HD_AUTO_ANIM,
     .view_frame_type = ZOOM_FRAME_MODE_KEEP_RANGE,
@@ -147,10 +150,11 @@ const UserDef U_default = {
     .tablet_api = USER_TABLET_AUTOMATIC,
     .pressure_threshold_max = 1.0,
     .pressure_softness = 0.0,
-    .ndof_sensitivity = 1.0,
-    .ndof_orbit_sensitivity = 1.0,
+    .ndof_sensitivity = 4.0,
+    .ndof_orbit_sensitivity = 4.0,
     .ndof_deadzone = 0.1,
-    .ndof_flag = (NDOF_LOCK_HORIZON | NDOF_SHOULD_PAN | NDOF_SHOULD_ZOOM | NDOF_SHOULD_ROTATE),
+    .ndof_flag = (NDOF_MODE_ORBIT | NDOF_LOCK_HORIZON | NDOF_SHOULD_PAN | NDOF_SHOULD_ZOOM |
+                  NDOF_SHOULD_ROTATE),
     .ogl_multisamples = 0,
     .image_draw_method = IMAGE_DRAW_METHOD_AUTO,
     .glalphaclip = 0.004,
@@ -183,6 +187,8 @@ const UserDef U_default = {
     .opensubdiv_compute_type = 0,
     .gpencil_multisamples = 4,
     .factor_display_type = USER_FACTOR_AS_FACTOR,
+    .render_display_type = USER_RENDER_DISPLAY_WINDOW,
+    .filebrowser_display_type = USER_TEMP_SPACE_DISPLAY_WINDOW,
     .viewport_aa = 8,
 
     .walk_navigation =
@@ -199,6 +205,19 @@ const UserDef U_default = {
     .space_data =
         {
             .section_active = USER_SECTION_INTERFACE,
+        },
+
+    .file_space_data =
+        {
+            .display_type = FILE_VERTICALDISPLAY,
+            .thumbnail_size = 128,
+            .sort_type = FILE_SORT_ALPHA,
+            .details_flags = FILE_DETAILS_SIZE | FILE_DETAILS_DATETIME,
+            .flag = FILE_HIDE_DOT,
+            .filter_id = FILTER_ID_ALL,
+
+            .temp_win_sizex = 1020,
+            .temp_win_sizey = 600,
         },
 
     .runtime =

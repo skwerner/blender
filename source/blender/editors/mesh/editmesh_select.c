@@ -2642,12 +2642,48 @@ bool EDBM_mesh_deselect_all_multi_ex(struct Base **bases, const uint bases_len)
 
 bool EDBM_mesh_deselect_all_multi(struct bContext *C)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
   uint bases_len = 0;
   Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
       vc.view_layer, vc.v3d, &bases_len);
   bool changed_multi = EDBM_mesh_deselect_all_multi_ex(bases, bases_len);
+  MEM_freeN(bases);
+  return changed_multi;
+}
+
+bool EDBM_selectmode_disable_multi_ex(Scene *scene,
+                                      struct Base **bases,
+                                      const uint bases_len,
+                                      const short selectmode_disable,
+                                      const short selectmode_fallback)
+{
+  bool changed_multi = false;
+  for (uint base_index = 0; base_index < bases_len; base_index++) {
+    Base *base_iter = bases[base_index];
+    Object *ob_iter = base_iter->object;
+    BMEditMesh *em_iter = BKE_editmesh_from_object(ob_iter);
+
+    EDBM_selectmode_disable(scene, em_iter, selectmode_disable, selectmode_fallback);
+    changed_multi = true;
+  }
+  return changed_multi;
+}
+
+bool EDBM_selectmode_disable_multi(struct bContext *C,
+                                   const short selectmode_disable,
+                                   const short selectmode_fallback)
+{
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewContext vc;
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
+  uint bases_len = 0;
+  Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
+      vc.view_layer, NULL, &bases_len);
+  bool changed_multi = EDBM_selectmode_disable_multi_ex(
+      scene, bases, bases_len, selectmode_disable, selectmode_fallback);
   MEM_freeN(bases);
   return changed_multi;
 }
@@ -2916,7 +2952,7 @@ bool EDBM_select_interior_faces(BMEditMesh *em)
               SWAP(int, i_a, i_b);
             }
 
-            /* Merge the the groups. */
+            /* Merge the groups. */
             LISTBASE_FOREACH (LinkData *, n, &fgroup_listbase[i_b]) {
               BMFace *f_iter = n->data;
               BM_elem_index_set(f_iter, i_a);
@@ -4219,7 +4255,8 @@ void MESH_OT_select_nth(wmOperatorType *ot)
 
 void em_setup_viewcontext(bContext *C, ViewContext *vc)
 {
-  ED_view3d_viewcontext_init(C, vc);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  ED_view3d_viewcontext_init(C, vc, depsgraph);
 
   if (vc->obedit) {
     vc->em = BKE_editmesh_from_object(vc->obedit);

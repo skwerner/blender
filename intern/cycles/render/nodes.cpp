@@ -3502,6 +3502,7 @@ NODE_DEFINE(GeometryNode)
   SOCKET_OUT_POINT(parametric, "Parametric");
   SOCKET_OUT_FLOAT(backfacing, "Backfacing");
   SOCKET_OUT_FLOAT(pointiness, "Pointiness");
+  SOCKET_OUT_FLOAT(random_per_island, "Random Per Island");
 
   return type;
 }
@@ -3519,6 +3520,9 @@ void GeometryNode::attributes(Shader *shader, AttributeRequestSet *attributes)
     }
     if (!output("Pointiness")->links.empty()) {
       attributes->add(ATTR_STD_POINTINESS);
+    }
+    if (!output("Random Per Island")->links.empty()) {
+      attributes->add(ATTR_STD_RANDOM_PER_ISLAND);
     }
   }
 
@@ -3580,6 +3584,17 @@ void GeometryNode::compile(SVMCompiler &compiler)
     if (compiler.output_type() != SHADER_TYPE_VOLUME) {
       compiler.add_node(
           attr_node, ATTR_STD_POINTINESS, compiler.stack_assign(out), NODE_ATTR_FLOAT);
+    }
+    else {
+      compiler.add_node(NODE_VALUE_F, __float_as_int(0.0f), compiler.stack_assign(out));
+    }
+  }
+
+  out = output("Random Per Island");
+  if (!out->links.empty()) {
+    if (compiler.output_type() != SHADER_TYPE_VOLUME) {
+      compiler.add_node(
+          attr_node, ATTR_STD_RANDOM_PER_ISLAND, compiler.stack_assign(out), NODE_ATTR_FLOAT);
     }
     else {
       compiler.add_node(NODE_VALUE_F, __float_as_int(0.0f), compiler.stack_assign(out));
@@ -5567,11 +5582,21 @@ void MapRangeNode::expand(ShaderGraph *graph)
     ShaderOutput *result_out = output("Result");
     if (!result_out->links.empty()) {
       ClampNode *clamp_node = new ClampNode();
-      clamp_node->min = to_min;
-      clamp_node->max = to_max;
       graph->add(clamp_node);
       graph->relink(result_out, clamp_node->output("Result"));
       graph->connect(result_out, clamp_node->input("Value"));
+      if (input("To Min")->link) {
+        graph->connect(input("To Min")->link, clamp_node->input("Min"));
+      }
+      else {
+        clamp_node->min = to_min;
+      }
+      if (input("To Max")->link) {
+        graph->connect(input("To Max")->link, clamp_node->input("Max"));
+      }
+      else {
+        clamp_node->max = to_max;
+      }
     }
   }
 }

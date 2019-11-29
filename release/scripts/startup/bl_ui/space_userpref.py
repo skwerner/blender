@@ -265,6 +265,26 @@ class USERPREF_PT_interface_editors(PreferencePanel, Panel):
         flow.prop(view, "factor_display_type")
 
 
+class USERPREF_PT_interface_temporary_windows(PreferencePanel, Panel):
+    bl_label = "Temporary Windows"
+    bl_parent_id = "USERPREF_PT_interface_editors"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'INTERFACE')
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        view = prefs.view
+
+        flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
+
+        flow.prop(view, "render_display_type", text="Render in")
+        flow.prop(view, "filebrowser_display_type", text="File Browser")
+
+
 class USERPREF_PT_interface_menus(Panel):
     bl_space_type = 'PREFERENCES'
     bl_region_type = 'WINDOW'
@@ -363,7 +383,7 @@ class USERPREF_PT_edit_objects_duplicate_data(PreferencePanel, Panel):
         col.prop(edit, "use_duplicate_action", text="Action")
         col.prop(edit, "use_duplicate_armature", text="Armature")
         col.prop(edit, "use_duplicate_curve", text="Curve")
-        # col.prop(edit, "use_duplicate_fcurve", text="F-Curve")
+        # col.prop(edit, "use_duplicate_fcurve", text="F-Curve")  # Not implemented.
         col.prop(edit, "use_duplicate_light", text="Light")
         col.prop(edit, "use_duplicate_lightprobe", text="Light Probe")
         col = flow.column()
@@ -374,7 +394,7 @@ class USERPREF_PT_edit_objects_duplicate_data(PreferencePanel, Panel):
         col = flow.column()
         col.prop(edit, "use_duplicate_surface", text="Surface")
         col.prop(edit, "use_duplicate_text", text="Text")
-        col.prop(edit, "use_duplicate_texture", text="Texture")
+        # col.prop(edit, "use_duplicate_texture", text="Texture")  # Not implemented.
         col.prop(edit, "use_duplicate_grease_pencil", text="Grease Pencil")
 
 
@@ -549,6 +569,7 @@ class USERPREF_PT_animation_fcurves(PreferencePanel, Panel):
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
         flow.prop(edit, "fcurve_unselected_alpha", text="F-Curve Visibility")
+        flow.prop(edit, "fcurve_new_auto_smoothing", text="Default Smoothing Mode")
         flow.prop(edit, "keyframe_new_interpolation_type", text="Default Interpolation")
         flow.prop(edit, "keyframe_new_handle_type", text="Default Handles")
         flow.prop(edit, "use_insertkey_xyz_to_rgb", text="XYZ to RGB")
@@ -911,6 +932,7 @@ class USERPREF_PT_theme_interface_styles(PreferencePanel, Panel):
         flow.prop(ui, "icon_alpha")
         flow.prop(ui, "icon_saturation")
         flow.prop(ui, "editor_outline")
+        flow.prop(ui, "widget_text_cursor")
         flow.prop(ui, "menu_shadow_width")
         flow.prop(ui, "widget_emboss")
 
@@ -1385,23 +1407,26 @@ class USERPREF_PT_saveload_file_browser(PreferencePanel, Panel):
         flow.prop(paths, "show_hidden_files_datablocks")
         flow.prop(paths, "hide_recent_locations")
         flow.prop(paths, "hide_system_bookmarks")
-        flow.prop(paths, "show_thumbnails")
 
 
-class USERPREF_MT_ndof_settings(Menu):
-    # accessed from the window key-bindings in C (only)
+class USERPREF_PT_ndof_settings(Panel):
     bl_label = "3D Mouse Settings"
+    bl_space_type = 'TOPBAR'  # dummy.
+    bl_region_type = 'HEADER'
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
 
         input_prefs = context.preferences.inputs
 
         is_view3d = context.space_data.type == 'VIEW_3D'
 
-        layout.prop(input_prefs, "ndof_sensitivity")
-        layout.prop(input_prefs, "ndof_orbit_sensitivity")
-        layout.prop(input_prefs, "ndof_deadzone")
+        col = layout.column(align=True)
+        col.prop(input_prefs, "ndof_sensitivity")
+        col.prop(input_prefs, "ndof_orbit_sensitivity")
+        col.prop(input_prefs, "ndof_deadzone")
 
         if is_view3d:
             layout.separator()
@@ -1409,8 +1434,8 @@ class USERPREF_MT_ndof_settings(Menu):
 
             layout.separator()
             layout.label(text="Orbit Style")
-            layout.row().prop(input_prefs, "ndof_view_navigate_method", text="")
-            layout.row().prop(input_prefs, "ndof_view_rotate_method", text="")
+            layout.row().prop(input_prefs, "ndof_view_navigate_method", text="Navigate")
+            layout.row().prop(input_prefs, "ndof_view_rotate_method", text="Orbit")
             layout.separator()
             layout.label(text="Orbit Options")
             layout.prop(input_prefs, "ndof_rotx_invert_axis")
@@ -1460,12 +1485,17 @@ class USERPREF_PT_input_mouse(PreferencePanel, Panel):
         return (prefs.active_section == 'INPUT')
 
     def draw_props(self, context, layout):
+        import sys
         prefs = context.preferences
         inputs = prefs.inputs
 
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
         flow.prop(inputs, "use_mouse_emulate_3_button")
+        if sys.platform[:3] != "win":
+            rowsub = flow.row()
+            rowsub.active = inputs.use_mouse_emulate_3_button
+            rowsub.prop(inputs, "mouse_emulate_3_button_modifier")
         flow.prop(inputs, "use_mouse_continuous")
         flow.prop(inputs, "use_drag_immediately")
         flow.prop(inputs, "mouse_double_click_time", text="Double Click Speed")
@@ -2107,6 +2137,67 @@ class USERPREF_PT_studiolight_light_editor(Panel):
         layout.prop(system, "light_ambient")
 
 
+class ExperimentalPanel:
+    bl_space_type = 'PREFERENCES'
+    bl_region_type = 'WINDOW'
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return (prefs.active_section == 'EXPERIMENTAL')
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        self.draw_props(context, layout)
+
+
+class USERPREF_PT_experimental_all(ExperimentalPanel, Panel):
+    bl_label = "All"
+    bl_options = {'HIDE_HEADER'}
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        experimental = prefs.experimental
+
+        col = layout.column()
+        col.prop(experimental, "use_experimental_all")
+
+        # For the other settings create new panels
+        # and make sure they are disabled if use_experimental_all is True
+
+
+"""
+# Example panel, leave it here so we always have a template to follow even
+# after the features are gone from the experimental panel.
+
+class USERPREF_PT_experimental_virtual_reality(ExperimentalPanel, Panel):
+    bl_label = "Virtual Reality"
+
+    def draw_props(self, context, layout):
+        prefs = context.preferences
+        experimental = prefs.experimental
+        layout.active = not experimental.use_experimental_all
+
+        task = "T71347"
+        split = layout.split(factor=0.66)
+        col = split.split()
+        col.prop(experimental, "use_virtual_reality_scene_inspection", text="Scene Inspection")
+        col = split.split()
+        col.operator("wm.url_open", text=task, icon='URL').url = "https://developer.blender.org/" + task
+
+        task = "T71348"
+        split = layout.split(factor=0.66)
+        col = split.column()
+        col.prop(experimental, "use_virtual_reality_immersive_drawing", text="Continuous Immersive Drawing")
+        col = split.column()
+        col.operator("wm.url_open", text=task, icon='URL').url = "https://developer.blender.org/" + task
+"""
+
+
 # Order of registration defines order in UI,
 # so dynamically generated classes are 'injected' in the intended order.
 classes = (
@@ -2119,6 +2210,7 @@ classes = (
 
     USERPREF_PT_interface_display,
     USERPREF_PT_interface_editors,
+    USERPREF_PT_interface_temporary_windows,
     USERPREF_PT_interface_translation,
     USERPREF_PT_interface_text,
     USERPREF_PT_interface_menus,
@@ -2167,7 +2259,6 @@ classes = (
     USERPREF_PT_saveload_autorun,
     USERPREF_PT_saveload_file_browser,
 
-    USERPREF_MT_ndof_settings,
     USERPREF_MT_keyconfigs,
 
     USERPREF_PT_input_keyboard,
@@ -2187,6 +2278,11 @@ classes = (
     USERPREF_PT_studiolight_light_editor,
     USERPREF_PT_studiolight_matcaps,
     USERPREF_PT_studiolight_world,
+
+    USERPREF_PT_experimental_all,
+
+    # Popovers.
+    USERPREF_PT_ndof_settings,
 
     # Add dynamically generated editor theme panels last,
     # so they show up last in the theme section.

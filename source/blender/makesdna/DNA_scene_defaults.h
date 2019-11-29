@@ -93,7 +93,7 @@
     .frs_sec = 24, \
     .frs_sec_base = 1, \
  \
-    /* OCIO_TODO: for forwards compatibility only, so if no tonecurve are used, \
+    /* OCIO_TODO: for forwards compatibility only, so if no tone-curve are used, \
      *            images would look in the same way as in current blender \
      * \
      *            perhaps at some point should be completely deprecated? \
@@ -171,7 +171,7 @@
 
 #define _DNA_DEFAULT_PhysicsSettings \
   { \
-    .gravity = {0.0f, 0.0f -9.81f}, \
+    .gravity = {0.0f, 0.0f, -9.81f}, \
     .flag = PHYS_GLOBAL_GRAVITY, \
   }
 

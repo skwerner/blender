@@ -103,7 +103,7 @@ typedef struct Frame {
     int corner;
     /* checked to avoid chaining.
      * (merging when we're already been referenced), see T39775 */
-    unsigned int is_target : 1;
+    uint is_target : 1;
   } merge[4];
 
   /* For hull frames, whether each vertex is detached or not */
@@ -1871,7 +1871,7 @@ static Mesh *base_skin(Mesh *origmesh, SkinModifierData *smd)
     return NULL;
   }
 
-  result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL);
+  result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL, origmesh);
   BM_mesh_free(bm);
 
   result->runtime.cd_dirty_vert |= CD_MASK_NORMAL;

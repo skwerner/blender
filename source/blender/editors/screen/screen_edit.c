@@ -41,20 +41,18 @@
 #include "BKE_layer.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
-#include "BKE_node.h"
 #include "BKE_screen.h"
 #include "BKE_scene.h"
+#include "BKE_sound.h"
 #include "BKE_workspace.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_screen_types.h"
 #include "ED_clip.h"
 #include "ED_node.h"
-#include "ED_render.h"
 
 #include "UI_interface.h"
 
@@ -518,6 +516,17 @@ void ED_screen_ensure_updated(wmWindowManager *wm, wmWindow *win, bScreen *scree
   }
 }
 
+/**
+ * Utility to exit and free an area-region. Screen level regions (menus/popups) need to be treated
+ * slightly differently, see #ui_region_temp_remove().
+ */
+void ED_region_remove(bContext *C, ScrArea *sa, ARegion *ar)
+{
+  ED_region_exit(C, ar);
+  BKE_area_region_free(sa->type, ar);
+  BLI_freelinkN(&sa->regionbase, ar);
+}
+
 /* *********** exit calls are for closing running stuff ******** */
 
 void ED_region_exit(bContext *C, ARegion *ar)
@@ -583,6 +592,11 @@ void ED_screen_exit(bContext *C, wmWindow *window, bScreen *screen)
 
   if (screen->animtimer) {
     WM_event_remove_timer(wm, window, screen->animtimer);
+
+    Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+    Scene *scene = WM_window_get_active_scene(prevwin);
+    Scene *scene_eval = (Scene *)DEG_get_evaluated_id(depsgraph, &scene->id);
+    BKE_sound_stop_scene(scene_eval);
   }
   screen->animtimer = NULL;
   screen->scrubbing = false;
@@ -630,14 +644,14 @@ static void screen_cursor_set(wmWindow *win, const int xy[2])
 
   if (sa) {
     if (az->type == AZONE_AREA) {
-      WM_cursor_set(win, CURSOR_EDIT);
+      WM_cursor_set(win, WM_CURSOR_EDIT);
     }
     else if (az->type == AZONE_REGION) {
       if (az->edge == AE_LEFT_TO_TOPRIGHT || az->edge == AE_RIGHT_TO_TOPLEFT) {
-        WM_cursor_set(win, CURSOR_X_MOVE);
+        WM_cursor_set(win, WM_CURSOR_X_MOVE);
       }
       else {
-        WM_cursor_set(win, CURSOR_Y_MOVE);
+        WM_cursor_set(win, WM_CURSOR_Y_MOVE);
       }
     }
   }
@@ -646,14 +660,14 @@ static void screen_cursor_set(wmWindow *win, const int xy[2])
 
     if (actedge) {
       if (screen_geom_edge_is_horizontal(actedge)) {
-        WM_cursor_set(win, CURSOR_Y_MOVE);
+        WM_cursor_set(win, WM_CURSOR_Y_MOVE);
       }
       else {
-        WM_cursor_set(win, CURSOR_X_MOVE);
+        WM_cursor_set(win, WM_CURSOR_X_MOVE);
       }
     }
     else {
-      WM_cursor_set(win, CURSOR_STD);
+      WM_cursor_set(win, WM_CURSOR_DEFAULT);
     }
   }
 }
@@ -1101,6 +1115,7 @@ ScrArea *ED_screen_full_newspace(bContext *C, ScrArea *sa, int type)
 {
   wmWindow *win = CTX_wm_window(C);
   ScrArea *newsa = NULL;
+  SpaceLink *newsl;
 
   if (!sa || sa->full == NULL) {
     newsa = ED_screen_state_toggle(C, win, sa, SCREENMAXIMIZED);
@@ -1111,15 +1126,14 @@ ScrArea *ED_screen_full_newspace(bContext *C, ScrArea *sa, int type)
   }
 
   BLI_assert(newsa);
+  newsl = newsa->spacedata.first;
 
-  if (sa && (sa->spacetype != type)) {
-    newsa->flag |= AREA_FLAG_TEMP_TYPE;
-  }
-  else {
-    newsa->flag &= ~AREA_FLAG_TEMP_TYPE;
+  /* Tag the active space before changing, so we can identify it when user wants to go back. */
+  if ((newsl->link_flag & SPACE_FLAG_TYPE_TEMPORARY) == 0) {
+    newsl->link_flag |= SPACE_FLAG_TYPE_WAS_ACTIVE;
   }
 
-  ED_area_newspace(C, newsa, type, (newsa->flag & AREA_FLAG_TEMP_TYPE));
+  ED_area_newspace(C, newsa, type, newsl->link_flag & SPACE_FLAG_TYPE_TEMPORARY);
 
   return newsa;
 }
@@ -1132,7 +1146,7 @@ void ED_screen_full_prevspace(bContext *C, ScrArea *sa)
   BLI_assert(sa->full);
 
   if (sa->flag & AREA_FLAG_STACKED_FULLSCREEN) {
-    /* stacked fullscreen -> only go back to previous screen and don't toggle out of fullscreen */
+    /* stacked fullscreen -> only go back to previous area and don't toggle out of fullscreen */
     ED_area_prevspace(C, sa);
   }
   else {
@@ -1142,13 +1156,13 @@ void ED_screen_full_prevspace(bContext *C, ScrArea *sa)
 
 void ED_screen_restore_temp_type(bContext *C, ScrArea *sa)
 {
+  SpaceLink *sl = sa->spacedata.first;
+
   /* In case nether functions below run. */
   ED_area_tag_redraw(sa);
 
-  if (sa->flag & AREA_FLAG_TEMP_TYPE) {
+  if (sl->link_flag & SPACE_FLAG_TYPE_TEMPORARY) {
     ED_area_prevspace(C, sa);
-    /* Flag should be cleared now. */
-    BLI_assert((sa->flag & AREA_FLAG_TEMP_TYPE) == 0);
   }
 
   if (sa->full) {
@@ -1168,7 +1182,7 @@ void ED_screen_full_restore(bContext *C, ScrArea *sa)
    * overlaid on top of an existing setup) then return to the previous space */
 
   if (sl->next) {
-    if (sa->flag & AREA_FLAG_TEMP_TYPE) {
+    if (sl->link_flag & SPACE_FLAG_TYPE_TEMPORARY) {
       ED_screen_full_prevspace(C, sa);
     }
     else {
@@ -1344,6 +1358,55 @@ ScrArea *ED_screen_state_toggle(bContext *C, wmWindow *win, ScrArea *sa, const s
   CTX_wm_area_set(C, sc->areabase.first);
 
   return sc->areabase.first;
+}
+
+/**
+ * Wrapper to open a temporary space either as fullscreen space, or as separate window, as defined
+ * by \a display_type.
+ *
+ * \param title: Title to set for the window, if a window is spawned.
+ * \param x, y: Position of the window, if a window is spawned.
+ * \param sizex, sizey: Dimensions of the window, if a window is spawned.
+ */
+ScrArea *ED_screen_temp_space_open(bContext *C,
+                                   const char *title,
+                                   int x,
+                                   int y,
+                                   int sizex,
+                                   int sizey,
+                                   eSpace_Type space_type,
+                                   int display_type,
+                                   bool dialog)
+{
+  ScrArea *sa = NULL;
+
+  switch (display_type) {
+    case USER_TEMP_SPACE_DISPLAY_WINDOW:
+      if (WM_window_open_temp(C, title, x, y, sizex, sizey, (int)space_type, dialog)) {
+        sa = CTX_wm_area(C);
+      }
+      break;
+    case USER_TEMP_SPACE_DISPLAY_FULLSCREEN: {
+      ScrArea *ctx_sa = CTX_wm_area(C);
+
+      if (ctx_sa->full) {
+        sa = ctx_sa;
+        ED_area_newspace(C, ctx_sa, space_type, true);
+        sa->flag |= AREA_FLAG_STACKED_FULLSCREEN;
+        ((SpaceLink *)sa->spacedata.first)->link_flag |= SPACE_FLAG_TYPE_TEMPORARY;
+      }
+      else if (ctx_sa->spacetype == space_type) {
+        sa = ED_screen_state_toggle(C, CTX_wm_window(C), ctx_sa, SCREENMAXIMIZED);
+      }
+      else {
+        sa = ED_screen_full_newspace(C, ctx_sa, (int)space_type);
+        ((SpaceLink *)sa->spacedata.first)->link_flag |= SPACE_FLAG_TYPE_TEMPORARY;
+      }
+      break;
+    }
+  }
+
+  return sa;
 }
 
 /* update frame rate info for viewport drawing */

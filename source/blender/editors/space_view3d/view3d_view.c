@@ -196,8 +196,8 @@ void ED_view3d_smooth_view_ex(
     sms.to_camera = true; /* restore view3d values in end */
   }
 
-  /* skip smooth viewing for render engine draw */
-  if (smooth_viewtx && v3d->shading.type != OB_RENDER) {
+  /* skip smooth viewing for external render engine draw */
+  if (smooth_viewtx && !(v3d->shading.type == OB_RENDER && rv3d->render_engine)) {
     bool changed = false; /* zero means no difference */
 
     if (sview->camera_old != sview->camera) {
@@ -508,7 +508,7 @@ static bool view3d_camera_to_view_poll(bContext *C)
 void VIEW3D_OT_camera_to_view(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Align Camera To View";
+  ot->name = "Align Camera to View";
   ot->description = "Set camera view to active view";
   ot->idname = "VIEW3D_OT_camera_to_view";
 
@@ -963,8 +963,10 @@ static bool drw_select_filter_object_mode_lock(Object *ob, void *user_data)
   return BKE_object_is_mode_compat(ob, obact->mode);
 }
 
-/** Implement #VIEW3D_SELECT_FILTER_WPAINT_POSE_MODE_LOCK for special case when
- * we want to select pose bones (this doesn't switch modes). */
+/**
+ * Implement #VIEW3D_SELECT_FILTER_WPAINT_POSE_MODE_LOCK for special case when
+ * we want to select pose bones (this doesn't switch modes).
+ */
 static bool drw_select_filter_object_mode_lock_for_weight_paint(Object *ob, void *user_data)
 {
   LinkNode *ob_pose_list = user_data;
@@ -1254,6 +1256,9 @@ static bool view3d_localview_init(const Depsgraph *depsgraph,
   else {
     Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
     if (obedit) {
+      for (base = FIRSTBASE(view_layer); base; base = base->next) {
+        base->local_view_bits &= ~local_view_bit;
+      }
       FOREACH_BASE_IN_EDIT_MODE_BEGIN (view_layer, v3d, base_iter) {
         BKE_object_minmax(base_iter->object, min, max, false);
         base_iter->local_view_bits |= local_view_bit;
@@ -1267,6 +1272,9 @@ static bool view3d_localview_init(const Depsgraph *depsgraph,
           BKE_object_minmax(base->object, min, max, false);
           base->local_view_bits |= local_view_bit;
           ok = true;
+        }
+        else {
+          base->local_view_bits &= ~local_view_bit;
         }
       }
     }
@@ -1583,7 +1591,13 @@ static uint free_localcollection_bit(Main *bmain,
 static void local_collections_reset_uuid(LayerCollection *layer_collection,
                                          const unsigned short local_view_bit)
 {
-  layer_collection->local_collections_bits |= local_view_bit;
+  if (layer_collection->flag & LAYER_COLLECTION_HIDE) {
+    layer_collection->local_collections_bits &= ~local_view_bit;
+  }
+  else {
+    layer_collection->local_collections_bits |= local_view_bit;
+  }
+
   LISTBASE_FOREACH (LayerCollection *, child, &layer_collection->layer_collections) {
     local_collections_reset_uuid(child, local_view_bit);
   }

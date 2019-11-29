@@ -109,11 +109,11 @@ void MOD_get_texture_coords(MappingInfoModifierData *dmd,
 
       /* verts are given the UV from the first face that uses them */
       for (i = 0, mp = mpoly; i < numPolys; i++, mp++) {
-        unsigned int fidx = mp->totloop - 1;
+        uint fidx = mp->totloop - 1;
 
         do {
-          unsigned int lidx = mp->loopstart + fidx;
-          unsigned int vidx = mloop[lidx].v;
+          uint lidx = mp->loopstart + fidx;
+          uint vidx = mloop[lidx].v;
 
           if (!BLI_BITMAP_TEST(done, vidx)) {
             /* remap UVs from [0, 1] to [-1, 1] */
@@ -182,7 +182,7 @@ Mesh *MOD_deform_mesh_eval_get(Object *ob,
   }
   else if (ob->type == OB_MESH) {
     if (em) {
-      mesh = BKE_mesh_from_bmesh_for_eval_nomain(em->bm, NULL);
+      mesh = BKE_mesh_from_bmesh_for_eval_nomain(em->bm, NULL, ob->data);
     }
     else {
       /* TODO(sybren): after modifier conversion of DM to Mesh is done, check whether

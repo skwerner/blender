@@ -83,6 +83,7 @@ void EDBM_mesh_clear(struct BMEditMesh *em);
 void EDBM_selectmode_to_scene(struct bContext *C);
 void EDBM_mesh_make(struct Object *ob, const int select_mode, const bool add_key_index);
 void EDBM_mesh_free(struct BMEditMesh *em);
+void EDBM_mesh_load_ex(struct Main *bmain, struct Object *ob, bool free_data);
 void EDBM_mesh_load(struct Main *bmain, struct Object *ob);
 
 /* flushes based on the current select mode.  if in vertex select mode,
@@ -236,6 +237,14 @@ void em_setup_viewcontext(struct bContext *C, struct ViewContext *vc); /* rename
 
 bool EDBM_mesh_deselect_all_multi_ex(struct Base **bases, const uint bases_len);
 bool EDBM_mesh_deselect_all_multi(struct bContext *C);
+bool EDBM_selectmode_disable_multi_ex(struct Scene *scene,
+                                      struct Base **bases,
+                                      const uint bases_len,
+                                      const short selectmode_disable,
+                                      const short selectmode_fallback);
+bool EDBM_selectmode_disable_multi(struct bContext *C,
+                                   const short selectmode_disable,
+                                   const short selectmode_fallback);
 
 /* editmesh_preselect_edgering.c */
 struct EditMesh_PreSelEdgeRing;
@@ -380,17 +389,17 @@ float ED_vgroup_vert_weight(struct Object *ob, struct bDeformGroup *dg, int vert
 void ED_vgroup_vert_active_mirror(struct Object *ob, int def_nr);
 
 /* mesh_data.c */
-#if 0
-void ED_mesh_geometry_add(
-    struct Mesh *mesh, struct ReportList *reports, int verts, int edges, int faces);
-#endif
-void ED_mesh_polys_add(struct Mesh *mesh, struct ReportList *reports, int count);
+void ED_mesh_verts_add(struct Mesh *mesh, struct ReportList *reports, int count);
 void ED_mesh_edges_add(struct Mesh *mesh, struct ReportList *reports, int count);
 void ED_mesh_loops_add(struct Mesh *mesh, struct ReportList *reports, int count);
-void ED_mesh_vertices_add(struct Mesh *mesh, struct ReportList *reports, int count);
+void ED_mesh_polys_add(struct Mesh *mesh, struct ReportList *reports, int count);
 
+void ED_mesh_verts_remove(struct Mesh *mesh, struct ReportList *reports, int count);
 void ED_mesh_edges_remove(struct Mesh *mesh, struct ReportList *reports, int count);
-void ED_mesh_vertices_remove(struct Mesh *mesh, struct ReportList *reports, int count);
+void ED_mesh_loops_remove(struct Mesh *mesh, struct ReportList *reports, int count);
+void ED_mesh_polys_remove(struct Mesh *mesh, struct ReportList *reports, int count);
+
+void ED_mesh_geometry_clear(struct Mesh *mesh);
 
 void ED_mesh_update(struct Mesh *mesh, struct bContext *C, bool calc_edges, bool calc_edges_loose);
 

@@ -33,6 +33,7 @@
 #include "BKE_particle.h"
 
 #include "DNA_image_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_node_types.h"
@@ -387,17 +388,19 @@ void workbench_forward_engine_init(WORKBENCH_Data *vedata)
                                 });
 
   workbench_volume_cache_init(vedata);
-  const bool do_cull = CULL_BACKFACE_ENABLED(wpd);
-  const int cull_state = (do_cull) ? DRW_STATE_CULL_BACK : 0;
+
+  DRWState clip_state = WORLD_CLIPPING_ENABLED(wpd) ? DRW_STATE_CLIP_PLANES : 0;
+  DRWState cull_state = CULL_BACKFACE_ENABLED(wpd) ? DRW_STATE_CULL_BACK : 0;
 
   /* Transparency Accum */
   {
-    int state = DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_OIT | cull_state;
+    int state = DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_OIT | cull_state | clip_state;
     psl->transparent_accum_pass = DRW_pass_create("Transparent Accum", state);
   }
   /* Depth */
   {
-    int state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS | cull_state;
+    int state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS | cull_state |
+                clip_state;
     psl->object_outline_pass = DRW_pass_create("Object Outline Pass", state);
   }
   /* Composite */
@@ -419,7 +422,7 @@ void workbench_forward_engine_init(WORKBENCH_Data *vedata)
   /* TODO(campbell): displays but masks geometry,
    * only use with wire or solid-without-xray for now. */
   if ((wpd->shading.type != OB_WIRE && !XRAY_FLAG_ENABLED(wpd)) &&
-      (draw_ctx->rv3d && (draw_ctx->rv3d->rflag & RV3D_CLIPPING) && draw_ctx->rv3d->clipbb)) {
+      RV3D_CLIPPING_ENABLED(draw_ctx->v3d, draw_ctx->rv3d)) {
     psl->background_pass = DRW_pass_create("Background",
                                            DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_EQUAL);
     GPUShader *shader = GPU_shader_get_builtin_shader(GPU_SHADER_3D_UNIFORM_COLOR_BACKGROUND);
@@ -616,9 +619,10 @@ void workbench_forward_cache_populate(WORKBENCH_Data *vedata, Object *ob)
 
   ModifierData *md;
   if (((ob->base_flag & BASE_FROM_DUPLI) == 0) &&
-      (md = modifiers_findByType(ob, eModifierType_Smoke)) &&
+      (md = modifiers_findByType(ob, eModifierType_Fluid)) &&
       (modifier_isEnabled(scene, md, eModifierMode_Realtime)) &&
-      (((SmokeModifierData *)md)->domain != NULL)) {
+      (((FluidModifierData *)md)->domain != NULL) &&
+      (((FluidModifierData *)md)->domain->type == FLUID_DOMAIN_TYPE_GAS)) {
     workbench_volume_cache_populate(vedata, scene, ob, md);
     return; /* Do not draw solid in this case. */
   }

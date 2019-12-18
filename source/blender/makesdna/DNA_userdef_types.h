@@ -276,7 +276,7 @@ typedef struct ThemeSpace {
   unsigned char edge[4], edge_select[4];
   unsigned char edge_seam[4], edge_sharp[4], edge_facesel[4], edge_crease[4], edge_bevel[4];
   /** Solid faces. */
-  unsigned char face[4], face_select[4];
+  unsigned char face[4], face_select[4], face_back[4], face_front[4];
   /**  selected color. */
   unsigned char face_dot[4];
   unsigned char extra_edge_len[4], extra_edge_angle[4], extra_face_angle[4], extra_face_area[4];
@@ -600,15 +600,15 @@ typedef struct UserDef_FileSpaceData {
   int temp_win_sizey;
 } UserDef_FileSpaceData;
 
-/**
- * Store UI data here instead of the space
- * since the space is typically a window which is freed.
- */
 typedef struct UserDef_Experimental {
-  /** #eUserPref_Experimental_Flag options. */
-  int flag;
-  char _pad0[4];
+  char use_tool_fallback;
+  char use_usd_exporter;
+
+  char _pad0[6];
 } UserDef_Experimental;
+
+#define USER_EXPERIMENTAL_TEST(userdef, member) \
+  (((userdef)->flag & USER_DEVELOPER_UI) && ((userdef)->experimental).member)
 
 typedef struct UserDef {
   /** UserDef has separate do-version handling, and can be read from other files. */
@@ -905,11 +905,6 @@ typedef enum eUserPref_SpaceData_Flag {
   USER_SPACEDATA_ADDONS_SHOW_ONLY_ENABLED = (1 << 1),
 } eUserPref_SpaceData_Flag;
 
-/** #UserDef_Experimental.flag. */
-typedef enum eUserPref_Experimental_Flag {
-  USER_EXPERIMENTAL_ALL = (1 << 0),
-} eUserPref_Experimental_Flag;
-
 /** #UserDef.flag */
 typedef enum eUserPref_Flag {
   USER_AUTOSAVE = (1 << 0),
@@ -1017,10 +1012,10 @@ typedef enum eUserpref_UI_Flag {
   USER_ZOOM_HORIZ = (1 << 26), /* for CONTINUE and DOLLY zoom */
   USER_SPLASH_DISABLE = (1 << 27),
   USER_HIDE_RECENT = (1 << 28),
-#ifdef DNA_DEPRECATED
-  USER_SHOW_THUMBNAILS =
-      (1 << 29), /* deprecated - We're just trying if there's much desire for this feature, or if
-                    we can make it go for good. Should be cleared if so - Julian, Oct. 2019 */
+#ifdef DNA_DEPRECATED_ALLOW
+  /* Deprecated: We're just trying if there's much desire for this feature,
+   * or if we can make it go for good. Should be cleared if so - Julian, Oct. 2019. */
+  USER_SHOW_THUMBNAILS = (1 << 29),
 #endif
   USER_SAVE_PROMPT = (1 << 30),
   USER_HIDE_SYSTEM_BOOKMARKS = (1u << 31),
@@ -1042,6 +1037,7 @@ typedef enum eUserpref_UI_Flag2 {
 typedef enum eUserpref_GPU_Flag {
   USER_GPU_FLAG_NO_DEPT_PICK = (1 << 0),
   USER_GPU_FLAG_NO_EDIT_MODE_SMOOTH_WIRE = (1 << 1),
+  USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE = (1 << 2),
 } eUserpref_GPU_Flag;
 
 /** #UserDef.tablet_api */

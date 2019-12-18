@@ -242,8 +242,7 @@ endif()
 
 
 # Modifiers
-option(WITH_MOD_FLUID           "Enable Elbeem Modifier (Fluid Simulation)" ON)
-option(WITH_MOD_SMOKE           "Enable Smoke Modifier (Smoke Simulation)" ON)
+option(WITH_MOD_FLUID           "Enable Mantaflow Fluid Simulation Framework" ON)
 option(WITH_MOD_REMESH          "Enable Remesh Modifier" ON)
 option(WITH_MOD_OCEANSIM        "Enable Ocean Modifier" ON)
 
@@ -264,6 +263,9 @@ option(WITH_CODEC_SNDFILE       "Enable libsndfile Support (http://www.mega-nerd
 # Alembic support
 option(WITH_ALEMBIC             "Enable Alembic Support" ON)
 option(WITH_ALEMBIC_HDF5        "Enable Legacy Alembic Support (not officially supported)" OFF)
+
+# Universal Scene Description support
+option(WITH_USD                 "Enable Universal Scene Description (USD) Support" OFF)
 
 # 3D format support
 # Disable opencollada when we don't have precompiled libs
@@ -508,6 +510,10 @@ if(WIN32)
 
   option(WINDOWS_PYTHON_DEBUG "Include the files needed for debugging python scripts with visual studio 2017+." OFF)
   mark_as_advanced(WINDOWS_PYTHON_DEBUG)
+
+  option(WITH_WINDOWS_BUNDLE_CRT "Bundle the C runtime for install free distribution." ON)
+  mark_as_advanced(WITH_WINDOWS_BUNDLE_CRT)
+
 endif()
 
 # The following only works with the Ninja generator in CMake >= 3.0.
@@ -1724,6 +1730,7 @@ if(FIRST_RUN)
   info_cfg_option(WITH_OPENVDB)
   info_cfg_option(WITH_ALEMBIC)
   info_cfg_option(WITH_QUADRIFLOW)
+  info_cfg_option(WITH_USD)
 
   info_cfg_text("Compiler Options:")
   info_cfg_option(WITH_BUILDINFO)

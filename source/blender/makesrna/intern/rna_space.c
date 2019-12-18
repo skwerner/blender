@@ -374,7 +374,7 @@ static const EnumPropertyItem rna_enum_studio_light_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-const EnumPropertyItem rna_enum_view3dshading_render_pass_type_items[] = {
+static const EnumPropertyItem rna_enum_view3dshading_render_pass_type_items[] = {
     {SCE_PASS_COMBINED, "COMBINED", 0, "Combined", ""},
     /* {SCE_PASS_Z, "Z", 0, "Z", ""},*/
     {SCE_PASS_AO, "AO", 0, "Ambient Occlusion", ""},
@@ -1404,7 +1404,7 @@ static const EnumPropertyItem *rna_SpaceImageEditor_display_channels_itemf(
   void *lock;
   int zbuf, alpha, totitem = 0;
 
-  ibuf = ED_space_image_acquire_buffer(sima, &lock);
+  ibuf = ED_space_image_acquire_buffer(sima, &lock, 0);
 
   alpha = ibuf && (ibuf->channels == 4);
   zbuf = ibuf && (ibuf->zbuf || ibuf->zbuf_float || (ibuf->channels == 1));
@@ -1512,7 +1512,8 @@ static void rna_SpaceImageEditor_scopes_update(struct bContext *C, struct Pointe
   ImBuf *ibuf;
   void *lock;
 
-  ibuf = ED_space_image_acquire_buffer(sima, &lock);
+  /* TODO(lukas): Support tiles in scopes? */
+  ibuf = ED_space_image_acquire_buffer(sima, &lock, 0);
   if (ibuf) {
     ED_space_image_scopes_update(C, sima, ibuf, true);
     WM_main_add_notifier(NC_IMAGE, sima->image);
@@ -2312,6 +2313,18 @@ static int rna_FileBrowser_FSMenuEntry_name_get_editable(PointerRNA *ptr,
   return fsm->save ? PROP_EDITABLE : 0;
 }
 
+static int rna_FileBrowser_FSMenuEntry_icon_get(PointerRNA *ptr)
+{
+  FSMenuEntry *fsm = ptr->data;
+  return ED_fsmenu_entry_get_icon(fsm);
+}
+
+static void rna_FileBrowser_FSMenuEntry_icon_set(PointerRNA *ptr, int value)
+{
+  FSMenuEntry *fsm = ptr->data;
+  ED_fsmenu_entry_set_icon(fsm, value);
+}
+
 static bool rna_FileBrowser_FSMenuEntry_use_save_get(PointerRNA *ptr)
 {
   FSMenuEntry *fsm = ptr->data;
@@ -2789,6 +2802,15 @@ static void rna_def_space_image_uv(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_faces", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", SI_NO_DRAWFACES);
   RNA_def_property_ui_text(prop, "Display Faces", "Display faces over the image");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_IMAGE, NULL);
+
+  prop = RNA_def_property(srna, "tile_grid_shape", PROP_INT, PROP_NONE);
+  RNA_def_property_int_sdna(prop, NULL, "tile_grid_shape");
+  RNA_def_property_array(prop, 2);
+  RNA_def_property_int_default(prop, 1);
+  RNA_def_property_range(prop, 1, 10);
+  RNA_def_property_ui_text(
+      prop, "Tile Grid Shape", "How many tiles will be shown in the background");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_IMAGE, NULL);
 
   /* todo: move edge and face drawing options here from G.f */
@@ -4560,9 +4582,12 @@ static void rna_def_space_sequencer(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Show Seconds", "Show timing in seconds not frames");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SEQUENCER, NULL);
 
-  prop = RNA_def_property(srna, "show_marker_lines", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", SEQ_SHOW_MARKER_LINES);
-  RNA_def_property_ui_text(prop, "Show Marker Lines", "Show a vertical line for every marker");
+  prop = RNA_def_property(srna, "show_markers", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", SEQ_SHOW_MARKERS);
+  RNA_def_property_ui_text(
+      prop,
+      "Show Markers",
+      "If any exists, show markers in a separate row at the bottom of the editor");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SEQUENCER, NULL);
 
   prop = RNA_def_property(srna, "show_annotation", PROP_BOOLEAN, PROP_NONE);
@@ -4847,10 +4872,13 @@ static void rna_def_space_dopesheet(BlenderRNA *brna)
                            "comparison with adjacent keys");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_DOPESHEET, NULL);
 
-  prop = RNA_def_property(srna, "show_marker_lines", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", SACTION_SHOW_MARKER_LINES);
-  RNA_def_property_ui_text(prop, "Show Marker Lines", "Show a vertical line for every marker");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_GRAPH, NULL);
+  prop = RNA_def_property(srna, "show_markers", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", SACTION_SHOW_MARKERS);
+  RNA_def_property_ui_text(
+      prop,
+      "Show Markers",
+      "If any exists, show markers in a separate row at the bottom of the editor");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_DOPESHEET, NULL);
 
   /* editing */
   prop = RNA_def_property(srna, "use_auto_merge_keyframes", PROP_BOOLEAN, PROP_NONE);
@@ -4948,7 +4976,7 @@ static void rna_def_space_graph(BlenderRNA *brna)
   RNA_def_struct_sdna(srna, "SpaceGraph");
   RNA_def_struct_ui_text(srna, "Space Graph Editor", "Graph Editor space data");
 
-  rna_def_space_generic_show_region_toggles(srna, (1 << RGN_TYPE_UI));
+  rna_def_space_generic_show_region_toggles(srna, (1 << RGN_TYPE_UI) | (1 << RGN_TYPE_HUD));
 
   /* mode */
   prop = RNA_def_property(srna, "mode", PROP_ENUM, PROP_NONE);
@@ -5004,9 +5032,12 @@ static void rna_def_space_graph(BlenderRNA *brna)
       "Display groups and channels with colors matching their corresponding groups");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_GRAPH, NULL);
 
-  prop = RNA_def_property(srna, "show_marker_lines", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", SIPO_MARKER_LINES);
-  RNA_def_property_ui_text(prop, "Show Marker Lines", "Show a vertical line for every marker");
+  prop = RNA_def_property(srna, "show_markers", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", SIPO_SHOW_MARKERS);
+  RNA_def_property_ui_text(
+      prop,
+      "Show Markers",
+      "If any exists, show markers in a separate row at the bottom of the editor");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_GRAPH, NULL);
 
   /* editing */
@@ -5115,10 +5146,13 @@ static void rna_def_space_nla(BlenderRNA *brna)
       "Show action-local markers on the strips, useful when synchronizing timing across strips");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_NLA, NULL);
 
-  prop = RNA_def_property(srna, "show_marker_lines", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flag", SNLA_SHOW_MARKER_LINES);
-  RNA_def_property_ui_text(prop, "Show Marker Lines", "Show a vertical line for every marker");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_GRAPH, NULL);
+  prop = RNA_def_property(srna, "show_markers", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", SNLA_SHOW_MARKERS);
+  RNA_def_property_ui_text(
+      prop,
+      "Show Markers",
+      "If any exists, show markers in a separate row at the bottom of the editor");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_NLA, NULL);
 
   /* editing */
   prop = RNA_def_property(srna, "use_realtime_update", PROP_BOOLEAN, PROP_NONE);
@@ -5560,6 +5594,11 @@ static void rna_def_filemenu_entry(BlenderRNA *brna)
   RNA_def_property_editable_func(prop, "rna_FileBrowser_FSMenuEntry_name_get_editable");
   RNA_def_property_ui_text(prop, "Name", "");
   RNA_def_struct_name_property(srna, prop);
+
+  prop = RNA_def_property(srna, "icon", PROP_INT, PROP_NONE);
+  RNA_def_property_int_funcs(
+      prop, "rna_FileBrowser_FSMenuEntry_icon_get", "rna_FileBrowser_FSMenuEntry_icon_set", NULL);
+  RNA_def_property_ui_text(prop, "Icon", "");
 
   prop = RNA_def_property(srna, "use_save", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_funcs(prop, "rna_FileBrowser_FSMenuEntry_use_save_get", NULL);

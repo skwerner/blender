@@ -115,7 +115,6 @@ CCL_NAMESPACE_BEGIN
 #  define __LAMP_MIS__
 #  define __CAMERA_MOTION__
 #  define __OBJECT_MOTION__
-#  define __HAIR__
 #  define __BAKING__
 #  define __PRINCIPLED__
 #  define __SUBSURFACE__
@@ -143,6 +142,13 @@ CCL_NAMESPACE_BEGIN
 #    undef __BRANCHED_PATH__
 #  endif
 #endif /* __KERNEL_CUDA__ */
+
+#ifdef __KERNEL_OPTIX__
+#  undef __BAKING__
+#  undef __BRANCHED_PATH__
+/* TODO(pmours): Cannot use optixTrace in non-inlined functions */
+#  undef __SHADER_RAYTRACE__
+#endif /* __KERNEL_OPTIX__ */
 
 #ifdef __KERNEL_OPENCL__
 #endif /* __KERNEL_OPENCL__ */
@@ -216,6 +222,8 @@ typedef enum ShaderEvalType {
   SHADER_EVAL_TRANSMISSION_COLOR,
   SHADER_EVAL_SUBSURFACE_COLOR,
   SHADER_EVAL_EMISSION,
+  SHADER_EVAL_AOV_COLOR,
+  SHADER_EVAL_AOV_VALUE,
 
   /* light passes */
   SHADER_EVAL_AO,
@@ -365,6 +373,8 @@ typedef enum PassType {
 #endif
   PASS_RENDER_TIME,
   PASS_CRYPTOMATTE,
+  PASS_AOV_COLOR,
+  PASS_AOV_VALUE,
   PASS_CATEGORY_MAIN_END = 31,
 
   PASS_MIST = 32,
@@ -650,9 +660,8 @@ typedef struct Ray {
  * is fixed.
  */
 #ifndef __KERNEL_OPENCL_AMD__
-  float3 P; /* origin */
-  float3 D; /* direction */
-
+  float3 P;   /* origin */
+  float3 D;   /* direction */
   float t;    /* length of the ray */
   float time; /* time (for motion blur) */
 #else
@@ -763,6 +772,7 @@ typedef enum AttributeStandard {
   ATTR_STD_VOLUME_TEMPERATURE,
   ATTR_STD_VOLUME_VELOCITY,
   ATTR_STD_POINTINESS,
+  ATTR_STD_RANDOM_PER_ISLAND,
   ATTR_STD_NUM,
 
   ATTR_STD_NOT_FOUND = ~0
@@ -920,7 +930,8 @@ enum ShaderDataObjectFlag {
                      SD_OBJECT_HAS_VOLUME_ATTRIBUTES)
 };
 
-typedef ccl_addr_space struct ShaderData {
+typedef ccl_addr_space struct ccl_align(16) ShaderData
+{
   /* position */
   float3 P;
   /* smooth normal for shading */
@@ -1005,11 +1016,16 @@ typedef ccl_addr_space struct ShaderData {
 
   /* At the end so we can adjust size in ShaderDataTinyStorage. */
   struct ShaderClosure closure[MAX_CLOSURE];
-} ShaderData;
+}
+ShaderData;
 
-typedef ccl_addr_space struct ShaderDataTinyStorage {
+/* ShaderDataTinyStorage needs the same alignment as ShaderData, or else
+ * the pointer cast in AS_SHADER_DATA invokes undefined behavior. */
+typedef ccl_addr_space struct ccl_align(16) ShaderDataTinyStorage
+{
   char pad[sizeof(ShaderData) - sizeof(ShaderClosure) * MAX_CLOSURE];
-} ShaderDataTinyStorage;
+}
+ShaderDataTinyStorage;
 #define AS_SHADER_DATA(shader_data_tiny_storage) ((ShaderData *)shader_data_tiny_storage)
 
 /* Path State */
@@ -1057,6 +1073,15 @@ typedef struct PathState {
   VolumeStack volume_stack[VOLUME_STACK_SIZE];
 #endif
 } PathState;
+
+#ifdef __VOLUME__
+typedef struct VolumeState {
+#  ifdef __SPLIT_KERNEL__
+#  else
+  PathState ps;
+#  endif
+} VolumeState;
+#endif
 
 /* Struct to gather multiple nearby intersections. */
 typedef struct LocalIntersection {
@@ -1170,6 +1195,7 @@ static_assert_align(KernelCamera, 16);
 typedef struct KernelFilm {
   float exposure;
   int pass_flag;
+
   int light_pass_flag;
   int pass_stride;
   int use_light_pass;
@@ -1222,6 +1248,11 @@ typedef struct KernelFilm {
   int pass_denoising_clean;
   int denoising_flags;
 
+  int pass_aov_color;
+  int pass_aov_value;
+  int pad1;
+  int pad2;
+
   /* XYZ to rendering color space transform. float4 instead of float3 to
    * ensure consistent padding/alignment across devices. */
   float4 xyz_to_r;
@@ -1235,6 +1266,13 @@ typedef struct KernelFilm {
   int pass_bvh_intersections;
   int pass_ray_bounces;
 #endif
+
+  /* viewport rendering options */
+  int display_pass_stride;
+  int display_pass_components;
+  int display_divide_pass_stride;
+  int use_display_exposure;
+  int use_display_pass_alpha;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 
@@ -1337,9 +1375,12 @@ typedef enum KernelBVHLayout {
   BVH_LAYOUT_BVH2 = (1 << 0),
   BVH_LAYOUT_BVH4 = (1 << 1),
   BVH_LAYOUT_BVH8 = (1 << 2),
+
   BVH_LAYOUT_EMBREE = (1 << 3),
+  BVH_LAYOUT_OPTIX = (1 << 4),
+
   BVH_LAYOUT_DEFAULT = BVH_LAYOUT_BVH8,
-  BVH_LAYOUT_ALL = (unsigned int)(-1),
+  BVH_LAYOUT_ALL = (unsigned int)(~0u),
 } KernelBVHLayout;
 
 typedef struct KernelBVH {
@@ -1351,14 +1392,18 @@ typedef struct KernelBVH {
   int bvh_layout;
   int use_bvh_steps;
 
-  /* Embree */
-#ifdef __EMBREE__
-  RTCScene scene;
-#  ifndef __KERNEL_64_BIT__
-  int pad1;
-#  endif
+  /* Custom BVH */
+#ifdef __KERNEL_OPTIX__
+  OptixTraversableHandle scene;
 #else
-  int pad1, pad2;
+#  ifdef __EMBREE__
+  RTCScene scene;
+#    ifndef __KERNEL_64_BIT__
+  int pad2;
+#    endif
+#  else
+  int scene, pad2;
+#  endif
 #endif
 } KernelBVH;
 static_assert_align(KernelBVH, 16);
@@ -1408,6 +1453,7 @@ typedef struct KernelObject {
   float surface_area;
   float pass_id;
   float random_number;
+  float color[3];
   int particle_index;
 
   float dupli_generated[3];
@@ -1420,11 +1466,9 @@ typedef struct KernelObject {
   uint patch_map_offset;
   uint attribute_map_offset;
   uint motion_offset;
-  uint pad1;
 
   float cryptomatte_object;
   float cryptomatte_asset;
-  float pad2, pad3;
 } KernelObject;
 static_assert_align(KernelObject, 16);
 
@@ -1523,7 +1567,7 @@ static_assert_align(KernelShader, 16);
  * Queue 1 - Active rays
  * Queue 2 - Background queue
  * Queue 3 - Shadow ray cast kernel - AO
- * Queeu 4 - Shadow ray cast kernel - direct lighting
+ * Queue 4 - Shadow ray cast kernel - direct lighting
  */
 
 /* Queue names */

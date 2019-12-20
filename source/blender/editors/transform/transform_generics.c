@@ -81,6 +81,7 @@
 #include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "ED_anim_api.h"
 #include "ED_armature.h"
@@ -98,6 +99,7 @@
 #include "ED_clip.h"
 #include "ED_screen.h"
 #include "ED_gpencil.h"
+#include "ED_sculpt.h"
 
 #include "WM_types.h"
 #include "WM_api.h"
@@ -108,6 +110,8 @@
 #include "UI_view2d.h"
 
 #include "transform.h"
+#include "transform_convert.h"
+#include "transform_snap.h"
 
 /* ************************** Functions *************************** */
 
@@ -221,35 +225,31 @@ static void clipMirrorModifier(TransInfo *t)
 }
 
 /* assumes obedit set to mesh object */
-static void editbmesh_apply_to_mirror(TransInfo *t)
+static void transform_apply_to_mirror(TransInfo *t)
 {
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
-    if (tc->mirror.axis_flag) {
-      TransData *td = tc->data;
-      BMVert *eve;
+    if (tc->mirror.use_mirror_any) {
       int i;
+      TransData *td;
+      for (i = 0, td = tc->data; i < tc->data_len; i++, td++) {
+        if (td->flag & (TD_MIRROR_EDGE_X | TD_MIRROR_EDGE_Y | TD_MIRROR_EDGE_Z)) {
+          if (td->flag & TD_MIRROR_EDGE_X) {
+            td->loc[0] = 0.0f;
+          }
+          if (td->flag & TD_MIRROR_EDGE_Y) {
+            td->loc[1] = 0.0f;
+          }
+          if (td->flag & TD_MIRROR_EDGE_Z) {
+            td->loc[2] = 0.0f;
+          }
+        }
+      }
 
-      for (i = 0; i < tc->data_len; i++, td++) {
-        if (td->flag & TD_NOACTION) {
-          break;
-        }
-        if (td->loc == NULL) {
-          break;
-        }
-        if (td->flag & TD_SKIP) {
-          continue;
-        }
-
-        eve = td->extra;
-        if (eve) {
-          eve->co[0] = -td->loc[0];
-          eve->co[1] = td->loc[1];
-          eve->co[2] = td->loc[2];
-        }
-
-        if (td->flag & TD_MIRROR_EDGE) {
-          td->loc[0] = 0;
-        }
+      TransDataMirror *tdm;
+      for (i = 0, tdm = tc->mirror.data; i < tc->mirror.data_len; i++, tdm++) {
+        tdm->loc_dst[0] = tdm->loc_src[0] * tdm->sign_x;
+        tdm->loc_dst[1] = tdm->loc_src[1] * tdm->sign_y;
+        tdm->loc_dst[2] = tdm->loc_src[2] * tdm->sign_z;
       }
     }
   }
@@ -448,7 +448,7 @@ static void recalcData_graphedit(TransInfo *t)
       dosort++;
     }
     else {
-      calchandles_fcurve(fcu);
+      calchandles_fcurve_ex(fcu, BEZT_FLAG_TEMP_TAG);
     }
 
     /* set refresh tags for objects using this animation,
@@ -795,6 +795,12 @@ static void pose_transform_mirror_update(Object *ob, PoseInitData_Mirror *pid)
 
   for (bPoseChannel *pchan_orig = ob->pose->chanbase.first; pchan_orig;
        pchan_orig = pchan_orig->next) {
+    /* Clear the MIRROR flag from previous runs */
+    pchan_orig->bone->flag &= ~BONE_TRANSFORM_MIRROR;
+  }
+
+  for (bPoseChannel *pchan_orig = ob->pose->chanbase.first; pchan_orig;
+       pchan_orig = pchan_orig->next) {
     /* no layer check, correct mirror is more important */
     if (pchan_orig->bone->flag & BONE_TRANSFORM) {
       bPoseChannel *pchan = BKE_pose_channel_get_mirrored(ob->pose, pchan_orig->name);
@@ -886,7 +892,7 @@ static void recalcData_objects(TransInfo *t)
         clipMirrorModifier(t);
       }
       if ((t->flag & T_NO_MIRROR) == 0 && (t->options & CTX_NO_MIRROR) == 0) {
-        editbmesh_apply_to_mirror(t);
+        transform_apply_to_mirror(t);
       }
 
       if (t->mode == TFM_EDGE_SLIDE) {
@@ -900,7 +906,7 @@ static void recalcData_objects(TransInfo *t)
         DEG_id_tag_update(tc->obedit->data, 0); /* sets recalc flags */
         BMEditMesh *em = BKE_editmesh_from_object(tc->obedit);
         EDBM_mesh_normals_update(em);
-        BKE_editmesh_tessface_calc(em);
+        BKE_editmesh_looptri_calc(em);
       }
     }
     else if (t->obedit_type == OB_ARMATURE) { /* no recalc flag, does pose */
@@ -1001,6 +1007,9 @@ static void recalcData_objects(TransInfo *t)
             restoreBones(tc);
           }
         }
+
+        /* Tag for redraw/invalidate overlay cache. */
+        DEG_id_tag_update(&arm->id, ID_RECALC_SELECT);
       }
     }
     else {
@@ -1089,12 +1098,12 @@ static void recalcData_objects(TransInfo *t)
     GSetIterator gs_iter;
     GSET_ITER (gs_iter, motionpath_updates) {
       Object *ob = BLI_gsetIterator_getKey(&gs_iter);
-      ED_pose_recalculate_paths(t->context, t->scene, ob, true);
+      ED_pose_recalculate_paths(t->context, t->scene, ob, POSE_PATH_CALC_RANGE_CURRENT_FRAME);
     }
     BLI_gset_free(motionpath_updates, NULL);
   }
   else if (base && (base->object->mode & OB_MODE_PARTICLE_EDIT) &&
-           PE_get_current(t->scene, base->object)) {
+           PE_get_current(t->depsgraph, t->scene, base->object)) {
     if (t->state != TRANS_CANCEL) {
       applyProject(t);
     }
@@ -1147,7 +1156,15 @@ static void recalcData_objects(TransInfo *t)
 
     if (motionpath_update) {
       /* Update motion paths once for all transformed objects. */
-      ED_objects_recalculate_paths(t->context, t->scene, true);
+      ED_objects_recalculate_paths(t->context, t->scene, OBJECT_PATH_CALC_RANGE_CHANGED);
+    }
+
+    if (t->options & CTX_OBMODE_XFORM_SKIP_CHILDREN) {
+      trans_obchild_in_obmode_update_all(t);
+    }
+
+    if (t->options & CTX_OBMODE_XFORM_OBDATA) {
+      trans_obdata_in_obmode_update_all(t);
     }
   }
 }
@@ -1196,6 +1213,11 @@ static void recalcData_gpencil_strokes(TransInfo *t)
   }
 }
 
+static void recalcData_sculpt(TransInfo *t)
+{
+  ED_sculpt_update_modal_transform(t->context);
+}
+
 /* called for updating while transform acts, once per redraw */
 void recalcData(TransInfo *t)
 {
@@ -1215,6 +1237,9 @@ void recalcData(TransInfo *t)
   else if (t->options & CTX_GPENCIL_STROKES) {
     /* set recalc triangle cache flag */
     recalcData_gpencil_strokes(t);
+  }
+  else if (t->options & CTX_SCULPT) {
+    recalcData_sculpt(t);
   }
   else if (t->spacetype == SPACE_IMAGE) {
     recalcData_image(t);
@@ -1342,11 +1367,12 @@ void initTransDataContainers_FromObjectData(TransInfo *t,
 
     for (int i = 0; i < objects_len; i++) {
       TransDataContainer *tc = &t->data_container[i];
-      /* TODO, multiple axes. */
-      tc->mirror.axis_flag = (((t->flag & T_NO_MIRROR) == 0) &&
-                              ((t->options & CTX_NO_MIRROR) == 0) &&
-                              (objects[i]->type == OB_MESH) &&
-                              (((Mesh *)objects[i]->data)->editflag & ME_EDIT_MIRROR_X) != 0);
+      if (((t->flag & T_NO_MIRROR) == 0) && ((t->options & CTX_NO_MIRROR) == 0) &&
+          (objects[i]->type == OB_MESH)) {
+        tc->mirror.axis_x = (((Mesh *)objects[i]->data)->editflag & ME_EDIT_MIRROR_X) != 0;
+        tc->mirror.axis_y = (((Mesh *)objects[i]->data)->editflag & ME_EDIT_MIRROR_Y) != 0;
+        tc->mirror.axis_z = (((Mesh *)objects[i]->data)->editflag & ME_EDIT_MIRROR_Z) != 0;
+      }
 
       if (object_mode & OB_MODE_EDIT) {
         tc->obedit = objects[i];
@@ -1393,8 +1419,8 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 {
   Scene *sce = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  const eObjectMode object_mode = OBACT(view_layer) ? OBACT(view_layer)->mode : OB_MODE_OBJECT;
-  const short object_type = OBACT(view_layer) ? OBACT(view_layer)->type : -1;
+  Object *obact = OBACT(view_layer);
+  const eObjectMode object_mode = obact ? obact->mode : OB_MODE_OBJECT;
   ToolSettings *ts = CTX_data_tool_settings(C);
   ARegion *ar = CTX_wm_region(C);
   ScrArea *sa = CTX_wm_area(C);
@@ -1414,9 +1440,13 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 
   t->flag = 0;
 
-  t->obedit_type = ((object_mode == OB_MODE_EDIT) || (object_mode == OB_MODE_EDIT_GPENCIL)) ?
-                       object_type :
-                       -1;
+  if (obact && !(t->options & (CTX_CURSOR | CTX_TEXTURE)) &&
+      ELEM(object_mode, OB_MODE_EDIT, OB_MODE_EDIT_GPENCIL)) {
+    t->obedit_type = obact->type;
+  }
+  else {
+    t->obedit_type = -1;
+  }
 
   /* Many kinds of transform only use a single handle. */
   if (t->data_container == NULL) {
@@ -1650,7 +1680,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
       ((prop = RNA_struct_find_property(op->ptr, "orient_matrix")) &&
        RNA_property_is_set(op->ptr, prop)) &&
       ((t->flag & T_MODAL) ||
-       /* When using redo, don't use the the custom constraint matrix
+       /* When using redo, don't use the custom constraint matrix
         * if the user selects a different orientation. */
        (RNA_enum_get(op->ptr, "orient_type") == RNA_enum_get(op->ptr, "orient_matrix_type")))) {
     RNA_property_float_get_array(op->ptr, prop, &t->spacemtx[0][0]);
@@ -1691,7 +1721,9 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     }
   }
   else {
-    if (ISMOUSE(t->launch_event) && (U.flag & USER_RELEASECONFIRM)) {
+    /* Release confirms preference should not affect node editor (T69288, T70504). */
+    if (ISMOUSE(t->launch_event) &&
+        ((U.flag & USER_RELEASECONFIRM) || (t->spacetype == SPACE_NODE))) {
       /* Global "release confirm" on mouse bindings */
       t->flag |= T_RELEASE_CONFIRM;
     }
@@ -1751,7 +1783,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
               }
             }
           }
-          else if ((t->obedit_type == -1) && ts->proportional_objects) {
+          else if (!(t->options & CTX_CURSOR) && ts->proportional_objects) {
             t->flag |= T_PROP_EDIT;
           }
         }
@@ -1816,7 +1848,7 @@ static void freeTransCustomData(TransInfo *t, TransDataContainer *tc, TransCusto
     custom_data->data = NULL;
   }
   /* In case modes are switched in the same transform session. */
-  custom_data->free_cb = false;
+  custom_data->free_cb = NULL;
   custom_data->use_free = false;
 }
 
@@ -1883,6 +1915,7 @@ void postTrans(bContext *C, TransInfo *t)
 
       MEM_SAFE_FREE(tc->data_ext);
       MEM_SAFE_FREE(tc->data_2d);
+      MEM_SAFE_FREE(tc->mirror.data);
     }
   }
 
@@ -2329,11 +2362,6 @@ void calculatePropRatio(TransInfo *t)
       for (i = 0; i < tc->data_len; i++, td++) {
         if (td->flag & TD_SELECTED) {
           td->factor = 1.0f;
-        }
-        else if (tc->mirror.axis_flag && (td->loc[0] * tc->mirror.sign) < -0.00001f) {
-          td->flag |= TD_SKIP;
-          td->factor = 0.0f;
-          restoreElement(td);
         }
         else if ((connected && (td->flag & TD_NOTCONNECTED || td->dist > t->prop_size)) ||
                  (connected == 0 && td->rdist > t->prop_size)) {

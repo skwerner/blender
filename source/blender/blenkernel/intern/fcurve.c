@@ -382,8 +382,8 @@ FCurve *rna_get_fcurve_context_ui(bContext *C,
   }
 
   /* there must be some RNA-pointer + property combon */
-  if (prop && tptr.id.data && RNA_property_animateable(&tptr, prop)) {
-    AnimData *adt = BKE_animdata_from_id(tptr.id.data);
+  if (prop && tptr.owner_id && RNA_property_animateable(&tptr, prop)) {
+    AnimData *adt = BKE_animdata_from_id(tptr.owner_id);
     int step = (
         /* Always 1 in case we have no context (can't check in 'ancestors' of given RNA ptr). */
         C ? 2 : 1);
@@ -391,7 +391,7 @@ FCurve *rna_get_fcurve_context_ui(bContext *C,
 
     if (!adt && C) {
       path = BKE_animdata_driver_path_hack(C, &tptr, prop, NULL);
-      adt = BKE_animdata_from_id(tptr.id.data);
+      adt = BKE_animdata_from_id(tptr.owner_id);
       step--;
     }
 
@@ -438,7 +438,7 @@ FCurve *rna_get_fcurve_context_ui(bContext *C,
             if (tpath && tpath != path) {
               MEM_freeN(path);
               path = tpath;
-              adt = BKE_animdata_from_id(tptr.id.data);
+              adt = BKE_animdata_from_id(tptr.owner_id);
             }
             else {
               adt = NULL;
@@ -1036,10 +1036,14 @@ static BezTriple *cycle_offset_triple(
   return out;
 }
 
-/* This function recalculates the handles of an F-Curve
- * If the BezTriples have been rearranged, sort them first before using this.
+/**
+ * Variant of #calchandles_fcurve() that allows calculating based on a different select flag.
+ *
+ * \param sel_flag: The flag (bezt.f1/2/3) value to use to determine selection. Usually `SELECT`,
+ *                  but may want to use a different one at times (if caller does not operate on
+ *                  selection).
  */
-void calchandles_fcurve(FCurve *fcu)
+void calchandles_fcurve_ex(FCurve *fcu, eBezTriple_Flag handle_sel_flag)
 {
   BezTriple *bezt, *prev, *next;
   int a = fcu->totvert;
@@ -1075,7 +1079,7 @@ void calchandles_fcurve(FCurve *fcu)
     }
 
     /* calculate auto-handles */
-    BKE_nurb_handle_calc(bezt, prev, next, true, fcu->auto_smoothing);
+    BKE_nurb_handle_calc_ex(bezt, prev, next, handle_sel_flag, true, fcu->auto_smoothing);
 
     /* for automatic ease in and out */
     if (BEZT_IS_AUTOH(bezt) && !cycle) {
@@ -1121,7 +1125,29 @@ void calchandles_fcurve(FCurve *fcu)
   }
 }
 
-void testhandles_fcurve(FCurve *fcu, const bool use_handle)
+/**
+ * This function recalculates the handles of an F-Curve. Acts based on selection with `SELECT`
+ * flag. To use a different flag, use #calchandles_fcurve_ex().
+ *
+ * If the BezTriples have been rearranged, sort them first before using this.
+ */
+void calchandles_fcurve(FCurve *fcu)
+{
+  calchandles_fcurve_ex(fcu, SELECT);
+}
+
+/**
+ * Update handles, making sure the handle-types are valid (e.g. correctly deduced from an "Auto"
+ * type), and recalculating their position vectors.
+ * Use when something has changed handle positions.
+ *
+ * \param sel_flag: The flag (bezt.f1/2/3) value to use to determine selection. Usually `SELECT`,
+ *                  but may want to use a different one at times (if caller does not operate on
+ *                  selection).
+ * \param use_handle: Check selection state of individual handles, otherwise always update both
+ *                    handles if the key is selected.
+ */
+void testhandles_fcurve(FCurve *fcu, eBezTriple_Flag sel_flag, const bool use_handle)
 {
   BezTriple *bezt;
   unsigned int a;
@@ -1133,11 +1159,11 @@ void testhandles_fcurve(FCurve *fcu, const bool use_handle)
 
   /* loop over beztriples */
   for (a = 0, bezt = fcu->bezt; a < fcu->totvert; a++, bezt++) {
-    BKE_nurb_bezt_handle_test(bezt, use_handle);
+    BKE_nurb_bezt_handle_test(bezt, sel_flag, use_handle);
   }
 
   /* recalculate handles */
-  calchandles_fcurve(fcu);
+  calchandles_fcurve_ex(fcu, sel_flag);
 }
 
 /* This function sorts BezTriples so that they are arranged in chronological order,
@@ -1560,7 +1586,7 @@ static float dvar_eval_locDiff(ChannelDriver *driver, DriverVar *dvar)
           /* extract transform just like how the constraints do it! */
           copy_m4_m4(mat, pchan->pose_mat);
           BKE_constraint_mat_convertspace(
-              ob, pchan, mat, CONSTRAINT_SPACE_POSE, CONSTRAINT_SPACE_LOCAL, false);
+              ob, pchan, mat, CONSTRAINT_SPACE_POSE, CONSTRAINT_SPACE_LOCAL);
 
           /* ... and from that, we get our transform */
           copy_v3_v3(tmp_loc, mat[3]);
@@ -1586,7 +1612,7 @@ static float dvar_eval_locDiff(ChannelDriver *driver, DriverVar *dvar)
           /* extract transform just like how the constraints do it! */
           copy_m4_m4(mat, ob->obmat);
           BKE_constraint_mat_convertspace(
-              ob, NULL, mat, CONSTRAINT_SPACE_WORLD, CONSTRAINT_SPACE_LOCAL, false);
+              ob, NULL, mat, CONSTRAINT_SPACE_WORLD, CONSTRAINT_SPACE_LOCAL);
 
           /* ... and from that, we get our transform */
           copy_v3_v3(tmp_loc, mat[3]);
@@ -1663,7 +1689,7 @@ static float dvar_eval_transChan(ChannelDriver *driver, DriverVar *dvar)
         /* just like how the constraints do it! */
         copy_m4_m4(mat, pchan->pose_mat);
         BKE_constraint_mat_convertspace(
-            ob, pchan, mat, CONSTRAINT_SPACE_POSE, CONSTRAINT_SPACE_LOCAL, false);
+            ob, pchan, mat, CONSTRAINT_SPACE_POSE, CONSTRAINT_SPACE_LOCAL);
       }
       else {
         /* specially calculate local matrix, since chan_mat is not valid
@@ -1691,7 +1717,7 @@ static float dvar_eval_transChan(ChannelDriver *driver, DriverVar *dvar)
         /* just like how the constraints do it! */
         copy_m4_m4(mat, ob->obmat);
         BKE_constraint_mat_convertspace(
-            ob, NULL, mat, CONSTRAINT_SPACE_WORLD, CONSTRAINT_SPACE_LOCAL, false);
+            ob, NULL, mat, CONSTRAINT_SPACE_WORLD, CONSTRAINT_SPACE_LOCAL);
       }
       else {
         /* transforms to matrix */
@@ -1714,7 +1740,10 @@ static float dvar_eval_transChan(ChannelDriver *driver, DriverVar *dvar)
      * of scale over all three axes unless the matrix includes shear. */
     return cbrtf(mat4_to_volume_scale(mat));
   }
-  else if (dtar->transChan >= DTAR_TRANSCHAN_SCALEX) {
+  else if (ELEM(dtar->transChan,
+                DTAR_TRANSCHAN_SCALEX,
+                DTAR_TRANSCHAN_SCALEY,
+                DTAR_TRANSCHAN_SCALEZ)) {
     /* Extract scale, and choose the right axis,
      * inline 'mat4_to_size'. */
     return len_v3(mat[dtar->transChan - DTAR_TRANSCHAN_SCALEX]);
@@ -1728,19 +1757,94 @@ static float dvar_eval_transChan(ChannelDriver *driver, DriverVar *dvar)
      *     b) [NOT USED] directly use the original values (no decomposition)
      *         - only an option for "transform space", if quality is really bad with a)
      */
-    float eul[3];
+    float quat[4];
+    int channel;
 
-    mat4_to_eulO(eul, rot_order, mat);
-
-    if (use_eulers) {
-      compatible_eul(eul, oldEul);
+    if (dtar->transChan == DTAR_TRANSCHAN_ROTW) {
+      channel = 0;
+    }
+    else {
+      channel = 1 + dtar->transChan - DTAR_TRANSCHAN_ROTX;
+      BLI_assert(channel < 4);
     }
 
-    return eul[dtar->transChan - DTAR_TRANSCHAN_ROTX];
+    BKE_driver_target_matrix_to_rot_channels(
+        mat, rot_order, dtar->rotation_mode, channel, false, quat);
+
+    if (use_eulers && dtar->rotation_mode == DTAR_ROTMODE_AUTO) {
+      compatible_eul(quat + 1, oldEul);
+    }
+
+    return quat[channel];
   }
   else {
     /* extract location and choose right axis */
     return mat[3][dtar->transChan];
+  }
+}
+
+/* Convert a quaternion to pseudo-angles representing the weighted amount of rotation. */
+static void quaternion_to_angles(float quat[4], int channel)
+{
+  if (channel < 0) {
+    quat[0] = 2.0f * saacosf(quat[0]);
+
+    for (int i = 1; i < 4; i++) {
+      quat[i] = 2.0f * saasinf(quat[i]);
+    }
+  }
+  else if (channel == 0) {
+    quat[0] = 2.0f * saacosf(quat[0]);
+  }
+  else {
+    quat[channel] = 2.0f * saasinf(quat[channel]);
+  }
+}
+
+/* Compute channel values for a rotational Transform Channel driver variable. */
+void BKE_driver_target_matrix_to_rot_channels(
+    float mat[4][4], int auto_order, int rotation_mode, int channel, bool angles, float r_buf[4])
+{
+  float *const quat = r_buf;
+  float *const eul = r_buf + 1;
+
+  zero_v4(r_buf);
+
+  if (rotation_mode == DTAR_ROTMODE_AUTO) {
+    mat4_to_eulO(eul, auto_order, mat);
+  }
+  else if (rotation_mode >= DTAR_ROTMODE_EULER_MIN && rotation_mode <= DTAR_ROTMODE_EULER_MAX) {
+    mat4_to_eulO(eul, rotation_mode, mat);
+  }
+  else if (rotation_mode == DTAR_ROTMODE_QUATERNION) {
+    mat4_to_quat(quat, mat);
+
+    /* For Transformation constraint convenience, convert to pseudo-angles. */
+    if (angles) {
+      quaternion_to_angles(quat, channel);
+    }
+  }
+  else if (rotation_mode >= DTAR_ROTMODE_SWING_TWIST_X &&
+           rotation_mode <= DTAR_ROTMODE_SWING_TWIST_Z) {
+    int axis = rotation_mode - DTAR_ROTMODE_SWING_TWIST_X;
+    float raw_quat[4], twist;
+
+    mat4_to_quat(raw_quat, mat);
+
+    if (channel == axis + 1) {
+      /* If only the twist angle is needed, skip computing swing. */
+      twist = quat_split_swing_and_twist(raw_quat, axis, NULL, NULL);
+    }
+    else {
+      twist = quat_split_swing_and_twist(raw_quat, axis, quat, NULL);
+
+      quaternion_to_angles(quat, channel);
+    }
+
+    quat[axis + 1] = twist;
+  }
+  else {
+    BLI_assert(false);
   }
 }
 

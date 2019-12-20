@@ -71,7 +71,7 @@ static SpaceLink *nla_new(const ScrArea *sa, const Scene *scene)
 
   /* set auto-snapping settings */
   snla->autosnap = SACTSNAP_FRAME;
-  snla->flag = SNLA_SHOW_MARKER_LINES;
+  snla->flag = SNLA_SHOW_MARKERS;
 
   /* header */
   ar = MEM_callocN(sizeof(ARegion), "header for nla");
@@ -274,10 +274,9 @@ static void nla_main_region_draw(const bContext *C, ARegion *ar)
   /* markers */
   UI_view2d_view_orthoSpecial(ar, v2d, 1);
   int marker_draw_flag = DRAW_MARKERS_MARGIN;
-  if (snla->flag & SNLA_SHOW_MARKER_LINES) {
-    marker_draw_flag |= DRAW_MARKERS_LINES;
+  if (snla->flag & SNLA_SHOW_MARKERS) {
+    ED_markers_draw(C, marker_draw_flag);
   }
-  ED_markers_draw(C, marker_draw_flag);
 
   /* preview range */
   UI_view2d_view_ortho(v2d);
@@ -522,7 +521,7 @@ static void nla_channel_region_message_subscribe(const struct bContext *UNUSED(C
    * so just whitelist the entire struct for updates
    */
   {
-    wmMsgParams_RNA msg_key_params = {{{0}}};
+    wmMsgParams_RNA msg_key_params = {{0}};
     StructRNA *type_array[] = {
         &RNA_DopeSheet,
     };

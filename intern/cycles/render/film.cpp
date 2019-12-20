@@ -163,6 +163,12 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
     case PASS_CRYPTOMATTE:
       pass.components = 4;
       break;
+    case PASS_AOV_COLOR:
+      pass.components = 4;
+      break;
+    case PASS_AOV_VALUE:
+      pass.components = 1;
+      break;
     default:
       assert(false);
       break;
@@ -267,7 +273,7 @@ NODE_DEFINE(Film)
   NodeType *type = NodeType::add("film", create);
 
   SOCKET_FLOAT(exposure, "Exposure", 0.8f);
-  SOCKET_FLOAT(pass_alpha_threshold, "Pass Alpha Threshold", 0.5f);
+  SOCKET_FLOAT(pass_alpha_threshold, "Pass Alpha Threshold", 0.0f);
 
   static NodeEnum filter_enum;
   filter_enum.insert("box", FILTER_BOX);
@@ -281,8 +287,6 @@ NODE_DEFINE(Film)
   SOCKET_FLOAT(mist_depth, "Mist Depth", 100.0f);
   SOCKET_FLOAT(mist_falloff, "Mist Falloff", 1.0f);
 
-  SOCKET_BOOLEAN(use_sample_clamp, "Use Sample Clamp", false);
-
   SOCKET_BOOLEAN(denoising_data_pass, "Generate Denoising Data Pass", false);
   SOCKET_BOOLEAN(denoising_clean_pass, "Generate Denoising Clean Pass", false);
   SOCKET_BOOLEAN(denoising_prefiltered_pass, "Generate Denoising Prefiltered Pass", false);
@@ -293,8 +297,6 @@ NODE_DEFINE(Film)
 
 Film::Film() : Node(node_type)
 {
-  Pass::add(PASS_COMBINED, passes);
-
   use_light_visibility = false;
   filter_table_offset = TABLE_OFFSET_INVALID;
   cryptomatte_passes = CRYPT_NONE;
@@ -318,11 +320,18 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   /* update __data */
   kfilm->exposure = exposure;
   kfilm->pass_flag = 0;
+
+  kfilm->display_pass_stride = -1;
+  kfilm->display_pass_components = 0;
+  kfilm->display_divide_pass_stride = -1;
+  kfilm->use_display_exposure = false;
+  kfilm->use_display_pass_alpha = (display_pass == PASS_COMBINED);
+
   kfilm->light_pass_flag = 0;
   kfilm->pass_stride = 0;
-  kfilm->use_light_pass = use_light_visibility || use_sample_clamp;
+  kfilm->use_light_pass = use_light_visibility;
 
-  bool have_cryptomatte = false;
+  bool have_cryptomatte = false, have_aov_color = false, have_aov_value = false;
 
   for (size_t i = 0; i < passes.size(); i++) {
     Pass &pass = passes[i];
@@ -459,9 +468,31 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
                                       kfilm->pass_stride;
         have_cryptomatte = true;
         break;
+      case PASS_AOV_COLOR:
+        if (!have_aov_color) {
+          kfilm->pass_aov_color = kfilm->pass_stride;
+          have_aov_color = true;
+        }
+        break;
+      case PASS_AOV_VALUE:
+        if (!have_aov_value) {
+          kfilm->pass_aov_value = kfilm->pass_stride;
+          have_aov_value = true;
+        }
+        break;
       default:
         assert(false);
         break;
+    }
+
+    if (pass.type == display_pass) {
+      kfilm->display_pass_stride = kfilm->pass_stride;
+      kfilm->display_pass_components = pass.components;
+      kfilm->use_display_exposure = pass.exposure && (kfilm->exposure != 1.0f);
+    }
+    else if (pass.type == PASS_DIFFUSE_COLOR || pass.type == PASS_TRANSMISSION_COLOR ||
+             pass.type == PASS_GLOSSY_COLOR || pass.type == PASS_SUBSURFACE_COLOR) {
+      kfilm->display_divide_pass_stride = kfilm->pass_stride;
     }
 
     kfilm->pass_stride += pass.components;
@@ -485,7 +516,18 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   }
 
   kfilm->pass_stride = align_up(kfilm->pass_stride, 4);
-  kfilm->pass_alpha_threshold = pass_alpha_threshold;
+
+  /* When displaying the normal/uv pass in the viewport we need to disable
+   * transparency.
+   *
+   * We also don't need to perform light accumulations. Later we want to optimize this to suppress
+   * light calculations. */
+  if (display_pass == PASS_NORMAL || display_pass == PASS_UV) {
+    kfilm->use_light_pass = 0;
+  }
+  else {
+    kfilm->pass_alpha_threshold = pass_alpha_threshold;
+  }
 
   /* update filter table */
   vector<float> table = filter_table(filter_type, filter_width);
@@ -518,7 +560,7 @@ bool Film::modified(const Film &film)
   return !Node::equals(film) || !Pass::equals(passes, film.passes);
 }
 
-void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_)
+void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_, bool update_passes)
 {
   if (Pass::contains(passes, PASS_UV) != Pass::contains(passes_, PASS_UV)) {
     scene->mesh_manager->tag_update(scene);
@@ -526,15 +568,44 @@ void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_)
     foreach (Shader *shader, scene->shaders)
       shader->need_update_mesh = true;
   }
-  else if (Pass::contains(passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION))
+  else if (Pass::contains(passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION)) {
     scene->mesh_manager->tag_update(scene);
+  }
+  else if (Pass::contains(passes, PASS_AO) != Pass::contains(passes_, PASS_AO)) {
+    scene->integrator->tag_update(scene);
+  }
 
-  passes = passes_;
+  if (update_passes) {
+    passes = passes_;
+  }
 }
 
 void Film::tag_update(Scene * /*scene*/)
 {
   need_update = true;
+}
+
+int Film::get_aov_offset(string name, bool &is_color)
+{
+  int num_color = 0, num_value = 0;
+  foreach (const Pass &pass, passes) {
+    if (pass.type == PASS_AOV_COLOR) {
+      num_color++;
+    }
+    else if (pass.type == PASS_AOV_VALUE) {
+      num_value++;
+    }
+    else {
+      continue;
+    }
+
+    if (pass.name == name) {
+      is_color = (pass.type == PASS_AOV_COLOR);
+      return (is_color ? num_color : num_value) - 1;
+    }
+  }
+
+  return -1;
 }
 
 CCL_NAMESPACE_END

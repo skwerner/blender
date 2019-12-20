@@ -22,8 +22,6 @@
 
 #include "workbench_private.h"
 
-#include "BIF_gl.h"
-
 #include "BLI_alloca.h"
 #include "BLI_dynstr.h"
 #include "BLI_string_utils.h"
@@ -35,6 +33,7 @@
 #include "BKE_particle.h"
 
 #include "DNA_image_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_node_types.h"
@@ -63,8 +62,6 @@ static struct {
   struct GPUTexture *transparent_accum_tx;     /* ref only, not alloced */
   struct GPUTexture *transparent_revealage_tx; /* ref only, not alloced */
   struct GPUTexture *composite_buffer_tx;      /* ref only, not alloced */
-
-  int next_object_id;
 } e_data = {{{{NULL}}}};
 
 /* Shaders */
@@ -92,6 +89,18 @@ static char *workbench_build_forward_vert(bool is_hair)
   }
   BLI_dynstr_append(ds, datatoc_common_view_lib_glsl);
   BLI_dynstr_append(ds, datatoc_workbench_prepass_vert_glsl);
+
+  char *str = BLI_dynstr_get_cstring(ds);
+  BLI_dynstr_free(ds);
+  return str;
+}
+
+static char *workbench_build_forward_outline_frag(void)
+{
+  DynStr *ds = BLI_dynstr_new();
+
+  BLI_dynstr_append(ds, datatoc_common_view_lib_glsl);
+  BLI_dynstr_append(ds, datatoc_workbench_forward_depth_frag_glsl);
 
   char *str = BLI_dynstr_get_cstring(ds);
   BLI_dynstr_free(ds);
@@ -129,12 +138,6 @@ static char *workbench_build_forward_composite_frag(void)
   return str;
 }
 
-static void workbench_init_object_data(DrawData *dd)
-{
-  WORKBENCH_ObjectData *data = (WORKBENCH_ObjectData *)dd;
-  data->object_id = ((e_data.next_object_id++) & 0xff) + 1;
-}
-
 WORKBENCH_MaterialData *workbench_forward_get_or_create_material_data(WORKBENCH_Data *vedata,
                                                                       Object *ob,
                                                                       Material *mat,
@@ -149,18 +152,11 @@ WORKBENCH_MaterialData *workbench_forward_get_or_create_material_data(WORKBENCH_
   WORKBENCH_PassList *psl = vedata->psl;
   WORKBENCH_PrivateData *wpd = stl->g_data;
   WORKBENCH_MaterialData *material;
-  WORKBENCH_ObjectData *engine_object_data = (WORKBENCH_ObjectData *)DRW_drawdata_ensure(
-      &ob->id,
-      &draw_engine_workbench_solid,
-      sizeof(WORKBENCH_ObjectData),
-      &workbench_init_object_data,
-      NULL);
   WORKBENCH_MaterialData material_template;
   DRWShadingGroup *grp;
 
   /* Solid */
   workbench_material_update_data(wpd, ob, mat, &material_template, color_type);
-  material_template.object_id = OBJECT_ID_PASS_ENABLED(wpd) ? engine_object_data->object_id : 1;
   material_template.color_type = color_type;
   material_template.ima = ima;
   material_template.iuser = iuser;
@@ -186,11 +182,17 @@ WORKBENCH_MaterialData *workbench_forward_get_or_create_material_data(WORKBENCH_
     DRW_shgroup_uniform_vec4(grp, "viewvecs[0]", (float *)wpd->viewvecs, 3);
     workbench_material_copy(material, &material_template);
     if (STUDIOLIGHT_TYPE_MATCAP_ENABLED(wpd)) {
-      BKE_studiolight_ensure_flag(wpd->studio_light, STUDIOLIGHT_EQUIRECT_RADIANCE_GPUTEXTURE);
+      BKE_studiolight_ensure_flag(wpd->studio_light,
+                                  STUDIOLIGHT_MATCAP_DIFFUSE_GPUTEXTURE |
+                                      STUDIOLIGHT_MATCAP_SPECULAR_GPUTEXTURE);
       DRW_shgroup_uniform_texture(
-          grp, "matcapImage", wpd->studio_light->equirect_radiance_gputexture);
+          grp, "matcapDiffuseImage", wpd->studio_light->matcap_diffuse.gputexture);
+      if (workbench_is_specular_highlight_enabled(wpd)) {
+        DRW_shgroup_uniform_texture(
+            grp, "matcapSpecularImage", wpd->studio_light->matcap_specular.gputexture);
+      }
     }
-    if (SPECULAR_HIGHLIGHT_ENABLED(wpd) || MATCAP_ENABLED(wpd)) {
+    if (workbench_is_specular_highlight_enabled(wpd) || MATCAP_ENABLED(wpd)) {
       DRW_shgroup_uniform_vec2(grp, "invertedViewportSize", DRW_viewport_invert_size_get(), 1);
     }
     if (SHADOW_ENABLED(wpd)) {
@@ -199,7 +201,7 @@ WORKBENCH_MaterialData *workbench_forward_get_or_create_material_data(WORKBENCH_
       DRW_shgroup_uniform_float_copy(grp, "shadowFocus", wpd->shadow_focus);
     }
 
-    workbench_material_shgroup_uniform(wpd, grp, material, ob, false, false, interp);
+    workbench_material_shgroup_uniform(wpd, grp, material, ob, false, interp);
     material->shgrp = grp;
 
     /* Depth */
@@ -213,8 +215,6 @@ WORKBENCH_MaterialData *workbench_forward_get_or_create_material_data(WORKBENCH_
       material->shgrp_object_outline = DRW_shgroup_create(sh_data->object_outline_sh,
                                                           psl->object_outline_pass);
     }
-    material->object_id = engine_object_data->object_id;
-    DRW_shgroup_uniform_int(material->shgrp_object_outline, "object_id", &material->object_id, 1);
     if (draw_ctx->sh_cfg == GPU_SHADER_CFG_CLIPPED) {
       DRW_shgroup_state_enable(material->shgrp_object_outline, DRW_STATE_CLIP_PLANES);
     }
@@ -226,16 +226,16 @@ WORKBENCH_MaterialData *workbench_forward_get_or_create_material_data(WORKBENCH_
 static GPUShader *ensure_forward_accum_shaders(WORKBENCH_PrivateData *wpd,
                                                bool is_uniform_color,
                                                bool is_hair,
-                                               bool is_texture_painting,
+                                               const WORKBENCH_ColorOverride color_override,
                                                eGPUShaderConfig sh_cfg)
 {
   WORKBENCH_FORWARD_Shaders *sh_data = &e_data.sh_data[sh_cfg];
   int index = workbench_material_get_accum_shader_index(
-      wpd, is_uniform_color, is_hair, is_texture_painting);
+      wpd, is_uniform_color, is_hair, color_override);
   if (sh_data->transparent_accum_sh_cache[index] == NULL) {
     const GPUShaderConfigData *sh_cfg_data = &GPU_shader_cfg_data[sh_cfg];
     char *defines = workbench_material_build_defines(
-        wpd, is_uniform_color, is_hair, is_texture_painting);
+        wpd, is_uniform_color, is_hair, color_override);
     char *transparent_accum_vert = workbench_build_forward_vert(is_hair);
     char *transparent_accum_frag = workbench_build_forward_transparent_accum_frag();
     sh_data->transparent_accum_sh_cache[index] = GPU_shader_create_from_arrays({
@@ -254,7 +254,8 @@ static GPUShader *ensure_forward_composite_shaders(WORKBENCH_PrivateData *wpd)
 {
   int index = OBJECT_OUTLINE_ENABLED(wpd) ? 1 : 0;
   if (e_data.composite_sh_cache[index] == NULL) {
-    char *defines = workbench_material_build_defines(wpd, false, false, false);
+    char *defines = workbench_material_build_defines(
+        wpd, false, false, WORKBENCH_COLOR_OVERRIDE_OFF);
     char *composite_frag = workbench_build_forward_composite_frag();
     e_data.composite_sh_cache[index] = DRW_shader_create_fullscreen(composite_frag, defines);
     MEM_freeN(composite_frag);
@@ -266,14 +267,18 @@ static GPUShader *ensure_forward_composite_shaders(WORKBENCH_PrivateData *wpd)
 void workbench_forward_choose_shaders(WORKBENCH_PrivateData *wpd, eGPUShaderConfig sh_cfg)
 {
   wpd->composite_sh = ensure_forward_composite_shaders(wpd);
-  wpd->transparent_accum_sh = ensure_forward_accum_shaders(wpd, false, false, false, sh_cfg);
-  wpd->transparent_accum_hair_sh = ensure_forward_accum_shaders(wpd, false, true, false, sh_cfg);
+  wpd->transparent_accum_sh = ensure_forward_accum_shaders(
+      wpd, false, false, WORKBENCH_COLOR_OVERRIDE_OFF, sh_cfg);
+  wpd->transparent_accum_hair_sh = ensure_forward_accum_shaders(
+      wpd, false, true, WORKBENCH_COLOR_OVERRIDE_OFF, sh_cfg);
   wpd->transparent_accum_uniform_sh = ensure_forward_accum_shaders(
-      wpd, true, false, false, sh_cfg);
+      wpd, true, false, WORKBENCH_COLOR_OVERRIDE_OFF, sh_cfg);
   wpd->transparent_accum_uniform_hair_sh = ensure_forward_accum_shaders(
-      wpd, true, true, false, sh_cfg);
+      wpd, true, true, WORKBENCH_COLOR_OVERRIDE_OFF, sh_cfg);
   wpd->transparent_accum_textured_sh = ensure_forward_accum_shaders(
-      wpd, false, false, true, sh_cfg);
+      wpd, false, false, WORKBENCH_COLOR_OVERRIDE_TEXTURE, sh_cfg);
+  wpd->transparent_accum_vertex_sh = ensure_forward_accum_shaders(
+      wpd, false, false, WORKBENCH_COLOR_OVERRIDE_VERTEX, sh_cfg);
 }
 
 void workbench_forward_outline_shaders_ensure(WORKBENCH_PrivateData *wpd, eGPUShaderConfig sh_cfg)
@@ -282,30 +287,37 @@ void workbench_forward_outline_shaders_ensure(WORKBENCH_PrivateData *wpd, eGPUSh
 
   if (sh_data->object_outline_sh == NULL) {
     const GPUShaderConfigData *sh_cfg_data = &GPU_shader_cfg_data[sh_cfg];
-    char *defines = workbench_material_build_defines(wpd, false, false, false);
-    char *defines_texture = workbench_material_build_defines(wpd, true, false, false);
-    char *defines_hair = workbench_material_build_defines(wpd, false, true, false);
+    char *defines = workbench_material_build_defines(
+        wpd, false, false, WORKBENCH_COLOR_OVERRIDE_OFF);
+    char *defines_texture = workbench_material_build_defines(
+        wpd, true, false, WORKBENCH_COLOR_OVERRIDE_OFF);
+    char *defines_hair = workbench_material_build_defines(
+        wpd, false, true, WORKBENCH_COLOR_OVERRIDE_OFF);
     char *forward_vert = workbench_build_forward_vert(false);
+    char *forward_frag = workbench_build_forward_outline_frag();
     char *forward_hair_vert = workbench_build_forward_vert(true);
+
+    const char *define_id_pass = "#define OBJECT_ID_PASS_ENABLED\n";
 
     sh_data->object_outline_sh = GPU_shader_create_from_arrays({
         .vert = (const char *[]){sh_cfg_data->lib, forward_vert, NULL},
-        .frag = (const char *[]){datatoc_workbench_forward_depth_frag_glsl, NULL},
-        .defs = (const char *[]){sh_cfg_data->def, defines, NULL},
+        .frag = (const char *[]){forward_frag, NULL},
+        .defs = (const char *[]){sh_cfg_data->def, defines, define_id_pass, NULL},
     });
     sh_data->object_outline_texture_sh = GPU_shader_create_from_arrays({
         .vert = (const char *[]){sh_cfg_data->lib, forward_vert, NULL},
-        .frag = (const char *[]){datatoc_workbench_forward_depth_frag_glsl, NULL},
-        .defs = (const char *[]){sh_cfg_data->def, defines_texture, NULL},
+        .frag = (const char *[]){forward_frag, NULL},
+        .defs = (const char *[]){sh_cfg_data->def, defines_texture, define_id_pass, NULL},
     });
     sh_data->object_outline_hair_sh = GPU_shader_create_from_arrays({
         .vert = (const char *[]){sh_cfg_data->lib, forward_hair_vert, NULL},
-        .frag = (const char *[]){datatoc_workbench_forward_depth_frag_glsl, NULL},
-        .defs = (const char *[]){sh_cfg_data->def, defines_hair, NULL},
+        .frag = (const char *[]){forward_frag, NULL},
+        .defs = (const char *[]){sh_cfg_data->def, defines_hair, define_id_pass, NULL},
     });
 
     MEM_freeN(forward_hair_vert);
     MEM_freeN(forward_vert);
+    MEM_freeN(forward_frag);
     MEM_freeN(defines);
     MEM_freeN(defines_texture);
     MEM_freeN(defines_hair);
@@ -332,8 +344,6 @@ void workbench_forward_engine_init(WORKBENCH_Data *vedata)
   }
   WORKBENCH_PrivateData *wpd = stl->g_data;
   workbench_private_data_init(wpd);
-  float light_direction[3];
-  workbench_private_data_get_light_direction(wpd, light_direction);
 
   if (!e_data.checker_depth_sh) {
     e_data.checker_depth_sh = DRW_shader_create_fullscreen(
@@ -386,17 +396,19 @@ void workbench_forward_engine_init(WORKBENCH_Data *vedata)
                                 });
 
   workbench_volume_cache_init(vedata);
-  const bool do_cull = CULL_BACKFACE_ENABLED(wpd);
-  const int cull_state = (do_cull) ? DRW_STATE_CULL_BACK : 0;
+
+  DRWState clip_state = WORLD_CLIPPING_ENABLED(wpd) ? DRW_STATE_CLIP_PLANES : 0;
+  DRWState cull_state = CULL_BACKFACE_ENABLED(wpd) ? DRW_STATE_CULL_BACK : 0;
 
   /* Transparency Accum */
   {
-    int state = DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_OIT | cull_state;
+    int state = DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_OIT | cull_state | clip_state;
     psl->transparent_accum_pass = DRW_pass_create("Transparent Accum", state);
   }
   /* Depth */
   {
-    int state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS | cull_state;
+    int state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS | cull_state |
+                clip_state;
     psl->object_outline_pass = DRW_pass_create("Object Outline Pass", state);
   }
   /* Composite */
@@ -418,7 +430,7 @@ void workbench_forward_engine_init(WORKBENCH_Data *vedata)
   /* TODO(campbell): displays but masks geometry,
    * only use with wire or solid-without-xray for now. */
   if ((wpd->shading.type != OB_WIRE && !XRAY_FLAG_ENABLED(wpd)) &&
-      (draw_ctx->rv3d && (draw_ctx->rv3d->rflag & RV3D_CLIPPING) && draw_ctx->rv3d->clipbb)) {
+      RV3D_CLIPPING_ENABLED(draw_ctx->v3d, draw_ctx->rv3d)) {
     psl->background_pass = DRW_pass_create("Background",
                                            DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_EQUAL);
     GPUShader *shader = GPU_shader_get_builtin_shader(GPU_SHADER_3D_UNIFORM_COLOR_BACKGROUND);
@@ -521,25 +533,30 @@ static void workbench_forward_cache_populate_particles(WORKBENCH_Data *vedata, O
       DRWShadingGroup *shgrp = DRW_shgroup_hair_create(
           ob, psys, md, psl->transparent_accum_pass, shader);
       DRW_shgroup_uniform_block(shgrp, "world_block", wpd->world_ubo);
-      workbench_material_shgroup_uniform(wpd, shgrp, material, ob, false, false, interp);
+      workbench_material_shgroup_uniform(wpd, shgrp, material, ob, false, interp);
       DRW_shgroup_uniform_vec4(shgrp, "viewvecs[0]", (float *)wpd->viewvecs, 3);
       /* Hairs have lots of layer and can rapidly become the most prominent surface.
        * So lower their alpha artificially. */
       float hair_alpha = XRAY_ALPHA(wpd) * 0.33f;
       DRW_shgroup_uniform_float_copy(shgrp, "alpha", hair_alpha);
       if (STUDIOLIGHT_TYPE_MATCAP_ENABLED(wpd)) {
-        BKE_studiolight_ensure_flag(wpd->studio_light, STUDIOLIGHT_EQUIRECT_RADIANCE_GPUTEXTURE);
+        BKE_studiolight_ensure_flag(wpd->studio_light,
+                                    STUDIOLIGHT_MATCAP_DIFFUSE_GPUTEXTURE |
+                                        STUDIOLIGHT_MATCAP_SPECULAR_GPUTEXTURE);
         DRW_shgroup_uniform_texture(
-            shgrp, "matcapImage", wpd->studio_light->equirect_radiance_gputexture);
+            shgrp, "matcapDiffuseImage", wpd->studio_light->matcap_diffuse.gputexture);
+        if (workbench_is_specular_highlight_enabled(wpd)) {
+          DRW_shgroup_uniform_texture(
+              shgrp, "matcapSpecularImage", wpd->studio_light->matcap_specular.gputexture);
+        }
       }
-      if (SPECULAR_HIGHLIGHT_ENABLED(wpd) || MATCAP_ENABLED(wpd)) {
+      if (workbench_is_specular_highlight_enabled(wpd) || MATCAP_ENABLED(wpd)) {
         DRW_shgroup_uniform_vec2(shgrp, "invertedViewportSize", DRW_viewport_invert_size_get(), 1);
       }
 
       WORKBENCH_FORWARD_Shaders *sh_data = &e_data.sh_data[draw_ctx->sh_cfg];
       shgrp = DRW_shgroup_hair_create(
           ob, psys, md, vedata->psl->object_outline_pass, sh_data->object_outline_hair_sh);
-      DRW_shgroup_uniform_int(shgrp, "object_id", &material->object_id, 1);
     }
   }
 }
@@ -550,7 +567,8 @@ static void workbench_forward_cache_populate_texture_paint_mode(WORKBENCH_Data *
   const DRWContextState *draw_ctx = DRW_context_state_get();
 
   Scene *scene = draw_ctx->scene;
-  const bool use_sculpt_pbvh = BKE_sculptsession_use_pbvh_draw(ob, draw_ctx->v3d);
+  const bool use_sculpt_pbvh = BKE_sculptsession_use_pbvh_draw(ob, draw_ctx->v3d) &&
+                               !DRW_state_is_image_render();
   WORKBENCH_MaterialData *material;
 
   /* Force workbench to render active object textured when in texture paint mode */
@@ -590,6 +608,23 @@ static void workbench_forward_cache_populate_texture_paint_mode(WORKBENCH_Data *
     }
   }
 }
+static void workbench_forward_cache_populate_vertex_paint_mode(WORKBENCH_Data *vedata, Object *ob)
+{
+  WORKBENCH_StorageList *stl = vedata->stl;
+  WORKBENCH_PrivateData *wpd = stl->g_data;
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+
+  const bool use_sculpt_pbvh = BKE_sculptsession_use_pbvh_draw(ob, draw_ctx->v3d) &&
+                               !DRW_state_is_image_render();
+  WORKBENCH_MaterialData *material;
+
+  int color_type = workbench_material_determine_color_type(wpd, NULL, ob, use_sculpt_pbvh);
+  struct GPUBatch *geom = DRW_cache_mesh_surface_vertpaint_get(ob);
+  material = workbench_forward_get_or_create_material_data(
+      vedata, ob, NULL, NULL, NULL, color_type, false);
+  DRW_shgroup_call(material->shgrp, geom, ob);
+  DRW_shgroup_call(material->shgrp_object_outline, geom, ob);
+}
 
 void workbench_forward_cache_populate(WORKBENCH_Data *vedata, Object *ob)
 {
@@ -609,9 +644,10 @@ void workbench_forward_cache_populate(WORKBENCH_Data *vedata, Object *ob)
 
   ModifierData *md;
   if (((ob->base_flag & BASE_FROM_DUPLI) == 0) &&
-      (md = modifiers_findByType(ob, eModifierType_Smoke)) &&
+      (md = modifiers_findByType(ob, eModifierType_Fluid)) &&
       (modifier_isEnabled(scene, md, eModifierMode_Realtime)) &&
-      (((SmokeModifierData *)md)->domain != NULL)) {
+      (((FluidModifierData *)md)->domain != NULL) &&
+      (((FluidModifierData *)md)->domain->type == FLUID_DOMAIN_TYPE_GAS)) {
     workbench_volume_cache_populate(vedata, scene, ob, md);
     return; /* Do not draw solid in this case. */
   }
@@ -625,16 +661,25 @@ void workbench_forward_cache_populate(WORKBENCH_Data *vedata, Object *ob)
 
   WORKBENCH_MaterialData *material;
   if (ELEM(ob->type, OB_MESH, OB_CURVE, OB_SURF, OB_FONT, OB_MBALL)) {
-    const bool use_sculpt_pbvh = BKE_sculptsession_use_pbvh_draw(ob, draw_ctx->v3d);
+    const bool use_sculpt_pbvh = BKE_sculptsession_use_pbvh_draw(ob, draw_ctx->v3d) &&
+                                 !DRW_state_is_image_render();
     const int materials_len = MAX2(1, ob->totcol);
     const Mesh *me = (ob->type == OB_MESH) ? ob->data : NULL;
+    const WORKBENCH_ColorOverride color_override = workbench_object_color_override_get(ob);
     const bool use_texture_paint_drawing = !(DRW_state_is_image_render() &&
                                              draw_ctx->v3d == NULL) &&
-                                           workbench_is_object_in_texture_paint_mode(ob) && me &&
-                                           me->mloopuv;
+                                           (color_override == WORKBENCH_COLOR_OVERRIDE_TEXTURE) &&
+                                           me && me->mloopuv;
+    const bool use_vertex_paint_drawing = !(DRW_state_is_image_render() &&
+                                            draw_ctx->v3d == NULL) &&
+                                          (color_override == WORKBENCH_COLOR_OVERRIDE_VERTEX) &&
+                                          me && me->mloopcol;
 
     if (use_texture_paint_drawing) {
       workbench_forward_cache_populate_texture_paint_mode(vedata, ob);
+    }
+    else if (use_vertex_paint_drawing) {
+      workbench_forward_cache_populate_vertex_paint_mode(vedata, ob);
     }
     else if (!use_sculpt_pbvh && TEXTURE_DRAWING_ENABLED(wpd) && me && me->mloopuv) {
       struct GPUBatch **geom_array = DRW_cache_mesh_surface_texpaint_get(ob);
@@ -689,7 +734,7 @@ void workbench_forward_cache_populate(WORKBENCH_Data *vedata, Object *ob)
       if (use_sculpt_pbvh) {
         struct DRWShadingGroup **shgrps = BLI_array_alloca(shgrps, materials_len);
 
-        for (int i = 0; i < materials_len; ++i) {
+        for (int i = 0; i < materials_len; i++) {
           struct Material *mat = give_current_material(ob, i + 1);
           material = workbench_forward_get_or_create_material_data(
               vedata, ob, mat, NULL, NULL, V3D_SHADING_MATERIAL_COLOR, 0);
@@ -708,7 +753,7 @@ void workbench_forward_cache_populate(WORKBENCH_Data *vedata, Object *ob)
         struct GPUBatch **mat_geom = DRW_cache_object_surface_material_get(
             ob, gpumat_array, materials_len, NULL, NULL, NULL);
         if (mat_geom) {
-          for (int i = 0; i < materials_len; ++i) {
+          for (int i = 0; i < materials_len; i++) {
             if (mat_geom[i] == NULL) {
               continue;
             }

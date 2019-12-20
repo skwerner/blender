@@ -63,7 +63,7 @@ static void compute_cdf(float (*func)(float x), float cdf[FILTER_CDF_TABLE_SIZE]
 {
   cdf[0] = 0.0f;
   /* Actual CDF evaluation. */
-  for (int u = 0; u < FILTER_CDF_TABLE_SIZE - 1; ++u) {
+  for (int u = 0; u < FILTER_CDF_TABLE_SIZE - 1; u++) {
     float x = (float)(u + 1) / (float)(FILTER_CDF_TABLE_SIZE - 1);
     cdf[u + 1] = cdf[u] + func(x - 0.5f); /* [-0.5..0.5]. We resize later. */
   }
@@ -80,7 +80,7 @@ static void invert_cdf(const float cdf[FILTER_CDF_TABLE_SIZE],
 {
   for (int u = 0; u < FILTER_CDF_TABLE_SIZE; u++) {
     float x = (float)u / (float)(FILTER_CDF_TABLE_SIZE - 1);
-    for (int i = 0; i < FILTER_CDF_TABLE_SIZE; ++i) {
+    for (int i = 0; i < FILTER_CDF_TABLE_SIZE; i++) {
       if (cdf[i] >= x) {
         if (i == FILTER_CDF_TABLE_SIZE - 1) {
           invert_cdf[u] = 1.0f;
@@ -123,7 +123,7 @@ static void eevee_create_cdf_table_temporal_sampling(void)
   invert_cdf(cdf_table, e_data.inverted_cdf);
 
   /* Scale and offset table. */
-  for (int i = 0; i < FILTER_CDF_TABLE_SIZE; ++i) {
+  for (int i = 0; i < FILTER_CDF_TABLE_SIZE; i++) {
     e_data.inverted_cdf[i] = (e_data.inverted_cdf[i] - 0.5f) * filter_width;
   }
 
@@ -234,7 +234,9 @@ int EEVEE_temporal_sampling_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data
       view_is_valid = view_is_valid && (ED_screen_animation_no_scrub(wm) == NULL);
     }
 
-    effects->taa_total_sample = scene_eval->eevee.taa_samples;
+    effects->taa_total_sample = EEVEE_renderpasses_only_first_sample_pass_active(vedata) ?
+                                    1 :
+                                    scene_eval->eevee.taa_samples;
     MAX2(effects->taa_total_sample, 0);
 
     DRW_view_persmat_get(NULL, persmat, false);

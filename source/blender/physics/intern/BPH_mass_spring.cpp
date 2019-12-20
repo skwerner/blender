@@ -74,6 +74,46 @@ static int cloth_count_nondiag_blocks(Cloth *cloth)
   return nondiag;
 }
 
+static float cloth_calc_volume(ClothModifierData *clmd)
+{
+  /* Calculate the (closed) cloth volume. */
+  Cloth *cloth = clmd->clothObject;
+  const MVertTri *tri = cloth->tri;
+  Implicit_Data *data = cloth->implicit;
+  float vol = 0;
+
+  if (clmd->sim_parms->vgroup_pressure > 0) {
+    for (unsigned int i = 0; i < cloth->tri_num; i++) {
+      bool skip_face = false;
+      /* We have custom vertex weights for pressure. */
+      const MVertTri *vt = &tri[i];
+      for (unsigned int j = 0; j < 3; j++) {
+        /* If any weight is zero, don't take this face into account for volume calculation. */
+        ClothVertex *verts = clmd->clothObject->verts;
+
+        if (verts[vt->tri[j]].pressure_factor == 0.0f) {
+          skip_face = true;
+        }
+      }
+      if (skip_face) {
+        continue;
+      }
+
+      vol += BPH_tri_tetra_volume_signed_6x(data, vt->tri[0], vt->tri[1], vt->tri[2]);
+    }
+  }
+  else {
+    for (unsigned int i = 0; i < cloth->tri_num; i++) {
+      const MVertTri *vt = &tri[i];
+      vol += BPH_tri_tetra_volume_signed_6x(data, vt->tri[0], vt->tri[1], vt->tri[2]);
+    }
+  }
+  /* We need to divide by 6 to get the actual volume. */
+  vol = vol / 6.0f;
+
+  return vol;
+}
+
 int BPH_cloth_solver_init(Object *UNUSED(ob), ClothModifierData *clmd)
 {
   Cloth *cloth = clmd->clothObject;
@@ -125,6 +165,13 @@ void BKE_cloth_solver_set_positions(ClothModifierData *clmd)
 
     BPH_mass_spring_set_motion_state(id, i, verts[i].x, verts[i].v);
   }
+}
+
+void BKE_cloth_solver_set_volume(ClothModifierData *clmd)
+{
+  Cloth *cloth = clmd->clothObject;
+
+  cloth->initial_mesh_volume = cloth_calc_volume(clmd);
 }
 
 static bool collision_response(ClothModifierData *clmd,
@@ -231,9 +278,9 @@ static void cloth_setup_constraints(ClothModifierData *clmd,
     verts[v].impulse_count = 0;
   }
 
-  for (i = 0; i < totcolliders; ++i) {
+  for (i = 0; i < totcolliders; i++) {
     ColliderContacts *ct = &contacts[i];
-    for (j = 0; j < ct->totcollisions; ++j) {
+    for (j = 0; j < ct->totcollisions; j++) {
       CollPair *collpair = &ct->collisions[j];
       // float restitution = (1.0f - clmd->coll_parms->damping) * (1.0f - ct->ob->pd->pdef_sbdamp);
       float restitution = 0.0f;
@@ -380,7 +427,8 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s)
   }
 
   /* Calculate force of structural + shear springs. */
-  if (s->type & (CLOTH_SPRING_TYPE_STRUCTURAL | CLOTH_SPRING_TYPE_SEWING)) {
+  if (s->type &
+      (CLOTH_SPRING_TYPE_STRUCTURAL | CLOTH_SPRING_TYPE_SEWING | CLOTH_SPRING_TYPE_INTERNAL)) {
 #ifdef CLOTH_FORCE_SPRING_STRUCTURAL
     float k_tension, scaling_tension;
 
@@ -393,7 +441,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s)
     if (s->type & CLOTH_SPRING_TYPE_SEWING) {
       /* TODO: verify, half verified (couldn't see error)
        * sewing springs usually have a large distance at first so clamp the force so we don't get
-       * tunnelling through collision objects. */
+       * tunneling through collision objects. */
       BPH_mass_spring_force_spring_linear(data,
                                           s->ij,
                                           s->kl,
@@ -406,7 +454,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s)
                                           false,
                                           parms->max_sewing);
     }
-    else {
+    else if (s->type & CLOTH_SPRING_TYPE_STRUCTURAL) {
       float k_compression, scaling_compression;
       scaling_compression = parms->compression +
                             s->lin_stiffness * fabsf(parms->max_compression - parms->compression);
@@ -420,6 +468,44 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s)
                                           parms->tension_damp,
                                           k_compression,
                                           parms->compression_damp,
+                                          resist_compress,
+                                          using_angular,
+                                          0.0f);
+    }
+    else {
+      /* CLOTH_SPRING_TYPE_INTERNAL */
+      BLI_assert(s->type & CLOTH_SPRING_TYPE_INTERNAL);
+
+      scaling_tension = parms->internal_tension +
+                        s->lin_stiffness *
+                            fabsf(parms->max_internal_tension - parms->internal_tension);
+      k_tension = scaling_tension / (parms->avg_spring_len + FLT_EPSILON);
+      float scaling_compression = parms->internal_compression +
+                                  s->lin_stiffness * fabsf(parms->max_internal_compression -
+                                                           parms->internal_compression);
+      float k_compression = scaling_compression / (parms->avg_spring_len + FLT_EPSILON);
+
+      float k_tension_damp = parms->tension_damp;
+      float k_compression_damp = parms->compression_damp;
+
+      if (k_tension == 0.0f) {
+        /* No damping so it behaves as if no tension spring was there at all. */
+        k_tension_damp = 0.0f;
+      }
+
+      if (k_compression == 0.0f) {
+        /* No damping so it behaves as if no compression spring was there at all. */
+        k_compression_damp = 0.0f;
+      }
+
+      BPH_mass_spring_force_spring_linear(data,
+                                          s->ij,
+                                          s->kl,
+                                          s->restlen,
+                                          k_tension,
+                                          k_tension_damp,
+                                          k_compression,
+                                          k_compression_damp,
                                           resist_compress,
                                           using_angular,
                                           0.0f);
@@ -526,6 +612,7 @@ static void cloth_calc_force(
 {
   /* Collect forces and derivatives:  F, dFdX, dFdV */
   Cloth *cloth = clmd->clothObject;
+  ClothSimSettings *parms = clmd->sim_parms;
   Implicit_Data *data = cloth->implicit;
   unsigned int i = 0;
   float drag = clmd->sim_parms->Cvi * 0.01f; /* viscosity of air scaled in percent */
@@ -570,6 +657,78 @@ static void cloth_calc_force(
 #ifdef CLOTH_FORCE_DRAG
   BPH_mass_spring_force_drag(data, drag);
 #endif
+  /* handle pressure forces */
+  if (parms->flags & CLOTH_SIMSETTINGS_FLAG_PRESSURE) {
+    /* The difference in pressure between the inside and outside of the mesh.*/
+    float pressure_difference = 0.0f;
+
+    float init_vol;
+    if (parms->flags & CLOTH_SIMSETTINGS_FLAG_PRESSURE_VOL) {
+      init_vol = clmd->sim_parms->target_volume;
+    }
+    else {
+      init_vol = cloth->initial_mesh_volume;
+    }
+
+    /* Check if we need to calculate the volume of the mesh. */
+    if (init_vol > 1E-6f) {
+      float f;
+      float vol = cloth_calc_volume(clmd);
+
+      /* Calculate an artifical maximum value for cloth pressure. */
+      f = fabs(clmd->sim_parms->uniform_pressure_force) + 200.0f;
+
+      /* Clamp the cloth pressure to the calculated maximum value. */
+      if (vol * f < init_vol) {
+        pressure_difference = f;
+      }
+      else {
+        /* If the volume is the same don't apply any pressure. */
+        pressure_difference = (init_vol / vol) - 1;
+      }
+    }
+    pressure_difference += clmd->sim_parms->uniform_pressure_force;
+
+    pressure_difference *= clmd->sim_parms->pressure_factor;
+
+    for (i = 0; i < cloth->tri_num; i++) {
+      const MVertTri *vt = &tri[i];
+      if (fabs(pressure_difference) > 1E-6f) {
+        if (clmd->sim_parms->vgroup_pressure > 0) {
+          /* We have custom vertex weights for pressure. */
+          ClothVertex *verts = clmd->clothObject->verts;
+          int v1, v2, v3;
+          v1 = vt->tri[0];
+          v2 = vt->tri[1];
+          v3 = vt->tri[2];
+
+          float weights[3];
+          bool skip_face = false;
+
+          weights[0] = verts[v1].pressure_factor;
+          weights[1] = verts[v2].pressure_factor;
+          weights[2] = verts[v3].pressure_factor;
+          for (unsigned int j = 0; j < 3; j++) {
+            if (weights[j] == 0.0f) {
+              /* Exclude faces which has a zero weight vert. */
+              skip_face = true;
+              break;
+            }
+          }
+          if (skip_face) {
+            continue;
+          }
+
+          BPH_mass_spring_force_pressure(data, v1, v2, v3, pressure_difference, weights);
+        }
+        else {
+          float weights[3] = {1.0f, 1.0f, 1.0f};
+          BPH_mass_spring_force_pressure(
+              data, vt->tri[0], vt->tri[1], vt->tri[2], pressure_difference, weights);
+        }
+      }
+    }
+  }
 
   /* handle external forces like wind */
   if (effectors) {
@@ -867,8 +1026,8 @@ static void cloth_continuum_step(ClothModifierData *clmd, float dt)
                           clmd->hair_grid_min[(axis + 2) % 3];
 
       BKE_sim_debug_data_clear_category(clmd->debug_data, "grid velocity");
-      for (j = 0; j < size; ++j) {
-        for (i = 0; i < size; ++i) {
+      for (j = 0; j < size; j++) {
+        for (i = 0; i < size; i++) {
           float x[3], v[3], gvel[3], gvel_smooth[3], gdensity;
 
           madd_v3_v3v3fl(x, offset, a, (float)i / (float)(size - 1));
@@ -1111,6 +1270,12 @@ int BPH_cloth_solve(
     ImplicitSolverResult result;
 
     if (is_hair) {
+      /* copy velocities for collision */
+      for (i = 0; i < mvert_num; i++) {
+        BPH_mass_spring_get_motion_state(id, i, NULL, verts[i].tv);
+        copy_v3_v3(verts[i].v, verts[i].tv);
+      }
+
       /* determine contact points */
       if (clmd->coll_parms->flags & CLOTH_COLLSETTINGS_FLAG_ENABLED) {
         cloth_find_point_contacts(depsgraph, ob, clmd, 0.0f, tf, &contacts, &totcolliders);

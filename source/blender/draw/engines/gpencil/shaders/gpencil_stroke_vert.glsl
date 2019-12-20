@@ -6,6 +6,7 @@ uniform float pixfactor;
 uniform int viewport_xray;
 uniform int shading_type[2];
 uniform vec4 wire_color;
+uniform mat4 gpModelMatrix;
 
 in vec3 pos;
 in vec4 color;
@@ -23,12 +24,13 @@ out vec2 finaluvdata;
 
 #define V3D_SHADING_MATERIAL_COLOR 0
 #define V3D_SHADING_TEXTURE_COLOR 3
+#define V3D_SHADING_VERTEX_COLOR 5
 
 float defaultpixsize = pixsize * (1000.0 / pixfactor);
 
 void main(void)
 {
-  gl_Position = point_object_to_ndc(pos);
+  gl_Position = point_world_to_ndc((gpModelMatrix * vec4(pos, 1.0)).xyz);
   finalColor = color;
 
   if (keep_size == TRUE) {
@@ -48,7 +50,8 @@ void main(void)
   /* for solid override color */
   if (shading_type[0] == OB_SOLID) {
     if ((shading_type[1] != V3D_SHADING_MATERIAL_COLOR) &&
-        (shading_type[1] != V3D_SHADING_TEXTURE_COLOR)) {
+        (shading_type[1] != V3D_SHADING_TEXTURE_COLOR) &&
+        (shading_type[1] != V3D_SHADING_VERTEX_COLOR)) {
       finalColor = wire_color;
     }
     if (viewport_xray == 1) {

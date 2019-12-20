@@ -62,8 +62,7 @@ Testing Targets
    Not associated with building Blender.
 
    * test:
-     Run ctest, currently tests import/export,
-     operator execution and that python modules load
+     Run automated tests with ctest.
    * test_cmake:
      Runs our own cmake file checker
      which detects errors in the cmake file list definitions
@@ -119,7 +118,7 @@ Utilities
      Example
         make icons_geom BLENDER_BIN=/path/to/blender
 
-   * tgz:
+   * source_archive:
      Create a compressed archive of the source code.
 
    * update:
@@ -164,9 +163,8 @@ CPU:=$(shell uname -m)
 BLENDER_DIR:=$(shell pwd -P)
 BUILD_TYPE:=Release
 
-ifndef BUILD_CMAKE_ARGS
-	BUILD_CMAKE_ARGS:=
-endif
+# CMake arguments, assigned to local variable to make it mutable.
+CMAKE_CONFIG_ARGS := $(BUILD_CMAKE_ARGS)
 
 ifndef BUILD_DIR
 	BUILD_DIR:=$(shell dirname "$(BLENDER_DIR)")/build_$(OS_NCASE)
@@ -193,6 +191,16 @@ ifndef PYTHON
 	PYTHON:=python3
 endif
 
+# For macOS python3 is not installed by default, so fallback to python binary
+# in libraries, or python 2 for running make update to get it.
+ifeq ($(OS_NCASE),darwin)
+	ifeq (, $(shell command -v $(PYTHON)))
+		PYTHON:=../lib/darwin/python/bin/python3.7m
+		ifeq (, $(shell command -v $(PYTHON)))
+			PYTHON:=python
+		endif
+	endif
+endif
 
 # -----------------------------------------------------------------------------
 # additional targets for the build configuration
@@ -204,40 +212,47 @@ ifneq "$(findstring debug, $(MAKECMDGOALS))" ""
 endif
 ifneq "$(findstring full, $(MAKECMDGOALS))" ""
 	BUILD_DIR:=$(BUILD_DIR)_full
-	BUILD_CMAKE_ARGS:=$(BUILD_CMAKE_ARGS) -C"$(BLENDER_DIR)/build_files/cmake/config/blender_full.cmake"
+	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/blender_full.cmake" $(CMAKE_CONFIG_ARGS)
 endif
 ifneq "$(findstring lite, $(MAKECMDGOALS))" ""
 	BUILD_DIR:=$(BUILD_DIR)_lite
-	BUILD_CMAKE_ARGS:=$(BUILD_CMAKE_ARGS) -C"$(BLENDER_DIR)/build_files/cmake/config/blender_lite.cmake"
+	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/blender_lite.cmake" $(CMAKE_CONFIG_ARGS)
 endif
 ifneq "$(findstring cycles, $(MAKECMDGOALS))" ""
 	BUILD_DIR:=$(BUILD_DIR)_cycles
-	BUILD_CMAKE_ARGS:=$(BUILD_CMAKE_ARGS) -C"$(BLENDER_DIR)/build_files/cmake/config/cycles_standalone.cmake"
+	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/cycles_standalone.cmake" $(CMAKE_CONFIG_ARGS)
 endif
 ifneq "$(findstring headless, $(MAKECMDGOALS))" ""
 	BUILD_DIR:=$(BUILD_DIR)_headless
-	BUILD_CMAKE_ARGS:=$(BUILD_CMAKE_ARGS) -C"$(BLENDER_DIR)/build_files/cmake/config/blender_headless.cmake"
+	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/blender_headless.cmake" $(CMAKE_CONFIG_ARGS)
 endif
 ifneq "$(findstring bpy, $(MAKECMDGOALS))" ""
 	BUILD_DIR:=$(BUILD_DIR)_bpy
-	BUILD_CMAKE_ARGS:=$(BUILD_CMAKE_ARGS) -C"$(BLENDER_DIR)/build_files/cmake/config/bpy_module.cmake"
+	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/bpy_module.cmake" $(CMAKE_CONFIG_ARGS)
 endif
 
 ifneq "$(findstring developer, $(MAKECMDGOALS))" ""
-	BUILD_CMAKE_ARGS:=$(BUILD_CMAKE_ARGS) -C"$(BLENDER_DIR)/build_files/cmake/config/blender_developer.cmake"
+	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/blender_developer.cmake" $(CMAKE_CONFIG_ARGS)
 endif
 
 # -----------------------------------------------------------------------------
 # build tool
 
 ifneq "$(findstring ninja, $(MAKECMDGOALS))" ""
-	BUILD_CMAKE_ARGS:=$(BUILD_CMAKE_ARGS) -G Ninja
+	CMAKE_CONFIG_ARGS:=$(CMAKE_CONFIG_ARGS) -G Ninja
 	BUILD_COMMAND:=ninja
+	DEPS_BUILD_COMMAND:=ninja
 else
 	ifneq ("$(wildcard $(BUILD_DIR)/build.ninja)","")
 		BUILD_COMMAND:=ninja
 	else
 		BUILD_COMMAND:=make -s
+	endif
+
+	ifneq ("$(wildcard $(DEPS_BUILD_DIR)/build.ninja)","")
+		DEPS_BUILD_COMMAND:=ninja
+	else
+		DEPS_BUILD_COMMAND:=make -s
 	endif
 endif
 
@@ -260,7 +275,10 @@ ifndef NPROCS
 	ifeq ($(OS), Linux)
 		NPROCS:=$(shell nproc)
 	endif
-	ifneq (,$(filter $(OS),Darwin FreeBSD NetBSD))
+	ifeq ($(OS), NetBSD)
+		NPROCS:=$(shell getconf NPROCESSORS_ONLN)
+	endif
+	ifneq (,$(filter $(OS),Darwin FreeBSD))
 		NPROCS:=$(shell sysctl -n hw.ncpu)
 	endif
 endif
@@ -269,7 +287,7 @@ endif
 # -----------------------------------------------------------------------------
 # Macro for configuring cmake
 
-CMAKE_CONFIG = cmake $(BUILD_CMAKE_ARGS) \
+CMAKE_CONFIG = cmake $(CMAKE_CONFIG_ARGS) \
                      -H"$(BLENDER_DIR)" \
                      -B"$(BUILD_DIR)" \
                      -DCMAKE_BUILD_TYPE_INIT:STRING=$(BUILD_TYPE)
@@ -333,7 +351,7 @@ deps: .FORCE
 
 	@echo
 	@echo Building dependencies ...
-	$(BUILD_COMMAND) -C "$(DEPS_BUILD_DIR)" -j $(NPROCS) $(DEPS_TARGET)
+	$(DEPS_BUILD_COMMAND) -C "$(DEPS_BUILD_DIR)" -j $(NPROCS) $(DEPS_TARGET)
 	@echo
 	@echo Dependencies successfully built and installed to $(DEPS_INSTALL_DIR).
 	@echo
@@ -368,7 +386,7 @@ package_archive: .FORCE
 # Tests
 #
 test: .FORCE
-	cd $(BUILD_DIR) ; ctest . --output-on-failure
+	$(PYTHON) ./build_files/utils/make_test.py "$(BUILD_DIR)"
 
 # run pep8 check check on scripts we distribute.
 test_pep8: .FORCE
@@ -509,8 +527,8 @@ check_descriptions: .FORCE
 # Utilities
 #
 
-tgz: .FORCE
-	./build_files/utils/build_tgz.sh
+source_archive: .FORCE
+	./build_files/utils/make_source_archive.sh
 
 INKSCAPE_BIN?="inkscape"
 icons: .FORCE
@@ -524,21 +542,11 @@ icons_geom: .FORCE
 	    "$(BLENDER_DIR)/release/datafiles/blender_icons_geom_update.py"
 
 update: .FORCE
-	if [ "$(OS_NCASE)" = "darwin" ] && [ ! -d "../lib/$(OS_NCASE)" ]; then \
-		svn checkout https://svn.blender.org/svnroot/bf-blender/trunk/lib/$(OS_NCASE) ../lib/$(OS_NCASE) ; \
-	fi
-	if [ -d "../lib" ]; then \
-		svn cleanup ../lib/* ; \
-		svn update ../lib/* ; \
-	fi
-	git pull --rebase
-	git submodule update --init --recursive
-	git submodule foreach git checkout master
-	git submodule foreach git pull --rebase origin master
+	$(PYTHON) ./build_files/utils/make_update.py
 
 format: .FORCE
 	PATH="../lib/${OS_NCASE}/llvm/bin/:$(PATH)" \
-		python3 source/tools/utils_maintenance/clang_format_paths.py $(PATHS)
+		$(PYTHON) source/tools/utils_maintenance/clang_format_paths.py $(PATHS)
 
 
 # -----------------------------------------------------------------------------

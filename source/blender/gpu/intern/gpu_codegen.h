@@ -33,8 +33,8 @@ struct GPUNode;
 struct GPUOutput;
 struct GPUShader;
 struct GPUVertAttrLayers;
+struct GSet;
 struct ListBase;
-struct PreviewImage;
 
 /* Pass Generation
  * - Takes a list of nodes and a desired output, and makes a pass. This
@@ -99,6 +99,7 @@ struct GPUNodeLink {
     struct {
       struct Image *ima;
       struct ImageUser *iuser;
+      int image_tile;
     };
   };
 };
@@ -138,6 +139,7 @@ typedef struct GPUInput {
       struct ImageUser *iuser;  /* image user */
       bool bindtex;             /* input is responsible for binding the texture? */
       int texid;                /* number for multitexture, starting from zero */
+      int image_tile;           /* image tile */
       eGPUType textype;         /* texture type (2D, 1D Array ...) */
     };
     /* GPU_SOURCE_ATTR */
@@ -207,5 +209,7 @@ struct GPUTexture **gpu_material_ramp_texture_row_set(GPUMaterial *mat,
                                                       int size,
                                                       float *pixels,
                                                       float *row);
+
+struct GSet *gpu_material_used_libraries(struct GPUMaterial *material);
 
 #endif

@@ -35,6 +35,7 @@ struct ID;
 struct IDOverrideLibrary;
 struct IDOverrideLibraryProperty;
 struct IDOverrideLibraryPropertyOperation;
+struct IDProperty;
 struct ListBase;
 struct Main;
 struct ReportList;
@@ -209,6 +210,8 @@ extern StructRNA RNA_CurveMapPoint;
 extern StructRNA RNA_CurveMapping;
 extern StructRNA RNA_CurveModifier;
 extern StructRNA RNA_CurvePoint;
+extern StructRNA RNA_CurveProfile;
+extern StructRNA RNA_CurveProfilePoint;
 extern StructRNA RNA_DampedTrackConstraint;
 extern StructRNA RNA_DataTransferModifier;
 extern StructRNA RNA_DecimateModifier;
@@ -259,7 +262,6 @@ extern StructRNA RNA_FloatProperty;
 extern StructRNA RNA_FloorConstraint;
 extern StructRNA RNA_FluidFluidSettings;
 extern StructRNA RNA_FluidSettings;
-extern StructRNA RNA_FluidSimulationModifier;
 extern StructRNA RNA_FollowPathConstraint;
 extern StructRNA RNA_FreestyleLineSet;
 extern StructRNA RNA_FreestyleLineStyle;
@@ -399,6 +401,7 @@ extern StructRNA RNA_MeshFloatPropertyLayer;
 extern StructRNA RNA_MeshIntProperty;
 extern StructRNA RNA_MeshIntPropertyLayer;
 extern StructRNA RNA_MeshLoop;
+extern StructRNA RNA_MeshLoopColor;
 extern StructRNA RNA_MeshLoopColorLayer;
 extern StructRNA RNA_MeshLoopTriangle;
 extern StructRNA RNA_MeshPolygon;
@@ -412,6 +415,7 @@ extern StructRNA RNA_MeshTextureFace;
 extern StructRNA RNA_MeshTextureFaceLayer;
 extern StructRNA RNA_MeshTexturePoly;
 extern StructRNA RNA_MeshTexturePolyLayer;
+extern StructRNA RNA_MeshUVLoop;
 extern StructRNA RNA_MeshVertex;
 extern StructRNA RNA_MessageSensor;
 extern StructRNA RNA_MetaBall;
@@ -430,6 +434,7 @@ extern StructRNA RNA_MovieTrackingObject;
 extern StructRNA RNA_MovieTrackingStabilization;
 extern StructRNA RNA_MovieTrackingTrack;
 extern StructRNA RNA_MulticamSequence;
+extern StructRNA RNA_MultiplyGpencilModifier;
 extern StructRNA RNA_MultiresModifier;
 extern StructRNA RNA_MusgraveTexture;
 extern StructRNA RNA_NandController;
@@ -568,6 +573,7 @@ extern StructRNA RNA_ShaderNodeMath;
 extern StructRNA RNA_ShaderNodeMixRGB;
 extern StructRNA RNA_ShaderNodeNormal;
 extern StructRNA RNA_ShaderNodeOutput;
+extern StructRNA RNA_ShaderNodeOutputAOV;
 extern StructRNA RNA_ShaderNodeRGB;
 extern StructRNA RNA_ShaderNodeRGBCurve;
 extern StructRNA RNA_ShaderNodeRGBToBW;
@@ -589,10 +595,10 @@ extern StructRNA RNA_ShrinkwrapModifier;
 extern StructRNA RNA_SimpleDeformModifier;
 extern StructRNA RNA_SimplifyGpencilModifier;
 extern StructRNA RNA_SkinModifier;
-extern StructRNA RNA_SmokeCollSettings;
-extern StructRNA RNA_SmokeDomainSettings;
-extern StructRNA RNA_SmokeFlowSettings;
-extern StructRNA RNA_SmokeModifier;
+extern StructRNA RNA_FluidEffectorSettings;
+extern StructRNA RNA_FluidDomainSettings;
+extern StructRNA RNA_FluidFlowSettings;
+extern StructRNA RNA_FluidModifier;
 extern StructRNA RNA_SmoothGpencilModifier;
 extern StructRNA RNA_SmoothModifier;
 extern StructRNA RNA_SoftBodyModifier;
@@ -734,6 +740,7 @@ extern StructRNA RNA_Window;
 extern StructRNA RNA_WindowManager;
 extern StructRNA RNA_WipeSequence;
 extern StructRNA RNA_WireframeModifier;
+extern StructRNA RNA_WeldModifier;
 extern StructRNA RNA_WoodTexture;
 extern StructRNA RNA_WorkSpace;
 extern StructRNA RNA_World;
@@ -1151,24 +1158,39 @@ struct PropertyElemRNA {
 };
 bool RNA_path_resolve_elements(PointerRNA *ptr, const char *path, struct ListBase *r_elements);
 
+char *RNA_path_from_struct_to_idproperty(PointerRNA *ptr, struct IDProperty *needle);
+
+struct ID *RNA_find_real_ID_and_path(struct Main *bmain, struct ID *id, const char **r_path);
+
 char *RNA_path_from_ID_to_struct(PointerRNA *ptr);
+
+char *RNA_path_from_real_ID_to_struct(struct Main *bmain, PointerRNA *ptr, struct ID **r_real);
+
 char *RNA_path_from_ID_to_property(PointerRNA *ptr, PropertyRNA *prop);
 char *RNA_path_from_ID_to_property_index(PointerRNA *ptr,
                                          PropertyRNA *prop,
                                          int array_dim,
                                          int index);
 
+char *RNA_path_from_real_ID_to_property_index(struct Main *bmain,
+                                              PointerRNA *ptr,
+                                              PropertyRNA *prop,
+                                              int array_dim,
+                                              int index,
+                                              struct ID **r_real_id);
+
 char *RNA_path_resolve_from_type_to_property(struct PointerRNA *ptr,
                                              struct PropertyRNA *prop,
                                              const struct StructRNA *type);
 
-char *RNA_path_full_ID_py(struct ID *id);
-char *RNA_path_full_struct_py(struct PointerRNA *ptr);
-char *RNA_path_full_property_py_ex(PointerRNA *ptr,
-                                   PropertyRNA *prop,
-                                   int index,
-                                   bool use_fallback);
-char *RNA_path_full_property_py(struct PointerRNA *ptr, struct PropertyRNA *prop, int index);
+char *RNA_path_full_ID_py(struct Main *bmain, struct ID *id);
+char *RNA_path_full_struct_py(struct Main *bmain, struct PointerRNA *ptr);
+char *RNA_path_full_property_py_ex(
+    struct Main *bmain, PointerRNA *ptr, PropertyRNA *prop, int index, bool use_fallback);
+char *RNA_path_full_property_py(struct Main *bmain,
+                                struct PointerRNA *ptr,
+                                struct PropertyRNA *prop,
+                                int index);
 char *RNA_path_struct_property_py(struct PointerRNA *ptr, struct PropertyRNA *prop, int index);
 char *RNA_path_property_py(struct PointerRNA *ptr, struct PropertyRNA *prop, int index);
 
@@ -1411,8 +1433,8 @@ StructRNA *ID_code_to_RNA_type(short idcode);
 #define RNA_POINTER_INVALIDATE(ptr) \
   { \
     /* this is checked for validity */ \
-    (ptr)->type = /* should not be needed but prevent bad pointer access, just in case */ \
-        (ptr)->id.data = NULL; \
+    (ptr)->type = NULL; /* should not be needed but prevent bad pointer access, just in case */ \
+    (ptr)->owner_id = NULL; \
   } \
   (void)0
 
@@ -1504,8 +1526,8 @@ bool RNA_struct_override_store(struct Main *bmain,
                                struct IDOverrideLibrary *override);
 
 void RNA_struct_override_apply(struct Main *bmain,
-                               struct PointerRNA *ptr_local,
-                               struct PointerRNA *ptr_override,
+                               struct PointerRNA *ptr_dst,
+                               struct PointerRNA *ptr_src,
                                struct PointerRNA *ptr_storage,
                                struct IDOverrideLibrary *override);
 

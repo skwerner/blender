@@ -23,31 +23,27 @@
 #ifndef __DRW_ENGINE_H__
 #define __DRW_ENGINE_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "BLI_sys_types.h" /* for bool */
 
 struct ARegion;
-struct Base;
 struct DRWInstanceDataList;
-struct DRWPass;
 struct Depsgraph;
 struct DrawEngineType;
 struct GPUMaterial;
 struct GPUOffScreen;
 struct GPUViewport;
 struct ID;
-struct IDProperty;
 struct Main;
-struct Material;
 struct Object;
-struct RegionView3D;
 struct RenderEngine;
 struct RenderEngineType;
 struct Scene;
 struct View3D;
-struct ViewContext;
 struct ViewLayer;
-struct ViewportEngineData;
-struct WorkSpace;
 struct bContext;
 struct rcti;
 
@@ -56,6 +52,7 @@ struct rcti;
 /* Buffer and textures used by the viewport by default */
 typedef struct DefaultFramebufferList {
   struct GPUFrameBuffer *default_fb;
+  struct GPUFrameBuffer *in_front_fb;
   struct GPUFrameBuffer *color_only_fb;
   struct GPUFrameBuffer *depth_only_fb;
   struct GPUFrameBuffer *multisample_fb;
@@ -64,6 +61,7 @@ typedef struct DefaultFramebufferList {
 typedef struct DefaultTextureList {
   struct GPUTexture *color;
   struct GPUTexture *depth;
+  struct GPUTexture *depth_in_front;
   struct GPUTexture *multisample_color;
   struct GPUTexture *multisample_depth;
 } DefaultTextureList;
@@ -136,6 +134,7 @@ void DRW_draw_depth_loop_gpencil(struct Depsgraph *depsgraph,
                                  struct View3D *v3d,
                                  struct GPUViewport *viewport);
 void DRW_draw_depth_object(struct ARegion *ar,
+                           struct View3D *v3d,
                            struct GPUViewport *viewport,
                            struct Object *object);
 void DRW_draw_select_id(struct Depsgraph *depsgraph,
@@ -166,12 +165,16 @@ void DRW_opengl_context_disable_ex(bool restore);
 
 void DRW_opengl_render_context_enable(void *re_gl_context);
 void DRW_opengl_render_context_disable(void *re_gl_context);
-void DRW_gawain_render_context_enable(void *re_gpu_context);
-void DRW_gawain_render_context_disable(void *re_gpu_context);
+void DRW_gpu_render_context_enable(void *re_gpu_context);
+void DRW_gpu_render_context_disable(void *re_gpu_context);
 
 void DRW_deferred_shader_remove(struct GPUMaterial *mat);
 
 struct DrawDataList *DRW_drawdatalist_from_id(struct ID *id);
 void DRW_drawdata_free(struct ID *id);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __DRW_ENGINE_H__ */

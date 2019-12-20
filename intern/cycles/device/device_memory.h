@@ -216,6 +216,8 @@ class device_memory {
   device_ptr device_pointer;
   void *host_pointer;
   void *shared_pointer;
+  /* reference counter for shared_pointer */
+  int shared_counter;
 
   virtual ~device_memory();
 
@@ -224,13 +226,14 @@ class device_memory {
 
  protected:
   friend class CUDADevice;
+  friend class OptiXDevice;
 
   /* Only create through subclasses. */
   device_memory(Device *device, const char *name, MemoryType type);
 
   /* No copying allowed. */
-  device_memory(const device_memory &);
-  device_memory &operator=(const device_memory &);
+  device_memory(const device_memory &) = delete;
+  device_memory &operator=(const device_memory &) = delete;
 
   /* Host allocation on the device. All host_pointer memory should be
    * allocated with these functions, for devices that support using

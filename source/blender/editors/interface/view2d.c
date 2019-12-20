@@ -61,7 +61,9 @@
 
 static void ui_view2d_curRect_validate_resize(View2D *v2d, bool resize, bool mask_scrollers);
 
-/* *********************************************************************** */
+/* -------------------------------------------------------------------- */
+/** \name Internal Utilities
+ * \{ */
 
 BLI_INLINE int clamp_float_to_int(const float f)
 {
@@ -93,6 +95,12 @@ BLI_INLINE void clamp_rctf_to_rcti(rcti *dst, const rctf *src)
 
 /* XXX still unresolved: scrolls hide/unhide vs region mask handling */
 /* XXX there's V2D_SCROLL_HORIZONTAL_HIDE and V2D_SCROLL_HORIZONTAL_FULLR ... */
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Internal Scroll & Mask Utilities
+ * \{ */
 
 /**
  * helper to allow scrollbars to dynamically hide
@@ -166,12 +174,9 @@ static void view2d_masks(View2D *v2d, bool check_scrollers, const rcti *mask_scr
    * - if they overlap, they must not occupy the corners (which are reserved for other widgets)
    */
   if (scroll) {
-    const int scroll_width = (v2d->scroll & V2D_SCROLL_VERTICAL_HANDLES) ?
-                                 V2D_SCROLL_HANDLE_WIDTH :
-                                 V2D_SCROLL_WIDTH;
-    const int scroll_height = (v2d->scroll & V2D_SCROLL_HORIZONTAL_HANDLES) ?
-                                  V2D_SCROLL_HANDLE_HEIGHT :
-                                  V2D_SCROLL_HEIGHT;
+    float scroll_width, scroll_height;
+
+    UI_view2d_scroller_size_get(v2d, &scroll_width, &scroll_height);
 
     /* vertical scroller */
     if (scroll & V2D_SCROLL_LEFT) {
@@ -219,7 +224,11 @@ static void view2d_masks(View2D *v2d, bool check_scrollers, const rcti *mask_scr
   }
 }
 
-/* Refresh and Validation */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View2D Refresh and Validation (Spatial)
+ * \{ */
 
 /**
  * Initialize all relevant View2D data (including view rects if first time)
@@ -1123,8 +1132,11 @@ void UI_view2d_zoom_cache_reset(void)
   BLF_cache_clear();
 }
 
-/* *********************************************************************** */
-/* View Matrix Setup */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View2D Matrix Setup
+ * \{ */
 
 /* mapping function to ensure 'cur' draws extended over the area where sliders are */
 static void view2d_map_cur_using_mask(const View2D *v2d, rctf *r_curmasked)
@@ -1245,8 +1257,11 @@ void UI_view2d_view_restore(const bContext *C)
   //  ED_region_pixelspace(CTX_wm_region(C));
 }
 
-/* *********************************************************************** */
-/* Gridlines */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Grid-Line Drawing
+ * \{ */
 
 /* Draw a constant grid in given 2d-region */
 void UI_view2d_constant_grid_draw(View2D *v2d, float step)
@@ -1347,7 +1362,7 @@ void UI_view2d_multi_grid_draw(View2D *v2d, int colorid, float step, int level_s
   immBindBuiltinProgram(GPU_SHADER_2D_FLAT_COLOR);
   immBeginAtMost(GPU_PRIM_LINES, vertex_count);
 
-  for (int level = 0; level < totlevels; ++level) {
+  for (int level = 0; level < totlevels; level++) {
     UI_GetThemeColorShade3ubv(colorid, offset, grid_line_color);
 
     int i = (int)(v2d->cur.xmin / lstep);
@@ -1356,7 +1371,7 @@ void UI_view2d_multi_grid_draw(View2D *v2d, int colorid, float step, int level_s
     }
     float start = i * lstep;
 
-    for (; start < v2d->cur.xmax; start += lstep, ++i) {
+    for (; start < v2d->cur.xmax; start += lstep, i++) {
       if (i == 0 || (level < totlevels - 1 && i % level_size == 0)) {
         continue;
       }
@@ -1373,7 +1388,7 @@ void UI_view2d_multi_grid_draw(View2D *v2d, int colorid, float step, int level_s
     }
     start = i * lstep;
 
-    for (; start < v2d->cur.ymax; start += lstep, ++i) {
+    for (; start < v2d->cur.ymax; start += lstep, i++) {
       if (i == 0 || (level < totlevels - 1 && i % level_size == 0)) {
         continue;
       }
@@ -1405,8 +1420,11 @@ void UI_view2d_multi_grid_draw(View2D *v2d, int colorid, float step, int level_s
   immUnbindProgram();
 }
 
-/* *********************************************************************** */
-/* Scrollers */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Scrollers
+ * \{ */
 
 /**
  * View2DScrollers is typedef'd in UI_view2d.h
@@ -1648,8 +1666,11 @@ void UI_view2d_scrollers_free(View2DScrollers *scrollers)
   MEM_freeN(scrollers);
 }
 
-/* *********************************************************************** */
-/* List View Utilities */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name List View Utilities
+ * \{ */
 
 /**
  * Get the 'cell' (row, column) that the given 2D-view coordinates
@@ -1693,8 +1714,11 @@ void UI_view2d_listview_view_to_cell(float columnwidth,
   }
 }
 
-/* *********************************************************************** */
-/* Coordinate Conversions */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Coordinate Conversions
+ * \{ */
 
 float UI_view2d_region_to_view_x(const struct View2D *v2d, float x)
 {
@@ -1872,8 +1896,11 @@ bool UI_view2d_view_to_region_rcti_clip(View2D *v2d, const rctf *rect_src, rcti 
   }
 }
 
-/* *********************************************************************** */
-/* Utilities */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Utilities
+ * \{ */
 
 /* View2D data by default resides in region, so get from region stored in context */
 View2D *UI_view2d_fromcontext(const bContext *C)
@@ -1907,6 +1934,31 @@ View2D *UI_view2d_fromcontext_rwin(const bContext *C)
     return ar ? &(ar->v2d) : NULL;
   }
   return &(region->v2d);
+}
+
+/* Get scrollbar sizes of the current 2D view. The size will be zero if the view has its scrollbars
+ * disabled. */
+void UI_view2d_scroller_size_get(const View2D *v2d, float *r_x, float *r_y)
+{
+  int scroll = view2d_scroll_mapped(v2d->scroll);
+
+  if (r_x) {
+    if (scroll & V2D_SCROLL_VERTICAL) {
+      *r_x = (scroll & V2D_SCROLL_VERTICAL_HANDLES) ? V2D_SCROLL_HANDLE_WIDTH : V2D_SCROLL_WIDTH;
+    }
+    else {
+      *r_x = 0;
+    }
+  }
+  if (r_y) {
+    if (scroll & V2D_SCROLL_HORIZONTAL) {
+      *r_y = (scroll & V2D_SCROLL_HORIZONTAL_HANDLES) ? V2D_SCROLL_HANDLE_HEIGHT :
+                                                        V2D_SCROLL_HEIGHT;
+    }
+    else {
+      *r_y = 0;
+    }
+  }
 }
 
 /**
@@ -2075,7 +2127,11 @@ char UI_view2d_rect_in_scrollers(const ARegion *ar, const View2D *v2d, const rct
   return UI_view2d_rect_in_scrollers_ex(ar, v2d, rect, &scroll_dummy);
 }
 
-/* ******************* view2d text drawing cache ******************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View2D Text Drawing Cache
+ * \{ */
 
 typedef struct View2DString {
   struct View2DString *next;
@@ -2205,4 +2261,4 @@ void UI_view2d_text_cache_draw(ARegion *ar)
   }
 }
 
-/* ******************************************************** */
+/** \} */

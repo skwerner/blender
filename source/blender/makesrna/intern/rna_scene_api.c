@@ -80,7 +80,7 @@ static void rna_Scene_frame_set(Scene *scene, Main *bmain, int frame, float subf
 
   for (ViewLayer *view_layer = scene->view_layers.first; view_layer != NULL;
        view_layer = view_layer->next) {
-    Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
+    Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
     BKE_scene_graph_update_for_newframe(depsgraph, bmain);
   }
 
@@ -88,7 +88,11 @@ static void rna_Scene_frame_set(Scene *scene, Main *bmain, int frame, float subf
   BPy_END_ALLOW_THREADS;
 #  endif
 
-  BKE_scene_camera_switch_update(scene);
+  if (BKE_scene_camera_switch_update(scene)) {
+    for (bScreen *sc = bmain->screens.first; sc; sc = sc->id.next) {
+      BKE_screen_view3d_scene_sync(sc, scene);
+    }
+  }
 
   /* don't do notifier when we're rendering, avoid some viewport crashes
    * redrawing while the data is being modified for render */
@@ -156,7 +160,7 @@ static void rna_Scene_ray_cast(Scene *scene,
 {
   normalize_v3(direction);
 
-  Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
+  Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
   SnapObjectContext *sctx = ED_transform_snap_object_context_create(bmain, scene, depsgraph, 0);
 
   bool ret = ED_transform_snap_object_project_ray_ex(sctx,
@@ -212,7 +216,7 @@ static void rna_Scene_alembic_export(Scene *scene,
                                      bool vcolors,
                                      bool apply_subdiv,
                                      bool flatten_hierarchy,
-                                     bool visible_layers_only,
+                                     bool visible_objects_only,
                                      bool renderable_only,
                                      bool face_sets,
                                      bool use_subdiv_schema,
@@ -247,7 +251,7 @@ static void rna_Scene_alembic_export(Scene *scene,
       .vcolors = vcolors,
       .apply_subdiv = apply_subdiv,
       .flatten_hierarchy = flatten_hierarchy,
-      .visible_layers_only = visible_layers_only,
+      .visible_objects_only = visible_objects_only,
       .renderable_only = renderable_only,
       .face_sets = face_sets,
       .use_subdiv_schema = use_subdiv_schema,
@@ -387,7 +391,7 @@ void RNA_api_scene(StructRNA *srna)
       func, "apply_subdiv", 1, "Subsurfs as meshes", "Export subdivision surfaces as meshes");
   RNA_def_boolean(func, "flatten", 0, "Flatten hierarchy", "Flatten hierarchy");
   RNA_def_boolean(func,
-                  "visible_layers_only",
+                  "visible_objects_only",
                   0,
                   "Visible layers only",
                   "Export only objects in visible layers");

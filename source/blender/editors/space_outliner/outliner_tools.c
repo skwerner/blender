@@ -63,6 +63,7 @@
 
 #include "ED_armature.h"
 #include "ED_object.h"
+#include "ED_outliner.h"
 #include "ED_scene.h"
 #include "ED_screen.h"
 #include "ED_sequencer.h"
@@ -298,7 +299,7 @@ static void unlink_collection_cb(bContext *C,
     }
     else if (GS(tsep->id->name) == ID_SCE) {
       Scene *scene = (Scene *)tsep->id;
-      Collection *parent = BKE_collection_master(scene);
+      Collection *parent = scene->master_collection;
       id_fake_user_set(&collection->id);
       BKE_collection_child_remove(bmain, parent, collection);
       DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
@@ -337,7 +338,7 @@ static void unlink_object_cb(bContext *C,
       }
       else if (GS(tsep->id->name) == ID_SCE) {
         Scene *scene = (Scene *)tsep->id;
-        Collection *parent = BKE_collection_master(scene);
+        Collection *parent = scene->master_collection;
         BKE_collection_object_remove(bmain, parent, ob, true);
         DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
         DEG_relations_tag_update(bmain);
@@ -478,6 +479,130 @@ void OUTLINER_OT_scene_operation(wmOperatorType *ot)
 }
 /* ******************************************** */
 
+/**
+ * Stores the parent and a child element of a merged icon-row icon for
+ * the merged select popup menu. The sub-tree of the parent is searched and
+ * the child is needed to only show elements of the same type in the popup.
+ */
+typedef struct MergedSearchData {
+  TreeElement *parent_element;
+  TreeElement *select_element;
+} MergedSearchData;
+
+static void merged_element_search_cb_recursive(
+    const ListBase *tree, short tselem_type, short type, const char *str, uiSearchItems *items)
+{
+  char name[64];
+  int iconid;
+
+  for (TreeElement *te = tree->first; te; te = te->next) {
+    TreeStoreElem *tselem = TREESTORE(te);
+
+    if (tree_element_id_type_to_index(te) == type && tselem_type == tselem->type) {
+      if (BLI_strcasestr(te->name, str)) {
+        BLI_strncpy(name, te->name, 64);
+
+        iconid = tree_element_get_icon(tselem, te).icon;
+
+        /* Don't allow duplicate named items */
+        if (UI_search_items_find_index(items, name) == -1) {
+          if (!UI_search_item_add(items, name, te, iconid)) {
+            break;
+          }
+        }
+      }
+    }
+
+    merged_element_search_cb_recursive(&te->subtree, tselem_type, type, str, items);
+  }
+}
+
+/* Get a list of elements that match the search string */
+static void merged_element_search_cb(const bContext *UNUSED(C),
+                                     void *data,
+                                     const char *str,
+                                     uiSearchItems *items)
+{
+  MergedSearchData *search_data = (MergedSearchData *)data;
+  TreeElement *parent = search_data->parent_element;
+  TreeElement *te = search_data->select_element;
+
+  int type = tree_element_id_type_to_index(te);
+
+  merged_element_search_cb_recursive(&parent->subtree, TREESTORE(te)->type, type, str, items);
+}
+
+/* Activate an element from the merged element search menu */
+static void merged_element_search_call_cb(struct bContext *C, void *UNUSED(arg1), void *element)
+{
+  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+  TreeElement *te = (TreeElement *)element;
+
+  outliner_item_select(soops, te, false, false);
+  outliner_item_do_activate_from_tree_element(C, te, te->store_elem, false, false);
+
+  if (soops->flag & SO_SYNC_SELECT) {
+    ED_outliner_select_sync_from_outliner(C, soops);
+  }
+}
+
+/**
+ * Merged element search menu
+ * Created on activation of a merged or aggregated icon-row icon.
+ */
+static uiBlock *merged_element_search_menu(bContext *C, ARegion *ar, void *data)
+{
+  static char search[64] = "";
+  uiBlock *block;
+  uiBut *but;
+
+  /* Clear search on each menu creation */
+  *search = '\0';
+
+  block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_MOVEMOUSE_QUIT | UI_BLOCK_SEARCH_MENU);
+  UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
+
+  short menu_width = 10 * UI_UNIT_X;
+  but = uiDefSearchBut(
+      block, search, 0, ICON_VIEWZOOM, sizeof(search), 10, 10, menu_width, UI_UNIT_Y, 0, 0, "");
+  UI_but_func_search_set(
+      but, NULL, merged_element_search_cb, data, false, merged_element_search_call_cb, NULL);
+  UI_but_flag_enable(but, UI_BUT_ACTIVATE_ON_INIT);
+
+  /* Fake button to hold space for search items */
+  uiDefBut(block,
+           UI_BTYPE_LABEL,
+           0,
+           "",
+           10,
+           10 - UI_searchbox_size_y(),
+           menu_width,
+           UI_searchbox_size_y(),
+           NULL,
+           0,
+           0,
+           0,
+           0,
+           NULL);
+
+  /* Center the menu on the cursor */
+  UI_block_bounds_set_popup(block, 6, (const int[2]){-(menu_width / 2), 0});
+
+  return block;
+}
+
+void merged_element_search_menu_invoke(bContext *C,
+                                       TreeElement *parent_te,
+                                       TreeElement *activate_te)
+{
+  MergedSearchData *select_data = MEM_callocN(sizeof(MergedSearchData), "merge_search_data");
+  select_data->parent_element = parent_te;
+  select_data->select_element = activate_te;
+
+  UI_popup_block_invoke(C, merged_element_search_menu, select_data, MEM_freeN);
+}
+
 static void object_select_cb(bContext *C,
                              ReportList *UNUSED(reports),
                              Scene *UNUSED(scene),
@@ -556,12 +681,7 @@ static void object_delete_cb(bContext *C,
     if (ob == CTX_data_edit_object(C)) {
       ED_object_editmode_exit(C, EM_FREEDATA);
     }
-    ED_object_base_free_and_unlink(CTX_data_main(C), scene, ob);
-    /* leave for ED_outliner_id_unref to handle */
-#if 0
-    te->directdata = NULL;
-    tselem->id = NULL;
-#endif
+    BKE_id_delete(bmain, ob);
   }
 }
 
@@ -594,12 +714,15 @@ static void id_override_library_cb(bContext *C,
                                    TreeStoreElem *tselem,
                                    void *UNUSED(user_data))
 {
-  if (ID_IS_LINKED(tselem->id) && (tselem->id->tag & LIB_TAG_EXTERN)) {
+  if (ID_IS_OVERRIDABLE_LIBRARY(tselem->id)) {
     Main *bmain = CTX_data_main(C);
-    ID *override_id = BKE_override_library_create_from_id(bmain, tselem->id);
+    /* For now, remapp all local usages of linked ID to local override one here. */
+    BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, true);
+    ID *override_id = BKE_override_library_create_from_id(bmain, tselem->id, true);
     if (override_id != NULL) {
       BKE_main_id_clear_newpoins(bmain);
     }
+    BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
   }
 }
 
@@ -654,7 +777,7 @@ static void singleuser_action_cb(bContext *C,
 
   if (id) {
     IdAdtTemplate *iat = (IdAdtTemplate *)tsep->id;
-    PointerRNA ptr = {{NULL}};
+    PointerRNA ptr = {NULL};
     PropertyRNA *prop;
 
     RNA_pointer_create(&iat->id, &RNA_AnimData, iat->adt, &ptr);
@@ -677,7 +800,7 @@ static void singleuser_world_cb(bContext *C,
   /* need to use parent scene not just scene, otherwise may end up getting wrong one */
   if (id) {
     Scene *parscene = (Scene *)tsep->id;
-    PointerRNA ptr = {{NULL}};
+    PointerRNA ptr = {NULL};
     PropertyRNA *prop;
 
     RNA_id_pointer_create(&parscene->id, &ptr);
@@ -1080,11 +1203,6 @@ static void object_delete_hierarchy_cb(bContext *C,
     }
 
     outline_delete_hierarchy(C, reports, scene, base);
-    /* leave for ED_outliner_id_unref to handle */
-#if 0
-    te->directdata = NULL;
-    tselem->id = NULL;
-#endif
   }
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
@@ -1168,11 +1286,6 @@ static void object_batch_delete_hierarchy_cb(bContext *C,
     }
 
     outline_batch_delete_hierarchy(reports, CTX_data_main(C), view_layer, scene, base);
-    /* leave for ED_outliner_id_unref to handle */
-#if 0
-    te->directdata = NULL;
-    tselem->id = NULL;
-#endif
   }
 }
 
@@ -1416,21 +1529,41 @@ static const EnumPropertyItem prop_id_op_types[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-static const EnumPropertyItem *outliner_id_operation_itemf(bContext *UNUSED(C),
-                                                           PointerRNA *UNUSED(ptr),
-                                                           PropertyRNA *UNUSED(prop),
-                                                           bool *r_free)
+static bool outliner_id_operation_item_poll(bContext *C,
+                                            PointerRNA *UNUSED(ptr),
+                                            PropertyRNA *UNUSED(prop),
+                                            const int enum_value)
 {
-  if (BKE_override_library_is_enabled()) {
-    *r_free = false;
-    return prop_id_op_types;
+  SpaceOutliner *soops = CTX_wm_space_outliner(C);
+
+  switch (enum_value) {
+    case OUTLINER_IDOP_OVERRIDE_LIBRARY:
+      return BKE_override_library_is_enabled();
+    case OUTLINER_IDOP_SINGLE:
+      if (!soops || ELEM(soops->outlinevis, SO_SCENES, SO_VIEW_LAYER)) {
+        return true;
+      }
+      /* TODO (dalai): enable in the few cases where this can be supported
+      (i.e., when we have a valid parent for the tselem). */
+      return false;
   }
 
+  return true;
+}
+
+static const EnumPropertyItem *outliner_id_operation_itemf(bContext *C,
+                                                           PointerRNA *ptr,
+                                                           PropertyRNA *prop,
+                                                           bool *r_free)
+{
   EnumPropertyItem *items = NULL;
   int totitem = 0;
 
+  if (C == NULL) {
+    return prop_id_op_types;
+  }
   for (const EnumPropertyItem *it = prop_id_op_types; it->identifier != NULL; it++) {
-    if (it->value == OUTLINER_IDOP_OVERRIDE_LIBRARY) {
+    if (!outliner_id_operation_item_poll(C, ptr, prop, it->value)) {
       continue;
     }
     RNA_enum_item_add(&items, &totitem, it);

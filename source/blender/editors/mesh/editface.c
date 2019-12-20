@@ -36,8 +36,6 @@
 #include "BKE_global.h"
 #include "BKE_mesh.h"
 
-#include "BIF_gl.h"
-
 #include "ED_mesh.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
@@ -45,8 +43,6 @@
 
 #include "WM_api.h"
 #include "WM_types.h"
-
-#include "GPU_draw.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"

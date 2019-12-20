@@ -52,6 +52,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_effect.h"
 #include "BKE_global.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_key.h"
 #include "BKE_lattice.h"
 #include "BKE_library.h"
@@ -109,6 +110,9 @@ static void object_force_modifier_update_for_bind(Depsgraph *depsgraph, Object *
   }
   else if (ELEM(ob->type, OB_CURVE, OB_SURF, OB_FONT)) {
     BKE_displist_make_curveTypes(depsgraph, scene_eval, ob_eval, false, false);
+  }
+  else if (ob->type == OB_GPENCIL) {
+    BKE_gpencil_modifiers_calc(depsgraph, scene_eval, ob_eval);
   }
 }
 
@@ -673,7 +677,7 @@ static int modifier_apply_obdata(
 
     /* Multires: ensure that recent sculpting is applied */
     if (md_eval->type == eModifierType_Multires) {
-      multires_force_update(ob);
+      multires_force_sculpt_rebuild(ob);
     }
 
     if (mmd && mmd->totlvl && mti->type == eModifierTypeType_OnlyDeform) {
@@ -714,9 +718,9 @@ static int modifier_apply_obdata(
                RPT_INFO,
                "Applied modifier only changed CV points, not tessellated/bevel vertices");
 
-    vertexCos = BKE_curve_nurbs_vertexCos_get(&curve_eval->nurb, &numVerts);
+    vertexCos = BKE_curve_nurbs_vert_coords_alloc(&curve_eval->nurb, &numVerts);
     mti->deformVerts(md_eval, &mectx, NULL, vertexCos, numVerts);
-    BK_curve_nurbs_vertexCos_apply(&curve->nurb, vertexCos);
+    BKE_curve_nurbs_vert_coords_apply(&curve->nurb, vertexCos, false);
 
     MEM_freeN(vertexCos);
 
@@ -918,7 +922,8 @@ bool edit_modifier_poll_generic(bContext *C,
                                 const bool is_editmode_allowed)
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "modifier", rna_type);
-  Object *ob = (ptr.id.data) ? ptr.id.data : ED_object_active_context(C);
+  Object *ob = (ptr.owner_id) ? (Object *)ptr.owner_id : ED_object_active_context(C);
+  ModifierData *mod = ptr.data; /* May be NULL. */
 
   if (!ob || ID_IS_LINKED(ob)) {
     return 0;
@@ -926,13 +931,15 @@ bool edit_modifier_poll_generic(bContext *C,
   if (obtype_flag && ((1 << ob->type) & obtype_flag) == 0) {
     return 0;
   }
-  if (ptr.id.data && ID_IS_LINKED(ptr.id.data)) {
+  if (ptr.owner_id && ID_IS_LINKED(ptr.owner_id)) {
     return 0;
   }
 
   if (ID_IS_OVERRIDE_LIBRARY(ob)) {
-    CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers coming from library override");
-    return (((ModifierData *)ptr.data)->flag & eModifierFlag_OverrideLibrary_Local) != 0;
+    if ((mod != NULL) && (mod->flag & eModifierFlag_OverrideLibrary_Local) == 0) {
+      CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers coming from library override");
+      return 0;
+    }
   }
 
   if (!is_editmode_allowed && CTX_data_edit_object(C) != NULL) {
@@ -2018,7 +2025,7 @@ static int correctivesmooth_bind_exec(bContext *C, wmOperator *op)
   is_bind = (csmd->bind_coords != NULL);
 
   MEM_SAFE_FREE(csmd->bind_coords);
-  MEM_SAFE_FREE(csmd->delta_cache);
+  MEM_SAFE_FREE(csmd->delta_cache.deltas);
 
   if (is_bind) {
     /* toggle off */

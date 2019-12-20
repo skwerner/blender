@@ -77,7 +77,9 @@
 
 #include "object_intern.h"
 
-/*************************** Clear Transformation ****************************/
+/* -------------------------------------------------------------------- */
+/** \name Clear Transformation Utilities
+ * \{ */
 
 /* clear location of object */
 static void object_clear_loc(Object *ob, const bool clear_delta)
@@ -284,8 +286,6 @@ static void object_clear_scale(Object *ob, const bool clear_delta)
   }
 }
 
-/* --------------- */
-
 /* generic exec for clear-transform operators */
 static int object_clear_transform_generic_exec(bContext *C,
                                                wmOperator *op,
@@ -329,7 +329,11 @@ static int object_clear_transform_generic_exec(bContext *C,
   return OPERATOR_FINISHED;
 }
 
-/* --------------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Location Operator
+ * \{ */
 
 static int object_location_clear_exec(bContext *C, wmOperator *op)
 {
@@ -359,6 +363,12 @@ void OBJECT_OT_location_clear(wmOperatorType *ot)
       "Clear delta location in addition to clearing the normal location transform");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Rotation Operator
+ * \{ */
+
 static int object_rotation_clear_exec(bContext *C, wmOperator *op)
 {
   return object_clear_transform_generic_exec(C, op, object_clear_rot, ANIM_KS_ROTATION_ID);
@@ -386,6 +396,12 @@ void OBJECT_OT_rotation_clear(wmOperatorType *ot)
       "Clear Delta",
       "Clear delta rotation in addition to clearing the normal rotation transform");
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Scale Operator
+ * \{ */
 
 static int object_scale_clear_exec(bContext *C, wmOperator *op)
 {
@@ -415,7 +431,11 @@ void OBJECT_OT_scale_clear(wmOperatorType *ot)
       "Clear delta scale in addition to clearing the normal scale transform");
 }
 
-/* --------------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Origin Operator
+ * \{ */
 
 static int object_origin_clear_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -457,7 +477,11 @@ void OBJECT_OT_origin_clear(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/*************************** Apply Transformation ****************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Apply Transformation Operator
+ * \{ */
 
 /* use this when the loc/size/rot of the parent has changed but the children
  * should stay in the same place, e.g. for apply-size-rot or object center */
@@ -687,7 +711,7 @@ static int apply_objects_internal(bContext *C,
     return OPERATOR_CANCELLED;
   }
 
-  for (int object_index = 0; object_index < num_objects; ++object_index) {
+  for (int object_index = 0; object_index < num_objects; object_index++) {
     Object *ob = objects[object_index];
 
     /* calculate rotation/scale matrix */
@@ -744,7 +768,8 @@ static int apply_objects_internal(bContext *C,
       BKE_mesh_calc_normals(me);
     }
     else if (ob->type == OB_ARMATURE) {
-      ED_armature_transform_apply(bmain, ob, mat, do_props);
+      bArmature *arm = ob->data;
+      BKE_armature_transform(arm, mat, do_props);
     }
     else if (ob->type == OB_LATTICE) {
       Lattice *lt = ob->data;
@@ -960,7 +985,11 @@ void OBJECT_OT_transform_apply(wmOperatorType *ot)
                   "Modify properties such as curve vertex radius, font size and bone envelope");
 }
 
-/********************* Set Object Center ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Set Object Center Operator
+ * \{ */
 
 enum {
   GEOMETRY_TO_ORIGIN = 0,
@@ -1057,7 +1086,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
   }
 
   /* reset flags */
-  for (int object_index = 0; object_index < num_objects; ++object_index) {
+  for (int object_index = 0; object_index < num_objects; object_index++) {
     Object *ob = objects[object_index];
     ob->flag &= ~OB_DONE;
 
@@ -1077,7 +1106,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
     }
   }
 
-  for (int object_index = 0; object_index < num_objects; ++object_index) {
+  for (int object_index = 0; object_index < num_objects; object_index++) {
     Object *ob = objects[object_index];
 
     if ((ob->flag & OB_DONE) == 0) {
@@ -1152,7 +1181,8 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
       else if (ELEM(ob->type, OB_CURVE, OB_SURF)) {
         Curve *cu = ob->data;
 
-        if (centermode == ORIGIN_TO_CURSOR) { /* done */
+        if (centermode == ORIGIN_TO_CURSOR) {
+          /* done */
         }
         else if (around == V3D_AROUND_CENTER_MEDIAN) {
           BKE_curve_center_median(cu, cent);
@@ -1244,7 +1274,8 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
       else if (ob->type == OB_MBALL) {
         MetaBall *mb = ob->data;
 
-        if (centermode == ORIGIN_TO_CURSOR) { /* done */
+        if (centermode == ORIGIN_TO_CURSOR) {
+          /* done */
         }
         else if (around == V3D_AROUND_CENTER_MEDIAN) {
           BKE_mball_center_median(mb, cent);
@@ -1270,7 +1301,8 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
       else if (ob->type == OB_LATTICE) {
         Lattice *lt = ob->data;
 
-        if (centermode == ORIGIN_TO_CURSOR) { /* done */
+        if (centermode == ORIGIN_TO_CURSOR) {
+          /* done */
         }
         else if (around == V3D_AROUND_CENTER_MEDIAN) {
           BKE_lattice_center_median(lt, cent);
@@ -1323,11 +1355,6 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
               invert_m4_m4(inverse_diff_mat, diff_mat);
               for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
                 for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
-                  /* skip strokes that are invalid for current view */
-                  if (ED_gpencil_stroke_can_use(C, gps) == false) {
-                    continue;
-                  }
-
                   for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
                     float mpt[3];
                     mul_v3_m4v3(mpt, inverse_diff_mat, &pt->x);
@@ -1384,7 +1411,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
         //{
 
         /* use existing context looper */
-        for (int other_object_index = 0; other_object_index < num_objects; ++other_object_index) {
+        for (int other_object_index = 0; other_object_index < num_objects; other_object_index++) {
           Object *ob_other = objects[other_object_index];
 
           if ((ob_other->flag & OB_DONE) == 0 &&
@@ -1509,6 +1536,8 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
   RNA_def_enum(ot->srna, "center", prop_set_bounds_types, V3D_AROUND_CENTER_MEDIAN, "Center", "");
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
 /** \name Transform Axis Target
  *
@@ -1521,8 +1550,10 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
 #define USE_RELATIVE_ROTATION
 /** Disable overlays, ignoring user setting (light wire gets in the way). */
 #define USE_RENDER_OVERRIDE
-/** Calculate a depth if the cursor isn't already over a depth
- * (not essential but feels buggy without). */
+/**
+ * Calculate a depth if the cursor isn't already over a depth
+ * (not essential but feels buggy without).
+ */
 #define USE_FAKE_DEPTH_INIT
 
 struct XFormAxisItem {
@@ -1650,7 +1681,7 @@ static void object_apply_location(Object *ob, const float loc[3])
 }
 
 static void object_orient_to_location(Object *ob,
-                                      float rot_orig[3][3],
+                                      const float rot_orig[3][3],
                                       const float axis[3],
                                       const float location[3])
 {
@@ -1686,8 +1717,9 @@ static void object_transform_axis_target_cancel(bContext *C, wmOperator *op)
 
 static int object_transform_axis_target_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   if (vc.obact == NULL || !object_is_target_compat(vc.obact)) {
     /* Falls back to texture space transform. */

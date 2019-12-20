@@ -117,7 +117,6 @@ struct ID;
 struct ImBuf;
 struct bContext;
 struct wmEvent;
-struct wmMsgBus;
 struct wmOperator;
 struct wmWindowManager;
 
@@ -738,6 +737,12 @@ typedef struct wmOperatorType {
    */
   const char *(*get_name)(struct wmOperatorType *, struct PointerRNA *);
 
+  /**
+   * Return a different description to use in the user interface, based on property values.
+   * The returned string must be freed by the caller, unless NULL.
+   */
+  char *(*get_description)(struct bContext *C, struct wmOperatorType *, struct PointerRNA *);
+
   /** rna for properties */
   struct StructRNA *srna;
 
@@ -769,6 +774,16 @@ typedef struct wmOperatorType {
   short flag;
 
 } wmOperatorType;
+
+/**
+ * Wrapper to reference a #wmOperatorType together with some set properties and other relevant
+ * information to invoke the operator in a customizable way.
+ */
+typedef struct wmOperatorCallParams {
+  struct wmOperatorType *optype;
+  struct PointerRNA *opptr;
+  short opcontext;
+} wmOperatorCallParams;
 
 #ifdef WITH_INPUT_IME
 /* *********** Input Method Editor (IME) *********** */
@@ -879,6 +894,8 @@ typedef struct wmDropBox {
 typedef struct wmTooltipState {
   /** Create tooltip on this event. */
   struct wmTimer *timer;
+  /** The area the tooltip is created in. */
+  struct ScrArea *area_from;
   /** The region the tooltip is created in. */
   struct ARegion *region_from;
   /** The tooltip region. */

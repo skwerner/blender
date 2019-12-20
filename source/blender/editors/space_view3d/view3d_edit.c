@@ -404,9 +404,7 @@ static void viewops_data_create(bContext *C,
   if (viewops_flag & VIEWOPS_FLAG_PERSP_ENSURE) {
     if (ED_view3d_persp_ensure(depsgraph, vod->v3d, vod->ar)) {
       /* If we're switching from camera view to the perspective one,
-       * need to tag viewport update, so camera vuew and borders
-       * are properly updated.
-       */
+       * need to tag viewport update, so camera view and borders are properly updated. */
       ED_region_tag_redraw(vod->ar);
     }
   }
@@ -994,8 +992,17 @@ void VIEW3D_OT_rotate(wmOperatorType *ot)
  * \{ */
 
 #ifdef WITH_INPUT_NDOF
-#  define NDOF_HAS_TRANSLATE ((!ED_view3d_offset_lock_check(v3d, rv3d)) && !is_zero_v3(ndof->tvec))
-#  define NDOF_HAS_ROTATE (((rv3d->viewlock & RV3D_LOCKED) == 0) && !is_zero_v3(ndof->rvec))
+static bool ndof_has_translate(const wmNDOFMotionData *ndof,
+                               const View3D *v3d,
+                               const RegionView3D *rv3d)
+{
+  return !is_zero_v3(ndof->tvec) && (!ED_view3d_offset_lock_check(v3d, rv3d));
+}
+
+static bool ndof_has_rotate(const wmNDOFMotionData *ndof, const RegionView3D *rv3d)
+{
+  return !is_zero_v3(ndof->rvec) && ((rv3d->viewlock & RV3D_LOCKED) == 0);
+}
 
 /**
  * \param depth_pt: A point to calculate the depth (in perspective mode)
@@ -1191,8 +1198,8 @@ void view3d_ndof_fly(const wmNDOFMotionData *ndof,
                      bool *r_has_translate,
                      bool *r_has_rotate)
 {
-  bool has_translate = NDOF_HAS_TRANSLATE;
-  bool has_rotate = NDOF_HAS_ROTATE;
+  bool has_translate = ndof_has_translate(ndof, v3d, rv3d);
+  bool has_rotate = ndof_has_rotate(ndof, rv3d);
 
   float view_inv[4];
   invert_qt_qt_normalized(view_inv, rv3d->viewquat);
@@ -1340,9 +1347,10 @@ static int ndof_orbit_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   ED_view3d_camera_lock_init_ex(depsgraph, v3d, rv3d, false);
 
   if (ndof->progress != P_FINISHING) {
-    const bool has_rotation = NDOF_HAS_ROTATE;
+    const bool has_rotation = ndof_has_rotate(ndof, rv3d);
     /* if we can't rotate, fallback to translate (locked axis views) */
-    const bool has_translate = NDOF_HAS_TRANSLATE && (rv3d->viewlock & RV3D_LOCKED);
+    const bool has_translate = ndof_has_translate(ndof, v3d, rv3d) &&
+                               (rv3d->viewlock & RV3D_LOCKED);
     const bool has_zoom = (ndof->tvec[2] != 0.0f) && !rv3d->is_persp;
 
     if (has_translate || has_zoom) {
@@ -1425,7 +1433,7 @@ static int ndof_orbit_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   }
   else if ((rv3d->persp == RV3D_ORTHO) && RV3D_VIEW_IS_AXIS(rv3d->view)) {
     /* if we can't rotate, fallback to translate (locked axis views) */
-    const bool has_translate = NDOF_HAS_TRANSLATE;
+    const bool has_translate = ndof_has_translate(ndof, v3d, rv3d);
     const bool has_zoom = (ndof->tvec[2] != 0.0f) && ED_view3d_offset_lock_check(v3d, rv3d);
 
     if (has_translate || has_zoom) {
@@ -1433,41 +1441,33 @@ static int ndof_orbit_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *ev
       xform_flag |= HAS_TRANSLATE;
     }
   }
-  else if ((U.ndof_flag & NDOF_MODE_ORBIT) || ED_view3d_offset_lock_check(v3d, rv3d)) {
-    const bool has_rotation = NDOF_HAS_ROTATE;
+  else {
+    /* Note: based on feedback from T67579, users want to have pan and orbit enabled at once.
+     * It's arguable that orbit shouldn't pan (since we have a pan only operator),
+     * so if there are users who like to separate orbit/pan operations - it can be a preference. */
+    const bool is_orbit_around_pivot = (U.ndof_flag & NDOF_MODE_ORBIT) ||
+                                       ED_view3d_offset_lock_check(v3d, rv3d);
+    const bool has_rotation = ndof_has_rotate(ndof, rv3d);
+    const bool has_translate = !is_zero_v2(ndof->tvec) && ndof_has_translate(ndof, v3d, rv3d);
     const bool has_zoom = (ndof->tvec[2] != 0.0f);
 
-    if (has_zoom) {
-      view3d_ndof_pan_zoom(ndof, vod->sa, vod->ar, false, has_zoom);
-      xform_flag |= HAS_TRANSLATE;
-    }
-
+    /* Rotation first because dynamic offset resets offset otherwise (and disasbles panning). */
     if (has_rotation) {
-      view3d_ndof_orbit(ndof, vod->sa, vod->ar, vod, true);
+      const float dist_backup = rv3d->dist;
+      if (!is_orbit_around_pivot) {
+        ED_view3d_distance_set(rv3d, 0.0f);
+      }
+      view3d_ndof_orbit(ndof, vod->sa, vod->ar, vod, is_orbit_around_pivot);
       xform_flag |= HAS_ROTATE;
+      if (!is_orbit_around_pivot) {
+        ED_view3d_distance_set(rv3d, dist_backup);
+      }
     }
-  }
-  else { /* free/explore (like fly mode) */
-    const bool has_rotation = NDOF_HAS_ROTATE;
-    const bool has_translate = NDOF_HAS_TRANSLATE;
-    const bool has_zoom = (ndof->tvec[2] != 0.0f) && !rv3d->is_persp;
-
-    float dist_backup;
 
     if (has_translate || has_zoom) {
       view3d_ndof_pan_zoom(ndof, vod->sa, vod->ar, has_translate, has_zoom);
       xform_flag |= HAS_TRANSLATE;
     }
-
-    dist_backup = rv3d->dist;
-    ED_view3d_distance_set(rv3d, 0.0f);
-
-    if (has_rotation) {
-      view3d_ndof_orbit(ndof, vod->sa, vod->ar, vod, false);
-      xform_flag |= HAS_ROTATE;
-    }
-
-    ED_view3d_distance_set(rv3d, dist_backup);
   }
 
   ED_view3d_camera_lock_sync(depsgraph, v3d, rv3d);
@@ -1516,7 +1516,7 @@ static int ndof_pan_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent *e
   const wmNDOFMotionData *ndof = event->customdata;
   char xform_flag = 0;
 
-  const bool has_translate = NDOF_HAS_TRANSLATE;
+  const bool has_translate = ndof_has_translate(ndof, v3d, rv3d);
   const bool has_zoom = (ndof->tvec[2] != 0.0f) && !rv3d->is_persp;
 
   /* we're panning here! so erase any leftover rotation from other operators */
@@ -2999,7 +2999,7 @@ static int viewselected_exec(bContext *C, wmOperator *op)
     ok = paintface_minmax(ob_eval, min, max);
   }
   else if (ob_eval && (ob_eval->mode & OB_MODE_PARTICLE_EDIT)) {
-    ok = PE_minmax(scene, view_layer_eval, min, max);
+    ok = PE_minmax(depsgraph, scene, CTX_data_view_layer(C), min, max);
   }
   else if (ob_eval && (ob_eval->mode & (OB_MODE_SCULPT | OB_MODE_VERTEX_PAINT |
                                         OB_MODE_WEIGHT_PAINT | OB_MODE_TEXTURE_PAINT))) {
@@ -4946,6 +4946,7 @@ void ED_view3d_cursor3d_position_rotation(bContext *C,
                                                        .use_object_edit_cage = false,
                                                    },
                                                    mval_fl,
+                                                   NULL,
                                                    &dist_px,
                                                    ray_co,
                                                    ray_no,
@@ -5052,7 +5053,7 @@ void ED_view3d_cursor3d_update(bContext *C,
 
   {
     struct wmMsgBus *mbus = CTX_wm_message_bus(C);
-    wmMsgParams_RNA msg_key_params = {{{0}}};
+    wmMsgParams_RNA msg_key_params = {{0}};
     RNA_pointer_create(&scene->id, &RNA_View3DCursor, &scene->cursor, &msg_key_params.ptr);
     WM_msg_publish_rna_params(mbus, &msg_key_params);
   }

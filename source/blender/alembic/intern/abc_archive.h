@@ -34,6 +34,9 @@
 
 #include <fstream>
 
+struct Main;
+struct Scene;
+
 /* Wrappers around input and output archives. The goal is to be able to use
  * streams so that unicode paths work on Windows (T49112), and to make sure that
  * the stream objects remain valid as long as the archives are open.
@@ -46,7 +49,7 @@ class ArchiveReader {
   bool m_is_hdf5;
 
  public:
-  explicit ArchiveReader(const char *filename);
+  ArchiveReader(struct Main *bmain, const char *filename);
 
   bool valid() const;
 
@@ -66,10 +69,10 @@ class ArchiveWriter {
   Alembic::Abc::OArchive m_archive;
 
  public:
-  explicit ArchiveWriter(const char *filename,
-                         const char *scene,
-                         bool do_ogawa,
-                         Alembic::Abc::MetaData &md);
+  ArchiveWriter(const char *filename,
+                const std::string &abc_scene_name,
+                const Scene *scene,
+                bool do_ogawa);
 
   Alembic::Abc::OArchive &archive();
 };

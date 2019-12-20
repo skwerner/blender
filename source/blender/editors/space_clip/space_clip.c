@@ -443,6 +443,7 @@ static void clip_operatortypes(void)
   WM_operatortype_append(CLIP_OT_view_zoom_ratio);
   WM_operatortype_append(CLIP_OT_view_all);
   WM_operatortype_append(CLIP_OT_view_selected);
+  WM_operatortype_append(CLIP_OT_view_center_cursor);
   WM_operatortype_append(CLIP_OT_change_frame);
   WM_operatortype_append(CLIP_OT_rebuild_proxy);
   WM_operatortype_append(CLIP_OT_mode_set);
@@ -452,6 +453,7 @@ static void clip_operatortypes(void)
   WM_operatortype_append(CLIP_OT_prefetch);
   WM_operatortype_append(CLIP_OT_set_scene_frames);
   WM_operatortype_append(CLIP_OT_cursor_set);
+  WM_operatortype_append(CLIP_OT_lock_selection_toggle);
 
   /* ** tracking_ops.c ** */
 

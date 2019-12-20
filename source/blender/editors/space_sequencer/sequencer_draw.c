@@ -72,6 +72,7 @@
 #include "UI_view2d.h"
 
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -333,7 +334,7 @@ static void drawseqwave(View2D *v2d,
         value2 = (1.0f - f) * value2 + f * waveform->data[p * 3 + 4];
       }
 
-      if (fcu) {
+      if (fcu && !BKE_fcurve_is_empty(fcu)) {
         float evaltime = x1_offset + (i * stepsize);
         volume = evaluate_fcurve(fcu, evaltime);
       }
@@ -1045,9 +1046,8 @@ ImBuf *sequencer_ibuf_get(struct Main *bmain,
       bmain, depsgraph, scene, rectx, recty, proxy_size, false, &context);
   context.view_id = BKE_scene_multiview_view_id_get(&scene->r, viewname);
 
-  /* sequencer could start rendering, in this case we need to be sure it wouldn't be canceled
-   * by Esc pressed somewhere in the past
-   */
+  /* Sequencer could start rendering, in this case we need to be sure it wouldn't be canceled
+   * by Escape pressed somewhere in the past. */
   G.is_break = false;
 
   /* Rendering can change OGL context. Save & Restore framebuffer. */
@@ -1223,6 +1223,14 @@ void sequencer_draw_maskedit(const bContext *C, Scene *scene, ARegion *ar, Space
   }
 }
 #endif
+
+/* Force redraw, when prefetching and using cache view. */
+static void seq_prefetch_wm_notify(const bContext *C, Scene *scene)
+{
+  if (BKE_sequencer_prefetch_need_redraw(CTX_data_main(C), scene)) {
+    WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, NULL);
+  }
+}
 
 static void *sequencer_OCIO_transform_ibuf(
     const bContext *C, ImBuf *ibuf, bool *glsl_used, int *format, int *type)
@@ -1613,6 +1621,7 @@ void sequencer_draw_preview(const bContext *C,
   }
 
   UI_view2d_view_restore(C);
+  seq_prefetch_wm_notify(C, scene);
 }
 
 #if 0
@@ -1758,8 +1767,8 @@ static void draw_seq_strips(const bContext *C, Editing *ed, ARegion *ar)
 static void seq_draw_sfra_efra(Scene *scene, View2D *v2d)
 {
   const Editing *ed = BKE_sequencer_editing_get(scene, false);
-  const int frame_sta = PSFRA;
-  const int frame_end = PEFRA + 1;
+  const int frame_sta = scene->r.sfra;
+  const int frame_end = scene->r.efra + 1;
 
   GPU_blend(true);
 
@@ -2005,6 +2014,8 @@ void draw_timeline_seq(const bContext *C, ARegion *ar)
   short cfra_flag = 0;
   float col[3];
 
+  seq_prefetch_wm_notify(C, scene);
+
   /* clear and setup matrix */
   UI_GetThemeColor3fv(TH_BACK, col);
   if (ed && ed->metastack.first) {
@@ -2056,10 +2067,9 @@ void draw_timeline_seq(const bContext *C, ARegion *ar)
   /* markers */
   UI_view2d_view_orthoSpecial(ar, v2d, 1);
   int marker_draw_flag = DRAW_MARKERS_MARGIN;
-  if (sseq->flag & SEQ_SHOW_MARKER_LINES) {
-    marker_draw_flag |= DRAW_MARKERS_LINES;
+  if (sseq->flag & SEQ_SHOW_MARKERS) {
+    ED_markers_draw(C, marker_draw_flag);
   }
-  ED_markers_draw(C, marker_draw_flag);
 
   UI_view2d_view_ortho(v2d);
   /* draw cache on top of markers area */
@@ -2076,8 +2086,10 @@ void draw_timeline_seq(const bContext *C, ARegion *ar)
                         scene->r.cfra + scene->ed->over_ofs;
 
     uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-    immBindBuiltinProgram(GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR);
-
+    immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
+    float viewport_size[4];
+    GPU_viewport_size_get_f(viewport_size);
+    immUniform2f("viewport_size", viewport_size[2], viewport_size[3]);
     immUniform1f("dash_width", 20.0f * U.pixelsize);
     immUniform1f("dash_factor", 0.5f);
     immUniformThemeColor(TH_CFRAME);

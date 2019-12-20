@@ -114,7 +114,8 @@ class PREFERENCES_OT_copy_prev(Operator):
 
         shutil.copytree(self._old_path(), self._new_path(), symlinks=True)
 
-        # reload recent-files.txt
+        # reload preferences and recent-files.txt
+        bpy.ops.wm.read_userpref()
         bpy.ops.wm.read_history()
 
         # don't loose users work if they open the splash later.
@@ -537,7 +538,7 @@ class PREFERENCES_OT_addon_refresh(Operator):
 class PREFERENCES_OT_addon_install(Operator):
     """Install an add-on"""
     bl_idname = "preferences.addon_install"
-    bl_label = "Install Add-on from File..."
+    bl_label = "Install Add-on"
 
     overwrite: BoolProperty(
         name="Overwrite",
@@ -667,6 +668,7 @@ class PREFERENCES_OT_addon_install(Operator):
                 info = addon_utils.module_bl_info(mod)
 
                 # show the newly installed addon.
+                context.preferences.view.show_addons_enabled_only = False
                 context.window_manager.addon_filter = 'All'
                 context.window_manager.addon_search = info["name"]
                 break
@@ -796,6 +798,7 @@ class PREFERENCES_OT_addon_show(Operator):
             info["show_expanded"] = True
 
             context.preferences.active_section = 'ADDONS'
+            context.preferences.view.show_addons_enabled_only = False
             context.window_manager.addon_filter = 'All'
             context.window_manager.addon_search = info["name"]
             bpy.ops.screen.userpref_show('INVOKE_DEFAULT')
@@ -1029,7 +1032,7 @@ class PREFERENCES_OT_studiolight_uninstall(Operator):
     """Delete Studio Light"""
     bl_idname = "preferences.studiolight_uninstall"
     bl_label = "Uninstall Studio Light"
-    index: bpy.props.IntProperty()
+    index: IntProperty()
 
     def execute(self, context):
         import os
@@ -1052,7 +1055,7 @@ class PREFERENCES_OT_studiolight_copy_settings(Operator):
     """Copy Studio Light settings to the Studio light editor"""
     bl_idname = "preferences.studiolight_copy_settings"
     bl_label = "Copy Studio Light settings"
-    index: bpy.props.IntProperty()
+    index: IntProperty()
 
     def execute(self, context):
         prefs = context.preferences

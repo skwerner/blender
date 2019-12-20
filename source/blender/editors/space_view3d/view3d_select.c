@@ -88,6 +88,7 @@
 #include "ED_particle.h"
 #include "ED_mesh.h"
 #include "ED_object.h"
+#include "ED_outliner.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
 #include "ED_sculpt.h"
@@ -96,7 +97,6 @@
 
 #include "UI_interface.h"
 
-#include "GPU_draw.h"
 #include "GPU_glew.h"
 #include "GPU_matrix.h"
 
@@ -120,13 +120,13 @@ float ED_view3d_select_dist_px(void)
 }
 
 /* TODO: should return whether there is valid context to continue */
-void ED_view3d_viewcontext_init(bContext *C, ViewContext *vc)
+void ED_view3d_viewcontext_init(bContext *C, ViewContext *vc, Depsgraph *depsgraph)
 {
   memset(vc, 0, sizeof(ViewContext));
   vc->C = C;
   vc->ar = CTX_wm_region(C);
   vc->bmain = CTX_data_main(C);
-  vc->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  vc->depsgraph = depsgraph;
   vc->scene = CTX_data_scene(C);
   vc->view_layer = CTX_data_view_layer(C);
   vc->v3d = CTX_wm_view3d(C);
@@ -1020,10 +1020,12 @@ static void do_lasso_select_armature__doSelectBone(void *userData,
       is_ignore_flag |= BONESEL_TIP;
     }
 
-    if (is_inside_flag == (BONE_ROOTSEL | BONE_TIPSEL) ||
-        BLI_lasso_is_edge_inside(
-            data->mcords, data->moves, UNPACK2(screen_co_a), UNPACK2(screen_co_b), INT_MAX)) {
-      is_inside_flag |= BONESEL_BONE;
+    if (is_ignore_flag == 0) {
+      if (is_inside_flag == (BONE_ROOTSEL | BONE_TIPSEL) ||
+          BLI_lasso_is_edge_inside(
+              data->mcords, data->moves, UNPACK2(screen_co_a), UNPACK2(screen_co_b), INT_MAX)) {
+        is_inside_flag |= BONESEL_BONE;
+      }
     }
 
     ebone->temp.i = is_inside_flag | (is_ignore_flag >> 16);
@@ -1280,9 +1282,15 @@ static bool view3d_lasso_select(
     }
     else if (ob && (ob->mode & OB_MODE_POSE)) {
       changed_multi |= do_lasso_select_pose(vc, mcords, moves, sel_op);
+      if (changed_multi) {
+        ED_outliner_select_sync_from_pose_bone_tag(C);
+      }
     }
     else {
       changed_multi |= do_lasso_select_objects(vc, mcords, moves, sel_op);
+      if (changed_multi) {
+        ED_outliner_select_sync_from_object_tag(C);
+      }
     }
   }
   else { /* Edit Mode */
@@ -1303,12 +1311,15 @@ static bool view3d_lasso_select(
           break;
         case OB_ARMATURE:
           changed = do_lasso_select_armature(vc, mcords, moves, sel_op);
+          if (changed) {
+            ED_outliner_select_sync_from_edit_bone_tag(C);
+          }
           break;
         case OB_MBALL:
           changed = do_lasso_select_meta(vc, mcords, moves, sel_op);
           break;
         default:
-          assert(!"lasso select on incorrect object type");
+          BLI_assert(!"lasso select on incorrect object type");
           break;
       }
 
@@ -1335,11 +1346,12 @@ static int view3d_lasso_select_exec(bContext *C, wmOperator *op)
   const int(*mcords)[2] = WM_gesture_lasso_path_to_array(C, op, &mcords_tot);
 
   if (mcords) {
+    Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
     view3d_operator_needs_opengl(C);
     BKE_object_update_select_id(CTX_data_main(C));
 
     /* setup view context for argument to callbacks */
-    ED_view3d_viewcontext_init(C, &vc);
+    ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
     eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
     bool changed_multi = view3d_lasso_select(C, &vc, mcords, mcords_tot, sel_op);
@@ -1488,6 +1500,9 @@ static int object_select_menu_exec(bContext *C, wmOperator *op)
     Scene *scene = CTX_data_scene(C);
     DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
     WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
+
+    ED_outliner_select_sync_from_object_tag(C);
+
     return OPERATOR_FINISHED;
   }
   else {
@@ -1877,6 +1892,7 @@ static Base *mouse_select_eval_buffer(ViewContext *vc,
 /* mval comes from event->mval, only use within region handlers */
 Base *ED_view3d_give_base_under_cursor(bContext *C, const int mval[2])
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   Base *basact = NULL;
   uint buffer[MAXPICKBUF];
@@ -1885,7 +1901,7 @@ Base *ED_view3d_give_base_under_cursor(bContext *C, const int mval[2])
   view3d_operator_needs_opengl(C);
   BKE_object_update_select_id(CTX_data_main(C));
 
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   const bool do_nearest = !XRAY_ACTIVE(vc.v3d);
   const int hits = mixed_bones_object_selectbuffer(
@@ -1943,9 +1959,10 @@ static bool ed_object_select_pick(bContext *C,
                                   bool enumerate,
                                   bool object)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   /* setup view context for argument to callbacks */
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   ARegion *ar = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
@@ -2350,6 +2367,9 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
       if (!retval && deselect_all) {
         retval = ED_armature_edit_deselect_all_visible_multi(C);
       }
+      if (retval) {
+        ED_outliner_select_sync_from_edit_bone_tag(C);
+      }
     }
     else if (obedit->type == OB_LATTICE) {
       retval = ED_lattice_select_pick(C, location, extend, deselect, toggle);
@@ -2408,6 +2428,15 @@ static int view3d_select_exec(bContext *C, wmOperator *op)
         retval = ED_object_base_deselect_all(
             CTX_data_view_layer(C), CTX_wm_view3d(C), SEL_DESELECT);
         DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
+      }
+    }
+
+    if (retval) {
+      if (obact && obact->mode & OB_MODE_POSE) {
+        ED_outliner_select_sync_from_pose_bone_tag(C);
+      }
+      else {
+        ED_outliner_select_sync_from_object_tag(C);
       }
     }
   }
@@ -3179,6 +3208,7 @@ static bool do_pose_box_select(bContext *C, ViewContext *vc, rcti *rect, const e
 
 static int view3d_box_select_exec(bContext *C, wmOperator *op)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   rcti rect;
   bool changed_multi = false;
@@ -3190,7 +3220,7 @@ static int view3d_box_select_exec(bContext *C, wmOperator *op)
   BKE_object_update_select_id(CTX_data_main(C));
 
   /* setup view context for argument to callbacks */
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
   WM_operator_properties_border_to_rcti(op, &rect);
@@ -3230,6 +3260,7 @@ static int view3d_box_select_exec(bContext *C, wmOperator *op)
           if (changed) {
             DEG_id_tag_update(&vc.obedit->id, ID_RECALC_SELECT);
             WM_event_add_notifier(C, NC_OBJECT | ND_BONE_SELECT, vc.obedit);
+            ED_outliner_select_sync_from_edit_bone_tag(C);
           }
           break;
         case OB_LATTICE:
@@ -3240,7 +3271,7 @@ static int view3d_box_select_exec(bContext *C, wmOperator *op)
           }
           break;
         default:
-          assert(!"box select on incorrect object type");
+          BLI_assert(!"box select on incorrect object type");
           break;
       }
       changed_multi |= changed;
@@ -3264,9 +3295,15 @@ static int view3d_box_select_exec(bContext *C, wmOperator *op)
     }
     else if (vc.obact && vc.obact->mode & OB_MODE_POSE) {
       changed_multi = do_pose_box_select(C, &vc, &rect, sel_op);
+      if (changed_multi) {
+        ED_outliner_select_sync_from_pose_bone_tag(C);
+      }
     }
     else { /* object mode with none active */
       changed_multi = do_object_box_select(C, &vc, &rect, sel_op);
+      if (changed_multi) {
+        ED_outliner_select_sync_from_object_tag(C);
+      }
     }
   }
 
@@ -3888,9 +3925,11 @@ static bool mball_circle_select(ViewContext *vc,
   return data.is_changed;
 }
 
-/** Callbacks for circle selection in Editmode */
-
-static bool obedit_circle_select(ViewContext *vc,
+/**
+ * Callbacks for circle selection in Editmode
+ */
+static bool obedit_circle_select(bContext *C,
+                                 ViewContext *vc,
                                  wmGenericUserData *wm_userdata,
                                  const eSelectOp sel_op,
                                  const int mval[2],
@@ -3911,6 +3950,9 @@ static bool obedit_circle_select(ViewContext *vc,
       break;
     case OB_ARMATURE:
       changed = armature_circle_select(vc, sel_op, mval, rad);
+      if (changed) {
+        ED_outliner_select_sync_from_edit_bone_tag(C);
+      }
       break;
     case OB_MBALL:
       changed = mball_circle_select(vc, sel_op, mval, rad);
@@ -3969,6 +4011,7 @@ static bool object_circle_select(ViewContext *vc,
 /* not a real operator, only for circle test */
 static int view3d_circle_select_exec(bContext *C, wmOperator *op)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   const int radius = RNA_int_get(op->ptr, "radius");
   const int mval[2] = {RNA_int_get(op->ptr, "x"), RNA_int_get(op->ptr, "y")};
@@ -3981,7 +4024,7 @@ static int view3d_circle_select_exec(bContext *C, wmOperator *op)
   const eSelectOp sel_op = ED_select_op_modal(RNA_enum_get(op->ptr, "mode"),
                                               WM_gesture_is_modal_first(gesture));
 
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   Object *obact = vc.obact;
   Object *obedit = vc.obedit;
@@ -3999,7 +4042,7 @@ static int view3d_circle_select_exec(bContext *C, wmOperator *op)
       obedit = vc.obedit;
 
       if (obedit) {
-        obedit_circle_select(&vc, wm_userdata, sel_op, mval, (float)radius);
+        obedit_circle_select(C, &vc, wm_userdata, sel_op, mval, (float)radius);
       }
       else if (BKE_paint_select_face_test(obact)) {
         paint_facesel_circle_select(&vc, wm_userdata, sel_op, mval, (float)radius);
@@ -4009,6 +4052,7 @@ static int view3d_circle_select_exec(bContext *C, wmOperator *op)
       }
       else if (obact->mode & OB_MODE_POSE) {
         pose_circle_select(&vc, sel_op, mval, (float)radius);
+        ED_outliner_select_sync_from_pose_bone_tag(C);
       }
       else {
         BLI_assert(0);
@@ -4029,6 +4073,8 @@ static int view3d_circle_select_exec(bContext *C, wmOperator *op)
     if (object_circle_select(&vc, sel_op, mval, (float)radius)) {
       DEG_id_tag_update(&vc.scene->id, ID_RECALC_SELECT);
       WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, vc.scene);
+
+      ED_outliner_select_sync_from_object_tag(C);
     }
   }
 

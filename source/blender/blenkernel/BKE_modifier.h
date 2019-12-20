@@ -20,6 +20,10 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "DNA_modifier_types.h" /* needed for all enum typdefs */
 #include "BLI_compiler_attrs.h"
 #include "BKE_customdata.h"
@@ -35,7 +39,6 @@ struct Mesh;
 struct ModifierData;
 struct Object;
 struct Scene;
-struct ViewLayer;
 struct bArmature;
 
 typedef enum {
@@ -49,7 +52,9 @@ typedef enum {
    */
   eModifierTypeType_OnlyDeform,
 
+  /* Modifier adds geometry. */
   eModifierTypeType_Constructive,
+  /* Modifier can add and remove geometry. */
   eModifierTypeType_Nonconstructive,
 
   /* both deformVerts & applyModifier are valid calls
@@ -381,6 +386,7 @@ struct Object *modifiers_isDeformedByArmature(struct Object *ob);
 struct Object *modifiers_isDeformedByMeshDeform(struct Object *ob);
 struct Object *modifiers_isDeformedByLattice(struct Object *ob);
 struct Object *modifiers_isDeformedByCurve(struct Object *ob);
+bool modifiers_usesMultires(struct Object *ob);
 bool modifiers_usesArmature(struct Object *ob, struct bArmature *arm);
 bool modifiers_usesSubsurfFacedots(struct Scene *scene, struct Object *ob);
 bool modifiers_isCorrectableDeformed(struct Scene *scene, struct Object *ob);
@@ -415,7 +421,7 @@ typedef struct VirtualModifierData {
   ShapeKeyModifierData smd;
 } VirtualModifierData;
 
-struct ModifierData *modifiers_getVirtualModifierList(struct Object *ob,
+struct ModifierData *modifiers_getVirtualModifierList(const struct Object *ob,
                                                       struct VirtualModifierData *data);
 
 /* ensure modifier correctness when changing ob->data */
@@ -458,5 +464,9 @@ void modwrap_deformVertsEM(ModifierData *md,
 
 struct Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(struct Object *ob_eval,
                                                                    const bool get_cage_mesh);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

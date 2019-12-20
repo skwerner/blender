@@ -26,6 +26,12 @@ uniform int viewport_xray;
 uniform int shading_type[2];
 uniform vec4 wire_color;
 
+uniform int fade_layer;
+uniform float fade_layer_factor;
+uniform bool fade_ob;
+uniform vec3 fade_color;
+uniform float fade_ob_factor;
+
 /* keep this list synchronized with list in gpencil_draw_utils.c */
 #define SOLID 0
 #define GRADIENT 1
@@ -45,6 +51,7 @@ uniform vec4 wire_color;
 
 #define V3D_SHADING_MATERIAL_COLOR 0
 #define V3D_SHADING_TEXTURE_COLOR 3
+#define V3D_SHADING_VERTEX_COLOR 5
 
 in vec4 finalColor;
 in vec2 texCoord_interp;
@@ -204,11 +211,24 @@ void main()
   /* for solid override color */
   if (shading_type[0] == OB_SOLID) {
     if ((shading_type[1] != V3D_SHADING_MATERIAL_COLOR) &&
-        (shading_type[1] != V3D_SHADING_TEXTURE_COLOR)) {
+        (shading_type[1] != V3D_SHADING_TEXTURE_COLOR) &&
+        (shading_type[1] != V3D_SHADING_VERTEX_COLOR)) {
       fragColor = wire_color;
     }
     if (viewport_xray == 1) {
       fragColor.a *= 0.5;
     }
+  }
+  /* Apply paper opacity */
+  if (fade_layer == 1) {
+    /* Layer is below, mix with background. */
+    fragColor.rgb = mix(fade_color.rgb, fragColor.rgb, fade_layer_factor);
+  }
+  else if (fade_layer == 2) {
+    /* Layer is above, change opacity. */
+    fragColor.a *= fade_layer_factor;
+  }
+  else if (fade_ob == true) {
+    fragColor.rgb = mix(fade_color.rgb, fragColor.rgb, fade_ob_factor);
   }
 }

@@ -49,7 +49,7 @@ struct ExportSettings {
   SimpleLogger logger;
 
   bool selected_only;
-  bool visible_layers_only;
+  bool visible_objects_only;
   bool renderable_only;
 
   double frame_start, frame_end;
@@ -104,7 +104,7 @@ class AbcExporter {
   AbcExporter(Main *bmain, const char *filename, ExportSettings &settings);
   ~AbcExporter();
 
-  void operator()(float &progress, bool &was_canceled);
+  void operator()(short *do_update, float *progress, bool *was_canceled);
 
  protected:
   void getShutterSamples(unsigned int nr_of_samples,

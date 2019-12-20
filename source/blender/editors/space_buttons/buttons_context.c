@@ -76,7 +76,7 @@ static int set_pointer_type(ButsContextPath *path, bContextDataResult *result, S
     ptr = &path->ptr[a];
 
     if (RNA_struct_is_a(ptr->type, type)) {
-      CTX_data_pointer_set(result, ptr->id.data, ptr->type, ptr->data);
+      CTX_data_pointer_set(result, ptr->owner_id, ptr->type, ptr->data);
       return 1;
     }
   }
@@ -770,7 +770,6 @@ const char *buttons_context_dir[] = {
     "cloth",
     "soft_body",
     "fluid",
-    "smoke",
     "collision",
     "brush",
     "dynamic_paint",
@@ -894,7 +893,7 @@ int buttons_context(const bContext *C, const char *member, bContextDataResult *r
 
     if (ct->user && ct->user->ptr.data) {
       ButsTextureUser *user = ct->user;
-      CTX_data_pointer_set(result, user->ptr.id.data, user->ptr.type, user->ptr.data);
+      CTX_data_pointer_set(result, user->ptr.owner_id, user->ptr.type, user->ptr.data);
     }
 
     return 1;
@@ -982,7 +981,7 @@ int buttons_context(const bContext *C, const char *member, bContextDataResult *r
     PointerRNA *ptr = get_pointer_type(path, &RNA_ParticleSettings);
 
     if (ptr && ptr->data) {
-      CTX_data_pointer_set(result, ptr->id.data, &RNA_ParticleSettings, ptr->data);
+      CTX_data_pointer_set(result, ptr->owner_id, &RNA_ParticleSettings, ptr->data);
       return 1;
     }
     else {
@@ -991,7 +990,7 @@ int buttons_context(const bContext *C, const char *member, bContextDataResult *r
 
       if (ptr && ptr->data) {
         ParticleSettings *part = ((ParticleSystem *)ptr->data)->part;
-        CTX_data_pointer_set(result, ptr->id.data, &RNA_ParticleSettings, part);
+        CTX_data_pointer_set(result, ptr->owner_id, &RNA_ParticleSettings, part);
         return 1;
       }
     }
@@ -1018,24 +1017,14 @@ int buttons_context(const bContext *C, const char *member, bContextDataResult *r
       return 1;
     }
   }
+
   else if (CTX_data_equals(member, "fluid")) {
     PointerRNA *ptr = get_pointer_type(path, &RNA_Object);
 
     if (ptr && ptr->data) {
       Object *ob = ptr->data;
-      ModifierData *md = modifiers_findByType(ob, eModifierType_Fluidsim);
-      CTX_data_pointer_set(result, &ob->id, &RNA_FluidSimulationModifier, md);
-      return 1;
-    }
-  }
-
-  else if (CTX_data_equals(member, "smoke")) {
-    PointerRNA *ptr = get_pointer_type(path, &RNA_Object);
-
-    if (ptr && ptr->data) {
-      Object *ob = ptr->data;
-      ModifierData *md = modifiers_findByType(ob, eModifierType_Smoke);
-      CTX_data_pointer_set(result, &ob->id, &RNA_SmokeModifier, md);
+      ModifierData *md = modifiers_findByType(ob, eModifierType_Fluid);
+      CTX_data_pointer_set(result, &ob->id, &RNA_FluidModifier, md);
       return 1;
     }
   }
@@ -1249,8 +1238,15 @@ ID *buttons_context_id_path(const bContext *C)
         }
       }
 
-      if (ptr->id.data) {
-        return ptr->id.data;
+      /* There is no valid image ID panel, Image Empty objects need this workaround.*/
+      if (sbuts->mainb == BCONTEXT_DATA && sbuts->flag & SB_PIN_CONTEXT) {
+        if (ptr->type == &RNA_Image && ptr->data) {
+          continue;
+        }
+      }
+
+      if (ptr->owner_id) {
+        return ptr->owner_id;
       }
     }
   }

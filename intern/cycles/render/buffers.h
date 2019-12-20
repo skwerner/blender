@@ -65,7 +65,6 @@ class BufferParams {
 
   void get_offset_stride(int &offset, int &stride);
   bool modified(const BufferParams &params);
-  void add_pass(PassType type);
   int get_passes_size();
   int get_denoising_offset();
   int get_denoising_prefiltered_offset();
@@ -90,12 +89,8 @@ class RenderBuffers {
   void zero();
 
   bool copy_from_device();
-  bool get_pass_rect(PassType type,
-                     float exposure,
-                     int sample,
-                     int components,
-                     float *pixels,
-                     const string &name);
+  bool get_pass_rect(
+      const string &name, float exposure, int sample, int components, float *pixels);
   bool get_denoising_pass_rect(
       int offset, float exposure, int sample, int components, float *pixels);
 };

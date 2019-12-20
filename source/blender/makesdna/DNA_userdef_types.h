@@ -38,8 +38,10 @@ struct ColorBand;
 
 #define MAX_STYLE_NAME 64
 
-/** default offered by Blender.
- * #uiFont.uifont_id */
+/**
+ * Default offered by Blender.
+ * #uiFont.uifont_id
+ */
 typedef enum eUIFont_ID {
   UIFONT_DEFAULT = 0,
   /*  UIFONT_BITMAP   = 1 */ /* UNUSED */
@@ -64,7 +66,7 @@ typedef struct uiFont {
   char _pad0[2];
 } uiFont;
 
-/* this state defines appearance of text */
+/** This state defines appearance of text. */
 typedef struct uiFontStyle {
   /** Saved in file, 0 is default. */
   short uifont_id;
@@ -171,7 +173,7 @@ typedef struct ThemeUI {
 
   float icon_alpha;
   float icon_saturation;
-  char _pad[4];
+  unsigned char widget_text_cursor[4];
 
   /* Axis Colors */
   unsigned char xaxis[4], yaxis[4], zaxis[4];
@@ -196,6 +198,9 @@ typedef struct ThemeUI {
   unsigned char icon_modifier[4];
   /** Shading related items. */
   unsigned char icon_shading[4];
+  /** File folders. */
+  unsigned char icon_folder[4];
+  char _pad2[4];
   /** Intensity of the border icons. >0 will render an border around themed
    * icons. */
   float icon_border_intensity;
@@ -271,7 +276,7 @@ typedef struct ThemeSpace {
   unsigned char edge[4], edge_select[4];
   unsigned char edge_seam[4], edge_sharp[4], edge_facesel[4], edge_crease[4], edge_bevel[4];
   /** Solid faces. */
-  unsigned char face[4], face_select[4];
+  unsigned char face[4], face_select[4], face_back[4], face_front[4];
   /**  selected color. */
   unsigned char face_dot[4];
   unsigned char extra_edge_len[4], extra_edge_angle[4], extra_face_angle[4], extra_face_area[4];
@@ -317,6 +322,9 @@ typedef struct ThemeSpace {
   unsigned char syntaxv[4], syntaxc[4];  // in nodespace used for converter group
   unsigned char syntaxd[4], syntaxr[4];  // in nodespace used for distort
 
+  unsigned char line_numbers[4];
+  char _pad6[4];
+
   unsigned char nodeclass_output[4], nodeclass_filter[4];
   unsigned char nodeclass_vector[4], nodeclass_texture[4];
   unsigned char nodeclass_shader[4], nodeclass_script[4];
@@ -342,6 +350,7 @@ typedef struct ThemeSpace {
       lock_marker[4];
   unsigned char bundle_solid[4];
   unsigned char path_before[4], path_after[4];
+  unsigned char path_keyframe_before[4], path_keyframe_after[4];
   unsigned char camera_path[4];
   unsigned char _pad1[2];
 
@@ -390,6 +399,8 @@ typedef struct ThemeSpace {
   /** NLA - warning color for duplicate instances of tweaking strip. */
   unsigned char nla_tweakdupli[4];
 
+  /** NLA "Track" */
+  unsigned char nla_track[4];
   /** NLA "Transition" strips. */
   unsigned char nla_transition[4], nla_transition_sel[4];
   /** NLA "Meta" strips. */
@@ -410,7 +421,6 @@ typedef struct ThemeSpace {
   unsigned char metadatabg[4];
   unsigned char metadatatext[4];
 
-  char _pad2[4];
 } ThemeSpace;
 
 /* set of colors for use as a custom color set for Objects/Bones wire drawing */
@@ -430,15 +440,22 @@ typedef enum eWireColor_Flags {
   TH_WIRECOLOR_TEXTCOLS = (1 << 1),
 } eWireColor_Flags;
 
-/* A theme */
+/**
+ * A theme.
+ *
+ * \note Currently only a single theme is ever used at once.
+ * Different theme presets are stored as external files now.
+ */
 typedef struct bTheme {
   struct bTheme *next, *prev;
   char name[32];
 
   ThemeUI tui;
 
-  /* Individual Spacetypes */
-  /* note: ensure UI_THEMESPACE_END is updated when adding */
+  /**
+   * Individual Spacetypes:
+   * \note Ensure #UI_THEMESPACE_END is updated when adding.
+   */
   ThemeSpace space_properties;
   ThemeSpace space_view3d;
   ThemeSpace space_file;
@@ -465,8 +482,10 @@ typedef struct bTheme {
   char _pad0[4];
 } bTheme;
 
-#define UI_THEMESPACE_START(btheme) (CHECK_TYPE_INLINE(btheme, bTheme *), &((btheme)->tbuts))
-#define UI_THEMESPACE_END(btheme) (CHECK_TYPE_INLINE(btheme, bTheme *), (&((btheme)->tclip) + 1))
+#define UI_THEMESPACE_START(btheme) \
+  (CHECK_TYPE_INLINE(btheme, bTheme *), &((btheme)->space_properties))
+#define UI_THEMESPACE_END(btheme) \
+  (CHECK_TYPE_INLINE(btheme, bTheme *), (&((btheme)->space_statusbar) + 1))
 
 typedef struct bAddon {
   struct bAddon *next, *prev;
@@ -492,7 +511,7 @@ typedef struct bUserMenu {
   ListBase items;
 } bUserMenu;
 
-/* May be part of bUserMenu or other list. */
+/** May be part of #bUserMenu or other list. */
 typedef struct bUserMenuItem {
   struct bUserMenuItem *next, *prev;
   char ui_name[64];
@@ -553,19 +572,57 @@ typedef struct UserDef_Runtime {
   char _pad0[7];
 } UserDef_Runtime;
 
+/**
+ * Store UI data here instead of the space
+ * since the space is typically a window which is freed.
+ */
+typedef struct UserDef_SpaceData {
+  char section_active;
+  /** #eUserPref_SpaceData_Flag UI options. */
+  char flag;
+  char _pad0[6];
+} UserDef_SpaceData;
+
+/**
+ * Storage for UI data that to keep it even after the window was closed. (Similar to
+ * #UserDef_SpaceData.)
+ */
+typedef struct UserDef_FileSpaceData {
+  int display_type;   /* FileSelectParams.display */
+  int thumbnail_size; /* FileSelectParams.thumbnail_size */
+  int sort_type;      /* FileSelectParams.sort */
+  int details_flags;  /* FileSelectParams.details_flags */
+  int flag;           /* FileSelectParams.flag */
+  int filter_id;      /* FileSelectParams.filter_id */
+
+  /** Info used when creating the file browser in a temporary window. */
+  int temp_win_sizex;
+  int temp_win_sizey;
+} UserDef_FileSpaceData;
+
+typedef struct UserDef_Experimental {
+  char use_tool_fallback;
+  char use_usd_exporter;
+
+  char _pad0[6];
+} UserDef_Experimental;
+
+#define USER_EXPERIMENTAL_TEST(userdef, member) \
+  (((userdef)->flag & USER_DEVELOPER_UI) && ((userdef)->experimental).member)
+
 typedef struct UserDef {
-  /* UserDef has separate do-version handling, and can be read from other files */
+  /** UserDef has separate do-version handling, and can be read from other files. */
   int versionfile, subversionfile;
 
   /** #eUserPref_Flag. */
   int flag;
   /** #eDupli_ID_Flags. */
   short dupflag;
-  /**
-   * #eUserPref_PrefFlag preferences for the preferences. */
+  /** #eUserPref_PrefFlag preferences for the preferences. */
   char pref_flag;
   char savetime;
-  char _pad4[4];
+  char mouse_emulate_3_button_modifier;
+  char _pad4[3];
   /** FILE_MAXDIR length. */
   char tempdir[768];
   char fontdir[768];
@@ -600,14 +657,12 @@ typedef struct UserDef {
   /** #eUserpref_UI_Flag2. */
   char uiflag2;
   char gpu_flag;
-  char _pad8[2];
+  char _pad8[6];
   /* Experimental flag for app-templates to make changes to behavior
    * which are outside the scope of typical preferences. */
-  short app_flag;
-  short language;
-  short userpref;
-  char userpref_flag;
+  char app_flag;
   char viewzoom;
+  short language;
 
   int mixbufsize;
   int audiodevice;
@@ -638,7 +693,7 @@ typedef struct UserDef {
   short transopts;
   short menuthreshold1, menuthreshold2;
 
-  /* startup template */
+  /** Startup application template. */
   char app_template[64];
 
   struct ListBase themes;
@@ -687,11 +742,13 @@ typedef struct UserDef {
   short curssize;
   /** #eColorPicker_Types. */
   short color_picker_type;
+  /** Curve smoothing type for newly added F-Curves. */
+  char auto_smoothing_new;
   /** Interpolation mode for newly added F-Curves. */
   char ipo_new;
   /** Handle types for newly added keyframes. */
   char keyhandles_new;
-  char _pad11[3];
+  char _pad11[2];
   /** #eZoomFrame_Mode. */
   char view_frame_type;
 
@@ -717,7 +774,7 @@ typedef struct UserDef {
   /** Overall sensitivity of 3D mouse. */
   float ndof_sensitivity;
   float ndof_orbit_sensitivity;
-  /** Deadzone of 3D mouse. */
+  /** Dead-zone of 3D mouse. */
   float ndof_deadzone;
   /** #eNdof_Flag, flags for 3D mouse. */
   int ndof_flag;
@@ -765,7 +822,6 @@ typedef struct UserDef {
 
   /** Legacy, for backwards compatibility only. */
   int compute_device_type;
-  char _pad6[4];
 
   /** Opacity of inactive F-Curves in F-Curve Editor. */
   float fcu_inactive_alpha;
@@ -787,8 +843,6 @@ typedef struct UserDef {
   /** Pie menu distance from center before a direction is set. */
   short pie_menu_threshold;
 
-  struct WalkNavigation walk_navigation;
-
   short opensubdiv_compute_type;
   /** #eMultiSample_Type, amount of samples for Grease Pencil. */
   short gpencil_multisamples;
@@ -797,7 +851,17 @@ typedef struct UserDef {
 
   char viewport_aa;
 
-  char _pad5[2];
+  char render_display_type;      /* eUserpref_RenderDisplayType */
+  char filebrowser_display_type; /* eUserpref_TempSpaceDisplayType */
+  char _pad5[4];
+
+  struct WalkNavigation walk_navigation;
+
+  /** The UI for the user preferences. */
+  UserDef_SpaceData space_data;
+  UserDef_FileSpaceData file_space_data;
+
+  UserDef_Experimental experimental;
 
   /** Runtime data (keep last). */
   UserDef_Runtime runtime;
@@ -811,7 +875,7 @@ extern UserDef U;
 /* Toggles for unfinished 2.8 UserPref design. */
 //#define WITH_USERDEF_WORKSPACES
 
-/** #UserDef.userpref (UI active_section) */
+/** #UserDef_SpaceData.section_active (UI active_section) */
 typedef enum eUserPref_Section {
   USER_SECTION_INTERFACE = 0,
   USER_SECTION_EDITING = 1,
@@ -831,13 +895,15 @@ typedef enum eUserPref_Section {
   USER_SECTION_ANIMATION = 13,
   USER_SECTION_NAVIGATION = 14,
   USER_SECTION_FILE_PATHS = 15,
+  USER_SECTION_EXPERIMENTAL = 16,
 } eUserPref_Section;
 
-/* UserDef.userpref_flag (State of the user preferences UI). */
-typedef enum eUserPref_SectionFlag {
-  /* Hide/expand keymap preferences. */
-  USER_SECTION_INPUT_HIDE_UI_KEYCONFIG = (1 << 0),
-} eUserPref_SectionFlag;
+/** #UserDef_SpaceData.flag (State of the user preferences UI). */
+typedef enum eUserPref_SpaceData_Flag {
+  /** Hide/expand key-map preferences. */
+  USER_SPACEDATA_INPUT_HIDE_UI_KEYCONFIG = (1 << 0),
+  USER_SPACEDATA_ADDONS_SHOW_ONLY_ENABLED = (1 << 1),
+} eUserPref_SpaceData_Flag;
 
 /** #UserDef.flag */
 typedef enum eUserPref_Flag {
@@ -868,6 +934,7 @@ typedef enum eUserPref_Flag {
   USER_NONEGFRAMES = (1 << 24),
   USER_TXT_TABSTOSPACES_DISABLE = (1 << 25),
   USER_TOOLTIPS_PYTHON = (1 << 26),
+  USER_FLAG_UNUSED_27 = (1 << 27), /* dirty */
 } eUserPref_Flag;
 
 typedef enum eUserPref_PrefFlag {
@@ -945,14 +1012,20 @@ typedef enum eUserpref_UI_Flag {
   USER_ZOOM_HORIZ = (1 << 26), /* for CONTINUE and DOLLY zoom */
   USER_SPLASH_DISABLE = (1 << 27),
   USER_HIDE_RECENT = (1 << 28),
+#ifdef DNA_DEPRECATED_ALLOW
+  /* Deprecated: We're just trying if there's much desire for this feature,
+   * or if we can make it go for good. Should be cleared if so - Julian, Oct. 2019. */
   USER_SHOW_THUMBNAILS = (1 << 29),
+#endif
   USER_SAVE_PROMPT = (1 << 30),
   USER_HIDE_SYSTEM_BOOKMARKS = (1u << 31),
 } eUserpref_UI_Flag;
 
-/** #UserDef.uiflag2
+/**
+ * #UserDef.uiflag2
  *
- * \note don't add new flags here, use 'uiflag' which has flags free. */
+ * \note don't add new flags here, use 'uiflag' which has flags free.
+ */
 typedef enum eUserpref_UI_Flag2 {
   USER_UIFLAG2_UNUSED_0 = (1 << 0), /* cleared */
   USER_REGION_OVERLAP = (1 << 1),
@@ -964,6 +1037,7 @@ typedef enum eUserpref_UI_Flag2 {
 typedef enum eUserpref_GPU_Flag {
   USER_GPU_FLAG_NO_DEPT_PICK = (1 << 0),
   USER_GPU_FLAG_NO_EDIT_MODE_SMOOTH_WIRE = (1 << 1),
+  USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE = (1 << 2),
 } eUserpref_GPU_Flag;
 
 /** #UserDef.tablet_api */
@@ -978,8 +1052,10 @@ typedef enum eUserpref_APP_Flag {
   USER_APP_LOCK_UI_LAYOUT = (1 << 0),
 } eUserpref_APP_Flag;
 
-/** Auto-Keying mode.
- * #UserDef.autokey_mode */
+/**
+ * Auto-Keying mode.
+ * #UserDef.autokey_mode
+ */
 typedef enum eAutokey_Mode {
   /* AUTOKEY_ON is a bitflag */
   AUTOKEY_ON = 1,
@@ -990,15 +1066,18 @@ typedef enum eAutokey_Mode {
   AUTOKEY_MODE_EDITKEYS = 5,
 } eAutokey_Mode;
 
-/** Zoom to frame mode.
- * #UserDef.view_frame_type */
+/**
+ * Zoom to frame mode.
+ * #UserDef.view_frame_type
+ */
 typedef enum eZoomFrame_Mode {
   ZOOM_FRAME_MODE_KEEP_RANGE = 0,
   ZOOM_FRAME_MODE_SECONDS = 1,
   ZOOM_FRAME_MODE_KEYFRAMES = 2,
 } eZoomFrame_Mode;
 
-/** Auto-Keying flag
+/**
+ * Auto-Keying flag
  * #UserDef.autokey_flag (not strictly used when autokeying only -
  * is also used when keyframing these days).
  * \note #eAutokey_Flag is used with a macro, search for lines like IS_AUTOKEY_FLAG(INSERTAVAIL).
@@ -1037,9 +1116,9 @@ typedef enum eDupli_ID_Flags {
   USER_DUP_FONT = (1 << 3),
   USER_DUP_MBALL = (1 << 4),
   USER_DUP_LAMP = (1 << 5),
-  USER_DUP_IPO = (1 << 6),
+  /* USER_DUP_FCURVE = (1 << 6), */ /* UNUSED, keep because we may implement. */
   USER_DUP_MAT = (1 << 7),
-  USER_DUP_TEX = (1 << 8),
+  /* USER_DUP_TEX = (1 << 8), */ /* UNUSED, keep because we may implement. */
   USER_DUP_ARM = (1 << 9),
   USER_DUP_ACT = (1 << 10),
   USER_DUP_PSYS = (1 << 11),
@@ -1047,16 +1126,20 @@ typedef enum eDupli_ID_Flags {
   USER_DUP_GPENCIL = (1 << 13),
 } eDupli_ID_Flags;
 
-/** Max anti alias draw method
- * #UserDef.gpu_viewport_antialias */
+/**
+ * Max anti alias draw method
+ * #UserDef.gpu_viewport_antialias
+ */
 typedef enum eOpenGL_AntiAliasMethod {
   USER_AA_NONE = 0,
   USER_AA_FXAA = 1,
   USER_AA_TAA8 = 2,
 } eOpenGL_AntiAliasMethod;
 
-/** Text draw options
- * #UserDef.text_render */
+/**
+ * Text draw options
+ * #UserDef.text_render
+ */
 typedef enum eText_Draw_Options {
   USER_TEXT_DISABLE_AA = (1 << 0),
 
@@ -1065,8 +1148,10 @@ typedef enum eText_Draw_Options {
   USER_TEXT_HINTING_FULL = (1 << 3),
 } eText_Draw_Options;
 
-/** Grease Pencil Settings.
- * #UserDef.gp_settings */
+/**
+ * Grease Pencil Settings.
+ * #UserDef.gp_settings
+ */
 typedef enum eGP_UserdefSettings {
   GP_PAINT_UNUSED_0 = (1 << 0),
 } eGP_UserdefSettings;
@@ -1075,8 +1160,10 @@ enum {
   USER_GIZMO_DRAW = (1 << 0),
 };
 
-/** Color Picker Types.
- * #UserDef.color_picker_type */
+/**
+ * Color Picker Types.
+ * #UserDef.color_picker_type
+ */
 typedef enum eColorPicker_Types {
   USER_CP_CIRCLE_HSV = 0,
   USER_CP_SQUARE_SV = 1,
@@ -1085,29 +1172,28 @@ typedef enum eColorPicker_Types {
   USER_CP_CIRCLE_HSL = 4,
 } eColorPicker_Types;
 
-/** Timecode display styles
- * #UserDef.timecode_style */
+/**
+ * Timecode display styles
+ * #UserDef.timecode_style
+ */
 typedef enum eTimecodeStyles {
-  /* as little info as is necessary to show relevant info
-   * with '+' to denote the frames
-   * i.e. HH:MM:SS+FF, MM:SS+FF, SS+FF, or MM:SS
+  /**
+   * As little info as is necessary to show relevant info with '+' to denote the frames
+   * i.e. HH:MM:SS+FF, MM:SS+FF, SS+FF, or MM:SS.
    */
   USER_TIMECODE_MINIMAL = 0,
-
-  /* reduced SMPTE - (HH:)MM:SS:FF */
+  /** Reduced SMPTE - (HH:)MM:SS:FF */
   USER_TIMECODE_SMPTE_MSF = 1,
-
-  /* full SMPTE - HH:MM:SS:FF */
+  /** Full SMPTE - HH:MM:SS:FF */
   USER_TIMECODE_SMPTE_FULL = 2,
-
-  /* milliseconds for sub-frames - HH:MM:SS.sss */
+  /** Milliseconds for sub-frames - HH:MM:SS.sss. */
   USER_TIMECODE_MILLISECONDS = 3,
-
-  /* seconds only */
+  /** Seconds only. */
   USER_TIMECODE_SECONDS_ONLY = 4,
-
-  /* Private (not exposed as generic choices) options. */
-  /* milliseconds for sub-frames , SubRip format- HH:MM:SS,sss */
+  /**
+   * Private (not exposed as generic choices) options.
+   * milliseconds for sub-frames , SubRip format- HH:MM:SS,sss.
+   */
   USER_TIMECODE_SUBRIP = 100,
 } eTimecodeStyles;
 
@@ -1117,15 +1203,14 @@ typedef enum eNdof_Flag {
   NDOF_FLY_HELICOPTER = (1 << 1),
   NDOF_LOCK_HORIZON = (1 << 2),
 
-  /* the following might not need to be saved between sessions,
-   * but they do need to live somewhere accessible... */
+  /* The following might not need to be saved between sessions,
+   * but they do need to live somewhere accessible. */
   NDOF_SHOULD_PAN = (1 << 3),
   NDOF_SHOULD_ZOOM = (1 << 4),
   NDOF_SHOULD_ROTATE = (1 << 5),
 
-  /* orbit navigation modes */
+  /* Orbit navigation modes. */
 
-  /* exposed as Orbit|Explore in the UI */
   NDOF_MODE_ORBIT = (1 << 6),
 
   /* actually... users probably don't care about what the mode
@@ -1181,6 +1266,23 @@ typedef enum eUserpref_FactorDisplay {
   USER_FACTOR_AS_FACTOR = 0,
   USER_FACTOR_AS_PERCENTAGE = 1,
 } eUserpref_FactorDisplay;
+
+typedef enum eUserpref_RenderDisplayType {
+  USER_RENDER_DISPLAY_NONE = 0,
+  USER_RENDER_DISPLAY_SCREEN = 1,
+  USER_RENDER_DISPLAY_AREA = 2,
+  USER_RENDER_DISPLAY_WINDOW = 3
+} eUserpref_RenderDisplayType;
+
+typedef enum eUserpref_TempSpaceDisplayType {
+  USER_TEMP_SPACE_DISPLAY_FULLSCREEN,
+  USER_TEMP_SPACE_DISPLAY_WINDOW,
+} eUserpref_TempSpaceDisplayType;
+
+typedef enum eUserpref_EmulateMMBMod {
+  USER_EMU_MMB_MOD_ALT = 0,
+  USER_EMU_MMB_MOD_OSKEY = 1,
+} eUserpref_EmulateMMBMod;
 
 #ifdef __cplusplus
 }

@@ -336,6 +336,7 @@ class PrincipledBSDFWrapper(ShaderWrapper):
             self, self.node_principled_bsdf,
             self.node_principled_bsdf.inputs["Specular"],
             grid_row_diff=0,
+            colorspace_name='Non-Color',
         )
 
     specular_texture = property(specular_texture_get)
@@ -367,6 +368,7 @@ class PrincipledBSDFWrapper(ShaderWrapper):
             self, self.node_principled_bsdf,
             self.node_principled_bsdf.inputs["Roughness"],
             grid_row_diff=0,
+            colorspace_name='Non-Color',
         )
 
     roughness_texture = property(roughness_texture_get)
@@ -398,6 +400,7 @@ class PrincipledBSDFWrapper(ShaderWrapper):
             self, self.node_principled_bsdf,
             self.node_principled_bsdf.inputs["Metallic"],
             grid_row_diff=0,
+            colorspace_name='Non-Color',
         )
 
     metallic_texture = property(metallic_texture_get)
@@ -428,6 +431,7 @@ class PrincipledBSDFWrapper(ShaderWrapper):
             self, self.node_principled_bsdf,
             self.node_principled_bsdf.inputs["IOR"],
             grid_row_diff=-1,
+            colorspace_name='Non-Color',
         )
 
     ior_texture = property(ior_texture_get)
@@ -455,6 +459,7 @@ class PrincipledBSDFWrapper(ShaderWrapper):
             self, self.node_principled_bsdf,
             self.node_principled_bsdf.inputs["Transmission"],
             grid_row_diff=-1,
+            colorspace_name='Non-Color',
         )
 
     transmission_texture = property(transmission_texture_get)
@@ -482,10 +487,40 @@ class PrincipledBSDFWrapper(ShaderWrapper):
             self, self.node_principled_bsdf,
             self.node_principled_bsdf.inputs["Alpha"],
             grid_row_diff=-1,
+            colorspace_name='Non-Color',
         )
 
     alpha_texture = property(alpha_texture_get)
 
+
+    # --------------------------------------------------------------------
+    # Emission color.
+
+    def emission_color_get(self):
+        if not self.use_nodes or self.node_principled_bsdf is None:
+            return Color((0.0, 0.0, 0.0))
+        return rgba_to_rgb(self.node_principled_bsdf.inputs["Emission"].default_value)
+
+    @_set_check
+    def emission_color_set(self, color):
+        if self.use_nodes and self.node_principled_bsdf is not None:
+            color = values_clamp(color, 0.0, 1.0)
+            color = rgb_to_rgba(color)
+            self.node_principled_bsdf.inputs["Emission"].default_value = color
+
+    emission_color = property(emission_color_get, emission_color_set)
+
+
+    def emission_color_texture_get(self):
+        if not self.use_nodes or self.node_principled_bsdf is None:
+            return None
+        return ShaderImageTextureWrapper(
+            self, self.node_principled_bsdf,
+            self.node_principled_bsdf.inputs["Emission"],
+            grid_row_diff=1,
+        )
+
+    emission_color_texture = property(emission_color_texture_get)
 
 
     # --------------------------------------------------------------------
@@ -539,6 +574,7 @@ class ShaderImageTextureWrapper():
         "grid_row_diff",
         "use_alpha",
         "colorspace_is_data",
+        "colorspace_name",
         *NODES_LIST,
     )
 
@@ -551,7 +587,7 @@ class ShaderImageTextureWrapper():
         return instance
 
     def __init__(self, owner_shader: ShaderWrapper, node_dst, socket_dst, grid_row_diff=0,
-                 use_alpha=False, colorspace_is_data=...):
+                 use_alpha=False, colorspace_is_data=..., colorspace_name=...):
         self.owner_shader = owner_shader
         self.is_readonly = owner_shader.is_readonly
         self.node_dst = node_dst
@@ -559,6 +595,7 @@ class ShaderImageTextureWrapper():
         self.grid_row_diff = grid_row_diff
         self.use_alpha = use_alpha
         self.colorspace_is_data = colorspace_is_data
+        self.colorspace_name = colorspace_name
 
         self._node_image = ...
         self._node_mapping = ...
@@ -619,10 +656,6 @@ class ShaderImageTextureWrapper():
             self.translation = tex.translation
             self.rotation = tex.rotation
             self.scale = tex.scale
-            self.use_min = tex.use_min
-            self.use_max = tex.use_max
-            self.min = tex.min
-            self.max = tex.max
 
         tex.is_readonly = is_readonly_back
 
@@ -660,7 +693,13 @@ class ShaderImageTextureWrapper():
     @_set_check
     def image_set(self, image):
         if self.colorspace_is_data is not ...:
+            if image.colorspace_settings.is_data != self.colorspace_is_data and image.users >= 1:
+                image = image.copy()
             image.colorspace_settings.is_data = self.colorspace_is_data
+        if self.colorspace_name is not ...:
+            if image.colorspace_settings.is_data != self.colorspace_is_data and image.users >= 1:
+                image = image.copy()
+            image.colorspace_settings.name = self.colorspace_name
         self.node_image.image = image
 
     image = property(image_get, image_set)
@@ -750,70 +789,36 @@ class ShaderImageTextureWrapper():
 
 
     def translation_get(self):
-        return self.node_mapping.translation if self.node_mapping is not None else Vector((0.0, 0.0, 0.0))
+        if self.node_mapping is None:
+            return Vector((0.0, 0.0, 0.0))
+        return self.node_mapping.inputs['Location'].default_value
 
     @_set_check
     def translation_set(self, translation):
-        self.node_mapping.translation = translation
+        self.node_mapping.inputs['Location'].default_value = translation
 
     translation = property(translation_get, translation_set)
 
 
     def rotation_get(self):
-        return self.node_mapping.rotation if self.node_mapping is not None else Vector((0.0, 0.0, 0.0))
+        if self.node_mapping is None:
+            return Vector((0.0, 0.0, 0.0))
+        return self.node_mapping.inputs['Rotation'].default_value
 
     @_set_check
     def rotation_set(self, rotation):
-        self.node_mapping.rotation = rotation
+        self.node_mapping.inputs['Rotation'].default_value = rotation
 
     rotation = property(rotation_get, rotation_set)
 
 
     def scale_get(self):
-        return self.node_mapping.scale if self.node_mapping is not None else Vector((1.0, 1.0, 1.0))
+        if self.node_mapping is None:
+            return Vector((1.0, 1.0, 1.0))
+        return self.node_mapping.inputs['Scale'].default_value
 
     @_set_check
     def scale_set(self, scale):
-        self.node_mapping.scale = scale
+        self.node_mapping.inputs['Scale'].default_value = scale
 
     scale = property(scale_get, scale_set)
-
-
-    def use_min_get(self):
-        return self.node_mapping.use_min if self.node_mapping is not None else False
-
-    @_set_check
-    def use_min_set(self, use_min):
-        self.node_mapping.use_min = use_min
-
-    use_min = property(use_min_get, use_min_set)
-
-
-    def use_max_get(self):
-        return self.node_mapping.use_max if self.node_mapping is not None else False
-
-    @_set_check
-    def use_max_set(self, use_max):
-        self.node_mapping.use_max = use_max
-
-    use_max = property(use_max_get, use_max_set)
-
-
-    def min_get(self):
-        return self.node_mapping.min if self.node_mapping is not None else Vector((0.0, 0.0, 0.0))
-
-    @_set_check
-    def min_set(self, min):
-        self.node_mapping.min = min
-
-    min = property(min_get, min_set)
-
-
-    def max_get(self):
-        return self.node_mapping.max if self.node_mapping is not None else Vector((0.0, 0.0, 0.0))
-
-    @_set_check
-    def max_set(self, max):
-        self.node_mapping.max = max
-
-    max = property(max_get, max_set)

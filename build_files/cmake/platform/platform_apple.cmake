@@ -56,6 +56,13 @@ if(WITH_ALEMBIC)
   set(ALEMBIC_FOUND ON)
 endif()
 
+if(WITH_USD)
+  find_package(USD)
+  if(NOT USD_FOUND)
+    set(WITH_USD OFF)
+  endif()
+endif()
+
 if(WITH_OPENSUBDIV)
   set(OPENSUBDIV ${LIBDIR}/opensubdiv)
   set(OPENSUBDIV_LIBPATH ${OPENSUBDIV}/lib)
@@ -100,8 +107,8 @@ if(WITH_PYTHON)
     set(PYTHON_INCLUDE_DIR "${_py_framework}/include/python${PYTHON_VERSION}m")
     set(PYTHON_EXECUTABLE "${_py_framework}/bin/python${PYTHON_VERSION}m")
     set(PYTHON_LIBPATH "${_py_framework}/lib/python${PYTHON_VERSION}/config-${PYTHON_VERSION}m")
-    #set(PYTHON_LIBRARY python${PYTHON_VERSION})
-    #set(PYTHON_LINKFLAGS "-u _PyMac_Error -framework Python")  # won't  build with this enabled
+    # set(PYTHON_LIBRARY python${PYTHON_VERSION})
+    # set(PYTHON_LINKFLAGS "-u _PyMac_Error -framework Python")  # won't  build with this enabled
 
     unset(_py_framework)
   endif()
@@ -157,7 +164,7 @@ if(WITH_CODEC_FFMPEG)
     avcodec avdevice avformat avutil
     mp3lame swscale x264 xvidcore
     theora theoradec theoraenc
-    vorbis vorbisenc vorbisfile ogg
+    vorbis vorbisenc vorbisfile ogg opus
     vpx swresample)
   set(FFMPEG_LIBPATH ${FFMPEG}/lib)
 endif()
@@ -218,12 +225,12 @@ if(WITH_OPENCOLLADA)
     ${OPENCOLLADA_LIBPATH}/libxml2.a
   )
   # PCRE is bundled with openCollada
-  #set(PCRE ${LIBDIR}/pcre)
-  #set(PCRE_LIBPATH ${PCRE}/lib)
+  # set(PCRE ${LIBDIR}/pcre)
+  # set(PCRE_LIBPATH ${PCRE}/lib)
   set(PCRE_LIBRARIES pcre)
   # libxml2 is used
-  #set(EXPAT ${LIBDIR}/expat)
-  #set(EXPAT_LIBPATH ${EXPAT}/lib)
+  # set(EXPAT ${LIBDIR}/expat)
+  # set(EXPAT_LIBPATH ${EXPAT}/lib)
   set(EXPAT_LIB)
 endif()
 
@@ -313,16 +320,13 @@ endif()
 if(WITH_OPENVDB)
   set(OPENVDB ${LIBDIR}/openvdb)
   set(OPENVDB_INCLUDE_DIRS ${OPENVDB}/include)
-  set(TBB_INCLUDE_DIRS ${LIBDIR}/tbb/include)
-  set(TBB_LIBRARIES ${LIBDIR}/tbb/lib/libtbb.a)
-  set(OPENVDB_LIBRARIES openvdb blosc ${TBB_LIBRARIES})
+  set(OPENVDB_LIBRARIES openvdb blosc)
   set(OPENVDB_LIBPATH ${LIBDIR}/openvdb/lib)
   set(OPENVDB_DEFINITIONS)
 endif()
 
 if(WITH_LLVM)
   set(LLVM_ROOT_DIR ${LIBDIR}/llvm)
-  set(LLVM_VERSION 3.4)
   if(EXISTS "${LLVM_ROOT_DIR}/bin/llvm-config")
     set(LLVM_CONFIG "${LLVM_ROOT_DIR}/bin/llvm-config")
   else()
@@ -333,6 +337,9 @@ if(WITH_LLVM)
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   execute_process(COMMAND ${LLVM_CONFIG} --prefix
       OUTPUT_VARIABLE LLVM_ROOT_DIR
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+  execute_process(COMMAND ${LLVM_CONFIG} --includedir
+      OUTPUT_VARIABLE LLVM_INCLUDE_DIRS
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   execute_process(COMMAND ${LLVM_CONFIG} --libdir
       OUTPUT_VARIABLE LLVM_LIBPATH
@@ -384,14 +391,29 @@ endif()
 
 if(WITH_OPENIMAGEDENOISE)
   find_package(OpenImageDenoise)
-  find_package(TBB)
 
   if(NOT OPENIMAGEDENOISE_FOUND)
     set(WITH_OPENIMAGEDENOISE OFF)
     message(STATUS "OpenImageDenoise not found")
-  elseif(NOT TBB_FOUND)
+  endif()
+endif()
+
+if(WITH_TBB)
+  find_package(TBB)
+endif()
+
+if(NOT WITH_TBB OR NOT TBB_FOUND)
+  if(WITH_OPENIMAGEDENOISE)
+    message(STATUS "TBB not found, disabling OpenImageDenoise")
     set(WITH_OPENIMAGEDENOISE OFF)
-    message(STATUS "TBB not found")
+  endif()
+  if(WITH_OPENVDB)
+    message(STATUS "TBB not found, disabling OpenVDB")
+    set(WITH_OPENVDB OFF)
+  endif()
+  if(WITH_MOD_FLUID)
+    message(STATUS "TBB not found, disabling Fluid modifier")
+    set(WITH_MOD_FLUID OFF)
   endif()
 endif()
 

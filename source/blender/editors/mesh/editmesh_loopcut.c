@@ -39,10 +39,6 @@
 #include "BKE_unit.h"
 #include "BKE_layer.h"
 
-#include "GPU_immediate.h"
-#include "GPU_matrix.h"
-#include "GPU_state.h"
-
 #include "UI_interface.h"
 
 #include "ED_screen.h"
@@ -390,7 +386,6 @@ static int loopcut_init(bContext *C, wmOperator *op, const wmEvent *event)
   bool ok = true;
   if (is_interactive == false) {
     if (exec_data.base_index >= bases_len) {
-      return OPERATOR_CANCELLED;
       ok = false;
     }
     else {

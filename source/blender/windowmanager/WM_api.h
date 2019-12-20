@@ -53,19 +53,15 @@ struct PropertyRNA;
 struct ScrArea;
 struct ViewLayer;
 struct bContext;
-struct bToolRef_Runtime;
 struct rcti;
 struct wmDrag;
 struct wmDropBox;
 struct wmEvent;
-struct wmEventHandler;
 struct wmEventHandler_Keymap;
 struct wmEventHandler_UI;
 struct wmGenericUserData;
 struct wmGesture;
 struct wmJob;
-struct wmMsgSubscribeKey;
-struct wmMsgSubscribeValue;
 struct wmOperator;
 struct wmOperatorType;
 struct wmPaintCursor;
@@ -106,13 +102,16 @@ void WM_init_opengl(struct Main *bmain);
 void WM_check(struct bContext *C);
 void WM_reinit_gizmomap_all(struct Main *bmain);
 
+void WM_script_tag_reload(void);
+
 uint *WM_window_pixels_read(struct wmWindowManager *wm, struct wmWindow *win, int r_size[2]);
 
 int WM_window_pixels_x(const struct wmWindow *win);
 int WM_window_pixels_y(const struct wmWindow *win);
 void WM_window_rect_calc(const struct wmWindow *win, struct rcti *r_rect);
 void WM_window_screen_rect_calc(const struct wmWindow *win, struct rcti *r_rect);
-bool WM_window_is_fullscreen(struct wmWindow *win);
+bool WM_window_is_fullscreen(const struct wmWindow *win);
+bool WM_window_is_maximized(const struct wmWindow *win);
 
 void WM_windows_scene_data_sync(const ListBase *win_lb, struct Scene *scene) ATTR_NONNULL();
 struct Scene *WM_windows_scene_get_from_screen(const struct wmWindowManager *wm,
@@ -157,18 +156,16 @@ void WM_opengl_context_dispose(void *context);
 void WM_opengl_context_activate(void *context);
 void WM_opengl_context_release(void *context);
 
-/* defines for 'type' WM_window_open_temp */
-enum {
-  WM_WINDOW_RENDER = 1,
-  WM_WINDOW_USERPREFS,
-  WM_WINDOW_DRIVERS,
-  // WM_WINDOW_FILESEL // UNUSED
-};
-
 struct wmWindow *WM_window_open(struct bContext *C, const struct rcti *rect);
-struct wmWindow *WM_window_open_temp(
-    struct bContext *C, int x, int y, int sizex, int sizey, int type);
-void WM_window_set_dpi(wmWindow *win);
+struct wmWindow *WM_window_open_temp(struct bContext *C,
+                                     const char *title,
+                                     int x,
+                                     int y,
+                                     int sizex,
+                                     int sizey,
+                                     int space_type,
+                                     bool dialog);
+void WM_window_set_dpi(const wmWindow *win);
 
 bool WM_stereo3d_enabled(struct wmWindow *win, bool only_fullscreen_test);
 
@@ -231,6 +228,8 @@ struct wmEventHandler_Keymap *WM_event_add_keymap_handler_priority(ListBase *han
 typedef struct wmKeyMap *(wmEventHandler_KeymapDynamicFn)(
     wmWindowManager *wm, struct wmEventHandler_Keymap *handler)ATTR_WARN_UNUSED_RESULT;
 
+struct wmKeyMap *WM_event_get_keymap_from_toolsystem_fallback(
+    struct wmWindowManager *wm, struct wmEventHandler_Keymap *handler);
 struct wmKeyMap *WM_event_get_keymap_from_toolsystem(struct wmWindowManager *wm,
                                                      struct wmEventHandler_Keymap *handler);
 
@@ -246,6 +245,10 @@ void WM_event_set_keymap_handler_post_callback(struct wmEventHandler_Keymap *han
                                                void *user_data);
 wmKeyMap *WM_event_get_keymap_from_handler(wmWindowManager *wm,
                                            struct wmEventHandler_Keymap *handler);
+
+wmKeyMapItem *WM_event_match_keymap_item(struct bContext *C,
+                                         wmKeyMap *keymap,
+                                         const struct wmEvent *event);
 
 typedef int (*wmUIHandlerFunc)(struct bContext *C, const struct wmEvent *event, void *userdata);
 typedef void (*wmUIHandlerRemoveFunc)(struct bContext *C, void *userdata);
@@ -339,6 +342,12 @@ void WM_event_timer_sleep(struct wmWindowManager *wm,
 
 /* operator api, default callbacks */
 /* invoke callback, uses enum property named "type" */
+int WM_generic_select_modal(struct bContext *C,
+                            struct wmOperator *op,
+                            const struct wmEvent *event);
+int WM_generic_select_invoke(struct bContext *C,
+                             struct wmOperator *op,
+                             const struct wmEvent *event);
 void WM_operator_view3d_unit_defaults(struct bContext *C, struct wmOperator *op);
 int WM_operator_smooth_viewtx_get(const struct wmOperator *op);
 int WM_menu_invoke_ex(struct bContext *C, struct wmOperator *op, int opcontext);
@@ -478,6 +487,7 @@ void WM_operator_properties_select_random(struct wmOperatorType *ot);
 int WM_operator_properties_select_random_seed_increment_get(wmOperator *op);
 void WM_operator_properties_select_operation(struct wmOperatorType *ot);
 void WM_operator_properties_select_operation_simple(struct wmOperatorType *ot);
+void WM_operator_properties_generic_select(struct wmOperatorType *ot);
 struct CheckerIntervalParams {
   int nth; /* bypass when set to zero */
   int skip;
@@ -496,6 +506,8 @@ bool WM_operator_properties_checker_interval_test(const struct CheckerIntervalPa
 #define WM_FILESEL_FILENAME (1 << 2)
 #define WM_FILESEL_FILEPATH (1 << 3)
 #define WM_FILESEL_FILES (1 << 4)
+/* Show the properties sidebar by default. */
+#define WM_FILESEL_SHOW_PROPS (1 << 5)
 
 /* operator as a python command (resultuing string must be freed) */
 char *WM_operator_pystring_ex(struct bContext *C,
@@ -548,6 +560,12 @@ struct wmOperatorTypeMacro *WM_operatortype_macro_define(struct wmOperatorType *
                                                          const char *idname);
 
 const char *WM_operatortype_name(struct wmOperatorType *ot, struct PointerRNA *properties);
+char *WM_operatortype_description(struct bContext *C,
+                                  struct wmOperatorType *ot,
+                                  struct PointerRNA *properties);
+
+/* wm_operator_utils.c */
+void WM_operator_type_modal_from_exec_for_object_edit_coords(struct wmOperatorType *ot);
 
 /* wm_uilist_type.c */
 void WM_uilisttype_init(void);
@@ -607,6 +625,7 @@ void WM_gesture_straightline_cancel(struct bContext *C, struct wmOperator *op);
 struct wmGesture *WM_gesture_new(struct bContext *C, const struct wmEvent *event, int type);
 void WM_gesture_end(struct bContext *C, struct wmGesture *gesture);
 void WM_gestures_remove(struct bContext *C);
+void WM_gestures_free_all(struct wmWindow *win);
 bool WM_gesture_is_modal_first(const struct wmGesture *gesture);
 
 /* fileselecting support */
@@ -659,8 +678,10 @@ enum {
   WM_JOB_PROGRESS = (1 << 2),
 };
 
-/** Identifying jobs by owner alone is unreliable, this isnt saved,
- * order can change (keep 0 for 'any'). */
+/**
+ * Identifying jobs by owner alone is unreliable, this isnt saved,
+ * order can change (keep 0 for 'any').
+ */
 enum {
   WM_JOB_TYPE_ANY = 0,
   WM_JOB_TYPE_COMPOSITE,
@@ -684,6 +705,7 @@ enum {
   WM_JOB_TYPE_STUDIOLIGHT,
   WM_JOB_TYPE_LIGHT_BAKE,
   WM_JOB_TYPE_FSMENU_BOOKMARK_VALIDATE,
+  WM_JOB_TYPE_QUADRIFLOW_REMESH,
   /* add as needed, bake, seq proxy build
    * if having hard coded values is a problem */
 };
@@ -801,15 +823,18 @@ typedef struct ARegion *(*wmTooltipInitFn)(struct bContext *C,
 
 void WM_tooltip_immediate_init(struct bContext *C,
                                struct wmWindow *win,
+                               struct ScrArea *sa,
                                struct ARegion *ar,
                                wmTooltipInitFn init);
 void WM_tooltip_timer_init_ex(struct bContext *C,
                               struct wmWindow *win,
+                              struct ScrArea *sa,
                               struct ARegion *ar,
                               wmTooltipInitFn init,
                               double delay);
 void WM_tooltip_timer_init(struct bContext *C,
                            struct wmWindow *win,
+                           struct ScrArea *sa,
                            struct ARegion *ar,
                            wmTooltipInitFn init);
 void WM_tooltip_timer_clear(struct bContext *C, struct wmWindow *win);

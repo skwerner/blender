@@ -55,10 +55,10 @@ def pointInTri2D(v, v1, v2, v3):
         x= key[i]
         y= key[i+1]
 
-        if xmax<x:	xmax= x
-        if ymax<y:	ymax= y
-        if xmin>x:	xmin= x
-        if ymin>y:	ymin= y
+        if xmax<x: xmax= x
+        if ymax<y: ymax= y
+        if xmin>x: xmin= x
+        if ymin>y: ymin= y
 
     x= v.x
     y= v.y
@@ -169,7 +169,7 @@ def island2Edge(island):
 
     # Its okay to leave the length in there.
     # for e in length_sorted_edges:
-    #	e.pop(2)
+    #     e.pop(2)
 
     # return edges and unique points
     return length_sorted_edges, [v.to_3d() for v in unique_points.values()]
@@ -283,7 +283,16 @@ def mergeUvIslands(islandList):
         # UV Edge list used for intersections as well as unique points.
         edges, uniqueEdgePoints = island2Edge(islandList[islandIdx])
 
-        decoratedIslandList.append([islandList[islandIdx], totFaceArea, efficiency, islandBoundsArea, w, h, edges, uniqueEdgePoints])
+        decoratedIslandList.append([
+            islandList[islandIdx],
+            totFaceArea,
+            efficiency,
+            islandBoundsArea,
+            w,
+            h,
+            edges,
+            uniqueEdgePoints,
+        ])
 
     # Sort by island bounding box area, smallest face area first.
     # no.. chance that to most simple edge loop first.
@@ -389,7 +398,8 @@ def mergeUvIslands(islandList):
 
                             # testcount+=1
                             # print 'Testing intersect'
-                            Intersect = islandIntersectUvIsland(sourceIsland, targetIsland, Vector((boxLeft, boxBottom)))
+                            Intersect = islandIntersectUvIsland(
+                                sourceIsland, targetIsland, Vector((boxLeft, boxBottom)))
                             # print 'Done', Intersect
                             if Intersect == 1:  # Line intersect, don't bother with this any more
                                 pass
@@ -410,7 +420,7 @@ def mergeUvIslands(islandList):
                             elif Intersect == 0:  # No intersection?? Place it.
                                 # Progress
                                 removedCount += 1
-# XXX								Window.DrawProgressBar(0.0, 'Merged: %i islands, Ctrl to finish early.' % removedCount)
+# XXX  Window.DrawProgressBar(0.0, 'Merged: %i islands, Ctrl to finish early.' % removedCount)
 
                                 # Move faces into new island and offset
                                 targetIsland[0].extend(sourceIsland[0])
@@ -485,7 +495,7 @@ def getUvIslands(faceGroups, me):
 
     islandList = []
 
-# XXX	Window.DrawProgressBar(0.0, 'Splitting %d projection groups into UV islands:' % len(faceGroups))
+# XXX  Window.DrawProgressBar(0.0, 'Splitting %d projection groups into UV islands:' % len(faceGroups))
     # print '\tSplitting %d projection groups into UV islands:' % len(faceGroups),
     # Find grouped faces
 
@@ -552,7 +562,7 @@ def getUvIslands(faceGroups, me):
                     break
             # if not ok will stop looping
 
-# XXX	Window.DrawProgressBar(0.1, 'Optimizing Rotation for %i UV Islands' % len(islandList))
+# XXX  Window.DrawProgressBar(0.1, 'Optimizing Rotation for %i UV Islands' % len(islandList))
 
     for island in islandList:
         optiRotateUvIsland(island)
@@ -562,7 +572,7 @@ def getUvIslands(faceGroups, me):
 
 def packIslands(islandList):
     if USER_FILL_HOLES:
-        # XXX		Window.DrawProgressBar(0.1, 'Merging Islands (Ctrl: skip merge)...')
+        # XXX  Window.DrawProgressBar(0.1, 'Merging Islands (Ctrl: skip merge)...')
         mergeUvIslands(islandList)  # Modify in place
 
     # Now we have UV islands, we need to pack them.
@@ -611,18 +621,18 @@ def packIslands(islandList):
     # with the islands.
 
     # print '\tPacking UV Islands...'
-# XXX	Window.DrawProgressBar(0.7, "Packing %i UV Islands..." % len(packBoxes) )
+# XXX  Window.DrawProgressBar(0.7, "Packing %i UV Islands..." % len(packBoxes) )
 
     # time1 = time.time()
     packWidth, packHeight = geometry.box_pack_2d(packBoxes)
 
     # print 'Box Packing Time:', time.time() - time1
 
-    # if len(pa	ckedLs) != len(islandList):
+    # if len(packedLs) != len(islandList):
     #    raise ValueError("Packed boxes differs from original length")
 
     # print '\tWriting Packed Data to faces'
-# XXX	Window.DrawProgressBar(0.8, "Writing Packed Data to faces")
+# XXX  Window.DrawProgressBar(0.8, "Writing Packed Data to faces")
 
     # Sort by ID, so there in sync again
     islandIdx = len(islandList)

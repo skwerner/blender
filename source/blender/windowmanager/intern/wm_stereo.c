@@ -32,8 +32,6 @@
 
 #include "BLI_utildefines.h"
 
-#include "BIF_gl.h"
-
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_report.h"
@@ -43,8 +41,8 @@
 #include "ED_screen.h"
 
 #include "GPU_immediate.h"
-#include "GPU_framebuffer.h"
 #include "GPU_texture.h"
+#include "GPU_viewport.h"
 
 #include "WM_api.h"
 #include "WM_types.h"

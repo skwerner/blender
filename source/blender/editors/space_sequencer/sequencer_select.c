@@ -27,6 +27,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
+#include "BLI_math.h"
 
 #include "DNA_scene_types.h"
 
@@ -41,6 +42,7 @@
 
 /* for menu/popup icons etc etc*/
 
+#include "ED_outliner.h"
 #include "ED_screen.h"
 #include "ED_sequencer.h"
 #include "ED_select_utils.h"
@@ -49,6 +51,7 @@
 
 /* own include */
 #include "sequencer_intern.h"
+
 static void *find_nearest_marker(int UNUSED(d1), int UNUSED(d2))
 {
   return NULL;
@@ -79,7 +82,7 @@ static void select_surrounding_handles(Scene *scene, Sequence *test) /* XXX BRIN
   }
 }
 
-/* used for mouse selection and for SEQUENCER_OT_select_active_side() */
+/* Used for mouse selection in SEQUENCER_OT_select. */
 static void select_active_side(ListBase *seqbase, int sel_side, int channel, int frame)
 {
   Sequence *seq;
@@ -108,7 +111,43 @@ static void select_active_side(ListBase *seqbase, int sel_side, int channel, int
   }
 }
 
-/* used for mouse selection and for SEQUENCER_OT_select_active_side() */
+/* Used for mouse selection in SEQUENCER_OT_select_side. */
+static void select_active_side_range(ListBase *seqbase,
+                                     const int sel_side,
+                                     const int frame_ranges[MAXSEQ],
+                                     const int frame_ignore)
+{
+  Sequence *seq;
+
+  for (seq = seqbase->first; seq; seq = seq->next) {
+    if (seq->machine < MAXSEQ) {
+      const int frame = frame_ranges[seq->machine];
+      if (frame == frame_ignore) {
+        continue;
+      }
+      switch (sel_side) {
+        case SEQ_SIDE_LEFT:
+          if (frame > (seq->startdisp)) {
+            seq->flag &= ~(SEQ_RIGHTSEL | SEQ_LEFTSEL);
+            seq->flag |= SELECT;
+          }
+          break;
+        case SEQ_SIDE_RIGHT:
+          if (frame < (seq->startdisp)) {
+            seq->flag &= ~(SEQ_RIGHTSEL | SEQ_LEFTSEL);
+            seq->flag |= SELECT;
+          }
+          break;
+        case SEQ_SIDE_BOTH:
+          seq->flag &= ~(SEQ_RIGHTSEL | SEQ_LEFTSEL);
+          seq->flag |= SELECT;
+          break;
+      }
+    }
+  }
+}
+
+/* used for mouse selection in SEQUENCER_OT_select */
 static void select_linked_time(ListBase *seqbase, Sequence *seq_link)
 {
   Sequence *seq;
@@ -254,6 +293,8 @@ static int sequencer_de_select_all_exec(bContext *C, wmOperator *op)
     }
   }
 
+  ED_outliner_select_sync_from_sequence_tag(C);
+
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
 
   return OPERATOR_FINISHED;
@@ -293,6 +334,8 @@ static int sequencer_select_inverse_exec(bContext *C, wmOperator *UNUSED(op))
     }
   }
 
+  ED_outliner_select_sync_from_sequence_tag(C);
+
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
 
   return OPERATOR_FINISHED;
@@ -313,7 +356,7 @@ void SEQUENCER_OT_select_inverse(struct wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-static int sequencer_select_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+static int sequencer_select_exec(bContext *C, wmOperator *op)
 {
   View2D *v2d = UI_view2d_fromcontext(C);
   Scene *scene = CTX_data_scene(C);
@@ -322,7 +365,13 @@ static int sequencer_select_invoke(bContext *C, wmOperator *op, const wmEvent *e
   const bool deselect_all = RNA_boolean_get(op->ptr, "deselect_all");
   const bool linked_handle = RNA_boolean_get(op->ptr, "linked_handle");
   const bool linked_time = RNA_boolean_get(op->ptr, "linked_time");
+  bool wait_to_deselect_others = RNA_boolean_get(op->ptr, "wait_to_deselect_others");
   int left_right = RNA_enum_get(op->ptr, "left_right");
+  int mval[2];
+  int ret_value = OPERATOR_CANCELLED;
+
+  mval[0] = RNA_int_get(op->ptr, "mouse_x");
+  mval[1] = RNA_int_get(op->ptr, "mouse_y");
 
   Sequence *seq, *neighbor, *act_orig;
   int hand, sel_side;
@@ -332,9 +381,13 @@ static int sequencer_select_invoke(bContext *C, wmOperator *op, const wmEvent *e
     return OPERATOR_CANCELLED;
   }
 
+  if (extend) {
+    wait_to_deselect_others = false;
+  }
+
   marker = find_nearest_marker(SCE_MARKERS, 1);  // XXX - dummy function for now
 
-  seq = find_nearest_seq(scene, v2d, &hand, event->mval);
+  seq = find_nearest_seq(scene, v2d, &hand, mval);
 
   // XXX - not nice, Ctrl+RMB needs to do left_right only when not over a strip
   if (seq && linked_time && (left_right == SEQ_SELECT_LR_MOUSE)) {
@@ -358,6 +411,8 @@ static int sequencer_select_invoke(bContext *C, wmOperator *op, const wmEvent *e
       /* deselect_markers(0, 0); */
       marker->flag |= SELECT;
     }
+
+    ret_value = OPERATOR_FINISHED;
   }
   else if (left_right != SEQ_SELECT_LR_NONE) {
     /* use different logic for this */
@@ -368,7 +423,7 @@ static int sequencer_select_invoke(bContext *C, wmOperator *op, const wmEvent *e
 
     switch (left_right) {
       case SEQ_SELECT_LR_MOUSE:
-        x = UI_view2d_region_to_view_x(v2d, event->mval[0]);
+        x = UI_view2d_region_to_view_x(v2d, mval[0]);
         break;
       case SEQ_SELECT_LR_LEFT:
         x = CFRA - 1.0f;
@@ -403,13 +458,27 @@ static int sequencer_select_invoke(bContext *C, wmOperator *op, const wmEvent *e
         }
       }
     }
+
+    ret_value = OPERATOR_FINISHED;
   }
   else {
     act_orig = ed->act_seq;
 
     if (seq) {
-      if (!extend && !linked_handle) {
+      /* Are we trying to select a handle that's already selected? */
+      const bool handle_selected = ((hand == SEQ_SIDE_LEFT) && (seq->flag & SEQ_LEFTSEL)) ||
+                                   ((hand == SEQ_SIDE_RIGHT) && (seq->flag & SEQ_RIGHTSEL));
+
+      if (wait_to_deselect_others && (seq->flag & SELECT) &&
+          (hand == SEQ_SIDE_NONE || handle_selected)) {
+        ret_value = OPERATOR_RUNNING_MODAL;
+      }
+      else if (!extend && !linked_handle) {
         ED_sequencer_deselect_all(scene);
+        ret_value = OPERATOR_FINISHED;
+      }
+      else {
+        ret_value = OPERATOR_FINISHED;
       }
 
       BKE_sequencer_active_set(scene, seq);
@@ -503,6 +572,8 @@ static int sequencer_select_invoke(bContext *C, wmOperator *op, const wmEvent *e
             select_active_side(ed->seqbasep, sel_side, seq->machine, seq->startdisp);
           }
         }
+
+        ret_value = OPERATOR_FINISHED;
       }
       else {
         if (extend && (seq->flag & SELECT) && ed->act_seq == act_orig) {
@@ -519,6 +590,7 @@ static int sequencer_select_invoke(bContext *C, wmOperator *op, const wmEvent *e
               seq->flag ^= SEQ_RIGHTSEL;
               break;
           }
+          ret_value = OPERATOR_FINISHED;
         }
         else {
           seq->flag |= SELECT;
@@ -536,16 +608,20 @@ static int sequencer_select_invoke(bContext *C, wmOperator *op, const wmEvent *e
       if (linked_time) {
         select_linked_time(ed->seqbasep, seq);
       }
+
+      BLI_assert((ret_value & OPERATOR_CANCELLED) == 0);
     }
     else if (deselect_all) {
       ED_sequencer_deselect_all(scene);
+      ret_value = OPERATOR_FINISHED;
     }
   }
 
+  ED_outliner_select_sync_from_sequence_tag(C);
+
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
 
-  /* allowing tweaks */
-  return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
+  return ret_value;
 }
 
 void SEQUENCER_OT_select(wmOperatorType *ot)
@@ -557,6 +633,7 @@ void SEQUENCER_OT_select(wmOperatorType *ot)
       {SEQ_SELECT_LR_RIGHT, "RIGHT", 0, "Right", "Select right"},
       {0, NULL, 0, NULL, NULL},
   };
+  PropertyRNA *prop;
 
   /* identifiers */
   ot->name = "Select";
@@ -564,14 +641,16 @@ void SEQUENCER_OT_select(wmOperatorType *ot)
   ot->description = "Select a strip (last selected becomes the \"active strip\")";
 
   /* api callbacks */
-  ot->invoke = sequencer_select_invoke;
+  ot->exec = sequencer_select_exec;
+  ot->invoke = WM_generic_select_invoke;
+  ot->modal = WM_generic_select_modal;
   ot->poll = ED_operator_sequencer_active;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  PropertyRNA *prop;
+  WM_operator_properties_generic_select(ot);
   RNA_def_boolean(ot->srna, "extend", 0, "Extend", "Extend the selection");
   prop = RNA_def_boolean(ot->srna,
                          "deselect_all",
@@ -668,6 +747,8 @@ static int sequencer_select_more_exec(bContext *C, wmOperator *UNUSED(op))
     return OPERATOR_CANCELLED;
   }
 
+  ED_outliner_select_sync_from_sequence_tag(C);
+
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
 
   return OPERATOR_FINISHED;
@@ -698,6 +779,8 @@ static int sequencer_select_less_exec(bContext *C, wmOperator *UNUSED(op))
   if (!select_more_less_seq__internal(scene, false, false)) {
     return OPERATOR_CANCELLED;
   }
+
+  ED_outliner_select_sync_from_sequence_tag(C);
 
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
 
@@ -750,6 +833,8 @@ static int sequencer_select_linked_pick_invoke(bContext *C, wmOperator *op, cons
     selected = select_more_less_seq__internal(scene, 1, 1);
   }
 
+  ED_outliner_select_sync_from_sequence_tag(C);
+
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
 
   return OPERATOR_FINISHED;
@@ -783,6 +868,8 @@ static int sequencer_select_linked_exec(bContext *C, wmOperator *UNUSED(op))
   while (selected) {
     selected = select_more_less_seq__internal(scene, true, true);
   }
+
+  ED_outliner_select_sync_from_sequence_tag(C);
 
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
 
@@ -832,6 +919,8 @@ static int sequencer_select_handles_exec(bContext *C, wmOperator *op)
     }
   }
 
+  ED_outliner_select_sync_from_sequence_tag(C);
+
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
 
   return OPERATOR_FINISHED;
@@ -861,35 +950,56 @@ void SEQUENCER_OT_select_handles(wmOperatorType *ot)
 }
 
 /* select side operator */
-static int sequencer_select_active_side_exec(bContext *C, wmOperator *op)
+static int sequencer_select_side_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
   Editing *ed = BKE_sequencer_editing_get(scene, false);
-  Sequence *seq_act = BKE_sequencer_active_get(scene);
 
-  if (ed == NULL || seq_act == NULL) {
+  const int sel_side = RNA_enum_get(op->ptr, "side");
+  const int frame_init = sel_side == SEQ_SIDE_LEFT ? INT_MIN : INT_MAX;
+  int frame_ranges[MAXSEQ];
+  bool selected = false;
+
+  copy_vn_i(frame_ranges, ARRAY_SIZE(frame_ranges), frame_init);
+
+  for (Sequence *seq = ed->seqbasep->first; seq; seq = seq->next) {
+    if (UNLIKELY(seq->machine >= MAXSEQ)) {
+      continue;
+    }
+    int *frame_limit_p = &frame_ranges[seq->machine];
+    if (seq->flag & SELECT) {
+      selected = true;
+      if (sel_side == SEQ_SIDE_LEFT) {
+        *frame_limit_p = max_ii(*frame_limit_p, seq->startdisp);
+      }
+      else {
+        *frame_limit_p = min_ii(*frame_limit_p, seq->startdisp);
+      }
+    }
+  }
+
+  if (selected == false) {
     return OPERATOR_CANCELLED;
   }
 
-  seq_act->flag |= SELECT;
+  select_active_side_range(ed->seqbasep, sel_side, frame_ranges, frame_init);
 
-  select_active_side(
-      ed->seqbasep, RNA_enum_get(op->ptr, "side"), seq_act->machine, seq_act->startdisp);
+  ED_outliner_select_sync_from_sequence_tag(C);
 
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
 
   return OPERATOR_FINISHED;
 }
 
-void SEQUENCER_OT_select_active_side(wmOperatorType *ot)
+void SEQUENCER_OT_select_side(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Select Active Side";
-  ot->idname = "SEQUENCER_OT_select_active_side";
-  ot->description = "Select strips on the nominated side of the active strip";
+  ot->name = "Select Side";
+  ot->idname = "SEQUENCER_OT_select_side";
+  ot->description = "Select strips on the nominated side of the selected strips";
 
   /* api callbacks */
-  ot->exec = sequencer_select_active_side_exec;
+  ot->exec = sequencer_select_side_exec;
   ot->poll = sequencer_edit_poll;
 
   /* flags */
@@ -901,7 +1011,7 @@ void SEQUENCER_OT_select_active_side(wmOperatorType *ot)
                prop_side_types,
                SEQ_SIDE_BOTH,
                "Side",
-               "The side of the handle that is selected");
+               "The side to which the selection is applied");
 }
 
 /* box_select operator */
@@ -933,6 +1043,8 @@ static int sequencer_box_select_exec(bContext *C, wmOperator *op)
       recurs_sel_seq(seq);
     }
   }
+
+  ED_outliner_select_sync_from_sequence_tag(C);
 
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
 
@@ -1311,6 +1423,7 @@ static int sequencer_select_grouped_exec(bContext *C, wmOperator *op)
   }
 
   if (changed) {
+    ED_outliner_select_sync_from_sequence_tag(C);
     WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER | NA_SELECTED, scene);
     return OPERATOR_FINISHED;
   }

@@ -38,6 +38,7 @@ struct bNode;
 /* materials */
 
 void init_def_material(void);
+void BKE_material_gpencil_default_free(void);
 void BKE_material_free(struct Material *ma);
 void test_object_materials(struct Main *bmain, struct Object *ob, struct ID *id);
 void test_all_objects_materials(struct Main *bmain, struct ID *id);
@@ -46,6 +47,7 @@ void BKE_material_resize_object(struct Main *bmain,
                                 const short totcol,
                                 bool do_id_user);
 void BKE_material_init(struct Material *ma);
+void BKE_material_gpencil_init(struct Material *ma);
 void BKE_material_remap_object(struct Object *ob, const unsigned int *remap);
 void BKE_material_remap_object_calc(struct Object *ob_dst,
                                     struct Object *ob_src,
@@ -92,6 +94,8 @@ bool BKE_object_material_slot_add(struct Main *bmain, struct Object *ob);
 bool BKE_object_material_slot_remove(struct Main *bmain, struct Object *ob);
 bool BKE_object_material_slot_used(struct ID *id, short actcol);
 
+struct Material *BKE_material_gpencil_get(struct Object *ob, short act);
+struct Material *BKE_material_gpencil_default_get(void);
 struct MaterialGPencilStyle *BKE_material_gpencil_settings_get(struct Object *ob, short act);
 
 void BKE_texpaint_slot_refresh_cache(struct Scene *scene, struct Material *ma);
@@ -104,9 +108,8 @@ void BKE_material_append_id(struct Main *bmain, struct ID *id, struct Material *
 struct Material *BKE_material_pop_id(struct Main *bmain,
                                      struct ID *id,
                                      /* index is an int because of RNA. */
-                                     int index,
-                                     bool update_data);
-void BKE_material_clear_id(struct Main *bmain, struct ID *id, bool update_data);
+                                     int index);
+void BKE_material_clear_id(struct Main *bmain, struct ID *id);
 /* rendering */
 
 void ramp_blend(int type, float r_col[3], const float fac, const float col[3]);
@@ -124,6 +127,7 @@ struct Depsgraph;
 void BKE_material_eval(struct Depsgraph *depsgraph, struct Material *material);
 
 extern struct Material defmaterial;
+extern struct Material defgpencil_material;
 
 #ifdef __cplusplus
 }

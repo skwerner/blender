@@ -27,8 +27,6 @@
 /* ******************* Registration Function ********************** */
 
 struct Object;
-struct SnapObjectContext;
-struct SnapObjectParams;
 struct bContext;
 struct wmKeyConfig;
 struct wmOperatorType;
@@ -107,7 +105,6 @@ bool calculateTransformCenter(struct bContext *C,
 
 struct Object;
 struct Scene;
-struct TransInfo;
 struct wmGizmoGroup;
 struct wmGizmoGroupType;
 
@@ -168,44 +165,30 @@ void VIEW3D_GGT_xform_shear(struct wmGizmoGroupType *gzgt);
 /* *** transform_gizmo_extrude_3d.c *** */
 void VIEW3D_GGT_xform_extrude(struct wmGizmoGroupType *gzgt);
 
-bool ED_widgetgroup_gizmo2d_poll(const struct bContext *C, struct wmGizmoGroupType *gzgt);
-void ED_widgetgroup_gizmo2d_setup(const struct bContext *C, struct wmGizmoGroup *gzgroup);
-void ED_widgetgroup_gizmo2d_refresh(const struct bContext *C, struct wmGizmoGroup *gzgroup);
-void ED_widgetgroup_gizmo2d_draw_prepare(const struct bContext *C, struct wmGizmoGroup *gzgroup);
+/* Transform: Axis/Cage */
+bool ED_widgetgroup_gizmo2d_xform_poll(const struct bContext *C, struct wmGizmoGroupType *gzgt);
+void ED_widgetgroup_gizmo2d_xform_setup(const struct bContext *C, struct wmGizmoGroup *gzgroup);
+void ED_widgetgroup_gizmo2d_xform_setup_no_cage(const struct bContext *C,
+                                                struct wmGizmoGroup *gzgroup);
+void ED_widgetgroup_gizmo2d_xform_refresh(const struct bContext *C, struct wmGizmoGroup *gzgroup);
+void ED_widgetgroup_gizmo2d_xform_draw_prepare(const struct bContext *C,
+                                               struct wmGizmoGroup *gzgroup);
 
-/* Snapping */
+/* Resize: Axis */
+bool ED_widgetgroup_gizmo2d_resize_poll(const struct bContext *C, struct wmGizmoGroupType *gzgt);
+void ED_widgetgroup_gizmo2d_resize_setup(const struct bContext *C, struct wmGizmoGroup *gzgroup);
+void ED_widgetgroup_gizmo2d_resize_refresh(const struct bContext *C, struct wmGizmoGroup *gzgroup);
+void ED_widgetgroup_gizmo2d_resize_draw_prepare(const struct bContext *C,
+                                                struct wmGizmoGroup *gzgroup);
 
-#define SNAP_MIN_DISTANCE 30
+/* Rotate: Axis */
+bool ED_widgetgroup_gizmo2d_rotate_poll(const struct bContext *C, struct wmGizmoGroupType *gzgt);
+void ED_widgetgroup_gizmo2d_rotate_setup(const struct bContext *C, struct wmGizmoGroup *gzgroup);
+void ED_widgetgroup_gizmo2d_rotate_refresh(const struct bContext *C, struct wmGizmoGroup *gzgroup);
+void ED_widgetgroup_gizmo2d_rotate_draw_prepare(const struct bContext *C,
+                                                struct wmGizmoGroup *gzgroup);
+
 #define SNAP_INCREMENTAL_ANGLE DEG2RAD(5.0)
-
-bool peelObjectsTransform(struct TransInfo *t,
-                          const float mval[2],
-                          const bool use_peel_object,
-                          /* return args */
-                          float r_loc[3],
-                          float r_no[3],
-                          float *r_thickness);
-bool peelObjectsSnapContext(struct SnapObjectContext *sctx,
-                            const float mval[2],
-                            const struct SnapObjectParams *params,
-                            const bool use_peel_object,
-                            /* return args */
-                            float r_loc[3],
-                            float r_no[3],
-                            float *r_thickness);
-
-short snapObjectsTransform(struct TransInfo *t,
-                           const float mval[2],
-                           float *dist_px,
-                           /* return args */
-                           float r_loc[3],
-                           float r_no[3]);
-bool snapNodesTransform(struct TransInfo *t,
-                        const int mval[2],
-                        /* return args */
-                        float r_loc[2],
-                        float *r_dist_px,
-                        char *r_node_border);
 
 void ED_transform_calc_orientation_from_type(const struct bContext *C, float r_mat[3][3]);
 void ED_transform_calc_orientation_from_type_ex(const struct bContext *C,

@@ -947,6 +947,68 @@ void nodeChainIter(const bNodeTree *ntree,
   }
 }
 
+static void iter_backwards_ex(const bNodeTree *ntree,
+                              const bNode *node_start,
+                              bool (*callback)(bNode *, bNode *, void *),
+                              void *userdata,
+                              char recursion_mask)
+{
+  LISTBASE_FOREACH (bNodeSocket *, sock, &node_start->inputs) {
+    bNodeLink *link = sock->link;
+    if (link == NULL) {
+      continue;
+    }
+    if ((link->flag & NODE_LINK_VALID) == 0) {
+      /* Skip links marked as cyclic. */
+      continue;
+    }
+    if (link->fromnode->iter_flag & recursion_mask) {
+      continue;
+    }
+    else {
+      link->fromnode->iter_flag |= recursion_mask;
+    }
+
+    if (!callback(link->fromnode, link->tonode, userdata)) {
+      return;
+    }
+    iter_backwards_ex(ntree, link->fromnode, callback, userdata, recursion_mask);
+  }
+}
+
+/**
+ * Iterate over a chain of nodes, starting with \a node_start, executing
+ * \a callback for each node (which can return false to end iterator).
+ *
+ * Faster than nodeChainIter. Iter only once per node.
+ * Can be called recursively (using another nodeChainIterBackwards) by
+ * setting the recursion_lvl accordingly.
+ *
+ * \note Needs updated socket links (ntreeUpdateTree).
+ * \note Recursive
+ */
+void nodeChainIterBackwards(const bNodeTree *ntree,
+                            const bNode *node_start,
+                            bool (*callback)(bNode *, bNode *, void *),
+                            void *userdata,
+                            int recursion_lvl)
+{
+  if (!node_start) {
+    return;
+  }
+
+  /* Limited by iter_flag type. */
+  BLI_assert(recursion_lvl < 8);
+  char recursion_mask = (1 << recursion_lvl);
+
+  /* Reset flag. */
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    node->iter_flag &= ~recursion_mask;
+  }
+
+  iter_backwards_ex(ntree, node_start, callback, userdata, recursion_mask);
+}
+
 /**
  * Iterate over all parents of \a node, executing \a callback for each parent
  * (which can return false to end iterator)
@@ -1084,8 +1146,9 @@ bNode *BKE_node_copy_ex(bNodeTree *ntree, const bNode *node_src, const int flag)
 
   node_dst->new_node = NULL;
 
-  bool do_copy_api = !((flag & LIB_ID_CREATE_NO_MAIN) || (flag & LIB_ID_COPY_LOCALIZE));
-  if (node_dst->typeinfo->copyfunc_api && do_copy_api) {
+  /* Only call copy function when a copy is made for the main database, not
+   * for cases like the dependency graph and localization. */
+  if (node_dst->typeinfo->copyfunc_api && !(flag & LIB_ID_CREATE_NO_MAIN)) {
     PointerRNA ptr;
     RNA_pointer_create((ID *)ntree, &RNA_Node, node_dst, &ptr);
 
@@ -3348,7 +3411,7 @@ void ntreeUpdateTree(Main *bmain, bNodeTree *ntree)
     return;
   }
 
-  /* avoid reentrant updates, can be caused by RNA update callbacks */
+  /* Avoid re-entrant updates, can be caused by RNA update callbacks. */
   if (ntree->is_updating) {
     return;
   }
@@ -3409,7 +3472,7 @@ void ntreeUpdateTree(Main *bmain, bNodeTree *ntree)
 
 void nodeUpdate(bNodeTree *ntree, bNode *node)
 {
-  /* avoid reentrant updates, can be caused by RNA update callbacks */
+  /* Avoid re-entrant updates, can be caused by RNA update callbacks. */
   if (ntree->is_updating) {
     return;
   }
@@ -3436,7 +3499,7 @@ bool nodeUpdateID(bNodeTree *ntree, ID *id)
     return changed;
   }
 
-  /* avoid reentrant updates, can be caused by RNA update callbacks */
+  /* Avoid re-entrant updates, can be caused by RNA update callbacks. */
   if (ntree->is_updating) {
     return changed;
   }
@@ -3944,6 +4007,7 @@ static void registerShaderNodes(void)
   register_node_type_sh_output_material();
   register_node_type_sh_output_world();
   register_node_type_sh_output_linestyle();
+  register_node_type_sh_output_aov();
 
   register_node_type_sh_tex_image();
   register_node_type_sh_tex_environment();

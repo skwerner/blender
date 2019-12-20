@@ -179,7 +179,7 @@ static void validate_object_select_id(
     return;
   }
 
-  if (obact_eval && ((obact_eval->base_flag & BASE_VISIBLE) != 0)) {
+  if (obact_eval && ((obact_eval->base_flag & BASE_VISIBLE_DEPSGRAPH) != 0)) {
     Base *base = BKE_view_layer_base_find(view_layer, obact);
     DRW_select_buffer_context_create(&base, 1, -1);
   }
@@ -226,9 +226,9 @@ void ED_view3d_backbuf_depth_validate(ViewContext *vc)
     ARegion *ar = vc->ar;
     Object *obact_eval = DEG_get_evaluated_object(vc->depsgraph, vc->obact);
 
-    if (obact_eval && ((obact_eval->base_flag & BASE_VISIBLE) != 0)) {
+    if (obact_eval && ((obact_eval->base_flag & BASE_VISIBLE_DEPSGRAPH) != 0)) {
       GPUViewport *viewport = WM_draw_region_get_viewport(ar, 0);
-      DRW_draw_depth_object(vc->ar, viewport, obact_eval);
+      DRW_draw_depth_object(vc->ar, vc->v3d, viewport, obact_eval);
     }
 
     vc->v3d->flag &= ~V3D_INVALID_BACKBUF;

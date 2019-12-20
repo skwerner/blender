@@ -859,7 +859,7 @@ static void screen_render_cancel(bContext *C, wmOperator *op)
 
 static void clean_viewport_memory_base(Base *base)
 {
-  if ((base->flag & BASE_VISIBLE) == 0) {
+  if ((base->flag & BASE_VISIBLE_DEPSGRAPH) == 0) {
     return;
   }
 
@@ -1173,7 +1173,7 @@ static int render_shutter_curve_preset_exec(bContext *C, wmOperator *op)
   CurveMap *cm = mblur_shutter_curve->cm;
   int preset = RNA_enum_get(op->ptr, "shape");
 
-  cm->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
+  mblur_shutter_curve->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
   mblur_shutter_curve->preset = preset;
   BKE_curvemap_reset(
       cm, &mblur_shutter_curve->clipr, mblur_shutter_curve->preset, CURVEMAP_SLOPE_POS_NEG);

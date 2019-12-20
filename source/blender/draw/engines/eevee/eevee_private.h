@@ -157,10 +157,11 @@ enum {
   VAR_MAT_BLEND = (1 << 3),
   VAR_MAT_VOLUME = (1 << 4),
   VAR_MAT_LOOKDEV = (1 << 5),
+  VAR_MAT_HOLDOUT = (1 << 6),
   /* Max number of variation */
   /* IMPORTANT : Leave it last and set
    * it's value accordingly. */
-  VAR_MAT_MAX = (1 << 6),
+  VAR_MAT_MAX = (1 << 7),
   /* These are options that are not counted in VAR_MAT_MAX
    * because they are not cumulative with the others above. */
   VAR_MAT_CLIP = (1 << 9),
@@ -270,6 +271,7 @@ typedef struct EEVEE_PassList {
   struct DRWPass *update_noise_pass;
   struct DRWPass *lookdev_glossy_pass;
   struct DRWPass *lookdev_diffuse_pass;
+  struct DRWPass *renderpass_pass;
 } EEVEE_PassList;
 
 typedef struct EEVEE_FramebufferList {
@@ -294,6 +296,7 @@ typedef struct EEVEE_FramebufferList {
   struct GPUFrameBuffer *screen_tracing_fb;
   struct GPUFrameBuffer *refract_fb;
   struct GPUFrameBuffer *mist_accum_fb;
+  struct GPUFrameBuffer *renderpass_fb;
   struct GPUFrameBuffer *ao_accum_fb;
   struct GPUFrameBuffer *velocity_resolve_fb;
 
@@ -339,6 +342,8 @@ typedef struct EEVEE_TextureList {
   struct GPUTexture *planar_depth;
 
   struct GPUTexture *maxzbuffer;
+
+  struct GPUTexture *renderpass;
 
   struct GPUTexture *color; /* R16_G16_B16 */
   struct GPUTexture *color_double_buffer;
@@ -665,9 +670,13 @@ typedef struct EEVEE_CommonUniformBuffer {
   float prb_lod_cube_max;      /* float */
   float prb_lod_planar_max;    /* float */
   /* Misc */
-  int hiz_mip_offset; /* int */
-  int ray_type;       /* int */
-  float ray_depth;    /* float */
+  int hiz_mip_offset;      /* int */
+  int ray_type;            /* int */
+  float ray_depth;         /* float */
+  float alpha_hash_offset; /* float */
+  float alpha_hash_scale;  /* float */
+  float pad7;              /* float */
+  float pad8;              /* float */
 } EEVEE_CommonUniformBuffer;
 
 BLI_STATIC_ASSERT_ALIGN(EEVEE_CommonUniformBuffer, 16)
@@ -793,6 +802,10 @@ typedef struct EEVEE_PrivateData {
   int studiolight_cubemap_res;
   float studiolight_glossy_clamp;
   float studiolight_filter_quality;
+
+  /* Renderpasses */
+  /* Bitmask containing the active render_passes */
+  eScenePassType render_passes;
 
   /** For rendering shadows. */
   struct DRWView *cube_views[6];
@@ -983,7 +996,9 @@ void EEVEE_bloom_free(void);
 
 /* eevee_occlusion.c */
 int EEVEE_occlusion_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
-void EEVEE_occlusion_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
+void EEVEE_occlusion_output_init(EEVEE_ViewLayerData *sldata,
+                                 EEVEE_Data *vedata,
+                                 uint tot_samples);
 void EEVEE_occlusion_output_accumulate(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_occlusion_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_occlusion_compute(EEVEE_ViewLayerData *sldata,
@@ -1004,7 +1019,9 @@ void EEVEE_screen_raytrace_free(void);
 void EEVEE_subsurface_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_subsurface_draw_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_subsurface_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
-void EEVEE_subsurface_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
+void EEVEE_subsurface_output_init(EEVEE_ViewLayerData *sldata,
+                                  EEVEE_Data *vedata,
+                                  uint tot_samples);
 void EEVEE_subsurface_add_pass(EEVEE_ViewLayerData *sldata,
                                EEVEE_Data *vedata,
                                uint sss_id,
@@ -1029,6 +1046,19 @@ void EEVEE_motion_blur_free(void);
 void EEVEE_mist_output_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_mist_output_accumulate(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_mist_free(void);
+
+/* eevee_renderpasses.c */
+void EEVEE_renderpasses_init(EEVEE_Data *vedata);
+void EEVEE_renderpasses_output_init(EEVEE_ViewLayerData *sldata,
+                                    EEVEE_Data *vedata,
+                                    uint tot_samples);
+void EEVEE_renderpasses_output_accumulate(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
+void EEVEE_renderpasses_postprocess(EEVEE_ViewLayerData *sldata,
+                                    EEVEE_Data *vedata,
+                                    eScenePassType renderpass_type);
+void EEVEE_renderpasses_draw(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
+void EEVEE_renderpasses_free(void);
+bool EEVEE_renderpasses_only_first_sample_pass_active(EEVEE_Data *vedata);
 
 /* eevee_temporal_sampling.c */
 void EEVEE_temporal_sampling_reset(EEVEE_Data *vedata);

@@ -213,7 +213,10 @@ typedef struct TransData2D {
   float ih1[2], ih2[2];
 } TransData2D;
 
-/** Used to store 2 handles for each #TransData in case the other handle wasn't selected. */
+/**
+ * Used to store 2 handles for each #TransData in case the other handle wasn't selected.
+ * Also to unset temporary flags.
+ */
 typedef struct TransDataCurveHandleFlags {
   char ih1, ih2;
   char *h1, *h2;
@@ -267,7 +270,6 @@ typedef struct TransDataNla {
   int handle;
 } TransDataNla;
 
-struct GHash;
 struct LinkNode;
 
 /* header of TransDataEdgeSlideVert, TransDataEdgeSlideEdge */
@@ -632,6 +634,9 @@ typedef struct TransInfo {
   /*************** NEW STUFF *********************/
   /** event type used to launch transform. */
   short launch_event;
+  /** Is the actual launch event a tweak event? (launch_event above is set to the corresponding
+   * mouse button then.) */
+  bool is_launch_event_tweak;
 
   struct {
     /** Orientation type when when we're not constrained.
@@ -644,7 +649,7 @@ typedef struct TransInfo {
     short index;
     short *types[2];
     /* this gets used when custom_orientation is V3D_ORIENT_CUSTOM */
-    TransformOrientation *custom;
+    struct TransformOrientation *custom;
   } orientation;
   /** backup from view3d, to restore on end. */
   short gizmo_flag;
@@ -728,7 +733,7 @@ enum {
   T_EDIT = 1 << 1,
   T_POSE = 1 << 2,
   T_TEXTURE = 1 << 3,
-  /** Transforming the camera while in camera view. */
+  /** Transforming the 3d view. */
   T_CAMERA = 1 << 4,
   /** Transforming the 3D cursor. */
   T_CURSOR = 1 << 5,
@@ -935,40 +940,6 @@ void selectConstraint(TransInfo *t);
 void postSelectConstraint(TransInfo *t);
 
 void setNearestAxis(TransInfo *t);
-
-/*********************** Snapping ********************************/
-
-typedef enum {
-  NO_GEARS = 0,
-  BIG_GEARS = 1,
-  SMALL_GEARS = 2,
-} GearsType;
-
-bool transformModeUseSnap(const TransInfo *t);
-
-void snapGridIncrement(TransInfo *t, float *val);
-void snapGridIncrementAction(TransInfo *t, float *val, GearsType action);
-
-void snapSequenceBounds(TransInfo *t, const int mval[2]);
-
-bool activeSnap(const TransInfo *t);
-bool validSnap(const TransInfo *t);
-
-void initSnapping(struct TransInfo *t, struct wmOperator *op);
-void freeSnapping(struct TransInfo *t);
-void applyProject(TransInfo *t);
-void applyGridAbsolute(TransInfo *t);
-void applySnapping(TransInfo *t, float *vec);
-void resetSnapping(TransInfo *t);
-eRedrawFlag handleSnapping(TransInfo *t, const struct wmEvent *event);
-void drawSnapping(const struct bContext *C, TransInfo *t);
-bool usingSnappingNormal(const TransInfo *t);
-bool validSnappingNormal(const TransInfo *t);
-
-void getSnapPoint(const TransInfo *t, float vec[3]);
-void addSnapPoint(TransInfo *t);
-eRedrawFlag updateSelectedSnapPoint(TransInfo *t);
-void removeSnapPoint(TransInfo *t);
 
 /********************** Mouse Input ******************************/
 

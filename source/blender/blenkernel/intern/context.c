@@ -466,6 +466,18 @@ PointerRNA CTX_data_pointer_get_type(const bContext *C, const char *member, Stru
   return PointerRNA_NULL;
 }
 
+PointerRNA CTX_data_pointer_get_type_silent(const bContext *C, const char *member, StructRNA *type)
+{
+  PointerRNA ptr = CTX_data_pointer_get(C, member);
+
+  if (ptr.data && RNA_struct_is_a(ptr.type, type)) {
+    return ptr;
+  }
+  else {
+    return PointerRNA_NULL;
+  }
+}
+
 ListBase CTX_data_collection_get(const bContext *C, const char *member)
 {
   bContextDataResult result;
@@ -758,7 +770,7 @@ RegionView3D *CTX_wm_region_view3d(const bContext *C)
   ARegion *ar = CTX_wm_region(C);
 
   if (sa && sa->spacetype == SPACE_VIEW3D) {
-    if (ar) {
+    if (ar && ar->regiontype == RGN_TYPE_WINDOW) {
       return ar->regiondata;
     }
   }

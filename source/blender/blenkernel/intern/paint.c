@@ -60,6 +60,7 @@
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
+#include "BKE_multires.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_pbvh.h"
@@ -151,6 +152,9 @@ bool BKE_paint_ensure_from_paintmode(Scene *sce, ePaintMode mode)
 {
   ToolSettings *ts = sce->toolsettings;
   Paint **paint_ptr = NULL;
+  /* Some paint modes don't store paint settings as pointer, for these this can be set and
+   * referenced by paint_ptr. */
+  Paint *paint_tmp = NULL;
 
   switch (mode) {
     case PAINT_MODE_SCULPT:
@@ -164,6 +168,8 @@ bool BKE_paint_ensure_from_paintmode(Scene *sce, ePaintMode mode)
       break;
     case PAINT_MODE_TEXTURE_2D:
     case PAINT_MODE_TEXTURE_3D:
+      paint_tmp = (Paint *)&ts->imapaint;
+      paint_ptr = &paint_tmp;
       break;
     case PAINT_MODE_SCULPT_UV:
       paint_ptr = (Paint **)&ts->uvsculpt;
@@ -174,7 +180,7 @@ bool BKE_paint_ensure_from_paintmode(Scene *sce, ePaintMode mode)
     case PAINT_MODE_INVALID:
       break;
   }
-  if (paint_ptr && (*paint_ptr == NULL)) {
+  if (paint_ptr) {
     BKE_paint_ensure(ts, paint_ptr);
     return true;
   }
@@ -224,7 +230,6 @@ const EnumPropertyItem *BKE_paint_get_tool_enum_from_paintmode(ePaintMode mode)
       return rna_enum_brush_image_tool_items;
     case PAINT_MODE_SCULPT_UV:
       return rna_enum_brush_uv_sculpt_tool_items;
-      return NULL;
     case PAINT_MODE_GPENCIL:
       return rna_enum_brush_gpencil_types_items;
     case PAINT_MODE_INVALID:
@@ -655,19 +660,19 @@ bool BKE_paint_select_elem_test(Object *ob)
 
 void BKE_paint_cavity_curve_preset(Paint *p, int preset)
 {
-  CurveMap *cm = NULL;
+  CurveMapping *cumap = NULL;
+  CurveMap *cuma = NULL;
 
   if (!p->cavity_curve) {
     p->cavity_curve = BKE_curvemapping_add(1, 0, 0, 1, 1);
   }
+  cumap = p->cavity_curve;
+  cumap->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
+  cumap->preset = preset;
 
-  cm = p->cavity_curve->cm;
-  cm->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
-
-  p->cavity_curve->preset = preset;
-  BKE_curvemap_reset(
-      cm, &p->cavity_curve->clipr, p->cavity_curve->preset, CURVEMAP_SLOPE_POSITIVE);
-  BKE_curvemapping_changed(p->cavity_curve, false);
+  cuma = cumap->cm;
+  BKE_curvemap_reset(cuma, &cumap->clipr, cumap->preset, CURVEMAP_SLOPE_POSITIVE);
+  BKE_curvemapping_changed(cumap, false);
 }
 
 eObjectMode BKE_paint_object_mode_from_paintmode(ePaintMode mode)
@@ -693,26 +698,36 @@ eObjectMode BKE_paint_object_mode_from_paintmode(ePaintMode mode)
 /**
  * Call when entering each respective paint mode.
  */
-bool BKE_paint_ensure(const ToolSettings *ts, struct Paint **r_paint)
+bool BKE_paint_ensure(ToolSettings *ts, struct Paint **r_paint)
 {
   Paint *paint = NULL;
   if (*r_paint) {
-    /* Note: 'ts->imapaint' is ignored, it's not allocated. */
-    BLI_assert(ELEM(*r_paint,
-                    &ts->gp_paint->paint,
-                    &ts->sculpt->paint,
-                    &ts->vpaint->paint,
-                    &ts->wpaint->paint,
-                    &ts->uvsculpt->paint));
+    /* Tool offset should never be 0 for initialized paint settings, so it's a reliable way to
+     * check if already initialized. */
+    if ((*r_paint)->runtime.tool_offset == 0) {
+      /* Currently only image painting is initialized this way, others have to be allocated. */
+      BLI_assert(ELEM(*r_paint, (Paint *)&ts->imapaint));
 
+      BKE_paint_runtime_init(ts, *r_paint);
+    }
+    else {
+      BLI_assert(ELEM(*r_paint,
+                      /* Cast is annoying, but prevent NULL-pointer access. */
+                      (Paint *)ts->gp_paint,
+                      (Paint *)ts->sculpt,
+                      (Paint *)ts->vpaint,
+                      (Paint *)ts->wpaint,
+                      (Paint *)ts->uvsculpt,
+                      (Paint *)&ts->imapaint));
 #ifdef DEBUG
-    struct Paint paint_test = **r_paint;
-    BKE_paint_runtime_init(ts, *r_paint);
-    /* Swap so debug doesn't hide errors when release fails. */
-    SWAP(Paint, **r_paint, paint_test);
-    BLI_assert(paint_test.runtime.ob_mode == (*r_paint)->runtime.ob_mode);
-    BLI_assert(paint_test.runtime.tool_offset == (*r_paint)->runtime.tool_offset);
+      struct Paint paint_test = **r_paint;
+      BKE_paint_runtime_init(ts, *r_paint);
+      /* Swap so debug doesn't hide errors when release fails. */
+      SWAP(Paint, **r_paint, paint_test);
+      BLI_assert(paint_test.runtime.ob_mode == (*r_paint)->runtime.ob_mode);
+      BLI_assert(paint_test.runtime.tool_offset == (*r_paint)->runtime.tool_offset);
 #endif
+    }
     return true;
   }
 
@@ -737,6 +752,9 @@ bool BKE_paint_ensure(const ToolSettings *ts, struct Paint **r_paint)
   else if ((UvSculpt **)r_paint == &ts->uvsculpt) {
     UvSculpt *data = MEM_callocN(sizeof(*data), __func__);
     paint = &data->paint;
+  }
+  else if (*r_paint == &ts->imapaint.paint) {
+    paint = &ts->imapaint.paint;
   }
 
   paint->flags |= PAINT_SHOW_BRUSH;
@@ -1118,7 +1136,7 @@ MultiresModifierData *BKE_sculpt_multires_active(Scene *scene, Object *ob)
         continue;
       }
 
-      if (mmd->sculptlvl > 0) {
+      if (BKE_multires_sculpt_level_get(mmd) > 0) {
         return mmd;
       }
       else {
@@ -1185,7 +1203,7 @@ static void sculpt_update_object(
   Mesh *me = BKE_object_get_original_mesh(ob);
   MultiresModifierData *mmd = BKE_sculpt_multires_active(scene, ob);
 
-  ss->modifiers_active = sculpt_modifiers_active(scene, sd, ob);
+  ss->deform_modifiers_active = sculpt_modifiers_active(scene, sd, ob);
   ss->show_mask = (sd->flags & SCULPT_HIDE_MASK) == 0;
 
   ss->building_vp_handle = false;
@@ -1206,7 +1224,7 @@ static void sculpt_update_object(
   /* tessfaces aren't used and will become invalid */
   BKE_mesh_tessface_clear(me);
 
-  ss->kb = (mmd == NULL) ? BKE_keyblock_from_object(ob) : NULL;
+  ss->shapekey_active = (mmd == NULL) ? BKE_keyblock_from_object(ob) : NULL;
 
   /* NOTE: Weight pPaint require mesh info for loop lookup, but it never uses multires code path,
    * so no extra checks is needed here. */
@@ -1241,14 +1259,15 @@ static void sculpt_update_object(
 
   pbvh_show_mask_set(ss->pbvh, ss->show_mask);
 
-  if (ss->modifiers_active) {
+  if (ss->deform_modifiers_active) {
     if (!ss->orig_cos) {
       int a;
 
       BKE_sculptsession_free_deformMats(ss);
 
-      ss->orig_cos = (ss->kb) ? BKE_keyblock_convert_to_vertcos(ob, ss->kb) :
-                                BKE_mesh_vert_coords_alloc(me, NULL);
+      ss->orig_cos = (ss->shapekey_active) ?
+                         BKE_keyblock_convert_to_vertcos(ob, ss->shapekey_active) :
+                         BKE_mesh_vert_coords_alloc(me, NULL);
 
       BKE_crazyspace_build_sculpt(depsgraph, scene, ob, &ss->deform_imats, &ss->deform_cos);
       BKE_pbvh_vert_coords_apply(ss->pbvh, ss->deform_cos, me->totvert);
@@ -1262,15 +1281,15 @@ static void sculpt_update_object(
     BKE_sculptsession_free_deformMats(ss);
   }
 
-  if (ss->kb != NULL && ss->deform_cos == NULL) {
-    ss->deform_cos = BKE_keyblock_convert_to_vertcos(ob, ss->kb);
+  if (ss->shapekey_active != NULL && ss->deform_cos == NULL) {
+    ss->deform_cos = BKE_keyblock_convert_to_vertcos(ob, ss->shapekey_active);
   }
 
   /* if pbvh is deformed, key block is already applied to it */
-  if (ss->kb) {
+  if (ss->shapekey_active) {
     bool pbvh_deformed = BKE_pbvh_is_deformed(ss->pbvh);
     if (!pbvh_deformed || ss->deform_cos == NULL) {
-      float(*vertCos)[3] = BKE_keyblock_convert_to_vertcos(ob, ss->kb);
+      float(*vertCos)[3] = BKE_keyblock_convert_to_vertcos(ob, ss->shapekey_active);
 
       if (vertCos) {
         if (!pbvh_deformed) {
@@ -1360,7 +1379,7 @@ int BKE_sculpt_mask_layers_ensure(Object *ob, MultiresModifierData *mmd)
    * isn't one already */
   if (mmd && !CustomData_has_layer(&me->ldata, CD_GRID_PAINT_MASK)) {
     GridPaintMask *gmask;
-    int level = max_ii(1, mmd->sculptlvl);
+    int level = max_ii(1, BKE_multires_sculpt_level_get(mmd));
     int gridsize = BKE_ccg_gridsize(level);
     int gridarea = gridsize * gridsize;
     int i, j;
@@ -1449,17 +1468,17 @@ static bool check_sculpt_object_deformed(Object *object, const bool for_construc
    * on birth of PBVH and sculpt "layer" levels, so use PBVH only for internal brush
    * stuff and show final evaluated mesh so user would see actual object shape.
    */
-  deformed |= object->sculpt->modifiers_active;
+  deformed |= object->sculpt->deform_modifiers_active;
 
   if (for_construction) {
-    deformed |= object->sculpt->kb != NULL;
+    deformed |= object->sculpt->shapekey_active != NULL;
   }
   else {
     /* As in case with modifiers, we can't synchronize deformation made against
      * PBVH and non-locked keyblock, so also use PBVH only for brushes and
      * final DM to give final result to user.
      */
-    deformed |= object->sculpt->kb && (object->shapeflag & OB_SHAPE_LOCK) == 0;
+    deformed |= object->sculpt->shapekey_active && (object->shapeflag & OB_SHAPE_LOCK) == 0;
   }
 
   return deformed;
@@ -1489,6 +1508,7 @@ static PBVH *build_pbvh_from_regular_mesh(Object *ob, Mesh *me_eval_deform)
   BKE_mesh_recalc_looptri(me->mloop, me->mpoly, me->mvert, me->totloop, me->totpoly, looptri);
 
   BKE_pbvh_build_mesh(pbvh,
+                      me,
                       me->mpoly,
                       me->mloop,
                       me->mvert,
@@ -1588,7 +1608,7 @@ bool BKE_sculptsession_use_pbvh_draw(const Object *ob, const View3D *v3d)
   if (BKE_pbvh_type(ss->pbvh) == PBVH_FACES) {
     /* Regular mesh only draws from PBVH without modifiers and shape keys. */
     const bool full_shading = (v3d && (v3d->shading.type > OB_SOLID));
-    return !(ss->kb || ss->modifiers_active || full_shading);
+    return !(ss->shapekey_active || ss->deform_modifiers_active || full_shading);
   }
   else {
     /* Multires and dyntopo always draw directly from the PBVH. */

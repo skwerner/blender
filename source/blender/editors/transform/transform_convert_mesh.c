@@ -52,6 +52,8 @@
 
 #include "transform.h"
 #include "transform_convert.h"
+#include "transform_snap.h"
+
 #include "bmesh.h"
 
 /* Used for both mirror epsilon and TD_MIRROR_EDGE_ */
@@ -190,8 +192,8 @@ static void editmesh_set_connectivity_distance(BMesh *bm,
             if (e_iter->l) {
               BMLoop *l_iter_radial, *l_first_radial;
               /**
-               * imaginary edge diagonally across quad,
-               * \note, this takes advantage of the rules of winding that we
+               * imaginary edge diagonally across quad.
+               * \note This takes advantage of the rules of winding that we
                * know 2 or more of a verts edges wont reference the same face twice.
                * Also, if the edge is hidden, the face will be hidden too.
                */
@@ -1451,7 +1453,7 @@ void createTransUVs(bContext *C, TransInfo *t)
       const bool use_facesel = (ts->uv_flag & UV_SYNC_SELECTION) == 0;
       elementmap = BM_uv_element_map_create(em->bm, use_facesel, false, true);
       if (elementmap == NULL) {
-        return;
+        continue;
       }
 
       if (is_prop_connected) {

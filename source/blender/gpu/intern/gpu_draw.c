@@ -36,17 +36,9 @@
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
-#include "DNA_light_types.h"
-#include "DNA_material_types.h"
-#include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
-#include "DNA_modifier_types.h"
-#include "DNA_node_types.h"
-#include "DNA_object_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_smoke_types.h"
-#include "DNA_view3d_types.h"
-#include "DNA_particle_types.h"
+#include "DNA_image_types.h"
+#include "DNA_movieclip_types.h"
+#include "DNA_userdef_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -54,25 +46,18 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
-#include "BKE_colorband.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_main.h"
-#include "BKE_material.h"
 #include "BKE_movieclip.h"
-#include "BKE_node.h"
-#include "BKE_scene.h"
 
 #include "GPU_draw.h"
 #include "GPU_extensions.h"
 #include "GPU_glew.h"
+#include "GPU_platform.h"
 #include "GPU_texture.h"
 
 #include "PIL_time.h"
-
-#ifdef WITH_SMOKE
-#  include "smoke_API.h"
-#endif
 
 static void gpu_free_image_immediate(Image *ima);
 
@@ -194,13 +179,13 @@ float GPU_get_anisotropic(void)
 
 /* Set OpenGL state for an MTFace */
 
-static GPUTexture **gpu_get_image_gputexture(Image *ima, GLenum textarget)
+static GPUTexture **gpu_get_tile_gputexture(ImageTile *tile, GLenum textarget)
 {
   if (textarget == GL_TEXTURE_2D) {
-    return &ima->gputexture[TEXTARGET_TEXTURE_2D];
+    return &tile->gputexture[TEXTARGET_TEXTURE_2D];
   }
   else if (textarget == GL_TEXTURE_CUBE_MAP) {
-    return &ima->gputexture[TEXTARGET_TEXTURE_CUBE_MAP];
+    return &tile->gputexture[TEXTARGET_TEXTURE_CUBE_MAP];
   }
 
   return NULL;
@@ -475,8 +460,19 @@ GPUTexture *GPU_texture_from_blender(Image *ima, ImageUser *iuser, int textarget
   /* Tag as in active use for garbage collector. */
   BKE_image_tag_time(ima);
 
+  ImageTile *tile = BKE_image_get_tile_from_iuser(ima, iuser);
+
+  if (tile == NULL) {
+    /* TODO(lukas): When a tile gets deleted, the materials using the image
+     * aren't rebuilt and therefore continue to use it.
+     * This workaround isn't ideal, the result should be a pink color
+     * (for a missing tile). With the current behavior, new tiles also won't
+     * be detected. */
+    tile = BKE_image_get_tile(ima, 0);
+  }
+
   /* Test if we already have a texture. */
-  GPUTexture **tex = gpu_get_image_gputexture(ima, textarget);
+  GPUTexture **tex = gpu_get_tile_gputexture(tile, textarget);
   if (*tex) {
     return *tex;
   }
@@ -484,7 +480,7 @@ GPUTexture *GPU_texture_from_blender(Image *ima, ImageUser *iuser, int textarget
   /* Check if we have a valid image. If not, we return a dummy
    * texture with zero bindcode so we don't keep trying. */
   uint bindcode = 0;
-  if (ima->ok == 0) {
+  if (tile->ok == 0) {
     *tex = GPU_texture_from_bindcode(textarget, bindcode);
     return *tex;
   }
@@ -860,11 +856,14 @@ void GPU_paint_set_mipmap(Main *bmain, bool mipmap)
     for (Image *ima = bmain->images.first; ima; ima = ima->id.next) {
       if (BKE_image_has_opengl_texture(ima)) {
         if (ima->gpuflag & IMA_GPU_MIPMAP_COMPLETE) {
-          if (ima->gputexture[TEXTARGET_TEXTURE_2D]) {
-            GPU_texture_bind(ima->gputexture[TEXTARGET_TEXTURE_2D], 0);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gpu_get_mipmap_filter(0));
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gpu_get_mipmap_filter(1));
-            GPU_texture_unbind(ima->gputexture[TEXTARGET_TEXTURE_2D]);
+          LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
+            GPUTexture *tex = tile->gputexture[TEXTARGET_TEXTURE_2D];
+            if (tex != NULL) {
+              GPU_texture_bind(tex, 0);
+              glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gpu_get_mipmap_filter(0));
+              glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gpu_get_mipmap_filter(1));
+              GPU_texture_unbind(tex);
+            }
           }
         }
         else {
@@ -879,11 +878,14 @@ void GPU_paint_set_mipmap(Main *bmain, bool mipmap)
   else {
     for (Image *ima = bmain->images.first; ima; ima = ima->id.next) {
       if (BKE_image_has_opengl_texture(ima)) {
-        if (ima->gputexture[TEXTARGET_TEXTURE_2D]) {
-          GPU_texture_bind(ima->gputexture[TEXTARGET_TEXTURE_2D], 0);
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-          glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gpu_get_mipmap_filter(1));
-          GPU_texture_unbind(ima->gputexture[TEXTARGET_TEXTURE_2D]);
+        LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
+          GPUTexture *tex = tile->gputexture[TEXTARGET_TEXTURE_2D];
+          if (tex != NULL) {
+            GPU_texture_bind(tex, 0);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gpu_get_mipmap_filter(1));
+            GPU_texture_unbind(tex);
+          }
         }
       }
       else {
@@ -896,14 +898,16 @@ void GPU_paint_set_mipmap(Main *bmain, bool mipmap)
 void GPU_paint_update_image(Image *ima, ImageUser *iuser, int x, int y, int w, int h)
 {
   ImBuf *ibuf = BKE_image_acquire_ibuf(ima, iuser, NULL);
+  ImageTile *tile = BKE_image_get_tile_from_iuser(ima, iuser);
+  GPUTexture *tex = tile->gputexture[TEXTARGET_TEXTURE_2D];
 
-  if ((ima->gputexture[TEXTARGET_TEXTURE_2D] == NULL) || (ibuf == NULL) || (w == 0) || (h == 0)) {
+  if ((tex == NULL) || (ibuf == NULL) || (w == 0) || (h == 0)) {
     /* Full reload of texture. */
     GPU_free_image(ima);
   }
   else {
     /* Partial update of texture. */
-    GPU_texture_bind(ima->gputexture[TEXTARGET_TEXTURE_2D], 0);
+    GPU_texture_bind(tex, 0);
 
     gpu_texture_update_from_ibuf(ima, ibuf, x, y, w, h);
 
@@ -914,376 +918,10 @@ void GPU_paint_update_image(Image *ima, ImageUser *iuser, int x, int y, int w, i
       ima->gpuflag &= ~IMA_GPU_MIPMAP_COMPLETE;
     }
 
-    GPU_texture_unbind(ima->gputexture[TEXTARGET_TEXTURE_2D]);
+    GPU_texture_unbind(tex);
   }
 
   BKE_image_release_ibuf(ima, ibuf, NULL);
-}
-
-/* *************************** Transfer functions *************************** */
-
-enum {
-  TFUNC_FLAME_SPECTRUM = 0,
-  TFUNC_COLOR_RAMP = 1,
-};
-
-#define TFUNC_WIDTH 256
-
-#ifdef WITH_SMOKE
-static void create_flame_spectrum_texture(float *data)
-{
-#  define FIRE_THRESH 7
-#  define MAX_FIRE_ALPHA 0.06f
-#  define FULL_ON_FIRE 100
-
-  float *spec_pixels = MEM_mallocN(TFUNC_WIDTH * 4 * 16 * 16 * sizeof(float), "spec_pixels");
-
-  blackbody_temperature_to_rgb_table(data, TFUNC_WIDTH, 1500, 3000);
-
-  for (int i = 0; i < 16; i++) {
-    for (int j = 0; j < 16; j++) {
-      for (int k = 0; k < TFUNC_WIDTH; k++) {
-        int index = (j * TFUNC_WIDTH * 16 + i * TFUNC_WIDTH + k) * 4;
-        if (k >= FIRE_THRESH) {
-          spec_pixels[index] = (data[k * 4]);
-          spec_pixels[index + 1] = (data[k * 4 + 1]);
-          spec_pixels[index + 2] = (data[k * 4 + 2]);
-          spec_pixels[index + 3] = MAX_FIRE_ALPHA *
-                                   ((k > FULL_ON_FIRE) ?
-                                        1.0f :
-                                        (k - FIRE_THRESH) / ((float)FULL_ON_FIRE - FIRE_THRESH));
-        }
-        else {
-          zero_v4(&spec_pixels[index]);
-        }
-      }
-    }
-  }
-
-  memcpy(data, spec_pixels, sizeof(float) * 4 * TFUNC_WIDTH);
-
-  MEM_freeN(spec_pixels);
-
-#  undef FIRE_THRESH
-#  undef MAX_FIRE_ALPHA
-#  undef FULL_ON_FIRE
-}
-
-static void create_color_ramp(const ColorBand *coba, float *data)
-{
-  for (int i = 0; i < TFUNC_WIDTH; i++) {
-    BKE_colorband_evaluate(coba, (float)i / TFUNC_WIDTH, &data[i * 4]);
-  }
-}
-
-static GPUTexture *create_transfer_function(int type, const ColorBand *coba)
-{
-  float *data = MEM_mallocN(sizeof(float) * 4 * TFUNC_WIDTH, __func__);
-
-  switch (type) {
-    case TFUNC_FLAME_SPECTRUM:
-      create_flame_spectrum_texture(data);
-      break;
-    case TFUNC_COLOR_RAMP:
-      create_color_ramp(coba, data);
-      break;
-  }
-
-  GPUTexture *tex = GPU_texture_create_1d(TFUNC_WIDTH, GPU_RGBA8, data, NULL);
-
-  MEM_freeN(data);
-
-  return tex;
-}
-
-static void swizzle_texture_channel_rrrr(GPUTexture *tex)
-{
-  GPU_texture_bind(tex, 0);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_SWIZZLE_R, GL_RED);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_SWIZZLE_G, GL_RED);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_SWIZZLE_B, GL_RED);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_SWIZZLE_A, GL_RED);
-  GPU_texture_unbind(tex);
-}
-
-static GPUTexture *create_field_texture(SmokeDomainSettings *sds)
-{
-  float *field = NULL;
-
-  switch (sds->coba_field) {
-    case FLUID_FIELD_DENSITY:
-      field = smoke_get_density(sds->fluid);
-      break;
-    case FLUID_FIELD_HEAT:
-      field = smoke_get_heat(sds->fluid);
-      break;
-    case FLUID_FIELD_FUEL:
-      field = smoke_get_fuel(sds->fluid);
-      break;
-    case FLUID_FIELD_REACT:
-      field = smoke_get_react(sds->fluid);
-      break;
-    case FLUID_FIELD_FLAME:
-      field = smoke_get_flame(sds->fluid);
-      break;
-    case FLUID_FIELD_VELOCITY_X:
-      field = smoke_get_velocity_x(sds->fluid);
-      break;
-    case FLUID_FIELD_VELOCITY_Y:
-      field = smoke_get_velocity_y(sds->fluid);
-      break;
-    case FLUID_FIELD_VELOCITY_Z:
-      field = smoke_get_velocity_z(sds->fluid);
-      break;
-    case FLUID_FIELD_COLOR_R:
-      field = smoke_get_color_r(sds->fluid);
-      break;
-    case FLUID_FIELD_COLOR_G:
-      field = smoke_get_color_g(sds->fluid);
-      break;
-    case FLUID_FIELD_COLOR_B:
-      field = smoke_get_color_b(sds->fluid);
-      break;
-    case FLUID_FIELD_FORCE_X:
-      field = smoke_get_force_x(sds->fluid);
-      break;
-    case FLUID_FIELD_FORCE_Y:
-      field = smoke_get_force_y(sds->fluid);
-      break;
-    case FLUID_FIELD_FORCE_Z:
-      field = smoke_get_force_z(sds->fluid);
-      break;
-    default:
-      return NULL;
-  }
-
-  GPUTexture *tex = GPU_texture_create_nD(
-      sds->res[0], sds->res[1], sds->res[2], 3, field, GPU_R8, GPU_DATA_FLOAT, 0, true, NULL);
-
-  swizzle_texture_channel_rrrr(tex);
-  return tex;
-}
-
-static GPUTexture *create_density_texture(SmokeDomainSettings *sds, int highres)
-{
-  float *data = NULL, *source;
-  int cell_count = (highres) ? smoke_turbulence_get_cells(sds->wt) : sds->total_cells;
-  const bool has_color = (highres) ? smoke_turbulence_has_colors(sds->wt) :
-                                     smoke_has_colors(sds->fluid);
-  int *dim = (highres) ? sds->res_wt : sds->res;
-  eGPUTextureFormat format = (has_color) ? GPU_RGBA8 : GPU_R8;
-
-  if (has_color) {
-    data = MEM_callocN(sizeof(float) * cell_count * 4, "smokeColorTexture");
-  }
-
-  if (highres) {
-    if (has_color) {
-      smoke_turbulence_get_rgba(sds->wt, data, 0);
-    }
-    else {
-      source = smoke_turbulence_get_density(sds->wt);
-    }
-  }
-  else {
-    if (has_color) {
-      smoke_get_rgba(sds->fluid, data, 0);
-    }
-    else {
-      source = smoke_get_density(sds->fluid);
-    }
-  }
-
-  GPUTexture *tex = GPU_texture_create_nD(dim[0],
-                                          dim[1],
-                                          dim[2],
-                                          3,
-                                          (has_color) ? data : source,
-                                          format,
-                                          GPU_DATA_FLOAT,
-                                          0,
-                                          true,
-                                          NULL);
-  if (data) {
-    MEM_freeN(data);
-  }
-
-  if (format == GPU_R8) {
-    /* Swizzle the RGBA components to read the Red channel so
-     * that the shader stay the same for colored and non color
-     * density textures. */
-    swizzle_texture_channel_rrrr(tex);
-  }
-  return tex;
-}
-
-static GPUTexture *create_flame_texture(SmokeDomainSettings *sds, int highres)
-{
-  float *source = NULL;
-  const bool has_fuel = (highres) ? smoke_turbulence_has_fuel(sds->wt) :
-                                    smoke_has_fuel(sds->fluid);
-  int *dim = (highres) ? sds->res_wt : sds->res;
-
-  if (!has_fuel) {
-    return NULL;
-  }
-
-  if (highres) {
-    source = smoke_turbulence_get_flame(sds->wt);
-  }
-  else {
-    source = smoke_get_flame(sds->fluid);
-  }
-
-  GPUTexture *tex = GPU_texture_create_nD(
-      dim[0], dim[1], dim[2], 3, source, GPU_R8, GPU_DATA_FLOAT, 0, true, NULL);
-
-  swizzle_texture_channel_rrrr(tex);
-
-  return tex;
-}
-#endif /* WITH_SMOKE */
-
-void GPU_free_smoke(SmokeModifierData *smd)
-{
-  if (smd->type & MOD_SMOKE_TYPE_DOMAIN && smd->domain) {
-    if (smd->domain->tex) {
-      GPU_texture_free(smd->domain->tex);
-    }
-    smd->domain->tex = NULL;
-
-    if (smd->domain->tex_shadow) {
-      GPU_texture_free(smd->domain->tex_shadow);
-    }
-    smd->domain->tex_shadow = NULL;
-
-    if (smd->domain->tex_flame) {
-      GPU_texture_free(smd->domain->tex_flame);
-    }
-    smd->domain->tex_flame = NULL;
-
-    if (smd->domain->tex_flame_coba) {
-      GPU_texture_free(smd->domain->tex_flame_coba);
-    }
-    smd->domain->tex_flame_coba = NULL;
-
-    if (smd->domain->tex_coba) {
-      GPU_texture_free(smd->domain->tex_coba);
-    }
-    smd->domain->tex_coba = NULL;
-
-    if (smd->domain->tex_field) {
-      GPU_texture_free(smd->domain->tex_field);
-    }
-    smd->domain->tex_field = NULL;
-  }
-}
-
-void GPU_create_smoke_coba_field(SmokeModifierData *smd)
-{
-#ifdef WITH_SMOKE
-  if (smd->type & MOD_SMOKE_TYPE_DOMAIN) {
-    SmokeDomainSettings *sds = smd->domain;
-
-    if (!sds->tex_field) {
-      sds->tex_field = create_field_texture(sds);
-    }
-    if (!sds->tex_coba) {
-      sds->tex_coba = create_transfer_function(TFUNC_COLOR_RAMP, sds->coba);
-    }
-  }
-#else   // WITH_SMOKE
-  smd->domain->tex_field = NULL;
-#endif  // WITH_SMOKE
-}
-
-void GPU_create_smoke(SmokeModifierData *smd, int highres)
-{
-#ifdef WITH_SMOKE
-  if (smd->type & MOD_SMOKE_TYPE_DOMAIN) {
-    SmokeDomainSettings *sds = smd->domain;
-
-    if (!sds->tex) {
-      sds->tex = create_density_texture(sds, highres);
-    }
-    if (!sds->tex_flame) {
-      sds->tex_flame = create_flame_texture(sds, highres);
-    }
-    if (!sds->tex_flame_coba && sds->tex_flame) {
-      sds->tex_flame_coba = create_transfer_function(TFUNC_FLAME_SPECTRUM, NULL);
-    }
-    if (!sds->tex_shadow) {
-      sds->tex_shadow = GPU_texture_create_nD(sds->res[0],
-                                              sds->res[1],
-                                              sds->res[2],
-                                              3,
-                                              sds->shadow,
-                                              GPU_R8,
-                                              GPU_DATA_FLOAT,
-                                              0,
-                                              true,
-                                              NULL);
-    }
-  }
-#else   // WITH_SMOKE
-  (void)highres;
-  smd->domain->tex = NULL;
-  smd->domain->tex_flame = NULL;
-  smd->domain->tex_flame_coba = NULL;
-  smd->domain->tex_shadow = NULL;
-#endif  // WITH_SMOKE
-}
-
-void GPU_create_smoke_velocity(SmokeModifierData *smd)
-{
-#ifdef WITH_SMOKE
-  if (smd->type & MOD_SMOKE_TYPE_DOMAIN) {
-    SmokeDomainSettings *sds = smd->domain;
-
-    const float *vel_x = smoke_get_velocity_x(sds->fluid);
-    const float *vel_y = smoke_get_velocity_y(sds->fluid);
-    const float *vel_z = smoke_get_velocity_z(sds->fluid);
-
-    if (ELEM(NULL, vel_x, vel_y, vel_z)) {
-      return;
-    }
-
-    if (!sds->tex_velocity_x) {
-      sds->tex_velocity_x = GPU_texture_create_3d(
-          sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_x, NULL);
-      sds->tex_velocity_y = GPU_texture_create_3d(
-          sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_y, NULL);
-      sds->tex_velocity_z = GPU_texture_create_3d(
-          sds->res[0], sds->res[1], sds->res[2], GPU_R16F, vel_z, NULL);
-    }
-  }
-#else   // WITH_SMOKE
-  smd->domain->tex_velocity_x = NULL;
-  smd->domain->tex_velocity_y = NULL;
-  smd->domain->tex_velocity_z = NULL;
-#endif  // WITH_SMOKE
-}
-
-/* TODO Unify with the other GPU_free_smoke. */
-void GPU_free_smoke_velocity(SmokeModifierData *smd)
-{
-  if (smd->type & MOD_SMOKE_TYPE_DOMAIN && smd->domain) {
-    if (smd->domain->tex_velocity_x) {
-      GPU_texture_free(smd->domain->tex_velocity_x);
-    }
-
-    if (smd->domain->tex_velocity_y) {
-      GPU_texture_free(smd->domain->tex_velocity_y);
-    }
-
-    if (smd->domain->tex_velocity_z) {
-      GPU_texture_free(smd->domain->tex_velocity_z);
-    }
-
-    smd->domain->tex_velocity_x = NULL;
-    smd->domain->tex_velocity_y = NULL;
-    smd->domain->tex_velocity_z = NULL;
-  }
 }
 
 static LinkNode *image_free_queue = NULL;
@@ -1322,11 +960,13 @@ void GPU_free_unused_buffers(Main *bmain)
 
 static void gpu_free_image_immediate(Image *ima)
 {
-  for (int i = 0; i < TEXTARGET_COUNT; i++) {
-    /* free glsl image binding */
-    if (ima->gputexture[i]) {
-      GPU_texture_free(ima->gputexture[i]);
-      ima->gputexture[i] = NULL;
+  LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
+    for (int i = 0; i < TEXTARGET_COUNT; i++) {
+      /* free glsl image binding */
+      if (tile->gputexture[i] != NULL) {
+        GPU_texture_free(tile->gputexture[i]);
+        tile->gputexture[i] = NULL;
+      }
     }
   }
 

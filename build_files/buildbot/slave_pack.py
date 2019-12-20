@@ -22,9 +22,12 @@
 # system and zipping it into buildbot_upload.zip. This is then uploaded
 # to the master in the next buildbot step.
 
-import buildbot_utils
 import os
 import sys
+
+from pathlib import Path
+
+import buildbot_utils
 
 def get_package_name(builder, platform=None):
     info = buildbot_utils.VersionInfo(builder)
@@ -32,10 +35,17 @@ def get_package_name(builder, platform=None):
     package_name = 'blender-' + info.full_version
     if platform:
       package_name += '-' + platform
-    if builder.branch != 'master' and info.is_development_build:
-        package_name = builder.branch + "-" + package_name
+    if not (builder.branch == 'master' or builder.is_release_branch):
+        if info.is_development_build:
+            package_name = builder.branch + "-" + package_name
 
     return package_name
+
+def sign_file_or_directory(path):
+    from codesign.simple_code_signer import SimpleCodeSigner
+    code_signer = SimpleCodeSigner()
+    code_signer.sign_file_or_directory(Path(path))
+
 
 def create_buildbot_upload_zip(builder, package_files):
     import zipfile
@@ -47,13 +57,14 @@ def create_buildbot_upload_zip(builder, package_files):
     try:
         z = zipfile.ZipFile(buildbot_upload_zip, "w", compression=zipfile.ZIP_STORED)
         for filepath, filename in package_files:
+            print("Packaged", filename)
             z.write(filepath, arcname=filename)
         z.close()
     except Exception as ex:
         sys.stderr.write('Create buildbot_upload.zip failed: ' + str(ex) + '\n')
         sys.exit(1)
 
-def create_tar_bz2(src, dest, package_name):
+def create_tar_xz(src, dest, package_name):
     # One extra to remove leading os.sep when cleaning root for package_root
     ln = len(src) + 1
     flist = list()
@@ -64,9 +75,20 @@ def create_tar_bz2(src, dest, package_name):
         flist.extend([(os.path.join(root, file), os.path.join(package_root, file)) for file in files])
 
     import tarfile
-    package = tarfile.open(dest, 'w:bz2')
+
+    # Set UID/GID of archived files to 0, otherwise they'd be owned by whatever
+    # user compiled the package. If root then unpacks it to /usr/local/ you get
+    # a security issue.
+    def _fakeroot(tarinfo):
+        tarinfo.gid = 0
+        tarinfo.gname = "root"
+        tarinfo.uid = 0
+        tarinfo.uname = "root"
+        return tarinfo
+
+    package = tarfile.open(dest, 'w:xz', preset=9)
     for entry in flist:
-        package.add(entry[0], entry[1], recursive=False)
+        package.add(entry[0], entry[1], recursive=False, filter=_fakeroot)
     package.close()
 
 def cleanup_files(dirpath, extension):
@@ -127,6 +149,8 @@ def pack_win(builder):
 
         package_filename = package_name + '.msi'
         package_filepath = os.path.join(builder.build_dir, package_filename)
+        sign_file_or_directory(package_filepath)
+
         package_files += [(package_filepath, package_filename)]
 
     create_buildbot_upload_zip(builder, package_files)
@@ -147,28 +171,14 @@ def pack_linux(builder):
     py_target = os.path.join(builder.install_dir, info.version)
     buildbot_utils.call(builder.command_prefix + ['find', py_target, '-iname', '*.so', '-exec', 'strip', '-s', '{}', ';'])
 
-    # Copy all specific files which are too specific to be copied by
-    # the CMake rules themselves
-    print("Copying extra scripts and libs...")
-
-    extra = '/' + os.path.join('home', 'sources', 'release-builder', 'extra')
-    mesalibs = os.path.join(extra, 'mesalibs' + str(builder.bits) + '.tar.bz2')
-    software_gl = os.path.join(builder.blender_dir, 'release', 'bin', 'blender-softwaregl')
-    icons = os.path.join(builder.blender_dir, 'release', 'freedesktop', 'icons')
-
-    os.system('tar -xpf %s -C %s' % (mesalibs, builder.install_dir))
-    os.system('cp %s %s' % (software_gl, builder.install_dir))
-    os.system('cp -r %s %s' % (icons, builder.install_dir))
-    os.system('chmod 755 %s' % (os.path.join(builder.install_dir, 'blender-softwaregl')))
-
     # Construct package name
     platform_name = 'linux-' + blender_glibc + '-' + blender_arch
     package_name = get_package_name(builder, platform_name)
-    package_filename = package_name + ".tar.bz2"
+    package_filename = package_name + ".tar.xz"
 
-    print("Creating .tar.bz2 archive")
-    package_filepath = builder.install_dir + '.tar.bz2'
-    create_tar_bz2(builder.install_dir, package_filepath, package_name)
+    print("Creating .tar.xz archive")
+    package_filepath = builder.install_dir + '.tar.xz'
+    create_tar_xz(builder.install_dir, package_filepath, package_name)
 
     # Create buildbot_upload.zip
     create_buildbot_upload_zip(builder, [(package_filepath, package_filename)])

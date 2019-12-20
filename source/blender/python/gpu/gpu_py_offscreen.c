@@ -183,7 +183,7 @@ static PyObject *bpygpu_offscreen_unbind(BPyGPUOffScreen *self, PyObject *args, 
 
 PyDoc_STRVAR(
     bpygpu_offscreen_draw_view3d_doc,
-    ".. method:: draw_view3d(scene, view3d, region, view_matrix, projection_matrix)\n"
+    ".. method:: draw_view3d(scene, view_layer, view3d, region, view_matrix, projection_matrix)\n"
     "\n"
     "   Draw the 3d viewport in the offscreen object.\n"
     "\n"
@@ -303,17 +303,13 @@ static void BPyGPUOffScreen__tp_dealloc(BPyGPUOffScreen *self)
 }
 
 static PyGetSetDef bpygpu_offscreen_getseters[] = {
-    {(char *)"color_texture",
+    {"color_texture",
      (getter)bpygpu_offscreen_color_texture_get,
      (setter)NULL,
      bpygpu_offscreen_color_texture_doc,
      NULL},
-    {(char *)"width",
-     (getter)bpygpu_offscreen_width_get,
-     (setter)NULL,
-     bpygpu_offscreen_width_doc,
-     NULL},
-    {(char *)"height",
+    {"width", (getter)bpygpu_offscreen_width_get, (setter)NULL, bpygpu_offscreen_width_doc, NULL},
+    {"height",
      (getter)bpygpu_offscreen_height_get,
      (setter)NULL,
      bpygpu_offscreen_height_doc,

@@ -38,7 +38,6 @@ struct wmTimer;
 #include "DNA_image_types.h"
 #include "DNA_object_types.h"
 #include "DNA_movieclip_types.h"
-#include "DNA_gpu_types.h"
 
 typedef struct RegionView3D {
 
@@ -180,6 +179,10 @@ typedef struct View3DShading {
   float curvature_ridge_factor;
   float curvature_valley_factor;
 
+  /* Render pass displayed in the viewport. Is an `eScenePassType` where one bit is set */
+  int render_pass;
+  char _pad2[4];
+
   struct IDProperty *prop;
 } View3DShading;
 
@@ -301,10 +304,6 @@ typedef struct View3D {
   /** Actually only used to define the opacity of the grease pencil vertex in edit mode. */
   float vertex_opacity;
 
-  /* note, 'fx_settings.dof' is currently _not_ allocated,
-   * instead set (temporarily) from camera */
-  struct GPUFXSettings fx_settings;
-
   /* XXX deprecated? */
   /** Grease-Pencil Data (annotation layers). */
   struct bGPdata *gpd DNA_DEPRECATED;
@@ -351,6 +350,7 @@ typedef struct View3D {
 #define RV3D_CLIPPING (1 << 2)
 #define RV3D_NAVIGATING (1 << 3)
 #define RV3D_GPULIGHT_UPDATE (1 << 4)
+#define RV3D_PAINTING (1 << 5)
 /*#define RV3D_IS_GAME_ENGINE       (1 << 5) */ /* UNUSED */
 /**
  * Disable zbuffer offset, skip calls to #ED_view3d_polygon_offset.
@@ -376,6 +376,9 @@ typedef struct View3D {
 #define RV3D_VIEW_CAMERA 8
 
 #define RV3D_VIEW_IS_AXIS(view) (((view) >= RV3D_VIEW_FRONT) && ((view) <= RV3D_VIEW_BOTTOM))
+#define RV3D_CLIPPING_ENABLED(v3d, rv3d) \
+  (rv3d && v3d && (rv3d->rflag & RV3D_CLIPPING) && ELEM(v3d->shading.type, OB_WIRE, OB_SOLID) && \
+   rv3d->clipbb)
 
 /** #View3D.flag2 (int) */
 #define V3D_HIDE_OVERLAYS (1 << 2)

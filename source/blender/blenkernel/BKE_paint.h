@@ -134,7 +134,7 @@ void BKE_paint_curve_copy_data(struct Main *bmain,
 struct PaintCurve *BKE_paint_curve_copy(struct Main *bmain, const struct PaintCurve *pc);
 void BKE_paint_curve_make_local(struct Main *bmain, struct PaintCurve *pc, const bool lib_local);
 
-bool BKE_paint_ensure(const struct ToolSettings *ts, struct Paint **r_paint);
+bool BKE_paint_ensure(struct ToolSettings *ts, struct Paint **r_paint);
 void BKE_paint_init(struct Main *bmain, struct Scene *sce, ePaintMode mode, const char col[3]);
 void BKE_paint_free(struct Paint *p);
 void BKE_paint_copy(struct Paint *src, struct Paint *tar, const int flag);
@@ -220,7 +220,7 @@ typedef struct SculptSession {
   struct MPoly *mpoly;
   struct MLoop *mloop;
   int totvert, totpoly;
-  struct KeyBlock *kb;
+  struct KeyBlock *shapekey_active;
   float *vmask;
 
   /* Mesh connectivity */
@@ -243,10 +243,10 @@ typedef struct SculptSession {
   bool show_mask;
 
   /* Painting on deformed mesh */
-  bool modifiers_active;       /* object is deformed with some modifiers */
-  float (*orig_cos)[3];        /* coords of undeformed mesh */
-  float (*deform_cos)[3];      /* coords of deformed mesh but without stroke displacement */
-  float (*deform_imats)[3][3]; /* crazyspace deformation matrices */
+  bool deform_modifiers_active; /* object is deformed with some modifiers */
+  float (*orig_cos)[3];         /* coords of undeformed mesh */
+  float (*deform_cos)[3];       /* coords of deformed mesh but without stroke displacement */
+  float (*deform_imats)[3][3];  /* crazyspace deformation matrices */
 
   /* Used to cache the render of the active texture */
   unsigned int texcache_side, *texcache, texcache_actual;
@@ -265,7 +265,10 @@ typedef struct SculptSession {
   float cursor_location[3];
   float cursor_normal[3];
   float cursor_view_normal[3];
+
+  /* TODO(jbakker): Replace rv3d adn v3d with ViewContext */
   struct RegionView3D *rv3d;
+  struct View3D *v3d;
 
   /* Dynamic mesh preview */
   int *preview_vert_index_list;
@@ -306,6 +309,13 @@ typedef struct SculptSession {
 
   /* This flag prevents PBVH from being freed when creating the vp_handle for texture paint. */
   bool building_vp_handle;
+
+  /**
+   * ID data is older than sculpt-mode data.
+   * Set #Main.is_memfile_undo_flush_needed when enabling.
+   */
+  char needs_flush_to_id;
+
 } SculptSession;
 
 void BKE_sculptsession_free(struct Object *ob);

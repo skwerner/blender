@@ -2265,9 +2265,18 @@ static int wm_handler_operator_call(bContext *C,
       bool use_last_properties = true;
       PointerRNA tool_properties = {0};
 
-      bToolRef *keymap_tool = ((handler_base->type == WM_HANDLER_TYPE_KEYMAP) ?
-                                   ((wmEventHandler_Keymap *)handler_base)->keymap_tool :
-                                   NULL);
+      bToolRef *keymap_tool = NULL;
+      if (handler_base->type == WM_HANDLER_TYPE_KEYMAP) {
+        keymap_tool = ((wmEventHandler_Keymap *)handler_base)->keymap_tool;
+      }
+      else if (handler_base->type == WM_HANDLER_TYPE_GIZMO) {
+        wmGizmoMap *gizmo_map = ((wmEventHandler_Gizmo *)handler_base)->gizmo_map;
+        wmGizmo *gz = wm_gizmomap_highlight_get(gizmo_map);
+        if (gz && (gz->flag & WM_GIZMO_OPERATOR_TOOL_INIT)) {
+          keymap_tool = WM_toolsystem_ref_from_context(C);
+        }
+      }
+
       const bool is_tool = (keymap_tool != NULL);
       const bool use_tool_properties = is_tool;
 
@@ -2338,24 +2347,22 @@ static int wm_handler_fileselect_do(bContext *C,
                                     int val)
 {
   wmWindowManager *wm = CTX_wm_manager(C);
-  SpaceFile *sfile;
   int action = WM_HANDLER_CONTINUE;
 
   switch (val) {
     case EVT_FILESELECT_FULL_OPEN: {
       wmWindow *win = CTX_wm_window(C);
-      const int sizex = 1020 * UI_DPI_FAC;
-      const int sizey = 600 * UI_DPI_FAC;
       ScrArea *area;
 
       if ((area = ED_screen_temp_space_open(C,
                                             IFACE_("Blender File View"),
                                             WM_window_pixels_x(win) / 2,
                                             WM_window_pixels_y(win) / 2,
-                                            sizex,
-                                            sizey,
+                                            U.file_space_data.temp_win_sizex * UI_DPI_FAC,
+                                            U.file_space_data.temp_win_sizey * UI_DPI_FAC,
                                             SPACE_FILE,
-                                            U.filebrowser_display_type))) {
+                                            U.filebrowser_display_type,
+                                            true))) {
         ARegion *region_header = BKE_area_find_region_type(area, RGN_TYPE_HEADER);
 
         BLI_assert(area->spacetype == SPACE_FILE);
@@ -2365,10 +2372,10 @@ static int wm_handler_fileselect_do(bContext *C,
         region_header->alignment = RGN_ALIGN_BOTTOM;
 
         /* settings for filebrowser, sfile is not operator owner but sends events */
-        sfile = (SpaceFile *)area->spacedata.first;
+        SpaceFile *sfile = (SpaceFile *)area->spacedata.first;
         sfile->op = handler->op;
 
-        ED_fileselect_set_params(sfile);
+        ED_fileselect_set_params_from_userdef(sfile);
       }
       else {
         BKE_report(&wm->reports, RPT_ERROR, "Failed to open window!");
@@ -2402,6 +2409,11 @@ static int wm_handler_fileselect_do(bContext *C,
           ScrArea *file_sa = screen->areabase.first;
 
           if (screen->temp && (file_sa->spacetype == SPACE_FILE)) {
+            int win_size[2];
+            bool is_maximized;
+            ED_fileselect_window_params_get(temp_win, win_size, &is_maximized);
+            ED_fileselect_params_to_userdef(file_sa->spacedata.first, win_size, is_maximized);
+
             if (BLI_listbase_is_single(&file_sa->spacedata)) {
               BLI_assert(ctx_win != temp_win);
 
@@ -2430,6 +2442,7 @@ static int wm_handler_fileselect_do(bContext *C,
         }
 
         if (!temp_win && ctx_sa->full) {
+          ED_fileselect_params_to_userdef(ctx_sa->spacedata.first, NULL, false);
           ED_screen_full_prevspace(C, ctx_sa);
         }
       }
@@ -2730,7 +2743,10 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
         /* Clear the tool-tip whenever a key binding is handled, without this tool-tips
          * are kept when a modal operators starts (annoying but otherwise harmless). */
         if (action & WM_HANDLER_BREAK) {
-          WM_tooltip_clear(C, CTX_wm_window(C));
+          /* Window may be gone after file read. */
+          if (CTX_wm_window(C) != NULL) {
+            WM_tooltip_clear(C, CTX_wm_window(C));
+          }
         }
       }
       else if (handler_base->type == WM_HANDLER_TYPE_UI) {
@@ -2795,6 +2811,12 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
         BLI_assert(gzmap != NULL);
         wmGizmo *gz = wm_gizmomap_highlight_get(gzmap);
 
+        /* Special case, needed so postponed refresh can respond to events,
+         * see #WM_GIZMOGROUPTYPE_DELAY_REFRESH_FOR_TWEAK for details. */
+        if (WM_gizmomap_tag_refresh_check(gzmap)) {
+          ED_region_tag_redraw(region);
+        }
+
         if (region->gizmo_map != handler->gizmo_map) {
           WM_gizmomap_tag_refresh(handler->gizmo_map);
         }
@@ -2843,7 +2865,7 @@ static int wm_handlers_do_intern(bContext *C, wmEvent *event, ListBase *handlers
           if (wm_gizmomap_highlight_set(gzmap, C, gz, part)) {
             if (gz != NULL) {
               if (U.flag & USER_TOOLTIPS) {
-                WM_tooltip_timer_init(C, CTX_wm_window(C), region, WM_gizmomap_tooltip_init);
+                WM_tooltip_timer_init(C, CTX_wm_window(C), area, region, WM_gizmomap_tooltip_init);
               }
             }
           }
@@ -3714,22 +3736,93 @@ wmEventHandler_Keymap *WM_event_add_keymap_handler(ListBase *handlers, wmKeyMap 
   return handler;
 }
 
-/** Follow #wmEventHandler_KeymapDynamicFn signiture. */
+/**
+ * Implements fallback tool when enabled by:
+ * #SCE_WORKSPACE_TOOL_FALLBACK, #WM_GIZMOGROUPTYPE_TOOL_FALLBACK_KEYMAP.
+ *
+ * This runs before #WM_event_get_keymap_from_toolsystem,
+ * allowing both the fallback-tool and active-tool to be activated
+ * providing the key-map is configured so the keys don't conflict.
+ * For example one mouse button can run the active-tool, another button for the fallback-tool.
+ * See T72567.
+ *
+ * Follow #wmEventHandler_KeymapDynamicFn signature.
+ */
+wmKeyMap *WM_event_get_keymap_from_toolsystem_fallback(wmWindowManager *wm,
+                                                       wmEventHandler_Keymap *handler)
+{
+  if (!USER_EXPERIMENTAL_TEST(&U, use_tool_fallback)) {
+    return NULL;
+  }
+
+  ScrArea *sa = handler->dynamic.user_data;
+  handler->keymap_tool = NULL;
+  bToolRef_Runtime *tref_rt = sa->runtime.tool ? sa->runtime.tool->runtime : NULL;
+  if (tref_rt && tref_rt->keymap_fallback[0]) {
+    const char *keymap_id = NULL;
+
+    /* Support for the gizmo owning the tool keymap. */
+    if (tref_rt->gizmo_group[0] != '\0' && tref_rt->keymap_fallback[0] != '\n') {
+      wmGizmoMap *gzmap = NULL;
+      wmGizmoGroup *gzgroup = NULL;
+      for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+        if (ar->gizmo_map != NULL) {
+          gzmap = ar->gizmo_map;
+          gzgroup = WM_gizmomap_group_find(gzmap, tref_rt->gizmo_group);
+          if (gzgroup != NULL) {
+            break;
+          }
+        }
+      }
+      if (gzgroup != NULL) {
+        if (gzgroup->type->flag & WM_GIZMOGROUPTYPE_TOOL_FALLBACK_KEYMAP) {
+          /* If all are hidden, don't override. */
+          if (gzgroup->use_fallback_keymap) {
+            wmGizmo *highlight = wm_gizmomap_highlight_get(gzmap);
+            if (highlight == NULL) {
+              keymap_id = tref_rt->keymap_fallback;
+            }
+          }
+        }
+      }
+    }
+
+    if (keymap_id && keymap_id[0]) {
+      wmKeyMap *km = WM_keymap_list_find_spaceid_or_empty(
+          &wm->userconf->keymaps, keymap_id, sa->spacetype, RGN_TYPE_WINDOW);
+      /* We shouldn't use keymaps from unrelated spaces. */
+      if (km != NULL) {
+        handler->keymap_tool = sa->runtime.tool;
+        return km;
+      }
+      else {
+        printf(
+            "Keymap: '%s' not found for tool '%s'\n", tref_rt->keymap, sa->runtime.tool->idname);
+      }
+    }
+  }
+  return NULL;
+}
+
 wmKeyMap *WM_event_get_keymap_from_toolsystem(wmWindowManager *wm, wmEventHandler_Keymap *handler)
 {
   ScrArea *sa = handler->dynamic.user_data;
   handler->keymap_tool = NULL;
   bToolRef_Runtime *tref_rt = sa->runtime.tool ? sa->runtime.tool->runtime : NULL;
   if (tref_rt && tref_rt->keymap[0]) {
-    wmKeyMap *km = WM_keymap_list_find_spaceid_or_empty(
-        &wm->userconf->keymaps, tref_rt->keymap, sa->spacetype, RGN_TYPE_WINDOW);
-    /* We shouldn't use keymaps from unrelated spaces. */
-    if (km != NULL) {
-      handler->keymap_tool = sa->runtime.tool;
-      return km;
-    }
-    else {
-      printf("Keymap: '%s' not found for tool '%s'\n", tref_rt->keymap, sa->runtime.tool->idname);
+    const char *keymap_id = tref_rt->keymap;
+    {
+      wmKeyMap *km = WM_keymap_list_find_spaceid_or_empty(
+          &wm->userconf->keymaps, keymap_id, sa->spacetype, RGN_TYPE_WINDOW);
+      /* We shouldn't use keymaps from unrelated spaces. */
+      if (km != NULL) {
+        handler->keymap_tool = sa->runtime.tool;
+        return km;
+      }
+      else {
+        printf(
+            "Keymap: '%s' not found for tool '%s'\n", tref_rt->keymap, sa->runtime.tool->idname);
+      }
     }
   }
   return NULL;
@@ -4126,6 +4219,8 @@ static int convert_key(GHOST_TKey key)
         return LEFTALTKEY;
       case GHOST_kKeyRightAlt:
         return RIGHTALTKEY;
+      case GHOST_kKeyApp:
+        return APPKEY;
 
       case GHOST_kKeyCapsLock:
         return CAPSLOCKKEY;
@@ -4203,19 +4298,31 @@ static void wm_eventemulation(wmEvent *event, bool test_only)
   if (U.flag & USER_TWOBUTTONMOUSE) {
 
     if (event->type == LEFTMOUSE) {
-      if (event->val == KM_PRESS && event->alt) {
-        event->type = MIDDLEMOUSE;
-        event->alt = 0;
+      short *mod = (
+#if !defined(WIN32)
+          (U.mouse_emulate_3_button_modifier == USER_EMU_MMB_MOD_OSKEY) ? &event->oskey :
+                                                                          &event->alt
+#else
+          /* Disable for WIN32 for now because it accesses the start menu. */
+          &event->alt
+#endif
+      );
 
-        if (!test_only) {
-          emulating_event = MIDDLEMOUSE;
+      if (event->val == KM_PRESS) {
+        if (*mod) {
+          *mod = 0;
+          event->type = MIDDLEMOUSE;
+
+          if (!test_only) {
+            emulating_event = MIDDLEMOUSE;
+          }
         }
       }
       else if (event->val == KM_RELEASE) {
         /* only send middle-mouse release if emulated */
         if (emulating_event == MIDDLEMOUSE) {
           event->type = MIDDLEMOUSE;
-          event->alt = 0;
+          *mod = 0;
         }
 
         if (!test_only) {
@@ -4979,6 +5086,19 @@ wmKeyMap *WM_event_get_keymap_from_handler(wmWindowManager *wm, wmEventHandler_K
   return keymap;
 }
 
+wmKeyMapItem *WM_event_match_keymap_item(bContext *C, wmKeyMap *keymap, const wmEvent *event)
+{
+  for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+    if (wm_eventmatch(event, kmi)) {
+      wmOperatorType *ot = WM_operatortype_find(kmi->idname, 0);
+      if (WM_operator_poll_context(C, ot, WM_OP_INVOKE_DEFAULT)) {
+        return kmi;
+      }
+    }
+  }
+  return NULL;
+}
+
 static wmKeyMapItem *wm_kmi_from_event(bContext *C,
                                        wmWindowManager *wm,
                                        ListBase *handlers,
@@ -4994,13 +5114,9 @@ static wmKeyMapItem *wm_kmi_from_event(bContext *C,
         wmEventHandler_Keymap *handler = (wmEventHandler_Keymap *)handler_base;
         wmKeyMap *keymap = WM_event_get_keymap_from_handler(wm, handler);
         if (keymap && WM_keymap_poll(C, keymap)) {
-          for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
-            if (wm_eventmatch(event, kmi)) {
-              wmOperatorType *ot = WM_operatortype_find(kmi->idname, 0);
-              if (WM_operator_poll_context(C, ot, WM_OP_INVOKE_DEFAULT)) {
-                return kmi;
-              }
-            }
+          wmKeyMapItem *kmi = WM_event_match_keymap_item(C, keymap, event);
+          if (kmi != NULL) {
+            return kmi;
           }
         }
       }
@@ -5295,17 +5411,7 @@ bool WM_window_modal_keymap_status_draw(bContext *UNUSED(C), wmWindow *win, uiLa
           /* Assume release events just disable something which was toggled on. */
           continue;
         }
-        int icon_mod[4];
-#ifdef WITH_HEADLESS
-        int icon = 0;
-#else
-        int icon = UI_icon_from_keymap_item(kmi, icon_mod);
-#endif
-        if (icon != 0) {
-          for (int j = 0; j < ARRAY_SIZE(icon_mod) && icon_mod[j]; j++) {
-            uiItemL(row, "", icon_mod[j]);
-          }
-          uiItemL(row, items[i].name, icon);
+        if (uiTemplateEventFromKeymapItem(row, items[i].name, kmi, false)) {
           show_text = false;
         }
       }

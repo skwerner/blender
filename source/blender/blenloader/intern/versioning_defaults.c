@@ -27,6 +27,7 @@
 #include "BLI_system.h"
 
 #include "DNA_camera_types.h"
+#include "DNA_curveprofile_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
@@ -41,15 +42,22 @@
 #include "DNA_light_types.h"
 
 #include "BKE_appdir.h"
+#include "BKE_brush.h"
 #include "BKE_colortools.h"
 #include "BKE_layer.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
+#include "BKE_mesh.h"
 #include "BKE_node.h"
+#include "BKE_paint.h"
 #include "BKE_screen.h"
 #include "BKE_workspace.h"
+#include "BKE_curveprofile.h"
 
 #include "BLO_readfile.h"
+
+/* Make preferences read-only, use versioning_userdef.c. */
+#define U (*((const UserDef *)&U))
 
 /**
  * Rename if the ID doesn't exist.
@@ -142,10 +150,9 @@ static void blo_update_defaults_screen(bScreen *screen,
       }
     }
     else if (sa->spacetype == SPACE_ACTION) {
-      /* Show marker lines, hide channels and collapse summary in timelines. */
+      /* Show markers region, hide channels and collapse summary in timelines. */
       SpaceAction *saction = sa->spacedata.first;
-      saction->flag |= SACTION_SHOW_MARKER_LINES;
-
+      saction->flag |= SACTION_SHOW_MARKERS;
       if (saction->mode == SACTCONT_TIMELINE) {
         saction->ads.flag |= ADS_FLAG_SUMMARY_COLLAPSED;
 
@@ -158,11 +165,15 @@ static void blo_update_defaults_screen(bScreen *screen,
     }
     else if (sa->spacetype == SPACE_GRAPH) {
       SpaceGraph *sipo = sa->spacedata.first;
-      sipo->flag |= SIPO_MARKER_LINES;
+      sipo->flag |= SIPO_SHOW_MARKERS;
     }
     else if (sa->spacetype == SPACE_NLA) {
       SpaceNla *snla = sa->spacedata.first;
-      snla->flag |= SNLA_SHOW_MARKER_LINES;
+      snla->flag |= SNLA_SHOW_MARKERS;
+    }
+    else if (sa->spacetype == SPACE_SEQ) {
+      SpaceSeq *seq = sa->spacedata.first;
+      seq->flag |= SEQ_SHOW_MARKERS;
     }
     else if (sa->spacetype == SPACE_TEXT) {
       /* Show syntax and line numbers in Script workspace text editor. */
@@ -207,6 +218,19 @@ static void blo_update_defaults_screen(bScreen *screen,
       }
     }
   }
+
+  /* 2D animation template. */
+  if (app_template && STREQ(app_template, "2D_Animation")) {
+    for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+      for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+        if (sa->spacetype == SPACE_ACTION) {
+          SpaceAction *saction = sa->spacedata.first;
+          /* Enable Sliders. */
+          saction->flag |= SACTION_SLIDERS;
+        }
+      }
+    }
+  }
 }
 
 void BLO_update_defaults_workspace(WorkSpace *workspace, const char *app_template)
@@ -227,6 +251,25 @@ void BLO_update_defaults_workspace(WorkSpace *workspace, const char *app_templat
     /* For 2D animation template. */
     if (STREQ(workspace->id.name + 2, "Drawing")) {
       workspace->object_mode = OB_MODE_PAINT_GPENCIL;
+    }
+
+    /* For Sculpting template. */
+    if (STREQ(workspace->id.name + 2, "Sculpting")) {
+      for (WorkSpaceLayout *layout = layouts->first; layout; layout = layout->next) {
+        bScreen *screen = layout->screen;
+        if (screen) {
+          for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+            for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
+              if (sa->spacetype == SPACE_VIEW3D) {
+                View3D *v3d = sa->spacedata.first;
+                v3d->shading.flag &= ~V3D_SHADING_CAVITY;
+                copy_v3_fl(v3d->shading.single_color, 1.0f);
+                STRNCPY(v3d->shading.matcap, "basic_1");
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
@@ -285,6 +328,10 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
                        CURVEMAP_SLOPE_POSITIVE);
   }
 
+  if (ts->sculpt) {
+    ts->sculpt->paint.symmetry_flags |= PAINT_SYMMETRY_FEATHER;
+  }
+
   /* Correct default startup UV's. */
   Mesh *me = BLI_findstring(&bmain->meshes, "Cube", offsetof(ID, name) + 2);
   if (me && (me->totloop == 24) && (me->mloopuv != NULL)) {
@@ -297,6 +344,11 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
     for (int i = 0; i < ARRAY_SIZE(uv_values); i++) {
       copy_v2_v2(me->mloopuv[i].uv, uv_values[i]);
     }
+  }
+
+  /* Make sure that the curve profile is initialized */
+  if (ts->custom_bevel_profile_preset == NULL) {
+    ts->custom_bevel_profile_preset = BKE_curveprofile_add(PROF_PRESET_LINE);
   }
 }
 
@@ -352,6 +404,12 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
       scene->audio.flag &= ~AUDIO_SYNC;
       scene->flag &= ~SCE_FRAME_DROP;
     }
+
+    /* Change default selection mode for Grease Pencil. */
+    if (app_template && STREQ(app_template, "2D_Animation")) {
+      ToolSettings *ts = scene->toolsettings;
+      ts->gpencil_selectmode_edit = GP_SELECTMODE_STROKE;
+    }
   }
 
   /* Objects */
@@ -373,6 +431,13 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
   for (Mesh *mesh = bmain->meshes.first; mesh; mesh = mesh->id.next) {
     /* Match default for new meshes. */
     mesh->smoothresh = DEG2RADF(30);
+
+    /* For Sculpting template. */
+    if (app_template && STREQ(app_template, "Sculpting")) {
+      mesh->remesh_voxel_size = 0.035f;
+      mesh->flag |= ME_REMESH_FIX_POLES | ME_REMESH_REPROJECT_VOLUME;
+      BKE_mesh_smooth_flag_set(mesh, false);
+    }
   }
 
   for (Camera *camera = bmain->cameras.first; camera; camera = camera->id.next) {
@@ -407,7 +472,8 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
   {
     /* Enable for UV sculpt (other brush types will be created as needed),
      * without this the grab brush will be active but not selectable from the list. */
-    Brush *brush = BLI_findstring(&bmain->brushes, "Grab", offsetof(ID, name) + 2);
+    const char *brush_name = "Grab";
+    Brush *brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
     if (brush) {
       brush->ob_mode |= OB_MODE_EDIT;
     }
@@ -415,13 +481,114 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 
   for (Brush *brush = bmain->brushes.first; brush; brush = brush->id.next) {
     brush->blur_kernel_radius = 2;
+
+    /* Use full strength for all non-sculpt brushes,
+     * when painting we want to use full color/weight always.
+     *
+     * Note that sculpt is an exception,
+     * it's values are overwritten by #BKE_brush_sculpt_reset below. */
+    brush->alpha = 1.0;
+
+    /* Enable antialiasing by default */
+    brush->sampling_flag |= BRUSH_PAINT_ANTIALIASING;
   }
 
   {
     /* Change the spacing of the Smear brush to 3.0% */
-    Brush *brush = BLI_findstring(&bmain->brushes, "Smear", offsetof(ID, name) + 2);
+    const char *brush_name;
+    Brush *brush;
+
+    brush_name = "Smear";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
     if (brush) {
       brush->spacing = 3.0;
     }
+
+    brush_name = "Draw Sharp";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_DRAW_SHARP;
+    }
+
+    brush_name = "Elastic Deform";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_ELASTIC_DEFORM;
+    }
+
+    brush_name = "Pose";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_POSE;
+    }
+
+    brush_name = "Multiplane Scrape";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_MULTIPLANE_SCRAPE;
+    }
+
+    brush_name = "Simplify";
+    brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+    if (!brush) {
+      brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);
+      id_us_min(&brush->id);
+      brush->sculpt_tool = SCULPT_TOOL_SIMPLIFY;
+    }
+
+    /* Use the same tool icon color in the brush cursor */
+    for (brush = bmain->brushes.first; brush; brush = brush->id.next) {
+      if (brush->ob_mode & OB_MODE_SCULPT) {
+        BLI_assert(brush->sculpt_tool != 0);
+        BKE_brush_sculpt_reset(brush);
+      }
+    }
+  }
+
+  if (app_template && STREQ(app_template, "2D_Animation")) {
+    /* Update Grease Pencil brushes. */
+    Brush *brush;
+
+    /* Pencil brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Pencil", "Pencil");
+
+    /* Pen brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Pen", "Pen");
+
+    /* Pen Soft brush. */
+    brush = (Brush *)rename_id_for_versioning(bmain, ID_BR, "Draw Soft", "Pencil Soft");
+    if (brush) {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PEN;
+    }
+
+    /* Ink Pen brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Ink", "Ink Pen");
+
+    /* Ink Pen Rough brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Noise", "Ink Pen Rough");
+
+    /* Marker Bold brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Marker", "Marker Bold");
+
+    /* Marker Chisel brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Block", "Marker Chisel");
+
+    /* Remove useless Fill Area.001 brush. */
+    brush = BLI_findstring(&bmain->brushes, "Fill Area.001", offsetof(ID, name) + 2);
+    if (brush) {
+      BKE_id_delete(bmain, brush);
+    }
+
+    /* Reset all grease pencil brushes. */
+    Scene *scene = bmain->scenes.first;
+    BKE_brush_gpencil_presets(bmain, scene->toolsettings);
   }
 }

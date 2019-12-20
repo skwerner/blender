@@ -1017,13 +1017,11 @@ static void copy_particle_edit(Depsgraph *depsgraph,
 
   edit->points = MEM_dupallocN(edit_from->points);
   pa = psys->particles;
-  LOOP_POINTS
-  {
+  LOOP_POINTS {
     HairKey *hkey = pa->hair;
 
     point->keys = MEM_dupallocN(point->keys);
-    LOOP_KEYS
-    {
+    LOOP_KEYS {
       key->co = hkey->co;
       key->time = &hkey->time;
       key->flag = hkey->editflag;
@@ -1067,7 +1065,7 @@ static void remove_particle_systems_from_object(Object *ob_to)
     if (ELEM(md->type,
              eModifierType_ParticleSystem,
              eModifierType_DynamicPaint,
-             eModifierType_Smoke)) {
+             eModifierType_Fluid)) {
       BLI_remlink(&ob_to->modifiers, md);
       modifier_free(md);
     }

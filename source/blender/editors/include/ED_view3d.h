@@ -67,8 +67,6 @@ struct wmOperatorType;
 struct wmWindow;
 struct wmWindowManager;
 
-enum eGPUFXFlags;
-
 /* for derivedmesh drawing callbacks, for view3d_select, .... */
 typedef struct ViewContext {
   struct bContext *C;
@@ -595,7 +593,6 @@ struct ImBuf *ED_view3d_draw_offscreen_imbuf(struct Depsgraph *depsgraph,
                                              int sizey,
                                              unsigned int flag,
                                              int alpha_mode,
-                                             int samples,
                                              const char *viewname,
                                              struct GPUOffScreen *ofs,
                                              char err_out[256]);
@@ -609,7 +606,6 @@ struct ImBuf *ED_view3d_draw_offscreen_imbuf_simple(struct Depsgraph *depsgraph,
                                                     unsigned int flag,
                                                     unsigned int draw_flags,
                                                     int alpha_mode,
-                                                    int samples,
                                                     const char *viewname,
                                                     struct GPUOffScreen *ofs,
                                                     char err_out[256]);

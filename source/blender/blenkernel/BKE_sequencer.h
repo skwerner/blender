@@ -24,6 +24,10 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Depsgraph;
 struct Editing;
 struct GPUOffScreen;
@@ -289,7 +293,7 @@ bool BKE_sequencer_input_have_to_preprocess(const SeqRenderData *context,
                                             struct Sequence *seq,
                                             float cfra);
 
-void BKE_sequencer_proxy_rebuild_context(struct Main *bmain,
+bool BKE_sequencer_proxy_rebuild_context(struct Main *bmain,
                                          struct Depsgraph *depsgraph,
                                          struct Scene *scene,
                                          struct Sequence *seq,
@@ -351,6 +355,7 @@ void BKE_sequencer_prefetch_start(const SeqRenderData *context, float cfra, floa
 void BKE_sequencer_prefetch_stop(struct Scene *scene);
 void BKE_sequencer_prefetch_free(struct Scene *scene);
 bool BKE_sequencer_prefetch_need_redraw(struct Main *bmain, struct Scene *scene);
+bool BKE_sequencer_prefetch_job_is_running(struct Scene *scene);
 void BKE_sequencer_prefetch_get_time_range(struct Scene *scene, int *start, int *end);
 SeqRenderData *BKE_sequencer_prefetch_get_original_context(const SeqRenderData *context);
 struct Sequence *BKE_sequencer_prefetch_get_original_sequence(struct Sequence *seq,
@@ -526,7 +531,6 @@ typedef struct ImBuf *(*SequencerDrawView)(struct Depsgraph *depsgraph,
                                            unsigned int flag,
                                            unsigned int draw_flags,
                                            int alpha_mode,
-                                           int samples,
                                            const char *viewname,
                                            struct GPUOffScreen *ofs,
                                            char err_out[256]);
@@ -597,5 +601,9 @@ void BKE_sequencer_color_balance_apply(struct StripColorBalance *cb,
                                        struct ImBuf *mask_input);
 
 void BKE_sequencer_all_free_anim_ibufs(struct Scene *scene, int cfra);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_SEQUENCER_H__ */

@@ -213,7 +213,9 @@ void IMB_blend_color_float(float dst[4],
   }
 }
 
-/** Crop */
+/* -------------------------------------------------------------------- */
+/** \name Crop
+ * \{ */
 
 static void rect_crop_4bytes(void **buf_p, const int size_src[2], const rcti *crop)
 {
@@ -262,7 +264,7 @@ void IMB_rect_crop(ImBuf *ibuf, const rcti *crop)
       BLI_rcti_size_x(crop) + 1,
       BLI_rcti_size_y(crop) + 1,
   };
-  BLI_assert(size_dst[0] > 0 && size_dst[0] > 0);
+  BLI_assert(size_dst[0] > 0 && size_dst[1] > 0);
   BLI_assert(crop->xmin >= 0 && crop->ymin >= 0);
   BLI_assert(crop->xmax < ibuf->x && crop->ymax < ibuf->y);
 
@@ -278,6 +280,48 @@ void IMB_rect_crop(ImBuf *ibuf, const rcti *crop)
   ibuf->x = size_dst[0];
   ibuf->y = size_dst[1];
 }
+
+/**
+ * Re-allocate buffers at a new size.
+ */
+static void rect_realloc_4bytes(void **buf_p, const uint size[2])
+{
+  if (*buf_p == NULL) {
+    return;
+  }
+  MEM_freeN(*buf_p);
+  *buf_p = MEM_mallocN(sizeof(uint) * size[0] * size[1], __func__);
+}
+
+static void rect_realloc_16bytes(void **buf_p, const uint size[2])
+{
+  if (*buf_p == NULL) {
+    return;
+  }
+  MEM_freeN(*buf_p);
+  *buf_p = MEM_mallocN(sizeof(uint[4]) * size[0] * size[1], __func__);
+}
+
+/**
+ * In-place size setting (caller must fill in buffer contents).
+ */
+void IMB_rect_size_set(ImBuf *ibuf, const uint size[2])
+{
+  BLI_assert(size[0] > 0 && size[1] > 0);
+  if ((size[0] == ibuf->x) && (size[1] == ibuf->y)) {
+    return;
+  }
+
+  rect_realloc_4bytes((void **)&ibuf->rect, size);
+  rect_realloc_4bytes((void **)&ibuf->zbuf, size);
+  rect_realloc_4bytes((void **)&ibuf->zbuf_float, size);
+  rect_realloc_16bytes((void **)&ibuf->rect_float, size);
+
+  ibuf->x = size[0];
+  ibuf->y = size[1];
+}
+
+/** \} */
 
 /* clipping */
 

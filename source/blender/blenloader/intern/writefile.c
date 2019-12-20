@@ -26,35 +26,36 @@
  * FILE FORMAT
  * ===========
  *
- * IFF-style structure  (but not IFF compatible!)
+ * IFF-style structure (but not IFF compatible!)
  *
- * start file:
+ * Start file:
  * <pre>
- *     BLENDER_V100    12 bytes  (version 1.00)
- *                     V = big endian, v = little endian
- *                     _ = 4 byte pointer, - = 8 byte pointer
+ * `BLENDER_V100`  `12` bytes  (version 1.00 is just an example).
+ *                 `V` = big endian, `v` = little endian.
+ *                 `_` = 4 byte pointer, `-` = 8 byte pointer.
  * </pre>
  *
  * data-blocks: (also see struct #BHead).
  * <pre>
- *     <bh.code>           4 chars
- *     <bh.len>            int,  len data after BHead
- *     <bh.old>            void,  old pointer
- *     <bh.SDNAnr>         int
- *     <bh.nr>             int, in case of array: number of structs
- *     data
- *     ...
- *     ...
+ * `bh.code`       `char[4]` see `BLO_blend_defs.h` for a list of known types.
+ * `bh.len`        `int32` length data after #BHead in bytes.
+ * `bh.old`        `void *` old pointer (the address at the time of writing the file).
+ * `bh.SDNAnr`     `int32` struct index of structs stored in #DNA1 data.
+ * `bh.nr`         `int32` in case of array: number of structs.
+ * data
+ * ...
+ * ...
  * </pre>
  *
  * Almost all data in Blender are structures. Each struct saved
  * gets a BHead header.  With BHead the struct can be linked again
- * and compared with StructDNA .
+ * and compared with #StructDNA.
+
  * WRITE
  * =====
  *
  * Preferred writing order: (not really a must, but why would you do it random?)
- * Any case: direct data is ALWAYS after the lib block
+ * Any case: direct data is ALWAYS after the lib block.
  *
  * (Local file data)
  * - for each LibBlock
@@ -125,7 +126,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_sdna_types.h"
 #include "DNA_sequence_types.h"
-#include "DNA_smoke_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_space_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_speaker_types.h"
@@ -138,6 +139,7 @@
 #include "DNA_workspace_types.h"
 #include "DNA_movieclip_types.h"
 #include "DNA_mask_types.h"
+#include "DNA_curveprofile_types.h"
 
 #include "MEM_guardedalloc.h"  // MEM_freeN
 #include "BLI_bitmap.h"
@@ -178,6 +180,9 @@
 #include "dna_type_offsets.h"
 
 #include <errno.h>
+
+/* Make preferences read-only. */
+#define U (*((const UserDef *)&U))
 
 /* ********* my write, buffered writing with minimum size chunks ************ */
 
@@ -952,6 +957,12 @@ static void write_curvemapping(WriteData *wd, CurveMapping *cumap)
   write_curvemapping_curves(wd, cumap);
 }
 
+static void write_CurveProfile(WriteData *wd, CurveProfile *profile)
+{
+  writestruct(wd, DATA, CurveProfile, 1, profile);
+  writestruct(wd, DATA, CurveProfilePoint, profile->path_len, profile->path);
+}
+
 static void write_node_socket(WriteData *wd, bNodeSocket *sock)
 {
   /* actual socket writing */
@@ -1617,38 +1628,38 @@ static void write_modifiers(WriteData *wd, ListBase *modbase)
       writestruct(wd, DATA, EffectorWeights, 1, clmd->sim_parms->effector_weights);
       write_pointcaches(wd, &clmd->ptcaches);
     }
-    else if (md->type == eModifierType_Smoke) {
-      SmokeModifierData *smd = (SmokeModifierData *)md;
+    else if (md->type == eModifierType_Fluid) {
+      FluidModifierData *mmd = (FluidModifierData *)md;
 
-      if (smd->type & MOD_SMOKE_TYPE_DOMAIN) {
-        writestruct(wd, DATA, SmokeDomainSettings, 1, smd->domain);
+      if (mmd->type & MOD_FLUID_TYPE_DOMAIN) {
+        writestruct(wd, DATA, FluidDomainSettings, 1, mmd->domain);
 
-        if (smd->domain) {
-          write_pointcaches(wd, &(smd->domain->ptcaches[0]));
+        if (mmd->domain) {
+          write_pointcaches(wd, &(mmd->domain->ptcaches[0]));
 
           /* create fake pointcache so that old blender versions can read it */
-          smd->domain->point_cache[1] = BKE_ptcache_add(&smd->domain->ptcaches[1]);
-          smd->domain->point_cache[1]->flag |= PTCACHE_DISK_CACHE | PTCACHE_FAKE_SMOKE;
-          smd->domain->point_cache[1]->step = 1;
+          mmd->domain->point_cache[1] = BKE_ptcache_add(&mmd->domain->ptcaches[1]);
+          mmd->domain->point_cache[1]->flag |= PTCACHE_DISK_CACHE | PTCACHE_FAKE_SMOKE;
+          mmd->domain->point_cache[1]->step = 1;
 
-          write_pointcaches(wd, &(smd->domain->ptcaches[1]));
+          write_pointcaches(wd, &(mmd->domain->ptcaches[1]));
 
-          if (smd->domain->coba) {
-            writestruct(wd, DATA, ColorBand, 1, smd->domain->coba);
+          if (mmd->domain->coba) {
+            writestruct(wd, DATA, ColorBand, 1, mmd->domain->coba);
           }
 
           /* cleanup the fake pointcache */
-          BKE_ptcache_free_list(&smd->domain->ptcaches[1]);
-          smd->domain->point_cache[1] = NULL;
+          BKE_ptcache_free_list(&mmd->domain->ptcaches[1]);
+          mmd->domain->point_cache[1] = NULL;
 
-          writestruct(wd, DATA, EffectorWeights, 1, smd->domain->effector_weights);
+          writestruct(wd, DATA, EffectorWeights, 1, mmd->domain->effector_weights);
         }
       }
-      else if (smd->type & MOD_SMOKE_TYPE_FLOW) {
-        writestruct(wd, DATA, SmokeFlowSettings, 1, smd->flow);
+      else if (mmd->type & MOD_FLUID_TYPE_FLOW) {
+        writestruct(wd, DATA, FluidFlowSettings, 1, mmd->flow);
       }
-      else if (smd->type & MOD_SMOKE_TYPE_COLL) {
-        writestruct(wd, DATA, SmokeCollSettings, 1, smd->coll);
+      else if (mmd->type & MOD_FLUID_TYPE_EFFEC) {
+        writestruct(wd, DATA, FluidEffectorSettings, 1, mmd->effector);
       }
     }
     else if (md->type == eModifierType_Fluidsim) {
@@ -1756,6 +1767,12 @@ static void write_modifiers(WriteData *wd, ListBase *modbase)
             }
           }
         }
+      }
+    }
+    else if (md->type == eModifierType_Bevel) {
+      BevelModifierData *bmd = (BevelModifierData *)md;
+      if (bmd->custom_profile) {
+        write_CurveProfile(wd, bmd->custom_profile);
       }
     }
   }
@@ -2249,6 +2266,8 @@ static void write_image(WriteData *wd, Image *ima)
     }
     writestruct(wd, DATA, Stereo3dFormat, 1, ima->stereo3d_format);
 
+    writelist(wd, DATA, ImageTile, &ima->tiles);
+
     ima->packedfile = NULL;
 
     writelist(wd, DATA, RenderSlot, &ima->renderslots);
@@ -2531,6 +2550,10 @@ static void write_scene(WriteData *wd, Scene *sce)
   /* write grease-pencil primitive curve to file */
   if (tos->gp_sculpt.cur_primitive) {
     write_curvemapping(wd, tos->gp_sculpt.cur_primitive);
+  }
+  /* Write the curve profile to the file. */
+  if (tos->custom_bevel_profile_preset) {
+    write_CurveProfile(wd, tos->custom_bevel_profile_preset);
   }
 
   write_paint(wd, &tos->imapaint.paint);
@@ -2852,12 +2875,6 @@ static void write_area_regions(WriteData *wd, ScrArea *area)
         writestruct(wd, DATA, View3D, 1, v3d->localvd);
       }
 
-      if (v3d->fx_settings.ssao) {
-        writestruct(wd, DATA, GPUSSAOSettings, 1, v3d->fx_settings.ssao);
-      }
-      if (v3d->fx_settings.dof) {
-        writestruct(wd, DATA, GPUDOFSettings, 1, v3d->fx_settings.dof);
-      }
       write_view3dshading(wd, &v3d->shading);
     }
     else if (sl->spacetype == SPACE_GRAPH) {

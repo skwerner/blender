@@ -466,7 +466,7 @@ static int gizmo_axis_test_select(bContext *UNUSED(C), wmGizmo *gz, const int mv
 {
   float point_local[2] = {UNPACK2(mval)};
   sub_v2_v2(point_local, gz->matrix_basis[3]);
-  mul_v2_fl(point_local, 1.0f / (gz->scale_basis * UI_DPI_FAC));
+  mul_v2_fl(point_local, 1.0f / gz->scale_final);
 
   const float len_sq = len_squared_v2(point_local);
   if (len_sq > 1.0) {
@@ -518,9 +518,9 @@ static int gizmo_axis_test_select(bContext *UNUSED(C), wmGizmo *gz, const int mv
 static int gizmo_axis_cursor_get(wmGizmo *gz)
 {
   if (gz->highlight_part > 0) {
-    return CURSOR_EDIT;
+    return WM_CURSOR_EDIT;
   }
-  return BC_NSEW_SCROLLCURSOR;
+  return WM_CURSOR_NSEW_SCROLL;
 }
 
 void VIEW3D_GT_navigate_rotate(wmGizmoType *gzt)

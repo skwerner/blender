@@ -81,10 +81,12 @@ void register_node_type_sh_layer_weight(void);
 void register_node_type_sh_tex_coord(void);
 void register_node_type_sh_particle_info(void);
 void register_node_type_sh_hair_info(void);
+void register_node_type_sh_volume_info(void);
 void register_node_type_sh_script(void);
 void register_node_type_sh_normal_map(void);
 void register_node_type_sh_tangent(void);
 void register_node_type_sh_vect_transform(void);
+void register_node_type_sh_vertex_color(void);
 
 void register_node_type_sh_ambient_occlusion(void);
 void register_node_type_sh_background(void);
@@ -118,6 +120,7 @@ void register_node_type_sh_output_material(void);
 void register_node_type_sh_output_eevee_material(void);
 void register_node_type_sh_output_world(void);
 void register_node_type_sh_output_linestyle(void);
+void register_node_type_sh_output_aov(void);
 
 void register_node_type_sh_tex_image(void);
 void register_node_type_sh_tex_environment(void);
@@ -131,6 +134,7 @@ void register_node_type_sh_tex_noise(void);
 void register_node_type_sh_tex_checker(void);
 void register_node_type_sh_bump(void);
 void register_node_type_sh_tex_ies(void);
+void register_node_type_sh_tex_white_noise(void);
 
 void register_node_type_sh_custom_group(bNodeType *ntype);
 

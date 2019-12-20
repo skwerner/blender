@@ -196,6 +196,19 @@ void GPU_vertbuf_attr_fill(GPUVertBuf *verts, uint a_idx, const void *data)
   GPU_vertbuf_attr_fill_stride(verts, a_idx, stride, data);
 }
 
+/** Fills a whole vertex (all attribs). Data must match packed layout.  */
+void GPU_vertbuf_vert_set(GPUVertBuf *verts, uint v_idx, const void *data)
+{
+  const GPUVertFormat *format = &verts->format;
+
+#if TRUST_NO_ONE
+  assert(v_idx < verts->vertex_alloc);
+  assert(verts->data != NULL);
+#endif
+  verts->dirty = true;
+  memcpy((GLubyte *)verts->data + v_idx * format->stride, data, format->stride);
+}
+
 void GPU_vertbuf_attr_fill_stride(GPUVertBuf *verts, uint a_idx, uint stride, const void *data)
 {
   const GPUVertFormat *format = &verts->format;
@@ -214,7 +227,7 @@ void GPU_vertbuf_attr_fill_stride(GPUVertBuf *verts, uint a_idx, uint stride, co
   }
   else {
     /* we must copy it per vertex */
-    for (uint v = 0; v < vertex_len; ++v) {
+    for (uint v = 0; v < vertex_len; v++) {
       memcpy((GLubyte *)verts->data + a->offset + v * format->stride,
              (const GLubyte *)data + v * stride,
              a->sz);

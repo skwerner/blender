@@ -57,8 +57,10 @@
 
 #ifdef WIN32
 
-/** Return true if the path is absolute ie starts with a drive specifier
- * (eg A:\) or is a UNC path. */
+/**
+ * Return true if the path is absolute ie starts with a drive specifier
+ * (eg A:\) or is a UNC path.
+ */
 static bool BLI_path_is_abs(const char *name);
 
 #endif /* WIN32 */
@@ -153,6 +155,20 @@ void BLI_stringenc(
     char *string, const char *head, const char *tail, unsigned short numlen, int pic)
 {
   sprintf(string, "%s%.*d%s", head, numlen, MAX2(0, pic), tail);
+}
+
+/**
+ * Returns in area pointed to by string a string of the form "<dir><head><pic><tail>", where pic
+ * is formatted as numlen digits with leading zeroes.
+ */
+void BLI_stringenc_path(char *string,
+                        const char *dir,
+                        const char *head,
+                        const char *tail,
+                        unsigned short numlen,
+                        int pic)
+{
+  sprintf(string, "%s%s%.*d%s", dir, head, numlen, MAX2(0, pic), tail);
 }
 
 static int BLI_path_unc_prefix_len(const char *path); /* defined below in same file */
@@ -444,8 +460,10 @@ static int BLI_path_unc_prefix_len(const char *path)
 
 #if defined(WIN32)
 
-/** Return true if the path is absolute ie starts with a drive specifier
- * (eg A:\) or is a UNC path. */
+/**
+ * Return true if the path is absolute ie starts with a drive specifier
+ * (eg A:\) or is a UNC path.
+ */
 static bool BLI_path_is_abs(const char *name)
 {
   return (name[1] == ':' && (name[2] == '\\' || name[2] == '/')) || BLI_path_is_unc(name);
@@ -618,14 +636,14 @@ void BLI_path_rel(char *file, const char *relfile)
      */
     if (*q != '/') {
       while ((q >= file) && (*q != '/')) {
-        --q;
-        --p;
+        q--;
+        p--;
       }
     }
     else if (*p != '/') {
       while ((p >= temp) && (*p != '/')) {
-        --p;
-        --q;
+        p--;
+        q--;
       }
     }
 

@@ -41,24 +41,27 @@
 
 #include "rna_internal.h" /* own include */
 
-/* confusingm 2 enums mixed up here */
+/* confusing 2 enums mixed up here */
 const EnumPropertyItem rna_enum_window_cursor_items[] = {
-    {CURSOR_STD, "DEFAULT", 0, "Default", ""},
-    {CURSOR_NONE, "NONE", 0, "None", ""},
-    {CURSOR_WAIT, "WAIT", 0, "Wait", ""},
-    {CURSOR_EDIT, "CROSSHAIR", 0, "Crosshair", ""},
-    {CURSOR_X_MOVE, "MOVE_X", 0, "Move-X", ""},
-    {CURSOR_Y_MOVE, "MOVE_Y", 0, "Move-Y", ""},
+    {WM_CURSOR_DEFAULT, "DEFAULT", 0, "Default", ""},
+    {WM_CURSOR_NONE, "NONE", 0, "None", ""},
+    {WM_CURSOR_WAIT, "WAIT", 0, "Wait", ""},
+    {WM_CURSOR_EDIT, "CROSSHAIR", 0, "Crosshair", ""},
+    {WM_CURSOR_X_MOVE, "MOVE_X", 0, "Move-X", ""},
+    {WM_CURSOR_Y_MOVE, "MOVE_Y", 0, "Move-Y", ""},
 
     /* new */
-    {BC_KNIFECURSOR, "KNIFE", 0, "Knife", ""},
-    {BC_TEXTEDITCURSOR, "TEXT", 0, "Text", ""},
-    {BC_PAINTBRUSHCURSOR, "PAINT_BRUSH", 0, "Paint Brush", ""},
-    {BC_HANDCURSOR, "HAND", 0, "Hand", ""},
-    {BC_EW_SCROLLCURSOR, "SCROLL_X", 0, "Scroll-X", ""},
-    {BC_NS_SCROLLCURSOR, "SCROLL_Y", 0, "Scroll-Y", ""},
-    {BC_NSEW_SCROLLCURSOR, "SCROLL_XY", 0, "Scroll-XY", ""},
-    {BC_EYEDROPPER_CURSOR, "EYEDROPPER", 0, "Eyedropper", ""},
+    {WM_CURSOR_KNIFE, "KNIFE", 0, "Knife", ""},
+    {WM_CURSOR_TEXT_EDIT, "TEXT", 0, "Text", ""},
+    {WM_CURSOR_PAINT_BRUSH, "PAINT_BRUSH", 0, "Paint Brush", ""},
+    {WM_CURSOR_PAINT, "PAINT_CROSS", 0, "Paint Cross", ""},
+    {WM_CURSOR_DOT, "DOT", 0, "Dot Cursor", ""},
+    {WM_CURSOR_ERASER, "ERASER", 0, "Eraser", ""},
+    {WM_CURSOR_HAND, "HAND", 0, "Hand", ""},
+    {WM_CURSOR_EW_SCROLL, "SCROLL_X", 0, "Scroll-X", ""},
+    {WM_CURSOR_NS_SCROLL, "SCROLL_Y", 0, "Scroll-Y", ""},
+    {WM_CURSOR_NSEW_SCROLL, "SCROLL_XY", 0, "Scroll-XY", ""},
+    {WM_CURSOR_EYEDROPPER, "EYEDROPPER", 0, "Eyedropper", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -363,6 +366,14 @@ static PointerRNA rna_KeyMap_item_find_from_operator(ID *id,
   return kmi_ptr;
 }
 
+static PointerRNA rna_KeyMap_item_match_event(ID *id, wmKeyMap *km, bContext *C, wmEvent *event)
+{
+  wmKeyMapItem *kmi = WM_event_match_keymap_item(C, km, event);
+  PointerRNA kmi_ptr;
+  RNA_pointer_create(id, &RNA_KeyMapItem, kmi, &kmi_ptr);
+  return kmi_ptr;
+}
+
 static wmKeyMap *rna_keymap_new(
     wmKeyConfig *keyconf, const char *idname, int spaceid, int regionid, bool modal, bool tool)
 {
@@ -628,7 +639,7 @@ static void rna_generic_op_invoke(FunctionRNA *func, int flag)
 
   if (flag & WM_GEN_INVOKE_RETURN) {
     parm = RNA_def_enum_flag(
-        func, "result", rna_enum_operator_return_items, OPERATOR_CANCELLED, "result", "");
+        func, "result", rna_enum_operator_return_items, OPERATOR_FINISHED, "result", "");
     RNA_def_function_return(func, parm);
   }
 }
@@ -903,7 +914,7 @@ void RNA_api_operator(StructRNA *srna)
 
   /* better name? */
   parm = RNA_def_enum_flag(
-      func, "result", rna_enum_operator_return_items, OPERATOR_CANCELLED, "result", "");
+      func, "result", rna_enum_operator_return_items, OPERATOR_FINISHED, "result", "");
   RNA_def_function_return(func, parm);
 
   /* check */
@@ -928,7 +939,7 @@ void RNA_api_operator(StructRNA *srna)
 
   /* better name? */
   parm = RNA_def_enum_flag(
-      func, "result", rna_enum_operator_return_items, OPERATOR_CANCELLED, "result", "");
+      func, "result", rna_enum_operator_return_items, OPERATOR_FINISHED, "result", "");
   RNA_def_function_return(func, parm);
 
   func = RNA_def_function(srna, "modal", NULL); /* same as invoke */
@@ -941,7 +952,7 @@ void RNA_api_operator(StructRNA *srna)
 
   /* better name? */
   parm = RNA_def_enum_flag(
-      func, "result", rna_enum_operator_return_items, OPERATOR_CANCELLED, "result", "");
+      func, "result", rna_enum_operator_return_items, OPERATOR_FINISHED, "result", "");
   RNA_def_function_return(func, parm);
 
   /* draw */
@@ -957,6 +968,19 @@ void RNA_api_operator(StructRNA *srna)
   RNA_def_function_flag(func, FUNC_REGISTER_OPTIONAL | FUNC_ALLOW_WRITE);
   parm = RNA_def_pointer(func, "context", "Context", "", "");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+
+  /* description */
+  func = RNA_def_function(srna, "description", NULL);
+  RNA_def_function_ui_description(func, "Compute a description string that depends on parameters");
+  RNA_def_function_flag(func, FUNC_NO_SELF | FUNC_REGISTER_OPTIONAL);
+  parm = RNA_def_string(func, "result", NULL, 4096, "result", "");
+  RNA_def_parameter_clear_flags(parm, PROP_NEVER_NULL, 0);
+  RNA_def_parameter_flags(parm, PROP_THICK_WRAP, 0);
+  RNA_def_function_output(func, parm);
+  parm = RNA_def_pointer(func, "context", "Context", "", "");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
+  parm = RNA_def_pointer(func, "properties", "OperatorProperties", "", "");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
 }
 
 void RNA_api_macro(StructRNA *srna)
@@ -1109,6 +1133,14 @@ void RNA_api_keymapitems(StructRNA *srna)
   RNA_def_enum_flag(
       func, "include", rna_enum_event_type_mask_items, EVT_TYPE_MASK_ALL, "Include", "");
   RNA_def_enum_flag(func, "exclude", rna_enum_event_type_mask_items, 0, "Exclude", "");
+  parm = RNA_def_pointer(func, "item", "KeyMapItem", "", "");
+  RNA_def_parameter_flags(parm, 0, PARM_RNAPTR);
+  RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(srna, "match_event", "rna_KeyMap_item_match_event");
+  RNA_def_function_flag(func, FUNC_USE_SELF_ID | FUNC_USE_CONTEXT);
+  parm = RNA_def_pointer(func, "event", "Event", "", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_pointer(func, "item", "KeyMapItem", "", "");
   RNA_def_parameter_flags(parm, 0, PARM_RNAPTR);
   RNA_def_function_return(func, parm);

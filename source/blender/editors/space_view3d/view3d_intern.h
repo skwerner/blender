@@ -30,18 +30,11 @@
 
 struct ARegion;
 struct ARegionType;
-struct Base;
 struct BoundBox;
 struct Depsgraph;
-struct GPUBatch;
-struct Mesh;
 struct Object;
-struct SmokeDomainSettings;
 struct ViewLayer;
-struct bAnimVizSettings;
 struct bContext;
-struct bMotionPath;
-struct bPoseChannel;
 struct wmGizmoGroupType;
 struct wmGizmoType;
 struct wmKeyConfig;
@@ -268,6 +261,8 @@ void VIEW3D_GGT_armature_spline(struct wmGizmoGroupType *gzgt);
 void VIEW3D_GGT_navigate(struct wmGizmoGroupType *gzgt);
 void VIEW3D_GGT_mesh_preselect_elem(struct wmGizmoGroupType *gzgt);
 void VIEW3D_GGT_mesh_preselect_edgering(struct wmGizmoGroupType *gzgt);
+void VIEW3D_GGT_tool_generic_handle_normal(struct wmGizmoGroupType *gzgt);
+void VIEW3D_GGT_tool_generic_handle_free(struct wmGizmoGroupType *gzgt);
 
 void VIEW3D_GGT_ruler(struct wmGizmoGroupType *gzgt);
 void VIEW3D_GT_ruler_item(struct wmGizmoType *gzt);

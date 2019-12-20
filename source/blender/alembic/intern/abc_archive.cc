@@ -24,6 +24,12 @@
 #include "abc_archive.h"
 extern "C" {
 #include "BKE_blender_version.h"
+#include "BKE_main.h"
+
+#include "BLI_path_util.h"
+#include "BLI_string.h"
+
+#include "DNA_scene_types.h"
 }
 
 #ifdef WIN32
@@ -95,20 +101,24 @@ static IArchive open_archive(const std::string &filename,
   return IArchive();
 }
 
-ArchiveReader::ArchiveReader(const char *filename)
+ArchiveReader::ArchiveReader(struct Main *bmain, const char *filename)
 {
+  char abs_filename[FILE_MAX];
+  BLI_strncpy(abs_filename, filename, FILE_MAX);
+  BLI_path_abs(abs_filename, BKE_main_blendfile_path(bmain));
+
 #ifdef WIN32
-  UTF16_ENCODE(filename);
-  std::wstring wstr(filename_16);
+  UTF16_ENCODE(abs_filename);
+  std::wstring wstr(abs_filename_16);
   m_infile.open(wstr.c_str(), std::ios::in | std::ios::binary);
-  UTF16_UN_ENCODE(filename);
+  UTF16_UN_ENCODE(abs_filename);
 #else
-  m_infile.open(filename, std::ios::in | std::ios::binary);
+  m_infile.open(abs_filename, std::ios::in | std::ios::binary);
 #endif
 
   m_streams.push_back(&m_infile);
 
-  m_archive = open_archive(filename, m_streams, m_is_hdf5);
+  m_archive = open_archive(abs_filename, m_streams, m_is_hdf5);
 
   /* We can't open an HDF5 file from a stream, so close it. */
   if (m_is_hdf5) {
@@ -139,12 +149,15 @@ Alembic::Abc::IObject ArchiveReader::getTop()
 static OArchive create_archive(std::ostream *ostream,
                                const std::string &filename,
                                const std::string &scene_name,
-                               Alembic::Abc::MetaData &md,
+                               double scene_fps,
                                bool ogawa)
 {
-  md.set(Alembic::Abc::kApplicationNameKey, "Blender");
-  md.set(Alembic::Abc::kUserDescriptionKey, scene_name);
-  md.set("blender_version", versionstr);
+  Alembic::Abc::MetaData abc_metadata;
+
+  abc_metadata.set(Alembic::Abc::kApplicationNameKey, "Blender");
+  abc_metadata.set(Alembic::Abc::kUserDescriptionKey, scene_name);
+  abc_metadata.set("blender_version", versionstr);
+  abc_metadata.set("FramesPerTimeUnit", std::to_string(scene_fps));
 
   time_t raw_time;
   time(&raw_time);
@@ -161,13 +174,13 @@ static OArchive create_archive(std::ostream *ostream,
     buffer[buffer_len - 1] = '\0';
   }
 
-  md.set(Alembic::Abc::kDateWrittenKey, buffer);
+  abc_metadata.set(Alembic::Abc::kDateWrittenKey, buffer);
 
   ErrorHandler::Policy policy = ErrorHandler::kThrowPolicy;
 
 #ifdef WITH_ALEMBIC_HDF5
   if (!ogawa) {
-    return OArchive(Alembic::AbcCoreHDF5::WriteArchive(), filename, md, policy);
+    return OArchive(Alembic::AbcCoreHDF5::WriteArchive(), filename, abc_metadata, policy);
   }
 #else
   static_cast<void>(filename);
@@ -175,13 +188,13 @@ static OArchive create_archive(std::ostream *ostream,
 #endif
 
   Alembic::AbcCoreOgawa::WriteArchive archive_writer;
-  return OArchive(archive_writer(ostream, md), kWrapExisting, policy);
+  return OArchive(archive_writer(ostream, abc_metadata), kWrapExisting, policy);
 }
 
 ArchiveWriter::ArchiveWriter(const char *filename,
-                             const char *scene,
-                             bool do_ogawa,
-                             Alembic::Abc::MetaData &md)
+                             const std::string &abc_scene_name,
+                             const Scene *scene,
+                             bool do_ogawa)
 {
   /* Use stream to support unicode character paths on Windows. */
   if (do_ogawa) {
@@ -195,7 +208,7 @@ ArchiveWriter::ArchiveWriter(const char *filename,
 #endif
   }
 
-  m_archive = create_archive(&m_outfile, filename, scene, md, do_ogawa);
+  m_archive = create_archive(&m_outfile, filename, abc_scene_name, FPS, do_ogawa);
 }
 
 OArchive &ArchiveWriter::archive()

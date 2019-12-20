@@ -58,6 +58,15 @@ set(SRC
   intern/eval/deg_eval.cc
   intern/eval/deg_eval_copy_on_write.cc
   intern/eval/deg_eval_flush.cc
+  intern/eval/deg_eval_runtime_backup.cc
+  intern/eval/deg_eval_runtime_backup_modifier.cc
+  intern/eval/deg_eval_runtime_backup_movieclip.cc
+  intern/eval/deg_eval_runtime_backup_object.cc
+  intern/eval/deg_eval_runtime_backup_pose.cc
+  intern/eval/deg_eval_runtime_backup_scene.cc
+  intern/eval/deg_eval_runtime_backup_sequence.cc
+  intern/eval/deg_eval_runtime_backup_sequencer.cc
+  intern/eval/deg_eval_runtime_backup_sound.cc
   intern/eval/deg_eval_stats.cc
   intern/node/deg_node.cc
   intern/node/deg_node_component.cc
@@ -73,6 +82,7 @@ set(SRC
   intern/depsgraph_query.cc
   intern/depsgraph_query_foreach.cc
   intern/depsgraph_query_iter.cc
+  intern/depsgraph_registry.cc
   intern/depsgraph_tag.cc
   intern/depsgraph_type.cc
   intern/depsgraph_update.cc
@@ -97,6 +107,15 @@ set(SRC
   intern/eval/deg_eval.h
   intern/eval/deg_eval_copy_on_write.h
   intern/eval/deg_eval_flush.h
+  intern/eval/deg_eval_runtime_backup.h
+  intern/eval/deg_eval_runtime_backup_modifier.h
+  intern/eval/deg_eval_runtime_backup_movieclip.h
+  intern/eval/deg_eval_runtime_backup_object.h
+  intern/eval/deg_eval_runtime_backup_pose.h
+  intern/eval/deg_eval_runtime_backup_scene.h
+  intern/eval/deg_eval_runtime_backup_sequence.h
+  intern/eval/deg_eval_runtime_backup_sequencer.h
+  intern/eval/deg_eval_runtime_backup_sound.h
   intern/eval/deg_eval_stats.h
   intern/node/deg_node.h
   intern/node/deg_node_component.h
@@ -107,6 +126,7 @@ set(SRC
   intern/node/deg_node_time.h
   intern/depsgraph.h
   intern/depsgraph_physics.h
+  intern/depsgraph_registry.h
   intern/depsgraph_tag.h
   intern/depsgraph_type.h
   intern/depsgraph_update.h

@@ -382,6 +382,9 @@ typedef struct ARegion_Runtime {
    *
    * Lazy initialize, zero'd when unset, relative to #ARegion.winrct x/y min. */
   rcti visible_rect;
+
+  /* The offset needed to not overlap with window scrollbars. Only used by HUD regions for now. */
+  int offset_x, offset_y;
 } ARegion_Runtime;
 
 typedef struct ARegion {
@@ -458,16 +461,19 @@ enum {
 #ifdef DNA_DEPRECATED_ALLOW
   AREA_TEMP_INFO = (1 << 3), /* versioned to make slot reusable */
 #endif
-  /* update size of regions within the area */
+  /** Update size of regions within the area. */
   AREA_FLAG_REGION_SIZE_UPDATE = (1 << 3),
   AREA_FLAG_ACTIVE_TOOL_UPDATE = (1 << 4),
+
   //  AREA_FLAG_UNUSED_5           = (1 << 5),
-  /* used to check if we should switch back to prevspace (of a different type) */
-  AREA_FLAG_TEMP_TYPE = (1 << 6),
-  /* for temporary fullscreens (file browser, image editor render)
-   * that are opened above user set fullscreens */
+  AREA_FLAG_UNUSED_6 = (1 << 6), /* cleared */
+
+  /**
+   * For temporary full-screens (file browser, image editor render)
+   * that are opened above user set full-screens.
+   */
   AREA_FLAG_STACKED_FULLSCREEN = (1 << 7),
-  /* update action zones (even if the mouse is not intersecting them) */
+  /** Update action zones (even if the mouse is not intersecting them). */
   AREA_FLAG_ACTIONZONES_UPDATE = (1 << 8),
 };
 

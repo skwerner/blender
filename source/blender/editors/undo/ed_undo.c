@@ -31,12 +31,12 @@
 #include "DNA_object_types.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_callbacks.h"
 #include "BLI_listbase.h"
 
 #include "BLT_translation.h"
 
 #include "BKE_blender_undo.h"
+#include "BKE_callbacks.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
@@ -53,6 +53,7 @@
 #include "ED_gpencil.h"
 #include "ED_render.h"
 #include "ED_object.h"
+#include "ED_outliner.h"
 #include "ED_screen.h"
 #include "ED_undo.h"
 
@@ -171,8 +172,8 @@ static int ed_undo_step_impl(
     /* Note: ignore grease pencil for now. */
     Main *bmain = CTX_data_main(C);
     wm->op_undo_depth++;
-    BLI_callback_exec(
-        bmain, &scene->id, (step_for_callback > 0) ? BLI_CB_EVT_UNDO_PRE : BLI_CB_EVT_REDO_PRE);
+    BKE_callback_exec_id(
+        bmain, &scene->id, (step_for_callback > 0) ? BKE_CB_EVT_UNDO_PRE : BKE_CB_EVT_REDO_PRE);
     wm->op_undo_depth--;
   }
 
@@ -219,8 +220,8 @@ static int ed_undo_step_impl(
     Main *bmain = CTX_data_main(C);
     scene = CTX_data_scene(C);
     wm->op_undo_depth++;
-    BLI_callback_exec(
-        bmain, &scene->id, step_for_callback > 0 ? BLI_CB_EVT_UNDO_POST : BLI_CB_EVT_REDO_POST);
+    BKE_callback_exec_id(
+        bmain, &scene->id, step_for_callback > 0 ? BKE_CB_EVT_UNDO_POST : BKE_CB_EVT_REDO_POST);
     wm->op_undo_depth--;
   }
 
@@ -321,7 +322,7 @@ bool ED_undo_is_memfile_compatible(const bContext *C)
   if (view_layer != NULL) {
     Object *obact = OBACT(view_layer);
     if (obact != NULL) {
-      if (obact->mode & (OB_MODE_SCULPT | OB_MODE_EDIT)) {
+      if (obact->mode & OB_MODE_EDIT) {
         return false;
       }
     }
@@ -390,6 +391,8 @@ static int ed_undo_exec(bContext *C, wmOperator *op)
     /* Keep button under the cursor active. */
     WM_event_add_mousemove(C);
   }
+
+  ED_outliner_select_sync_from_all_tag(C);
   return ret;
 }
 
@@ -417,6 +420,8 @@ static int ed_redo_exec(bContext *C, wmOperator *op)
     /* Keep button under the cursor active. */
     WM_event_add_mousemove(C);
   }
+
+  ED_outliner_select_sync_from_all_tag(C);
   return ret;
 }
 
@@ -665,7 +670,7 @@ static int undo_history_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
         }
         if (item[i].identifier) {
           uiItemIntO(column, item[i].name, item[i].icon, op->type->idname, "item", item[i].value);
-          ++c;
+          c++;
           add_col = true;
         }
       }

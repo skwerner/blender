@@ -75,6 +75,7 @@ static int node_shader_gpu_tex_environment(GPUMaterial *mat,
 
   if (!in[0].link) {
     GPU_link(mat, "node_tex_environment_texco", GPU_builtin(GPU_VIEW_POSITION), &in[0].link);
+    node_shader_gpu_bump_tex_coord(mat, node, &in[0].link);
   }
 
   node_shader_gpu_tex_mapping(mat, node, in, out);
@@ -87,7 +88,7 @@ static int node_shader_gpu_tex_environment(GPUMaterial *mat,
              "node_tex_environment_equirectangular",
              in[0].link,
              GPU_constant(&clamp_size),
-             GPU_image(ima, iuser),
+             GPU_image(ima, iuser, 0),
              &in[0].link);
   }
   else {
@@ -102,7 +103,7 @@ static int node_shader_gpu_tex_environment(GPUMaterial *mat,
       GPU_link(mat,
                "node_tex_image_linear_no_mip",
                in[0].link,
-               GPU_image(ima, iuser),
+               GPU_image(ima, iuser, 0),
                &out[0].link,
                &outalpha);
       break;
@@ -110,13 +111,17 @@ static int node_shader_gpu_tex_environment(GPUMaterial *mat,
       GPU_link(mat,
                "node_tex_image_nearest",
                in[0].link,
-               GPU_image(ima, iuser),
+               GPU_image(ima, iuser, 0),
                &out[0].link,
                &outalpha);
       break;
     default:
-      GPU_link(
-          mat, "node_tex_image_cubic", in[0].link, GPU_image(ima, iuser), &out[0].link, &outalpha);
+      GPU_link(mat,
+               "node_tex_image_cubic",
+               in[0].link,
+               GPU_image(ima, iuser, 0),
+               &out[0].link,
+               &outalpha);
       break;
   }
 
@@ -124,15 +129,15 @@ static int node_shader_gpu_tex_environment(GPUMaterial *mat,
     if (ELEM(ima->alpha_mode, IMA_ALPHA_IGNORE, IMA_ALPHA_CHANNEL_PACKED) ||
         IMB_colormanagement_space_name_is_data(ima->colorspace_settings.name)) {
       /* Don't let alpha affect color output in these cases. */
-      GPU_link(mat, "tex_color_alpha_clear", out[0].link, &out[0].link);
+      GPU_link(mat, "color_alpha_clear", out[0].link, &out[0].link);
     }
     else {
       /* Always output with premultiplied alpha. */
       if (ima->alpha_mode == IMA_ALPHA_PREMUL) {
-        GPU_link(mat, "tex_color_alpha_clear", out[0].link, &out[0].link);
+        GPU_link(mat, "color_alpha_clear", out[0].link, &out[0].link);
       }
       else {
-        GPU_link(mat, "tex_color_alpha_premultiply", out[0].link, &out[0].link);
+        GPU_link(mat, "color_alpha_premultiply", out[0].link, &out[0].link);
       }
     }
   }

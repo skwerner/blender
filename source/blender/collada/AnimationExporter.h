@@ -14,8 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BC_ANIMATION_EXPORTER_H__
-#define __BC_ANIMATION_EXPORTER_H__
+#ifndef __ANIMATIONEXPORTER_H__
+#define __ANIMATIONEXPORTER_H__
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -77,8 +77,6 @@ extern "C" {
 #include <vector>
 #include <map>
 #include <algorithm>  // std::find
-
-struct Depsgraph;
 
 typedef enum BC_animation_source_type {
   BC_SOURCE_TYPE_VALUE,
@@ -265,4 +263,4 @@ class AnimationExporter : COLLADASW::LibraryAnimations {
 #endif
 };
 
-#endif
+#endif /* __ANIMATIONEXPORTER_H__ */

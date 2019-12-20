@@ -19,6 +19,7 @@
 
 #include "graph/node.h"
 
+#include "bvh/bvh_params.h"
 #include "render/attribute.h"
 #include "render/shader.h"
 
@@ -27,6 +28,7 @@
 #include "util/util_list.h"
 #include "util/util_map.h"
 #include "util/util_param.h"
+#include "util/util_set.h"
 #include "util/util_transform.h"
 #include "util/util_types.h"
 #include "util/util_vector.h"
@@ -94,7 +96,7 @@ class Mesh : public Node {
     int first_key;
     int num_keys;
 
-    int num_segments()
+    int num_segments() const
     {
       return num_keys - 1;
     }
@@ -165,6 +167,16 @@ class Mesh : public Node {
   size_t num_curves() const
   {
     return curve_first_key.size();
+  }
+
+  size_t num_segments() const
+  {
+    return curve_keys.size() - curve_first_key.size();
+  }
+
+  size_t num_primitives() const
+  {
+    return num_triangles() + num_segments();
   }
 
   /* Mesh SubdFace */
@@ -268,8 +280,18 @@ class Mesh : public Node {
 
   size_t attr_map_offset;
 
+  size_t prim_offset;
+
   size_t num_subd_verts;
 
+ private:
+  unordered_map<int, int> vert_to_stitching_key_map; /* real vert index -> stitching index */
+  unordered_multimap<int, int>
+      vert_stitching_map; /* stitching index -> multiple real vert indices */
+  friend class DiagSplit;
+  friend class MeshManager;
+
+ public:
   /* Functions */
   Mesh();
   ~Mesh();
@@ -292,6 +314,8 @@ class Mesh : public Node {
   void add_face_normals();
   void add_vertex_normals();
   void add_undisplaced();
+
+  void get_uv_tiles(ustring map, unordered_set<int> &tiles);
 
   void pack_shaders(Scene *scene, uint *shader);
   void pack_normals(float4 *vnormal);
@@ -332,8 +356,9 @@ class Mesh : public Node {
    *   same BVH tree.
    * - Special ray intersection is needed, for example to limit subsurface rays
    *   to only the mesh itself.
+   * - The BVH layout requires the top level to only contain instances.
    */
-  bool need_build_bvh() const;
+  bool need_build_bvh(BVHLayout layout) const;
 
   /* Check if the mesh should be treated as instanced. */
   bool is_instanced() const;

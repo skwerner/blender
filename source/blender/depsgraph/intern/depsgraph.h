@@ -45,13 +45,11 @@
 struct GHash;
 struct GSet;
 struct ID;
-struct Main;
 struct Scene;
 struct ViewLayer;
 
 namespace DEG {
 
-struct ComponentNode;
 struct IDNode;
 struct Node;
 struct OperationNode;
@@ -102,7 +100,7 @@ struct Depsgraph {
   typedef vector<OperationNode *> OperationNodes;
   typedef vector<IDNode *> IDDepsNodes;
 
-  Depsgraph(Scene *scene, ViewLayer *view_layer, eEvaluationMode mode);
+  Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluationMode mode);
   ~Depsgraph();
 
   TimeSourceNode *add_time_source();
@@ -174,7 +172,8 @@ struct Depsgraph {
    * Mainly used by graph evaluation. */
   SpinLock lock;
 
-  /* Scene, layer, mode this dependency graph is built for. */
+  /* Main, scene, layer, mode this dependency graph is built for. */
+  Main *bmain;
   Scene *scene;
   ViewLayer *view_layer;
   eEvaluationMode mode;
@@ -199,7 +198,7 @@ struct Depsgraph {
   int debug_flags;
   string debug_name;
 
-  bool debug_is_evaluating;
+  bool is_evaluating;
 
   /* Is set to truth for dependency graph which are used for post-processing (compositor and
    * sequencer).

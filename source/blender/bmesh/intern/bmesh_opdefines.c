@@ -369,28 +369,6 @@ static BMOpDefine bmo_remove_doubles_def = {
 };
 
 /*
- * Auto Merge.
- *
- * Finds groups of vertices closer then **dist** and merges them together,
- * using the weld verts bmop.  The merges must go from a vert not in
- * **verts** to one in **verts**.
- */
-static BMOpDefine bmo_automerge_def = {
-  "automerge",
-  /* slots_in */
-  {{"verts", BMO_OP_SLOT_ELEMENT_BUF, {BM_VERT}}, /* input verts */
-   {"dist",         BMO_OP_SLOT_FLT}, /* maximum distance */
-   {{'\0'}},
-  },
-  {{{'\0'}}},  /* no output */
-  bmo_automerge_exec,
-  (BMO_OPTYPE_FLAG_UNTAN_MULTIRES |
-   BMO_OPTYPE_FLAG_NORMALS_CALC |
-   BMO_OPTYPE_FLAG_SELECT_FLUSH |
-   BMO_OPTYPE_FLAG_SELECT_VALIDATE),
-};
-
-/*
  * Collapse Connected.
  *
  * Collapses connected vertices
@@ -1747,6 +1725,12 @@ static BMO_FlagSet bmo_enum_bevel_miter_type[] = {
   {0, NULL},
 };
 
+static BMO_FlagSet bmo_enum_bevel_vmesh_method[] = {
+  {BEVEL_VMESH_ADJ, "ADJ"},
+  {BEVEL_VMESH_CUTOFF, "CUTOFF"},
+  {0, NULL},
+};
+
 /*
  * Bevel.
  *
@@ -1757,7 +1741,8 @@ static BMOpDefine bmo_bevel_def = {
   /* slots_in */
   {{"geom", BMO_OP_SLOT_ELEMENT_BUF, {BM_VERT | BM_EDGE | BM_FACE}},     /* input edges and vertices */
    {"offset", BMO_OP_SLOT_FLT},           /* amount to offset beveled edge */
-   {"offset_type", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM}, bmo_enum_bevel_offset_type}, /* how to measure the offset */
+   {"offset_type", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
+    bmo_enum_bevel_offset_type}, /* how to measure the offset */
    {"segments", BMO_OP_SLOT_INT},         /* number of segments in bevel */
    {"profile", BMO_OP_SLOT_FLT},          /* profile shape, 0->1 (.5=>round) */
    {"vertex_only", BMO_OP_SLOT_BOOL},     /* only bevel vertices, not edges */
@@ -1768,13 +1753,18 @@ static BMOpDefine bmo_bevel_def = {
    {"mark_sharp", BMO_OP_SLOT_BOOL},      /* extend edge data to allow sharp edges to run across bevels */
    {"harden_normals", BMO_OP_SLOT_BOOL},  /* harden normals */
    {"face_strength_mode", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
-    bmo_enum_bevel_face_strength_type}, /* whether to set face strength, and which faces to set if so */
+    bmo_enum_bevel_face_strength_type},   /* whether to set face strength, and which faces to set if so */
    {"miter_outer", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
-    bmo_enum_bevel_miter_type},         /* outer miter kind */
+    bmo_enum_bevel_miter_type},           /* outer miter kind */
    {"miter_inner", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
-    bmo_enum_bevel_miter_type},         /* outer miter kind */
+    bmo_enum_bevel_miter_type},           /* outer miter kind */
    {"spread", BMO_OP_SLOT_FLT},           /* amount to offset beveled edge */
    {"smoothresh", BMO_OP_SLOT_FLT},       /* for passing mesh's smoothresh, used in hardening */
+   {"use_custom_profile", BMO_OP_SLOT_BOOL}, /* Whether to use custom profile feature */
+   /* the ProfileWiget struct for the custom profile shape */
+   {"custom_profile", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_STRUCT}},
+   {"vmesh_method", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
+    bmo_enum_bevel_vmesh_method},
    {{'\0'}},
   },
   /* slots_out */
@@ -2073,7 +2063,6 @@ static BMOpDefine bmo_symmetrize_def = {
 /* clang-format on */
 
 const BMOpDefine *bmo_opdefines[] = {
-    &bmo_automerge_def,
     &bmo_average_vert_facedata_def,
     &bmo_beautify_fill_def,
     &bmo_bevel_def,

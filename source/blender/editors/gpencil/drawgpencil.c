@@ -51,6 +51,7 @@
 #include "BKE_context.h"
 #include "BKE_brush.h"
 #include "BKE_global.h"
+#include "BKE_material.h"
 #include "BKE_paint.h"
 #include "BKE_gpencil.h"
 #include "BKE_image.h"
@@ -62,7 +63,6 @@
 #include "BIF_glutil.h"
 
 #include "GPU_immediate.h"
-#include "GPU_draw.h"
 #include "GPU_state.h"
 
 #include "ED_gpencil.h"
@@ -268,8 +268,11 @@ static void gp_calc_2d_bounding_box(
 }
 
 /* calc texture coordinates using flat projected points */
-static void gp_calc_stroke_text_coordinates(
-    const float (*points2d)[2], int totpoints, float minv[2], float maxv[2], float (*r_uv)[2])
+static void gp_calc_stroke_text_coordinates(const float (*points2d)[2],
+                                            int totpoints,
+                                            const float minv[2],
+                                            float maxv[2],
+                                            float (*r_uv)[2])
 {
   float d[2];
   d[0] = maxv[0] - minv[0];
@@ -425,7 +428,9 @@ static void gp_draw_stroke_fill(bGPdata *gpd,
                                 const float color[4])
 {
   BLI_assert(gps->totpoints >= 3);
-  Material *ma = gpd->mat[gps->mat_nr];
+  const bool use_mat = (gpd->mat != NULL);
+
+  Material *ma = (use_mat) ? gpd->mat[gps->mat_nr] : BKE_material_gpencil_default_get();
   MaterialGPencilStyle *gp_style = (ma) ? ma->gp_style : NULL;
 
   /* Calculate triangles cache for filling area (must be done only after changes) */
@@ -867,6 +872,7 @@ static void gp_draw_strokes(tGPDdraw *tgpw)
   short sthickness;
   float ink[4];
   const bool is_unique = (tgpw->gps != NULL);
+  const bool use_mat = (tgpw->gpd->mat != NULL);
 
   GPU_program_point_size(true);
 
@@ -878,7 +884,7 @@ static void gp_draw_strokes(tGPDdraw *tgpw)
       continue;
     }
     /* check if the color is visible */
-    Material *ma = tgpw->gpd->mat[gps->mat_nr];
+    Material *ma = (use_mat) ? tgpw->gpd->mat[gps->mat_nr] : BKE_material_gpencil_default_get();
     MaterialGPencilStyle *gp_style = (ma) ? ma->gp_style : NULL;
 
     if ((gp_style == NULL) || (gp_style->flag & GP_STYLE_COLOR_HIDE) ||
@@ -1157,6 +1163,9 @@ void ED_gp_draw_interpolation(const bContext *C, tGPDinterpolate *tgpi, const in
       copy_v4_v4(tgpw.tintcolor, color);
       tgpw.onion = true;
       tgpw.custonion = true;
+      if (obact->totcol == 0) {
+        tgpw.gpd->mat = NULL;
+      }
 
       gp_draw_strokes(&tgpw);
     }

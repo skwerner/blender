@@ -103,11 +103,8 @@ typedef struct GizmoGroupData_SpinInit {
 #define INIT_SCALE_BUTTON 0.15f
 
 static const uchar shape_plus[] = {
-    0x5f, 0xfb, 0x40, 0xee, 0x25, 0xda, 0x11, 0xbf, 0x4,  0xa0, 0x0,  0x80, 0x4,  0x5f, 0x11, 0x40,
-    0x25, 0x25, 0x40, 0x11, 0x5f, 0x4,  0x7f, 0x0,  0xa0, 0x4,  0xbf, 0x11, 0xda, 0x25, 0xee, 0x40,
-    0xfb, 0x5f, 0xff, 0x7f, 0xfb, 0xa0, 0xee, 0xbf, 0xda, 0xda, 0xbf, 0xee, 0xa0, 0xfb, 0x80, 0xff,
-    0x6e, 0xd7, 0x92, 0xd7, 0x92, 0x90, 0xd8, 0x90, 0xd8, 0x6d, 0x92, 0x6d, 0x92, 0x27, 0x6e, 0x27,
-    0x6e, 0x6d, 0x28, 0x6d, 0x28, 0x90, 0x6e, 0x90, 0x6e, 0xd7, 0x80, 0xff, 0x5f, 0xfb, 0x5f, 0xfb,
+    0x73, 0x73, 0x73, 0x36, 0x8c, 0x36, 0x8c, 0x73, 0xc9, 0x73, 0xc9, 0x8c, 0x8c,
+    0x8c, 0x8c, 0xc9, 0x73, 0xc9, 0x73, 0x8c, 0x36, 0x8c, 0x36, 0x73, 0x36, 0x73,
 };
 
 static void gizmo_mesh_spin_init_setup(const bContext *UNUSED(C), wmGizmoGroup *gzgroup)
@@ -129,6 +126,8 @@ static void gizmo_mesh_spin_init_setup(const bContext *UNUSED(C), wmGizmoGroup *
       PropertyRNA *prop = RNA_struct_find_property(gz->ptr, "shape");
       RNA_property_string_set_bytes(
           gz->ptr, prop, (const char *)shape_plus, ARRAY_SIZE(shape_plus));
+
+      RNA_enum_set(gz->ptr, "draw_options", ED_GIZMO_BUTTON_SHOW_BACKDROP);
 
       float color[4];
       UI_GetThemeColor3fv(TH_AXIS_X + i, color);
@@ -522,7 +521,6 @@ typedef struct GizmoGroupData_SpinRedo {
     PropertyRNA *prop_axis_no;
     PropertyRNA *prop_angle;
 
-    float rotate_axis[3];
 #ifdef USE_ANGLE_Z_ORIENT
     /* Apply 'orient_mat' for the final value. */
     float orient_axis_relative[3];
@@ -1008,8 +1006,17 @@ static void gizmo_mesh_spin_redo_setup(const bContext *C, wmGizmoGroup *gzgroup)
                                       });
   }
 
-  /* Become modal as soon as it's started. */
-  gizmo_mesh_spin_redo_modal_from_setup(C, gzgroup);
+  wmWindow *win = CTX_wm_window(C);
+  if (win && win->active) {
+    bScreen *screen = WM_window_get_active_screen(win);
+    if (screen->active_region) {
+      ARegion *ar = CTX_wm_region(C);
+      if (screen->active_region == ar) {
+        /* Become modal as soon as it's started. */
+        gizmo_mesh_spin_redo_modal_from_setup(C, gzgroup);
+      }
+    }
+  }
 }
 
 static void gizmo_mesh_spin_redo_draw_prepare(const bContext *UNUSED(C), wmGizmoGroup *gzgroup)

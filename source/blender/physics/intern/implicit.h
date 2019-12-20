@@ -182,11 +182,18 @@ bool BPH_mass_spring_force_spring_goal(struct Implicit_Data *data,
                                        float stiffness,
                                        float damping);
 
+float BPH_tri_tetra_volume_signed_6x(struct Implicit_Data *data, int v1, int v2, int v3);
+
+void BPH_mass_spring_force_pressure(struct Implicit_Data *data,
+                                    int v1,
+                                    int v2,
+                                    int v3,
+                                    float pressure_difference,
+                                    float weights[3]);
+
 /* ======== Hair Volumetric Forces ======== */
 
 struct HairGrid;
-
-struct VoxelData;
 
 #define MAX_HAIR_GRID_RES 256
 

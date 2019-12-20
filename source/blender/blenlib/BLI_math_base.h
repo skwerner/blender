@@ -112,6 +112,7 @@ MINLINE float saasin(float fac);
 MINLINE float sasqrt(float fac);
 
 MINLINE float interpf(float a, float b, float t);
+MINLINE double interpd(double a, double b, double t);
 
 MINLINE float min_ff(float a, float b);
 MINLINE float max_ff(float a, float b);
@@ -119,6 +120,9 @@ MINLINE float min_fff(float a, float b, float c);
 MINLINE float max_fff(float a, float b, float c);
 MINLINE float min_ffff(float a, float b, float c, float d);
 MINLINE float max_ffff(float a, float b, float c, float d);
+
+MINLINE double min_dd(double a, double b);
+MINLINE double max_dd(double a, double b);
 
 MINLINE int min_ii(int a, int b);
 MINLINE int max_ii(int a, int b);
@@ -154,6 +158,8 @@ MINLINE int power_of_2_min_i(int n);
 
 MINLINE unsigned int power_of_2_max_u(unsigned int x);
 MINLINE unsigned int power_of_2_min_u(unsigned int x);
+MINLINE unsigned int log2_floor_u(unsigned int x);
+MINLINE unsigned int log2_ceil_u(unsigned int x);
 
 MINLINE int divide_round_i(int a, int b);
 MINLINE int mod_i(int i, int n);

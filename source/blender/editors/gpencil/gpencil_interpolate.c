@@ -560,7 +560,7 @@ static int gpencil_interpolate_invoke(bContext *C, wmOperator *op, const wmEvent
       tgpi->ar->type, gpencil_interpolate_draw_3d, tgpi, REGION_DRAW_POST_VIEW);
 
   /* set cursor to indicate modal */
-  WM_cursor_modal_set(win, BC_EW_SCROLLCURSOR);
+  WM_cursor_modal_set(win, WM_CURSOR_EW_SCROLL);
 
   /* update shift indicator in header */
   gpencil_interpolate_status_indicators(C, tgpi);
@@ -585,6 +585,7 @@ static int gpencil_interpolate_modal(bContext *C, wmOperator *op, const wmEvent 
 
   switch (event->type) {
     case LEFTMOUSE: /* confirm */
+    case PADENTER:
     case RETKEY: {
       /* return to normal cursor and header status */
       ED_area_status_text(tgpi->sa, NULL);
@@ -1051,8 +1052,8 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
         /* if destination stroke is smaller, resize new_stroke to size of gps_to stroke */
         if (gps_from->totpoints > gps_to->totpoints) {
           /* free weights of removed points */
-          if (gps_from->dvert != NULL) {
-            BKE_defvert_array_free_elems(gps_from->dvert + gps_to->totpoints,
+          if (new_stroke->dvert != NULL) {
+            BKE_defvert_array_free_elems(new_stroke->dvert + gps_to->totpoints,
                                          gps_from->totpoints - gps_to->totpoints);
           }
 

@@ -29,6 +29,7 @@
 
 #include "BLI_blenlib.h"
 
+#include "BKE_global.h"
 #include "BKE_context.h"
 #include "BKE_library.h"
 #include "BKE_screen.h"
@@ -116,7 +117,7 @@ static SpaceLink *text_duplicate(SpaceLink *sl)
 
   /* clear or remove stuff from old */
 
-  stextn->drawcache = NULL; /* space need it's own cache */
+  stextn->runtime.drawcache = NULL; /* space need it's own cache */
 
   return (SpaceLink *)stextn;
 }
@@ -202,6 +203,7 @@ static void text_operatortypes(void)
   WM_operatortype_append(TEXT_OT_comment_toggle);
   WM_operatortype_append(TEXT_OT_unindent);
   WM_operatortype_append(TEXT_OT_indent);
+  WM_operatortype_append(TEXT_OT_indent_or_autocomplete);
 
   WM_operatortype_append(TEXT_OT_select_line);
   WM_operatortype_append(TEXT_OT_select_all);
@@ -310,11 +312,12 @@ static void text_main_region_draw(const bContext *C, ARegion *ar)
 static void text_cursor(wmWindow *win, ScrArea *sa, ARegion *ar)
 {
   SpaceText *st = sa->spacedata.first;
-  int wmcursor = BC_TEXTEDITCURSOR;
+  int wmcursor = WM_CURSOR_TEXT_EDIT;
 
-  if (st->text &&
-      BLI_rcti_isect_pt(&st->txtbar, win->eventstate->x - ar->winrct.xmin, st->txtbar.ymin)) {
-    wmcursor = CURSOR_STD;
+  if (st->text && BLI_rcti_isect_pt(&st->runtime.scroll_region_handle,
+                                    win->eventstate->x - ar->winrct.xmin,
+                                    st->runtime.scroll_region_handle.ymin)) {
+    wmcursor = WM_CURSOR_DEFAULT;
   }
 
   WM_cursor_set(win, wmcursor);
@@ -356,7 +359,7 @@ static void text_drop_paste(wmDrag *drag, wmDropBox *drop)
   ID *id = WM_drag_ID(drag, 0);
 
   /* copy drag path to properties */
-  text = RNA_path_full_ID_py(id);
+  text = RNA_path_full_ID_py(G_MAIN, id);
   RNA_string_set(drop->ptr, "text", text);
   MEM_freeN(text);
 }

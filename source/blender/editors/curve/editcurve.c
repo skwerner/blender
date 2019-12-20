@@ -51,17 +51,16 @@
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_query.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_keyframes_edit.h"
 #include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_transform.h"
 #include "ED_transform_snap_object_context.h"
 #include "ED_types.h"
-#include "ED_util.h"
 #include "ED_view3d.h"
 #include "ED_curve.h"
 
@@ -691,7 +690,7 @@ static void calc_shapeKeys(Object *obedit, ListBase *newnurbs)
 
               if (oldbezt) {
                 int j;
-                for (j = 0; j < 3; ++j) {
+                for (j = 0; j < 3; j++) {
                   sub_v3_v3v3(ofs[i], bezt->vec[j], oldbezt->vec[j]);
                   i++;
                 }
@@ -909,7 +908,7 @@ static bool curve_is_animated(Curve *cu)
 
 static void fcurve_path_rename(AnimData *adt,
                                const char *orig_rna_path,
-                               char *rna_path,
+                               const char *rna_path,
                                ListBase *orig_curves,
                                ListBase *curves)
 {
@@ -923,11 +922,15 @@ static void fcurve_path_rename(AnimData *adt,
       nfcu = copy_fcurve(fcu);
       spath = nfcu->rna_path;
       nfcu->rna_path = BLI_sprintfN("%s%s", rna_path, suffix);
+
+      /* copy_fcurve() sets nfcu->grp to NULL. To maintain the groups, we need to keep the pointer.
+       * As a result, the group's 'channels' pointers will be wrong, which is fixed by calling
+       * `action_groups_reconstruct(action)` later, after all fcurves have been renamed. */
+      nfcu->grp = fcu->grp;
       BLI_addtail(curves, nfcu);
 
       if (fcu->grp) {
         action_groups_remove_channel(adt->action, fcu);
-        action_groups_add_channel(adt->action, fcu->grp, nfcu);
       }
       else if ((adt->action) && (&adt->action->curves == orig_curves)) {
         BLI_remlink(&adt->action->curves, fcu);
@@ -1078,6 +1081,9 @@ static void curve_rename_fcurves(Curve *cu, ListBase *orig_curves)
   }
 
   *orig_curves = curves;
+  if (adt != NULL) {
+    BKE_action_groups_reconstruct(adt->action);
+  }
 }
 
 /* return 0 if animation data wasn't changed, 1 otherwise */
@@ -3342,7 +3348,8 @@ void CURVE_OT_reveal(wmOperatorType *ot)
 
 /********************** subdivide operator *********************/
 
-/** Divide the line segments associated with the currently selected
+/**
+ * Divide the line segments associated with the currently selected
  * curve nodes (Bezier or NURB). If there are no valid segment
  * selections within the current selection, nothing happens.
  */
@@ -4875,6 +4882,7 @@ void CURVE_OT_make_segment(wmOperatorType *ot)
 bool ED_curve_editnurb_select_pick(
     bContext *C, const int mval[2], bool extend, bool deselect, bool toggle)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
   Nurb *nu;
   BezTriple *bezt = NULL;
@@ -4883,7 +4891,7 @@ bool ED_curve_editnurb_select_pick(
   short hand;
 
   view3d_operator_needs_opengl(C);
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
   copy_v2_v2_int(vc.mval, mval);
 
   if (ED_curve_pick_vert(&vc, 1, &nu, &bezt, &bp, &hand, &basact)) {
@@ -5634,9 +5642,10 @@ static int add_vertex_exec(bContext *C, wmOperator *op)
 
 static int add_vertex_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewContext vc;
 
-  ED_view3d_viewcontext_init(C, &vc);
+  ED_view3d_viewcontext_init(C, &vc, depsgraph);
 
   if (vc.rv3d && !RNA_struct_property_is_set(op->ptr, "location")) {
     Curve *cu;
@@ -5678,6 +5687,7 @@ static int add_vertex_invoke(bContext *C, wmOperator *op, const wmEvent *event)
               .use_object_edit_cage = false,
           },
           mval,
+          NULL,
           NULL,
           location,
           NULL);
@@ -7104,14 +7114,15 @@ static int match_texture_space_exec(bContext *C, wmOperator *UNUSED(op))
   (void)depsgraph;
 
   Object *object = CTX_data_active_object(C);
+  Object *object_eval = DEG_get_evaluated_object(depsgraph, object);
   Curve *curve = (Curve *)object->data;
   float min[3], max[3], size[3], loc[3];
   int a;
 
-  BLI_assert(object->runtime.curve_cache != NULL);
+  BLI_assert(object_eval->runtime.curve_cache != NULL);
 
   INIT_MINMAX(min, max);
-  BKE_displist_minmax(&object->runtime.curve_cache->disp, min, max);
+  BKE_displist_minmax(&object_eval->runtime.curve_cache->disp, min, max);
 
   mid_v3_v3v3(loc, min, max);
 
@@ -7133,11 +7144,11 @@ static int match_texture_space_exec(bContext *C, wmOperator *UNUSED(op))
 
   copy_v3_v3(curve->loc, loc);
   copy_v3_v3(curve->size, size);
-  zero_v3(curve->rot);
 
   curve->texflag &= ~CU_AUTOSPACE;
 
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, curve);
+  DEG_id_tag_update(&curve->id, ID_RECALC_GEOMETRY);
 
   return OPERATOR_FINISHED;
 }

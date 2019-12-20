@@ -36,10 +36,15 @@
 #include "DNA_cloth_types.h"
 #include "DNA_collection_types.h"
 #include "DNA_constraint_types.h"
+#include "DNA_curveprofile_types.h"
+#include "DNA_freestyle_types.h"
 #include "DNA_gpu_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_gpencil_modifier_types.h"
 #include "DNA_light_types.h"
 #include "DNA_layer_types.h"
 #include "DNA_lightprobe_types.h"
+#include "DNA_linestyle_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
@@ -49,14 +54,14 @@
 #include "DNA_screen_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_genfile.h"
-#include "DNA_gpencil_types.h"
 #include "DNA_workspace_types.h"
 #include "DNA_key_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_text_types.h"
+#include "DNA_texture_types.h"
+#include "DNA_world_types.h"
 
-#include "BKE_action.h"
 #include "BKE_animsys.h"
 #include "BKE_cloth.h"
 #include "BKE_collection.h"
@@ -65,22 +70,18 @@
 #include "BKE_customdata.h"
 #include "BKE_fcurve.h"
 #include "BKE_freestyle.h"
-#include "BKE_gpencil.h"
 #include "BKE_idprop.h"
-#include "BKE_image.h"
 #include "BKE_key.h"
 #include "BKE_library.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
-#include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_node.h"
-#include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_pointcache.h"
+#include "BKE_curveprofile.h"
 #include "BKE_report.h"
 #include "BKE_rigidbody.h"
-#include "BKE_scene.h"
 #include "BKE_screen.h"
 #include "BKE_sequencer.h"
 #include "BKE_studiolight.h"
@@ -98,6 +99,9 @@
 #include "readfile.h"
 
 #include "MEM_guardedalloc.h"
+
+/* Make preferences read-only, use versioning_userdef.c. */
+#define U (*((const UserDef *)&U))
 
 static bScreen *screen_parent_find(const bScreen *screen)
 {
@@ -125,8 +129,8 @@ static void do_version_workspaces_create_from_screens(Main *bmain)
     }
 
     if (screen_parent) {
-      /* fullscreen with "Back to Previous" option, don't create
-       * a new workspace, add layout workspace containing parent */
+      /* Full-screen with "Back to Previous" option, don't create
+       * a new workspace, add layout workspace containing parent. */
       workspace = BLI_findstring(
           &bmain->workspaces, screen_parent->id.name + 2, offsetof(ID, name) + 2);
     }
@@ -406,7 +410,7 @@ static void do_version_layers_to_collections(Main *bmain, Scene *scene)
   }
 
   /* Create collections from layers. */
-  Collection *collection_master = BKE_collection_master(scene);
+  Collection *collection_master = scene->master_collection;
   Collection *collections[20] = {NULL};
 
   for (int layer = 0; layer < 20; layer++) {
@@ -590,13 +594,18 @@ static void do_versions_fix_annotations(bGPdata *gpd)
   }
 }
 
-static void do_versions_remove_region(ListBase *regionbase, int regiontype)
+static void do_versions_remove_region(ListBase *regionbase, ARegion *ar)
+{
+  BLI_freelinkN(regionbase, ar);
+}
+
+static void do_versions_remove_regions_by_type(ListBase *regionbase, int regiontype)
 {
   ARegion *ar, *ar_next;
   for (ar = regionbase->first; ar; ar = ar_next) {
     ar_next = ar->next;
     if (ar->regiontype == regiontype) {
-      BLI_freelinkN(regionbase, ar);
+      do_versions_remove_region(regionbase, ar);
     }
   }
 }
@@ -634,6 +643,18 @@ static void do_version_bones_split_bbone_scale(ListBase *lb)
     bone->scale_out_y = bone->scale_out_x;
 
     do_version_bones_split_bbone_scale(&bone->childbase);
+  }
+}
+
+static void do_version_bones_inherit_scale(ListBase *lb)
+{
+  for (Bone *bone = lb->first; bone; bone = bone->next) {
+    if (bone->flag & BONE_NO_SCALE) {
+      bone->inherit_scale_mode = BONE_INHERIT_SCALE_NONE_LEGACY;
+      bone->flag &= ~BONE_NO_SCALE;
+    }
+
+    do_version_bones_inherit_scale(&bone->childbase);
   }
 }
 
@@ -715,6 +736,17 @@ static void do_version_constraints_copy_scale_power(ListBase *lb)
   }
 }
 
+static void do_version_constraints_copy_rotation_mix_mode(ListBase *lb)
+{
+  for (bConstraint *con = lb->first; con; con = con->next) {
+    if (con->type == CONSTRAINT_TYPE_ROTLIKE) {
+      bRotateLikeConstraint *data = (bRotateLikeConstraint *)con->data;
+      data->mix_mode = (data->flag & ROTLIKE_OFFSET) ? ROTLIKE_MIX_OFFSET : ROTLIKE_MIX_REPLACE;
+      data->flag &= ~ROTLIKE_OFFSET;
+    }
+  }
+}
+
 static void do_versions_seq_alloc_transform_and_crop(ListBase *seqbase)
 {
   for (Sequence *seq = seqbase->first; seq != NULL; seq = seq->next) {
@@ -735,13 +767,9 @@ static void do_versions_seq_alloc_transform_and_crop(ListBase *seqbase)
 }
 
 /* Return true if there is something to convert. */
-static bool do_versions_material_convert_legacy_blend_mode(bNodeTree *ntree,
-                                                           char blend_method,
-                                                           GSet *nodegrp_tree_set,
-                                                           GSet *nooutput_tree_set)
+static void do_versions_material_convert_legacy_blend_mode(bNodeTree *ntree, char blend_method)
 {
   bool need_update = false;
-  bool do_conversion = false;
 
   /* Iterate backwards from end so we don't encounter newly added links. */
   bNodeLink *prevlink;
@@ -754,31 +782,6 @@ static bool do_versions_material_convert_legacy_blend_mode(bNodeTree *ntree,
     bNode *tonode = link->tonode;
     bNodeSocket *tosock = link->tosock;
 
-    if (nodegrp_tree_set) {
-      if (fromnode->type == NODE_GROUP && fromnode->id != NULL) {
-        bNodeTree *group_ntree = (bNodeTree *)fromnode->id;
-        if (BLI_gset_add(nodegrp_tree_set, group_ntree)) {
-          /* Recursive but not convert (blend_method = -1). Conversion happens after. */
-          if (!do_versions_material_convert_legacy_blend_mode(
-                  group_ntree, -1, nodegrp_tree_set, nooutput_tree_set)) {
-            /* There is no output to convert in the tree. */
-            BLI_gset_add(nooutput_tree_set, group_ntree);
-          }
-        }
-      }
-      if (tonode->type == NODE_GROUP && tonode->id != NULL) {
-        bNodeTree *group_ntree = (bNodeTree *)tonode->id;
-        if (BLI_gset_add(nodegrp_tree_set, group_ntree)) {
-          /* Recursive but not convert (blend_method = -1). Conversion happens after. */
-          if (!do_versions_material_convert_legacy_blend_mode(
-                  group_ntree, -1, nodegrp_tree_set, nooutput_tree_set)) {
-            /* There is no output to convert in the tree. */
-            BLI_gset_add(nooutput_tree_set, group_ntree);
-          }
-        }
-      }
-    }
-
     if (!(tonode->type == SH_NODE_OUTPUT_MATERIAL && STREQ(tosock->identifier, "Surface"))) {
       continue;
     }
@@ -787,8 +790,6 @@ static bool do_versions_material_convert_legacy_blend_mode(bNodeTree *ntree,
     if (!ELEM(tonode->custom1, SHD_OUTPUT_ALL, SHD_OUTPUT_EEVEE)) {
       continue;
     }
-
-    do_conversion = true;
 
     if (blend_method == 1 /* MA_BM_ADD */) {
       nodeRemLink(ntree, link);
@@ -854,11 +855,243 @@ static bool do_versions_material_convert_legacy_blend_mode(bNodeTree *ntree,
   if (need_update) {
     ntreeUpdateTree(NULL, ntree);
   }
-
-  return do_conversion;
 }
 
-void do_versions_after_linking_280(Main *bmain, ReportList *reports)
+static void do_versions_local_collection_bits_set(LayerCollection *layer_collection)
+{
+  layer_collection->local_collections_bits = ~(0);
+  LISTBASE_FOREACH (LayerCollection *, child, &layer_collection->layer_collections) {
+    do_versions_local_collection_bits_set(child);
+  }
+}
+
+static void do_version_curvemapping_flag_extend_extrapolate(CurveMapping *cumap)
+{
+#define CUMA_EXTEND_EXTRAPOLATE_OLD 1
+  for (int curve_map_index = 0; curve_map_index < 4; curve_map_index++) {
+    CurveMap *cuma = &cumap->cm[curve_map_index];
+    if (cuma->flag & CUMA_EXTEND_EXTRAPOLATE_OLD) {
+      cumap->flag |= CUMA_EXTEND_EXTRAPOLATE;
+      return;
+    }
+  }
+#undef CUMA_EXTEND_EXTRAPOLATE_OLD
+}
+
+/* Util version to walk over all CurveMappings in the given `bmain` */
+static void do_version_curvemapping_walker(Main *bmain, void (*callback)(CurveMapping *cumap))
+{
+  LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+    callback(&scene->r.mblur_shutter_curve);
+
+    if (scene->view_settings.curve_mapping) {
+      callback(scene->view_settings.curve_mapping);
+    }
+
+    if (scene->ed != NULL) {
+      LISTBASE_FOREACH (Sequence *, seq, &scene->ed->seqbase) {
+        LISTBASE_FOREACH (SequenceModifierData *, smd, &seq->modifiers) {
+          const SequenceModifierTypeInfo *smti = BKE_sequence_modifier_type_info_get(smd->type);
+
+          if (smti) {
+            if (smd->type == seqModifierType_Curves) {
+              CurvesModifierData *cmd = (CurvesModifierData *)smd;
+              callback(&cmd->curve_mapping);
+            }
+            else if (smd->type == seqModifierType_HueCorrect) {
+              HueCorrectModifierData *hcmd = (HueCorrectModifierData *)smd;
+              callback(&hcmd->curve_mapping);
+            }
+          }
+        }
+      }
+    }
+
+    // toolsettings
+    ToolSettings *ts = scene->toolsettings;
+    if (ts->vpaint) {
+      callback(ts->vpaint->paint.cavity_curve);
+    }
+    if (ts->wpaint) {
+      callback(ts->wpaint->paint.cavity_curve);
+    }
+    if (ts->sculpt) {
+      callback(ts->sculpt->paint.cavity_curve);
+    }
+    if (ts->uvsculpt) {
+      callback(ts->uvsculpt->paint.cavity_curve);
+    }
+    if (ts->gp_paint) {
+      callback(ts->gp_paint->paint.cavity_curve);
+    }
+    if (ts->gp_interpolate.custom_ipo) {
+      callback(ts->gp_interpolate.custom_ipo);
+    }
+    if (ts->gp_sculpt.cur_falloff) {
+      callback(ts->gp_sculpt.cur_falloff);
+    }
+    if (ts->gp_sculpt.cur_primitive) {
+      callback(ts->gp_sculpt.cur_primitive);
+    }
+    callback(ts->imapaint.paint.cavity_curve);
+  }
+
+  FOREACH_NODETREE_BEGIN (bmain, node_tree, id) {
+    LISTBASE_FOREACH (bNode *, node, &node_tree->nodes) {
+      if (ELEM(node->type,
+               SH_NODE_CURVE_VEC,
+               SH_NODE_CURVE_RGB,
+               CMP_NODE_CURVE_VEC,
+               CMP_NODE_CURVE_RGB,
+               CMP_NODE_TIME,
+               CMP_NODE_HUECORRECT,
+               TEX_NODE_CURVE_RGB,
+               TEX_NODE_CURVE_TIME)) {
+        callback((CurveMapping *)node->storage);
+      }
+    }
+  }
+  FOREACH_NODETREE_END;
+
+  LISTBASE_FOREACH (Light *, light, &bmain->lights) {
+    if (light->curfalloff) {
+      callback(light->curfalloff);
+    }
+  }
+
+  LISTBASE_FOREACH (Brush *, brush, &bmain->brushes) {
+    if (brush->curve) {
+      callback(brush->curve);
+    }
+    if (brush->gpencil_settings) {
+      if (brush->gpencil_settings->curve_sensitivity) {
+        callback(brush->gpencil_settings->curve_sensitivity);
+      }
+      if (brush->gpencil_settings->curve_strength) {
+        callback(brush->gpencil_settings->curve_strength);
+      }
+      if (brush->gpencil_settings->curve_jitter) {
+        callback(brush->gpencil_settings->curve_jitter);
+      }
+    }
+  }
+
+  LISTBASE_FOREACH (ParticleSettings *, part, &bmain->particles) {
+    if (part->clumpcurve) {
+      callback(part->clumpcurve);
+    }
+    if (part->roughcurve) {
+      callback(part->roughcurve);
+    }
+    if (part->twistcurve) {
+      callback(part->twistcurve);
+    }
+  }
+
+  /* Object */
+  LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+    /* Object modifiers */
+    LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+      if (md->type == eModifierType_Hook) {
+        HookModifierData *hmd = (HookModifierData *)md;
+
+        if (hmd->curfalloff) {
+          callback(hmd->curfalloff);
+        }
+      }
+      else if (md->type == eModifierType_Warp) {
+        WarpModifierData *tmd = (WarpModifierData *)md;
+        if (tmd->curfalloff) {
+          callback(tmd->curfalloff);
+        }
+      }
+      else if (md->type == eModifierType_WeightVGEdit) {
+        WeightVGEditModifierData *wmd = (WeightVGEditModifierData *)md;
+
+        if (wmd->cmap_curve) {
+          callback(wmd->cmap_curve);
+        }
+      }
+    }
+    /* Grease pencil modifiers */
+    LISTBASE_FOREACH (ModifierData *, md, &ob->greasepencil_modifiers) {
+      if (md->type == eGpencilModifierType_Thick) {
+        ThickGpencilModifierData *gpmd = (ThickGpencilModifierData *)md;
+
+        if (gpmd->curve_thickness) {
+          callback(gpmd->curve_thickness);
+        }
+      }
+      else if (md->type == eGpencilModifierType_Hook) {
+        HookGpencilModifierData *gpmd = (HookGpencilModifierData *)md;
+
+        if (gpmd->curfalloff) {
+          callback(gpmd->curfalloff);
+        }
+      }
+    }
+  }
+
+  /* Free Style */
+  LISTBASE_FOREACH (struct FreestyleLineStyle *, linestyle, &bmain->linestyles) {
+    LISTBASE_FOREACH (LineStyleModifier *, m, &linestyle->thickness_modifiers) {
+      switch (m->type) {
+        case LS_MODIFIER_ALONG_STROKE:
+          callback(((LineStyleAlphaModifier_AlongStroke *)m)->curve);
+          break;
+        case LS_MODIFIER_DISTANCE_FROM_CAMERA:
+          callback(((LineStyleAlphaModifier_DistanceFromCamera *)m)->curve);
+          break;
+        case LS_MODIFIER_DISTANCE_FROM_OBJECT:
+          callback(((LineStyleAlphaModifier_DistanceFromObject *)m)->curve);
+          break;
+        case LS_MODIFIER_MATERIAL:
+          callback(((LineStyleAlphaModifier_Material *)m)->curve);
+          break;
+        case LS_MODIFIER_TANGENT:
+          callback(((LineStyleAlphaModifier_Tangent *)m)->curve);
+          break;
+        case LS_MODIFIER_NOISE:
+          callback(((LineStyleAlphaModifier_Noise *)m)->curve);
+          break;
+        case LS_MODIFIER_CREASE_ANGLE:
+          callback(((LineStyleAlphaModifier_CreaseAngle *)m)->curve);
+          break;
+        case LS_MODIFIER_CURVATURE_3D:
+          callback(((LineStyleAlphaModifier_Curvature_3D *)m)->curve);
+          break;
+      }
+    }
+
+    LISTBASE_FOREACH (LineStyleModifier *, m, &linestyle->thickness_modifiers) {
+      switch (m->type) {
+        case LS_MODIFIER_ALONG_STROKE:
+          callback(((LineStyleThicknessModifier_AlongStroke *)m)->curve);
+          break;
+        case LS_MODIFIER_DISTANCE_FROM_CAMERA:
+          callback(((LineStyleThicknessModifier_DistanceFromCamera *)m)->curve);
+          break;
+        case LS_MODIFIER_DISTANCE_FROM_OBJECT:
+          callback(((LineStyleThicknessModifier_DistanceFromObject *)m)->curve);
+          break;
+        case LS_MODIFIER_MATERIAL:
+          callback(((LineStyleThicknessModifier_Material *)m)->curve);
+          break;
+        case LS_MODIFIER_TANGENT:
+          callback(((LineStyleThicknessModifier_Tangent *)m)->curve);
+          break;
+        case LS_MODIFIER_CREASE_ANGLE:
+          callback(((LineStyleThicknessModifier_CreaseAngle *)m)->curve);
+          break;
+        case LS_MODIFIER_CURVATURE_3D:
+          callback(((LineStyleThicknessModifier_Curvature_3D *)m)->curve);
+          break;
+      }
+    }
+  }
+}
+
+void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
 {
   bool use_collection_compat_28 = true;
 
@@ -907,11 +1140,10 @@ void do_versions_after_linking_280(Main *bmain, ReportList *reports)
       }
     }
 
-    /* We need to assign lib pointer to generated hidden collections *after* all have been created,
-     * otherwise we'll end up with several data-blocks sharing same name/library,
-     * which is FORBIDDEN!
-     * Note: we need this to be recursive,
-     * since a child collection may be sorted before its parent in bmain. */
+    /* We need to assign lib pointer to generated hidden collections *after* all have been
+     * created, otherwise we'll end up with several data-blocks sharing same name/library,
+     * which is FORBIDDEN! Note: we need this to be recursive, since a child collection may be
+     * sorted before its parent in bmain. */
     for (Collection *collection = bmain->collections.first; collection != NULL;
          collection = collection->id.next) {
       do_version_collection_propagate_lib_to_children(collection);
@@ -1215,7 +1447,8 @@ void do_versions_after_linking_280(Main *bmain, ReportList *reports)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 38)) {
-    /* Ensure we get valid rigidbody object/constraint data in relevant collections' objects. */
+    /* Ensure we get valid rigidbody object/constraint data in relevant collections' objects.
+     */
     for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
       RigidBodyWorld *rbw = scene->rigidbody_world;
 
@@ -1259,74 +1492,36 @@ void do_versions_after_linking_280(Main *bmain, ReportList *reports)
      * now that we use dualsource blending. */
     /* We take care of doing only nodetrees that are always part of materials
      * with old blending modes. */
-    GSet *ntrees_additive = BLI_gset_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
-    GSet *ntrees_multiply = BLI_gset_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
-    GSet *ntrees_nolegacy = BLI_gset_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
-    GSet *ntrees_nooutput = BLI_gset_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
     for (Material *ma = bmain->materials.first; ma; ma = ma->id.next) {
       bNodeTree *ntree = ma->nodetree;
       if (ma->blend_method == 1 /* MA_BM_ADD */) {
         if (ma->use_nodes) {
-          do_versions_material_convert_legacy_blend_mode(
-              ntree, ma->blend_method, ntrees_additive, ntrees_nooutput);
+          do_versions_material_convert_legacy_blend_mode(ntree, 1 /* MA_BM_ADD */);
         }
         ma->blend_method = MA_BM_BLEND;
       }
       else if (ma->blend_method == 2 /* MA_BM_MULTIPLY */) {
         if (ma->use_nodes) {
-          do_versions_material_convert_legacy_blend_mode(
-              ntree, ma->blend_method, ntrees_multiply, ntrees_nooutput);
+          do_versions_material_convert_legacy_blend_mode(ntree, 2 /* MA_BM_MULTIPLY */);
         }
         ma->blend_method = MA_BM_BLEND;
       }
-      else {
-        /* Still tag the group nodes as not using legacy blend modes. */
-        if (ma->use_nodes) {
-          do_versions_material_convert_legacy_blend_mode(
-              ntree, -1, ntrees_nolegacy, ntrees_nooutput);
+    }
+
+    {
+      /* Update all ruler layers to set new flag. */
+      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+        bGPdata *gpd = scene->gpd;
+        if (gpd == NULL) {
+          continue;
+        }
+        for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+          if (STREQ(gpl->info, "RulerData3D")) {
+            gpl->flag |= GP_LAYER_IS_RULER;
+            break;
+          }
         }
       }
-    }
-    GHashIterState iter = {0};
-    bNodeTree *ntree;
-    /* Remove trees that have no output nodes.
-     * This is done separately to avoid infinite recursion. */
-    while (BLI_gset_pop(ntrees_nooutput, (GSetIterState *)&iter, (void **)&ntree)) {
-      BLI_gset_remove(ntrees_additive, ntree, NULL);
-      BLI_gset_remove(ntrees_multiply, ntree, NULL);
-      BLI_gset_remove(ntrees_nolegacy, ntree, NULL);
-    }
-    BLI_gset_free(ntrees_nooutput, NULL);
-    /* Remove group nodetree that are used by material using non-legacy blend mode. */
-    GHashIterState iter_rm = {0};
-    bool error = false;
-    while (BLI_gset_pop(ntrees_nolegacy, (GSetIterState *)&iter_rm, (void **)&ntree)) {
-      if (BLI_gset_remove(ntrees_additive, ntree, NULL)) {
-        error = true;
-      }
-      if (BLI_gset_remove(ntrees_multiply, ntree, NULL)) {
-        error = true;
-      }
-    }
-    BLI_gset_free(ntrees_nolegacy, NULL);
-    /* Convert remaining group nodetree. */
-    GHashIterState iter_add = {0};
-    GHashIterState iter_mul = {0};
-    while (BLI_gset_pop(ntrees_additive, (GSetIterState *)&iter_add, (void **)&ntree)) {
-      do_versions_material_convert_legacy_blend_mode(ntree, 1 /* MA_BM_ADD */, NULL, NULL);
-    }
-    while (BLI_gset_pop(ntrees_multiply, (GSetIterState *)&iter_mul, (void **)&ntree)) {
-      do_versions_material_convert_legacy_blend_mode(ntree, 2 /* MA_BM_MULTIPLY */, NULL, NULL);
-    }
-    BLI_gset_free(ntrees_additive, NULL);
-    BLI_gset_free(ntrees_multiply, NULL);
-
-    if (error) {
-      BKE_report(reports, RPT_ERROR, "Eevee material conversion problem. Error in console");
-      printf(
-          "One or more group nodetrees containing a material output were found"
-          " in both a material using deprecated blend mode and a normal one.\n"
-          "Nothing in these nodetrees was changed and manual update is required.\n");
     }
   }
 }
@@ -1466,7 +1661,8 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     if (error & NTREE_DOVERSION_NEED_OUTPUT) {
       BKE_report(fd->reports, RPT_ERROR, "Eevee material conversion problem. Error in console");
       printf(
-          "You need to connect Principled and Eevee Specular shader nodes to new material output "
+          "You need to connect Principled and Eevee Specular shader nodes to new material "
+          "output "
           "nodes.\n");
     }
 
@@ -1517,7 +1713,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           ToolSettings *ts = scene->toolsettings;
           /* sculpt brushes */
           GP_Sculpt_Settings *gset = &ts->gp_sculpt;
-          for (int i = 0; i < GP_SCULPT_TYPE_MAX; ++i) {
+          for (int i = 0; i < GP_SCULPT_TYPE_MAX; i++) {
             gp_brush = &gset->brush[i];
             gp_brush->flag |= GP_SCULPT_FLAG_ENABLE_CURSOR;
             copy_v3_v3(gp_brush->curcolor_add, curcolor_add);
@@ -1929,7 +2125,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         EEVEE_GET_BOOL(props, shadow_high_bitdepth, SCE_EEVEE_SHADOW_HIGH_BITDEPTH);
         EEVEE_GET_BOOL(props, taa_reprojection, SCE_EEVEE_TAA_REPROJECTION);
         // EEVEE_GET_BOOL(props, sss_enable, SCE_EEVEE_SSS_ENABLED);
-        EEVEE_GET_BOOL(props, sss_separate_albedo, SCE_EEVEE_SSS_SEPARATE_ALBEDO);
+        // EEVEE_GET_BOOL(props, sss_separate_albedo, SCE_EEVEE_SSS_SEPARATE_ALBEDO);
         EEVEE_GET_BOOL(props, ssr_enable, SCE_EEVEE_SSR_ENABLED);
         EEVEE_GET_BOOL(props, ssr_refraction, SCE_EEVEE_SSR_REFRACTION);
         EEVEE_GET_BOOL(props, ssr_halfres, SCE_EEVEE_SSR_HALF_RESOLUTION);
@@ -2982,7 +3178,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             }
             case SPACE_VIEW3D: {
               View3D *v3d = (View3D *)sl;
-              v3d->flag &= ~(V3D_FLAG_UNUSED_0 | V3D_FLAG_UNUSED_1 | V3D_FLAG_UNUSED_10 |
+              v3d->flag &= ~(V3D_LOCAL_COLLECTIONS | V3D_FLAG_UNUSED_1 | V3D_FLAG_UNUSED_10 |
                              V3D_FLAG_UNUSED_12);
               v3d->flag2 &= ~(V3D_FLAG2_UNUSED_3 | V3D_FLAG2_UNUSED_6 | V3D_FLAG2_UNUSED_12 |
                               V3D_FLAG2_UNUSED_13 | V3D_FLAG2_UNUSED_14 | V3D_FLAG2_UNUSED_15);
@@ -3198,19 +3394,6 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  if (!MAIN_VERSION_ATLEAST(bmain, 280, 45)) {
-    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
-      for (ScrArea *area = screen->areabase.first; area; area = area->next) {
-        for (SpaceLink *sl = area->spacedata.first; sl; sl = sl->next) {
-          if (sl->spacetype == SPACE_SEQ) {
-            SpaceSeq *sseq = (SpaceSeq *)sl;
-            sseq->flag |= SEQ_SHOW_MARKER_LINES;
-          }
-        }
-      }
-    }
-  }
-
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 46)) {
     /* Add wireframe color. */
     if (!DNA_struct_elem_find(fd->filesdna, "View3DShading", "char", "wire_color_type")) {
@@ -3401,7 +3584,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
 
             /* Remove multiple footers that were added by mistake. */
-            do_versions_remove_region(regionbase, RGN_TYPE_FOOTER);
+            do_versions_remove_regions_by_type(regionbase, RGN_TYPE_FOOTER);
 
             /* Add footer. */
             ARegion *ar = do_versions_add_region(RGN_TYPE_FOOTER, "footer for text");
@@ -3749,12 +3932,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  {
-    /* Versioning code until next subversion bump goes here. */
-    if (U.view_rotate_sensitivity_turntable == 0) {
-      U.view_rotate_sensitivity_turntable = DEG2RADF(0.4f);
-      U.view_rotate_sensitivity_trackball = 1.0f;
-    }
+  if (!MAIN_VERSION_ATLEAST(bmain, 281, 3)) {
     for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
       for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
         for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
@@ -3765,12 +3943,378 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               ar->alignment = RGN_ALIGN_RIGHT;
             }
           }
+          /* Mark outliners as dirty for syncing and enable synced selection */
+          if (sl->spacetype == SPACE_OUTLINER) {
+            SpaceOutliner *soutliner = (SpaceOutliner *)sl;
+            soutliner->sync_select_dirty |= WM_OUTLINER_SYNC_SELECT_FROM_ALL;
+            soutliner->flag |= SO_SYNC_SELECT;
+          }
         }
       }
     }
     for (Mesh *mesh = bmain->meshes.first; mesh; mesh = mesh->id.next) {
       if (mesh->remesh_voxel_size == 0.0f) {
         mesh->remesh_voxel_size = 0.1f;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 281, 4)) {
+    ID *id;
+    FOREACH_MAIN_ID_BEGIN (bmain, id) {
+      bNodeTree *ntree = ntreeFromID(id);
+      if (ntree) {
+        ntree->id.flag |= LIB_PRIVATE_DATA;
+      }
+    }
+    FOREACH_MAIN_ID_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 281, 5)) {
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      if (br->ob_mode & OB_MODE_SCULPT && br->normal_radius_factor == 0.0f) {
+        br->normal_radius_factor = 0.5f;
+      }
+    }
+
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      /* Older files do not have a master collection, which is then added through
+       * `BKE_collection_master_add()`, so everything is fine. */
+      if (scene->master_collection != NULL) {
+        scene->master_collection->id.flag |= LIB_PRIVATE_DATA;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 281, 6)) {
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+        for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+          if (sl->spacetype == SPACE_VIEW3D) {
+            View3D *v3d = (View3D *)sl;
+            v3d->shading.flag |= V3D_SHADING_SCENE_LIGHTS_RENDER | V3D_SHADING_SCENE_WORLD_RENDER;
+
+            /* files by default don't have studio lights selected unless interacted
+             * with the shading popover. When no studiolight could be read, we will
+             * select the default world one. */
+            StudioLight *studio_light = BKE_studiolight_find(v3d->shading.lookdev_light,
+                                                             STUDIOLIGHT_TYPE_WORLD);
+            if (studio_light != NULL) {
+              STRNCPY(v3d->shading.lookdev_light, studio_light->name);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 281, 9)) {
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+        for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+          if (sl->spacetype == SPACE_FILE) {
+            SpaceFile *sfile = (SpaceFile *)sl;
+            ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+            ARegion *ar_ui = do_versions_find_region(regionbase, RGN_TYPE_UI);
+            ARegion *ar_header = do_versions_find_region(regionbase, RGN_TYPE_HEADER);
+            ARegion *ar_toolprops = do_versions_find_region_or_null(regionbase,
+                                                                    RGN_TYPE_TOOL_PROPS);
+
+            /* Reinsert UI region so that it spawns entire area width */
+            BLI_remlink(regionbase, ar_ui);
+            BLI_insertlinkafter(regionbase, ar_header, ar_ui);
+
+            ar_ui->flag |= RGN_FLAG_DYNAMIC_SIZE;
+
+            if (ar_toolprops && (ar_toolprops->alignment == (RGN_ALIGN_BOTTOM | RGN_SPLIT_PREV))) {
+              SpaceType *stype = BKE_spacetype_from_id(sl->spacetype);
+
+              /* Remove empty region at old location. */
+              BLI_assert(sfile->op == NULL);
+              BKE_area_region_free(stype, ar_toolprops);
+              BLI_freelinkN(regionbase, ar_toolprops);
+            }
+
+            if (sfile->params) {
+              sfile->params->details_flags |= FILE_DETAILS_SIZE | FILE_DETAILS_DATETIME;
+            }
+          }
+        }
+      }
+    }
+
+    /* Convert the BONE_NO_SCALE flag to inherit_scale_mode enum. */
+    if (!DNA_struct_elem_find(fd->filesdna, "Bone", "char", "inherit_scale_mode")) {
+      LISTBASE_FOREACH (bArmature *, arm, &bmain->armatures) {
+        do_version_bones_inherit_scale(&arm->bonebase);
+      }
+    }
+
+    /* Convert the Offset flag to the mix mode enum. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bRotateLikeConstraint", "char", "mix_mode")) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        do_version_constraints_copy_rotation_mix_mode(&ob->constraints);
+        if (ob->pose) {
+          LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
+            do_version_constraints_copy_rotation_mix_mode(&pchan->constraints);
+          }
+        }
+      }
+    }
+
+    /* Added studiolight intensity */
+    if (!DNA_struct_elem_find(fd->filesdna, "View3DShading", "float", "studiolight_intensity")) {
+      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+        for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+          for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+            if (sl->spacetype == SPACE_VIEW3D) {
+              View3D *v3d = (View3D *)sl;
+              v3d->shading.studiolight_intensity = 1.0f;
+            }
+          }
+        }
+      }
+    }
+
+    /* Elatic deform brush */
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      if (br->ob_mode & OB_MODE_SCULPT && br->elastic_deform_volume_preservation == 0.0f) {
+        br->elastic_deform_volume_preservation = 0.5f;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 281, 15)) {
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      if (scene->toolsettings->snap_node_mode == SCE_SNAP_MODE_NODE_X) {
+        scene->toolsettings->snap_node_mode = SCE_SNAP_MODE_GRID;
+      }
+    }
+
+    if (!DNA_struct_elem_find(
+            fd->filesdna, "LayerCollection", "short", "local_collections_bits")) {
+      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+        LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
+          LISTBASE_FOREACH (LayerCollection *, layer_collection, &view_layer->layer_collections) {
+            do_versions_local_collection_bits_set(layer_collection);
+          }
+        }
+      }
+    }
+
+    /* Fix wrong 3D viewport copying causing corrupt pointers (T69974). */
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+        for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+          if (sl->spacetype == SPACE_VIEW3D) {
+            View3D *v3d = (View3D *)sl;
+
+            for (ScrArea *sa_other = screen->areabase.first; sa_other; sa_other = sa_other->next) {
+              for (SpaceLink *sl_other = sa_other->spacedata.first; sl_other;
+                   sl_other = sl_other->next) {
+                if (sl != sl_other && sl_other->spacetype == SPACE_VIEW3D) {
+                  View3D *v3d_other = (View3D *)sl_other;
+
+                  if (v3d->shading.prop == v3d_other->shading.prop) {
+                    v3d_other->shading.prop = NULL;
+                  }
+                }
+              }
+            }
+          }
+          else if (sl->spacetype == SPACE_FILE) {
+            ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+            ARegion *ar_tools = do_versions_find_region_or_null(regionbase, RGN_TYPE_TOOLS);
+            ARegion *ar_header = do_versions_find_region(regionbase, RGN_TYPE_HEADER);
+
+            if (ar_tools) {
+              ARegion *ar_next = ar_tools->next;
+
+              /* We temporarily had two tools regions, get rid of the second one. */
+              if (ar_next && ar_next->regiontype == RGN_TYPE_TOOLS) {
+                do_versions_remove_region(regionbase, ar_next);
+              }
+
+              BLI_remlink(regionbase, ar_tools);
+              BLI_insertlinkafter(regionbase, ar_header, ar_tools);
+            }
+            else {
+              ar_tools = do_versions_add_region(RGN_TYPE_TOOLS, "versioning file tools region");
+              BLI_insertlinkafter(regionbase, ar_header, ar_tools);
+              ar_tools->alignment = RGN_ALIGN_LEFT;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 282, 2)) {
+    do_version_curvemapping_walker(bmain, do_version_curvemapping_flag_extend_extrapolate);
+
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+        sa->flag &= ~AREA_FLAG_UNUSED_6;
+      }
+    }
+
+    /* Add custom curve profile to toolsettings for bevel tool */
+    if (!DNA_struct_elem_find(fd->filesdna, "ToolSettings", "CurveProfile", "custom_profile")) {
+      for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+        ToolSettings *ts = scene->toolsettings;
+        if ((ts) && (ts->custom_bevel_profile_preset == NULL)) {
+          ts->custom_bevel_profile_preset = BKE_curveprofile_add(PROF_PRESET_LINE);
+        }
+      }
+    }
+
+    /* Add custom curve profile to bevel modifier */
+    if (!DNA_struct_elem_find(fd->filesdna, "BevelModifier", "CurveProfile", "custom_profile")) {
+      for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
+        for (ModifierData *md = object->modifiers.first; md; md = md->next) {
+          if (md->type == eModifierType_Bevel) {
+            BevelModifierData *bmd = (BevelModifierData *)md;
+            if (!bmd->custom_profile) {
+              bmd->custom_profile = BKE_curveprofile_add(PROF_PRESET_LINE);
+            }
+          }
+        }
+      }
+    }
+
+    /* Dash Ratio and Dash Samples */
+    if (!DNA_struct_elem_find(fd->filesdna, "Brush", "float", "dash_ratio")) {
+      for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+        br->dash_ratio = 1.0f;
+        br->dash_samples = 20;
+      }
+    }
+
+    /* Pose brush smooth iterations */
+    if (!DNA_struct_elem_find(fd->filesdna, "Brush", "float", "pose_smooth_iterations")) {
+      for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+        br->pose_smooth_iterations = 4;
+      }
+    }
+
+    /* Cloth pressure */
+    for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+      for (ModifierData *md = ob->modifiers.first; md; md = md->next) {
+        if (md->type == eModifierType_Cloth) {
+          ClothModifierData *clmd = (ClothModifierData *)md;
+
+          clmd->sim_parms->pressure_factor = 1;
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 282, 3)) {
+    /* Remove Unified pressure/size and pressure/alpha */
+    for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+      ToolSettings *ts = scene->toolsettings;
+      UnifiedPaintSettings *ups = &ts->unified_paint_settings;
+      ups->flag &= ~(UNIFIED_PAINT_FLAG_UNUSED_0 | UNIFIED_PAINT_FLAG_UNUSED_1);
+    }
+
+    /* Set the default render pass in the viewport to Combined. */
+    if (!DNA_struct_elem_find(fd->filesdna, "View3DShading", "int", "render_pass")) {
+      for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+        scene->display.shading.render_pass = SCE_PASS_COMBINED;
+      }
+
+      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+        for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+          for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+            if (sl->spacetype == SPACE_VIEW3D) {
+              View3D *v3d = (View3D *)sl;
+              v3d->shading.render_pass = SCE_PASS_COMBINED;
+            }
+          }
+        }
+      }
+    }
+
+    /* Make markers region visible by default. */
+    for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+      for (ScrArea *area = screen->areabase.first; area; area = area->next) {
+        for (SpaceLink *sl = area->spacedata.first; sl; sl = sl->next) {
+          switch (sl->spacetype) {
+            case SPACE_SEQ: {
+              SpaceSeq *sseq = (SpaceSeq *)sl;
+              sseq->flag |= SEQ_SHOW_MARKERS;
+              break;
+            }
+            case SPACE_ACTION: {
+              SpaceAction *saction = (SpaceAction *)sl;
+              saction->flag |= SACTION_SHOW_MARKERS;
+              break;
+            }
+            case SPACE_GRAPH: {
+              SpaceGraph *sipo = (SpaceGraph *)sl;
+              sipo->flag |= SIPO_SHOW_MARKERS;
+              break;
+            }
+            case SPACE_NLA: {
+              SpaceNla *snla = (SpaceNla *)sl;
+              snla->flag |= SNLA_SHOW_MARKERS;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - "versioning_userdef.c", #BLO_version_defaults_userpref_blend
+   * - "versioning_userdef.c", #do_versions_theme
+   *
+   * \note Keep this message at the bottom of the function.
+   */
+  {
+    /* Keep this block, even when empty. */
+
+    /* Cloth internal springs */
+    for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+      for (ModifierData *md = ob->modifiers.first; md; md = md->next) {
+        if (md->type == eModifierType_Cloth) {
+          ClothModifierData *clmd = (ClothModifierData *)md;
+
+          clmd->sim_parms->internal_tension = 15.0f;
+          clmd->sim_parms->max_internal_tension = 15.0f;
+          clmd->sim_parms->internal_compression = 15.0f;
+          clmd->sim_parms->max_internal_compression = 15.0f;
+          clmd->sim_parms->internal_spring_max_diversion = M_PI / 4.0f;
+        }
+      }
+    }
+
+    /* Add primary tile to images. */
+    if (!DNA_struct_elem_find(fd->filesdna, "Image", "ListBase", "tiles")) {
+      for (Image *ima = bmain->images.first; ima; ima = ima->id.next) {
+        ImageTile *tile = MEM_callocN(sizeof(ImageTile), "Image Tile");
+        tile->ok = 1;
+        tile->tile_number = 1001;
+        BLI_addtail(&ima->tiles, tile);
+      }
+    }
+
+    /* UDIM Image Editor change. */
+    if (!DNA_struct_elem_find(fd->filesdna, "SpaceImage", "int", "tile_grid_shape[2]")) {
+      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+        for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+          for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+            if (sl->spacetype == SPACE_IMAGE) {
+              SpaceImage *sima = (SpaceImage *)sl;
+              sima->tile_grid_shape[0] = 1;
+              sima->tile_grid_shape[1] = 1;
+            }
+          }
+        }
       }
     }
   }

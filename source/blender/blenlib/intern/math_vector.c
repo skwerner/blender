@@ -122,7 +122,7 @@ bool interp_v2_v2v2_slerp(float target[2], const float a[2], const float b[2], c
 void interp_v3_v3v3_slerp_safe(float target[3], const float a[3], const float b[3], const float t)
 {
   if (UNLIKELY(!interp_v3_v3v3_slerp(target, a, b, t))) {
-    /* axis are aligned so any otho vector is acceptable */
+    /* Axis are aligned so any orthogonal vector is acceptable. */
     float ab_ortho[3];
     ortho_v3_v3(ab_ortho, a);
     normalize_v3(ab_ortho);
@@ -143,7 +143,7 @@ void interp_v3_v3v3_slerp_safe(float target[3], const float a[3], const float b[
 void interp_v2_v2v2_slerp_safe(float target[2], const float a[2], const float b[2], const float t)
 {
   if (UNLIKELY(!interp_v2_v2v2_slerp(target, a, b, t))) {
-    /* axis are aligned so any otho vector is acceptable */
+    /* Axis are aligned so any orthogonal vector is acceptable. */
     float ab_ortho[2];
     ortho_v2_v2(ab_ortho, a);
     // normalize_v2(ab_ortho);
@@ -1390,6 +1390,23 @@ void mul_vn_db(double *array_tar, const int size, const double f)
   while (i--) {
     *(array_pt--) *= f;
   }
+}
+
+void interp_v3_v3v3_db(double target[3], const double a[3], const double b[3], const double t)
+{
+  const double s = 1.0f - t;
+
+  target[0] = s * a[0] + t * b[0];
+  target[1] = s * a[1] + t * b[1];
+  target[2] = s * a[2] + t * b[2];
+}
+
+void interp_v2_v2v2_db(double target[2], const double a[2], const double b[2], const double t)
+{
+  const double s = 1.0f - t;
+
+  target[0] = s * a[0] + t * b[0];
+  target[1] = s * a[1] + t * b[1];
 }
 
 /** \} */

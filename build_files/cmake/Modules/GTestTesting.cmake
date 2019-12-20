@@ -12,24 +12,36 @@
 #
 #=============================================================================
 
-macro(BLENDER_SRC_GTEST_EX NAME SRC EXTRA_LIBS DO_ADD_TEST)
+macro(BLENDER_SRC_GTEST_EX)
   if(WITH_GTESTS)
+    set(options SKIP_ADD_TEST)
+    set(oneValueArgs NAME)
+    set(multiValueArgs SRC EXTRA_LIBS COMMAND_ARGS)
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN} )
+
+    set(TARGET_NAME ${ARG_NAME}_test)
     get_property(_current_include_directories
                  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
                  PROPERTY INCLUDE_DIRECTORIES)
     set(TEST_INC
       ${_current_include_directories}
       ${CMAKE_SOURCE_DIR}/tests/gtests
+    )
+    set(TEST_INC_SYS
       ${GLOG_INCLUDE_DIRS}
       ${GFLAGS_INCLUDE_DIRS}
       ${CMAKE_SOURCE_DIR}/extern/gtest/include
       ${CMAKE_SOURCE_DIR}/extern/gmock/include
     )
     unset(_current_include_directories)
-
-    add_executable(${NAME}_test ${SRC})
-    target_link_libraries(${NAME}_test
-                          ${EXTRA_LIBS}
+    if(WIN32)
+      set(MANIFEST "${CMAKE_BINARY_DIR}/tests.exe.manifest")
+    endif()
+    add_executable(${TARGET_NAME} ${ARG_SRC} ${MANIFEST})
+    target_include_directories(${TARGET_NAME} PUBLIC "${TEST_INC}")
+    target_include_directories(${TARGET_NAME} SYSTEM PUBLIC "${TEST_INC_SYS}")
+    target_link_libraries(${TARGET_NAME}
+                          ${ARG_EXTRA_LIBS}
                           ${PLATFORM_LINKLIBS}
                           bf_testing_main
                           bf_intern_eigen
@@ -41,31 +53,57 @@ macro(BLENDER_SRC_GTEST_EX NAME SRC EXTRA_LIBS DO_ADD_TEST)
                           ${GLOG_LIBRARIES}
                           ${GFLAGS_LIBRARIES})
     if(WITH_OPENMP_STATIC)
-      target_link_libraries(${NAME}_test ${OpenMP_LIBRARIES})
+      target_link_libraries(${TARGET_NAME} ${OpenMP_LIBRARIES})
     endif()
-    set_target_properties(${NAME}_test PROPERTIES
+
+    get_property(GENERATOR_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+    if(GENERATOR_IS_MULTI_CONFIG)
+      string(REPLACE "\${BUILD_TYPE}" "$<CONFIG>" TEST_INSTALL_DIR ${CMAKE_INSTALL_PREFIX})
+    else()
+      string(REPLACE "\${BUILD_TYPE}" "" TEST_INSTALL_DIR ${CMAKE_INSTALL_PREFIX})
+    endif()
+
+    set_target_properties(${TARGET_NAME} PROPERTIES
                           RUNTIME_OUTPUT_DIRECTORY         "${TESTS_OUTPUT_DIR}"
                           RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TESTS_OUTPUT_DIR}"
-                          RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${TESTS_OUTPUT_DIR}"
-                          INCLUDE_DIRECTORIES              "${TEST_INC}")
-    if(${DO_ADD_TEST})
-      add_test(NAME ${NAME}_test COMMAND ${TESTS_OUTPUT_DIR}/${NAME}_test WORKING_DIRECTORY $<TARGET_FILE_DIR:blender>)
+                          RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${TESTS_OUTPUT_DIR}")
+    if(NOT ARG_SKIP_ADD_TEST)
+      add_test(
+        NAME ${TARGET_NAME}
+        COMMAND ${TESTS_OUTPUT_DIR}/${TARGET_NAME} ${ARG_COMMAND_ARGS}
+        WORKING_DIRECTORY ${TEST_INSTALL_DIR})
 
       # Don't fail tests on leaks since these often happen in external libraries
       # that we can't fix.
-      set_tests_properties(${NAME}_test PROPERTIES ENVIRONMENT LSAN_OPTIONS=exitcode=0)
+      set_tests_properties(${TARGET_NAME} PROPERTIES ENVIRONMENT LSAN_OPTIONS=exitcode=0)
     endif()
+    if(WIN32)
+      unset(MANIFEST)
+    endif()
+    unset(TEST_INC)
+    unset(TEST_INC_SYS)
+    unset(TARGET_NAME)
   endif()
 endmacro()
 
 macro(BLENDER_SRC_GTEST NAME SRC EXTRA_LIBS)
-  BLENDER_SRC_GTEST_EX("${NAME}" "${SRC}" "${EXTRA_LIBS}" "TRUE")
+  BLENDER_SRC_GTEST_EX(
+    NAME "${NAME}"
+    SRC "${SRC}"
+    EXTRA_LIBS "${EXTRA_LIBS}")
 endmacro()
 
 macro(BLENDER_TEST NAME EXTRA_LIBS)
-  BLENDER_SRC_GTEST_EX("${NAME}" "${NAME}_test.cc" "${EXTRA_LIBS}" "TRUE")
+  BLENDER_SRC_GTEST_EX(
+    NAME "${NAME}"
+    SRC "${NAME}_test.cc"
+    EXTRA_LIBS "${EXTRA_LIBS}")
 endmacro()
 
 macro(BLENDER_TEST_PERFORMANCE NAME EXTRA_LIBS)
-  BLENDER_SRC_GTEST_EX("${NAME}" "${NAME}_test.cc" "${EXTRA_LIBS}" "FALSE")
+  BLENDER_SRC_GTEST_EX(
+    NAME "${NAME}"
+    SRC "${NAME}_test.cc"
+    EXTRA_LIBS "${EXTRA_LIBS}"
+    SKIP_ADD_TEST)
 endmacro()

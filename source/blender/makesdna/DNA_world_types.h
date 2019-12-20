@@ -29,7 +29,6 @@
 
 struct AnimData;
 struct Ipo;
-struct MTex;
 struct bNodeTree;
 
 #ifndef MAX_MTEX
@@ -86,9 +85,6 @@ typedef struct World {
   /* nodes */
   struct bNodeTree *nodetree;
 
-  /** Runtime : miststa + mistdist, used for drawing camera. */
-  float mistend;
-  char _pad1[4];
   /** Runtime. */
   ListBase gpumaterial;
 } World;

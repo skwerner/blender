@@ -45,10 +45,7 @@ struct ImageUser;
 struct ListBase;
 struct Main;
 struct Material;
-struct Object;
-struct PreviewImage;
 struct Scene;
-struct World;
 struct bNode;
 struct bNodeTree;
 
@@ -92,7 +89,7 @@ typedef enum eGPUBuiltin {
   GPU_INVERSE_OBJECT_MATRIX = (1 << 3),
   GPU_VIEW_POSITION = (1 << 4),
   GPU_VIEW_NORMAL = (1 << 5),
-  GPU_OBCOLOR = (1 << 6),
+  GPU_OBJECT_COLOR = (1 << 6),
   GPU_AUTO_BUMPSCALE = (1 << 7),
   GPU_CAMERA_TEXCO_FACTORS = (1 << 8),
   GPU_PARTICLE_SCALAR_PROPS = (1 << 9),
@@ -145,7 +142,7 @@ typedef enum eGPUMaterialStatus {
 GPUNodeLink *GPU_attribute(CustomDataType type, const char *name);
 GPUNodeLink *GPU_constant(float *num);
 GPUNodeLink *GPU_uniform(float *num);
-GPUNodeLink *GPU_image(struct Image *ima, struct ImageUser *iuser);
+GPUNodeLink *GPU_image(struct Image *ima, struct ImageUser *iuser, int tile);
 GPUNodeLink *GPU_color_band(GPUMaterial *mat, int size, float *pixels, float *layer);
 GPUNodeLink *GPU_builtin(eGPUBuiltin builtin);
 

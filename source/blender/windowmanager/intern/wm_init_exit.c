@@ -41,7 +41,6 @@
 #include "DNA_userdef_types.h"
 #include "DNA_windowmanager_types.h"
 
-#include "BLI_callbacks.h"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
@@ -54,7 +53,7 @@
 
 #include "BKE_blendfile.h"
 #include "BKE_blender.h"
-#include "BKE_blender_undo.h"
+#include "BKE_callbacks.h"
 #include "BKE_context.h"
 #include "BKE_font.h"
 #include "BKE_global.h"
@@ -100,6 +99,7 @@
 #include "wm.h"
 #include "wm_files.h"
 #include "wm_window.h"
+#include "wm_platform_support.h"
 
 #include "ED_anim_api.h"
 #include "ED_armature.h"
@@ -120,7 +120,6 @@
 
 #include "GPU_material.h"
 #include "GPU_draw.h"
-#include "GPU_immediate.h"
 #include "GPU_init_exit.h"
 
 #include "BKE_sound.h"
@@ -215,7 +214,7 @@ static void sound_jack_sync_callback(Main *bmain, int mode, float time)
       continue;
     }
     ViewLayer *view_layer = WM_window_get_active_view_layer(window);
-    Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer, false);
+    Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, false);
     if (depsgraph == NULL) {
       continue;
     }
@@ -262,7 +261,6 @@ void WM_init(bContext *C, int argc, const char **argv)
 
   ED_spacetypes_init(); /* editors/space_api/spacetype.c */
 
-  ED_file_init(); /* for fsmenu */
   ED_node_init_butfuncs();
 
   BLF_init();
@@ -288,6 +286,12 @@ void WM_init(bContext *C, int argc, const char **argv)
   const bool use_data = true;
   const bool use_userdef = true;
 
+  /* Studio-lights needs to be init before we read the home-file,
+   * otherwise the versioning cannot find the default studio-light. */
+  BKE_studiolight_init();
+
+  BLI_assert((G.fileflags & G_FILE_NO_UI) == 0);
+
   wm_homefile_read(C,
                    NULL,
                    G.factory_startup,
@@ -301,6 +305,9 @@ void WM_init(bContext *C, int argc, const char **argv)
   /* Call again to set from userpreferences... */
   BLT_lang_set(NULL);
 
+  /* For fsMenu. Called here so can include user preference paths if needed. */
+  ED_file_init();
+
   /* That one is generated on demand, we need to be sure it's clear on init. */
   IMB_thumb_clear_translations();
 
@@ -312,10 +319,12 @@ void WM_init(bContext *C, int argc, const char **argv)
 #endif
     WM_init_opengl(G_MAIN);
 
+    if (!WM_platform_support_perform_checks()) {
+      exit(-1);
+    }
+
     UI_init();
   }
-
-  BKE_studiolight_init();
 
   ED_spacemacros_init();
 
@@ -376,10 +385,10 @@ void WM_init(bContext *C, int argc, const char **argv)
      * note that recovering the last session does its own callbacks. */
     CTX_wm_window_set(C, CTX_wm_manager(C)->windows.first);
 
-    BLI_callback_exec(bmain, NULL, BLI_CB_EVT_VERSION_UPDATE);
-    BLI_callback_exec(bmain, NULL, BLI_CB_EVT_LOAD_POST);
+    BKE_callback_exec_null(bmain, BKE_CB_EVT_VERSION_UPDATE);
+    BKE_callback_exec_null(bmain, BKE_CB_EVT_LOAD_POST);
     if (is_factory_startup) {
-      BLI_callback_exec(bmain, NULL, BLI_CB_EVT_LOAD_FACTORY_STARTUP_POST);
+      BKE_callback_exec_null(bmain, BKE_CB_EVT_LOAD_FACTORY_STARTUP_POST);
     }
 
     wm_file_read_report(C, bmain);
@@ -524,6 +533,7 @@ void WM_exit_ex(bContext *C, const bool do_python)
 
   BKE_addon_pref_type_free();
   BKE_keyconfig_pref_type_free();
+  BKE_material_gpencil_default_free();
 
   wm_operatortype_free();
   wm_dropbox_free();
@@ -679,4 +689,13 @@ void WM_exit(bContext *C)
 #endif
 
   exit(G.is_break == true);
+}
+
+/**
+ * Needed for cases when operators are re-registered
+ * (when operator type pointers are stored).
+ */
+void WM_script_tag_reload(void)
+{
+  UI_interface_tag_script_reload();
 }

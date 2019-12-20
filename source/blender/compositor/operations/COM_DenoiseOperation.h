@@ -1,6 +1,4 @@
 /*
- * Copyright 2019, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *      Stefan Werner
+ * Copyright 2019, Blender Foundation.
  */
 
-#ifndef __COM_DENOISEBASEOPERATION_H__
-#define __COM_DENOISEBASEOPERATION_H__
+#ifndef __COM_DENOISEOPERATION_H__
+#define __COM_DENOISEOPERATION_H__
 
 #include "COM_SingleThreadedOperation.h"
 #include "DNA_node_types.h"
@@ -62,10 +59,11 @@ class DenoiseOperation : public SingleThreadedOperation {
  protected:
   void generateDenoise(float *data,
                        MemoryBuffer *inputTileColor,
-                       MemoryBuffer *inputTileAlbedo,
                        MemoryBuffer *inputTileNormal,
+                       MemoryBuffer *inputTileAlbedo,
                        NodeDenoise *settings);
 
   MemoryBuffer *createMemoryBuffer(rcti *rect);
 };
-#endif
+
+#endif /* __COM_DENOISEOPERATION_H__ */

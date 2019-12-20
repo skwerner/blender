@@ -153,6 +153,16 @@ class MultiDevice : public Device {
     return result;
   }
 
+  bool build_optix_bvh(BVH *bvh)
+  {
+    // Broadcast acceleration structure build to all devices
+    foreach (SubDevice &sub, devices) {
+      if (!sub.device->build_optix_bvh(bvh))
+        return false;
+    }
+    return true;
+  }
+
   void mem_alloc(device_memory &mem)
   {
     device_ptr key = unique_key++;

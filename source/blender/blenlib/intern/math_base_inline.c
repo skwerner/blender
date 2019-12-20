@@ -58,6 +58,10 @@ MINLINE float pow4f(float x)
 {
   return pow2f(pow2f(x));
 }
+MINLINE float pow5f(float x)
+{
+  return pow4f(x) * x;
+}
 MINLINE float pow7f(float x)
 {
   return pow2f(pow3f(x)) * x;
@@ -171,6 +175,11 @@ MINLINE float interpf(float target, float origin, float fac)
   return (fac * target) + (1.0f - fac) * origin;
 }
 
+MINLINE double interpd(double target, double origin, double fac)
+{
+  return (fac * target) + (1.0f - fac) * origin;
+}
+
 /* used for zoom values*/
 MINLINE float power_of_2(float val)
 {
@@ -223,6 +232,21 @@ MINLINE unsigned power_of_2_min_u(unsigned x)
   x |= (x >> 8);
   x |= (x >> 16);
   return x - (x >> 1);
+}
+
+MINLINE unsigned int log2_floor_u(unsigned int x)
+{
+  return x <= 1 ? 0 : 1 + log2_floor_u(x >> 1);
+}
+
+MINLINE unsigned int log2_ceil_u(unsigned int x)
+{
+  if (is_power_of_2_i((int)x)) {
+    return log2_floor_u(x);
+  }
+  else {
+    return log2_floor_u(x) + 1;
+  }
 }
 
 /* rounding and clamping */
@@ -339,11 +363,43 @@ MINLINE int mod_i(int i, int n)
   return (i % n + n) % n;
 }
 
+MINLINE float fractf(float a)
+{
+  return a - floorf(a);
+}
+
+/* Adapted from godotengine math_funcs.h. */
+MINLINE float wrapf(float value, float max, float min)
+{
+  float range = max - min;
+  return (range != 0.0f) ? value - (range * floorf((value - min) / range)) : min;
+}
+
 MINLINE float min_ff(float a, float b)
 {
   return (a < b) ? a : b;
 }
 MINLINE float max_ff(float a, float b)
+{
+  return (a > b) ? a : b;
+}
+/* See: https://www.iquilezles.org/www/articles/smin/smin.htm. */
+MINLINE float smoothminf(float a, float b, float c)
+{
+  if (c != 0.0f) {
+    float h = max_ff(c - fabsf(a - b), 0.0f) / c;
+    return min_ff(a, b) - h * h * h * c * (1.0f / 6.0f);
+  }
+  else {
+    return min_ff(a, b);
+  }
+}
+
+MINLINE double min_dd(double a, double b)
+{
+  return (a < b) ? a : b;
+}
+MINLINE double max_dd(double a, double b)
 {
   return (a > b) ? a : b;
 }
@@ -471,6 +527,19 @@ MINLINE float signf(float f)
   return (f < 0.f) ? -1.f : 1.f;
 }
 
+MINLINE float compatible_signf(float f)
+{
+  if (f > 0.0f) {
+    return 1.0f;
+  }
+  if (f < 0.0f) {
+    return -1.0f;
+  }
+  else {
+    return 0.0f;
+  }
+}
+
 MINLINE int signum_i_ex(float a, float eps)
 {
   if (a > eps) {
@@ -497,15 +566,19 @@ MINLINE int signum_i(float a)
   }
 }
 
-/** Returns number of (base ten) *significant* digits of integer part of given float
- * (negative in case of decimal-only floats, 0.01 returns -1 e.g.). */
+/**
+ * Returns number of (base ten) *significant* digits of integer part of given float
+ * (negative in case of decimal-only floats, 0.01 returns -1 e.g.).
+ */
 MINLINE int integer_digits_f(const float f)
 {
   return (f == 0.0f) ? 0 : (int)floor(log10(fabs(f))) + 1;
 }
 
-/** Returns number of (base ten) *significant* digits of integer part of given double
- * (negative in case of decimal-only floats, 0.01 returns -1 e.g.). */
+/**
+ * Returns number of (base ten) *significant* digits of integer part of given double
+ * (negative in case of decimal-only floats, 0.01 returns -1 e.g.).
+ */
 MINLINE int integer_digits_d(const double d)
 {
   return (d == 0.0) ? 0 : (int)floor(log10(fabs(d))) + 1;

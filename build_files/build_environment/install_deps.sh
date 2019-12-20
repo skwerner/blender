@@ -388,7 +388,7 @@ OPENVDB_FORCE_REBUILD=false
 OPENVDB_SKIP=false
 
 # Alembic needs to be compiled for now
-ALEMBIC_VERSION="1.7.8"
+ALEMBIC_VERSION="1.7.12"
 ALEMBIC_VERSION_MIN=$ALEMBIC_VERSION
 ALEMBIC_FORCE_BUILD=false
 ALEMBIC_FORCE_REBUILD=false
@@ -431,6 +431,9 @@ X264_VERSION_MIN=0.118
 VPX_USE=false
 VPX_VERSION_MIN=0.9.7
 VPX_DEV=""
+OPUS_USE=false
+OPUS_VERSION_MIN=1.1.1
+OPUS_DEV=""
 MP3LAME_USE=false
 MP3LAME_DEV=""
 OPENJPEG_USE=false
@@ -1107,13 +1110,14 @@ _create_inst_shortcut() {
 # ldconfig
 run_ldconfig() {
   _lib_path="$INST/$1/lib"
+  _lib64_path="$INST/$1/lib64"
   _ldconf_path="/etc/ld.so.conf.d/$1.conf"
   PRINT ""
   if [ ! $SUDO ]; then
     WARNING "--no-sudo enabled, impossible to run ldconfig for $1, you'll have to do it yourself..."
   else
     INFO "Running ldconfig for $1..."
-    $SUDO sh -c "echo \"$_lib_path\" > $_ldconf_path"
+    $SUDO sh -c "/bin/echo -e \"$_lib_path\n$_lib64_path\" > $_ldconf_path"
     $SUDO /sbin/ldconfig  # XXX OpenSuse does not include sbin in command path with sudo!!!
   fi
   PRINT ""
@@ -1974,7 +1978,8 @@ compile_OSL() {
     cmake_d="$cmake_d -D OSL_BUILD_PLUGINS=OFF"
     cmake_d="$cmake_d -D OSL_BUILD_TESTS=OFF"
     cmake_d="$cmake_d -D USE_SIMD=sse2"
-    cmake_d="$cmake_d -D OSL_BUILD_CPP11=1"
+    cmake_d="$cmake_d -D USE_LLVM_BITCODE=OFF"
+    cmake_d="$cmake_d -D USE_PARTIO=OFF"
 
     #~ cmake_d="$cmake_d -D ILMBASE_VERSION=$ILMBASE_VERSION"
 
@@ -2682,6 +2687,8 @@ compile_OIDN() {
     INFO "Own OpenImageDenoise-$OIDN_VERSION is up to date, nothing to do!"
     INFO "If you want to force rebuild of this lib, use the --force-oidn option."
   fi
+
+  run_ldconfig "oidn"
 }
 
 #### Build FFMPEG ####
@@ -2748,6 +2755,10 @@ compile_FFmpeg() {
 
     if [ "$VPX_USE" = true ]; then
       extra="$extra --enable-libvpx"
+    fi
+
+    if [ "$OPUS_USE" = true ]; then
+      extra="$extra --enable-libopus"
     fi
 
     if [ "$MP3LAME_USE" = true ]; then
@@ -2986,6 +2997,14 @@ install_DEB() {
     if [ $? -eq 0 ]; then
       install_packages_DEB $VPX_DEV
       VPX_USE=true
+    fi
+
+    PRINT ""
+    OPUS_DEV="libopus-dev"
+    check_package_version_ge_DEB $OPUS_DEV $OPUS_VERSION_MIN
+    if [ $? -eq 0 ]; then
+      install_packages_DEB $OPUS_DEV
+      OPUS_USE=true
     fi
   fi
 
@@ -3450,7 +3469,7 @@ install_RPM() {
       $SUDO dnf -y update
 
     elif [ "$RPM" = "RHEL" ]; then
-      if [ "`grep '6\.' /etc/redhat-release`" ]; then
+      if [ "`grep '[^.]6\.' /etc/redhat-release`" ]; then
         ERROR "Building with GCC 4.4 is not supported!"
         exit 1
       else
@@ -3597,8 +3616,17 @@ install_RPM() {
       install_packages_RPM $VPX_DEV
       VPX_USE=true
     fi
+
     PRINT ""
     install_packages_RPM libspnav-devel
+
+    PRINT ""
+    OPUS_DEV="libopus-devel"
+    check_package_version_ge_RPM $OPUS_DEV $OPUS_VERSION_MIN
+    if [ $? -eq 0 ]; then
+      install_packages_RPM $OPUS_DEV
+      OPUS_USE=true
+    fi
   fi
 
   PRINT ""
@@ -4072,6 +4100,14 @@ install_ARCH() {
     if [ $? -eq 0 ]; then
       install_packages_ARCH $VPX_DEV
       VPX_USE=true
+    fi
+
+    PRINT ""
+    OPUS_DEV="opus"
+    check_package_version_ge_ARCH $OPUS_DEV $OPUS_VERSION_MIN
+    if [ $? -eq 0 ]; then
+      install_packages_ARCH $OPUS_DEV
+      OPUS_USE=true
     fi
   fi
 
@@ -4627,6 +4663,10 @@ print_info_ffmpeglink() {
 
   if [ "$VPX_USE" = true ]; then
     _packages="$_packages $VPX_DEV"
+  fi
+
+  if [ "$OPUS_USE" = true ]; then
+    _packages="$_packages $OPUS_DEV"
   fi
 
   if [ "$MP3LAME_USE" = true ]; then

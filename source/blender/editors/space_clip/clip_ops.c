@@ -78,7 +78,9 @@
 
 #include "clip_intern.h"  // own include
 
-/******************** view navigation utilities *********************/
+/* -------------------------------------------------------------------- */
+/** \name View Navigation Utilities
+ * \{ */
 
 static void sclip_zoom_set(const bContext *C,
                            float zoom,
@@ -162,7 +164,11 @@ static void sclip_zoom_set_factor_exec(bContext *C, const wmEvent *event, float 
   ED_region_tag_redraw(ar);
 }
 
-/******************** open clip operator ********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Open Clip Operator
+ * \{ */
 
 static void clip_filesel(bContext *C, wmOperator *op, const char *path)
 {
@@ -326,7 +332,11 @@ void CLIP_OT_open(wmOperatorType *ot)
                                  FILE_SORT_ALPHA);
 }
 
-/******************* reload clip operator *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Reload Clip Operator
+ * \{ */
 
 static int reload_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -355,7 +365,11 @@ void CLIP_OT_reload(wmOperatorType *ot)
   ot->exec = reload_exec;
 }
 
-/********************** view pan operator *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Pan Operator
+ * \{ */
 
 typedef struct ViewPanData {
   float x, y;
@@ -376,7 +390,7 @@ static void view_pan_init(bContext *C, wmOperator *op, const wmEvent *event)
   /* Grab will be set when running from gizmo. */
   vpd->own_cursor = (win->grabcursor == 0);
   if (vpd->own_cursor) {
-    WM_cursor_modal_set(win, BC_NSEW_SCROLLCURSOR);
+    WM_cursor_modal_set(win, WM_CURSOR_NSEW_SCROLL);
   }
 
   vpd->x = event->x;
@@ -510,7 +524,7 @@ void CLIP_OT_view_pan(wmOperatorType *ot)
   ot->poll = ED_space_clip_view_clip_poll;
 
   /* flags */
-  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY;
+  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY | OPTYPE_LOCK_BYPASS;
 
   /* properties */
   RNA_def_float_vector(ot->srna,
@@ -525,7 +539,11 @@ void CLIP_OT_view_pan(wmOperatorType *ot)
                        FLT_MAX);
 }
 
-/********************** view zoom operator *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Zoom Operator
+ * \{ */
 
 typedef struct ViewZoomData {
   float x, y;
@@ -549,7 +567,7 @@ static void view_zoom_init(bContext *C, wmOperator *op, const wmEvent *event)
   /* Grab will be set when running from gizmo. */
   vpd->own_cursor = (win->grabcursor == 0);
   if (vpd->own_cursor) {
-    WM_cursor_modal_set(win, BC_NSEW_SCROLLCURSOR);
+    WM_cursor_modal_set(win, WM_CURSOR_NSEW_SCROLL);
   }
 
   if (U.viewzoom == USER_ZOOM_CONT) {
@@ -712,7 +730,7 @@ void CLIP_OT_view_zoom(wmOperatorType *ot)
   ot->poll = ED_space_clip_view_clip_poll;
 
   /* flags */
-  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY;
+  ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY | OPTYPE_LOCK_BYPASS;
 
   /* properties */
   prop = RNA_def_float(ot->srna,
@@ -729,7 +747,11 @@ void CLIP_OT_view_zoom(wmOperatorType *ot)
   WM_operator_properties_use_cursor_init(ot);
 }
 
-/********************** view zoom in/out operator *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Zoom In/Out Operator
+ * \{ */
 
 static int view_zoom_in_exec(bContext *C, wmOperator *op)
 {
@@ -770,6 +792,9 @@ void CLIP_OT_view_zoom_in(wmOperatorType *ot)
   ot->exec = view_zoom_in_exec;
   ot->invoke = view_zoom_in_invoke;
   ot->poll = ED_space_clip_view_clip_poll;
+
+  /* flags */
+  ot->flag |= OPTYPE_LOCK_BYPASS;
 
   /* properties */
   prop = RNA_def_float_vector(ot->srna,
@@ -825,6 +850,9 @@ void CLIP_OT_view_zoom_out(wmOperatorType *ot)
   ot->invoke = view_zoom_out_invoke;
   ot->poll = ED_space_clip_view_clip_poll;
 
+  /* flags */
+  ot->flag |= OPTYPE_LOCK_BYPASS;
+
   /* properties */
   prop = RNA_def_float_vector(ot->srna,
                               "location",
@@ -839,7 +867,11 @@ void CLIP_OT_view_zoom_out(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_HIDDEN);
 }
 
-/********************** view zoom ratio operator *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Zoom Ratio Operator
+ * \{ */
 
 static int view_zoom_ratio_exec(bContext *C, wmOperator *op)
 {
@@ -867,6 +899,9 @@ void CLIP_OT_view_zoom_ratio(wmOperatorType *ot)
   ot->exec = view_zoom_ratio_exec;
   ot->poll = ED_space_clip_view_clip_poll;
 
+  /* flags */
+  ot->flag |= OPTYPE_LOCK_BYPASS;
+
   /* properties */
   RNA_def_float(ot->srna,
                 "ratio",
@@ -878,8 +913,11 @@ void CLIP_OT_view_zoom_ratio(wmOperatorType *ot)
                 -FLT_MAX,
                 FLT_MAX);
 }
+/** \} */
 
-/********************** view all operator *********************/
+/* -------------------------------------------------------------------- */
+/** \name View All Operator
+ * \{ */
 
 static int view_all_exec(bContext *C, wmOperator *op)
 {
@@ -945,12 +983,48 @@ void CLIP_OT_view_all(wmOperatorType *ot)
   ot->exec = view_all_exec;
   ot->poll = ED_space_clip_view_clip_poll;
 
+  /* flags */
+  ot->flag = OPTYPE_LOCK_BYPASS;
+
   /* properties */
   prop = RNA_def_boolean(ot->srna, "fit_view", 0, "Fit View", "Fit frame to the viewport");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
+/** \} */
 
-/********************** view selected operator *********************/
+/* -------------------------------------------------------------------- */
+/** \name Center View To Cursor Operator
+ * \{ */
+
+static int view_center_cursor_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  SpaceClip *sc = CTX_wm_space_clip(C);
+  ARegion *ar = CTX_wm_region(C);
+
+  clip_view_center_to_point(sc, sc->cursor[0], sc->cursor[1]);
+
+  ED_region_tag_redraw(ar);
+
+  return OPERATOR_FINISHED;
+}
+
+void CLIP_OT_view_center_cursor(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Center View to Cursor";
+  ot->description = "Center the view so that the cursor is in the middle of the view";
+  ot->idname = "CLIP_OT_view_center_cursor";
+
+  /* api callbacks */
+  ot->exec = view_center_cursor_exec;
+  ot->poll = ED_space_clip_maskedit_poll;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Selected Operator
+ * \{ */
 
 static int view_selected_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -976,9 +1050,15 @@ void CLIP_OT_view_selected(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = view_selected_exec;
   ot->poll = ED_space_clip_view_clip_poll;
-}
 
-/********************** change frame operator *********************/
+  /* flags */
+  ot->flag = OPTYPE_LOCK_BYPASS;
+}
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Change Frame Operator
+ * \{ */
 
 static bool change_frame_poll(bContext *C)
 {
@@ -1038,7 +1118,7 @@ static int change_frame_invoke(bContext *C, wmOperator *op, const wmEvent *event
   ARegion *ar = CTX_wm_region(C);
 
   if (ar->regiontype == RGN_TYPE_WINDOW) {
-    if (event->mval[1] > 16) {
+    if (event->mval[1] > 16 * UI_DPI_FAC) {
       return OPERATOR_PASS_THROUGH;
     }
   }
@@ -1094,8 +1174,11 @@ void CLIP_OT_change_frame(wmOperatorType *ot)
   /* rna */
   RNA_def_int(ot->srna, "frame", 0, MINAFRAME, MAXFRAME, "Frame", "", MINAFRAME, MAXFRAME);
 }
+/** \} */
 
-/********************** rebuild proxies operator *********************/
+/* -------------------------------------------------------------------- */
+/** \name Rebuild Proxies Operator
+ * \{ */
 
 typedef struct ProxyBuildJob {
   Scene *scene;
@@ -1116,7 +1199,7 @@ static void proxy_freejob(void *pjv)
 static int proxy_bitflag_to_array(int size_flag, int build_sizes[4], int undistort)
 {
   int build_count = 0;
-  int size_flags[2][4] = {
+  const int size_flags[2][4] = {
       {MCLIP_PROXY_SIZE_25, MCLIP_PROXY_SIZE_50, MCLIP_PROXY_SIZE_75, MCLIP_PROXY_SIZE_100},
       {MCLIP_PROXY_UNDISTORTED_SIZE_25,
        MCLIP_PROXY_UNDISTORTED_SIZE_50,
@@ -1506,8 +1589,11 @@ void CLIP_OT_rebuild_proxy(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER;
 }
+/** \} */
 
-/********************** mode set operator *********************/
+/* -------------------------------------------------------------------- */
+/** \name Mode Set Operator
+ * \{ */
 
 static int mode_set_exec(bContext *C, wmOperator *op)
 {
@@ -1543,7 +1629,12 @@ void CLIP_OT_mode_set(wmOperatorType *ot)
 }
 
 #ifdef WITH_INPUT_NDOF
-/********************** NDOF operator *********************/
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name NDOF Operator
+ * \{ */
 
 /* Combined pan/zoom from a 3D mouse device.
  * Z zooms, XY pans
@@ -1589,10 +1680,18 @@ void CLIP_OT_view_ndof(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = clip_view_ndof_invoke;
   ot->poll = ED_space_clip_view_clip_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_LOCK_BYPASS;
 }
+
+/** \} */
+
 #endif /* WITH_INPUT_NDOF */
 
-/********************** Prefetch operator *********************/
+/* -------------------------------------------------------------------- */
+/** \name Prefetch Operator
+ * \{ */
 
 static int clip_prefetch_modal(bContext *C, wmOperator *UNUSED(op), const wmEvent *event)
 {
@@ -1632,8 +1731,11 @@ void CLIP_OT_prefetch(wmOperatorType *ot)
   ot->invoke = clip_prefetch_invoke;
   ot->modal = clip_prefetch_modal;
 }
+/** \} */
 
-/********************** Set scene frames *********************/
+/* -------------------------------------------------------------------- */
+/** \name Set Scene Frames Operator
+ * \{ */
 
 static int clip_set_scene_frames_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -1668,8 +1770,11 @@ void CLIP_OT_set_scene_frames(wmOperatorType *ot)
   ot->poll = ED_space_clip_view_clip_poll;
   ot->exec = clip_set_scene_frames_exec;
 }
+/** \} */
 
-/******************** set 3d cursor operator ********************/
+/* -------------------------------------------------------------------- */
+/** \name Set 3d Cursor Operator
+ * \{ */
 
 static int clip_set_2d_cursor_exec(bContext *C, wmOperator *op)
 {
@@ -1730,7 +1835,40 @@ void CLIP_OT_cursor_set(wmOperatorType *ot)
                        10.0f);
 }
 
-/********************** macros *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Toggle Lock To Selection Operator
+ * \{ */
+
+static int lock_selection_togglee_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  SpaceClip *space_clip = CTX_wm_space_clip(C);
+  space_clip->flag ^= SC_LOCK_SELECTION;
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_CLIP, NULL);
+  return OPERATOR_FINISHED;
+}
+
+void CLIP_OT_lock_selection_toggle(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Toggle Lock Selection";
+  ot->description = "Toggle Lock Selection option of the current clip editor";
+  ot->idname = "CLIP_OT_lock_selection_toggle";
+
+  /* api callbacks */
+  ot->poll = ED_space_clip_poll;
+  ot->exec = lock_selection_togglee_exec;
+
+  /* flags */
+  ot->flag = OPTYPE_LOCK_BYPASS;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Macros
+ * \{ */
 
 void ED_operatormacros_clip(void)
 {
@@ -1754,3 +1892,5 @@ void ED_operatormacros_clip(void)
   otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
   RNA_boolean_set(otmacro->ptr, "release_confirm", true);
 }
+
+/** \} */

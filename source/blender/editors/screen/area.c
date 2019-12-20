@@ -30,6 +30,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
+#include "BLI_rand.h"
 #include "BLI_utildefines.h"
 #include "BLI_linklist_stack.h"
 
@@ -55,13 +56,11 @@
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
-#include "GPU_draw.h"
 #include "GPU_state.h"
 #include "GPU_framebuffer.h"
 
 #include "BLF_api.h"
 
-#include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 #include "IMB_metadata.h"
 
@@ -544,20 +543,20 @@ void ED_region_do_draw(bContext *C, ARegion *ar)
   region_draw_azones(sa, ar);
 
   /* for debugging unneeded area redraws and partial redraw */
-#if 0
-  GPU_blend(true);
-  GPUVertFormat *format = immVertexFormat();
-  uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-  immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
-  immUniformColor4f(drand48(), drand48(), drand48(), 0.1f);
-  immRectf(pos,
-           ar->drawrct.xmin - ar->winrct.xmin,
-           ar->drawrct.ymin - ar->winrct.ymin,
-           ar->drawrct.xmax - ar->winrct.xmin,
-           ar->drawrct.ymax - ar->winrct.ymin);
-  immUnbindProgram();
-  GPU_blend(false);
-#endif
+  if (G.debug_value == 888) {
+    GPU_blend(true);
+    GPUVertFormat *format = immVertexFormat();
+    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+    immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+    immUniformColor4f(BLI_thread_frand(0), BLI_thread_frand(0), BLI_thread_frand(0), 0.1f);
+    immRectf(pos,
+             ar->drawrct.xmin - ar->winrct.xmin,
+             ar->drawrct.ymin - ar->winrct.ymin,
+             ar->drawrct.xmax - ar->winrct.xmin,
+             ar->drawrct.ymax - ar->winrct.ymin);
+    immUnbindProgram();
+    GPU_blend(false);
+  }
 
   memset(&ar->drawrct, 0, sizeof(ar->drawrct));
 
@@ -813,7 +812,7 @@ static void area_azone_initialize(wmWindow *win, const bScreen *screen, ScrArea 
     return;
   }
 
-  float coords[4][4] = {
+  const float coords[4][4] = {
       /* Bottom-left. */
       {sa->totrct.xmin - U.pixelsize,
        sa->totrct.ymin - U.pixelsize,
@@ -1052,16 +1051,11 @@ static void region_azones_scrollbars_initialize(ScrArea *sa, ARegion *ar)
 }
 
 /* *************************************************************** */
-
-static void region_azones_add(const bScreen *screen, ScrArea *sa, ARegion *ar, const int alignment)
+static void region_azones_add_edge(ScrArea *sa,
+                                   ARegion *ar,
+                                   const int alignment,
+                                   const bool is_fullscreen)
 {
-  const bool is_fullscreen = screen->state == SCREENFULL;
-
-  /* Only display tab or icons when the header region is hidden
-   * (not the tool header - they overlap). */
-  if (ar->regiontype == RGN_TYPE_TOOL_HEADER) {
-    return;
-  }
 
   /* edge code (t b l r) is along which area edge azone will be drawn */
   if (alignment == RGN_ALIGN_TOP) {
@@ -1075,6 +1069,25 @@ static void region_azones_add(const bScreen *screen, ScrArea *sa, ARegion *ar, c
   }
   else if (alignment == RGN_ALIGN_LEFT) {
     region_azone_edge_initialize(sa, ar, AE_RIGHT_TO_TOPLEFT, is_fullscreen);
+  }
+}
+
+static void region_azones_add(const bScreen *screen, ScrArea *sa, ARegion *ar)
+{
+  const bool is_fullscreen = screen->state == SCREENFULL;
+
+  /* Only display tab or icons when the header region is hidden
+   * (not the tool header - they overlap). */
+  if (ar->regiontype == RGN_TYPE_TOOL_HEADER) {
+    return;
+  }
+
+  region_azones_add_edge(sa, ar, RGN_ALIGN_ENUM_FROM_MASK(ar->alignment), is_fullscreen);
+
+  /* For a split region also continue the azone edge from the next region if this region is aligned
+   * with the next */
+  if ((ar->alignment & RGN_SPLIT_PREV) && ar->prev) {
+    region_azones_add_edge(sa, ar, RGN_ALIGN_ENUM_FROM_MASK(ar->prev->alignment), is_fullscreen);
   }
 
   if (is_fullscreen) {
@@ -1251,9 +1264,6 @@ static void region_rect_recursive(
   else if (ED_area_is_global(sa)) {
     prefsizey = ED_region_global_size_y();
   }
-  else if (ar->regiontype == RGN_TYPE_UI && sa->spacetype == SPACE_FILE) {
-    prefsizey = UI_UNIT_Y * 2 + (UI_UNIT_Y / 2);
-  }
   else {
     prefsizey = UI_DPI_FAC * (ar->sizey > 1 ? ar->sizey + 0.5f : ar->type->prefsizey);
   }
@@ -1270,11 +1280,12 @@ static void region_rect_recursive(
      */
     const int size_min[2] = {UI_UNIT_X, UI_UNIT_Y};
     rcti overlap_remainder_margin = *overlap_remainder;
+
     BLI_rcti_resize(&overlap_remainder_margin,
                     max_ii(0, BLI_rcti_size_x(overlap_remainder) - UI_UNIT_X / 2),
                     max_ii(0, BLI_rcti_size_y(overlap_remainder) - UI_UNIT_Y / 2));
-    ar->winrct.xmin = overlap_remainder_margin.xmin;
-    ar->winrct.ymin = overlap_remainder_margin.ymin;
+    ar->winrct.xmin = overlap_remainder_margin.xmin + ar->runtime.offset_x;
+    ar->winrct.ymin = overlap_remainder_margin.ymin + ar->runtime.offset_y;
     ar->winrct.xmax = ar->winrct.xmin + prefsizex - 1;
     ar->winrct.ymax = ar->winrct.ymin + prefsizey - 1;
 
@@ -1695,7 +1706,7 @@ void ED_area_update_region_sizes(wmWindowManager *wm, wmWindow *win, ScrArea *ar
     }
 
     /* Some AZones use View2D data which is only updated in region init, so call that first! */
-    region_azones_add(screen, area, ar, RGN_ALIGN_ENUM_FROM_MASK(ar->alignment));
+    region_azones_add(screen, area, ar);
   }
   ED_area_azones_update(area, &win->eventstate->x);
 
@@ -1766,7 +1777,7 @@ void ED_area_initialize(wmWindowManager *wm, wmWindow *win, ScrArea *sa)
     }
 
     /* Some AZones use View2D data which is only updated in region init, so call that first! */
-    region_azones_add(screen, sa, ar, RGN_ALIGN_ENUM_FROM_MASK(ar->alignment));
+    region_azones_add(screen, sa, ar);
   }
 
   /* Avoid re-initializing tools while resizing the window. */
@@ -1817,7 +1828,7 @@ void ED_region_cursor_set(wmWindow *win, ScrArea *sa, ARegion *ar)
     if (WM_cursor_set_from_tool(win, sa, ar)) {
       return;
     }
-    WM_cursor_set(win, CURSOR_STD);
+    WM_cursor_set(win, WM_CURSOR_DEFAULT);
   }
 }
 
@@ -1937,7 +1948,7 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
 
   if (sa->spacetype != type) {
     SpaceType *st;
-    SpaceLink *slold;
+    SpaceLink *slold = sa->spacedata.first;
     SpaceLink *sl;
     /* store sa->type->exit callback */
     void *sa_exit = sa->type ? sa->type->exit : NULL;
@@ -1953,7 +1964,7 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
      */
     int header_alignment = ED_area_header_alignment_or_fallback(sa, -1);
     const bool sync_header_alignment = ((header_alignment != -1) &&
-                                        (sa->flag & AREA_FLAG_TEMP_TYPE) == 0);
+                                        ((slold->link_flag & SPACE_FLAG_TYPE_TEMPORARY) == 0));
 
     /* in some cases (opening temp space) we don't want to
      * call area exit callback, so we temporarily unset it */
@@ -1969,7 +1980,6 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
     }
 
     st = BKE_spacetype_from_id(type);
-    slold = sa->spacedata.first;
 
     sa->spacetype = type;
     sa->type = st;
@@ -2000,6 +2010,10 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
       slold->regionbase = sa->regionbase;
       sa->regionbase = sl->regionbase;
       BLI_listbase_clear(&sl->regionbase);
+      /* SPACE_FLAG_TYPE_WAS_ACTIVE is only used to go back to a previously active space that is
+       * overlapped by temporary ones. It's now properly activated, so the flag should be cleared
+       * at this point. */
+      sl->link_flag &= ~SPACE_FLAG_TYPE_WAS_ACTIVE;
 
       /* put in front of list */
       BLI_remlink(&sa->spacedata, sl);
@@ -2063,23 +2077,45 @@ void ED_area_newspace(bContext *C, ScrArea *sa, int type, const bool skip_ar_exi
   ED_area_tag_redraw(sa);
 }
 
-void ED_area_prevspace(bContext *C, ScrArea *sa)
+static SpaceLink *area_get_prevspace(ScrArea *sa)
 {
   SpaceLink *sl = sa->spacedata.first;
 
-  if (sl && sl->next) {
-    ED_area_newspace(C, sa, sl->next->spacetype, false);
+  /* First toggle to the next temporary space in the list. */
+  for (SpaceLink *sl_iter = sl->next; sl_iter; sl_iter = sl_iter->next) {
+    if (sl_iter->link_flag & SPACE_FLAG_TYPE_TEMPORARY) {
+      return sl_iter;
+    }
+  }
 
-    /* keep old spacedata but move it to end, so calling
-     * ED_area_prevspace once more won't open it again */
-    BLI_remlink(&sa->spacedata, sl);
-    BLI_addtail(&sa->spacedata, sl);
+  /* No temporary space, find the item marked as last active. */
+  for (SpaceLink *sl_iter = sl->next; sl_iter; sl_iter = sl_iter->next) {
+    if (sl_iter->link_flag & SPACE_FLAG_TYPE_WAS_ACTIVE) {
+      return sl_iter;
+    }
+  }
+
+  /* If neither is found, we can just return to the regular previous one. */
+  return sl->next;
+}
+
+void ED_area_prevspace(bContext *C, ScrArea *sa)
+{
+  SpaceLink *sl = sa->spacedata.first;
+  SpaceLink *prevspace = sl ? area_get_prevspace(sa) : NULL;
+
+  if (prevspace) {
+    ED_area_newspace(C, sa, prevspace->spacetype, false);
+    /* We've exited the space, so it can't be considered temporary anymore. */
+    sl->link_flag &= ~SPACE_FLAG_TYPE_TEMPORARY;
   }
   else {
     /* no change */
     return;
   }
-  sa->flag &= ~(AREA_FLAG_STACKED_FULLSCREEN | AREA_FLAG_TEMP_TYPE);
+  /* If this is a stacked fullscreen, changing to previous area exits it (meaning we're still in a
+   * fullscreen, but not in a stacked one). */
+  sa->flag &= ~AREA_FLAG_STACKED_FULLSCREEN;
 
   ED_area_tag_redraw(sa);
 
@@ -2424,7 +2460,7 @@ void ED_region_panels_layout_ex(const bContext *C,
      * instead they calculate offsets for the next panel to start drawing. */
     Panel *panel = ar->panels.last;
     if (panel != NULL) {
-      int size_dyn[2] = {
+      const int size_dyn[2] = {
           UI_UNIT_X * ((panel->flag & PNL_CLOSED) ? 8 : 14) / UI_DPI_FAC,
           UI_panel_size_y(panel) / UI_DPI_FAC,
       };
@@ -2859,7 +2895,7 @@ void ED_region_info_draw(ARegion *ar,
                          float fill_color[4],
                          const bool full_redraw)
 {
-  ED_region_info_draw_multiline(ar, (const char * [2]){text, NULL}, fill_color, full_redraw);
+  ED_region_info_draw_multiline(ar, (const char *[2]){text, NULL}, fill_color, full_redraw);
 }
 
 #define MAX_METADATA_STR 1024
@@ -3176,15 +3212,15 @@ void ED_region_image_metadata_panel_draw(ImBuf *ibuf, uiLayout *layout)
   IMB_metadata_foreach(ibuf, metadata_panel_draw_field, &ctx);
 }
 
-void ED_region_grid_draw(ARegion *ar, float zoomx, float zoomy)
+void ED_region_grid_draw(ARegion *ar, float zoomx, float zoomy, float x0, float y0)
 {
   float gridsize, gridstep = 1.0f / 32.0f;
   float fac, blendfac;
   int x1, y1, x2, y2;
 
-  /* the image is located inside (0, 0), (1, 1) as set by view2d */
-  UI_view2d_view_to_region(&ar->v2d, 0.0f, 0.0f, &x1, &y1);
-  UI_view2d_view_to_region(&ar->v2d, 1.0f, 1.0f, &x2, &y2);
+  /* the image is located inside (x0, y0), (x0+1, y0+1) as set by view2d */
+  UI_view2d_view_to_region(&ar->v2d, x0, y0, &x1, &y1);
+  UI_view2d_view_to_region(&ar->v2d, x0 + 1.0f, y0 + 1.0f, &x2, &y2);
 
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
@@ -3327,13 +3363,17 @@ const rcti *ED_region_visible_rect(ARegion *ar)
 
 /* Cache display helpers */
 
-void ED_region_cache_draw_background(const ARegion *ar)
+void ED_region_cache_draw_background(ARegion *ar)
 {
+  /* Local coordinate visible rect inside region, to accommodate overlapping ui. */
+  const rcti *rect_visible = ED_region_visible_rect(ar);
+  const int region_bottom = rect_visible->ymin;
+
   uint pos = GPU_vertformat_attr_add(
       immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
   immUniformColor4ub(128, 128, 255, 64);
-  immRecti(pos, 0, 0, ar->winx, 8 * UI_DPI_FAC);
+  immRecti(pos, 0, region_bottom, ar->winx, region_bottom + 8 * UI_DPI_FAC);
   immUnbindProgram();
 }
 
@@ -3363,9 +3403,13 @@ void ED_region_cache_draw_curfra_label(const int framenr, const float x, const f
 }
 
 void ED_region_cache_draw_cached_segments(
-    const ARegion *ar, const int num_segments, const int *points, const int sfra, const int efra)
+    ARegion *ar, const int num_segments, const int *points, const int sfra, const int efra)
 {
   if (num_segments) {
+    /* Local coordinate visible rect inside region, to accommodate overlapping ui. */
+    const rcti *rect_visible = ED_region_visible_rect(ar);
+    const int region_bottom = rect_visible->ymin;
+
     uint pos = GPU_vertformat_attr_add(
         immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
@@ -3375,7 +3419,7 @@ void ED_region_cache_draw_cached_segments(
       float x1 = (float)(points[a * 2] - sfra) / (efra - sfra + 1) * ar->winx;
       float x2 = (float)(points[a * 2 + 1] - sfra + 1) / (efra - sfra + 1) * ar->winx;
 
-      immRecti(pos, x1, 0, x2, 8 * UI_DPI_FAC);
+      immRecti(pos, x1, region_bottom, x2, region_bottom + 8 * UI_DPI_FAC);
       /* TODO(merwin): use primitive restart to draw multiple rects more efficiently */
     }
 

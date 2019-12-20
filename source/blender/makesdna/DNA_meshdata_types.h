@@ -27,8 +27,6 @@
 #include "DNA_customdata_types.h"
 #include "DNA_listBase.h"
 
-struct Image;
-
 /*tessellation face, see MLoop/MPoly for the real face data*/
 typedef struct MFace {
   unsigned int v1, v2, v3, v4;
@@ -61,9 +59,10 @@ typedef struct MVert {
   char flag, bweight;
 } MVert;
 
-/** Tessellation vertex color data.
+/**
+ * Tessellation vertex color data.
  * at the moment alpha is abused for vertex painting and not used for transparency,
- * note that red and blue are swapped
+ * note that red and blue are swapped.
  */
 typedef struct MCol {
   unsigned char a, r, g, b;
@@ -187,10 +186,6 @@ typedef struct MLoopTri {
 typedef struct MVertTri {
   unsigned int tri[3];
 } MVertTri;
-
-// typedef struct MTexPoly {
-//  void *_pad;
-//} MTexPoly;
 
 typedef struct MLoopUV {
   float uv[2];

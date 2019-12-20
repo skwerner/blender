@@ -34,7 +34,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_particle_types.h"
-#include "DNA_smoke_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_dynamicpaint_types.h"
 
@@ -88,7 +88,7 @@ float PSYS_FRAND_BASE[PSYS_FRAND_COUNT];
 void psys_init_rng(void)
 {
   RNG *rng = BLI_rng_new_srandom(5831); /* arbitrary */
-  for (int i = 0; i < PSYS_FRAND_COUNT; ++i) {
+  for (int i = 0; i < PSYS_FRAND_COUNT; i++) {
     PSYS_FRAND_BASE[i] = BLI_rng_get_float(rng);
     PSYS_FRAND_SEED_OFFSET[i] = (unsigned int)BLI_rng_get_int(rng);
     PSYS_FRAND_SEED_MULTIPLIER[i] = (unsigned int)BLI_rng_get_int(rng);
@@ -360,6 +360,11 @@ bool psys_check_enabled(Object *ob, ParticleSystem *psys, const bool use_render_
   }
 
   psmd = psys_get_modifier(ob, psys);
+
+  if (!psmd) {
+    return 0;
+  }
+
   if (use_render_params) {
     if (!(psmd->modifier.mode & eModifierMode_Render)) {
       return 0;
@@ -2691,7 +2696,7 @@ static void psys_thread_create_path(ParticleTask *task,
       pa = &psys->particles[cpa->parent];
       par = pcache[cpa->parent];
 
-      /* If particle is unexisting, try to pick a viable parent from particles
+      /* If particle is non-existing, try to pick a viable parent from particles
        * used for interpolation. */
       for (k = 0; k < 4 && pa && (pa->flag & PARS_UNEXIST); k++) {
         if (cpa->pa[k] >= 0) {
@@ -2747,7 +2752,7 @@ static void exec_child_path_cache(TaskPool *__restrict UNUSED(pool),
   int i;
 
   cpa = psys->child + task->begin;
-  for (i = task->begin; i < task->end; ++i, ++cpa) {
+  for (i = task->begin; i < task->end; i++, cpa++) {
     BLI_assert(i < psys->totchildcache);
     psys_thread_create_path(task, cpa, cache[i], i);
   }
@@ -2794,7 +2799,7 @@ void psys_cache_child_paths(ParticleSimulationData *sim,
   /* cache parent paths */
   ctx.parent_pass = 1;
   psys_tasks_create(&ctx, 0, totparent, &tasks_parent, &numtasks_parent);
-  for (i = 0; i < numtasks_parent; ++i) {
+  for (i = 0; i < numtasks_parent; i++) {
     ParticleTask *task = &tasks_parent[i];
 
     psys_task_init_path(task, sim);
@@ -2805,7 +2810,7 @@ void psys_cache_child_paths(ParticleSimulationData *sim,
   /* cache child paths */
   ctx.parent_pass = 0;
   psys_tasks_create(&ctx, totparent, totchild, &tasks_child, &numtasks_child);
-  for (i = 0; i < numtasks_child; ++i) {
+  for (i = 0; i < numtasks_child; i++) {
     ParticleTask *task = &tasks_child[i];
 
     psys_task_init_path(task, sim);
@@ -2965,7 +2970,7 @@ void psys_cache_paths(ParticleSimulationData *sim, float cfra, const bool use_re
     /*--get the first data points--*/
     init_particle_interpolation(sim->ob, sim->psys, pa, &pind);
 
-    /* hairmat is needed for for non-hair particle too so we get proper rotations */
+    /* 'hairmat' is needed for non-hair particle too so we get proper rotations. */
     psys_mat_hair_to_global(sim->ob, psmd->mesh_final, psys->part->from, pa, hairmat);
     copy_v3_v3(rotmat[0], hairmat[2]);
     copy_v3_v3(rotmat[1], hairmat[1]);
@@ -3011,7 +3016,7 @@ void psys_cache_paths(ParticleSimulationData *sim, float cfra, const bool use_re
     if (part->type == PART_HAIR) {
       HairKey *hkey;
 
-      for (k = 0, hkey = pa->hair; k < pa->totkey; ++k, ++hkey) {
+      for (k = 0, hkey = pa->hair; k < pa->totkey; k++, hkey++) {
         mul_v3_m4v3(hkey->world_co, hairmat, hkey->co);
       }
     }
@@ -3577,12 +3582,12 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
     return;
   }
 
-  /* clear all other appearances of this pointer (like on smoke flow modifier) */
-  if ((md = modifiers_findByType(ob, eModifierType_Smoke))) {
-    SmokeModifierData *smd = (SmokeModifierData *)md;
-    if ((smd->type == MOD_SMOKE_TYPE_FLOW) && smd->flow && smd->flow->psys) {
-      if (smd->flow->psys == psys) {
-        smd->flow->psys = NULL;
+  /* clear all other appearances of this pointer (like on manta flow modifier) */
+  if ((md = modifiers_findByType(ob, eModifierType_Fluid))) {
+    FluidModifierData *mmd = (FluidModifierData *)md;
+    if ((mmd->type == MOD_FLUID_TYPE_FLOW) && mmd->flow && mmd->flow->psys) {
+      if (mmd->flow->psys == psys) {
+        mmd->flow->psys = NULL;
       }
     }
   }
@@ -4068,9 +4073,7 @@ void psys_get_texture(
                                    0,
                                    texvec);
 
-          if (me->bb == NULL || (me->bb->flag & BOUNDBOX_DIRTY)) {
-            BKE_mesh_texspace_calc(me);
-          }
+          BKE_mesh_texspace_ensure(me);
           sub_v3_v3(texvec, me->loc);
           if (me->size[0] != 0.0f) {
             texvec[0] /= me->size[0];

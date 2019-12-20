@@ -267,7 +267,7 @@ int imagewrap(Tex *tex,
 
   if (texres->nor) {
     if (tex->imaflag & TEX_NORMALMAP) {
-      /* qdn: normal from color
+      /* Normal from color:
        * The invert of the red channel is to make
        * the normal map compliant with the outside world.
        * It needs to be done because in Blender
@@ -842,8 +842,8 @@ static void area_sample(TexResult *texr, ImBuf *ibuf, float fx, float fy, afdata
   xsd = 1.f / xsam;
   ysd = 1.f / ysam;
   texr->tr = texr->tg = texr->tb = texr->ta = 0.f;
-  for (ys = 0; ys < ysam; ++ys) {
-    for (xs = 0; xs < xsam; ++xs) {
+  for (ys = 0; ys < ysam; ys++) {
+    for (xs = 0; xs < xsam; xs++) {
       const float su = (xs + ((ys & 1) + 0.5f) * 0.5f) * xsd - 0.5f;
       const float sv = (ys + ((xs & 1) + 0.5f) * 0.5f) * ysd - 0.5f;
       const float pu = fx + su * AFD->dxt[0] + sv * AFD->dyt[0];

@@ -15,8 +15,6 @@ extern "C" {
 #include <fstream>
 #include <sstream>
 
-#define DLNY_EPSILON 1e-8
-
 static void fill_input_verts(CDT_input *r_input, float (*vcos)[2], int nverts)
 {
   r_input->verts_len = nverts;
@@ -27,7 +25,7 @@ static void fill_input_verts(CDT_input *r_input, float (*vcos)[2], int nverts)
   r_input->faces = NULL;
   r_input->faces_start_table = NULL;
   r_input->faces_len_table = NULL;
-  r_input->epsilon = 1e-6f;
+  r_input->epsilon = 1e-5f;
 }
 
 static void add_input_edges(CDT_input *r_input, int (*edges)[2], int nedges)
@@ -643,6 +641,58 @@ TEST(delaunay, TwoSquaresOverlap)
   BLI_delaunay_2d_cdt_free(out);
 }
 
+TEST(delaunay, TriCutoff)
+{
+  CDT_input in;
+  CDT_result *out;
+  float p[][2] = {
+      {-3.53009f, 1.29403f},
+      {-4.11844f, -1.08375f},
+      {1.56893f, 1.29403f},
+      {0.621034f, 0.897734f},
+      {0.549125f, 1.29403f},
+  };
+  int f[] = {0, 2, 1};
+  int fstart[] = {0};
+  int flen[] = {3};
+  int e[][2] = {{3, 4}};
+
+  fill_input_verts(&in, p, 5);
+  add_input_faces(&in, f, fstart, flen, 1);
+  add_input_edges(&in, e, 1);
+  out = BLI_delaunay_2d_cdt_calc(&in, CDT_CONSTRAINTS_VALID_BMESH);
+  EXPECT_EQ(out->verts_len, 5);
+  EXPECT_EQ(out->edges_len, 6);
+  EXPECT_EQ(out->faces_len, 2);
+  BLI_delaunay_2d_cdt_free(out);
+}
+
+TEST(delaunay, TriInTri)
+{
+  CDT_input in;
+  CDT_result *out;
+  float p[][2] = {
+      {-5.65685f, 0.0f},
+      {1.41421f, -5.83095f},
+      {0.0f, 0.0f},
+      {-2.47487f, -1.45774f},
+      {-0.707107f, -2.91548f},
+      {-1.06066f, -1.45774f},
+  };
+  int f[] = {0, 1, 2, 3, 4, 5};
+  int fstart[] = {0, 3};
+  int flen[] = {3, 3};
+
+  fill_input_verts(&in, p, 6);
+  add_input_faces(&in, f, fstart, flen, 2);
+  out = BLI_delaunay_2d_cdt_calc(&in, CDT_CONSTRAINTS_VALID_BMESH);
+  EXPECT_EQ(out->verts_len, 6);
+  EXPECT_EQ(out->edges_len, 8);
+  EXPECT_EQ(out->faces_len, 3);
+  BLI_delaunay_2d_cdt_free(out);
+}
+
+#if 0
 enum {
   RANDOM_PTS,
   RANDOM_SEGS,
@@ -715,12 +765,12 @@ static void rand_delaunay_test(int test_kind,
       times[lg_size] += PIL_check_seconds_timer() - tstart;
     }
   }
-#ifdef DO_TIMING
+#  ifdef DO_TIMING
   fprintf(stderr, "size,time\n");
   for (lg_size = 0; lg_size <= max_lg_size; lg_size++) {
     fprintf(stderr, "%d,%f\n", 1 << lg_size, times[lg_size] / reps_per_size);
   }
-#endif
+#  endif
   MEM_freeN(p);
   if (e)
     MEM_freeN(e);
@@ -757,6 +807,7 @@ TEST(delaunay, randompoly_validbmesh)
 {
   rand_delaunay_test(RANDOM_POLY, 7, 1, CDT_CONSTRAINTS_VALID_BMESH);
 }
+#endif
 
 #if 0
 /* For debugging or timing large examples.

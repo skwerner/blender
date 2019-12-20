@@ -630,9 +630,8 @@ static bAnimListElem *make_new_animlistelem(void *data,
     /* do specifics */
     switch (datatype) {
       case ANIMTYPE_SUMMARY: {
-        /* nothing to include for now... this is just a dummy wrappy around all the other channels
-         * in the DopeSheet, and gets included at the start of the list
-         */
+        /* Nothing to include for now... this is just a dummy wrapper around
+         * all the other channels in the DopeSheet, and gets included at the start of the list. */
         ale->key_data = NULL;
         ale->datatype = ALE_ALL;
         break;
@@ -1819,7 +1818,7 @@ static size_t animdata_filter_gpencil(bAnimContext *ac,
             !(ads->filterflag & ADS_FILTER_INCL_HIDDEN)) {
           /* Layer visibility - we check both object and base,
            * since these may not be in sync yet. */
-          if ((base->flag & BASE_VISIBLE) == 0) {
+          if ((base->flag & BASE_VISIBLE_DEPSGRAPH) == 0) {
             continue;
           }
 
@@ -3018,7 +3017,7 @@ static bool animdata_filter_base_is_ok(bDopeSheet *ads, Base *base, int filter_m
    */
   if ((filter_mode & ANIMFILTER_DATA_VISIBLE) && !(ads->filterflag & ADS_FILTER_INCL_HIDDEN)) {
     /* layer visibility - we check both object and base, since these may not be in sync yet */
-    if ((base->flag & BASE_VISIBLE) == 0) {
+    if ((base->flag & BASE_VISIBLE_DEPSGRAPH) == 0) {
       return false;
     }
 

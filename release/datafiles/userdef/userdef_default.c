@@ -21,10 +21,14 @@
 
 #include "DNA_userdef_types.h"
 #include "DNA_curve_types.h"
+#include "DNA_space_types.h"
+#include "DNA_anim_types.h"
 
 #include "BLI_math_rotation.h"
 
 #include "BKE_blender_version.h"
+
+#include "BLO_readfile.h" /* own include */
 
 const UserDef U_default = {
     .versionfile = BLENDER_VERSION,
@@ -58,11 +62,9 @@ const UserDef U_default = {
                USER_HIDE_DOT | USER_SHOW_GIZMO_NAVIGATE | USER_SHOW_VIEWPORTNAME | USER_SHOW_FPS |
                USER_CONTINUOUS_MOUSE | USER_SAVE_PROMPT),
     .uiflag2 = USER_REGION_OVERLAP,
-    .gpu_flag = 0,
+    .gpu_flag = USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE,
     .app_flag = 0,
     .language = 0,
-    .userpref = USER_SECTION_INTERFACE,
-    .userpref_flag = 0,
     .viewzoom = USER_ZOOM_DOLLY,
     .mixbufsize = 2048,
     .audiodevice = 0,
@@ -137,6 +139,7 @@ const UserDef U_default = {
     .glreslimit = 0,
     .curssize = 0,
     .color_picker_type = USER_CP_CIRCLE_HSV,
+    .auto_smoothing_new = FCURVE_SMOOTH_CONT_ACCEL,
     .ipo_new = BEZT_IPO_BEZ,
     .keyhandles_new = HD_AUTO_ANIM,
     .view_frame_type = ZOOM_FRAME_MODE_KEEP_RANGE,
@@ -147,11 +150,16 @@ const UserDef U_default = {
     .tablet_api = USER_TABLET_AUTOMATIC,
     .pressure_threshold_max = 1.0,
     .pressure_softness = 0.0,
-    .ndof_sensitivity = 1.0,
-    .ndof_orbit_sensitivity = 1.0,
+    .ndof_sensitivity = 4.0,
+    .ndof_orbit_sensitivity = 4.0,
     .ndof_deadzone = 0.1,
-    .ndof_flag = (NDOF_LOCK_HORIZON | NDOF_SHOULD_PAN | NDOF_SHOULD_ZOOM | NDOF_SHOULD_ROTATE),
-    .ogl_multisamples = 0,
+    .ndof_flag = (NDOF_MODE_ORBIT | NDOF_LOCK_HORIZON | NDOF_SHOULD_PAN | NDOF_SHOULD_ZOOM |
+                  NDOF_SHOULD_ROTATE |
+                  /* Software from the driver authors follows this convention
+                   * so invert this by default, see: T67579. */
+                  NDOF_ROTX_INVERT_AXIS | NDOF_ROTY_INVERT_AXIS | NDOF_ROTZ_INVERT_AXIS |
+                  NDOF_PANX_INVERT_AXIS | NDOF_PANY_INVERT_AXIS | NDOF_PANZ_INVERT_AXIS |
+                  NDOF_ZOOM_INVERT),
     .image_draw_method = IMAGE_DRAW_METHOD_AUTO,
     .glalphaclip = 0.004,
     .autokey_mode = (AUTOKEY_MODE_NORMAL & ~AUTOKEY_ON),
@@ -180,6 +188,13 @@ const UserDef U_default = {
     .pie_menu_confirm = 0,
     .pie_menu_radius = 100,
     .pie_menu_threshold = 12,
+    .opensubdiv_compute_type = 0,
+    .gpencil_multisamples = 4,
+    .factor_display_type = USER_FACTOR_AS_FACTOR,
+    .render_display_type = USER_RENDER_DISPLAY_WINDOW,
+    .filebrowser_display_type = USER_TEMP_SPACE_DISPLAY_WINDOW,
+    .viewport_aa = 8,
+
     .walk_navigation =
         {
             .mouse_speed = 1,
@@ -190,10 +205,25 @@ const UserDef U_default = {
             .teleport_time = 0.2,
             .flag = 0,
         },
-    .opensubdiv_compute_type = 0,
-    .gpencil_multisamples = 4,
-    .factor_display_type = USER_FACTOR_AS_FACTOR,
-    .viewport_aa = 8,
+
+    .space_data =
+        {
+            .section_active = USER_SECTION_INTERFACE,
+        },
+
+    .file_space_data =
+        {
+            .display_type = FILE_VERTICALDISPLAY,
+            .thumbnail_size = 128,
+            .sort_type = FILE_SORT_ALPHA,
+            .details_flags = FILE_DETAILS_SIZE | FILE_DETAILS_DATETIME,
+            .flag = FILE_HIDE_DOT,
+            .filter_id = FILTER_ID_ALL,
+
+            .temp_win_sizex = 1020,
+            .temp_win_sizey = 600,
+        },
+
     .runtime =
         {
             .is_dirty = 0,

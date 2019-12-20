@@ -25,6 +25,7 @@ from bpy.types import (
 )
 from bpy.props import (
     BoolProperty,
+    CollectionProperty,
     EnumProperty,
     FloatProperty,
     IntProperty,
@@ -846,6 +847,86 @@ class WM_OT_url_open(Operator):
         return {'FINISHED'}
 
 
+class WM_OT_url_open_preset(Operator):
+    """Open a preset website in the web-browser"""
+    bl_idname = "wm.url_open_preset"
+    bl_label = "Open Preset Website"
+    bl_options = {'INTERNAL'}
+
+    type: EnumProperty(
+        name="Site",
+        items=lambda self, _context: (
+            item for (item, _) in WM_OT_url_open_preset.preset_items
+        ),
+    )
+
+    id: StringProperty(
+        name="Identifier",
+        description="Optional identifier",
+    )
+
+    def _url_from_bug(self, _context):
+        from bl_ui_utils.bug_report_url import url_prefill_from_blender
+        return url_prefill_from_blender()
+
+    def _url_from_bug_addon(self, _context):
+        from bl_ui_utils.bug_report_url import url_prefill_from_blender
+        return url_prefill_from_blender(addon_info=self.id)
+
+    def _url_from_release_notes(self, _context):
+        return "https://www.blender.org/download/releases/%d-%d/" % bpy.app.version[:2]
+
+    def _url_from_manual(self, _context):
+        if bpy.app.version_cycle in {"rc", "release"}:
+            manual_version = "%d.%d" % bpy.app.version[:2]
+        else:
+            manual_version = "dev"
+        return "https://docs.blender.org/manual/en/" + manual_version + "/"
+
+    # This list is: (enum_item, url) pairs.
+    # Allow dynamically extending.
+    preset_items = [
+        # Dynamic URL's.
+        (('BUG', "Bug",
+          "Report a bug with pre-filled version information"),
+         _url_from_bug),
+        (('BUG_ADDON', "Add-On Bug",
+          "Report a bug in an add-on"),
+         _url_from_bug_addon),
+        (('RELEASE_NOTES', "Release Notes",
+          "Read about whats new in this version of Blender"),
+         _url_from_release_notes),
+        (('MANUAL', "Manual",
+          "The reference manual for this version of Blender"),
+         _url_from_manual),
+
+        # Static URL's.
+        (('FUND', "Development Fund",
+          "The donation program to support maintenance and improvements"),
+         "https://fund.blender.org"),
+        (('BLENDER', "blender.org",
+          "Blender's official web-site"),
+         "https://www.blender.org"),
+        (('CREDITS', "Credits",
+          "Lists committers to Blender's source code"),
+         "https://www.blender.org/about/credits/"),
+    ]
+
+    def execute(self, context):
+        url = None
+        type = self.type
+        for (item_id, _, _), url in self.preset_items:
+            if item_id == type:
+                if callable(url):
+                    url = url(self, context)
+                break
+
+        import webbrowser
+        webbrowser.open(url)
+
+        return {'FINISHED'}
+
+
 class WM_OT_path_open(Operator):
     """Open a path in a file browser"""
     bl_idname = "wm.path_open"
@@ -1022,7 +1103,7 @@ class WM_OT_doc_view(Operator):
     bl_label = "View Documentation"
 
     doc_id: doc_id
-    if bpy.app.version_cycle in {"release", "rc"}:
+    if bpy.app.version_cycle in {"release", "rc", "beta"}:
         _prefix = ("https://docs.blender.org/api/%d.%d%s" %
                    (bpy.app.version[0], bpy.app.version[1], bpy.app.version_char))
     else:
@@ -1093,6 +1174,7 @@ rna_vector_subtype_items = (
     ('EULER', "Euler Angles", "Euler rotation angles in radians"),
     ('QUATERNION', "Quaternion Rotation", "Quaternion rotation (affects NLA blending)"),
 )
+
 
 class WM_OT_properties_edit(Operator):
     bl_idname = "wm.properties_edit"
@@ -1563,6 +1645,12 @@ class WM_OT_tool_set_by_id(Operator):
         default=False,
         options={'SKIP_SAVE'},
     )
+    as_fallback: BoolProperty(
+        name="Set Fallback",
+        description="Set the fallback tool instead of the primary tool",
+        default=False,
+        options={'SKIP_SAVE', 'HIDDEN'},
+    )
 
     space_type: rna_space_type_prop
 
@@ -1590,7 +1678,10 @@ class WM_OT_tool_set_by_id(Operator):
             space_type = context.space_data.type
 
         fn = activate_by_id_or_cycle if self.cycle else activate_by_id
-        if fn(context, space_type, self.name):
+        if fn(context, space_type, self.name, as_fallback=self.as_fallback):
+            if self.as_fallback:
+                tool_settings = context.tool_settings
+                tool_settings.workspace_tool_type = 'FALLBACK'
             return {'FINISHED'}
         else:
             self.report({'WARNING'}, f"Tool {self.name!r:s} not found for space {space_type!r:s}.")
@@ -1617,13 +1708,20 @@ class WM_OT_tool_set_by_index(Operator):
         default=True,
     )
 
+    as_fallback: BoolProperty(
+        name="Set Fallback",
+        description="Set the fallback tool instead of the primary",
+        default=False,
+        options={'SKIP_SAVE', 'HIDDEN'},
+    )
+
     space_type: rna_space_type_prop
 
     def execute(self, context):
         from bl_ui.space_toolsystem_common import (
             activate_by_id,
             activate_by_id_or_cycle,
-            item_from_index,
+            item_from_index_active,
             item_from_flat_index,
         )
 
@@ -1632,7 +1730,7 @@ class WM_OT_tool_set_by_index(Operator):
         else:
             space_type = context.space_data.type
 
-        fn = item_from_flat_index if self.expand else item_from_index
+        fn = item_from_flat_index if self.expand else item_from_index_active
         item = fn(context, space_type, self.index)
         if item is None:
             # Don't report, since the number of tools may change.
@@ -1640,7 +1738,10 @@ class WM_OT_tool_set_by_index(Operator):
 
         # Same as: WM_OT_tool_set_by_id
         fn = activate_by_id_or_cycle if self.cycle else activate_by_id
-        if fn(context, space_type, item.idname):
+        if fn(context, space_type, item.idname, as_fallback=self.as_fallback):
+            if self.as_fallback:
+                tool_settings = context.tool_settings
+                tool_settings.workspace_tool_type = 'FALLBACK'
             return {'FINISHED'}
         else:
             # Since we already have the tool, this can't happen.
@@ -1662,25 +1763,642 @@ class WM_OT_toolbar(Operator):
             WM_OT_toolbar._key_held = event.type
             return self.execute(context)
 
-    def execute(self, context):
+    @staticmethod
+    def keymap_from_toolbar(context, space_type, use_fallback_keys=True, use_reset=True):
         from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
         from bl_keymap_utils import keymap_from_toolbar
 
-        space_type = context.space_data.type
         cls = ToolSelectPanelHelper._tool_class_from_space_type(space_type)
         if cls is None:
-            return {'CANCELLED'}
+            return None, None
 
-        wm = context.window_manager
-        keymap = keymap_from_toolbar.generate(context, space_type)
+        return cls, keymap_from_toolbar.generate(
+            context,
+            space_type,
+            use_fallback_keys=use_fallback_keys,
+            use_reset=use_reset,
+        )
+
+    def execute(self, context):
+        space_type = context.space_data.type
+        cls, keymap = self.keymap_from_toolbar(context, space_type)
+        if keymap is None:
+            return {'CANCELLED'}
 
         def draw_menu(popover, context):
             layout = popover.layout
             layout.operator_context = 'INVOKE_REGION_WIN'
             cls.draw_cls(layout, context, detect_layout=False, scale_y=1.0)
 
+        wm = context.window_manager
         wm.popover(draw_menu, ui_units_x=8, keymap=keymap)
         return {'FINISHED'}
+
+
+class WM_OT_toolbar_fallback_pie(Operator):
+    bl_idname = "wm.toolbar_fallback_pie"
+    bl_label = "Fallback Tool Pie Menu"
+
+    @classmethod
+    def poll(cls, context):
+        return context.space_data is not None
+
+    def invoke(self, context, event):
+        if not context.preferences.experimental.use_tool_fallback:
+            return {'PASS_THROUGH'}
+
+        from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+        space_type = context.space_data.type
+        cls = ToolSelectPanelHelper._tool_class_from_space_type(space_type)
+        if cls is None:
+            return {'PASS_THROUGH'}
+
+        # It's possible we don't have the fallback tool available.
+        # This can happen in the image editor for example when there is no selection
+        # in painting modes.
+        item, _ = cls._tool_get_by_id(context, cls.tool_fallback_id)
+        if item is None:
+            print("Tool", cls.tool_fallback_id, "not active in", cls)
+            return {'PASS_THROUGH'}
+
+        def draw_cb(self, context):
+            from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+            ToolSelectPanelHelper.draw_fallback_tool_items_for_pie_menu(self.layout, context)
+
+        wm = context.window_manager
+        wm.popup_menu_pie(draw_func=draw_cb, title="Fallback Tool", event=event)
+        return {'FINISHED'}
+
+
+class WM_OT_toolbar_prompt(Operator):
+    """Leader key like functionality for accessing tools"""
+    bl_idname = "wm.toolbar_prompt"
+    bl_label = "Toolbar Prompt"
+
+    @staticmethod
+    def _status_items_generate(cls, keymap, context):
+        from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+
+        # The keymap doesn't have the same order the tools are declared in,
+        # while we could support this, it's simpler to apply order here.
+        tool_map_id_to_order = {}
+        # Map the
+        tool_map_id_to_label = {}
+        for item in ToolSelectPanelHelper._tools_flatten(cls.tools_from_context(context)):
+            if item is not None:
+                tool_map_id_to_label[item.idname] = item.label
+                tool_map_id_to_order[item.idname] = len(tool_map_id_to_order)
+
+        status_items = []
+
+        for item in keymap.keymap_items:
+            name = item.name
+            key_str = item.to_string()
+            # These are duplicated from regular numbers.
+            if key_str.startswith("Numpad "):
+                continue
+            properties = item.properties
+            idname = item.idname
+            if idname == "wm.tool_set_by_id":
+                tool_idname = properties["name"]
+                name = tool_map_id_to_label[tool_idname]
+                name = name.replace("Annotate ", "")
+            else:
+                continue
+
+            status_items.append((tool_idname, name, item))
+
+        status_items.sort(
+            key=lambda a: tool_map_id_to_order[a[0]]
+        )
+        return status_items
+
+    def modal(self, context, event):
+        event_type = event.type
+        event_value = event.value
+
+        if event_type in {
+                'LEFTMOUSE', 'RIGHTMOUSE', 'MIDDLEMOUSE',
+                'WHEELDOWNMOUSE', 'WHEELUPMOUSE', 'WHEELINMOUSE', 'WHEELOUTMOUSE',
+                'ESC',
+        }:
+            context.workspace.status_text_set(None)
+            return {'CANCELLED', 'PASS_THROUGH'}
+
+        keymap = self._keymap
+        item = keymap.keymap_items.match_event(event)
+        if item is not None:
+            idname = item.idname
+            properties = item.properties
+            if idname == "wm.tool_set_by_id":
+                tool_idname = properties["name"]
+                bpy.ops.wm.tool_set_by_id(name=tool_idname)
+
+            context.workspace.status_text_set(None)
+            return {'FINISHED'}
+
+        # Pressing entry even again exists, as long as it's not mapped to a key (for convenience).
+        if event_type == self._init_event_type:
+            if event_value == 'RELEASE':
+                if not (event.ctrl or event.alt or event.shift or event.oskey):
+                    context.workspace.status_text_set(None)
+                    return {'CANCELLED'}
+
+        return {'RUNNING_MODAL'}
+
+    def invoke(self, context, event):
+        space_data = context.space_data
+        if space_data is None:
+            return {'CANCELLED'}
+
+        space_type = space_data.type
+        cls, keymap = WM_OT_toolbar.keymap_from_toolbar(
+            context,
+            space_type,
+            use_fallback_keys=False,
+            use_reset=False,
+        )
+        if (keymap is None) or (not keymap.keymap_items):
+            return {'CANCELLED'}
+
+        self._init_event_type = event.type
+
+        # Strip Left/Right, since "Left Alt" isn't especially useful.
+        init_event_type_as_text = self._init_event_type.title().split("_")
+        if init_event_type_as_text[0] in {"Left", "Right"}:
+            del init_event_type_as_text[0]
+        init_event_type_as_text = " ".join(init_event_type_as_text)
+
+        status_items = self._status_items_generate(cls, keymap, context)
+
+        def status_text_fn(self, context):
+
+            layout = self.layout
+            if True:
+                box = layout.row(align=True).box()
+                box.scale_x = 0.8
+                box.label(text=init_event_type_as_text)
+
+            flow = layout.grid_flow(columns=len(status_items), align=True, row_major=True)
+            for _, name, item in status_items:
+                row = flow.row(align=True)
+                row.template_event_from_keymap_item(item, text=name)
+
+        self._keymap = keymap
+
+        context.workspace.status_text_set(status_text_fn)
+
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+
+class BatchRenameAction(bpy.types.PropertyGroup):
+    # category: StringProperty()
+    type: EnumProperty(
+        name="Operation",
+        items=(
+            ('REPLACE', "Find/Replace", "Replace text in the name"),
+            ('SET', "Set Name", "Set a new name or prefix/suffix the existing one"),
+            ('STRIP', "Strip Characters", "Strip leading/trailing text from the name"),
+            ('CASE', "Change Case", "Change case of each name"),
+        ),
+    )
+
+    # We could split these into sub-properties, however it's not so important.
+
+    # type: 'SET'.
+    set_name: StringProperty(name="Name")
+    set_method: EnumProperty(
+        name="Method",
+        items=(
+            ('NEW', "New", ""),
+            ('PREFIX', "Prefix", ""),
+            ('SUFFIX', "Suffix", ""),
+        ),
+        default='SUFFIX',
+    )
+
+    # type: 'STRIP'.
+    strip_chars: EnumProperty(
+        name="Strip Characters",
+        options={'ENUM_FLAG'},
+        items=(
+            ('SPACE', "Spaces", ""),
+            ('DIGIT', "Digits", ""),
+            ('PUNCT', "Punctuation", ""),
+        ),
+    )
+
+    # type: 'STRIP'.
+    strip_part: EnumProperty(
+        name="Strip Part",
+        options={'ENUM_FLAG'},
+        items=(
+            ('START', "Start", ""),
+            ('END', "End", ""),
+        ),
+    )
+
+    # type: 'REPLACE'.
+    replace_src: StringProperty(name="Find")
+    replace_dst: StringProperty(name="Replace")
+    replace_match_case: BoolProperty(name="Case Sensitive")
+    use_replace_regex_src: BoolProperty(
+        name="Regular Expression Find",
+        description="Use regular expressions to match text in the 'Find' field"
+    )
+    use_replace_regex_dst: BoolProperty(
+        name="Regular Expression Replace",
+        description="Use regular expression for the replacement text (supporting groups)"
+    )
+
+    # type: 'CASE'.
+    case_method: EnumProperty(
+        name="Case",
+        items=(
+            ('UPPER', "Upper Case", ""),
+            ('LOWER', "Lower Case", ""),
+            ('TITLE', "Title Case", ""),
+        ),
+    )
+
+    # Weak, add/remove as properties.
+    op_add: BoolProperty()
+    op_remove: BoolProperty()
+
+
+class WM_OT_batch_rename(Operator):
+    bl_idname = "wm.batch_rename"
+    bl_label = "Batch Rename"
+
+    bl_options = {'UNDO'}
+
+    data_type: EnumProperty(
+        name="Type",
+        items=(
+            ('OBJECT', "Objects", ""),
+            ('MATERIAL', "Materials", ""),
+            None,
+            # Enum identifiers are compared with 'object.type'.
+            ('MESH', "Meshes", ""),
+            ('CURVE', "Curves", ""),
+            ('META', "Meta Balls", ""),
+            ('ARMATURE', "Armatures", ""),
+            ('LATTICE', "Lattices", ""),
+            ('GPENCIL', "Grease Pencils", ""),
+            ('CAMERA', "Cameras", ""),
+            ('SPEAKER', "Speakers", ""),
+            ('LIGHT_PROBE', "Light Probes", ""),
+            None,
+            ('BONE', "Bones", ""),
+            ('NODE', "Nodes", ""),
+            ('SEQUENCE_STRIP', "Sequence Strips", ""),
+        ),
+        description="Type of data to rename",
+    )
+
+    data_source: EnumProperty(
+        name="Source",
+        items=(
+            ('SELECT', "Selected", ""),
+            ('ALL', "All", ""),
+        ),
+    )
+
+    actions: CollectionProperty(type=BatchRenameAction)
+
+    @staticmethod
+    def _data_from_context(context, data_type, only_selected, check_context=False):
+
+        mode = context.mode
+        scene = context.scene
+        space = context.space_data
+        space_type = None if (space is None) else space.type
+
+        data = None
+        if space_type == 'SEQUENCE_EDITOR':
+            data_type_test = 'SEQUENCE_STRIP'
+            if check_context:
+                return data_type_test
+            if data_type == data_type_test:
+                data = (
+                    # TODO, we don't have access to seqbasep, this won't work when inside metas.
+                    [seq for seq in context.scene.sequence_editor.sequences_all if seq.select]
+                    if only_selected else
+                    context.scene.sequence_editor.sequences_all,
+                    "name",
+                    "Strip(s)",
+                )
+        elif space_type == 'NODE_EDITOR':
+            data_type_test = 'NODE'
+            if check_context:
+                return data_type_test
+            if data_type == data_type_test:
+                data = (
+                    context.selected_nodes
+                    if only_selected else
+                    list(space.node_tree.nodes),
+                    "name",
+                    "Node(s)",
+                )
+        else:
+            if mode == 'POSE' or (mode == 'WEIGHT_PAINT' and context.pose_object):
+                data_type_test = 'BONE'
+                if check_context:
+                    return data_type_test
+                if data_type == data_type_test:
+                    data = (
+                        [pchan.bone for pchan in context.selected_pose_bones]
+                        if only_selected else
+                        [pbone.bone for ob in context.objects_in_mode_unique_data for pbone in ob.pose.bones],
+                        "name",
+                        "Bone(s)",
+                    )
+            elif mode == 'EDIT_ARMATURE':
+                data_type_test = 'BONE'
+                if check_context:
+                    return data_type_test
+                if data_type == data_type_test:
+                    data = (
+                        context.selected_editable_bones
+                        if only_selected else
+                        [ebone for ob in context.objects_in_mode_unique_data for ebone in ob.data.edit_bones],
+                        "name",
+                        "Edit Bone(s)",
+                    )
+
+        if check_context:
+            return 'OBJECT'
+
+        object_data_type_attrs_map = {
+            'MESH': ("meshes", "Mesh(es)"),
+            'CURVE': ("curves", "Curve(s)"),
+            'META': ("metaballs", "MetaBall(s)"),
+            'ARMATURE': ("armatures", "Armature(s)"),
+            'LATTICE': ("lattices", "Lattice(s)"),
+            'GPENCIL': ("grease_pencils", "Grease Pencil(s)"),
+            'CAMERA': ("cameras", "Camera(s)"),
+            'SPEAKER': ("speakers", "Speaker(s)"),
+            'LIGHT_PROBE': ("light_probes", "LightProbe(s)"),
+        }
+
+        # Finish with space types.
+        if data is None:
+
+            if data_type == 'OBJECT':
+                data = (
+                    context.selected_editable_objects
+                    if only_selected else
+                    [id for id in bpy.data.objects if id.library is None],
+                    "name",
+                    "Object(s)",
+                )
+            elif data_type == 'MATERIAL':
+                data = (
+                    tuple(set(
+                        slot.material
+                        for ob in context.selected_objects
+                        for slot in ob.material_slots
+                        if slot.material is not None
+                    ))
+                    if only_selected else
+                    [id for id in bpy.data.materials if id.library is None],
+                    "name",
+                    "Material(s)",
+                )
+            elif data_type in object_data_type_attrs_map.keys():
+                attr, descr = object_data_type_attrs_map[data_type]
+                data = (
+                    tuple(set(
+                        id
+                        for ob in context.selected_objects
+                        if ob.type == data_type
+                        for id in (ob.data,)
+                        if id is not None and id.library is None
+                    ))
+                    if only_selected else
+                    [id for id in getattr(bpy.data, attr) if id.library is None],
+                    "name",
+                    descr,
+                )
+
+        return data
+
+    @staticmethod
+    def _apply_actions(actions, name):
+        import string
+        import re
+
+        for action in actions:
+            ty = action.type
+            if ty == 'SET':
+                text = action.set_name
+                method = action.set_method
+                if method == 'NEW':
+                    name = text
+                elif method == 'PREFIX':
+                    name = text + name
+                elif method == 'SUFFIX':
+                    name = name + text
+                else:
+                    assert(0)
+
+            elif ty == 'STRIP':
+                chars = action.strip_chars
+                chars_strip = (
+                    "{:s}{:s}{:s}"
+                ).format(
+                    string.punctuation if 'PUNCT' in chars else "",
+                    string.digits if 'DIGIT' in chars else "",
+                    " " if 'SPACE' in chars else "",
+                )
+                part = action.strip_part
+                if 'START' in part:
+                    name = name.lstrip(chars_strip)
+                if 'END' in part:
+                    name = name.rstrip(chars_strip)
+
+            elif ty == 'REPLACE':
+                if action.use_replace_regex_src:
+                    replace_src = action.replace_src
+                    if action.use_replace_regex_dst:
+                        replace_dst = action.replace_dst
+                    else:
+                        replace_dst = action.replace_dst.replace("\\", "\\\\")
+                else:
+                    replace_src = re.escape(action.replace_src)
+                    replace_dst = action.replace_dst.replace("\\", "\\\\")
+                name = re.sub(
+                    replace_src,
+                    replace_dst,
+                    name,
+                    flags=(
+                        0 if action.replace_match_case else
+                        re.IGNORECASE
+                    ),
+                )
+            elif ty == 'CASE':
+                method = action.case_method
+                if method == 'UPPER':
+                    name = name.upper()
+                elif method == 'LOWER':
+                    name = name.lower()
+                elif method == 'TITLE':
+                    name = name.title()
+                else:
+                    assert(0)
+            else:
+                assert(0)
+        return name
+
+    def _data_update(self, context):
+        only_selected = self.data_source == 'SELECT'
+
+        self._data = self._data_from_context(context, self.data_type, only_selected)
+        if self._data is None:
+            self.data_type = self._data_from_context(context, None, False, check_context=True)
+            self._data = self._data_from_context(context, self.data_type, only_selected)
+
+        self._data_source_prev = self.data_source
+        self._data_type_prev = self.data_type
+
+    def draw(self, context):
+        import re
+
+        layout = self.layout
+
+        split = layout.split(factor=0.5)
+        split.label(text="Data Type:")
+        split.prop(self, "data_type", text="")
+
+        split = layout.split(factor=0.5)
+        split.label(text="Rename {:d} {:s}:".format(len(self._data[0]), self._data[2]))
+        split.row().prop(self, "data_source", expand=True)
+
+        for action in self.actions:
+            box = layout.box()
+
+            row = box.row(align=True)
+            row.prop(action, "type", text="")
+            row.prop(action, "op_add", text="", icon='ADD')
+            row.prop(action, "op_remove", text="", icon='REMOVE')
+
+            ty = action.type
+            if ty == 'SET':
+                box.prop(action, "set_method")
+                box.prop(action, "set_name")
+            elif ty == 'STRIP':
+                box.row().prop(action, "strip_chars")
+                box.row().prop(action, "strip_part")
+            elif ty == 'REPLACE':
+
+                row = box.row(align=True)
+                re_error_src = None
+                if action.use_replace_regex_src:
+                    try:
+                        re.compile(action.replace_src)
+                    except Exception as ex:
+                        re_error_src = str(ex)
+                        row.alert = True
+                row.prop(action, "replace_src")
+                row.prop(action, "use_replace_regex_src", text="", icon='SORTBYEXT')
+                if re_error_src is not None:
+                    box.label(text=re_error_src)
+
+                re_error_dst = None
+                row = box.row(align=True)
+                if action.use_replace_regex_src:
+                    if action.use_replace_regex_dst:
+                        if re_error_src is None:
+                            try:
+                                re.sub(action.replace_src, action.replace_dst, "")
+                            except Exception as ex:
+                                re_error_dst = str(ex)
+                                row.alert = True
+
+                row.prop(action, "replace_dst")
+                rowsub = row.row(align=True)
+                rowsub.active = action.use_replace_regex_src
+                rowsub.prop(action, "use_replace_regex_dst", text="", icon='SORTBYEXT')
+                if re_error_dst is not None:
+                    box.label(text=re_error_dst)
+
+                row = box.row()
+                row.prop(action, "replace_match_case")
+            elif ty == 'CASE':
+                box.row().prop(action, "case_method", expand=True)
+
+    def check(self, context):
+        changed = False
+        for i, action in enumerate(self.actions):
+            if action.op_add:
+                action.op_add = False
+                self.actions.add()
+                if i + 2 != len(self.actions):
+                    self.actions.move(len(self.actions) - 1, i + 1)
+                changed = True
+                break
+            if action.op_remove:
+                action.op_remove = False
+                if len(self.actions) > 1:
+                    self.actions.remove(i)
+                changed = True
+                break
+
+        if (
+                (self._data_source_prev != self.data_source) or
+                (self._data_type_prev != self.data_type)
+        ):
+            self._data_update(context)
+            changed = True
+
+        return changed
+
+    def execute(self, context):
+        import re
+
+        seq, attr, descr = self._data
+
+        actions = self.actions
+
+        # Sanitize actions.
+        for action in actions:
+            if action.use_replace_regex_src:
+                try:
+                    re.compile(action.replace_src)
+                except Exception as ex:
+                    self.report({'ERROR'}, "Invalid regular expression (find): " + str(ex))
+                    return {'CANCELLED'}
+
+                if action.use_replace_regex_dst:
+                    try:
+                        re.sub(action.replace_src, action.replace_dst, "")
+                    except Exception as ex:
+                        self.report({'ERROR'}, "Invalid regular expression (replace): " + str(ex))
+                        return {'CANCELLED'}
+
+        total_len = 0
+        change_len = 0
+        for item in seq:
+            name_src = getattr(item, attr)
+            name_dst = self._apply_actions(actions, name_src)
+            if name_src != name_dst:
+                setattr(item, attr, name_dst)
+                change_len += 1
+            total_len += 1
+
+        self.report({'INFO'}, "Renamed {:d} of {:d} {:s}".format(change_len, total_len, descr))
+
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+
+        self._data_update(context)
+
+        if not self.actions:
+            self.actions.add()
+        wm = context.window_manager
+        return wm.invoke_props_dialog(self, width=400)
 
 
 class WM_MT_splash(Menu):
@@ -1808,26 +2526,13 @@ class WM_MT_splash(Menu):
         if found_recent:
             col2_title.label(text="Recent Files")
         else:
-            if bpy.app.version_cycle in {'rc', 'release'}:
-                manual_version = '%d.%d' % bpy.app.version[:2]
-            else:
-                manual_version = 'dev'
 
             # Links if no recent files
             col2_title.label(text="Getting Started")
 
-            col2.operator(
-                "wm.url_open", text="Manual", icon='URL'
-            ).url = "https://docs.blender.org/manual/en/" + manual_version + "/"
-            col2.operator(
-                "wm.url_open", text="Release Notes", icon='URL',
-            ).url = "https://www.blender.org/download/releases/%d-%d/" % bpy.app.version[:2]
-            col2.operator(
-                "wm.url_open", text="Blender Website", icon='URL',
-            ).url = "https://www.blender.org"
-            col2.operator(
-                "wm.url_open", text="Credits", icon='URL',
-            ).url = "https://www.blender.org/about/credits/"
+            col2.operator("wm.url_open_preset", text="Manual", icon='URL').type = 'MANUAL'
+            col2.operator("wm.url_open_preset", text="Blender Website", icon='URL').type = 'BLENDER'
+            col2.operator("wm.url_open_preset", text="Credits", icon='URL').type = 'CREDITS'
 
         layout.separator()
 
@@ -1840,12 +2545,9 @@ class WM_MT_splash(Menu):
         col1.operator("wm.recover_last_session", icon='RECOVER_LAST')
 
         col2 = split.column()
-        col2.operator(
-            "wm.url_open", text="Release Notes", icon='URL',
-        ).url = "https://www.blender.org/download/releases/%d-%d/" % bpy.app.version[:2]
-        col2.operator(
-            "wm.url_open", text="Development Fund", icon='FUND'
-        ).url = "https://fund.blender.org"
+
+        col2.operator("wm.url_open_preset", text="Release Notes", icon='URL').type = 'RELEASE_NOTES'
+        col2.operator("wm.url_open_preset", text="Development Fund", icon='FUND').type = 'FUND'
 
         layout.separator()
         layout.separator()
@@ -1911,8 +2613,13 @@ classes = (
     WM_OT_owner_disable,
     WM_OT_owner_enable,
     WM_OT_url_open,
+    WM_OT_url_open_preset,
     WM_OT_tool_set_by_id,
     WM_OT_tool_set_by_index,
     WM_OT_toolbar,
+    WM_OT_toolbar_fallback_pie,
+    WM_OT_toolbar_prompt,
+    BatchRenameAction,
+    WM_OT_batch_rename,
     WM_MT_splash,
 )

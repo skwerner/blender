@@ -37,16 +37,10 @@ void ED_gizmotypes_facemap_3d(void);
 void ED_gizmotypes_preselect_3d(void);
 void ED_gizmotypes_primitive_3d(void);
 void ED_gizmotypes_blank_3d(void);
-void ED_gizmotypes_value_2d(void);
-
-/* gizmo group types */
-void ED_gizmogrouptypes_value_2d(void);
 
 struct Object;
-struct Scene;
 struct bContext;
 struct wmGizmo;
-struct wmGizmoGroup;
 
 /* -------------------------------------------------------------------- */
 /* Shape Presets

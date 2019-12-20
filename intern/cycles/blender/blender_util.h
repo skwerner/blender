@@ -34,8 +34,8 @@
 extern "C" {
 void BKE_image_user_frame_calc(void *ima, void *iuser, int cfra);
 void BKE_image_user_file_path(void *iuser, void *ima, char *path);
-unsigned char *BKE_image_get_pixels_for_frame(void *image, int frame);
-float *BKE_image_get_float_pixels_for_frame(void *image, int frame);
+unsigned char *BKE_image_get_pixels_for_frame(void *image, int frame, int tile);
+float *BKE_image_get_float_pixels_for_frame(void *image, int frame, int tile);
 }
 
 CCL_NAMESPACE_BEGIN
@@ -159,7 +159,7 @@ static inline void curvemapping_to_array(BL::CurveMapping &cumap, array<float> &
   data.resize(size);
   for (int i = 0; i < size; i++) {
     float t = (float)i / (float)(size - 1);
-    data[i] = curve.evaluate(t);
+    data[i] = cumap.evaluate(curve, t);
   }
 }
 
@@ -197,15 +197,16 @@ static inline void curvemapping_color_to_array(BL::CurveMapping &cumap,
     BL::CurveMap mapI = cumap.curves[3];
     for (int i = 0; i < size; i++) {
       const float t = min_x + (float)i / (float)(size - 1) * range_x;
-      data[i] = make_float3(mapR.evaluate(mapI.evaluate(t)),
-                            mapG.evaluate(mapI.evaluate(t)),
-                            mapB.evaluate(mapI.evaluate(t)));
+      data[i] = make_float3(cumap.evaluate(mapR, cumap.evaluate(mapI, t)),
+                            cumap.evaluate(mapG, cumap.evaluate(mapI, t)),
+                            cumap.evaluate(mapB, cumap.evaluate(mapI, t)));
     }
   }
   else {
     for (int i = 0; i < size; i++) {
       float t = min_x + (float)i / (float)(size - 1) * range_x;
-      data[i] = make_float3(mapR.evaluate(t), mapG.evaluate(t), mapB.evaluate(t));
+      data[i] = make_float3(
+          cumap.evaluate(mapR, t), cumap.evaluate(mapG, t), cumap.evaluate(mapB, t));
     }
   }
 }
@@ -230,11 +231,26 @@ static inline int render_resolution_y(BL::RenderSettings &b_render)
   return b_render.resolution_y() * b_render.resolution_percentage() / 100;
 }
 
-static inline string image_user_file_path(BL::ImageUser &iuser, BL::Image &ima, int cfra)
+static inline string image_user_file_path(BL::ImageUser &iuser,
+                                          BL::Image &ima,
+                                          int cfra,
+                                          bool *is_tiled)
 {
+  if (is_tiled != NULL) {
+    *is_tiled = false;
+  }
+
   char filepath[1024];
+  iuser.tile(0);
   BKE_image_user_frame_calc(NULL, iuser.ptr.data, cfra);
   BKE_image_user_file_path(iuser.ptr.data, ima.ptr.data, filepath);
+  if (ima.source() == BL::Image::source_TILED && is_tiled != NULL) {
+    char *udim_id = strstr(filepath, "1001");
+    if (udim_id != NULL) {
+      memcpy(udim_id, "%04d", 4);
+      *is_tiled = true;
+    }
+  }
   return string(filepath);
 }
 
@@ -244,14 +260,14 @@ static inline int image_user_frame_number(BL::ImageUser &iuser, int cfra)
   return iuser.frame_current();
 }
 
-static inline unsigned char *image_get_pixels_for_frame(BL::Image &image, int frame)
+static inline unsigned char *image_get_pixels_for_frame(BL::Image &image, int frame, int tile)
 {
-  return BKE_image_get_pixels_for_frame(image.ptr.data, frame);
+  return BKE_image_get_pixels_for_frame(image.ptr.data, frame, tile);
 }
 
-static inline float *image_get_float_pixels_for_frame(BL::Image &image, int frame)
+static inline float *image_get_float_pixels_for_frame(BL::Image &image, int frame, int tile)
 {
-  return BKE_image_get_float_pixels_for_frame(image.ptr.data, frame);
+  return BKE_image_get_float_pixels_for_frame(image.ptr.data, frame, tile);
 }
 
 static inline void render_add_metadata(BL::RenderResult &b_rr, string name, string value)
@@ -521,37 +537,20 @@ static inline bool object_use_deform_motion(BL::Object &b_parent, BL::Object &b_
   return use_deform_motion;
 }
 
-static inline BL::SmokeDomainSettings object_smoke_domain_find(BL::Object &b_ob)
+static inline BL::FluidDomainSettings object_fluid_domain_find(BL::Object &b_ob)
 {
   BL::Object::modifiers_iterator b_mod;
 
   for (b_ob.modifiers.begin(b_mod); b_mod != b_ob.modifiers.end(); ++b_mod) {
-    if (b_mod->is_a(&RNA_SmokeModifier)) {
-      BL::SmokeModifier b_smd(*b_mod);
+    if (b_mod->is_a(&RNA_FluidModifier)) {
+      BL::FluidModifier b_mmd(*b_mod);
 
-      if (b_smd.smoke_type() == BL::SmokeModifier::smoke_type_DOMAIN)
-        return b_smd.domain_settings();
+      if (b_mmd.fluid_type() == BL::FluidModifier::fluid_type_DOMAIN)
+        return b_mmd.domain_settings();
     }
   }
 
-  return BL::SmokeDomainSettings(PointerRNA_NULL);
-}
-
-static inline BL::DomainFluidSettings object_fluid_domain_find(BL::Object b_ob)
-{
-  BL::Object::modifiers_iterator b_mod;
-
-  for (b_ob.modifiers.begin(b_mod); b_mod != b_ob.modifiers.end(); ++b_mod) {
-    if (b_mod->is_a(&RNA_FluidSimulationModifier)) {
-      BL::FluidSimulationModifier b_fmd(*b_mod);
-      BL::FluidSettings fss = b_fmd.settings();
-
-      if (fss.type() == BL::FluidSettings::type_DOMAIN)
-        return (BL::DomainFluidSettings)b_fmd.settings();
-    }
-  }
-
-  return BL::DomainFluidSettings(PointerRNA_NULL);
+  return BL::FluidDomainSettings(PointerRNA_NULL);
 }
 
 static inline Mesh::SubdivisionType object_subdivision_type(BL::Object &b_ob,
@@ -594,7 +593,7 @@ template<typename K, typename T> class id_map {
 
   T *find(const BL::ID &id)
   {
-    return find(id.ptr.id.data);
+    return find(id.ptr.owner_id);
   }
 
   T *find(const K &key)
@@ -629,7 +628,7 @@ template<typename K, typename T> class id_map {
 
   bool sync(T **r_data, const BL::ID &id)
   {
-    return sync(r_data, id, id, id.ptr.id.data);
+    return sync(r_data, id, id, id.ptr.owner_id);
   }
 
   bool sync(T **r_data, const BL::ID &id, const BL::ID &parent, const K &key)

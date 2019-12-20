@@ -848,7 +848,7 @@ kernel_volume_integrate_heterogeneous_woodcock_tracking(KernelGlobals *kg,
     if (volume_shader_sample(kg, sd, state, new_P, &coeff)) {
       int closure_flag = sd->flag;
       if (L && (closure_flag & SD_EMISSION)) {
-        path_radiance_accum_emission(L, state, *throughput * dt, coeff.emission);
+        path_radiance_accum_emission(kg, L, state, *throughput * dt, coeff.emission);
       }
       if (s2 < max3(coeff.sigma_s) / sigma_m) {
         sd->P = new_P;
@@ -899,7 +899,7 @@ kernel_volume_integrate_heterogeneous_woodcock_mis_tracking(KernelGlobals *kg,
     if (volume_shader_sample(kg, sd, state, new_P, &coeff)) {
       int closure_flag = sd->flag;
       if (L && (closure_flag & SD_EMISSION)) {
-        path_radiance_accum_emission(L, state, *throughput * dt, coeff.emission);
+        path_radiance_accum_emission(kg, L, state, *throughput * dt, coeff.emission);
       }
       if (s2 < kernel_volume_channel_get(coeff.sigma_s, channel) / sigma_m) {
         sd->P = new_P;
@@ -971,7 +971,7 @@ kernel_volume_integrate_heterogeneous_tracking(KernelGlobals *kg,
 
       if (L && (closure_flag & SD_EMISSION)) {
         float3 emission = coeff.emission * dt;
-        path_radiance_accum_emission(L, state, tp, emission);
+        path_radiance_accum_emission(kg, L, state, tp, emission);
       }
 
       /* adjust throughput and move to new location */
@@ -987,7 +987,7 @@ kernel_volume_integrate_heterogeneous_tracking(KernelGlobals *kg,
 
       if (L && (closure_flag & SD_EMISSION)) {
         float3 emission = coeff.emission * dt;
-        path_radiance_accum_emission(L, state, tp, emission);
+        path_radiance_accum_emission(kg, L, state, tp, emission);
       }
     }
     else {

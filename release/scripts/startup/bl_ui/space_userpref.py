@@ -2003,7 +2003,7 @@ class USERPREF_PT_studiolight_matcaps(StudioLightPanel, StudioLightPanelMixin, P
 
 
 class USERPREF_PT_studiolight_world(StudioLightPanel, StudioLightPanelMixin, Panel):
-    bl_label = "LookDev HDRIs"
+    bl_label = "HDRIs"
     sl_type = 'WORLD'
 
     def draw_header_preset(self, _context):
@@ -2087,9 +2087,12 @@ class ExperimentalPanel:
 
     url_prefix = "https://developer.blender.org/"
 
+"""
+# Example panel, leave it here so we always have a template to follow even
+# after the features are gone from the experimental panel.
 
-class USERPREF_PT_experimental_ui(ExperimentalPanel, Panel):
-    bl_label = "User Interface"
+class USERPREF_PT_experimental_virtual_reality(ExperimentalPanel, Panel):
+    bl_label = "Virtual Reality"
 
     def draw(self, context):
         prefs = context.preferences
@@ -2098,25 +2101,6 @@ class USERPREF_PT_experimental_ui(ExperimentalPanel, Panel):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
-
-        task = "T66304"
-        split = layout.split(factor=0.66)
-        col = split.column()
-        col.prop(experimental, "use_tool_fallback", text="Use Tool Fallback")
-        col = split.column()
-        col.operator("wm.url_open", text=task, icon='URL').url = self.url_prefix + task
-
-
-"""
-# Example panel, leave it here so we always have a template to follow even
-# after the features are gone from the experimental panel.
-
-class USERPREF_PT_experimental_virtual_reality(ExperimentalPanel, Panel):
-    bl_label = "Virtual Reality"
-
-    def draw_centered(self, context, layout):
-        prefs = context.preferences
-        experimental = prefs.experimental
 
         task = "T71347"
         split = layout.split(factor=0.66)
@@ -2132,30 +2116,6 @@ class USERPREF_PT_experimental_virtual_reality(ExperimentalPanel, Panel):
         col = split.column()
         col.operator("wm.url_open", text=task, icon='URL').url = self.url_prefix + task
 """
-
-
-class USERPREF_PT_experimental_usd(ExperimentalPanel, Panel):
-    bl_label = "Universal Scene Description"
-
-    @classmethod
-    def poll(cls, context):
-        # Only show the panel if Blender was actually built with USD support.
-        return getattr(bpy.app.build_options, "usd", False)
-
-    def draw(self, context):
-        prefs = context.preferences
-        experimental = prefs.experimental
-
-        layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-
-        split = layout.split(factor=0.66)
-        col = split.split()
-        col.prop(experimental, "use_usd_exporter", text="USD Exporter")
-        col = split.split()
-        url = "https://devtalk.blender.org/t/universal-scene-description-usd-exporter-feedback/10920"
-        col.operator("wm.url_open", text='Give Feedback', icon='URL').url = url
 
 
 # -----------------------------------------------------------------------------
@@ -2241,9 +2201,6 @@ classes = (
     USERPREF_PT_studiolight_light_editor,
     USERPREF_PT_studiolight_matcaps,
     USERPREF_PT_studiolight_world,
-
-    USERPREF_PT_experimental_ui,
-    USERPREF_PT_experimental_usd,
 
     # Popovers.
     USERPREF_PT_ndof_settings,

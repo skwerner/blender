@@ -580,9 +580,6 @@ static void rna_userdef_autosave_update(Main *bmain, Scene *scene, PointerRNA *p
       return USER_EXPERIMENTAL_TEST(userdef, member); \
     }
 
-RNA_USERDEF_EXPERIMENTAL_BOOLEAN_GET(use_tool_fallback)
-RNA_USERDEF_EXPERIMENTAL_BOOLEAN_GET(use_usd_exporter)
-
 static bAddon *rna_userdef_addon_new(void)
 {
   ListBase *addons_list = &U.addons;
@@ -4511,8 +4508,7 @@ static void rna_def_userdef_view(BlenderRNA *brna)
   prop = RNA_def_property(srna, "lookdev_sphere_size", PROP_INT, PROP_PIXEL);
   RNA_def_property_int_sdna(prop, NULL, "lookdev_sphere_size");
   RNA_def_property_range(prop, 50, 400);
-  RNA_def_property_ui_text(
-      prop, "Look Dev Spheres Size", "Maximum diameter of the look development sphere size");
+  RNA_def_property_ui_text(prop, "HDRI Preview Size", "Diameter of the HDRI preview spheres");
   RNA_def_property_update(prop, 0, "rna_userdef_update");
 
   /* View2D Grid Displays */
@@ -5851,25 +5847,12 @@ static void rna_def_userdef_filepaths(BlenderRNA *brna)
 static void rna_def_userdef_experimental(BlenderRNA *brna)
 {
   StructRNA *srna;
-  PropertyRNA *prop;
 
   srna = RNA_def_struct(brna, "PreferencesExperimental", NULL);
   RNA_def_struct_sdna(srna, "UserDef_Experimental");
   RNA_def_struct_nested(brna, srna, "Preferences");
   RNA_def_struct_clear_flag(srna, STRUCT_UNDO);
   RNA_def_struct_ui_text(srna, "Experimental", "Experimental features");
-
-  prop = RNA_def_property(srna, "use_tool_fallback", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "use_tool_fallback", 1);
-  RNA_def_property_boolean_funcs(prop, "rna_userdef_experimental_use_tool_fallback_get", NULL);
-  RNA_def_property_ui_text(prop, "Fallback Tool Support", "Allow selection with an active tool");
-  RNA_def_property_update(prop, 0, "rna_userdef_update");
-
-  prop = RNA_def_property(srna, "use_usd_exporter", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "use_usd_exporter", 1);
-  RNA_def_property_boolean_funcs(prop, "rna_userdef_experimental_use_usd_exporter_get", NULL);
-  RNA_def_property_ui_text(prop, "USD Exporter", "Enable exporting to the USD format");
-  RNA_def_property_update(prop, 0, "rna_userdef_update");
 }
 
 static void rna_def_userdef_addon_collection(BlenderRNA *brna, PropertyRNA *cprop)

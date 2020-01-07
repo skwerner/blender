@@ -5486,13 +5486,14 @@ static void direct_link_pose(FileData *fd, bPose *pose)
   }
 }
 
-/* TODO(sergey): Find a more better place for this.
+/* TODO(sergey): Find a better place for this.
  *
  * Unfortunately, this can not be done as a regular do_versions() since the modifier type is
  * set to NONE, so the do_versions code wouldn't know where the modifier came from.
  *
- * Most bestest approach seems to have the functionality in versioning_280 but still call the
- * function from direct_link_modifiers(). */
+ * The best approach seems to have the functionality in versioning_280.c but still call the
+ * function from #direct_link_modifiers().
+ */
 
 /* Domain, inflow, ... */
 static void modifier_ensure_type(FluidModifierData *fluid_modifier_data, int type)
@@ -9189,7 +9190,7 @@ static ID *create_placeholder(Main *mainvar, const short idcode, const char *idn
   ph_id->icon_id = 0;
 
   BLI_addtail(lb, ph_id);
-  id_sort_by_name(lb, ph_id);
+  id_sort_by_name(lb, ph_id, NULL);
 
   return ph_id;
 }
@@ -11590,7 +11591,7 @@ static ID *link_named_part(
       if (id) {
         /* sort by name in list */
         ListBase *lb = which_libbase(mainl, idcode);
-        id_sort_by_name(lb, id);
+        id_sort_by_name(lb, id, NULL);
       }
     }
     else {
@@ -11647,7 +11648,7 @@ int BLO_library_link_copypaste(Main *mainl, BlendHandle *bh, const unsigned int 
     if (id) {
       /* sort by name in list */
       ListBase *lb = which_libbase(mainl, GS(id->name));
-      id_sort_by_name(lb, id);
+      id_sort_by_name(lb, id, NULL);
 
       if (bhead->code == ID_OB) {
         /* Instead of instancing Base's directly, postpone until after collections are loaded

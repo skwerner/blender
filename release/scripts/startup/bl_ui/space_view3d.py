@@ -260,15 +260,16 @@ class _draw_tool_settings_context_mode:
         if size_owner.use_locked_size == 'SCENE':
             size = "unprojected_radius"
 
-        # NOTE: We don't draw UnifiedPaintSettings in the header to reduce clutter. D5928#136281
         UnifiedPaintPanel.prop_unified(
             layout,
             context,
             brush,
             size,
             pressure_name="use_pressure_size",
+            unified_name="use_unified_size",
             text="Radius",
             slider=True,
+            header=True
         )
 
         # strength, use_strength_pressure
@@ -279,7 +280,9 @@ class _draw_tool_settings_context_mode:
             brush,
             "strength",
             pressure_name=pressure_name,
+            unified_name="use_unified_strength",
             text="Strength",
+            header=True
         )
 
         # direction
@@ -331,10 +334,17 @@ class _draw_tool_settings_context_mode:
         if brush is None:
             return False
 
-        # NOTE: We don't draw UnifiedPaintSettings in the header to reduce clutter. D5928#136281
         capabilities = brush.weight_paint_capabilities
         if capabilities.has_weight:
-            UnifiedPaintPanel.prop_unified(layout, context, brush, "weight", slider=True)
+            UnifiedPaintPanel.prop_unified(
+                layout,
+                context,
+                brush,
+                "weight",
+                unified_name="use_unified_weight",
+                slider=True,
+                header=True
+            )
 
         UnifiedPaintPanel.prop_unified(
             layout,
@@ -342,8 +352,10 @@ class _draw_tool_settings_context_mode:
             brush,
             "size",
             pressure_name="use_pressure_size",
+            unified_name="use_unified_size",
             slider=True,
             text="Radius",
+            header=True
         )
         UnifiedPaintPanel.prop_unified(
             layout,
@@ -351,6 +363,8 @@ class _draw_tool_settings_context_mode:
             brush,
             "strength",
             pressure_name="use_pressure_strength",
+            unified_name="use_unified_strength",
+            header=True
         )
 
         return True
@@ -904,7 +918,7 @@ class VIEW3D_MT_transform_base(Menu):
         if context.mode != 'OBJECT':
             layout.operator("transform.vertex_warp", text="Warp")
             layout.operator_context = 'EXEC_DEFAULT'
-            layout.operator("transform.vertex_random", text="Randomize")
+            layout.operator("transform.vertex_random", text="Randomize").offset = 0.1
             layout.operator_context = 'INVOKE_REGION_WIN'
 
 
@@ -3516,8 +3530,8 @@ class VIEW3D_MT_edit_mesh_context_menu(Menu):
             col.operator("transform.shear", text="Shear")
             col.operator("transform.vert_slide", text="Slide Vertices")
             col.operator_context = 'EXEC_DEFAULT'
-            col.operator("transform.vertex_random", text="Randomize Vertices")
-            col.operator("mesh.vertices_smooth", text="Smooth Vertices")
+            col.operator("transform.vertex_random", text="Randomize Vertices").offset = 0.1
+            col.operator("mesh.vertices_smooth", text="Smooth Vertices").factor = 0.5
             col.operator_context = 'INVOKE_REGION_WIN'
             col.operator("mesh.vertices_smooth_laplacian", text="Smooth Laplacian")
 
@@ -3733,7 +3747,7 @@ class VIEW3D_MT_edit_mesh_vertices(Menu):
 
         layout.operator("transform.vert_slide", text="Slide Vertices")
         layout.operator_context = 'EXEC_DEFAULT'
-        layout.operator("mesh.vertices_smooth", text="Smooth Vertices")
+        layout.operator("mesh.vertices_smooth", text="Smooth Vertices").factor = 0.5
         layout.operator_context = 'INVOKE_REGION_WIN'
 
         layout.separator()

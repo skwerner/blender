@@ -64,6 +64,7 @@ class SessionParams {
   bool run_denoising;
   bool write_denoising_passes;
   bool full_denoising;
+  bool optix_denoising;
   DenoiseParams denoising;
 
   double cancel_timeout;
@@ -94,6 +95,7 @@ class SessionParams {
     run_denoising = false;
     write_denoising_passes = false;
     full_denoising = false;
+    optix_denoising = false;
 
     display_buffer_linear = false;
 

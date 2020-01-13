@@ -581,17 +581,19 @@ const char *GPU_builtin_name(eGPUBuiltin builtin)
 }
 
 /* assign only one texid per buffer to avoid sampling the same texture twice */
-static void codegen_set_texid(GHash *bindhash, GPUInput *input, int *texid, void *key)
+static void codegen_set_texid(GHash *bindhash, GPUInput *input, int *texid, void *key1, int key2)
 {
-  if (BLI_ghash_haskey(bindhash, key)) {
+  GHashPair pair = {key1, POINTER_FROM_INT(key2)};
+  if (BLI_ghash_haskey(bindhash, &pair)) {
     /* Reuse existing texid */
-    input->texid = POINTER_AS_INT(BLI_ghash_lookup(bindhash, key));
+    input->texid = POINTER_AS_INT(BLI_ghash_lookup(bindhash, &pair));
   }
   else {
     /* Allocate new texid */
     input->texid = *texid;
     (*texid)++;
     input->bindtex = true;
+    void *key = BLI_ghashutil_pairalloc(key1, POINTER_FROM_INT(key2));
     BLI_ghash_insert(bindhash, key, POINTER_FROM_INT(input->texid));
   }
 }
@@ -604,7 +606,7 @@ static void codegen_set_unique_ids(ListBase *nodes)
   GPUOutput *output;
   int id = 1, texid = 0;
 
-  bindhash = BLI_ghash_ptr_new("codegen_set_unique_ids1 gh");
+  bindhash = BLI_ghash_pair_new("codegen_set_unique_ids1 gh");
 
   for (node = nodes->first; node; node = node->next) {
     for (input = node->inputs.first; input; input = input->next) {
@@ -616,11 +618,11 @@ static void codegen_set_unique_ids(ListBase *nodes)
         input->bindtex = false;
         if (input->ima) {
           /* input is texture from image */
-          codegen_set_texid(bindhash, input, &texid, input->ima);
+          codegen_set_texid(bindhash, input, &texid, input->ima, input->image_tile);
         }
         else if (input->coba) {
           /* input is color band texture, check coba pointer */
-          codegen_set_texid(bindhash, input, &texid, input->coba);
+          codegen_set_texid(bindhash, input, &texid, input->coba, 0);
         }
         else {
           /* Either input->ima or input->coba should be non-NULL. */
@@ -635,7 +637,7 @@ static void codegen_set_unique_ids(ListBase *nodes)
     }
   }
 
-  BLI_ghash_free(bindhash, NULL, NULL);
+  BLI_ghash_free(bindhash, BLI_ghashutil_pairfree, NULL);
 }
 
 /**
@@ -1545,6 +1547,7 @@ static void gpu_node_input_link(GPUNode *node, GPUNodeLink *link, const eGPUType
       input->source = GPU_SOURCE_TEX;
       input->ima = link->ima;
       input->iuser = link->iuser;
+      input->image_tile = link->image_tile;
       break;
     case GPU_NODE_LINK_ATTR:
       input->source = GPU_SOURCE_ATTR;
@@ -1789,12 +1792,13 @@ GPUNodeLink *GPU_uniform(float *num)
   return link;
 }
 
-GPUNodeLink *GPU_image(Image *ima, ImageUser *iuser)
+GPUNodeLink *GPU_image(Image *ima, ImageUser *iuser, int tile)
 {
   GPUNodeLink *link = GPU_node_link_create();
   link->link_type = GPU_NODE_LINK_IMAGE_BLENDER;
   link->ima = ima;
   link->iuser = iuser;
+  link->image_tile = tile;
   return link;
 }
 
@@ -2127,8 +2131,10 @@ GPUPass *GPU_generate_pass(GPUMaterial *material,
 static int count_active_texture_sampler(GPUShader *shader, char *source)
 {
   char *code = source;
-  int samplers_id[64]; /* Remember this is per stage. */
-  int sampler_len = 0;
+
+  /* Remember this is per stage. */
+  GSet *sampler_ids = BLI_gset_int_new(__func__);
+  int num_samplers = 0;
 
   while ((code = strstr(code, "uniform "))) {
     /* Move past "uniform". */
@@ -2163,22 +2169,16 @@ static int count_active_texture_sampler(GPUShader *shader, char *source)
           continue;
         }
         /* Catch duplicates. */
-        bool is_duplicate = false;
-        for (int i = 0; i < sampler_len; i++) {
-          if (samplers_id[i] == id) {
-            is_duplicate = true;
-          }
-        }
-
-        if (!is_duplicate) {
-          samplers_id[sampler_len] = id;
-          sampler_len++;
+        if (BLI_gset_add(sampler_ids, POINTER_FROM_INT(id))) {
+          num_samplers++;
         }
       }
     }
   }
 
-  return sampler_len;
+  BLI_gset_free(sampler_ids, NULL);
+
+  return num_samplers;
 }
 
 static bool gpu_pass_shader_validate(GPUPass *pass, GPUShader *shader)

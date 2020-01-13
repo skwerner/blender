@@ -34,8 +34,8 @@
 extern "C" {
 void BKE_image_user_frame_calc(void *ima, void *iuser, int cfra);
 void BKE_image_user_file_path(void *iuser, void *ima, char *path);
-unsigned char *BKE_image_get_pixels_for_frame(void *image, int frame);
-float *BKE_image_get_float_pixels_for_frame(void *image, int frame);
+unsigned char *BKE_image_get_pixels_for_frame(void *image, int frame, int tile);
+float *BKE_image_get_float_pixels_for_frame(void *image, int frame, int tile);
 }
 
 CCL_NAMESPACE_BEGIN
@@ -231,12 +231,21 @@ static inline int render_resolution_y(BL::RenderSettings &b_render)
   return b_render.resolution_y() * b_render.resolution_percentage() / 100;
 }
 
-static inline string image_user_file_path(BL::ImageUser &iuser, BL::Image &ima, int cfra)
+static inline string image_user_file_path(BL::ImageUser &iuser,
+                                          BL::Image &ima,
+                                          int cfra,
+                                          bool load_tiled)
 {
   char filepath[1024];
+  iuser.tile(0);
   BKE_image_user_frame_calc(NULL, iuser.ptr.data, cfra);
   BKE_image_user_file_path(iuser.ptr.data, ima.ptr.data, filepath);
-  return string(filepath);
+
+  string filepath_str = string(filepath);
+  if (load_tiled && ima.source() == BL::Image::source_TILED) {
+    string_replace(filepath_str, "1001", "<UDIM>");
+  }
+  return filepath_str;
 }
 
 static inline int image_user_frame_number(BL::ImageUser &iuser, int cfra)
@@ -245,14 +254,14 @@ static inline int image_user_frame_number(BL::ImageUser &iuser, int cfra)
   return iuser.frame_current();
 }
 
-static inline unsigned char *image_get_pixels_for_frame(BL::Image &image, int frame)
+static inline unsigned char *image_get_pixels_for_frame(BL::Image &image, int frame, int tile)
 {
-  return BKE_image_get_pixels_for_frame(image.ptr.data, frame);
+  return BKE_image_get_pixels_for_frame(image.ptr.data, frame, tile);
 }
 
-static inline float *image_get_float_pixels_for_frame(BL::Image &image, int frame)
+static inline float *image_get_float_pixels_for_frame(BL::Image &image, int frame, int tile)
 {
-  return BKE_image_get_float_pixels_for_frame(image.ptr.data, frame);
+  return BKE_image_get_float_pixels_for_frame(image.ptr.data, frame, tile);
 }
 
 static inline void render_add_metadata(BL::RenderResult &b_rr, string name, string value)
@@ -522,37 +531,20 @@ static inline bool object_use_deform_motion(BL::Object &b_parent, BL::Object &b_
   return use_deform_motion;
 }
 
-static inline BL::SmokeDomainSettings object_smoke_domain_find(BL::Object &b_ob)
+static inline BL::FluidDomainSettings object_fluid_domain_find(BL::Object &b_ob)
 {
   BL::Object::modifiers_iterator b_mod;
 
   for (b_ob.modifiers.begin(b_mod); b_mod != b_ob.modifiers.end(); ++b_mod) {
-    if (b_mod->is_a(&RNA_SmokeModifier)) {
-      BL::SmokeModifier b_smd(*b_mod);
+    if (b_mod->is_a(&RNA_FluidModifier)) {
+      BL::FluidModifier b_mmd(*b_mod);
 
-      if (b_smd.smoke_type() == BL::SmokeModifier::smoke_type_DOMAIN)
-        return b_smd.domain_settings();
+      if (b_mmd.fluid_type() == BL::FluidModifier::fluid_type_DOMAIN)
+        return b_mmd.domain_settings();
     }
   }
 
-  return BL::SmokeDomainSettings(PointerRNA_NULL);
-}
-
-static inline BL::DomainFluidSettings object_fluid_domain_find(BL::Object b_ob)
-{
-  BL::Object::modifiers_iterator b_mod;
-
-  for (b_ob.modifiers.begin(b_mod); b_mod != b_ob.modifiers.end(); ++b_mod) {
-    if (b_mod->is_a(&RNA_FluidSimulationModifier)) {
-      BL::FluidSimulationModifier b_fmd(*b_mod);
-      BL::FluidSettings fss = b_fmd.settings();
-
-      if (fss.type() == BL::FluidSettings::type_DOMAIN)
-        return (BL::DomainFluidSettings)b_fmd.settings();
-    }
-  }
-
-  return BL::DomainFluidSettings(PointerRNA_NULL);
+  return BL::FluidDomainSettings(PointerRNA_NULL);
 }
 
 static inline Mesh::SubdivisionType object_subdivision_type(BL::Object &b_ob,

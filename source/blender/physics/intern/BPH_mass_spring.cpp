@@ -76,18 +76,39 @@ static int cloth_count_nondiag_blocks(Cloth *cloth)
 
 static float cloth_calc_volume(ClothModifierData *clmd)
 {
-  /* calc the (closed) cloth volume */
+  /* Calculate the (closed) cloth volume. */
   Cloth *cloth = clmd->clothObject;
   const MVertTri *tri = cloth->tri;
   Implicit_Data *data = cloth->implicit;
   float vol = 0;
 
-  for (unsigned int i = 0; i < cloth->tri_num; i++) {
-    const MVertTri *vt = &tri[i];
-    vol += BPH_tri_tetra_volume_signed_6x(data, vt->tri[0], vt->tri[1], vt->tri[2]);
-  }
+  if (clmd->sim_parms->vgroup_pressure > 0) {
+    for (unsigned int i = 0; i < cloth->tri_num; i++) {
+      bool skip_face = false;
+      /* We have custom vertex weights for pressure. */
+      const MVertTri *vt = &tri[i];
+      for (unsigned int j = 0; j < 3; j++) {
+        /* If any weight is zero, don't take this face into account for volume calculation. */
+        ClothVertex *verts = clmd->clothObject->verts;
 
-  /* We need to divide by 6 to get the actual volume */
+        if (verts[vt->tri[j]].pressure_factor == 0.0f) {
+          skip_face = true;
+        }
+      }
+      if (skip_face) {
+        continue;
+      }
+
+      vol += BPH_tri_tetra_volume_signed_6x(data, vt->tri[0], vt->tri[1], vt->tri[2]);
+    }
+  }
+  else {
+    for (unsigned int i = 0; i < cloth->tri_num; i++) {
+      const MVertTri *vt = &tri[i];
+      vol += BPH_tri_tetra_volume_signed_6x(data, vt->tri[0], vt->tri[1], vt->tri[2]);
+    }
+  }
+  /* We need to divide by 6 to get the actual volume. */
   vol = vol / 6.0f;
 
   return vol;
@@ -406,7 +427,8 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s)
   }
 
   /* Calculate force of structural + shear springs. */
-  if (s->type & (CLOTH_SPRING_TYPE_STRUCTURAL | CLOTH_SPRING_TYPE_SEWING)) {
+  if (s->type &
+      (CLOTH_SPRING_TYPE_STRUCTURAL | CLOTH_SPRING_TYPE_SEWING | CLOTH_SPRING_TYPE_INTERNAL)) {
 #ifdef CLOTH_FORCE_SPRING_STRUCTURAL
     float k_tension, scaling_tension;
 
@@ -432,7 +454,7 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s)
                                           false,
                                           parms->max_sewing);
     }
-    else {
+    else if (s->type & CLOTH_SPRING_TYPE_STRUCTURAL) {
       float k_compression, scaling_compression;
       scaling_compression = parms->compression +
                             s->lin_stiffness * fabsf(parms->max_compression - parms->compression);
@@ -446,6 +468,44 @@ BLI_INLINE void cloth_calc_spring_force(ClothModifierData *clmd, ClothSpring *s)
                                           parms->tension_damp,
                                           k_compression,
                                           parms->compression_damp,
+                                          resist_compress,
+                                          using_angular,
+                                          0.0f);
+    }
+    else {
+      /* CLOTH_SPRING_TYPE_INTERNAL */
+      BLI_assert(s->type & CLOTH_SPRING_TYPE_INTERNAL);
+
+      scaling_tension = parms->internal_tension +
+                        s->lin_stiffness *
+                            fabsf(parms->max_internal_tension - parms->internal_tension);
+      k_tension = scaling_tension / (parms->avg_spring_len + FLT_EPSILON);
+      float scaling_compression = parms->internal_compression +
+                                  s->lin_stiffness * fabsf(parms->max_internal_compression -
+                                                           parms->internal_compression);
+      float k_compression = scaling_compression / (parms->avg_spring_len + FLT_EPSILON);
+
+      float k_tension_damp = parms->tension_damp;
+      float k_compression_damp = parms->compression_damp;
+
+      if (k_tension == 0.0f) {
+        /* No damping so it behaves as if no tension spring was there at all. */
+        k_tension_damp = 0.0f;
+      }
+
+      if (k_compression == 0.0f) {
+        /* No damping so it behaves as if no compression spring was there at all. */
+        k_compression_damp = 0.0f;
+      }
+
+      BPH_mass_spring_force_spring_linear(data,
+                                          s->ij,
+                                          s->kl,
+                                          s->restlen,
+                                          k_tension,
+                                          k_tension_damp,
+                                          k_compression,
+                                          k_compression_damp,
                                           resist_compress,
                                           using_angular,
                                           0.0f);
@@ -634,8 +694,38 @@ static void cloth_calc_force(
     for (i = 0; i < cloth->tri_num; i++) {
       const MVertTri *vt = &tri[i];
       if (fabs(pressure_difference) > 1E-6f) {
-        BPH_mass_spring_force_pressure(
-            data, vt->tri[0], vt->tri[1], vt->tri[2], pressure_difference);
+        if (clmd->sim_parms->vgroup_pressure > 0) {
+          /* We have custom vertex weights for pressure. */
+          ClothVertex *verts = clmd->clothObject->verts;
+          int v1, v2, v3;
+          v1 = vt->tri[0];
+          v2 = vt->tri[1];
+          v3 = vt->tri[2];
+
+          float weights[3];
+          bool skip_face = false;
+
+          weights[0] = verts[v1].pressure_factor;
+          weights[1] = verts[v2].pressure_factor;
+          weights[2] = verts[v3].pressure_factor;
+          for (unsigned int j = 0; j < 3; j++) {
+            if (weights[j] == 0.0f) {
+              /* Exclude faces which has a zero weight vert. */
+              skip_face = true;
+              break;
+            }
+          }
+          if (skip_face) {
+            continue;
+          }
+
+          BPH_mass_spring_force_pressure(data, v1, v2, v3, pressure_difference, weights);
+        }
+        else {
+          float weights[3] = {1.0f, 1.0f, 1.0f};
+          BPH_mass_spring_force_pressure(
+              data, vt->tri[0], vt->tri[1], vt->tri[2], pressure_difference, weights);
+        }
       }
     }
   }

@@ -466,8 +466,8 @@ typedef enum eGraphEdit_Flag {
   /* normalize curves on display */
   SIPO_NORMALIZE = (1 << 14),
   SIPO_NORMALIZE_FREEZE = (1 << 15),
-  /* show vertical line for every marker */
-  SIPO_MARKER_LINES = (1 << 16),
+  /* show markers region */
+  SIPO_SHOW_MARKERS = (1 << 16),
 } eGraphEdit_Flag;
 
 /* SpaceGraph.mode (Graph Editor Mode) */
@@ -532,8 +532,8 @@ typedef enum eSpaceNla_Flag {
   SNLA_NOREALTIMEUPDATES = (1 << 6),
   /* don't show local strip marker indications */
   SNLA_NOLOCALMARKERS = (1 << 7),
-  /* show vertical line for every marker */
-  SNLA_SHOW_MARKER_LINES = (1 << 8),
+  /* show markers region */
+  SNLA_SHOW_MARKERS = (1 << 8),
 } eSpaceNla_Flag;
 
 /** \} */
@@ -615,7 +615,7 @@ typedef enum eSpaceSeq_Flag {
   SEQ_NO_WAVEFORMS = (1 << 8),  /* draw no waveforms */
   SEQ_SHOW_SAFE_CENTER = (1 << 9),
   SEQ_SHOW_METADATA = (1 << 10),
-  SEQ_SHOW_MARKER_LINES = (1 << 11),
+  SEQ_SHOW_MARKERS = (1 << 11), /* show markers region */
 } eSpaceSeq_Flag;
 
 /* SpaceSeq.view */
@@ -859,6 +859,7 @@ typedef enum eFileSel_File_Types {
   FILE_TYPE_ALEMBIC = (1 << 16),
   /** For all kinds of recognized import/export formats. No need for specialized types. */
   FILE_TYPE_OBJECT_IO = (1 << 17),
+  FILE_TYPE_USD = (1 << 18),
 
   /** An FS directory (i.e. S_ISDIR on its path is true). */
   FILE_TYPE_DIR = (1 << 30),
@@ -1069,6 +1070,8 @@ typedef struct SpaceImage {
 
   char pixel_snap_mode;
   char _pad2[3];
+
+  int tile_grid_shape[2];
 
   MaskSpaceInfo mask_info;
 } SpaceImage;
@@ -1492,6 +1495,7 @@ typedef struct SpaceConsole {
   /** Multiple consoles are possible, not just python. */
   char language[32];
 
+  /** Selection offset in bytes. */
   int sel_start;
   int sel_end;
 } SpaceConsole;
@@ -1693,7 +1697,7 @@ typedef enum eSpace_Type {
   SPACE_INFO = 7,
   SPACE_SEQ = 8,
   SPACE_TEXT = 9,
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   SPACE_IMASEL = 10, /* Deprecated */
   SPACE_SOUND = 11,  /* Deprecated */
 #endif
@@ -1701,11 +1705,11 @@ typedef enum eSpace_Type {
   SPACE_NLA = 13,
   /* TODO: fully deprecate */
   SPACE_SCRIPT = 14, /* Deprecated */
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   SPACE_TIME = 15, /* Deprecated */
 #endif
   SPACE_NODE = 16,
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   SPACE_LOGIC = 17, /* Deprecated */
 #endif
   SPACE_CONSOLE = 18,

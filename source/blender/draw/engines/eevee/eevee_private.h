@@ -1052,10 +1052,13 @@ void EEVEE_renderpasses_init(EEVEE_Data *vedata);
 void EEVEE_renderpasses_output_init(EEVEE_ViewLayerData *sldata,
                                     EEVEE_Data *vedata,
                                     uint tot_samples);
+void EEVEE_renderpasses_output_accumulate(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_renderpasses_postprocess(EEVEE_ViewLayerData *sldata,
                                     EEVEE_Data *vedata,
                                     eScenePassType renderpass_type);
+void EEVEE_renderpasses_draw(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_renderpasses_free(void);
+bool EEVEE_renderpasses_only_first_sample_pass_active(EEVEE_Data *vedata);
 
 /* eevee_temporal_sampling.c */
 void EEVEE_temporal_sampling_reset(EEVEE_Data *vedata);

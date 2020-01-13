@@ -113,8 +113,10 @@ typedef struct ClothVertex {
   float struct_stiff;
   float bend_stiff;
   float shear_stiff;
-  int spring_count;    /* how many springs attached? */
-  float shrink_factor; /* how much to shrink this cloth */
+  int spring_count;      /* how many springs attached? */
+  float shrink_factor;   /* how much to shrink this cloth */
+  float internal_stiff;  /* internal spring stiffness scaling */
+  float pressure_factor; /* how much pressure should affect this vertex */
 } ClothVertex;
 
 /**
@@ -197,8 +199,12 @@ typedef enum {
   CLOTH_SIMSETTINGS_FLAG_PRESSURE = (1 << 5),
   /** Use the user defined target volume. */
   CLOTH_SIMSETTINGS_FLAG_PRESSURE_VOL = (1 << 6),
+  /** True if internal spring generation is enabled. */
+  CLOTH_SIMSETTINGS_FLAG_INTERNAL_SPRINGS = (1 << 7),
   /** DEPRECATED, for versioning only. */
   CLOTH_SIMSETTINGS_FLAG_SCALING = (1 << 8),
+  /** Require internal springs to be created between points with opposite normals. */
+  CLOTH_SIMSETTINGS_FLAG_INTERNAL_SPRINGS_NORMAL = (1 << 9),
   /** Edit cache in edit-mode. */
   CLOTH_SIMSETTINGS_FLAG_CCACHE_EDIT = (1 << 12),
   /** Don't allow spring compression. */
@@ -229,6 +235,7 @@ typedef enum {
   CLOTH_SPRING_TYPE_GOAL = (1 << 4),
   CLOTH_SPRING_TYPE_SEWING = (1 << 5),
   CLOTH_SPRING_TYPE_BENDING_HAIR = (1 << 6),
+  CLOTH_SPRING_TYPE_INTERNAL = (1 << 7),
 } CLOTH_SPRING_TYPES;
 
 /* SPRING FLAGS */

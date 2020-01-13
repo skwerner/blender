@@ -113,7 +113,7 @@ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO")
 
 list(APPEND PLATFORM_LINKLIBS
   ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32 Comctl32
-  advapi32 shfolder shell32 ole32 oleaut32 uuid psapi Dbghelp
+  advapi32 shfolder shell32 ole32 oleaut32 uuid psapi Dbghelp Shlwapi
 )
 
 if(WITH_INPUT_IME)
@@ -133,14 +133,7 @@ add_definitions(-D_ALLOW_KEYWORD_MACROS)
 
 # We want to support Vista level ABI
 add_definitions(-D_WIN32_WINNT=0x600)
-
-# Make cmake find the msvc redistributables
-set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP FALSE)
-set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
-set(CMAKE_INSTALL_OPENMP_LIBRARIES ${WITH_OPENMP})
-set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
-include(InstallRequiredSystemLibraries)
-
+include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
 remove_cc_flag("/MDd" "/MD")
 
 if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
@@ -574,6 +567,10 @@ else()
     message(STATUS "TBB disabled, also disabling OpenVDB")
     set(WITH_OPENVDB OFF)
   endif()
+  if(WITH_MOD_FLUID)
+    message(STATUS "TBB disabled, disabling Fluid modifier")
+    set(WITH_MOD_FLUID OFF)
+  endif()
 endif()
 
 # used in many places so include globally, like OpenGL
@@ -655,6 +652,18 @@ if(WITH_CYCLES_EMBREE)
       debug ${LIBDIR}/embree/lib/simd_d.lib
       debug ${LIBDIR}/embree/lib/sys_d.lib
       debug ${LIBDIR}/embree/lib/tasking_d.lib)
+  endif()
+endif()
+
+if(WITH_USD)
+  windows_find_package(USD)
+  if(NOT USD_FOUND)
+    set(USD_FOUND ON)
+    set(USD_INCLUDE_DIRS ${LIBDIR}/usd/include)
+    set(USD_LIBRARIES
+        debug ${LIBDIR}/usd/lib/libusd_m_d.lib
+        optimized ${LIBDIR}/usd/lib/libusd_m.lib
+    )
   endif()
 endif()
 

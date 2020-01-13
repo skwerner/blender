@@ -93,9 +93,11 @@ typedef struct ClothSimSettings {
   float collider_friction;
   /** Damp the velocity to speed up getting to the resting position. */
   float vel_damping DNA_DEPRECATED;
-  /** Min amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing). */
+  /** Min amount to shrink cloth by 0.0f (no shrink), 1.0f (shrink to nothing), -1.0f (double the
+   * edge length). */
   float shrink_min;
-  /** Max amount to shrink cloth by 0.0f (no shrink) - 1.0f (shrink to nothing). */
+  /** Max amount to shrink cloth by 0.0f (no shrink), 1.0f (shrink to nothing), -1.0f (double the
+   * edge length). */
   float shrink_max;
 
   /* Air pressure */
@@ -107,7 +109,8 @@ typedef struct ClothSimSettings {
      pressure=( (current_volume/target_volume) - 1 + uniform_pressure_force) *
      pressure_factor */
   float pressure_factor;
-  char _pad7[4];
+  short vgroup_pressure;
+  char _pad7[2];
 
   /* XXX various hair stuff
    * should really be separate, this struct is a horrible mess already
@@ -116,7 +119,6 @@ typedef struct ClothSimSettings {
   float bending_damping;
   /** Size of voxel grid cells for continuum dynamics. */
   float voxel_cell_size;
-  char _pad[4];
 
   /** Number of time steps per frame. */
   int stepsPerFrame;
@@ -142,7 +144,6 @@ typedef struct ClothSimSettings {
   short presets;
   short reset;
 
-  char _pad0[4];
   struct EffectorWeights *effector_weights;
 
   short bending_model;
@@ -158,6 +159,20 @@ typedef struct ClothSimSettings {
   float compression_damp;
   /** Mechanical damping of shear springs. */
   float shear_damp;
+
+  /** The maximum lenght an internal spring can have during creation. */
+  float internal_spring_max_length;
+  /** How much the interal spring can diverge from the vertex normal during creation. */
+  float internal_spring_max_diversion;
+  /** Vertex group for scaling structural stiffness. */
+  short vgroup_intern;
+  char _pad1[2];
+  float internal_tension;
+  float internal_compression;
+  float max_internal_tension;
+  float max_internal_compression;
+  char _pad0[4];
+
 } ClothSimSettings;
 
 typedef struct ClothCollSettings {

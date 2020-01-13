@@ -613,7 +613,7 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
   }
   if (get_boolean(crp, "pass_debug_sample_count")) {
     b_engine.add_pass("Debug Sample Count", 1, "X", b_view_layer.name().c_str());
-    Pass::add(PASS_SAMPLE_COUNT, passes);
+    Pass::add(PASS_SAMPLE_COUNT, passes, "Debug Sample Count");
   }
   if (get_boolean(crp, "use_pass_volume_direct")) {
     b_engine.add_pass("VolumeDir", 3, "RGB", b_view_layer.name().c_str());

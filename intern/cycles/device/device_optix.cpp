@@ -1188,8 +1188,8 @@ class OptiXDevice : public Device {
                                            out_data,
                                            sizes.outputSizeInBytes,
                                            &out_handle,
-                                           &compacted_size_prop,
-                                           1));
+                                           background ? &compacted_size_prop : NULL,
+                                           background ? 1 : 0));
 
     // Wait for all operations to finish
     check_result_cuda_ret(cuStreamSynchronize(NULL));
@@ -1431,6 +1431,8 @@ class OptiXDevice : public Device {
           size_t motion_keys = max(ob->motion.size(), 2) - 2;
           size_t motion_transform_size = sizeof(OptixSRTMotionTransform) +
                                          motion_keys * sizeof(OptixSRTData);
+
+          const CUDAContextScope scope(cuda_context);
 
           CUdeviceptr motion_transform_gpu = 0;
           check_result_cuda_ret(cuMemAlloc(&motion_transform_gpu, motion_transform_size));

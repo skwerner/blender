@@ -1437,6 +1437,10 @@ static void region_rect_recursive(
         BLI_rcti_init(remainder, 0, 0, 0, 0);
       }
 
+      /* Fix any negative dimensions. This can happen when a quad split 3d view gets to small. (see
+       * T72200). */
+      BLI_rcti_sanitize(&ar->winrct);
+
       quad++;
     }
   }

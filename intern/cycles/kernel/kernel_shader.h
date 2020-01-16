@@ -1182,6 +1182,7 @@ ccl_device float3 shader_holdout_eval(KernelGlobals *kg, ShaderData *sd)
 ccl_device void shader_eval_surface(KernelGlobals *kg,
                                     ShaderData *sd,
                                     ccl_addr_space PathState *state,
+                                    ccl_global float *buffer,
                                     int path_flag)
 {
   PROFILING_INIT(kg, PROFILING_SHADER_EVAL);
@@ -1213,7 +1214,7 @@ ccl_device void shader_eval_surface(KernelGlobals *kg,
 #endif
   {
 #ifdef __SVM__
-    svm_eval_nodes(kg, sd, state, SHADER_TYPE_SURFACE, path_flag);
+    svm_eval_nodes(kg, sd, state, buffer, SHADER_TYPE_SURFACE, path_flag);
 #else
     if (sd->object == OBJECT_NONE) {
       sd->closure_emission_background = make_float3(0.8f, 0.8f, 0.8f);
@@ -1425,7 +1426,7 @@ ccl_device_inline void shader_eval_volume(KernelGlobals *kg,
     else
 #    endif
     {
-      svm_eval_nodes(kg, sd, state, SHADER_TYPE_VOLUME, path_flag);
+      svm_eval_nodes(kg, sd, state, NULL, SHADER_TYPE_VOLUME, path_flag);
     }
 #  endif
 
@@ -1454,7 +1455,7 @@ ccl_device void shader_eval_displacement(KernelGlobals *kg,
   else
 #  endif
   {
-    svm_eval_nodes(kg, sd, state, SHADER_TYPE_DISPLACEMENT, 0);
+    svm_eval_nodes(kg, sd, state, NULL, SHADER_TYPE_DISPLACEMENT, 0);
   }
 #endif
 }

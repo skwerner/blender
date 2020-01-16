@@ -34,6 +34,11 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg,
                                     uint flags,
                                     int path_flag)
 {
+  if (id == -1) {
+    return make_float4(
+        TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
+  }
+
   float4 r;
 #ifdef __OIIO__
   if (kg->oiio && kg->oiio->textures.size() > id && kg->oiio->textures[id].handle) {
@@ -86,7 +91,7 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg,
   }
   else
 #endif
-    r = kernel_tex_image_interp(kg, id, x, y);
+  r = kernel_tex_image_interp(kg, id, x, y);
   const float alpha = r.w;
 
   if ((flags & NODE_IMAGE_ALPHA_UNASSOCIATE) && alpha != 1.0f && alpha != 0.0f) {
@@ -112,10 +117,8 @@ ccl_device_inline float3 texco_remap_square(float3 co)
 }
 
 ccl_device void svm_node_tex_image(
-    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
+    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node, int *offset)
 {
-  uint id = node.y;
-
   uint co_offset, out_offset, alpha_offset, flags;
   uint projection, dx_offset, dy_offset, unused;
 
@@ -134,6 +137,49 @@ ccl_device void svm_node_tex_image(
   }
   else {
     tex_co = make_float2(co.x, co.y);
+  }
+
+  /* TODO(lukas): Consider moving tile information out of the SVM node.
+   * TextureInfo seems a reasonable candidate. */
+  int id = -1;
+  int num_nodes = (int)node.y;
+  if (num_nodes > 0) {
+    /* Remember the offset of the node following the tile nodes. */
+    int next_offset = (*offset) + num_nodes;
+
+    /* Find the tile that the UV lies in. */
+    int tx = (int)tex_co.x;
+    int ty = (int)tex_co.y;
+
+    /* Check that we're within a legitimate tile. */
+    if (tx >= 0 && ty >= 0 && tx < 10) {
+      int tile = 1001 + 10 * ty + tx;
+
+      /* Find the index of the tile. */
+      for (int i = 0; i < num_nodes; i++) {
+        uint4 tile_node = read_node(kg, offset);
+        if (tile_node.x == tile) {
+          id = tile_node.y;
+          break;
+        }
+        if (tile_node.z == tile) {
+          id = tile_node.w;
+          break;
+        }
+      }
+
+      /* If we found the tile, offset the UVs to be relative to it. */
+      if (id != -1) {
+        tex_co.x -= tx;
+        tex_co.y -= ty;
+      }
+    }
+
+    /* Skip over the remaining nodes. */
+    *offset = next_offset;
+  }
+  else {
+    id = -num_nodes;
   }
 
   differential ds, dt;
@@ -169,6 +215,7 @@ ccl_device void svm_node_tex_image(
     ds = differential_zero();
     dt = differential_zero();
   }
+
   float4 f = svm_image_texture(kg, id, tex_co.x, tex_co.y, ds, dt, flags, path_flag);
 
   if (stack_valid(out_offset))

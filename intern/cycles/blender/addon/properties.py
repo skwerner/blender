@@ -19,6 +19,7 @@
 import bpy
 from bpy.props import (
     BoolProperty,
+    CollectionProperty,
     EnumProperty,
     FloatProperty,
     IntProperty,
@@ -31,6 +32,7 @@ from math import pi
 # enums
 
 import _cycles
+from . import engine
 
 enum_devices = (
     ('CPU', "CPU", "Use CPU for rendering"),
@@ -190,6 +192,16 @@ enum_view3d_shading_render_pass= (
     ('MIST', "Mist", "Show the Mist render pass", 32),
 )
 
+enum_aov_types = (
+    ('VALUE', "Value", "Write a Value pass", 0),
+    ('COLOR', "Color", "Write a Color pass", 1),
+)
+
+enum_denoising_optix_input_passes= (
+    ('RGB', "Color", "Use only color as input", 1),
+    ('RGB_ALBEDO', "Color + Albedo", "Use color and albedo data as input", 2),
+    ('RGB_ALBEDO_NORMAL', "Color + Albedo + Normal", "Use color, albedo and normal data as input", 3),
+)
 
 class CyclesRenderSettings(bpy.types.PropertyGroup):
 
@@ -780,6 +792,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         subtype="DIR_PATH",
         description="Custom path for the texture cache"
     )
+    ao_bounces: IntProperty(
+        name="AO Bounces",
+        default=0,
+        description="Approximate indirect light with background tinted ambient occlusion at the specified bounce, 0 disables this feature",
+        min=0, max=1024,
+    )
 
     ao_bounces_render: IntProperty(
         name="AO Bounces Render",
@@ -1287,7 +1305,28 @@ class CyclesCurveRenderSettings(bpy.types.PropertyGroup):
 def update_render_passes(self, context):
     view_layer = context.view_layer
     view_layer.update_render_passes()
+    engine.detect_conflicting_passes(view_layer)
 
+
+class CyclesAOVPass(bpy.types.PropertyGroup):
+    name: StringProperty(
+        name="Name",
+        description="Name of the pass, to use in the AOV Output shader node",
+        update=update_render_passes,
+        default="AOV"
+    )
+    type: EnumProperty(
+        name="Type",
+        description="Pass data type",
+        update=update_render_passes,
+        items=enum_aov_types,
+        default='COLOR'
+    )
+    conflict: StringProperty(
+        name="Conflict",
+        description="If there is a conflict with another render passes, message explaining why",
+        default=""
+    )
 
 class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
 
@@ -1321,6 +1360,7 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         default=False,
         update=update_render_passes,
     )
+
     use_pass_volume_direct: BoolProperty(
         name="Volume Direct",
         description="Deliver direct volumetric scattering pass",
@@ -1337,6 +1377,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
     use_denoising: BoolProperty(
         name="Use Denoising",
         description="Denoise the rendered image",
+        default=False,
+        update=update_render_passes,
+    )
+    use_optix_denoising: BoolProperty(
+        name="Use OptiX AI Denoising",
+        description="Denoise the rendered image with the OptiX AI denoiser",
         default=False,
         update=update_render_passes,
     )
@@ -1416,6 +1462,13 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         min=0, max=7,
         default=0,
     )
+    denoising_optix_input_passes: EnumProperty(
+        name="Input Passes",
+        description="Controls which passes the OptiX AI denoiser should use as input, which can have different effects on the denoised image",
+        items=enum_denoising_optix_input_passes,
+        default='RGB',
+    )
+
     use_pass_crypto_object: BoolProperty(
         name="Cryptomatte Object",
         description="Render cryptomatte object pass, for isolating objects in compositing",
@@ -1446,6 +1499,15 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         default=True,
         update=update_render_passes,
         )
+
+    aovs: CollectionProperty(
+        type=CyclesAOVPass,
+        description="Custom render passes that can be output by shader nodes",
+    )
+    active_aov: IntProperty(
+        default=0,
+        min=0
+    )
 
     @classmethod
     def register(cls):
@@ -1621,6 +1683,7 @@ def register():
     bpy.utils.register_class(CyclesCurveRenderSettings)
     bpy.utils.register_class(CyclesDeviceSettings)
     bpy.utils.register_class(CyclesPreferences)
+    bpy.utils.register_class(CyclesAOVPass)
     bpy.utils.register_class(CyclesRenderLayerSettings)
     bpy.utils.register_class(CyclesView3DShadingSettings)
 
@@ -1642,5 +1705,6 @@ def unregister():
     bpy.utils.unregister_class(CyclesCurveRenderSettings)
     bpy.utils.unregister_class(CyclesDeviceSettings)
     bpy.utils.unregister_class(CyclesPreferences)
+    bpy.utils.unregister_class(CyclesAOVPass)
     bpy.utils.unregister_class(CyclesRenderLayerSettings)
     bpy.utils.unregister_class(CyclesView3DShadingSettings)

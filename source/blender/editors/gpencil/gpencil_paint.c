@@ -1173,7 +1173,7 @@ static void gp_stroke_newfrombuffer(tGPsdata *p)
   gps->points = MEM_callocN(sizeof(bGPDspoint) * gps->totpoints, "gp_stroke_points");
 
   /* initialize triangle memory to dummy data */
-  gps->triangles = MEM_callocN(sizeof(bGPDtriangle), "GP Stroke triangulation");
+  gps->triangles = NULL;
   gps->flag |= GP_STROKE_RECALC_GEOMETRY;
   gps->tot_triangles = 0;
   /* drawing batch cache is dirty now */
@@ -3296,7 +3296,8 @@ static void gpencil_guide_event_handling(bContext *C,
 
   /* Enter or exit set center point mode */
   if ((event->type == OKEY) && (event->val == KM_RELEASE)) {
-    if ((p->paintmode == GP_PAINTMODE_DRAW) && guide->use_guide && (guide->reference_point != GP_GUIDE_REF_OBJECT)) {
+    if ((p->paintmode == GP_PAINTMODE_DRAW) && guide->use_guide &&
+        (guide->reference_point != GP_GUIDE_REF_OBJECT)) {
       add_notifier = true;
       p->paintmode = GP_PAINTMODE_SET_CP;
       ED_gpencil_toggle_brush_cursor(C, false, NULL);

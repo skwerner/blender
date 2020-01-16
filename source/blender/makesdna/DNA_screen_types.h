@@ -382,6 +382,9 @@ typedef struct ARegion_Runtime {
    *
    * Lazy initialize, zero'd when unset, relative to #ARegion.winrct x/y min. */
   rcti visible_rect;
+
+  /* The offset needed to not overlap with window scrollbars. Only used by HUD regions for now. */
+  int offset_x, offset_y;
 } ARegion_Runtime;
 
 typedef struct ARegion {
@@ -406,7 +409,9 @@ typedef struct ARegion {
   short flag;
 
   /** Current split size in unscaled pixels (if zero it uses regiontype).
-   * To convert to pixels use: `UI_DPI_FAC * ar->sizex + 0.5f`. */
+   * To convert to pixels use: `UI_DPI_FAC * ar->sizex + 0.5f`.
+   * However to get the current region size, you should usually use winx/winy from above, not this!
+   */
   short sizex, sizey;
 
   /** Private, cached notifier events. */

@@ -197,8 +197,15 @@ void BPY_context_set(bContext *C)
   BPy_SetContext(C);
 }
 
+#ifdef WITH_FLUID
+/* defined in manta module */
+extern PyObject *Manta_initPython(void);
+#endif
+
+#ifdef WITH_AUDASPACE
 /* defined in AUD_C-API.cpp */
 extern PyObject *AUD_initPython(void);
+#endif
 
 #ifdef WITH_CYCLES
 /* defined in cycles module */
@@ -224,6 +231,9 @@ static struct _inittab bpy_internal_modules[] = {
     {"bmesh.types", BPyInit_bmesh_types},
     {"bmesh.utils", BPyInit_bmesh_utils},
     {"bmesh.utils", BPyInit_bmesh_geometry},
+#endif
+#ifdef WITH_FLUID
+    {"manta", Manta_initPython},
 #endif
 #ifdef WITH_AUDASPACE
     {"aud", AUD_initPython},
@@ -262,16 +272,8 @@ void BPY_python_start(int argc, const char **argv)
    * blender is utf-8 too - campbell */
   Py_SetStandardStreamEncoding("utf-8", "surrogateescape");
 
-  /* Update, Py3.3 resolves attempting to parse non-existing header */
-#  if 0
-  /* Python 3.2 now looks for '2.xx/python/include/python3.2d/pyconfig.h' to
-   * parse from the 'sysconfig' module which is used by 'site',
-   * so for now disable site. alternatively we could copy the file. */
-  if (py_path_bundle) {
-    Py_NoSiteFlag = 1;
-  }
-#  endif
-
+  /* Suppress error messages when calculating the module search path.
+   * While harmless, it's noisy. */
   Py_FrozenFlag = 1;
 
   Py_Initialize();
@@ -293,6 +295,13 @@ void BPY_python_start(int argc, const char **argv)
 
   /* Initialize thread support (also acquires lock) */
   PyEval_InitThreads();
+
+#  ifdef WITH_FLUID
+  /* Required to prevent assertion error, see:
+   * https://stackoverflow.com/questions/27844676 */
+  Py_DECREF(PyImport_ImportModule("threading"));
+#  endif
+
 #else
   (void)argc;
   (void)argv;
@@ -626,8 +635,12 @@ bool BPY_execute_string_as_number(
 /**
  * \return success
  */
-bool BPY_execute_string_as_string(
-    bContext *C, const char *imports[], const char *expr, const bool verbose, char **r_value)
+bool BPY_execute_string_as_string_and_size(bContext *C,
+                                           const char *imports[],
+                                           const char *expr,
+                                           const bool verbose,
+                                           char **r_value,
+                                           size_t *r_value_size)
 {
   BLI_assert(r_value && expr);
   PyGILState_STATE gilstate;
@@ -640,7 +653,7 @@ bool BPY_execute_string_as_string(
 
   bpy_context_set(C, &gilstate);
 
-  ok = PyC_RunString_AsString(imports, expr, "<expr as str>", r_value);
+  ok = PyC_RunString_AsStringAndSize(imports, expr, "<expr as str>", r_value, r_value_size);
 
   if (ok == false) {
     if (verbose) {
@@ -654,6 +667,14 @@ bool BPY_execute_string_as_string(
   bpy_context_clear(C, &gilstate);
 
   return ok;
+}
+
+bool BPY_execute_string_as_string(
+    bContext *C, const char *imports[], const char *expr, const bool verbose, char **r_value)
+{
+  size_t value_dummy_size;
+  return BPY_execute_string_as_string_and_size(
+      C, imports, expr, verbose, r_value, &value_dummy_size);
 }
 
 /**

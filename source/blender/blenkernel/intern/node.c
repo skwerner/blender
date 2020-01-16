@@ -1146,8 +1146,9 @@ bNode *BKE_node_copy_ex(bNodeTree *ntree, const bNode *node_src, const int flag)
 
   node_dst->new_node = NULL;
 
-  bool do_copy_api = !((flag & LIB_ID_CREATE_NO_MAIN) || (flag & LIB_ID_COPY_LOCALIZE));
-  if (node_dst->typeinfo->copyfunc_api && do_copy_api) {
+  /* Only call copy function when a copy is made for the main database, not
+   * for cases like the dependency graph and localization. */
+  if (node_dst->typeinfo->copyfunc_api && !(flag & LIB_ID_CREATE_NO_MAIN)) {
     PointerRNA ptr;
     RNA_pointer_create((ID *)ntree, &RNA_Node, node_dst, &ptr);
 
@@ -1594,7 +1595,7 @@ void BKE_node_tree_copy_data(Main *UNUSED(bmain),
 bNodeTree *ntreeCopyTree_ex(const bNodeTree *ntree, Main *bmain, const bool do_id_user)
 {
   bNodeTree *ntree_copy;
-  const int flag = do_id_user ? LIB_ID_CREATE_NO_USER_REFCOUNT | LIB_ID_CREATE_NO_MAIN : 0;
+  const int flag = do_id_user ? 0 : LIB_ID_CREATE_NO_USER_REFCOUNT | LIB_ID_CREATE_NO_MAIN;
   BKE_id_copy_ex(bmain, (ID *)ntree, (ID **)&ntree_copy, flag);
   return ntree_copy;
 }
@@ -4006,6 +4007,7 @@ static void registerShaderNodes(void)
   register_node_type_sh_output_material();
   register_node_type_sh_output_world();
   register_node_type_sh_output_linestyle();
+  register_node_type_sh_output_aov();
 
   register_node_type_sh_tex_image();
   register_node_type_sh_tex_environment();

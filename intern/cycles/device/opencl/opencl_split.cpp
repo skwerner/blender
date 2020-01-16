@@ -1844,11 +1844,7 @@ void OpenCLDevice::shader(DeviceTask &task)
 
 string OpenCLDevice::kernel_build_options(const string *debug_src)
 {
-#ifdef __APPLE__
-  string build_options = "-cl-unsafe-math-optimizations ";
-#else
   string build_options = "-cl-no-signed-zeros -cl-mad-enable ";
-#endif
 
   if (platform_name == "NVIDIA CUDA") {
     build_options +=

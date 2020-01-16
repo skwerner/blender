@@ -404,22 +404,6 @@ bool OpenCLDevice::OpenCLProgram::compile_separate(const string &clbin)
   string kernel_file_escaped = kernel_file;
   string clbin_escaped = clbin;
 
-#ifdef __APPLE__
-    /* MacOS already includes an offline OpenCL compiler - use it. */
-    string call = "/System/Library/Frameworks/OpenCL.framework/Libraries/openclc -x cl -cl-std=CL1.2 -arch gpu_64 -emit-llvm ";
-    call += build_options;
-    call += " -I" + path_get("source");
-    call += " -c ";
-    call += path_get("source") + string("/kernel/kernels/opencl/") + kernel_file;
-    call += " -o ";
-    call += clbin;
-    int result = system(call.c_str());
-    if (result != 0) {
-        return false;
-    }
-    return load_binary(clbin);
-#endif
-
   escape_python_string(device_name);
   escape_python_string(platform_name);
   escape_python_string(build_options);

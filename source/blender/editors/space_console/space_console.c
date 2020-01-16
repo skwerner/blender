@@ -26,6 +26,7 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_global.h"
 #include "BKE_context.h"
 #include "BKE_screen.h"
 
@@ -145,14 +146,12 @@ static void console_main_region_init(wmWindowManager *wm, ARegion *ar)
 }
 
 /* same as 'text_cursor' */
-static void console_cursor(wmWindow *win, ScrArea *sa, ARegion *ar)
+static void console_cursor(wmWindow *win, ScrArea *UNUSED(sa), ARegion *ar)
 {
-  SpaceText *st = sa->spacedata.first;
-  int wmcursor = BC_TEXTEDITCURSOR;
-
-  if (st->text &&
-      BLI_rcti_isect_pt(&st->txtbar, win->eventstate->x - ar->winrct.xmin, st->txtbar.ymin)) {
-    wmcursor = CURSOR_STD;
+  int wmcursor = WM_CURSOR_TEXT_EDIT;
+  const wmEvent *event = win->eventstate;
+  if (UI_view2d_mouse_in_scrollers(ar, &ar->v2d, event->x, event->y)) {
+    wmcursor = WM_CURSOR_DEFAULT;
   }
 
   WM_cursor_set(win, wmcursor);
@@ -173,7 +172,7 @@ static void id_drop_copy(wmDrag *drag, wmDropBox *drop)
   ID *id = WM_drag_ID(drag, 0);
 
   /* copy drag path to properties */
-  char *text = RNA_path_full_ID_py(id);
+  char *text = RNA_path_full_ID_py(G_MAIN, id);
   RNA_string_set(drop->ptr, "text", text);
   MEM_freeN(text);
 }
@@ -244,6 +243,7 @@ static void console_operatortypes(void)
   WM_operatortype_append(CONSOLE_OT_insert);
 
   WM_operatortype_append(CONSOLE_OT_indent);
+  WM_operatortype_append(CONSOLE_OT_indent_or_autocomplete);
   WM_operatortype_append(CONSOLE_OT_unindent);
 
   /* for use by python only */
@@ -328,6 +328,7 @@ void ED_spacetype_console(void)
   art->init = console_main_region_init;
   art->draw = console_main_region_draw;
   art->cursor = console_cursor;
+  art->event_cursor = true;
   art->listener = console_main_region_listener;
 
   BLI_addhead(&st->regiontypes, art);

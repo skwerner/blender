@@ -34,14 +34,15 @@
 
 #include "BLI_blenlib.h"
 
-#include "BIF_gl.h"
 #include "BIF_glutil.h"
 
 #include "BKE_context.h"
 #include "BKE_idcode.h"
 
+#include "GPU_glew.h"
 #include "GPU_shader.h"
 #include "GPU_state.h"
+#include "GPU_viewport.h"
 
 #include "IMB_imbuf_types.h"
 
@@ -265,7 +266,7 @@ static void wm_drop_operator_options(bContext *C, wmDrag *drag, const wmEvent *e
 
     if (opname) {
       BLI_strncpy(drag->opname, opname, sizeof(drag->opname));
-      // WM_cursor_modal_set(win, CURSOR_COPY);
+      // WM_cursor_modal_set(win, WM_CURSOR_COPY);
     }
     // else
     //  WM_cursor_modal_restore(win);

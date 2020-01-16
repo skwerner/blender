@@ -45,10 +45,7 @@ struct ImageUser;
 struct ListBase;
 struct Main;
 struct Material;
-struct Object;
-struct PreviewImage;
 struct Scene;
-struct World;
 struct bNode;
 struct bNodeTree;
 
@@ -74,12 +71,13 @@ typedef enum eGPUType {
   /* Values not in GPU_DATATYPE_STR */
   GPU_TEX1D_ARRAY = 1001,
   GPU_TEX2D = 1002,
-  GPU_TEX3D = 1003,
-  GPU_SHADOW2D = 1004,
-  GPU_TEXCUBE = 1005,
+  GPU_TEX2D_ARRAY = 1003,
+  GPU_TEX3D = 1004,
+  GPU_SHADOW2D = 1005,
+  GPU_TEXCUBE = 1006,
 
   /* GLSL Struct types */
-  GPU_CLOSURE = 1006,
+  GPU_CLOSURE = 1007,
 
   /* Opengl Attributes */
   GPU_ATTR = 3001,
@@ -92,7 +90,7 @@ typedef enum eGPUBuiltin {
   GPU_INVERSE_OBJECT_MATRIX = (1 << 3),
   GPU_VIEW_POSITION = (1 << 4),
   GPU_VIEW_NORMAL = (1 << 5),
-  GPU_OBCOLOR = (1 << 6),
+  GPU_OBJECT_COLOR = (1 << 6),
   GPU_AUTO_BUMPSCALE = (1 << 7),
   GPU_CAMERA_TEXCO_FACTORS = (1 << 8),
   GPU_PARTICLE_SCALAR_PROPS = (1 << 9),
@@ -146,6 +144,7 @@ GPUNodeLink *GPU_attribute(CustomDataType type, const char *name);
 GPUNodeLink *GPU_constant(float *num);
 GPUNodeLink *GPU_uniform(float *num);
 GPUNodeLink *GPU_image(struct Image *ima, struct ImageUser *iuser);
+GPUNodeLink *GPU_image_tilemap(struct Image *ima, struct ImageUser *iuser);
 GPUNodeLink *GPU_color_band(GPUMaterial *mat, int size, float *pixels, float *layer);
 GPUNodeLink *GPU_builtin(eGPUBuiltin builtin);
 

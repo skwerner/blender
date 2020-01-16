@@ -50,8 +50,10 @@
 /** Make sure all ID's created at the point we add an undo step that uses ID's. */
 #define WITH_GLOBAL_UNDO_ENSURE_UPDATED
 
-/** Make sure we don't apply edits on top of a newer memfile state, see: T56163.
- * \note Keep an eye on this, could solve differently. */
+/**
+ * Make sure we don't apply edits on top of a newer memfile state, see: T56163.
+ * \note Keep an eye on this, could solve differently.
+ */
 #define WITH_GLOBAL_UNDO_CORRECT_ORDER
 
 /** We only need this locally. */
@@ -503,7 +505,7 @@ bool BKE_undosys_step_push_with_type(UndoStack *ustack,
   /* Might not be final place for this to be called - probably only want to call it from some
    * undo handlers, not all of them? */
   if (BKE_override_library_is_enabled()) {
-    BKE_main_override_library_operations_create(G.main, false);
+    BKE_main_override_library_operations_create(G_MAIN, false);
   }
 
   /* Remove all undos after (also when 'ustack->step_active == NULL'). */

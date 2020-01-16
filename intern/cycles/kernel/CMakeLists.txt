@@ -64,6 +64,10 @@ set(SRC_OPENCL_KERNELS
   kernels/opencl/filter.cl
 )
 
+set(SRC_OPTIX_KERNELS
+  kernels/optix/kernel_optix.cu
+)
+
 set(SRC_BVH_HEADERS
   bvh/bvh.h
   bvh/bvh_nodes.h
@@ -95,6 +99,7 @@ set(SRC_HEADERS
   kernel_color.h
   kernel_compat_cpu.h
   kernel_compat_cuda.h
+  kernel_compat_optix.h
   kernel_compat_opencl.h
   kernel_differential.h
   kernel_emission.h
@@ -124,6 +129,7 @@ set(SRC_HEADERS
   kernel_types.h
   kernel_volume.h
   kernel_work_stealing.h
+  kernel_write_passes.h
 )
 
 set(SRC_KERNELS_CPU_HEADERS
@@ -138,6 +144,9 @@ set(SRC_KERNELS_CPU_HEADERS
 set(SRC_KERNELS_CUDA_HEADERS
   kernels/cuda/kernel_config.h
   kernels/cuda/kernel_cuda_image.h
+)
+
+set(SRC_KERNELS_OPTIX_HEADERS
 )
 
 set(SRC_KERNELS_OPENCL_HEADERS
@@ -168,17 +177,19 @@ set(SRC_CLOSURE_HEADERS
   closure/volume.h
   closure/bsdf_principled_diffuse.h
   closure/bsdf_principled_sheen.h
-    closure/bsdf_hair_principled.h
+  closure/bsdf_hair_principled.h
 )
 
 set(SRC_SVM_HEADERS
   svm/svm.h
   svm/svm_ao.h
+  svm/svm_aov.h
   svm/svm_attribute.h
   svm/svm_bevel.h
   svm/svm_blackbody.h
   svm/svm_bump.h
   svm/svm_camera.h
+  svm/svm_clamp.h
   svm/svm_closure.h
   svm/svm_convert.h
   svm/svm_checker.h
@@ -198,7 +209,9 @@ set(SRC_SVM_HEADERS
   svm/svm_invert.h
   svm/svm_light_path.h
   svm/svm_magic.h
+  svm/svm_map_range.h
   svm/svm_mapping.h
+  svm/svm_mapping_util.h
   svm/svm_math.h
   svm/svm_math_util.h
   svm/svm_mix.h
@@ -212,13 +225,15 @@ set(SRC_SVM_HEADERS
   svm/svm_sepcomb_vector.h
   svm/svm_sky.h
   svm/svm_tex_coord.h
-  svm/svm_texture.h
+  svm/svm_fractal_noise.h
   svm/svm_types.h
   svm/svm_value.h
   svm/svm_vector_transform.h
   svm/svm_voronoi.h
   svm/svm_voxel.h
   svm/svm_wave.h
+  svm/svm_white_noise.h
+  svm/svm_vertex_color.h
 )
 
 set(SRC_GEOM_HEADERS
@@ -376,11 +391,20 @@ if(WITH_CYCLES_CUDA_BINARIES)
   set(cuda_cubins)
 
   macro(CYCLES_CUDA_KERNEL_ADD arch prev_arch name flags sources experimental)
-    set(cuda_cubin ${name}_${arch}.cubin)
+    if(${arch} MATCHES "compute_.*")
+      set(format "ptx")
+    else()
+      set(format "cubin")
+    endif()
+    set(cuda_file ${name}_${arch}.${format})
 
     set(kernel_sources ${sources})
     if(NOT ${prev_arch} STREQUAL "none")
-      set(kernel_sources ${kernel_sources} ${name}_${prev_arch}.cubin)
+      if(${prev_arch} MATCHES "compute_.*")
+        set(kernel_sources ${kernel_sources} ${name}_${prev_arch}.ptx)
+      else()
+        set(kernel_sources ${kernel_sources} ${name}_${prev_arch}.cubin)
+      endif()
     endif()
 
     set(cuda_kernel_src "/kernels/cuda/${name}.cu")
@@ -393,7 +417,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
       -I ${CMAKE_CURRENT_SOURCE_DIR}/..
       -I ${CMAKE_CURRENT_SOURCE_DIR}/kernels/cuda
       --use_fast_math
-      -o ${CMAKE_CURRENT_BINARY_DIR}/${cuda_cubin})
+      -o ${CMAKE_CURRENT_BINARY_DIR}/${cuda_file})
 
     if(${experimental})
       set(cuda_flags ${cuda_flags} -D __KERNEL_EXPERIMENTAL__)
@@ -427,20 +451,21 @@ if(WITH_CYCLES_CUDA_BINARIES)
             -v
             -cuda-toolkit-dir "${CUDA_TOOLKIT_ROOT_DIR}"
         DEPENDS ${kernel_sources} cycles_cubin_cc)
+      set(cuda_file ${cuda_cubin})
     else()
       add_custom_command(
-        OUTPUT ${cuda_cubin}
+        OUTPUT ${cuda_file}
         COMMAND ${CUDA_NVCC_EXECUTABLE}
             -arch=${arch}
             ${CUDA_NVCC_FLAGS}
-            --cubin
+            --${format}
             ${CMAKE_CURRENT_SOURCE_DIR}${cuda_kernel_src}
             --ptxas-options="-v"
             ${cuda_flags}
         DEPENDS ${kernel_sources})
     endif()
-    delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${cuda_cubin}" ${CYCLES_INSTALL_PATH}/lib)
-    list(APPEND cuda_cubins ${cuda_cubin})
+    delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${cuda_file}" ${CYCLES_INSTALL_PATH}/lib)
+    list(APPEND cuda_cubins ${cuda_file})
 
     unset(cuda_debug_flags)
   endmacro()
@@ -471,6 +496,53 @@ if(WITH_CYCLES_CUDA_BINARIES)
   cycles_set_solution_folder(cycles_kernel_cuda)
 endif()
 
+# OptiX PTX modules
+
+if(WITH_CYCLES_DEVICE_OPTIX)
+  foreach(input ${SRC_OPTIX_KERNELS})
+    get_filename_component(input_we ${input} NAME_WE)
+
+    set(output "${CMAKE_CURRENT_BINARY_DIR}/${input_we}.ptx")
+    set(cuda_flags
+      -I "${OPTIX_INCLUDE_DIR}"
+      -I "${CMAKE_CURRENT_SOURCE_DIR}/.."
+      -I "${CMAKE_CURRENT_SOURCE_DIR}/kernels/cuda"
+      -arch=sm_30
+      --use_fast_math
+      -o ${output})
+
+    if(WITH_CYCLES_DEBUG)
+      set(cuda_flags ${cuda_flags}
+        -D __KERNEL_DEBUG__)
+    endif()
+
+    add_custom_command(
+      OUTPUT
+        ${output}
+      DEPENDS
+        ${input}
+        ${SRC_HEADERS}
+        ${SRC_KERNELS_CUDA_HEADERS}
+        ${SRC_KERNELS_OPTIX_HEADERS}
+        ${SRC_BVH_HEADERS}
+        ${SRC_SVM_HEADERS}
+        ${SRC_GEOM_HEADERS}
+        ${SRC_CLOSURE_HEADERS}
+        ${SRC_UTIL_HEADERS}
+      COMMAND
+        ${CUDA_NVCC_EXECUTABLE} --ptx ${cuda_flags} ${input}
+      WORKING_DIRECTORY
+        "${CMAKE_CURRENT_SOURCE_DIR}")
+
+    list(APPEND optix_ptx ${output})
+
+    delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${output}" ${CYCLES_INSTALL_PATH}/lib)
+  endforeach()
+
+  add_custom_target(cycles_kernel_optix ALL DEPENDS ${optix_ptx})
+  cycles_set_solution_folder(cycles_kernel_optix)
+endif()
+
 # OSL module
 
 if(WITH_CYCLES_OSL)
@@ -486,15 +558,17 @@ endif()
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})
 
-if(CMAKE_COMPILER_IS_GNUCC AND (NOT WITH_CYCLES_KERNEL_ASAN))
-  # GCC hangs compiling the big kernel files with asan and release, so disable by default.
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-sanitize=all")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-sanitize=vptr")
-elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
-  # With OSL, Cycles disables rtti in some modules, wich then breaks at linking
-  # when trying to use vptr sanitizer (included into 'undefined' general option).
-  set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-sanitize=vptr")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-sanitize=vptr")
+if(WITH_COMPILER_ASAN)
+  if(CMAKE_COMPILER_IS_GNUCC AND (NOT WITH_CYCLES_KERNEL_ASAN))
+    # GCC hangs compiling the big kernel files with asan and release, so disable by default.
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-sanitize=all")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-sanitize=vptr")
+  elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    # With OSL, Cycles disables rtti in some modules, wich then breaks at linking
+    # when trying to use vptr sanitizer (included into 'undefined' general option).
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-sanitize=vptr")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-sanitize=vptr")
+  endif()
 endif()
 
 set_source_files_properties(kernels/cpu/kernel.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_KERNEL_FLAGS}")
@@ -528,10 +602,12 @@ endif()
 cycles_add_library(cycles_kernel "${LIB}"
   ${SRC_CPU_KERNELS}
   ${SRC_CUDA_KERNELS}
+  ${SRC_OPTIX_KERNELS}
   ${SRC_OPENCL_KERNELS}
   ${SRC_HEADERS}
   ${SRC_KERNELS_CPU_HEADERS}
   ${SRC_KERNELS_CUDA_HEADERS}
+  ${SRC_KERNELS_OPTIX_HEADERS}
   ${SRC_KERNELS_OPENCL_HEADERS}
   ${SRC_BVH_HEADERS}
   ${SRC_CLOSURE_HEADERS}
@@ -541,25 +617,42 @@ cycles_add_library(cycles_kernel "${LIB}"
   ${SRC_SPLIT_HEADERS}
 )
 
+source_group("bvh" FILES ${SRC_BVH_HEADERS})
+source_group("closure" FILES ${SRC_CLOSURE_HEADERS})
+source_group("filter" FILES ${SRC_FILTER_HEADERS})
+source_group("geom" FILES ${SRC_GEOM_HEADERS})
+source_group("kernel" FILES ${SRC_HEADERS})
+source_group("kernel\\split" FILES ${SRC_SPLIT_HEADERS})
+source_group("kernels\\cpu" FILES ${SRC_CPU_KERNELS} ${SRC_KERNELS_CPU_HEADERS})
+source_group("kernels\\cuda" FILES ${SRC_CUDA_KERNELS} ${SRC_KERNELS_CUDA_HEADERS})
+source_group("kernels\\opencl" FILES ${SRC_OPENCL_KERNELS} ${SRC_KERNELS_OPENCL_HEADERS})
+source_group("kernels\\optix" FILES ${SRC_OPTIX_KERNELS} ${SRC_KERNELS_OPTIX_HEADERS})
+source_group("svm" FILES ${SRC_SVM_HEADERS})
+
 if(WITH_CYCLES_CUDA)
   add_dependencies(cycles_kernel cycles_kernel_cuda)
+endif()
+if(WITH_CYCLES_DEVICE_OPTIX)
+  add_dependencies(cycles_kernel cycles_kernel_optix)
 endif()
 
 # OpenCL kernel
 
-#set(KERNEL_PREPROCESSED ${CMAKE_CURRENT_BINARY_DIR}/kernel_preprocessed.cl)
-#add_custom_command(
-#   OUTPUT ${KERNEL_PREPROCESSED}
-#   COMMAND gcc -x c++ -E ${CMAKE_CURRENT_SOURCE_DIR}/kernel.cl -I ${CMAKE_CURRENT_SOURCE_DIR}/../util/ -DCCL_NAMESPACE_BEGIN= -DCCL_NAMESPACE_END= -o ${KERNEL_PREPROCESSED}
-#   DEPENDS ${SRC_KERNEL} ${SRC_UTIL_HEADERS})
-#add_custom_target(cycles_kernel_preprocess ALL DEPENDS ${KERNEL_PREPROCESSED})
-#delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${KERNEL_PREPROCESSED}" ${CYCLES_INSTALL_PATH}/kernel)
+# set(KERNEL_PREPROCESSED ${CMAKE_CURRENT_BINARY_DIR}/kernel_preprocessed.cl)
+# add_custom_command(
+#    OUTPUT ${KERNEL_PREPROCESSED}
+#    COMMAND gcc -x c++ -E ${CMAKE_CURRENT_SOURCE_DIR}/kernel.cl -I ${CMAKE_CURRENT_SOURCE_DIR}/../util/ -DCCL_NAMESPACE_BEGIN= -DCCL_NAMESPACE_END= -o ${KERNEL_PREPROCESSED}
+#    DEPENDS ${SRC_KERNEL} ${SRC_UTIL_HEADERS})
+# add_custom_target(cycles_kernel_preprocess ALL DEPENDS ${KERNEL_PREPROCESSED})
+# delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${KERNEL_PREPROCESSED}" ${CYCLES_INSTALL_PATH}/kernel)
 
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_OPENCL_KERNELS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/opencl)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_CUDA_KERNELS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/cuda)
+delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_OPTIX_KERNELS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/optix)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_KERNELS_OPENCL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/opencl)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_KERNELS_CUDA_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/cuda)
+delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_KERNELS_OPTIX_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/optix)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_BVH_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/bvh)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_CLOSURE_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/closure)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_FILTER_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/filter)

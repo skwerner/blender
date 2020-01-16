@@ -33,6 +33,7 @@
 
 #include "wm.h"
 
+#include "ED_keyframing.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
 
@@ -84,6 +85,7 @@ void WM_gizmo_target_property_def_rna_ptr(wmGizmo *gz,
 
   /* if gizmo evokes an operator we cannot use it for property manipulation */
   BLI_assert(gz->op_data == NULL);
+  BLI_assert(prop != NULL);
 
   gz_prop->type = gz_prop_type;
 
@@ -101,6 +103,9 @@ void WM_gizmo_target_property_def_rna(
 {
   const wmGizmoPropertyType *gz_prop_type = WM_gizmotype_target_property_find(gz->type, idname);
   PropertyRNA *prop = RNA_struct_find_property(ptr, propname);
+  if (prop == NULL) {
+    RNA_warning("%s: %s.%s not found", __func__, RNA_struct_identifier(ptr->type), propname);
+  }
   WM_gizmo_target_property_def_rna_ptr(gz, gz_prop_type, ptr, prop, index);
 }
 
@@ -350,6 +355,21 @@ void WM_gizmo_target_property_subscribe_all(wmGizmo *gz, struct wmMsgBus *mbus, 
         }
       }
     }
+  }
+}
+
+/**
+ * Auto-key function if auto-key is enabled.
+ */
+void WM_gizmo_target_property_anim_autokey(bContext *C,
+                                           const wmGizmo *UNUSED(gz),
+                                           wmGizmoProperty *gz_prop)
+{
+  if (gz_prop->prop != NULL) {
+    Scene *scene = CTX_data_scene(C);
+    const float cfra = (float)CFRA;
+    const int index = gz_prop->index == -1 ? 0 : gz_prop->index;
+    ED_autokeyframe_property(C, scene, &gz_prop->ptr, gz_prop->prop, index, cfra);
   }
 }
 

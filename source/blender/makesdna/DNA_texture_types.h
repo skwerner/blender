@@ -35,7 +35,6 @@ extern "C" {
 struct AnimData;
 struct ColorBand;
 struct CurveMapping;
-struct ImBuf;
 struct Image;
 struct Ipo;
 struct Object;
@@ -407,8 +406,8 @@ typedef struct ColorMapping {
 
 /* return value */
 #define TEX_INT 0
-#define TEX_RGB 1
-#define TEX_NOR 2
+#define TEX_RGB (1 << 0)
+#define TEX_NOR (1 << 1)
 
 /* pr_texture in material, world, light. */
 #define TEX_PR_TEXTURE 0

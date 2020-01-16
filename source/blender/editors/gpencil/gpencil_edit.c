@@ -58,6 +58,7 @@
 #include "BKE_paint.h"
 #include "BKE_report.h"
 #include "BKE_workspace.h"
+#include "BKE_scene.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -76,6 +77,7 @@
 #include "ED_gpencil.h"
 #include "ED_object.h"
 #include "ED_screen.h"
+#include "ED_transform_snap_object_context.h"
 #include "ED_view3d.h"
 #include "ED_select_utils.h"
 #include "ED_space_api.h"
@@ -220,15 +222,53 @@ void GPENCIL_OT_editmode_toggle(wmOperatorType *ot)
 }
 
 /* set select mode */
+static bool gpencil_selectmode_toggle_poll(bContext *C)
+{
+  /* edit only supported with grease pencil objects */
+  Object *ob = CTX_data_active_object(C);
+  if ((ob == NULL) || (ob->type != OB_GPENCIL) || (ob->mode != OB_MODE_EDIT_GPENCIL)) {
+    return false;
+  }
+
+  return ED_operator_view3d_active(C);
+}
+
 static int gpencil_selectmode_toggle_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
   ToolSettings *ts = CTX_data_tool_settings(C);
+  Object *ob = CTX_data_active_object(C);
   const int mode = RNA_int_get(op->ptr, "mode");
+  bool changed = false;
+
+  if (ts->gpencil_selectmode_edit == mode) {
+    return OPERATOR_FINISHED;
+  }
 
   /* Just set mode */
-  ts->gpencil_selectmode = mode;
+  ts->gpencil_selectmode_edit = mode;
 
+  /* If the mode is Stroke, extend selection. */
+  if ((ob) && (ts->gpencil_selectmode_edit == GP_SELECTMODE_STROKE)) {
+    bGPdata *gpd = (bGPdata *)ob->data;
+    /* Extend selection to all points in all selected strokes. */
+    CTX_DATA_BEGIN (C, bGPDstroke *, gps, editable_gpencil_strokes) {
+      if ((gps->flag & GP_STROKE_SELECT) && (gps->totpoints > 1)) {
+        changed = true;
+        bGPDspoint *pt;
+        for (int i = 0; i < gps->totpoints; i++) {
+          pt = &gps->points[i];
+          pt->flag |= GP_SPOINT_SELECT;
+        }
+      }
+    }
+    CTX_DATA_END;
+    if (changed) {
+      DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+    }
+  }
+
+  WM_event_add_notifier(C, NC_GPENCIL | NA_SELECTED, NULL);
   WM_main_add_notifier(NC_SCENE | ND_TOOLSETTINGS, NULL);
   DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
 
@@ -246,7 +286,7 @@ void GPENCIL_OT_selectmode_toggle(wmOperatorType *ot)
 
   /* callbacks */
   ot->exec = gpencil_selectmode_toggle_exec;
-  ot->poll = gp_strokes_edit3d_poll;
+  ot->poll = gpencil_selectmode_toggle_poll;
 
   /* flags */
   ot->flag = OPTYPE_UNDO | OPTYPE_REGISTER;
@@ -315,7 +355,7 @@ static int gpencil_paintmode_toggle_exec(bContext *C, wmOperator *op)
     Paint *paint = &ts->gp_paint->paint;
     /* if not exist, create a new one */
     if ((paint->brush == NULL) || (paint->brush->gpencil_settings == NULL)) {
-      BKE_brush_gpencil_presets(C);
+      BKE_brush_gpencil_presets(bmain, ts);
     }
     BKE_paint_toolslots_brush_validate(bmain, &ts->gp_paint->paint);
   }
@@ -730,6 +770,11 @@ static int gp_duplicate_exec(bContext *C, wmOperator *op)
         /* deselect original stroke, or else the originals get moved too
          * (when using the copy + move macro)
          */
+        bGPDspoint *pt;
+        int i;
+        for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
+          pt->flag &= ~GP_SPOINT_SELECT;
+        }
         gps->flag &= ~GP_STROKE_SELECT;
       }
     }
@@ -1178,10 +1223,15 @@ static int gp_strokes_copy_exec(bContext *C, wmOperator *op)
     GHash *ma_to_name = gp_strokes_copypastebuf_colors_material_to_name_create(bmain);
     for (bGPDstroke *gps = gp_strokes_copypastebuf.first; gps; gps = gps->next) {
       if (ED_gpencil_stroke_can_use(C, gps)) {
+        Material *ma = give_current_material(ob, gps->mat_nr + 1);
+        /* Avoid default material. */
+        if (ma == NULL) {
+          continue;
+        }
+
         char **ma_name_val;
         if (!BLI_ghash_ensure_p(
                 gp_strokes_copypastebuf_colors, &gps->mat_nr, (void ***)&ma_name_val)) {
-          Material *ma = give_current_material(ob, gps->mat_nr + 1);
           char *ma_name = BLI_ghash_lookup(ma_to_name, ma);
           *ma_name_val = MEM_dupallocN(ma_name);
         }
@@ -1228,8 +1278,8 @@ static bool gp_strokes_paste_poll(bContext *C)
 }
 
 typedef enum eGP_PasteMode {
-  GP_COPY_ONLY = -1,
-  GP_COPY_MERGE = 1,
+  GP_COPY_BY_LAYER = -1,
+  GP_COPY_TO_ACTIVE = 1,
 } eGP_PasteMode;
 
 static int gp_strokes_paste_exec(bContext *C, wmOperator *op)
@@ -1262,7 +1312,7 @@ static int gp_strokes_paste_exec(bContext *C, wmOperator *op)
     /* no active layer - let's just create one */
     gpl = BKE_gpencil_layer_addnew(gpd, DATA_("GP_Layer"), true);
   }
-  else if ((gpencil_layer_is_editable(gpl) == false) && (type == GP_COPY_MERGE)) {
+  else if ((gpencil_layer_is_editable(gpl) == false) && (type == GP_COPY_TO_ACTIVE)) {
     BKE_report(
         op->reports, RPT_ERROR, "Can not paste strokes when active layer is hidden or locked");
     return OPERATOR_CANCELLED;
@@ -1315,7 +1365,7 @@ static int gp_strokes_paste_exec(bContext *C, wmOperator *op)
   for (bGPDstroke *gps = gp_strokes_copypastebuf.first; gps; gps = gps->next) {
     if (ED_gpencil_stroke_can_use(C, gps)) {
       /* Need to verify if layer exists */
-      if (type != GP_COPY_MERGE) {
+      if (type != GP_COPY_TO_ACTIVE) {
         gpl = BLI_findstring(&gpd->layers, gps->runtime.tmp_layerinfo, offsetof(bGPDlayer, info));
         if (gpl == NULL) {
           /* no layer - use active (only if layer deleted before paste) */
@@ -1348,7 +1398,7 @@ static int gp_strokes_paste_exec(bContext *C, wmOperator *op)
         /* Remap material */
         Material *ma = BLI_ghash_lookup(new_colors, POINTER_FROM_INT(new_stroke->mat_nr));
         new_stroke->mat_nr = BKE_gpencil_object_material_get_index(ob, ma);
-        BLI_assert(new_stroke->mat_nr >= 0); /* have to add the material first */
+        CLAMP_MIN(new_stroke->mat_nr, 0);
       }
     }
   }
@@ -1366,15 +1416,15 @@ static int gp_strokes_paste_exec(bContext *C, wmOperator *op)
 void GPENCIL_OT_paste(wmOperatorType *ot)
 {
   static const EnumPropertyItem copy_type[] = {
-      {GP_COPY_ONLY, "COPY", 0, "Copy", ""},
-      {GP_COPY_MERGE, "MERGE", 0, "Merge", ""},
+      {GP_COPY_TO_ACTIVE, "ACTIVE", 0, "Paste to Active", ""},
+      {GP_COPY_BY_LAYER, "LAYER", 0, "Paste by Layer", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
   /* identifiers */
   ot->name = "Paste Strokes";
   ot->idname = "GPENCIL_OT_paste";
-  ot->description = "Paste previously copied strokes or copy and merge in active layer";
+  ot->description = "Paste previously copied strokes to active layer or to original layer";
 
   /* callbacks */
   ot->exec = gp_strokes_paste_exec;
@@ -1384,33 +1434,18 @@ void GPENCIL_OT_paste(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  ot->prop = RNA_def_enum(ot->srna, "type", copy_type, 0, "Type", "");
+  ot->prop = RNA_def_enum(ot->srna, "type", copy_type, GP_COPY_TO_ACTIVE, "Type", "");
 }
 
 /* ******************* Move To Layer ****************************** */
 
-static int gp_move_to_layer_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(evt))
-{
-  uiPopupMenu *pup;
-  uiLayout *layout;
-
-  /* call the menu, which will call this operator again, hence the canceled */
-  pup = UI_popup_menu_begin(C, op->type->name, ICON_NONE);
-  layout = UI_popup_menu_layout(pup);
-  uiItemsEnumO(layout, "GPENCIL_OT_move_to_layer", "layer");
-  UI_popup_menu_end(C, pup);
-
-  return OPERATOR_INTERFACE;
-}
-
-// FIXME: allow moving partial strokes
 static int gp_move_to_layer_exec(bContext *C, wmOperator *op)
 {
   bGPdata *gpd = CTX_data_gpencil_data(C);
   Scene *scene = CTX_data_scene(C);
   bGPDlayer *target_layer = NULL;
   ListBase strokes = {NULL, NULL};
-  int layer_num = RNA_enum_get(op->ptr, "layer");
+  int layer_num = RNA_int_get(op->ptr, "layer");
   const bool use_autolock = (bool)(gpd->flag & GP_DATA_AUTOLOCK_LAYERS);
 
   if (GPENCIL_MULTIEDIT_SESSIONS_ON(gpd)) {
@@ -1423,23 +1458,16 @@ static int gp_move_to_layer_exec(bContext *C, wmOperator *op)
     gpd->flag &= ~GP_DATA_AUTOLOCK_LAYERS;
   }
 
-  /* Get layer or create new one */
-  if (layer_num == -1) {
-    /* Create layer */
-    target_layer = BKE_gpencil_layer_addnew(gpd, DATA_("GP_Layer"), true);
-  }
-  else {
-    /* Try to get layer */
-    target_layer = BLI_findlink(&gpd->layers, layer_num);
+  /* Try to get layer */
+  target_layer = BLI_findlink(&gpd->layers, layer_num);
 
-    if (target_layer == NULL) {
-      /* back autolock status */
-      if (use_autolock) {
-        gpd->flag |= GP_DATA_AUTOLOCK_LAYERS;
-      }
-      BKE_reportf(op->reports, RPT_ERROR, "There is no layer number %d", layer_num);
-      return OPERATOR_CANCELLED;
+  if (target_layer == NULL) {
+    /* back autolock status */
+    if (use_autolock) {
+      gpd->flag |= GP_DATA_AUTOLOCK_LAYERS;
     }
+    BKE_reportf(op->reports, RPT_ERROR, "There is no layer number %d", layer_num);
+    return OPERATOR_CANCELLED;
   }
 
   /* Extract all strokes to move to this layer
@@ -1507,16 +1535,15 @@ void GPENCIL_OT_move_to_layer(wmOperatorType *ot)
       "Move selected strokes to another layer";  // XXX: allow moving individual points too?
 
   /* callbacks */
-  ot->invoke = gp_move_to_layer_invoke;
   ot->exec = gp_move_to_layer_exec;
   ot->poll = gp_stroke_edit_poll;  // XXX?
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-  /* gp layer to use (dynamic enum) */
-  ot->prop = RNA_def_enum(ot->srna, "layer", DummyRNA_DEFAULT_items, 0, "Grease Pencil Layer", "");
-  RNA_def_enum_funcs(ot->prop, ED_gpencil_layers_with_new_enum_itemf);
+  /* GPencil layer to use. */
+  ot->prop = RNA_def_int(ot->srna, "layer", 0, 0, INT_MAX, "Grease Pencil Layer", "", 0, INT_MAX);
+  RNA_def_property_flag(ot->prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
 /* ********************* Add Blank Frame *************************** */
@@ -1588,6 +1615,8 @@ static int gp_blank_frame_add_exec(bContext *C, wmOperator *op)
 
 void GPENCIL_OT_blank_frame_add(wmOperatorType *ot)
 {
+  PropertyRNA *prop;
+
   /* identifiers */
   ot->name = "Insert Blank Frame";
   ot->idname = "GPENCIL_OT_blank_frame_add";
@@ -1599,13 +1628,15 @@ void GPENCIL_OT_blank_frame_add(wmOperatorType *ot)
   ot->exec = gp_blank_frame_add_exec;
   ot->poll = gp_add_poll;
 
-  /* properties */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-  RNA_def_boolean(ot->srna,
-                  "all_layers",
-                  false,
-                  "All Layers",
-                  "Create blank frame in all layers, not only active");
+
+  /* properties */
+  prop = RNA_def_boolean(ot->srna,
+                         "all_layers",
+                         false,
+                         "All Layers",
+                         "Create blank frame in all layers, not only active");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
 /* ******************* Delete Active Frame ************************ */
@@ -1619,10 +1650,23 @@ static bool gp_actframe_delete_poll(bContext *C)
   return (gpl && gpl->actframe);
 }
 
+static bool gp_annotation_actframe_delete_poll(bContext *C)
+{
+  bGPdata *gpd = ED_annotation_data_get_active(C);
+  bGPDlayer *gpl = BKE_gpencil_layer_getactive(gpd);
+
+  /* only if there's an active layer with an active frame */
+  return (gpl && gpl->actframe);
+}
+
 /* delete active frame - wrapper around API calls */
 static int gp_actframe_delete_exec(bContext *C, wmOperator *op)
 {
-  bGPdata *gpd = ED_gpencil_data_get_active(C);
+  const bool is_annotation = STREQ(op->idname, "GPENCIL_OT_annotation_active_frame_delete");
+
+  bGPdata *gpd = (!is_annotation) ? ED_gpencil_data_get_active(C) :
+                                    ED_annotation_data_get_active(C);
+
   bGPDlayer *gpl = BKE_gpencil_layer_getactive(gpd);
 
   Scene *scene = CTX_data_scene(C);
@@ -1663,6 +1707,19 @@ void GPENCIL_OT_active_frame_delete(wmOperatorType *ot)
   ot->poll = gp_actframe_delete_poll;
 }
 
+void GPENCIL_OT_annotation_active_frame_delete(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Delete Active Frame";
+  ot->idname = "GPENCIL_OT_annotation_active_frame_delete";
+  ot->description = "Delete the active frame for the active Annotation Layer";
+
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  /* callbacks */
+  ot->exec = gp_actframe_delete_exec;
+  ot->poll = gp_annotation_actframe_delete_poll;
+}
 /* **************** Delete All Active Frames ****************** */
 
 static bool gp_actframe_delete_all_poll(bContext *C)
@@ -3027,7 +3084,7 @@ static void gpencil_flip_stroke(bGPDstroke *gps)
 static void gpencil_stroke_copy_point(bGPDstroke *gps,
                                       bGPDspoint *point,
                                       int idx,
-                                      float delta[3],
+                                      const float delta[3],
                                       float pressure,
                                       float strength,
                                       float deltatime)
@@ -3331,7 +3388,7 @@ typedef enum eGP_ReprojectModes {
   GP_REPROJECT_FRONT = 0,
   GP_REPROJECT_SIDE,
   GP_REPROJECT_TOP,
-  /* On same plane, parallel to viewplane */
+  /* On same plane, parallel to view-plane. */
   GP_REPROJECT_VIEW,
   /* Reprojected on to the scene geometry */
   GP_REPROJECT_SURFACE,
@@ -3343,11 +3400,14 @@ static int gp_strokes_reproject_exec(bContext *C, wmOperator *op)
 {
   bGPdata *gpd = ED_gpencil_data_get_active(C);
   Scene *scene = CTX_data_scene(C);
+  Main *bmain = CTX_data_main(C);
   ToolSettings *ts = CTX_data_tool_settings(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *ob = CTX_data_active_object(C);
   ARegion *ar = CTX_wm_region(C);
   RegionView3D *rv3d = ar->regiondata;
+  SnapObjectContext *sctx = NULL;
+  int oldframe = (int)DEG_get_ctime(depsgraph);
 
   GP_SpaceConversion gsc = {NULL};
   eGP_ReprojectModes mode = RNA_enum_get(op->ptr, "type");
@@ -3357,28 +3417,33 @@ static int gp_strokes_reproject_exec(bContext *C, wmOperator *op)
   /* init space conversion stuff */
   gp_point_conversion_init(C, &gsc);
 
-  /* init autodist for geometry projection */
-  if (mode == GP_REPROJECT_SURFACE) {
-    view3d_region_operator_needs_opengl(CTX_wm_window(C), gsc.ar);
-    ED_view3d_autodist_init(depsgraph, gsc.ar, CTX_wm_view3d(C), 0);
-  }
-
-  // TODO: For deforming geometry workflow, create new frames?
+  int cfra_prv = INT_MIN;
+  /* init snap context for geometry projection */
+  sctx = ED_transform_snap_object_context_create_view3d(
+      bmain, scene, depsgraph, 0, ar, CTX_wm_view3d(C));
 
   /* Go through each editable + selected stroke, adjusting each of its points one by one... */
   GP_EDITABLE_STROKES_BEGIN (gpstroke_iter, C, gpl, gps) {
     if (gps->flag & GP_STROKE_SELECT) {
+
+      /* update frame to get the new location of objects */
+      if ((mode == GP_REPROJECT_SURFACE) && (cfra_prv != gpf_->framenum)) {
+        cfra_prv = gpf_->framenum;
+        CFRA = gpf_->framenum;
+        BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+      }
+
       bGPDspoint *pt;
       int i;
       /* Adjust each point */
       for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
         float xy[2];
 
-        /* 3D to Screenspace */
-        /* Note: We can't use gp_point_to_xy() here because that uses ints for the screenspace
-         *       coordinates, resulting in lost precision, which in turn causes stairstepping
-         *       artifacts in the final points.
-         */
+        /* 3D to Screen-space */
+        /* Note: We can't use gp_point_to_xy() here because that uses ints for the screen-space
+         * coordinates, resulting in lost precision, which in turn causes stair-stepping
+         * artifacts in the final points. */
+
         bGPDspoint pt2;
         gp_point_to_parent_space(pt, gpstroke_iter.diff_mat, &pt2);
         gp_point_to_xy_fl(&gsc, gps, &pt2, &xy[0], &xy[1]);
@@ -3427,26 +3492,34 @@ static int gp_strokes_reproject_exec(bContext *C, wmOperator *op)
           /* apply parent again */
           gp_apply_parent_point(depsgraph, ob, gpd, gpl, pt);
         }
-        /* Project screenspace back to 3D space (from current perspective)
-         * so that all points have been treated the same way
-         */
+        /* Project screen-space back to 3D space (from current perspective)
+         * so that all points have been treated the same way. */
         else if (mode == GP_REPROJECT_VIEW) {
-          /* Planar - All on same plane parallel to the viewplane */
+          /* Planar - All on same plane parallel to the view-plane. */
           gp_point_xy_to_3d(&gsc, scene, xy, &pt->x);
         }
         else {
           /* Geometry - Snap to surfaces of visible geometry */
-          /* XXX: There will be precision loss (possible stairstep artifacts)
-           * from this conversion to satisfy the API's */
-          const int screen_co[2] = {(int)xy[0], (int)xy[1]};
+          float ray_start[3];
+          float ray_normal[3];
+          /* magic value for initial depth copied from the default
+           * value of Python's Scene.ray_cast function
+           */
+          float depth = 1.70141e+38f;
+          float location[3] = {0.0f, 0.0f, 0.0f};
+          float normal[3] = {0.0f, 0.0f, 0.0f};
 
-          int depth_margin = 0;  // XXX: 4 for strokes, 0 for normal
-          float depth;
-
-          /* XXX: The proper procedure computes the depths into an array,
-           * to have smooth transitions when all else fails... */
-          if (ED_view3d_autodist_depth(gsc.ar, screen_co, depth_margin, &depth)) {
-            ED_view3d_autodist_simple(gsc.ar, screen_co, &pt->x, 0, &depth);
+          ED_view3d_win_to_ray(ar, xy, &ray_start[0], &ray_normal[0]);
+          if (ED_transform_snap_object_project_ray(sctx,
+                                                   &(const struct SnapObjectParams){
+                                                       .snap_select = SNAP_ALL,
+                                                   },
+                                                   &ray_start[0],
+                                                   &ray_normal[0],
+                                                   &depth,
+                                                   &location[0],
+                                                   &normal[0])) {
+            copy_v3_v3(&pt->x, location);
           }
           else {
             /* Default to planar */
@@ -3463,6 +3536,15 @@ static int gp_strokes_reproject_exec(bContext *C, wmOperator *op)
   }
   GP_EDITABLE_STROKES_END(gpstroke_iter);
 
+  /* return frame state and DB to original state */
+  CFRA = oldframe;
+  BKE_scene_graph_update_for_newframe(depsgraph, bmain);
+
+  if (sctx != NULL) {
+    ED_transform_snap_object_context_destroy(sctx);
+  }
+
+  /* update changed data */
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
   return OPERATOR_FINISHED;
@@ -3548,7 +3630,7 @@ static void gp_smooth_stroke(bContext *C, wmOperator *op)
           }
           if (smooth_thickness) {
             /* thickness need to repeat process several times */
-            for (int r2 = 0; r2 < r * 10; r2++) {
+            for (int r2 = 0; r2 < r * 20; r2++) {
               BKE_gpencil_smooth_stroke_thickness(gps, i, factor);
             }
           }
@@ -4052,8 +4134,10 @@ static int gp_stroke_separate_exec(bContext *C, wmOperator *op)
               }
 
               /* add duplicate materials */
-              ma = give_current_material(
-                  ob, gps->mat_nr + 1); /* XXX same material can be in multiple slots */
+
+              /* XXX same material can be in multiple slots. */
+              ma = BKE_material_gpencil_get(ob, gps->mat_nr + 1);
+
               idx = BKE_gpencil_object_material_ensure(bmain, ob_dst, ma);
 
               /* selected points mode */
@@ -4125,7 +4209,7 @@ static int gp_stroke_separate_exec(bContext *C, wmOperator *op)
           if (ED_gpencil_stroke_can_use(C, gps) == false) {
             continue;
           }
-          ma = give_current_material(ob, gps->mat_nr + 1);
+          ma = BKE_material_gpencil_get(ob, gps->mat_nr + 1);
           gps->mat_nr = BKE_gpencil_object_material_ensure(bmain, ob_dst, ma);
         }
       }
@@ -4302,7 +4386,7 @@ void GPENCIL_OT_stroke_smooth(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  prop = RNA_def_int(ot->srna, "repeat", 1, 1, 10, "Repeat", "", 1, 5);
+  prop = RNA_def_int(ot->srna, "repeat", 1, 1, 50, "Repeat", "", 1, 20);
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   RNA_def_float(ot->srna, "factor", 0.5f, 0.0f, 2.0f, "Factor", "", 0.0f, 2.0f);
@@ -4438,7 +4522,7 @@ static int gpencil_cutter_lasso_select(bContext *C,
       if ((pt->flag & GP_SPOINT_SELECT) || (pt->flag & GP_SPOINT_TAG)) {
         continue;
       }
-      /* convert point coords to screenspace */
+      /* convert point coords to screen-space */
       const bool is_inside = is_inside_fn(gps, pt, &gsc, gpstroke_iter.diff_mat, user_data);
       if (is_inside) {
         tot_inside++;
@@ -4468,6 +4552,10 @@ static int gpencil_cutter_lasso_select(bContext *C,
   /* dissolve selected points */
   bGPDstroke *gpsn;
   for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+    if (gpl->flag & GP_LAYER_LOCKED) {
+      continue;
+    }
+
     bGPDframe *gpf = gpl->actframe;
     if (gpf == NULL) {
       continue;

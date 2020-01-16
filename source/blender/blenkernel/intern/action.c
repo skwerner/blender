@@ -343,6 +343,43 @@ void action_groups_add_channel(bAction *act, bActionGroup *agrp, FCurve *fcurve)
   fcurve->grp = agrp;
 }
 
+/* Reconstruct group channel pointers.
+ * Assumes that the channels are still in the proper order, i.e. that channels of the same group
+ * are adjacent in the act->channels list. It also assumes that the groups
+ * referred to by the FCurves are already in act->groups.
+ */
+void BKE_action_groups_reconstruct(bAction *act)
+{
+  /* Sanity check. */
+  if (ELEM(NULL, act, act->groups.first)) {
+    return;
+  }
+
+  /* Clear out all group channels. Channels that are actually in use are
+   * reconstructed below; this step is necessary to clear out unused groups. */
+  LISTBASE_FOREACH (bActionGroup *, group, &act->groups) {
+    BLI_listbase_clear(&group->channels);
+  }
+
+  bActionGroup *grp;
+  bActionGroup *last_grp = NULL;
+  LISTBASE_FOREACH (FCurve *, fcurve, &act->curves) {
+    if (fcurve->grp == NULL) {
+      continue;
+    }
+
+    grp = fcurve->grp;
+    if (last_grp != grp) {
+      /* If this is the first time we see this group, this must be the first channel. */
+      grp->channels.first = fcurve;
+    }
+
+    /* This is the last channel, until it's overwritten by a later iteration. */
+    grp->channels.last = fcurve;
+    last_grp = grp;
+  }
+}
+
 /* Remove the given channel from all groups */
 void action_groups_remove_channel(bAction *act, FCurve *fcu)
 {
@@ -502,9 +539,10 @@ bool BKE_pose_channels_is_valid(const bPose *pose)
 #endif
 
 /**
- * Find the active posechannel for an object (we can't just use pose, as layer info is in armature)
+ * Find the active pose-channel for an object
+ * (we can't just use pose, as layer info is in armature)
  *
- * \note: Object, not bPose is used here, as we need layer info from Armature)
+ * \note #Object, not #bPose is used here, as we need layer info from Armature.
  */
 bPoseChannel *BKE_pose_channel_active(Object *ob)
 {
@@ -1420,9 +1458,7 @@ short action_get_item_transforms(bAction *act, Object *ob, bPoseChannel *pchan, 
 
       if ((curves) || (flags & ACT_TRANS_PROP) == 0) {
         /* custom properties only */
-        pPtr = strstr(
-            bPtr,
-            "[\""); /* extra '"' comment here to keep my texteditor functionlist working :) */
+        pPtr = strstr(bPtr, "[\"");
         if (pPtr) {
           flags |= ACT_TRANS_PROP;
 
@@ -1474,7 +1510,7 @@ void BKE_pose_rest(bPose *pose)
   }
 }
 
-void BKE_pose_copyesult_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
+void BKE_pose_copy_pchan_result(bPoseChannel *pchanto, const bPoseChannel *pchanfrom)
 {
   copy_m4_m4(pchanto->pose_mat, pchanfrom->pose_mat);
   copy_m4_m4(pchanto->chan_mat, pchanfrom->chan_mat);
@@ -1525,7 +1561,7 @@ bool BKE_pose_copy_result(bPose *to, bPose *from)
   for (pchanfrom = from->chanbase.first; pchanfrom; pchanfrom = pchanfrom->next) {
     pchanto = BKE_pose_channel_find_name(to, pchanfrom->name);
     if (pchanto != NULL) {
-      BKE_pose_copyesult_pchan_result(pchanto, pchanfrom);
+      BKE_pose_copy_pchan_result(pchanto, pchanfrom);
     }
   }
   return true;

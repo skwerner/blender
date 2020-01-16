@@ -57,8 +57,10 @@
 
 #ifdef WIN32
 
-/** Return true if the path is absolute ie starts with a drive specifier
- * (eg A:\) or is a UNC path. */
+/**
+ * Return true if the path is absolute ie starts with a drive specifier
+ * (eg A:\) or is a UNC path.
+ */
 static bool BLI_path_is_abs(const char *name);
 
 #endif /* WIN32 */
@@ -444,8 +446,10 @@ static int BLI_path_unc_prefix_len(const char *path)
 
 #if defined(WIN32)
 
-/** Return true if the path is absolute ie starts with a drive specifier
- * (eg A:\) or is a UNC path. */
+/**
+ * Return true if the path is absolute ie starts with a drive specifier
+ * (eg A:\) or is a UNC path.
+ */
 static bool BLI_path_is_abs(const char *name)
 {
   return (name[1] == ':' && (name[2] == '\\' || name[2] == '/')) || BLI_path_is_unc(name);
@@ -618,14 +622,14 @@ void BLI_path_rel(char *file, const char *relfile)
      */
     if (*q != '/') {
       while ((q >= file) && (*q != '/')) {
-        --q;
-        --p;
+        q--;
+        p--;
       }
     }
     else if (*p != '/') {
       while ((p >= temp) && (*p != '/')) {
-        --p;
-        --q;
+        p--;
+        q--;
       }
     }
 
@@ -1682,6 +1686,24 @@ void BLI_split_dir_part(const char *string, char *dir, const size_t dirlen)
 void BLI_split_file_part(const char *string, char *file, const size_t filelen)
 {
   BLI_split_dirfile(string, NULL, file, 0, filelen);
+}
+
+/**
+ * Returns a pointer to the last extension (e.g. the position of the last period).
+ * Returns NULL if there is no extension.
+ */
+const char *BLI_path_extension(const char *filepath)
+{
+  const char *extension = strrchr(filepath, '.');
+  if (extension == NULL) {
+    return NULL;
+  }
+  if (BLI_first_slash(extension) != NULL) {
+    /* There is a path separator in the extension, so the '.' was found in a
+     * directory component and not in the filename. */
+    return NULL;
+  }
+  return extension;
 }
 
 /**

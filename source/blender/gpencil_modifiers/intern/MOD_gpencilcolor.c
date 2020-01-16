@@ -51,6 +51,7 @@ static void initData(GpencilModifierData *md)
   gpmd->pass_index = 0;
   ARRAY_SET_ITEMS(gpmd->hsv, 0.5f, 1.0f, 1.0f);
   gpmd->layername[0] = '\0';
+  gpmd->materialname[0] = '\0';
   gpmd->flag |= GP_COLOR_CREATE_COLORS;
   gpmd->modify_color = GP_MODIFY_COLOR_BOTH;
 }
@@ -74,6 +75,7 @@ static void deformStroke(GpencilModifierData *md,
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
+                                      mmd->materialname,
                                       mmd->pass_index,
                                       mmd->layer_pass,
                                       1,
@@ -81,7 +83,8 @@ static void deformStroke(GpencilModifierData *md,
                                       gps,
                                       mmd->flag & GP_COLOR_INVERT_LAYER,
                                       mmd->flag & GP_COLOR_INVERT_PASS,
-                                      mmd->flag & GP_COLOR_INVERT_LAYERPASS)) {
+                                      mmd->flag & GP_COLOR_INVERT_LAYERPASS,
+                                      mmd->flag & GP_COLOR_INVERT_MATERIAL)) {
     return;
   }
 
@@ -116,7 +119,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
     for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
       for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
 
-        Material *mat = give_current_material(ob, gps->mat_nr + 1);
+        Material *mat = BKE_material_gpencil_get(ob, gps->mat_nr + 1);
         if (mat == NULL) {
           continue;
         }
@@ -165,5 +168,4 @@ GpencilModifierTypeInfo modifierType_Gpencil_Color = {
     /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
-    /* getDuplicationFactor */ NULL,
 };

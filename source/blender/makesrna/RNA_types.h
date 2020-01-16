@@ -29,6 +29,7 @@ extern "C" {
 
 struct BlenderRNA;
 struct FunctionRNA;
+struct ID;
 struct Main;
 struct ParameterList;
 struct PropertyRNA;
@@ -36,7 +37,8 @@ struct ReportList;
 struct StructRNA;
 struct bContext;
 
-/** Pointer
+/**
+ * Pointer
  *
  * RNA pointers are not a single C pointer but include the type,
  * and a pointer to the ID struct that owns the struct, since
@@ -44,10 +46,7 @@ struct bContext;
  * the properties and validate them. */
 
 typedef struct PointerRNA {
-  struct {
-    void *data;
-  } id;
-
+  struct ID *owner_id;
   struct StructRNA *type;
   void *data;
 } PointerRNA;
@@ -105,7 +104,7 @@ typedef enum PropertyUnit {
 #define RNA_STACK_ARRAY 32
 
 /**
- * \note Also update enums in bpy_props.c when adding items here.
+ * \note Also update enums in bpy_props.c and rna_rna.c when adding items here.
  * Watch it: these values are written to files as part of node socket button subtypes!
  */
 typedef enum PropertySubType {
@@ -534,7 +533,7 @@ typedef struct ParameterDynAlloc {
 typedef enum FunctionFlag {
   /**
    * Pass ID owning 'self' data
-   * (i.e. ptr->id.data, might be same as self in case data is an ID...).
+   * (i.e. ptr->owner_id, might be same as self in case data is an ID...).
    */
   FUNC_USE_SELF_ID = (1 << 11),
 

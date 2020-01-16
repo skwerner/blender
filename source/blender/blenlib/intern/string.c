@@ -663,8 +663,11 @@ static int left_number_strcmp(const char *s1, const char *s2, int *tiebreaker)
   return 0;
 }
 
-/* natural string compare, keeping numbers in order */
-int BLI_natstrcmp(const char *s1, const char *s2)
+/**
+ * Case insensitive, *natural* string comparison,
+ * keeping numbers in order.
+ */
+int BLI_strcasecmp_natural(const char *s1, const char *s2)
 {
   register int d1 = 0, d2 = 0;
   register char c1, c2;
@@ -675,16 +678,14 @@ int BLI_natstrcmp(const char *s1, const char *s2)
    * numeric, else do a tolower and char compare */
 
   while (1) {
-    c1 = tolower(s1[d1]);
-    c2 = tolower(s2[d2]);
-
-    if (isdigit(c1) && isdigit(c2)) {
+    if (isdigit(s1[d1]) && isdigit(s2[d2])) {
       int numcompare = left_number_strcmp(s1 + d1, s2 + d2, &tiebreaker);
 
       if (numcompare != 0) {
         return numcompare;
       }
 
+      /* Some wasted work here, left_number_strcmp already consumes at least some digits. */
       d1++;
       while (isdigit(s1[d1])) {
         d1++;
@@ -693,16 +694,24 @@ int BLI_natstrcmp(const char *s1, const char *s2)
       while (isdigit(s2[d2])) {
         d2++;
       }
-
-      c1 = tolower(s1[d1]);
-      c2 = tolower(s2[d2]);
     }
 
-    /* first check for '.' so "foo.bar" comes before "foo 1.bar" */
-    if (c1 == '.' && c2 != '.') {
+    /* Test for end of strings first so that shorter strings are ordered in front. */
+    if (ELEM(0, s1[d1], s2[d2])) {
+      break;
+    }
+
+    c1 = tolower(s1[d1]);
+    c2 = tolower(s2[d2]);
+
+    if (c1 == c2) {
+      /* Continue iteration */
+    }
+    /* Check for '.' so "foo.bar" comes before "foo 1.bar". */
+    else if (c1 == '.') {
       return -1;
     }
-    if (c1 != '.' && c2 == '.') {
+    else if (c2 == '.') {
       return 1;
     }
     else if (c1 < c2) {
@@ -711,9 +720,7 @@ int BLI_natstrcmp(const char *s1, const char *s2)
     else if (c1 > c2) {
       return 1;
     }
-    else if (c1 == 0) {
-      break;
-    }
+
     d1++;
     d2++;
   }
@@ -978,7 +985,7 @@ size_t BLI_str_partition_ex(const char *str,
 
   *sep = *suf = NULL;
 
-  for (d = delim; *d != '\0'; ++d) {
+  for (d = delim; *d != '\0'; d++) {
     const char *tmp;
 
     if (end) {

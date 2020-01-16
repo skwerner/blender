@@ -116,6 +116,10 @@ typedef struct wmEventHandler_Op {
 
   /** Store context for this handler for derived/modal handlers. */
   struct {
+    /* To override the window, and hence the screen. Set for few cases only, usually window/screen
+     * can be taken from current context. */
+    struct wmWindow *win;
+
     struct ScrArea *area;
     struct ARegion *region;
     short region_type;
@@ -144,6 +148,7 @@ void wm_event_do_depsgraph(bContext *C, bool is_after_open_file);
 void wm_event_do_refresh_wm_and_depsgraph(bContext *C);
 void wm_event_do_notifiers(bContext *C);
 
+/* wm_event_query.c */
 float wm_pressure_curve(float raw_pressure);
 
 /* wm_keymap.c */

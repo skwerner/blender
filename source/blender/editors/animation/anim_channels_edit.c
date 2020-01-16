@@ -898,6 +898,23 @@ static AnimChanRearrangeFp rearrange_get_mode_func(eRearrangeAnimChan_Mode mode)
   }
 }
 
+/* get rearranging function, given 'rearrange' mode (grease pencil is inverted) */
+static AnimChanRearrangeFp rearrange_gpencil_get_mode_func(eRearrangeAnimChan_Mode mode)
+{
+  switch (mode) {
+    case REARRANGE_ANIMCHAN_TOP:
+      return rearrange_island_bottom;
+    case REARRANGE_ANIMCHAN_UP:
+      return rearrange_island_down;
+    case REARRANGE_ANIMCHAN_DOWN:
+      return rearrange_island_up;
+    case REARRANGE_ANIMCHAN_BOTTOM:
+      return rearrange_island_top;
+    default:
+      return NULL;
+  }
+}
+
 /* Rearrange Islands Generics ------------------------------------- */
 
 /* add channel into list of islands */
@@ -1331,7 +1348,7 @@ static void rearrange_gpencil_channels(bAnimContext *ac, eRearrangeAnimChan_Mode
   int filter;
 
   /* get rearranging function */
-  AnimChanRearrangeFp rearrange_func = rearrange_get_mode_func(mode);
+  AnimChanRearrangeFp rearrange_func = rearrange_gpencil_get_mode_func(mode);
 
   if (rearrange_func == NULL) {
     return;
@@ -1360,10 +1377,15 @@ static void rearrange_gpencil_channels(bAnimContext *ac, eRearrangeAnimChan_Mode
 
     /* free visible layers data */
     BLI_freelistN(&anim_data_visible);
+
+    /* Tag to recalc geometry */
+    DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   }
 
   /* free GPD channel data */
   ANIM_animdata_freelist(&anim_data);
+
+  WM_main_add_notifier(NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
 }
 
 /* ------------------- */
@@ -3114,6 +3136,8 @@ static int mouse_anim_channels(bContext *C, bAnimContext *ac, int channel_index,
         ANIM_set_active_channel(ac, ac->data, ac->datatype, filter, gpl, ANIMTYPE_GPLAYER);
         /* update other layer status */
         BKE_gpencil_layer_setactive(gpd, gpl);
+        BKE_gpencil_layer_autolock_set(gpd, false);
+        DEG_id_tag_update(&gpd->id, ID_RECALC_GEOMETRY);
       }
 
       /* Grease Pencil updates */
@@ -3338,7 +3362,7 @@ static void ANIM_OT_channel_select_keys(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "Select Channel keyframes";
+  ot->name = "Select Channel Keyframes";
   ot->idname = "ANIM_OT_channel_select_keys";
   ot->description = "Select all keyframes of channel under mouse";
 

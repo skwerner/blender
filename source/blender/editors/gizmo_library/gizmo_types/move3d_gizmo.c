@@ -283,6 +283,7 @@ static int gizmo_move_modal(bContext *C,
                   .use_occlusion_test = true,
               },
               mval_fl,
+              NULL,
               &dist_px,
               co,
               NULL)) {
@@ -333,6 +334,13 @@ static void gizmo_move_exit(bContext *C, wmGizmo *gz, const bool cancel)
   if (inter->snap_context_v3d) {
     ED_transform_snap_object_context_destroy(inter->snap_context_v3d);
     inter->snap_context_v3d = NULL;
+  }
+
+  if (!cancel) {
+    wmGizmoProperty *gz_prop = WM_gizmo_target_property_find(gz, "offset");
+    if (WM_gizmo_target_property_is_valid(gz_prop)) {
+      WM_gizmo_target_property_anim_autokey(C, gz, gz_prop);
+    }
   }
 }
 
@@ -411,7 +419,7 @@ static void gizmo_move_property_update(wmGizmo *gz, wmGizmoProperty *gz_prop)
 
 static int gizmo_move_cursor_get(wmGizmo *UNUSED(gz))
 {
-  return BC_NSEW_SCROLLCURSOR;
+  return WM_CURSOR_NSEW_SCROLL;
 }
 
 /* -------------------------------------------------------------------- */

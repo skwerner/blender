@@ -239,8 +239,7 @@ static void mouse_mesh_shortest_path_vert(Scene *UNUSED(scene),
       }
     } while ((node = node->next));
 
-    /* We need to start as if just *after* a 'skip' block... */
-    int depth = op_params->interval_params.skip;
+    int depth = -1;
     node = path;
     do {
       if ((is_path_ordered == false) ||
@@ -271,7 +270,7 @@ static void mouse_mesh_shortest_path_vert(Scene *UNUSED(scene),
     }
   }
 
-  EDBM_update_generic(em, false, false);
+  EDBM_update_generic(obedit->data, false, false);
 }
 
 /** \} */
@@ -430,8 +429,7 @@ static void mouse_mesh_shortest_path_edge(Scene *scene,
       }
     } while ((node = node->next));
 
-    /* We need to start as if just *after* a 'skip' block... */
-    int depth = op_params->interval_params.skip;
+    int depth = -1;
     node = path;
     do {
       if ((is_path_ordered == false) ||
@@ -476,7 +474,7 @@ static void mouse_mesh_shortest_path_edge(Scene *scene,
     }
   }
 
-  EDBM_update_generic(em, false, false);
+  EDBM_update_generic(obedit->data, false, false);
 
   if (op_params->edge_mode == EDGE_MODE_TAG_SEAM) {
     ED_uvedit_live_unwrap(scene, &obedit, 1);
@@ -561,8 +559,7 @@ static void mouse_mesh_shortest_path_face(Scene *UNUSED(scene),
       }
     } while ((node = node->next));
 
-    /* We need to start as if just *after* a 'skip' block... */
-    int depth = op_params->interval_params.skip;
+    int depth = -1;
     node = path;
     do {
       if ((is_path_ordered == false) ||
@@ -594,7 +591,7 @@ static void mouse_mesh_shortest_path_face(Scene *UNUSED(scene),
     BM_mesh_active_face_set(bm, f_dst_last);
   }
 
-  EDBM_update_generic(em, false, false);
+  EDBM_update_generic(obedit->data, false, false);
 }
 
 /** \} */

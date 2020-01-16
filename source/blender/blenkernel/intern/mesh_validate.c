@@ -866,7 +866,7 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
           tot_elem = mesh->totedge;
           break;
         case ME_FSEL:
-          tot_elem = mesh->totface;
+          tot_elem = mesh->totpoly;
           break;
       }
 
@@ -1618,6 +1618,12 @@ void BKE_mesh_calc_edges_loose(Mesh *mesh)
   MLoop *ml = mesh->mloop;
   for (int i = 0; i < mesh->totloop; i++, ml++) {
     mesh->medge[ml->e].flag &= ~ME_LOOSEEDGE;
+  }
+  med = mesh->medge;
+  for (int i = 0; i < mesh->totedge; i++, med++) {
+    if (med->flag & ME_LOOSEEDGE) {
+      med->flag |= ME_EDGEDRAW;
+    }
   }
 }
 

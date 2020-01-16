@@ -271,7 +271,9 @@ typedef struct bTrackToConstraint {
 typedef struct bRotateLikeConstraint {
   struct Object *tar;
   int flag;
-  int reserved1;
+  char euler_order;
+  char mix_mode;
+  char _pad[2];
   /** MAX_ID_NAME-2. */
   char subtarget[64];
 } bRotateLikeConstraint;
@@ -305,6 +307,8 @@ typedef struct bSameVolumeConstraint {
 /* Copy Transform Constraint */
 typedef struct bTransLikeConstraint {
   struct Object *tar;
+  char mix_mode;
+  char _pad[7];
   /** MAX_ID_NAME-2. */
   char subtarget[64];
 } bTransLikeConstraint;
@@ -332,6 +336,8 @@ typedef struct bActionConstraint {
   float min;
   float max;
   int flag;
+  char mix_mode;
+  char _pad[7];
   struct bAction *act;
   /** MAX_ID_NAME-2. */
   char subtarget[64];
@@ -440,6 +446,18 @@ typedef struct bTransformConstraint {
   char map[3];
   /** Extrapolate motion? if 0, confine to ranges. */
   char expo;
+
+  /** Input rotation type - uses the same values as driver targets. */
+  char from_rotation_mode;
+  /** Output euler order override. */
+  char to_euler_order;
+
+  /** Mixing modes for location, rotation, and scale. */
+  char mix_mode_loc;
+  char mix_mode_rot;
+  char mix_mode_scale;
+
+  char _pad[3];
 
   /** From_min/max defines range of target transform. */
   float from_min[3];
@@ -715,6 +733,20 @@ typedef enum eConstraintChannel_Flags {
   CONSTRAINT_CHANNEL_PROTECTED = (1 << 1),
 } eConstraintChannel_Flags;
 
+/* Common enum for constraints that support override. */
+typedef enum eConstraint_EulerOrder {
+  /** Automatic euler mode. */
+  CONSTRAINT_EULER_AUTO = 0,
+
+  /** Explicit euler rotation modes - must sync with BLI_math_rotation.h defines. */
+  CONSTRAINT_EULER_XYZ = 1,
+  CONSTRAINT_EULER_XZY,
+  CONSTRAINT_EULER_YXZ,
+  CONSTRAINT_EULER_YZX,
+  CONSTRAINT_EULER_ZXY,
+  CONSTRAINT_EULER_ZYX,
+} eConstraint_EulerOrder;
+
 /* -------------------------------------- */
 
 /* bRotateLikeConstraint.flag */
@@ -725,8 +757,24 @@ typedef enum eCopyRotation_Flags {
   ROTLIKE_X_INVERT = (1 << 4),
   ROTLIKE_Y_INVERT = (1 << 5),
   ROTLIKE_Z_INVERT = (1 << 6),
+#ifdef DNA_DEPRECATED_ALLOW
   ROTLIKE_OFFSET = (1 << 7),
+#endif
 } eCopyRotation_Flags;
+
+/* bRotateLikeConstraint.mix_mode */
+typedef enum eCopyRotation_MixMode {
+  /* Replace rotation channel values. */
+  ROTLIKE_MIX_REPLACE = 0,
+  /* Legacy Offset mode - don't use. */
+  ROTLIKE_MIX_OFFSET,
+  /* Add Euler components together. */
+  ROTLIKE_MIX_ADD,
+  /* Multiply the copied rotation on the left. */
+  ROTLIKE_MIX_BEFORE,
+  /* Multiply the copied rotation on the right. */
+  ROTLIKE_MIX_AFTER,
+} eCopyRotation_MixMode;
 
 /* bLocateLikeConstraint.flag */
 typedef enum eCopyLocation_Flags {
@@ -748,7 +796,18 @@ typedef enum eCopyScale_Flags {
   SIZELIKE_Z = (1 << 2),
   SIZELIKE_OFFSET = (1 << 3),
   SIZELIKE_MULTIPLY = (1 << 4),
+  SIZELIKE_UNIFORM = (1 << 5),
 } eCopyScale_Flags;
+
+/* bTransLikeConstraint.mix_mode */
+typedef enum eCopyTransforms_MixMode {
+  /* Replace rotation channel values. */
+  TRANSLIKE_MIX_REPLACE = 0,
+  /* Multiply the copied transformation on the left, with anti-shear scale handling. */
+  TRANSLIKE_MIX_BEFORE,
+  /* Multiply the copied transformation on the right, with anti-shear scale handling. */
+  TRANSLIKE_MIX_AFTER,
+} eCopyTransforms_MixMode;
 
 /* bTransformConstraint.to/from */
 typedef enum eTransform_ToFrom {
@@ -756,6 +815,34 @@ typedef enum eTransform_ToFrom {
   TRANS_ROTATION = 1,
   TRANS_SCALE = 2,
 } eTransform_ToFrom;
+
+/* bTransformConstraint.mix_mode_loc */
+typedef enum eTransform_MixModeLoc {
+  /* Add component values together (default). */
+  TRANS_MIXLOC_ADD = 0,
+  /* Replace component values. */
+  TRANS_MIXLOC_REPLACE,
+} eTransform_MixModeLoc;
+
+/* bTransformConstraint.mix_mode_rot */
+typedef enum eTransform_MixModeRot {
+  /* Add component values together (default). */
+  TRANS_MIXROT_ADD = 0,
+  /* Replace component values. */
+  TRANS_MIXROT_REPLACE,
+  /* Multiply the generated rotation on the left. */
+  TRANS_MIXROT_BEFORE,
+  /* Multiply the generated rotation on the right. */
+  TRANS_MIXROT_AFTER,
+} eTransform_MixModeRot;
+
+/* bTransformConstraint.mix_mode_scale */
+typedef enum eTransform_MixModeScale {
+  /* Replace component values (default). */
+  TRANS_MIXSCALE_REPLACE = 0,
+  /* Multiply component values together. */
+  TRANS_MIXSCALE_MULTIPLY,
+} eTransform_MixModeScale;
 
 /* bSameVolumeConstraint.free_axis */
 typedef enum eSameVolume_Axis {
@@ -779,6 +866,16 @@ typedef enum eActionConstraint_Flags {
   /* Bones use "object" part of target action, instead of "same bone name" part */
   ACTCON_BONE_USE_OBJECT_ACTION = (1 << 0),
 } eActionConstraint_Flags;
+
+/* bActionConstraint.mix_mode */
+typedef enum eActionConstraint_MixMode {
+  /* Multiply the action transformation on the right. */
+  ACTCON_MIX_AFTER_FULL = 0,
+  /* Multiply the action transformation on the right, with anti-shear scale handling. */
+  ACTCON_MIX_AFTER,
+  /* Multiply the action transformation on the left, with anti-shear scale handling. */
+  ACTCON_MIX_BEFORE,
+} eActionConstraint_MixMode;
 
 /* Locked-Axis Values (Locked Track) */
 typedef enum eLockAxis_Modes {
@@ -845,7 +942,7 @@ typedef enum eStretchTo_VolMode {
 /* Stretch To Constraint -> plane mode */
 typedef enum eStretchTo_PlaneMode {
   PLANE_X = 0,
-  PLANE_Y = 1,
+  SWING_Y = 1,
   PLANE_Z = 2,
 } eStretchTo_PlaneMode;
 
@@ -891,7 +988,7 @@ typedef enum eSplineIK_Flags {
   CONSTRAINT_SPLINEIK_BOUND = (1 << 0),
   /* root of chain is not influenced by the constraint */
   CONSTRAINT_SPLINEIK_NO_ROOT = (1 << 1),
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   /* bones in the chain should not scale to fit the curve */
   CONSTRAINT_SPLINEIK_SCALE_LIMITED = (1 << 2),
 #endif

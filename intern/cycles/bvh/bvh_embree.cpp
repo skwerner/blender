@@ -168,22 +168,28 @@ static void rtc_filter_occluded_func(const RTCFilterFunctionNArguments *args)
         }
       }
 
-      ++ctx->ss_isect->num_hits;
-      int hit_idx;
+      int hit_idx = 0;
 
-      if (ctx->ss_isect->num_hits <= ctx->max_hits) {
-        hit_idx = ctx->ss_isect->num_hits - 1;
+      if (ctx->lcg_state) {
+
+        ++ctx->ss_isect->num_hits;
+        if (ctx->ss_isect->num_hits <= ctx->max_hits) {
+          hit_idx = ctx->ss_isect->num_hits - 1;
+        }
+        else {
+          /* reservoir sampling: if we are at the maximum number of
+           * hits, randomly replace element or skip it */
+          hit_idx = lcg_step_uint(ctx->lcg_state) % ctx->ss_isect->num_hits;
+
+          if (hit_idx >= ctx->max_hits) {
+            /* This tells Embree to continue tracing. */
+            *args->valid = 0;
+            break;
+          }
+        }
       }
       else {
-        /* reservoir sampling: if we are at the maximum number of
-         * hits, randomly replace element or skip it */
-        hit_idx = lcg_step_uint(ctx->lcg_state) % ctx->ss_isect->num_hits;
-
-        if (hit_idx >= ctx->max_hits) {
-          /* This tells Embree to continue tracing. */
-          *args->valid = 0;
-          break;
-        }
+        ctx->ss_isect->num_hits = 1;
       }
       /* record intersection */
       kernel_embree_convert_local_hit(
@@ -285,8 +291,10 @@ RTCDevice BVHEmbree::rtc_shared_device = NULL;
 int BVHEmbree::rtc_shared_users = 0;
 thread_mutex BVHEmbree::rtc_shared_mutex;
 
-BVHEmbree::BVHEmbree(const BVHParams &params_, const vector<Object *> &objects_)
-    : BVH(params_, objects_),
+BVHEmbree::BVHEmbree(const BVHParams &params_,
+                     const vector<Mesh *> &meshes_,
+                     const vector<Object *> &objects_)
+    : BVH(params_, meshes_, objects_),
       scene(NULL),
       mem_used(0),
       top_level(NULL),
@@ -495,6 +503,11 @@ void BVHEmbree::build(Progress &progress, Stats *stats_)
   pack_nodes(NULL);
 
   stats = NULL;
+}
+
+void BVHEmbree::copy_to_device(Progress & /*progress*/, DeviceScene *dscene)
+{
+  dscene->data.bvh.scene = scene;
 }
 
 BVHNode *BVHEmbree::widen_children_nodes(const BVHNode * /*root*/)
@@ -840,7 +853,7 @@ void BVHEmbree::pack_nodes(const BVHNode *)
     Mesh *mesh = ob->mesh;
     BVH *bvh = mesh->bvh;
 
-    if (mesh->need_build_bvh()) {
+    if (mesh->need_build_bvh(BVH_LAYOUT_EMBREE)) {
       if (mesh_map.find(mesh) == mesh_map.end()) {
         prim_index_size += bvh->pack.prim_index.size();
         prim_tri_verts_size += bvh->pack.prim_tri_verts.size();
@@ -872,7 +885,7 @@ void BVHEmbree::pack_nodes(const BVHNode *)
     /* We assume that if mesh doesn't need own BVH it was already included
      * into a top-level BVH and no packing here is needed.
      */
-    if (!mesh->need_build_bvh()) {
+    if (!mesh->need_build_bvh(BVH_LAYOUT_EMBREE)) {
       pack.object_node[object_offset++] = prim_offset;
       continue;
     }

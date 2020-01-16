@@ -81,14 +81,7 @@ static bool ED_operator_rigidbody_con_add_poll(bContext *C)
        ID_IS_LINKED(&scene->rigidbody_world->constraints->id))) {
     return false;
   }
-
-  if (ED_operator_object_active_editable(C)) {
-    Object *ob = ED_object_active_context(C);
-    return (ob && ob->type == OB_MESH);
-  }
-  else {
-    return false;
-  }
+  return ED_operator_object_active_editable(C);
 }
 
 bool ED_rigidbody_constraint_add(
@@ -122,13 +115,7 @@ bool ED_rigidbody_constraint_add(
 
 void ED_rigidbody_constraint_remove(Main *bmain, Scene *scene, Object *ob)
 {
-  RigidBodyWorld *rbw = BKE_rigidbody_get_world(scene);
-
-  BKE_rigidbody_remove_constraint(scene, ob);
-  if (rbw) {
-    BKE_collection_object_remove(bmain, rbw->constraints, ob, false);
-    DEG_id_tag_update(&rbw->constraints->id, ID_RECALC_COPY_ON_WRITE);
-  }
+  BKE_rigidbody_remove_constraint(bmain, scene, ob, false);
 
   DEG_relations_tag_update(bmain);
   DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);

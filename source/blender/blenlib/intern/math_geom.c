@@ -300,6 +300,25 @@ float volume_tetrahedron_signed_v3(const float v1[3],
   return determinant_m3_array(m) / 6.0f;
 }
 
+/**
+ * The volume from a triangle that is made into a tetrahedron.
+ * This uses a simplified formula where the tip of the tetrahedron is in the world origin.
+ * Using this method, the total volume of a closed triangle mesh can be calculated.
+ * Note that you need to divide the result by 6 to get the actual volume.
+ */
+float volume_tri_tetrahedron_signed_v3_6x(const float v1[3], const float v2[3], const float v3[3])
+{
+  float v_cross[3];
+  cross_v3_v3v3(v_cross, v1, v2);
+  float tetra_volume = dot_v3v3(v_cross, v3);
+  return tetra_volume;
+}
+
+float volume_tri_tetrahedron_signed_v3(const float v1[3], const float v2[3], const float v3[3])
+{
+  return volume_tri_tetrahedron_signed_v3_6x(v1, v2, v3) / 6.0f;
+}
+
 /********************************* Distance **********************************/
 
 /* distance p to line v1-v2
@@ -1353,6 +1372,52 @@ bool isect_seg_seg_v2_simple(const float v1[2],
   return CCW(v1, v3, v4) != CCW(v2, v3, v4) && CCW(v1, v2, v3) != CCW(v1, v2, v4);
 
 #undef CCW
+}
+
+/**
+ * If intersection == ISECT_LINE_LINE_CROSS or ISECT_LINE_LINE_NONE:
+ * <pre>
+ * pt = v1 + lambda * (v2 - v1) = v3 + mu * (v4 - v3)
+ * </pre>
+ * \returns intersection type:
+ * - ISECT_LINE_LINE_COLINEAR: collinear.
+ * - ISECT_LINE_LINE_EXACT: intersection at an endpoint of either.
+ * - ISECT_LINE_LINE_CROSS: interaction, not at an endpoint.
+ * - ISECT_LINE_LINE_NONE: no intersection.
+ * Also returns lambda and mu in r_lambda and r_mu.
+ */
+int isect_seg_seg_v2_lambda_mu_db(const double v1[2],
+                                  const double v2[2],
+                                  const double v3[2],
+                                  const double v4[2],
+                                  double *r_lambda,
+                                  double *r_mu)
+{
+  double div, lambda, mu;
+
+  div = (v2[0] - v1[0]) * (v4[1] - v3[1]) - (v2[1] - v1[1]) * (v4[0] - v3[0]);
+  if (fabs(div) < DBL_EPSILON) {
+    return ISECT_LINE_LINE_COLINEAR;
+  }
+
+  lambda = ((v1[1] - v3[1]) * (v4[0] - v3[0]) - (v1[0] - v3[0]) * (v4[1] - v3[1])) / div;
+
+  mu = ((v1[1] - v3[1]) * (v2[0] - v1[0]) - (v1[0] - v3[0]) * (v2[1] - v1[1])) / div;
+
+  if (r_lambda) {
+    *r_lambda = lambda;
+  }
+  if (r_mu) {
+    *r_mu = mu;
+  }
+
+  if (lambda >= 0.0 && lambda <= 1.0 && mu >= 0.0 && mu <= 1.0) {
+    if (lambda == 0.0 || lambda == 1.0 || mu == 0.0 || mu == 1.0) {
+      return ISECT_LINE_LINE_EXACT;
+    }
+    return ISECT_LINE_LINE_CROSS;
+  }
+  return ISECT_LINE_LINE_NONE;
 }
 
 /**
@@ -2950,8 +3015,9 @@ int isect_line_line_v3(const float v1[3],
   return isect_line_line_epsilon_v3(v1, v2, v3, v4, r_i1, r_i2, epsilon);
 }
 
-/** Intersection point strictly between the two lines
- * \return false when no intersection is found
+/**
+ * Intersection point strictly between the two lines
+ * \return false when no intersection is found.
  */
 bool isect_line_line_strict_v3(const float v1[3],
                                const float v2[3],
@@ -3011,19 +3077,21 @@ bool isect_line_line_strict_v3(const float v1[3],
  *
  * \note Neither directions need to be normalized.
  */
-bool isect_ray_ray_v3(const float ray_origin_a[3],
-                      const float ray_direction_a[3],
-                      const float ray_origin_b[3],
-                      const float ray_direction_b[3],
-                      float *r_lambda_a,
-                      float *r_lambda_b)
+bool isect_ray_ray_epsilon_v3(const float ray_origin_a[3],
+                              const float ray_direction_a[3],
+                              const float ray_origin_b[3],
+                              const float ray_direction_b[3],
+                              const float epsilon,
+                              float *r_lambda_a,
+                              float *r_lambda_b)
 {
   BLI_assert(r_lambda_a || r_lambda_b);
   float n[3];
   cross_v3_v3v3(n, ray_direction_b, ray_direction_a);
   const float nlen = len_squared_v3(n);
 
-  if (UNLIKELY(nlen == 0.0f)) {
+  /* `nlen` is the square of the area formed by the two vectors. */
+  if (UNLIKELY(nlen < epsilon)) {
     /* The lines are parallel. */
     return false;
   }
@@ -3043,6 +3111,22 @@ bool isect_ray_ray_v3(const float ray_origin_a[3],
   }
 
   return true;
+}
+
+bool isect_ray_ray_v3(const float ray_origin_a[3],
+                      const float ray_direction_a[3],
+                      const float ray_origin_b[3],
+                      const float ray_direction_b[3],
+                      float *r_lambda_a,
+                      float *r_lambda_b)
+{
+  return isect_ray_ray_epsilon_v3(ray_origin_a,
+                                  ray_direction_a,
+                                  ray_origin_b,
+                                  ray_direction_b,
+                                  FLT_MIN,
+                                  r_lambda_a,
+                                  r_lambda_b);
 }
 
 bool isect_aabb_aabb_v3(const float min1[3],
@@ -3124,7 +3208,7 @@ bool isect_ray_aabb_v3(const struct IsectRayAABB_Precalc *data,
  * Test a bounding box (AABB) for ray intersection.
  * Assumes the ray is already local to the boundbox space.
  *
- * \note: \a direction should be normalized
+ * \note \a direction should be normalized
  * if you intend to use the \a tmin or \a tmax distance results!
  */
 bool isect_ray_aabb_v3_simple(const float orig[3],
@@ -3182,6 +3266,26 @@ float closest_to_line_v2(float r_close[2], const float p[2], const float l1[2], 
   sub_v2_v2v2(u, l2, l1);
   sub_v2_v2v2(h, p, l1);
   lambda = dot_v2v2(u, h) / dot_v2v2(u, u);
+  r_close[0] = l1[0] + u[0] * lambda;
+  r_close[1] = l1[1] + u[1] * lambda;
+  return lambda;
+}
+
+double closest_to_line_v2_db(double r_close[2],
+                             const double p[2],
+                             const double l1[2],
+                             const double l2[2])
+{
+  double h[2], u[2], lambda, denom;
+  sub_v2_v2v2_db(u, l2, l1);
+  sub_v2_v2v2_db(h, p, l1);
+  denom = dot_v2v2_db(u, u);
+  if (denom < DBL_EPSILON) {
+    r_close[0] = l1[0];
+    r_close[1] = l1[1];
+    return 0.0;
+  }
+  lambda = dot_v2v2_db(u, h) / dot_v2v2_db(u, u);
   r_close[0] = l1[0] + u[0] * lambda;
   r_close[1] = l1[1] + u[1] * lambda;
   return lambda;
@@ -3452,7 +3556,7 @@ bool clip_segment_v3_plane(
     }
   }
 
-  /* incase input/output values match (above also) */
+  /* In case input/output values match (above also). */
   const float p1_copy[3] = {UNPACK3(p1)};
   copy_v3_v3(r_p2, p2);
   copy_v3_v3(r_p1, p1_copy);
@@ -3511,7 +3615,7 @@ bool clip_segment_v3_plane_n(const float p1[3],
     }
   }
 
-  /* incase input/output values match */
+  /* In case input/output values match. */
   const float p1_copy[3] = {UNPACK3(p1)};
 
   madd_v3_v3v3fl(r_p1, p1_copy, dp, p1_fac);
@@ -3707,7 +3811,7 @@ bool barycentric_coords_v2(
 }
 
 /**
- * \note: using #cross_tri_v2 means locations outside the triangle are correctly weighted
+ * \note Using #cross_tri_v2 means locations outside the triangle are correctly weighted.
  *
  * \note This is *exactly* the same calculation as #resolve_tri_uv_v2,
  * although it has double precision and is used for texture baking, so keep both.
@@ -4607,7 +4711,7 @@ void window_translate_m4(float winmat[4][4], float perspmat[4][4], const float x
  *
  * plane parameters can be NULL if you do not need them.
  */
-void planes_from_projmat(float mat[4][4],
+void planes_from_projmat(const float mat[4][4],
                          float left[4],
                          float right[4],
                          float top[4],
@@ -4707,29 +4811,24 @@ void projmat_from_subregion(const float projmat[4][4],
   float rect_width = (float)(x_max - x_min);
   float rect_height = (float)(y_max - y_min);
 
+  float x_sca = (float)win_size[0] / rect_width;
+  float y_sca = (float)win_size[1] / rect_height;
+
   float x_fac = (float)((x_min + x_max) - win_size[0]) / rect_width;
   float y_fac = (float)((y_min + y_max) - win_size[1]) / rect_height;
 
   copy_m4_m4(r_projmat, projmat);
-  r_projmat[0][0] *= (float)win_size[0] / rect_width;
-  r_projmat[1][1] *= (float)win_size[1] / rect_height;
+  r_projmat[0][0] *= x_sca;
+  r_projmat[1][1] *= y_sca;
 
-#if 0 /* TODO: check if this is more efficient. */
-  r_projmat[2][0] -= x_fac * r_projmat[2][3];
-  r_projmat[2][1] -= y_fac * r_projmat[2][3];
-
-  r_projmat[3][0] -= x_fac * r_projmat[3][3];
-  r_projmat[3][1] -= y_fac * r_projmat[3][3];
-#else
   if (projmat[3][3] == 0.0f) {
-    r_projmat[2][0] += x_fac;
-    r_projmat[2][1] += y_fac;
+    r_projmat[2][0] = r_projmat[2][0] * x_sca + x_fac;
+    r_projmat[2][1] = r_projmat[2][1] * y_sca + y_fac;
   }
   else {
-    r_projmat[3][0] -= x_fac;
-    r_projmat[3][1] -= y_fac;
+    r_projmat[3][0] = r_projmat[3][0] * x_sca - x_fac;
+    r_projmat[3][1] = r_projmat[3][1] * y_sca - y_fac;
   }
-#endif
 }
 
 static void i_multmatrix(float icand[4][4], float Vm[4][4])
@@ -5727,6 +5826,27 @@ float form_factor_hemi_poly(
   }
 
   return contrib;
+}
+
+/**
+ * Check if the edge is convex or concave
+ * (depends on face winding)
+ * Copied from BM_edge_is_convex().
+ */
+bool is_edge_convex_v3(const float v1[3],
+                       const float v2[3],
+                       const float f1_no[3],
+                       const float f2_no[3])
+{
+  if (!equals_v3v3(f1_no, f2_no)) {
+    float cross[3];
+    float l_dir[3];
+    cross_v3_v3v3(cross, f1_no, f2_no);
+    /* we assume contiguous normals, otherwise the result isn't meaningful */
+    sub_v3_v3v3(l_dir, v2, v1);
+    return (dot_v3v3(l_dir, cross) > 0.0f);
+  }
+  return false;
 }
 
 /**

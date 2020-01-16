@@ -39,14 +39,11 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
-#include "BIF_gl.h"
-
 #include "BKE_context.h"
 #include "BKE_image.h"
 #include "BKE_main.h"
 #include "BKE_screen.h"
 #include "BKE_scene.h"
-#include "BKE_workspace.h"
 
 #include "GHOST_C-api.h"
 
@@ -55,10 +52,8 @@
 #include "ED_screen.h"
 
 #include "GPU_draw.h"
-#include "GPU_extensions.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
-#include "GPU_matrix.h"
 #include "GPU_state.h"
 #include "GPU_texture.h"
 #include "GPU_viewport.h"
@@ -436,6 +431,17 @@ static void wm_draw_region_blit(ARegion *ar, int view)
     return;
   }
 
+  if (view == -1) {
+    /* Non-stereo drawing. */
+    view = 0;
+  }
+  else if (view > 0) {
+    if (ar->draw_buffer->viewport[view] == NULL && ar->draw_buffer->offscreen[view] == NULL) {
+      /* Region does not need stereo or failed to allocate stereo buffers. */
+      view = 0;
+    }
+  }
+
   if (ar->draw_buffer->viewport[view]) {
     GPU_viewport_draw_to_screen(ar->draw_buffer->viewport[view], &ar->winrct);
   }
@@ -575,7 +581,14 @@ static void wm_draw_window_offscreen(bContext *C, wmWindow *win, bool stereo)
 
     /* Compute UI layouts for dynamically size regions. */
     for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
-      if (ar->visible && ar->do_draw && ar->type && ar->type->layout) {
+      /* Dynamic region may have been flagged as too small because their size on init is 0.
+       * ARegion.visible is false then, as expected. The layout should still be created then, so
+       * the region size can be updated (it may turn out to be not too small then). */
+      const bool ignore_visibility = (ar->flag & RGN_FLAG_DYNAMIC_SIZE) &&
+                                     (ar->flag & RGN_FLAG_TOO_SMALL) &&
+                                     !(ar->flag & RGN_FLAG_HIDDEN);
+
+      if ((ar->visible || ignore_visibility) && ar->do_draw && ar->type && ar->type->layout) {
         CTX_wm_region_set(C, ar);
         ED_region_do_layout(C, ar);
         CTX_wm_region_set(C, NULL);
@@ -688,7 +701,7 @@ static void wm_draw_window_onscreen(bContext *C, wmWindow *win, int view)
         }
         else {
           /* Blit from offscreen buffer. */
-          wm_draw_region_blit(ar, 0);
+          wm_draw_region_blit(ar, view);
         }
       }
     }
@@ -820,11 +833,11 @@ static void wm_draw_window(bContext *C, wmWindow *win)
 /****************** main update call **********************/
 
 /* quick test to prevent changing window drawable */
-static bool wm_draw_update_test_window(wmWindow *win)
+static bool wm_draw_update_test_window(Main *bmain, wmWindow *win)
 {
   Scene *scene = WM_window_get_active_scene(win);
   ViewLayer *view_layer = WM_window_get_active_view_layer(win);
-  struct Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
+  struct Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
   bScreen *screen = WM_window_get_active_screen(win);
   ARegion *ar;
   bool do_draw = false;
@@ -925,7 +938,7 @@ void wm_draw_update(bContext *C)
     }
 #endif
 
-    if (wm_draw_update_test_window(win)) {
+    if (wm_draw_update_test_window(bmain, win)) {
       bScreen *screen = WM_window_get_active_screen(win);
 
       CTX_wm_window_set(C, win);

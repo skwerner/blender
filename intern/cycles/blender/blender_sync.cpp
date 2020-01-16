@@ -80,7 +80,7 @@ BlenderSync::~BlenderSync()
 
 /* Sync */
 
-void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph)
+void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d)
 {
   /* Sync recalc flags from blender to cycles. Actual update is done separate,
    * so we can do it later on if doing it immediate is not suitable. */
@@ -175,6 +175,11 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph)
     }
   }
 
+  BlenderViewportParameters new_viewport_parameters(b_v3d);
+  if (viewport_parameters.modified(new_viewport_parameters)) {
+    world_recalc = true;
+  }
+
   /* Updates shader with object dependency if objects changed. */
   if (has_updated_objects) {
     if (scene->default_background->has_object_dependency) {
@@ -201,8 +206,8 @@ void BlenderSync::sync_data(BL::RenderSettings &b_render,
 
   sync_view_layer(b_v3d, b_view_layer);
   sync_integrator();
-  sync_film();
-  sync_shaders(b_depsgraph);
+  sync_film(b_v3d);
+  sync_shaders(b_depsgraph, b_v3d);
   sync_images();
   sync_curve_settings();
 
@@ -210,9 +215,9 @@ void BlenderSync::sync_data(BL::RenderSettings &b_render,
 
   if (scene->need_motion() == Scene::MOTION_PASS || scene->need_motion() == Scene::MOTION_NONE ||
       scene->camera->motion_position == Camera::MOTION_POSITION_CENTER) {
-    sync_objects(b_depsgraph);
+    sync_objects(b_depsgraph, b_v3d);
   }
-  sync_motion(b_render, b_depsgraph, b_override, width, height, python_thread_state);
+  sync_motion(b_render, b_depsgraph, b_v3d, b_override, width, height, python_thread_state);
 
   mesh_synced.clear();
 
@@ -255,13 +260,13 @@ void BlenderSync::sync_integrator()
 
   integrator->seed = get_int(cscene, "seed");
   if (get_boolean(cscene, "use_animated_seed")) {
-    integrator->seed = hash_int_2d(b_scene.frame_current(), get_int(cscene, "seed"));
+    integrator->seed = hash_uint2(b_scene.frame_current(), get_int(cscene, "seed"));
     if (b_scene.frame_subframe() != 0.0f) {
       /* TODO(sergey): Ideally should be some sort of hash_merge,
        * but this is good enough for now.
        */
-      integrator->seed += hash_int_2d((int)(b_scene.frame_subframe() * (float)INT_MAX),
-                                      get_int(cscene, "seed"));
+      integrator->seed += hash_uint2((int)(b_scene.frame_subframe() * (float)INT_MAX),
+                                     get_int(cscene, "seed"));
     }
   }
 
@@ -331,12 +336,16 @@ void BlenderSync::sync_integrator()
 
 /* Film */
 
-void BlenderSync::sync_film()
+void BlenderSync::sync_film(BL::SpaceView3D &b_v3d)
 {
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
 
   Film *film = scene->film;
   Film prevfilm = *film;
+
+  if (b_v3d) {
+    film->display_pass = update_viewport_display_passes(b_v3d, film->passes);
+  }
 
   film->exposure = get_float(cscene, "film_exposure");
   film->filter_type = (FilterType)get_enum(
@@ -363,8 +372,10 @@ void BlenderSync::sync_film()
     }
   }
 
-  if (film->modified(prevfilm))
+  if (film->modified(prevfilm)) {
     film->tag_update(scene);
+    film->tag_passes_update(scene, prevfilm.passes, false);
+  }
 }
 
 /* Render Layer */
@@ -509,7 +520,6 @@ int BlenderSync::get_denoising_pass(BL::RenderPass &b_pass)
 vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_view_layer)
 {
   vector<Pass> passes;
-  Pass::add(PASS_COMBINED, passes);
 
   /* loop over passes */
   BL::RenderLayer::passes_iterator b_pass_iter;
@@ -521,27 +531,30 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
     if (pass_type == PASS_MOTION && scene->integrator->motion_blur)
       continue;
     if (pass_type != PASS_NONE)
-      Pass::add(pass_type, passes);
+      Pass::add(pass_type, passes, b_pass.name().c_str());
   }
 
   PointerRNA crp = RNA_pointer_get(&b_view_layer.ptr, "cycles");
-  bool full_denoising = get_boolean(crp, "use_denoising");
+  bool use_denoising = get_boolean(crp, "use_denoising");
+  bool use_optix_denoising = get_boolean(crp, "use_optix_denoising");
   bool write_denoising_passes = get_boolean(crp, "denoising_store_passes");
 
   scene->film->denoising_flags = 0;
-  if (full_denoising || write_denoising_passes) {
+  if (use_denoising || write_denoising_passes) {
+    if (!use_optix_denoising) {
 #define MAP_OPTION(name, flag) \
   if (!get_boolean(crp, name)) \
     scene->film->denoising_flags |= flag;
-    MAP_OPTION("denoising_diffuse_direct", DENOISING_CLEAN_DIFFUSE_DIR);
-    MAP_OPTION("denoising_diffuse_indirect", DENOISING_CLEAN_DIFFUSE_IND);
-    MAP_OPTION("denoising_glossy_direct", DENOISING_CLEAN_GLOSSY_DIR);
-    MAP_OPTION("denoising_glossy_indirect", DENOISING_CLEAN_GLOSSY_IND);
-    MAP_OPTION("denoising_transmission_direct", DENOISING_CLEAN_TRANSMISSION_DIR);
-    MAP_OPTION("denoising_transmission_indirect", DENOISING_CLEAN_TRANSMISSION_IND);
-    MAP_OPTION("denoising_subsurface_direct", DENOISING_CLEAN_SUBSURFACE_DIR);
-    MAP_OPTION("denoising_subsurface_indirect", DENOISING_CLEAN_SUBSURFACE_IND);
+      MAP_OPTION("denoising_diffuse_direct", DENOISING_CLEAN_DIFFUSE_DIR);
+      MAP_OPTION("denoising_diffuse_indirect", DENOISING_CLEAN_DIFFUSE_IND);
+      MAP_OPTION("denoising_glossy_direct", DENOISING_CLEAN_GLOSSY_DIR);
+      MAP_OPTION("denoising_glossy_indirect", DENOISING_CLEAN_GLOSSY_IND);
+      MAP_OPTION("denoising_transmission_direct", DENOISING_CLEAN_TRANSMISSION_DIR);
+      MAP_OPTION("denoising_transmission_indirect", DENOISING_CLEAN_TRANSMISSION_IND);
+      MAP_OPTION("denoising_subsurface_direct", DENOISING_CLEAN_SUBSURFACE_DIR);
+      MAP_OPTION("denoising_subsurface_indirect", DENOISING_CLEAN_SUBSURFACE_IND);
 #undef MAP_OPTION
+    }
     b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
   }
 
@@ -549,43 +562,46 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
     b_engine.add_pass("Denoising Normal", 3, "XYZ", b_view_layer.name().c_str());
     b_engine.add_pass("Denoising Albedo", 3, "RGB", b_view_layer.name().c_str());
     b_engine.add_pass("Denoising Depth", 1, "Z", b_view_layer.name().c_str());
-    b_engine.add_pass("Denoising Shadowing", 1, "X", b_view_layer.name().c_str());
-    b_engine.add_pass("Denoising Variance", 3, "RGB", b_view_layer.name().c_str());
-    b_engine.add_pass("Denoising Intensity", 1, "X", b_view_layer.name().c_str());
+    if (!use_optix_denoising) {
+      b_engine.add_pass("Denoising Shadowing", 1, "X", b_view_layer.name().c_str());
+      b_engine.add_pass("Denoising Variance", 3, "RGB", b_view_layer.name().c_str());
+      b_engine.add_pass("Denoising Intensity", 1, "X", b_view_layer.name().c_str());
+    }
 
     if (scene->film->denoising_flags & DENOISING_CLEAN_ALL_PASSES) {
       b_engine.add_pass("Denoising Clean", 3, "RGB", b_view_layer.name().c_str());
     }
   }
+
 #ifdef __KERNEL_DEBUG__
   if (get_boolean(crp, "pass_debug_bvh_traversed_nodes")) {
     b_engine.add_pass("Debug BVH Traversed Nodes", 1, "X", b_view_layer.name().c_str());
-    Pass::add(PASS_BVH_TRAVERSED_NODES, passes);
+    Pass::add(PASS_BVH_TRAVERSED_NODES, passes, "Debug BVH Traversed Nodes");
   }
   if (get_boolean(crp, "pass_debug_bvh_traversed_instances")) {
     b_engine.add_pass("Debug BVH Traversed Instances", 1, "X", b_view_layer.name().c_str());
-    Pass::add(PASS_BVH_TRAVERSED_INSTANCES, passes);
+    Pass::add(PASS_BVH_TRAVERSED_INSTANCES, passes, "Debug BVH Traversed Instances");
   }
   if (get_boolean(crp, "pass_debug_bvh_intersections")) {
     b_engine.add_pass("Debug BVH Intersections", 1, "X", b_view_layer.name().c_str());
-    Pass::add(PASS_BVH_INTERSECTIONS, passes);
+    Pass::add(PASS_BVH_INTERSECTIONS, passes, "Debug BVH Intersections");
   }
   if (get_boolean(crp, "pass_debug_ray_bounces")) {
     b_engine.add_pass("Debug Ray Bounces", 1, "X", b_view_layer.name().c_str());
-    Pass::add(PASS_RAY_BOUNCES, passes);
+    Pass::add(PASS_RAY_BOUNCES, passes, "Debug Ray Bounces");
   }
 #endif
   if (get_boolean(crp, "pass_debug_render_time")) {
     b_engine.add_pass("Debug Render Time", 1, "X", b_view_layer.name().c_str());
-    Pass::add(PASS_RENDER_TIME, passes);
+    Pass::add(PASS_RENDER_TIME, passes, "Debug Render Time");
   }
   if (get_boolean(crp, "use_pass_volume_direct")) {
     b_engine.add_pass("VolumeDir", 3, "RGB", b_view_layer.name().c_str());
-    Pass::add(PASS_VOLUME_DIRECT, passes);
+    Pass::add(PASS_VOLUME_DIRECT, passes, "VolumeDir");
   }
   if (get_boolean(crp, "use_pass_volume_indirect")) {
     b_engine.add_pass("VolumeInd", 3, "RGB", b_view_layer.name().c_str());
-    Pass::add(PASS_VOLUME_INDIRECT, passes);
+    Pass::add(PASS_VOLUME_INDIRECT, passes, "VolumeInd");
   }
 
   /* Cryptomatte stores two ID/weight pairs per RGBA layer.
@@ -624,6 +640,21 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
     scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
                                                         CRYPT_ACCURATE);
   }
+
+  RNA_BEGIN (&crp, b_aov, "aovs") {
+    bool is_color = (get_enum(b_aov, "type") == 1);
+    string name = get_string(b_aov, "name");
+
+    if (is_color) {
+      b_engine.add_pass(name.c_str(), 4, "RGBA", b_view_layer.name().c_str());
+      Pass::add(PASS_AOV_COLOR, passes, name.c_str());
+    }
+    else {
+      b_engine.add_pass(name.c_str(), 1, "X", b_view_layer.name().c_str());
+      Pass::add(PASS_AOV_VALUE, passes, name.c_str());
+    }
+  }
+  RNA_END;
 
   return passes;
 }
@@ -704,6 +735,9 @@ SceneParams BlenderSync::get_scene_params(BL::Scene &b_scene, bool background)
   params.bvh_layout = RNA_boolean_get(&cscene, "use_bvh_embree") ? BVH_LAYOUT_EMBREE :
                                                                    params.bvh_layout;
 #endif
+
+  params.background = background;
+
   return params;
 }
 
@@ -747,7 +781,7 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
     preview_samples = preview_samples * preview_samples;
   }
 
-  if (get_enum(cscene, "progressive") == 0) {
+  if (get_enum(cscene, "progressive") == 0 && (params.device.type != DEVICE_OPTIX)) {
     if (background) {
       params.samples = aa_samples;
     }

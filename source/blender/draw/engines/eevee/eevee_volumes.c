@@ -28,12 +28,12 @@
 #include "BLI_string_utils.h"
 
 #include "DNA_object_force_types.h"
-#include "DNA_smoke_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_world_types.h"
 
 #include "BKE_modifier.h"
 #include "BKE_mesh.h"
-#include "BKE_smoke.h"
+#include "BKE_fluid.h"
 
 #include "ED_screen.h"
 
@@ -41,6 +41,7 @@
 
 #include "eevee_private.h"
 #include "GPU_draw.h"
+#include "GPU_extensions.h"
 #include "GPU_texture.h"
 #include "GPU_material.h"
 
@@ -54,7 +55,6 @@ static struct {
   struct GPUShader *volumetric_integration_sh;
   struct GPUShader *volumetric_resolve_sh;
 
-  GPUTexture *color_src;
   GPUTexture *depth_src;
 
   GPUTexture *dummy_density;
@@ -63,7 +63,7 @@ static struct {
   GPUTexture *dummy_scatter;
   GPUTexture *dummy_transmit;
 
-  /* List of all smoke domains rendered within this frame. */
+  /* List of all fluid simulation / smoke domains rendered within this frame. */
   ListBase smoke_domains;
 } e_data = {NULL}; /* Engine data */
 
@@ -81,6 +81,10 @@ extern char datatoc_volumetric_scatter_frag_glsl[];
 extern char datatoc_volumetric_integration_frag_glsl[];
 extern char datatoc_volumetric_lib_glsl[];
 extern char datatoc_common_fullscreen_vert_glsl[];
+
+#define USE_VOLUME_OPTI \
+  (GLEW_ARB_shader_image_load_store && GLEW_ARB_shading_language_420pack && \
+   !GPU_crappy_amd_driver())
 
 static void eevee_create_shader_volumes(void)
 {
@@ -123,7 +127,10 @@ static void eevee_create_shader_volumes(void)
       datatoc_volumetric_geom_glsl,
       datatoc_volumetric_integration_frag_glsl,
       e_data.volumetric_common_lib,
-      NULL);
+      USE_VOLUME_OPTI ? "#extension GL_ARB_shader_image_load_store: enable\n"
+                        "#extension GL_ARB_shading_language_420pack: enable\n"
+                        "#define USE_VOLUME_OPTI\n" :
+                        NULL);
   e_data.volumetric_resolve_sh = DRW_shader_create_with_lib(datatoc_common_fullscreen_vert_glsl,
                                                             NULL,
                                                             datatoc_volumetric_resolve_frag_glsl,
@@ -250,7 +257,7 @@ void EEVEE_volumes_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
   if (DRW_view_is_persp_get(NULL)) {
     float sample_distribution = scene_eval->eevee.volumetric_sample_distribution;
-    sample_distribution = 4.0f * (1.00001f - sample_distribution);
+    sample_distribution = 4.0f * (max_ff(1.0f - sample_distribution, 1e-2f));
 
     const float clip_start = common_data->view_vecs[0][2];
     /* Negate */
@@ -383,8 +390,7 @@ void EEVEE_volumes_cache_object_add(EEVEE_ViewLayerData *sldata,
                                     Scene *scene,
                                     Object *ob)
 {
-  const DRWContextState *draw_ctx = DRW_context_state_get();
-  static float white[3] = {1.0f, 1.0f, 1.0f};
+  static const float white[3] = {1.0f, 1.0f, 1.0f};
 
   float *texcoloc = NULL;
   float *texcosize = NULL;
@@ -408,7 +414,7 @@ void EEVEE_volumes_cache_object_add(EEVEE_ViewLayerData *sldata,
 
   DRWShadingGroup *grp = DRW_shgroup_material_create(mat, vedata->psl->volumetric_objects_ps);
 
-  BKE_mesh_texspace_get_reference((struct Mesh *)ob->data, NULL, &texcoloc, NULL, &texcosize);
+  BKE_mesh_texspace_get_reference((struct Mesh *)ob->data, NULL, &texcoloc, &texcosize);
 
   /* TODO(fclem) remove those "unnecessary" UBOs */
   DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
@@ -423,41 +429,49 @@ void EEVEE_volumes_cache_object_add(EEVEE_ViewLayerData *sldata,
 
   /* Smoke Simulation */
   if (((ob->base_flag & BASE_FROM_DUPLI) == 0) &&
-      (md = modifiers_findByType(ob, eModifierType_Smoke)) &&
+      (md = modifiers_findByType(ob, eModifierType_Fluid)) &&
       (modifier_isEnabled(scene, md, eModifierMode_Realtime)) &&
-      ((SmokeModifierData *)md)->domain != NULL) {
-    SmokeModifierData *smd = (SmokeModifierData *)md;
-    SmokeDomainSettings *sds = smd->domain;
+      ((FluidModifierData *)md)->domain != NULL) {
+    FluidModifierData *mmd = (FluidModifierData *)md;
+    FluidDomainSettings *mds = mmd->domain;
+
+    /* Don't try to show liquid domains here. */
+    if (!mds->fluid || !(mds->type == FLUID_DOMAIN_TYPE_GAS)) {
+      return;
+    }
 
     /* Don't show smoke before simulation starts, this could be made an option in the future. */
+    /* (sebbas): Always show smoke for manta */
+#if 0
+    const DRWContextState *draw_ctx = DRW_context_state_get();
     const bool show_smoke = ((int)DEG_get_ctime(draw_ctx->depsgraph) >=
-                             sds->point_cache[0]->startframe);
+                             *mds->point_cache[0]->startframe);
+#endif
 
-    if (sds->fluid && show_smoke) {
-      const bool show_highres = BKE_smoke_show_highres(scene, sds);
-      if (!sds->wt || !show_highres) {
-        GPU_create_smoke(smd, 0);
+    if (mds->fluid && (mds->type == FLUID_DOMAIN_TYPE_GAS) /* && show_smoke */) {
+      if (!(mds->flags & FLUID_DOMAIN_USE_NOISE)) {
+        GPU_create_smoke(mmd, 0);
       }
-      else if (sds->wt && show_highres) {
-        GPU_create_smoke(smd, 1);
+      else if (mds->flags & FLUID_DOMAIN_USE_NOISE) {
+        GPU_create_smoke(mmd, 1);
       }
-      BLI_addtail(&e_data.smoke_domains, BLI_genericNodeN(smd));
+      BLI_addtail(&e_data.smoke_domains, BLI_genericNodeN(mmd));
     }
 
     DRW_shgroup_uniform_texture_ref(
-        grp, "sampdensity", sds->tex ? &sds->tex : &e_data.dummy_density);
+        grp, "sampdensity", mds->tex ? &mds->tex : &e_data.dummy_density);
     DRW_shgroup_uniform_texture_ref(
-        grp, "sampflame", sds->tex_flame ? &sds->tex_flame : &e_data.dummy_flame);
+        grp, "sampflame", mds->tex_flame ? &mds->tex_flame : &e_data.dummy_flame);
 
     /* Constant Volume color. */
-    bool use_constant_color = ((sds->active_fields & SM_ACTIVE_COLORS) == 0 &&
-                               (sds->active_fields & SM_ACTIVE_COLOR_SET) != 0);
+    bool use_constant_color = ((mds->active_fields & FLUID_DOMAIN_ACTIVE_COLORS) == 0 &&
+                               (mds->active_fields & FLUID_DOMAIN_ACTIVE_COLOR_SET) != 0);
 
     DRW_shgroup_uniform_vec3(
-        grp, "volumeColor", (use_constant_color) ? sds->active_color : white, 1);
+        grp, "volumeColor", (use_constant_color) ? mds->active_color : white, 1);
 
     /* Output is such that 0..1 maps to 0..1000K */
-    DRW_shgroup_uniform_vec2(grp, "unftemperature", &sds->flame_ignition, 1);
+    DRW_shgroup_uniform_vec2(grp, "unftemperature", &mds->flame_ignition, 1);
   }
   else {
     DRW_shgroup_uniform_texture(grp, "sampdensity", e_data.dummy_density);
@@ -509,7 +523,8 @@ void EEVEE_volumes_cache_finish(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     DRW_shgroup_uniform_texture_ref(grp, "volumeExtinction", &txl->volume_transmit);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
 
-    DRW_shgroup_call_procedural_triangles(grp, NULL, common_data->vol_tex_size[2]);
+    DRW_shgroup_call_procedural_triangles(
+        grp, NULL, USE_VOLUME_OPTI ? 1 : common_data->vol_tex_size[2]);
 
     DRW_PASS_CREATE(psl->volumetric_resolve_ps, DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_CUSTOM);
     grp = DRW_shgroup_create(e_data.volumetric_resolve_sh, psl->volumetric_resolve_ps);
@@ -595,7 +610,7 @@ void EEVEE_volumes_draw_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   effects->volume_transmit = e_data.dummy_transmit;
 }
 
-void EEVEE_volumes_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
+void EEVEE_volumes_compute(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 {
   EEVEE_PassList *psl = vedata->psl;
   EEVEE_TextureList *txl = vedata->txl;
@@ -605,6 +620,15 @@ void EEVEE_volumes_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *veda
   if ((effects->enabled_effects & EFFECT_VOLUMETRIC) != 0) {
     DRW_stats_group_start("Volumetrics");
 
+    /* We sample the shadow-maps using shadow sampler. We need to enable Comparison mode.
+     * TODO(fclem) avoid this by using sampler objects.*/
+    GPU_texture_bind(sldata->shadow_cube_pool, 0);
+    GPU_texture_compare_mode(sldata->shadow_cube_pool, true);
+    GPU_texture_unbind(sldata->shadow_cube_pool);
+    GPU_texture_bind(sldata->shadow_cascade_pool, 0);
+    GPU_texture_compare_mode(sldata->shadow_cascade_pool, true);
+    GPU_texture_unbind(sldata->shadow_cascade_pool);
+
     GPU_framebuffer_bind(fbl->volumetric_fb);
     DRW_draw_pass(psl->volumetric_world_ps);
     DRW_draw_pass(psl->volumetric_objects_ps);
@@ -612,8 +636,30 @@ void EEVEE_volumes_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *veda
     GPU_framebuffer_bind(fbl->volumetric_scat_fb);
     DRW_draw_pass(psl->volumetric_scatter_ps);
 
-    GPU_framebuffer_bind(fbl->volumetric_integ_fb);
+    if (USE_VOLUME_OPTI) {
+      int tex_scatter = GPU_texture_opengl_bindcode(txl->volume_scatter_history);
+      int tex_transmit = GPU_texture_opengl_bindcode(txl->volume_transmit_history);
+      /* TODO(fclem) Encapsulate these GL calls into DRWManager. */
+      glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+      /* Subtlety here! we need to tell the GL that the texture is layered (GL_TRUE)
+       * in order to bind the full 3D texture and not just a 2D slice. */
+      glBindImageTexture(0, tex_scatter, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R11F_G11F_B10F);
+      glBindImageTexture(1, tex_transmit, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R11F_G11F_B10F);
+
+      GPU_framebuffer_bind(fbl->volumetric_fb);
+    }
+    else {
+      GPU_framebuffer_bind(fbl->volumetric_integ_fb);
+    }
+
     DRW_draw_pass(psl->volumetric_integration_ps);
+
+    if (USE_VOLUME_OPTI) {
+      glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+      glBindImageTexture(0, 0, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R11F_G11F_B10F);
+      glBindImageTexture(1, 0, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R11F_G11F_B10F);
+    }
 
     SWAP(struct GPUFrameBuffer *, fbl->volumetric_scat_fb, fbl->volumetric_integ_fb);
     SWAP(GPUTexture *, txl->volume_scatter, txl->volume_scatter_history);
@@ -653,8 +699,8 @@ void EEVEE_volumes_free_smoke_textures(void)
 {
   /* Free Smoke Textures after rendering */
   for (LinkData *link = e_data.smoke_domains.first; link; link = link->next) {
-    SmokeModifierData *smd = (SmokeModifierData *)link->data;
-    GPU_free_smoke(smd);
+    FluidModifierData *mmd = (FluidModifierData *)link->data;
+    GPU_free_smoke(mmd);
   }
   BLI_freelistN(&e_data.smoke_domains);
 }

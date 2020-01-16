@@ -252,7 +252,7 @@ static void rna_Gizmo_update_redraw(Main *UNUSED(bmain), Scene *UNUSED(scene), P
 static wmGizmo *rna_GizmoProperties_find_operator(PointerRNA *ptr)
 {
 #  if 0
-  wmWindowManager *wm = ptr->id.data;
+  wmWindowManager *wm = (wmWindowManager *)ptr->owner_id;
 #  endif
 
   /* We could try workaruond this lookup, but not trivial. */
@@ -870,9 +870,10 @@ static StructRNA *rna_GizmoGroup_register(Main *bmain,
 
   /* create a new gizmogroup type */
   dummywgt.ext.srna = RNA_def_struct_ptr(&BLENDER_RNA, dummywgt.idname, &RNA_GizmoGroup);
-  RNA_def_struct_flag(
-      dummywgt.ext.srna,
-      STRUCT_NO_IDPROPERTIES); /* gizmogroup properties are registered separately */
+
+  /* Gizmo group properties are registered separately. */
+  RNA_def_struct_flag(dummywgt.ext.srna, STRUCT_NO_IDPROPERTIES);
+
   dummywgt.ext.data = data;
   dummywgt.ext.call = call;
   dummywgt.ext.free = free;
@@ -1072,7 +1073,7 @@ static void rna_def_gizmo(BlenderRNA *brna, PropertyRNA *cprop)
   parm = RNA_def_enum_flag(func, "tweak", tweak_actions, 0, "Tweak", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_enum_flag(
-      func, "result", rna_enum_operator_return_items, OPERATOR_CANCELLED, "result", "");
+      func, "result", rna_enum_operator_return_items, OPERATOR_FINISHED, "result", "");
   RNA_def_function_return(func, parm);
   /* wmGizmo.property_update */
   /* TODO */
@@ -1091,7 +1092,7 @@ static void rna_def_gizmo(BlenderRNA *brna, PropertyRNA *cprop)
   parm = RNA_def_pointer(func, "event", "Event", "", "");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
   parm = RNA_def_enum_flag(
-      func, "result", rna_enum_operator_return_items, OPERATOR_CANCELLED, "result", "");
+      func, "result", rna_enum_operator_return_items, OPERATOR_FINISHED, "result", "");
   RNA_def_function_return(func, parm);
 
   /* wmGizmo.exit */

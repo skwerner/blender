@@ -29,8 +29,6 @@
 
 #include "DEG_depsgraph_query.h"
 
-#include "draw_mode_engines.h"
-
 #include "RE_pipeline.h"
 
 #include "gpencil_engine.h"
@@ -73,7 +71,7 @@ void GPENCIL_render_init(GPENCIL_Data *ved, RenderEngine *engine, struct Depsgra
    * because there is no viewport. So we need to manually create one
    * NOTE : use 32 bit format for precision in render mode.
    */
-  /* create multiframe framebuffer for AA */
+  /* create multisample framebuffer for AA */
   if (U.gpencil_multisamples > 0) {
     int rect_w = (int)viewport_size[0];
     int rect_h = (int)viewport_size[1];
@@ -131,7 +129,7 @@ static void GPENCIL_render_cache(void *vedata,
 
 /* TODO: Reuse Eevee code in shared module instead to duplicate here */
 static void GPENCIL_render_update_viewvecs(float invproj[4][4],
-                                           float winmat[4][4],
+                                           const float winmat[4][4],
                                            float (*r_viewvecs)[4])
 {
   /* view vectors for the corners of the view frustum.
@@ -308,6 +306,9 @@ void GPENCIL_render_to_image(void *vedata,
   DRW_render_object_iter(vedata, engine, draw_ctx->depsgraph, GPENCIL_render_cache);
 
   GPENCIL_cache_finish(vedata);
+
+  DRW_render_instance_buffer_finish();
+
   GPENCIL_draw_scene(vedata);
 
   /* combined data */

@@ -37,6 +37,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_animsys.h"
+#include "BKE_curveprofile.h"
 #include "BKE_data_transfer.h"
 #include "BKE_dynamicpaint.h"
 #include "BKE_effect.h"
@@ -44,7 +45,7 @@
 #include "BKE_mesh_remap.h"
 #include "BKE_multires.h"
 #include "BKE_ocean.h"
-#include "BKE_smoke.h" /* For smokeModifier_free & smokeModifier_createType */
+#include "BKE_fluid.h" /* For BKE_fluid_modifier_free & BKE_fluid_modifier_create_type_data */
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -57,92 +58,235 @@
 
 const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
     {0, "", 0, N_("Modify"), ""},
-    {eModifierType_DataTransfer, "DATA_TRANSFER", ICON_MOD_DATA_TRANSFER, "Data Transfer", ""},
-    {eModifierType_MeshCache, "MESH_CACHE", ICON_MOD_MESHDEFORM, "Mesh Cache", ""},
+    {eModifierType_DataTransfer,
+     "DATA_TRANSFER",
+     ICON_MOD_DATA_TRANSFER,
+     "Data Transfer",
+     "Transfer several types of data (vertex groups, UV maps, vertex colors, custom normals) from "
+     "one mesh to another"},
+    {eModifierType_MeshCache,
+     "MESH_CACHE",
+     ICON_MOD_MESHDEFORM,
+     "Mesh Cache",
+     "Deform the mesh using an external frame-by-frame vertex transform cache"},
     {eModifierType_MeshSequenceCache,
      "MESH_SEQUENCE_CACHE",
      ICON_MOD_MESHDEFORM,
      "Mesh Sequence Cache",
-     ""},
-    {eModifierType_NormalEdit, "NORMAL_EDIT", ICON_MOD_NORMALEDIT, "Normal Edit", ""},
-    {eModifierType_WeightedNormal, "WEIGHTED_NORMAL", ICON_MOD_NORMALEDIT, "Weighted Normal", ""},
-    {eModifierType_UVProject, "UV_PROJECT", ICON_MOD_UVPROJECT, "UV Project", ""},
-    {eModifierType_UVWarp, "UV_WARP", ICON_MOD_UVPROJECT, "UV Warp", ""},
+     "Deform the mesh or curve using an external mesh cache in Alembic format"},
+    {eModifierType_NormalEdit,
+     "NORMAL_EDIT",
+     ICON_MOD_NORMALEDIT,
+     "Normal Edit",
+     "Modify the direction of the surface normals"},
+    {eModifierType_WeightedNormal,
+     "WEIGHTED_NORMAL",
+     ICON_MOD_NORMALEDIT,
+     "Weighted Normal",
+     "Modify the direction of the surface normals using a weighting method"},
+    {eModifierType_UVProject,
+     "UV_PROJECT",
+     ICON_MOD_UVPROJECT,
+     "UV Project",
+     "Project the UV map coordinates from the negative Z axis of another object"},
+    {eModifierType_UVWarp,
+     "UV_WARP",
+     ICON_MOD_UVPROJECT,
+     "UV Warp",
+     "Transform the UV map using the the difference between two objects"},
     {eModifierType_WeightVGEdit,
      "VERTEX_WEIGHT_EDIT",
      ICON_MOD_VERTEX_WEIGHT,
      "Vertex Weight Edit",
-     ""},
+     "Modify of the weights of a vertex group"},
     {eModifierType_WeightVGMix,
      "VERTEX_WEIGHT_MIX",
      ICON_MOD_VERTEX_WEIGHT,
      "Vertex Weight Mix",
-     ""},
+     "Mix the weights of two vertex groups"},
     {eModifierType_WeightVGProximity,
      "VERTEX_WEIGHT_PROXIMITY",
      ICON_MOD_VERTEX_WEIGHT,
      "Vertex Weight Proximity",
-     ""},
+     "Set the vertex group weights based on the distance to another target object"},
     {0, "", 0, N_("Generate"), ""},
-    {eModifierType_Array, "ARRAY", ICON_MOD_ARRAY, "Array", ""},
-    {eModifierType_Bevel, "BEVEL", ICON_MOD_BEVEL, "Bevel", ""},
-    {eModifierType_Boolean, "BOOLEAN", ICON_MOD_BOOLEAN, "Boolean", ""},
-    {eModifierType_Build, "BUILD", ICON_MOD_BUILD, "Build", ""},
-    {eModifierType_Decimate, "DECIMATE", ICON_MOD_DECIM, "Decimate", ""},
-    {eModifierType_EdgeSplit, "EDGE_SPLIT", ICON_MOD_EDGESPLIT, "Edge Split", ""},
-    {eModifierType_Mask, "MASK", ICON_MOD_MASK, "Mask", ""},
-    {eModifierType_Mirror, "MIRROR", ICON_MOD_MIRROR, "Mirror", ""},
-    {eModifierType_Multires, "MULTIRES", ICON_MOD_MULTIRES, "Multiresolution", ""},
-    {eModifierType_Remesh, "REMESH", ICON_MOD_REMESH, "Remesh", ""},
-    {eModifierType_Screw, "SCREW", ICON_MOD_SCREW, "Screw", ""},
-    {eModifierType_Skin, "SKIN", ICON_MOD_SKIN, "Skin", ""},
-    {eModifierType_Solidify, "SOLIDIFY", ICON_MOD_SOLIDIFY, "Solidify", ""},
-    {eModifierType_Subsurf, "SUBSURF", ICON_MOD_SUBSURF, "Subdivision Surface", ""},
-    {eModifierType_Triangulate, "TRIANGULATE", ICON_MOD_TRIANGULATE, "Triangulate", ""},
+    {eModifierType_Array,
+     "ARRAY",
+     ICON_MOD_ARRAY,
+     "Array",
+     "Create copies of the shape with offsets"},
+    {eModifierType_Bevel,
+     "BEVEL",
+     ICON_MOD_BEVEL,
+     "Bevel",
+     "Generate sloped corners by adding geometry to the mesh's edges or vertices"},
+    {eModifierType_Boolean,
+     "BOOLEAN",
+     ICON_MOD_BOOLEAN,
+     "Boolean",
+     "Use another shape to cut, combine or perform a difference operation"},
+    {eModifierType_Build,
+     "BUILD",
+     ICON_MOD_BUILD,
+     "Build",
+     "Cause the faces of the mesh object to appear or disappear one after the other over time"},
+    {eModifierType_Decimate,
+     "DECIMATE",
+     ICON_MOD_DECIM,
+     "Decimate",
+     "Reduce the geometry density"},
+    {eModifierType_EdgeSplit,
+     "EDGE_SPLIT",
+     ICON_MOD_EDGESPLIT,
+     "Edge Split",
+     "Split away joined faces at the edges"},
+    {eModifierType_Mask,
+     "MASK",
+     ICON_MOD_MASK,
+     "Mask",
+     "Dynamically hide vertices based on a vertex group or armature"},
+    {eModifierType_Mirror,
+     "MIRROR",
+     ICON_MOD_MIRROR,
+     "Mirror",
+     "Mirror along the local X, Y and/or Z axes, over the object origin"},
+    {eModifierType_Multires,
+     "MULTIRES",
+     ICON_MOD_MULTIRES,
+     "Multiresolution",
+     "Subdivide the mesh in a way that allows editing the higher subdivision levels"},
+    {eModifierType_Remesh,
+     "REMESH",
+     ICON_MOD_REMESH,
+     "Remesh",
+     "Generate new mesh topology based on the current shape"},
+    {eModifierType_Screw,
+     "SCREW",
+     ICON_MOD_SCREW,
+     "Screw",
+     "Lathe around an axis, treating the inout mesh as a profile"},
+    {eModifierType_Skin,
+     "SKIN",
+     ICON_MOD_SKIN,
+     "Skin",
+     "Create a solid shape from vertices and edges, using the vertex radius to define the "
+     "thickness"},
+    {eModifierType_Solidify, "SOLIDIFY", ICON_MOD_SOLIDIFY, "Solidify", " Make the surface thick"},
+    {eModifierType_Subsurf,
+     "SUBSURF",
+     ICON_MOD_SUBSURF,
+     "Subdivision Surface",
+     "Split the faces into smaller parts, giving it a smoother appearance"},
+    {eModifierType_Triangulate,
+     "TRIANGULATE",
+     ICON_MOD_TRIANGULATE,
+     "Triangulate",
+     "Convert all polygons to triangles"},
     {eModifierType_Wireframe,
      "WIREFRAME",
      ICON_MOD_WIREFRAME,
      "Wireframe",
-     "Generate a wireframe on the edges of a mesh"},
+     "Convert faces into thickened edges"},
+    {eModifierType_Weld,
+     "WELD",
+     ICON_AUTOMERGE_OFF,
+     "Weld",
+     "Find groups of vertices closer then dist and merges them together"},
     {0, "", 0, N_("Deform"), ""},
-    {eModifierType_Armature, "ARMATURE", ICON_MOD_ARMATURE, "Armature", ""},
-    {eModifierType_Cast, "CAST", ICON_MOD_CAST, "Cast", ""},
-    {eModifierType_Curve, "CURVE", ICON_MOD_CURVE, "Curve", ""},
-    {eModifierType_Displace, "DISPLACE", ICON_MOD_DISPLACE, "Displace", ""},
-    {eModifierType_Hook, "HOOK", ICON_HOOK, "Hook", ""},
+    {eModifierType_Armature,
+     "ARMATURE",
+     ICON_MOD_ARMATURE,
+     "Armature",
+     "Deform the shape using an armature object"},
+    {eModifierType_Cast,
+     "CAST",
+     ICON_MOD_CAST,
+     "Cast",
+     "Shift the shape towards a predefined primitive"},
+    {eModifierType_Curve, "CURVE", ICON_MOD_CURVE, "Curve", "Bend the mesh using a curve object"},
+    {eModifierType_Displace,
+     "DISPLACE",
+     ICON_MOD_DISPLACE,
+     "Displace",
+     "Offset vertices based on a texture"},
+    {eModifierType_Hook, "HOOK", ICON_HOOK, "Hook", "Deform specific points using another object"},
     {eModifierType_LaplacianDeform,
      "LAPLACIANDEFORM",
      ICON_MOD_MESHDEFORM,
      "Laplacian Deform",
-     ""},
-    {eModifierType_Lattice, "LATTICE", ICON_MOD_LATTICE, "Lattice", ""},
-    {eModifierType_MeshDeform, "MESH_DEFORM", ICON_MOD_MESHDEFORM, "Mesh Deform", ""},
-    {eModifierType_Shrinkwrap, "SHRINKWRAP", ICON_MOD_SHRINKWRAP, "Shrinkwrap", ""},
-    {eModifierType_SimpleDeform, "SIMPLE_DEFORM", ICON_MOD_SIMPLEDEFORM, "Simple Deform", ""},
-    {eModifierType_Smooth, "SMOOTH", ICON_MOD_SMOOTH, "Smooth", ""},
+     "Deform based a series of anchor points"},
+    {eModifierType_Lattice,
+     "LATTICE",
+     ICON_MOD_LATTICE,
+     "Lattice",
+     "Deform using the shape of a lattice object"},
+    {eModifierType_MeshDeform,
+     "MESH_DEFORM",
+     ICON_MOD_MESHDEFORM,
+     "Mesh Deform",
+     "Deform using a different mesh, which acts as a deformation cage"},
+    {eModifierType_Shrinkwrap,
+     "SHRINKWRAP",
+     ICON_MOD_SHRINKWRAP,
+     "Shrinkwrap",
+     "Project the shape onto another object"},
+    {eModifierType_SimpleDeform,
+     "SIMPLE_DEFORM",
+     ICON_MOD_SIMPLEDEFORM,
+     "Simple Deform",
+     "Deform the shape by twisting, bending, tapering or stretching"},
+    {eModifierType_Smooth,
+     "SMOOTH",
+     ICON_MOD_SMOOTH,
+     "Smooth",
+     "Smooth the mesh by flattening the angles between adjacent faces"},
     {eModifierType_CorrectiveSmooth,
      "CORRECTIVE_SMOOTH",
      ICON_MOD_SMOOTH,
      "Smooth Corrective",
-     ""},
-    {eModifierType_LaplacianSmooth, "LAPLACIANSMOOTH", ICON_MOD_SMOOTH, "Smooth Laplacian", ""},
-    {eModifierType_SurfaceDeform, "SURFACE_DEFORM", ICON_MOD_MESHDEFORM, "Surface Deform", ""},
-    {eModifierType_Warp, "WARP", ICON_MOD_WARP, "Warp", ""},
-    {eModifierType_Wave, "WAVE", ICON_MOD_WAVE, "Wave", ""},
+     "Smooth the mesh while still preserving the volume"},
+    {eModifierType_LaplacianSmooth,
+     "LAPLACIANSMOOTH",
+     ICON_MOD_SMOOTH,
+     "Smooth Laplacian",
+     "Reduce the noise on a mesh surface with minimal changes to its shape"},
+    {eModifierType_SurfaceDeform,
+     "SURFACE_DEFORM",
+     ICON_MOD_MESHDEFORM,
+     "Surface Deform",
+     "Transfer motion from another mesh"},
+    {eModifierType_Warp,
+     "WARP",
+     ICON_MOD_WARP,
+     "Warp",
+     "Warp parts of a mesh to a new location in a very flexible way thanks to 2 specified "
+     "objects"},
+    {eModifierType_Wave,
+     "WAVE",
+     ICON_MOD_WAVE,
+     "Wave",
+     "Adds a ripple-like motion to an object’s geometry"},
     {0, "", 0, N_("Simulate"), ""},
     {eModifierType_Cloth, "CLOTH", ICON_MOD_CLOTH, "Cloth", ""},
     {eModifierType_Collision, "COLLISION", ICON_MOD_PHYSICS, "Collision", ""},
     {eModifierType_DynamicPaint, "DYNAMIC_PAINT", ICON_MOD_DYNAMICPAINT, "Dynamic Paint", ""},
-    {eModifierType_Explode, "EXPLODE", ICON_MOD_EXPLODE, "Explode", ""},
-    {eModifierType_Fluidsim, "FLUID_SIMULATION", ICON_MOD_FLUIDSIM, "Fluid Simulation", ""},
-    {eModifierType_Ocean, "OCEAN", ICON_MOD_OCEAN, "Ocean", ""},
+    {eModifierType_Explode,
+     "EXPLODE",
+     ICON_MOD_EXPLODE,
+     "Explode",
+     "Break apart the mesh faces and let them follow particles"},
+    {eModifierType_Ocean, "OCEAN", ICON_MOD_OCEAN, "Ocean", "Generate a moving ocean surface"},
     {eModifierType_ParticleInstance,
      "PARTICLE_INSTANCE",
      ICON_MOD_PARTICLE_INSTANCE,
      "Particle Instance",
      ""},
-    {eModifierType_ParticleSystem, "PARTICLE_SYSTEM", ICON_MOD_PARTICLES, "Particle System", ""},
-    {eModifierType_Smoke, "SMOKE", ICON_MOD_SMOKE, "Smoke", ""},
+    {eModifierType_ParticleSystem,
+     "PARTICLE_SYSTEM",
+     ICON_MOD_PARTICLES,
+     "Particle System",
+     "Spawn particles from the shape"},
+    {eModifierType_Fluid, "FLUID", ICON_MOD_FLUIDSIM, "Fluid Simulation", ""},
     {eModifierType_Softbody, "SOFT_BODY", ICON_MOD_SOFT, "Soft Body", ""},
     {eModifierType_Surface, "SURFACE", ICON_MODIFIER, "Surface", ""},
     {0, NULL, 0, NULL, NULL},
@@ -433,10 +577,9 @@ const EnumPropertyItem rna_enum_axis_flag_xyz_items[] = {
 };
 
 #ifdef RNA_RUNTIME
-
 #  include "DNA_particle_types.h"
 #  include "DNA_curve_types.h"
-#  include "DNA_smoke_types.h"
+#  include "DNA_fluid_types.h"
 
 #  include "BKE_cachefile.h"
 #  include "BKE_context.h"
@@ -517,8 +660,6 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
       return &RNA_BevelModifier;
     case eModifierType_Shrinkwrap:
       return &RNA_ShrinkwrapModifier;
-    case eModifierType_Fluidsim:
-      return &RNA_FluidSimulationModifier;
     case eModifierType_Mask:
       return &RNA_MaskModifier;
     case eModifierType_SimpleDeform:
@@ -527,8 +668,8 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
       return &RNA_MultiresModifier;
     case eModifierType_Surface:
       return &RNA_SurfaceModifier;
-    case eModifierType_Smoke:
-      return &RNA_SmokeModifier;
+    case eModifierType_Fluid:
+      return &RNA_FluidModifier;
     case eModifierType_Solidify:
       return &RNA_SolidifyModifier;
     case eModifierType_Screw:
@@ -561,6 +702,8 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
       return &RNA_LaplacianDeformModifier;
     case eModifierType_Wireframe:
       return &RNA_WireframeModifier;
+    case eModifierType_Weld:
+      return &RNA_WeldModifier;
     case eModifierType_DataTransfer:
       return &RNA_DataTransferModifier;
     case eModifierType_NormalEdit:
@@ -574,6 +717,7 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
     case eModifierType_WeightedNormal:
       return &RNA_WeightedNormalModifier;
     /* Default */
+    case eModifierType_Fluidsim: /* deprecated */
     case eModifierType_None:
     case eModifierType_ShapeKey:
     case NUM_MODIFIER_TYPES:
@@ -595,8 +739,8 @@ static void rna_Modifier_name_set(PointerRNA *ptr, const char *value)
   BLI_strncpy_utf8(md->name, value, sizeof(md->name));
 
   /* make sure the name is truly unique */
-  if (ptr->id.data) {
-    Object *ob = ptr->id.data;
+  if (ptr->owner_id) {
+    Object *ob = (Object *)ptr->owner_id;
     modifier_unique_name(&ob->modifiers, md);
   }
 
@@ -615,8 +759,8 @@ static char *rna_Modifier_path(PointerRNA *ptr)
 
 static void rna_Modifier_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  DEG_id_tag_update(ptr->id.data, ID_RECALC_GEOMETRY);
-  WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ptr->id.data);
+  DEG_id_tag_update(ptr->owner_id, ID_RECALC_GEOMETRY);
+  WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ptr->owner_id);
 }
 
 static void rna_Modifier_dependency_update(Main *bmain, Scene *scene, PointerRNA *ptr)
@@ -664,6 +808,7 @@ RNA_MOD_VGROUP_NAME_SET(WeightVGMix, mask_defgrp_name);
 RNA_MOD_VGROUP_NAME_SET(WeightVGProximity, defgrp_name);
 RNA_MOD_VGROUP_NAME_SET(WeightVGProximity, mask_defgrp_name);
 RNA_MOD_VGROUP_NAME_SET(WeightedNormal, defgrp_name);
+RNA_MOD_VGROUP_NAME_SET(Weld, defgrp_name);
 RNA_MOD_VGROUP_NAME_SET(Wireframe, defgrp_name);
 
 static void rna_ExplodeModifier_vgroup_get(PointerRNA *ptr, char *value)
@@ -723,7 +868,7 @@ static void modifier_object_set(Object *self, Object **ob_p, int type, PointerRN
         PointerRNA *ptr, PointerRNA value, struct ReportList *UNUSED(reports)) \
     { \
       _type##ModifierData *tmd = (_type##ModifierData *)ptr->data; \
-      modifier_object_set(ptr->id.data, &tmd->_prop, _obtype, value); \
+      modifier_object_set((Object *)ptr->owner_id, &tmd->_prop, _obtype, value); \
     }
 
 RNA_MOD_OBJECT_SET(Armature, object, OB_ARMATURE);
@@ -746,7 +891,7 @@ static void rna_HookModifier_object_set(PointerRNA *ptr,
                                         PointerRNA value,
                                         struct ReportList *UNUSED(reports))
 {
-  Object *owner = (Object *)ptr->id.data;
+  Object *owner = (Object *)ptr->owner_id;
   HookModifierData *hmd = ptr->data;
   Object *ob = (Object *)value.data;
 
@@ -755,9 +900,50 @@ static void rna_HookModifier_object_set(PointerRNA *ptr,
   BKE_object_modifier_hook_reset(owner, hmd);
 }
 
+static bool rna_HookModifier_object_override_apply(Main *UNUSED(bmain),
+                                                   PointerRNA *ptr_dst,
+                                                   PointerRNA *ptr_src,
+                                                   PointerRNA *ptr_storage,
+                                                   PropertyRNA *prop_dst,
+                                                   PropertyRNA *prop_src,
+                                                   PropertyRNA *UNUSED(prop_storage),
+                                                   const int len_dst,
+                                                   const int len_src,
+                                                   const int len_storage,
+                                                   PointerRNA *UNUSED(ptr_item_dst),
+                                                   PointerRNA *UNUSED(ptr_item_src),
+                                                   PointerRNA *UNUSED(ptr_item_storage),
+                                                   IDOverrideLibraryPropertyOperation *opop)
+{
+  BLI_assert(len_dst == len_src && (!ptr_storage || len_dst == len_storage) && len_dst == 0);
+  BLI_assert(opop->operation == IDOVERRIDE_LIBRARY_OP_REPLACE &&
+             "Unsupported RNA override operation on Hook modifier target objet pointer");
+  UNUSED_VARS_NDEBUG(ptr_storage, len_dst, len_src, len_storage, opop);
+
+  /* We need a special handling here because setting hook target resets invert parent matrix,
+   * which is evil in our case. */
+  HookModifierData *hmd = ptr_dst->data;
+  Object *owner = (Object *)ptr_dst->owner_id;
+  Object *target_dst = RNA_property_pointer_get(ptr_dst, prop_dst).data;
+  Object *target_src = RNA_property_pointer_get(ptr_src, prop_src).data;
+
+  BLI_assert(target_dst == hmd->object);
+
+  if (target_src == target_dst) {
+    return false;
+  }
+
+  hmd->object = target_src;
+  if (target_src == NULL) {
+    /* The only case where we do want default behavior (with matrix reset). */
+    BKE_object_modifier_hook_reset(owner, hmd);
+  }
+  return true;
+}
+
 static void rna_HookModifier_subtarget_set(PointerRNA *ptr, const char *value)
 {
-  Object *owner = (Object *)ptr->id.data;
+  Object *owner = (Object *)ptr->owner_id;
   HookModifierData *hmd = ptr->data;
 
   BLI_strncpy(hmd->subtarget, value, sizeof(hmd->subtarget));
@@ -841,25 +1027,27 @@ static void rna_UVProjector_object_set(PointerRNA *ptr,
 
 /* Other rna callbacks */
 
-static void rna_Smoke_set_type(Main *bmain, Scene *scene, PointerRNA *ptr)
+static void rna_fluid_set_type(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
-  SmokeModifierData *smd = (SmokeModifierData *)ptr->data;
-  Object *ob = (Object *)ptr->id.data;
+  FluidModifierData *mmd = (FluidModifierData *)ptr->data;
+  Object *ob = (Object *)ptr->owner_id;
 
   /* nothing changed */
-  if ((smd->type & MOD_SMOKE_TYPE_DOMAIN) && smd->domain) {
+  if ((mmd->type & MOD_FLUID_TYPE_DOMAIN) && mmd->domain) {
     return;
   }
 
-  smokeModifier_free(smd);       /* XXX TODO: completely free all 3 pointers */
-  smokeModifier_createType(smd); /* create regarding of selected type */
+#  ifdef WITH_FLUID
+  BKE_fluid_modifier_free(mmd);             /* XXX TODO: completely free all 3 pointers */
+  BKE_fluid_modifier_create_type_data(mmd); /* create regarding of selected type */
+#  endif
 
-  switch (smd->type) {
-    case MOD_SMOKE_TYPE_DOMAIN:
+  switch (mmd->type) {
+    case MOD_FLUID_TYPE_DOMAIN:
       ob->dt = OB_WIRE;
       break;
-    case MOD_SMOKE_TYPE_FLOW:
-    case MOD_SMOKE_TYPE_COLL:
+    case MOD_FLUID_TYPE_FLOW:
+    case MOD_FLUID_TYPE_EFFEC:
     case 0:
     default:
       break;
@@ -871,10 +1059,10 @@ static void rna_Smoke_set_type(Main *bmain, Scene *scene, PointerRNA *ptr)
 
 static void rna_MultiresModifier_type_set(PointerRNA *ptr, int value)
 {
-  Object *ob = (Object *)ptr->id.data;
+  Object *ob = (Object *)ptr->owner_id;
   MultiresModifierData *mmd = (MultiresModifierData *)ptr->data;
 
-  multires_force_update(ob);
+  multires_force_sculpt_rebuild(ob);
   mmd->simple = value;
 }
 
@@ -889,7 +1077,7 @@ static void rna_MultiresModifier_level_range(
 
 static bool rna_MultiresModifier_external_get(PointerRNA *ptr)
 {
-  Object *ob = (Object *)ptr->id.data;
+  Object *ob = (Object *)ptr->owner_id;
   Mesh *me = ob->data;
 
   return CustomData_external_test(&me->ldata, CD_MDISPS);
@@ -897,7 +1085,7 @@ static bool rna_MultiresModifier_external_get(PointerRNA *ptr)
 
 static void rna_MultiresModifier_filepath_get(PointerRNA *ptr, char *value)
 {
-  Object *ob = (Object *)ptr->id.data;
+  Object *ob = (Object *)ptr->owner_id;
   CustomDataExternal *external = ((Mesh *)ob->data)->ldata.external;
 
   BLI_strncpy(value, (external) ? external->filename : "", sizeof(external->filename));
@@ -905,7 +1093,7 @@ static void rna_MultiresModifier_filepath_get(PointerRNA *ptr, char *value)
 
 static void rna_MultiresModifier_filepath_set(PointerRNA *ptr, const char *value)
 {
-  Object *ob = (Object *)ptr->id.data;
+  Object *ob = (Object *)ptr->owner_id;
   CustomDataExternal *external = ((Mesh *)ob->data)->ldata.external;
 
   if (external && !STREQ(external->filename, value)) {
@@ -916,7 +1104,7 @@ static void rna_MultiresModifier_filepath_set(PointerRNA *ptr, const char *value
 
 static int rna_MultiresModifier_filepath_length(PointerRNA *ptr)
 {
-  Object *ob = (Object *)ptr->id.data;
+  Object *ob = (Object *)ptr->owner_id;
   CustomDataExternal *external = ((Mesh *)ob->data)->ldata.external;
 
   return strlen((external) ? external->filename : "");
@@ -941,20 +1129,32 @@ static bool rna_MeshDeformModifier_is_bound_get(PointerRNA *ptr)
 
 static PointerRNA rna_SoftBodyModifier_settings_get(PointerRNA *ptr)
 {
-  Object *ob = (Object *)ptr->id.data;
+  Object *ob = (Object *)ptr->owner_id;
   return rna_pointer_inherit_refine(ptr, &RNA_SoftBodySettings, ob->soft);
 }
 
 static PointerRNA rna_SoftBodyModifier_point_cache_get(PointerRNA *ptr)
 {
-  Object *ob = (Object *)ptr->id.data;
+  Object *ob = (Object *)ptr->owner_id;
   return rna_pointer_inherit_refine(ptr, &RNA_PointCache, ob->soft->shared->pointcache);
 }
 
 static PointerRNA rna_CollisionModifier_settings_get(PointerRNA *ptr)
 {
-  Object *ob = (Object *)ptr->id.data;
+  Object *ob = (Object *)ptr->owner_id;
   return rna_pointer_inherit_refine(ptr, &RNA_CollisionSettings, ob->pd);
+}
+
+/* Special update function for setting the number of segments of the modifier that also resamples
+ * the segments in the custom profile. */
+static void rna_BevelModifier_update_segments(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  BevelModifierData *bmd = (BevelModifierData *)ptr->data;
+  if (RNA_boolean_get(ptr, "use_custom_profile")) {
+    short segments = (short)RNA_int_get(ptr, "segments");
+    BKE_curveprofile_initialize(bmd->custom_profile, segments);
+  }
+  rna_Modifier_update(bmain, scene, ptr);
 }
 
 static void rna_UVProjectModifier_num_projectors_set(PointerRNA *ptr, int value)
@@ -1346,7 +1546,7 @@ static void rna_CorrectiveSmoothModifier_update(Main *bmain, Scene *scene, Point
 {
   CorrectiveSmoothModifierData *csmd = (CorrectiveSmoothModifierData *)ptr->data;
 
-  MEM_SAFE_FREE(csmd->delta_cache);
+  MEM_SAFE_FREE(csmd->delta_cache.deltas);
 
   rna_Modifier_update(bmain, scene, ptr);
 }
@@ -1560,6 +1760,7 @@ static void rna_def_modifier_generic_map_info(StructRNA *srna)
   prop = RNA_def_property(srna, "texture", PROP_POINTER, PROP_NONE);
   RNA_def_property_ui_text(prop, "Texture", "");
   RNA_def_property_flag(prop, PROP_EDITABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "texture_coords", PROP_ENUM, PROP_NONE);
@@ -1579,6 +1780,7 @@ static void rna_def_modifier_generic_map_info(StructRNA *srna)
   RNA_def_property_ui_text(
       prop, "Texture Coordinate Object", "Object to set the texture coordinates");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 }
 
@@ -1595,11 +1797,13 @@ static void rna_def_modifier_warp(BlenderRNA *brna)
   prop = RNA_def_property(srna, "object_from", PROP_POINTER, PROP_NONE);
   RNA_def_property_ui_text(prop, "From", "Object to transform from");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "object_to", PROP_POINTER, PROP_NONE);
   RNA_def_property_ui_text(prop, "To", "Object to transform to");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "strength", PROP_FLOAT, PROP_NONE);
@@ -1715,6 +1919,7 @@ static void rna_def_modifier_lattice(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_LatticeModifier_object_set", NULL, "rna_Lattice_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "vertex_group", PROP_STRING, PROP_NONE);
@@ -1758,6 +1963,7 @@ static void rna_def_modifier_curve(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_CurveModifier_object_set", NULL, "rna_Curve_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_CurveModifier_dependency_update");
 
   prop = RNA_def_property(srna, "vertex_group", PROP_STRING, PROP_NONE);
@@ -1916,6 +2122,7 @@ static void rna_def_modifier_mirror(BlenderRNA *brna)
   RNA_def_property_pointer_sdna(prop, NULL, "mirror_ob");
   RNA_def_property_ui_text(prop, "Mirror Object", "Object to use as mirror");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 }
 
@@ -2014,7 +2221,7 @@ static void rna_def_modifier_decimate(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_dissolve_boundaries", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_DECIM_FLAG_ALL_BOUNDARY_VERTS);
   RNA_def_property_ui_text(
-      prop, "All Boundaries", "Dissolve all vertices inbetween face boundaries (planar only)");
+      prop, "All Boundaries", "Dissolve all vertices in between face boundaries (planar only)");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "delimit", PROP_ENUM, PROP_NONE);
@@ -2125,6 +2332,7 @@ static void rna_def_modifier_wave(BlenderRNA *brna)
   RNA_def_property_pointer_sdna(prop, NULL, "objectcenter");
   RNA_def_property_ui_text(prop, "Start Position Object", "Object which defines the wave center");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "vertex_group", PROP_STRING, PROP_NONE);
@@ -2280,6 +2488,8 @@ static void rna_def_modifier_hook(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Object", "Parent Object for hook, also recalculates and clears offset");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_override_funcs(prop, NULL, NULL, "rna_HookModifier_object_override_apply");
   RNA_def_property_pointer_funcs(prop, NULL, "rna_HookModifier_object_set", NULL, NULL);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
@@ -2380,6 +2590,7 @@ static void rna_def_modifier_boolean(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_BooleanModifier_object_set", NULL, "rna_Mesh_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "operation", PROP_ENUM, PROP_NONE);
@@ -2468,6 +2679,7 @@ static void rna_def_modifier_array(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_ArrayModifier_curve_ob_set", NULL, "rna_Curve_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_ArrayModifier_dependency_update");
 
   /* Offset parameters */
@@ -2531,6 +2743,7 @@ static void rna_def_modifier_array(BlenderRNA *brna)
       "Use the location and rotation of another object to determine the distance and "
       "rotational change between arrayed items");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   /* Caps */
@@ -2539,6 +2752,7 @@ static void rna_def_modifier_array(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_ArrayModifier_start_cap_set", NULL, "rna_Mesh_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "end_cap", PROP_POINTER, PROP_NONE);
@@ -2546,6 +2760,7 @@ static void rna_def_modifier_array(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_ArrayModifier_end_cap_set", NULL, "rna_Mesh_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "offset_u", PROP_FLOAT, PROP_FACTOR);
@@ -2754,6 +2969,7 @@ static void rna_def_modifier_uvproject(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, "rna_UVProjector_object_get", "rna_UVProjector_object_set", NULL, NULL);
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Object", "Object to use as projector transform");
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 }
@@ -2998,6 +3214,7 @@ static void rna_def_modifier_cast(BlenderRNA *brna)
       "Control object: if available, its location determines the center of the effect");
   RNA_def_property_pointer_funcs(prop, NULL, "rna_CastModifier_object_set", NULL, NULL);
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "use_x", PROP_BOOLEAN, PROP_NONE);
@@ -3024,7 +3241,7 @@ static void rna_def_modifier_cast(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_transform", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_CAST_USE_OB_TRANSFORM);
   RNA_def_property_ui_text(
-      prop, "Use transform", "Use object transform to control projection shape");
+      prop, "Use Transform", "Use object transform to control projection shape");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "factor", PROP_FLOAT, PROP_FACTOR);
@@ -3080,6 +3297,7 @@ static void rna_def_modifier_meshdeform(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_MeshDeformModifier_object_set", NULL, "rna_Mesh_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "is_bound", PROP_BOOLEAN, PROP_NONE);
@@ -3165,6 +3383,7 @@ static void rna_def_modifier_particleinstance(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(prop, NULL, NULL, NULL, "rna_Mesh_object_poll");
   RNA_def_property_ui_text(prop, "Object", "Object that has the particle system");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "particle_system_index", PROP_INT, PROP_NONE);
@@ -3388,23 +3607,23 @@ static void rna_def_modifier_cloth(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Hair Grid Resolution", "");
 }
 
-static void rna_def_modifier_smoke(BlenderRNA *brna)
+static void rna_def_modifier_fluid(BlenderRNA *brna)
 {
   StructRNA *srna;
   PropertyRNA *prop;
 
-  static const EnumPropertyItem prop_smoke_type_items[] = {
+  static const EnumPropertyItem prop_fluid_type_items[] = {
       {0, "NONE", 0, "None", ""},
-      {MOD_SMOKE_TYPE_DOMAIN, "DOMAIN", 0, "Domain", ""},
-      {MOD_SMOKE_TYPE_FLOW, "FLOW", 0, "Flow", "Inflow/Outflow"},
-      {MOD_SMOKE_TYPE_COLL, "COLLISION", 0, "Collision", ""},
+      {MOD_FLUID_TYPE_DOMAIN, "DOMAIN", 0, "Domain", ""},
+      {MOD_FLUID_TYPE_FLOW, "FLOW", 0, "Flow", "Inflow/Outflow"},
+      {MOD_FLUID_TYPE_EFFEC, "EFFECTOR", 0, "Effector", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
-  srna = RNA_def_struct(brna, "SmokeModifier", "Modifier");
-  RNA_def_struct_ui_text(srna, "Smoke Modifier", "Smoke simulation modifier");
-  RNA_def_struct_sdna(srna, "SmokeModifierData");
-  RNA_def_struct_ui_icon(srna, ICON_MOD_SMOKE);
+  srna = RNA_def_struct(brna, "FluidModifier", "Modifier");
+  RNA_def_struct_ui_text(srna, "Fluid Modifier", "Fluid simulation modifier");
+  RNA_def_struct_sdna(srna, "FluidModifierData");
+  RNA_def_struct_ui_icon(srna, ICON_MOD_FLUIDSIM);
 
   prop = RNA_def_property(srna, "domain_settings", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "domain");
@@ -3414,16 +3633,16 @@ static void rna_def_modifier_smoke(BlenderRNA *brna)
   RNA_def_property_pointer_sdna(prop, NULL, "flow");
   RNA_def_property_ui_text(prop, "Flow Settings", "");
 
-  prop = RNA_def_property(srna, "coll_settings", PROP_POINTER, PROP_NONE);
-  RNA_def_property_pointer_sdna(prop, NULL, "coll");
-  RNA_def_property_ui_text(prop, "Collision Settings", "");
+  prop = RNA_def_property(srna, "effector_settings", PROP_POINTER, PROP_NONE);
+  RNA_def_property_pointer_sdna(prop, NULL, "effector");
+  RNA_def_property_ui_text(prop, "Effector Settings", "");
 
-  prop = RNA_def_property(srna, "smoke_type", PROP_ENUM, PROP_NONE);
+  prop = RNA_def_property(srna, "fluid_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "type");
-  RNA_def_property_enum_items(prop, prop_smoke_type_items);
+  RNA_def_property_enum_items(prop, prop_fluid_type_items);
   RNA_def_property_ui_text(prop, "Type", "");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
-  RNA_def_property_update(prop, 0, "rna_Smoke_set_type");
+  RNA_def_property_update(prop, 0, "rna_fluid_set_type");
 }
 
 static void rna_def_modifier_dynamic_paint(BlenderRNA *brna)
@@ -3523,10 +3742,26 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
-  static EnumPropertyItem prop_miter_items[] = {
-      {MOD_BEVEL_MITER_SHARP, "MITER_SHARP", 0, "Sharp", "Default sharp miter"},
-      {MOD_BEVEL_MITER_PATCH, "MITER_PATCH", 0, "Patch", "Miter with extra corner"},
-      {MOD_BEVEL_MITER_ARC, "MITER_ARC", 0, "Arc", "Miter with curved arc"},
+  static const EnumPropertyItem prop_miter_outer_items[] = {
+      {MOD_BEVEL_MITER_SHARP, "MITER_SHARP", 0, "Sharp", "Outside of miter is sharp"},
+      {MOD_BEVEL_MITER_PATCH, "MITER_PATCH", 0, "Patch", "Outside of miter is squared-off patch"},
+      {MOD_BEVEL_MITER_ARC, "MITER_ARC", 0, "Arc", "Outside of miter is arc"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem prop_miter_inner_items[] = {
+      {MOD_BEVEL_MITER_SHARP, "MITER_SHARP", 0, "Sharp", "Inside of miter is sharp"},
+      {MOD_BEVEL_MITER_ARC, "MITER_ARC", 0, "Arc", "Inside of miter is arc"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static EnumPropertyItem prop_vmesh_method_items[] = {
+      {MOD_BEVEL_VMESH_ADJ, "ADJ", 0, "Grid Fill", "Default patterned fill"},
+      {MOD_BEVEL_VMESH_CUTOFF,
+       "CUTOFF",
+       0,
+       "Cutoff",
+       "A cut-off at the end of each profile before the intersection"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -3554,7 +3789,7 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
   RNA_def_property_int_sdna(prop, NULL, "res");
   RNA_def_property_range(prop, 1, 100);
   RNA_def_property_ui_text(prop, "Segments", "Number of segments for round edges/verts");
-  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+  RNA_def_property_update(prop, 0, "rna_BevelModifier_update_segments");
 
   prop = RNA_def_property(srna, "use_only_vertices", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_BEVEL_VERT);
@@ -3588,7 +3823,7 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
   prop = RNA_def_property(srna, "offset_type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "val_flags");
   RNA_def_property_enum_items(prop, prop_val_type_items);
-  RNA_def_property_ui_text(prop, "Amount Type", "What distance Width measures");
+  RNA_def_property_ui_text(prop, "Width Type", "What distance Width measures");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "profile", PROP_FLOAT, PROP_FACTOR);
@@ -3633,13 +3868,13 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "miter_outer", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "miter_outer");
-  RNA_def_property_enum_items(prop, prop_miter_items);
+  RNA_def_property_enum_items(prop, prop_miter_outer_items);
   RNA_def_property_ui_text(prop, "Outer Miter", "Pattern to use for outside of miters");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "miter_inner", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "miter_inner");
-  RNA_def_property_enum_items(prop, prop_miter_items);
+  RNA_def_property_enum_items(prop, prop_miter_inner_items);
   RNA_def_property_ui_text(prop, "Inner Miter", "Pattern to use for inside of miters");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
@@ -3648,6 +3883,25 @@ static void rna_def_modifier_bevel(BlenderRNA *brna)
   RNA_def_property_range(prop, 0, FLT_MAX);
   RNA_def_property_ui_range(prop, 0.0f, 100.0f, 0.1, 4);
   RNA_def_property_ui_text(prop, "Spread", "Spread distance for inner miter arcs");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "use_custom_profile", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flags", MOD_BEVEL_CUSTOM_PROFILE);
+  RNA_def_property_ui_text(
+      prop, "Custom Profile", "Whether to use a user inputed curve for the bevel's profile");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "custom_profile", PROP_POINTER, PROP_NONE);
+  RNA_def_property_struct_type(prop, "CurveProfile");
+  RNA_def_property_pointer_sdna(prop, NULL, "custom_profile");
+  RNA_def_property_ui_text(prop, "Custom Profile Path", "The path for the custom profile");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "vmesh_method", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "vmesh_method");
+  RNA_def_property_enum_items(prop, prop_vmesh_method_items);
+  RNA_def_property_ui_text(
+      prop, "Vertex Mesh Method", "The method to use to create the mesh at intersections");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
@@ -3732,6 +3986,7 @@ static void rna_def_modifier_shrinkwrap(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_ShrinkwrapModifier_target_set", NULL, "rna_Mesh_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "auxiliary_target", PROP_POINTER, PROP_NONE);
@@ -3740,6 +3995,7 @@ static void rna_def_modifier_shrinkwrap(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_ShrinkwrapModifier_auxTarget_set", NULL, "rna_Mesh_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "vertex_group", PROP_STRING, PROP_NONE);
@@ -3813,23 +4069,6 @@ static void rna_def_modifier_shrinkwrap(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
-static void rna_def_modifier_fluidsim(BlenderRNA *brna)
-{
-  StructRNA *srna;
-  PropertyRNA *prop;
-
-  srna = RNA_def_struct(brna, "FluidSimulationModifier", "Modifier");
-  RNA_def_struct_ui_text(srna, "Fluid Simulation Modifier", "Fluid simulation modifier");
-  RNA_def_struct_sdna(srna, "FluidsimModifierData");
-  RNA_def_struct_ui_icon(srna, ICON_MOD_FLUIDSIM);
-
-  prop = RNA_def_property(srna, "settings", PROP_POINTER, PROP_NONE);
-  RNA_def_property_flag(prop, PROP_NEVER_NULL);
-  RNA_def_property_pointer_sdna(prop, NULL, "fss");
-  RNA_def_property_ui_text(
-      prop, "Settings", "Settings for how this object is used in the fluid simulation");
-}
-
 static void rna_def_modifier_mask(BlenderRNA *brna)
 {
   StructRNA *srna;
@@ -3857,6 +4096,7 @@ static void rna_def_modifier_mask(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_MaskModifier_ob_arm_set", NULL, "rna_Armature_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "vertex_group", PROP_STRING, PROP_NONE);
@@ -3935,6 +4175,7 @@ static void rna_def_modifier_simpledeform(BlenderRNA *brna)
   prop = RNA_def_property(srna, "origin", PROP_POINTER, PROP_NONE);
   RNA_def_property_ui_text(prop, "Origin", "Offset the origin and orientation of the deformation");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "factor", PROP_FLOAT, PROP_NONE);
@@ -3995,15 +4236,70 @@ static void rna_def_modifier_surface(BlenderRNA *brna)
 
 static void rna_def_modifier_solidify(BlenderRNA *brna)
 {
+  static const EnumPropertyItem mode_items[] = {
+      {MOD_SOLIDIFY_MODE_EXTRUDE,
+       "EXTRUDE",
+       0,
+       "Simple",
+       "Output a solidified version of a mesh by simple extrusion"},
+      {MOD_SOLIDIFY_MODE_NONMANIFOLD,
+       "NON_MANIFOLD",
+       0,
+       "Complex",
+       "Output a manifold mesh even if the base mesh is non-manifold, "
+       "where edges have 3 or more connecting faces."
+       "This method is slower"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem nonmanifold_thickness_mode_items[] = {
+      {MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_FIXED,
+       "FIXED",
+       0,
+       "Fixed",
+       "Most basic thickness calculation"},
+      {MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_EVEN,
+       "EVEN",
+       0,
+       "Even",
+       "Even thickness calculation which takes the angle between faces into account"},
+      {MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_CONSTRAINTS,
+       "CONSTRAINTS",
+       0,
+       "Constraints",
+       "Thickness calculation using constraints, most advanced"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
+  static const EnumPropertyItem nonmanifold_boundary_mode_items[] = {
+      {MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_NONE, "NONE", 0, "None", "No shape correction"},
+      {MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_ROUND,
+       "ROUND",
+       0,
+       "Round",
+       "Round open perimeter shape"},
+      {MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_FLAT,
+       "FLAT",
+       0,
+       "Flat",
+       "Flat open perimeter shape"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   StructRNA *srna;
   PropertyRNA *prop;
 
   srna = RNA_def_struct(brna, "SolidifyModifier", "Modifier");
-  RNA_def_struct_ui_text(srna,
-                         "Solidify Modifier",
-                         "Create a solid skin by extruding, compensating for sharp angles");
+  RNA_def_struct_ui_text(
+      srna, "Solidify Modifier", "Create a solid skin, compensating for sharp angles");
   RNA_def_struct_sdna(srna, "SolidifyModifierData");
   RNA_def_struct_ui_icon(srna, ICON_MOD_SOLIDIFY);
+
+  prop = RNA_def_property(srna, "solidify_mode", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "mode");
+  RNA_def_property_enum_items(prop, mode_items);
+  RNA_def_property_ui_text(prop, "Mode", "Selects the used algorithm");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "thickness", PROP_FLOAT, PROP_DISTANCE);
   RNA_def_property_float_sdna(prop, NULL, "offset");
@@ -4017,6 +4313,11 @@ static void rna_def_modifier_solidify(BlenderRNA *brna)
   RNA_def_property_range(prop, 0, 100.0);
   RNA_def_property_ui_range(prop, 0, 2.0, 0.1, 4);
   RNA_def_property_ui_text(prop, "Clamp", "Offset clamp based on geometry scale");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "use_thickness_angle_clamp", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_SOLIDIFY_OFFSET_ANGLE_CLAMP);
+  RNA_def_property_ui_text(prop, "Angle Clamp", "Clamp thickness based on angles");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "thickness_vertex_group", PROP_FLOAT, PROP_FACTOR);
@@ -4112,6 +4413,18 @@ static void rna_def_modifier_solidify(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_SOLIDIFY_NOSHELL);
   RNA_def_property_ui_text(prop, "Only Rim", "Only add the rim to the original data");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  /* Settings for #MOD_SOLIDIFY_MODE_NONMANIFOLD */
+  prop = RNA_def_property(srna, "nonmanifold_thickness_mode", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "nonmanifold_offset_mode");
+  RNA_def_property_enum_items(prop, nonmanifold_thickness_mode_items);
+  RNA_def_property_ui_text(prop, "Thickness Mode", "Selects the used thickness algorithm");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "nonmanifold_boundary_mode", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, nonmanifold_boundary_mode_items);
+  RNA_def_property_ui_text(prop, "Boundary Shape", "Selects the boundary adjustment algorithm");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
 static void rna_def_modifier_screw(BlenderRNA *brna)
@@ -4128,6 +4441,7 @@ static void rna_def_modifier_screw(BlenderRNA *brna)
   RNA_def_property_pointer_sdna(prop, NULL, "ob_axis");
   RNA_def_property_ui_text(prop, "Object", "Object to define the screw axis");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "steps", PROP_INT, PROP_UNSIGNED);
@@ -4254,6 +4568,7 @@ static void rna_def_modifier_uvwarp(BlenderRNA *brna)
   RNA_def_property_pointer_sdna(prop, NULL, "object_src");
   RNA_def_property_ui_text(prop, "Object From", "Object defining offset");
   RNA_def_property_flag(prop, PROP_EDITABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "bone_from", PROP_STRING, PROP_NONE);
@@ -4265,6 +4580,7 @@ static void rna_def_modifier_uvwarp(BlenderRNA *brna)
   RNA_def_property_pointer_sdna(prop, NULL, "object_dst");
   RNA_def_property_ui_text(prop, "Object To", "Object defining offset");
   RNA_def_property_flag(prop, PROP_EDITABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "bone_to", PROP_STRING, PROP_NONE);
@@ -4332,6 +4648,7 @@ static void rna_def_modifier_weightvg_mask(BlenderRNA *UNUSED(brna),
   prop = RNA_def_property(srna, "mask_texture", PROP_POINTER, PROP_NONE);
   RNA_def_property_ui_text(prop, "Masking Tex", "Masking texture");
   RNA_def_property_flag(prop, PROP_EDITABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "mask_tex_use_channel", PROP_ENUM, PROP_NONE);
@@ -4360,6 +4677,7 @@ static void rna_def_modifier_weightvg_mask(BlenderRNA *UNUSED(brna),
                            "Which object to take texture "
                            "coordinates from");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 }
 
@@ -4629,6 +4947,7 @@ static void rna_def_modifier_weightvgproximity(BlenderRNA *brna)
   RNA_def_property_pointer_sdna(prop, NULL, "proximity_ob_target");
   RNA_def_property_ui_text(prop, "Target Object", "Object to calculate vertices distances from");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "min_dist", PROP_FLOAT, PROP_DISTANCE);
@@ -5192,6 +5511,7 @@ static void rna_def_modifier_meshseqcache(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "CacheFile");
   RNA_def_property_ui_text(prop, "Cache File", "");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "object_path", PROP_STRING, PROP_NONE);
@@ -5330,6 +5650,40 @@ static void rna_def_modifier_wireframe(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
+static void rna_def_modifier_weld(BlenderRNA *brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+  srna = RNA_def_struct(brna, "WeldModifier", "Modifier");
+  RNA_def_struct_ui_text(srna, "Weld Modifier", "Weld modifier");
+  RNA_def_struct_sdna(srna, "WeldModifierData");
+  RNA_def_struct_ui_icon(srna, ICON_AUTOMERGE_OFF);
+
+  prop = RNA_def_property(srna, "merge_threshold", PROP_FLOAT, PROP_DISTANCE);
+  RNA_def_property_float_sdna(prop, NULL, "merge_dist");
+  RNA_def_property_range(prop, 0, FLT_MAX);
+  RNA_def_property_ui_range(prop, 0, 1, 0.001, 6);
+  RNA_def_property_ui_text(prop, "Merge Distance", "Limit below which to merge vertices");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "max_interactions", PROP_INT, PROP_UNSIGNED);
+  RNA_def_property_int_sdna(prop, NULL, "max_interactions");
+  RNA_def_property_ui_text(
+      prop,
+      "Duplicate Limit",
+      "For a better performance, limits the number of elements found per vertex. "
+      "(0 makes it infinite)");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "vertex_group", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_sdna(prop, NULL, "defgrp_name");
+  RNA_def_property_ui_text(
+      prop, "Vertex Group", "Vertex group name for selecting the affected areas");
+  RNA_def_property_string_funcs(prop, NULL, NULL, "rna_WeldModifier_defgrp_name_set");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+}
+
 static void rna_def_modifier_datatransfer(BlenderRNA *brna)
 {
   StructRNA *srna;
@@ -5393,6 +5747,7 @@ static void rna_def_modifier_datatransfer(BlenderRNA *brna)
   RNA_def_property_pointer_sdna(prop, NULL, "ob_source");
   RNA_def_property_ui_text(prop, "Source Object", "Object to transfer data from");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_DataTransferModifier_ob_source_set", NULL, "rna_Mesh_object_poll");
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
@@ -5798,6 +6153,7 @@ static void rna_def_modifier_normaledit(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Target", "Target object used to affect normals");
   RNA_def_property_pointer_funcs(prop, NULL, "rna_NormalEditModifier_target_set", NULL, NULL);
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "use_direction_parallel", PROP_BOOLEAN, PROP_NONE);
@@ -5825,12 +6181,13 @@ static void rna_def_modifier_surfacedeform(BlenderRNA *brna)
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_SurfaceDeformModifier_target_set", NULL, "rna_Mesh_object_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 
   prop = RNA_def_property(srna, "falloff", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 2.0f, 16.0f);
   RNA_def_property_ui_text(
-      prop, "Interpolation falloff", "Controls how much nearby polygons influence deformation");
+      prop, "Interpolation Falloff", "Controls how much nearby polygons influence deformation");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "is_bound", PROP_BOOLEAN, PROP_NONE);
@@ -5981,7 +6338,7 @@ void RNA_def_modifier(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "mode", eModifierMode_ApplyOnSpline);
   RNA_def_property_ui_text(
       prop,
-      "Apply on spline",
+      "Apply on Spline",
       "Apply this and all preceding deformation modifiers on splines' points rather than "
       "on filled curve/surface");
   RNA_def_property_ui_icon(prop, ICON_SURFACE_DATA, 0);
@@ -6014,13 +6371,12 @@ void RNA_def_modifier(BlenderRNA *brna)
   rna_def_modifier_collision(brna);
   rna_def_modifier_bevel(brna);
   rna_def_modifier_shrinkwrap(brna);
-  rna_def_modifier_fluidsim(brna);
   rna_def_modifier_mask(brna);
   rna_def_modifier_simpledeform(brna);
   rna_def_modifier_warp(brna);
   rna_def_modifier_multires(brna);
   rna_def_modifier_surface(brna);
-  rna_def_modifier_smoke(brna);
+  rna_def_modifier_fluid(brna);
   rna_def_modifier_solidify(brna);
   rna_def_modifier_screw(brna);
   rna_def_modifier_uvwarp(brna);
@@ -6036,6 +6392,7 @@ void RNA_def_modifier(BlenderRNA *brna)
   rna_def_modifier_meshcache(brna);
   rna_def_modifier_laplaciandeform(brna);
   rna_def_modifier_wireframe(brna);
+  rna_def_modifier_weld(brna);
   rna_def_modifier_datatransfer(brna);
   rna_def_modifier_normaledit(brna);
   rna_def_modifier_meshseqcache(brna);

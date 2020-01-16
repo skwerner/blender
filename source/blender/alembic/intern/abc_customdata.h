@@ -28,11 +28,11 @@
 #include <Alembic/AbcGeom/All.h>
 
 struct CustomData;
-struct Mesh;
 struct MLoop;
 struct MLoopUV;
 struct MPoly;
 struct MVert;
+struct Mesh;
 
 using Alembic::Abc::ICompoundProperty;
 using Alembic::Abc::OCompoundProperty;
@@ -59,8 +59,7 @@ struct CDStreamConfig {
   bool pack_uvs;
 
   /* TODO(kevin): might need a better way to handle adding and/or updating
-   * custom datas such that it updates the custom data holder and its pointers
-   * properly. */
+   * custom data such that it updates the custom data holder and its pointers properly. */
   Mesh *mesh;
   void *(*add_customdata_cb)(Mesh *mesh, const char *name, int data_type);
 

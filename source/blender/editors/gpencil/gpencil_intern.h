@@ -214,6 +214,8 @@ typedef struct tGPDprimitive {
   int sel_cp;
   /** flag to determine operations in progress */
   int flag;
+  /** flag to determine operations previous mode */
+  int prev_flag;
   /** recorded mouse-position */
   float mval[2];
   /** previous recorded mouse-position */
@@ -426,12 +428,15 @@ void GPENCIL_OT_sculpt_paint(struct wmOperatorType *ot);
 
 /* buttons editing --- */
 
-void GPENCIL_OT_data_add(struct wmOperatorType *ot);
+void GPENCIL_OT_annotation_add(struct wmOperatorType *ot);
 void GPENCIL_OT_data_unlink(struct wmOperatorType *ot);
 
 void GPENCIL_OT_layer_add(struct wmOperatorType *ot);
 void GPENCIL_OT_layer_remove(struct wmOperatorType *ot);
 void GPENCIL_OT_layer_move(struct wmOperatorType *ot);
+void GPENCIL_OT_layer_annotation_add(struct wmOperatorType *ot);
+void GPENCIL_OT_layer_annotation_remove(struct wmOperatorType *ot);
+void GPENCIL_OT_layer_annotation_move(struct wmOperatorType *ot);
 void GPENCIL_OT_layer_duplicate(struct wmOperatorType *ot);
 void GPENCIL_OT_layer_duplicate_object(struct wmOperatorType *ot);
 
@@ -447,6 +452,7 @@ void GPENCIL_OT_layer_merge(struct wmOperatorType *ot);
 void GPENCIL_OT_blank_frame_add(struct wmOperatorType *ot);
 
 void GPENCIL_OT_active_frame_delete(struct wmOperatorType *ot);
+void GPENCIL_OT_annotation_active_frame_delete(struct wmOperatorType *ot);
 void GPENCIL_OT_active_frames_delete_all(struct wmOperatorType *ot);
 void GPENCIL_OT_frame_duplicate(struct wmOperatorType *ot);
 void GPENCIL_OT_frame_clean_fill(struct wmOperatorType *ot);
@@ -465,6 +471,7 @@ enum {
   GP_STROKE_CIRCLE = 2,
   GP_STROKE_ARC = 3,
   GP_STROKE_CURVE = 4,
+  GP_STROKE_POLYLINE = 5,
 };
 
 enum {
@@ -528,6 +535,7 @@ void GPENCIL_OT_color_reveal(struct wmOperatorType *ot);
 void GPENCIL_OT_color_lock_all(struct wmOperatorType *ot);
 void GPENCIL_OT_color_unlock_all(struct wmOperatorType *ot);
 void GPENCIL_OT_color_select(struct wmOperatorType *ot);
+void GPENCIL_OT_set_active_material(struct wmOperatorType *ot);
 
 /* convert old 2.7 files to 2.8 */
 void GPENCIL_OT_convert_old_files(struct wmOperatorType *ot);
@@ -632,6 +640,66 @@ struct GP_EditableStrokes_Iter {
   } \
   } \
   CTX_DATA_END; \
+  } \
+  (void)0
+
+#define GPENCIL_ANY_SCULPT_MASK(flag) \
+  ((flag & (GP_SCULPT_MASK_SELECTMODE_POINT | GP_SCULPT_MASK_SELECTMODE_STROKE | \
+            GP_SCULPT_MASK_SELECTMODE_SEGMENT)))
+
+/**
+ * Iterate over all editable strokes using evaluated data in the current context,
+ * stopping on each usable layer + stroke pair (i.e. gpl and gps)
+ * to perform some operations on the stroke.
+ *
+ * \param gpl: The identifier to use for the layer of the stroke being processed.
+ *                    Choose a suitable value to avoid name clashes.
+ * \param gps: The identifier to use for current stroke being processed.
+ *                    Choose a suitable value to avoid name clashes.
+ */
+#define GP_EVALUATED_STROKES_BEGIN(gpstroke_iter, C, gpl, gps) \
+  { \
+    struct GP_EditableStrokes_Iter gpstroke_iter = {{{0}}}; \
+    Depsgraph *depsgraph_ = CTX_data_ensure_evaluated_depsgraph(C); \
+    Object *obact_ = CTX_data_active_object(C); \
+    Object *obeval_ = DEG_get_evaluated_object(depsgraph_, obact_); \
+    bGPdata *gpd_ = CTX_data_gpencil_data(C); \
+    const bool is_multiedit_ = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd_); \
+    int idx_eval = 0; \
+    for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) { \
+      if (gpencil_layer_is_editable(gpl)) { \
+        bGPDframe *init_gpf_ = gpl->actframe; \
+        if (is_multiedit_) { \
+          init_gpf_ = gpl->frames.first; \
+        } \
+        for (bGPDframe *gpf_ = init_gpf_; gpf_; gpf_ = gpf_->next) { \
+          if ((gpf_ == gpl->actframe) || ((gpf_->flag & GP_FRAME_SELECT) && is_multiedit_)) { \
+            ED_gpencil_parent_location(depsgraph_, obact_, gpd_, gpl, gpstroke_iter.diff_mat); \
+            invert_m4_m4(gpstroke_iter.inverse_diff_mat, gpstroke_iter.diff_mat); \
+            /* get evaluated frame with modifiers applied */ \
+            bGPDframe *gpf_eval_ = (!is_multiedit_) ? \
+                                       &obeval_->runtime.gpencil_evaluated_frames[idx_eval] : \
+                                       gpf_; \
+            /* loop over strokes */ \
+            for (bGPDstroke *gps = gpf_eval_->strokes.first; gps; gps = gps->next) { \
+              /* skip strokes that are invalid for current view */ \
+              if (ED_gpencil_stroke_can_use(C, gps) == false) \
+                continue; \
+              /* check if the color is editable */ \
+              if (ED_gpencil_stroke_color_use(obact_, gpl, gps) == false) \
+                continue; \
+    /* ... Do Stuff With Strokes ...  */
+
+#define GP_EVALUATED_STROKES_END(gpstroke_iter) \
+  } \
+  } \
+  if (!is_multiedit_) { \
+    break; \
+  } \
+  } \
+  } \
+  idx_eval++; \
+  } \
   } \
   (void)0
 

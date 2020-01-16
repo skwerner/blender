@@ -79,7 +79,7 @@ class Light : public Node {
 
   void tag_update(Scene *scene);
 
-  /* Check whether the light has contribution the the scene. */
+  /* Check whether the light has contribution the scene. */
   bool has_contribution(Scene *scene);
 };
 
@@ -92,8 +92,8 @@ class LightManager {
   ~LightManager();
 
   /* IES texture management */
-  int add_ies(ustring ies);
-  int add_ies_from_file(ustring filename);
+  int add_ies(const string &ies);
+  int add_ies_from_file(const string &filename);
   void remove_ies(int slot);
 
   void device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);

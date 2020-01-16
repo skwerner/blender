@@ -256,13 +256,13 @@ static int view_pan_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   RNA_int_set(op->ptr, "deltay", 0);
 
   if (v2d->keepofs & V2D_LOCKOFS_X) {
-    WM_cursor_modal_set(window, BC_NS_SCROLLCURSOR);
+    WM_cursor_modal_set(window, WM_CURSOR_NS_SCROLL);
   }
   else if (v2d->keepofs & V2D_LOCKOFS_Y) {
-    WM_cursor_modal_set(window, BC_EW_SCROLLCURSOR);
+    WM_cursor_modal_set(window, WM_CURSOR_EW_SCROLL);
   }
   else {
-    WM_cursor_modal_set(window, BC_NSEW_SCROLLCURSOR);
+    WM_cursor_modal_set(window, WM_CURSOR_NSEW_SCROLL);
   }
 
   /* add temp handler */
@@ -1113,13 +1113,13 @@ static int view_zoomdrag_invoke(bContext *C, wmOperator *op, const wmEvent *even
   }
 
   if (v2d->keepofs & V2D_LOCKOFS_X) {
-    WM_cursor_modal_set(window, BC_NS_SCROLLCURSOR);
+    WM_cursor_modal_set(window, WM_CURSOR_NS_SCROLL);
   }
   else if (v2d->keepofs & V2D_LOCKOFS_Y) {
-    WM_cursor_modal_set(window, BC_EW_SCROLLCURSOR);
+    WM_cursor_modal_set(window, WM_CURSOR_EW_SCROLL);
   }
   else {
-    WM_cursor_modal_set(window, BC_NSEW_SCROLLCURSOR);
+    WM_cursor_modal_set(window, WM_CURSOR_NSEW_SCROLL);
   }
 
   /* add temp handler */
@@ -1844,7 +1844,7 @@ static void scroller_activate_init(bContext *C,
    */
   scrollers = UI_view2d_scrollers_calc(v2d, NULL);
 
-  /* use a union of 'cur' & 'tot' incase the current view is far outside 'tot'. In this cases
+  /* Use a union of 'cur' & 'tot' in case the current view is far outside 'tot'. In this cases
    * moving the scroll bars has far too little effect and the view can get stuck T31476. */
   tot_cur_union = v2d->tot;
   BLI_rctf_union(&tot_cur_union, &v2d->cur);

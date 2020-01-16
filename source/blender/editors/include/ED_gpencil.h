@@ -27,7 +27,6 @@
 struct ID;
 struct ListBase;
 struct PointerRNA;
-struct rcti;
 
 struct Brush;
 struct bGPDframe;
@@ -39,13 +38,11 @@ struct tGPspoint;
 
 struct ARegion;
 struct Depsgraph;
-struct EvaluationContext;
 struct Main;
 struct RegionView3D;
 struct ReportList;
 struct Scene;
 struct ScrArea;
-struct ToolSettings;
 struct View3D;
 struct ViewLayer;
 struct bContext;
@@ -58,8 +55,6 @@ struct bAnimContext;
 
 struct wmKeyConfig;
 struct wmOperator;
-struct wmWindow;
-struct wmWindowManager;
 
 /* ------------- Grease-Pencil Runtime Data ---------------- */
 
@@ -76,7 +71,14 @@ typedef struct tGPspoint {
   float uv_rot;   /* uv rotation for dor mode */
   float rnd[3];   /* rnd value */
   bool rnd_dirty; /* rnd flag */
+  short tflag;    /* Internal flag */
 } tGPspoint;
+
+/* tGPspoint->flag */
+typedef enum etGPspoint_tFlag {
+  /* Created by Fake event (used when mouse/pen move very fast while drawing). */
+  GP_TPOINT_FAKE = (1 << 0),
+} etGPspoint_tFlag;
 
 /* used to sort by zdepth gpencil objects in viewport */
 /* TODO: this could be a system parameter in userprefs screen */
@@ -95,15 +97,21 @@ struct bGPdata *ED_gpencil_data_get_active(const struct bContext *C);
 struct bGPdata *ED_gpencil_data_get_active_evaluated(const struct bContext *C);
 
 /* Context independent (i.e. each required part is passed in instead) */
-struct bGPdata **ED_gpencil_data_get_pointers_direct(struct ID *screen_id,
-                                                     struct ScrArea *sa,
-                                                     struct Scene *scene,
+struct bGPdata **ED_gpencil_data_get_pointers_direct(struct ScrArea *sa,
                                                      struct Object *ob,
                                                      struct PointerRNA *r_ptr);
-struct bGPdata *ED_gpencil_data_get_active_direct(struct ID *screen_id,
-                                                  struct ScrArea *sa,
-                                                  struct Scene *scene,
-                                                  struct Object *ob);
+struct bGPdata *ED_gpencil_data_get_active_direct(struct ScrArea *sa, struct Object *ob);
+
+struct bGPdata *ED_annotation_data_get_active(const struct bContext *C);
+struct bGPdata **ED_annotation_data_get_pointers(const struct bContext *C,
+                                                 struct PointerRNA *r_ptr);
+struct bGPdata **ED_annotation_data_get_pointers_direct(struct ID *screen_id,
+                                                        struct ScrArea *sa,
+                                                        struct Scene *scene,
+                                                        struct PointerRNA *r_ptr);
+struct bGPdata *ED_annotation_data_get_active_direct(struct ID *screen_id,
+                                                     struct ScrArea *sa,
+                                                     struct Scene *scene);
 
 bool ED_gpencil_data_owner_is_annotation(struct PointerRNA *owner_ptr);
 
@@ -290,7 +298,10 @@ void ED_gpencil_select_toggle_all(struct bContext *C, int action);
 
 /* Ensure stroke sbuffer size is enough */
 struct tGPspoint *ED_gpencil_sbuffer_ensure(struct tGPspoint *buffer_array,
-                                            short *buffer_size,
-                                            short *buffer_used,
+                                            int *buffer_size,
+                                            int *buffer_used,
                                             const bool clear);
+/* Tag all scene grease pencil object to update. */
+void ED_gpencil_tag_scene_gpencil(struct Scene *scene);
+
 #endif /*  __ED_GPENCIL_H__ */

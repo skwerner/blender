@@ -34,7 +34,6 @@ struct EnumPropertyItem;
 struct EnumPropertyItem;
 struct ID;
 struct Main;
-struct Menu;
 struct ModifierData;
 struct Object;
 struct PointerRNA;
@@ -44,16 +43,15 @@ struct Scene;
 struct ShaderFxData;
 struct View3D;
 struct ViewLayer;
+struct XFormObjectData;
 struct bConstraint;
 struct bContext;
 struct bFaceMap;
 struct bPoseChannel;
 struct uiLayout;
 struct wmKeyConfig;
-struct wmKeyMap;
 struct wmOperator;
 struct wmOperatorType;
-struct wmWindow;
 struct wmWindowManager;
 
 #include "DNA_object_enums.h"
@@ -240,9 +238,17 @@ void ED_object_single_user(struct Main *bmain, struct Scene *scene, struct Objec
 
 /* object motion paths */
 void ED_objects_clear_paths(struct bContext *C, bool only_selected);
+
+/* Corresponds to eAnimvizCalcRange. */
+typedef enum eObjectPathCalcRange {
+  OBJECT_PATH_CALC_RANGE_CURRENT_FRAME,
+  OBJECT_PATH_CALC_RANGE_CHANGED,
+  OBJECT_PATH_CALC_RANGE_FULL,
+} eObjectPathCalcRange;
+
 void ED_objects_recalculate_paths(struct bContext *C,
                                   struct Scene *scene,
-                                  bool current_frame_only);
+                                  eObjectPathCalcRange range);
 
 /* constraints */
 struct ListBase *get_active_constraints(struct Object *ob);
@@ -402,6 +408,28 @@ bool ED_object_jump_to_bone(struct bContext *C,
 /* object_facemap_ops.c */
 void ED_object_facemap_face_add(struct Object *ob, struct bFaceMap *fmap, int facenum);
 void ED_object_facemap_face_remove(struct Object *ob, struct bFaceMap *fmap, int facenum);
+
+/* object_data_transform.c */
+struct XFormObjectData *ED_object_data_xform_create_ex(struct ID *id, bool is_edit_mode);
+struct XFormObjectData *ED_object_data_xform_create(struct ID *id);
+struct XFormObjectData *ED_object_data_xform_create_from_edit_mode(ID *id);
+
+void ED_object_data_xform_destroy(struct XFormObjectData *xod);
+
+void ED_object_data_xform_by_mat4(struct XFormObjectData *xod, const float mat[4][4]);
+
+void ED_object_data_xform_restore(struct XFormObjectData *xod);
+void ED_object_data_xform_tag_update(struct XFormObjectData *xod);
+
+/* Container helper API. */
+struct XFormObjectData_Container;
+struct XFormObjectData_Container *ED_object_data_xform_container_create(void);
+void ED_object_data_xform_container_destroy(struct XFormObjectData_Container *xds);
+void ED_object_data_xform_container_update_all(struct XFormObjectData_Container *xds,
+                                               struct Main *bmain,
+                                               struct Depsgraph *depsgraph);
+void ED_object_data_xform_container_item_ensure(struct XFormObjectData_Container *xds,
+                                                struct Object *ob);
 
 #ifdef __cplusplus
 }

@@ -26,17 +26,16 @@
 struct BezTriple;
 struct Curve;
 struct Depsgraph;
-struct EditNurb;
 struct GHash;
-struct LinkNode;
 struct ListBase;
 struct Main;
 struct Nurb;
 struct Object;
 struct Path;
-struct Scene;
 struct TextBox;
 struct rctf;
+
+typedef int eBezTriple_Flag__Alias;
 
 typedef struct CurveCache {
   ListBase disp;
@@ -75,7 +74,7 @@ typedef struct CVKeyIndex {
 /* ** Curve ** */
 void BKE_curve_free(struct Curve *cu);
 void BKE_curve_editfont_free(struct Curve *cu);
-void BKE_curve_init(struct Curve *cu);
+void BKE_curve_init(struct Curve *cu, const short curve_type);
 struct Curve *BKE_curve_add(struct Main *bmain, const char *name, int type);
 void BKE_curve_copy_data(struct Main *bmain,
                          struct Curve *cu_dst,
@@ -89,11 +88,10 @@ void BKE_curve_curve_dimension_update(struct Curve *cu);
 
 void BKE_curve_boundbox_calc(struct Curve *cu, float r_loc[3], float r_size[3]);
 struct BoundBox *BKE_curve_boundbox_get(struct Object *ob);
+
 void BKE_curve_texspace_calc(struct Curve *cu);
-struct BoundBox *BKE_curve_texspace_get(struct Curve *cu,
-                                        float r_loc[3],
-                                        float r_rot[3],
-                                        float r_size[3]);
+void BKE_curve_texspace_ensure(struct Curve *cu);
+void BKE_curve_texspace_get(struct Curve *cu, float r_loc[3], float r_size[3]);
 
 bool BKE_curve_minmax(struct Curve *cu, bool use_radius, float min[3], float max[3]);
 bool BKE_curve_center_median(struct Curve *cu, float cent[3]);
@@ -124,11 +122,22 @@ void BKE_curve_nurb_vert_active_set(struct Curve *cu, const struct Nurb *nu, con
 bool BKE_curve_nurb_vert_active_get(struct Curve *cu, struct Nurb **r_nu, void **r_vert);
 void BKE_curve_nurb_vert_active_validate(struct Curve *cu);
 
-float (*BKE_curve_nurbs_vertexCos_get(struct ListBase *lb, int *r_numVerts))[3];
-void BK_curve_nurbs_vertexCos_apply(struct ListBase *lb, float (*vertexCos)[3]);
+float (*BKE_curve_nurbs_vert_coords_alloc(struct ListBase *lb, int *r_vert_len))[3];
+void BKE_curve_nurbs_vert_coords_get(struct ListBase *lb, float (*vert_coords)[3], int vert_len);
 
-float (*BKE_curve_nurbs_keyVertexCos_get(struct ListBase *lb, float *key))[3];
-void BKE_curve_nurbs_keyVertexTilts_apply(struct ListBase *lb, float *key);
+void BKE_curve_nurbs_vert_coords_apply_with_mat4(struct ListBase *lb,
+                                                 const float (*vert_coords)[3],
+                                                 const float mat[4][4],
+                                                 const bool constrain_2d);
+
+void BKE_curve_nurbs_vert_coords_apply(struct ListBase *lb,
+                                       const float (*vert_coords)[3],
+                                       const bool constrain_2d);
+
+float (*BKE_curve_nurbs_key_vert_coords_alloc(struct ListBase *lb,
+                                              float *key,
+                                              int *r_vert_len))[3];
+void BKE_curve_nurbs_key_vert_tilts_apply(struct ListBase *lb, float *key);
 
 void BKE_curve_editNurb_keyIndex_delCV(struct GHash *keyindex, const void *cv);
 void BKE_curve_editNurb_keyIndex_free(struct GHash **keyindex);
@@ -235,6 +244,12 @@ void BKE_nurb_handle_calc(struct BezTriple *bezt,
                           struct BezTriple *next,
                           const bool is_fcurve,
                           const char smoothing);
+void BKE_nurb_handle_calc_ex(struct BezTriple *bezt,
+                             struct BezTriple *prev,
+                             struct BezTriple *next,
+                             const eBezTriple_Flag__Alias handle_sel_flag,
+                             const bool is_fcurve,
+                             const char smoothing);
 void BKE_nurb_handle_calc_simple(struct Nurb *nu, struct BezTriple *bezt);
 void BKE_nurb_handle_calc_simple_auto(struct Nurb *nu, struct BezTriple *bezt);
 
@@ -242,7 +257,9 @@ void BKE_nurb_handle_smooth_fcurve(struct BezTriple *bezt, int total, bool cycli
 
 void BKE_nurb_handles_calc(struct Nurb *nu);
 void BKE_nurb_handles_autocalc(struct Nurb *nu, int flag);
-void BKE_nurb_bezt_handle_test(struct BezTriple *bezt, const bool use_handle);
+void BKE_nurb_bezt_handle_test(struct BezTriple *bezt,
+                               const eBezTriple_Flag__Alias sel_flag,
+                               const bool use_handle);
 void BKE_nurb_handles_test(struct Nurb *nu, const bool use_handles);
 
 /* **** Depsgraph evaluation **** */

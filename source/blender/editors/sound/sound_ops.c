@@ -273,8 +273,11 @@ static void sound_update_animation_flags(Scene *scene)
 
 static int sound_update_animation_flags_exec(bContext *C, wmOperator *UNUSED(op))
 {
+  Scene *scene = CTX_data_scene(C);
+
   BKE_main_id_tag_idcode(CTX_data_main(C), ID_SCE, LIB_TAG_DOIT, false);
   sound_update_animation_flags(CTX_data_scene(C));
+  DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
   return OPERATOR_FINISHED;
 }
 
@@ -710,7 +713,7 @@ static void SOUND_OT_mixdown(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_SOUND,
                                  FILE_SPECIAL,
                                  FILE_SAVE,
-                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 #ifdef WITH_AUDASPACE

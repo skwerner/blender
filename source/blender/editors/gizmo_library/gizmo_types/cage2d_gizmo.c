@@ -56,7 +56,6 @@
 /* own includes */
 #include "../gizmo_library_intern.h"
 
-#define GIZMO_RESIZER_SIZE 10.0f
 #define GIZMO_MARGIN_OFFSET_SCALE 1.5f
 
 static bool gizmo_calc_rect_view_scale(const wmGizmo *gz, const float dims[2], float scale[2])
@@ -92,12 +91,7 @@ static bool gizmo_calc_rect_view_scale(const wmGizmo *gz, const float dims[2], f
 static bool gizmo_calc_rect_view_margin(const wmGizmo *gz, const float dims[2], float margin[2])
 {
   float handle_size;
-  if (gz->parent_gzgroup->type->flag & WM_GIZMOGROUPTYPE_3D) {
-    handle_size = 0.15f;
-  }
-  else {
-    handle_size = GIZMO_RESIZER_SIZE;
-  }
+  handle_size = 0.15f;
   handle_size *= gz->scale_final;
   float scale_xy[2];
   if (!gizmo_calc_rect_view_scale(gz, dims, scale_xy)) {
@@ -752,30 +746,30 @@ static int gizmo_cage2d_get_cursor(wmGizmo *gz)
   int highlight_part = gz->highlight_part;
 
   if (gz->parent_gzgroup->type->flag & WM_GIZMOGROUPTYPE_3D) {
-    return BC_NSEW_SCROLLCURSOR;
+    return WM_CURSOR_NSEW_SCROLL;
   }
 
   switch (highlight_part) {
     case ED_GIZMO_CAGE2D_PART_TRANSLATE:
-      return BC_NSEW_SCROLLCURSOR;
+      return WM_CURSOR_NSEW_SCROLL;
     case ED_GIZMO_CAGE2D_PART_SCALE_MIN_X:
     case ED_GIZMO_CAGE2D_PART_SCALE_MAX_X:
-      return CURSOR_X_MOVE;
+      return WM_CURSOR_X_MOVE;
     case ED_GIZMO_CAGE2D_PART_SCALE_MIN_Y:
     case ED_GIZMO_CAGE2D_PART_SCALE_MAX_Y:
-      return CURSOR_Y_MOVE;
+      return WM_CURSOR_Y_MOVE;
 
       /* TODO diagonal cursor */
     case ED_GIZMO_CAGE2D_PART_SCALE_MIN_X_MIN_Y:
     case ED_GIZMO_CAGE2D_PART_SCALE_MAX_X_MIN_Y:
-      return BC_NSEW_SCROLLCURSOR;
+      return WM_CURSOR_NSEW_SCROLL;
     case ED_GIZMO_CAGE2D_PART_SCALE_MIN_X_MAX_Y:
     case ED_GIZMO_CAGE2D_PART_SCALE_MAX_X_MAX_Y:
-      return BC_NSEW_SCROLLCURSOR;
+      return WM_CURSOR_NSEW_SCROLL;
     case ED_GIZMO_CAGE2D_PART_ROTATE:
-      return BC_CROSSCURSOR;
+      return WM_CURSOR_CROSS;
     default:
-      return CURSOR_STD;
+      return WM_CURSOR_DEFAULT;
   }
 }
 

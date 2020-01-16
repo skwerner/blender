@@ -93,7 +93,7 @@ static SpaceLink *sequencer_new(const ScrArea *UNUSED(sa), const Scene *scene)
   sseq->chanshown = 0;
   sseq->view = SEQ_VIEW_SEQUENCE;
   sseq->mainb = SEQ_DRAW_IMG_IMBUF;
-  sseq->flag = SEQ_SHOW_GPENCIL | SEQ_USE_ALPHA | SEQ_SHOW_MARKER_LINES;
+  sseq->flag = SEQ_SHOW_GPENCIL | SEQ_USE_ALPHA | SEQ_SHOW_MARKERS;
 
   /* header */
   ar = MEM_callocN(sizeof(ARegion), "header for sequencer");
@@ -597,7 +597,7 @@ static void sequencer_main_region_message_subscribe(const struct bContext *UNUSE
         &RNA_SequenceModifier,
         &RNA_SequenceColorBalanceData,
     };
-    wmMsgParams_RNA msg_key_params = {{{0}}};
+    wmMsgParams_RNA msg_key_params = {{0}};
     for (int i = 0; i < ARRAY_SIZE(type_array); i++) {
       msg_key_params.ptr.type = type_array[i];
       WM_msg_subscribe_rna_params(
@@ -675,10 +675,9 @@ static void sequencer_preview_region_draw(const bContext *C, ARegion *ar)
   WM_gizmomap_draw(ar->gizmo_map, C, WM_GIZMOMAP_DRAWSTEP_2D);
 
   if ((U.uiflag & USER_SHOW_FPS) && ED_screen_animation_no_scrub(wm)) {
-    rcti rect;
-    ED_region_visible_rect(ar, &rect);
-    int xoffset = rect.xmin + U.widget_unit;
-    int yoffset = rect.ymax;
+    const rcti *rect = ED_region_visible_rect(ar);
+    int xoffset = rect->xmin + U.widget_unit;
+    int yoffset = rect->ymax;
     ED_scene_draw_fps(scene, xoffset, &yoffset);
   }
 }

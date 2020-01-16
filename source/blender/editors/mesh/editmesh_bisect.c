@@ -384,7 +384,7 @@ static int mesh_bisect_exec(bContext *C, wmOperator *op)
         bm, bmop.slots_out, "geom_cut.out", BM_VERT | BM_EDGE, BM_ELEM_SELECT, true);
 
     if (EDBM_op_finish(em, &bmop, op, true)) {
-      EDBM_update_generic(em, true, true);
+      EDBM_update_generic(obedit->data, true, true);
       EDBM_selectmode_flush(em);
       ret = OPERATOR_FINISHED;
     }
@@ -455,7 +455,7 @@ void MESH_OT_bisect(struct wmOperatorType *ot)
                 0.00001,
                 0.1);
 
-  WM_operator_properties_gesture_straightline(ot, CURSOR_EDIT);
+  WM_operator_properties_gesture_straightline(ot, WM_CURSOR_EDIT);
 
 #ifdef USE_GIZMO
   WM_gizmogrouptype_append(MESH_GGT_bisect);

@@ -28,12 +28,9 @@ struct Brush;
 struct ImBuf;
 struct ImagePool;
 struct Main;
-struct Material;
-struct Paint;
 struct Scene;
 struct ToolSettings;
 struct UnifiedPaintSettings;
-struct bContext;
 
 // enum eCurveMappingPreset;
 
@@ -58,7 +55,7 @@ void BKE_brush_make_local(struct Main *bmain, struct Brush *brush, const bool li
 void BKE_brush_free(struct Brush *brush);
 
 void BKE_brush_sculpt_reset(struct Brush *brush);
-void BKE_brush_gpencil_presets(struct bContext *C);
+void BKE_brush_gpencil_presets(struct Main *bmain, struct ToolSettings *ts);
 
 /* image icon function */
 struct ImBuf *get_brush_icon(struct Brush *brush);
@@ -92,7 +89,9 @@ float BKE_brush_sample_masktex(const struct Scene *scene,
 unsigned int *BKE_brush_gen_texture_cache(struct Brush *br, int half_side, bool use_secondary);
 
 /* radial control */
-struct ImBuf *BKE_brush_gen_radial_control_imbuf(struct Brush *br, bool secondary);
+struct ImBuf *BKE_brush_gen_radial_control_imbuf(struct Brush *br,
+                                                 bool secondary,
+                                                 bool display_gradient);
 
 /* unified strength size and color */
 
@@ -112,8 +111,8 @@ float BKE_brush_weight_get(const struct Scene *scene, const struct Brush *brush)
 void BKE_brush_weight_set(const struct Scene *scene, struct Brush *brush, float value);
 
 bool BKE_brush_use_locked_size(const struct Scene *scene, const struct Brush *brush);
-bool BKE_brush_use_alpha_pressure(const struct Scene *scene, const struct Brush *brush);
-bool BKE_brush_use_size_pressure(const struct Scene *scene, const struct Brush *brush);
+bool BKE_brush_use_alpha_pressure(const struct Brush *brush);
+bool BKE_brush_use_size_pressure(const struct Brush *brush);
 
 bool BKE_brush_sculpt_has_secondary_color(const struct Brush *brush);
 

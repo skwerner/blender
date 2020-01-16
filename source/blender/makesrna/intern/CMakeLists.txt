@@ -40,10 +40,11 @@ set(DEFSRC
   rna_constraint.c
   rna_context.c
   rna_curve.c
+  rna_curveprofile.c
   rna_depsgraph.c
   rna_dynamicpaint.c
   rna_fcurve.c
-  rna_fluidsim.c
+  rna_fluid.c
   rna_gpencil.c
   rna_gpencil_modifier.c
   rna_image.c
@@ -76,7 +77,6 @@ set(DEFSRC
   rna_sculpt_paint.c
   rna_sequencer.c
   rna_shader_fx.c
-  rna_smoke.c
   rna_sound.c
   rna_space.c
   rna_speaker.c
@@ -164,10 +164,19 @@ set(SRC
   ../../../../intern/guardedalloc/intern/mallocn_guarded_impl.c
   ../../../../intern/guardedalloc/intern/mallocn_lockfree_impl.c
   ../../../../intern/guardedalloc/intern/mmap_win.c
+
+  # Needed for defaults.
+  ../../../../release/datafiles/userdef/userdef_default.c
+  ../../../../release/datafiles/userdef/userdef_default_theme.c
 )
 
 set(INC
-    ../../../../intern/clog
+  ../../../../intern/clog
+
+  # Needed for defaults forward declarations.
+  ../../blenloader
+
+  ${CMAKE_BINARY_DIR}/source/blender/makesdna/intern
 )
 
 set(INC_SYS
@@ -231,16 +240,12 @@ if(WITH_CODEC_FFMPEG)
   add_definitions(-DWITH_FFMPEG)
 endif()
 
-if(WITH_MOD_FLUID)
-  add_definitions(-DWITH_MOD_FLUID)
-endif()
-
 if(WITH_FFTW3)
   add_definitions(-DWITH_FFTW3)
 endif()
 
-if(WITH_MOD_SMOKE)
-  add_definitions(-DWITH_SMOKE)
+if(WITH_MOD_FLUID)
+  add_definitions(-DWITH_FLUID)
 endif()
 
 if(WITH_MOD_OCEANSIM)
@@ -338,7 +343,7 @@ blender_include_dirs(
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
   ../../../../intern/memutil
-  ../../../../intern/smoke/extern
+  ../../../../intern/mantaflow/extern
 )
 
 blender_include_dirs_sys(
@@ -364,9 +369,11 @@ add_custom_command(
 # Build bf_rna
 set(SRC
   rna_access.c
+  rna_access_compare_override.c
   ${GENSRC}
 
   ${SRC_RNA_INC}
+  rna_access_internal.h
   rna_internal.h
   rna_internal_types.h
   rna_mesh_utils.h
@@ -374,23 +381,23 @@ set(SRC
 
 set(LIB
   bf_dna
+  bf_editor_space_api
+
+  bf_editor_animation
   bf_editor_armature
   bf_editor_curve
   bf_editor_gizmo_library
   bf_editor_gpencil
+  bf_editor_io
   bf_editor_mesh
   bf_editor_object
   bf_editor_physics
   bf_editor_render
   bf_editor_scene
   bf_editor_sculpt_paint
-  bf_editor_space_clip
-  bf_editor_space_file
-  bf_editor_space_image
-  bf_editor_space_info
-  bf_editor_space_node
-  bf_editor_space_view3d
+  bf_editor_sound
   bf_editor_transform
+  bf_editor_undo
 )
 
 add_definitions(${GL_DEFINITIONS})

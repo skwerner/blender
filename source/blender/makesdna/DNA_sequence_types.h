@@ -37,6 +37,10 @@
 #include "DNA_vec_types.h"
 #include "DNA_vfont_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Ipo;
 struct MovieClip;
 struct Scene;
@@ -270,6 +274,8 @@ typedef struct Editing {
   /* Cache control */
   float recycle_max_cost;
   int cache_flag;
+
+  struct PrefetchJob *prefetch_job;
 } Editing;
 
 /* ************* Effect Variable Structs ********* */
@@ -584,7 +590,7 @@ enum {
   SEQ_TYPE_LIGHTEN = 44,
   SEQ_TYPE_DODGE = 45,
   SEQ_TYPE_DARKEN = 46,
-  SEQ_TYPE_BURN = 47,
+  SEQ_TYPE_COLOR_BURN = 47,
   SEQ_TYPE_LINEAR_BURN = 48,
   SEQ_TYPE_OVERLAY = 49,
   SEQ_TYPE_HARD_LIGHT = 50,
@@ -674,6 +680,12 @@ enum {
   SEQ_CACHE_VIEW_PREPROCESSED = (1 << 7),
   SEQ_CACHE_VIEW_COMPOSITE = (1 << 8),
   SEQ_CACHE_VIEW_FINAL_OUT = (1 << 9),
+
+  SEQ_CACHE_PREFETCH_ENABLE = (1 << 10),
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __DNA_SEQUENCE_TYPES_H__ */

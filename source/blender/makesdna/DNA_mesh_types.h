@@ -28,6 +28,10 @@
 #include "DNA_ID.h"
 #include "DNA_customdata_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct AnimData;
 struct Ipo;
 struct Key;
@@ -40,7 +44,6 @@ struct MLoopCol;
 struct MLoopTri;
 struct MLoopUV;
 struct MPoly;
-struct MTexPoly;
 struct MVert;
 struct Material;
 struct Mesh;
@@ -117,8 +120,6 @@ typedef struct Mesh {
   /** Animation data (must be immediately after id for utilities to use it). */
   struct AnimData *adt;
 
-  struct BoundBox *bb;
-
   /** Old animation system, deprecated for 2.5. */
   struct Ipo *ipo DNA_DEPRECATED;
   struct Key *key;
@@ -178,7 +179,6 @@ typedef struct Mesh {
   /* texture space, copied as one block in editobject.c */
   float loc[3];
   float size[3];
-  float rot[3];
 
   short texflag, flag;
   float smoothresh;
@@ -193,15 +193,18 @@ typedef struct Mesh {
 
   short totcol;
 
+  float remesh_voxel_size;
+  float remesh_voxel_adaptivity;
+  char remesh_mode;
+  char _pad1[3];
   /** Deprecated multiresolution modeling data, only keep for loading old files. */
   struct Multires *mr DNA_DEPRECATED;
-  void *_pad1;
 
   Mesh_Runtime runtime;
 } Mesh;
 
 /* deprecated by MTFace, only here for file reading */
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
 typedef struct TFace {
   /** The faces image for the active UVLayer. */
   void *tpage;
@@ -217,6 +220,7 @@ typedef struct TFace {
 /* texflag */
 enum {
   ME_AUTOSPACE = 1,
+  ME_AUTOSPACE_EVALUATED = 2,
 };
 
 /* me->editflag */
@@ -250,6 +254,10 @@ enum {
   ME_FLAG_UNUSED_8 = 1 << 8, /* cleared */
   ME_DS_EXPAND = 1 << 9,
   ME_SCULPT_DYNAMIC_TOPOLOGY = 1 << 10,
+  ME_REMESH_SMOOTH_NORMALS = 1 << 11,
+  ME_REMESH_REPROJECT_PAINT_MASK = 1 << 12,
+  ME_REMESH_FIX_POLES = 1 << 13,
+  ME_REMESH_REPROJECT_VOLUME = 1 << 14,
 };
 
 /* me->cd_flag */
@@ -257,6 +265,12 @@ enum {
   ME_CDFLAG_VERT_BWEIGHT = 1 << 0,
   ME_CDFLAG_EDGE_BWEIGHT = 1 << 1,
   ME_CDFLAG_EDGE_CREASE = 1 << 2,
+};
+
+/* me->remesh_mode */
+enum {
+  REMESH_VOXEL = 0,
+  REMESH_QUAD = 1,
 };
 
 /* Subsurf Type */
@@ -267,10 +281,8 @@ enum {
 
 #define MESH_MAX_VERTS 2000000000L
 
-/* this is so we can save bmesh files that load in trunk, ignoring NGons
- * will eventually be removed */
-
-/* enable this so meshes get tessfaces calculated by default */
-/* #define USE_TESSFACE_DEFAULT */
+#ifdef __cplusplus
+}
+#endif
 
 #endif

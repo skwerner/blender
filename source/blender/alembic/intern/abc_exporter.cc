@@ -42,6 +42,7 @@ extern "C" {
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h" /* for FILE_MAX */
+#include "DNA_fluid_types.h"
 
 #include "BLI_string.h"
 
@@ -53,6 +54,7 @@ extern "C" {
 #include "BKE_anim.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
+#include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_mball.h"
 #include "BKE_modifier.h"
@@ -73,7 +75,7 @@ ExportSettings::ExportSettings()
       depsgraph(NULL),
       logger(),
       selected_only(false),
-      visible_layers_only(false),
+      visible_objects_only(false),
       renderable_only(false),
       frame_start(1),
       frame_end(1),
@@ -104,11 +106,12 @@ ExportSettings::ExportSettings()
 
 static bool object_is_smoke_sim(Object *ob)
 {
-  ModifierData *md = modifiers_findByType(ob, eModifierType_Smoke);
+  ModifierData *md = modifiers_findByType(ob, eModifierType_Fluid);
 
   if (md) {
-    SmokeModifierData *smd = reinterpret_cast<SmokeModifierData *>(md);
-    return (smd->type == MOD_SMOKE_TYPE_DOMAIN);
+    FluidModifierData *smd = reinterpret_cast<FluidModifierData *>(md);
+    return (smd->type == MOD_FLUID_TYPE_DOMAIN && smd->domain &&
+            smd->domain->type == FLUID_DOMAIN_TYPE_GAS);
   }
 
   return false;
@@ -160,7 +163,7 @@ static bool export_object(const ExportSettings *const settings,
     }
     // FIXME Sybren: handle these cleanly (maybe just remove code),
     // now using active scene layer instead.
-    if (settings->visible_layers_only && !BASE_VISIBLE(v3d, base)) {
+    if (settings->visible_objects_only && !BASE_VISIBLE(v3d, base)) {
       return false;
     }
   }
@@ -202,7 +205,7 @@ AbcExporter::~AbcExporter()
   }
 
   /* Free shapes vector */
-  for (int i = 0, e = m_shapes.size(); i != e; ++i) {
+  for (int i = 0, e = m_shapes.size(); i != e; i++) {
     delete m_shapes[i];
   }
 
@@ -223,7 +226,7 @@ void AbcExporter::getShutterSamples(unsigned int nr_of_samples,
   double time_inc = (shutter_close - shutter_open) / nr_of_samples;
 
   /* sample between shutter open & close */
-  for (int sample = 0; sample < nr_of_samples; ++sample) {
+  for (int sample = 0; sample < nr_of_samples; sample++) {
     double sample_time = shutter_open + time_inc * sample;
     double time = (frame_offset + sample_time) / time_factor;
 
@@ -241,9 +244,9 @@ Alembic::Abc::TimeSamplingPtr AbcExporter::createTimeSampling(double step)
 
   getShutterSamples(step, true, samples);
 
-  Alembic::Abc::TimeSamplingType ts(
-      static_cast<uint32_t>(samples.size()),
-      1.0 / m_settings.scene->r.frs_sec); /* TODO(Sybren): shouldn't we use the FPS macro here? */
+  /* TODO(Sybren): shouldn't we use the FPS macro here? */
+  Alembic::Abc::TimeSamplingType ts(static_cast<uint32_t>(samples.size()),
+                                    1.0 / m_settings.scene->r.frs_sec);
 
   return TimeSamplingPtr(new Alembic::Abc::TimeSampling(ts, samples));
 }
@@ -257,35 +260,27 @@ void AbcExporter::getFrameSet(unsigned int nr_of_samples, std::set<double> &fram
   getShutterSamples(nr_of_samples, false, shutter_samples);
 
   for (double frame = m_settings.frame_start; frame <= m_settings.frame_end; frame += 1.0) {
-    for (size_t j = 0; j < nr_of_samples; ++j) {
+    for (size_t j = 0; j < nr_of_samples; j++) {
       frames.insert(frame + shutter_samples[j]);
     }
   }
 }
 
-void AbcExporter::operator()(float &progress, bool &was_canceled)
+void AbcExporter::operator()(short *do_update, float *progress, bool *was_canceled)
 {
-  std::string scene_name;
+  std::string abc_scene_name;
 
   if (m_bmain->name[0] != '\0') {
     char scene_file_name[FILE_MAX];
     BLI_strncpy(scene_file_name, m_bmain->name, FILE_MAX);
-    scene_name = scene_file_name;
+    abc_scene_name = scene_file_name;
   }
   else {
-    scene_name = "untitled";
+    abc_scene_name = "untitled";
   }
 
-  Scene *scene = m_settings.scene;
-  const double fps = FPS;
-  char buf[16];
-  snprintf(buf, 15, "%f", fps);
-  const std::string str_fps = buf;
-
-  Alembic::AbcCoreAbstract::MetaData md;
-  md.set("FramesPerTimeUnit", str_fps);
-
-  m_writer = new ArchiveWriter(m_filename, scene_name.c_str(), m_settings.export_ogawa, md);
+  m_writer = new ArchiveWriter(
+      m_filename, abc_scene_name, m_settings.scene, m_settings.export_ogawa);
 
   /* Create time samplings for transforms and shapes. */
 
@@ -332,10 +327,11 @@ void AbcExporter::operator()(float &progress, bool &was_canceled)
   size_t i = 0;
 
   for (; begin != end; ++begin) {
-    progress = (++i / size);
+    *progress = (++i / size);
+    *do_update = 1;
 
     if (G.is_break) {
-      was_canceled = true;
+      *was_canceled = true;
       break;
     }
 
@@ -345,7 +341,7 @@ void AbcExporter::operator()(float &progress, bool &was_canceled)
     setCurrentFrame(m_bmain, frame);
 
     if (shape_frames.count(frame) != 0) {
-      for (int i = 0, e = m_shapes.size(); i != e; ++i) {
+      for (int i = 0, e = m_shapes.size(); i != e; i++) {
         m_shapes[i]->write();
       }
     }
@@ -559,7 +555,10 @@ void AbcExporter::createParticleSystemsWriters(Object *ob, AbcTransformWriter *x
       m_settings.export_child_hairs = true;
       m_shapes.push_back(new AbcHairWriter(ob, xform, m_shape_sampling_index, m_settings, psys));
     }
-    else if (m_settings.export_particles && psys->part->type == PART_EMITTER) {
+    else if (m_settings.export_particles &&
+             (psys->part->type == PART_EMITTER || psys->part->type == PART_FLUID_FLIP ||
+              psys->part->type == PART_FLUID_SPRAY || psys->part->type == PART_FLUID_BUBBLE ||
+              psys->part->type == PART_FLUID_FOAM || psys->part->type == PART_FLUID_TRACER)) {
       m_shapes.push_back(new AbcPointsWriter(ob, xform, m_shape_sampling_index, m_settings, psys));
     }
   }

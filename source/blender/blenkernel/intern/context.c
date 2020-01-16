@@ -89,7 +89,8 @@ struct bContext {
     struct Scene *scene;
 
     int recursion;
-    int py_init; /* true if python is initialized */
+    /** True if python is initialized. */
+    bool py_init;
     void *py_context;
   } data;
 };
@@ -212,11 +213,11 @@ void CTX_store_free_list(ListBase *contexts)
 
 /* is python initialized? */
 
-int CTX_py_init_get(bContext *C)
+bool CTX_py_init_get(bContext *C)
 {
   return C->data.py_init;
 }
-void CTX_py_init_set(bContext *C, int value)
+void CTX_py_init_set(bContext *C, bool value)
 {
   C->data.py_init = value;
 }
@@ -463,6 +464,18 @@ PointerRNA CTX_data_pointer_get_type(const bContext *C, const char *member, Stru
   }
 
   return PointerRNA_NULL;
+}
+
+PointerRNA CTX_data_pointer_get_type_silent(const bContext *C, const char *member, StructRNA *type)
+{
+  PointerRNA ptr = CTX_data_pointer_get(C, member);
+
+  if (ptr.data && RNA_struct_is_a(ptr.type, type)) {
+    return ptr;
+  }
+  else {
+    return PointerRNA_NULL;
+  }
 }
 
 ListBase CTX_data_collection_get(const bContext *C, const char *member)
@@ -757,7 +770,7 @@ RegionView3D *CTX_wm_region_view3d(const bContext *C)
   ARegion *ar = CTX_wm_region(C);
 
   if (sa && sa->spacetype == SPACE_VIEW3D) {
-    if (ar) {
+    if (ar && ar->regiontype == RGN_TYPE_WINDOW) {
       return ar->regiondata;
     }
   }
@@ -1052,7 +1065,7 @@ Collection *CTX_data_collection(const bContext *C)
 
   /* fallback */
   Scene *scene = CTX_data_scene(C);
-  return BKE_collection_master(scene);
+  return scene->master_collection;
 }
 
 enum eContextObjectMode CTX_data_mode_enum_ex(const Object *obedit,
@@ -1350,9 +1363,10 @@ int CTX_data_editable_gpencil_strokes(const bContext *C, ListBase *list)
 
 Depsgraph *CTX_data_depsgraph_pointer(const bContext *C)
 {
+  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
+  Depsgraph *depsgraph = BKE_scene_get_depsgraph(bmain, scene, view_layer, true);
   /* Dependency graph might have been just allocated, and hence it will not be marked.
    * This confuses redo system due to the lack of flushing changes back to the original data.
    * In the future we would need to check whether the CTX_wm_window(C)  is in editing mode (as an
@@ -1380,7 +1394,8 @@ Depsgraph *CTX_data_ensure_evaluated_depsgraph(const bContext *C)
 
 Depsgraph *CTX_data_depsgraph_on_load(const bContext *C)
 {
+  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  return BKE_scene_get_depsgraph(scene, view_layer, false);
+  return BKE_scene_get_depsgraph(bmain, scene, view_layer, false);
 }

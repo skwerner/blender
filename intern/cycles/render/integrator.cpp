@@ -141,7 +141,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->caustics_refractive = caustics_refractive;
   kintegrator->filter_glossy = (filter_glossy == 0.0f) ? FLT_MAX : 1.0f / filter_glossy;
 
-  kintegrator->seed = hash_int(seed);
+  kintegrator->seed = hash_uint2(seed, 0);
 
   kintegrator->use_ambient_occlusion = ((Pass::contains(scene->film->passes, PASS_AO)) ||
                                         dscene->data.background.ao_factor != 0.0f);
@@ -208,13 +208,6 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   sobol_generate_direction_vectors((uint(*)[SOBOL_BITS])directions, dimensions);
 
   dscene->sobol_directions.copy_to_device();
-
-  /* Clamping. */
-  bool use_sample_clamp = (sample_clamp_direct != 0.0f || sample_clamp_indirect != 0.0f);
-  if (use_sample_clamp != scene->film->use_sample_clamp) {
-    scene->film->use_sample_clamp = use_sample_clamp;
-    scene->film->tag_update(scene);
-  }
 
   need_update = false;
 }

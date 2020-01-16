@@ -29,16 +29,13 @@ struct Brush;
 struct ColorManagedDisplay;
 struct ColorSpace;
 struct ImagePool;
-struct ListBase;
 struct MTex;
 struct Object;
 struct Paint;
-struct PaintCurve;
 struct PaintStroke;
 struct PointerRNA;
 struct RegionView3D;
 struct Scene;
-struct UndoStep;
 struct VPaint;
 struct ViewContext;
 struct bContext;
@@ -48,6 +45,7 @@ struct wmOperator;
 struct wmOperatorType;
 struct wmWindowManager;
 enum ePaintMode;
+enum ePaintSymmetryFlags;
 
 typedef struct CoNo {
   float co[3];
@@ -71,7 +69,7 @@ struct PaintStroke *paint_stroke_new(struct bContext *C,
                                      StrokeRedraw redraw,
                                      StrokeDone done,
                                      int event_type);
-void paint_stroke_data_free(struct wmOperator *op);
+void paint_stroke_free(struct bContext *C, struct wmOperator *op);
 
 bool paint_space_stroke_enabled(struct Brush *br, enum ePaintMode mode);
 bool paint_supports_dynamic_size(struct Brush *br, enum ePaintMode mode);
@@ -185,20 +183,17 @@ typedef struct ImagePaintPartialRedraw {
   int enabled;
 } ImagePaintPartialRedraw;
 
-#define IMAPAINT_TILE_BITS 6
-#define IMAPAINT_TILE_SIZE (1 << IMAPAINT_TILE_BITS)
-#define IMAPAINT_TILE_NUMBER(size) (((size) + IMAPAINT_TILE_SIZE - 1) >> IMAPAINT_TILE_BITS)
-
 bool image_texture_paint_poll(struct bContext *C);
 void imapaint_image_update(struct SpaceImage *sima,
                            struct Image *image,
                            struct ImBuf *ibuf,
+                           struct ImageUser *iuser,
                            short texpaint);
 struct ImagePaintPartialRedraw *get_imapaintpartial(void);
 void set_imapaintpartial(struct ImagePaintPartialRedraw *ippr);
 void imapaint_region_tiles(
     struct ImBuf *ibuf, int x, int y, int w, int h, int *tx, int *ty, int *tw, int *th);
-int get_imapaint_zoom(struct bContext *C, float *zoomx, float *zoomy);
+bool get_imapaint_zoom(struct bContext *C, float *zoomx, float *zoomy);
 void *paint_2d_new_stroke(struct bContext *, struct wmOperator *, int mode);
 void paint_2d_redraw(const struct bContext *C, void *ps, bool final);
 void paint_2d_stroke_done(void *ps);
@@ -213,6 +208,7 @@ void paint_2d_bucket_fill(const struct bContext *C,
                           const float color[3],
                           struct Brush *br,
                           const float mouse_init[2],
+                          const float mouse_final[2],
                           void *ps);
 void paint_2d_gradient_fill(const struct bContext *C,
                             struct Brush *br,
@@ -252,31 +248,6 @@ void PAINT_OT_image_from_view(struct wmOperatorType *ot);
 void PAINT_OT_add_texture_paint_slot(struct wmOperatorType *ot);
 void PAINT_OT_image_paint(struct wmOperatorType *ot);
 void PAINT_OT_add_simple_uvs(struct wmOperatorType *ot);
-
-/* paint_image_undo.c */
-void *image_undo_find_tile(ListBase *undo_tiles,
-                           struct Image *ima,
-                           struct ImBuf *ibuf,
-                           int x_tile,
-                           int y_tile,
-                           unsigned short **mask,
-                           bool validate);
-void *image_undo_push_tile(ListBase *undo_tiles,
-                           struct Image *ima,
-                           struct ImBuf *ibuf,
-                           struct ImBuf **tmpibuf,
-                           int x_tile,
-                           int y_tile,
-                           unsigned short **,
-                           bool **valid,
-                           bool proj,
-                           bool find_prev);
-void image_undo_remove_masks(void);
-void image_undo_init_locks(void);
-void image_undo_end_locks(void);
-
-struct ListBase *ED_image_undosys_step_get_tiles(struct UndoStep *us_p);
-struct ListBase *ED_image_undo_get_tiles(void);
 
 /* sculpt_uv.c */
 void SCULPT_OT_uv_sculpt_stroke(struct wmOperatorType *ot);
@@ -336,8 +307,8 @@ bool mask_paint_poll(struct bContext *C);
 bool paint_curve_poll(struct bContext *C);
 
 bool facemask_paint_poll(struct bContext *C);
-void flip_v3_v3(float out[3], const float in[3], const char symm);
-void flip_qt_qt(float out[3], const float in[3], const char symm);
+void flip_v3_v3(float out[3], const float in[3], const enum ePaintSymmetryFlags symm);
+void flip_qt_qt(float out[3], const float in[3], const enum ePaintSymmetryFlags symm);
 
 /* stroke operator */
 typedef enum BrushStrokeMode {

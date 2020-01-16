@@ -17,17 +17,17 @@
 CCL_NAMESPACE_BEGIN
 
 /* Direction Emission */
-ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
-                                                ShaderData *emission_sd,
-                                                LightSample *ls,
-                                                ccl_addr_space PathState *state,
-                                                float3 I,
-                                                differential3 dI,
-                                                float t,
-                                                float time)
+ccl_device_noinline_cpu float3 direct_emissive_eval(KernelGlobals *kg,
+                                                    ShaderData *emission_sd,
+                                                    LightSample *ls,
+                                                    ccl_addr_space PathState *state,
+                                                    float3 I,
+                                                    differential3 dI,
+                                                    float t,
+                                                    float time)
 {
   /* setup shading at emitter */
-  float3 eval;
+  float3 eval = make_float3(0.0f, 0.0f, 0.0f);
 
   if (shader_constant_emission_eval(kg, ls->shader, &eval)) {
     if ((ls->prim != PRIM_NONE) && dot(ls->Ng, I) < 0.0f) {
@@ -73,7 +73,7 @@ ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
     /* No proper path flag, we're evaluating this for all closures. that's
      * weak but we'd have to do multiple evaluations otherwise. */
     path_state_modify_bounce(state, true);
-    shader_eval_surface(kg, emission_sd, state, PATH_RAY_EMISSION);
+    shader_eval_surface(kg, emission_sd, state, NULL, PATH_RAY_EMISSION);
     path_state_modify_bounce(state, false);
 
     /* Evaluate closures. */
@@ -98,15 +98,15 @@ ccl_device_noinline float3 direct_emissive_eval(KernelGlobals *kg,
   return eval;
 }
 
-ccl_device_noinline bool direct_emission(KernelGlobals *kg,
-                                         ShaderData *sd,
-                                         ShaderData *emission_sd,
-                                         LightSample *ls,
-                                         ccl_addr_space PathState *state,
-                                         Ray *ray,
-                                         BsdfEval *eval,
-                                         bool *is_lamp,
-                                         float rand_terminate)
+ccl_device_noinline_cpu bool direct_emission(KernelGlobals *kg,
+                                             ShaderData *sd,
+                                             ShaderData *emission_sd,
+                                             LightSample *ls,
+                                             ccl_addr_space PathState *state,
+                                             Ray *ray,
+                                             BsdfEval *eval,
+                                             bool *is_lamp,
+                                             float rand_terminate)
 {
   if (ls->pdf == 0.0f)
     return false;
@@ -208,7 +208,7 @@ ccl_device_noinline bool direct_emission(KernelGlobals *kg,
 
 /* Indirect Primitive Emission */
 
-ccl_device_noinline float3 indirect_primitive_emission(
+ccl_device_noinline_cpu float3 indirect_primitive_emission(
     KernelGlobals *kg, ShaderData *sd, float t, int path_flag, float bsdf_pdf)
 {
   /* evaluate emissive closure */
@@ -234,18 +234,15 @@ ccl_device_noinline float3 indirect_primitive_emission(
 
 /* Indirect Lamp Emission */
 
-ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
-                                                ShaderData *emission_sd,
-                                                ccl_addr_space PathState *state,
-                                                Ray *ray,
-                                                float3 *emission)
+ccl_device_noinline_cpu void indirect_lamp_emission(KernelGlobals *kg,
+                                                    ShaderData *emission_sd,
+                                                    ccl_addr_space PathState *state,
+                                                    PathRadiance *L,
+                                                    Ray *ray,
+                                                    float3 throughput)
 {
-  bool hit_lamp = false;
-
-  *emission = make_float3(0.0f, 0.0f, 0.0f);
-
   for (int lamp = 0; lamp < kernel_data.integrator.num_all_lights; lamp++) {
-    LightSample ls;
+    LightSample ls ccl_optional_struct_init;
 
     if (!lamp_light_eval(kg, lamp, ray->P, ray->D, ray->t, &ls))
       continue;
@@ -263,7 +260,7 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
     }
 #endif
 
-    float3 L = direct_emissive_eval(
+    float3 lamp_L = direct_emissive_eval(
         kg, emission_sd, &ls, state, -ray->D, ray->dD, ls.t, ray->time);
 
 #ifdef __VOLUME__
@@ -273,7 +270,7 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
       volume_ray.t = ls.t;
       float3 volume_tp = make_float3(1.0f, 1.0f, 1.0f);
       kernel_volume_shadow(kg, emission_sd, state, &volume_ray, &volume_tp);
-      L *= volume_tp;
+      lamp_L *= volume_tp;
     }
 #endif
 
@@ -281,22 +278,20 @@ ccl_device_noinline bool indirect_lamp_emission(KernelGlobals *kg,
       /* multiple importance sampling, get regular light pdf,
        * and compute weight with respect to BSDF pdf */
       float mis_weight = power_heuristic(state->ray_pdf, ls.pdf);
-      L *= mis_weight;
+      lamp_L *= mis_weight;
     }
 
-    *emission += L;
-    hit_lamp = true;
+    path_radiance_accum_emission(kg, L, state, throughput, lamp_L);
   }
-
-  return hit_lamp;
 }
 
 /* Indirect Background */
 
-ccl_device_noinline float3 indirect_background(KernelGlobals *kg,
-                                               ShaderData *emission_sd,
-                                               ccl_addr_space PathState *state,
-                                               ccl_addr_space Ray *ray)
+ccl_device_noinline_cpu float3 indirect_background(KernelGlobals *kg,
+                                                   ShaderData *emission_sd,
+                                                   ccl_addr_space PathState *state,
+                                                   ccl_global float *buffer,
+                                                   ccl_addr_space Ray *ray)
 {
 #ifdef __BACKGROUND__
   int shader = kernel_data.background.surface_shader;
@@ -314,7 +309,7 @@ ccl_device_noinline float3 indirect_background(KernelGlobals *kg,
   }
 
   /* Evaluate background shader. */
-  float3 L;
+  float3 L = make_float3(0.0f, 0.0f, 0.0f);
   if (!shader_constant_emission_eval(kg, shader, &L)) {
 #  ifdef __SPLIT_KERNEL__
     Ray priv_ray = *ray;
@@ -324,7 +319,7 @@ ccl_device_noinline float3 indirect_background(KernelGlobals *kg,
 #  endif
 
     path_state_modify_bounce(state, true);
-    shader_eval_surface(kg, emission_sd, state, state->flag | PATH_RAY_EMISSION);
+    shader_eval_surface(kg, emission_sd, state, buffer, state->flag | PATH_RAY_EMISSION);
     path_state_modify_bounce(state, false);
 
     L = shader_background_eval(emission_sd);

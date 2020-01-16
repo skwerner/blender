@@ -33,7 +33,6 @@ struct Depsgraph;
 struct Implicit_Data;
 struct ListBase;
 struct Object;
-struct VoxelData;
 
 typedef enum eMassSpringSolverStatus {
   BPH_SOLVER_SUCCESS = (1 << 0),
@@ -54,6 +53,7 @@ int BPH_cloth_solve(struct Depsgraph *depsgraph,
                     struct ClothModifierData *clmd,
                     struct ListBase *effectors);
 void BKE_cloth_solver_set_positions(struct ClothModifierData *clmd);
+void BKE_cloth_solver_set_volume(ClothModifierData *clmd);
 
 #ifdef __cplusplus
 }

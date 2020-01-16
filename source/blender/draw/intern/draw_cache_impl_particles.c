@@ -190,18 +190,18 @@ static void particle_batch_cache_clear_hair(ParticleHairCache *hair_cache)
   DRW_TEXTURE_FREE_SAFE(hair_cache->strand_tex);
   DRW_TEXTURE_FREE_SAFE(hair_cache->strand_seg_tex);
 
-  for (int i = 0; i < MAX_MTFACE; ++i) {
+  for (int i = 0; i < MAX_MTFACE; i++) {
     GPU_VERTBUF_DISCARD_SAFE(hair_cache->proc_uv_buf[i]);
     DRW_TEXTURE_FREE_SAFE(hair_cache->uv_tex[i]);
   }
-  for (int i = 0; i < MAX_MCOL; ++i) {
+  for (int i = 0; i < MAX_MCOL; i++) {
     GPU_VERTBUF_DISCARD_SAFE(hair_cache->proc_col_buf[i]);
     DRW_TEXTURE_FREE_SAFE(hair_cache->col_tex[i]);
   }
-  for (int i = 0; i < MAX_HAIR_SUBDIV; ++i) {
+  for (int i = 0; i < MAX_HAIR_SUBDIV; i++) {
     GPU_VERTBUF_DISCARD_SAFE(hair_cache->final[i].proc_buf);
     DRW_TEXTURE_FREE_SAFE(hair_cache->final[i].proc_tex);
-    for (int j = 0; j < MAX_THICKRES; ++j) {
+    for (int j = 0; j < MAX_THICKRES; j++) {
       GPU_BATCH_DISCARD_SAFE(hair_cache->final[i].proc_hairs[j]);
     }
   }
@@ -894,11 +894,13 @@ static void particle_batch_cache_ensure_procedural_strand_data(PTCacheEdit *edit
     GPU_vertbuf_data_alloc(cache->proc_uv_buf[i], cache->strands_len);
     GPU_vertbuf_attr_get_raw_data(cache->proc_uv_buf[i], uv_id, &uv_step[i]);
 
+    char attr_safe_name[GPU_MAX_SAFE_ATTRIB_NAME];
     const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPUV, i);
-    uint hash = BLI_ghashutil_strhash_p(name);
+    GPU_vertformat_safe_attrib_name(name, attr_safe_name, GPU_MAX_SAFE_ATTRIB_NAME);
+
     int n = 0;
-    BLI_snprintf(cache->uv_layer_names[i][n++], MAX_LAYER_NAME_LEN, "u%u", hash);
-    BLI_snprintf(cache->uv_layer_names[i][n++], MAX_LAYER_NAME_LEN, "a%u", hash);
+    BLI_snprintf(cache->uv_layer_names[i][n++], MAX_LAYER_NAME_LEN, "u%s", attr_safe_name);
+    BLI_snprintf(cache->uv_layer_names[i][n++], MAX_LAYER_NAME_LEN, "a%s", attr_safe_name);
 
     if (i == active_uv) {
       BLI_strncpy(cache->uv_layer_names[i][n++], "au", MAX_LAYER_NAME_LEN);
@@ -913,14 +915,16 @@ static void particle_batch_cache_ensure_procedural_strand_data(PTCacheEdit *edit
     GPU_vertbuf_data_alloc(cache->proc_col_buf[i], cache->strands_len);
     GPU_vertbuf_attr_get_raw_data(cache->proc_col_buf[i], col_id, &col_step[i]);
 
+    char attr_safe_name[GPU_MAX_SAFE_ATTRIB_NAME];
     const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPCOL, i);
-    uint hash = BLI_ghashutil_strhash_p(name);
+    GPU_vertformat_safe_attrib_name(name, attr_safe_name, GPU_MAX_SAFE_ATTRIB_NAME);
+
     int n = 0;
-    BLI_snprintf(cache->col_layer_names[i][n++], MAX_LAYER_NAME_LEN, "c%u", hash);
+    BLI_snprintf(cache->col_layer_names[i][n++], MAX_LAYER_NAME_LEN, "c%s", attr_safe_name);
 
     /* We only do vcols auto name that are not overridden by uvs */
     if (CustomData_get_named_layer_index(&psmd->mesh_final->ldata, CD_MLOOPUV, name) == -1) {
-      BLI_snprintf(cache->col_layer_names[i][n++], MAX_LAYER_NAME_LEN, "a%u", hash);
+      BLI_snprintf(cache->col_layer_names[i][n++], MAX_LAYER_NAME_LEN, "a%s", attr_safe_name);
     }
 
     if (i == active_col) {
@@ -1176,10 +1180,12 @@ static void particle_batch_cache_ensure_pos_and_seg(PTCacheEdit *edit,
     col_id = MEM_mallocN(sizeof(*col_id) * num_col_layers, "Col attr format");
 
     for (int i = 0; i < num_uv_layers; i++) {
-      const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPUV, i);
-      char uuid[32];
 
-      BLI_snprintf(uuid, sizeof(uuid), "u%u", BLI_ghashutil_strhash_p(name));
+      char uuid[32], attr_safe_name[GPU_MAX_SAFE_ATTRIB_NAME];
+      const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPUV, i);
+      GPU_vertformat_safe_attrib_name(name, attr_safe_name, GPU_MAX_SAFE_ATTRIB_NAME);
+
+      BLI_snprintf(uuid, sizeof(uuid), "u%s", attr_safe_name);
       uv_id[i] = GPU_vertformat_attr_add(&format, uuid, GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
       if (i == active_uv) {
@@ -1187,11 +1193,12 @@ static void particle_batch_cache_ensure_pos_and_seg(PTCacheEdit *edit,
       }
     }
 
-    for (int i = 0; i < num_uv_layers; i++) {
-      const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPUV, i);
-      char uuid[32];
+    for (int i = 0; i < num_col_layers; i++) {
+      char uuid[32], attr_safe_name[GPU_MAX_SAFE_ATTRIB_NAME];
+      const char *name = CustomData_get_layer_name(&psmd->mesh_final->ldata, CD_MLOOPCOL, i);
+      GPU_vertformat_safe_attrib_name(name, attr_safe_name, GPU_MAX_SAFE_ATTRIB_NAME);
 
-      BLI_snprintf(uuid, sizeof(uuid), "c%u", BLI_ghashutil_strhash_p(name));
+      BLI_snprintf(uuid, sizeof(uuid), "c%s", attr_safe_name);
       col_id[i] = GPU_vertformat_attr_add(&format, uuid, GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
       if (i == active_col) {
@@ -1335,22 +1342,13 @@ static void particle_batch_cache_ensure_pos(Object *object,
   sim.psmd = psys_get_modifier(object, psys);
   sim.psys->lattice_deform_data = psys_create_lattice_deform_data(&sim);
 
-  if (psys->part->phystype == PART_PHYS_KEYED) {
-    if (psys->flag & PSYS_KEYED) {
-      psys_count_keyed_targets(&sim);
-      if (psys->totkeyed == 0) {
-        return;
-      }
-    }
-  }
-
   GPU_VERTBUF_DISCARD_SAFE(point_cache->pos);
 
   if (format.attr_len == 0) {
     /* initialize vertex format */
-    pos_id = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
-    rot_id = GPU_vertformat_attr_add(&format, "rot", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
-    val_id = GPU_vertformat_attr_add(&format, "val", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
+    pos_id = GPU_vertformat_attr_add(&format, "part_pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
+    val_id = GPU_vertformat_attr_add(&format, "part_val", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
+    rot_id = GPU_vertformat_attr_add(&format, "part_rot", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
   }
 
   point_cache->pos = GPU_vertbuf_create_with_format(&format);
@@ -1551,6 +1549,9 @@ static void ensure_edit_inner_points_count(const PTCacheEdit *edit, ParticleBatc
   cache->edit_inner_point_len = 0;
   for (int point_index = 0; point_index < edit->totpoint; point_index++) {
     const PTCacheEditPoint *point = &edit->points[point_index];
+    if (point->flag & PEP_HIDE) {
+      continue;
+    }
     BLI_assert(point->totkey >= 1);
     cache->edit_inner_point_len += (point->totkey - 1);
   }
@@ -1572,6 +1573,9 @@ static void particle_batch_cache_ensure_edit_inner_pos(PTCacheEdit *edit,
   int global_key_index = 0;
   for (int point_index = 0; point_index < edit->totpoint; point_index++) {
     const PTCacheEditPoint *point = &edit->points[point_index];
+    if (point->flag & PEP_HIDE) {
+      continue;
+    }
     for (int key_index = 0; key_index < point->totkey - 1; key_index++) {
       PTCacheEditKey *key = &point->keys[key_index];
       float color = (key->flag & PEK_SELECT) ? 1.0f : 0.0f;
@@ -1602,7 +1606,14 @@ static void ensure_edit_tip_points_count(const PTCacheEdit *edit, ParticleBatchC
   if (cache->edit_tip_pos != NULL) {
     return;
   }
-  cache->edit_tip_point_len = edit->totpoint;
+  cache->edit_tip_point_len = 0;
+  for (int point_index = 0; point_index < edit->totpoint; point_index++) {
+    const PTCacheEditPoint *point = &edit->points[point_index];
+    if (point->flag & PEP_HIDE) {
+      continue;
+    }
+    cache->edit_tip_point_len += 1;
+  }
 }
 
 static void particle_batch_cache_ensure_edit_tip_pos(PTCacheEdit *edit, ParticleBatchCache *cache)
@@ -1617,13 +1628,18 @@ static void particle_batch_cache_ensure_edit_tip_pos(PTCacheEdit *edit, Particle
   cache->edit_tip_pos = GPU_vertbuf_create_with_format(edit_point_format);
   GPU_vertbuf_data_alloc(cache->edit_tip_pos, cache->edit_tip_point_len);
 
+  int global_point_index = 0;
   for (int point_index = 0; point_index < edit->totpoint; point_index++) {
     const PTCacheEditPoint *point = &edit->points[point_index];
+    if (point->flag & PEP_HIDE) {
+      continue;
+    }
     PTCacheEditKey *key = &point->keys[point->totkey - 1];
     float color = (key->flag & PEK_SELECT) ? 1.0f : 0.0f;
 
-    GPU_vertbuf_attr_set(cache->edit_tip_pos, pos_id, point_index, key->world_co);
-    GPU_vertbuf_attr_set(cache->edit_tip_pos, color_id, point_index, &color);
+    GPU_vertbuf_attr_set(cache->edit_tip_pos, pos_id, global_point_index, key->world_co);
+    GPU_vertbuf_attr_set(cache->edit_tip_pos, color_id, global_point_index, &color);
+    global_point_index++;
   }
 }
 

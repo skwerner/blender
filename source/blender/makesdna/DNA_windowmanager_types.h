@@ -48,7 +48,6 @@ struct PointerRNA;
 struct Report;
 struct ReportList;
 struct Stereo3dFormat;
-struct UndoStep;
 struct bContext;
 struct bScreen;
 struct uiLayout;
@@ -131,11 +130,14 @@ typedef struct wmWindowManager {
   ListBase windows;
 
   /** Set on file read. */
-  int initialized;
+  short initialized;
   /** Indicator whether data was saved. */
   short file_saved;
   /** Operator stack depth to avoid nested undo pushes. */
   short op_undo_depth;
+
+  /** Set after selection to notify outliner to sync. Stores type of selection */
+  short outliner_sync_select_dirty;
 
   /** Operator registry. */
   ListBase operators;
@@ -185,6 +187,18 @@ enum {
   WM_WINDOW_IS_INITIALIZED = (1 << 0),
   WM_KEYCONFIG_IS_INITIALIZED = (1 << 1),
 };
+
+/* wmWindowManager.outliner_sync_select_dirty */
+enum {
+  WM_OUTLINER_SYNC_SELECT_FROM_OBJECT = (1 << 0),
+  WM_OUTLINER_SYNC_SELECT_FROM_EDIT_BONE = (1 << 1),
+  WM_OUTLINER_SYNC_SELECT_FROM_POSE_BONE = (1 << 2),
+  WM_OUTLINER_SYNC_SELECT_FROM_SEQUENCE = (1 << 3),
+};
+
+#define WM_OUTLINER_SYNC_SELECT_FROM_ALL \
+  (WM_OUTLINER_SYNC_SELECT_FROM_OBJECT | WM_OUTLINER_SYNC_SELECT_FROM_EDIT_BONE | \
+   WM_OUTLINER_SYNC_SELECT_FROM_POSE_BONE | WM_OUTLINER_SYNC_SELECT_FROM_SEQUENCE)
 
 #define WM_KEYCONFIG_STR_DEFAULT "blender"
 
@@ -516,7 +530,7 @@ enum {
    *
    * This difference can be important because previous settings may be used,
    * even with #PROP_SKIP_SAVE the repeat last operator will use the previous settings.
-   * Unlike #OP_IS_REPEAT the selection (and context generally) may be be different each time.
+   * Unlike #OP_IS_REPEAT the selection (and context generally) may be different each time.
    * See T60777 for an example of when this is needed.
    */
   OP_IS_REPEAT_LAST = (1 << 1),

@@ -457,7 +457,7 @@ void ACTION_OT_view_all(wmOperatorType *ot)
   ot->poll = ED_operator_action_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 void ACTION_OT_view_selected(wmOperatorType *ot)
@@ -472,7 +472,7 @@ void ACTION_OT_view_selected(wmOperatorType *ot)
   ot->poll = ED_operator_action_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 /* ****************** View-All Operator ****************** */
@@ -497,7 +497,7 @@ void ACTION_OT_view_frame(wmOperatorType *ot)
   ot->poll = ED_operator_action_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 /* ************************************************************************** */
@@ -1663,7 +1663,7 @@ static const EnumPropertyItem prop_actkeys_snap_types[] = {
     {ACTKEYS_SNAP_CFRA,
      "CFRA",
      0,
-     "Current frame",
+     "Current Frame",
      "Snap selected keyframes to the current frame"},
     {ACTKEYS_SNAP_NEAREST_FRAME,
      "NEAREST_FRAME",
@@ -1789,17 +1789,17 @@ static const EnumPropertyItem prop_actkeys_mirror_types[] = {
     {ACTKEYS_MIRROR_CFRA,
      "CFRA",
      0,
-     "By Times over Current frame",
+     "By Times Over Current Frame",
      "Flip times of selected keyframes using the current frame as the mirror line"},
     {ACTKEYS_MIRROR_XAXIS,
      "XAXIS",
      0,
-     "By Values over Value=0",
+     "By Values Over Value=0",
      "Flip values of selected keyframes (i.e. negative values become positive, and vice versa)"},
     {ACTKEYS_MIRROR_MARKER,
      "MARKER",
      0,
-     "By Times over First Selected Marker",
+     "By Times Over First Selected Marker",
      "Flip times of selected keyframes using the first selected marker as the reference point"},
     {0, NULL, 0, NULL, NULL},
 };

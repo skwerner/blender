@@ -264,6 +264,8 @@ void ED_operatortypes_gpencil(void)
   WM_operatortype_append(GPENCIL_OT_move_to_layer);
   WM_operatortype_append(GPENCIL_OT_layer_change);
 
+  WM_operatortype_append(GPENCIL_OT_set_active_material);
+
   WM_operatortype_append(GPENCIL_OT_snap_to_grid);
   WM_operatortype_append(GPENCIL_OT_snap_to_cursor);
   WM_operatortype_append(GPENCIL_OT_snap_cursor_to_selected);
@@ -274,12 +276,15 @@ void ED_operatortypes_gpencil(void)
 
   /* Editing (Buttons) ------------ */
 
-  WM_operatortype_append(GPENCIL_OT_data_add);
+  WM_operatortype_append(GPENCIL_OT_annotation_add);
   WM_operatortype_append(GPENCIL_OT_data_unlink);
 
   WM_operatortype_append(GPENCIL_OT_layer_add);
   WM_operatortype_append(GPENCIL_OT_layer_remove);
   WM_operatortype_append(GPENCIL_OT_layer_move);
+  WM_operatortype_append(GPENCIL_OT_layer_annotation_add);
+  WM_operatortype_append(GPENCIL_OT_layer_annotation_remove);
+  WM_operatortype_append(GPENCIL_OT_layer_annotation_move);
   WM_operatortype_append(GPENCIL_OT_layer_duplicate);
   WM_operatortype_append(GPENCIL_OT_layer_duplicate_object);
 
@@ -293,6 +298,7 @@ void ED_operatortypes_gpencil(void)
   WM_operatortype_append(GPENCIL_OT_blank_frame_add);
 
   WM_operatortype_append(GPENCIL_OT_active_frame_delete);
+  WM_operatortype_append(GPENCIL_OT_annotation_active_frame_delete);
   WM_operatortype_append(GPENCIL_OT_active_frames_delete_all);
   WM_operatortype_append(GPENCIL_OT_frame_duplicate);
   WM_operatortype_append(GPENCIL_OT_frame_clean_fill);

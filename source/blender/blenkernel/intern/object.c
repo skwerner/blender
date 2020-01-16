@@ -39,6 +39,7 @@
 #include "DNA_key_types.h"
 #include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_material_types.h"
 #include "DNA_meta_types.h"
 #include "DNA_mesh_types.h"
@@ -48,13 +49,13 @@
 #include "DNA_screen_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_shader_fx_types.h"
-#include "DNA_smoke_types.h"
 #include "DNA_space_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_world_types.h"
 #include "DNA_object_types.h"
 #include "DNA_lightprobe_types.h"
 #include "DNA_rigidbody_types.h"
+#include "DNA_defaults.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
@@ -80,6 +81,7 @@
 #include "BKE_curve.h"
 #include "BKE_displist.h"
 #include "BKE_effect.h"
+#include "BKE_font.h"
 #include "BKE_fcurve.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_icons.h"
@@ -120,10 +122,6 @@
 #include "DEG_depsgraph_query.h"
 
 #include "DRW_engine.h"
-
-#ifdef WITH_MOD_FLUID
-#  include "LBM_fluidsim.h"
-#endif
 
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
@@ -628,6 +626,54 @@ bool BKE_object_data_is_in_editmode(const ID *id)
   }
 }
 
+char *BKE_object_data_editmode_flush_ptr_get(struct ID *id)
+{
+  const short type = GS(id->name);
+  switch (type) {
+    case ID_ME: {
+      BMEditMesh *em = ((Mesh *)id)->edit_mesh;
+      if (em != NULL) {
+        return &em->needs_flush_to_id;
+      }
+      break;
+    }
+    case ID_CU: {
+      if (((Curve *)id)->vfont != NULL) {
+        EditFont *ef = ((Curve *)id)->editfont;
+        if (ef != NULL) {
+          return &ef->needs_flush_to_id;
+        }
+      }
+      else {
+        EditNurb *editnurb = ((Curve *)id)->editnurb;
+        if (editnurb) {
+          return &editnurb->needs_flush_to_id;
+        }
+      }
+      break;
+    }
+    case ID_MB: {
+      MetaBall *mb = (MetaBall *)id;
+      return &mb->needs_flush_to_id;
+    }
+    case ID_LT: {
+      EditLatt *editlatt = ((Lattice *)id)->editlatt;
+      if (editlatt) {
+        return &editlatt->needs_flush_to_id;
+      }
+      break;
+    }
+    case ID_AR: {
+      bArmature *arm = (bArmature *)id;
+      return &arm->needs_flush_to_id;
+    }
+    default:
+      BLI_assert(0);
+      return NULL;
+  }
+  return NULL;
+}
+
 bool BKE_object_is_in_wpaint_select_vert(const Object *ob)
 {
   if (ob->type == OB_MESH) {
@@ -679,7 +725,7 @@ bool BKE_object_is_mode_compat(const struct Object *ob, eObjectMode object_mode)
  */
 int BKE_object_visibility(const Object *ob, const int dag_eval_mode)
 {
-  if ((ob->base_flag & BASE_VISIBLE) == 0) {
+  if ((ob->base_flag & BASE_VISIBLE_DEPSGRAPH) == 0) {
     return 0;
   }
 
@@ -803,38 +849,16 @@ void *BKE_object_obdata_add_from_type(Main *bmain, int type, const char *name)
   }
 }
 
-void BKE_object_init(Object *ob)
+void BKE_object_init(Object *ob, const short ob_type)
 {
-  /* BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(ob, id)); */ /* ob->type is already initialized... */
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(ob, id));
 
-  copy_v4_fl(ob->color, 1.0f);
+  MEMCPY_STRUCT_AFTER(ob, DNA_struct_default_get(Object), id);
 
-  ob->scale[0] = ob->scale[1] = ob->scale[2] = 1.0;
-  ob->dscale[0] = ob->dscale[1] = ob->dscale[2] = 1.0;
+  ob->type = ob_type;
 
-  /* objects should default to having Euler XYZ rotations,
-   * but rotations default to quaternions
-   */
-  ob->rotmode = ROT_MODE_EUL;
-
-  unit_axis_angle(ob->rotAxis, &ob->rotAngle);
-  unit_axis_angle(ob->drotAxis, &ob->drotAngle);
-
-  unit_qt(ob->quat);
-  unit_qt(ob->dquat);
-
-  /* rotation locks should be 4D for 4 component rotations by default... */
-  ob->protectflag = OB_LOCK_ROT4D;
-
-  unit_m4(ob->constinv);
-  unit_m4(ob->parentinv);
-  unit_m4(ob->obmat);
-  ob->dt = OB_TEXTURE;
-  ob->empty_drawtype = OB_PLAINAXES;
-  ob->empty_drawsize = 1.0;
-  ob->empty_image_depth = OB_EMPTY_IMAGE_DEPTH_DEFAULT;
-  if (ob->type == OB_EMPTY) {
-    copy_v2_fl(ob->ima_ofs, -0.5f);
+  if (ob->type != OB_EMPTY) {
+    zero_v2(ob->ima_ofs);
   }
 
   if (ELEM(ob->type, OB_LAMP, OB_CAMERA, OB_SPEAKER)) {
@@ -845,18 +869,6 @@ void BKE_object_init(Object *ob)
     ob->trackflag = OB_POSY;
     ob->upflag = OB_POSZ;
   }
-
-  ob->instance_faces_scale = 1.0;
-
-  ob->col_group = 0x01;
-  ob->col_mask = 0xffff;
-  ob->preview = NULL;
-  ob->duplicator_visibility_flag = OB_DUPLI_FLAG_VIEWPORT | OB_DUPLI_FLAG_RENDER;
-
-  /* NT fluid sim defaults */
-  ob->fluidsimSettings = NULL;
-
-  BLI_listbase_clear(&ob->pc_ids);
 
   /* Animation Visualization defaults */
   animviz_settings_init(&ob->avs);
@@ -877,9 +889,7 @@ Object *BKE_object_add_only_object(Main *bmain, int type, const char *name)
   id_us_min(&ob->id);
 
   /* default object vars */
-  ob->type = type;
-
-  BKE_object_init(ob);
+  BKE_object_init(ob, type);
 
   return ob;
 }
@@ -1116,13 +1126,13 @@ void BKE_object_copy_particlesystems(Object *ob_dst, const Object *ob_src, const
           }
         }
       }
-      else if (md->type == eModifierType_Smoke) {
-        SmokeModifierData *smd = (SmokeModifierData *)md;
+      else if (md->type == eModifierType_Fluid) {
+        FluidModifierData *mmd = (FluidModifierData *)md;
 
-        if (smd->type == MOD_SMOKE_TYPE_FLOW) {
-          if (smd->flow) {
-            if (smd->flow->psys == psys) {
-              smd->flow->psys = npsys;
+        if (mmd->type == MOD_FLUID_TYPE_FLOW) {
+          if (mmd->flow) {
+            if (mmd->flow->psys == psys) {
+              mmd->flow->psys = npsys;
             }
           }
         }
@@ -1313,7 +1323,7 @@ void BKE_object_transform_copy(Object *ob_tar, const Object *ob_src)
 {
   copy_v3_v3(ob_tar->loc, ob_src->loc);
   copy_v3_v3(ob_tar->rot, ob_src->rot);
-  copy_v3_v3(ob_tar->quat, ob_src->quat);
+  copy_v4_v4(ob_tar->quat, ob_src->quat);
   copy_v3_v3(ob_tar->rotAxis, ob_src->rotAxis);
   ob_tar->rotAngle = ob_src->rotAngle;
   ob_tar->rotmode = ob_src->rotmode;
@@ -1448,7 +1458,8 @@ Object *BKE_object_copy(Main *bmain, const Object *ob)
   return ob_copy;
 }
 
-/** Perform deep-copy of object and its 'children' data-blocks (obdata, materials, actions, etc.).
+/**
+ * Perform deep-copy of object and its 'children' data-blocks (obdata, materials, actions, etc.).
  *
  * \param dupflag: Controls which sub-data are also duplicated
  * (see #eDupli_ID_Flags in DNA_userdef_types.h).
@@ -2799,6 +2810,12 @@ void BKE_object_boundbox_calc_from_mesh(struct Object *ob, struct Mesh *me_eval)
   ob->runtime.bb->flag &= ~BOUNDBOX_DIRTY;
 }
 
+/* -------------------------------------------------------------------- */
+/** \name Object Dimension Get/Set
+ *
+ * \warning Setting dimensions is prone to feedback loops in evaluation.
+ * \{ */
+
 void BKE_object_dimensions_get(Object *ob, float vec[3])
 {
   BoundBox *bb = NULL;
@@ -2818,7 +2835,19 @@ void BKE_object_dimensions_get(Object *ob, float vec[3])
   }
 }
 
-void BKE_object_dimensions_set(Object *ob, const float value[3], int axis_mask)
+/**
+ * The original scale and object matrix can be passed in so any difference
+ * of the objects matrix and the final matrix can be accounted for,
+ * typically this caused by parenting, constraints or delta-scale.
+ *
+ * Re-using these values from the object causes a feedback loop
+ * when multiple values are modified at once in some situations. see: T69536.
+ */
+void BKE_object_dimensions_set_ex(Object *ob,
+                                  const float value[3],
+                                  int axis_mask,
+                                  const float ob_scale_orig[3],
+                                  const float ob_obmat_orig[4][4])
 {
   BoundBox *bb = NULL;
 
@@ -2832,12 +2861,26 @@ void BKE_object_dimensions_set(Object *ob, const float value[3], int axis_mask)
 
     for (int i = 0; i < 3; i++) {
       if (((1 << i) & axis_mask) == 0) {
+
+        if (ob_scale_orig != NULL) {
+          const float scale_delta = len_v3(ob_obmat_orig[i]) / ob_scale_orig[i];
+          if (isfinite(scale_delta)) {
+            len[i] *= scale_delta;
+          }
+        }
+
         if (len[i] > 0.0f) {
+
           ob->scale[i] = copysignf(value[i] / len[i], ob->scale[i]);
         }
       }
     }
   }
+}
+
+void BKE_object_dimensions_set(Object *ob, const float value[3], int axis_mask)
+{
+  BKE_object_dimensions_set_ex(ob, value, axis_mask, NULL, NULL);
 }
 
 void BKE_object_minmax(Object *ob, float min_r[3], float max_r[3], const bool use_hidden)
@@ -2982,6 +3025,15 @@ bool BKE_object_empty_image_data_is_visible_in_view3d(const Object *ob, const Re
       if (dot > -eps) {
         return false;
       }
+    }
+  }
+
+  if (visibility_flag & OB_EMPTY_IMAGE_HIDE_NON_AXIS_ALIGNED) {
+    float proj[3];
+    project_plane_v3_v3v3(proj, ob->obmat[2], rv3d->viewinv[2]);
+    const float proj_length_sq = len_squared_v3(proj);
+    if (proj_length_sq > 1e-5f) {
+      return false;
     }
   }
 
@@ -3263,8 +3315,7 @@ void BKE_object_sculpt_data_create(Object *ob)
   ob->sculpt->mode_type = ob->mode;
 }
 
-int BKE_object_obdata_texspace_get(
-    Object *ob, short **r_texflag, float **r_loc, float **r_size, float **r_rot)
+int BKE_object_obdata_texspace_get(Object *ob, short **r_texflag, float **r_loc, float **r_size)
 {
 
   if (ob->data == NULL) {
@@ -3273,14 +3324,12 @@ int BKE_object_obdata_texspace_get(
 
   switch (GS(((ID *)ob->data)->name)) {
     case ID_ME: {
-      BKE_mesh_texspace_get_reference((Mesh *)ob->data, r_texflag, r_loc, r_rot, r_size);
+      BKE_mesh_texspace_get_reference((Mesh *)ob->data, r_texflag, r_loc, r_size);
       break;
     }
     case ID_CU: {
       Curve *cu = ob->data;
-      if (cu->bb == NULL || (cu->bb->flag & BOUNDBOX_DIRTY)) {
-        BKE_curve_texspace_calc(cu);
-      }
+      BKE_curve_texspace_ensure(cu);
       if (r_texflag) {
         *r_texflag = &cu->texflag;
       }
@@ -3289,9 +3338,6 @@ int BKE_object_obdata_texspace_get(
       }
       if (r_size) {
         *r_size = cu->size;
-      }
-      if (r_rot) {
-        *r_rot = cu->rot;
       }
       break;
     }
@@ -3305,9 +3351,6 @@ int BKE_object_obdata_texspace_get(
       }
       if (r_size) {
         *r_size = mb->size;
-      }
-      if (r_rot) {
-        *r_rot = mb->rot;
       }
       break;
     }
@@ -3587,7 +3630,7 @@ bool BKE_object_shapekey_free(Main *bmain, Object *ob)
 
   BKE_id_free_us(bmain, key);
 
-  return false;
+  return true;
 }
 
 bool BKE_object_shapekey_remove(Main *bmain, Object *ob, KeyBlock *kb)
@@ -3716,24 +3759,24 @@ int BKE_object_is_modified(Scene *scene, Object *ob)
  * speed. In combination with checks of modifier stack and real life usage
  * percentage of false-positives shouldn't be that height.
  */
-static bool object_moves_in_time(Object *object)
+bool BKE_object_moves_in_time(const Object *object, bool recurse_parent)
 {
-  AnimData *adt = object->adt;
-  if (adt != NULL) {
-    /* If object has any sort of animation data assume it is moving. */
-    if (adt->action != NULL || !BLI_listbase_is_empty(&adt->nla_tracks) ||
-        !BLI_listbase_is_empty(&adt->drivers) || !BLI_listbase_is_empty(&adt->overrides)) {
-      return true;
-    }
+  /* If object has any sort of animation data assume it is moving. */
+  if (BKE_animdata_id_is_animated(&object->id)) {
+    return true;
   }
   if (!BLI_listbase_is_empty(&object->constraints)) {
     return true;
   }
-  if (object->parent != NULL) {
-    /* TODO(sergey): Do recursive check here? */
-    return true;
+  if (recurse_parent && object->parent != NULL) {
+    return BKE_object_moves_in_time(object->parent, true);
   }
   return false;
+}
+
+static bool object_moves_in_time(const Object *object)
+{
+  return BKE_object_moves_in_time(object, true);
 }
 
 static bool object_deforms_in_time(Object *object)
@@ -3779,7 +3822,7 @@ static bool constructive_modifier_is_deform_modified(ModifierData *md)
   return false;
 }
 
-static bool modifiers_has_animation_check(Object *ob)
+static bool modifiers_has_animation_check(const Object *ob)
 {
   /* TODO(sergey): This is a bit code duplication with depsgraph, but
    * would be nicer to solve this as a part of new dependency graph
@@ -3851,27 +3894,12 @@ int BKE_object_is_deform_modified(Scene *scene, Object *ob)
   return flag;
 }
 
-/* See if an object is using an animated modifier */
-bool BKE_object_is_animated(Scene *scene, Object *ob)
-{
-  ModifierData *md;
-  VirtualModifierData virtualModifierData;
-
-  for (md = modifiers_getVirtualModifierList(ob, &virtualModifierData); md; md = md->next) {
-    if (modifier_dependsOnTime(md) && (modifier_isEnabled(scene, md, eModifierMode_Realtime) ||
-                                       modifier_isEnabled(scene, md, eModifierMode_Render))) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /** Return the number of scenes using (instantiating) that object in their collections. */
 int BKE_object_scenes_users_get(Main *bmain, Object *ob)
 {
   int num_scenes = 0;
   for (Scene *scene = bmain->scenes.first; scene != NULL; scene = scene->id.next) {
-    if (BKE_collection_has_object_recursive(BKE_collection_master(scene), ob)) {
+    if (BKE_collection_has_object_recursive(scene->master_collection, ob)) {
       num_scenes++;
     }
   }
@@ -4348,10 +4376,10 @@ bool BKE_object_modifier_update_subframe(Depsgraph *depsgraph,
       return true;
     }
   }
-  else if (type == eModifierType_Smoke) {
-    SmokeModifierData *smd = (SmokeModifierData *)md;
+  else if (type == eModifierType_Fluid) {
+    FluidModifierData *mmd = (FluidModifierData *)md;
 
-    if (smd && (smd->type & MOD_SMOKE_TYPE_DOMAIN) != 0) {
+    if (mmd && (mmd->type & MOD_FLUID_TYPE_DOMAIN) != 0) {
       return true;
     }
   }

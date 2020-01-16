@@ -38,7 +38,6 @@
 #include "BKE_context.h"
 #include "BKE_customdata.h"
 #include "BKE_editmesh.h"
-#include "BKE_main.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_paint.h"
 
@@ -47,10 +46,6 @@
 #include "ED_screen.h"
 #include "ED_image.h"
 #include "ED_mesh.h"
-
-#include "GPU_immediate.h"
-#include "GPU_immediate_util.h"
-#include "GPU_state.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -151,7 +146,7 @@ typedef struct Temp_UvData {
 
 static void HC_relaxation_iteration_uv(BMEditMesh *em,
                                        UvSculptData *sculptdata,
-                                       float mouse_coord[2],
+                                       const float mouse_coord[2],
                                        float alpha,
                                        float radius,
                                        float aspectRatio)
@@ -239,7 +234,7 @@ static void HC_relaxation_iteration_uv(BMEditMesh *em,
 
 static void laplacian_relaxation_iteration_uv(BMEditMesh *em,
                                               UvSculptData *sculptdata,
-                                              float mouse_coord[2],
+                                              const float mouse_coord[2],
                                               float alpha,
                                               float radius,
                                               float aspectRatio)
@@ -526,18 +521,18 @@ static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wm
     if (do_island_optimization) {
       /* We will need island information */
       if (ts->uv_flag & UV_SYNC_SELECTION) {
-        data->elementMap = BM_uv_element_map_create(bm, false, true, true);
+        data->elementMap = BM_uv_element_map_create(bm, scene, false, false, true, true);
       }
       else {
-        data->elementMap = BM_uv_element_map_create(bm, true, true, true);
+        data->elementMap = BM_uv_element_map_create(bm, scene, true, false, true, true);
       }
     }
     else {
       if (ts->uv_flag & UV_SYNC_SELECTION) {
-        data->elementMap = BM_uv_element_map_create(bm, false, true, false);
+        data->elementMap = BM_uv_element_map_create(bm, scene, false, false, true, false);
       }
       else {
-        data->elementMap = BM_uv_element_map_create(bm, true, true, false);
+        data->elementMap = BM_uv_element_map_create(bm, scene, true, false, true, false);
       }
     }
 

@@ -38,6 +38,7 @@
 #include "GPU_extensions.h"
 #include "GPU_glew.h"
 #include "GPU_framebuffer.h"
+#include "GPU_platform.h"
 #include "GPU_texture.h"
 
 #include "gpu_context_private.h"
@@ -1031,10 +1032,6 @@ GPUTexture *GPU_texture_create_buffer(eGPUTextureFormat tex_format, const GLuint
 
 GPUTexture *GPU_texture_from_bindcode(int textarget, int bindcode)
 {
-  /* see GPUInput::textarget: it can take two values - GL_TEXTURE_2D and GL_TEXTURE_CUBE_MAP
-   * these values are correct for glDisable, so textarget can be safely used in
-   * GPU_texture_bind/GPU_texture_unbind through tex->target_base */
-  /* (is any of this obsolete now that we don't glEnable/Disable textures?) */
   GPUTexture *tex = MEM_callocN(sizeof(GPUTexture), "GPUTexture");
   tex->bindcode = bindcode;
   tex->number = -1;
@@ -1051,12 +1048,8 @@ GPUTexture *GPU_texture_from_bindcode(int textarget, int bindcode)
   else {
     GLint w, h;
 
-    GLenum gettarget;
-
-    if (textarget == GL_TEXTURE_2D) {
-      gettarget = GL_TEXTURE_2D;
-    }
-    else {
+    GLenum gettarget = textarget;
+    if (textarget == GL_TEXTURE_CUBE_MAP) {
       gettarget = GL_TEXTURE_CUBE_MAP_POSITIVE_X;
     }
 
@@ -1067,56 +1060,6 @@ GPUTexture *GPU_texture_from_bindcode(int textarget, int bindcode)
     tex->h = h;
     glBindTexture(textarget, 0);
   }
-
-  return tex;
-}
-
-GPUTexture *GPU_texture_from_preview(PreviewImage *prv, int mipmap)
-{
-  GPUTexture *tex = prv->gputexture[0];
-  GLuint bindcode = 0;
-
-  if (tex) {
-    bindcode = tex->bindcode;
-  }
-
-  /* this binds a texture, so that's why we restore it to 0 */
-  if (bindcode == 0) {
-    GPU_create_gl_tex(
-        &bindcode, prv->rect[0], NULL, prv->w[0], prv->h[0], GL_TEXTURE_2D, mipmap, false, NULL);
-  }
-  if (tex) {
-    tex->bindcode = bindcode;
-    glBindTexture(GL_TEXTURE_2D, 0);
-    return tex;
-  }
-
-  tex = MEM_callocN(sizeof(GPUTexture), "GPUTexture");
-  tex->bindcode = bindcode;
-  tex->number = -1;
-  tex->refcount = 1;
-  tex->target = GL_TEXTURE_2D;
-  tex->target_base = GL_TEXTURE_2D;
-  tex->format = -1;
-  tex->components = -1;
-
-  prv->gputexture[0] = tex;
-
-  if (!glIsTexture(tex->bindcode)) {
-    GPU_print_error_debug("Blender Texture Not Loaded");
-  }
-  else {
-    GLint w, h;
-
-    glBindTexture(GL_TEXTURE_2D, tex->bindcode);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &w);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &h);
-
-    tex->w = w;
-    tex->h = h;
-  }
-
-  glBindTexture(GL_TEXTURE_2D, 0);
 
   return tex;
 }
@@ -1471,7 +1414,7 @@ void *GPU_texture_read(GPUTexture *tex, eGPUDataFormat gpu_data_format, int mipl
 
   if (GPU_texture_cube(tex)) {
     int cube_face_size = buf_size / 6;
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 6; i++) {
       glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
                     miplvl,
                     data_format,
@@ -1540,7 +1483,7 @@ void GPU_texture_bind(GPUTexture *tex, int number)
   }
 
   if ((G.debug & G_DEBUG)) {
-    for (int i = 0; i < GPU_TEX_MAX_FBO_ATTACHED; ++i) {
+    for (int i = 0; i < GPU_TEX_MAX_FBO_ATTACHED; i++) {
       if (tex->fb[i] && GPU_framebuffer_bound(tex->fb[i])) {
         fprintf(stderr,
                 "Feedback loop warning!: Attempting to bind "
@@ -1598,12 +1541,12 @@ void GPU_texture_generate_mipmap(GPUTexture *tex)
 
   if (GPU_texture_depth(tex)) {
     /* Some drivers have bugs when using glGenerateMipmap with depth textures (see T56789).
-     * In this case we just create a complete texture with mipmaps manually without downsampling.
+     * In this case we just create a complete texture with mipmaps manually without down-sampling.
      * You must initialize the texture levels using other methods like
      * GPU_framebuffer_recursive_downsample(). */
     int levels = 1 + floor(log2(max_ii(tex->w, tex->h)));
     eGPUDataFormat data_format = gpu_get_data_format_from_tex_format(tex->format);
-    for (int i = 1; i < levels; ++i) {
+    for (int i = 1; i < levels; i++) {
       GPU_texture_add_mipmap(tex, data_format, i, NULL);
     }
     glBindTexture(tex->target, tex->bindcode);
@@ -1712,7 +1655,7 @@ void GPU_texture_free(GPUTexture *tex)
   }
 
   if (tex->refcount == 0) {
-    for (int i = 0; i < GPU_TEX_MAX_FBO_ATTACHED; ++i) {
+    for (int i = 0; i < GPU_TEX_MAX_FBO_ATTACHED; i++) {
       if (tex->fb[i] != NULL) {
         GPU_framebuffer_texture_detach_slot(tex->fb[i], tex, tex->fb_attachment[i]);
       }
@@ -1806,7 +1749,7 @@ int GPU_texture_opengl_bindcode(const GPUTexture *tex)
 
 void GPU_texture_attach_framebuffer(GPUTexture *tex, GPUFrameBuffer *fb, int attachment)
 {
-  for (int i = 0; i < GPU_TEX_MAX_FBO_ATTACHED; ++i) {
+  for (int i = 0; i < GPU_TEX_MAX_FBO_ATTACHED; i++) {
     if (tex->fb[i] == NULL) {
       tex->fb[i] = fb;
       tex->fb_attachment[i] = attachment;
@@ -1820,7 +1763,7 @@ void GPU_texture_attach_framebuffer(GPUTexture *tex, GPUFrameBuffer *fb, int att
 /* Return previous attachment point */
 int GPU_texture_detach_framebuffer(GPUTexture *tex, GPUFrameBuffer *fb)
 {
-  for (int i = 0; i < GPU_TEX_MAX_FBO_ATTACHED; ++i) {
+  for (int i = 0; i < GPU_TEX_MAX_FBO_ATTACHED; i++) {
     if (tex->fb[i] == fb) {
       tex->fb[i] = NULL;
       return tex->fb_attachment[i];

@@ -119,9 +119,15 @@ def _test_import(module_name, loaded_modules):
     return mod
 
 
-def _sys_path_ensure(path):
-    if path not in _sys.path:  # reloading would add twice
+# Reloading would add twice.
+def _sys_path_ensure_prepend(path):
+    if path not in _sys.path:
         _sys.path.insert(0, path)
+
+
+def _sys_path_ensure_append(path):
+    if path not in _sys.path:
+        _sys.path.append(path)
 
 
 def modules_from_path(path, loaded_modules):
@@ -253,7 +259,7 @@ def load_scripts(reload_scripts=False, refresh_scripts=False):
             for path_subdir in _script_module_dirs:
                 path = _os.path.join(base_path, path_subdir)
                 if _os.path.isdir(path):
-                    _sys_path_ensure(path)
+                    _sys_path_ensure_prepend(path)
 
                     # Only add to 'sys.modules' unless this is 'startup'.
                     if path_subdir == "startup":
@@ -385,13 +391,13 @@ def refresh_script_paths():
         for path_subdir in _script_module_dirs:
             path = _os.path.join(base_path, path_subdir)
             if _os.path.isdir(path):
-                _sys_path_ensure(path)
+                _sys_path_ensure_prepend(path)
 
     for path in _addon_utils.paths():
-        _sys_path_ensure(path)
+        _sys_path_ensure_append(path)
         path = _os.path.join(path, "modules")
         if _os.path.isdir(path):
-            _sys_path_ensure(path)
+            _sys_path_ensure_append(path)
 
 
 def app_template_paths(subdir=None):
@@ -449,6 +455,41 @@ def preset_paths(subdir):
             dirs.append(directory)
 
     return dirs
+
+
+def is_path_builtin(path):
+    """
+    Returns True if the path is one of the built-in paths used by Blender.
+
+    :arg path: Path you want to check if it is in the built-in settings directory
+    :type path: str
+    :rtype: bool
+    """
+    # Note that this function is is not optimized for speed,
+    # it's intended to be used to check if it's OK to remove presets.
+    #
+    # If this is used in a draw-loop for example, we could cache some of the values.
+    user_path = resource_path('USER')
+
+    for res in ('SYSTEM', 'LOCAL'):
+        parent_path = resource_path(res)
+        if not parent_path or parent_path == user_path:
+            # Make sure that the current path is not empty string and that it is
+            # not the same as the user config path. IE "~/.config/blender" on Linux
+            # This can happen on portable installs.
+            continue
+
+        try:
+            if _os.path.samefile(
+                    _os.path.commonpath([parent_path]),
+                    _os.path.commonpath([parent_path, path])
+            ):
+                return True
+        except FileNotFoundError:
+            #The path we tried to look up doesn't exist
+            pass
+
+    return False
 
 
 def smpte_from_seconds(time, fps=None, fps_base=None):

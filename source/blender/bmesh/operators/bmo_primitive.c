@@ -1507,7 +1507,7 @@ void bmo_create_cone_exec(BMesh *bm, BMOperator *op)
     BMO_op_callf(bm, op->flag, "dissolve_faces faces=%ff", FACE_NEW);
   }
 
-  BMO_op_callf(bm, op->flag, "remove_doubles verts=%fv dist=%f", VERT_MARK, 0.000001);
+  BMO_op_callf(bm, op->flag, "remove_doubles verts=%fv dist=%f", VERT_MARK, 0.0000005 * depth);
   BMO_slot_buffer_from_enabled_flag(bm, op, op->slots_out, "verts.out", BM_VERT, VERT_MARK);
 }
 
@@ -1560,9 +1560,10 @@ void BM_mesh_calc_uvs_cone(BMesh *bm,
   float inv_mat[4][4];
   int loop_index;
 
-  mul_mat3_m4_v3(
-      mat, local_up); /* transform the upvector like we did the cone itself, without location. */
-  normalize_v3(local_up); /* remove global scaling... */
+  /* Transform the upvector like we did the cone itself, without location. */
+  mul_mat3_m4_v3(mat, local_up);
+  /* Remove global scaling... */
+  normalize_v3(local_up);
 
   invert_m4_m4(inv_mat, mat);
 

@@ -271,7 +271,7 @@ typedef struct PointCache {
 
   char name[64];
   char prev_name[64];
-  char info[64];
+  char info[128];
   /** File path, 1024 = FILE_MAX. */
   char path[1024];
 
@@ -492,10 +492,14 @@ typedef struct SoftBody {
 #define PTCACHE_READ_INFO (1 << 10)
 /** don't use the filename of the blendfile the data is linked from (write a local cache) */
 #define PTCACHE_IGNORE_LIBPATH (1 << 11)
-/** high resolution cache is saved for smoke for backwards compatibility,
- * so set this flag to know it's a "fake" cache */
+/**
+ * High resolution cache is saved for smoke for backwards compatibility,
+ * so set this flag to know it's a "fake" cache.
+ */
 #define PTCACHE_FAKE_SMOKE (1 << 12)
 #define PTCACHE_IGNORE_CLEAR (1 << 13)
+
+#define PTCACHE_FLAG_INFO_DIRTY (1 << 14)
 
 /* PTCACHE_OUTDATED + PTCACHE_FRAMES_SKIPPED */
 #define PTCACHE_REDO_NEEDED 258

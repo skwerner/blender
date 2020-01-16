@@ -39,10 +39,6 @@
 #include "BKE_unit.h"
 #include "BKE_layer.h"
 
-#include "GPU_immediate.h"
-#include "GPU_matrix.h"
-#include "GPU_state.h"
-
 #include "UI_interface.h"
 
 #include "ED_screen.h"
@@ -201,7 +197,7 @@ static void ringsel_finish(bContext *C, wmOperator *op)
 
       /* when used in a macro the tessfaces will be recalculated anyway,
        * this is needed here because modifiers depend on updated tessellation, see T45920 */
-      EDBM_update_generic(em, true, true);
+      EDBM_update_generic(lcd->ob->data, true, true);
 
       if (is_single) {
         /* de-select endpoints */
@@ -390,7 +386,6 @@ static int loopcut_init(bContext *C, wmOperator *op, const wmEvent *event)
   bool ok = true;
   if (is_interactive == false) {
     if (exec_data.base_index >= bases_len) {
-      return OPERATOR_CANCELLED;
       ok = false;
     }
     else {

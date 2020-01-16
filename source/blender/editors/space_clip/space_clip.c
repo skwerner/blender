@@ -443,6 +443,7 @@ static void clip_operatortypes(void)
   WM_operatortype_append(CLIP_OT_view_zoom_ratio);
   WM_operatortype_append(CLIP_OT_view_all);
   WM_operatortype_append(CLIP_OT_view_selected);
+  WM_operatortype_append(CLIP_OT_view_center_cursor);
   WM_operatortype_append(CLIP_OT_change_frame);
   WM_operatortype_append(CLIP_OT_rebuild_proxy);
   WM_operatortype_append(CLIP_OT_mode_set);
@@ -452,6 +453,7 @@ static void clip_operatortypes(void)
   WM_operatortype_append(CLIP_OT_prefetch);
   WM_operatortype_append(CLIP_OT_set_scene_frames);
   WM_operatortype_append(CLIP_OT_cursor_set);
+  WM_operatortype_append(CLIP_OT_lock_selection_toggle);
 
   /* ** tracking_ops.c ** */
 
@@ -1081,11 +1083,7 @@ static void graph_region_draw(const bContext *C, ARegion *ar)
   /* scale indicators */
   {
     rcti rect;
-    BLI_rcti_init(&rect,
-                  0,
-                  15 * UI_DPI_FAC,
-                  15 * UI_DPI_FAC,
-                  UI_DPI_FAC * ar->sizey - UI_TIME_SCRUB_MARGIN_Y);
+    BLI_rcti_init(&rect, 0, 15 * UI_DPI_FAC, 15 * UI_DPI_FAC, ar->winy - UI_TIME_SCRUB_MARGIN_Y);
     UI_view2d_draw_scale_y__values(ar, v2d, &rect, TH_TEXT);
   }
 }

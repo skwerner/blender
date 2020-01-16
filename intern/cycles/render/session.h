@@ -63,6 +63,7 @@ class SessionParams {
   bool run_denoising;
   bool write_denoising_passes;
   bool full_denoising;
+  bool optix_denoising;
   DenoiseParams denoising;
 
   double cancel_timeout;
@@ -92,6 +93,7 @@ class SessionParams {
     run_denoising = false;
     write_denoising_passes = false;
     full_denoising = false;
+    optix_denoising = false;
 
     display_buffer_linear = false;
 
@@ -176,7 +178,7 @@ class Session {
 
   void update_status_time(bool show_pause = false, bool show_done = false);
 
-  void tonemap(int sample);
+  void copy_to_display_buffer(int sample);
   void render();
   void reset_(BufferParams &params, int samples);
 
@@ -202,8 +204,8 @@ class Session {
   volatile bool display_outdated;
 
   volatile bool gpu_draw_ready;
-  volatile bool gpu_need_tonemap;
-  thread_condition_variable gpu_need_tonemap_cond;
+  volatile bool gpu_need_display_buffer_update;
+  thread_condition_variable gpu_need_display_buffer_update_cond;
 
   bool pause;
   thread_condition_variable pause_cond;

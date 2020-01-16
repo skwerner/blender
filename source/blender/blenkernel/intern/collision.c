@@ -77,9 +77,11 @@ typedef struct SelfColDetectData {
  ***********************************/
 
 /* step is limited from 0 (frame start position) to 1 (frame end position) */
-void collision_move_object(CollisionModifierData *collmd, float step, float prevstep)
+void collision_move_object(CollisionModifierData *collmd,
+                           const float step,
+                           const float prevstep,
+                           const bool moving_bvh)
 {
-  float oldx[3];
   unsigned int i = 0;
 
   /* the collider doesn't move this frame */
@@ -92,13 +94,17 @@ void collision_move_object(CollisionModifierData *collmd, float step, float prev
   }
 
   for (i = 0; i < collmd->mvert_num; i++) {
-    interp_v3_v3v3(oldx, collmd->x[i].co, collmd->xnew[i].co, prevstep);
-    interp_v3_v3v3(collmd->current_x[i].co, collmd->x[i].co, collmd->xnew[i].co, step);
-    sub_v3_v3v3(collmd->current_v[i].co, collmd->current_x[i].co, oldx);
+    interp_v3_v3v3(collmd->current_x[i].co, collmd->x[i].co, collmd->xnew[i].co, prevstep);
+    interp_v3_v3v3(collmd->current_xnew[i].co, collmd->x[i].co, collmd->xnew[i].co, step);
+    sub_v3_v3v3(collmd->current_v[i].co, collmd->current_xnew[i].co, collmd->current_x[i].co);
   }
 
-  bvhtree_update_from_mvert(
-      collmd->bvhtree, collmd->current_x, NULL, collmd->tri, collmd->tri_num, false);
+  bvhtree_update_from_mvert(collmd->bvhtree,
+                            collmd->current_xnew,
+                            collmd->current_x,
+                            collmd->tri,
+                            collmd->tri_num,
+                            moving_bvh);
 }
 
 BVHTree *bvhtree_build_from_mvert(const MVert *mvert,
@@ -188,11 +194,11 @@ BLI_INLINE int next_ind(int i)
 }
 
 static float compute_collision_point(float a1[3],
-                                     float a2[3],
-                                     float a3[3],
-                                     float b1[3],
-                                     float b2[3],
-                                     float b3[3],
+                                     const float a2[3],
+                                     const float a3[3],
+                                     const float b1[3],
+                                     const float b2[3],
+                                     const float b3[3],
                                      bool culling,
                                      bool use_normal,
                                      float r_a[3],
@@ -419,7 +425,7 @@ static float compute_collision_point(float a1[3],
 
 // w3 is not perfect
 static void collision_compute_barycentric(
-    float pv[3], float p1[3], float p2[3], float p3[3], float *w1, float *w2, float *w3)
+    const float pv[3], float p1[3], float p2[3], float p3[3], float *w1, float *w2, float *w3)
 {
   /* dot_v3v3 */
 #define INPR(v1, v2) ((v1)[0] * (v2)[0] + (v1)[1] * (v2)[1] + (v1)[2] * (v2)[2])
@@ -513,9 +519,9 @@ static int cloth_collision_response_static(ClothModifierData *clmd,
                                   &w3);
 
     collision_compute_barycentric(collpair->pb,
-                                  collmd->current_x[collpair->bp1].co,
-                                  collmd->current_x[collpair->bp2].co,
-                                  collmd->current_x[collpair->bp3].co,
+                                  collmd->current_xnew[collpair->bp1].co,
+                                  collmd->current_xnew[collpair->bp2].co,
+                                  collmd->current_xnew[collpair->bp3].co,
                                   &u1,
                                   &u2,
                                   &u3);
@@ -872,9 +878,9 @@ static void cloth_collision(void *__restrict userdata,
   distance = compute_collision_point(verts1[tri_a->tri[0]].tx,
                                      verts1[tri_a->tri[1]].tx,
                                      verts1[tri_a->tri[2]].tx,
-                                     collmd->current_x[tri_b->tri[0]].co,
-                                     collmd->current_x[tri_b->tri[1]].co,
-                                     collmd->current_x[tri_b->tri[2]].co,
+                                     collmd->current_xnew[tri_b->tri[0]].co,
+                                     collmd->current_xnew[tri_b->tri[1]].co,
+                                     collmd->current_xnew[tri_b->tri[2]].co,
                                      data->culling,
                                      data->use_normal,
                                      pa,
@@ -1117,7 +1123,7 @@ ListBase *BKE_collider_cache_create(Depsgraph *depsgraph, Object *self, Collecti
       col->ob = ob;
       col->collmd = cmd;
       /* make sure collider is properly set up */
-      collision_move_object(cmd, 1.0, 0.0);
+      collision_move_object(cmd, 1.0, 0.0, true);
       BLI_addtail(cache, col);
     }
   }
@@ -1319,7 +1325,7 @@ int cloth_bvh_collision(
         }
 
         /* Move object to position (step) in time. */
-        collision_move_object(collmd, step + dt, step);
+        collision_move_object(collmd, step + dt, step, false);
 
         overlap_obj[i] = BLI_bvhtree_overlap(
             cloth_bvh, collmd->bvhtree, &coll_counts_obj[i], NULL, NULL);
@@ -1499,7 +1505,7 @@ BLI_INLINE bool cloth_point_face_collision_params(const float p1[3],
 }
 
 static CollPair *cloth_point_collpair(float p1[3],
-                                      float p2[3],
+                                      const float p2[3],
                                       const MVert *mverts,
                                       int bp1,
                                       int bp2,
@@ -1664,7 +1670,7 @@ void cloth_find_point_contacts(Depsgraph *depsgraph,
     }
 
     /* move object to position (step) in time */
-    collision_move_object(collmd, step + dt, step);
+    collision_move_object(collmd, step + dt, step, true);
   }
 
   collider_contacts = MEM_callocN(sizeof(ColliderContacts) * numcollobj, "CollPair");
@@ -1742,7 +1748,7 @@ void cloth_free_contacts(ColliderContacts *collider_contacts, int totcolliders)
 {
   if (collider_contacts) {
     int i;
-    for (i = 0; i < totcolliders; ++i) {
+    for (i = 0; i < totcolliders; i++) {
       ColliderContacts *ct = collider_contacts + i;
       if (ct->collisions) {
         MEM_freeN(ct->collisions);

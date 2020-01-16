@@ -48,6 +48,7 @@ set(SRC
   object_collection.c
   object_constraint.c
   object_data_transfer.c
+  object_data_transform.c
   object_edit.c
   object_facemap_ops.c
   object_gpencil_modifier.c
@@ -57,6 +58,7 @@ set(SRC
   object_ops.c
   object_random.c
   object_relations.c
+  object_remesh.c
   object_select.c
   object_shader_fx.c
   object_shapekey.c
@@ -71,7 +73,9 @@ set(SRC
 set(LIB
   bf_blenkernel
   bf_blenlib
+  bf_editor_mesh
   bf_render
+  bf_windowmanager
 )
 
 add_definitions(${GL_DEFINITIONS})

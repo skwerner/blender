@@ -29,6 +29,11 @@
 #  include "utfconv.h"
 #endif
 
+#if defined(WITH_TBB_MALLOC) && defined(_MSC_VER) && defined(NDEBUG)
+#  pragma comment(lib, "tbbmalloc_proxy.lib")
+#  pragma comment(linker, "/include:__TBB_malloc_proxy")
+#endif
+
 #include "MEM_guardedalloc.h"
 
 #include "CLG_log.h"
@@ -38,7 +43,6 @@
 #include "BLI_args.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
-#include "BLI_callbacks.h"
 #include "BLI_string.h"
 #include "BLI_system.h"
 
@@ -47,6 +51,7 @@
 #include "BKE_blender.h"
 #include "BKE_brush.h"
 #include "BKE_cachefile.h"
+#include "BKE_callbacks.h"
 #include "BKE_context.h"
 #include "BKE_font.h"
 #include "BKE_global.h"
@@ -105,6 +110,21 @@
 #ifdef WITH_PYTHON_MODULE
 int main_python_enter(int argc, const char **argv);
 void main_python_exit(void);
+#endif
+
+#ifdef WITH_USD
+/**
+ * Workaround to make it possible to pass a path at runtime to USD.
+ *
+ * USD requires some JSON files, and it uses a static constructor to determine the possible
+ * file-system paths to find those files. This made it impossible for Blender to pass a path to the
+ * USD library at runtime, as the constructor would run before Blender's main() function. We have
+ * patched USD (see usd.diff) to avoid that particular static constructor, and have an
+ * initialization function instead.
+ *
+ * This function is implemented in the USD source code, pxr/base/lib/plug/initConfig.cpp.
+ */
+void usd_initialise_plugin_path(const char *datafiles_usd_path);
 #endif
 
 /* written to by 'creator_args.c' */
@@ -357,7 +377,7 @@ int main(int argc,
   BKE_brush_system_init();
   RE_texture_rng_init();
 
-  BLI_callback_global_init();
+  BKE_callback_global_init();
 
   /* first test for background */
 #ifndef WITH_PYTHON_MODULE
@@ -400,11 +420,18 @@ int main(int argc,
   /* background render uses this font too */
   BKE_vfont_builtin_register(datatoc_bfont_pfb, datatoc_bfont_pfb_size);
 
-  /* Initialize ffmpeg if built in, also needed for bg mode if videos are
-   * rendered via ffmpeg */
+  /* Initialize ffmpeg if built in, also needed for background-mode if videos are
+   * rendered via ffmpeg. */
   BKE_sound_init_once();
 
   init_def_material();
+
+#ifdef WITH_USD
+  /* Tell USD which directory to search for its JSON files. If datafiles/usd
+   * does not exist, the USD library will not be able to read or write any files.
+   */
+  usd_initialise_plugin_path(BKE_appdir_folder_id(BLENDER_DATAFILES, "usd"));
+#endif
 
   if (G.background == 0) {
 #ifndef WITH_PYTHON_MODULE
@@ -442,7 +469,7 @@ int main(int argc,
       "this is not intended for typical usage\n\n");
 #endif
 
-  CTX_py_init_set(C, 1);
+  CTX_py_init_set(C, true);
   WM_keyconfig_init(C);
 
 #ifdef WITH_FREESTYLE

@@ -52,6 +52,7 @@ extern const EnumPropertyItem rna_enum_mesh_select_mode_items[];
 extern const EnumPropertyItem rna_enum_mesh_select_mode_uv_items[];
 extern const EnumPropertyItem rna_enum_mesh_delimit_mode_items[];
 extern const EnumPropertyItem rna_enum_space_graph_mode_items[];
+extern const EnumPropertyItem rna_enum_space_sequencer_view_type_items[];
 extern const EnumPropertyItem rna_enum_space_type_items[];
 extern const EnumPropertyItem rna_enum_space_image_mode_items[];
 extern const EnumPropertyItem rna_enum_space_image_mode_all_items[];
@@ -141,6 +142,8 @@ extern const EnumPropertyItem rna_enum_texture_type_items[];
 
 extern const EnumPropertyItem rna_enum_light_type_items[];
 
+extern const EnumPropertyItem rna_enum_lightprobes_type_items[];
+
 extern const EnumPropertyItem rna_enum_unpack_method_items[];
 
 extern const EnumPropertyItem rna_enum_object_type_items[];
@@ -188,6 +191,8 @@ extern const EnumPropertyItem rna_enum_node_math_items[];
 extern const EnumPropertyItem rna_enum_mapping_type_items[];
 extern const EnumPropertyItem rna_enum_node_vec_math_items[];
 extern const EnumPropertyItem rna_enum_node_filter_items[];
+extern const EnumPropertyItem rna_enum_node_map_range_items[];
+extern const EnumPropertyItem rna_enum_node_clamp_items[];
 
 extern const EnumPropertyItem rna_enum_ramp_blend_items[];
 
@@ -215,6 +220,9 @@ extern const EnumPropertyItem rna_enum_dt_layers_select_dst_items[];
 
 extern const EnumPropertyItem rna_enum_abc_compression_items[];
 extern const EnumPropertyItem rna_enum_context_mode_items[];
+
+extern const EnumPropertyItem rna_enum_curveprofile_preset_items[];
+extern const EnumPropertyItem rna_enum_preference_section_items[];
 
 /* API calls */
 int rna_node_tree_type_to_enum(struct bNodeTreeType *typeinfo);

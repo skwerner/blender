@@ -265,6 +265,14 @@ static ARegion *hud_region_add(ScrArea *sa)
   ar->overlap = true;
   ar->flag |= RGN_FLAG_DYNAMIC_SIZE;
 
+  if (ar_win) {
+    float x, y;
+
+    UI_view2d_scroller_size_get(&ar_win->v2d, &x, &y);
+    ar->runtime.offset_x = x;
+    ar->runtime.offset_y = y;
+  }
+
   return ar;
 }
 
@@ -356,7 +364,7 @@ void ED_area_type_hud_ensure(bContext *C, ScrArea *sa)
     ED_area_update_region_sizes(wm, win, sa);
   }
 
-  ED_region_init(ar);
+  ED_region_floating_initialize(ar);
   ED_region_tag_redraw(ar);
 
   /* Reset zoom level (not well supported). */

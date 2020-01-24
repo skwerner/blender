@@ -535,7 +535,7 @@ void NLA_OT_view_all(wmOperatorType *ot)
   ot->poll = ED_operator_nla_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 void NLA_OT_view_selected(wmOperatorType *ot)
@@ -550,7 +550,7 @@ void NLA_OT_view_selected(wmOperatorType *ot)
   ot->poll = ED_operator_nla_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 /* *********************************************** */
@@ -565,16 +565,16 @@ static int nlaedit_viewframe_exec(bContext *C, wmOperator *op)
 void NLA_OT_view_frame(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Frame";
+  ot->name = "Go to Current Frame";
   ot->idname = "NLA_OT_view_frame";
-  ot->description = "Reset viewable area to show range around current frame";
+  ot->description = "Move the view to the playhead";
 
   /* api callbacks */
   ot->exec = nlaedit_viewframe_exec;
   ot->poll = ED_operator_nla_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 /* *********************************************** */

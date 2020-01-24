@@ -59,6 +59,7 @@ extern "C" {
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
+#include "intern/depsgraph_relation.h"
 #include "intern/depsgraph_registry.h"
 #include "intern/depsgraph_type.h"
 
@@ -345,7 +346,7 @@ class DepsgraphFromIDsFilter {
   DepsgraphFromIDsFilter(ID **ids, const int num_ids)
   {
     for (int i = 0; i < num_ids; ++i) {
-      ids_.insert(ids[0]);
+      ids_.insert(ids[i]);
     }
   }
 

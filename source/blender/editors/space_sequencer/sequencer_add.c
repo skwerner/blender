@@ -96,8 +96,8 @@ static void sequencer_generic_props__internal(wmOperatorType *ot, int flag)
                 INT_MAX,
                 "Start Frame",
                 "Start frame of the sequence strip",
-                INT_MIN,
-                INT_MAX);
+                -MAXFRAME,
+                MAXFRAME);
   }
 
   if (flag & SEQPROP_ENDFRAME) {
@@ -109,8 +109,8 @@ static void sequencer_generic_props__internal(wmOperatorType *ot, int flag)
                 INT_MAX,
                 "End Frame",
                 "End frame for the color strip",
-                INT_MIN,
-                INT_MAX);
+                -MAXFRAME,
+                MAXFRAME);
   }
 
   RNA_def_int(
@@ -310,6 +310,26 @@ static void sequencer_add_apply_replace_sel(bContext *C, wmOperator *op, Sequenc
     BKE_sequencer_active_set(scene, seq);
     seq->flag |= SELECT;
   }
+}
+
+static bool seq_effect_add_properties_poll(const bContext *UNUSED(C),
+                                           wmOperator *op,
+                                           const PropertyRNA *prop)
+{
+  const char *prop_id = RNA_property_identifier(prop);
+  int type = RNA_enum_get(op->ptr, "type");
+
+  /* Hide start/end frames for effect strips that are locked to their parents' location. */
+  if (BKE_sequence_effect_get_num_inputs(type) != 0) {
+    if ((STREQ(prop_id, "frame_start")) || (STREQ(prop_id, "frame_end"))) {
+      return false;
+    }
+  }
+  if ((type != SEQ_TYPE_COLOR) && (STREQ(prop_id, "color"))) {
+    return false;
+  }
+
+  return true;
 }
 
 /* add scene operator */
@@ -578,7 +598,8 @@ static int sequencer_add_generic_strip_exec(bContext *C, wmOperator *op, SeqLoad
     ED_sequencer_deselect_all(scene);
   }
 
-  if (RNA_struct_property_is_set(op->ptr, "files")) {
+  if (RNA_struct_property_is_set(op->ptr, "files") &&
+      RNA_struct_property_is_set(op->ptr, "directory")) {
     tot_files = RNA_property_collection_length(op->ptr,
                                                RNA_struct_find_property(op->ptr, "files"));
   }
@@ -591,7 +612,7 @@ static int sequencer_add_generic_strip_exec(bContext *C, wmOperator *op, SeqLoad
     char dir_only[FILE_MAX];
     char file_only[FILE_MAX];
 
-    BLI_split_dir_part(seq_load.path, dir_only, sizeof(dir_only));
+    RNA_string_get(op->ptr, "directory", dir_only);
 
     RNA_BEGIN (op->ptr, itemptr, "files") {
       Sequence *seq;
@@ -759,7 +780,8 @@ void SEQUENCER_OT_movie_strip_add(struct wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_MOVIE,
                                  FILE_SPECIAL,
                                  FILE_OPENFILE,
-                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_FILES,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_FILES |
+                                     WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
   sequencer_generic_props__internal(ot, SEQPROP_STARTFRAME);
@@ -818,7 +840,8 @@ void SEQUENCER_OT_sound_strip_add(struct wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_SOUND,
                                  FILE_SPECIAL,
                                  FILE_OPENFILE,
-                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_FILES,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_FILES |
+                                     WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
   sequencer_generic_props__internal(ot, SEQPROP_STARTFRAME);
@@ -1021,7 +1044,8 @@ void SEQUENCER_OT_image_strip_add(struct wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_IMAGE,
                                  FILE_SPECIAL,
                                  FILE_OPENFILE,
-                                 WM_FILESEL_DIRECTORY | WM_FILESEL_RELPATH | WM_FILESEL_FILES,
+                                 WM_FILESEL_DIRECTORY | WM_FILESEL_RELPATH | WM_FILESEL_FILES |
+                                     WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
   sequencer_generic_props__internal(ot, SEQPROP_STARTFRAME | SEQPROP_ENDFRAME);
@@ -1062,8 +1086,8 @@ static int sequencer_add_effect_strip_exec(bContext *C, wmOperator *op)
   /* If seq1 is NULL and no error was raised it means the seq is standalone
    * (like color strips) and we need to check its start and end frames are valid */
   if (seq1 == NULL && end_frame <= start_frame) {
-    BKE_report(op->reports, RPT_ERROR, "Start and end frame are not set");
-    return OPERATOR_CANCELLED;
+    end_frame = start_frame + 1;
+    RNA_int_set(op->ptr, "frame_end", end_frame);
   }
 
   seq = BKE_sequence_alloc(ed->seqbasep, start_frame, channel, type);
@@ -1157,6 +1181,8 @@ static int sequencer_add_effect_strip_invoke(bContext *C,
 
 void SEQUENCER_OT_effect_strip_add(struct wmOperatorType *ot)
 {
+  PropertyRNA *prop;
+
   /* identifiers */
   ot->name = "Add Effect Strip";
   ot->idname = "SEQUENCER_OT_effect_strip_add";
@@ -1167,25 +1193,27 @@ void SEQUENCER_OT_effect_strip_add(struct wmOperatorType *ot)
   ot->exec = sequencer_add_effect_strip_exec;
 
   ot->poll = ED_operator_sequencer_active_editable;
+  ot->poll_property = seq_effect_add_properties_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-  sequencer_generic_props__internal(ot, SEQPROP_STARTFRAME | SEQPROP_ENDFRAME);
   RNA_def_enum(ot->srna,
                "type",
                sequencer_prop_effect_types,
                SEQ_TYPE_CROSS,
                "Type",
                "Sequencer effect type");
-  RNA_def_float_vector(ot->srna,
-                       "color",
-                       3,
-                       NULL,
-                       0.0f,
-                       1.0f,
-                       "Color",
-                       "Initialize the strip with this color (only used when type='COLOR')",
-                       0.0f,
-                       1.0f);
+  sequencer_generic_props__internal(ot, SEQPROP_STARTFRAME | SEQPROP_ENDFRAME);
+  prop = RNA_def_float_color(ot->srna,
+                             "color",
+                             3,
+                             NULL,
+                             0.0f,
+                             1.0f,
+                             "Color",
+                             "Initialize the strip with this color (only used when type='COLOR')",
+                             0.0f,
+                             1.0f);
+  RNA_def_property_subtype(prop, PROP_COLOR_GAMMA);
 }

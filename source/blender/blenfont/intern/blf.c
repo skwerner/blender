@@ -475,6 +475,19 @@ void BLF_color3ubv(int fontid, const unsigned char rgb[3])
   BLF_color3ubv_alpha(fontid, rgb, 255);
 }
 
+void BLF_color4ub(
+    int fontid, unsigned char r, unsigned char g, unsigned char b, unsigned char alpha)
+{
+  FontBLF *font = blf_get(fontid);
+
+  if (font) {
+    font->color[0] = r;
+    font->color[1] = g;
+    font->color[2] = b;
+    font->color[3] = alpha;
+  }
+}
+
 void BLF_color3ub(int fontid, unsigned char r, unsigned char g, unsigned char b)
 {
   FontBLF *font = blf_get(fontid);
@@ -922,10 +935,7 @@ void blf_draw_buffer__start(FontBLF *font)
 {
   FontBufInfoBLF *buf_info = &font->buf_info;
 
-  buf_info->col_char[0] = buf_info->col_init[0] * 255;
-  buf_info->col_char[1] = buf_info->col_init[1] * 255;
-  buf_info->col_char[2] = buf_info->col_init[2] * 255;
-  buf_info->col_char[3] = buf_info->col_init[3] * 255;
+  rgba_float_to_uchar(buf_info->col_char, buf_info->col_init);
 
   if (buf_info->display) {
     copy_v4_v4(buf_info->col_float, buf_info->col_init);

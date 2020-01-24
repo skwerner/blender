@@ -40,6 +40,13 @@ GHOST_SystemHandle GHOST_CreateSystem(void)
   return (GHOST_SystemHandle)system;
 }
 
+void GHOST_SystemInitDebug(GHOST_SystemHandle systemhandle, int is_debug_enabled)
+{
+  GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
+
+  system->initDebug(is_debug_enabled);
+}
+
 GHOST_TSuccess GHOST_DisposeSystem(GHOST_SystemHandle systemhandle)
 {
   GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
@@ -701,7 +708,7 @@ void GHOST_SetTabletAPI(GHOST_SystemHandle systemhandle, GHOST_TTabletAPI api)
 
 const GHOST_TabletData *GHOST_GetTabletData(GHOST_WindowHandle windowhandle)
 {
-  return ((GHOST_IWindow *)windowhandle)->GetTabletData();
+  return &((GHOST_IWindow *)windowhandle)->GetTabletData();
 }
 
 GHOST_TInt32 GHOST_GetWidthRectangle(GHOST_RectangleHandle rectanglehandle)

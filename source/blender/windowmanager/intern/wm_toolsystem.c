@@ -351,6 +351,25 @@ void WM_toolsystem_ref_set_from_runtime(struct bContext *C,
     *tref->runtime = *tref_rt;
   }
 
+  /* Ideally Python could check this gizmo group flag and not
+   * pass in the argument to begin with. */
+  bool use_fallback_keymap = false;
+
+  if (tref->idname_fallback[0] || tref->runtime->keymap_fallback[0]) {
+    if (tref_rt->gizmo_group[0]) {
+      wmGizmoGroupType *gzgt = WM_gizmogrouptype_find(tref_rt->gizmo_group, false);
+      if (gzgt) {
+        if (gzgt->flag & WM_GIZMOGROUPTYPE_TOOL_FALLBACK_KEYMAP) {
+          use_fallback_keymap = true;
+        }
+      }
+    }
+  }
+  if (use_fallback_keymap == false) {
+    tref->idname_fallback[0] = '\0';
+    tref->runtime->keymap_fallback[0] = '\0';
+  }
+
   toolsystem_ref_link(C, workspace, tref);
 
   toolsystem_refresh_screen_from_active_tool(bmain, workspace, tref);
@@ -468,6 +487,8 @@ static bool toolsystem_key_ensure_check(const bToolKey *tkey)
       break;
     case SPACE_NODE:
       return true;
+    case SPACE_SEQ:
+      return true;
   }
   return false;
 }
@@ -495,6 +516,11 @@ int WM_toolsystem_mode_from_spacetype(ViewLayer *view_layer, ScrArea *sa, int sp
     }
     case SPACE_NODE: {
       mode = 0;
+      break;
+    }
+    case SPACE_SEQ: {
+      SpaceSeq *sseq = sa->spacedata.first;
+      mode = sseq->view;
       break;
     }
   }
@@ -633,7 +659,7 @@ static void toolsystem_refresh_screen_from_active_tool(Main *bmain,
   }
 }
 
-bToolRef *WM_toolsystem_ref_set_by_id(
+bToolRef *WM_toolsystem_ref_set_by_id_ex(
     bContext *C, WorkSpace *workspace, const bToolKey *tkey, const char *name, bool cycle)
 {
   wmOperatorType *ot = WM_operatortype_find("WM_OT_tool_set_by_id", false);
@@ -663,13 +689,25 @@ bToolRef *WM_toolsystem_ref_set_by_id(
   return (tref && STREQ(tref->idname, name)) ? tref : NULL;
 }
 
+bToolRef *WM_toolsystem_ref_set_by_id(bContext *C, const char *name)
+{
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  ScrArea *sa = CTX_wm_area(C);
+  bToolKey tkey;
+  if (WM_toolsystem_key_from_context(view_layer, sa, &tkey)) {
+    WorkSpace *workspace = CTX_wm_workspace(C);
+    return WM_toolsystem_ref_set_by_id_ex(C, workspace, &tkey, name, false);
+  }
+  return NULL;
+}
+
 static void toolsystem_reinit_with_toolref(bContext *C, WorkSpace *workspace, bToolRef *tref)
 {
   bToolKey tkey = {
       .space_type = tref->space_type,
       .mode = tref->mode,
   };
-  WM_toolsystem_ref_set_by_id(C, workspace, &tkey, tref->idname, false);
+  WM_toolsystem_ref_set_by_id_ex(C, workspace, &tkey, tref->idname, false);
 }
 
 static const char *toolsystem_default_tool(const bToolKey *tkey)
@@ -703,6 +741,17 @@ static const char *toolsystem_default_tool(const bToolKey *tkey)
       }
       break;
     case SPACE_NODE: {
+      return "builtin.select_box";
+    }
+    case SPACE_SEQ: {
+      switch (tkey->mode) {
+        case SEQ_VIEW_SEQUENCE:
+          return "builtin.select";
+        case SEQ_VIEW_PREVIEW:
+          return "builtin.annotate";
+        case SEQ_VIEW_SEQUENCE_PREVIEW:
+          return "builtin.select";
+      }
       return "builtin.select_box";
     }
   }

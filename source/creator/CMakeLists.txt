@@ -38,22 +38,22 @@ blender_include_dirs(
 )
 
 set(LIB
-  bf_blenloader
-  bf_blenkernel
-  bf_blenlib
-  bf_depsgraph
-  bf_dna
-  bf_editor_datafiles
-  bf_imbuf
-  bf_intern_clog
-  bf_intern_guardedalloc
-  bf_intern_memutil
-  bf_intern_opencolorio
-  bf_python
-  bf_render
-  bf_rna
+  # This forces TBB libraries to be in front of MKL (which is a part of OpenImageDenoise).
+  #
+  # The need of this comes to need to ensure static libraries initialization order, making it
+  # so TBB is initialized prior to MKL (or any other dpeendnecy).
+  #
+  # This isn't fully robust but seems to work.
+  ${TBB_LIBRARIES}
+
   bf_windowmanager
 )
+
+# Note: this should not be needed, but causes issues in some situations:
+# See reply to daf290dcc80c.
+if(WITH_TBB AND WITH_OPENIMAGEDENOISE)
+  list(INSERT LIB 0 bf_blenkernel)
+endif()
 
 add_definitions(${GL_DEFINITIONS})
 blender_include_dirs("${GLEW_INCLUDE_PATH}")
@@ -72,14 +72,17 @@ if(WITH_CYCLES)
     blender_include_dirs(../../intern/cycles/blender)
     add_definitions(-DWITH_CYCLES_LOGGING)
   endif()
-  list(APPEND LIB
-    bf_intern_cycles
-  )
 endif()
 
 if(WITH_CODEC_FFMPEG)
   add_definitions(-DWITH_FFMPEG)
 endif()
+
+if(WITH_TBB)
+  blender_include_dirs(${TBB_INCLUDE_DIRS})
+  link_directories(${LIBDIR}/tbb/lib)
+endif()
+
 
 if(WITH_PYTHON)
   blender_include_dirs(../blender/python)
@@ -104,17 +107,11 @@ endif()
 
 if(WITH_BINRELOC)
   blender_include_dirs(${BINRELOC_INCLUDE_DIRS})
-  list(APPEND LIB
-    extern_binreloc
-  )
   add_definitions(-DWITH_BINRELOC)
 endif()
 
 if(WITH_FREESTYLE)
   blender_include_dirs(../blender/freestyle)
-  list(APPEND LIB
-    bf_freestyle
-  )
   add_definitions(-DWITH_FREESTYLE)
 endif()
 
@@ -143,6 +140,7 @@ if(WIN32 AND NOT UNIX)
 
   list(APPEND SRC
     ${CMAKE_SOURCE_DIR}/release/windows/icons/winblender.rc
+    ${CMAKE_BINARY_DIR}/blender.exe.manifest
   )
 endif()
 
@@ -271,7 +269,6 @@ if(WITH_PYTHON_MODULE)
 
 else()
   add_executable(blender ${EXETYPE} ${SRC})
-  WINDOWS_SIGN_TARGET(blender)
 endif()
 
 if(WITH_BUILDINFO)
@@ -697,12 +694,14 @@ elseif(WIN32)
     if(NOT CMAKE_COMPILER_IS_GNUCC)
       install(
         FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python${_PYTHON_VERSION_NO_DOTS}.dll
+              ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python3.dll
         DESTINATION "."
         CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
       )
 
       install(
         FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python${_PYTHON_VERSION_NO_DOTS}_d.dll
+              ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python3_d.dll
         DESTINATION "."
         CONFIGURATIONS Debug
       )
@@ -803,6 +802,23 @@ elseif(WIN32)
         ${LIBDIR}/ffmpeg/lib/swscale-5.dll
         ${LIBDIR}/ffmpeg/lib/swresample-3.dll
       DESTINATION "."
+    )
+  endif()
+
+  if(WITH_TBB_MALLOC_PROXY)
+    install(
+      FILES
+        ${LIBDIR}/tbb/lib/tbbmalloc.dll
+        ${LIBDIR}/tbb/lib/tbbmalloc_proxy.dll
+      DESTINATION "."
+      CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
+    )
+    install(
+      FILES
+        ${LIBDIR}/tbb/lib/debug/tbbmalloc.dll
+        ${LIBDIR}/tbb/lib/debug/tbbmalloc_proxy.dll
+      DESTINATION "."
+      CONFIGURATIONS Debug
     )
   endif()
 
@@ -1039,6 +1055,19 @@ unset(LIB)
 
 setup_liblinks(blender)
 
+# -----------------------------------------------------------------------------
+# USD registry.
+# USD requires a set of JSON files that define the standard schemas. These
+# files are required at runtime.
+if(WITH_USD)
+  add_definitions(-DWITH_USD)
+  install(DIRECTORY
+    ${LIBDIR}/usd/lib/usd
+    DESTINATION "${TARGETDIR_VER}/datafiles"
+  )
+endif()
+
+
 # vcpkg substitutes our libs with theirs, which will cause issues when you
 # you run these builds on other systems due to missing dlls. So we opt out
 # the use of vcpkg
@@ -1060,4 +1089,11 @@ if(WIN32 AND NOT WITH_PYTHON_MODULE)
     PROPERTIES
       VS_USER_PROPS "blender.Cpp.user.props"
   )
+endif()
+
+# -----------------------------------------------------------------------------
+# Post-install script
+
+if(POSTINSTALL_SCRIPT)
+  install(SCRIPT ${POSTINSTALL_SCRIPT})
 endif()

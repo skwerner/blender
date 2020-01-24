@@ -457,7 +457,7 @@ void ACTION_OT_view_all(wmOperatorType *ot)
   ot->poll = ED_operator_action_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 void ACTION_OT_view_selected(wmOperatorType *ot)
@@ -472,7 +472,7 @@ void ACTION_OT_view_selected(wmOperatorType *ot)
   ot->poll = ED_operator_action_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 /* ****************** View-All Operator ****************** */
@@ -488,16 +488,16 @@ static int actkeys_view_frame_exec(bContext *C, wmOperator *op)
 void ACTION_OT_view_frame(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View Frame";
+  ot->name = "Go to Current Frame";
   ot->idname = "ACTION_OT_view_frame";
-  ot->description = "Reset viewable area to show range around current frame";
+  ot->description = "Move the view to the playhead";
 
   /* api callbacks */
   ot->exec = actkeys_view_frame_exec;
   ot->poll = ED_operator_action_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = 0;
 }
 
 /* ************************************************************************** */

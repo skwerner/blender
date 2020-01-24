@@ -285,6 +285,14 @@ if(WITH_ALEMBIC)
   endif()
 endif()
 
+if(WITH_USD)
+  find_package_wrapper(USD)
+
+  if(NOT USD_FOUND)
+    set(WITH_USD OFF)
+  endif()
+endif()
+
 if(WITH_BOOST)
   # uses in build instructions to override include and library variables
   if(NOT BOOST_CUSTOM)
@@ -328,6 +336,11 @@ if(WITH_BOOST)
   set(BOOST_LIBRARIES ${Boost_LIBRARIES})
   set(BOOST_LIBPATH ${Boost_LIBRARY_DIRS})
   set(BOOST_DEFINITIONS "-DBOOST_ALL_NO_LIB")
+
+  if(Boost_USE_STATIC_LIBS AND WITH_BOOST_ICU)
+    find_package(IcuLinux)
+    list(APPEND BOOST_LIBRARIES ${ICU_LIBRARIES})
+  endif()
 endif()
 
 if(WITH_OPENIMAGEIO)

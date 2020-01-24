@@ -42,6 +42,7 @@ extern "C" {
 }
 
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
 #include "intern/depsgraph_tag.h"
 #include "intern/depsgraph_type.h"
 #include "intern/builder/deg_builder_cache.h"
@@ -54,6 +55,12 @@ extern "C" {
 #include "DEG_depsgraph.h"
 
 namespace DEG {
+
+bool deg_check_id_in_depsgraph(const Depsgraph *graph, ID *id_orig)
+{
+  IDNode *id_node = graph->find_id_node(id_orig);
+  return id_node != NULL;
+}
 
 bool deg_check_base_in_depsgraph(const Depsgraph *graph, Base *base)
 {

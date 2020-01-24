@@ -30,6 +30,9 @@ from bpy.app.translations import (
 from bl_ui.properties_grease_pencil_common import (
     AnnotationDataPanel,
 )
+from bl_ui.space_toolsystem_common import (
+    ToolActivePanelHelper,
+)
 from rna_prop_ui import PropertyPanel
 
 
@@ -89,6 +92,35 @@ def draw_color_balance(layout, color_balance):
     split.template_color_picker(color_balance, "gain", value_slider=True, lock_luminosity=True, cubic=True)
 
 
+class SEQUENCER_PT_active_tool(ToolActivePanelHelper, Panel):
+    bl_space_type = 'SEQUENCE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "Tool"
+
+
+class SEQUENCER_HT_tool_header(Header):
+    bl_space_type = 'SEQUENCE_EDITOR'
+    bl_region_type = 'TOOL_HEADER'
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.template_header()
+
+        self.draw_tool_settings(context)
+
+        # TODO: options popover.
+
+    def draw_tool_settings(self, context):
+        layout = self.layout
+
+        # Active Tool
+        # -----------
+        from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+        tool = ToolSelectPanelHelper.draw_active_tool_header(context, layout)
+        tool_mode = context.mode if tool is None else tool.mode
+
+
 class SEQUENCER_HT_header(Header):
     bl_space_type = 'SEQUENCE_EDITOR'
 
@@ -97,7 +129,10 @@ class SEQUENCER_HT_header(Header):
 
         st = context.space_data
 
-        layout.template_header()
+        show_region_tool_header = st.show_region_tool_header
+
+        if not show_region_tool_header:
+            layout.template_header()
 
         layout.prop(st, "view_type", text="")
 
@@ -134,7 +169,8 @@ class SEQUENCER_MT_editor_menus(Menu):
 
         if st.view_type in {'SEQUENCER', 'SEQUENCER_PREVIEW'}:
             layout.menu("SEQUENCER_MT_select")
-            layout.menu("SEQUENCER_MT_marker")
+            if st.show_markers:
+                layout.menu("SEQUENCER_MT_marker")
             layout.menu("SEQUENCER_MT_add")
             layout.menu("SEQUENCER_MT_strip")
 
@@ -225,7 +261,11 @@ class SEQUENCER_MT_view(Menu):
             # wm_keymap_item_find_props() (see #32595).
             layout.operator_context = 'INVOKE_REGION_PREVIEW'
         layout.prop(st, "show_region_ui")
+        layout.prop(st, "show_region_toolbar")
         layout.operator_context = 'INVOKE_DEFAULT'
+
+        if is_sequencer_view:
+            layout.prop(st, "show_region_hud")
 
         if st.view_type == 'SEQUENCER':
             layout.prop(st, "show_backdrop", text="Preview as Backdrop")
@@ -267,8 +307,10 @@ class SEQUENCER_MT_view(Menu):
             layout.operator_context = 'INVOKE_DEFAULT'
 
             layout.prop(st, "show_seconds")
+            layout.prop(st, "show_locked_time")
             layout.prop(st, "show_strip_offset")
-            layout.prop(st, "show_marker_lines")
+            layout.separator()
+            layout.prop(st, "show_markers")
 
         if is_preview:
             layout.separator()
@@ -508,7 +550,7 @@ class SEQUENCER_MT_add(Menu):
         col.enabled = selected_sequences_len(context) >= 2
 
         col = layout.column()
-        col.operator_menu_enum("sequencer.fades_add", "type", text="Fade", icon="IPO_EASE_IN_OUT")
+        col.operator_menu_enum("sequencer.fades_add", "type", text="Fade", icon='IPO_EASE_IN_OUT')
         col.enabled = selected_sequences_len(context) >= 1
 
 
@@ -2126,6 +2168,7 @@ class SEQUENCER_PT_custom_props(SequencerButtonsPanel, PropertyPanel, Panel):
 
 classes = (
     SEQUENCER_MT_change,
+    SEQUENCER_HT_tool_header,
     SEQUENCER_HT_header,
     SEQUENCER_MT_editor_menus,
     SEQUENCER_MT_range,
@@ -2151,7 +2194,7 @@ classes = (
     SEQUENCER_MT_strip_input,
     SEQUENCER_MT_strip_lock_mute,
     SEQUENCER_MT_context_menu,
-
+    SEQUENCER_PT_active_tool,
     SEQUENCER_PT_strip,
 
     SEQUENCER_PT_effect,

@@ -1171,16 +1171,16 @@ void testhandles_fcurve(FCurve *fcu, eBezTriple_Flag sel_flag, const bool use_ha
  */
 void sort_time_fcurve(FCurve *fcu)
 {
-  bool ok = true;
 
   /* keep adjusting order of beztriples until nothing moves (bubble-sort) */
-  while (ok) {
-    ok = 0;
+  if (fcu->bezt) {
+    BezTriple *bezt;
+    uint a;
 
-    /* currently, will only be needed when there are beztriples */
-    if (fcu->bezt) {
-      BezTriple *bezt;
-      unsigned int a;
+    bool ok = true;
+    while (ok) {
+      ok = 0;
+      /* currently, will only be needed when there are beztriples */
 
       /* loop over ALL points to adjust position in array and recalculate handles */
       for (a = 0, bezt = fcu->bezt; a < fcu->totvert; a++, bezt++) {
@@ -1191,18 +1191,20 @@ void sort_time_fcurve(FCurve *fcu)
             SWAP(BezTriple, *bezt, *(bezt + 1));
             ok = 1;
           }
-
-          /* if either one of both of the points exceeds crosses over the keyframe time... */
-          if ((bezt->vec[0][0] > bezt->vec[1][0]) && (bezt->vec[2][0] < bezt->vec[1][0])) {
-            /* swap handles if they have switched sides for some reason */
-            swap_v2_v2(bezt->vec[0], bezt->vec[2]);
-          }
-          else {
-            /* clamp handles */
-            CLAMP_MAX(bezt->vec[0][0], bezt->vec[1][0]);
-            CLAMP_MIN(bezt->vec[2][0], bezt->vec[1][0]);
-          }
         }
+      }
+    }
+
+    for (a = 0, bezt = fcu->bezt; a < fcu->totvert; a++, bezt++) {
+      /* if either one of both of the points exceeds crosses over the keyframe time... */
+      if ((bezt->vec[0][0] > bezt->vec[1][0]) && (bezt->vec[2][0] < bezt->vec[1][0])) {
+        /* swap handles if they have switched sides for some reason */
+        swap_v2_v2(bezt->vec[0], bezt->vec[2]);
+      }
+      else {
+        /* clamp handles */
+        CLAMP_MAX(bezt->vec[0][0], bezt->vec[1][0]);
+        CLAMP_MIN(bezt->vec[2][0], bezt->vec[1][0]);
       }
     }
   }
@@ -2140,20 +2142,34 @@ ChannelDriver *fcurve_copy_driver(const ChannelDriver *driver)
 
 /* Driver Expression Evaluation --------------- */
 
+/* Index constants for the expression parameter array. */
+enum {
+  /* Index of the 'frame' variable. */
+  VAR_INDEX_FRAME = 0,
+  /* Index of the first user-defined driver variable. */
+  VAR_INDEX_CUSTOM
+};
+
 static ExprPyLike_Parsed *driver_compile_simple_expr_impl(ChannelDriver *driver)
 {
   /* Prepare parameter names. */
   int names_len = BLI_listbase_count(&driver->variables);
-  const char **names = BLI_array_alloca(names, names_len + 1);
-  int i = 0;
+  const char **names = BLI_array_alloca(names, names_len + VAR_INDEX_CUSTOM);
+  int i = VAR_INDEX_CUSTOM;
 
-  names[i++] = "frame";
+  names[VAR_INDEX_FRAME] = "frame";
 
   for (DriverVar *dvar = driver->variables.first; dvar; dvar = dvar->next) {
     names[i++] = dvar->name;
   }
 
-  return BLI_expr_pylike_parse(driver->expression, names, names_len + 1);
+  return BLI_expr_pylike_parse(driver->expression, names, names_len + VAR_INDEX_CUSTOM);
+}
+
+static bool driver_check_simple_expr_depends_on_time(ExprPyLike_Parsed *expr)
+{
+  /* Check if the 'frame' parameter is actually used. */
+  return BLI_expr_pylike_is_using_param(expr, VAR_INDEX_FRAME);
 }
 
 static bool driver_evaluate_simple_expr(ChannelDriver *driver,
@@ -2163,10 +2179,10 @@ static bool driver_evaluate_simple_expr(ChannelDriver *driver,
 {
   /* Prepare parameter values. */
   int vars_len = BLI_listbase_count(&driver->variables);
-  double *vars = BLI_array_alloca(vars, vars_len + 1);
-  int i = 0;
+  double *vars = BLI_array_alloca(vars, vars_len + VAR_INDEX_CUSTOM);
+  int i = VAR_INDEX_CUSTOM;
 
-  vars[i++] = time;
+  vars[VAR_INDEX_FRAME] = time;
 
   for (DriverVar *dvar = driver->variables.first; dvar; dvar = dvar->next) {
     vars[i++] = driver_get_variable_value(driver, dvar);
@@ -2174,7 +2190,8 @@ static bool driver_evaluate_simple_expr(ChannelDriver *driver,
 
   /* Evaluate expression. */
   double result_val;
-  eExprPyLike_EvalStatus status = BLI_expr_pylike_eval(expr, vars, vars_len + 1, &result_val);
+  eExprPyLike_EvalStatus status = BLI_expr_pylike_eval(
+      expr, vars, vars_len + VAR_INDEX_CUSTOM, &result_val);
   const char *message;
 
   switch (status) {
@@ -2241,6 +2258,44 @@ static bool driver_try_evaluate_simple_expr(ChannelDriver *driver,
 bool BKE_driver_has_simple_expression(ChannelDriver *driver)
 {
   return driver_compile_simple_expr(driver) && BLI_expr_pylike_is_valid(driver->expr_simple);
+}
+
+/* TODO(sergey): This is somewhat weak, but we don't want neither false-positive
+ * time dependencies nor special exceptions in the depsgraph evaluation. */
+static bool python_driver_exression_depends_on_time(const char *expression)
+{
+  if (expression[0] == '\0') {
+    /* Empty expression depends on nothing. */
+    return false;
+  }
+  if (strchr(expression, '(') != NULL) {
+    /* Function calls are considered dependent on a time. */
+    return true;
+  }
+  if (strstr(expression, "frame") != NULL) {
+    /* Variable `frame` depends on time. */
+    /* TODO(sergey): This is a bit weak, but not sure about better way of handling this. */
+    return true;
+  }
+  /* Possible indirect time relation s should be handled via variable targets. */
+  return false;
+}
+
+/* Check if the expression in the driver may depend on the current frame. */
+bool BKE_driver_expression_depends_on_time(ChannelDriver *driver)
+{
+  if (driver->type != DRIVER_TYPE_PYTHON) {
+    return false;
+  }
+
+  if (BKE_driver_has_simple_expression(driver)) {
+    /* Simple expressions can be checked exactly. */
+    return driver_check_simple_expr_depends_on_time(driver->expr_simple);
+  }
+  else {
+    /* Otherwise, heuristically scan the expression string for certain patterns. */
+    return python_driver_exression_depends_on_time(driver->expression);
+  }
 }
 
 /* Reset cached compiled expression data */

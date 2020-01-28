@@ -387,7 +387,7 @@ GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
 
   setTitle(title);
 
-  m_tablet.Active = GHOST_kTabletModeNone;
+  m_tablet = GHOST_TABLET_DATA_DEFAULT;
 
   CocoaWindowDelegate *windowDelegate = [[CocoaWindowDelegate alloc] init];
   [windowDelegate setSystemAndWindowCocoa:systemCocoa windowCocoa:this];
@@ -799,6 +799,7 @@ GHOST_TSuccess GHOST_WindowCocoa::setOrder(GHOST_TWindowOrder order)
 
   GHOST_ASSERT(getValid(), "GHOST_WindowCocoa::setOrder(): window invalid");
   if (order == GHOST_kWindowOrderTop) {
+    [NSApp activateIgnoringOtherApps:YES];
     [m_window makeKeyAndOrderFront:nil];
   }
   else {

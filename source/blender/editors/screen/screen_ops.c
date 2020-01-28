@@ -3643,6 +3643,15 @@ static void SCREEN_OT_spacedata_cleanup(wmOperatorType *ot)
 /** \name Repeat Last Operator
  * \{ */
 
+static bool repeat_history_poll(bContext *C)
+{
+  if (!ED_operator_screenactive(C)) {
+    return false;
+  }
+  wmWindowManager *wm = CTX_wm_manager(C);
+  return !BLI_listbase_is_empty(&wm->operators);
+}
+
 static int repeat_last_exec(bContext *C, wmOperator *UNUSED(op))
 {
   wmWindowManager *wm = CTX_wm_manager(C);
@@ -3676,7 +3685,7 @@ static void SCREEN_OT_repeat_last(wmOperatorType *ot)
   /* api callbacks */
   ot->exec = repeat_last_exec;
 
-  ot->poll = ED_operator_screenactive;
+  ot->poll = repeat_history_poll;
 }
 
 /** \} */
@@ -3743,8 +3752,7 @@ static void SCREEN_OT_repeat_history(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = repeat_history_invoke;
   ot->exec = repeat_history_exec;
-
-  ot->poll = ED_operator_screenactive;
+  ot->poll = repeat_history_poll;
 
   RNA_def_int(ot->srna, "index", 0, 0, INT_MAX, "Index", "", 0, 1000);
 }
@@ -3775,8 +3783,7 @@ static void SCREEN_OT_redo_last(wmOperatorType *ot)
 
   /* api callbacks */
   ot->invoke = redo_last_invoke;
-
-  ot->poll = ED_operator_screenactive;
+  ot->poll = repeat_history_poll;
 }
 
 /** \} */
@@ -4114,8 +4121,9 @@ void ED_screens_header_tools_menu_create(bContext *C, uiLayout *layout, void *UN
 {
   ScrArea *sa = CTX_wm_area(C);
   ARegion *ar = CTX_wm_region(C);
-  const char *but_flip_str = (ar->alignment == RGN_ALIGN_TOP) ? IFACE_("Flip to Bottom") :
-                                                                IFACE_("Flip to Top");
+  const char *but_flip_str = (RGN_ALIGN_ENUM_FROM_MASK(ar->alignment) == RGN_ALIGN_TOP) ?
+                                 IFACE_("Flip to Bottom") :
+                                 IFACE_("Flip to Top");
   {
     PointerRNA ptr;
     RNA_pointer_create((ID *)CTX_wm_screen(C), &RNA_Space, sa->spacedata.first, &ptr);
@@ -4160,8 +4168,9 @@ void ED_screens_footer_tools_menu_create(bContext *C, uiLayout *layout, void *UN
 {
   ScrArea *sa = CTX_wm_area(C);
   ARegion *ar = CTX_wm_region(C);
-  const char *but_flip_str = (ar->alignment == RGN_ALIGN_TOP) ? IFACE_("Flip to Bottom") :
-                                                                IFACE_("Flip to Top");
+  const char *but_flip_str = (RGN_ALIGN_ENUM_FROM_MASK(ar->alignment) == RGN_ALIGN_TOP) ?
+                                 IFACE_("Flip to Bottom") :
+                                 IFACE_("Flip to Top");
   {
     PointerRNA ptr;
     RNA_pointer_create((ID *)CTX_wm_screen(C), &RNA_Space, sa->spacedata.first, &ptr);
@@ -4186,8 +4195,9 @@ void ED_screens_footer_tools_menu_create(bContext *C, uiLayout *layout, void *UN
 void ED_screens_navigation_bar_tools_menu_create(bContext *C, uiLayout *layout, void *UNUSED(arg))
 {
   const ARegion *ar = CTX_wm_region(C);
-  const char *but_flip_str = (ar->alignment == RGN_ALIGN_LEFT) ? IFACE_("Flip to Right") :
-                                                                 IFACE_("Flip to Left");
+  const char *but_flip_str = (RGN_ALIGN_ENUM_FROM_MASK(ar->alignment) == RGN_ALIGN_LEFT) ?
+                                 IFACE_("Flip to Right") :
+                                 IFACE_("Flip to Left");
 
   /* default is WM_OP_INVOKE_REGION_WIN, which we don't want here. */
   uiLayoutSetOperatorContext(layout, WM_OP_INVOKE_DEFAULT);
@@ -4840,7 +4850,10 @@ static int userpref_show_invoke(bContext *C, wmOperator *op, const wmEvent *even
      * So hiding in the temp window makes sense. */
     ScrArea *area = CTX_wm_area(C);
     ARegion *region = BKE_area_find_region_type(area, RGN_TYPE_HEADER);
+
     region->flag |= RGN_FLAG_HIDDEN;
+    ED_region_visibility_change_update(C, area, region);
+
     return OPERATOR_FINISHED;
   }
   else {

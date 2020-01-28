@@ -72,6 +72,7 @@
 #include "BKE_particle.h"
 #include "BKE_curveprofile.h"
 #include "BKE_report.h"
+#include "BKE_scene.h"
 #include "BKE_screen.h"
 #include "BKE_shader_fx.h"
 
@@ -1822,7 +1823,9 @@ static int modifier_can_delete(ModifierData *md)
     short particle_type = ((ParticleSystemModifierData *)md)->psys->part->type;
     if (particle_type == PART_FLUID || particle_type == PART_FLUID_FLIP ||
         particle_type == PART_FLUID_FOAM || particle_type == PART_FLUID_SPRAY ||
-        particle_type == PART_FLUID_BUBBLE || particle_type == PART_FLUID_TRACER) {
+        particle_type == PART_FLUID_BUBBLE || particle_type == PART_FLUID_TRACER ||
+        particle_type == PART_FLUID_SPRAYFOAM || particle_type == PART_FLUID_SPRAYBUBBLE ||
+        particle_type == PART_FLUID_FOAMBUBBLE || particle_type == PART_FLUID_SPRAYFOAMBUBBLE) {
       return 0;
     }
   }
@@ -2843,8 +2846,13 @@ void uiTemplatePreview(uiLayout *layout,
       col = uiLayoutColumn(row, true);
       uiLayoutSetScaleX(col, 1.5);
       uiItemR(col, &material_ptr, "preview_render_type", UI_ITEM_R_EXPAND, "", ICON_NONE);
-      uiItemS(col);
-      uiItemR(col, &material_ptr, "use_preview_world", 0, "", ICON_WORLD);
+
+      /* EEVEE preview file has baked lighting so use_preview_world has no effect,
+       * just hide the option until this feature is supported. */
+      if (!BKE_scene_uses_blender_eevee(CTX_data_scene(C))) {
+        uiItemS(col);
+        uiItemR(col, &material_ptr, "use_preview_world", 0, "", ICON_WORLD);
+      }
     }
 
     if (pr_texture) {
@@ -6863,7 +6871,6 @@ static char *progress_tooltip_func(bContext *UNUSED(C), void *argN, const char *
 
 void uiTemplateRunningJobs(uiLayout *layout, bContext *C)
 {
-  bScreen *screen = CTX_wm_screen(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   ScrArea *sa = CTX_wm_area(C);
   uiBlock *block;
@@ -7045,7 +7052,7 @@ void uiTemplateRunningJobs(uiLayout *layout, bContext *C)
     }
   }
 
-  if (screen->animtimer) {
+  if (ED_screen_animation_no_scrub(wm)) {
     uiDefIconTextBut(block,
                      UI_BTYPE_BUT,
                      B_STOPANIM,

@@ -1886,11 +1886,13 @@ static bool ui_but_drag_init(bContext *C,
                RGN_TYPE_HEADER,
                RGN_TYPE_TOOL_HEADER,
                RGN_TYPE_FOOTER)) {
+        const int ar_alignment = RGN_ALIGN_ENUM_FROM_MASK(data->region->alignment);
         int lock_axis = -1;
-        if (ELEM(data->region->alignment, RGN_ALIGN_LEFT, RGN_ALIGN_RIGHT)) {
+
+        if (ELEM(ar_alignment, RGN_ALIGN_LEFT, RGN_ALIGN_RIGHT)) {
           lock_axis = 0;
         }
-        else if (ELEM(data->region->alignment, RGN_ALIGN_TOP, RGN_ALIGN_BOTTOM)) {
+        else if (ELEM(ar_alignment, RGN_ALIGN_TOP, RGN_ALIGN_BOTTOM)) {
           lock_axis = 1;
         }
         if (lock_axis != -1) {
@@ -9549,18 +9551,29 @@ static int ui_handle_menu_event(bContext *C,
           break;
 
         case WHEELUPMOUSE:
-        case WHEELDOWNMOUSE: {
+        case WHEELDOWNMOUSE:
+        case MOUSEPAN: {
           if (IS_EVENT_MOD(event, shift, ctrl, alt, oskey)) {
             /* pass */
           }
           else if (!ui_block_is_menu(block)) {
-            const int scroll_dir = (event->type == WHEELUPMOUSE) ? 1 : -1;
-            if (ui_menu_scroll_step(ar, block, scroll_dir)) {
-              if (but) {
-                but->active->cancel = true;
-                button_activate_exit(C, but, but->active, false, false);
+            int type = event->type;
+            int val = event->val;
+
+            /* convert pan to scrollwheel */
+            if (type == MOUSEPAN) {
+              ui_pan_to_scroll(event, &type, &val);
+            }
+
+            if (type != MOUSEPAN) {
+              const int scroll_dir = (type == WHEELUPMOUSE) ? 1 : -1;
+              if (ui_menu_scroll_step(ar, block, scroll_dir)) {
+                if (but) {
+                  but->active->cancel = true;
+                  button_activate_exit(C, but, but->active, false, false);
+                }
+                WM_event_add_mousemove(C);
               }
-              WM_event_add_mousemove(C);
             }
             break;
           }
@@ -9572,7 +9585,6 @@ static int ui_handle_menu_event(bContext *C,
         case PAGEDOWNKEY:
         case HOMEKEY:
         case ENDKEY:
-        case MOUSEPAN:
           /* arrowkeys: only handle for block_loop blocks */
           if (IS_EVENT_MOD(event, shift, ctrl, alt, oskey)) {
             /* pass */
@@ -10587,14 +10599,10 @@ static void ui_region_handler_remove(bContext *C, void *UNUSED(userdata))
  * number sliding, text editing, or when a menu block is open */
 static int ui_handler_region_menu(bContext *C, const wmEvent *event, void *UNUSED(userdata))
 {
-  ARegion *ar;
+  ARegion *menu_region = CTX_wm_menu(C);
+  ARegion *ar = menu_region ? menu_region : CTX_wm_region(C);
   uiBut *but;
   int retval = WM_UI_HANDLER_CONTINUE;
-
-  ar = CTX_wm_menu(C);
-  if (!ar) {
-    ar = CTX_wm_region(C);
-  }
 
   but = ui_region_find_active_but(ar);
 
@@ -10614,7 +10622,13 @@ static int ui_handler_region_menu(bContext *C, const wmEvent *event, void *UNUSE
         (ui_screen_region_find_mouse_over(screen, event) == NULL) &&
         (ELEM(but->type, UI_BTYPE_PULLDOWN, UI_BTYPE_POPOVER, UI_BTYPE_MENU)) &&
         (but_other = ui_but_find_mouse_over(ar, event)) && (but != but_other) &&
-        (ELEM(but_other->type, UI_BTYPE_PULLDOWN, UI_BTYPE_POPOVER, UI_BTYPE_MENU))) {
+        (ELEM(but_other->type, UI_BTYPE_PULLDOWN, UI_BTYPE_POPOVER, UI_BTYPE_MENU)) &&
+        /* Hover-opening menu's doesn't work well for buttons over one another
+         * along the same axis the menu is opening on (see T71719). */
+        (((data->menu->direction & (UI_DIR_LEFT | UI_DIR_RIGHT)) &&
+          BLI_rctf_isect_rect_x(&but->rect, &but_other->rect, NULL)) ||
+         ((data->menu->direction & (UI_DIR_DOWN | UI_DIR_UP)) &&
+          BLI_rctf_isect_rect_y(&but->rect, &but_other->rect, NULL)))) {
       /* if mouse moves to a different root-level menu button,
        * open it to replace the current menu */
       if ((but_other->flag & UI_BUT_DISABLED) == 0) {
@@ -10652,8 +10666,17 @@ static int ui_handler_region_menu(bContext *C, const wmEvent *event, void *UNUSE
     ui_blocks_set_tooltips(ar, true);
   }
 
+  if (but && but->active && but->active->menu) {
+    /* Set correct context menu-region. The handling button above breaks if we set the region
+     * first, so only set it for executing the after-funcs. */
+    CTX_wm_menu_set(C, but->active->menu->region);
+  }
+
   /* delayed apply callbacks */
   ui_apply_but_funcs_after(C);
+
+  /* Reset to previous context region. */
+  CTX_wm_menu_set(C, menu_region);
 
   /* Don't handle double-click events,
    * these will be converted into regular clicks which we handle. */

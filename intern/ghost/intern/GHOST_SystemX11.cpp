@@ -50,6 +50,7 @@
 
 #if defined(WITH_GL_EGL)
 #  include "GHOST_ContextEGL.h"
+#  include <EGL/eglext.h>
 #else
 #  include "GHOST_ContextGLX.h"
 #endif
@@ -243,6 +244,10 @@ GHOST_SystemX11::~GHOST_SystemX11()
   clearXInputDevices();
 #endif /* WITH_X11_XINPUT */
 
+#ifdef WITH_GL_EGL
+  ::eglTerminate(::eglGetDisplay(m_display));
+#endif
+
   if (m_xkb_descr) {
     XkbFreeKeyboard(m_xkb_descr, XkbAllComponentsMask, true);
   }
@@ -406,17 +411,39 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
 #endif
 
   const int profile_mask =
-#if defined(WITH_GL_PROFILE_CORE)
-      GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
-#elif defined(WITH_GL_PROFILE_COMPAT)
-      GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB;
+#ifdef WITH_GL_EGL
+#  if defined(WITH_GL_PROFILE_CORE)
+      EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT;
+#  elif defined(WITH_GL_PROFILE_COMPAT)
+      EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT;
+#  else
+#    error  // must specify either core or compat at build time
+#  endif
 #else
-#  error  // must specify either core or compat at build time
+#  if defined(WITH_GL_PROFILE_CORE)
+      GLX_CONTEXT_CORE_PROFILE_BIT_ARB;
+#  elif defined(WITH_GL_PROFILE_COMPAT)
+      GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB;
+#  else
+#    error  // must specify either core or compat at build time
+#  endif
 #endif
 
   GHOST_Context *context;
 
   for (int minor = 5; minor >= 0; --minor) {
+#if defined(WITH_GL_EGL)
+    context = new GHOST_ContextEGL(false,
+                                   EGLNativeWindowType(nullptr),
+                                   EGLNativeDisplayType(m_display),
+                                   profile_mask,
+                                   4,
+                                   minor,
+                                   GHOST_OPENGL_EGL_CONTEXT_FLAGS |
+                                       (false ? EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR : 0),
+                                   GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
+                                   EGL_OPENGL_API);
+#else
     context = new GHOST_ContextGLX(false,
                                    (Window)NULL,
                                    m_display,
@@ -427,6 +454,7 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
                                    GHOST_OPENGL_GLX_CONTEXT_FLAGS |
                                        (false ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
                                    GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
+#endif
 
     if (context->initializeDrawingContext())
       return context;
@@ -434,6 +462,18 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
       delete context;
   }
 
+#if defined(WITH_GL_EGL)
+  context = new GHOST_ContextEGL(false,
+                                 EGLNativeWindowType(nullptr),
+                                 EGLNativeDisplayType(m_display),
+                                 profile_mask,
+                                 3,
+                                 3,
+                                 GHOST_OPENGL_EGL_CONTEXT_FLAGS |
+                                     (false ? EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR : 0),
+                                 GHOST_OPENGL_EGL_RESET_NOTIFICATION_STRATEGY,
+                                 EGL_OPENGL_API);
+#else
   context = new GHOST_ContextGLX(false,
                                  (Window)NULL,
                                  m_display,
@@ -444,6 +484,7 @@ GHOST_IContext *GHOST_SystemX11::createOffscreenContext()
                                  GHOST_OPENGL_GLX_CONTEXT_FLAGS |
                                      (false ? GLX_CONTEXT_DEBUG_BIT_ARB : 0),
                                  GHOST_OPENGL_GLX_RESET_NOTIFICATION_STRATEGY);
+#endif
 
   if (context->initializeDrawingContext())
     return context;
@@ -823,7 +864,7 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
    * in the future we could have a ghost call window->CheckTabletProximity()
    * but for now enough parts of the code are checking 'Active'
    * - campbell */
-  if (window->GetTabletData()->Active != GHOST_kTabletModeNone) {
+  if (window->GetTabletData().Active != GHOST_kTabletModeNone) {
     bool any_proximity = false;
 
     for (GHOST_TabletX11 &xtablet : m_xtablets) {
@@ -834,7 +875,7 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
 
     if (!any_proximity) {
       // printf("proximity disable\n");
-      window->GetTabletData()->Active = GHOST_kTabletModeNone;
+      window->GetTabletData().Active = GHOST_kTabletModeNone;
     }
   }
 #endif /* WITH_X11_XINPUT */
@@ -855,7 +896,7 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
       XMotionEvent &xme = xe->xmotion;
 
 #ifdef WITH_X11_XINPUT
-      bool is_tablet = window->GetTabletData()->Active != GHOST_kTabletModeNone;
+      bool is_tablet = window->GetTabletData().Active != GHOST_kTabletModeNone;
 #else
       bool is_tablet = false;
 #endif
@@ -1395,7 +1436,7 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
           /* stroke might begin without leading ProxyIn event,
            * this happens when window is opened when stylus is already hovering
            * around tablet surface */
-          window->GetTabletData()->Active = xtablet.mode;
+          window->GetTabletData().Active = xtablet.mode;
 
           /* Note: This event might be generated with incomplete dataset
            * (don't exactly know why, looks like in some cases, if the value does not change,
@@ -1408,7 +1449,7 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
      ((void)(val = data->axis_data[axis - axis_first]), true))
 
           if (AXIS_VALUE_GET(2, axis_value)) {
-            window->GetTabletData()->Pressure = axis_value / ((float)xtablet.PressureLevels);
+            window->GetTabletData().Pressure = axis_value / ((float)xtablet.PressureLevels);
           }
 
           /* the (short) cast and the & 0xffff is bizarre and unexplained anywhere,
@@ -1420,12 +1461,12 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
            * check this. --mont29
            */
           if (AXIS_VALUE_GET(3, axis_value)) {
-            window->GetTabletData()->Xtilt = (short)(axis_value & 0xffff) /
-                                             ((float)xtablet.XtiltLevels);
+            window->GetTabletData().Xtilt = (short)(axis_value & 0xffff) /
+                                            ((float)xtablet.XtiltLevels);
           }
           if (AXIS_VALUE_GET(4, axis_value)) {
-            window->GetTabletData()->Ytilt = (short)(axis_value & 0xffff) /
-                                             ((float)xtablet.YtiltLevels);
+            window->GetTabletData().Ytilt = (short)(axis_value & 0xffff) /
+                                            ((float)xtablet.YtiltLevels);
           }
 
 #  undef AXIS_VALUE_GET
@@ -1436,10 +1477,10 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
             continue;
           }
 
-          window->GetTabletData()->Active = xtablet.mode;
+          window->GetTabletData().Active = xtablet.mode;
         }
         else if (xe->type == xtablet.ProxOutEvent) {
-          window->GetTabletData()->Active = GHOST_kTabletModeNone;
+          window->GetTabletData().Active = GHOST_kTabletModeNone;
         }
       }
 #endif  // WITH_X11_XINPUT
@@ -2533,7 +2574,7 @@ void GHOST_SystemX11::refreshXInputDevices()
           XAnyClassPtr ici = device_info[i].inputclassinfo;
 
           if (ici != NULL) {
-            for (int j = 0; j < xtablet.Device->num_classes; ++j) {
+            for (int j = 0; j < device_info[i].num_classes; ++j) {
               if (ici->c_class == ValuatorClass) {
                 XValuatorInfo *xvi = (XValuatorInfo *)ici;
                 if (xvi->axes != NULL) {

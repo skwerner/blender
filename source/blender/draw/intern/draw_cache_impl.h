@@ -69,6 +69,8 @@ void DRW_mesh_batch_cache_free_old(struct Mesh *me, int ctime);
 /* Curve */
 void DRW_curve_batch_cache_create_requested(struct Object *ob);
 
+int DRW_curve_material_count_get(struct Curve *cu);
+
 struct GPUBatch *DRW_curve_batch_cache_get_wire_edge(struct Curve *cu);
 struct GPUBatch *DRW_curve_batch_cache_get_normal_edge(struct Curve *cu);
 struct GPUBatch *DRW_curve_batch_cache_get_edge_detection(struct Curve *cu, bool *r_is_manifold);
@@ -80,7 +82,10 @@ struct GPUBatch **DRW_curve_batch_cache_get_surface_shaded(struct Curve *cu,
                                                            struct GPUMaterial **gpumat_array,
                                                            uint gpumat_array_len);
 struct GPUBatch *DRW_curve_batch_cache_get_wireframes_face(struct Curve *cu);
+
 /* Metaball */
+int DRW_metaball_material_count_get(struct MetaBall *mb);
+
 struct GPUBatch *DRW_metaball_batch_cache_get_triangles_with_normals(struct Object *ob);
 struct GPUBatch **DRW_metaball_batch_cache_get_surface_shaded(struct Object *ob,
                                                               struct MetaBall *mb,
@@ -127,10 +132,7 @@ struct GPUBatch *DRW_mesh_batch_cache_get_surface(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_edges(struct Mesh *me);
 struct GPUBatch **DRW_mesh_batch_cache_get_surface_shaded(struct Mesh *me,
                                                           struct GPUMaterial **gpumat_array,
-                                                          uint gpumat_array_len,
-                                                          char **auto_layer_names,
-                                                          int **auto_layer_is_srgb,
-                                                          int *auto_layer_count);
+                                                          uint gpumat_array_len);
 struct GPUBatch **DRW_mesh_batch_cache_get_surface_texpaint(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_texpaint_single(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_surface_vertpaint(struct Mesh *me);
@@ -162,6 +164,8 @@ struct GPUBatch *DRW_mesh_batch_cache_get_edituv_facedots(struct Mesh *me);
 /* For Image UV editor. */
 struct GPUBatch *DRW_mesh_batch_cache_get_uv_edges(struct Mesh *me);
 struct GPUBatch *DRW_mesh_batch_cache_get_edit_mesh_analysis(struct Mesh *me);
+
+int DRW_mesh_material_count_get(struct Mesh *me);
 
 /* Edit mesh bitflags (is this the right place?) */
 enum {

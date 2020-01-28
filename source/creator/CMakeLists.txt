@@ -38,6 +38,14 @@ blender_include_dirs(
 )
 
 set(LIB
+  # This forces TBB libraries to be in front of MKL (which is a part of OpenImageDenoise).
+  #
+  # The need of this comes to need to ensure static libraries initialization order, making it
+  # so TBB is initialized prior to MKL (or any other dpeendnecy).
+  #
+  # This isn't fully robust but seems to work.
+  ${TBB_LIBRARIES}
+
   bf_windowmanager
 )
 
@@ -686,12 +694,14 @@ elseif(WIN32)
     if(NOT CMAKE_COMPILER_IS_GNUCC)
       install(
         FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python${_PYTHON_VERSION_NO_DOTS}.dll
+              ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python3.dll
         DESTINATION "."
         CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
       )
 
       install(
         FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python${_PYTHON_VERSION_NO_DOTS}_d.dll
+              ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python3_d.dll
         DESTINATION "."
         CONFIGURATIONS Debug
       )

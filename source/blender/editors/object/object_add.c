@@ -603,27 +603,8 @@ static int lightprobe_add_exec(bContext *C, wmOperator *op)
   copy_v3_fl(ob->scale, radius);
 
   probe = (LightProbe *)ob->data;
-  probe->type = type;
 
-  switch (type) {
-    case LIGHTPROBE_TYPE_GRID:
-      probe->distinf = 0.3f;
-      probe->falloff = 1.0f;
-      probe->clipsta = 0.01f;
-      break;
-    case LIGHTPROBE_TYPE_PLANAR:
-      probe->distinf = 0.1f;
-      probe->falloff = 0.5f;
-      probe->clipsta = 0.001f;
-      ob->empty_drawsize = 0.5f;
-      break;
-    case LIGHTPROBE_TYPE_CUBE:
-      probe->attenuation_type = LIGHTPROBE_SHAPE_ELIPSOID;
-      break;
-    default:
-      BLI_assert(!"LightProbe type not configured.");
-      break;
-  }
+  BKE_lightprobe_type_set(probe, type);
 
   DEG_relations_tag_update(CTX_data_main(C));
 
@@ -2344,7 +2325,7 @@ static int convert_exec(bContext *C, wmOperator *op)
 
       if (!keep_original) {
         /* other users */
-        if (cu->id.us > 1) {
+        if (ID_REAL_USERS(&cu->id) > 1) {
           for (ob1 = bmain->objects.first; ob1; ob1 = ob1->id.next) {
             if (ob1->data == ob->data) {
               ob1->type = OB_CURVE;
@@ -2692,6 +2673,8 @@ static int duplicate_exec(bContext *C, wmOperator *op)
   CTX_DATA_END;
 
   copy_object_set_idnew(C);
+
+  ED_outliner_select_sync_from_object_tag(C);
 
   DEG_relations_tag_update(bmain);
   DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE | ID_RECALC_SELECT);

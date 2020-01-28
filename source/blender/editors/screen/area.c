@@ -1141,6 +1141,9 @@ static void region_overlap_fix(ScrArea *sa, ARegion *ar)
     }
   }
 
+  /* Guard against flags slipping through that would have to be masked out in usages below. */
+  BLI_assert(align1 == RGN_ALIGN_ENUM_FROM_MASK(align1));
+
   /* translate or close */
   if (ar1) {
     if (align1 == RGN_ALIGN_LEFT) {
@@ -1838,8 +1841,10 @@ void ED_region_update_rect(ARegion *ar)
 }
 
 /* externally called for floating regions like menus */
-void ED_region_init(ARegion *ar)
+void ED_region_floating_initialize(ARegion *ar)
 {
+  BLI_assert(ar->alignment == RGN_ALIGN_FLOAT);
+
   /* refresh can be called before window opened */
   region_subwindow(ar);
 
@@ -2341,7 +2346,7 @@ static void ed_panel_draw(const bContext *C,
     }
   }
 
-  UI_panel_end(block, w, h, open);
+  UI_panel_end(sa, ar, block, w, h, open);
 }
 
 /**
@@ -2585,7 +2590,7 @@ void ED_region_panels_draw(const bContext *C, ARegion *ar)
   /* scrollers */
   const rcti *mask = NULL;
   rcti mask_buf;
-  if (ar->runtime.category && (ar->alignment == RGN_ALIGN_RIGHT)) {
+  if (ar->runtime.category && (RGN_ALIGN_ENUM_FROM_MASK(ar->alignment) == RGN_ALIGN_RIGHT)) {
     UI_view2d_mask_from_win(v2d, &mask_buf);
     mask_buf.xmax -= UI_PANEL_CATEGORY_MARGIN_WIDTH;
     mask = &mask_buf;
@@ -3347,7 +3352,9 @@ static void region_visible_rect_calc(ARegion *ar, rcti *rect)
   for (; arn; arn = arn->next) {
     if (ar != arn && arn->overlap) {
       if (BLI_rcti_isect(rect, &arn->winrct, NULL)) {
-        if (ELEM(arn->alignment, RGN_ALIGN_LEFT, RGN_ALIGN_RIGHT)) {
+        int alignment = RGN_ALIGN_ENUM_FROM_MASK(arn->alignment);
+
+        if (ELEM(alignment, RGN_ALIGN_LEFT, RGN_ALIGN_RIGHT)) {
           /* Overlap left, also check 1 pixel offset (2 regions on one side). */
           if (ABS(rect->xmin - arn->winrct.xmin) < 2) {
             rect->xmin = arn->winrct.xmax;
@@ -3358,7 +3365,7 @@ static void region_visible_rect_calc(ARegion *ar, rcti *rect)
             rect->xmax = arn->winrct.xmin;
           }
         }
-        else if (ELEM(arn->alignment, RGN_ALIGN_TOP, RGN_ALIGN_BOTTOM)) {
+        else if (ELEM(alignment, RGN_ALIGN_TOP, RGN_ALIGN_BOTTOM)) {
           /* Same logic as above for vertical regions. */
           if (ABS(rect->ymin - arn->winrct.ymin) < 2) {
             rect->ymin = arn->winrct.ymax;
@@ -3367,7 +3374,7 @@ static void region_visible_rect_calc(ARegion *ar, rcti *rect)
             rect->ymax = arn->winrct.ymin;
           }
         }
-        else if (arn->alignment == RGN_ALIGN_FLOAT) {
+        else if (alignment == RGN_ALIGN_FLOAT) {
           /* Skip floating. */
         }
         else {

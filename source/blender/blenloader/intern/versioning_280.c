@@ -636,6 +636,29 @@ static ARegion *do_versions_add_region(int regiontype, const char *name)
   return ar;
 }
 
+static void do_versions_area_ensure_tool_region(Main *bmain,
+                                                const short space_type,
+                                                const short region_flag)
+{
+  for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+    for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+      for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+        if (sl->spacetype == space_type) {
+          ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+          ARegion *ar = BKE_area_find_region_type(sa, RGN_TYPE_TOOLS);
+          if (!ar) {
+            ARegion *header = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
+            ar = do_versions_add_region(RGN_TYPE_TOOLS, "tools region");
+            BLI_insertlinkafter(regionbase, header, ar);
+            ar->alignment = RGN_ALIGN_LEFT;
+            ar->flag = region_flag;
+          }
+        }
+      }
+    }
+  }
+}
+
 static void do_version_bones_split_bbone_scale(ListBase *lb)
 {
   for (Bone *bone = lb->first; bone; bone = bone->next) {
@@ -1034,7 +1057,7 @@ static void do_version_curvemapping_walker(Main *bmain, void (*callback)(CurveMa
 
   /* Free Style */
   LISTBASE_FOREACH (struct FreestyleLineStyle *, linestyle, &bmain->linestyles) {
-    LISTBASE_FOREACH (LineStyleModifier *, m, &linestyle->thickness_modifiers) {
+    LISTBASE_FOREACH (LineStyleModifier *, m, &linestyle->alpha_modifiers) {
       switch (m->type) {
         case LS_MODIFIER_ALONG_STROKE:
           callback(((LineStyleAlphaModifier_AlongStroke *)m)->curve);
@@ -2828,6 +2851,35 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
+    /* Files stored pre 2.5 (possibly re-saved with newer versions) may have non-visible
+     * spaces without a header (visible/active ones are properly versioned).
+     * Multiple version patches below assume there's always a header though. So inserting this
+     * patch in-between older ones to add a header when needed.
+     *
+     * From here on it should be fine to assume there always is a header.
+     */
+    if (!MAIN_VERSION_ATLEAST(bmain, 283, 1)) {
+      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+        for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+          for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+            ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+            ARegion *ar_header = do_versions_find_region_or_null(regionbase, RGN_TYPE_HEADER);
+
+            if (!ar_header) {
+              /* Headers should always be first in the region list, except if there's also a
+               * tool-header. These were only introduced in later versions though, so should be
+               * fine to always insert headers first. */
+              BLI_assert(!do_versions_find_region_or_null(regionbase, RGN_TYPE_TOOL_HEADER));
+
+              ARegion *ar = do_versions_add_region(RGN_TYPE_HEADER, "header 2.83.1 versioning");
+              ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
+              BLI_addhead(regionbase, ar);
+            }
+          }
+        }
+      }
+    }
+
     for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
       for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
         for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
@@ -3709,7 +3761,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
           /* All spaces that use tools must be eventually added. */
           ARegion *ar = NULL;
-          if (ELEM(sl->spacetype, SPACE_VIEW3D, SPACE_IMAGE) &&
+          if (ELEM(sl->spacetype, SPACE_VIEW3D, SPACE_IMAGE, SPACE_SEQ) &&
               ((ar = do_versions_find_region_or_null(regionbase, RGN_TYPE_TOOL_HEADER)) == NULL)) {
             /* Add tool header. */
             ar = do_versions_add_region(RGN_TYPE_TOOL_HEADER, "tool header");
@@ -4308,6 +4360,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
    */
   {
     /* Keep this block, even when empty. */
+
+    /* Sequencer Tool region */
+    do_versions_area_ensure_tool_region(bmain, SPACE_SEQ, RGN_FLAG_HIDDEN);
 
     /* Cloth internal springs */
     for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {

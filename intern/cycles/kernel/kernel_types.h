@@ -660,15 +660,17 @@ typedef struct Ray {
  * is fixed.
  */
 #ifndef __KERNEL_OPENCL_AMD__
-  float3 P;   /* origin */
-  float3 D;   /* direction */
-  float t;    /* length of the ray */
-  float time; /* time (for motion blur) */
+  float3 P;     /* origin */
+  float3 D;     /* direction */
+  float t;      /* length of the ray */
+  float t_near; /* Min intersection distance. */
+  float time;   /* time (for motion blur) */
 #else
-  float t;    /* length of the ray */
-  float time; /* time (for motion blur) */
-  float3 P;   /* origin */
-  float3 D;   /* direction */
+  float t;      /* length of the ray */
+  float t_near; /* Min intersection distance. */
+  float time;   /* time (for motion blur) */
+  float3 P;     /* origin */
+  float3 D;     /* direction */
 #endif
 
 #ifdef __RAY_DIFFERENTIALS__

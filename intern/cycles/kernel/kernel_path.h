@@ -66,7 +66,7 @@ ccl_device_forceinline bool kernel_path_scene_intersect(KernelGlobals *kg,
     ray->t = kernel_data.background.ao_distance;
   }
 
-  bool hit = scene_intersect(kg, ray, visibility, isect);
+  bool hit = scene_intersect(kg, ray, visibility, isect, isect->object, isect->prim);
 
 #ifdef __KERNEL_DEBUG__
   if (state->flag & PATH_RAY_CAMERA) {
@@ -98,6 +98,7 @@ ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
     light_ray.P = ray->P - state->ray_t * ray->D;
     state->ray_t += isect->t;
     light_ray.D = ray->D;
+    light_ray.t_near = 0.0f;
     light_ray.t = state->ray_t;
     light_ray.time = ray->time;
     light_ray.dD = ray->dD;
@@ -360,6 +361,7 @@ ccl_device_noinline
 
     light_ray.P = ray_offset(sd->P, sd->Ng);
     light_ray.D = ao_D;
+    light_ray.t_near = 0.0f;
     light_ray.t = kernel_data.background.ao_distance;
     light_ray.time = sd->time;
     light_ray.dP = sd->dP;

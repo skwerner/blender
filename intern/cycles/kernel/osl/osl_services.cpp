@@ -1472,7 +1472,7 @@ bool OSLRenderServices::trace(TraceOpt &options,
 
   /* Raytrace, leaving out shadow opaque to avoid early exit. */
   uint visibility = PATH_RAY_ALL_VISIBILITY - PATH_RAY_SHADOW_OPAQUE;
-  return scene_intersect(kg, &ray, visibility, &tracedata->isect);
+  return scene_intersect(kg, &ray, visibility, &tracedata->isect, OBJECT_NONE, PRIM_NONE);
 }
 
 bool OSLRenderServices::getmessage(OSL::ShaderGlobals *sg,

@@ -186,7 +186,9 @@ ccl_device_inline bool scene_intersect_valid(const Ray *ray)
 ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
                                           const Ray *ray,
                                           const uint visibility,
-                                          Intersection *isect)
+                                          Intersection *isect,
+                                          int origin_object,
+                                          int origin_prim)
 {
   PROFILING_INIT(kg, PROFILING_INTERSECT);
 
@@ -236,6 +238,11 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
     IntersectContext rtc_ctx(&ctx);
     RTCRayHit ray_hit;
     kernel_embree_setup_rayhit(*ray, ray_hit, visibility);
+    ctx.object_test = OBJECT_NONE;
+    ctx.prim_test = PRIM_NONE;
+    ctx.t_test = 0.0f;
+    ctx.object_origin = origin_object;
+    ctx.prim_origin = origin_prim;
     rtcIntersect1(kernel_data.bvh.scene, &rtc_ctx.context, &ray_hit);
     if (ray_hit.hit.geomID != RTC_INVALID_GEOMETRY_ID &&
         ray_hit.hit.primID != RTC_INVALID_GEOMETRY_ID) {

@@ -84,6 +84,41 @@ static void rtc_filter_func(const RTCFilterFunctionNArguments *args)
       return;
     }
   }
+
+  if (ctx->type == CCLIntersectContext::RAY_REGULAR) {
+    /* Order intersections by distance, object ID, prim ID. */
+    Intersection current_isect;
+    kernel_embree_convert_hit(kg, ray, hit, &current_isect);
+    if (ray->tnear == ray->tfar) {
+      if (current_isect.object < ctx->object_origin) {
+        *args->valid = 0;
+        return;
+      }
+      else if (current_isect.object == ctx->object_origin) {
+        if (current_isect.prim <= ctx->prim_origin) {
+          *args->valid = 0;
+          return;
+        }
+      }
+    }
+    else
+    if (ctx->prim_origin != PRIM_NONE && ray->tfar == ctx->t_test) {
+      if (current_isect.object > ctx->object_test) {
+        *args->valid = 0;
+        return;
+      }
+      else if (current_isect.object == ctx->object_test) {
+        if (current_isect.prim >= ctx->prim_test) {
+          *args->valid = 0;
+          return;
+        }
+      }
+    }
+    /* Accepted hit. Update for robust traversal. */
+    ctx->object_test = current_isect.object;
+    ctx->prim_test = current_isect.prim;
+    ctx->t_test = current_isect.t;
+  }
 }
 
 static void rtc_filter_occluded_func(const RTCFilterFunctionNArguments *args)
@@ -421,7 +456,7 @@ void BVHEmbree::build(Progress &progress, Stats *stats_)
 
   scene = rtcNewScene(rtc_shared_device);
   const RTCSceneFlags scene_flags = (dynamic ? RTC_SCENE_FLAG_DYNAMIC : RTC_SCENE_FLAG_NONE) |
-                                    RTC_SCENE_FLAG_COMPACT | RTC_SCENE_FLAG_ROBUST;
+                                    RTC_SCENE_FLAG_ROBUST;
   rtcSetSceneFlags(scene, scene_flags);
   build_quality = dynamic ? RTC_BUILD_QUALITY_LOW :
                             (params.use_spatial_split ? RTC_BUILD_QUALITY_HIGH :

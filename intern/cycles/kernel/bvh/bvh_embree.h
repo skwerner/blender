@@ -41,6 +41,13 @@ struct CCLIntersectContext {
   int max_hits;
   int num_hits;
 
+  /* For robust ray traversal: */
+  int object_test;
+  int prim_test;
+  float t_test;
+  int object_origin;
+  int prim_origin;
+
   /* for SSS Rays: */
   LocalIntersection *local_isect;
   int local_object_id;
@@ -53,6 +60,9 @@ struct CCLIntersectContext {
     max_hits = 1;
     num_hits = 0;
     isect_s = NULL;
+    object_test = OBJECT_NONE;
+    prim_test = PRIM_NONE;
+    t_test = 0.0f;
     local_isect = NULL;
     local_object_id = -1;
     lcg_state = NULL;
@@ -80,7 +90,7 @@ ccl_device_inline void kernel_embree_setup_ray(const Ray &ray,
   rtc_ray.dir_x = ray.D.x;
   rtc_ray.dir_y = ray.D.y;
   rtc_ray.dir_z = ray.D.z;
-  rtc_ray.tnear = 0.0f;
+  rtc_ray.tnear = ray.t_near;
   rtc_ray.tfar = ray.t;
   rtc_ray.time = ray.time;
   rtc_ray.mask = visibility;

@@ -48,6 +48,7 @@ ccl_device_inline void kernel_branched_path_ao(KernelGlobals *kg,
 
       light_ray.P = ray_offset(sd->P, sd->Ng);
       light_ray.D = ao_D;
+      light_ray.t_near = 0.0f;
       light_ray.t = kernel_data.background.ao_distance;
       light_ray.time = sd->time;
       light_ray.dP = sd->dP;
@@ -89,7 +90,10 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
 
   /* volume attenuation, emission, scatter */
   Ray volume_ray = *ray;
-  volume_ray.t = (hit) ? isect->t : FLT_MAX;
+
+  /* Move the voluem ray forward. */
+  volume_ray.P = volume_ray.P + volume_ray.D * volume_ray.t_near;
+  volume_ray.t = (hit) ? isect->t - volume_ray.t_near : FLT_MAX;
 
   bool heterogeneous = volume_stack_is_heterogeneous(kg, state->volume_stack);
 
@@ -118,6 +122,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
       for (int j = 0; j < num_samples; j++) {
         PathState ps = *state;
         Ray pray = *ray;
+        pray.t_near = 0.0f;
         float3 tp = *throughput;
 
         /* branch RNG state */
@@ -165,6 +170,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
     for (int j = 0; j < num_samples; j++) {
       PathState ps = *state;
       Ray pray = *ray;
+      pray.t_near = 0.0f;
       float3 tp = (*throughput) * num_samples_inv;
 
       /* branch RNG state */
@@ -319,6 +325,7 @@ ccl_device void kernel_branched_path_subsurface_scatter(KernelGlobals *kg,
 
 #      ifdef __VOLUME__
       Ray volume_ray = *ray;
+      volume_ray.t_near = 0.0f;
       bool need_update_volume_stack = kernel_data.integrator.use_volumes &&
                                       sd->object_flag & SD_OBJECT_INTERSECTS_VOLUME;
 #      endif /* __VOLUME__ */
@@ -498,14 +505,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
     }
 #    endif
 
-    ray.P = ray_offset(sd.P, -sd.Ng);
-    ray.t -= sd.ray_length; /* clipping works through transparent */
-
-#    ifdef __RAY_DIFFERENTIALS__
-    ray.dP = sd.dP;
-    ray.dD.dx = -sd.dI.dx;
-    ray.dD.dy = -sd.dI.dy;
-#    endif /* __RAY_DIFFERENTIALS__ */
+   ray.t_near = isect.t;
 
 #    ifdef __VOLUME__
     /* enter/exit volume */

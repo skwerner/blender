@@ -21,11 +21,18 @@ if NOT "%1" == "" (
     set BuildDir=VS15
     goto par2
   )
+	if "%1" == "2019" (
+    echo "Building for VS2019"
+    set VSVER=16.0
+    set VSVER_SHORT=16
+    set BuildDir=VS16
+    goto par2
+  )
   
 )
 :usage
 
-Echo Usage build_deps 2013/2015/2017 x64/x86
+Echo Usage build_deps 2013/2015/s/2019 x64/x86
 goto exit
 :par2
 if NOT "%2" == "" (
@@ -42,6 +49,9 @@ if NOT "%2" == "" (
 		if "%1" == "2017" (
 			set CMAKE_BUILDER=Visual Studio 15 2017
 		)
+		if "%1" == "2019" (
+			set CMAKE_BUILDER=Visual Studio 16
+		)
 		
     goto start
   )
@@ -57,6 +67,9 @@ if NOT "%2" == "" (
 		)
 		if "%1" == "2017" (
 			set CMAKE_BUILDER=Visual Studio 15 2017 Win64
+		)
+		if "%1" == "2019" (
+			set CMAKE_BUILDER=Visual Studio 16 2019
 		)
 		
     goto start

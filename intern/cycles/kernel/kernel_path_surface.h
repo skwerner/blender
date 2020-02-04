@@ -80,6 +80,7 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
 
     for (int j = 0; j < num_samples; j++) {
       Ray light_ray ccl_optional_struct_init;
+      light_ray.t_near = 0.0f;
       light_ray.t = 0.0f; /* reset ray */
 #    ifdef __OBJECT_MOTION__
       light_ray.time = sd->time;
@@ -180,6 +181,7 @@ ccl_device bool kernel_branched_path_surface_bounce(KernelGlobals *kg,
   /* setup ray */
   ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT) ? -sd->Ng : sd->Ng);
   ray->D = normalize(bsdf_omega_in);
+  ray->t_near = 0.0f;
   ray->t = FLT_MAX;
 #  ifdef __RAY_DIFFERENTIALS__
   ray->dP = sd->dP;
@@ -231,6 +233,7 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
   bool is_lamp = false;
   bool has_emission = false;
 
+  light_ray.t_near = 0.0f;
   light_ray.t = 0.0f;
 #    ifdef __OBJECT_MOTION__
   light_ray.time = sd->time;
@@ -309,13 +312,15 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
     path_state_next(kg, state, label);
 
     /* setup ray */
-    ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT) ? -sd->Ng : sd->Ng);
-    ray->D = normalize(bsdf_omega_in);
-
-    if (state->bounce == 0)
-      ray->t -= sd->ray_length; /* clipping works through transparent */
-    else
+    if (state->bounce == 0) {
+      ray->t_near = sd->ray_length; /* clipping works through transparent */
+    }
+    else {
+      ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT) ? -sd->Ng : sd->Ng);
+      ray->D = normalize(bsdf_omega_in);
       ray->t = FLT_MAX;
+      ray->t_near = 0.0f;
+    }
 
 #ifdef __RAY_DIFFERENTIALS__
     ray->dP = sd->dP;

@@ -89,7 +89,7 @@ static void rtc_filter_func(const RTCFilterFunctionNArguments *args)
     /* Order intersections by distance, object ID, prim ID. */
     Intersection current_isect;
     kernel_embree_convert_hit(kg, ray, hit, &current_isect);
-    if (ray->tnear == ray->tfar) {
+    if (ctx->prim_origin != PRIM_NONE && ray->tnear == ray->tfar) {
       if (current_isect.object < ctx->object_origin) {
         *args->valid = 0;
         return;
@@ -101,8 +101,7 @@ static void rtc_filter_func(const RTCFilterFunctionNArguments *args)
         }
       }
     }
-    else
-    if (ctx->prim_origin != PRIM_NONE && ray->tfar == ctx->t_test) {
+    if (ray->tfar == ctx->t_test) {
       if (current_isect.object > ctx->object_test) {
         *args->valid = 0;
         return;

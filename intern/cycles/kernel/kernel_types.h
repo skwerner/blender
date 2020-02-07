@@ -648,6 +648,12 @@ typedef struct differential {
   float dy;
 } differential;
 
+typedef struct Hit {
+  float t;
+  int object;
+  int prim;
+} Hit;
+
 /* Ray */
 
 typedef struct Ray {
@@ -663,15 +669,15 @@ typedef struct Ray {
   float3 P;     /* origin */
   float3 D;     /* direction */
   float t;      /* length of the ray */
-  float t_near; /* Min intersection distance. */
   float time;   /* time (for motion blur) */
 #else
   float t;      /* length of the ray */
-  float t_near; /* Min intersection distance. */
   float time;   /* time (for motion blur) */
   float3 P;     /* origin */
   float3 D;     /* direction */
 #endif
+
+  Hit near;
 
 #ifdef __RAY_DIFFERENTIALS__
   differential3 dP;

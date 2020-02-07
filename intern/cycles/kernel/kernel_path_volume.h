@@ -32,7 +32,9 @@ ccl_device_inline void kernel_path_volume_connect_light(KernelGlobals *kg,
   bool is_lamp = false;
   bool has_emission = false;
 
-  light_ray.t_near = 0.0f;
+  light_ray.near.t = 0.0f;
+  light_ray.near.object = sd->object;
+  light_ray.near.prim = sd->prim;
   light_ray.t = 0.0f;
 #    ifdef __OBJECT_MOTION__
   /* connect to light from given point where shader has been evaluated */
@@ -183,7 +185,9 @@ ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
 
     for (int j = 0; j < num_samples; j++) {
       Ray light_ray ccl_optional_struct_init;
-      light_ray.t_near = 0.0f;
+      light_ray.near.t = 0.0f;
+      light_ray.near.object = sd->object;
+      light_ray.near.prim = sd->prim;
       light_ray.t = 0.0f; /* reset ray */
 #      ifdef __OBJECT_MOTION__
       light_ray.time = sd->time;

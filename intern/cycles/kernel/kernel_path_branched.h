@@ -48,9 +48,9 @@ ccl_device_inline void kernel_branched_path_ao(KernelGlobals *kg,
 
       light_ray.P = ray_offset(sd->P, sd->Ng);
       light_ray.D = ao_D;
-      light_ray.near.t = 0.0f;
-      light_ray.near.object = sd->object;
-      light_ray.near.prim = sd->prim;
+      light_ray.near_hit.t = 0.0f;
+      light_ray.near_hit.object = sd->object;
+      light_ray.near_hit.prim = sd->prim;
       light_ray.t = kernel_data.background.ao_distance;
       light_ray.time = sd->time;
       light_ray.dP = sd->dP;
@@ -94,8 +94,8 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
   Ray volume_ray = *ray;
 
   /* Move the voluem ray forward. */
-  volume_ray.P = volume_ray.P + volume_ray.D * volume_ray.near.t;
-  volume_ray.t = (hit) ? isect->t - volume_ray.near.t : FLT_MAX;
+  volume_ray.P = volume_ray.P + volume_ray.D * volume_ray.near_hit.t;
+  volume_ray.t = (hit) ? isect->t - volume_ray.near_hit.t : FLT_MAX;
 
   bool heterogeneous = volume_stack_is_heterogeneous(kg, state->volume_stack);
 
@@ -124,9 +124,9 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
       for (int j = 0; j < num_samples; j++) {
         PathState ps = *state;
         Ray pray = *ray;
-        pray.near.t = 0.0f;
-        pray.near.object = OBJECT_NONE;
-        pray.near.prim = PRIM_NONE;
+        pray.near_hit.t = 0.0f;
+        pray.near_hit.object = OBJECT_NONE;
+        pray.near_hit.prim = PRIM_NONE;
         float3 tp = *throughput;
 
         /* branch RNG state */
@@ -174,9 +174,9 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
     for (int j = 0; j < num_samples; j++) {
       PathState ps = *state;
       Ray pray = *ray;
-      pray.near.t = 0.0f;
-      pray.near.object = OBJECT_NONE;
-      pray.near.prim = PRIM_NONE;
+      pray.near_hit.t = 0.0f;
+      pray.near_hit.object = OBJECT_NONE;
+      pray.near_hit.prim = PRIM_NONE;
       float3 tp = (*throughput) * num_samples_inv;
 
       /* branch RNG state */
@@ -331,9 +331,9 @@ ccl_device void kernel_branched_path_subsurface_scatter(KernelGlobals *kg,
 
 #      ifdef __VOLUME__
       Ray volume_ray = *ray;
-      volume_ray.near.t = 0.0f;
-      volume_ray.near.object = sd->object;
-      volume_ray.near.prim = sd->prim;
+      volume_ray.near_hit.t = 0.0f;
+      volume_ray.near_hit.object = sd->object;
+      volume_ray.near_hit.prim = sd->prim;
       bool need_update_volume_stack = kernel_data.integrator.use_volumes &&
                                       sd->object_flag & SD_OBJECT_INTERSECTS_VOLUME;
 #      endif /* __VOLUME__ */
@@ -513,9 +513,9 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
     }
 #    endif
 
-   ray.near.t = isect.t;
-   ray.near.object = isect.object;
-   ray.near.prim = isect.prim;
+   ray.near_hit.t = isect.t;
+   ray.near_hit.object = isect.object;
+   ray.near_hit.prim = isect.prim;
 
 #    ifdef __VOLUME__
     /* enter/exit volume */

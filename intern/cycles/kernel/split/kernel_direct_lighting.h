@@ -88,9 +88,9 @@ ccl_device void kernel_direct_lighting(KernelGlobals *kg,
       LightSample ls;
       if (light_sample(kg, -1, light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
         Ray light_ray;
-        light_ray.near.t = 0.0f;
-        light_ray.near.object = sd->object;
-        light_ray.near.prim = sd->prim;
+        light_ray.near_hit.t = 0.0f;
+        light_ray.near_hit.object = sd->object;
+        light_ray.near_hit.prim = sd->prim;
         light_ray.time = sd->time;
 
         BsdfEval L_light;

@@ -80,9 +80,9 @@ ccl_device_noinline_cpu void kernel_branched_path_surface_connect_light(
 
     for (int j = 0; j < num_samples; j++) {
       Ray light_ray ccl_optional_struct_init;
-      light_ray.near.t = 0.0f;
-      light_ray.near.object = sd->object;
-      light_ray.near.prim = sd->prim;
+      light_ray.near_hit.t = 0.0f;
+      light_ray.near_hit.object = sd->object;
+      light_ray.near_hit.prim = sd->prim;
       light_ray.t = 0.0f; /* reset ray */
 #    ifdef __OBJECT_MOTION__
       light_ray.time = sd->time;
@@ -183,9 +183,9 @@ ccl_device bool kernel_branched_path_surface_bounce(KernelGlobals *kg,
   /* setup ray */
   ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT) ? -sd->Ng : sd->Ng);
   ray->D = normalize(bsdf_omega_in);
-  ray->near.t = 0.0f;
-  ray->near.object = sd->object;
-  ray->near.prim = sd->prim;
+  ray->near_hit.t = 0.0f;
+  ray->near_hit.object = sd->object;
+  ray->near_hit.prim = sd->prim;
   ray->t = FLT_MAX;
 #  ifdef __RAY_DIFFERENTIALS__
   ray->dP = sd->dP;
@@ -237,9 +237,9 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
   bool is_lamp = false;
   bool has_emission = false;
 
-  light_ray.near.t = 0.0f;
-  light_ray.near.object = sd->object;
-  light_ray.near.prim = sd->prim;
+  light_ray.near_hit.t = 0.0f;
+  light_ray.near_hit.object = sd->object;
+  light_ray.near_hit.prim = sd->prim;
   light_ray.t = 0.0f;
 #    ifdef __OBJECT_MOTION__
   light_ray.time = sd->time;
@@ -320,17 +320,17 @@ ccl_device bool kernel_path_surface_bounce(KernelGlobals *kg,
     /* setup ray */
     if (state->bounce == 0) {
       ray->P = sd->P;
-      ray->near.t = sd->ray_length; /* clipping works through transparent */
-      ray->near.object = sd->object;
-      ray->near.prim = sd->prim;
+      ray->near_hit.t = sd->ray_length; /* clipping works through transparent */
+      ray->near_hit.object = sd->object;
+      ray->near_hit.prim = sd->prim;
     }
     else {
       ray->P = ray_offset(sd->P, (label & LABEL_TRANSMIT) ? -sd->Ng : sd->Ng);
       ray->D = normalize(bsdf_omega_in);
       ray->t = FLT_MAX;
-      ray->near.t = 0.0f;
-      ray->near.object = sd->object;
-      ray->near.prim = sd->prim;
+      ray->near_hit.t = 0.0f;
+      ray->near_hit.object = sd->object;
+      ray->near_hit.prim = sd->prim;
     }
 
 #ifdef __RAY_DIFFERENTIALS__

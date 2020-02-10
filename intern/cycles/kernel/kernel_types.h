@@ -677,7 +677,7 @@ typedef struct Ray {
   float3 D;     /* direction */
 #endif
 
-  Hit near;
+  Hit near_hit;
 
 #ifdef __RAY_DIFFERENTIALS__
   differential3 dP;

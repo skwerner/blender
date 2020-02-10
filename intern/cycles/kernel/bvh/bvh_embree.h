@@ -90,7 +90,7 @@ ccl_device_inline void kernel_embree_setup_ray(const Ray &ray,
   rtc_ray.dir_x = ray.D.x;
   rtc_ray.dir_y = ray.D.y;
   rtc_ray.dir_z = ray.D.z;
-  rtc_ray.tnear = ray.near.t;
+  rtc_ray.tnear = ray.near_hit.t;
   rtc_ray.tfar = ray.t;
   rtc_ray.time = ray.time;
   rtc_ray.mask = visibility;

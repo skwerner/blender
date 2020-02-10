@@ -200,9 +200,9 @@ ccl_device_noinline_cpu bool direct_emission(KernelGlobals *kg,
     ray->t = 0.0f;
   }
 
-  ray->near.t = 0.0f;
-  ray->near.object = sd->object;
-  ray->near.prim = sd->prim;
+  ray->near_hit.t = 0.0f;
+  ray->near_hit.object = sd->object;
+  ray->near_hit.prim = sd->prim;
 
   /* return if it's a lamp for shadow pass */
   *is_lamp = (ls->prim == PRIM_NONE && ls->type != LIGHT_BACKGROUND);

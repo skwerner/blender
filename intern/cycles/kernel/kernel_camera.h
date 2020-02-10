@@ -160,10 +160,10 @@ ccl_device void camera_sample_perspective(KernelGlobals *kg,
 #ifdef __CAMERA_CLIPPING__
   /* clipping */
   float z_inv = 1.0f / normalize(Pcamera).z;
-  ray->near.t = kernel_data.cam.nearclip * z_inv;
+  ray->near_hit.t = kernel_data.cam.nearclip * z_inv;
   ray->t = kernel_data.cam.cliplength * z_inv;
 #else
-  ray->near.t = 0.0f;
+  ray->near_hit.t = 0.0f;
   ray->t = FLT_MAX;
 #endif
 }
@@ -230,7 +230,7 @@ ccl_device void camera_sample_orthographic(KernelGlobals *kg,
 #else
   ray->t = FLT_MAX;
 #endif
-  ray->near.t = 0.0f;
+  ray->near_hit.t = 0.0f;
 }
 
 /* Panorama Camera */
@@ -339,10 +339,10 @@ ccl_device_inline void camera_sample_panorama(ccl_constant KernelCamera *cam,
 
 #ifdef __CAMERA_CLIPPING__
   /* clipping */
-  ray->near.t = cam->nearclip;
+  ray->near_hit.t = cam->nearclip;
   ray->t = cam->cliplength;
 #else
-  ray->near.t = 0.0f;
+  ray->near_hit.t = 0.0f;
   ray->t = FLT_MAX;
 #endif
 }
@@ -404,8 +404,8 @@ ccl_device_inline void camera_sample(KernelGlobals *kg,
   }
 #endif
 
-  ray->near.object = OBJECT_NONE;
-  ray->near.prim = PRIM_NONE;
+  ray->near_hit.object = OBJECT_NONE;
+  ray->near_hit.prim = PRIM_NONE;
   
   /* sample */
   if (kernel_data.cam.type == CAMERA_PERSPECTIVE) {

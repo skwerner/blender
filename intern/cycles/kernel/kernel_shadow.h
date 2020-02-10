@@ -334,9 +334,9 @@ ccl_device bool shadow_blocked_transparent_stepped_loop(KernelGlobals *kg,
         return true;
       }
       /* Move ray forward. */
-      ray->near.t = isect->t;
-      ray->near.object = shadow_sd.object;
-      ray->near.prim = shadow_sd.prim;
+      ray->near_hit.t = isect->t;
+      ray->near_hit.object = shadow_sd->object;
+      ray->near_hit.prim = shadow_sd->prim;
       bounce++;
     }
 #    ifdef __VOLUME__

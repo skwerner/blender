@@ -91,9 +91,9 @@ ccl_device_inline
 #  ifdef __VOLUME__
         if (need_update_volume_stack) {
           Ray volume_ray = *ray;
-          volume_ray.near.t = 0.0f;
-          volume_ray.near.object = sd->object;
-          volume_ray.near.prim = sd->prim;
+          volume_ray.near_hit.t = 0.0f;
+          volume_ray.near_hit.object = sd->object;
+          volume_ray.near_hit.prim = sd->prim;
           /* Setup ray from previous surface point to the new one. */
           volume_ray.D = normalize_len(hit_ray->P - volume_ray.P, &volume_ray.t);
 

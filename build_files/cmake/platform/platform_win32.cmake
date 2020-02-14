@@ -629,7 +629,7 @@ if(WITH_CYCLES_OSL)
 endif()
 
 if(WITH_CYCLES_EMBREE)
-  windows_find_package(Embree 3.7.0)
+  windows_find_package(Embree 3.8.0)
   if(NOT EMBREE_FOUND)
     set(EMBREE_INCLUDE_DIRS ${LIBDIR}/embree/include)
     set(EMBREE_LIBRARIES

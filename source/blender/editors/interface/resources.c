@@ -443,6 +443,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
         case TH_BONE_POSE_ACTIVE:
           cp = ts->bone_pose_active;
           break;
+        case TH_BONE_LOCKED_WEIGHT:
+          cp = ts->bone_locked_weight;
+          break;
         case TH_STRIP:
           cp = ts->strip;
           break;
@@ -968,6 +971,18 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           break;
         case TH_INFO_DEBUG_TEXT:
           cp = ts->info_debug_text;
+          break;
+        case TH_INFO_PROPERTY:
+          cp = ts->info_property;
+          break;
+        case TH_INFO_PROPERTY_TEXT:
+          cp = ts->info_property_text;
+          break;
+        case TH_INFO_OPERATOR:
+          cp = ts->info_operator;
+          break;
+        case TH_INFO_OPERATOR_TEXT:
+          cp = ts->info_operator_text;
           break;
         case TH_V3D_CLIPPING_BORDER:
           cp = ts->clipping_border_3d;

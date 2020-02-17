@@ -27,9 +27,7 @@ ENDIF()
 
 SET(_usd_SEARCH_DIRS
   ${USD_ROOT_DIR}
-  /usr/local
   /opt/lib/usd
-  /opt/usd
 )
 
 FIND_PATH(USD_INCLUDE_DIR
@@ -44,7 +42,7 @@ FIND_PATH(USD_INCLUDE_DIR
 
 FIND_LIBRARY(USD_LIBRARY
   NAMES
-    usd_m
+    usd_m usd_ms
   HINTS
     ${_usd_SEARCH_DIRS}
   PATH_SUFFIXES

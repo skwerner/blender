@@ -2848,7 +2848,7 @@ static bool object_frame_has_keyframe(Object *ob, float frame, short filter)
   if (!(filter & ANIMFILTER_KEYS_LOCAL) && !(filter & ANIMFILTER_KEYS_NOMAT)) {
     /* if only active, then we can skip a lot of looping */
     if (filter & ANIMFILTER_KEYS_ACTIVE) {
-      Material *ma = give_current_material(ob, (ob->actcol + 1));
+      Material *ma = BKE_object_material_get(ob, (ob->actcol + 1));
 
       /* we only retrieve the active material... */
       if (id_frame_has_keyframe((ID *)ma, frame, filter)) {
@@ -2860,7 +2860,7 @@ static bool object_frame_has_keyframe(Object *ob, float frame, short filter)
 
       /* loop over materials */
       for (a = 0; a < ob->totcol; a++) {
-        Material *ma = give_current_material(ob, a + 1);
+        Material *ma = BKE_object_material_get(ob, a + 1);
 
         if (id_frame_has_keyframe((ID *)ma, frame, filter)) {
           return true;
@@ -3015,8 +3015,6 @@ bool ED_autokeyframe_property(
       ReportList *reports = CTX_wm_reports(C);
       ToolSettings *ts = scene->toolsettings;
       short flag = ANIM_get_keyframing_flags(scene, 1);
-
-      fcu->flag &= ~FCURVE_SELECTED;
 
       /* Note: We use rnaindex instead of fcu->array_index,
        *       because a button may control all items of an array at once.

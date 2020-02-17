@@ -44,7 +44,7 @@
 #include "BKE_cdderivedmesh.h"
 #include "BKE_DerivedMesh.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_modifier.h"
 
 #include "BKE_deform.h"
@@ -1511,7 +1511,7 @@ void BKE_shrinkwrap_mesh_nearest_surface_deform(struct bContext *C,
 {
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   struct Scene *sce = CTX_data_scene(C);
-  ShrinkwrapModifierData ssmd = {0};
+  ShrinkwrapModifierData ssmd = {{0}};
   ModifierEvalContext ctx = {depsgraph, ob_source, 0};
   int totvert;
 
@@ -1532,7 +1532,7 @@ void BKE_shrinkwrap_mesh_nearest_surface_deform(struct bContext *C,
 
 void BKE_shrinkwrap_remesh_target_project(Mesh *src_me, Mesh *target_me, Object *ob_target)
 {
-  ShrinkwrapModifierData ssmd = {0};
+  ShrinkwrapModifierData ssmd = {{0}};
   int totvert;
 
   ssmd.target = ob_target;

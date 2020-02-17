@@ -116,6 +116,9 @@ typedef struct bNodeSocket {
   char display_shape;
   char _pad[3];
 
+  /** Custom dynamic defined label, MAX_NAME. */
+  char label[64];
+
   /** Cached data from execution. */
   void *cache;
 
@@ -1262,6 +1265,10 @@ enum {
   NODE_VECTOR_MATH_ABSOLUTE = 17,
   NODE_VECTOR_MATH_MINIMUM = 18,
   NODE_VECTOR_MATH_MAXIMUM = 19,
+  NODE_VECTOR_MATH_WRAP = 20,
+  NODE_VECTOR_MATH_SINE = 21,
+  NODE_VECTOR_MATH_COSINE = 22,
+  NODE_VECTOR_MATH_TANGENT = 23,
 };
 
 /* Clamp node types. */

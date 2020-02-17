@@ -21,6 +21,8 @@
  * \ingroup gpu
  */
 
+#include <string.h>
+
 #include "MEM_guardedalloc.h"
 
 #include "DNA_image_types.h"
@@ -51,7 +53,7 @@ static struct GPUTextureGlobal {
 } GG = {NULL, NULL, NULL};
 
 /* Maximum number of FBOs a texture can be attached to. */
-#define GPU_TEX_MAX_FBO_ATTACHED 10
+#define GPU_TEX_MAX_FBO_ATTACHED 12
 
 typedef enum eGPUTextureFormatFlag {
   GPU_FORMAT_DEPTH = (1 << 0),
@@ -183,6 +185,7 @@ static int gpu_get_component_count(eGPUTextureFormat format)
     case GPU_RGBA16F:
     case GPU_RGBA16:
     case GPU_RGBA32F:
+    case GPU_SRGB8_A8:
       return 4;
     case GPU_RGB16F:
     case GPU_R11F_G11F_B10F:
@@ -221,7 +224,7 @@ static void gpu_validate_data_format(eGPUTextureFormat tex_format, eGPUDataForma
       }
     }
     /* Byte formats */
-    else if (ELEM(tex_format, GPU_R8, GPU_RG8, GPU_RGBA8, GPU_RGBA8UI)) {
+    else if (ELEM(tex_format, GPU_R8, GPU_RG8, GPU_RGBA8, GPU_RGBA8UI, GPU_SRGB8_A8)) {
       BLI_assert(ELEM(data_format, GPU_DATA_UNSIGNED_BYTE, GPU_DATA_FLOAT));
     }
     /* Special case */
@@ -349,6 +352,7 @@ static uint gpu_get_bytesize(eGPUTextureFormat data_type)
     case GPU_DEPTH_COMPONENT32F:
     case GPU_RGBA8UI:
     case GPU_RGBA8:
+    case GPU_SRGB8_A8:
     case GPU_R11F_G11F_B10F:
     case GPU_R32F:
     case GPU_R32UI:
@@ -398,6 +402,8 @@ static GLenum gpu_get_gl_internalformat(eGPUTextureFormat format)
       return GL_RGBA8;
     case GPU_RGBA8UI:
       return GL_RGBA8UI;
+    case GPU_SRGB8_A8:
+      return GL_SRGB8_ALPHA8;
     case GPU_R32F:
       return GL_R32F;
     case GPU_R32UI:
@@ -1032,10 +1038,6 @@ GPUTexture *GPU_texture_create_buffer(eGPUTextureFormat tex_format, const GLuint
 
 GPUTexture *GPU_texture_from_bindcode(int textarget, int bindcode)
 {
-  /* see GPUInput::textarget: it can take two values - GL_TEXTURE_2D and GL_TEXTURE_CUBE_MAP
-   * these values are correct for glDisable, so textarget can be safely used in
-   * GPU_texture_bind/GPU_texture_unbind through tex->target_base */
-  /* (is any of this obsolete now that we don't glEnable/Disable textures?) */
   GPUTexture *tex = MEM_callocN(sizeof(GPUTexture), "GPUTexture");
   tex->bindcode = bindcode;
   tex->number = -1;
@@ -1052,12 +1054,8 @@ GPUTexture *GPU_texture_from_bindcode(int textarget, int bindcode)
   else {
     GLint w, h;
 
-    GLenum gettarget;
-
-    if (textarget == GL_TEXTURE_2D) {
-      gettarget = GL_TEXTURE_2D;
-    }
-    else {
+    GLenum gettarget = textarget;
+    if (textarget == GL_TEXTURE_CUBE_MAP) {
       gettarget = GL_TEXTURE_CUBE_MAP_POSITIVE_X;
     }
 
@@ -1437,6 +1435,30 @@ void *GPU_texture_read(GPUTexture *tex, eGPUDataFormat gpu_data_format, int mipl
   glBindTexture(tex->target, 0);
 
   return buf;
+}
+
+void GPU_texture_clear(GPUTexture *tex, eGPUDataFormat gpu_data_format, const void *color)
+{
+  if (GLEW_ARB_clear_texture) {
+    GLenum data_format = gpu_get_gl_dataformat(tex->format, &tex->format_flag);
+    GLenum data_type = gpu_get_gl_datatype(gpu_data_format);
+    glClearTexImage(tex->bindcode, 0, data_format, data_type, color);
+  }
+  else {
+    size_t buffer_len = gpu_texture_memory_footprint_compute(tex);
+    unsigned char *pixels = MEM_mallocN(buffer_len, __func__);
+    if (color) {
+      size_t bytesize = tex->bytesize;
+      for (size_t byte = 0; byte < buffer_len; byte += bytesize) {
+        memcpy(&pixels[byte], color, bytesize);
+      }
+    }
+    else {
+      memset(pixels, 0, buffer_len);
+    }
+    GPU_texture_update(tex, gpu_data_format, pixels);
+    MEM_freeN(pixels);
+  }
 }
 
 void GPU_texture_update(GPUTexture *tex, eGPUDataFormat data_format, const void *pixels)

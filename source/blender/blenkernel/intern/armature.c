@@ -58,7 +58,7 @@
 #include "BKE_deform.h"
 #include "BKE_displist.h"
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_lattice.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
@@ -194,7 +194,7 @@ static void copy_bonechildren_custom_handles(Bone *bone_dst, bArmature *arm_dst)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_armature_copy_data(Main *UNUSED(bmain),
                             bArmature *arm_dst,
@@ -1562,8 +1562,8 @@ static void armature_vert_task(void *__restrict userdata,
     int deformed = 0;
     unsigned int j;
     for (j = dvert->totweight; j != 0; j--, dw++) {
-      const int index = dw->def_nr;
-      if (index >= 0 && index < data->defbase_tot && (pchan = data->defnrToPC[index])) {
+      const uint index = dw->def_nr;
+      if (index < data->defbase_tot && (pchan = data->defnrToPC[index])) {
         float weight = dw->weight;
         Bone *bone = pchan->bone;
 
@@ -2293,13 +2293,17 @@ void mat3_to_vec_roll(const float mat[3][3], float r_vec[3], float *r_roll)
  * If vec is the Y vector from purely rotational mat, result should be exact. */
 void mat3_vec_to_roll(const float mat[3][3], const float vec[3], float *r_roll)
 {
-  float vecmat[3][3], vecmatinv[3][3], rollmat[3][3];
+  float vecmat[3][3], vecmatinv[3][3], rollmat[3][3], q[4];
 
+  /* Compute the orientation relative to the vector with zero roll. */
   vec_roll_to_mat3(vec, 0.0f, vecmat);
   invert_m3_m3(vecmatinv, vecmat);
   mul_m3_m3m3(rollmat, vecmatinv, mat);
 
-  *r_roll = atan2f(rollmat[2][0], rollmat[2][2]);
+  /* Extract the twist angle as the roll value. */
+  mat3_to_quat(q, rollmat);
+
+  *r_roll = quat_split_swing_and_twist(q, 1, NULL, NULL);
 }
 
 /* Calculates the rest matrix of a bone based on its vector and a roll around that vector. */

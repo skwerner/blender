@@ -132,11 +132,8 @@ static GHOST_TStandardCursor convert_to_ghost_standard_cursor(WMCursorType curs)
   }
 }
 
-static void window_set_custom_cursor(wmWindow *win,
-                                     unsigned const char mask[16][2],
-                                     unsigned char bitmap[16][2],
-                                     int hotx,
-                                     int hoty)
+static void window_set_custom_cursor(
+    wmWindow *win, const uchar mask[16][2], uchar bitmap[16][2], int hotx, int hoty)
 {
   GHOST_SetCustomCursorShape(
       win->ghostwin, (GHOST_TUns8 *)bitmap, (GHOST_TUns8 *)mask, 16, 16, hotx, hoty, true);
@@ -304,8 +301,7 @@ void WM_cursor_grab_enable(wmWindow *win, int wrap, bool hide, int bounds[4])
 
   if ((G.debug & G_DEBUG) == 0) {
     if (win->ghostwin) {
-      /* Note: There is no tabletdata on Windows if no tablet device is connected. */
-      if (win->eventstate->is_motion_absolute == false) {
+      if (win->eventstate->tablet.is_motion_absolute == false) {
         GHOST_SetCursorGrab(win->ghostwin, mode, mode_axis, bounds, NULL);
       }
 
@@ -345,20 +341,23 @@ static void wm_cursor_warp_relative(wmWindow *win, int x, int y)
 bool wm_cursor_arrow_move(wmWindow *win, const wmEvent *event)
 {
   if (win && event->val == KM_PRESS) {
+    /* Must move at least this much to avoid rounding in WM_cursor_warp. */
+    float fac = GHOST_GetNativePixelSize(win->ghostwin);
+
     if (event->type == UPARROWKEY) {
-      wm_cursor_warp_relative(win, 0, 1);
+      wm_cursor_warp_relative(win, 0, fac);
       return 1;
     }
     else if (event->type == DOWNARROWKEY) {
-      wm_cursor_warp_relative(win, 0, -1);
+      wm_cursor_warp_relative(win, 0, -fac);
       return 1;
     }
     else if (event->type == LEFTARROWKEY) {
-      wm_cursor_warp_relative(win, -1, 0);
+      wm_cursor_warp_relative(win, -fac, 0);
       return 1;
     }
     else if (event->type == RIGHTARROWKEY) {
-      wm_cursor_warp_relative(win, 1, 0);
+      wm_cursor_warp_relative(win, fac, 0);
       return 1;
     }
   }
@@ -381,8 +380,8 @@ void WM_cursor_time(wmWindow *win, int nr)
       {0, 60, 66, 66, 60, 66, 66, 60},
       {0, 56, 68, 68, 120, 64, 68, 56},
   };
-  unsigned char mask[16][2];
-  unsigned char bitmap[16][2] = {{0}};
+  uchar mask[16][2];
+  uchar bitmap[16][2] = {{0}};
   int i, idx;
 
   if (win->lastcursor == 0) {

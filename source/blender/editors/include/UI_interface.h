@@ -403,22 +403,22 @@ void UI_draw_roundbox_aa(
     bool filled, float minx, float miny, float maxx, float maxy, float rad, const float color[4]);
 void UI_draw_roundbox_4fv(
     bool filled, float minx, float miny, float maxx, float maxy, float rad, const float col[4]);
-void UI_draw_roundbox_3ubAlpha(bool filled,
-                               float minx,
-                               float miny,
-                               float maxx,
-                               float maxy,
-                               float rad,
-                               const unsigned char col[3],
-                               unsigned char alpha);
-void UI_draw_roundbox_3fvAlpha(bool filled,
-                               float minx,
-                               float miny,
-                               float maxx,
-                               float maxy,
-                               float rad,
-                               const float col[3],
-                               float alpha);
+void UI_draw_roundbox_3ub_alpha(bool filled,
+                                float minx,
+                                float miny,
+                                float maxx,
+                                float maxy,
+                                float rad,
+                                const unsigned char col[3],
+                                unsigned char alpha);
+void UI_draw_roundbox_3fv_alpha(bool filled,
+                                float minx,
+                                float miny,
+                                float maxx,
+                                float maxy,
+                                float rad,
+                                const float col[3],
+                                float alpha);
 void UI_draw_roundbox_shade_x(bool filled,
                               float minx,
                               float miny,
@@ -723,6 +723,11 @@ void UI_but_drawflag_disable(uiBut *but, int flag);
 void UI_but_type_set_menu_from_pulldown(uiBut *but);
 
 /* special button case, only draw it when used actively, for outliner etc */
+bool UI_but_active_only_ex(const struct bContext *C,
+                           struct ARegion *ar,
+                           uiBlock *block,
+                           uiBut *but,
+                           const bool remove_on_failure);
 bool UI_but_active_only(const struct bContext *C, struct ARegion *ar, uiBlock *block, uiBut *but);
 bool UI_block_active_only_flagged_buttons(const struct bContext *C,
                                           struct ARegion *ar,
@@ -1640,7 +1645,12 @@ struct Panel *UI_panel_begin(struct ScrArea *sa,
                              struct PanelType *pt,
                              struct Panel *pa,
                              bool *r_open);
-void UI_panel_end(uiBlock *block, int width, int height, bool open);
+void UI_panel_end(const struct ScrArea *sa,
+                  const struct ARegion *ar,
+                  uiBlock *block,
+                  int width,
+                  int height,
+                  bool open);
 void UI_panels_scale(struct ARegion *ar, float new_width);
 void UI_panel_label_offset(struct uiBlock *block, int *r_x, int *r_y);
 int UI_panel_size_y(const struct Panel *pa);

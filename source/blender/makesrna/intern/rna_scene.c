@@ -941,8 +941,8 @@ static void rna_Scene_start_frame_set(PointerRNA *ptr, int value)
   CLAMP(value, MINFRAME, MAXFRAME);
   data->r.sfra = value;
 
-  if (data->r.sfra >= data->r.efra) {
-    data->r.efra = MIN2(data->r.sfra, MAXFRAME);
+  if (value > data->r.efra) {
+    data->r.efra = MIN2(value, MAXFRAME);
   }
 }
 
@@ -952,8 +952,8 @@ static void rna_Scene_end_frame_set(PointerRNA *ptr, int value)
   CLAMP(value, MINFRAME, MAXFRAME);
   data->r.efra = value;
 
-  if (data->r.sfra >= data->r.efra) {
-    data->r.sfra = MAX2(data->r.efra, MINFRAME);
+  if (data->r.sfra > value) {
+    data->r.sfra = MAX2(value, MINFRAME);
   }
 }
 
@@ -985,10 +985,12 @@ static void rna_Scene_preview_range_start_frame_set(PointerRNA *ptr, int value)
     /* TODO: or just refuse to set instead? */
     data->r.pefra = data->r.efra;
   }
-
-  /* now set normally */
-  CLAMP(value, MINAFRAME, data->r.pefra);
+  CLAMP(value, MINAFRAME, MAXFRAME);
   data->r.psfra = value;
+
+  if (value > data->r.pefra) {
+    data->r.pefra = MIN2(value, MAXFRAME);
+  }
 }
 
 static void rna_Scene_preview_range_end_frame_set(PointerRNA *ptr, int value)
@@ -1001,10 +1003,12 @@ static void rna_Scene_preview_range_end_frame_set(PointerRNA *ptr, int value)
     /* TODO: or just refuse to set instead? */
     data->r.psfra = data->r.sfra;
   }
-
-  /* now set normally */
-  CLAMP(value, data->r.psfra, MAXFRAME);
+  CLAMP(value, MINAFRAME, MAXFRAME);
   data->r.pefra = value;
+
+  if (data->r.psfra > value) {
+    data->r.psfra = MAX2(value, MINAFRAME);
+  }
 }
 
 static void rna_Scene_show_subframe_update(Main *UNUSED(bmain),
@@ -1655,6 +1659,17 @@ void rna_Scene_freestyle_update(Main *UNUSED(bmain), Scene *UNUSED(scene), Point
   Scene *scene = (Scene *)ptr->owner_id;
 
   DEG_id_tag_update(&scene->id, 0);
+}
+
+void rna_Scene_use_freestyle_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+{
+  Scene *scene = (Scene *)ptr->owner_id;
+
+  DEG_id_tag_update(&scene->id, 0);
+
+  if (scene->nodetree) {
+    ntreeCompositUpdateRLayers(scene->nodetree);
+  }
 }
 
 void rna_Scene_use_view_map_cache_update(Main *UNUSED(bmain),
@@ -2959,17 +2974,21 @@ static void rna_def_tool_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_transform_pivot_point_align", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "transform_flag", SCE_XFORM_AXIS_ALIGN);
   RNA_def_property_ui_text(
-      prop, "Only Locations", "Manipulate origins (object, pose and weight paint mode only)");
+      prop,
+      "Only Locations",
+      "Only transform object locations, without affecting rotation or scaling");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "use_transform_data_origin", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "transform_flag", SCE_XFORM_DATA_ORIGIN);
-  RNA_def_property_ui_text(prop, "Transform Origins", "Manipulate object data");
+  RNA_def_property_ui_text(
+      prop, "Transform Origins", "Transform object origins, while leaving the shape in place");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "use_transform_skip_children", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "transform_flag", SCE_XFORM_SKIP_CHILDREN);
-  RNA_def_property_ui_text(prop, "Transform Parents", "Don't transform children");
+  RNA_def_property_ui_text(
+      prop, "Transform Parents", "Transform the parents, leaving the children in place");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "use_mesh_automerge", PROP_BOOLEAN, PROP_NONE);
@@ -4618,6 +4637,14 @@ void rna_def_freestyle_settings(BlenderRNA *brna)
   RNA_def_property_update(
       prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_Scene_use_view_map_cache_update");
 
+  prop = RNA_def_property(srna, "as_render_pass", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flags", FREESTYLE_AS_RENDER_PASS);
+  RNA_def_property_ui_text(
+      prop,
+      "As Render Pass",
+      "Renders Freestyle output to a separate pass instead of overlaying it on the Combined pass");
+  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_ViewLayer_pass_update");
+
   prop = RNA_def_property(srna, "sphere_radius", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "sphere_radius");
   RNA_def_property_range(prop, 0.0, 1000.0);
@@ -5683,7 +5710,7 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_boolean_sdna(prop, NULL, "mode", R_EDGE_FRS);
   RNA_def_property_ui_text(prop, "Edge", "Draw stylized strokes using Freestyle");
-  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_Scene_freestyle_update");
+  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, "rna_Scene_use_freestyle_update");
 
   /* threads */
   prop = RNA_def_property(srna, "threads", PROP_INT, PROP_NONE);

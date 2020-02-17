@@ -947,15 +947,16 @@ ImBuf *filelist_geticon_image(struct FileList *filelist, const int index)
   return filelist_geticon_image_ex(file->typeflag, file->relpath);
 }
 
-static int filelist_geticon_ex(const int typeflag,
-                               const int blentype,
-                               const char *relpath,
+static int filelist_geticon_ex(FileDirEntry *file,
+                               const char *root,
                                const bool is_main,
                                const bool ignore_libdir)
 {
+  const int typeflag = file->typeflag;
+
   if ((typeflag & FILE_TYPE_DIR) &&
       !(ignore_libdir && (typeflag & (FILE_TYPE_BLENDERLIB | FILE_TYPE_BLENDER)))) {
-    if (FILENAME_IS_PARENT(relpath)) {
+    if (FILENAME_IS_PARENT(file->relpath)) {
       return is_main ? ICON_FILE_PARENT : ICON_NONE;
     }
     else if (typeflag & FILE_TYPE_APPLICATIONBUNDLE) {
@@ -968,6 +969,20 @@ static int filelist_geticon_ex(const int typeflag,
       /* Do not return icon for folders if icons are not 'main' draw type
        * (e.g. when used over previews). */
       return ICON_FILE_FOLDER;
+    }
+    else {
+      /* If this path is in System list then use that icon. */
+      struct FSMenu *fsmenu = ED_fsmenu_get();
+      FSMenuEntry *tfsm = ED_fsmenu_get_category(fsmenu, FS_CATEGORY_SYSTEM_BOOKMARKS);
+      char fullpath[FILE_MAX_LIBEXTRA];
+      BLI_join_dirfile(fullpath, sizeof(fullpath), root, file->relpath);
+      BLI_add_slash(fullpath);
+      for (; tfsm; tfsm = tfsm->next) {
+        if (STREQ(tfsm->path, fullpath)) {
+          /* Never want a little folder inside a large one. */
+          return (tfsm->icon == ICON_FILE_FOLDER) ? ICON_NONE : tfsm->icon;
+        }
+      }
     }
   }
 
@@ -1014,7 +1029,7 @@ static int filelist_geticon_ex(const int typeflag,
     return ICON_FILE_ARCHIVE;
   }
   else if (typeflag & FILE_TYPE_BLENDERLIB) {
-    const int ret = UI_idcode_icon_get(blentype);
+    const int ret = UI_idcode_icon_get(file->blentype);
     if (ret != ICON_NONE) {
       return ret;
     }
@@ -1026,17 +1041,28 @@ int filelist_geticon(struct FileList *filelist, const int index, const bool is_m
 {
   FileDirEntry *file = filelist_geticon_get_file(filelist, index);
 
-  return filelist_geticon_ex(file->typeflag, file->blentype, file->relpath, is_main, false);
+  return filelist_geticon_ex(file, filelist->filelist.root, is_main, false);
 }
 
 /* ********** Main ********** */
+
+static void parent_dir_until_exists_or_default_root(char *dir)
+{
+  if (!BLI_parent_dir_until_exists(dir)) {
+#ifdef WIN32
+    get_default_root(dir);
+#else
+    strcpy(dir, "/");
+#endif
+  }
+}
 
 static bool filelist_checkdir_dir(struct FileList *UNUSED(filelist),
                                   char *r_dir,
                                   const bool do_change)
 {
   if (do_change) {
-    BLI_make_exist(r_dir);
+    parent_dir_until_exists_or_default_root(r_dir);
     return true;
   }
   else {
@@ -1057,7 +1083,7 @@ static bool filelist_checkdir_lib(struct FileList *UNUSED(filelist),
 
   if (do_change && !is_valid) {
     /* if not a valid library, we need it to be a valid directory! */
-    BLI_make_exist(r_dir);
+    parent_dir_until_exists_or_default_root(r_dir);
     return true;
   }
   return is_valid;

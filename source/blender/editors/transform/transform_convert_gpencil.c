@@ -30,7 +30,6 @@
 #include "BKE_colortools.h"
 #include "BKE_context.h"
 #include "BKE_gpencil.h"
-#include "BKE_report.h"
 
 #include "ED_gpencil.h"
 
@@ -63,6 +62,10 @@ static void createTransGPencil_center_get(bGPDstroke *gps, float r_center[3])
 
 void createTransGPencil(bContext *C, TransInfo *t)
 {
+  if (t->data_container_len == 0) {
+    return;
+  }
+
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   bGPdata *gpd = ED_gpencil_data_get_active(C);
   ToolSettings *ts = CTX_data_tool_settings(C);

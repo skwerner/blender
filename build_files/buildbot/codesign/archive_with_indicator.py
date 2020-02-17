@@ -18,9 +18,10 @@
 
 # <pep8 compliant>
 
+import os
 from pathlib import Path
 
-from codesign.util import ensure_file_does_not_exist_or_die
+import codesign.util as util
 
 
 class ArchiveWithIndicator:
@@ -71,7 +72,15 @@ class ArchiveWithIndicator:
 
     def is_ready(self) -> bool:
         """Check whether the archive is ready for access."""
-        return self.ready_indicator_filepath.exists()
+        if not self.ready_indicator_filepath.exists():
+            return False
+        # Sometimes on macOS indicator file appears prior to the actual archive
+        # despite the order of creation and os.sync() used in tag_ready().
+        # So consider archive not ready if there is an indicator without an
+        # actual archive.
+        if not self.archive_filepath.exists():
+            return False
+        return True
 
     def tag_ready(self) -> None:
         """
@@ -82,14 +91,19 @@ class ArchiveWithIndicator:
               If it is violated, an assert will fail.
         """
         assert not self.is_ready()
+        # Try the best to make sure everything is synced to the file system,
+        # to avoid any possibility of stamp appearing on a network share prior to
+        # an actual file.
+        if util.get_current_platform() != util.Platform.WINDOWS:
+            os.sync()
         self.ready_indicator_filepath.touch()
 
     def clean(self) -> None:
         """
         Remove both archive and the ready indication file.
         """
-        ensure_file_does_not_exist_or_die(self.ready_indicator_filepath)
-        ensure_file_does_not_exist_or_die(self.archive_filepath)
+        util.ensure_file_does_not_exist_or_die(self.ready_indicator_filepath)
+        util.ensure_file_does_not_exist_or_die(self.archive_filepath)
 
     def is_fully_absent(self) -> bool:
         """

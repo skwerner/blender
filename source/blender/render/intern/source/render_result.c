@@ -520,12 +520,12 @@ void render_result_clone_passes(Render *re, RenderResult *rr, const char *viewna
   }
 }
 
-void render_result_add_pass(RenderResult *rr,
-                            const char *name,
-                            int channels,
-                            const char *chan_id,
-                            const char *layername,
-                            const char *viewname)
+void RE_create_render_pass(RenderResult *rr,
+                           const char *name,
+                           int channels,
+                           const char *chan_id,
+                           const char *layername,
+                           const char *viewname)
 {
   RenderLayer *rl;
   RenderPass *rp;
@@ -1234,7 +1234,7 @@ void render_result_exr_file_begin(Render *re, RenderEngine *engine)
        * mutex locked to avoid deadlock with Python GIL. */
       BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
       for (RenderPass *pass = templates.first; pass; pass = pass->next) {
-        render_result_add_pass(
+        RE_create_render_pass(
             re->result, pass->name, pass->channels, pass->chan_id, rl->name, NULL);
       }
       BLI_rw_mutex_unlock(&re->resultmutex);
@@ -1277,8 +1277,7 @@ void render_result_exr_file_end(Render *re, RenderEngine *engine)
      * mutex locked to avoid deadlock with Python GIL. */
     BLI_rw_mutex_lock(&re->resultmutex, THREAD_LOCK_WRITE);
     for (RenderPass *pass = templates.first; pass; pass = pass->next) {
-      render_result_add_pass(
-          re->result, pass->name, pass->channels, pass->chan_id, rl->name, NULL);
+      RE_create_render_pass(re->result, pass->name, pass->channels, pass->chan_id, rl->name, NULL);
     }
 
     BLI_freelistN(&templates);
@@ -1547,10 +1546,10 @@ void render_result_rect_get_pixels(RenderResult *rr,
 {
   RenderView *rv = RE_RenderViewGetById(rr, view_id);
 
-  if (rv->rect32) {
+  if (rv && rv->rect32) {
     memcpy(rect, rv->rect32, sizeof(int) * rr->rectx * rr->recty);
   }
-  else if (rv->rectf) {
+  else if (rv && rv->rectf) {
     IMB_display_buffer_transform_apply((unsigned char *)rect,
                                        rv->rectf,
                                        rr->rectx,

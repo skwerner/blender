@@ -348,7 +348,7 @@ static void imapaint_pick_uv(Mesh *me_eval,
         const Material *ma;
         const TexPaintSlot *slot;
 
-        ma = give_current_material(ob_eval, mp->mat_nr + 1);
+        ma = BKE_object_material_get(ob_eval, mp->mat_nr + 1);
         slot = &ma->texpaintslot[ma->paint_active_slot];
 
         if (!(slot && slot->uvname &&
@@ -405,7 +405,7 @@ static Image *imapaint_face_image(Object *ob, Mesh *me, int face_index)
 {
   Image *ima;
   MPoly *mp = me->mpoly + face_index;
-  Material *ma = give_current_material(ob, mp->mat_nr + 1);
+  Material *ma = BKE_object_material_get(ob, mp->mat_nr + 1);
   ima = ma && ma->texpaintslot ? ma->texpaintslot[ma->paint_active_slot].ima : NULL;
 
   return ima;
@@ -545,7 +545,7 @@ void paint_sample_color(
             }
 
             ImBuf *ibuf = BKE_image_acquire_ibuf(image, &iuser, NULL);
-            if (ibuf && ibuf->rect) {
+            if (ibuf && (ibuf->rect || ibuf->rect_float)) {
               sample_success = true;
 
               u = u * ibuf->x;

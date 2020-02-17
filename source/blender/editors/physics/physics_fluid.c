@@ -215,8 +215,6 @@ static bool fluid_validatepaths(FluidJob *job, ReportList *reports)
                 temp_dir,
                 mds->cache_directory);
 
-    BLI_strncpy(temp_dir, mds->cache_directory, FILE_MAXDIR);
-
     /* Ensure whole path exists and is writable. */
     if (!BLI_dir_create_recursive(temp_dir)) {
       BKE_reportf(reports,
@@ -456,6 +454,9 @@ static void fluid_free_endjob(void *customdata)
   BKE_spacedata_draw_locks(false);
   WM_set_locked_interface(G_MAIN->wm.first, false);
 
+  /* Reflect the now empty cache in the viewport too. */
+  DEG_id_tag_update(&job->ob->id, ID_RECALC_GEOMETRY);
+
   /* Free was successful:
    *  Report for ended free job and how long it took */
   if (job->success) {
@@ -477,7 +478,6 @@ static void fluid_free_startjob(void *customdata, short *stop, short *do_update,
 {
   FluidJob *job = customdata;
   FluidDomainSettings *mds = job->mmd->domain;
-  Scene *scene = job->scene;
 
   job->stop = stop;
   job->do_update = do_update;
@@ -505,17 +505,18 @@ static void fluid_free_startjob(void *customdata, short *stop, short *do_update,
     cache_map |= FLUID_DOMAIN_OUTDATED_PARTICLES;
   }
   if (fluid_is_free_guiding(job) || fluid_is_free_all(job)) {
-    cache_map |= FLUID_DOMAIN_OUTDATED_GUIDE;
+    cache_map |= (FLUID_DOMAIN_OUTDATED_DATA | FLUID_DOMAIN_OUTDATED_NOISE |
+                  FLUID_DOMAIN_OUTDATED_MESH | FLUID_DOMAIN_OUTDATED_PARTICLES |
+                  FLUID_DOMAIN_OUTDATED_GUIDE);
   }
 #ifdef WITH_FLUID
   BKE_fluid_cache_free(mds, job->ob, cache_map);
+#else
+  UNUSED_VARS(mds);
 #endif
 
   *do_update = true;
   *stop = 0;
-
-  /* Reset scene frame to cache frame start */
-  CFRA = mds->cache_frame_start;
 
   /* Update scene so that viewport shows freed up scene */
   ED_update_for_newframe(job->bmain, job->depsgraph);
@@ -538,6 +539,8 @@ static int fluid_bake_exec(struct bContext *C, struct wmOperator *op)
   if (!fluid_validatepaths(job, op->reports)) {
     return OPERATOR_CANCELLED;
   }
+  WM_report_banners_cancel(job->bmain);
+
   fluid_bake_startjob(job, NULL, NULL, NULL);
   fluid_bake_endjob(job);
   fluid_bake_free(job);
@@ -564,6 +567,9 @@ static int fluid_bake_invoke(struct bContext *C,
   if (!fluid_validatepaths(job, op->reports)) {
     return OPERATOR_CANCELLED;
   }
+
+  /* Clear existing banners so that the upcoming progress bar from this job has more room. */
+  WM_report_banners_cancel(job->bmain);
 
   wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
                               CTX_wm_window(C),
@@ -638,6 +644,9 @@ static int fluid_free_exec(struct bContext *C, struct wmOperator *op)
   if (!fluid_validatepaths(job, op->reports)) {
     return OPERATOR_CANCELLED;
   }
+
+  /* Clear existing banners so that the upcoming progress bar from this job has more room. */
+  WM_report_banners_cancel(job->bmain);
 
   wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
                               CTX_wm_window(C),

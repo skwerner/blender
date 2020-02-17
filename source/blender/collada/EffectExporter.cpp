@@ -65,7 +65,7 @@ bool EffectsExporter::hasEffects(Scene *sce)
   FOREACH_SCENE_OBJECT_BEGIN (sce, ob) {
     int a;
     for (a = 0; a < ob->totcol; a++) {
-      Material *ma = give_current_material(ob, a + 1);
+      Material *ma = BKE_object_material_get(ob, a + 1);
 
       // no material, but check all of the slots
       if (!ma) {
@@ -112,26 +112,22 @@ void EffectsExporter::set_transparency(COLLADASW::EffectProfile &ep, Material *m
 
 void EffectsExporter::set_diffuse_color(COLLADASW::EffectProfile &ep, Material *ma)
 {
-  // get diffuse color
   COLLADASW::ColorOrTexture cot = bc_get_base_color(ma);
   ep.setDiffuse(cot, false, "diffuse");
 }
 
 void EffectsExporter::set_ambient(COLLADASW::EffectProfile &ep, Material *ma)
 {
-  // get diffuse color
   COLLADASW::ColorOrTexture cot = bc_get_ambient(ma);
   ep.setAmbient(cot, false, "ambient");
 }
 void EffectsExporter::set_specular(COLLADASW::EffectProfile &ep, Material *ma)
 {
-  // get diffuse color
   COLLADASW::ColorOrTexture cot = bc_get_specular(ma);
   ep.setSpecular(cot, false, "specular");
 }
 void EffectsExporter::set_reflective(COLLADASW::EffectProfile &ep, Material *ma)
 {
-  // get diffuse color
   COLLADASW::ColorOrTexture cot = bc_get_reflective(ma);
   ep.setReflective(cot, false, "reflective");
 }

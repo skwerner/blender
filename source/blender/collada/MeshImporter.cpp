@@ -19,10 +19,7 @@
  */
 
 #include <algorithm>
-
-#if !defined(WIN32)
-#  include <iostream>
-#endif
+#include <iostream>
 
 /* COLLADABU_ASSERT, may be able to remove later */
 #include "COLLADABUPlatform.h"
@@ -31,11 +28,13 @@
 #include "COLLADAFWMeshVertexData.h"
 #include "COLLADAFWPolygons.h"
 
+#include "MEM_guardedalloc.h"
+
 extern "C" {
 #include "BKE_customdata.h"
 #include "BKE_displist.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
@@ -44,8 +43,6 @@ extern "C" {
 #include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_edgehash.h"
-
-#include "MEM_guardedalloc.h"
 }
 
 #include "ArmatureImporter.h"
@@ -279,7 +276,7 @@ bool MeshImporter::is_nice_mesh(COLLADAFW::Mesh *mesh)
 
   const std::string &name = bc_get_dae_name(mesh);
 
-  for (unsigned i = 0; i < prim_arr.getCount(); i++) {
+  for (unsigned int i = 0; i < prim_arr.getCount(); i++) {
 
     COLLADAFW::MeshPrimitive *mp = prim_arr[i];
     COLLADAFW::MeshPrimitive::PrimitiveType type = mp->getPrimitiveType();
@@ -683,7 +680,7 @@ void MeshImporter::read_polys(COLLADAFW::Mesh *collada_mesh, Mesh *me)
     // XXX The proper function of TRIANGLE_FANS is not tested!!!
     // XXX In particular the handling of the normal_indices looks very wrong to me
     if (collada_meshtype == COLLADAFW::MeshPrimitive::TRIANGLE_FANS) {
-      unsigned grouped_vertex_count = mp->getGroupedVertexElementsCount();
+      unsigned int grouped_vertex_count = mp->getGroupedVertexElementsCount();
       for (unsigned int group_index = 0; group_index < grouped_vertex_count; group_index++) {
         unsigned int first_vertex = position_indices[0];  // Store first trifan vertex
         unsigned int first_normal = normal_indices[0];    // Store first trifan vertex normal
@@ -1014,12 +1011,12 @@ void MeshImporter::optimize_material_assignements()
        ++it) {
     Object *ob = (*it);
     Mesh *me = (Mesh *)ob->data;
-    if (me->id.us == 1) {
+    if (ID_REAL_USERS(&me->id) == 1) {
       bc_copy_materials_to_data(ob, me);
       bc_remove_materials_from_object(ob, me);
       bc_remove_mark(ob);
     }
-    else if (me->id.us > 1) {
+    else if (ID_REAL_USERS(&me->id) > 1) {
       bool can_move = true;
       std::vector<Object *> mesh_users = get_all_users_of(me);
       if (mesh_users.size() > 1) {
@@ -1076,7 +1073,7 @@ void MeshImporter::assign_material_to_geom(
   // Attention! This temporarily assigns material to object on purpose!
   // See note above.
   ob->actcol = 0;
-  assign_material(m_bmain, ob, ma, mat_index + 1, BKE_MAT_ASSIGN_OBJECT);
+  BKE_object_material_assign(m_bmain, ob, ma, mat_index + 1, BKE_MAT_ASSIGN_OBJECT);
 
   MaterialIdPrimitiveArrayMap &mat_prim_map = geom_uid_mat_mapping_map[*geom_uid];
   COLLADAFW::MaterialId mat_id = cmaterial.getMaterialId();

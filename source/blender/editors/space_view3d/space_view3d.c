@@ -367,6 +367,13 @@ static void view3d_main_region_init(wmWindowManager *wm, ARegion *ar)
   keymap = WM_keymap_ensure(wm->defaultconf, "Weight Paint Vertex Selection", 0, 0);
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 
+  /* Before 'Pose' so weight paint menus aren't overridden by pose menus. */
+  keymap = WM_keymap_ensure(wm->defaultconf, "Weight Paint", 0, 0);
+  WM_event_add_keymap_handler(&ar->handlers, keymap);
+
+  keymap = WM_keymap_ensure(wm->defaultconf, "Vertex Paint", 0, 0);
+  WM_event_add_keymap_handler(&ar->handlers, keymap);
+
   /* pose is not modal, operator poll checks for this */
   keymap = WM_keymap_ensure(wm->defaultconf, "Pose", 0, 0);
   WM_event_add_keymap_handler(&ar->handlers, keymap);
@@ -383,25 +390,13 @@ static void view3d_main_region_init(wmWindowManager *wm, ARegion *ar)
   keymap = WM_keymap_ensure(wm->defaultconf, "Image Paint", 0, 0);
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-  keymap = WM_keymap_ensure(wm->defaultconf, "Vertex Paint", 0, 0);
-  WM_event_add_keymap_handler(&ar->handlers, keymap);
-
-  keymap = WM_keymap_ensure(wm->defaultconf, "Weight Paint", 0, 0);
-  WM_event_add_keymap_handler(&ar->handlers, keymap);
-
   keymap = WM_keymap_ensure(wm->defaultconf, "Sculpt", 0, 0);
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "Mesh", 0, 0);
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 
-  keymap = WM_keymap_ensure(wm->defaultconf, "Curve", 0, 0);
-  WM_event_add_keymap_handler(&ar->handlers, keymap);
-
   keymap = WM_keymap_ensure(wm->defaultconf, "Armature", 0, 0);
-  WM_event_add_keymap_handler(&ar->handlers, keymap);
-
-  keymap = WM_keymap_ensure(wm->defaultconf, "Pose", 0, 0);
   WM_event_add_keymap_handler(&ar->handlers, keymap);
 
   keymap = WM_keymap_ensure(wm->defaultconf, "Metaball", 0, 0);
@@ -829,7 +824,7 @@ static void view3d_main_region_listener(
     case NC_BRUSH:
       switch (wmn->action) {
         case NA_EDITED:
-          ED_region_tag_redraw_overlay(ar);
+          ED_region_tag_redraw_cursor(ar);
           break;
         case NA_SELECTED:
           /* used on brush changes - needed because 3d cursor
@@ -1027,19 +1022,9 @@ static void view3d_main_region_message_subscribe(const struct bContext *C,
   }
 }
 
-/* concept is to retrieve cursor type context-less */
 static void view3d_main_region_cursor(wmWindow *win, ScrArea *sa, ARegion *ar)
 {
-  if (WM_cursor_set_from_tool(win, sa, ar)) {
-    return;
-  }
-
-  ViewLayer *view_layer = WM_window_get_active_view_layer(win);
-  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
-  if (obedit) {
-    WM_cursor_set(win, WM_CURSOR_EDIT);
-  }
-  else {
+  if (!WM_cursor_set_from_tool(win, sa, ar)) {
     WM_cursor_set(win, WM_CURSOR_DEFAULT);
   }
 }

@@ -34,7 +34,7 @@ extern "C" {
 
 #include "BKE_customdata.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 }
@@ -352,7 +352,7 @@ void GeometryExporter::create_mesh_primitive_list(short material_index,
     return;
   }
 
-  Material *ma = ob->totcol ? give_current_material(ob, material_index + 1) : NULL;
+  Material *ma = ob->totcol ? BKE_object_material_get(ob, material_index + 1) : NULL;
   COLLADASW::PrimitivesBase *primitive_list = create_primitive_list(is_triangulated, mSW);
 
   /* sets count attribute in <polylist> */

@@ -28,7 +28,7 @@
 
 #include "BKE_global.h"
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"
 #include "BKE_object.h"
@@ -247,8 +247,12 @@ WorkSpaceLayout *BKE_workspace_layout_add(Main *bmain,
 
 void BKE_workspace_layout_remove(Main *bmain, WorkSpace *workspace, WorkSpaceLayout *layout)
 {
-  id_us_min(&layout->screen->id);
-  BKE_id_free(bmain, layout->screen);
+  /* Screen should usually be set, but we call this from file reading to get rid of invalid
+   * layouts. */
+  if (layout->screen) {
+    id_us_min(&layout->screen->id);
+    BKE_id_free(bmain, layout->screen);
+  }
   BLI_freelinkN(&workspace->layouts, layout);
 }
 

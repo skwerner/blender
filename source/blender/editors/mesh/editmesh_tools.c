@@ -48,7 +48,7 @@
 #include "BKE_deform.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -96,13 +96,12 @@ static int edbm_subdivide_exec(bContext *C, wmOperator *op)
   const float smooth = RNA_float_get(op->ptr, "smoothness");
   const float fractal = RNA_float_get(op->ptr, "fractal") / 2.5f;
   const float along_normal = RNA_float_get(op->ptr, "fractal_along_normal");
+  const bool use_quad_tri = !RNA_boolean_get(op->ptr, "ngon");
 
-  if (RNA_boolean_get(op->ptr, "ngon") &&
-      RNA_enum_get(op->ptr, "quadcorner") == SUBD_CORNER_STRAIGHT_CUT) {
+  if (use_quad_tri && RNA_enum_get(op->ptr, "quadcorner") == SUBD_CORNER_STRAIGHT_CUT) {
     RNA_enum_set(op->ptr, "quadcorner", SUBD_CORNER_INNERVERT);
   }
   const int quad_corner_type = RNA_enum_get(op->ptr, "quadcorner");
-  const bool use_quad_tri = !RNA_boolean_get(op->ptr, "ngon");
   const int seed = RNA_int_get(op->ptr, "seed");
 
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -1288,7 +1287,7 @@ static int edbm_vert_connect_exec(bContext *C, wmOperator *op)
     }
   }
   MEM_freeN(objects);
-  return failed_objects_len == objects_len ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
+  return failed_objects_len == objects_len ? OPERATOR_CANCELLED : OPERATOR_FINISHED;
 }
 
 void MESH_OT_vert_connect(wmOperatorType *ot)
@@ -3936,7 +3935,10 @@ static Base *mesh_separate_tagged(
   /* DAG_relations_tag_update(bmain); */
 
   /* new in 2.5 */
-  assign_matarar(bmain, base_new->object, give_matarar(obedit), *give_totcolp(obedit));
+  BKE_object_material_array_assign(bmain,
+                                   base_new->object,
+                                   BKE_object_material_array(obedit),
+                                   *BKE_object_material_num(obedit));
 
   ED_object_base_select(base_new, BA_SELECT);
 
@@ -4003,7 +4005,10 @@ static Base *mesh_separate_arrays(Main *bmain,
   /* DAG_relations_tag_update(bmain); */
 
   /* new in 2.5 */
-  assign_matarar(bmain, base_new->object, give_matarar(obedit), *give_totcolp(obedit));
+  BKE_object_material_array_assign(bmain,
+                                   base_new->object,
+                                   BKE_object_material_array(obedit),
+                                   *BKE_object_material_num(obedit));
 
   ED_object_base_select(base_new, BA_SELECT);
 
@@ -4047,8 +4052,8 @@ static void mesh_separate_material_assign_mat_nr(Main *bmain, Object *ob, const 
   Material ***matarar;
   const short *totcolp;
 
-  totcolp = give_totcolp_id(obdata);
-  matarar = give_matarar_id(obdata);
+  totcolp = BKE_id_material_num(obdata);
+  matarar = BKE_id_material_array(obdata);
 
   if ((totcolp && matarar) == 0) {
     BLI_assert(0);

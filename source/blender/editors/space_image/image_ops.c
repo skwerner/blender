@@ -58,7 +58,7 @@
 #include "BKE_image.h"
 #include "BKE_image_save.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_packedFile.h"
 #include "BKE_paint.h"
@@ -305,7 +305,7 @@ static bool image_sample_poll(bContext *C)
 typedef struct ViewPanData {
   float x, y;
   float xof, yof;
-  int event_type;
+  int launch_event;
   bool own_cursor;
 } ViewPanData;
 
@@ -327,7 +327,7 @@ static void image_view_pan_init(bContext *C, wmOperator *op, const wmEvent *even
   vpd->y = event->y;
   vpd->xof = sima->xof;
   vpd->yof = sima->yof;
-  vpd->event_type = event->type;
+  vpd->launch_event = WM_userdef_event_type_from_keymap_type(event->type);
 
   WM_event_add_modal_handler(C, op);
 }
@@ -398,7 +398,7 @@ static int image_view_pan_modal(bContext *C, wmOperator *op, const wmEvent *even
       image_view_pan_exec(C, op);
       break;
     default:
-      if (event->type == vpd->event_type && event->val == KM_RELEASE) {
+      if (event->type == vpd->launch_event && event->val == KM_RELEASE) {
         image_view_pan_exit(C, op, false);
         return OPERATOR_FINISHED;
       }
@@ -452,7 +452,7 @@ void IMAGE_OT_view_pan(wmOperatorType *ot)
 typedef struct ViewZoomData {
   float origx, origy;
   float zoom;
-  int event_type;
+  int launch_event;
   float location[2];
 
   /* needed for continuous zoom */
@@ -483,7 +483,7 @@ static void image_view_zoom_init(bContext *C, wmOperator *op, const wmEvent *eve
   vpd->origx = event->x;
   vpd->origy = event->y;
   vpd->zoom = sima->zoom;
-  vpd->event_type = event->type;
+  vpd->launch_event = WM_userdef_event_type_from_keymap_type(event->type);
 
   UI_view2d_region_to_view(
       &ar->v2d, event->mval[0], event->mval[1], &vpd->location[0], &vpd->location[1]);
@@ -633,7 +633,7 @@ static int image_view_zoom_modal(bContext *C, wmOperator *op, const wmEvent *eve
   else if (event->type == MOUSEMOVE) {
     event_code = VIEW_APPLY;
   }
-  else if (event->type == vpd->event_type && event->val == KM_RELEASE) {
+  else if (event->type == vpd->launch_event && event->val == KM_RELEASE) {
     event_code = VIEW_CONFIRM;
   }
 
@@ -781,6 +781,29 @@ static int image_view_all_exec(bContext *C, wmOperator *op)
   w = width * aspx;
   h = height * aspy;
 
+  float xof = 0.0f, yof = 0.0f;
+  if ((sima->image == NULL) || (sima->image->source == IMA_SRC_TILED)) {
+    /* Extend the shown area to cover all UDIM tiles. */
+    int x_tiles, y_tiles;
+    if (sima->image == NULL) {
+      x_tiles = sima->tile_grid_shape[0];
+      y_tiles = sima->tile_grid_shape[1];
+    }
+    else {
+      x_tiles = y_tiles = 1;
+      LISTBASE_FOREACH (ImageTile *, tile, &sima->image->tiles) {
+        int tile_x = (tile->tile_number - 1001) % 10;
+        int tile_y = (tile->tile_number - 1001) / 10;
+        x_tiles = max_ii(x_tiles, tile_x + 1);
+        y_tiles = max_ii(y_tiles, tile_y + 1);
+      }
+    }
+    xof = 0.5f * (x_tiles - 1.0f) * w;
+    yof = 0.5f * (y_tiles - 1.0f) * h;
+    w *= x_tiles;
+    h *= y_tiles;
+  }
+
   /* check if the image will fit in the image with (zoom == 1) */
   width = BLI_rcti_size_x(&ar->winrct) + 1;
   height = BLI_rcti_size_y(&ar->winrct) + 1;
@@ -806,7 +829,8 @@ static int image_view_all_exec(bContext *C, wmOperator *op)
     }
   }
 
-  sima->xof = sima->yof = 0.0f;
+  sima->xof = xof;
+  sima->yof = yof;
 
   ED_region_tag_redraw(ar);
 
@@ -2486,7 +2510,7 @@ static bool image_should_be_saved_when_modified(Image *ima)
 static bool image_should_be_saved(Image *ima, bool *is_format_writable)
 {
   if (BKE_image_is_dirty_writable(ima, is_format_writable) &&
-      (ima->source == IMA_SRC_FILE || ima->source == IMA_SRC_GENERATED)) {
+      ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_GENERATED, IMA_SRC_TILED)) {
     return image_should_be_saved_when_modified(ima);
   }
   else {
@@ -3124,7 +3148,8 @@ static bool image_pack_test(bContext *C, wmOperator *op)
   }
 
   if (ELEM(ima->source, IMA_SRC_SEQUENCE, IMA_SRC_MOVIE, IMA_SRC_TILED)) {
-    BKE_report(op->reports, RPT_ERROR, "Packing movies or image sequences not supported");
+    BKE_report(
+        op->reports, RPT_ERROR, "Packing movies, image sequences or tiled images not supported");
     return 0;
   }
 
@@ -3192,7 +3217,8 @@ static int image_unpack_exec(bContext *C, wmOperator *op)
   }
 
   if (ELEM(ima->source, IMA_SRC_SEQUENCE, IMA_SRC_MOVIE, IMA_SRC_TILED)) {
-    BKE_report(op->reports, RPT_ERROR, "Unpacking movies or image sequences not supported");
+    BKE_report(
+        op->reports, RPT_ERROR, "Unpacking movies, image sequences or tiled images not supported");
     return OPERATOR_CANCELLED;
   }
 
@@ -3225,7 +3251,8 @@ static int image_unpack_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
   }
 
   if (ELEM(ima->source, IMA_SRC_SEQUENCE, IMA_SRC_MOVIE, IMA_SRC_TILED)) {
-    BKE_report(op->reports, RPT_ERROR, "Unpacking movies or image sequences not supported");
+    BKE_report(
+        op->reports, RPT_ERROR, "Unpacking movies, image sequences or tiled images not supported");
     return OPERATOR_CANCELLED;
   }
 
@@ -3356,6 +3383,9 @@ static void image_sample_draw(const bContext *C, ARegion *ar, void *arg_info)
 /* Returns color in linear space, matching ED_space_node_color_sample(). */
 bool ED_space_image_color_sample(SpaceImage *sima, ARegion *ar, int mval[2], float r_col[3])
 {
+  if (sima->image == NULL) {
+    return false;
+  }
   float uv[2];
   UI_view2d_region_to_view(&ar->v2d, mval[0], mval[1], &uv[0], &uv[1]);
   int tile = BKE_image_get_tile_from_pos(sima->image, uv, uv, NULL);
@@ -4343,7 +4373,13 @@ static int tile_add_exec(bContext *C, wmOperator *op)
   Image *ima = CTX_data_edit_image(C);
 
   int start_tile = RNA_int_get(op->ptr, "number");
-  int end_tile = min_ii(start_tile + RNA_int_get(op->ptr, "count"), IMA_UDIM_MAX);
+  int end_tile = start_tile + RNA_int_get(op->ptr, "count");
+
+  if (start_tile < 1001 || end_tile > IMA_UDIM_MAX) {
+    BKE_report(op->reports, RPT_ERROR, "Invalid UDIM index range was specified");
+    return OPERATOR_CANCELLED;
+  }
+
   bool fill_tile = RNA_boolean_get(op->ptr, "fill");
   char *label = RNA_string_get_alloc(op->ptr, "label", NULL, 0);
 
@@ -4439,8 +4475,15 @@ void IMAGE_OT_tile_add(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-  RNA_def_int(
-      ot->srna, "number", 1002, 1001, INT_MAX, "Number", "UDIM number of the tile", 1001, 1099);
+  RNA_def_int(ot->srna,
+              "number",
+              1002,
+              1001,
+              IMA_UDIM_MAX,
+              "Number",
+              "UDIM number of the tile",
+              1001,
+              1099);
   RNA_def_int(ot->srna, "count", 1, 1, INT_MAX, "Count", "How many tiles to add", 1, 1000);
   RNA_def_string(ot->srna, "label", NULL, 0, "Label", "Optional tile label");
   RNA_def_boolean(ot->srna, "fill", true, "Fill", "Fill new tile with a generated image");

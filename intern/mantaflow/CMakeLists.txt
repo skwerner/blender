@@ -27,7 +27,13 @@ add_definitions(-DWITH_FLUID=1)
 
 if(WITH_OPENVDB)
   add_definitions(-DOPENVDB=1)
+  add_definitions(-DOPENVDB_STATICLIB)
 endif()
+
+if(WIN32)
+  add_definitions(-D_USE_MATH_DEFINES)
+endif()
+
 
 set(INC
   extern
@@ -47,6 +53,35 @@ set(INC_SYS
   ${ZLIB_INCLUDE_DIRS}
 )
 
+if(WITH_TBB)
+  list(APPEND INC_SYS
+    ${TBB_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${TBB_LIBRARIES}
+  )
+endif()
+
+if(WITH_OPENVDB)
+  list(APPEND INC_SYS
+    ${BOOST_INCLUDE_DIR}
+    ${OPENEXR_INCLUDE_DIRS}
+    ${OPENVDB_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${OPENVDB_LIBRARIES}
+    ${OPENEXR_LIBRARIES}
+    ${ZLIB_LIBRARIES}
+    ${BOOST_LIBRARIES}
+  )
+  if(WITH_OPENVDB_BLOSC)
+    list(APPEND LIB
+      ${BLOSC_LIBRARIES}
+      ${ZLIB_LIBRARIES}
+    )
+  endif()
+endif()
+
 set(SRC
   intern/manta_python_API.cpp
   intern/manta_fluid_API.cpp
@@ -62,6 +97,10 @@ set(SRC
 
 set(LIB
   extern_mantaflow
+
+  ${PYTHON_LINKFLAGS}
+  ${PYTHON_LIBRARIES}
+  ${ZLIB_LIBRARIES}
 )
 
 blender_add_lib(bf_intern_mantaflow "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

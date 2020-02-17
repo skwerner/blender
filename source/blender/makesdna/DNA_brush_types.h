@@ -320,6 +320,7 @@ typedef struct Brush {
   float crease_pinch_factor;
 
   float normal_radius_factor;
+  float area_radius_factor;
 
   float plane_trim;
   /** Affectable height of brush (layer height for layer tool, i.e.). */
@@ -329,6 +330,10 @@ typedef struct Brush {
 
   int curve_preset;
   int automasking_flags;
+
+  /* Factor that controls the shape of the brush tip by rounding the corners of a square. */
+  /* 0.0 value produces a square, 1.0 produces a circle. */
+  float tip_roundness;
 
   int elastic_deform_type;
   float elastic_deform_volume_preservation;
@@ -458,6 +463,7 @@ typedef enum eBrushSamplingFlags {
 typedef enum eBrushFlags2 {
   BRUSH_MULTIPLANE_SCRAPE_DYNAMIC = (1 << 0),
   BRUSH_MULTIPLANE_SCRAPE_PLANES_PREVIEW = (1 << 1),
+  BRUSH_POSE_IK_ANCHORED = (1 << 2),
 } eBrushFlags2;
 
 typedef enum {
@@ -504,7 +510,8 @@ typedef enum eBrushSculptTool {
   SCULPT_TOOL_ELASTIC_DEFORM = 21,
   SCULPT_TOOL_POSE = 22,
   SCULPT_TOOL_MULTIPLANE_SCRAPE = 23,
-  SCULPT_TOOL_TOPOLOGY = 24,
+  SCULPT_TOOL_SLIDE_RELAX = 24,
+  SCULPT_TOOL_CLAY_THUMB = 25,
 } eBrushSculptTool;
 
 /* Brush.uv_sculpt_tool */
@@ -519,13 +526,14 @@ typedef enum eBrushUVSculptTool {
   ELEM(t, \
        SCULPT_TOOL_DRAW, \
        SCULPT_TOOL_DRAW_SHARP, \
-       SCULPT_TOOL_TOPOLOGY, \
+       SCULPT_TOOL_SLIDE_RELAX, \
        SCULPT_TOOL_CREASE, \
        SCULPT_TOOL_BLOB, \
        SCULPT_TOOL_LAYER, \
        SCULPT_TOOL_INFLATE, \
        SCULPT_TOOL_CLAY, \
        SCULPT_TOOL_CLAY_STRIPS, \
+       SCULPT_TOOL_CLAY_THUMB, \
        SCULPT_TOOL_ROTATE, \
        SCULPT_TOOL_SCRAPE, \
        SCULPT_TOOL_FLATTEN)
@@ -542,7 +550,7 @@ typedef enum eBrushUVSculptTool {
         SCULPT_TOOL_THUMB, \
         SCULPT_TOOL_LAYER, \
         SCULPT_TOOL_DRAW_SHARP, \
-        SCULPT_TOOL_TOPOLOGY, \
+        SCULPT_TOOL_SLIDE_RELAX, \
         SCULPT_TOOL_ELASTIC_DEFORM, \
         SCULPT_TOOL_POSE, \
 \
@@ -557,7 +565,7 @@ typedef enum eBrushUVSculptTool {
         SCULPT_TOOL_ROTATE, \
         SCULPT_TOOL_THUMB, \
         SCULPT_TOOL_DRAW_SHARP, \
-        SCULPT_TOOL_TOPOLOGY, \
+        SCULPT_TOOL_SLIDE_RELAX, \
         SCULPT_TOOL_MASK) == 0)
 
 /* ImagePaintSettings.tool */

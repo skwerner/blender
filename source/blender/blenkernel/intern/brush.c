@@ -33,9 +33,9 @@
 #include "BKE_brush.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_lib_remap.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_paint.h"
@@ -82,6 +82,7 @@ static void brush_defaults(Brush *brush)
   FROM_DEFAULT(topology_rake_factor);
   FROM_DEFAULT(crease_pinch_factor);
   FROM_DEFAULT(normal_radius_factor);
+  FROM_DEFAULT(area_radius_factor);
   FROM_DEFAULT(sculpt_plane);
   FROM_DEFAULT(plane_offset);
   FROM_DEFAULT(clone.alpha);
@@ -290,7 +291,7 @@ void BKE_brush_gpencil_presets(Main *bmain, ToolSettings *ts)
    * drawn. */
   Material *ma = BLI_findstring(&bmain->materials, "Black Dots", offsetof(ID, name) + 2);
   if (ma == NULL) {
-    ma = BKE_material_add_gpencil(bmain, "Black Dots");
+    ma = BKE_gpencil_material_add(bmain, "Black Dots");
   }
   brush->gpencil_settings->material = ma;
   /* Pin the matterial to the brush. */
@@ -704,7 +705,7 @@ struct Brush *BKE_brush_first_search(struct Main *bmain, const eObjectMode ob_mo
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_brush_copy_data(Main *UNUSED(bmain),
                          Brush *brush_dst,
@@ -928,7 +929,7 @@ void BKE_brush_sculpt_reset(Brush *br)
       br->curve_preset = BRUSH_CURVE_POW4;
       br->spacing = 5;
       break;
-    case SCULPT_TOOL_TOPOLOGY:
+    case SCULPT_TOOL_SLIDE_RELAX:
       br->spacing = 10;
       br->alpha = 1.0f;
       break;
@@ -938,13 +939,21 @@ void BKE_brush_sculpt_reset(Brush *br)
       br->autosmooth_factor = 0.25f;
       br->normal_radius_factor = 0.75f;
       break;
+    case SCULPT_TOOL_CLAY_THUMB:
+      br->alpha = 0.5f;
+      br->normal_radius_factor = 1.0f;
+      br->spacing = 6;
+      br->flag |= BRUSH_SIZE_PRESSURE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      break;
     case SCULPT_TOOL_CLAY_STRIPS:
       br->flag |= BRUSH_ACCUMULATE | BRUSH_SIZE_PRESSURE;
       br->flag &= ~BRUSH_SPACE_ATTEN;
       br->alpha = 0.6f;
+      br->spacing = 5;
       br->normal_radius_factor = 1.55f;
-      br->curve_preset = BRUSH_CURVE_SPHERE;
-      br->spacing = 6;
+      br->tip_roundness = 0.18f;
+      br->curve_preset = BRUSH_CURVE_SMOOTHER;
       break;
     case SCULPT_TOOL_MULTIPLANE_SCRAPE:
       br->flag2 |= BRUSH_MULTIPLANE_SCRAPE_DYNAMIC | BRUSH_MULTIPLANE_SCRAPE_PLANES_PREVIEW;
@@ -993,6 +1002,7 @@ void BKE_brush_sculpt_reset(Brush *br)
     case SCULPT_TOOL_POSE:
       br->pose_smooth_iterations = 4;
       br->pose_ik_segments = 1;
+      br->flag2 |= BRUSH_POSE_IK_ANCHORED;
       br->flag &= ~BRUSH_ALPHA_PRESSURE;
       br->flag &= ~BRUSH_SPACE;
       br->flag &= ~BRUSH_SPACE_ATTEN;
@@ -1019,6 +1029,7 @@ void BKE_brush_sculpt_reset(Brush *br)
     case SCULPT_TOOL_DRAW_SHARP:
     case SCULPT_TOOL_CLAY:
     case SCULPT_TOOL_CLAY_STRIPS:
+    case SCULPT_TOOL_CLAY_THUMB:
     case SCULPT_TOOL_LAYER:
     case SCULPT_TOOL_INFLATE:
     case SCULPT_TOOL_BLOB:
@@ -1428,6 +1439,7 @@ bool BKE_brush_sculpt_has_secondary_color(const Brush *brush)
               SCULPT_TOOL_INFLATE,
               SCULPT_TOOL_CLAY,
               SCULPT_TOOL_CLAY_STRIPS,
+              SCULPT_TOOL_CLAY_THUMB,
               SCULPT_TOOL_PINCH,
               SCULPT_TOOL_CREASE,
               SCULPT_TOOL_LAYER,

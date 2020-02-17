@@ -781,11 +781,8 @@ void GPU_draw_primitive(GPUPrimType prim_type, int v_count)
 #if 0
 #  define USE_MULTI_DRAW_INDIRECT 0
 #else
-/* TODO: partial workaround for NVIDIA driver bug on recent GTX/RTX cards,
- * that breaks instancing when using indirect draw-call (see T70011). */
 #  define USE_MULTI_DRAW_INDIRECT \
-    (GL_ARB_multi_draw_indirect && GPU_arb_base_instance_is_supported() && \
-     !GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_ANY, GPU_DRIVER_OFFICIAL))
+    (GL_ARB_multi_draw_indirect && GPU_arb_base_instance_is_supported())
 #endif
 
 typedef struct GPUDrawCommand {
@@ -980,6 +977,17 @@ void GPU_batch_program_set_builtin_with_config(GPUBatch *batch,
 void GPU_batch_program_set_builtin(GPUBatch *batch, eGPUBuiltinShader shader_id)
 {
   GPU_batch_program_set_builtin_with_config(batch, shader_id, GPU_SHADER_CFG_DEFAULT);
+}
+
+/* Bind program bound to IMM to the batch.
+ * XXX Use this with much care. Drawing with the GPUBatch API is not compatible with IMM.
+ * DO NOT DRAW WITH THE BATCH BEFORE CALLING immUnbindProgram. */
+void GPU_batch_program_set_imm_shader(GPUBatch *batch)
+{
+  GLuint program;
+  GPUShaderInterface *interface;
+  immGetProgram(&program, &interface);
+  GPU_batch_program_set(batch, program, interface);
 }
 
 /** \} */

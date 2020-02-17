@@ -53,11 +53,8 @@ void OVERLAY_image_cache_init(OVERLAY_Data *vedata)
   OVERLAY_PrivateData *pd = vedata->stl->pd;
   DRWState state;
 
-  state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_GREATER | DRW_STATE_BLEND_ALPHA_UNDER_PREMUL;
-  DRW_PASS_CREATE(psl->image_background_under_ps, state);
-
-  state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_LESS_EQUAL | DRW_STATE_BLEND_ALPHA;
-  DRW_PASS_CREATE(psl->image_background_over_ps, state);
+  state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_GREATER | DRW_STATE_BLEND_ALPHA_PREMUL;
+  DRW_PASS_CREATE(psl->image_background_ps, state);
 
   state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS;
   DRW_PASS_CREATE(psl->image_empties_ps, state | pd->clipping_state);
@@ -134,6 +131,7 @@ static struct GPUTexture *image_camera_background_texture_get(CameraBGImage *bgp
                                                               float *r_aspect,
                                                               bool *r_use_alpha_premult)
 {
+  void *lock;
   Image *image = bgpic->ima;
   ImageUser *iuser = &bgpic->iuser;
   MovieClip *clip = NULL;
@@ -160,12 +158,19 @@ static struct GPUTexture *image_camera_background_texture_get(CameraBGImage *bgp
         camera_background_images_stereo_setup(scene, draw_ctx->v3d, image, iuser);
       }
 
-      ImBuf *ibuf = BKE_image_acquire_ibuf(image, iuser, NULL);
+      iuser->scene = draw_ctx->scene;
+      ImBuf *ibuf = BKE_image_acquire_ibuf(image, iuser, &lock);
       if (ibuf == NULL) {
+        BKE_image_release_ibuf(image, ibuf, lock);
+        iuser->scene = NULL;
         return NULL;
       }
+      width = ibuf->x;
+      height = ibuf->y;
+      tex = GPU_texture_from_blender(image, iuser, ibuf, GL_TEXTURE_2D);
+      BKE_image_release_ibuf(image, ibuf, lock);
+      iuser->scene = NULL;
 
-      tex = GPU_texture_from_blender(image, iuser, GL_TEXTURE_2D);
       if (tex == NULL) {
         return NULL;
       }
@@ -173,10 +178,6 @@ static struct GPUTexture *image_camera_background_texture_get(CameraBGImage *bgp
       aspect_x = bgpic->ima->aspx;
       aspect_y = bgpic->ima->aspy;
 
-      width = ibuf->x;
-      height = ibuf->y;
-
-      BKE_image_release_ibuf(image, ibuf, NULL);
       break;
 
     case CAM_BGIMG_SOURCE_MOVIE:
@@ -326,29 +327,18 @@ void OVERLAY_image_camera_cache_populate(OVERLAY_Data *vedata, Object *ob)
       mul_m4_m4m4(mat, norm_obmat, mat);
       const bool is_foreground = (bgpic->flag & CAM_BGIMG_FLAG_FOREGROUND) != 0;
 
-      float color_alpha[4] = {1.0f, 1.0f, 1.0f, bgpic->alpha};
       float color_premult_alpha[4] = {bgpic->alpha, bgpic->alpha, bgpic->alpha, bgpic->alpha};
 
-      /* When drawing background we do 2 passes.
-       * - One alpha over, which works where background is visible.
-       * - One alpha under, works under partially visible objects. (only in cycles)
-       * This approach is not ideal and should be revisited.
-       **/
-      for (int i = 0; i < (is_foreground ? 1 : 2); i++) {
-        DRWPass *pass = is_foreground ? psl->image_foreground_ps :
-                                        ((i == 0) ? psl->image_background_under_ps :
-                                                    psl->image_background_over_ps);
-        GPUShader *sh = OVERLAY_shader_image();
-        DRWShadingGroup *grp = DRW_shgroup_create(sh, pass);
-        float *color = (is_foreground || i == 1) ? color_alpha : color_premult_alpha;
-        DRW_shgroup_uniform_texture(grp, "imgTexture", tex);
-        DRW_shgroup_uniform_bool_copy(grp, "imgPremultiplied", use_alpha_premult);
-        DRW_shgroup_uniform_bool_copy(grp, "imgAlphaBlend", true);
-        DRW_shgroup_uniform_bool_copy(grp, "imgLinear", !DRW_state_do_color_management());
-        DRW_shgroup_uniform_bool_copy(grp, "depthSet", true);
-        DRW_shgroup_uniform_vec4_copy(grp, "color", color);
-        DRW_shgroup_call_obmat(grp, DRW_cache_quad_get(), mat);
-      }
+      DRWPass *pass = is_foreground ? psl->image_foreground_ps : psl->image_background_ps;
+
+      GPUShader *sh = OVERLAY_shader_image();
+      DRWShadingGroup *grp = DRW_shgroup_create(sh, pass);
+      DRW_shgroup_uniform_texture(grp, "imgTexture", tex);
+      DRW_shgroup_uniform_bool_copy(grp, "imgPremultiplied", use_alpha_premult);
+      DRW_shgroup_uniform_bool_copy(grp, "imgAlphaBlend", true);
+      DRW_shgroup_uniform_bool_copy(grp, "depthSet", true);
+      DRW_shgroup_uniform_vec4_copy(grp, "color", color_premult_alpha);
+      DRW_shgroup_call_obmat(grp, DRW_cache_quad_get(), mat);
     }
   }
 }
@@ -376,7 +366,7 @@ void OVERLAY_image_empty_cache_populate(OVERLAY_Data *vedata, Object *ob)
      * see: T59347 */
     int size[2] = {0};
     if (ima != NULL) {
-      tex = GPU_texture_from_blender(ima, ob->iuser, GL_TEXTURE_2D);
+      tex = GPU_texture_from_blender(ima, ob->iuser, NULL, GL_TEXTURE_2D);
       if (tex) {
         size[0] = GPU_texture_orig_width(tex);
         size[1] = GPU_texture_orig_height(tex);
@@ -423,7 +413,6 @@ void OVERLAY_image_empty_cache_populate(OVERLAY_Data *vedata, Object *ob)
     DRW_shgroup_uniform_texture(grp, "imgTexture", tex);
     DRW_shgroup_uniform_bool_copy(grp, "imgPremultiplied", use_alpha_premult);
     DRW_shgroup_uniform_bool_copy(grp, "imgAlphaBlend", use_alpha_blend);
-    DRW_shgroup_uniform_bool_copy(grp, "imgLinear", false);
     DRW_shgroup_uniform_bool_copy(grp, "depthSet", depth_mode != OB_EMPTY_IMAGE_DEPTH_DEFAULT);
     DRW_shgroup_uniform_vec4_copy(grp, "color", ob->color);
     DRW_shgroup_call_obmat(grp, DRW_cache_quad_get(), mat);
@@ -434,30 +423,25 @@ void OVERLAY_image_cache_finish(OVERLAY_Data *vedata)
 {
   OVERLAY_PassList *psl = vedata->psl;
 
-  DRW_pass_sort_shgroup_reverse(psl->image_background_under_ps);
   DRW_pass_sort_shgroup_z(psl->image_empties_blend_ps);
   DRW_pass_sort_shgroup_z(psl->image_empties_front_ps);
   DRW_pass_sort_shgroup_z(psl->image_empties_back_ps);
+}
+
+void OVERLAY_image_background_draw(OVERLAY_Data *vedata)
+{
+  OVERLAY_PassList *psl = vedata->psl;
+
+  DRW_draw_pass(psl->image_background_ps);
+  DRW_draw_pass(psl->image_empties_back_ps);
 }
 
 void OVERLAY_image_draw(OVERLAY_Data *vedata)
 {
   OVERLAY_PassList *psl = vedata->psl;
   OVERLAY_PrivateData *pd = vedata->stl->pd;
-  OVERLAY_FramebufferList *fbl = vedata->fbl;
-
-  const DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
 
   DRW_view_set_active(pd->view_reference_images);
-  DRW_draw_pass(psl->image_background_over_ps);
-
-  if (DRW_state_is_fbo() && !DRW_pass_is_empty(psl->image_background_under_ps)) {
-    GPU_framebuffer_bind(dfbl->default_fb);
-    DRW_draw_pass(psl->image_background_under_ps);
-    GPU_framebuffer_bind(fbl->overlay_default_fb);
-  }
-
-  DRW_draw_pass(psl->image_empties_back_ps);
 
   DRW_draw_pass(psl->image_empties_ps);
   DRW_draw_pass(psl->image_empties_blend_ps);

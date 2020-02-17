@@ -1567,7 +1567,7 @@ static int gizmo_modal(bContext *C,
     WM_gizmo_set_matrix_location(widget, rv3d->twmat[3]);
   }
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw_editor_overlays(ar);
 
   return OPERATOR_RUNNING_MODAL;
 }
@@ -1862,7 +1862,7 @@ static void WIDGETGROUP_gizmo_draw_prepare(const bContext *C, wmGizmoGroup *gzgr
 
   /* when looking through a selected camera, the gizmo can be at the
    * exact same position as the view, skip so we don't break selection */
-  if (ggd->all_hidden || fabsf(ED_view3d_pixel_size(rv3d, rv3d->twmat[3])) < 1e-6f) {
+  if (ggd->all_hidden || fabsf(ED_view3d_pixel_size(rv3d, rv3d->twmat[3])) < 5e-7f) {
     MAN_ITER_AXES_BEGIN (axis, axis_idx) {
       WM_gizmo_set_flag(axis, WM_GIZMO_HIDDEN, true);
     }

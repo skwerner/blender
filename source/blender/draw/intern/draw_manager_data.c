@@ -46,6 +46,7 @@
 #endif
 
 #include "GPU_buffers.h"
+#include "GPU_material.h"
 
 #include "intern/gpu_codegen.h"
 
@@ -1205,38 +1206,39 @@ static DRWShadingGroup *drw_shgroup_material_create_ex(GPUPass *gpupass, DRWPass
 static DRWShadingGroup *drw_shgroup_material_inputs(DRWShadingGroup *grp,
                                                     struct GPUMaterial *material)
 {
-  ListBase *inputs = GPU_material_get_inputs(material);
+  ListBase textures = GPU_material_textures(material);
 
-  /* Converting dynamic GPUInput to DRWUniform */
-  for (GPUInput *input = inputs->first; input; input = input->next) {
-    /* Textures */
-    if (input->source == GPU_SOURCE_TEX) {
-      GPUTexture *tex = NULL;
+  /* Bind all textures needed by the material. */
+  for (GPUMaterialTexture *tex = textures.first; tex; tex = tex->next) {
+    GPUTexture *gputex;
 
-      if (input->ima) {
-        /* If there's no specified iuser but we need a different tile, create a temporary one. */
-        ImageUser local_iuser;
-        BKE_imageuser_default(&local_iuser);
-        local_iuser.tile = input->image_tile;
+    if (tex->ima) {
+      /* Image */
+      GPUTexture **gputex_ref = BLI_memblock_alloc(DST.vmempool->images);
 
-        ImageUser *iuser = input->iuser ? input->iuser : &local_iuser;
-        iuser->tile = input->image_tile;
-
-        GPUTexture **tex_ref = BLI_memblock_alloc(DST.vmempool->images);
-
-        *tex_ref = tex = GPU_texture_from_blender(input->ima, iuser, GL_TEXTURE_2D);
-
-        GPU_texture_ref(tex);
+      int textarget;
+      if (tex->type == GPU_TEX2D_ARRAY) {
+        textarget = GL_TEXTURE_2D_ARRAY;
+      }
+      else if (tex->type == GPU_TEX1D_ARRAY) {
+        textarget = GL_TEXTURE_1D_ARRAY;
       }
       else {
-        /* Color Ramps */
-        tex = *input->coba;
+        textarget = GL_TEXTURE_2D;
       }
+      *gputex_ref = gputex = GPU_texture_from_blender(tex->ima, tex->iuser, NULL, textarget);
 
-      if (input->bindtex) {
-        drw_shgroup_uniform_create_ex(grp, input->shaderloc, DRW_UNIFORM_TEXTURE, tex, 0, 1);
-      }
+      GPU_texture_ref(gputex);
     }
+    else if (tex->colorband) {
+      /* Color Ramp */
+      gputex = *tex->colorband;
+    }
+    else {
+      continue;
+    }
+
+    DRW_shgroup_uniform_texture(grp, tex->shadername, gputex);
   }
 
   GPUUniformBuffer *ubo = GPU_material_uniform_buffer_get(material);

@@ -33,6 +33,7 @@
 #include "bpy_app_opensubdiv.h"
 #include "bpy_app_openvdb.h"
 #include "bpy_app_sdl.h"
+#include "bpy_app_usd.h"
 #include "bpy_app_build_options.h"
 
 #include "bpy_app_translations.h"
@@ -49,7 +50,7 @@
 #include "BKE_appdir.h"
 #include "BKE_blender_version.h"
 #include "BKE_global.h"
-#include "BKE_library_override.h"
+#include "BKE_lib_override.h"
 
 #include "DNA_ID.h"
 
@@ -108,6 +109,7 @@ static PyStructSequence_Field app_info_fields[] = {
 
     /* submodules */
     {"alembic", "Alembic library information backend"},
+    {"usd", "USD library information backend"},
     {"ffmpeg", "FFmpeg library information backend"},
     {"ocio", "OpenColorIO library information backend"},
     {"oiio", "OpenImageIO library information backend"},
@@ -201,6 +203,7 @@ static PyObject *make_app_info(void)
 #endif
 
   SetObjItem(BPY_app_alembic_struct());
+  SetObjItem(BPY_app_usd_struct());
   SetObjItem(BPY_app_ffmpeg_struct());
   SetObjItem(BPY_app_ocio_struct());
   SetObjItem(BPY_app_oiio_struct());
@@ -393,7 +396,7 @@ PyDoc_STRVAR(bpy_app_use_override_library_doc,
              "Boolean, whether library override is exposed in UI or not.");
 static PyObject *bpy_app_use_override_library_get(PyObject *UNUSED(self), void *UNUSED(closure))
 {
-  return PyBool_FromLong((long)BKE_override_library_is_enabled());
+  return PyBool_FromLong((long)BKE_lib_override_library_is_enabled());
 }
 
 static int bpy_app_use_override_library_set(PyObject *UNUSED(self),
@@ -407,7 +410,7 @@ static int bpy_app_use_override_library_set(PyObject *UNUSED(self),
     return -1;
   }
 
-  BKE_override_library_enable((const bool)param);
+  BKE_lib_override_library_enable((const bool)param);
 
   return 0;
 }

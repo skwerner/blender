@@ -131,8 +131,8 @@ add_definitions(
 # MSVC11 needs _ALLOW_KEYWORD_MACROS to build
 add_definitions(-D_ALLOW_KEYWORD_MACROS)
 
-# We want to support Vista level ABI
-add_definitions(-D_WIN32_WINNT=0x600)
+# We want to support Windows 7 level ABI
+add_definitions(-D_WIN32_WINNT=0x601)
 include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
 remove_cc_flag("/MDd" "/MD")
 
@@ -143,6 +143,14 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /nologo /J /Gd /MP /EHsc /bigobj")
   set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd /MP /bigobj")
 endif()
+
+# C++ standards conformace (/permissive-) is available on msvc 15.5 (1912) and up
+if(MSVC_VERSION GREATER 1911 AND NOT MSVC_CLANG)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /permissive-")
+  # Two-phase name lookup does not place nicely with OpenMP yet, so disable for now
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:twoPhase-")
+endif()
+
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd /ZI")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MDd /ZI")
@@ -225,7 +233,7 @@ windows_find_package(png)
 if(NOT PNG_FOUND)
   warn_hardcoded_paths(libpng)
   set(PNG_PNG_INCLUDE_DIR ${LIBDIR}/png/include)
-  set(PNG_LIBRARIES ${LIBDIR}/png/lib/libpng.lib)
+  set(PNG_LIBRARIES ${LIBDIR}/png/lib/libpng.lib ${ZLIB_LIBRARY})
   set(PNG "${LIBDIR}/png")
   set(PNG_INCLUDE_DIRS "${PNG}/include")
   set(PNG_LIBPATH ${PNG}/lib) # not cmake defined
@@ -269,21 +277,33 @@ if(WITH_OPENCOLLADA)
   )
 
   set(OPENCOLLADA_LIBRARIES
-    ${OPENCOLLADA}/lib/opencollada/OpenCOLLADASaxFrameworkLoader.lib
-    ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAFramework.lib
-    ${OPENCOLLADA}/lib/opencollada/OpenCOLLADABaseUtils.lib
-    ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAStreamWriter.lib
-    ${OPENCOLLADA}/lib/opencollada/MathMLSolver.lib
-    ${OPENCOLLADA}/lib/opencollada/GeneratedSaxParser.lib
-    ${OPENCOLLADA}/lib/opencollada/xml.lib
-    ${OPENCOLLADA}/lib/opencollada/buffer.lib
-    ${OPENCOLLADA}/lib/opencollada/ftoa.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/OpenCOLLADASaxFrameworkLoader.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAFramework.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/OpenCOLLADABaseUtils.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAStreamWriter.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/MathMLSolver.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/GeneratedSaxParser.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/xml.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/buffer.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/ftoa.lib
+
+    debug ${OPENCOLLADA}/lib/opencollada/OpenCOLLADASaxFrameworkLoader_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAFramework_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/OpenCOLLADABaseUtils_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAStreamWriter_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/MathMLSolver_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/GeneratedSaxParser_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/xml_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/buffer_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/ftoa_d.lib
   )
 
   list(APPEND OPENCOLLADA_LIBRARIES ${OPENCOLLADA}/lib/opencollada/UTF.lib)
 
   set(PCRE_LIBRARIES
-    ${OPENCOLLADA}/lib/opencollada/pcre.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/pcre.lib
+
+    debug ${OPENCOLLADA}/lib/opencollada/pcre_d.lib
   )
 endif()
 
@@ -386,8 +406,8 @@ if(WITH_BOOST)
     set(BOOST_INCLUDE_DIR ${BOOST}/include)
     set(BOOST_LIBPATH ${BOOST}/lib)
     if(CMAKE_CL_64)
-      set(BOOST_POSTFIX "vc141-mt-x64-1_68.lib")
-      set(BOOST_DEBUG_POSTFIX "vc141-mt-gd-x64-1_68.lib")
+      set(BOOST_POSTFIX "vc141-mt-x64-1_70.lib")
+      set(BOOST_DEBUG_POSTFIX "vc141-mt-gd-x64-1_70.lib")
     endif()
     set(BOOST_LIBRARIES
       optimized ${BOOST_LIBPATH}/libboost_date_time-${BOOST_POSTFIX}
@@ -558,19 +578,6 @@ if(WITH_TBB)
   if(WITH_TBB_MALLOC_PROXY)
     add_definitions(-DWITH_TBB_MALLOC)
   endif()
-else()
-  if(WITH_OPENIMAGEDENOISE)
-    message(STATUS "TBB disabled, also disabling OpenImageDenoise")
-    set(WITH_OPENIMAGEDENOISE OFF)
-  endif()
-  if(WITH_OPENVDB)
-    message(STATUS "TBB disabled, also disabling OpenVDB")
-    set(WITH_OPENVDB OFF)
-  endif()
-  if(WITH_MOD_FLUID)
-    message(STATUS "TBB disabled, disabling Fluid modifier")
-    set(WITH_MOD_FLUID OFF)
-  endif()
 endif()
 
 # used in many places so include globally, like OpenGL
@@ -662,6 +669,7 @@ if(WITH_USD)
     set(USD_INCLUDE_DIRS ${LIBDIR}/usd/include)
     set(USD_RELEASE_LIB ${LIBDIR}/usd/lib/libusd_m.lib)
     set(USD_DEBUG_LIB ${LIBDIR}/usd/lib/libusd_m_d.lib)
+    set(USD_LIBRARY_DIR ${LIBDIR}/usd/lib/usd)
     set(USD_LIBRARIES
         debug ${USD_DEBUG_LIB}
         optimized ${USD_RELEASE_LIB}

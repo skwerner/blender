@@ -2231,6 +2231,14 @@ static void rna_def_userdef_theme_space_view3d(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Bone Solid", "");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
+  prop = RNA_def_property(srna, "bone_locked_weight", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(
+      prop,
+      "Bone Locked Weight",
+      "Shade for bones corresponding to a locked weight group during painting");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
   /* misc */
 
   prop = RNA_def_property(srna, "bundle_solid", PROP_FLOAT, PROP_COLOR_GAMMA);
@@ -2508,63 +2516,73 @@ static void rna_def_userdef_theme_space_info(BlenderRNA *brna)
   rna_def_userdef_theme_spaces_main(srna);
 
   prop = RNA_def_property(srna, "info_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_selected");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Selected Line Background", "");
+  RNA_def_property_ui_text(prop, "Selected Line Background", "Background color of selected line");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_selected_text", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_selected_text");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Selected Line Text", "");
+  RNA_def_property_ui_text(prop, "Selected Line Text Color", "Text color of selected line");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_error", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_error");
-  RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Error Background", "");
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Error Icon Background", "Background color of Error icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_error_text", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_error_text");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Error Text", "");
+  RNA_def_property_ui_text(prop, "Error Icon Foreground", "Foreground color of Error icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_warning", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_warning");
-  RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Warning Background", "");
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Warning Icon Background", "Background color of Warning icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_warning_text", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_warning_text");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Warning Text", "");
+  RNA_def_property_ui_text(prop, "Warning Icon Foreground", "Foreground color of Warning icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_info", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_info");
-  RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Info Background", "");
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Info Icon Background", "Background color of Info icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_info_text", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_info_text");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Info Text", "");
+  RNA_def_property_ui_text(prop, "Info Icon Foreground", "Foreground color of Info icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_debug", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_debug");
-  RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Debug Background", "");
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Debug Icon Background", "Background color of Debug icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_debug_text", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_debug_text");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Debug Text", "");
+  RNA_def_property_ui_text(prop, "Debug Icon Foreground", "Foreground color of Debug icon");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "info_property", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Property Icon Background", "Backgrond color of Property icon");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "info_property_text", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 3);
+  RNA_def_property_ui_text(prop, "Property Icon Foreground", "Foreground color of Property icon");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "info_operator", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Operator Icon Background", "Background color of Operator icon");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "info_operator_text", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 3);
+  RNA_def_property_ui_text(prop, "Operator Icon Foreground", "Foreground color of Operator icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 }
 
@@ -5055,14 +5073,6 @@ static void rna_def_userdef_system(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "pixelsize");
 
   /* Memory */
-
-  prop = RNA_def_property(srna, "prefetch_frames", PROP_INT, PROP_NONE);
-  RNA_def_property_int_sdna(prop, NULL, "prefetchframes");
-  RNA_def_property_range(prop, 0, INT_MAX);
-  RNA_def_property_ui_range(prop, 0, 500, 1, -1);
-  RNA_def_property_ui_text(prop,
-                           "Prefetch Frames",
-                           "Number of frames to render ahead during playback (sequencer only)");
 
   prop = RNA_def_property(srna, "memory_cache_limit", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "memcachelimit");

@@ -93,6 +93,8 @@ struct MANTA {
   int updateMeshStructures(FluidModifierData *mmd, int framenr);
   int updateFlipStructures(FluidModifierData *mmd, int framenr);
   int updateParticleStructures(FluidModifierData *mmd, int framenr);
+  int updateSmokeStructures(FluidModifierData *mmd, int framenr);
+  int updateNoiseStructures(FluidModifierData *mmd, int framenr);
   void updateVariables(FluidModifierData *mmd);
 
   // Bake cache
@@ -248,11 +250,11 @@ struct MANTA {
   {
     return mObstacle;
   }
-  inline int *getNumObstacle()
+  inline float *getNumObstacle()
   {
     return mNumObstacle;
   }
-  inline int *getNumGuide()
+  inline float *getNumGuide()
   {
     return mNumGuide;
   }
@@ -692,6 +694,19 @@ struct MANTA {
     return (mSndParticleData && !mSndParticleData->empty()) ? mSndParticleData->size() : 0;
   }
 
+  inline bool usingFlipFromFile()
+  {
+    return mFlipFromFile;
+  }
+  inline bool usingMeshFromFile()
+  {
+    return mMeshFromFile;
+  }
+  inline bool usingParticleFromFile()
+  {
+    return mParticlesFromFile;
+  }
+
   // Direct access to solver time attributes
   int getFrame();
   float getTimestep();
@@ -725,6 +740,12 @@ struct MANTA {
   bool mUsingBubbles;
   bool mUsingFloats;
   bool mUsingTracers;
+
+  bool mFlipFromFile;
+  bool mMeshFromFile;
+  bool mParticlesFromFile;
+  bool mSmokeFromFile;
+  bool mNoiseFromFile;
 
   int mResX;
   int mResY;
@@ -765,8 +786,8 @@ struct MANTA {
   float *mForceY;
   float *mForceZ;
   int *mObstacle;
-  int *mNumObstacle;
-  int *mNumGuide;
+  float *mNumObstacle;
+  float *mNumGuide;
 
   // Smoke grids
   float *mDensity;
@@ -835,10 +856,12 @@ struct MANTA {
   void updateMeshFromObj(const char *filename);
   void updateMeshFromUni(const char *filename);
   void updateParticlesFromUni(const char *filename, bool isSecondarySys, bool isVelData);
+  int updateGridFromUni(const char *filename, float *grid, bool isNoise);
+  int updateGridFromVDB(const char *filename, float *grid, bool isNoise);
+  int updateGridFromRaw(const char *filename, float *grid, bool isNoise);
   void updateMeshFromFile(const char *filename);
   void updateParticlesFromFile(const char *filename, bool isSecondarySys, bool isVelData);
-  template<class T>
-  void setPointers(std::vector<std::tuple<T **, std::string, std::string, bool>>);
+  int updateGridFromFile(const char *filename, float *grid, bool isNoise);
 };
 
 #endif

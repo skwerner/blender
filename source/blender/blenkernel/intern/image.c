@@ -71,7 +71,7 @@
 #include "BKE_global.h"
 #include "BKE_icons.h"
 #include "BKE_image.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_packedFile.h"
 #include "BKE_report.h"
@@ -417,7 +417,7 @@ static void copy_image_packedfiles(ListBase *lb_dst, const ListBase *lb_src)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_image_copy_data(Main *UNUSED(bmain), Image *ima_dst, const Image *ima_src, const int flag)
 {
@@ -441,10 +441,9 @@ void BKE_image_copy_data(Main *UNUSED(bmain), Image *ima_dst, const Image *ima_s
   BLI_listbase_clear(&ima_dst->anims);
 
   BLI_duplicatelist(&ima_dst->tiles, &ima_src->tiles);
-  LISTBASE_FOREACH (ImageTile *, tile, &ima_dst->tiles) {
-    for (int i = 0; i < TEXTARGET_COUNT; i++) {
-      tile->gputexture[i] = NULL;
-    }
+
+  for (int i = 0; i < TEXTARGET_COUNT; i++) {
+    ima_dst->gputexture[i] = NULL;
   }
 
   if ((flag & LIB_ID_COPY_NO_PREVIEW) == 0) {
@@ -510,11 +509,9 @@ bool BKE_image_scale(Image *image, int width, int height)
 
 bool BKE_image_has_opengl_texture(Image *ima)
 {
-  LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
-    for (int i = 0; i < TEXTARGET_COUNT; i++) {
-      if (tile->gputexture[i] != NULL) {
-        return true;
-      }
+  for (int i = 0; i < TEXTARGET_COUNT; i++) {
+    if (ima->gputexture[i] != NULL) {
+      return true;
     }
   }
   return false;
@@ -1348,6 +1345,7 @@ char BKE_imtype_valid_channels(const char imtype, bool write_file)
 
   /* bw */
   switch (imtype) {
+    case R_IMF_IMTYPE_BMP:
     case R_IMF_IMTYPE_PNG:
     case R_IMF_IMTYPE_JPEG90:
     case R_IMF_IMTYPE_TARGA:
@@ -3293,9 +3291,16 @@ void BKE_image_init_imageuser(Image *ima, ImageUser *iuser)
 static void image_free_tile(Image *ima, ImageTile *tile)
 {
   for (int i = 0; i < TEXTARGET_COUNT; i++) {
-    if (tile->gputexture[i] != NULL) {
-      GPU_texture_free(tile->gputexture[i]);
-      tile->gputexture[i] = NULL;
+    /* Only two textures depends on all tiles, so if this is a secondary tile we can keep the other
+     * two. */
+    if (tile != ima->tiles.first &&
+        !(ELEM(i, TEXTARGET_TEXTURE_2D_ARRAY, TEXTARGET_TEXTURE_TILE_MAPPING))) {
+      continue;
+    }
+
+    if (ima->gputexture[i] != NULL) {
+      GPU_texture_free(ima->gputexture[i]);
+      ima->gputexture[i] = NULL;
     }
   }
 
@@ -3359,7 +3364,9 @@ void BKE_image_signal(Main *bmain, Image *ima, ImageUser *iuser, int signal)
       if (ima->source != IMA_SRC_TILED) {
         /* Free all but the first tile. */
         ImageTile *base_tile = BKE_image_get_tile(ima, 0);
-        for (ImageTile *tile = base_tile->next; tile; tile = tile->next) {
+        BLI_assert(base_tile == ima->tiles.first);
+        for (ImageTile *tile = base_tile->next, *tile_next; tile; tile = tile_next) {
+          tile_next = tile->next;
           image_free_tile(ima, tile);
           MEM_freeN(tile);
         }
@@ -3558,6 +3565,16 @@ ImageTile *BKE_image_add_tile(struct Image *ima, int tile_number, const char *la
 
   if (label) {
     BLI_strncpy(tile->label, label, sizeof(tile->label));
+  }
+
+  /* Reallocate GPU tile array. */
+  if (ima->gputexture[TEXTARGET_TEXTURE_2D_ARRAY] != NULL) {
+    GPU_texture_free(ima->gputexture[TEXTARGET_TEXTURE_2D_ARRAY]);
+    ima->gputexture[TEXTARGET_TEXTURE_2D_ARRAY] = NULL;
+  }
+  if (ima->gputexture[TEXTARGET_TEXTURE_TILE_MAPPING] != NULL) {
+    GPU_texture_free(ima->gputexture[TEXTARGET_TEXTURE_TILE_MAPPING]);
+    ima->gputexture[TEXTARGET_TEXTURE_TILE_MAPPING] = NULL;
   }
 
   return tile;
@@ -3877,7 +3894,12 @@ static void image_initialize_after_load(Image *ima, ImageUser *iuser, ImBuf *UNU
   BKE_image_tag_time(ima);
 
   ImageTile *tile = BKE_image_get_tile_from_iuser(ima, iuser);
-  tile->ok = IMA_OK_LOADED;
+  /* Images should never get loaded if the corresponding tile does not exist,
+   * but we should at least not crash if it happens due to a bug elsewhere. */
+  BLI_assert(tile != NULL);
+  if (tile != NULL) {
+    tile->ok = IMA_OK_LOADED;
+  }
 }
 
 static int imbuf_alpha_flags_for_image(Image *ima)
@@ -4750,14 +4772,14 @@ BLI_INLINE bool image_quick_test(Image *ima, ImageUser *iuser)
     return false;
   }
 
-  ImageTile *tile = BKE_image_get_tile_from_iuser(ima, iuser);
-
   if (iuser) {
     if (iuser->ok == 0) {
       return false;
     }
   }
-  else if (tile == NULL) {
+
+  ImageTile *tile = BKE_image_get_tile_from_iuser(ima, iuser);
+  if (tile == NULL) {
     return false;
   }
   else if (tile->ok == 0) {

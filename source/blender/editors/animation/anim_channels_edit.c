@@ -46,7 +46,7 @@
 #include "BKE_fcurve.h"
 #include "BKE_gpencil.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mask.h"
 #include "BKE_global.h"
 #include "BKE_scene.h"
@@ -1870,7 +1870,7 @@ static int animchannels_delete_exec(bContext *C, wmOperator *UNUSED(op))
     }
   }
 
-  /* cleanup */
+  ANIM_animdata_update(&ac, &anim_data);
   ANIM_animdata_freelist(&anim_data);
 
   /* send notifier that things have changed */

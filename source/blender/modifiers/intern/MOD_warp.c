@@ -31,8 +31,8 @@
 #include "DNA_object_types.h"
 
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_deform.h"
@@ -175,7 +175,7 @@ static void warpModifier_do(WarpModifierData *wmd,
   int i;
   int defgrp_index;
   MDeformVert *dvert, *dv = NULL;
-
+  const bool invert_vgroup = (wmd->flag & MOD_WARP_INVERT_VGROUP) != 0;
   float(*tex_co)[3] = NULL;
 
   if (!(wmd->object_from && wmd->object_to)) {
@@ -235,7 +235,8 @@ static void warpModifier_do(WarpModifierData *wmd,
       /* skip if no vert group found */
       if (defgrp_index != -1) {
         dv = &dvert[i];
-        weight = defvert_find_weight(dv, defgrp_index) * strength;
+        weight = invert_vgroup ? 1.0f - defvert_find_weight(dv, defgrp_index) * strength :
+                                 defvert_find_weight(dv, defgrp_index) * strength;
         if (weight <= 0.0f) {
           continue;
         }

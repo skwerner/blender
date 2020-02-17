@@ -324,9 +324,12 @@ NODE_DEFINE(Film)
 
 Film::Film() : Node(node_type)
 {
+  Pass::add(PASS_COMBINED, passes);
+
   use_light_visibility = false;
   filter_table_offset = TABLE_OFFSET_INVALID;
   cryptomatte_passes = CRYPT_NONE;
+  display_pass = PASS_COMBINED;
 
   need_update = true;
 }
@@ -590,13 +593,13 @@ bool Film::modified(const Film &film)
 void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_, bool update_passes)
 {
   if (Pass::contains(passes, PASS_UV) != Pass::contains(passes_, PASS_UV)) {
-    scene->mesh_manager->tag_update(scene);
+    scene->geometry_manager->tag_update(scene);
 
     foreach (Shader *shader, scene->shaders)
-      shader->need_update_mesh = true;
+      shader->need_update_geometry = true;
   }
   else if (Pass::contains(passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION)) {
-    scene->mesh_manager->tag_update(scene);
+    scene->geometry_manager->tag_update(scene);
   }
   else if (Pass::contains(passes, PASS_AO) != Pass::contains(passes_, PASS_AO)) {
     scene->integrator->tag_update(scene);

@@ -73,8 +73,8 @@
 #include "BKE_idprop.h"
 #include "BKE_image.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
-#include "BKE_library_remap.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_remap.h"
 #include "BKE_linestyle.h"
 #include "BKE_main.h"
 #include "BKE_mask.h"
@@ -145,7 +145,7 @@ static void remove_sequencer_fcurves(Scene *sce)
   }
 }
 
-/* flag -- copying options (see BKE_library.h's LIB_ID_COPY_... flags for more). */
+/* flag -- copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more). */
 ToolSettings *BKE_toolsettings_copy(ToolSettings *toolsettings, const int flag)
 {
   if (toolsettings == NULL) {
@@ -243,7 +243,7 @@ void BKE_toolsettings_free(ToolSettings *toolsettings)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_scene_copy_data(Main *bmain, Scene *sce_dst, const Scene *sce_src, const int flag)
 {
@@ -351,6 +351,13 @@ void BKE_scene_copy_data(Main *bmain, Scene *sce_dst, const Scene *sce_src, cons
     sce_dst->preview = NULL;
   }
 
+  BKE_scene_copy_data_eevee(sce_dst, sce_src);
+}
+
+void BKE_scene_copy_data_eevee(Scene *sce_dst, const Scene *sce_src)
+{
+  /* Copy eevee data between scenes. */
+  sce_dst->eevee = sce_src->eevee;
   sce_dst->eevee.light_cache = NULL;
   sce_dst->eevee.light_cache_info[0] = '\0';
   /* TODO Copy the cache. */
@@ -374,9 +381,7 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
     sce_copy->unit = sce->unit;
     sce_copy->physics_settings = sce->physics_settings;
     sce_copy->audio = sce->audio;
-    sce_copy->eevee = sce->eevee;
-    sce_copy->eevee.light_cache = NULL;
-    sce_copy->eevee.light_cache_info[0] = '\0';
+    BKE_scene_copy_data_eevee(sce_copy, sce);
 
     if (sce->id.properties) {
       sce_copy->id.properties = IDP_CopyProperty(sce->id.properties);

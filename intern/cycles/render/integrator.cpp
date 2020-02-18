@@ -24,6 +24,8 @@
 #include "render/shader.h"
 #include "render/sobol.h"
 
+#include "kernel/kernel_types.h"
+
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
 #include "util/util_hash.h"
@@ -233,8 +235,8 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
     dscene->sample_pattern_lut.copy_to_device();
   }
   else {
-    constexpr int sequence_size = 64 * 64;
-    constexpr int num_sequences = 48;
+    constexpr int sequence_size = NUM_PMJ_SAMPLES;
+    constexpr int num_sequences = NUM_PMJ_PATTERNS;
     float2 *directions = (float2 *)dscene->sample_pattern_lut.alloc(sequence_size * num_sequences *
                                                                     2);
     TaskPool pool;

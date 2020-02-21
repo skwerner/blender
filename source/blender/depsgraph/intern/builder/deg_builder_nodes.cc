@@ -717,9 +717,9 @@ void DepsgraphNodeBuilder::build_object_data(Object *object, bool is_object_visi
     }
   }
   /* Materials. */
-  Material ***materials_ptr = give_matarar(object);
+  Material ***materials_ptr = BKE_object_material_array(object);
   if (materials_ptr != nullptr) {
-    short *num_materials_ptr = give_totcolp(object);
+    short *num_materials_ptr = BKE_object_material_num(object);
     build_materials(*materials_ptr, *num_materials_ptr);
   }
 }
@@ -895,7 +895,7 @@ void DepsgraphNodeBuilder::build_animation_images(ID *id)
   if (BKE_image_user_id_has_animation(id)) {
     ID *id_cow = get_cow_id(id);
     add_operation_node(id,
-                       NodeType::ANIMATION,
+                       NodeType::IMAGE_ANIMATION,
                        OperationCode::IMAGE_ANIMATION,
                        function_bind(BKE_image_user_id_eval_animation, _1, id_cow));
   }

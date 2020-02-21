@@ -48,7 +48,7 @@ typedef enum eUIFont_ID {
 
   /* free slots */
   UIFONT_CUSTOM1 = 2,
-  UIFONT_CUSTOM2 = 3,
+  /* UIFONT_CUSTOM2 = 3, */ /* UNUSED */
 } eUIFont_ID;
 
 /* default fonts to load/initialize */
@@ -214,7 +214,7 @@ typedef struct ThemeSpace {
   unsigned char back[4];
   unsigned char back_grad[4];
 
-  char show_back_grad;
+  char background_type;
   char _pad0[3];
 
   /** Panel title. */
@@ -413,6 +413,8 @@ typedef struct ThemeSpace {
   unsigned char info_warning[4], info_warning_text[4];
   unsigned char info_info[4], info_info_text[4];
   unsigned char info_debug[4], info_debug_text[4];
+  unsigned char info_property[4], info_property_text[4];
+  unsigned char info_operator[4], info_operator_text[4];
 
   unsigned char paint_curve_pivot[4];
   unsigned char paint_curve_handle[4];
@@ -421,6 +423,14 @@ typedef struct ThemeSpace {
   unsigned char metadatatext[4];
 
 } ThemeSpace;
+
+/* Viewport Background Gradient Types. */
+
+typedef enum eBackgroundGradientTypes {
+  TH_BACKGROUND_SINGLE_COLOR = 0,
+  TH_BACKGROUND_GRADIENT_LINEAR = 1,
+  TH_BACKGROUND_GRADIENT_RADIAL = 2,
+} eBackgroundGradientTypes;
 
 /* set of colors for use as a custom color set for Objects/Bones wire drawing */
 typedef struct ThemeWireColor {
@@ -436,7 +446,7 @@ typedef struct ThemeWireColor {
 /** #ThemeWireColor.flag */
 typedef enum eWireColor_Flags {
   TH_WIRECOLOR_CONSTCOLS = (1 << 0),
-  TH_WIRECOLOR_TEXTCOLS = (1 << 1),
+  /* TH_WIRECOLOR_TEXTCOLS = (1 << 1), */ /* UNUSED */
 } eWireColor_Flags;
 
 /**
@@ -722,6 +732,7 @@ typedef struct UserDef {
   short vbotimeout, vbocollectrate;
   short textimeout, texcollectrate;
   int memcachelimit;
+  /** Unused. */
   int prefetchframes;
   /** Control the rotation step of the view when PAD2, PAD4, PAD6&PAD8 is use. */
   float pad_rot_angle;
@@ -1121,16 +1132,6 @@ typedef enum eDupli_ID_Flags {
   USER_DUP_LIGHTPROBE = (1 << 12),
   USER_DUP_GPENCIL = (1 << 13),
 } eDupli_ID_Flags;
-
-/**
- * Max anti alias draw method
- * #UserDef.gpu_viewport_antialias
- */
-typedef enum eOpenGL_AntiAliasMethod {
-  USER_AA_NONE = 0,
-  USER_AA_FXAA = 1,
-  USER_AA_TAA8 = 2,
-} eOpenGL_AntiAliasMethod;
 
 /**
  * Text draw options

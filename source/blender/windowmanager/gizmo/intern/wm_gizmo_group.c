@@ -310,7 +310,7 @@ void WM_gizmo_group_remove_by_tool(bContext *C,
               if (gzgroup->type == gzgt) {
                 BLI_assert(gzgroup->parent_gzmap == gzmap);
                 wm_gizmogroup_free(C, gzgroup);
-                ED_region_tag_redraw(ar);
+                ED_region_tag_redraw_editor_overlays(ar);
               }
             }
           }
@@ -391,7 +391,7 @@ static int gizmo_select_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
     }
 
     if (redraw) {
-      ED_region_tag_redraw(ar);
+      ED_region_tag_redraw_editor_overlays(ar);
     }
 
     return OPERATOR_FINISHED;
@@ -547,7 +547,24 @@ static int gizmo_tweak_modal(bContext *C, wmOperator *op, const wmEvent *event)
   /* handle gizmo */
   wmGizmoFnModal modal_fn = gz->custom_modal ? gz->custom_modal : gz->type->modal;
   if (modal_fn) {
+    /* Ugly hack to ensure Python won't get 'EVT_MODAL_MAP' which isn't supported, see T73727.
+     * note that we could move away from wrapping modal gizmos in a modal operator,
+     * since it's causing the need for code like this. */
+    wmEvent *evil_event = (wmEvent *)event;
+    short event_modal_val = 0;
+
+    if (event->type == EVT_MODAL_MAP) {
+      event_modal_val = evil_event->val;
+      evil_event->type = evil_event->prevtype;
+      evil_event->val = evil_event->prevval;
+    }
+
     int modal_retval = modal_fn(C, gz, event, mtweak->flag);
+
+    if (event_modal_val != 0) {
+      evil_event->type = EVT_MODAL_MAP;
+      evil_event->val = event_modal_val;
+    }
 
     if ((modal_retval & OPERATOR_RUNNING_MODAL) == 0) {
       gizmo_tweak_finish(C, op, (modal_retval & OPERATOR_CANCELLED) != 0, true);
@@ -555,7 +572,7 @@ static int gizmo_tweak_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
 
     /* Ugly hack to send gizmo events */
-    ((wmEvent *)event)->type = EVT_GIZMO_UPDATE;
+    evil_event->type = EVT_GIZMO_UPDATE;
   }
 
   /* always return PASS_THROUGH so modal handlers
@@ -924,7 +941,7 @@ wmGizmoGroup *WM_gizmomaptype_group_init_runtime_with_region(wmGizmoMapType *gzm
 
   wm_gizmomap_highlight_set(gzmap, NULL, NULL, 0);
 
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw_editor_overlays(ar);
 
   return gzgroup;
 }
@@ -956,7 +973,7 @@ void WM_gizmomaptype_group_unlink(bContext *C,
               if (gzgroup->type == gzgt) {
                 BLI_assert(gzgroup->parent_gzmap == gzmap);
                 wm_gizmogroup_free(C, gzgroup);
-                ED_region_tag_redraw(ar);
+                ED_region_tag_redraw_editor_overlays(ar);
               }
             }
           }

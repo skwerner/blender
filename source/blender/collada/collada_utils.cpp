@@ -54,7 +54,7 @@ extern "C" {
 #include "BKE_object.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_object.h"
@@ -943,7 +943,7 @@ bool bc_has_animations(Object *ob)
 
   /* Check Material Effect parameter animations. */
   for (int a = 0; a < ob->totcol; a++) {
-    Material *ma = give_current_material(ob, a + 1);
+    Material *ma = BKE_object_material_get(ob, a + 1);
     if (!ma) {
       continue;
     }

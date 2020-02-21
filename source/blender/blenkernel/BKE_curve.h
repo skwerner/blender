@@ -86,7 +86,6 @@ short BKE_curve_type_get(struct Curve *cu);
 void BKE_curve_type_test(struct Object *ob);
 void BKE_curve_curve_dimension_update(struct Curve *cu);
 
-void BKE_curve_boundbox_calc(struct Curve *cu, float r_loc[3], float r_size[3]);
 struct BoundBox *BKE_curve_boundbox_get(struct Object *ob);
 
 void BKE_curve_texspace_calc(struct Curve *cu);
@@ -143,8 +142,6 @@ void BKE_curve_editNurb_keyIndex_delCV(struct GHash *keyindex, const void *cv);
 void BKE_curve_editNurb_keyIndex_free(struct GHash **keyindex);
 void BKE_curve_editNurb_free(struct Curve *cu);
 struct ListBase *BKE_curve_editNurbs_get(struct Curve *cu);
-
-float *BKE_curve_surf_make_orco(struct Object *ob);
 
 void BKE_curve_bevelList_free(struct ListBase *bev);
 void BKE_curve_bevelList_make(struct Object *ob, struct ListBase *nurbs, bool for_render);
@@ -220,7 +217,10 @@ bool BKE_nurb_order_clamp_u(struct Nurb *nu);
 bool BKE_nurb_order_clamp_v(struct Nurb *nu);
 
 void BKE_nurb_direction_switch(struct Nurb *nu);
-bool BKE_nurb_type_convert(struct Nurb *nu, const short type, const bool use_handles);
+bool BKE_nurb_type_convert(struct Nurb *nu,
+                           const short type,
+                           const bool use_handles,
+                           const char **r_err_msg);
 
 void BKE_nurb_points_add(struct Nurb *nu, int number);
 void BKE_nurb_bezierPoints_add(struct Nurb *nu, int number);

@@ -679,20 +679,30 @@ GPUBatch *DRW_cache_cube_get(void)
   if (!SHC.drw_cube) {
     GPUVertFormat format = extra_vert_format();
 
+    const int tri_len = ARRAY_SIZE(bone_box_solid_tris);
+    const int vert_len = ARRAY_SIZE(bone_box_verts);
+
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
-    GPU_vertbuf_data_alloc(vbo, ARRAY_SIZE(bone_box_solid_tris) * 3);
+    GPU_vertbuf_data_alloc(vbo, vert_len);
+
+    GPUIndexBufBuilder elb;
+    GPU_indexbuf_init(&elb, GPU_PRIM_TRIS, tri_len, vert_len);
 
     int v = 0;
-    for (int i = 0; i < ARRAY_SIZE(bone_box_solid_tris); i++) {
-      for (int a = 0; a < 3; a++) {
-        float x = bone_box_verts[bone_box_solid_tris[i][a]][0];
-        float y = bone_box_verts[bone_box_solid_tris[i][a]][1] * 2.0f - 1.0f;
-        float z = bone_box_verts[bone_box_solid_tris[i][a]][2];
-        GPU_vertbuf_vert_set(vbo, v++, &(Vert){{x, y, z}, VCLASS_EMPTY_SCALED});
-      }
+    for (int i = 0; i < vert_len; i++) {
+      float x = bone_box_verts[i][0];
+      float y = bone_box_verts[i][1] * 2.0f - 1.0f;
+      float z = bone_box_verts[i][2];
+      GPU_vertbuf_vert_set(vbo, v++, &(Vert){{x, y, z}, VCLASS_EMPTY_SCALED});
     }
 
-    SHC.drw_cube = GPU_batch_create_ex(GPU_PRIM_TRIS, vbo, NULL, GPU_BATCH_OWNS_VBO);
+    for (int i = 0; i < tri_len; i++) {
+      const uint *tri_indices = bone_box_solid_tris[i];
+      GPU_indexbuf_add_tri_verts(&elb, tri_indices[0], tri_indices[1], tri_indices[2]);
+    }
+
+    SHC.drw_cube = GPU_batch_create_ex(
+        GPU_PRIM_TRIS, vbo, GPU_indexbuf_build(&elb), GPU_BATCH_OWNS_VBO | GPU_BATCH_OWNS_INDEX);
   }
   return SHC.drw_cube;
 }
@@ -826,11 +836,12 @@ GPUBatch *DRW_cache_object_surface_get(Object *ob)
 
 int DRW_cache_object_material_count_get(struct Object *ob)
 {
+  Mesh *me = (ob->runtime.mesh_eval != NULL) ? ob->runtime.mesh_eval : (Mesh *)ob->data;
   short type = (ob->runtime.mesh_eval != NULL) ? OB_MESH : ob->type;
 
   switch (type) {
     case OB_MESH:
-      return DRW_mesh_material_count_get(ob->data);
+      return DRW_mesh_material_count_get(me);
     case OB_CURVE:
     case OB_SURF:
     case OB_FONT:
@@ -3423,7 +3434,7 @@ void drw_batch_cache_generate_requested(Object *ob)
   const bool use_hide = ((ob->type == OB_MESH) &&
                          ((is_paint_mode && (ob == draw_ctx->obact) &&
                            DRW_object_use_hide_faces(ob)) ||
-                          ((mode == CTX_MODE_EDIT_MESH) && BKE_object_is_in_editmode(ob))));
+                          ((mode == CTX_MODE_EDIT_MESH) && DRW_object_is_in_edit_mode(ob))));
 
   struct Mesh *mesh_eval = ob->runtime.mesh_eval;
   switch (ob->type) {

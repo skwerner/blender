@@ -725,8 +725,7 @@ typedef enum PrimitiveType {
 /* Attributes */
 
 typedef enum AttributePrimitive {
-  ATTR_PRIM_TRIANGLE = 0,
-  ATTR_PRIM_CURVE,
+  ATTR_PRIM_GEOMETRY = 0,
   ATTR_PRIM_SUBD,
 
   ATTR_PRIM_TYPES
@@ -754,6 +753,7 @@ typedef enum AttributeStandard {
   ATTR_STD_UV,
   ATTR_STD_UV_TANGENT,
   ATTR_STD_UV_TANGENT_SIGN,
+  ATTR_STD_VERTEX_COLOR,
   ATTR_STD_GENERATED,
   ATTR_STD_GENERATED_TRANSFORM,
   ATTR_STD_POSITION_UNDEFORMED,
@@ -1057,6 +1057,7 @@ typedef struct PathState {
 
 #ifdef __DENOISING_FEATURES__
   float denoising_feature_weight;
+  float3 denoising_feature_throughput;
 #endif /* __DENOISING_FEATURES__ */
 
   /* multiple importance sampling */

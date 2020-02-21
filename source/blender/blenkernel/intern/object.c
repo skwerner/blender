@@ -89,9 +89,9 @@
 #include "BKE_light.h"
 #include "BKE_layer.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_lib_remap.h"
 #include "BKE_linestyle.h"
 #include "BKE_mesh.h"
 #include "BKE_editmesh.h"
@@ -1325,7 +1325,7 @@ void BKE_object_transform_copy(Object *ob_tar, const Object *ob_src)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_object_copy_data(Main *bmain, Object *ob_dst, const Object *ob_src, const int flag)
 {
@@ -1677,7 +1677,7 @@ Object *BKE_object_duplicate(Main *bmain, const Object *ob, const int dupflag)
     }
 
     if (dupflag & USER_DUP_MAT) {
-      matarar = give_matarar(obn);
+      matarar = BKE_object_material_array(obn);
       if (matarar) {
         for (a = 0; a < obn->totcol; a++) {
           id = (ID *)(*matarar)[a];
@@ -1907,7 +1907,7 @@ void BKE_object_make_proxy(Main *bmain, Object *ob, Object *target, Object *cob)
     ob->mat = MEM_dupallocN(target->mat);
     ob->matbits = MEM_dupallocN(target->matbits);
     for (i = 0; i < target->totcol; i++) {
-      /* don't need to run test_object_materials
+      /* don't need to run BKE_object_materials_test
        * since we know this object is new and not used elsewhere */
       id_us_plus((ID *)ob->mat[i]);
     }

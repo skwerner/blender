@@ -51,7 +51,7 @@
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
 #include "BKE_icons.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mask.h"
 #include "BKE_object.h"
@@ -3812,6 +3812,7 @@ static void region_quadview_init_rv3d(
 
   rv3d->viewlock = viewlock;
   rv3d->view = view;
+  rv3d->view_axis_roll = RV3D_VIEW_AXIS_ROLL_0;
   rv3d->persp = persp;
 
   ED_view3d_lock(rv3d);
@@ -4615,20 +4616,18 @@ int ED_screen_animation_play(bContext *C, int sync, int mode)
 
   if (ED_screen_animation_playing(CTX_wm_manager(C))) {
     /* stop playback now */
-    ED_screen_animation_timer(C, 0, 0, 0, 0);
+    ED_screen_animation_timer(C, 0, 0, 0);
     BKE_sound_stop_scene(scene_eval);
 
     WM_event_add_notifier(C, NC_SCENE | ND_FRAME, scene);
   }
   else {
     /* these settings are currently only available from a menu in the TimeLine */
-    int refresh = SPACE_ACTION;
-
     if (mode == 1) { /* XXX only play audio forwards!? */
       BKE_sound_play_scene(scene_eval);
     }
 
-    ED_screen_animation_timer(C, screen->redraws_flag, refresh, sync, mode);
+    ED_screen_animation_timer(C, screen->redraws_flag, sync, mode);
 
     if (screen->animtimer) {
       wmTimer *wt = screen->animtimer;

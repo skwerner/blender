@@ -51,16 +51,19 @@ class DATA_PT_empty(DataButtonsPanel, Panel):
             col = layout.column()
             col.row().prop(ob, "empty_image_depth", text="Depth", expand=True)
             col.row().prop(ob, "empty_image_side", text="Side", expand=True)
-            col.prop(ob, "show_empty_image_orthographic",
-                     text="Display Orthographic")
-            col.prop(ob, "show_empty_image_perspective",
-                     text="Display Perspective")
+            col.prop(ob, "show_empty_image_orthographic", text="Display Orthographic")
+            col.prop(ob, "show_empty_image_perspective", text="Display Perspective")
             col.prop(ob, "show_empty_image_only_axis_aligned")
 
 
 class DATA_PT_empty_alpha(DataButtonsPanel, Panel):
     bl_label = "Transparency"
     bl_parent_id = "DATA_PT_empty"
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.object
+        return (ob and ob.type == 'EMPTY' and ob.empty_display_type == 'IMAGE')
 
     def draw_header(self, context):
         ob = context.object
@@ -88,8 +91,7 @@ class DATA_PT_empty_image(DataButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
         ob = context.object
-        layout.template_ID(ob, "data", open="image.open",
-                           unlink="object.unlink_data")
+        layout.template_ID(ob, "data", open="image.open", unlink="object.unlink_data")
         layout.separator()
         layout.template_image(ob, "data", ob.image_user, compact=True)
 

@@ -45,7 +45,7 @@
 #include "BKE_brush.h"
 #include "BKE_colortools.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_node.h"
@@ -286,7 +286,6 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
   BLI_strncpy(scene->r.engine, RE_engine_id_BLENDER_EEVEE, sizeof(scene->r.engine));
 
   scene->r.cfra = 1.0f;
-  scene->r.displaymode = R_OUTPUT_WINDOW;
 
   /* Don't enable compositing nodes. */
   if (scene->nodetree) {
@@ -535,7 +534,7 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
       brush->sculpt_tool = SCULPT_TOOL_POSE;
     }
 
-    brush_name = "Multiplane Scrape";
+    brush_name = "Multi-plane Scrape";
     brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
     if (!brush) {
       brush = BKE_brush_add(bmain, brush_name, OB_MODE_SCULPT);

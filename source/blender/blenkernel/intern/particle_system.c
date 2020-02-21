@@ -62,8 +62,8 @@
 #include "BKE_collision.h"
 #include "BKE_colortools.h"
 #include "BKE_effect.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_particle.h"
 
 #include "BKE_collection.h"
@@ -465,7 +465,7 @@ void psys_thread_context_init(ParticleThreadContext *ctx, ParticleSimulationData
   memset(ctx, 0, sizeof(ParticleThreadContext));
   ctx->sim = *sim;
   ctx->mesh = ctx->sim.psmd->mesh_final;
-  ctx->ma = give_current_material(sim->ob, sim->psys->part->omat);
+  ctx->ma = BKE_object_material_get(sim->ob, sim->psys->part->omat);
 }
 
 void psys_tasks_create(ParticleThreadContext *ctx,
@@ -4378,7 +4378,6 @@ static void particles_fluid_step(ParticleSimulationData *sim,
               1. / fabsf(ob->scale[0]), 1. / fabsf(ob->scale[1]), 1. / fabsf(ob->scale[2])};
           mul_v3_fl(scaleAbs, max_size);
           mul_v3_v3(pa->state.co, scaleAbs);
-          ;
 
           /* Match domain scale. */
           mul_m4_v3(ob->obmat, pa->state.co);

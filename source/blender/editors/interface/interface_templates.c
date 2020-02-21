@@ -61,8 +61,8 @@
 #include "BKE_idcode.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
-#include "BKE_library_override.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_override.h"
 #include "BKE_linestyle.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
@@ -544,10 +544,10 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
     case UI_ID_LOCAL:
       if (id) {
         Main *bmain = CTX_data_main(C);
-        if (BKE_override_library_is_enabled() && CTX_wm_window(C)->eventstate->shift) {
+        if (BKE_lib_override_library_is_enabled() && CTX_wm_window(C)->eventstate->shift) {
           if (ID_IS_OVERRIDABLE_LIBRARY(id)) {
             /* Only remap that specific ID usage to overriding local data-block. */
-            ID *override_id = BKE_override_library_create_from_id(bmain, id, false);
+            ID *override_id = BKE_lib_override_library_create_from_id(bmain, id, false);
             if (override_id != NULL) {
               BKE_main_id_clear_newpoins(bmain);
 
@@ -570,7 +570,7 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
       break;
     case UI_ID_OVERRIDE:
       if (id && id->override_library) {
-        BKE_override_library_free(&id->override_library, true);
+        BKE_lib_override_library_free(&id->override_library, true);
         /* reassign to get get proper updates/notifiers */
         idptr = RNA_property_pointer_get(&template_ui->ptr, template_ui->prop);
         RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr, NULL);
@@ -813,7 +813,7 @@ static void template_ID(bContext *C,
   }
 
   if (text) {
-    /* Add label resepecting the seperated layout property split state. */
+    /* Add label resepecting the separated layout property split state. */
     layout = uiItemL_respect_property_split(layout, text, ICON_NONE);
   }
 
@@ -894,7 +894,7 @@ static void template_ID(bContext *C,
                            0,
                            0,
                            0,
-                           BKE_override_library_is_enabled() ?
+                           BKE_lib_override_library_is_enabled() ?
                                TIP_("Direct linked library data-block, click to make local, "
                                     "Shift + Click to create a library override") :
                                TIP_("Direct linked library data-block, click to make local"));
@@ -4607,7 +4607,7 @@ static uiBlock *CurveProfile_presets_func(bContext *C, ARegion *ar, CurveProfile
                    UI_BTYPE_BUT_MENU,
                    1,
                    ICON_BLANK1,
-                   IFACE_("Cornice Moulding"),
+                   IFACE_("Cornice Molding"),
                    0,
                    yco -= UI_UNIT_Y,
                    menuwidth,
@@ -4622,7 +4622,7 @@ static uiBlock *CurveProfile_presets_func(bContext *C, ARegion *ar, CurveProfile
                    UI_BTYPE_BUT_MENU,
                    1,
                    ICON_BLANK1,
-                   IFACE_("Crown Moulding"),
+                   IFACE_("Crown Molding"),
                    0,
                    yco -= UI_UNIT_Y,
                    menuwidth,
@@ -6871,6 +6871,7 @@ static char *progress_tooltip_func(bContext *UNUSED(C), void *argN, const char *
 
 void uiTemplateRunningJobs(uiLayout *layout, bContext *C)
 {
+  Main *bmain = CTX_data_main(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   ScrArea *sa = CTX_wm_area(C);
   uiBlock *block;
@@ -6884,7 +6885,7 @@ void uiTemplateRunningJobs(uiLayout *layout, bContext *C)
 
   Scene *scene;
   /* another scene can be rendering too, for example via compositor */
-  for (scene = CTX_data_main(C)->scenes.first; scene; scene = scene->id.next) {
+  for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
     if (WM_jobs_test(wm, scene, WM_JOB_TYPE_ANY)) {
       handle_event = B_STOPOTHER;
       icon = ICON_NONE;

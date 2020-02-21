@@ -157,7 +157,7 @@
 #include "BKE_gpencil_modifier.h"
 #include "BKE_idcode.h"
 #include "BKE_layer.h"
-#include "BKE_library_override.h"
+#include "BKE_lib_override.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_node.h"
@@ -3597,6 +3597,7 @@ static void write_workspace(WriteData *wd, WorkSpace *workspace)
   ListBase *layouts = BKE_workspace_layouts_get(workspace);
 
   writestruct(wd, ID_WS, WorkSpace, 1, workspace);
+  write_iddata(wd, &workspace->id);
   writelist(wd, DATA, WorkSpaceLayout, layouts);
   writelist(wd, DATA, WorkSpaceDataRelation, &workspace->hook_layout_relations);
   writelist(wd, DATA, wmOwnerID, &workspace->owner_ids);
@@ -3782,7 +3783,7 @@ static bool write_file_handle(Main *mainvar,
   mywrite_flush(wd);
 
   OverrideLibraryStorage *override_storage =
-      wd->use_memfile ? NULL : BKE_override_library_operations_store_initialize();
+      wd->use_memfile ? NULL : BKE_lib_override_library_operations_store_initialize();
 
   /* This outer loop allows to save first data-blocks from real mainvar,
    * then the temp ones from override process,
@@ -3807,7 +3808,7 @@ static bool write_file_handle(Main *mainvar,
         const bool do_override = !ELEM(override_storage, NULL, bmain) && id->override_library;
 
         if (do_override) {
-          BKE_override_library_operations_store_start(bmain, override_storage, id);
+          BKE_lib_override_library_operations_store_start(bmain, override_storage, id);
         }
 
         switch ((ID_Type)GS(id->name)) {
@@ -3927,7 +3928,7 @@ static bool write_file_handle(Main *mainvar,
         }
 
         if (do_override) {
-          BKE_override_library_operations_store_end(override_storage, id);
+          BKE_lib_override_library_operations_store_end(override_storage, id);
         }
       }
 
@@ -3936,7 +3937,7 @@ static bool write_file_handle(Main *mainvar,
   } while ((bmain != override_storage) && (bmain = override_storage));
 
   if (override_storage) {
-    BKE_override_library_operations_store_finalize(override_storage);
+    BKE_lib_override_library_operations_store_finalize(override_storage);
     override_storage = NULL;
   }
 
@@ -4055,39 +4056,36 @@ bool BLO_write_file(Main *mainvar,
     return 0;
   }
 
-  /* check if we need to backup and restore paths */
-  if (UNLIKELY((write_flags & G_FILE_RELATIVE_REMAP) && (G_FILE_SAVE_COPY & write_flags))) {
-    path_list_backup = BKE_bpath_list_backup(mainvar, path_list_flag);
-  }
-
-  /* remapping of relative paths to new file location */
+  /* Remapping of relative paths to new file location. */
   if (write_flags & G_FILE_RELATIVE_REMAP) {
-    char dir1[FILE_MAX];
-    char dir2[FILE_MAX];
-    BLI_split_dir_part(filepath, dir1, sizeof(dir1));
-    BLI_split_dir_part(mainvar->name, dir2, sizeof(dir2));
+    char dir_src[FILE_MAX];
+    char dir_dst[FILE_MAX];
+    BLI_split_dir_part(mainvar->name, dir_src, sizeof(dir_src));
+    BLI_split_dir_part(filepath, dir_dst, sizeof(dir_dst));
 
     /* just in case there is some subtle difference */
-    BLI_cleanup_dir(mainvar->name, dir1);
-    BLI_cleanup_dir(mainvar->name, dir2);
+    BLI_cleanup_dir(mainvar->name, dir_dst);
+    BLI_cleanup_dir(mainvar->name, dir_src);
 
-    if (G.relbase_valid && (BLI_path_cmp(dir1, dir2) == 0)) {
+    if (G.relbase_valid && (BLI_path_cmp(dir_dst, dir_src) == 0)) {
+      /* Saved to same path. Nothing to do. */
       write_flags &= ~G_FILE_RELATIVE_REMAP;
     }
     else {
+      /* Check if we need to backup and restore paths. */
+      if (UNLIKELY(G_FILE_SAVE_COPY & write_flags)) {
+        path_list_backup = BKE_bpath_list_backup(mainvar, path_list_flag);
+      }
+
       if (G.relbase_valid) {
-        /* blend may not have been saved before. Tn this case
-         * we should not have any relative paths, but if there
-         * is somehow, an invalid or empty G_MAIN->name it will
-         * print an error, don't try make the absolute in this case. */
-        BKE_bpath_absolute_convert(mainvar, BKE_main_blendfile_path_from_global(), NULL);
+        /* Saved, make relative paths relative to new location (if possible). */
+        BKE_bpath_relative_rebase(mainvar, dir_src, dir_dst, NULL);
+      }
+      else {
+        /* Unsaved, make all relative. */
+        BKE_bpath_relative_convert(mainvar, dir_dst, NULL);
       }
     }
-  }
-
-  if (write_flags & G_FILE_RELATIVE_REMAP) {
-    /* note, making relative to something OTHER then G_MAIN->name */
-    BKE_bpath_relative_convert(mainvar, filepath, NULL);
   }
 
   /* actual file writing */

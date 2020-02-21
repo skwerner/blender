@@ -80,14 +80,14 @@ int UI_draw_roundbox_corner_get(void)
 }
 #endif
 
-void UI_draw_roundbox_3ubAlpha(bool filled,
-                               float minx,
-                               float miny,
-                               float maxx,
-                               float maxy,
-                               float rad,
-                               const uchar col[3],
-                               uchar alpha)
+void UI_draw_roundbox_3ub_alpha(bool filled,
+                                float minx,
+                                float miny,
+                                float maxx,
+                                float maxy,
+                                float rad,
+                                const uchar col[3],
+                                uchar alpha)
 {
   float colv[4];
   colv[0] = ((float)col[0]) / 255;
@@ -97,14 +97,14 @@ void UI_draw_roundbox_3ubAlpha(bool filled,
   UI_draw_roundbox_4fv(filled, minx, miny, maxx, maxy, rad, colv);
 }
 
-void UI_draw_roundbox_3fvAlpha(bool filled,
-                               float minx,
-                               float miny,
-                               float maxx,
-                               float maxy,
-                               float rad,
-                               const float col[3],
-                               float alpha)
+void UI_draw_roundbox_3fv_alpha(bool filled,
+                                float minx,
+                                float miny,
+                                float maxx,
+                                float maxy,
+                                float rad,
+                                const float col[3],
+                                float alpha)
 {
   float colv[4];
   colv[0] = col[0];
@@ -1736,11 +1736,11 @@ void ui_draw_but_UNITVEC(uiBut *but, const uiWidgetColors *wcol, const rcti *rec
   /* sphere color */
   float diffuse[3] = {1.0f, 1.0f, 1.0f};
   float light[3];
-  float size;
+  const float size = 0.5f * min_ff(BLI_rcti_size_x(rect), BLI_rcti_size_y(rect));
 
   /* backdrop */
   UI_draw_roundbox_corner_set(UI_CNR_ALL);
-  UI_draw_roundbox_3ubAlpha(
+  UI_draw_roundbox_3ub_alpha(
       true, rect->xmin, rect->ymin, rect->xmax, rect->ymax, 5.0f, wcol->inner, 255);
 
   glCullFace(GL_BACK);
@@ -1752,11 +1752,10 @@ void ui_draw_but_UNITVEC(uiBut *but, const uiWidgetColors *wcol, const rcti *rec
   /* transform to button */
   GPU_matrix_push();
 
-  if (BLI_rcti_size_x(rect) < BLI_rcti_size_y(rect)) {
-    size = 0.5f * BLI_rcti_size_x(rect);
-  }
-  else {
-    size = 0.5f * BLI_rcti_size_y(rect);
+  bool use_project_matrix = (size >= -GPU_MATRIX_ORTHO_CLIP_NEAR_DEFAULT);
+  if (use_project_matrix) {
+    GPU_matrix_push_projection();
+    GPU_matrix_ortho_set_z(-size, size);
   }
 
   GPU_matrix_translate_2f(rect->xmin + 0.5f * BLI_rcti_size_x(rect),
@@ -1783,6 +1782,10 @@ void ui_draw_but_UNITVEC(uiBut *but, const uiWidgetColors *wcol, const rcti *rec
   imm_draw_circle_wire_2d(pos, 0.0f, 0.0f, 1.0f, 32);
   GPU_blend(false);
   GPU_line_smooth(false);
+
+  if (use_project_matrix) {
+    GPU_matrix_pop_projection();
+  }
 
   /* matrix after circle */
   GPU_matrix_pop();

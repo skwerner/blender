@@ -44,7 +44,7 @@
 #include "BKE_key.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_material.h"
 #include "BKE_modifier.h"
 #include "BKE_multires.h"
@@ -563,7 +563,7 @@ Mesh *BKE_mesh_add(Main *bmain, const char *name)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_mesh_copy_data(Main *bmain, Mesh *me_dst, const Mesh *me_src, const int flag)
 {
@@ -608,6 +608,8 @@ void BKE_mesh_copy_data(Main *bmain, Mesh *me_dst, const Mesh *me_src, const int
   /* TODO Do we want to add flag to prevent this? */
   if (me_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
     BKE_id_copy_ex(bmain, &me_src->key->id, (ID **)&me_dst->key, flag);
+    /* XXX This is not nice, we need to make BKE_id_copy_ex fully re-entrant... */
+    me_dst->key->from = &me_dst->id;
   }
 }
 
@@ -1092,7 +1094,7 @@ void BKE_mesh_assign_object(Main *bmain, Object *ob, Mesh *me)
     id_us_plus((ID *)me);
   }
 
-  test_object_materials(bmain, ob, (ID *)me);
+  BKE_object_materials_test(bmain, ob, (ID *)me);
 
   test_object_modifiers(ob);
 }
@@ -1200,7 +1202,7 @@ void BKE_mesh_smooth_flag_set(Mesh *me, const bool use_smooth)
  * Find the index of the loop in 'poly' which references vertex,
  * returns -1 if not found
  */
-int poly_find_loop_from_vert(const MPoly *poly, const MLoop *loopstart, unsigned vert)
+int poly_find_loop_from_vert(const MPoly *poly, const MLoop *loopstart, uint vert)
 {
   int j;
   for (j = 0; j < poly->totloop; j++, loopstart++) {

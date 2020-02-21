@@ -383,36 +383,44 @@ static void rna_Object_matrix_basis_set(PointerRNA *ptr, const float values[16])
   BKE_object_apply_mat4(ob, (float(*)[4])values, false, false);
 }
 
-void rna_Object_internal_update_data(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+void rna_Object_internal_update_data_impl(PointerRNA *ptr)
 {
   DEG_id_tag_update(ptr->owner_id, ID_RECALC_GEOMETRY);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, ptr->owner_id);
 }
 
-void rna_Object_internal_update_data_dependency(Main *bmain, Scene *scene, PointerRNA *ptr)
+void rna_Object_internal_update_data(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  DEG_relations_tag_update(bmain);
-  rna_Object_internal_update_data(bmain, scene, ptr);
+  rna_Object_internal_update_data_impl(ptr);
 }
 
-static void rna_Object_active_shape_update(bContext *C, PointerRNA *ptr)
+void rna_Object_internal_update_data_dependency(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
+{
+  DEG_relations_tag_update(bmain);
+  rna_Object_internal_update_data_impl(ptr);
+}
+
+static void rna_Object_active_shape_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
-  Main *bmain = CTX_data_main(C);
-  Scene *scene = CTX_data_scene(C);
 
-  if (CTX_data_edit_object(C) == ob) {
+  if (BKE_object_is_in_editmode(ob)) {
     /* exit/enter editmode to get new shape */
     switch (ob->type) {
-      case OB_MESH:
+      case OB_MESH: {
+        Mesh *me = ob->data;
+        BMEditMesh *em = me->edit_mesh;
+        int select_mode = em->selectmode;
         EDBM_mesh_load(bmain, ob);
-        EDBM_mesh_make(ob, scene->toolsettings->selectmode, true);
+        EDBM_mesh_make(ob, select_mode, true);
+        em = me->edit_mesh;
 
-        DEG_id_tag_update(ob->data, 0);
+        DEG_id_tag_update(&me->id, 0);
 
-        EDBM_mesh_normals_update(((Mesh *)ob->data)->edit_mesh);
-        BKE_editmesh_looptri_calc(((Mesh *)ob->data)->edit_mesh);
+        EDBM_mesh_normals_update(em);
+        BKE_editmesh_looptri_calc(em);
         break;
+      }
       case OB_CURVE:
       case OB_SURF:
         ED_curve_editnurb_load(bmain, ob);
@@ -425,7 +433,7 @@ static void rna_Object_active_shape_update(bContext *C, PointerRNA *ptr)
     }
   }
 
-  rna_Object_internal_update_data(bmain, scene, ptr);
+  rna_Object_internal_update_data_impl(ptr);
 }
 
 static void rna_Object_dependency_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
@@ -481,7 +489,7 @@ static void rna_Object_data_set(PointerRNA *ptr, PointerRNA value, struct Report
     id_us_plus(id);
 
     ob->data = id;
-    test_object_materials(G_MAIN, ob, id);
+    BKE_object_materials_test(G_MAIN, ob, id);
 
     if (GS(id->name) == ID_CU) {
       BKE_curve_type_test(ob);
@@ -948,7 +956,7 @@ static PointerRNA rna_Object_active_material_get(PointerRNA *ptr)
   Object *ob = (Object *)ptr->owner_id;
   Material *ma;
 
-  ma = (ob->totcol) ? give_current_material(ob, ob->actcol) : NULL;
+  ma = (ob->totcol) ? BKE_object_material_get(ob, ob->actcol) : NULL;
   return rna_pointer_inherit_refine(ptr, &RNA_Material, ma);
 }
 
@@ -961,7 +969,7 @@ static void rna_Object_active_material_set(PointerRNA *ptr,
   DEG_id_tag_update(value.data, 0);
   BLI_assert(BKE_id_is_in_global_main(&ob->id));
   BLI_assert(BKE_id_is_in_global_main(value.data));
-  assign_material(G_MAIN, ob, value.data, ob->actcol, BKE_MAT_ASSIGN_EXISTING);
+  BKE_object_material_assign(G_MAIN, ob, value.data, ob->actcol, BKE_MAT_ASSIGN_EXISTING);
 
   if (ob && ob->type == OB_GPENCIL) {
     /* notifying material property in topbar */
@@ -1165,7 +1173,7 @@ static PointerRNA rna_MaterialSlot_material_get(PointerRNA *ptr)
   Material *ma;
   const int index = (Material **)ptr->data - ob->mat;
 
-  ma = give_current_material(ob, index + 1);
+  ma = BKE_object_material_get(ob, index + 1);
   return rna_pointer_inherit_refine(ptr, &RNA_Material, ma);
 }
 
@@ -1178,7 +1186,7 @@ static void rna_MaterialSlot_material_set(PointerRNA *ptr,
 
   BLI_assert(BKE_id_is_in_global_main(&ob->id));
   BLI_assert(BKE_id_is_in_global_main(value.data));
-  assign_material(G_MAIN, ob, value.data, index + 1, BKE_MAT_ASSIGN_EXISTING);
+  BKE_object_material_assign(G_MAIN, ob, value.data, index + 1, BKE_MAT_ASSIGN_EXISTING);
 }
 
 static bool rna_MaterialSlot_material_poll(PointerRNA *ptr, PointerRNA value)
@@ -1225,7 +1233,7 @@ static int rna_MaterialSlot_name_length(PointerRNA *ptr)
   Material *ma;
   int index = (Material **)ptr->data - ob->mat;
 
-  ma = give_current_material(ob, index + 1);
+  ma = BKE_object_material_get(ob, index + 1);
 
   if (ma) {
     return strlen(ma->id.name + 2);
@@ -1240,7 +1248,7 @@ static void rna_MaterialSlot_name_get(PointerRNA *ptr, char *str)
   Material *ma;
   int index = (Material **)ptr->data - ob->mat;
 
-  ma = give_current_material(ob, index + 1);
+  ma = BKE_object_material_get(ob, index + 1);
 
   if (ma) {
     strcpy(str, ma->id.name + 2);
@@ -3105,7 +3113,6 @@ static void rna_def_object(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "active_shape_key_index", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "shapenr");
-  RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE); /* XXX this is really unpredictable... */
   RNA_def_property_int_funcs(prop,
                              "rna_Object_active_shape_key_index_get",

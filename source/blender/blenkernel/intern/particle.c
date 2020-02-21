@@ -65,7 +65,7 @@
 #include "BKE_particle.h"
 #include "BKE_material.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_modifier.h"
 #include "BKE_mesh.h"
 #include "BKE_cdderivedmesh.h" /* for weight_to_rgb() */
@@ -2926,7 +2926,7 @@ void psys_cache_paths(ParticleSimulationData *sim, float cfra, const bool use_re
       &psys->pathcachebufs, totpart, segments + 1);
 
   psys->lattice_deform_data = psys_create_lattice_deform_data(sim);
-  ma = give_current_material(sim->ob, psys->part->omat);
+  ma = BKE_object_material_get(sim->ob, psys->part->omat);
   if (ma && (psys->part->draw_col == PART_DRAW_COL_MAT)) {
     copy_v3_v3(col, &ma->r);
   }
@@ -3112,8 +3112,6 @@ typedef struct CacheEditrPathsIterData {
   ParticleData *pa;
   int segments;
   bool use_weight;
-  float sel_col[3];
-  float nosel_col[3];
 } CacheEditrPathsIterData;
 
 static void psys_cache_edit_paths_iter(void *__restrict iter_data_v,
@@ -3329,18 +3327,6 @@ void psys_cache_edit_paths(Depsgraph *depsgraph,
   iter_data.pa = pa;
   iter_data.segments = segments;
   iter_data.use_weight = use_weight;
-
-  if (use_weight) {
-    /* use weight painting colors now... */
-  }
-  else {
-    iter_data.sel_col[0] = (float)edit->sel_col[0] / 255.0f;
-    iter_data.sel_col[1] = (float)edit->sel_col[1] / 255.0f;
-    iter_data.sel_col[2] = (float)edit->sel_col[2] / 255.0f;
-    iter_data.nosel_col[0] = (float)edit->nosel_col[0] / 255.0f;
-    iter_data.nosel_col[1] = (float)edit->nosel_col[1] / 255.0f;
-    iter_data.nosel_col[2] = (float)edit->nosel_col[2] / 255.0f;
-  }
 
   TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
@@ -3586,12 +3572,45 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
     return;
   }
 
-  /* clear all other appearances of this pointer (like on manta flow modifier) */
+  /* Clear particle system in fluid modifier. */
   if ((md = modifiers_findByType(ob, eModifierType_Fluid))) {
     FluidModifierData *mmd = (FluidModifierData *)md;
+
+    /* Clear particle system pointer in flow settings. */
     if ((mmd->type == MOD_FLUID_TYPE_FLOW) && mmd->flow && mmd->flow->psys) {
       if (mmd->flow->psys == psys) {
         mmd->flow->psys = NULL;
+      }
+    }
+    /* Clear particle flag in domain settings when removing particle system manually. */
+    if (mmd->type == MOD_FLUID_TYPE_DOMAIN) {
+      if (psys->part->type == PART_FLUID_FLIP) {
+        mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_FLIP;
+      }
+      if (psys->part->type == PART_FLUID_SPRAY || psys->part->type == PART_FLUID_SPRAYFOAM ||
+          psys->part->type == PART_FLUID_SPRAYBUBBLE ||
+          psys->part->type == PART_FLUID_SPRAYFOAMBUBBLE) {
+        mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_SPRAY;
+      }
+      if (psys->part->type == PART_FLUID_FOAM || psys->part->type == PART_FLUID_SPRAYFOAM ||
+          psys->part->type == PART_FLUID_FOAMBUBBLE ||
+          psys->part->type == PART_FLUID_SPRAYFOAMBUBBLE) {
+        mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_FOAM;
+      }
+      if (psys->part->type == PART_FLUID_BUBBLE || psys->part->type == PART_FLUID_FOAMBUBBLE ||
+          psys->part->type == PART_FLUID_SPRAYBUBBLE ||
+          psys->part->type == PART_FLUID_SPRAYFOAMBUBBLE) {
+        mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_BUBBLE;
+      }
+      if (psys->part->type == PART_FLUID_TRACER) {
+        mmd->domain->particle_type &= ~FLUID_DOMAIN_PARTICLE_TRACER;
+      }
+
+      /* Disable combined export if combined particle system was deleted. */
+      if (psys->part->type == PART_FLUID_SPRAYFOAM || psys->part->type == PART_FLUID_SPRAYBUBBLE ||
+          psys->part->type == PART_FLUID_FOAMBUBBLE ||
+          psys->part->type == PART_FLUID_SPRAYFOAMBUBBLE) {
+        mmd->domain->sndparticle_combined_export = SNDPARTICLE_COMBINED_EXPORT_OFF;
       }
     }
   }
@@ -3605,12 +3624,14 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
     }
   }
 
-  /* clear modifier */
+  /* Clear modifier, skip empty ones. */
   psmd = psys_get_modifier(ob, psys);
-  BLI_remlink(&ob->modifiers, psmd);
-  modifier_free((ModifierData *)psmd);
+  if (psmd) {
+    BLI_remlink(&ob->modifiers, psmd);
+    modifier_free((ModifierData *)psmd);
+  }
 
-  /* clear particle system */
+  /* Clear particle system. */
   BLI_remlink(&ob->particlesystem, psys);
   if (psys->part) {
     id_us_min(&psys->part->id);
@@ -3777,7 +3798,7 @@ void BKE_particlesettings_twist_curve_init(ParticleSettings *part)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_particlesettings_copy_data(Main *UNUSED(bmain),
                                     ParticleSettings *part_dst,
@@ -4276,7 +4297,7 @@ void psys_get_particle_on_path(ParticleSimulationData *sim,
   PARTICLE_PSMD;
   ParticleSystem *psys = sim->psys;
   ParticleSettings *part = sim->psys->part;
-  Material *ma = give_current_material(sim->ob, part->omat);
+  Material *ma = BKE_object_material_get(sim->ob, part->omat);
   ParticleData *pa;
   ChildParticle *cpa;
   ParticleTexture ptex;

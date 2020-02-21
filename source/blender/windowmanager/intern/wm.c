@@ -40,7 +40,7 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_workspace.h"
@@ -267,7 +267,7 @@ void WM_check(bContext *C)
 
   /* wm context */
   if (wm == NULL) {
-    wm = CTX_data_main(C)->wm.first;
+    wm = bmain->wm.first;
     CTX_wm_manager_set(C, wm);
   }
 
@@ -344,7 +344,7 @@ void wm_add_default(Main *bmain, bContext *C)
   wm_window_make_drawable(wm, win);
 }
 
-/* context is allowed to be NULL, do not free wm itself (library.c) */
+/* context is allowed to be NULL, do not free wm itself (lib_id.c) */
 void wm_close_and_free(bContext *C, wmWindowManager *wm)
 {
   wmWindow *win;

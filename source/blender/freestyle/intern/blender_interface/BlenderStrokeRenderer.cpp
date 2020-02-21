@@ -45,7 +45,7 @@ extern "C" {
 #include "BKE_idprop.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
-#include "BKE_library.h" /* free_libblock */
+#include "BKE_lib_id.h" /* free_libblock */
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_node.h"
@@ -838,7 +838,7 @@ void BlenderStrokeRenderer::GenerateStrokeMesh(StrokeGroup *group, bool hasTex)
     material_index++;
   }  // loop over strokes
 
-  test_object_materials(freestyle_bmain, object_mesh, (ID *)mesh);
+  BKE_object_materials_test(freestyle_bmain, object_mesh, (ID *)mesh);
 
 #if 0  // XXX
   BLI_assert(mesh->totvert == vertex_index);

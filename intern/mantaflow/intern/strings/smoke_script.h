@@ -279,18 +279,18 @@ def smoke_adaptive_step_$ID$(framenr):\n\
         mantaMsg('Initializing obstacle levelset')\n\
         phiObsIn_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=2)\n\
         extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=int(res_s$ID$/2), inside=True)\n\
-        extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=int(res_s$ID$/2), inside=False)\n\
+        extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=3, inside=False)\n\
         phiObs_s$ID$.join(phiObsIn_s$ID$)\n\
         \n\
         # Using boundaryWidth=2 to not search beginning from walls (just a performance optimization)\n\
         # Additional sanity check: fill holes in phiObs which can result after joining with phiObsIn\n\
         phiObs_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=2)\n\
         extrapolateLsSimple(phi=phiObs_s$ID$, distance=int(res_s$ID$/2), inside=True)\n\
-        extrapolateLsSimple(phi=phiObs_s$ID$, distance=int(res_s$ID$/2), inside=False)\n\
+        extrapolateLsSimple(phi=phiObs_s$ID$, distance=3, inside=False)\n\
     \n\
     mantaMsg('Initializing fluid levelset')\n\
     extrapolateLsSimple(phi=phiIn_s$ID$, distance=int(res_s$ID$/2), inside=True)\n\
-    extrapolateLsSimple(phi=phiIn_s$ID$, distance=int(res_s$ID$/2), inside=False)\n\
+    extrapolateLsSimple(phi=phiIn_s$ID$, distance=3, inside=False)\n\
     \n\
     if using_outflow_s$ID$:\n\
         phiOut_s$ID$.join(phiOutIn_s$ID$)\n\
@@ -298,21 +298,19 @@ def smoke_adaptive_step_$ID$(framenr):\n\
     setObstacleFlags(flags=flags_s$ID$, phiObs=phiObs_s$ID$, phiOut=phiOut_s$ID$, phiIn=phiIn_s$ID$)\n\
     flags_s$ID$.fillGrid()\n\
     \n\
-    if timePerFrame_s$ID$ == 0: # Only apply inflow once per frame\n\
-        mantaMsg('Smoke inflow at frame: ' + str(framenr))\n\
-        applyEmission(flags=flags_s$ID$, target=density_s$ID$, source=densityIn_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
-        if using_heat_s$ID$:\n\
-            applyEmission(flags=flags_s$ID$, target=heat_s$ID$, source=heatIn_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
-        \n\
-        if using_colors_s$ID$:\n\
-            applyEmission(flags=flags_s$ID$, target=color_r_s$ID$, source=color_r_in_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
-            applyEmission(flags=flags_s$ID$, target=color_g_s$ID$, source=color_g_in_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
-            applyEmission(flags=flags_s$ID$, target=color_b_s$ID$, source=color_b_in_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
-        \n\
-        if using_fire_s$ID$:\n\
-            applyEmission(flags=flags_s$ID$, target=fuel_s$ID$, source=fuelIn_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
-            applyEmission(flags=flags_s$ID$, target=react_s$ID$, source=reactIn_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
-        \n\
+    applyEmission(flags=flags_s$ID$, target=density_s$ID$, source=densityIn_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
+    if using_heat_s$ID$:\n\
+        applyEmission(flags=flags_s$ID$, target=heat_s$ID$, source=heatIn_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
+    \n\
+    if using_colors_s$ID$:\n\
+        applyEmission(flags=flags_s$ID$, target=color_r_s$ID$, source=color_r_in_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
+        applyEmission(flags=flags_s$ID$, target=color_g_s$ID$, source=color_g_in_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
+        applyEmission(flags=flags_s$ID$, target=color_b_s$ID$, source=color_b_in_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
+    \n\
+    if using_fire_s$ID$:\n\
+        applyEmission(flags=flags_s$ID$, target=fuel_s$ID$, source=fuelIn_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
+        applyEmission(flags=flags_s$ID$, target=react_s$ID$, source=reactIn_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
+    \n\
     mantaMsg('Smoke step / s$ID$.frame: ' + str(s$ID$.frame))\n\
     if using_fire_s$ID$:\n\
         process_burn_$ID$()\n\
@@ -361,7 +359,7 @@ def smoke_step_$ID$():\n\
     if using_fire_s$ID$:\n\
         flame_s$ID$.copyFrom(fuel_s$ID$) # temporarily misuse flame grid as vorticity storage\n\
         flame_s$ID$.multConst(flameVorticity_s$ID$)\n\
-    vorticityConfinement(vel=vel_s$ID$, flags=flags_s$ID$, strengthGlobal=vorticity_s$ID$, strengthCell=flame_s$ID$ if using_fire_s$ID$ else None)\n\
+    vorticityConfinement(vel=vel_s$ID$, flags=flags_s$ID$, strength=vorticity_s$ID$, strengthCell=flame_s$ID$ if using_fire_s$ID$ else None)\n\
     \n\
     if using_heat_s$ID$:\n\
         mantaMsg('Adding heat buoyancy')\n\

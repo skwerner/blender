@@ -1138,8 +1138,8 @@ endmacro()
 macro(blender_precompile_headers target cpp header)
   if(MSVC)
     # get the name for the pch output file
-    get_filename_component( pchbase ${cpp} NAME_WE )
-    set( pchfinal "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/${pchbase}.pch" )
+    get_filename_component(pchbase ${cpp} NAME_WE)
+    set(pchfinal "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/${pchbase}.pch")
 
     # mark the cpp as the one outputting the pch
     set_property(SOURCE ${cpp} APPEND PROPERTY OBJECT_OUTPUTS "${pchfinal}")
@@ -1157,3 +1157,13 @@ macro(blender_precompile_headers target cpp header)
     set_source_files_properties(${cpp} PROPERTIES COMPILE_FLAGS "/Yc${header} /Fp${pchfinal}")
   endif()
 endmacro()
+
+macro(set_and_warn_dependency
+    _dependency _setting _val)
+    # when $_dependency is disabled, forces $_setting = $_val
+    if(NOT ${${_dependency}} AND ${${_setting}})
+      message(STATUS "'${_dependency}' is disabled: forcing 'set(${_setting} ${_val})'")
+      set(${_setting} ${_val})
+    endif()
+endmacro()
+

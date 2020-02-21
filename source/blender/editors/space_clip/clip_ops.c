@@ -48,7 +48,7 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_movieclip.h"
 #include "BKE_report.h"
@@ -209,7 +209,7 @@ static int open_exec(bContext *C, wmOperator *op)
 
     RNA_string_get(op->ptr, "directory", dir_only);
     if (relative) {
-      BLI_path_rel(dir_only, CTX_data_main(C)->name);
+      BLI_path_rel(dir_only, bmain->name);
     }
 
     prop = RNA_struct_find_property(op->ptr, "files");

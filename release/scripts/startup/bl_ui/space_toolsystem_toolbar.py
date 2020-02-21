@@ -125,7 +125,7 @@ class _defs_view3d_generic:
                 "\u2022 Drag ruler segment to measure an angle.\n"
                 "\u2022 {} to remove the active ruler.\n"
                 "\u2022 Ctrl while dragging to snap.\n"
-                "\u2022 Shift while dragging to measure surface thickness."
+                "\u2022 Shift while dragging to measure surface thickness"
             ).format(
                 kmi_to_string_or_none(kmi_add),
                 kmi_to_string_or_none(kmi_remove),
@@ -144,11 +144,7 @@ class _defs_view3d_generic:
 class _defs_annotate:
 
     def draw_settings_common(context, layout, tool):
-        if type(context.gpencil_data_owner) is bpy.types.Object:
-            gpd = context.scene.grease_pencil
-        else:
-            gpd = context.gpencil_data
-
+        gpd = context.annotation_data
         if gpd is not None:
             if gpd.layers.active_note is not None:
                 text = gpd.layers.active_note
@@ -158,7 +154,7 @@ class _defs_annotate:
             else:
                 text = ""
 
-            gpl = context.active_gpencil_layer
+            gpl = context.active_annotation_layer
             if gpl is not None:
                 layout.label(text="Annotation:")
                 sub = layout.row(align=True)
@@ -289,6 +285,20 @@ class _defs_transform:
             widget="VIEW3D_GGT_xform_cage",
             operator="transform.resize",
             keymap="3D View Tool: Scale",
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def shear():
+        def draw_settings(context, layout, _tool):
+            # props = tool.operator_properties("transform.shear")
+            _template_widget.VIEW3D_GGT_xform_gizmo.draw_settings_with_index(context, layout, 2)
+        return dict(
+            idname="builtin.shear",
+            label="Shear",
+            icon="ops.transform.shear",
+            widget="VIEW3D_GGT_xform_shear",
+            keymap="3D View Tool: Shear",
             draw_settings=draw_settings,
         )
 
@@ -446,6 +456,7 @@ class _defs_edit_armature:
         return dict(
             idname="builtin.extrude_to_cursor",
             label="Extrude to Cursor",
+            cursor='CROSSHAIR',
             icon="ops.armature.extrude_cursor",
             widget=None,
             keymap=(),
@@ -700,6 +711,7 @@ class _defs_edit_mesh:
         return dict(
             idname="builtin.extrude_to_cursor",
             label="Extrude to Cursor",
+            cursor='CROSSHAIR',
             icon="ops.mesh.dupli_extrude_cursor",
             widget=None,
             keymap=(),
@@ -761,20 +773,6 @@ class _defs_edit_mesh:
             label="Randomize",
             icon="ops.transform.vertex_random",
             widget="VIEW3D_GGT_tool_generic_handle_normal",
-            keymap=(),
-            draw_settings=draw_settings,
-        )
-
-    @ToolDef.from_fn
-    def shear():
-        def draw_settings(context, layout, _tool):
-            # props = tool.operator_properties("transform.shear")
-            _template_widget.VIEW3D_GGT_xform_gizmo.draw_settings_with_index(context, layout, 2)
-        return dict(
-            idname="builtin.shear",
-            label="Shear",
-            icon="ops.transform.shear",
-            widget="VIEW3D_GGT_xform_shear",
             keymap=(),
             draw_settings=draw_settings,
         )
@@ -896,7 +894,8 @@ class _defs_edit_curve:
     def extrude_cursor():
         return dict(
             idname="builtin.extrude_cursor",
-            label="Extrude Cursor",
+            label="Extrude to Cursor",
+            cursor='CROSSHAIR',
             icon="ops.curve.extrude_cursor",
             widget=None,
             keymap=(),
@@ -1710,23 +1709,26 @@ class _defs_node_edit:
             keymap="Node Tool: Links Cut",
         )
 
+
 class _defs_sequencer_generic:
 
     @ToolDef.from_fn
-    def cut():
+    def blade():
         def draw_settings(_context, layout, tool):
-            props = tool.operator_properties("sequencer.cut")
+            props = tool.operator_properties("sequencer.split")
             row = layout.row()
             row.use_property_split = False
             row.prop(props, "type", expand=True)
         return dict(
-            idname="builtin.cut",
-            label="Cut",
-            icon="ops.mesh.knife_tool",
+            idname="builtin.blade",
+            label="Blade",
+            icon="ops.sequencer.blade",
+            cursor='CROSSHAIR',
             widget=None,
-            keymap="Sequencer Tool: Cut",
+            keymap="Sequencer Tool: Blade",
             draw_settings=draw_settings,
         )
+
 
 class _defs_sequencer_select:
     @ToolDef.from_fn
@@ -2008,6 +2010,7 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
                 _defs_edit_armature.extrude,
                 _defs_edit_armature.extrude_cursor,
             ),
+            _defs_transform.shear,
         ],
         'EDIT_MESH': [
             *_tools_default,
@@ -2046,7 +2049,7 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
                 _defs_edit_mesh.push_pull,
             ),
             (
-                _defs_edit_mesh.shear,
+                _defs_transform.shear,
                 _defs_edit_mesh.tosphere,
             ),
             (
@@ -2066,16 +2069,23 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
             _defs_edit_curve.curve_radius,
             _defs_edit_curve.tilt,
             None,
+            _defs_transform.shear,
             _defs_edit_curve.curve_vertex_randomize,
         ],
         'EDIT_SURFACE': [
             *_tools_default,
+            None,
+            _defs_transform.shear,
         ],
         'EDIT_METABALL': [
             *_tools_default,
+            None,
+            _defs_transform.shear,
         ],
         'EDIT_LATTICE': [
             *_tools_default,
+            None,
+            _defs_transform.shear,
         ],
         'EDIT_TEXT': [
             _defs_view3d_generic.cursor,
@@ -2249,14 +2259,15 @@ class SEQUENCER_PT_tools_active(ToolSelectPanelHelper, Panel):
         ],
         'SEQUENCER': [
             *_tools_select,
-            _defs_sequencer_generic.cut,
+            _defs_sequencer_generic.blade,
         ],
         'SEQUENCER_PREVIEW': [
             *_tools_select,
             *_tools_annotate,
-            _defs_sequencer_generic.cut,
+            _defs_sequencer_generic.blade,
         ],
     }
+
 
 classes = (
     IMAGE_PT_tools_active,

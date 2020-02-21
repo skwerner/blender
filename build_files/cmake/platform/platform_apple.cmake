@@ -381,7 +381,7 @@ if(WITH_CYCLES_OSL)
 endif()
 
 if(WITH_CYCLES_EMBREE)
-  find_package(Embree 3.2.4 REQUIRED)
+  find_package(Embree 3.8.0 REQUIRED)
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -Xlinker -stack_size -Xlinker 0x100000")
 endif()
 
@@ -396,21 +396,6 @@ endif()
 
 if(WITH_TBB)
   find_package(TBB)
-endif()
-
-if(NOT WITH_TBB OR NOT TBB_FOUND)
-  if(WITH_OPENIMAGEDENOISE)
-    message(STATUS "TBB not found, disabling OpenImageDenoise")
-    set(WITH_OPENIMAGEDENOISE OFF)
-  endif()
-  if(WITH_OPENVDB)
-    message(STATUS "TBB not found, disabling OpenVDB")
-    set(WITH_OPENVDB OFF)
-  endif()
-  if(WITH_MOD_FLUID)
-    message(STATUS "TBB not found, disabling Fluid modifier")
-    set(WITH_MOD_FLUID OFF)
-  endif()
 endif()
 
 # CMake FindOpenMP doesn't know about AppleClang before 3.12, so provide custom flags.

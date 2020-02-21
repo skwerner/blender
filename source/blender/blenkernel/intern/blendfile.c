@@ -50,7 +50,7 @@
 #include "BKE_ipo.h"
 #include "BKE_keyconfig.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
@@ -372,7 +372,7 @@ static void setup_app_data(bContext *C,
      * lib_link on local IDs using linked ones.
      * There is no real way to predict amount of changes here, so we have to fully redo
      * refcounting . */
-    BKE_main_id_refcount_recompute(bmain, true);
+    BKE_main_id_refcount_recompute(bmain, false);
   }
 }
 

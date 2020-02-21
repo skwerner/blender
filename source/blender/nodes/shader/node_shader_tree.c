@@ -44,7 +44,7 @@
 #include "BKE_linestyle.h"
 #include "BKE_node.h"
 #include "BKE_scene.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 
 #include "RNA_access.h"
 
@@ -95,7 +95,7 @@ static void shader_get_from_context(const bContext *C,
         *r_ntree = ((Light *)ob->data)->nodetree;
       }
       else {
-        Material *ma = give_current_material(ob, ob->actcol);
+        Material *ma = BKE_object_material_get(ob, ob->actcol);
         if (ma) {
           *r_id = &ma->id;
           *r_ntree = ma->nodetree;

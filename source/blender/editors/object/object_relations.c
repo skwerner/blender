@@ -70,10 +70,10 @@
 #include "BKE_light.h"
 #include "BKE_lattice.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
-#include "BKE_library_override.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_override.h"
+#include "BKE_lib_query.h"
+#include "BKE_lib_remap.h"
 #include "BKE_lightprobe.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
@@ -616,8 +616,6 @@ void OBJECT_OT_parent_clear(wmOperatorType *ot)
   ot->invoke = WM_menu_invoke;
   ot->exec = parent_clear_exec;
 
-  ot->poll = ED_operator_object_active_editable;
-
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
@@ -1056,7 +1054,9 @@ static int parent_set_invoke_menu(bContext *C, wmOperatorType *ot)
   if (parent->type == OB_ARMATURE) {
     uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE);
     uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_NAME);
-    uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_ENVELOPE);
+    if (!has_children_of_type.gpencil) {
+      uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_ENVELOPE);
+    }
     if (has_children_of_type.mesh || has_children_of_type.gpencil) {
       uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_AUTO);
     }
@@ -1534,16 +1534,16 @@ static int make_links_data_exec(bContext *C, wmOperator *op)
             ob_dst->data = obdata_id;
 
             /* if amount of material indices changed: */
-            test_object_materials(bmain, ob_dst, ob_dst->data);
+            BKE_object_materials_test(bmain, ob_dst, ob_dst->data);
 
             DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
             break;
           case MAKE_LINKS_MATERIALS:
             /* new approach, using functions from kernel */
             for (a = 0; a < ob_src->totcol; a++) {
-              Material *ma = give_current_material(ob_src, a + 1);
+              Material *ma = BKE_object_material_get(ob_src, a + 1);
               /* also works with `ma == NULL` */
-              assign_material(bmain, ob_dst, ma, a + 1, BKE_MAT_ASSIGN_USERPREF);
+              BKE_object_material_assign(bmain, ob_dst, ma, a + 1, BKE_MAT_ASSIGN_USERPREF);
             }
             DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
             break;
@@ -1950,7 +1950,7 @@ static void single_mat_users(
   FOREACH_OBJECT_FLAG_BEGIN (scene, view_layer, v3d, flag, ob) {
     if (!ID_IS_LINKED(ob)) {
       for (a = 1; a <= ob->totcol; a++) {
-        ma = give_current_material(ob, a);
+        ma = BKE_object_material_get(ob, a);
         if (ma) {
           /* do not test for LIB_TAG_NEW or use newid:
            * this functions guaranteed delivers single_users! */
@@ -1960,7 +1960,7 @@ static void single_mat_users(
             BKE_animdata_copy_id_action(bmain, &man->id, false);
 
             man->id.us = 0;
-            assign_material(bmain, ob, man, a, BKE_MAT_ASSIGN_USERPREF);
+            BKE_object_material_assign(bmain, ob, man, a, BKE_MAT_ASSIGN_USERPREF);
           }
         }
       }
@@ -2087,11 +2087,9 @@ enum {
   MAKE_LOCAL_ALL = 4,
 };
 
-static int tag_localizable_looper(void *UNUSED(user_data),
-                                  ID *UNUSED(self_id),
-                                  ID **id_pointer,
-                                  const int UNUSED(cb_flag))
+static int tag_localizable_looper(LibraryIDLinkCallbackData *cb_data)
 {
+  ID **id_pointer = cb_data->id_pointer;
   if (*id_pointer) {
     (*id_pointer)->tag &= ~LIB_TAG_DOIT;
   }
@@ -2262,7 +2260,7 @@ static int make_local_exec(bContext *C, wmOperator *op)
           }
         }
 
-        matarar = (Material ***)give_matarar(ob);
+        matarar = (Material ***)BKE_object_material_array(ob);
         if (matarar) {
           for (a = 0; a < ob->totcol; a++) {
             ma = (*matarar)[a];
@@ -2453,7 +2451,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
     }
     FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
 
-    success = BKE_override_library_create_from_tag(bmain);
+    success = BKE_lib_override_library_create_from_tag(bmain);
 
     /* Instantiate our newly overridden objects in scene, if not yet done. */
     Scene *scene = CTX_data_scene(C);
@@ -2485,7 +2483,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
           new_ob->id.override_library->flag &= ~OVERRIDE_LIBRARY_AUTO;
         }
         /* We still want to store all objects' current override status (i.e. change of parent). */
-        BKE_override_library_operations_create(bmain, &new_ob->id, true);
+        BKE_lib_override_library_operations_create(bmain, &new_ob->id, true);
       }
     }
     FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
@@ -2520,7 +2518,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
       make_override_library_tag_object(obact, ob);
     }
 
-    success = BKE_override_library_create_from_tag(bmain);
+    success = BKE_lib_override_library_create_from_tag(bmain);
 
     /* Also, we'd likely want to lock by default things like
      * transformations of implicitly overridden objects? */
@@ -2533,7 +2531,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
   else {
     /* For now, remapp all local usages of linked ID to local override one here. */
     BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, true);
-    success = (BKE_override_library_create_from_id(bmain, &obact->id, true) != NULL);
+    success = (BKE_lib_override_library_create_from_id(bmain, &obact->id, true) != NULL);
     BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
   }
 
@@ -2547,7 +2545,7 @@ static bool make_override_library_poll(bContext *C)
   Object *obact = CTX_data_active_object(C);
 
   /* Object must be directly linked to be overridable. */
-  return (BKE_override_library_is_enabled() && ED_operator_objectmode(C) && obact != NULL &&
+  return (BKE_lib_override_library_is_enabled() && ED_operator_objectmode(C) && obact != NULL &&
           ((ID_IS_LINKED(obact) && obact->id.tag & LIB_TAG_EXTERN) ||
            (!ID_IS_LINKED(obact) && obact->instance_collection != NULL &&
             ID_IS_LINKED(obact->instance_collection))));
@@ -2645,8 +2643,11 @@ void OBJECT_OT_make_single_user(wmOperatorType *ot)
   ot->description = "Make linked data local to each object";
   ot->idname = "OBJECT_OT_make_single_user";
 
+  /* Note that the invoke callback is only used from operator search,
+   * otherwise this does nothing by default. */
+
   /* api callbacks */
-  ot->invoke = WM_menu_invoke;
+  ot->invoke = WM_operator_props_popup_confirm;
   ot->exec = make_single_user_exec;
   ot->poll = ED_operator_objectmode;
 
@@ -2676,7 +2677,7 @@ static int drop_named_material_invoke(bContext *C, wmOperator *op, const wmEvent
     return OPERATOR_CANCELLED;
   }
 
-  assign_material(CTX_data_main(C), base->object, ma, 1, BKE_MAT_ASSIGN_USERPREF);
+  BKE_object_material_assign(CTX_data_main(C), base->object, ma, 1, BKE_MAT_ASSIGN_USERPREF);
 
   DEG_id_tag_update(&base->object->id, ID_RECALC_TRANSFORM);
 

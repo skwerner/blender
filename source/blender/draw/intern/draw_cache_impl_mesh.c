@@ -142,11 +142,10 @@ static DRW_MeshCDMask mesh_cd_calc_used_gpu_layers(const Mesh *me,
   for (int i = 0; i < gpumat_array_len; i++) {
     GPUMaterial *gpumat = gpumat_array[i];
     if (gpumat) {
-      GPUVertAttrLayers gpu_attrs;
-      GPU_material_vertex_attrs(gpumat, &gpu_attrs);
-      for (int j = 0; j < gpu_attrs.totlayer; j++) {
-        const char *name = gpu_attrs.layer[j].name;
-        int type = gpu_attrs.layer[j].type;
+      ListBase gpu_attrs = GPU_material_attributes(gpumat);
+      for (GPUMaterialAttribute *gpu_attr = gpu_attrs.first; gpu_attr; gpu_attr = gpu_attr->next) {
+        const char *name = gpu_attr->name;
+        int type = gpu_attr->type;
         int layer = -1;
 
         if (type == CD_AUTO_FROM_NAME) {
@@ -987,8 +986,9 @@ void DRW_mesh_batch_cache_create_requested(
   if (cache->batch_requested == 0) {
 #ifdef DEBUG
     goto check;
-#endif
+#else
     return;
+#endif
   }
 
   /* Sanity check. */
@@ -996,13 +996,7 @@ void DRW_mesh_batch_cache_create_requested(
     BLI_assert(me->edit_mesh->mesh_eval_final != NULL);
   }
 
-  const bool is_editmode =
-      (me->edit_mesh != NULL) &&
-      (/* Simple case, the object is in edit-mode with an edit-mesh. */
-       (ob->mode & OB_MODE_EDIT) ||
-       /* This is needed so linked duplicates show updates while the user edits the mesh.
-        * While this is not essential, it's useful to see the edit-mode changes everywhere. */
-       (me->edit_mesh->mesh_eval_final != NULL));
+  const bool is_editmode = (me->edit_mesh != NULL) && DRW_object_is_in_edit_mode(ob);
 
   DRWBatchFlag batch_requested = cache->batch_requested;
   cache->batch_requested = 0;
@@ -1133,8 +1127,9 @@ void DRW_mesh_batch_cache_create_requested(
   if ((batch_requested & ~cache->batch_ready) == 0) {
 #ifdef DEBUG
     goto check;
-#endif
+#else
     return;
+#endif
   }
 
   cache->batch_ready |= batch_requested;
@@ -1346,6 +1341,7 @@ void DRW_mesh_batch_cache_create_requested(
                                        true,
                                        false,
                                        &cache->cd_used,
+                                       scene,
                                        ts,
                                        true);
   }
@@ -1360,6 +1356,7 @@ void DRW_mesh_batch_cache_create_requested(
                                        false,
                                        use_subsurf_fdots,
                                        &cache->cd_used,
+                                       scene,
                                        ts,
                                        true);
   }
@@ -1373,6 +1370,7 @@ void DRW_mesh_batch_cache_create_requested(
                                      false,
                                      use_subsurf_fdots,
                                      &cache->cd_used,
+                                     scene,
                                      ts,
                                      use_hide);
 

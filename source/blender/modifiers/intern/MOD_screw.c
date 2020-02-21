@@ -33,7 +33,7 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 
 #include "DEG_depsgraph_build.h"
@@ -1090,7 +1090,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   /* validate loop edges */
 #if 0
   {
-    unsigned i = 0;
+    uint i = 0;
     printf("\n");
     for (; i < maxPolys * 4; i += 4) {
       uint ii;

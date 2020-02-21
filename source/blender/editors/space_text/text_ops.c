@@ -29,13 +29,14 @@
 #include "DNA_text_types.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_math_base.h"
 
 #include "BLT_translation.h"
 
 #include "PIL_time.h"
 
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_text.h"
@@ -819,13 +820,14 @@ static int text_refresh_pyconstraints_exec(bContext *UNUSED(C), wmOperator *UNUS
 {
 #ifdef WITH_PYTHON
 #  if 0
+  Main *bmain = CTX_data_main(C);
   Text *text = CTX_data_edit_text(C);
   Object *ob;
   bConstraint *con;
   short update;
 
   /* check all pyconstraints */
-  for (ob = CTX_data_main(C)->objects.first; ob; ob = ob->id.next) {
+  for (ob = bmain->objects.first; ob; ob = ob->id.next) {
     update = 0;
     if (ob->type == OB_ARMATURE && ob->pose) {
       bPoseChannel *pchan;
@@ -2314,7 +2316,7 @@ static int text_jump_exec(bContext *C, wmOperator *op)
 
 static int text_jump_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  return WM_operator_props_dialog_popup(C, op, 200, 100);
+  return WM_operator_props_dialog_popup(C, op, 200);
 }
 
 void TEXT_OT_jump(wmOperatorType *ot)
@@ -2544,7 +2546,7 @@ static void text_scroll_state_init(TextScroll *tsc, SpaceText *st, ARegion *ar)
   tsc->state.ofs_init[1] = st->top;
 
   tsc->state.ofs_max[0] = INT_MAX;
-  tsc->state.ofs_max[1] = text_get_total_lines(st, ar) - (st->runtime.viewlines / 2);
+  tsc->state.ofs_max[1] = max_ii(0, text_get_total_lines(st, ar) - (st->runtime.viewlines / 2));
 
   tsc->state.size_px[0] = st->runtime.cwidth_px;
   tsc->state.size_px[1] = TXT_LINE_HEIGHT(st);

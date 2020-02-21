@@ -105,6 +105,16 @@ class PhysicButtonsPanel:
         if (flow.flow_behavior == 'OUTFLOW'):
             return True
 
+    @staticmethod
+    def poll_fluid_flow_liquid(context):
+        if not PhysicButtonsPanel.poll_fluid_flow(context):
+            return False
+
+        md = context.fluid
+        flow = md.flow_settings
+        if (flow.flow_type == 'LIQUID'):
+            return True
+
 
 class PHYSICS_PT_fluid(PhysicButtonsPanel, Panel):
     bl_label = "Fluid"
@@ -152,9 +162,6 @@ class PHYSICS_PT_settings(PhysicButtonsPanel, Panel):
         if md.fluid_type == 'DOMAIN':
             domain = md.domain_settings
 
-            # Deactivate UI if guides are enabled but not baked yet.
-            layout.active = not self.check_domain_has_unbaked_guide(domain)
-
             is_baking_any = domain.is_cache_baking_any
             has_baked_data = domain.has_cache_baked_data
 
@@ -166,7 +173,9 @@ class PHYSICS_PT_settings(PhysicButtonsPanel, Panel):
             flow.enabled = not is_baking_any and not has_baked_data
 
             col = flow.column()
+            col.enabled = not domain.has_cache_baked_guide
             col.prop(domain, "resolution_max", text="Resolution Divisions")
+            col = flow.column()
             col.prop(domain, "time_scale", text="Time Scale")
             col.prop(domain, "cfl_condition", text="CFL Number")
 
@@ -191,7 +200,17 @@ class PHYSICS_PT_settings(PhysicButtonsPanel, Panel):
 
             if domain.cache_type == 'MODULAR':
                 col.separator()
+
+                # Deactivate bake operator if guides are enabled but not baked yet.
+                note_flag = True
+                if self.check_domain_has_unbaked_guide(domain) and domain.cache_type == 'MODULAR':
+                    note = layout.split()
+                    note_flag = False
+                    note.enabled = note_flag
+                    note.label(icon='INFO', text="Unbaked Guides: Bake Guides or disable them")
+
                 split = layout.split()
+                split.enabled = note_flag
 
                 bake_incomplete = (domain.cache_frame_pause_data < domain.cache_frame_end)
                 if domain.has_cache_baked_data and not domain.is_cache_baking_data and bake_incomplete:
@@ -323,9 +342,9 @@ class PHYSICS_PT_smoke(PhysicButtonsPanel, Panel):
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
         flow.enabled = not is_baking_any and not has_baked_data
 
-        col = flow.column()
-        col.prop(domain, "alpha")
-        col.prop(domain, "beta", text="Temperature Diff.")
+        col = flow.column(align=True)
+        col.prop(domain, "alpha", text="Buoyancy Density")
+        col.prop(domain, "beta", text="Heat")
         col = flow.column()
         col.prop(domain, "vorticity")
 
@@ -344,10 +363,13 @@ class PHYSICS_PT_smoke_dissolve(PhysicButtonsPanel, Panel):
         return (context.engine in cls.COMPAT_ENGINES)
 
     def draw_header(self, context):
-        md = context.fluid
-        domain = md.domain_settings
+        md = context.fluid.domain_settings
+        domain = context.fluid.domain_settings
 
-        self.layout.prop(domain, "use_dissolve_smoke", text="")
+        is_baking_any = domain.is_cache_baking_any
+
+        self.layout.enabled = not is_baking_any
+        self.layout.prop(md, "use_dissolve_smoke", text="")
 
     def draw(self, context):
         layout = self.layout
@@ -399,14 +421,12 @@ class PHYSICS_PT_fire(PhysicButtonsPanel, Panel):
 
         col = flow.column()
         col.prop(domain, "burning_rate", text="Reaction Speed")
-        col = flow.column()
+        col = flow.column(align=True)
         col.prop(domain, "flame_smoke", text="Flame Smoke")
-        col = flow.column()
-        col.prop(domain, "flame_vorticity", text="Flame Vorticity")
-        col = flow.column()
-        col.prop(domain, "flame_ignition", text="Temperature Ignition")
-        col = flow.column()
-        col.prop(domain, "flame_max_temp", text="Maximum Temperature")
+        col.prop(domain, "flame_vorticity", text="Vorticity")
+        col = flow.column(align=True)
+        col.prop(domain, "flame_max_temp", text="Temperature Maximum")
+        col.prop(domain, "flame_ignition", text="Minimum")
         col = flow.column()
         col.prop(domain, "flame_smoke_color", text="Flame Color")
 
@@ -425,6 +445,11 @@ class PHYSICS_PT_liquid(PhysicButtonsPanel, Panel):
 
     def draw_header(self, context):
         md = context.fluid.domain_settings
+        domain = context.fluid.domain_settings
+
+        is_baking_any = domain.is_cache_baking_any
+
+        self.layout.enabled = not is_baking_any
         self.layout.prop(md, "use_flip_particles", text="")
 
     def draw(self, context):
@@ -437,32 +462,28 @@ class PHYSICS_PT_liquid(PhysicButtonsPanel, Panel):
         is_baking_any = domain.is_cache_baking_any
         has_baked_data = domain.has_cache_baked_data
 
+        layout.enabled = not is_baking_any and not has_baked_data
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
 
         col = flow.column()
-        col0 = col.column()
-        col0.enabled = not is_baking_any and not has_baked_data
-        col0.prop(domain, "simulation_method", expand=False)
-        col0.prop(domain, "flip_ratio", text="FLIP Ratio")
-        col0.prop(domain, "particle_radius", text="Particle Radius")
+        col.prop(domain, "simulation_method", expand=False)
+        col.prop(domain, "flip_ratio", text="FLIP Ratio")
+        col.prop(domain, "particle_radius", text="Particle Radius")
 
-        col1 = flow.column(align=True)
-        col1.enabled = not is_baking_any and not has_baked_data
-        col1.prop(domain, "particle_max", text="Particles Maximum")
-        col1.prop(domain, "particle_min", text="Minimum")
+        col = flow.column()
+        col.prop(domain, "particle_max", text="Particles Maximum")
+        col.prop(domain, "particle_min", text="Minimum")
 
-        col1 = flow.column()
-        col1.enabled = not is_baking_any and not has_baked_data
-        col1.prop(domain, "particle_number", text="Particle Sampling")
-        col1.prop(domain, "particle_band_width", text="Narrow Band Width")
-        col1.prop(domain, "particle_randomness", text="Particle Randomness")
+        col = flow.column()
+        col.prop(domain, "particle_number", text="Particle Sampling")
+        col.prop(domain, "particle_band_width", text="Narrow Band Width")
+        col.prop(domain, "particle_randomness", text="Particle Randomness")
 
-        col2 = flow.column()
-        col2.enabled = not is_baking_any and not has_baked_data
-        col2.prop(domain, "use_fractions", text="Fractional Obstacles")
-        col3 = col2.column()
-        col3.enabled = domain.use_fractions and col2.enabled
-        col3.prop(domain, "fractions_threshold", text="Obstacle-Fluid Threshold")
+        col = flow.column()
+        col.prop(domain, "use_fractions", text="Fractional Obstacles")
+        col1 = col.column()
+        col1.enabled = domain.use_fractions
+        col1.prop(domain, "fractions_threshold", text="Obstacle-Fluid Threshold")
 
 
 class PHYSICS_PT_flow_source(PhysicButtonsPanel, Panel):
@@ -495,10 +516,10 @@ class PHYSICS_PT_flow_source(PhysicButtonsPanel, Panel):
         col = grid.column()
         if flow.flow_source == 'MESH':
             col.prop(flow, "use_plane_init", text="Is Planar")
-            col.prop(flow, "surface_distance", text="Surface Thickness")
+            col.prop(flow, "surface_distance", text="Surface Emission")
             if flow.flow_type in {'SMOKE', 'BOTH', 'FIRE'}:
                 col = grid.column()
-                col.prop(flow, "volume_density", text="Volume Density")
+                col.prop(flow, "volume_density", text="Volume Emission")
 
         if flow.flow_source == 'PARTICLES':
             col.prop(flow, "use_particle_size", text="Set Size")
@@ -562,6 +583,9 @@ class PHYSICS_PT_flow_texture(PhysicButtonsPanel, Panel):
         if PhysicButtonsPanel.poll_fluid_flow_outflow(context):
             return False
 
+        if PhysicButtonsPanel.poll_fluid_flow_liquid(context):
+            return False
+
         return (context.engine in cls.COMPAT_ENGINES)
 
     def draw_header(self, context):
@@ -605,6 +629,12 @@ class PHYSICS_PT_adaptive_domain(PhysicButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         if not PhysicButtonsPanel.poll_gas_domain(context):
+            return False
+
+        md = context.fluid
+        domain = md.domain_settings
+        # Effector guides require a fixed domain size
+        if domain.use_guide and domain.guide_source == 'EFFECTOR':
             return False
 
         return (context.engine in cls.COMPAT_ENGINES)
@@ -667,9 +697,7 @@ class PHYSICS_PT_noise(PhysicButtonsPanel, Panel):
         layout.use_property_split = True
 
         domain = context.fluid.domain_settings
-
-        # Deactivate UI if guides are enabled but not baked yet.
-        layout.active = domain.use_noise and not self.check_domain_has_unbaked_guide(domain)
+        layout.enabled = domain.use_noise
 
         is_baking_any = domain.is_cache_baking_any
         has_baked_noise = domain.has_cache_baked_noise
@@ -690,8 +718,16 @@ class PHYSICS_PT_noise(PhysicButtonsPanel, Panel):
         if domain.cache_type == 'MODULAR':
             col.separator()
 
+            # Deactivate bake operator if data has not been baked yet.
+            note_flag = True
+            if domain.use_noise and not domain.has_cache_baked_data and domain.cache_type == 'MODULAR':
+                note = layout.split()
+                note_flag = False
+                note.enabled = note_flag
+                note.label(icon='INFO', text="Unbaked Data: Bake Data first")
+
             split = layout.split()
-            split.enabled = domain.has_cache_baked_data
+            split.enabled = domain.has_cache_baked_data and note_flag
 
             bake_incomplete = (domain.cache_frame_pause_noise < domain.cache_frame_end)
             if domain.has_cache_baked_noise and not domain.is_cache_baking_noise and bake_incomplete:
@@ -733,9 +769,7 @@ class PHYSICS_PT_mesh(PhysicButtonsPanel, Panel):
         layout.use_property_split = True
 
         domain = context.fluid.domain_settings
-
-        # Deactivate UI if guides are enabled but not baked yet.
-        layout.active = domain.use_mesh and not self.check_domain_has_unbaked_guide(domain)
+        layout.enabled = domain.use_mesh
 
         is_baking_any = domain.is_cache_baking_any
         has_baked_mesh = domain.has_cache_baked_mesh
@@ -769,8 +803,16 @@ class PHYSICS_PT_mesh(PhysicButtonsPanel, Panel):
         if domain.cache_type == 'MODULAR':
             col.separator()
 
+            # Deactivate bake operator if data has not been baked yet.
+            note_flag = True
+            if domain.use_mesh and not domain.has_cache_baked_data and domain.cache_type == 'MODULAR':
+                note = layout.split()
+                note_flag = False
+                note.enabled = note_flag
+                note.label(icon='INFO', text="Unbaked Data: Bake Data first")
+
             split = layout.split()
-            split.enabled = domain.has_cache_baked_data
+            split.enabled = domain.has_cache_baked_data and note_flag
 
             bake_incomplete = (domain.cache_frame_pause_mesh < domain.cache_frame_end)
             if domain.has_cache_baked_mesh and not domain.is_cache_baking_mesh and bake_incomplete:
@@ -806,9 +848,6 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
 
         domain = context.fluid.domain_settings
 
-        # Deactivate UI if guides are enabled but not baked yet.
-        layout.active = not self.check_domain_has_unbaked_guide(domain)
-
         is_baking_any = domain.is_cache_baking_any
         has_baked_particles = domain.has_cache_baked_particles
         using_particles = domain.use_spray_particles or domain.use_foam_particles or domain.use_bubble_particles
@@ -836,18 +875,18 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
         col.separator()
 
         col = flow.column(align=True)
-        col.prop(domain, "sndparticle_tau_max_wc", text="Wave Crest Potential Maximum")
-        col.prop(domain, "sndparticle_tau_min_wc", text="Minimum")
+        col.prop(domain, "sndparticle_potential_max_wavecrest", text="Wave Crest Potential Maximum")
+        col.prop(domain, "sndparticle_potential_min_wavecrest", text="Minimum")
         col.separator()
 
         col = flow.column(align=True)
-        col.prop(domain, "sndparticle_tau_max_ta", text="Trapped Air Potential Maximum")
-        col.prop(domain, "sndparticle_tau_min_ta", text="Minimum")
+        col.prop(domain, "sndparticle_potential_max_trappedair", text="Trapped Air Potential Maximum")
+        col.prop(domain, "sndparticle_potential_min_trappedair", text="Minimum")
         col.separator()
 
         col = flow.column(align=True)
-        col.prop(domain, "sndparticle_tau_max_k", text="Kinetic Energy Potential Maximum")
-        col.prop(domain, "sndparticle_tau_min_k", text="Minimum")
+        col.prop(domain, "sndparticle_potential_max_energy", text="Kinetic Energy Potential Maximum")
+        col.prop(domain, "sndparticle_potential_min_energy", text="Minimum")
         col.separator()
 
         col = flow.column(align=True)
@@ -856,18 +895,18 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
         col.separator()
 
         col = flow.column(align=True)
-        col.prop(domain, "sndparticle_k_wc", text="Wave Crest Particle Sampling")
-        col.prop(domain, "sndparticle_k_ta", text="Trapped Air Particle Sampling")
+        col.prop(domain, "sndparticle_sampling_wavecrest", text="Wave Crest Particle Sampling")
+        col.prop(domain, "sndparticle_sampling_trappedair", text="Trapped Air Particle Sampling")
         col.separator()
 
         col = flow.column(align=True)
-        col.prop(domain, "sndparticle_l_max", text="Particle Life Maximum")
-        col.prop(domain, "sndparticle_l_min", text="Minimum")
+        col.prop(domain, "sndparticle_life_max", text="Particle Life Maximum")
+        col.prop(domain, "sndparticle_life_min", text="Minimum")
         col.separator()
 
         col = flow.column(align=True)
-        col.prop(domain, "sndparticle_k_b", text="Bubble Buoyancy")
-        col.prop(domain, "sndparticle_k_d", text="Bubble Drag")
+        col.prop(domain, "sndparticle_bubble_buoyancy", text="Bubble Buoyancy")
+        col.prop(domain, "sndparticle_bubble_drag", text="Bubble Drag")
         col.separator()
 
         col = flow.column()
@@ -876,8 +915,17 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
         if domain.cache_type == 'MODULAR':
             col.separator()
 
+            # Deactivate bake operator if data has not been baked yet.
+            note_flag = True
+            if using_particles and not domain.has_cache_baked_data and domain.cache_type == 'MODULAR':
+                note = layout.split()
+                note_flag = False
+                note.enabled = note_flag
+                note.label(icon='INFO', text="Unbaked Data: Bake Data first")
+
             split = layout.split()
             split.enabled = (
+                note_flag and
                 domain.has_cache_baked_data and
                 (domain.use_spray_particles or
                  domain.use_bubble_particles or
@@ -919,9 +967,6 @@ class PHYSICS_PT_diffusion(PhysicButtonsPanel, Panel):
         layout.use_property_split = True
 
         domain = context.fluid.domain_settings
-
-        # Deactivate UI if guides are enabled but not baked yet.
-        layout.active = not self.check_domain_has_unbaked_guide(domain)
 
         is_baking_any = domain.is_cache_baking_any
         has_baked_any = domain.has_cache_baked_any
@@ -1007,7 +1052,8 @@ class PHYSICS_PT_guide(PhysicButtonsPanel, Panel):
                     col = split.column()
                     col.operator("fluid.free_guides", text="Free")
                 elif not domain.has_cache_baked_guide and domain.is_cache_baking_guide:
-                    split.operator("fluid.pause_bake", text="Pause Guides")
+                    split.enabled = False
+                    split.operator("fluid.pause_bake", text="Baking Guides - ESC to pause")
                 elif not domain.has_cache_baked_guide and not domain.is_cache_baking_guide:
                     split.operator("fluid.bake_guides", text="Bake Guides")
                 else:
@@ -1061,7 +1107,10 @@ class PHYSICS_PT_cache(PhysicButtonsPanel, Panel):
         domain = context.fluid.domain_settings
 
         is_baking_any = domain.is_cache_baking_any
-        has_baked_any = domain.has_cache_baked_any
+        has_baked_data = domain.has_cache_baked_data
+        has_baked_noise = domain.has_cache_baked_noise
+        has_baked_mesh = domain.has_cache_baked_mesh
+        has_baked_particles = domain.has_cache_baked_particles
 
         col = layout.column()
         col.prop(domain, "cache_directory", text="")
@@ -1085,18 +1134,24 @@ class PHYSICS_PT_cache(PhysicButtonsPanel, Panel):
         col.separator()
 
         col = flow.column()
-        col.enabled = not is_baking_any and not has_baked_any
+        col.enabled = not is_baking_any and not has_baked_data
         col.prop(domain, "cache_data_format", text="Data File Format")
 
         if md.domain_settings.domain_type in {'GAS'}:
             if domain.use_noise:
+                col = flow.column()
+                col.enabled = not is_baking_any and not has_baked_noise
                 col.prop(domain, "cache_noise_format", text="Noise File Format")
 
         if md.domain_settings.domain_type in {'LIQUID'}:
             # File format for all particle systemes (FLIP and secondary)
+            col = flow.column()
+            col.enabled = not is_baking_any and not has_baked_particles and not has_baked_data
             col.prop(domain, "cache_particle_format", text="Particle File Format")
 
             if domain.use_mesh:
+                col = flow.column()
+                col.enabled = not is_baking_any and not has_baked_mesh
                 col.prop(domain, "cache_mesh_format", text="Mesh File Format")
 
         if domain.cache_type == 'FINAL':
@@ -1121,7 +1176,8 @@ class PHYSICS_PT_export(PhysicButtonsPanel, Panel):
 
     @classmethod
     def poll(cls, context):
-        if not PhysicButtonsPanel.poll_fluid_domain(context):
+        # Only show the advanced panel to advanced users who know Mantaflow's birthday :)
+        if not PhysicButtonsPanel.poll_fluid_domain(context) or bpy.app.debug_value != 3001:
             return False
 
         return (context.engine in cls.COMPAT_ENGINES)

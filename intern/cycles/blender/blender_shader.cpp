@@ -323,6 +323,12 @@ static ShaderNode *add_node(Scene *scene,
     vector_math_node->type = (NodeVectorMathType)b_vector_math_node.operation();
     node = vector_math_node;
   }
+  else if (b_node.is_a(&RNA_ShaderNodeVectorRotate)) {
+    BL::ShaderNodeVectorRotate b_vector_rotate_node(b_node);
+    VectorRotateNode *vector_rotate_node = new VectorRotateNode();
+    vector_rotate_node->type = (NodeVectorRotateType)b_vector_rotate_node.rotation_type();
+    node = vector_rotate_node;
+  }
   else if (b_node.is_a(&RNA_ShaderNodeVectorTransform)) {
     BL::ShaderNodeVectorTransform b_vector_transform_node(b_node);
     VectorTransformNode *vtransform = new VectorTransformNode();
@@ -770,6 +776,8 @@ static ShaderNode *add_node(Scene *scene,
     BL::ShaderNodeTexWave b_wave_node(b_node);
     WaveTextureNode *wave = new WaveTextureNode();
     wave->type = (NodeWaveType)b_wave_node.wave_type();
+    wave->bands_direction = (NodeWaveBandsDirection)b_wave_node.bands_direction();
+    wave->rings_direction = (NodeWaveRingsDirection)b_wave_node.rings_direction();
     wave->profile = (NodeWaveProfile)b_wave_node.wave_profile();
     BL::TexMapping b_texture_mapping(b_wave_node.texture_mapping());
     get_tex_mapping(&wave->tex_mapping, b_texture_mapping);
@@ -1255,7 +1263,7 @@ void BlenderSync::sync_materials(BL::Depsgraph &b_depsgraph, bool update_all)
     Shader *shader;
 
     /* test if we need to sync */
-    if (shader_map.sync(&shader, b_mat) || shader->need_sync_object || update_all) {
+    if (shader_map.add_or_update(&shader, b_mat) || shader->need_sync_object || update_all) {
       ShaderGraph *graph = new ShaderGraph();
 
       shader->name = b_mat.name().c_str();
@@ -1480,7 +1488,7 @@ void BlenderSync::sync_lights(BL::Depsgraph &b_depsgraph, bool update_all)
     Shader *shader;
 
     /* test if we need to sync */
-    if (shader_map.sync(&shader, b_light) || update_all) {
+    if (shader_map.add_or_update(&shader, b_light) || update_all) {
       ShaderGraph *graph = new ShaderGraph();
 
       /* create nodes */

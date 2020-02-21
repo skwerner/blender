@@ -40,8 +40,8 @@
 #include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
-#include "BKE_library_override.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_override.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
 #include "BKE_screen.h"
@@ -650,7 +650,7 @@ static int override_remove_button_exec(bContext *C, wmOperator *op)
     bool is_strict_find;
     /* Remove override operation for given item,
      * add singular operations for the other items as needed. */
-    IDOverrideLibraryPropertyOperation *opop = BKE_override_library_property_operation_find(
+    IDOverrideLibraryPropertyOperation *opop = BKE_lib_override_library_property_operation_find(
         oprop, NULL, NULL, index, index, false, &is_strict_find);
     BLI_assert(opop != NULL);
     if (!is_strict_find) {
@@ -659,22 +659,22 @@ static int override_remove_button_exec(bContext *C, wmOperator *op)
        * before removing generic one. */
       for (int idx = RNA_property_array_length(&ptr, prop); idx--;) {
         if (idx != index) {
-          BKE_override_library_property_operation_get(
+          BKE_lib_override_library_property_operation_get(
               oprop, opop->operation, NULL, NULL, idx, idx, true, NULL, NULL);
         }
       }
     }
-    BKE_override_library_property_operation_delete(oprop, opop);
+    BKE_lib_override_library_property_operation_delete(oprop, opop);
     if (!is_template) {
       RNA_property_copy(bmain, &ptr, &src, prop, index);
     }
     if (BLI_listbase_is_empty(&oprop->operations)) {
-      BKE_override_library_property_delete(id->override_library, oprop);
+      BKE_lib_override_library_property_delete(id->override_library, oprop);
     }
   }
   else {
     /* Just remove whole generic override operation of this property. */
-    BKE_override_library_property_delete(id->override_library, oprop);
+    BKE_lib_override_library_property_delete(id->override_library, oprop);
     if (!is_template) {
       RNA_property_copy(bmain, &ptr, &src, prop, -1);
     }
@@ -735,6 +735,8 @@ bool UI_context_copy_to_selected_list(bContext *C,
 {
   *r_use_path_from_id = false;
   *r_path = NULL;
+  /* special case for bone constraints */
+  char *path_from_bone = NULL;
 
   /* PropertyGroup objects don't have a reference to the struct that actually owns
    * them, so it is normally necessary to do a brute force search to find it. This
@@ -796,6 +798,11 @@ bool UI_context_copy_to_selected_list(bContext *C,
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_FCurve)) {
     *r_lb = CTX_data_collection_get(C, "selected_editable_fcurves");
+  }
+  else if (RNA_struct_is_a(ptr->type, &RNA_Constraint) &&
+           (path_from_bone = RNA_path_resolve_from_type_to_property(ptr, prop, &RNA_PoseBone)) != NULL) {
+    *r_lb = CTX_data_collection_get(C, "selected_pose_bones");
+    *r_path = path_from_bone;
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_Node) || RNA_struct_is_a(ptr->type, &RNA_NodeSocket)) {
     ListBase lb = {NULL, NULL};

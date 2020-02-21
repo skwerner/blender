@@ -69,9 +69,9 @@
 #include "BKE_light.h"
 #include "BKE_lattice.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_lib_remap.h"
 #include "BKE_lightprobe.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
@@ -1326,7 +1326,7 @@ static int collection_instance_add_exec(bContext *C, wmOperator *op)
     }
   }
   else {
-    collection = BLI_findlink(&CTX_data_main(C)->collections, RNA_enum_get(op->ptr, "collection"));
+    collection = BLI_findlink(&bmain->collections, RNA_enum_get(op->ptr, "collection"));
   }
 
   if (!ED_object_add_generic_get_opts(C, op, 'Z', loc, rot, NULL, &local_view_bits, NULL)) {
@@ -2378,8 +2378,7 @@ static int convert_exec(bContext *C, wmOperator *op)
       else if (target == OB_GPENCIL) {
         if (ob->type != OB_CURVE) {
           ob->flag &= ~OB_DONE;
-          BKE_report(
-              op->reports, RPT_ERROR, "Convert Surfaces to Grease Pencil is not supported.");
+          BKE_report(op->reports, RPT_ERROR, "Convert Surfaces to Grease Pencil is not supported");
         }
         else {
           /* Create a new grease pencil object and copy transformations.
@@ -2443,7 +2442,7 @@ static int convert_exec(bContext *C, wmOperator *op)
 
     /* Ensure new object has consistent material data with its new obdata. */
     if (newob) {
-      test_object_materials(bmain, newob, newob->data);
+      BKE_object_materials_test(bmain, newob, newob->data);
     }
 
     /* tag obdata if it was been changed */

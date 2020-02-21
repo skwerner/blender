@@ -71,7 +71,7 @@
 #include "BKE_global.h"
 #include "BKE_icons.h"
 #include "BKE_image.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_packedFile.h"
 #include "BKE_report.h"
@@ -417,7 +417,7 @@ static void copy_image_packedfiles(ListBase *lb_dst, const ListBase *lb_src)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_image_copy_data(Main *UNUSED(bmain), Image *ima_dst, const Image *ima_src, const int flag)
 {
@@ -1345,6 +1345,7 @@ char BKE_imtype_valid_channels(const char imtype, bool write_file)
 
   /* bw */
   switch (imtype) {
+    case R_IMF_IMTYPE_BMP:
     case R_IMF_IMTYPE_PNG:
     case R_IMF_IMTYPE_JPEG90:
     case R_IMF_IMTYPE_TARGA:
@@ -3363,7 +3364,9 @@ void BKE_image_signal(Main *bmain, Image *ima, ImageUser *iuser, int signal)
       if (ima->source != IMA_SRC_TILED) {
         /* Free all but the first tile. */
         ImageTile *base_tile = BKE_image_get_tile(ima, 0);
-        for (ImageTile *tile = base_tile->next; tile; tile = tile->next) {
+        BLI_assert(base_tile == ima->tiles.first);
+        for (ImageTile *tile = base_tile->next, *tile_next; tile; tile = tile_next) {
+          tile_next = tile->next;
           image_free_tile(ima, tile);
           MEM_freeN(tile);
         }

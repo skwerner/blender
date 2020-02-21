@@ -170,7 +170,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         if md.limit_method == 'ANGLE':
             layout.prop(md, "angle_limit")
         elif md.limit_method == 'VGROUP':
-            layout.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+            row = layout.row(align=True)
+            row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+            row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         layout.label(text="Face Strength Mode:")
         layout.row().prop(md, "face_strength_mode", expand=True)
@@ -316,7 +318,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "object", text="")
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
         layout.label(text="Deformation Axis:")
         layout.row().prop(md, "deform_axis", expand=True)
 
@@ -381,7 +385,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             col.label(text="Space:")
             col.prop(md, "space", text="")
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         col = split.column(align=True)
         col.active = has_texture
@@ -419,7 +425,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
         sub = col.column()
         sub.active = bool(md.vertex_group)
         sub.prop(md, "protect")
@@ -450,7 +458,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             col.prop_search(md, "subtarget", md.object.data, "bones", text="")
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         layout.separator()
 
@@ -491,6 +501,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row = layout.row()
         row.enabled = not is_bind
         row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         layout.separator()
 
@@ -519,7 +530,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "use_normalized")
 
         layout.label(text="Vertex Group:")
-        layout.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = layout.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
     def LATTICE(self, layout, ob, md):
         split = layout.split()
@@ -530,7 +543,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         layout.separator()
         layout.prop(md, "strength", slider=True)
@@ -963,7 +978,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "factor")
         col.prop(md, "iterations")
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
     def SOFT_BODY(self, layout, _ob, _md):
         layout.label(text="Settings are inside the Physics tab")
@@ -1137,7 +1154,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col = split.column()
         col.label(text="To:")
         col.prop(md, "object_to", text="")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         col = layout.column()
 
@@ -1257,7 +1276,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         if not md.mask_texture:
             split = layout.split(factor=0.4)
             split.label(text="Vertex Group Mask:")
-            split.prop_search(md, "mask_vertex_group", ob, "vertex_groups", text="")
+            row = split.row(align=True)
+            row.prop_search(md, "mask_vertex_group", ob, "vertex_groups", text="")
+            row.prop(md, "invert_mask_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         if not md.mask_vertex_group:
             split = layout.split(factor=0.4)
@@ -1442,10 +1463,25 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             col.prop_search(md, "bone_to", obj.data, "bones", text="")
 
         split = layout.split()
+        col = split.column()
+        col.label(text="Offset:")
+        col.prop(md, "offset", text="")
+
+        col = split.column()
+        col.label(text="Scale:")
+        col.prop(md, "scale", text="")
+
+        col = split.column()
+        col.label(text="Rotate:")
+        col.prop(md, "rotation", text="")
+
+        split = layout.split()
 
         col = split.column()
         col.label(text="Vertex Group:")
-        col.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
         col = split.column()
         col.label(text="UV Map:")
@@ -1486,7 +1522,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
     def WELD(self, layout, ob, md):
         layout.prop(md, "merge_threshold", text="Distance")
         layout.prop(md, "max_interactions")
-        layout.prop_search(md, "vertex_group", ob, "vertex_groups")
+        row = layout.row(align=True)
+        row.prop_search(md, "vertex_group", ob, "vertex_groups")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
 
     def DATA_TRANSFER(self, layout, ob, md):
         row = layout.row(align=True)

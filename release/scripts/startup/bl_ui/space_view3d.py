@@ -621,15 +621,19 @@ class VIEW3D_HT_header(Header):
         tool_settings = context.tool_settings
         view = context.space_data
         shading = view.shading
-        # mode_string = context.mode
-        obj = context.active_object
         show_region_tool_header = view.show_region_tool_header
 
         if not show_region_tool_header:
             layout.row(align=True).template_header()
 
         row = layout.row(align=True)
+        obj = context.active_object
+        # mode_string = context.mode
         object_mode = 'OBJECT' if obj is None else obj.mode
+        has_pose_mode = (
+            (object_mode == 'POSE') or
+            (object_mode == 'WEIGHT_PAINT' and context.pose_object is not None)
+        )
 
         # Note: This is actually deadly in case enum_items have to be dynamically generated
         #       (because internal RNA array iterator will free everything immediately...).
@@ -780,10 +784,13 @@ class VIEW3D_HT_header(Header):
             "view3d.toggle_xray",
             text="",
             icon='XRAY',
-            depress=getattr(
-                shading,
-                "show_xray_wireframe" if shading.type == 'WIREFRAME' else
-                "show_xray"
+            depress=(
+                overlay.show_xray_bone if has_pose_mode else
+                getattr(
+                    shading,
+                    "show_xray_wireframe" if shading.type == 'WIREFRAME' else
+                    "show_xray"
+                )
             ),
         )
 
@@ -1436,7 +1443,7 @@ class VIEW3D_MT_select_particle(Menu):
 
         layout.separator()
 
-        layout.operator("particle.select_linked")
+        layout.operator("particle.select_linked", text="Select Linked")
 
         layout.separator()
 
@@ -2706,6 +2713,7 @@ class VIEW3D_MT_make_single_user(Menu):
 
     def draw(self, _context):
         layout = self.layout
+        layout.operator_context = 'EXEC_DEFAULT'
 
         props = layout.operator("object.make_single_user", text="Object")
         props.object = True
@@ -2930,6 +2938,10 @@ class VIEW3D_MT_sculpt(Menu):
 
         layout.menu("VIEW3D_MT_sculpt_set_pivot", text="Set Pivot")
 
+        layout.separator()
+
+        layout.operator("sculpt.optimize")
+
 
 class VIEW3D_MT_mask(Menu):
     bl_label = "Mask"
@@ -3114,8 +3126,7 @@ class VIEW3D_MT_particle_context_menu(Menu):
 
             layout.separator()
 
-            layout.operator("particle.select_linked")
-
+            layout.operator("particle.select_linked", text="Select Linked")
 
 class VIEW3D_MT_particle_showhide(ShowHideMenu, Menu):
     _operator_name = "particle"
@@ -3378,7 +3389,6 @@ class BoneOptions:
             "use_deform",
             "use_envelope_multiply",
             "use_inherit_rotation",
-            "inherit_scale",
         ]
 
         if context.mode == 'EDIT_ARMATURE':
@@ -3573,7 +3583,8 @@ class VIEW3D_MT_edit_mesh_context_menu(Menu):
 
             col.separator()
 
-            col.operator("mesh.loopcut_slide")
+            props = col.operator("mesh.loopcut_slide")
+            props.TRANSFORM_OT_edge_slide.release_confirm = False
             col.operator("mesh.offset_edge_loops_slide")
 
             col.separator()
@@ -5006,6 +5017,39 @@ class VIEW3D_MT_sculpt_mask_edit_pie(Menu):
         op = pie.operator("sculpt.mask_filter", text='Decrease Contrast')
         op.filter_type = 'CONTRAST_DECREASE'
         op.auto_iteration_count = False
+
+
+class VIEW3D_MT_wpaint_vgroup_lock_pie(Menu):
+    bl_label = "Vertex Group Locks"
+
+    def draw(self, _context):
+        layout = self.layout
+        pie = layout.menu_pie()
+
+        # 1: Left
+        op = pie.operator("object.vertex_group_lock", icon='LOCKED', text="Lock All")
+        op.action, op.mask = 'LOCK', 'ALL'
+        # 2: Right
+        op = pie.operator("object.vertex_group_lock", icon='UNLOCKED', text="Unlock All")
+        op.action, op.mask = 'UNLOCK', 'ALL'
+        # 3: Down
+        op = pie.operator("object.vertex_group_lock", icon='UNLOCKED', text="Unlock Selected")
+        op.action, op.mask = 'UNLOCK', 'SELECTED'
+        # 4: Up
+        op = pie.operator("object.vertex_group_lock", icon='LOCKED', text="Lock Selected")
+        op.action, op.mask = 'LOCK', 'SELECTED'
+        # 5: Up/Left
+        op = pie.operator("object.vertex_group_lock", icon='LOCKED', text="Lock Unselected")
+        op.action, op.mask = 'LOCK', 'UNSELECTED'
+        # 6: Up/Right
+        op = pie.operator("object.vertex_group_lock", text="Lock Only Selected")
+        op.action, op.mask = 'LOCK', 'INVERT_UNSELECTED'
+        # 7: Down/Left
+        op = pie.operator("object.vertex_group_lock", text="Lock Only Unselected")
+        op.action, op.mask = 'UNLOCK', 'INVERT_UNSELECTED'
+        # 8: Down/Right
+        op = pie.operator("object.vertex_group_lock", text="Invert Locks")
+        op.action, op.mask = 'INVERT', 'ALL'
 
 
 # ********** Panel **********
@@ -6892,7 +6936,10 @@ class VIEW3D_PT_sculpt_context_menu(Panel):
             layout.prop(brush, "normal_weight", slider=True)
 
         if capabilities.has_pinch_factor:
-            layout.prop(brush, "crease_pinch_factor", slider=True, text="Pinch")
+            text = "Pinch"
+            if brush.sculpt_tool in {'BLOB', 'SNAKE_HOOK'}:
+                text = "Magnify"
+            layout.prop(brush, "crease_pinch_factor", slider=True, text=text)
 
         if capabilities.has_rake_factor:
             layout.prop(brush, "rake_factor", slider=True)
@@ -7078,6 +7125,7 @@ classes = (
     VIEW3D_MT_orientations_pie,
     VIEW3D_MT_proportional_editing_falloff_pie,
     VIEW3D_MT_sculpt_mask_edit_pie,
+    VIEW3D_MT_wpaint_vgroup_lock_pie,
     VIEW3D_PT_active_tool,
     VIEW3D_PT_active_tool_duplicate,
     VIEW3D_PT_view3d_properties,

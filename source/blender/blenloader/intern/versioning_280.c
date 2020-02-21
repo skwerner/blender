@@ -70,9 +70,10 @@
 #include "BKE_customdata.h"
 #include "BKE_fcurve.h"
 #include "BKE_freestyle.h"
+#include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
@@ -890,6 +891,10 @@ static void do_versions_local_collection_bits_set(LayerCollection *layer_collect
 
 static void do_version_curvemapping_flag_extend_extrapolate(CurveMapping *cumap)
 {
+  if (cumap == NULL) {
+    return;
+  }
+
 #define CUMA_EXTEND_EXTRAPOLATE_OLD 1
   for (int curve_map_index = 0; curve_map_index < 4; curve_map_index++) {
     CurveMap *cuma = &cumap->cm[curve_map_index];
@@ -1543,19 +1548,42 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
       }
     }
 
-    {
-      /* Update all ruler layers to set new flag. */
-      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
-        bGPdata *gpd = scene->gpd;
-        if (gpd == NULL) {
-          continue;
+    /* Update all ruler layers to set new flag. */
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      bGPdata *gpd = scene->gpd;
+      if (gpd == NULL) {
+        continue;
+      }
+      for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+        if (STREQ(gpl->info, "RulerData3D")) {
+          gpl->flag |= GP_LAYER_IS_RULER;
+          break;
         }
-        for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-          if (STREQ(gpl->info, "RulerData3D")) {
-            gpl->flag |= GP_LAYER_IS_RULER;
-            break;
-          }
-        }
+      }
+    }
+
+    /* This versioning could probably be done only on earlier versions, not sure however
+     * which exact version fully deprecated tessfaces, so think we can keep that one here, no
+     * harm to be expected anyway for being over-conservative. */
+    for (Mesh *me = bmain->meshes.first; me != NULL; me = me->id.next) {
+      /*check if we need to convert mfaces to mpolys*/
+      if (me->totface && !me->totpoly) {
+        /* temporarily switch main so that reading from
+         * external CustomData works */
+        Main *gmain = G_MAIN;
+        G_MAIN = bmain;
+
+        BKE_mesh_do_versions_convert_mfaces_to_mpolys(me);
+
+        G_MAIN = gmain;
+      }
+
+      /* Deprecated, only kept for conversion. */
+      BKE_mesh_tessface_clear(me);
+
+      /* Moved from do_versions because we need updated polygons for calculating normals. */
+      if (MAIN_VERSION_OLDER(bmain, 256, 6)) {
+        BKE_mesh_calc_normals(me);
       }
     }
   }
@@ -4230,6 +4258,12 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
       }
     }
+
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      if (br->ob_mode & OB_MODE_SCULPT && br->area_radius_factor == 0.0f) {
+        br->area_radius_factor = 0.5f;
+      }
+    }
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 282, 2)) {
@@ -4349,17 +4383,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  /**
-   * Versioning code until next subversion bump goes here.
-   *
-   * \note Be sure to check when bumping the version:
-   * - "versioning_userdef.c", #BLO_version_defaults_userpref_blend
-   * - "versioning_userdef.c", #do_versions_theme
-   *
-   * \note Keep this message at the bottom of the function.
-   */
-  {
-    /* Keep this block, even when empty. */
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 3)) {
 
     /* Sequencer Tool region */
     do_versions_area_ensure_tool_region(bmain, SPACE_SEQ, RGN_FLAG_HIDDEN);
@@ -4404,16 +4428,74 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
-    /* Brush cursor alpha */
     for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
       br->add_col[3] = 0.9f;
       br->sub_col[3] = 0.9f;
     }
 
     /* Pose brush IK segments. */
-    if (!DNA_struct_elem_find(fd->filesdna, "Brush", "int", "pose_ik_segments")) {
-      for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      if (br->pose_ik_segments == 0) {
         br->pose_ik_segments = 1;
+      }
+    }
+
+    /* Pose brush keep anchor point. */
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      if (br->sculpt_tool == SCULPT_TOOL_POSE) {
+        br->flag2 |= BRUSH_POSE_IK_ANCHORED;
+      }
+    }
+
+    /* Tip Roundness. */
+    if (!DNA_struct_elem_find(fd->filesdna, "Brush", "float", "tip_roundness")) {
+      for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+        if (br->ob_mode & OB_MODE_SCULPT && br->sculpt_tool == SCULPT_TOOL_CLAY_STRIPS) {
+          br->tip_roundness = 0.18f;
+        }
+      }
+    }
+
+    /* EEVEE: Cascade shadow bias fix */
+    LISTBASE_FOREACH (Light *, light, &bmain->lights) {
+      if (light->type == LA_SUN) {
+        /* Should be 0.0004 but for practical reason we make it bigger.
+         * Correct factor is scene dependent. */
+        light->bias *= 0.002f;
+      }
+    }
+  }
+
+  /**
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - "versioning_userdef.c", #BLO_version_defaults_userpref_blend
+   * - "versioning_userdef.c", #do_versions_theme
+   *
+   * \note Keep this message at the bottom of the function.
+   */
+  {
+    /* Keep this block, even when empty. */
+
+    /* Alembic Transform Cache changed from world to local space. */
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      LISTBASE_FOREACH (bConstraint *, con, &ob->constraints) {
+        if (con->type == CONSTRAINT_TYPE_TRANSFORM_CACHE) {
+          con->ownspace = CONSTRAINT_SPACE_LOCAL;
+        }
+      }
+    }
+
+    /* Add 2D transform to UV Warp modifier. */
+    if (!DNA_struct_elem_find(fd->filesdna, "UVWarpModifierData", "float", "scale[2]")) {
+      for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+        for (ModifierData *md = ob->modifiers.first; md; md = md->next) {
+          if (md->type == eModifierType_UVWarp) {
+            UVWarpModifierData *umd = (UVWarpModifierData *)md;
+            copy_v2_fl(umd->scale, 1.0f);
+          }
+        }
       }
     }
   }

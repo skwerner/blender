@@ -338,7 +338,10 @@ class CPUDevice : public Device {
     if (DebugFlags().cpu.has_sse2() && system_cpu_support_sse2()) {
       bvh_layout_mask |= BVH_LAYOUT_BVH4;
     }
-#if defined(__x86_64__) || defined(_M_X64)
+    /* MSVC does not support the -march=native switch and you always end up  */
+    /* with an sse2 kernel when you use WITH_KERNEL_NATIVE. We *cannot* feed */
+    /* that kernel BVH8 even if the CPU flags would allow for it. */
+#if (defined(__x86_64__) || defined(_M_X64)) && !(defined(_MSC_VER) && defined(WITH_KERNEL_NATIVE))
     if (DebugFlags().cpu.has_avx2() && system_cpu_support_avx2()) {
       bvh_layout_mask |= BVH_LAYOUT_BVH8;
     }
@@ -508,13 +511,14 @@ class CPUDevice : public Device {
 
   void thread_run(DeviceTask *task)
   {
-    if (task->type == DeviceTask::RENDER) {
+    if (task->type == DeviceTask::RENDER || task->type == DeviceTask::DENOISE)
       thread_render(*task);
-    }
-    else if (task->type == DeviceTask::FILM_CONVERT)
-      thread_film_convert(*task);
     else if (task->type == DeviceTask::SHADER)
       thread_shader(*task);
+    else if (task->type == DeviceTask::FILM_CONVERT)
+      thread_film_convert(*task);
+    else if (task->type == DeviceTask::DENOISE_BUFFER)
+      thread_denoise(*task);
   }
 
   class CPUDeviceTask : public DeviceTask {
@@ -952,6 +956,33 @@ class CPUDevice : public Device {
     kg->~KernelGlobals();
     kgbuffer.free();
     delete split_kernel;
+  }
+
+  void thread_denoise(DeviceTask &task)
+  {
+    RenderTile tile;
+    tile.x = task.x;
+    tile.y = task.y;
+    tile.w = task.w;
+    tile.h = task.h;
+    tile.buffer = task.buffer;
+    tile.sample = task.sample + task.num_samples;
+    tile.num_samples = task.num_samples;
+    tile.start_sample = task.sample;
+    tile.offset = task.offset;
+    tile.stride = task.stride;
+    tile.buffers = task.buffers;
+
+    DenoisingTask denoising(this, task);
+
+    ProfilingState denoising_profiler_state;
+    profiler.add_state(&denoising_profiler_state);
+    denoising.profiler = &denoising_profiler_state;
+
+    denoise(denoising, tile);
+    task.update_progress(&tile, tile.w * tile.h);
+
+    profiler.remove_state(&denoising_profiler_state);
   }
 
   void thread_film_convert(DeviceTask &task)

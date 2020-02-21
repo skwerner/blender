@@ -257,6 +257,10 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
                                    bPoseChannel *pchan,
                                    bConstraint *con,
                                    RootPChanMap *root_map);
+  virtual void build_inter_ik_chains(Object *object,
+                                     const OperationKey &solver_key,
+                                     const bPoseChannel *rootchan,
+                                     const RootPChanMap *root_map);
   virtual void build_rig(Object *object);
   virtual void build_proxy_rig(Object *object);
   virtual void build_shapekeys(Key *key);
@@ -298,6 +302,8 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
 
   virtual void build_copy_on_write_relations();
   virtual void build_copy_on_write_relations(IDNode *id_node);
+  virtual void build_driver_relations();
+  virtual void build_driver_relations(IDNode *id_node);
 
   template<typename KeyType> OperationNode *find_operation_node(const KeyType &key);
 

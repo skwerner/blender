@@ -137,9 +137,11 @@ BLI_INLINE SymEdge *prev(const SymEdge *se)
   return se->rot->next->rot;
 }
 
-/** Return true if a -- b -- c are in that order, assuming they are on a straight line according to
- * orient2d and we know the order is either abc or bac.
- * This means ab . ac and bc . ac must both be non-negative.  */
+/**
+ * Return true if a -- b -- c are in that order, assuming they are on a straight line according to
+ * orient2d and we know the order is either `abc` or `bac`.
+ * This means `ab . ac` and `bc . ac` must both be non-negative.
+ */
 static bool in_line(const double a[2], const double b[2], const double c[2])
 {
   double ab[2], bc[2], ac[2];
@@ -1375,7 +1377,7 @@ static void add_edge_constraint(
         isect = isect_seg_seg_v2_lambda_mu_db(va->co, vb->co, curco, v2->co, &lambda, NULL);
         if (isect == ISECT_LINE_LINE_NONE || isect == ISECT_LINE_LINE_EXACT) {
           /* The orient tests say that there is an intersection between
-           * va and vb, but the inexect isect routine has either put the
+           * va and vb, but the inexact intersection routine has either put the
            * intersection exactly on one of the endpoints or just outside
            * one of them.
            * Or this is an exact intersection at one of the curco / v2 ends.
@@ -2443,7 +2445,7 @@ static CDT_result *cdt_get_output(CDT_state *cdt,
  * The current initial Deluanay triangulation algorithm is the Guibas-Stolfi Divide and Conquer
  * algorithm (see "Primitives for the Manipulation of General Subdivisions and the Computation of
  * Voronoi Diagrams"). and uses Shewchuk's exact predicates to issues where numeric errors cause
- * inconsistent geometric judgements. This is followed by inserting edge constraints (including the
+ * inconsistent geometric judgments. This is followed by inserting edge constraints (including the
  * edges implied by faces) using the algorithms discussed in "Fully Dynamic Constrained Delaunay
  * Triangulations" by Kallmann, Bieri, and Thalmann.
  *
@@ -3085,7 +3087,7 @@ static void write_cdt_input_to_file(const CDT_input *inp)
 #  ifndef NDEBUG /* Only used in assert. */
 /*
  * Is a visible from b: i.e., ab crosses no edge of cdt?
- * If constrained is true, consider only constrained edges as possible crossers.
+ * If constrained is true, consider only constrained edges as possible crosser's.
  * In any case, don't count an edge ab itself.
  * Note: this is an expensive test if there are a lot of edges.
  */
@@ -3463,8 +3465,8 @@ static double isperrboundA, isperrboundB, isperrboundC;
  *  floating-point arithmetic.  `epsilon' bounds the relative roundoff
  *  error.  It is used for floating-point error analysis.
  *
- *  `splitter' is used to split floating-point numbers into two half-
- *  length significands for exact multiplication.
+ *  `splitter' is used to split floating-point numbers into two
+ *  half-length significances for exact multiplication.
  *
  *  I imagine that a highly optimizing compiler might be too smart for its
  *  own good, and somehow cause this routine to fail, if it pretends that

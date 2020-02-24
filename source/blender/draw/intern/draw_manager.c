@@ -282,8 +282,21 @@ static void drw_viewport_colormanagement_set(void)
   ColorManagedViewSettings view_settings;
   float dither = 0.0f;
 
-  bool use_render_settings = v3d && (v3d->shading.type == OB_RENDER);
+  /* TODO(fclem) This should be a render engine callback to determine if we need CM or not. */
+  bool use_workbench = BKE_scene_uses_blender_workbench(scene);
+
+  bool use_scene_lights = (!v3d ||
+                           ((v3d->shading.type == OB_MATERIAL) &&
+                            (v3d->shading.flag & V3D_SHADING_SCENE_LIGHTS)) ||
+                           ((v3d->shading.type == OB_RENDER) &&
+                            (v3d->shading.flag & V3D_SHADING_SCENE_LIGHTS_RENDER)));
+  bool use_scene_world =
+      (!v3d ||
+       ((v3d->shading.type == OB_MATERIAL) && (v3d->shading.flag & V3D_SHADING_SCENE_WORLD)) ||
+       ((v3d->shading.type == OB_RENDER) && (v3d->shading.flag & V3D_SHADING_SCENE_WORLD_RENDER)));
   bool use_view_transform = v3d && (v3d->shading.type >= OB_MATERIAL);
+  bool use_render_settings = v3d && ((use_workbench && use_view_transform) || use_scene_lights ||
+                                     use_scene_world);
 
   if (use_render_settings) {
     /* Use full render settings, for renders with scene lighting. */
@@ -1309,6 +1322,9 @@ void DRW_draw_callbacks_post_scene(void)
      * function is done with sRGB color. Avoid double transform. */
     glDisable(GL_FRAMEBUFFER_SRGB);
 
+    GPU_matrix_projection_set(rv3d->winmat);
+    GPU_matrix_set(rv3d->viewmat);
+
     /* annotations - temporary drawing buffer (3d space) */
     /* XXX: Or should we use a proper draw/overlay engine for this case? */
     if (do_annotations) {
@@ -1319,9 +1335,6 @@ void DRW_draw_callbacks_post_scene(void)
     }
 
     drw_debug_draw();
-
-    GPU_matrix_projection_set(rv3d->winmat);
-    GPU_matrix_set(rv3d->viewmat);
 
     GPU_depth_test(false);
     ED_region_draw_cb_draw(DST.draw_ctx.evil_C, DST.draw_ctx.ar, REGION_DRAW_POST_VIEW);
@@ -1583,7 +1596,26 @@ void DRW_draw_render_loop_offscreen(struct Depsgraph *depsgraph,
   DST.options.draw_background = draw_background;
   DRW_draw_render_loop_ex(depsgraph, engine_type, ar, v3d, render_viewport, NULL);
 
+  if (draw_background) {
+    /* HACK(fclem): In this case we need to make sure the final alpha is 1.
+     * We use the blend mode to ensure that. A better way to fix that would
+     * be to do that in the colormanagmeent shader. */
+    GPU_offscreen_bind(ofs, false);
+    GPU_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
+    GPU_clear(GPU_COLOR_BIT);
+    /* Premult Alpha over black background. */
+    GPU_blend_set_func(GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(true);
+  }
+
   GPU_viewport_unbind_from_offscreen(render_viewport, ofs, do_color_management);
+
+  if (draw_background) {
+    /* Reset default. */
+    GPU_blend_set_func_separate(
+        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(false);
+  }
 
   /* Free temporary viewport. */
   if (viewport == NULL) {

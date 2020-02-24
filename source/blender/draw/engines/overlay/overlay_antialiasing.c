@@ -91,7 +91,7 @@ void OVERLAY_antialiasing_init(OVERLAY_Data *vedata)
   }
   else {
     /* Just a copy of the defaults framebuffers. */
-    color_tex = dtxl->color;
+    color_tex = dtxl->color_overlay;
   }
 
   GPU_framebuffer_ensure_config(&fbl->overlay_color_only_fb,
@@ -157,13 +157,13 @@ void OVERLAY_antialiasing_cache_finish(OVERLAY_Data *vedata)
                                    GPU_ATTACHMENT_TEXTURE(txl->overlay_line_tx)});
   }
   else {
-    GPU_framebuffer_ensure_config(
-        &fbl->overlay_in_front_fb,
-        {GPU_ATTACHMENT_TEXTURE(dtxl->depth_in_front), GPU_ATTACHMENT_TEXTURE(dtxl->color)});
+    GPU_framebuffer_ensure_config(&fbl->overlay_in_front_fb,
+                                  {GPU_ATTACHMENT_TEXTURE(dtxl->depth_in_front),
+                                   GPU_ATTACHMENT_TEXTURE(dtxl->color_overlay)});
 
     GPU_framebuffer_ensure_config(&fbl->overlay_line_in_front_fb,
                                   {GPU_ATTACHMENT_TEXTURE(dtxl->depth_in_front),
-                                   GPU_ATTACHMENT_TEXTURE(dtxl->color),
+                                   GPU_ATTACHMENT_TEXTURE(dtxl->color_overlay),
                                    GPU_ATTACHMENT_TEXTURE(txl->overlay_line_tx)});
   }
 }

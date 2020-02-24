@@ -202,6 +202,10 @@ typedef struct SculptThreadedTaskData {
   float (*mat)[4];
   float (*vertCos)[3];
 
+  /* X and Z vectors aligned to the stroke direction for operations where perpendicular vectors to
+   * the stroke direction are needed. */
+  float (*stroke_xz)[3];
+
   int filter_type;
   float filter_strength;
 
@@ -289,7 +293,7 @@ bool sculpt_brush_test_sphere_sq(SculptBrushTest *test, const float co[3]);
 bool sculpt_brush_test_sphere_fast(const SculptBrushTest *test, const float co[3]);
 bool sculpt_brush_test_cube(SculptBrushTest *test,
                             const float co[3],
-                            float local[4][4],
+                            const float local[4][4],
                             const float roundness);
 bool sculpt_brush_test_circle_sq(SculptBrushTest *test, const float co[3]);
 bool sculpt_search_sphere_cb(PBVHNode *node, void *data_v);

@@ -1443,7 +1443,7 @@ class VIEW3D_MT_select_particle(Menu):
 
         layout.separator()
 
-        layout.operator("particle.select_linked")
+        layout.operator("particle.select_linked", text="Select Linked")
 
         layout.separator()
 
@@ -3126,8 +3126,7 @@ class VIEW3D_MT_particle_context_menu(Menu):
 
             layout.separator()
 
-            layout.operator("particle.select_linked")
-
+            layout.operator("particle.select_linked", text="Select Linked")
 
 class VIEW3D_MT_particle_showhide(ShowHideMenu, Menu):
     _operator_name = "particle"
@@ -3390,7 +3389,6 @@ class BoneOptions:
             "use_deform",
             "use_envelope_multiply",
             "use_inherit_rotation",
-            "inherit_scale",
         ]
 
         if context.mode == 'EDIT_ARMATURE':
@@ -3585,7 +3583,8 @@ class VIEW3D_MT_edit_mesh_context_menu(Menu):
 
             col.separator()
 
-            col.operator("mesh.loopcut_slide")
+            props = col.operator("mesh.loopcut_slide")
+            props.TRANSFORM_OT_edge_slide.release_confirm = False
             col.operator("mesh.offset_edge_loops_slide")
 
             col.separator()
@@ -6937,7 +6936,10 @@ class VIEW3D_PT_sculpt_context_menu(Panel):
             layout.prop(brush, "normal_weight", slider=True)
 
         if capabilities.has_pinch_factor:
-            layout.prop(brush, "crease_pinch_factor", slider=True, text="Pinch")
+            text = "Pinch"
+            if brush.sculpt_tool in {'BLOB', 'SNAKE_HOOK'}:
+                text = "Magnify"
+            layout.prop(brush, "crease_pinch_factor", slider=True, text=text)
 
         if capabilities.has_rake_factor:
             layout.prop(brush, "rake_factor", slider=True)

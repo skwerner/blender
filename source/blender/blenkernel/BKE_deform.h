@@ -20,6 +20,10 @@
 #ifndef __BKE_DEFORM_H__
 #define __BKE_DEFORM_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** \file
  * \ingroup bke
  * \brief support for deformation groups and hooks.
@@ -102,7 +106,7 @@ void defvert_normalize_subset(struct MDeformVert *dvert,
 void defvert_normalize_lock_single(struct MDeformVert *dvert,
                                    const bool *vgroup_subset,
                                    const int vgroup_tot,
-                                   const int def_nr_lock);
+                                   const uint def_nr_lock);
 void defvert_normalize_lock_map(struct MDeformVert *dvert,
                                 const bool *vgroup_subset,
                                 const int vgroup_tot,
@@ -141,5 +145,9 @@ void BKE_defvert_extract_vgroup_to_polyweights(struct MDeformVert *dvert,
                                                const bool invert_vgroup);
 
 void BKE_defvert_weight_to_rgb(float r_rgb[3], const float weight);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_DEFORM_H__ */

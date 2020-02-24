@@ -283,13 +283,12 @@ typedef struct ThemeSpace {
   unsigned char normal[4];
   unsigned char vertex_normal[4];
   unsigned char loop_normal[4];
-  unsigned char bone_solid[4], bone_pose[4], bone_pose_active[4];
+  unsigned char bone_solid[4], bone_pose[4], bone_pose_active[4], bone_locked_weight[4];
   unsigned char strip[4], strip_select[4];
   unsigned char cframe[4];
   unsigned char time_keyframe[4], time_gp_keyframe[4];
   unsigned char freestyle_edge_mark[4], freestyle_face_mark[4];
   unsigned char time_scrub_background[4];
-  char _pad5[4];
 
   unsigned char nurb_uline[4], nurb_vline[4];
   unsigned char act_spline[4], nurb_sel_uline[4], nurb_sel_vline[4], lastsel_point[4];
@@ -414,6 +413,8 @@ typedef struct ThemeSpace {
   unsigned char info_warning[4], info_warning_text[4];
   unsigned char info_info[4], info_info_text[4];
   unsigned char info_debug[4], info_debug_text[4];
+  unsigned char info_property[4], info_property_text[4];
+  unsigned char info_operator[4], info_operator_text[4];
 
   unsigned char paint_curve_pivot[4];
   unsigned char paint_curve_handle[4];
@@ -723,6 +724,7 @@ typedef struct UserDef {
   short vbotimeout, vbocollectrate;
   short textimeout, texcollectrate;
   int memcachelimit;
+  /** Unused. */
   int prefetchframes;
   /** Control the rotation step of the view when PAD2, PAD4, PAD6&PAD8 is use. */
   float pad_rot_angle;

@@ -37,7 +37,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 
@@ -409,8 +409,8 @@ static void node_update_basis(const bContext *C, bNodeTree *ntree, bNode *node)
     /* align output buttons to the right */
     row = uiLayoutRow(layout, 1);
     uiLayoutSetAlignment(row, UI_LAYOUT_ALIGN_RIGHT);
-
-    nsock->typeinfo->draw((bContext *)C, row, &sockptr, &nodeptr, IFACE_(nsock->name));
+    const char *socket_label = nodeSocketLabel(nsock);
+    nsock->typeinfo->draw((bContext *)C, row, &sockptr, &nodeptr, IFACE_(socket_label));
 
     UI_block_align_end(node->block);
     UI_block_layout_resolve(node->block, NULL, &buty);
@@ -535,7 +535,8 @@ static void node_update_basis(const bContext *C, bNodeTree *ntree, bNode *node)
 
     row = uiLayoutRow(layout, 1);
 
-    nsock->typeinfo->draw((bContext *)C, row, &sockptr, &nodeptr, IFACE_(nsock->name));
+    const char *socket_label = nodeSocketLabel(nsock);
+    nsock->typeinfo->draw((bContext *)C, row, &sockptr, &nodeptr, IFACE_(socket_label));
 
     UI_block_align_end(node->block);
     UI_block_layout_resolve(node->block, NULL, &buty);
@@ -722,18 +723,18 @@ static void node_socket_draw(const bContext *C,
                              bNodeTree *ntree,
                              PointerRNA node_ptr,
                              bNodeSocket *sock,
-                             unsigned pos_id,
-                             unsigned col_id,
-                             unsigned shape_id,
-                             unsigned size_id,
-                             unsigned outline_col_id,
+                             uint pos_id,
+                             uint col_id,
+                             uint shape_id,
+                             uint size_id,
+                             uint outline_col_id,
                              float size,
                              bool selected)
 {
   PointerRNA ptr;
   float color[4];
   float outline_color[4];
-  unsigned int flags = 0;
+  uint flags = 0;
 
   RNA_pointer_create((ID *)ntree, &RNA_NodeSocket, sock, &ptr);
   sock->typeinfo->draw_color((bContext *)C, &ptr, &node_ptr, color);

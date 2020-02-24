@@ -395,6 +395,7 @@ void wm_quit_with_optional_confirmation_prompt(bContext *C, wmWindow *win)
 
   if (U.uiflag & USER_SAVE_PROMPT) {
     if (wm_file_or_image_is_modified(C) && !G.background) {
+      wm_window_raise(win);
       wm_confirm_quit(C);
     }
     else {
@@ -547,6 +548,12 @@ void WM_window_set_dpi(const wmWindow *win)
   BLF_default_dpi(U.pixelsize * U.dpi);
 }
 
+static void wm_window_update_eventstate(wmWindow *win)
+{
+  /* Update mouse position when a window is activated. */
+  wm_get_cursor_position(win, &win->eventstate->x, &win->eventstate->y);
+}
+
 static void wm_window_ensure_eventstate(wmWindow *win)
 {
   if (win->eventstate) {
@@ -554,7 +561,7 @@ static void wm_window_ensure_eventstate(wmWindow *win)
   }
 
   win->eventstate = MEM_callocN(sizeof(wmEvent), "window event state");
-  wm_get_cursor_position(win, &win->eventstate->x, &win->eventstate->y);
+  wm_window_update_eventstate(win);
 }
 
 /* belongs to below */
@@ -702,6 +709,8 @@ static void wm_window_ghostwindow_ensure(wmWindowManager *wm, wmWindow *win, boo
 
     /* happens after fileread */
     wm_window_ensure_eventstate(win);
+
+    WM_window_set_dpi(win);
   }
 
   /* add keymap handlers (1 handler for all keys in map!) */
@@ -1206,7 +1215,6 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
       case GHOST_kEventWindowActivate: {
         GHOST_TEventKeyData kdata;
         wmEvent event;
-        int wx, wy;
         const int keymodifier = ((query_qual(SHIFT) ? KM_SHIFT : 0) |
                                  (query_qual(CONTROL) ? KM_CTRL : 0) |
                                  (query_qual(ALT) ? KM_ALT : 0) | (query_qual(OS) ? KM_OSKEY : 0));
@@ -1291,10 +1299,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
         win->eventstate->keymodifier = 0;
 
         /* entering window, update mouse pos. but no event */
-        wm_get_cursor_position(win, &wx, &wy);
-
-        win->eventstate->x = wx;
-        win->eventstate->y = wy;
+        wm_window_update_eventstate(win);
 
         win->addmousemove = 1; /* enables highlighted buttons */
 
@@ -1445,7 +1450,8 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
 
           WM_operator_properties_create_ptr(&props_ptr, ot);
           RNA_string_set(&props_ptr, "filepath", path);
-          WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_DEFAULT, &props_ptr);
+          RNA_boolean_set(&props_ptr, "display_file_selector", false);
+          WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr);
           WM_operator_properties_free(&props_ptr);
 
           CTX_wm_window_set(C, NULL);
@@ -1455,12 +1461,9 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
       case GHOST_kEventDraggingDropDone: {
         wmEvent event;
         GHOST_TEventDragnDropData *ddd = GHOST_GetEventData(evt);
-        int wx, wy;
 
         /* entering window, update mouse pos */
-        wm_get_cursor_position(win, &wx, &wy);
-        win->eventstate->x = wx;
-        win->eventstate->y = wy;
+        wm_window_update_eventstate(win);
 
         wm_event_init_from_window(win, &event); /* copy last state, like mouse coords */
 
@@ -1542,9 +1545,21 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
         wm_event_add_ghostevent(wm, win, type, data);
         break;
       }
-      default:
+      case GHOST_kEventButtonDown:
+      case GHOST_kEventButtonUp: {
+        if (win->active == 0) {
+          /* Entering window, update cursor and tablet state.
+           * (ghost sends win-activate *after* the mouse-click in window!) */
+          wm_window_update_eventstate(win);
+        }
+
         wm_event_add_ghostevent(wm, win, type, data);
         break;
+      }
+      default: {
+        wm_event_add_ghostevent(wm, win, type, data);
+        break;
+      }
     }
   }
   return 1;
@@ -2098,21 +2113,6 @@ void WM_cursor_compatible_xy(wmWindow *win, int *x, int *y)
   }
 }
 
-/**
- * Get the cursor pressure, in most cases you'll want to use wmTabletData from the event
- */
-float WM_cursor_pressure(const struct wmWindow *win)
-{
-  const GHOST_TabletData *td = GHOST_GetTabletData(win->ghostwin);
-  /* if there's tablet data from an active tablet device then add it */
-  if ((td != NULL) && td->Active != GHOST_kTabletModeNone) {
-    return wm_pressure_curve(td->Pressure);
-  }
-  else {
-    return -1.0f;
-  }
-}
-
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -2189,8 +2189,8 @@ void WM_window_screen_rect_calc(const wmWindow *win, rcti *r_rect)
     }
   }
 
-  BLI_assert(screen_rect.xmin < screen_rect.xmax);
-  BLI_assert(screen_rect.ymin < screen_rect.ymax);
+  BLI_assert(BLI_rcti_is_valid(&screen_rect));
+
   *r_rect = screen_rect;
 }
 

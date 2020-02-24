@@ -43,6 +43,8 @@ BufferParams::BufferParams()
   denoising_data_pass = false;
   denoising_clean_pass = false;
   denoising_prefiltered_pass = false;
+
+  Pass::add(PASS_COMBINED, passes);
 }
 
 void BufferParams::get_offset_stride(int &offset, int &stride)
@@ -144,7 +146,7 @@ void RenderBuffers::reset(BufferParams &params_)
   params = params_;
 
   /* re-allocate buffer */
-  buffer.alloc(params.width * params.height * params.get_passes_size());
+  buffer.alloc(params.width * params.get_passes_size(), params.height);
   buffer.zero_to_device();
 }
 

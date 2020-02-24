@@ -39,7 +39,7 @@
 #include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -481,7 +481,7 @@ static bool bake_object_check(ViewLayer *view_layer, Object *ob, ReportList *rep
       }
     }
     else {
-      Material *mat = give_current_material(ob, i);
+      Material *mat = BKE_object_material_get(ob, i);
       if (mat != NULL) {
         BKE_reportf(reports,
                     RPT_INFO,

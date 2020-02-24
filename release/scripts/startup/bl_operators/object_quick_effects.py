@@ -466,6 +466,13 @@ class QuickLiquid(Operator):
             self.report({'ERROR'}, "Select at least one mesh object")
             return {'CANCELLED'}
 
+        # set shading type to wireframe so that liquid particles are visible
+        for area in bpy.context.screen.areas:
+            if area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        space.shading.type = 'WIREFRAME'
+
         for obj in mesh_objects:
             fake_context["object"] = obj
             # make each selected object a liquid flow
@@ -499,7 +506,6 @@ class QuickLiquid(Operator):
         # setup liquid domain
         bpy.ops.object.modifier_add(type='FLUID')
         obj.modifiers[-1].fluid_type = 'DOMAIN'
-        obj.modifiers[-1].domain_settings.domain_type = 'LIQUID'
         # set all domain borders to obstacle
         obj.modifiers[-1].domain_settings.use_collision_border_front = True
         obj.modifiers[-1].domain_settings.use_collision_border_back = True
@@ -511,8 +517,8 @@ class QuickLiquid(Operator):
         # set correct cache file format for liquid
         obj.modifiers[-1].domain_settings.cache_mesh_format = 'BOBJECT'
 
-        # allocate and show particle system for FLIP
-        obj.modifiers[-1].domain_settings.use_flip_particles = True
+        # change domain type, will also allocate and show particle system for FLIP
+        obj.modifiers[-1].domain_settings.domain_type = 'LIQUID'
 
         # make the domain smooth so it renders nicely
         bpy.ops.object.shade_smooth()

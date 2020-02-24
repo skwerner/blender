@@ -19,7 +19,32 @@
 
 # A shell script installing/building all needed dependencies to build Blender, for some Linux distributions.
 
-##### Args and Help Handling #####
+# ----------------------------------------------------------------------------
+# Debugging Helpers
+#
+# Use for developing this script (keep first).
+
+# Useful for debugging this script:
+USE_DEBUG_TRAP=${USE_DEBUG_TRAP:-0}
+USE_DEBUG_LOG=${USE_DEBUG_LOG:-0}
+
+# Print the line that exits.
+if [ $USE_DEBUG_TRAP -ne 0 ]; then
+  err_report() {
+    echo "Error on line $1"
+    exit 1
+  }
+  trap 'err_report $LINENO' ERR
+fi
+
+# Noisy, show every line that runs with it's line number.
+if [ $USE_DEBUG_LOG -ne 0 ]; then
+  PS4='\e[0;33m$(printf %4d ${LINENO}):\e\033[0m '
+  set -x
+fi
+
+# ----------------------------------------------------------------------------
+# Args and Help Handling
 
 # Parse command line!
 ARGS=$( \
@@ -30,13 +55,13 @@ with-all,with-opencollada,with-jack,with-embree,with-oidn,\
 ver-ocio:,ver-oiio:,ver-llvm:,ver-osl:,ver-osd:,ver-openvdb:,\
 force-all,force-python,force-numpy,force-boost,\
 force-ocio,force-openexr,force-oiio,force-llvm,force-osl,force-osd,force-openvdb,\
-force-ffmpeg,force-opencollada,force-alembic,force-embree,force-oidn,\
+force-ffmpeg,force-opencollada,force-alembic,force-embree,force-oidn,force-usd,\
 build-all,build-python,build-numpy,build-boost,\
 build-ocio,build-openexr,build-oiio,build-llvm,build-osl,build-osd,build-openvdb,\
-build-ffmpeg,build-opencollada,build-alembic,build-embree,build-oidn,\
+build-ffmpeg,build-opencollada,build-alembic,build-embree,build-oidn,build-usd,\
 skip-python,skip-numpy,skip-boost,\
 skip-ocio,skip-openexr,skip-oiio,skip-llvm,skip-osl,skip-osd,skip-openvdb,\
-skip-ffmpeg,skip-opencollada,skip-alembic,skip-embree,skip-oidn \
+skip-ffmpeg,skip-opencollada,skip-alembic,skip-embree,skip-oidn,skip-usd \
 -- "$@" \
 )
 
@@ -196,6 +221,9 @@ ARGUMENTS_INFO="\"COMMAND LINE ARGUMENTS:
     --build-ffmpeg
         Force the build of FFMpeg.
 
+    --build-usd
+        Force the build of Universal Scene Description.
+
     Note about the --build-foo options:
         * They force the script to prefer building dependencies rather than using available packages.
           This may make things simpler and allow working around some distribution bugs, but on the other hand it will
@@ -254,6 +282,9 @@ ARGUMENTS_INFO="\"COMMAND LINE ARGUMENTS:
     --force-ffmpeg
         Force the rebuild of FFMpeg.
 
+    --force-usd
+        Force the rebuild of Universal Scene Description.
+
     Note about the --force-foo options:
         * They obviously only have an effect if those libraries are built by this script
           (i.e. if there is no available and satisfactory package)!
@@ -303,9 +334,13 @@ ARGUMENTS_INFO="\"COMMAND LINE ARGUMENTS:
         Unconditionally skip OpenImageDenoise installation/building.
 
     --skip-ffmpeg
-        Unconditionally skip FFMpeg installation/building.\""
+        Unconditionally skip FFMpeg installation/building.
 
-##### Main Vars #####
+    --skip-usd
+        Unconditionally skip Universal Scene Description installation/building.\""
+
+# ----------------------------------------------------------------------------
+# Main Vars
 
 DO_SHOW_DEPS=false
 
@@ -329,7 +364,7 @@ NUMPY_FORCE_BUILD=false
 NUMPY_FORCE_REBUILD=false
 NUMPY_SKIP=false
 
-BOOST_VERSION="1.68.0"
+BOOST_VERSION="1.70.0"
 BOOST_VERSION_MIN="1.49"
 BOOST_FORCE_BUILD=false
 BOOST_FORCE_REBUILD=false
@@ -341,9 +376,9 @@ OCIO_FORCE_BUILD=false
 OCIO_FORCE_REBUILD=false
 OCIO_SKIP=false
 
-OPENEXR_VERSION="2.3.0"
+OPENEXR_VERSION="2.4.0"
 OPENEXR_VERSION_MIN="2.0.1"
-ILMBASE_VERSION="2.3.0"
+ILMBASE_VERSION="2.4.0"
 ILMBASE_VERSION_MIN="2.3"
 OPENEXR_FORCE_BUILD=false
 OPENEXR_FORCE_REBUILD=false
@@ -357,7 +392,7 @@ OIIO_FORCE_BUILD=false
 OIIO_FORCE_REBUILD=false
 OIIO_SKIP=false
 
-LLVM_VERSION="6.0.1"
+LLVM_VERSION="9.0.1"
 LLVM_VERSION_MIN="6.0"
 LLVM_VERSION_FOUND=""
 LLVM_FORCE_BUILD=false
@@ -365,7 +400,7 @@ LLVM_FORCE_REBUILD=false
 LLVM_SKIP=false
 
 # OSL needs to be compiled for now!
-OSL_VERSION="1.9.9"
+OSL_VERSION="1.10.9"
 OSL_VERSION_MIN=$OSL_VERSION
 OSL_FORCE_BUILD=false
 OSL_FORCE_REBUILD=false
@@ -379,9 +414,9 @@ OSD_FORCE_REBUILD=false
 OSD_SKIP=false
 
 # OpenVDB needs to be compiled for now
-OPENVDB_BLOSC_VERSION="1.14.4"
+OPENVDB_BLOSC_VERSION="1.5.0"
 
-OPENVDB_VERSION="5.1.0"
+OPENVDB_VERSION="7.0.0"
 OPENVDB_VERSION_MIN=$OPENVDB_VERSION
 OPENVDB_FORCE_BUILD=false
 OPENVDB_FORCE_REBUILD=false
@@ -393,6 +428,11 @@ ALEMBIC_VERSION_MIN=$ALEMBIC_VERSION
 ALEMBIC_FORCE_BUILD=false
 ALEMBIC_FORCE_REBUILD=false
 ALEMBIC_SKIP=false
+
+USD_VERSION="19.11"
+USD_FORCE_BUILD=false
+USD_FORCE_REBUILD=false
+USD_SKIP=false
 
 OPENCOLLADA_VERSION="1.6.68"
 OPENCOLLADA_FORCE_BUILD=false
@@ -447,7 +487,8 @@ LANG_BACK=$LANG
 LANG=""
 export LANG
 
-##### Generic Helpers #####
+# ----------------------------------------------------------------------------
+# Generic Helpers
 
 BLACK=$(tput setaf 0)
 RED=$(tput setaf 1)
@@ -489,7 +530,8 @@ PRINT() {
   _echo "$@"
 }
 
-##### Args Handling #####
+# ----------------------------------------------------------------------------
+# Args Handling
 
 # Finish parsing the commandline args.
 eval set -- "$ARGS"
@@ -600,6 +642,7 @@ while true; do
       OIDN_FORCE_BUILD=true
       FFMPEG_FORCE_BUILD=true
       ALEMBIC_FORCE_BUILD=true
+      USD_FORCE_BUILD=true
       shift; continue
     ;;
     --build-python)
@@ -651,6 +694,9 @@ while true; do
     --build-alembic)
       ALEMBIC_FORCE_BUILD=true; shift; continue
     ;;
+    --build-usd)
+      USD_FORCE_BUILD=true; shift; continue
+    ;;
     --force-all)
       PYTHON_FORCE_REBUILD=true
       NUMPY_FORCE_REBUILD=true
@@ -667,6 +713,7 @@ while true; do
       OIDN_FORCE_REBUILD=true
       FFMPEG_FORCE_REBUILD=true
       ALEMBIC_FORCE_REBUILD=true
+      USD_FORCE_REBUILD=true
       shift; continue
     ;;
     --force-python)
@@ -716,6 +763,9 @@ while true; do
     --force-alembic)
       ALEMBIC_FORCE_REBUILD=true; shift; continue
     ;;
+    --force-usd)
+      USD_FORCE_REBUILD=true; shift; continue
+    ;;
     --skip-python)
       PYTHON_SKIP=true; shift; continue
     ;;
@@ -760,6 +810,9 @@ while true; do
     ;;
     --skip-alembic)
       ALEMBIC_SKIP=true; shift; continue
+    ;;
+    --skip-usd)
+      USD_SKIP=true; shift; continue
     ;;
     --)
       # no more arguments to parse
@@ -831,8 +884,9 @@ OIIO_SOURCE=( "https://github.com/OpenImageIO/oiio/archive/Release-$OIIO_VERSION
 #~ OIIO_SOURCE_REPO=( "https://github.com/OpenImageIO/oiio.git" )
 #~ OIIO_SOURCE_REPO_UID="c9e67275a0b248ead96152f6d2221cc0c0f278a4"
 
-LLVM_SOURCE=( "http://releases.llvm.org/$LLVM_VERSION/llvm-$LLVM_VERSION.src.tar.xz" )
-LLVM_CLANG_SOURCE=( "http://releases.llvm.org/$LLVM_VERSION/clang-$LLVM_VERSION.src.tar.xz" "http://llvm.org/releases/$LLVM_VERSION/cfe-$LLVM_VERSION.src.tar.xz" )
+_LLVM_SOURCE_ROOT="https://github.com/llvm/llvm-project/releases/download/llvmorg-$LLVM_VERSION"
+LLVM_SOURCE=( "$_LLVM_SOURCE_ROOT/llvm-$LLVM_VERSION.src.tar.xz" )
+LLVM_CLANG_SOURCE=( "$_LLVM_SOURCE_ROOT/clang-$LLVM_VERSION.src.tar.xz" "$_LLVM_SOURCE_ROOT/cfe-$LLVM_VERSION.src.tar.xz" )
 
 OSL_USE_REPO=false
 OSL_SOURCE=( "https://github.com/imageworks/OpenShadingLanguage/archive/Release-$OSL_VERSION.tar.gz" )
@@ -867,6 +921,8 @@ ALEMBIC_SOURCE=( "https://github.com/alembic/alembic/archive/${ALEMBIC_VERSION}.
 # ALEMBIC_SOURCE_REPO_UID="e6c90d4faa32c4550adeaaf3f556dad4b73a92bb"
 # ALEMBIC_SOURCE_REPO_BRANCH="master"
 
+USD_SOURCE=( "https://github.com/PixarAnimationStudios/USD/archive/v${USD_VERSION}.tar.gz" )
+
 OPENCOLLADA_USE_REPO=false
 OPENCOLLADA_SOURCE=( "https://github.com/KhronosGroup/OpenCOLLADA/archive/v${OPENCOLLADA_VERSION}.tar.gz" )
 #~ OPENCOLLADA_SOURCE_REPO=( "https://github.com/KhronosGroup/OpenCOLLADA.git" )
@@ -892,7 +948,8 @@ CXXFLAGS_BACK=$CXXFLAGS
 CXXFLAGS="$CXXFLAGS -std=c++11"
 export CXXFLAGS
 
-#### Show Dependencies ####
+# ----------------------------------------------------------------------------
+# Show Dependencies
 
 # Need those to be after we defined versions...
 DEPS_COMMON_INFO="\"COMMON DEPENDENCIES:
@@ -927,7 +984,8 @@ You may also want to build them yourself (optional ones are [between brackets]):
     * [OpenCollada $OPENCOLLADA_VERSION] (from $OPENCOLLADA_SOURCE).
     * [Embree $EMBREE_VERSION] (from $EMBREE_SOURCE).
     * [OpenImageDenoise $OIDN_VERSION] (from $OIDN_SOURCE).
-    * [Alembic $ALEMBIC_VERSION] (from $ALEMBIC_SOURCE).\""
+    * [Alembic $ALEMBIC_VERSION] (from $ALEMBIC_SOURCE).
+    * [Universal Scene Description $USD_VERSION] (from $USD_SOURCE).\""
 
 if [ "$DO_SHOW_DEPS" = true ]; then
   PRINT ""
@@ -940,9 +998,8 @@ if [ "$DO_SHOW_DEPS" = true ]; then
   exit 0
 fi
 
-
-
-##### Generic Helpers #####
+# ----------------------------------------------------------------------------
+# Generic Helpers
 
 # Check return code of wget for success...
 download() {
@@ -965,15 +1022,25 @@ download() {
   fi
 }
 
+version_sanitize() {
+  # Remove suffix such as '1.3_RC2', keeping only '1.3'.
+  # Needed for numeric comparisons.
+  local val=$(sed -r 's/^([^_]+).*/\1/' <<< "$1")
+  # Remove trailing punctuation such as '1.0.', keeping only '1.0'.
+  val=$(sed -r 's/[[:punct:]]*$//g' <<< "$val")
+  echo $val
+}
+
 # Return 0 if $1 = $2 (i.e. 1.01.0 = 1.1, but 1.1.1 != 1.1), else 1.
 # $1 and $2 should be version numbers made of numbers only.
 version_eq() {
-  backIFS=$IFS
-  IFS='.'
+  local VER_1=$(version_sanitize "$1")
+  local VER_2=$(version_sanitize "$2")
+  local IFS='.'
 
   # Split both version numbers into their numeric elements.
-  arr1=( $1 )
-  arr2=( $2 )
+  arr1=( $VER_1 )
+  arr2=( $VER_2 )
 
   ret=1
 
@@ -983,8 +1050,8 @@ version_eq() {
     _t=$count1
     count1=$count2
     count2=$_t
-    arr1=( $2 )
-    arr2=( $1 )
+    arr1=( $VER_2 )
+    arr2=( $VER_1 )
   fi
 
   ret=0
@@ -1004,7 +1071,6 @@ version_eq() {
     fi
   done
 
-  IFS=$backIFS
   return $ret
 }
 
@@ -1035,12 +1101,13 @@ version_ge_lt() {
 # $1 and $2 should be version numbers made of numbers only.
 # $1 should be at least as long as $2!
 version_match() {
-  backIFS=$IFS
-  IFS='.'
+  local VER_1=$(version_sanitize "$1")
+  local VER_2=$(version_sanitize "$2")
+  local IFS='.'
 
   # Split both version numbers into their numeric elements.
-  arr1=( $1 )
-  arr2=( $2 )
+  arr1=( $VER_1 )
+  arr2=( $VER_2 )
 
   ret=1
 
@@ -1057,11 +1124,12 @@ version_match() {
     done
   fi
 
-  IFS=$backIFS
   return $ret
 }
 
-##### Generic compile helpers #####
+# ----------------------------------------------------------------------------
+# Generic compile helpers
+
 prepare_opt() {
   INFO "Ensuring $INST exists and is writable by us"
   if [ ! $SUDO ]; then
@@ -1123,7 +1191,9 @@ run_ldconfig() {
   PRINT ""
 }
 
-#### Build Python ####
+# ----------------------------------------------------------------------------
+# Build Python
+
 _init_python() {
   _src=$SRC/Python-$PYTHON_VERSION
   _git=false
@@ -1192,7 +1262,9 @@ compile_Python() {
   fi
 }
 
-##### Build Numpy #####
+# ----------------------------------------------------------------------------
+# Build Numpy
+
 _init_numpy() {
   _src=$SRC/numpy-$NUMPY_VERSION
   _git=false
@@ -1259,7 +1331,9 @@ compile_Numpy() {
   fi
 }
 
-#### Build Boost ####
+# ----------------------------------------------------------------------------
+# Build Boost
+
 _init_boost() {
   _src=$SRC/boost-$BOOST_VERSION
   _git=false
@@ -1337,7 +1411,9 @@ compile_Boost() {
   run_ldconfig "boost"
 }
 
-#### Build OCIO ####
+# ----------------------------------------------------------------------------
+# Build OCIO
+
 _init_ocio() {
   _src=$SRC/OpenColorIO-$OCIO_VERSION
   if [ "$OCIO_USE_REPO" = true ]; then
@@ -1452,7 +1528,9 @@ compile_OCIO() {
   run_ldconfig "ocio"
 }
 
-#### Build ILMBase ####
+# ----------------------------------------------------------------------------
+# Build ILMBase
+
 _init_ilmbase() {
   _src=$SRC/ILMBase-$ILMBASE_VERSION
   _git=false
@@ -1543,7 +1621,9 @@ compile_ILMBASE() {
   magic_compile_set ilmbase-$ILMBASE_VERSION $ilmbase_magic
 }
 
-#### Build OpenEXR ####
+# ----------------------------------------------------------------------------
+# Build OpenEXR
+
 _init_openexr() {
   _src=$SRC/OpenEXR-$OPENEXR_VERSION
   _git=true
@@ -1663,7 +1743,9 @@ compile_OPENEXR() {
   run_ldconfig "openexr"
 }
 
-#### Build OIIO ####
+# ----------------------------------------------------------------------------
+# Build OIIO
+
 _init_oiio() {
   _src=$SRC/OpenImageIO-$OIIO_VERSION
   _git=true
@@ -1804,7 +1886,9 @@ compile_OIIO() {
   run_ldconfig "oiio"
 }
 
-#### Build LLVM ####
+# ----------------------------------------------------------------------------
+# Build LLVM
+
 _init_llvm() {
   _src=$SRC/LLVM-$LLVM_VERSION
   _src_clang=$SRC/CLANG-$LLVM_VERSION
@@ -1904,7 +1988,9 @@ compile_LLVM() {
   fi
 }
 
-#### Build OSL ####
+# ----------------------------------------------------------------------------
+# Build OSL
+
 _init_osl() {
   _src=$SRC/OpenShadingLanguage-$OSL_VERSION
   _git=true
@@ -1996,7 +2082,7 @@ compile_OSL() {
     fi
 
     if [ -d $INST/oiio ]; then
-      cmake_d="$cmake_d -D OPENIMAGEIOHOME=$INST/oiio"
+      cmake_d="$cmake_d -D OPENIMAGEIO_ROOT_DIR=$INST/oiio"
     fi
 
     if [ ! -z $LLVM_VERSION_FOUND ]; then
@@ -2034,7 +2120,9 @@ compile_OSL() {
   run_ldconfig "osl"
 }
 
-#### Build OSD ####
+# ----------------------------------------------------------------------------
+# Build OSD
+
 _init_osd() {
   _src=$SRC/OpenSubdiv-$OSD_VERSION
   _git=true
@@ -2131,7 +2219,9 @@ compile_OSD() {
   run_ldconfig "osd"
 }
 
-#### Build Blosc ####
+# ----------------------------------------------------------------------------
+# Build Blosc
+
 _init_blosc() {
   _src=$SRC/c-blosc-$OPENVDB_BLOSC_VERSION
   _git=false
@@ -2218,7 +2308,9 @@ compile_BLOSC() {
   run_ldconfig "blosc"
 }
 
-#### Build OpenVDB ####
+# ----------------------------------------------------------------------------
+# Build OpenVDB
+
 _init_openvdb() {
   _src=$SRC/openvdb-$OPENVDB_VERSION
   _git=false
@@ -2319,7 +2411,9 @@ compile_OPENVDB() {
   run_ldconfig "openvdb"
 }
 
-#### Build Alembic ####
+# ----------------------------------------------------------------------------
+# Build Alembic
+
 _init_alembic() {
   _src=$SRC/alembic-$ALEMBIC_VERSION
   _git=false
@@ -2412,7 +2506,90 @@ compile_ALEMBIC() {
   run_ldconfig "alembic"
 }
 
-#### Build OpenCOLLADA ####
+#### Build USD ####
+_init_usd() {
+  _src=$SRC/USD-$USD_VERSION
+  _git=false
+  _inst=$INST/usd-$USD_VERSION
+  _inst_shortcut=$INST/usd
+}
+
+clean_USD() {
+  _init_usd
+  _clean
+}
+
+compile_USD() {
+  if [ "$NO_BUILD" = true ]; then
+    WARNING "--no-build enabled, USD will not be compiled!"
+    return
+  fi
+
+  # To be changed each time we make edits that would modify the compiled result!
+  usd_magic=1
+  _init_usd
+
+  # Clean install if needed!
+  magic_compile_check usd-$USD_VERSION $usd_magic
+  if [ $? -eq 1 -o "$USD_FORCE_REBUILD" = true ]; then
+    clean_USD
+  fi
+
+  if [ ! -d $_inst ]; then
+    INFO "Building USD-$USD_VERSION"
+
+    prepare_opt
+
+    if [ ! -d $_src ]; then
+      mkdir -p $SRC
+      download USD_SOURCE[@] "$_src.tar.gz"
+
+      INFO "Unpacking USD-$USD_VERSION"
+      tar -C $SRC -xf $_src.tar.gz
+      patch -d $_src -p1 < $SCRIPT_DIR/patches/usd.diff
+    fi
+
+    cd $_src
+
+    cmake_d="-D CMAKE_INSTALL_PREFIX=$_inst"
+    # For the reasoning behind these options, please see usd.cmake.
+    if [ -d $INST/boost ]; then
+      cmake_d="$cmake_d $cmake_d -D BOOST_ROOT=$INST/boost"
+    fi
+    cmake_d="$cmake_d -DPXR_SET_INTERNAL_NAMESPACE=usdBlender"
+    cmake_d="$cmake_d -DPXR_ENABLE_PYTHON_SUPPORT=OFF"
+    cmake_d="$cmake_d -DPXR_BUILD_IMAGING=OFF"
+    cmake_d="$cmake_d -DPXR_BUILD_TESTS=OFF"
+    cmake_d="$cmake_d -DBUILD_SHARED_LIBS=ON"
+    cmake_d="$cmake_d -DPXR_BUILD_MONOLITHIC=ON"
+    cmake_d="$cmake_d -DPXR_BUILD_USD_TOOLS=OFF"
+    cmake_d="$cmake_d -DCMAKE_DEBUG_POSTFIX=_d"
+
+    cmake $cmake_d ./
+    make -j$THREADS install
+    make clean
+
+    if [ -d $_inst ]; then
+      _create_inst_shortcut
+    else
+      ERROR "USD-$USD_VERSION failed to compile, exiting"
+      exit 1
+    fi
+
+    magic_compile_set usd-$USD_VERSION $usd_magic
+
+    cd $CWD
+    INFO "Done compiling USD-$USD_VERSION!"
+  else
+    INFO "Own USD-$USD_VERSION is up to date, nothing to do!"
+    INFO "If you want to force rebuild of this lib, use the --force-usd option."
+  fi
+
+  run_ldconfig "usd"
+}
+
+# ----------------------------------------------------------------------------
+# Build OpenCOLLADA
 _init_opencollada() {
   _src=$SRC/OpenCOLLADA-$OPENCOLLADA_VERSION
   _git=true
@@ -2504,7 +2681,9 @@ compile_OpenCOLLADA() {
   fi
 }
 
-#### Build Embree ####
+# ----------------------------------------------------------------------------
+# Build Embree
+
 _init_embree() {
   _src=$SRC/embree-$EMBREE_VERSION
   _git=true
@@ -2599,7 +2778,9 @@ compile_Embree() {
   fi
 }
 
-#### Build OpenImageDenoise ####
+# ----------------------------------------------------------------------------
+# Build OpenImageDenoise
+
 _init_oidn() {
   _src=$SRC/oidn-$OIDN_VERSION
   _git=true
@@ -2691,7 +2872,9 @@ compile_OIDN() {
   run_ldconfig "oidn"
 }
 
-#### Build FFMPEG ####
+# ----------------------------------------------------------------------------
+# Build FFMPEG
+
 _init_ffmpeg() {
   _src=$SRC/ffmpeg-$FFMPEG_VERSION
   _inst=$INST/ffmpeg-$FFMPEG_VERSION
@@ -2806,7 +2989,9 @@ compile_FFmpeg() {
 }
 
 
-#### Install on DEB-like ####
+# ----------------------------------------------------------------------------
+# Install on DEB-like
+
 get_package_version_DEB() {
     dpkg-query -W -f '${Version}' $1 | sed -r 's/([0-9]+:)?(([0-9]+\.?)+([0-9]+)).*/\2/'
 }
@@ -3257,6 +3442,15 @@ install_DEB() {
     compile_ALEMBIC
   fi
 
+  PRINT ""
+  if [ "$USD_SKIP" = true ]; then
+    WARNING "Skipping USD installation, as requested..."
+  elif [ "$USD_FORCE_BUILD" = true ]; then
+    INFO "Forced USD building, as requested..."
+    compile_USD
+  else
+    compile_USD
+  fi
 
   if [ "$WITH_OPENCOLLADA" = true ]; then
     _do_compile_collada=false
@@ -3341,7 +3535,9 @@ install_DEB() {
 }
 
 
-#### Install on RPM-like ####
+# ----------------------------------------------------------------------------
+# Install on RPM-like
+
 rpm_flavour() {
   if [ -f /etc/redhat-release ]; then
     if [ "`grep '[6-7]\.' /etc/redhat-release`" ]; then
@@ -3859,6 +4055,15 @@ install_RPM() {
     compile_ALEMBIC
   fi
 
+  PRINT ""
+  if [ "$USD_SKIP" = true ]; then
+    WARNING "Skipping USD installation, as requested..."
+  elif [ "$USD_FORCE_BUILD" = true ]; then
+    INFO "Forced USD building, as requested..."
+    compile_USD
+  else
+    compile_USD
+  fi
 
   if [ "$WITH_OPENCOLLADA" = true ]; then
     PRINT ""
@@ -3936,7 +4141,9 @@ install_RPM() {
 }
 
 
-#### Install on ARCH-like ####
+# ----------------------------------------------------------------------------
+# Install on ARCH-like
+
 get_package_version_ARCH() {
   pacman -Si $1 | grep Version | tail -n 1 | sed -r 's/.*:\s+?(([0-9]+\.?)+).*/\1/'
 }
@@ -4056,7 +4263,7 @@ install_ARCH() {
   fi
 
   if [ "$WITH_JACK" = true ]; then
-    _packages="$_packages jack"
+    _packages="$_packages jack2"
   fi
 
   PRINT ""
@@ -4339,6 +4546,15 @@ install_ARCH() {
     compile_ALEMBIC
   fi
 
+  PRINT ""
+  if [ "$USD_SKIP" = true ]; then
+    WARNING "Skipping USD installation, as requested..."
+  elif [ "$USD_FORCE_BUILD" = true ]; then
+    INFO "Forced USD building, as requested..."
+    compile_USD
+  else
+    compile_USD
+  fi
 
   if [ "$WITH_OPENCOLLADA" = true ]; then
     PRINT ""
@@ -4426,7 +4642,8 @@ install_ARCH() {
 }
 
 
-#### Install on other distro (very limited!) ####
+# ----------------------------------------------------------------------------
+# Install on other distro (very limited!)
 
 install_OTHER() {
   PRINT ""
@@ -4621,7 +4838,8 @@ install_OTHER() {
   fi
 }
 
-#### Printing User Info ####
+# ----------------------------------------------------------------------------
+# Printing User Info
 
 print_info_ffmpeglink_DEB() {
   dpkg -L $_packages | grep -e ".*\/lib[^\/]\+\.so" | gawk '{ printf(nlines ? "'"$_ffmpeg_list_sep"'%s" : "%s", gensub(/.*lib([^\/]+)\.so/, "\\1", "g", $0)); nlines++ }'
@@ -4704,7 +4922,7 @@ print_info() {
 
   _buildargs="-U *SNDFILE* -U *PYTHON* -U *BOOST* -U *Boost*"
   _buildargs="$_buildargs -U *OPENCOLORIO* -U *OPENEXR* -U *OPENIMAGEIO* -U *LLVM* -U *CYCLES*"
-  _buildargs="$_buildargs -U *OPENSUBDIV* -U *OPENVDB* -U *COLLADA* -U *FFMPEG* -U *ALEMBIC*"
+  _buildargs="$_buildargs -U *OPENSUBDIV* -U *OPENVDB* -U *COLLADA* -U *FFMPEG* -U *ALEMBIC* -U *USD*"
 
   _1="-D WITH_CODEC_SNDFILE=ON"
   PRINT "  $_1"
@@ -4713,7 +4931,7 @@ print_info() {
   _1="-D PYTHON_VERSION=$PYTHON_VERSION_MIN"
   PRINT "  $_1"
   _buildargs="$_buildargs $_1"
-  if [ -d $INST/python-$PYTHON_VERSION_MIN ]; then
+  if [ -d "$INST/python-$PYTHON_VERSION_MIN" ]; then
     _1="-D PYTHON_ROOT_DIR=$INST/python-$PYTHON_VERSION_MIN"
     PRINT "  $_1"
     _buildargs="$_buildargs $_1"
@@ -4861,6 +5079,12 @@ print_info() {
     fi
   fi
 
+  if [ "$USD_SKIP" = false ]; then
+    _1="-D WITH_USD=ON"
+    PRINT "  $_1"
+    _buildargs="$_buildargs $_1"
+  fi
+
   if [ "$NO_SYSTEM_GLEW" = true ]; then
     _1="-D WITH_SYSTEM_GLEW=OFF"
     PRINT "  $_1"
@@ -4889,7 +5113,9 @@ print_info() {
   PRINT "  cmake $_buildargs ."
 }
 
-#### "Main" ####
+# ----------------------------------------------------------------------------
+# "Main"
+
 # Detect distribution type used on this machine
 if [ -f /etc/debian_version ]; then
   DISTRO="DEB"

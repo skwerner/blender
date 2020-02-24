@@ -32,9 +32,9 @@
 using namespace std;
 using namespace Freestyle;
 
-extern "C" {
-
 #include "MEM_guardedalloc.h"
+
+extern "C" {
 
 #include "DNA_camera_types.h"
 #include "DNA_collection_types.h"
@@ -46,7 +46,7 @@ extern "C" {
 #include "BKE_context.h"
 #include "BKE_freestyle.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_linestyle.h"
 #include "BKE_scene.h"
 #include "BKE_text.h"

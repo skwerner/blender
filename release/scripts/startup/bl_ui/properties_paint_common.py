@@ -121,7 +121,7 @@ class UnifiedPaintPanel:
 
         if unified_name and not header:
             # NOTE: We don't draw UnifiedPaintSettings in the header to reduce clutter. D5928#136281
-            row.prop(ups, unified_name, text="", icon="WORLD")
+            row.prop(ups, unified_name, text="", icon="BRUSHES_ALL")
 
         return row
 
@@ -438,7 +438,7 @@ class FalloffPanel(BrushPanel):
             row.operator("brush.curve_preset", icon='LINCURVE', text="").shape = 'LINE'
             row.operator("brush.curve_preset", icon='NOCURVE', text="").shape = 'MAX'
 
-        if mode in {'SCULPT', 'PAINT_VERTEX', 'PAINT_WEIGHT'}:
+        if mode in {'SCULPT', 'PAINT_VERTEX', 'PAINT_WEIGHT'} and brush.sculpt_tool != 'POSE':
             col.separator()
             row = col.row(align=True)
             row.use_property_split = True
@@ -609,6 +609,10 @@ def brush_settings(layout, context, brush, popover=False):
                 layout.operator("sculpt.set_persistent_base")
                 layout.separator()
 
+        if brush.sculpt_tool == 'CLAY_STRIPS':
+            row = layout.row()
+            row.prop(brush, "tip_roundness")
+
         if brush.sculpt_tool == 'ELASTIC_DEFORM':
             layout.separator()
             layout.prop(brush, "elastic_deform_type")
@@ -620,13 +624,18 @@ def brush_settings(layout, context, brush, popover=False):
             layout.prop(brush, "pose_offset")
             layout.prop(brush, "pose_smooth_iterations")
             layout.prop(brush, "pose_ik_segments")
+            layout.prop(brush, "use_pose_ik_anchored")
             layout.separator()
         
         if brush.sculpt_tool == 'SCRAPE':
             row = layout.row()
+            row.prop(brush, "area_radius_factor", slider=True)
+            row = layout.row()
             row.prop(brush, "invert_to_scrape_fill", text="Invert to Fill")
 
         if brush.sculpt_tool == 'FILL':
+            row = layout.row()
+            row.prop(brush, "area_radius_factor", slider=True)
             row = layout.row()
             row.prop(brush, "invert_to_scrape_fill", text="Invert to Scrape")
 
@@ -996,6 +1005,8 @@ def brush_basic_texpaint_settings(layout, context, brush, *, compact=False):
 def brush_basic_gpencil_paint_settings(layout, context, brush, *, compact=False):
     gp_settings = brush.gpencil_settings
     tool = context.workspace.tools.from_space_view3d_mode(context.mode, create=False)
+    if gp_settings is None:
+        return
 
     # Brush details
     if brush.gpencil_tool == 'ERASE':

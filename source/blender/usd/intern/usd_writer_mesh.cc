@@ -29,7 +29,7 @@ extern "C" {
 
 #include "BKE_anim.h"
 #include "BKE_customdata.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
@@ -59,7 +59,7 @@ bool USDGenericMeshWriter::is_supported(const HierarchyContext *context) const
 
   if (is_dupli) {
     /* Construct the object's base flags from its dupliparent, just like is done in
-     * deg_objects_dupli_iterator_next(). Without this, the visiblity check below will fail. Doing
+     * deg_objects_dupli_iterator_next(). Without this, the visibility check below will fail. Doing
      * this here, instead of a more suitable location in AbstractHierarchyIterator, prevents
      * copying the Object for every dupli. */
     base_flag = object->base_flag;
@@ -339,7 +339,7 @@ void USDGenericMeshWriter::assign_materials(const HierarchyContext &context,
    * https://github.com/PixarAnimationStudios/USD/issues/542 for more info. */
   bool mesh_material_bound = false;
   for (short mat_num = 0; mat_num < context.object->totcol; mat_num++) {
-    Material *material = give_current_material(context.object, mat_num + 1);
+    Material *material = BKE_object_material_get(context.object, mat_num + 1);
     if (material == nullptr) {
       continue;
     }
@@ -373,7 +373,7 @@ void USDGenericMeshWriter::assign_materials(const HierarchyContext &context,
     short material_number = face_group.first;
     const pxr::VtIntArray &face_indices = face_group.second;
 
-    Material *material = give_current_material(context.object, material_number + 1);
+    Material *material = BKE_object_material_get(context.object, material_number + 1);
     if (material == nullptr) {
       continue;
     }

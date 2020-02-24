@@ -169,6 +169,12 @@ MINLINE void copy_v4_v4_short(short r[4], const short a[4])
 }
 
 /* int */
+MINLINE void zero_v2_int(int r[2])
+{
+  r[0] = 0;
+  r[1] = 0;
+}
+
 MINLINE void zero_v3_int(int r[3])
 {
   r[0] = 0;
@@ -365,6 +371,12 @@ MINLINE void add_v2_v2v2(float r[2], const float a[2], const float b[2])
 {
   r[0] = a[0] + b[0];
   r[1] = a[1] + b[1];
+}
+
+MINLINE void add_v2_v2_int(int r[2], const int a[2])
+{
+  r[0] = r[0] + a[0];
+  r[1] = r[1] + a[1];
 }
 
 MINLINE void add_v2_v2v2_int(int r[2], const int a[2], const int b[2])

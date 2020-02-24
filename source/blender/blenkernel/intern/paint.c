@@ -55,7 +55,7 @@
 #include "BKE_gpencil.h"
 #include "BKE_image.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_runtime.h"
@@ -498,7 +498,7 @@ PaintCurve *BKE_paint_curve_add(Main *bmain, const char *name)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_paint_curve_copy_data(Main *UNUSED(bmain),
                                PaintCurve *pc_dst,
@@ -587,7 +587,7 @@ Palette *BKE_palette_add(Main *bmain, const char *name)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_palette_copy_data(Main *UNUSED(bmain),
                            Palette *palette_dst,
@@ -846,7 +846,7 @@ bool paint_is_face_hidden(const MLoopTri *lt, const MVert *mvert, const MLoop *m
 /* returns non-zero if any of the corners of the grid
  * face whose inner corner is at (x, y) are hidden,
  * zero otherwise */
-bool paint_is_grid_face_hidden(const unsigned int *grid_hidden, int gridsize, int x, int y)
+bool paint_is_grid_face_hidden(const uint *grid_hidden, int gridsize, int x, int y)
 {
   /* skip face if any of its corners are hidden */
   return (BLI_BITMAP_TEST(grid_hidden, y * gridsize + x) ||
@@ -871,7 +871,7 @@ bool paint_is_bmesh_face_hidden(BMFace *f)
   return false;
 }
 
-float paint_grid_paint_mask(const GridPaintMask *gpm, unsigned level, unsigned x, unsigned y)
+float paint_grid_paint_mask(const GridPaintMask *gpm, uint level, uint x, uint y)
 {
   int factor = BKE_ccg_factor(level, gpm->level);
   int gridsize = BKE_ccg_gridsize(gpm->level);
@@ -1019,15 +1019,12 @@ static void sculptsession_free_pbvh(Object *object)
     ss->pbvh = NULL;
   }
 
-  if (ss->pmap) {
-    MEM_freeN(ss->pmap);
-    ss->pmap = NULL;
-  }
+  MEM_SAFE_FREE(ss->pmap);
 
-  if (ss->pmap_mem) {
-    MEM_freeN(ss->pmap_mem);
-    ss->pmap_mem = NULL;
-  }
+  MEM_SAFE_FREE(ss->pmap_mem);
+
+  MEM_SAFE_FREE(ss->preview_vert_index_list);
+  ss->preview_vert_index_count = 0;
 }
 
 void BKE_sculptsession_bm_to_me_for_render(Object *object)

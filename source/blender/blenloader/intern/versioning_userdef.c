@@ -164,6 +164,17 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(space_view3d.face_front);
   }
 
+  if (!USER_VERSION_ATLEAST(283, 1)) {
+    FROM_DEFAULT_V4_UCHAR(space_view3d.bone_locked_weight);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 2)) {
+    FROM_DEFAULT_V4_UCHAR(space_info.info_property);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_property_text);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_operator);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_operator_text);
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *

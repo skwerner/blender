@@ -2848,7 +2848,7 @@ static bool object_frame_has_keyframe(Object *ob, float frame, short filter)
   if (!(filter & ANIMFILTER_KEYS_LOCAL) && !(filter & ANIMFILTER_KEYS_NOMAT)) {
     /* if only active, then we can skip a lot of looping */
     if (filter & ANIMFILTER_KEYS_ACTIVE) {
-      Material *ma = give_current_material(ob, (ob->actcol + 1));
+      Material *ma = BKE_object_material_get(ob, (ob->actcol + 1));
 
       /* we only retrieve the active material... */
       if (id_frame_has_keyframe((ID *)ma, frame, filter)) {
@@ -2860,7 +2860,7 @@ static bool object_frame_has_keyframe(Object *ob, float frame, short filter)
 
       /* loop over materials */
       for (a = 0; a < ob->totcol; a++) {
-        Material *ma = give_current_material(ob, a + 1);
+        Material *ma = BKE_object_material_get(ob, a + 1);
 
         if (id_frame_has_keyframe((ID *)ma, frame, filter)) {
           return true;
@@ -2962,6 +2962,80 @@ bool ED_autokeyframe_pchan(
 
     return false;
   }
+}
+
+/**
+ * Use for auto-keyframing from the UI.
+ */
+bool ED_autokeyframe_property(
+    bContext *C, Scene *scene, PointerRNA *ptr, PropertyRNA *prop, int rnaindex, float cfra)
+{
+  Main *bmain = CTX_data_main(C);
+  ID *id;
+  bAction *action;
+  FCurve *fcu;
+  bool driven;
+  bool special;
+  bool changed = false;
+
+  fcu = rna_get_fcurve_context_ui(C, ptr, prop, rnaindex, NULL, &action, &driven, &special);
+
+  if (fcu == NULL) {
+    return changed;
+  }
+
+  if (special) {
+    /* NLA Strip property */
+    if (IS_AUTOKEY_ON(scene)) {
+      ReportList *reports = CTX_wm_reports(C);
+      ToolSettings *ts = scene->toolsettings;
+
+      changed = insert_keyframe_direct(reports, *ptr, prop, fcu, cfra, ts->keyframe_type, NULL, 0);
+      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
+    }
+  }
+  else if (driven) {
+    /* Driver - Try to insert keyframe using the driver's input as the frame,
+     * making it easier to set up corrective drivers
+     */
+    if (IS_AUTOKEY_ON(scene)) {
+      ReportList *reports = CTX_wm_reports(C);
+      ToolSettings *ts = scene->toolsettings;
+
+      changed = insert_keyframe_direct(
+          reports, *ptr, prop, fcu, cfra, ts->keyframe_type, NULL, INSERTKEY_DRIVER);
+      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
+    }
+  }
+  else {
+    id = ptr->owner_id;
+
+    /* TODO: this should probably respect the keyingset only option for anim */
+    if (autokeyframe_cfra_can_key(scene, id)) {
+      ReportList *reports = CTX_wm_reports(C);
+      ToolSettings *ts = scene->toolsettings;
+      short flag = ANIM_get_keyframing_flags(scene, 1);
+
+      /* Note: We use rnaindex instead of fcu->array_index,
+       *       because a button may control all items of an array at once.
+       *       E.g., color wheels (see T42567). */
+      BLI_assert((fcu->array_index == rnaindex) || (rnaindex == -1));
+      changed = insert_keyframe(bmain,
+                                reports,
+                                id,
+                                action,
+                                ((fcu->grp) ? (fcu->grp->name) : (NULL)),
+                                fcu->rna_path,
+                                rnaindex,
+                                cfra,
+                                ts->keyframe_type,
+                                NULL,
+                                flag) != 0;
+
+      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
+    }
+  }
+  return changed;
 }
 
 /* -------------------------------------------------------------------- */

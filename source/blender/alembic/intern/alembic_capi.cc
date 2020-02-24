@@ -32,9 +32,9 @@
 #include "abc_transform.h"
 #include "abc_util.h"
 
-extern "C" {
 #include "MEM_guardedalloc.h"
 
+extern "C" {
 #include "DNA_cachefile_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_modifier_types.h"
@@ -47,7 +47,7 @@ extern "C" {
 #include "BKE_curve.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_scene.h"
 
 #include "DEG_depsgraph.h"

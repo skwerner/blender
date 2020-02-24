@@ -143,6 +143,20 @@ int manta_update_particle_structures(MANTA *fluid, FluidModifierData *mmd, int f
   return fluid->updateParticleStructures(mmd, framenr);
 }
 
+int manta_update_smoke_structures(MANTA *fluid, FluidModifierData *mmd, int framenr)
+{
+  if (!fluid || !mmd)
+    return 0;
+  return fluid->updateSmokeStructures(mmd, framenr);
+}
+
+int manta_update_noise_structures(MANTA *fluid, FluidModifierData *mmd, int framenr)
+{
+  if (!fluid || !mmd)
+    return 0;
+  return fluid->updateNoiseStructures(mmd, framenr);
+}
+
 int manta_bake_data(MANTA *fluid, FluidModifierData *mmd, int framenr)
 {
   if (!fluid || !mmd)
@@ -292,11 +306,11 @@ float *manta_get_phiguide_in(MANTA *fluid)
   return fluid->getPhiGuideIn();
 }
 
-int *manta_get_num_obstacle(MANTA *fluid)
+float *manta_get_num_obstacle(MANTA *fluid)
 {
   return fluid->getNumObstacle();
 }
-int *manta_get_num_guide(MANTA *fluid)
+float *manta_get_num_guide(MANTA *fluid)
 {
   return fluid->getNumGuide();
 }
@@ -372,7 +386,8 @@ void manta_smoke_export(MANTA *smoke,
   if (b)
     *b = smoke->getColorB();
   *obstacle = smoke->getObstacle();
-  *shadow = smoke->getShadow();
+  if (shadow)
+    *shadow = smoke->getShadow();
   *dt = 1;  // dummy value, not needed for smoke
   *dx = 1;  // dummy value, not needed for smoke
 }
@@ -557,9 +572,9 @@ float *manta_smoke_get_flame(MANTA *smoke)
 {
   return smoke->getFlame();
 }
-float *manta_smoke_get_shadow(MANTA *fluid)
+float *manta_smoke_get_shadow(MANTA *smoke)
 {
-  return fluid->getShadow();
+  return smoke->getShadow();
 }
 
 float *manta_smoke_get_color_r(MANTA *smoke)
@@ -863,4 +878,17 @@ float manta_liquid_get_snd_particle_velocity_y_at(MANTA *liquid, int i)
 float manta_liquid_get_snd_particle_velocity_z_at(MANTA *liquid, int i)
 {
   return liquid->getSndParticleVelocityZAt(i);
+}
+
+bool manta_liquid_flip_from_file(MANTA *liquid)
+{
+  return liquid->usingFlipFromFile();
+}
+bool manta_liquid_mesh_from_file(MANTA *liquid)
+{
+  return liquid->usingMeshFromFile();
+}
+bool manta_liquid_particle_from_file(MANTA *liquid)
+{
+  return liquid->usingParticleFromFile();
 }

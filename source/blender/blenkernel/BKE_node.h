@@ -387,7 +387,8 @@ struct bNodeTree *ntreeCopyTree(struct Main *bmain, const struct bNodeTree *ntre
 void ntreeUserIncrefID(struct bNodeTree *ntree);
 void ntreeUserDecrefID(struct bNodeTree *ntree);
 
-struct bNodeTree *ntreeFromID(const struct ID *id);
+struct bNodeTree **BKE_ntree_ptr_from_id(struct ID *id);
+struct bNodeTree *ntreeFromID(struct ID *id);
 struct ID *BKE_node_tree_find_owner_ID(struct Main *bmain, struct bNodeTree *ntree);
 
 void ntreeMakeLocal(struct Main *bmain,
@@ -545,7 +546,8 @@ void nodeRemoveNode(struct Main *bmain,
 
 struct bNode *BKE_node_copy_ex(struct bNodeTree *ntree,
                                const struct bNode *node_src,
-                               const int flag);
+                               const int flag,
+                               const bool unique_name);
 
 /* Same as BKE_node_copy_ex() but stores pointers to a new node and its sockets in the source
  * node.
@@ -738,6 +740,7 @@ void BKE_node_preview_set_pixel(
  * \{ */
 
 void nodeLabel(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
+const char *nodeSocketLabel(const struct bNodeSocket *sock);
 
 int nodeGroupPoll(struct bNodeTree *nodetree, struct bNodeTree *grouptree);
 

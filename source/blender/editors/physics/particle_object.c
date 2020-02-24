@@ -39,7 +39,7 @@
 #include "BKE_bvhutils.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
@@ -1259,6 +1259,11 @@ static int copy_particle_systems_exec(bContext *C, wmOperator *op)
     }
   }
   CTX_DATA_END;
+
+  if (changed_tot > 0) {
+    Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+    DEG_graph_tag_relations_update(depsgraph);
+  }
 
   if ((changed_tot == 0 && fail == 0) || fail) {
     BKE_reportf(op->reports,

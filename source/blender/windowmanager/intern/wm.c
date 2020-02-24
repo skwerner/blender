@@ -40,7 +40,7 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_workspace.h"
@@ -275,6 +275,11 @@ void WM_check(bContext *C)
     return;
   }
 
+  /* Run before loading the keyconfig. */
+  if (wm->message_bus == NULL) {
+    wm->message_bus = WM_msgbus_create();
+  }
+
   if (!G.background) {
     /* case: fileread */
     if ((wm->initialized & WM_WINDOW_IS_INITIALIZED) == 0) {
@@ -284,10 +289,6 @@ void WM_check(bContext *C)
 
     /* case: no open windows at all, for old file reads */
     wm_window_ghostwindows_ensure(wm);
-  }
-
-  if (wm->message_bus == NULL) {
-    wm->message_bus = WM_msgbus_create();
   }
 
   /* case: fileread */
@@ -343,7 +344,7 @@ void wm_add_default(Main *bmain, bContext *C)
   wm_window_make_drawable(wm, win);
 }
 
-/* context is allowed to be NULL, do not free wm itself (library.c) */
+/* context is allowed to be NULL, do not free wm itself (lib_id.c) */
 void wm_close_and_free(bContext *C, wmWindowManager *wm)
 {
   wmWindow *win;

@@ -205,7 +205,6 @@ void WM_paint_cursor_tag_redraw(struct wmWindow *win, struct ARegion *ar);
 
 void WM_cursor_warp(struct wmWindow *win, int x, int y);
 void WM_cursor_compatible_xy(wmWindow *win, int *x, int *y);
-float WM_cursor_pressure(const struct wmWindow *win);
 
 /* handlers */
 
@@ -308,6 +307,7 @@ void WM_main_remap_editor_id_reference(struct ID *old_id, struct ID *new_id);
 
 /* reports */
 void WM_report_banner_show(void);
+void WM_report_banners_cancel(struct Main *bmain);
 void WM_report(ReportType type, const char *message);
 void WM_reportf(ReportType type, const char *format, ...) ATTR_PRINTF_FORMAT(2, 3);
 

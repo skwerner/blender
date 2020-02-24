@@ -45,7 +45,7 @@
 #include "BKE_brush.h"
 #include "BKE_colortools.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_node.h"
@@ -207,13 +207,20 @@ static void blo_update_defaults_screen(bScreen *screen,
     }
   }
 
-  /* Show top-bar by default. */
+  /* Show tool-header by default (for most cases at least, hide for others). */
+  const bool hide_image_tool_header = STREQ(workspace_name, "Rendering");
   for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
     for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
       ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+
       for (ARegion *ar = regionbase->first; ar; ar = ar->next) {
         if (ar->regiontype == RGN_TYPE_TOOL_HEADER) {
-          ar->flag &= ~(RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER);
+          if ((sl->spacetype == SPACE_IMAGE) && hide_image_tool_header) {
+            ar->flag |= RGN_FLAG_HIDDEN;
+          }
+          else {
+            ar->flag &= ~(RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER);
+          }
         }
       }
     }

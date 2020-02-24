@@ -410,7 +410,7 @@ void multires_flush_sculpt_updates(Object *ob)
 {
   if (ob && ob->sculpt && ob->sculpt->pbvh != NULL) {
     SculptSession *sculpt_session = ob->sculpt;
-    if (BKE_pbvh_type(sculpt_session->pbvh) == PBVH_GRIDS) {
+    if (BKE_pbvh_type(sculpt_session->pbvh) == PBVH_GRIDS && sculpt_session->multires) {
       Mesh *mesh = ob->data;
       multiresModifier_reshapeFromCCG(
           sculpt_session->multires->totlvl, mesh, sculpt_session->subdiv_ccg);
@@ -1289,13 +1289,9 @@ void multires_modifier_update_mdisps(struct DerivedMesh *dm, Scene *scene)
       int i, j, numGrids, highGridSize, lowGridSize;
       const bool has_mask = CustomData_has_layer(&me->ldata, CD_GRID_PAINT_MASK);
 
-      /* create subsurf DM from original mesh at high level */
-      if (ob->derivedDeform) {
-        cddm = CDDM_copy(ob->derivedDeform);
-      }
-      else {
-        cddm = CDDM_from_mesh(me);
-      }
+      /* Create subsurf DM from original mesh at high level. */
+      /* TODO: use mesh_deform_eval when sculpting on deformed mesh. */
+      cddm = CDDM_from_mesh(me);
       DM_set_only_copy(cddm, &CD_MASK_BAREMESH);
 
       highdm = subsurf_dm_create_local(scene,
@@ -1369,12 +1365,8 @@ void multires_modifier_update_mdisps(struct DerivedMesh *dm, Scene *scene)
       DerivedMesh *cddm, *subdm;
       const bool has_mask = CustomData_has_layer(&me->ldata, CD_GRID_PAINT_MASK);
 
-      if (ob->derivedDeform) {
-        cddm = CDDM_copy(ob->derivedDeform);
-      }
-      else {
-        cddm = CDDM_from_mesh(me);
-      }
+      /* TODO: use mesh_deform_eval when sculpting on deformed mesh. */
+      cddm = CDDM_from_mesh(me);
       DM_set_only_copy(cddm, &CD_MASK_BAREMESH);
 
       subdm = subsurf_dm_create_local(scene,

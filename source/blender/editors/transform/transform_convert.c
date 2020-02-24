@@ -1417,7 +1417,6 @@ void autokeyframe_object(bContext *C, Scene *scene, ViewLayer *view_layer, Objec
       if (adt && adt->action) {
         ListBase nla_cache = {NULL, NULL};
         for (fcu = adt->action->curves.first; fcu; fcu = fcu->next) {
-          fcu->flag &= ~FCURVE_SELECTED;
           insert_keyframe(bmain,
                           reports,
                           id,
@@ -1892,8 +1891,8 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 
     SpaceSeq *sseq = (SpaceSeq *)t->sa->spacedata.first;
 
-    /* marker transform, not especially nice but we may want to move markers
-     * at the same time as keyframes in the dope sheet. */
+    /* Marker transform, not especially nice but we may want to move markers
+     * at the same time as strips in the Video Sequencer. */
     if ((sseq->flag & SEQ_MARKER_TRANS) && (canceled == 0)) {
       /* cant use TFM_TIME_EXTEND
        * for some reason EXTEND is changed into TRANSLATE, so use frame_side instead */

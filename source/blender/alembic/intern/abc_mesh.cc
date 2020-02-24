@@ -25,6 +25,8 @@
 #include "abc_transform.h"
 #include "abc_util.h"
 
+#include "MEM_guardedalloc.h"
+
 extern "C" {
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
@@ -38,15 +40,13 @@ extern "C" {
 
 #include "BKE_animsys.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
-
-#include "MEM_guardedalloc.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -589,7 +589,7 @@ void AbcGenericMeshWriter::getGeoGroups(struct Mesh *mesh,
     MPoly &current_poly = polygons[i];
     short mnr = current_poly.mat_nr;
 
-    Material *mat = give_current_material(m_object, mnr + 1);
+    Material *mat = BKE_object_material_get(m_object, mnr + 1);
 
     if (!mat) {
       continue;
@@ -606,7 +606,7 @@ void AbcGenericMeshWriter::getGeoGroups(struct Mesh *mesh,
   }
 
   if (geo_groups.size() == 0) {
-    Material *mat = give_current_material(m_object, 1);
+    Material *mat = BKE_object_material_get(m_object, 1);
 
     std::string name = (mat) ? get_id_name(&mat->id) : "default";
 
@@ -691,7 +691,7 @@ static void assign_materials(Main *bmain,
         assigned_mat = mat_iter->second;
       }
 
-      assign_material(bmain, ob, assigned_mat, it->second, BKE_MAT_ASSIGN_OBDATA);
+      BKE_object_material_assign(bmain, ob, assigned_mat, it->second, BKE_MAT_ASSIGN_OBDATA);
     }
   }
 }

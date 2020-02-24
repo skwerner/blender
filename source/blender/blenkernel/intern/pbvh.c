@@ -1120,7 +1120,7 @@ static void pbvh_update_mask_redraw_task_cb(void *__restrict userdata,
     if (node->flag & PBVH_Leaf) {
       PBVHVertexIter vd;
 
-      BKE_pbvh_vertex_iter_begin(bvh, node, vd, PBVH_ITER_UNIQUE)
+      BKE_pbvh_vertex_iter_begin(bvh, node, vd, PBVH_ITER_ALL)
       {
         if (vd.mask && *vd.mask < 1.0f) {
           has_unmasked = true;
@@ -1410,7 +1410,7 @@ void BKE_pbvh_get_grid_updates(PBVH *bvh, bool clear, void ***r_gridfaces, int *
 
   while ((node = pbvh_iter_next(&iter))) {
     if (node->flag & PBVH_UpdateNormals) {
-      for (unsigned i = 0; i < node->totprim; i++) {
+      for (uint i = 0; i < node->totprim; i++) {
         void *face = bvh->gridfaces[node->prim_indices[i]];
         BLI_gset_add(face_set, face);
       }

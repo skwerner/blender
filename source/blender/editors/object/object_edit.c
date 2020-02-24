@@ -218,7 +218,7 @@ static int object_hide_view_set_exec(bContext *C, wmOperator *op)
 
   /* Hide selected or unselected objects. */
   for (Base *base = view_layer->object_bases.first; base; base = base->next) {
-    if (!(base->flag & BASE_VISIBLE_DEPSGRAPH)) {
+    if (!(base->flag & BASE_VISIBLE_VIEWLAYER)) {
       continue;
     }
 
@@ -543,6 +543,8 @@ bool ED_object_editmode_exit_ex(Main *bmain, Scene *scene, Object *obedit, int f
      * is flagged for editmode, without 'obedit' being set [#35489] */
     if (UNLIKELY(obedit && obedit->mode & OB_MODE_EDIT)) {
       obedit->mode &= ~OB_MODE_EDIT;
+      /* Also happens when mesh is shared across multiple objects. [#T69834] */
+      DEG_id_tag_update(&obedit->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
     }
     return true;
   }

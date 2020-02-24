@@ -32,7 +32,7 @@
 #include "BLI_math.h"
 
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 
 #include "CLG_log.h"
 
@@ -459,6 +459,21 @@ static IDProperty *IDP_CopyID(const IDProperty *prop, const int flag)
   }
 
   return newp;
+}
+
+void IDP_AssignID(IDProperty *prop, ID *id, const int flag)
+{
+  BLI_assert(prop->type == IDP_ID);
+
+  if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0 && IDP_Id(prop) != NULL) {
+    id_us_min(IDP_Id(prop));
+  }
+
+  prop->data.pointer = id;
+
+  if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
+    id_us_plus(IDP_Id(prop));
+  }
 }
 
 /** \} */

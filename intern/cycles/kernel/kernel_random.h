@@ -300,17 +300,11 @@ ccl_device_inline bool sample_is_even(int pattern, int sample)
 #elif defined(__NVCC__)
     return __popc(sample & 0xaaaaaaaa) & 1;
 #else
-    int i = sample & 0xaaaaaaaa
+    int i = sample & 0xaaaaaaaa;
     i = i - ((i >> 1) & 0x55555555);
     i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
     i = (((i + (i >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24;
     return i & 1;
-    return (bool)(sample & 2) ^ (bool)(sample & 8) ^ (bool)(sample & 0x20) ^
-           (bool)(sample & 0x80) ^ (bool)(sample & 0x200) ^ (bool)(sample & 0x800) ^
-           (bool)(sample & 0x2000) ^ (bool)(sample & 0x8000) ^ (bool)(sample & 0x20000) ^
-           (bool)(sample & 0x80000) ^ (bool)(sample & 0x200000) ^ (bool)(sample & 0x800000) ^
-           (bool)(sample & 0x2000000) ^ (bool)(sample & 0x8000000) ^ (bool)(sample & 0x20000000) ^
-           (bool)(sample & 0x80000000);
 #endif
   }
   else {

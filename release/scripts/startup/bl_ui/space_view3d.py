@@ -4290,6 +4290,7 @@ class VIEW3D_MT_edit_curve_context_menu(Menu):
         # Remove
         layout.operator("curve.split")
         layout.operator("curve.decimate")
+        layout.operator("curve.separate")
         layout.operator("curve.dissolve_verts")
         layout.operator("curve.delete", text="Delete Segment").type = 'SEGMENT'
         layout.operator("curve.delete", text="Delete Point").type = 'VERT'
@@ -4328,6 +4329,23 @@ class VIEW3D_MT_edit_font(Menu):
         layout.operator("font.style_toggle", text="Toggle Italic", icon='ITALIC').style = 'ITALIC'
         layout.operator("font.style_toggle", text="Toggle Underline", icon='UNDERLINE').style = 'UNDERLINE'
         layout.operator("font.style_toggle", text="Toggle Small Caps", icon='SMALL_CAPS').style = 'SMALL_CAPS'
+
+        layout.menu("VIEW3D_MT_edit_font_kerning")
+
+
+class VIEW3D_MT_edit_font_kerning(Menu):
+    bl_label = "Kerning"
+
+    def draw(self, context):
+        layout = self.layout
+
+        ob = context.active_object
+        text = ob.data
+        kerning = text.edit_format.kerning
+
+        layout.operator("font.change_spacing", text="Decrease Kerning").delta = -1
+        layout.operator("font.change_spacing", text="Increase Kerning").delta = 1
+        layout.operator("font.change_spacing", text="Reset Kerning").delta = -kerning
 
 
 class VIEW3D_MT_edit_text_chars(Menu):
@@ -4520,6 +4538,7 @@ class VIEW3D_MT_armature_context_menu(Menu):
 
         # Remove
         layout.operator("armature.split")
+        layout.operator("armature.separate")
         layout.operator("armature.merge")
         layout.operator("armature.dissolve")
         layout.operator("armature.delete")
@@ -5415,6 +5434,7 @@ class VIEW3D_PT_shading_lighting(Panel):
                 col.prop(shading, "studiolight_rotate_z", text="Rotation")
                 col.prop(shading, "studiolight_intensity")
                 col.prop(shading, "studiolight_background_alpha")
+                col.prop(shading, "studiolight_background_blur")
                 col = split.column()  # to align properly with above
 
         elif shading.type == 'RENDERED':
@@ -5438,6 +5458,7 @@ class VIEW3D_PT_shading_lighting(Panel):
                 col.prop(shading, "studiolight_rotate_z", text="Rotation")
                 col.prop(shading, "studiolight_intensity")
                 col.prop(shading, "studiolight_background_alpha")
+                col.prop(shading, "studiolight_background_blur")
                 col = split.column()  # to align properly with above
 
 
@@ -7103,6 +7124,7 @@ classes = (
     VIEW3D_MT_edit_curve_showhide,
     VIEW3D_MT_edit_surface,
     VIEW3D_MT_edit_font,
+    VIEW3D_MT_edit_font_kerning,
     VIEW3D_MT_edit_text_chars,
     VIEW3D_MT_edit_meta,
     VIEW3D_MT_edit_meta_showhide,

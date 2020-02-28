@@ -3380,7 +3380,7 @@ def km_grease_pencil_stroke_weight_mode(_params):
 def km_face_mask(params):
     items = []
     keymap = (
-        "Face Mask",
+        "Paint Face Mask (Weight, Vertex, Texture)",
         {"space_type": 'EMPTY', "region_type": 'WINDOW'},
         {"items": items},
     )
@@ -3405,7 +3405,7 @@ def km_face_mask(params):
 def km_weight_paint_vertex_selection(params):
     items = []
     keymap = (
-        "Weight Paint Vertex Selection",
+        "Paint Vertex Selection (Weight, Vertex)",
         {"space_type": 'EMPTY', "region_type": 'WINDOW'},
         {"items": items},
     )
@@ -5408,8 +5408,8 @@ def km_3d_view_tool_edit_armature_bone_size(params):
         "3D View Tool: Edit Armature, Bone Size",
         {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
         {"items": [
-            ("transform.bbone_resize", {"type": params.tool_tweak, "value": 'ANY'},
-             {"properties": [("release_confirm", True)]}),
+            ("transform.transform", {"type": params.tool_tweak, "value": 'ANY'},
+             {"properties": [("release_confirm", True), ("mode", 'BONE_ENVELOPE')]}),
         ]},
     )
 
@@ -5418,9 +5418,10 @@ def km_3d_view_tool_edit_armature_bone_envelope(params):
     return (
         "3D View Tool: Edit Armature, Bone Envelope",
         {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+
         {"items": [
-            ("transform.transform", {"type": params.tool_tweak, "value": 'ANY'},
-             {"properties": [("release_confirm", True), ("mode", 'BONE_ENVELOPE')]}),
+            ("transform.bbone_resize", {"type": params.tool_tweak, "value": 'ANY'},
+             {"properties": [("release_confirm", True)]}),
         ]},
     )
 

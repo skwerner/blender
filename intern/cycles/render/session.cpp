@@ -629,7 +629,7 @@ void Session::run_cpu()
     }
 
     /* Don't go in pause mode when preview kernels are used
-     * When feature kernels become available the session will be resetted. */
+     * When feature kernels become available the session will be reset. */
     else if (no_tiles && kernel_state == DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL) {
       time_sleep(0.1);
     }
@@ -908,9 +908,6 @@ void Session::set_samples(int samples)
     params.samples = samples;
     tile_manager.set_samples(samples);
 
-    {
-      thread_scoped_lock pause_lock(pause_mutex);
-    }
     pause_cond.notify_all();
   }
 }
@@ -944,6 +941,15 @@ void Session::set_denoising(bool denoising, bool optix_denoising)
   // TODO(pmours): Query the required overlap value for denoising from the device?
   tile_manager.slice_overlap = denoising && !params.background ? 64 : 0;
   tile_manager.schedule_denoising = denoising && !buffers;
+}
+
+void Session::set_denoising_start_sample(int sample)
+{
+  if (sample != params.denoising_start_sample) {
+    params.denoising_start_sample = sample;
+
+    pause_cond.notify_all();
+  }
 }
 
 void Session::wait()
@@ -1110,8 +1116,8 @@ void Session::denoise()
     return;
   }
 
-  /* It can happen that denoising was already enabled, but the scene still needs an update. */
-  if (scene->film->need_update || !scene->film->denoising_data_offset) {
+  /* Do not denoise viewport until the sample at which denoising should start is reached. */
+  if (!params.background && tile_manager.state.sample < params.denoising_start_sample) {
     return;
   }
 
@@ -1119,6 +1125,11 @@ void Session::denoise()
    * It breaks the copy in 'MultiDevice::map_neighbor_tiles' (which operates on the full buffer
    * dimensions and not the scaled ones). */
   if (!params.device.denoising_devices.empty() && tile_manager.state.resolution_divider > 1) {
+    return;
+  }
+
+  /* It can happen that denoising was already enabled, but the scene still needs an update. */
+  if (scene->film->need_update || !scene->film->denoising_data_offset) {
     return;
   }
 

@@ -120,6 +120,7 @@ enum_use_layer_samples = (
 enum_sampling_pattern = (
     ('SOBOL', "Sobol", "Use Sobol random sampling pattern"),
     ('CORRELATED_MUTI_JITTER', "Correlated Multi-Jitter", "Use Correlated Multi-Jitter random sampling pattern"),
+    ('PROGRESSIVE_MUTI_JITTER', "Progressive Multi-Jitter", "Use Progressive Multi-Jitter random sampling pattern"),
 )
 
 enum_integrator = (
@@ -186,10 +187,6 @@ enum_view3d_shading_render_pass= (
     ('TRANSMISSION_INDIRECT', "Transmission Indirect", "Show the Transmission Indirect render pass", 45),
     ('TRANSMISSION_COLOR', "Transmission Color", "Show the Transmission Color render pass", 46),
 
-    ('SUBSURFACE_DIRECT', "Subsurface Direct", "Show the Subsurface Direct render pass", 47),
-    ('SUBSURFACE_INDIRECT', "Subsurface Indirect", "Show the Subsurface Indirect render pass", 48),
-    ('SUBSURFACE_COLOR', "Subsurface Color", "Show the Subsurface Color render pass", 49),
-
     ('VOLUME_DIRECT', "Volume Direct", "Show the Volume Direct render pass", 50),
     ('VOLUME_INDIRECT', "Volume Indirect", "Show the Volume Indirect render pass", 51),
 
@@ -203,6 +200,17 @@ enum_view3d_shading_render_pass= (
 enum_aov_types = (
     ('VALUE', "Value", "Write a Value pass", 0),
     ('COLOR', "Color", "Write a Color pass", 1),
+)
+
+enum_viewport_denoising = (
+    ('NONE', "None", "Disable viewport denoising", 0),
+    ('OPTIX', "OptiX AI-Accelerated", "Use the OptiX denoiser running on the GPU (requires at least one compatible OptiX device)", 1),
+)
+
+enum_denoising_optix_input_passes = (
+    ('RGB', "Color", "Use only color as input", 1),
+    ('RGB_ALBEDO', "Color + Albedo", "Use color and albedo data as input", 2),
+    ('RGB_ALBEDO_NORMAL', "Color + Albedo + Normal", "Use color, albedo and normal data as input", 3),
 )
 
 class CyclesRenderSettings(bpy.types.PropertyGroup):
@@ -231,6 +239,18 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default='PATH',
     )
 
+    preview_pause: BoolProperty(
+        name="Pause Preview",
+        description="Pause all viewport preview renders",
+        default=False,
+    )
+    preview_denoising: EnumProperty(
+        name="Viewport Denoising",
+        description="Denoise the image after each preview update with the selected denoiser engine",
+        items=enum_viewport_denoising,
+        default='NONE',
+    )
+
     use_square_samples: BoolProperty(
         name="Square Samples",
         description="Square sampling values for easier artist control",
@@ -249,11 +269,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         min=0, max=(1 << 24),
         default=32,
     )
-    preview_pause: BoolProperty(
-        name="Pause Preview",
-        description="Pause all viewport preview renders",
-        default=False,
-    )
     aa_samples: IntProperty(
         name="AA Samples",
         description="Number of antialiasing samples to render for each pixel",
@@ -266,6 +281,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         min=0, max=2097151,
         default=32,
     )
+
     diffuse_samples: IntProperty(
         name="Diffuse Samples",
         description="Number of diffuse bounce samples to render for each AA sample",
@@ -296,14 +312,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         min=1, max=1024,
         default=1,
     )
-
     subsurface_samples: IntProperty(
         name="Subsurface Samples",
         description="Number of subsurface scattering samples to render for each AA sample",
         min=1, max=1024,
         default=1,
     )
-
     volume_samples: IntProperty(
         name="Volume Samples",
         description="Number of volume scattering samples to render for each AA sample",
@@ -342,6 +356,25 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         "Zero disables the test and never ignores lights",
         min=0.0, max=1.0,
         default=0.01,
+    )
+
+    use_adaptive_sampling: BoolProperty(
+        name="Use Adaptive Sampling",
+        description="Automatically reduce the number of samples per pixel based on estimated noise level",
+        default=False,
+    )
+
+    adaptive_threshold: FloatProperty(
+        name="Adaptive Sampling Threshold",
+        description="Noise level step to stop sampling at, lower values reduce noise the cost of render time. Zero for automatic setting based on number of AA samples",
+        min=0.0, max=1.0,
+        default=0.0,
+    )
+    adaptive_min_samples: IntProperty(
+        name="Adaptive Min Samples",
+        description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on number of AA samples",
+        min=0, max=4096,
+        default=0,
     )
 
     min_light_bounces: IntProperty(
@@ -578,6 +611,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=64,
         subtype='PIXEL'
     )
+    preview_denoising_start_sample: IntProperty(
+        name="Start Denoising",
+        description="Sample to start denoising the preview at",
+        min=0, max=(1 << 24),
+        default=1,
+    )
 
     debug_reset_timeout: FloatProperty(
         name="Reset timeout",
@@ -657,7 +696,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
             ('DIFFUSE', "Diffuse", ""),
             ('GLOSSY', "Glossy", ""),
             ('TRANSMISSION', "Transmission", ""),
-            ('SUBSURFACE', "Subsurface", ""),
         ),
     )
 
@@ -1137,7 +1175,7 @@ class CyclesObjectSettings(bpy.types.PropertyGroup):
     motion_steps: IntProperty(
         name="Motion Steps",
         description="Control accuracy of motion blur, more steps gives more memory usage (actual number of steps is 2^(steps - 1))",
-        min=1, soft_max=8,
+        min=1, max=7,
         default=1,
     )
 
@@ -1301,6 +1339,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         default=False,
         update=update_render_passes,
     )
+    pass_debug_sample_count: BoolProperty(
+        name="Debug Sample Count",
+        description="Number of samples/camera rays per pixel",
+        default=False,
+        update=update_render_passes,
+    )
     use_pass_volume_direct: BoolProperty(
         name="Volume Direct",
         description="Deliver direct volumetric scattering pass",
@@ -1350,16 +1394,6 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         description="Denoise the indirect transmission lighting",
         default=True,
     )
-    denoising_subsurface_direct: BoolProperty(
-        name="Subsurface Direct",
-        description="Denoise the direct subsurface lighting",
-        default=True,
-    )
-    denoising_subsurface_indirect: BoolProperty(
-        name="Subsurface Indirect",
-        description="Denoise the indirect subsurface lighting",
-        default=True,
-    )
     denoising_strength: FloatProperty(
         name="Denoising Strength",
         description="Controls neighbor pixel weighting for the denoising filter (lower values preserve more detail, but aren't as smooth)",
@@ -1396,6 +1430,20 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         min=0, max=7,
         default=0,
     )
+
+    use_optix_denoising: BoolProperty(
+        name="OptiX AI-Accelerated",
+        description="Use the OptiX denoiser to denoise the rendered image",
+        default=False,
+        update=update_render_passes,
+    )
+    denoising_optix_input_passes: EnumProperty(
+        name="Input Passes",
+        description="Passes handed over to the OptiX denoiser (this can have different effects on the denoised image)",
+        items=enum_denoising_optix_input_passes,
+        default='RGB_ALBEDO',
+    )
+
     use_pass_crypto_object: BoolProperty(
         name="Cryptomatte Object",
         description="Render cryptomatte object pass, for isolating objects in compositing",

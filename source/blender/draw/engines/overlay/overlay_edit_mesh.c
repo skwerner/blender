@@ -96,7 +96,6 @@ void OVERLAY_edit_mesh_cache_init(OVERLAY_Data *vedata)
 
   if ((flag & V3D_OVERLAY_EDIT_FACES) == 0) {
     pd->edit_mesh.do_faces = false;
-    pd->edit_mesh.do_zbufclip = false;
   }
   if ((flag & V3D_OVERLAY_EDIT_EDGES) == 0) {
     if ((tsettings->selectmode & SCE_SELECT_EDGE) == 0) {
@@ -204,6 +203,7 @@ void OVERLAY_edit_mesh_cache_init(OVERLAY_Data *vedata)
     DRW_shgroup_uniform_bool_copy(grp, "selectEdges", pd->edit_mesh.do_edges || select_edge);
 
     /* Verts */
+    state |= DRW_STATE_WRITE_DEPTH;
     DRW_PASS_CREATE(psl->edit_mesh_verts_ps[i], state | pd->clipping_state);
 
     if (select_vert) {
@@ -333,7 +333,7 @@ void OVERLAY_edit_mesh_cache_populate(OVERLAY_Data *vedata, Object *ob)
 
   if (DRW_state_show_text() && (pd->edit_mesh.flag & OVERLAY_EDIT_TEXT)) {
     const DRWContextState *draw_ctx = DRW_context_state_get();
-    DRW_text_edit_mesh_measure_stats(draw_ctx->ar, draw_ctx->v3d, ob, &draw_ctx->scene->unit);
+    DRW_text_edit_mesh_measure_stats(draw_ctx->region, draw_ctx->v3d, ob, &draw_ctx->scene->unit);
   }
 }
 
@@ -406,7 +406,11 @@ void OVERLAY_edit_mesh_draw(OVERLAY_Data *vedata)
       GPU_framebuffer_clear_depth(fbl->overlay_default_fb, 1.0f);
     }
 
-    DRW_draw_pass(psl->edit_mesh_depth_ps[IN_FRONT]);
+    if (!DRW_pass_is_empty(psl->edit_mesh_depth_ps[IN_FRONT])) {
+      DRW_view_set_active(NULL);
+      DRW_draw_pass(psl->edit_mesh_depth_ps[IN_FRONT]);
+    }
+
     overlay_edit_mesh_draw_components(psl, pd, true);
   }
 }

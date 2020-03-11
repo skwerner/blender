@@ -30,7 +30,7 @@
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_paint.h"
@@ -63,7 +63,7 @@ static bool paint_mask_extract_poll(bContext *C)
   Object *ob = CTX_data_active_object(C);
   if (ob != NULL && ob->mode == OB_MODE_SCULPT) {
     if (ob->sculpt->bm) {
-      CTX_wm_operator_poll_msg_set(C, "The mask can not be extracted with dyntopo activated.");
+      CTX_wm_operator_poll_msg_set(C, "The mask can not be extracted with dyntopo activated");
       return false;
     }
     else {
@@ -79,6 +79,8 @@ static int paint_mask_extract_exec(bContext *C, wmOperator *op)
   Object *ob = CTX_data_active_object(C);
   View3D *v3d = CTX_wm_view3d(C);
   Scene *scene = CTX_data_scene(C);
+
+  BKE_sculpt_mask_layers_ensure(ob, NULL);
 
   Mesh *mesh = ob->data;
   Mesh *new_mesh = BKE_mesh_copy(bmain, mesh);
@@ -104,9 +106,8 @@ static int paint_mask_extract_exec(bContext *C, wmOperator *op)
   BMIter face_iter;
 
   /* Delete all unmasked faces */
-  const int cd_vert_mask_offset = CustomData_get_offset(&bm->vdata, CD_PAINT_MASK);
-  BLI_assert(cd_vert_mask_offset != -1);
   BM_mesh_elem_hflag_disable_all(bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_TAG, false);
+  const int cd_vert_mask_offset = CustomData_get_offset(&bm->vdata, CD_PAINT_MASK);
 
   float mask_threshold = RNA_float_get(op->ptr, "mask_threshold");
   BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
@@ -123,6 +124,10 @@ static int paint_mask_extract_exec(bContext *C, wmOperator *op)
 
   BM_mesh_delete_hflag_context(bm, BM_ELEM_TAG, DEL_FACES);
   BM_mesh_elem_hflag_disable_all(bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_TAG, false);
+
+  BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+    mul_v3_v3(v->co, ob->scale);
+  }
 
   if (RNA_boolean_get(op->ptr, "add_boundary_loop")) {
     BM_ITER_MESH (ed, &iter, bm, BM_EDGES_OF_MESH) {
@@ -336,11 +341,17 @@ static int paint_mask_slice_exec(bContext *C, wmOperator *op)
   Object *ob = CTX_data_active_object(C);
   View3D *v3d = CTX_wm_view3d(C);
 
+  BKE_sculpt_mask_layers_ensure(ob, NULL);
+
   Mesh *mesh = ob->data;
   Mesh *new_mesh = BKE_mesh_copy(bmain, mesh);
 
   if (ob->mode == OB_MODE_SCULPT) {
     ED_sculpt_undo_geometry_begin(ob, "mask slice");
+    /* TODO: The ideal functionality would be to preserve the current face sets and add a new one
+     * for the new triangles, but this datalayer needs to be rebuild in order to make sculpt mode
+     * not crash when modifying the geometry. */
+    CustomData_free_layers(&mesh->pdata, CD_SCULPT_FACE_SETS, mesh->totpoly);
   }
 
   BMesh *bm;
@@ -413,6 +424,13 @@ static int paint_mask_slice_exec(bContext *C, wmOperator *op)
 
   if (ob->mode == OB_MODE_SCULPT) {
     ED_sculpt_undo_geometry_end(ob);
+    SculptSession *ss = ob->sculpt;
+    /* Rebuild a new valid Face Set layer for the object. */
+    ss->face_sets = CustomData_add_layer(
+        &mesh->pdata, CD_SCULPT_FACE_SETS, CD_CALLOC, NULL, mesh->totpoly);
+    for (int i = 0; i < mesh->totpoly; i++) {
+      ss->face_sets[i] = 1;
+    }
   }
 
   BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_ALL);

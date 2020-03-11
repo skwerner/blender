@@ -43,7 +43,7 @@
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_font.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
@@ -2256,7 +2256,7 @@ bool ED_curve_editfont_select_pick(
 
     for (j = 0; j < 4; j++) {
       if (ED_view3d_project_float_object(
-              vc.ar, obedit_co[j], screen_co[j], V3D_PROJ_TEST_CLIP_BB) == V3D_PROJ_RET_OK) {
+              vc.region, obedit_co[j], screen_co[j], V3D_PROJ_TEST_CLIP_BB) == V3D_PROJ_RET_OK) {
         project_ok |= (1 << j);
       }
     }
@@ -2272,7 +2272,7 @@ bool ED_curve_editfont_select_pick(
       }
     }
 
-    /* bias in pixels to cycle seletion */
+    /* Bias in pixels to cycle selection. */
     if (i_iter == 0) {
       dist_sq_min += active_bias_px;
     }

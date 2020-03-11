@@ -38,13 +38,13 @@ if(WIN32)
   set(BOOST_BUILD_OPTIONS runtime-link=shared )
   set(BOOST_HARVEST_CMD   ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/boost/lib/ ${HARVEST_TARGET}/boost/lib/ )
   if(BUILD_MODE STREQUAL Release)
-    set(BOOST_HARVEST_CMD ${BOOST_HARVEST_CMD} && ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/boost/include/boost-1_68/ ${HARVEST_TARGET}/boost/include/)
+    set(BOOST_HARVEST_CMD ${BOOST_HARVEST_CMD} && ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/boost/include/boost-${BOOST_VERSION_NODOTS_SHORT}/ ${HARVEST_TARGET}/boost/include/)
   endif()
 
 elseif(APPLE)
   set(BOOST_CONFIGURE_COMMAND ./bootstrap.sh)
   set(BOOST_BUILD_COMMAND ./b2)
-  set(BOOST_BUILD_OPTIONS toolset=darwin cxxflags=${PLATFORM_CXXFLAGS} linkflags=${PLATFORM_LDFLAGS} --disable-icu boost.locale.icu=off)
+  set(BOOST_BUILD_OPTIONS toolset=darwin cxxflags=${PLATFORM_CXXFLAGS} linkflags=${PLATFORM_LDFLAGS} visibility=global --disable-icu boost.locale.icu=off)
   set(BOOST_HARVEST_CMD echo .)
   set(BOOST_PATCH_COMMAND echo .)
 else()
@@ -72,6 +72,9 @@ set(BOOST_OPTIONS
   --with-serialization
   --with-program_options
   --with-iostreams
+  -sNO_BZIP2=1
+  -sNO_LZMA=1
+  -sNO_ZSTD=1
   ${BOOST_TOOLSET}
 )
 

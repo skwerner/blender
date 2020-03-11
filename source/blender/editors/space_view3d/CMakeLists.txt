@@ -48,7 +48,6 @@ set(SRC
   view3d_buttons.c
   view3d_camera_control.c
   view3d_draw.c
-  view3d_draw_legacy.c
   view3d_edit.c
   view3d_fly.c
   view3d_gizmo_armature.c
@@ -93,10 +92,6 @@ endif()
 
 if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)
-endif()
-
-if(WITH_MOD_FLUID)
-  add_definitions(-DWITH_FLUID)
 endif()
 
 blender_add_lib(bf_editor_space_view3d "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

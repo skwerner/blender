@@ -32,13 +32,14 @@
 namespace DEG {
 
 RuntimeBackup::RuntimeBackup(const Depsgraph *depsgraph)
-    : scene_backup(depsgraph),
+    : animation_backup(depsgraph),
+      scene_backup(depsgraph),
       sound_backup(depsgraph),
       object_backup(depsgraph),
-      drawdata_ptr(NULL),
+      drawdata_ptr(nullptr),
       movieclip_backup(depsgraph)
 {
-  drawdata_backup.first = drawdata_backup.last = NULL;
+  drawdata_backup.first = drawdata_backup.last = nullptr;
 }
 
 void RuntimeBackup::init_from_id(ID *id)
@@ -46,6 +47,8 @@ void RuntimeBackup::init_from_id(ID *id)
   if (!deg_copy_on_write_is_expanded(id)) {
     return;
   }
+
+  animation_backup.init_from_id(id);
 
   const ID_Type id_type = GS(id->name);
   switch (id_type) {
@@ -68,14 +71,16 @@ void RuntimeBackup::init_from_id(ID *id)
   /* Note that we never free GPU draw data from here since that's not
    * safe for threading and draw data is likely to be re-used. */
   drawdata_ptr = DRW_drawdatalist_from_id(id);
-  if (drawdata_ptr != NULL) {
+  if (drawdata_ptr != nullptr) {
     drawdata_backup = *drawdata_ptr;
-    drawdata_ptr->first = drawdata_ptr->last = NULL;
+    drawdata_ptr->first = drawdata_ptr->last = nullptr;
   }
 }
 
 void RuntimeBackup::restore_to_id(ID *id)
 {
+  animation_backup.restore_to_id(id);
+
   const ID_Type id_type = GS(id->name);
   switch (id_type) {
     case ID_OB:
@@ -93,7 +98,7 @@ void RuntimeBackup::restore_to_id(ID *id)
     default:
       break;
   }
-  if (drawdata_ptr != NULL) {
+  if (drawdata_ptr != nullptr) {
     *drawdata_ptr = drawdata_backup;
   }
 }

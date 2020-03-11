@@ -49,10 +49,12 @@
 #include "BKE_mesh.h"
 #include "BKE_armature.h"
 #include "BKE_lattice.h"
+#include "BKE_scene.h"
 
 #include "bmesh.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "WM_types.h"
 
@@ -304,6 +306,9 @@ struct XFormObjectData_MetaBall {
 struct XFormObjectData *ED_object_data_xform_create_ex(ID *id, bool is_edit_mode)
 {
   struct XFormObjectData *xod_base = NULL;
+  if (id == NULL) {
+    return xod_base;
+  }
   switch (GS(id->name)) {
     case ID_ME: {
       Mesh *me = (Mesh *)id;
@@ -536,7 +541,7 @@ void ED_object_data_xform_tag_update(struct XFormObjectData *xod_base)
     case ID_ME: {
       Mesh *me = (Mesh *)xod_base->id;
       if (xod_base->is_edit_mode) {
-        EDBM_update_generic(me->edit_mesh, true, false);
+        EDBM_update_generic(me, true, false);
         EDBM_mesh_normals_update(me->edit_mesh);
       }
       DEG_id_tag_update(&me->id, ID_RECALC_GEOMETRY);

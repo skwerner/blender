@@ -24,6 +24,10 @@
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Depsgraph;
 struct FluidDomainSettings;
 struct FluidEffectorSettings;
@@ -58,6 +62,7 @@ void BKE_fluid_reallocate_copy_fluid(struct FluidDomainSettings *mds,
                                      int o_shift[3],
                                      int n_shift[3]);
 void BKE_fluid_cache_free(struct FluidDomainSettings *mds, struct Object *ob, int cache_map);
+void BKE_fluid_cache_new_name_for_current_session(int maxlen, char *r_name);
 
 float BKE_fluid_get_velocity_at(struct Object *ob, float position[3], float velocity[3]);
 int BKE_fluid_get_data_flags(struct FluidDomainSettings *mds);
@@ -88,5 +93,9 @@ void BKE_fluid_effector_type_set(struct Object *object,
 void BKE_fluid_flow_behavior_set(struct Object *object,
                                  struct FluidFlowSettings *settings,
                                  int behavior);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_FLUID_H__ */

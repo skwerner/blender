@@ -25,6 +25,7 @@
 
 #include "DNA_ID.h"
 
+#include "intern/eval/deg_eval_runtime_backup_animation.h"
 #include "intern/eval/deg_eval_runtime_backup_movieclip.h"
 #include "intern/eval/deg_eval_runtime_backup_object.h"
 #include "intern/eval/deg_eval_runtime_backup_scene.h"
@@ -38,12 +39,13 @@ class RuntimeBackup {
  public:
   explicit RuntimeBackup(const Depsgraph *depsgraph);
 
-  /* NOTE: Will reset all runtime fields which has been backed up to NULL. */
+  /* NOTE: Will reset all runtime fields which has been backed up to nullptr. */
   void init_from_id(ID *id);
 
   /* Restore fields to the given ID. */
   void restore_to_id(ID *id);
 
+  AnimationBackup animation_backup;
   SceneBackup scene_backup;
   SoundBackup sound_backup;
   ObjectRuntimeBackup object_backup;

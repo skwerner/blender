@@ -183,7 +183,7 @@ typedef enum eGPUBuiltinShader {
   GPU_SHADER_3D_DEPTH_ONLY,
   GPU_SHADER_3D_CLIPPED_UNIFORM_COLOR,
   /* basic image drawing */
-  GPU_SHADER_2D_IMAGE_LINEAR_TO_SRGB,
+  GPU_SHADER_2D_IMAGE_OVERLAYS_MERGE,
   GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR,
   GPU_SHADER_2D_IMAGE_MASK_UNIFORM_COLOR,
   /**
@@ -381,16 +381,6 @@ void GPU_shader_free_builtin_shaders(void);
 /* Hardware limit is 16. Position attribute is always needed so we reduce to 15.
  * This makes sure the GPUVertexFormat name buffer does not overflow. */
 #define GPU_MAX_ATTR 15
-
-typedef struct GPUVertAttrLayers {
-  struct {
-    int type; /* CustomDataType */
-    int attr_id;
-    char name[64]; /* MAX_CUSTOMDATA_LAYER_NAME */
-  } layer[GPU_MAX_ATTR];
-
-  int totlayer;
-} GPUVertAttrLayers;
 
 #ifdef __cplusplus
 }

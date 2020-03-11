@@ -26,6 +26,7 @@
 #define __GHOST_EVENTBUTTON_H__
 
 #include "GHOST_Event.h"
+#include "GHOST_Window.h"
 
 /**
  * Mouse button event.
@@ -46,6 +47,7 @@ class GHOST_EventButton : public GHOST_Event {
       : GHOST_Event(time, type, window)
   {
     m_buttonEventData.button = button;
+    m_buttonEventData.tablet = window->GetTabletData();
     m_data = &m_buttonEventData;
   }
 

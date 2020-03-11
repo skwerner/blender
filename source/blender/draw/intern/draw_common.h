@@ -68,6 +68,8 @@ typedef struct GlobalsUboStorage {
   float colorFace[4];
   float colorFaceSelect[4];
   float colorFaceFreestyle[4];
+  float colorGpencilVertex[4];
+  float colorGpencilVertexSelect[4];
   float colorNormal[4];
   float colorVNormal[4];
   float colorLNormal[4];
@@ -79,6 +81,10 @@ typedef struct GlobalsUboStorage {
   float colorLightNoAlpha[4];
 
   float colorBackground[4];
+  float colorBackgroundGradient[4];
+  float colorCheckerLow[4];
+  float colorCheckerHigh[4];
+  float colorClippingBorder[4];
   float colorEditMeshMiddle[4];
 
   float colorHandleFree[4];
@@ -98,6 +104,30 @@ typedef struct GlobalsUboStorage {
   float colorActiveSpline[4];
 
   float colorBonePose[4];
+  float colorBonePoseActive[4];
+  float colorBonePoseActiveUnsel[4];
+  float colorBonePoseConstraint[4];
+  float colorBonePoseIK[4];
+  float colorBonePoseSplineIK[4];
+  float colorBonePoseTarget[4];
+  float colorBoneSolid[4];
+  float colorBoneLocked[4];
+  float colorBoneActive[4];
+  float colorBoneActiveUnsel[4];
+  float colorBoneSelect[4];
+  float colorBoneIKLine[4];
+  float colorBoneIKLineNoTarget[4];
+  float colorBoneIKLineSpline[4];
+
+  float colorText[4];
+  float colorTextHi[4];
+
+  float colorBundleSolid[4];
+
+  float colorMballRadius[4];
+  float colorMballRadiusSelect[4];
+  float colorMballStiffness[4];
+  float colorMballStiffnessSelect[4];
 
   float colorCurrentFrame[4];
 

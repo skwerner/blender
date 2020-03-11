@@ -165,11 +165,11 @@ class TOPBAR_PT_gpencil_layers(Panel):
 
             srow = col.row(align=True)
             srow.prop(gpl, "opacity", text="Opacity", slider=True)
-            srow.prop(gpl, "mask_layer", text="",
-                      icon='MOD_MASK' if gpl.mask_layer else 'LAYER_ACTIVE')
+            srow.prop(gpl, "use_mask_layer", text="",
+                      icon='MOD_MASK' if gpl.use_mask_layer else 'LAYER_ACTIVE')
 
             srow = col.row(align=True)
-            srow.prop(gpl, "use_solo_mode", text="Show Only On Keyframed")
+            srow.prop(gpl, "use_lights")
 
         col = row.column()
 
@@ -243,6 +243,16 @@ class TOPBAR_MT_app(Menu):
                         text="Install Application Template...")
 
 
+class TOPBAR_MT_file_cleanup(Menu):
+    bl_label = "Clean Up"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.separator()
+
+        layout.operator("outliner.orphans_purge")
+
+
 class TOPBAR_MT_file(Menu):
     bl_label = "File"
 
@@ -281,6 +291,7 @@ class TOPBAR_MT_file(Menu):
         layout.separator()
 
         layout.menu("TOPBAR_MT_file_external_data")
+        layout.menu("TOPBAR_MT_file_cleanup")
 
         layout.separator()
 
@@ -441,6 +452,7 @@ class TOPBAR_MT_templates_more(Menu):
 class TOPBAR_MT_file_import(Menu):
     bl_idname = "TOPBAR_MT_file_import"
     bl_label = "Import"
+    bl_owner_use_filter = False
 
     def draw(self, _context):
         if bpy.app.build_options.collada:
@@ -453,6 +465,7 @@ class TOPBAR_MT_file_import(Menu):
 class TOPBAR_MT_file_export(Menu):
     bl_idname = "TOPBAR_MT_file_export"
     bl_label = "Export"
+    bl_owner_use_filter = False
 
     def draw(self, context):
         if bpy.app.build_options.collada:
@@ -460,7 +473,7 @@ class TOPBAR_MT_file_export(Menu):
                                  text="Collada (Default) (.dae)")
         if bpy.app.build_options.alembic:
             self.layout.operator("wm.alembic_export", text="Alembic (.abc)")
-        if bpy.app.build_options.usd and context.preferences.experimental.use_usd_exporter:
+        if bpy.app.build_options.usd:
             self.layout.operator(
                 "wm.usd_export", text="Universal Scene Description (.usd, .usdc, .usda)")
 
@@ -823,6 +836,7 @@ classes = (
     TOPBAR_MT_file_import,
     TOPBAR_MT_file_export,
     TOPBAR_MT_file_external_data,
+    TOPBAR_MT_file_cleanup,
     TOPBAR_MT_file_previews,
     TOPBAR_MT_edit,
     TOPBAR_MT_render,

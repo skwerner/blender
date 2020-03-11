@@ -85,7 +85,8 @@ typedef struct PropertyDefRNA {
   const char *dnalengthname;
   int dnalengthfixed;
 
-  int booleanbit, booleannegative;
+  int64_t booleanbit;
+  bool booleannegative;
 
   /* not to be confused with PROP_ENUM_FLAG
    * this only allows one of the flags to be set at a time, clearing all others */
@@ -151,7 +152,6 @@ void RNA_def_collections(struct BlenderRNA *brna);
 void RNA_def_color(struct BlenderRNA *brna);
 void RNA_def_constraint(struct BlenderRNA *brna);
 void RNA_def_context(struct BlenderRNA *brna);
-void RNA_def_controller(struct BlenderRNA *brna);
 void RNA_def_curve(struct BlenderRNA *brna);
 void RNA_def_depsgraph(struct BlenderRNA *brna);
 void RNA_def_dynamic_paint(struct BlenderRNA *brna);

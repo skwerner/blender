@@ -580,9 +580,6 @@ static void rna_userdef_autosave_update(Main *bmain, Scene *scene, PointerRNA *p
       return USER_EXPERIMENTAL_TEST(userdef, member); \
     }
 
-RNA_USERDEF_EXPERIMENTAL_BOOLEAN_GET(use_tool_fallback)
-RNA_USERDEF_EXPERIMENTAL_BOOLEAN_GET(use_usd_exporter)
-
 static bAddon *rna_userdef_addon_new(void)
 {
   ListBase *addons_list = &U.addons;
@@ -1309,6 +1306,25 @@ static void rna_def_userdef_theme_ui_panel(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 }
 
+const EnumPropertyItem rna_enum_userdef_theme_background_types_items[] = {
+    {TH_BACKGROUND_SINGLE_COLOR,
+     "SINGLE_COLOR",
+     0,
+     "Single Color",
+     "Use a solid color as viewport background"},
+    {TH_BACKGROUND_GRADIENT_LINEAR,
+     "LINEAR",
+     0,
+     "Linear Gradient",
+     "Use a screen space vertical linear gradient as viewport background"},
+    {TH_BACKGROUND_GRADIENT_RADIAL,
+     "RADIAL",
+     0,
+     "Vignette",
+     "Use a radial gradient as viewport background"},
+    {0, NULL, 0, NULL, NULL},
+};
+
 static void rna_def_userdef_theme_ui_gradient(BlenderRNA *brna)
 {
   /* Fake struct, keep this for compatible theme presets. */
@@ -1321,10 +1337,10 @@ static void rna_def_userdef_theme_ui_gradient(BlenderRNA *brna)
   RNA_def_struct_ui_text(
       srna, "Theme Background Color", "Theme settings for background colors and gradient");
 
-  prop = RNA_def_property(srna, "show_grad", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "show_back_grad", 1);
-  RNA_def_property_ui_text(
-      prop, "Use Gradient", "Do a gradient for the background of the viewport working area");
+  prop = RNA_def_property(srna, "background_type", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "background_type");
+  RNA_def_property_enum_items(prop, rna_enum_userdef_theme_background_types_items);
+  RNA_def_property_ui_text(prop, "Background Type", "Type of background in the 3D viewport");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "high_gradient", PROP_FLOAT, PROP_COLOR_GAMMA);
@@ -2234,6 +2250,14 @@ static void rna_def_userdef_theme_space_view3d(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Bone Solid", "");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
+  prop = RNA_def_property(srna, "bone_locked_weight", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(
+      prop,
+      "Bone Locked Weight",
+      "Shade for bones corresponding to a locked weight group during painting");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
   /* misc */
 
   prop = RNA_def_property(srna, "bundle_solid", PROP_FLOAT, PROP_COLOR_GAMMA);
@@ -2312,6 +2336,16 @@ static void rna_def_userdef_theme_space_graph(BlenderRNA *brna)
   prop = RNA_def_property(srna, "time_scrub_background", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_array(prop, 4);
   RNA_def_property_ui_text(prop, "Scrubbing/Markers Region", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "time_marker_line", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Marker Line", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "time_marker_line_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Marker Line Selected", "");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "window_sliders", PROP_FLOAT, PROP_COLOR_GAMMA);
@@ -2511,63 +2545,73 @@ static void rna_def_userdef_theme_space_info(BlenderRNA *brna)
   rna_def_userdef_theme_spaces_main(srna);
 
   prop = RNA_def_property(srna, "info_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_selected");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Selected Line Background", "");
+  RNA_def_property_ui_text(prop, "Selected Line Background", "Background color of selected line");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_selected_text", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_selected_text");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Selected Line Text", "");
+  RNA_def_property_ui_text(prop, "Selected Line Text Color", "Text color of selected line");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_error", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_error");
-  RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Error Background", "");
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Error Icon Background", "Background color of Error icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_error_text", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_error_text");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Error Text", "");
+  RNA_def_property_ui_text(prop, "Error Icon Foreground", "Foreground color of Error icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_warning", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_warning");
-  RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Warning Background", "");
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Warning Icon Background", "Background color of Warning icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_warning_text", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_warning_text");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Warning Text", "");
+  RNA_def_property_ui_text(prop, "Warning Icon Foreground", "Foreground color of Warning icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_info", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_info");
-  RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Info Background", "");
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Info Icon Background", "Background color of Info icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_info_text", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_info_text");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Info Text", "");
+  RNA_def_property_ui_text(prop, "Info Icon Foreground", "Foreground color of Info icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_debug", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_debug");
-  RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Debug Background", "");
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Debug Icon Background", "Background color of Debug icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "info_debug_text", PROP_FLOAT, PROP_COLOR_GAMMA);
-  RNA_def_property_float_sdna(prop, NULL, "info_debug_text");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Debug Text", "");
+  RNA_def_property_ui_text(prop, "Debug Icon Foreground", "Foreground color of Debug icon");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "info_property", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Property Icon Background", "Background color of Property icon");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "info_property_text", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 3);
+  RNA_def_property_ui_text(prop, "Property Icon Foreground", "Foreground color of Property icon");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "info_operator", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Operator Icon Background", "Background color of Operator icon");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "info_operator_text", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 3);
+  RNA_def_property_ui_text(prop, "Operator Icon Foreground", "Foreground color of Operator icon");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 }
 
@@ -2771,6 +2815,14 @@ static void rna_def_userdef_theme_space_node(BlenderRNA *brna)
   RNA_def_property_int_default(prop, 5);
   RNA_def_property_range(prop, 0, 10);
   RNA_def_property_ui_text(prop, "Noodle curving", "Curving of the noodle");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "grid_levels", PROP_INT, PROP_NONE);
+  RNA_def_property_int_sdna(prop, NULL, "grid_levels");
+  RNA_def_property_int_default(prop, 2);
+  RNA_def_property_range(prop, 0, 2);
+  RNA_def_property_ui_text(
+      prop, "Grid levels", "Amount of grid lines displayed in the background");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "input_node", PROP_FLOAT, PROP_COLOR_GAMMA);
@@ -3040,6 +3092,16 @@ static void rna_def_userdef_theme_space_seq(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Scrubbing/Markers Region", "");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
+  prop = RNA_def_property(srna, "time_marker_line", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Marker Line", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "time_marker_line_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Marker Line Selected", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
   prop = RNA_def_property(srna, "keyframe", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "vertex_select");
   RNA_def_property_array(prop, 3);
@@ -3106,6 +3168,16 @@ static void rna_def_userdef_theme_space_action(BlenderRNA *brna)
   prop = RNA_def_property(srna, "time_scrub_background", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_array(prop, 4);
   RNA_def_property_ui_text(prop, "Scrubbing/Markers Region", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "time_marker_line", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Marker Line", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "time_marker_line_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Marker Line Selected", "");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "value_sliders", PROP_FLOAT, PROP_COLOR_GAMMA);
@@ -3417,6 +3489,16 @@ static void rna_def_userdef_theme_space_nla(BlenderRNA *brna)
   RNA_def_property_array(prop, 4);
   RNA_def_property_ui_text(prop, "Scrubbing/Markers Region", "");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "time_marker_line", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Marker Line", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "time_marker_line_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Marker Line Selected", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 }
 
 static void rna_def_userdef_theme_colorset(BlenderRNA *brna)
@@ -3537,6 +3619,16 @@ static void rna_def_userdef_theme_space_clip(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Scrubbing/Markers Region", "");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
+  prop = RNA_def_property(srna, "time_marker_line", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Marker Line", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  prop = RNA_def_property(srna, "time_marker_line_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Marker Line Selected", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
   prop = RNA_def_property(srna, "strips", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "strip");
   RNA_def_property_array(prop, 3);
@@ -3616,8 +3708,8 @@ static void rna_def_userdef_themes(BlenderRNA *brna)
       {16, "FILE_BROWSER", ICON_FILEBROWSER, "File Browser", ""},
       {17, "CONSOLE", ICON_CONSOLE, "Python Console", ""},
       {20, "CLIP_EDITOR", ICON_TRACKER, "Movie Clip Editor", ""},
-      {21, "TOPBAR", ICON_NONE, "Top Bar", ""},
-      {22, "STATUSBAR", ICON_NONE, "Status Bar", ""},
+      {21, "TOPBAR", ICON_TOPBAR, "Top Bar", ""},
+      {22, "STATUSBAR", ICON_STATUSBAR, "Status Bar", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -4260,11 +4352,6 @@ static void rna_def_userdef_view(BlenderRNA *brna)
       prop, "Display Object Info", "Display objects name and frame number in 3D view");
   RNA_def_property_update(prop, 0, "rna_userdef_update");
 
-  prop = RNA_def_property(srna, "show_large_cursors", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "curssize", 0);
-  RNA_def_property_ui_text(prop, "Large Cursors", "Use large mouse cursors when available");
-  RNA_def_property_update(prop, 0, "rna_userdef_update");
-
   prop = RNA_def_property(srna, "show_view_name", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "uiflag", USER_SHOW_VIEWPORTNAME);
   RNA_def_property_ui_text(
@@ -4511,8 +4598,7 @@ static void rna_def_userdef_view(BlenderRNA *brna)
   prop = RNA_def_property(srna, "lookdev_sphere_size", PROP_INT, PROP_PIXEL);
   RNA_def_property_int_sdna(prop, NULL, "lookdev_sphere_size");
   RNA_def_property_range(prop, 50, 400);
-  RNA_def_property_ui_text(
-      prop, "Look Dev Spheres Size", "Maximum diameter of the look development sphere size");
+  RNA_def_property_ui_text(prop, "HDRI Preview Size", "Diameter of the HDRI preview spheres");
   RNA_def_property_update(prop, 0, "rna_userdef_update");
 
   /* View2D Grid Displays */
@@ -4901,7 +4987,7 @@ static void rna_def_userdef_edit(BlenderRNA *brna)
 
   /* Currently only used for insert offset (aka auto-offset),
    * maybe also be useful for later stuff though. */
-  prop = RNA_def_property(srna, "node_margin", PROP_INT, PROP_NONE);
+  prop = RNA_def_property(srna, "node_margin", PROP_INT, PROP_PIXEL);
   RNA_def_property_int_sdna(prop, NULL, "node_margin");
   RNA_def_property_ui_text(
       prop, "Auto-offset Margin", "Minimum distance between nodes for Auto-offsetting nodes");
@@ -4948,14 +5034,14 @@ static void rna_def_userdef_system(BlenderRNA *brna)
   };
 
   static const EnumPropertyItem audio_mixing_samples_items[] = {
-      {256, "SAMPLES_256", 0, "256", "Set audio mixing buffer size to 256 samples"},
-      {512, "SAMPLES_512", 0, "512", "Set audio mixing buffer size to 512 samples"},
-      {1024, "SAMPLES_1024", 0, "1024", "Set audio mixing buffer size to 1024 samples"},
-      {2048, "SAMPLES_2048", 0, "2048", "Set audio mixing buffer size to 2048 samples"},
-      {4096, "SAMPLES_4096", 0, "4096", "Set audio mixing buffer size to 4096 samples"},
-      {8192, "SAMPLES_8192", 0, "8192", "Set audio mixing buffer size to 8192 samples"},
-      {16384, "SAMPLES_16384", 0, "16384", "Set audio mixing buffer size to 16384 samples"},
-      {32768, "SAMPLES_32768", 0, "32768", "Set audio mixing buffer size to 32768 samples"},
+      {256, "SAMPLES_256", 0, "256 Samples", "Set audio mixing buffer size to 256 samples"},
+      {512, "SAMPLES_512", 0, "512 Samples", "Set audio mixing buffer size to 512 samples"},
+      {1024, "SAMPLES_1024", 0, "1024 Samples", "Set audio mixing buffer size to 1024 samples"},
+      {2048, "SAMPLES_2048", 0, "2048 Samples", "Set audio mixing buffer size to 2048 samples"},
+      {4096, "SAMPLES_4096", 0, "4096 Samples", "Set audio mixing buffer size to 4096 samples"},
+      {8192, "SAMPLES_8192", 0, "8192 Samples", "Set audio mixing buffer size to 8192 samples"},
+      {16384, "SAMPLES_16384", 0, "16384 Samples", "Set audio mixing buffer size to 16384 samples"},
+      {32768, "SAMPLES_32768", 0, "32768 Samples", "Set audio mixing buffer size to 32768 samples"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -4993,15 +5079,6 @@ static void rna_def_userdef_system(BlenderRNA *brna)
       {4, "SURROUND4", 0, "4 Channels", "Set audio channels to 4 channels"},
       {6, "SURROUND51", 0, "5.1 Surround", "Set audio channels to 5.1 surround sound"},
       {8, "SURROUND71", 0, "7.1 Surround", "Set audio channels to 7.1 surround sound"},
-      {0, NULL, 0, NULL, NULL},
-  };
-
-  static const EnumPropertyItem multi_sample_levels[] = {
-      {USER_MULTISAMPLE_NONE, "NONE", 0, "No MultiSample", "Do not use OpenGL MultiSample"},
-      {USER_MULTISAMPLE_2, "2", 0, "MultiSample: 2", "Use 2x OpenGL MultiSample"},
-      {USER_MULTISAMPLE_4, "4", 0, "MultiSample: 4", "Use 4x OpenGL MultiSample"},
-      {USER_MULTISAMPLE_8, "8", 0, "MultiSample: 8", "Use 8x OpenGL MultiSample"},
-      {USER_MULTISAMPLE_16, "16", 0, "MultiSample: 16", "Use 16x OpenGL MultiSample"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -5060,14 +5137,6 @@ static void rna_def_userdef_system(BlenderRNA *brna)
 
   /* Memory */
 
-  prop = RNA_def_property(srna, "prefetch_frames", PROP_INT, PROP_NONE);
-  RNA_def_property_int_sdna(prop, NULL, "prefetchframes");
-  RNA_def_property_range(prop, 0, INT_MAX);
-  RNA_def_property_ui_range(prop, 0, 500, 1, -1);
-  RNA_def_property_ui_text(prop,
-                           "Prefetch Frames",
-                           "Number of frames to render ahead during playback (sequencer only)");
-
   prop = RNA_def_property(srna, "memory_cache_limit", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "memcachelimit");
   RNA_def_property_range(prop, 0, max_memory_in_megabytes_int());
@@ -5095,16 +5164,6 @@ static void rna_def_userdef_system(BlenderRNA *brna)
   RNA_def_property_ui_text(prop,
                            "Edit-Mode Smooth Wires",
                            "Enable Edit-Mode edge smoothing, reducing aliasing, requires restart");
-  RNA_def_property_update(prop, 0, "rna_userdef_dpi_update");
-
-  /* grease pencil anti-aliasing */
-  prop = RNA_def_property(srna, "gpencil_multi_sample", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_bitflag_sdna(prop, NULL, "gpencil_multisamples");
-  RNA_def_property_enum_items(prop, multi_sample_levels);
-  RNA_def_property_ui_text(
-      prop,
-      "Gpencil MultiSample",
-      "Enable Grease Pencil OpenGL multi-sampling, only for systems that support it");
   RNA_def_property_update(prop, 0, "rna_userdef_dpi_update");
 
   prop = RNA_def_property(srna, "use_region_overlap", PROP_BOOLEAN, PROP_NONE);
@@ -5851,25 +5910,12 @@ static void rna_def_userdef_filepaths(BlenderRNA *brna)
 static void rna_def_userdef_experimental(BlenderRNA *brna)
 {
   StructRNA *srna;
-  PropertyRNA *prop;
 
   srna = RNA_def_struct(brna, "PreferencesExperimental", NULL);
   RNA_def_struct_sdna(srna, "UserDef_Experimental");
   RNA_def_struct_nested(brna, srna, "Preferences");
   RNA_def_struct_clear_flag(srna, STRUCT_UNDO);
   RNA_def_struct_ui_text(srna, "Experimental", "Experimental features");
-
-  prop = RNA_def_property(srna, "use_tool_fallback", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "use_tool_fallback", 1);
-  RNA_def_property_boolean_funcs(prop, "rna_userdef_experimental_use_tool_fallback_get", NULL);
-  RNA_def_property_ui_text(prop, "Fallback Tool Support", "Allow selection with an active tool");
-  RNA_def_property_update(prop, 0, "rna_userdef_update");
-
-  prop = RNA_def_property(srna, "use_usd_exporter", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "use_usd_exporter", 1);
-  RNA_def_property_boolean_funcs(prop, "rna_userdef_experimental_use_usd_exporter_get", NULL);
-  RNA_def_property_ui_text(prop, "USD Exporter", "Enable exporting to the USD format");
-  RNA_def_property_update(prop, 0, "rna_userdef_update");
 }
 
 static void rna_def_userdef_addon_collection(BlenderRNA *brna, PropertyRNA *cprop)

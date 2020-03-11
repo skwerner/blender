@@ -312,7 +312,7 @@ static int buttons_context_path_material(ButsContextPath *path)
     ob = path->ptr[path->len - 1].data;
 
     if (ob && OB_TYPE_SUPPORT_MATERIAL(ob->type)) {
-      ma = give_current_material(ob, ob->actcol);
+      ma = BKE_object_material_get(ob, ob->actcol);
       RNA_id_pointer_create(&ma->id, &path->ptr[path->len]);
       path->len++;
       return 1;
@@ -1233,7 +1233,7 @@ ID *buttons_context_id_path(const bContext *C)
       /* pin particle settings instead of system, since only settings are an idblock*/
       if (sbuts->mainb == BCONTEXT_PARTICLE && sbuts->flag & SB_PIN_CONTEXT) {
         if (ptr->type == &RNA_ParticleSystem && ptr->data) {
-          ParticleSystem *psys = (ParticleSystem *)ptr->data;
+          ParticleSystem *psys = ptr->data;
           return &psys->part->id;
         }
       }

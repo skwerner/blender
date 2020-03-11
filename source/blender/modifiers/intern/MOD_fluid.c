@@ -34,9 +34,8 @@
 #include "DNA_object_force_types.h"
 #include "DNA_mesh_types.h"
 
-#include "BKE_cdderivedmesh.h"
 #include "BKE_layer.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_modifier.h"
 #include "BKE_fluid.h"
 

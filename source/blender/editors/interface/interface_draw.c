@@ -80,14 +80,14 @@ int UI_draw_roundbox_corner_get(void)
 }
 #endif
 
-void UI_draw_roundbox_3ubAlpha(bool filled,
-                               float minx,
-                               float miny,
-                               float maxx,
-                               float maxy,
-                               float rad,
-                               const uchar col[3],
-                               uchar alpha)
+void UI_draw_roundbox_3ub_alpha(bool filled,
+                                float minx,
+                                float miny,
+                                float maxx,
+                                float maxy,
+                                float rad,
+                                const uchar col[3],
+                                uchar alpha)
 {
   float colv[4];
   colv[0] = ((float)col[0]) / 255;
@@ -97,14 +97,14 @@ void UI_draw_roundbox_3ubAlpha(bool filled,
   UI_draw_roundbox_4fv(filled, minx, miny, maxx, maxy, rad, colv);
 }
 
-void UI_draw_roundbox_3fvAlpha(bool filled,
-                               float minx,
-                               float miny,
-                               float maxx,
-                               float maxy,
-                               float rad,
-                               const float col[3],
-                               float alpha)
+void UI_draw_roundbox_3fv_alpha(bool filled,
+                                float minx,
+                                float miny,
+                                float maxx,
+                                float maxy,
+                                float rad,
+                                const float col[3],
+                                float alpha)
 {
   float colv[4];
   colv[0] = col[0];
@@ -692,7 +692,7 @@ void ui_draw_but_TAB_outline(const rcti *rect,
   immUnbindProgram();
 }
 
-void ui_draw_but_IMAGE(ARegion *UNUSED(ar),
+void ui_draw_but_IMAGE(ARegion *UNUSED(region),
                        uiBut *but,
                        const uiWidgetColors *UNUSED(wcol),
                        const rcti *rect)
@@ -872,7 +872,7 @@ static void histogram_draw_one(float r,
 
 #define HISTOGRAM_TOT_GRID_LINES 4
 
-void ui_draw_but_HISTOGRAM(ARegion *UNUSED(ar),
+void ui_draw_but_HISTOGRAM(ARegion *UNUSED(region),
                            uiBut *but,
                            const uiWidgetColors *UNUSED(wcol),
                            const rcti *recti)
@@ -985,7 +985,7 @@ static void waveform_draw_one(float *waveform, int nbr, const float col[3])
   GPU_batch_discard(batch);
 }
 
-void ui_draw_but_WAVEFORM(ARegion *UNUSED(ar),
+void ui_draw_but_WAVEFORM(ARegion *UNUSED(region),
                           uiBut *but,
                           const uiWidgetColors *UNUSED(wcol),
                           const rcti *recti)
@@ -1330,7 +1330,7 @@ static void vectorscope_draw_target(
   immEnd();
 }
 
-void ui_draw_but_VECTORSCOPE(ARegion *UNUSED(ar),
+void ui_draw_but_VECTORSCOPE(ARegion *UNUSED(region),
                              uiBut *but,
                              const uiWidgetColors *UNUSED(wcol),
                              const rcti *recti)
@@ -1736,11 +1736,11 @@ void ui_draw_but_UNITVEC(uiBut *but, const uiWidgetColors *wcol, const rcti *rec
   /* sphere color */
   float diffuse[3] = {1.0f, 1.0f, 1.0f};
   float light[3];
-  float size;
+  const float size = 0.5f * min_ff(BLI_rcti_size_x(rect), BLI_rcti_size_y(rect));
 
   /* backdrop */
   UI_draw_roundbox_corner_set(UI_CNR_ALL);
-  UI_draw_roundbox_3ubAlpha(
+  UI_draw_roundbox_3ub_alpha(
       true, rect->xmin, rect->ymin, rect->xmax, rect->ymax, 5.0f, wcol->inner, 255);
 
   glCullFace(GL_BACK);
@@ -1752,11 +1752,10 @@ void ui_draw_but_UNITVEC(uiBut *but, const uiWidgetColors *wcol, const rcti *rec
   /* transform to button */
   GPU_matrix_push();
 
-  if (BLI_rcti_size_x(rect) < BLI_rcti_size_y(rect)) {
-    size = 0.5f * BLI_rcti_size_x(rect);
-  }
-  else {
-    size = 0.5f * BLI_rcti_size_y(rect);
+  bool use_project_matrix = (size >= -GPU_MATRIX_ORTHO_CLIP_NEAR_DEFAULT);
+  if (use_project_matrix) {
+    GPU_matrix_push_projection();
+    GPU_matrix_ortho_set_z(-size, size);
   }
 
   GPU_matrix_translate_2f(rect->xmin + 0.5f * BLI_rcti_size_x(rect),
@@ -1783,6 +1782,10 @@ void ui_draw_but_UNITVEC(uiBut *but, const uiWidgetColors *wcol, const rcti *rec
   imm_draw_circle_wire_2d(pos, 0.0f, 0.0f, 1.0f, 32);
   GPU_blend(false);
   GPU_line_smooth(false);
+
+  if (use_project_matrix) {
+    GPU_matrix_pop_projection();
+  }
 
   /* matrix after circle */
   GPU_matrix_pop();
@@ -1845,7 +1848,7 @@ static void gl_shaded_color(const uchar *color, int shade)
   immUniformColor3ubv(color_shaded);
 }
 
-void ui_draw_but_CURVE(ARegion *ar, uiBut *but, const uiWidgetColors *wcol, const rcti *rect)
+void ui_draw_but_CURVE(ARegion *region, uiBut *but, const uiWidgetColors *wcol, const rcti *rect)
 {
   CurveMapping *cumap;
 
@@ -1886,7 +1889,7 @@ void ui_draw_but_CURVE(ARegion *ar, uiBut *but, const uiWidgetColors *wcol, cons
       .xmax = rect->xmax,
       .ymax = rect->ymax,
   };
-  rcti scissor_region = {0, ar->winx, 0, ar->winy};
+  rcti scissor_region = {0, region->winx, 0, region->winy};
   BLI_rcti_isect(&scissor_new, &scissor_region, &scissor_new);
   GPU_scissor(scissor_new.xmin,
               scissor_new.ymin,
@@ -2121,7 +2124,7 @@ void ui_draw_but_CURVE(ARegion *ar, uiBut *but, const uiWidgetColors *wcol, cons
 }
 
 /** Used to draw a curve profile widget. Somewhat similar to ui_draw_but_CURVE */
-void ui_draw_but_CURVEPROFILE(ARegion *ar,
+void ui_draw_but_CURVEPROFILE(ARegion *region,
                               uiBut *but,
                               const uiWidgetColors *wcol,
                               const rcti *rect)
@@ -2156,7 +2159,7 @@ void ui_draw_but_CURVEPROFILE(ARegion *ar,
       .xmax = rect->xmax,
       .ymax = rect->ymax,
   };
-  rcti scissor_region = {0, ar->winx, 0, ar->winy};
+  rcti scissor_region = {0, region->winx, 0, region->winy};
   BLI_rcti_isect(&scissor_new, &scissor_region, &scissor_new);
   GPU_scissor(scissor_new.xmin,
               scissor_new.ymin,
@@ -2345,7 +2348,7 @@ void ui_draw_but_CURVEPROFILE(ARegion *ar,
   immUnbindProgram();
 }
 
-void ui_draw_but_TRACKPREVIEW(ARegion *UNUSED(ar),
+void ui_draw_but_TRACKPREVIEW(ARegion *UNUSED(region),
                               uiBut *but,
                               const uiWidgetColors *UNUSED(wcol),
                               const rcti *recti)

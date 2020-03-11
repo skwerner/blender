@@ -196,9 +196,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           cp = ts->back_grad;
           break;
 
-        case TH_SHOW_BACK_GRAD:
+        case TH_BACKGROUND_TYPE:
           cp = &setting;
-          setting = ts->show_back_grad;
+          setting = ts->background_type;
           break;
         case TH_TEXT:
           if (theme_regionid == RGN_TYPE_WINDOW) {
@@ -310,6 +310,12 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           break;
         case TH_TIME_SCRUB_BACKGROUND:
           cp = ts->time_scrub_background;
+          break;
+        case TH_TIME_MARKER_LINE:
+          cp = ts->time_marker_line;
+          break;
+        case TH_TIME_MARKER_LINE_SELECTED:
+          cp = ts->time_marker_line_selected;
           break;
         case TH_VIEW_OVERLAY:
           cp = ts->view_overlay;
@@ -442,6 +448,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           break;
         case TH_BONE_POSE_ACTIVE:
           cp = ts->bone_pose_active;
+          break;
+        case TH_BONE_LOCKED_WEIGHT:
+          cp = ts->bone_locked_weight;
           break;
         case TH_STRIP:
           cp = ts->strip;
@@ -630,6 +639,9 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           break;
         case TH_NODE_CURVING:
           cp = &ts->noodle_curving;
+          break;
+        case TH_NODE_GRID_LEVELS:
+          cp = &ts->grid_levels;
           break;
 
         case TH_SEQ_MOVIE:
@@ -968,6 +980,18 @@ const uchar *UI_ThemeGetColorPtr(bTheme *btheme, int spacetype, int colorid)
           break;
         case TH_INFO_DEBUG_TEXT:
           cp = ts->info_debug_text;
+          break;
+        case TH_INFO_PROPERTY:
+          cp = ts->info_property;
+          break;
+        case TH_INFO_PROPERTY_TEXT:
+          cp = ts->info_property_text;
+          break;
+        case TH_INFO_OPERATOR:
+          cp = ts->info_operator;
+          break;
+        case TH_INFO_OPERATOR_TEXT:
+          cp = ts->info_operator_text;
           break;
         case TH_V3D_CLIPPING_BORDER:
           cp = ts->clipping_border_3d;

@@ -26,6 +26,7 @@
 #include "BLI_string.h"
 
 #include "BKE_context.h"
+#include "BKE_global.h"
 #include "BKE_layer.h"
 
 #include "RNA_access.h"
@@ -62,7 +63,7 @@ typedef struct ValueInteraction {
 
   struct {
     ScrArea *sa;
-    ARegion *ar;
+    ARegion *region;
   } context_vars;
 } ValueInteraction;
 
@@ -74,7 +75,7 @@ static void interactive_value_init(bContext *C,
 {
 
   inter->context_vars.sa = CTX_wm_area(C);
-  inter->context_vars.ar = CTX_wm_region(C);
+  inter->context_vars.region = CTX_wm_region(C);
 
   inter->init.mval[0] = event->mval[0];
   inter->init.mval[1] = event->mval[1];
@@ -110,7 +111,7 @@ static bool interactive_value_update(ValueInteraction *inter,
   const int mval_curr = event->mval[mval_axis];
   const int mval_init = inter->init.mval[mval_axis];
   float value_delta = (inter->init.prop_value +
-                       (((float)(mval_curr - mval_init) / inter->context_vars.ar->winx) *
+                       (((float)(mval_curr - mval_init) / inter->context_vars.region->winx) *
                         value_range)) *
                       value_scale;
   if (event->ctrl) {
@@ -147,6 +148,7 @@ static bool interactive_value_update(ValueInteraction *inter,
  * \{ */
 
 struct ObCustomData_ForEditMode {
+  int launch_event;
   bool wait_for_input;
   bool is_active;
   bool is_first;
@@ -176,6 +178,8 @@ static void op_generic_value_exit(wmOperator *op)
     MEM_freeN(cd->objects_xform);
     MEM_freeN(cd);
   }
+
+  G.moving &= ~G_TRANSFORM_EDIT;
 }
 
 static void op_generic_value_restore(wmOperator *op)
@@ -194,6 +198,10 @@ static void op_generic_value_cancel(bContext *UNUSED(C), wmOperator *op)
 
 static int op_generic_value_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
+  if (RNA_property_is_set(op->ptr, op->type->prop)) {
+    return WM_operator_call_notest(C, op);
+  }
+
   ViewLayer *view_layer = CTX_data_view_layer(C);
   uint objects_len;
   Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
@@ -204,6 +212,7 @@ static int op_generic_value_invoke(bContext *C, wmOperator *op, const wmEvent *e
   }
 
   struct ObCustomData_ForEditMode *cd = MEM_callocN(sizeof(*cd), __func__);
+  cd->launch_event = WM_userdef_event_type_from_keymap_type(event->type);
   cd->wait_for_input = RNA_boolean_get(op->ptr, "wait_for_input");
   cd->is_active = !cd->wait_for_input;
   cd->is_first = true;
@@ -224,12 +233,23 @@ static int op_generic_value_invoke(bContext *C, wmOperator *op, const wmEvent *e
   op->customdata = cd;
 
   WM_event_add_modal_handler(C, op);
+  G.moving |= G_TRANSFORM_EDIT;
+
   return OPERATOR_RUNNING_MODAL;
 }
 
 static int op_generic_value_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   struct ObCustomData_ForEditMode *cd = op->customdata;
+
+  /* Special case, check if we release the event that activated this operator. */
+  if ((event->type == cd->launch_event) && (event->val == KM_RELEASE)) {
+    if (cd->wait_for_input == false) {
+      op_generic_value_exit(op);
+      return OPERATOR_FINISHED;
+    }
+  }
+
   switch (event->type) {
     case MOUSEMOVE:
     case LEFTCTRLKEY:

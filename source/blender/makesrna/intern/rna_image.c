@@ -193,6 +193,19 @@ static char *rna_ImageUser_path(PointerRNA *ptr)
   return BLI_strdup("");
 }
 
+static void rna_Image_gpu_texture_update(Main *UNUSED(bmain),
+                                         Scene *UNUSED(scene),
+                                         PointerRNA *ptr)
+{
+  Image *ima = (Image *)ptr->owner_id;
+
+  if (!G.background) {
+    GPU_free_image(ima);
+  }
+
+  WM_main_add_notifier(NC_IMAGE | ND_DISPLAY, &ima->id);
+}
+
 static const EnumPropertyItem *rna_Image_source_itemf(bContext *UNUSED(C),
                                                       PointerRNA *ptr,
                                                       PropertyRNA *UNUSED(prop),
@@ -385,8 +398,7 @@ static void rna_Image_resolution_set(PointerRNA *ptr, const float *values)
 static int rna_Image_bindcode_get(PointerRNA *ptr)
 {
   Image *ima = (Image *)ptr->data;
-  ImageTile *tile = BKE_image_get_tile(ima, 0);
-  GPUTexture *tex = tile->gputexture[TEXTARGET_TEXTURE_2D];
+  GPUTexture *tex = ima->gputexture[TEXTARGET_TEXTURE_2D];
   return (tex) ? GPU_texture_opengl_bindcode(tex) : 0;
 }
 
@@ -1119,6 +1131,13 @@ static void rna_def_image(BlenderRNA *brna)
                            "Representation of alpha in the image file, to convert to and from "
                            "when saving and loading the image");
   RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_colormanage_update");
+
+  prop = RNA_def_property(srna, "use_half_precision", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_negative_sdna(prop, NULL, "flag", IMA_HIGH_BITDEPTH);
+  RNA_def_property_ui_text(prop,
+                           "Half Float Precision",
+                           "Use 16bits per channel to lower the memory usage during rendering");
+  RNA_def_property_update(prop, NC_IMAGE | ND_DISPLAY, "rna_Image_gpu_texture_update");
 
   /* multiview */
   prop = RNA_def_property(srna, "views_format", PROP_ENUM, PROP_NONE);

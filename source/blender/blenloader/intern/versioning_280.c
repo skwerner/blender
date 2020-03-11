@@ -52,6 +52,7 @@
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_shader_fx_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_genfile.h"
 #include "DNA_workspace_types.h"
@@ -63,6 +64,7 @@
 #include "DNA_world_types.h"
 
 #include "BKE_animsys.h"
+#include "BKE_brush.h"
 #include "BKE_cloth.h"
 #include "BKE_collection.h"
 #include "BKE_constraint.h"
@@ -70,9 +72,12 @@
 #include "BKE_customdata.h"
 #include "BKE_fcurve.h"
 #include "BKE_freestyle.h"
+#include "BKE_global.h"
+#include "BKE_gpencil.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_idprop.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
@@ -572,7 +577,7 @@ static void do_versions_fix_annotations(bGPdata *gpd)
   for (const bGPDpalette *palette = gpd->palettes.first; palette; palette = palette->next) {
     for (bGPDpalettecolor *palcolor = palette->colors.first; palcolor; palcolor = palcolor->next) {
       /* fix layers */
-      for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+      LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
         /* unlock/unhide layer */
         gpl->flag &= ~GP_LAYER_LOCKED;
         gpl->flag &= ~GP_LAYER_HIDE;
@@ -581,8 +586,8 @@ static void do_versions_fix_annotations(bGPdata *gpd)
         /* disable tint */
         gpl->tintcolor[3] = 0.0f;
 
-        for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
-          for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+        LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+          LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
             if ((gps->colorname[0] != '\0') && (STREQ(gps->colorname, palcolor->info))) {
               /* copy color settings */
               copy_v4_v4(gpl->color, palcolor->color);
@@ -594,27 +599,27 @@ static void do_versions_fix_annotations(bGPdata *gpd)
   }
 }
 
-static void do_versions_remove_region(ListBase *regionbase, ARegion *ar)
+static void do_versions_remove_region(ListBase *regionbase, ARegion *region)
 {
-  BLI_freelinkN(regionbase, ar);
+  BLI_freelinkN(regionbase, region);
 }
 
 static void do_versions_remove_regions_by_type(ListBase *regionbase, int regiontype)
 {
-  ARegion *ar, *ar_next;
-  for (ar = regionbase->first; ar; ar = ar_next) {
-    ar_next = ar->next;
-    if (ar->regiontype == regiontype) {
-      do_versions_remove_region(regionbase, ar);
+  ARegion *region, *ar_next;
+  for (region = regionbase->first; region; region = ar_next) {
+    ar_next = region->next;
+    if (region->regiontype == regiontype) {
+      do_versions_remove_region(regionbase, region);
     }
   }
 }
 
 static ARegion *do_versions_find_region_or_null(ListBase *regionbase, int regiontype)
 {
-  for (ARegion *ar = regionbase->first; ar; ar = ar->next) {
-    if (ar->regiontype == regiontype) {
-      return ar;
+  for (ARegion *region = regionbase->first; region; region = region->next) {
+    if (region->regiontype == regiontype) {
+      return region;
     }
   }
   return NULL;
@@ -622,18 +627,41 @@ static ARegion *do_versions_find_region_or_null(ListBase *regionbase, int region
 
 static ARegion *do_versions_find_region(ListBase *regionbase, int regiontype)
 {
-  ARegion *ar = do_versions_find_region_or_null(regionbase, regiontype);
-  if (ar == NULL) {
+  ARegion *region = do_versions_find_region_or_null(regionbase, regiontype);
+  if (region == NULL) {
     BLI_assert(!"Did not find expected region in versioning");
   }
-  return ar;
+  return region;
 }
 
 static ARegion *do_versions_add_region(int regiontype, const char *name)
 {
-  ARegion *ar = MEM_callocN(sizeof(ARegion), name);
-  ar->regiontype = regiontype;
-  return ar;
+  ARegion *region = MEM_callocN(sizeof(ARegion), name);
+  region->regiontype = regiontype;
+  return region;
+}
+
+static void do_versions_area_ensure_tool_region(Main *bmain,
+                                                const short space_type,
+                                                const short region_flag)
+{
+  for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+    for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+      for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+        if (sl->spacetype == space_type) {
+          ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+          ARegion *region = BKE_area_find_region_type(sa, RGN_TYPE_TOOLS);
+          if (!region) {
+            ARegion *header = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
+            region = do_versions_add_region(RGN_TYPE_TOOLS, "tools region");
+            BLI_insertlinkafter(regionbase, header, region);
+            region->alignment = RGN_ALIGN_LEFT;
+            region->flag = region_flag;
+          }
+        }
+      }
+    }
+  }
 }
 
 static void do_version_bones_split_bbone_scale(ListBase *lb)
@@ -867,6 +895,10 @@ static void do_versions_local_collection_bits_set(LayerCollection *layer_collect
 
 static void do_version_curvemapping_flag_extend_extrapolate(CurveMapping *cumap)
 {
+  if (cumap == NULL) {
+    return;
+  }
+
 #define CUMA_EXTEND_EXTRAPOLATE_OLD 1
   for (int curve_map_index = 0; curve_map_index < 4; curve_map_index++) {
     CurveMap *cuma = &cumap->cm[curve_map_index];
@@ -1029,12 +1061,54 @@ static void do_version_curvemapping_walker(Main *bmain, void (*callback)(CurveMa
           callback(gpmd->curfalloff);
         }
       }
+      else if (md->type == eGpencilModifierType_Noise) {
+        NoiseGpencilModifierData *gpmd = (NoiseGpencilModifierData *)md;
+
+        if (gpmd->curve_intensity) {
+          callback(gpmd->curve_intensity);
+        }
+      }
+      else if (md->type == eGpencilModifierType_Vertexcolor) {
+        VertexcolorGpencilModifierData *gpmd = (VertexcolorGpencilModifierData *)md;
+
+        if (gpmd->curve_intensity) {
+          callback(gpmd->curve_intensity);
+        }
+      }
+      else if (md->type == eGpencilModifierType_Smooth) {
+        SmoothGpencilModifierData *gpmd = (SmoothGpencilModifierData *)md;
+
+        if (gpmd->curve_intensity) {
+          callback(gpmd->curve_intensity);
+        }
+      }
+      else if (md->type == eGpencilModifierType_Color) {
+        ColorGpencilModifierData *gpmd = (ColorGpencilModifierData *)md;
+
+        if (gpmd->curve_intensity) {
+          callback(gpmd->curve_intensity);
+        }
+      }
+      else if (md->type == eGpencilModifierType_Opacity) {
+        OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
+
+        if (gpmd->curve_intensity) {
+          callback(gpmd->curve_intensity);
+        }
+      }
+      else if (md->type == eGpencilModifierType_Tint) {
+        TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
+
+        if (gpmd->curve_intensity) {
+          callback(gpmd->curve_intensity);
+        }
+      }
     }
   }
 
   /* Free Style */
   LISTBASE_FOREACH (struct FreestyleLineStyle *, linestyle, &bmain->linestyles) {
-    LISTBASE_FOREACH (LineStyleModifier *, m, &linestyle->thickness_modifiers) {
+    LISTBASE_FOREACH (LineStyleModifier *, m, &linestyle->alpha_modifiers) {
       switch (m->type) {
         case LS_MODIFIER_ALONG_STROKE:
           callback(((LineStyleAlphaModifier_AlongStroke *)m)->curve);
@@ -1089,6 +1163,18 @@ static void do_version_curvemapping_walker(Main *bmain, void (*callback)(CurveMa
       }
     }
   }
+}
+
+static void do_version_fcurve_hide_viewport_fix(struct ID *UNUSED(id),
+                                                struct FCurve *fcu,
+                                                void *UNUSED(user_data))
+{
+  if (strcmp(fcu->rna_path, "hide")) {
+    return;
+  }
+
+  MEM_freeN(fcu->rna_path);
+  fcu->rna_path = BLI_strdupn("hide_viewport", 13);
 }
 
 void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
@@ -1508,21 +1594,95 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
       }
     }
 
-    {
-      /* Update all ruler layers to set new flag. */
-      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
-        bGPdata *gpd = scene->gpd;
-        if (gpd == NULL) {
-          continue;
-        }
-        for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-          if (STREQ(gpl->info, "RulerData3D")) {
-            gpl->flag |= GP_LAYER_IS_RULER;
-            break;
-          }
+    /* Update all ruler layers to set new flag. */
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      bGPdata *gpd = scene->gpd;
+      if (gpd == NULL) {
+        continue;
+      }
+      LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+        if (STREQ(gpl->info, "RulerData3D")) {
+          gpl->flag |= GP_LAYER_IS_RULER;
+          break;
         }
       }
     }
+
+    /* This versioning could probably be done only on earlier versions, not sure however
+     * which exact version fully deprecated tessfaces, so think we can keep that one here, no
+     * harm to be expected anyway for being over-conservative. */
+    for (Mesh *me = bmain->meshes.first; me != NULL; me = me->id.next) {
+      /*check if we need to convert mfaces to mpolys*/
+      if (me->totface && !me->totpoly) {
+        /* temporarily switch main so that reading from
+         * external CustomData works */
+        Main *gmain = G_MAIN;
+        G_MAIN = bmain;
+
+        BKE_mesh_do_versions_convert_mfaces_to_mpolys(me);
+
+        G_MAIN = gmain;
+      }
+
+      /* Deprecated, only kept for conversion. */
+      BKE_mesh_tessface_clear(me);
+
+      /* Moved from do_versions because we need updated polygons for calculating normals. */
+      if (MAIN_VERSION_OLDER(bmain, 256, 6)) {
+        BKE_mesh_calc_normals(me);
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 282, 2)) {
+    /* Init all Vertex/Sculpt and Weight Paint brushes. */
+    Brush *brush = BLI_findstring(&bmain->brushes, "Pencil", offsetof(ID, name) + 2);
+    for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+      ToolSettings *ts = scene->toolsettings;
+
+      BKE_brush_gpencil_vertex_presets(bmain, ts);
+      BKE_brush_gpencil_sculpt_presets(bmain, ts);
+      BKE_brush_gpencil_weight_presets(bmain, ts);
+
+      /* Ensure new Paint modes. */
+      BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_GPENCIL);
+      BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_VERTEX_GPENCIL);
+      BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_SCULPT_GPENCIL);
+      BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_WEIGHT_GPENCIL);
+
+      /* Set default Draw brush. */
+      if (brush != NULL) {
+        Paint *paint = &ts->gp_paint->paint;
+        BKE_paint_brush_set(paint, brush);
+        /* Enable cursor by default. */
+        paint->flags |= PAINT_SHOW_BRUSH;
+      }
+      /* Ensure Palette by default. */
+      BKE_gpencil_palette_ensure(bmain, scene);
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 8)) {
+
+    /* During development of Blender 2.80 the "Object.hide" property was
+     * removed, and reintroduced in 5e968a996a53 as "Object.hide_viewport". */
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      BKE_fcurves_id_cb(&ob->id, do_version_fcurve_hide_viewport_fix, NULL);
+    }
+  }
+
+  /**
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - #blo_do_versions_280 in this file.
+   * - "versioning_userdef.c", #BLO_version_defaults_userpref_blend
+   * - "versioning_userdef.c", #do_versions_theme
+   *
+   * \note Keep this message at the bottom of the function.
+   */
+  {
+    /* Keep this block, even when empty. */
   }
 }
 
@@ -1692,36 +1852,6 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 #endif
 
     {
-      /* Grease pencil sculpt and paint cursors */
-      if (!DNA_struct_elem_find(fd->filesdna, "GP_Sculpt_Settings", "int", "weighttype")) {
-        for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
-          /* sculpt brushes */
-          GP_Sculpt_Settings *gset = &scene->toolsettings->gp_sculpt;
-          if (gset) {
-            gset->weighttype = GP_SCULPT_TYPE_WEIGHT;
-          }
-        }
-      }
-
-      {
-        float curcolor_add[3], curcolor_sub[3];
-        ARRAY_SET_ITEMS(curcolor_add, 1.0f, 0.6f, 0.6f);
-        ARRAY_SET_ITEMS(curcolor_sub, 0.6f, 0.6f, 1.0f);
-        GP_Sculpt_Data *gp_brush;
-
-        for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
-          ToolSettings *ts = scene->toolsettings;
-          /* sculpt brushes */
-          GP_Sculpt_Settings *gset = &ts->gp_sculpt;
-          for (int i = 0; i < GP_SCULPT_TYPE_MAX; i++) {
-            gp_brush = &gset->brush[i];
-            gp_brush->flag |= GP_SCULPT_FLAG_ENABLE_CURSOR;
-            copy_v3_v3(gp_brush->curcolor_add, curcolor_add);
-            copy_v3_v3(gp_brush->curcolor_sub, curcolor_sub);
-          }
-        }
-      }
-
       /* Init grease pencil edit line color */
       if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "float", "line_color[4]")) {
         for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
@@ -1784,8 +1914,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 3)) {
     /* init grease pencil grids and paper */
-    if (!DNA_struct_elem_find(
-            fd->filesdna, "gp_paper_opacity", "float", "gpencil_paper_color[3]")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "View3DOverlay", "float", "gpencil_paper_color[3]")) {
       for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
         for (ScrArea *area = screen->areabase.first; area; area = area->next) {
           for (SpaceLink *sl = area->spacedata.first; sl; sl = sl->next) {
@@ -2539,7 +2668,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
     if (!DNA_struct_elem_find(fd->filesdna, "bGPDlayer", "short", "line_change")) {
       for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
-        for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
           gpl->line_change = gpl->thickness;
           if ((gpl->thickness < 1) || (gpl->thickness > 10)) {
             gpl->thickness = 3;
@@ -2797,12 +2926,43 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
+    /* Files stored pre 2.5 (possibly re-saved with newer versions) may have non-visible
+     * spaces without a header (visible/active ones are properly versioned).
+     * Multiple version patches below assume there's always a header though. So inserting this
+     * patch in-between older ones to add a header when needed.
+     *
+     * From here on it should be fine to assume there always is a header.
+     */
+    if (!MAIN_VERSION_ATLEAST(bmain, 283, 1)) {
+      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+        for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+          for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+            ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
+            ARegion *ar_header = do_versions_find_region_or_null(regionbase, RGN_TYPE_HEADER);
+
+            if (!ar_header) {
+              /* Headers should always be first in the region list, except if there's also a
+               * tool-header. These were only introduced in later versions though, so should be
+               * fine to always insert headers first. */
+              BLI_assert(!do_versions_find_region_or_null(regionbase, RGN_TYPE_TOOL_HEADER));
+
+              ARegion *region = do_versions_add_region(RGN_TYPE_HEADER,
+                                                       "header 2.83.1 versioning");
+              region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM :
+                                                                    RGN_ALIGN_TOP;
+              BLI_addhead(regionbase, region);
+            }
+          }
+        }
+      }
+    }
+
     for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
       for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
         for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_PROPERTIES) {
             ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
-            ARegion *ar = MEM_callocN(sizeof(ARegion), "navigation bar for properties");
+            ARegion *region = MEM_callocN(sizeof(ARegion), "navigation bar for properties");
             ARegion *ar_header = NULL;
 
             for (ar_header = regionbase->first; ar_header; ar_header = ar_header->next) {
@@ -2812,10 +2972,10 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             }
             BLI_assert(ar_header);
 
-            BLI_insertlinkafter(regionbase, ar_header, ar);
+            BLI_insertlinkafter(regionbase, ar_header, region);
 
-            ar->regiontype = RGN_TYPE_NAV_BAR;
-            ar->alignment = RGN_ALIGN_LEFT;
+            region->regiontype = RGN_TYPE_NAV_BAR;
+            region->alignment = RGN_ALIGN_LEFT;
           }
         }
       }
@@ -2840,34 +3000,13 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     /* grease pencil main material show switches */
     for (Material *mat = bmain->materials.first; mat; mat = mat->id.next) {
       if (mat->gp_style) {
-        mat->gp_style->flag |= GP_STYLE_STROKE_SHOW;
-        mat->gp_style->flag |= GP_STYLE_FILL_SHOW;
+        mat->gp_style->flag |= GP_MATERIAL_STROKE_SHOW;
+        mat->gp_style->flag |= GP_MATERIAL_FILL_SHOW;
       }
     }
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 33)) {
-    /* Grease pencil reset sculpt brushes after struct rename  */
-    if (!DNA_struct_elem_find(fd->filesdna, "GP_Sculpt_Settings", "int", "weighttype")) {
-      float curcolor_add[3], curcolor_sub[3];
-      ARRAY_SET_ITEMS(curcolor_add, 1.0f, 0.6f, 0.6f);
-      ARRAY_SET_ITEMS(curcolor_sub, 0.6f, 0.6f, 1.0f);
-
-      for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
-        /* sculpt brushes */
-        GP_Sculpt_Settings *gset = &scene->toolsettings->gp_sculpt;
-        if (gset) {
-          for (int i = 0; i < GP_SCULPT_TYPE_MAX; i++) {
-            GP_Sculpt_Data *gp_brush = &gset->brush[i];
-            gp_brush->size = 30;
-            gp_brush->strength = 0.5f;
-            gp_brush->flag = GP_SCULPT_FLAG_USE_FALLOFF | GP_SCULPT_FLAG_ENABLE_CURSOR;
-            copy_v3_v3(gp_brush->curcolor_add, curcolor_add);
-            copy_v3_v3(gp_brush->curcolor_sub, curcolor_sub);
-          }
-        }
-      }
-    }
 
     if (!DNA_struct_elem_find(fd->filesdna, "SceneEEVEE", "float", "overscan")) {
       for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
@@ -3101,7 +3240,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     /* init Annotations onion skin */
     if (!DNA_struct_elem_find(fd->filesdna, "bGPDlayer", "int", "gstep")) {
       for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
-        for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
           ARRAY_SET_ITEMS(gpl->gcolor_prev, 0.302f, 0.851f, 0.302f);
           ARRAY_SET_ITEMS(gpl->gcolor_next, 0.250f, 0.1f, 1.0f);
         }
@@ -3253,7 +3392,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
 
     for (Image *image = bmain->images.first; image; image = image->id.next) {
-      image->flag &= ~(IMA_FLAG_UNUSED_0 | IMA_FLAG_UNUSED_1 | IMA_FLAG_UNUSED_4 |
+      image->flag &= ~(IMA_HIGH_BITDEPTH | IMA_FLAG_UNUSED_1 | IMA_FLAG_UNUSED_4 |
                        IMA_FLAG_UNUSED_6 | IMA_FLAG_UNUSED_8 | IMA_FLAG_UNUSED_15 |
                        IMA_FLAG_UNUSED_16);
     }
@@ -3303,20 +3442,6 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
         for (int i = 0; i < ARRAY_SIZE(scene->orientation_slots); i++) {
           scene->orientation_slots[i].index_custom = -1;
-        }
-      }
-    }
-
-    /* Grease pencil target weight  */
-    if (!DNA_struct_elem_find(fd->filesdna, "GP_Sculpt_Settings", "float", "weight")) {
-      for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
-        /* sculpt brushes */
-        GP_Sculpt_Settings *gset = &scene->toolsettings->gp_sculpt;
-        if (gset) {
-          for (int i = 0; i < GP_SCULPT_TYPE_MAX; i++) {
-            GP_Sculpt_Data *gp_brush = &gset->brush[i];
-            gp_brush->weight = 1.0f;
-          }
         }
       }
     }
@@ -3540,7 +3665,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         if (gpd->flag & GP_DATA_ANNOTATIONS) {
           continue;
         }
-        for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
           /* default channel color */
           ARRAY_SET_ITEMS(gpl->color, 0.2f, 0.2f, 0.2f);
         }
@@ -3587,11 +3712,11 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             do_versions_remove_regions_by_type(regionbase, RGN_TYPE_FOOTER);
 
             /* Add footer. */
-            ARegion *ar = do_versions_add_region(RGN_TYPE_FOOTER, "footer for text");
-            ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_TOP : RGN_ALIGN_BOTTOM;
+            ARegion *region = do_versions_add_region(RGN_TYPE_FOOTER, "footer for text");
+            region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_TOP : RGN_ALIGN_BOTTOM;
 
             ARegion *ar_header = do_versions_find_region(regionbase, RGN_TYPE_HEADER);
-            BLI_insertlinkafter(regionbase, ar_header, ar);
+            BLI_insertlinkafter(regionbase, ar_header, region);
           }
         }
       }
@@ -3631,26 +3756,24 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
 
     /* init grease pencil brush gradients */
-    if (!DNA_struct_elem_find(fd->filesdna, "BrushGpencilSettings", "float", "gradient_f")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "BrushGpencilSettings", "float", "hardeness")) {
       for (Brush *brush = bmain->brushes.first; brush; brush = brush->id.next) {
         if (brush->gpencil_settings != NULL) {
           BrushGpencilSettings *gp = brush->gpencil_settings;
-          gp->gradient_f = 1.0f;
-          gp->gradient_s[0] = 1.0f;
-          gp->gradient_s[1] = 1.0f;
+          gp->hardeness = 1.0f;
+          copy_v2_fl(gp->aspect_ratio, 1.0f);
         }
       }
     }
 
     /* init grease pencil stroke gradients */
-    if (!DNA_struct_elem_find(fd->filesdna, "bGPDstroke", "float", "gradient_f")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPDstroke", "float", "hardeness")) {
       for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
-        for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-          for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
-            for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
-              gps->gradient_f = 1.0f;
-              gps->gradient_s[0] = 1.0f;
-              gps->gradient_s[1] = 1.0f;
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+          LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+            LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+              gps->hardeness = 1.0f;
+              copy_v2_fl(gps->aspect_ratio, 1.0f);
             }
           }
         }
@@ -3677,20 +3800,22 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
           ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
           /* All spaces that use tools must be eventually added. */
-          ARegion *ar = NULL;
-          if (ELEM(sl->spacetype, SPACE_VIEW3D, SPACE_IMAGE) &&
-              ((ar = do_versions_find_region_or_null(regionbase, RGN_TYPE_TOOL_HEADER)) == NULL)) {
+          ARegion *region = NULL;
+          if (ELEM(sl->spacetype, SPACE_VIEW3D, SPACE_IMAGE, SPACE_SEQ) &&
+              ((region = do_versions_find_region_or_null(regionbase, RGN_TYPE_TOOL_HEADER)) ==
+               NULL)) {
             /* Add tool header. */
-            ar = do_versions_add_region(RGN_TYPE_TOOL_HEADER, "tool header");
-            ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
+            region = do_versions_add_region(RGN_TYPE_TOOL_HEADER, "tool header");
+            region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
 
             ARegion *ar_header = do_versions_find_region(regionbase, RGN_TYPE_HEADER);
-            BLI_insertlinkbefore(regionbase, ar_header, ar);
+            BLI_insertlinkbefore(regionbase, ar_header, region);
             /* Hide by default, enable for painting workspaces (startup only). */
-            ar->flag |= RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER;
+            region->flag |= RGN_FLAG_HIDDEN | RGN_FLAG_HIDDEN_BY_USER;
           }
-          if (ar != NULL) {
-            SET_FLAG_FROM_TEST(ar->flag, ar->flag & RGN_FLAG_HIDDEN_BY_USER, RGN_FLAG_HIDDEN);
+          if (region != NULL) {
+            SET_FLAG_FROM_TEST(
+                region->flag, region->flag & RGN_FLAG_HIDDEN_BY_USER, RGN_FLAG_HIDDEN);
           }
         }
       }
@@ -3787,19 +3912,19 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           if (ELEM(sl->spacetype, SPACE_CLIP, SPACE_GRAPH, SPACE_SEQ)) {
             ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
 
-            ARegion *ar = NULL;
+            ARegion *region = NULL;
             if (sl->spacetype == SPACE_CLIP) {
               if (((SpaceClip *)sl)->view == SC_VIEW_GRAPH) {
-                ar = do_versions_find_region_or_null(regionbase, RGN_TYPE_PREVIEW);
+                region = do_versions_find_region_or_null(regionbase, RGN_TYPE_PREVIEW);
               }
             }
             else {
-              ar = do_versions_find_region_or_null(regionbase, RGN_TYPE_WINDOW);
+              region = do_versions_find_region_or_null(regionbase, RGN_TYPE_WINDOW);
             }
 
-            if (ar != NULL) {
-              ar->v2d.scroll &= ~V2D_SCROLL_LEFT;
-              ar->v2d.scroll |= V2D_SCROLL_RIGHT;
+            if (region != NULL) {
+              region->v2d.scroll &= ~V2D_SCROLL_LEFT;
+              region->v2d.scroll |= V2D_SCROLL_RIGHT;
             }
           }
         }
@@ -3938,9 +4063,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_TEXT) {
             ListBase *regionbase = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
-            ARegion *ar = do_versions_find_region_or_null(regionbase, RGN_TYPE_UI);
-            if (ar) {
-              ar->alignment = RGN_ALIGN_RIGHT;
+            ARegion *region = do_versions_find_region_or_null(regionbase, RGN_TYPE_UI);
+            if (region) {
+              region->alignment = RGN_ALIGN_RIGHT;
             }
           }
           /* Mark outliners as dirty for syncing and enable synced selection */
@@ -4102,7 +4227,6 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
-    /* Fix wrong 3D viewport copying causing corrupt pointers (T69974). */
     for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
       for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
         for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
@@ -4145,6 +4269,12 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             }
           }
         }
+      }
+    }
+
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      if (br->ob_mode & OB_MODE_SCULPT && br->area_radius_factor == 0.0f) {
+        br->area_radius_factor = 0.5f;
       }
     }
   }
@@ -4266,17 +4396,10 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  /**
-   * Versioning code until next subversion bump goes here.
-   *
-   * \note Be sure to check when bumping the version:
-   * - "versioning_userdef.c", #BLO_version_defaults_userpref_blend
-   * - "versioning_userdef.c", #do_versions_theme
-   *
-   * \note Keep this message at the bottom of the function.
-   */
-  {
-    /* Keep this block, even when empty. */
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 3)) {
+
+    /* Sequencer Tool region */
+    do_versions_area_ensure_tool_region(bmain, SPACE_SEQ, RGN_FLAG_HIDDEN);
 
     /* Cloth internal springs */
     for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
@@ -4317,5 +4440,414 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
       }
     }
+
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      br->add_col[3] = 0.9f;
+      br->sub_col[3] = 0.9f;
+    }
+
+    /* Pose brush IK segments. */
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      if (br->pose_ik_segments == 0) {
+        br->pose_ik_segments = 1;
+      }
+    }
+
+    /* Pose brush keep anchor point. */
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      if (br->sculpt_tool == SCULPT_TOOL_POSE) {
+        br->flag2 |= BRUSH_POSE_IK_ANCHORED;
+      }
+    }
+
+    /* Tip Roundness. */
+    if (!DNA_struct_elem_find(fd->filesdna, "Brush", "float", "tip_roundness")) {
+      for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+        if (br->ob_mode & OB_MODE_SCULPT && br->sculpt_tool == SCULPT_TOOL_CLAY_STRIPS) {
+          br->tip_roundness = 0.18f;
+        }
+      }
+    }
+
+    /* EEVEE: Cascade shadow bias fix */
+    LISTBASE_FOREACH (Light *, light, &bmain->lights) {
+      if (light->type == LA_SUN) {
+        /* Should be 0.0004 but for practical reason we make it bigger.
+         * Correct factor is scene dependent. */
+        light->bias *= 0.002f;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 5)) {
+    /* Alembic Transform Cache changed from world to local space. */
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      LISTBASE_FOREACH (bConstraint *, con, &ob->constraints) {
+        if (con->type == CONSTRAINT_TYPE_TRANSFORM_CACHE) {
+          con->ownspace = CONSTRAINT_SPACE_LOCAL;
+        }
+      }
+    }
+
+    /* Add 2D transform to UV Warp modifier. */
+    if (!DNA_struct_elem_find(fd->filesdna, "UVWarpModifierData", "float", "scale[2]")) {
+      for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+        for (ModifierData *md = ob->modifiers.first; md; md = md->next) {
+          if (md->type == eModifierType_UVWarp) {
+            UVWarpModifierData *umd = (UVWarpModifierData *)md;
+            copy_v2_fl(umd->scale, 1.0f);
+          }
+        }
+      }
+    }
+
+    /* Add Lookdev blur property. */
+    if (!DNA_struct_elem_find(fd->filesdna, "View3DShading", "float", "studiolight_blur")) {
+      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+        for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+          for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+            if (sl->spacetype == SPACE_VIEW3D) {
+              View3D *v3d = (View3D *)sl;
+              v3d->shading.studiolight_blur = 0.5f;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 7)) {
+    /* Init default Grease Pencil Vertex paint mix factor for Viewport. */
+    if (!DNA_struct_elem_find(
+            fd->filesdna, "View3DOverlay", "float", "gpencil_vertex_paint_opacity")) {
+      LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+        LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+          LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+            if (sl->spacetype == SPACE_VIEW3D) {
+              View3D *v3d = (View3D *)sl;
+              v3d->overlay.gpencil_vertex_paint_opacity = 1.0f;
+            }
+          }
+        }
+      }
+    }
+
+    /* Update Grease Pencil after drawing engine and code refactor.
+     * It uses the seed variable of Array modifier to avoid double patching for
+     * files created with a development version. */
+    if (!DNA_struct_elem_find(fd->filesdna, "ArrayGpencilModifierData", "int", "seed")) {
+      /* Init new Grease Pencil Paint tools. */
+      {
+        LISTBASE_FOREACH (Brush *, brush, &bmain->brushes) {
+          if (brush->gpencil_settings != NULL) {
+            brush->gpencil_vertex_tool = brush->gpencil_settings->brush_type;
+            brush->gpencil_sculpt_tool = brush->gpencil_settings->brush_type;
+            brush->gpencil_weight_tool = brush->gpencil_settings->brush_type;
+          }
+        }
+
+        BKE_paint_toolslots_init_from_main(bmain);
+      }
+
+      LISTBASE_FOREACH (Material *, mat, &bmain->materials) {
+        MaterialGPencilStyle *gp_style = mat->gp_style;
+        if (gp_style == NULL) {
+          continue;
+        }
+        /* Fix Grease Pencil Material colors to Linear. */
+        srgb_to_linearrgb_v4(gp_style->stroke_rgba, gp_style->stroke_rgba);
+        srgb_to_linearrgb_v4(gp_style->fill_rgba, gp_style->fill_rgba);
+
+        /* Move old gradient variables to texture. */
+        if (gp_style->fill_style == GP_MATERIAL_FILL_STYLE_GRADIENT) {
+          gp_style->texture_angle = gp_style->gradient_angle;
+          copy_v2_v2(gp_style->texture_scale, gp_style->gradient_scale);
+          copy_v2_v2(gp_style->texture_offset, gp_style->gradient_shift);
+        }
+        /* Set Checker material as Solid. This fill mode has been removed and replaced
+         * by textures. */
+        if (gp_style->fill_style == GP_MATERIAL_FILL_STYLE_CHECKER) {
+          gp_style->fill_style = GP_MATERIAL_FILL_STYLE_SOLID;
+        }
+        /* Update Alpha channel for texture opacity. */
+        if (gp_style->fill_style == GP_MATERIAL_FILL_STYLE_TEXTURE) {
+          gp_style->fill_rgba[3] *= gp_style->texture_opacity;
+        }
+        /* Stroke stencil mask to mix = 1. */
+        if (gp_style->flag & GP_MATERIAL_STROKE_PATTERN) {
+          gp_style->mix_stroke_factor = 1.0f;
+          gp_style->flag &= ~GP_MATERIAL_STROKE_PATTERN;
+        }
+        /* Mix disabled, set mix factor to 0. */
+        else if ((gp_style->flag & GP_MATERIAL_STROKE_TEX_MIX) == 0) {
+          gp_style->mix_stroke_factor = 0.0f;
+        }
+      }
+
+      /* Fix Grease Pencil VFX and modifiers. */
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        if (ob->type != OB_GPENCIL) {
+          continue;
+        }
+
+        /* VFX. */
+        LISTBASE_FOREACH (ShaderFxData *, fx, &ob->shader_fx) {
+          switch (fx->type) {
+            case eShaderFxType_Colorize: {
+              ColorizeShaderFxData *vfx = (ColorizeShaderFxData *)fx;
+              if (ELEM(vfx->mode, eShaderFxColorizeMode_GrayScale, eShaderFxColorizeMode_Sepia)) {
+                vfx->factor = 1.0f;
+              }
+              srgb_to_linearrgb_v4(vfx->low_color, vfx->low_color);
+              srgb_to_linearrgb_v4(vfx->high_color, vfx->high_color);
+              break;
+            }
+            case eShaderFxType_Pixel: {
+              PixelShaderFxData *vfx = (PixelShaderFxData *)fx;
+              srgb_to_linearrgb_v4(vfx->rgba, vfx->rgba);
+              break;
+            }
+            case eShaderFxType_Rim: {
+              RimShaderFxData *vfx = (RimShaderFxData *)fx;
+              srgb_to_linearrgb_v3_v3(vfx->rim_rgb, vfx->rim_rgb);
+              srgb_to_linearrgb_v3_v3(vfx->mask_rgb, vfx->mask_rgb);
+              break;
+            }
+            case eShaderFxType_Shadow: {
+              ShadowShaderFxData *vfx = (ShadowShaderFxData *)fx;
+              srgb_to_linearrgb_v4(vfx->shadow_rgba, vfx->shadow_rgba);
+              break;
+            }
+            case eShaderFxType_Glow: {
+              GlowShaderFxData *vfx = (GlowShaderFxData *)fx;
+              srgb_to_linearrgb_v3_v3(vfx->glow_color, vfx->glow_color);
+              vfx->glow_color[3] = 1.0f;
+              srgb_to_linearrgb_v3_v3(vfx->select_color, vfx->select_color);
+              vfx->blur[1] = vfx->blur[0];
+              break;
+            }
+            default:
+              break;
+          }
+        }
+
+        /* Modifiers. */
+        LISTBASE_FOREACH (GpencilModifierData *, md, &ob->greasepencil_modifiers) {
+          switch ((GpencilModifierType)md->type) {
+            case eGpencilModifierType_Array: {
+              ArrayGpencilModifierData *mmd = (ArrayGpencilModifierData *)md;
+              mmd->seed = 1;
+              if ((mmd->offset[0] != 0.0f) || (mmd->offset[1] != 0.0f) ||
+                  (mmd->offset[2] != 0.0f)) {
+                mmd->flag |= GP_ARRAY_USE_OFFSET;
+              }
+              if ((mmd->shift[0] != 0.0f) || (mmd->shift[1] != 0.0f) || (mmd->shift[2] != 0.0f)) {
+                mmd->flag |= GP_ARRAY_USE_OFFSET;
+              }
+              if (mmd->object != NULL) {
+                mmd->flag |= GP_ARRAY_USE_OB_OFFSET;
+              }
+              break;
+            }
+            case eGpencilModifierType_Noise: {
+              NoiseGpencilModifierData *mmd = (NoiseGpencilModifierData *)md;
+              mmd->factor /= 25.0f;
+              mmd->factor_thickness = mmd->factor;
+              mmd->factor_strength = mmd->factor;
+              mmd->factor_uvs = mmd->factor;
+              mmd->noise_scale = (mmd->flag & GP_NOISE_FULL_STROKE) ? 0.0f : 1.0f;
+
+              if (mmd->curve_intensity == NULL) {
+                mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+                if (mmd->curve_intensity) {
+                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                }
+              }
+              break;
+            }
+            case eGpencilModifierType_Tint: {
+              TintGpencilModifierData *mmd = (TintGpencilModifierData *)md;
+              srgb_to_linearrgb_v3_v3(mmd->rgb, mmd->rgb);
+              if (mmd->curve_intensity == NULL) {
+                mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+                if (mmd->curve_intensity) {
+                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                }
+              }
+              break;
+            }
+            case eGpencilModifierType_Smooth: {
+              SmoothGpencilModifierData *mmd = (SmoothGpencilModifierData *)md;
+              if (mmd->curve_intensity == NULL) {
+                mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+                if (mmd->curve_intensity) {
+                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                }
+              }
+              break;
+            }
+            case eGpencilModifierType_Opacity: {
+              OpacityGpencilModifierData *mmd = (OpacityGpencilModifierData *)md;
+              if (mmd->curve_intensity == NULL) {
+                mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+                if (mmd->curve_intensity) {
+                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                }
+              }
+              break;
+            }
+            case eGpencilModifierType_Color: {
+              ColorGpencilModifierData *mmd = (ColorGpencilModifierData *)md;
+              if (mmd->curve_intensity == NULL) {
+                mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+                if (mmd->curve_intensity) {
+                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                }
+              }
+              break;
+            }
+            case eGpencilModifierType_Thick: {
+              if (!DNA_struct_elem_find(
+                      fd->filesdna, "ThickGpencilModifierData", "float", "thickness_fac")) {
+                ThickGpencilModifierData *mmd = (ThickGpencilModifierData *)md;
+                mmd->thickness_fac = mmd->thickness;
+              }
+              break;
+            }
+            case eGpencilModifierType_Multiply: {
+              MultiplyGpencilModifierData *mmd = (MultiplyGpencilModifierData *)md;
+              mmd->fading_opacity = 1.0 - mmd->fading_opacity;
+              break;
+            }
+            case eGpencilModifierType_Subdiv: {
+              const short simple = (1 << 0);
+              SubdivGpencilModifierData *mmd = (SubdivGpencilModifierData *)md;
+              if (mmd->flag & simple) {
+                mmd->flag &= ~simple;
+                mmd->type = GP_SUBDIV_SIMPLE;
+              }
+              break;
+            }
+            case eGpencilModifierType_Vertexcolor: {
+              VertexcolorGpencilModifierData *mmd = (VertexcolorGpencilModifierData *)md;
+              if (mmd->curve_intensity == NULL) {
+                mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+                if (mmd->curve_intensity) {
+                  BKE_curvemapping_initialize(mmd->curve_intensity);
+                }
+              }
+              break;
+            }
+            default:
+              break;
+          }
+        }
+      }
+
+      /* Fix Layers Colors and Vertex Colors to Linear.
+       * Also set lights to on for layers. */
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        if (gpd->flag & GP_DATA_ANNOTATIONS) {
+          continue;
+        }
+        /* Onion colors. */
+        srgb_to_linearrgb_v3_v3(gpd->gcolor_prev, gpd->gcolor_prev);
+        srgb_to_linearrgb_v3_v3(gpd->gcolor_next, gpd->gcolor_next);
+        /* Z-depth Offset. */
+        gpd->zdepth_offset = 0.150f;
+
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+          gpl->flag |= GP_LAYER_USE_LIGHTS;
+          srgb_to_linearrgb_v4(gpl->tintcolor, gpl->tintcolor);
+          gpl->vertex_paint_opacity = 1.0f;
+
+          LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+            LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+              /* Set initial opacity for fill color. */
+              gps->fill_opacity_fac = 1.0f;
+
+              /* Calc geometry data because in old versions this data was not saved. */
+              BKE_gpencil_stroke_geometry_update(gps);
+
+              srgb_to_linearrgb_v4(gps->vert_color_fill, gps->vert_color_fill);
+              int i;
+              bGPDspoint *pt;
+              for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
+                srgb_to_linearrgb_v4(pt->vert_color, pt->vert_color);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 8)) {
+    if (!DNA_struct_elem_find(
+            fd->filesdna, "View3DOverlay", "float", "sculpt_mode_face_sets_opacity")) {
+      for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+        for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
+          for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
+            if (sl->spacetype == SPACE_VIEW3D) {
+              View3D *v3d = (View3D *)sl;
+              v3d->overlay.sculpt_mode_face_sets_opacity = 1.0f;
+            }
+          }
+        }
+      }
+    }
+
+    /* Alembic Transform Cache changed from local to world space. */
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      LISTBASE_FOREACH (bConstraint *, con, &ob->constraints) {
+        if (con->type == CONSTRAINT_TYPE_TRANSFORM_CACHE) {
+          con->ownspace = CONSTRAINT_SPACE_WORLD;
+        }
+      }
+    }
+
+    /* Boundary Edges Automasking. */
+    if (!DNA_struct_elem_find(
+            fd->filesdna, "Brush", "int", "automasking_boundary_edges_propagation_steps")) {
+      for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+        br->automasking_boundary_edges_propagation_steps = 1;
+      }
+    }
+
+    /* Corrective smooth modifier scale*/
+    if (!DNA_struct_elem_find(fd->filesdna, "CorrectiveSmoothModifierData", "float", "scale")) {
+      for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+        for (ModifierData *md = ob->modifiers.first; md; md = md->next) {
+          if (md->type == eModifierType_CorrectiveSmooth) {
+            CorrectiveSmoothModifierData *csmd = (CorrectiveSmoothModifierData *)md;
+            csmd->scale = 1.0f;
+          }
+        }
+      }
+    }
+
+    /* Default Face Set Color. */
+    for (Mesh *me = bmain->meshes.first; me != NULL; me = me->id.next) {
+      if (me->totpoly > 0) {
+        int *face_sets = CustomData_get_layer(&me->pdata, CD_SCULPT_FACE_SETS);
+        if (face_sets) {
+          me->face_sets_color_default = abs(face_sets[0]);
+        }
+      }
+    }
+  }
+
+  /**
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - #do_versions_after_linking_280 in this file.
+   * - "versioning_userdef.c", #BLO_version_defaults_userpref_blend
+   * - "versioning_userdef.c", #do_versions_theme
+   *
+   * \note Keep this message at the bottom of the function.
+   */
+  {
+    /* Keep this block, even when empty. */
   }
 }

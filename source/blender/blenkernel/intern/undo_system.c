@@ -36,7 +36,7 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_library_override.h"
+#include "BKE_lib_override.h"
 #include "BKE_main.h"
 #include "BKE_undo_system.h"
 
@@ -434,7 +434,7 @@ void BKE_undosys_stack_limit_steps_and_memory(UndoStack *ustack, int steps, size
     /* Hack, we need to keep at least one BKE_UNDOSYS_TYPE_MEMFILE. */
     if (us->type != BKE_UNDOSYS_TYPE_MEMFILE) {
       us_exclude = us->prev;
-      while (us_exclude && us->type != BKE_UNDOSYS_TYPE_MEMFILE) {
+      while (us_exclude && us_exclude->type != BKE_UNDOSYS_TYPE_MEMFILE) {
         us_exclude = us_exclude->prev;
       }
     }
@@ -504,8 +504,8 @@ bool BKE_undosys_step_push_with_type(UndoStack *ustack,
 
   /* Might not be final place for this to be called - probably only want to call it from some
    * undo handlers, not all of them? */
-  if (BKE_override_library_is_enabled()) {
-    BKE_main_override_library_operations_create(G_MAIN, false);
+  if (BKE_lib_override_library_is_enabled()) {
+    BKE_lib_override_library_main_operations_create(G_MAIN, false);
   }
 
   /* Remove all undos after (also when 'ustack->step_active == NULL'). */

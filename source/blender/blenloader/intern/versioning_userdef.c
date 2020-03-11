@@ -164,6 +164,34 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(space_view3d.face_front);
   }
 
+  if (!USER_VERSION_ATLEAST(283, 1)) {
+    FROM_DEFAULT_V4_UCHAR(space_view3d.bone_locked_weight);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 2)) {
+    FROM_DEFAULT_V4_UCHAR(space_info.info_property);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_property_text);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_operator);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_operator_text);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 5)) {
+    FROM_DEFAULT_V4_UCHAR(space_graph.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_action.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_nla.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_clip.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_graph.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_action.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_nla.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_clip.time_marker_line_selected);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 6)) {
+    btheme->space_node.grid_levels = U_theme_default.space_node.grid_levels;
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *

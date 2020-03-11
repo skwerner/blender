@@ -97,6 +97,11 @@ cmake_policy(SET CMP0010 NEW)
 # Input directories must have CMakeLists.txt
 cmake_policy(SET CMP0014 NEW)
 
+# Silence draco warning on macOS, new policy works fine.
+if(POLICY CMP0068)
+  cmake_policy(SET CMP0068 NEW)
+endif()
+
 #-----------------------------------------------------------------------------
 # Load some macros.
 include(build_files/cmake/macros.cmake)
@@ -175,6 +180,15 @@ option(WITH_BULLET        "Enable Bullet (Physics Engine)" ON)
 option(WITH_SYSTEM_BULLET "Use the systems bullet library (currently unsupported due to missing features in upstream!)" )
 mark_as_advanced(WITH_SYSTEM_BULLET)
 option(WITH_OPENCOLORIO   "Enable OpenColorIO color management" ON)
+if(APPLE)
+  # There's no OpenXR runtime in sight for macOS, neither is code well
+  # tested there -> disable it by default.
+  option(WITH_XR_OPENXR   "Enable VR features through the OpenXR specification" OFF)
+  mark_as_advanced(WITH_XR_OPENXR)
+else()
+  # Disabled until there's more than just the build system stuff. Should be enabled soon.
+  option(WITH_XR_OPENXR   "Enable VR features through the OpenXR specification" OFF)
+endif()
 
 # Compositor
 option(WITH_COMPOSITOR         "Enable the tile based nodal compositor" ON)
@@ -487,7 +501,8 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
     if(NOT MSVC)
       find_library(COMPILER_ASAN_LIBRARY asan ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES})
     else()
-      find_library( COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
+      find_library(
+        COMPILER_ASAN_LIBRARY NAMES clang_rt.asan-x86_64
         PATHS
         [HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/7.0.0/lib/windows
         [HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\LLVM\\LLVM;]/lib/clang/6.0.0/lib/windows
@@ -608,28 +623,27 @@ endif()
 
 # enable boost for cycles, audaspace or i18n
 # otherwise if the user disabled
-if(NOT WITH_BOOST)
-  # Explicitly disabled. so disable all deps.
-  macro(set_and_warn
-    _setting _val)
-    if(${${_setting}})
-      message(STATUS "'WITH_BOOST' is disabled: forcing 'set(${_setting} ${_val})'")
-    endif()
-    set(${_setting} ${_val})
-  endmacro()
 
-  set_and_warn(WITH_CYCLES         OFF)
-  set_and_warn(WITH_INTERNATIONAL  OFF)
-  set_and_warn(WITH_OPENVDB        OFF)
-  set_and_warn(WITH_OPENCOLORIO    OFF)
-  set_and_warn(WITH_QUADRIFLOW     OFF)
-elseif(WITH_CYCLES OR WITH_OPENIMAGEIO OR WITH_INTERNATIONAL OR
-       WITH_OPENVDB OR WITH_OPENCOLORIO)
-  # Keep enabled
-else()
-  # Disable boost if not needed.
+set_and_warn_dependency(WITH_BOOST WITH_CYCLES         OFF)
+set_and_warn_dependency(WITH_BOOST WITH_INTERNATIONAL  OFF)
+set_and_warn_dependency(WITH_BOOST WITH_OPENVDB        OFF)
+set_and_warn_dependency(WITH_BOOST WITH_OPENCOLORIO    OFF)
+set_and_warn_dependency(WITH_BOOST WITH_QUADRIFLOW     OFF)
+set_and_warn_dependency(WITH_BOOST WITH_USD            OFF)
+
+if(WITH_BOOST AND NOT (WITH_CYCLES OR WITH_OPENIMAGEIO OR WITH_INTERNATIONAL OR
+   WITH_OPENVDB OR WITH_OPENCOLORIO OR WITH_USD))
+  message(STATUS "No dependencies need 'WITH_BOOST' forcing WITH_BOOST=OFF")
   set(WITH_BOOST OFF)
 endif()
+
+set_and_warn_dependency(WITH_TBB WITH_USD               OFF)
+set_and_warn_dependency(WITH_TBB WITH_OPENIMAGEDENOISE  OFF)
+set_and_warn_dependency(WITH_TBB WITH_OPENVDB           OFF)
+set_and_warn_dependency(WITH_TBB WITH_MOD_FLUID         OFF)
+
+# OpenVDB uses 'half' type from OpenEXR & fails to link without OpenEXR enabled.
+set_and_warn_dependency(WITH_IMAGE_OPENEXR WITH_OPENVDB OFF)
 
 # auto enable openimageio for cycles
 if(WITH_CYCLES)
@@ -780,66 +794,13 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
     if(MSVC)
       set(COMPILER_ASAN_LINKER_FLAGS "/FUNCTIONPADMIN:6")
     endif()
-    set(PLATFORM_LINKLIBS "${PLATFORM_LINKLIBS};${COMPILER_ASAN_LIBRARY}")
-    set(PLATFORM_LINKFLAGS "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
-    set(PLATFORM_LINKFLAGS_DEBUG "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
+    if(COMPILER_ASAN_LIBRARY)
+      set(PLATFORM_LINKLIBS "${PLATFORM_LINKLIBS};${COMPILER_ASAN_LIBRARY}")
+      set(PLATFORM_LINKFLAGS "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
+      set(PLATFORM_LINKFLAGS_DEBUG "${COMPILER_ASAN_LIBRARY} ${COMPILER_ASAN_LINKER_FLAGS}")
+    endif()
   endif()
 endif()
-
-#-----------------------------------------------------------------------------
-# Platform specifics
-
-if(WITH_X11)
-  find_package(X11 REQUIRED)
-
-  find_path(X11_XF86keysym_INCLUDE_PATH X11/XF86keysym.h ${X11_INC_SEARCH_PATH})
-  mark_as_advanced(X11_XF86keysym_INCLUDE_PATH)
-
-  list(APPEND PLATFORM_LINKLIBS ${X11_X11_LIB})
-
-  if(WITH_X11_XINPUT)
-    if(X11_Xinput_LIB)
-      list(APPEND PLATFORM_LINKLIBS ${X11_Xinput_LIB})
-    else()
-      message(FATAL_ERROR "LibXi not found. Disable WITH_X11_XINPUT if you
-      want to build without tablet support")
-    endif()
-  endif()
-
-  if(WITH_X11_XF86VMODE)
-    # XXX, why doesn't cmake make this available?
-    find_library(X11_Xxf86vmode_LIB Xxf86vm   ${X11_LIB_SEARCH_PATH})
-    mark_as_advanced(X11_Xxf86vmode_LIB)
-    if(X11_Xxf86vmode_LIB)
-      list(APPEND PLATFORM_LINKLIBS ${X11_Xxf86vmode_LIB})
-    else()
-      message(FATAL_ERROR "libXxf86vm not found. Disable WITH_X11_XF86VMODE if you
-      want to build without")
-    endif()
-  endif()
-
-  if(WITH_X11_XFIXES)
-    if(X11_Xfixes_LIB)
-      list(APPEND PLATFORM_LINKLIBS ${X11_Xfixes_LIB})
-    else()
-      message(FATAL_ERROR "libXfixes not found. Disable WITH_X11_XFIXES if you
-      want to build without")
-    endif()
-  endif()
-
-  if(WITH_X11_ALPHA)
-    find_library(X11_Xrender_LIB Xrender  ${X11_LIB_SEARCH_PATH})
-    mark_as_advanced(X11_Xrender_LIB)
-    if(X11_Xrender_LIB)
-      list(APPEND PLATFORM_LINKLIBS ${X11_Xrender_LIB})
-    else()
-      message(FATAL_ERROR "libXrender not found. Disable WITH_X11_ALPHA if you
-      want to build without")
-    endif()
-  endif()
-
-endif()
-
 
 # ----------------------------------------------------------------------------
 # Main Platform Checks
@@ -950,6 +911,28 @@ if(NOT WITH_SYSTEM_EIGEN3)
   set(EIGEN3_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/extern/Eigen3)
 endif()
 
+if(WITH_OPENVDB)
+  list(APPEND OPENVDB_DEFINITIONS -DWITH_OPENVDB)
+
+  if(WITH_OPENVDB_3_ABI_COMPATIBLE)
+    list(APPEND OPENVDB_DEFINITIONS -DOPENVDB_3_ABI_COMPATIBLE)
+  endif()
+
+  list(APPEND OPENVDB_INCLUDE_DIRS
+    ${BOOST_INCLUDE_DIR}
+    ${TBB_INCLUDE_DIRS}
+    ${OPENEXR_INCLUDE_DIRS})
+
+  list(APPEND OPENVDB_LIBRARIES ${OPENEXR_LIBRARIES} ${ZLIB_LIBRARIES})
+
+  if(WITH_OPENVDB_BLOSC)
+    list(APPEND OPENVDB_DEFINITIONS -DWITH_OPENVDB_BLOSC)
+    list(APPEND OPENVDB_LIBRARIES ${BLOSC_LIBRARIES} ${ZLIB_LIBRARIES})
+  endif()
+
+  list(APPEND OPENVDB_LIBRARIES ${BOOST_LIBRARIES} ${TBB_LIBRARIES})
+endif()
+
 #-----------------------------------------------------------------------------
 # Configure OpenGL.
 
@@ -973,7 +956,7 @@ if(WITH_GL_PROFILE_ES20)
       )
     endif()
 
-    list(APPEND BLENDER_GL_LIBRARIES OPENGLES_LIBRARY)
+    list(APPEND BLENDER_GL_LIBRARIES "${OPENGLES_LIBRARY}")
 
   else()
     set(OPENGLES_LIBRARY "" CACHE FILEPATH "OpenGL ES 2.0 library file")
@@ -1033,7 +1016,10 @@ else()
 endif()
 
 if(WITH_GL_EGL)
-  list(APPEND GL_DEFINITIONS -DWITH_GL_EGL)
+  find_package(OpenGL REQUIRED EGL)
+  list(APPEND BLENDER_GL_LIBRARIES OpenGL::EGL)
+
+  list(APPEND GL_DEFINITIONS -DWITH_GL_EGL -DGLEW_EGL -DGLEW_INC_EGL)
 
   if(WITH_SYSTEM_GLES)
     if(NOT OPENGLES_EGL_LIBRARY)
@@ -1043,7 +1029,7 @@ if(WITH_GL_EGL)
       )
     endif()
 
-    list(APPEND BLENDER_GL_LIBRARIES OPENGLES_EGL_LIBRARY)
+    list(APPEND BLENDER_GL_LIBRARIES ${OPENGLES_EGL_LIBRARY})
 
   else()
     set(OPENGLES_EGL_LIBRARY "" CACHE FILEPATH "EGL library file")
@@ -1081,10 +1067,6 @@ if(WITH_GL_PROFILE_ES20)
   list(APPEND GL_DEFINITIONS -DWITH_GL_PROFILE_ES20)
 else()
   list(APPEND GL_DEFINITIONS -DWITH_GL_PROFILE_CORE)
-endif()
-
-if(WITH_GL_EGL)
-  list(APPEND GL_DEFINITIONS -DWITH_EGL)
 endif()
 
 #-----------------------------------------------------------------------------
@@ -1156,10 +1138,6 @@ else()
       # so there are lots of modifications to GLEW to make this work,
       # and no attempt to make it work beyond Blender at this point.
       list(APPEND GL_DEFINITIONS -DGL_ES_VERSION_1_0=0 -DGL_ES_VERSION_CL_1_1=0 -DGL_ES_VERSION_CM_1_1=0)
-    endif()
-
-    if(WITH_GL_EGL)
-      list(APPEND GL_DEFINITIONS -DGLEW_INC_EGL)
     endif()
 
     set(BLENDER_GLEW_LIBRARIES extern_glew_es bf_intern_glew_mx)
@@ -1458,6 +1436,7 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
 
   # flags to undo strict flags
   ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_PARAMETER -Wno-unused-parameter)
+  ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_VARIABLE  -Wno-unused-variable)
   ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_MACROS    -Wno-unused-macros)
 
   ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_MISSING_VARIABLE_DECLARATIONS -Wno-missing-variable-declarations)
@@ -1476,6 +1455,8 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_REORDER -Wno-reorder)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_COMMENT -Wno-comment)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_TYPEDEFS -Wno-unused-local-typedefs)
+  ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNDEFINED_VAR_TEMPLATE -Wno-undefined-var-template)
+  ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_INSTANTIATION_AFTER_SPECIALIZATION -Wno-instantiation-after-specialization)
 
 elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
 
@@ -1726,6 +1707,7 @@ if(FIRST_RUN)
   info_cfg_option(WITH_CYCLES)
   info_cfg_option(WITH_FREESTYLE)
   info_cfg_option(WITH_OPENCOLORIO)
+  info_cfg_option(WITH_XR_OPENXR)
   info_cfg_option(WITH_OPENIMAGEDENOISE)
   info_cfg_option(WITH_OPENVDB)
   info_cfg_option(WITH_ALEMBIC)

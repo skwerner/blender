@@ -54,6 +54,7 @@ set(SRC
   intern/wm_cursors.c
   intern/wm_dragdrop.c
   intern/wm_draw.c
+  intern/wm_event_query.c
   intern/wm_event_system.c
   intern/wm_files.c
   intern/wm_files_link.c
@@ -122,6 +123,10 @@ if(WITH_AUDASPACE)
   list(APPEND INC_SYS
     ${AUDASPACE_C_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${AUDASPACE_C_LIBRARIES}
+    ${AUDASPACE_PY_LIBRARIES}
+  )
 endif()
 
 add_definitions(${GL_DEFINITIONS})
@@ -137,6 +142,9 @@ endif()
 if(WITH_CODEC_FFMPEG)
   list(APPEND INC_SYS
     ${FFMPEG_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${FFMPEG_LIBRARIES}
   )
   add_definitions(-DWITH_FFMPEG)
 endif()

@@ -238,6 +238,11 @@ class IMAGE_MT_image(Menu):
                 layout.separator()
                 layout.operator("image.pack", text="Pack")
 
+        if ima:
+            layout.separator()
+            layout.operator("palette.extract_from_image", text="Extract Palette")
+            layout.operator("gpencil.image_to_grease_pencil", text="Generate Grease Pencil")
+
 
 class IMAGE_MT_image_invert(Menu):
     bl_label = "Invert"
@@ -589,14 +594,15 @@ class _draw_tool_settings_context_mode:
                 uv_sculpt = tool_settings.uv_sculpt
                 brush = uv_sculpt.brush
                 if brush:
-                    # NOTE: We don't draw UnifiedPaintSettings in the header to reduce clutter. D5928#136281
                     UnifiedPaintPanel.prop_unified(
                         layout,
                         context,
                         brush,
                         "size",
                         pressure_name="use_pressure_size",
+                        unified_name="use_unified_size",
                         slider=True,
+                        header=True
                     )
                     UnifiedPaintPanel.prop_unified(
                         layout,
@@ -604,7 +610,9 @@ class _draw_tool_settings_context_mode:
                         brush,
                         "strength",
                         pressure_name="use_pressure_strength",
+                        unified_name="use_unified_strength",
                         slider=True,
+                        header=True
                     )
 
     @staticmethod

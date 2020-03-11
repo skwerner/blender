@@ -55,6 +55,8 @@ int manta_update_mesh_structures(struct MANTA *fluid, struct FluidModifierData *
 int manta_update_particle_structures(struct MANTA *fluid,
                                      struct FluidModifierData *mmd,
                                      int framenr);
+int manta_update_smoke_structures(struct MANTA *fluid, struct FluidModifierData *mmd, int framenr);
+int manta_update_noise_structures(struct MANTA *fluid, struct FluidModifierData *mmd, int framenr);
 int manta_bake_data(struct MANTA *fluid, struct FluidModifierData *mmd, int framenr);
 int manta_bake_noise(struct MANTA *fluid, struct FluidModifierData *mmd, int framenr);
 int manta_bake_mesh(struct MANTA *fluid, struct FluidModifierData *mmd, int framenr);
@@ -85,13 +87,15 @@ float *manta_get_force_x(struct MANTA *fluid);
 float *manta_get_force_y(struct MANTA *fluid);
 float *manta_get_force_z(struct MANTA *fluid);
 float *manta_get_phiguide_in(struct MANTA *fluid);
-int *manta_get_num_obstacle(struct MANTA *fluid);
-int *manta_get_num_guide(struct MANTA *fluid);
+float *manta_get_num_obstacle(struct MANTA *fluid);
+float *manta_get_num_guide(struct MANTA *fluid);
 int manta_get_res_x(struct MANTA *fluid);
 int manta_get_res_y(struct MANTA *fluid);
 int manta_get_res_z(struct MANTA *fluid);
 float *manta_get_phi_in(struct MANTA *fluid);
+float *manta_get_phistatic_in(struct MANTA *fluid);
 float *manta_get_phiobs_in(struct MANTA *fluid);
+float *manta_get_phiobsstatic_in(struct MANTA *fluid);
 float *manta_get_phiout_in(struct MANTA *fluid);
 
 /* Smoke functions */
@@ -110,7 +114,7 @@ void manta_smoke_export(struct MANTA *smoke,
                         float **r,
                         float **g,
                         float **b,
-                        int **obstacles,
+                        int **flags,
                         float **shadow);
 void manta_smoke_turbulence_export(struct MANTA *smoke,
                                    float **dens,
@@ -150,7 +154,7 @@ float *manta_smoke_get_shadow(struct MANTA *fluid);
 float *manta_smoke_get_color_r(struct MANTA *smoke);
 float *manta_smoke_get_color_g(struct MANTA *smoke);
 float *manta_smoke_get_color_b(struct MANTA *smoke);
-int *manta_smoke_get_obstacle(struct MANTA *smoke);
+int *manta_smoke_get_flags(struct MANTA *smoke);
 float *manta_smoke_get_density_in(struct MANTA *smoke);
 float *manta_smoke_get_heat_in(struct MANTA *smoke);
 float *manta_smoke_get_color_r_in(struct MANTA *smoke);
@@ -218,6 +222,9 @@ float manta_liquid_get_snd_particle_position_z_at(struct MANTA *liquid, int i);
 float manta_liquid_get_snd_particle_velocity_x_at(struct MANTA *liquid, int i);
 float manta_liquid_get_snd_particle_velocity_y_at(struct MANTA *liquid, int i);
 float manta_liquid_get_snd_particle_velocity_z_at(struct MANTA *liquid, int i);
+bool manta_liquid_flip_from_file(struct MANTA *liquid);
+bool manta_liquid_mesh_from_file(struct MANTA *liquid);
+bool manta_liquid_particle_from_file(struct MANTA *liquid);
 
 #ifdef __cplusplus
 }

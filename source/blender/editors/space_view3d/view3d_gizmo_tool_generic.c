@@ -22,6 +22,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
+#include "BKE_global.h"
 
 #include "ED_screen.h"
 #include "ED_transform.h"
@@ -52,16 +53,17 @@ static const char *handle_free_id;
 
 static bool WIDGETGROUP_tool_generic_poll(const bContext *C, wmGizmoGroupType *gzgt)
 {
-  if (!USER_EXPERIMENTAL_TEST(&U, use_tool_fallback)) {
-    return false;
-  }
-
   if (!ED_gizmo_poll_or_unlink_delayed_from_tool(C, gzgt)) {
     return false;
   }
 
   View3D *v3d = CTX_wm_view3d(C);
   if (v3d->gizmo_flag & (V3D_GIZMO_HIDE | V3D_GIZMO_HIDE_CONTEXT)) {
+    return false;
+  }
+
+  /* Without this, refreshing the gizmo jitters in some cases with edit-mesh smooth. See T72948. */
+  if (G.moving & G_TRANSFORM_EDIT) {
     return false;
   }
 
@@ -162,10 +164,10 @@ static void WIDGETGROUP_gizmo_message_subscribe(const bContext *C,
                                                 wmGizmoGroup *gzgroup,
                                                 struct wmMsgBus *mbus)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   wmMsgSubscribeValue msg_sub_value_gz_tag_refresh = {
-      .owner = ar,
+      .owner = region,
       .user_data = gzgroup->parent_gzmap,
       .notify = WM_gizmo_do_msg_notify_tag_refresh,
   };

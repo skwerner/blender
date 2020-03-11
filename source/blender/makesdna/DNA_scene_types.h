@@ -317,6 +317,11 @@ typedef enum eScenePassType {
 #define RE_PASSNAME_SUBSURFACE_INDIRECT "SubsurfaceInd"
 #define RE_PASSNAME_SUBSURFACE_COLOR "SubsurfaceCol"
 
+#define RE_PASSNAME_FREESTYLE "Freestyle"
+#define RE_PASSNAME_BLOOM "BloomCol"
+#define RE_PASSNAME_VOLUME_TRANSMITTANCE "VolumeTransmCol"
+#define RE_PASSNAME_VOLUME_SCATTER "VolumeScatterCol"
+
 /* View - MultiView */
 typedef struct SceneRenderView {
   struct SceneRenderView *next, *prev;
@@ -592,12 +597,6 @@ typedef enum eBakePassFilter {
 
 #define R_BAKE_PASS_FILTER_ALL (~0)
 
-/* RenderEngineSettingsClay.options */
-typedef enum ClayFlagSettings {
-  CLAY_USE_AO = (1 << 0),
-  CLAY_USE_HSV = (1 << 1),
-} ClayFlagSettings;
-
 /* *************************************************************** */
 /* Render Data */
 
@@ -653,12 +652,8 @@ typedef struct RenderData {
   short subimtype DNA_DEPRECATED;
   short quality DNA_DEPRECATED;
 
-  /**
-   * Render to image editor, fullscreen or to new window.
-   */
-  short displaymode;
   char use_lock_interface;
-  char _pad7;
+  char _pad7[3];
 
   /**
    * Flags for render settings. Use bit-masking to access the settings.
@@ -752,7 +747,10 @@ typedef struct RenderData {
 
   /* render engine */
   char engine[32];
-  char _pad2[4];
+  char _pad2[2];
+
+  /* Performance Options */
+  short perf_flag;
 
   /* Cycles baking */
   struct BakeData bake;
@@ -777,6 +775,11 @@ typedef struct RenderData {
   /* Motion blur shutter */
   struct CurveMapping mblur_shutter_curve;
 } RenderData;
+
+/* RenderData.quality_flag */
+typedef enum eQualityOption {
+  SCE_PERF_HQ_NORMALS = (1 << 0),
+} eQualityOption;
 
 /* RenderData.hair_type */
 typedef enum eHairType {
@@ -996,7 +999,37 @@ typedef struct UvSculpt {
 /* grease pencil drawing brushes */
 typedef struct GpPaint {
   Paint paint;
+  int flag;
+  /* Mode of paint (Materials or Vertex Color). */
+  int mode;
 } GpPaint;
+
+/* GpPaint.flag */
+enum {
+  GPPAINT_FLAG_USE_MATERIAL = 0,
+  GPPAINT_FLAG_USE_VERTEXCOLOR = 1,
+};
+
+/* Grease pencil vertex paint. */
+typedef struct GpVertexPaint {
+  Paint paint;
+  int flag;
+  char _pad[4];
+} GpVertexPaint;
+
+/* Grease pencil sculpt paint. */
+typedef struct GpSculptPaint {
+  Paint paint;
+  int flag;
+  char _pad[4];
+} GpSculptPaint;
+
+/* Grease pencil weight paint. */
+typedef struct GpWeightPaint {
+  Paint paint;
+  int flag;
+  char _pad[4];
+} GpWeightPaint;
 
 /* ------------------------------------------- */
 /* Vertex Paint */
@@ -1019,27 +1052,6 @@ enum {
 /* ------------------------------------------- */
 /* GPencil Stroke Sculpting */
 
-/* GP_Sculpt_Settings.brushtype */
-typedef enum eGP_Sculpt_Types {
-  GP_SCULPT_TYPE_SMOOTH = 0,
-  GP_SCULPT_TYPE_THICKNESS = 1,
-  GP_SCULPT_TYPE_STRENGTH = 2,
-  GP_SCULPT_TYPE_GRAB = 3,
-  GP_SCULPT_TYPE_PUSH = 4,
-  GP_SCULPT_TYPE_TWIST = 5,
-  GP_SCULPT_TYPE_PINCH = 6,
-  GP_SCULPT_TYPE_RANDOMIZE = 7,
-  GP_SCULPT_TYPE_CLONE = 8,
-  GP_SCULPT_TYPE_SUBDIVIDE = 9,
-  GP_SCULPT_TYPE_SIMPLIFY = 10,
-  /* add any sculpt brush above this value */
-  GP_SCULPT_TYPE_WEIGHT = 11,
-  /* add any weight paint brush below this value. Do no mix brushes */
-
-  /* !!! Update GP_Sculpt_Data brush[###]; below !!! */
-  GP_SCULPT_TYPE_MAX,
-} eGP_Sculpt_Types;
-
 /* GP_Sculpt_Settings.lock_axis */
 typedef enum eGP_Lockaxis_Types {
   GP_LOCKAXIS_VIEW = 0,
@@ -1048,23 +1060,6 @@ typedef enum eGP_Lockaxis_Types {
   GP_LOCKAXIS_Z = 3,
   GP_LOCKAXIS_CURSOR = 4,
 } eGP_Lockaxis_Types;
-
-/* Settings for a GPencil Stroke Sculpting Brush */
-typedef struct GP_Sculpt_Data {
-  /** Radius of brush. */
-  short size;
-  /** EGP_Sculpt_Flag. */
-  short flag;
-  /** Strength of effect. */
-  float strength;
-  /** Cursor color for add. */
-  float curcolor_add[3];
-  /** Cursor color for sub. */
-  float curcolor_sub[3];
-  /** Target weight. */
-  float weight;
-  char _pad[4];
-} GP_Sculpt_Data;
 
 /* Settings for a GPencil Speed Guide */
 typedef struct GP_Sculpt_Guide {
@@ -1080,48 +1075,17 @@ typedef struct GP_Sculpt_Guide {
   struct Object *reference_object;
 } GP_Sculpt_Guide;
 
-/* GP_Sculpt_Data.flag */
-typedef enum eGP_Sculpt_Flag {
-  /* invert the effect of the brush */
-  GP_SCULPT_FLAG_INVERT = (1 << 0),
-  /* adjust strength using pen pressure */
-  GP_SCULPT_FLAG_USE_PRESSURE = (1 << 1),
-
-  /* strength of brush falls off with distance from cursor */
-  GP_SCULPT_FLAG_USE_FALLOFF = (1 << 2),
-
-  /* smooth brush affects pressure values as well */
-  GP_SCULPT_FLAG_SMOOTH_PRESSURE = (1 << 3),
-  /* enable screen cursor */
-  GP_SCULPT_FLAG_ENABLE_CURSOR = (1 << 4),
-  /* temporary invert action */
-  GP_SCULPT_FLAG_TMP_INVERT = (1 << 5),
-  /* adjust radius using pen pressure */
-  GP_SCULPT_FLAG_PRESSURE_RADIUS = (1 << 6),
-} eGP_Sculpt_Flag;
-
 /* GPencil Stroke Sculpting Settings */
 typedef struct GP_Sculpt_Settings {
-  /** GP_SCULPT_TYPE_MAX. */
-  GP_Sculpt_Data brush[12];
   /** Runtime. */
   void *paintcursor;
-
-  /** #eGP_Sculpt_Types (sculpt). */
-  int brushtype;
   /** #eGP_Sculpt_SettingsFlag. */
   int flag;
   /** #eGP_Lockaxis_Types lock drawing to one axis. */
   int lock_axis;
   /** Threshold for intersections */
   float isect_threshold;
-
-  /* weight paint is a submode of sculpt but use its own index. All weight paint
-   * brushes must be defined at the end of the brush array.
-   */
-  /** #eGP_Sculpt_Types (weight paint). */
-  int weighttype;
-  char _pad[4];
+  char _pad_[4];
   /** Multiframe edit falloff effect by frame. */
   struct CurveMapping *cur_falloff;
   /** Curve used for primitive tools. */
@@ -1132,22 +1096,12 @@ typedef struct GP_Sculpt_Settings {
 
 /* GP_Sculpt_Settings.flag */
 typedef enum eGP_Sculpt_SettingsFlag {
-  /* only affect selected points */
-  GP_SCULPT_SETT_FLAG_DEPRECATED = (1 << 0),
-  /* apply brush to position */
-  GP_SCULPT_SETT_FLAG_APPLY_POSITION = (1 << 1),
-  /* apply brush to strength */
-  GP_SCULPT_SETT_FLAG_APPLY_STRENGTH = (1 << 2),
-  /* apply brush to thickness */
-  GP_SCULPT_SETT_FLAG_APPLY_THICKNESS = (1 << 3),
-  /* apply brush to thickness */
-  GP_SCULPT_SETT_FLAG_WEIGHT_MODE = (1 << 4),
   /* enable falloff for multiframe editing */
-  GP_SCULPT_SETT_FLAG_FRAME_FALLOFF = (1 << 5),
-  /* apply brush to uv data */
-  GP_SCULPT_SETT_FLAG_APPLY_UV = (1 << 6),
+  GP_SCULPT_SETT_FLAG_FRAME_FALLOFF = (1 << 0),
   /* apply primitive curve */
-  GP_SCULPT_SETT_FLAG_PRIMITIVE_CURVE = (1 << 7),
+  GP_SCULPT_SETT_FLAG_PRIMITIVE_CURVE = (1 << 1),
+  /* Scale thickness. */
+  GP_SCULPT_SETT_FLAG_SCALE_THICKNESS = (1 << 3),
 } eGP_Sculpt_SettingsFlag;
 
 /* GP_Sculpt_Settings.gpencil_selectmode_sculpt */
@@ -1159,6 +1113,16 @@ typedef enum eGP_Sculpt_SelectMaskFlag {
   /* only affect selected segmenst */
   GP_SCULPT_MASK_SELECTMODE_SEGMENT = (1 << 2),
 } eGP_Sculpt_SelectMaskFlag;
+
+/* GP_Sculpt_Settings.gpencil_selectmode_vertex */
+typedef enum eGP_vertex_SelectMaskFlag {
+  /* only affect selected points */
+  GP_VERTEX_MASK_SELECTMODE_POINT = (1 << 0),
+  /* only affect selected strokes */
+  GP_VERTEX_MASK_SELECTMODE_STROKE = (1 << 1),
+  /* only affect selected segmenst */
+  GP_VERTEX_MASK_SELECTMODE_SEGMENT = (1 << 2),
+} eGP_Vertex_SelectMaskFlag;
 
 /* Settings for GP Interpolation Operators */
 typedef struct GP_Interpolate_Settings {
@@ -1392,6 +1356,12 @@ typedef struct ToolSettings {
   UvSculpt *uvsculpt;
   /** Gpencil paint. */
   GpPaint *gp_paint;
+  /** Gpencil vertex paint. */
+  GpVertexPaint *gp_vertexpaint;
+  /** Gpencil sculpt paint. */
+  GpSculptPaint *gp_sculptpaint;
+  /** Gpencil weight paint. */
+  GpWeightPaint *gp_weightpaint;
 
   /* Vertex group weight - used only for editmode, not weight
    * paint */
@@ -1505,8 +1475,11 @@ typedef struct ToolSettings {
   /** Subset selection filter in wpaint. */
   char vgroupsubset;
 
+  /** Stroke selection mode for Vertex Paint. */
+  char gpencil_selectmode_vertex;
+
   /* UV painting */
-  char _pad2[3];
+  char _pad2[2];
   char uv_sculpt_settings;
   char uv_relax_method;
   /* XXX: these sculpt_paint_* fields are deprecated, use the
@@ -1793,6 +1766,7 @@ typedef struct Scene {
 
   /** Settings to be override by workspaces. */
   IDProperty *layer_properties;
+  void *_pad9;
 
   struct SceneDisplay display;
   struct SceneEEVEE eevee;
@@ -1849,13 +1823,6 @@ enum {
   R_SEQ_UNUSED_4 = (1 << 4), /* cleared */
   R_SEQ_OVERRIDE_SCENE_SETTINGS = (1 << 5),
 };
-
-/** #RenderData.displaymode */
-#define R_OUTPUT_SCREEN 0
-#define R_OUTPUT_AREA 1
-#define R_OUTPUT_WINDOW 2
-#define R_OUTPUT_NONE 3
-/*#define R_OUTPUT_FORKED   4*/
 
 /** #RenderData.filtertype (used for nodes) */
 #define R_FILTER_BOX 0
@@ -1928,25 +1895,6 @@ enum {
   R_COLOR_MANAGEMENT = (1 << 0),
   R_COLOR_MANAGEMENT_UNUSED_1 = (1 << 1),
 };
-
-#ifdef DNA_DEPRECATED_ALLOW
-/* RenderData.subimtype flag options for imtype */
-enum {
-  R_OPENEXR_HALF = (1 << 0), /*deprecated*/
-  R_OPENEXR_ZBUF = (1 << 1), /*deprecated*/
-  R_PREVIEW_JPG = (1 << 2),  /*deprecated*/
-  R_CINEON_LOG = (1 << 3),   /*deprecated*/
-  R_TIFF_16BIT = (1 << 4),   /*deprecated*/
-
-  R_JPEG2K_12BIT = (1 << 5),
-  /* Jpeg2000 */             /*deprecated*/
-  R_JPEG2K_16BIT = (1 << 6), /*deprecated*/
-  R_JPEG2K_YCC = (1 << 7),
-  /* when disabled use RGB */      /*deprecated*/
-  R_JPEG2K_CINE_PRESET = (1 << 8), /*deprecated*/
-  R_JPEG2K_CINE_48FPS = (1 << 9),  /*deprecated*/
-};
-#endif
 
 /* bake_mode: same as RE_BAKE_xxx defines */
 /* RenderData.bake_flag */
@@ -2154,6 +2102,7 @@ typedef enum eVGroupSelect {
 #define SCE_NLA_EDIT_ON (1 << 2)
 #define SCE_FRAME_DROP (1 << 3)
 #define SCE_KEYS_NO_SELONLY (1 << 4)
+#define SCE_READFILE_LIBLINK_NEED_SETSCENE_CHECK (1 << 5)
 
 /* return flag BKE_scene_base_iter_next functions */
 /* #define F_ERROR          -1 */ /* UNUSED */
@@ -2232,6 +2181,9 @@ typedef enum eSculptFlags {
 
   /* Don't display mask in viewport, but still use it for strokes. */
   SCULPT_HIDE_MASK = (1 << 15),
+
+  /* Don't display face sets in viewport. */
+  SCULPT_HIDE_FACE_SETS = (1 << 16),
 } eSculptFlags;
 
 /* ImagePaintSettings.mode */
@@ -2307,14 +2259,12 @@ typedef enum eGPencil_SimplifyFlags {
   SIMPLIFY_GPENCIL_FILL = (1 << 2),
   /* Simplify modifier on viewport */
   SIMPLIFY_GPENCIL_MODIFIER = (1 << 3),
-  /* Remove fill external line */
-  SIMPLIFY_GPENCIL_REMOVE_FILL_LINE = (1 << 4),
   /* Simplify Shader FX */
   SIMPLIFY_GPENCIL_FX = (1 << 5),
-  /* Simplify layer blending */
-  SIMPLIFY_GPENCIL_BLEND = (1 << 6),
   /* Simplify layer tint */
   SIMPLIFY_GPENCIL_TINT = (1 << 7),
+  /* Simplify Antialiasing */
+  SIMPLIFY_GPENCIL_AA = (1 << 8),
 } eGPencil_SimplifyFlags;
 
 /* ToolSettings.gpencil_*_align - Stroke Placement mode flags */
@@ -2323,7 +2273,7 @@ typedef enum eGPencil_Placement_Flags {
   GP_PROJECT_VIEWSPACE = (1 << 0),
 
   /* Viewport space, but relative to render canvas (Sequencer Preview Only) */
-  GP_PROJECT_CANVAS = (1 << 1),
+  /* GP_PROJECT_CANVAS = (1 << 1), */ /* UNUSED */
 
   /* Project into the screen's Z values */
   GP_PROJECT_DEPTH_VIEW = (1 << 2),
@@ -2429,8 +2379,8 @@ enum {
 /* SceneEEVEE->shadow_method */
 enum {
   SHADOW_ESM = 1,
-  SHADOW_VSM = 2,
-  SHADOW_METHOD_MAX = 3,
+  /* SHADOW_VSM = 2, */        /* UNUSED */
+  /* SHADOW_METHOD_MAX = 3, */ /* UNUSED */
 };
 
 /* SceneDisplay->render_aa, SceneDisplay->viewport_aa */

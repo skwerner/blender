@@ -48,7 +48,7 @@ typedef enum eUIFont_ID {
 
   /* free slots */
   UIFONT_CUSTOM1 = 2,
-  UIFONT_CUSTOM2 = 3,
+  /* UIFONT_CUSTOM2 = 3, */ /* UNUSED */
 } eUIFont_ID;
 
 /* default fonts to load/initialize */
@@ -214,7 +214,7 @@ typedef struct ThemeSpace {
   unsigned char back[4];
   unsigned char back_grad[4];
 
-  char show_back_grad;
+  char background_type;
   char _pad0[3];
 
   /** Panel title. */
@@ -283,13 +283,13 @@ typedef struct ThemeSpace {
   unsigned char normal[4];
   unsigned char vertex_normal[4];
   unsigned char loop_normal[4];
-  unsigned char bone_solid[4], bone_pose[4], bone_pose_active[4];
+  unsigned char bone_solid[4], bone_pose[4], bone_pose_active[4], bone_locked_weight[4];
   unsigned char strip[4], strip_select[4];
   unsigned char cframe[4];
   unsigned char time_keyframe[4], time_gp_keyframe[4];
   unsigned char freestyle_edge_mark[4], freestyle_face_mark[4];
   unsigned char time_scrub_background[4];
-  char _pad5[4];
+  unsigned char time_marker_line[4], time_marker_line_selected[4];
 
   unsigned char nurb_uline[4], nurb_vline[4];
   unsigned char act_spline[4], nurb_sel_uline[4], nurb_sel_vline[4], lastsel_point[4];
@@ -315,6 +315,7 @@ typedef struct ThemeSpace {
 
   unsigned char vertex_size, outline_width, obcenter_dia, facedot_size;
   unsigned char noodle_curving;
+  unsigned char grid_levels;
 
   /* syntax for textwindow and nodes */
   unsigned char syntaxl[4], syntaxs[4];  // in nodespace used for backdrop matte
@@ -323,7 +324,7 @@ typedef struct ThemeSpace {
   unsigned char syntaxd[4], syntaxr[4];  // in nodespace used for distort
 
   unsigned char line_numbers[4];
-  char _pad6[4];
+  char _pad6[3];
 
   unsigned char nodeclass_output[4], nodeclass_filter[4];
   unsigned char nodeclass_vector[4], nodeclass_texture[4];
@@ -414,6 +415,8 @@ typedef struct ThemeSpace {
   unsigned char info_warning[4], info_warning_text[4];
   unsigned char info_info[4], info_info_text[4];
   unsigned char info_debug[4], info_debug_text[4];
+  unsigned char info_property[4], info_property_text[4];
+  unsigned char info_operator[4], info_operator_text[4];
 
   unsigned char paint_curve_pivot[4];
   unsigned char paint_curve_handle[4];
@@ -422,6 +425,14 @@ typedef struct ThemeSpace {
   unsigned char metadatatext[4];
 
 } ThemeSpace;
+
+/* Viewport Background Gradient Types. */
+
+typedef enum eBackgroundGradientTypes {
+  TH_BACKGROUND_SINGLE_COLOR = 0,
+  TH_BACKGROUND_GRADIENT_LINEAR = 1,
+  TH_BACKGROUND_GRADIENT_RADIAL = 2,
+} eBackgroundGradientTypes;
 
 /* set of colors for use as a custom color set for Objects/Bones wire drawing */
 typedef struct ThemeWireColor {
@@ -437,7 +448,7 @@ typedef struct ThemeWireColor {
 /** #ThemeWireColor.flag */
 typedef enum eWireColor_Flags {
   TH_WIRECOLOR_CONSTCOLS = (1 << 0),
-  TH_WIRECOLOR_TEXTCOLS = (1 << 1),
+  /* TH_WIRECOLOR_TEXTCOLS = (1 << 1), */ /* UNUSED */
 } eWireColor_Flags;
 
 /**
@@ -593,7 +604,8 @@ typedef struct UserDef_FileSpaceData {
   int sort_type;      /* FileSelectParams.sort */
   int details_flags;  /* FileSelectParams.details_flags */
   int flag;           /* FileSelectParams.flag */
-  int filter_id;      /* FileSelectParams.filter_id */
+  int _pad0;
+  uint64_t filter_id; /* FileSelectParams.filter_id */
 
   /** Info used when creating the file browser in a temporary window. */
   int temp_win_sizex;
@@ -601,10 +613,7 @@ typedef struct UserDef_FileSpaceData {
 } UserDef_FileSpaceData;
 
 typedef struct UserDef_Experimental {
-  char use_tool_fallback;
-  char use_usd_exporter;
-
-  char _pad0[6];
+  char _pad0[8]; /* makesdna does not allow empty structs. */
 } UserDef_Experimental;
 
 #define USER_EXPERIMENTAL_TEST(userdef, member) \
@@ -726,6 +735,7 @@ typedef struct UserDef {
   short vbotimeout, vbocollectrate;
   short textimeout, texcollectrate;
   int memcachelimit;
+  /** Unused. */
   int prefetchframes;
   /** Control the rotation step of the view when PAD2, PAD4, PAD6&PAD8 is use. */
   float pad_rot_angle;
@@ -739,7 +749,6 @@ typedef struct UserDef {
   /** Milliseconds to spend spinning the view. */
   short smooth_viewtx;
   short glreslimit;
-  short curssize;
   /** #eColorPicker_Types. */
   short color_picker_type;
   /** Curve smoothing type for newly added F-Curves. */
@@ -748,7 +757,7 @@ typedef struct UserDef {
   char ipo_new;
   /** Handle types for newly added keyframes. */
   char keyhandles_new;
-  char _pad11[2];
+  char _pad11[4];
   /** #eZoomFrame_Mode. */
   char view_frame_type;
 
@@ -844,8 +853,7 @@ typedef struct UserDef {
   short pie_menu_threshold;
 
   short opensubdiv_compute_type;
-  /** #eMultiSample_Type, amount of samples for Grease Pencil. */
-  short gpencil_multisamples;
+  short _pad6;
 
   char factor_display_type;
 
@@ -1127,16 +1135,6 @@ typedef enum eDupli_ID_Flags {
 } eDupli_ID_Flags;
 
 /**
- * Max anti alias draw method
- * #UserDef.gpu_viewport_antialias
- */
-typedef enum eOpenGL_AntiAliasMethod {
-  USER_AA_NONE = 0,
-  USER_AA_FXAA = 1,
-  USER_AA_TAA8 = 2,
-} eOpenGL_AntiAliasMethod;
-
-/**
  * Text draw options
  * #UserDef.text_render
  */
@@ -1229,7 +1227,7 @@ typedef enum eNdof_Flag {
 
 #define NDOF_PIXELS_PER_SECOND 600.0f
 
-/** UserDef.ogl_multisamples and gpencil_multisamples */
+/** UserDef.ogl_multisamples */
 typedef enum eMultiSample_Type {
   USER_MULTISAMPLE_NONE = 0,
   USER_MULTISAMPLE_2 = 2,

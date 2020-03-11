@@ -1003,6 +1003,214 @@ void PbRegister_densityInflowMesh()
 }
 }
 
+struct KnResetInObstacle : public KernelBase {
+  KnResetInObstacle(FlagGrid &flags,
+                    MACGrid &vel,
+                    Grid<Real> *density,
+                    Grid<Real> *heat,
+                    Grid<Real> *fuel,
+                    Grid<Real> *flame,
+                    Grid<Real> *red,
+                    Grid<Real> *green,
+                    Grid<Real> *blue,
+                    Real resetValue)
+      : KernelBase(&flags, 0),
+        flags(flags),
+        vel(vel),
+        density(density),
+        heat(heat),
+        fuel(fuel),
+        flame(flame),
+        red(red),
+        green(green),
+        blue(blue),
+        resetValue(resetValue)
+  {
+    runMessage();
+    run();
+  }
+  inline void op(int i,
+                 int j,
+                 int k,
+                 FlagGrid &flags,
+                 MACGrid &vel,
+                 Grid<Real> *density,
+                 Grid<Real> *heat,
+                 Grid<Real> *fuel,
+                 Grid<Real> *flame,
+                 Grid<Real> *red,
+                 Grid<Real> *green,
+                 Grid<Real> *blue,
+                 Real resetValue) const
+  {
+    if (!flags.isObstacle(i, j, k))
+      return;
+    vel(i, j, k).x = resetValue;
+    vel(i, j, k).y = resetValue;
+    vel(i, j, k).z = resetValue;
+
+    if (density) {
+      (*density)(i, j, k) = resetValue;
+    }
+    if (heat) {
+      (*heat)(i, j, k) = resetValue;
+    }
+    if (fuel) {
+      (*fuel)(i, j, k) = resetValue;
+      (*flame)(i, j, k) = resetValue;
+    }
+    if (red) {
+      (*red)(i, j, k) = resetValue;
+      (*green)(i, j, k) = resetValue;
+      (*blue)(i, j, k) = resetValue;
+    }
+  }
+  inline FlagGrid &getArg0()
+  {
+    return flags;
+  }
+  typedef FlagGrid type0;
+  inline MACGrid &getArg1()
+  {
+    return vel;
+  }
+  typedef MACGrid type1;
+  inline Grid<Real> *getArg2()
+  {
+    return density;
+  }
+  typedef Grid<Real> type2;
+  inline Grid<Real> *getArg3()
+  {
+    return heat;
+  }
+  typedef Grid<Real> type3;
+  inline Grid<Real> *getArg4()
+  {
+    return fuel;
+  }
+  typedef Grid<Real> type4;
+  inline Grid<Real> *getArg5()
+  {
+    return flame;
+  }
+  typedef Grid<Real> type5;
+  inline Grid<Real> *getArg6()
+  {
+    return red;
+  }
+  typedef Grid<Real> type6;
+  inline Grid<Real> *getArg7()
+  {
+    return green;
+  }
+  typedef Grid<Real> type7;
+  inline Grid<Real> *getArg8()
+  {
+    return blue;
+  }
+  typedef Grid<Real> type8;
+  inline Real &getArg9()
+  {
+    return resetValue;
+  }
+  typedef Real type9;
+  void runMessage()
+  {
+    debMsg("Executing kernel KnResetInObstacle ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    const int _maxX = maxX;
+    const int _maxY = maxY;
+    if (maxZ > 1) {
+      for (int k = __r.begin(); k != (int)__r.end(); k++)
+        for (int j = 0; j < _maxY; j++)
+          for (int i = 0; i < _maxX; i++)
+            op(i, j, k, flags, vel, density, heat, fuel, flame, red, green, blue, resetValue);
+    }
+    else {
+      const int k = 0;
+      for (int j = __r.begin(); j != (int)__r.end(); j++)
+        for (int i = 0; i < _maxX; i++)
+          op(i, j, k, flags, vel, density, heat, fuel, flame, red, green, blue, resetValue);
+    }
+  }
+  void run()
+  {
+    if (maxZ > 1)
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(minZ, maxZ), *this);
+    else
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(0, maxY), *this);
+  }
+  FlagGrid &flags;
+  MACGrid &vel;
+  Grid<Real> *density;
+  Grid<Real> *heat;
+  Grid<Real> *fuel;
+  Grid<Real> *flame;
+  Grid<Real> *red;
+  Grid<Real> *green;
+  Grid<Real> *blue;
+  Real resetValue;
+};
+
+void resetInObstacle(FlagGrid &flags,
+                     MACGrid &vel,
+                     Grid<Real> *density,
+                     Grid<Real> *heat = NULL,
+                     Grid<Real> *fuel = NULL,
+                     Grid<Real> *flame = NULL,
+                     Grid<Real> *red = NULL,
+                     Grid<Real> *green = NULL,
+                     Grid<Real> *blue = NULL,
+                     Real resetValue = 0)
+{
+  KnResetInObstacle(flags, vel, density, heat, fuel, flame, red, green, blue, resetValue);
+}
+static PyObject *_W_10(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+{
+  try {
+    PbArgs _args(_linargs, _kwds);
+    FluidSolver *parent = _args.obtainParent();
+    bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
+    pbPreparePlugin(parent, "resetInObstacle", !noTiming);
+    PyObject *_retval = 0;
+    {
+      ArgLocker _lock;
+      FlagGrid &flags = *_args.getPtr<FlagGrid>("flags", 0, &_lock);
+      MACGrid &vel = *_args.getPtr<MACGrid>("vel", 1, &_lock);
+      Grid<Real> *density = _args.getPtr<Grid<Real>>("density", 2, &_lock);
+      Grid<Real> *heat = _args.getPtrOpt<Grid<Real>>("heat", 3, NULL, &_lock);
+      Grid<Real> *fuel = _args.getPtrOpt<Grid<Real>>("fuel", 4, NULL, &_lock);
+      Grid<Real> *flame = _args.getPtrOpt<Grid<Real>>("flame", 5, NULL, &_lock);
+      Grid<Real> *red = _args.getPtrOpt<Grid<Real>>("red", 6, NULL, &_lock);
+      Grid<Real> *green = _args.getPtrOpt<Grid<Real>>("green", 7, NULL, &_lock);
+      Grid<Real> *blue = _args.getPtrOpt<Grid<Real>>("blue", 8, NULL, &_lock);
+      Real resetValue = _args.getOpt<Real>("resetValue", 9, 0, &_lock);
+      _retval = getPyNone();
+      resetInObstacle(flags, vel, density, heat, fuel, flame, red, green, blue, resetValue);
+      _args.check();
+    }
+    pbFinalizePlugin(parent, "resetInObstacle", !noTiming);
+    return _retval;
+  }
+  catch (std::exception &e) {
+    pbSetError("resetInObstacle", e.what());
+    return 0;
+  }
+}
+static const Pb::Register _RP_resetInObstacle("", "resetInObstacle", _W_10);
+extern "C" {
+void PbRegister_resetInObstacle()
+{
+  KEEP_UNUSED(_RP_resetInObstacle);
+}
+}
+
 //*****************************************************************************
 
 //! check for symmetry , optionally enfore by copying
@@ -1026,7 +1234,7 @@ void checkSymmetry(
     }
   }
 }
-static PyObject *_W_10(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_11(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -1053,7 +1261,7 @@ static PyObject *_W_10(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_checkSymmetry("", "checkSymmetry", _W_10);
+static const Pb::Register _RP_checkSymmetry("", "checkSymmetry", _W_11);
 extern "C" {
 void PbRegister_checkSymmetry()
 {
@@ -1144,7 +1352,7 @@ void checkSymmetryVec3(Grid<Vec3> &a,
     }
   }
 }
-static PyObject *_W_11(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_12(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -1172,7 +1380,7 @@ static PyObject *_W_11(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_checkSymmetryVec3("", "checkSymmetryVec3", _W_11);
+static const Pb::Register _RP_checkSymmetryVec3("", "checkSymmetryVec3", _W_12);
 extern "C" {
 void PbRegister_checkSymmetryVec3()
 {
@@ -1192,7 +1400,7 @@ void projectPpmFull(const Grid<Real> &val, string name, int shadeMode = 0, Real 
   projectImg(img, val, shadeMode, scale);
   img.writePpm(name);
 }
-static PyObject *_W_12(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_13(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -1218,7 +1426,7 @@ static PyObject *_W_12(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_projectPpmFull("", "projectPpmFull", _W_12);
+static const Pb::Register _RP_projectPpmFull("", "projectPpmFull", _W_13);
 extern "C" {
 void PbRegister_projectPpmFull()
 {
@@ -1238,7 +1446,7 @@ void addTestParts(BasicParticleSystem &parts, int num)
   parts.doCompress();
   parts.insertBufferedParticles();
 }
-static PyObject *_W_13(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_14(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -1262,7 +1470,7 @@ static PyObject *_W_13(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_addTestParts("", "addTestParts", _W_13);
+static const Pb::Register _RP_addTestParts("", "addTestParts", _W_14);
 extern "C" {
 void PbRegister_addTestParts()
 {
@@ -1313,7 +1521,7 @@ Real pdataMaxDiff(const ParticleDataBase *a, const ParticleDataBase *b)
 
   return maxVal;
 }
-static PyObject *_W_14(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_15(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -1336,7 +1544,7 @@ static PyObject *_W_14(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_pdataMaxDiff("", "pdataMaxDiff", _W_14);
+static const Pb::Register _RP_pdataMaxDiff("", "pdataMaxDiff", _W_15);
 extern "C" {
 void PbRegister_pdataMaxDiff()
 {
@@ -1359,7 +1567,7 @@ Vec3 calcCenterOfMass(const Grid<Real> &density)
     p /= w;
   return p;
 }
-static PyObject *_W_15(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_16(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -1381,7 +1589,7 @@ static PyObject *_W_15(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_calcCenterOfMass("", "calcCenterOfMass", _W_15);
+static const Pb::Register _RP_calcCenterOfMass("", "calcCenterOfMass", _W_16);
 extern "C" {
 void PbRegister_calcCenterOfMass()
 {
@@ -1581,7 +1789,7 @@ void updateFractions(const FlagGrid &flags,
   fractions.setConst(Vec3(0.));
   KnUpdateFractions(flags, phiObs, fractions, boundaryWidth, fracThreshold);
 }
-static PyObject *_W_16(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_17(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -1608,7 +1816,7 @@ static PyObject *_W_16(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_updateFractions("", "updateFractions", _W_16);
+static const Pb::Register _RP_updateFractions("", "updateFractions", _W_17);
 extern "C" {
 void PbRegister_updateFractions()
 {
@@ -1621,13 +1829,15 @@ struct KnUpdateFlagsObs : public KernelBase {
                    const MACGrid *fractions,
                    const Grid<Real> &phiObs,
                    const Grid<Real> *phiOut,
-                   const Grid<Real> *phiIn)
-      : KernelBase(&flags, 1),
+                   const Grid<Real> *phiIn,
+                   int boundaryWidth)
+      : KernelBase(&flags, boundaryWidth),
         flags(flags),
         fractions(fractions),
         phiObs(phiObs),
         phiOut(phiOut),
-        phiIn(phiIn)
+        phiIn(phiIn),
+        boundaryWidth(boundaryWidth)
   {
     runMessage();
     run();
@@ -1639,7 +1849,8 @@ struct KnUpdateFlagsObs : public KernelBase {
                  const MACGrid *fractions,
                  const Grid<Real> &phiObs,
                  const Grid<Real> *phiOut,
-                 const Grid<Real> *phiIn) const
+                 const Grid<Real> *phiIn,
+                 int boundaryWidth) const
   {
 
     bool isObs = false;
@@ -1702,6 +1913,11 @@ struct KnUpdateFlagsObs : public KernelBase {
     return phiIn;
   }
   typedef Grid<Real> type4;
+  inline int &getArg5()
+  {
+    return boundaryWidth;
+  }
+  typedef int type5;
   void runMessage()
   {
     debMsg("Executing kernel KnUpdateFlagsObs ", 3);
@@ -1715,15 +1931,15 @@ struct KnUpdateFlagsObs : public KernelBase {
     const int _maxY = maxY;
     if (maxZ > 1) {
       for (int k = __r.begin(); k != (int)__r.end(); k++)
-        for (int j = 1; j < _maxY; j++)
-          for (int i = 1; i < _maxX; i++)
-            op(i, j, k, flags, fractions, phiObs, phiOut, phiIn);
+        for (int j = boundaryWidth; j < _maxY; j++)
+          for (int i = boundaryWidth; i < _maxX; i++)
+            op(i, j, k, flags, fractions, phiObs, phiOut, phiIn, boundaryWidth);
     }
     else {
       const int k = 0;
       for (int j = __r.begin(); j != (int)__r.end(); j++)
-        for (int i = 1; i < _maxX; i++)
-          op(i, j, k, flags, fractions, phiObs, phiOut, phiIn);
+        for (int i = boundaryWidth; i < _maxX; i++)
+          op(i, j, k, flags, fractions, phiObs, phiOut, phiIn, boundaryWidth);
     }
   }
   void run()
@@ -1731,13 +1947,14 @@ struct KnUpdateFlagsObs : public KernelBase {
     if (maxZ > 1)
       tbb::parallel_for(tbb::blocked_range<IndexInt>(minZ, maxZ), *this);
     else
-      tbb::parallel_for(tbb::blocked_range<IndexInt>(1, maxY), *this);
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(boundaryWidth, maxY), *this);
   }
   FlagGrid &flags;
   const MACGrid *fractions;
   const Grid<Real> &phiObs;
   const Grid<Real> *phiOut;
   const Grid<Real> *phiIn;
+  int boundaryWidth;
 };
 
 //! update obstacle and outflow flags from levelsets
@@ -1746,11 +1963,12 @@ void setObstacleFlags(FlagGrid &flags,
                       const Grid<Real> &phiObs,
                       const MACGrid *fractions = NULL,
                       const Grid<Real> *phiOut = NULL,
-                      const Grid<Real> *phiIn = NULL)
+                      const Grid<Real> *phiIn = NULL,
+                      int boundaryWidth = 1)
 {
-  KnUpdateFlagsObs(flags, fractions, phiObs, phiOut, phiIn);
+  KnUpdateFlagsObs(flags, fractions, phiObs, phiOut, phiIn, boundaryWidth);
 }
-static PyObject *_W_17(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_18(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -1765,8 +1983,9 @@ static PyObject *_W_17(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
       const MACGrid *fractions = _args.getPtrOpt<MACGrid>("fractions", 2, NULL, &_lock);
       const Grid<Real> *phiOut = _args.getPtrOpt<Grid<Real>>("phiOut", 3, NULL, &_lock);
       const Grid<Real> *phiIn = _args.getPtrOpt<Grid<Real>>("phiIn", 4, NULL, &_lock);
+      int boundaryWidth = _args.getOpt<int>("boundaryWidth", 5, 1, &_lock);
       _retval = getPyNone();
-      setObstacleFlags(flags, phiObs, fractions, phiOut, phiIn);
+      setObstacleFlags(flags, phiObs, fractions, phiOut, phiIn, boundaryWidth);
       _args.check();
     }
     pbFinalizePlugin(parent, "setObstacleFlags", !noTiming);
@@ -1777,7 +1996,7 @@ static PyObject *_W_17(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_setObstacleFlags("", "setObstacleFlags", _W_17);
+static const Pb::Register _RP_setObstacleFlags("", "setObstacleFlags", _W_18);
 extern "C" {
 void PbRegister_setObstacleFlags()
 {
@@ -1894,7 +2113,7 @@ void initVortexVelocity(const Grid<Real> &phiObs,
 {
   kninitVortexVelocity(phiObs, vel, center, radius);
 }
-static PyObject *_W_18(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_19(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -1920,7 +2139,7 @@ static PyObject *_W_18(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_initVortexVelocity("", "initVortexVelocity", _W_18);
+static const Pb::Register _RP_initVortexVelocity("", "initVortexVelocity", _W_19);
 extern "C" {
 void PbRegister_initVortexVelocity()
 {
@@ -2246,7 +2465,7 @@ int blurMacGrid(MACGrid &oG, MACGrid &tG, float si)
   }
   return tmGK.mDim;
 }
-static PyObject *_W_19(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_20(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -2270,7 +2489,7 @@ static PyObject *_W_19(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_blurMacGrid("", "blurMacGrid", _W_19);
+static const Pb::Register _RP_blurMacGrid("", "blurMacGrid", _W_20);
 extern "C" {
 void PbRegister_blurMacGrid()
 {
@@ -2282,7 +2501,7 @@ int blurRealGrid(Grid<Real> &oG, Grid<Real> &tG, float si)
 {
   return blurGrid<Real>(oG, tG, si);
 }
-static PyObject *_W_20(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
+static PyObject *_W_21(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {
   try {
     PbArgs _args(_linargs, _kwds);
@@ -2306,7 +2525,7 @@ static PyObject *_W_20(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
     return 0;
   }
 }
-static const Pb::Register _RP_blurRealGrid("", "blurRealGrid", _W_20);
+static const Pb::Register _RP_blurRealGrid("", "blurRealGrid", _W_21);
 extern "C" {
 void PbRegister_blurRealGrid()
 {

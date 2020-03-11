@@ -50,6 +50,7 @@
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
@@ -66,6 +67,7 @@
 
 #include "ED_screen.h"
 #include "ED_view3d.h"
+#include "ED_view3d_offscreen.h"
 #include "ED_gpencil.h"
 
 #include "RE_pipeline.h"
@@ -103,7 +105,7 @@ typedef struct OGLRender {
 
   View3D *v3d;
   RegionView3D *rv3d;
-  ARegion *ar;
+  ARegion *region;
 
   ScrArea *prevsa;
   ARegion *prevar;
@@ -285,7 +287,7 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
 {
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = oglrender->scene;
-  ARegion *ar = oglrender->ar;
+  ARegion *region = oglrender->region;
   View3D *v3d = oglrender->v3d;
   RegionView3D *rv3d = oglrender->rv3d;
   Object *camera = NULL;
@@ -367,17 +369,18 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
     char err_out[256] = "unknown";
     ImBuf *ibuf_view;
     const int alpha_mode = (draw_sky) ? R_ADDSKY : R_ALPHAPREMUL;
-    int output_flags = oglrender->color_depth <= R_IMF_CHAN_DEPTH_8 ? IB_rect : IB_rectfloat;
+    eImBufFlags imbuf_flags = oglrender->color_depth <= R_IMF_CHAN_DEPTH_8 ? IB_rect :
+                                                                             IB_rectfloat;
 
     if (view_context) {
       ibuf_view = ED_view3d_draw_offscreen_imbuf(depsgraph,
                                                  scene,
                                                  v3d->shading.type,
                                                  v3d,
-                                                 ar,
+                                                 region,
                                                  sizex,
                                                  sizey,
-                                                 output_flags,
+                                                 imbuf_flags,
                                                  alpha_mode,
                                                  viewname,
                                                  oglrender->ofs,
@@ -396,7 +399,7 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
                                                         scene->camera,
                                                         oglrender->sizex,
                                                         oglrender->sizey,
-                                                        output_flags,
+                                                        imbuf_flags,
                                                         V3D_OFSDRAW_SHOW_ANNOTATION,
                                                         alpha_mode,
                                                         viewname,
@@ -526,14 +529,15 @@ static void screen_opengl_render_apply(const bContext *C, OGLRender *oglrender)
   }
 }
 
-static void gather_frames_to_render_for_adt(OGLRender *oglrender,
-                                            int frame_start,
-                                            int frame_end,
-                                            const AnimData *adt)
+static void gather_frames_to_render_for_adt(const OGLRender *oglrender, const AnimData *adt)
 {
   if (adt == NULL || adt->action == NULL) {
     return;
   }
+
+  Scene *scene = oglrender->scene;
+  int frame_start = PSFRA;
+  int frame_end = PEFRA;
 
   LISTBASE_FOREACH (FCurve *, fcu, &adt->action->curves) {
     if (fcu->driver != NULL || fcu->fpt != NULL) {
@@ -561,13 +565,117 @@ static void gather_frames_to_render_for_adt(OGLRender *oglrender,
   }
 }
 
+static void gather_frames_to_render_for_grease_pencil(const OGLRender *oglrender,
+                                                      const bGPdata *gp)
+{
+  if (gp == NULL) {
+    return;
+  }
+
+  Scene *scene = oglrender->scene;
+  int frame_start = PSFRA;
+  int frame_end = PEFRA;
+
+  LISTBASE_FOREACH (const bGPDlayer *, gp_layer, &gp->layers) {
+    LISTBASE_FOREACH (const bGPDframe *, gp_frame, &gp_layer->frames) {
+      if (gp_frame->framenum < frame_start || gp_frame->framenum > frame_end) {
+        continue;
+      }
+      BLI_BITMAP_ENABLE(oglrender->render_frames, gp_frame->framenum - frame_start);
+    }
+  }
+}
+
+static int gather_frames_to_render_for_id(LibraryIDLinkCallbackData *cb_data)
+{
+  ID **id_p = cb_data->id_pointer;
+  if (*id_p == NULL) {
+    return IDWALK_RET_NOP;
+  }
+  ID *id = *id_p;
+
+  ID *id_self = cb_data->id_self;
+  const int cb_flag = cb_data->cb_flag;
+  if (cb_flag == IDWALK_CB_LOOPBACK || id == id_self) {
+    /* IDs may end up referencing themselves one way or the other, and those
+     * (the id_self ones) have always already been processed. */
+    return IDWALK_RET_STOP_RECURSION;
+  }
+
+  OGLRender *oglrender = cb_data->user_data;
+
+  /* Whitelist of datablocks to follow pointers into. */
+  const ID_Type id_type = GS(id->name);
+  switch (id_type) {
+    /* Whitelist: */
+    case ID_ME:  /* Mesh */
+    case ID_CU:  /* Curve */
+    case ID_MB:  /* MetaBall */
+    case ID_MA:  /* Material */
+    case ID_TE:  /* Tex (Texture) */
+    case ID_IM:  /* Image */
+    case ID_LT:  /* Lattice */
+    case ID_LA:  /* Light */
+    case ID_CA:  /* Camera */
+    case ID_KE:  /* Key (shape key) */
+    case ID_VF:  /* VFont (Vector Font) */
+    case ID_TXT: /* Text */
+    case ID_SPK: /* Speaker */
+    case ID_SO:  /* Sound */
+    case ID_AR:  /* bArmature */
+    case ID_NT:  /* bNodeTree */
+    case ID_PA:  /* ParticleSettings */
+    case ID_MC:  /* MovieClip */
+    case ID_MSK: /* Mask */
+    case ID_LP:  /* LightProbe */
+      break;
+
+      /* Blacklist: */
+    case ID_SCE: /* Scene */
+    case ID_LI:  /* Library */
+    case ID_OB:  /* Object */
+    case ID_IP:  /* Ipo (depreciated, replaced by FCurves) */
+    case ID_WO:  /* World */
+    case ID_SCR: /* Screen */
+    case ID_GR:  /* Group */
+    case ID_AC:  /* bAction */
+    case ID_BR:  /* Brush */
+    case ID_WM:  /* WindowManager */
+    case ID_LS:  /* FreestyleLineStyle */
+    case ID_PAL: /* Palette */
+    case ID_PC:  /* PaintCurve  */
+    case ID_CF:  /* CacheFile */
+    case ID_WS:  /* WorkSpace */
+      /* Only follow pointers to specific datablocks, to avoid ending up in
+       * unrelated datablocks and exploding the number of blocks we follow. If the
+       * frames of the animation of certain objects should be taken into account,
+       * they should have been selected by the user. */
+      return IDWALK_RET_STOP_RECURSION;
+
+    /* Special cases: */
+    case ID_GD: /* bGPdata, (Grease Pencil) */
+      /* In addition to regular ID's animdata, GreasePencil uses a specific frame-based animation
+       * system that requires specific handling here. */
+      gather_frames_to_render_for_grease_pencil(oglrender, (bGPdata *)id);
+      break;
+  }
+
+  AnimData *adt = BKE_animdata_from_id(id);
+  gather_frames_to_render_for_adt(oglrender, adt);
+
+  return IDWALK_RET_NOP;
+}
+
 /**
  * Collect the frame numbers for which selected objects have keys in the animation data.
  * The frames ares stored in #OGLRender.render_frames.
+ *
+ * Note that this follows all pointers to ID blocks, only filtering on ID type,
+ * so it will pick up keys from pointers in custom properties as well.
  */
 static void gather_frames_to_render(bContext *C, OGLRender *oglrender)
 {
-  Scene *scene = CTX_data_scene(C);
+  Scene *scene = oglrender->scene;
   int frame_start = PSFRA;
   int frame_end = PEFRA;
 
@@ -579,14 +687,15 @@ static void gather_frames_to_render(bContext *C, OGLRender *oglrender)
   BLI_BITMAP_ENABLE(oglrender->render_frames, 0);
 
   CTX_DATA_BEGIN (C, Object *, ob, selected_objects) {
-    if (ob->adt != NULL) {
-      gather_frames_to_render_for_adt(oglrender, frame_start, frame_end, ob->adt);
-    }
+    ID *id = &ob->id;
 
-    AnimData *adt = BKE_animdata_from_id(ob->data);
-    if (adt != NULL) {
-      gather_frames_to_render_for_adt(oglrender, frame_start, frame_end, adt);
-    }
+    /* Gather the frames from the object animation data. */
+    AnimData *adt = BKE_animdata_from_id(id);
+    gather_frames_to_render_for_adt(oglrender, adt);
+
+    /* Gather the frames from linked datablocks (materials, shapkeys, etc.). */
+    BKE_library_foreach_ID_link(
+        NULL, id, gather_frames_to_render_for_id, oglrender, IDWALK_RECURSE);
   }
   CTX_DATA_END;
 }
@@ -697,9 +806,9 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
 
   if (is_view_context) {
     /* so quad view renders camera */
-    ED_view3d_context_user_region(C, &oglrender->v3d, &oglrender->ar);
+    ED_view3d_context_user_region(C, &oglrender->v3d, &oglrender->region);
 
-    oglrender->rv3d = oglrender->ar->regiondata;
+    oglrender->rv3d = oglrender->region->regiondata;
 
     /* MUST be cleared on exit */
     memset(&oglrender->scene->customdata_mask_modal,
@@ -718,7 +827,7 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
   oglrender->re = RE_NewSceneRender(scene);
 
   /* create image and image user */
-  oglrender->ima = BKE_image_verify_viewer(oglrender->bmain, IMA_TYPE_R_RESULT, "Render Result");
+  oglrender->ima = BKE_image_ensure_viewer(oglrender->bmain, IMA_TYPE_R_RESULT, "Render Result");
   BKE_image_signal(oglrender->bmain, oglrender->ima, NULL, IMA_SIGNAL_FREE);
   BKE_image_backup_render(oglrender->scene, oglrender->ima, true);
 
@@ -1164,7 +1273,7 @@ static int screen_opengl_render_invoke(bContext *C, wmOperator *op, const wmEven
   oglrender = op->customdata;
   render_view_open(C, event->x, event->y, op->reports);
 
-  /* view may be changed above (R_OUTPUT_WINDOW) */
+  /* View may be changed above #USER_RENDER_DISPLAY_WINDOW. */
   oglrender->win = CTX_wm_window(C);
 
   WM_event_add_modal_handler(C, op);
@@ -1275,6 +1384,3 @@ void RENDER_OT_opengl(wmOperatorType *ot)
                          "Use the current 3D view for rendering, else use scene settings");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
-
-/* function for getting an opengl buffer from a View3D, used by sequencer */
-// extern void *sequencer_view3d_cb;

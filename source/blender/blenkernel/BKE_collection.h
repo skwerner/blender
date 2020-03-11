@@ -56,13 +56,6 @@ bool BKE_collection_delete(struct Main *bmain, struct Collection *collection, bo
 struct Collection *BKE_collection_copy(struct Main *bmain,
                                        struct Collection *parent,
                                        struct Collection *collection);
-void BKE_collection_copy_data(struct Main *bmain,
-                              struct Collection *collection_dst,
-                              const struct Collection *collection_src,
-                              const int flag);
-void BKE_collection_make_local(struct Main *bmain,
-                               struct Collection *collection,
-                               const bool lib_local);
 
 struct Collection *BKE_collection_duplicate(struct Main *bmain,
                                             struct Collection *parent,
@@ -79,7 +72,7 @@ struct Scene *BKE_collection_master_scene_search(const struct Main *bmain,
 
 /* Collection Objects */
 
-bool BKE_collection_has_object(struct Collection *collection, struct Object *ob);
+bool BKE_collection_has_object(struct Collection *collection, const struct Object *ob);
 bool BKE_collection_has_object_recursive(struct Collection *collection, struct Object *ob);
 struct Collection *BKE_collection_object_find(struct Main *bmain,
                                               struct Scene *scene,
@@ -141,6 +134,8 @@ bool BKE_collection_objects_select(struct ViewLayer *view_layer,
 bool BKE_collection_child_add(struct Main *bmain,
                               struct Collection *parent,
                               struct Collection *child);
+
+bool BKE_collection_child_add_no_sync(struct Collection *parent, struct Collection *child);
 
 bool BKE_collection_child_remove(struct Main *bmain,
                                  struct Collection *parent,

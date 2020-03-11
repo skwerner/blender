@@ -224,7 +224,7 @@ MINLINE unsigned int power_of_2_max_u(unsigned int x)
   return x + 1;
 }
 
-MINLINE unsigned power_of_2_min_u(unsigned x)
+MINLINE unsigned int power_of_2_min_u(unsigned int x)
 {
   x |= (x >> 1);
   x |= (x >> 2);
@@ -374,6 +374,72 @@ MINLINE float wrapf(float value, float max, float min)
   float range = max - min;
   return (range != 0.0f) ? value - (range * floorf((value - min) / range)) : min;
 }
+
+// Square.
+
+MINLINE int square_s(short a)
+{
+  return a * a;
+}
+
+MINLINE int square_i(int a)
+{
+  return a * a;
+}
+
+MINLINE unsigned int square_uint(unsigned int a)
+{
+  return a * a;
+}
+
+MINLINE int square_uchar(unsigned char a)
+{
+  return a * a;
+}
+
+MINLINE float square_f(float a)
+{
+  return a * a;
+}
+
+MINLINE double square_d(double a)
+{
+  return a * a;
+}
+
+// Cube.
+
+MINLINE int cube_s(short a)
+{
+  return a * a * a;
+}
+
+MINLINE int cube_i(int a)
+{
+  return a * a * a;
+}
+
+MINLINE unsigned int cube_uint(unsigned int a)
+{
+  return a * a * a;
+}
+
+MINLINE int cube_uchar(unsigned char a)
+{
+  return a * a * a;
+}
+
+MINLINE float cube_f(float a)
+{
+  return a * a * a;
+}
+
+MINLINE double cube_d(double a)
+{
+  return a * a * a;
+}
+
+// Min/max
 
 MINLINE float min_ff(float a, float b)
 {
@@ -598,7 +664,7 @@ MINLINE int integer_digits_i(const int i)
 
 /* Calculate initial guess for arg^exp based on float representation
  * This method gives a constant bias, which can be easily compensated by
- * multiplicating with bias_coeff.
+ * multiplying with bias_coeff.
  * Gives better results for exponents near 1 (e. g. 4/5).
  * exp = exponent, encoded as uint32_t
  * e2coeff = 2^(127/exponent - 127) * bias_coeff^(1/exponent), encoded as

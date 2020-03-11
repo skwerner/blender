@@ -61,8 +61,8 @@
 #include "BKE_idcode.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
-#include "BKE_library_override.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_override.h"
 #include "BKE_linestyle.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
@@ -72,6 +72,7 @@
 #include "BKE_particle.h"
 #include "BKE_curveprofile.h"
 #include "BKE_report.h"
+#include "BKE_scene.h"
 #include "BKE_screen.h"
 #include "BKE_shader_fx.h"
 
@@ -443,7 +444,7 @@ static void id_search_cb_objects_from_scene(const bContext *C,
 }
 
 /* ID Search browse menu, open */
-static uiBlock *id_search_menu(bContext *C, ARegion *ar, void *arg_litem)
+static uiBlock *id_search_menu(bContext *C, ARegion *region, void *arg_litem)
 {
   static TemplateID template_ui;
   PointerRNA active_item_ptr;
@@ -463,7 +464,7 @@ static uiBlock *id_search_menu(bContext *C, ARegion *ar, void *arg_litem)
   }
 
   return template_common_search_menu(C,
-                                     ar,
+                                     region,
                                      id_search_cb_p,
                                      &template_ui,
                                      template_ID_set_property_cb,
@@ -543,10 +544,10 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
     case UI_ID_LOCAL:
       if (id) {
         Main *bmain = CTX_data_main(C);
-        if (BKE_override_library_is_enabled() && CTX_wm_window(C)->eventstate->shift) {
+        if (BKE_lib_override_library_is_enabled() && CTX_wm_window(C)->eventstate->shift) {
           if (ID_IS_OVERRIDABLE_LIBRARY(id)) {
             /* Only remap that specific ID usage to overriding local data-block. */
-            ID *override_id = BKE_override_library_create_from_id(bmain, id, false);
+            ID *override_id = BKE_lib_override_library_create_from_id(bmain, id, false);
             if (override_id != NULL) {
               BKE_main_id_clear_newpoins(bmain);
 
@@ -556,7 +557,7 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
           }
         }
         else {
-          if (id_make_local(bmain, id, false, false)) {
+          if (BKE_lib_id_make_local(bmain, id, false, 0)) {
             BKE_main_id_clear_newpoins(bmain);
 
             /* reassign to get get proper updates/notifiers */
@@ -569,7 +570,7 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
       break;
     case UI_ID_OVERRIDE:
       if (id && id->override_library) {
-        BKE_override_library_free(&id->override_library, true);
+        BKE_lib_override_library_free(&id->override_library, true);
         /* reassign to get get proper updates/notifiers */
         idptr = RNA_property_pointer_get(&template_ui->ptr, template_ui->prop);
         RNA_property_pointer_set(&template_ui->ptr, template_ui->prop, idptr, NULL);
@@ -812,7 +813,7 @@ static void template_ID(bContext *C,
   }
 
   if (text) {
-    /* Add label resepecting the seperated layout property split state. */
+    /* Add label resepecting the separated layout property split state. */
     layout = uiItemL_respect_property_split(layout, text, ICON_NONE);
   }
 
@@ -878,7 +879,7 @@ static void template_ID(bContext *C,
         UI_but_flag_enable(but, UI_BUT_DISABLED);
       }
       else {
-        const bool disabled = (!id_make_local(CTX_data_main(C), id, true /* test */, false) ||
+        const bool disabled = (!BKE_lib_id_make_local(CTX_data_main(C), id, true /* test */, 0) ||
                                (idfrom && idfrom->lib));
         but = uiDefIconBut(block,
                            UI_BTYPE_BUT,
@@ -893,7 +894,7 @@ static void template_ID(bContext *C,
                            0,
                            0,
                            0,
-                           BKE_override_library_is_enabled() ?
+                           BKE_lib_override_library_is_enabled() ?
                                TIP_("Direct linked library data-block, click to make local, "
                                     "Shift + Click to create a library override") :
                                TIP_("Direct linked library data-block, click to make local"));
@@ -1822,7 +1823,9 @@ static int modifier_can_delete(ModifierData *md)
     short particle_type = ((ParticleSystemModifierData *)md)->psys->part->type;
     if (particle_type == PART_FLUID || particle_type == PART_FLUID_FLIP ||
         particle_type == PART_FLUID_FOAM || particle_type == PART_FLUID_SPRAY ||
-        particle_type == PART_FLUID_BUBBLE || particle_type == PART_FLUID_TRACER) {
+        particle_type == PART_FLUID_BUBBLE || particle_type == PART_FLUID_TRACER ||
+        particle_type == PART_FLUID_SPRAYFOAM || particle_type == PART_FLUID_SPRAYBUBBLE ||
+        particle_type == PART_FLUID_FOAMBUBBLE || particle_type == PART_FLUID_SPRAYFOAMBUBBLE) {
       return 0;
     }
   }
@@ -2720,7 +2723,7 @@ void uiTemplatePreview(uiLayout *layout,
   uiLayout *row, *col;
   uiBlock *block;
   uiPreview *ui_preview = NULL;
-  ARegion *ar;
+  ARegion *region;
 
   Material *ma = NULL;
   Tex *tex = (Tex *)id;
@@ -2771,14 +2774,14 @@ void uiTemplatePreview(uiLayout *layout,
   }
 
   /* Find or add the uiPreview to the current Region. */
-  ar = CTX_wm_region(C);
-  ui_preview = BLI_findstring(&ar->ui_previews, preview_id, offsetof(uiPreview, preview_id));
+  region = CTX_wm_region(C);
+  ui_preview = BLI_findstring(&region->ui_previews, preview_id, offsetof(uiPreview, preview_id));
 
   if (!ui_preview) {
     ui_preview = MEM_callocN(sizeof(uiPreview), "uiPreview");
     BLI_strncpy(ui_preview->preview_id, preview_id, sizeof(ui_preview->preview_id));
     ui_preview->height = (short)(UI_UNIT_Y * 7.6f);
-    BLI_addtail(&ar->ui_previews, ui_preview);
+    BLI_addtail(&region->ui_previews, ui_preview);
   }
 
   if (ui_preview->height < UI_UNIT_Y) {
@@ -2843,8 +2846,13 @@ void uiTemplatePreview(uiLayout *layout,
       col = uiLayoutColumn(row, true);
       uiLayoutSetScaleX(col, 1.5);
       uiItemR(col, &material_ptr, "preview_render_type", UI_ITEM_R_EXPAND, "", ICON_NONE);
-      uiItemS(col);
-      uiItemR(col, &material_ptr, "use_preview_world", 0, "", ICON_WORLD);
+
+      /* EEVEE preview file has baked lighting so use_preview_world has no effect,
+       * just hide the option until this feature is supported. */
+      if (!BKE_scene_uses_blender_eevee(CTX_data_scene(C))) {
+        uiItemS(col);
+        uiItemR(col, &material_ptr, "use_preview_world", 0, "", ICON_WORLD);
+      }
     }
 
     if (pr_texture) {
@@ -3039,14 +3047,14 @@ static void colorband_tools_dofunc(bContext *C, void *coba_v, int event)
   ED_region_tag_redraw(CTX_wm_region(C));
 }
 
-static uiBlock *colorband_tools_func(bContext *C, ARegion *ar, void *coba_v)
+static uiBlock *colorband_tools_func(bContext *C, ARegion *region, void *coba_v)
 {
   uiStyle *style = UI_style_get_dpi();
   ColorBand *coba = coba_v;
   uiBlock *block;
   short yco = 0, menuwidth = 10 * UI_UNIT_X;
 
-  block = UI_block_begin(C, ar, __func__, UI_EMBOSS_PULLDOWN);
+  block = UI_block_begin(C, region, __func__, UI_EMBOSS_PULLDOWN);
   UI_block_func_butmenu_set(block, colorband_tools_dofunc, coba);
 
   uiLayout *layout = UI_block_layout(block,
@@ -3435,7 +3443,7 @@ typedef struct IconViewMenuArgs {
 } IconViewMenuArgs;
 
 /* ID Search browse menu, open */
-static uiBlock *ui_icon_view_menu_cb(bContext *C, ARegion *ar, void *arg_litem)
+static uiBlock *ui_icon_view_menu_cb(bContext *C, ARegion *region, void *arg_litem)
 {
   static IconViewMenuArgs args;
   uiBlock *block;
@@ -3451,7 +3459,7 @@ static uiBlock *ui_icon_view_menu_cb(bContext *C, ARegion *ar, void *arg_litem)
   w = UI_UNIT_X * (args.icon_scale);
   h = UI_UNIT_X * (args.icon_scale + args.show_labels);
 
-  block = UI_block_begin(C, ar, "_popup", UI_EMBOSS_PULLDOWN);
+  block = UI_block_begin(C, region, "_popup", UI_EMBOSS_PULLDOWN);
   UI_block_flag_enable(block, UI_BLOCK_LOOP | UI_BLOCK_NO_FLIP);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
@@ -3859,14 +3867,14 @@ static void curvemap_buttons_delete(bContext *C, void *cb_v, void *cumap_v)
 }
 
 /* NOTE: this is a block-menu, needs 0 events, otherwise the menu closes */
-static uiBlock *curvemap_clipping_func(bContext *C, ARegion *ar, void *cumap_v)
+static uiBlock *curvemap_clipping_func(bContext *C, ARegion *region, void *cumap_v)
 {
   CurveMapping *cumap = cumap_v;
   uiBlock *block;
   uiBut *bt;
   float width = 8 * UI_UNIT_X;
 
-  block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  block = UI_block_begin(C, region, __func__, UI_EMBOSS);
   UI_block_flag_enable(block, UI_BLOCK_KEEP_OPEN | UI_BLOCK_MOVEMOUSE_QUIT);
   UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
 
@@ -4007,12 +4015,12 @@ static void curvemap_tools_dofunc(bContext *C, void *cumap_v, int event)
 }
 
 static uiBlock *curvemap_tools_func(
-    bContext *C, ARegion *ar, CurveMapping *cumap, bool show_extend, int reset_mode)
+    bContext *C, ARegion *region, CurveMapping *cumap, bool show_extend, int reset_mode)
 {
   uiBlock *block;
   short yco = 0, menuwidth = 10 * UI_UNIT_X;
 
-  block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  block = UI_block_begin(C, region, __func__, UI_EMBOSS);
   UI_block_func_butmenu_set(block, curvemap_tools_dofunc, cumap);
 
   {
@@ -4135,24 +4143,24 @@ static uiBlock *curvemap_tools_func(
   return block;
 }
 
-static uiBlock *curvemap_tools_posslope_func(bContext *C, ARegion *ar, void *cumap_v)
+static uiBlock *curvemap_tools_posslope_func(bContext *C, ARegion *region, void *cumap_v)
 {
-  return curvemap_tools_func(C, ar, cumap_v, true, UICURVE_FUNC_RESET_POS);
+  return curvemap_tools_func(C, region, cumap_v, true, UICURVE_FUNC_RESET_POS);
 }
 
-static uiBlock *curvemap_tools_negslope_func(bContext *C, ARegion *ar, void *cumap_v)
+static uiBlock *curvemap_tools_negslope_func(bContext *C, ARegion *region, void *cumap_v)
 {
-  return curvemap_tools_func(C, ar, cumap_v, true, UICURVE_FUNC_RESET_NEG);
+  return curvemap_tools_func(C, region, cumap_v, true, UICURVE_FUNC_RESET_NEG);
 }
 
-static uiBlock *curvemap_brush_tools_func(bContext *C, ARegion *ar, void *cumap_v)
+static uiBlock *curvemap_brush_tools_func(bContext *C, ARegion *region, void *cumap_v)
 {
-  return curvemap_tools_func(C, ar, cumap_v, false, UICURVE_FUNC_RESET_NEG);
+  return curvemap_tools_func(C, region, cumap_v, false, UICURVE_FUNC_RESET_NEG);
 }
 
-static uiBlock *curvemap_brush_tools_negslope_func(bContext *C, ARegion *ar, void *cumap_v)
+static uiBlock *curvemap_brush_tools_negslope_func(bContext *C, ARegion *region, void *cumap_v)
 {
-  return curvemap_tools_func(C, ar, cumap_v, false, UICURVE_FUNC_RESET_POS);
+  return curvemap_tools_func(C, region, cumap_v, false, UICURVE_FUNC_RESET_POS);
 }
 
 static void curvemap_buttons_redraw(bContext *C, void *UNUSED(arg1), void *UNUSED(arg2))
@@ -4555,14 +4563,14 @@ static void CurveProfile_presets_dofunc(bContext *C, void *profile_v, int event)
   ED_region_tag_redraw(CTX_wm_region(C));
 }
 
-static uiBlock *CurveProfile_presets_func(bContext *C, ARegion *ar, CurveProfile *profile)
+static uiBlock *CurveProfile_presets_func(bContext *C, ARegion *region, CurveProfile *profile)
 {
   uiBlock *block;
   short yco = 0;
   short menuwidth = 12 * UI_UNIT_X;
   menuwidth = 0;
 
-  block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  block = UI_block_begin(C, region, __func__, UI_EMBOSS);
   UI_block_func_butmenu_set(block, CurveProfile_presets_dofunc, profile);
 
   uiDefIconTextBut(block,
@@ -4599,7 +4607,7 @@ static uiBlock *CurveProfile_presets_func(bContext *C, ARegion *ar, CurveProfile
                    UI_BTYPE_BUT_MENU,
                    1,
                    ICON_BLANK1,
-                   IFACE_("Cornice Moulding"),
+                   IFACE_("Cornice Molding"),
                    0,
                    yco -= UI_UNIT_Y,
                    menuwidth,
@@ -4614,7 +4622,7 @@ static uiBlock *CurveProfile_presets_func(bContext *C, ARegion *ar, CurveProfile
                    UI_BTYPE_BUT_MENU,
                    1,
                    ICON_BLANK1,
-                   IFACE_("Crown Moulding"),
+                   IFACE_("Crown Molding"),
                    0,
                    yco -= UI_UNIT_Y,
                    menuwidth,
@@ -4647,9 +4655,9 @@ static uiBlock *CurveProfile_presets_func(bContext *C, ARegion *ar, CurveProfile
   return block;
 }
 
-static uiBlock *CurveProfile_buttons_presets(bContext *C, ARegion *ar, void *profile_v)
+static uiBlock *CurveProfile_buttons_presets(bContext *C, ARegion *region, void *profile_v)
 {
-  return CurveProfile_presets_func(C, ar, (CurveProfile *)profile_v);
+  return CurveProfile_presets_func(C, region, (CurveProfile *)profile_v);
 }
 
 /* Only for CurveProfile tools block */
@@ -4675,13 +4683,13 @@ static void CurveProfile_tools_dofunc(bContext *C, void *profile_v, int event)
   ED_region_tag_redraw(CTX_wm_region(C));
 }
 
-static uiBlock *CurveProfile_tools_func(bContext *C, ARegion *ar, CurveProfile *profile)
+static uiBlock *CurveProfile_tools_func(bContext *C, ARegion *region, CurveProfile *profile)
 {
   uiBlock *block;
   short yco = 0;
   short menuwidth = 10 * UI_UNIT_X;
 
-  block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  block = UI_block_begin(C, region, __func__, UI_EMBOSS);
   UI_block_func_butmenu_set(block, CurveProfile_tools_dofunc, profile);
 
   uiDefIconTextBut(block,
@@ -4721,9 +4729,9 @@ static uiBlock *CurveProfile_tools_func(bContext *C, ARegion *ar, CurveProfile *
   return block;
 }
 
-static uiBlock *CurveProfile_buttons_tools(bContext *C, ARegion *ar, void *profile_v)
+static uiBlock *CurveProfile_buttons_tools(bContext *C, ARegion *region, void *profile_v)
 {
-  return CurveProfile_tools_func(C, ar, (CurveProfile *)profile_v);
+  return CurveProfile_tools_func(C, region, (CurveProfile *)profile_v);
 }
 
 static void CurveProfile_buttons_zoom_in(bContext *C, void *profile_v, void *UNUSED(arg))
@@ -5013,7 +5021,7 @@ static void CurveProfile_buttons_layout(uiLayout *layout, PointerRNA *ptr, RNAUp
                       0.0,
                       0.0,
                       0.0,
-                      TIP_("Set the point's handle type to sharp."));
+                      TIP_("Set the point's handle type to sharp"));
     if (point_last_or_first) {
       UI_but_flag_enable(bt, UI_BUT_DISABLED);
     }
@@ -5031,7 +5039,7 @@ static void CurveProfile_buttons_layout(uiLayout *layout, PointerRNA *ptr, RNAUp
                       0.0,
                       0.0,
                       0.0,
-                      TIP_("Set the point's handle type to sharp."));
+                      TIP_("Set the point's handle type to smooth"));
     UI_but_funcN_set(bt, CurveProfile_buttons_setcurved, MEM_dupallocN(cb), profile);
     if (point_last_or_first) {
       UI_but_flag_enable(bt, UI_BUT_DISABLED);
@@ -5377,6 +5385,21 @@ void uiTemplateColorPicker(uiLayout *layout,
   }
 }
 
+static void ui_template_palette_menu(bContext *UNUSED(C), uiLayout *layout, void *UNUSED(but_p))
+{
+  uiLayout *row;
+
+  uiItemL(layout, IFACE_("Sort by:"), ICON_NONE);
+  row = uiLayoutRow(layout, false);
+  uiItemEnumO_value(row, IFACE_("Hue"), ICON_NONE, "PALETTE_OT_sort", "type", 1);
+  row = uiLayoutRow(layout, false);
+  uiItemEnumO_value(row, IFACE_("Saturation"), ICON_NONE, "PALETTE_OT_sort", "type", 2);
+  row = uiLayoutRow(layout, false);
+  uiItemEnumO_value(row, IFACE_("Value"), ICON_NONE, "PALETTE_OT_sort", "type", 3);
+  row = uiLayoutRow(layout, false);
+  uiItemEnumO_value(row, IFACE_("Luminance"), ICON_NONE, "PALETTE_OT_sort", "type", 4);
+}
+
 void uiTemplatePalette(uiLayout *layout,
                        PointerRNA *ptr,
                        const char *propname,
@@ -5388,6 +5411,8 @@ void uiTemplatePalette(uiLayout *layout,
   PaletteColor *color;
   uiBlock *block;
   uiLayout *col;
+  uiBut *but = NULL;
+
   int row_cols = 0, col_id = 0;
   int cols_per_row = MAX2(uiLayoutGetWidth(layout) / UI_UNIT_X, 1);
 
@@ -5429,6 +5454,37 @@ void uiTemplatePalette(uiLayout *layout,
                 UI_UNIT_X,
                 UI_UNIT_Y,
                 NULL);
+  if (color) {
+    but = uiDefIconButO(block,
+                        UI_BTYPE_BUT,
+                        "PALETTE_OT_color_move",
+                        WM_OP_INVOKE_DEFAULT,
+                        ICON_TRIA_UP,
+                        0,
+                        0,
+                        UI_UNIT_X,
+                        UI_UNIT_Y,
+                        NULL);
+    UI_but_operator_ptr_get(but);
+    RNA_enum_set(but->opptr, "type", -1);
+
+    but = uiDefIconButO(block,
+                        UI_BTYPE_BUT,
+                        "PALETTE_OT_color_move",
+                        WM_OP_INVOKE_DEFAULT,
+                        ICON_TRIA_DOWN,
+                        0,
+                        0,
+                        UI_UNIT_X,
+                        UI_UNIT_Y,
+                        NULL);
+    UI_but_operator_ptr_get(but);
+    RNA_enum_set(but->opptr, "type", 1);
+
+    /* Menu. */
+    uiDefIconMenuBut(
+        block, ui_template_palette_menu, NULL, ICON_SORTSIZE, 0, 0, UI_UNIT_X, UI_UNIT_Y, "");
+  }
 
   col = uiLayoutColumn(layout, true);
   uiLayoutRow(col, true);
@@ -5926,7 +5982,7 @@ void uiTemplateList(uiLayout *layout,
   uiListType *ui_list_type;
   uiList *ui_list = NULL;
   uiListDyn *dyn_data;
-  ARegion *ar;
+  ARegion *region;
   uiListDrawItemFunc draw_item;
   uiListDrawFilterFunc draw_filter;
   uiListFilterItemsFunc filter_items;
@@ -6018,16 +6074,16 @@ void uiTemplateList(uiLayout *layout,
       ui_list_id, sizeof(ui_list_id), "%s_%s", ui_list_type->idname, list_id ? list_id : "");
 
   /* Allows to work in popups. */
-  ar = CTX_wm_menu(C);
-  if (ar == NULL) {
-    ar = CTX_wm_region(C);
+  region = CTX_wm_menu(C);
+  if (region == NULL) {
+    region = CTX_wm_region(C);
   }
-  ui_list = BLI_findstring(&ar->ui_lists, ui_list_id, offsetof(uiList, list_id));
+  ui_list = BLI_findstring(&region->ui_lists, ui_list_id, offsetof(uiList, list_id));
 
   if (!ui_list) {
     ui_list = MEM_callocN(sizeof(uiList), "uiList");
     BLI_strncpy(ui_list->list_id, ui_list_id, sizeof(ui_list->list_id));
-    BLI_addtail(&ar->ui_lists, ui_list);
+    BLI_addtail(&region->ui_lists, ui_list);
     ui_list->list_grip = -UI_LIST_AUTO_SIZE_THRESHOLD; /* Force auto size by default. */
     if (sort_reverse) {
       ui_list->filter_sort_flag |= UILST_FLT_SORT_REVERSE;
@@ -6863,7 +6919,7 @@ static char *progress_tooltip_func(bContext *UNUSED(C), void *argN, const char *
 
 void uiTemplateRunningJobs(uiLayout *layout, bContext *C)
 {
-  bScreen *screen = CTX_wm_screen(C);
+  Main *bmain = CTX_data_main(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   ScrArea *sa = CTX_wm_area(C);
   uiBlock *block;
@@ -6877,7 +6933,7 @@ void uiTemplateRunningJobs(uiLayout *layout, bContext *C)
 
   Scene *scene;
   /* another scene can be rendering too, for example via compositor */
-  for (scene = CTX_data_main(C)->scenes.first; scene; scene = scene->id.next) {
+  for (scene = bmain->scenes.first; scene; scene = scene->id.next) {
     if (WM_jobs_test(wm, scene, WM_JOB_TYPE_ANY)) {
       handle_event = B_STOPOTHER;
       icon = ICON_NONE;
@@ -7045,7 +7101,7 @@ void uiTemplateRunningJobs(uiLayout *layout, bContext *C)
     }
   }
 
-  if (screen->animtimer) {
+  if (ED_screen_animation_no_scrub(wm)) {
     uiDefIconTextBut(block,
                      UI_BTYPE_BUT,
                      B_STOPANIM,
@@ -7408,13 +7464,13 @@ typedef struct ComponentMenuArgs {
   char propname[64]; /* XXX arbitrary */
 } ComponentMenuArgs;
 /* NOTE: this is a block-menu, needs 0 events, otherwise the menu closes */
-static uiBlock *component_menu(bContext *C, ARegion *ar, void *args_v)
+static uiBlock *component_menu(bContext *C, ARegion *region, void *args_v)
 {
   ComponentMenuArgs *args = (ComponentMenuArgs *)args_v;
   uiBlock *block;
   uiLayout *layout;
 
-  block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+  block = UI_block_begin(C, region, __func__, UI_EMBOSS);
   UI_block_flag_enable(block, UI_BLOCK_KEEP_OPEN);
 
   layout = uiLayoutColumn(UI_block_layout(block,

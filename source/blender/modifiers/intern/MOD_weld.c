@@ -37,6 +37,7 @@
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_deform.h"
@@ -45,6 +46,8 @@
 #include "BKE_mesh.h"
 
 #include "DEG_depsgraph.h"
+
+#include "MOD_modifiertypes.h"
 
 //#define USE_WELD_DEBUG
 //#define USE_WELD_NORMALS
@@ -1602,6 +1605,7 @@ static bool bvhtree_weld_overlap_cb(void *userdata, int index_a, int index_b, in
     struct WeldOverlapData *data = userdata;
     const MVert *mvert = data->mvert;
     const float dist_sq = len_squared_v3v3(mvert[index_a].co, mvert[index_b].co);
+    BLI_assert(dist_sq <= ((data->merge_dist_sq + FLT_EPSILON) * 3));
     return dist_sq <= data->merge_dist_sq;
   }
   return false;
@@ -1625,17 +1629,20 @@ static Mesh *weldModifier_doWeld(WeldModifierData *wmd, const ModifierEvalContex
   totvert = mesh->totvert;
 
   /* Vertex Group. */
-  const int defgrp_index = defgroup_name_index(ob, wmd->defgrp_name);
+  const int defgrp_index = BKE_object_defgroup_name_index(ob, wmd->defgrp_name);
   if (defgrp_index != -1) {
     MDeformVert *dvert, *dv;
     dvert = CustomData_get_layer(&mesh->vdata, CD_MDEFORMVERT);
-    dv = &dvert[0];
-    v_mask = BLI_BITMAP_NEW(totvert, __func__);
-    for (i = 0; i < totvert; i++, dv++) {
-      const bool found = defvert_find_weight(dv, defgrp_index) > 0.0f;
-      if (found) {
-        BLI_BITMAP_ENABLE(v_mask, i);
-        v_mask_act++;
+    if (dvert) {
+      const bool invert_vgroup = (wmd->flag & MOD_WELD_INVERT_VGROUP) != 0;
+      dv = &dvert[0];
+      v_mask = BLI_BITMAP_NEW(totvert, __func__);
+      for (i = 0; i < totvert; i++, dv++) {
+        const bool found = BKE_defvert_find_weight(dv, defgrp_index) > 0.0f;
+        if (found != invert_vgroup) {
+          BLI_BITMAP_ENABLE(v_mask, i);
+          v_mask_act++;
+        }
       }
     }
   }
@@ -1644,7 +1651,7 @@ static Mesh *weldModifier_doWeld(WeldModifierData *wmd, const ModifierEvalContex
   /* TODO: For a better performanse use KD-Tree. */
   struct BVHTreeFromMesh treedata;
   BVHTree *bvhtree = bvhtree_from_mesh_verts_ex(
-      &treedata, mvert, totvert, false, v_mask, v_mask_act, wmd->merge_dist, 2, 6, 0, NULL);
+      &treedata, mvert, totvert, false, v_mask, v_mask_act, wmd->merge_dist / 2, 2, 6, 0, NULL);
 
   if (v_mask) {
     MEM_freeN(v_mask);
@@ -1656,7 +1663,7 @@ static Mesh *weldModifier_doWeld(WeldModifierData *wmd, const ModifierEvalContex
 
   struct WeldOverlapData data;
   data.mvert = mvert;
-  data.merge_dist_sq = SQUARE(wmd->merge_dist);
+  data.merge_dist_sq = square_f(wmd->merge_dist);
 
   uint overlap_len;
   BVHTreeOverlap *overlap = BLI_bvhtree_overlap_ex(bvhtree,
@@ -1883,6 +1890,18 @@ static void initData(ModifierData *md)
   wmd->defgrp_name[0] = '\0';
 }
 
+static void requiredDataMask(Object *UNUSED(ob),
+                             ModifierData *md,
+                             CustomData_MeshMasks *r_cddata_masks)
+{
+  WeldModifierData *wmd = (WeldModifierData *)md;
+
+  /* Ask for vertexgroups if we need them. */
+  if (wmd->defgrp_name[0] != '\0') {
+    r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+  }
+}
+
 ModifierTypeInfo modifierType_Weld = {
     /* name */ "Weld",
     /* structName */ "WeldModifierData",
@@ -1901,7 +1920,7 @@ ModifierTypeInfo modifierType_Weld = {
     /* applyModifier */ applyModifier,
 
     /* initData */ initData,
-    /* requiredDataMask */ NULL,
+    /* requiredDataMask */ requiredDataMask,
     /* freeData */ NULL,
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,

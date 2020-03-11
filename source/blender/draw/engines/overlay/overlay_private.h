@@ -35,6 +35,7 @@ typedef struct OVERLAY_FramebufferList {
   struct GPUFrameBuffer *overlay_color_only_fb;
   struct GPUFrameBuffer *overlay_in_front_fb;
   struct GPUFrameBuffer *overlay_line_in_front_fb;
+  struct GPUFrameBuffer *overlay_xray_depth_copy_fb;
   struct GPUFrameBuffer *outlines_prepass_fb;
   struct GPUFrameBuffer *outlines_resolve_fb;
 } OVERLAY_FramebufferList;
@@ -55,8 +56,12 @@ typedef struct OVERLAY_PassList {
   DRWPass *armature_ps[2];
   DRWPass *armature_bone_select_ps;
   DRWPass *armature_transp_ps;
+  DRWPass *background_ps;
+  DRWPass *clipping_frustum_ps;
   DRWPass *edit_curve_wire_ps[2];
   DRWPass *edit_curve_handle_ps;
+  DRWPass *edit_gpencil_ps;
+  DRWPass *edit_gpencil_gizmos_ps;
   DRWPass *edit_lattice_ps;
   DRWPass *edit_mesh_depth_ps[2];
   DRWPass *edit_mesh_verts_ps[2];
@@ -73,10 +78,10 @@ typedef struct OVERLAY_PassList {
   DRWPass *extra_blend_ps;
   DRWPass *extra_centers_ps;
   DRWPass *extra_grid_ps;
+  DRWPass *gpencil_canvas_ps;
   DRWPass *facing_ps;
   DRWPass *grid_ps;
-  DRWPass *image_background_under_ps;
-  DRWPass *image_background_over_ps;
+  DRWPass *image_background_ps;
   DRWPass *image_empties_ps;
   DRWPass *image_empties_back_ps;
   DRWPass *image_empties_blend_ps;
@@ -93,6 +98,7 @@ typedef struct OVERLAY_PassList {
   DRWPass *sculpt_mask_ps;
   DRWPass *wireframe_ps;
   DRWPass *wireframe_xray_ps;
+  DRWPass *xray_fade_ps;
 } OVERLAY_PassList;
 
 /* Data used by GLSL shader. To be used as UBO. */
@@ -177,6 +183,7 @@ typedef struct OVERLAY_ExtraCallBuffers {
 typedef struct OVERLAY_ArmatureCallBuffers {
   DRWCallBuffer *box_outline;
   DRWCallBuffer *box_solid;
+  DRWCallBuffer *box_transp;
 
   DRWCallBuffer *dof_lines;
   DRWCallBuffer *dof_sphere;
@@ -184,20 +191,25 @@ typedef struct OVERLAY_ArmatureCallBuffers {
   DRWCallBuffer *envelope_distance;
   DRWCallBuffer *envelope_outline;
   DRWCallBuffer *envelope_solid;
+  DRWCallBuffer *envelope_transp;
 
   DRWCallBuffer *octa_outline;
   DRWCallBuffer *octa_solid;
+  DRWCallBuffer *octa_transp;
 
   DRWCallBuffer *point_outline;
   DRWCallBuffer *point_solid;
+  DRWCallBuffer *point_transp;
 
   DRWCallBuffer *stick;
 
   DRWCallBuffer *wire;
 
-  DRWShadingGroup *custom_solid;
   DRWShadingGroup *custom_outline;
+  DRWShadingGroup *custom_solid;
+  DRWShadingGroup *custom_transp;
   DRWShadingGroup *custom_wire;
+  GHash *custom_shapes_transp_ghash;
   GHash *custom_shapes_ghash;
 } OVERLAY_ArmatureCallBuffers;
 
@@ -210,6 +222,8 @@ typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *edit_curve_points_grp;
   DRWShadingGroup *edit_lattice_points_grp;
   DRWShadingGroup *edit_lattice_wires_grp;
+  DRWShadingGroup *edit_gpencil_points_grp;
+  DRWShadingGroup *edit_gpencil_wires_grp;
   DRWShadingGroup *edit_mesh_depth_grp[2];
   DRWShadingGroup *edit_mesh_faces_grp[2];
   DRWShadingGroup *edit_mesh_faces_cage_grp[2];
@@ -229,6 +243,7 @@ typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *motion_path_lines_grp;
   DRWShadingGroup *motion_path_points_grp;
   DRWShadingGroup *outlines_grp;
+  DRWShadingGroup *outlines_gpencil_grp;
   DRWShadingGroup *paint_surf_grp;
   DRWShadingGroup *paint_wire_grp;
   DRWShadingGroup *paint_wire_selected_grp;
@@ -265,8 +280,10 @@ typedef struct OVERLAY_PrivateData {
   bool hide_overlays;
   bool xray_enabled;
   bool xray_enabled_and_not_wire;
+  float xray_opacity;
   short v3d_flag;     /* TODO move to View3DOverlay */
   short v3d_gridflag; /* TODO move to View3DOverlay */
+  int cfra;
   DRWState clipping_state;
   OVERLAY_ShadingData shdata;
 
@@ -294,6 +311,7 @@ typedef struct OVERLAY_PrivateData {
   struct {
     bool transparent;
     bool show_relations;
+    bool do_pose_xray;
     bool do_pose_fade_geom;
   } armature;
   struct {
@@ -383,6 +401,8 @@ void OVERLAY_antialiasing_cache_init(OVERLAY_Data *vedata);
 void OVERLAY_antialiasing_cache_finish(OVERLAY_Data *vedata);
 void OVERLAY_antialiasing_start(OVERLAY_Data *vedata);
 void OVERLAY_antialiasing_end(OVERLAY_Data *vedata);
+void OVERLAY_xray_fade_draw(OVERLAY_Data *vedata);
+void OVERLAY_xray_depth_copy(OVERLAY_Data *vedata);
 
 bool OVERLAY_armature_is_pose_mode(Object *ob, const struct DRWContextState *draw_ctx);
 void OVERLAY_armature_cache_init(OVERLAY_Data *vedata);
@@ -395,14 +415,22 @@ void OVERLAY_armature_in_front_draw(OVERLAY_Data *vedata);
 void OVERLAY_pose_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_pose_draw(OVERLAY_Data *vedata);
 
+void OVERLAY_background_cache_init(OVERLAY_Data *vedata);
+void OVERLAY_background_draw(OVERLAY_Data *vedata);
+
 void OVERLAY_bone_instance_data_set_color_hint(BoneInstanceData *data, const float hint_color[4]);
 void OVERLAY_bone_instance_data_set_color(BoneInstanceData *data, const float bone_color[4]);
 
-void OVERLAY_edit_curve_init(OVERLAY_Data *vedata);
 void OVERLAY_edit_curve_cache_init(OVERLAY_Data *vedata);
 void OVERLAY_edit_curve_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_edit_surf_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_edit_curve_draw(OVERLAY_Data *vedata);
+
+void OVERLAY_edit_gpencil_cache_init(OVERLAY_Data *vedata);
+void OVERLAY_gpencil_cache_init(OVERLAY_Data *vedata);
+void OVERLAY_gpencil_cache_populate(OVERLAY_Data *vedata, Object *ob);
+void OVERLAY_gpencil_draw(OVERLAY_Data *vedata);
+void OVERLAY_edit_gpencil_draw(OVERLAY_Data *vedata);
 
 void OVERLAY_edit_lattice_cache_init(OVERLAY_Data *vedata);
 void OVERLAY_edit_lattice_cache_populate(OVERLAY_Data *vedata, Object *ob);
@@ -431,7 +459,6 @@ void OVERLAY_extra_centers_draw(OVERLAY_Data *vedata);
 
 void OVERLAY_camera_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_empty_cache_populate(OVERLAY_Data *vedata, Object *ob);
-void OVERLAY_gpencil_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_light_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_lightprobe_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_speaker_cache_populate(OVERLAY_Data *vedata, Object *ob);
@@ -474,6 +501,7 @@ void OVERLAY_image_camera_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_image_empty_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_image_cache_finish(OVERLAY_Data *vedata);
 void OVERLAY_image_draw(OVERLAY_Data *vedata);
+void OVERLAY_image_background_draw(OVERLAY_Data *vedata);
 void OVERLAY_image_in_front_draw(OVERLAY_Data *vedata);
 
 void OVERLAY_metaball_cache_init(OVERLAY_Data *vedata);
@@ -525,10 +553,15 @@ GPUShader *OVERLAY_shader_armature_shape_wire(void);
 GPUShader *OVERLAY_shader_armature_sphere(bool use_outline);
 GPUShader *OVERLAY_shader_armature_stick(void);
 GPUShader *OVERLAY_shader_armature_wire(void);
+GPUShader *OVERLAY_shader_background(void);
+GPUShader *OVERLAY_shader_clipbound(void);
 GPUShader *OVERLAY_shader_depth_only(void);
 GPUShader *OVERLAY_shader_edit_curve_handle(void);
 GPUShader *OVERLAY_shader_edit_curve_point(void);
 GPUShader *OVERLAY_shader_edit_curve_wire(void);
+GPUShader *OVERLAY_shader_edit_gpencil_guide_point(void);
+GPUShader *OVERLAY_shader_edit_gpencil_point(void);
+GPUShader *OVERLAY_shader_edit_gpencil_wire(void);
 GPUShader *OVERLAY_shader_edit_lattice_point(void);
 GPUShader *OVERLAY_shader_edit_lattice_wire(void);
 GPUShader *OVERLAY_shader_edit_mesh_analysis(void);
@@ -546,12 +579,14 @@ GPUShader *OVERLAY_shader_extra_wire(bool use_object);
 GPUShader *OVERLAY_shader_extra_loose_point(void);
 GPUShader *OVERLAY_shader_extra_point(void);
 GPUShader *OVERLAY_shader_facing(void);
+GPUShader *OVERLAY_shader_gpencil_canvas(void);
 GPUShader *OVERLAY_shader_grid(void);
 GPUShader *OVERLAY_shader_image(void);
 GPUShader *OVERLAY_shader_motion_path_line(void);
 GPUShader *OVERLAY_shader_motion_path_vert(void);
 GPUShader *OVERLAY_shader_uniform_color(void);
 GPUShader *OVERLAY_shader_outline_prepass(bool use_wire);
+GPUShader *OVERLAY_shader_outline_prepass_gpencil(void);
 GPUShader *OVERLAY_shader_extra_grid(void);
 GPUShader *OVERLAY_shader_outline_detect(void);
 GPUShader *OVERLAY_shader_paint_face(void);
@@ -566,6 +601,7 @@ GPUShader *OVERLAY_shader_sculpt_mask(void);
 GPUShader *OVERLAY_shader_volume_velocity(bool use_needle);
 GPUShader *OVERLAY_shader_wireframe(void);
 GPUShader *OVERLAY_shader_wireframe_select(void);
+GPUShader *OVERLAY_shader_xray_fade(void);
 
 OVERLAY_InstanceFormats *OVERLAY_shader_instance_formats_get(void);
 

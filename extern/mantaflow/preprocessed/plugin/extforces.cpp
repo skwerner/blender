@@ -1335,7 +1335,7 @@ struct KnConfForce : public KernelBase {
 
 void vorticityConfinement(MACGrid &vel,
                           const FlagGrid &flags,
-                          Real strengthGlobal = 0,
+                          Real strength = 0,
                           const Grid<Real> *strengthCell = NULL)
 {
   Grid<Vec3> velCenter(flags.getParent()), curl(flags.getParent()), force(flags.getParent());
@@ -1344,7 +1344,7 @@ void vorticityConfinement(MACGrid &vel,
   GetCentered(velCenter, vel);
   CurlOp(velCenter, curl);
   GridNorm(norm, curl);
-  KnConfForce(force, norm, curl, strengthGlobal, strengthCell);
+  KnConfForce(force, norm, curl, strength, strengthCell);
   KnApplyForceField(flags, vel, force, NULL, true, false);
 }
 static PyObject *_W_8(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
@@ -1359,11 +1359,11 @@ static PyObject *_W_8(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
       ArgLocker _lock;
       MACGrid &vel = *_args.getPtr<MACGrid>("vel", 0, &_lock);
       const FlagGrid &flags = *_args.getPtr<FlagGrid>("flags", 1, &_lock);
-      Real strengthGlobal = _args.getOpt<Real>("strengthGlobal", 2, 0, &_lock);
+      Real strength = _args.getOpt<Real>("strength", 2, 0, &_lock);
       const Grid<Real> *strengthCell = _args.getPtrOpt<Grid<Real>>(
           "strengthCell", 3, NULL, &_lock);
       _retval = getPyNone();
-      vorticityConfinement(vel, flags, strengthGlobal, strengthCell);
+      vorticityConfinement(vel, flags, strength, strengthCell);
       _args.check();
     }
     pbFinalizePlugin(parent, "vorticityConfinement", !noTiming);
@@ -1468,23 +1468,50 @@ void PbRegister_setForceField()
 }
 }
 
-void dissolveSmoke(const FlagGrid &flags,
-                   Grid<Real> &density,
-                   Grid<Real> *heat = NULL,
-                   Grid<Real> *red = NULL,
-                   Grid<Real> *green = NULL,
-                   Grid<Real> *blue = NULL,
-                   int speed = 5,
-                   bool logFalloff = true)
-{
-  float dydx = 1.0f / (float)speed;  // max density/speed = dydx
-  float fac = 1.0f - dydx;
-
-  FOR_IJK_BND(density, 0)
+struct KnDissolveSmoke : public KernelBase {
+  KnDissolveSmoke(const FlagGrid &flags,
+                  Grid<Real> &density,
+                  Grid<Real> *heat,
+                  Grid<Real> *red,
+                  Grid<Real> *green,
+                  Grid<Real> *blue,
+                  int speed,
+                  bool logFalloff,
+                  float dydx,
+                  float fac)
+      : KernelBase(&flags, 0),
+        flags(flags),
+        density(density),
+        heat(heat),
+        red(red),
+        green(green),
+        blue(blue),
+        speed(speed),
+        logFalloff(logFalloff),
+        dydx(dydx),
+        fac(fac)
   {
+    runMessage();
+    run();
+  }
+  inline void op(int i,
+                 int j,
+                 int k,
+                 const FlagGrid &flags,
+                 Grid<Real> &density,
+                 Grid<Real> *heat,
+                 Grid<Real> *red,
+                 Grid<Real> *green,
+                 Grid<Real> *blue,
+                 int speed,
+                 bool logFalloff,
+                 float dydx,
+                 float fac) const
+  {
+
     bool curFluid = flags.isFluid(i, j, k);
     if (!curFluid)
-      continue;
+      return;
 
     if (logFalloff) {
       density(i, j, k) *= fac;
@@ -1517,6 +1544,111 @@ void dissolveSmoke(const FlagGrid &flags,
       }
     }
   }
+  inline const FlagGrid &getArg0()
+  {
+    return flags;
+  }
+  typedef FlagGrid type0;
+  inline Grid<Real> &getArg1()
+  {
+    return density;
+  }
+  typedef Grid<Real> type1;
+  inline Grid<Real> *getArg2()
+  {
+    return heat;
+  }
+  typedef Grid<Real> type2;
+  inline Grid<Real> *getArg3()
+  {
+    return red;
+  }
+  typedef Grid<Real> type3;
+  inline Grid<Real> *getArg4()
+  {
+    return green;
+  }
+  typedef Grid<Real> type4;
+  inline Grid<Real> *getArg5()
+  {
+    return blue;
+  }
+  typedef Grid<Real> type5;
+  inline int &getArg6()
+  {
+    return speed;
+  }
+  typedef int type6;
+  inline bool &getArg7()
+  {
+    return logFalloff;
+  }
+  typedef bool type7;
+  inline float &getArg8()
+  {
+    return dydx;
+  }
+  typedef float type8;
+  inline float &getArg9()
+  {
+    return fac;
+  }
+  typedef float type9;
+  void runMessage()
+  {
+    debMsg("Executing kernel KnDissolveSmoke ", 3);
+    debMsg("Kernel range"
+               << " x " << maxX << " y " << maxY << " z " << minZ << " - " << maxZ << " ",
+           4);
+  };
+  void operator()(const tbb::blocked_range<IndexInt> &__r) const
+  {
+    const int _maxX = maxX;
+    const int _maxY = maxY;
+    if (maxZ > 1) {
+      for (int k = __r.begin(); k != (int)__r.end(); k++)
+        for (int j = 0; j < _maxY; j++)
+          for (int i = 0; i < _maxX; i++)
+            op(i, j, k, flags, density, heat, red, green, blue, speed, logFalloff, dydx, fac);
+    }
+    else {
+      const int k = 0;
+      for (int j = __r.begin(); j != (int)__r.end(); j++)
+        for (int i = 0; i < _maxX; i++)
+          op(i, j, k, flags, density, heat, red, green, blue, speed, logFalloff, dydx, fac);
+    }
+  }
+  void run()
+  {
+    if (maxZ > 1)
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(minZ, maxZ), *this);
+    else
+      tbb::parallel_for(tbb::blocked_range<IndexInt>(0, maxY), *this);
+  }
+  const FlagGrid &flags;
+  Grid<Real> &density;
+  Grid<Real> *heat;
+  Grid<Real> *red;
+  Grid<Real> *green;
+  Grid<Real> *blue;
+  int speed;
+  bool logFalloff;
+  float dydx;
+  float fac;
+};
+
+void dissolveSmoke(const FlagGrid &flags,
+                   Grid<Real> &density,
+                   Grid<Real> *heat = NULL,
+                   Grid<Real> *red = NULL,
+                   Grid<Real> *green = NULL,
+                   Grid<Real> *blue = NULL,
+                   int speed = 5,
+                   bool logFalloff = true)
+{
+  float dydx = 1.0f / (float)speed;  // max density/speed = dydx
+  float fac = 1.0f - dydx;
+  KnDissolveSmoke(flags, density, heat, red, green, blue, speed, logFalloff, dydx, fac);
 }
 static PyObject *_W_11(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
 {

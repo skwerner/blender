@@ -21,6 +21,7 @@
  * \ingroup GHOST
  */
 
+#include "GHOST_ContextD3D.h"
 #include "GHOST_SystemWin32.h"
 #include "GHOST_EventDragnDrop.h"
 
@@ -405,6 +406,47 @@ GHOST_TSuccess GHOST_SystemWin32::disposeContext(GHOST_IContext *context)
   return GHOST_kSuccess;
 }
 
+/**
+ * Create a new offscreen DirectX 11 context.
+ * Never explicitly delete the window, use #disposeContext() instead.
+ * \return The new context (or 0 if creation failed).
+ */
+GHOST_IContext *GHOST_SystemWin32::createOffscreenContextD3D()
+{
+  GHOST_Context *context;
+
+  HWND wnd = CreateWindowA("STATIC",
+                           "Blender XR",
+                           WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
+                           0,
+                           0,
+                           64,
+                           64,
+                           NULL,
+                           NULL,
+                           GetModuleHandle(NULL),
+                           NULL);
+
+  context = new GHOST_ContextD3D(false, wnd);
+  if (context->initializeDrawingContext() == GHOST_kFailure) {
+    delete context;
+  }
+
+  return context;
+}
+
+GHOST_IContext *GHOST_SystemWin32::createOffscreenContext(GHOST_TDrawingContextType type)
+{
+  switch (type) {
+    case GHOST_kDrawingContextTypeOpenGL:
+      return createOffscreenContext();
+    case GHOST_kDrawingContextTypeD3D:
+      return createOffscreenContextD3D();
+    default:
+      return NULL;
+  }
+}
+
 bool GHOST_SystemWin32::processEvents(bool waitForEvent)
 {
   MSG msg;
@@ -443,6 +485,13 @@ bool GHOST_SystemWin32::processEvents(bool waitForEvent)
       ::DispatchMessageW(&msg);
       hasEventHandled = true;
     }
+
+    /* PeekMessage above is allowed to dispatch messages to the wndproc without us
+     * noticing, so we need to check the event manager here to see if there are
+     * events waiting in the queue.
+     */
+    hasEventHandled |= this->m_eventManager->getNumEvents() > 0;
+
   } while (waitForEvent && !hasEventHandled);
 
   return hasEventHandled;
@@ -894,6 +943,7 @@ GHOST_Event *GHOST_SystemWin32::processPointerEvent(GHOST_TEventType type,
 
   switch (type) {
     case GHOST_kEventButtonDown:
+      /* Update window tablet data to be included in event. */
       window->setTabletData(&pointerInfo.tabletData);
       eventHandled = true;
       return new GHOST_EventButton(
@@ -903,6 +953,7 @@ GHOST_Event *GHOST_SystemWin32::processPointerEvent(GHOST_TEventType type,
       return new GHOST_EventButton(
           system->getMilliSeconds(), GHOST_kEventButtonUp, window, pointerInfo.buttonMask);
     case GHOST_kEventCursorMove:
+      /* Update window tablet data to be included in event. */
       window->setTabletData(&pointerInfo.tabletData);
       eventHandled = true;
       return new GHOST_EventCursor(system->getMilliSeconds(),
@@ -996,6 +1047,20 @@ GHOST_EventKey *GHOST_SystemWin32::processKeyEvent(GHOST_WindowWin32 *window, RA
   if (key != GHOST_kKeyUnknown) {
     char utf8_char[6] = {0};
     char ascii = 0;
+    bool is_repeat = false;
+
+    /* Unlike on Linux, not all keys can send repeat events. E.g. modifier keys don't. */
+    if (keyDown) {
+      if (system->m_keycode_last_repeat_key == vk) {
+          is_repeat = true;
+      }
+      system->m_keycode_last_repeat_key = vk;
+    }
+    else {
+      if (system->m_keycode_last_repeat_key == vk) {
+        system->m_keycode_last_repeat_key = 0;
+      }
+    }
 
     wchar_t utf16[3] = {0};
     BYTE state[256] = {0};
@@ -1032,7 +1097,8 @@ GHOST_EventKey *GHOST_SystemWin32::processKeyEvent(GHOST_WindowWin32 *window, RA
                                window,
                                key,
                                ascii,
-                               utf8_char);
+                               utf8_char,
+                               is_repeat);
 
     // GHOST_PRINTF("%c\n", ascii); // we already get this info via EventPrinter
   }
@@ -1451,7 +1517,10 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
         ////////////////////////////////////////////////////////////////////////
         case WM_CLOSE:
           /* The WM_CLOSE message is sent as a signal that a window
-           * or an application should terminate. */
+           * or an application should terminate. Restore if minimized. */
+          if (IsIconic(hwnd)) {
+            ShowWindow(hwnd, SW_RESTORE);
+          }
           event = processWindowEvent(GHOST_kEventWindowClose, window);
           break;
         case WM_ACTIVATE:
@@ -1466,6 +1535,7 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, UINT msg, WPARAM wParam, 
             modifiers.clear();
             system->storeModifierKeys(modifiers);
             system->m_wheelDeltaAccum = 0;
+            system->m_keycode_last_repeat_key = 0;
             event = processWindowEvent(LOWORD(wParam) ? GHOST_kEventWindowActivate :
                                                         GHOST_kEventWindowDeactivate,
                                        window);

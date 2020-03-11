@@ -48,13 +48,12 @@
 #include "BLT_translation.h"
 
 #include "BKE_appdir.h"
-#include "BKE_cdderivedmesh.h"
 #include "BKE_editmesh.h"
 #include "BKE_global.h"
 #include "BKE_idcode.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_multires.h"
 #include "BKE_object.h"
@@ -1020,7 +1019,7 @@ Mesh *BKE_modifier_get_evaluated_mesh_from_evaluated_object(Object *ob_eval,
   if (me == NULL) {
     me = (get_cage_mesh && ob_eval->runtime.mesh_deform_eval != NULL) ?
              ob_eval->runtime.mesh_deform_eval :
-             ob_eval->runtime.mesh_eval;
+             BKE_object_get_evaluated_mesh(ob_eval);
   }
 
   return me;

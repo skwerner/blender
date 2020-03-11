@@ -42,10 +42,10 @@ struct rctf;
 struct wmOperator;
 
 /* sequencer_draw.c */
-void draw_timeline_seq(const struct bContext *C, struct ARegion *ar);
+void draw_timeline_seq(const struct bContext *C, struct ARegion *region);
 void sequencer_draw_preview(const struct bContext *C,
                             struct Scene *scene,
-                            struct ARegion *ar,
+                            struct ARegion *region,
                             struct SpaceSeq *sseq,
                             int cfra,
                             int offset,
@@ -54,6 +54,7 @@ void sequencer_draw_preview(const struct bContext *C,
 void color3ubv_from_seq(struct Scene *curscene, struct Sequence *seq, unsigned char col[3]);
 
 void sequencer_special_update_set(Sequence *seq);
+float sequence_handle_size_get_clamped(struct Sequence *seq, const float pixelx);
 
 /* UNUSED */
 // void seq_reset_imageofs(struct SpaceSeq *sseq);
@@ -103,7 +104,7 @@ extern EnumPropertyItem prop_side_types[];
 struct wmKeyConfig;
 struct wmOperatorType;
 
-void SEQUENCER_OT_cut(struct wmOperatorType *ot);
+void SEQUENCER_OT_split(struct wmOperatorType *ot);
 void SEQUENCER_OT_slip(struct wmOperatorType *ot);
 void SEQUENCER_OT_mute(struct wmOperatorType *ot);
 void SEQUENCER_OT_unmute(struct wmOperatorType *ot);
@@ -177,8 +178,8 @@ void SEQUENCER_OT_image_strip_add(struct wmOperatorType *ot);
 void SEQUENCER_OT_effect_strip_add(struct wmOperatorType *ot);
 
 enum {
-  SEQ_CUT_SOFT,
-  SEQ_CUT_HARD,
+  SEQ_SPLIT_SOFT,
+  SEQ_SPLIT_HARD,
 };
 enum {
   SEQ_SELECTED,

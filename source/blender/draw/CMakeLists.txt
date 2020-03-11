@@ -52,10 +52,12 @@ set(SRC
   intern/draw_cache_extract_mesh.c
   intern/draw_cache_impl_curve.c
   intern/draw_cache_impl_displist.c
+  intern/draw_cache_impl_gpencil.c
   intern/draw_cache_impl_lattice.c
   intern/draw_cache_impl_mesh.c
   intern/draw_cache_impl_metaball.c
   intern/draw_cache_impl_particles.c
+  intern/draw_color_management.c
   intern/draw_common.c
   intern/draw_debug.c
   intern/draw_hair.c
@@ -110,23 +112,26 @@ set(SRC
   engines/workbench/workbench_studiolight.c
   engines/workbench/workbench_volume.c
   engines/external/external_engine.c
+  engines/gpencil/gpencil_antialiasing.c
   engines/gpencil/gpencil_cache_utils.c
-  engines/gpencil/gpencil_draw_cache_impl.c
-  engines/gpencil/gpencil_draw_utils.c
+  engines/gpencil/gpencil_draw_data.c
   engines/gpencil/gpencil_engine.c
   engines/gpencil/gpencil_engine.h
   engines/gpencil/gpencil_render.c
+  engines/gpencil/gpencil_shader.c
   engines/gpencil/gpencil_shader_fx.c
   engines/select/select_draw_utils.c
   engines/select/select_engine.c
   engines/overlay/overlay_antialiasing.c
   engines/overlay/overlay_armature.c
+  engines/overlay/overlay_background.c
   engines/overlay/overlay_edit_curve.c
   engines/overlay/overlay_edit_mesh.c
   engines/overlay/overlay_edit_text.c
   engines/overlay/overlay_engine.c
   engines/overlay/overlay_extra.c
   engines/overlay/overlay_facing.c
+  engines/overlay/overlay_gpencil.c
   engines/overlay/overlay_grid.c
   engines/overlay/overlay_image.c
   engines/overlay/overlay_lattice.c
@@ -146,6 +151,7 @@ set(SRC
   intern/draw_cache_extract.h
   intern/draw_cache_impl.h
   intern/draw_cache_inline.h
+  intern/draw_color_management.h
   intern/draw_common.h
   intern/draw_debug.h
   intern/draw_hair_private.h
@@ -216,6 +222,8 @@ data_to_c_simple(engines/eevee/shaders/lightprobe_planar_downsample_geom.glsl SR
 data_to_c_simple(engines/eevee/shaders/lightprobe_planar_downsample_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/prepass_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/prepass_vert.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/shadow_accum_frag.glsl SRC)
+
 data_to_c_simple(engines/eevee/shaders/shadow_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/shadow_vert.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/bsdf_lut_frag.glsl SRC)
@@ -229,6 +237,7 @@ data_to_c_simple(engines/eevee/shaders/renderpass_postprocess_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/ltc_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/ssr_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/update_noise_frag.glsl SRC)
+data_to_c_simple(engines/eevee/shaders/volumetric_accum_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/volumetric_lib.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/volumetric_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/volumetric_geom.glsl SRC)
@@ -237,10 +246,8 @@ data_to_c_simple(engines/eevee/shaders/volumetric_resolve_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/volumetric_scatter_frag.glsl SRC)
 data_to_c_simple(engines/eevee/shaders/volumetric_integration_frag.glsl SRC)
 
-data_to_c_simple(engines/workbench/shaders/workbench_background_lib.glsl SRC)
 data_to_c_simple(engines/workbench/shaders/workbench_cavity_lib.glsl SRC)
 data_to_c_simple(engines/workbench/shaders/workbench_cavity_frag.glsl SRC)
-data_to_c_simple(engines/workbench/shaders/workbench_checkerboard_depth_frag.glsl SRC)
 data_to_c_simple(engines/workbench/shaders/workbench_common_lib.glsl SRC)
 data_to_c_simple(engines/workbench/shaders/workbench_data_lib.glsl SRC)
 data_to_c_simple(engines/workbench/shaders/workbench_deferred_composite_frag.glsl SRC)
@@ -273,39 +280,23 @@ data_to_c_simple(intern/shaders/common_fxaa_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_smaa_lib.glsl SRC)
 data_to_c_simple(intern/shaders/common_fullscreen_vert.glsl SRC)
 
-data_to_c_simple(engines/gpencil/shaders/gpencil_fill_vert.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_fill_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_stroke_vert.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_stroke_geom.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_stroke_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_zdepth_mix_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_simple_mix_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_blend_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_point_vert.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_point_geom.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_point_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_background_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_paper_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_edit_point_vert.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_edit_point_geom.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/gpencil_edit_point_frag.glsl SRC)
-
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_blur_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_colorize_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_flip_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_glow_prepare_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_glow_resolve_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_light_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_pixel_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_rim_prepare_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_rim_resolve_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_shadow_prepare_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_shadow_resolve_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_swirl_frag.glsl SRC)
-data_to_c_simple(engines/gpencil/shaders/fx/gpencil_fx_wave_frag.glsl SRC)
+data_to_c_simple(engines/gpencil/shaders/gpencil_frag.glsl SRC)
+data_to_c_simple(engines/gpencil/shaders/gpencil_vert.glsl SRC)
+data_to_c_simple(engines/gpencil/shaders/gpencil_antialiasing_frag.glsl SRC)
+data_to_c_simple(engines/gpencil/shaders/gpencil_antialiasing_vert.glsl SRC)
+data_to_c_simple(engines/gpencil/shaders/gpencil_common_lib.glsl SRC)
+data_to_c_simple(engines/gpencil/shaders/gpencil_layer_blend_frag.glsl SRC)
+data_to_c_simple(engines/gpencil/shaders/gpencil_mask_invert_frag.glsl SRC)
+data_to_c_simple(engines/gpencil/shaders/gpencil_depth_merge_frag.glsl SRC)
+data_to_c_simple(engines/gpencil/shaders/gpencil_depth_merge_vert.glsl SRC)
+data_to_c_simple(engines/gpencil/shaders/gpencil_vfx_frag.glsl SRC)
 
 data_to_c_simple(engines/select/shaders/selection_id_3D_vert.glsl SRC)
 data_to_c_simple(engines/select/shaders/selection_id_frag.glsl SRC)
+
+data_to_c_simple(engines/basic/shaders/conservative_depth_geom.glsl SRC)
+data_to_c_simple(engines/basic/shaders/conservative_depth_vert.glsl SRC)
+data_to_c_simple(engines/basic/shaders/conservative_depth_frag.glsl SRC)
 
 data_to_c_simple(engines/overlay/shaders/antialiasing_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/antialiasing_vert.glsl SRC)
@@ -325,11 +316,16 @@ data_to_c_simple(engines/overlay/shaders/armature_stick_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/armature_stick_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/armature_wire_frag.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/armature_wire_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/background_frag.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/clipbound_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/depth_only_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_curve_handle_geom.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_curve_handle_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_curve_point_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_curve_wire_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_gpencil_canvas_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_gpencil_guide_vert.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/edit_gpencil_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_lattice_point_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_lattice_wire_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/edit_mesh_common_lib.glsl SRC)
@@ -381,6 +377,7 @@ data_to_c_simple(engines/overlay/shaders/sculpt_mask_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/volume_velocity_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/wireframe_vert.glsl SRC)
 data_to_c_simple(engines/overlay/shaders/wireframe_frag.glsl SRC)
+data_to_c_simple(engines/overlay/shaders/xray_fade_frag.glsl SRC)
 
 list(APPEND INC
 )

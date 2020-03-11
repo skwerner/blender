@@ -213,12 +213,6 @@ typedef struct MeshBatchCache {
 
   GPUBatch **surface_per_mat;
 
-  /* arrays of bool uniform names (and value) that will be use to
-   * set srgb conversion for auto attributes.*/
-  char *auto_layer_names;
-  int *auto_layer_is_srgb;
-  int auto_layer_len;
-
   DRWBatchFlag batch_requested;
   DRWBatchFlag batch_ready;
 
@@ -253,10 +247,13 @@ typedef struct MeshBatchCache {
 void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
                                         MeshBufferCache mbc,
                                         Mesh *me,
+                                        const bool is_editmode,
+                                        const float obmat[4][4],
                                         const bool do_final,
                                         const bool do_uvedit,
                                         const bool use_subsurf_fdots,
                                         const DRW_MeshCDMask *cd_layer_used,
+                                        const Scene *scene,
                                         const ToolSettings *ts,
                                         const bool use_hide);
 

@@ -1742,9 +1742,8 @@ float UI_text_clip_middle_ex(const uiFontStyle *fstyle,
   strwidth = BLF_width(fstyle->uifont_id, str, max_len);
 
   if ((okwidth > 0.0f) && (strwidth > okwidth)) {
-    /* utf8 two-dots leader '..' (shorter than ellipsis '...'),
-     * some compilers complain with real literal string. */
-    const char sep[] = {0xe2, 0x80, 0xA5, 0x0};
+    /* Ellipsis. Some compilers complain with real literal string. */
+    const char sep[] = {0xe2, 0x80, 0xA6, 0x0};
     const int sep_len = sizeof(sep) - 1;
     const float sep_strwidth = BLF_width(fstyle->uifont_id, sep, sep_len + 1);
     float parts_strwidth;
@@ -2662,10 +2661,14 @@ static void widget_state(uiWidgetType *wt, int state, int drawflag)
     if (color_blend != NULL) {
       color_blend_v3_v3(wt->wcol.inner, color_blend, wcol_state->blend);
     }
-  }
 
-  if (state & UI_ACTIVE) {
-    widget_active_color(&wt->wcol);
+    /* Add "hover" highlight. Ideally this could apply in all cases,
+     * even if UI_SELECT. But currently this causes some flickering
+     * as buttons can be created and updated without respect to mouse
+     * position and so can draw without UI_ACTIVE set.  See D6503. */
+    if (state & UI_ACTIVE) {
+      widget_active_color(&wt->wcol);
+    }
   }
 
   if (state & UI_BUT_REDALERT) {
@@ -4594,7 +4597,7 @@ static int widget_roundbox_set(uiBut *but, rcti *rect)
  * \{ */
 
 /* conversion from old to new buttons, so still messy */
-void ui_draw_but(const bContext *C, ARegion *ar, uiStyle *style, uiBut *but, rcti *rect)
+void ui_draw_but(const bContext *C, ARegion *region, uiStyle *style, uiBut *but, rcti *rect)
 {
   bTheme *btheme = UI_GetTheme();
   const ThemeUI *tui = &btheme->tui;
@@ -4787,30 +4790,30 @@ void ui_draw_but(const bContext *C, ARegion *ar, uiStyle *style, uiBut *but, rct
         break;
 
       case UI_BTYPE_IMAGE:
-        ui_draw_but_IMAGE(ar, but, &tui->wcol_regular, rect);
+        ui_draw_but_IMAGE(region, but, &tui->wcol_regular, rect);
         break;
 
       case UI_BTYPE_HISTOGRAM:
-        ui_draw_but_HISTOGRAM(ar, but, &tui->wcol_regular, rect);
+        ui_draw_but_HISTOGRAM(region, but, &tui->wcol_regular, rect);
         break;
 
       case UI_BTYPE_WAVEFORM:
-        ui_draw_but_WAVEFORM(ar, but, &tui->wcol_regular, rect);
+        ui_draw_but_WAVEFORM(region, but, &tui->wcol_regular, rect);
         break;
 
       case UI_BTYPE_VECTORSCOPE:
-        ui_draw_but_VECTORSCOPE(ar, but, &tui->wcol_regular, rect);
+        ui_draw_but_VECTORSCOPE(region, but, &tui->wcol_regular, rect);
         break;
 
       case UI_BTYPE_CURVE:
         /* do not draw right to edge of rect */
         rect->xmin += (0.2f * UI_UNIT_X);
         rect->xmax -= (0.2f * UI_UNIT_X);
-        ui_draw_but_CURVE(ar, but, &tui->wcol_regular, rect);
+        ui_draw_but_CURVE(region, but, &tui->wcol_regular, rect);
         break;
 
       case UI_BTYPE_CURVEPROFILE:
-        ui_draw_but_CURVEPROFILE(ar, but, &tui->wcol_regular, rect);
+        ui_draw_but_CURVEPROFILE(region, but, &tui->wcol_regular, rect);
         break;
 
       case UI_BTYPE_PROGRESS_BAR:
@@ -4827,7 +4830,7 @@ void ui_draw_but(const bContext *C, ARegion *ar, uiStyle *style, uiBut *but, rct
         break;
 
       case UI_BTYPE_TRACK_PREVIEW:
-        ui_draw_but_TRACKPREVIEW(ar, but, &tui->wcol_regular, rect);
+        ui_draw_but_TRACKPREVIEW(region, but, &tui->wcol_regular, rect);
         break;
 
       case UI_BTYPE_NODE_SOCKET:
@@ -4967,8 +4970,6 @@ static void ui_draw_popover_back_impl(const uiWidgetColors *wcol,
                                              rect->xmin + unit_size,
                                              rect->xmax - unit_size) :
                                      BLI_rcti_cent_x(rect);
-  rect->ymax -= unit_half;
-  rect->ymin += unit_half;
 
   GPU_blend(true);
 
@@ -5011,13 +5012,13 @@ static void ui_draw_popover_back_impl(const uiWidgetColors *wcol,
   GPU_blend(false);
 }
 
-void ui_draw_popover_back(ARegion *ar, uiStyle *UNUSED(style), uiBlock *block, rcti *rect)
+void ui_draw_popover_back(ARegion *region, uiStyle *UNUSED(style), uiBlock *block, rcti *rect)
 {
   uiWidgetType *wt = widget_type(UI_WTYPE_MENU_BACK);
 
   if (block) {
     float mval_origin[2] = {UNPACK2(block->bounds_offset)};
-    ui_window_to_block_fl(ar, block, &mval_origin[0], &mval_origin[1]);
+    ui_window_to_block_fl(region, block, &mval_origin[0], &mval_origin[1]);
     ui_draw_popover_back_impl(
         wt->wcol_theme, rect, block->direction, U.widget_unit / block->aspect, mval_origin);
   }

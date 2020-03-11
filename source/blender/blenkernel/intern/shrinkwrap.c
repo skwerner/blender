@@ -44,7 +44,7 @@
 #include "BKE_cdderivedmesh.h"
 #include "BKE_DerivedMesh.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_modifier.h"
 
 #include "BKE_deform.h"
@@ -355,7 +355,7 @@ static void shrinkwrap_calc_nearest_vertex_cb_ex(void *__restrict userdata,
 
   float *co = calc->vertexCos[i];
   float tmp_co[3];
-  float weight = defvert_array_find_weight_safe(calc->dvert, i, calc->vgroup);
+  float weight = BKE_defvert_array_find_weight_safe(calc->dvert, i, calc->vgroup);
 
   if (calc->invert_vgroup) {
     weight = 1.0f - weight;
@@ -527,7 +527,7 @@ static void shrinkwrap_calc_normal_projection_cb_ex(void *__restrict userdata,
   const float proj_limit_squared = calc->smd->projLimit * calc->smd->projLimit;
   float *co = calc->vertexCos[i];
   float tmp_co[3], tmp_no[3];
-  float weight = defvert_array_find_weight_safe(calc->dvert, i, calc->vgroup);
+  float weight = BKE_defvert_array_find_weight_safe(calc->dvert, i, calc->vgroup);
 
   if (calc->invert_vgroup) {
     weight = 1.0f - weight;
@@ -794,54 +794,59 @@ static bool target_project_tri_correct(void *UNUSED(userdata),
                                        float x_next[3])
 {
   /* Insignificant correction threshold */
-  const float epsilon = 1e-6f;
-  const float dir_epsilon = 0.05f;
+  const float epsilon = 1e-5f;
+  /* Dot product threshold for checking if step is 'clearly' pointing outside. */
+  const float dir_epsilon = 0.5f;
   bool fixed = false, locked = false;
 
-  /* Weight 0 and 1 boundary check. */
-  for (int i = 0; i < 2; i++) {
-    if (step[i] > x[i]) {
-      if (step[i] > dir_epsilon * fabsf(step[1 - i])) {
-        /* Abort if the solution is clearly outside the domain. */
-        if (x[i] < epsilon) {
-          return false;
-        }
-
-        /* Scale a significant step down to arrive at the boundary. */
-        mul_v3_fl(step, x[i] / step[i]);
-        fixed = true;
-      }
-      else {
-        /* Reset precision errors to stay at the boundary. */
-        step[i] = x[i];
-        fixed = locked = true;
-      }
-    }
-  }
-
-  /* Weight 2 boundary check. */
+  /* The barycentric coordinate domain is a triangle bounded by
+   * the X and Y axes, plus the x+y=1 diagonal. First, clamp the
+   * movement against the diagonal. Note that step is subtracted. */
   float sum = x[0] + x[1];
-  float sstep = step[0] + step[1];
+  float sstep = -(step[0] + step[1]);
 
-  if (sum - sstep > 1.0f) {
-    if (sstep < -dir_epsilon * (fabsf(step[0]) + fabsf(step[1]))) {
+  if (sum + sstep > 1.0f) {
+    float ldist = 1.0f - sum;
+
+    /* If already at the boundary, slide along it. */
+    if (ldist < epsilon * (float)M_SQRT2) {
+      float step_len = len_v2(step);
+
       /* Abort if the solution is clearly outside the domain. */
-      if (sum > 1.0f - epsilon) {
+      if (step_len > epsilon && sstep > step_len * dir_epsilon * (float)M_SQRT2) {
         return false;
       }
 
-      /* Scale a significant step down to arrive at the boundary. */
-      mul_v3_fl(step, (1.0f - sum) / -sstep);
-      fixed = true;
+      /* Project the new position onto the diagonal. */
+      add_v2_fl(step, (sum + sstep - 1.0f) * 0.5f);
+      fixed = locked = true;
     }
     else {
-      /* Reset precision errors to stay at the boundary. */
-      if (locked) {
-        step[0] = step[1] = 0.0f;
+      /* Scale a significant step down to arrive at the boundary. */
+      mul_v3_fl(step, ldist / sstep);
+      fixed = true;
+    }
+  }
+
+  /* Weight 0 and 1 boundary checks - along axis. */
+  for (int i = 0; i < 2; i++) {
+    if (step[i] > x[i]) {
+      /* If already at the boundary, slide along it. */
+      if (x[i] < epsilon) {
+        float step_len = len_v2(step);
+
+        /* Abort if the solution is clearly outside the domain. */
+        if (step_len > epsilon && (locked || step[i] > step_len * dir_epsilon)) {
+          return false;
+        }
+
+        /* Reset precision errors to stay at the boundary. */
+        step[i] = x[i];
+        fixed = true;
       }
       else {
-        step[0] -= 0.5f * sstep;
-        step[1] = -step[0];
+        /* Scale a significant step down to arrive at the boundary. */
+        mul_v3_fl(step, x[i] / step[i]);
         fixed = true;
       }
     }
@@ -1125,7 +1130,7 @@ static void shrinkwrap_calc_nearest_surface_point_cb_ex(void *__restrict userdat
 
   float *co = calc->vertexCos[i];
   float tmp_co[3];
-  float weight = defvert_array_find_weight_safe(calc->dvert, i, calc->vgroup);
+  float weight = BKE_defvert_array_find_weight_safe(calc->dvert, i, calc->vgroup);
 
   if (calc->invert_vgroup) {
     weight = 1.0f - weight;
@@ -1506,7 +1511,7 @@ void BKE_shrinkwrap_mesh_nearest_surface_deform(struct bContext *C,
 {
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   struct Scene *sce = CTX_data_scene(C);
-  ShrinkwrapModifierData ssmd = {0};
+  ShrinkwrapModifierData ssmd = {{0}};
   ModifierEvalContext ctx = {depsgraph, ob_source, 0};
   int totvert;
 
@@ -1527,7 +1532,7 @@ void BKE_shrinkwrap_mesh_nearest_surface_deform(struct bContext *C,
 
 void BKE_shrinkwrap_remesh_target_project(Mesh *src_me, Mesh *target_me, Object *ob_target)
 {
-  ShrinkwrapModifierData ssmd = {0};
+  ShrinkwrapModifierData ssmd = {{0}};
   int totvert;
 
   ssmd.target = ob_target;

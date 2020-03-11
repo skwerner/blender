@@ -534,7 +534,7 @@ static void ui_item_array(uiLayout *layout,
     buth = unit;
 
     if (ptr->type == &RNA_Armature) {
-      bArmature *arm = (bArmature *)ptr->data;
+      bArmature *arm = ptr->data;
 
       layer_used = arm->layer_used;
 
@@ -1067,7 +1067,7 @@ void UI_context_active_but_prop_get_filebrowser(const bContext *C,
                                                 PropertyRNA **r_prop,
                                                 bool *r_is_undo)
 {
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_menu(C) ? CTX_wm_menu(C) : CTX_wm_region(C);
   uiBlock *block;
   uiBut *but, *prevbut = NULL;
 
@@ -1075,11 +1075,11 @@ void UI_context_active_but_prop_get_filebrowser(const bContext *C,
   *r_prop = NULL;
   *r_is_undo = false;
 
-  if (!ar) {
+  if (!region) {
     return;
   }
 
-  for (block = ar->uiblocks.first; block; block = block->next) {
+  for (block = region->uiblocks.first; block; block = block->next) {
     for (but = block->buttons.first; but; but = but->next) {
       if (but && but->rnapoin.data) {
         if (RNA_property_type(but->rnaprop) == PROP_STRING) {
@@ -1241,17 +1241,19 @@ static void ui_item_menu_hold(struct bContext *C, ARegion *butregion, uiBut *but
 
   char direction = UI_DIR_DOWN;
   if (!but->drawstr[0]) {
-    if (butregion->alignment == RGN_ALIGN_LEFT) {
-      direction = UI_DIR_RIGHT;
-    }
-    else if (butregion->alignment == RGN_ALIGN_RIGHT) {
-      direction = UI_DIR_LEFT;
-    }
-    else if (butregion->alignment == RGN_ALIGN_BOTTOM) {
-      direction = UI_DIR_UP;
-    }
-    else {
-      direction = UI_DIR_DOWN;
+    switch (RGN_ALIGN_ENUM_FROM_MASK(butregion->alignment)) {
+      case RGN_ALIGN_LEFT:
+        direction = UI_DIR_RIGHT;
+        break;
+      case RGN_ALIGN_RIGHT:
+        direction = UI_DIR_LEFT;
+        break;
+      case RGN_ALIGN_BOTTOM:
+        direction = UI_DIR_UP;
+        break;
+      default:
+        direction = UI_DIR_DOWN;
+        break;
     }
   }
   UI_block_direction_set(block, direction);
@@ -2181,7 +2183,11 @@ void uiItemFullR(uiLayout *layout,
     }
 
     if (flag & UI_ITEM_R_CHECKBOX_INVERT) {
-      if (ELEM(but->type, UI_BTYPE_CHECKBOX, UI_BTYPE_CHECKBOX_N)) {
+      if (ELEM(but->type,
+               UI_BTYPE_CHECKBOX,
+               UI_BTYPE_CHECKBOX_N,
+               UI_BTYPE_ICON_TOGGLE,
+               UI_BTYPE_ICON_TOGGLE_N)) {
         but->drawflag |= UI_BUT_CHECKBOX_INVERT;
       }
     }
@@ -2323,7 +2329,7 @@ void uiItemFullR_with_popover(uiLayout *layout,
   uiItemFullR(layout, ptr, prop, index, value, flag, name, icon);
   but = but->next;
   while (but) {
-    if (but->rnaprop == prop && but->type == UI_BTYPE_MENU) {
+    if (but->rnaprop == prop && ELEM(but->type, UI_BTYPE_MENU, UI_BTYPE_COLOR)) {
       ui_but_rna_menu_convert_to_panel_type(but, panel_type);
       break;
     }
@@ -2436,6 +2442,10 @@ void uiItemEnumR_string_prop(uiLayout *layout,
   }
 
   for (a = 0; item[a].identifier; a++) {
+    if (item[a].identifier[0] == '\0') {
+      /* Skip enum item separators. */
+      continue;
+    }
     if (item[a].value == ivalue) {
       const char *item_name = name ?
                                   name :
@@ -2949,6 +2959,21 @@ static uiBut *uiItemL_(uiLayout *layout, const char *name, int icon)
   }
 
   return but;
+}
+
+void uiItemL_ex(
+    uiLayout *layout, const char *name, int icon, const bool highlight, const bool redalert)
+{
+  uiBut *but = uiItemL_(layout, name, icon);
+
+  if (highlight) {
+    /* TODO: add another flag for this. */
+    UI_but_flag_enable(but, UI_SELECT_DRAW);
+  }
+
+  if (redalert) {
+    UI_but_flag_enable(but, UI_BUT_REDALERT);
+  }
 }
 
 void uiItemL(uiLayout *layout, const char *name, int icon)

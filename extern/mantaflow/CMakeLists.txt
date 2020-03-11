@@ -23,6 +23,14 @@
 #
 # ***** END GPL LICENSE BLOCK *****
 
+# Mantaflow triggers a clang-cl compiler error with versions before 9.0.1
+# Since mantaflow does not appear to be using OpenMP at this point in time,
+# disable the flag for now. See https://bugs.llvm.org/show_bug.cgi?id=43175 for details.
+
+if(MSVC_CLANG AND WITH_OPENMP AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0.1")
+  remove_cc_flag("-fopenmp")
+endif()
+
 set(MANTAVERSION "0.12")
 
 add_definitions(-DWITH_FLUID=1)
@@ -43,6 +51,11 @@ endif()
 
 if(WITH_OPENVDB)
   add_definitions(-DOPENVDB=1)
+  add_definitions(-DOPENVDB_STATICLIB)
+endif()
+
+if(WIN32)
+  add_definitions(-D_USE_MATH_DEFINES)
 endif()
 
 set(INC
@@ -64,13 +77,17 @@ if(WITH_TBB)
   list(APPEND INC_SYS
     ${TBB_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${TBB_LIBRARIES}
+  )
 endif()
 
 if(WITH_OPENVDB)
   list(APPEND INC_SYS
-    ${BOOST_INCLUDE_DIR}
-    ${OPENEXR_INCLUDE_DIRS}
     ${OPENVDB_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${OPENVDB_LIBRARIES}
   )
 endif()
 
@@ -89,6 +106,7 @@ set(SRC
   ${MANTA_PP}/fastmarch.cpp
   ${MANTA_PP}/fastmarch.h
   ${MANTA_PP}/fastmarch.h.reg.cpp
+  ${MANTA_PP}/fileio/ioutil.cpp
   ${MANTA_PP}/fileio/iogrids.cpp
   ${MANTA_PP}/fileio/iomeshes.cpp
   ${MANTA_PP}/fileio/ioparticles.cpp
@@ -198,6 +216,8 @@ set(SRC
 )
 
 set(LIB
+  ${PYTHON_LINKFLAGS}
+  ${PYTHON_LIBRARIES}
 )
 
 blender_add_lib(extern_mantaflow "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

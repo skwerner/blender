@@ -25,6 +25,10 @@
 #ifndef __BKE_RIGIDBODY_H__
 #define __BKE_RIGIDBODY_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct RigidBodyOb;
 struct RigidBodyWorld;
 
@@ -44,8 +48,10 @@ void BKE_rigidbody_free_constraint(struct Object *ob);
 
 /* ...... */
 
-struct RigidBodyOb *BKE_rigidbody_copy_object(const struct Object *ob, const int flag);
-struct RigidBodyCon *BKE_rigidbody_copy_constraint(const struct Object *ob, const int flag);
+void BKE_rigidbody_object_copy(struct Main *bmain,
+                               struct Object *ob_dst,
+                               const struct Object *ob_src,
+                               const int flag);
 
 /* Callback format for performing operations on ID-pointers for rigidbody world. */
 typedef void (*RigidbodyWorldIDFunc)(struct RigidBodyWorld *rbw,
@@ -152,5 +158,9 @@ void BKE_rigidbody_eval_simulation(struct Depsgraph *depsgraph, struct Scene *sc
 void BKE_rigidbody_object_sync_transforms(struct Depsgraph *depsgraph,
                                           struct Scene *scene,
                                           struct Object *ob);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_RIGIDBODY_H__ */

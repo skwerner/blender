@@ -47,11 +47,9 @@
 
 #include "IMB_colormanagement.h"
 
-#ifndef BLF_STANDALONE
-#  include "GPU_shader.h"
-#  include "GPU_matrix.h"
-#  include "GPU_immediate.h"
-#endif
+#include "GPU_shader.h"
+#include "GPU_matrix.h"
+#include "GPU_immediate.h"
 
 #include "blf_internal_types.h"
 #include "blf_internal.h"
@@ -584,9 +582,6 @@ static void blf_draw_gl__start(FontBLF *font)
    * in BLF_position (old ui_rasterpos_safe).
    */
 
-  /* always bind the texture for the first glyph */
-  font->tex_bind_state = 0;
-
   if ((font->flags & (BLF_ROTATION | BLF_MATRIX | BLF_ASPECT)) == 0) {
     return; /* glyphs will be translated individually and batched. */
   }
@@ -935,10 +930,7 @@ void blf_draw_buffer__start(FontBLF *font)
 {
   FontBufInfoBLF *buf_info = &font->buf_info;
 
-  buf_info->col_char[0] = buf_info->col_init[0] * 255;
-  buf_info->col_char[1] = buf_info->col_init[1] * 255;
-  buf_info->col_char[2] = buf_info->col_init[2] * 255;
-  buf_info->col_char[3] = buf_info->col_init[3] * 255;
+  rgba_float_to_uchar(buf_info->col_char, buf_info->col_init);
 
   if (buf_info->display) {
     copy_v4_v4(buf_info->col_float, buf_info->col_init);

@@ -16,6 +16,7 @@
 
 #include "device/device.h"
 
+#include "render/background.h"
 #include "render/colorspace.h"
 #include "render/graph.h"
 #include "render/light.h"
@@ -106,6 +107,7 @@ void OSLShaderManager::device_update(Device *device,
 
   /* create shaders */
   OSLGlobals *og = (OSLGlobals *)device->osl_memory();
+  Shader *background_shader = scene->background->get_shader(scene);
 
   foreach (Shader *shader, scene->shaders) {
     assert(shader->graph);
@@ -119,7 +121,7 @@ void OSLShaderManager::device_update(Device *device,
     thread_scoped_lock lock(ss_mutex);
 
     OSLCompiler compiler(this, services, ss, scene);
-    compiler.background = (shader == scene->default_background);
+    compiler.background = (shader == background_shader);
     compiler.compile(og, shader);
 
     if (shader->use_mis && shader->has_surface_emission)
@@ -131,7 +133,7 @@ void OSLShaderManager::device_update(Device *device,
   og->ts = ts;
   og->services = services;
 
-  int background_id = scene->shader_manager->get_shader_id(scene->default_background);
+  int background_id = scene->shader_manager->get_shader_id(background_shader);
   og->background_state = og->surface_state[background_id & SHADER_MASK];
   og->use = true;
 
@@ -317,7 +319,7 @@ bool OSLShaderManager::osl_compile(const string &inputfile, const string &output
   string include_path_arg = string("-I") + shader_path;
   options.push_back(include_path_arg);
 
-  stdosl_path = path_get("shader/stdosl.h");
+  stdosl_path = path_get("shader/stdcycles.h");
 
   /* compile */
   OSL::OSLCompiler *compiler = new OSL::OSLCompiler(&OSL::ErrorHandler::default_handler());

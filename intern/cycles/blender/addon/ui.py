@@ -373,7 +373,7 @@ class CYCLES_RENDER_PT_subdivision(CyclesButtonsPanel, Panel):
         col = layout.column()
         sub = col.column(align=True)
         sub.prop(cscene, "dicing_rate", text="Dicing Rate Render")
-        sub.prop(cscene, "preview_dicing_rate", text="Preview")
+        sub.prop(cscene, "preview_dicing_rate", text="Viewport")
 
         col.separator()
 
@@ -431,10 +431,12 @@ class CYCLES_RENDER_PT_volumes(CyclesButtonsPanel, Panel):
         col = layout.column()
         col.prop(cscene, "volume_integrator")
         if cscene.volume_integrator == 'VOLUME_RAY_MARCH':
-            col.prop(cscene, "volume_step_size", text="Step Size")
+            col.prop(cscene, "volume_step_rate", text="Step Rate Render")
         else:
             col.prop(cscene, "volume_max_density", text="Max Density")
-        col.prop(cscene, "volume_max_steps", text="Max Steps")
+        col.prop(cscene, "volume_preview_step_rate", text="Viewport")
+
+        layout.prop(cscene, "volume_max_steps", text="Max Steps")
 
 
 class CYCLES_RENDER_PT_light_paths(CyclesButtonsPanel, Panel):
@@ -774,6 +776,8 @@ class CYCLES_RENDER_PT_filter(CyclesButtonsPanel, Panel):
         col.prop(view_layer, "use_solid", text="Surfaces")
         col = flow.column()
         col.prop(view_layer, "use_strand", text="Hair")
+        col = flow.column()
+        col.prop(view_layer, "use_volumes", text="Volumes")
         if with_freestyle:
             col = flow.column()
             col.prop(view_layer, "use_freestyle", text="Freestyle")
@@ -1417,8 +1421,6 @@ class CYCLES_LIGHT_PT_light(CyclesButtonsPanel, Panel):
         light = context.light
         clamp = light.cycles
 
-        layout.use_property_decorate = False
-
         if self.bl_space_type == 'PROPERTIES':
             layout.row().prop(light, "type", expand=True)
             layout.use_property_split = True
@@ -1700,6 +1702,9 @@ class CYCLES_WORLD_PT_settings_volume(CyclesButtonsPanel, Panel):
         sub.prop(cworld, "volume_sampling", text="Sampling")
         col.prop(cworld, "volume_interpolation", text="Interpolation")
         col.prop(cworld, "homogeneous_volume", text="Homogeneous")
+        sub = col.column()
+        sub.active = not cworld.homogeneous_volume
+        sub.prop(cworld, "volume_step_size")
 
 
 class CYCLES_MATERIAL_PT_preview(CyclesButtonsPanel, Panel):
@@ -1831,6 +1836,9 @@ class CYCLES_MATERIAL_PT_settings_volume(CyclesButtonsPanel, Panel):
         sub.prop(cmat, "volume_sampling", text="Sampling")
         col.prop(cmat, "volume_interpolation", text="Interpolation")
         col.prop(cmat, "homogeneous_volume", text="Homogeneous")
+        sub = col.column()
+        sub.active = not cmat.homogeneous_volume
+        sub.prop(cmat, "volume_step_rate")
 
     def draw(self, context):
         self.draw_shared(self, context, context.material)

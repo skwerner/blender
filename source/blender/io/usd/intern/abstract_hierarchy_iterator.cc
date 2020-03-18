@@ -25,6 +25,8 @@
 
 extern "C" {
 #include "BKE_anim.h"
+#include "BKE_animsys.h"
+#include "BKE_key.h"
 #include "BKE_particle.h"
 
 #include "BLI_assert.h"
@@ -33,6 +35,7 @@ extern "C" {
 
 #include "DNA_ID.h"
 #include "DNA_layer_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 #include "DNA_particle_types.h"
 
@@ -74,6 +77,31 @@ void HierarchyContext::mark_as_not_instanced()
 
 AbstractHierarchyWriter::~AbstractHierarchyWriter()
 {
+}
+
+bool AbstractHierarchyWriter::check_is_animated(const HierarchyContext &context) const
+{
+  const Object *object = context.object;
+
+  if (BKE_animdata_id_is_animated(static_cast<ID *>(object->data))) {
+    return true;
+  }
+  if (BKE_key_from_object(object) != nullptr) {
+    return true;
+  }
+
+  /* Test modifiers. */
+  /* TODO(Sybren): replace this with a check on the depsgraph to properly check for dependency on
+   * time. */
+  ModifierData *md = static_cast<ModifierData *>(object->modifiers.first);
+  while (md) {
+    if (md->type != eModifierType_Subsurf) {
+      return true;
+    }
+    md = md->next;
+  }
+
+  return false;
 }
 
 AbstractHierarchyIterator::AbstractHierarchyIterator(Depsgraph *depsgraph)
@@ -164,7 +192,7 @@ void AbstractHierarchyIterator::debug_print_export_graph(const ExportGraph &grap
       }
     }
   }
-  printf("    (Total graph size: %lu objects\n", total_graph_size);
+  printf("    (Total graph size: %zu objects\n", total_graph_size);
 }
 
 void AbstractHierarchyIterator::export_graph_construct()
@@ -345,7 +373,7 @@ void AbstractHierarchyIterator::visit_dupli_object(DupliObject *dupli_object,
   }
   else {
     /* The parent object is NOT part of the duplicated collection. This means that the world
-     * transform of this dupliobject can be influenced by objects that are not part of its
+     * transform of this dupli-object can be influenced by objects that are not part of its
      * export graph. */
     animation_check_include_parent = true;
     context->export_parent = duplicator;

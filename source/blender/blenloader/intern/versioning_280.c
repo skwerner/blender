@@ -30,6 +30,8 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
+#include "DNA_defaults.h"
+
 #include "DNA_anim_types.h"
 #include "DNA_object_types.h"
 #include "DNA_camera_types.h"
@@ -1068,8 +1070,8 @@ static void do_version_curvemapping_walker(Main *bmain, void (*callback)(CurveMa
           callback(gpmd->curve_intensity);
         }
       }
-      else if (md->type == eGpencilModifierType_Vertexcolor) {
-        VertexcolorGpencilModifierData *gpmd = (VertexcolorGpencilModifierData *)md;
+      else if (md->type == eGpencilModifierType_Tint) {
+        TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
 
         if (gpmd->curve_intensity) {
           callback(gpmd->curve_intensity);
@@ -1091,13 +1093,6 @@ static void do_version_curvemapping_walker(Main *bmain, void (*callback)(CurveMa
       }
       else if (md->type == eGpencilModifierType_Opacity) {
         OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
-
-        if (gpmd->curve_intensity) {
-          callback(gpmd->curve_intensity);
-        }
-      }
-      else if (md->type == eGpencilModifierType_Tint) {
-        TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
 
         if (gpmd->curve_intensity) {
           callback(gpmd->curve_intensity);
@@ -2546,7 +2541,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
                 V3D_SHOW_MODE_SHADE_OVERRIDE = (1 << 15),
               };
               View3D *v3d = (View3D *)sl;
-              float alpha = v3d->flag2 & V3D_SHOW_MODE_SHADE_OVERRIDE ? 0.0f : 1.0f;
+              float alpha = (v3d->flag2 & V3D_SHOW_MODE_SHADE_OVERRIDE) ? 0.0f : 1.0f;
               v3d->overlay.texture_paint_mode_opacity = alpha;
               v3d->overlay.vertex_paint_mode_opacity = alpha;
               v3d->overlay.weight_paint_mode_opacity = alpha;
@@ -4089,7 +4084,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     FOREACH_MAIN_ID_BEGIN (bmain, id) {
       bNodeTree *ntree = ntreeFromID(id);
       if (ntree) {
-        ntree->id.flag |= LIB_PRIVATE_DATA;
+        ntree->id.flag |= LIB_EMBEDDED_DATA;
       }
     }
     FOREACH_MAIN_ID_END;
@@ -4106,7 +4101,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       /* Older files do not have a master collection, which is then added through
        * `BKE_collection_master_add()`, so everything is fine. */
       if (scene->master_collection != NULL) {
-        scene->master_collection->id.flag |= LIB_PRIVATE_DATA;
+        scene->master_collection->id.flag |= LIB_EMBEDDED_DATA;
       }
     }
   }
@@ -4651,10 +4646,12 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             }
             case eGpencilModifierType_Noise: {
               NoiseGpencilModifierData *mmd = (NoiseGpencilModifierData *)md;
-              mmd->factor /= 25.0f;
-              mmd->factor_thickness = mmd->factor;
-              mmd->factor_strength = mmd->factor;
-              mmd->factor_uvs = mmd->factor;
+              float factor = mmd->factor / 25.0f;
+              mmd->factor = (mmd->flag & GP_NOISE_MOD_LOCATION) ? factor : 0.0f;
+              mmd->factor_thickness = (mmd->flag & GP_NOISE_MOD_STRENGTH) ? factor : 0.0f;
+              mmd->factor_strength = (mmd->flag & GP_NOISE_MOD_THICKNESS) ? factor : 0.0f;
+              mmd->factor_uvs = (mmd->flag & GP_NOISE_MOD_UV) ? factor : 0.0f;
+
               mmd->noise_scale = (mmd->flag & GP_NOISE_FULL_STROKE) ? 0.0f : 1.0f;
 
               if (mmd->curve_intensity == NULL) {
@@ -4725,16 +4722,6 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (mmd->flag & simple) {
                 mmd->flag &= ~simple;
                 mmd->type = GP_SUBDIV_SIMPLE;
-              }
-              break;
-            }
-            case eGpencilModifierType_Vertexcolor: {
-              VertexcolorGpencilModifierData *mmd = (VertexcolorGpencilModifierData *)md;
-              if (mmd->curve_intensity == NULL) {
-                mmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-                if (mmd->curve_intensity) {
-                  BKE_curvemapping_initialize(mmd->curve_intensity);
-                }
               }
               break;
             }
@@ -4849,5 +4836,32 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
    */
   {
     /* Keep this block, even when empty. */
+
+    if (!DNA_struct_elem_find(fd->filesdna, "OceanModifierData", "float", "fetch_jonswap")) {
+      for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
+        for (ModifierData *md = object->modifiers.first; md; md = md->next) {
+          if (md->type == eModifierType_Ocean) {
+            OceanModifierData *omd = (OceanModifierData *)md;
+            omd->fetch_jonswap = 120.0f;
+          }
+        }
+      }
+    }
+
+    if (!DNA_struct_find(fd->filesdna, "XrSessionSettings")) {
+      for (wmWindowManager *wm = bmain->wm.first; wm; wm = wm->id.next) {
+        const View3D *v3d_default = DNA_struct_default_get(View3D);
+
+        wm->xr.session_settings.shading = v3d_default->shading;
+        /* Don't rotate light with the viewer by default, make it fixed. */
+        wm->xr.session_settings.shading.flag |= V3D_SHADING_WORLD_ORIENTATION;
+        wm->xr.session_settings.draw_flags = (V3D_OFSDRAW_SHOW_GRIDFLOOR |
+                                              V3D_OFSDRAW_SHOW_ANNOTATION);
+        wm->xr.session_settings.clip_start = v3d_default->clip_start;
+        wm->xr.session_settings.clip_end = v3d_default->clip_end;
+
+        wm->xr.session_settings.flag = XR_SESSION_USE_POSITION_TRACKING;
+      }
+    }
   }
 }

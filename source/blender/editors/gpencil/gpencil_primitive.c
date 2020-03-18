@@ -202,7 +202,7 @@ static void gp_rotate_v2_v2v2fl(float v[2],
   add_v2_v2v2(v, r, origin);
 }
 
-/* Helper to rotate line around line centre */
+/* Helper to rotate line around line center. */
 static void gp_primitive_rotate_line(
     float va[2], float vb[2], const float a[2], const float b[2], const float angle)
 {
@@ -1157,8 +1157,6 @@ static void gpencil_primitive_init(bContext *C, wmOperator *op)
 
   /* set GP datablock */
   tgpi->gpd = gpd;
-  /* region where paint was originated */
-  tgpi->gpd->runtime.ar = tgpi->region;
 
   /* if brush doesn't exist, create a new set (fix damaged files from old versions) */
   if ((paint->brush == NULL) || (paint->brush->gpencil_settings == NULL)) {

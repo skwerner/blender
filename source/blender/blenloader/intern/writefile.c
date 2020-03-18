@@ -106,6 +106,7 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_shader_fx_types.h"
+#include "DNA_hair_types.h"
 #include "DNA_fileglobal_types.h"
 #include "DNA_key_types.h"
 #include "DNA_lattice_types.h"
@@ -121,6 +122,7 @@
 #include "DNA_object_force_types.h"
 #include "DNA_packedFile_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_pointcloud_types.h"
 #include "DNA_lightprobe_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
@@ -134,6 +136,7 @@
 #include "DNA_text_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_vfont_types.h"
+#include "DNA_volume_types.h"
 #include "DNA_world_types.h"
 #include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
@@ -703,7 +706,7 @@ void IDP_WriteProperty(const IDProperty *prop, void *wd)
   IDP_WriteProperty_OnlyData(prop, wd);
 }
 
-static void write_iddata(void *wd, const ID *id)
+static void write_iddata(WriteData *wd, ID *id)
 {
   /* ID_WM's id->properties are considered runtime only, and never written in .blend file. */
   if (id->properties && !ELEM(GS(id->name), ID_WM)) {
@@ -730,6 +733,11 @@ static void write_iddata(void *wd, const ID *id)
         }
       }
     }
+  }
+
+  /* Clear the accumulated recalc flags in case of undo step saving. */
+  if (wd->use_memfile) {
+    id->recalc_undo_accumulated = 0;
   }
 }
 
@@ -1130,6 +1138,11 @@ static void write_nodetree_nolib(WriteData *wd, bNodeTree *ntree)
   }
   for (sock = ntree->outputs.first; sock; sock = sock->next) {
     write_node_socket_interface(wd, sock);
+  }
+
+  /* Clear the accumulated recalc flags in case of undo step saving. */
+  if (wd->use_memfile) {
+    ntree->id.recalc_undo_accumulated = 0;
   }
 }
 
@@ -1844,8 +1857,8 @@ static void write_gpencil_modifiers(WriteData *wd, ListBase *modbase)
         write_curvemapping(wd, gpmd->curfalloff);
       }
     }
-    else if (md->type == eGpencilModifierType_Vertexcolor) {
-      VertexcolorGpencilModifierData *gpmd = (VertexcolorGpencilModifierData *)md;
+    else if (md->type == eGpencilModifierType_Tint) {
+      TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
       if (gpmd->colorband) {
         writestruct(wd, DATA, ColorBand, 1, gpmd->colorband);
       }
@@ -1867,12 +1880,6 @@ static void write_gpencil_modifiers(WriteData *wd, ListBase *modbase)
     }
     else if (md->type == eGpencilModifierType_Opacity) {
       OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
-      if (gpmd->curve_intensity) {
-        write_curvemapping(wd, gpmd->curve_intensity);
-      }
-    }
-    else if (md->type == eGpencilModifierType_Tint) {
-      TintGpencilModifierData *gpmd = (TintGpencilModifierData *)md;
       if (gpmd->curve_intensity) {
         write_curvemapping(wd, gpmd->curve_intensity);
       }
@@ -2431,6 +2438,11 @@ static void write_collection_nolib(WriteData *wd, Collection *collection)
   for (CollectionChild *child = collection->children.first; child; child = child->next) {
     writestruct(wd, DATA, CollectionChild, 1, child);
   }
+
+  /* Clear the accumulated recalc flags in case of undo step saving. */
+  if (wd->use_memfile) {
+    collection->id.recalc_undo_accumulated = 0;
+  }
 }
 
 static void write_collection(WriteData *wd, Collection *collection)
@@ -2767,9 +2779,9 @@ static void write_scene(WriteData *wd, Scene *sce)
   }
 
   /* Eevee Lightcache */
-  if (sce->eevee.light_cache && !wd->use_memfile) {
-    writestruct(wd, DATA, LightCache, 1, sce->eevee.light_cache);
-    write_lightcache(wd, sce->eevee.light_cache);
+  if (sce->eevee.light_cache_data && !wd->use_memfile) {
+    writestruct(wd, DATA, LightCache, 1, sce->eevee.light_cache_data);
+    write_lightcache(wd, sce->eevee.light_cache_data);
   }
 
   write_view3dshading(wd, &sce->display.shading);
@@ -2809,6 +2821,11 @@ static void write_gpencil(WriteData *wd, bGPdata *gpd)
       }
     }
   }
+}
+
+static void write_wm_xr_data(WriteData *wd, wmXrData *xr_data)
+{
+  write_view3dshading(wd, &xr_data->session_settings.shading);
 }
 
 static void write_region(WriteData *wd, ARegion *region, int spacetype)
@@ -3057,6 +3074,7 @@ static void write_windowmanager(WriteData *wd, wmWindowManager *wm)
 {
   writestruct(wd, ID_WM, wmWindowManager, 1, wm);
   write_iddata(wd, &wm->id);
+  write_wm_xr_data(wd, &wm->xr);
 
   for (wmWindow *win = wm->windows.first; win; win = win->next) {
 #ifndef WITH_GLOBAL_AREA_WRITING
@@ -3697,6 +3715,98 @@ static void write_workspace(WriteData *wd, WorkSpace *workspace)
   }
 }
 
+static void write_hair(WriteData *wd, Hair *hair)
+{
+  if (hair->id.us > 0 || wd->use_memfile) {
+    /* Write a copy of the hair with possibly reduced number of data layers.
+     * Don't edit the original since other threads might be reading it. */
+    Hair *old_hair = hair;
+    Hair copy_hair = *hair;
+    hair = &copy_hair;
+
+    CustomDataLayer *players = NULL, players_buff[CD_TEMP_CHUNK_SIZE];
+    CustomDataLayer *clayers = NULL, clayers_buff[CD_TEMP_CHUNK_SIZE];
+    CustomData_file_write_prepare(&hair->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
+    CustomData_file_write_prepare(&hair->cdata, &clayers, clayers_buff, ARRAY_SIZE(clayers_buff));
+
+    /* Write LibData */
+    writestruct_at_address(wd, ID_HA, Hair, 1, old_hair, hair);
+    write_iddata(wd, &hair->id);
+
+    /* Direct data */
+    write_customdata(wd, &hair->id, hair->totpoint, &hair->pdata, players, CD_MASK_ALL);
+    write_customdata(wd, &hair->id, hair->totcurve, &hair->cdata, clayers, CD_MASK_ALL);
+    writedata(wd, DATA, sizeof(void *) * hair->totcol, hair->mat);
+    if (hair->adt) {
+      write_animdata(wd, hair->adt);
+    }
+
+    /* Remove temporary data. */
+    if (players && players != players_buff) {
+      MEM_freeN(players);
+    }
+    if (clayers && clayers != clayers_buff) {
+      MEM_freeN(clayers);
+    }
+
+    /* restore pointer */
+    hair = old_hair;
+  }
+}
+
+static void write_pointcloud(WriteData *wd, PointCloud *pointcloud)
+{
+  if (pointcloud->id.us > 0 || wd->use_memfile) {
+    /* Write a copy of the pointcloud with possibly reduced number of data layers.
+     * Don't edit the original since other threads might be reading it. */
+    PointCloud *old_pointcloud = pointcloud;
+    PointCloud copy_pointcloud = *pointcloud;
+    pointcloud = &copy_pointcloud;
+
+    CustomDataLayer *players = NULL, players_buff[CD_TEMP_CHUNK_SIZE];
+    CustomData_file_write_prepare(
+        &pointcloud->pdata, &players, players_buff, ARRAY_SIZE(players_buff));
+
+    /* Write LibData */
+    writestruct_at_address(wd, ID_PT, PointCloud, 1, old_pointcloud, pointcloud);
+    write_iddata(wd, &pointcloud->id);
+
+    /* Direct data */
+    write_customdata(
+        wd, &pointcloud->id, pointcloud->totpoint, &pointcloud->pdata, players, CD_MASK_ALL);
+    writedata(wd, DATA, sizeof(void *) * pointcloud->totcol, pointcloud->mat);
+    if (pointcloud->adt) {
+      write_animdata(wd, pointcloud->adt);
+    }
+
+    /* Remove temporary data. */
+    if (players && players != players_buff) {
+      MEM_freeN(players);
+    }
+  }
+}
+
+static void write_volume(WriteData *wd, Volume *volume)
+{
+  if (volume->id.us > 0 || wd->use_memfile) {
+    /* write LibData */
+    writestruct(wd, ID_VO, Volume, 1, volume);
+    write_iddata(wd, &volume->id);
+
+    /* direct data */
+    writedata(wd, DATA, sizeof(void *) * volume->totcol, volume->mat);
+    if (volume->adt) {
+      write_animdata(wd, volume->adt);
+    }
+
+    if (volume->packedfile) {
+      PackedFile *pf = volume->packedfile;
+      writestruct(wd, DATA, PackedFile, 1, pf);
+      writedata(wd, DATA, pf->size, pf->data);
+    }
+  }
+}
+
 /* Keep it last of write_foodata functions. */
 static void write_libraries(WriteData *wd, Main *main)
 {
@@ -4002,6 +4112,15 @@ static bool write_file_handle(Main *mainvar,
           case ID_CF:
             write_cachefile(wd, (CacheFile *)id);
             break;
+          case ID_HA:
+            write_hair(wd, (Hair *)id);
+            break;
+          case ID_PT:
+            write_pointcloud(wd, (PointCloud *)id);
+            break;
+          case ID_VO:
+            write_volume(wd, (Volume *)id);
+            break;
           case ID_LI:
             /* Do nothing, handled below - and should never be reached. */
             BLI_assert(0);
@@ -4017,6 +4136,12 @@ static bool write_file_handle(Main *mainvar,
 
         if (do_override) {
           BKE_lib_override_library_operations_store_end(override_storage, id);
+        }
+
+        if (wd->use_memfile) {
+          /* Very important to do it after every ID write now, otherwise we cannot know whether a
+           * specific ID changed or not. */
+          mywrite_flush(wd);
         }
       }
 

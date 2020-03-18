@@ -30,6 +30,7 @@
 #include "DNA_collection_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_hair_types.h"
 #include "DNA_key_types.h"
 #include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
@@ -43,6 +44,7 @@
 #include "DNA_object_force_types.h"
 #include "DNA_outliner_types.h"
 #include "DNA_lightprobe_types.h"
+#include "DNA_pointcloud_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
@@ -52,6 +54,7 @@
 #include "DNA_sound_types.h"
 #include "DNA_text_types.h"
 #include "DNA_vfont_types.h"
+#include "DNA_volume_types.h"
 #include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
 #include "DNA_world_types.h"
@@ -137,11 +140,15 @@ enum {
 
 typedef struct LibraryForeachIDData {
   Main *bmain;
-  /* 'Real' ID, the one that might be in bmain, only differs from self_id when the later is a
-   * private one. */
+  /**
+   * 'Real' ID, the one that might be in bmain, only differs from self_id when the later is a
+   * private one.
+   */
   ID *owner_id;
-  /* ID from which the current ID pointer is being processed. It may be a 'private' ID like master
-   * collection or root node tree. */
+  /**
+   * ID from which the current ID pointer is being processed. It may be an embedded ID like master
+   * collection or root node tree.
+   */
   ID *self_id;
 
   int flag;
@@ -343,8 +350,8 @@ static void library_foreach_layer_collection(LibraryForeachIDData *data, ListBas
     /* XXX This is very weak. The whole idea of keeping pointers to private IDs is very bad
      * anyway... */
     const int cb_flag = (lc->collection != NULL &&
-                         (lc->collection->id.flag & LIB_PRIVATE_DATA) != 0) ?
-                            IDWALK_CB_PRIVATE :
+                         (lc->collection->id.flag & LIB_EMBEDDED_DATA) != 0) ?
+                            IDWALK_CB_EMBEDDED :
                             IDWALK_CB_NOP;
     FOREACH_CALLBACK_INVOKE(data, lc->collection, cb_flag);
     library_foreach_layer_collection(data, &lc->layer_collections);
@@ -367,8 +374,8 @@ static void library_foreach_collection(LibraryForeachIDData *data, Collection *c
     /* XXX This is very weak. The whole idea of keeping pointers to private IDs is very bad
      * anyway... */
     const int cb_flag = ((parent->collection != NULL &&
-                          (parent->collection->id.flag & LIB_PRIVATE_DATA) != 0) ?
-                             IDWALK_CB_PRIVATE :
+                          (parent->collection->id.flag & LIB_EMBEDDED_DATA) != 0) ?
+                             IDWALK_CB_EMBEDDED :
                              IDWALK_CB_NOP);
     FOREACH_CALLBACK_INVOKE(
         data, parent->collection, IDWALK_CB_NEVER_SELF | IDWALK_CB_LOOPBACK | cb_flag);
@@ -397,7 +404,7 @@ static void library_foreach_screen_area(LibraryForeachIDData *data, ScrArea *are
         View3D *v3d = (View3D *)sl;
 
         FOREACH_CALLBACK_INVOKE(data, v3d->camera, IDWALK_CB_NOP);
-        FOREACH_CALLBACK_INVOKE(data, v3d->ob_centre, IDWALK_CB_NOP);
+        FOREACH_CALLBACK_INVOKE(data, v3d->ob_center, IDWALK_CB_NOP);
 
         if (v3d->localvd) {
           FOREACH_CALLBACK_INVOKE(data, v3d->localvd->camera, IDWALK_CB_NOP);
@@ -484,13 +491,13 @@ static void library_foreach_screen_area(LibraryForeachIDData *data, ScrArea *are
         FOREACH_CALLBACK_INVOKE_ID(data, snode->from, IDWALK_CB_NOP);
 
         FOREACH_CALLBACK_INVOKE(
-            data, snode->nodetree, is_private_nodetree ? IDWALK_CB_PRIVATE : IDWALK_CB_USER);
+            data, snode->nodetree, is_private_nodetree ? IDWALK_CB_EMBEDDED : IDWALK_CB_USER);
 
         for (path = snode->treepath.first; path; path = path->next) {
           if (path == snode->treepath.first) {
             /* first nodetree in path is same as snode->nodetree */
             FOREACH_CALLBACK_INVOKE(
-                data, path->nodetree, is_private_nodetree ? IDWALK_CB_PRIVATE : IDWALK_CB_NOP);
+                data, path->nodetree, is_private_nodetree ? IDWALK_CB_EMBEDDED : IDWALK_CB_NOP);
           }
           else {
             FOREACH_CALLBACK_INVOKE(data, path->nodetree, IDWALK_CB_USER);
@@ -527,10 +534,13 @@ static void library_foreach_ID_as_subdata_link(ID **id_pp,
 {
   /* Needed e.g. for callbacks handling relationships... This call shall be absolutely readonly. */
   ID *id = *id_pp;
-  FOREACH_CALLBACK_INVOKE_ID_PP(data, id_pp, IDWALK_CB_PRIVATE);
+  FOREACH_CALLBACK_INVOKE_ID_PP(data, id_pp, IDWALK_CB_EMBEDDED);
   BLI_assert(id == *id_pp);
 
-  if (flag & IDWALK_RECURSE) {
+  if (flag & IDWALK_IGNORE_EMBEDDED_ID) {
+    /* Do Nothing. */
+  }
+  else if (flag & IDWALK_RECURSE) {
     /* Defer handling into main loop, recursively calling BKE_library_foreach_ID_link in
      * IDWALK_RECURSE case is troublesome, see T49553. */
     /* XXX note that this breaks the 'owner id' thing now, we likely want to handle that
@@ -583,7 +593,12 @@ static void library_foreach_ID_link(Main *bmain,
 
   for (; id != NULL; id = (flag & IDWALK_RECURSE) ? BLI_LINKSTACK_POP(data.ids_todo) : NULL) {
     data.self_id = id;
-    data.owner_id = (id->flag & LIB_PRIVATE_DATA) ? id_owner : data.self_id;
+    /* Note that we may call this functions sometime directly on an embedded ID, without any
+     * knowledge of the owner ID then.
+     * While not great, and that should be probably sanitized at some point, we cal live with it
+     * for now. */
+    data.owner_id = ((id->flag & LIB_EMBEDDED_DATA) != 0 && id_owner != NULL) ? id_owner :
+                                                                                data.self_id;
 
     /* inherit_data is non-NULL when this function is called for some sub-data ID
      * (like root nodetree of a material).
@@ -1238,6 +1253,27 @@ static void library_foreach_ID_link(Main *bmain,
 
         break;
       }
+      case ID_HA: {
+        Hair *hair = (Hair *)id;
+        for (i = 0; i < hair->totcol; i++) {
+          CALLBACK_INVOKE(hair->mat[i], IDWALK_CB_USER);
+        }
+        break;
+      }
+      case ID_PT: {
+        PointCloud *pointcloud = (PointCloud *)id;
+        for (i = 0; i < pointcloud->totcol; i++) {
+          CALLBACK_INVOKE(pointcloud->mat[i], IDWALK_CB_USER);
+        }
+        break;
+      }
+      case ID_VO: {
+        Volume *volume = (Volume *)id;
+        for (i = 0; i < volume->totcol; i++) {
+          CALLBACK_INVOKE(volume->mat[i], IDWALK_CB_USER);
+        }
+        break;
+      }
 
       case ID_SCR: {
         if (data.flag & IDWALK_INCLUDE_UI) {
@@ -1404,6 +1440,12 @@ bool BKE_library_id_can_use_idtype(ID *id_owner, const short id_type_used)
       return ELEM(id_type_used, ID_MA);
     case ID_WS:
       return ELEM(id_type_used, ID_SCR, ID_SCE);
+    case ID_HA:
+      return ELEM(id_type_used, ID_MA);
+    case ID_PT:
+      return ELEM(id_type_used, ID_MA);
+    case ID_VO:
+      return ELEM(id_type_used, ID_MA);
     case ID_IM:
     case ID_VF:
     case ID_TXT:

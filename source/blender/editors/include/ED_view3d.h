@@ -561,6 +561,9 @@ struct RegionView3D *ED_view3d_context_rv3d(struct bContext *C);
 bool ED_view3d_context_user_region(struct bContext *C,
                                    struct View3D **r_v3d,
                                    struct ARegion **r_ar);
+bool ED_view3d_area_user_region(const struct ScrArea *sa,
+                                const struct View3D *v3d,
+                                struct ARegion **r_ar);
 bool ED_operator_rv3d_user_region_poll(struct bContext *C);
 
 void ED_view3d_init_mats_rv3d(struct Object *ob, struct RegionView3D *rv3d);
@@ -581,10 +584,11 @@ void ED_draw_object_facemap(struct Depsgraph *depsgraph,
                             const float col[4],
                             const int facemap);
 
-struct RenderEngineType *ED_view3d_engine_type(struct Scene *scene, int drawtype);
+struct RenderEngineType *ED_view3d_engine_type(const struct Scene *scene, int drawtype);
 
 bool ED_view3d_context_activate(struct bContext *C);
-void ED_view3d_draw_setup_view(struct wmWindow *win,
+void ED_view3d_draw_setup_view(const struct wmWindowManager *wm,
+                               struct wmWindow *win,
                                struct Depsgraph *depsgraph,
                                struct Scene *scene,
                                struct ARegion *region,
@@ -598,7 +602,7 @@ struct Object *ED_view3d_give_object_under_cursor(struct bContext *C, const int 
 bool ED_view3d_is_object_under_cursor(struct bContext *C, const int mval[2]);
 void ED_view3d_quadview_update(struct ScrArea *sa, struct ARegion *region, bool do_clip);
 void ED_view3d_update_viewmat(struct Depsgraph *depsgraph,
-                              struct Scene *scene,
+                              const struct Scene *scene,
                               struct View3D *v3d,
                               struct ARegion *region,
                               float viewmat[4][4],
@@ -648,7 +652,7 @@ bool ED_view3d_camera_lock_sync(const struct Depsgraph *depsgraph,
                                 struct View3D *v3d,
                                 struct RegionView3D *rv3d);
 
-bool ED_view3d_camera_autokey(struct Scene *scene,
+bool ED_view3d_camera_autokey(const struct Scene *scene,
                               struct ID *id_key,
                               struct bContext *C,
                               const bool do_rotate,
@@ -670,9 +674,9 @@ bool ED_view3d_distance_set_from_location(struct RegionView3D *rv3d,
                                           const float dist_co[3],
                                           const float dist_min);
 
-float ED_scene_grid_scale(struct Scene *scene, const char **grid_unit);
-float ED_view3d_grid_scale(struct Scene *scene, struct View3D *v3d, const char **grid_unit);
-void ED_view3d_grid_steps(struct Scene *scene,
+float ED_scene_grid_scale(const struct Scene *scene, const char **grid_unit);
+float ED_view3d_grid_scale(const struct Scene *scene, struct View3D *v3d, const char **grid_unit);
+void ED_view3d_grid_steps(const struct Scene *scene,
                           struct View3D *v3d,
                           struct RegionView3D *rv3d,
                           float *r_grid_steps);
@@ -681,7 +685,7 @@ float ED_view3d_grid_view_scale(struct Scene *scene,
                                 struct RegionView3D *rv3d,
                                 const char **grid_unit);
 
-void ED_scene_draw_fps(struct Scene *scene, int xoffset, int *yoffset);
+void ED_scene_draw_fps(const struct Scene *scene, int xoffset, int *yoffset);
 
 /* view matrix properties utilities */
 /* unused */
@@ -708,7 +712,7 @@ void ED_view3d_shade_update(struct Main *bmain, struct View3D *v3d, struct ScrAr
 
 /* view3d_draw_legacy.c */
 /* Try avoid using these more move out of legacy. */
-void ED_view3d_draw_bgpic_test(struct Scene *scene,
+void ED_view3d_draw_bgpic_test(const struct Scene *scene,
                                struct Depsgraph *depsgraph,
                                struct ARegion *region,
                                struct View3D *v3d,
@@ -729,6 +733,18 @@ void ED_view3d_buttons_region_layout_ex(const struct bContext *C,
 /* view3d_view.c */
 bool ED_view3d_local_collections_set(struct Main *bmain, struct View3D *v3d);
 void ED_view3d_local_collections_reset(struct bContext *C, const bool reset_all);
+
+#ifdef WITH_XR_OPENXR
+void ED_view3d_xr_mirror_update(const struct ScrArea *area,
+                                const struct View3D *v3d,
+                                const bool enable);
+void ED_view3d_xr_shading_update(struct wmWindowManager *wm,
+                                 const View3D *v3d,
+                                 const struct Scene *scene);
+bool ED_view3d_is_region_xr_mirror_active(const struct wmWindowManager *wm,
+                                          const struct View3D *v3d,
+                                          const struct ARegion *region);
+#endif
 
 #ifdef __cplusplus
 }

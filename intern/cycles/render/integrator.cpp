@@ -50,7 +50,7 @@ NODE_DEFINE(Integrator)
   SOCKET_INT(ao_bounces, "AO Bounces", 0);
 
   SOCKET_INT(volume_max_steps, "Volume Max Steps", 1024);
-  SOCKET_FLOAT(volume_step_size, "Volume Step Size", 0.1f);
+  SOCKET_FLOAT(volume_step_rate, "Volume Step Rate", 1.0f);
   static NodeEnum volume_integrator_enum;
   volume_integrator_enum.insert("ray marching", VOLUME_INTEGRATOR_RAY_MARCH);
   volume_integrator_enum.insert("woodcock tracking", VOLUME_INTEGRATOR_WOODCOCK);
@@ -151,7 +151,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   }
 
   kintegrator->volume_max_steps = volume_max_steps;
-  kintegrator->volume_step_size = volume_step_size;
+  kintegrator->volume_step_rate = volume_step_rate;
   kintegrator->volume_max_density = volume_max_density;
   kintegrator->volume_integrator = volume_integrator;
 

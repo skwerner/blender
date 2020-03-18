@@ -369,6 +369,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Noise level step to stop sampling at, lower values reduce noise the cost of render time. Zero for automatic setting based on number of AA samples",
         min=0.0, max=1.0,
         default=0.0,
+        precision=4,
     )
     adaptive_min_samples: IntProperty(
         name="Adaptive Min Samples",
@@ -451,13 +452,20 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=8,
     )
 
-    volume_step_size: FloatProperty(
-        name="Step Size",
-        description="Distance between volume shader samples when rendering the volume "
-        "(lower values give more accurate and detailed results, but also increased render time)",
-        default=0.1,
-        min=0.0000001, max=100000.0, soft_min=0.01, soft_max=1.0, precision=4,
-        unit='LENGTH'
+    volume_step_rate: FloatProperty(
+        name="Step Rate",
+        description="Globally adjust detail for volume rendering, on top of automatically estimated step size. "
+                    "Higher values reduce render time, lower values render with more detail",
+        default=1.0,
+        min=0.01, max=100.0, soft_min=0.1, soft_max=10.0, precision=2
+    )
+
+    volume_preview_step_rate: FloatProperty(
+        name="Step Rate",
+        description="Globally adjust detail for volume rendering, on top of automatically estimated step size. "
+                    "Higher values reduce render time, lower values render with more detail",
+        default=1.0,
+        min=0.01, max=100.0, soft_min=0.1, soft_max=10.0, precision=2
     )
 
     volume_max_steps: IntProperty(
@@ -955,6 +963,14 @@ class CyclesMaterialSettings(bpy.types.PropertyGroup):
         default='LINEAR',
     )
 
+    volume_step_rate: FloatProperty(
+        name="Step Rate",
+        description="Scale the distance between volume shader samples when rendering the volume "
+                    "(lower values give more accurate and detailed results, but also increased render time)",
+        default=1.0,
+        min=0.001, max=1000.0, soft_min=0.1, soft_max=10.0, precision=4
+    )
+
     displacement_method: EnumProperty(
         name="Displacement Method",
         description="Method to use for the displacement",
@@ -1064,6 +1080,13 @@ class CyclesWorldSettings(bpy.types.PropertyGroup):
         description="Interpolation method to use for volumes",
         items=enum_volume_interpolation,
         default='LINEAR',
+    )
+    volume_step_size: FloatProperty(
+        name="Step Size",
+        description="Distance between volume shader samples when rendering the volume "
+                    "(lower values give more accurate and detailed results, but also increased render time)",
+        default=1.0,
+        min=0.0000001, max=100000.0, soft_min=0.1, soft_max=100.0, precision=4
     )
 
     @classmethod

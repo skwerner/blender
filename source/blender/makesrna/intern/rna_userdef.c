@@ -4985,6 +4985,23 @@ static void rna_def_userdef_edit(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Duplicate GPencil", "Causes grease pencil data to be duplicated with the object");
 
+#  ifdef WITH_NEW_OBJECT_TYPES
+  prop = RNA_def_property(srna, "use_duplicate_hair", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "dupflag", USER_DUP_HAIR);
+  RNA_def_property_ui_text(
+      prop, "Duplicate Hair", "Causes hair data to be duplicated with the object");
+
+  prop = RNA_def_property(srna, "use_duplicate_pointcloud", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "dupflag", USER_DUP_POINTCLOUD);
+  RNA_def_property_ui_text(
+      prop, "Duplicate Point Cloud", "Causes point cloud data to be duplicated with the object");
+#  endif
+
+  prop = RNA_def_property(srna, "use_duplicate_volume", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "dupflag", USER_DUP_VOLUME);
+  RNA_def_property_ui_text(
+      prop, "Duplicate Volume", "Causes volume data to be duplicated with the object");
+
   /* Currently only used for insert offset (aka auto-offset),
    * maybe also be useful for later stuff though. */
   prop = RNA_def_property(srna, "node_margin", PROP_INT, PROP_PIXEL);
@@ -5040,8 +5057,16 @@ static void rna_def_userdef_system(BlenderRNA *brna)
       {2048, "SAMPLES_2048", 0, "2048 Samples", "Set audio mixing buffer size to 2048 samples"},
       {4096, "SAMPLES_4096", 0, "4096 Samples", "Set audio mixing buffer size to 4096 samples"},
       {8192, "SAMPLES_8192", 0, "8192 Samples", "Set audio mixing buffer size to 8192 samples"},
-      {16384, "SAMPLES_16384", 0, "16384 Samples", "Set audio mixing buffer size to 16384 samples"},
-      {32768, "SAMPLES_32768", 0, "32768 Samples", "Set audio mixing buffer size to 32768 samples"},
+      {16384,
+       "SAMPLES_16384",
+       0,
+       "16384 Samples",
+       "Set audio mixing buffer size to 16384 samples"},
+      {32768,
+       "SAMPLES_32768",
+       0,
+       "32768 Samples",
+       "Set audio mixing buffer size to 32768 samples"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -5910,12 +5935,20 @@ static void rna_def_userdef_filepaths(BlenderRNA *brna)
 static void rna_def_userdef_experimental(BlenderRNA *brna)
 {
   StructRNA *srna;
+  PropertyRNA *prop;
 
   srna = RNA_def_struct(brna, "PreferencesExperimental", NULL);
   RNA_def_struct_sdna(srna, "UserDef_Experimental");
   RNA_def_struct_nested(brna, srna, "Preferences");
   RNA_def_struct_clear_flag(srna, STRUCT_UNDO);
   RNA_def_struct_ui_text(srna, "Experimental", "Experimental features");
+
+  prop = RNA_def_property(srna, "use_undo_speedup", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "use_undo_speedup", 1);
+  RNA_def_property_ui_text(
+      prop,
+      "Undo Speedup",
+      "Use new undo speedup (WARNING: can lead to crashes and serious .blend file corruption)");
 }
 
 static void rna_def_userdef_addon_collection(BlenderRNA *brna, PropertyRNA *cprop)

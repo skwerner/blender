@@ -178,6 +178,11 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
         world_recalc = true;
       }
     }
+    /* Volume */
+    else if (b_id.is_a(&RNA_Volume)) {
+      BL::Volume b_volume(b_id);
+      geometry_map.set_recalc(b_volume);
+    }
   }
 
   BlenderViewportParameters new_viewport_parameters(b_v3d);
@@ -257,9 +262,10 @@ void BlenderSync::sync_integrator()
   integrator->transparent_max_bounce = get_int(cscene, "transparent_max_bounces");
 
   integrator->volume_max_steps = get_int(cscene, "volume_max_steps");
-  integrator->volume_step_size = get_float(cscene, "volume_step_size");
-  integrator->volume_max_density = get_float(cscene, "volume_max_density");
+  integrator->volume_step_rate = (preview) ? get_float(cscene, "volume_preview_step_rate") :
+                                             get_float(cscene, "volume_step_rate");
 
+  integrator->volume_max_density = get_float(cscene, "volume_max_density");
   integrator->volume_integrator = (VolumeIntegrator)get_enum(
       cscene, "volume_integrator", NUM_VOLUME_INTEGRATORS, VOLUME_INTEGRATOR_RAY_MARCH);
 
@@ -409,6 +415,7 @@ void BlenderSync::sync_view_layer(BL::SpaceView3D & /*b_v3d*/, BL::ViewLayer &b_
   view_layer.use_background_ao = b_view_layer.use_ao();
   view_layer.use_surfaces = b_view_layer.use_solid();
   view_layer.use_hair = b_view_layer.use_strand();
+  view_layer.use_volumes = b_view_layer.use_volumes();
 
   /* Material override. */
   view_layer.material_override = b_view_layer.material_override();

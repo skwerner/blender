@@ -26,6 +26,7 @@ typedef enum eV3DOffscreenDrawFlag {
   V3D_OFSDRAW_NONE = (0),
   V3D_OFSDRAW_SHOW_ANNOTATION = (1 << 0),
   V3D_OFSDRAW_OVERRIDE_SCENE_SETTINGS = (1 << 1),
+  V3D_OFSDRAW_SHOW_GRIDFLOOR = (1 << 2),
 } eV3DOffscreenDrawFlag;
 
 /** #View3DShading.light */
@@ -43,10 +44,6 @@ typedef enum eV3DShadingColorType {
   V3D_SHADING_TEXTURE_COLOR = 3,
   V3D_SHADING_OBJECT_COLOR = 4,
   V3D_SHADING_VERTEX_COLOR = 5,
-
-  /* Is used to display the object using the error color. For example when in
-   * solid texture paint mode without any textures configured */
-  V3D_SHADING_ERROR_COLOR = 999,
 } eV3DShadingColorType;
 
 /** #View3DShading.background_type */

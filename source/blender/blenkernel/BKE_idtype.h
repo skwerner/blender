@@ -26,6 +26,8 @@
  * ID type structure, helping to factorize common operations and data for all data-block types.
  */
 
+#include "BLI_sys_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -70,7 +72,7 @@ typedef struct IDTypeInfo {
    * Bitflag matching id_code, used for filtering (e.g. in file browser), see DNA_ID.h's
    * FILTER_ID_XX enums.
    */
-  int id_filter;
+  int64_t id_filter;
 
   /**
    * Define the position of this data-block type in the virtual list of all data in a Main that is
@@ -160,6 +162,9 @@ extern IDTypeInfo IDType_ID_PC;
 extern IDTypeInfo IDType_ID_CF;
 extern IDTypeInfo IDType_ID_WS;
 extern IDTypeInfo IDType_ID_LP;
+extern IDTypeInfo IDType_ID_HA;
+extern IDTypeInfo IDType_ID_PT;
+extern IDTypeInfo IDType_ID_VO;
 
 /* ********** Helpers/Utils API. ********** */
 

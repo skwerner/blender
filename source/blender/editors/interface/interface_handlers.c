@@ -58,6 +58,7 @@
 #include "BKE_unit.h"
 #include "BKE_paint.h"
 #include "BKE_curveprofile.h"
+#include "BKE_movieclip.h"
 
 #include "IMB_colormanagement.h"
 
@@ -2847,10 +2848,9 @@ static bool ui_textedit_delete_selection(uiBut *but, uiHandleButtonData *data)
  */
 static void ui_textedit_set_cursor_pos(uiBut *but, uiHandleButtonData *data, const float x)
 {
-  uiStyle *style = UI_style_get();  // XXX pass on as arg
-  uiFontStyle *fstyle = &style->widget;
+  /* XXX pass on as arg. */
+  uiFontStyle fstyle = UI_style_get()->widget;
   const float aspect = but->block->aspect;
-  const short fstyle_points_prev = fstyle->points;
 
   float startx = but->rect.xmin;
   float starty_dummy = 0.0f;
@@ -2860,13 +2860,13 @@ static void ui_textedit_set_cursor_pos(uiBut *but, uiHandleButtonData *data, con
 
   ui_block_to_window_fl(data->region, but->block, &startx, &starty_dummy);
 
-  ui_fontscale(&fstyle->points, aspect);
+  ui_fontscale(&fstyle.points, aspect);
 
-  UI_fontstyle_set(fstyle);
+  UI_fontstyle_set(&fstyle);
 
-  if (fstyle->kerning == 1) {
+  if (fstyle.kerning == 1) {
     /* for BLF_width */
-    BLF_enable(fstyle->uifont_id, BLF_KERNING_DEFAULT);
+    BLF_enable(fstyle.uifont_id, BLF_KERNING_DEFAULT);
   }
 
   ui_but_text_password_hide(password_str, but, false);
@@ -2888,7 +2888,7 @@ static void ui_textedit_set_cursor_pos(uiBut *but, uiHandleButtonData *data, con
     while (i > 0) {
       if (BLI_str_cursor_step_prev_utf8(str, but->ofs, &i)) {
         /* 0.25 == scale factor for less sensitivity */
-        if (BLF_width(fstyle->uifont_id, str + i, (str_last - str) - i) > (startx - x) * 0.25f) {
+        if (BLF_width(fstyle.uifont_id, str + i, (str_last - str) - i) > (startx - x) * 0.25f) {
           break;
         }
       }
@@ -2912,7 +2912,7 @@ static void ui_textedit_set_cursor_pos(uiBut *but, uiHandleButtonData *data, con
     but->pos = pos_prev = ((str_last - str) - but->ofs);
 
     while (true) {
-      cdist = startx + BLF_width(fstyle->uifont_id, str + but->ofs, (str_last - str) - but->ofs);
+      cdist = startx + BLF_width(fstyle.uifont_id, str + but->ofs, (str_last - str) - but->ofs);
 
       /* check if position is found */
       if (cdist < x) {
@@ -2944,13 +2944,11 @@ static void ui_textedit_set_cursor_pos(uiBut *but, uiHandleButtonData *data, con
     }
   }
 
-  if (fstyle->kerning == 1) {
-    BLF_disable(fstyle->uifont_id, BLF_KERNING_DEFAULT);
+  if (fstyle.kerning == 1) {
+    BLF_disable(fstyle.uifont_id, BLF_KERNING_DEFAULT);
   }
 
   ui_but_text_password_hide(password_str, but, true);
-
-  fstyle->points = fstyle_points_prev;
 }
 
 static void ui_textedit_set_cursor_select(uiBut *but, uiHandleButtonData *data, const float x)
@@ -7339,8 +7337,10 @@ static bool ui_numedit_but_TRACKPREVIEW(
   }
 
   if (!scopes->track_locked) {
-    if (scopes->marker->framenr != scopes->framenr) {
-      scopes->marker = BKE_tracking_marker_ensure(scopes->track, scopes->framenr);
+    const MovieClip *clip = CTX_data_edit_movieclip(C);
+    int clip_framenr = BKE_movieclip_remap_scene_to_clip_frame(clip, scopes->framenr);
+    if (scopes->marker->framenr != clip_framenr) {
+      scopes->marker = BKE_tracking_marker_ensure(scopes->track, clip_framenr);
     }
 
     scopes->marker->flag &= ~(MARKER_DISABLED | MARKER_TRACKED);
@@ -8266,6 +8266,13 @@ uiBut *UI_region_active_but_get(ARegion *region)
 uiBut *UI_region_but_find_rect_over(const ARegion *region, const rcti *rect_px)
 {
   return ui_but_find_rect_over(region, rect_px);
+}
+
+uiBlock *UI_region_block_find_mouse_over(const struct ARegion *region,
+                                         const int xy[2],
+                                         bool only_clip)
+{
+  return ui_block_find_mouse_over_ex(region, xy[0], xy[1], only_clip);
 }
 
 /**

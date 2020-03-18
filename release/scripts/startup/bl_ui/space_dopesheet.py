@@ -126,6 +126,12 @@ class DopesheetFilterPopoverBase:
             flow.prop(dopesheet, "show_lattices", text="Lattices")
         if bpy.data.metaballs:
             flow.prop(dopesheet, "show_metaballs", text="Metaballs")
+        if hasattr(bpy.data, "hairs") and bpy.data.hairs:
+            flow.prop(dopesheet, "show_hairs", text="Hairs")
+        if hasattr(bpy.data, "pointclouds") and bpy.data.pointclouds:
+            flow.prop(dopesheet, "show_pointclouds", text="Point Clouds")
+        if bpy.data.volumes:
+            flow.prop(dopesheet, "show_volumes", text="Volumes")
 
         # data types
         flow.prop(dopesheet, "show_worlds", text="Worlds")
@@ -252,15 +258,25 @@ class DOPESHEET_HT_editor_buttons(Header):
 
         # Layer management
         if st.mode == 'GPENCIL':
+            ob = context.active_object
+            selected = st.dopesheet.show_only_selected
+            enable_but = selected and ob is not None and ob.type == 'GPENCIL'
+
             row = layout.row(align=True)
+            row.enabled = enable_but
+            row.operator("gpencil.layer_add", icon='ADD', text="")
+            row.operator("gpencil.layer_remove", icon='REMOVE', text="")
+            row.menu("GPENCIL_MT_layer_context_menu", icon='DOWNARROW_HLT', text="")
+
+            row = layout.row(align=True)
+            row.enabled = enable_but
             row.operator("gpencil.layer_move", icon='TRIA_UP', text="").type = 'UP'
             row.operator("gpencil.layer_move", icon='TRIA_DOWN', text="").type = 'DOWN'
 
             row = layout.row(align=True)
-            row.operator("gpencil.layer_add", icon='ADD', text="")
-            row.operator("gpencil.layer_remove", icon='REMOVE', text="")
-
-            layout.separator_spacer()
+            row.enabled = enable_but
+            row.operator("gpencil.layer_isolate", icon='RESTRICT_VIEW_ON', text="").affect_visibility = True
+            row.operator("gpencil.layer_isolate", icon='LOCKED', text="").affect_visibility = False
 
         layout.separator_spacer()
 
@@ -270,15 +286,8 @@ class DOPESHEET_HT_editor_buttons(Header):
             dopesheet_filter(layout, context)
         elif st.mode == 'GPENCIL':
             row = layout.row(align=True)
-            row.prop(st.dopesheet, "show_gpencil_3d_only", text="Active Only")
-
-            if st.dopesheet.show_gpencil_3d_only:
-                row = layout.row(align=True)
-                row.prop(st.dopesheet, "show_only_selected", text="")
-                row.prop(st.dopesheet, "show_hidden", text="")
-
-            row = layout.row(align=True)
-            row.prop(st.dopesheet, "filter_text", text="")
+            row.prop(st.dopesheet, "show_only_selected", text="")
+            row.prop(st.dopesheet, "show_hidden", text="")
 
         layout.popover(
             panel="DOPESHEET_PT_filters",

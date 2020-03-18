@@ -34,8 +34,10 @@ struct CurveMapping;
 struct Depsgraph;
 struct GHash;
 struct ListBase;
+struct MDeformVert;
 struct Main;
 struct Material;
+struct MaterialGPencilStyle;
 struct Object;
 struct Scene;
 struct SpaceImage;
@@ -47,8 +49,6 @@ struct bGPDlayer_Mask;
 struct bGPDspoint;
 struct bGPDstroke;
 struct bGPdata;
-struct MaterialGPencilStyle;
-struct MDeformVert;
 
 #define GPENCIL_SIMPLIFY(scene) ((scene->r.simplify_gpencil & SIMPLIFY_GPENCIL_ENABLE))
 #define GPENCIL_SIMPLIFY_ONPLAY(playing) \
@@ -193,6 +193,7 @@ void BKE_gpencil_layer_mask_remove_ref(struct bGPdata *gpd, const char *name);
 struct bGPDlayer_Mask *BKE_gpencil_layer_mask_named_get(struct bGPDlayer *gpl, const char *name);
 void BKE_gpencil_layer_mask_sort(struct bGPdata *gpd, struct bGPDlayer *gpl);
 void BKE_gpencil_layer_mask_sort_all(struct bGPdata *gpd);
+void BKE_gpencil_layer_frames_sort(struct bGPDlayer *gpl, bool *r_has_duplicate_frames);
 
 /* Brush */
 struct Material *BKE_gpencil_brush_material_get(struct Brush *brush);

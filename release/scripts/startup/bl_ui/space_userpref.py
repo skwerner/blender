@@ -390,18 +390,23 @@ class USERPREF_PT_edit_objects_duplicate_data(EditingPanel, CenterAlignMixIn, Pa
         col.prop(edit, "use_duplicate_armature", text="Armature")
         col.prop(edit, "use_duplicate_curve", text="Curve")
         # col.prop(edit, "use_duplicate_fcurve", text="F-Curve")  # Not implemented.
+        col.prop(edit, "use_duplicate_grease_pencil", text="Grease Pencil")
+        if hasattr(edit, "use_duplicate_hair"):
+            col.prop(edit, "use_duplicate_hair", text="Hair")
         col.prop(edit, "use_duplicate_light", text="Light")
-        col.prop(edit, "use_duplicate_lightprobe", text="Light Probe")
         col = flow.column()
+        col.prop(edit, "use_duplicate_lightprobe", text="Light Probe")
         col.prop(edit, "use_duplicate_material", text="Material")
         col.prop(edit, "use_duplicate_mesh", text="Mesh")
         col.prop(edit, "use_duplicate_metaball", text="Metaball")
         col.prop(edit, "use_duplicate_particle", text="Particle")
         col = flow.column()
+        if hasattr(edit, "use_duplicate_pointcloud"):
+            col.prop(edit, "use_duplicate_pointcloud", text="Point Cloud")
         col.prop(edit, "use_duplicate_surface", text="Surface")
         col.prop(edit, "use_duplicate_text", text="Text")
         # col.prop(edit, "use_duplicate_texture", text="Texture")  # Not implemented.
-        col.prop(edit, "use_duplicate_grease_pencil", text="Grease Pencil")
+        col.prop(edit, "use_duplicate_volume", text="Volume")
 
 
 class USERPREF_PT_edit_cursor(EditingPanel, CenterAlignMixIn, Panel):
@@ -2133,6 +2138,25 @@ class USERPREF_PT_experimental_virtual_reality(ExperimentalPanel, Panel):
 """
 
 
+class USERPREF_PT_experimental_system(ExperimentalPanel, Panel):
+    bl_label = "System"
+
+    def draw(self, context):
+        prefs = context.preferences
+        experimental = prefs.experimental
+
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        task = "T60695"
+        split = layout.split(factor=0.66)
+        col = split.split()
+        col.prop(experimental, "use_undo_speedup")
+        col = split.split()
+        col.operator("wm.url_open", text=task, icon='URL').url = self.url_prefix + task
+
+
 # -----------------------------------------------------------------------------
 # Class Registration
 
@@ -2221,6 +2245,8 @@ classes = (
 
     # Popovers.
     USERPREF_PT_ndof_settings,
+
+    USERPREF_PT_experimental_system,
 
     # Add dynamically generated editor theme panels last,
     # so they show up last in the theme section.

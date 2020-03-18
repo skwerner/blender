@@ -97,6 +97,7 @@ extern "C" {
 #include "BKE_shader_fx.h"
 #include "BKE_sound.h"
 #include "BKE_tracking.h"
+#include "BKE_volume.h"
 #include "BKE_world.h"
 
 #include "RNA_access.h"
@@ -319,6 +320,18 @@ void DepsgraphNodeBuilder::begin_build()
    * them for new ID nodes. */
   id_info_hash_ = BLI_ghash_ptr_new("Depsgraph id hash");
   for (IDNode *id_node : graph_->id_nodes) {
+    /* It is possible that the ID does not need to have CoW version in which case id_cow is the
+     * same as id_orig. Additionally, such ID might have been removed, which makes the check
+     * for whether id_cow is expanded to access freed memory. In order to deal with this we
+     * check whether CoW is needed based on a scalar value which does not lead to access of
+     * possibly deleted memory.
+     * Additionally, this saves some space in the map by skipping mapping for datablocks which
+     * do not need CoW, */
+    if (!deg_copy_on_write_is_needed(id_node->id_type)) {
+      id_node->id_cow = nullptr;
+      continue;
+    }
+
     IDInfo *id_info = (IDInfo *)MEM_mallocN(sizeof(IDInfo), "depsgraph id info");
     if (deg_copy_on_write_is_expanded(id_node->id_cow) && id_node->id_orig != id_node->id_cow) {
       id_info->id_cow = id_node->id_cow;
@@ -443,6 +456,9 @@ void DepsgraphNodeBuilder::build_id(ID *id)
     case ID_CU:
     case ID_MB:
     case ID_LT:
+    case ID_HA:
+    case ID_PT:
+    case ID_VO:
       /* TODO(sergey): Get visibility from a "parent" somehow.
        *
        * NOTE: Similarly to above, we don't want false-positives on
@@ -688,6 +704,9 @@ void DepsgraphNodeBuilder::build_object_data(Object *object, bool is_object_visi
     case OB_MBALL:
     case OB_LATTICE:
     case OB_GPENCIL:
+    case OB_HAIR:
+    case OB_POINTCLOUD:
+    case OB_VOLUME:
       build_object_data_geometry(object, is_object_visible);
       break;
     case OB_ARMATURE:
@@ -1311,6 +1330,26 @@ void DepsgraphNodeBuilder::build_object_data_geometry_datablock(ID *obdata, bool
           NodeType::GEOMETRY,
           OperationCode::GEOMETRY_EVAL,
           function_bind(BKE_gpencil_frame_active_set, _1, (bGPdata *)obdata_cow));
+      op_node->set_as_entry();
+      break;
+    }
+    case ID_HA: {
+      op_node = add_operation_node(obdata, NodeType::GEOMETRY, OperationCode::GEOMETRY_EVAL);
+      op_node->set_as_entry();
+      break;
+    }
+    case ID_PT: {
+      op_node = add_operation_node(obdata, NodeType::GEOMETRY, OperationCode::GEOMETRY_EVAL);
+      op_node->set_as_entry();
+      break;
+    }
+    case ID_VO: {
+      /* Volume frame update. */
+      op_node = add_operation_node(
+          obdata,
+          NodeType::GEOMETRY,
+          OperationCode::GEOMETRY_EVAL,
+          function_bind(BKE_volume_eval_geometry, _1, (Volume *)obdata_cow));
       op_node->set_as_entry();
       break;
     }

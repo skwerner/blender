@@ -45,7 +45,8 @@ class Integrator : public Node {
   int ao_bounces;
 
   int volume_max_steps;
-  float volume_step_size;
+  
+  float volume_step_rate;
   float volume_max_density;
 
   bool caustics_reflective;

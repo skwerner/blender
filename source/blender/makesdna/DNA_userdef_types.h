@@ -613,7 +613,8 @@ typedef struct UserDef_FileSpaceData {
 } UserDef_FileSpaceData;
 
 typedef struct UserDef_Experimental {
-  char _pad0[8]; /* makesdna does not allow empty structs. */
+  char use_undo_speedup;
+  char _pad0[7]; /* makesdna does not allow empty structs. */
 } UserDef_Experimental;
 
 #define USER_EXPERIMENTAL_TEST(userdef, member) \
@@ -1132,6 +1133,9 @@ typedef enum eDupli_ID_Flags {
   USER_DUP_PSYS = (1 << 11),
   USER_DUP_LIGHTPROBE = (1 << 12),
   USER_DUP_GPENCIL = (1 << 13),
+  USER_DUP_HAIR = (1 << 14),
+  USER_DUP_POINTCLOUD = (1 << 15),
+  USER_DUP_VOLUME = (1 << 16),
 } eDupli_ID_Flags;
 
 /**

@@ -43,6 +43,7 @@
 #include "DNA_camera_types.h"
 #include "DNA_collection_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_hair_types.h"
 #include "DNA_ipo_types.h"
 #include "DNA_key_types.h"
 #include "DNA_light_types.h"
@@ -55,6 +56,7 @@
 #include "DNA_mask_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
+#include "DNA_pointcloud_types.h"
 #include "DNA_lightprobe_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
@@ -62,6 +64,7 @@
 #include "DNA_sound_types.h"
 #include "DNA_text_types.h"
 #include "DNA_vfont_types.h"
+#include "DNA_volume_types.h"
 #include "DNA_windowmanager_types.h"
 #include "DNA_world_types.h"
 #include "DNA_workspace_types.h"
@@ -89,6 +92,7 @@
 #include "BKE_font.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
+#include "BKE_hair.h"
 #include "BKE_idcode.h"
 #include "BKE_idprop.h"
 #include "BKE_idtype.h"
@@ -110,6 +114,7 @@
 #include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
+#include "BKE_pointcloud.h"
 #include "BKE_lightprobe.h"
 #include "BKE_rigidbody.h"
 #include "BKE_sound.h"
@@ -117,6 +122,7 @@
 #include "BKE_scene.h"
 #include "BKE_text.h"
 #include "BKE_texture.h"
+#include "BKE_volume.h"
 #include "BKE_world.h"
 
 #include "DEG_depsgraph.h"
@@ -162,7 +168,8 @@ static void lib_id_clear_library_data_ex(Main *bmain, ID *id)
 {
   bNodeTree *ntree = NULL;
   Key *key = NULL;
-  const bool id_in_mainlist = (id->tag & LIB_TAG_NO_MAIN) == 0;
+  const bool id_in_mainlist = (id->tag & LIB_TAG_NO_MAIN) == 0 &&
+                              (id->flag & LIB_EMBEDDED_DATA) == 0;
 
   lib_id_library_local_paths(bmain, id->lib, id);
 
@@ -340,7 +347,7 @@ static int lib_id_expand_local_cb(LibraryIDLinkCallbackData *cb_data)
   ID *id_self = cb_data->id_self;
   ID **id_pointer = cb_data->id_pointer;
   int const cb_flag = cb_data->cb_flag;
-  if (cb_flag & IDWALK_CB_PRIVATE) {
+  if (cb_flag & IDWALK_CB_EMBEDDED) {
     return IDWALK_RET_NOP;
   }
 
@@ -596,7 +603,7 @@ bool BKE_id_copy(Main *bmain, const ID *id, ID **newid)
  * Does a mere memory swap over the whole IDs data (including type-specific memory).
  * \note Most internal ID data itself is not swapped (only IDProperties are).
  */
-void BKE_id_swap(Main *bmain, ID *id_a, ID *id_b)
+static void id_swap(Main *bmain, ID *id_a, ID *id_b, const bool do_full_id)
 {
   BLI_assert(GS(id_a->name) == GS(id_b->name));
 
@@ -644,23 +651,54 @@ void BKE_id_swap(Main *bmain, ID *id_a, ID *id_b)
     CASE_SWAP(ID_PAL, Palette);
     CASE_SWAP(ID_PC, PaintCurve);
     CASE_SWAP(ID_CF, CacheFile);
+    CASE_SWAP(ID_HA, Hair);
+    CASE_SWAP(ID_PT, PointCloud);
+    CASE_SWAP(ID_VO, Volume);
     case ID_IP:
       break; /* Deprecated. */
   }
 
 #undef CASE_SWAP
 
-  /* Restore original ID's internal data. */
-  *id_a = id_a_back;
-  *id_b = id_b_back;
+  if (!do_full_id) {
+    /* Restore original ID's internal data. */
+    *id_a = id_a_back;
+    *id_b = id_b_back;
 
-  /* Exception: IDProperties. */
-  id_a->properties = id_b_back.properties;
-  id_b->properties = id_a_back.properties;
+    /* Exception: IDProperties. */
+    id_a->properties = id_b_back.properties;
+    id_b->properties = id_a_back.properties;
+  }
 
-  /* Swap will have broken internal references to itself, restore them. */
-  BKE_libblock_relink_ex(bmain, id_a, id_b, id_a, ID_REMAP_SKIP_NEVER_NULL_USAGE);
-  BKE_libblock_relink_ex(bmain, id_b, id_a, id_b, ID_REMAP_SKIP_NEVER_NULL_USAGE);
+  if (bmain != NULL) {
+    /* Swap will have broken internal references to itself, restore them. */
+    BKE_libblock_relink_ex(bmain, id_a, id_b, id_a, ID_REMAP_SKIP_NEVER_NULL_USAGE);
+    BKE_libblock_relink_ex(bmain, id_b, id_a, id_b, ID_REMAP_SKIP_NEVER_NULL_USAGE);
+  }
+}
+
+/**
+ * Does a mere memory swap over the whole IDs data (including type-specific memory).
+ * \note Most internal ID data itself is not swapped (only IDProperties are).
+ *
+ * \param bmain May be NULL, in which case there will be no remapping of internal pointers to
+ * itself.
+ */
+void BKE_lib_id_swap(Main *bmain, ID *id_a, ID *id_b)
+{
+  id_swap(bmain, id_a, id_b, false);
+}
+
+/**
+ * Does a mere memory swap over the whole IDs data (including type-specific memory).
+ * \note All internal ID data itself is also swapped.
+ *
+ * \param bmain May be NULL, in which case there will be no remapping of internal pointers to
+ * itself.
+ */
+void BKE_lib_id_swap_full(Main *bmain, ID *id_a, ID *id_b)
+{
+  id_swap(bmain, id_a, id_b, true);
 }
 
 /** Does *not* set ID->newid pointer. */
@@ -988,6 +1026,9 @@ size_t BKE_libblock_get_alloc_info(short type, const char **name)
     CASE_RETURN(ID_PC, PaintCurve);
     CASE_RETURN(ID_CF, CacheFile);
     CASE_RETURN(ID_WS, WorkSpace);
+    CASE_RETURN(ID_HA, Hair);
+    CASE_RETURN(ID_PT, PointCloud);
+    CASE_RETURN(ID_VO, Volume);
   }
   return 0;
 #undef CASE_RETURN
@@ -1148,13 +1189,13 @@ void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int ori
   ID *new_id = *r_newid;
   int flag = orig_flag;
 
-  const bool is_private_id_data = (id->flag & LIB_PRIVATE_DATA) != 0;
+  const bool is_private_id_data = (id->flag & LIB_EMBEDDED_DATA) != 0;
 
   BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || bmain != NULL);
   BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) != 0 || (flag & LIB_ID_CREATE_NO_ALLOCATE) == 0);
   if (!is_private_id_data) {
-    /* When we are handling private ID data, we might still want to manage usercounts, even though
-     * that ID data-block is actually outside of Main... */
+    /* When we are handling private ID data, we might still want to manage usercounts, even
+     * though that ID data-block is actually outside of Main... */
     BLI_assert((flag & LIB_ID_CREATE_NO_MAIN) == 0 ||
                (flag & LIB_ID_CREATE_NO_USER_REFCOUNT) != 0);
   }
@@ -1167,7 +1208,7 @@ void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int ori
   }
 
   /* The id->flag bits to copy over. */
-  const int copy_idflag_mask = LIB_PRIVATE_DATA;
+  const int copy_idflag_mask = LIB_EMBEDDED_DATA;
 
   if ((flag & LIB_ID_CREATE_NO_ALLOCATE) != 0) {
     /* r_newid already contains pointer to allocated memory. */
@@ -1365,10 +1406,10 @@ void id_sort_by_name(ListBase *lb, ID *id, ID *id_sorting_hint)
 /**
  * Helper building final ID name from given base_name and number.
  *
- * If everything goes well and we do generate a valid final ID name in given name, we return true.
- * In case the final name would overflow the allowed ID name length, or given number is bigger than
- * maximum allowed value, we truncate further the base_name (and given name, which is assumed to
- * have the same 'base_name' part), and return false.
+ * If everything goes well and we do generate a valid final ID name in given name, we return
+ * true. In case the final name would overflow the allowed ID name length, or given number is
+ * bigger than maximum allowed value, we truncate further the base_name (and given name, which is
+ * assumed to have the same 'base_name' part), and return false.
  */
 static bool id_name_final_build(char *name, char *base_name, size_t base_name_len, int number)
 {
@@ -1430,10 +1471,10 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name, ID **r_id_sorting_
   static short prev_id_type = ID_LINK_PLACEHOLDER; /* Should never exist in actual ID list. */
   static int prev_number = MIN_NUMBER - 1;
 
-  /* Initial test to check whether we can 'shortcut' the more complex loop of the main code below.
-   * Note that we do not do that for low numbers, as that would prevent using actual smallest
-   * available number in some cases, and benefits of this special case handling mostly show up with
-   * high numbers anyway. */
+  /* Initial test to check whether we can 'shortcut' the more complex loop of the main code
+   * below. Note that we do not do that for low numbers, as that would prevent using actual
+   * smallest available number in some cases, and benefits of this special case handling mostly
+   * show up with high numbers anyway. */
   if (id_type == prev_id_type && prev_number >= MAX_NUMBERS_IN_USE &&
       prev_number < MAX_NUMBER - 1 && name[0] == prev_final_base_name[0]) {
 
@@ -1446,8 +1487,8 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name, ID **r_id_sorting_
 
     if (base_name_len == prev_orig_base_name_len &&
         STREQLEN(base_name, prev_orig_base_name, prev_orig_base_name_len)) {
-      /* Once we have ensured given base_name and original previous one are the same, we can check
-       * that previously used number is actually used, and that next one is free. */
+      /* Once we have ensured given base_name and original previous one are the same, we can
+       * check that previously used number is actually used, and that next one is free. */
       /* Note that from now on, we only used previous final base name, as it might have been
        * truncated from original one due to number suffix length. */
       char final_name[MAX_ID_NAME - 2];
@@ -1523,8 +1564,8 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name, ID **r_id_sorting_
           STREQLEN(name, id_test->name + 2, base_name_len) &&
           (BLI_split_name_num(base_name_test, &number_test, id_test->name + 2, '.') ==
            base_name_len)) {
-        /* If we did not yet encounter exact same name as the given one, check the remaining parts
-         * of the strings. */
+        /* If we did not yet encounter exact same name as the given one, check the remaining
+         * parts of the strings. */
         if (!is_orig_name_used) {
           is_orig_name_used = STREQ(name + base_name_len, id_test->name + 2 + base_name_len);
         }
@@ -1541,11 +1582,13 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name, ID **r_id_sorting_
     }
 
     /* If there is no double, we are done.
-     * Note however that name might have been changed (truncated) in a previous iteration already.
+     * Note however that name might have been changed (truncated) in a previous iteration
+     * already.
      */
     if (!is_orig_name_used) {
       /* Don't bother updating prev_ static variables here, this case is not supposed to happen
-       * that often, and is not straight-forward here, so just ignore and reset them to default. */
+       * that often, and is not straight-forward here, so just ignore and reset them to default.
+       */
       prev_id_type = ID_LINK_PLACEHOLDER;
       prev_final_base_name[0] = '\0';
       prev_number = MIN_NUMBER - 1;
@@ -1556,8 +1599,8 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name, ID **r_id_sorting_
       return is_name_changed;
     }
 
-    /* Decide which value of number to use, either the smallest unused one if possible, or default
-     * to the first largest unused one we got from previous loop. */
+    /* Decide which value of number to use, either the smallest unused one if possible, or
+     * default to the first largest unused one we got from previous loop. */
     for (int i = MIN_NUMBER; i < MAX_NUMBERS_IN_USE; i++) {
       if (ids_in_use[i] == NULL) {
         number = i;
@@ -1576,8 +1619,8 @@ static bool check_for_dupid(ListBase *lb, ID *id, char *name, ID **r_id_sorting_
     /* We know for wure that name will be changed. */
     is_name_changed = true;
 
-    /* If id_name_final_build helper returns false, it had to truncate further given name, hence we
-     * have to go over the whole check again. */
+    /* If id_name_final_build helper returns false, it had to truncate further given name, hence
+     * we have to go over the whole check again. */
     if (!id_name_final_build(name, base_name, base_name_len, number)) {
       /* We have to clear our list of small used numbers before we do the whole check again. */
       memset(ids_in_use, 0, sizeof(ids_in_use));
@@ -1744,7 +1787,7 @@ static void library_make_local_copying_check(ID *id,
       }
 
       /* Shapekeys are considered 'private' to their owner ID here, and never tagged
-       * (since they cannot be linked), * so we have to switch effective parent to their owner.
+       * (since they cannot be linked), so we have to switch effective parent to their owner.
        */
       if (GS(par_id->name) == ID_KE) {
         par_id = ((Key *)par_id)->from;

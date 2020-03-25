@@ -23,13 +23,14 @@
 
 #define _USE_MATH_DEFINES
 
-#include "GHOST_WindowManager.h"
 #include "GHOST_WindowWin32.h"
-#include "GHOST_SystemWin32.h"
-#include "GHOST_DropTargetWin32.h"
+#include "GHOST_ContextD3D.h"
 #include "GHOST_ContextNone.h"
-#include "utfconv.h"
+#include "GHOST_DropTargetWin32.h"
+#include "GHOST_SystemWin32.h"
+#include "GHOST_WindowManager.h"
 #include "utf_winfunc.h"
+#include "utfconv.h"
 
 #if defined(WITH_GL_EGL)
 #  include "GHOST_ContextEGL.h"
@@ -40,10 +41,10 @@
 #  include <Dwmapi.h>
 #endif
 
-#include <windowsx.h>
+#include <assert.h>
 #include <math.h>
 #include <string.h>
-#include <assert.h>
+#include <windowsx.h>
 
 #ifndef GET_POINTERID_WPARAM
 #  define GET_POINTERID_WPARAM(wParam) (LOWORD(wParam))
@@ -89,8 +90,7 @@ GHOST_WindowWin32::GHOST_WindowWin32(GHOST_SystemWin32 *system,
 {
   // Initialize tablet variables
   memset(&m_wintab, 0, sizeof(m_wintab));
-  memset(&m_tabletData, 0, sizeof(m_tabletData));
-  m_tabletData.Active = GHOST_kTabletModeNone;
+  m_tabletData = GHOST_TABLET_DATA_DEFAULT;
 
   // Create window
   if (state != GHOST_kWindowStateFullScreen) {
@@ -645,6 +645,9 @@ GHOST_TSuccess GHOST_WindowWin32::setOrder(GHOST_TWindowOrder order)
     hWndToRaise = ::GetWindow(m_hWnd, GW_HWNDNEXT); /* the window to raise */
   }
   else {
+    if (getState() == GHOST_kWindowStateMinimized) {
+      setState(GHOST_kWindowStateNormal);
+    }
     hWndInsertAfter = HWND_TOP;
     hWndToRaise = NULL;
   }
@@ -747,6 +750,19 @@ GHOST_Context *GHOST_WindowWin32::newDrawingContext(GHOST_TDrawingContextType ty
 #else
 #  error  // must specify either core or compat at build time
 #endif
+  }
+  else if (type == GHOST_kDrawingContextTypeD3D) {
+    GHOST_Context *context;
+
+    context = new GHOST_ContextD3D(false, m_hWnd);
+    if (context->initializeDrawingContext()) {
+      return context;
+    }
+    else {
+      delete context;
+    }
+
+    return context;
   }
 
   return NULL;
@@ -1085,10 +1101,7 @@ void GHOST_WindowWin32::setTabletData(GHOST_TabletData *pTabletData)
     m_tabletData = *pTabletData;
   }
   else {
-    m_tabletData.Active = GHOST_kTabletModeNone;
-    m_tabletData.Pressure = 1.0f;
-    m_tabletData.Xtilt = 0.0f;
-    m_tabletData.Ytilt = 0.0f;
+    m_tabletData = GHOST_TABLET_DATA_DEFAULT;
   }
 }
 
@@ -1150,8 +1163,6 @@ void GHOST_WindowWin32::processWin32TabletInitEvent()
         m_wintab.maxAzimuth = m_wintab.maxAltitude = 0;
       }
     }
-
-    m_tabletData.Active = GHOST_kTabletModeNone;
   }
 
   m_tabletData.Active = GHOST_kTabletModeNone;

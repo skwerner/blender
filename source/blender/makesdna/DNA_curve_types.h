@@ -24,10 +24,10 @@
 #ifndef __DNA_CURVE_TYPES_H__
 #define __DNA_CURVE_TYPES_H__
 
+#include "DNA_ID.h"
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 #include "DNA_vec_types.h"
-#include "DNA_ID.h"
 
 #define MAXTEXTBOX 256 /* used in readfile.c and editfont.c */
 
@@ -330,7 +330,7 @@ enum {
   CU_BACK = 1 << 2,
   CU_PATH = 1 << 3,
   CU_FOLLOW = 1 << 4,
-  CU_UV_ORCO = 1 << 5,
+  /* CU_UV_ORCO = 1 << 5, */ /* DEPRECATED */
   CU_DEFORM_BOUNDS_OFF = 1 << 6,
   CU_STRETCH = 1 << 7,
   /* CU_OFFS_PATHDIST   = 1 << 8, */  /* DEPRECATED */

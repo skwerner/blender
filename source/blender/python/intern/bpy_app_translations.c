@@ -33,16 +33,16 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLT_translation.h"
 #include "BLT_lang.h"
+#include "BLT_translation.h"
 
 #include "RNA_types.h"
 
 #include "../generic/python_utildefines.h"
 
 #ifdef WITH_INTERNATIONAL
-#  include "BLI_string.h"
 #  include "BLI_ghash.h"
+#  include "BLI_string.h"
 #endif
 
 typedef struct {
@@ -80,10 +80,10 @@ static GHashKey *_ghashutil_keyalloc(const void *msgctxt, const void *msgid)
   return key;
 }
 
-static unsigned int _ghashutil_keyhash(const void *ptr)
+static uint _ghashutil_keyhash(const void *ptr)
 {
   const GHashKey *key = ptr;
-  unsigned int hash = BLI_ghashutil_strhash(key->msgctxt);
+  uint hash = BLI_ghashutil_strhash(key->msgctxt);
   return hash ^ BLI_ghashutil_strhash(key->msgid);
 }
 

@@ -27,16 +27,16 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "GPU_matrix.h"
 #include "GPU_batch.h"
 #include "GPU_immediate.h"
+#include "GPU_matrix.h"
 #include "GPU_state.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_fileops_types.h"
-#include "BLI_math_vector.h"
 #include "BLI_math_color_blend.h"
+#include "BLI_math_vector.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_brush_types.h"
 #include "DNA_curve_types.h"
@@ -50,11 +50,11 @@
 #include "RNA_access.h"
 #include "RNA_enum_types.h"
 
+#include "BKE_appdir.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_paint.h"
 #include "BKE_icons.h"
-#include "BKE_appdir.h"
+#include "BKE_paint.h"
 #include "BKE_studiolight.h"
 
 #include "IMB_imbuf.h"
@@ -119,6 +119,7 @@ typedef struct DrawInfo {
     } vector;
     struct {
       ImBuf *image_cache;
+      bool inverted;
     } geom;
     struct {
       IconImage *image;
@@ -566,14 +567,14 @@ static DrawInfo *g_di_event_list = NULL;
 
 int UI_icon_from_event_type(short event_type, short event_value)
 {
-  if (event_type == RIGHTSHIFTKEY) {
-    event_type = LEFTSHIFTKEY;
+  if (event_type == EVT_RIGHTSHIFTKEY) {
+    event_type = EVT_LEFTSHIFTKEY;
   }
-  else if (event_type == RIGHTCTRLKEY) {
-    event_type = LEFTCTRLKEY;
+  else if (event_type == EVT_RIGHTCTRLKEY) {
+    event_type = EVT_LEFTCTRLKEY;
   }
-  else if (event_type == RIGHTALTKEY) {
-    event_type = LEFTALTKEY;
+  else if (event_type == EVT_RIGHTALTKEY) {
+    event_type = EVT_LEFTALTKEY;
   }
   else if (event_type == EVT_TWEAK_L) {
     event_type = LEFTMOUSE;
@@ -647,54 +648,54 @@ static void init_event_icons(void)
 
   const int w = 16; /* DUMMY */
 
-  INIT_EVENT_ICON(ICON_EVENT_A, AKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_B, BKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_C, CKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_D, DKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_E, EKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F, FKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_G, GKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_H, HKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_I, IKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_J, JKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_K, KKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_L, LKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_M, MKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_N, NKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_O, OKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_P, PKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_Q, QKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_R, RKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_S, SKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_T, TKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_U, UKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_V, VKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_W, WKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_X, XKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_Y, YKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_Z, ZKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_SHIFT, LEFTSHIFTKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_CTRL, LEFTCTRLKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_ALT, LEFTALTKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_OS, OSKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F1, F1KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F2, F2KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F3, F3KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F4, F4KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F5, F5KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F6, F6KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F7, F7KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F8, F8KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F9, F9KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F10, F10KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F11, F11KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_F12, F12KEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_ESC, ESCKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_TAB, TABKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_PAGEUP, PAGEUPKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_PAGEDOWN, PAGEDOWNKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_RETURN, RETKEY, KM_ANY);
-  INIT_EVENT_ICON(ICON_EVENT_SPACEKEY, SPACEKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_A, EVT_AKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_B, EVT_BKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_C, EVT_CKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_D, EVT_DKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_E, EVT_EKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F, EVT_FKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_G, EVT_GKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_H, EVT_HKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_I, EVT_IKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_J, EVT_JKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_K, EVT_KKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_L, EVT_LKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_M, EVT_MKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_N, EVT_NKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_O, EVT_OKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_P, EVT_PKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_Q, EVT_QKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_R, EVT_RKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_S, EVT_SKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_T, EVT_TKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_U, EVT_UKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_V, EVT_VKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_W, EVT_WKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_X, EVT_XKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_Y, EVT_YKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_Z, EVT_ZKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_SHIFT, EVT_LEFTSHIFTKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_CTRL, EVT_LEFTCTRLKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_ALT, EVT_LEFTALTKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_OS, EVT_OSKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F1, EVT_F1KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F2, EVT_F2KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F3, EVT_F3KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F4, EVT_F4KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F5, EVT_F5KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F6, EVT_F6KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F7, EVT_F7KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F8, EVT_F8KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F9, EVT_F9KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F10, EVT_F10KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F11, EVT_F11KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_F12, EVT_F12KEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_ESC, EVT_ESCKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_TAB, EVT_TABKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_PAGEUP, EVT_PAGEUPKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_PAGEDOWN, EVT_PAGEDOWNKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_RETURN, EVT_RETKEY, KM_ANY);
+  INIT_EVENT_ICON(ICON_EVENT_SPACEKEY, EVT_SPACEKEY, KM_ANY);
 
   g_di_event_list = di_next;
 
@@ -804,45 +805,6 @@ static ImBuf *create_mono_icon_with_border(ImBuf *buf,
   return result;
 }
 
-/* Generate the mipmap levels for the icon textures
- * During creation the source16 ImBuf will be freed to reduce memory overhead
- * A new ImBuf will be returned that needs is owned by the caller.
- *
- * FIXME: Mipmap levels are generated until the width of the image is 1, which
- *        are too many levels than that are needed.*/
-static ImBuf *create_mono_icon_mipmaps(ImBuf *source32, ImBuf *source16, int level)
-{
-  if (level == 0) {
-    glTexImage2D(GL_TEXTURE_2D,
-                 level,
-                 GL_RGBA8,
-                 source32->x,
-                 source32->y,
-                 0,
-                 GL_RGBA,
-                 GL_UNSIGNED_BYTE,
-                 source32->rect);
-    return create_mono_icon_mipmaps(source32, source16, level + 1);
-  }
-  else {
-    glTexImage2D(GL_TEXTURE_2D,
-                 level,
-                 GL_RGBA8,
-                 source16->x,
-                 source16->y,
-                 0,
-                 GL_RGBA,
-                 GL_UNSIGNED_BYTE,
-                 source16->rect);
-    if (source16->x > 1) {
-      ImBuf *nbuf = IMB_onehalf(source16);
-      IMB_freeImBuf(source16);
-      source16 = create_mono_icon_mipmaps(source32, nbuf, level + 1);
-    }
-    return source16;
-  }
-}
-
 static void free_icons_textures(void)
 {
   if (icongltex.num_textures > 0) {
@@ -900,6 +862,8 @@ void UI_icons_reload_internal_textures(void)
     icongltex.num_textures = need_icons_with_border ? 2 : 1;
     glGenTextures(icongltex.num_textures, icongltex.id);
 
+    /* Note the filter and LOD bias were tweaked to better preserve icon
+     * sharpness at different UI scales. */
     if (icongltex.id[0]) {
       icongltex.w = b32buf->x;
       icongltex.h = b32buf->y;
@@ -907,17 +871,57 @@ void UI_icons_reload_internal_textures(void)
       icongltex.invh = 1.0f / b32buf->y;
 
       glBindTexture(GL_TEXTURE_2D, icongltex.id[0]);
-      b16buf = create_mono_icon_mipmaps(b32buf, b16buf, 0);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+      glTexImage2D(GL_TEXTURE_2D,
+                   0,
+                   GL_RGBA8,
+                   b32buf->x,
+                   b32buf->y,
+                   0,
+                   GL_RGBA,
+                   GL_UNSIGNED_BYTE,
+                   b32buf->rect);
+      glTexImage2D(GL_TEXTURE_2D,
+                   1,
+                   GL_RGBA8,
+                   b16buf->x,
+                   b16buf->y,
+                   0,
+                   GL_RGBA,
+                   GL_UNSIGNED_BYTE,
+                   b16buf->rect);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, -0.5f);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1);
       glBindTexture(GL_TEXTURE_2D, 0);
     }
 
     if (need_icons_with_border && icongltex.id[1]) {
       glBindTexture(GL_TEXTURE_2D, icongltex.id[1]);
-      b16buf_border = create_mono_icon_mipmaps(b32buf_border, b16buf_border, 0);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+      glTexImage2D(GL_TEXTURE_2D,
+                   0,
+                   GL_RGBA8,
+                   b32buf_border->x,
+                   b32buf_border->y,
+                   0,
+                   GL_RGBA,
+                   GL_UNSIGNED_BYTE,
+                   b32buf_border->rect);
+      glTexImage2D(GL_TEXTURE_2D,
+                   1,
+                   GL_RGBA8,
+                   b16buf_border->x,
+                   b16buf_border->y,
+                   0,
+                   GL_RGBA,
+                   GL_UNSIGNED_BYTE,
+                   b16buf_border->rect);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, -0.5f);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1);
       glBindTexture(GL_TEXTURE_2D, 0);
     }
   }
@@ -1506,7 +1510,7 @@ static void icon_draw_rect(float x,
     return;
   }
   /* modulate color */
-  float col[4] = {1.0f, 1.0f, 1.0f, alpha};
+  float col[4] = {alpha, alpha, alpha, alpha};
 
   /* rect contains image in 'rendersize', we only scale if needed */
   if (rw != w || rh != h) {
@@ -1830,15 +1834,23 @@ static void icon_draw_size(float x,
     }
 #endif
 
+    /* If the theme is light, we will adjust the icon colors. */
+    const bool invert = (rgb_to_grayscale_byte(btheme->tui.wcol_toolbar_item.inner) > 128);
+    const bool geom_inverted = di->data.geom.inverted;
+
     /* This could re-generate often if rendered at different sizes in the one interface.
      * TODO(campbell): support caching multiple sizes. */
     ImBuf *ibuf = di->data.geom.image_cache;
-    if ((ibuf == NULL) || (ibuf->x != w) || (ibuf->y != h)) {
+    if ((ibuf == NULL) || (ibuf->x != w) || (ibuf->y != h) || (invert != geom_inverted)) {
       if (ibuf) {
         IMB_freeImBuf(ibuf);
       }
+      if (invert != geom_inverted) {
+        BKE_icon_geom_invert_lightness(icon->obj);
+      }
       ibuf = BKE_icon_geom_rasterize(icon->obj, w, h);
       di->data.geom.image_cache = ibuf;
+      di->data.geom.inverted = invert;
     }
 
     GPU_blend_set_func_separate(
@@ -2038,7 +2050,10 @@ static int ui_id_brush_get_icon(const bContext *C, ID *id)
     }
 
     /* reset the icon */
-    if ((ob != NULL) && (ob->mode & OB_MODE_PAINT_GPENCIL) && (br->gpencil_settings != NULL)) {
+    if ((ob != NULL) &&
+        (ob->mode & (OB_MODE_PAINT_GPENCIL | OB_MODE_VERTEX_GPENCIL | OB_MODE_SCULPT_GPENCIL |
+                     OB_MODE_WEIGHT_GPENCIL)) &&
+        (br->gpencil_settings != NULL)) {
       switch (br->gpencil_settings->icon_id) {
         case GP_BRUSH_ICON_PENCIL:
           br->id.icon_id = ICON_GPBRUSH_PENCIL;
@@ -2075,6 +2090,54 @@ static int ui_id_brush_get_icon(const bContext *C, ID *id)
           break;
         case GP_BRUSH_ICON_ERASE_STROKE:
           br->id.icon_id = ICON_GPBRUSH_ERASE_STROKE;
+          break;
+        case GP_BRUSH_ICON_TINT:
+          br->id.icon_id = ICON_BRUSH_TEXDRAW;
+          break;
+        case GP_BRUSH_ICON_VERTEX_DRAW:
+          br->id.icon_id = ICON_BRUSH_MIX;
+          break;
+        case GP_BRUSH_ICON_VERTEX_BLUR:
+          br->id.icon_id = ICON_BRUSH_BLUR;
+          break;
+        case GP_BRUSH_ICON_VERTEX_AVERAGE:
+          br->id.icon_id = ICON_BRUSH_BLUR;
+          break;
+        case GP_BRUSH_ICON_VERTEX_SMEAR:
+          br->id.icon_id = ICON_BRUSH_BLUR;
+          break;
+        case GP_BRUSH_ICON_VERTEX_REPLACE:
+          br->id.icon_id = ICON_BRUSH_MIX;
+          break;
+        case GP_BRUSH_ICON_GPBRUSH_SMOOTH:
+          br->id.icon_id = ICON_GPBRUSH_SMOOTH;
+          break;
+        case GP_BRUSH_ICON_GPBRUSH_THICKNESS:
+          br->id.icon_id = ICON_GPBRUSH_THICKNESS;
+          break;
+        case GP_BRUSH_ICON_GPBRUSH_STRENGTH:
+          br->id.icon_id = ICON_GPBRUSH_STRENGTH;
+          break;
+        case GP_BRUSH_ICON_GPBRUSH_RANDOMIZE:
+          br->id.icon_id = ICON_GPBRUSH_RANDOMIZE;
+          break;
+        case GP_BRUSH_ICON_GPBRUSH_GRAB:
+          br->id.icon_id = ICON_GPBRUSH_GRAB;
+          break;
+        case GP_BRUSH_ICON_GPBRUSH_PUSH:
+          br->id.icon_id = ICON_GPBRUSH_PUSH;
+          break;
+        case GP_BRUSH_ICON_GPBRUSH_TWIST:
+          br->id.icon_id = ICON_GPBRUSH_TWIST;
+          break;
+        case GP_BRUSH_ICON_GPBRUSH_PINCH:
+          br->id.icon_id = ICON_GPBRUSH_PINCH;
+          break;
+        case GP_BRUSH_ICON_GPBRUSH_CLONE:
+          br->id.icon_id = ICON_GPBRUSH_CLONE;
+          break;
+        case GP_BRUSH_ICON_GPBRUSH_WEIGHT:
+          br->id.icon_id = ICON_GPBRUSH_WEIGHT;
           break;
         default:
           br->id.icon_id = ICON_GPBRUSH_PEN;
@@ -2253,6 +2316,12 @@ int UI_idcode_icon_get(const int idcode)
       return ICON_TEXT;
     case ID_VF:
       return ICON_FONT_DATA;
+    case ID_HA:
+      return ICON_HAIR_DATA;
+    case ID_PT:
+      return ICON_POINTCLOUD_DATA;
+    case ID_VO:
+      return ICON_VOLUME_DATA;
     case ID_WO:
       return ICON_WORLD_DATA;
     case ID_WS:
@@ -2298,4 +2367,26 @@ void UI_icon_draw_ex(float x,
                  desaturate,
                  mono_color,
                  mono_border);
+}
+
+/* ********** Alert Icons ********** */
+
+ImBuf *UI_alert_image(eAlertIcon icon)
+{
+#ifdef WITH_HEADLESS
+  return NULL;
+#else
+  const int ALERT_IMG_SIZE = 256;
+  icon = MIN2(icon, ALERT_ICON_MAX - 1);
+  const int left = icon * ALERT_IMG_SIZE;
+  const rcti crop = {left, left + ALERT_IMG_SIZE - 1, 0, ALERT_IMG_SIZE - 1};
+  ImBuf *ibuf = IMB_ibImageFromMemory((const uchar *)datatoc_alert_icons_png,
+                                      datatoc_alert_icons_png_size,
+                                      IB_rect,
+                                      NULL,
+                                      "alert_icon");
+  IMB_rect_crop(ibuf, &crop);
+  IMB_premultiply_alpha(ibuf);
+  return ibuf;
+#endif
 }

@@ -28,37 +28,40 @@
 
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
-#include "DNA_constraint_types.h"
-#include "DNA_camera_types.h"
 #include "DNA_cachefile_types.h"
+#include "DNA_camera_types.h"
 #include "DNA_collection_types.h"
+#include "DNA_constraint_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_hair_types.h"
 #include "DNA_key_types.h"
 #include "DNA_light_types.h"
+#include "DNA_lightprobe_types.h"
+#include "DNA_linestyle_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meta_types.h"
-#include "DNA_lightprobe_types.h"
+#include "DNA_object_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_pointcloud_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_world_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_speaker_types.h"
-#include "DNA_object_types.h"
-#include "DNA_linestyle_types.h"
+#include "DNA_volume_types.h"
+#include "DNA_world_types.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_listbase.h"
-#include "BLI_utildefines.h"
-#include "BLI_mempool.h"
 #include "BLI_fnmatch.h"
+#include "BLI_listbase.h"
+#include "BLI_mempool.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
 #include "BKE_fcurve.h"
-#include "BKE_idcode.h"
+#include "BKE_idtype.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_outliner_treehash.h"
@@ -750,6 +753,25 @@ static void outliner_add_id_contents(SpaceOutliner *soops,
         Collection *collection = (Collection *)id;
         outliner_add_collection_recursive(soops, collection, te);
       }
+      break;
+    }
+    case ID_HA: {
+      Hair *hair = (Hair *)id;
+      if (outliner_animdata_test(hair->adt))
+        outliner_add_element(soops, &te->subtree, hair, te, TSE_ANIM_DATA, 0);
+      break;
+    }
+    case ID_PT: {
+      PointCloud *pointcloud = (PointCloud *)id;
+      if (outliner_animdata_test(pointcloud->adt))
+        outliner_add_element(soops, &te->subtree, pointcloud, te, TSE_ANIM_DATA, 0);
+      break;
+    }
+    case ID_VO: {
+      Volume *volume = (Volume *)id;
+      if (outliner_animdata_test(volume->adt))
+        outliner_add_element(soops, &te->subtree, volume, te, TSE_ANIM_DATA, 0);
+      break;
     }
     default:
       break;
@@ -1215,7 +1237,7 @@ static void outliner_add_seq_dup(SpaceOutliner *soops, Sequence *seq, TreeElemen
 
 static const char *outliner_idcode_to_plural(short idcode)
 {
-  const char *propname = BKE_idcode_to_name_plural(idcode);
+  const char *propname = BKE_idtype_idcode_to_name_plural(idcode);
   PropertyRNA *prop = RNA_struct_type_find_property(&RNA_BlendData, propname);
   return (prop) ? RNA_property_ui_name(prop) : "UNKNOWN";
 }
@@ -1267,6 +1289,7 @@ static TreeElement *outliner_add_library_contents(Main *mainvar,
   for (a = 0; a < tot; a++) {
     if (lbarray[a] && lbarray[a]->first) {
       ID *id = lbarray[a]->first;
+      const bool is_library = (GS(id->name) == ID_LI) && (lib != NULL);
 
       /* check if there's data in current lib */
       for (; id; id = id->next) {
@@ -1275,7 +1298,9 @@ static TreeElement *outliner_add_library_contents(Main *mainvar,
         }
       }
 
-      if (id) {
+      /* We always want to create an entry for libraries, even if/when we have no more IDs from
+       * them. This invalid state is important to show to user as well.*/
+      if (id != NULL || is_library) {
         if (!tenlib) {
           /* Create library tree element on demand, depending if there are any data-blocks. */
           if (lib) {
@@ -1288,18 +1313,20 @@ static TreeElement *outliner_add_library_contents(Main *mainvar,
         }
 
         /* Create data-block list parent element on demand. */
-        if (filter_id_type) {
-          ten = tenlib;
-        }
-        else {
-          ten = outliner_add_element(soops, &tenlib->subtree, lbarray[a], NULL, TSE_ID_BASE, 0);
-          ten->directdata = lbarray[a];
-          ten->name = outliner_idcode_to_plural(GS(id->name));
-        }
+        if (id != NULL) {
+          if (filter_id_type) {
+            ten = tenlib;
+          }
+          else {
+            ten = outliner_add_element(soops, &tenlib->subtree, lbarray[a], NULL, TSE_ID_BASE, 0);
+            ten->directdata = lbarray[a];
+            ten->name = outliner_idcode_to_plural(GS(id->name));
+          }
 
-        for (id = lbarray[a]->first; id; id = id->next) {
-          if (outliner_library_id_show(lib, id, filter_id_type)) {
-            outliner_add_element(soops, &ten->subtree, id, ten, 0, 0);
+          for (id = lbarray[a]->first; id; id = id->next) {
+            if (outliner_library_id_show(lib, id, filter_id_type)) {
+              outliner_add_element(soops, &ten->subtree, id, ten, 0, 0);
+            }
           }
         }
       }
@@ -1837,13 +1864,13 @@ typedef struct OutlinerTreeElementFocus {
  * Caller is expected to handle redrawing of ARegion.
  */
 static void outliner_restore_scrolling_position(SpaceOutliner *soops,
-                                                ARegion *ar,
+                                                ARegion *region,
                                                 OutlinerTreeElementFocus *focus)
 {
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
 
   if (focus->tselem != NULL) {
-    outliner_set_coordinates(ar, soops);
+    outliner_set_coordinates(region, soops);
 
     TreeElement *te_new = outliner_find_tree_element(&soops->tree, focus->tselem);
 
@@ -1965,15 +1992,15 @@ static TreeElement *outliner_find_first_desired_element_at_y(const SpaceOutliner
  * original position as before filtering.
  */
 static void outliner_store_scrolling_position(SpaceOutliner *soops,
-                                              ARegion *ar,
+                                              ARegion *region,
                                               OutlinerTreeElementFocus *focus)
 {
   TreeElement *te;
-  float limit = ar->v2d.cur.ymin;
+  float limit = region->v2d.cur.ymin;
 
-  outliner_set_coordinates(ar, soops);
+  outliner_set_coordinates(region, soops);
 
-  te = outliner_find_first_desired_element_at_y(soops, ar->v2d.cur.ymax, limit);
+  te = outliner_find_first_desired_element_at_y(soops, region->v2d.cur.ymax, limit);
 
   if (te != NULL) {
     focus->tselem = TREESTORE(te);
@@ -2085,12 +2112,12 @@ static bool outliner_element_visible_get(ViewLayer *view_layer,
       }
 
       if (exclude_filter & SO_FILTER_OB_STATE_VISIBLE) {
-        if ((base->flag & BASE_VISIBLE_DEPSGRAPH) == 0) {
+        if ((base->flag & BASE_VISIBLE_VIEWLAYER) == 0) {
           return false;
         }
       }
       else if (exclude_filter & SO_FILTER_OB_STATE_HIDDEN) {
-        if ((base->flag & BASE_VISIBLE_DEPSGRAPH) != 0) {
+        if ((base->flag & BASE_VISIBLE_VIEWLAYER) != 0) {
           return false;
         }
       }
@@ -2259,7 +2286,7 @@ static void outliner_filter_tree(SpaceOutliner *soops, ViewLayer *view_layer)
 /* Main entry point for building the tree data-structure that the outliner represents */
 // TODO: split each mode into its own function?
 void outliner_build_tree(
-    Main *mainvar, Scene *scene, ViewLayer *view_layer, SpaceOutliner *soops, ARegion *ar)
+    Main *mainvar, Scene *scene, ViewLayer *view_layer, SpaceOutliner *soops, ARegion *region)
 {
   TreeElement *te = NULL, *ten;
   TreeStoreElem *tselem;
@@ -2281,12 +2308,12 @@ void outliner_build_tree(
     BKE_outliner_treehash_rebuild_from_treestore(soops->treehash, soops->treestore);
   }
 
-  if (ar->do_draw & RGN_DRAW_NO_REBUILD) {
+  if (region->do_draw & RGN_DRAW_NO_REBUILD) {
     return;
   }
 
   OutlinerTreeElementFocus focus;
-  outliner_store_scrolling_position(soops, ar, &focus);
+  outliner_store_scrolling_position(soops, region, &focus);
 
   outliner_free_tree(&soops->tree);
   outliner_storage_cleanup(soops);
@@ -2306,9 +2333,8 @@ void outliner_build_tree(
 
     for (lib = mainvar->libraries.first; lib; lib = lib->id.next) {
       ten = outliner_add_library_contents(mainvar, soops, &soops->tree, lib);
-      if (ten) {
-        lib->id.newid = (ID *)ten;
-      }
+      BLI_assert(ten != NULL);
+      lib->id.newid = (ID *)ten;
     }
     /* make hierarchy */
     ten = soops->tree.first;
@@ -2441,7 +2467,7 @@ void outliner_build_tree(
   }
 
   outliner_filter_tree(soops, view_layer);
-  outliner_restore_scrolling_position(soops, ar, &focus);
+  outliner_restore_scrolling_position(soops, region, &focus);
 
   BKE_main_id_clear_newpoins(mainvar);
 }

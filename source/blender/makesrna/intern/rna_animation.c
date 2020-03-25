@@ -20,8 +20,8 @@
 
 #include <stdlib.h>
 
-#include "DNA_anim_types.h"
 #include "DNA_action_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_scene_types.h"
 
 #include "BLI_utildefines.h"
@@ -332,7 +332,7 @@ static StructRNA *rna_KeyingSetInfo_register(Main *bmain,
   }
 
   /* create a new KeyingSetInfo type */
-  ksi = MEM_callocN(sizeof(KeyingSetInfo), "python keying set info");
+  ksi = MEM_mallocN(sizeof(KeyingSetInfo), "python keying set info");
   memcpy(ksi, &dummyksi, sizeof(KeyingSetInfo));
 
   /* set RNA-extensions info */

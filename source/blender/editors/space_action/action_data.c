@@ -21,10 +21,10 @@
  * \ingroup spaction
  */
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <float.h>
 
 #include "BLI_utildefines.h"
 
@@ -33,33 +33,33 @@
 #include "DNA_anim_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_key_types.h"
+#include "DNA_mask_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_mask_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
-#include "BKE_animsys.h"
 #include "BKE_action.h"
+#include "BKE_animsys.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_nla.h"
-#include "BKE_scene.h"
 #include "BKE_report.h"
+#include "BKE_scene.h"
 
 #include "UI_view2d.h"
 
 #include "ED_anim_api.h"
 #include "ED_gpencil.h"
-#include "ED_keyframing.h"
 #include "ED_keyframes_edit.h"
-#include "ED_screen.h"
+#include "ED_keyframing.h"
 #include "ED_markers.h"
 #include "ED_mask.h"
+#include "ED_screen.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -211,12 +211,13 @@ static int action_new_exec(bContext *C, wmOperator *UNUSED(op))
   PointerRNA ptr, idptr;
   PropertyRNA *prop;
 
+  bAction *oldact = NULL;
+  AnimData *adt = NULL;
   /* hook into UI */
   UI_context_active_but_prop_get_templateID(C, &ptr, &prop);
 
   if (prop) {
-    bAction *action = NULL, *oldact = NULL;
-    AnimData *adt = NULL;
+    /* The operator was called from a button. */
     PointerRNA oldptr;
 
     oldptr = RNA_property_pointer_get(&ptr, prop);
@@ -229,6 +230,13 @@ static int action_new_exec(bContext *C, wmOperator *UNUSED(op))
     else if (ptr.type == &RNA_SpaceDopeSheetEditor) {
       adt = ED_actedit_animdata_from_context(C);
     }
+  }
+  else {
+    adt = ED_actedit_animdata_from_context(C);
+    oldact = adt->action;
+  }
+  {
+    bAction *action = NULL;
 
     /* Perform stashing operation - But only if there is an action */
     if (adt && oldact) {
@@ -242,7 +250,7 @@ static int action_new_exec(bContext *C, wmOperator *UNUSED(op))
          * or else the user gets decremented twice!
          */
         if (ptr.type == &RNA_SpaceDopeSheetEditor) {
-          SpaceAction *saction = (SpaceAction *)ptr.data;
+          SpaceAction *saction = ptr.data;
           saction->action = NULL;
         }
       }
@@ -257,12 +265,14 @@ static int action_new_exec(bContext *C, wmOperator *UNUSED(op))
     /* create action */
     action = action_create_new(C, oldact);
 
-    /* set this new action
-     * NOTE: we can't use actedit_change_action, as this function is also called from the NLA
-     */
-    RNA_id_pointer_create(&action->id, &idptr);
-    RNA_property_pointer_set(&ptr, prop, idptr, NULL);
-    RNA_property_update(C, &ptr, prop);
+    if (prop) {
+      /* set this new action
+       * NOTE: we can't use actedit_change_action, as this function is also called from the NLA
+       */
+      RNA_id_pointer_create(&action->id, &idptr);
+      RNA_property_pointer_set(&ptr, prop, idptr, NULL);
+      RNA_property_update(C, &ptr, prop);
+    }
   }
 
   /* set notifier that keyframes have changed */

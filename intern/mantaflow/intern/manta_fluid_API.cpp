@@ -143,6 +143,20 @@ int manta_update_particle_structures(MANTA *fluid, FluidModifierData *mmd, int f
   return fluid->updateParticleStructures(mmd, framenr);
 }
 
+int manta_update_smoke_structures(MANTA *fluid, FluidModifierData *mmd, int framenr)
+{
+  if (!fluid || !mmd)
+    return 0;
+  return fluid->updateSmokeStructures(mmd, framenr);
+}
+
+int manta_update_noise_structures(MANTA *fluid, FluidModifierData *mmd, int framenr)
+{
+  if (!fluid || !mmd)
+    return 0;
+  return fluid->updateNoiseStructures(mmd, framenr);
+}
+
 int manta_bake_data(MANTA *fluid, FluidModifierData *mmd, int framenr)
 {
   if (!fluid || !mmd)
@@ -318,9 +332,17 @@ float *manta_get_phi_in(MANTA *fluid)
 {
   return fluid->getPhiIn();
 }
+float *manta_get_phistatic_in(MANTA *fluid)
+{
+  return fluid->getPhiStaticIn();
+}
 float *manta_get_phiobs_in(MANTA *fluid)
 {
   return fluid->getPhiObsIn();
+}
+float *manta_get_phiobsstatic_in(MANTA *fluid)
+{
+  return fluid->getPhiObsStaticIn();
 }
 float *manta_get_phiout_in(MANTA *fluid)
 {
@@ -349,7 +371,7 @@ void manta_smoke_export(MANTA *smoke,
                         float **r,
                         float **g,
                         float **b,
-                        int **obstacle,
+                        int **flags,
                         float **shadow)
 {
   if (dens)
@@ -371,8 +393,9 @@ void manta_smoke_export(MANTA *smoke,
     *g = smoke->getColorG();
   if (b)
     *b = smoke->getColorB();
-  *obstacle = smoke->getObstacle();
-  *shadow = smoke->getShadow();
+  *flags = smoke->getFlags();
+  if (shadow)
+    *shadow = smoke->getShadow();
   *dt = 1;  // dummy value, not needed for smoke
   *dx = 1;  // dummy value, not needed for smoke
 }
@@ -432,14 +455,9 @@ static void get_rgba(
 
   for (i = 0; i < total_cells; i++) {
     float alpha = a[i];
-    if (alpha) {
-      data[i * m] = r[i];
-      data[i * m + i_g] = g[i];
-      data[i * m + i_b] = b[i];
-    }
-    else {
-      data[i * m] = data[i * m + i_g] = data[i * m + i_b] = 0.0f;
-    }
+    data[i * m] = r[i] * alpha;
+    data[i * m + i_g] = g[i] * alpha;
+    data[i * m + i_b] = b[i] * alpha;
     data[i * m + i_a] = alpha;
   }
 }
@@ -466,8 +484,7 @@ void manta_smoke_turbulence_get_rgba(MANTA *smoke, float *data, int sequential)
            sequential);
 }
 
-static void get_rgba_from_density(
-    float color[3], float *a, int total_cells, float *data, int sequential)
+static void get_rgba_fixed_color(float color[3], int total_cells, float *data, int sequential)
 {
   int i;
   int m = 4, i_g = 1, i_b = 2, i_a = 3;
@@ -479,31 +496,24 @@ static void get_rgba_from_density(
   }
 
   for (i = 0; i < total_cells; i++) {
-    float alpha = a[i];
-    if (alpha) {
-      data[i * m] = color[0] * alpha;
-      data[i * m + i_g] = color[1] * alpha;
-      data[i * m + i_b] = color[2] * alpha;
-    }
-    else {
-      data[i * m] = data[i * m + i_g] = data[i * m + i_b] = 0.0f;
-    }
-    data[i * m + i_a] = alpha;
+    data[i * m] = color[0];
+    data[i * m + i_g] = color[1];
+    data[i * m + i_b] = color[2];
+    data[i * m + i_a] = 1.0f;
   }
 }
 
-void manta_smoke_get_rgba_from_density(MANTA *smoke, float color[3], float *data, int sequential)
+void manta_smoke_get_rgba_fixed_color(MANTA *smoke, float color[3], float *data, int sequential)
 {
-  get_rgba_from_density(color, smoke->getDensity(), smoke->getTotalCells(), data, sequential);
+  get_rgba_fixed_color(color, smoke->getTotalCells(), data, sequential);
 }
 
-void manta_smoke_turbulence_get_rgba_from_density(MANTA *smoke,
-                                                  float color[3],
-                                                  float *data,
-                                                  int sequential)
+void manta_smoke_turbulence_get_rgba_fixed_color(MANTA *smoke,
+                                                 float color[3],
+                                                 float *data,
+                                                 int sequential)
 {
-  get_rgba_from_density(
-      color, smoke->getDensityHigh(), smoke->getTotalCellsHigh(), data, sequential);
+  get_rgba_fixed_color(color, smoke->getTotalCellsHigh(), data, sequential);
 }
 
 void manta_smoke_ensure_heat(MANTA *smoke, struct FluidModifierData *mmd)
@@ -557,9 +567,9 @@ float *manta_smoke_get_flame(MANTA *smoke)
 {
   return smoke->getFlame();
 }
-float *manta_smoke_get_shadow(MANTA *fluid)
+float *manta_smoke_get_shadow(MANTA *smoke)
 {
-  return fluid->getShadow();
+  return smoke->getShadow();
 }
 
 float *manta_smoke_get_color_r(MANTA *smoke)
@@ -575,9 +585,9 @@ float *manta_smoke_get_color_b(MANTA *smoke)
   return smoke->getColorB();
 }
 
-int *manta_smoke_get_obstacle(MANTA *smoke)
+int *manta_smoke_get_flags(MANTA *smoke)
 {
-  return smoke->getObstacle();
+  return smoke->getFlags();
 }
 
 float *manta_smoke_get_density_in(MANTA *smoke)
@@ -863,4 +873,17 @@ float manta_liquid_get_snd_particle_velocity_y_at(MANTA *liquid, int i)
 float manta_liquid_get_snd_particle_velocity_z_at(MANTA *liquid, int i)
 {
   return liquid->getSndParticleVelocityZAt(i);
+}
+
+bool manta_liquid_flip_from_file(MANTA *liquid)
+{
+  return liquid->usingFlipFromFile();
+}
+bool manta_liquid_mesh_from_file(MANTA *liquid)
+{
+  return liquid->usingMeshFromFile();
+}
+bool manta_liquid_particle_from_file(MANTA *liquid)
+{
+  return liquid->usingParticleFromFile();
 }

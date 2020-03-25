@@ -31,16 +31,16 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
+#include "DNA_mask_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
-#include "DNA_mask_types.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_select_utils.h"
 #include "ED_mask.h" /* own include */
 #include "ED_screen.h"
+#include "ED_select_utils.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -55,14 +55,14 @@ bool ED_mask_find_nearest_diff_point(const bContext *C,
                                      float tangent[2],
                                      const bool use_deform,
                                      const bool use_project,
-                                     MaskLayer **mask_layer_r,
-                                     MaskSpline **spline_r,
-                                     MaskSplinePoint **point_r,
-                                     float *u_r,
-                                     float *score_r)
+                                     MaskLayer **r_mask_layer,
+                                     MaskSpline **r_spline,
+                                     MaskSplinePoint **r_point,
+                                     float *r_u,
+                                     float *r_score)
 {
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   MaskLayer *point_mask_layer;
   MaskSpline *point_spline;
@@ -76,7 +76,7 @@ bool ED_mask_find_nearest_diff_point(const bContext *C,
   Mask *mask_eval = (Mask *)DEG_get_evaluated_id(depsgraph, &mask_orig->id);
 
   ED_mask_get_size(sa, &width, &height);
-  ED_mask_pixelspace_factor(sa, ar, &scalex, &scaley);
+  ED_mask_pixelspace_factor(sa, region, &scalex, &scaley);
 
   co[0] = normal_co[0] * scalex;
   co[1] = normal_co[1] * scaley;
@@ -156,44 +156,44 @@ bool ED_mask_find_nearest_diff_point(const bContext *C,
   }
 
   if (point && dist_best_sq < threshold) {
-    if (mask_layer_r) {
-      *mask_layer_r = point_mask_layer;
+    if (r_mask_layer) {
+      *r_mask_layer = point_mask_layer;
     }
 
-    if (spline_r) {
-      *spline_r = point_spline;
+    if (r_spline) {
+      *r_spline = point_spline;
     }
 
-    if (point_r) {
-      *point_r = point;
+    if (r_point) {
+      *r_point = point;
     }
 
-    if (u_r) {
+    if (r_u) {
       /* TODO(sergey): Projection fails in some weirdo cases.. */
       if (use_project) {
         u = BKE_mask_spline_project_co(point_spline, point, u, normal_co, MASK_PROJ_ANY);
       }
 
-      *u_r = u;
+      *r_u = u;
     }
 
-    if (score_r) {
-      *score_r = dist_best_sq;
+    if (r_score) {
+      *r_score = dist_best_sq;
     }
 
     return true;
   }
 
-  if (mask_layer_r) {
-    *mask_layer_r = NULL;
+  if (r_mask_layer) {
+    *r_mask_layer = NULL;
   }
 
-  if (spline_r) {
-    *spline_r = NULL;
+  if (r_spline) {
+    *r_spline = NULL;
   }
 
-  if (point_r) {
-    *point_r = NULL;
+  if (r_point) {
+    *r_point = NULL;
   }
 
   return false;
@@ -598,10 +598,10 @@ static void mask_point_make_pixel_space(bContext *C,
                                         float point_pixel[2])
 {
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   float scalex, scaley;
-  ED_mask_pixelspace_factor(sa, ar, &scalex, &scaley);
+  ED_mask_pixelspace_factor(sa, region, &scalex, &scaley);
 
   point_pixel[0] = point_normalized[0] * scalex;
   point_pixel[1] = point_normalized[1] * scaley;
@@ -710,11 +710,11 @@ static int add_vertex_exec(bContext *C, wmOperator *op)
 static int add_vertex_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   float co[2];
 
-  ED_mask_mouse_pos(sa, ar, event->mval, co);
+  ED_mask_mouse_pos(sa, region, event->mval, co);
 
   RNA_float_set_array(op->ptr, "location", co);
 
@@ -802,11 +802,11 @@ static int add_feather_vertex_exec(bContext *C, wmOperator *op)
 static int add_feather_vertex_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   float co[2];
 
-  ED_mask_mouse_pos(sa, ar, event->mval, co);
+  ED_mask_mouse_pos(sa, region, event->mval, co);
 
   RNA_float_set_array(op->ptr, "location", co);
 

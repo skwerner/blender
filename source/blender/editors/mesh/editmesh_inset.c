@@ -22,19 +22,19 @@
 
 #include "DNA_object_types.h"
 
-#include "BLI_string.h"
 #include "BLI_math.h"
+#include "BLI_string.h"
 
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_global.h"
 #include "BKE_editmesh.h"
-#include "BKE_unit.h"
+#include "BKE_global.h"
 #include "BKE_layer.h"
+#include "BKE_unit.h"
 
-#include "RNA_define.h"
 #include "RNA_access.h"
+#include "RNA_define.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -72,6 +72,7 @@ typedef struct {
   uint ob_store_len;
 
   /* modal only */
+  int launch_event;
   float mcenter[2];
   void *draw_handle_pixel;
   short gizmo_flag;
@@ -165,7 +166,7 @@ static bool edbm_inset_init(bContext *C, wmOperator *op, const bool is_modal)
 
   if (is_modal) {
     View3D *v3d = CTX_wm_view3d(C);
-    ARegion *ar = CTX_wm_region(C);
+    ARegion *region = CTX_wm_region(C);
 
     for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
       Object *obedit = opdata->ob_store[ob_index].ob;
@@ -174,7 +175,7 @@ static bool edbm_inset_init(bContext *C, wmOperator *op, const bool is_modal)
     }
 
     opdata->draw_handle_pixel = ED_region_draw_cb_activate(
-        ar->type, ED_region_draw_mouse_line_cb, opdata->mcenter, REGION_DRAW_POST_PIXEL);
+        region->type, ED_region_draw_mouse_line_cb, opdata->mcenter, REGION_DRAW_POST_PIXEL);
     G.moving = G_TRANSFORM_EDIT;
     if (v3d) {
       opdata->gizmo_flag = v3d->gizmo_flag;
@@ -194,11 +195,11 @@ static void edbm_inset_exit(bContext *C, wmOperator *op)
 
   if (opdata->is_modal) {
     View3D *v3d = CTX_wm_view3d(C);
-    ARegion *ar = CTX_wm_region(C);
+    ARegion *region = CTX_wm_region(C);
     for (uint ob_index = 0; ob_index < opdata->ob_store_len; ob_index++) {
       EDBM_redo_state_free(&opdata->ob_store[ob_index].mesh_backup, NULL, false);
     }
-    ED_region_draw_cb_exit(ar->type, opdata->draw_handle_pixel);
+    ED_region_draw_cb_exit(region->type, opdata->draw_handle_pixel);
     if (v3d) {
       v3d->gizmo_flag = opdata->gizmo_flag;
     }
@@ -348,6 +349,8 @@ static int edbm_inset_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
   opdata = op->customdata;
 
+  opdata->launch_event = WM_userdef_event_type_from_keymap_type(event->type);
+
   /* initialize mouse values */
   if (!calculateTransformCenter(C, V3D_AROUND_CENTER_MEDIAN, center_3d, opdata->mcenter)) {
     /* in this case the tool will likely do nothing,
@@ -389,10 +392,16 @@ static int edbm_inset_modal(bContext *C, wmOperator *op, const wmEvent *event)
       return OPERATOR_CANCELLED;
     }
   }
+  else if ((event->type == opdata->launch_event) && (event->val == KM_RELEASE) &&
+           RNA_boolean_get(op->ptr, "release_confirm")) {
+    edbm_inset_calc(op);
+    edbm_inset_exit(C, op);
+    return OPERATOR_FINISHED;
+  }
   else {
     bool handled = false;
     switch (event->type) {
-      case ESCKEY:
+      case EVT_ESCKEY:
       case RIGHTMOUSE:
         edbm_inset_cancel(C, op);
         return OPERATOR_CANCELLED;
@@ -441,8 +450,8 @@ static int edbm_inset_modal(bContext *C, wmOperator *op, const wmEvent *event)
         break;
 
       case LEFTMOUSE:
-      case PADENTER:
-      case RETKEY:
+      case EVT_PADENTER:
+      case EVT_RETKEY:
         if ((event->val == KM_PRESS) ||
             ((event->val == KM_RELEASE) && RNA_boolean_get(op->ptr, "release_confirm"))) {
           edbm_inset_calc(op);
@@ -450,8 +459,8 @@ static int edbm_inset_modal(bContext *C, wmOperator *op, const wmEvent *event)
           return OPERATOR_FINISHED;
         }
         break;
-      case LEFTSHIFTKEY:
-      case RIGHTSHIFTKEY:
+      case EVT_LEFTSHIFTKEY:
+      case EVT_RIGHTSHIFTKEY:
         if (event->val == KM_PRESS) {
           if (opdata->modify_depth) {
             opdata->shift_amount = RNA_float_get(op->ptr, "depth");
@@ -469,8 +478,8 @@ static int edbm_inset_modal(bContext *C, wmOperator *op, const wmEvent *event)
         }
         break;
 
-      case LEFTCTRLKEY:
-      case RIGHTCTRLKEY: {
+      case EVT_LEFTCTRLKEY:
+      case EVT_RIGHTCTRLKEY: {
         float mlen[2];
 
         mlen[0] = opdata->mcenter[0] - event->mval[0];
@@ -497,7 +506,7 @@ static int edbm_inset_modal(bContext *C, wmOperator *op, const wmEvent *event)
         break;
       }
 
-      case OKEY:
+      case EVT_OKEY:
         if (event->val == KM_PRESS) {
           const bool use_outset = RNA_boolean_get(op->ptr, "use_outset");
           RNA_boolean_set(op->ptr, "use_outset", !use_outset);
@@ -511,7 +520,7 @@ static int edbm_inset_modal(bContext *C, wmOperator *op, const wmEvent *event)
           handled = true;
         }
         break;
-      case BKEY:
+      case EVT_BKEY:
         if (event->val == KM_PRESS) {
           const bool use_boundary = RNA_boolean_get(op->ptr, "use_boundary");
           RNA_boolean_set(op->ptr, "use_boundary", !use_boundary);
@@ -525,7 +534,7 @@ static int edbm_inset_modal(bContext *C, wmOperator *op, const wmEvent *event)
           handled = true;
         }
         break;
-      case IKEY:
+      case EVT_IKEY:
         if (event->val == KM_PRESS) {
           const bool use_individual = RNA_boolean_get(op->ptr, "use_individual");
           RNA_boolean_set(op->ptr, "use_individual", !use_individual);

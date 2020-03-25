@@ -18,9 +18,9 @@
  * \ingroup wm
  */
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 #include "BKE_main.h"
@@ -42,8 +42,8 @@
 #include "wm.h"
 
 /* own includes */
-#include "wm_gizmo_wmapi.h"
 #include "wm_gizmo_intern.h"
+#include "wm_gizmo_wmapi.h"
 
 /** \name Gizmo Type Append
  *
@@ -138,8 +138,8 @@ static void gizmotype_unlink(bContext *C, Main *bmain, wmGizmoType *gzt)
     for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
       for (SpaceLink *sl = sa->spacedata.first; sl; sl = sl->next) {
         ListBase *lb = (sl == sa->spacedata.first) ? &sa->regionbase : &sl->regionbase;
-        for (ARegion *ar = lb->first; ar; ar = ar->next) {
-          wmGizmoMap *gzmap = ar->gizmo_map;
+        for (ARegion *region = lb->first; region; region = region->next) {
+          wmGizmoMap *gzmap = region->gizmo_map;
           if (gzmap) {
             wmGizmoGroup *gzgroup;
             for (gzgroup = gzmap->groups.first; gzgroup; gzgroup = gzgroup->next) {
@@ -148,7 +148,7 @@ static void gizmotype_unlink(bContext *C, Main *bmain, wmGizmoType *gzt)
                 BLI_assert(gzgroup->parent_gzmap == gzmap);
                 if (gz->type == gzt) {
                   WM_gizmo_unlink(&gzgroup->gizmos, gzgroup->parent_gzmap, gz, C);
-                  ED_region_tag_redraw(ar);
+                  ED_region_tag_redraw_editor_overlays(region);
                 }
               }
             }

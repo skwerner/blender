@@ -30,7 +30,7 @@
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_paint.h"
@@ -40,15 +40,15 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
-#include "RNA_define.h"
 #include "RNA_access.h"
+#include "RNA_define.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "ED_mesh.h"
-#include "ED_screen.h"
 #include "ED_object.h"
+#include "ED_screen.h"
 #include "ED_sculpt.h"
 #include "ED_view3d.h"
 
@@ -63,7 +63,7 @@ static bool paint_mask_extract_poll(bContext *C)
   Object *ob = CTX_data_active_object(C);
   if (ob != NULL && ob->mode == OB_MODE_SCULPT) {
     if (ob->sculpt->bm) {
-      CTX_wm_operator_poll_msg_set(C, "The mask can not be extracted with dyntopo activated.");
+      CTX_wm_operator_poll_msg_set(C, "The mask can not be extracted with dyntopo activated");
       return false;
     }
     else {
@@ -79,6 +79,9 @@ static int paint_mask_extract_exec(bContext *C, wmOperator *op)
   Object *ob = CTX_data_active_object(C);
   View3D *v3d = CTX_wm_view3d(C);
   Scene *scene = CTX_data_scene(C);
+
+  Depsgraph *depsgraph = CTX_data_depsgraph_on_load(C);
+  ED_object_sculptmode_exit(C, depsgraph);
 
   BKE_sculpt_mask_layers_ensure(ob, NULL);
 
@@ -124,6 +127,10 @@ static int paint_mask_extract_exec(bContext *C, wmOperator *op)
 
   BM_mesh_delete_hflag_context(bm, BM_ELEM_TAG, DEL_FACES);
   BM_mesh_elem_hflag_disable_all(bm, BM_VERT | BM_EDGE | BM_FACE, BM_ELEM_TAG, false);
+
+  BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
+    mul_v3_v3(v->co, ob->scale);
+  }
 
   if (RNA_boolean_get(op->ptr, "add_boundary_loop")) {
     BM_ITER_MESH (ed, &iter, bm, BM_EDGES_OF_MESH) {
@@ -204,6 +211,11 @@ static int paint_mask_extract_exec(bContext *C, wmOperator *op)
   }
   Object *new_ob = ED_object_add_type(C, OB_MESH, NULL, ob->loc, ob->rot, false, local_view_bits);
   BKE_mesh_nomain_to_mesh(new_mesh, new_ob->data, new_ob, &CD_MASK_EVERYTHING, true);
+
+  /* Remove the Face Sets as they need to be recreated when entering Sculpt Mode in the new object.
+   * TODO(pablodobarro): In the future we can try to preserve them from the original mesh. */
+  Mesh *new_ob_mesh = new_ob->data;
+  CustomData_free_layers(&new_ob_mesh->pdata, CD_SCULPT_FACE_SETS, new_ob_mesh->totpoly);
 
   if (RNA_boolean_get(op->ptr, "apply_shrinkwrap")) {
     BKE_shrinkwrap_mesh_nearest_surface_deform(C, new_ob, ob);
@@ -344,6 +356,10 @@ static int paint_mask_slice_exec(bContext *C, wmOperator *op)
 
   if (ob->mode == OB_MODE_SCULPT) {
     ED_sculpt_undo_geometry_begin(ob, "mask slice");
+    /* TODO: The ideal functionality would be to preserve the current face sets and add a new one
+     * for the new triangles, but this data-layer needs to be rebuild in order to make sculpt mode
+     * not crash when modifying the geometry. */
+    CustomData_free_layers(&mesh->pdata, CD_SCULPT_FACE_SETS, mesh->totpoly);
   }
 
   BMesh *bm;
@@ -416,6 +432,13 @@ static int paint_mask_slice_exec(bContext *C, wmOperator *op)
 
   if (ob->mode == OB_MODE_SCULPT) {
     ED_sculpt_undo_geometry_end(ob);
+    SculptSession *ss = ob->sculpt;
+    /* Rebuild a new valid Face Set layer for the object. */
+    ss->face_sets = CustomData_add_layer(
+        &mesh->pdata, CD_SCULPT_FACE_SETS, CD_CALLOC, NULL, mesh->totpoly);
+    for (int i = 0; i < mesh->totpoly; i++) {
+      ss->face_sets[i] = 1;
+    }
   }
 
   BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_ALL);

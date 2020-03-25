@@ -21,19 +21,19 @@
  * \ingroup edobj
  */
 
+#include <ctype.h>
+#include <float.h>
+#include <math.h>
+#include <stddef.h>  //for offsetof
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include <time.h>
-#include <float.h>
-#include <ctype.h>
-#include <stddef.h>  //for offsetof
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -41,15 +41,15 @@
 #include "DNA_collection_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_material_types.h"
-#include "DNA_meta_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_object_force_types.h"
-#include "DNA_meshdata_types.h"
-#include "DNA_vfont_types.h"
-#include "DNA_mesh_types.h"
 #include "DNA_lattice_types.h"
+#include "DNA_material_types.h"
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_meta_types.h"
+#include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_vfont_types.h"
 #include "DNA_workspace_types.h"
 
 #include "IMB_imbuf_types.h"
@@ -60,6 +60,7 @@
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_editlattice.h"
+#include "BKE_editmesh.h"
 #include "BKE_effect.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
@@ -74,10 +75,9 @@
 #include "BKE_paint.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
-#include "BKE_softbody.h"
-#include "BKE_editmesh.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
+#include "BKE_softbody.h"
 #include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
@@ -86,15 +86,15 @@
 #include "ED_anim_api.h"
 #include "ED_armature.h"
 #include "ED_curve.h"
-#include "ED_mesh.h"
-#include "ED_mball.h"
+#include "ED_gpencil.h"
+#include "ED_image.h"
 #include "ED_lattice.h"
+#include "ED_mball.h"
+#include "ED_mesh.h"
 #include "ED_object.h"
 #include "ED_outliner.h"
 #include "ED_screen.h"
 #include "ED_undo.h"
-#include "ED_image.h"
-#include "ED_gpencil.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -106,9 +106,9 @@
 #include "UI_resources.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
 #include "WM_toolsystem.h"
+#include "WM_types.h"
 
 #include "object_intern.h"  // own include
 
@@ -543,6 +543,8 @@ bool ED_object_editmode_exit_ex(Main *bmain, Scene *scene, Object *obedit, int f
      * is flagged for editmode, without 'obedit' being set [#35489] */
     if (UNLIKELY(obedit && obedit->mode & OB_MODE_EDIT)) {
       obedit->mode &= ~OB_MODE_EDIT;
+      /* Also happens when mesh is shared across multiple objects. [#T69834] */
+      DEG_id_tag_update(&obedit->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
     }
     return true;
   }
@@ -627,7 +629,7 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
     bArmature *arm = ob->data;
     ok = 1;
     ED_armature_to_edit(arm);
-    /* to ensure all goes in restposition and without striding */
+    /* To ensure all goes in rest-position and without striding. */
 
     arm->needs_flush_to_id = 0;
 
@@ -1018,7 +1020,7 @@ static int object_calculate_paths_invoke(bContext *C, wmOperator *op, const wmEv
 
   /* show popup dialog to allow editing of range... */
   /* FIXME: hardcoded dimensions here are just arbitrary */
-  return WM_operator_props_dialog_popup(C, op, 200, 200);
+  return WM_operator_props_dialog_popup(C, op, 200);
 }
 
 /* Calculate/recalculate whole paths (avs.path_sf to avs.path_ef) */
@@ -1368,7 +1370,8 @@ static const EnumPropertyItem *object_mode_set_itemsf(bContext *C,
                 OB_MODE_EDIT_GPENCIL,
                 OB_MODE_PAINT_GPENCIL,
                 OB_MODE_SCULPT_GPENCIL,
-                OB_MODE_WEIGHT_GPENCIL) &&
+                OB_MODE_WEIGHT_GPENCIL,
+                OB_MODE_VERTEX_GPENCIL) &&
            (ob->type == OB_GPENCIL)) ||
           (input->value == OB_MODE_OBJECT)) {
         RNA_enum_item_add(&item, &totitem, input);
@@ -1737,7 +1740,7 @@ static int move_to_collection_invoke(bContext *C, wmOperator *op, const wmEvent 
         BKE_collection_new_name_get(collection, name);
 
         RNA_property_string_set(op->ptr, prop, name);
-        return WM_operator_props_dialog_popup(C, op, 200, 100);
+        return WM_operator_props_dialog_popup(C, op, 200);
       }
     }
     return move_to_collection_exec(C, op);

@@ -28,9 +28,9 @@
 
 #include "DNA_armature_types.h"
 #include "DNA_constraint_types.h"
-#include "DNA_object_types.h"
-#include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_ghash.h"
@@ -39,16 +39,16 @@
 
 #include "BLT_translation.h"
 
-#include "BKE_animsys.h"
 #include "BKE_action.h"
+#include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
 #include "BKE_deform.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
-#include "BKE_gpencil_modifier.h"
 
 #include "DEG_depsgraph.h"
 
@@ -79,6 +79,7 @@ static bool editbone_unique_check(void *arg, const char *name)
   return dupli && dupli != data->bone;
 }
 
+/* If bone is already in list, pass it as param to ignore it. */
 void ED_armature_ebone_unique_name(ListBase *edbo, char *name, EditBone *bone)
 {
   struct {
@@ -255,7 +256,7 @@ void ED_armature_bone_rename(Main *bmain,
       }
 
       if (modifiers_usesArmature(ob, arm)) {
-        bDeformGroup *dg = defgroup_find_name(ob, oldname);
+        bDeformGroup *dg = BKE_object_defgroup_find_name(ob, oldname);
         if (dg) {
           BLI_strncpy(dg->name, newname, MAXBONENAME);
         }
@@ -298,7 +299,7 @@ void ED_armature_bone_rename(Main *bmain,
       if (ob->type == OB_GPENCIL) {
 
         bGPdata *gpd = (bGPdata *)ob->data;
-        for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
           if ((gpl->parent != NULL) && (gpl->parent->data == arm)) {
             if (STREQ(gpl->parsubstr, oldname)) {
               BLI_strncpy(gpl->parsubstr, newname, MAXBONENAME);
@@ -312,7 +313,7 @@ void ED_armature_bone_rename(Main *bmain,
             case eGpencilModifierType_Armature: {
               ArmatureGpencilModifierData *mmd = (ArmatureGpencilModifierData *)gp_md;
               if (mmd->object && mmd->object->data == arm) {
-                bDeformGroup *dg = defgroup_find_name(ob, oldname);
+                bDeformGroup *dg = BKE_object_defgroup_find_name(ob, oldname);
                 if (dg) {
                   BLI_strncpy(dg->name, newname, MAXBONENAME);
                 }
@@ -358,9 +359,9 @@ void ED_armature_bone_rename(Main *bmain,
           for (sl = sa->spacedata.first; sl; sl = sl->next) {
             if (sl->spacetype == SPACE_VIEW3D) {
               View3D *v3d = (View3D *)sl;
-              if (v3d->ob_centre && v3d->ob_centre->data == arm) {
-                if (STREQ(v3d->ob_centre_bone, oldname)) {
-                  BLI_strncpy(v3d->ob_centre_bone, newname, MAXBONENAME);
+              if (v3d->ob_center && v3d->ob_center->data == arm) {
+                if (STREQ(v3d->ob_center_bone, oldname)) {
+                  BLI_strncpy(v3d->ob_center_bone, newname, MAXBONENAME);
                 }
               }
             }

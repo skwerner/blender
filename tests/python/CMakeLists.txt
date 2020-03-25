@@ -28,6 +28,7 @@ set(TEST_OUT_DIR ${CMAKE_BINARY_DIR}/tests)
 # ugh, any better way to do this on testing only?
 file(MAKE_DIRECTORY ${TEST_OUT_DIR})
 file(MAKE_DIRECTORY ${TEST_OUT_DIR}/io_tests)
+file(MAKE_DIRECTORY ${TEST_OUT_DIR}/blendfile_io)
 
 # if(NOT IS_DIRECTORY ${TEST_SRC_DIR})
 #   message(FATAL_ERROR "CMake test directory not found!")
@@ -79,6 +80,11 @@ add_blender_test(
   --python ${CMAKE_CURRENT_LIST_DIR}/bl_load_py_modules.py
 )
 
+add_blender_test(
+  script_bundled_modules
+  --python ${CMAKE_CURRENT_LIST_DIR}/bl_bundled_modules.py
+)
+
 # test running operators doesn't segfault under various conditions
 if(USE_EXPERIMENTAL_TESTS)
   add_blender_test(
@@ -114,12 +120,32 @@ add_blender_test(
   --python ${CMAKE_CURRENT_LIST_DIR}/bl_pyapi_idprop_datablock.py
 )
 
+add_blender_test(
+  script_pyapi_prop_array
+  --python ${CMAKE_CURRENT_LIST_DIR}/bl_pyapi_prop_array.py
+)
+
 # ------------------------------------------------------------------------------
 # DATA MANAGEMENT TESTS
 
 add_blender_test(
   id_management
   --python ${CMAKE_CURRENT_LIST_DIR}/bl_id_management.py
+)
+
+# ------------------------------------------------------------------------------
+# BLEND IO & LINKING
+
+add_blender_test(
+  blendfile_io
+  --python ${CMAKE_CURRENT_LIST_DIR}/bl_blendfile_io.py --
+  --output-dir ${TEST_OUT_DIR}/blendfile_io/
+)
+
+add_blender_test(
+  blendfile_liblink
+  --python ${CMAKE_CURRENT_LIST_DIR}/bl_blendfile_liblink.py --
+  --output-dir ${TEST_OUT_DIR}/blendfile_io/
 )
 
 # ------------------------------------------------------------------------------
@@ -160,6 +186,13 @@ add_blender_test(
   --python ${TEST_PYTHON_DIR}/modifiers.py
   --
   --run-all-tests
+)
+
+add_blender_test(
+  constraints
+  --python ${CMAKE_CURRENT_LIST_DIR}/bl_constraints.py
+  --
+  --testdir "${TEST_SRC_DIR}/constraints"
 )
 
 # ------------------------------------------------------------------------------
@@ -527,6 +560,7 @@ if(WITH_CYCLES OR WITH_OPENGL_RENDER_TESTS)
       light
       mesh
       motion_blur
+      openvdb
       render_layer
       reports
       shader
@@ -624,8 +658,8 @@ if(WITH_ALEMBIC)
   )
 
   add_blender_test(
-    script_alembic_import
-    --python ${CMAKE_CURRENT_LIST_DIR}/bl_alembic_import_test.py
+    script_alembic_io
+    --python ${CMAKE_CURRENT_LIST_DIR}/bl_alembic_io_test.py
     --
     --testdir "${TEST_SRC_DIR}/alembic"
   )

@@ -37,25 +37,26 @@
 #include "DNA_scene_types.h"
 
 #include "BLI_bitmap.h"
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_path_util.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
-#include "BLI_path_util.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
-#include "BKE_curve.h"
-#include "BKE_context.h"
 #include "BKE_DerivedMesh.h"
+#include "BKE_animsys.h"
+#include "BKE_context.h"
+#include "BKE_curve.h"
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
 #include "BKE_effect.h"
 #include "BKE_global.h"
 #include "BKE_gpencil_modifier.h"
+#include "BKE_hair.h"
 #include "BKE_key.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
@@ -67,9 +68,11 @@
 #include "BKE_ocean.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
+#include "BKE_pointcloud.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_softbody.h"
+#include "BKE_volume.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -80,9 +83,9 @@
 #include "RNA_enum_types.h"
 
 #include "ED_armature.h"
+#include "ED_mesh.h"
 #include "ED_object.h"
 #include "ED_screen.h"
-#include "ED_mesh.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -114,6 +117,15 @@ static void object_force_modifier_update_for_bind(Depsgraph *depsgraph, Object *
   else if (ob->type == OB_GPENCIL) {
     BKE_gpencil_modifiers_calc(depsgraph, scene_eval, ob_eval);
   }
+  else if (ob->type == OB_HAIR) {
+    BKE_hair_data_update(depsgraph, scene_eval, ob);
+  }
+  else if (ob->type == OB_POINTCLOUD) {
+    BKE_pointcloud_data_update(depsgraph, scene_eval, ob);
+  }
+  else if (ob->type == OB_VOLUME) {
+    BKE_volume_data_update(depsgraph, scene_eval, ob);
+  }
 }
 
 static void object_force_modifier_bind_simple_options(Depsgraph *depsgraph,
@@ -127,6 +139,11 @@ static void object_force_modifier_bind_simple_options(Depsgraph *depsgraph,
   md_eval->mode = mode;
 }
 
+/** Add a modifier to given object, including relevant extra processing needed by some physics
+ * types (particles, simulations...).
+ *
+ * \param scene is only used to set current frame in some cases, and may be NULL.
+ */
 ModifierData *ED_object_modifier_add(
     ReportList *reports, Main *bmain, Scene *scene, Object *ob, const char *name, int type)
 {
@@ -649,6 +666,7 @@ static int modifier_apply_shape(Main *bmain,
     BKE_id_free(NULL, mesh_applied);
   }
   else {
+    /* TODO: implement for hair, pointclouds and volumes. */
     BKE_report(reports, RPT_ERROR, "Cannot apply modifier for this object type");
     return 0;
   }
@@ -681,7 +699,7 @@ static int modifier_apply_obdata(
     }
 
     if (mmd && mmd->totlvl && mti->type == eModifierTypeType_OnlyDeform) {
-      if (!multiresModifier_reshapeFromDeformModifier(depsgraph, mmd, ob, md_eval)) {
+      if (!multiresModifier_reshapeFromDeformModifier(depsgraph, ob, mmd, md_eval)) {
         BKE_report(reports, RPT_ERROR, "Multires modifier returned error, skipping apply");
         return 0;
       }
@@ -727,6 +745,7 @@ static int modifier_apply_obdata(
     DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   }
   else {
+    /* TODO: implement for hair, pointclouds and volumes. */
     BKE_report(reports, RPT_ERROR, "Cannot apply modifier for this object type");
     return 0;
   }
@@ -749,30 +768,30 @@ static int modifier_apply_obdata(
   return 1;
 }
 
-int ED_object_modifier_apply(Main *bmain,
-                             ReportList *reports,
-                             Depsgraph *depsgraph,
-                             Scene *scene,
-                             Object *ob,
-                             ModifierData *md,
-                             int mode)
+bool ED_object_modifier_apply(Main *bmain,
+                              ReportList *reports,
+                              Depsgraph *depsgraph,
+                              Scene *scene,
+                              Object *ob,
+                              ModifierData *md,
+                              int mode)
 {
   int prev_mode;
 
   if (BKE_object_is_in_editmode(ob)) {
     BKE_report(reports, RPT_ERROR, "Modifiers cannot be applied in edit mode");
-    return 0;
+    return false;
   }
-  else if (((ID *)ob->data)->us > 1) {
+  else if (ID_REAL_USERS(ob->data) > 1) {
     BKE_report(reports, RPT_ERROR, "Modifiers cannot be applied to multi-user data");
-    return 0;
+    return false;
   }
   else if ((ob->mode & OB_MODE_SCULPT) && (find_multires_modifier_before(scene, md)) &&
            (modifier_isSameTopology(md) == false)) {
     BKE_report(reports,
                RPT_ERROR,
                "Constructive modifier cannot be applied to multi-res data in sculpt mode");
-    return 0;
+    return false;
   }
 
   if (md != ob->modifiers.first) {
@@ -791,13 +810,13 @@ int ED_object_modifier_apply(Main *bmain,
   if (mode == MODIFIER_APPLY_SHAPE) {
     if (!modifier_apply_shape(bmain, reports, depsgraph, scene, ob, md_eval)) {
       md_eval->mode = prev_mode;
-      return 0;
+      return false;
     }
   }
   else {
     if (!modifier_apply_obdata(reports, depsgraph, scene, ob, md_eval)) {
       md_eval->mode = prev_mode;
-      return 0;
+      return false;
     }
   }
 
@@ -807,7 +826,7 @@ int ED_object_modifier_apply(Main *bmain,
 
   BKE_object_free_derived_caches(ob);
 
-  return 1;
+  return true;
 }
 
 int ED_object_modifier_copy(ReportList *UNUSED(reports), Object *ob, ModifierData *md)
@@ -926,28 +945,28 @@ bool edit_modifier_poll_generic(bContext *C,
   ModifierData *mod = ptr.data; /* May be NULL. */
 
   if (!ob || ID_IS_LINKED(ob)) {
-    return 0;
+    return false;
   }
   if (obtype_flag && ((1 << ob->type) & obtype_flag) == 0) {
-    return 0;
+    return false;
   }
   if (ptr.owner_id && ID_IS_LINKED(ptr.owner_id)) {
-    return 0;
+    return false;
   }
 
   if (ID_IS_OVERRIDE_LIBRARY(ob)) {
     if ((mod != NULL) && (mod->flag & eModifierFlag_OverrideLibrary_Local) == 0) {
       CTX_wm_operator_poll_msg_set(C, "Cannot edit modifiers coming from library override");
-      return 0;
+      return false;
     }
   }
 
   if (!is_editmode_allowed && CTX_data_edit_object(C) != NULL) {
     CTX_wm_operator_poll_msg_set(C, "This modifier operation is not allowed from Edit mode");
-    return 0;
+    return false;
   }
 
-  return 1;
+  return true;
 }
 
 bool edit_modifier_poll(bContext *C)
@@ -1134,6 +1153,32 @@ void OBJECT_OT_modifier_move_down(wmOperatorType *ot)
 
 /************************ apply modifier operator *********************/
 
+static bool modifier_apply_poll(bContext *C)
+{
+  if (!edit_modifier_poll_generic(C, &RNA_Modifier, 0, false)) {
+    return false;
+  }
+
+  Scene *scene = CTX_data_scene(C);
+  PointerRNA ptr = CTX_data_pointer_get_type(C, "modifier", &RNA_Modifier);
+  Object *ob = (ptr.owner_id != NULL) ? (Object *)ptr.owner_id : ED_object_active_context(C);
+  ModifierData *md = ptr.data; /* May be NULL. */
+
+  if (ID_REAL_USERS(ob->data) > 1) {
+    CTX_wm_operator_poll_msg_set(C, "Modifiers cannot be applied to multi-user data");
+    return false;
+  }
+  else if (md != NULL) {
+    if ((ob->mode & OB_MODE_SCULPT) && (find_multires_modifier_before(scene, md)) &&
+        (modifier_isSameTopology(md) == false)) {
+      CTX_wm_operator_poll_msg_set(
+          C, "Constructive modifier cannot be applied to multi-res data in sculpt mode");
+      return false;
+    }
+  }
+  return true;
+}
+
 static int modifier_apply_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
@@ -1182,7 +1227,7 @@ void OBJECT_OT_modifier_apply(wmOperatorType *ot)
 
   ot->invoke = modifier_apply_invoke;
   ot->exec = modifier_apply_exec;
-  ot->poll = edit_modifier_poll;
+  ot->poll = modifier_apply_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
@@ -1344,26 +1389,25 @@ void OBJECT_OT_multires_higher_levels_delete(wmOperatorType *ot)
 
 static int multires_subdivide_exec(bContext *C, wmOperator *op)
 {
-  Scene *scene = CTX_data_scene(C);
-  Object *ob = ED_object_active_context(C);
+  Object *object = ED_object_active_context(C);
   MultiresModifierData *mmd = (MultiresModifierData *)edit_modifier_property_get(
-      op, ob, eModifierType_Multires);
+      op, object, eModifierType_Multires);
 
   if (!mmd) {
     return OPERATOR_CANCELLED;
   }
 
-  multiresModifier_subdivide(mmd, scene, ob, 0, mmd->simple);
+  multiresModifier_subdivide(object, mmd);
 
   ED_object_iter_other(
-      CTX_data_main(C), ob, true, ED_object_multires_update_totlevels_cb, &mmd->totlvl);
+      CTX_data_main(C), object, true, ED_object_multires_update_totlevels_cb, &mmd->totlvl);
 
-  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-  WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
+  DEG_id_tag_update(&object->id, ID_RECALC_GEOMETRY);
+  WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, object);
 
-  if (ob->mode & OB_MODE_SCULPT) {
+  if (object->mode & OB_MODE_SCULPT) {
     /* ensure that grid paint mask layer is created */
-    BKE_sculpt_mask_layers_ensure(ob, mmd);
+    BKE_sculpt_mask_layers_ensure(object, mmd);
   }
 
   return OPERATOR_FINISHED;
@@ -1583,19 +1627,19 @@ void OBJECT_OT_multires_external_pack(wmOperatorType *ot)
 /********************* multires apply base ***********************/
 static int multires_base_apply_exec(bContext *C, wmOperator *op)
 {
-  Scene *scene = CTX_data_scene(C);
-  Object *ob = ED_object_active_context(C);
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+  Object *object = ED_object_active_context(C);
   MultiresModifierData *mmd = (MultiresModifierData *)edit_modifier_property_get(
-      op, ob, eModifierType_Multires);
+      op, object, eModifierType_Multires);
 
   if (!mmd) {
     return OPERATOR_CANCELLED;
   }
 
-  multiresModifier_base_apply(mmd, scene, ob);
+  multiresModifier_base_apply(depsgraph, object, mmd);
 
-  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-  WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
+  DEG_id_tag_update(&object->id, ID_RECALC_GEOMETRY);
+  WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, object);
 
   return OPERATOR_FINISHED;
 }

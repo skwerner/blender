@@ -29,9 +29,9 @@
 
 #include "BLI_alloca.h"
 #include "BLI_bitmap.h"
+#include "BLI_linklist_stack.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
-#include "BLI_linklist_stack.h"
 
 #include "BKE_context.h"
 #include "BKE_crazyspace.h"
@@ -1030,7 +1030,15 @@ static void create_trans_vert_customdata_layer(BMVert *v,
 void trans_mesh_customdata_correction_init(TransInfo *t)
 {
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
-    BLI_assert(tc->custom.type.data == NULL);
+    if (tc->custom.type.data) {
+      if (tc->custom.type.free_cb == trans_mesh_customdata_free_cb) {
+        /* Custom data correction has initiated before. */
+        continue;
+      }
+      else {
+        BLI_assert(false);
+      }
+    }
     int i;
 
     BMEditMesh *em = BKE_editmesh_from_object(tc->obedit);
@@ -1168,7 +1176,7 @@ static void trans_mesh_customdata_correction_apply_vert(struct TransCustomDataLa
     BM_loop_interp_from_face(bm, l, f_copy, false, false);
 
     /* make sure face-attributes are correct (e.g. #MLoopUV, #MLoopCol) */
-    BM_elem_attrs_copy_ex(tcld->bm_origfaces, bm, f_copy, l->f, 0x0, CD_MASK_NORMAL);
+    BM_elem_attrs_copy_ex(tcld->bm_origfaces, bm, f_copy, l->f, BM_ELEM_SELECT, CD_MASK_NORMAL);
 
     /* weight the loop */
     if (do_loop_weight) {

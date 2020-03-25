@@ -23,8 +23,8 @@
 #ifndef __DNA_SOUND_TYPES_H__
 #define __DNA_SOUND_TYPES_H__
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
+#include "DNA_defs.h"
 
 /* stupid... could easily be solved */
 #include "DNA_view2d_types.h"
@@ -103,12 +103,6 @@ typedef enum eSound_Type {
   SOUND_TYPE_LIMITER = 2,
 } eSound_Type;
 #endif
-
-/* spacesound->flag */
-enum {
-  SND_DRAWFRAMES = 1,
-  SND_CFRA_NUM = 2,
-};
 
 /* bSound->flags */
 enum {

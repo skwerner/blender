@@ -18,16 +18,16 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
 #include "rna_internal.h"
 
-#include "DNA_screen_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 #include "DNA_workspace_types.h"
 
 const EnumPropertyItem rna_enum_region_type_items[] = {
@@ -55,8 +55,8 @@ const EnumPropertyItem rna_enum_region_type_items[] = {
 #ifdef RNA_RUNTIME
 
 #  include "BKE_global.h"
-#  include "BKE_workspace.h"
 #  include "BKE_screen.h"
+#  include "BKE_workspace.h"
 
 #  include "DEG_depsgraph.h"
 
@@ -80,7 +80,7 @@ static void rna_Screen_redraw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), 
   /* the settings for this are currently only available from a menu in the TimeLine,
    * hence refresh=SPACE_ACTION, as timeline is now in there
    */
-  ED_screen_animation_timer_update(screen, screen->redraws_flag, SPACE_ACTION);
+  ED_screen_animation_timer_update(screen, screen->redraws_flag);
 }
 
 static bool rna_Screen_is_animation_playing_get(PointerRNA *UNUSED(ptr))
@@ -109,21 +109,9 @@ static const EnumPropertyItem *rna_Area_type_itemf(bContext *UNUSED(C),
                                                    PropertyRNA *UNUSED(prop),
                                                    bool *r_free)
 {
-  EnumPropertyItem *item = NULL;
-  int totitem = 0;
-
   /* +1 to skip SPACE_EMPTY */
-  for (const EnumPropertyItem *item_from = rna_enum_space_type_items + 1; item_from->identifier;
-       item_from++) {
-    if (ELEM(item_from->value, SPACE_TOPBAR, SPACE_STATUSBAR)) {
-      continue;
-    }
-    RNA_enum_item_add(&item, &totitem, item_from);
-  }
-  RNA_enum_item_end(&item, &totitem);
-  *r_free = true;
-
-  return item;
+  *r_free = false;
+  return rna_enum_space_type_items + 1;
 }
 
 static int rna_Area_type_get(PointerRNA *ptr)

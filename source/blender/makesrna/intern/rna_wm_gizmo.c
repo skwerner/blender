@@ -259,9 +259,9 @@ static wmGizmo *rna_GizmoProperties_find_operator(PointerRNA *ptr)
   for (bScreen *screen = G_MAIN->screens.first; screen; screen = screen->id.next) {
     IDProperty *properties = ptr->data;
     for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-      for (ARegion *ar = sa->regionbase.first; ar; ar = ar->next) {
-        if (ar->gizmo_map) {
-          wmGizmoMap *gzmap = ar->gizmo_map;
+      for (ARegion *region = sa->regionbase.first; region; region = region->next) {
+        if (region->gizmo_map) {
+          wmGizmoMap *gzmap = region->gizmo_map;
           for (wmGizmoGroup *gzgroup = WM_gizmomap_group_list(gzmap)->first; gzgroup;
                gzgroup = gzgroup->next) {
             for (wmGizmo *gz = gzgroup->gizmos.first; gz; gz = gz->next) {
@@ -1376,6 +1376,12 @@ static void rna_def_gizmogroup(BlenderRNA *brna)
        0,
        "Tool Init",
        "Postpone running until tool operator run (when used with a tool)"},
+      {WM_GIZMOGROUPTYPE_VR_REDRAWS,
+       "VR_REDRAWS",
+       0,
+       "VR Redraws",
+       "The gizmos are made for use with virtual reality sessions and require special redraw "
+       "management"},
       {0, NULL, 0, NULL, NULL},
   };
   prop = RNA_def_property(srna, "bl_options", PROP_ENUM, PROP_NONE);

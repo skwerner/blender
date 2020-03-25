@@ -22,15 +22,15 @@
  */
 
 #include <math.h>
-#include <string.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_listbase.h"
-#include "BLI_timecode.h"
 #include "BLI_math.h"
 #include "BLI_threads.h"
+#include "BLI_timecode.h"
 #include "BLI_utildefines.h"
 
 #include "PIL_time.h"
@@ -39,25 +39,25 @@
 
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_view3d_types.h"
 #include "DNA_userdef_types.h"
+#include "DNA_view3d_types.h"
 
 #include "BKE_blender_undo.h"
 #include "BKE_blender_version.h"
 #include "BKE_camera.h"
-#include "BKE_context.h"
 #include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
-#include "BKE_sequencer.h"
-#include "BKE_screen.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
+#include "BKE_sequencer.h"
 #include "BKE_undo_system.h"
 
 #include "DEG_depsgraph.h"
@@ -68,14 +68,14 @@
 #include "ED_object.h"
 #include "ED_render.h"
 #include "ED_screen.h"
-#include "ED_util.h"
 #include "ED_undo.h"
+#include "ED_util.h"
 #include "ED_view3d.h"
 
 #include "BIF_glutil.h"
 
-#include "RE_pipeline.h"
 #include "RE_engine.h"
+#include "RE_pipeline.h"
 
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf_types.h"
@@ -333,9 +333,11 @@ static int screen_render_exec(bContext *C, wmOperator *op)
   re = RE_NewSceneRender(scene);
 
   G.is_break = false;
+
+  RE_draw_lock_cb(re, NULL, NULL);
   RE_test_break_cb(re, NULL, render_break);
 
-  ima = BKE_image_verify_viewer(mainp, IMA_TYPE_R_RESULT, "Render Result");
+  ima = BKE_image_ensure_viewer(mainp, IMA_TYPE_R_RESULT, "Render Result");
   BKE_image_signal(mainp, ima, NULL, IMA_SIGNAL_FREE);
   BKE_image_backup_render(scene, ima, true);
 
@@ -842,7 +844,7 @@ static int screen_render_modal(bContext *C, wmOperator *op, const wmEvent *event
 
   /* running render */
   switch (event->type) {
-    case ESCKEY:
+    case EVT_ESCKEY:
       return OPERATOR_RUNNING_MODAL;
   }
   return OPERATOR_PASS_THROUGH;
@@ -955,7 +957,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   WM_cursor_wait(1);
 
   /* flush sculpt and editmode changes */
-  ED_editors_flush_edits(bmain, true);
+  ED_editors_flush_edits_ex(bmain, true, false);
 
   /* cleanup sequencer caches before starting user triggered render.
    * otherwise, invalidated cache entries can make their way into
@@ -1047,7 +1049,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   }
 
   /* get a render result image, and make sure it is empty */
-  ima = BKE_image_verify_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
+  ima = BKE_image_ensure_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
   BKE_image_signal(rj->main, ima, NULL, IMA_SIGNAL_FREE);
   BKE_image_backup_render(rj->scene, ima, true);
   rj->image = ima;

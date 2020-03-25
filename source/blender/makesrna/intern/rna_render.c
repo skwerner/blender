@@ -21,16 +21,16 @@
 #include <stdlib.h>
 
 #include "DNA_node_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_path_util.h"
+#include "BLI_utildefines.h"
 
 #include "DEG_depsgraph.h"
 
-#include "BKE_scene.h"
 #include "BKE_image.h"
+#include "BKE_scene.h"
 
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
@@ -86,7 +86,6 @@ const EnumPropertyItem rna_enum_bake_pass_type_items[] = {
     {SCE_PASS_DIFFUSE_COLOR, "DIFFUSE", 0, "Diffuse", ""},
     {SCE_PASS_GLOSSY_COLOR, "GLOSSY", 0, "Glossy", ""},
     {SCE_PASS_TRANSM_COLOR, "TRANSMISSION", 0, "Transmission", ""},
-    {SCE_PASS_SUBSURFACE_COLOR, "SUBSURFACE", 0, "Subsurface", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -99,8 +98,9 @@ const EnumPropertyItem rna_enum_bake_pass_type_items[] = {
 #  include "BKE_context.h"
 #  include "BKE_report.h"
 
-#  include "IMB_colormanagement.h"
 #  include "GPU_extensions.h"
+#  include "GPU_shader.h"
+#  include "IMB_colormanagement.h"
 
 #  include "DEG_depsgraph_query.h"
 
@@ -126,15 +126,19 @@ static int engine_get_preview_pixel_size(RenderEngine *UNUSED(engine), Scene *sc
   return BKE_render_preview_pixel_size(&scene->r);
 }
 
-static void engine_bind_display_space_shader(RenderEngine *UNUSED(engine), Scene *scene)
+static void engine_bind_display_space_shader(RenderEngine *UNUSED(engine), Scene *UNUSED(scene))
 {
-  IMB_colormanagement_setup_glsl_draw(
-      &scene->view_settings, &scene->display_settings, scene->r.dither_intensity, false);
+  GPUShader *shader = GPU_shader_get_builtin_shader(GPU_SHADER_2D_IMAGE);
+  GPU_shader_bind(shader);
+
+  int img_loc = GPU_shader_get_uniform_ensure(shader, "image");
+
+  GPU_shader_uniform_int(shader, img_loc, 0);
 }
 
 static void engine_unbind_display_space_shader(RenderEngine *UNUSED(engine))
 {
-  IMB_colormanagement_finish_glsl_draw();
+  GPU_shader_unbind();
 }
 
 static void engine_update(RenderEngine *engine, Main *bmain, Depsgraph *depsgraph)
@@ -347,7 +351,7 @@ static StructRNA *rna_RenderEngine_register(Main *bmain,
   }
 
   /* create a new engine type */
-  et = MEM_callocN(sizeof(RenderEngineType), "python render engine");
+  et = MEM_mallocN(sizeof(RenderEngineType), "python render engine");
   memcpy(et, &dummyet, sizeof(dummyet));
 
   et->ext.srna = RNA_def_struct_ptr(&BLENDER_RNA, et->idname, &RNA_RenderEngine);
@@ -526,7 +530,7 @@ static void rna_def_render_engine(BlenderRNA *brna)
                      0,
                      INT_MAX,
                      "Pass Filter",
-                     "Filter to combined, diffuse, glossy, transmission and subsurface passes",
+                     "Filter to combined, diffuse, glossy and transmission passes",
                      0,
                      INT_MAX);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
@@ -829,6 +833,7 @@ static void rna_def_render_engine(BlenderRNA *brna)
   parm = RNA_def_string(func, "chanid", NULL, 8, "Channel IDs", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_enum(func, "type", render_pass_type_items, SOCK_FLOAT, "Type", "");
+  RNA_def_property_enum_native_type(parm, "eNodeSocketDatatype");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
   /* registration */
@@ -879,6 +884,11 @@ static void rna_def_render_engine(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_SPHERICAL_STEREO);
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
   RNA_def_property_ui_text(prop, "Use Spherical Stereo", "Support spherical stereo camera models");
+
+  prop = RNA_def_property(srna, "bl_use_stereo_viewport", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_STEREO_VIEWPORT);
+  RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(prop, "Use Stereo Viewport", "Support rendering stereo 3D viewport");
 
   RNA_define_verify_sdna(1);
 }

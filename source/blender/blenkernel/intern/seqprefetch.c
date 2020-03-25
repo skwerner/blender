@@ -27,11 +27,11 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_sequence_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_sequence_types.h"
 #include "DNA_windowmanager_types.h"
-#include "DNA_anim_types.h"
 
 #include "BLI_listbase.h"
 #include "BLI_threads.h"
@@ -40,12 +40,12 @@
 #include "IMB_imbuf_types.h"
 
 #include "BKE_animsys.h"
-#include "BKE_library.h"
-#include "BKE_scene.h"
-#include "BKE_main.h"
 #include "BKE_context.h"
-#include "BKE_sequencer.h"
 #include "BKE_layer.h"
+#include "BKE_lib_id.h"
+#include "BKE_main.h"
+#include "BKE_scene.h"
+#include "BKE_sequencer.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -416,9 +416,7 @@ static PrefetchJob *seq_prefetch_start(const SeqRenderData *context, float cfra)
   pfjob->stop = false;
   pfjob->running = true;
 
-  if (&pfjob->threads) {
-    BLI_threadpool_remove(&pfjob->threads, pfjob);
-  }
+  BLI_threadpool_remove(&pfjob->threads, pfjob);
   BLI_threadpool_insert(&pfjob->threads, pfjob);
 
   return pfjob;

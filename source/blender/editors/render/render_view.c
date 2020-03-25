@@ -21,8 +21,8 @@
  * \ingroup edrend
  */
 
-#include <string.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
@@ -31,11 +31,11 @@
 #include "DNA_userdef_types.h"
 
 #include "BKE_context.h"
-#include "BKE_image.h"
 #include "BKE_global.h"
+#include "BKE_image.h"
 #include "BKE_main.h"
-#include "BKE_screen.h"
 #include "BKE_report.h"
+#include "BKE_screen.h"
 
 #include "BLT_translation.h"
 
@@ -230,7 +230,7 @@ ScrArea *render_view_open(bContext *C, int mx, int my, ReportList *reports)
   sima->link_flag |= SPACE_FLAG_TYPE_TEMPORARY;
 
   /* get the correct image, and scale it */
-  sima->image = BKE_image_verify_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
+  sima->image = BKE_image_ensure_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
 
   /* If we're rendering to full screen, set appropriate hints on image editor
    * so it can restore properly on pressing escape. */

@@ -27,9 +27,9 @@
 /* placed up here because of crappy
  * winsock stuff.
  */
+#include <errno.h>
 #include <stddef.h>
 #include <string.h>
-#include <errno.h>
 
 #include "zlib.h" /* wm_read_exotic() */
 
@@ -42,19 +42,19 @@
 #  endif
 /* For SHGetSpecialFolderPath, has to be done before BLI_winstuff
  * because 'near' is disabled through BLI_windstuff */
-#  include <shlobj.h>
 #  include "BLI_winstuff.h"
+#  include <shlobj.h>
 #endif
 
-#include "MEM_guardedalloc.h"
 #include "MEM_CacheLimiterC-Api.h"
+#include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_linklist.h"
-#include "BLI_utildefines.h"
-#include "BLI_timer.h"
-#include "BLI_threads.h"
 #include "BLI_system.h"
+#include "BLI_threads.h"
+#include "BLI_timer.h"
+#include "BLI_utildefines.h"
 #include BLI_SYSTEM_PID_H
 
 #include "BLT_translation.h"
@@ -62,10 +62,10 @@
 #include "BLF_api.h"
 
 #include "DNA_object_types.h"
-#include "DNA_space_types.h"
-#include "DNA_userdef_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_space_types.h"
+#include "DNA_userdef_types.h"
 #include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
 
@@ -77,19 +77,20 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
-#include "BKE_library_override.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_override.h"
 #include "BKE_main.h"
 #include "BKE_packedFile.h"
 #include "BKE_report.h"
-#include "BKE_sound.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
+#include "BKE_sound.h"
 #include "BKE_undo_system.h"
 #include "BKE_workspace.h"
 
 #include "BLO_readfile.h"
-#include "BLO_writefile.h"
 #include "BLO_undofile.h" /* to save from an undo memfile */
+#include "BLO_writefile.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -103,14 +104,16 @@
 #include "ED_image.h"
 #include "ED_outliner.h"
 #include "ED_screen.h"
-#include "ED_view3d.h"
-#include "ED_util.h"
 #include "ED_undo.h"
+#include "ED_util.h"
+#include "ED_view3d.h"
+#include "ED_view3d_offscreen.h"
 
 #include "GHOST_C-api.h"
 #include "GHOST_Path-api.h"
 
 #include "UI_interface.h"
+#include "UI_interface_icons.h"
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
@@ -124,14 +127,14 @@
 #include "DEG_depsgraph.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
 #include "WM_toolsystem.h"
+#include "WM_types.h"
 
 #include "wm.h"
+#include "wm_event_system.h"
 #include "wm_files.h"
 #include "wm_window.h"
-#include "wm_event_system.h"
 
 static RecentFile *wm_file_history_find(const char *filepath);
 static void wm_history_file_free(RecentFile *recent);
@@ -611,6 +614,9 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
 
   UI_view2d_zoom_cache_reset();
 
+  /* Reset session-wise ID UUID counter. */
+  BKE_lib_libblock_session_uuid_reset();
+
   /* first try to append data from exotic file formats... */
   /* it throws error box when file doesn't exist and returns -1 */
   /* note; it should set some error message somewhere... (ton) */
@@ -917,6 +923,9 @@ void wm_homefile_read(bContext *C,
     }
   }
 
+  /* Reset session-wise ID UUID counter. */
+  BKE_lib_libblock_session_uuid_reset();
+
   if (!use_factory_settings || (filepath_startup[0] != '\0')) {
     if (BLI_access(filepath_startup, R_OK) == 0) {
       success = BKE_blendfile_read(C,
@@ -1080,7 +1089,7 @@ void wm_history_file_read(void)
     return;
   }
 
-  BLI_make_file_string("/", name, cfgdir, BLENDER_HISTORY_FILE);
+  BLI_join_dirfile(name, sizeof(name), cfgdir, BLENDER_HISTORY_FILE);
 
   lines = BLI_file_read_as_lines(name);
 
@@ -1136,7 +1145,7 @@ static void wm_history_file_write(void)
     return;
   }
 
-  BLI_make_file_string("/", name, user_config_dir, BLENDER_HISTORY_FILE);
+  BLI_join_dirfile(name, sizeof(name), user_config_dir, BLENDER_HISTORY_FILE);
 
   fp = BLI_fopen(name, "w");
   if (fp) {
@@ -1211,7 +1220,7 @@ static ImBuf *blend_file_thumb(const bContext *C,
 
   /* screen if no camera found */
   ScrArea *sa = NULL;
-  ARegion *ar = NULL;
+  ARegion *region = NULL;
   View3D *v3d = NULL;
 
   /* In case we are given a valid thumbnail data, just generate image from it. */
@@ -1227,8 +1236,8 @@ static ImBuf *blend_file_thumb(const bContext *C,
 
   if ((scene->camera == NULL) && (screen != NULL)) {
     sa = BKE_screen_find_big_area(screen, SPACE_VIEW3D, 0);
-    ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
-    if (ar) {
+    region = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
+    if (region) {
       v3d = sa->spacedata.first;
     }
   }
@@ -1260,7 +1269,7 @@ static ImBuf *blend_file_thumb(const bContext *C,
                                           scene,
                                           OB_SOLID,
                                           v3d,
-                                          ar,
+                                          region,
                                           BLEN_THUMB_SIZE * 2,
                                           BLEN_THUMB_SIZE * 2,
                                           IB_rect,
@@ -1366,7 +1375,7 @@ static bool wm_file_write(bContext *C, const char *filepath, int fileflags, Repo
   BKE_callback_exec_null(bmain, BKE_CB_EVT_SAVE_PRE);
 
   /* Enforce full override check/generation on file save. */
-  BKE_main_override_library_operations_create(bmain, true);
+  BKE_lib_override_library_main_operations_create(bmain, true);
 
   /* blend file thumbnail */
   /* Save before exit_editmode, otherwise derivedmeshes for shared data corrupt T27765. */
@@ -1386,7 +1395,7 @@ static bool wm_file_write(bContext *C, const char *filepath, int fileflags, Repo
   /* don't forget not to return without! */
   WM_cursor_wait(1);
 
-  ED_editors_flush_edits(bmain, false);
+  ED_editors_flush_edits(bmain);
 
   fileflags |= G_FILE_HISTORY; /* write file history */
 
@@ -1479,7 +1488,7 @@ void wm_autosave_location(char *filepath)
   }
 #endif
 
-  BLI_make_file_string("/", filepath, BKE_tempdir_base(), path);
+  BLI_join_dirfile(filepath, FILE_MAX, BKE_tempdir_base(), path);
 }
 
 void WM_autosave_init(wmWindowManager *wm)
@@ -1491,7 +1500,7 @@ void WM_autosave_init(wmWindowManager *wm)
   }
 }
 
-void wm_autosave_timer(const bContext *C, wmWindowManager *wm, wmTimer *UNUSED(wt))
+void wm_autosave_timer(Main *bmain, wmWindowManager *wm, wmTimer *UNUSED(wt))
 {
   char filepath[FILE_MAX];
 
@@ -1524,10 +1533,9 @@ void wm_autosave_timer(const bContext *C, wmWindowManager *wm, wmTimer *UNUSED(w
   }
   else {
     /*  save as regular blend file */
-    Main *bmain = CTX_data_main(C);
     int fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_HISTORY);
 
-    ED_editors_flush_edits(bmain, false);
+    ED_editors_flush_edits(bmain);
 
     /* Error reporting into console */
     BLO_write_file(bmain, filepath, fileflags, NULL, NULL);
@@ -1552,7 +1560,7 @@ void wm_autosave_delete(void)
 
   if (BLI_exists(filename)) {
     char str[FILE_MAX];
-    BLI_make_file_string("/", str, BKE_tempdir_base(), BLENDER_QUIT_FILE);
+    BLI_join_dirfile(str, sizeof(str), BKE_tempdir_base(), BLENDER_QUIT_FILE);
 
     /* if global undo; remove tempsave, otherwise rename */
     if (U.uiflag & USER_GLOBALUNDO) {
@@ -1655,7 +1663,7 @@ static int wm_homefile_write_exec(bContext *C, wmOperator *op)
 
   printf("Writing homefile: '%s' ", filepath);
 
-  ED_editors_flush_edits(bmain, false);
+  ED_editors_flush_edits(bmain);
 
   /*  force save as regular blend file */
   fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_HISTORY);
@@ -2001,7 +2009,8 @@ static void wm_free_operator_properties_callback(void *user_data)
 
 static int wm_homefile_read_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
-  if (U.uiflag & USER_SAVE_PROMPT && wm_file_or_image_is_modified(C)) {
+  if (U.uiflag & USER_SAVE_PROMPT &&
+      wm_file_or_image_is_modified(CTX_data_main(C), CTX_wm_manager(C))) {
     wmGenericCallback *callback = MEM_callocN(sizeof(*callback), __func__);
     callback->exec = wm_homefile_read_after_dialog_callback;
     callback->user_data = IDP_CopyProperty(op->properties);
@@ -2164,7 +2173,8 @@ static int wm_open_mainfile__discard_changes(bContext *C, wmOperator *op)
     set_next_operator_state(op, OPEN_MAINFILE_STATE_OPEN);
   }
 
-  if (U.uiflag & USER_SAVE_PROMPT && wm_file_or_image_is_modified(C)) {
+  if (U.uiflag & USER_SAVE_PROMPT &&
+      wm_file_or_image_is_modified(CTX_data_main(C), CTX_wm_manager(C))) {
     wmGenericCallback *callback = MEM_callocN(sizeof(*callback), __func__);
     callback->exec = wm_open_mainfile_after_dialog_callback;
     callback->user_data = IDP_CopyProperty(op->properties);
@@ -2430,7 +2440,7 @@ void WM_recover_last_session(bContext *C, ReportList *reports)
 {
   char filepath[FILE_MAX];
 
-  BLI_make_file_string("/", filepath, BKE_tempdir_base(), BLENDER_QUIT_FILE);
+  BLI_join_dirfile(filepath, sizeof(filepath), BKE_tempdir_base(), BLENDER_QUIT_FILE);
   /* if reports==NULL, it's called directly without operator, we add a quick check here */
   if (reports || BLI_exists(filepath)) {
     G.fileflags |= G_FILE_RECOVER;
@@ -2668,7 +2678,7 @@ void WM_OT_save_as_mainfile(wmOperatorType *ot)
                   "relative_remap",
                   true,
                   "Remap Relative",
-                  "Make paths relative when saving to a different directory");
+                  "Remap relative paths when saving to a different directory");
   prop = RNA_def_boolean(
       ot->srna,
       "copy",
@@ -2740,7 +2750,7 @@ void WM_OT_save_mainfile(wmOperatorType *ot)
                   "relative_remap",
                   false,
                   "Remap Relative",
-                  "Make paths relative when saving to a different directory");
+                  "Remap relative paths when saving to a different directory");
 
   prop = RNA_def_boolean(ot->srna, "exit", false, "Exit", "Exit Blender after saving");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
@@ -2804,12 +2814,12 @@ static void wm_block_autorun_warning_enable_scripts(bContext *C,
 
 /* Build the autorun warning dialog UI */
 static uiBlock *block_create_autorun_warning(struct bContext *C,
-                                             struct ARegion *ar,
+                                             struct ARegion *region,
                                              void *UNUSED(arg1))
 {
   wmWindowManager *wm = CTX_wm_manager(C);
-  uiStyle *style = UI_style_get();
-  uiBlock *block = UI_block_begin(C, ar, "autorun_warning_popup", UI_EMBOSS);
+  const uiStyle *style = UI_style_get_dpi();
+  uiBlock *block = UI_block_begin(C, region, "autorun_warning_popup", UI_EMBOSS);
 
   UI_block_flag_enable(
       block, UI_BLOCK_KEEP_OPEN | UI_BLOCK_LOOP | UI_BLOCK_NO_WIN_CLIP | UI_BLOCK_NUMSELECT);
@@ -2828,13 +2838,13 @@ static uiBlock *block_create_autorun_warning(struct bContext *C,
 
   /* Text and some vertical space */
   uiLayout *col = uiLayoutColumn(layout, true);
-  uiItemL(col,
-          TIP_("For security reasons, automatic execution of Python scripts in this file was "
-               "disabled:"),
-          ICON_ERROR);
-  uiLayout *sub = uiLayoutRow(col, true);
-  uiLayoutSetRedAlert(sub, true);
-  uiItemL(sub, G.autoexec_fail, ICON_BLANK1);
+  uiItemL_ex(col,
+             TIP_("For security reasons, automatic execution of Python scripts "
+                  "in this file was disabled:"),
+             ICON_ERROR,
+             true,
+             false);
+  uiItemL_ex(col, G.autoexec_fail, ICON_BLANK1, false, true);
   uiItemL(col, TIP_("This may lead to unexpected behavior"), ICON_BLANK1);
 
   uiItemS(layout);
@@ -2978,15 +2988,16 @@ static void wm_block_file_close_discard(bContext *C, void *arg_block, void *arg_
 
 static void wm_block_file_close_save(bContext *C, void *arg_block, void *arg_data)
 {
+  const Main *bmain = CTX_data_main(C);
   wmGenericCallback *callback = WM_generic_callback_steal((wmGenericCallback *)arg_data);
   bool execute_callback = true;
 
   wmWindow *win = CTX_wm_window(C);
   UI_popup_block_close(C, win, arg_block);
 
-  int modified_images_count = ED_image_save_all_modified_info(C, NULL);
+  int modified_images_count = ED_image_save_all_modified_info(CTX_data_main(C), NULL);
   if (modified_images_count > 0 && save_images_when_file_is_closed) {
-    if (ED_image_should_save_modified(C)) {
+    if (ED_image_should_save_modified(bmain)) {
       ReportList *reports = CTX_wm_reports(C);
       ED_image_save_all_modified(C, reports);
       WM_report_banner_show();
@@ -2996,7 +3007,6 @@ static void wm_block_file_close_save(bContext *C, void *arg_block, void *arg_dat
     }
   }
 
-  Main *bmain = CTX_data_main(C);
   bool file_has_been_saved_before = BKE_main_blendfile_path(bmain)[0] != '\0';
 
   if (file_has_been_saved_before) {
@@ -3040,15 +3050,44 @@ static void wm_block_file_close_save_button(uiBlock *block, wmGenericCallback *p
 
 static const char *close_file_dialog_name = "file_close_popup";
 
-static uiBlock *block_create__close_file_dialog(struct bContext *C, struct ARegion *ar, void *arg1)
+static uiBlock *block_create__close_file_dialog(struct bContext *C,
+                                                struct ARegion *region,
+                                                void *arg1)
 {
   wmGenericCallback *post_action = (wmGenericCallback *)arg1;
   Main *bmain = CTX_data_main(C);
-  uiStyle *style = UI_style_get();
-  uiFontStyle *fs = &style->widgetlabel;
+  const uiStyle *style = UI_style_get_dpi();
+  const int dialog_width = U.widget_unit * 22;
+  const short icon_size = 64 * U.dpi_fac;
 
-  /* Filename */
-  const char *blendfile_pathpath = BKE_main_blendfile_path(bmain);
+  /* Calculate icon column factor. */
+  const float split_factor = (float)icon_size / (float)(dialog_width - style->columnspace);
+
+  uiBlock *block = UI_block_begin(C, region, close_file_dialog_name, UI_EMBOSS);
+
+  UI_block_flag_enable(
+      block, UI_BLOCK_KEEP_OPEN | UI_BLOCK_LOOP | UI_BLOCK_NO_WIN_CLIP | UI_BLOCK_NUMSELECT);
+  UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
+  UI_block_emboss_set(block, UI_EMBOSS);
+
+  uiLayout *block_layout = UI_block_layout(
+      block, UI_LAYOUT_VERTICAL, UI_LAYOUT_PANEL, 0, 0, dialog_width, 0, 0, style);
+
+  /* Split layout to put alert icon on left side. */
+  uiLayout *split_block = uiLayoutSplit(block_layout, split_factor, false);
+
+  /* Alert Icon. */
+  uiLayout *layout = uiLayoutColumn(split_block, false);
+  uiDefButAlert(block, ALERT_ICON_WARNING, 0, 0, 0, icon_size);
+
+  /* The rest of the content on the right. */
+  layout = uiLayoutColumn(split_block, false);
+
+  /* Title. */
+  uiItemL_ex(layout, TIP_("Save changes before closing?"), ICON_NONE, true, false);
+
+  /* Filename. */
+  const char *blendfile_pathpath = BKE_main_blendfile_path(CTX_data_main(C));
   char filename[FILE_MAX];
   if (blendfile_pathpath[0] != '\0') {
     BLI_split_file_part(blendfile_pathpath, filename, sizeof(filename));
@@ -3057,46 +3096,37 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C, struct ARegi
   else {
     STRNCPY(filename, IFACE_("Untitled"));
   }
+  uiItemL(layout, filename, ICON_NONE);
 
-  /* Title */
-  char title[FILE_MAX + 100];
-  UI_text_clip_middle_ex(
-      fs, filename, U.widget_unit * 9, U.widget_unit * 2, sizeof(filename), '\0');
-  BLI_snprintf(title, sizeof(title), TIP_("Save changes to \"%s\" before closing?"), filename);
-  int title_width = MAX2(UI_fontstyle_string_width(fs, title), U.widget_unit * 22);
-
-  /* Create dialog */
-  uiBlock *block = UI_block_begin(C, ar, close_file_dialog_name, UI_EMBOSS);
-
-  UI_block_flag_enable(
-      block, UI_BLOCK_KEEP_OPEN | UI_BLOCK_LOOP | UI_BLOCK_NO_WIN_CLIP | UI_BLOCK_NUMSELECT);
-  UI_block_theme_style_set(block, UI_BLOCK_THEME_STYLE_POPUP);
-  UI_block_emboss_set(block, UI_EMBOSS);
-
-  uiLayout *layout = UI_block_layout(block,
-                                     UI_LAYOUT_VERTICAL,
-                                     UI_LAYOUT_PANEL,
-                                     10,
-                                     2,
-                                     U.widget_unit * 2 + title_width,
-                                     U.widget_unit * 6,
-                                     0,
-                                     style);
-
-  /* Title */
-  uiItemL(layout, title, ICON_ERROR);
-
-  /* Image Saving */
+  /* Image Saving Warnings. */
   ReportList reports;
   BKE_reports_init(&reports, RPT_STORE);
-  uint modified_images_count = ED_image_save_all_modified_info(C, &reports);
+  uint modified_images_count = ED_image_save_all_modified_info(bmain, &reports);
 
   LISTBASE_FOREACH (Report *, report, &reports.list) {
-    uiLayout *row = uiLayoutRow(layout, false);
-    uiLayoutSetRedAlert(row, true);
-    uiItemL(row, report->message, ICON_CANCEL);
+    uiLayout *row = uiLayoutColumn(layout, false);
+    uiLayoutSetScaleY(row, 0.6f);
+    uiItemS_ex(row, 1.2f);
+
+    /* Error messages created in ED_image_save_all_modified_info() can be long,
+     * but are made to separate into two parts at first colon between text and paths.
+     */
+    char *message = BLI_strdupn(report->message, report->len);
+    char *path_info = strstr(message, ": ");
+    if (path_info) {
+      /* Terminate message string at colon. */
+      path_info[1] = '\0';
+      /* Skip over the ": " */
+      path_info += 2;
+    }
+    uiItemL_ex(row, message, ICON_NONE, false, true);
+    if (path_info) {
+      uiItemL_ex(row, path_info, ICON_NONE, false, true);
+    }
+    MEM_freeN(message);
   }
 
+  /* Modified Images Checkbox. */
   if (modified_images_count > 0) {
     char message[64];
     BLI_snprintf(message,
@@ -3104,7 +3134,7 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C, struct ARegi
                  (modified_images_count == 1) ? "Save %u modified image" :
                                                 "Save %u modified images",
                  modified_images_count);
-    uiItemS(layout);
+    uiItemS_ex(layout, 2.0f);
     uiDefButBitC(block,
                  UI_BTYPE_CHECKBOX,
                  1,
@@ -3124,9 +3154,9 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C, struct ARegi
 
   BKE_reports_clear(&reports);
 
-  uiItemS_ex(layout, 3.0f);
+  uiItemS_ex(layout, 1.0f);
 
-  /* Buttons */
+  /* Buttons. */
 #ifdef _WIN32
   const bool windows_layout = true;
 #else
@@ -3136,37 +3166,44 @@ static uiBlock *block_create__close_file_dialog(struct bContext *C, struct ARegi
   if (windows_layout) {
     /* Windows standard layout. */
 
-    uiLayout *split = uiLayoutSplit(layout, 0.18f, true);
+    uiLayout *split = uiLayoutSplit(block_layout, 0.174f, true);
     uiLayoutSetScaleY(split, 1.2f);
 
-    uiLayout *col = uiLayoutColumn(split, false);
-    uiItemS(col);
+    uiLayoutColumn(split, false);
+    uiItemS(layout);
 
-    col = uiLayoutColumn(split, false);
+    uiLayoutColumn(split, false);
     wm_block_file_close_save_button(block, post_action);
 
-    col = uiLayoutColumn(split, false);
+    uiLayoutColumn(split, false);
     wm_block_file_close_discard_button(block, post_action);
 
-    col = uiLayoutColumn(split, false);
+    uiLayoutColumn(split, false);
     wm_block_file_close_cancel_button(block, post_action);
   }
   else {
-    /* macOS and Linux standard layout. */
+    /* Non-Windows layout (macOS and Linux). */
 
-    uiLayout *split = uiLayoutSplit(layout, 0.0f, true);
+    uiLayout *split = uiLayoutSplit(block_layout, 0.167f, true);
     uiLayoutSetScaleY(split, 1.2f);
 
-    uiLayout *col = uiLayoutColumn(split, true);
+    layout = uiLayoutColumn(split, false);
+    uiItemS(layout);
+
+    /* Split button area into two sections: 40/60. */
+    uiLayout *split_left = uiLayoutSplit(split, 0.40f, true);
+
+    /* First button uses 75% of left side (30% of original). */
+    uiLayoutSplit(split_left, 0.75f, true);
     wm_block_file_close_discard_button(block, post_action);
 
-    col = uiLayoutColumn(split, true);
-    uiItemS(col);
+    /* The right side is split 50/50 (each 30% of original). */
+    uiLayout *split_right = uiLayoutSplit(split_left, 0.50f, true);
 
-    col = uiLayoutColumn(split, true);
+    uiLayoutColumn(split_right, false);
     wm_block_file_close_cancel_button(block, post_action);
 
-    col = uiLayoutColumn(split, false);
+    uiLayoutColumn(split_right, false);
     wm_block_file_close_save_button(block, post_action);
   }
 
@@ -3182,7 +3219,7 @@ static void free_post_file_close_action(void *arg)
 
 void wm_close_file_dialog(bContext *C, wmGenericCallback *post_action)
 {
-  if (!UI_popup_block_name_exists(C, close_file_dialog_name)) {
+  if (!UI_popup_block_name_exists(CTX_wm_screen(C), close_file_dialog_name)) {
     UI_popup_block_invoke(
         C, block_create__close_file_dialog, post_action, free_post_file_close_action);
   }
@@ -3191,10 +3228,9 @@ void wm_close_file_dialog(bContext *C, wmGenericCallback *post_action)
   }
 }
 
-bool wm_file_or_image_is_modified(const bContext *C)
+bool wm_file_or_image_is_modified(const Main *bmain, const wmWindowManager *wm)
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
-  return !wm->file_saved || ED_image_should_save_modified(C);
+  return !wm->file_saved || ED_image_should_save_modified(bmain);
 }
 
 /** \} */

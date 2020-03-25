@@ -28,8 +28,8 @@
 /* exposed internal in render module only! */
 /* ------------------------------------------------------------------------- */
 
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_threads.h"
 
@@ -57,7 +57,7 @@ typedef struct RenderPart {
 } RenderPart;
 
 enum {
-  PART_STATUS_NONE = 0,
+  /* PART_STATUS_NONE = 0, */ /* UNUSED */
   PART_STATUS_IN_PROGRESS = 1,
   PART_STATUS_RENDERED = 2,
   PART_STATUS_MERGED = 3,

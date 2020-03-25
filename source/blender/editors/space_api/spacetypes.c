@@ -38,10 +38,16 @@
 
 #include "ED_anim_api.h"
 #include "ED_armature.h"
+#include "ED_clip.h"
 #include "ED_curve.h"
 #include "ED_fileselect.h"
+#include "ED_gizmo_library.h"
 #include "ED_gpencil.h"
+#include "ED_lattice.h"
+#include "ED_logic.h"
 #include "ED_markers.h"
+#include "ED_mask.h"
+#include "ED_mball.h"
 #include "ED_mesh.h"
 #include "ED_node.h"
 #include "ED_object.h"
@@ -51,18 +57,12 @@
 #include "ED_scene.h"
 #include "ED_screen.h"
 #include "ED_sculpt.h"
-#include "ED_space_api.h"
-#include "ED_sound.h"
-#include "ED_uvedit.h"
-#include "ED_userpref.h"
-#include "ED_lattice.h"
-#include "ED_mball.h"
-#include "ED_logic.h"
-#include "ED_clip.h"
-#include "ED_mask.h"
 #include "ED_sequencer.h"
-#include "ED_gizmo_library.h"
+#include "ED_sound.h"
+#include "ED_space_api.h"
 #include "ED_transform.h"
+#include "ED_userpref.h"
+#include "ED_uvedit.h"
 
 #include "io_ops.h"
 
@@ -263,13 +263,13 @@ void ED_region_draw_cb_exit(ARegionType *art, void *handle)
   }
 }
 
-void ED_region_draw_cb_draw(const bContext *C, ARegion *ar, int type)
+void ED_region_draw_cb_draw(const bContext *C, ARegion *region, int type)
 {
   RegionDrawCB *rdc;
 
-  for (rdc = ar->type->drawcalls.first; rdc; rdc = rdc->next) {
+  for (rdc = region->type->drawcalls.first; rdc; rdc = rdc->next) {
     if (rdc->type == type) {
-      rdc->draw(C, ar, rdc->customdata);
+      rdc->draw(C, region, rdc->customdata);
     }
   }
 }

@@ -21,13 +21,13 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_kdopbvh.h"
+#include "BLI_utildefines.h"
 
 #include "RNA_define.h"
 
@@ -36,8 +36,8 @@
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
 
+#include "BKE_gpencil_geom.h"
 #include "BKE_layer.h"
-#include "BKE_gpencil.h"
 
 #include "DEG_depsgraph.h"
 
@@ -72,8 +72,8 @@ static const EnumPropertyItem space_items[] = {
 #  include "BKE_global.h"
 #  include "BKE_layer.h"
 #  include "BKE_main.h"
-#  include "BKE_mesh.h"
 #  include "BKE_mball.h"
+#  include "BKE_mesh.h"
 #  include "BKE_modifier.h"
 #  include "BKE_object.h"
 #  include "BKE_report.h"
@@ -323,7 +323,7 @@ static void rna_Object_mat_convert_space(Object *ob,
     }
   }
 
-  BKE_constraint_mat_convertspace(ob, pchan, (float(*)[4])mat_ret, from, to);
+  BKE_constraint_mat_convertspace(ob, pchan, (float(*)[4])mat_ret, from, to, false);
 }
 
 static void rna_Object_calc_matrix_camera(Object *ob,
@@ -487,7 +487,7 @@ static Object *eval_object_ensure(Object *ob,
                                   ReportList *reports,
                                   PointerRNA *rnaptr_depsgraph)
 {
-  if (ob->runtime.mesh_eval == NULL) {
+  if (ob->runtime.data_eval == NULL) {
     Object *ob_orig = ob;
     Depsgraph *depsgraph = rnaptr_depsgraph != NULL ? rnaptr_depsgraph->data : NULL;
     if (depsgraph == NULL) {
@@ -496,7 +496,7 @@ static Object *eval_object_ensure(Object *ob,
     if (depsgraph != NULL) {
       ob = DEG_get_evaluated_object(depsgraph, ob);
     }
-    if (ob == NULL || ob->runtime.mesh_eval == NULL) {
+    if (ob == NULL || BKE_object_get_evaluated_mesh(ob) == NULL) {
       BKE_reportf(
           reports, RPT_ERROR, "Object '%s' has no evaluated mesh data", ob_orig->id.name + 2);
       return NULL;
@@ -521,8 +521,7 @@ static void rna_Object_ray_cast(Object *ob,
 
   /* TODO(sergey): This isn't very reliable check. It is possible to have non-NULL pointer
    * but which is out of date, and possibly dangling one. */
-  if (ob->runtime.mesh_eval == NULL &&
-      (ob = eval_object_ensure(ob, C, reports, rnaptr_depsgraph)) == NULL) {
+  if ((ob = eval_object_ensure(ob, C, reports, rnaptr_depsgraph)) == NULL) {
     return;
   }
 
@@ -538,7 +537,8 @@ static void rna_Object_ray_cast(Object *ob,
 
     /* No need to managing allocation or freeing of the BVH data.
      * This is generated and freed as needed. */
-    BKE_bvhtree_from_mesh_get(&treeData, ob->runtime.mesh_eval, BVHTREE_FROM_LOOPTRI, 4);
+    Mesh *mesh_eval = BKE_object_get_evaluated_mesh(ob);
+    BKE_bvhtree_from_mesh_get(&treeData, mesh_eval, BVHTREE_FROM_LOOPTRI, 4);
 
     /* may fail if the mesh has no faces, in that case the ray-cast misses */
     if (treeData.tree != NULL) {
@@ -559,8 +559,7 @@ static void rna_Object_ray_cast(Object *ob,
 
           copy_v3_v3(r_location, hit.co);
           copy_v3_v3(r_normal, hit.no);
-          *r_index = mesh_looptri_to_poly_index(ob->runtime.mesh_eval,
-                                                &treeData.looptri[hit.index]);
+          *r_index = mesh_looptri_to_poly_index(mesh_eval, &treeData.looptri[hit.index]);
         }
       }
 
@@ -589,14 +588,14 @@ static void rna_Object_closest_point_on_mesh(Object *ob,
 {
   BVHTreeFromMesh treeData = {NULL};
 
-  if (ob->runtime.mesh_eval == NULL &&
-      (ob = eval_object_ensure(ob, C, reports, rnaptr_depsgraph)) == NULL) {
+  if ((ob = eval_object_ensure(ob, C, reports, rnaptr_depsgraph)) == NULL) {
     return;
   }
 
   /* No need to managing allocation or freeing of the BVH data.
    * this is generated and freed as needed. */
-  BKE_bvhtree_from_mesh_get(&treeData, ob->runtime.mesh_eval, BVHTREE_FROM_LOOPTRI, 4);
+  Mesh *mesh_eval = BKE_object_get_evaluated_mesh(ob);
+  BKE_bvhtree_from_mesh_get(&treeData, mesh_eval, BVHTREE_FROM_LOOPTRI, 4);
 
   if (treeData.tree == NULL) {
     BKE_reportf(reports,
@@ -617,8 +616,7 @@ static void rna_Object_closest_point_on_mesh(Object *ob,
 
       copy_v3_v3(r_location, nearest.co);
       copy_v3_v3(r_normal, nearest.no);
-      *r_index = mesh_looptri_to_poly_index(ob->runtime.mesh_eval,
-                                            &treeData.looptri[nearest.index]);
+      *r_index = mesh_looptri_to_poly_index(mesh_eval, &treeData.looptri[nearest.index]);
 
       goto finally;
     }
@@ -659,8 +657,7 @@ void rna_Object_me_eval_info(
   switch (type) {
     case 1:
     case 2:
-      if (ob->runtime.mesh_eval == NULL &&
-          (ob = eval_object_ensure(ob, C, NULL, rnaptr_depsgraph)) == NULL) {
+      if ((ob = eval_object_ensure(ob, C, NULL, rnaptr_depsgraph)) == NULL) {
         return;
       }
   }
@@ -675,7 +672,7 @@ void rna_Object_me_eval_info(
       me_eval = ob->runtime.mesh_deform_eval;
       break;
     case 2:
-      me_eval = ob->runtime.mesh_eval;
+      me_eval = BKE_object_get_evaluated_mesh(ob);
       break;
   }
 
@@ -686,6 +683,15 @@ void rna_Object_me_eval_info(
       MEM_freeN(ret);
     }
   }
+}
+#  else
+void rna_Object_me_eval_info(struct Object *UNUSED(ob),
+                             bContext *UNUSED(C),
+                             int UNUSED(type),
+                             PointerRNA *UNUSED(rnaptr_depsgraph),
+                             char *result)
+{
+  result[0] = '\0';
 }
 #  endif /* NDEBUG */
 
@@ -711,7 +717,7 @@ bool rna_Object_generate_gpencil_strokes(Object *ob,
   if (ob->type != OB_CURVE) {
     BKE_reportf(reports,
                 RPT_ERROR,
-                "Object '%s' not valid for this operation! Only curves supported.",
+                "Object '%s' is not valid for this operation! Only curves are supported",
                 ob->id.name + 2);
     return false;
   }

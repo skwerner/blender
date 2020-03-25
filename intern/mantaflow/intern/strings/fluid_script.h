@@ -96,9 +96,10 @@ gravity_s$ID$ = vec3($GRAVITY_X$, $GRAVITY_Y$, $GRAVITY_Z$)\n\
 gs_s$ID$      = vec3($RESX$, $RESY$, $RESZ$)\n\
 maxVel_s$ID$  = 0\n\
 \n\
-doOpen_s$ID$          = $DO_OPEN$\n\
-boundConditions_s$ID$ = '$BOUND_CONDITIONS$'\n\
-boundaryWidth_s$ID$   = $BOUNDARY_WIDTH$\n\
+doOpen_s$ID$           = $DO_OPEN$\n\
+boundConditions_s$ID$  = '$BOUND_CONDITIONS$'\n\
+boundaryWidth_s$ID$    = $BOUNDARY_WIDTH$\n\
+deleteInObstacle_s$ID$ = $DELETE_IN_OBSTACLE$\n\
 \n\
 using_smoke_s$ID$        = $USING_SMOKE$\n\
 using_liquid_s$ID$       = $USING_LIQUID$\n\
@@ -111,6 +112,7 @@ using_invel_s$ID$        = $USING_INVEL$\n\
 using_outflow_s$ID$      = $USING_OUTFLOW$\n\
 using_sndparts_s$ID$     = $USING_SNDPARTS$\n\
 using_speedvectors_s$ID$ = $USING_SPEEDVECTORS$\n\
+using_diffusion_s$ID$    = $USING_DIFFUSION$\n\
 \n\
 # Fluid time params\n\
 timeTotal_s$ID$    = $TIME_TOTAL$\n\
@@ -120,6 +122,11 @@ dt0_s$ID$          = $DT$\n\
 cflCond_s$ID$      = $CFL$\n\
 timestepsMin_s$ID$ = $TIMESTEPS_MIN$\n\
 timestepsMax_s$ID$ = $TIMESTEPS_MAX$\n\
+\n\
+# Start and stop for simulation\n\
+current_frame_s$ID$ = $CURRENT_FRAME$\n\
+start_frame_s$ID$   = $START_FRAME$\n\
+end_frame_s$ID$     = $END_FRAME$\n\
 \n\
 # Fluid diffusion / viscosity\n\
 domainSize_s$ID$ = $FLUID_DOMAIN_SIZE$ # longest domain side in meters\n\
@@ -206,6 +213,8 @@ def fluid_adapt_time_step_$ID$():\n\
     # time params are animatable\n\
     s$ID$.frameLength = frameLength_s$ID$\n\
     s$ID$.cfl         = cflCond_s$ID$\n\
+    s$ID$.timestepMin  = s$ID$.frameLength / max(1, timestepsMax_s$ID$)\n\
+    s$ID$.timestepMax  = s$ID$.frameLength / max(1, timestepsMin_s$ID$)\n\
     \n\
     # ensure that vel grid is full (remember: adaptive domain can reallocate solver)\n\
     copyRealToVec3(sourceX=x_vel_s$ID$, sourceY=y_vel_s$ID$, sourceZ=z_vel_s$ID$, target=vel_s$ID$)\n\
@@ -223,12 +232,13 @@ const std::string fluid_alloc =
 mantaMsg('Fluid alloc data')\n\
 flags_s$ID$       = s$ID$.create(FlagGrid)\n\
 vel_s$ID$         = s$ID$.create(MACGrid)\n\
-velC_s$ID$        = s$ID$.create(MACGrid)\n\
+velTmp_s$ID$      = s$ID$.create(MACGrid)\n\
 x_vel_s$ID$       = s$ID$.create(RealGrid)\n\
 y_vel_s$ID$       = s$ID$.create(RealGrid)\n\
 z_vel_s$ID$       = s$ID$.create(RealGrid)\n\
 pressure_s$ID$    = s$ID$.create(RealGrid)\n\
 phiObs_s$ID$      = s$ID$.create(LevelsetGrid)\n\
+phiSIn_s$ID$      = s$ID$.create(LevelsetGrid) # helper for static flow objects\n\
 phiIn_s$ID$       = s$ID$.create(LevelsetGrid)\n\
 phiOut_s$ID$      = s$ID$.create(LevelsetGrid)\n\
 forces_s$ID$      = s$ID$.create(Vec3Grid)\n\
@@ -237,13 +247,21 @@ y_force_s$ID$     = s$ID$.create(RealGrid)\n\
 z_force_s$ID$     = s$ID$.create(RealGrid)\n\
 obvel_s$ID$       = None\n\
 \n\
+# Set some initial values\n\
+phiObs_s$ID$.setConst(9999)\n\
+phiSIn_s$ID$.setConst(9999)\n\
+phiIn_s$ID$.setConst(9999)\n\
+phiOut_s$ID$.setConst(9999)\n\
+\n\
 # Keep track of important objects in dict to load them later on\n\
-fluid_data_dict_s$ID$ = dict(vel=vel_s$ID$, phiObs=phiObs_s$ID$, phiIn=phiIn_s$ID$, phiOut=phiOut_s$ID$, flags=flags_s$ID$)\n";
+fluid_data_dict_final_s$ID$  = dict(vel=vel_s$ID$, velTmp=velTmp_s$ID$)\n\
+fluid_data_dict_resume_s$ID$ = dict(phiObs=phiObs_s$ID$, phiIn=phiIn_s$ID$, phiOut=phiOut_s$ID$, flags=flags_s$ID$)\n";
 
 const std::string fluid_alloc_obstacle =
     "\n\
 mantaMsg('Allocating obstacle data')\n\
 numObs_s$ID$     = s$ID$.create(RealGrid)\n\
+phiObsSIn_s$ID$  = s$ID$.create(LevelsetGrid) # helper for static obstacles\n\
 phiObsIn_s$ID$   = s$ID$.create(LevelsetGrid)\n\
 obvel_s$ID$      = s$ID$.create(MACGrid)\n\
 obvelC_s$ID$     = s$ID$.create(Vec3Grid)\n\
@@ -251,8 +269,12 @@ x_obvel_s$ID$    = s$ID$.create(RealGrid)\n\
 y_obvel_s$ID$    = s$ID$.create(RealGrid)\n\
 z_obvel_s$ID$    = s$ID$.create(RealGrid)\n\
 \n\
-tmpDict_s$ID$ = dict(phiObsIn=phiObsIn_s$ID$)\n\
-fluid_data_dict_s$ID$.update(tmpDict_s$ID$)\n";
+# Set some initial values\n\
+phiObsSIn_s$ID$.setConst(9999)\n\
+phiObsIn_s$ID$.setConst(9999)\n\
+\n\
+if 'fluid_data_dict_resume_s$ID$' in globals():\n\
+    fluid_data_dict_resume_s$ID$.update(phiObsIn=phiObsIn_s$ID$)\n";
 
 const std::string fluid_alloc_guiding =
     "\n\
@@ -290,23 +312,6 @@ const std::string fluid_alloc_outflow =
     "\n\
 mantaMsg('Allocating outflow data')\n\
 phiOutIn_s$ID$ = s$ID$.create(LevelsetGrid)\n";
-
-const std::string fluid_alloc_sndparts =
-    "\n\
-mantaMsg('Allocating snd parts low')\n\
-ppSnd_sp$ID$     = sp$ID$.create(BasicParticleSystem)\n\
-pVelSnd_pp$ID$   = ppSnd_sp$ID$.create(PdataVec3)\n\
-pForceSnd_pp$ID$ = ppSnd_sp$ID$.create(PdataVec3)\n\
-pLifeSnd_pp$ID$  = ppSnd_sp$ID$.create(PdataReal)\n\
-vel_sp$ID$       = sp$ID$.create(MACGrid)\n\
-flags_sp$ID$     = sp$ID$.create(FlagGrid)\n\
-phi_sp$ID$       = sp$ID$.create(LevelsetGrid)\n\
-phiIn_sp$ID$     = sp$ID$.create(LevelsetGrid)\n\
-phiObs_sp$ID$    = sp$ID$.create(LevelsetGrid)\n\
-phiObsIn_sp$ID$  = sp$ID$.create(LevelsetGrid)\n\
-\n\
-# Keep track of important objects in dict to load them later on\n\
-fluid_particles_dict_s$ID$ = dict(ppSnd=ppSnd_sp$ID$, pVelSnd=pVelSnd_pp$ID$, pLifeSnd=pLifeSnd_pp$ID$)\n";
 
 //////////////////////////////////////////////////////////////////////
 // PRE / POST STEP
@@ -392,16 +397,21 @@ const std::string fluid_delete_all =
 mantaMsg('Deleting fluid')\n\
 # Clear all helper dictionaries first\n\
 mantaMsg('Clear helper dictionaries')\n\
-if 'liquid_data_dict_s$ID$' in globals(): liquid_data_dict_s$ID$.clear()\n\
-if 'liquid_flip_dict_s$ID$' in globals(): liquid_flip_dict_s$ID$.clear()\n\
+if 'liquid_data_dict_final_s$ID$' in globals(): liquid_data_dict_final_s$ID$.clear()\n\
+if 'liquid_data_dict_resume_s$ID$' in globals(): liquid_data_dict_resume_s$ID$.clear()\n\
 if 'liquid_mesh_dict_s$ID$' in globals(): liquid_mesh_dict_s$ID$.clear()\n\
 if 'liquid_meshvel_dict_s$ID$' in globals(): liquid_meshvel_dict_s$ID$.clear()\n\
-if 'liquid_particles_dict_s$ID$' in globals(): liquid_particles_dict_s$ID$.clear()\n\
-if 'smoke_data_dict_s$ID$' in globals(): smoke_data_dict_s$ID$.clear()\n\
-if 'smoke_noise_dict_s$ID$' in globals(): smoke_noise_dict_s$ID$.clear()\n\
-if 'fluid_particles_dict_s$ID$' in globals(): fluid_particles_dict_s$ID$.clear()\n\
+if 'liquid_particles_final_dict_s$ID$' in globals(): liquid_particles_final_dict_s$ID$.clear()\n\
+if 'liquid_particles_resume_dict_s$ID$' in globals(): liquid_particles_resume_dict_s$ID$.clear()\n\
+\n\
+if 'smoke_data_dict_final_s$ID$' in globals(): smoke_data_dict_final_s$ID$.clear()\n\
+if 'smoke_data_dict_resume_s$ID$' in globals(): smoke_data_dict_resume_s$ID$.clear()\n\
+if 'smoke_noise_dict_final_s$ID$' in globals(): smoke_noise_dict_final_s$ID$.clear()\n\
+if 'smoke_noise_dict_resume_s$ID$' in globals(): smoke_noise_dict_resume_s$ID$.clear()\n\
+\n\
+if 'fluid_data_dict_final_s$ID$' in globals(): fluid_data_dict_final_s$ID$.clear()\n\
+if 'fluid_data_dict_resume_s$ID$' in globals(): fluid_data_dict_resume_s$ID$.clear()\n\
 if 'fluid_guiding_dict_s$ID$' in globals(): fluid_guiding_dict_s$ID$.clear()\n\
-if 'fluid_data_dict_s$ID$' in globals(): fluid_data_dict_s$ID$.clear()\n\
 if 'fluid_vel_dict_s$ID$' in globals(): fluid_vel_dict_s$ID$.clear()\n\
 \n\
 # Delete all childs from objects (e.g. pdata for particles)\n\
@@ -452,7 +462,7 @@ def fluid_cache_get_framenr_formatted_$ID$(framenr):\n\
 
 const std::string fluid_bake_multiprocessing =
     "\n\
-def fluid_cache_multiprocessing_start_$ID$(function, framenr, format_data=None, format_noise=None, format_mesh=None, format_particles=None, format_guiding=None, path_data=None, path_noise=None, path_mesh=None, path_particles=None, path_guiding=None, dict=None, do_join=True):\n\
+def fluid_cache_multiprocessing_start_$ID$(function, framenr, format_data=None, format_noise=None, format_mesh=None, format_particles=None, format_guiding=None, path_data=None, path_noise=None, path_mesh=None, path_particles=None, path_guiding=None, dict=None, do_join=True, resumable=False):\n\
     mantaMsg('Multiprocessing cache')\n\
     if __name__ == '__main__':\n\
         args = (framenr,)\n\
@@ -478,6 +488,7 @@ def fluid_cache_multiprocessing_start_$ID$(function, framenr, format_data=None, 
             args += (path_guiding,)\n\
         if dict:\n\
             args += (dict,)\n\
+        args += (resumable,)\n\
         p$ID$ = multiprocessing.Process(target=function, args=args)\n\
         p$ID$.start()\n\
         if do_join:\n\
@@ -489,7 +500,8 @@ def bake_fluid_process_data_$ID$(framenr, format_data, format_particles, format_
     mantaMsg('Bake fluid data')\n\
     \n\
     s$ID$.frame = framenr\n\
-    # Must not set 'timeTotal' here. Remember, this function is called from manta.c while-loop\n\
+    s$ID$.frameLength = frameLength_s$ID$\n\
+    s$ID$.timeTotal = timeTotal_s$ID$\n\
     \n\
     start_time = time.time()\n\
     if using_smoke_s$ID$:\n\
@@ -506,22 +518,22 @@ def bake_fluid_data_$ID$(path_data, path_guiding, framenr, format_data, format_p
 
 const std::string fluid_bake_noise =
     "\n\
-def bake_noise_process_$ID$(framenr, format_data, format_noise, path_data, path_noise):\n\
+def bake_noise_process_$ID$(framenr, format_data, format_noise, path_data, path_noise, resumable):\n\
     mantaMsg('Bake fluid noise')\n\
     \n\
     sn$ID$.frame = framenr\n\
-    sn$ID$.timeTotal = (framenr-1) * frameLength_s$ID$\n\
-    sn$ID$.timestep  = dt0_s$ID$\n\
-    mantaMsg('sn$ID$.timeTotal: ' + str(sn$ID$.timeTotal))\n\
+    sn$ID$.frameLength = frameLength_s$ID$\n\
+    sn$ID$.timeTotal = abs(framenr - start_frame_s$ID$) * frameLength_s$ID$\n\
+    sn$ID$.timestep = frameLength_s$ID$ # no adaptive timestep for noise\n\
     \n\
     smoke_step_noise_$ID$(framenr)\n\
-    smoke_save_noise_$ID$(path_noise, framenr, format_noise)\n\
+    smoke_save_noise_$ID$(path_noise, framenr, format_noise, resumable)\n\
 \n\
-def bake_noise_$ID$(path_data, path_noise, framenr, format_data, format_noise):\n\
+def bake_noise_$ID$(path_data, path_noise, framenr, format_data, format_noise, resumable):\n\
     if not withMPBake or isWindows:\n\
-        bake_noise_process_$ID$(framenr, format_data, format_noise, path_data, path_noise)\n\
+        bake_noise_process_$ID$(framenr, format_data, format_noise, path_data, path_noise, resumable)\n\
     else:\n\
-        fluid_cache_multiprocessing_start_$ID$(function=bake_noise_process_$ID$, framenr=framenr, format_data=format_data, format_noise=format_noise, path_data=path_data, path_noise=path_noise)\n";
+        fluid_cache_multiprocessing_start_$ID$(function=bake_noise_process_$ID$, framenr=framenr, format_data=format_data, format_noise=format_noise, path_data=path_data, path_noise=path_noise, resumable=resumable)\n";
 
 const std::string fluid_bake_mesh =
     "\n\
@@ -529,8 +541,9 @@ def bake_mesh_process_$ID$(framenr, format_data, format_mesh, format_particles, 
     mantaMsg('Bake fluid mesh')\n\
     \n\
     sm$ID$.frame = framenr\n\
-    sm$ID$.timeTotal = (framenr-1) * frameLength_s$ID$\n\
-    sm$ID$.timestep  = dt0_s$ID$\n\
+    sm$ID$.frameLength = frameLength_s$ID$\n\
+    sm$ID$.timeTotal = abs(framenr - start_frame_s$ID$) * frameLength_s$ID$\n\
+    sm$ID$.timestep = frameLength_s$ID$ # no adaptive timestep for mesh\n\
     \n\
     #if using_smoke_s$ID$:\n\
         # TODO (sebbas): Future update could include smoke mesh (vortex sheets)\n\
@@ -548,35 +561,30 @@ def bake_mesh_$ID$(path_data, path_mesh, framenr, format_data, format_mesh, form
 
 const std::string fluid_bake_particles =
     "\n\
-def bake_particles_process_$ID$(framenr, format_data, format_particles, path_data, path_particles):\n\
+def bake_particles_process_$ID$(framenr, format_data, format_particles, path_data, path_particles, resumable):\n\
     mantaMsg('Bake secondary particles')\n\
     \n\
     sp$ID$.frame = framenr\n\
-    sp$ID$.timeTotal = (framenr-1) * frameLength_s$ID$\n\
-    sp$ID$.timestep  = dt0_s$ID$\n\
+    sp$ID$.frameLength = frameLength_s$ID$\n\
+    sp$ID$.timeTotal = abs(framenr - start_frame_s$ID$) * frameLength_s$ID$\n\
+    sp$ID$.timestep = frameLength_s$ID$ # no adaptive timestep for particles\n\
     \n\
-    fluid_load_data_$ID$(path_data, framenr, format_data)\n\
     #if using_smoke_s$ID$:\n\
         # TODO (sebbas): Future update could include smoke particles (e.g. fire sparks)\n\
     if using_liquid_s$ID$:\n\
-        liquid_load_data_$ID$(path_data, framenr, format_data)\n\
         liquid_step_particles_$ID$()\n\
-        fluid_save_particles_$ID$(path_particles, framenr, format_particles)\n\
-        liquid_save_particles_$ID$(path_particles, framenr, format_particles)\n\
+        liquid_save_particles_$ID$(path_particles, framenr, format_particles, resumable)\n\
 \n\
-def bake_particles_$ID$(path_data, path_particles, framenr, format_data, format_particles):\n\
+def bake_particles_$ID$(path_data, path_particles, framenr, format_data, format_particles, resumable):\n\
     if not withMPBake or isWindows:\n\
-        bake_particles_process_$ID$(framenr, format_data, format_particles, path_data, path_particles)\n\
+        bake_particles_process_$ID$(framenr, format_data, format_particles, path_data, path_particles, resumable)\n\
     else:\n\
-        fluid_cache_multiprocessing_start_$ID$(function=bake_particles_process_$ID$, framenr=framenr, format_data=format_data, format_particles=format_particles, path_data=path_data, path_particles=path_particles)\n";
+        fluid_cache_multiprocessing_start_$ID$(function=bake_particles_process_$ID$, framenr=framenr, format_data=format_data, format_particles=format_particles, path_data=path_data, path_particles=path_particles, resumable=resumable)\n";
 
 const std::string fluid_bake_guiding =
     "\n\
-def bake_guiding_process_$ID$(framenr, format_guiding, path_guiding):\n\
+def bake_guiding_process_$ID$(framenr, format_guiding, path_guiding, resumable):\n\
     mantaMsg('Bake fluid guiding')\n\
-    \n\
-    if framenr>1:\n\
-        fluid_load_guiding_$ID$(path_guiding, framenr-1, format_guiding)\n\
     \n\
     # Average out velocities from multiple guiding objects at one cell\n\
     x_guidevel_s$ID$.safeDivide(numGuides_s$ID$)\n\
@@ -591,17 +599,17 @@ def bake_guiding_process_$ID$(framenr, format_guiding, path_guiding):\n\
     \n\
     mantaMsg('Extrapolating guiding velocity')\n\
     # ensure velocities inside of guiding object, slightly add guiding vels outside of object too\n\
-    extrapolateVec3Simple(vel=guidevelC_s$ID$, phi=phiGuideIn_s$ID$, distance=int(res_s$ID$/2), inside=True)\n\
-    extrapolateVec3Simple(vel=guidevelC_s$ID$, phi=phiGuideIn_s$ID$, distance=4, inside=False)\n\
+    extrapolateVec3Simple(vel=guidevelC_s$ID$, phi=phiGuideIn_s$ID$, distance=6, inside=True)\n\
+    extrapolateVec3Simple(vel=guidevelC_s$ID$, phi=phiGuideIn_s$ID$, distance=3, inside=False)\n\
     resampleVec3ToMac(source=guidevelC_s$ID$, target=guidevel_sg$ID$)\n\
     \n\
-    fluid_save_guiding_$ID$(path_guiding, framenr, format_guiding)\n\
+    fluid_save_guiding_$ID$(path_guiding, framenr, format_guiding, resumable)\n\
 \n\
-def bake_guiding_$ID$(path_guiding, framenr, format_guiding):\n\
+def bake_guiding_$ID$(path_guiding, framenr, format_guiding, resumable):\n\
     if not withMPBake or isWindows:\n\
-        bake_guiding_process_$ID$(framenr, format_guiding, path_guiding)\n\
+        bake_guiding_process_$ID$(framenr, format_guiding, path_guiding, resumable)\n\
     else:\n\
-        fluid_cache_multiprocessing_start_$ID$(function=bake_guiding_process_$ID$, framenr=framenr, format_guiding=format_guiding, path_guiding=path_guiding)\n";
+        fluid_cache_multiprocessing_start_$ID$(function=bake_guiding_process_$ID$, framenr=framenr, format_guiding=format_guiding, path_guiding=path_guiding, resumable=resumable)\n";
 
 //////////////////////////////////////////////////////////////////////
 // IMPORT
@@ -623,20 +631,17 @@ def fluid_file_import_s$ID$(dict, path, framenr, file_format):\n\
         #mantaMsg(str(e))\n\
         pass # Just skip file load errors for now\n";
 
-const std::string fluid_load_particles =
-    "\n\
-def fluid_load_particles_$ID$(path, framenr, file_format):\n\
-    mantaMsg('Fluid load particles, frame ' + str(framenr))\n\
-    fluid_file_import_s$ID$(dict=fluid_particles_dict_s$ID$, path=path, framenr=framenr, file_format=file_format)\n";
-
 const std::string fluid_load_data =
     "\n\
-def fluid_load_data_$ID$(path, framenr, file_format):\n\
+def fluid_load_data_$ID$(path, framenr, file_format, resumable):\n\
     mantaMsg('Fluid load data, frame ' + str(framenr))\n\
-    fluid_file_import_s$ID$(dict=fluid_data_dict_s$ID$, path=path, framenr=framenr, file_format=file_format)\n\
+    fluid_file_import_s$ID$(dict=fluid_data_dict_final_s$ID$, path=path, framenr=framenr, file_format=file_format)\n\
     \n\
-    # When adaptive domain bake is resumed we need correct values in xyz vel grids\n\
-    copyVec3ToReal(source=vel_s$ID$, targetX=x_vel_s$ID$, targetY=y_vel_s$ID$, targetZ=z_vel_s$ID$)\n";
+    if resumable:\n\
+        fluid_file_import_s$ID$(dict=fluid_data_dict_resume_s$ID$, path=path, framenr=framenr, file_format=file_format)\n\
+        \n\
+        # When adaptive domain bake is resumed we need correct values in xyz vel grids\n\
+        copyVec3ToReal(source=vel_s$ID$, targetX=x_vel_s$ID$, targetY=y_vel_s$ID$, targetZ=z_vel_s$ID$)\n";
 
 const std::string fluid_load_guiding =
     "\n\
@@ -648,8 +653,8 @@ const std::string fluid_load_vel =
     "\n\
 def fluid_load_vel_$ID$(path, framenr, file_format):\n\
     mantaMsg('Fluid load vel, frame ' + str(framenr))\n\
-    fluid_vel_dict = dict(vel=guidevel_sg$ID$)\n\
-    fluid_file_import_s$ID$(dict=fluid_vel_dict, path=path, framenr=framenr, file_format=file_format)\n";
+    fluid_vel_dict_s$ID$ = dict(vel=guidevel_sg$ID$)\n\
+    fluid_file_import_s$ID$(dict=fluid_vel_dict_s$ID$, path=path, framenr=framenr, file_format=file_format)\n";
 
 //////////////////////////////////////////////////////////////////////
 // EXPORT
@@ -672,29 +677,24 @@ def fluid_file_export_s$ID$(framenr, file_format, path, dict, mode_override=True
         mantaMsg(str(e))\n\
         pass # Just skip file save errors for now\n";
 
-const std::string fluid_save_particles =
-    "\n\
-def fluid_save_particles_$ID$(path, framenr, file_format):\n\
-    mantaMsg('Liquid save particles, frame ' + str(framenr))\n\
-    if not withMPSave or isWindows:\n\
-        fluid_file_export_s$ID$(dict=fluid_particles_dict_s$ID$, framenr=framenr, file_format=file_format, path=path)\n\
-    else:\n\
-        fluid_cache_multiprocessing_start_$ID$(function=fluid_file_export_s$ID$, framenr=framenr, format_data=file_format, path_data=path, dict=fluid_particles_dict_s$ID$, do_join=False)\n";
-
 const std::string fluid_save_data =
     "\n\
-def fluid_save_data_$ID$(path, framenr, file_format):\n\
+def fluid_save_data_$ID$(path, framenr, file_format, resumable):\n\
     mantaMsg('Fluid save data, frame ' + str(framenr))\n\
     start_time = time.time()\n\
     if not withMPSave or isWindows:\n\
-        fluid_file_export_s$ID$(framenr=framenr, file_format=file_format, path=path, dict=fluid_data_dict_s$ID$)\n\
+        fluid_file_export_s$ID$(framenr=framenr, file_format=file_format, path=path, dict=fluid_data_dict_final_s$ID$)\n\
+        if resumable:\n\
+            fluid_file_export_s$ID$(framenr=framenr, file_format=file_format, path=path, dict=fluid_data_dict_resume_s$ID$)\n\
     else:\n\
-        fluid_cache_multiprocessing_start_$ID$(function=fluid_file_export_s$ID$, framenr=framenr, format_data=file_format, path_data=path, dict=fluid_data_dict_s$ID$, do_join=False)\n\
+        fluid_cache_multiprocessing_start_$ID$(function=fluid_file_export_s$ID$, framenr=framenr, format_data=file_format, path_data=path, dict=fluid_data_dict_final_s$ID$, do_join=False)\n\
+        if resumable:\n\
+            fluid_cache_multiprocessing_start_$ID$(function=fluid_file_export_s$ID$, framenr=framenr, format_data=file_format, path_data=path, dict=fluid_data_dict_resume_s$ID$, do_join=False)\n\
     mantaMsg('--- Save: %s seconds ---' % (time.time() - start_time))\n";
 
 const std::string fluid_save_guiding =
     "\n\
-def fluid_save_guiding_$ID$(path, framenr, file_format):\n\
+def fluid_save_guiding_$ID$(path, framenr, file_format, resumable):\n\
     mantaMsg('Fluid save guiding, frame ' + str(framenr))\n\
     if not withMPSave or isWindows:\n\
         fluid_file_export_s$ID$(dict=fluid_guiding_dict_s$ID$, framenr=framenr, file_format=file_format, path=path)\n\
@@ -713,34 +713,31 @@ if (GUI):\n\
     gui.show()\n\
     gui.pause()\n\
 \n\
-cache_dir = '$CACHE_DIR$'\n\
-file_format_data      = '.uni'\n\
-file_format_noise     = '.uni'\n\
-file_format_particles = '.uni'\n\
-file_format_mesh      = '.bobj.gz'\n\
-\n\
-# Start and stop for simulation\n\
-current_frame  = $CURRENT_FRAME$\n\
-end_frame      = $END_FRAME$\n\
+cache_resumable       = $CACHE_RESUMABLE$\n\
+cache_dir             = '$CACHE_DIR$'\n\
+file_format_data      = '$CACHE_DATA_FORMAT$'\n\
+file_format_noise     = '$CACHE_NOISE_FORMAT$'\n\
+file_format_particles = '$CACHE_PARTICLE_FORMAT$'\n\
+file_format_mesh      = '$CACHE_MESH_FORMAT$'\n\
 \n\
 # How many frame to load from cache\n\
 from_cache_cnt = 100\n\
 \n\
 loop_cnt = 0\n\
-while current_frame <= end_frame:\n\
+while current_frame_s$ID$ <= end_frame_s$ID$:\n\
     \n\
     # Load already simulated data from cache:\n\
     if loop_cnt < from_cache_cnt:\n\
-        load(current_frame)\n\
+        load(current_frame_s$ID$, cache_resumable)\n\
     \n\
     # Otherwise simulate new data\n\
     else:\n\
-        while(s$ID$.frame <= current_frame):\n\
+        while(s$ID$.frame <= current_frame_s$ID$):\n\
             if using_adaptTime_s$ID$:\n\
                 fluid_adapt_time_step_$ID$()\n\
-            step(current_frame)\n\
+            step(current_frame_s$ID$)\n\
     \n\
-    current_frame += 1\n\
+    current_frame_s$ID$ += 1\n\
     loop_cnt += 1\n\
     \n\
     if gui:\n\

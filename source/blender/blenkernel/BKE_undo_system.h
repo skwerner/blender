@@ -20,6 +20,13 @@
  * \ingroup bke
  */
 
+#include "DNA_ID.h"
+#include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Main;
 struct UndoStep;
 struct bContext;
@@ -30,9 +37,6 @@ struct Mesh;
 struct Object;
 struct Scene;
 struct Text;
-
-#include "DNA_ID.h"
-#include "DNA_listBase.h"
 
 typedef struct UndoRefID {
   struct ID *ptr;
@@ -79,6 +83,9 @@ typedef struct UndoStep {
   bool skip;
   /** Some situations require the global state to be stored, edge cases when exiting modes. */
   bool use_memfile_step;
+  /** When this is true, undo/memfile read code is allowed to re-use old data-blocks for unchanged
+   * IDs, and existing depsgraphes. This has to be forbidden in some cases (like renamed IDs). */
+  bool use_old_bmain_data;
   /** For use by undo systems that accumulate changes (text editor, painting). */
   bool is_applied;
   /* Over alloc 'type->struct_size'. */
@@ -197,5 +204,9 @@ void BKE_undosys_foreach_ID_ref(UndoStack *ustack,
 #endif
 
 void BKE_undosys_print(UndoStack *ustack);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_UNDO_SYSTEM_H__ */

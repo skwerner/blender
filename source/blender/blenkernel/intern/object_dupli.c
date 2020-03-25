@@ -22,8 +22,8 @@
  */
 
 #include <limits.h>
-#include <stdlib.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -40,8 +40,10 @@
 #include "DNA_scene_types.h"
 #include "DNA_vfont_types.h"
 
+#include "BKE_anim.h"
 #include "BKE_animsys.h"
 #include "BKE_collection.h"
+#include "BKE_editmesh.h"
 #include "BKE_font.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
@@ -53,14 +55,12 @@
 #include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_scene.h"
-#include "BKE_editmesh.h"
-#include "BKE_anim.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "BLI_strict_flags.h"
 #include "BLI_hash.h"
+#include "BLI_strict_flags.h"
 
 /* Dupli-Geometry */
 
@@ -426,7 +426,7 @@ static void make_duplis_verts(const DupliContext *ctx)
       vdd.me_eval = vdd.edit_mesh->mesh_eval_cage;
     }
     else {
-      vdd.me_eval = parent->runtime.mesh_eval;
+      vdd.me_eval = BKE_object_get_evaluated_mesh(parent);
     }
 
     if (vdd.me_eval == NULL) {
@@ -521,6 +521,9 @@ static void make_duplis_font(const DupliContext *ctx)
   family_len = strlen(cu->family);
   family_gh = BLI_ghash_int_new_ex(__func__, 256);
 
+  /* Safety check even if it might fail badly when called for original object. */
+  const bool is_eval_curve = DEG_is_evaluated_id(&cu->id);
+
   /* advance matching BLI_strncpy_wchar_from_utf8 */
   for (a = 0; a < text_len; a++, ct++) {
 
@@ -528,6 +531,12 @@ static void make_duplis_font(const DupliContext *ctx)
      * Definitively don't think it would be safe to put back Main *bmain pointer
      * in DupliContext as done in 2.7x? */
     ob = find_family_object(G.main, cu->family, family_len, (unsigned int)text[a], family_gh);
+
+    if (is_eval_curve) {
+      /* Workaround for the above hack. */
+      ob = DEG_get_evaluated_object(ctx->depsgraph, ob);
+    }
+
     if (ob) {
       vec[0] = fsize * (ct->xof - xof);
       vec[1] = fsize * (ct->yof - yof);
@@ -693,7 +702,7 @@ static void make_duplis_faces(const DupliContext *ctx)
       fdd.me_eval = em->mesh_eval_cage;
     }
     else {
-      fdd.me_eval = parent->runtime.mesh_eval;
+      fdd.me_eval = BKE_object_get_evaluated_mesh(parent);
     }
 
     if (fdd.me_eval == NULL) {

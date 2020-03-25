@@ -30,22 +30,22 @@
 
 #include "CLG_log.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_path_util.h"
 #include "BLI_fileops.h"
 #include "BLI_listbase.h"
+#include "BLI_path_util.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
 #include "RNA_types.h"
 
 #include "bpy.h"
-#include "bpy_rna.h"
-#include "bpy_path.h"
 #include "bpy_capi_utils.h"
-#include "bpy_traceback.h"
 #include "bpy_intern_string.h"
+#include "bpy_path.h"
+#include "bpy_rna.h"
+#include "bpy_traceback.h"
 
 #include "bpy_app_translations.h"
 
@@ -66,12 +66,12 @@
 #include "../generic/py_capi_utils.h"
 
 /* inittab initialization functions */
+#include "../bmesh/bmesh_py_api.h"
 #include "../generic/bgl.h"
 #include "../generic/blf_py_api.h"
 #include "../generic/idprop_py_api.h"
 #include "../generic/imbuf_py_api.h"
 #include "../gpu/gpu_py_api.h"
-#include "../bmesh/bmesh_py_api.h"
 #include "../mathutils/mathutils.h"
 
 /* Logging types to use anywhere in the Python modules. */
@@ -83,6 +83,9 @@ CLG_LOGREF_DECLARE_GLOBAL(BPY_LOG_RNA, "bpy.rna");
 /* In case a python script triggers another python call,
  * stop bpy_context_clear from invalidating. */
 static int py_call_level = 0;
+
+/* Set by command line arguments before Python starts. */
+static bool py_use_system_env = false;
 
 // #define TIME_PY_RUN // simple python tests. prints on exit.
 
@@ -276,6 +279,10 @@ void BPY_python_start(int argc, const char **argv)
    * While harmless, it's noisy. */
   Py_FrozenFlag = 1;
 
+  /* Only use the systems environment variables when explicitly requested.
+   * Since an incorrect 'PYTHONPATH' causes difficult to debug errors, see: T72807. */
+  Py_IgnoreEnvironmentFlag = !py_use_system_env;
+
   Py_Initialize();
 
   // PySys_SetArgv(argc, argv);  /* broken in py3, not a huge deal */
@@ -406,6 +413,12 @@ void BPY_python_reset(bContext *C)
   BPY_driver_reset();
   BPY_app_handlers_reset(false);
   BPY_modules_load_user(C);
+}
+
+void BPY_python_use_system_env(void)
+{
+  BLI_assert(!Py_IsInitialized());
+  py_use_system_env = true;
 }
 
 static void python_script_error_jump_text(struct Text *text)
@@ -1027,12 +1040,12 @@ bool BPY_string_is_keyword(const char *str)
 
 /* EVIL, define text.c functions here... */
 /* BKE_text.h */
-int text_check_identifier_unicode(const unsigned int ch)
+int text_check_identifier_unicode(const uint ch)
 {
   return (ch < 255 && text_check_identifier((char)ch)) || Py_UNICODE_ISALNUM(ch);
 }
 
-int text_check_identifier_nodigit_unicode(const unsigned int ch)
+int text_check_identifier_nodigit_unicode(const uint ch)
 {
   return (ch < 255 && text_check_identifier_nodigit((char)ch)) || Py_UNICODE_ISALPHA(ch);
 }

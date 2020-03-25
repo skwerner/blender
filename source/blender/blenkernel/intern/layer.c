@@ -32,18 +32,18 @@
 #include "BKE_freestyle.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_object.h"
 
 #include "DNA_ID.h"
-#include "DNA_space_types.h"
 #include "DNA_collection_types.h"
 #include "DNA_layer_types.h"
-#include "DNA_object_types.h"
 #include "DNA_node_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_space_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
@@ -388,7 +388,7 @@ static void layer_collections_copy_data(ViewLayer *view_layer_dst,
 /**
  * Only copy internal data of ViewLayer from source to already allocated/initialized destination.
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_view_layer_copy_data(Scene *scene_dst,
                               const Scene *UNUSED(scene_src),

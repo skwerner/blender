@@ -29,8 +29,8 @@
 #  error WIN32 only!
 #endif  // WIN32
 
-#include "GHOST_Window.h"
 #include "GHOST_TaskbarWin32.h"
+#include "GHOST_Window.h"
 #ifdef WITH_INPUT_IME
 #  include "GHOST_ImeWin32.h"
 #endif
@@ -392,9 +392,9 @@ class GHOST_WindowWin32 : public GHOST_Window {
   HCURSOR getStandardCursor(GHOST_TStandardCursor shape) const;
   void loadCursor(bool visible, GHOST_TStandardCursor cursorShape) const;
 
-  const GHOST_TabletData *GetTabletData()
+  const GHOST_TabletData &GetTabletData()
   {
-    return &m_tabletData;
+    return m_tabletData;
   }
 
   void setTabletData(GHOST_TabletData *tabletData);

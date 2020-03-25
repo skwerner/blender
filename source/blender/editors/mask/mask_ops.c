@@ -33,9 +33,9 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "DNA_scene_types.h"
 #include "DNA_mask_types.h"
 #include "DNA_object_types.h" /* SELECT */
+#include "DNA_scene_types.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -69,13 +69,13 @@ MaskSplinePoint *ED_mask_point_find_nearest(const bContext *C,
                                             Mask *mask_orig,
                                             const float normal_co[2],
                                             const float threshold,
-                                            MaskLayer **mask_layer_r,
-                                            MaskSpline **spline_r,
-                                            eMaskWhichHandle *which_handle_r,
-                                            float *score)
+                                            MaskLayer **r_mask_layer,
+                                            MaskSpline **r_spline,
+                                            eMaskWhichHandle *r_which_handle,
+                                            float *r_score)
 {
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   MaskLayer *point_mask_layer = NULL;
   MaskSpline *point_spline = NULL;
@@ -90,7 +90,7 @@ MaskSplinePoint *ED_mask_point_find_nearest(const bContext *C,
   Mask *mask_eval = (Mask *)DEG_get_evaluated_id(depsgraph, &mask_orig->id);
 
   ED_mask_get_size(sa, &width, &height);
-  ED_mask_pixelspace_factor(sa, ar, &scalex, &scaley);
+  ED_mask_pixelspace_factor(sa, region, &scalex, &scaley);
 
   co[0] = normal_co[0] * scalex;
   co[1] = normal_co[1] * scaley;
@@ -185,35 +185,35 @@ MaskSplinePoint *ED_mask_point_find_nearest(const bContext *C,
   }
 
   if (len_sq < threshold_sq) {
-    if (mask_layer_r) {
-      *mask_layer_r = point_mask_layer;
+    if (r_mask_layer) {
+      *r_mask_layer = point_mask_layer;
     }
 
-    if (spline_r) {
-      *spline_r = point_spline;
+    if (r_spline) {
+      *r_spline = point_spline;
     }
 
-    if (which_handle_r) {
-      *which_handle_r = which_handle;
+    if (r_which_handle) {
+      *r_which_handle = which_handle;
     }
 
-    if (score) {
-      *score = sqrtf(len_sq);
+    if (r_score) {
+      *r_score = sqrtf(len_sq);
     }
 
     return point;
   }
 
-  if (mask_layer_r) {
-    *mask_layer_r = NULL;
+  if (r_mask_layer) {
+    *r_mask_layer = NULL;
   }
 
-  if (spline_r) {
-    *spline_r = NULL;
+  if (r_spline) {
+    *r_spline = NULL;
   }
 
-  if (which_handle_r) {
-    *which_handle_r = MASK_WHICH_HANDLE_NONE;
+  if (r_which_handle) {
+    *r_which_handle = MASK_WHICH_HANDLE_NONE;
   }
 
   return NULL;
@@ -223,14 +223,14 @@ bool ED_mask_feather_find_nearest(const bContext *C,
                                   Mask *mask_orig,
                                   const float normal_co[2],
                                   const float threshold,
-                                  MaskLayer **mask_layer_r,
-                                  MaskSpline **spline_r,
-                                  MaskSplinePoint **point_r,
-                                  MaskSplinePointUW **uw_r,
-                                  float *score)
+                                  MaskLayer **r_mask_layer,
+                                  MaskSpline **r_spline,
+                                  MaskSplinePoint **r_point,
+                                  MaskSplinePointUW **r_uw,
+                                  float *r_score)
 {
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   MaskLayer *point_mask_layer = NULL;
   MaskSpline *point_spline = NULL;
@@ -245,7 +245,7 @@ bool ED_mask_feather_find_nearest(const bContext *C,
   Mask *mask_eval = (Mask *)DEG_get_evaluated_id(depsgraph, &mask_orig->id);
 
   ED_mask_get_size(sa, &width, &height);
-  ED_mask_pixelspace_factor(sa, ar, &scalex, &scaley);
+  ED_mask_pixelspace_factor(sa, region, &scalex, &scaley);
 
   co[0] = normal_co[0] * scalex;
   co[1] = normal_co[1] * scaley;
@@ -306,39 +306,39 @@ bool ED_mask_feather_find_nearest(const bContext *C,
   }
 
   if (len < threshold_sq) {
-    if (mask_layer_r) {
-      *mask_layer_r = point_mask_layer;
+    if (r_mask_layer) {
+      *r_mask_layer = point_mask_layer;
     }
 
-    if (spline_r) {
-      *spline_r = point_spline;
+    if (r_spline) {
+      *r_spline = point_spline;
     }
 
-    if (point_r) {
-      *point_r = point;
+    if (r_point) {
+      *r_point = point;
     }
 
-    if (uw_r) {
-      *uw_r = uw;
+    if (r_uw) {
+      *r_uw = uw;
     }
 
-    if (score) {
-      *score = sqrtf(len);
+    if (r_score) {
+      *r_score = sqrtf(len);
     }
 
     return true;
   }
 
-  if (mask_layer_r) {
-    *mask_layer_r = NULL;
+  if (r_mask_layer) {
+    *r_mask_layer = NULL;
   }
 
-  if (spline_r) {
-    *spline_r = NULL;
+  if (r_spline) {
+    *r_spline = NULL;
   }
 
-  if (point_r) {
-    *point_r = NULL;
+  if (r_point) {
+    *r_point = NULL;
   }
 
   return false;
@@ -549,8 +549,8 @@ static void mask_point_undistort_pos(SpaceClip *sc, float r_co[2], const float c
 static bool spline_under_mouse_get(const bContext *C,
                                    Mask *mask,
                                    const float co[2],
-                                   MaskLayer **mask_layer_r,
-                                   MaskSpline **mask_spline_r)
+                                   MaskLayer **r_mask_layer,
+                                   MaskSpline **r_mask_spline)
 {
   const float threshold = 19.0f;
   ScrArea *sa = CTX_wm_area(C);
@@ -561,8 +561,8 @@ static bool spline_under_mouse_get(const bContext *C,
   MaskLayer *closest_layer = NULL;
   MaskSpline *closest_spline = NULL;
   bool undistort = false;
-  *mask_layer_r = NULL;
-  *mask_spline_r = NULL;
+  *r_mask_layer = NULL;
+  *r_mask_spline = NULL;
   ED_mask_get_size(sa, &width, &height);
   pixel_co[0] = co[0] * width;
   pixel_co[1] = co[1] * height;
@@ -614,7 +614,7 @@ static bool spline_under_mouse_get(const bContext *C,
       }
     }
   }
-  if (closest_dist_squared < SQUARE(threshold) && closest_spline != NULL) {
+  if (closest_dist_squared < square_f(threshold) && closest_spline != NULL) {
     float diff_score;
     if (ED_mask_find_nearest_diff_point(C,
                                         mask,
@@ -629,13 +629,13 @@ static bool spline_under_mouse_get(const bContext *C,
                                         NULL,
                                         NULL,
                                         &diff_score)) {
-      if (SQUARE(diff_score) < closest_dist_squared) {
+      if (square_f(diff_score) < closest_dist_squared) {
         return false;
       }
     }
 
-    *mask_layer_r = closest_layer;
-    *mask_spline_r = closest_spline;
+    *r_mask_layer = closest_layer;
+    *r_mask_spline = closest_spline;
     return true;
   }
   return false;
@@ -714,7 +714,7 @@ static void check_sliding_handle_type(MaskSplinePoint *point, eMaskWhichHandle w
 static void *slide_point_customdata(bContext *C, wmOperator *op, const wmEvent *event)
 {
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
 
   Mask *mask = CTX_data_edit_mask(C);
   SlidePointData *customdata = NULL;
@@ -728,7 +728,7 @@ static void *slide_point_customdata(bContext *C, wmOperator *op, const wmEvent *
   const float threshold = 19;
   eMaskWhichHandle which_handle;
 
-  ED_mask_mouse_pos(sa, ar, event->mval, co);
+  ED_mask_mouse_pos(sa, region, event->mval, co);
   ED_mask_get_size(sa, &width, &height);
 
   cv_point = ED_mask_point_find_nearest(
@@ -827,7 +827,7 @@ static void *slide_point_customdata(bContext *C, wmOperator *op, const wmEvent *
     }
     customdata->which_handle = which_handle;
 
-    ED_mask_mouse_pos(sa, ar, event->mval, customdata->prev_mouse_coord);
+    ED_mask_mouse_pos(sa, region, event->mval, customdata->prev_mouse_coord);
   }
 
   return customdata;
@@ -932,11 +932,11 @@ static int slide_point_modal(bContext *C, wmOperator *op, const wmEvent *event)
   float co[2];
 
   switch (event->type) {
-    case LEFTALTKEY:
-    case RIGHTALTKEY:
-    case LEFTSHIFTKEY:
-    case RIGHTSHIFTKEY:
-      if (ELEM(event->type, LEFTALTKEY, RIGHTALTKEY)) {
+    case EVT_LEFTALTKEY:
+    case EVT_RIGHTALTKEY:
+    case EVT_LEFTSHIFTKEY:
+    case EVT_RIGHTSHIFTKEY:
+      if (ELEM(event->type, EVT_LEFTALTKEY, EVT_RIGHTALTKEY)) {
         if (data->action == SLIDE_ACTION_FEATHER) {
           data->is_overall_feather = (event->val == KM_PRESS);
         }
@@ -945,17 +945,17 @@ static int slide_point_modal(bContext *C, wmOperator *op, const wmEvent *event)
         }
       }
 
-      if (ELEM(event->type, LEFTSHIFTKEY, RIGHTSHIFTKEY)) {
+      if (ELEM(event->type, EVT_LEFTSHIFTKEY, EVT_RIGHTSHIFTKEY)) {
         data->is_accurate = (event->val == KM_PRESS);
       }
 
       ATTR_FALLTHROUGH; /* update CV position */
     case MOUSEMOVE: {
       ScrArea *sa = CTX_wm_area(C);
-      ARegion *ar = CTX_wm_region(C);
+      ARegion *region = CTX_wm_region(C);
       float delta[2];
 
-      ED_mask_mouse_pos(sa, ar, event->mval, co);
+      ED_mask_mouse_pos(sa, region, event->mval, co);
       sub_v2_v2v2(delta, co, data->prev_mouse_coord);
       if (data->is_accurate) {
         mul_v2_fl(delta, 0.2f);
@@ -1165,7 +1165,7 @@ static int slide_point_modal(bContext *C, wmOperator *op, const wmEvent *event)
         break;
       }
 
-    case ESCKEY:
+    case EVT_ESCKEY:
       cancel_slide_point(op->customdata);
 
       WM_event_add_notifier(C, NC_MASK | NA_EDITED, data->mask);
@@ -1419,15 +1419,15 @@ static int slide_spline_curvature_modal(bContext *C, wmOperator *op, const wmEve
   float u = slide_data->u;
 
   switch (event->type) {
-    case LEFTSHIFTKEY:
-    case RIGHTSHIFTKEY:
-    case LEFTCTRLKEY:
-    case RIGHTCTRLKEY:
-      if (ELEM(event->type, LEFTSHIFTKEY, RIGHTSHIFTKEY)) {
+    case EVT_LEFTSHIFTKEY:
+    case EVT_RIGHTSHIFTKEY:
+    case EVT_LEFTCTRLKEY:
+    case EVT_RIGHTCTRLKEY:
+      if (ELEM(event->type, EVT_LEFTSHIFTKEY, EVT_RIGHTSHIFTKEY)) {
         slide_data->accurate = (event->val == KM_PRESS);
       }
 
-      if (ELEM(event->type, LEFTCTRLKEY, RIGHTCTRLKEY)) {
+      if (ELEM(event->type, EVT_LEFTCTRLKEY, EVT_RIGHTCTRLKEY)) {
         if (event->val == KM_PRESS) {
           slide_data->adjust_bezt->h1 = slide_data->adjust_bezt->h2 = HD_FREE;
           if ((u > margin && u < 0.5f) || (u >= 0.5f && u < 1.0f - margin)) {
@@ -1551,7 +1551,7 @@ static int slide_spline_curvature_modal(bContext *C, wmOperator *op, const wmEve
 
       break;
 
-    case ESCKEY:
+    case EVT_ESCKEY:
       cancel_slide_spline_curvature(slide_data);
 
       WM_event_add_notifier(C, NC_MASK | NA_EDITED, slide_data->mask);

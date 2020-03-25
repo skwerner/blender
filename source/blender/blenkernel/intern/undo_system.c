@@ -24,10 +24,10 @@
 
 #include "CLG_log.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_sys_types.h"
 #include "BLI_listbase.h"
 #include "BLI_string.h"
+#include "BLI_sys_types.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -36,7 +36,7 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_library_override.h"
+#include "BKE_lib_override.h"
 #include "BKE_main.h"
 #include "BKE_undo_system.h"
 
@@ -163,6 +163,7 @@ static bool undosys_step_encode(bContext *C, Main *bmain, UndoStack *ustack, Und
        * not all members are filled in. */
       us->type->step_foreach_ID_ref(us, undosys_id_ref_store, bmain);
     }
+
 #ifdef WITH_GLOBAL_UNDO_CORRECT_ORDER
     if (us->type == BKE_UNDOSYS_TYPE_MEMFILE) {
       ustack->step_active_memfile = us;
@@ -193,7 +194,7 @@ static void undosys_step_decode(
              * undo step will be correctly resolved, see: T56163. */
             undosys_step_decode(C, bmain, ustack, us_iter, dir, false);
             /* May have been freed on memfile read. */
-            bmain = G.main;
+            bmain = G_MAIN;
           }
           break;
         }
@@ -504,8 +505,8 @@ bool BKE_undosys_step_push_with_type(UndoStack *ustack,
 
   /* Might not be final place for this to be called - probably only want to call it from some
    * undo handlers, not all of them? */
-  if (BKE_override_library_is_enabled()) {
-    BKE_main_override_library_operations_create(G_MAIN, false);
+  if (BKE_lib_override_library_is_enabled()) {
+    BKE_lib_override_library_main_operations_create(G_MAIN, false);
   }
 
   /* Remove all undos after (also when 'ustack->step_active == NULL'). */

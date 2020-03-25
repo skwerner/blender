@@ -39,11 +39,11 @@ bool ED_mask_find_nearest_diff_point(const struct bContext *C,
                                      float tangent[2],
                                      const bool use_deform,
                                      const bool use_project,
-                                     struct MaskLayer **mask_layer_r,
-                                     struct MaskSpline **spline_r,
-                                     struct MaskSplinePoint **point_r,
-                                     float *u_r,
-                                     float *score_r);
+                                     struct MaskLayer **r_mask_layer,
+                                     struct MaskSpline **r_spline,
+                                     struct MaskSplinePoint **r_point,
+                                     float *r_u,
+                                     float *r_score);
 
 void MASK_OT_add_vertex(struct wmOperatorType *ot);
 void MASK_OT_add_feather_vertex(struct wmOperatorType *ot);
@@ -76,20 +76,20 @@ bool ED_mask_feather_find_nearest(const struct bContext *C,
                                   struct Mask *mask,
                                   const float normal_co[2],
                                   const float threshold,
-                                  struct MaskLayer **mask_layer_r,
-                                  struct MaskSpline **spline_r,
-                                  struct MaskSplinePoint **point_r,
-                                  struct MaskSplinePointUW **uw_r,
-                                  float *score);
+                                  struct MaskLayer **r_mask_layer,
+                                  struct MaskSpline **r_spline,
+                                  struct MaskSplinePoint **r_point,
+                                  struct MaskSplinePointUW **r_uw,
+                                  float *r_score);
 
 struct MaskSplinePoint *ED_mask_point_find_nearest(const struct bContext *C,
                                                    struct Mask *mask,
                                                    const float normal_co[2],
                                                    const float threshold,
-                                                   struct MaskLayer **mask_layer_r,
-                                                   struct MaskSpline **spline_r,
-                                                   eMaskWhichHandle *which_handle_r,
-                                                   float *score);
+                                                   struct MaskLayer **r_mask_layer,
+                                                   struct MaskSpline **r_spline,
+                                                   eMaskWhichHandle *r_which_handle,
+                                                   float *r_score);
 
 void MASK_OT_layer_move(struct wmOperatorType *ot);
 
@@ -113,9 +113,9 @@ void MASK_OT_select_linked(struct wmOperatorType *ot);
 void MASK_OT_select_more(struct wmOperatorType *ot);
 void MASK_OT_select_less(struct wmOperatorType *ot);
 
-bool ED_mask_spline_select_check(struct MaskSpline *spline);
-bool ED_mask_layer_select_check(struct MaskLayer *mask_layer);
-bool ED_mask_select_check(struct Mask *mask);
+bool ED_mask_spline_select_check(const struct MaskSpline *spline);
+bool ED_mask_layer_select_check(const struct MaskLayer *mask_layer);
+bool ED_mask_select_check(const struct Mask *mask);
 
 void ED_mask_spline_select_set(struct MaskSpline *spline, const bool do_select);
 void ED_mask_layer_select_set(struct MaskLayer *mask_layer, const bool do_select);

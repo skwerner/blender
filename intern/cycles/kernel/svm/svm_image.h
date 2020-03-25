@@ -24,7 +24,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-#ifdef __TEXTURES__
 ccl_device float4 svm_image_texture(KernelGlobals *kg,
                                     int id,
                                     float x,
@@ -96,10 +95,6 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg,
 
   if ((flags & NODE_IMAGE_ALPHA_UNASSOCIATE) && alpha != 1.0f && alpha != 0.0f) {
     r /= alpha;
-    const int texture_type = kernel_tex_type(id);
-    if (texture_type == IMAGE_DATA_TYPE_BYTE4 || texture_type == IMAGE_DATA_TYPE_BYTE) {
-      r = min(r, make_float4(1.0f, 1.0f, 1.0f, 1.0f));
-    }
     r.w = alpha;
   }
 
@@ -430,7 +425,5 @@ ccl_device void svm_node_tex_environment(
   if (stack_valid(alpha_offset))
     stack_store_float(stack, alpha_offset, f.w);
 }
-
-#endif /* __TEXTURES__ */
 
 CCL_NAMESPACE_END

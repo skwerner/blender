@@ -69,7 +69,9 @@ set(SRC
   intern/gpu_immediate_util.c
   intern/gpu_init_exit.c
   intern/gpu_material.c
+  intern/gpu_material_library.c
   intern/gpu_matrix.c
+  intern/gpu_node_graph.c
   intern/gpu_platform.c
   intern/gpu_primitive.c
   intern/gpu_select.c
@@ -121,6 +123,7 @@ set(SRC
   intern/gpu_context_private.h
   intern/gpu_material_library.h
   intern/gpu_matrix_private.h
+  intern/gpu_node_graph.h
   intern/gpu_primitive_private.h
   intern/gpu_private.h
   intern/gpu_select_private.h
@@ -129,6 +132,7 @@ set(SRC
 )
 
 set(LIB
+  ${BLENDER_GL_LIBRARIES}
 )
 
 if(NOT WITH_SYSTEM_GLEW)
@@ -167,7 +171,8 @@ data_to_c_simple(shaders/gpu_shader_2D_image_rect_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_2D_image_multi_rect_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_desaturate_frag.glsl SRC)
-data_to_c_simple(shaders/gpu_shader_image_linear_frag.glsl SRC)
+data_to_c_simple(shaders/gpu_shader_image_overlays_merge_frag.glsl SRC)
+data_to_c_simple(shaders/gpu_shader_image_overlays_stereo_merge_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_shuffle_color_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_mask_uniform_color_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_modulate_alpha_frag.glsl SRC)
@@ -176,7 +181,6 @@ data_to_c_simple(shaders/gpu_shader_image_color_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_varying_color_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_depth_linear_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_depth_copy_frag.glsl SRC)
-data_to_c_simple(shaders/gpu_shader_image_interlace_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_image_multisample_resolve_frag.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_3D_image_vert.glsl SRC)
 data_to_c_simple(shaders/gpu_shader_3D_vert.glsl SRC)
@@ -299,6 +303,7 @@ data_to_c_simple(shaders/material/gpu_shader_material_uv_map.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_vector_curves.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_vector_displacement.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_vector_math.glsl SRC)
+data_to_c_simple(shaders/material/gpu_shader_material_vector_rotate.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_velvet.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_vertex_color.glsl SRC)
 data_to_c_simple(shaders/material/gpu_shader_material_volume_absorption.glsl SRC)

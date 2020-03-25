@@ -28,7 +28,7 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
@@ -65,7 +65,7 @@ Scene *ED_scene_add(Main *bmain, bContext *C, wmWindow *win, eSceneCopyMethod me
 
     /* these can't be handled in blenkernel currently, so do them here */
     if (method == SCE_COPY_FULL) {
-      ED_editors_flush_edits(bmain, false);
+      ED_editors_flush_edits(bmain);
       ED_object_single_users(bmain, scene_new, true, true);
     }
   }
@@ -181,6 +181,8 @@ bool ED_scene_view_layer_delete(Main *bmain, Scene *scene, ViewLayer *layer, Rep
       STRNCPY(win->view_layer_name, first_layer->name);
     }
   }
+
+  BKE_scene_free_view_layer_depsgraph(scene, layer);
 
   BKE_view_layer_free(layer);
 

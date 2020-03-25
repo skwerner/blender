@@ -22,13 +22,13 @@
 
 #include "CLG_log.h"
 
+#include "DNA_anim_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_anim_types.h"
 
+#include "BLI_array_utils.h"
 #include "BLI_blenlib.h"
 #include "BLI_ghash.h"
-#include "BLI_array_utils.h"
 
 #include "BKE_animsys.h"
 #include "BKE_context.h"
@@ -40,11 +40,11 @@
 
 #include "DEG_depsgraph.h"
 
-#include "ED_undo.h"
 #include "ED_curve.h"
+#include "ED_undo.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "curve_intern.h"
 
@@ -216,8 +216,7 @@ static bool curve_undosys_step_encode(struct bContext *C, struct Main *bmain, Un
    * outside of this list will be moved out of edit-mode when reading back undo steps. */
   ViewLayer *view_layer = CTX_data_view_layer(C);
   uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
-      view_layer, NULL, &objects_len);
+  Object **objects = ED_undo_editmode_objects_from_view_layer(view_layer, &objects_len);
 
   us->elems = MEM_callocN(sizeof(*us->elems) * objects_len, __func__);
   us->elems_len = objects_len;

@@ -18,9 +18,9 @@
  * \ingroup edtransform
  */
 
-#include <string.h>
-#include <stddef.h>
 #include <ctype.h>
+#include <stddef.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -34,15 +34,15 @@
 #include "DNA_view3d_types.h"
 #include "DNA_workspace_types.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_action.h"
-#include "BKE_curve.h"
 #include "BKE_context.h"
+#include "BKE_curve.h"
 #include "BKE_editmesh.h"
 #include "BKE_layer.h"
 #include "BKE_report.h"
@@ -471,8 +471,8 @@ void initTransformOrientation(bContext *C, TransInfo *t)
       break;
 
     case V3D_ORIENT_VIEW:
-      if ((t->spacetype == SPACE_VIEW3D) && (t->ar->regiontype == RGN_TYPE_WINDOW)) {
-        RegionView3D *rv3d = t->ar->regiondata;
+      if ((t->spacetype == SPACE_VIEW3D) && (t->region->regiontype == RGN_TYPE_WINDOW)) {
+        RegionView3D *rv3d = t->region->regiondata;
         float mat[3][3];
 
         BLI_strncpy(t->spacename, TIP_("view"), sizeof(t->spacename));
@@ -512,11 +512,11 @@ void initTransformOrientation(bContext *C, TransInfo *t)
       t->orientation.unset = V3D_ORIENT_VIEW;
       copy_m3_m4(t->orient_matrix, t->viewinv);
       normalize_m3(t->orient_matrix);
+      negate_m3(t->orient_matrix);
     }
     else {
       copy_m3_m3(t->orient_matrix, t->spacemtx);
     }
-    negate_m3(t->orient_matrix);
   }
 }
 

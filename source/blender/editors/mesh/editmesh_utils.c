@@ -23,25 +23,25 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "DNA_key_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
-#include "DNA_key_types.h"
 
-#include "BLI_math.h"
 #include "BLI_alloca.h"
 #include "BLI_buffer.h"
 #include "BLI_kdtree.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 
 #include "BKE_DerivedMesh.h"
 #include "BKE_context.h"
+#include "BKE_editmesh.h"
+#include "BKE_editmesh_bvh.h"
+#include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_report.h"
-#include "BKE_editmesh.h"
-#include "BKE_editmesh_bvh.h"
-#include "BKE_global.h"
 
 #include "DEG_depsgraph.h"
 
@@ -1079,7 +1079,7 @@ void EDBM_verts_mirror_cache_begin_ex(BMEditMesh *em,
   BMVert *v;
   int cd_vmirr_offset = 0;
   int i;
-  const float maxdist_sq = SQUARE(maxdist);
+  const float maxdist_sq = square_f(maxdist);
 
   /* one or the other is used depending if topo is enabled */
   KDTree_3d *tree = NULL;
@@ -1577,7 +1577,7 @@ static void scale_point(float c1[3], const float p[3], const float s)
 bool BMBVH_EdgeVisible(struct BMBVHTree *tree,
                        BMEdge *e,
                        struct Depsgraph *depsgraph,
-                       ARegion *ar,
+                       ARegion *region,
                        View3D *v3d,
                        Object *obedit)
 {
@@ -1587,11 +1587,11 @@ bool BMBVH_EdgeVisible(struct BMBVHTree *tree,
   float epsilon = 0.01f;
   float end[3];
   const float mval_f[2] = {
-      ar->winx / 2.0f,
-      ar->winy / 2.0f,
+      region->winx / 2.0f,
+      region->winy / 2.0f,
   };
 
-  ED_view3d_win_to_segment_clipped(depsgraph, ar, v3d, mval_f, origin, end, false);
+  ED_view3d_win_to_segment_clipped(depsgraph, region, v3d, mval_f, origin, end, false);
 
   invert_m4_m4(invmat, obedit->obmat);
   mul_m4_v3(invmat, origin);

@@ -24,15 +24,15 @@
 #include "DNA_movieclip_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 #include "BKE_movieclip.h"
 #include "BKE_tracking.h"
 
-#include "ED_screen.h"
 #include "ED_clip.h"
+#include "ED_screen.h"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
@@ -249,10 +249,10 @@ static void draw_frame_curves(SpaceClip *sc, unsigned int pos)
   }
 }
 
-void clip_draw_graph(SpaceClip *sc, ARegion *ar, Scene *scene)
+void clip_draw_graph(SpaceClip *sc, ARegion *region, Scene *scene)
 {
   MovieClip *clip = ED_space_clip_get_clip(sc);
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
 
   /* grid */
   UI_view2d_draw_lines_x__values(v2d);

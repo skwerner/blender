@@ -28,10 +28,8 @@
 #include "BLI_math.h"
 
 #include "BKE_context.h"
-#include "BKE_sequencer.h"
 #include "BKE_report.h"
-
-#include "UI_view2d.h"
+#include "BKE_sequencer.h"
 
 #include "transform.h"
 #include "transform_convert.h"
@@ -49,7 +47,7 @@
  * seq->depth must be set before running this function so we know if the strips
  * are root level or not
  */
-static void SeqTransInfo(TransInfo *t, Sequence *seq, int *recursive, int *count, int *flag)
+static void SeqTransInfo(TransInfo *t, Sequence *seq, int *r_recursive, int *r_count, int *r_flag)
 {
   /* for extend we need to do some tricks */
   if (t->mode == TFM_TIME_EXTEND) {
@@ -62,51 +60,51 @@ static void SeqTransInfo(TransInfo *t, Sequence *seq, int *recursive, int *count
     int right = BKE_sequence_tx_get_final_right(seq, true);
 
     if (seq->depth == 0 && ((seq->flag & SELECT) == 0 || (seq->flag & SEQ_LOCK))) {
-      *recursive = false;
-      *count = 0;
-      *flag = 0;
+      *r_recursive = false;
+      *r_count = 0;
+      *r_flag = 0;
     }
     else if (seq->type == SEQ_TYPE_META) {
 
       /* for meta's we only ever need to extend their children, no matter what depth
        * just check the meta's are in the bounds */
       if (t->frame_side == 'R' && right <= cfra) {
-        *recursive = false;
+        *r_recursive = false;
       }
       else if (t->frame_side == 'L' && left >= cfra) {
-        *recursive = false;
+        *r_recursive = false;
       }
       else {
-        *recursive = true;
+        *r_recursive = true;
       }
 
-      *count = 1;
-      *flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
+      *r_count = 1;
+      *r_flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
     }
     else {
 
-      *recursive = false; /* not a meta, so no thinking here */
-      *count = 1;         /* unless its set to 0, extend will never set 2 handles at once */
-      *flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
+      *r_recursive = false; /* not a meta, so no thinking here */
+      *r_count = 1;         /* unless its set to 0, extend will never set 2 handles at once */
+      *r_flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
 
       if (t->frame_side == 'R') {
         if (right <= cfra) {
-          *count = *flag = 0;
+          *r_count = *r_flag = 0;
         } /* ignore */
         else if (left > cfra) {
         } /* keep the selection */
         else {
-          *flag |= SEQ_RIGHTSEL;
+          *r_flag |= SEQ_RIGHTSEL;
         }
       }
       else {
         if (left >= cfra) {
-          *count = *flag = 0;
+          *r_count = *r_flag = 0;
         } /* ignore */
         else if (right < cfra) {
         } /* keep the selection */
         else {
-          *flag |= SEQ_LEFTSEL;
+          *r_flag |= SEQ_LEFTSEL;
         }
       }
     }
@@ -123,28 +121,28 @@ static void SeqTransInfo(TransInfo *t, Sequence *seq, int *recursive, int *count
 
       /* Non nested strips (resect selection and handles) */
       if ((seq->flag & SELECT) == 0 || (seq->flag & SEQ_LOCK)) {
-        *recursive = false;
-        *count = 0;
-        *flag = 0;
+        *r_recursive = false;
+        *r_count = 0;
+        *r_flag = 0;
       }
       else {
         if ((seq->flag & (SEQ_LEFTSEL | SEQ_RIGHTSEL)) == (SEQ_LEFTSEL | SEQ_RIGHTSEL)) {
-          *flag = seq->flag;
-          *count = 2; /* we need 2 transdata's */
+          *r_flag = seq->flag;
+          *r_count = 2; /* we need 2 transdata's */
         }
         else {
-          *flag = seq->flag;
-          *count = 1; /* selected or with a handle selected */
+          *r_flag = seq->flag;
+          *r_count = 1; /* selected or with a handle selected */
         }
 
         /* Recursive */
 
         if ((seq->type == SEQ_TYPE_META) && ((seq->flag & (SEQ_LEFTSEL | SEQ_RIGHTSEL)) == 0)) {
           /* if any handles are selected, don't recurse */
-          *recursive = true;
+          *r_recursive = true;
         }
         else {
-          *recursive = false;
+          *r_recursive = false;
         }
       }
     }
@@ -152,23 +150,23 @@ static void SeqTransInfo(TransInfo *t, Sequence *seq, int *recursive, int *count
       /* Nested, different rules apply */
 
 #ifdef SEQ_TX_NESTED_METAS
-      *flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
-      *count = 1; /* ignore the selection for nested */
-      *recursive = (seq->type == SEQ_TYPE_META);
+      *r_flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
+      *r_count = 1; /* ignore the selection for nested */
+      *r_recursive = (seq->type == SEQ_TYPE_META);
 #else
       if (seq->type == SEQ_TYPE_META) {
         /* Meta's can only directly be moved between channels since they
          * don't have their start and length set directly (children affect that)
          * since this Meta is nested we don't need any of its data in fact.
          * BKE_sequence_calc() will update its settings when run on the top-level meta. */
-        *flag = 0;
-        *count = 0;
-        *recursive = true;
+        *r_flag = 0;
+        *r_count = 0;
+        *r_recursive = true;
       }
       else {
-        *flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
-        *count = 1; /* ignore the selection for nested */
-        *recursive = false;
+        *r_flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
+        *r_count = 1; /* ignore the selection for nested */
+        *r_recursive = false;
       }
 #endif
     }
@@ -381,6 +379,10 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
         }
 
         if (overlap) {
+          const bool use_sync_markers = (((SpaceSeq *)t->sa->spacedata.first)->flag &
+                                         SEQ_MARKER_TRANS) != 0;
+          ListBase *markers = &t->scene->markers;
+
           bool has_effect_root = false, has_effect_any = false;
           for (seq = seqbasep->first; seq; seq = seq->next) {
             seq->tmp = NULL;
@@ -425,7 +427,7 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
               }
             }
 
-            BKE_sequence_base_shuffle_time(seqbasep, t->scene);
+            BKE_sequence_base_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
 
             for (seq = seqbasep->first; seq; seq = seq->next) {
               if (seq->machine >= MAXSEQ * 2) {
@@ -437,10 +439,10 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
               }
             }
 
-            BKE_sequence_base_shuffle_time(seqbasep, t->scene);
+            BKE_sequence_base_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
           }
           else {
-            BKE_sequence_base_shuffle_time(seqbasep, t->scene);
+            BKE_sequence_base_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
           }
 
           if (has_effect_any) {
@@ -518,18 +520,16 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
   DEG_id_tag_update(&t->scene->id, ID_RECALC_SEQUENCER_STRIPS);
 }
 
-void createTransSeqData(bContext *C, TransInfo *t)
+void createTransSeqData(TransInfo *t)
 {
 #define XXX_DURIAN_ANIM_TX_HACK
 
-  View2D *v2d = UI_view2d_fromcontext(C);
   Scene *scene = t->scene;
   Editing *ed = BKE_sequencer_editing_get(t->scene, false);
   TransData *td = NULL;
   TransData2D *td2d = NULL;
   TransDataSeq *tdsq = NULL;
   TransSeq *ts = NULL;
-  int xmouse;
 
   int count = 0;
 
@@ -541,18 +541,10 @@ void createTransSeqData(bContext *C, TransInfo *t)
   }
 
   tc->custom.type.free_cb = freeSeqData;
-
-  xmouse = (int)UI_view2d_region_to_view_x(v2d, t->mouse.imval[0]);
-
-  /* which side of the current frame should be allowed */
-  if (t->mode == TFM_TIME_EXTEND) {
-    /* only side on which mouse is gets transformed */
-    t->frame_side = (xmouse > CFRA) ? 'R' : 'L';
-  }
-  else {
-    /* normal transform - both sides of current frame are considered */
-    t->frame_side = 'B';
-  }
+  /* only side on which center is gets transformed */
+  int center[2];
+  transform_convert_center_global_v2_int(t, center);
+  t->frame_side = (center[0] > CFRA) ? 'R' : 'L';
 
 #ifdef XXX_DURIAN_ANIM_TX_HACK
   {
@@ -595,7 +587,7 @@ void createTransSeqData(bContext *C, TransInfo *t)
   SeqTransDataBounds(t, ed->seqbasep, ts);
 
   /* set the snap mode based on how close the mouse is at the end/start points */
-  if (abs(xmouse - ts->max) > abs(xmouse - ts->min)) {
+  if (abs(center[0] - ts->max) > abs(center[0] - ts->min)) {
     ts->snap_left = true;
   }
 

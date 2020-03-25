@@ -183,7 +183,8 @@ typedef enum eGPUBuiltinShader {
   GPU_SHADER_3D_DEPTH_ONLY,
   GPU_SHADER_3D_CLIPPED_UNIFORM_COLOR,
   /* basic image drawing */
-  GPU_SHADER_2D_IMAGE_LINEAR_TO_SRGB,
+  GPU_SHADER_2D_IMAGE_OVERLAYS_MERGE,
+  GPU_SHADER_2D_IMAGE_OVERLAYS_STEREO_MERGE,
   GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR,
   GPU_SHADER_2D_IMAGE_MASK_UNIFORM_COLOR,
   /**
@@ -207,8 +208,6 @@ typedef enum eGPUBuiltinShader {
    */
   GPU_SHADER_3D_IMAGE_DEPTH,
   GPU_SHADER_3D_IMAGE_DEPTH_COPY,
-  /* stereo 3d */
-  GPU_SHADER_2D_IMAGE_INTERLACE,
   /* points */
   /**
    * Draw round points with a hardcoded size.
@@ -353,17 +352,6 @@ typedef struct GPUShaderConfigData {
 /* gpu_shader.c */
 extern const GPUShaderConfigData GPU_shader_cfg_data[GPU_SHADER_CFG_LEN];
 
-/**
- * Keep these in sync with:
- * - `gpu_shader_image_interlace_frag.glsl`
- * - `gpu_shader_image_rect_interlace_frag.glsl`
- */
-typedef enum eGPUInterlaceShader {
-  GPU_SHADER_INTERLACE_ROW = 0,
-  GPU_SHADER_INTERLACE_COLUMN = 1,
-  GPU_SHADER_INTERLACE_CHECKER = 2,
-} eGPUInterlaceShader;
-
 GPUShader *GPU_shader_get_builtin_shader_with_config(eGPUBuiltinShader shader,
                                                      eGPUShaderConfig sh_cfg);
 GPUShader *GPU_shader_get_builtin_shader(eGPUBuiltinShader shader);
@@ -381,16 +369,6 @@ void GPU_shader_free_builtin_shaders(void);
 /* Hardware limit is 16. Position attribute is always needed so we reduce to 15.
  * This makes sure the GPUVertexFormat name buffer does not overflow. */
 #define GPU_MAX_ATTR 15
-
-typedef struct GPUVertAttrLayers {
-  struct {
-    int type; /* CustomDataType */
-    int attr_id;
-    char name[64]; /* MAX_CUSTOMDATA_LAYER_NAME */
-  } layer[GPU_MAX_ATTR];
-
-  int totlayer;
-} GPUVertAttrLayers;
 
 #ifdef __cplusplus
 }

@@ -23,16 +23,16 @@
  * GPU shader interface (C --> GLSL)
  */
 
-#include "MEM_guardedalloc.h"
 #include "BKE_global.h"
+#include "MEM_guardedalloc.h"
 
 #include "GPU_shader_interface.h"
 
 #include "gpu_batch_private.h"
 #include "gpu_context_private.h"
 
-#include <stdlib.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define DEBUG_SHADER_INTERFACE 0
@@ -67,6 +67,7 @@ static const char *BuiltinUniform_name(GPUUniformBuiltin u)
       [GPU_UNIFORM_COLOR] = "color",
       [GPU_UNIFORM_BASE_INSTANCE] = "baseInstance",
       [GPU_UNIFORM_RESOURCE_CHUNK] = "resourceChunk",
+      [GPU_UNIFORM_RESOURCE_ID] = "resourceId",
 
       [GPU_UNIFORM_CUSTOM] = NULL,
       [GPU_NUM_UNIFORMS] = NULL,

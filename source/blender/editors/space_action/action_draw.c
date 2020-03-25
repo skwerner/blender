@@ -23,10 +23,10 @@
 
 /* System includes ----------------------------------------------------- */
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <float.h>
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
@@ -38,8 +38,8 @@
 #include "DNA_cachefile_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
-#include "DNA_screen_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_action.h"
 #include "BKE_context.h"
@@ -64,13 +64,13 @@
 /* Channel List */
 
 /* left hand part */
-void draw_channel_names(bContext *C, bAnimContext *ac, ARegion *ar)
+void draw_channel_names(bContext *C, bAnimContext *ac, ARegion *region)
 {
   ListBase anim_data = {NULL, NULL};
   bAnimListElem *ale;
   int filter;
 
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
   size_t items;
 
   /* build list of channels to draw */
@@ -100,7 +100,7 @@ void draw_channel_names(bContext *C, bAnimContext *ac, ARegion *ar)
     }
   }
   { /* second pass: widgets */
-    uiBlock *block = UI_block_begin(C, ar, __func__, UI_EMBOSS);
+    uiBlock *block = UI_block_begin(C, region, __func__, UI_EMBOSS);
     size_t channel_index = 0;
     float ymax = ACHANNEL_FIRST_TOP(ac);
 
@@ -132,12 +132,12 @@ void draw_channel_names(bContext *C, bAnimContext *ac, ARegion *ar)
 #define EXTRA_SCROLL_PAD 100.0f
 
 /* draw keyframes in each channel */
-void draw_channel_strips(bAnimContext *ac, SpaceAction *saction, ARegion *ar)
+void draw_channel_strips(bAnimContext *ac, SpaceAction *saction, ARegion *region)
 {
   ListBase anim_data = {NULL, NULL};
   bAnimListElem *ale;
 
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
   bDopeSheet *ads = &saction->ads;
   AnimData *adt = NULL;
 

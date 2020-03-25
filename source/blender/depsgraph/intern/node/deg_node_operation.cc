@@ -25,12 +25,12 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "intern/depsgraph.h"
-#include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_component.h"
+#include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_id.h"
 
 namespace DEG {
@@ -64,6 +64,8 @@ const char *operationCodeAsString(OperationCode opcode)
     /* Object related. */
     case OperationCode::OBJECT_BASE_FLAGS:
       return "OBJECT_BASE_FLAGS";
+    case OperationCode::DIMENSIONS:
+      return "DIMENSIONS";
     /* Transform. */
     case OperationCode::TRANSFORM_INIT:
       return "TRANSFORM_INIT";
@@ -241,13 +243,13 @@ void OperationNode::tag_update(Depsgraph *graph, eUpdateSource source)
 
 void OperationNode::set_as_entry()
 {
-  BLI_assert(owner != NULL);
+  BLI_assert(owner != nullptr);
   owner->set_entry_operation(this);
 }
 
 void OperationNode::set_as_exit()
 {
-  BLI_assert(owner != NULL);
+  BLI_assert(owner != nullptr);
   owner->set_exit_operation(this);
 }
 

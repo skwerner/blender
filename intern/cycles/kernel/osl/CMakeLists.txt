@@ -27,7 +27,14 @@ set(HEADER_SRC
 
 set(LIB
   cycles_render
+
+  ${OSL_LIBRARIES}
+  ${OPENIMAGEIO_LIBRARIES}
+  ${LLVM_LIBRARY}
 )
+
+# OSL and LLVM are built without RTTI
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${RTTI_DISABLE_FLAGS}")
 
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})

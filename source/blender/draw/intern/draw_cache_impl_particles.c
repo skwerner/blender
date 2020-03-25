@@ -27,16 +27,16 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
+#include "BLI_ghash.h"
 #include "BLI_math_vector.h"
 #include "BLI_string.h"
-#include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
+#include "DNA_customdata_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_particle_types.h"
-#include "DNA_customdata_types.h"
 
 #include "BKE_mesh.h"
 #include "BKE_particle.h"
@@ -179,7 +179,7 @@ static void particle_batch_cache_clear_point(ParticlePointCache *point_cache)
   GPU_VERTBUF_DISCARD_SAFE(point_cache->pos);
 }
 
-static void particle_batch_cache_clear_hair(ParticleHairCache *hair_cache)
+void particle_batch_cache_clear_hair(ParticleHairCache *hair_cache)
 {
   /* TODO more granular update tagging. */
   GPU_VERTBUF_DISCARD_SAFE(hair_cache->proc_point_buf);
@@ -637,23 +637,6 @@ static void particle_batch_cache_fill_segments_proc_pos(ParticleCacheKey **path_
   }
 }
 
-static float particle_key_select_ratio(const PTCacheEdit *edit, int strand, float t)
-{
-  const PTCacheEditPoint *point = &edit->points[strand];
-  float edit_key_seg_t = 1.0f / (point->totkey - 1);
-  if (t == 1.0) {
-    return (point->keys[point->totkey - 1].flag & PEK_SELECT) ? 1.0f : 0.0;
-  }
-  else {
-    float interp = t / edit_key_seg_t;
-    int index = (int)interp;
-    interp -= floorf(interp); /* Time between 2 edit key */
-    float s1 = (point->keys[index].flag & PEK_SELECT) ? 1.0f : 0.0;
-    float s2 = (point->keys[index + 1].flag & PEK_SELECT) ? 1.0f : 0.0;
-    return s1 + interp * (s2 - s1);
-  }
-}
-
 static float particle_key_weight(const ParticleData *particle, int strand, float t)
 {
   const ParticleData *part = particle + strand;
@@ -673,8 +656,8 @@ static float particle_key_weight(const ParticleData *particle, int strand, float
 }
 
 static int particle_batch_cache_fill_segments_edit(
-    const PTCacheEdit *edit,      /* NULL for weight data */
-    const ParticleData *particle, /* NULL for select data */
+    const PTCacheEdit *UNUSED(edit), /* NULL for weight data */
+    const ParticleData *particle,    /* NULL for select data */
     ParticleCacheKey **path_cache,
     const int start_index,
     const int num_path_keys,
@@ -697,8 +680,8 @@ static int particle_batch_cache_fill_segments_edit(
         seg_data->color = (weight < 1.0f) ? weight : 1.0f;
       }
       else {
-        float selected = particle_key_select_ratio(edit, i, strand_t);
-        seg_data->color = selected;
+        /* Computed in psys_cache_edit_paths_iter(). */
+        seg_data->color = path[j].col[0];
       }
       GPU_indexbuf_add_generic_vert(elb, curr_point);
       curr_point++;
@@ -1199,7 +1182,7 @@ static void particle_batch_cache_ensure_pos_and_seg(PTCacheEdit *edit,
       GPU_vertformat_safe_attrib_name(name, attr_safe_name, GPU_MAX_SAFE_ATTRIB_NAME);
 
       BLI_snprintf(uuid, sizeof(uuid), "c%s", attr_safe_name);
-      col_id[i] = GPU_vertformat_attr_add(&format, uuid, GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+      col_id[i] = GPU_vertformat_attr_add(&format, uuid, GPU_COMP_U16, 4, GPU_FETCH_FLOAT);
 
       if (i == active_col) {
         GPU_vertformat_alias_add(&format, "c");

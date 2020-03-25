@@ -24,8 +24,8 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_math_base.h"
+#include "BLI_utildefines.h"
 
 #include "GPU_batch.h"
 #include "GPU_draw.h"
@@ -34,8 +34,8 @@
 #include "GPU_shader.h"
 #include "GPU_texture.h"
 
-#include "gpu_private.h"
 #include "gpu_context_private.h"
+#include "gpu_private.h"
 
 typedef enum {
   GPU_FB_DEPTH_ATTACHMENT = 0,
@@ -513,6 +513,7 @@ void GPU_framebuffer_bind(GPUFrameBuffer *fb)
 
   if (GPU_framebuffer_active_get() != fb) {
     glBindFramebuffer(GL_FRAMEBUFFER, fb->object);
+    glEnable(GL_FRAMEBUFFER_SRGB);
   }
 
   gpu_framebuffer_current_set(fb);
@@ -547,6 +548,7 @@ void GPU_framebuffer_restore(void)
   if (GPU_framebuffer_active_get() != NULL) {
     glBindFramebuffer(GL_FRAMEBUFFER, GPU_framebuffer_default());
     gpu_framebuffer_current_set(NULL);
+    glDisable(GL_FRAMEBUFFER_SRGB);
   }
 }
 
@@ -610,6 +612,21 @@ void GPU_framebuffer_clear(GPUFrameBuffer *fb,
 
   GLbitfield mask = convert_buffer_bits_to_gl(buffers);
   glClear(mask);
+}
+
+/* Clear all textures bound to this framebuffer with a different color. */
+void GPU_framebuffer_multi_clear(GPUFrameBuffer *fb, const float (*clear_cols)[4])
+{
+  CHECK_FRAMEBUFFER_IS_BOUND(fb);
+
+  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+  GPUAttachmentType type = GPU_FB_COLOR_ATTACHMENT0;
+  for (int i = 0; type < GPU_FB_MAX_ATTACHEMENT; i++, type++) {
+    if (fb->attachments[type].tex != NULL) {
+      glClearBufferfv(GL_COLOR, i, clear_cols[i]);
+    }
+  }
 }
 
 void GPU_framebuffer_read_depth(GPUFrameBuffer *fb, int x, int y, int w, int h, float *data)
@@ -926,6 +943,7 @@ void GPU_offscreen_bind(GPUOffScreen *ofs, bool save)
   glDisable(GL_SCISSOR_TEST);
   GPUFrameBuffer *ofs_fb = gpu_offscreen_fb_get(ofs);
   GPU_framebuffer_bind(ofs_fb);
+  glDisable(GL_FRAMEBUFFER_SRGB);
 }
 
 void GPU_offscreen_unbind(GPUOffScreen *UNUSED(ofs), bool restore)

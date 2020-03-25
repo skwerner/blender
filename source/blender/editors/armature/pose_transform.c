@@ -710,6 +710,8 @@ static int pose_copy_exec(bContext *C, wmOperator *op)
    * any datablock expansion?
    */
   Main *temp_bmain = BKE_main_new();
+  STRNCPY(temp_bmain->name, BKE_main_blendfile_path_from_global());
+
   Object ob_copy = *ob;
   ob_copy.adt = NULL;
   bArmature arm_copy = *((bArmature *)ob->data);
@@ -723,7 +725,7 @@ static int pose_copy_exec(bContext *C, wmOperator *op)
    * existing on it's own.
    */
   BKE_copybuffer_tag_ID(&ob_copy.id);
-  BLI_make_file_string("/", str, BKE_tempdir_base(), "copybuffer_pose.blend");
+  BLI_join_dirfile(str, sizeof(str), BKE_tempdir_base(), "copybuffer_pose.blend");
   BKE_copybuffer_save(temp_bmain, str, op->reports);
   /* We clear the lists so no datablocks gets freed,
    * This is required because objects in temp bmain shares same pointers
@@ -773,7 +775,9 @@ static int pose_paste_exec(bContext *C, wmOperator *op)
   /* Read copy buffer .blend file. */
   char str[FILE_MAX];
   Main *tmp_bmain = BKE_main_new();
-  BLI_make_file_string("/", str, BKE_tempdir_base(), "copybuffer_pose.blend");
+  STRNCPY(tmp_bmain->name, BKE_main_blendfile_path_from_global());
+
+  BLI_join_dirfile(str, sizeof(str), BKE_tempdir_base(), "copybuffer_pose.blend");
   if (!BKE_copybuffer_read(tmp_bmain, str, op->reports, FILTER_ID_OB)) {
     BKE_report(op->reports, RPT_ERROR, "Copy buffer is empty");
     BKE_main_free(tmp_bmain);

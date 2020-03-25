@@ -16,13 +16,14 @@
 
 #include "device/device.h"
 
+#include "render/background.h"
 #include "render/colorspace.h"
 #include "render/graph.h"
 #include "render/light.h"
+#include "render/nodes.h"
 #include "render/osl.h"
 #include "render/scene.h"
 #include "render/shader.h"
-#include "render/nodes.h"
 
 #ifdef WITH_OSL
 
@@ -97,11 +98,12 @@ void OSLShaderManager::device_update(Device *device,
 
   device_free(device, dscene, scene);
 
-  /* determine which shaders are in use */
-  device_update_shaders_used(scene);
+  /* set texture system */
+  scene->image_manager->set_oiio_texture_system((void *)ts);
 
   /* create shaders */
   OSLGlobals *og = (OSLGlobals *)device->osl_memory();
+  Shader *background_shader = scene->background->get_shader(scene);
 
   foreach (Shader *shader, scene->shaders) {
     assert(shader->graph);
@@ -115,7 +117,7 @@ void OSLShaderManager::device_update(Device *device,
     thread_scoped_lock lock(ss_mutex);
 
     OSLCompiler compiler(this, services, ss, scene);
-    compiler.background = (shader == scene->default_background);
+    compiler.background = (shader == background_shader);
     compiler.compile(og, shader);
 
     if (shader->use_mis && shader->has_surface_emission)
@@ -127,7 +129,7 @@ void OSLShaderManager::device_update(Device *device,
   og->ts = ts;
   og->services = services;
 
-  int background_id = scene->shader_manager->get_shader_id(scene->default_background);
+  int background_id = scene->shader_manager->get_shader_id(background_shader);
   og->background_state = og->surface_state[background_id & SHADER_MASK];
   og->use = true;
 
@@ -135,9 +137,6 @@ void OSLShaderManager::device_update(Device *device,
     shader->need_update = false;
 
   need_update = false;
-
-  /* set texture system */
-  scene->image_manager->set_oiio_texture_system((void *)ts);
 
   /* add special builtin texture types */
   services->textures.insert(ustring("@ao"), new OSLTextureHandle(OSLTextureHandle::AO));
@@ -278,7 +277,7 @@ bool OSLShaderManager::osl_compile(const string &inputfile, const string &output
   string include_path_arg = string("-I") + shader_path;
   options.push_back(include_path_arg);
 
-  stdosl_path = path_get("shader/stdosl.h");
+  stdosl_path = path_get("shader/stdcycles.h");
 
   /* compile */
   OSL::OSLCompiler *compiler = new OSL::OSLCompiler(&OSL::ErrorHandler::default_handler());
@@ -399,27 +398,35 @@ const char *OSLShaderManager::shader_load_bytecode(const string &hash, const str
   return loaded_shaders.find(hash)->first.c_str();
 }
 
-OSLNode *OSLShaderManager::osl_node(const std::string &filepath,
+/* This is a static function to avoid RTTI link errors with only this
+ * file being compiled without RTTI to match OSL and LLVM libraries. */
+OSLNode *OSLShaderManager::osl_node(ShaderManager *manager,
+                                    const std::string &filepath,
                                     const std::string &bytecode_hash,
                                     const std::string &bytecode)
 {
+  if (!manager->use_osl()) {
+    return NULL;
+  }
+
   /* create query */
+  OSLShaderManager *osl_manager = static_cast<OSLShaderManager *>(manager);
   const char *hash;
 
   if (!filepath.empty()) {
-    hash = shader_load_filepath(filepath);
+    hash = osl_manager->shader_load_filepath(filepath);
   }
   else {
-    hash = shader_test_loaded(bytecode_hash);
+    hash = osl_manager->shader_test_loaded(bytecode_hash);
     if (!hash)
-      hash = shader_load_bytecode(bytecode_hash, bytecode);
+      hash = osl_manager->shader_load_bytecode(bytecode_hash, bytecode);
   }
 
   if (!hash) {
     return NULL;
   }
 
-  OSLShaderInfo *info = shader_loaded_info(hash);
+  OSLShaderInfo *info = osl_manager->shader_loaded_info(hash);
 
   /* count number of inputs */
   size_t num_inputs = 0;
@@ -714,14 +721,12 @@ void OSLCompiler::add(ShaderNode *node, const char *name, bool isfilepath)
   else if (current_type == SHADER_TYPE_VOLUME) {
     if (node->has_spatial_varying())
       current_shader->has_volume_spatial_varying = true;
+    if (node->has_attribute_dependency())
+      current_shader->has_volume_attribute_dependency = true;
   }
 
   if (node->has_object_dependency()) {
     current_shader->has_object_dependency = true;
-  }
-
-  if (node->has_attribute_dependency()) {
-    current_shader->has_attribute_dependency = true;
   }
 
   if (node->has_integrator_dependency()) {
@@ -1097,8 +1102,8 @@ void OSLCompiler::compile(OSLGlobals *og, Shader *shader)
     shader->has_displacement = false;
     shader->has_surface_spatial_varying = false;
     shader->has_volume_spatial_varying = false;
+    shader->has_volume_attribute_dependency = false;
     shader->has_object_dependency = false;
-    shader->has_attribute_dependency = false;
     shader->has_integrator_dependency = false;
 
     /* generate surface shader */

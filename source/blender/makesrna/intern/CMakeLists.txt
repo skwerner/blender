@@ -88,11 +88,20 @@ set(DEFSRC
   rna_ui.c
   rna_userdef.c
   rna_vfont.c
+  rna_volume.c
   rna_wm.c
   rna_wm_gizmo.c
   rna_workspace.c
   rna_world.c
+  rna_xr.c
 )
+
+if(WITH_NEW_OBJECT_TYPES)
+  list(APPEND DEFSRC
+    rna_hair.c
+    rna_pointcloud.c
+  )
+endif()
 
 set(APISRC
   rna_action_api.c
@@ -228,6 +237,10 @@ if(WITH_AUDASPACE)
   list(APPEND INC_SYS
     ${AUDASPACE_C_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${AUDASPACE_C_LIBRARIES}
+    ${AUDASPACE_PY_LIBRARIES}
+  )
 endif()
 
 if(WITH_CODEC_FFMPEG)
@@ -236,6 +249,9 @@ if(WITH_CODEC_FFMPEG)
   )
   list(APPEND INC_SYS
     ${FFMPEG_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${FFMPEG_LIBRARIES}
   )
   add_definitions(-DWITH_FFMPEG)
 endif()
@@ -280,7 +296,7 @@ endif()
 
 if(WITH_ALEMBIC)
   list(APPEND INC
-    ../../alembic
+    ../../io/alembic
   )
   add_definitions(-DWITH_ALEMBIC)
 endif()
@@ -316,6 +332,14 @@ endif()
 
 if(WITH_INPUT_NDOF)
   add_definitions(-DWITH_INPUT_NDOF)
+endif()
+
+if(WITH_XR_OPENXR)
+  add_definitions(-DWITH_XR_OPENXR)
+endif()
+
+if(WITH_NEW_OBJECT_TYPES)
+  add_definitions(-DWITH_NEW_OBJECT_TYPES)
 endif()
 
 # Build makesrna executable

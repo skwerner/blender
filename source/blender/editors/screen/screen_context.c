@@ -27,33 +27,33 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_object_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_sequence_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_sequence_types.h"
 #include "DNA_space_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BLI_utildefines.h"
 
-#include "BKE_context.h"
-#include "BKE_object.h"
 #include "BKE_action.h"
 #include "BKE_armature.h"
+#include "BKE_context.h"
 #include "BKE_gpencil.h"
 #include "BKE_layer.h"
+#include "BKE_object.h"
 #include "BKE_sequencer.h"
 
 #include "RNA_access.h"
 
+#include "ED_anim_api.h"
 #include "ED_armature.h"
 #include "ED_gpencil.h"
-#include "ED_anim_api.h"
 
-#include "WM_api.h"
 #include "UI_interface.h"
+#include "WM_api.h"
 
 #include "screen_intern.h"
 
@@ -555,7 +555,7 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
     bGPdata *gpd = ED_gpencil_data_get_active_direct(sa, obact);
 
     if (gpd) {
-      bGPDlayer *gpl = BKE_gpencil_layer_getactive(gpd);
+      bGPDlayer *gpl = BKE_gpencil_layer_active_get(gpd);
 
       if (gpl) {
         CTX_data_pointer_set(result, &gpd->id, &RNA_GPencilLayer, gpl);
@@ -567,7 +567,7 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
     bGPdata *gpd = ED_annotation_data_get_active_direct((ID *)sc, sa, scene);
 
     if (gpd) {
-      bGPDlayer *gpl = BKE_gpencil_layer_getactive(gpd);
+      bGPDlayer *gpl = BKE_gpencil_layer_active_get(gpd);
 
       if (gpl) {
         CTX_data_pointer_set(result, &gpd->id, &RNA_GPencilLayer, gpl);
@@ -579,7 +579,7 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
     bGPdata *gpd = ED_gpencil_data_get_active_direct(sa, obact);
 
     if (gpd) {
-      bGPDlayer *gpl = BKE_gpencil_layer_getactive(gpd);
+      bGPDlayer *gpl = BKE_gpencil_layer_active_get(gpd);
 
       if (gpl) {
         CTX_data_pointer_set(result, &gpd->id, &RNA_GPencilLayer, gpl->actframe);
@@ -609,7 +609,7 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
       bGPDlayer *gpl;
 
       for (gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-        if (gpencil_layer_is_editable(gpl)) {
+        if (BKE_gpencil_layer_is_editable(gpl)) {
           CTX_data_list_add(result, &gpd->id, &RNA_GPencilLayer, gpl);
         }
       }
@@ -625,7 +625,7 @@ int ed_screen_context(const bContext *C, const char *member, bContextDataResult 
       bGPDlayer *gpl;
 
       for (gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-        if (gpencil_layer_is_editable(gpl) && (gpl->actframe)) {
+        if (BKE_gpencil_layer_is_editable(gpl) && (gpl->actframe)) {
           bGPDframe *gpf;
           bGPDstroke *gps;
           bGPDframe *init_gpf = gpl->actframe;

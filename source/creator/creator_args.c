@@ -20,9 +20,9 @@
 
 #ifndef WITH_PYTHON_MODULE
 
+#  include <errno.h>
 #  include <stdlib.h>
 #  include <string.h>
-#  include <errno.h>
 
 #  include "MEM_guardedalloc.h"
 
@@ -33,15 +33,15 @@
 #  endif
 
 #  include "BLI_args.h"
-#  include "BLI_threads.h"
-#  include "BLI_utildefines.h"
+#  include "BLI_fileops.h"
 #  include "BLI_listbase.h"
+#  include "BLI_mempool.h"
+#  include "BLI_path_util.h"
 #  include "BLI_string.h"
 #  include "BLI_string_utf8.h"
-#  include "BLI_path_util.h"
-#  include "BLI_fileops.h"
-#  include "BLI_mempool.h"
 #  include "BLI_system.h"
+#  include "BLI_threads.h"
+#  include "BLI_utildefines.h"
 
 #  include "BLO_readfile.h" /* only for BLO_has_bfile_extension */
 
@@ -50,8 +50,8 @@
 
 #  include "BKE_global.h"
 #  include "BKE_image.h"
-#  include "BKE_library.h"
-#  include "BKE_library_override.h"
+#  include "BKE_lib_id.h"
+#  include "BKE_lib_override.h"
 #  include "BKE_main.h"
 #  include "BKE_report.h"
 #  include "BKE_scene.h"
@@ -559,6 +559,7 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
   BLI_argsPrintArgDoc(ba, "--python-expr");
   BLI_argsPrintArgDoc(ba, "--python-console");
   BLI_argsPrintArgDoc(ba, "--python-exit-code");
+  BLI_argsPrintArgDoc(ba, "--python-use-system-env");
   BLI_argsPrintArgDoc(ba, "--addons");
 
   printf("\n");
@@ -602,6 +603,10 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
   BLI_argsPrintArgDoc(ba, "--debug-gpu-shaders");
   BLI_argsPrintArgDoc(ba, "--debug-gpu-force-workarounds");
   BLI_argsPrintArgDoc(ba, "--debug-wm");
+#  ifdef WITH_XR_OPENXR
+  BLI_argsPrintArgDoc(ba, "--debug-xr");
+  BLI_argsPrintArgDoc(ba, "--debug-xr-time");
+#  endif
   BLI_argsPrintArgDoc(ba, "--debug-all");
   BLI_argsPrintArgDoc(ba, "--debug-io");
 
@@ -939,6 +944,16 @@ static const char arg_handle_debug_mode_generic_set_doc_wm[] =
     "\n\t"
     "Enable debug messages for the window manager, shows all operators in search, shows "
     "keymap errors.";
+#  ifdef WITH_XR_OPENXR
+static const char arg_handle_debug_mode_generic_set_doc_xr[] =
+    "\n\t"
+    "Enable debug messages for virtual reality contexts.\n"
+    "\tEnables the OpenXR API validation layer, (OpenXR) debug messages and general information "
+    "prints.";
+static const char arg_handle_debug_mode_generic_set_doc_xr_time[] =
+    "\n\t"
+    "Enable debug messages for virtual reality frame rendering times.";
+#  endif
 static const char arg_handle_debug_mode_generic_set_doc_jobs[] =
     "\n\t"
     "Enable time profiling for background jobs.";
@@ -1114,7 +1129,7 @@ static int arg_handle_disable_override_library(int UNUSED(argc),
                                                const char **UNUSED(argv),
                                                void *UNUSED(data))
 {
-  BKE_override_library_enable(false);
+  BKE_lib_override_library_enable(false);
   return 0;
 }
 
@@ -1907,6 +1922,17 @@ static int arg_handle_python_exit_code_set(int argc, const char **argv, void *UN
   }
 }
 
+static const char arg_handle_python_use_system_env_set_doc[] =
+    "\n\t"
+    "Allow Python to use system environment variables such as 'PYTHONPATH'.";
+static int arg_handle_python_use_system_env_set(int UNUSED(argc),
+                                                const char **UNUSED(argv),
+                                                void *UNUSED(data))
+{
+  BPY_python_use_system_env();
+  return 0;
+}
+
 static const char arg_handle_addons_set_doc[] =
     "<addon(s)>\n"
     "\tComma separated list of add-ons (no spaces).";
@@ -2079,6 +2105,16 @@ void main_args_setup(bContext *C, bArgs *ba)
               (void *)G_DEBUG_HANDLERS);
   BLI_argsAdd(
       ba, 1, NULL, "--debug-wm", CB_EX(arg_handle_debug_mode_generic_set, wm), (void *)G_DEBUG_WM);
+#  ifdef WITH_XR_OPENXR
+  BLI_argsAdd(
+      ba, 1, NULL, "--debug-xr", CB_EX(arg_handle_debug_mode_generic_set, xr), (void *)G_DEBUG_XR);
+  BLI_argsAdd(ba,
+              1,
+              NULL,
+              "--debug-xr-time",
+              CB_EX(arg_handle_debug_mode_generic_set, xr_time),
+              (void *)G_DEBUG_XR_TIME);
+#  endif
   BLI_argsAdd(ba,
               1,
               NULL,
@@ -2187,6 +2223,9 @@ void main_args_setup(bContext *C, bArgs *ba)
   BLI_argsAdd(
       ba, 1, NULL, "--env-system-scripts", CB_EX(arg_handle_env_system_set, scripts), NULL);
   BLI_argsAdd(ba, 1, NULL, "--env-system-python", CB_EX(arg_handle_env_system_set, python), NULL);
+
+  BLI_argsAdd(
+      ba, 1, NULL, "--python-use-system-env", CB(arg_handle_python_use_system_env_set), NULL);
 
   /* second pass: custom window stuff */
   BLI_argsAdd(ba, 2, "-p", "--window-geometry", CB(arg_handle_window_geometry), NULL);

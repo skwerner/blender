@@ -25,8 +25,8 @@
 
 #include <string.h>
 
-#include "DNA_windowmanager_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_windowmanager_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -37,7 +37,7 @@
 #include "BIF_glutil.h"
 
 #include "BKE_context.h"
-#include "BKE_idcode.h"
+#include "BKE_idtype.h"
 
 #include "GPU_glew.h"
 #include "GPU_shader.h"
@@ -223,7 +223,7 @@ static const char *wm_dropbox_active(bContext *C, wmDrag *drag, const wmEvent *e
 {
   wmWindow *win = CTX_wm_window(C);
   ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   const char *name;
 
   name = dropbox_active(C, &win->handlers, drag, event);
@@ -236,7 +236,7 @@ static const char *wm_dropbox_active(bContext *C, wmDrag *drag, const wmEvent *e
     return name;
   }
 
-  name = dropbox_active(C, &ar->handlers, drag, event);
+  name = dropbox_active(C, &region->handlers, drag, event);
   if (name) {
     return name;
   }
@@ -357,7 +357,7 @@ static const char *wm_drag_name(wmDrag *drag)
         return id->name + 2;
       }
       else if (id) {
-        return BKE_idcode_to_name_plural(GS(id->name));
+        return BKE_idtype_idcode_to_name_plural(GS(id->name));
       }
       break;
     }

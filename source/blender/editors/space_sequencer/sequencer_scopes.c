@@ -23,12 +23,12 @@
 #include <math.h>
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_task.h"
+#include "BLI_utildefines.h"
 
 #include "IMB_colormanagement.h"
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "atomic_ops.h"
 
@@ -743,9 +743,7 @@ static ImBuf *make_vectorscope_view_from_ibuf_float(ImBuf *ibuf)
 
       memcpy(rgb, src1, 3 * sizeof(float));
 
-      CLAMP(rgb[0], 0.0f, 1.0f);
-      CLAMP(rgb[1], 0.0f, 1.0f);
-      CLAMP(rgb[2], 0.0f, 1.0f);
+      clamp_v3(rgb, 0.0f, 1.0f);
 
       rgb_to_yuv_normalized(rgb, yuv);
 

@@ -35,20 +35,20 @@
 
 #include "BLI_bitmap.h"
 #include "BLI_heap_simple.h"
-#include "BLI_listbase.h"
 #include "BLI_linklist.h"
 #include "BLI_linklist_stack.h"
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_rand.h"
 #include "BLI_sort_utils.h"
 #include "BLI_string.h"
 
-#include "BKE_editmesh.h"
 #include "BKE_context.h"
 #include "BKE_deform.h"
+#include "BKE_editmesh.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
@@ -60,8 +60,8 @@
 
 #include "BLT_translation.h"
 
-#include "RNA_define.h"
 #include "RNA_access.h"
+#include "RNA_define.h"
 #include "RNA_enum_types.h"
 
 #include "WM_api.h"
@@ -96,13 +96,12 @@ static int edbm_subdivide_exec(bContext *C, wmOperator *op)
   const float smooth = RNA_float_get(op->ptr, "smoothness");
   const float fractal = RNA_float_get(op->ptr, "fractal") / 2.5f;
   const float along_normal = RNA_float_get(op->ptr, "fractal_along_normal");
+  const bool use_quad_tri = !RNA_boolean_get(op->ptr, "ngon");
 
-  if (RNA_boolean_get(op->ptr, "ngon") &&
-      RNA_enum_get(op->ptr, "quadcorner") == SUBD_CORNER_STRAIGHT_CUT) {
+  if (use_quad_tri && RNA_enum_get(op->ptr, "quadcorner") == SUBD_CORNER_STRAIGHT_CUT) {
     RNA_enum_set(op->ptr, "quadcorner", SUBD_CORNER_INNERVERT);
   }
   const int quad_corner_type = RNA_enum_get(op->ptr, "quadcorner");
-  const bool use_quad_tri = !RNA_boolean_get(op->ptr, "ngon");
   const int seed = RNA_int_get(op->ptr, "seed");
 
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -412,23 +411,24 @@ void MESH_OT_unsubdivide(wmOperatorType *ot)
 }
 
 void EDBM_project_snap_verts(
-    bContext *C, Depsgraph *depsgraph, ARegion *ar, Object *obedit, BMEditMesh *em)
+    bContext *C, Depsgraph *depsgraph, ARegion *region, Object *obedit, BMEditMesh *em)
 {
   Main *bmain = CTX_data_main(C);
   BMIter iter;
   BMVert *eve;
 
-  ED_view3d_init_mats_rv3d(obedit, ar->regiondata);
+  ED_view3d_init_mats_rv3d(obedit, region->regiondata);
 
   struct SnapObjectContext *snap_context = ED_transform_snap_object_context_create_view3d(
-      bmain, CTX_data_scene(C), depsgraph, 0, ar, CTX_wm_view3d(C));
+      bmain, CTX_data_scene(C), 0, region, CTX_wm_view3d(C));
 
   BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
     if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
       float mval[2], co_proj[3];
-      if (ED_view3d_project_float_object(ar, eve->co, mval, V3D_PROJ_TEST_NOP) ==
+      if (ED_view3d_project_float_object(region, eve->co, mval, V3D_PROJ_TEST_NOP) ==
           V3D_PROJ_RET_OK) {
         if (ED_transform_snap_object_project_view3d(snap_context,
+                                                    depsgraph,
                                                     SCE_SNAP_MODE_FACE,
                                                     &(const struct SnapObjectParams){
                                                         .snap_select = SNAP_NOT_ACTIVE,
@@ -3382,11 +3382,9 @@ static int edbm_blend_from_shape_exec(bContext *C, wmOperator *op)
 
         if (use_add) {
           /* In add mode, we add relative shape key offset. */
-          if (kb) {
-            const float *rco = CustomData_bmesh_get_n(
-                &em->bm->vdata, eve->head.data, CD_SHAPEKEY, kb->relative);
-            sub_v3_v3v3(co, co, rco);
-          }
+          const float *rco = CustomData_bmesh_get_n(
+              &em->bm->vdata, eve->head.data, CD_SHAPEKEY, kb->relative);
+          sub_v3_v3v3(co, co, rco);
 
           madd_v3_v3fl(eve->co, co, blend);
         }
@@ -3751,7 +3749,7 @@ static int edbm_knife_cut_exec(bContext *C, wmOperator *op)
   Object *obedit = CTX_data_edit_object(C);
   BMEditMesh *em = BKE_editmesh_from_object(obedit);
   BMesh *bm = em->bm;
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   BMVert *bv;
   BMIter iter;
   BMEdge *be;
@@ -3765,8 +3763,8 @@ static int edbm_knife_cut_exec(bContext *C, wmOperator *op)
   /* allocd vars */
   float(*screen_vert_coords)[2], (*sco)[2], (*mouse_path)[2];
 
-  /* edit-object needed for matrix, and ar->regiondata for projections to work */
-  if (ELEM(NULL, obedit, ar, ar->regiondata)) {
+  /* edit-object needed for matrix, and region->regiondata for projections to work */
+  if (ELEM(NULL, obedit, region, region->regiondata)) {
     return OPERATOR_CANCELLED;
   }
 
@@ -3791,7 +3789,7 @@ static int edbm_knife_cut_exec(bContext *C, wmOperator *op)
   RNA_END;
 
   /* for ED_view3d_project_float_object */
-  ED_view3d_init_mats_rv3d(obedit, ar->regiondata);
+  ED_view3d_init_mats_rv3d(obedit, region->regiondata);
 
   /* TODO, investigate using index lookup for screen_vert_coords() rather then a hash table */
 
@@ -3800,7 +3798,7 @@ static int edbm_knife_cut_exec(bContext *C, wmOperator *op)
   screen_vert_coords = sco = MEM_mallocN(bm->totvert * sizeof(float) * 2, __func__);
 
   BM_ITER_MESH_INDEX (bv, &iter, bm, BM_VERTS_OF_MESH, i) {
-    if (ED_view3d_project_float_object(ar, bv->co, *sco, V3D_PROJ_TEST_CLIP_NEAR) !=
+    if (ED_view3d_project_float_object(region, bv->co, *sco, V3D_PROJ_TEST_CLIP_NEAR) !=
         V3D_PROJ_RET_OK) {
       copy_v2_fl(*sco, FLT_MAX); /* set error value */
     }
@@ -3930,13 +3928,18 @@ static Base *mesh_separate_tagged(
   CustomData_bmesh_init_pool(&bm_new->ldata, bm_mesh_allocsize_default.totloop, BM_LOOP);
   CustomData_bmesh_init_pool(&bm_new->pdata, bm_mesh_allocsize_default.totface, BM_FACE);
 
-  base_new = ED_object_add_duplicate(bmain, scene, view_layer, base_old, USER_DUP_MESH);
+  /* Take into account user preferences for duplicating actions. */
+  short dupflag = USER_DUP_MESH | (U.dupflag & USER_DUP_ACT);
+  base_new = ED_object_add_duplicate(bmain, scene, view_layer, base_old, dupflag);
 
   /* normally would call directly after but in this case delay recalc */
   /* DAG_relations_tag_update(bmain); */
 
   /* new in 2.5 */
-  assign_matarar(bmain, base_new->object, give_matarar(obedit), *give_totcolp(obedit));
+  BKE_object_material_array_assign(bmain,
+                                   base_new->object,
+                                   BKE_object_material_array_p(obedit),
+                                   *BKE_object_material_len_p(obedit));
 
   ED_object_base_select(base_new, BA_SELECT);
 
@@ -3997,13 +4000,18 @@ static Base *mesh_separate_arrays(Main *bmain,
   CustomData_bmesh_init_pool(&bm_new->ldata, faces_len * 3, BM_LOOP);
   CustomData_bmesh_init_pool(&bm_new->pdata, faces_len, BM_FACE);
 
-  base_new = ED_object_add_duplicate(bmain, scene, view_layer, base_old, USER_DUP_MESH);
+  /* Take into account user preferences for duplicating actions. */
+  short dupflag = USER_DUP_MESH | (U.dupflag & USER_DUP_ACT);
+  base_new = ED_object_add_duplicate(bmain, scene, view_layer, base_old, dupflag);
 
   /* normally would call directly after but in this case delay recalc */
   /* DAG_relations_tag_update(bmain); */
 
   /* new in 2.5 */
-  assign_matarar(bmain, base_new->object, give_matarar(obedit), *give_totcolp(obedit));
+  BKE_object_material_array_assign(bmain,
+                                   base_new->object,
+                                   BKE_object_material_array_p(obedit),
+                                   *BKE_object_material_len_p(obedit));
 
   ED_object_base_select(base_new, BA_SELECT);
 
@@ -4047,8 +4055,8 @@ static void mesh_separate_material_assign_mat_nr(Main *bmain, Object *ob, const 
   Material ***matarar;
   const short *totcolp;
 
-  totcolp = give_totcolp_id(obdata);
-  matarar = give_matarar_id(obdata);
+  totcolp = BKE_id_material_len_p(obdata);
+  matarar = BKE_id_material_array_p(obdata);
 
   if ((totcolp && matarar) == 0) {
     BLI_assert(0);
@@ -4076,9 +4084,9 @@ static void mesh_separate_material_assign_mat_nr(Main *bmain, Object *ob, const 
       ma_obdata = NULL;
     }
 
-    BKE_material_clear_id(bmain, obdata);
-    BKE_material_resize_object(bmain, ob, 1, true);
-    BKE_material_resize_id(bmain, obdata, 1, true);
+    BKE_id_material_clear(bmain, obdata);
+    BKE_object_material_resize(bmain, ob, 1, true);
+    BKE_id_material_resize(bmain, obdata, 1, true);
 
     ob->mat[0] = ma_ob;
     id_us_plus((ID *)ma_ob);
@@ -4087,9 +4095,9 @@ static void mesh_separate_material_assign_mat_nr(Main *bmain, Object *ob, const 
     id_us_plus((ID *)ma_obdata);
   }
   else {
-    BKE_material_clear_id(bmain, obdata);
-    BKE_material_resize_object(bmain, ob, 0, true);
-    BKE_material_resize_id(bmain, obdata, 0, true);
+    BKE_id_material_clear(bmain, obdata);
+    BKE_object_material_resize(bmain, ob, 0, true);
+    BKE_id_material_resize(bmain, obdata, 0, true);
   }
 }
 
@@ -5241,7 +5249,7 @@ static int edbm_decimate_exec(bContext *C, wmOperator *op)
         if (BM_elem_flag_test(v, BM_ELEM_SELECT)) {
           if (use_vertex_group) {
             const MDeformVert *dv = BM_ELEM_CD_GET_VOID_P(v, cd_dvert_offset);
-            weight = defvert_find_weight(dv, defbase_act);
+            weight = BKE_defvert_find_weight(dv, defbase_act);
             if (invert_vertex_group) {
               weight = 1.0f - weight;
             }
@@ -8011,12 +8019,12 @@ static int edbm_point_normals_modal(bContext *C, wmOperator *op, const wmEvent *
   /* Only handle mousemove event in case we are in mouse mode. */
   if (event->type == MOUSEMOVE || force_mousemove) {
     if (mode == EDBM_CLNOR_POINTTO_MODE_MOUSE) {
-      ARegion *ar = CTX_wm_region(C);
+      ARegion *region = CTX_wm_region(C);
       float center[3];
 
       bmesh_selected_verts_center_calc(bm, center);
 
-      ED_view3d_win_to_3d_int(v3d, ar, center, event->mval, target);
+      ED_view3d_win_to_3d_int(v3d, region, center, event->mval, target);
 
       ret = OPERATOR_RUNNING_MODAL;
     }

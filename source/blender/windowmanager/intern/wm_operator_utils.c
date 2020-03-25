@@ -22,8 +22,8 @@
 
 #include <math.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
@@ -63,7 +63,7 @@ typedef struct ValueInteraction {
 
   struct {
     ScrArea *sa;
-    ARegion *ar;
+    ARegion *region;
   } context_vars;
 } ValueInteraction;
 
@@ -75,7 +75,7 @@ static void interactive_value_init(bContext *C,
 {
 
   inter->context_vars.sa = CTX_wm_area(C);
-  inter->context_vars.ar = CTX_wm_region(C);
+  inter->context_vars.region = CTX_wm_region(C);
 
   inter->init.mval[0] = event->mval[0];
   inter->init.mval[1] = event->mval[1];
@@ -111,7 +111,7 @@ static bool interactive_value_update(ValueInteraction *inter,
   const int mval_curr = event->mval[mval_axis];
   const int mval_init = inter->init.mval[mval_axis];
   float value_delta = (inter->init.prop_value +
-                       (((float)(mval_curr - mval_init) / inter->context_vars.ar->winx) *
+                       (((float)(mval_curr - mval_init) / inter->context_vars.region->winx) *
                         value_range)) *
                       value_scale;
   if (event->ctrl) {
@@ -148,6 +148,7 @@ static bool interactive_value_update(ValueInteraction *inter,
  * \{ */
 
 struct ObCustomData_ForEditMode {
+  int launch_event;
   bool wait_for_input;
   bool is_active;
   bool is_first;
@@ -211,6 +212,7 @@ static int op_generic_value_invoke(bContext *C, wmOperator *op, const wmEvent *e
   }
 
   struct ObCustomData_ForEditMode *cd = MEM_callocN(sizeof(*cd), __func__);
+  cd->launch_event = WM_userdef_event_type_from_keymap_type(event->type);
   cd->wait_for_input = RNA_boolean_get(op->ptr, "wait_for_input");
   cd->is_active = !cd->wait_for_input;
   cd->is_first = true;
@@ -239,12 +241,21 @@ static int op_generic_value_invoke(bContext *C, wmOperator *op, const wmEvent *e
 static int op_generic_value_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   struct ObCustomData_ForEditMode *cd = op->customdata;
+
+  /* Special case, check if we release the event that activated this operator. */
+  if ((event->type == cd->launch_event) && (event->val == KM_RELEASE)) {
+    if (cd->wait_for_input == false) {
+      op_generic_value_exit(op);
+      return OPERATOR_FINISHED;
+    }
+  }
+
   switch (event->type) {
     case MOUSEMOVE:
-    case LEFTCTRLKEY:
-    case RIGHTCTRLKEY:
-    case LEFTSHIFTKEY:
-    case RIGHTSHIFTKEY: {
+    case EVT_LEFTCTRLKEY:
+    case EVT_RIGHTCTRLKEY:
+    case EVT_LEFTSHIFTKEY:
+    case EVT_RIGHTSHIFTKEY: {
       float value_final;
       if (cd->is_active && interactive_value_update(&cd->inter, event, &value_final)) {
         wmWindowManager *wm = CTX_wm_manager(C);
@@ -268,8 +279,8 @@ static int op_generic_value_modal(bContext *C, wmOperator *op, const wmEvent *ev
       }
       break;
     }
-    case RETKEY:
-    case PADENTER:
+    case EVT_RETKEY:
+    case EVT_PADENTER:
     case LEFTMOUSE: {
       if (cd->wait_for_input) {
         if (event->val == KM_PRESS) {
@@ -293,7 +304,7 @@ static int op_generic_value_modal(bContext *C, wmOperator *op, const wmEvent *ev
       }
       break;
     }
-    case ESCKEY:
+    case EVT_ESCKEY:
     case RIGHTMOUSE: {
       if (event->val == KM_PRESS) {
         if (cd->is_active == true) {

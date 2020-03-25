@@ -21,13 +21,13 @@
  * \ingroup spseq
  */
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_scene_types.h"
 
@@ -44,8 +44,8 @@
 
 #include "ED_outliner.h"
 #include "ED_screen.h"
-#include "ED_sequencer.h"
 #include "ED_select_utils.h"
+#include "ED_sequencer.h"
 
 #include "UI_view2d.h"
 
@@ -312,7 +312,7 @@ void SEQUENCER_OT_select_all(struct wmOperatorType *ot)
   ot->poll = sequencer_edit_poll;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_UNDO;
 
   WM_operator_properties_select_all(ot);
 }
@@ -353,7 +353,7 @@ void SEQUENCER_OT_select_inverse(struct wmOperatorType *ot)
   ot->poll = sequencer_edit_poll;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_UNDO;
 }
 
 static int sequencer_select_exec(bContext *C, wmOperator *op)
@@ -647,7 +647,7 @@ void SEQUENCER_OT_select(wmOperatorType *ot)
   ot->poll = ED_operator_sequencer_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_UNDO;
 
   /* properties */
   WM_operator_properties_generic_select(ot);
@@ -1018,15 +1018,17 @@ void SEQUENCER_OT_select_side(wmOperatorType *ot)
 static int sequencer_box_select_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
+  View2D *v2d = UI_view2d_fromcontext(C);
   Editing *ed = BKE_sequencer_editing_get(scene, false);
+
   if (ed == NULL) {
     return OPERATOR_CANCELLED;
   }
 
-  View2D *v2d = UI_view2d_fromcontext(C);
-
   const eSelectOp sel_op = RNA_enum_get(op->ptr, "mode");
+  const bool handles = RNA_boolean_get(op->ptr, "include_handles");
   const bool select = (sel_op != SEL_OP_SUB);
+
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
     ED_sequencer_deselect_all(scene);
   }
@@ -1039,8 +1041,44 @@ static int sequencer_box_select_exec(bContext *C, wmOperator *op)
     rctf rq;
     seq_rectf(seq, &rq);
     if (BLI_rctf_isect(&rq, &rectf, NULL)) {
-      SET_FLAG_FROM_TEST(seq->flag, select, SELECT);
-      recurs_sel_seq(seq);
+      if (handles) {
+        /* Get the handles draw size. */
+        float pixelx = BLI_rctf_size_x(&v2d->cur) / BLI_rcti_size_x(&v2d->mask);
+        float handsize = sequence_handle_size_get_clamped(seq, pixelx);
+
+        /* Right handle. */
+        if (rectf.xmax > (seq->enddisp - handsize)) {
+          if (select) {
+            seq->flag |= SELECT | SEQ_RIGHTSEL;
+          }
+          else {
+            /* Deselect the strip if it's left with no handles selected. */
+            if ((seq->flag & SEQ_RIGHTSEL) && ((seq->flag & SEQ_LEFTSEL) == 0)) {
+              seq->flag &= ~SELECT;
+            }
+            seq->flag &= ~SEQ_RIGHTSEL;
+          }
+        }
+        /* Left handle. */
+        if (rectf.xmin < (seq->startdisp + handsize)) {
+          if (select) {
+            seq->flag |= SELECT | SEQ_LEFTSEL;
+          }
+          else {
+            /* Deselect the strip if it's left with no handles selected. */
+            if ((seq->flag & SEQ_LEFTSEL) && ((seq->flag & SEQ_RIGHTSEL) == 0)) {
+              seq->flag &= ~SELECT;
+            }
+            seq->flag &= ~SEQ_LEFTSEL;
+          }
+        }
+      }
+
+      /* Regular box selection. */
+      else {
+        SET_FLAG_FROM_TEST(seq->flag, select, SELECT);
+        seq->flag &= ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
+      }
     }
   }
 
@@ -1072,6 +1110,8 @@ static int sequencer_box_select_invoke(bContext *C, wmOperator *op, const wmEven
 
 void SEQUENCER_OT_select_box(wmOperatorType *ot)
 {
+  PropertyRNA *prop;
+
   /* identifiers */
   ot->name = "Box Select";
   ot->idname = "SEQUENCER_OT_select_box";
@@ -1086,14 +1126,17 @@ void SEQUENCER_OT_select_box(wmOperatorType *ot)
   ot->poll = ED_operator_sequencer_active;
 
   /* flags */
-  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+  ot->flag = OPTYPE_UNDO;
 
   /* properties */
   WM_operator_properties_gesture_box(ot);
   WM_operator_properties_select_operation_simple(ot);
 
-  PropertyRNA *prop = RNA_def_boolean(
+  prop = RNA_def_boolean(
       ot->srna, "tweak", 0, "Tweak", "Operator has been activated using a tweak event");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+  prop = RNA_def_boolean(
+      ot->srna, "include_handles", 0, "Select Handles", "Select the strips and their handles");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
@@ -1292,7 +1335,7 @@ static bool select_grouped_time_overlap(Editing *ed, Sequence *actseq)
   bool changed = false;
 
   SEQP_BEGIN (ed, seq) {
-    if (!((seq->startdisp >= actseq->enddisp) || (seq->enddisp < actseq->startdisp))) {
+    if (seq->startdisp < actseq->enddisp && seq->enddisp > actseq->startdisp) {
       seq->flag |= SELECT;
       changed = true;
     }
@@ -1376,16 +1419,16 @@ static int sequencer_select_grouped_exec(bContext *C, wmOperator *op)
   Editing *ed = BKE_sequencer_editing_get(scene, false);
   Sequence *seq, *actseq = BKE_sequencer_active_get(scene);
 
+  if (actseq == NULL) {
+    BKE_report(op->reports, RPT_ERROR, "No active sequence!");
+    return OPERATOR_CANCELLED;
+  }
+
   const int type = RNA_enum_get(op->ptr, "type");
   const int channel = RNA_boolean_get(op->ptr, "use_active_channel") ? actseq->machine : 0;
   const bool extend = RNA_boolean_get(op->ptr, "extend");
 
   bool changed = false;
-
-  if (actseq == NULL) {
-    BKE_report(op->reports, RPT_ERROR, "No active sequence!");
-    return OPERATOR_CANCELLED;
-  }
 
   if (!extend) {
     SEQP_BEGIN (ed, seq) {

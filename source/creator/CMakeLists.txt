@@ -41,9 +41,13 @@ set(LIB
   bf_windowmanager
 )
 
-# Note: this should not be needed, but causes issues in some situations:
-# See reply to daf290dcc80c.
-if(WITH_TBB AND WITH_OPENIMAGEDENOISE)
+if(WITH_TBB)
+  # Force TBB libraries to be in front of MKL (part of OpenImageDenoise), so
+  # that it is initialized before MKL and static library initialization order
+  # issues are avoided.
+  #
+  # This isn't fully robust but seems to work.
+  list(INSERT LIB 0 ${TBB_LIBRARIES})
   list(INSERT LIB 0 bf_blenkernel)
 endif()
 
@@ -105,6 +109,10 @@ endif()
 if(WITH_FREESTYLE)
   blender_include_dirs(../blender/freestyle)
   add_definitions(-DWITH_FREESTYLE)
+endif()
+
+if(WITH_XR_OPENXR)
+  add_definitions(-DWITH_XR_OPENXR)
 endif()
 
 # Setup the exe sources and buildinfo
@@ -686,12 +694,14 @@ elseif(WIN32)
     if(NOT CMAKE_COMPILER_IS_GNUCC)
       install(
         FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python${_PYTHON_VERSION_NO_DOTS}.dll
+              ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python3.dll
         DESTINATION "."
         CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
       )
 
       install(
         FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python${_PYTHON_VERSION_NO_DOTS}_d.dll
+              ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/bin/python3_d.dll
         DESTINATION "."
         CONFIGURATIONS Debug
       )
@@ -850,6 +860,8 @@ elseif(WIN32)
       ${CMAKE_SOURCE_DIR}/release/windows/batch/blender_debug_gpu_glitchworkaround.cmd
       ${CMAKE_SOURCE_DIR}/release/windows/batch/blender_debug_log.cmd
       ${CMAKE_SOURCE_DIR}/release/windows/batch/blender_factory_startup.cmd
+      ${CMAKE_SOURCE_DIR}/release/windows/batch/blender_oculus.cmd
+      ${CMAKE_SOURCE_DIR}/release/windows/batch/oculus.json
     DESTINATION "."
   )
 
@@ -1052,7 +1064,7 @@ setup_liblinks(blender)
 if(WITH_USD)
   add_definitions(-DWITH_USD)
   install(DIRECTORY
-    ${LIBDIR}/usd/lib/usd
+    ${USD_LIBRARY_DIR}/usd
     DESTINATION "${TARGETDIR_VER}/datafiles"
   )
 endif()

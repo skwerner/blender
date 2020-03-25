@@ -31,21 +31,21 @@
 #include "BKE_global.h"
 #include "BKE_mball.h"
 #include "BKE_mesh.h"
-#include "BKE_movieclip.h"
 #include "BKE_modifier.h"
+#include "BKE_movieclip.h"
 #include "BKE_object.h"
 #include "BKE_tracking.h"
 
 #include "DNA_camera_types.h"
 #include "DNA_constraint_types.h"
-#include "DNA_gpencil_types.h"
+#include "DNA_curve_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_lightprobe_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meta_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_force_types.h"
 #include "DNA_rigidbody_types.h"
-#include "DNA_fluid_types.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -140,7 +140,7 @@ void OVERLAY_extra_cache_init(OVERLAY_Data *vedata)
       cb->light_point = BUF_INSTANCE(grp_sub, format, DRW_cache_light_point_lines_get());
       cb->light_spot = BUF_INSTANCE(grp_sub, format, DRW_cache_light_spot_lines_get());
       cb->light_sun = BUF_INSTANCE(grp_sub, format, DRW_cache_light_sun_lines_get());
-      cb->probe_cube = BUF_INSTANCE(grp_sub, format, DRW_cache_lightprobe_planar_get());
+      cb->probe_cube = BUF_INSTANCE(grp_sub, format, DRW_cache_lightprobe_cube_get());
       cb->probe_grid = BUF_INSTANCE(grp_sub, format, DRW_cache_lightprobe_grid_get());
       cb->probe_planar = BUF_INSTANCE(grp_sub, format, DRW_cache_lightprobe_planar_get());
       cb->solid_quad = BUF_INSTANCE(grp_sub, format, DRW_cache_quad_get());
@@ -344,10 +344,13 @@ void OVERLAY_empty_cache_populate(OVERLAY_Data *vedata, Object *ob)
   }
 }
 
-static void OVERLAY_bounds(
-    OVERLAY_ExtraCallBuffers *cb, Object *ob, int theme_id, char boundtype, bool around_origin)
+static void OVERLAY_bounds(OVERLAY_ExtraCallBuffers *cb,
+                           Object *ob,
+                           const float *color,
+                           char boundtype,
+                           bool around_origin)
 {
-  float color[4], center[3], size[3], tmp[4][4], final_mat[4][4];
+  float center[3], size[3], tmp[4][4], final_mat[4][4];
   BoundBox bb_local;
 
   if (ob->type == OB_MBALL && !BKE_mball_is_basis(ob)) {
@@ -362,7 +365,6 @@ static void OVERLAY_bounds(
     BKE_boundbox_init_from_minmax(bb, min, max);
   }
 
-  UI_GetThemeColor4fv(theme_id, color);
   BKE_boundbox_calc_size_aabb(bb, size);
 
   if (around_origin) {
@@ -425,28 +427,28 @@ static void OVERLAY_bounds(
   }
 }
 
-static void OVERLAY_collision(OVERLAY_ExtraCallBuffers *cb, Object *ob, int theme_id)
+static void OVERLAY_collision(OVERLAY_ExtraCallBuffers *cb, Object *ob, const float *color)
 {
   switch (ob->rigidbody_object->shape) {
     case RB_SHAPE_BOX:
-      OVERLAY_bounds(cb, ob, theme_id, OB_BOUND_BOX, true);
+      OVERLAY_bounds(cb, ob, color, OB_BOUND_BOX, true);
       break;
     case RB_SHAPE_SPHERE:
-      OVERLAY_bounds(cb, ob, theme_id, OB_BOUND_SPHERE, true);
+      OVERLAY_bounds(cb, ob, color, OB_BOUND_SPHERE, true);
       break;
     case RB_SHAPE_CONE:
-      OVERLAY_bounds(cb, ob, theme_id, OB_BOUND_CONE, true);
+      OVERLAY_bounds(cb, ob, color, OB_BOUND_CONE, true);
       break;
     case RB_SHAPE_CYLINDER:
-      OVERLAY_bounds(cb, ob, theme_id, OB_BOUND_CYLINDER, true);
+      OVERLAY_bounds(cb, ob, color, OB_BOUND_CYLINDER, true);
       break;
     case RB_SHAPE_CAPSULE:
-      OVERLAY_bounds(cb, ob, theme_id, OB_BOUND_CAPSULE, true);
+      OVERLAY_bounds(cb, ob, color, OB_BOUND_CAPSULE, true);
       break;
   }
 }
 
-static void OVERLAY_texture_space(OVERLAY_ExtraCallBuffers *cb, Object *ob, int theme_id)
+static void OVERLAY_texture_space(OVERLAY_ExtraCallBuffers *cb, Object *ob, const float *color)
 {
   if (ob->data == NULL) {
     return;
@@ -473,17 +475,27 @@ static void OVERLAY_texture_space(OVERLAY_ExtraCallBuffers *cb, Object *ob, int 
       texcosize = mb->size;
       break;
     }
+    case ID_HA:
+    case ID_PT:
+    case ID_VO: {
+      /* No user defined texture space support. */
+      break;
+    }
     default:
       BLI_assert(0);
   }
 
-  float mat[4][4], color[4];
-  size_to_mat4(mat, texcosize);
-  copy_v3_v3(mat[3], texcoloc);
+  float mat[4][4];
+
+  if (texcoloc != NULL && texcosize != NULL) {
+    size_to_mat4(mat, texcosize);
+    copy_v3_v3(mat[3], texcoloc);
+  }
+  else {
+    unit_m4(mat);
+  }
 
   mul_m4_m4m4(mat, ob->obmat, mat);
-
-  UI_GetThemeColor4fv(theme_id, color);
 
   DRW_buffer_add_entry(cb->empty_cube, color, mat);
 }
@@ -600,7 +612,7 @@ void OVERLAY_light_cache_populate(OVERLAY_Data *vedata, Object *ob)
   float *color_p;
   DRW_object_wire_theme_get(ob, view_layer, &color_p);
   /* Remove the alpha. */
-  float color[4] = {color_p[0], color_p[1], color_p[2], 1.0f};
+  float color[4] = {UNPACK3(color_p), 1.0f};
   /* Pack render data into object matrix. */
   union {
     float mat[4][4];
@@ -623,8 +635,9 @@ void OVERLAY_light_cache_populate(OVERLAY_Data *vedata, Object *ob)
   copy_m4_m4(instdata.mat, ob->obmat);
   /* FIXME / TODO: clipend has no meaning nowadays.
    * In EEVEE, Only clipsta is used shadowmaping.
-   * Clip end is computed automatically based on light power. */
-  instdata.clip_end = la->clipend;
+   * Clip end is computed automatically based on light power.
+   * For now, always use the custom distance as clipend. */
+  instdata.clip_end = la->att_dist;
   instdata.clip_sta = la->clipsta;
 
   DRW_buffer_add_entry(cb->groundline, instdata.pos);
@@ -707,7 +720,7 @@ void OVERLAY_lightprobe_cache_populate(OVERLAY_Data *vedata, Object *ob)
     case LIGHTPROBE_TYPE_CUBE:
       instdata.clip_sta = show_clipping ? prb->clipsta : -1.0;
       instdata.clip_end = show_clipping ? prb->clipend : -1.0;
-      DRW_buffer_add_entry(cb->probe_grid, color_p, &instdata);
+      DRW_buffer_add_entry(cb->probe_cube, color_p, &instdata);
       DRW_buffer_add_entry(cb->groundline, instdata.pos);
 
       if (show_influence) {
@@ -866,18 +879,16 @@ static void camera_view3d_reconstruction(OVERLAY_ExtraCallBuffers *cb,
   /* Index must start in 1, to mimic BKE_tracking_track_get_indexed. */
   int track_index = 1;
 
+  float bundle_color_custom[3];
+  float *bundle_color_solid = G_draw.block.colorBundleSolid;
+  float *bundle_color_unselected = G_draw.block.colorWire;
   uchar text_color_selected[4], text_color_unselected[4];
-  float bundle_color_unselected[4], bundle_color_solid[4];
-
+  /* Color Management: Exception here as texts are drawn in sRGB space directly.  */
   UI_GetThemeColor4ubv(TH_SELECT, text_color_selected);
   UI_GetThemeColor4ubv(TH_TEXT, text_color_unselected);
-  UI_GetThemeColor4fv(TH_WIRE, bundle_color_unselected);
-  UI_GetThemeColor4fv(TH_BUNDLE_SOLID, bundle_color_solid);
 
-  float camera_mat[4][4], normal_mat[4][4];
-  BKE_tracking_get_camera_object_matrix(scene, ob, camera_mat);
-
-  normalize_m4_m4(normal_mat, ob->obmat);
+  float camera_mat[4][4];
+  BKE_tracking_get_camera_object_matrix(ob, camera_mat);
 
   LISTBASE_FOREACH (MovieTrackingObject *, tracking_object, &tracking->objects) {
     float tracking_object_mat[4][4];
@@ -888,12 +899,15 @@ static void camera_view3d_reconstruction(OVERLAY_ExtraCallBuffers *cb,
     else {
       const int framenr = BKE_movieclip_remap_scene_to_clip_frame(
           clip, DEG_get_ctime(draw_ctx->depsgraph));
+
       float object_mat[4][4];
       BKE_tracking_camera_get_reconstructed_interpolate(
           tracking, tracking_object, framenr, object_mat);
 
-      invert_m4(object_mat);
-      mul_m4_m4m4(tracking_object_mat, normal_mat, object_mat);
+      float object_imat[4][4];
+      invert_m4_m4(object_imat, object_mat);
+
+      mul_m4_m4m4(tracking_object_mat, ob->obmat, object_imat);
     }
 
     ListBase *tracksbase = BKE_tracking_object_get_tracks(tracking, tracking_object);
@@ -909,7 +923,10 @@ static void camera_view3d_reconstruction(OVERLAY_ExtraCallBuffers *cb,
 
       const float *bundle_color;
       if (track->flag & TRACK_CUSTOMCOLOR) {
-        bundle_color = track->color;
+        /* Meh, hardcoded srgb transform here. */
+        /* TODO change the actual DNA color to be linear. */
+        srgb_to_linearrgb_v3_v3(bundle_color_custom, track->color);
+        bundle_color = bundle_color_custom;
       }
       else if (is_solid_bundle) {
         bundle_color = bundle_color_solid;
@@ -1017,6 +1034,11 @@ static void camera_stereoscopy_extra(OVERLAY_ExtraCallBuffers *cb,
   const bool is_stereo3d_cameras = (v3d->stereo3d_flag & V3D_S3D_DISPCAMERAS) != 0;
   const bool is_stereo3d_plane = (v3d->stereo3d_flag & V3D_S3D_DISPPLANE) != 0;
   const bool is_stereo3d_volume = (v3d->stereo3d_flag & V3D_S3D_DISPVOLUME) != 0;
+
+  if (!is_stereo3d_cameras) {
+    /* Draw single camera. */
+    DRW_buffer_add_entry_struct(cb->camera_frame, instdata);
+  }
 
   for (int eye = 0; eye < 2; eye++) {
     ob = BKE_camera_multiview_render(scene, ob, viewnames[eye]);
@@ -1322,87 +1344,6 @@ static void OVERLAY_relationship_lines(OVERLAY_ExtraCallBuffers *cb,
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name GPencil.
- * \{ */
-
-static void OVERLAY_gpencil_color_names(Object *ob)
-{
-  if (ob->mode != OB_MODE_EDIT_GPENCIL) {
-    return;
-  }
-
-  bGPdata *gpd = (bGPdata *)ob->data;
-  if (gpd == NULL) {
-    return;
-  }
-
-  const DRWContextState *draw_ctx = DRW_context_state_get();
-  ViewLayer *view_layer = draw_ctx->view_layer;
-  int theme_id = DRW_object_wire_theme_get(ob, view_layer, NULL);
-  uchar color[4];
-  UI_GetThemeColor4ubv(theme_id, color);
-  struct DRWTextStore *dt = DRW_text_cache_ensure();
-
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-    if (gpl->flag & GP_LAYER_HIDE) {
-      continue;
-    }
-    bGPDframe *gpf = gpl->actframe;
-    if (gpf == NULL) {
-      continue;
-    }
-    for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
-      Material *ma = give_current_material(ob, gps->mat_nr + 1);
-      if (ma == NULL) {
-        continue;
-      }
-
-      MaterialGPencilStyle *gp_style = ma->gp_style;
-      /* skip stroke if it doesn't have any valid data */
-      if ((gps->points == NULL) || (gps->totpoints < 1) || (gp_style == NULL)) {
-        continue;
-      }
-      /* check if the color is visible */
-      if (gp_style->flag & GP_STYLE_COLOR_HIDE) {
-        continue;
-      }
-
-      /* only if selected */
-      if (gps->flag & GP_STROKE_SELECT) {
-        float fpt[3];
-        for (int i = 0; i < gps->totpoints; i++) {
-          bGPDspoint *pt = &gps->points[i];
-          if (pt->flag & GP_SPOINT_SELECT) {
-            mul_v3_m4v3(fpt, ob->obmat, &pt->x);
-            DRW_text_cache_add(dt,
-                               fpt,
-                               ma->id.name + 2,
-                               strlen(ma->id.name + 2),
-                               10,
-                               0,
-                               DRW_TEXT_CACHE_GLOBALSPACE | DRW_TEXT_CACHE_STRING_PTR,
-                               color);
-            break;
-          }
-        }
-      }
-    }
-  }
-}
-
-void OVERLAY_gpencil_cache_populate(OVERLAY_Data *UNUSED(vedata), Object *ob)
-{
-  /* don't show object extras in set's */
-  if ((ob->base_flag & (BASE_FROM_SET | BASE_FROM_DUPLI)) == 0) {
-    if ((ob->dtx & OB_DRAWNAME) && DRW_state_show_text()) {
-      OVERLAY_gpencil_color_names(ob);
-    }
-  }
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
 /** \name Volumetric / Smoke sim
  * \{ */
 
@@ -1500,7 +1441,7 @@ static void OVERLAY_object_center(OVERLAY_ExtraCallBuffers *cb,
                                   OVERLAY_PrivateData *pd,
                                   ViewLayer *view_layer)
 {
-  const bool is_library = ob->id.us > 1 || ID_IS_LINKED(ob);
+  const bool is_library = ID_REAL_USERS(&ob->id) > 1 || ID_IS_LINKED(ob);
 
   if (ob == OBACT(view_layer)) {
     DRW_buffer_add_entry(cb->center_active, ob->obmat[3]);
@@ -1519,6 +1460,7 @@ static void OVERLAY_object_name(Object *ob, int theme_id)
 {
   struct DRWTextStore *dt = DRW_text_cache_ensure();
   uchar color[4];
+  /* Color Management: Exception here as texts are drawn in sRGB space directly.  */
   UI_GetThemeColor4ubv(theme_id, color);
 
   DRW_text_cache_add(dt,
@@ -1570,11 +1512,11 @@ void OVERLAY_extra_cache_populate(OVERLAY_Data *vedata, Object *ob)
   }
 
   if (draw_bounds) {
-    OVERLAY_bounds(cb, ob, theme_id, ob->boundtype, false);
+    OVERLAY_bounds(cb, ob, color, ob->boundtype, false);
   }
   /* Helpers for when we're transforming origins. */
   if (draw_xform) {
-    float color_xform[4] = {0.75f, 0.75f, 0.75f, 0.5f};
+    float color_xform[4] = {0.15f, 0.15f, 0.15f, 0.7f};
     DRW_buffer_add_entry(cb->origin_xform, color_xform, ob->obmat);
   }
   /* don't show object extras in set's */
@@ -1589,10 +1531,10 @@ void OVERLAY_extra_cache_populate(OVERLAY_Data *vedata, Object *ob)
       OVERLAY_object_name(ob, theme_id);
     }
     if (draw_texspace) {
-      OVERLAY_texture_space(cb, ob, theme_id);
+      OVERLAY_texture_space(cb, ob, color);
     }
     if (ob->rigidbody_object != NULL) {
-      OVERLAY_collision(cb, ob, theme_id);
+      OVERLAY_collision(cb, ob, color);
     }
     if (ob->dtx & OB_AXIS) {
       DRW_buffer_add_entry(cb->empty_axes, color, ob->obmat);

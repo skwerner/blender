@@ -24,10 +24,14 @@
 #ifndef __BKE_SUBDIV_CCG_H__
 #define __BKE_SUBDIV_CCG_H__
 
-#include "BKE_customdata.h"
 #include "BKE_DerivedMesh.h"
+#include "BKE_customdata.h"
 #include "BLI_bitmap.h"
 #include "BLI_sys_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct CCGElem;
 struct CCGFace;
@@ -297,5 +301,9 @@ void BKE_subdiv_ccg_neighbor_coords_get(const SubdivCCG *subdiv_ccg,
                                         const SubdivCCGCoord *coord,
                                         const bool include_duplicates,
                                         SubdivCCGNeighbors *r_neighbors);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_SUBDIV_CCG_H__ */

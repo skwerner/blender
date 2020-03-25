@@ -33,8 +33,8 @@
 #include "DNA_collection_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meta_types.h"
@@ -44,36 +44,37 @@
 #include "DNA_vfont_types.h"
 #include "DNA_world_types.h"
 
-#include "BLI_math.h"
-#include "BLI_listbase.h"
-#include "BLI_linklist.h"
-#include "BLI_string.h"
 #include "BLI_kdtree.h"
+#include "BLI_linklist.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
+#include "BKE_DerivedMesh.h"
 #include "BKE_action.h"
 #include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_camera.h"
 #include "BKE_collection.h"
-#include "BKE_context.h"
 #include "BKE_constraint.h"
+#include "BKE_context.h"
 #include "BKE_curve.h"
-#include "BKE_DerivedMesh.h"
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
-#include "BKE_gpencil.h"
 #include "BKE_fcurve.h"
+#include "BKE_gpencil.h"
+#include "BKE_hair.h"
 #include "BKE_idprop.h"
-#include "BKE_light.h"
 #include "BKE_lattice.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
-#include "BKE_library_override.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_override.h"
+#include "BKE_lib_query.h"
+#include "BKE_lib_remap.h"
+#include "BKE_light.h"
 #include "BKE_lightprobe.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
@@ -82,10 +83,12 @@
 #include "BKE_modifier.h"
 #include "BKE_node.h"
 #include "BKE_object.h"
+#include "BKE_pointcloud.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_speaker.h"
 #include "BKE_texture.h"
+#include "BKE_volume.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -105,8 +108,8 @@
 #include "ED_curve.h"
 #include "ED_gpencil.h"
 #include "ED_keyframing.h"
-#include "ED_object.h"
 #include "ED_mesh.h"
+#include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
 
@@ -386,6 +389,7 @@ static int make_proxy_exec(bContext *C, wmOperator *op)
   }
   else {
     ob = gob;
+    gob = NULL;
   }
 
   if (ob) {
@@ -482,12 +486,6 @@ void OBJECT_OT_proxy_make(wmOperatorType *ot)
 }
 
 /********************** Clear Parent Operator ******************* */
-
-typedef enum eObClearParentTypes {
-  CLEAR_PARENT_ALL = 0,
-  CLEAR_PARENT_KEEP_TRANSFORM,
-  CLEAR_PARENT_INVERSE,
-} eObClearParentTypes;
 
 EnumPropertyItem prop_clear_parent_types[] = {
     {CLEAR_PARENT_ALL,
@@ -615,8 +613,6 @@ void OBJECT_OT_parent_clear(wmOperatorType *ot)
   ot->invoke = WM_menu_invoke;
   ot->exec = parent_clear_exec;
 
-  ot->poll = ED_operator_object_active_editable;
-
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
@@ -708,8 +704,8 @@ bool ED_object_parent_set(ReportList *reports,
       /* if follow, add F-Curve for ctime (i.e. "eval_time") so that path-follow works */
       if (partype == PAR_FOLLOW) {
         /* get or create F-Curve */
-        bAction *act = verify_adt_action(bmain, &cu->id, 1);
-        FCurve *fcu = verify_fcurve(bmain, act, NULL, NULL, "eval_time", 0, 1);
+        bAction *act = ED_id_action_ensure(bmain, &cu->id);
+        FCurve *fcu = ED_action_fcurve_ensure(bmain, act, NULL, NULL, "eval_time", 0);
 
         /* setup dummy 'generator' modifier here to get 1-1 correspondence still working */
         if (!fcu->bezt && !fcu->fpt && !fcu->modifiers.first) {
@@ -1055,7 +1051,9 @@ static int parent_set_invoke_menu(bContext *C, wmOperatorType *ot)
   if (parent->type == OB_ARMATURE) {
     uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE);
     uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_NAME);
-    uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_ENVELOPE);
+    if (!has_children_of_type.gpencil) {
+      uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_ENVELOPE);
+    }
     if (has_children_of_type.mesh || has_children_of_type.gpencil) {
       uiItemEnumO_ptr(layout, ot, NULL, 0, "type", PAR_ARMATURE_AUTO);
     }
@@ -1533,16 +1531,16 @@ static int make_links_data_exec(bContext *C, wmOperator *op)
             ob_dst->data = obdata_id;
 
             /* if amount of material indices changed: */
-            test_object_materials(bmain, ob_dst, ob_dst->data);
+            BKE_object_materials_test(bmain, ob_dst, ob_dst->data);
 
             DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
             break;
           case MAKE_LINKS_MATERIALS:
             /* new approach, using functions from kernel */
             for (a = 0; a < ob_src->totcol; a++) {
-              Material *ma = give_current_material(ob_src, a + 1);
+              Material *ma = BKE_object_material_get(ob_src, a + 1);
               /* also works with `ma == NULL` */
-              assign_material(bmain, ob_dst, ma, a + 1, BKE_MAT_ASSIGN_USERPREF);
+              BKE_object_material_assign(bmain, ob_dst, ma, a + 1, BKE_MAT_ASSIGN_USERPREF);
             }
             DEG_id_tag_update(&ob_dst->id, ID_RECALC_GEOMETRY);
             break;
@@ -1585,7 +1583,7 @@ static int make_links_data_exec(bContext *C, wmOperator *op)
             DEG_id_tag_update(&ob_dst->id, ID_RECALC_COPY_ON_WRITE);
             break;
           case MAKE_LINKS_MODIFIERS:
-            BKE_object_link_modifiers(scene, ob_dst, ob_src);
+            BKE_object_link_modifiers(ob_dst, ob_src);
             DEG_id_tag_update(&ob_dst->id,
                               ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION);
             break;
@@ -1721,14 +1719,6 @@ static void libblock_relink_collection(Collection *collection, const bool do_col
   }
 }
 
-static void libblock_relink_collections_from_scene(Scene *scene)
-{
-  /* Will also handle the master collection. */
-  BKE_libblock_relink_to_newid(&scene->id);
-
-  libblock_relink_collection(scene->master_collection, false);
-}
-
 static Collection *single_object_users_collection(Main *bmain,
                                                   Scene *scene,
                                                   Collection *collection,
@@ -1763,8 +1753,13 @@ static Collection *single_object_users_collection(Main *bmain,
     child_next = child->next;
     Collection *collection_child_new = single_object_users_collection(
         bmain, scene, child->collection, flag, copy_collections, false);
+
     if (is_master_collection && copy_collections && child->collection != collection_child_new) {
-      BKE_collection_child_add(bmain, collection, collection_child_new);
+      /* We do not want a collection sync here, our collections are in a complete uninitialized
+       * state currently. With current code, that would lead to a memory leak - because of reasons.
+       * It would be a useless loss of computing anyway, since caller has to fully refresh
+       * view-layers/collections caching at the end. */
+      BKE_collection_child_add_no_sync(collection, collection_child_new);
       BLI_remlink(&collection->children, child);
       MEM_freeN(child);
       if (child == orig_child_last) {
@@ -1784,57 +1779,20 @@ static void single_object_users(
   Collection *master_collection = scene->master_collection;
   single_object_users_collection(bmain, scene, master_collection, flag, copy_collections, true);
 
-  /* duplicate collections that consist entirely of duplicated objects */
-  /* XXX I guess that was designed for calls from 'make single user' operator.
-   *     But since copy_collection is always false then, was not doing anything.
-   *     And that kind of behavior should be added at operator level,
-   *     not in a utility function also used by rather different code. */
-#if 0
-  if (copy_collections) {
-    Collection *collection, *collectionn;
-    for (collection = bmain->collections.first; collection; collection = collection->id.next) {
-      bool all_duplicated = true;
-      bool any_duplicated = false;
-
-      for (CollectionObject *cob = collection->gobject.first; cob; cob = cob->next) {
-        any_duplicated = true;
-        if (cob->ob->id.newid == NULL) {
-          all_duplicated = false;
-          break;
-        }
-      }
-
-      if (any_duplicated && all_duplicated) {
-        // TODO: test if this works, with child collections ..
-        collectionn = ID_NEW_SET(collection, BKE_collection_copy(bmain, NULL, collection));
-
-        for (CollectionObject *cob = collectionn->gobject.first; cob; cob = cob->next) {
-          cob->ob = (Object *)cob->ob->id.newid;
-        }
-      }
-    }
-  }
-#endif
+  /* Will also handle the master collection. */
+  BKE_libblock_relink_to_newid(&scene->id);
 
   /* Collection and object pointers in collections */
-  libblock_relink_collections_from_scene(scene);
+  libblock_relink_collection(scene->master_collection, false);
 
-  /* collection pointers in scene */
-  BKE_scene_groups_relink(scene);
-
-  /* active camera */
-  ID_NEW_REMAP(scene->camera);
+  /* We also have to handle runtime things in UI. */
   if (v3d) {
     ID_NEW_REMAP(v3d->camera);
-  }
-  /* Camera pointers of markers. */
-  for (TimeMarker *marker = scene->markers.first; marker; marker = marker->next) {
-    ID_NEW_REMAP(marker->camera);
   }
 
   /* Making single user may affect other scenes if they share
    * with current one some collections in their ViewLayer. */
-  BKE_main_collection_sync(bmain);
+  BKE_main_collection_sync_remap(bmain);
 }
 
 /* not an especially efficient function, only added so the single user
@@ -1939,6 +1897,15 @@ static void single_obdata_users(
           case OB_GPENCIL:
             ob->data = ID_NEW_SET(ob->data, BKE_gpencil_copy(bmain, ob->data));
             break;
+          case OB_HAIR:
+            ob->data = ID_NEW_SET(ob->data, BKE_hair_copy(bmain, ob->data));
+            break;
+          case OB_POINTCLOUD:
+            ob->data = ID_NEW_SET(ob->data, BKE_pointcloud_copy(bmain, ob->data));
+            break;
+          case OB_VOLUME:
+            ob->data = ID_NEW_SET(ob->data, BKE_volume_copy(bmain, ob->data));
+            break;
           default:
             printf("ERROR %s: can't copy %s\n", __func__, id->name);
             BLI_assert(!"This should never happen.");
@@ -1989,7 +1956,7 @@ static void single_mat_users(
   FOREACH_OBJECT_FLAG_BEGIN (scene, view_layer, v3d, flag, ob) {
     if (!ID_IS_LINKED(ob)) {
       for (a = 1; a <= ob->totcol; a++) {
-        ma = give_current_material(ob, a);
+        ma = BKE_object_material_get(ob, a);
         if (ma) {
           /* do not test for LIB_TAG_NEW or use newid:
            * this functions guaranteed delivers single_users! */
@@ -1999,7 +1966,7 @@ static void single_mat_users(
             BKE_animdata_copy_id_action(bmain, &man->id, false);
 
             man->id.us = 0;
-            assign_material(bmain, ob, man, a, BKE_MAT_ASSIGN_USERPREF);
+            BKE_object_material_assign(bmain, ob, man, a, BKE_MAT_ASSIGN_USERPREF);
           }
         }
       }
@@ -2060,13 +2027,19 @@ void ED_object_single_users(Main *bmain,
     single_obdata_users(bmain, scene, NULL, NULL, 0);
     single_object_action_users(bmain, scene, NULL, NULL, 0);
     single_mat_users_expand(bmain);
+
     /* Duplicating obdata and other IDs may require another update of the collections and objects
      * pointers, especially regarding drivers and custom props, see T66641.
      * Note that this whole scene duplication code and 'make single user' functions have te be
      * rewritten at some point to make use of proper modern ID management code,
      * but that is no small task.
      * For now we are doomed to that kind of band-aid to try to cover most of remapping cases. */
-    libblock_relink_collections_from_scene(scene);
+
+    /* Will also handle the master collection. */
+    BKE_libblock_relink_to_newid(&scene->id);
+
+    /* Collection and object pointers in collections */
+    libblock_relink_collection(scene->master_collection, false);
   }
 
   /* Relink nodetrees' pointers that have been duplicated. */
@@ -2120,11 +2093,9 @@ enum {
   MAKE_LOCAL_ALL = 4,
 };
 
-static int tag_localizable_looper(void *UNUSED(user_data),
-                                  ID *UNUSED(self_id),
-                                  ID **id_pointer,
-                                  const int UNUSED(cb_flag))
+static int tag_localizable_looper(LibraryIDLinkCallbackData *cb_data)
 {
+  ID **id_pointer = cb_data->id_pointer;
   if (*id_pointer) {
     (*id_pointer)->tag &= ~LIB_TAG_DOIT;
   }
@@ -2295,7 +2266,7 @@ static int make_local_exec(bContext *C, wmOperator *op)
           }
         }
 
-        matarar = (Material ***)give_matarar(ob);
+        matarar = BKE_object_material_array_p(ob);
         if (matarar) {
           for (a = 0; a < ob->totcol; a++) {
             ma = (*matarar)[a];
@@ -2486,7 +2457,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
     }
     FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
 
-    success = BKE_override_library_create_from_tag(bmain);
+    success = BKE_lib_override_library_create_from_tag(bmain);
 
     /* Instantiate our newly overridden objects in scene, if not yet done. */
     Scene *scene = CTX_data_scene(C);
@@ -2505,7 +2476,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
         /* Disabled for now, according to some artist this is probably not really useful anyway.
          * And it breaks things like objects parented to bones
          * (most likely due to missing proper setting of inverse parent matrix?)... */
-        /* Note: we might even actually want to get rid of that instanciating empty... */
+        /* Note: we might even actually want to get rid of that instantiating empty... */
         if (0 && new_ob->parent == NULL) {
           new_ob->parent = obcollection;
         }
@@ -2518,7 +2489,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
           new_ob->id.override_library->flag &= ~OVERRIDE_LIBRARY_AUTO;
         }
         /* We still want to store all objects' current override status (i.e. change of parent). */
-        BKE_override_library_operations_create(bmain, &new_ob->id, true);
+        BKE_lib_override_library_operations_create(bmain, &new_ob->id, true);
       }
     }
     FOREACH_COLLECTION_OBJECT_RECURSIVE_END;
@@ -2553,7 +2524,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
       make_override_library_tag_object(obact, ob);
     }
 
-    success = BKE_override_library_create_from_tag(bmain);
+    success = BKE_lib_override_library_create_from_tag(bmain);
 
     /* Also, we'd likely want to lock by default things like
      * transformations of implicitly overridden objects? */
@@ -2566,7 +2537,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
   else {
     /* For now, remapp all local usages of linked ID to local override one here. */
     BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, true);
-    success = (BKE_override_library_create_from_id(bmain, &obact->id, true) != NULL);
+    success = (BKE_lib_override_library_create_from_id(bmain, &obact->id, true) != NULL);
     BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
   }
 
@@ -2580,7 +2551,7 @@ static bool make_override_library_poll(bContext *C)
   Object *obact = CTX_data_active_object(C);
 
   /* Object must be directly linked to be overridable. */
-  return (BKE_override_library_is_enabled() && ED_operator_objectmode(C) && obact != NULL &&
+  return (BKE_lib_override_library_is_enabled() && ED_operator_objectmode(C) && obact != NULL &&
           ((ID_IS_LINKED(obact) && obact->id.tag & LIB_TAG_EXTERN) ||
            (!ID_IS_LINKED(obact) && obact->instance_collection != NULL &&
             ID_IS_LINKED(obact->instance_collection))));
@@ -2644,6 +2615,9 @@ static int make_single_user_exec(bContext *C, wmOperator *op)
 
   if (RNA_boolean_get(op->ptr, "obdata")) {
     single_obdata_users(bmain, scene, view_layer, v3d, flag);
+
+    /* Needed since some IDs were remapped? (incl. me->texcomesh, see T73797). */
+    update_deps = true;
   }
 
   if (RNA_boolean_get(op->ptr, "material")) {
@@ -2678,8 +2652,11 @@ void OBJECT_OT_make_single_user(wmOperatorType *ot)
   ot->description = "Make linked data local to each object";
   ot->idname = "OBJECT_OT_make_single_user";
 
+  /* Note that the invoke callback is only used from operator search,
+   * otherwise this does nothing by default. */
+
   /* api callbacks */
-  ot->invoke = WM_menu_invoke;
+  ot->invoke = WM_operator_props_popup_confirm;
   ot->exec = make_single_user_exec;
   ot->poll = ED_operator_objectmode;
 
@@ -2709,7 +2686,7 @@ static int drop_named_material_invoke(bContext *C, wmOperator *op, const wmEvent
     return OPERATOR_CANCELLED;
   }
 
-  assign_material(CTX_data_main(C), base->object, ma, 1, BKE_MAT_ASSIGN_USERPREF);
+  BKE_object_material_assign(CTX_data_main(C), base->object, ma, 1, BKE_MAT_ASSIGN_USERPREF);
 
   DEG_id_tag_update(&base->object->id, ID_RECALC_TRANSFORM);
 

@@ -18,8 +18,8 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <limits.h>
+#include <stdlib.h>
 
 #include "DNA_cloth_types.h"
 #include "DNA_object_types.h"
@@ -986,7 +986,7 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Pressure",
-      "The uniform pressure that is constanty applied to the mesh. Can be negative");
+      "The uniform pressure that is constantly applied to the mesh. Can be negative");
   RNA_def_property_update(prop, 0, "rna_cloth_update");
 
   prop = RNA_def_property(srna, "target_volume", PROP_FLOAT, PROP_NONE);

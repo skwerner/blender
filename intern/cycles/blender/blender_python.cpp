@@ -19,10 +19,12 @@
 #include "blender/CCL_api.h"
 
 #include "blender/blender_device.h"
-#include "blender/blender_sync.h"
 #include "blender/blender_session.h"
+#include "blender/blender_sync.h"
+#include "blender/blender_util.h"
 
 #include "render/denoising.h"
+#include "render/image_oiio.h"
 #include "render/merge.h"
 
 #include "util/util_debug.h"
@@ -37,8 +39,8 @@
 #ifdef WITH_OSL
 #  include "render/osl.h"
 
-#  include <OSL/oslquery.h>
 #  include <OSL/oslconfig.h>
+#  include <OSL/oslquery.h>
 #endif
 
 #ifdef WITH_OPENCL
@@ -647,7 +649,7 @@ static PyObject *oiio_make_tx(PyObject * /*self*/, PyObject *args)
     return NULL;
 
   /* return */
-  if (!ImageManager::make_tx(inputfile, outputfile, ustring(colorspace), (ExtensionType)extension))
+  if (!OIIOImageLoader::make_tx(inputfile, outputfile, ustring(colorspace), (ExtensionType)extension))
     Py_RETURN_FALSE;
 
   Py_RETURN_TRUE;

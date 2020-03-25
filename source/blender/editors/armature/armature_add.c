@@ -30,15 +30,15 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_math.h"
 #include "BLI_ghash.h"
+#include "BLI_math.h"
 #include "BLI_string_utils.h"
 
 #include "BKE_action.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
-#include "BKE_idprop.h"
 #include "BKE_deform.h"
+#include "BKE_idprop.h"
 #include "BKE_layer.h"
 
 #include "RNA_access.h"
@@ -228,13 +228,13 @@ static int armature_click_extrude_invoke(bContext *C, wmOperator *op, const wmEv
 
   /* temporarily change 3d cursor position */
   Scene *scene;
-  ARegion *ar;
+  ARegion *region;
   View3D *v3d;
   float tvec[3], oldcurs[3], mval_f[2];
   int retv;
 
   scene = CTX_data_scene(C);
-  ar = CTX_wm_region(C);
+  region = CTX_wm_region(C);
   v3d = CTX_wm_view3d(C);
 
   View3DCursor *cursor = &scene->cursor;
@@ -242,7 +242,7 @@ static int armature_click_extrude_invoke(bContext *C, wmOperator *op, const wmEv
   copy_v3_v3(oldcurs, cursor->location);
 
   copy_v2fl_v2i(mval_f, event->mval);
-  ED_view3d_win_to_3d(v3d, ar, cursor->location, mval_f, tvec);
+  ED_view3d_win_to_3d(v3d, region, cursor->location, mval_f, tvec);
   copy_v3_v3(cursor->location, tvec);
 
   /* extrude to the where new cursor is and store the operation result */

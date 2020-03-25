@@ -22,26 +22,26 @@
  */
 
 #include <math.h>
-#include <string.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_camera_types.h"
 #include "BLI_bitmap.h"
+#include "BLI_blenlib.h"
 #include "BLI_math.h"
 #include "BLI_math_color_blend.h"
-#include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
-#include "BLI_threads.h"
 #include "BLI_task.h"
+#include "BLI_threads.h"
+#include "BLI_utildefines.h"
+#include "DNA_camera_types.h"
 
-#include "DNA_anim_types.h"
 #include "DNA_action_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_animsys.h"
 #include "BKE_camera.h"
@@ -50,7 +50,7 @@
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
@@ -65,14 +65,15 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_gpencil.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
-#include "ED_gpencil.h"
+#include "ED_view3d_offscreen.h"
 
-#include "RE_pipeline.h"
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 #include "IMB_colormanagement.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
+#include "RE_pipeline.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -104,7 +105,7 @@ typedef struct OGLRender {
 
   View3D *v3d;
   RegionView3D *rv3d;
-  ARegion *ar;
+  ARegion *region;
 
   ScrArea *prevsa;
   ARegion *prevar;
@@ -286,7 +287,7 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
 {
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = oglrender->scene;
-  ARegion *ar = oglrender->ar;
+  ARegion *region = oglrender->region;
   View3D *v3d = oglrender->v3d;
   RegionView3D *rv3d = oglrender->rv3d;
   Object *camera = NULL;
@@ -368,17 +369,18 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
     char err_out[256] = "unknown";
     ImBuf *ibuf_view;
     const int alpha_mode = (draw_sky) ? R_ADDSKY : R_ALPHAPREMUL;
-    int output_flags = oglrender->color_depth <= R_IMF_CHAN_DEPTH_8 ? IB_rect : IB_rectfloat;
+    eImBufFlags imbuf_flags = oglrender->color_depth <= R_IMF_CHAN_DEPTH_8 ? IB_rect :
+                                                                             IB_rectfloat;
 
     if (view_context) {
       ibuf_view = ED_view3d_draw_offscreen_imbuf(depsgraph,
                                                  scene,
                                                  v3d->shading.type,
                                                  v3d,
-                                                 ar,
+                                                 region,
                                                  sizex,
                                                  sizey,
-                                                 output_flags,
+                                                 imbuf_flags,
                                                  alpha_mode,
                                                  viewname,
                                                  oglrender->ofs,
@@ -397,7 +399,7 @@ static void screen_opengl_render_doit(const bContext *C, OGLRender *oglrender, R
                                                         scene->camera,
                                                         oglrender->sizex,
                                                         oglrender->sizey,
-                                                        output_flags,
+                                                        imbuf_flags,
                                                         V3D_OFSDRAW_SHOW_ANNOTATION,
                                                         alpha_mode,
                                                         viewname,
@@ -584,20 +586,23 @@ static void gather_frames_to_render_for_grease_pencil(const OGLRender *oglrender
   }
 }
 
-static int gather_frames_to_render_for_id(void *user_data_v, ID *id_self, ID **id_p, int cb_flag)
+static int gather_frames_to_render_for_id(LibraryIDLinkCallbackData *cb_data)
 {
-  if (id_p == NULL || *id_p == NULL) {
+  ID **id_p = cb_data->id_pointer;
+  if (*id_p == NULL) {
     return IDWALK_RET_NOP;
   }
   ID *id = *id_p;
 
+  ID *id_self = cb_data->id_self;
+  const int cb_flag = cb_data->cb_flag;
   if (cb_flag == IDWALK_CB_LOOPBACK || id == id_self) {
     /* IDs may end up referencing themselves one way or the other, and those
      * (the id_self ones) have always already been processed. */
     return IDWALK_RET_STOP_RECURSION;
   }
 
-  OGLRender *oglrender = user_data_v;
+  OGLRender *oglrender = cb_data->user_data;
 
   /* Whitelist of datablocks to follow pointers into. */
   const ID_Type id_type = GS(id->name);
@@ -623,6 +628,9 @@ static int gather_frames_to_render_for_id(void *user_data_v, ID *id_self, ID **i
     case ID_MC:  /* MovieClip */
     case ID_MSK: /* Mask */
     case ID_LP:  /* LightProbe */
+    case ID_HA:  /* Hair */
+    case ID_PT:  /* PointCloud */
+    case ID_VO:  /* Volume */
       break;
 
       /* Blacklist: */
@@ -801,9 +809,9 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
 
   if (is_view_context) {
     /* so quad view renders camera */
-    ED_view3d_context_user_region(C, &oglrender->v3d, &oglrender->ar);
+    ED_view3d_context_user_region(C, &oglrender->v3d, &oglrender->region);
 
-    oglrender->rv3d = oglrender->ar->regiondata;
+    oglrender->rv3d = oglrender->region->regiondata;
 
     /* MUST be cleared on exit */
     memset(&oglrender->scene->customdata_mask_modal,
@@ -822,7 +830,7 @@ static bool screen_opengl_render_init(bContext *C, wmOperator *op)
   oglrender->re = RE_NewSceneRender(scene);
 
   /* create image and image user */
-  oglrender->ima = BKE_image_verify_viewer(oglrender->bmain, IMA_TYPE_R_RESULT, "Render Result");
+  oglrender->ima = BKE_image_ensure_viewer(oglrender->bmain, IMA_TYPE_R_RESULT, "Render Result");
   BKE_image_signal(oglrender->bmain, oglrender->ima, NULL, IMA_SIGNAL_FREE);
   BKE_image_backup_render(oglrender->scene, oglrender->ima, true);
 
@@ -1214,7 +1222,7 @@ static int screen_opengl_render_modal(bContext *C, wmOperator *op, const wmEvent
   bool ret;
 
   switch (event->type) {
-    case ESCKEY:
+    case EVT_ESCKEY:
       /* cancel */
       oglrender->pool_ok = false; /* Flag pool for cancel. */
       screen_opengl_render_end(C, op->customdata);
@@ -1268,7 +1276,7 @@ static int screen_opengl_render_invoke(bContext *C, wmOperator *op, const wmEven
   oglrender = op->customdata;
   render_view_open(C, event->x, event->y, op->reports);
 
-  /* view may be changed above (R_OUTPUT_WINDOW) */
+  /* View may be changed above #USER_RENDER_DISPLAY_WINDOW. */
   oglrender->win = CTX_wm_window(C);
 
   WM_event_add_modal_handler(C, op);
@@ -1379,6 +1387,3 @@ void RENDER_OT_opengl(wmOperatorType *ot)
                          "Use the current 3D view for rendering, else use scene settings");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
-
-/* function for getting an opengl buffer from a View3D, used by sequencer */
-// extern void *sequencer_view3d_cb;

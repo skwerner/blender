@@ -23,25 +23,25 @@
 
 #include <math.h>
 
+#include "BLI_jitter_2d.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_rect.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
 #include "BLI_threads.h"
-#include "BLI_jitter_2d.h"
 
 #include "BKE_camera.h"
 #include "BKE_collection.h"
 #include "BKE_context.h"
 #include "BKE_customdata.h"
 #include "BKE_global.h"
-#include "BKE_layer.h"
 #include "BKE_key.h"
+#include "BKE_layer.h"
 #include "BKE_main.h"
-#include "BKE_scene.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
+#include "BKE_scene.h"
 #include "BKE_studiolight.h"
 #include "BKE_unit.h"
 
@@ -62,8 +62,8 @@
 #include "DRW_select_buffer.h"
 
 #include "ED_armature.h"
-#include "ED_keyframing.h"
 #include "ED_gpencil.h"
+#include "ED_keyframing.h"
 #include "ED_screen.h"
 #include "ED_screen_types.h"
 #include "ED_transform.h"
@@ -74,13 +74,13 @@
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h"
 #include "GPU_draw.h"
-#include "GPU_matrix.h"
+#include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_material.h"
-#include "GPU_viewport.h"
+#include "GPU_matrix.h"
 #include "GPU_state.h"
-#include "GPU_framebuffer.h"
+#include "GPU_viewport.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -855,7 +855,7 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *region, View3D *v3d, bo
   WM_draw_region_viewport_ensure(region, SPACE_VIEW3D);
   WM_draw_region_viewport_bind(region);
 
-  GPUViewport *viewport = WM_draw_region_get_viewport(region, 0);
+  GPUViewport *viewport = WM_draw_region_get_viewport(region);
   /* When Blender is starting, a click event can trigger a depth test while the viewport is not
    * yet available. */
   if (viewport != NULL) {
@@ -881,7 +881,7 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *region, View3D *v3d, bo
 /* ******************** other elements ***************** */
 
 /** could move this elsewhere, but tied into #ED_view3d_grid_scale */
-float ED_scene_grid_scale(const Scene *scene, const char **grid_unit)
+float ED_scene_grid_scale(const Scene *scene, const char **r_grid_unit)
 {
   /* apply units */
   if (scene->unit.system) {
@@ -892,8 +892,8 @@ float ED_scene_grid_scale(const Scene *scene, const char **grid_unit)
 
     if (usys) {
       int i = bUnit_GetBaseUnit(usys);
-      if (grid_unit) {
-        *grid_unit = bUnit_GetNameDisplay(usys, i);
+      if (r_grid_unit) {
+        *r_grid_unit = bUnit_GetNameDisplay(usys, i);
       }
       return (float)bUnit_GetScaler(usys, i) / scene->unit.scale_length;
     }
@@ -902,9 +902,9 @@ float ED_scene_grid_scale(const Scene *scene, const char **grid_unit)
   return 1.0f;
 }
 
-float ED_view3d_grid_scale(const Scene *scene, View3D *v3d, const char **grid_unit)
+float ED_view3d_grid_scale(const Scene *scene, View3D *v3d, const char **r_grid_unit)
 {
-  return v3d->grid * ED_scene_grid_scale(scene, grid_unit);
+  return v3d->grid * ED_scene_grid_scale(scene, r_grid_unit);
 }
 
 #define STEPS_LEN 8
@@ -958,7 +958,7 @@ void ED_view3d_grid_steps(const Scene *scene,
 float ED_view3d_grid_view_scale(Scene *scene,
                                 View3D *v3d,
                                 RegionView3D *rv3d,
-                                const char **grid_unit)
+                                const char **r_grid_unit)
 {
   float grid_scale;
   if (!rv3d->is_persp && RV3D_VIEW_IS_AXIS(rv3d->view)) {
@@ -977,18 +977,18 @@ float ED_view3d_grid_view_scale(Scene *scene,
       }
     }
 
-    if (grid_unit) {
+    if (r_grid_unit) {
       const void *usys;
       int len;
       bUnit_GetSystem(scene->unit.system, B_UNIT_LENGTH, &usys, &len);
 
       if (usys) {
-        *grid_unit = bUnit_GetNameDisplay(usys, len - i - 1);
+        *r_grid_unit = bUnit_GetNameDisplay(usys, len - i - 1);
       }
     }
   }
   else {
-    grid_scale = ED_view3d_grid_scale(scene, v3d, grid_unit);
+    grid_scale = ED_view3d_grid_scale(scene, v3d, r_grid_unit);
   }
 
   return grid_scale;
@@ -2216,7 +2216,7 @@ void ED_view3d_backbuf_depth_validate(ViewContext *vc)
     Object *obact_eval = DEG_get_evaluated_object(vc->depsgraph, vc->obact);
 
     if (obact_eval && ((obact_eval->base_flag & BASE_VISIBLE_DEPSGRAPH) != 0)) {
-      GPUViewport *viewport = WM_draw_region_get_viewport(region, 0);
+      GPUViewport *viewport = WM_draw_region_get_viewport(region);
       DRW_draw_depth_object(vc->region, vc->v3d, viewport, obact_eval);
     }
 
@@ -2279,7 +2279,7 @@ void view3d_update_depths_rect(ARegion *region, ViewDepths *d, rcti *rect)
   }
 
   if (d->damaged) {
-    GPUViewport *viewport = WM_draw_region_get_viewport(region, 0);
+    GPUViewport *viewport = WM_draw_region_get_viewport(region);
     view3d_opengl_read_Z_pixels(viewport, rect, d->depths);
     glGetDoublev(GL_DEPTH_RANGE, d->depth_range);
     d->damaged = false;
@@ -2308,7 +2308,7 @@ void ED_view3d_depth_update(ARegion *region)
     }
 
     if (d->damaged) {
-      GPUViewport *viewport = WM_draw_region_get_viewport(region, 0);
+      GPUViewport *viewport = WM_draw_region_get_viewport(region);
       rcti r = {
           .xmin = 0,
           .xmax = d->w,
@@ -2355,7 +2355,7 @@ void ED_view3d_draw_depth_gpencil(Depsgraph *depsgraph, Scene *scene, ARegion *r
 
   GPU_depth_test(true);
 
-  GPUViewport *viewport = WM_draw_region_get_viewport(region, 0);
+  GPUViewport *viewport = WM_draw_region_get_viewport(region);
   DRW_draw_depth_loop_gpencil(depsgraph, region, v3d, viewport);
 
   GPU_depth_test(false);

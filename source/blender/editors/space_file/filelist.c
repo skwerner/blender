@@ -23,8 +23,8 @@
 
 /* global includes */
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -32,8 +32,8 @@
 #ifndef WIN32
 #  include <unistd.h>
 #else
-#  include <io.h>
 #  include <direct.h>
+#  include <io.h>
 #endif
 #include "MEM_guardedalloc.h"
 
@@ -56,7 +56,7 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_icons.h"
-#include "BKE_idcode.h"
+#include "BKE_idtype.h"
 #include "BKE_main.h"
 #include "BLO_readfile.h"
 
@@ -75,8 +75,8 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "UI_resources.h"
 #include "UI_interface_icons.h"
+#include "UI_resources.h"
 
 #include "atomic_ops.h"
 
@@ -2436,9 +2436,9 @@ void filelist_entry_parent_select_set(FileList *filelist,
 }
 
 /* WARNING! dir must be FILE_MAX_LIBEXTRA long! */
-bool filelist_islibrary(struct FileList *filelist, char *dir, char **group)
+bool filelist_islibrary(struct FileList *filelist, char *dir, char **r_group)
 {
-  return BLO_library_path_explode(filelist->filelist.root, dir, group, NULL);
+  return BLO_library_path_explode(filelist->filelist.root, dir, r_group, NULL);
 }
 
 static int groupname_to_code(const char *group)
@@ -2454,14 +2454,14 @@ static int groupname_to_code(const char *group)
     lslash[0] = '\0';
   }
 
-  return buf[0] ? BKE_idcode_from_name(buf) : 0;
+  return buf[0] ? BKE_idtype_idcode_from_name(buf) : 0;
 }
 
 static uint64_t groupname_to_filter_id(const char *group)
 {
   int id_code = groupname_to_code(group);
 
-  return BKE_idcode_to_idfilter(id_code);
+  return BKE_idtype_idcode_to_idfilter(id_code);
 }
 
 /**

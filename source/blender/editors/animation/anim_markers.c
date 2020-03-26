@@ -25,8 +25,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
@@ -56,18 +56,18 @@
 
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
-#include "UI_view2d.h"
 #include "UI_resources.h"
+#include "UI_view2d.h"
 
 #include "ED_anim_api.h"
 #include "ED_markers.h"
-#include "ED_screen.h"
-#include "ED_select_utils.h"
-#include "ED_util.h"
 #include "ED_numinput.h"
 #include "ED_object.h"
+#include "ED_screen.h"
+#include "ED_select_utils.h"
 #include "ED_transform.h"
 #include "ED_types.h"
+#include "ED_util.h"
 
 #include "DEG_depsgraph.h"
 
@@ -197,7 +197,7 @@ int ED_markers_find_nearest_marker_time(ListBase *markers, float x)
   return (nearest) ? (nearest->frame) : round_fl_to_int(x);
 }
 
-void ED_markers_get_minmax(ListBase *markers, short sel, float *first, float *last)
+void ED_markers_get_minmax(ListBase *markers, short sel, float *r_first, float *r_last)
 {
   TimeMarker *marker;
   float min, max;
@@ -205,8 +205,8 @@ void ED_markers_get_minmax(ListBase *markers, short sel, float *first, float *la
   /* sanity check */
   // printf("markers = %p -  %p, %p\n", markers, markers->first, markers->last);
   if (ELEM(NULL, markers, markers->first, markers->last)) {
-    *first = 0.0f;
-    *last = 0.0f;
+    *r_first = 0.0f;
+    *r_last = 0.0f;
     return;
   }
 
@@ -224,8 +224,8 @@ void ED_markers_get_minmax(ListBase *markers, short sel, float *first, float *la
   }
 
   /* set the min/max values */
-  *first = min;
-  *last = max;
+  *r_first = min;
+  *r_last = max;
 }
 
 /**
@@ -235,6 +235,9 @@ void ED_markers_get_minmax(ListBase *markers, short sel, float *first, float *la
 static bool ED_operator_markers_region_active(bContext *C)
 {
   ScrArea *sa = CTX_wm_area(C);
+  if (sa == NULL) {
+    return false;
+  }
 
   switch (sa->spacetype) {
     case SPACE_ACTION: {
@@ -965,7 +968,7 @@ static int ed_marker_move_modal(bContext *C, wmOperator *op, const wmEvent *even
   else {
     bool handled = false;
     switch (event->type) {
-      case ESCKEY:
+      case EVT_ESCKEY:
         ed_marker_move_cancel(C, op);
         return OPERATOR_CANCELLED;
       case RIGHTMOUSE:
@@ -977,8 +980,8 @@ static int ed_marker_move_modal(bContext *C, wmOperator *op, const wmEvent *even
         /* else continue; <--- see if release event should be caught for tweak-end */
         ATTR_FALLTHROUGH;
 
-      case RETKEY:
-      case PADENTER:
+      case EVT_RETKEY:
+      case EVT_PADENTER:
       case LEFTMOUSE:
       case MIDDLEMOUSE:
         if (WM_event_is_modal_tweak_exit(event, mm->event_type)) {

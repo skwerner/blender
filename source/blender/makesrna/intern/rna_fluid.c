@@ -18,31 +18,31 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <limits.h>
+#include <stdlib.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_path_util.h"
 #include "BLI_sys_types.h"
+#include "BLI_utildefines.h"
 
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
 #include "rna_internal.h"
 
-#include "BKE_modifier.h"
 #include "BKE_fluid.h"
+#include "BKE_modifier.h"
 #include "BKE_pointcache.h"
 
+#include "DNA_fluid_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_fluid_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_scene_types.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #ifdef RNA_RUNTIME
 
@@ -1332,6 +1332,11 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_Fluid_flip_parts_update");
 
+  prop = RNA_def_property(srna, "delete_in_obstacle", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flags", FLUID_DOMAIN_DELETE_IN_OBSTACLE);
+  RNA_def_property_ui_text(prop, "Clear In Obstacle", "Delete fluid inside obstacles");
+  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_reset");
+
   /* smoke domain options */
 
   prop = RNA_def_property(srna, "alpha", PROP_FLOAT, PROP_NONE);
@@ -1361,7 +1366,7 @@ static void rna_def_fluid_domain_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Dissolve Speed",
-      "Determine how quickly the smoke dissolves (higher value makes smoke disappear faster)");
+      "Determine how quickly the smoke dissolves (lower value makes smoke disappear faster)");
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_resetCache");
 
   prop = RNA_def_property(srna, "vorticity", PROP_FLOAT, PROP_NONE);
@@ -2541,17 +2546,12 @@ static void rna_def_fluid_effector_settings(BlenderRNA *brna)
   RNA_def_property_range(prop, 0.0, 10.0);
   RNA_def_property_ui_range(prop, 0.0, 10.0, 0.05, 5);
   RNA_def_property_ui_text(
-      prop, "Surface", "Distance around mesh surface to consider as effector");
+      prop, "Surface", "Additional distance around mesh surface to consider as effector");
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_reset");
 
   prop = RNA_def_property(srna, "use_plane_init", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", FLUID_EFFECTOR_USE_PLANE_INIT);
   RNA_def_property_ui_text(prop, "Is Planar", "Treat this object as a planar, unclosed mesh");
-  RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_reset");
-
-  prop = RNA_def_property(srna, "delete_in_obstacle", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flags", FLUID_DOMAIN_DELETE_IN_OBSTACLE);
-  RNA_def_property_ui_text(prop, "Clear In Obstacle", "Delete fluid inside obstacles");
   RNA_def_property_update(prop, NC_OBJECT | ND_MODIFIER, "rna_Fluid_reset");
 
   prop = RNA_def_property(srna, "velocity_factor", PROP_FLOAT, PROP_NONE);

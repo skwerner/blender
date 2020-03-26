@@ -24,21 +24,21 @@
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_collection_types.h"
-#include "DNA_gpencil_types.h"
+#include "DNA_constraint_types.h"
 #include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
 #include "DNA_light_types.h"
 #include "DNA_lightprobe_types.h"
+#include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
-#include "DNA_constraint_types.h"
-#include "DNA_object_force_types.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
+#include "BLI_mempool.h"
 #include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
-#include "BLI_mempool.h"
 
 #include "BLT_translation.h"
 
@@ -46,7 +46,7 @@
 #include "BKE_deform.h"
 #include "BKE_fcurve.h"
 #include "BKE_gpencil.h"
-#include "BKE_idcode.h"
+#include "BKE_idtype.h"
 #include "BKE_layer.h"
 #include "BKE_lib_id.h"
 #include "BKE_library.h"
@@ -2827,7 +2827,7 @@ int tree_element_id_type_to_index(TreeElement *te)
 {
   TreeStoreElem *tselem = TREESTORE(te);
 
-  const int id_index = tselem->type == 0 ? BKE_idcode_to_index(te->idcode) : INDEX_ID_GR;
+  const int id_index = tselem->type == 0 ? BKE_idtype_idcode_to_index(te->idcode) : INDEX_ID_GR;
   if (id_index < INDEX_ID_OB) {
     return id_index;
   }

@@ -26,16 +26,16 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_string.h"
 #include "BLI_listbase.h"
+#include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_ID.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h"
 #include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
-#include "DNA_object_types.h"
 
 #include "BKE_brush.h"
 #include "BKE_context.h"
@@ -49,9 +49,9 @@
 #include "RNA_enum_types.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
 #include "WM_toolsystem.h" /* own include */
+#include "WM_types.h"
 
 static void toolsystem_reinit_with_toolref(bContext *C,
                                            WorkSpace *UNUSED(workspace),
@@ -73,7 +73,7 @@ struct bToolRef *WM_toolsystem_ref_from_context(struct bContext *C)
   WorkSpace *workspace = CTX_wm_workspace(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   ScrArea *sa = CTX_wm_area(C);
-  if (((1 << sa->spacetype) & WM_TOOLSYSTEM_SPACE_MASK) == 0) {
+  if ((sa == NULL) || ((1 << sa->spacetype) & WM_TOOLSYSTEM_SPACE_MASK) == 0) {
     return NULL;
   }
   const bToolKey tkey = {

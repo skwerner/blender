@@ -21,8 +21,8 @@
  * \ingroup spseq
  */
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
@@ -40,11 +40,11 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 #include "BKE_sequencer.h"
 #include "BKE_sound.h"
-#include "BKE_lib_id.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -57,12 +57,12 @@
 #include "ED_anim_api.h"
 #include "ED_numinput.h"
 #include "ED_screen.h"
-#include "ED_transform.h"
 #include "ED_sequencer.h"
 #include "ED_space_api.h"
+#include "ED_transform.h"
 
-#include "UI_view2d.h"
 #include "UI_interface.h"
+#include "UI_view2d.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -407,7 +407,7 @@ Sequence *find_nearest_seq(Scene *scene, View2D *v2d, int *hand, const int mval[
 
           /* clamp handles to defined size in pixel space */
 
-          handsize = seq->handsize;
+          handsize = 2.0f * sequence_handle_size_get_clamped(seq, pixelx);
           displen = (float)abs(seq->startdisp - seq->enddisp);
 
           /* don't even try to grab the handles of small strips */
@@ -551,15 +551,15 @@ bool ED_space_sequencer_check_show_strip(SpaceSeq *sseq)
 int seq_effect_find_selected(Scene *scene,
                              Sequence *activeseq,
                              int type,
-                             Sequence **selseq1,
-                             Sequence **selseq2,
-                             Sequence **selseq3,
-                             const char **error_str)
+                             Sequence **r_selseq1,
+                             Sequence **r_selseq2,
+                             Sequence **r_selseq3,
+                             const char **r_error_str)
 {
   Editing *ed = BKE_sequencer_editing_get(scene, false);
   Sequence *seq1 = NULL, *seq2 = NULL, *seq3 = NULL, *seq;
 
-  *error_str = NULL;
+  *r_error_str = NULL;
 
   if (!activeseq) {
     seq2 = BKE_sequencer_active_get(scene);
@@ -568,7 +568,7 @@ int seq_effect_find_selected(Scene *scene,
   for (seq = ed->seqbasep->first; seq; seq = seq->next) {
     if (seq->flag & SELECT) {
       if (seq->type == SEQ_TYPE_SOUND_RAM && BKE_sequence_effect_get_num_inputs(type) != 0) {
-        *error_str = N_("Cannot apply effects to audio sequence strips");
+        *r_error_str = N_("Cannot apply effects to audio sequence strips");
         return 0;
       }
       if ((seq != activeseq) && (seq != seq2)) {
@@ -582,7 +582,7 @@ int seq_effect_find_selected(Scene *scene,
           seq3 = seq;
         }
         else {
-          *error_str = N_("Cannot apply effect to more than 3 sequence strips");
+          *r_error_str = N_("Cannot apply effect to more than 3 sequence strips");
           return 0;
         }
       }
@@ -599,11 +599,11 @@ int seq_effect_find_selected(Scene *scene,
 
   switch (BKE_sequence_effect_get_num_inputs(type)) {
     case 0:
-      *selseq1 = *selseq2 = *selseq3 = NULL;
+      *r_selseq1 = *r_selseq2 = *r_selseq3 = NULL;
       return 1; /* success */
     case 1:
       if (seq2 == NULL) {
-        *error_str = N_("At least one selected sequence strip is needed");
+        *r_error_str = N_("At least one selected sequence strip is needed");
         return 0;
       }
       if (seq1 == NULL) {
@@ -615,7 +615,7 @@ int seq_effect_find_selected(Scene *scene,
       ATTR_FALLTHROUGH;
     case 2:
       if (seq1 == NULL || seq2 == NULL) {
-        *error_str = N_("2 selected sequence strips are needed");
+        *r_error_str = N_("2 selected sequence strips are needed");
         return 0;
       }
       if (seq3 == NULL) {
@@ -625,13 +625,13 @@ int seq_effect_find_selected(Scene *scene,
   }
 
   if (seq1 == NULL && seq2 == NULL && seq3 == NULL) {
-    *error_str = N_("TODO: in what cases does this happen?");
+    *r_error_str = N_("TODO: in what cases does this happen?");
     return 0;
   }
 
-  *selseq1 = seq1;
-  *selseq2 = seq2;
-  *selseq3 = seq3;
+  *r_selseq1 = seq1;
+  *r_selseq2 = seq2;
+  *r_selseq3 = seq3;
 
   return 1;
 }
@@ -1707,8 +1707,8 @@ static int sequencer_slip_modal(bContext *C, wmOperator *op, const wmEvent *even
     }
 
     case LEFTMOUSE:
-    case RETKEY:
-    case SPACEKEY: {
+    case EVT_RETKEY:
+    case EVT_SPACEKEY: {
       MEM_freeN(data->seq_array);
       MEM_freeN(data->trim);
       MEM_freeN(data->ts);
@@ -1722,7 +1722,7 @@ static int sequencer_slip_modal(bContext *C, wmOperator *op, const wmEvent *even
       return OPERATOR_FINISHED;
     }
 
-    case ESCKEY:
+    case EVT_ESCKEY:
     case RIGHTMOUSE: {
       int i;
       Editing *ed = BKE_sequencer_editing_get(scene, false);
@@ -1754,8 +1754,8 @@ static int sequencer_slip_modal(bContext *C, wmOperator *op, const wmEvent *even
       return OPERATOR_CANCELLED;
     }
 
-    case RIGHTSHIFTKEY:
-    case LEFTSHIFTKEY:
+    case EVT_RIGHTSHIFTKEY:
+    case EVT_LEFTSHIFTKEY:
       if (!has_numInput) {
         if (event->val == KM_PRESS) {
           data->slow = true;

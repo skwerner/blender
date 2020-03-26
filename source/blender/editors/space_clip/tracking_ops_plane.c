@@ -26,12 +26,12 @@
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
-#include "BKE_tracking.h"
 #include "BKE_report.h"
+#include "BKE_tracking.h"
 
 #include "DEG_depsgraph.h"
 
@@ -122,7 +122,7 @@ static float mouse_to_plane_slide_zone_distance_squared(const float co[2],
 
 static MovieTrackingPlaneTrack *tracking_plane_marker_check_slide(bContext *C,
                                                                   const wmEvent *event,
-                                                                  int *corner_r)
+                                                                  int *r_corner)
 {
   const float distance_clip_squared = 12.0f * 12.0f;
   SpaceClip *sc = CTX_wm_space_clip(C);
@@ -162,8 +162,8 @@ static MovieTrackingPlaneTrack *tracking_plane_marker_check_slide(bContext *C,
   }
 
   if (min_distance_squared < distance_clip_squared / sc->zoom) {
-    if (corner_r != NULL) {
-      *corner_r = min_corner;
+    if (r_corner != NULL) {
+      *r_corner = min_corner;
     }
     return min_plane_track;
   }
@@ -270,11 +270,11 @@ static int slide_plane_marker_modal(bContext *C, wmOperator *op, const wmEvent *
   float next_edge[2], prev_edge[2], next_diag_edge[2], prev_diag_edge[2];
 
   switch (event->type) {
-    case LEFTCTRLKEY:
-    case RIGHTCTRLKEY:
-    case LEFTSHIFTKEY:
-    case RIGHTSHIFTKEY:
-      if (ELEM(event->type, LEFTSHIFTKEY, RIGHTSHIFTKEY)) {
+    case EVT_LEFTCTRLKEY:
+    case EVT_RIGHTCTRLKEY:
+    case EVT_LEFTSHIFTKEY:
+    case EVT_RIGHTSHIFTKEY:
+      if (ELEM(event->type, EVT_LEFTSHIFTKEY, EVT_RIGHTSHIFTKEY)) {
         data->accurate = event->val == KM_PRESS;
       }
       ATTR_FALLTHROUGH;
@@ -363,7 +363,7 @@ static int slide_plane_marker_modal(bContext *C, wmOperator *op, const wmEvent *
 
       break;
 
-    case ESCKEY:
+    case EVT_ESCKEY:
       cancel_mouse_slide_plane_marker(op->customdata);
 
       free_slide_plane_marker_data(op->customdata);

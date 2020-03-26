@@ -25,12 +25,12 @@
 
 #include "DRW_render.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
 
+#include "DNA_customdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_particle_types.h"
-#include "DNA_customdata_types.h"
 
 #include "BKE_anim.h"
 
@@ -166,6 +166,10 @@ static DRWShadingGroup *drw_shgroup_create_hair_procedural_ex(Object *object,
   else {
     shgrp = NULL;
     BLI_assert(0);
+  }
+
+  if (shgrp == NULL) {
+    return NULL;
   }
 
   /* TODO optimize this. Only bind the ones GPUMaterial needs. */

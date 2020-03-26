@@ -34,22 +34,22 @@
 #include "BLI_bitmap.h"
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
-#include "BLI_utildefines.h"
 #include "BLI_task.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_pbvh.h"
 #include "BKE_ccg.h"
 #include "BKE_cdderivedmesh.h"
+#include "BKE_editmesh.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
 #include "BKE_multires.h"
 #include "BKE_paint.h"
+#include "BKE_pbvh.h"
 #include "BKE_scene.h"
 #include "BKE_subdiv_ccg.h"
 #include "BKE_subsurf.h"
-#include "BKE_editmesh.h"
 
 #include "BKE_object.h"
 
@@ -90,9 +90,14 @@ void multires_customdata_delete(Mesh *me)
      * as non-external for further free-ing, so zero element count
      * looks safer than em->totface */
     CustomData_external_remove(&em->bm->ldata, &me->id, CD_MDISPS, 0);
-    BM_data_layer_free(em->bm, &em->bm->ldata, CD_MDISPS);
 
-    BM_data_layer_free(em->bm, &em->bm->ldata, CD_GRID_PAINT_MASK);
+    if (CustomData_has_layer(&em->bm->ldata, CD_MDISPS)) {
+      BM_data_layer_free(em->bm, &em->bm->ldata, CD_MDISPS);
+    }
+
+    if (CustomData_has_layer(&em->bm->ldata, CD_GRID_PAINT_MASK)) {
+      BM_data_layer_free(em->bm, &em->bm->ldata, CD_GRID_PAINT_MASK);
+    }
   }
   else {
     CustomData_external_remove(&me->ldata, &me->id, CD_MDISPS, me->totloop);

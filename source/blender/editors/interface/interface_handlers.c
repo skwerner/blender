@@ -21,13 +21,13 @@
  * \ingroup edinterface
  */
 
+#include <assert.h>
+#include <ctype.h>
 #include <float.h>
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include <assert.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -36,29 +36,29 @@
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
-#include "BLI_math.h"
-#include "BLI_listbase.h"
 #include "BLI_linklist.h"
-#include "BLI_string.h"
-#include "BLI_string_utf8.h"
-#include "BLI_string_cursor_utf8.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_rect.h"
+#include "BLI_string.h"
+#include "BLI_string_cursor_utf8.h"
+#include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
 
 #include "PIL_time.h"
 
-#include "BKE_colorband.h"
 #include "BKE_blender_undo.h"
 #include "BKE_brush.h"
+#include "BKE_colorband.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
+#include "BKE_curveprofile.h"
+#include "BKE_movieclip.h"
+#include "BKE_paint.h"
 #include "BKE_report.h"
 #include "BKE_screen.h"
 #include "BKE_tracking.h"
 #include "BKE_unit.h"
-#include "BKE_paint.h"
-#include "BKE_curveprofile.h"
-#include "BKE_movieclip.h"
 
 #include "IMB_colormanagement.h"
 
@@ -79,9 +79,9 @@
 #include "wm_event_system.h"
 
 #ifdef WITH_INPUT_IME
-#  include "wm_window.h"
-#  include "BLT_translation.h"
 #  include "BLT_lang.h"
+#  include "BLT_translation.h"
+#  include "wm_window.h"
 #endif
 
 /* place the mouse at the scaled down location when un-grabbing */
@@ -421,6 +421,9 @@ typedef struct uiAfterFunc {
   PointerRNA rnapoin;
   PropertyRNA *rnaprop;
 
+  void *search_arg;
+  uiButSearchArgFreeFunc search_arg_free_func;
+
   bContextStore *context;
 
   char undostr[BKE_UNDO_STR_MAX];
@@ -634,8 +637,8 @@ static enum eSnapType ui_event_to_snap(const wmEvent *event)
 
 static bool ui_event_is_snap(const wmEvent *event)
 {
-  return (ELEM(event->type, LEFTCTRLKEY, RIGHTCTRLKEY) ||
-          ELEM(event->type, LEFTSHIFTKEY, RIGHTSHIFTKEY));
+  return (ELEM(event->type, EVT_LEFTCTRLKEY, EVT_RIGHTCTRLKEY) ||
+          ELEM(event->type, EVT_LEFTSHIFTKEY, EVT_RIGHTSHIFTKEY));
 }
 
 static void ui_color_snap_hue(const enum eSnapType snap, float *r_hue)
@@ -754,6 +757,11 @@ static void ui_apply_but_func(bContext *C, uiBut *but)
 
     after->rnapoin = but->rnapoin;
     after->rnaprop = but->rnaprop;
+
+    after->search_arg_free_func = but->search_arg_free_func;
+    after->search_arg = but->search_arg;
+    but->search_arg_free_func = NULL;
+    but->search_arg = NULL;
 
     if (but->context) {
       after->context = CTX_store_copy(but->context);
@@ -919,6 +927,10 @@ static void ui_apply_but_funcs_after(bContext *C)
     }
     if (after.rename_orig) {
       MEM_freeN(after.rename_orig);
+    }
+
+    if (after.search_arg_free_func) {
+      after.search_arg_free_func(after.search_arg);
     }
 
     ui_afterfunc_update_preferences_dirty(&after);
@@ -3513,7 +3525,7 @@ static void ui_do_but_textedit(
 
       break;
     case RIGHTMOUSE:
-    case ESCKEY:
+    case EVT_ESCKEY:
       if (event->val == KM_PRESS) {
 #ifdef WITH_INPUT_IME
         /* skips button handling since it is not wanted */
@@ -3584,24 +3596,24 @@ static void ui_do_but_textedit(
 
   if (event->val == KM_PRESS && !is_ime_composing) {
     switch (event->type) {
-      case VKEY:
-      case XKEY:
-      case CKEY:
+      case EVT_VKEY:
+      case EVT_XKEY:
+      case EVT_CKEY:
         if (IS_EVENT_MOD(event, ctrl, oskey)) {
-          if (event->type == VKEY) {
+          if (event->type == EVT_VKEY) {
             changed = ui_textedit_copypaste(but, data, UI_TEXTEDIT_PASTE);
           }
-          else if (event->type == CKEY) {
+          else if (event->type == EVT_CKEY) {
             changed = ui_textedit_copypaste(but, data, UI_TEXTEDIT_COPY);
           }
-          else if (event->type == XKEY) {
+          else if (event->type == EVT_XKEY) {
             changed = ui_textedit_copypaste(but, data, UI_TEXTEDIT_CUT);
           }
 
           retval = WM_UI_HANDLER_BREAK;
         }
         break;
-      case RIGHTARROWKEY:
+      case EVT_RIGHTARROWKEY:
         ui_textedit_move(but,
                          data,
                          STRCUR_DIR_NEXT,
@@ -3609,7 +3621,7 @@ static void ui_do_but_textedit(
                          event->ctrl ? STRCUR_JUMP_DELIM : STRCUR_JUMP_NONE);
         retval = WM_UI_HANDLER_BREAK;
         break;
-      case LEFTARROWKEY:
+      case EVT_LEFTARROWKEY:
         ui_textedit_move(but,
                          data,
                          STRCUR_DIR_PREV,
@@ -3618,7 +3630,7 @@ static void ui_do_but_textedit(
         retval = WM_UI_HANDLER_BREAK;
         break;
       case WHEELDOWNMOUSE:
-      case DOWNARROWKEY:
+      case EVT_DOWNARROWKEY:
         if (data->searchbox) {
 #ifdef USE_KEYNAV_LIMIT
           ui_mouse_motion_keynav_init(&data->searchbox_keynav_state, event);
@@ -3630,12 +3642,12 @@ static void ui_do_but_textedit(
           break;
         }
         ATTR_FALLTHROUGH;
-      case ENDKEY:
+      case EVT_ENDKEY:
         ui_textedit_move(but, data, STRCUR_DIR_NEXT, event->shift != 0, STRCUR_JUMP_ALL);
         retval = WM_UI_HANDLER_BREAK;
         break;
       case WHEELUPMOUSE:
-      case UPARROWKEY:
+      case EVT_UPARROWKEY:
         if (data->searchbox) {
 #ifdef USE_KEYNAV_LIMIT
           ui_mouse_motion_keynav_init(&data->searchbox_keynav_state, event);
@@ -3647,28 +3659,28 @@ static void ui_do_but_textedit(
           break;
         }
         ATTR_FALLTHROUGH;
-      case HOMEKEY:
+      case EVT_HOMEKEY:
         ui_textedit_move(but, data, STRCUR_DIR_PREV, event->shift != 0, STRCUR_JUMP_ALL);
         retval = WM_UI_HANDLER_BREAK;
         break;
-      case PADENTER:
-      case RETKEY:
+      case EVT_PADENTER:
+      case EVT_RETKEY:
         button_activate_state(C, but, BUTTON_STATE_EXIT);
         retval = WM_UI_HANDLER_BREAK;
         break;
-      case DELKEY:
+      case EVT_DELKEY:
         changed = ui_textedit_delete(
             but, data, 1, event->ctrl ? STRCUR_JUMP_DELIM : STRCUR_JUMP_NONE);
         retval = WM_UI_HANDLER_BREAK;
         break;
 
-      case BACKSPACEKEY:
+      case EVT_BACKSPACEKEY:
         changed = ui_textedit_delete(
             but, data, 0, event->ctrl ? STRCUR_JUMP_DELIM : STRCUR_JUMP_NONE);
         retval = WM_UI_HANDLER_BREAK;
         break;
 
-      case AKEY:
+      case EVT_AKEY:
 
         /* Ctrl + A: Select all */
 #if defined(__APPLE__)
@@ -3685,7 +3697,7 @@ static void ui_do_but_textedit(
         }
         break;
 
-      case TABKEY:
+      case EVT_TABKEY:
         /* there is a key conflict here, we can't tab with autocomplete */
         if (but->autocomplete_func || data->searchbox) {
           int autocomplete = ui_textedit_autocomplete(C, but, data);
@@ -3719,7 +3731,7 @@ static void ui_do_but_textedit(
       /* exception that's useful for number buttons, some keyboard
        * numpads have a comma instead of a period */
       if (ELEM(but->type, UI_BTYPE_NUM, UI_BTYPE_NUM_SLIDER)) { /* could use data->min*/
-        if (event->type == PADPERIOD && ascii == ',') {
+        if (event->type == EVT_PADPERIOD && ascii == ',') {
           ascii = '.';
           utf8_buf = NULL; /* force ascii fallback */
         }
@@ -4194,7 +4206,7 @@ static int ui_do_but_BUT(bContext *C, uiBut *but, uiHandleButtonData *data, cons
       button_activate_state(C, but, BUTTON_STATE_EXIT);
       return WM_UI_HANDLER_BREAK;
     }
-    else if (ELEM(event->type, PADENTER, RETKEY) && event->val == KM_PRESS) {
+    else if (ELEM(event->type, EVT_PADENTER, EVT_RETKEY) && event->val == KM_PRESS) {
       button_activate_state(C, but, BUTTON_STATE_WAIT_FLASH);
       return WM_UI_HANDLER_BREAK;
     }
@@ -4218,7 +4230,7 @@ static int ui_do_but_HOTKEYEVT(bContext *C,
                                const wmEvent *event)
 {
   if (data->state == BUTTON_STATE_HIGHLIGHT) {
-    if (ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY) && event->val == KM_PRESS) {
+    if (ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY) && event->val == KM_PRESS) {
       but->drawstr[0] = 0;
       but->modifier_key = 0;
       button_activate_state(C, but, BUTTON_STATE_WAIT_KEY_EVENT);
@@ -4229,11 +4241,11 @@ static int ui_do_but_HOTKEYEVT(bContext *C,
     if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)) {
       return WM_UI_HANDLER_CONTINUE;
     }
-    else if (event->type == UNKNOWNKEY) {
+    else if (event->type == EVT_UNKNOWNKEY) {
       WM_report(RPT_WARNING, "Unsupported key: Unknown");
       return WM_UI_HANDLER_CONTINUE;
     }
-    else if (event->type == CAPSLOCKKEY) {
+    else if (event->type == EVT_CAPSLOCKKEY) {
       WM_report(RPT_WARNING, "Unsupported key: CapsLock");
       return WM_UI_HANDLER_CONTINUE;
     }
@@ -4272,7 +4284,7 @@ static int ui_do_but_HOTKEYEVT(bContext *C,
     ED_region_tag_redraw(data->region);
 
     if (event->val == KM_PRESS) {
-      if (ISHOTKEY(event->type) && (event->type != ESCKEY)) {
+      if (ISHOTKEY(event->type) && (event->type != EVT_ESCKEY)) {
         if (WM_key_event_string(event->type, false)[0]) {
           ui_but_value_set(but, event->type);
         }
@@ -4283,7 +4295,7 @@ static int ui_do_but_HOTKEYEVT(bContext *C,
         button_activate_state(C, but, BUTTON_STATE_EXIT);
         return WM_UI_HANDLER_BREAK;
       }
-      else if (event->type == ESCKEY) {
+      else if (event->type == EVT_ESCKEY) {
         if (event->val == KM_PRESS) {
           data->cancel = true;
           data->escapecancel = true;
@@ -4302,7 +4314,7 @@ static int ui_do_but_KEYEVT(bContext *C,
                             const wmEvent *event)
 {
   if (data->state == BUTTON_STATE_HIGHLIGHT) {
-    if (ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY) && event->val == KM_PRESS) {
+    if (ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY) && event->val == KM_PRESS) {
       button_activate_state(C, but, BUTTON_STATE_WAIT_KEY_EVENT);
       return WM_UI_HANDLER_BREAK;
     }
@@ -4349,7 +4361,7 @@ static int ui_do_but_TAB(
       button_activate_state(C, but, BUTTON_STATE_TEXT_EDITING);
       return WM_UI_HANDLER_BREAK;
     }
-    else if (ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY)) {
+    else if (ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY)) {
       int event_val = (is_property) ? KM_PRESS : KM_CLICK;
       if (event->val == event_val) {
         button_activate_state(C, but, BUTTON_STATE_EXIT);
@@ -4373,8 +4385,9 @@ static int ui_do_but_TEX(
     bContext *C, uiBlock *block, uiBut *but, uiHandleButtonData *data, const wmEvent *event)
 {
   if (data->state == BUTTON_STATE_HIGHLIGHT) {
-    if (ELEM(event->type, LEFTMOUSE, EVT_BUT_OPEN, PADENTER, RETKEY) && event->val == KM_PRESS) {
-      if (ELEM(event->type, PADENTER, RETKEY) && (!UI_but_is_utf8(but))) {
+    if (ELEM(event->type, LEFTMOUSE, EVT_BUT_OPEN, EVT_PADENTER, EVT_RETKEY) &&
+        event->val == KM_PRESS) {
+      if (ELEM(event->type, EVT_PADENTER, EVT_RETKEY) && (!UI_but_is_utf8(but))) {
         /* pass - allow filesel, enter to execute */
       }
       else if (but->dt == UI_EMBOSS_NONE && !event->ctrl) {
@@ -4404,7 +4417,7 @@ static int ui_do_but_SEARCH_UNLINK(
     bContext *C, uiBlock *block, uiBut *but, uiHandleButtonData *data, const wmEvent *event)
 {
   /* unlink icon is on right */
-  if (ELEM(event->type, LEFTMOUSE, EVT_BUT_OPEN, PADENTER, RETKEY)) {
+  if (ELEM(event->type, LEFTMOUSE, EVT_BUT_OPEN, EVT_PADENTER, EVT_RETKEY)) {
     /* doing this on KM_PRESS calls eyedropper after clicking unlink icon */
     if ((event->val == KM_RELEASE) && ui_do_but_extra_operator_icon(C, but, data, event)) {
       return WM_UI_HANDLER_BREAK;
@@ -4426,7 +4439,7 @@ static int ui_do_but_TOG(bContext *C, uiBut *but, uiHandleButtonData *data, cons
 
   if (data->state == BUTTON_STATE_HIGHLIGHT) {
     bool do_activate = false;
-    if (ELEM(event->type, PADENTER, RETKEY)) {
+    if (ELEM(event->type, EVT_PADENTER, EVT_RETKEY)) {
       if (event->val == KM_PRESS) {
         do_activate = true;
       }
@@ -4511,7 +4524,7 @@ static int ui_do_but_EXIT(bContext *C, uiBut *but, uiHandleButtonData *data, con
     }
 #endif
 
-    if (ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY) && event->val == KM_PRESS) {
+    if (ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY) && event->val == KM_PRESS) {
       int ret = WM_UI_HANDLER_BREAK;
       /* XXX (a bit ugly) Special case handling for filebrowser drag button */
       if (but->dragpoin && but->imb && ui_but_contains_point_px_icon(but, data->region, event)) {
@@ -4910,7 +4923,7 @@ static int ui_do_but_NUM(
       click = 1;
     }
     else if (event->val == KM_PRESS) {
-      if (ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY) && event->ctrl) {
+      if (ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY) && event->ctrl) {
         button_activate_state(C, but, BUTTON_STATE_TEXT_EDITING);
         retval = WM_UI_HANDLER_BREAK;
       }
@@ -4919,10 +4932,10 @@ static int ui_do_but_NUM(
         button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
         retval = WM_UI_HANDLER_BREAK;
       }
-      else if (ELEM(event->type, PADENTER, RETKEY) && event->val == KM_PRESS) {
+      else if (ELEM(event->type, EVT_PADENTER, EVT_RETKEY) && event->val == KM_PRESS) {
         click = 1;
       }
-      else if (event->type == MINUSKEY && event->val == KM_PRESS) {
+      else if (event->type == EVT_MINUSKEY && event->val == KM_PRESS) {
         button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
         data->value = -data->value;
         button_activate_state(C, but, BUTTON_STATE_EXIT);
@@ -4935,7 +4948,7 @@ static int ui_do_but_NUM(
     }
   }
   else if (data->state == BUTTON_STATE_NUM_EDITING) {
-    if (event->type == ESCKEY || event->type == RIGHTMOUSE) {
+    if (event->type == EVT_ESCKEY || event->type == RIGHTMOUSE) {
       if (event->val == KM_PRESS) {
         data->cancel = true;
         data->escapecancel = true;
@@ -5214,7 +5227,7 @@ static int ui_do_but_SLI(
       click = 2;
     }
     else if (event->val == KM_PRESS) {
-      if (ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY) && event->ctrl) {
+      if (ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY) && event->ctrl) {
         button_activate_state(C, but, BUTTON_STATE_TEXT_EDITING);
         retval = WM_UI_HANDLER_BREAK;
       }
@@ -5238,10 +5251,10 @@ static int ui_do_but_SLI(
         button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
         retval = WM_UI_HANDLER_BREAK;
       }
-      else if (ELEM(event->type, PADENTER, RETKEY) && event->val == KM_PRESS) {
+      else if (ELEM(event->type, EVT_PADENTER, EVT_RETKEY) && event->val == KM_PRESS) {
         click = 1;
       }
-      else if (event->type == MINUSKEY && event->val == KM_PRESS) {
+      else if (event->type == EVT_MINUSKEY && event->val == KM_PRESS) {
         button_activate_state(C, but, BUTTON_STATE_NUM_EDITING);
         data->value = -data->value;
         button_activate_state(C, but, BUTTON_STATE_EXIT);
@@ -5253,7 +5266,7 @@ static int ui_do_but_SLI(
 #endif
   }
   else if (data->state == BUTTON_STATE_NUM_EDITING) {
-    if (event->type == ESCKEY || event->type == RIGHTMOUSE) {
+    if (event->type == EVT_ESCKEY || event->type == RIGHTMOUSE) {
       if (event->val == KM_PRESS) {
         data->cancel = true;
         data->escapecancel = true;
@@ -5420,7 +5433,7 @@ static int ui_do_but_SCROLL(
     }
   }
   else if (data->state == BUTTON_STATE_NUM_EDITING) {
-    if (event->type == ESCKEY) {
+    if (event->type == EVT_ESCKEY) {
       if (event->val == KM_PRESS) {
         data->cancel = true;
         data->escapecancel = true;
@@ -5472,7 +5485,7 @@ static int ui_do_but_GRIP(
     }
   }
   else if (data->state == BUTTON_STATE_NUM_EDITING) {
-    if (event->type == ESCKEY) {
+    if (event->type == EVT_ESCKEY) {
       if (event->val == KM_PRESS) {
         data->cancel = true;
         data->escapecancel = true;
@@ -5505,7 +5518,7 @@ static int ui_do_but_LISTROW(bContext *C,
     /* hack to pass on ctrl+click and double click to overlapping text
      * editing field for editing list item names
      */
-    if ((ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY) && event->val == KM_PRESS &&
+    if ((ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY) && event->val == KM_PRESS &&
          event->ctrl) ||
         (event->type == LEFTMOUSE && event->val == KM_DBL_CLICK)) {
       uiBut *labelbut = ui_but_list_row_text_activate(
@@ -5543,7 +5556,7 @@ static int ui_do_but_BLOCK(bContext *C, uiBut *but, uiHandleButtonData *data, co
     }
 #endif
     /* regular open menu */
-    if (ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY) && event->val == KM_PRESS) {
+    if (ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY) && event->val == KM_PRESS) {
       button_activate_state(C, but, BUTTON_STATE_MENU_OPEN);
       return WM_UI_HANDLER_BREAK;
     }
@@ -5716,7 +5729,7 @@ static int ui_do_but_COLOR(bContext *C, uiBut *but, uiHandleButtonData *data, co
     }
 #endif
     /* regular open menu */
-    if (ELEM(event->type, LEFTMOUSE, PADENTER, RETKEY) && event->val == KM_PRESS) {
+    if (ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY) && event->val == KM_PRESS) {
       ui_palette_set_active(but);
       button_activate_state(C, but, BUTTON_STATE_MENU_OPEN);
       return WM_UI_HANDLER_BREAK;
@@ -5748,7 +5761,7 @@ static int ui_do_but_COLOR(bContext *C, uiBut *but, uiHandleButtonData *data, co
       ui_apply_but(C, but->block, but, data, true);
       return WM_UI_HANDLER_BREAK;
     }
-    else if ((int)(but->a1) == UI_PALETTE_COLOR && event->type == DELKEY &&
+    else if ((int)(but->a1) == UI_PALETTE_COLOR && event->type == EVT_DELKEY &&
              event->val == KM_PRESS) {
       Palette *palette = (Palette *)but->rnapoin.owner_id;
       PaletteColor *color = but->rnapoin.data;
@@ -5874,7 +5887,7 @@ static int ui_do_but_UNITVEC(
         }
       }
     }
-    else if (event->type == ESCKEY || event->type == RIGHTMOUSE) {
+    else if (event->type == EVT_ESCKEY || event->type == RIGHTMOUSE) {
       if (event->val == KM_PRESS) {
         data->cancel = true;
         data->escapecancel = true;
@@ -6167,7 +6180,7 @@ static int ui_do_but_HSVCUBE(
     }
 #endif /* WITH_INPUT_NDOF */
     /* XXX hardcoded keymap check.... */
-    else if (event->type == BACKSPACEKEY && event->val == KM_PRESS) {
+    else if (event->type == EVT_BACKSPACEKEY && event->val == KM_PRESS) {
       if (ELEM(but->a1, UI_GRAD_V_ALT, UI_GRAD_L_ALT)) {
         int len;
 
@@ -6199,7 +6212,7 @@ static int ui_do_but_HSVCUBE(
     }
   }
   else if (data->state == BUTTON_STATE_NUM_EDITING) {
-    if (event->type == ESCKEY || event->type == RIGHTMOUSE) {
+    if (event->type == EVT_ESCKEY || event->type == RIGHTMOUSE) {
       if (event->val == KM_PRESS) {
         data->cancel = true;
         data->escapecancel = true;
@@ -6443,7 +6456,7 @@ static int ui_do_but_HSVCIRCLE(
     }
 #endif /* WITH_INPUT_NDOF */
     /* XXX hardcoded keymap check.... */
-    else if (event->type == BACKSPACEKEY && event->val == KM_PRESS) {
+    else if (event->type == EVT_BACKSPACEKEY && event->val == KM_PRESS) {
       int len;
 
       /* reset only saturation */
@@ -6474,7 +6487,7 @@ static int ui_do_but_HSVCIRCLE(
     }
   }
   else if (data->state == BUTTON_STATE_NUM_EDITING) {
-    if (event->type == ESCKEY || event->type == RIGHTMOUSE) {
+    if (event->type == EVT_ESCKEY || event->type == RIGHTMOUSE) {
       if (event->val == KM_PRESS) {
         data->cancel = true;
         data->escapecancel = true;
@@ -6598,7 +6611,7 @@ static int ui_do_but_COLORBAND(
     else if (event->type == LEFTMOUSE && event->val == KM_RELEASE) {
       button_activate_state(C, but, BUTTON_STATE_EXIT);
     }
-    else if (ELEM(event->type, ESCKEY, RIGHTMOUSE)) {
+    else if (ELEM(event->type, EVT_ESCKEY, RIGHTMOUSE)) {
       if (event->val == KM_PRESS) {
         data->dragcbd->pos = data->dragfstart;
         BKE_colorband_update_sort(data->coba);
@@ -7024,7 +7037,7 @@ static int ui_do_but_CURVEPROFILE(
   ui_window_to_block(data->region, block, &mx, &my);
 
   /* Move selected control points. */
-  if (event->type == GKEY && event->val == KM_RELEASE) {
+  if (event->type == EVT_GKEY && event->val == KM_RELEASE) {
     data->dragstartx = mx;
     data->dragstarty = my;
     data->draglastx = mx;
@@ -7036,7 +7049,7 @@ static int ui_do_but_CURVEPROFILE(
   CurveProfile *profile = (CurveProfile *)but->poin;
 
   /* Delete selected control points. */
-  if (event->type == XKEY && event->val == KM_RELEASE) {
+  if (event->type == EVT_XKEY && event->val == KM_RELEASE) {
     BKE_curveprofile_remove_by_flag(profile, PROF_SELECT);
     BKE_curveprofile_update(profile, false);
     button_activate_state(C, but, BUTTON_STATE_EXIT);
@@ -7213,7 +7226,7 @@ static int ui_do_but_HISTOGRAM(
       return WM_UI_HANDLER_BREAK;
     }
     /* XXX hardcoded keymap check.... */
-    else if (event->type == BACKSPACEKEY && event->val == KM_PRESS) {
+    else if (event->type == EVT_BACKSPACEKEY && event->val == KM_PRESS) {
       Histogram *hist = (Histogram *)but->poin;
       hist->ymax = 1.f;
 
@@ -7222,7 +7235,7 @@ static int ui_do_but_HISTOGRAM(
     }
   }
   else if (data->state == BUTTON_STATE_NUM_EDITING) {
-    if (event->type == ESCKEY) {
+    if (event->type == EVT_ESCKEY) {
       if (event->val == KM_PRESS) {
         data->cancel = true;
         data->escapecancel = true;
@@ -7289,7 +7302,7 @@ static int ui_do_but_WAVEFORM(
       return WM_UI_HANDLER_BREAK;
     }
     /* XXX hardcoded keymap check.... */
-    else if (event->type == BACKSPACEKEY && event->val == KM_PRESS) {
+    else if (event->type == EVT_BACKSPACEKEY && event->val == KM_PRESS) {
       Scopes *scopes = (Scopes *)but->poin;
       scopes->wavefrm_yfac = 1.f;
 
@@ -7298,7 +7311,7 @@ static int ui_do_but_WAVEFORM(
     }
   }
   else if (data->state == BUTTON_STATE_NUM_EDITING) {
-    if (event->type == ESCKEY) {
+    if (event->type == EVT_ESCKEY) {
       if (event->val == KM_PRESS) {
         data->cancel = true;
         data->escapecancel = true;
@@ -7384,7 +7397,7 @@ static int ui_do_but_TRACKPREVIEW(
     }
   }
   else if (data->state == BUTTON_STATE_NUM_EDITING) {
-    if (event->type == ESCKEY) {
+    if (event->type == EVT_ESCKEY) {
       if (event->val == KM_PRESS) {
         data->cancel = true;
         data->escapecancel = true;
@@ -7428,8 +7441,8 @@ static int ui_do_button(bContext *C, uiBlock *block, uiBut *but, const wmEvent *
     /* handle copy and paste */
     bool is_press_ctrl_but_no_shift = event->val == KM_PRESS && IS_EVENT_MOD(event, ctrl, oskey) &&
                                       !event->shift;
-    bool do_copy = event->type == CKEY && is_press_ctrl_but_no_shift;
-    bool do_paste = event->type == VKEY && is_press_ctrl_but_no_shift;
+    bool do_copy = event->type == EVT_CKEY && is_press_ctrl_but_no_shift;
+    bool do_paste = event->type == EVT_VKEY && is_press_ctrl_but_no_shift;
 
     /* Specific handling for listrows, we try to find their overlapping tex button. */
     if ((do_copy || do_paste) && but->type == UI_BTYPE_LISTROW) {
@@ -7470,7 +7483,7 @@ static int ui_do_button(bContext *C, uiBlock *block, uiBut *but, const wmEvent *
     }
 
     if ((data->state == BUTTON_STATE_HIGHLIGHT) &&
-        ELEM(event->type, LEFTMOUSE, EVT_BUT_OPEN, PADENTER, RETKEY) &&
+        ELEM(event->type, LEFTMOUSE, EVT_BUT_OPEN, EVT_PADENTER, EVT_RETKEY) &&
         (event->val == KM_RELEASE) &&
         /* Only returns true if the event was handled. */
         ui_do_but_extra_operator_icon(C, but, data, event)) {
@@ -7602,7 +7615,7 @@ static int ui_do_button(bContext *C, uiBlock *block, uiBut *but, const wmEvent *
   data = but->active;
   if (data && data->state == BUTTON_STATE_HIGHLIGHT) {
     if ((retval == WM_UI_HANDLER_CONTINUE) &&
-        (event->type == BACKSPACEKEY && event->val == KM_PRESS)) {
+        (event->type == EVT_BACKSPACEKEY && event->val == KM_PRESS)) {
       /* ctrl+backspace = reset active button; backspace = reset a whole array*/
       ui_but_default_set(C, !event->ctrl, true);
       ED_region_tag_redraw(data->region);
@@ -8896,7 +8909,8 @@ static int ui_handle_list_event(bContext *C, const wmEvent *event, ARegion *regi
   }
 
   if (val == KM_PRESS) {
-    if ((ELEM(type, UPARROWKEY, DOWNARROWKEY) && !IS_EVENT_MOD(event, shift, ctrl, alt, oskey)) ||
+    if ((ELEM(type, EVT_UPARROWKEY, EVT_DOWNARROWKEY) &&
+         !IS_EVENT_MOD(event, shift, ctrl, alt, oskey)) ||
         ((ELEM(type, WHEELUPMOUSE, WHEELDOWNMOUSE) && event->ctrl &&
           !IS_EVENT_MOD(event, shift, alt, oskey)))) {
       const int value_orig = RNA_property_int_get(&listbox->rnapoin, listbox->rnaprop);
@@ -8905,10 +8919,10 @@ static int ui_handle_list_event(bContext *C, const wmEvent *event, ARegion *regi
       /* activate up/down the list */
       value = value_orig;
       if ((ui_list->filter_sort_flag & UILST_FLT_SORT_REVERSE) != 0) {
-        inc = ELEM(type, UPARROWKEY, WHEELUPMOUSE) ? 1 : -1;
+        inc = ELEM(type, EVT_UPARROWKEY, WHEELUPMOUSE) ? 1 : -1;
       }
       else {
-        inc = ELEM(type, UPARROWKEY, WHEELUPMOUSE) ? -1 : 1;
+        inc = ELEM(type, EVT_UPARROWKEY, WHEELUPMOUSE) ? -1 : 1;
       }
 
       if (dyn_data->items_filter_neworder || dyn_data->items_filter_flags) {
@@ -9563,7 +9577,7 @@ static int ui_handle_menu_event(bContext *C,
           break;
 
         /* Closing sub-levels of pull-downs. */
-        case LEFTARROWKEY:
+        case EVT_LEFTARROWKEY:
           if (event->val == KM_PRESS && (block->flag & UI_BLOCK_LOOP)) {
             if (block->saferct.first) {
               menu->menuretval = UI_RETURN_OUT;
@@ -9574,7 +9588,7 @@ static int ui_handle_menu_event(bContext *C,
           break;
 
         /* Opening sub-levels of pull-downs. */
-        case RIGHTARROWKEY:
+        case EVT_RIGHTARROWKEY:
           if (event->val == KM_PRESS && (block->flag & UI_BLOCK_LOOP)) {
 
             if (ui_menu_pass_event_to_parent_if_nonactive(menu, but, level, retval)) {
@@ -9630,12 +9644,12 @@ static int ui_handle_menu_event(bContext *C,
           }
           ATTR_FALLTHROUGH;
         }
-        case UPARROWKEY:
-        case DOWNARROWKEY:
-        case PAGEUPKEY:
-        case PAGEDOWNKEY:
-        case HOMEKEY:
-        case ENDKEY:
+        case EVT_UPARROWKEY:
+        case EVT_DOWNARROWKEY:
+        case EVT_PAGEUPKEY:
+        case EVT_PAGEDOWNKEY:
+        case EVT_HOMEKEY:
+        case EVT_ENDKEY:
           /* arrowkeys: only handle for block_loop blocks */
           if (IS_EVENT_MOD(event, shift, ctrl, alt, oskey)) {
             /* pass */
@@ -9654,13 +9668,13 @@ static int ui_handle_menu_event(bContext *C,
               uiMenuScrollType scrolltype;
               bool ui_block_flipped = (block->flag & UI_BLOCK_IS_FLIP) != 0;
 
-              if (ELEM(type, PAGEUPKEY, HOMEKEY)) {
+              if (ELEM(type, EVT_PAGEUPKEY, EVT_HOMEKEY)) {
                 scrolltype = ui_block_flipped ? MENU_SCROLL_TOP : MENU_SCROLL_BOTTOM;
               }
-              else if (ELEM(type, PAGEDOWNKEY, ENDKEY)) {
+              else if (ELEM(type, EVT_PAGEDOWNKEY, EVT_ENDKEY)) {
                 scrolltype = ui_block_flipped ? MENU_SCROLL_BOTTOM : MENU_SCROLL_TOP;
               }
-              else if (ELEM(type, UPARROWKEY, WHEELUPMOUSE)) {
+              else if (ELEM(type, EVT_UPARROWKEY, WHEELUPMOUSE)) {
                 scrolltype = ui_block_flipped ? MENU_SCROLL_UP : MENU_SCROLL_DOWN;
               }
               else {
@@ -9680,21 +9694,29 @@ static int ui_handle_menu_event(bContext *C,
                 /* Apply scroll operation. */
                 if (scrolltype == MENU_SCROLL_DOWN) {
                   but = ui_but_next(but);
-                  if (but == NULL) {
-                    but = ui_but_first(block);
-                  }
                 }
                 else if (scrolltype == MENU_SCROLL_UP) {
                   but = ui_but_prev(but);
-                  if (but == NULL) {
-                    but = ui_but_last(block);
-                  }
                 }
                 else if (scrolltype == MENU_SCROLL_TOP) {
                   but = ui_but_first(block);
                 }
                 else if (scrolltype == MENU_SCROLL_BOTTOM) {
                   but = ui_but_last(block);
+                }
+              }
+
+              if (!but) {
+                /* wrap button or no active button*/
+                uiBut *but_wrap = NULL;
+                if (ELEM(scrolltype, MENU_SCROLL_UP, MENU_SCROLL_BOTTOM)) {
+                  but_wrap = ui_but_last(block);
+                }
+                else if (ELEM(scrolltype, MENU_SCROLL_DOWN, MENU_SCROLL_TOP)) {
+                  but_wrap = ui_but_first(block);
+                }
+                if (but_wrap) {
+                  but = but_wrap;
                 }
               }
 
@@ -9709,60 +9731,60 @@ static int ui_handle_menu_event(bContext *C,
 
           break;
 
-        case ONEKEY:
-        case PAD1:
+        case EVT_ONEKEY:
+        case EVT_PAD1:
           act = 1;
           ATTR_FALLTHROUGH;
-        case TWOKEY:
-        case PAD2:
+        case EVT_TWOKEY:
+        case EVT_PAD2:
           if (act == 0) {
             act = 2;
           }
           ATTR_FALLTHROUGH;
-        case THREEKEY:
-        case PAD3:
+        case EVT_THREEKEY:
+        case EVT_PAD3:
           if (act == 0) {
             act = 3;
           }
           ATTR_FALLTHROUGH;
-        case FOURKEY:
-        case PAD4:
+        case EVT_FOURKEY:
+        case EVT_PAD4:
           if (act == 0) {
             act = 4;
           }
           ATTR_FALLTHROUGH;
-        case FIVEKEY:
-        case PAD5:
+        case EVT_FIVEKEY:
+        case EVT_PAD5:
           if (act == 0) {
             act = 5;
           }
           ATTR_FALLTHROUGH;
-        case SIXKEY:
-        case PAD6:
+        case EVT_SIXKEY:
+        case EVT_PAD6:
           if (act == 0) {
             act = 6;
           }
           ATTR_FALLTHROUGH;
-        case SEVENKEY:
-        case PAD7:
+        case EVT_SEVENKEY:
+        case EVT_PAD7:
           if (act == 0) {
             act = 7;
           }
           ATTR_FALLTHROUGH;
-        case EIGHTKEY:
-        case PAD8:
+        case EVT_EIGHTKEY:
+        case EVT_PAD8:
           if (act == 0) {
             act = 8;
           }
           ATTR_FALLTHROUGH;
-        case NINEKEY:
-        case PAD9:
+        case EVT_NINEKEY:
+        case EVT_PAD9:
           if (act == 0) {
             act = 9;
           }
           ATTR_FALLTHROUGH;
-        case ZEROKEY:
-        case PAD0:
+        case EVT_ZEROKEY:
+        case EVT_PAD0:
           if (act == 0) {
             act = 10;
           }
@@ -9823,32 +9845,32 @@ static int ui_handle_menu_event(bContext *C,
           break;
 
         /* Handle keystrokes on menu items */
-        case AKEY:
-        case BKEY:
-        case CKEY:
-        case DKEY:
-        case EKEY:
-        case FKEY:
-        case GKEY:
-        case HKEY:
-        case IKEY:
-        case JKEY:
-        case KKEY:
-        case LKEY:
-        case MKEY:
-        case NKEY:
-        case OKEY:
-        case PKEY:
-        case QKEY:
-        case RKEY:
-        case SKEY:
-        case TKEY:
-        case UKEY:
-        case VKEY:
-        case WKEY:
-        case XKEY:
-        case YKEY:
-        case ZKEY: {
+        case EVT_AKEY:
+        case EVT_BKEY:
+        case EVT_CKEY:
+        case EVT_DKEY:
+        case EVT_EKEY:
+        case EVT_FKEY:
+        case EVT_GKEY:
+        case EVT_HKEY:
+        case EVT_IKEY:
+        case EVT_JKEY:
+        case EVT_KKEY:
+        case EVT_LKEY:
+        case EVT_MKEY:
+        case EVT_NKEY:
+        case EVT_OKEY:
+        case EVT_PKEY:
+        case EVT_QKEY:
+        case EVT_RKEY:
+        case EVT_SKEY:
+        case EVT_TKEY:
+        case EVT_UKEY:
+        case EVT_VKEY:
+        case EVT_WKEY:
+        case EVT_XKEY:
+        case EVT_YKEY:
+        case EVT_ZKEY: {
           if ((event->val == KM_PRESS || event->val == KM_DBL_CLICK) &&
               !IS_EVENT_MOD(event, shift, ctrl, oskey)) {
             if (ui_menu_pass_event_to_parent_if_nonactive(menu, but, level, retval)) {
@@ -9930,11 +9952,11 @@ static int ui_handle_menu_event(bContext *C,
         retval = WM_UI_HANDLER_BREAK;
       }
 #endif
-      else if (event->type == ESCKEY && event->val == KM_PRESS) {
+      else if (event->type == EVT_ESCKEY && event->val == KM_PRESS) {
         /* Escape cancels this and all preceding menus. */
         menu->menuretval = UI_RETURN_CANCEL;
       }
-      else if (ELEM(event->type, RETKEY, PADENTER) && event->val == KM_PRESS) {
+      else if (ELEM(event->type, EVT_RETKEY, EVT_PADENTER) && event->val == KM_PRESS) {
         uiBut *but_default = ui_region_find_first_but_test_flag(
             region, UI_BUT_ACTIVE_DEFAULT, UI_HIDDEN);
         if ((but_default != NULL) && (but_default->active == NULL)) {
@@ -10367,37 +10389,37 @@ static int ui_pie_handler(bContext *C, const wmEvent *event, uiPopupBlockHandle 
           }
           break;
 
-        case ESCKEY:
+        case EVT_ESCKEY:
         case RIGHTMOUSE:
           menu->menuretval = UI_RETURN_CANCEL;
           break;
 
-        case AKEY:
-        case BKEY:
-        case CKEY:
-        case DKEY:
-        case EKEY:
-        case FKEY:
-        case GKEY:
-        case HKEY:
-        case IKEY:
-        case JKEY:
-        case KKEY:
-        case LKEY:
-        case MKEY:
-        case NKEY:
-        case OKEY:
-        case PKEY:
-        case QKEY:
-        case RKEY:
-        case SKEY:
-        case TKEY:
-        case UKEY:
-        case VKEY:
-        case WKEY:
-        case XKEY:
-        case YKEY:
-        case ZKEY: {
+        case EVT_AKEY:
+        case EVT_BKEY:
+        case EVT_CKEY:
+        case EVT_DKEY:
+        case EVT_EKEY:
+        case EVT_FKEY:
+        case EVT_GKEY:
+        case EVT_HKEY:
+        case EVT_IKEY:
+        case EVT_JKEY:
+        case EVT_KKEY:
+        case EVT_LKEY:
+        case EVT_MKEY:
+        case EVT_NKEY:
+        case EVT_OKEY:
+        case EVT_PKEY:
+        case EVT_QKEY:
+        case EVT_RKEY:
+        case EVT_SKEY:
+        case EVT_TKEY:
+        case EVT_UKEY:
+        case EVT_VKEY:
+        case EVT_WKEY:
+        case EVT_XKEY:
+        case EVT_YKEY:
+        case EVT_ZKEY: {
           if ((event->val == KM_PRESS || event->val == KM_DBL_CLICK) &&
               !IS_EVENT_MOD(event, shift, ctrl, oskey)) {
             for (but = block->buttons.first; but; but = but->next) {
@@ -10410,8 +10432,8 @@ static int ui_pie_handler(bContext *C, const wmEvent *event, uiPopupBlockHandle 
         }
 
 #define CASE_NUM_TO_DIR(n, d) \
-  case (ZEROKEY + n): \
-  case (PAD0 + n): { \
+  case (EVT_ZEROKEY + n): \
+  case (EVT_PAD0 + n): { \
     if (num_dir == UI_RADIAL_NONE) \
       num_dir = d; \
   } \

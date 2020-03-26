@@ -23,17 +23,17 @@
  * 3D view manipulation/operators.
  */
 
-#include <string.h>
-#include <stdio.h>
-#include <math.h>
 #include <float.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "DNA_armature_types.h"
 #include "DNA_camera_types.h"
 #include "DNA_curve_types.h"
+#include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_gpencil_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -46,7 +46,7 @@
 #include "BKE_camera.h"
 #include "BKE_context.h"
 #include "BKE_font.h"
-#include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_layer.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
@@ -60,19 +60,19 @@
 #include "DEG_depsgraph_query.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
+#include "WM_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 
 #include "ED_armature.h"
+#include "ED_mesh.h"
 #include "ED_particle.h"
 #include "ED_screen.h"
 #include "ED_transform.h"
-#include "ED_mesh.h"
-#include "ED_view3d.h"
 #include "ED_transform_snap_object_context.h"
+#include "ED_view3d.h"
 
 #include "UI_resources.h"
 
@@ -236,7 +236,7 @@ typedef struct ViewOpsData {
 } ViewOpsData;
 
 /**
- * Size of the sphere being dragged for trackball rotation withing the view bounds.
+ * Size of the sphere being dragged for trackball rotation within the view bounds.
  * also affects speed (smaller is faster).
  */
 #define TRACKBALLSIZE (1.1f)
@@ -1713,7 +1713,7 @@ void viewmove_modal_keymap(wmKeyConfig *keyconf)
 
   /* items for modal map */
   WM_modalkeymap_add_item(keymap, MIDDLEMOUSE, KM_RELEASE, KM_ANY, 0, VIEW_MODAL_CONFIRM);
-  WM_modalkeymap_add_item(keymap, ESCKEY, KM_PRESS, KM_ANY, 0, VIEW_MODAL_CONFIRM);
+  WM_modalkeymap_add_item(keymap, EVT_ESCKEY, KM_PRESS, KM_ANY, 0, VIEW_MODAL_CONFIRM);
 
   /* disabled mode switching for now, can re-implement better, later on */
 #if 0

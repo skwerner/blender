@@ -21,12 +21,12 @@
  * \ingroup edinterface
  */
 
+#include <ctype.h>
 #include <float.h>
 #include <limits.h>
 #include <math.h>
-#include <string.h>
-#include <ctype.h>
 #include <stddef.h> /* offsetof() */
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -36,11 +36,11 @@
 #include "DNA_userdef_types.h"
 #include "DNA_workspace_types.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_rect.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
-#include "BLI_rect.h"
 
 #include "BLI_utildefines.h"
 
@@ -65,15 +65,15 @@
 #include "IMB_imbuf.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
+#include "WM_types.h"
 
 #include "RNA_access.h"
 
 #include "BPY_extern.h"
 
-#include "ED_screen.h"
 #include "ED_numinput.h"
+#include "ED_screen.h"
 
 #include "IMB_colormanagement.h"
 
@@ -3207,8 +3207,9 @@ static void ui_but_free(const bContext *C, uiBut *but)
     MEM_freeN(but->hold_argN);
   }
 
-  if (but->free_search_arg) {
-    MEM_SAFE_FREE(but->search_arg);
+  if (but->search_arg_free_func) {
+    but->search_arg_free_func(but->search_arg);
+    but->search_arg = NULL;
   }
 
   if (but->active) {
@@ -6336,7 +6337,7 @@ void UI_but_func_search_set(uiBut *but,
                             uiButSearchCreateFunc search_create_func,
                             uiButSearchFunc search_func,
                             void *arg,
-                            bool free_arg,
+                            uiButSearchArgFreeFunc search_arg_free_func,
                             uiButHandleFunc bfunc,
                             void *active)
 {
@@ -6346,14 +6347,16 @@ void UI_but_func_search_set(uiBut *but,
     search_create_func = ui_searchbox_create_generic;
   }
 
-  if (but->free_search_arg) {
-    MEM_SAFE_FREE(but->search_arg);
+  if (but->search_arg_free_func != NULL) {
+    but->search_arg_free_func(but->search_arg);
+    but->search_arg = NULL;
   }
 
   but->search_create_func = search_create_func;
   but->search_func = search_func;
+
   but->search_arg = arg;
-  but->free_search_arg = free_arg;
+  but->search_arg_free_func = search_arg_free_func;
 
   if (bfunc) {
 #ifdef DEBUG
@@ -6404,8 +6407,7 @@ static void operator_enum_search_cb(const struct bContext *C,
       /* note: need to give the index rather than the
        * identifier because the enum can be freed */
       if (BLI_strcasestr(item->name, str)) {
-        if (false ==
-            UI_search_item_add(items, item->name, POINTER_FROM_INT(item->value), item->icon)) {
+        if (!UI_search_item_add(items, item->name, POINTER_FROM_INT(item->value), item->icon, 0)) {
           break;
         }
       }
@@ -6462,7 +6464,7 @@ uiBut *uiDefSearchButO_ptr(uiBlock *block,
                          ui_searchbox_create_generic,
                          operator_enum_search_cb,
                          but,
-                         false,
+                         NULL,
                          operator_enum_call_cb,
                          NULL);
 

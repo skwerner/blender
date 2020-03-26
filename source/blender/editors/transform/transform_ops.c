@@ -30,10 +30,10 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_global.h"
-#include "BKE_report.h"
 #include "BKE_editmesh.h"
+#include "BKE_global.h"
 #include "BKE_layer.h"
+#include "BKE_report.h"
 #include "BKE_scene.h"
 
 #include "RNA_access.h"
@@ -42,8 +42,8 @@
 
 #include "WM_api.h"
 #include "WM_message.h"
-#include "WM_types.h"
 #include "WM_toolsystem.h"
+#include "WM_types.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -1031,7 +1031,7 @@ static void TRANSFORM_OT_bbone_resize(struct wmOperatorType *ot)
   ot->exec = transform_exec;
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
-  ot->poll = ED_operator_screenactive;
+  ot->poll = ED_operator_editarmature;
   ot->poll_property = transform_poll_property;
 
   RNA_def_float_translation(

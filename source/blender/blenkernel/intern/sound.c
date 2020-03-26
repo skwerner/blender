@@ -21,8 +21,8 @@
  * \ingroup bke
  */
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -35,30 +35,30 @@
 
 #include "DNA_anim_types.h"
 #include "DNA_object_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_sequence_types.h"
 #include "DNA_packedFile_types.h"
+#include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
+#include "DNA_sequence_types.h"
 #include "DNA_sound_types.h"
 #include "DNA_speaker_types.h"
 #include "DNA_windowmanager_types.h"
 
 #ifdef WITH_AUDASPACE
-#  include <AUD_Sound.h>
-#  include <AUD_Sequence.h>
-#  include <AUD_Handle.h>
-#  include <AUD_Special.h>
 #  include "../../../intern/audaspace/intern/AUD_Set.h"
+#  include <AUD_Handle.h>
+#  include <AUD_Sequence.h>
+#  include <AUD_Sound.h>
+#  include <AUD_Special.h>
 #endif
 
 #include "BKE_global.h"
 #include "BKE_idtype.h"
-#include "BKE_main.h"
-#include "BKE_sound.h"
 #include "BKE_lib_id.h"
+#include "BKE_main.h"
 #include "BKE_packedFile.h"
-#include "BKE_sequencer.h"
 #include "BKE_scene.h"
+#include "BKE_sequencer.h"
+#include "BKE_sound.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -548,6 +548,16 @@ void BKE_sound_destroy_scene(Scene *scene)
   if (scene->sound_scene) {
     AUD_Sequence_free(scene->sound_scene);
   }
+}
+
+void BKE_sound_lock_scene(struct Scene *scene)
+{
+  AUD_Device_lock(sound_device);
+}
+
+void BKE_sound_unlock_scene(struct Scene *scene)
+{
+  AUD_Device_unlock(sound_device);
 }
 
 void BKE_sound_reset_scene_specs(Scene *scene)
@@ -1149,6 +1159,12 @@ void BKE_sound_create_scene(Scene *UNUSED(scene))
 {
 }
 void BKE_sound_destroy_scene(Scene *UNUSED(scene))
+{
+}
+void BKE_sound_lock_scene(Scene *UNUSED(scene))
+{
+}
+void BKE_sound_unlock_scene(Scene *UNUSED(scene))
 {
 }
 void BKE_sound_reset_scene_specs(Scene *UNUSED(scene))

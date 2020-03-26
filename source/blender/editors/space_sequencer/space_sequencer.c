@@ -21,12 +21,12 @@
  * \ingroup spseq
  */
 
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "DNA_gpencil_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_mask_types.h"
+#include "DNA_scene_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -40,14 +40,14 @@
 #include "BKE_sequencer.h"
 #include "BKE_sequencer_offscreen.h"
 
-#include "ED_space_api.h"
 #include "ED_screen.h"
+#include "ED_space_api.h"
 #include "ED_view3d.h"
 #include "ED_view3d_offscreen.h" /* only for sequencer view3d drawing callback */
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
+#include "WM_types.h"
 
 #include "RNA_access.h"
 
@@ -363,7 +363,7 @@ static void sequencer_listener(wmWindow *UNUSED(win),
 static bool image_drop_poll(bContext *C,
                             wmDrag *drag,
                             const wmEvent *event,
-                            const char **UNUSED(tooltip))
+                            const char **UNUSED(r_tooltip))
 {
   ARegion *region = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
@@ -383,7 +383,7 @@ static bool image_drop_poll(bContext *C,
 static bool movie_drop_poll(bContext *C,
                             wmDrag *drag,
                             const wmEvent *event,
-                            const char **UNUSED(tooltip))
+                            const char **UNUSED(r_tooltip))
 {
   ARegion *region = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
@@ -402,7 +402,7 @@ static bool movie_drop_poll(bContext *C,
 static bool sound_drop_poll(bContext *C,
                             wmDrag *drag,
                             const wmEvent *event,
-                            const char **UNUSED(tooltip))
+                            const char **UNUSED(r_tooltip))
 {
   ARegion *region = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
@@ -679,19 +679,18 @@ static void sequencer_preview_region_draw(const bContext *C, ARegion *region)
   SpaceSeq *sseq = sa->spacedata.first;
   Scene *scene = CTX_data_scene(C);
   wmWindowManager *wm = CTX_wm_manager(C);
-  const bool show_split = (scene->ed && (scene->ed->over_flag & SEQ_EDIT_OVERLAY_SHOW) &&
-                           (sseq->mainb == SEQ_DRAW_IMG_IMBUF));
+  const bool draw_overlay = (scene->ed && (scene->ed->over_flag & SEQ_EDIT_OVERLAY_SHOW));
 
   /* XXX temp fix for wrong setting in sseq->mainb */
   if (sseq->mainb == SEQ_DRAW_SEQUENCE) {
     sseq->mainb = SEQ_DRAW_IMG_IMBUF;
   }
 
-  if (!show_split || sseq->overlay_type != SEQ_DRAW_OVERLAY_REFERENCE) {
+  if (!draw_overlay || sseq->overlay_type != SEQ_DRAW_OVERLAY_REFERENCE) {
     sequencer_draw_preview(C, scene, region, sseq, scene->r.cfra, 0, false, false);
   }
 
-  if (show_split && sseq->overlay_type != SEQ_DRAW_OVERLAY_CURRENT) {
+  if (draw_overlay && sseq->overlay_type != SEQ_DRAW_OVERLAY_CURRENT) {
     int over_cfra;
 
     if (scene->ed->over_flag & SEQ_EDIT_OVERLAY_ABS) {

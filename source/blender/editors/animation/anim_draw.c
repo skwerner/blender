@@ -24,30 +24,30 @@
 #include "BLI_sys_types.h"
 
 #include "DNA_anim_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_space_types.h"
-#include "DNA_userdef_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_mask_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
+#include "DNA_space_types.h"
+#include "DNA_userdef_types.h"
 
+#include "BLI_dlrbTree.h"
 #include "BLI_math.h"
+#include "BLI_rect.h"
 #include "BLI_timecode.h"
 #include "BLI_utildefines.h"
-#include "BLI_rect.h"
-#include "BLI_dlrbTree.h"
 
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
-#include "BKE_nla.h"
 #include "BKE_mask.h"
+#include "BKE_nla.h"
 
 #include "ED_anim_api.h"
-#include "ED_keyframes_edit.h"
 #include "ED_keyframes_draw.h"
+#include "ED_keyframes_edit.h"
 
 #include "RNA_access.h"
 
@@ -515,7 +515,7 @@ float ANIM_unit_mapping_get_factor(Scene *scene, ID *id, FCurve *fcu, short flag
   return 1.0f;
 }
 
-static bool find_prev_next_keyframes(struct bContext *C, int *nextfra, int *prevfra)
+static bool find_prev_next_keyframes(struct bContext *C, int *r_nextfra, int *r_prevfra)
 {
   Scene *scene = CTX_data_scene(C);
   Object *ob = CTX_data_active_object(C);
@@ -594,17 +594,17 @@ static bool find_prev_next_keyframes(struct bContext *C, int *nextfra, int *prev
   /* any success? */
   if (doneprev || donenext) {
     if (doneprev) {
-      *prevfra = cfraprev;
+      *r_prevfra = cfraprev;
     }
     else {
-      *prevfra = CFRA - (cfranext - CFRA);
+      *r_prevfra = CFRA - (cfranext - CFRA);
     }
 
     if (donenext) {
-      *nextfra = cfranext;
+      *r_nextfra = cfranext;
     }
     else {
-      *nextfra = CFRA + (CFRA - cfraprev);
+      *r_nextfra = CFRA + (CFRA - cfraprev);
     }
 
     return true;

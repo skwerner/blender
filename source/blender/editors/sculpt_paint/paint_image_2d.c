@@ -26,19 +26,19 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_brush_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h"
-#include "DNA_object_types.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_listbase.h"
 #include "BLI_math_color_blend.h"
 #include "BLI_stack.h"
-#include "BLI_bitmap.h"
 #include "BLI_task.h"
 
+#include "BKE_brush.h"
 #include "BKE_colorband.h"
 #include "BKE_context.h"
-#include "BKE_brush.h"
 #include "BKE_image.h"
 #include "BKE_paint.h"
 #include "BKE_report.h"
@@ -48,9 +48,9 @@
 #include "ED_paint.h"
 #include "ED_screen.h"
 
+#include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-#include "IMB_colormanagement.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -1609,7 +1609,9 @@ void paint_2d_stroke(void *ps,
     copy_v2_v2(last_uv, old_uv);
   }
 
-  float uv_brush_size[2] = {base_size / s->tiles[0].size[0], base_size / s->tiles[0].size[1]};
+  const float uv_brush_size[2] = {
+      (s->symmetry & PAINT_TILE_X) ? FLT_MAX : base_size / s->tiles[0].size[0],
+      (s->symmetry & PAINT_TILE_Y) ? FLT_MAX : base_size / s->tiles[0].size[1]};
 
   for (int i = 0; i < s->num_tiles; i++) {
     ImagePaintTile *tile = &s->tiles[i];
@@ -1640,7 +1642,8 @@ void paint_2d_stroke(void *ps,
     paint_2d_uv_to_coord(tile, last_uv, tile->last_paintpos);
 
     /* Second check in pixel coordinates. */
-    const float pixel_brush_size[] = {size, size};
+    const float pixel_brush_size[] = {(s->symmetry & PAINT_TILE_X) ? FLT_MAX : size,
+                                      (s->symmetry & PAINT_TILE_Y) ? FLT_MAX : size};
     if (!(is_inside_tile(tile->size, new_coord, pixel_brush_size) ||
           is_inside_tile(tile->size, old_coord, pixel_brush_size))) {
       continue;

@@ -43,8 +43,8 @@
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_material.h"
 #include "BKE_layer.h"
+#include "BKE_material.h"
 
 #include "BKE_scene.h"
 
@@ -61,8 +61,8 @@
 #include "ED_mesh.h"
 #include "ED_uvedit.h"
 
-#include "UI_resources.h"
 #include "UI_interface.h"
+#include "UI_resources.h"
 #include "UI_view2d.h"
 
 #include "uvedit_intern.h"
@@ -478,9 +478,9 @@ static void draw_uvs(SpaceImage *sima,
 }
 
 static void draw_uv_shadows_get(
-    SpaceImage *sima, Object *ob, Object *obedit, bool *show_shadow, bool *show_texpaint)
+    SpaceImage *sima, Object *ob, Object *obedit, bool *r_show_shadow, bool *r_show_texpaint)
 {
-  *show_shadow = *show_texpaint = false;
+  *r_show_shadow = *r_show_texpaint = false;
 
   if (ED_space_image_show_render(sima) || (sima->flag & SI_NO_DRAW_TEXPAINT)) {
     return;
@@ -489,10 +489,10 @@ static void draw_uv_shadows_get(
   if ((sima->mode == SI_MODE_PAINT) && obedit && obedit->type == OB_MESH) {
     struct BMEditMesh *em = BKE_editmesh_from_object(obedit);
 
-    *show_shadow = EDBM_uv_check(em);
+    *r_show_shadow = EDBM_uv_check(em);
   }
 
-  *show_texpaint = (ob && ob->type == OB_MESH && ob->mode == OB_MODE_TEXTURE_PAINT);
+  *r_show_texpaint = (ob && ob->type == OB_MESH && ob->mode == OB_MODE_TEXTURE_PAINT);
 }
 
 void ED_uvedit_draw_main(SpaceImage *sima,

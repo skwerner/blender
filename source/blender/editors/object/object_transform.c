@@ -26,54 +26,55 @@
 
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
+#include "DNA_collection_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_lattice_types.h"
+#include "DNA_light_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meta_types.h"
-#include "DNA_light_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_gpencil_types.h"
-#include "DNA_collection_types.h"
-#include "DNA_lattice_types.h"
 
-#include "BLI_math.h"
-#include "BLI_listbase.h"
-#include "BLI_utildefines.h"
 #include "BLI_array.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_utildefines.h"
 
+#include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
-#include "BKE_main.h"
-#include "BKE_idcode.h"
+#include "BKE_editmesh.h"
+#include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
+#include "BKE_idtype.h"
+#include "BKE_lattice.h"
 #include "BKE_layer.h"
+#include "BKE_lib_id.h"
+#include "BKE_main.h"
 #include "BKE_mball.h"
 #include "BKE_mesh.h"
-#include "BKE_object.h"
-#include "BKE_scene.h"
-#include "BKE_report.h"
-#include "BKE_editmesh.h"
 #include "BKE_multires.h"
-#include "BKE_armature.h"
-#include "BKE_lattice.h"
-#include "BKE_lib_id.h"
+#include "BKE_object.h"
+#include "BKE_report.h"
+#include "BKE_scene.h"
 #include "BKE_tracking.h"
-#include "BKE_gpencil.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "RNA_define.h"
 #include "RNA_access.h"
+#include "RNA_define.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
 #include "ED_armature.h"
+#include "ED_gpencil.h"
 #include "ED_keyframing.h"
 #include "ED_mesh.h"
+#include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
-#include "ED_gpencil.h"
-#include "ED_object.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -638,7 +639,7 @@ static int apply_objects_internal(bContext *C,
                     RPT_ERROR,
                     "Cannot apply to a multi user: Object \"%s\", %s \"%s\", aborting",
                     ob->id.name + 2,
-                    BKE_idcode_to_name(GS(obdata->name)),
+                    BKE_idtype_idcode_to_name(GS(obdata->name)),
                     obdata->name + 2);
         changed = false;
       }
@@ -648,7 +649,7 @@ static int apply_objects_internal(bContext *C,
                     RPT_ERROR,
                     "Cannot apply to library data: Object \"%s\", %s \"%s\", aborting",
                     ob->id.name + 2,
-                    BKE_idcode_to_name(GS(obdata->name)),
+                    BKE_idtype_idcode_to_name(GS(obdata->name)),
                     obdata->name + 2);
         changed = false;
       }
@@ -666,7 +667,7 @@ static int apply_objects_internal(bContext *C,
             RPT_ERROR,
             "Rotation/Location can't apply to a 2D curve: Object \"%s\", %s \"%s\", aborting",
             ob->id.name + 2,
-            BKE_idcode_to_name(GS(obdata->name)),
+            BKE_idtype_idcode_to_name(GS(obdata->name)),
             obdata->name + 2);
         changed = false;
       }
@@ -675,7 +676,7 @@ static int apply_objects_internal(bContext *C,
                     RPT_ERROR,
                     "Can't apply to a curve with shape-keys: Object \"%s\", %s \"%s\", aborting",
                     ob->id.name + 2,
-                    BKE_idcode_to_name(GS(obdata->name)),
+                    BKE_idtype_idcode_to_name(GS(obdata->name)),
                     obdata->name + 2);
         changed = false;
       }
@@ -711,7 +712,7 @@ static int apply_objects_internal(bContext *C,
                         "Can't apply to a GP datablock where all layers are parented: Object "
                         "\"%s\", %s \"%s\", aborting",
                         ob->id.name + 2,
-                        BKE_idcode_to_name(ID_GD),
+                        BKE_idtype_idcode_to_name(ID_GD),
                         gpd->id.name + 2);
             changed = false;
           }
@@ -723,7 +724,7 @@ static int apply_objects_internal(bContext *C,
               RPT_ERROR,
               "Can't apply to GP datablock with no layers: Object \"%s\", %s \"%s\", aborting",
               ob->id.name + 2,
-              BKE_idcode_to_name(ID_GD),
+              BKE_idtype_idcode_to_name(ID_GD),
               gpd->id.name + 2);
         }
       }
@@ -1995,7 +1996,7 @@ static int object_transform_axis_target_modal(bContext *C, wmOperator *op, const
     }
   }
   else {
-    if (ELEM(event->type, LEFTMOUSE, RETKEY, PADENTER)) {
+    if (ELEM(event->type, LEFTMOUSE, EVT_RETKEY, EVT_PADENTER)) {
       is_finished = true;
     }
   }
@@ -2004,7 +2005,7 @@ static int object_transform_axis_target_modal(bContext *C, wmOperator *op, const
     object_transform_axis_target_free_data(op);
     return OPERATOR_FINISHED;
   }
-  else if (ELEM(event->type, ESCKEY, RIGHTMOUSE)) {
+  else if (ELEM(event->type, EVT_ESCKEY, RIGHTMOUSE)) {
     object_transform_axis_target_cancel(C, op);
     return OPERATOR_CANCELLED;
   }

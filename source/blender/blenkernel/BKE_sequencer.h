@@ -312,19 +312,22 @@ void BKE_sequencer_proxy_set(struct Sequence *seq, bool value);
 struct ImBuf *BKE_sequencer_cache_get(const SeqRenderData *context,
                                       struct Sequence *seq,
                                       float cfra,
-                                      int type);
+                                      int type,
+                                      bool skip_disk_cache);
 void BKE_sequencer_cache_put(const SeqRenderData *context,
                              struct Sequence *seq,
                              float cfra,
                              int type,
                              struct ImBuf *nval,
-                             float cost);
+                             float cost,
+                             bool skip_disk_cache);
 bool BKE_sequencer_cache_put_if_possible(const SeqRenderData *context,
                                          struct Sequence *seq,
                                          float cfra,
                                          int type,
                                          struct ImBuf *nval,
-                                         float cost);
+                                         float cost,
+                                         bool skip_disk_cache);
 bool BKE_sequencer_cache_recycle_item(struct Scene *scene);
 void BKE_sequencer_cache_free_temp_cache(struct Scene *scene, short id, int cfra);
 void BKE_sequencer_cache_destruct(struct Scene *scene);
@@ -334,11 +337,14 @@ void BKE_sequencer_cache_cleanup_sequence(struct Scene *scene,
                                           struct Sequence *seq,
                                           struct Sequence *seq_changed,
                                           int invalidate_types);
-void BKE_sequencer_cache_iterate(
-    struct Scene *scene,
-    void *userdata,
-    bool callback(void *userdata, struct Sequence *seq, int cfra, int cache_type, float cost));
-size_t BKE_sequencer_cache_get_num_items(struct Scene *scene);
+void BKE_sequencer_cache_iterate(struct Scene *scene,
+                                 void *userdata,
+                                 bool callback_init(void *userdata, size_t item_count),
+                                 bool callback_iter(void *userdata,
+                                                    struct Sequence *seq,
+                                                    int cfra,
+                                                    int cache_type,
+                                                    float cost));
 bool BKE_sequencer_cache_is_full(struct Scene *scene);
 
 /* **********************************************************************

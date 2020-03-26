@@ -25,16 +25,16 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_alloca.h"
 #include "BLI_bitmap.h"
 #include "BLI_buffer.h"
-#include "BLI_utildefines.h"
-#include "BLI_math_vector.h"
-#include "BLI_math_bits.h"
-#include "BLI_string.h"
-#include "BLI_alloca.h"
 #include "BLI_edgehash.h"
-#include "BLI_task.h"
 #include "BLI_jitter_2d.h"
+#include "BLI_math_bits.h"
+#include "BLI_math_vector.h"
+#include "BLI_string.h"
+#include "BLI_task.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -45,12 +45,12 @@
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
+#include "BKE_editmesh_bvh.h"
 #include "BKE_editmesh_cache.h"
 #include "BKE_editmesh_tangent.h"
-#include "BKE_editmesh_bvh.h"
 #include "BKE_mesh.h"
-#include "BKE_mesh_tangent.h"
 #include "BKE_mesh_runtime.h"
+#include "BKE_mesh_tangent.h"
 #include "BKE_modifier.h"
 #include "BKE_object_deform.h"
 
@@ -66,8 +66,8 @@
 #include "ED_mesh.h"
 #include "ED_uvedit.h"
 
-#include "draw_cache_inline.h"
 #include "draw_cache_impl.h"
+#include "draw_cache_inline.h"
 
 #include "draw_cache_extract.h"
 
@@ -1066,7 +1066,7 @@ static void extract_lines_adjacency_looptri_mesh(const MeshRenderData *mr,
                                                  void *data)
 {
   const MPoly *mpoly = &mr->mpoly[mlt->poly];
-  if (!(mpoly->flag & ME_HIDE)) {
+  if (!(mr->use_hide && (mpoly->flag & ME_HIDE))) {
     lines_adjacency_triangle(mr->mloop[mlt->tri[0]].v,
                              mr->mloop[mlt->tri[1]].v,
                              mr->mloop[mlt->tri[2]].v,
@@ -3207,7 +3207,7 @@ static const MeshExtract extract_stretch_angle = {
 /** \} */
 
 /* ---------------------------------------------------------------------- */
-/** \name Extract Edit UV angle stretch
+/** \name Extract Edit Mesh Analysis Colors
  * \{ */
 
 static void *extract_mesh_analysis_init(const MeshRenderData *mr, void *buf)

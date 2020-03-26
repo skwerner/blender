@@ -58,8 +58,8 @@
 
 #include "UI_interface.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "wm.h"
 #include "wm_surface.h"
@@ -143,7 +143,7 @@ static void wm_xr_error_handler(const GHOST_XrError *error)
   WM_report(RPT_ERROR, error->user_message);
   WM_report_banner_show();
 
-  if (wm->xr.runtime->context) {
+  if (wm->xr.runtime) {
     /* Just play safe and destroy the entire runtime data, including context. */
     wm_xr_runtime_data_free(&wm->xr.runtime);
   }
@@ -300,7 +300,13 @@ static void wm_xr_draw_data_populate(const wmXrSessionState *state,
 
   wm_xr_base_pose_calc(scene, settings, &r_draw_data->base_pose);
 
-  if (position_tracking_toggled || !state->is_view_data_set) {
+  /* Set the eye position offset, it's used to offset the base pose when changing positional
+   * tracking. */
+  if (!state->is_view_data_set) {
+    /* Always use the exact base pose with no offset when starting the session. */
+    copy_v3_fl(r_draw_data->eye_position_ofs, 0.0f);
+  }
+  else if (position_tracking_toggled) {
     if (use_position_tracking) {
       copy_v3_fl(r_draw_data->eye_position_ofs, 0.0f);
     }
@@ -685,7 +691,7 @@ static void wm_xr_draw_viewport_buffers_to_active_framebuffer(
   if (is_upside_down) {
     SWAP(int, rect.ymin, rect.ymax);
   }
-  GPU_viewport_draw_to_screen_ex(surface_data->viewport, &rect, draw_view->expects_srgb_buffer);
+  GPU_viewport_draw_to_screen_ex(surface_data->viewport, 0, &rect, draw_view->expects_srgb_buffer);
 }
 
 /**
@@ -746,10 +752,10 @@ void wm_xr_draw_view(const GHOST_XrDrawViewInfo *draw_view, void *customdata)
   /* The draw-manager uses both GPUOffscreen and GPUViewport to manage frame and texture buffers. A
    * call to GPU_viewport_draw_to_screen() is still needed to get the final result from the
    * viewport buffers composited together and potentially color managed for display on screen.
-   * It needs a bound framebuffer to draw into, for which we simply reuse the GPUOffscreen one.
+   * It needs a bound frame-buffer to draw into, for which we simply reuse the GPUOffscreen one.
    *
-   * In a next step, Ghost-XR will use the the currently bound framebuffer to retrieve the image to
-   * be submitted to the OpenXR swapchain. So do not un-bind the offscreen yet! */
+   * In a next step, Ghost-XR will use the the currently bound frame-buffer to retrieve the image
+   * to be submitted to the OpenXR swap-chain. So do not un-bind the offscreen yet! */
 
   GPU_offscreen_bind(surface_data->offscreen, false);
 

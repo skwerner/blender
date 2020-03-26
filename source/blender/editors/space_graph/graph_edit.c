@@ -21,10 +21,10 @@
  * \ingroup spgraph
  */
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <float.h>
 
 #ifdef WITH_AUDASPACE
 #  include <AUD_Special.h>
@@ -54,16 +54,16 @@
 
 #include "DEG_depsgraph_build.h"
 
-#include "UI_view2d.h"
 #include "UI_interface.h"
+#include "UI_view2d.h"
 
 #include "ED_anim_api.h"
-#include "ED_keyframing.h"
 #include "ED_keyframes_edit.h"
+#include "ED_keyframing.h"
+#include "ED_markers.h"
 #include "ED_numinput.h"
 #include "ED_screen.h"
 #include "ED_transform.h"
-#include "ED_markers.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -1576,8 +1576,8 @@ static int graphkeys_decimate_modal(bContext *C, wmOperator *op, const wmEvent *
 
   switch (event->type) {
     case LEFTMOUSE: /* confirm */
-    case RETKEY:
-    case PADENTER: {
+    case EVT_RETKEY:
+    case EVT_PADENTER: {
       if (event->val == KM_PRESS) {
         decimate_exit(C, op);
 
@@ -1586,7 +1586,7 @@ static int graphkeys_decimate_modal(bContext *C, wmOperator *op, const wmEvent *
       break;
     }
 
-    case ESCKEY: /* cancel */
+    case EVT_ESCKEY: /* cancel */
     case RIGHTMOUSE: {
       if (event->val == KM_PRESS) {
         decimate_reset_bezts(dgo);

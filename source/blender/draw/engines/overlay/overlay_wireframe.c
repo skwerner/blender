@@ -33,8 +33,8 @@
 
 #include "BLI_hash.h"
 
-#include "GPU_shader.h"
 #include "DRW_render.h"
+#include "GPU_shader.h"
 
 #include "ED_view3d.h"
 
@@ -173,7 +173,9 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
       DRW_object_wire_theme_get(ob, draw_ctx->view_layer, &color);
 
       struct GPUBatch *geom = DRW_cache_object_face_wireframe_get(ob);
-      OVERLAY_extra_loose_points(cb, geom, ob->obmat, color);
+      if (geom) {
+        OVERLAY_extra_loose_points(cb, geom, ob->obmat, color);
+      }
       return;
     }
   }

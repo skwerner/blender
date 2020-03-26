@@ -23,19 +23,19 @@
  * Operators for dealing with GP data-blocks and layers.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stddef.h>
 #include <math.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_math.h"
 #include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -76,8 +76,8 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
-#include "ED_object.h"
 #include "ED_gpencil.h"
+#include "ED_object.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -214,6 +214,7 @@ static int gp_layer_add_exec(bContext *C, wmOperator *op)
 
   PointerRNA gpd_owner = {NULL};
   Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
   bGPdata *gpd = NULL;
 
   if (is_annotation) {
@@ -238,7 +239,13 @@ static int gp_layer_add_exec(bContext *C, wmOperator *op)
     Object *ob = CTX_data_active_object(C);
     if ((ob != NULL) && (ob->type == OB_GPENCIL)) {
       gpd = (bGPdata *)ob->data;
-      BKE_gpencil_layer_addnew(gpd, DATA_("GP_Layer"), true);
+      bGPDlayer *gpl = BKE_gpencil_layer_addnew(gpd, DATA_("GP_Layer"), true);
+      ScrArea *sa = CTX_wm_area(C);
+
+      /* In dopesheet add a new frame. */
+      if ((gpl != NULL) && (sa->spacetype == SPACE_ACTION)) {
+        gpl->actframe = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_ADD_NEW);
+      }
     }
   }
 

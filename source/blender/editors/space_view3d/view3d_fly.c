@@ -30,8 +30,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 
 #include "BKE_context.h"
 #include "BKE_report.h"
@@ -593,7 +593,7 @@ static void flyEvent(FlyInfo *fly, const wmEvent *event)
         }
         else {
           /* flip speed rather than stopping, game like motion,
-           * else increase like mousewheel if were already moving in that direction */
+           * else increase like mousewheel if we're already moving in that direction */
           if (fly->speed < 0.0f) {
             fly->speed = -fly->speed;
           }

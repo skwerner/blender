@@ -22,26 +22,26 @@
  */
 
 #include "DNA_camera_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_linklist.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_rect.h"
 #include "BLI_utildefines.h"
-#include "BLI_linklist.h"
 
 #include "BKE_action.h"
 #include "BKE_camera.h"
 #include "BKE_context.h"
-#include "BKE_idprop.h"
-#include "BKE_object.h"
 #include "BKE_global.h"
+#include "BKE_idprop.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 
@@ -51,8 +51,8 @@
 #include "UI_resources.h"
 
 #include "GPU_glew.h"
-#include "GPU_select.h"
 #include "GPU_matrix.h"
+#include "GPU_select.h"
 #include "GPU_state.h"
 
 #include "WM_api.h"
@@ -1557,7 +1557,7 @@ void VIEW3D_OT_localview_remove_from(wmOperatorType *ot)
 
 static uint free_localcollection_bit(Main *bmain,
                                      unsigned short local_collections_uuid,
-                                     bool *reset)
+                                     bool *r_reset)
 {
   ScrArea *sa;
   bScreen *sc;
@@ -1587,7 +1587,7 @@ static uint free_localcollection_bit(Main *bmain,
   /* Otherwise get the first free available. */
   for (int i = 0; i < 16; i++) {
     if ((local_view_bits & (1 << i)) == 0) {
-      *reset = true;
+      *r_reset = true;
       return (1 << i);
     }
   }

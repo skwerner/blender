@@ -22,18 +22,18 @@
  * \ingroup edgpencil
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stddef.h>
 #include <math.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
 #include "BLI_rand.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -54,6 +54,7 @@
 #include "BKE_deform.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_paint.h"
@@ -72,8 +73,8 @@
 #include "ED_gpencil.h"
 #include "ED_object.h"
 #include "ED_screen.h"
-#include "ED_view3d.h"
 #include "ED_space_api.h"
+#include "ED_view3d.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -1429,7 +1430,7 @@ static void gpencil_primitive_edit_event_handling(
       }
       break;
     }
-    case MKEY: {
+    case EVT_MKEY: {
       if ((event->val == KM_PRESS) && (tgpi->curve) && (ELEM(tgpi->orign_type, GP_STROKE_ARC))) {
         tgpi->flip ^= 1;
         gp_primitive_update_cps(tgpi);
@@ -1437,7 +1438,7 @@ static void gpencil_primitive_edit_event_handling(
       }
       break;
     }
-    case EKEY: {
+    case EVT_EKEY: {
       if (tgpi->flag == IN_CURVE_EDIT && !ELEM(tgpi->type, GP_STROKE_BOX, GP_STROKE_CIRCLE)) {
         tgpi->flag = IN_PROGRESS;
         WM_cursor_modal_set(win, WM_CURSOR_NSEW_SCROLL);
@@ -1544,7 +1545,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
         gpencil_primitive_update(C, op, tgpi);
         break;
       }
-      case ESCKEY:
+      case EVT_ESCKEY:
       case LEFTMOUSE: {
         zero_v2(tgpi->move);
         tgpi->flag = IN_CURVE_EDIT;
@@ -1566,7 +1567,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
 
     switch (event->type) {
 
-      case ESCKEY: {
+      case EVT_ESCKEY: {
         /* return to normal cursor and header status */
         ED_workspace_status_text(C, NULL);
         WM_cursor_modal_restore(win);
@@ -1588,9 +1589,9 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
         }
         break;
       }
-      case SPACEKEY: /* confirm */
+      case EVT_SPACEKEY: /* confirm */
       case MIDDLEMOUSE:
-      case RETKEY:
+      case EVT_RETKEY:
       case RIGHTMOUSE: {
         if (event->val == KM_PRESS) {
           tgpi->flag = IDLE;
@@ -1612,7 +1613,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
         gpencil_primitive_update(C, op, tgpi);
         break;
       }
-      case PADPLUSKEY:
+      case EVT_PADPLUSKEY:
       case WHEELUPMOUSE: {
         if ((event->val != KM_RELEASE)) {
           tgpi->tot_edges = tgpi->tot_edges + 1;
@@ -1622,7 +1623,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
         }
         break;
       }
-      case PADMINUS:
+      case EVT_PADMINUS:
       case WHEELDOWNMOUSE: {
         if ((event->val != KM_RELEASE)) {
           tgpi->tot_edges = tgpi->tot_edges - 1;
@@ -1632,7 +1633,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
         }
         break;
       }
-      case FKEY: /* brush thickness/ brush strength */
+      case EVT_FKEY: /* brush thickness/ brush strength */
       {
         if ((event->val == KM_PRESS)) {
           if (event->shift) {
@@ -1658,7 +1659,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
         gpencil_primitive_size(tgpi, false);
         gpencil_primitive_update(C, op, tgpi);
         break;
-      case ESCKEY:
+      case EVT_ESCKEY:
       case MIDDLEMOUSE:
       case LEFTMOUSE:
         tgpi->brush_size = 0;
@@ -1681,7 +1682,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
         gpencil_primitive_strength(tgpi, false);
         gpencil_primitive_update(C, op, tgpi);
         break;
-      case ESCKEY:
+      case EVT_ESCKEY:
       case MIDDLEMOUSE:
       case LEFTMOUSE:
         tgpi->brush_strength = 0.0f;
@@ -1748,10 +1749,10 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
       }
       break;
     }
-    case SPACEKEY: /* confirm */
+    case EVT_SPACEKEY: /* confirm */
     case MIDDLEMOUSE:
-    case PADENTER:
-    case RETKEY: {
+    case EVT_PADENTER:
+    case EVT_RETKEY: {
       tgpi->flag = IDLE;
       gpencil_primitive_interaction_end(C, op, win, tgpi);
       /* done! */
@@ -1769,7 +1770,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
       }
       ATTR_FALLTHROUGH;
     }
-    case ESCKEY: {
+    case EVT_ESCKEY: {
       /* return to normal cursor and header status */
       ED_workspace_status_text(C, NULL);
       WM_cursor_modal_restore(win);
@@ -1780,7 +1781,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
       /* canceled! */
       return OPERATOR_CANCELLED;
     }
-    case PADPLUSKEY:
+    case EVT_PADPLUSKEY:
     case WHEELUPMOUSE: {
       if ((event->val != KM_RELEASE)) {
         tgpi->tot_edges = tgpi->tot_edges + 1;
@@ -1792,7 +1793,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
       }
       break;
     }
-    case PADMINUS:
+    case EVT_PADMINUS:
     case WHEELDOWNMOUSE: {
       if ((event->val != KM_RELEASE)) {
         tgpi->tot_edges = tgpi->tot_edges - 1;
@@ -1804,7 +1805,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
       }
       break;
     }
-    case GKEY: /* grab mode */
+    case EVT_GKEY: /* grab mode */
     {
       if ((event->val == KM_PRESS)) {
         tgpi->flag = IN_MOVE;
@@ -1812,7 +1813,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
       }
       break;
     }
-    case FKEY: /* brush thickness/ brush strength */
+    case EVT_FKEY: /* brush thickness/ brush strength */
     {
       if ((event->val == KM_PRESS)) {
         if (event->shift) {
@@ -1827,7 +1828,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
       }
       break;
     }
-    case CKEY: /* curve mode */
+    case EVT_CKEY: /* curve mode */
     {
       if ((event->val == KM_PRESS) && (tgpi->orign_type == GP_STROKE_CURVE)) {
         switch (tgpi->type) {
@@ -1846,7 +1847,7 @@ static int gpencil_primitive_modal(bContext *C, wmOperator *op, const wmEvent *e
       }
       break;
     }
-    case TABKEY: {
+    case EVT_TABKEY: {
       if (tgpi->flag == IN_CURVE_EDIT) {
         tgpi->flag = IN_PROGRESS;
         WM_cursor_modal_set(win, WM_CURSOR_NSEW_SCROLL);

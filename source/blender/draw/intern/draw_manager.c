@@ -45,31 +45,31 @@
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
-#include "BKE_particle.h"
 #include "BKE_paint.h"
+#include "BKE_particle.h"
 #include "BKE_pbvh.h"
 #include "BKE_pointcache.h"
 #include "BKE_pointcloud.h"
 #include "BKE_volume.h"
 
-#include "draw_manager.h"
 #include "DNA_camera_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_world_types.h"
+#include "draw_manager.h"
 
-#include "ED_space_api.h"
-#include "ED_screen.h"
 #include "ED_gpencil.h"
+#include "ED_screen.h"
+#include "ED_space_api.h"
 #include "ED_view3d.h"
 
 #include "GPU_draw.h"
 #include "GPU_extensions.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
+#include "GPU_matrix.h"
 #include "GPU_uniformbuffer.h"
 #include "GPU_viewport.h"
-#include "GPU_matrix.h"
 
 #include "IMB_colormanagement.h"
 
@@ -81,20 +81,20 @@
 #include "WM_api.h"
 #include "wm_window.h"
 
-#include "draw_manager_text.h"
-#include "draw_manager_profiling.h"
 #include "draw_color_management.h"
+#include "draw_manager_profiling.h"
+#include "draw_manager_text.h"
 
 /* only for callbacks */
 #include "draw_cache_impl.h"
 
-#include "engines/eevee/eevee_engine.h"
 #include "engines/basic/basic_engine.h"
-#include "engines/workbench/workbench_engine.h"
+#include "engines/eevee/eevee_engine.h"
 #include "engines/external/external_engine.h"
 #include "engines/gpencil/gpencil_engine.h"
-#include "engines/select/select_engine.h"
 #include "engines/overlay/overlay_engine.h"
+#include "engines/select/select_engine.h"
+#include "engines/workbench/workbench_engine.h"
 
 #include "GPU_context.h"
 
@@ -1218,7 +1218,7 @@ void DRW_notify_view_update(const DRWUpdateContext *update_ctx)
 
   /* Separate update for each stereo view. */
   for (int view = 0; view < 2; view++) {
-    GPUViewport *viewport = WM_draw_region_get_viewport(region, view);
+    GPUViewport *viewport = WM_draw_region_get_viewport(region);
     if (!viewport) {
       continue;
     }
@@ -1232,6 +1232,7 @@ void DRW_notify_view_update(const DRWUpdateContext *update_ctx)
     drw_state_prepare_clean_for_draw(&DST);
 
     DST.viewport = viewport;
+    GPU_viewport_active_view_set(viewport, view);
     DST.draw_ctx = (DRWContextState){
         .region = region,
         .rv3d = rv3d,
@@ -1416,7 +1417,6 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
 
   DST.draw_ctx.evil_C = evil_C;
   DST.viewport = viewport;
-
   /* Setup viewport */
   DST.draw_ctx = (DRWContextState){
       .region = region,
@@ -1627,6 +1627,13 @@ bool DRW_render_check_grease_pencil(Depsgraph *depsgraph)
   return false;
 }
 
+static void drw_view_reset(void)
+{
+  DST.view_default = NULL;
+  DST.view_active = NULL;
+  DST.view_previous = NULL;
+}
+
 static void DRW_render_gpencil_to_image(RenderEngine *engine,
                                         struct RenderLayer *render_layer,
                                         const rcti *rect)
@@ -1701,10 +1708,13 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
 
   RenderResult *render_result = RE_engine_get_result(engine);
   RenderLayer *render_layer = RE_GetRenderLayer(render_result, view_layer->name);
-
-  DST.buffer_finish_called = false;
-
-  DRW_render_gpencil_to_image(engine, render_layer, &render_rect);
+  for (RenderView *render_view = render_result->views.first; render_view != NULL;
+       render_view = render_view->next) {
+    RE_SetActiveRenderView(render, render_view->name);
+    drw_view_reset();
+    DST.buffer_finish_called = false;
+    DRW_render_gpencil_to_image(engine, render_layer, &render_rect);
+  }
 
   /* Force cache to reset. */
   drw_viewport_cache_resize();
@@ -1726,13 +1736,6 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
   }
 
   DST.buffer_finish_called = false;
-}
-
-static void drw_view_reset(void)
-{
-  DST.view_default = NULL;
-  DST.view_active = NULL;
-  DST.view_previous = NULL;
 }
 
 void DRW_render_to_image(RenderEngine *engine, struct Depsgraph *depsgraph)
@@ -2374,7 +2377,7 @@ void DRW_draw_select_id(Depsgraph *depsgraph, ARegion *region, View3D *v3d, cons
   drw_context_state_init();
 
   /* Setup viewport */
-  DST.viewport = WM_draw_region_get_viewport(region, 0);
+  DST.viewport = WM_draw_region_get_viewport(region);
   drw_viewport_var_init();
 
   /* Update ubos */

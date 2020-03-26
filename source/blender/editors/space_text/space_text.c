@@ -29,14 +29,14 @@
 
 #include "BLI_blenlib.h"
 
-#include "BKE_global.h"
 #include "BKE_context.h"
+#include "BKE_global.h"
 #include "BKE_lib_id.h"
 #include "BKE_screen.h"
 #include "BKE_text.h"
 
-#include "ED_space_api.h"
 #include "ED_screen.h"
+#include "ED_space_api.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -47,9 +47,9 @@
 
 #include "RNA_access.h"
 
+#include "GPU_framebuffer.h"
 #include "text_format.h"
 #include "text_intern.h" /* own include */
-#include "GPU_framebuffer.h"
 
 /* ******************** default callbacks for text space ***************** */
 
@@ -328,7 +328,7 @@ static void text_cursor(wmWindow *win, ScrArea *sa, ARegion *region)
 static bool text_drop_poll(bContext *UNUSED(C),
                            wmDrag *drag,
                            const wmEvent *UNUSED(event),
-                           const char **UNUSED(tooltip))
+                           const char **UNUSED(r_tooltip))
 {
   if (drag->type == WM_DRAG_PATH) {
     /* rule might not work? */
@@ -348,7 +348,7 @@ static void text_drop_copy(wmDrag *drag, wmDropBox *drop)
 static bool text_drop_paste_poll(bContext *UNUSED(C),
                                  wmDrag *drag,
                                  const wmEvent *UNUSED(event),
-                                 const char **UNUSED(tooltip))
+                                 const char **UNUSED(r_tooltip))
 {
   return (drag->type == WM_DRAG_ID);
 }

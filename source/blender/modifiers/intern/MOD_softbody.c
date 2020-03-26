@@ -25,9 +25,9 @@
 
 #include "BLI_utildefines.h"
 
-#include "DNA_scene_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_force_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_layer.h"
 #include "BKE_particle.h"
@@ -79,7 +79,8 @@ ModifierTypeInfo modifierType_Softbody = {
     /* structSize */ sizeof(SoftbodyModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
-        eModifierTypeFlag_RequiresOriginalData | eModifierTypeFlag_Single,
+        eModifierTypeFlag_RequiresOriginalData | eModifierTypeFlag_Single |
+        eModifierTypeFlag_UsesPointCache,
 
     /* copyData */ NULL,
 

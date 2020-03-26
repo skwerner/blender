@@ -30,24 +30,24 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_console.h"
-#include "BLI_hash.h"
 #include "BLI_ghash.h"
+#include "BLI_hash.h"
+#include "BLI_utildefines.h"
 
 extern "C" {
-#include "BKE_scene.h"
 #include "BKE_global.h"
-#include "BKE_idcode.h"
+#include "BKE_idtype.h"
+#include "BKE_scene.h"
 }
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_debug.h"
 
-#include "intern/depsgraph_update.h"
 #include "intern/depsgraph_physics.h"
-#include "intern/depsgraph_relation.h"
 #include "intern/depsgraph_registry.h"
+#include "intern/depsgraph_relation.h"
+#include "intern/depsgraph_update.h"
 
 #include "intern/eval/deg_eval_copy_on_write.h"
 
@@ -135,7 +135,7 @@ IDNode *Depsgraph::add_id_node(ID *id, ID *id_cow_hint)
     BLI_ghash_insert(id_hash, id, id_node);
     id_nodes.push_back(id_node);
 
-    id_type_exist[BKE_idcode_to_index(GS(id->name))] = 1;
+    id_type_exist[BKE_idtype_idcode_to_index(GS(id->name))] = 1;
   }
   return id_node;
 }

@@ -34,14 +34,14 @@
 
 #include "BKE_context.h"
 #include "BKE_lib_id.h"
+#include "BKE_node.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-#include "BKE_node.h"
 
-#include "ED_space_api.h"
 #include "ED_node.h"
 #include "ED_render.h"
 #include "ED_screen.h"
+#include "ED_space_api.h"
 
 #include "UI_resources.h"
 #include "UI_view2d.h"
@@ -635,7 +635,7 @@ static void node_main_region_draw(const bContext *C, ARegion *region)
 static bool node_ima_drop_poll(bContext *UNUSED(C),
                                wmDrag *drag,
                                const wmEvent *UNUSED(event),
-                               const char **UNUSED(tooltip))
+                               const char **UNUSED(r_tooltip))
 {
   if (drag->type == WM_DRAG_PATH) {
     /* rule might not work? */
@@ -649,7 +649,7 @@ static bool node_ima_drop_poll(bContext *UNUSED(C),
 static bool node_mask_drop_poll(bContext *UNUSED(C),
                                 wmDrag *drag,
                                 const wmEvent *UNUSED(event),
-                                const char **UNUSED(tooltip))
+                                const char **UNUSED(r_tooltip))
 {
   return WM_drag_ID(drag, ID_MSK) != NULL;
 }

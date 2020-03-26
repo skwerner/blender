@@ -26,9 +26,9 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_object_types.h" /* for OB_DATA_SUPPORT_ID */
 #include "DNA_screen_types.h"
 #include "DNA_text_types.h"
-#include "DNA_object_types.h" /* for OB_DATA_SUPPORT_ID */
 
 #include "BLI_blenlib.h"
 #include "BLI_math_color.h"
@@ -69,9 +69,9 @@
 #include "ED_keyframing.h"
 
 /* only for UI_OT_editsource */
-#include "ED_screen.h"
 #include "BKE_main.h"
 #include "BLI_ghash.h"
+#include "ED_screen.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Copy Data Path Operator
@@ -1251,7 +1251,7 @@ static bool ui_editsource_uibut_match(uiBut *but_a, uiBut *but_b)
 
 void UI_editsource_active_but_test(uiBut *but)
 {
-  extern void PyC_FileAndNum_Safe(const char **filename, int *lineno);
+  extern void PyC_FileAndNum_Safe(const char **r_filename, int *r_lineno);
 
   struct uiEditSourceButStore *but_store = MEM_callocN(sizeof(uiEditSourceButStore), __func__);
 
@@ -1703,7 +1703,7 @@ static void UI_OT_button_string_clear(wmOperatorType *ot)
 bool UI_drop_color_poll(struct bContext *C,
                         wmDrag *drag,
                         const wmEvent *UNUSED(event),
-                        const char **UNUSED(tooltip))
+                        const char **UNUSED(r_tooltip))
 {
   /* should only return true for regions that include buttons, for now
    * return true always */

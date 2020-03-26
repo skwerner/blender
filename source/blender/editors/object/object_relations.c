@@ -33,8 +33,8 @@
 #include "DNA_collection_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_light_types.h"
 #include "DNA_lattice_types.h"
+#include "DNA_light_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meta_types.h"
@@ -44,37 +44,37 @@
 #include "DNA_vfont_types.h"
 #include "DNA_world_types.h"
 
-#include "BLI_math.h"
-#include "BLI_listbase.h"
-#include "BLI_linklist.h"
-#include "BLI_string.h"
 #include "BLI_kdtree.h"
+#include "BLI_linklist.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
+#include "BKE_DerivedMesh.h"
 #include "BKE_action.h"
 #include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_camera.h"
 #include "BKE_collection.h"
-#include "BKE_context.h"
 #include "BKE_constraint.h"
+#include "BKE_context.h"
 #include "BKE_curve.h"
-#include "BKE_DerivedMesh.h"
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
-#include "BKE_gpencil.h"
 #include "BKE_fcurve.h"
+#include "BKE_gpencil.h"
 #include "BKE_hair.h"
 #include "BKE_idprop.h"
-#include "BKE_light.h"
 #include "BKE_lattice.h"
 #include "BKE_layer.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_override.h"
 #include "BKE_lib_query.h"
 #include "BKE_lib_remap.h"
+#include "BKE_light.h"
 #include "BKE_lightprobe.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
@@ -108,14 +108,16 @@
 #include "ED_curve.h"
 #include "ED_gpencil.h"
 #include "ED_keyframing.h"
-#include "ED_object.h"
 #include "ED_mesh.h"
+#include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
 
 #include "object_intern.h"
 
-/*********************** Make Vertex Parent Operator ************************/
+/* ------------------------------------------------------------------- */
+/** \name Make Vertex Parent Operator
+ * \{ */
 
 static bool vertex_parent_set_poll(bContext *C)
 {
@@ -331,7 +333,11 @@ void OBJECT_OT_vertex_parent_set(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/********************** Make Proxy Operator *************************/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Proxy Operator
+ * \{ */
 
 /* set the object to proxify */
 static int make_proxy_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -411,7 +417,12 @@ static int make_proxy_exec(bContext *C, wmOperator *op)
      * TODO(sergey): We really need to get rid of this bi-directional links
      * in proxies with something like library overrides.
      */
-    newob->proxy->proxy_from = newob;
+    if (newob->proxy != NULL) {
+      newob->proxy->proxy_from = newob;
+    }
+    else {
+      BKE_report(op->reports, RPT_ERROR, "Unable to assign proxy");
+    }
 
     /* depsgraph flushes are needed for the new data */
     DEG_relations_tag_update(bmain);
@@ -485,13 +496,11 @@ void OBJECT_OT_proxy_make(wmOperatorType *ot)
   ot->prop = prop;
 }
 
-/********************** Clear Parent Operator ******************* */
+/** \} */
 
-typedef enum eObClearParentTypes {
-  CLEAR_PARENT_ALL = 0,
-  CLEAR_PARENT_KEEP_TRANSFORM,
-  CLEAR_PARENT_INVERSE,
-} eObClearParentTypes;
+/* ------------------------------------------------------------------- */
+/** \name Clear Parent Operator
+ * \{ */
 
 EnumPropertyItem prop_clear_parent_types[] = {
     {CLEAR_PARENT_ALL,
@@ -625,7 +634,11 @@ void OBJECT_OT_parent_clear(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", prop_clear_parent_types, CLEAR_PARENT_ALL, "Type", "");
 }
 
-/* ******************** Make Parent Operator *********************** */
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Parent Operator
+ * \{ */
 
 void ED_object_parent(Object *ob, Object *par, const int type, const char *substr)
 {
@@ -1144,7 +1157,11 @@ void OBJECT_OT_parent_set(wmOperatorType *ot)
                   "Apply transformation before parenting");
 }
 
-/* ************ Make Parent Without Inverse Operator ******************* */
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Parent Without Inverse Operator
+ * \{ */
 
 static int parent_noinv_set_exec(bContext *C, wmOperator *op)
 {
@@ -1197,7 +1214,11 @@ void OBJECT_OT_parent_no_inverse_set(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Clear Track Operator ******************* */
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Clear Track Operator
+ * \{ */
 
 enum {
   CLEAR_TRACK = 1,
@@ -1273,7 +1294,11 @@ void OBJECT_OT_track_clear(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", prop_clear_track_types, 0, "Type", "");
 }
 
-/************************** Make Track Operator *****************************/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Track Operator
+ * \{ */
 
 enum {
   CREATE_TRACK_DAMPTRACK = 1,
@@ -1392,7 +1417,11 @@ void OBJECT_OT_track_set(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", prop_make_track_types, 0, "Type", "");
 }
 
-/************************** Link to Scene Operator *****************************/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Link to Scene Operator
+ * \{ */
 
 #if 0
 static void link_to_scene(Main *UNUSED(bmain), unsigned short UNUSED(nr))
@@ -1708,7 +1737,11 @@ void OBJECT_OT_make_links_data(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", make_links_items, 0, "Type", "");
 }
 
-/**************************** Make Single User ********************************/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Single User Operator
+ * \{ */
 
 static void libblock_relink_collection(Collection *collection, const bool do_collection)
 {
@@ -2090,7 +2123,11 @@ void ED_object_single_users(Main *bmain,
   DEG_relations_tag_update(bmain);
 }
 
-/******************************* Make Local ***********************************/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Local Operator
+ * \{ */
 
 enum {
   MAKE_LOCAL_SELECT_OB = 1,
@@ -2330,6 +2367,12 @@ void OBJECT_OT_make_local(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", type_items, 0, "Type", "");
 }
 
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Library Override Operator
+ * \{ */
+
 static void make_override_library_tag_object(Object *obact, Object *ob)
 {
   if (ob == obact) {
@@ -2482,7 +2525,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
         /* Disabled for now, according to some artist this is probably not really useful anyway.
          * And it breaks things like objects parented to bones
          * (most likely due to missing proper setting of inverse parent matrix?)... */
-        /* Note: we might even actually want to get rid of that instanciating empty... */
+        /* Note: we might even actually want to get rid of that instantiating empty... */
         if (0 && new_ob->parent == NULL) {
           new_ob->parent = obcollection;
         }
@@ -2591,6 +2634,12 @@ void OBJECT_OT_make_override_library(wmOperatorType *ot)
   ot->prop = prop;
 }
 
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Single User Operator
+ * \{ */
+
 enum {
   MAKE_SINGLE_USER_ALL = 1,
   MAKE_SINGLE_USER_SELECTED = 2,
@@ -2679,6 +2728,12 @@ void OBJECT_OT_make_single_user(wmOperatorType *ot)
       ot->srna, "animation", 0, "Object Animation", "Make animation data local to each object");
 }
 
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Drop Named Material on Object Operator
+ * \{ */
+
 static int drop_named_material_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   Main *bmain = CTX_data_main(C);
@@ -2721,6 +2776,12 @@ void OBJECT_OT_drop_named_material(wmOperatorType *ot)
   /* properties */
   RNA_def_string(ot->srna, "name", "Material", MAX_ID_NAME - 2, "Name", "Material name to assign");
 }
+
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Unlink Object Operator
+ * \{ */
 
 static int object_unlink_data_exec(bContext *C, wmOperator *op)
 {
@@ -2772,3 +2833,5 @@ void OBJECT_OT_unlink_data(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_INTERNAL;
 }
+
+/** \} */

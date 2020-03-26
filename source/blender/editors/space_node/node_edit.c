@@ -29,8 +29,8 @@
 #include "DNA_text_types.h"
 #include "DNA_world_types.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
@@ -50,9 +50,9 @@
 #include "RE_pipeline.h"
 
 #include "ED_node.h" /* own include */
-#include "ED_select_utils.h"
-#include "ED_screen.h"
 #include "ED_render.h"
+#include "ED_screen.h"
+#include "ED_select_utils.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -67,10 +67,10 @@
 
 #include "IMB_imbuf_types.h"
 
-#include "node_intern.h" /* own include */
 #include "NOD_composite.h"
 #include "NOD_shader.h"
 #include "NOD_texture.h"
+#include "node_intern.h" /* own include */
 
 #define USE_ESC_COMPO
 
@@ -819,7 +819,7 @@ static int edit_node_invoke_properties(bContext *C, wmOperator *op)
 }
 
 static void edit_node_properties_get(
-    wmOperator *op, bNodeTree *ntree, bNode **rnode, bNodeSocket **rsock, int *rin_out)
+    wmOperator *op, bNodeTree *ntree, bNode **r_node, bNodeSocket **r_sock, int *r_in_out)
 {
   bNode *node;
   bNodeSocket *sock = NULL;
@@ -842,14 +842,14 @@ static void edit_node_properties_get(
       break;
   }
 
-  if (rnode) {
-    *rnode = node;
+  if (r_node) {
+    *r_node = node;
   }
-  if (rsock) {
-    *rsock = sock;
+  if (r_sock) {
+    *r_sock = sock;
   }
-  if (rin_out) {
-    *rin_out = in_out;
+  if (r_in_out) {
+    *r_in_out = in_out;
   }
 }
 #endif

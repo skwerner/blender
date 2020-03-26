@@ -21,8 +21,8 @@
 /* allow readfile to use deprecated functionality */
 #define DNA_DEPRECATED_ALLOW
 
-#include <string.h>
 #include <float.h>
+#include <string.h>
 
 #include "BLI_listbase.h"
 #include "BLI_math.h"
@@ -33,60 +33,61 @@
 #include "DNA_defaults.h"
 
 #include "DNA_anim_types.h"
-#include "DNA_object_types.h"
+#include "DNA_armature_types.h"
 #include "DNA_camera_types.h"
 #include "DNA_cloth_types.h"
 #include "DNA_collection_types.h"
 #include "DNA_constraint_types.h"
+#include "DNA_curve_types.h"
 #include "DNA_curveprofile_types.h"
 #include "DNA_freestyle_types.h"
-#include "DNA_gpu_types.h"
-#include "DNA_gpencil_types.h"
+#include "DNA_genfile.h"
 #include "DNA_gpencil_modifier_types.h"
-#include "DNA_light_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_gpu_types.h"
+#include "DNA_key_types.h"
 #include "DNA_layer_types.h"
+#include "DNA_light_types.h"
 #include "DNA_lightprobe_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
 #include "DNA_particle_types.h"
 #include "DNA_rigidbody_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_shader_fx_types.h"
-#include "DNA_view3d_types.h"
-#include "DNA_genfile.h"
-#include "DNA_workspace_types.h"
-#include "DNA_key_types.h"
-#include "DNA_curve_types.h"
-#include "DNA_armature_types.h"
 #include "DNA_text_types.h"
 #include "DNA_texture_types.h"
+#include "DNA_view3d_types.h"
+#include "DNA_workspace_types.h"
 #include "DNA_world_types.h"
 
 #include "BKE_animsys.h"
 #include "BKE_brush.h"
 #include "BKE_cloth.h"
 #include "BKE_collection.h"
-#include "BKE_constraint.h"
 #include "BKE_colortools.h"
+#include "BKE_constraint.h"
+#include "BKE_curveprofile.h"
 #include "BKE_customdata.h"
 #include "BKE_fcurve.h"
 #include "BKE_freestyle.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_idprop.h"
 #include "BKE_key.h"
-#include "BKE_lib_id.h"
 #include "BKE_layer.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_node.h"
 #include "BKE_paint.h"
 #include "BKE_pointcache.h"
-#include "BKE_curveprofile.h"
 #include "BKE_report.h"
 #include "BKE_rigidbody.h"
 #include "BKE_screen.h"
@@ -4824,19 +4825,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  /**
-   * Versioning code until next subversion bump goes here.
-   *
-   * \note Be sure to check when bumping the version:
-   * - #do_versions_after_linking_280 in this file.
-   * - "versioning_userdef.c", #BLO_version_defaults_userpref_blend
-   * - "versioning_userdef.c", #do_versions_theme
-   *
-   * \note Keep this message at the bottom of the function.
-   */
-  {
-    /* Keep this block, even when empty. */
-
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 11)) {
     if (!DNA_struct_elem_find(fd->filesdna, "OceanModifierData", "float", "fetch_jonswap")) {
       for (Object *object = bmain->objects.first; object != NULL; object = object->id.next) {
         for (ModifierData *md = object->modifiers.first; md; md = md->next) {
@@ -4863,5 +4852,19 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
         wm->xr.session_settings.flag = XR_SESSION_USE_POSITION_TRACKING;
       }
     }
+  }
+
+  /**
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - #do_versions_after_linking_280 in this file.
+   * - "versioning_userdef.c", #BLO_version_defaults_userpref_blend
+   * - "versioning_userdef.c", #do_versions_theme
+   *
+   * \note Keep this message at the bottom of the function.
+   */
+  {
+    /* Keep this block, even when empty. */
   }
 }

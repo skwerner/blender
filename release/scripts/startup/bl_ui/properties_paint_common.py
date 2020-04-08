@@ -626,6 +626,7 @@ def brush_settings(layout, context, brush, popover=False):
 
         if brush.sculpt_tool == 'POSE':
             layout.separator()
+            layout.prop(brush, "pose_origin_type")
             layout.prop(brush, "pose_offset")
             layout.prop(brush, "pose_smooth_iterations")
             layout.prop(brush, "pose_ik_segments")
@@ -664,6 +665,14 @@ def brush_settings(layout, context, brush, popover=False):
             col.prop(brush, "multiplane_scrape_angle")
             col.prop(brush, "use_multiplane_scrape_dynamic")
             col.prop(brush, "show_multiplane_scrape_planes_preview")
+
+        if brush.sculpt_tool == 'SMOOTH':
+            col = layout.column()
+            col.prop(brush, "smooth_deform_type")
+            if brush.smooth_deform_type == 'SURFACE':
+                col.prop(brush, "surface_smooth_shape_preservation")
+                col.prop(brush, "surface_smooth_current_vertex")
+                col.prop(brush, "surface_smooth_iterations")
 
         if brush.sculpt_tool == 'MASK':
             layout.row().prop(brush, "mask_tool", expand=True)
@@ -814,8 +823,9 @@ def brush_settings_advanced(layout, context, brush, popover=False):
         # face masks automasking
         layout.prop(brush, "use_automasking_face_sets")
         
-        # boundary edges automasking
+        # boundary edges/face sets automasking
         layout.prop(brush, "use_automasking_boundary_edges")
+        layout.prop(brush, "use_automasking_boundary_face_sets")
         layout.prop(brush, "automasking_boundary_edges_propagation_steps")
 
 

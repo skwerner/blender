@@ -312,6 +312,7 @@ static eOLDrawState tree_element_set_active_object(bContext *C,
   Scene *sce;
   Base *base;
   Object *ob = NULL;
+  TreeElement *te_ob = NULL;
 
   /* if id is not object, we search back */
   if (te->idcode == ID_OB) {
@@ -355,8 +356,12 @@ static eOLDrawState tree_element_set_active_object(bContext *C,
     }
   }
 
-  parent_tselem = TREESTORE(outliner_find_id(soops, &soops->tree, (ID *)ob));
-  if (base) {
+  te_ob = outliner_find_id(soops, &soops->tree, (ID *)ob);
+  if (te_ob != NULL) {
+    parent_tselem = TREESTORE(te_ob);
+  }
+
+  if (!ELEM(NULL, parent_tselem, base)) {
     if (set == OL_SETSEL_EXTEND) {
       /* swap select */
       if (base->flag & BASE_SELECTED) {
@@ -1252,7 +1257,7 @@ static bool do_outliner_range_select_recursive(ListBase *lb,
                                                TreeElement *cursor,
                                                bool selecting)
 {
-  for (TreeElement *te = lb->first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, lb) {
     TreeStoreElem *tselem = TREESTORE(te);
 
     if (selecting) {
@@ -1496,7 +1501,7 @@ static int outliner_box_select_exec(bContext *C, wmOperator *op)
   WM_operator_properties_border_to_rctf(op, &rectf);
   UI_view2d_region_to_view_rctf(&region->v2d, &rectf, &rectf);
 
-  for (TreeElement *te = soops->tree.first; te; te = te->next) {
+  LISTBASE_FOREACH (TreeElement *, te, &soops->tree) {
     outliner_item_box_select(soops, scene, &rectf, te, select);
   }
 

@@ -236,7 +236,7 @@ static void wm_window_match_keep_current_wm(const bContext *C,
 
   /* when loading without UI, no matching needed */
   if (load_ui && (screen = CTX_wm_screen(C))) {
-    for (wmWindow *win = wm->windows.first; win; win = win->next) {
+    LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
       WorkSpace *workspace;
 
       BKE_workspace_layout_find_global(bmain, screen, &workspace);
@@ -294,8 +294,8 @@ static void wm_window_match_replace_by_file_wm(bContext *C,
   wm_window_clear_drawable(oldwm);
 
   /* only first wm in list has ghostwins */
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
-    for (wmWindow *oldwin = oldwm->windows.first; oldwin; oldwin = oldwin->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
+    LISTBASE_FOREACH (wmWindow *, oldwin, &oldwm->windows) {
       if (oldwin->winid == win->winid) {
         has_match = true;
 
@@ -375,6 +375,9 @@ static void wm_init_userdef(Main *bmain)
 
   /* update tempdir from user preferences */
   BKE_tempdir_init(U.tempdir);
+
+  /* Update tablet API preference. */
+  WM_init_tablet_api();
 }
 
 /* return codes */
@@ -1047,8 +1050,8 @@ void wm_homefile_read(bContext *C,
   }
 
   if (use_userdef) {
-    /*  Clear keymaps because the current default keymap may have been initialized
-     *  from user preferences, which have been reset. */
+    /* Clear keymaps because the current default keymap may have been initialized
+     * from user preferences, which have been reset. */
     for (wmWindowManager *wm = bmain->wm.first; wm; wm = wm->id.next) {
       if (wm->defaultconf) {
         wm->defaultconf->flag &= ~KEYCONF_INIT_DEFAULT;
@@ -1219,7 +1222,7 @@ static ImBuf *blend_file_thumb(const bContext *C,
   char err_out[256] = "unknown";
 
   /* screen if no camera found */
-  ScrArea *sa = NULL;
+  ScrArea *area = NULL;
   ARegion *region = NULL;
   View3D *v3d = NULL;
 
@@ -1235,10 +1238,10 @@ static ImBuf *blend_file_thumb(const bContext *C,
   }
 
   if ((scene->camera == NULL) && (screen != NULL)) {
-    sa = BKE_screen_find_big_area(screen, SPACE_VIEW3D, 0);
-    region = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
+    area = BKE_screen_find_big_area(screen, SPACE_VIEW3D, 0);
+    region = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
     if (region) {
-      v3d = sa->spacedata.first;
+      v3d = area->spacedata.first;
     }
   }
 
@@ -1433,6 +1436,9 @@ static bool wm_file_write(bContext *C, const char *filepath, int fileflags, Repo
       ibuf_thumb = IMB_thumb_create(filepath, THB_LARGE, THB_SOURCE_BLEND, ibuf_thumb);
     }
 
+    /* Without this there is no feedback the file was saved. */
+    BKE_reportf(reports, RPT_INFO, "Saved \"%s\"", BLI_path_basename(filepath));
+
     /* Success. */
     ok = true;
   }
@@ -1507,7 +1513,7 @@ void wm_autosave_timer(Main *bmain, wmWindowManager *wm, wmTimer *UNUSED(wt))
   WM_event_remove_timer(wm, NULL, wm->autosavetimer);
 
   /* if a modal operator is running, don't autosave, but try again in 10 seconds */
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     LISTBASE_FOREACH (wmEventHandler *, handler_base, &win->modalhandlers) {
       if (handler_base->type == WM_HANDLER_TYPE_OP) {
         wmEventHandler_Op *handler = (wmEventHandler_Op *)handler_base;
@@ -1532,7 +1538,7 @@ void wm_autosave_timer(Main *bmain, wmWindowManager *wm, wmTimer *UNUSED(wt))
     }
   }
   else {
-    /*  save as regular blend file */
+    /* Save as regular blend file. */
     int fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_HISTORY);
 
     ED_editors_flush_edits(bmain);
@@ -1665,7 +1671,7 @@ static int wm_homefile_write_exec(bContext *C, wmOperator *op)
 
   ED_editors_flush_edits(bmain);
 
-  /*  force save as regular blend file */
+  /* Force save as regular blend file. */
   fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_HISTORY);
 
   if (BLO_write_file(bmain, filepath, fileflags, op->reports, NULL) == 0) {
@@ -2298,7 +2304,7 @@ static bool wm_open_mainfile_check(bContext *UNUSED(C), wmOperator *op)
   RNA_string_get(op->ptr, "filepath", path);
 
   /* get the dir */
-  lslash = (char *)BLI_last_slash(path);
+  lslash = (char *)BLI_path_slash_rfind(path);
   if (lslash) {
     *(lslash + 1) = '\0';
   }
@@ -2536,7 +2542,7 @@ void WM_OT_recover_auto_save(wmOperatorType *ot)
 static void wm_filepath_default(char *filepath)
 {
   if (G.save_over == false) {
-    BLI_ensure_filename(filepath, FILE_MAX, "untitled.blend");
+    BLI_path_filename_ensure(filepath, FILE_MAX, "untitled.blend");
   }
 }
 
@@ -2715,8 +2721,6 @@ static int wm_save_mainfile_invoke(bContext *C, wmOperator *op, const wmEvent *U
 
     RNA_string_get(op->ptr, "filepath", path);
     ret = wm_save_as_mainfile_exec(C, op);
-    /* Without this there is no feedback the file was saved. */
-    BKE_reportf(op->reports, RPT_INFO, "Saved \"%s\"", BLI_path_basename(path));
   }
   else {
     WM_event_add_fileselect(C, op);

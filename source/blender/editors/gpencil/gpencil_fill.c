@@ -92,7 +92,7 @@ typedef struct tGPDfill {
   /** current active gp object */
   struct Object *ob;
   /** area where painting originated */
-  struct ScrArea *sa;
+  struct ScrArea *area;
   /** region where painting originated */
   struct RegionView3D *rv3d;
   /** view3 where painting originated */
@@ -1143,7 +1143,6 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
     gp_stroke_convertcoords_tpoint(tgpf->scene,
                                    tgpf->region,
                                    tgpf->ob,
-                                   tgpf->gpl,
                                    point2D,
                                    tgpf->depth_arr ? tgpf->depth_arr + i : NULL,
                                    &pt->x);
@@ -1186,8 +1185,7 @@ static void gpencil_stroke_from_buffer(tGPDfill *tgpf)
   if ((tgpf->lock_axis > GP_LOCKAXIS_VIEW) &&
       ((ts->gpencil_v3d_align & GP_PROJECT_DEPTH_VIEW) == 0)) {
     float origin[3];
-    ED_gpencil_drawing_reference_get(
-        tgpf->scene, tgpf->ob, tgpf->gpl, ts->gpencil_v3d_align, origin);
+    ED_gpencil_drawing_reference_get(tgpf->scene, tgpf->ob, ts->gpencil_v3d_align, origin);
     ED_gp_project_stroke_to_plane(
         tgpf->scene, tgpf->ob, tgpf->rv3d, gps, origin, tgpf->lock_axis - 1);
   }
@@ -1250,8 +1248,8 @@ static bool gpencil_fill_poll(bContext *C)
   Object *obact = CTX_data_active_object(C);
 
   if (ED_operator_regionactive(C)) {
-    ScrArea *sa = CTX_wm_area(C);
-    if (sa->spacetype == SPACE_VIEW3D) {
+    ScrArea *area = CTX_wm_area(C);
+    if (area->spacetype == SPACE_VIEW3D) {
       if ((obact == NULL) || (obact->type != OB_GPENCIL) ||
           (obact->mode != OB_MODE_PAINT_GPENCIL)) {
         return false;
@@ -1285,10 +1283,10 @@ static tGPDfill *gp_session_init_fill(bContext *C, wmOperator *UNUSED(op))
   tgpf->bmain = CTX_data_main(C);
   tgpf->scene = CTX_data_scene(C);
   tgpf->ob = CTX_data_active_object(C);
-  tgpf->sa = CTX_wm_area(C);
+  tgpf->area = CTX_wm_area(C);
   tgpf->region = CTX_wm_region(C);
   tgpf->rv3d = tgpf->region->regiondata;
-  tgpf->v3d = tgpf->sa->spacedata.first;
+  tgpf->v3d = tgpf->area->spacedata.first;
   tgpf->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   tgpf->win = CTX_wm_window(C);
 

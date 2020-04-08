@@ -33,7 +33,7 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_global.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
@@ -895,6 +895,16 @@ const char *BKE_volume_grids_error_msg(const Volume *volume)
 {
 #ifdef WITH_OPENVDB
   return volume->runtime.grids->error_msg.c_str();
+#else
+  UNUSED_VARS(volume);
+  return "";
+#endif
+}
+
+const char *BKE_volume_grids_frame_filepath(const Volume *volume)
+{
+#ifdef WITH_OPENVDB
+  return volume->runtime.grids->filepath;
 #else
   UNUSED_VARS(volume);
   return "";

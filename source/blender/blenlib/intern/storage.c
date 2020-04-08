@@ -226,11 +226,12 @@ size_t BLI_file_size(const char *path)
   return stats.st_size;
 }
 
+#ifndef __APPLE__
 eFileAttributes BLI_file_attributes(const char *path)
 {
   int ret = 0;
 
-#ifdef WIN32
+#  ifdef WIN32
   wchar_t wline[FILE_MAXDIR];
   BLI_strncpy_wchar_from_utf8(wline, path, ARRAY_SIZE(wline));
   DWORD attr = GetFileAttributesW(wline);
@@ -265,19 +266,9 @@ eFileAttributes BLI_file_attributes(const char *path)
     ret |= FILE_ATTR_REPARSE_POINT;
   }
 
-#endif
+#  endif
 
-#ifdef __APPLE__
-
-  /* TODO:
-   * If Hidden (Invisible) set FILE_ATTR_HIDDEN
-   * If Locked set FILE_ATTR_READONLY
-   * If Restricted set FILE_ATTR_RESTRICTED
-   */
-
-#endif
-
-#ifdef __linux__
+#  ifdef __linux__
   UNUSED_VARS(path);
 
   /* TODO:
@@ -285,10 +276,23 @@ eFileAttributes BLI_file_attributes(const char *path)
    * If Archived set FILE_ATTR_ARCHIVE
    */
 
-#endif
+#  endif
 
   return ret;
 }
+#endif
+
+/**
+ * Returns the target path of a file-based redirection, like Mac Alias or Win32 Shortcut file.
+ */
+#ifndef __APPLE__
+bool BLI_file_alias_target(char UNUSED(target[FILE_MAXDIR]), const char *UNUSED(filepath))
+{
+  /* TODO: Find target in Win32 Shortcut - Shell Link (.lnk) file.
+   * Format: https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-shllink/ */
+  return false;
+}
+#endif
 
 /**
  * Returns the st_mode from stat-ing the specified path name, or 0 if stat fails
@@ -312,7 +316,7 @@ int BLI_exists(const char *name)
    * 2. after the C:\ when the path is the volume only
    */
   if ((len >= 3) && (tmp_16[0] == L'\\') && (tmp_16[1] == L'\\')) {
-    BLI_cleanup_unc_16(tmp_16);
+    BLI_path_normalize_unc_16(tmp_16);
   }
 
   if ((tmp_16[1] == L':') && (tmp_16[2] == L'\0')) {

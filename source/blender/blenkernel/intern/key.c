@@ -43,7 +43,6 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BKE_animsys.h"
 #include "BKE_curve.h"
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
@@ -952,7 +951,7 @@ static void do_key(const int start,
   k3 = key_block_get_data(key, actkb, k[2], &freek3);
   k4 = key_block_get_data(key, actkb, k[3], &freek4);
 
-  /*  test for more or less points (per key!) */
+  /* Test for more or less points (per key!) */
   if (tot != k[0]->totelem) {
     k1tot = 0.0;
     flagflo |= 1;

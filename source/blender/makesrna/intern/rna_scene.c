@@ -36,6 +36,7 @@
 
 #include "IMB_imbuf_types.h"
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 
 #include "BLT_translation.h"
@@ -1679,10 +1680,10 @@ void rna_Scene_glsl_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA
 
 static void rna_Scene_world_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
-  Scene *sc = (Scene *)ptr->owner_id;
+  Scene *screen = (Scene *)ptr->owner_id;
 
   rna_Scene_glsl_update(bmain, scene, ptr);
-  WM_main_add_notifier(NC_WORLD | ND_WORLD, &sc->id);
+  WM_main_add_notifier(NC_WORLD | ND_WORLD, &screen->id);
   DEG_relations_tag_update(bmain);
 }
 
@@ -1810,7 +1811,7 @@ static void rna_Scene_editmesh_select_mode_set(PointerRNA *ptr, const bool *valu
 
     /* Update select mode in all the workspaces in mesh edit mode. */
     wmWindowManager *wm = G_MAIN->wm.first;
-    for (wmWindow *win = wm->windows.first; win; win = win->next) {
+    LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
       ViewLayer *view_layer = WM_window_get_active_view_layer(win);
 
       if (view_layer && view_layer->basact) {
@@ -2340,7 +2341,7 @@ static void rna_Stereo3dFormat_update(Main *bmain, Scene *UNUSED(scene), Pointer
 static ViewLayer *rna_ViewLayer_new(ID *id, Scene *UNUSED(sce), Main *bmain, const char *name)
 {
   Scene *scene = (Scene *)id;
-  ViewLayer *view_layer = BKE_view_layer_add(scene, name);
+  ViewLayer *view_layer = BKE_view_layer_add(scene, name, NULL, VIEWLAYER_ADD_NEW);
 
   DEG_id_tag_update(&scene->id, 0);
   DEG_relations_tag_update(bmain);
@@ -2434,7 +2435,7 @@ static const EnumPropertyItem *rna_TransformOrientation_impl_itemf(Scene *scene,
   if (transform_orientations && (BLI_listbase_is_empty(transform_orientations) == false)) {
     RNA_enum_item_add_separator(&item, &totitem);
 
-    for (TransformOrientation *ts = transform_orientations->first; ts; ts = ts->next) {
+    LISTBASE_FOREACH (TransformOrientation *, ts, transform_orientations) {
       tmp.identifier = ts->name;
       tmp.name = ts->name;
       tmp.value = i++;
@@ -6379,12 +6380,6 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Simplify Child Particles", "Global child particles percentage during rendering");
   RNA_def_property_update(prop, 0, "rna_Scene_simplify_update");
-
-  prop = RNA_def_property(srna, "use_simplify_smoke_highres", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_negative_sdna(prop, NULL, "simplify_smoke_ignore_highres", 1);
-  RNA_def_property_ui_text(
-      prop, "Use High-resolution Smoke", "Display high-resolution smoke in the viewport");
-  RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, NULL);
 
   /* Grease Pencil - Simplify Options */
   prop = RNA_def_property(srna, "simplify_gpencil", PROP_BOOLEAN, PROP_NONE);

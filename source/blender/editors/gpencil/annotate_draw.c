@@ -209,7 +209,6 @@ static void annotation_calc_2d_stroke_fxy(
 /* draw a given stroke - just a single dot (only one point) */
 static void annotation_draw_stroke_point(const bGPDspoint *points,
                                          short thickness,
-                                         short UNUSED(dflag),
                                          short sflag,
                                          int offsx,
                                          int offsy,
@@ -252,12 +251,8 @@ static void annotation_draw_stroke_point(const bGPDspoint *points,
 }
 
 /* draw a given stroke in 3d (i.e. in 3d-space), using simple ogl lines */
-static void annotation_draw_stroke_3d(const bGPDspoint *points,
-                                      int totpoints,
-                                      short thickness,
-                                      short UNUSED(sflag),
-                                      const float ink[4],
-                                      bool cyclic)
+static void annotation_draw_stroke_3d(
+    const bGPDspoint *points, int totpoints, short thickness, const float ink[4], bool cyclic)
 {
   float curpressure = points[0].pressure;
   float cyclic_fpt[3];
@@ -358,7 +353,7 @@ static void annotation_draw_stroke_2d(const bGPDspoint *points,
 
   /* Tessellation code - draw stroke as series of connected quads
    * (triangle strips in fact) with connection edges rotated to minimize shrinking artifacts,
-   * and rounded endcaps.
+   * and rounded end-caps.
    */
   {
     const bGPDspoint *pt1, *pt2;
@@ -550,9 +545,7 @@ static bool annotation_can_draw_stroke(const bGPDstroke *gps, const int dflag)
 }
 
 /* draw a set of strokes */
-static void annotation_draw_strokes(bGPdata *UNUSED(gpd),
-                                    bGPDlayer *UNUSED(gpl),
-                                    const bGPDframe *gpf,
+static void annotation_draw_strokes(const bGPDframe *gpf,
                                     int offsx,
                                     int offsy,
                                     int winx,
@@ -587,11 +580,11 @@ static void annotation_draw_strokes(bGPdata *UNUSED(gpd),
       /* 3D Lines - OpenGL primitives-based */
       if (gps->totpoints == 1) {
         annotation_draw_stroke_point(
-            gps->points, lthick, dflag, gps->flag, offsx, offsy, winx, winy, color);
+            gps->points, lthick, gps->flag, offsx, offsy, winx, winy, color);
       }
       else {
         annotation_draw_stroke_3d(
-            gps->points, gps->totpoints, lthick, gps->flag, color, gps->flag & GP_STROKE_CYCLIC);
+            gps->points, gps->totpoints, lthick, color, gps->flag & GP_STROKE_CYCLIC);
       }
 
       if (no_xray) {
@@ -605,7 +598,7 @@ static void annotation_draw_strokes(bGPdata *UNUSED(gpd),
       /* 2D Strokes... */
       if (gps->totpoints == 1) {
         annotation_draw_stroke_point(
-            gps->points, lthick, dflag, gps->flag, offsx, offsy, winx, winy, color);
+            gps->points, lthick, gps->flag, offsx, offsy, winx, winy, color);
       }
       else {
         annotation_draw_stroke_2d(gps->points,
@@ -626,15 +619,13 @@ static void annotation_draw_strokes(bGPdata *UNUSED(gpd),
 }
 
 /* Draw selected verts for strokes being edited */
-static void annotation_draw_strokes_edit(bGPdata *UNUSED(gpd),
-                                         bGPDlayer *gpl,
+static void annotation_draw_strokes_edit(bGPDlayer *gpl,
                                          const bGPDframe *gpf,
                                          int offsx,
                                          int offsy,
                                          int winx,
                                          int winy,
                                          short dflag,
-                                         short UNUSED(lflag),
                                          float alpha)
 {
   /* if alpha 0 do not draw */
@@ -754,15 +745,8 @@ static void annotation_draw_strokes_edit(bGPdata *UNUSED(gpd),
 
 /* ----- General Drawing ------ */
 /* draw onion-skinning for a layer */
-static void annotation_draw_onionskins(bGPdata *gpd,
-                                       bGPDlayer *gpl,
-                                       bGPDframe *gpf,
-                                       int offsx,
-                                       int offsy,
-                                       int winx,
-                                       int winy,
-                                       int UNUSED(cfra),
-                                       int dflag)
+static void annotation_draw_onionskins(
+    bGPDlayer *gpl, bGPDframe *gpf, int offsx, int offsy, int winx, int winy, int dflag)
 {
   const float alpha = 1.0f;
   float color[4];
@@ -781,8 +765,7 @@ static void annotation_draw_onionskins(bGPdata *gpd,
         /* alpha decreases with distance from curframe index */
         fac = 1.0f - ((float)(gpf->framenum - gf->framenum) / (float)(gpl->gstep + 1));
         color[3] = alpha * fac * 0.66f;
-        annotation_draw_strokes(
-            gpd, gpl, gf, offsx, offsy, winx, winy, dflag, gpl->thickness, color);
+        annotation_draw_strokes(gf, offsx, offsy, winx, winy, dflag, gpl->thickness, color);
       }
       else {
         break;
@@ -793,8 +776,7 @@ static void annotation_draw_onionskins(bGPdata *gpd,
     /* draw the strokes for the ghost frames (at half of the alpha set by user) */
     if (gpf->prev) {
       color[3] = (alpha / 7);
-      annotation_draw_strokes(
-          gpd, gpl, gpf->prev, offsx, offsy, winx, winy, dflag, gpl->thickness, color);
+      annotation_draw_strokes(gpf->prev, offsx, offsy, winx, winy, dflag, gpl->thickness, color);
     }
   }
   else {
@@ -815,8 +797,7 @@ static void annotation_draw_onionskins(bGPdata *gpd,
         /* alpha decreases with distance from curframe index */
         fac = 1.0f - ((float)(gf->framenum - gpf->framenum) / (float)(gpl->gstep_next + 1));
         color[3] = alpha * fac * 0.66f;
-        annotation_draw_strokes(
-            gpd, gpl, gf, offsx, offsy, winx, winy, dflag, gpl->thickness, color);
+        annotation_draw_strokes(gf, offsx, offsy, winx, winy, dflag, gpl->thickness, color);
       }
       else {
         break;
@@ -827,8 +808,7 @@ static void annotation_draw_onionskins(bGPdata *gpd,
     /* draw the strokes for the ghost frames (at half of the alpha set by user) */
     if (gpf->next) {
       color[3] = (alpha / 4);
-      annotation_draw_strokes(
-          gpd, gpl, gpf->next, offsx, offsy, winx, winy, dflag, gpl->thickness, color);
+      annotation_draw_strokes(gpf->next, offsx, offsy, winx, winy, dflag, gpl->thickness, color);
     }
   }
   else {
@@ -875,11 +855,11 @@ static void annotation_draw_data_layers(
 
     /* Draw 'onionskins' (frame left + right) */
     if (gpl->onion_flag & GP_LAYER_ONIONSKIN) {
-      annotation_draw_onionskins(gpd, gpl, gpf, offsx, offsy, winx, winy, cfra, dflag);
+      annotation_draw_onionskins(gpl, gpf, offsx, offsy, winx, winy, dflag);
     }
 
     /* draw the strokes already in active frame */
-    annotation_draw_strokes(gpd, gpl, gpf, offsx, offsy, winx, winy, dflag, lthick, ink);
+    annotation_draw_strokes(gpf, offsx, offsy, winx, winy, dflag, lthick, ink);
 
     /* Draw verts of selected strokes:
      *  - when doing OpenGL renders, we don't want to be showing these, as that ends up flickering
@@ -892,8 +872,7 @@ static void annotation_draw_data_layers(
     /* XXX: perhaps we don't want to show these when users are drawing... */
     if ((G.f & G_FLAG_RENDER_VIEWPORT) == 0 && (gpl->flag & GP_LAYER_LOCKED) == 0 &&
         (gpd->flag & GP_DATA_STROKE_EDITMODE)) {
-      annotation_draw_strokes_edit(
-          gpd, gpl, gpf, offsx, offsy, winx, winy, dflag, gpl->flag, alpha);
+      annotation_draw_strokes_edit(gpl, gpf, offsx, offsy, winx, winy, dflag, alpha);
     }
 
     /* Check if may need to draw the active stroke cache, only if this layer is the active layer
@@ -1034,7 +1013,7 @@ static void annotation_draw_data_all(Scene *scene,
 void ED_annotation_draw_2dimage(const bContext *C)
 {
   wmWindowManager *wm = CTX_wm_manager(C);
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   ARegion *region = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
 
@@ -1047,7 +1026,7 @@ void ED_annotation_draw_2dimage(const bContext *C)
   }
 
   /* calculate rect */
-  switch (sa->spacetype) {
+  switch (area->spacetype) {
     case SPACE_IMAGE: /* image */
     case SPACE_CLIP:  /* clip */
     {
@@ -1096,7 +1075,7 @@ void ED_annotation_draw_2dimage(const bContext *C)
   }
 
   /* draw it! */
-  annotation_draw_data_all(scene, gpd, offsx, offsy, sizex, sizey, CFRA, dflag, sa->spacetype);
+  annotation_draw_data_all(scene, gpd, offsx, offsy, sizex, sizey, CFRA, dflag, area->spacetype);
 }
 
 /**
@@ -1109,13 +1088,13 @@ void ED_annotation_draw_2dimage(const bContext *C)
 void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
 {
   wmWindowManager *wm = CTX_wm_manager(C);
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   ARegion *region = CTX_wm_region(C);
   Scene *scene = CTX_data_scene(C);
   int dflag = 0;
 
   /* check that we have grease-pencil stuff to draw */
-  if (sa == NULL) {
+  if (area == NULL) {
     return;
   }
   bGPdata *gpd = ED_annotation_data_get_active(C);
@@ -1126,7 +1105,7 @@ void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
   /* special hack for Image Editor */
   /* FIXME: the opengl poly-strokes don't draw at right thickness when done this way,
    * so disabled. */
-  if (ELEM(sa->spacetype, SPACE_IMAGE, SPACE_CLIP)) {
+  if (ELEM(area->spacetype, SPACE_IMAGE, SPACE_CLIP)) {
     dflag |= GP_DRAWDATA_IEDITHACK;
   }
 
@@ -1139,7 +1118,7 @@ void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
   }
 
   annotation_draw_data_all(
-      scene, gpd, 0, 0, region->winx, region->winy, CFRA, dflag, sa->spacetype);
+      scene, gpd, 0, 0, region->winx, region->winy, CFRA, dflag, area->spacetype);
 
   /* draw status text (if in screen/pixel-space) */
   if (!onlyv2d) {

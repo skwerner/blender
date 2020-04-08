@@ -27,6 +27,8 @@
 #include "BKE_movieclip.h"
 #include "BKE_object.h"
 
+#include "BLI_listbase.h"
+
 #include "DNA_camera_types.h"
 #include "DNA_screen_types.h"
 
@@ -244,7 +246,7 @@ static void image_camera_background_matrix_get(const Camera *cam,
   unit_m4(scale);
   unit_m4(translate);
 
-  /*  Normalized Object space camera frame corners. */
+  /* Normalized Object space camera frame corners. */
   float cam_corners[4][3];
   BKE_camera_view_frame(draw_ctx->scene, cam, cam_corners);
   float cam_width = fabsf(cam_corners[0][0] - cam_corners[3][0]);
@@ -311,7 +313,7 @@ void OVERLAY_image_camera_cache_populate(OVERLAY_Data *vedata, Object *ob)
   float norm_obmat[4][4];
   normalize_m4_m4(norm_obmat, ob->obmat);
 
-  for (CameraBGImage *bgpic = cam->bg_images.first; bgpic; bgpic = bgpic->next) {
+  LISTBASE_FOREACH (CameraBGImage *, bgpic, &cam->bg_images) {
     if (bgpic->flag & CAM_BGIMG_FLAG_DISABLED) {
       continue;
     }

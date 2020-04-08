@@ -32,6 +32,7 @@
 
 #include "BLT_translation.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_animsys.h"
 #include "BKE_sequencer.h"
 #include "BKE_sound.h"
@@ -426,7 +427,7 @@ static void rna_Sequence_use_crop_set(PointerRNA *ptr, bool value)
   }
 }
 
-static int transform_seq_cmp_cb(Sequence *seq, void *arg_pt)
+static int transform_seq_cmp_fn(Sequence *seq, void *arg_pt)
 {
   SequenceSearchData *data = arg_pt;
 
@@ -445,7 +446,7 @@ static Sequence *sequence_get_by_transform(Editing *ed, StripTransform *transfor
   data.data = transform;
 
   /* irritating we need to search for our sequence! */
-  BKE_sequencer_base_recursive_apply(&ed->seqbase, transform_seq_cmp_cb, &data);
+  BKE_sequencer_base_recursive_apply(&ed->seqbase, transform_seq_cmp_fn, &data);
 
   return data.seq;
 }
@@ -478,7 +479,7 @@ static void rna_SequenceTransform_update(Main *UNUSED(bmain),
   BKE_sequence_invalidate_cache_preprocessed(scene, seq);
 }
 
-static int crop_seq_cmp_cb(Sequence *seq, void *arg_pt)
+static int crop_seq_cmp_fn(Sequence *seq, void *arg_pt)
 {
   SequenceSearchData *data = arg_pt;
 
@@ -497,7 +498,7 @@ static Sequence *sequence_get_by_crop(Editing *ed, StripCrop *crop)
   data.data = crop;
 
   /* irritating we need to search for our sequence! */
-  BKE_sequencer_base_recursive_apply(&ed->seqbase, crop_seq_cmp_cb, &data);
+  BKE_sequencer_base_recursive_apply(&ed->seqbase, crop_seq_cmp_fn, &data);
 
   return data.seq;
 }
@@ -821,7 +822,7 @@ static void rna_Sequence_sound_update(Main *UNUSED(bmain), Scene *scene, Pointer
   DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS | ID_RECALC_AUDIO);
 }
 
-static int seqproxy_seq_cmp_cb(Sequence *seq, void *arg_pt)
+static int seqproxy_seq_cmp_fn(Sequence *seq, void *arg_pt)
 {
   SequenceSearchData *data = arg_pt;
 
@@ -839,7 +840,7 @@ static Sequence *sequence_get_by_proxy(Editing *ed, StripProxy *proxy)
   data.seq = NULL;
   data.data = proxy;
 
-  BKE_sequencer_base_recursive_apply(&ed->seqbase, seqproxy_seq_cmp_cb, &data);
+  BKE_sequencer_base_recursive_apply(&ed->seqbase, seqproxy_seq_cmp_fn, &data);
   return data.seq;
 }
 
@@ -875,7 +876,7 @@ static void rna_Sequence_opacity_set(PointerRNA *ptr, float value)
   seq->blend_opacity = value * 100.0f;
 }
 
-static int colbalance_seq_cmp_cb(Sequence *seq, void *arg_pt)
+static int colbalance_seq_cmp_fn(Sequence *seq, void *arg_pt)
 {
   SequenceSearchData *data = arg_pt;
 
@@ -909,7 +910,7 @@ static Sequence *sequence_get_by_colorbalance(Editing *ed,
   data.data = cb;
 
   /* irritating we need to search for our sequence! */
-  BKE_sequencer_base_recursive_apply(&ed->seqbase, colbalance_seq_cmp_cb, &data);
+  BKE_sequencer_base_recursive_apply(&ed->seqbase, colbalance_seq_cmp_fn, &data);
 
   *r_smd = data.smd;
 
@@ -1013,7 +1014,7 @@ static void rna_SequenceEditor_overlay_frame_set(PointerRNA *ptr, int value)
   }
 }
 
-static int modifier_seq_cmp_cb(Sequence *seq, void *arg_pt)
+static int modifier_seq_cmp_fn(Sequence *seq, void *arg_pt)
 {
   SequenceSearchData *data = arg_pt;
 
@@ -1033,7 +1034,7 @@ static Sequence *sequence_get_by_modifier(Editing *ed, SequenceModifierData *smd
   data.data = smd;
 
   /* irritating we need to search for our sequence! */
-  BKE_sequencer_base_recursive_apply(&ed->seqbase, modifier_seq_cmp_cb, &data);
+  BKE_sequencer_base_recursive_apply(&ed->seqbase, modifier_seq_cmp_fn, &data);
 
   return data.seq;
 }

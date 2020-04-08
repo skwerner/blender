@@ -3101,7 +3101,7 @@ static void image_walk_ntree_all_users(
 {
   switch (ntree->type) {
     case NTREE_SHADER:
-      for (bNode *node = ntree->nodes.first; node; node = node->next) {
+      LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
         if (node->id) {
           if (node->type == SH_NODE_TEX_IMAGE) {
             NodeTexImage *tex = node->storage;
@@ -3117,7 +3117,7 @@ static void image_walk_ntree_all_users(
       }
       break;
     case NTREE_TEXTURE:
-      for (bNode *node = ntree->nodes.first; node; node = node->next) {
+      LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
         if (node->id && node->type == TEX_NODE_IMAGE) {
           Image *ima = (Image *)node->id;
           ImageUser *iuser = node->storage;
@@ -3126,7 +3126,7 @@ static void image_walk_ntree_all_users(
       }
       break;
     case NTREE_COMPOSIT:
-      for (bNode *node = ntree->nodes.first; node; node = node->next) {
+      LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
         if (node->id && node->type == CMP_NODE_IMAGE) {
           Image *ima = (Image *)node->id;
           ImageUser *iuser = node->storage;
@@ -3189,19 +3189,19 @@ static void image_walk_id_all_users(
     }
     case ID_CA: {
       Camera *cam = (Camera *)id;
-      for (CameraBGImage *bgpic = cam->bg_images.first; bgpic; bgpic = bgpic->next) {
+      LISTBASE_FOREACH (CameraBGImage *, bgpic, &cam->bg_images) {
         callback(bgpic->ima, NULL, &bgpic->iuser, customdata);
       }
       break;
     }
     case ID_WM: {
       wmWindowManager *wm = (wmWindowManager *)id;
-      for (wmWindow *win = wm->windows.first; win; win = win->next) {
+      LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
         const bScreen *screen = BKE_workspace_active_screen_get(win->workspace_hook);
 
-        for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-          if (sa->spacetype == SPACE_IMAGE) {
-            SpaceImage *sima = sa->spacedata.first;
+        LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+          if (area->spacetype == SPACE_IMAGE) {
+            SpaceImage *sima = area->spacedata.first;
             callback(sima->image, NULL, &sima->iuser, customdata);
           }
         }
@@ -3761,7 +3761,7 @@ static void image_init_multilayer_multiview(Image *ima, RenderResult *rr)
   BKE_image_free_views(ima);
 
   if (rr) {
-    for (RenderView *rv = rr->views.first; rv; rv = rv->next) {
+    LISTBASE_FOREACH (RenderView *, rv, &rr->views) {
       ImageView *iv = MEM_callocN(sizeof(ImageView), "Viewer Image View");
       STRNCPY(iv->name, rv->name);
       BLI_addtail(&ima->views, iv);
@@ -5316,8 +5316,8 @@ void BKE_image_user_file_path(ImageUser *iuser, Image *ima, char *filepath)
       index = (iuser && iuser->tile) ? iuser->tile : 1001;
     }
 
-    BLI_stringdec(filepath, head, tail, &numlen);
-    BLI_stringenc(filepath, head, tail, numlen, index);
+    BLI_path_sequence_decode(filepath, head, tail, &numlen);
+    BLI_path_sequence_encode(filepath, head, tail, numlen, index);
   }
 
   BLI_path_abs(filepath, ID_BLEND_PATH_FROM_GLOBAL(&ima->id));
@@ -5458,7 +5458,7 @@ float *BKE_image_get_float_pixels_for_frame(struct Image *image, int frame, int 
 
 int BKE_image_sequence_guess_offset(Image *image)
 {
-  return BLI_stringdec(image->name, NULL, NULL, NULL);
+  return BLI_path_sequence_decode(image->name, NULL, NULL, NULL);
 }
 
 bool BKE_image_has_anim(Image *ima)

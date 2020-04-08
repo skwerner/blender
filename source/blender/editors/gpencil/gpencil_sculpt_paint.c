@@ -91,7 +91,7 @@ typedef struct tGP_BrushEditData {
   Scene *scene;
   Object *object;
 
-  ScrArea *sa;
+  ScrArea *area;
   ARegion *region;
 
   /* Current GPencil datablock */
@@ -1181,7 +1181,7 @@ static bool gpsculpt_brush_init(bContext *C, wmOperator *op)
     gso->is_transformed = false;
   }
 
-  gso->sa = CTX_wm_area(C);
+  gso->area = CTX_wm_area(C);
   gso->region = CTX_wm_region(C);
 
   Paint *paint = &ts->gp_sculptpaint->paint;
@@ -1307,8 +1307,8 @@ static void gpsculpt_brush_exit(bContext *C, wmOperator *op)
 /* poll callback for stroke sculpting operator(s) */
 static bool gpsculpt_brush_poll(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
-  if (sa && sa->spacetype != SPACE_VIEW3D) {
+  ScrArea *area = CTX_wm_area(C);
+  if (area && area->spacetype != SPACE_VIEW3D) {
     return false;
   }
 
@@ -1495,8 +1495,7 @@ static bool gpsculpt_brush_do_stroke(tGP_BrushEditData *gso,
          * brush region  (either within stroke painted, or on its lines)
          * - this assumes that linewidth is irrelevant
          */
-        if (gp_stroke_inside_circle(
-                gso->mval, gso->mval_prev, radius, pc1[0], pc1[1], pc2[0], pc2[1])) {
+        if (gp_stroke_inside_circle(gso->mval, radius, pc1[0], pc1[1], pc2[0], pc2[1])) {
           /* Apply operation to these points */
           bool ok = false;
 

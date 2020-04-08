@@ -52,6 +52,7 @@
 
 #include "ED_mesh.h"
 #include "ED_screen.h"
+#include "ED_transform_snap_object_context.h"
 #include "ED_uvedit.h"
 #include "ED_view3d.h"
 
@@ -370,8 +371,7 @@ void EDBM_mesh_load_ex(Main *bmain, Object *ob, bool free_data)
    * cycles.
    */
 #if 0
-  for (Object *other_object = bmain->objects.first; other_object != NULL;
-       other_object = other_object->id.next) {
+  for (Object *other_object = bmain->objects.first; other_object != NULL; other_object = other_object->id.next) {
     if (other_object->data == ob->data) {
       BKE_object_free_derived_caches(other_object);
     }
@@ -406,10 +406,10 @@ void EDBM_mesh_load(Main *bmain, Object *ob)
 void EDBM_mesh_free(BMEditMesh *em)
 {
   /* These tables aren't used yet, so it's not strictly necessary
-   * to 'end' them (with 'e' param) but if someone tries to start
-   * using them, having these in place will save a lot of pain */
-  ED_mesh_mirror_spatial_table(NULL, NULL, NULL, NULL, 'e');
-  ED_mesh_mirror_topo_table(NULL, NULL, 'e');
+   * to 'end' them but if someone tries to start using them,
+   * having these in place will save a lot of pain. */
+  ED_mesh_mirror_spatial_table_end(NULL);
+  ED_mesh_mirror_topo_table_end(NULL);
 
   BKE_editmesh_free(em);
 }
@@ -539,7 +539,7 @@ UvVertMap *BM_uv_vert_map_create(BMesh *bm,
   UvVertMap *vmap;
   UvMapVert *buf;
   MLoopUV *luv;
-  unsigned int a;
+  uint a;
   int totverts, i, totuv, totfaces;
   const int cd_loop_uv_offset = CustomData_get_offset(&bm->ldata, CD_MLOOPUV);
   bool *winding = NULL;
@@ -669,7 +669,7 @@ UvVertMap *BM_uv_vert_map_create(BMesh *bm,
   return vmap;
 }
 
-UvMapVert *BM_uv_vert_map_at_index(UvVertMap *vmap, unsigned int v)
+UvMapVert *BM_uv_vert_map_at_index(UvVertMap *vmap, uint v)
 {
   return vmap->vert[v];
 }
@@ -832,7 +832,7 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
   }
 
   if (do_islands) {
-    unsigned int *map;
+    uint *map;
     BMFace **stack;
     int stacksize = 0;
     UvElement *islandbuf;
@@ -1224,7 +1224,7 @@ BMFace *EDBM_verts_mirror_get_face(BMEditMesh *em, BMFace *f)
   BMVert **v_mirr_arr = BLI_array_alloca(v_mirr_arr, f->len);
 
   BMLoop *l_iter, *l_first;
-  unsigned int i = 0;
+  uint i = 0;
 
   l_iter = l_first = BM_FACE_FIRST_LOOP(f);
   do {
@@ -1636,6 +1636,51 @@ bool BMBVH_EdgeVisible(struct BMBVHTree *tree,
   }
 
   return false;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name BMesh Vertex Projection API
+ * \{ */
+
+void EDBM_project_snap_verts(
+    bContext *C, Depsgraph *depsgraph, ARegion *region, Object *obedit, BMEditMesh *em)
+{
+  Main *bmain = CTX_data_main(C);
+  BMIter iter;
+  BMVert *eve;
+
+  ED_view3d_init_mats_rv3d(obedit, region->regiondata);
+
+  struct SnapObjectContext *snap_context = ED_transform_snap_object_context_create_view3d(
+      bmain, CTX_data_scene(C), 0, region, CTX_wm_view3d(C));
+
+  BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
+    if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
+      float mval[2], co_proj[3];
+      if (ED_view3d_project_float_object(region, eve->co, mval, V3D_PROJ_TEST_NOP) ==
+          V3D_PROJ_RET_OK) {
+        if (ED_transform_snap_object_project_view3d(snap_context,
+                                                    depsgraph,
+                                                    SCE_SNAP_MODE_FACE,
+                                                    &(const struct SnapObjectParams){
+                                                        .snap_select = SNAP_NOT_ACTIVE,
+                                                        .use_object_edit_cage = false,
+                                                        .use_occlusion_test = true,
+                                                    },
+                                                    mval,
+                                                    NULL,
+                                                    NULL,
+                                                    co_proj,
+                                                    NULL)) {
+          mul_v3_m4v3(eve->co, obedit->imat, co_proj);
+        }
+      }
+    }
+  }
+
+  ED_transform_snap_object_context_destroy(snap_context);
 }
 
 /** \} */

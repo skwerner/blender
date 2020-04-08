@@ -43,7 +43,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_action.h"
-#include "BKE_anim.h"
+#include "BKE_anim_visualization.h"
 #include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
@@ -925,6 +925,7 @@ void BKE_pose_channel_free_ex(bPoseChannel *pchan, bool do_id_user)
 
   if (pchan->prop) {
     IDP_FreeProperty(pchan->prop);
+    pchan->prop = NULL;
   }
 
   /* Cached data, for new draw manager rendering code. */

@@ -192,7 +192,7 @@ typedef struct OVERLAY_Shaders {
   GPUShader *volume_velocity_needle_sh;
   GPUShader *volume_velocity_sh;
   GPUShader *wireframe_select;
-  GPUShader *wireframe;
+  GPUShader *wireframe[2];
   GPUShader *xray_fade;
 } OVERLAY_Shaders;
 
@@ -713,7 +713,7 @@ GPUShader *OVERLAY_shader_edit_mesh_normal(void)
                                  datatoc_edit_mesh_normal_vert_glsl,
                                  NULL},
         .frag = (const char *[]){datatoc_gpu_shader_flat_color_frag_glsl, NULL},
-        .defs = (const char *[]){sh_cfg->def, "#define INSTANCED_ATTRIB\n", NULL},
+        .defs = (const char *[]){sh_cfg->def, "#define INSTANCED_ATTR\n", NULL},
     });
   }
   return sh_data->edit_mesh_normals;
@@ -750,7 +750,7 @@ GPUShader *OVERLAY_shader_edit_mesh_skin_root(void)
                                  datatoc_edit_mesh_skin_root_vert_glsl,
                                  NULL},
         .frag = (const char *[]){datatoc_gpu_shader_flat_color_frag_glsl, NULL},
-        .defs = (const char *[]){sh_cfg->def, "#define INSTANCED_ATTRIB\n", NULL},
+        .defs = (const char *[]){sh_cfg->def, "#define INSTANCED_ATTR\n", NULL},
     });
   }
   return sh_data->edit_mesh_skin_root;
@@ -1269,7 +1269,7 @@ GPUShader *OVERLAY_shader_particle_shape(void)
                                  datatoc_particle_vert_glsl,
                                  NULL},
         .frag = (const char *[]){datatoc_gpu_shader_flat_color_frag_glsl, NULL},
-        .defs = (const char *[]){sh_cfg->def, "#define INSTANCED_ATTRIB\n", NULL},
+        .defs = (const char *[]){sh_cfg->def, "#define INSTANCED_ATTR\n", NULL},
     });
   }
   return sh_data->particle_shape;
@@ -1372,24 +1372,29 @@ GPUShader *OVERLAY_shader_wireframe_select(void)
   return sh_data->wireframe_select;
 }
 
-GPUShader *OVERLAY_shader_wireframe(void)
+GPUShader *OVERLAY_shader_wireframe(bool custom_bias)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const GPUShaderConfigData *sh_cfg = &GPU_shader_cfg_data[draw_ctx->sh_cfg];
   OVERLAY_Shaders *sh_data = &e_data.sh_data[draw_ctx->sh_cfg];
-  if (!sh_data->wireframe) {
-    sh_data->wireframe = GPU_shader_create_from_arrays({
+  if (!sh_data->wireframe[custom_bias]) {
+    sh_data->wireframe[custom_bias] = GPU_shader_create_from_arrays({
         .vert = (const char *[]){sh_cfg->lib,
                                  datatoc_common_view_lib_glsl,
                                  datatoc_common_globals_lib_glsl,
                                  datatoc_gpu_shader_common_obinfos_lib_glsl,
                                  datatoc_wireframe_vert_glsl,
                                  NULL},
-        .frag = (const char *[]){datatoc_common_view_lib_glsl, datatoc_wireframe_frag_glsl, NULL},
-        .defs = (const char *[]){sh_cfg->def, NULL},
+        .frag = (const char *[]){datatoc_common_view_lib_glsl,
+                                 datatoc_common_globals_lib_glsl,
+                                 datatoc_wireframe_frag_glsl,
+                                 NULL},
+        .defs = (const char *[]){sh_cfg->def,
+                                 custom_bias ? "#define CUSTOM_DEPTH_BIAS\n" : NULL,
+                                 NULL},
     });
   }
-  return sh_data->wireframe;
+  return sh_data->wireframe[custom_bias];
 }
 
 GPUShader *OVERLAY_shader_xray_fade(void)

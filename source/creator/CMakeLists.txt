@@ -921,6 +921,11 @@ elseif(APPLE)
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
   # Give the bundle actual creation/modification date
+  #
+  # Note that the directory might not yet exist, which happens when CMake is first run.
+  if(NOT EXISTS ${EXECUTABLE_OUTPUT_PATH}/Blender.app)
+    file(MAKE_DIRECTORY ${EXECUTABLE_OUTPUT_PATH}/Blender.app)
+  endif()
   execute_process(COMMAND SetFile -d ${SETFILE_DATE} -m ${SETFILE_DATE}
                   ${EXECUTABLE_OUTPUT_PATH}/Blender.app)
 
@@ -1055,6 +1060,12 @@ target_link_libraries(blender ${LIB})
 unset(LIB)
 
 setup_liblinks(blender)
+
+if(APPLE)
+  set_target_properties(blender PROPERTIES LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/osx_locals.map)
+elseif(UNIX)
+  set_target_properties(blender PROPERTIES LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/blender.map)
+endif()
 
 # -----------------------------------------------------------------------------
 # USD registry.

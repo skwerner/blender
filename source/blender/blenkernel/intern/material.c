@@ -54,7 +54,6 @@
 
 #include "BLT_translation.h"
 
-#include "BKE_animsys.h"
 #include "BKE_brush.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
@@ -171,7 +170,6 @@ void BKE_gpencil_material_attr_init(Material *ma)
     gp_style->fill_rgba[3] = 1.0f;
     ARRAY_SET_ITEMS(gp_style->mix_rgba, 1.0f, 1.0f, 1.0f, 0.2f);
     ARRAY_SET_ITEMS(gp_style->texture_scale, 1.0f, 1.0f);
-    gp_style->texture_opacity = 1.0f;
     gp_style->texture_pixsize = 100.0f;
 
     gp_style->flag |= GP_MATERIAL_STROKE_SHOW;
@@ -1123,7 +1121,7 @@ static bool ntree_foreach_texnode_recursive(bNodeTree *nodetree,
                                             ForEachTexNodeCallback callback,
                                             void *userdata)
 {
-  for (bNode *node = nodetree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &nodetree->nodes) {
     if (node->typeinfo->nclass == NODE_CLASS_TEXTURE &&
         node->typeinfo->type == SH_NODE_TEX_IMAGE && node->id) {
       if (!callback(node, userdata)) {

@@ -22,8 +22,13 @@
 #define DNA_DEPRECATED_ALLOW
 #include <string.h>
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
+
+#ifdef WITH_INTERNATIONAL
+#  include "BLT_translation.h"
+#endif
 
 #include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
@@ -533,7 +538,7 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     userdef->gpu_viewport_quality = 0.6f;
 
     /* Reset theme, old themes will not be compatible with minor version updates from now on. */
-    for (bTheme *btheme = userdef->themes.first; btheme; btheme = btheme->next) {
+    LISTBASE_FOREACH (bTheme *, btheme, &userdef->themes) {
       memcpy(btheme, &U_theme_default, sizeof(*btheme));
     }
 
@@ -551,8 +556,8 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 
   if (!USER_VERSION_ATLEAST(280, 31)) {
     /* Remove select/action mouse from user defined keymaps. */
-    for (wmKeyMap *keymap = userdef->user_keymaps.first; keymap; keymap = keymap->next) {
-      for (wmKeyMapDiffItem *kmdi = keymap->diff_items.first; kmdi; kmdi = kmdi->next) {
+    LISTBASE_FOREACH (wmKeyMap *, keymap, &userdef->user_keymaps) {
+      LISTBASE_FOREACH (wmKeyMapDiffItem *, kmdi, &keymap->diff_items) {
         if (kmdi->remove_item) {
           do_version_select_mouse(userdef, kmdi->remove_item);
         }
@@ -561,7 +566,7 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
         }
       }
 
-      for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+      LISTBASE_FOREACH (wmKeyMapItem *, kmi, &keymap->items) {
         do_version_select_mouse(userdef, kmi);
       }
     }
@@ -739,6 +744,15 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     userdef->gpu_flag |= USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE;
   }
 
+  if (!USER_VERSION_ATLEAST(283, 13)) {
+    /* If Translations is off then language should default to English. */
+    if ((userdef->transopts & USER_DOTRANSLATE_DEPRECATED) == 0) {
+      userdef->language = ULANGUAGE_ENGLISH;
+    }
+    /* Clear this deprecated flag. */
+    userdef->transopts &= ~USER_DOTRANSLATE_DEPRECATED;
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *
@@ -756,7 +770,7 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     userdef->pixelsize = 1.0f;
   }
 
-  for (bTheme *btheme = userdef->themes.first; btheme; btheme = btheme->next) {
+  LISTBASE_FOREACH (bTheme *, btheme, &userdef->themes) {
     do_versions_theme(userdef, btheme);
   }
 #undef USER_VERSION_ATLEAST

@@ -240,8 +240,8 @@ static void gp_primitive_update_cps(tGPDprimitive *tgpi)
 static bool gpencil_primitive_add_poll(bContext *C)
 {
   /* only 3D view */
-  ScrArea *sa = CTX_wm_area(C);
-  if (sa && sa->spacetype != SPACE_VIEW3D) {
+  ScrArea *area = CTX_wm_area(C);
+  if (area && area->spacetype != SPACE_VIEW3D) {
     return 0;
   }
 
@@ -954,8 +954,7 @@ static void gp_primitive_update_strokes(bContext *C, tGPDprimitive *tgpi)
 
       /* get origin to reproject point */
       float origin[3];
-      ED_gpencil_drawing_reference_get(
-          tgpi->scene, tgpi->ob, tgpi->gpl, ts->gpencil_v3d_align, origin);
+      ED_gpencil_drawing_reference_get(tgpi->scene, tgpi->ob, ts->gpencil_v3d_align, origin);
       /* reproject current */
       ED_gpencil_tpoint_to_point(tgpi->region, origin, tpt, &spt);
       ED_gp_project_point_to_plane(
@@ -987,13 +986,8 @@ static void gp_primitive_update_strokes(bContext *C, tGPDprimitive *tgpi)
     }
 
     /* convert screen-coordinates to 3D coordinates */
-    gp_stroke_convertcoords_tpoint(tgpi->scene,
-                                   tgpi->region,
-                                   tgpi->ob,
-                                   tgpi->gpl,
-                                   p2d,
-                                   depth_arr ? depth_arr + i : NULL,
-                                   &pt->x);
+    gp_stroke_convertcoords_tpoint(
+        tgpi->scene, tgpi->region, tgpi->ob, p2d, depth_arr ? depth_arr + i : NULL, &pt->x);
 
     pt->pressure = pressure;
     pt->strength = strength;
@@ -1019,15 +1013,14 @@ static void gp_primitive_update_strokes(bContext *C, tGPDprimitive *tgpi)
     for (int i = 0; i < tgpi->gpd->runtime.tot_cp_points; i++) {
       bGPDcontrolpoint *cp = &cps[i];
       gp_stroke_convertcoords_tpoint(
-          tgpi->scene, tgpi->region, tgpi->ob, tgpi->gpl, (tGPspoint *)cp, NULL, &cp->x);
+          tgpi->scene, tgpi->region, tgpi->ob, (tGPspoint *)cp, NULL, &cp->x);
     }
   }
 
   /* reproject to plane */
   if (!is_depth) {
     float origin[3];
-    ED_gpencil_drawing_reference_get(
-        tgpi->scene, tgpi->ob, tgpi->gpl, ts->gpencil_v3d_align, origin);
+    ED_gpencil_drawing_reference_get(tgpi->scene, tgpi->ob, ts->gpencil_v3d_align, origin);
     ED_gp_project_stroke_to_plane(
         tgpi->scene, tgpi->ob, tgpi->rv3d, gps, origin, ts->gp_sculpt.lock_axis - 1);
   }
@@ -1144,10 +1137,10 @@ static void gpencil_primitive_init(bContext *C, wmOperator *op)
   tgpi->scene = scene;
   tgpi->ob = CTX_data_active_object(C);
   tgpi->ob_eval = (Object *)DEG_get_evaluated_object(tgpi->depsgraph, tgpi->ob);
-  tgpi->sa = CTX_wm_area(C);
+  tgpi->area = CTX_wm_area(C);
   tgpi->region = CTX_wm_region(C);
   tgpi->rv3d = tgpi->region->regiondata;
-  tgpi->v3d = tgpi->sa->spacedata.first;
+  tgpi->v3d = tgpi->area->spacedata.first;
   tgpi->win = CTX_wm_window(C);
 
   /* save original type */

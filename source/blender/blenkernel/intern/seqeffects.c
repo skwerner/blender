@@ -30,6 +30,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_listbase.h"
 #include "BLI_math.h" /* windows needs for M_PI */
 #include "BLI_path_util.h"
 #include "BLI_rect.h"
@@ -2499,15 +2500,14 @@ static ImBuf *do_transform_effect(const SeqRenderData *context,
 /*********************** Glow *************************/
 
 static void RVBlurBitmap2_float(float *map, int width, int height, float blur, int quality)
-/*  MUUUCCH better than the previous blur. */
-/*  We do the blurring in two passes which is a whole lot faster. */
-/*  I changed the math around to implement an actual Gaussian */
-/*  distribution. */
-/* */
-/*  Watch out though, it tends to misbehaven with large blur values on */
-/*  a small bitmap.  Avoid avoid avoid. */
-/*=============================== */
 {
+  /* Much better than the previous blur!
+   * We do the blurring in two passes which is a whole lot faster.
+   * I changed the math around to implement an actual Gaussian distribution.
+   *
+   * Watch out though, it tends to misbehave with large blur values on
+   * a small bitmap. Avoid avoid! */
+
   float *temp = NULL, *swap;
   float *filter = NULL;
   int x, y, i, fx, fy;
@@ -3166,7 +3166,6 @@ void BKE_sequence_effect_speed_rebuild_map(Scene *scene, Sequence *seq, bool for
   /* XXX - new in 2.5x. should we use the animation system this way?
    * The fcurve is needed because many frames need evaluating at once - campbell */
   fcu = id_data_find_fcurve(&scene->id, seq, &RNA_Sequence, "speed_factor", 0, NULL);
-
   if (!v->frameMap || v->length != seq->len) {
     if (v->frameMap) {
       MEM_freeN(v->frameMap);

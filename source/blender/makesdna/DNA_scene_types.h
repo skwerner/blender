@@ -731,13 +731,12 @@ typedef struct RenderData {
   char seq_rend_type;
   /** Flag use for sequence render/draw. */
   char seq_flag;
-  char _pad5[5];
+  char _pad5[7];
 
   /* render simplify */
   short simplify_subsurf;
   short simplify_subsurf_render;
   short simplify_gpencil;
-  short simplify_smoke_ignore_highres;
   float simplify_particles;
   float simplify_particles_render;
 
@@ -971,6 +970,8 @@ typedef struct Sculpt {
   // float pivot[3]; XXX not used?
   int flags;
 
+  int automasking_flags;
+
   /* Control tablet input */
   // char tablet_size, tablet_strength; XXX not used?
   int radial_symm[3];
@@ -988,7 +989,6 @@ typedef struct Sculpt {
   /** Constant detail resolution (Blender unit / constant_detail). */
   float constant_detail;
   float detail_percent;
-  char _pad[4];
 
   struct Object *gravity_object;
 } Sculpt;
@@ -2137,6 +2137,7 @@ typedef enum ePaintFlags {
   PAINT_FAST_NAVIGATE = (1 << 1),
   PAINT_SHOW_BRUSH_ON_SURFACE = (1 << 2),
   PAINT_USE_CAVITY_MASK = (1 << 3),
+  PAINT_SCULPT_DELAY_UPDATES = (1 << 4),
 } ePaintFlags;
 
 /* Paint.symmetry_flags

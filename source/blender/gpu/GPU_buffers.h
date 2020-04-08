@@ -42,6 +42,7 @@ struct MPoly;
 struct MVert;
 struct Mesh;
 struct PBVH;
+struct SubdivCCG;
 
 /* Buffers for drawing from PBVH grids. */
 typedef struct GPU_PBVH_Buffers GPU_PBVH_Buffers;
@@ -95,10 +96,14 @@ void GPU_pbvh_bmesh_buffers_update(GPU_PBVH_Buffers *buffers,
                                    const int update_flags);
 
 void GPU_pbvh_grid_buffers_update(GPU_PBVH_Buffers *buffers,
+                                  struct SubdivCCG *subdiv_ccg,
                                   struct CCGElem **grids,
                                   const struct DMFlagMat *grid_flag_mats,
                                   int *grid_indices,
                                   int totgrid,
+                                  const int *sculpt_face_sets,
+                                  const int face_sets_color_seed,
+                                  const int face_sets_color_default,
                                   const struct CCGKey *key,
                                   const int update_flags);
 
@@ -113,7 +118,7 @@ struct GPUBatch *GPU_pbvh_buffers_batch_get(GPU_PBVH_Buffers *buffers, bool fast
 
 short GPU_pbvh_buffers_material_index_get(GPU_PBVH_Buffers *buffers);
 
-bool GPU_pbvh_buffers_has_mask(GPU_PBVH_Buffers *buffers);
+bool GPU_pbvh_buffers_has_overlays(GPU_PBVH_Buffers *buffers);
 
 #ifdef __cplusplus
 }

@@ -103,9 +103,13 @@
 
 #include "wm.h"
 #include "wm_draw.h"
+#include "wm_event_system.h"
 #include "wm_event_types.h"
 #include "wm_files.h"
 #include "wm_window.h"
+#ifdef WITH_XR_OPENXR
+#  include "wm_xr.h"
+#endif
 
 #define UNDOCUMENTED_OPERATOR_TIP N_("(undocumented operator)")
 
@@ -769,7 +773,7 @@ bool WM_operator_last_properties_init(wmOperator *op)
   bool changed = false;
   if (op->type->last_properties) {
     changed |= operator_last_properties_init_impl(op, op->type->last_properties);
-    for (wmOperator *opm = op->macro.first; opm; opm = opm->next) {
+    LISTBASE_FOREACH (wmOperator *, opm, &op->macro) {
       IDProperty *idp_src = IDP_GetPropertyFromGroup(op->type->last_properties, opm->idname);
       if (idp_src) {
         changed |= operator_last_properties_init_impl(opm, idp_src);
@@ -792,7 +796,7 @@ bool WM_operator_last_properties_store(wmOperator *op)
   }
 
   if (op->macro.first != NULL) {
-    for (wmOperator *opm = op->macro.first; opm; opm = opm->next) {
+    LISTBASE_FOREACH (wmOperator *, opm, &op->macro) {
       if (opm->properties) {
         if (op->type->last_properties == NULL) {
           op->type->last_properties = IDP_New(
@@ -1767,13 +1771,13 @@ static int wm_search_menu_invoke(bContext *C, wmOperator *op, const wmEvent *eve
   /* Exception for launching via spacebar */
   if (event->type == EVT_SPACEKEY) {
     bool ok = true;
-    ScrArea *sa = CTX_wm_area(C);
-    if (sa) {
-      if (sa->spacetype == SPACE_CONSOLE) {
+    ScrArea *area = CTX_wm_area(C);
+    if (area) {
+      if (area->spacetype == SPACE_CONSOLE) {
         /* So we can use the shortcut in the console. */
         ok = false;
       }
-      else if (sa->spacetype == SPACE_TEXT) {
+      else if (area->spacetype == SPACE_TEXT) {
         /* So we can use the spacebar in the text editor. */
         ok = false;
       }
@@ -2135,7 +2139,7 @@ static void radial_control_update_header(wmOperator *op, bContext *C)
 {
   RadialControl *rc = op->customdata;
   char msg[UI_MAX_DRAW_STR];
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   Scene *scene = CTX_data_scene(C);
 
   if (hasNumInput(&rc->num_input)) {
@@ -2172,7 +2176,7 @@ static void radial_control_update_header(wmOperator *op, bContext *C)
     }
   }
 
-  ED_area_status_text(sa, msg);
+  ED_area_status_text(area, msg);
 }
 
 static void radial_control_set_initial_mouse(RadialControl *rc, const wmEvent *event)
@@ -2788,14 +2792,14 @@ static void radial_control_cancel(bContext *C, wmOperator *op)
 {
   RadialControl *rc = op->customdata;
   wmWindowManager *wm = CTX_wm_manager(C);
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
   if (rc->dial) {
     MEM_freeN(rc->dial);
     rc->dial = NULL;
   }
 
-  ED_area_status_text(sa, NULL);
+  ED_area_status_text(area, NULL);
 
   WM_paint_cursor_end(wm, rc->cursor);
 
@@ -3139,11 +3143,11 @@ static void WM_OT_radial_control(wmOperatorType *ot)
 static void redraw_timer_window_swap(bContext *C)
 {
   wmWindow *win = CTX_wm_window(C);
-  ScrArea *sa;
+  ScrArea *area;
   CTX_wm_menu_set(C, NULL);
 
-  for (sa = CTX_wm_screen(C)->areabase.first; sa; sa = sa->next) {
-    ED_area_tag_redraw(sa);
+  for (area = CTX_wm_screen(C)->areabase.first; area; area = area->next) {
+    ED_area_tag_redraw(area);
   }
   wm_draw_update(C);
 
@@ -3176,14 +3180,14 @@ static void redraw_timer_step(bContext *C,
                               Scene *scene,
                               struct Depsgraph *depsgraph,
                               wmWindow *win,
-                              ScrArea *sa,
+                              ScrArea *area,
                               ARegion *region,
                               const int type,
                               const int cfra)
 {
   if (type == eRTDrawRegion) {
     if (region) {
-      wm_draw_region_test(C, sa, region);
+      wm_draw_region_test(C, area, region);
     }
   }
   else if (type == eRTDrawRegionSwap) {
@@ -3196,25 +3200,26 @@ static void redraw_timer_step(bContext *C,
   }
   else if (type == eRTDrawWindow) {
     bScreen *screen = WM_window_get_active_screen(win);
-    ScrArea *sa_iter;
+    ScrArea *area_iter;
 
     CTX_wm_menu_set(C, NULL);
 
-    for (sa_iter = screen->areabase.first; sa_iter; sa_iter = sa_iter->next) {
-      ARegion *ar_iter;
-      CTX_wm_area_set(C, sa_iter);
+    for (area_iter = screen->areabase.first; area_iter; area_iter = area_iter->next) {
+      ARegion *region_iter;
+      CTX_wm_area_set(C, area_iter);
 
-      for (ar_iter = sa_iter->regionbase.first; ar_iter; ar_iter = ar_iter->next) {
-        if (ar_iter->visible) {
-          CTX_wm_region_set(C, ar_iter);
-          wm_draw_region_test(C, sa_iter, ar_iter);
+      for (region_iter = area_iter->regionbase.first; region_iter;
+           region_iter = region_iter->next) {
+        if (region_iter->visible) {
+          CTX_wm_region_set(C, region_iter);
+          wm_draw_region_test(C, area_iter, region_iter);
         }
       }
     }
 
     CTX_wm_window_set(C, win); /* XXX context manipulation warning! */
 
-    CTX_wm_area_set(C, sa);
+    CTX_wm_area_set(C, area);
     CTX_wm_region_set(C, region);
   }
   else if (type == eRTDrawWindowSwap) {
@@ -3240,8 +3245,12 @@ static void redraw_timer_step(bContext *C,
     }
   }
   else { /* eRTUndo */
+    /* Undo and redo, including depsgraph update since that can be a
+     * significant part of the cost. */
     ED_undo_pop(C);
+    wm_event_do_refresh_wm_and_depsgraph(C);
     ED_undo_redo(C);
+    wm_event_do_refresh_wm_and_depsgraph(C);
   }
 }
 
@@ -3250,7 +3259,7 @@ static int redraw_timer_exec(bContext *C, wmOperator *op)
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   wmWindow *win = CTX_wm_window(C);
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   ARegion *region = CTX_wm_region(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   double time_start, time_delta;
@@ -3272,7 +3281,7 @@ static int redraw_timer_exec(bContext *C, wmOperator *op)
   wm_window_make_drawable(wm, win);
 
   for (a = 0; a < iter; a++) {
-    redraw_timer_step(C, bmain, scene, depsgraph, win, sa, region, type, cfra);
+    redraw_timer_step(C, bmain, scene, depsgraph, win, area, region, type, cfra);
     iter_steps += 1;
 
     if (time_limit != 0.0) {
@@ -3688,8 +3697,8 @@ static void wm_xr_session_update_screen(Main *bmain, const wmXrData *xr_data)
   const bool session_exists = WM_xr_session_exists(xr_data);
 
   for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
-    for (ScrArea *area = screen->areabase.first; area; area = area->next) {
-      for (SpaceLink *slink = area->spacedata.first; slink; slink = slink->next) {
+    LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+      LISTBASE_FOREACH (SpaceLink *, slink, &area->spacedata) {
         if (slink->spacetype == SPACE_VIEW3D) {
           View3D *v3d = (View3D *)slink;
 
@@ -3711,6 +3720,8 @@ static void wm_xr_session_update_screen(Main *bmain, const wmXrData *xr_data)
       }
     }
   }
+
+  WM_main_add_notifier(NC_WM | ND_XR_DATA_CHANGED, NULL);
 }
 
 static void wm_xr_session_update_screen_on_exit_cb(const wmXrData *xr_data)
@@ -3833,14 +3844,14 @@ static void gesture_circle_modal_keymap(wmKeyConfig *keyconf)
   };
 
   /* WARNING - name is incorrect, use for non-3d views */
-  wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "View3D Gesture Circle");
+  wmKeyMap *keymap = WM_modalkeymap_find(keyconf, "View3D Gesture Circle");
 
   /* this function is called for each spacetype, only needs to add map once */
   if (keymap && keymap->modal_items) {
     return;
   }
 
-  keymap = WM_modalkeymap_add(keyconf, "View3D Gesture Circle", modal_items);
+  keymap = WM_modalkeymap_ensure(keyconf, "View3D Gesture Circle", modal_items);
 
   /* assign map to operators */
   WM_modalkeymap_assign(keymap, "VIEW3D_OT_select_circle");
@@ -3863,14 +3874,14 @@ static void gesture_straightline_modal_keymap(wmKeyConfig *keyconf)
       {0, NULL, 0, NULL, NULL},
   };
 
-  wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Gesture Straight Line");
+  wmKeyMap *keymap = WM_modalkeymap_find(keyconf, "Gesture Straight Line");
 
   /* this function is called for each spacetype, only needs to add map once */
   if (keymap && keymap->modal_items) {
     return;
   }
 
-  keymap = WM_modalkeymap_add(keyconf, "Gesture Straight Line", modal_items);
+  keymap = WM_modalkeymap_ensure(keyconf, "Gesture Straight Line", modal_items);
 
   /* assign map to operators */
   WM_modalkeymap_assign(keymap, "IMAGE_OT_sample_line");
@@ -3889,14 +3900,14 @@ static void gesture_box_modal_keymap(wmKeyConfig *keyconf)
       {0, NULL, 0, NULL, NULL},
   };
 
-  wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Gesture Box");
+  wmKeyMap *keymap = WM_modalkeymap_find(keyconf, "Gesture Box");
 
   /* this function is called for each spacetype, only needs to add map once */
   if (keymap && keymap->modal_items) {
     return;
   }
 
-  keymap = WM_modalkeymap_add(keyconf, "Gesture Box", modal_items);
+  keymap = WM_modalkeymap_ensure(keyconf, "Gesture Box", modal_items);
 
   /* assign map to operators */
   WM_modalkeymap_assign(keymap, "ACTION_OT_select_box");
@@ -3940,14 +3951,14 @@ static void gesture_zoom_border_modal_keymap(wmKeyConfig *keyconf)
       {0, NULL, 0, NULL, NULL},
   };
 
-  wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Gesture Zoom Border");
+  wmKeyMap *keymap = WM_modalkeymap_find(keyconf, "Gesture Zoom Border");
 
   /* this function is called for each spacetype, only needs to add map once */
   if (keymap && keymap->modal_items) {
     return;
   }
 
-  keymap = WM_modalkeymap_add(keyconf, "Gesture Zoom Border", modal_items);
+  keymap = WM_modalkeymap_ensure(keyconf, "Gesture Zoom Border", modal_items);
 
   /* assign map to operators */
   WM_modalkeymap_assign(keymap, "VIEW2D_OT_zoom_border");

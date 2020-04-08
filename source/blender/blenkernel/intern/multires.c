@@ -308,6 +308,7 @@ float (*BKE_multires_create_deformed_base_mesh_vert_coords(struct Depsgraph *dep
 
   Object object_for_eval = *object_eval;
   object_for_eval.data = object->data;
+  object_for_eval.sculpt = NULL;
 
   const bool use_render = (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
   ModifierEvalContext mesh_eval_context = {depsgraph, &object_for_eval, 0};
@@ -472,7 +473,8 @@ void multires_flush_sculpt_updates(Object *object)
   }
 
   SculptSession *sculpt_session = object->sculpt;
-  if (BKE_pbvh_type(sculpt_session->pbvh) != PBVH_GRIDS || sculpt_session->multires == NULL) {
+  if (BKE_pbvh_type(sculpt_session->pbvh) != PBVH_GRIDS || !sculpt_session->multires.active ||
+      sculpt_session->multires.modifier == NULL) {
     return;
   }
 
@@ -487,7 +489,7 @@ void multires_flush_sculpt_updates(Object *object)
 
   Mesh *mesh = object->data;
   multiresModifier_reshapeFromCCG(
-      sculpt_session->multires->totlvl, mesh, sculpt_session->subdiv_ccg);
+      sculpt_session->multires.modifier->totlvl, mesh, sculpt_session->subdiv_ccg);
 
   subdiv_ccg->dirty.coords = false;
   subdiv_ccg->dirty.hidden = false;

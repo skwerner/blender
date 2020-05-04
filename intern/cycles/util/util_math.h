@@ -782,12 +782,19 @@ ccl_device_inline float3 decode_normal(float2 f)
   n.x = f.x;
   n.y = f.y;
   n.z = 1.0f - fabsf(f.x) - fabsf(f.y);
+  n.w = 0.0f;
 
   if (n.z < 0.0f) {
     n.x = (1.0f - fabsf(f.y)) * sign_not_zero(f.x);
     n.y = (1.0f - fabsf(f.x)) * sign_not_zero(f.y);
   }
+
+#  if defined(__KERNEL_SSE41__) && defined(__KERNEL_SSE__)
+  __m128 norm = _mm_rsqrt_ps(_mm_dp_ps(n, n, 0x7F));
+  return float3(_mm_mul_ps(n, norm));
+#  else
   return normalize(n);
+#  endif
 }
 
 ccl_device_inline float3 decode_normal_uint(uint u)

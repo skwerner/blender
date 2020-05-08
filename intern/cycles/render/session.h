@@ -17,8 +17,8 @@
 #ifndef __SESSION_H__
 #define __SESSION_H__
 
-#include "render/buffers.h"
 #include "device/device.h"
+#include "render/buffers.h"
 #include "render/shader.h"
 #include "render/stats.h"
 #include "render/tile.h"
@@ -56,6 +56,7 @@ class SessionParams {
   int denoising_start_sample;
   int pixel_size;
   int threads;
+  bool adaptive_sampling;
 
   bool use_profiling;
 
@@ -89,6 +90,7 @@ class SessionParams {
     denoising_start_sample = 0;
     pixel_size = 1;
     threads = 0;
+    adaptive_sampling = false;
 
     use_profiling = false;
 
@@ -117,6 +119,7 @@ class SessionParams {
              progressive == params.progressive && experimental == params.experimental &&
              tile_size == params.tile_size && start_resolution == params.start_resolution &&
              pixel_size == params.pixel_size && threads == params.threads &&
+             adaptive_sampling == params.adaptive_sampling &&
              use_profiling == params.use_profiling &&
              display_buffer_linear == params.display_buffer_linear &&
              cancel_timeout == params.cancel_timeout && reset_timeout == params.reset_timeout &&
@@ -183,8 +186,7 @@ class Session {
 
   void update_status_time(bool show_pause = false, bool show_done = false);
 
-  void render();
-  void denoise();
+  void render(bool use_denoise);
   void copy_to_display_buffer(int sample);
 
   void reset_(BufferParams &params, int samples);
@@ -197,9 +199,11 @@ class Session {
   bool draw_gpu(BufferParams &params, DeviceDrawParams &draw_params);
   void reset_gpu(BufferParams &params, int samples);
 
-  bool acquire_tile(Device *tile_device, RenderTile &tile, RenderTile::Task task);
+  bool render_need_denoise(bool &delayed);
+
+  bool acquire_tile(RenderTile &tile, Device *tile_device, uint tile_types);
   void update_tile_sample(RenderTile &tile);
-  void release_tile(RenderTile &tile);
+  void release_tile(RenderTile &tile, const bool need_denoise);
 
   void map_neighbor_tiles(RenderTile *tiles, Device *tile_device);
   void unmap_neighbor_tiles(RenderTile *tiles, Device *tile_device);

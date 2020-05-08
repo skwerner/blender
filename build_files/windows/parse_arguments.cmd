@@ -66,8 +66,6 @@ if NOT "%1" == "" (
 	) else if "%1" == "2019b" (
 		set BUILD_VS_YEAR=2019
 		set VSWHERE_ARGS=-products Microsoft.VisualStudio.Product.BuildTools
-	) else if "%1" == "2015" (
-		set BUILD_VS_YEAR=2015
 	) else if "%1" == "packagename" (
 		set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% -DCPACK_OVERRIDE_PACKAGENAME="%2"
 		shift /1
@@ -88,6 +86,8 @@ if NOT "%1" == "" (
 		set BUILD_UPDATE_ARGS="--no-libraries"
 	) else if "%1" == "ninja" (
 		SET BUILD_WITH_NINJA=1
+	) else if "%1" == "sccache" (
+		SET BUILD_WITH_SCCACHE=1
 	) else if "%1" == "clean" (
 		set MUST_CLEAN=1
 	) else if "%1" == "verbose" (

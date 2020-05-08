@@ -24,17 +24,23 @@
 #ifndef __ED_GPENCIL_H__
 #define __ED_GPENCIL_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ID;
 struct ListBase;
 struct PointerRNA;
 
 struct Brush;
+struct GP_SpaceConversion;
 struct bGPDframe;
 struct bGPDlayer;
 struct bGPDspoint;
 struct bGPDstroke;
 struct bGPdata;
 struct tGPspoint;
+struct GpRandomSettings;
 
 struct ARegion;
 struct Depsgraph;
@@ -43,6 +49,8 @@ struct RegionView3D;
 struct ReportList;
 struct Scene;
 struct ScrArea;
+struct SnapObjectContext;
+struct ToolSettings;
 struct View3D;
 struct ViewLayer;
 struct bContext;
@@ -63,30 +71,16 @@ struct wmOperator;
  * Used as part of the 'stroke cache' used during drawing of new strokes
  */
 typedef struct tGPspoint {
-  float x, y;     /* x and y coordinates of cursor (in relative to area) */
-  float pressure; /* pressure of tablet at this point */
-  float strength; /* pressure of tablet at this point for alpha factor */
-  float time;     /* Time relative to stroke start (used when converting to path) */
-  float uv_fac;   /* factor of uv along the stroke */
-  float uv_rot;   /* uv rotation for dor mode */
-  float rnd[3];   /* rnd value */
-  bool rnd_dirty; /* rnd flag */
-  short tflag;    /* Internal flag */
+  float x, y;          /* x and y coordinates of cursor (in relative to area) */
+  float pressure;      /* pressure of tablet at this point */
+  float strength;      /* pressure of tablet at this point for alpha factor */
+  float time;          /* Time relative to stroke start (used when converting to path) */
+  float uv_fac;        /* factor of uv along the stroke */
+  float uv_rot;        /* uv rotation for dor mode */
+  float rnd[3];        /* rnd value */
+  bool rnd_dirty;      /* rnd flag */
+  float vert_color[4]; /* Point vertex color. */
 } tGPspoint;
-
-/* tGPspoint->flag */
-typedef enum etGPspoint_tFlag {
-  /* Created by Fake event (used when mouse/pen move very fast while drawing). */
-  GP_TPOINT_FAKE = (1 << 0),
-} etGPspoint_tFlag;
-
-/* used to sort by zdepth gpencil objects in viewport */
-/* TODO: this could be a system parameter in userprefs screen */
-#define GP_CACHE_BLOCK_SIZE 16
-typedef struct tGPencilSort {
-  struct Base *base;
-  float zdepth;
-} tGPencilSort;
 
 /* ----------- Grease Pencil Tools/Context ------------- */
 
@@ -97,20 +91,20 @@ struct bGPdata *ED_gpencil_data_get_active(const struct bContext *C);
 struct bGPdata *ED_gpencil_data_get_active_evaluated(const struct bContext *C);
 
 /* Context independent (i.e. each required part is passed in instead) */
-struct bGPdata **ED_gpencil_data_get_pointers_direct(struct ScrArea *sa,
+struct bGPdata **ED_gpencil_data_get_pointers_direct(struct ScrArea *area,
                                                      struct Object *ob,
                                                      struct PointerRNA *r_ptr);
-struct bGPdata *ED_gpencil_data_get_active_direct(struct ScrArea *sa, struct Object *ob);
+struct bGPdata *ED_gpencil_data_get_active_direct(struct ScrArea *area, struct Object *ob);
 
 struct bGPdata *ED_annotation_data_get_active(const struct bContext *C);
 struct bGPdata **ED_annotation_data_get_pointers(const struct bContext *C,
                                                  struct PointerRNA *r_ptr);
 struct bGPdata **ED_annotation_data_get_pointers_direct(struct ID *screen_id,
-                                                        struct ScrArea *sa,
+                                                        struct ScrArea *area,
                                                         struct Scene *scene,
                                                         struct PointerRNA *r_ptr);
 struct bGPdata *ED_annotation_data_get_active_direct(struct ID *screen_id,
-                                                     struct ScrArea *sa,
+                                                     struct ScrArea *area,
                                                      struct Scene *scene);
 
 bool ED_gpencil_data_owner_is_annotation(struct PointerRNA *owner_ptr);
@@ -120,7 +114,7 @@ bool ED_gpencil_has_keyframe_v3d(struct Scene *scene, struct Object *ob, int cfr
 
 /* ----------- Stroke Editing Utilities ---------------- */
 
-bool ED_gpencil_stroke_can_use_direct(const struct ScrArea *sa, const struct bGPDstroke *gps);
+bool ED_gpencil_stroke_can_use_direct(const struct ScrArea *area, const struct bGPDstroke *gps);
 bool ED_gpencil_stroke_can_use(const struct bContext *C, const struct bGPDstroke *gps);
 bool ED_gpencil_stroke_color_use(struct Object *ob,
                                  const struct bGPDlayer *gpl,
@@ -146,7 +140,7 @@ void ED_annotation_draw_view2d(const struct bContext *C, bool onlyv2d);
 void ED_annotation_draw_view3d(struct Scene *scene,
                                struct Depsgraph *depsgraph,
                                struct View3D *v3d,
-                               struct ARegion *ar,
+                               struct ARegion *region,
                                bool only3d);
 void ED_annotation_draw_ex(struct Scene *scene,
                            struct bGPdata *gpd,
@@ -187,7 +181,11 @@ bool ED_gpencil_anim_copybuf_paste(struct bAnimContext *ac, const short copy_mod
 int ED_gpencil_session_active(void);
 int ED_undo_gpencil_step(struct bContext *C, int step, const char *name);
 
-/* ------------ Grease-Pencil Armature weights ------------------ */
+/* ------------ Grease-Pencil Armature ------------------ */
+bool ED_gpencil_add_armature(const struct bContext *C,
+                             struct ReportList *reports,
+                             struct Object *ob,
+                             struct Object *ob_arm);
 bool ED_gpencil_add_armature_weights(const struct bContext *C,
                                      struct ReportList *reports,
                                      struct Object *ob,
@@ -206,12 +204,6 @@ bool ED_gpencil_add_lattice_modifier(const struct bContext *C,
 
 /* ------------ Transformation Utilities ------------ */
 
-/* get difference matrix */
-void ED_gpencil_parent_location(const struct Depsgraph *depsgraph,
-                                struct Object *obact,
-                                struct bGPdata *gpd,
-                                struct bGPDlayer *gpl,
-                                float diff_mat[4][4]);
 /* reset parent matrix for all layers */
 void ED_gpencil_reset_layers_parent(struct Depsgraph *depsgraph,
                                     struct Object *obact,
@@ -227,7 +219,6 @@ void ED_gpencil_create_stroke(struct bContext *C, struct Object *ob, float mat[4
 
 /* ------------ Object Utilities ------------ */
 struct Object *ED_gpencil_add_object(struct bContext *C,
-                                     struct Scene *scene,
                                      const float loc[3],
                                      unsigned short local_view_bits);
 void ED_gpencil_add_defaults(struct bContext *C, struct Object *ob);
@@ -247,11 +238,10 @@ void ED_gp_project_point_to_plane(const struct Scene *scene,
                                   const float origin[3],
                                   const int axis,
                                   struct bGPDspoint *pt);
-void ED_gp_get_drawing_reference(const struct Scene *scene,
-                                 const struct Object *ob,
-                                 struct bGPDlayer *gpl,
-                                 char align_flag,
-                                 float vec[3]);
+void ED_gpencil_drawing_reference_get(const struct Scene *scene,
+                                      const struct Object *ob,
+                                      char align_flag,
+                                      float vec[3]);
 void ED_gpencil_project_stroke_to_view(struct bContext *C,
                                        struct bGPDlayer *gpl,
                                        struct bGPDstroke *gps);
@@ -269,11 +259,10 @@ void ED_gpencil_vgroup_deselect(struct bContext *C, struct Object *ob);
 int ED_gpencil_join_objects_exec(struct bContext *C, struct wmOperator *op);
 
 /* texture coordinate utilities */
-void ED_gpencil_tpoint_to_point(struct ARegion *ar,
+void ED_gpencil_tpoint_to_point(struct ARegion *region,
                                 float origin[3],
                                 const struct tGPspoint *tpt,
                                 struct bGPDspoint *pt);
-void ED_gpencil_calc_stroke_uv(struct Object *ob, struct bGPDstroke *gps);
 void ED_gpencil_update_color_uv(struct Main *bmain, struct Material *mat);
 
 /* extend selection to stroke intersections
@@ -299,7 +288,38 @@ struct tGPspoint *ED_gpencil_sbuffer_ensure(struct tGPspoint *buffer_array,
                                             int *buffer_size,
                                             int *buffer_used,
                                             const bool clear);
+void ED_gpencil_sbuffer_update_eval(struct bGPdata *gpd, struct Object *ob_eval);
+
 /* Tag all scene grease pencil object to update. */
 void ED_gpencil_tag_scene_gpencil(struct Scene *scene);
+
+/* Vertex color set. */
+void ED_gpencil_fill_vertex_color_set(struct ToolSettings *ts,
+                                      struct Brush *brush,
+                                      struct bGPDstroke *gps);
+void ED_gpencil_point_vertex_color_set(struct ToolSettings *ts,
+                                       struct Brush *brush,
+                                       struct bGPDspoint *pt,
+                                       struct tGPspoint *tpt);
+void ED_gpencil_sbuffer_vertex_color_set(struct Depsgraph *depsgraph,
+                                         struct Object *ob,
+                                         struct ToolSettings *ts,
+                                         struct Brush *brush,
+                                         struct Material *material,
+                                         float random_color[3],
+                                         float pen_pressure);
+void ED_gpencil_init_random_settings(struct Brush *brush,
+                                     const int mval[2],
+                                     struct GpRandomSettings *random_settings);
+
+bool ED_gpencil_stroke_check_collision(struct GP_SpaceConversion *gsc,
+                                       struct bGPDstroke *gps,
+                                       float mouse[2],
+                                       const int radius,
+                                       const float diff_mat[4][4]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /*  __ED_GPENCIL_H__ */

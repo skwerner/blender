@@ -156,7 +156,7 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   (DT_TYPE_BWEIGHT_VERT | DT_TYPE_BWEIGHT_EDGE | DT_TYPE_CREASE | DT_TYPE_SHARP_EDGE | \
    DT_TYPE_LNOR | DT_TYPE_SHARP_FACE)
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *me_mod)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *me_mod)
 {
   DataTransferModifierData *dtmd = (DataTransferModifierData *)md;
   struct Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
@@ -220,13 +220,12 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     modifier_setError(md, "%s", BKE_reports_string(&reports, RPT_ERROR));
   }
   else if ((dtmd->data_types & DT_TYPE_LNOR) && !(me->flag & ME_AUTOSMOOTH)) {
-    modifier_setError((ModifierData *)dtmd, "Enable 'Auto Smooth' option in mesh settings");
+    modifier_setError((ModifierData *)dtmd, "Enable 'Auto Smooth' in Object Data Properties");
   }
   else if (result->totvert > HIGH_POLY_WARNING ||
            ((Mesh *)(ob_source->data))->totvert > HIGH_POLY_WARNING) {
     modifier_setError(
-        md,
-        "You are using a rather high poly as source or destination, computation might be slow");
+        md, "Source or destination object has a high polygon count, computation might be slow");
   }
 
   return result;
@@ -249,7 +248,10 @@ ModifierTypeInfo modifierType_DataTransfer = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

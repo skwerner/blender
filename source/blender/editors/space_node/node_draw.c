@@ -23,16 +23,16 @@
  */
 
 #include "DNA_light_types.h"
-#include "DNA_node_types.h"
+#include "DNA_linestyle_types.h"
 #include "DNA_material_types.h"
+#include "DNA_node_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 #include "DNA_texture_types.h"
 #include "DNA_world_types.h"
-#include "DNA_linestyle_types.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 
 #include "BLT_translation.h"
 
@@ -47,17 +47,17 @@
 
 #include "BIF_glutil.h"
 
+#include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
 #include "GPU_state.h"
-#include "GPU_framebuffer.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_node.h"
 #include "ED_gpencil.h"
+#include "ED_node.h"
 #include "ED_space_api.h"
 
 #include "UI_resources.h"
@@ -94,23 +94,11 @@ void ED_node_tree_update(const bContext *C)
 static bNodeTree *node_tree_from_ID(ID *id)
 {
   if (id) {
-    short idtype = GS(id->name);
-
-    switch (idtype) {
-      case ID_NT:
-        return (bNodeTree *)id;
-      case ID_MA:
-        return ((Material *)id)->nodetree;
-      case ID_LA:
-        return ((Light *)id)->nodetree;
-      case ID_WO:
-        return ((World *)id)->nodetree;
-      case ID_SCE:
-        return ((Scene *)id)->nodetree;
-      case ID_TE:
-        return ((Tex *)id)->nodetree;
-      case ID_LS:
-        return ((FreestyleLineStyle *)id)->nodetree;
+    if (GS(id->name) == ID_NT) {
+      return (bNodeTree *)id;
+    }
+    else {
+      return ntreeFromID(id);
     }
   }
 
@@ -719,39 +707,19 @@ static void node_draw_mute_line(View2D *v2d, SpaceNode *snode, bNode *node)
 #define MARKER_SHAPE_CIRCLE 0x2
 #define MARKER_SHAPE_INNER_DOT 0x10
 
-static void node_socket_draw(const bContext *C,
-                             bNodeTree *ntree,
-                             PointerRNA node_ptr,
-                             bNodeSocket *sock,
+static void node_socket_draw(const bNodeSocket *sock,
+                             const float color[4],
+                             const float color_outline[4],
+                             float size,
+                             int locx,
+                             int locy,
                              uint pos_id,
                              uint col_id,
                              uint shape_id,
                              uint size_id,
-                             uint outline_col_id,
-                             float size,
-                             bool selected)
+                             uint outline_col_id)
 {
-  PointerRNA ptr;
-  float color[4];
-  float outline_color[4];
-  uint flags = 0;
-
-  RNA_pointer_create((ID *)ntree, &RNA_NodeSocket, sock, &ptr);
-  sock->typeinfo->draw_color((bContext *)C, &ptr, &node_ptr, color);
-
-  bNode *node = node_ptr.data;
-  if (node->flag & NODE_MUTED) {
-    color[3] *= 0.25f;
-  }
-
-  if (selected) {
-    UI_GetThemeColor4fv(TH_TEXT_HI, outline_color);
-    outline_color[3] = 0.9f;
-  }
-  else {
-    copy_v4_fl(outline_color, 0.0f);
-    outline_color[3] = 0.6f;
-  }
+  int flags;
 
   /* sets shape flags */
   switch (sock->display_shape) {
@@ -780,8 +748,120 @@ static void node_socket_draw(const bContext *C,
   immAttr4fv(col_id, color);
   immAttr1u(shape_id, flags);
   immAttr1f(size_id, size);
-  immAttr4fv(outline_col_id, outline_color);
-  immVertex2f(pos_id, sock->locx, sock->locy);
+  immAttr4fv(outline_col_id, color_outline);
+  immVertex2f(pos_id, locx, locy);
+}
+
+static void node_socket_outline_color_get(bool selected, float r_outline_color[4])
+{
+  if (selected) {
+    UI_GetThemeColor4fv(TH_TEXT_HI, r_outline_color);
+    r_outline_color[3] = 0.9f;
+  }
+  else {
+    copy_v4_fl(r_outline_color, 0.0f);
+    r_outline_color[3] = 0.6f;
+  }
+}
+
+/* Usual convention here would be node_socket_get_color(), but that's already used (for setting a
+ * color property socket). */
+void node_socket_color_get(
+    bContext *C, bNodeTree *ntree, PointerRNA *node_ptr, bNodeSocket *sock, float r_color[4])
+{
+  PointerRNA ptr;
+
+  BLI_assert(RNA_struct_is_a(node_ptr->type, &RNA_Node));
+  RNA_pointer_create((ID *)ntree, &RNA_NodeSocket, sock, &ptr);
+
+  sock->typeinfo->draw_color(C, &ptr, node_ptr, r_color);
+
+  bNode *node = node_ptr->data;
+  if (node->flag & NODE_MUTED) {
+    r_color[3] *= 0.25f;
+  }
+}
+
+static void node_socket_draw_nested(const bContext *C,
+                                    bNodeTree *ntree,
+                                    PointerRNA *node_ptr,
+                                    bNodeSocket *sock,
+                                    uint pos_id,
+                                    uint col_id,
+                                    uint shape_id,
+                                    uint size_id,
+                                    uint outline_col_id,
+                                    float size,
+                                    bool selected)
+{
+  float color[4];
+  float outline_color[4];
+
+  node_socket_color_get((bContext *)C, ntree, node_ptr, sock, color);
+  node_socket_outline_color_get(selected, outline_color);
+
+  node_socket_draw(sock,
+                   color,
+                   outline_color,
+                   size,
+                   sock->locx,
+                   sock->locy,
+                   pos_id,
+                   col_id,
+                   shape_id,
+                   size_id,
+                   outline_col_id);
+}
+
+/**
+ * Draw a single node socket at default size.
+ * \note this is only called from external code, internally #node_socket_draw_nested() is used for
+ *       optimized drawing of multiple/all sockets of a node.
+ */
+void ED_node_socket_draw(bNodeSocket *sock, const rcti *rect, const float color[4], float scale)
+{
+  const float size = 2.25f * NODE_SOCKSIZE * scale;
+  rcti draw_rect = *rect;
+  float outline_color[4] = {0};
+
+  node_socket_outline_color_get(sock->flag & SELECT, outline_color);
+
+  BLI_rcti_resize(&draw_rect, size, size);
+
+  GPUVertFormat *format = immVertexFormat();
+  uint pos_id = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+  uint col_id = GPU_vertformat_attr_add(format, "color", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
+  uint shape_id = GPU_vertformat_attr_add(format, "flags", GPU_COMP_U32, 1, GPU_FETCH_INT);
+  uint size_id = GPU_vertformat_attr_add(format, "size", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
+  uint outline_col_id = GPU_vertformat_attr_add(
+      format, "outlineColor", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
+
+  gpuPushAttr(GPU_BLEND_BIT);
+  GPU_blend(true);
+  GPU_program_point_size(true);
+
+  immBindBuiltinProgram(GPU_SHADER_KEYFRAME_DIAMOND);
+  immUniform1f("outline_scale", 0.7f);
+  immUniform2f("ViewportSize", -1.0f, -1.0f);
+
+  /* Single point */
+  immBegin(GPU_PRIM_POINTS, 1);
+  node_socket_draw(sock,
+                   color,
+                   outline_color,
+                   BLI_rcti_size_y(&draw_rect),
+                   BLI_rcti_cent_x(&draw_rect),
+                   BLI_rcti_cent_y(&draw_rect),
+                   pos_id,
+                   col_id,
+                   shape_id,
+                   size_id,
+                   outline_col_id);
+  immEnd();
+
+  immUnbindProgram();
+  GPU_program_point_size(false);
+  gpuPopAttr();
 }
 
 /* **************  Socket callbacks *********** */
@@ -974,17 +1054,17 @@ void node_draw_sockets(View2D *v2d,
       continue;
     }
 
-    node_socket_draw(C,
-                     ntree,
-                     node_ptr,
-                     sock,
-                     pos_id,
-                     col_id,
-                     shape_id,
-                     size_id,
-                     outline_col_id,
-                     scale,
-                     selected);
+    node_socket_draw_nested(C,
+                            ntree,
+                            &node_ptr,
+                            sock,
+                            pos_id,
+                            col_id,
+                            shape_id,
+                            size_id,
+                            outline_col_id,
+                            scale,
+                            selected);
   }
 
   /* socket outputs */
@@ -999,17 +1079,17 @@ void node_draw_sockets(View2D *v2d,
         continue;
       }
 
-      node_socket_draw(C,
-                       ntree,
-                       node_ptr,
-                       sock,
-                       pos_id,
-                       col_id,
-                       shape_id,
-                       size_id,
-                       outline_col_id,
-                       scale,
-                       selected);
+      node_socket_draw_nested(C,
+                              ntree,
+                              &node_ptr,
+                              sock,
+                              pos_id,
+                              col_id,
+                              shape_id,
+                              size_id,
+                              outline_col_id,
+                              scale,
+                              selected);
     }
   }
 
@@ -1032,17 +1112,17 @@ void node_draw_sockets(View2D *v2d,
           continue;
         }
         if (select_all || (sock->flag & SELECT)) {
-          node_socket_draw(C,
-                           ntree,
-                           node_ptr,
-                           sock,
-                           pos_id,
-                           col_id,
-                           shape_id,
-                           size_id,
-                           outline_col_id,
-                           scale,
-                           selected);
+          node_socket_draw_nested(C,
+                                  ntree,
+                                  &node_ptr,
+                                  sock,
+                                  pos_id,
+                                  col_id,
+                                  shape_id,
+                                  size_id,
+                                  outline_col_id,
+                                  scale,
+                                  selected);
           if (--selected_input_len == 0) {
             break; /* stop as soon as last one is drawn */
           }
@@ -1057,17 +1137,17 @@ void node_draw_sockets(View2D *v2d,
           continue;
         }
         if (select_all || (sock->flag & SELECT)) {
-          node_socket_draw(C,
-                           ntree,
-                           node_ptr,
-                           sock,
-                           pos_id,
-                           col_id,
-                           shape_id,
-                           size_id,
-                           outline_col_id,
-                           scale,
-                           selected);
+          node_socket_draw_nested(C,
+                                  ntree,
+                                  &node_ptr,
+                                  sock,
+                                  pos_id,
+                                  col_id,
+                                  shape_id,
+                                  size_id,
+                                  outline_col_id,
+                                  scale,
+                                  selected);
           if (--selected_output_len == 0) {
             break; /* stop as soon as last one is drawn */
           }
@@ -1085,7 +1165,7 @@ void node_draw_sockets(View2D *v2d,
 }
 
 static void node_draw_basis(const bContext *C,
-                            ARegion *ar,
+                            ARegion *region,
                             SpaceNode *snode,
                             bNodeTree *ntree,
                             bNode *node,
@@ -1099,7 +1179,7 @@ static void node_draw_basis(const bContext *C,
   int color_id = node_get_colorid(node);
   float color[4];
   char showname[128]; /* 128 used below */
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
 
   /* skip if out of view */
   if (BLI_rctf_isect(&node->totr, &v2d->cur, NULL) == false) {
@@ -1179,6 +1259,25 @@ static void node_draw_basis(const bContext *C,
                        0,
                        "");
     UI_but_func_set(but, node_toggle_button_cb, node, (void *)"NODE_OT_group_edit");
+    UI_block_emboss_set(node->block, UI_EMBOSS);
+  }
+  if (node->type == NODE_CUSTOM && node->typeinfo->ui_icon != ICON_NONE) {
+    iconofs -= iconbutw;
+    UI_block_emboss_set(node->block, UI_EMBOSS_NONE);
+    uiDefIconBut(node->block,
+                 UI_BTYPE_BUT,
+                 0,
+                 node->typeinfo->ui_icon,
+                 iconofs,
+                 rct->ymax - NODE_DY,
+                 iconbutw,
+                 UI_UNIT_Y,
+                 NULL,
+                 0,
+                 0,
+                 0,
+                 0,
+                 "");
     UI_block_emboss_set(node->block, UI_EMBOSS);
   }
 
@@ -1296,7 +1395,7 @@ static void node_draw_basis(const bContext *C,
 }
 
 static void node_draw_hidden(const bContext *C,
-                             ARegion *ar,
+                             ARegion *region,
                              SpaceNode *snode,
                              bNodeTree *ntree,
                              bNode *node,
@@ -1308,7 +1407,7 @@ static void node_draw_hidden(const bContext *C,
   int color_id = node_get_colorid(node);
   float color[4];
   char showname[128]; /* 128 is used below */
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
   float scale;
 
   UI_view2d_scale_get(v2d, &scale, NULL);
@@ -1392,7 +1491,7 @@ static void node_draw_hidden(const bContext *C,
 
   /* disable lines */
   if (node->flag & NODE_MUTED) {
-    node_draw_mute_line(&ar->v2d, snode, node);
+    node_draw_mute_line(&region->v2d, snode, node);
   }
 
   nodeLabel(ntree, node, showname, sizeof(showname));
@@ -1499,17 +1598,17 @@ void node_set_cursor(wmWindow *win, SpaceNode *snode, float cursor[2])
 }
 
 void node_draw_default(const bContext *C,
-                       ARegion *ar,
+                       ARegion *region,
                        SpaceNode *snode,
                        bNodeTree *ntree,
                        bNode *node,
                        bNodeInstanceKey key)
 {
   if (node->flag & NODE_HIDDEN) {
-    node_draw_hidden(C, ar, snode, ntree, node, key);
+    node_draw_hidden(C, region, snode, ntree, node, key);
   }
   else {
-    node_draw_basis(C, ar, snode, ntree, node, key);
+    node_draw_basis(C, region, snode, ntree, node, key);
   }
 }
 
@@ -1534,21 +1633,21 @@ void node_update_nodetree(const bContext *C, bNodeTree *ntree)
 }
 
 static void node_draw(const bContext *C,
-                      ARegion *ar,
+                      ARegion *region,
                       SpaceNode *snode,
                       bNodeTree *ntree,
                       bNode *node,
                       bNodeInstanceKey key)
 {
   if (node->typeinfo->draw_nodetype) {
-    node->typeinfo->draw_nodetype(C, ar, snode, ntree, node, key);
+    node->typeinfo->draw_nodetype(C, region, snode, ntree, node, key);
   }
 }
 
 #define USE_DRAW_TOT_UPDATE
 
 void node_draw_nodetree(const bContext *C,
-                        ARegion *ar,
+                        ARegion *region,
                         SpaceNode *snode,
                         bNodeTree *ntree,
                         bNodeInstanceKey parent_key)
@@ -1563,7 +1662,7 @@ void node_draw_nodetree(const bContext *C,
 
 #ifdef USE_DRAW_TOT_UPDATE
   if (ntree->nodes.first) {
-    BLI_rctf_init_minmax(&ar->v2d.tot);
+    BLI_rctf_init_minmax(&region->v2d.tot);
   }
 #endif
 
@@ -1574,7 +1673,7 @@ void node_draw_nodetree(const bContext *C,
 #ifdef USE_DRAW_TOT_UPDATE
     /* unrelated to background nodes, update the v2d->tot,
      * can be anywhere before we draw the scroll bars */
-    BLI_rctf_union(&ar->v2d.tot, &node->totr);
+    BLI_rctf_union(&region->v2d.tot, &node->totr);
 #endif
 
     if (!(node->flag & NODE_BACKGROUND)) {
@@ -1583,7 +1682,7 @@ void node_draw_nodetree(const bContext *C,
 
     key = BKE_node_instance_key(parent_key, ntree, node);
     node->nr = a; /* index of node in list, used for exec event code */
-    node_draw(C, ar, snode, ntree, node, key);
+    node_draw(C, region, snode, ntree, node, key);
   }
 
   /* node lines */
@@ -1591,7 +1690,7 @@ void node_draw_nodetree(const bContext *C,
   nodelink_batch_start(snode);
   for (link = ntree->links.first; link; link = link->next) {
     if (!nodeLinkIsHidden(link)) {
-      node_draw_link(&ar->v2d, snode, link);
+      node_draw_link(&region->v2d, snode, link);
     }
   }
   nodelink_batch_end(snode);
@@ -1606,7 +1705,7 @@ void node_draw_nodetree(const bContext *C,
 
     key = BKE_node_instance_key(parent_key, ntree, node);
     node->nr = a; /* index of node in list, used for exec event code */
-    node_draw(C, ar, snode, ntree, node, key);
+    node_draw(C, region, snode, ntree, node, key);
   }
 }
 
@@ -1621,21 +1720,21 @@ static void draw_tree_path(SpaceNode *snode)
   BLF_draw_default(1.5f * UI_UNIT_X, 1.5f * UI_UNIT_Y, 0.0f, info, sizeof(info));
 }
 
-static void snode_setup_v2d(SpaceNode *snode, ARegion *ar, const float center[2])
+static void snode_setup_v2d(SpaceNode *snode, ARegion *region, const float center[2])
 {
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
 
   /* shift view to node tree center */
   UI_view2d_center_set(v2d, center[0], center[1]);
   UI_view2d_view_ortho(v2d);
 
   /* aspect+font, set each time */
-  snode->aspect = BLI_rctf_size_x(&v2d->cur) / (float)ar->winx;
+  snode->aspect = BLI_rctf_size_x(&v2d->cur) / (float)region->winx;
   // XXX snode->curfont = uiSetCurFont_ext(snode->aspect);
 }
 
 static void draw_nodetree(const bContext *C,
-                          ARegion *ar,
+                          ARegion *region,
                           bNodeTree *ntree,
                           bNodeInstanceKey parent_key)
 {
@@ -1644,13 +1743,13 @@ static void draw_nodetree(const bContext *C,
   node_uiblocks_init(C, ntree);
 
   node_update_nodetree(C, ntree);
-  node_draw_nodetree(C, ar, snode, ntree, parent_key);
+  node_draw_nodetree(C, region, snode, ntree, parent_key);
 }
 
 /* shade the parent node group and add a uiBlock to clip mouse events */
-static void draw_group_overlay(const bContext *C, ARegion *ar)
+static void draw_group_overlay(const bContext *C, ARegion *region)
 {
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
   rctf rect = v2d->cur;
   uiBlock *block;
   float color[4];
@@ -1664,18 +1763,18 @@ static void draw_group_overlay(const bContext *C, ARegion *ar)
   GPU_blend(false);
 
   /* set the block bounds to clip mouse events from underlying nodes */
-  block = UI_block_begin(C, ar, "node tree bounds block", UI_EMBOSS);
+  block = UI_block_begin(C, region, "node tree bounds block", UI_EMBOSS);
   UI_block_bounds_set_explicit(block, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
   UI_block_flag_enable(block, UI_BLOCK_CLIP_EVENTS);
   UI_block_end(C, block);
 }
 
-void drawnodespace(const bContext *C, ARegion *ar)
+void drawnodespace(const bContext *C, ARegion *region)
 {
   wmWindow *win = CTX_wm_window(C);
   View2DScrollers *scrollers;
   SpaceNode *snode = CTX_wm_space_node(C);
-  View2D *v2d = &ar->v2d;
+  View2D *v2d = &region->v2d;
 
   UI_ThemeClearColor(TH_BACK);
   GPU_clear(GPU_COLOR_BIT);
@@ -1683,15 +1782,17 @@ void drawnodespace(const bContext *C, ARegion *ar)
   UI_view2d_view_ortho(v2d);
 
   /* XXX snode->cursor set in coordspace for placing new nodes, used for drawing noodles too */
-  UI_view2d_region_to_view(&ar->v2d,
-                           win->eventstate->x - ar->winrct.xmin,
-                           win->eventstate->y - ar->winrct.ymin,
+  UI_view2d_region_to_view(&region->v2d,
+                           win->eventstate->x - region->winrct.xmin,
+                           win->eventstate->y - region->winrct.ymin,
                            &snode->cursor[0],
                            &snode->cursor[1]);
   snode->cursor[0] /= UI_DPI_FAC;
   snode->cursor[1] /= UI_DPI_FAC;
 
-  ED_region_draw_cb_draw(C, ar, REGION_DRAW_PRE_VIEW);
+  int grid_levels = UI_GetThemeValueType(TH_NODE_GRID_LEVELS, SPACE_NODE);
+
+  ED_region_draw_cb_draw(C, region, REGION_DRAW_PRE_VIEW);
 
   /* only set once */
   GPU_blend_set_func_separate(
@@ -1739,25 +1840,28 @@ void drawnodespace(const bContext *C, ARegion *ar)
     for (curdepth = depth; curdepth > 0; path = path->next, curdepth--) {
       ntree = path->nodetree;
       if (ntree) {
-        snode_setup_v2d(snode, ar, path->view_center);
+        snode_setup_v2d(snode, region, path->view_center);
 
-        draw_nodetree(C, ar, ntree, path->parent_key);
+        draw_nodetree(C, region, ntree, path->parent_key);
 
-        draw_group_overlay(C, ar);
+        draw_group_overlay(C, region);
       }
     }
 
     /* top-level edit tree */
     ntree = path->nodetree;
     if (ntree) {
-      snode_setup_v2d(snode, ar, center);
+      snode_setup_v2d(snode, region, center);
 
       /* grid, uses theme color based on node path depth */
-      UI_view2d_multi_grid_draw(
-          v2d, (depth > 0 ? TH_NODE_GROUP : TH_BACK), ED_node_grid_size(), NODE_GRID_STEPS, 2);
+      UI_view2d_multi_grid_draw(v2d,
+                                (depth > 0 ? TH_NODE_GROUP : TH_BACK),
+                                ED_node_grid_size(),
+                                NODE_GRID_STEPS,
+                                grid_levels);
 
       /* backdrop */
-      draw_nodespace_back_pix(C, ar, snode, path->parent_key);
+      draw_nodespace_back_pix(C, region, snode, path->parent_key);
 
       {
         float original_proj[4][4];
@@ -1766,15 +1870,15 @@ void drawnodespace(const bContext *C, ARegion *ar)
         GPU_matrix_push();
         GPU_matrix_identity_set();
 
-        wmOrtho2_pixelspace(ar->winx, ar->winy);
+        wmOrtho2_pixelspace(region->winx, region->winy);
 
-        WM_gizmomap_draw(ar->gizmo_map, C, WM_GIZMOMAP_DRAWSTEP_2D);
+        WM_gizmomap_draw(region->gizmo_map, C, WM_GIZMOMAP_DRAWSTEP_2D);
 
         GPU_matrix_pop();
         GPU_matrix_projection_set(original_proj);
       }
 
-      draw_nodetree(C, ar, ntree, path->parent_key);
+      draw_nodetree(C, region, ntree, path->parent_key);
     }
 
     /* temporary links */
@@ -1795,13 +1899,13 @@ void drawnodespace(const bContext *C, ARegion *ar)
   }
   else {
     /* default grid */
-    UI_view2d_multi_grid_draw(v2d, TH_BACK, ED_node_grid_size(), NODE_GRID_STEPS, 2);
+    UI_view2d_multi_grid_draw(v2d, TH_BACK, ED_node_grid_size(), NODE_GRID_STEPS, grid_levels);
 
     /* backdrop */
-    draw_nodespace_back_pix(C, ar, snode, NODE_INSTANCE_KEY_NONE);
+    draw_nodespace_back_pix(C, region, snode, NODE_INSTANCE_KEY_NONE);
   }
 
-  ED_region_draw_cb_draw(C, ar, REGION_DRAW_POST_VIEW);
+  ED_region_draw_cb_draw(C, region, REGION_DRAW_POST_VIEW);
 
   /* reset view matrix */
   UI_view2d_view_restore(C);

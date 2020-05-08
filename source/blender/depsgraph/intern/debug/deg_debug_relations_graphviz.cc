@@ -26,7 +26,6 @@
 #include <cstdarg>
 
 #include "BLI_utildefines.h"
-#include "BLI_ghash.h"
 
 extern "C" {
 #include "DNA_listBase.h"
@@ -125,6 +124,9 @@ static int deg_debug_node_color_index(const Node *node)
     case NodeType::OPERATION: {
       OperationNode *op_node = (OperationNode *)node;
       if (op_node->is_noop()) {
+        if (op_node->flag & OperationFlag::DEPSOP_FLAG_PINNED) {
+          return 7;
+        }
         return 8;
       }
       break;
@@ -195,6 +197,7 @@ static void deg_debug_graphviz_legend(const DebugContext &ctx)
   deg_debug_graphviz_legend_color(ctx, "Component", colors[1]);
   deg_debug_graphviz_legend_color(ctx, "ID Node", colors[5]);
   deg_debug_graphviz_legend_color(ctx, "NOOP", colors[8]);
+  deg_debug_graphviz_legend_color(ctx, "Pinned OP", colors[7]);
 #endif
 
 #ifdef COLOR_SCHEME_NODE_TYPE
@@ -403,15 +406,14 @@ static void deg_debug_graphviz_node(const DebugContext &ctx, const Node *node)
   switch (node->type) {
     case NodeType::ID_REF: {
       const IDNode *id_node = (const IDNode *)node;
-      if (BLI_ghash_len(id_node->components) == 0) {
+      if (id_node->components.is_empty()) {
         deg_debug_graphviz_node_single(ctx, node);
       }
       else {
         deg_debug_graphviz_node_cluster_begin(ctx, node);
-        GHASH_FOREACH_BEGIN (const ComponentNode *, comp, id_node->components) {
+        for (const ComponentNode *comp : id_node->components.values()) {
           deg_debug_graphviz_node(ctx, comp);
         }
-        GHASH_FOREACH_END();
         deg_debug_graphviz_node_cluster_end(ctx);
       }
       break;
@@ -468,7 +470,7 @@ static bool deg_debug_graphviz_is_cluster(const Node *node)
   switch (node->type) {
     case NodeType::ID_REF: {
       const IDNode *id_node = (const IDNode *)node;
-      return BLI_ghash_len(id_node->components) > 0;
+      return !id_node->components.is_empty();
     }
     case NodeType::PARAMETERS:
     case NodeType::ANIMATION:
@@ -564,12 +566,11 @@ static void deg_debug_graphviz_graph_nodes(const DebugContext &ctx, const Depsgr
 static void deg_debug_graphviz_graph_relations(const DebugContext &ctx, const Depsgraph *graph)
 {
   for (IDNode *id_node : graph->id_nodes) {
-    GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
+    for (ComponentNode *comp_node : id_node->components.values()) {
       for (OperationNode *op_node : comp_node->operations) {
         deg_debug_graphviz_node_relations(ctx, op_node);
       }
     }
-    GHASH_FOREACH_END();
   }
 
   TimeSourceNode *time_source = graph->find_time_source();

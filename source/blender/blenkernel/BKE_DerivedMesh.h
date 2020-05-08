@@ -63,14 +63,18 @@
  *       as it is and stick with using BMesh and CDDM.
  */
 
-#include "DNA_defs.h"
 #include "DNA_customdata_types.h"
+#include "DNA_defs.h"
 #include "DNA_meshdata_types.h"
 
 #include "BLI_compiler_attrs.h"
 
-#include "BKE_customdata.h"
 #include "BKE_bvhutils.h"
+#include "BKE_customdata.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct BMEditMesh;
 struct CCGElem;
@@ -381,6 +385,10 @@ void DM_debug_print(DerivedMesh *dm);
 void DM_debug_print_cdlayers(CustomData *cdata);
 
 bool DM_is_valid(DerivedMesh *dm);
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* __BKE_DERIVEDMESH_H__ */

@@ -106,8 +106,8 @@ class TileManager {
   void reset(BufferParams &params, int num_samples);
   void set_samples(int num_samples);
   bool next();
-  bool next_tile(Tile *&tile, int device, bool denoising);
-  bool finish_tile(int index, bool &delete_tile);
+  bool next_tile(Tile *&tile, int device, uint tile_types);
+  bool finish_tile(const int index, const bool need_denoise, bool &delete_tile);
   bool done();
   bool has_tiles();
 

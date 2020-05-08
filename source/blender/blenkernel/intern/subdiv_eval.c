@@ -26,9 +26,9 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_bitmap.h"
 #include "BLI_math_vector.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
 #include "BKE_subdiv.h"
@@ -121,13 +121,20 @@ static void set_face_varying_data_from_uv(Subdiv *subdiv,
   }
 }
 
-bool BKE_subdiv_eval_update_from_mesh(Subdiv *subdiv,
-                                      const Mesh *mesh,
-                                      const float (*coarse_vertex_cos)[3])
+bool BKE_subdiv_eval_begin_from_mesh(Subdiv *subdiv,
+                                     const Mesh *mesh,
+                                     const float (*coarse_vertex_cos)[3])
 {
   if (!BKE_subdiv_eval_begin(subdiv)) {
     return false;
   }
+  return BKE_subdiv_eval_refine_from_mesh(subdiv, mesh, coarse_vertex_cos);
+}
+
+bool BKE_subdiv_eval_refine_from_mesh(Subdiv *subdiv,
+                                      const Mesh *mesh,
+                                      const float (*coarse_vertex_cos)[3])
+{
   if (subdiv->evaluator == NULL) {
     /* NOTE: This situation is supposed to be handled by begin(). */
     BLI_assert(!"Is not supposed to happen");
@@ -176,6 +183,28 @@ void BKE_subdiv_eval_limit_point_and_derivatives(Subdiv *subdiv,
                                                  float r_dPdv[3])
 {
   subdiv->evaluator->evaluateLimit(subdiv->evaluator, ptex_face_index, u, v, r_P, r_dPdu, r_dPdv);
+
+  /* NOTE: In a very rare occasions derivatives are evaluated to zeros. This happens, for example,
+   * in single vertex on Suzannne's nose (where two quads have 2 common edges).
+   *
+   * This makes tangent space displacement (such as multires) impossible to be used in those
+   * vertices, so those needs to be addressed in one way or another.
+   *
+   * Simplest thing to do: step inside of the face a little bit, where there is known patch at
+   * which there must be proper derivatives. This might break continuity of normals, but is better
+   * that giving totally unusable derivatives. */
+
+  if (r_dPdu != NULL && r_dPdv != NULL) {
+    if (is_zero_v3(r_dPdu) || is_zero_v3(r_dPdv)) {
+      subdiv->evaluator->evaluateLimit(subdiv->evaluator,
+                                       ptex_face_index,
+                                       u * 0.999f + 0.0005f,
+                                       v * 0.999f + 0.0005f,
+                                       r_P,
+                                       r_dPdu,
+                                       r_dPdv);
+    }
+  }
 }
 
 void BKE_subdiv_eval_limit_point_and_normal(Subdiv *subdiv,

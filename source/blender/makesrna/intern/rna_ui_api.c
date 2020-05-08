@@ -21,8 +21,8 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "BLI_utildefines.h"
 
@@ -33,9 +33,9 @@
 
 #include "DNA_screen_types.h"
 
-#include "UI_resources.h"
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
+#include "UI_resources.h"
 
 #include "rna_internal.h"
 
@@ -152,8 +152,10 @@ static void rna_uiItemR_with_popover(uiLayout *layout,
     RNA_warning("property not found: %s.%s", RNA_struct_identifier(ptr->type), propname);
     return;
   }
-  if (RNA_property_type(prop) != PROP_ENUM) {
-    RNA_warning("property is not an enum: %s.%s", RNA_struct_identifier(ptr->type), propname);
+  if ((RNA_property_type(prop) != PROP_ENUM) &&
+      !ELEM(RNA_property_subtype(prop), PROP_COLOR, PROP_COLOR_GAMMA)) {
+    RNA_warning(
+        "property is not an enum or color: %s.%s", RNA_struct_identifier(ptr->type), propname);
     return;
   }
   int flag = 0;
@@ -691,7 +693,7 @@ void RNA_api_ui_layout(StructRNA *srna)
   static float node_socket_color_default[] = {0.0f, 0.0f, 0.0f, 1.0f};
 
   /* simple layout specifiers */
-  func = RNA_def_function(srna, "row", "uiLayoutRow");
+  func = RNA_def_function(srna, "row", "uiLayoutRowWithHeading");
   parm = RNA_def_pointer(func, "layout", "UILayout", "", "Sub-layout to put items in");
   RNA_def_function_return(func, parm);
   RNA_def_function_ui_description(
@@ -699,8 +701,14 @@ void RNA_api_ui_layout(StructRNA *srna)
       "Sub-layout. Items placed in this sublayout are placed next to each other "
       "in a row");
   RNA_def_boolean(func, "align", false, "", "Align buttons to each other");
+  RNA_def_string(func,
+                 "heading",
+                 NULL,
+                 UI_MAX_NAME_STR,
+                 "Heading",
+                 "Label to insert into the layout for this row");
 
-  func = RNA_def_function(srna, "column", "uiLayoutColumn");
+  func = RNA_def_function(srna, "column", "uiLayoutColumnWithHeading");
   parm = RNA_def_pointer(func, "layout", "UILayout", "", "Sub-layout to put items in");
   RNA_def_function_return(func, parm);
   RNA_def_function_ui_description(
@@ -708,6 +716,12 @@ void RNA_api_ui_layout(StructRNA *srna)
       "Sub-layout. Items placed in this sublayout are placed under each other "
       "in a column");
   RNA_def_boolean(func, "align", false, "", "Align buttons to each other");
+  RNA_def_string(func,
+                 "heading",
+                 NULL,
+                 UI_MAX_NAME_STR,
+                 "Heading",
+                 "Label to insert into the layout for this column");
 
   func = RNA_def_function(srna, "column_flow", "uiLayoutColumnFlow");
   RNA_def_int(func, "columns", 0, 0, INT_MAX, "", "Number of columns, 0 is automatic", 0, INT_MAX);
@@ -884,6 +898,20 @@ void RNA_api_ui_layout(StructRNA *srna)
       func, "search_property", NULL, 0, "", "Identifier of search collection property");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   api_ui_item_common(func);
+
+  func = RNA_def_function(srna, "prop_decorator", "uiItemDecoratorR");
+  api_ui_item_rna_common(func);
+  RNA_def_int(func,
+              "index",
+              /* RNA_NO_INDEX == -1 */
+              -1,
+              -2,
+              INT_MAX,
+              "",
+              "The index of this button, when set a single member of an array can be accessed, "
+              "when set to -1 all array members are used",
+              -2,
+              INT_MAX);
 
   for (int is_menu_hold = 0; is_menu_hold < 2; is_menu_hold++) {
     func = (is_menu_hold) ? RNA_def_function(srna, "operator_menu_hold", "rna_uiItemOMenuHold") :
@@ -1472,6 +1500,7 @@ void RNA_api_ui_layout(StructRNA *srna)
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
 
   RNA_def_function(srna, "template_operator_search", "uiTemplateOperatorSearch");
+  RNA_def_function(srna, "template_menu_search", "uiTemplateMenuSearch");
 
   func = RNA_def_function(srna, "template_header_3D_mode", "uiTemplateHeader3D_mode");
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
@@ -1489,6 +1518,7 @@ void RNA_api_ui_layout(StructRNA *srna)
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
 
   func = RNA_def_function(srna, "template_node_link", "uiTemplateNodeLink");
+  RNA_def_function_flag(func, FUNC_USE_CONTEXT);
   parm = RNA_def_pointer(func, "ntree", "NodeTree", "", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_pointer(func, "node", "Node", "", "");

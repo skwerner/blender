@@ -28,8 +28,8 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math_vector.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
 #include "BKE_subdiv.h"
@@ -39,9 +39,9 @@
 
 #include "MEM_guardedalloc.h"
 
-/* ================================================================================================
- * Subdivision context.
- */
+/* -------------------------------------------------------------------- */
+/** \name Subdivision context
+ * \{ */
 
 typedef struct SubdivDeformContext {
   const Mesh *coarse_mesh;
@@ -77,9 +77,11 @@ static void subdiv_mesh_context_free(SubdivDeformContext *ctx)
   MEM_SAFE_FREE(ctx->accumulated_counters);
 }
 
-/* ================================================================================================
- * Accumulation helpers.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Accumulation helpers
+ * \{ */
 
 static void subdiv_accumulate_vertex_displacement(SubdivDeformContext *ctx,
                                                   const int ptex_face_index,
@@ -105,9 +107,11 @@ static void subdiv_accumulate_vertex_displacement(SubdivDeformContext *ctx,
   ++ctx->accumulated_counters[vertex_index];
 }
 
-/* ================================================================================================
- * Subdivision callbacks.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Subdivision callbacks
+ * \{ */
 
 static bool subdiv_mesh_topology_info(const SubdivForeachContext *foreach_context,
                                       const int UNUSED(num_vertices),
@@ -165,9 +169,11 @@ static void subdiv_mesh_vertex_corner(const SubdivForeachContext *foreach_contex
   add_v3_v3(vertex_co, D);
 }
 
-/* ================================================================================================
- * Initialization.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Initialization
+ * \{ */
 
 static void setup_foreach_callbacks(const SubdivDeformContext *subdiv_context,
                                     SubdivForeachContext *foreach_context)
@@ -182,9 +188,11 @@ static void setup_foreach_callbacks(const SubdivDeformContext *subdiv_context,
   foreach_context->vertex_corner = subdiv_mesh_vertex_corner;
 }
 
-/* ================================================================================================
- * Public entry point.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Public entry point
+ * \{ */
 
 void BKE_subdiv_deform_coarse_vertices(struct Subdiv *subdiv,
                                        const struct Mesh *coarse_mesh,
@@ -194,7 +202,7 @@ void BKE_subdiv_deform_coarse_vertices(struct Subdiv *subdiv,
   BKE_subdiv_stats_begin(&subdiv->stats, SUBDIV_STATS_SUBDIV_TO_MESH);
   /* Make sure evaluator is up to date with possible new topology, and that
    * is refined for the new positions of coarse vertices. */
-  if (!BKE_subdiv_eval_update_from_mesh(subdiv, coarse_mesh, vertex_cos)) {
+  if (!BKE_subdiv_eval_begin_from_mesh(subdiv, coarse_mesh, vertex_cos)) {
     /* This could happen in two situations:
      * - OpenSubdiv is disabled.
      * - Something totally bad happened, and OpenSubdiv rejected our
@@ -234,3 +242,5 @@ void BKE_subdiv_deform_coarse_vertices(struct Subdiv *subdiv,
   /* Free used memory. */
   subdiv_mesh_context_free(&subdiv_context);
 }
+
+/** \} */

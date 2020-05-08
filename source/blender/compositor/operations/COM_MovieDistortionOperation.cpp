@@ -19,8 +19,8 @@
 #include "COM_MovieDistortionOperation.h"
 
 extern "C" {
-#include "BKE_tracking.h"
 #include "BKE_movieclip.h"
+#include "BKE_tracking.h"
 #include "BLI_linklist.h"
 }
 
@@ -50,7 +50,8 @@ void MovieDistortionOperation::initExecution()
     full_frame.xmin = full_frame.ymin = 0;
     full_frame.xmax = this->m_width;
     full_frame.ymax = this->m_height;
-    BKE_tracking_max_distortion_delta_across_bound(tracking, &full_frame, !this->m_apply, delta);
+    BKE_tracking_max_distortion_delta_across_bound(
+        tracking, this->m_width, this->m_height, &full_frame, !this->m_apply, delta);
 
     /* 5 is just in case we didn't hit real max of distortion in
      * BKE_tracking_max_undistortion_delta_across_bound

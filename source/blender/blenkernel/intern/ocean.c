@@ -38,11 +38,11 @@
 #include "BLI_path_util.h"
 #include "BLI_rand.h"
 #include "BLI_task.h"
-#include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_image.h"
 #include "BKE_ocean.h"
+#include "ocean_intern.h"
 
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
@@ -54,95 +54,6 @@
 #ifdef WITH_OCEANSIM
 
 /* Ocean code */
-#  include "fftw3.h"
-
-#  define GRAVITY 9.81f
-
-typedef struct Ocean {
-  /* ********* input parameters to the sim ********* */
-  float _V;
-  float _l;
-  float _w;
-  float _A;
-  float _damp_reflections;
-  float _wind_alignment;
-  float _depth;
-
-  float _wx;
-  float _wz;
-
-  float _L;
-
-  /* dimensions of computational grid */
-  int _M;
-  int _N;
-
-  /* spatial size of computational grid */
-  float _Lx;
-  float _Lz;
-
-  float normalize_factor; /* init w */
-  float time;
-
-  short _do_disp_y;
-  short _do_normals;
-  short _do_chop;
-  short _do_jacobian;
-
-  /* mutex for threaded texture access */
-  ThreadRWMutex oceanmutex;
-
-  /* ********* sim data arrays ********* */
-
-  /* two dimensional arrays of complex */
-  fftw_complex *_fft_in;     /* init w   sim w */
-  fftw_complex *_fft_in_x;   /* init w   sim w */
-  fftw_complex *_fft_in_z;   /* init w   sim w */
-  fftw_complex *_fft_in_jxx; /* init w   sim w */
-  fftw_complex *_fft_in_jzz; /* init w   sim w */
-  fftw_complex *_fft_in_jxz; /* init w   sim w */
-  fftw_complex *_fft_in_nx;  /* init w   sim w */
-  fftw_complex *_fft_in_nz;  /* init w   sim w */
-  fftw_complex *_htilda;     /* init w   sim w (only once) */
-
-  /* fftw "plans" */
-  fftw_plan _disp_y_plan; /* init w   sim r */
-  fftw_plan _disp_x_plan; /* init w   sim r */
-  fftw_plan _disp_z_plan; /* init w   sim r */
-  fftw_plan _N_x_plan;    /* init w   sim r */
-  fftw_plan _N_z_plan;    /* init w   sim r */
-  fftw_plan _Jxx_plan;    /* init w   sim r */
-  fftw_plan _Jxz_plan;    /* init w   sim r */
-  fftw_plan _Jzz_plan;    /* init w   sim r */
-
-  /* two dimensional arrays of float */
-  double *_disp_y; /* init w   sim w via plan? */
-  double *_N_x;    /* init w   sim w via plan? */
-  /* all member of this array has same values,
-   * so convert this array to a float to reduce memory usage (MEM01). */
-  /*float * _N_y; */
-  double _N_y;     /*          sim w ********* can be rearranged? */
-  double *_N_z;    /* init w   sim w via plan? */
-  double *_disp_x; /* init w   sim w via plan? */
-  double *_disp_z; /* init w   sim w via plan? */
-
-  /* two dimensional arrays of float */
-  /* Jacobian and minimum eigenvalue */
-  double *_Jxx; /* init w   sim w */
-  double *_Jzz; /* init w   sim w */
-  double *_Jxz; /* init w   sim w */
-
-  /* one dimensional float array */
-  float *_kx; /* init w   sim r */
-  float *_kz; /* init w   sim r */
-
-  /* two dimensional complex array */
-  fftw_complex *_h0;       /* init w   sim r */
-  fftw_complex *_h0_minus; /* init w   sim r */
-
-  /* two dimensional float array */
-  float *_k; /* init w   sim r */
-} Ocean;
 
 static float nextfr(RNG *rng, float min, float max)
 {
@@ -285,7 +196,7 @@ float BKE_ocean_jminus_to_foam(float jminus, float coverage)
 {
   float foam = jminus * -0.005f + coverage;
   CLAMP(foam, 0.0f, 1.0f);
-  return foam * foam;
+  return foam;
 }
 
 void BKE_ocean_eval_uv(struct Ocean *oc, struct OceanResult *ocr, float u, float v)
@@ -542,21 +453,17 @@ static void ocean_compute_htilda(void *__restrict userdata,
   }
 }
 
-static void ocean_compute_displacement_y(TaskPool *__restrict pool,
-                                         void *UNUSED(taskdata),
-                                         int UNUSED(threadid))
+static void ocean_compute_displacement_y(TaskPool *__restrict pool, void *UNUSED(taskdata))
 {
-  OceanSimulateData *osd = BLI_task_pool_userdata(pool);
+  OceanSimulateData *osd = BLI_task_pool_user_data(pool);
   const Ocean *o = osd->o;
 
   fftw_execute(o->_disp_y_plan);
 }
 
-static void ocean_compute_displacement_x(TaskPool *__restrict pool,
-                                         void *UNUSED(taskdata),
-                                         int UNUSED(threadid))
+static void ocean_compute_displacement_x(TaskPool *__restrict pool, void *UNUSED(taskdata))
 {
-  OceanSimulateData *osd = BLI_task_pool_userdata(pool);
+  OceanSimulateData *osd = BLI_task_pool_user_data(pool);
   const Ocean *o = osd->o;
   const float scale = osd->scale;
   const float chop_amount = osd->chop_amount;
@@ -583,11 +490,9 @@ static void ocean_compute_displacement_x(TaskPool *__restrict pool,
   fftw_execute(o->_disp_x_plan);
 }
 
-static void ocean_compute_displacement_z(TaskPool *__restrict pool,
-                                         void *UNUSED(taskdata),
-                                         int UNUSED(threadid))
+static void ocean_compute_displacement_z(TaskPool *__restrict pool, void *UNUSED(taskdata))
 {
-  OceanSimulateData *osd = BLI_task_pool_userdata(pool);
+  OceanSimulateData *osd = BLI_task_pool_user_data(pool);
   const Ocean *o = osd->o;
   const float scale = osd->scale;
   const float chop_amount = osd->chop_amount;
@@ -614,11 +519,9 @@ static void ocean_compute_displacement_z(TaskPool *__restrict pool,
   fftw_execute(o->_disp_z_plan);
 }
 
-static void ocean_compute_jacobian_jxx(TaskPool *__restrict pool,
-                                       void *UNUSED(taskdata),
-                                       int UNUSED(threadid))
+static void ocean_compute_jacobian_jxx(TaskPool *__restrict pool, void *UNUSED(taskdata))
 {
-  OceanSimulateData *osd = BLI_task_pool_userdata(pool);
+  OceanSimulateData *osd = BLI_task_pool_user_data(pool);
   const Ocean *o = osd->o;
   const float chop_amount = osd->chop_amount;
   int i, j;
@@ -649,11 +552,9 @@ static void ocean_compute_jacobian_jxx(TaskPool *__restrict pool,
   }
 }
 
-static void ocean_compute_jacobian_jzz(TaskPool *__restrict pool,
-                                       void *UNUSED(taskdata),
-                                       int UNUSED(threadid))
+static void ocean_compute_jacobian_jzz(TaskPool *__restrict pool, void *UNUSED(taskdata))
 {
-  OceanSimulateData *osd = BLI_task_pool_userdata(pool);
+  OceanSimulateData *osd = BLI_task_pool_user_data(pool);
   const Ocean *o = osd->o;
   const float chop_amount = osd->chop_amount;
   int i, j;
@@ -684,11 +585,9 @@ static void ocean_compute_jacobian_jzz(TaskPool *__restrict pool,
   }
 }
 
-static void ocean_compute_jacobian_jxz(TaskPool *__restrict pool,
-                                       void *UNUSED(taskdata),
-                                       int UNUSED(threadid))
+static void ocean_compute_jacobian_jxz(TaskPool *__restrict pool, void *UNUSED(taskdata))
 {
-  OceanSimulateData *osd = BLI_task_pool_userdata(pool);
+  OceanSimulateData *osd = BLI_task_pool_user_data(pool);
   const Ocean *o = osd->o;
   const float chop_amount = osd->chop_amount;
   int i, j;
@@ -713,11 +612,9 @@ static void ocean_compute_jacobian_jxz(TaskPool *__restrict pool,
   fftw_execute(o->_Jxz_plan);
 }
 
-static void ocean_compute_normal_x(TaskPool *__restrict pool,
-                                   void *UNUSED(taskdata),
-                                   int UNUSED(threadid))
+static void ocean_compute_normal_x(TaskPool *__restrict pool, void *UNUSED(taskdata))
 {
-  OceanSimulateData *osd = BLI_task_pool_userdata(pool);
+  OceanSimulateData *osd = BLI_task_pool_user_data(pool);
   const Ocean *o = osd->o;
   int i, j;
 
@@ -734,11 +631,9 @@ static void ocean_compute_normal_x(TaskPool *__restrict pool,
   fftw_execute(o->_N_x_plan);
 }
 
-static void ocean_compute_normal_z(TaskPool *__restrict pool,
-                                   void *UNUSED(taskdata),
-                                   int UNUSED(threadid))
+static void ocean_compute_normal_z(TaskPool *__restrict pool, void *UNUSED(taskdata))
 {
-  OceanSimulateData *osd = BLI_task_pool_userdata(pool);
+  OceanSimulateData *osd = BLI_task_pool_user_data(pool);
   const Ocean *o = osd->o;
   int i, j;
 
@@ -757,7 +652,6 @@ static void ocean_compute_normal_z(TaskPool *__restrict pool,
 
 void BKE_ocean_simulate(struct Ocean *o, float t, float scale, float chop_amount)
 {
-  TaskScheduler *scheduler = BLI_task_scheduler_get();
   TaskPool *pool;
 
   OceanSimulateData osd;
@@ -769,7 +663,7 @@ void BKE_ocean_simulate(struct Ocean *o, float t, float scale, float chop_amount
   osd.scale = scale;
   osd.chop_amount = chop_amount;
 
-  pool = BLI_task_pool_create(scheduler, &osd);
+  pool = BLI_task_pool_create(&osd, TASK_PRIORITY_HIGH);
 
   BLI_rw_mutex_lock(&o->oceanmutex, THREAD_LOCK_WRITE);
 
@@ -787,23 +681,23 @@ void BKE_ocean_simulate(struct Ocean *o, float t, float scale, float chop_amount
   BLI_task_parallel_range(0, o->_M, &osd, ocean_compute_htilda, &settings);
 
   if (o->_do_disp_y) {
-    BLI_task_pool_push(pool, ocean_compute_displacement_y, NULL, false, TASK_PRIORITY_HIGH);
+    BLI_task_pool_push(pool, ocean_compute_displacement_y, NULL, false, NULL);
   }
 
   if (o->_do_chop) {
-    BLI_task_pool_push(pool, ocean_compute_displacement_x, NULL, false, TASK_PRIORITY_HIGH);
-    BLI_task_pool_push(pool, ocean_compute_displacement_z, NULL, false, TASK_PRIORITY_HIGH);
+    BLI_task_pool_push(pool, ocean_compute_displacement_x, NULL, false, NULL);
+    BLI_task_pool_push(pool, ocean_compute_displacement_z, NULL, false, NULL);
   }
 
   if (o->_do_jacobian) {
-    BLI_task_pool_push(pool, ocean_compute_jacobian_jxx, NULL, false, TASK_PRIORITY_HIGH);
-    BLI_task_pool_push(pool, ocean_compute_jacobian_jzz, NULL, false, TASK_PRIORITY_HIGH);
-    BLI_task_pool_push(pool, ocean_compute_jacobian_jxz, NULL, false, TASK_PRIORITY_HIGH);
+    BLI_task_pool_push(pool, ocean_compute_jacobian_jxx, NULL, false, NULL);
+    BLI_task_pool_push(pool, ocean_compute_jacobian_jzz, NULL, false, NULL);
+    BLI_task_pool_push(pool, ocean_compute_jacobian_jxz, NULL, false, NULL);
   }
 
   if (o->_do_normals) {
-    BLI_task_pool_push(pool, ocean_compute_normal_x, NULL, false, TASK_PRIORITY_HIGH);
-    BLI_task_pool_push(pool, ocean_compute_normal_z, NULL, false, TASK_PRIORITY_HIGH);
+    BLI_task_pool_push(pool, ocean_compute_normal_x, NULL, false, NULL);
+    BLI_task_pool_push(pool, ocean_compute_normal_z, NULL, false, NULL);
     o->_N_y = 1.0f / scale;
   }
 
@@ -893,6 +787,9 @@ void BKE_ocean_init_from_modifier(struct Ocean *ocean, struct OceanModifierData 
                  omd->wave_alignment,
                  omd->depth,
                  omd->time,
+                 omd->spectrum,
+                 omd->fetch_jonswap,
+                 omd->sharpen_peak_jonswap,
                  do_heightfield,
                  do_chop,
                  do_normals,
@@ -913,6 +810,9 @@ void BKE_ocean_init(struct Ocean *o,
                     float alignment,
                     float depth,
                     float time,
+                    int spectrum,
+                    float fetch_jonswap,
+                    float sharpen_peak_jonswap,
                     short do_height_field,
                     short do_chop,
                     short do_normals,
@@ -939,6 +839,13 @@ void BKE_ocean_init(struct Ocean *o,
   o->_wz = -sin(w);        /* wave direction */
   o->_L = V * V / GRAVITY; /* largest wave for a given velocity V */
   o->time = time;
+
+  /* Spectrum to use. */
+  o->_spectrum = spectrum;
+
+  /* Common JONSWAP parameters. */
+  o->_fetch_jonswap = fetch_jonswap;
+  o->_sharpen_peak_jonswap = sharpen_peak_jonswap;
 
   o->_do_disp_y = do_height_field;
   o->_do_normals = do_normals;
@@ -1001,10 +908,46 @@ void BKE_ocean_init(struct Ocean *o,
 
       fftw_complex r1r2;
       init_complex(r1r2, r1, r2);
-      mul_complex_f(
-          o->_h0[i * o->_N + j], r1r2, (float)(sqrt(Ph(o, o->_kx[i], o->_kz[j]) / 2.0f)));
-      mul_complex_f(
-          o->_h0_minus[i * o->_N + j], r1r2, (float)(sqrt(Ph(o, -o->_kx[i], -o->_kz[j]) / 2.0f)));
+      switch (o->_spectrum) {
+        case MOD_OCEAN_SPECTRUM_JONSWAP:
+          mul_complex_f(o->_h0[i * o->_N + j],
+                        r1r2,
+                        (float)(sqrt(BLI_ocean_spectrum_jonswap(o, o->_kx[i], o->_kz[j]) / 2.0f)));
+          mul_complex_f(
+              o->_h0_minus[i * o->_N + j],
+              r1r2,
+              (float)(sqrt(BLI_ocean_spectrum_jonswap(o, -o->_kx[i], -o->_kz[j]) / 2.0f)));
+          break;
+        case MOD_OCEAN_SPECTRUM_TEXEL_MARSEN_ARSLOE:
+          mul_complex_f(
+              o->_h0[i * o->_N + j],
+              r1r2,
+              (float)(sqrt(BLI_ocean_spectrum_texelmarsenarsloe(o, o->_kx[i], o->_kz[j]) / 2.0f)));
+          mul_complex_f(
+              o->_h0_minus[i * o->_N + j],
+              r1r2,
+              (float)(sqrt(BLI_ocean_spectrum_texelmarsenarsloe(o, -o->_kx[i], -o->_kz[j]) /
+                           2.0f)));
+          break;
+        case MOD_OCEAN_SPECTRUM_PIERSON_MOSKOWITZ:
+          mul_complex_f(
+              o->_h0[i * o->_N + j],
+              r1r2,
+              (float)(sqrt(BLI_ocean_spectrum_piersonmoskowitz(o, o->_kx[i], o->_kz[j]) / 2.0f)));
+          mul_complex_f(
+              o->_h0_minus[i * o->_N + j],
+              r1r2,
+              (float)(sqrt(BLI_ocean_spectrum_piersonmoskowitz(o, -o->_kx[i], -o->_kz[j]) /
+                           2.0f)));
+          break;
+        default:
+          mul_complex_f(
+              o->_h0[i * o->_N + j], r1r2, (float)(sqrt(Ph(o, o->_kx[i], o->_kz[j]) / 2.0f)));
+          mul_complex_f(o->_h0_minus[i * o->_N + j],
+                        r1r2,
+                        (float)(sqrt(Ph(o, -o->_kx[i], -o->_kz[j]) / 2.0f)));
+          break;
+      }
     }
   }
 
@@ -1517,12 +1460,6 @@ void BKE_ocean_bake(struct Ocean *o,
 
 #else /* WITH_OCEANSIM */
 
-/* stub */
-typedef struct Ocean {
-  /* need some data here, C does not allow empty struct */
-  int stub;
-} Ocean;
-
 float BKE_ocean_jminus_to_foam(float UNUSED(jminus), float UNUSED(coverage))
 {
   return 0.0f;
@@ -1591,6 +1528,9 @@ void BKE_ocean_init(struct Ocean *UNUSED(o),
                     float UNUSED(alignment),
                     float UNUSED(depth),
                     float UNUSED(time),
+                    int UNUSED(spectrum),
+                    float UNUSED(fetch_jonswap),
+                    float UNUSED(sharpen_peak_jonswap),
                     short UNUSED(do_height_field),
                     short UNUSED(do_chop),
                     short UNUSED(do_normals),

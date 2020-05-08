@@ -41,8 +41,8 @@
 #include "util/util_progress.h"
 #include "util/util_time.h"
 
-#include "blender/blender_sync.h"
 #include "blender/blender_session.h"
+#include "blender/blender_sync.h"
 #include "blender/blender_util.h"
 
 CCL_NAMESPACE_BEGIN
@@ -137,14 +137,6 @@ void BlenderSession::create_session()
   /* create scene */
   scene = new Scene(scene_params, session->device);
   scene->name = b_scene.name();
-
-  /* setup callbacks for builtin image support */
-  scene->image_manager->builtin_image_info_cb = function_bind(
-      &BlenderSession::builtin_image_info, this, _1, _2, _3);
-  scene->image_manager->builtin_image_pixels_cb = function_bind(
-      &BlenderSession::builtin_image_pixels, this, _1, _2, _3, _4, _5, _6, _7);
-  scene->image_manager->builtin_image_float_pixels_cb = function_bind(
-      &BlenderSession::builtin_image_float_pixels, this, _1, _2, _3, _4, _5, _6, _7);
 
   session->scene = scene;
 
@@ -470,7 +462,8 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   b_rlay_name = b_view_layer.name();
 
   /* add passes */
-  vector<Pass> passes = sync->sync_render_passes(b_rlay, b_view_layer);
+  vector<Pass> passes = sync->sync_render_passes(
+      b_rlay, b_view_layer, session_params.adaptive_sampling);
   buffer_params.passes = passes;
 
   PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");

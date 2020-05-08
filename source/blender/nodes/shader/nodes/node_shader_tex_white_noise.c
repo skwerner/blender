@@ -22,14 +22,14 @@
 /* **************** WHITE NOISE **************** */
 
 static bNodeSocketTemplate sh_node_tex_white_noise_in[] = {
-    {SOCK_VECTOR, 1, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, -10000.0f, 10000.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("W"), 0.0f, 0.0f, 0.0f, 0.0f, -10000.0f, 10000.0f, PROP_NONE},
-    {-1, 0, ""}};
+    {SOCK_VECTOR, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, -10000.0f, 10000.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("W"), 0.0f, 0.0f, 0.0f, 0.0f, -10000.0f, 10000.0f, PROP_NONE},
+    {-1, ""}};
 
 static bNodeSocketTemplate sh_node_tex_white_noise_out[] = {
-    {SOCK_FLOAT, 0, N_("Value")},
-    {SOCK_RGBA, 0, N_("Color")},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Value")},
+    {SOCK_RGBA, N_("Color")},
+    {-1, ""},
 };
 
 static void node_shader_init_tex_white_noise(bNodeTree *UNUSED(ntree), bNode *node)
@@ -72,7 +72,8 @@ void register_node_type_sh_tex_white_noise(void)
 {
   static bNodeType ntype;
 
-  sh_node_type_base(&ntype, SH_NODE_TEX_WHITE_NOISE, "White Noise Texture", NODE_CLASS_TEXTURE, 0);
+  sh_fn_node_type_base(
+      &ntype, SH_NODE_TEX_WHITE_NOISE, "White Noise Texture", NODE_CLASS_TEXTURE, 0);
   node_type_socket_templates(&ntype, sh_node_tex_white_noise_in, sh_node_tex_white_noise_out);
   node_type_init(&ntype, node_shader_init_tex_white_noise);
   node_type_gpu(&ntype, gpu_shader_tex_white_noise);

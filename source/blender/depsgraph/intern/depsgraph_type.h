@@ -33,12 +33,18 @@
 
 /* TODO(sergey): Ideally we'll just use char* and statically allocated strings
  * to avoid any possible overhead caused by string (re)allocation/formatting. */
-#include <string>
-#include <vector>
 #include <algorithm>
+#include <deque>
 #include <map>
 #include <set>
-#include <unordered_map>
+#include <string>
+#include <vector>
+
+#include "BLI_map.hh"
+#include "BLI_set.hh"
+#include "BLI_string_ref.hh"
+#include "BLI_vector.hh"
+#include "BLI_vector_set.hh"
 
 struct Depsgraph;
 
@@ -47,11 +53,19 @@ struct CustomData_MeshMasks;
 namespace DEG {
 
 /* Commonly used types. */
+using BLI::ArrayRef;
+using BLI::Map;
+using BLI::Set;
+using BLI::StringRef;
+using BLI::StringRefNull;
+using BLI::Vector;
+using BLI::VectorSet;
+using std::deque;
 using std::map;
 using std::pair;
 using std::set;
 using std::string;
-using std::unordered_map;
+using std::unique_ptr;
 using std::vector;
 
 /* Commonly used functions. */

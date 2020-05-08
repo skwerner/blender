@@ -20,14 +20,13 @@
 /** \file
  * \ingroup depsgraph
  *
- * Evaluation engine entrypoints for Depsgraph Engine.
+ * Evaluation engine entry-points for Depsgraph Engine.
  */
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
-#include "BLI_ghash.h"
 
 extern "C" {
 #include "BKE_scene.h"
@@ -87,5 +86,5 @@ void DEG_evaluate_on_framechange(Main *bmain, Depsgraph *graph, float ctime)
 bool DEG_needs_eval(Depsgraph *graph)
 {
   DEG::Depsgraph *deg_graph = reinterpret_cast<DEG::Depsgraph *>(graph);
-  return BLI_gset_len(deg_graph->entry_tags) != 0 || deg_graph->need_update_time;
+  return !deg_graph->entry_tags.is_empty() || deg_graph->need_update_time;
 }

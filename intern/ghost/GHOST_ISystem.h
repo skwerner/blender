@@ -27,10 +27,12 @@
 #ifndef __GHOST_ISYSTEM_H__
 #define __GHOST_ISYSTEM_H__
 
-#include "GHOST_Types.h"
+#include <stdlib.h>
+
 #include "GHOST_IContext.h"
 #include "GHOST_ITimerTask.h"
 #include "GHOST_IWindow.h"
+#include "GHOST_Types.h"
 
 class GHOST_IEventConsumer;
 
@@ -240,7 +242,7 @@ class GHOST_ISystem {
    * \param parentWindow: Parent (embedder) window
    * \return The new window (or 0 if creation failed).
    */
-  virtual GHOST_IWindow *createWindow(const STR_String &title,
+  virtual GHOST_IWindow *createWindow(const char *title,
                                       GHOST_TInt32 left,
                                       GHOST_TInt32 top,
                                       GHOST_TUns32 width,

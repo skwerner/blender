@@ -26,8 +26,8 @@
 #include "DNA_modifier_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_array.h"
 #include "BLI_alloca.h"
+#include "BLI_array.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
 #include "BLI_utildefines.h"
@@ -997,10 +997,10 @@ static bool point_between_edges(float co[3], BMVert *v, BMFace *f, EdgeHalf *e1,
  * record the change in offset_l (or offset_r); later we can tell that a change has happened
  * because the offset will differ from its original value in offset_l_spec (or offset_r_spec).
  *
- * \param edges_between If this is true, there are edges between e1 and e2 in CCW order so they
+ * \param edges_between: If this is true, there are edges between e1 and e2 in CCW order so they
  * don't share a common face. We want the meeting point to be on an existing face so it
  * should be dropped onto one of the intermediate faces, if possible.
- * \param e_in_plane If we need to drop from the calculated offset lines to one of the faces,
+ * \param e_in_plane: If we need to drop from the calculated offset lines to one of the faces,
  * we don't want to drop onto the 'in plane' face, so if this is not null skip this edge's faces.
  */
 static void offset_meet(EdgeHalf *e1,
@@ -2601,13 +2601,13 @@ static void adjust_miter_inner_coords(BevelParams *bp, BevVert *bv, EdgeHalf *em
  * to be a subsequent pass to make the widths as consistent as possible.
  * Doesn't make the actual BMVerts.
  *
- * For a width consistency pass, we just recalculate the coordinates of the BoundVerts. If the
+ * For a width consistency pass, we just recalculate the coordinates of the #BoundVerts. If the
  * other ends have been (re)built already, then we copy the offsets from there to match, else we
  * use the ideal (user-specified) widths.
  *
- * \param construct The first time through, construct will be true and we are making the BoundVerts
- * and setting up the BoundVert and EdgeHalf pointers appropriately. Also, if construct, decide on
- * the mesh pattern that will be used inside the boundary.
+ * \param construct: The first time through, construct will be true and we are making the
+ * #BoundVerts and setting up the #BoundVert and #EdgeHalf pointers appropriately.
+ * Also, if construct, decide on the mesh pattern that will be used inside the boundary.
  */
 static void build_boundary(BevelParams *bp, BevVert *bv, bool construct)
 {
@@ -3132,22 +3132,22 @@ static EdgeHalf *next_edgehalf_bev(BevelParams *bp,
  */
 static void regularize_profile_orientation(BevelParams *bp, BMEdge *bme)
 {
-  BevVert *start_bv;
-  BevVert *bv;
-  EdgeHalf *start_edgehalf, *edgehalf;
-  bool toward_bv;
-
-  start_bv = find_bevvert(bp, bme->v1);
-  start_edgehalf = find_edge_half(start_bv, bme);
+  BevVert *start_bv = find_bevvert(bp, bme->v1);
+  EdgeHalf *start_edgehalf = find_edge_half(start_bv, bme);
   if (!start_edgehalf->is_bev || start_edgehalf->visited_rpo) {
     return;
   }
 
-  /* Pick a BoundVert on one side of the profile to use for the start of the profile. */
-  start_edgehalf->leftv->is_profile_start = false;
+  /* Pick a BoundVert on one side of the profile to use for the starting side. Use the one highest
+   * on the Z axis because even any rule is better than an arbitrary decision. */
+  bool right_highest = start_edgehalf->leftv->nv.co[2] < start_edgehalf->rightv->nv.co[2];
+  start_edgehalf->leftv->is_profile_start = right_highest;
   start_edgehalf->visited_rpo = true;
 
   /* First loop starts in the away from BevVert direction and the second starts toward it. */
+  bool toward_bv;
+  BevVert *bv;
+  EdgeHalf *edgehalf;
   for (int i = 0; i < 2; i++) {
     edgehalf = start_edgehalf;
     bv = start_bv;
@@ -3160,11 +3160,11 @@ static void regularize_profile_orientation(BevelParams *bp, BMEdge *bme)
        * The direction relative to the BevVert switches every step, so also switch
        * the orientation every step. */
       if (i == 0) {
-        edgehalf->leftv->is_profile_start = toward_bv;
+        edgehalf->leftv->is_profile_start = toward_bv ^ right_highest;
       }
       else {
         /* The opposite side as the first direction because we're moving the other way. */
-        edgehalf->leftv->is_profile_start = !toward_bv;
+        edgehalf->leftv->is_profile_start = (!toward_bv) ^ right_highest;
       }
 
       /* The next jump will in the opposite direction relative to the BevVert. */
@@ -5876,7 +5876,7 @@ static BevVert *bevel_vert_construct(BMesh *bm, BevelParams *bp, BMVert *v)
   if (bp->vertex_only) {
     /* If weighted, modify offset by weight. */
     if (bp->dvert != NULL && bp->vertex_group != -1) {
-      weight = defvert_find_weight(bp->dvert + BM_elem_index_get(v), bp->vertex_group);
+      weight = BKE_defvert_find_weight(bp->dvert + BM_elem_index_get(v), bp->vertex_group);
       bv->offset *= weight;
     }
     else if (bp->use_weights) {
@@ -6919,13 +6919,14 @@ static void set_profile_spacing(BevelParams *bp, ProfileSpacing *pro_spacing, bo
 
 /**
  * Assume we have a situation like:
- *
+ * <pre>
  * a                 d
  *  \               /
  * A \             / C
  *    \ th1    th2/
  *     b---------c
  *          B
+ * </pre>
  *
  * where edges are A, B, and C, following a face around vertices a, b, c, d.
  * th1 is angle abc and th2 is angle bcd;

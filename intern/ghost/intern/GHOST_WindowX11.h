@@ -37,7 +37,6 @@
 
 #include <map>
 
-class STR_String;
 class GHOST_SystemX11;
 
 #ifdef WITH_XDND
@@ -69,7 +68,7 @@ class GHOST_WindowX11 : public GHOST_Window {
    */
   GHOST_WindowX11(GHOST_SystemX11 *system,
                   Display *display,
-                  const STR_String &title,
+                  const char *title,
                   GHOST_TInt32 left,
                   GHOST_TInt32 top,
                   GHOST_TUns32 width,
@@ -85,9 +84,9 @@ class GHOST_WindowX11 : public GHOST_Window {
 
   bool getValid() const;
 
-  void setTitle(const STR_String &title);
+  void setTitle(const char *title);
 
-  void getTitle(STR_String &title) const;
+  std::string getTitle() const;
 
   void getWindowBounds(GHOST_Rect &bounds) const;
 
@@ -144,12 +143,11 @@ class GHOST_WindowX11 : public GHOST_Window {
    * Return a handle to the x11 window type.
    */
   Window getXWindow();
-#ifdef WITH_X11_XINPUT
+
   GHOST_TabletData &GetTabletData()
   {
     return m_tabletData;
   }
-#endif  // WITH_X11_XINPUT
 
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
   XIC getX11_XIC()
@@ -269,9 +267,7 @@ class GHOST_WindowX11 : public GHOST_Window {
   GHOST_DropTargetX11 *m_dropTarget;
 #endif
 
-#ifdef WITH_X11_XINPUT
   GHOST_TabletData m_tabletData;
-#endif
 
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
   XIC m_xic;

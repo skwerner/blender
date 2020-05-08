@@ -24,9 +24,9 @@
 
 #include "DRW_render.h"
 
+#include "BKE_animsys.h"
 #include "BKE_camera.h"
 #include "BKE_object.h"
-#include "BKE_animsys.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_camera_types.h"
@@ -37,8 +37,8 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "eevee_private.h"
 #include "GPU_texture.h"
+#include "eevee_private.h"
 
 static struct {
   /* Motion Blur */
@@ -48,7 +48,7 @@ static struct {
 extern char datatoc_effect_motion_blur_frag_glsl[];
 
 static void eevee_motion_blur_camera_get_matrix_at_time(Scene *scene,
-                                                        ARegion *ar,
+                                                        ARegion *region,
                                                         RegionView3D *rv3d,
                                                         View3D *v3d,
                                                         Object *camera,
@@ -73,8 +73,7 @@ static void eevee_motion_blur_camera_get_matrix_at_time(Scene *scene,
   /* Past matrix */
   /* FIXME : This is a temporal solution that does not take care of parent animations */
   /* Recalc Anim manually */
-  BKE_animsys_evaluate_animdata(
-      scene, &camdata_cpy.id, camdata_cpy.adt, time, ADT_RECALC_ALL, false);
+  BKE_animsys_evaluate_animdata(&camdata_cpy.id, camdata_cpy.adt, time, ADT_RECALC_ALL, false);
   BKE_object_where_is_calc_time(draw_ctx->depsgraph, scene, &cam_cpy, time);
 
   /* Compute winmat */
@@ -83,7 +82,7 @@ static void eevee_motion_blur_camera_get_matrix_at_time(Scene *scene,
 
   if (v3d != NULL) {
     BKE_camera_params_from_view3d(&params, draw_ctx->depsgraph, v3d, rv3d);
-    BKE_camera_params_compute_viewplane(&params, ar->winx, ar->winy, 1.0f, 1.0f);
+    BKE_camera_params_compute_viewplane(&params, region->winx, region->winy, 1.0f, 1.0f);
   }
   else {
     BKE_camera_params_from_object(&params, &cam_cpy);
@@ -115,7 +114,7 @@ int EEVEE_motion_blur_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *veda
 
   View3D *v3d = draw_ctx->v3d;
   RegionView3D *rv3d = draw_ctx->rv3d;
-  ARegion *ar = draw_ctx->ar;
+  ARegion *region = draw_ctx->region;
 
   if (scene_eval->eevee.flag & SCE_EEVEE_MOTION_BLUR_ENABLED) {
     /* Update Motion Blur Matrices */
@@ -151,7 +150,7 @@ int EEVEE_motion_blur_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *veda
       /* Current matrix */
       if (effects->motion_blur_mat_cached == false) {
         eevee_motion_blur_camera_get_matrix_at_time(
-            scene, ar, rv3d, v3d, ob_camera_eval, ctime, effects->current_world_to_ndc);
+            scene, region, rv3d, v3d, ob_camera_eval, ctime, effects->current_world_to_ndc);
       }
 
       /* Only continue if camera is not being keyed */
@@ -160,12 +159,12 @@ int EEVEE_motion_blur_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *veda
         /* Past matrix */
         if (effects->motion_blur_mat_cached == false) {
           eevee_motion_blur_camera_get_matrix_at_time(
-              scene, ar, rv3d, v3d, ob_camera_eval, ctime - delta, effects->past_world_to_ndc);
+              scene, region, rv3d, v3d, ob_camera_eval, ctime - delta, effects->past_world_to_ndc);
 
 #if 0 /* for future high quality blur */
           /* Future matrix */
           eevee_motion_blur_camera_get_matrix_at_time(
-              scene, ar, rv3d, v3d, ob_camera_eval, ctime + delta, effects->future_world_to_ndc);
+              scene, region, rv3d, v3d, ob_camera_eval, ctime + delta, effects->future_world_to_ndc);
 #endif
           invert_m4_m4(effects->current_ndc_to_world, effects->current_world_to_ndc);
         }

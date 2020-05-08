@@ -26,36 +26,36 @@
 
 #include <stddef.h>
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_boid_types.h"
-#include "DNA_particle_types.h"
+#include "DNA_curve_types.h"
+#include "DNA_listBase.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
-#include "DNA_curve_types.h"
+#include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_texture_types.h"
-#include "DNA_listBase.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_edgehash.h"
-#include "BLI_rand.h"
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
-#include "BLI_kdtree.h"
+#include "BLI_edgehash.h"
 #include "BLI_kdopbvh.h"
+#include "BLI_kdtree.h"
+#include "BLI_linklist.h"
+#include "BLI_math.h"
+#include "BLI_rand.h"
+#include "BLI_string_utils.h"
 #include "BLI_task.h"
 #include "BLI_threads.h"
-#include "BLI_linklist.h"
-#include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_animsys.h"
 #include "BKE_boids.h"
@@ -66,16 +66,16 @@
 #include "BKE_lib_query.h"
 #include "BKE_particle.h"
 
-#include "BKE_collection.h"
-#include "BKE_object.h"
-#include "BKE_material.h"
+#include "BKE_bvhutils.h"
 #include "BKE_cloth.h"
+#include "BKE_collection.h"
 #include "BKE_lattice.h"
-#include "BKE_pointcache.h"
+#include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
+#include "BKE_pointcache.h"
 #include "BKE_scene.h"
-#include "BKE_bvhutils.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_physics.h"
@@ -1258,7 +1258,8 @@ static void set_keyed_keys(ParticleSimulationData *sim)
       key = pa->keys + k;
       key->time = -1.0; /* use current time */
 
-      psys_get_particle_state(&ksim, p % ksim.psys->totpart, key, 1);
+      const int p_ksim = (ksim.psys->totpart) ? p % ksim.psys->totpart : 0;
+      psys_get_particle_state(&ksim, p_ksim, key, 1);
 
       if (psys->flag & PSYS_KEYED_TIMING) {
         key->time = pa->time + pt->time;
@@ -3692,10 +3693,11 @@ typedef struct DynamicStepSolverTaskData {
   SpinLock spin;
 } DynamicStepSolverTaskData;
 
-static void dynamics_step_finalize_sphdata(void *__restrict UNUSED(userdata),
-                                           void *__restrict tls_userdata_chunk)
+static void dynamics_step_sphdata_reduce(const void *__restrict UNUSED(userdata),
+                                         void *__restrict UNUSED(join_v),
+                                         void *__restrict chunk_v)
 {
-  SPHData *sphdata = tls_userdata_chunk;
+  SPHData *sphdata = chunk_v;
 
   psys_sph_flush_springs(sphdata);
 }
@@ -3986,7 +3988,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
         settings.use_threading = (psys->totpart > 100);
         settings.userdata_chunk = &sphdata;
         settings.userdata_chunk_size = sizeof(sphdata);
-        settings.func_finalize = dynamics_step_finalize_sphdata;
+        settings.func_reduce = dynamics_step_sphdata_reduce;
         BLI_task_parallel_range(
             0, psys->totpart, &task_data, dynamics_step_sph_ddr_task_cb_ex, &settings);
 
@@ -4018,7 +4020,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
           settings.use_threading = (psys->totpart > 100);
           settings.userdata_chunk = &sphdata;
           settings.userdata_chunk_size = sizeof(sphdata);
-          settings.func_finalize = dynamics_step_finalize_sphdata;
+          settings.func_reduce = dynamics_step_sphdata_reduce;
           BLI_task_parallel_range(0,
                                   psys->totpart,
                                   &task_data,
@@ -4033,7 +4035,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
           settings.use_threading = (psys->totpart > 100);
           settings.userdata_chunk = &sphdata;
           settings.userdata_chunk_size = sizeof(sphdata);
-          settings.func_finalize = dynamics_step_finalize_sphdata;
+          settings.func_reduce = dynamics_step_sphdata_reduce;
           BLI_task_parallel_range(0,
                                   psys->totpart,
                                   &task_data,
@@ -4189,7 +4191,7 @@ static void particles_fluid_step(ParticleSimulationData *sim,
       ParticleSettings *part = psys->part;
       ParticleData *pa = NULL;
 
-      int p, totpart, tottypepart = 0;
+      int p, totpart = 0, tottypepart = 0;
       int flagActivePart, activeParts = 0;
       float posX, posY, posZ, velX, velY, velZ;
       float resX, resY, resZ;
@@ -4847,7 +4849,7 @@ void particle_system_update(struct Depsgraph *depsgraph,
         hcfra = 100.0f * (float)i / (float)psys->part->hair_step;
         if ((part->flag & PART_HAIR_REGROW) == 0) {
           BKE_animsys_evaluate_animdata(
-              scene, &part_local->id, part_local->adt, hcfra, ADT_RECALC_ANIM, false);
+              &part_local->id, part_local->adt, hcfra, ADT_RECALC_ANIM, false);
         }
         system_step(&sim, hcfra, use_render_params);
         psys->cfra = hcfra;

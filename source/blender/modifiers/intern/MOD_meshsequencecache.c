@@ -20,8 +20,8 @@
 
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_cachefile_types.h"
 #include "DNA_mesh_types.h"
@@ -90,7 +90,7 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return (mcmd->cache_file == NULL) || (mcmd->object_path[0] == '\0');
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
 #ifdef WITH_ALEMBIC
   MeshSeqCacheModifierData *mcmd = (MeshSeqCacheModifierData *)md;
@@ -197,7 +197,10 @@ ModifierTypeInfo modifierType_MeshSequenceCache = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,

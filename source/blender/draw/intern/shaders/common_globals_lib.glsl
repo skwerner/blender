@@ -32,6 +32,8 @@ layout(std140) uniform globalsBlock
   vec4 colorFace;
   vec4 colorFaceSelect;
   vec4 colorFaceFreestyle;
+  vec4 colorGpencilVertex;
+  vec4 colorGpencilVertexSelect;
   vec4 colorNormal;
   vec4 colorVNormal;
   vec4 colorLNormal;
@@ -43,8 +45,8 @@ layout(std140) uniform globalsBlock
 
   vec4 colorBackground;
   vec4 colorBackgroundGradient;
-  vec4 colorCheckerLow;
-  vec4 colorCheckerHigh;
+  vec4 colorCheckerPrimary;
+  vec4 colorCheckerSecondary;
   vec4 colorClippingBorder;
   vec4 colorEditMeshMiddle;
 
@@ -104,7 +106,7 @@ layout(std140) uniform globalsBlock
   vec4 screenVecs[2];
   vec4 sizeViewport; /* Inverted size in zw. */
 
-  float sizePixel; /* This one is for dpi scalling */
+  float sizePixel; /* This one is for dpi scaling */
   float pixelFac;  /* To use with mul_project_m4_v3_zfac() */
   float sizeObjectCenter;
   float sizeLightCenter;
@@ -114,6 +116,7 @@ layout(std140) uniform globalsBlock
   float sizeEdge;
   float sizeEdgeFix;
   float sizeFaceDot;
+  float sizeChecker;
 
   float pad_globalsBlock;
 };

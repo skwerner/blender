@@ -23,11 +23,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
+
+#include "UI_resources.h"
 
 static const float cube_coords[8][3] = {
     {-1, -1, -1},
@@ -316,6 +318,11 @@ void imm_draw_circle_wire_3d(uint pos, float x, float y, float rad, int nsegment
   imm_draw_circle_3D(GPU_PRIM_LINE_LOOP, pos, x, y, rad, nsegments);
 }
 
+void imm_draw_circle_dashed_3d(uint pos, float x, float y, float rad, int nsegments)
+{
+  imm_draw_circle_3D(GPU_PRIM_LINES, pos, x, y, rad, nsegments / 2);
+}
+
 void imm_draw_circle_fill_3d(uint pos, float x, float y, float rad, int nsegments)
 {
   imm_draw_circle_3D(GPU_PRIM_TRI_FAN, pos, x, y, rad, nsegments);
@@ -354,18 +361,34 @@ void imm_draw_box_wire_3d(uint pos, float x1, float y1, float x2, float y2)
 /**
  * Draw a standard checkerboard to indicate transparent backgrounds.
  */
-void imm_draw_box_checker_2d(float x1, float y1, float x2, float y2)
+void imm_draw_box_checker_2d_ex(float x1,
+                                float y1,
+                                float x2,
+                                float y2,
+                                const float color_primary[4],
+                                const float color_secondary[4],
+                                int checker_size)
 {
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
   immBindBuiltinProgram(GPU_SHADER_2D_CHECKER);
 
-  immUniform4f("color1", 0.15f, 0.15f, 0.15f, 1.0f);
-  immUniform4f("color2", 0.2f, 0.2f, 0.2f, 1.0f);
-  immUniform1i("size", 8);
+  immUniform4fv("color1", color_primary);
+  immUniform4fv("color2", color_secondary);
+  immUniform1i("size", checker_size);
 
   immRectf(pos, x1, y1, x2, y2);
 
   immUnbindProgram();
+}
+void imm_draw_box_checker_2d(float x1, float y1, float x2, float y2)
+{
+  float checker_primary[4];
+  float checker_secondary[4];
+  UI_GetThemeColor4fv(TH_TRANSPARENT_CHECKER_PRIMARY, checker_primary);
+  UI_GetThemeColor4fv(TH_TRANSPARENT_CHECKER_SECONDARY, checker_secondary);
+  int checker_size = UI_GetThemeValue(TH_TRANSPARENT_CHECKER_SIZE);
+  imm_draw_box_checker_2d_ex(x1, y1, x2, y2, checker_primary, checker_secondary, checker_size);
 }
 
 void imm_draw_cube_fill_3d(uint pos, const float co[3], const float aspect[3])

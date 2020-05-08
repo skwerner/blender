@@ -27,14 +27,14 @@
 #include "BLI_bitmap.h"
 #include "BLI_math.h"
 
-#include "DNA_object_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
 
+#include "BKE_deform.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
-#include "BKE_deform.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -494,7 +494,7 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
   if (!(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH))
 #endif
   {
-    modifier_setError((ModifierData *)enmd, "Enable 'Auto Smooth' option in mesh settings");
+    modifier_setError((ModifierData *)enmd, "Enable 'Auto Smooth' in Object Data Properties");
     return mesh;
   }
 
@@ -684,7 +684,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   }
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   return normalEditModifier_do((NormalEditModifierData *)md, ctx, ctx->object, mesh);
 }
@@ -703,7 +703,10 @@ ModifierTypeInfo modifierType_NormalEdit = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

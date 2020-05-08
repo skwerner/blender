@@ -28,9 +28,9 @@
 #include "BLI_math.h"
 #include "BLI_uvproject.h"
 
+#include "DNA_camera_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_camera_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_camera.h"
@@ -303,7 +303,7 @@ static Mesh *uvprojectModifier_do(UVProjectModifierData *umd,
   return mesh;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result;
   UVProjectModifierData *umd = (UVProjectModifierData *)md;
@@ -327,7 +327,10 @@ ModifierTypeInfo modifierType_UVProject = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

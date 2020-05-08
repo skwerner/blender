@@ -28,8 +28,8 @@
 extern "C" {
 #endif
 
-#include "DNA_listBase.h"
 #include "DNA_defs.h"
+#include "DNA_listBase.h"
 
 /* pd->forcefield:  Effector Fields types */
 typedef enum ePFieldType {
@@ -62,6 +62,7 @@ typedef enum ePFieldType {
   /** Force based on smoke simulation air flow. */
   PFIELD_SMOKEFLOW = 13,
 
+  /* Keep last. */
   NUM_PFIELD_TYPES,
 } ePFieldType;
 

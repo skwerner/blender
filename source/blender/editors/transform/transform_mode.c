@@ -61,7 +61,9 @@ bool transdata_check_local_center(TransInfo *t, short around)
            (t->options & (CTX_MOVIECLIP | CTX_MASK | CTX_PAINT_CURVE))));
 }
 
-/* ************************** TRANSFORM LOCKS **************************** */
+/* -------------------------------------------------------------------- */
+/** \name Transform Locks
+ * \{ */
 
 void protectedTransBits(short protectflag, float vec[3])
 {
@@ -211,7 +213,11 @@ static void protectedSizeBits(short protectflag, float size[3])
   }
 }
 
-/* ******************* TRANSFORM LIMITS ********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Transform Limits
+ * \{ */
 
 void constraintTransLim(TransInfo *t, TransData *td)
 {
@@ -490,7 +496,7 @@ static void constraintSizeLim(TransInfo *t, TransData *td)
 /* -------------------------------------------------------------------- */
 /* Transform (Rotation Utils) */
 
-/** \name Transform Rotaion Utils
+/** \name Transform Rotation Utils
  * \{ */
 /* Used by Transform Rotation and Transform Normal Rotation */
 void headerRotation(TransInfo *t, char str[UI_MAX_DRAW_STR], float final)
@@ -523,7 +529,7 @@ void headerRotation(TransInfo *t, char str[UI_MAX_DRAW_STR], float final)
 void postInputRotation(TransInfo *t, float values[3])
 {
   float axis_final[3];
-  copy_v3_v3(axis_final, t->orient_matrix[t->orient_axis]);
+  copy_v3_v3(axis_final, t->spacemtx[t->orient_axis]);
   if ((t->con.mode & CON_APPLY) && t->con.applyRot) {
     t->con.applyRot(t, NULL, NULL, axis_final, values);
   }
@@ -1022,21 +1028,21 @@ short getAnimEdit_SnapMode(TransInfo *t)
   short autosnap = SACTSNAP_OFF;
 
   if (t->spacetype == SPACE_ACTION) {
-    SpaceAction *saction = (SpaceAction *)t->sa->spacedata.first;
+    SpaceAction *saction = (SpaceAction *)t->area->spacedata.first;
 
     if (saction) {
       autosnap = saction->autosnap;
     }
   }
   else if (t->spacetype == SPACE_GRAPH) {
-    SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
+    SpaceGraph *sipo = (SpaceGraph *)t->area->spacedata.first;
 
     if (sipo) {
       autosnap = sipo->autosnap;
     }
   }
   else if (t->spacetype == SPACE_NLA) {
-    SpaceNla *snla = (SpaceNla *)t->sa->spacedata.first;
+    SpaceNla *snla = (SpaceNla *)t->area->spacedata.first;
 
     if (snla) {
       autosnap = snla->autosnap;
@@ -1104,9 +1110,7 @@ void doAnimEdit_SnapFrame(
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Transform Mode API */
-
-/** \name Transform Frame Utils
+/** \name Transform Mode Initialization
  * \{ */
 
 void transform_mode_init(TransInfo *t, wmOperator *op, const int mode)

@@ -24,6 +24,10 @@
 #ifndef __UI_INTERFACE_ICONS_H__
 #define __UI_INTERFACE_ICONS_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ID;
 struct PointerRNA;
 struct PreviewImage;
@@ -47,6 +51,17 @@ typedef struct IconFile {
 #define ICON_DEFAULT_WIDTH_SCALE ((int)(UI_UNIT_X * 0.8f))
 
 #define PREVIEW_DEFAULT_HEIGHT 128
+
+typedef enum eAlertIcon {
+  ALERT_ICON_WARNING = 0,
+  ALERT_ICON_QUESTION = 1,
+  ALERT_ICON_ERROR = 2,
+  ALERT_ICON_INFO = 3,
+  ALERT_ICON_BLENDER = 4,
+  ALERT_ICON_MAX,
+} eAlertIcon;
+
+struct ImBuf *UI_alert_image(eAlertIcon icon);
 
 /*
  * Resizable Icons for Blender
@@ -91,5 +106,9 @@ struct PreviewImage *UI_icon_to_preview(int icon_id);
 
 int UI_rnaptr_icon_get(struct bContext *C, struct PointerRNA *ptr, int rnaicon, const bool big);
 int UI_idcode_icon_get(const int idcode);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /*  __UI_INTERFACE_ICONS_H__ */

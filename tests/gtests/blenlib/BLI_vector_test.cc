@@ -1,5 +1,5 @@
+#include "BLI_vector.hh"
 #include "testing/testing.h"
-#include "BLI_vector.h"
 #include <forward_list>
 
 using BLI::Vector;
@@ -45,7 +45,7 @@ struct TestListValue {
   int value;
 };
 
-TEST(vector, IntrusiveListBaseConstructor)
+TEST(vector, ListBaseConstructor)
 {
   TestListValue *value1 = new TestListValue{0, 0, 4};
   TestListValue *value2 = new TestListValue{0, 0, 5};
@@ -55,7 +55,7 @@ TEST(vector, IntrusiveListBaseConstructor)
   BLI_addtail(&list, value1);
   BLI_addtail(&list, value2);
   BLI_addtail(&list, value3);
-  Vector<TestListValue *> vec(list, true);
+  Vector<TestListValue *> vec(list);
 
   EXPECT_EQ(vec.size(), 3);
   EXPECT_EQ(vec[0]->value, 4);
@@ -345,14 +345,14 @@ TEST(vector, RemoveLast)
   EXPECT_EQ(vec.size(), 0);
 }
 
-TEST(vector, Empty)
+TEST(vector, IsEmpty)
 {
   IntVector vec;
-  EXPECT_TRUE(vec.empty());
+  EXPECT_TRUE(vec.is_empty());
   vec.append(1);
-  EXPECT_FALSE(vec.empty());
+  EXPECT_FALSE(vec.is_empty());
   vec.remove_last();
-  EXPECT_TRUE(vec.empty());
+  EXPECT_TRUE(vec.is_empty());
 }
 
 TEST(vector, RemoveReorder)
@@ -368,7 +368,7 @@ TEST(vector, RemoveReorder)
   vec.remove_and_reorder(0);
   EXPECT_EQ(vec[0], 7);
   vec.remove_and_reorder(0);
-  EXPECT_TRUE(vec.empty());
+  EXPECT_TRUE(vec.is_empty());
 }
 
 TEST(vector, RemoveFirstOccurrenceAndReorder)

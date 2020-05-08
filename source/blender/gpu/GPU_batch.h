@@ -27,10 +27,14 @@
 #ifndef __GPU_BATCH_H__
 #define __GPU_BATCH_H__
 
-#include "GPU_vertex_buffer.h"
 #include "GPU_element.h"
-#include "GPU_shader_interface.h"
 #include "GPU_shader.h"
+#include "GPU_shader_interface.h"
+#include "GPU_vertex_buffer.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum {
   GPU_BATCH_UNUSED,
@@ -240,5 +244,9 @@ void gpu_batch_exit(void);
       MEM_freeN(_batch_array); \
     } \
   } while (0)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __GPU_BATCH_H__ */

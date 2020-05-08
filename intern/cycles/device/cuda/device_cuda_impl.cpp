@@ -39,8 +39,8 @@
 #  include "util/util_path.h"
 #  include "util/util_string.h"
 #  include "util/util_system.h"
-#  include "util/util_types.h"
 #  include "util/util_time.h"
+#  include "util/util_types.h"
 #  include "util/util_windows.h"
 
 #  include "kernel/split/kernel_split_data_types.h"
@@ -185,7 +185,7 @@ void CUDADevice::cuda_error_message(const string &message)
 }
 
 CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background_)
-    : Device(info, stats, profiler, background_), texture_info(this, "__texture_info", MEM_TEXTURE)
+    : Device(info, stats, profiler, background_), texture_info(this, "__texture_info", MEM_GLOBAL)
 {
   first_error = true;
   background = background_;
@@ -207,6 +207,8 @@ CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
   map_host_limit = 0;
   map_host_used = 0;
   can_map_host = 0;
+
+  functions.loaded = false;
 
   /* Intialize CUDA. */
   if (cuda_error(cuInit(0)))
@@ -419,10 +421,10 @@ string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_featu
         nvcc_cuda_version % 10);
     return string();
   }
-  else if (nvcc_cuda_version != 101) {
+  else if (!(nvcc_cuda_version == 101 || nvcc_cuda_version == 102)) {
     printf(
         "CUDA version %d.%d detected, build may succeed but only "
-        "CUDA 10.1 is officially supported.\n",
+        "CUDA 10.1 and 10.2 are officially supported.\n",
         nvcc_cuda_version / 10,
         nvcc_cuda_version % 10);
   }
@@ -531,7 +533,40 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
     reserve_local_memory(requested_features);
   }
 
+  load_functions();
+
   return (result == CUDA_SUCCESS);
+}
+
+void CUDADevice::load_functions()
+{
+  /* TODO: load all functions here. */
+  if (functions.loaded) {
+    return;
+  }
+  functions.loaded = true;
+
+  cuda_assert(cuModuleGetFunction(
+      &functions.adaptive_stopping, cuModule, "kernel_cuda_adaptive_stopping"));
+  cuda_assert(cuModuleGetFunction(
+      &functions.adaptive_filter_x, cuModule, "kernel_cuda_adaptive_filter_x"));
+  cuda_assert(cuModuleGetFunction(
+      &functions.adaptive_filter_y, cuModule, "kernel_cuda_adaptive_filter_y"));
+  cuda_assert(cuModuleGetFunction(
+      &functions.adaptive_scale_samples, cuModule, "kernel_cuda_adaptive_scale_samples"));
+
+  cuda_assert(cuFuncSetCacheConfig(functions.adaptive_stopping, CU_FUNC_CACHE_PREFER_L1));
+  cuda_assert(cuFuncSetCacheConfig(functions.adaptive_filter_x, CU_FUNC_CACHE_PREFER_L1));
+  cuda_assert(cuFuncSetCacheConfig(functions.adaptive_filter_y, CU_FUNC_CACHE_PREFER_L1));
+  cuda_assert(cuFuncSetCacheConfig(functions.adaptive_scale_samples, CU_FUNC_CACHE_PREFER_L1));
+
+  int unused_min_blocks;
+  cuda_assert(cuOccupancyMaxPotentialBlockSize(&unused_min_blocks,
+                                               &functions.adaptive_num_threads_per_block,
+                                               functions.adaptive_scale_samples,
+                                               NULL,
+                                               0,
+                                               0));
 }
 
 void CUDADevice::reserve_local_memory(const DeviceRequestedFeatures &requested_features)
@@ -649,7 +684,8 @@ void CUDADevice::move_textures_to_host(size_t size, bool for_texture)
       device_memory &mem = *pair.first;
       CUDAMem *cmem = &pair.second;
 
-      bool is_texture = (mem.type == MEM_TEXTURE) && (&mem != &texture_info);
+      bool is_texture = (mem.type == MEM_TEXTURE || mem.type == MEM_GLOBAL) &&
+                        (&mem != &texture_info);
       bool is_image = is_texture && (mem.data_height > 1);
 
       /* Can't move this type of memory. */
@@ -689,8 +725,7 @@ void CUDADevice::move_textures_to_host(size_t size, bool for_texture)
       device_ptr prev_pointer = max_mem->device_pointer;
       size_t prev_size = max_mem->device_size;
 
-      tex_free(*max_mem);
-      tex_alloc(*max_mem);
+      mem_copy_to(*max_mem);
       size = (max_size >= size) ? 0 : size - max_size;
 
       max_mem->device_pointer = prev_pointer;
@@ -724,7 +759,7 @@ CUDADevice::CUDAMem *CUDADevice::generic_alloc(device_memory &mem, size_t pitch_
    * If there is not enough room for working memory, we will try to move
    * textures to host memory, assuming the performance impact would have
    * been worse for working memory. */
-  bool is_texture = (mem.type == MEM_TEXTURE) && (&mem != &texture_info);
+  bool is_texture = (mem.type == MEM_TEXTURE || mem.type == MEM_GLOBAL) && (&mem != &texture_info);
   bool is_image = is_texture && (mem.data_height > 1);
 
   size_t headroom = (is_texture) ? device_texture_headroom : device_working_headroom;
@@ -887,6 +922,9 @@ void CUDADevice::mem_alloc(device_memory &mem)
   else if (mem.type == MEM_TEXTURE) {
     assert(!"mem_alloc not supported for textures.");
   }
+  else if (mem.type == MEM_GLOBAL) {
+    assert(!"mem_alloc not supported for global memory.");
+  }
   else {
     generic_alloc(mem);
   }
@@ -897,9 +935,13 @@ void CUDADevice::mem_copy_to(device_memory &mem)
   if (mem.type == MEM_PIXELS) {
     assert(!"mem_copy_to not supported for pixels.");
   }
+  else if (mem.type == MEM_GLOBAL) {
+    global_free(mem);
+    global_alloc(mem);
+  }
   else if (mem.type == MEM_TEXTURE) {
-    tex_free(mem);
-    tex_alloc(mem);
+    tex_free((device_texture &)mem);
+    tex_alloc((device_texture &)mem);
   }
   else {
     if (!mem.device_pointer) {
@@ -915,7 +957,7 @@ void CUDADevice::mem_copy_from(device_memory &mem, int y, int w, int h, int elem
   if (mem.type == MEM_PIXELS && !background) {
     pixels_copy_from(mem, y, w, h);
   }
-  else if (mem.type == MEM_TEXTURE) {
+  else if (mem.type == MEM_TEXTURE || mem.type == MEM_GLOBAL) {
     assert(!"mem_copy_from not supported for textures.");
   }
   else if (mem.host_pointer) {
@@ -958,8 +1000,11 @@ void CUDADevice::mem_free(device_memory &mem)
   if (mem.type == MEM_PIXELS && !background) {
     pixels_free(mem);
   }
+  else if (mem.type == MEM_GLOBAL) {
+    global_free(mem);
+  }
   else if (mem.type == MEM_TEXTURE) {
-    tex_free(mem);
+    tex_free((device_texture &)mem);
   }
   else {
     generic_free(mem);
@@ -982,7 +1027,25 @@ void CUDADevice::const_copy_to(const char *name, void *host, size_t size)
   cuda_assert(cuMemcpyHtoD(mem, host, size));
 }
 
-void CUDADevice::tex_alloc(device_memory &mem)
+void CUDADevice::global_alloc(device_memory &mem)
+{
+  CUDAContextScope scope(this);
+
+  generic_alloc(mem);
+  generic_copy_to(mem);
+
+  const_copy_to(mem.name, &mem.device_pointer, sizeof(mem.device_pointer));
+}
+
+void CUDADevice::global_free(device_memory &mem)
+{
+  if (mem.device_pointer) {
+    CUDAContextScope scope(this);
+    generic_free(mem);
+  }
+}
+
+void CUDADevice::tex_alloc(device_texture &mem)
 {
   CUDAContextScope scope(this);
 
@@ -992,7 +1055,7 @@ void CUDADevice::tex_alloc(device_memory &mem)
   size_t size = mem.memory_size();
 
   CUaddress_mode address_mode = CU_TR_ADDRESS_MODE_WRAP;
-  switch (mem.extension) {
+  switch (mem.info.extension) {
     case EXTENSION_REPEAT:
       address_mode = CU_TR_ADDRESS_MODE_WRAP;
       break;
@@ -1008,20 +1071,11 @@ void CUDADevice::tex_alloc(device_memory &mem)
   }
 
   CUfilter_mode filter_mode;
-  if (mem.interpolation == INTERPOLATION_CLOSEST) {
+  if (mem.info.interpolation == INTERPOLATION_CLOSEST) {
     filter_mode = CU_TR_FILTER_MODE_POINT;
   }
   else {
     filter_mode = CU_TR_FILTER_MODE_LINEAR;
-  }
-
-  /* Data Storage */
-  if (mem.interpolation == INTERPOLATION_NONE) {
-    generic_alloc(mem);
-    generic_copy_to(mem);
-
-    const_copy_to(bind_name.c_str(), &mem.device_pointer, sizeof(mem.device_pointer));
-    return;
   }
 
   /* Image Texture Storage */
@@ -1134,15 +1188,6 @@ void CUDADevice::tex_alloc(device_memory &mem)
   }
 
   /* Kepler+, bindless textures. */
-  int flat_slot = 0;
-  if (string_startswith(mem.name, "__tex_image")) {
-    int pos = string(mem.name).rfind("_");
-    flat_slot = atoi(mem.name + pos + 1);
-  }
-  else {
-    assert(0);
-  }
-
   CUDA_RESOURCE_DESC resDesc;
   memset(&resDesc, 0, sizeof(resDesc));
 
@@ -1179,25 +1224,20 @@ void CUDADevice::tex_alloc(device_memory &mem)
   cuda_assert(cuTexObjectCreate(&cmem->texobject, &resDesc, &texDesc, NULL));
 
   /* Resize once */
-  if (flat_slot >= texture_info.size()) {
+  const uint slot = mem.slot;
+  if (slot >= texture_info.size()) {
     /* Allocate some slots in advance, to reduce amount
      * of re-allocations. */
-    texture_info.resize(flat_slot + 128);
+    texture_info.resize(slot + 128);
   }
 
   /* Set Mapping and tag that we need to (re-)upload to device */
-  TextureInfo &info = texture_info[flat_slot];
-  info.data = (uint64_t)cmem->texobject;
-  info.cl_buffer = 0;
-  info.interpolation = mem.interpolation;
-  info.extension = mem.extension;
-  info.width = mem.data_width;
-  info.height = mem.data_height;
-  info.depth = mem.data_depth;
+  texture_info[slot] = mem.info;
+  texture_info[slot].data = (uint64_t)cmem->texobject;
   need_texture_info = true;
 }
 
-void CUDADevice::tex_free(device_memory &mem)
+void CUDADevice::tex_free(device_texture &mem)
 {
   if (mem.device_pointer) {
     CUDAContextScope scope(this);
@@ -1666,6 +1706,80 @@ void CUDADevice::denoise(RenderTile &rtile, DenoisingTask &denoising)
   denoising.run_denoising(&rtile);
 }
 
+void CUDADevice::adaptive_sampling_filter(uint filter_sample,
+                                          WorkTile *wtile,
+                                          CUdeviceptr d_wtile,
+                                          CUstream stream)
+{
+  const int num_threads_per_block = functions.adaptive_num_threads_per_block;
+
+  /* These are a series of tiny kernels because there is no grid synchronization
+   * from within a kernel, so multiple kernel launches it is. */
+  uint total_work_size = wtile->h * wtile->w;
+  void *args2[] = {&d_wtile, &filter_sample, &total_work_size};
+  uint num_blocks = divide_up(total_work_size, num_threads_per_block);
+  cuda_assert(cuLaunchKernel(functions.adaptive_stopping,
+                             num_blocks,
+                             1,
+                             1,
+                             num_threads_per_block,
+                             1,
+                             1,
+                             0,
+                             stream,
+                             args2,
+                             0));
+  total_work_size = wtile->h;
+  num_blocks = divide_up(total_work_size, num_threads_per_block);
+  cuda_assert(cuLaunchKernel(functions.adaptive_filter_x,
+                             num_blocks,
+                             1,
+                             1,
+                             num_threads_per_block,
+                             1,
+                             1,
+                             0,
+                             stream,
+                             args2,
+                             0));
+  total_work_size = wtile->w;
+  num_blocks = divide_up(total_work_size, num_threads_per_block);
+  cuda_assert(cuLaunchKernel(functions.adaptive_filter_y,
+                             num_blocks,
+                             1,
+                             1,
+                             num_threads_per_block,
+                             1,
+                             1,
+                             0,
+                             stream,
+                             args2,
+                             0));
+}
+
+void CUDADevice::adaptive_sampling_post(RenderTile &rtile,
+                                        WorkTile *wtile,
+                                        CUdeviceptr d_wtile,
+                                        CUstream stream)
+{
+  const int num_threads_per_block = functions.adaptive_num_threads_per_block;
+  uint total_work_size = wtile->h * wtile->w;
+
+  void *args[] = {&d_wtile, &rtile.start_sample, &rtile.sample, &total_work_size};
+  uint num_blocks = divide_up(total_work_size, num_threads_per_block);
+  cuda_assert(cuLaunchKernel(functions.adaptive_scale_samples,
+                             num_blocks,
+                             1,
+                             1,
+                             num_threads_per_block,
+                             1,
+                             1,
+                             0,
+                             stream,
+                             args,
+                             0));
+}
+
 void CUDADevice::path_trace(DeviceTask &task,
                             RenderTile &rtile,
                             device_vector<WorkTile> &work_tiles)
@@ -1715,6 +1829,9 @@ void CUDADevice::path_trace(DeviceTask &task,
   }
 
   uint step_samples = divide_up(min_blocks * num_threads_per_block, wtile->w * wtile->h);
+  if (task.adaptive_sampling.use) {
+    step_samples = task.adaptive_sampling.align_static_samples(step_samples);
+  }
 
   /* Render all samples. */
   int start_sample = rtile.start_sample;
@@ -1736,6 +1853,12 @@ void CUDADevice::path_trace(DeviceTask &task,
     cuda_assert(
         cuLaunchKernel(cuPathTrace, num_blocks, 1, 1, num_threads_per_block, 1, 1, 0, 0, args, 0));
 
+    /* Run the adaptive sampling kernels at selected samples aligned to step samples. */
+    uint filter_sample = sample + wtile->num_samples - 1;
+    if (task.adaptive_sampling.use && task.adaptive_sampling.need_filter(filter_sample)) {
+      adaptive_sampling_filter(filter_sample, wtile, d_work_tiles);
+    }
+
     cuda_assert(cuCtxSynchronize());
 
     /* Update progress. */
@@ -1746,6 +1869,14 @@ void CUDADevice::path_trace(DeviceTask &task,
       if (task.need_finish_queue == false)
         break;
     }
+  }
+
+  /* Finalize adaptive sampling. */
+  if (task.adaptive_sampling.use) {
+    CUdeviceptr d_work_tiles = (CUdeviceptr)work_tiles.device_pointer;
+    adaptive_sampling_post(rtile, wtile, d_work_tiles);
+    cuda_assert(cuCtxSynchronize());
+    task.update_progress(&rtile, rtile.w * rtile.h * wtile->num_samples);
   }
 }
 
@@ -2144,7 +2275,7 @@ void CUDADevice::thread_run(DeviceTask *task)
 {
   CUDAContextScope scope(this);
 
-  if (task->type == DeviceTask::RENDER || task->type == DeviceTask::DENOISE) {
+  if (task->type == DeviceTask::RENDER) {
     DeviceRequestedFeatures requested_features;
     if (use_split_kernel()) {
       if (split_kernel == NULL) {
@@ -2159,7 +2290,7 @@ void CUDADevice::thread_run(DeviceTask *task)
     RenderTile tile;
     DenoisingTask denoising(this, *task);
 
-    while (task->acquire_tile(this, tile)) {
+    while (task->acquire_tile(this, tile, task->tile_types)) {
       if (tile.task == RenderTile::PATH_TRACE) {
         if (use_split_kernel()) {
           device_only_memory<uchar> void_buffer(this, "void_buffer");

@@ -68,7 +68,7 @@ int DeviceTask::get_subtask_count(int num, int max_size)
   if (type == SHADER) {
     num = min(shader_w, num);
   }
-  else if (type == RENDER || type == DENOISE) {
+  else if (type == RENDER) {
   }
   else {
     num = min(h, num);
@@ -94,7 +94,7 @@ void DeviceTask::split(list<DeviceTask> &tasks, int num, int max_size)
       tasks.push_back(task);
     }
   }
-  else if (type == RENDER || type == DENOISE) {
+  else if (type == RENDER) {
     for (int i = 0; i < num; i++)
       tasks.push_back(*this);
   }
@@ -133,6 +133,60 @@ void DeviceTask::update_progress(RenderTile *rtile, int pixel_samples)
 
       last_update_time = current_time;
     }
+  }
+}
+
+/* Adaptive Sampling */
+
+AdaptiveSampling::AdaptiveSampling() : use(true), adaptive_step(0), min_samples(0)
+{
+}
+
+/* Render samples in steps that align with the adaptive filtering. */
+int AdaptiveSampling::align_static_samples(int samples) const
+{
+  if (samples > adaptive_step) {
+    /* Make multiple of adaptive_step. */
+    while (samples % adaptive_step != 0) {
+      samples--;
+    }
+  }
+  else if (samples < adaptive_step) {
+    /* Make divisor of adaptive_step. */
+    while (adaptive_step % samples != 0) {
+      samples--;
+    }
+  }
+
+  return max(samples, 1);
+}
+
+/* Render samples in steps that align with the adaptive filtering, with the
+ * suggested number of samples dynamically changing. */
+int AdaptiveSampling::align_dynamic_samples(int offset, int samples) const
+{
+  /* Round so that we end up on multiples of adaptive_samples. */
+  samples += offset;
+
+  if (samples > adaptive_step) {
+    /* Make multiple of adaptive_step. */
+    while (samples % adaptive_step != 0) {
+      samples--;
+    }
+  }
+
+  samples -= offset;
+
+  return max(samples, 1);
+}
+
+bool AdaptiveSampling::need_filter(int sample) const
+{
+  if (sample > min_samples) {
+    return (sample & (adaptive_step - 1)) == (adaptive_step - 1);
+  }
+  else {
+    return false;
   }
 }
 

@@ -25,13 +25,13 @@
 
 /* Used for PolyFill */
 #ifndef MATH_STANDALONE /* define when building outside blender */
-#  include "MEM_guardedalloc.h"
+#  include "BKE_curve.h"
+#  include "BKE_displist.h"
 #  include "BLI_blenlib.h"
 #  include "BLI_boxpack_2d.h"
 #  include "BLI_convexhull_2d.h"
 #  include "BLI_delaunay_2d.h"
-#  include "BKE_displist.h"
-#  include "BKE_curve.h"
+#  include "MEM_guardedalloc.h"
 #endif
 
 #include "BLI_math.h"
@@ -1649,6 +1649,7 @@ static PyObject *M_Geometry_delaunay_2d_cdt(PyObject *UNUSED(self), PyObject *ar
   in.faces_start_table = in_faces_start_table;
   in.faces_len_table = in_faces_len_table;
   in.epsilon = epsilon;
+  in.skip_input_modify = false;
 
   res = BLI_delaunay_2d_cdt_calc(&in, output_type);
 

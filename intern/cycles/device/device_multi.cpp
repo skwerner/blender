@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <stdlib.h>
 #include <sstream>
+#include <stdlib.h>
 
 #include "device/device.h"
 #include "device/device_intern.h"
@@ -181,6 +181,14 @@ class MultiDevice : public Device {
         return false;
 
     return true;
+  }
+
+  virtual void *osl_memory()
+  {
+    if (devices.size() > 1) {
+      return NULL;
+    }
+    return devices.front().device->osl_memory();
   }
 
   void mem_alloc(device_memory &mem)
@@ -482,11 +490,24 @@ class MultiDevice : public Device {
 
   void task_add(DeviceTask &task)
   {
-    list<SubDevice> &task_devices = denoising_devices.empty() ||
-                                            (task.type != DeviceTask::DENOISE &&
-                                             task.type != DeviceTask::DENOISE_BUFFER) ?
-                                        devices :
-                                        denoising_devices;
+    list<SubDevice> task_devices = devices;
+    if (!denoising_devices.empty()) {
+      if (task.type == DeviceTask::DENOISE_BUFFER) {
+        /* Denoising tasks should be redirected to the denoising devices entirely. */
+        task_devices = denoising_devices;
+      }
+      else if (task.type == DeviceTask::RENDER && (task.tile_types & RenderTile::DENOISE)) {
+        const uint tile_types = task.tile_types;
+        /* For normal rendering tasks only redirect the denoising part to the denoising devices.
+         * Do not need to split the task here, since they all run through 'acquire_tile'. */
+        task.tile_types = RenderTile::DENOISE;
+        foreach (SubDevice &sub, denoising_devices) {
+          sub.device->task_add(task);
+        }
+        /* Rendering itself should still be executed on the rendering devices. */
+        task.tile_types = tile_types ^ RenderTile::DENOISE;
+      }
+    }
 
     list<DeviceTask> tasks;
     task.split(tasks, task_devices.size());

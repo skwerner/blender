@@ -146,8 +146,8 @@ set(PYTHON_URI https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTH
 set(PYTHON_HASH d33e4aae66097051c2eca45ee3604803)
 
 set(TBB_VERSION 2019_U9)
-set(TBB_URI https://github.com/01org/tbb/archive/${TBB_VERSION}.tar.gz)
-set(TBB_HASH 584edbec127c508f2cd5b6e79ad200fc)
+set(TBB_URI https://github.com/oneapi-src/oneTBB/archive/${TBB_VERSION}.tar.gz)
+set(TBB_HASH 26263622e9187212ec240dcf01b66207)
 
 set(OPENVDB_VERSION 7.0.0)
 set(OPENVDB_URI https://github.com/dreamworksanimation/openvdb/archive/v${OPENVDB_VERSION}.tar.gz)
@@ -318,3 +318,7 @@ set(LIBGLU_HASH 151aef599b8259efe9acd599c96ea2a3)
 set(MESA_VERSION 18.3.1)
 set(MESA_URI ftp://ftp.freedesktop.org/pub/mesa//mesa-${MESA_VERSION}.tar.xz)
 set(MESA_HASH d60828056d77bfdbae0970f9b15fb1be)
+
+set(XR_OPENXR_SDK_VERSION 1.0.6)
+set(XR_OPENXR_SDK_URI https://github.com/KhronosGroup/OpenXR-SDK/archive/release-${XR_OPENXR_SDK_VERSION}.tar.gz)
+set(XR_OPENXR_SDK_HASH 21daea7c3bfec365298d779a0e19caa1)

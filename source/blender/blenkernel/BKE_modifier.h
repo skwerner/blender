@@ -20,9 +20,9 @@
  * \ingroup bke
  */
 
-#include "DNA_modifier_types.h" /* needed for all enum typdefs */
-#include "BLI_compiler_attrs.h"
 #include "BKE_customdata.h"
+#include "BLI_compiler_attrs.h"
+#include "DNA_modifier_types.h" /* needed for all enum typdefs */
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,7 +100,7 @@ typedef enum {
 
   /* For modifiers that use CD_PREVIEW_MCOL for preview. */
   eModifierTypeFlag_UsesPreview = (1 << 9),
-  eModifierTypeFlag_AcceptsLattice = (1 << 10),
+  eModifierTypeFlag_AcceptsVertexCosOnly = (1 << 10),
 } ModifierTypeFlag;
 
 /* IMPORTANT! Keep ObjectWalkFunc and IDWalkFunc signatures compatible. */
@@ -125,6 +125,11 @@ typedef enum ModifierApplyFlag {
   /** Ignore scene simplification flag and use subdivisions
    * level set in multires modifier. */
   MOD_APPLY_IGNORE_SIMPLIFY = 1 << 3,
+  /** The effect of this modifier will be applied to the base mesh
+   * The modifier itself will be removed from the modifier stack.
+   * This flag can be checked to ignore rendering display data to the mesh.
+   * See `OBJECT_OT_modifier_apply` operator. */
+  MOD_APPLY_TO_BASE_MESH = 1 << 4,
 } ModifierApplyFlag;
 
 typedef struct ModifierUpdateDepsgraphContext {
@@ -206,18 +211,28 @@ typedef struct ModifierTypeInfo {
 
   /********************* Non-deform modifier functions *********************/
 
-  /* For non-deform types: apply the modifier and return a mesh object.
+  /* For non-deform types: apply the modifier and return a mesh datablock.
    *
-   * The mesh argument should always be non-NULL; the modifier
-   * should read the object data from the mesh object instead of the
-   * actual object data.
+   * The mesh argument should always be non-NULL; the modifier should use the
+   * passed in mesh datablock rather than object->data, as it contains the mesh
+   * with modifier applied up to this point.
    *
-   * The modifier may reuse the mesh argument (i.e. return it in
-   * modified form), but must not release it.
+   * The modifier may modify and return the mesh argument, but must not free it
+   * and must ensure any referenced data layers are converted to non-referenced
+   * before modification.
    */
-  struct Mesh *(*applyModifier)(struct ModifierData *md,
-                                const struct ModifierEvalContext *ctx,
-                                struct Mesh *mesh);
+  struct Mesh *(*modifyMesh)(struct ModifierData *md,
+                             const struct ModifierEvalContext *ctx,
+                             struct Mesh *mesh);
+  struct Hair *(*modifyHair)(struct ModifierData *md,
+                             const struct ModifierEvalContext *ctx,
+                             struct Hair *hair);
+  struct PointCloud *(*modifyPointCloud)(struct ModifierData *md,
+                                         const struct ModifierEvalContext *ctx,
+                                         struct PointCloud *pointcloud);
+  struct Volume *(*modifyVolume)(struct ModifierData *md,
+                                 const struct ModifierEvalContext *ctx,
+                                 struct Volume *volume);
 
   /********************* Optional functions *********************/
 
@@ -445,9 +460,9 @@ struct ModifierData *modifier_get_evaluated(struct Depsgraph *depsgraph,
 
 /* wrappers for modifier callbacks that ensure valid normals */
 
-struct Mesh *modwrap_applyModifier(ModifierData *md,
-                                   const struct ModifierEvalContext *ctx,
-                                   struct Mesh *me);
+struct Mesh *modwrap_modifyMesh(ModifierData *md,
+                                const struct ModifierEvalContext *ctx,
+                                struct Mesh *me);
 
 void modwrap_deformVerts(ModifierData *md,
                          const struct ModifierEvalContext *ctx,

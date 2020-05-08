@@ -18,13 +18,13 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "DNA_ID.h"
-#include "DNA_vfont_types.h"
 #include "DNA_material_types.h"
 #include "DNA_object_types.h"
+#include "DNA_vfont_types.h"
 
 #include "BLI_utildefines.h"
 
@@ -71,10 +71,18 @@ const EnumPropertyItem rna_enum_id_type_items[] = {
     {ID_PA, "PARTICLE", ICON_PARTICLE_DATA, "Particle", ""},
     {ID_LP, "LIGHT_PROBE", ICON_LIGHTPROBE_CUBEMAP, "Light Probe", ""},
     {ID_SCE, "SCENE", ICON_SCENE_DATA, "Scene", ""},
+#ifdef WITH_NEW_SIMULATION_TYPE
+    {ID_SIM, "SIMULATION", ICON_PHYSICS, "Simulation", ""}, /* TODO: Use correct icon. */
+#endif
     {ID_SO, "SOUND", ICON_SOUND, "Sound", ""},
     {ID_SPK, "SPEAKER", ICON_SPEAKER, "Speaker", ""},
     {ID_TXT, "TEXT", ICON_TEXT, "Text", ""},
     {ID_TE, "TEXTURE", ICON_TEXTURE_DATA, "Texture", ""},
+#ifdef WITH_NEW_OBJECT_TYPES
+    {ID_HA, "HAIR", ICON_HAIR_DATA, "Hair", ""},
+    {ID_PT, "POINTCLOUD", ICON_POINTCLOUD_DATA, "PointCloud", ""},
+#endif
+    {ID_VO, "VOLUME", ICON_VOLUME_DATA, "Volume", ""},
     {ID_WM, "WINDOWMANAGER", ICON_WINDOW, "Window Manager", ""},
     {ID_WO, "WORLD", ICON_WORLD_DATA, "World", ""},
     {ID_WS, "WORKSPACE", ICON_WORKSPACE, "Workspace", ""},
@@ -88,15 +96,15 @@ const EnumPropertyItem rna_enum_id_type_items[] = {
 #  include "BLI_listbase.h"
 #  include "BLI_math_base.h"
 
+#  include "BKE_anim_data.h"
 #  include "BKE_font.h"
+#  include "BKE_global.h" /* XXX, remove me */
 #  include "BKE_idprop.h"
-#  include "BKE_lib_query.h"
 #  include "BKE_lib_override.h"
+#  include "BKE_lib_query.h"
 #  include "BKE_lib_remap.h"
 #  include "BKE_library.h"
-#  include "BKE_animsys.h"
 #  include "BKE_material.h"
-#  include "BKE_global.h" /* XXX, remove me */
 
 #  include "DEG_depsgraph.h"
 #  include "DEG_depsgraph_build.h"
@@ -246,6 +254,11 @@ short RNA_type_to_ID_code(const StructRNA *type)
   if (base_type == &RNA_FreestyleLineStyle) {
     return ID_LS;
   }
+#  ifdef WITH_NEW_OBJECT_TYPES
+  if (base_type == &RNA_Hair) {
+    return ID_HA;
+  }
+#  endif
   if (base_type == &RNA_Lattice) {
     return ID_LT;
   }
@@ -279,6 +292,11 @@ short RNA_type_to_ID_code(const StructRNA *type)
   if (base_type == &RNA_PaintCurve) {
     return ID_PC;
   }
+#  ifdef WITH_NEW_OBJECT_TYPES
+  if (base_type == &RNA_PointCloud) {
+    return ID_PT;
+  }
+#  endif
   if (base_type == &RNA_LightProbe) {
     return ID_LP;
   }
@@ -288,6 +306,11 @@ short RNA_type_to_ID_code(const StructRNA *type)
   if (base_type == &RNA_Screen) {
     return ID_SCR;
   }
+#  ifdef WITH_NEW_SIMULATION_TYPE
+  if (base_type == &RNA_Simulation) {
+    return ID_SIM;
+  }
+#  endif
   if (base_type == &RNA_Sound) {
     return ID_SO;
   }
@@ -302,6 +325,9 @@ short RNA_type_to_ID_code(const StructRNA *type)
   }
   if (base_type == &RNA_VectorFont) {
     return ID_VF;
+  }
+  if (base_type == &RNA_Volume) {
+    return ID_VO;
   }
   if (base_type == &RNA_WorkSpace) {
     return ID_WS;
@@ -337,6 +363,12 @@ StructRNA *ID_code_to_RNA_type(short idcode)
       return &RNA_GreasePencil;
     case ID_GR:
       return &RNA_Collection;
+    case ID_HA:
+#  ifdef WITH_NEW_OBJECT_TYPES
+      return &RNA_Hair;
+#  else
+      return &RNA_ID;
+#  endif
     case ID_IM:
       return &RNA_Image;
     case ID_KE:
@@ -369,12 +401,24 @@ StructRNA *ID_code_to_RNA_type(short idcode)
       return &RNA_Palette;
     case ID_PC:
       return &RNA_PaintCurve;
+    case ID_PT:
+#  ifdef WITH_NEW_OBJECT_TYPES
+      return &RNA_PointCloud;
+#  else
+      return &RNA_ID;
+#  endif
     case ID_LP:
       return &RNA_LightProbe;
     case ID_SCE:
       return &RNA_Scene;
     case ID_SCR:
       return &RNA_Screen;
+    case ID_SIM:
+#  ifdef WITH_NEW_SIMULATION_TYPE
+      return &RNA_Simulation;
+#  else
+      return &RNA_ID;
+#  endif
     case ID_SO:
       return &RNA_Sound;
     case ID_SPK:
@@ -385,6 +429,8 @@ StructRNA *ID_code_to_RNA_type(short idcode)
       return &RNA_Text;
     case ID_VF:
       return &RNA_VectorFont;
+    case ID_VO:
+      return &RNA_Volume;
     case ID_WM:
       return &RNA_WindowManager;
     case ID_WO:
@@ -582,13 +628,8 @@ static void rna_ID_user_remap(ID *id, Main *bmain, ID *new_id)
 
 static struct ID *rna_ID_make_local(struct ID *self, Main *bmain, bool clear_proxy)
 {
-  /* Special case, as we can't rely on id_make_local(); it clears proxies. */
-  if (!clear_proxy && GS(self->name) == ID_OB) {
-    BKE_object_make_local_ex(bmain, (Object *)self, false, clear_proxy);
-  }
-  else {
-    id_make_local(bmain, self, false, false);
-  }
+  BKE_lib_id_make_local(
+      bmain, self, false, clear_proxy ? 0 : LIB_ID_MAKELOCAL_OBJECT_NO_PROXY_CLEARING);
 
   ID *ret_id = self->newid ? self->newid : self;
   BKE_id_clear_newpoin(self);
@@ -631,7 +672,7 @@ static int rna_IDPArray_length(PointerRNA *ptr)
 int rna_IDMaterials_assign_int(PointerRNA *ptr, int key, const PointerRNA *assign_ptr)
 {
   ID *id = ptr->owner_id;
-  short *totcol = BKE_id_material_num(id);
+  short *totcol = BKE_id_material_len_p(id);
   Material *mat_id = (Material *)assign_ptr->owner_id;
   if (totcol && (key >= 0 && key < *totcol)) {
     BLI_assert(BKE_id_is_in_global_main(id));
@@ -646,7 +687,7 @@ int rna_IDMaterials_assign_int(PointerRNA *ptr, int key, const PointerRNA *assig
 
 static void rna_IDMaterials_append_id(ID *id, Main *bmain, Material *ma)
 {
-  BKE_material_append_id(bmain, id, ma);
+  BKE_id_material_append(bmain, id, ma);
 
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, id);
   WM_main_add_notifier(NC_OBJECT | ND_OB_SHADING, id);
@@ -655,7 +696,7 @@ static void rna_IDMaterials_append_id(ID *id, Main *bmain, Material *ma)
 static Material *rna_IDMaterials_pop_id(ID *id, Main *bmain, ReportList *reports, int index_i)
 {
   Material *ma;
-  short *totcol = BKE_id_material_num(id);
+  short *totcol = BKE_id_material_len_p(id);
   const short totcol_orig = *totcol;
   if (index_i < 0) {
     index_i += (*totcol);
@@ -666,7 +707,7 @@ static Material *rna_IDMaterials_pop_id(ID *id, Main *bmain, ReportList *reports
     return NULL;
   }
 
-  ma = BKE_material_pop_id(bmain, id, index_i);
+  ma = BKE_id_material_pop(bmain, id, index_i);
 
   if (*totcol == totcol_orig) {
     BKE_report(reports, RPT_ERROR, "No material to removed");
@@ -682,7 +723,7 @@ static Material *rna_IDMaterials_pop_id(ID *id, Main *bmain, ReportList *reports
 
 static void rna_IDMaterials_clear_id(ID *id, Main *bmain)
 {
-  BKE_material_clear_id(bmain, id);
+  BKE_id_material_clear(bmain, id);
 
   DEG_id_tag_update(id, ID_RECALC_GEOMETRY);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, id);
@@ -1472,6 +1513,15 @@ static void rna_def_ID(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Fake User", "Save this data-block even if it has no users");
   RNA_def_property_ui_icon(prop, ICON_FAKE_USER_OFF, true);
   RNA_def_property_boolean_funcs(prop, NULL, "rna_ID_fake_user_set");
+
+  prop = RNA_def_property(srna, "is_embedded_data", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", LIB_EMBEDDED_DATA);
+  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+  RNA_def_property_ui_text(
+      prop,
+      "Embedded Data",
+      "This data-block is not an independent one, but is actually a sub-data of another ID "
+      "(typical example: root node trees or master collections)");
 
   prop = RNA_def_property(srna, "tag", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "tag", LIB_TAG_DOIT);

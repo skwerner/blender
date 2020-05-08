@@ -28,6 +28,10 @@
 
 #include "BLI_compiler_attrs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ------------------------------------------ */
 /* Settings and Defines:                      */
 
@@ -115,7 +119,7 @@ void UI_view2d_region_reinit(struct View2D *v2d, short type, int winx, int winy)
 
 void UI_view2d_curRect_validate(struct View2D *v2d);
 void UI_view2d_curRect_reset(struct View2D *v2d);
-void UI_view2d_sync(struct bScreen *screen, struct ScrArea *sa, struct View2D *v2dcur, int flag);
+void UI_view2d_sync(struct bScreen *screen, struct ScrArea *area, struct View2D *v2dcur, int flag);
 
 void UI_view2d_totRect_set(struct View2D *v2d, int width, int height);
 void UI_view2d_totRect_set_resize(struct View2D *v2d, int width, int height, bool resize);
@@ -129,13 +133,13 @@ void UI_view2d_zoom_cache_reset(void);
 
 /* view matrix operations */
 void UI_view2d_view_ortho(const struct View2D *v2d);
-void UI_view2d_view_orthoSpecial(struct ARegion *ar, struct View2D *v2d, const bool xaxis);
+void UI_view2d_view_orthoSpecial(struct ARegion *region, struct View2D *v2d, const bool xaxis);
 void UI_view2d_view_restore(const struct bContext *C);
 
 /* grid drawing */
-void UI_view2d_constant_grid_draw(struct View2D *v2d, float step);
+void UI_view2d_constant_grid_draw(const struct View2D *v2d, float step);
 void UI_view2d_multi_grid_draw(
-    struct View2D *v2d, int colorid, float step, int level_size, int totlevels);
+    const struct View2D *v2d, int colorid, float step, int level_size, int totlevels);
 
 void UI_view2d_draw_lines_y__values(const struct View2D *v2d);
 void UI_view2d_draw_lines_x__values(const struct View2D *v2d);
@@ -154,21 +158,21 @@ float UI_view2d_grid_resolution_x__frames_or_seconds(const struct View2D *v2d,
 float UI_view2d_grid_resolution_y__values(const struct View2D *v2d);
 
 /* scale indicator text drawing */
-void UI_view2d_draw_scale_y__values(const struct ARegion *ar,
+void UI_view2d_draw_scale_y__values(const struct ARegion *region,
                                     const struct View2D *v2d,
                                     const struct rcti *rect,
                                     int colorid);
-void UI_view2d_draw_scale_y__block(const struct ARegion *ar,
+void UI_view2d_draw_scale_y__block(const struct ARegion *region,
                                    const struct View2D *v2d,
                                    const struct rcti *rect,
                                    int colorid);
-void UI_view2d_draw_scale_x__discrete_frames_or_seconds(const struct ARegion *ar,
+void UI_view2d_draw_scale_x__discrete_frames_or_seconds(const struct ARegion *region,
                                                         const struct View2D *v2d,
                                                         const struct rcti *rect,
                                                         const struct Scene *scene,
                                                         bool display_seconds,
                                                         int colorid);
-void UI_view2d_draw_scale_x__frames_or_seconds(const struct ARegion *ar,
+void UI_view2d_draw_scale_x__frames_or_seconds(const struct ARegion *region,
                                                const struct View2D *v2d,
                                                const struct rcti *rect,
                                                const struct Scene *scene,
@@ -205,14 +209,17 @@ bool UI_view2d_view_to_region_clip(
     const struct View2D *v2d, float x, float y, int *r_region_x, int *r_region_y) ATTR_NONNULL();
 
 void UI_view2d_view_to_region(
-    struct View2D *v2d, float x, float y, int *r_region_x, int *r_region_y) ATTR_NONNULL();
-void UI_view2d_view_to_region_fl(
-    struct View2D *v2d, float x, float y, float *r_region_x, float *r_region_y) ATTR_NONNULL();
-void UI_view2d_view_to_region_m4(struct View2D *v2d, float matrix[4][4]) ATTR_NONNULL();
-void UI_view2d_view_to_region_rcti(struct View2D *v2d,
+    const struct View2D *v2d, float x, float y, int *r_region_x, int *r_region_y) ATTR_NONNULL();
+void UI_view2d_view_to_region_fl(const struct View2D *v2d,
+                                 float x,
+                                 float y,
+                                 float *r_region_x,
+                                 float *r_region_y) ATTR_NONNULL();
+void UI_view2d_view_to_region_m4(const struct View2D *v2d, float matrix[4][4]) ATTR_NONNULL();
+void UI_view2d_view_to_region_rcti(const struct View2D *v2d,
                                    const struct rctf *rect_src,
                                    struct rcti *rect_dst) ATTR_NONNULL();
-bool UI_view2d_view_to_region_rcti_clip(struct View2D *v2d,
+bool UI_view2d_view_to_region_rcti_clip(const struct View2D *v2d,
                                         const struct rctf *rect_src,
                                         struct rcti *rect_dst) ATTR_NONNULL();
 
@@ -224,43 +231,47 @@ void UI_view2d_scroller_size_get(const struct View2D *v2d, float *r_x, float *r_
 void UI_view2d_scale_get(struct View2D *v2d, float *r_x, float *r_y);
 float UI_view2d_scale_get_x(const struct View2D *v2d);
 float UI_view2d_scale_get_y(const struct View2D *v2d);
-void UI_view2d_scale_get_inverse(struct View2D *v2d, float *r_x, float *r_y);
+void UI_view2d_scale_get_inverse(const struct View2D *v2d, float *r_x, float *r_y);
 
-void UI_view2d_center_get(struct View2D *v2d, float *r_x, float *r_y);
+void UI_view2d_center_get(const struct View2D *v2d, float *r_x, float *r_y);
 void UI_view2d_center_set(struct View2D *v2d, float x, float y);
 
 void UI_view2d_offset(struct View2D *v2d, float xfac, float yfac);
 
 char UI_view2d_mouse_in_scrollers_ex(
-    const struct ARegion *ar, const struct View2D *v2d, int x, int y, int *r_scroll);
-char UI_view2d_mouse_in_scrollers(const struct ARegion *ar,
+    const struct ARegion *region, const struct View2D *v2d, int x, int y, int *r_scroll);
+char UI_view2d_mouse_in_scrollers(const struct ARegion *region,
                                   const struct View2D *v2d,
                                   int x,
                                   int y);
-char UI_view2d_rect_in_scrollers_ex(const struct ARegion *ar,
+char UI_view2d_rect_in_scrollers_ex(const struct ARegion *region,
                                     const struct View2D *v2d,
                                     const struct rcti *rect,
                                     int *r_scroll);
-char UI_view2d_rect_in_scrollers(const struct ARegion *ar,
+char UI_view2d_rect_in_scrollers(const struct ARegion *region,
                                  const struct View2D *v2d,
                                  const struct rcti *rect);
 
 /* cached text drawing in v2d, to allow pixel-aligned draw as post process */
-void UI_view2d_text_cache_add(
-    struct View2D *v2d, float x, float y, const char *str, size_t str_len, const char col[4]);
+void UI_view2d_text_cache_add(struct View2D *v2d,
+                              float x,
+                              float y,
+                              const char *str,
+                              size_t str_len,
+                              const unsigned char col[4]);
 void UI_view2d_text_cache_add_rectf(struct View2D *v2d,
                                     const struct rctf *rect_view,
                                     const char *str,
                                     size_t str_len,
-                                    const char col[4]);
-void UI_view2d_text_cache_draw(struct ARegion *ar);
+                                    const unsigned char col[4]);
+void UI_view2d_text_cache_draw(struct ARegion *region);
 
 /* operators */
 void ED_operatortypes_view2d(void);
 void ED_keymap_view2d(struct wmKeyConfig *keyconf);
 
 void UI_view2d_smooth_view(struct bContext *C,
-                           struct ARegion *ar,
+                           struct ARegion *region,
                            const struct rctf *cur,
                            const int smooth_viewtx);
 
@@ -272,5 +283,9 @@ void UI_view2d_smooth_view(struct bContext *C,
 /* view2d_gizmo_navigate.c */
 /* Caller passes in own idname.  */
 void VIEW2D_GGT_navigate_impl(struct wmGizmoGroupType *gzgt, const char *idname);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __UI_VIEW2D_H__ */

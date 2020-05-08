@@ -96,7 +96,7 @@ void ObjectRuntimeBackup::backup_pose_channel_runtime_data(Object *object)
 void ObjectRuntimeBackup::restore_to_object(Object *object)
 {
   ID *data_orig = object->runtime.data_orig;
-  ID *data_eval = object->runtime.data_eval;
+  ID *data_eval = runtime.data_eval;
   BoundBox *bb = object->runtime.bb;
   object->runtime = runtime;
   object->runtime.data_orig = data_orig;
@@ -129,6 +129,17 @@ void ObjectRuntimeBackup::restore_to_object(Object *object)
       }
     }
   }
+  else if (ELEM(object->type, OB_HAIR, OB_POINTCLOUD, OB_VOLUME)) {
+    if (object->id.recalc & ID_RECALC_GEOMETRY) {
+      /* Free evaluated caches. */
+      object->data = data_orig;
+      BKE_object_free_derived_caches(object);
+    }
+    else {
+      object->data = object->runtime.data_eval;
+    }
+  }
+
   object->base_flag = base_flag;
   object->base_local_view_bits = base_local_view_bits;
   /* Restore modifier's runtime data.

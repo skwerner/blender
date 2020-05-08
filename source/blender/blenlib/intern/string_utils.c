@@ -22,8 +22,8 @@
  */
 
 #include <ctype.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -425,6 +425,29 @@ char *BLI_string_join_array(char *result,
   char *c = result;
   char *c_end = &result[result_len - 1];
   for (uint i = 0; i < strings_len; i++) {
+    const char *p = strings[i];
+    while (*p && (c < c_end)) {
+      *c++ = *p++;
+    }
+  }
+  *c = '\0';
+  return c;
+}
+
+/**
+ * A version of #BLI_string_join that takes a separator which can be any character including '\0'.
+ */
+char *BLI_string_join_array_by_sep_char(
+    char *result, size_t result_len, char sep, const char *strings[], uint strings_len)
+{
+  char *c = result;
+  char *c_end = &result[result_len - 1];
+  for (uint i = 0; i < strings_len; i++) {
+    if (i != 0) {
+      if (c < c_end) {
+        *c++ = sep;
+      }
+    }
     const char *p = strings[i];
     while (*p && (c < c_end)) {
       *c++ = *p++;

@@ -1,5 +1,5 @@
+#include "BLI_stack.hh"
 #include "testing/testing.h"
-#include "BLI_stack_cxx.h"
 
 using BLI::Stack;
 using IntStack = Stack<int>;

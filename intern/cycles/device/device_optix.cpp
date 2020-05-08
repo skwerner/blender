@@ -17,28 +17,28 @@
 
 #ifdef WITH_OPTIX
 
-#  include "device/cuda/device_cuda.h"
-#  include "device/device_intern.h"
-#  include "device/device_denoising.h"
 #  include "bvh/bvh.h"
-#  include "render/scene.h"
+#  include "device/cuda/device_cuda.h"
+#  include "device/device_denoising.h"
+#  include "device/device_intern.h"
+#  include "render/buffers.h"
 #  include "render/hair.h"
 #  include "render/mesh.h"
 #  include "render/object.h"
-#  include "render/buffers.h"
+#  include "render/scene.h"
+#  include "util/util_debug.h"
+#  include "util/util_logging.h"
 #  include "util/util_md5.h"
 #  include "util/util_path.h"
 #  include "util/util_time.h"
-#  include "util/util_debug.h"
-#  include "util/util_logging.h"
 
 #  ifdef WITH_CUDA_DYNLOAD
 #    include <cuew.h>
 // Do not use CUDA SDK headers when using CUEW
 #    define OPTIX_DONT_INCLUDE_CUDA
 #  endif
-#  include <optix_stubs.h>
 #  include <optix_function_table_definition.h>
+#  include <optix_stubs.h>
 
 // TODO(pmours): Disable this once drivers have native support
 #  define OPTIX_DENOISER_NO_PIXEL_STRIDE 1
@@ -186,14 +186,15 @@ class OptiXDevice : public CUDADevice {
   OptixTraversableHandle tlas_handle = 0;
 
   OptixDenoiser denoiser = NULL;
-  pair<int2, CUdeviceptr> denoiser_state = {};
+  device_only_memory<unsigned char> denoiser_state;
   int denoiser_input_passes = 0;
 
  public:
   OptiXDevice(DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background_)
       : CUDADevice(info_, stats_, profiler_, background_),
         sbt_data(this, "__sbt", MEM_READ_ONLY),
-        launch_params(this, "__params")
+        launch_params(this, "__params"),
+        denoiser_state(this, "__denoiser_state")
   {
     // Store number of CUDA streams in device info
     info.cpu_threads = DebugFlags().optix.cuda_streams;
@@ -255,13 +256,10 @@ class OptiXDevice : public CUDADevice {
       cuMemFree(mem);
     }
 
-    if (denoiser_state.second) {
-      cuMemFree(denoiser_state.second);
-    }
-
     sbt_data.free();
     texture_info.free();
     launch_params.free();
+    denoiser_state.free();
 
     // Unload modules
     if (optix_module != NULL)
@@ -385,7 +383,13 @@ class OptiXDevice : public CUDADevice {
 
     {  // Load and compile PTX module with OptiX kernels
       string ptx_data, ptx_filename = path_get("lib/kernel_optix.ptx");
-      if (use_adaptive_compilation()) {
+      if (use_adaptive_compilation() || path_file_size(ptx_filename) == -1) {
+        if (!getenv("OPTIX_ROOT_DIR")) {
+          set_error(
+              "OPTIX_ROOT_DIR environment variable not set, must be set with the path to the "
+              "Optix SDK in order to compile the Optix kernel on demand.");
+          return false;
+        }
         ptx_filename = compile_kernel(requested_features, "kernel_optix", "optix", true);
       }
       if (ptx_filename.empty() || !path_read_text(ptx_filename, ptx_data)) {
@@ -479,9 +483,9 @@ class OptiXDevice : public CUDADevice {
     // Calculate maximum trace continuation stack size
     unsigned int trace_css = stack_size[PG_HITD].cssCH;
     // This is based on the maximum of closest-hit and any-hit/intersection programs
-    trace_css = max(trace_css, stack_size[PG_HITD].cssIS + stack_size[PG_HITD].cssAH);
-    trace_css = max(trace_css, stack_size[PG_HITL].cssIS + stack_size[PG_HITL].cssAH);
-    trace_css = max(trace_css, stack_size[PG_HITS].cssIS + stack_size[PG_HITS].cssAH);
+    trace_css = std::max(trace_css, stack_size[PG_HITD].cssIS + stack_size[PG_HITD].cssAH);
+    trace_css = std::max(trace_css, stack_size[PG_HITL].cssIS + stack_size[PG_HITL].cssAH);
+    trace_css = std::max(trace_css, stack_size[PG_HITS].cssIS + stack_size[PG_HITS].cssAH);
 
     OptixPipelineLinkOptions link_options;
     link_options.maxTraceDepth = 1;
@@ -550,8 +554,9 @@ class OptiXDevice : public CUDADevice {
                               &pipelines[PIP_SHADER_EVAL]));
 
       // Calculate continuation stack size based on the maximum of all ray generation stack sizes
-      const unsigned int css = max(stack_size[PG_BAKE].cssRG,
-                                   max(stack_size[PG_DISP].cssRG, stack_size[PG_BACK].cssRG)) +
+      const unsigned int css = std::max(stack_size[PG_BAKE].cssRG,
+                                        std::max(stack_size[PG_DISP].cssRG,
+                                                 stack_size[PG_BACK].cssRG)) +
                                link_options.maxTraceDepth * trace_css;
 
       check_result_optix_ret(optixPipelineSetStackSize(
@@ -571,9 +576,14 @@ class OptiXDevice : public CUDADevice {
     if (have_error())
       return;  // Abort early if there was an error previously
 
-    if (task.type == DeviceTask::RENDER || task.type == DeviceTask::DENOISE) {
+    if (task.type == DeviceTask::RENDER) {
+      if (thread_index != 0) {
+        // Only execute denoising in a single thread (see also 'task_add')
+        task.tile_types &= ~RenderTile::DENOISE;
+      }
+
       RenderTile tile;
-      while (task.acquire_tile(this, tile)) {
+      while (task.acquire_tile(this, tile, task.tile_types)) {
         if (tile.task == RenderTile::PATH_TRACE)
           launch_render(task, tile, thread_index);
         else if (tile.task == RenderTile::DENOISE)
@@ -624,7 +634,11 @@ class OptiXDevice : public CUDADevice {
 
     const int end_sample = rtile.start_sample + rtile.num_samples;
     // Keep this number reasonable to avoid running into TDRs
-    const int step_samples = (info.display_device ? 8 : 32);
+    int step_samples = (info.display_device ? 8 : 32);
+    if (task.adaptive_sampling.use) {
+      step_samples = task.adaptive_sampling.align_static_samples(step_samples);
+    }
+
     // Offset into launch params buffer so that streams use separate data
     device_ptr launch_params_ptr = launch_params.device_pointer +
                                    thread_index * launch_params.data_elements;
@@ -635,10 +649,9 @@ class OptiXDevice : public CUDADevice {
       // Copy work tile information to device
       wtile.num_samples = min(step_samples, end_sample - sample);
       wtile.start_sample = sample;
-      check_result_cuda(cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParams, tile),
-                                          &wtile,
-                                          sizeof(wtile),
-                                          cuda_stream[thread_index]));
+      device_ptr d_wtile_ptr = launch_params_ptr + offsetof(KernelParams, tile);
+      check_result_cuda(
+          cuMemcpyHtoDAsync(d_wtile_ptr, &wtile, sizeof(wtile), cuda_stream[thread_index]));
 
       OptixShaderBindingTable sbt_params = {};
       sbt_params.raygenRecord = sbt_data.device_pointer + PG_RGEN * sizeof(SbtRecord);
@@ -663,6 +676,12 @@ class OptiXDevice : public CUDADevice {
                                      wtile.h,
                                      1));
 
+      // Run the adaptive sampling kernels at selected samples aligned to step samples.
+      uint filter_sample = wtile.start_sample + wtile.num_samples - 1;
+      if (task.adaptive_sampling.use && task.adaptive_sampling.need_filter(filter_sample)) {
+        adaptive_sampling_filter(filter_sample, &wtile, d_wtile_ptr, cuda_stream[thread_index]);
+      }
+
       // Wait for launch to finish
       check_result_cuda(cuStreamSynchronize(cuda_stream[thread_index]));
 
@@ -673,6 +692,14 @@ class OptiXDevice : public CUDADevice {
 
       if (task.get_cancel() && !task.need_finish_queue)
         return;  // Cancel rendering
+    }
+
+    // Finalize adaptive sampling
+    if (task.adaptive_sampling.use) {
+      device_ptr d_wtile_ptr = launch_params_ptr + offsetof(KernelParams, tile);
+      adaptive_sampling_post(rtile, &wtile, d_wtile_ptr, cuda_stream[thread_index]);
+      check_result_cuda(cuStreamSynchronize(cuda_stream[thread_index]));
+      task.update_progress(&rtile, rtile.w * rtile.h * wtile.num_samples);
     }
   }
 
@@ -813,32 +840,26 @@ class OptiXDevice : public CUDADevice {
       check_result_optix_ret(
           optixDenoiserComputeMemoryResources(denoiser, rect_size.x, rect_size.y, &sizes));
 
-      auto &state = denoiser_state.second;
-      auto &state_size = denoiser_state.first;
       const size_t scratch_size = sizes.recommendedScratchSizeInBytes;
       const size_t scratch_offset = sizes.stateSizeInBytes;
 
       // Allocate denoiser state if tile size has changed since last setup
-      if (state_size.x != rect_size.x || state_size.y != rect_size.y || recreate_denoiser) {
-        // Free existing state before allocating new one
-        if (state) {
-          cuMemFree(state);
-          state = 0;
-        }
-
-        check_result_cuda_ret(cuMemAlloc(&state, scratch_offset + scratch_size));
+      if (recreate_denoiser || (denoiser_state.data_width != rect_size.x ||
+                                denoiser_state.data_height != rect_size.y)) {
+        denoiser_state.alloc_to_device(scratch_offset + scratch_size);
 
         // Initialize denoiser state for the current tile size
         check_result_optix_ret(optixDenoiserSetup(denoiser,
                                                   0,
                                                   rect_size.x,
                                                   rect_size.y,
-                                                  state,
+                                                  denoiser_state.device_pointer,
                                                   scratch_offset,
-                                                  state + scratch_offset,
+                                                  denoiser_state.device_pointer + scratch_offset,
                                                   scratch_size));
 
-        state_size = rect_size;
+        denoiser_state.data_width = rect_size.x;
+        denoiser_state.data_height = rect_size.y;
       }
 
       // Set up input and output layer information
@@ -880,14 +901,14 @@ class OptiXDevice : public CUDADevice {
       check_result_optix_ret(optixDenoiserInvoke(denoiser,
                                                  0,
                                                  &params,
-                                                 state,
+                                                 denoiser_state.device_pointer,
                                                  scratch_offset,
                                                  input_layers,
                                                  task.denoising.optix_input_passes,
                                                  overlap_offset.x,
                                                  overlap_offset.y,
                                                  output_layers,
-                                                 state + scratch_offset,
+                                                 denoiser_state.device_pointer + scratch_offset,
                                                  scratch_size));
 
 #  if OPTIX_DENOISER_NO_PIXEL_STRIDE
@@ -1459,7 +1480,7 @@ class OptiXDevice : public CUDADevice {
       return;
     }
 
-    if (task.type == DeviceTask::DENOISE || task.type == DeviceTask::DENOISE_BUFFER) {
+    if (task.type == DeviceTask::DENOISE_BUFFER) {
       // Execute denoising in a single thread (e.g. to avoid race conditions during creation)
       task_pool.push(new OptiXDeviceTask(this, task, 0));
       return;
@@ -1543,7 +1564,7 @@ void device_optix_info(vector<DeviceInfo> &devices)
     }
 
     // Only add devices with RTX support
-    if (rtcore_version == 0)
+    if (rtcore_version == 0 && !getenv("CYCLES_OPTIX_TEST"))
       it = cuda_devices.erase(it);
     else
       ++it;

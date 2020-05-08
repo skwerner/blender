@@ -148,6 +148,8 @@ class _defs_annotate:
 
     def draw_settings_common(context, layout, tool):
         gpd = context.annotation_data
+        region_type = context.region.type
+
         if gpd is not None:
             if gpd.layers.active_note is not None:
                 text = gpd.layers.active_note
@@ -160,17 +162,24 @@ class _defs_annotate:
             gpl = context.active_annotation_layer
             if gpl is not None:
                 layout.label(text="Annotation:")
-                sub = layout.row(align=True)
-                sub.ui_units_x = 8
+                if context.space_data.type == 'VIEW_3D':
+                    if region_type == 'TOOL_HEADER':
+                        sub = layout.split(align=True, factor=0.5)
+                        sub.ui_units_x = 6.5
+                        sub.prop(gpl, "color", text="")
+                    else:
+                        sub = layout.row(align=True)
+                        sub.prop(gpl, "color", text="")
+                    sub.popover(
+                        panel="TOPBAR_PT_annotation_layers",
+                        text=text,
+                    )
+                else:
+                    layout.prop(gpl, "color", text="")
 
-                sub.prop(gpl, "color", text="")
-                sub.popover(
-                    panel="TOPBAR_PT_annotation_layers",
-                    text=text,
-                )
-
-        tool_settings = context.tool_settings
         space_type = tool.space_type
+        tool_settings = context.tool_settings
+
         if space_type == 'VIEW_3D':
             layout.separator()
 
@@ -180,6 +189,21 @@ class _defs_annotate:
                 row.prop(tool_settings.gpencil_sculpt, "lockaxis")
             elif tool_settings.gpencil_stroke_placement_view3d in {'SURFACE', 'STROKE'}:
                 row.prop(tool_settings, "use_gpencil_stroke_endpoints")
+
+        if tool.idname == "builtin.annotate_line":
+            layout.separator()
+
+            props = tool.operator_properties("gpencil.annotate")
+            if region_type == 'TOOL_HEADER':
+                row = layout.row()
+                row.ui_units_x = 15
+                row.prop(props, "arrowstyle_start", text="Start")
+                row.separator()
+                row.prop(props, "arrowstyle_end", text="End")
+            else:
+                col = layout.row().column(align=True)
+                col.prop(props, "arrowstyle_start", text="Style Start")
+                col.prop(props, "arrowstyle_end", text="End")
 
     @ToolDef.from_fn.with_args(draw_settings=draw_settings_common)
     def scribble(*, draw_settings):
@@ -628,9 +652,10 @@ class _defs_edit_mesh:
                 layout.prop(props, "vertex_only")
                 layout.prop(props, "clamp_overlap")
                 layout.prop(props, "loop_slide")
-                layout.prop(props, "mark_seam")
-                layout.prop(props, "mark_sharp")
                 layout.prop(props, "harden_normals")
+                col = layout.column(heading="Mark")
+                col.prop(props, "mark_seam", text="Seam")
+                col.prop(props, "mark_sharp", text="Sharp")
 
                 layout.prop(props, "material")
 
@@ -668,6 +693,19 @@ class _defs_edit_mesh:
             operator="view3d.edit_mesh_extrude_move_normal",
             keymap=(),
             draw_settings=_template_widget.VIEW3D_GGT_xform_extrude.draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def extrude_dissolve_and_intersect():
+        return dict(
+            idname="builtin.extrude_dissolve_and_intersect",
+            label="Extrude Dissolve and Intersect",
+            description=(
+                "Extrude, dissolves edges whose faces form a flat surface and intersect new edges"
+            ),
+            icon="none",
+            widget="VIEW3D_GGT_tool_generic_handle_normal",
+            keymap=(),
         )
 
     @ToolDef.from_fn
@@ -1030,6 +1068,12 @@ class _defs_sculpt:
             layout.prop(props, "type", expand=False)
             layout.prop(props, "strength")
             layout.prop(props, "deform_axis")
+            layout.prop(props, "use_face_sets")
+            if (props.type == "SURFACE_SMOOTH"):
+                layout.prop(props, "surface_smooth_shape_preservation", expand=False)
+                layout.prop(props, "surface_smooth_current_vertex", expand=False)
+            if (props.type == "SHARPEN"):
+                layout.prop(props, "sharpen_smooth_ratio", expand=False)
 
         return dict(
             idname="builtin.mesh_filter",
@@ -1454,6 +1498,11 @@ class _defs_gpencil_paint:
 
     @ToolDef.from_fn
     def eyedropper():
+        def draw_settings(context, layout, tool):
+            props = tool.operator_properties("ui.eyedropper_gpencil_color")
+            row = layout.row()
+            row.use_property_split = False
+            row.prop(props, "mode", expand=True)
         return dict(
             idname="builtin.eyedropper",
             label="Eyedropper",
@@ -1461,10 +1510,22 @@ class _defs_gpencil_paint:
             cursor='EYEDROPPER',
             widget=None,
             keymap=(),
+            draw_settings=draw_settings,
         )
 
 
 class _defs_gpencil_edit:
+    def is_segment(context):
+        ts = context.scene.tool_settings
+        if context.mode == 'EDIT_GPENCIL':
+            return ts.gpencil_selectmode_edit == 'SEGMENT'
+        elif context.mode == 'SCULPT_GPENCIL':
+            return ts.use_gpencil_select_mask_segment
+        elif context.mode == 'VERTEX_GPENCIL':
+            return ts.use_gpencil_vertex_select_mask_segment
+        else:
+            return False
+
     @ToolDef.from_fn
     def bend():
         return dict(
@@ -1478,7 +1539,8 @@ class _defs_gpencil_edit:
     @ToolDef.from_fn
     def select():
         def draw_settings(context, layout, _tool):
-            layout.prop(context.tool_settings.gpencil_sculpt, "intersection_threshold")
+            if _defs_gpencil_edit.is_segment(context):
+                layout.prop(context.tool_settings.gpencil_sculpt, "intersection_threshold")
         return dict(
             idname="builtin.select",
             label="Tweak",
@@ -1495,7 +1557,8 @@ class _defs_gpencil_edit:
             row = layout.row()
             row.use_property_split = False
             row.prop(props, "mode", text="", expand=True, icon_only=True)
-            layout.prop(context.tool_settings.gpencil_sculpt, "intersection_threshold")
+            if _defs_gpencil_edit.is_segment(context):
+                layout.prop(context.tool_settings.gpencil_sculpt, "intersection_threshold")
         return dict(
             idname="builtin.select_box",
             label="Select Box",
@@ -1512,7 +1575,8 @@ class _defs_gpencil_edit:
             row = layout.row()
             row.use_property_split = False
             row.prop(props, "mode", text="", expand=True, icon_only=True)
-            layout.prop(context.tool_settings.gpencil_sculpt, "intersection_threshold")
+            if _defs_gpencil_edit.is_segment(context):
+                layout.prop(context.tool_settings.gpencil_sculpt, "intersection_threshold")
         return dict(
             idname="builtin.select_lasso",
             label="Select Lasso",
@@ -1530,7 +1594,8 @@ class _defs_gpencil_edit:
             row.use_property_split = False
             row.prop(props, "mode", text="", expand=True, icon_only=True)
             layout.prop(props, "radius")
-            layout.prop(context.tool_settings.gpencil_sculpt, "intersection_threshold")
+            if _defs_gpencil_edit.is_segment(context):
+                layout.prop(context.tool_settings.gpencil_sculpt, "intersection_threshold")
 
         def draw_cursor(_context, tool, xy):
             from gpu_extras.presets import draw_circle_2d
@@ -1593,6 +1658,23 @@ class _defs_gpencil_edit:
             draw_settings=_template_widget.VIEW3D_GGT_xform_extrude.draw_settings,
         )
 
+    @ToolDef.from_fn
+    def transform_fill():
+        def draw_settings(context, layout, tool):
+                props = tool.operator_properties("gpencil.transform_fill")
+                row = layout.row()
+                row.use_property_split = False
+                row.prop(props, "mode", expand=True)
+
+        return dict(
+            idname="builtin.transform_fill",
+            label="Transform Fill",
+            icon="ops.gpencil.transform_fill",
+            cursor='DEFAULT',
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
 
 class _defs_gpencil_sculpt:
 
@@ -1612,11 +1694,10 @@ class _defs_gpencil_sculpt:
             context,
             idname_prefix="builtin_brush.",
             icon_prefix="ops.gpencil.sculpt_",
-            type=bpy.types.GPencilSculptSettings,
-            attr="sculpt_tool",
+            type=bpy.types.Brush,
+            attr="gpencil_sculpt_tool",
             tooldef_keywords=dict(
                 operator="gpencil.sculpt_paint",
-                keymap="3D View Tool: Sculpt Gpencil, Paint",
             ),
         )
 
@@ -1629,11 +1710,37 @@ class _defs_gpencil_weight:
             context,
             idname_prefix="builtin_brush.",
             icon_prefix="ops.gpencil.sculpt_",
-            type=bpy.types.GPencilSculptSettings,
-            attr="weight_tool",
+            type=bpy.types.Brush,
+            attr="gpencil_weight_tool",
             tooldef_keywords=dict(
-                operator="gpencil.sculpt_paint",
-                keymap="3D View Tool: Sculpt Gpencil, Paint",
+                operator="gpencil.weight_paint",
+            ),
+        )
+
+
+class _defs_gpencil_vertex:
+
+    @staticmethod
+    def poll_select_mask(context):
+        if context is None:
+            return True
+        ob = context.active_object
+        ts = context.scene.tool_settings
+        return ob and ob.type == 'GPENCIL' and (ts.use_gpencil_vertex_select_mask_point or
+                                                ts.use_gpencil_vertex_select_mask_stroke or
+                                                ts.use_gpencil_vertex_select_mask_segment)
+
+    @staticmethod
+    def generate_from_brushes(context):
+        return generate_from_enum_ex(
+            context,
+            idname_prefix="builtin_brush.",
+            icon_prefix="brush.paint_vertex.",
+            type=bpy.types.Brush,
+            attr="gpencil_vertex_tool",
+            cursor='DOT',
+            tooldef_keywords=dict(
+                operator="gpencil.vertex_paint",
             ),
         )
 
@@ -1737,6 +1844,21 @@ class _defs_sequencer_generic:
             cursor='CROSSHAIR',
             widget=None,
             keymap="Sequencer Tool: Blade",
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def sample():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sequencer.sample")
+        return dict(
+            idname="builtin.sample",
+            label="Sample",
+            description=(
+                "Sample pixel values under the cursor"
+            ),
+            icon="ops.paint.weight_sample",  # XXX, needs own icon.
+            keymap="Sequencer Tool: Sample",
             draw_settings=draw_settings,
         )
 
@@ -1852,6 +1974,8 @@ class IMAGE_PT_tools_active(ToolSelectPanelHelper, Panel):
         ],
         'PAINT': [
             _defs_texture_paint.generate_from_brushes,
+            None,
+            *_tools_annotate,
         ],
     }
 
@@ -2028,6 +2152,7 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
             None,
             (
                 _defs_edit_mesh.extrude,
+                _defs_edit_mesh.extrude_dissolve_and_intersect,
                 _defs_edit_mesh.extrude_normals,
                 _defs_edit_mesh.extrude_individual,
                 _defs_edit_mesh.extrude_cursor,
@@ -2201,6 +2326,8 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
                 _defs_gpencil_edit.tosphere,
             ),
             None,
+            _defs_gpencil_edit.transform_fill,
+            None,
             *_tools_annotate,
         ],
         'SCULPT_GPENCIL': [
@@ -2217,6 +2344,17 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
             _defs_gpencil_weight.generate_from_brushes,
             None,
             *_tools_annotate,
+        ],
+        'VERTEX_GPENCIL': [
+            _defs_gpencil_vertex.generate_from_brushes,
+            None,
+            *_tools_annotate,
+            None,
+            lambda context: (
+                VIEW3D_PT_tools_active._tools_gpencil_select
+                if _defs_gpencil_vertex.poll_select_mask(context)
+                else ()
+            ),
         ],
     }
 class SEQUENCER_PT_tools_active(ToolSelectPanelHelper, Panel):
@@ -2266,6 +2404,7 @@ class SEQUENCER_PT_tools_active(ToolSelectPanelHelper, Panel):
         None: [
         ],
         'PREVIEW': [
+            _defs_sequencer_generic.sample,
             *_tools_annotate,
         ],
         'SEQUENCER': [
@@ -2273,6 +2412,7 @@ class SEQUENCER_PT_tools_active(ToolSelectPanelHelper, Panel):
             _defs_sequencer_generic.blade,
         ],
         'SEQUENCER_PREVIEW': [
+            _defs_sequencer_generic.sample,
             *_tools_select,
             *_tools_annotate,
             _defs_sequencer_generic.blade,

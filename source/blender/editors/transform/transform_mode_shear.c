@@ -40,8 +40,8 @@
 #include "BLT_translation.h"
 
 #include "transform.h"
-#include "transform_snap.h"
 #include "transform_mode.h"
+#include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
 /* Transform (Shear) */
@@ -53,17 +53,17 @@ static void initShear_mouseInputMode(TransInfo *t)
 {
   float dir[3];
   bool dir_flip = false;
-  copy_v3_v3(dir, t->orient_matrix[t->orient_axis_ortho]);
+  copy_v3_v3(dir, t->spacemtx[t->orient_axis_ortho]);
 
   /* Needed for axis aligned view gizmo. */
-  if (t->orientation.user == V3D_ORIENT_VIEW) {
+  if (t->orientation.types[t->orientation.index] == V3D_ORIENT_VIEW) {
     if (t->orient_axis_ortho == 0) {
-      if (t->center2d[1] > t->mouse.imval[1]) {
+      if (t->center2d[1] < t->mouse.imval[1]) {
         dir_flip = !dir_flip;
       }
     }
     else if (t->orient_axis_ortho == 1) {
-      if (t->center2d[0] > t->mouse.imval[0]) {
+      if (t->center2d[0] < t->mouse.imval[0]) {
         dir_flip = !dir_flip;
       }
     }
@@ -101,13 +101,13 @@ static eRedrawFlag handleEventShear(TransInfo *t, const wmEvent *event)
 
     status = TREDRAW_HARD;
   }
-  else if (event->type == XKEY && event->val == KM_PRESS) {
+  else if (event->type == EVT_XKEY && event->val == KM_PRESS) {
     t->orient_axis_ortho = (t->orient_axis + 1) % 3;
     initShear_mouseInputMode(t);
 
     status = TREDRAW_HARD;
   }
-  else if (event->type == YKEY && event->val == KM_PRESS) {
+  else if (event->type == EVT_YKEY && event->val == KM_PRESS) {
     t->orient_axis_ortho = (t->orient_axis + 2) % 3;
     initShear_mouseInputMode(t);
 
@@ -154,8 +154,8 @@ static void applyShear(TransInfo *t, const int UNUSED(mval[2]))
   unit_m3(smat);
   smat[1][0] = value;
 
-  copy_v3_v3(axismat_inv[0], t->orient_matrix[t->orient_axis_ortho]);
-  copy_v3_v3(axismat_inv[2], t->orient_matrix[t->orient_axis]);
+  copy_v3_v3(axismat_inv[0], t->spacemtx[t->orient_axis_ortho]);
+  copy_v3_v3(axismat_inv[2], t->spacemtx[t->orient_axis]);
   cross_v3_v3v3(axismat_inv[1], axismat_inv[0], axismat_inv[2]);
   invert_m3_m3(axismat, axismat_inv);
 
@@ -217,7 +217,7 @@ static void applyShear(TransInfo *t, const int UNUSED(mval[2]))
 
   recalcData(t);
 
-  ED_area_status_text(t->sa, str);
+  ED_area_status_text(t->area, str);
 }
 
 void initShear(TransInfo *t)

@@ -136,12 +136,17 @@ static void deformVertsEM(ModifierData *md,
 {
   ShrinkwrapModifierData *swmd = (ShrinkwrapModifierData *)md;
   struct Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
-  Mesh *mesh_src = MOD_deform_mesh_eval_get(
-      ctx->object, editData, mesh, NULL, numVerts, false, false);
+  Mesh *mesh_src = NULL;
+
+  if ((swmd->vgroup_name[0] != '\0') || (swmd->shrinkType == MOD_SHRINKWRAP_PROJECT)) {
+    mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
+  }
 
   struct MDeformVert *dvert = NULL;
   int defgrp_index = -1;
-  MOD_get_vgroup(ctx->object, mesh_src, swmd->vgroup_name, &dvert, &defgrp_index);
+  if (swmd->vgroup_name[0] != '\0') {
+    MOD_get_vgroup(ctx->object, mesh_src, swmd->vgroup_name, &dvert, &defgrp_index);
+  }
 
   shrinkwrapModifier_deform(
       swmd, ctx, scene, ctx->object, mesh_src, dvert, defgrp_index, vertexCos, numVerts);
@@ -199,7 +204,7 @@ ModifierTypeInfo modifierType_Shrinkwrap = {
     /* structSize */ sizeof(ShrinkwrapModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
-        eModifierTypeFlag_AcceptsLattice | eModifierTypeFlag_SupportsEditmode |
+        eModifierTypeFlag_AcceptsVertexCosOnly | eModifierTypeFlag_SupportsEditmode |
         eModifierTypeFlag_EnableInEditmode,
 
     /* copyData */ modifier_copyData_generic,
@@ -208,7 +213,10 @@ ModifierTypeInfo modifierType_Shrinkwrap = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

@@ -20,13 +20,14 @@
 
 #include <stddef.h>
 
+#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_dynamicpaint_types.h"
-#include "DNA_object_types.h"
-#include "DNA_object_force_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_dynamicpaint.h"
 #include "BKE_layer.h"
@@ -100,7 +101,7 @@ static void requiredDataMask(Object *UNUSED(ob),
   }
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
 
@@ -123,8 +124,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
   /* Add relation from canvases to all brush objects. */
   if (pmd->canvas != NULL && pmd->type == MOD_DYNAMICPAINT_TYPE_CANVAS) {
-    for (DynamicPaintSurface *surface = pmd->canvas->surfaces.first; surface;
-         surface = surface->next) {
+    LISTBASE_FOREACH (DynamicPaintSurface *, surface, &pmd->canvas->surfaces) {
       if (surface->effect & MOD_DPAINT_EFFECT_DO_DRIP) {
         DEG_add_forcefield_relations(
             ctx->node, ctx->object, surface->effector_weights, true, 0, "Dynamic Paint Field");
@@ -187,7 +187,10 @@ ModifierTypeInfo modifierType_DynamicPaint = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

@@ -24,8 +24,8 @@
 #ifndef __TRANSFORM_H__
 #define __TRANSFORM_H__
 
-#include "ED_transform.h"
 #include "ED_numinput.h"
+#include "ED_transform.h"
 #include "ED_view3d.h"
 
 #include "RE_engine.h"
@@ -531,17 +531,12 @@ typedef struct TransInfo {
   bool is_launch_event_tweak;
 
   struct {
-    /** Orientation type when when we're not constrained.
-     * nearly always global except for rotate which defaults to screen-space orientation. */
-    short unset;
-    /** Orientation to use when a key is pressed. */
-    short user;
-    /* Used when user is global. */
-    short user_alt;
     short index;
-    short *types[2];
-    /* this gets used when custom_orientation is V3D_ORIENT_CUSTOM */
+    short types[3];
+    /* this gets used when orientation.type[x] is V3D_ORIENT_CUSTOM */
     struct TransformOrientation *custom;
+    /* this gets used when orientation.type[0] is V3D_ORIENT_CUSTOM_MATRIX */
+    float custom_matrix[3][3];
   } orientation;
   /** backup from view3d, to restore on end. */
   short gizmo_flag;
@@ -566,23 +561,14 @@ typedef struct TransInfo {
   /** Secondary axis, shear uses this. */
   int orient_axis_ortho;
 
-  /** Often this matrix has similar usage to #TransInfo.spacemtx however this
-   * is used to define extra axes to operate on, not necessarily a space.
-   *
-   * For example, by default rotation operates on the view (`orient_matrix[2]`),
-   * even when the current space isn't set to the view. */
-  float orient_matrix[3][3];
-  /** Don't overwrite when set by operator redo defines the orientation axis. */
-  bool orient_matrix_is_set;
-
   /** remove elements if operator is canceled. */
   bool remove_on_cancel;
 
   void *view;
   /** Only valid (non null) during an operator called function. */
   struct bContext *context;
-  struct ScrArea *sa;
-  struct ARegion *ar;
+  struct ScrArea *area;
+  struct ARegion *region;
   struct Depsgraph *depsgraph;
   struct Scene *scene;
   struct ViewLayer *view_layer;
@@ -677,6 +663,10 @@ enum {
   T_MODAL_CURSOR_SET = 1 << 26,
 
   T_CLNOR_REBUILD = 1 << 27,
+
+  /* Special Aftertrans. */
+  T_AUTOMERGE = 1 << 28,
+  T_AUTOSPLIT = 1 << 29,
 };
 
 /** #TransInfo.modifiers */
@@ -829,8 +819,6 @@ void projectFloatView(TransInfo *t, const float vec[3], float adr[2]);
 void applyAspectRatio(TransInfo *t, float vec[2]);
 void removeAspectRatio(TransInfo *t, float vec[2]);
 
-void drawPropCircle(const struct bContext *C, TransInfo *t);
-
 struct wmKeyMap *transform_modal_keymap(struct wmKeyConfig *keyconf);
 
 /*********************** transform_gizmo.c ********** */
@@ -843,32 +831,6 @@ void drawDial3d(const TransInfo *t);
 
 /*********************** TransData Creation and General Handling *********** */
 bool transdata_check_local_islands(TransInfo *t, short around);
-
-/*********************** Constraints *****************************/
-
-void drawConstraint(TransInfo *t);
-
-void getConstraintMatrix(TransInfo *t);
-void setConstraint(TransInfo *t, float space[3][3], int mode, const char text[]);
-void setAxisMatrixConstraint(TransInfo *t, int mode, const char text[]);
-void setLocalConstraint(TransInfo *t, int mode, const char text[]);
-void setUserConstraint(TransInfo *t, short orientation, int mode, const char text[]);
-
-void constraintNumInput(TransInfo *t, float vec[3]);
-
-bool isLockConstraint(TransInfo *t);
-int getConstraintSpaceDimension(TransInfo *t);
-int constraintModeToIndex(const TransInfo *t);
-char constraintModeToChar(const TransInfo *t);
-
-void startConstraint(TransInfo *t);
-void stopConstraint(TransInfo *t);
-
-void initSelectConstraint(TransInfo *t, float mtx[3][3]);
-void selectConstraint(TransInfo *t);
-void postSelectConstraint(TransInfo *t);
-
-void setNearestAxis(TransInfo *t);
 
 /********************** Mouse Input ******************************/
 
@@ -950,7 +912,7 @@ void transform_data_ext_rotate(TransData *td, float mat[3][3], bool use_drot);
 
 /*********************** Transform Orientations ******************************/
 
-void initTransformOrientation(struct bContext *C, TransInfo *t);
+void initTransformOrientation(struct bContext *C, TransInfo *t, short orientation);
 
 /* Those two fill in mat and return non-zero on success */
 bool createSpaceNormal(float mat[3][3], const float normal[3]);
@@ -995,14 +957,14 @@ bool checkUseAxisMatrix(TransInfo *t);
   (BLI_assert((t)->data_container_len == 1), (&(t)->data_container[0]))
 
 #define FOREACH_TRANS_DATA_CONTAINER(t, th) \
-  for (TransDataContainer *tc = t->data_container, \
-                          *tc_end = t->data_container + t->data_container_len; \
+  for (TransDataContainer *tc = (t)->data_container, \
+                          *tc_end = (t)->data_container + (t)->data_container_len; \
        th != tc_end; \
        th++)
 
 #define FOREACH_TRANS_DATA_CONTAINER_INDEX(t, th, i) \
-  for (TransDataContainer *tc = ((i = 0), t->data_container), \
-                          *tc_end = t->data_container + t->data_container_len; \
+  for (TransDataContainer *tc = ((i = 0), (t)->data_container), \
+                          *tc_end = (t)->data_container + (t)->data_container_len; \
        th != tc_end; \
        th++, i++)
 

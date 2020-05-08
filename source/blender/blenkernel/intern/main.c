@@ -473,6 +473,14 @@ ListBase *which_libbase(Main *bmain, short type)
       return &(bmain->cachefiles);
     case ID_WS:
       return &(bmain->workspaces);
+    case ID_HA:
+      return &(bmain->hairs);
+    case ID_PT:
+      return &(bmain->pointclouds);
+    case ID_VO:
+      return &(bmain->volumes);
+    case ID_SIM:
+      return &(bmain->simulations);
   }
   return NULL;
 }
@@ -521,6 +529,9 @@ int set_listbasepointers(Main *bmain, ListBase **lb)
   lb[INDEX_ID_ME] = &(bmain->meshes);
   lb[INDEX_ID_CU] = &(bmain->curves);
   lb[INDEX_ID_MB] = &(bmain->metaballs);
+  lb[INDEX_ID_HA] = &(bmain->hairs);
+  lb[INDEX_ID_PT] = &(bmain->pointclouds);
+  lb[INDEX_ID_VO] = &(bmain->volumes);
 
   lb[INDEX_ID_LT] = &(bmain->lattices);
   lb[INDEX_ID_LA] = &(bmain->lights);
@@ -545,6 +556,7 @@ int set_listbasepointers(Main *bmain, ListBase **lb)
   lb[INDEX_ID_WS] = &(bmain->workspaces); /* before wm, so it's freed after it! */
   lb[INDEX_ID_WM] = &(bmain->wm);
   lb[INDEX_ID_MSK] = &(bmain->masks);
+  lb[INDEX_ID_SIM] = &(bmain->simulations);
 
   lb[INDEX_ID_NULL] = NULL;
 

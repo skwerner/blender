@@ -20,6 +20,7 @@
 from bpy.types import Header, Panel, Menu, UIList
 
 
+
 class FILEBROWSER_HT_header(Header):
     bl_space_type = 'FILE_BROWSER'
 
@@ -31,8 +32,7 @@ class FILEBROWSER_HT_header(Header):
         if st.active_operator is None:
             layout.template_header()
 
-        layout.menu("FILEBROWSER_MT_view")
-        layout.menu("FILEBROWSER_MT_select")
+        FILEBROWSER_MT_editor_menus.draw_collapsible(context, layout)
 
         # can be None when save/reload with a file selector open
 
@@ -66,8 +66,9 @@ class FILEBROWSER_PT_display(Panel):
         if params.display_type == 'THUMBNAIL':
             layout.prop(params, "display_size", text="Size")
         else:
-            layout.prop(params, "show_details_size", text="Size")
-            layout.prop(params, "show_details_datetime", text="Date")
+            col = layout.column(heading="Columns", align=True)
+            col.prop(params, "show_details_size", text="Size")
+            col.prop(params, "show_details_datetime", text="Date")
 
         layout.prop(params, "recursion_level", text="Recursions")
 
@@ -137,6 +138,9 @@ class FILEBROWSER_PT_filter(Panel):
             row = col.row()
             row.label(icon='FILE_TEXT')
             row.prop(params, "use_filter_text", text="Text Files", toggle=0)
+            row = col.row()
+            row.label(icon='FILE_VOLUME')
+            row.prop(params, "use_filter_volume", text="Volume Files", toggle=0)
 
         col.separator()
 
@@ -148,7 +152,12 @@ class FILEBROWSER_PT_filter(Panel):
             if params.use_filter_blendid:
                 row = col.row()
                 row.label(icon='BLANK1')  # Indentation
-                row.prop(params, "filter_id_category", text="")
+
+                sub = row.column(align=True)
+                filter_id = params.filter_id
+                for identifier in dir(filter_id):
+                    if identifier.startswith("category_"):
+                        sub.prop(filter_id, identifier, toggle=True)
 
                 col.separator()
 
@@ -314,8 +323,11 @@ class FILEBROWSER_PT_advanced_filter(Panel):
             layout.prop(params, "use_filter_blendid")
             if params.use_filter_blendid:
                 layout.separator()
-                col = layout.column()
-                col.prop(params, "filter_id")
+                col = layout.column(align=True)
+                filter_id = params.filter_id
+                for identifier in dir(filter_id):
+                    if identifier.startswith("filter_"):
+                        col.prop(filter_id, identifier, toggle=True)
 
 
 class FILEBROWSER_PT_directory_path(Panel):
@@ -397,6 +409,17 @@ class FILEBROWSER_PT_directory_path(Panel):
                 icon='PREFERENCES',
                 depress=self.is_option_region_visible(context, space)
             ).region_type = 'TOOL_PROPS'
+
+
+class FILEBROWSER_MT_editor_menus(Menu):
+    bl_idname = "FILEBROWSER_MT_editor_menus"
+    bl_label = ""
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.menu("FILEBROWSER_MT_view")
+        layout.menu("FILEBROWSER_MT_select")
 
 
 class FILEBROWSER_MT_view(Menu):
@@ -490,6 +513,7 @@ classes = (
     FILEBROWSER_PT_bookmarks_recents,
     FILEBROWSER_PT_advanced_filter,
     FILEBROWSER_PT_directory_path,
+    FILEBROWSER_MT_editor_menus,
     FILEBROWSER_MT_view,
     FILEBROWSER_MT_select,
     FILEBROWSER_MT_context_menu,

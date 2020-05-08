@@ -26,10 +26,10 @@
 #include "BLI_path_util.h"
 #include "BLI_string.h"
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_main.h"
 #include "BKE_mesh.h"
@@ -292,7 +292,7 @@ ModifierTypeInfo modifierType_MeshCache = {
     /* structName */ "MeshCacheModifierData",
     /* structSize */ sizeof(MeshCacheModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
 
     /* copyData */ modifier_copyData_generic,
@@ -301,7 +301,10 @@ ModifierTypeInfo modifierType_MeshCache = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,

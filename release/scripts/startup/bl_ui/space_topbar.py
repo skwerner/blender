@@ -165,11 +165,11 @@ class TOPBAR_PT_gpencil_layers(Panel):
 
             srow = col.row(align=True)
             srow.prop(gpl, "opacity", text="Opacity", slider=True)
-            srow.prop(gpl, "mask_layer", text="",
-                      icon='MOD_MASK' if gpl.mask_layer else 'LAYER_ACTIVE')
+            srow.prop(gpl, "use_mask_layer", text="",
+                      icon='MOD_MASK' if gpl.use_mask_layer else 'LAYER_ACTIVE')
 
             srow = col.row(align=True)
-            srow.prop(gpl, "use_solo_mode", text="Show Only On Keyframed")
+            srow.prop(gpl, "use_lights")
 
         col = row.column()
 
@@ -207,7 +207,8 @@ class TOPBAR_MT_editor_menus(Menu):
     def draw(self, context):
         layout = self.layout
 
-        if context.area.show_menus:
+        # Allow calling this menu directly (this might not be a header area).
+        if getattr(context.area, "show_menus", False):
             layout.menu("TOPBAR_MT_app", text="", icon='BLENDER')
         else:
             layout.menu("TOPBAR_MT_app", text="Blender")
@@ -241,6 +242,10 @@ class TOPBAR_MT_app(Menu):
 
         layout.operator("preferences.app_template_install",
                         text="Install Application Template...")
+
+        layout.separator()
+
+        layout.menu("TOPBAR_MT_app_system")
 
 
 class TOPBAR_MT_file_cleanup(Menu):
@@ -441,6 +446,26 @@ class TOPBAR_MT_app_support(Menu):
         ).url = "https://store.blender.org"
 
 
+# Include technical operators here which would otherwise have no way for users to access.
+class TOPBAR_MT_app_system(Menu):
+    bl_label = "System"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator("script.reload")
+
+        layout.separator()
+
+        layout.operator("wm.memory_statistics")
+        layout.operator("wm.debug_menu")
+        layout.operator_menu_enum("wm.redraw_timer", "type")
+
+        layout.separator()
+
+        layout.operator("screen.spacedata_cleanup")
+
+
 class TOPBAR_MT_templates_more(Menu):
     bl_label = "Templates"
 
@@ -555,6 +580,8 @@ class TOPBAR_MT_edit(Menu):
     def draw(self, context):
         layout = self.layout
 
+        show_developer = context.preferences.view.show_developer_ui
+
         layout.operator("ed.undo")
         layout.operator("ed.redo")
 
@@ -573,8 +600,9 @@ class TOPBAR_MT_edit(Menu):
 
         layout.separator()
 
-        layout.operator("wm.search_menu",
-                        text="Operator Search...", icon='VIEWZOOM')
+        layout.operator("wm.search_menu", text="Menu Search...", icon='VIEWZOOM')
+        if show_developer:
+            layout.operator("wm.search_operator", text="Operator Search...", icon='VIEWZOOM')
 
         layout.separator()
 
@@ -827,6 +855,7 @@ classes = (
     TOPBAR_MT_editor_menus,
     TOPBAR_MT_app,
     TOPBAR_MT_app_about,
+    TOPBAR_MT_app_system,
     TOPBAR_MT_app_support,
     TOPBAR_MT_file,
     TOPBAR_MT_file_new,

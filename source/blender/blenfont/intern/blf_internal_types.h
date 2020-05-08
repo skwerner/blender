@@ -24,8 +24,8 @@
 #ifndef __BLF_INTERNAL_TYPES_H__
 #define __BLF_INTERNAL_TYPES_H__
 
-#include "GPU_vertex_buffer.h"
 #include "GPU_texture.h"
+#include "GPU_vertex_buffer.h"
 
 #define BLF_BATCH_DRAW_LEN_MAX 2048 /* in glyph */
 
@@ -119,17 +119,16 @@ typedef struct GlyphBLF {
    */
   unsigned char *bitmap;
 
-  /* glyph width and height. */
-  int width;
-  int height;
+  /* Glyph width and height. */
+  int dims[2];
   int pitch;
 
-  /* X and Y bearing of the glyph.
+  /**
+   * X and Y bearing of the glyph.
    * The X bearing is from the origin to the glyph left bbox edge.
    * The Y bearing is from the baseline to the top of the glyph edge.
    */
-  float pos_x;
-  float pos_y;
+  int pos[2];
 
   struct GlyphCacheBLF *glyph_cache;
 } GlyphBLF;
@@ -141,9 +140,8 @@ typedef struct FontBufInfoBLF {
   /* the same but unsigned char */
   unsigned char *cbuf;
 
-  /* buffer size, keep signed so comparisons with negative values work */
-  int w;
-  int h;
+  /** Buffer size, keep signed so comparisons with negative values work. */
+  int dims[2];
 
   /* number of channels. */
   int ch;

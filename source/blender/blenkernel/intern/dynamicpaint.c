@@ -24,8 +24,8 @@
 #include <stdio.h>
 
 #include "BLI_blenlib.h"
-#include "BLI_math.h"
 #include "BLI_kdtree.h"
+#include "BLI_math.h"
 #include "BLI_string_utils.h"
 #include "BLI_task.h"
 #include "BLI_threads.h"
@@ -46,7 +46,6 @@
 #include "DNA_scene_types.h"
 #include "DNA_texture_types.h"
 
-#include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_bvhutils.h" /* bvh tree */
 #include "BKE_collection.h"
@@ -74,8 +73,8 @@
 #include "DEG_depsgraph_query.h"
 
 /* for image output */
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 /* to read material/texture color */
 #include "RE_render_ext.h"
@@ -355,7 +354,7 @@ bool dynamicPaint_outputLayerExists(struct DynamicPaintSurface *surface, Object 
       return (CustomData_get_named_layer_index(&me->ldata, CD_MLOOPCOL, name) != -1);
     }
     else if (surface->type == MOD_DPAINT_SURFACE_T_WEIGHT) {
-      return (defgroup_name_index(ob, name) != -1);
+      return (BKE_object_defgroup_name_index(ob, name) != -1);
     }
   }
 
@@ -654,15 +653,15 @@ static void grid_bound_insert_cb_ex(void *__restrict userdata,
   boundInsert(grid_bound, bData->realCoord[bData->s_pos[i]].v);
 }
 
-static void grid_bound_insert_finalize(void *__restrict userdata, void *__restrict userdata_chunk)
+static void grid_bound_insert_reduce(const void *__restrict UNUSED(userdata),
+                                     void *__restrict chunk_join,
+                                     void *__restrict chunk)
 {
-  PaintBakeData *bData = userdata;
-  VolumeGrid *grid = bData->grid;
+  Bounds3D *join = chunk_join;
+  Bounds3D *grid_bound = chunk;
 
-  Bounds3D *grid_bound = userdata_chunk;
-
-  boundInsert(&grid->grid_bounds, grid_bound->min);
-  boundInsert(&grid->grid_bounds, grid_bound->max);
+  boundInsert(join, grid_bound->min);
+  boundInsert(join, grid_bound->max);
 }
 
 static void grid_cell_points_cb_ex(void *__restrict userdata,
@@ -686,17 +685,20 @@ static void grid_cell_points_cb_ex(void *__restrict userdata,
   s_num[temp_t_index[i]]++;
 }
 
-static void grid_cell_points_finalize(void *__restrict userdata, void *__restrict userdata_chunk)
+static void grid_cell_points_reduce(const void *__restrict userdata,
+                                    void *__restrict chunk_join,
+                                    void *__restrict chunk)
 {
-  PaintBakeData *bData = userdata;
-  VolumeGrid *grid = bData->grid;
+  const PaintBakeData *bData = userdata;
+  const VolumeGrid *grid = bData->grid;
   const int grid_cells = grid->dim[0] * grid->dim[1] * grid->dim[2];
 
-  int *s_num = userdata_chunk;
+  int *join_s_num = chunk_join;
+  int *s_num = chunk;
 
   /* calculate grid indexes */
   for (int i = 0; i < grid_cells; i++) {
-    grid->s_num[i] += s_num[i];
+    join_s_num[i] += s_num[i];
   }
 }
 
@@ -754,7 +756,7 @@ static void surfaceGenerateGrid(struct DynamicPaintSurface *surface)
       settings.use_threading = (sData->total_points > 1000);
       settings.userdata_chunk = &grid->grid_bounds;
       settings.userdata_chunk_size = sizeof(grid->grid_bounds);
-      settings.func_finalize = grid_bound_insert_finalize;
+      settings.func_reduce = grid_bound_insert_reduce;
       BLI_task_parallel_range(0, sData->total_points, bData, grid_bound_insert_cb_ex, &settings);
     }
     /* get dimensions */
@@ -815,7 +817,7 @@ static void surfaceGenerateGrid(struct DynamicPaintSurface *surface)
         settings.use_threading = (sData->total_points > 1000);
         settings.userdata_chunk = grid->s_num;
         settings.userdata_chunk_size = sizeof(*grid->s_num) * grid_cells;
-        settings.func_finalize = grid_cell_points_finalize;
+        settings.func_reduce = grid_cell_points_reduce;
         BLI_task_parallel_range(0, sData->total_points, bData, grid_cell_points_cb_ex, &settings);
       }
 
@@ -2015,7 +2017,7 @@ static Mesh *dynamicPaint_Modifier_apply(DynamicPaintModifierData *pmd, Object *
           }
           /* vertex group paint */
           else if (surface->type == MOD_DPAINT_SURFACE_T_WEIGHT) {
-            int defgrp_index = defgroup_name_index(ob, surface->output_name);
+            int defgrp_index = BKE_object_defgroup_name_index(ob, surface->output_name);
             MDeformVert *dvert = CustomData_get_layer(&result->vdata, CD_MDEFORMVERT);
             float *weight = (float *)sData->type_data;
 
@@ -2030,13 +2032,13 @@ static Mesh *dynamicPaint_Modifier_apply(DynamicPaintModifierData *pmd, Object *
               int i;
               for (i = 0; i < sData->total_points; i++) {
                 MDeformVert *dv = &dvert[i];
-                MDeformWeight *def_weight = defvert_find_index(dv, defgrp_index);
+                MDeformWeight *def_weight = BKE_defvert_find_index(dv, defgrp_index);
 
                 /* skip if weight value is 0 and no existing weight is found */
                 if ((def_weight != NULL) || (weight[i] != 0.0f)) {
                   /* if not found, add a weight for it */
                   if (def_weight == NULL) {
-                    def_weight = defvert_verify_index(dv, defgrp_index);
+                    def_weight = BKE_defvert_ensure_index(dv, defgrp_index);
                   }
 
                   /* set weight value */
@@ -2430,6 +2432,8 @@ static float dist_squared_to_looptri_uv_edges(const MLoopTri *mlooptri,
                                               int tri_index,
                                               const float point[2])
 {
+  BLI_assert(tri_index >= 0);
+
   float min_distance = FLT_MAX;
 
   for (int i = 0; i < 3; i++) {
@@ -2705,7 +2709,7 @@ static void dynamic_paint_find_island_border(const DynamicPaintCreateUVSurfaceDa
       /* Check if it's close enough to likely touch the intended triangle. Any triangle
        * becomes thinner than a pixel at its vertices, so robustness requires some margin. */
       const float final_pt[2] = {((final_index % w) + 0.5f) / w, ((final_index / w) + 0.5f) / h};
-      const float threshold = SQUARE(0.7f) / (w * h);
+      const float threshold = square_f(0.7f) / (w * h);
 
       if (dist_squared_to_looptri_uv_edges(
               mlooptri, mloopuv, tempPoints[final_index].tri_index, final_pt) > threshold) {
@@ -4881,7 +4885,7 @@ static void dynamicPaint_prepareAdjacencyData(DynamicPaintSurface *surface, cons
       0, sData->total_points, sData, dynamic_paint_prepare_adjacency_cb, &settings);
 
   /* calculate average values (single thread).
-   * Note: tried to put this in threaded callback (using _finalize feature),
+   * Note: tried to put this in threaded callback (using _reduce feature),
    * but gave ~30% slower result! */
   bData->average_dist = 0.0;
   for (index = 0; index < sData->total_points; index++) {
@@ -6377,8 +6381,8 @@ static int dynamicPaint_doStep(Depsgraph *depsgraph,
   return ret;
 }
 
-/*
- * Calculate a single frame and included subframes for surface
+/**
+ * Calculate a single frame and included sub-frames for surface.
  */
 int dynamicPaint_calculateFrame(DynamicPaintSurface *surface,
                                 struct Depsgraph *depsgraph,

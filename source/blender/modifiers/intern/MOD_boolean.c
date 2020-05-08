@@ -153,7 +153,7 @@ static int bm_face_isect_pair(BMFace *f, void *UNUSED(user_data))
   return BM_elem_flag_test(f, BM_FACE_TAG) ? 1 : 0;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   BooleanModifierData *bmd = (BooleanModifierData *)md;
   Mesh *result = mesh;
@@ -260,7 +260,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
             /* Using original (not evaluated) object here since we are writing to it. */
             /* XXX Pretty sure comment above is fully wrong now with CoW & co ? */
-            BKE_material_remap_object_calc(ctx->object, other, material_remap);
+            BKE_object_material_remap_calc(ctx->object, other, material_remap);
 
             BMFace *efa;
             i = 0;
@@ -351,7 +351,7 @@ ModifierTypeInfo modifierType_Boolean = {
     /* structName */ "BooleanModifierData",
     /* structSize */ sizeof(BooleanModifierData),
     /* type */ eModifierTypeType_Nonconstructive,
-    /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_UsesPointCache,
+    /* flags */ eModifierTypeFlag_AcceptsMesh,
 
     /* copyData */ modifier_copyData_generic,
 
@@ -359,7 +359,10 @@ ModifierTypeInfo modifierType_Boolean = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

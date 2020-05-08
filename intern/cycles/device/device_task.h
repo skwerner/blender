@@ -62,9 +62,22 @@ class DenoiseParams {
   }
 };
 
+class AdaptiveSampling {
+ public:
+  AdaptiveSampling();
+
+  int align_static_samples(int samples) const;
+  int align_dynamic_samples(int offset, int samples) const;
+  bool need_filter(int sample) const;
+
+  bool use;
+  int adaptive_step;
+  int min_samples;
+};
+
 class DeviceTask : public Task {
  public:
-  typedef enum { RENDER, DENOISE, DENOISE_BUFFER, FILM_CONVERT, SHADER } Type;
+  typedef enum { RENDER, FILM_CONVERT, SHADER, DENOISE_BUFFER } Type;
   Type type;
 
   int x, y, w, h;
@@ -90,7 +103,7 @@ class DeviceTask : public Task {
 
   void update_progress(RenderTile *rtile, int pixel_samples = -1);
 
-  function<bool(Device *device, RenderTile &)> acquire_tile;
+  function<bool(Device *device, RenderTile &, uint)> acquire_tile;
   function<void(long, int)> update_progress_sample;
   function<void(RenderTile &)> update_tile_sample;
   function<void(RenderTile &)> release_tile;
@@ -98,6 +111,7 @@ class DeviceTask : public Task {
   function<void(RenderTile *, Device *)> map_neighbor_tiles;
   function<void(RenderTile *, Device *)> unmap_neighbor_tiles;
 
+  uint tile_types;
   DenoiseParams denoising;
   bool denoising_from_render;
   vector<int> denoising_frames;
@@ -114,6 +128,7 @@ class DeviceTask : public Task {
 
   bool need_finish_queue;
   bool integrator_branched;
+  AdaptiveSampling adaptive_sampling;
 
  protected:
   double last_update_time;

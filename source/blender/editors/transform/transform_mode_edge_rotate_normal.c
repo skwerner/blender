@@ -25,8 +25,8 @@
 
 #include "BLI_math.h"
 
-#include "BKE_editmesh.h"
 #include "BKE_context.h"
+#include "BKE_editmesh.h"
 #include "BKE_mesh.h"
 #include "BKE_unit.h"
 
@@ -35,8 +35,8 @@
 #include "UI_interface.h"
 
 #include "transform.h"
-#include "transform_snap.h"
 #include "transform_mode.h"
+#include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
 /* Transform (Normal Rotation) */
@@ -81,7 +81,7 @@ static void applyNormalRotation(TransInfo *t, const int UNUSED(mval[2]))
   char str[UI_MAX_DRAW_STR];
 
   float axis_final[3];
-  copy_v3_v3(axis_final, t->orient_matrix[t->orient_axis]);
+  copy_v3_v3(axis_final, t->spacemtx[t->orient_axis]);
 
   if ((t->con.mode & CON_APPLY) && t->con.applyRot) {
     t->con.applyRot(t, NULL, NULL, axis_final, NULL);
@@ -121,7 +121,7 @@ static void applyNormalRotation(TransInfo *t, const int UNUSED(mval[2]))
 
   recalcData(t);
 
-  ED_area_status_text(t->sa, str);
+  ED_area_status_text(t->area, str);
 }
 
 void initNormalRotation(TransInfo *t)

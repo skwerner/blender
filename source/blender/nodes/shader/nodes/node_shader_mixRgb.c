@@ -25,14 +25,14 @@
 
 /* **************** MIX RGB ******************** */
 static bNodeSocketTemplate sh_node_mix_rgb_in[] = {
-    {SOCK_FLOAT, 1, N_("Fac"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_RGBA, 1, N_("Color1"), 0.5f, 0.5f, 0.5f, 1.0f},
-    {SOCK_RGBA, 1, N_("Color2"), 0.5f, 0.5f, 0.5f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Fac"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_RGBA, N_("Color1"), 0.5f, 0.5f, 0.5f, 1.0f},
+    {SOCK_RGBA, N_("Color2"), 0.5f, 0.5f, 0.5f, 1.0f},
+    {-1, ""},
 };
 static bNodeSocketTemplate sh_node_mix_rgb_out[] = {
-    {SOCK_RGBA, 0, N_("Color")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color")},
+    {-1, ""},
 };
 
 static void node_shader_exec_mix_rgb(void *UNUSED(data),
@@ -107,7 +107,7 @@ void register_node_type_sh_mix_rgb(void)
 {
   static bNodeType ntype;
 
-  sh_node_type_base(&ntype, SH_NODE_MIX_RGB, "Mix", NODE_CLASS_OP_COLOR, 0);
+  sh_fn_node_type_base(&ntype, SH_NODE_MIX_RGB, "Mix", NODE_CLASS_OP_COLOR, 0);
   node_type_socket_templates(&ntype, sh_node_mix_rgb_in, sh_node_mix_rgb_out);
   node_type_label(&ntype, node_blend_label);
   node_type_exec(&ntype, NULL, NULL, node_shader_exec_mix_rgb);

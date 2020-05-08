@@ -106,8 +106,6 @@ CCL_NAMESPACE_BEGIN
 #ifndef __KERNEL_AO_PREVIEW__
 #  define __SVM__
 #  define __EMISSION__
-#  define __TEXTURES__
-#  define __EXTRA_NODES__
 #  define __HOLDOUT__
 #  define __MULTI_CLOSURE__
 #  define __TRANSPARENT_SHADOWS__
@@ -267,6 +265,7 @@ enum PathTraceDimension {
 enum SamplingPattern {
   SAMPLING_PATTERN_SOBOL = 0,
   SAMPLING_PATTERN_CMJ = 1,
+  SAMPLING_PATTERN_PMJ = 2,
 
   SAMPLING_NUM_PATTERNS,
 };
@@ -373,6 +372,8 @@ typedef enum PassType {
   PASS_CRYPTOMATTE,
   PASS_AOV_COLOR,
   PASS_AOV_VALUE,
+  PASS_ADAPTIVE_AUX_BUFFER,
+  PASS_SAMPLE_COUNT,
   PASS_CATEGORY_MAIN_END = 31,
 
   PASS_MIST = 32,
@@ -879,13 +880,13 @@ enum ShaderDataFlag {
   SD_HAS_DISPLACEMENT = (1 << 26),
   /* Has constant emission (value stored in __shaders) */
   SD_HAS_CONSTANT_EMISSION = (1 << 27),
-  /* Needs to access attributes */
-  SD_NEED_ATTRIBUTES = (1 << 28),
+  /* Needs to access attributes for volume rendering */
+  SD_NEED_VOLUME_ATTRIBUTES = (1 << 28),
 
   SD_SHADER_FLAGS = (SD_USE_MIS | SD_HAS_TRANSPARENT_SHADOW | SD_HAS_VOLUME | SD_HAS_ONLY_VOLUME |
                      SD_HETEROGENEOUS_VOLUME | SD_HAS_BSSRDF_BUMP | SD_VOLUME_EQUIANGULAR |
                      SD_VOLUME_MIS | SD_VOLUME_CUBIC | SD_HAS_BUMP | SD_HAS_DISPLACEMENT |
-                     SD_HAS_CONSTANT_EMISSION | SD_NEED_ATTRIBUTES)
+                     SD_HAS_CONSTANT_EMISSION | SD_NEED_VOLUME_ATTRIBUTES)
 };
 
 /* Object flags. */
@@ -1222,6 +1223,9 @@ typedef struct KernelFilm {
   int cryptomatte_depth;
   int pass_cryptomatte;
 
+  int pass_adaptive_aux_buffer;
+  int pass_sample_count;
+
   int pass_mist;
   float mist_start;
   float mist_inv_depth;
@@ -1233,7 +1237,9 @@ typedef struct KernelFilm {
 
   int pass_aov_color;
   int pass_aov_value;
-  int pad1;
+  int pass_aov_color_num;
+  int pass_aov_value_num;
+  int pad1, pad2, pad3;
 
   /* XYZ to rendering color space transform. float4 instead of float3 to
    * ensure consistent padding/alignment across devices. */
@@ -1255,6 +1261,8 @@ typedef struct KernelFilm {
   int display_divide_pass_stride;
   int use_display_exposure;
   int use_display_pass_alpha;
+
+  int pad4, pad5, pad6;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 
@@ -1262,6 +1270,7 @@ typedef struct KernelBackground {
   /* only shader index */
   int surface_shader;
   int volume_shader;
+  float volume_step_size;
   int transparent;
   float transparent_roughness_squared_threshold;
 
@@ -1269,7 +1278,6 @@ typedef struct KernelBackground {
   float ao_factor;
   float ao_distance;
   float ao_bounces_factor;
-  float ao_pad;
 } KernelBackground;
 static_assert_align(KernelBackground, 16);
 
@@ -1336,11 +1344,15 @@ typedef struct KernelIntegrator {
   /* sampler */
   int sampling_pattern;
   int aa_samples;
+  int adaptive_min_samples;
+  int adaptive_step;
+  int adaptive_stop_per_sample;
+  float adaptive_threshold;
 
   /* volume render */
   int use_volumes;
   int volume_max_steps;
-  float volume_step_size;
+  float volume_step_rate;
   int volume_samples;
 
   int start_sample;
@@ -1661,11 +1673,15 @@ typedef struct WorkTile {
   uint start_sample;
   uint num_samples;
 
-  uint offset;
+  int offset;
   uint stride;
 
   ccl_global float *buffer;
 } WorkTile;
+
+/* Precoumputed sample table sizes for PMJ02 sampler. */
+#define NUM_PMJ_SAMPLES 64 * 64
+#define NUM_PMJ_PATTERNS 48
 
 CCL_NAMESPACE_END
 

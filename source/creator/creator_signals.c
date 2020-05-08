@@ -31,24 +31,24 @@
 #  endif
 
 #  ifdef WIN32
-#    include <windows.h>
 #    include <float.h>
+#    include <windows.h>
 #  endif
 
+#  include <errno.h>
 #  include <stdlib.h>
 #  include <string.h>
-#  include <errno.h>
 
 #  include "BLI_sys_types.h"
 
 #  ifdef WIN32
 #    include "BLI_winstuff.h"
 #  endif
-#  include "BLI_utildefines.h"
-#  include "BLI_string.h"
-#  include "BLI_path_util.h"
 #  include "BLI_fileops.h"
+#  include "BLI_path_util.h"
+#  include "BLI_string.h"
 #  include "BLI_system.h"
+#  include "BLI_utildefines.h"
 #  include BLI_SYSTEM_PID_H
 
 #  include "BKE_appdir.h" /* BKE_tempdir_base */
@@ -114,7 +114,7 @@ static void sig_handle_crash(int signum)
       char fname[FILE_MAX];
 
       if (!(G_MAIN && G_MAIN->name[0])) {
-        BLI_make_file_string("/", fname, BKE_tempdir_base(), "crash.blend");
+        BLI_join_dirfile(fname, sizeof(fname), BKE_tempdir_base(), "crash.blend");
       }
       else {
         BLI_strncpy(fname, G_MAIN->name, sizeof(fname));
@@ -190,97 +190,25 @@ static void sig_handle_crash(int signum)
 }
 
 #  ifdef WIN32
-LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS *ExceptionInfo)
+extern LONG WINAPI windows_exception_handler(EXCEPTION_POINTERS *ExceptionInfo)
 {
-  switch (ExceptionInfo->ExceptionRecord->ExceptionCode) {
-    case EXCEPTION_ACCESS_VIOLATION:
-      fputs("Error   : EXCEPTION_ACCESS_VIOLATION\n", stderr);
-      break;
-    case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
-      fputs("Error   : EXCEPTION_ARRAY_BOUNDS_EXCEEDED\n", stderr);
-      break;
-    case EXCEPTION_BREAKPOINT:
-      fputs("Error   : EXCEPTION_BREAKPOINT\n", stderr);
-      break;
-    case EXCEPTION_DATATYPE_MISALIGNMENT:
-      fputs("Error   : EXCEPTION_DATATYPE_MISALIGNMENT\n", stderr);
-      break;
-    case EXCEPTION_FLT_DENORMAL_OPERAND:
-      fputs("Error   : EXCEPTION_FLT_DENORMAL_OPERAND\n", stderr);
-      break;
-    case EXCEPTION_FLT_DIVIDE_BY_ZERO:
-      fputs("Error   : EXCEPTION_FLT_DIVIDE_BY_ZERO\n", stderr);
-      break;
-    case EXCEPTION_FLT_INEXACT_RESULT:
-      fputs("Error   : EXCEPTION_FLT_INEXACT_RESULT\n", stderr);
-      break;
-    case EXCEPTION_FLT_INVALID_OPERATION:
-      fputs("Error   : EXCEPTION_FLT_INVALID_OPERATION\n", stderr);
-      break;
-    case EXCEPTION_FLT_OVERFLOW:
-      fputs("Error   : EXCEPTION_FLT_OVERFLOW\n", stderr);
-      break;
-    case EXCEPTION_FLT_STACK_CHECK:
-      fputs("Error   : EXCEPTION_FLT_STACK_CHECK\n", stderr);
-      break;
-    case EXCEPTION_FLT_UNDERFLOW:
-      fputs("Error   : EXCEPTION_FLT_UNDERFLOW\n", stderr);
-      break;
-    case EXCEPTION_ILLEGAL_INSTRUCTION:
-      fputs("Error   : EXCEPTION_ILLEGAL_INSTRUCTION\n", stderr);
-      break;
-    case EXCEPTION_IN_PAGE_ERROR:
-      fputs("Error   : EXCEPTION_IN_PAGE_ERROR\n", stderr);
-      break;
-    case EXCEPTION_INT_DIVIDE_BY_ZERO:
-      fputs("Error   : EXCEPTION_INT_DIVIDE_BY_ZERO\n", stderr);
-      break;
-    case EXCEPTION_INT_OVERFLOW:
-      fputs("Error   : EXCEPTION_INT_OVERFLOW\n", stderr);
-      break;
-    case EXCEPTION_INVALID_DISPOSITION:
-      fputs("Error   : EXCEPTION_INVALID_DISPOSITION\n", stderr);
-      break;
-    case EXCEPTION_NONCONTINUABLE_EXCEPTION:
-      fputs("Error   : EXCEPTION_NONCONTINUABLE_EXCEPTION\n", stderr);
-      break;
-    case EXCEPTION_PRIV_INSTRUCTION:
-      fputs("Error   : EXCEPTION_PRIV_INSTRUCTION\n", stderr);
-      break;
-    case EXCEPTION_SINGLE_STEP:
-      fputs("Error   : EXCEPTION_SINGLE_STEP\n", stderr);
-      break;
-    case EXCEPTION_STACK_OVERFLOW:
-      fputs("Error   : EXCEPTION_STACK_OVERFLOW\n", stderr);
-      break;
-    default:
-      fputs("Error   : Unrecognized Exception\n", stderr);
-      break;
-  }
-
-  fflush(stderr);
-
-  /* If this is a stack overflow then we can't walk the stack, so just show
+  /* If this is a stack overflow then we can't walk the stack, so just try to show
    * where the error happened */
-  if (EXCEPTION_STACK_OVERFLOW != ExceptionInfo->ExceptionRecord->ExceptionCode) {
+  if (ExceptionInfo->ExceptionRecord->ExceptionCode == EXCEPTION_STACK_OVERFLOW) {
     HMODULE mod;
     CHAR modulename[MAX_PATH];
     LPVOID address = ExceptionInfo->ExceptionRecord->ExceptionAddress;
-
+    fprintf(stderr, "Error   : EXCEPTION_STACK_OVERFLOW\n");
     fprintf(stderr, "Address : 0x%p\n", address);
     if (GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, address, &mod)) {
       if (GetModuleFileName(mod, modulename, MAX_PATH)) {
         fprintf(stderr, "Module  : %s\n", modulename);
       }
     }
-
-    fflush(stderr);
-
-#    ifdef NDEBUG
-    TerminateProcess(GetCurrentProcess(), SIGSEGV);
-#    else
+  }
+  else {
+    BLI_windows_handle_exception(ExceptionInfo);
     sig_handle_crash(SIGSEGV);
-#    endif
   }
 
   return EXCEPTION_EXECUTE_HANDLER;

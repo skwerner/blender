@@ -24,12 +24,12 @@
  * \ingroup bke
  */
 
-#include <stdlib.h>
-#include <stddef.h>
-#include <string.h>
-#include <stdarg.h>
-#include <math.h>
 #include <float.h>
+#include <math.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -38,26 +38,26 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_listbase.h"
 #include "BLI_linklist.h"
+#include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
+#include "BKE_DerivedMesh.h"
 #include "BKE_appdir.h"
 #include "BKE_editmesh.h"
 #include "BKE_global.h"
-#include "BKE_idcode.h"
+#include "BKE_idtype.h"
 #include "BKE_key.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_multires.h"
 #include "BKE_object.h"
-#include "BKE_DerivedMesh.h"
 
 /* may move these, only for modifier_path_relbase */
 #include "BKE_main.h"
@@ -677,7 +677,7 @@ Object *modifiers_isDeformedByArmature(Object *ob)
     }
   }
 
-  if (amd) { /* if were still here then return the last armature */
+  if (amd) { /* if we're still here then return the last armature */
     return amd->object;
   }
 
@@ -700,7 +700,7 @@ Object *modifiers_isDeformedByMeshDeform(Object *ob)
     }
   }
 
-  if (mdmd) { /* if were still here then return the last armature */
+  if (mdmd) { /* if we're still here then return the last armature */
     return mdmd->object;
   }
 
@@ -726,7 +726,7 @@ Object *modifiers_isDeformedByLattice(Object *ob)
     }
   }
 
-  if (lmd) { /* if were still here then return the last lattice */
+  if (lmd) { /* if we're still here then return the last lattice */
     return lmd->object;
   }
 
@@ -752,7 +752,7 @@ Object *modifiers_isDeformedByCurve(Object *ob)
     }
   }
 
-  if (cmd) { /* if were still here then return the last curve */
+  if (cmd) { /* if we're still here then return the last curve */
     return cmd->object;
   }
 
@@ -945,11 +945,9 @@ void modifier_path_init(char *path, int path_maxlen, const char *name)
   BLI_join_dirfile(path, path_maxlen, G.relbase_valid ? "//" : BKE_tempdir_session(), name);
 }
 
-/* wrapper around ModifierTypeInfo.applyModifier that ensures valid normals */
+/* wrapper around ModifierTypeInfo.modifyMesh that ensures valid normals */
 
-struct Mesh *modwrap_applyModifier(ModifierData *md,
-                                   const ModifierEvalContext *ctx,
-                                   struct Mesh *me)
+struct Mesh *modwrap_modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, struct Mesh *me)
 {
   const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
   BLI_assert(CustomData_has_layer(&me->pdata, CD_NORMAL) == false);
@@ -957,7 +955,7 @@ struct Mesh *modwrap_applyModifier(ModifierData *md,
   if (mti->dependsOnNormals && mti->dependsOnNormals(md)) {
     BKE_mesh_calc_normals(me);
   }
-  return mti->applyModifier(md, ctx, me);
+  return mti->modifyMesh(md, ctx, me);
 }
 
 void modwrap_deformVerts(ModifierData *md,

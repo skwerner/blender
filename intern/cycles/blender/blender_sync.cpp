@@ -16,6 +16,7 @@
 
 #include "render/background.h"
 #include "render/camera.h"
+#include "render/curves.h"
 #include "render/film.h"
 #include "render/graph.h"
 #include "render/integrator.h"
@@ -25,19 +26,18 @@
 #include "render/object.h"
 #include "render/scene.h"
 #include "render/shader.h"
-#include "render/curves.h"
 
 #include "device/device.h"
 
 #include "blender/blender_device.h"
-#include "blender/blender_sync.h"
 #include "blender/blender_session.h"
+#include "blender/blender_sync.h"
 #include "blender/blender_util.h"
 
 #include "util/util_debug.h"
 #include "util/util_foreach.h"
-#include "util/util_opengl.h"
 #include "util/util_hash.h"
+#include "util/util_opengl.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -108,7 +108,7 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
     }
 
     if (dicing_prop_changed) {
-      for (const pair<GeometryKey, Geometry *> &iter : geometry_map.key_to_scene_data()) {
+      for (const pair<const GeometryKey, Geometry *> &iter : geometry_map.key_to_scene_data()) {
         Geometry *geom = iter.second;
         if (geom->type == Geometry::MESH) {
           Mesh *mesh = static_cast<Mesh *>(geom);
@@ -142,7 +142,7 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
       BL::Object b_ob(b_id);
       const bool updated_geometry = b_update->is_updated_geometry();
 
-      if (b_update->is_updated_transform()) {
+      if (b_update->is_updated_transform() || b_update->is_updated_shading()) {
         object_map.set_recalc(b_ob);
         light_map.set_recalc(b_ob);
       }
@@ -177,6 +177,11 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
       if (world_map == b_world.ptr.data) {
         world_recalc = true;
       }
+    }
+    /* Volume */
+    else if (b_id.is_a(&RNA_Volume)) {
+      BL::Volume b_volume(b_id);
+      geometry_map.set_recalc(b_volume);
     }
   }
 
@@ -257,7 +262,8 @@ void BlenderSync::sync_integrator()
   integrator->transparent_max_bounce = get_int(cscene, "transparent_max_bounces");
 
   integrator->volume_max_steps = get_int(cscene, "volume_max_steps");
-  integrator->volume_step_size = get_float(cscene, "volume_step_size");
+  integrator->volume_step_rate = (preview) ? get_float(cscene, "volume_preview_step_rate") :
+                                             get_float(cscene, "volume_step_rate");
 
   integrator->caustics_reflective = get_boolean(cscene, "caustics_reflective");
   integrator->caustics_refractive = get_boolean(cscene, "caustics_refractive");
@@ -296,6 +302,16 @@ void BlenderSync::sync_integrator()
   integrator->sample_all_lights_indirect = get_boolean(cscene, "sample_all_lights_indirect");
   integrator->light_sampling_threshold = get_float(cscene, "light_sampling_threshold");
 
+  if (RNA_boolean_get(&cscene, "use_adaptive_sampling")) {
+    integrator->sampling_pattern = SAMPLING_PATTERN_PMJ;
+    integrator->adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
+    integrator->adaptive_threshold = get_float(cscene, "adaptive_threshold");
+  }
+  else {
+    integrator->adaptive_min_samples = INT_MAX;
+    integrator->adaptive_threshold = 0.0f;
+  }
+
   int diffuse_samples = get_int(cscene, "diffuse_samples");
   int glossy_samples = get_int(cscene, "glossy_samples");
   int transmission_samples = get_int(cscene, "transmission_samples");
@@ -312,6 +328,8 @@ void BlenderSync::sync_integrator()
     integrator->mesh_light_samples = mesh_light_samples * mesh_light_samples;
     integrator->subsurface_samples = subsurface_samples * subsurface_samples;
     integrator->volume_samples = volume_samples * volume_samples;
+    integrator->adaptive_min_samples = min(
+        integrator->adaptive_min_samples * integrator->adaptive_min_samples, INT_MAX);
   }
   else {
     integrator->diffuse_samples = diffuse_samples;
@@ -393,6 +411,7 @@ void BlenderSync::sync_view_layer(BL::SpaceView3D & /*b_v3d*/, BL::ViewLayer &b_
   view_layer.use_background_ao = b_view_layer.use_ao();
   view_layer.use_surfaces = b_view_layer.use_solid();
   view_layer.use_hair = b_view_layer.use_strand();
+  view_layer.use_volumes = b_view_layer.use_volumes();
 
   /* Material override. */
   view_layer.material_override = b_view_layer.material_override();
@@ -484,6 +503,8 @@ PassType BlenderSync::get_pass_type(BL::RenderPass &b_pass)
   MAP_PASS("Debug Ray Bounces", PASS_RAY_BOUNCES);
 #endif
   MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
+  MAP_PASS("AdaptiveAuxBuffer", PASS_ADAPTIVE_AUX_BUFFER);
+  MAP_PASS("Debug Sample Count", PASS_SAMPLE_COUNT);
   if (string_startswith(name, cryptomatte_prefix)) {
     return PASS_CRYPTOMATTE;
   }
@@ -519,7 +540,9 @@ int BlenderSync::get_denoising_pass(BL::RenderPass &b_pass)
   return -1;
 }
 
-vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_view_layer)
+vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
+                                             BL::ViewLayer &b_view_layer,
+                                             bool adaptive_sampling)
 {
   vector<Pass> passes;
 
@@ -595,6 +618,10 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
     b_engine.add_pass("Debug Render Time", 1, "X", b_view_layer.name().c_str());
     Pass::add(PASS_RENDER_TIME, passes, "Debug Render Time");
   }
+  if (get_boolean(crp, "pass_debug_sample_count")) {
+    b_engine.add_pass("Debug Sample Count", 1, "X", b_view_layer.name().c_str());
+    Pass::add(PASS_SAMPLE_COUNT, passes, "Debug Sample Count");
+  }
   if (get_boolean(crp, "use_pass_volume_direct")) {
     b_engine.add_pass("VolumeDir", 3, "RGB", b_view_layer.name().c_str());
     Pass::add(PASS_VOLUME_DIRECT, passes, "VolumeDir");
@@ -606,11 +633,11 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
 
   /* Cryptomatte stores two ID/weight pairs per RGBA layer.
    * User facing parameter is the number of pairs. */
-  int crypto_depth = min(16, get_int(crp, "pass_crypto_depth")) / 2;
+  int crypto_depth = divide_up(min(16, get_int(crp, "pass_crypto_depth")), 2);
   scene->film->cryptomatte_depth = crypto_depth;
   scene->film->cryptomatte_passes = CRYPT_NONE;
   if (get_boolean(crp, "use_pass_crypto_object")) {
-    for (int i = 0; i < crypto_depth; ++i) {
+    for (int i = 0; i < crypto_depth; i++) {
       string passname = cryptomatte_prefix + string_printf("Object%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
       Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
@@ -619,7 +646,7 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
                                                         CRYPT_OBJECT);
   }
   if (get_boolean(crp, "use_pass_crypto_material")) {
-    for (int i = 0; i < crypto_depth; ++i) {
+    for (int i = 0; i < crypto_depth; i++) {
       string passname = cryptomatte_prefix + string_printf("Material%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
       Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
@@ -628,7 +655,7 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
                                                         CRYPT_MATERIAL);
   }
   if (get_boolean(crp, "use_pass_crypto_asset")) {
-    for (int i = 0; i < crypto_depth; ++i) {
+    for (int i = 0; i < crypto_depth; i++) {
       string passname = cryptomatte_prefix + string_printf("Asset%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
       Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
@@ -639,6 +666,13 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLa
   if (get_boolean(crp, "pass_crypto_accurate") && scene->film->cryptomatte_passes != CRYPT_NONE) {
     scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
                                                         CRYPT_ACCURATE);
+  }
+
+  if (adaptive_sampling) {
+    Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes);
+    if (!get_boolean(crp, "pass_debug_sample_count")) {
+      Pass::add(PASS_SAMPLE_COUNT, passes);
+    }
   }
 
   RNA_BEGIN (&crp, b_aov, "aovs") {
@@ -879,6 +913,8 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
 
   params.use_profiling = params.device.has_profiling && !b_engine.is_preview() && background &&
                          BlenderSession::print_render_stats;
+
+  params.adaptive_sampling = RNA_boolean_get(&cscene, "use_adaptive_sampling");
 
   return params;
 }

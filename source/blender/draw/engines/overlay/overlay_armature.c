@@ -20,15 +20,15 @@
  * \ingroup draw_engine
  */
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 #include "DNA_armature_types.h"
 #include "DNA_constraint_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_view3d_types.h"
-#include "DNA_object_types.h"
 
 #include "DRW_render.h"
 
@@ -413,10 +413,11 @@ static void drw_shgroup_bone_envelope_distance(ArmatureDrawContext *ctx,
     mul_m4_v4(ctx->ob->obmat, tail_sph);
     mul_m4_v4(ctx->ob->obmat, xaxis);
     sub_v3_v3(xaxis, head_sph);
-    head_sph[3] = *radius_head;
-    head_sph[3] += *distance;
-    tail_sph[3] = *radius_tail;
-    tail_sph[3] += *distance;
+    float obscale = mat4_to_scale(ctx->ob->obmat);
+    head_sph[3] = *radius_head * obscale;
+    head_sph[3] += *distance * obscale;
+    tail_sph[3] = *radius_tail * obscale;
+    tail_sph[3] += *distance * obscale;
     DRW_buffer_add_entry(ctx->envelope_distance, head_sph, tail_sph, xaxis);
   }
 }
@@ -438,8 +439,9 @@ static void drw_shgroup_bone_envelope(ArmatureDrawContext *ctx,
   mul_m4_v4(ctx->ob->obmat, head_sph);
   mul_m4_v4(ctx->ob->obmat, tail_sph);
   mul_m4_v4(ctx->ob->obmat, xaxis);
-  head_sph[3] = *radius_head;
-  tail_sph[3] = *radius_tail;
+  float obscale = mat4_to_scale(ctx->ob->obmat);
+  head_sph[3] = *radius_head * obscale;
+  tail_sph[3] = *radius_tail * obscale;
 
   if (head_sph[3] < 0.0f || tail_sph[3] < 0.0f) {
     BoneInstanceData inst_data;
@@ -1282,9 +1284,8 @@ static void draw_axes(ArmatureDrawContext *ctx,
   final_col[3] = (ctx->const_color) ? 1.0 : (BONE_FLAG(eBone, pchan) & BONE_SELECTED) ? 0.1 : 0.65;
 
   if (pchan && pchan->custom && !(arm->flag & ARM_NO_CUSTOM)) {
-    /** Special case: Custom bones can have different scale than the bone.
-     * Recompute display matrix without the custom scalling applied. (T65640)
-     **/
+    /* Special case: Custom bones can have different scale than the bone.
+     * Recompute display matrix without the custom scaling applied. (T65640). */
     float axis_mat[4][4];
     float length = pchan->bone->length;
     copy_m4_m4(axis_mat, pchan->custom_tx ? pchan->custom_tx->pose_mat : pchan->pose_mat);
@@ -1340,8 +1341,8 @@ static void draw_points(ArmatureDrawContext *ctx,
   bone_hint_color_shade(col_hint_tail, (ctx->const_color) ? col_solid_tail : col_wire_tail);
 
   /* Draw root point if we are not connected to our parent */
-  if (!(eBone ? (eBone->parent && (eBone->flag & BONE_CONNECTED)) :
-                (pchan->bone->parent && (pchan->bone->flag & BONE_CONNECTED)))) {
+  if (!(eBone ? (eBone->parent && (boneflag & BONE_CONNECTED)) :
+                (pchan->bone->parent && (boneflag & BONE_CONNECTED)))) {
     if (select_id != -1) {
       DRW_select_load_id(select_id | BONESEL_ROOT);
     }
@@ -1521,8 +1522,8 @@ static void draw_bone_line(ArmatureDrawContext *ctx,
     }
 
     /* Draw root point if we are not connected to our parent. */
-    if (!(eBone ? (eBone->parent && (eBone->flag & BONE_CONNECTED)) :
-                  (pchan->bone->parent && (pchan->bone->flag & BONE_CONNECTED)))) {
+    if (!(eBone ? (eBone->parent && (boneflag & BONE_CONNECTED)) :
+                  (pchan->bone->parent && (boneflag & BONE_CONNECTED)))) {
 
       if (eBone) {
         col_head = (eBone->flag & BONE_ROOTSEL) ? G_draw.block.colorVertexSelect : col_bone;

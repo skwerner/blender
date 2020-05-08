@@ -57,6 +57,7 @@ if(EXISTS ${LIBDIR})
   set(BOOST_ROOT ${LIBDIR}/boost)
   set(BOOST_LIBRARYDIR ${LIBDIR}/boost/lib)
   set(Boost_NO_SYSTEM_PATHS ON)
+  set(OPENEXR_ROOT_DIR ${LIBDIR}/openexr)
 endif()
 
 if(WITH_STATIC_LIBS)
@@ -195,8 +196,14 @@ endif()
 if(WITH_OPENCOLLADA)
   find_package_wrapper(OpenCOLLADA)
   if(OPENCOLLADA_FOUND)
+    if(WITH_STATIC_LIBS)
+      # PCRE is bundled with OpenCollada without headers, so can't use
+      # find_package reliably to detect it.
+      set(PCRE_LIBRARIES ${LIBDIR}/opencollada/lib/libpcre.a)
+    else()
+      find_package_wrapper(PCRE)
+    endif()
     find_package_wrapper(XML2)
-    find_package_wrapper(PCRE)
   else()
     set(WITH_OPENCOLLADA OFF)
   endif()
@@ -405,13 +412,6 @@ if(WITH_LLVM)
   endif()
 endif()
 
-if(WITH_LLVM OR WITH_SDL_DYNLOAD)
-  # Fix for conflict with Mesa llvmpipe
-  set(PLATFORM_LINKFLAGS
-    "${PLATFORM_LINKFLAGS} -Wl,--version-script='${CMAKE_SOURCE_DIR}/source/creator/blender.map'"
-  )
-endif()
-
 if(WITH_OPENSUBDIV)
   find_package_wrapper(OpenSubdiv)
 
@@ -426,6 +426,14 @@ endif()
 
 if(WITH_TBB)
   find_package_wrapper(TBB)
+endif()
+
+if(WITH_XR_OPENXR)
+  find_package(XR-OpenXR-SDK)
+  if(NOT XR_OPENXR_SDK_FOUND)
+    message(WARNING "OpenXR-SDK not found, disabling WITH_XR_OPENXR")
+    set(WITH_XR_OPENXR OFF)
+  endif()
 endif()
 
 if(EXISTS ${LIBDIR})
@@ -497,7 +505,27 @@ if(WITH_SYSTEM_AUDASPACE)
   endif()
 endif()
 
-if(WITH_X11)
+if(WITH_GHOST_WAYLAND)
+  find_package(PkgConfig)
+  pkg_check_modules(wayland-client REQUIRED wayland-client>=1.12)
+  pkg_check_modules(wayland-egl REQUIRED wayland-egl)
+  pkg_check_modules(wayland-scanner REQUIRED wayland-scanner)
+  pkg_check_modules(xkbcommon REQUIRED xkbcommon)
+  pkg_check_modules(wayland-cursor REQUIRED wayland-cursor)
+
+  set(WITH_GL_EGL ON)
+
+  if(WITH_GHOST_WAYLAND)
+    list(APPEND PLATFORM_LINKLIBS
+      ${wayland-client_LIBRARIES}
+      ${wayland-egl_LIBRARIES}
+      ${xkbcommon_LIBRARIES}
+      ${wayland-cursor_LIBRARIES}
+    )
+  endif()
+endif()
+
+if(WITH_GHOST_X11)
   find_package(X11 REQUIRED)
 
   find_path(X11_XF86keysym_INCLUDE_PATH X11/XF86keysym.h ${X11_INC_SEARCH_PATH})
@@ -568,6 +596,19 @@ if(CMAKE_COMPILER_IS_GNUCC)
     unset(LD_VERSION)
   endif()
 
+  if(WITH_LINKER_LLD)
+    execute_process(
+      COMMAND ${CMAKE_C_COMPILER} -fuse-ld=lld -Wl,--version
+      ERROR_QUIET OUTPUT_VARIABLE LD_VERSION)
+    if("${LD_VERSION}" MATCHES "LLD")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fuse-ld=lld")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=lld")
+    else()
+      message(STATUS "LLD linker isn't available, using the default system linker.")
+    endif()
+    unset(LD_VERSION)
+  endif()
+
 # CLang is the same as GCC for now.
 elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
   set(PLATFORM_CFLAGS "-pipe -fPIC -funsigned-char -fno-strict-aliasing")
@@ -592,4 +633,17 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
   # set(PLATFORM_CFLAGS "${PLATFORM_CFLAGS} -diag-enable sc3")
   set(PLATFORM_CFLAGS "-pipe -fPIC -funsigned-char -fno-strict-aliasing")
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -static-intel")
+endif()
+
+# Avoid conflicts with Mesa llvmpipe, Luxrender, and other plug-ins that may
+# use the same libraries as Blender with a different version or build options.
+set(PLATFORM_LINKFLAGS
+  "${PLATFORM_LINKFLAGS} -Wl,--version-script='${CMAKE_SOURCE_DIR}/source/creator/blender.map'"
+)
+
+# Don't use position independent executable for portable install since file
+# browsers can't properly detect blender as an executable then. Still enabled
+# for non-portable installs as typically used by Linux distributions.
+if(WITH_INSTALL_PORTABLE)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
 endif()

@@ -29,8 +29,8 @@
 
 #include "DNA_curve_types.h"
 #include "DNA_mesh_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 #include "DNA_vfont_types.h"
 
 #include "BLI_bitmap.h"
@@ -42,18 +42,18 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_anim_path.h"
+#include "BKE_curve.h"
 #include "BKE_displist.h"
-#include "BKE_object.h"
+#include "BKE_font.h"
+#include "BKE_key.h"
+#include "BKE_lattice.h"
 #include "BKE_lib_id.h"
 #include "BKE_mball.h"
 #include "BKE_mball_tessellate.h"
 #include "BKE_mesh.h"
-#include "BKE_curve.h"
-#include "BKE_key.h"
-#include "BKE_anim.h"
-#include "BKE_font.h"
-#include "BKE_lattice.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 
 #include "BLI_sys_types.h"  // for intptr_t support
 
@@ -848,7 +848,8 @@ static ModifierData *curve_get_tessellate_point(Scene *scene,
   return pretessellatePoint;
 }
 
-static void curve_calc_modifiers_pre(
+/* Return true if any modifier was applied. */
+static bool curve_calc_modifiers_pre(
     Depsgraph *depsgraph, Scene *scene, Object *ob, ListBase *nurb, const bool for_render)
 {
   VirtualModifierData virtualModifierData;
@@ -857,25 +858,26 @@ static void curve_calc_modifiers_pre(
   Curve *cu = ob->data;
   int numElems = 0, numVerts = 0;
   const bool editmode = (!for_render && (cu->editnurb || cu->editfont));
-  ModifierApplyFlag app_flag = 0;
+  ModifierApplyFlag apply_flag = 0;
   float(*deformedVerts)[3] = NULL;
   float *keyVerts = NULL;
   int required_mode;
+  bool modified = false;
 
   modifiers_clearErrors(ob);
 
   if (editmode) {
-    app_flag |= MOD_APPLY_USECACHE;
+    apply_flag |= MOD_APPLY_USECACHE;
   }
   if (for_render) {
-    app_flag |= MOD_APPLY_RENDER;
+    apply_flag |= MOD_APPLY_RENDER;
     required_mode = eModifierMode_Render;
   }
   else {
     required_mode = eModifierMode_Realtime;
   }
 
-  const ModifierEvalContext mectx = {depsgraph, ob, app_flag};
+  const ModifierEvalContext mectx = {depsgraph, ob, apply_flag};
 
   pretessellatePoint = curve_get_tessellate_point(scene, ob, for_render, editmode);
 
@@ -913,6 +915,7 @@ static void curve_calc_modifiers_pre(
       }
 
       mti->deformVerts(md, &mectx, NULL, deformedVerts, numVerts);
+      modified = true;
 
       if (md == pretessellatePoint) {
         break;
@@ -931,6 +934,7 @@ static void curve_calc_modifiers_pre(
   if (keyVerts) {
     MEM_freeN(keyVerts);
   }
+  return modified;
 }
 
 static float (*displist_vert_coords_alloc(ListBase *dispbase, int *r_vert_len))[3]
@@ -974,7 +978,8 @@ static void curve_calc_modifiers_post(Depsgraph *depsgraph,
                                       ListBase *nurb,
                                       ListBase *dispbase,
                                       Mesh **r_final,
-                                      const bool for_render)
+                                      const bool for_render,
+                                      const bool force_mesh_conversion)
 {
   VirtualModifierData virtualModifierData;
   ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
@@ -985,10 +990,10 @@ static void curve_calc_modifiers_post(Depsgraph *depsgraph,
   Mesh *modified = NULL, *mesh_applied;
   float(*vertCos)[3] = NULL;
   int useCache = !for_render;
-  ModifierApplyFlag app_flag = 0;
+  ModifierApplyFlag apply_flag = 0;
 
   if (for_render) {
-    app_flag |= MOD_APPLY_RENDER;
+    apply_flag |= MOD_APPLY_RENDER;
     required_mode = eModifierMode_Render;
   }
   else {
@@ -996,9 +1001,9 @@ static void curve_calc_modifiers_post(Depsgraph *depsgraph,
   }
 
   const ModifierEvalContext mectx_deform = {
-      depsgraph, ob, editmode ? app_flag | MOD_APPLY_USECACHE : app_flag};
+      depsgraph, ob, editmode ? apply_flag | MOD_APPLY_USECACHE : apply_flag};
   const ModifierEvalContext mectx_apply = {
-      depsgraph, ob, useCache ? app_flag | MOD_APPLY_USECACHE : app_flag};
+      depsgraph, ob, useCache ? apply_flag | MOD_APPLY_USECACHE : apply_flag};
 
   pretessellatePoint = curve_get_tessellate_point(scene, ob, for_render, editmode);
 
@@ -1095,7 +1100,7 @@ static void curve_calc_modifiers_post(Depsgraph *depsgraph,
       if (need_normal) {
         BKE_mesh_ensure_normals(modified);
       }
-      mesh_applied = mti->applyModifier(md, &mectx_apply, modified);
+      mesh_applied = mti->modifyMesh(md, &mectx_apply, modified);
 
       if (mesh_applied) {
         /* Modifier returned a new derived mesh */
@@ -1128,6 +1133,22 @@ static void curve_calc_modifiers_post(Depsgraph *depsgraph,
   }
 
   if (r_final) {
+    if (force_mesh_conversion && !modified) {
+      /* XXX 2.8 : This is a workaround for by some deeper technical depts:
+       * - DRW Batch cache is stored inside the ob->data.
+       * - Curve data is not COWed for instances that use different modifiers.
+       * This can causes the modifiers to be applied on all user of the same datablock (see T71055)
+       *
+       * The easy workaround is to force to generate a Mesh that will be used for display data
+       * since a Mesh output is already used for generative modifiers.
+       * However it does not fix problems with actual edit data still being shared.
+       *
+       * The right solution would be to COW the Curve data block at the input of the modifer stack
+       * just like what the mesh modifier does.
+       * */
+      modified = BKE_mesh_new_nomain_from_curve_displist(ob, dispbase);
+    }
+
     if (modified) {
 
       /* XXX2.8(Sybren): make sure the face normals are recalculated as well */
@@ -1202,6 +1223,7 @@ void BKE_displist_make_surf(Depsgraph *depsgraph,
   DispList *dl;
   float *data;
   int len;
+  bool force_mesh_conversion = false;
 
   if (!for_render && cu->editnurb) {
     BKE_nurbList_duplicate(&nubase, BKE_curve_editNurbs_get(cu));
@@ -1211,7 +1233,7 @@ void BKE_displist_make_surf(Depsgraph *depsgraph,
   }
 
   if (!for_orco) {
-    curve_calc_modifiers_pre(depsgraph, scene, ob, &nubase, for_render);
+    force_mesh_conversion = curve_calc_modifiers_pre(depsgraph, scene, ob, &nubase, for_render);
   }
 
   for (nu = nubase.first; nu; nu = nu->next) {
@@ -1289,7 +1311,8 @@ void BKE_displist_make_surf(Depsgraph *depsgraph,
 
   if (!for_orco) {
     BKE_nurbList_duplicate(&ob->runtime.curve_cache->deformed_nurbs, &nubase);
-    curve_calc_modifiers_post(depsgraph, scene, ob, &nubase, dispbase, r_final, for_render);
+    curve_calc_modifiers_post(
+        depsgraph, scene, ob, &nubase, dispbase, r_final, for_render, force_mesh_conversion);
   }
 
   BKE_nurbList_free(&nubase);
@@ -1537,6 +1560,7 @@ static void do_makeDispListCurveTypes(Depsgraph *depsgraph,
   else if (ELEM(ob->type, OB_CURVE, OB_FONT)) {
     ListBase dlbev;
     ListBase nubase = {NULL, NULL};
+    bool force_mesh_conversion = false;
 
     BKE_curve_bevelList_free(&ob->runtime.curve_cache->bev);
 
@@ -1559,7 +1583,7 @@ static void do_makeDispListCurveTypes(Depsgraph *depsgraph,
     }
 
     if (!for_orco) {
-      curve_calc_modifiers_pre(depsgraph, scene, ob, &nubase, for_render);
+      force_mesh_conversion = curve_calc_modifiers_pre(depsgraph, scene, ob, &nubase, for_render);
     }
 
     BKE_curve_bevelList_make(ob, &nubase, for_render);
@@ -1769,7 +1793,8 @@ static void do_makeDispListCurveTypes(Depsgraph *depsgraph,
 
     if (!for_orco) {
       BKE_nurbList_duplicate(&ob->runtime.curve_cache->deformed_nurbs, &nubase);
-      curve_calc_modifiers_post(depsgraph, scene, ob, &nubase, dispbase, r_final, for_render);
+      curve_calc_modifiers_post(
+          depsgraph, scene, ob, &nubase, dispbase, r_final, for_render, force_mesh_conversion);
     }
 
     if (cu->flag & CU_DEFORM_FILL && !ob->runtime.data_eval) {

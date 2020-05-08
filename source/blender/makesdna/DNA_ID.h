@@ -31,6 +31,8 @@
 extern "C" {
 #endif
 
+#include "DNA_defs.h"
+
 struct FileData;
 struct GHash;
 struct GPUTexture;
@@ -104,6 +106,18 @@ enum {
   IDP_NUMTYPES = 10,
 };
 
+/** Used by some IDP utils, keep values in sync with type enum above. */
+enum {
+  IDP_TYPE_FILTER_STRING = 1 << 0,
+  IDP_TYPE_FILTER_INT = 1 << 1,
+  IDP_TYPE_FILTER_FLOAT = 1 << 2,
+  IDP_TYPE_FILTER_ARRAY = 1 << 5,
+  IDP_TYPE_FILTER_GROUP = 1 << 6,
+  IDP_TYPE_FILTER_ID = 1 << 7,
+  IDP_TYPE_FILTER_DOUBLE = 1 << 8,
+  IDP_TYPE_FILTER_IDPARRAY = 1 << 9,
+};
+
 /*->subtype */
 
 /* IDP_STRING */
@@ -133,7 +147,10 @@ typedef struct IDOverrideLibraryPropertyOperation {
   /* Type of override. */
   short operation;
   short flag;
-  char _pad0[4];
+
+  /** Runtime, tags are common to both IDOverrideProperty and IDOverridePropertyOperation. */
+  short tag;
+  char _pad0[2];
 
   /* Sub-item references, if needed (for arrays or collections only).
    * We need both reference and local values to allow e.g. insertion into collections
@@ -187,7 +204,17 @@ typedef struct IDOverrideLibraryProperty {
 
   /** List of overriding operations (IDOverridePropertyOperation) applied to this property. */
   ListBase operations;
+
+  /** Runtime, tags are common to both IDOverrideProperty and IDOverridePropertyOperation. */
+  short tag;
+  char _pad0[6];
 } IDOverrideLibraryProperty;
+
+/* IDOverrideProperty->tag and IDOverridePropertyOperation->tag. */
+enum {
+  /** This override property (operation) is unused and should be removed by cleanup process. */
+  IDOVERRIDE_LIBRARY_TAG_UNUSED = 1 << 0,
+};
 
 /* We do not need a full struct for that currently, just a GHash. */
 typedef struct GHash IDOverrideLibraryRuntime;
@@ -243,7 +270,24 @@ typedef struct ID {
   int us;
   int icon_id;
   int recalc;
-  char _pad[4];
+  /**
+   * Used by undo code. recalc_after_undo_push contains the changes between the
+   * last undo push and the current state. This is accumulated as IDs are tagged
+   * for update in the depsgraph, and only cleared on undo push.
+   *
+   * recalc_up_to_undo_push is saved to undo memory, and is the value of
+   * recalc_after_undo_push at the time of the undo push. This means it can be
+   * used to find the changes between undo states.
+   */
+  int recalc_up_to_undo_push;
+  int recalc_after_undo_push;
+
+  /**
+   * A session-wide unique identifier for a given ID, that remain the same across potential
+   * re-allocations (e.g. due to undo/redo steps).
+   */
+  unsigned int session_uuid;
+
   IDProperty *properties;
 
   /** Reference linked ID which this one overrides. */
@@ -389,6 +433,10 @@ typedef enum ID_Type {
   ID_CF = MAKE_ID2('C', 'F'),  /* CacheFile */
   ID_WS = MAKE_ID2('W', 'S'),  /* WorkSpace */
   ID_LP = MAKE_ID2('L', 'P'),  /* LightProbe */
+  ID_HA = MAKE_ID2('H', 'A'),  /* Hair */
+  ID_PT = MAKE_ID2('P', 'T'),  /* PointCloud */
+  ID_VO = MAKE_ID2('V', 'O'),  /* Volume */
+  ID_SIM = MAKE_ID2('S', 'I'), /* Simulation */
 } ID_Type;
 
 /* Only used as 'placeholder' in .blend files for directly linked data-blocks. */
@@ -457,16 +505,20 @@ typedef enum ID_Type {
   if ((a) && (a)->id.newid) \
   (a) = (void *)(a)->id.newid
 
-/* id->flag (persitent). */
+/** id->flag (persitent). */
 enum {
-  /* Don't delete the datablock even if unused. */
+  /** Don't delete the datablock even if unused. */
   LIB_FAKEUSER = 1 << 9,
-  /* The datablock structure is a sub-object of a different one.
-   * Direct persistent references are not allowed. */
-  LIB_PRIVATE_DATA = 1 << 10,
-  /* Datablock is from a library and linked indirectly, with LIB_TAG_INDIRECT
+  /**
+   * The data-block is a sub-data of another one.
+   * Direct persistent references are not allowed.
+   */
+  LIB_EMBEDDED_DATA = 1 << 10,
+  /**
+   * Datablock is from a library and linked indirectly, with LIB_TAG_INDIRECT
    * tag set. But the current .blend file also has a weak pointer to it that
-   * we want to restore if possible, and silently drop if it's missing. */
+   * we want to restore if possible, and silently drop if it's missing.
+   */
   LIB_INDIRECT_WEAK_LINK = 1 << 11,
 };
 
@@ -513,9 +565,9 @@ enum {
   /* RESET_NEVER tag data-block as needing an auto-override execution, if enabled. */
   LIB_TAG_OVERRIDE_LIBRARY_AUTOREFRESH = 1 << 17,
 
-  /* tag data-block has having an extra user. */
+  /* tag data-block as having an extra user. */
   LIB_TAG_EXTRAUSER = 1 << 2,
-  /* tag data-block has having actually increased usercount for the extra virtual user. */
+  /* tag data-block as having actually increased usercount for the extra virtual user. */
   LIB_TAG_EXTRAUSER_SET = 1 << 7,
 
   /* RESET_AFTER_USE tag newly duplicated/copied IDs.
@@ -539,6 +591,10 @@ enum {
   /* Datablock was not allocated by standard system (BKE_libblock_alloc), do not free its memory
    * (usual type-specific freeing is called though). */
   LIB_TAG_NOT_ALLOCATED = 1 << 18,
+
+  /* RESET_AFTER_USE Used by undo system to tag unchanged IDs re-used from old Main (instead of
+   * read from memfile). */
+  LIB_TAG_UNDO_OLD_ID_REUSED = 1 << 19,
 };
 
 /* Tag given ID for an update in all the dependency graphs. */
@@ -645,44 +701,42 @@ typedef enum IDRecalcFlag {
 
 } IDRecalcFlag;
 
-/* To filter ID types (filter_id) */
-/* XXX We cannot put all needed IDs inside an enum...
- *     We'll have to see whether we can fit all needed ones inside 32 values,
- *     or if we need to fallback to longlong defines :/
- */
-enum {
-  FILTER_ID_AC = (1 << 0),
-  FILTER_ID_AR = (1 << 1),
-  FILTER_ID_BR = (1 << 2),
-  FILTER_ID_CA = (1 << 3),
-  FILTER_ID_CU = (1 << 4),
-  FILTER_ID_GD = (1 << 5),
-  FILTER_ID_GR = (1 << 6),
-  FILTER_ID_IM = (1 << 7),
-  FILTER_ID_LA = (1 << 8),
-  FILTER_ID_LS = (1 << 9),
-  FILTER_ID_LT = (1 << 10),
-  FILTER_ID_MA = (1 << 11),
-  FILTER_ID_MB = (1 << 12),
-  FILTER_ID_MC = (1 << 13),
-  FILTER_ID_ME = (1 << 14),
-  FILTER_ID_MSK = (1 << 15),
-  FILTER_ID_NT = (1 << 16),
-  FILTER_ID_OB = (1 << 17),
-  FILTER_ID_PAL = (1 << 18),
-  FILTER_ID_PC = (1 << 19),
-  FILTER_ID_SCE = (1 << 20),
-  FILTER_ID_SPK = (1 << 21),
-  FILTER_ID_SO = (1 << 22),
-  FILTER_ID_TE = (1 << 23),
-  FILTER_ID_TXT = (1 << 24),
-  FILTER_ID_VF = (1 << 25),
-  FILTER_ID_WO = (1 << 26),
-  FILTER_ID_PA = (1 << 27),
-  FILTER_ID_CF = (1 << 28),
-  FILTER_ID_WS = (1 << 29),
-  FILTER_ID_LP = (1u << 31),
-};
+/* To filter ID types (filter_id). 64 bit to fit all types. */
+#define FILTER_ID_AC (1ULL << 0)
+#define FILTER_ID_AR (1ULL << 1)
+#define FILTER_ID_BR (1ULL << 2)
+#define FILTER_ID_CA (1ULL << 3)
+#define FILTER_ID_CU (1ULL << 4)
+#define FILTER_ID_GD (1ULL << 5)
+#define FILTER_ID_GR (1ULL << 6)
+#define FILTER_ID_IM (1ULL << 7)
+#define FILTER_ID_LA (1ULL << 8)
+#define FILTER_ID_LS (1ULL << 9)
+#define FILTER_ID_LT (1ULL << 10)
+#define FILTER_ID_MA (1ULL << 11)
+#define FILTER_ID_MB (1ULL << 12)
+#define FILTER_ID_MC (1ULL << 13)
+#define FILTER_ID_ME (1ULL << 14)
+#define FILTER_ID_MSK (1ULL << 15)
+#define FILTER_ID_NT (1ULL << 16)
+#define FILTER_ID_OB (1ULL << 17)
+#define FILTER_ID_PAL (1ULL << 18)
+#define FILTER_ID_PC (1ULL << 19)
+#define FILTER_ID_SCE (1ULL << 20)
+#define FILTER_ID_SPK (1ULL << 21)
+#define FILTER_ID_SO (1ULL << 22)
+#define FILTER_ID_TE (1ULL << 23)
+#define FILTER_ID_TXT (1ULL << 24)
+#define FILTER_ID_VF (1ULL << 25)
+#define FILTER_ID_WO (1ULL << 26)
+#define FILTER_ID_PA (1ULL << 27)
+#define FILTER_ID_CF (1ULL << 28)
+#define FILTER_ID_WS (1ULL << 29)
+#define FILTER_ID_LP (1ULL << 31)
+#define FILTER_ID_HA (1ULL << 32)
+#define FILTER_ID_PT (1ULL << 33)
+#define FILTER_ID_VO (1ULL << 34)
+#define FILTER_ID_SIM (1ULL << 35)
 
 #define FILTER_ID_ALL \
   (FILTER_ID_AC | FILTER_ID_AR | FILTER_ID_BR | FILTER_ID_CA | FILTER_ID_CU | FILTER_ID_GD | \
@@ -690,7 +744,7 @@ enum {
    FILTER_ID_MB | FILTER_ID_MC | FILTER_ID_ME | FILTER_ID_MSK | FILTER_ID_NT | FILTER_ID_OB | \
    FILTER_ID_PA | FILTER_ID_PAL | FILTER_ID_PC | FILTER_ID_SCE | FILTER_ID_SPK | FILTER_ID_SO | \
    FILTER_ID_TE | FILTER_ID_TXT | FILTER_ID_VF | FILTER_ID_WO | FILTER_ID_CF | FILTER_ID_WS | \
-   FILTER_ID_LP)
+   FILTER_ID_LP | FILTER_ID_HA | FILTER_ID_PT | FILTER_ID_VO | FILTER_ID_SIM)
 
 /* IMPORTANT: this enum matches the order currently use in set_listbasepointers,
  * keep them in sync! */
@@ -711,6 +765,9 @@ enum {
   INDEX_ID_ME,
   INDEX_ID_CU,
   INDEX_ID_MB,
+  INDEX_ID_HA,
+  INDEX_ID_PT,
+  INDEX_ID_VO,
   INDEX_ID_LT,
   INDEX_ID_LA,
   INDEX_ID_CA,
@@ -731,6 +788,7 @@ enum {
   INDEX_ID_WS,
   INDEX_ID_WM,
   INDEX_ID_MSK,
+  INDEX_ID_SIM,
   INDEX_ID_NULL,
   INDEX_ID_MAX,
 };

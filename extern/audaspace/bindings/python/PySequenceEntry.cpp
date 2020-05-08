@@ -43,21 +43,21 @@ SequenceEntry_dealloc(SequenceEntry* self)
 }
 
 PyDoc_STRVAR(M_aud_SequenceEntry_move_doc,
-			 "move()\n\n"
-			 "Moves the entry.\n\n"
-			 ":arg begin: The new start time.\n"
-			 ":type begin: float\n"
-			 ":arg end: The new end time or a negative value if unknown.\n"
-			 ":type end: float\n"
-			 ":arg skip: How many seconds to skip at the beginning.\n"
-			 ":type skip: float\n");
+			 ".. classmethod:: move()\n\n"
+			 "   Moves the entry.\n\n"
+			 "   :arg begin: The new start time.\n"
+			 "   :type begin: double\n"
+			 "   :arg end: The new end time or a negative value if unknown.\n"
+			 "   :type end: double\n"
+			 "   :arg skip: How many seconds to skip at the beginning.\n"
+			 "   :type skip: double\n");
 
 static PyObject *
 SequenceEntry_move(SequenceEntry* self, PyObject* args)
 {
-	float begin, end, skip;
+	double begin, end, skip;
 
-	if(!PyArg_ParseTuple(args, "fff:move", &begin, &end, &skip))
+	if(!PyArg_ParseTuple(args, "ddd:move", &begin, &end, &skip))
 		return nullptr;
 
 	try
@@ -73,16 +73,16 @@ SequenceEntry_move(SequenceEntry* self, PyObject* args)
 }
 
 PyDoc_STRVAR(M_aud_SequenceEntry_setAnimationData_doc,
-			 "setAnimationData()\n\n"
-			 "Writes animation data to a sequenced entry.\n\n"
-			 ":arg type: The type of animation data.\n"
-			 ":type type: int\n"
-			 ":arg frame: The frame this data is for.\n"
-			 ":type frame: int\n"
-			 ":arg data: The data to write.\n"
-			 ":type data: sequence of float\n"
-			 ":arg animated: Whether the attribute is animated.\n"
-			 ":type animated: bool");
+			 ".. classmethod:: setAnimationData()\n\n"
+			 "   Writes animation data to a sequenced entry.\n\n"
+			 "   :arg type: The type of animation data.\n"
+			 "   :type type: int\n"
+			 "   :arg frame: The frame this data is for.\n"
+			 "   :type frame: int\n"
+			 "   :arg data: The data to write.\n"
+			 "   :type data: sequence of float\n"
+			 "   :arg animated: Whether the attribute is animated.\n"
+			 "   :type animated: bool");
 
 static PyObject *
 SequenceEntry_setAnimationData(SequenceEntry* self, PyObject* args)

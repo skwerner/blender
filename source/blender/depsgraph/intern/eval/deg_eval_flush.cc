@@ -25,15 +25,12 @@
 
 #include "intern/eval/deg_eval_flush.h"
 
-// TODO(sergey): Use some sort of wrapper.
-#include <deque>
 #include <cmath>
 
-#include "BLI_utildefines.h"
 #include "BLI_listbase.h"
 #include "BLI_math_vector.h"
 #include "BLI_task.h"
-#include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_object.h"
 #include "BKE_scene.h"
@@ -50,6 +47,7 @@ extern "C" {
 #include "intern/debug/deg_debug.h"
 #include "intern/depsgraph.h"
 #include "intern/depsgraph_relation.h"
+#include "intern/depsgraph_type.h"
 #include "intern/depsgraph_update.h"
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_component.h"
@@ -84,7 +82,7 @@ enum {
   COMPONENT_STATE_DONE = 2,
 };
 
-typedef std::deque<OperationNode *> FlushQueue;
+typedef deque<OperationNode *> FlushQueue;
 
 namespace {
 
@@ -95,9 +93,9 @@ void flush_init_id_node_func(void *__restrict data_v,
   Depsgraph *graph = (Depsgraph *)data_v;
   IDNode *id_node = graph->id_nodes[i];
   id_node->custom_flags = ID_STATE_NONE;
-  GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components)
+  for (ComponentNode *comp_node : id_node->components.values()) {
     comp_node->custom_flags = COMPONENT_STATE_NONE;
-  GHASH_FOREACH_END();
+  }
 }
 
 BLI_INLINE void flush_prepare(Depsgraph *graph)
@@ -117,7 +115,7 @@ BLI_INLINE void flush_prepare(Depsgraph *graph)
 
 BLI_INLINE void flush_schedule_entrypoints(Depsgraph *graph, FlushQueue *queue)
 {
-  GSET_FOREACH_BEGIN (OperationNode *, op_node, graph->entry_tags) {
+  for (OperationNode *op_node : graph->entry_tags) {
     queue->push_back(op_node);
     op_node->scheduled = true;
     DEG_DEBUG_PRINTF((::Depsgraph *)graph,
@@ -125,7 +123,6 @@ BLI_INLINE void flush_schedule_entrypoints(Depsgraph *graph, FlushQueue *queue)
                      "Operation is entry point for update: %s\n",
                      op_node->identifier().c_str());
   }
-  GSET_FOREACH_END();
 }
 
 BLI_INLINE void flush_handle_id_node(IDNode *id_node)
@@ -173,15 +170,16 @@ BLI_INLINE void flush_handle_component_node(IDNode *id_node,
  */
 BLI_INLINE OperationNode *flush_schedule_children(OperationNode *op_node, FlushQueue *queue)
 {
+  if (op_node->flag & DEPSOP_FLAG_USER_MODIFIED) {
+    IDNode *id_node = op_node->owner->owner;
+    id_node->is_user_modified = true;
+  }
+
   OperationNode *result = nullptr;
   for (Relation *rel : op_node->outlinks) {
     /* Flush is forbidden, completely. */
     if (rel->flag & RELATION_FLAG_NO_FLUSH) {
       continue;
-    }
-    if (op_node->flag & DEPSOP_FLAG_USER_MODIFIED) {
-      IDNode *id_node = op_node->owner->owner;
-      id_node->is_user_modified = true;
     }
     /* Relation only allows flushes on user changes, but the node was not
      * affected by user. */
@@ -231,7 +229,7 @@ void flush_editors_id_update(Depsgraph *graph, const DEGEditorUpdateContext *upd
     ID *id_orig = id_node->id_orig;
     ID *id_cow = id_node->id_cow;
     /* Gather recalc flags from all changed components. */
-    GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
+    for (DEG::ComponentNode *comp_node : id_node->components.values()) {
       if (comp_node->custom_flags != COMPONENT_STATE_DONE) {
         continue;
       }
@@ -239,7 +237,6 @@ void flush_editors_id_update(Depsgraph *graph, const DEGEditorUpdateContext *upd
       BLI_assert(factory != nullptr);
       id_cow->recalc |= factory->id_recalc_tag();
     }
-    GHASH_FOREACH_END();
     DEG_DEBUG_PRINTF((::Depsgraph *)graph,
                      EVAL,
                      "Accumulated recalc bits for %s: %u\n",
@@ -307,7 +304,7 @@ void invalidate_tagged_evaluated_data(Depsgraph *graph)
     if (!deg_copy_on_write_is_expanded(id_cow)) {
       continue;
     }
-    GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
+    for (ComponentNode *comp_node : id_node->components.values()) {
       if (comp_node->custom_flags != COMPONENT_STATE_DONE) {
         continue;
       }
@@ -322,7 +319,6 @@ void invalidate_tagged_evaluated_data(Depsgraph *graph)
           break;
       }
     }
-    GHASH_FOREACH_END();
   }
 #else
   (void)graph;
@@ -347,7 +343,7 @@ void deg_graph_flush_updates(Main *bmain, Depsgraph *graph)
     graph->ctime = ctime;
     time_source->tag_update(graph, DEG::DEG_UPDATE_SOURCE_TIME);
   }
-  if (BLI_gset_len(graph->entry_tags) == 0) {
+  if (graph->entry_tags.is_empty()) {
     return;
   }
   /* Reset all flags, get ready for the flush. */
@@ -393,7 +389,7 @@ void deg_graph_clear_tags(Depsgraph *graph)
                     DEPSOP_FLAG_USER_MODIFIED);
   }
   /* Clear any entry tags which haven't been flushed. */
-  BLI_gset_clear(graph->entry_tags, nullptr);
+  graph->entry_tags.clear();
 }
 
 }  // namespace DEG

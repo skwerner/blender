@@ -63,8 +63,8 @@
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_object_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
 
 #include "BKE_deform.h"
 #include "BKE_lib_id.h"
@@ -943,7 +943,7 @@ static Mesh *subdivide_base(Mesh *orig)
         weight = interpf(vg->w2, vg->w1, t);
 
         if (weight > 0) {
-          defvert_add_index_notest(&outdvert[v], vg->def_nr, weight);
+          BKE_defvert_add_index_notest(&outdvert[v], vg->def_nr, weight);
         }
       }
 
@@ -1058,7 +1058,7 @@ static void output_frames(BMesh *bm, SkinNode *sn, const MDeformVert *input_dver
           dv = CustomData_bmesh_get(&bm->vdata, v->head.data, CD_MDEFORMVERT);
 
           BLI_assert(dv->totweight == 0);
-          defvert_copy(dv, input_dvert);
+          BKE_defvert_copy(dv, input_dvert);
         }
       }
     }
@@ -1911,7 +1911,7 @@ static void initData(ModifierData *md)
   smd->symmetry_axes = MOD_SKIN_SYMM_X;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
 {
   Mesh *result;
 
@@ -1941,7 +1941,10 @@ ModifierTypeInfo modifierType_Skin = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

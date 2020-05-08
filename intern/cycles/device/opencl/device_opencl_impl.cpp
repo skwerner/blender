@@ -56,7 +56,11 @@ static const string SPLIT_BUNDLE_KERNELS =
     "enqueue_inactive "
     "next_iteration_setup "
     "indirect_subsurface "
-    "buffer_update";
+    "buffer_update "
+    "adaptive_stopping "
+    "adaptive_filter_x "
+    "adaptive_filter_y "
+    "adaptive_adjust_samples";
 
 const string OpenCLDevice::get_opencl_program_name(const string &kernel_name)
 {
@@ -253,16 +257,16 @@ void OpenCLDevice::OpenCLSplitPrograms::load_kernels(
 
     /* Ordered with most complex kernels first, to reduce overall compile time. */
     ADD_SPLIT_KERNEL_PROGRAM(subsurface_scatter);
+    ADD_SPLIT_KERNEL_PROGRAM(direct_lighting);
+    ADD_SPLIT_KERNEL_PROGRAM(indirect_background);
     if (requested_features.use_volume || is_preview) {
       ADD_SPLIT_KERNEL_PROGRAM(do_volume);
     }
+    ADD_SPLIT_KERNEL_PROGRAM(shader_eval);
+    ADD_SPLIT_KERNEL_PROGRAM(lamp_emission);
+    ADD_SPLIT_KERNEL_PROGRAM(holdout_emission_blurring_pathtermination_ao);
     ADD_SPLIT_KERNEL_PROGRAM(shadow_blocked_dl);
     ADD_SPLIT_KERNEL_PROGRAM(shadow_blocked_ao);
-    ADD_SPLIT_KERNEL_PROGRAM(holdout_emission_blurring_pathtermination_ao);
-    ADD_SPLIT_KERNEL_PROGRAM(lamp_emission);
-    ADD_SPLIT_KERNEL_PROGRAM(direct_lighting);
-    ADD_SPLIT_KERNEL_PROGRAM(indirect_background);
-    ADD_SPLIT_KERNEL_PROGRAM(shader_eval);
 
     /* Quick kernels bundled in a single program to reduce overhead of starting
      * Blender processes. */
@@ -283,6 +287,10 @@ void OpenCLDevice::OpenCLSplitPrograms::load_kernels(
     ADD_SPLIT_KERNEL_BUNDLE_PROGRAM(next_iteration_setup);
     ADD_SPLIT_KERNEL_BUNDLE_PROGRAM(indirect_subsurface);
     ADD_SPLIT_KERNEL_BUNDLE_PROGRAM(buffer_update);
+    ADD_SPLIT_KERNEL_BUNDLE_PROGRAM(adaptive_stopping);
+    ADD_SPLIT_KERNEL_BUNDLE_PROGRAM(adaptive_filter_x);
+    ADD_SPLIT_KERNEL_BUNDLE_PROGRAM(adaptive_filter_y);
+    ADD_SPLIT_KERNEL_BUNDLE_PROGRAM(adaptive_adjust_samples);
     programs.push_back(&program_split);
 
 #  undef ADD_SPLIT_KERNEL_PROGRAM
@@ -605,7 +613,7 @@ OpenCLDevice::OpenCLDevice(DeviceInfo &info, Stats &stats, Profiler &profiler, b
       kernel_programs(this),
       preview_programs(this),
       memory_manager(this),
-      texture_info(this, "__texture_info", MEM_TEXTURE)
+      texture_info(this, "__texture_info", MEM_GLOBAL)
 {
   cpPlatform = NULL;
   cdDevice = NULL;
@@ -937,7 +945,7 @@ void OpenCLDevice::mem_alloc(device_memory &mem)
   cl_mem_flags mem_flag;
   void *mem_ptr = NULL;
 
-  if (mem.type == MEM_READ_ONLY || mem.type == MEM_TEXTURE)
+  if (mem.type == MEM_READ_ONLY || mem.type == MEM_TEXTURE || mem.type == MEM_GLOBAL)
     mem_flag = CL_MEM_READ_ONLY;
   else
     mem_flag = CL_MEM_READ_WRITE;
@@ -961,9 +969,13 @@ void OpenCLDevice::mem_alloc(device_memory &mem)
 
 void OpenCLDevice::mem_copy_to(device_memory &mem)
 {
-  if (mem.type == MEM_TEXTURE) {
-    tex_free(mem);
-    tex_alloc(mem);
+  if (mem.type == MEM_GLOBAL) {
+    global_free(mem);
+    global_alloc(mem);
+  }
+  else if (mem.type == MEM_TEXTURE) {
+    tex_free((device_texture &)mem);
+    tex_alloc((device_texture &)mem);
   }
   else {
     if (!mem.device_pointer) {
@@ -1069,8 +1081,11 @@ void OpenCLDevice::mem_zero(device_memory &mem)
 
 void OpenCLDevice::mem_free(device_memory &mem)
 {
-  if (mem.type == MEM_TEXTURE) {
-    tex_free(mem);
+  if (mem.type == MEM_GLOBAL) {
+    global_free(mem);
+  }
+  else if (mem.type == MEM_TEXTURE) {
+    tex_free((device_texture &)mem);
   }
   else {
     if (mem.device_pointer) {
@@ -1093,7 +1108,7 @@ int OpenCLDevice::mem_sub_ptr_alignment()
 device_ptr OpenCLDevice::mem_alloc_sub_ptr(device_memory &mem, int offset, int size)
 {
   cl_mem_flags mem_flag;
-  if (mem.type == MEM_READ_ONLY || mem.type == MEM_TEXTURE)
+  if (mem.type == MEM_READ_ONLY || mem.type == MEM_TEXTURE || mem.type == MEM_GLOBAL)
     mem_flag = CL_MEM_READ_ONLY;
   else
     mem_flag = CL_MEM_READ_WRITE;
@@ -1133,9 +1148,9 @@ void OpenCLDevice::const_copy_to(const char *name, void *host, size_t size)
   data->copy_to_device();
 }
 
-void OpenCLDevice::tex_alloc(device_memory &mem)
+void OpenCLDevice::global_alloc(device_memory &mem)
 {
-  VLOG(1) << "Texture allocate: " << mem.name << ", "
+  VLOG(1) << "Global memory allocate: " << mem.name << ", "
           << string_human_readable_number(mem.memory_size()) << " bytes. ("
           << string_human_readable_size(mem.memory_size()) << ")";
 
@@ -1147,7 +1162,7 @@ void OpenCLDevice::tex_alloc(device_memory &mem)
   textures_need_update = true;
 }
 
-void OpenCLDevice::tex_free(device_memory &mem)
+void OpenCLDevice::global_free(device_memory &mem)
 {
   if (mem.device_pointer) {
     mem.device_pointer = 0;
@@ -1163,6 +1178,25 @@ void OpenCLDevice::tex_free(device_memory &mem)
       }
     }
   }
+}
+
+void OpenCLDevice::tex_alloc(device_texture &mem)
+{
+  VLOG(1) << "Texture allocate: " << mem.name << ", "
+          << string_human_readable_number(mem.memory_size()) << " bytes. ("
+          << string_human_readable_size(mem.memory_size()) << ")";
+
+  memory_manager.alloc(mem.name, mem);
+  /* Set the pointer to non-null to keep code that inspects its value from thinking its
+   * unallocated. */
+  mem.device_pointer = 1;
+  textures[mem.name] = &mem;
+  textures_need_update = true;
+}
+
+void OpenCLDevice::tex_free(device_texture &mem)
+{
+  global_free(mem);
 }
 
 size_t OpenCLDevice::global_size_round_up(int group_size, int global_size)
@@ -1265,10 +1299,10 @@ void OpenCLDevice::flush_texture_buffers()
 
   foreach (TexturesMap::value_type &tex, textures) {
     string name = tex.first;
+    device_memory *mem = tex.second;
 
-    if (string_startswith(name, "__tex_image")) {
-      int pos = name.rfind("_");
-      int id = atoi(name.data() + pos + 1);
+    if (mem->type == MEM_TEXTURE) {
+      const uint id = ((device_texture *)mem)->slot;
       texture_slots.push_back(texture_slot_t(name, num_data_slots + id));
       num_slots = max(num_slots, num_data_slots + id + 1);
     }
@@ -1281,22 +1315,20 @@ void OpenCLDevice::flush_texture_buffers()
 
   /* Fill in descriptors */
   foreach (texture_slot_t &slot, texture_slots) {
+    device_memory *mem = textures[slot.name];
     TextureInfo &info = texture_info[slot.slot];
 
     MemoryManager::BufferDescriptor desc = memory_manager.get_descriptor(slot.name);
+
+    if (mem->type == MEM_TEXTURE) {
+      info = ((device_texture *)mem)->info;
+    }
+    else {
+      memset(&info, 0, sizeof(TextureInfo));
+    }
+
     info.data = desc.offset;
     info.cl_buffer = desc.device_buffer;
-
-    if (string_startswith(slot.name, "__tex_image")) {
-      device_memory *mem = textures[slot.name];
-
-      info.width = mem->data_width;
-      info.height = mem->data_height;
-      info.depth = mem->data_depth;
-
-      info.interpolation = mem->interpolation;
-      info.extension = mem->extension;
-    }
   }
 
   /* Force write of descriptors. */
@@ -1308,7 +1340,7 @@ void OpenCLDevice::thread_run(DeviceTask *task)
 {
   flush_texture_buffers();
 
-  if (task->type == DeviceTask::RENDER || task->type == DeviceTask::DENOISE) {
+  if (task->type == DeviceTask::RENDER) {
     RenderTile tile;
     DenoisingTask denoising(this, *task);
 
@@ -1317,7 +1349,7 @@ void OpenCLDevice::thread_run(DeviceTask *task)
     kgbuffer.alloc_to_device(1);
 
     /* Keep rendering tiles until done. */
-    while (task->acquire_tile(this, tile)) {
+    while (task->acquire_tile(this, tile, task->tile_types)) {
       if (tile.task == RenderTile::PATH_TRACE) {
         assert(tile.task == RenderTile::PATH_TRACE);
         scoped_timer timer(&tile.buffers->render_time);
@@ -1863,6 +1895,17 @@ void OpenCLDevice::shader(DeviceTask &task)
 string OpenCLDevice::kernel_build_options(const string *debug_src)
 {
   string build_options = "-cl-no-signed-zeros -cl-mad-enable ";
+
+  /* Build with OpenCL 2.0 if available, this improves performance
+   * with AMD OpenCL drivers on Windows and Linux (legacy drivers).
+   * Note that OpenCL selects the highest 1.x version by default,
+   * only for 2.0 do we need the explicit compiler flag. */
+  int version_major, version_minor;
+  if (OpenCLInfo::get_device_version(cdDevice, &version_major, &version_minor)) {
+    if (version_major >= 2) {
+      build_options += "-cl-std=CL2.0 ";
+    }
+  }
 
   if (platform_name == "NVIDIA CUDA") {
     build_options +=

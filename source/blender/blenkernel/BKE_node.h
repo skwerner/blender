@@ -385,8 +385,8 @@ struct bNodeTree *ntreeAddTree(struct Main *bmain, const char *name, const char 
 
 /* copy/free funcs, need to manage ID users */
 void ntreeFreeTree(struct bNodeTree *ntree);
-/* Free tree which is owned byt another datablock. */
-void ntreeFreeNestedTree(struct bNodeTree *ntree);
+/* Free tree which is embedded into another datablock. */
+void ntreeFreeEmbeddedTree(struct bNodeTree *ntree);
 struct bNodeTree *ntreeCopyTree_ex(const struct bNodeTree *ntree,
                                    struct Main *bmain,
                                    const bool do_id_user);
@@ -852,6 +852,7 @@ struct NodeTreeIterStore {
   struct Light *light;
   struct World *world;
   struct FreestyleLineStyle *linestyle;
+  struct Simulation *simulation;
 };
 
 void BKE_node_tree_iter_init(struct NodeTreeIterStore *ntreeiter, struct Main *bmain);
@@ -1275,11 +1276,42 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
                      float dyt[3],
                      int osatex,
                      const short thread,
-                     struct Tex *tex,
+                     const struct Tex *tex,
                      short which_output,
                      int cfra,
                      int preview,
                      struct MTex *mtex);
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Simulation Nodes
+ * \{ */
+
+#define SIM_NODE_PARTICLE_SIMULATION 1000
+#define SIM_NODE_FORCE 1001
+#define SIM_NODE_SET_PARTICLE_ATTRIBUTE 1002
+#define SIM_NODE_PARTICLE_BIRTH_EVENT 1003
+#define SIM_NODE_PARTICLE_TIME_STEP_EVENT 1004
+#define SIM_NODE_EXECUTE_CONDITION 1005
+#define SIM_NODE_MULTI_EXECUTE 1006
+#define SIM_NODE_PARTICLE_MESH_EMITTER 1007
+#define SIM_NODE_PARTICLE_MESH_COLLISION_EVENT 1008
+#define SIM_NODE_EMIT_PARTICLES 1009
+#define SIM_NODE_TIME 1010
+#define SIM_NODE_PARTICLE_ATTRIBUTE 1011
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Function Nodes
+ * \{ */
+
+#define FN_NODE_BOOLEAN_MATH 1200
+#define FN_NODE_SWITCH 1201
+#define FN_NODE_FLOAT_COMPARE 1202
+#define FN_NODE_GROUP_INSTANCE_ID 1203
+#define FN_NODE_COMBINE_STRINGS 1204
+
 /** \} */
 
 void init_nodesystem(void);

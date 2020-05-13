@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2007 by Nicholas Bishop
@@ -289,8 +289,8 @@ Mesh *BKE_multires_create_mesh(struct Depsgraph *depsgraph,
       .flag = MOD_APPLY_USECACHE | MOD_APPLY_IGNORE_SIMPLIFY,
   };
 
-  const ModifierTypeInfo *mti = modifierType_getInfo(mmd->modifier.type);
-  Mesh *result = mti->applyModifier(&mmd->modifier, &modifier_ctx, deformed_mesh);
+  const ModifierTypeInfo *mti = BKE_modifier_get_info(mmd->modifier.type);
+  Mesh *result = mti->modifyMesh(&mmd->modifier, &modifier_ctx, deformed_mesh);
 
   if (result == deformed_mesh) {
     result = BKE_mesh_copy_for_eval(deformed_mesh, true);
@@ -318,8 +318,8 @@ float (*BKE_multires_create_deformed_base_mesh_vert_coords(struct Depsgraph *dep
   const int required_mode = use_render ? eModifierMode_Render : eModifierMode_Realtime;
 
   VirtualModifierData virtual_modifier_data;
-  ModifierData *first_md = modifiers_getVirtualModifierList(&object_for_eval,
-                                                            &virtual_modifier_data);
+  ModifierData *first_md = BKE_modifiers_get_virtual_modifierlist(&object_for_eval,
+                                                                  &virtual_modifier_data);
 
   Mesh *base_mesh = object->data;
 
@@ -327,13 +327,13 @@ float (*BKE_multires_create_deformed_base_mesh_vert_coords(struct Depsgraph *dep
   float(*deformed_verts)[3] = BKE_mesh_vert_coords_alloc(base_mesh, &num_deformed_verts);
 
   for (ModifierData *md = first_md; md != NULL; md = md->next) {
-    const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
     if (md == &mmd->modifier) {
       break;
     }
 
-    if (!modifier_isEnabled(scene_eval, md, required_mode)) {
+    if (!BKE_modifier_is_enabled(scene_eval, md, required_mode)) {
       continue;
     }
 
@@ -341,7 +341,8 @@ float (*BKE_multires_create_deformed_base_mesh_vert_coords(struct Depsgraph *dep
       break;
     }
 
-    modwrap_deformVerts(md, &mesh_eval_context, base_mesh, deformed_verts, num_deformed_verts);
+    BKE_modifier_deform_verts(
+        md, &mesh_eval_context, base_mesh, deformed_verts, num_deformed_verts);
   }
 
   if (r_num_deformed_verts != NULL) {
@@ -356,7 +357,7 @@ MultiresModifierData *find_multires_modifier_before(Scene *scene, ModifierData *
 
   for (md = lastmd; md; md = md->prev) {
     if (md->type == eModifierType_Multires) {
-      if (modifier_isEnabled(scene, md, eModifierMode_Realtime)) {
+      if (BKE_modifier_is_enabled(scene, md, eModifierMode_Realtime)) {
         return (MultiresModifierData *)md;
       }
     }
@@ -380,7 +381,7 @@ MultiresModifierData *get_multires_modifier(Scene *scene, Object *ob, bool use_f
         firstmmd = (MultiresModifierData *)md;
       }
 
-      if (modifier_isEnabled(scene, md, eModifierMode_Realtime)) {
+      if (BKE_modifier_is_enabled(scene, md, eModifierMode_Realtime)) {
         mmd = (MultiresModifierData *)md;
         break;
       }
@@ -407,7 +408,7 @@ int multires_get_level(const Scene *scene,
                              mmd->renderlvl;
   }
   else if (ob->mode == OB_MODE_SCULPT) {
-    return BKE_multires_sculpt_level_get(mmd);
+    return mmd->sculptlvl;
   }
   else if (ignore_simplify) {
     return mmd->lvl;
@@ -2193,10 +2194,10 @@ void multires_load_old(Object *ob, Mesh *me)
 
   /* Add a multires modifier to the object */
   md = ob->modifiers.first;
-  while (md && modifierType_getInfo(md->type)->type == eModifierTypeType_OnlyDeform) {
+  while (md && BKE_modifier_get_info(md->type)->type == eModifierTypeType_OnlyDeform) {
     md = md->next;
   }
-  mmd = (MultiresModifierData *)modifier_new(eModifierType_Multires);
+  mmd = (MultiresModifierData *)BKE_modifier_new(eModifierType_Multires);
   BLI_insertlinkbefore(&ob->modifiers, md, mmd);
 
   for (i = 0; i < me->mr->level_count - 1; i++) {
@@ -2234,7 +2235,14 @@ void multiresModifier_sync_levels_ex(Object *ob_dst,
   }
 
   if (mmd_src->totlvl > mmd_dst->totlvl) {
-    multiresModifier_subdivide_to_level(ob_dst, mmd_dst, mmd_src->totlvl);
+    if (mmd_dst->simple) {
+      multiresModifier_subdivide_to_level(
+          ob_dst, mmd_dst, mmd_src->totlvl, MULTIRES_SUBDIVIDE_SIMPLE);
+    }
+    else {
+      multiresModifier_subdivide_to_level(
+          ob_dst, mmd_dst, mmd_src->totlvl, MULTIRES_SUBDIVIDE_CATMULL_CLARK);
+    }
   }
   else {
     multires_del_higher(mmd_dst, ob_dst, mmd_src->totlvl);
@@ -2515,13 +2523,4 @@ int mdisp_rot_face_to_crn(struct MVert *UNUSED(mvert),
   }
 
   return S;
-}
-
-/* This is a workaround for T58473.
- * Force sculpting on the highest level for until the root of the issue is solved.
- *
- * When that issue is solved simple replace call of this function with mmd->sculptlvl. */
-int BKE_multires_sculpt_level_get(const struct MultiresModifierData *mmd)
-{
-  return mmd->totlvl;
 }

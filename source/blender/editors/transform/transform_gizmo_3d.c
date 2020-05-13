@@ -713,7 +713,9 @@ void ED_transform_calc_orientation_from_type_ex(const bContext *C,
       ok = true;
       break;
     }
-    case V3D_ORIENT_CUSTOM: {
+    case V3D_ORIENT_CUSTOM:
+    default: {
+      BLI_assert(orientation_type >= V3D_ORIENT_CUSTOM);
       TransformOrientation *custom_orientation = BKE_scene_transform_orientation_find(
           scene, orientation_index_custom);
       if (applyTransformOrientation(custom_orientation, r_mat, NULL)) {
@@ -1033,7 +1035,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
       /* mislead counting bones... bah. We don't know the gizmo mode, could be mixed */
       const int mode = TFM_ROTATION;
 
-      const int totsel_iter = count_set_pose_transflags(
+      const int totsel_iter = transform_convert_pose_transflags_update(
           ob_iter, mode, V3D_AROUND_CENTER_BOUNDS, NULL);
 
       if (totsel_iter) {
@@ -1402,7 +1404,7 @@ void drawDial3d(const TransInfo *t)
     }
     else {
       axis_idx = MAN_AXIS_ROT_C;
-      negate_v3_v3(mat_basis[2], t->orient_matrix[t->orient_axis]);
+      negate_v3_v3(mat_basis[2], t->spacemtx[t->orient_axis]);
       scale *= 1.2f;
       line_with -= 1.0f;
     }

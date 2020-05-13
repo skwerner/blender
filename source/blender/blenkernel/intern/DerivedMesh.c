@@ -698,7 +698,8 @@ static float (*get_orco_coords(Object *ob, BMEditMesh *em, int layer, int *free)
     /* apply shape key for cloth, this should really be solved
      * by a more flexible customdata system, but not simple */
     if (!em) {
-      ClothModifierData *clmd = (ClothModifierData *)modifiers_findByType(ob, eModifierType_Cloth);
+      ClothModifierData *clmd = (ClothModifierData *)BKE_modifiers_findby_type(
+          ob, eModifierType_Cloth);
       KeyBlock *kb = BKE_keyblock_from_key(BKE_key_from_object(ob),
                                            clmd->sim_parms->shapekey_rest);
 
@@ -901,21 +902,21 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
 
   /* Sculpt can skip certain modifiers. */
   MultiresModifierData *mmd = get_multires_modifier(scene, ob, 0);
-  const bool has_multires = (mmd && BKE_multires_sculpt_level_get(mmd) != 0);
+  const bool has_multires = (mmd && mmd->sculptlvl != 0);
   bool multires_applied = false;
   const bool sculpt_mode = ob->mode & OB_MODE_SCULPT && ob->sculpt && !use_render;
   const bool sculpt_dyntopo = (sculpt_mode && ob->sculpt->bm) && !use_render;
 
   /* Modifier evaluation contexts for different types of modifiers. */
-  ModifierApplyFlag app_render = use_render ? MOD_APPLY_RENDER : 0;
-  ModifierApplyFlag app_cache = use_cache ? MOD_APPLY_USECACHE : 0;
-  const ModifierEvalContext mectx = {depsgraph, ob, app_render | app_cache};
-  const ModifierEvalContext mectx_orco = {depsgraph, ob, app_render | MOD_APPLY_ORCO};
+  ModifierApplyFlag apply_render = use_render ? MOD_APPLY_RENDER : 0;
+  ModifierApplyFlag apply_cache = use_cache ? MOD_APPLY_USECACHE : 0;
+  const ModifierEvalContext mectx = {depsgraph, ob, apply_render | apply_cache};
+  const ModifierEvalContext mectx_orco = {depsgraph, ob, apply_render | MOD_APPLY_ORCO};
 
   /* Get effective list of modifiers to execute. Some effects like shape keys
    * are added as virtual modifiers before the user created modifiers. */
   VirtualModifierData virtualModifierData;
-  ModifierData *firstmd = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+  ModifierData *firstmd = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
   ModifierData *md = firstmd;
 
   /* Preview colors by modifiers such as dynamic paint, to show the results
@@ -929,7 +930,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
     /* XXX Currently, DPaint modifier just ignores this.
      *     Needs a stupid hack...
      *     The whole "modifier preview" thing has to be (re?)designed, anyway! */
-    previewmd = modifiers_getLastPreview(scene, md, required_mode);
+    previewmd = BKE_modifier_get_last_preview(scene, md, required_mode);
   }
 
   /* Compute accumulated datamasks needed by each modifier. It helps to do
@@ -937,21 +938,21 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
    * an armature modifier, but not through a following subsurf modifier where
    * subdividing them is expensive. */
   CustomData_MeshMasks final_datamask = *dataMask;
-  CDMaskLink *datamasks = modifiers_calcDataMasks(
+  CDMaskLink *datamasks = BKE_modifier_calc_data_masks(
       scene, ob, md, &final_datamask, required_mode, previewmd, &previewmask);
   CDMaskLink *md_datamask = datamasks;
   /* XXX Always copying POLYINDEX, else tessellated data are no more valid! */
   CustomData_MeshMasks append_mask = CD_MASK_BAREMESH_ORIGINDEX;
 
   /* Clear errors before evaluation. */
-  modifiers_clearErrors(ob);
+  BKE_modifiers_clear_errors(ob);
 
   /* Apply all leading deform modifiers. */
   if (useDeform) {
     for (; md; md = md->next, md_datamask = md_datamask->next) {
-      const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+      const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
-      if (!modifier_isEnabled(scene, md, required_mode)) {
+      if (!BKE_modifier_is_enabled(scene, md, required_mode)) {
         continue;
       }
 
@@ -971,7 +972,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
           BKE_mesh_vert_coords_apply(mesh_final, deformed_verts);
         }
 
-        modwrap_deformVerts(md, &mectx, mesh_final, deformed_verts, num_deformed_verts);
+        BKE_modifier_deform_verts(md, &mectx, mesh_final, deformed_verts, num_deformed_verts);
 
         isPrevDeform = true;
       }
@@ -1001,9 +1002,9 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
   /* Apply all remaining constructive and deforming modifiers. */
   bool have_non_onlydeform_modifiers_appled = false;
   for (; md; md = md->next, md_datamask = md_datamask->next) {
-    const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
-    if (!modifier_isEnabled(scene, md, required_mode)) {
+    if (!BKE_modifier_is_enabled(scene, md, required_mode)) {
       continue;
     }
 
@@ -1013,15 +1014,14 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
 
     if ((mti->flags & eModifierTypeFlag_RequiresOriginalData) &&
         have_non_onlydeform_modifiers_appled) {
-      modifier_setError(md, "Modifier requires original data, bad stack position");
+      BKE_modifier_set_error(md, "Modifier requires original data, bad stack position");
       continue;
     }
 
     if (sculpt_mode && (!has_multires || multires_applied || sculpt_dyntopo)) {
       bool unsupported = false;
 
-      if (md->type == eModifierType_Multires &&
-          BKE_multires_sculpt_level_get((MultiresModifierData *)md) == 0) {
+      if (md->type == eModifierType_Multires && ((MultiresModifierData *)md)->sculptlvl == 0) {
         /* If multires is on level 0 skip it silently without warning message. */
         if (!sculpt_dyntopo) {
           continue;
@@ -1040,19 +1040,19 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
 
       if (unsupported) {
         if (sculpt_dyntopo) {
-          modifier_setError(md, "Not supported in dyntopo");
+          BKE_modifier_set_error(md, "Not supported in dyntopo");
         }
         else {
-          modifier_setError(md, "Not supported in sculpt mode");
+          BKE_modifier_set_error(md, "Not supported in sculpt mode");
         }
         continue;
       }
       else {
-        modifier_setError(md, "Sculpt: Hide, Mask and optimized display disabled");
+        BKE_modifier_set_error(md, "Sculpt: Hide, Mask and optimized display disabled");
       }
     }
 
-    if (need_mapping && !modifier_supportsMapping(md)) {
+    if (need_mapping && !BKE_modifier_supports_mapping(md)) {
       continue;
     }
 
@@ -1094,7 +1094,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
         }
         BKE_mesh_vert_coords_apply(mesh_final, deformed_verts);
       }
-      modwrap_deformVerts(md, &mectx, mesh_final, deformed_verts, num_deformed_verts);
+      BKE_modifier_deform_verts(md, &mectx, mesh_final, deformed_verts, num_deformed_verts);
     }
     else {
       have_non_onlydeform_modifiers_appled = true;
@@ -1176,7 +1176,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
         }
       }
 
-      Mesh *mesh_next = modwrap_applyModifier(md, &mectx, mesh_final);
+      Mesh *mesh_next = BKE_modifier_modify_mesh(md, &mectx, mesh_final);
       ASSERT_IS_VALID_MESH(mesh_next);
 
       if (mesh_next) {
@@ -1212,7 +1212,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
         CustomData_MeshMasks_update(&temp_cddata_masks, &nextmask);
         mesh_set_only_copy(mesh_orco, &temp_cddata_masks);
 
-        mesh_next = modwrap_applyModifier(md, &mectx_orco, mesh_orco);
+        mesh_next = BKE_modifier_modify_mesh(md, &mectx_orco, mesh_orco);
         ASSERT_IS_VALID_MESH(mesh_next);
 
         if (mesh_next) {
@@ -1238,7 +1238,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
         nextmask.pmask |= CD_MASK_ORIGINDEX;
         mesh_set_only_copy(mesh_orco_cloth, &nextmask);
 
-        mesh_next = modwrap_applyModifier(md, &mectx_orco, mesh_orco_cloth);
+        mesh_next = BKE_modifier_modify_mesh(md, &mectx_orco, mesh_orco_cloth);
         ASSERT_IS_VALID_MESH(mesh_next);
 
         if (mesh_next) {
@@ -1276,7 +1276,7 @@ static void mesh_calc_modifiers(struct Depsgraph *depsgraph,
   BLI_linklist_free((LinkNode *)datamasks, NULL);
 
   for (md = firstmd; md; md = md->next) {
-    modifier_freeTemporaryData(md);
+    BKE_modifier_free_temporary_data(md);
   }
 
   /* Yay, we are done. If we have a Mesh and deformed vertices,
@@ -1376,15 +1376,15 @@ float (*editbmesh_vert_coords_alloc(BMEditMesh *em, int *r_vert_len))[3]
 
 bool editbmesh_modifier_is_enabled(Scene *scene, ModifierData *md, bool has_prev_mesh)
 {
-  const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+  const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
   const int required_mode = eModifierMode_Realtime | eModifierMode_Editmode;
 
-  if (!modifier_isEnabled(scene, md, required_mode)) {
+  if (!BKE_modifier_is_enabled(scene, md, required_mode)) {
     return false;
   }
 
   if ((mti->flags & eModifierTypeFlag_RequiresOriginalData) && has_prev_mesh) {
-    modifier_setError(md, "Modifier requires original data, bad stack position");
+    BKE_modifier_set_error(md, "Modifier requires original data, bad stack position");
     return false;
   }
 
@@ -1486,30 +1486,30 @@ static void editbmesh_calc_modifiers(struct Depsgraph *depsgraph,
   /* Get effective list of modifiers to execute. Some effects like shape keys
    * are added as virtual modifiers before the user created modifiers. */
   VirtualModifierData virtualModifierData;
-  ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+  ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
 
   /* Compute accumulated datamasks needed by each modifier. It helps to do
    * this fine grained so that for example vertex groups are preserved up to
    * an armature modifier, but not through a following subsurf modifier where
    * subdividing them is expensive. */
   CustomData_MeshMasks final_datamask = *dataMask;
-  CDMaskLink *datamasks = modifiers_calcDataMasks(
+  CDMaskLink *datamasks = BKE_modifier_calc_data_masks(
       scene, ob, md, &final_datamask, required_mode, NULL, NULL);
   CDMaskLink *md_datamask = datamasks;
   CustomData_MeshMasks append_mask = CD_MASK_BAREMESH;
 
   /* Evaluate modifiers up to certain index to get the mesh cage. */
-  int cageIndex = modifiers_getCageIndex(scene, ob, NULL, 1);
+  int cageIndex = BKE_modifiers_get_cage_index(scene, ob, NULL, 1);
   if (r_cage && cageIndex == -1) {
     mesh_cage = BKE_mesh_from_editmesh_with_coords_thin_wrap(
         em_input, &final_datamask, NULL, mesh_input);
   }
 
   /* Clear errors before evaluation. */
-  modifiers_clearErrors(ob);
+  BKE_modifiers_clear_errors(ob);
 
   for (int i = 0; md; i++, md = md->next, md_datamask = md_datamask->next) {
-    const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
     if (!editbmesh_modifier_is_enabled(scene, md, mesh_final != NULL)) {
       continue;
@@ -1550,11 +1550,11 @@ static void editbmesh_calc_modifiers(struct Depsgraph *depsgraph,
       }
 
       if (mti->deformVertsEM) {
-        modwrap_deformVertsEM(
+        BKE_modifier_deform_vertsEM(
             md, &mectx, em_input, mesh_final, deformed_verts, num_deformed_verts);
       }
       else {
-        modwrap_deformVerts(md, &mectx, mesh_final, deformed_verts, num_deformed_verts);
+        BKE_modifier_deform_verts(md, &mectx, mesh_final, deformed_verts, num_deformed_verts);
       }
     }
     else {
@@ -1595,7 +1595,7 @@ static void editbmesh_calc_modifiers(struct Depsgraph *depsgraph,
         mask.pmask |= CD_MASK_ORIGINDEX;
         mesh_set_only_copy(mesh_orco, &mask);
 
-        Mesh *mesh_next = modwrap_applyModifier(md, &mectx_orco, mesh_orco);
+        Mesh *mesh_next = BKE_modifier_modify_mesh(md, &mectx_orco, mesh_orco);
         ASSERT_IS_VALID_MESH(mesh_next);
 
         if (mesh_next) {
@@ -1626,7 +1626,7 @@ static void editbmesh_calc_modifiers(struct Depsgraph *depsgraph,
         }
       }
 
-      Mesh *mesh_next = modwrap_applyModifier(md, &mectx, mesh_final);
+      Mesh *mesh_next = BKE_modifier_modify_mesh(md, &mectx, mesh_final);
       ASSERT_IS_VALID_MESH(mesh_next);
 
       if (mesh_next) {

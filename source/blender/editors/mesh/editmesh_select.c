@@ -2335,6 +2335,8 @@ void EDBM_selectmode_convert(BMEditMesh *em,
           BM_edge_select_set(bm, eed, false);
         }
       }
+      /* Deselect faces without edges selected. */
+      BM_mesh_deselect_flush(bm);
     }
     else if (selectmode_new == SCE_SELECT_VERTEX) {
       /* flush down (face -> vert) */
@@ -2668,8 +2670,9 @@ bool EDBM_selectmode_disable_multi_ex(Scene *scene,
     Object *ob_iter = base_iter->object;
     BMEditMesh *em_iter = BKE_editmesh_from_object(ob_iter);
 
-    EDBM_selectmode_disable(scene, em_iter, selectmode_disable, selectmode_fallback);
-    changed_multi = true;
+    if (EDBM_selectmode_disable(scene, em_iter, selectmode_disable, selectmode_fallback)) {
+      changed_multi = true;
+    }
   }
   return changed_multi;
 }

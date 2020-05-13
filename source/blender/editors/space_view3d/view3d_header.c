@@ -77,7 +77,8 @@ static int toggle_matcap_flip(bContext *C, wmOperator *UNUSED(op))
   else {
     Scene *scene = CTX_data_scene(C);
     scene->display.shading.flag ^= V3D_SHADING_MATCAP_FLIP_X;
-    WM_event_add_notifier(C, NC_SCENE | NA_EDITED, v3d);
+    DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
+    WM_event_add_notifier(C, NC_SCENE | ND_RENDER_OPTIONS, scene);
   }
 
   return OPERATOR_FINISHED;
@@ -138,10 +139,11 @@ void uiTemplateEditModeSelection(uiLayout *layout, struct bContext *C)
   if (obedit && (obedit->type == OB_MESH)) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
     uiLayout *row;
+    uiBut *but;
 
     row = uiLayoutRow(layout, true);
     block = uiLayoutGetBlock(row);
-    uiDefIconButBitS(
+    but = uiDefIconButBitS(
         block,
         UI_BTYPE_TOGGLE,
         SCE_SELECT_VERTEX,
@@ -157,23 +159,26 @@ void uiTemplateEditModeSelection(uiLayout *layout, struct bContext *C)
         0,
         0,
         TIP_("Vertex select - Shift-Click for multiple modes, Ctrl-Click contracts selection"));
-    uiDefIconButBitS(block,
-                     UI_BTYPE_TOGGLE,
-                     SCE_SELECT_EDGE,
-                     B_SEL_EDGE,
-                     ICON_EDGESEL,
-                     0,
-                     0,
-                     ceilf(UI_UNIT_X - U.pixelsize),
-                     UI_UNIT_Y,
-                     &em->selectmode,
-                     1.0,
-                     0.0,
-                     0,
-                     0,
-                     TIP_("Edge select - Shift-Click for multiple modes, Ctrl-Click "
-                          "expands/contracts selection"));
-    uiDefIconButBitS(
+    UI_but_flag_disable(but, UI_BUT_UNDO);
+    but = uiDefIconButBitS(
+        block,
+        UI_BTYPE_TOGGLE,
+        SCE_SELECT_EDGE,
+        B_SEL_EDGE,
+        ICON_EDGESEL,
+        0,
+        0,
+        ceilf(UI_UNIT_X - U.pixelsize),
+        UI_UNIT_Y,
+        &em->selectmode,
+        1.0,
+        0.0,
+        0,
+        0,
+        TIP_("Edge select - Shift-Click for multiple modes, "
+             "Ctrl-Click expands/contracts selection depending on the current mode"));
+    UI_but_flag_disable(but, UI_BUT_UNDO);
+    but = uiDefIconButBitS(
         block,
         UI_BTYPE_TOGGLE,
         SCE_SELECT_FACE,
@@ -189,6 +194,7 @@ void uiTemplateEditModeSelection(uiLayout *layout, struct bContext *C)
         0,
         0,
         TIP_("Face select - Shift-Click for multiple modes, Ctrl-Click expands selection"));
+    UI_but_flag_disable(but, UI_BUT_UNDO);
   }
 }
 

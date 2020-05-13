@@ -66,6 +66,7 @@ struct wmJob;
 struct wmOperator;
 struct wmOperatorType;
 struct wmPaintCursor;
+struct wmTabletData;
 
 #ifdef WITH_INPUT_NDOF
 struct wmNDOFMotionData;
@@ -617,7 +618,7 @@ int WM_gesture_lasso_modal(struct bContext *C, struct wmOperator *op, const stru
 void WM_gesture_lasso_cancel(struct bContext *C, struct wmOperator *op);
 const int (*WM_gesture_lasso_path_to_array(struct bContext *C,
                                            struct wmOperator *op,
-                                           int *mcords_tot))[2];
+                                           int *mcoords_len))[2];
 int WM_gesture_straightline_invoke(struct bContext *C,
                                    struct wmOperator *op,
                                    const struct wmEvent *event);
@@ -773,7 +774,7 @@ void WM_draw_region_viewport_bind(struct ARegion *region);
 void WM_draw_region_viewport_unbind(struct ARegion *region);
 
 /* Region drawing */
-void WM_draw_region_free(struct ARegion *region);
+void WM_draw_region_free(struct ARegion *region, bool hide);
 struct GPUViewport *WM_draw_region_get_viewport(struct ARegion *region);
 struct GPUViewport *WM_draw_region_get_bound_viewport(struct ARegion *region);
 
@@ -784,6 +785,8 @@ bool write_crash_blend(void);
 
 /* Lock the interface for any communication */
 void WM_set_locked_interface(struct wmWindowManager *wm, bool lock);
+
+void WM_event_tablet_data_default_set(struct wmTabletData *tablet_data);
 
 /* For testing only 'G_FLAG_EVENT_SIMULATE' */
 struct wmEvent *WM_event_add_simulate(struct wmWindow *win, const struct wmEvent *event_to_add);
@@ -872,6 +875,7 @@ void WM_generic_user_data_free(struct wmGenericUserData *user_data);
 bool WM_xr_session_exists(const wmXrData *xr);
 bool WM_xr_session_is_ready(const wmXrData *xr);
 struct wmXrSessionState *WM_xr_session_state_handle_get(const wmXrData *xr);
+void WM_xr_session_base_pose_reset(wmXrData *xr);
 bool WM_xr_session_state_viewer_pose_location_get(const wmXrData *xr, float r_location[3]);
 bool WM_xr_session_state_viewer_pose_rotation_get(const wmXrData *xr, float r_rotation[4]);
 bool WM_xr_session_state_viewer_pose_matrix_info_get(const wmXrData *xr,

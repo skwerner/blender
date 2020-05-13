@@ -583,7 +583,7 @@ void free_hair(Object *object, ParticleSystem *psys, int dynamics)
 
   if (psys->clmd) {
     if (dynamics) {
-      modifier_free((ModifierData *)psys->clmd);
+      BKE_modifier_free((ModifierData *)psys->clmd);
       psys->clmd = NULL;
       PTCacheID pid;
       BKE_ptcache_id_from_particles(&pid, object, psys);
@@ -735,7 +735,7 @@ void psys_free(Object *ob, ParticleSystem *psys)
      */
     free_hair(ob, psys, 0);
     if (psys->clmd != NULL) {
-      modifier_free((ModifierData *)psys->clmd);
+      BKE_modifier_free((ModifierData *)psys->clmd);
     }
 
     psys_free_particles(psys);
@@ -2787,9 +2787,7 @@ static void psys_thread_create_path(ParticleTask *task,
   }
 }
 
-static void exec_child_path_cache(TaskPool *__restrict UNUSED(pool),
-                                  void *taskdata,
-                                  int UNUSED(threadid))
+static void exec_child_path_cache(TaskPool *__restrict UNUSED(pool), void *taskdata)
 {
   ParticleTask *task = taskdata;
   ParticleThreadContext *ctx = task->ctx;
@@ -2810,7 +2808,6 @@ void psys_cache_child_paths(ParticleSimulationData *sim,
                             const bool editupdate,
                             const bool use_render_params)
 {
-  TaskScheduler *task_scheduler;
   TaskPool *task_pool;
   ParticleThreadContext ctx;
   ParticleTask *tasks_parent, *tasks_child;
@@ -2826,8 +2823,7 @@ void psys_cache_child_paths(ParticleSimulationData *sim,
     return;
   }
 
-  task_scheduler = BLI_task_scheduler_get();
-  task_pool = BLI_task_pool_create(task_scheduler, &ctx);
+  task_pool = BLI_task_pool_create(&ctx, TASK_PRIORITY_LOW);
   totchild = ctx.totchild;
   totparent = ctx.totparent;
 
@@ -2850,7 +2846,7 @@ void psys_cache_child_paths(ParticleSimulationData *sim,
     ParticleTask *task = &tasks_parent[i];
 
     psys_task_init_path(task, sim);
-    BLI_task_pool_push(task_pool, exec_child_path_cache, task, false, TASK_PRIORITY_LOW);
+    BLI_task_pool_push(task_pool, exec_child_path_cache, task, false, NULL);
   }
   BLI_task_pool_work_and_wait(task_pool);
 
@@ -2861,7 +2857,7 @@ void psys_cache_child_paths(ParticleSimulationData *sim,
     ParticleTask *task = &tasks_child[i];
 
     psys_task_init_path(task, sim);
-    BLI_task_pool_push(task_pool, exec_child_path_cache, task, false, TASK_PRIORITY_LOW);
+    BLI_task_pool_push(task_pool, exec_child_path_cache, task, false, NULL);
   }
   BLI_task_pool_work_and_wait(task_pool);
 
@@ -3377,7 +3373,6 @@ void psys_cache_edit_paths(Depsgraph *depsgraph,
 
   TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
-  settings.scheduling_mode = TASK_SCHEDULING_DYNAMIC;
   BLI_task_parallel_range(0, edit->totpoint, &iter_data, psys_cache_edit_paths_iter, &settings);
 
   edit->totcached = totpart;
@@ -3590,9 +3585,9 @@ ModifierData *object_add_particle_system(Main *bmain, Scene *scene, Object *ob, 
 
   psys->part = BKE_particlesettings_add(bmain, psys->name);
 
-  md = modifier_new(eModifierType_ParticleSystem);
+  md = BKE_modifier_new(eModifierType_ParticleSystem);
   BLI_strncpy(md->name, psys->name, sizeof(md->name));
-  modifier_unique_name(&ob->modifiers, md);
+  BKE_modifier_unique_name(&ob->modifiers, md);
 
   psmd = (ParticleSystemModifierData *)md;
   psmd->psys = psys;
@@ -3620,7 +3615,7 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
   }
 
   /* Clear particle system in fluid modifier. */
-  if ((md = modifiers_findByType(ob, eModifierType_Fluid))) {
+  if ((md = BKE_modifiers_findby_type(ob, eModifierType_Fluid))) {
     FluidModifierData *mmd = (FluidModifierData *)md;
 
     /* Clear particle system pointer in flow settings. */
@@ -3662,7 +3657,7 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
     }
   }
 
-  if ((md = modifiers_findByType(ob, eModifierType_DynamicPaint))) {
+  if ((md = BKE_modifiers_findby_type(ob, eModifierType_DynamicPaint))) {
     DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
     if (pmd->brush && pmd->brush->psys) {
       if (pmd->brush->psys == psys) {
@@ -3675,7 +3670,7 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
   psmd = psys_get_modifier(ob, psys);
   if (psmd) {
     BLI_remlink(&ob->modifiers, psmd);
-    modifier_free((ModifierData *)psmd);
+    BKE_modifier_free((ModifierData *)psmd);
   }
 
   /* Clear particle system. */
@@ -4009,7 +4004,7 @@ static void get_cpa_texture(Mesh *mesh,
           break;
       }
 
-      externtex(mtex, texvec, &value, rgba, rgba + 1, rgba + 2, rgba + 3, 0, NULL, false, false);
+      RE_texture_evaluate(mtex, texvec, 0, NULL, false, false, &value, rgba);
 
       if ((event & mtex->mapto) & PAMAP_ROUGH) {
         ptex->rough1 = ptex->rough2 = ptex->roughe = texture_value_blend(
@@ -4124,7 +4119,7 @@ void psys_get_texture(
           break;
       }
 
-      externtex(mtex, texvec, &value, rgba, rgba + 1, rgba + 2, rgba + 3, 0, NULL, false, false);
+      RE_texture_evaluate(mtex, texvec, 0, NULL, false, false, &value, rgba);
 
       if ((event & mtex->mapto) & PAMAP_TIME) {
         /* the first time has to set the base value for time regardless of blend mode */

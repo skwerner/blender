@@ -300,19 +300,15 @@ static TreeTraversalAction collection_find_data_to_edit(TreeElement *te, void *c
   return TRAVERSE_CONTINUE;
 }
 
-static int collection_delete_exec(bContext *C, wmOperator *op)
+void outliner_collection_delete(
+    bContext *C, Main *bmain, Scene *scene, ReportList *reports, bool hierarchy)
 {
-  struct wmMsgBus *mbus = CTX_wm_message_bus(C);
-  Main *bmain = CTX_data_main(C);
-  Scene *scene = CTX_data_scene(C);
-  ViewLayer *view_layer = CTX_data_view_layer(C);
-  const Base *basact_prev = BASACT(view_layer);
   SpaceOutliner *soops = CTX_wm_space_outliner(C);
+
   struct CollectionEditData data = {
       .scene = scene,
       .soops = soops,
   };
-  bool hierarchy = RNA_boolean_get(op->ptr, "hierarchy");
 
   data.collections_to_edit = BLI_gset_ptr_new(__func__);
 
@@ -358,7 +354,7 @@ static int collection_delete_exec(bContext *C, wmOperator *op)
       }
       else {
         BKE_reportf(
-            op->reports,
+            reports,
             RPT_WARNING,
             "Cannot delete linked collection '%s', it is used by other linked scenes/collections",
             collection->id.name + 2);
@@ -367,6 +363,17 @@ static int collection_delete_exec(bContext *C, wmOperator *op)
   }
 
   BLI_gset_free(data.collections_to_edit, NULL);
+}
+
+static int collection_hierarchy_delete_exec(bContext *C, wmOperator *op)
+{
+  Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  struct wmMsgBus *mbus = CTX_wm_message_bus(C);
+  const Base *basact_prev = BASACT(view_layer);
+
+  outliner_collection_delete(C, bmain, scene, op->reports, true);
 
   DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
   DEG_relations_tag_update(bmain);
@@ -377,27 +384,24 @@ static int collection_delete_exec(bContext *C, wmOperator *op)
     WM_msg_publish_rna_prop(mbus, &scene->id, view_layer, LayerObjects, active);
   }
 
+  ED_outliner_select_sync_from_object_tag(C);
+
   return OPERATOR_FINISHED;
 }
 
-void OUTLINER_OT_collection_delete(wmOperatorType *ot)
+void OUTLINER_OT_collection_hierarchy_delete(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Delete Collection";
-  ot->idname = "OUTLINER_OT_collection_delete";
-  ot->description = "Delete selected collections";
+  ot->name = "Delete Hierarchy";
+  ot->idname = "OUTLINER_OT_collection_hierarchy_delete";
+  ot->description = "Delete selected collection hierarchies";
 
   /* api callbacks */
-  ot->exec = collection_delete_exec;
+  ot->exec = collection_hierarchy_delete_exec;
   ot->poll = ED_outliner_collections_editor_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
-
-  /* properties */
-  PropertyRNA *prop = RNA_def_boolean(
-      ot->srna, "hierarchy", false, "Hierarchy", "Delete child objects and collections");
-  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 }
 
 /** \} */
@@ -458,6 +462,7 @@ static int collection_objects_select_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
   WM_main_add_notifier(NC_SCENE | ND_OB_SELECT, scene);
+  ED_outliner_select_sync_from_object_tag(C);
 
   return OPERATOR_FINISHED;
 }
@@ -580,6 +585,7 @@ static int collection_duplicate_exec(bContext *C, wmOperator *op)
 
   DEG_relations_tag_update(bmain);
   WM_main_add_notifier(NC_SCENE | ND_LAYER, CTX_data_scene(C));
+  ED_outliner_select_sync_from_object_tag(C);
 
   return OPERATOR_FINISHED;
 }
@@ -845,20 +851,6 @@ static bool collections_indirect_only_clear_poll(bContext *C)
   return collections_view_layer_poll(C, true, LAYER_COLLECTION_INDIRECT_ONLY);
 }
 
-static void layer_collection_flag_recursive_set(LayerCollection *lc, int flag)
-{
-  LISTBASE_FOREACH (LayerCollection *, nlc, &lc->layer_collections) {
-    if (lc->flag & flag) {
-      nlc->flag |= flag;
-    }
-    else {
-      nlc->flag &= ~flag;
-    }
-
-    layer_collection_flag_recursive_set(nlc, flag);
-  }
-}
-
 static int collection_view_layer_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
@@ -883,15 +875,7 @@ static int collection_view_layer_exec(bContext *C, wmOperator *op)
   GSetIterator collections_to_edit_iter;
   GSET_ITER (collections_to_edit_iter, data.collections_to_edit) {
     LayerCollection *lc = BLI_gsetIterator_getKey(&collections_to_edit_iter);
-
-    if (clear) {
-      lc->flag &= ~flag;
-    }
-    else {
-      lc->flag |= flag;
-    }
-
-    layer_collection_flag_recursive_set(lc, flag);
+    BKE_layer_collection_set_flag(lc, flag, !clear);
   }
 
   BLI_gset_free(data.collections_to_edit, NULL);
@@ -1468,8 +1452,7 @@ static int outliner_unhide_all_exec(bContext *C, wmOperator *UNUSED(op))
   /* Unhide all the collections. */
   LayerCollection *lc_master = view_layer->layer_collections.first;
   LISTBASE_FOREACH (LayerCollection *, lc_iter, &lc_master->layer_collections) {
-    lc_iter->flag &= ~LAYER_COLLECTION_HIDE;
-    layer_collection_flag_recursive_set(lc_iter, LAYER_COLLECTION_HIDE);
+    BKE_layer_collection_set_flag(lc_iter, LAYER_COLLECTION_HIDE, false);
   }
 
   /* Unhide all objects. */

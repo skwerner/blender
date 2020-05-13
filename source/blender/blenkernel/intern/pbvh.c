@@ -388,7 +388,7 @@ void BKE_pbvh_sync_face_sets_to_grids(PBVH *bvh)
   const int gridsize = bvh->gridkey.grid_size;
   for (int i = 0; i < bvh->totgrid; i++) {
     BLI_bitmap *gh = bvh->grid_hidden[i];
-    const int face_index = BKE_subdiv_cgg_grid_to_face_index(bvh->subdiv_ccg, i);
+    const int face_index = BKE_subdiv_ccg_grid_to_face_index(bvh->subdiv_ccg, i);
     if (!gh && bvh->face_sets[face_index] < 0) {
       gh = bvh->grid_hidden[i] = BLI_BITMAP_NEW(bvh->gridkey.grid_area, "partialvis_update_grids");
     }
@@ -685,8 +685,6 @@ void BKE_pbvh_free(PBVH *bvh)
       if (node->face_vert_indices) {
         MEM_freeN((void *)node->face_vert_indices);
       }
-      BKE_pbvh_node_layer_disp_free(node);
-
       if (node->bm_faces) {
         BLI_gset_free(node->bm_faces, NULL);
       }
@@ -720,13 +718,6 @@ void BKE_pbvh_free(PBVH *bvh)
   }
 
   MEM_freeN(bvh);
-}
-
-void BKE_pbvh_free_layer_disp(PBVH *bvh)
-{
-  for (int i = 0; i < bvh->totnode; i++) {
-    BKE_pbvh_node_layer_disp_free(&bvh->nodes[i]);
-  }
 }
 
 static void pbvh_iter_begin(PBVHIter *iter,
@@ -1124,11 +1115,11 @@ static void pbvh_faces_update_normals(PBVH *bvh, PBVHNode **nodes, int totnode)
       .vnors = vnors,
   };
 
-  PBVHParallelSettings settings;
+  TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, totnode);
 
-  BKE_pbvh_parallel_range(0, totnode, &data, pbvh_update_normals_accum_task_cb, &settings);
-  BKE_pbvh_parallel_range(0, totnode, &data, pbvh_update_normals_store_task_cb, &settings);
+  BLI_task_parallel_range(0, totnode, &data, pbvh_update_normals_accum_task_cb, &settings);
+  BLI_task_parallel_range(0, totnode, &data, pbvh_update_normals_store_task_cb, &settings);
 
   MEM_freeN(vnors);
 }
@@ -1178,9 +1169,9 @@ static void pbvh_update_mask_redraw(PBVH *bvh, PBVHNode **nodes, int totnode, in
       .flag = flag,
   };
 
-  PBVHParallelSettings settings;
+  TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, totnode);
-  BKE_pbvh_parallel_range(0, totnode, &data, pbvh_update_mask_redraw_task_cb, &settings);
+  BLI_task_parallel_range(0, totnode, &data, pbvh_update_mask_redraw_task_cb, &settings);
 }
 
 static void pbvh_update_visibility_redraw_task_cb(void *__restrict userdata,
@@ -1216,9 +1207,9 @@ static void pbvh_update_visibility_redraw(PBVH *bvh, PBVHNode **nodes, int totno
       .flag = flag,
   };
 
-  PBVHParallelSettings settings;
+  TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, totnode);
-  BKE_pbvh_parallel_range(0, totnode, &data, pbvh_update_visibility_redraw_task_cb, &settings);
+  BLI_task_parallel_range(0, totnode, &data, pbvh_update_visibility_redraw_task_cb, &settings);
 }
 
 static void pbvh_update_BB_redraw_task_cb(void *__restrict userdata,
@@ -1254,9 +1245,9 @@ void pbvh_update_BB_redraw(PBVH *bvh, PBVHNode **nodes, int totnode, int flag)
       .flag = flag,
   };
 
-  PBVHParallelSettings settings;
+  TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, totnode);
-  BKE_pbvh_parallel_range(0, totnode, &data, pbvh_update_BB_redraw_task_cb, &settings);
+  BLI_task_parallel_range(0, totnode, &data, pbvh_update_BB_redraw_task_cb, &settings);
 }
 
 static int pbvh_get_buffers_update_flags(PBVH *bvh, bool show_vcol)
@@ -1374,9 +1365,9 @@ static void pbvh_update_draw_buffers(
       .show_vcol = show_vcol,
   };
 
-  PBVHParallelSettings settings;
+  TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, totnode);
-  BKE_pbvh_parallel_range(0, totnode, &data, pbvh_update_draw_buffer_cb, &settings);
+  BLI_task_parallel_range(0, totnode, &data, pbvh_update_draw_buffer_cb, &settings);
 }
 
 static int pbvh_flush_bb(PBVH *bvh, PBVHNode *node, int flag)
@@ -1567,9 +1558,9 @@ static void pbvh_update_visibility(PBVH *bvh, PBVHNode **nodes, int totnode)
       .nodes = nodes,
   };
 
-  PBVHParallelSettings settings;
+  TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, totnode);
-  BKE_pbvh_parallel_range(0, totnode, &data, pbvh_update_visibility_task_cb, &settings);
+  BLI_task_parallel_range(0, totnode, &data, pbvh_update_visibility_task_cb, &settings);
 }
 
 void BKE_pbvh_update_visibility(PBVH *bvh)
@@ -1936,7 +1927,7 @@ void BKE_pbvh_node_get_bm_orco_data(PBVHNode *node,
 
 /**
  * \note doing a full search on all vertices here seems expensive,
- * however this is important to avoid having to recalculate boundbox & sync the buffers to the
+ * however this is important to avoid having to recalculate bound-box & sync the buffers to the
  * GPU (which is far more expensive!) See: T47232.
  */
 bool BKE_pbvh_node_vert_update_check_any(PBVH *bvh, PBVHNode *node)
@@ -2164,7 +2155,11 @@ static bool pbvh_faces_node_raycast(PBVH *bvh,
         float location[3] = {0.0f};
         madd_v3_v3v3fl(location, ray_start, ray_normal, *depth);
         for (int j = 0; j < 3; j++) {
-          if (len_squared_v3v3(location, co[j]) < len_squared_v3v3(location, nearest_vertex_co)) {
+          /* Always assign nearest_vertex_co in the first iteration to avoid comparison against
+           * uninitialized values. This stores the closest vertex in the current intersecting
+           * triangle. */
+          if (j == 0 ||
+              len_squared_v3v3(location, co[j]) < len_squared_v3v3(location, nearest_vertex_co)) {
             copy_v3_v3(nearest_vertex_co, co[j]);
             *r_active_vertex_index = mloop[lt->tri[j]].v;
             *r_active_face_index = lt->poly;
@@ -2244,8 +2239,11 @@ static bool pbvh_grids_node_raycast(PBVH *bvh,
             const int y_it[4] = {0, 0, 1, 1};
 
             for (int j = 0; j < 4; j++) {
-              if (len_squared_v3v3(location, co[j]) <
-                  len_squared_v3v3(location, nearest_vertex_co)) {
+              /* Always assign nearest_vertex_co in the first iteration to avoid comparison against
+               * uninitialized values. This stores the closest vertex in the current intersecting
+               * quad. */
+              if (j == 0 || len_squared_v3v3(location, co[j]) <
+                                len_squared_v3v3(location, nearest_vertex_co)) {
                 copy_v3_v3(nearest_vertex_co, co[j]);
 
                 *r_active_vertex_index = gridkey->grid_area * grid_index +
@@ -2768,26 +2766,6 @@ void BKE_pbvh_grids_update(
   }
 }
 
-/* Get the node's displacement layer, creating it if necessary */
-float *BKE_pbvh_node_layer_disp_get(PBVH *bvh, PBVHNode *node)
-{
-  if (!node->layer_disp) {
-    int totvert = 0;
-    BKE_pbvh_node_num_verts(bvh, node, &totvert, NULL);
-    node->layer_disp = MEM_callocN(sizeof(float) * totvert, "layer disp");
-  }
-  return node->layer_disp;
-}
-
-/* If the node has a displacement layer, free it and set to null */
-void BKE_pbvh_node_layer_disp_free(PBVHNode *node)
-{
-  if (node->layer_disp) {
-    MEM_freeN(node->layer_disp);
-    node->layer_disp = NULL;
-  }
-}
-
 float (*BKE_pbvh_vert_coords_alloc(PBVH *pbvh))[3]
 {
   float(*vertCos)[3] = NULL;
@@ -2987,7 +2965,7 @@ bool pbvh_has_face_sets(PBVH *bvh)
 {
   switch (bvh->type) {
     case PBVH_GRIDS:
-      return false;
+      return (bvh->pdata && CustomData_get_layer(bvh->pdata, CD_SCULPT_FACE_SETS));
     case PBVH_FACES:
       return (bvh->pdata && CustomData_get_layer(bvh->pdata, CD_SCULPT_FACE_SETS));
     case PBVH_BMESH:
@@ -3023,7 +3001,7 @@ void BKE_pbvh_get_frustum_planes(PBVH *bvh, PBVHFrustumPlanes *planes)
   }
 }
 
-void BKE_pbvh_parallel_range_settings(PBVHParallelSettings *settings,
+void BKE_pbvh_parallel_range_settings(TaskParallelSettings *settings,
                                       bool use_threading,
                                       int totnode)
 {

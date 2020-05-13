@@ -212,7 +212,7 @@ typedef enum eSpaceButtons_Context {
   BCONTEXT_SHADERFX = 15,
   BCONTEXT_OUTPUT = 16,
 
-  /* always as last... */
+  /* Keep last. */
   BCONTEXT_TOT,
 } eSpaceButtons_Context;
 
@@ -1075,7 +1075,9 @@ typedef struct SpaceImage {
   int flag;
 
   char pixel_snap_mode;
-  char _pad2[3];
+  char _pad2[7];
+
+  float uv_opacity;
 
   int tile_grid_shape[2];
 
@@ -1718,7 +1720,7 @@ typedef enum eSpace_Type {
   SPACE_TOPBAR = 21,
   SPACE_STATUSBAR = 22,
 
-  SPACE_TYPE_LAST = SPACE_STATUSBAR,
+#define SPACE_TYPE_LAST SPACE_STATUSBAR
 } eSpace_Type;
 
 /* use for function args */

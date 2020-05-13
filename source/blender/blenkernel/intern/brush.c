@@ -49,7 +49,7 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
-#include "RE_render_ext.h" /* externtex */
+#include "RE_render_ext.h" /* RE_texture_evaluate */
 
 static void brush_init_data(ID *id)
 {
@@ -89,6 +89,19 @@ static void brush_copy_data(Main *UNUSED(bmain), ID *id_dst, const ID *id_src, c
         brush_src->gpencil_settings->curve_strength);
     brush_dst->gpencil_settings->curve_jitter = BKE_curvemapping_copy(
         brush_src->gpencil_settings->curve_jitter);
+
+    brush_dst->gpencil_settings->curve_rand_pressure = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_pressure);
+    brush_dst->gpencil_settings->curve_rand_strength = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_strength);
+    brush_dst->gpencil_settings->curve_rand_uv = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_uv);
+    brush_dst->gpencil_settings->curve_rand_hue = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_hue);
+    brush_dst->gpencil_settings->curve_rand_saturation = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_saturation);
+    brush_dst->gpencil_settings->curve_rand_value = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_value);
   }
 
   /* enable fake user by default */
@@ -107,6 +120,14 @@ static void brush_free_data(ID *id)
     BKE_curvemapping_free(brush->gpencil_settings->curve_sensitivity);
     BKE_curvemapping_free(brush->gpencil_settings->curve_strength);
     BKE_curvemapping_free(brush->gpencil_settings->curve_jitter);
+
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_pressure);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_strength);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_uv);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_hue);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_saturation);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_value);
+
     MEM_SAFE_FREE(brush->gpencil_settings);
   }
 
@@ -160,6 +181,20 @@ static void brush_make_local(Main *bmain, ID *id, const int flags)
   }
 }
 
+static void brush_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Brush *brush = (Brush *)id;
+
+  BKE_LIB_FOREACHID_PROCESS(data, brush->toggle_brush, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS(data, brush->clone.image, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS(data, brush->paint_curve, IDWALK_CB_USER);
+  if (brush->gpencil_settings) {
+    BKE_LIB_FOREACHID_PROCESS(data, brush->gpencil_settings->material, IDWALK_CB_USER);
+  }
+  BKE_texture_mtex_foreach_id(data, &brush->mtex);
+  BKE_texture_mtex_foreach_id(data, &brush->mask_mtex);
+}
+
 IDTypeInfo IDType_ID_BR = {
     .id_code = ID_BR,
     .id_filter = FILTER_ID_BR,
@@ -174,6 +209,7 @@ IDTypeInfo IDType_ID_BR = {
     .copy_data = brush_copy_data,
     .free_data = brush_free_data,
     .make_local = brush_make_local,
+    .foreach_id = brush_foreach_id,
 };
 
 static RNG *brush_rng;
@@ -280,6 +316,13 @@ void BKE_brush_init_gpencil_settings(Brush *brush)
   brush->gpencil_settings->curve_sensitivity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
   brush->gpencil_settings->curve_strength = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
   brush->gpencil_settings->curve_jitter = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+
+  brush->gpencil_settings->curve_rand_pressure = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_rand_strength = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_rand_uv = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_rand_hue = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_rand_saturation = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_rand_value = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
 }
 
 /* add a new gp-brush */
@@ -344,7 +387,8 @@ typedef enum eGPCurveMappingPreset {
   GPCURVE_PRESET_INK = 1,
   GPCURVE_PRESET_INKNOISE = 2,
   GPCURVE_PRESET_MARKER = 3,
-  GPCURVE_PRESET_CHISEL = 4,
+  GPCURVE_PRESET_CHISEL_SENSIVITY = 4,
+  GPCURVE_PRESET_CHISEL_STRENGTH = 5,
 } eGPCurveMappingPreset;
 
 static void brush_gpencil_curvemap_reset(CurveMap *cuma, int tot, int preset)
@@ -391,11 +435,25 @@ static void brush_gpencil_curvemap_reset(CurveMap *cuma, int tot, int preset)
       cuma->curve[3].x = 1.0f;
       cuma->curve[3].y = 1.0f;
       break;
-    case GPCURVE_PRESET_CHISEL:
+    case GPCURVE_PRESET_CHISEL_SENSIVITY:
       cuma->curve[0].x = 0.0f;
       cuma->curve[0].y = 0.0f;
-      cuma->curve[1].x = 0.8f;
-      cuma->curve[1].y = 1.0f;
+      cuma->curve[1].x = 0.25f;
+      cuma->curve[1].y = 0.40f;
+      cuma->curve[2].x = 1.0f;
+      cuma->curve[2].y = 1.0f;
+      break;
+    case GPCURVE_PRESET_CHISEL_STRENGTH:
+      cuma->curve[0].x = 0.0f;
+      cuma->curve[0].y = 0.0f;
+      cuma->curve[1].x = 0.31f;
+      cuma->curve[1].y = 0.22f;
+      cuma->curve[2].x = 0.61f;
+      cuma->curve[2].y = 0.88f;
+      cuma->curve[3].x = 1.0f;
+      cuma->curve[3].y = 1.0f;
+      break;
+    default:
       break;
   }
 
@@ -581,15 +639,15 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       break;
     }
     case GP_BRUSH_PRESET_MARKER_CHISEL: {
-      brush->size = 100.0f;
+      brush->size = 150.0f;
       brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 1.0f;
 
       brush->gpencil_settings->input_samples = 10;
-      brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
-      brush->gpencil_settings->draw_angle = DEG2RAD(20.0f);
-      brush->gpencil_settings->draw_angle_factor = 1.0f;
+      brush->gpencil_settings->active_smooth = 0.3f;
+      brush->gpencil_settings->draw_angle = DEG2RAD(35.0f);
+      brush->gpencil_settings->draw_angle_factor = 0.5f;
       brush->gpencil_settings->hardeness = 1.0f;
       copy_v2_fl(brush->gpencil_settings->aspect_ratio, 1.0f);
 
@@ -608,7 +666,12 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
       custom_curve = brush->gpencil_settings->curve_sensitivity;
       BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
       BKE_curvemapping_initialize(custom_curve);
-      brush_gpencil_curvemap_reset(custom_curve->cm, 2, GPCURVE_PRESET_CHISEL);
+      brush_gpencil_curvemap_reset(custom_curve->cm, 3, GPCURVE_PRESET_CHISEL_SENSIVITY);
+
+      custom_curve = brush->gpencil_settings->curve_strength;
+      BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
+      BKE_curvemapping_initialize(custom_curve);
+      brush_gpencil_curvemap_reset(custom_curve->cm, 4, GPCURVE_PRESET_CHISEL_STRENGTH);
 
       brush->gpencil_settings->icon_id = GP_BRUSH_ICON_CHISEL;
       brush->gpencil_tool = GPAINT_TOOL_DRAW;
@@ -618,10 +681,10 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
     }
     case GP_BRUSH_PRESET_PEN: {
       brush->size = 25.0f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+      brush->gpencil_settings->flag &= ~GP_BRUSH_USE_PRESSURE;
 
       brush->gpencil_settings->draw_strength = 1.0f;
-      brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+      brush->gpencil_settings->flag &= ~GP_BRUSH_USE_STENGTH_PRESSURE;
 
       brush->gpencil_settings->input_samples = 10;
       brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
@@ -1422,6 +1485,12 @@ void BKE_brush_sculpt_reset(Brush *br)
       br->cloth_deform_type = BRUSH_CLOTH_DEFORM_DRAG;
       br->flag &= ~(BRUSH_ALPHA_PRESSURE | BRUSH_SIZE_PRESSURE);
       break;
+    case SCULPT_TOOL_LAYER:
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->hardness = 0.35f;
+      br->alpha = 1.0f;
+      br->height = 0.05f;
+      break;
     default:
       break;
   }
@@ -1546,8 +1615,7 @@ float BKE_brush_sample_tex_3d(const Scene *scene,
   else if (mtex->brush_map_mode == MTEX_MAP_MODE_3D) {
     /* Get strength by feeding the vertex
      * location directly into a texture */
-    hasrgb = externtex(
-        mtex, point, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+    hasrgb = RE_texture_evaluate(mtex, point, thread, pool, false, false, &intensity, rgba);
   }
   else if (mtex->brush_map_mode == MTEX_MAP_MODE_STENCIL) {
     float rotation = -mtex->rot;
@@ -1577,8 +1645,7 @@ float BKE_brush_sample_tex_3d(const Scene *scene,
     co[1] = y;
     co[2] = 0.0f;
 
-    hasrgb = externtex(
-        mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+    hasrgb = RE_texture_evaluate(mtex, co, thread, pool, false, false, &intensity, rgba);
   }
   else {
     float rotation = -mtex->rot;
@@ -1634,8 +1701,7 @@ float BKE_brush_sample_tex_3d(const Scene *scene,
     co[1] = y;
     co[2] = 0.0f;
 
-    hasrgb = externtex(
-        mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+    hasrgb = RE_texture_evaluate(mtex, co, thread, pool, false, false, &intensity, rgba);
   }
 
   intensity += br->texture_sample_bias;
@@ -1692,8 +1758,7 @@ float BKE_brush_sample_masktex(
     co[1] = y;
     co[2] = 0.0f;
 
-    externtex(
-        mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+    RE_texture_evaluate(mtex, co, thread, pool, false, false, &intensity, rgba);
   }
   else {
     float rotation = -mtex->rot;
@@ -1749,8 +1814,7 @@ float BKE_brush_sample_masktex(
     co[1] = y;
     co[2] = 0.0f;
 
-    externtex(
-        mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+    RE_texture_evaluate(mtex, co, thread, pool, false, false, &intensity, rgba);
   }
 
   CLAMP(intensity, 0.0f, 1.0f);
@@ -2054,7 +2118,7 @@ unsigned int *BKE_brush_gen_texture_cache(Brush *br, int half_side, bool use_sec
   unsigned int *texcache = NULL;
   MTex *mtex = (use_secondary) ? &br->mask_mtex : &br->mtex;
   float intensity;
-  float rgba[4];
+  float rgba_dummy[4];
   int ix, iy;
   int side = half_side * 2;
 
@@ -2072,11 +2136,8 @@ unsigned int *BKE_brush_gen_texture_cache(Brush *br, int half_side, bool use_sec
 
         /* This is copied from displace modifier code */
         /* TODO(sergey): brush are always caching with CM enabled for now. */
-        externtex(mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, 0, NULL, false, false);
-
-        ((char *)texcache)[(iy * side + ix) * 4] = ((char *)texcache)[(iy * side + ix) * 4 + 1] =
-            ((char *)texcache)[(iy * side + ix) * 4 + 2] = ((
-                char *)texcache)[(iy * side + ix) * 4 + 3] = (char)(intensity * 255.0f);
+        RE_texture_evaluate(mtex, co, 0, NULL, false, false, &intensity, rgba_dummy);
+        copy_v4_uchar((uchar *)&texcache[iy * side + ix], (char)(intensity * 255.0f));
       }
     }
   }

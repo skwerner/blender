@@ -45,10 +45,8 @@
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
-#include "DNA_workspace_types.h"
 
 #include "RNA_access.h"
-#include "RNA_enum_types.h"
 
 #include "BKE_appdir.h"
 #include "BKE_context.h"
@@ -62,10 +60,6 @@
 #include "IMB_thumbs.h"
 
 #include "BIF_glutil.h"
-
-#include "DEG_depsgraph.h"
-
-#include "DRW_engine.h"
 
 #include "ED_datafiles.h"
 #include "ED_keyframes_draw.h"
@@ -1129,8 +1123,8 @@ void UI_icons_free(void)
 #ifndef WITH_HEADLESS
   free_icons_textures();
   free_iconfile_list(&iconfilelist);
-  BKE_icons_free();
 #endif
+  BKE_icons_free();
 }
 
 void UI_icons_free_drawinfo(void *drawinfo)
@@ -2326,6 +2320,9 @@ int UI_idcode_icon_get(const int idcode)
       return ICON_WORLD_DATA;
     case ID_WS:
       return ICON_WORKSPACE;
+    case ID_SIM:
+      /* TODO: Use correct icon. */
+      return ICON_PHYSICS;
     default:
       return ICON_NONE;
   }

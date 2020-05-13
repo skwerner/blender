@@ -155,6 +155,9 @@ static void scene_init_data(ID *id)
   scene->unit.mass_unit = (uchar)bUnit_GetBaseUnitOfType(USER_UNIT_METRIC, B_UNIT_MASS);
   scene->unit.time_unit = (uchar)bUnit_GetBaseUnitOfType(USER_UNIT_METRIC, B_UNIT_TIME);
 
+  /* Anti-aliasing threshold. */
+  scene->grease_pencil_settings.smaa_threshold = 1.0f;
+
   {
     ParticleEditSettings *pset;
     pset = &scene->toolsettings->particle;
@@ -340,12 +343,17 @@ static void scene_free_data(ID *id)
 
   /* is no lib link block, but scene extension */
   if (scene->nodetree) {
-    ntreeFreeNestedTree(scene->nodetree);
+    ntreeFreeEmbeddedTree(scene->nodetree);
     MEM_freeN(scene->nodetree);
     scene->nodetree = NULL;
   }
 
   if (scene->rigidbody_world) {
+    /* Prevent rigidbody freeing code to follow other IDs pointers, this should never be allowed
+     * nor necessary from here, and with new undo code, those pointers may be fully invalid or
+     * worse, pointing to data actually belonging to new BMain! */
+    scene->rigidbody_world->constraints = NULL;
+    scene->rigidbody_world->group = NULL;
     BKE_rigidbody_free_world(scene);
   }
 
@@ -1278,6 +1286,14 @@ void BKE_scene_update_sound(Depsgraph *depsgraph, Main *bmain)
   BKE_sound_update_scene(depsgraph, scene);
 }
 
+void BKE_scene_update_tag_audio_volume(Depsgraph *UNUSED(depsgraph), Scene *scene)
+{
+  BLI_assert(DEG_is_evaluated_id(&scene->id));
+  /* The volume is actually updated in BKE_scene_update_sound(), from either
+   * scene_graph_update_tagged() or from BKE_scene_graph_update_for_newframe(). */
+  scene->id.recalc |= ID_RECALC_AUDIO_VOLUME;
+}
+
 /* TODO(sergey): This actually should become view_layer_graph or so.
  * Same applies to update_for_newframe.
  *
@@ -2094,7 +2110,7 @@ static Depsgraph **scene_get_depsgraph_p(Main *bmain,
       if (allocate_depsgraph) {
         *depsgraph_ptr = DEG_graph_new(bmain, scene, view_layer, DAG_EVAL_VIEWPORT);
         /* TODO(sergey): Would be cool to avoid string format print,
-         * but is a bit tricky because we can't know in advance  whether
+         * but is a bit tricky because we can't know in advance whether
          * we will ever enable debug messages for this depsgraph.
          */
         char name[1024];

@@ -1741,8 +1741,7 @@ static void area_move_apply_do(const bContext *C,
   /* only redraw if we actually moved a screen vert, for AREAGRID */
   if (doredraw) {
     bool redraw_all = false;
-    ED_screen_areas_iter(win, screen, area)
-    {
+    ED_screen_areas_iter (win, screen, area) {
       if (area->v1->editflag || area->v2->editflag || area->v3->editflag || area->v4->editflag) {
         if (ED_area_is_global(area)) {
           /* Snap to minimum or maximum for global areas. */
@@ -1761,8 +1760,7 @@ static void area_move_apply_do(const bContext *C,
       }
     }
     if (redraw_all) {
-      ED_screen_areas_iter(win, screen, area)
-      {
+      ED_screen_areas_iter (win, screen, area) {
         ED_area_tag_redraw(area);
       }
     }
@@ -3870,7 +3868,10 @@ static int region_quadview_exec(bContext *C, wmOperator *op)
 
       rv3d->viewlock_quad = RV3D_VIEWLOCK_INIT;
       rv3d->viewlock = 0;
-      rv3d->rflag &= ~RV3D_CLIPPING;
+
+      /* FIXME: This fixes missing update to workbench TAA. (see T76216)
+       * However, it would be nice if the tagging should be done in a more conventional way. */
+      rv3d->rflag |= RV3D_GPULIGHT_UPDATE;
 
       /* Accumulate locks, in case they're mixed. */
       for (region_iter = area->regionbase.first; region_iter; region_iter = region_iter->next) {
@@ -4389,7 +4390,7 @@ static int screen_animation_step(bContext *C, wmOperator *UNUSED(op), const wmEv
     wmWindow *window;
     ScrArea *area;
     int sync;
-    float time;
+    double time;
 
     /* sync, don't sync, or follow scene setting */
     if (sad->flag & ANIMPLAY_FLAG_SYNC) {
@@ -4412,7 +4413,7 @@ static int screen_animation_step(bContext *C, wmOperator *UNUSED(op), const wmEv
     }
     else if ((scene->audio.flag & AUDIO_SYNC) && (sad->flag & ANIMPLAY_FLAG_REVERSE) == false &&
              isfinite(time = BKE_sound_sync_scene(scene_eval))) {
-      double newfra = (double)time * FPS;
+      double newfra = time * FPS;
 
       /* give some space here to avoid jumps */
       if (newfra + 0.5 > scene->r.cfra && newfra - 0.5 < scene->r.cfra) {
@@ -4436,10 +4437,29 @@ static int screen_animation_step(bContext *C, wmOperator *UNUSED(op), const wmEv
     }
     else {
       if (sync) {
-        /* note: this is very simplistic,
-         * its has problem that it may skip too many frames.
-         * however at least this gives a less jittery playback */
-        const int step = max_ii(1, floor((wt->duration - sad->last_duration) * FPS));
+        /* Try to keep the playback in realtime by dropping frames. */
+
+        /* How much time (in frames) has passed since the last frame was drawn? */
+        double delta_frames = wt->delta * FPS;
+
+        /* Add the remaining fraction from the last time step. */
+        delta_frames += sad->lagging_frame_count;
+
+        if (delta_frames < 1.0) {
+          /* We can render faster than the scene frame rate. However skipping or delaying frames
+           * here seems to in practice lead to jittery playback so just step forward a minimum of
+           * one frame. (Even though this can lead to too fast playback, the jitteryness is more
+           * annoying)
+           */
+          delta_frames = 1.0f;
+          sad->lagging_frame_count = 0;
+        }
+        else {
+          /* Extract the delta frame fractions that will be skipped when converting to int. */
+          sad->lagging_frame_count = delta_frames - (int)delta_frames;
+        }
+
+        const int step = delta_frames;
 
         /* skip frames */
         if (sad->flag & ANIMPLAY_FLAG_REVERSE) {
@@ -4459,8 +4479,6 @@ static int screen_animation_step(bContext *C, wmOperator *UNUSED(op), const wmEv
         }
       }
     }
-
-    sad->last_duration = wt->duration;
 
     /* reset 'jumped' flag before checking if we need to jump... */
     sad->flag &= ~ANIMPLAY_FLAG_JUMPED;

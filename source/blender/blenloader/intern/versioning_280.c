@@ -40,6 +40,7 @@
 #include "DNA_constraint_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_curveprofile_types.h"
+#include "DNA_fluid_types.h"
 #include "DNA_freestyle_types.h"
 #include "DNA_genfile.h"
 #include "DNA_gpencil_modifier_types.h"
@@ -74,6 +75,7 @@
 #include "BKE_curveprofile.h"
 #include "BKE_customdata.h"
 #include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 #include "BKE_freestyle.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
@@ -110,6 +112,35 @@
 
 /* Make preferences read-only, use versioning_userdef.c. */
 #define U (*((const UserDef *)&U))
+
+/**
+ * Rename if the ID doesn't exist.
+ */
+static ID *rename_id_for_versioning(Main *bmain,
+                                    const short id_type,
+                                    const char *name_src,
+                                    const char *name_dst)
+{
+  /* We can ignore libraries */
+  ListBase *lb = which_libbase(bmain, id_type);
+  ID *id = NULL;
+  LISTBASE_FOREACH (ID *, idtest, lb) {
+    if (idtest->lib == NULL) {
+      if (STREQ(idtest->name + 2, name_src)) {
+        id = idtest;
+      }
+      if (STREQ(idtest->name + 2, name_dst)) {
+        return NULL;
+      }
+    }
+  }
+  if (id != NULL) {
+    BLI_strncpy(id->name + 2, name_dst, sizeof(id->name) - 2);
+    /* We know it's unique, this just sorts. */
+    BLI_libblock_ensure_unique_name(bmain, id->name);
+  }
+  return id;
+}
 
 static bScreen *screen_parent_find(const bScreen *screen)
 {
@@ -1633,7 +1664,45 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
 
   if (!MAIN_VERSION_ATLEAST(bmain, 282, 2)) {
     /* Init all Vertex/Sculpt and Weight Paint brushes. */
-    Brush *brush = BLI_findstring(&bmain->brushes, "Pencil", offsetof(ID, name) + 2);
+    Brush *brush;
+    Material *ma;
+    /* Pen Soft brush. */
+    brush = (Brush *)rename_id_for_versioning(bmain, ID_BR, "Draw Soft", "Pencil Soft");
+    if (brush) {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PEN;
+    }
+    rename_id_for_versioning(bmain, ID_BR, "Draw Pencil", "Pencil");
+    rename_id_for_versioning(bmain, ID_BR, "Draw Pen", "Pen");
+    rename_id_for_versioning(bmain, ID_BR, "Draw Ink", "Ink Pen");
+    rename_id_for_versioning(bmain, ID_BR, "Draw Noise", "Ink Pen Rough");
+    rename_id_for_versioning(bmain, ID_BR, "Draw Marker", "Marker Bold");
+    rename_id_for_versioning(bmain, ID_BR, "Draw Block", "Marker Chisel");
+
+    ma = BLI_findstring(&bmain->materials, "Black", offsetof(ID, name) + 2);
+    if (ma && ma->gp_style) {
+      rename_id_for_versioning(bmain, ID_MA, "Black", "Solid Stroke");
+    }
+    ma = BLI_findstring(&bmain->materials, "Red", offsetof(ID, name) + 2);
+    if (ma && ma->gp_style) {
+      rename_id_for_versioning(bmain, ID_MA, "Red", "Squares Stroke");
+    }
+    ma = BLI_findstring(&bmain->materials, "Grey", offsetof(ID, name) + 2);
+    if (ma && ma->gp_style) {
+      rename_id_for_versioning(bmain, ID_MA, "Grey", "Solid Fill");
+    }
+    ma = BLI_findstring(&bmain->materials, "Black Dots", offsetof(ID, name) + 2);
+    if (ma && ma->gp_style) {
+      rename_id_for_versioning(bmain, ID_MA, "Black Dots", "Dots Stroke");
+    }
+
+    /* Remove useless Fill Area.001 brush. */
+    brush = BLI_findstring(&bmain->brushes, "Fill Area.001", offsetof(ID, name) + 2);
+    if (brush) {
+      BKE_id_delete(bmain, brush);
+    }
+
+    brush = BLI_findstring(&bmain->brushes, "Pencil", offsetof(ID, name) + 2);
+
     for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
       ToolSettings *ts = scene->toolsettings;
 
@@ -1665,6 +1734,157 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
      * removed, and reintroduced in 5e968a996a53 as "Object.hide_viewport". */
     LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
       BKE_fcurves_id_cb(&ob->id, do_version_fcurve_hide_viewport_fix, NULL);
+    }
+
+    /* Reset all grease pencil brushes. */
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      BKE_brush_gpencil_paint_presets(bmain, scene->toolsettings);
+      BKE_brush_gpencil_sculpt_presets(bmain, scene->toolsettings);
+      BKE_brush_gpencil_weight_presets(bmain, scene->toolsettings);
+      BKE_brush_gpencil_vertex_presets(bmain, scene->toolsettings);
+
+      /* Ensure new Paint modes. */
+      BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_VERTEX_GPENCIL);
+      BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_SCULPT_GPENCIL);
+      BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_WEIGHT_GPENCIL);
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 290, 1)) {
+    /* Patch old grease pencil modifiers material filter. */
+    LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+      LISTBASE_FOREACH (GpencilModifierData *, md, &ob->greasepencil_modifiers) {
+        switch (md->type) {
+          case eGpencilModifierType_Array: {
+            ArrayGpencilModifierData *gpmd = (ArrayGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Color: {
+            ColorGpencilModifierData *gpmd = (ColorGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Hook: {
+            HookGpencilModifierData *gpmd = (HookGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Lattice: {
+            LatticeGpencilModifierData *gpmd = (LatticeGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Mirror: {
+            MirrorGpencilModifierData *gpmd = (MirrorGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Multiply: {
+            MultiplyGpencilModifierData *gpmd = (MultiplyGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Noise: {
+            NoiseGpencilModifierData *gpmd = (NoiseGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Offset: {
+            OffsetGpencilModifierData *gpmd = (OffsetGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Opacity: {
+            OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Simplify: {
+            SimplifyGpencilModifierData *gpmd = (SimplifyGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Smooth: {
+            SmoothGpencilModifierData *gpmd = (SmoothGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Subdiv: {
+            SubdivGpencilModifierData *gpmd = (SubdivGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Texture: {
+            TextureGpencilModifierData *gpmd = (TextureGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          case eGpencilModifierType_Thick: {
+            ThickGpencilModifierData *gpmd = (ThickGpencilModifierData *)md;
+            if (gpmd->materialname[0] != '\0') {
+              gpmd->material = BLI_findstring(
+                  &bmain->materials, gpmd->materialname, offsetof(ID, name) + 2);
+              gpmd->materialname[0] = '\0';
+            }
+            break;
+          }
+          default:
+            break;
+        }
+      }
     }
   }
 
@@ -4125,7 +4345,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             v3d->shading.flag |= V3D_SHADING_SCENE_LIGHTS_RENDER | V3D_SHADING_SCENE_WORLD_RENDER;
 
             /* files by default don't have studio lights selected unless interacted
-             * with the shading popover. When no studiolight could be read, we will
+             * with the shading popover. When no studio-light could be read, we will
              * select the default world one. */
             StudioLight *studio_light = BKE_studiolight_find(v3d->shading.lookdev_light,
                                                              STUDIOLIGHT_TYPE_WORLD);
@@ -4194,7 +4414,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
-    /* Added studiolight intensity */
+    /* Added studio-light intensity. */
     if (!DNA_struct_elem_find(fd->filesdna, "View3DShading", "float", "studiolight_intensity")) {
       for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
         LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
@@ -4405,6 +4625,19 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 283, 3)) {
+    /* Color Management Look. */
+    for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+      ColorManagedViewSettings *view_settings;
+      view_settings = &scene->view_settings;
+      if (BLI_str_startswith(view_settings->look, "Filmic - ")) {
+        char *src = view_settings->look + strlen("Filmic - ");
+        memmove(view_settings->look, src, strlen(src) + 1);
+      }
+      else if (BLI_str_startswith(view_settings->look, "Standard - ")) {
+        char *src = view_settings->look + strlen("Standard - ");
+        memmove(view_settings->look, src, strlen(src) + 1);
+      }
+    }
 
     /* Sequencer Tool region */
     do_versions_area_ensure_tool_region(bmain, SPACE_SEQ, RGN_FLAG_HIDDEN);
@@ -4553,6 +4786,13 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             brush->gpencil_weight_tool = brush->gpencil_settings->brush_type;
           }
         }
+        /* Tint brush. */
+        Brush *brush = BLI_findstring(&bmain->brushes, "Tint", offsetof(ID, name) + 2);
+        if (brush == NULL) {
+          brush = BKE_brush_add(bmain, "Tint", OB_MODE_PAINT_GPENCIL);
+          BKE_brush_init_gpencil_settings(brush);
+        }
+        BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_TINT);
 
         BKE_paint_toolslots_init_from_main(bmain);
       }
@@ -4879,7 +5119,6 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 283, 12)) {
-
     /* Activate f-curve drawing in the sequencer. */
     for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
       for (ScrArea *area = screen->areabase.first; area; area = area->next) {
@@ -4906,6 +5145,66 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 14)) {
+    /* Solidify modifier merge tolerance. */
+    if (!DNA_struct_elem_find(fd->filesdna, "SolidifyModifierData", "float", "merge_tolerance")) {
+      for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+        for (ModifierData *md = ob->modifiers.first; md; md = md->next) {
+          if (md->type == eModifierType_Solidify) {
+            SolidifyModifierData *smd = (SolidifyModifierData *)md;
+            /* set to 0.0003 since that is what was used before, default now is 0.0001 */
+            smd->merge_tolerance = 0.0003f;
+          }
+        }
+      }
+    }
+
+    /* Enumerator was incorrect for a time in 2.83 development.
+     * Note that this only corrects values known to be invalid. */
+    for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+      RigidBodyCon *rbc = ob->rigidbody_constraint;
+      if (rbc != NULL) {
+        enum {
+          INVALID_RBC_TYPE_SLIDER = 2,
+          INVALID_RBC_TYPE_6DOF_SPRING = 4,
+          INVALID_RBC_TYPE_MOTOR = 7,
+        };
+        switch (rbc->type) {
+          case INVALID_RBC_TYPE_SLIDER:
+            rbc->type = RBC_TYPE_SLIDER;
+            break;
+          case INVALID_RBC_TYPE_6DOF_SPRING:
+            rbc->type = RBC_TYPE_6DOF_SPRING;
+            break;
+          case INVALID_RBC_TYPE_MOTOR:
+            rbc->type = RBC_TYPE_MOTOR;
+            break;
+        }
+      }
+    }
+  }
+
+  /* Match scale of fluid modifier gravity with scene gravity. */
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 15)) {
+    for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+      for (ModifierData *md = ob->modifiers.first; md; md = md->next) {
+        if (md->type == eModifierType_Fluid) {
+          FluidModifierData *fmd = (FluidModifierData *)md;
+          if (fmd->domain != NULL) {
+            mul_v3_fl(fmd->domain->gravity, 9.81f);
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 16)) {
+    /* Init SMAA threshold for grease pencil render. */
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      scene->grease_pencil_settings.smaa_threshold = 1.0f;
+    }
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *
@@ -4918,5 +5217,14 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
    */
   {
     /* Keep this block, even when empty. */
+
+    /* Reset the cloth mass to 1.0 in brushes with an invalid value. */
+    for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
+      if (br->sculpt_tool == SCULPT_TOOL_CLOTH) {
+        if (br->cloth_mass == 0.0f) {
+          br->cloth_mass = 1.0f;
+        }
+      }
+    }
   }
 }

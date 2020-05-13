@@ -33,7 +33,6 @@
 #include "BLI_task.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_key_types.h"
@@ -54,7 +53,6 @@ extern "C" {
 #define new new_
 #include "BKE_screen.h"
 #undef new
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_debug.h"
@@ -495,13 +493,13 @@ void deg_graph_node_tag_zero(Main *bmain,
   ID *id = id_node->id_orig;
   /* TODO(sergey): Which recalc flags to set here? */
   id_node->id_cow->recalc |= deg_recalc_flags_for_legacy_zero();
-  GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
+
+  for (ComponentNode *comp_node : id_node->components.values()) {
     if (comp_node->type == NodeType::ANIMATION) {
       continue;
     }
     comp_node->tag_update(graph, update_source);
   }
-  GHASH_FOREACH_END();
   deg_graph_id_tag_legacy_compat(bmain, graph, id, (IDRecalcFlag)0, update_source);
 }
 
@@ -625,7 +623,7 @@ void id_tag_update(Main *bmain, ID *id, int flag, eUpdateSource update_source)
 
   /* Accumulate all tags for an ID between two undo steps, so they can be
    * replayed for undo. */
-  id->recalc_undo_accumulated |= deg_recalc_flags_effective(NULL, flag);
+  id->recalc_after_undo_push |= deg_recalc_flags_effective(NULL, flag);
 }
 
 void graph_id_tag_update(

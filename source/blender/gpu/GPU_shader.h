@@ -29,6 +29,7 @@ extern "C" {
 #endif
 
 typedef struct GPUShader GPUShader;
+struct GPUShaderInterface;
 struct GPUTexture;
 struct GPUUniformBuffer;
 
@@ -49,6 +50,11 @@ GPUShader *GPU_shader_create(const char *vertexcode,
                              const char *libcode,
                              const char *defines,
                              const char *shader_name);
+GPUShader *GPU_shader_create_from_python(const char *vertexcode,
+                                         const char *fragcode,
+                                         const char *geocode,
+                                         const char *libcode,
+                                         const char *defines);
 GPUShader *GPU_shader_create_ex(const char *vertexcode,
                                 const char *fragcode,
                                 const char *geocode,
@@ -83,6 +89,8 @@ int GPU_shader_get_program(GPUShader *shader);
 
 void *GPU_shader_get_interface(GPUShader *shader);
 
+void GPU_shader_set_srgb_uniform(const struct GPUShaderInterface *interface);
+
 int GPU_shader_get_uniform(GPUShader *shader, const char *name);
 int GPU_shader_get_uniform_ensure(GPUShader *shader, const char *name);
 int GPU_shader_get_builtin_uniform(GPUShader *shader, int builtin);
@@ -100,6 +108,8 @@ void GPU_shader_uniform_int(GPUShader *shader, int location, int value);
 int GPU_shader_get_attribute(GPUShader *shader, const char *name);
 
 char *GPU_shader_get_binary(GPUShader *shader, uint *r_binary_format, int *r_binary_len);
+
+void GPU_shader_set_framebuffer_srgb_target(int use_srgb_to_linear);
 
 /* Builtin/Non-generated shaders */
 typedef enum eGPUBuiltinShader {
@@ -146,6 +156,7 @@ typedef enum eGPUBuiltinShader {
    * \param pos: in vec3
    */
   GPU_SHADER_3D_UNIFORM_COLOR,
+  GPU_SHADER_3D_CLIPPED_UNIFORM_COLOR,
   /**
    * Take a 3D position and color for each vertex without color interpolation.
    *
@@ -161,12 +172,37 @@ typedef enum eGPUBuiltinShader {
    */
   GPU_SHADER_3D_SMOOTH_COLOR,
   /**
+   * Take a single color for all the vertices and a 3D position for each vertex.
+   * Used for drawing wide lines.
+   *
+   * \param color: uniform vec4
+   * \param pos: in vec3
+   */
+  GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR,
+  GPU_SHADER_3D_POLYLINE_CLIPPED_UNIFORM_COLOR,
+  /**
+   * Take a 3D position and color for each vertex without color interpolation.
+   * Used for drawing wide lines.
+   *
+   * \param color: in vec4
+   * \param pos: in vec3
+   */
+  GPU_SHADER_3D_POLYLINE_FLAT_COLOR,
+  /**
+   * Take a 3D position and color for each vertex with perspective correct interpolation.
+   * Used for drawing wide lines.
+   *
+   * \param color: in vec4
+   * \param pos: in vec3
+   */
+  GPU_SHADER_3D_POLYLINE_SMOOTH_COLOR,
+  /**
    * Take a 3D position for each vertex and output only depth.
+   * Used for drawing wide lines.
    *
    * \param pos: in vec3
    */
   GPU_SHADER_3D_DEPTH_ONLY,
-  GPU_SHADER_3D_CLIPPED_UNIFORM_COLOR,
   /* basic image drawing */
   GPU_SHADER_2D_IMAGE_OVERLAYS_MERGE,
   GPU_SHADER_2D_IMAGE_OVERLAYS_STEREO_MERGE,

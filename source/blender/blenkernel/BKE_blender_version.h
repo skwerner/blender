@@ -16,6 +16,10 @@
 #ifndef __BKE_BLENDER_VERSION_H__
 #define __BKE_BLENDER_VERSION_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** \file
  * \ingroup bke
  */
@@ -26,8 +30,8 @@
  *
  * \note Use #STRINGIFY() rather than defining with quotes.
  */
-#define BLENDER_VERSION 283
-#define BLENDER_SUBVERSION 13
+#define BLENDER_VERSION 290
+#define BLENDER_SUBVERSION 1
 /** Several breakages with 280, e.g. collections vs layers. */
 #define BLENDER_MINVERSION 280
 #define BLENDER_MINSUBVERSION 0
@@ -42,5 +46,9 @@
 
 /** Defined in from blender.c */
 extern char versionstr[];
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_BLENDER_VERSION_H__ */

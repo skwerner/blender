@@ -266,7 +266,7 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
      ICON_MOD_WAVE,
      "Wave",
      "Adds a ripple-like motion to an object’s geometry"},
-    {0, "", 0, N_("Simulate"), ""},
+    {0, "", 0, N_("Physics"), ""},
     {eModifierType_Cloth, "CLOTH", ICON_MOD_CLOTH, "Cloth", ""},
     {eModifierType_Collision, "COLLISION", ICON_MOD_PHYSICS, "Collision", ""},
     {eModifierType_DynamicPaint, "DYNAMIC_PAINT", ICON_MOD_DYNAMICPAINT, "Dynamic Paint", ""},
@@ -289,6 +289,13 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
      "Spawn particles from the shape"},
     {eModifierType_Softbody, "SOFT_BODY", ICON_MOD_SOFT, "Soft Body", ""},
     {eModifierType_Surface, "SURFACE", ICON_MODIFIER, "Surface", ""},
+#ifdef WITH_NEW_SIMULATION_TYPE
+    {eModifierType_Simulation,
+     "SIMULATION",
+     ICON_PHYSICS,
+     "Simulation",
+     ""}, /* TODO: Use correct icon. */
+#endif
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -716,6 +723,8 @@ static StructRNA *rna_Modifier_refine(struct PointerRNA *ptr)
       return &RNA_SurfaceDeformModifier;
     case eModifierType_WeightedNormal:
       return &RNA_WeightedNormalModifier;
+    case eModifierType_Simulation:
+      return &RNA_SimulationModifier;
     /* Default */
     case eModifierType_Fluidsim: /* deprecated */
     case eModifierType_None:
@@ -741,7 +750,7 @@ static void rna_Modifier_name_set(PointerRNA *ptr, const char *value)
   /* make sure the name is truly unique */
   if (ptr->owner_id) {
     Object *ob = (Object *)ptr->owner_id;
-    modifier_unique_name(&ob->modifiers, md);
+    BKE_modifier_unique_name(&ob->modifiers, md);
   }
 
   /* fix all the animation data which may link to this */
@@ -920,7 +929,7 @@ static bool rna_HookModifier_object_override_apply(Main *UNUSED(bmain),
 {
   BLI_assert(len_dst == len_src && (!ptr_storage || len_dst == len_storage) && len_dst == 0);
   BLI_assert(opop->operation == IDOVERRIDE_LIBRARY_OP_REPLACE &&
-             "Unsupported RNA override operation on Hook modifier target objet pointer");
+             "Unsupported RNA override operation on Hook modifier target object pointer");
   UNUSED_VARS_NDEBUG(ptr_storage, len_dst, len_src, len_storage, opop);
 
   /* We need a special handling here because setting hook target resets invert parent matrix,
@@ -1785,6 +1794,11 @@ static void rna_def_modifier_generic_map_info(StructRNA *srna)
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
+
+  prop = RNA_def_property(srna, "texture_coords_bone", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_sdna(prop, NULL, "map_bone");
+  RNA_def_property_ui_text(prop, "Texture Coordinate Bone", "Bone to set the texture coordinates");
+  RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 }
 
 static void rna_def_modifier_warp(BlenderRNA *brna)
@@ -2104,6 +2118,12 @@ static void rna_def_modifier_mirror(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_MIR_MIRROR_V);
   RNA_def_property_ui_text(
       prop, "Mirror V", "Mirror the V texture coordinate around the flip offset point");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "use_mirror_udim", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_MIR_MIRROR_UDIM);
+  RNA_def_property_ui_text(
+      prop, "Mirror UDIM", "Mirror the texture coordinate around each tile center");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
   prop = RNA_def_property(srna, "mirror_offset_u", PROP_FLOAT, PROP_FACTOR);
@@ -4497,6 +4517,15 @@ static void rna_def_modifier_solidify(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Vertex Group Invert", "Invert the vertex group influence");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 
+  prop = RNA_def_property(srna, "use_flat_faces", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_SOLIDIFY_NONMANIFOLD_FLAT_FACES);
+  RNA_def_property_ui_text(prop,
+                           "Flat Faces",
+                           "Make faces use the minimal vertex weight assigned to their vertices"
+                           "(ensures new faces remain parallel to their original ones, slow, "
+                           "disable when not needed)");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
   prop = RNA_def_property(srna, "use_flip_normals", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MOD_SOLIDIFY_FLIP);
   RNA_def_property_ui_text(prop, "Flip Normals", "Invert the face direction");
@@ -4517,6 +4546,21 @@ static void rna_def_modifier_solidify(BlenderRNA *brna)
   prop = RNA_def_property(srna, "nonmanifold_boundary_mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, nonmanifold_boundary_mode_items);
   RNA_def_property_ui_text(prop, "Boundary Shape", "Selects the boundary adjustment algorithm");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "nonmanifold_merge_threshold", PROP_FLOAT, PROP_DISTANCE);
+  RNA_def_property_float_sdna(prop, NULL, "merge_tolerance");
+  RNA_def_property_range(prop, 0.0, 1.0);
+  RNA_def_property_ui_range(prop, 0.0, 1.0, 0.01, 4);
+  RNA_def_property_ui_text(
+      prop, "Merge Threshold", "Distance within which degenerated geometry is merged");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  prop = RNA_def_property(srna, "bevel_convex", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_float_sdna(prop, NULL, "bevel_convex");
+  RNA_def_property_range(prop, -1.0, 1.0);
+  RNA_def_property_ui_range(prop, -1.0, 1.0, 0.1, 3);
+  RNA_def_property_ui_text(prop, "Bevel Convex", "Edge bevel weight to be added to outside edges");
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
@@ -4791,6 +4835,12 @@ static void rna_def_modifier_weightvg_mask(BlenderRNA *UNUSED(brna),
                            "coordinates from");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_SELF_CHECK);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
+
+  prop = RNA_def_property(srna, "mask_tex_map_bone", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_sdna(prop, NULL, "mask_tex_map_bone");
+  RNA_def_property_ui_text(
+      prop, "Texture Coordinate Bone", "Which bone to take texture coordinates from");
   RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
 }
 
@@ -6511,6 +6561,29 @@ static void rna_def_modifier_weightednormal(BlenderRNA *brna)
   RNA_def_property_update(prop, 0, "rna_Modifier_update");
 }
 
+static void rna_def_modifier_simulation_access(BlenderRNA *brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+  srna = RNA_def_struct(brna, "SimulationModifier", "Modifier");
+  RNA_def_struct_ui_text(srna, "Simulation Modifier", "");
+  RNA_def_struct_sdna(srna, "SimulationModifierData");
+  RNA_def_struct_ui_icon(srna, ICON_PHYSICS); /* TODO: Use correct icon. */
+
+#  ifdef WITH_NEW_SIMULATION_TYPE
+  prop = RNA_def_property(srna, "simulation", PROP_POINTER, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Simulation", "Simulation to access");
+  RNA_def_property_flag(prop, PROP_EDITABLE);
+  RNA_def_property_update(prop, 0, "rna_Modifier_dependency_update");
+#  endif
+
+  prop = RNA_def_property(srna, "data_path", PROP_STRING, PROP_NONE);
+  RNA_def_property_ui_text(
+      prop, "Data Path", "Identifier of the simulation component that should be accessed");
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+}
+
 void RNA_def_modifier(BlenderRNA *brna)
 {
   StructRNA *srna;
@@ -6636,6 +6709,7 @@ void RNA_def_modifier(BlenderRNA *brna)
   rna_def_modifier_meshseqcache(brna);
   rna_def_modifier_surfacedeform(brna);
   rna_def_modifier_weightednormal(brna);
+  rna_def_modifier_simulation_access(brna);
 }
 
 #endif

@@ -1153,7 +1153,8 @@ void BKE_sequencer_cache_cleanup(Scene *scene)
 void BKE_sequencer_cache_cleanup_sequence(Scene *scene,
                                           Sequence *seq,
                                           Sequence *seq_changed,
-                                          int invalidate_types)
+                                          int invalidate_types,
+                                          bool force_seq_changed_range)
 {
   SeqCache *cache = seq_cache_get_from_scene(scene);
   if (!cache) {
@@ -1169,12 +1170,14 @@ void BKE_sequencer_cache_cleanup_sequence(Scene *scene,
   int range_start = seq_changed->startdisp;
   int range_end = seq_changed->enddisp;
 
-  if (seq->startdisp > range_start) {
-    range_start = seq->startdisp;
-  }
+  if (!force_seq_changed_range) {
+    if (seq->startdisp > range_start) {
+      range_start = seq->startdisp;
+    }
 
-  if (seq->enddisp < range_end) {
-    range_end = seq->enddisp;
+    if (seq->enddisp < range_end) {
+      range_end = seq->enddisp;
+    }
   }
 
   int invalidate_composite = invalidate_types & SEQ_CACHE_STORE_FINAL_OUT;
@@ -1220,6 +1223,10 @@ struct ImBuf *BKE_sequencer_cache_get(
     context = BKE_sequencer_prefetch_get_original_context(context);
     scene = context->scene;
     seq = BKE_sequencer_prefetch_get_original_sequence(seq, scene);
+  }
+
+  if (!seq) {
+    return NULL;
   }
 
   if (!scene->ed->cache) {
@@ -1282,6 +1289,10 @@ bool BKE_sequencer_cache_put_if_possible(const SeqRenderData *context,
     context = BKE_sequencer_prefetch_get_original_context(context);
     scene = context->scene;
     seq = BKE_sequencer_prefetch_get_original_sequence(seq, scene);
+  }
+
+  if (!seq) {
+    return false;
   }
 
   if (BKE_sequencer_cache_recycle_item(scene)) {

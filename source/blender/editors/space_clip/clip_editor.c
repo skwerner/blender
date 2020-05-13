@@ -546,7 +546,7 @@ void ED_clip_point_undistorted_pos(SpaceClip *sc, const float co[2], float r_co[
     r_co[0] *= width;
     r_co[1] *= height * aspy;
 
-    BKE_tracking_undistort_v2(&clip->tracking, r_co, r_co);
+    BKE_tracking_undistort_v2(&clip->tracking, width, height, r_co, r_co);
 
     r_co[0] /= width;
     r_co[1] /= height * aspy;
@@ -580,7 +580,7 @@ void ED_clip_point_stable_pos(
     float aspy = 1.0f / tracking->camera.pixel_aspect;
     float tmp[2] = {*xr * width, *yr * height * aspy};
 
-    BKE_tracking_distort_v2(tracking, tmp, tmp);
+    BKE_tracking_distort_v2(tracking, width, height, tmp, tmp);
 
     *xr = tmp[0] / width;
     *yr = tmp[1] / (height * aspy);
@@ -885,9 +885,9 @@ static uchar *prefetch_thread_next_frame(PrefetchQueue *queue,
   return mem;
 }
 
-static void prefetch_task_func(TaskPool *__restrict pool, void *task_data, int UNUSED(threadid))
+static void prefetch_task_func(TaskPool *__restrict pool, void *task_data)
 {
-  PrefetchQueue *queue = (PrefetchQueue *)BLI_task_pool_userdata(pool);
+  PrefetchQueue *queue = (PrefetchQueue *)BLI_task_pool_user_data(pool);
   MovieClip *clip = (MovieClip *)task_data;
   uchar *mem;
   size_t size;
@@ -942,9 +942,8 @@ static void start_prefetch_threads(MovieClip *clip,
                                    float *progress)
 {
   PrefetchQueue queue;
-  TaskScheduler *task_scheduler = BLI_task_scheduler_get();
   TaskPool *task_pool;
-  int i, tot_thread = BLI_task_scheduler_num_threads(task_scheduler);
+  int i, tot_thread = BLI_task_scheduler_num_threads();
 
   /* initialize queue */
   BLI_spin_init(&queue.spin);
@@ -961,9 +960,9 @@ static void start_prefetch_threads(MovieClip *clip,
   queue.do_update = do_update;
   queue.progress = progress;
 
-  task_pool = BLI_task_pool_create(task_scheduler, &queue);
+  task_pool = BLI_task_pool_create(&queue, TASK_PRIORITY_LOW);
   for (i = 0; i < tot_thread; i++) {
-    BLI_task_pool_push(task_pool, prefetch_task_func, clip, false, TASK_PRIORITY_LOW);
+    BLI_task_pool_push(task_pool, prefetch_task_func, clip, false, NULL);
   }
   BLI_task_pool_work_and_wait(task_pool);
   BLI_task_pool_free(task_pool);

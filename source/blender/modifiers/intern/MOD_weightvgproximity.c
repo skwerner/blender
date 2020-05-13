@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2011 by Bastien Montagne.
@@ -366,6 +366,8 @@ static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   WeightVGProximityModifierData *wmd = (WeightVGProximityModifierData *)md;
+  bool need_transform_relation = false;
+
   if (wmd->proximity_ob_target != NULL) {
     DEG_add_object_relation(
         ctx->node, wmd->proximity_ob_target, DEG_OB_COMP_TRANSFORM, "WeightVGProximity Modifier");
@@ -374,17 +376,25 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
       DEG_add_object_relation(
           ctx->node, wmd->proximity_ob_target, DEG_OB_COMP_GEOMETRY, "WeightVGProximity Modifier");
     }
+    need_transform_relation = true;
   }
-  if (wmd->mask_tex_map_obj != NULL && wmd->mask_tex_mapping == MOD_DISP_MAP_OBJECT) {
-    DEG_add_object_relation(
-        ctx->node, wmd->mask_tex_map_obj, DEG_OB_COMP_TRANSFORM, "WeightVGProximity Modifier");
-    DEG_add_object_relation(
-        ctx->node, wmd->mask_tex_map_obj, DEG_OB_COMP_GEOMETRY, "WeightVGProximity Modifier");
-  }
+
   if (wmd->mask_texture != NULL) {
     DEG_add_generic_id_relation(ctx->node, &wmd->mask_texture->id, "WeightVGProximity Modifier");
+
+    if (wmd->mask_tex_map_obj != NULL && wmd->mask_tex_mapping == MOD_DISP_MAP_OBJECT) {
+      MOD_depsgraph_update_object_bone_relation(
+          ctx->node, wmd->mask_tex_map_obj, wmd->mask_tex_map_bone, "WeightVGProximity Modifier");
+      need_transform_relation = true;
+    }
+    else if (wmd->mask_tex_mapping == MOD_DISP_MAP_GLOBAL) {
+      need_transform_relation = true;
+    }
   }
-  DEG_add_modifier_to_transform_relation(ctx->node, "WeightVGProximity Modifier");
+
+  if (need_transform_relation) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "WeightVGProximity Modifier");
+  }
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene),
@@ -400,7 +410,7 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return (wmd->proximity_ob_target == NULL);
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   BLI_assert(mesh != NULL);
 
@@ -589,6 +599,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
                    wmd->mask_tex_use_channel,
                    wmd->mask_tex_mapping,
                    wmd->mask_tex_map_obj,
+                   wmd->mask_tex_map_bone,
                    wmd->mask_tex_uvlayer_name,
                    invert_vgroup_mask);
 
@@ -625,13 +636,16 @@ ModifierTypeInfo modifierType_WeightVGProximity = {
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_UsesPreview,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

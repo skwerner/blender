@@ -447,12 +447,12 @@ static void bone_children_clear_transflag(int mode, short around, ListBase *lb)
   }
 }
 
-/* sets transform flags in the bones
- * returns total number of bones with BONE_TRANSFORM */
-int count_set_pose_transflags(Object *ob,
-                              const int mode,
-                              const short around,
-                              bool has_translate_rotate[2])
+/* Sets transform flags in the bones.
+ * Returns total number of bones with `BONE_TRANSFORM`. */
+int transform_convert_pose_transflags_update(Object *ob,
+                                             const int mode,
+                                             const short around,
+                                             bool has_translate_rotate[2])
 {
   bArmature *arm = ob->data;
   bPoseChannel *pchan;
@@ -819,25 +819,28 @@ void clipUVData(TransInfo *t)
  * \{ */
 
 /**
- * For modal operation: `t->center_global` may not have been set yet.
+ * Used for `TFM_TIME_EXTEND`.
  */
-void transform_convert_center_global_v2(TransInfo *t, float r_center[2])
+char transform_convert_frame_side_dir_get(TransInfo *t, float cframe)
 {
+  char r_dir;
+  float center[2];
   if (t->flag & T_MODAL) {
     UI_view2d_region_to_view(
-        (View2D *)t->view, t->mouse.imval[0], t->mouse.imval[1], &r_center[0], &r_center[1]);
+        (View2D *)t->view, t->mouse.imval[0], t->mouse.imval[1], &center[0], &center[1]);
+    r_dir = (center[0] > cframe) ? 'R' : 'L';
+    {
+      /* XXX: This saves the direction in the "mirror" property to be used for redo! */
+      if (r_dir == 'R') {
+        t->flag |= T_NO_MIRROR;
+      }
+    }
   }
   else {
-    copy_v2_v2(r_center, t->center_global);
+    r_dir = (t->flag & T_NO_MIRROR) ? 'R' : 'L';
   }
-}
 
-void transform_convert_center_global_v2_int(TransInfo *t, int r_center[2])
-{
-  float center[2];
-  transform_convert_center_global_v2(t, center);
-  r_center[0] = round_fl_to_int(center[0]);
-  r_center[1] = round_fl_to_int(center[1]);
+  return r_dir;
 }
 
 /* This function tests if a point is on the "mouse" side of the cursor/frame-marking */
@@ -1843,8 +1846,8 @@ static void special_aftertrans_update__node(bContext *C, TransInfo *t)
 
 static void special_aftertrans_update__mesh(bContext *UNUSED(C), TransInfo *t)
 {
-  /* so automerge supports mirror */
-  if ((t->scene->toolsettings->automerge) && ((t->flag & T_EDIT) && t->obedit_type == OB_MESH)) {
+  bool use_automerge = (t->flag & (T_AUTOMERGE | T_AUTOSPLIT)) != 0;
+  if (use_automerge && ((t->flag & T_EDIT) && t->obedit_type == OB_MESH)) {
     FOREACH_TRANS_DATA_CONTAINER (t, tc) {
 
       BMEditMesh *em = BKE_editmesh_from_object(tc->obedit);
@@ -1870,14 +1873,12 @@ static void special_aftertrans_update__mesh(bContext *UNUSED(C), TransInfo *t)
         hflag = BM_ELEM_SELECT;
       }
 
-      if (t->scene->toolsettings->automerge & AUTO_MERGE) {
-        if (t->scene->toolsettings->automerge & AUTO_MERGE_AND_SPLIT) {
-          EDBM_automerge_and_split(
-              tc->obedit, true, true, true, hflag, t->scene->toolsettings->doublimit);
-        }
-        else {
-          EDBM_automerge(tc->obedit, true, hflag, t->scene->toolsettings->doublimit);
-        }
+      if (t->flag & T_AUTOSPLIT) {
+        EDBM_automerge_and_split(
+            tc->obedit, true, true, true, hflag, t->scene->toolsettings->doublimit);
+      }
+      else {
+        EDBM_automerge(tc->obedit, true, hflag, t->scene->toolsettings->doublimit);
       }
 
       /* Special case, this is needed or faces won't re-select.
@@ -2285,7 +2286,7 @@ void special_aftertrans_update(bContext *C, TransInfo *t)
 
       /* set BONE_TRANSFORM flags for autokey, gizmo draw might have changed them */
       if (!canceled && (t->mode != TFM_DUMMY)) {
-        count_set_pose_transflags(ob, t->mode, t->around, NULL);
+        transform_convert_pose_transflags_update(ob, t->mode, t->around, NULL);
       }
 
       /* if target-less IK grabbing, we calculate the pchan transforms and clear flag */
@@ -2740,7 +2741,7 @@ void createTransData(bContext *C, TransInfo *t)
     /* important that ob_armature can be set even when its not selected [#23412]
      * lines below just check is also visible */
     has_transform_context = false;
-    Object *ob_armature = modifiers_isDeformedByArmature(ob);
+    Object *ob_armature = BKE_modifiers_is_deformed_by_armature(ob);
     if (ob_armature && ob_armature->mode & OB_MODE_POSE) {
       Base *base_arm = BKE_view_layer_base_find(t->view_layer, ob_armature);
       if (base_arm) {

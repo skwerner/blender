@@ -156,7 +156,7 @@ static bool fluid_initjob(
   FluidDomainSettings *mds;
   Object *ob = CTX_data_active_object(C);
 
-  mmd = (FluidModifierData *)modifiers_findByType(ob, eModifierType_Fluid);
+  mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
   if (!mmd) {
     BLI_strncpy(error_msg, N_("Bake failed: no Fluid modifier found"), error_size);
     return false;
@@ -185,13 +185,13 @@ static bool fluid_validatepaths(FluidJob *job, ReportList *reports)
   temp_dir[0] = '\0';
   bool is_relative = false;
 
-  const char *relbase = modifier_path_relbase(job->bmain, job->ob);
+  const char *relbase = BKE_modifier_path_relbase(job->bmain, job->ob);
 
   /* We do not accept empty paths, they can end in random places silently, see T51176. */
   if (mds->cache_directory[0] == '\0') {
     char cache_name[64];
     BKE_fluid_cache_new_name_for_current_session(sizeof(cache_name), cache_name);
-    modifier_path_init(mds->cache_directory, sizeof(mds->cache_directory), cache_name);
+    BKE_modifier_path_init(mds->cache_directory, sizeof(mds->cache_directory), cache_name);
     BKE_reportf(reports,
                 RPT_WARNING,
                 "Fluid: Empty cache path, reset to default '%s'",
@@ -209,7 +209,7 @@ static bool fluid_validatepaths(FluidJob *job, ReportList *reports)
   if (!dir_exists) {
     char cache_name[64];
     BKE_fluid_cache_new_name_for_current_session(sizeof(cache_name), cache_name);
-    modifier_path_init(mds->cache_directory, sizeof(mds->cache_directory), cache_name);
+    BKE_modifier_path_init(mds->cache_directory, sizeof(mds->cache_directory), cache_name);
 
     BKE_reportf(reports,
                 RPT_ERROR,
@@ -361,7 +361,7 @@ static void fluid_bake_endjob(void *customdata)
         RPT_INFO, "Fluid: %s complete! (%.2f)", job->name, PIL_check_seconds_timer() - job->start);
   }
   else {
-    if (mds->error != NULL && mds->error[0] != '\0') {
+    if (mds->error[0] != '\0') {
       WM_reportf(RPT_ERROR, "Fluid: %s failed: %s", job->name, mds->error);
     }
     else { /* User canceled the bake */
@@ -376,7 +376,7 @@ static void fluid_bake_startjob(void *customdata, short *stop, short *do_update,
   FluidDomainSettings *mds = job->mmd->domain;
 
   char temp_dir[FILE_MAX];
-  const char *relbase = modifier_path_relbase_from_global(job->ob);
+  const char *relbase = BKE_modifier_path_relbase_from_global(job->ob);
 
   job->stop = stop;
   job->do_update = do_update;
@@ -473,7 +473,7 @@ static void fluid_free_endjob(void *customdata)
         RPT_INFO, "Fluid: %s complete! (%.2f)", job->name, PIL_check_seconds_timer() - job->start);
   }
   else {
-    if (mds->error != NULL && mds->error[0] != '\0') {
+    if (mds->error[0] != '\0') {
       WM_reportf(RPT_ERROR, "Fluid: %s failed: %s", job->name, mds->error);
     }
     else { /* User canceled the free job */
@@ -622,7 +622,7 @@ static int fluid_free_exec(struct bContext *C, struct wmOperator *op)
   /*
    * Get modifier data
    */
-  mmd = (FluidModifierData *)modifiers_findByType(ob, eModifierType_Fluid);
+  mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
   if (!mmd) {
     BKE_report(op->reports, RPT_ERROR, "Bake free failed: no Fluid modifier found");
     return OPERATOR_CANCELLED;
@@ -684,7 +684,7 @@ static int fluid_pause_exec(struct bContext *C, struct wmOperator *op)
   /*
    * Get modifier data
    */
-  mmd = (FluidModifierData *)modifiers_findByType(ob, eModifierType_Fluid);
+  mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob, eModifierType_Fluid);
   if (!mmd) {
     BKE_report(op->reports, RPT_ERROR, "Bake free failed: no Fluid modifier found");
     return OPERATOR_CANCELLED;

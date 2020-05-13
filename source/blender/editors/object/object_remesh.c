@@ -114,7 +114,7 @@ static bool object_remesh_poll(bContext *C)
     return false;
   }
 
-  if (modifiers_usesMultires(ob)) {
+  if (BKE_modifiers_uses_multires(ob)) {
     CTX_wm_operator_poll_msg_set(
         C, "The remesher cannot run with a Multires modifier in the modifier stack");
     return false;
@@ -578,7 +578,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   ED_region_tag_redraw(ar);
 
   const char *status_str = TIP_(
-      "Move the mouse to change the voxel size. LBM: confirm size, ESC/RMB: cancel");
+      "Move the mouse to change the voxel size. LMB: confirm size, ESC/RMB: cancel");
   ED_workspace_status_text(C, status_str);
 
   return OPERATOR_RUNNING_MODAL;

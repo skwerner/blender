@@ -48,6 +48,7 @@ struct Mesh;
 struct PBVH;
 struct PBVHNode;
 struct SubdivCCG;
+struct TaskParallelSettings;
 struct TaskParallelTLS;
 
 typedef struct PBVH PBVH;
@@ -122,7 +123,6 @@ void BKE_pbvh_build_bmesh(PBVH *bvh,
                           const int cd_vert_node_offset,
                           const int cd_face_node_offset);
 void BKE_pbvh_free(PBVH *bvh);
-void BKE_pbvh_free_layer_disp(PBVH *bvh);
 
 /* Hierarchical Search in the BVH, two methods:
  * - for each hit calling a callback
@@ -310,14 +310,6 @@ void BKE_pbvh_face_sets_set(PBVH *bvh, int *face_sets);
 
 void BKE_pbvh_face_sets_color_set(PBVH *bvh, int seed, int color_default);
 
-/* Layer displacement */
-
-/* Get the node's displacement layer, creating it if necessary */
-float *BKE_pbvh_node_layer_disp_get(PBVH *pbvh, PBVHNode *node);
-
-/* If the node has a displacement layer, free it and set to null */
-void BKE_pbvh_node_layer_disp_free(PBVHNode *node);
-
 /* vertex deformer */
 float (*BKE_pbvh_vert_coords_alloc(struct PBVH *pbvh))[3];
 void BKE_pbvh_vert_coords_apply(struct PBVH *pbvh, const float (*vertCos)[3], const int totvert);
@@ -465,29 +457,9 @@ bool pbvh_has_face_sets(PBVH *bvh);
 void pbvh_show_face_sets_set(PBVH *bvh, bool show_face_sets);
 
 /* Parallelization */
-typedef void (*PBVHParallelRangeFunc)(void *__restrict userdata,
-                                      const int iter,
-                                      const struct TaskParallelTLS *__restrict tls);
-typedef void (*PBVHParallelReduceFunc)(const void *__restrict userdata,
-                                       void *__restrict chunk_join,
-                                       void *__restrict chunk);
-
-typedef struct PBVHParallelSettings {
-  bool use_threading;
-  void *userdata_chunk;
-  size_t userdata_chunk_size;
-  PBVHParallelReduceFunc func_reduce;
-} PBVHParallelSettings;
-
-void BKE_pbvh_parallel_range_settings(struct PBVHParallelSettings *settings,
+void BKE_pbvh_parallel_range_settings(struct TaskParallelSettings *settings,
                                       bool use_threading,
                                       int totnode);
-
-void BKE_pbvh_parallel_range(const int start,
-                             const int stop,
-                             void *userdata,
-                             PBVHParallelRangeFunc func,
-                             const struct PBVHParallelSettings *settings);
 
 struct MVert *BKE_pbvh_get_verts(const PBVH *bvh);
 

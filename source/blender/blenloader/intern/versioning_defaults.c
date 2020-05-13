@@ -197,6 +197,7 @@ static void blo_update_defaults_screen(bScreen *screen,
       v3d->gp_flag |= V3D_GP_SHOW_EDIT_LINES;
       /* Remove dither pattern in wireframe mode. */
       v3d->shading.xray_alpha_wire = 0.0f;
+      v3d->clip_start = 0.01f;
       /* Skip startups that use the viewport color by default. */
       if (v3d->shading.background_type != V3D_SHADING_BACKGROUND_VIEWPORT) {
         copy_v3_fl(v3d->shading.background_color, 0.05f);
@@ -297,7 +298,7 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
 
   /* Don't enable compositing nodes. */
   if (scene->nodetree) {
-    ntreeFreeNestedTree(scene->nodetree);
+    ntreeFreeEmbeddedTree(scene->nodetree);
     MEM_freeN(scene->nodetree);
     scene->nodetree = NULL;
     scene->use_nodes = false;
@@ -368,12 +369,115 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
 
 /**
  * Update defaults in startup.blend, without having to save and embed the file.
- * This function can be emptied each time the startup.blend is updated. */
+ * This function can be emptied each time the startup.blend is updated.
+ *
+ * \note Screen data may be cleared at this point, this will happen in the case
+ * an app-template's data needs to be versioned when read-file is called with "Load UI" disabled.
+ * Versioning the screen data can be safely skipped without "Load UI" since the screen data
+ * will have been versioned when it was first loaded.
+ */
 void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
 {
   /* For all app templates. */
   for (WorkSpace *workspace = bmain->workspaces.first; workspace; workspace = workspace->id.next) {
     BLO_update_defaults_workspace(workspace, app_template);
+  }
+
+  /* New grease pencil brushes and vertex paint setup. */
+  {
+    /* Update Grease Pencil brushes. */
+    Brush *brush;
+
+    /* Pencil brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Pencil", "Pencil");
+
+    /* Pen brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Pen", "Pen");
+
+    /* Pen Soft brush. */
+    brush = (Brush *)rename_id_for_versioning(bmain, ID_BR, "Draw Soft", "Pencil Soft");
+    if (brush) {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PEN;
+    }
+
+    /* Ink Pen brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Ink", "Ink Pen");
+
+    /* Ink Pen Rough brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Noise", "Ink Pen Rough");
+
+    /* Marker Bold brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Marker", "Marker Bold");
+
+    /* Marker Chisel brush. */
+    rename_id_for_versioning(bmain, ID_BR, "Draw Block", "Marker Chisel");
+
+    /* Remove useless Fill Area.001 brush. */
+    brush = BLI_findstring(&bmain->brushes, "Fill Area.001", offsetof(ID, name) + 2);
+    if (brush) {
+      BKE_id_delete(bmain, brush);
+    }
+
+    /* Rename and fix materials and enable default object lights on. */
+    if (app_template && STREQ(app_template, "2D_Animation")) {
+      Material *ma = NULL;
+      rename_id_for_versioning(bmain, ID_MA, "Black", "Solid Stroke");
+      rename_id_for_versioning(bmain, ID_MA, "Red", "Squares Stroke");
+      rename_id_for_versioning(bmain, ID_MA, "Grey", "Solid Fill");
+      rename_id_for_versioning(bmain, ID_MA, "Black Dots", "Dots Stroke");
+
+      /* Dots Stroke. */
+      ma = BLI_findstring(&bmain->materials, "Dots Stroke", offsetof(ID, name) + 2);
+      if (ma == NULL) {
+        ma = BKE_gpencil_material_add(bmain, "Dots Stroke");
+      }
+      ma->gp_style->mode = GP_MATERIAL_MODE_DOT;
+
+      /* Squares Stroke. */
+      ma = BLI_findstring(&bmain->materials, "Squares Stroke", offsetof(ID, name) + 2);
+      if (ma == NULL) {
+        ma = BKE_gpencil_material_add(bmain, "Squares Stroke");
+      }
+      ma->gp_style->mode = GP_MATERIAL_MODE_SQUARE;
+
+      /* Change Solid Stroke settings. */
+      ma = BLI_findstring(&bmain->materials, "Solid Stroke", offsetof(ID, name) + 2);
+      if (ma != NULL) {
+        ma->gp_style->mix_rgba[3] = 1.0f;
+        ma->gp_style->texture_offset[0] = -0.5f;
+        ma->gp_style->mix_factor = 0.5f;
+      }
+
+      /* Change Solid Fill settings. */
+      ma = BLI_findstring(&bmain->materials, "Solid Fill", offsetof(ID, name) + 2);
+      if (ma != NULL) {
+        ma->gp_style->flag &= ~GP_MATERIAL_STROKE_SHOW;
+        ma->gp_style->mix_rgba[3] = 1.0f;
+        ma->gp_style->texture_offset[0] = -0.5f;
+        ma->gp_style->mix_factor = 0.5f;
+      }
+
+      Object *ob = BLI_findstring(&bmain->objects, "Stroke", offsetof(ID, name) + 2);
+      if (ob && ob->type == OB_GPENCIL) {
+        ob->dtx |= OB_USE_GPENCIL_LIGHTS;
+      }
+    }
+
+    /* Reset all grease pencil brushes. */
+    Scene *scene = bmain->scenes.first;
+    BKE_brush_gpencil_paint_presets(bmain, scene->toolsettings);
+
+    /* Ensure new Paint modes. */
+    BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_VERTEX_GPENCIL);
+    BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_SCULPT_GPENCIL);
+    BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_WEIGHT_GPENCIL);
+
+    /* Enable cursor. */
+    GpPaint *gp_paint = scene->toolsettings->gp_paint;
+    gp_paint->paint.flags |= PAINT_SHOW_BRUSH;
+
+    /* Ensure Palette by default. */
+    BKE_gpencil_palette_ensure(bmain, scene);
   }
 
   /* For builtin templates only. */
@@ -382,24 +486,26 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
   }
 
   /* Workspaces. */
-  wmWindow *win = ((wmWindowManager *)bmain->wm.first)->windows.first;
-  for (WorkSpace *workspace = bmain->workspaces.first; workspace; workspace = workspace->id.next) {
-    WorkSpaceLayout *layout = BKE_workspace_hook_layout_for_workspace_get(win->workspace_hook,
-                                                                          workspace);
+  LISTBASE_FOREACH (wmWindowManager *, wm, &bmain->wm) {
+    LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
+      LISTBASE_FOREACH (WorkSpace *, workspace, &bmain->workspaces) {
+        WorkSpaceLayout *layout = BKE_workspace_hook_layout_for_workspace_get(win->workspace_hook,
+                                                                              workspace);
+        /* Name all screens by their workspaces (avoids 'Default.###' names). */
+        /* Default only has one window. */
+        if (layout->screen) {
+          bScreen *screen = layout->screen;
+          BLI_strncpy(screen->id.name + 2, workspace->id.name + 2, sizeof(screen->id.name) - 2);
+          BLI_libblock_ensure_unique_name(bmain, screen->id.name);
+        }
 
-    /* Name all screens by their workspaces (avoids 'Default.###' names). */
-    /* Default only has one window. */
-    if (layout->screen) {
-      bScreen *screen = layout->screen;
-      BLI_strncpy(screen->id.name + 2, workspace->id.name + 2, sizeof(screen->id.name) - 2);
-      BLI_libblock_ensure_unique_name(bmain, screen->id.name);
-    }
-
-    /* For some reason we have unused screens, needed until re-saving.
-     * Clear unused layouts because they're visible in the outliner & Python API. */
-    LISTBASE_FOREACH_MUTABLE (WorkSpaceLayout *, layout_iter, &workspace->layouts) {
-      if (layout != layout_iter) {
-        BKE_workspace_layout_remove(bmain, workspace, layout_iter);
+        /* For some reason we have unused screens, needed until re-saving.
+         * Clear unused layouts because they're visible in the outliner & Python API. */
+        LISTBASE_FOREACH_MUTABLE (WorkSpaceLayout *, layout_iter, &workspace->layouts) {
+          if (layout != layout_iter) {
+            BKE_workspace_layout_remove(bmain, workspace, layout_iter);
+          }
+        }
       }
     }
   }
@@ -597,91 +703,5 @@ void BLO_update_defaults_startup_blend(Main *bmain, const char *app_template)
         BKE_brush_sculpt_reset(brush);
       }
     }
-  }
-
-  /* New grease pencil brushes and vertex paint setup. */
-  {
-    /* Update Grease Pencil brushes. */
-    Brush *brush;
-
-    /* Pencil brush. */
-    rename_id_for_versioning(bmain, ID_BR, "Draw Pencil", "Pencil");
-
-    /* Pen brush. */
-    rename_id_for_versioning(bmain, ID_BR, "Draw Pen", "Pen");
-
-    /* Pen Soft brush. */
-    brush = (Brush *)rename_id_for_versioning(bmain, ID_BR, "Draw Soft", "Pencil Soft");
-    if (brush) {
-      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PEN;
-    }
-
-    /* Ink Pen brush. */
-    rename_id_for_versioning(bmain, ID_BR, "Draw Ink", "Ink Pen");
-
-    /* Ink Pen Rough brush. */
-    rename_id_for_versioning(bmain, ID_BR, "Draw Noise", "Ink Pen Rough");
-
-    /* Marker Bold brush. */
-    rename_id_for_versioning(bmain, ID_BR, "Draw Marker", "Marker Bold");
-
-    /* Marker Chisel brush. */
-    rename_id_for_versioning(bmain, ID_BR, "Draw Block", "Marker Chisel");
-
-    /* Remove useless Fill Area.001 brush. */
-    brush = BLI_findstring(&bmain->brushes, "Fill Area.001", offsetof(ID, name) + 2);
-    if (brush) {
-      BKE_id_delete(bmain, brush);
-    }
-
-    /* Rename and fix materials and enable default object lights on. */
-    if (app_template && STREQ(app_template, "2D_Animation")) {
-      Material *ma = NULL;
-      rename_id_for_versioning(bmain, ID_MA, "Black", "Solid Stroke");
-      rename_id_for_versioning(bmain, ID_MA, "Red", "Squares Stroke");
-      rename_id_for_versioning(bmain, ID_MA, "Grey", "Solid Fill");
-      rename_id_for_versioning(bmain, ID_MA, "Black Dots", "Dots Stroke");
-
-      /* Dots Stroke. */
-      ma = BLI_findstring(&bmain->materials, "Dots Stroke", offsetof(ID, name) + 2);
-      if (ma == NULL) {
-        ma = BKE_gpencil_material_add(bmain, "Dots Stroke");
-      }
-      ma->gp_style->mode = GP_MATERIAL_MODE_DOT;
-
-      /* Squares Stroke. */
-      ma = BLI_findstring(&bmain->materials, "Squares Stroke", offsetof(ID, name) + 2);
-      if (ma == NULL) {
-        ma = BKE_gpencil_material_add(bmain, "Squares Stroke");
-      }
-      ma->gp_style->mode = GP_MATERIAL_MODE_SQUARE;
-
-      /* Change Solid Fill settings. */
-      ma = BLI_findstring(&bmain->materials, "Solid Fill", offsetof(ID, name) + 2);
-      if (ma != NULL) {
-        ma->gp_style->flag &= ~GP_MATERIAL_STROKE_SHOW;
-      }
-
-      Object *ob = BLI_findstring(&bmain->objects, "Stroke", offsetof(ID, name) + 2);
-      if (ob && ob->type == OB_GPENCIL) {
-        ob->dtx |= OB_USE_GPENCIL_LIGHTS;
-      }
-    }
-
-    /* Reset all grease pencil brushes. */
-    Scene *scene = bmain->scenes.first;
-    BKE_brush_gpencil_paint_presets(bmain, scene->toolsettings);
-
-    /* Ensure new Paint modes. */
-    BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_VERTEX_GPENCIL);
-    BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_SCULPT_GPENCIL);
-    BKE_paint_ensure_from_paintmode(scene, PAINT_MODE_WEIGHT_GPENCIL);
-
-    /* Enable cursor. */
-    GpPaint *gp_paint = scene->toolsettings->gp_paint;
-    gp_paint->paint.flags |= PAINT_SHOW_BRUSH;
-
-    /* Ensure Palette by default. */
-    BKE_gpencil_palette_ensure(bmain, scene);
   }
 }

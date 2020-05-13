@@ -57,6 +57,7 @@
 #include "BKE_image.h"
 #include "BKE_key.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_material.h"
 #include "BKE_node.h"
 #include "BKE_scene.h"
@@ -112,7 +113,7 @@ static void texture_free_data(ID *id)
 
   /* is no lib link block, but texture extension */
   if (texture->nodetree) {
-    ntreeFreeNestedTree(texture->nodetree);
+    ntreeFreeEmbeddedTree(texture->nodetree);
     MEM_freeN(texture->nodetree);
     texture->nodetree = NULL;
   }
@@ -121,6 +122,16 @@ static void texture_free_data(ID *id)
 
   BKE_icon_id_delete((ID *)texture);
   BKE_previewimg_free(&texture->preview);
+}
+
+static void texture_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Tex *texture = (Tex *)id;
+  if (texture->nodetree) {
+    /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
+    BKE_library_foreach_ID_embedded(data, (ID **)&texture->nodetree);
+  }
+  BKE_LIB_FOREACHID_PROCESS(data, texture->ima, IDWALK_CB_USER);
 }
 
 IDTypeInfo IDType_ID_TE = {
@@ -137,7 +148,15 @@ IDTypeInfo IDType_ID_TE = {
     .copy_data = texture_copy_data,
     .free_data = texture_free_data,
     .make_local = NULL,
+    .foreach_id = texture_foreach_id,
 };
+
+/* Utils for all IDs using those texture slots. */
+void BKE_texture_mtex_foreach_id(LibraryForeachIDData *data, MTex *mtex)
+{
+  BKE_LIB_FOREACHID_PROCESS(data, mtex->object, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS(data, mtex->tex, IDWALK_CB_USER);
+}
 
 /* ****************** Mapping ******************* */
 

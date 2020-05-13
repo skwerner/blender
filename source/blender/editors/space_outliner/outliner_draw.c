@@ -2191,6 +2191,9 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
             case eModifierType_WeightedNormal:
               data.icon = ICON_MOD_NORMALEDIT;
               break;
+            case eModifierType_Simulation:
+              data.icon = ICON_PHYSICS; /* TODO: Use correct icon. */
+              break;
               /* Default */
             case eModifierType_None:
             case eModifierType_ShapeKey:
@@ -2580,6 +2583,10 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
           break;
         case ID_PC:
           data.icon = ICON_CURVE_BEZCURVE;
+          break;
+        case ID_SIM:
+          /* TODO: Use correct icon. */
+          data.icon = ICON_PHYSICS;
           break;
         default:
           break;

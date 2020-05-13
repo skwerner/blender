@@ -1648,9 +1648,12 @@ static void extract_lnor_hq_loop_mesh(
     normal_float_to_short_v3(&lnor_data->x, mr->poly_normals[p]);
   }
 
-  /* Flag for paint mode overlay. */
-  if (mpoly->flag & ME_HIDE || (mr->extract_type == MR_EXTRACT_MAPPED && (mr->v_origindex) &&
-                                mr->v_origindex[mloop->v] == ORIGINDEX_NONE)) {
+  /* Flag for paint mode overlay.
+   * Only use MR_EXTRACT_MAPPED in edit mode where it is used to display the edge-normals. In paint
+   * mode it will use the unmapped data to draw the wireframe. */
+  if (mpoly->flag & ME_HIDE ||
+      (mr->edit_bmesh && mr->extract_type == MR_EXTRACT_MAPPED && (mr->v_origindex) &&
+       mr->v_origindex[mloop->v] == ORIGINDEX_NONE)) {
     lnor_data->w = -1;
   }
   else if (mpoly->flag & ME_FACE_SEL) {
@@ -1724,9 +1727,12 @@ static void extract_lnor_loop_mesh(
     *lnor_data = GPU_normal_convert_i10_v3(mr->poly_normals[p]);
   }
 
-  /* Flag for paint mode overlay. */
-  if (mpoly->flag & ME_HIDE || (mr->extract_type == MR_EXTRACT_MAPPED && (mr->v_origindex) &&
-                                mr->v_origindex[mloop->v] == ORIGINDEX_NONE)) {
+  /* Flag for paint mode overlay.
+   * Only use MR_EXTRACT_MAPPED in edit mode where it is used to display the edge-normals. In paint
+   * mode it will use the unmapped data to draw the wireframe. */
+  if (mpoly->flag & ME_HIDE ||
+      (mr->edit_bmesh && mr->extract_type == MR_EXTRACT_MAPPED && (mr->v_origindex) &&
+       mr->v_origindex[mloop->v] == ORIGINDEX_NONE)) {
     lnor_data->w = -1;
   }
   else if (mpoly->flag & ME_FACE_SEL) {
@@ -4503,7 +4509,7 @@ BLI_INLINE void mesh_extract_iter(const MeshRenderData *mr,
   }
 }
 
-static void extract_run(TaskPool *__restrict UNUSED(pool), void *taskdata, int UNUSED(threadid))
+static void extract_run(TaskPool *__restrict UNUSED(pool), void *taskdata)
 {
   ExtractTaskData *data = taskdata;
   mesh_extract_iter(
@@ -4524,7 +4530,7 @@ static void extract_range_task_create(
   taskdata->iter_type = type;
   taskdata->start = start;
   taskdata->end = start + length;
-  BLI_task_pool_push(task_pool, extract_run, taskdata, true, TASK_PRIORITY_HIGH);
+  BLI_task_pool_push(task_pool, extract_run, taskdata, true, NULL);
 }
 
 static void extract_task_create(TaskPool *task_pool,
@@ -4534,6 +4540,7 @@ static void extract_task_create(TaskPool *task_pool,
                                 void *buf,
                                 int32_t *task_counter)
 {
+  BLI_assert(scene != NULL);
   const bool do_hq_normals = (scene->r.perf_flag & SCE_PERF_HQ_NORMALS) != 0;
   if (do_hq_normals && (extract == &extract_lnor)) {
     extract = &extract_lnor_hq;
@@ -4583,12 +4590,12 @@ static void extract_task_create(TaskPool *task_pool,
   else if (use_thread) {
     /* One task for the whole VBO. */
     (*task_counter)++;
-    BLI_task_pool_push(task_pool, extract_run, taskdata, true, TASK_PRIORITY_HIGH);
+    BLI_task_pool_push(task_pool, extract_run, taskdata, true, NULL);
   }
   else {
     /* Single threaded extraction. */
     (*task_counter)++;
-    extract_run(NULL, taskdata, -1);
+    extract_run(NULL, taskdata);
     MEM_freeN(taskdata);
   }
 }
@@ -4678,11 +4685,11 @@ void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
   double rdata_end = PIL_check_seconds_timer();
 #endif
 
-  TaskScheduler *task_scheduler;
   TaskPool *task_pool;
 
-  task_scheduler = BLI_task_scheduler_get();
-  task_pool = BLI_task_pool_create_suspended(task_scheduler, NULL);
+  /* Create a suspended pool as the finalize method could be called too early.
+   * See `extract_run`. */
+  task_pool = BLI_task_pool_create_suspended(NULL, TASK_PRIORITY_HIGH);
 
   size_t counters_size = (sizeof(mbc) / sizeof(void *)) * sizeof(int32_t);
   int32_t *task_counters = MEM_callocN(counters_size, __func__);

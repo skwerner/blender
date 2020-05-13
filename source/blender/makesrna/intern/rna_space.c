@@ -45,6 +45,7 @@
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
 #include "DNA_sequence_types.h"
+#include "DNA_simulation_types.h"
 #include "DNA_space_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_workspace_types.h"
@@ -531,7 +532,7 @@ static StructRNA *rna_Space_refine(struct PointerRNA *ptr)
 {
   SpaceLink *space = (SpaceLink *)ptr->data;
 
-  switch (space->spacetype) {
+  switch ((eSpace_Type)space->spacetype) {
     case SPACE_VIEW3D:
       return &RNA_SpaceView3D;
     case SPACE_GRAPH:
@@ -562,9 +563,16 @@ static StructRNA *rna_Space_refine(struct PointerRNA *ptr)
       return &RNA_SpacePreferences;
     case SPACE_CLIP:
       return &RNA_SpaceClipEditor;
-    default:
-      return &RNA_Space;
+
+      /* Currently no type info. */
+    case SPACE_SCRIPT:
+    case SPACE_EMPTY:
+    case SPACE_TOPBAR:
+    case SPACE_STATUSBAR:
+      break;
   }
+
+  return &RNA_Space;
 }
 
 static ScrArea *rna_area_from_space(PointerRNA *ptr)
@@ -2166,6 +2174,40 @@ static void rna_SpaceNodeEditor_node_tree_update(const bContext *C, PointerRNA *
   ED_node_tree_update(C);
 }
 
+#  ifdef WITH_NEW_SIMULATION_TYPE
+static PointerRNA rna_SpaceNodeEditor_simulation_get(PointerRNA *ptr)
+{
+  SpaceNode *snode = (SpaceNode *)ptr->data;
+  ID *id = snode->id;
+  if (id && GS(id->name) == ID_SIM) {
+    return rna_pointer_inherit_refine(ptr, &RNA_Simulation, snode->id);
+  }
+  else {
+    return PointerRNA_NULL;
+  }
+}
+
+static void rna_SpaceNodeEditor_simulation_set(PointerRNA *ptr,
+                                               const PointerRNA value,
+                                               struct ReportList *UNUSED(reports))
+{
+  SpaceNode *snode = (SpaceNode *)ptr->data;
+  if (!STREQ(snode->tree_idname, "SimulationNodeTree")) {
+    return;
+  }
+
+  Simulation *sim = (Simulation *)value.data;
+  if (sim != NULL) {
+    bNodeTree *ntree = sim->nodetree;
+    ED_node_tree_start(snode, ntree, NULL, NULL);
+  }
+  else {
+    ED_node_tree_start(snode, NULL, NULL, NULL);
+  }
+  snode->id = &sim->id;
+}
+#  endif
+
 static int rna_SpaceNodeEditor_tree_type_get(PointerRNA *ptr)
 {
   SpaceNode *snode = (SpaceNode *)ptr->data;
@@ -2935,6 +2977,12 @@ static void rna_def_space_image_uv(BlenderRNA *brna)
       prop, "Tile Grid Shape", "How many tiles will be shown in the background");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_IMAGE, NULL);
 
+  prop = RNA_def_property(srna, "uv_opacity", PROP_FLOAT, PROP_FACTOR);
+  RNA_def_property_float_sdna(prop, NULL, "uv_opacity");
+  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_ui_text(prop, "UV Opacity", "Opacity of UV overlays");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_IMAGE, NULL);
+
   /* todo: move edge and face drawing options here from G.f */
 
   prop = RNA_def_property(srna, "pixel_snap_mode", PROP_ENUM, PROP_NONE);
@@ -3561,6 +3609,11 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_text", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "overlay.flag", V3D_OVERLAY_HIDE_TEXT);
   RNA_def_property_ui_text(prop, "Show Text", "Display overlay text");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+  prop = RNA_def_property(srna, "show_stats", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "overlay.flag", V3D_OVERLAY_STATS);
+  RNA_def_property_ui_text(prop, "Show Statistics", "Display scene statistics overlay text");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_extras", PROP_BOOLEAN, PROP_NONE);
@@ -5521,6 +5574,13 @@ static void rna_def_fileselect_idfilter(BlenderRNA *brna)
        "Show/hide Point Cloud data-blocks"},
 #  endif
       {FILTER_ID_SCE, "filter_scene", ICON_SCENE_DATA, "Scenes", "Show Scene data-blocks"},
+#  ifdef WITH_NEW_SIMULATION_TYPE
+      {FILTER_ID_SIM,
+       "filter_simulation",
+       ICON_PHYSICS,
+       "Simulations",
+       "Show Simulation data-blocks"}, /* TODO: Use correct icon. */
+#  endif
       {FILTER_ID_SPK, "filter_speaker", ICON_SPEAKER, "Speakers", "Show Speaker data-blocks"},
       {FILTER_ID_SO, "filter_sound", ICON_SOUND, "Sounds", "Show Sound data-blocks"},
       {FILTER_ID_TE, "filter_texture", ICON_TEXTURE_DATA, "Textures", "Show Texture data-blocks"},
@@ -6202,6 +6262,19 @@ static void rna_def_space_node(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "ID From", "Data-block from which the edited data-block is linked");
 
+#  ifdef WITH_NEW_SIMULATION_TYPE
+  prop = RNA_def_property(srna, "simulation", PROP_POINTER, PROP_NONE);
+  RNA_def_property_flag(prop, PROP_EDITABLE);
+  RNA_def_property_struct_type(prop, "Simulation");
+  RNA_def_property_ui_text(prop, "Simulation", "Simulation that is being edited");
+  RNA_def_property_pointer_funcs(prop,
+                                 "rna_SpaceNodeEditor_simulation_get",
+                                 "rna_SpaceNodeEditor_simulation_set",
+                                 NULL,
+                                 NULL);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_NODE, NULL);
+#  endif
+
   prop = RNA_def_property(srna, "path", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "treepath", NULL);
   RNA_def_property_struct_type(prop, "NodeTreePath");
@@ -6309,7 +6382,7 @@ static void rna_def_space_clip(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
-  static const EnumPropertyItem gpencil_source_items[] = {
+  static const EnumPropertyItem annotation_source_items[] = {
       {SC_GPENCIL_SRC_CLIP,
        "CLIP",
        0,
@@ -6571,10 +6644,10 @@ static void rna_def_space_clip(BlenderRNA *brna)
   RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, NULL);
 
   /* grease pencil source */
-  prop = RNA_def_property(srna, "grease_pencil_source", PROP_ENUM, PROP_NONE);
+  prop = RNA_def_property(srna, "annotation_source", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "gpencil_src");
-  RNA_def_property_enum_items(prop, gpencil_source_items);
-  RNA_def_property_ui_text(prop, "Grease Pencil Source", "Where the grease pencil comes from");
+  RNA_def_property_enum_items(prop, annotation_source_items);
+  RNA_def_property_ui_text(prop, "Annotation Source", "Where the annotation comes from");
   RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_MOVIECLIP);
   RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, NULL);
 

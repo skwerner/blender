@@ -410,8 +410,8 @@ void NLA_OT_previewrange_set(wmOperatorType *ot)
 /**
  * Find the extents of the active channel
  *
- * \param[out] min Bottom y-extent of channel
- * \param[out] max Top y-extent of channel
+ * \param[out] min: Bottom y-extent of channel.
+ * \param[out] max: Top y-extent of channel.
  * \return Success of finding a selected channel
  */
 static bool nla_channels_get_selected_extents(bAnimContext *ac, float *min, float *max)
@@ -526,7 +526,7 @@ static int nlaedit_viewsel_exec(bContext *C, wmOperator *UNUSED(op))
 void NLA_OT_view_all(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "View All";
+  ot->name = "Frame All";
   ot->idname = "NLA_OT_view_all";
   ot->description = "Reset viewable area to show full strips range";
 

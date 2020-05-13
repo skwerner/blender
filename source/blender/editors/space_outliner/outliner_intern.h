@@ -108,7 +108,8 @@ typedef struct TreeElementIcon {
         ID_LP, \
         ID_HA, \
         ID_PT, \
-        ID_VO) || /* Only in 'blendfile' mode ... :/ */ \
+        ID_VO, \
+        ID_SIM) || /* Only in 'blendfile' mode ... :/ */ \
    ELEM(GS((_id)->name), \
         ID_SCR, \
         ID_WM, \
@@ -430,6 +431,7 @@ void OUTLINER_OT_animdata_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_action_set(struct wmOperatorType *ot);
 void OUTLINER_OT_constraint_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_modifier_operation(struct wmOperatorType *ot);
+void OUTLINER_OT_delete(struct wmOperatorType *ot);
 
 /* ---------------------------------------------------------------- */
 
@@ -441,11 +443,16 @@ void outliner_keymap(struct wmKeyConfig *keyconf);
 
 bool outliner_is_collection_tree_element(const TreeElement *te);
 struct Collection *outliner_collection_from_tree_element(const TreeElement *te);
+void outliner_collection_delete(struct bContext *C,
+                                struct Main *bmain,
+                                struct Scene *scene,
+                                struct ReportList *reports,
+                                bool hierarchy);
 
 void OUTLINER_OT_collection_new(struct wmOperatorType *ot);
 void OUTLINER_OT_collection_duplicate_linked(struct wmOperatorType *ot);
 void OUTLINER_OT_collection_duplicate(struct wmOperatorType *ot);
-void OUTLINER_OT_collection_delete(struct wmOperatorType *ot);
+void OUTLINER_OT_collection_hierarchy_delete(struct wmOperatorType *ot);
 void OUTLINER_OT_collection_objects_select(struct wmOperatorType *ot);
 void OUTLINER_OT_collection_objects_deselect(struct wmOperatorType *ot);
 void OUTLINER_OT_collection_link(struct wmOperatorType *ot);

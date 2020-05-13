@@ -1313,7 +1313,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
                                            int build_shapekey_layers)
 {
   Mesh *me = ob_eval->runtime.data_orig ? ob_eval->runtime.data_orig : ob_eval->data;
-  const ModifierTypeInfo *mti = modifierType_getInfo(md_eval->type);
+  const ModifierTypeInfo *mti = BKE_modifier_get_info(md_eval->type);
   Mesh *result;
   KeyBlock *kb;
   ModifierEvalContext mectx = {depsgraph, ob_eval, MOD_APPLY_TO_BASE_MESH};
@@ -1353,7 +1353,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
       add_shapekey_layers(mesh_temp, me);
     }
 
-    result = mti->applyModifier(md_eval, &mectx, mesh_temp);
+    result = mti->modifyMesh(md_eval, &mectx, mesh_temp);
     ASSERT_IS_VALID_MESH(result);
 
     if (mesh_temp != result) {

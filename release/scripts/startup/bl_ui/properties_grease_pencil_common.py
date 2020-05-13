@@ -44,38 +44,6 @@ def gpencil_stroke_placement_settings(context, layout):
         row.prop_enum(tool_settings, propname, 'CURSOR', text="Cursor")
 
 
-def gpencil_active_brush_settings_simple(context, layout):
-    tool_settings = context.tool_settings
-    brush = tool_settings.gpencil_paint.brush
-    if brush is None:
-        layout.label(text="No Active Brush")
-        return
-
-    col = layout.column()
-    col.label(text="Active Brush:      ")
-
-    row = col.row(align=True)
-    row.operator_context = 'EXEC_REGION_WIN'
-    row.operator_menu_enum("gpencil.brush_change", "brush", text="", icon='BRUSH_DATA')
-    row.prop(brush, "name", text="")
-
-    col.prop(brush, "size", slider=True)
-    row = col.row(align=True)
-    row.prop(brush, "use_random_pressure", text="", icon='RNDCURVE')
-    row.prop(brush, "pen_sensitivity_factor", slider=True)
-    row.prop(brush, "use_pressure", text="", icon='STYLUS_PRESSURE')
-    row = col.row(align=True)
-    row.prop(brush, "use_random_strength", text="", icon='RNDCURVE')
-    row.prop(brush, "strength", slider=True)
-    row.prop(brush, "use_strength_pressure", text="", icon='STYLUS_PRESSURE')
-    row = col.row(align=True)
-    row.prop(brush, "jitter", slider=True)
-    row.prop(brush, "use_jitter_pressure", text="", icon='STYLUS_PRESSURE')
-    row = col.row()
-    row.prop(brush, "angle", slider=True)
-    row.prop(brush, "angle_factor", text="Factor", slider=True)
-
-
 # XXX: To be replaced with active tools
 class AnnotationDrawingToolsPanel:
     # subclass must set
@@ -116,9 +84,9 @@ class AnnotationDrawingToolsPanel:
             col.label(text="Data Source:")
             row = col.row(align=True)
             if is_3d_view:
-                row.prop(context.tool_settings, "grease_pencil_source", expand=True)
+                row.prop(context.tool_settings, "annotation_source", expand=True)
             elif is_clip_editor:
-                row.prop(context.space_data, "grease_pencil_source", expand=True)
+                row.prop(context.space_data, "annotation_source", expand=True)
 
         gpencil_stroke_placement_settings(context, col)
 
@@ -361,6 +329,35 @@ class GPENCIL_MT_layer_active(Menu):
         layout.operator("gpencil.layer_add", text="New Layer", icon='ADD')
 
 
+class GPENCIL_MT_material_active(Menu):
+    bl_label = "Change Active Material"
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.active_object
+        tool_settings = context.scene.tool_settings
+        mode = tool_settings.gpencil_paint.color_mode
+        if mode != 'MATERIAL':
+            return False
+
+        if ob is None or len(ob.material_slots) == 0:
+            return False
+
+        return True
+
+    def draw(self, context):
+        layout = self.layout
+        layout.operator_context = 'INVOKE_REGION_WIN'
+        ob = context.active_object
+        mat_active = ob.active_material
+
+        for slot in ob.material_slots:
+            mat = slot.material
+            if mat:
+                icon = mat.id_data.preview.icon_id
+                layout.operator("gpencil.material_set", text=mat.name, icon_value=icon).slot = mat.name
+
+
 class GPENCIL_MT_gpencil_draw_delete(Menu):
     bl_label = "Delete"
 
@@ -448,7 +445,7 @@ class AnnotationDataPanel:
 
         # Owner selector.
         if context.space_data.type == 'CLIP_EDITOR':
-            layout.row().prop(context.space_data, "grease_pencil_source", expand=True)
+            layout.row().prop(context.space_data, "annotation_source", expand=True)
 
         layout.template_ID(gpd_owner, "grease_pencil", new="gpencil.annotation_add", unlink="gpencil.data_unlink")
 
@@ -520,7 +517,7 @@ class AnnotationOnionSkin:
             if gpl is None:
                 return False
 
-            return True
+        return True
 
     def draw_header(self, context):
         gpl = context.active_annotation_layer
@@ -546,30 +543,6 @@ class AnnotationOnionSkin:
         row = sub.row(align=True)
         row.prop(gpl, "annotation_onion_after_color", text="")
         sub.prop(gpl, "annotation_onion_after_range", text="After")
-
-
-class GreasePencilToolsPanel:
-    # For use in "2D" Editors without their own toolbar
-    # subclass must set
-    # bl_space_type = 'IMAGE_EDITOR'
-    bl_label = "Grease Pencil Settings"
-    bl_region_type = 'UI'
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, _context):
-        # XXX - disabled in 2.8 branch.
-        # return (context.gpencil_data is not None)
-        return False
-
-    def draw(self, context):
-        layout = self.layout
-
-        gpencil_active_brush_settings_simple(context, layout)
-
-        layout.separator()
-
-        gpencil_stroke_placement_settings(context, layout)
 
 
 class GreasePencilMaterialsPanel:
@@ -632,8 +605,8 @@ class GreasePencilMaterialsPanel:
                 if ob.data.use_stroke_edit_mode:
                     row = layout.row(align=True)
                     row.operator("gpencil.stroke_change_color", text="Assign")
-                    row.operator("gpencil.select_material", text="Select").deselect = False
-                    row.operator("gpencil.select_material", text="Deselect").deselect = True
+                    row.operator("gpencil.material_select", text="Select").deselect = False
+                    row.operator("gpencil.material_select", text="Deselect").deselect = True
         # stroke color
             ma = None
             if is_view3d and brush is not None:
@@ -931,6 +904,7 @@ classes = (
     GPENCIL_MT_cleanup,
     GPENCIL_MT_move_to_layer,
     GPENCIL_MT_layer_active,
+    GPENCIL_MT_material_active,
 
     GPENCIL_MT_gpencil_draw_delete,
     GPENCIL_MT_layer_mask_menu,

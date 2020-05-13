@@ -1622,8 +1622,8 @@ static void node_parent_offset_apply(NodeInsertOfsData *data, bNode *parent, con
 
   node_offset_apply(parent, offset_x);
 
-  /* flag all childs as offset to prevent them from being offset
-   * separately (they've already moved with the parent) */
+  /* Flag all children as offset to prevent them from being offset
+   * separately (they've already moved with the parent). */
   for (node = data->ntree->nodes.first; node; node = node->next) {
     if (nodeIsChildOf(parent, node)) {
       /* NODE_TEST is used to flag nodes that shouldn't be offset (again) */
@@ -1657,7 +1657,7 @@ static bool node_link_insert_offset_frame_chain_cb(bNode *fromnode,
 }
 
 /**
- * Applies NodeInsertOfsData.offset_x to all childs of \a parent
+ * Applies #NodeInsertOfsData.offset_x to all children of \a parent.
  */
 static void node_link_insert_offset_frame_chains(const bNodeTree *ntree,
                                                  const bNode *parent,

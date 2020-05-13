@@ -1160,6 +1160,10 @@ void OVERLAY_camera_cache_populate(OVERLAY_Data *vedata, Object *ob)
   }
   else {
     copy_v3_fl3(scale, len_v3(ob->obmat[0]), len_v3(ob->obmat[1]), len_v3(ob->obmat[2]));
+    /* Avoid division by 0. */
+    if (ELEM(0.0f, scale[0], scale[1], scale[2])) {
+      return;
+    }
     invert_v3(scale);
   }
 
@@ -1502,8 +1506,9 @@ void OVERLAY_extra_cache_populate(OVERLAY_Data *vedata, Object *ob)
   const bool draw_xform = draw_ctx->object_mode == OB_MODE_OBJECT &&
                           (scene->toolsettings->transform_flag & SCE_XFORM_DATA_ORIGIN) &&
                           (ob->base_flag & BASE_SELECTED) && !is_select_mode;
-  const bool draw_volume = !from_dupli && (md = modifiers_findByType(ob, eModifierType_Fluid)) &&
-                           (modifier_isEnabled(scene, md, eModifierMode_Realtime)) &&
+  const bool draw_volume = !from_dupli &&
+                           (md = BKE_modifiers_findby_type(ob, eModifierType_Fluid)) &&
+                           (BKE_modifier_is_enabled(scene, md, eModifierMode_Realtime)) &&
                            (((FluidModifierData *)md)->domain != NULL);
 
   float *color;

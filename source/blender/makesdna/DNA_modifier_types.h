@@ -94,6 +94,7 @@ typedef enum ModifierType {
   eModifierType_WeightedNormal = 54,
   eModifierType_Weld = 55,
   eModifierType_Fluid = 56,
+  eModifierType_Simulation = 57,
   NUM_MODIFIER_TYPES,
 } ModifierType;
 
@@ -138,6 +139,7 @@ typedef struct MappingInfoModifierData {
 
   struct Tex *texture;
   struct Object *map_object;
+  char map_bone[64];
   /** MAX_CUSTOMDATA_LAYER_NAME. */
   char uvlayer_name[64];
   int uvlayer_tmp;
@@ -362,6 +364,7 @@ enum {
   MOD_MIR_BISECT_FLIP_AXIS_X = (1 << 11),
   MOD_MIR_BISECT_FLIP_AXIS_Y = (1 << 12),
   MOD_MIR_BISECT_FLIP_AXIS_Z = (1 << 13),
+  MOD_MIR_MIRROR_UDIM = (1 << 14),
 };
 
 typedef struct EdgeSplitModifierData {
@@ -451,23 +454,23 @@ enum {
 
 /* BevelModifierData->face_str_mode */
 enum {
-  MOD_BEVEL_FACE_STRENGTH_NONE,
-  MOD_BEVEL_FACE_STRENGTH_NEW,
-  MOD_BEVEL_FACE_STRENGTH_AFFECTED,
-  MOD_BEVEL_FACE_STRENGTH_ALL,
+  MOD_BEVEL_FACE_STRENGTH_NONE = 0,
+  MOD_BEVEL_FACE_STRENGTH_NEW = 1,
+  MOD_BEVEL_FACE_STRENGTH_AFFECTED = 2,
+  MOD_BEVEL_FACE_STRENGTH_ALL = 3,
 };
 
 /* BevelModifier->miter_inner and ->miter_outer */
 enum {
-  MOD_BEVEL_MITER_SHARP,
-  MOD_BEVEL_MITER_PATCH,
-  MOD_BEVEL_MITER_ARC,
+  MOD_BEVEL_MITER_SHARP = 0,
+  MOD_BEVEL_MITER_PATCH = 1,
+  MOD_BEVEL_MITER_ARC = 2,
 };
 
 /* BevelModifier->vmesh_method */
 enum {
-  MOD_BEVEL_VMESH_ADJ,
-  MOD_BEVEL_VMESH_CUTOFF,
+  MOD_BEVEL_VMESH_ADJ = 0,
+  MOD_BEVEL_VMESH_CUTOFF = 1,
 };
 
 typedef struct FluidModifierData {
@@ -496,6 +499,7 @@ typedef struct DisplaceModifierData {
   /* keep in sync with MappingInfoModifierData */
   struct Tex *texture;
   struct Object *map_object;
+  char map_bone[64];
   /** MAX_CUSTOMDATA_LAYER_NAME. */
   char uvlayer_name[64];
   int uvlayer_tmp;
@@ -592,10 +596,10 @@ enum {
 };
 
 enum {
-  MOD_DECIM_MODE_COLLAPSE,
-  MOD_DECIM_MODE_UNSUBDIV,
+  MOD_DECIM_MODE_COLLAPSE = 0,
+  MOD_DECIM_MODE_UNSUBDIV = 1,
   /** called planar in the UI */
-  MOD_DECIM_MODE_DISSOLVE,
+  MOD_DECIM_MODE_DISSOLVE = 2,
 };
 
 typedef struct SmoothModifierData {
@@ -651,6 +655,7 @@ typedef struct WaveModifierData {
   /* keep in sync with MappingInfoModifierData */
   struct Tex *texture;
   struct Object *map_object;
+  char map_bone[64];
   /** MAX_CUSTOMDATA_LAYER_NAME. */
   char uvlayer_name[64];
   int uvlayer_tmp;
@@ -1172,6 +1177,9 @@ typedef struct SolidifyModifierData {
   int flag;
   short mat_ofs;
   short mat_ofs_rim;
+
+  float merge_tolerance;
+  float bevel_convex;
 } SolidifyModifierData;
 
 /** #SolidifyModifierData.flag */
@@ -1186,6 +1194,7 @@ enum {
   MOD_SOLIDIFY_FLIP = (1 << 5),
   MOD_SOLIDIFY_NOSHELL = (1 << 6),
   MOD_SOLIDIFY_OFFSET_ANGLE_CLAMP = (1 << 7),
+  MOD_SOLIDIFY_NONMANIFOLD_FLAT_FACES = (1 << 8),
 };
 
 /** #SolidifyModifierData.mode */
@@ -1318,6 +1327,7 @@ typedef struct WarpModifierData {
   /* keep in sync with MappingInfoModifierData */
   struct Tex *texture;
   struct Object *map_object;
+  char map_bone[64];
   /** MAX_CUSTOMDATA_LAYER_NAME. */
   char uvlayer_name[64];
   int uvlayer_tmp;
@@ -1393,6 +1403,8 @@ typedef struct WeightVGEditModifierData {
   struct Tex *mask_texture;
   /** Name of the map object. */
   struct Object *mask_tex_map_obj;
+  /** Name of the map bone. */
+  char mask_tex_map_bone[64];
   /** How to map the texture (using MOD_DISP_MAP_* enums). */
   int mask_tex_mapping;
   /** Name of the UV map. MAX_CUSTOMDATA_LAYER_NAME. */
@@ -1444,6 +1456,8 @@ typedef struct WeightVGMixModifierData {
   struct Tex *mask_texture;
   /** Name of the map object. */
   struct Object *mask_tex_map_obj;
+  /** Name of the map bone. */
+  char mask_tex_map_bone[64];
   /** How to map the texture!. */
   int mask_tex_mapping;
   /** Name of the UV map. MAX_CUSTOMDATA_LAYER_NAME. */
@@ -1518,6 +1532,8 @@ typedef struct WeightVGProximityModifierData {
   struct Tex *mask_texture;
   /** Name of the map object. */
   struct Object *mask_tex_map_obj;
+  /** Name of the map bone. */
+  char mask_tex_map_bone[64];
   /** How to map the texture!. */
   int mask_tex_mapping;
   /** Name of the UV Map. MAX_CUSTOMDATA_LAYER_NAME. */
@@ -1680,15 +1696,15 @@ enum {
 /* Triangulate methods - NGons */
 enum {
   MOD_TRIANGULATE_NGON_BEAUTY = 0,
-  MOD_TRIANGULATE_NGON_EARCLIP,
+  MOD_TRIANGULATE_NGON_EARCLIP = 1,
 };
 
 /* Triangulate methods - Quads */
 enum {
   MOD_TRIANGULATE_QUAD_BEAUTY = 0,
-  MOD_TRIANGULATE_QUAD_FIXED,
-  MOD_TRIANGULATE_QUAD_ALTERNATE,
-  MOD_TRIANGULATE_QUAD_SHORTEDGE,
+  MOD_TRIANGULATE_QUAD_FIXED = 1,
+  MOD_TRIANGULATE_QUAD_ALTERNATE = 2,
+  MOD_TRIANGULATE_QUAD_SHORTEDGE = 3,
 };
 
 typedef struct LaplacianSmoothModifierData {
@@ -2102,6 +2118,13 @@ enum {
 
 #define MOD_MESHSEQ_READ_ALL \
   (MOD_MESHSEQ_READ_VERT | MOD_MESHSEQ_READ_POLY | MOD_MESHSEQ_READ_UV | MOD_MESHSEQ_READ_COLOR)
+
+typedef struct SimulationModifierData {
+  ModifierData modifier;
+
+  struct Simulation *simulation;
+  char data_path[64];
+} SimulationModifierData;
 
 #ifdef __cplusplus
 }

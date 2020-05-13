@@ -855,19 +855,17 @@ static void node_id_remap(ScrArea *UNUSED(area), SpaceLink *slink, ID *old_id, I
 {
   SpaceNode *snode = (SpaceNode *)slink;
 
-  if (GS(old_id->name) == ID_SCE) {
-    if (snode->id == old_id) {
-      /* nasty DNA logic for SpaceNode:
-       * ideally should be handled by editor code, but would be bad level call
-       */
-      BLI_freelistN(&snode->treepath);
+  if (snode->id == old_id) {
+    /* nasty DNA logic for SpaceNode:
+     * ideally should be handled by editor code, but would be bad level call
+     */
+    BLI_freelistN(&snode->treepath);
 
-      /* XXX Untested in case new_id != NULL... */
-      snode->id = new_id;
-      snode->from = NULL;
-      snode->nodetree = NULL;
-      snode->edittree = NULL;
-    }
+    /* XXX Untested in case new_id != NULL... */
+    snode->id = new_id;
+    snode->from = NULL;
+    snode->nodetree = NULL;
+    snode->edittree = NULL;
   }
   else if (GS(old_id->name) == ID_OB) {
     if (snode->from == old_id) {
@@ -890,8 +888,7 @@ static void node_id_remap(ScrArea *UNUSED(area), SpaceLink *slink, ID *old_id, I
     for (path = snode->treepath.first; path; path = path->next) {
       if ((ID *)path->nodetree == old_id) {
         path->nodetree = (bNodeTree *)new_id;
-        id_us_min(old_id);
-        id_us_plus(new_id);
+        id_us_ensure_real(new_id);
       }
       if (path == snode->treepath.first) {
         /* first nodetree in path is same as snode->nodetree */
@@ -939,6 +936,11 @@ static void node_space_subtype_item_extend(bContext *C, EnumPropertyItem **item,
   bool free;
   const EnumPropertyItem *item_src = RNA_enum_node_tree_types_itemf_impl(C, &free);
   for (const EnumPropertyItem *item_iter = item_src; item_iter->identifier; item_iter++) {
+#ifndef WITH_NEW_SIMULATION_TYPE
+    if (STREQ(item_iter->identifier, "SimulationNodeTree")) {
+      continue;
+    }
+#endif
     RNA_enum_item_add(item, totitem, item_iter);
   }
   if (free) {

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2006 by Nicholas Bishop
@@ -478,6 +478,7 @@ typedef struct SculptUndoNode {
    * the object when undoing the operation
    *
    * Modified geometry is stored after the modification and is used to redo the modification. */
+  bool geometry_clear_pbvh;
   SculptUndoNodeGeometry geometry_original;
   SculptUndoNodeGeometry geometry_modified;
 
@@ -780,6 +781,9 @@ typedef struct StrokeCache {
   /* Stores the displacement produced by the laplacian step of HC smooth. */
   float (*surface_smooth_laplacian_disp)[3];
 
+  /* Layer brush */
+  float *layer_displacement_factor;
+
   float vertex_rotation; /* amount to rotate the vertices when using rotate brush */
   struct Dial *dial;
 
@@ -817,6 +821,11 @@ typedef struct FilterCache {
   float surface_smooth_shape_preservation;
   float surface_smooth_current_vertex;
 
+  /* Sharpen mesh filter. */
+  float sharpen_smooth_ratio;
+  float *sharpen_factor;
+  float (*accum_disp)[3];
+
   /* unmasked nodes */
   PBVHNode **nodes;
   int totnode;
@@ -847,6 +856,7 @@ void SCULPT_cache_free(StrokeCache *cache);
 
 SculptUndoNode *SCULPT_undo_push_node(Object *ob, PBVHNode *node, SculptUndoType type);
 SculptUndoNode *SCULPT_undo_get_node(PBVHNode *node);
+SculptUndoNode *SCULPT_undo_get_first_node(void);
 void SCULPT_undo_push_begin(const char *name);
 void SCULPT_undo_push_end(void);
 void SCULPT_undo_push_end_ex(const bool use_nested_undo);

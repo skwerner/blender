@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -64,7 +64,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   const WarpModifierData *wmd = (const WarpModifierData *)md;
   WarpModifierData *twmd = (WarpModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   twmd->curfalloff = BKE_curvemapping_copy(wmd->curfalloff);
 }
@@ -152,35 +152,34 @@ static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void 
   walk(userData, ob, md, "texture");
 }
 
-static void warp_deps_object_bone_new(struct DepsNodeHandle *node,
-                                      Object *object,
-                                      const char *bonename)
-{
-  if (bonename[0] && object->type == OB_ARMATURE) {
-    DEG_add_object_relation(node, object, DEG_OB_COMP_EVAL_POSE, "Warp Modifier");
-  }
-  else {
-    DEG_add_object_relation(node, object, DEG_OB_COMP_TRANSFORM, "Warp Modifier");
-  }
-}
-
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   WarpModifierData *wmd = (WarpModifierData *)md;
+  bool need_transform_relation = false;
 
   if (wmd->object_from != NULL && wmd->object_to != NULL) {
-    warp_deps_object_bone_new(ctx->node, wmd->object_from, wmd->bone_from);
-    warp_deps_object_bone_new(ctx->node, wmd->object_to, wmd->bone_to);
-
-    DEG_add_modifier_to_transform_relation(ctx->node, "Warp Modifier");
+    MOD_depsgraph_update_object_bone_relation(
+        ctx->node, wmd->object_from, wmd->bone_from, "Warp Modifier");
+    MOD_depsgraph_update_object_bone_relation(
+        ctx->node, wmd->object_to, wmd->bone_to, "Warp Modifier");
+    need_transform_relation = true;
   }
 
-  if ((wmd->texmapping == MOD_DISP_MAP_OBJECT) && wmd->map_object != NULL) {
-    DEG_add_object_relation(
-        ctx->node, wmd->map_object, DEG_OB_COMP_TRANSFORM, "Warp Modifier map");
-  }
   if (wmd->texture != NULL) {
     DEG_add_generic_id_relation(ctx->node, &wmd->texture->id, "Warp Modifier");
+
+    if ((wmd->texmapping == MOD_DISP_MAP_OBJECT) && wmd->map_object != NULL) {
+      MOD_depsgraph_update_object_bone_relation(
+          ctx->node, wmd->map_object, wmd->map_bone, "Warp Modifier");
+      need_transform_relation = true;
+    }
+    else if (wmd->texmapping == MOD_DISP_MAP_GLOBAL) {
+      need_transform_relation = true;
+    }
+  }
+
+  if (need_transform_relation) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "Warp Modifier");
   }
 }
 
@@ -394,7 +393,7 @@ ModifierTypeInfo modifierType_Warp = {
     /* structName */ "WarpModifierData",
     /* structSize */ sizeof(WarpModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
     /* copyData */ copyData,
 
@@ -402,7 +401,10 @@ ModifierTypeInfo modifierType_Warp = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

@@ -302,8 +302,8 @@ static int collection_objects_remove_all_exec(bContext *C, wmOperator *UNUSED(op
 void COLLECTION_OT_objects_remove_all(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Remove from All Unlinked Collections";
-  ot->description = "Remove selected objects from all collections not used in a scene";
+  ot->name = "Remove from All Collections";
+  ot->description = "Remove selected objects from all collections";
   ot->idname = "COLLECTION_OT_objects_remove_all";
 
   /* api callbacks */
@@ -483,7 +483,7 @@ static int collection_link_exec(bContext *C, wmOperator *op)
 
   /* Adding object to collection which is used as dupli-collection for self is bad idea.
    *
-   * It is also  bad idea to add object to collection which is in collection which
+   * It is also bad idea to add object to collection which is in collection which
    * contains our current object.
    */
   if (BKE_collection_object_cyclic_check(bmain, ob, collection)) {

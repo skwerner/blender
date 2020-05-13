@@ -249,7 +249,9 @@ static void draw_azone_arrow(float x1, float y1, float x2, float y2, AZEdge edge
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
   GPU_blend(true);
-  immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+  /* NOTE(fclem): There is something strange going on with Mesa and GPU_SHADER_2D_UNIFORM_COLOR
+   * that causes a crash on some GPUs (see T76113). Using 3D variant avoid the issue. */
+  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
   immUniformColor4f(0.8f, 0.8f, 0.8f, 0.4f);
 
   immBegin(GPU_PRIM_TRI_FAN, 6);
@@ -2515,6 +2517,7 @@ void ED_region_panels_layout_ex(const bContext *C,
   int margin_x = 0;
   const bool region_layout_based = region->flag & RGN_FLAG_DYNAMIC_SIZE;
   const bool is_context_new = (contextnr != -1) ? UI_view2d_tab_set(v2d, contextnr) : false;
+  bool update_tot_size = true;
 
   /* before setting the view */
   if (vertical) {
@@ -2532,7 +2535,6 @@ void ED_region_panels_layout_ex(const bContext *C,
     v2d->scroll |= (V2D_SCROLL_BOTTOM);
     v2d->scroll &= ~(V2D_SCROLL_RIGHT);
   }
-  const int scroll = v2d->scroll;
 
   /* collect categories */
   if (use_category_tabs) {
@@ -2582,6 +2584,11 @@ void ED_region_panels_layout_ex(const bContext *C,
       if ((panel == NULL) || ((panel->flag & PNL_PIN) == 0)) {
         continue;
       }
+    }
+
+    if (panel && UI_panel_is_dragging(panel)) {
+      /* Prevent View2d.tot rectangle size changes while dragging panels. */
+      update_tot_size = false;
     }
 
     ed_panel_draw(C, area, region, &region->panels, pt, panel, w, em, vertical);
@@ -2639,17 +2646,9 @@ void ED_region_panels_layout_ex(const bContext *C,
     y = -y;
   }
 
-  /* this also changes the 'cur' */
-  UI_view2d_totRect_set(v2d, x, y);
-
-  if (scroll != v2d->scroll) {
-    /* Note: this code scales fine, but because of rounding differences, positions of elements
-     * flip +1 or -1 pixel compared to redoing the entire layout again.
-     * Leaving in commented code for future tests */
-#if 0
-    UI_panels_scale(region, BLI_rctf_size_x(&v2d->cur));
-    break;
-#endif
+  if (update_tot_size) {
+    /* this also changes the 'cur' */
+    UI_view2d_totRect_set(v2d, x, y);
   }
 
   if (use_category_tabs) {

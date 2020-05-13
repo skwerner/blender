@@ -320,6 +320,7 @@ static BMOpDefine bmo_mirror_def = {
    {"axis",            BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM}, bmo_enum_axis_xyz},   /* the axis to use. */
    {"mirror_u",        BMO_OP_SLOT_BOOL},  /* mirror UVs across the u axis */
    {"mirror_v",        BMO_OP_SLOT_BOOL},  /* mirror UVs across the v axis */
+   {"mirror_udim",     BMO_OP_SLOT_BOOL},  /* mirror UVs in each tile */
    {{'\0'}},
   },
   /* slots_out */
@@ -1046,6 +1047,7 @@ static BMOpDefine bmo_extrude_face_region_def = {
    {"use_keep_orig", BMO_OP_SLOT_BOOL},   /* keep original geometry (requires ``geom`` to include edges). */
    {"use_normal_flip", BMO_OP_SLOT_BOOL},  /* Create faces with reversed direction. */
    {"use_normal_from_adjacent", BMO_OP_SLOT_BOOL},  /* Use winding from surrounding faces instead of this region. */
+   {"use_dissolve_ortho_edges", BMO_OP_SLOT_BOOL},  /* Dissolve edges whose faces form a flat surface. */
    {"use_select_history", BMO_OP_SLOT_BOOL},  /* pass to duplicate */
    {{'\0'}},
   },

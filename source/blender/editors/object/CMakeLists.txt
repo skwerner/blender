@@ -17,8 +17,8 @@
 
 set(INC
   ../include
-  ../../blenkernel
   ../../blenfont
+  ../../blenkernel
   ../../blenlib
   ../../blentranslation
   ../../bmesh
@@ -34,6 +34,7 @@ set(INC
   ../../shader_fx
   ../../render/extern/include
   ../../windowmanager
+  ../../../../intern/clog
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
 )

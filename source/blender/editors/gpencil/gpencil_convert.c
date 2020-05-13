@@ -162,7 +162,7 @@ static void gp_strokepoint_convertcoords(bContext *C,
   View3D *v3d = CTX_wm_view3d(C);
   ARegion *region = CTX_wm_region(C);
   /* TODO(sergey): This function might be called from a loop, but no tagging is happening in it,
-   * so it's not that expensive to ensure evaluated depsgraph  here. However, ideally all the
+   * so it's not that expensive to ensure evaluated depsgraph here. However, ideally all the
    * parameters are to wrapped into a context style struct and queried from Context once.*/
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *obact = CTX_data_active_object(C);
@@ -1822,7 +1822,7 @@ void GPENCIL_OT_image_to_grease_pencil(wmOperatorType *ot)
                            0.0001f,
                            10.0f,
                            "Point Size",
-                           "Size used for graese pencil points",
+                           "Size used for grease pencil points",
                            0.001f,
                            1.0f);
   RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);

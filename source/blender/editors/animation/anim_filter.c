@@ -67,6 +67,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_sequence_types.h"
+#include "DNA_simulation_types.h"
 #include "DNA_space_types.h"
 #include "DNA_speaker_types.h"
 #include "DNA_userdef_types.h"
@@ -86,6 +87,7 @@
 #include "BKE_collection.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 #include "BKE_global.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
@@ -819,6 +821,18 @@ static bAnimListElem *make_new_animlistelem(void *data,
         AnimData *adt = volume->adt;
 
         ale->flag = FILTER_VOLUME_OBJD(volume);
+
+        ale->key_data = (adt) ? adt->action : NULL;
+        ale->datatype = ALE_ACT;
+
+        ale->adt = BKE_animdata_from_id(data);
+        break;
+      }
+      case ANIMTYPE_DSSIMULATION: {
+        Simulation *simulation = (Simulation *)data;
+        AnimData *adt = simulation->adt;
+
+        ale->flag = FILTER_SIMULATION_OBJD(simulation);
 
         ale->key_data = (adt) ? adt->action : NULL;
         ale->datatype = ALE_ACT;
@@ -1840,15 +1854,18 @@ static size_t animdata_filter_gpencil(bAnimContext *ac,
   bDopeSheet *ads = ac->ads;
   size_t items = 0;
 
-  Scene *scene = (Scene *)ads->source;
   ViewLayer *view_layer = (ViewLayer *)ac->view_layer;
   Base *base;
 
-  /* Active scene's GPencil block first - No parent item needed... */
-  if (scene->gpd) {
-    items += animdata_filter_gpencil_data(anim_data, ads, scene->gpd, filter_mode);
+  /* Include all annotation datablocks. */
+  if (((ads->filterflag & ADS_FILTER_ONLYSEL) == 0) ||
+      (ads->filterflag & ADS_FILTER_INCL_HIDDEN)) {
+    LISTBASE_FOREACH (bGPdata *, gpd, &ac->bmain->gpencils) {
+      if (gpd->flag & GP_DATA_ANNOTATIONS) {
+        items += animdata_filter_gpencil_data(anim_data, ads, gpd, filter_mode);
+      }
+    }
   }
-
   /* Objects in the scene */
   for (base = view_layer->object_bases.first; base; base = base->next) {
     /* Only consider this object if it has got some GP data (saving on all the other tests) */
@@ -1877,13 +1894,12 @@ static size_t animdata_filter_gpencil(bAnimContext *ac,
         }
       }
 
-      /* check selection and object type filters only for Object mode */
-      if (ob->mode == OB_MODE_OBJECT) {
-        if ((ads->filterflag & ADS_FILTER_ONLYSEL) && !((base->flag & BASE_SELECTED))) {
-          /* only selected should be shown */
-          continue;
-        }
+      /* check selection and object type filters */
+      if ((ads->filterflag & ADS_FILTER_ONLYSEL) && !((base->flag & BASE_SELECTED))) {
+        /* only selected should be shown */
+        continue;
       }
+
       /* check if object belongs to the filtering group if option to filter
        * objects by the grouped status is on
        * - used to ease the process of doing multiple-character choreographies
@@ -2412,7 +2428,7 @@ static size_t animdata_filter_ds_modifiers(
   afm.filter_mode = filter_mode;
 
   /* 2) walk over dependencies */
-  modifiers_foreachIDLink(ob, animfilter_modifier_idpoin_cb, &afm);
+  BKE_modifiers_foreach_ID_link(ob, animfilter_modifier_idpoin_cb, &afm);
 
   /* 3) extract data from the context, merging it back into the standard list */
   if (afm.items) {

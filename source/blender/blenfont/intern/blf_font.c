@@ -613,28 +613,28 @@ static void blf_font_draw_buffer_ex(FontBLF *font,
       BLF_KERNING_STEP_FAST(font, kern_mode, g_prev, g, c_prev, c, pen_x);
     }
 
-    chx = pen_x + ((int)g->pos_x);
-    chy = pen_y_basis + g->height;
+    chx = pen_x + ((int)g->pos[0]);
+    chy = pen_y_basis + g->dims[1];
 
     if (g->pitch < 0) {
-      pen_y = pen_y_basis + (g->height - (int)g->pos_y);
+      pen_y = pen_y_basis + (g->dims[1] - g->pos[1]);
     }
     else {
-      pen_y = pen_y_basis - (g->height - (int)g->pos_y);
+      pen_y = pen_y_basis - (g->dims[1] - g->pos[1]);
     }
 
-    if ((chx + g->width) >= 0 && chx < buf_info->w && (pen_y + g->height) >= 0 &&
-        pen_y < buf_info->h) {
+    if ((chx + g->dims[0]) >= 0 && chx < buf_info->dims[0] && (pen_y + g->dims[1]) >= 0 &&
+        pen_y < buf_info->dims[1]) {
       /* don't draw beyond the buffer bounds */
-      int width_clip = g->width;
-      int height_clip = g->height;
-      int yb_start = g->pitch < 0 ? 0 : g->height - 1;
+      int width_clip = g->dims[0];
+      int height_clip = g->dims[1];
+      int yb_start = g->pitch < 0 ? 0 : g->dims[1] - 1;
 
-      if (width_clip + chx > buf_info->w) {
-        width_clip -= chx + width_clip - buf_info->w;
+      if (width_clip + chx > buf_info->dims[0]) {
+        width_clip -= chx + width_clip - buf_info->dims[0];
       }
-      if (height_clip + pen_y > buf_info->h) {
-        height_clip -= pen_y + height_clip - buf_info->h;
+      if (height_clip + pen_y > buf_info->dims[1]) {
+        height_clip -= pen_y + height_clip - buf_info->dims[1];
       }
 
       /* drawing below the image? */
@@ -652,7 +652,7 @@ static void blf_font_draw_buffer_ex(FontBLF *font,
             if (a_byte) {
               const float a = (a_byte / 255.0f) * b_col_float[3];
               const size_t buf_ofs = (((size_t)(chx + x) +
-                                       ((size_t)(pen_y + y) * (size_t)buf_info->w)) *
+                                       ((size_t)(pen_y + y) * (size_t)buf_info->dims[0])) *
                                       (size_t)buf_info->ch);
               float *fbuf = buf_info->fbuf + buf_ofs;
 
@@ -689,7 +689,7 @@ static void blf_font_draw_buffer_ex(FontBLF *font,
             if (a_byte) {
               const float a = (a_byte / 255.0f) * b_col_float[3];
               const size_t buf_ofs = (((size_t)(chx + x) +
-                                       ((size_t)(pen_y + y) * (size_t)buf_info->w)) *
+                                       ((size_t)(pen_y + y) * (size_t)buf_info->dims[0])) *
                                       (size_t)buf_info->ch);
               unsigned char *cbuf = buf_info->cbuf + buf_ofs;
 
@@ -1201,6 +1201,84 @@ float blf_font_fixed_width(FontBLF *font)
   return g->advance;
 }
 
+/* -------------------------------------------------------------------- */
+/** \name Glyph Bound Box with Callback
+ * \{ */
+
+static void blf_font_boundbox_foreach_glyph_ex(FontBLF *font,
+                                               GlyphCacheBLF *gc,
+                                               const char *str,
+                                               size_t len,
+                                               BLF_GlyphBoundsFn user_fn,
+                                               void *user_data,
+                                               struct ResultBLF *r_info,
+                                               int pen_y)
+{
+  unsigned int c, c_prev = BLI_UTF8_ERR;
+  GlyphBLF *g, *g_prev = NULL;
+  int pen_x = 0;
+  size_t i = 0, i_curr;
+  rcti gbox;
+
+  if (len == 0) {
+    /* early output. */
+    return;
+  }
+
+  GlyphBLF **glyph_ascii_table = blf_font_ensure_ascii_table(font, gc);
+
+  BLF_KERNING_VARS(font, has_kerning, kern_mode);
+
+  blf_font_ensure_ascii_kerning(font, gc, kern_mode);
+
+  while ((i < len) && str[i]) {
+    i_curr = i;
+    BLF_UTF8_NEXT_FAST(font, gc, g, str, i, c, glyph_ascii_table);
+
+    if (UNLIKELY(c == BLI_UTF8_ERR)) {
+      break;
+    }
+    if (UNLIKELY(g == NULL)) {
+      continue;
+    }
+    if (has_kerning) {
+      BLF_KERNING_STEP_FAST(font, kern_mode, g_prev, g, c_prev, c, pen_x);
+    }
+
+    gbox.xmin = pen_x;
+    gbox.xmax = gbox.xmin + MIN2(g->advance_i, g->dims[0]);
+    gbox.ymin = pen_y;
+    gbox.ymax = gbox.ymin - g->dims[1];
+
+    pen_x += g->advance_i;
+
+    if (user_fn(str, i_curr, &gbox, g->advance_i, &g->box, g->pos, user_data) == false) {
+      break;
+    }
+
+    g_prev = g;
+    c_prev = c;
+  }
+
+  if (r_info) {
+    r_info->lines = 1;
+    r_info->width = pen_x;
+  }
+}
+void blf_font_boundbox_foreach_glyph(FontBLF *font,
+                                     const char *str,
+                                     size_t len,
+                                     BLF_GlyphBoundsFn user_fn,
+                                     void *user_data,
+                                     struct ResultBLF *r_info)
+{
+  GlyphCacheBLF *gc = blf_glyph_cache_acquire(font);
+  blf_font_boundbox_foreach_glyph_ex(font, gc, str, len, user_fn, user_data, r_info, 0);
+  blf_glyph_cache_release(font);
+}
+
+/** \} */
+
 int blf_font_count_missing_chars(FontBLF *font,
                                  const char *str,
                                  const size_t len,
@@ -1287,8 +1365,8 @@ static void blf_font_fill(FontBLF *font)
 
   font->buf_info.fbuf = NULL;
   font->buf_info.cbuf = NULL;
-  font->buf_info.w = 0;
-  font->buf_info.h = 0;
+  font->buf_info.dims[0] = 0;
+  font->buf_info.dims[1] = 0;
   font->buf_info.ch = 0;
   font->buf_info.col_init[0] = 0;
   font->buf_info.col_init[1] = 0;

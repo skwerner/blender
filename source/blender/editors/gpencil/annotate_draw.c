@@ -90,14 +90,54 @@ typedef enum eDrawStrokeFlags {
 
 /* ----- Tool Buffer Drawing ------ */
 
+static void annotation_draw_stroke_arrow_buffer(uint pos,
+                                                const float *corner_point,
+                                                const float *arrow_coords,
+                                                const int arrow_style)
+{
+  immBeginAtMost(GPU_PRIM_LINE_STRIP, arrow_style);
+
+  switch (arrow_style) {
+    case GP_STROKE_ARROWSTYLE_SEGMENT:
+      immVertex2f(pos, arrow_coords[0], arrow_coords[1]);
+      immVertex2f(pos, arrow_coords[2], arrow_coords[3]);
+      break;
+    case GP_STROKE_ARROWSTYLE_CLOSED:
+      immVertex2f(pos, arrow_coords[0], arrow_coords[1]);
+      immVertex2f(pos, arrow_coords[2], arrow_coords[3]);
+      immVertex2f(pos, arrow_coords[4], arrow_coords[5]);
+      immVertex2f(pos, arrow_coords[0], arrow_coords[1]);
+      break;
+    case GP_STROKE_ARROWSTYLE_OPEN:
+      immVertex2f(pos, arrow_coords[0], arrow_coords[1]);
+      immVertex2f(pos, corner_point[0], corner_point[1]);
+      immVertex2f(pos, arrow_coords[2], arrow_coords[3]);
+      break;
+    case GP_STROKE_ARROWSTYLE_SQUARE:
+      immVertex2f(pos, corner_point[0], corner_point[1]);
+      immVertex2f(pos, arrow_coords[0], arrow_coords[1]);
+      immVertex2f(pos, arrow_coords[4], arrow_coords[5]);
+      immVertex2f(pos, arrow_coords[6], arrow_coords[7]);
+      immVertex2f(pos, arrow_coords[2], arrow_coords[3]);
+      immVertex2f(pos, corner_point[0], corner_point[1]);
+      break;
+    default:
+      break;
+  }
+  immEnd();
+}
+
 /* draw stroke defined in buffer (simple ogl lines/points for now, as dotted lines) */
-static void annotation_draw_stroke_buffer(const tGPspoint *points,
-                                          int totpoints,
+static void annotation_draw_stroke_buffer(bGPdata *gps,
                                           short thickness,
                                           short dflag,
-                                          short sflag,
                                           const float ink[4])
 {
+  bGPdata_Runtime runtime = gps->runtime;
+  const tGPspoint *points = runtime.sbuffer;
+  int totpoints = runtime.sbuffer_used;
+  short sflag = runtime.sbuffer_sflag;
+
   int draw_points = 0;
 
   /* error checking */
@@ -176,6 +216,26 @@ static void annotation_draw_stroke_buffer(const tGPspoint *points,
   }
 
   immEnd();
+
+  /* Draw arrow stroke. */
+  if (totpoints > 1) {
+    /* Draw ending arrow stroke. */
+    if ((sflag & GP_STROKE_USE_ARROW_END) &&
+        (runtime.arrow_end_style != GP_STROKE_ARROWSTYLE_NONE)) {
+      float end[2];
+      copy_v2_fl2(end, points[1].x, points[1].y);
+      annotation_draw_stroke_arrow_buffer(pos, end, runtime.arrow_end, runtime.arrow_end_style);
+    }
+    /* Draw starting arrow stroke. */
+    if ((sflag & GP_STROKE_USE_ARROW_START) &&
+        (runtime.arrow_start_style != GP_STROKE_ARROWSTYLE_NONE)) {
+      float start[2];
+      copy_v2_fl2(start, points[0].x, points[0].y);
+      annotation_draw_stroke_arrow_buffer(
+          pos, start, runtime.arrow_start, runtime.arrow_start_style);
+    }
+  }
+
   immUnbindProgram();
 }
 
@@ -328,13 +388,10 @@ static void annotation_draw_stroke_3d(
   immUnbindProgram();
 }
 
-/* ----- Fancy 2D-Stroke Drawing ------ */
-
-/* draw a given stroke in 2d */
+/* Draw a given stroke in 2d. */
 static void annotation_draw_stroke_2d(const bGPDspoint *points,
                                       int totpoints,
                                       short thickness_s,
-                                      short dflag,
                                       short sflag,
                                       int offsx,
                                       int offsy,
@@ -342,167 +399,84 @@ static void annotation_draw_stroke_2d(const bGPDspoint *points,
                                       int winy,
                                       const float ink[4])
 {
-  /* otherwise thickness is twice that of the 3D view */
-  float thickness = (float)thickness_s * 0.5f;
-
-  /* strokes in Image Editor need a scale factor, since units there are not pixels! */
-  float scalefac = 1.0f;
-  if ((dflag & GP_DRAWDATA_IEDITHACK) && (dflag & GP_DRAWDATA_ONLYV2D)) {
-    scalefac = 0.001f;
+  if (totpoints == 0) {
+    return;
   }
+  float thickness = (float)thickness_s;
 
-  /* Tessellation code - draw stroke as series of connected quads
-   * (triangle strips in fact) with connection edges rotated to minimize shrinking artifacts,
-   * and rounded end-caps.
-   */
-  {
-    const bGPDspoint *pt1, *pt2;
-    float s0[2], s1[2]; /* segment 'center' points */
-    float pm[2];        /* normal from previous segment. */
-    int i;
+  GPUVertFormat *format = immVertexFormat();
+  uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
-    GPUVertFormat *format = immVertexFormat();
-    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+  const bGPDspoint *pt;
+  const bGPDspoint *pt_prev;
+  int draw_points = 0;
+  float co[2];
+  float oldpressure = points[0].pressure;
+  if (totpoints == 1) {
+    /* if drawing a single point, draw it larger */
+    GPU_point_size((float)(thickness + 2) * points->pressure);
+    immBindBuiltinProgram(GPU_SHADER_3D_POINT_UNIFORM_SIZE_UNIFORM_COLOR_AA);
+    immUniformColor3fvAlpha(ink, ink[3]);
+    immBegin(GPU_PRIM_POINTS, 1);
+
+    annotation_calc_2d_stroke_fxy(&points->x, sflag, offsx, offsy, winx, winy, co);
+    immVertex2fv(pos, co);
+  }
+  else {
+    /* draw stroke curve */
+    GPU_line_width(max_ff(oldpressure * thickness, 1.0));
 
     immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
     immUniformColor3fvAlpha(ink, ink[3]);
-    immBegin(GPU_PRIM_TRI_STRIP, totpoints * 2 + 4);
 
-    /* get x and y coordinates from first point */
-    annotation_calc_2d_stroke_fxy(&points->x, sflag, offsx, offsy, winx, winy, s0);
+    immBeginAtMost(GPU_PRIM_LINE_STRIP, totpoints);
 
-    for (i = 0, pt1 = points, pt2 = points + 1; i < (totpoints - 1); i++, pt1++, pt2++) {
-      float t0[2], t1[2]; /* tessellated coordinates */
-      float m1[2], m2[2]; /* gradient and normal */
-      float mt[2], sc[2]; /* gradient for thickness, point for end-cap */
-      float pthick;       /* thickness at segment point */
-
-      /* Get x and y coordinates from point2
-       * (point1 has already been computed in previous iteration). */
-      annotation_calc_2d_stroke_fxy(&pt2->x, sflag, offsx, offsy, winx, winy, s1);
-
-      /* calculate gradient and normal - 'angle'=(ny/nx) */
-      m1[1] = s1[1] - s0[1];
-      m1[0] = s1[0] - s0[0];
-      normalize_v2(m1);
-      m2[1] = -m1[0];
-      m2[0] = m1[1];
-
-      /* always use pressure from first point here */
-      pthick = (pt1->pressure * thickness * scalefac);
-
-      /* if the first segment, start of segment is segment's normal */
-      if (i == 0) {
-        /* draw start cap first
-         * - make points slightly closer to center (about halfway across)
-         */
-        mt[0] = m2[0] * pthick * 0.5f;
-        mt[1] = m2[1] * pthick * 0.5f;
-        sc[0] = s0[0] - (m1[0] * pthick * 0.75f);
-        sc[1] = s0[1] - (m1[1] * pthick * 0.75f);
-
-        t0[0] = sc[0] - mt[0];
-        t0[1] = sc[1] - mt[1];
-        t1[0] = sc[0] + mt[0];
-        t1[1] = sc[1] + mt[1];
-
-        /* First two points of cap. */
-        immVertex2fv(pos, t0);
-        immVertex2fv(pos, t1);
-
-        /* calculate points for start of segment */
-        mt[0] = m2[0] * pthick;
-        mt[1] = m2[1] * pthick;
-
-        t0[0] = s0[0] - mt[0];
-        t0[1] = s0[1] - mt[1];
-        t1[0] = s0[0] + mt[0];
-        t1[1] = s0[1] + mt[1];
-
-        /* Last two points of start cap (and first two points of first segment). */
-        immVertex2fv(pos, t0);
-        immVertex2fv(pos, t1);
-      }
-      /* if not the first segment, use bisector of angle between segments */
-      else {
-        float mb[2];        /* bisector normal */
-        float athick, dfac; /* actual thickness, difference between thicknesses */
-
-        /* calculate gradient of bisector (as average of normals) */
-        mb[0] = (pm[0] + m2[0]) / 2;
-        mb[1] = (pm[1] + m2[1]) / 2;
-        normalize_v2(mb);
-
-        /* calculate gradient to apply
-         *  - as basis, use just pthick * bisector gradient
-         * - if cross-section not as thick as it should be, add extra padding to fix it
-         */
-        mt[0] = mb[0] * pthick;
-        mt[1] = mb[1] * pthick;
-        athick = len_v2(mt);
-        dfac = pthick - (athick * 2);
-
-        if (((athick * 2.0f) < pthick) && (IS_EQF(athick, pthick) == 0)) {
-          mt[0] += (mb[0] * dfac);
-          mt[1] += (mb[1] * dfac);
+    for (int i = 0; i < totpoints; i++) {
+      pt = &points[i];
+      /* If there was a significant pressure change,
+       * stop the curve, change the thickness of the stroke,
+       * and continue drawing again (since line-width cannot change in middle of GL_LINE_STRIP).
+       */
+      if (fabsf(pt->pressure - oldpressure) > 0.2f) {
+        /* need to have 2 points to avoid immEnd assert error */
+        if (draw_points < 2) {
+          pt_prev = &points[i - 1];
+          annotation_calc_2d_stroke_fxy(&pt_prev->x, sflag, offsx, offsy, winx, winy, co);
+          immVertex2fv(pos, co);
         }
 
-        /* calculate points for start of segment */
-        t0[0] = s0[0] - mt[0];
-        t0[1] = s0[1] - mt[1];
-        t1[0] = s0[0] + mt[0];
-        t1[1] = s0[1] + mt[1];
+        immEnd();
+        draw_points = 0;
 
-        /* Last two points of previous segment, and first two points of current segment. */
-        immVertex2fv(pos, t0);
-        immVertex2fv(pos, t1);
+        GPU_line_width(max_ff(pt->pressure * thickness, 1.0f));
+        immBeginAtMost(GPU_PRIM_LINE_STRIP, totpoints - i + 1);
+
+        /* need to roll-back one point to ensure that there are no gaps in the stroke */
+        if (i != 0) {
+          pt_prev = &points[i - 1];
+          annotation_calc_2d_stroke_fxy(&pt_prev->x, sflag, offsx, offsy, winx, winy, co);
+          immVertex2fv(pos, co);
+          draw_points++;
+        }
+
+        oldpressure = pt->pressure; /* reset our threshold */
       }
 
-      /* if last segment, also draw end of segment (defined as segment's normal) */
-      if (i == totpoints - 2) {
-        /* for once, we use second point's pressure (otherwise it won't be drawn) */
-        pthick = (pt2->pressure * thickness * scalefac);
-
-        /* calculate points for end of segment */
-        mt[0] = m2[0] * pthick;
-        mt[1] = m2[1] * pthick;
-
-        t0[0] = s1[0] - mt[0];
-        t0[1] = s1[1] - mt[1];
-        t1[0] = s1[0] + mt[0];
-        t1[1] = s1[1] + mt[1];
-
-        /* Last two points of last segment (and first two points of end cap). */
-        immVertex2fv(pos, t0);
-        immVertex2fv(pos, t1);
-
-        /* draw end cap as last step
-         * - make points slightly closer to center (about halfway across)
-         */
-        mt[0] = m2[0] * pthick * 0.5f;
-        mt[1] = m2[1] * pthick * 0.5f;
-        sc[0] = s1[0] + (m1[0] * pthick * 0.75f);
-        sc[1] = s1[1] + (m1[1] * pthick * 0.75f);
-
-        t0[0] = sc[0] - mt[0];
-        t0[1] = sc[1] - mt[1];
-        t1[0] = sc[0] + mt[0];
-        t1[1] = sc[1] + mt[1];
-
-        /* Last two points of end cap. */
-        immVertex2fv(pos, t0);
-        immVertex2fv(pos, t1);
-      }
-
-      /* store computed point2 coordinates as point1 ones of next segment. */
-      copy_v2_v2(s0, s1);
-      /* store stroke's 'natural' normal for next stroke to use */
-      copy_v2_v2(pm, m2);
+      /* now the point we want */
+      annotation_calc_2d_stroke_fxy(&pt->x, sflag, offsx, offsy, winx, winy, co);
+      immVertex2fv(pos, co);
+      draw_points++;
     }
-
-    immEnd();
-    immUnbindProgram();
+    /* need to have 2 points to avoid immEnd assert error */
+    if (draw_points < 2) {
+      pt_prev = &points[0];
+      annotation_calc_2d_stroke_fxy(&pt_prev->x, sflag, offsx, offsy, winx, winy, co);
+      immVertex2fv(pos, co);
+    }
   }
+
+  immEnd();
+  immUnbindProgram();
 }
 
 /* ----- Strokes Drawing ------ */
@@ -601,146 +575,13 @@ static void annotation_draw_strokes(const bGPDframe *gpf,
             gps->points, lthick, gps->flag, offsx, offsy, winx, winy, color);
       }
       else {
-        annotation_draw_stroke_2d(gps->points,
-                                  gps->totpoints,
-                                  lthick,
-                                  dflag,
-                                  gps->flag,
-                                  offsx,
-                                  offsy,
-                                  winx,
-                                  winy,
-                                  color);
+        annotation_draw_stroke_2d(
+            gps->points, gps->totpoints, lthick, gps->flag, offsx, offsy, winx, winy, color);
       }
     }
   }
 
   GPU_program_point_size(false);
-}
-
-/* Draw selected verts for strokes being edited */
-static void annotation_draw_strokes_edit(bGPDlayer *gpl,
-                                         const bGPDframe *gpf,
-                                         int offsx,
-                                         int offsy,
-                                         int winx,
-                                         int winy,
-                                         short dflag,
-                                         float alpha)
-{
-  /* if alpha 0 do not draw */
-  if (alpha == 0.0f) {
-    return;
-  }
-
-  const bool no_xray = (dflag & GP_DRAWDATA_NO_XRAY) != 0;
-  int mask_orig = 0;
-
-  /* set up depth masks... */
-  if (dflag & GP_DRAWDATA_ONLY3D) {
-    if (no_xray) {
-      glGetIntegerv(GL_DEPTH_WRITEMASK, &mask_orig);
-      glDepthMask(0);
-      GPU_depth_test(true);
-
-      /* first arg is normally rv3d->dist, but this isn't
-       * available here and seems to work quite well without */
-      bglPolygonOffset(1.0f, 1.0f);
-    }
-  }
-
-  GPU_program_point_size(true);
-
-  /* draw stroke verts */
-  LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
-    /* check if stroke can be drawn */
-    if (annotation_can_draw_stroke(gps, dflag) == false) {
-      continue;
-    }
-
-    /* Optimization: only draw points for selected strokes
-     * We assume that selected points can only occur in
-     * strokes that are selected too.
-     */
-    if ((gps->flag & GP_STROKE_SELECT) == 0) {
-      continue;
-    }
-
-    /* Get size of verts:
-     * - The selected state needs to be larger than the unselected state so that
-     *   they stand out more.
-     * - We use the theme setting for size of the unselected verts
-     */
-    float bsize = UI_GetThemeValuef(TH_GP_VERTEX_SIZE);
-    float vsize;
-    if ((int)bsize > 8) {
-      vsize = 10.0f;
-      bsize = 8.0f;
-    }
-    else {
-      vsize = bsize + 2;
-    }
-
-    /* Why? */
-    UNUSED_VARS(vsize);
-
-    float selectColor[4];
-    UI_GetThemeColor3fv(TH_GP_VERTEX_SELECT, selectColor);
-    selectColor[3] = alpha;
-
-    GPUVertFormat *format = immVertexFormat();
-    uint pos; /* specified later */
-    uint size = GPU_vertformat_attr_add(format, "size", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
-    uint color = GPU_vertformat_attr_add(format, "color", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
-
-    if (gps->flag & GP_STROKE_3DSPACE) {
-      pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
-      immBindBuiltinProgram(GPU_SHADER_3D_POINT_VARYING_SIZE_VARYING_COLOR);
-    }
-    else {
-      pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-      immBindBuiltinProgram(GPU_SHADER_2D_POINT_VARYING_SIZE_VARYING_COLOR);
-    }
-
-    immBegin(GPU_PRIM_POINTS, gps->totpoints);
-
-    /* Draw all the stroke points (selected or not) */
-    bGPDspoint *pt = gps->points;
-    for (int i = 0; i < gps->totpoints; i++, pt++) {
-      /* size and color first */
-      immAttr3fv(color, gpl->color);
-      immAttr1f(size, bsize);
-
-      /* then position */
-      if (gps->flag & GP_STROKE_3DSPACE) {
-        immVertex3fv(pos, &pt->x);
-      }
-      else {
-        float co[2];
-        annotation_calc_2d_stroke_fxy(&pt->x, gps->flag, offsx, offsy, winx, winy, co);
-        immVertex2fv(pos, co);
-      }
-    }
-
-    immEnd();
-    immUnbindProgram();
-  }
-
-  GPU_program_point_size(false);
-
-  /* clear depth mask */
-  if (dflag & GP_DRAWDATA_ONLY3D) {
-    if (no_xray) {
-      glDepthMask(mask_orig);
-      GPU_depth_test(false);
-
-      bglPolygonOffset(0.0, 0.0);
-#if 0
-      glDisable(GL_POLYGON_OFFSET_LINE);
-      glPolygonOffset(0, 0);
-#endif
-    }
-  }
 }
 
 /* ----- General Drawing ------ */
@@ -818,7 +659,7 @@ static void annotation_draw_onionskins(
 
 /* loop over gpencil data layers, drawing them */
 static void annotation_draw_data_layers(
-    bGPdata *gpd, int offsx, int offsy, int winx, int winy, int cfra, int dflag, float alpha)
+    bGPdata *gpd, int offsx, int offsy, int winx, int winy, int cfra, int dflag)
 {
   float ink[4];
 
@@ -861,20 +702,6 @@ static void annotation_draw_data_layers(
     /* draw the strokes already in active frame */
     annotation_draw_strokes(gpf, offsx, offsy, winx, winy, dflag, lthick, ink);
 
-    /* Draw verts of selected strokes:
-     *  - when doing OpenGL renders, we don't want to be showing these, as that ends up flickering
-     *  - locked layers can't be edited, so there's no point showing these verts
-     *    as they will have no bearings on what gets edited
-     *  - only show when in editmode, since operators shouldn't work otherwise
-     *    (NOTE: doing it this way means that the toggling editmode
-     *    shows visible change immediately).
-     */
-    /* XXX: perhaps we don't want to show these when users are drawing... */
-    if ((G.f & G_FLAG_RENDER_VIEWPORT) == 0 && (gpl->flag & GP_LAYER_LOCKED) == 0 &&
-        (gpd->flag & GP_DATA_STROKE_EDITMODE)) {
-      annotation_draw_strokes_edit(gpl, gpf, offsx, offsy, winx, winy, dflag, alpha);
-    }
-
     /* Check if may need to draw the active stroke cache, only if this layer is the active layer
      * that is being edited. (Stroke buffer is currently stored in gp-data)
      */
@@ -886,67 +713,14 @@ static void annotation_draw_data_layers(
        * It should also be noted that sbuffer contains temporary point types
        * i.e. tGPspoints NOT bGPDspoints
        */
-      annotation_draw_stroke_buffer(gpd->runtime.sbuffer,
-                                    gpd->runtime.sbuffer_used,
-                                    lthick,
-                                    dflag,
-                                    gpd->runtime.sbuffer_sflag,
-                                    ink);
+      annotation_draw_stroke_buffer(gpd, lthick, dflag, ink);
     }
-  }
-}
-
-/* draw a short status message in the top-right corner */
-static void annotation_draw_status_text(const bGPdata *gpd, ARegion *region)
-{
-
-  /* Cannot draw any status text when drawing OpenGL Renders */
-  if (G.f & G_FLAG_RENDER_VIEWPORT) {
-    return;
-  }
-
-  /* Get bounds of region - Necessary to avoid problems with region overlap */
-  const rcti *rect = ED_region_visible_rect(region);
-
-  /* for now, this should only be used to indicate when we are in stroke editmode */
-  if (gpd->flag & GP_DATA_STROKE_EDITMODE) {
-    const char *printable = IFACE_("GPencil Stroke Editing");
-    float printable_size[2];
-
-    int font_id = BLF_default();
-
-    BLF_width_and_height(
-        font_id, printable, BLF_DRAW_STR_DUMMY_MAX, &printable_size[0], &printable_size[1]);
-
-    int xco = (rect->xmax - U.widget_unit) - (int)printable_size[0];
-    int yco = (rect->ymax - U.widget_unit);
-
-    /* text label */
-    UI_FontThemeColor(font_id, TH_TEXT_HI);
-#ifdef WITH_INTERNATIONAL
-    BLF_draw_default(xco, yco, 0.0f, printable, BLF_DRAW_STR_DUMMY_MAX);
-#else
-    BLF_draw_default_ascii(xco, yco, 0.0f, printable, BLF_DRAW_STR_DUMMY_MAX);
-#endif
-
-    /* grease pencil icon... */
-    // XXX: is this too intrusive?
-    GPU_blend_set_func_separate(
-        GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
-    GPU_blend(true);
-
-    xco -= U.widget_unit;
-    yco -= (int)printable_size[1] / 2;
-
-    UI_icon_draw(xco, yco, ICON_GREASEPENCIL);
-
-    GPU_blend(false);
   }
 }
 
 /* draw grease-pencil datablock */
 static void annotation_draw_data(
-    bGPdata *gpd, int offsx, int offsy, int winx, int winy, int cfra, int dflag, float alpha)
+    bGPdata *gpd, int offsx, int offsy, int winx, int winy, int cfra, int dflag)
 {
   /* turn on smooth lines (i.e. anti-aliasing) */
   GPU_line_smooth(true);
@@ -957,7 +731,7 @@ static void annotation_draw_data(
   GPU_blend(true);
 
   /* draw! */
-  annotation_draw_data_layers(gpd, offsx, offsy, winx, winy, cfra, dflag, alpha);
+  annotation_draw_data_layers(gpd, offsx, offsy, winx, winy, cfra, dflag);
 
   /* turn off alpha blending, then smooth lines */
   GPU_blend(false);        // alpha blending
@@ -977,7 +751,6 @@ static void annotation_draw_data_all(Scene *scene,
                                      const char spacetype)
 {
   bGPdata *gpd_source = NULL;
-  float alpha = 1.0f;
 
   if (scene) {
     if (spacetype == SPACE_VIEW3D) {
@@ -990,14 +763,14 @@ static void annotation_draw_data_all(Scene *scene,
     }
 
     if (gpd_source) {
-      annotation_draw_data(gpd_source, offsx, offsy, winx, winy, cfra, dflag, alpha);
+      annotation_draw_data(gpd_source, offsx, offsy, winx, winy, cfra, dflag);
     }
   }
 
   /* scene/clip data has already been drawn, only object/track data is drawn here
    * if gpd_source == gpd, we don't have any object/track data and we can skip */
   if (gpd_source == NULL || (gpd_source && gpd_source != gpd)) {
-    annotation_draw_data(gpd, offsx, offsy, winx, winy, cfra, dflag, alpha);
+    annotation_draw_data(gpd, offsx, offsy, winx, winy, cfra, dflag);
   }
 }
 
@@ -1119,15 +892,10 @@ void ED_annotation_draw_view2d(const bContext *C, bool onlyv2d)
 
   annotation_draw_data_all(
       scene, gpd, 0, 0, region->winx, region->winy, CFRA, dflag, area->spacetype);
-
-  /* draw status text (if in screen/pixel-space) */
-  if (!onlyv2d) {
-    annotation_draw_status_text(gpd, region);
-  }
 }
 
-/* draw annotations sketches to specified 3d-view assuming that matrices are already set correctly
- * Note: this gets called twice - first time with only3d=true to draw 3d-strokes,
+/* draw annotations sketches to specified 3d-view assuming that matrices are already set
+ * correctly Note: this gets called twice - first time with only3d=true to draw 3d-strokes,
  * second time with only3d=false for screen-aligned strokes */
 void ED_annotation_draw_view3d(
     Scene *scene, struct Depsgraph *depsgraph, View3D *v3d, ARegion *region, bool only3d)
@@ -1137,7 +905,8 @@ void ED_annotation_draw_view3d(
   int offsx, offsy, winx, winy;
 
   /* check that we have grease-pencil stuff to draw */
-  /* XXX: Hardcoded reference here may get out of sync if we change how we fetch annotation data */
+  /* XXX: Hardcoded reference here may get out of sync if we change how we fetch annotation data
+   */
   bGPdata *gpd = scene->gpd;
   if (gpd == NULL) {
     return;

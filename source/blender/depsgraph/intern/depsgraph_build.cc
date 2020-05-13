@@ -25,21 +25,19 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "PIL_time.h"
 #include "PIL_time_utildefines.h"
 
-extern "C" {
 #include "DNA_cachefile_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_simulation_types.h"
 
 #include "BKE_main.h"
 #include "BKE_scene.h"
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -104,6 +102,16 @@ void DEG_add_object_relation(DepsNodeHandle *node_handle,
   DEG::ComponentKey comp_key(&object->id, type);
   DEG::DepsNodeHandle *deg_node_handle = get_node_handle(node_handle);
   deg_node_handle->builder->add_node_handle_relation(comp_key, deg_node_handle, description);
+}
+
+void DEG_add_simulation_relation(DepsNodeHandle *node_handle,
+                                 Simulation *simulation,
+                                 const char *description)
+{
+  DEG::OperationKey operation_key(
+      &simulation->id, DEG::NodeType::SIMULATION, DEG::OperationCode::SIMULATION_EVAL);
+  DEG::DepsNodeHandle *deg_node_handle = get_node_handle(node_handle);
+  deg_node_handle->builder->add_node_handle_relation(operation_key, deg_node_handle, description);
 }
 
 void DEG_add_object_cache_relation(DepsNodeHandle *node_handle,

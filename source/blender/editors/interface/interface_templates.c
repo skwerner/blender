@@ -37,18 +37,12 @@
 #include "DNA_shader_fx_types.h"
 #include "DNA_texture_types.h"
 
-#include "BLI_alloca.h"
-#include "BLI_dynstr.h"
 #include "BLI_fnmatch.h"
-#include "BLI_ghash.h"
-#include "BLI_linklist.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
-#include "BLI_memarena.h"
 #include "BLI_path_util.h"
 #include "BLI_rect.h"
 #include "BLI_string.h"
-#include "BLI_string_utils.h"
 #include "BLI_timecode.h"
 #include "BLI_utildefines.h"
 
@@ -73,7 +67,6 @@
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_packedFile.h"
-#include "BKE_paint.h"
 #include "BKE_particle.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
@@ -102,9 +95,6 @@
 #include "interface_intern.h"
 
 #include "PIL_time.h"
-
-/* For key-map item access. */
-#include "wm_event_system.h"
 
 // #define USE_OP_RESET_BUT  // we may want to make this optional, disable for now.
 
@@ -213,9 +203,9 @@ static void template_add_button_search_menu(const bContext *C,
 
 static uiBlock *template_common_search_menu(const bContext *C,
                                             ARegion *region,
-                                            uiButSearchFunc search_func,
+                                            uiButSearchUpdateFn search_update_fn,
                                             void *search_arg,
-                                            uiButHandleFunc handle_func,
+                                            uiButHandleFunc search_exec_fn,
                                             void *active_item,
                                             const int preview_rows,
                                             const int preview_cols,
@@ -287,8 +277,13 @@ static uiBlock *template_common_search_menu(const bContext *C,
                          0,
                          "");
   }
-  UI_but_func_search_set(
-      but, ui_searchbox_create_generic, search_func, search_arg, NULL, handle_func, active_item);
+  UI_but_func_search_set(but,
+                         ui_searchbox_create_generic,
+                         search_update_fn,
+                         search_arg,
+                         NULL,
+                         search_exec_fn,
+                         active_item);
 
   UI_block_bounds_set_normal(block, 0.3f * U.widget_unit);
   UI_block_direction_set(block, UI_DIR_DOWN);
@@ -320,7 +315,7 @@ typedef struct TemplateID {
 } TemplateID;
 
 /* Search browse menu, assign  */
-static void template_ID_set_property_cb(bContext *C, void *arg_template, void *item)
+static void template_ID_set_property_exec_fn(bContext *C, void *arg_template, void *item)
 {
   TemplateID *template_ui = (TemplateID *)arg_template;
 
@@ -455,7 +450,8 @@ static uiBlock *id_search_menu(bContext *C, ARegion *region, void *arg_litem)
 {
   static TemplateID template_ui;
   PointerRNA active_item_ptr;
-  void (*id_search_cb_p)(const bContext *, void *, const char *, uiSearchItems *) = id_search_cb;
+  void (*id_search_update_fn)(
+      const bContext *, void *, const char *, uiSearchItems *) = id_search_cb;
 
   /* arg_litem is malloced, can be freed by parent button */
   template_ui = *((TemplateID *)arg_litem);
@@ -465,16 +461,16 @@ static uiBlock *id_search_menu(bContext *C, ARegion *region, void *arg_litem)
     /* Currently only used for objects. */
     if (template_ui.idcode == ID_OB) {
       if (template_ui.filter == UI_TEMPLATE_ID_FILTER_AVAILABLE) {
-        id_search_cb_p = id_search_cb_objects_from_scene;
+        id_search_update_fn = id_search_cb_objects_from_scene;
       }
     }
   }
 
   return template_common_search_menu(C,
                                      region,
-                                     id_search_cb_p,
+                                     id_search_update_fn,
                                      &template_ui,
-                                     template_ID_set_property_cb,
+                                     template_ID_set_property_exec_fn,
                                      active_item_ptr.data,
                                      template_ui.prv_rows,
                                      template_ui.prv_cols,
@@ -530,6 +526,7 @@ static void template_id_cb(bContext *C, void *arg_litem, void *arg_event)
 
       if (id && CTX_wm_window(C)->eventstate->shift) {
         /* only way to force-remove data (on save) */
+        id_us_clear_real(id);
         id_fake_user_clear(id);
         id->us = 0;
       }
@@ -681,6 +678,8 @@ static const char *template_id_browse_tip(const StructRNA *type)
         return N_("Browse Point Cloud Data to be linked");
       case ID_VO:
         return N_("Browse Volume Data to be linked");
+      case ID_SIM:
+        return N_("Browse Simulation to be linked");
     }
   }
   return N_("Browse ID data to be linked");
@@ -698,6 +697,8 @@ static const char *template_id_context(StructRNA *type)
   }
   return BLT_I18NCONTEXT_DEFAULT;
 }
+#else
+#  define template_id_context(type) 0
 #endif
 
 static uiBut *template_id_def_new_but(uiBlock *block,
@@ -746,7 +747,8 @@ static uiBut *template_id_def_new_but(uiBlock *block,
                             BLT_I18NCONTEXT_ID_LIGHTPROBE,
                             BLT_I18NCONTEXT_ID_HAIR,
                             BLT_I18NCONTEXT_ID_POINTCLOUD,
-                            BLT_I18NCONTEXT_ID_VOLUME, );
+                            BLT_I18NCONTEXT_ID_VOLUME,
+                            BLT_I18NCONTEXT_ID_SIMULATION, );
   /* Note: BLT_I18N_MSGID_MULTI_CTXT takes a maximum number of parameters,
    * check the definition to see if a new call must be added when the limit
    * is exceeded. */
@@ -1180,7 +1182,7 @@ static void template_ID_tabs(bContext *C,
                                                0.0f,
                                                0.0f,
                                                "");
-    UI_but_funcN_set(&tab->but, template_ID_set_property_cb, MEM_dupallocN(template), id);
+    UI_but_funcN_set(&tab->but, template_ID_set_property_exec_fn, MEM_dupallocN(template), id);
     tab->but.custom_data = (void *)id;
     tab->but.dragpoin = id;
     tab->menu = mt;
@@ -1526,7 +1528,7 @@ typedef struct TemplateSearch {
   int preview_rows, preview_cols;
 } TemplateSearch;
 
-static void template_search_handle_cb(bContext *C, void *arg_template, void *item)
+static void template_search_exec_fn(bContext *C, void *arg_template, void *item)
 {
   TemplateSearch *template_search = arg_template;
   uiRNACollectionSearch *coll_search = &template_search->search_data;
@@ -1550,9 +1552,9 @@ static uiBlock *template_search_menu(bContext *C, ARegion *region, void *arg_tem
 
   return template_common_search_menu(C,
                                      region,
-                                     ui_rna_collection_search_cb,
+                                     ui_rna_collection_search_update_fn,
                                      &template_search,
-                                     template_search_handle_cb,
+                                     template_search_exec_fn,
                                      active_ptr.data,
                                      template_search.preview_rows,
                                      template_search.preview_cols,
@@ -1816,14 +1818,14 @@ static void modifiers_convertToReal(bContext *C, void *ob_v, void *md_v)
 {
   Object *ob = ob_v;
   ModifierData *md = md_v;
-  ModifierData *nmd = modifier_new(md->type);
+  ModifierData *nmd = BKE_modifier_new(md->type);
 
-  modifier_copyData(md, nmd);
+  BKE_modifier_copydata(md, nmd);
   nmd->mode &= ~eModifierMode_Virtual;
 
   BLI_addhead(&ob->modifiers, nmd);
 
-  modifier_unique_name(&ob->modifiers, nmd);
+  BKE_modifier_unique_name(&ob->modifiers, nmd);
 
   ob->partype = PAROBJECT;
 
@@ -1833,20 +1835,26 @@ static void modifiers_convertToReal(bContext *C, void *ob_v, void *md_v)
   ED_undo_push(C, "Modifier convert to real");
 }
 
-static int modifier_can_delete(ModifierData *md)
+static bool modifier_can_delete(ModifierData *md)
 {
   /* fluid particle modifier can't be deleted here */
   if (md->type == eModifierType_ParticleSystem) {
     short particle_type = ((ParticleSystemModifierData *)md)->psys->part->type;
-    if (particle_type == PART_FLUID || particle_type == PART_FLUID_FLIP ||
-        particle_type == PART_FLUID_FOAM || particle_type == PART_FLUID_SPRAY ||
-        particle_type == PART_FLUID_BUBBLE || particle_type == PART_FLUID_TRACER ||
-        particle_type == PART_FLUID_SPRAYFOAM || particle_type == PART_FLUID_SPRAYBUBBLE ||
-        particle_type == PART_FLUID_FOAMBUBBLE || particle_type == PART_FLUID_SPRAYFOAMBUBBLE) {
-      return 0;
+    if (ELEM(particle_type,
+             PART_FLUID,
+             PART_FLUID_FLIP,
+             PART_FLUID_FOAM,
+             PART_FLUID_SPRAY,
+             PART_FLUID_BUBBLE,
+             PART_FLUID_TRACER,
+             PART_FLUID_SPRAYFOAM,
+             PART_FLUID_SPRAYBUBBLE,
+             PART_FLUID_FOAMBUBBLE,
+             PART_FLUID_SPRAYFOAMBUBBLE)) {
+      return false;
     }
   }
-  return 1;
+  return true;
 }
 
 /* Check whether Modifier is a simulation or not,
@@ -1881,7 +1889,7 @@ static uiLayout *draw_modifier(uiLayout *layout,
                                int cageIndex,
                                int lastCageIndex)
 {
-  const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+  const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
   PointerRNA ptr;
   uiBut *but;
   uiBlock *block;
@@ -1975,9 +1983,9 @@ static uiLayout *draw_modifier(uiLayout *layout,
     }
 
     if (ob->type == OB_MESH) {
-      if (modifier_supportsCage(scene, md) && (index <= lastCageIndex)) {
+      if (BKE_modifier_supports_cage(scene, md) && (index <= lastCageIndex)) {
         sub = uiLayoutRow(row, true);
-        if (index < cageIndex || !modifier_couldBeCage(scene, md)) {
+        if (index < cageIndex || !BKE_modifier_couldbe_cage(scene, md)) {
           uiLayoutSetActive(sub, false);
         }
         uiItemR(sub, &ptr, "show_on_cage", 0, "", ICON_NONE);
@@ -2073,7 +2081,7 @@ static uiLayout *draw_modifier(uiLayout *layout,
                     "apply_as",
                     MODIFIER_APPLY_DATA);
 
-        if (modifier_isSameTopology(md) && !modifier_isNonGeometrical(md)) {
+        if (BKE_modifier_is_same_topology(md) && !BKE_modifier_is_non_geometrical(md)) {
           uiItemEnumO(row,
                       "OBJECT_OT_modifier_apply",
                       CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply as Shape Key"),
@@ -2140,10 +2148,10 @@ uiLayout *uiTemplateModifier(uiLayout *layout, bContext *C, PointerRNA *ptr)
   UI_block_lock_set(uiLayoutGetBlock(layout), (ob && ID_IS_LINKED(ob)), ERROR_LIBDATA_MESSAGE);
 
   /* find modifier and draw it */
-  cageIndex = modifiers_getCageIndex(scene, ob, &lastCageIndex, 0);
+  cageIndex = BKE_modifiers_get_cage_index(scene, ob, &lastCageIndex, 0);
 
   /* XXX virtual modifiers are not accessible for python */
-  vmd = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+  vmd = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
 
   for (i = 0; vmd; i++, vmd = vmd->next) {
     if (md == vmd) {
@@ -2165,7 +2173,7 @@ uiLayout *uiTemplateModifier(uiLayout *layout, bContext *C, PointerRNA *ptr)
 
 static uiLayout *gpencil_draw_modifier(uiLayout *layout, Object *ob, GpencilModifierData *md)
 {
-  const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
+  const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
   PointerRNA ptr;
   uiBlock *block;
   uiLayout *box, *column, *row, *sub;
@@ -2242,6 +2250,10 @@ static uiLayout *gpencil_draw_modifier(uiLayout *layout, Object *ob, GpencilModi
                 0,
                 "apply_as",
                 MODIFIER_APPLY_DATA);
+
+    UI_block_lock_clear(block);
+    UI_block_lock_set(block, ob && ID_IS_LINKED(ob), ERROR_LIBDATA_MESSAGE);
+
     uiItemO(row,
             CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy"),
             ICON_NONE,
@@ -2304,7 +2316,7 @@ uiLayout *uiTemplateGpencilModifier(uiLayout *layout, bContext *UNUSED(C), Point
 
 static uiLayout *gpencil_draw_shaderfx(uiLayout *layout, Object *ob, ShaderFxData *md)
 {
-  const ShaderFxTypeInfo *mti = BKE_shaderfxType_getInfo(md->type);
+  const ShaderFxTypeInfo *mti = BKE_shaderfx_get_info(md->type);
   PointerRNA ptr;
   uiBlock *block;
   uiLayout *box, *column, *row, *sub;
@@ -2421,27 +2433,257 @@ uiLayout *uiTemplateShaderFx(uiLayout *layout, bContext *UNUSED(C), PointerRNA *
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Operator Redo Buttons Template
+/** \name Operator Property Buttons Template
  * \{ */
 
-static void template_operator_redo_property_buts_draw(
-    const bContext *C, wmOperator *op, uiLayout *layout, int layout_flags, bool *r_has_advanced)
+typedef struct uiTemplateOperatorPropertyPollParam {
+  const bContext *C;
+  wmOperator *op;
+  short flag;
+} uiTemplateOperatorPropertyPollParam;
+
+#ifdef USE_OP_RESET_BUT
+static void ui_layout_operator_buts__reset_cb(bContext *UNUSED(C),
+                                              void *op_pt,
+                                              void *UNUSED(arg_dummy2))
+{
+  WM_operator_properties_reset((wmOperator *)op_pt);
+}
+#endif
+
+static bool ui_layout_operator_buts_poll_property(struct PointerRNA *UNUSED(ptr),
+                                                  struct PropertyRNA *prop,
+                                                  void *user_data)
+{
+  uiTemplateOperatorPropertyPollParam *params = user_data;
+
+  if ((params->flag & UI_TEMPLATE_OP_PROPS_HIDE_ADVANCED) &&
+      (RNA_property_tags(prop) & OP_PROP_TAG_ADVANCED)) {
+    return false;
+  }
+  return params->op->type->poll_property(params->C, params->op, prop);
+}
+
+static eAutoPropButsReturn template_operator_property_buts_draw_single(
+    const bContext *C,
+    wmOperator *op,
+    uiLayout *layout,
+    const eButLabelAlign label_align,
+    int layout_flags)
+{
+  uiBlock *block = uiLayoutGetBlock(layout);
+  eAutoPropButsReturn return_info = 0;
+
+  if (!op->properties) {
+    IDPropertyTemplate val = {0};
+    op->properties = IDP_New(IDP_GROUP, &val, "wmOperatorProperties");
+  }
+
+  /* poll() on this operator may still fail,
+   * at the moment there is no nice feedback when this happens just fails silently. */
+  if (!WM_operator_repeat_check(C, op)) {
+    UI_block_lock_set(block, true, "Operator can't' redo");
+    return return_info;
+  }
+  else {
+    /* useful for macros where only one of the steps can't be re-done */
+    UI_block_lock_clear(block);
+  }
+
+  if (layout_flags & UI_TEMPLATE_OP_PROPS_SHOW_TITLE) {
+    uiItemL(layout, WM_operatortype_name(op->type, op->ptr), ICON_NONE);
+  }
+
+  /* menu */
+  if (op->type->flag & OPTYPE_PRESET) {
+    /* XXX, no simple way to get WM_MT_operator_presets.bl_label
+     * from python! Label remains the same always! */
+    PointerRNA op_ptr;
+    uiLayout *row;
+
+    block->ui_operator = op;
+
+    row = uiLayoutRow(layout, true);
+    uiItemM(row, "WM_MT_operator_presets", NULL, ICON_NONE);
+
+    wmOperatorType *ot = WM_operatortype_find("WM_OT_operator_preset_add", false);
+    uiItemFullO_ptr(row, ot, "", ICON_ADD, NULL, WM_OP_INVOKE_DEFAULT, 0, &op_ptr);
+    RNA_string_set(&op_ptr, "operator", op->type->idname);
+
+    uiItemFullO_ptr(row, ot, "", ICON_REMOVE, NULL, WM_OP_INVOKE_DEFAULT, 0, &op_ptr);
+    RNA_string_set(&op_ptr, "operator", op->type->idname);
+    RNA_boolean_set(&op_ptr, "remove_active", true);
+  }
+
+  if (op->type->ui) {
+    op->layout = layout;
+    op->type->ui((bContext *)C, op);
+    op->layout = NULL;
+
+    /* UI_LAYOUT_OP_SHOW_EMPTY ignored. retun_info is ignored too. We could
+     * allow ot.ui callback to return this, but not needed right now. */
+  }
+  else {
+    wmWindowManager *wm = CTX_wm_manager(C);
+    PointerRNA ptr;
+    uiTemplateOperatorPropertyPollParam user_data = {.C = C, .op = op, .flag = layout_flags};
+    const bool use_prop_split = (layout_flags & UI_TEMPLATE_OP_PROPS_NO_SPLIT_LAYOUT) == 0;
+
+    RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
+
+    uiLayoutSetPropSep(layout, use_prop_split);
+    uiLayoutSetPropDecorate(layout, false);
+
+    /* main draw call */
+    return_info = uiDefAutoButsRNA(
+        layout,
+        &ptr,
+        op->type->poll_property ? ui_layout_operator_buts_poll_property : NULL,
+        op->type->poll_property ? &user_data : NULL,
+        op->type->prop,
+        label_align,
+        (layout_flags & UI_TEMPLATE_OP_PROPS_COMPACT));
+
+    if ((return_info & UI_PROP_BUTS_NONE_ADDED) &&
+        (layout_flags & UI_TEMPLATE_OP_PROPS_SHOW_EMPTY)) {
+      uiItemL(layout, IFACE_("No Properties"), ICON_NONE);
+    }
+  }
+
+#ifdef USE_OP_RESET_BUT
+  /* its possible that reset can do nothing if all have PROP_SKIP_SAVE enabled
+   * but this is not so important if this button is drawn in those cases
+   * (which isn't all that likely anyway) - campbell */
+  if (op->properties->len) {
+    uiBut *but;
+    uiLayout *col; /* needed to avoid alignment errors with previous buttons */
+
+    col = uiLayoutColumn(layout, false);
+    block = uiLayoutGetBlock(col);
+    but = uiDefIconTextBut(block,
+                           UI_BTYPE_BUT,
+                           0,
+                           ICON_FILE_REFRESH,
+                           IFACE_("Reset"),
+                           0,
+                           0,
+                           UI_UNIT_X,
+                           UI_UNIT_Y,
+                           NULL,
+                           0.0,
+                           0.0,
+                           0.0,
+                           0.0,
+                           TIP_("Reset operator defaults"));
+    UI_but_func_set(but, ui_layout_operator_buts__reset_cb, op, NULL);
+  }
+#endif
+
+  /* set various special settings for buttons */
+
+  /* Only do this if we're not refreshing an existing UI. */
+  if (block->oldblock == NULL) {
+    const bool is_popup = (block->flag & UI_BLOCK_KEEP_OPEN) != 0;
+    uiBut *but;
+
+    for (but = block->buttons.first; but; but = but->next) {
+      /* no undo for buttons for operator redo panels */
+      UI_but_flag_disable(but, UI_BUT_UNDO);
+
+      /* only for popups, see [#36109] */
+
+      /* if button is operator's default property, and a text-field, enable focus for it
+       * - this is used for allowing operators with popups to rename stuff with fewer clicks
+       */
+      if (is_popup) {
+        if ((but->rnaprop == op->type->prop) && (but->type == UI_BTYPE_TEXT)) {
+          UI_but_focus_on_enter_event(CTX_wm_window(C), but);
+        }
+      }
+    }
+  }
+
+  return return_info;
+}
+
+static void template_operator_property_buts_draw_recursive(const bContext *C,
+                                                           wmOperator *op,
+                                                           uiLayout *layout,
+                                                           const eButLabelAlign label_align,
+                                                           int layout_flags,
+                                                           bool *r_has_advanced)
 {
   if (op->type->flag & OPTYPE_MACRO) {
     LISTBASE_FOREACH (wmOperator *, macro_op, &op->macro) {
-      template_operator_redo_property_buts_draw(C, macro_op, layout, layout_flags, r_has_advanced);
+      template_operator_property_buts_draw_recursive(
+          C, macro_op, layout, label_align, layout_flags, r_has_advanced);
     }
   }
   else {
     /* Might want to make label_align adjustable somehow. */
-    eAutoPropButsReturn return_info = uiTemplateOperatorPropertyButs(
-        C, layout, op, UI_BUT_LABEL_ALIGN_NONE, layout_flags);
+    eAutoPropButsReturn return_info = template_operator_property_buts_draw_single(
+        C, op, layout, label_align, layout_flags);
     if (return_info & UI_PROP_BUTS_ANY_FAILED_CHECK) {
       if (r_has_advanced) {
         *r_has_advanced = true;
       }
     }
   }
+}
+
+static bool ui_layout_operator_properties_only_booleans(const bContext *C,
+                                                        wmWindowManager *wm,
+                                                        wmOperator *op,
+                                                        int layout_flags)
+{
+  if (op->type->flag & OPTYPE_MACRO) {
+    LISTBASE_FOREACH (wmOperator *, macro_op, &op->macro) {
+      if (!ui_layout_operator_properties_only_booleans(C, wm, macro_op, layout_flags)) {
+        return false;
+      }
+    }
+  }
+  else {
+    uiTemplateOperatorPropertyPollParam user_data = {.C = C, .op = op, .flag = layout_flags};
+    PointerRNA ptr;
+
+    RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
+
+    RNA_STRUCT_BEGIN (&ptr, prop) {
+      if (RNA_property_flag(prop) & PROP_HIDDEN) {
+        continue;
+      }
+      if (op->type->poll_property &&
+          !ui_layout_operator_buts_poll_property(&ptr, prop, &user_data)) {
+        continue;
+      }
+      if (RNA_property_type(prop) != PROP_BOOLEAN) {
+        return false;
+      }
+    }
+    RNA_STRUCT_END;
+  }
+
+  return true;
+}
+
+/**
+ * Draw Operator property buttons for redoing execution with different settings.
+ * This function does not initialize the layout,
+ * functions can be called on the layout before and after.
+ */
+void uiTemplateOperatorPropertyButs(
+    const bContext *C, uiLayout *layout, wmOperator *op, eButLabelAlign label_align, short flag)
+{
+  wmWindowManager *wm = CTX_wm_manager(C);
+
+  /* If there are only checkbox items, don't use split layout by default. It looks weird if the
+   * checkboxes only use half the width. */
+  if (ui_layout_operator_properties_only_booleans(C, wm, op, flag)) {
+    flag |= UI_TEMPLATE_OP_PROPS_NO_SPLIT_LAYOUT;
+  }
+
+  template_operator_property_buts_draw_recursive(C, op, layout, label_align, flag, NULL);
 }
 
 void uiTemplateOperatorRedoProperties(uiLayout *layout, const bContext *C)
@@ -2476,8 +2718,8 @@ void uiTemplateOperatorRedoProperties(uiLayout *layout, const bContext *C)
 #endif
 
     UI_block_func_handle_set(block, ED_undo_operator_repeat_cb_evt, op);
-    template_operator_redo_property_buts_draw(
-        C, op, layout, layout_flags, NULL /* &has_advanced */);
+    template_operator_property_buts_draw_recursive(
+        C, op, layout, UI_BUT_LABEL_ALIGN_NONE, layout_flags, NULL /* &has_advanced */);
     /* Warning! this leaves the handle function for any other users of this block. */
 
 #if 0
@@ -6567,944 +6809,6 @@ void uiTemplateList(uiLayout *layout,
   if (items_ptr) {
     MEM_freeN(items_ptr);
   }
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Operator Search Template
- * \{ */
-
-static void operator_call_cb(bContext *C, void *UNUSED(arg1), void *arg2)
-{
-  wmOperatorType *ot = arg2;
-
-  if (ot) {
-    WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, NULL);
-  }
-}
-
-static bool has_word_prefix(const char *haystack, const char *needle, size_t needle_len)
-{
-  const char *match = BLI_strncasestr(haystack, needle, needle_len);
-  if (match) {
-    if ((match == haystack) || (*(match - 1) == ' ') || ispunct(*(match - 1))) {
-      return true;
-    }
-    else {
-      return has_word_prefix(match + 1, needle, needle_len);
-    }
-  }
-  else {
-    return false;
-  }
-}
-
-static void operator_search_cb(const bContext *C,
-                               void *UNUSED(arg),
-                               const char *str,
-                               uiSearchItems *items)
-{
-  GHashIterator iter;
-  const size_t str_len = strlen(str);
-  const int words_max = (str_len / 2) + 1;
-  int(*words)[2] = BLI_array_alloca(words, words_max);
-
-  const int words_len = BLI_string_find_split_words(str, str_len, ' ', words, words_max);
-
-  for (WM_operatortype_iter(&iter); !BLI_ghashIterator_done(&iter);
-       BLI_ghashIterator_step(&iter)) {
-    wmOperatorType *ot = BLI_ghashIterator_getValue(&iter);
-    const char *ot_ui_name = CTX_IFACE_(ot->translation_context, ot->name);
-    int index;
-
-    if ((ot->flag & OPTYPE_INTERNAL) && (G.debug & G_DEBUG_WM) == 0) {
-      continue;
-    }
-
-    /* match name against all search words */
-    for (index = 0; index < words_len; index++) {
-      if (!has_word_prefix(ot_ui_name, str + words[index][0], words[index][1])) {
-        break;
-      }
-    }
-
-    if (index == words_len) {
-      if (WM_operator_poll((bContext *)C, ot)) {
-        char name[256];
-        int len = strlen(ot_ui_name);
-
-        /* display name for menu, can hold hotkey */
-        BLI_strncpy(name, ot_ui_name, sizeof(name));
-
-        /* check for hotkey */
-        if (len < sizeof(name) - 6) {
-          if (WM_key_event_operator_string(C,
-                                           ot->idname,
-                                           WM_OP_EXEC_DEFAULT,
-                                           NULL,
-                                           true,
-                                           &name[len + 1],
-                                           sizeof(name) - len - 1)) {
-            name[len] = UI_SEP_CHAR;
-          }
-        }
-
-        if (!UI_search_item_add(items, name, ot, ICON_NONE, 0)) {
-          break;
-        }
-      }
-    }
-  }
-}
-
-void UI_but_func_operator_search(uiBut *but)
-{
-  UI_but_func_search_set(
-      but, ui_searchbox_create_operator, operator_search_cb, NULL, false, operator_call_cb, NULL);
-}
-
-void uiTemplateOperatorSearch(uiLayout *layout)
-{
-  uiBlock *block;
-  uiBut *but;
-  static char search[256] = "";
-
-  block = uiLayoutGetBlock(layout);
-  UI_block_layout_set_current(block, layout);
-
-  but = uiDefSearchBut(
-      block, search, 0, ICON_VIEWZOOM, sizeof(search), 0, 0, UI_UNIT_X * 6, UI_UNIT_Y, 0, 0, "");
-  UI_but_func_operator_search(but);
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Menu Search Template
- * \{ */
-
-struct MenuSearch_Parent {
-  struct MenuSearch_Parent *parent;
-  MenuType *parent_mt;
-  /* Set while writing menu items only. */
-  struct MenuSearch_Parent *temp_child;
-  const char *drawstr;
-};
-
-struct MenuSearch_Item {
-  struct MenuSearch_Item *next, *prev;
-  const char *drawstr;
-  const char *drawwstr_full;
-  /** Support a single level sub-menu nesting (for operator buttons that expand). */
-  const char *drawstr_submenu;
-  int icon;
-  int state;
-
-  struct MenuSearch_Parent *menu_parent;
-  MenuType *mt;
-
-  enum {
-    MENU_SEARCH_TYPE_OP = 1,
-    MENU_SEARCH_TYPE_RNA = 2,
-  } type;
-
-  union {
-    /* Operator menu item. */
-    struct {
-      wmOperatorType *type;
-      PointerRNA *opptr;
-      short opcontext;
-      bContextStore *context;
-    } op;
-
-    /* Property (only for check-boxe/boolean). */
-    struct {
-      PointerRNA ptr;
-      PropertyRNA *prop;
-      int index;
-      /** Only for enum buttons. */
-      int enum_value;
-    } rna;
-  };
-};
-
-struct MenuSearch_Data {
-  /** MenuSearch_Item */
-  ListBase items;
-  /** Use for all small allocations. */
-  MemArena *memarena;
-};
-
-static int menu_item_sort_by_drawstr_full(const void *menu_item_a_v, const void *menu_item_b_v)
-{
-  const struct MenuSearch_Item *menu_item_a = menu_item_a_v;
-  const struct MenuSearch_Item *menu_item_b = menu_item_b_v;
-  return strcmp(menu_item_a->drawwstr_full, menu_item_b->drawwstr_full);
-}
-
-static const char *strdup_memarena(MemArena *memarena, const char *str)
-{
-  const uint str_size = strlen(str) + 1;
-  char *str_dst = BLI_memarena_alloc(memarena, str_size);
-  memcpy(str_dst, str, str_size);
-  return str_dst;
-}
-
-static const char *strdup_memarena_from_dynstr(MemArena *memarena, DynStr *dyn_str)
-{
-  const uint str_size = BLI_dynstr_get_len(dyn_str) + 1;
-  char *str_dst = BLI_memarena_alloc(memarena, str_size);
-  BLI_dynstr_get_cstring_ex(dyn_str, str_dst);
-  return str_dst;
-}
-
-static bool menu_items_from_ui_create_item_from_button(struct MenuSearch_Data *data,
-                                                       MemArena *memarena,
-                                                       struct MenuType *mt,
-                                                       const char *drawstr_submenu,
-                                                       uiBut *but)
-{
-  struct MenuSearch_Item *item = NULL;
-  if (but->optype != NULL) {
-    item = BLI_memarena_calloc(memarena, sizeof(*item));
-    item->type = MENU_SEARCH_TYPE_OP;
-
-    item->op.type = but->optype;
-    item->op.opcontext = but->opcontext;
-    item->op.context = but->context;
-    item->op.opptr = but->opptr;
-    but->opptr = NULL;
-  }
-  else if (but->rnaprop != NULL) {
-    const int prop_type = RNA_property_type(but->rnaprop);
-    if (!ELEM(prop_type, PROP_BOOLEAN, PROP_ENUM)) {
-      /* Note that these buttons are not prevented,
-       * but aren't typically used in menus. */
-      printf("Button '%s' in menu '%s' is a menu item with unsupported RNA type %d\n",
-             but->drawstr,
-             mt->idname,
-             prop_type);
-    }
-    else {
-      item = BLI_memarena_calloc(memarena, sizeof(*item));
-      item->type = MENU_SEARCH_TYPE_RNA;
-
-      item->rna.ptr = but->rnapoin;
-      item->rna.prop = but->rnaprop;
-      item->rna.index = but->rnaindex;
-
-      if (prop_type == PROP_ENUM) {
-        item->rna.enum_value = (int)but->hardmax;
-      }
-    }
-  }
-
-  if (item != NULL) {
-    /* Handle shared settings. */
-    item->drawstr = strdup_memarena(memarena, but->drawstr);
-    item->icon = but->icon;
-    item->state = (but->flag & (UI_BUT_DISABLED | UI_BUT_INACTIVE | UI_BUT_REDALERT));
-    item->mt = mt;
-    item->drawstr_submenu = drawstr_submenu ? strdup_memarena(memarena, drawstr_submenu) : NULL;
-    BLI_addtail(&data->items, item);
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Populate \a menu_stack with menus from inspecting active key-maps for this context.
- */
-static void menu_types_add_from_keymap_items(bContext *C,
-                                             wmWindow *win,
-                                             ScrArea *area,
-                                             ARegion *region,
-                                             LinkNode **menuid_stack_p,
-                                             GHash *menu_to_kmi,
-                                             GSet *menu_tagged)
-{
-  wmWindowManager *wm = CTX_wm_manager(C);
-  ListBase *handlers[] = {
-      region ? &region->handlers : NULL,
-      area ? &area->handlers : NULL,
-      &win->handlers,
-  };
-
-  for (int handler_index = 0; handler_index < ARRAY_SIZE(handlers); handler_index++) {
-    if (handlers[handler_index] == NULL) {
-      continue;
-    }
-    LISTBASE_FOREACH (wmEventHandler *, handler_base, handlers[handler_index]) {
-      /* During this loop, ui handlers for nested menus can tag multiple handlers free. */
-      if (handler_base->flag & WM_HANDLER_DO_FREE) {
-        continue;
-      }
-      if (handler_base->type != WM_HANDLER_TYPE_KEYMAP) {
-        continue;
-      }
-
-      else if (handler_base->poll == NULL || handler_base->poll(region, win->eventstate)) {
-        wmEventHandler_Keymap *handler = (wmEventHandler_Keymap *)handler_base;
-        wmKeyMap *keymap = WM_event_get_keymap_from_handler(wm, handler);
-        if (keymap && WM_keymap_poll(C, keymap)) {
-          LISTBASE_FOREACH (wmKeyMapItem *, kmi, &keymap->items) {
-            if (kmi->flag & KMI_INACTIVE) {
-              continue;
-            }
-            if (STR_ELEM(kmi->idname, "WM_OT_call_menu", "WM_OT_call_menu_pie")) {
-              char menu_idname[MAX_NAME];
-              RNA_string_get(kmi->ptr, "name", menu_idname);
-              MenuType *mt = WM_menutype_find(menu_idname, false);
-
-              if (mt && BLI_gset_add(menu_tagged, mt)) {
-                /* Unlikely, but possible this will be included twice. */
-                BLI_linklist_prepend(menuid_stack_p, mt);
-
-                void **kmi_p;
-                if (!BLI_ghash_ensure_p(menu_to_kmi, mt, &kmi_p)) {
-                  *kmi_p = kmi;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-/**
- * Create #MenuSearch_Data by inspecting the current context, this uses two methods:
- *
- * - Look-up pre-defined editor-menus.
- * - Look-up key-map items which call menus.
- */
-static struct MenuSearch_Data *menu_items_from_ui_create(bContext *C,
-                                                         wmWindow *win,
-                                                         ScrArea *area,
-                                                         ARegion *region)
-{
-  MemArena *memarena = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, __func__);
-  /** Map (#MenuType to #MenuSearch_Parent) */
-  GHash *menu_parent_map = BLI_ghash_ptr_new(__func__);
-  GHash *menu_display_name_map = BLI_ghash_ptr_new(__func__);
-  const uiStyle *style = UI_style_get_dpi();
-
-  /* Convert into non-ui structure. */
-  struct MenuSearch_Data *data = MEM_callocN(sizeof(*data), __func__);
-
-  DynStr *dyn_str = BLI_dynstr_new_memarena();
-
-  /* Use a stack of menus to handle and discover new menus in passes. */
-  LinkNode *menu_stack = NULL;
-
-  /* Tag menu types not to add, either because they have already been added
-   * or they have been blacklisted.
-   * Set of #MenuType. */
-  GSet *menu_tagged = BLI_gset_ptr_new(__func__);
-  /** Map (#MenuType -> #wmKeyMapItem). */
-  GHash *menu_to_kmi = BLI_ghash_ptr_new(__func__);
-
-  /* Blacklist menus we don't want to show. */
-  {
-    const char *idname_array[] = {
-        /* While we could include this, it's just showing filenames to load. */
-        "TOPBAR_MT_file_open_recent",
-    };
-    for (int i = 0; i < ARRAY_SIZE(idname_array); i++) {
-      MenuType *mt = WM_menutype_find(idname_array[i], false);
-      if (mt != NULL) {
-        BLI_gset_add(menu_tagged, mt);
-      }
-    }
-  }
-
-  /* Populate menus from the editors,
-   * note that we could create a fake header, draw the header and extract the menus
-   * from the buttons, however this is quite involved and can be avoided as by convention
-   * each space-type has a single root-menu that headers use. */
-  {
-    const char *idname_array[] = {
-        "TOPBAR_MT_editor_menus",
-        /* Optional second menu for the space-type. */
-        NULL,
-    };
-    int idname_array_len = 1;
-
-#define SPACE_MENU_MAP(space_type, menu_id) \
-  case space_type: \
-    idname_array[idname_array_len++] = menu_id; \
-    break
-#define SPACE_MENU_NOP(space_type) \
-  case space_type: \
-    break
-
-    if (area != NULL) {
-      switch (area->spacetype) {
-        SPACE_MENU_MAP(SPACE_VIEW3D, "VIEW3D_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_GRAPH, "GRAPH_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_OUTLINER, "OUTLINER_MT_editor_menus");
-        SPACE_MENU_NOP(SPACE_PROPERTIES);
-        SPACE_MENU_MAP(SPACE_FILE, "FILE_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_IMAGE, "IMAGE_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_INFO, "INFO_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_SEQ, "SEQUENCER_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_TEXT, "TEXT_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_ACTION, "ACTION_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_NLA, "NLA_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_NODE, "NODE_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_CONSOLE, "CONSOLE_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_USERPREF, "USERPREF_MT_editor_menus");
-        SPACE_MENU_MAP(SPACE_CLIP,
-                       (((const SpaceClip *)area->spacedata.first)->mode == SC_MODE_TRACKING) ?
-                           "CLIP_MT_tracking_editor_menus" :
-                           "CLIP_MT_masking_editor_menus");
-        SPACE_MENU_NOP(SPACE_TOPBAR);
-        SPACE_MENU_NOP(SPACE_STATUSBAR);
-        default:
-          printf("Unknown space type '%d'\n", area->spacetype);
-      }
-    }
-    for (int i = 0; i < idname_array_len; i++) {
-      MenuType *mt = WM_menutype_find(idname_array[i], false);
-      if (mt != NULL) {
-        BLI_linklist_prepend(&menu_stack, mt);
-        BLI_gset_add(menu_tagged, mt);
-      }
-    }
-  }
-#undef SPACE_MENU_MAP
-#undef SPACE_MENU_NOP
-
-  bool has_keymap_menu_items = false;
-
-  GHashIterator iter;
-
-  while (menu_stack != NULL) {
-    MenuType *mt = BLI_linklist_pop(&menu_stack);
-    if (!WM_menutype_poll(C, mt)) {
-      continue;
-    }
-
-    uiBlock *block = UI_block_begin(C, region, __func__, UI_EMBOSS);
-    uiLayout *layout = UI_block_layout(
-        block, UI_LAYOUT_VERTICAL, UI_LAYOUT_MENU, 0, 0, 200, 0, UI_MENU_PADDING, style);
-
-    UI_block_flag_enable(block, UI_BLOCK_SHOW_SHORTCUT_ALWAYS);
-
-    uiLayoutSetOperatorContext(layout, WM_OP_EXEC_REGION_WIN);
-    UI_menutype_draw(C, mt, layout);
-
-    UI_block_end(C, block);
-
-    LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
-      MenuType *mt_from_but = NULL;
-      /* Support menu titles with dynamic from initial labels
-       * (used by edit-mesh context menu). */
-      if (but->type == UI_BTYPE_LABEL) {
-
-        /* Check if the label is the title. */
-        uiBut *but_test = but->prev;
-        while (but_test && but_test->type == UI_BTYPE_SEPR) {
-          but_test = but_test->prev;
-        }
-
-        if (but_test == NULL) {
-          BLI_ghash_insert(
-              menu_display_name_map, mt, (void *)strdup_memarena(memarena, but->drawstr));
-        }
-      }
-      else if (menu_items_from_ui_create_item_from_button(data, memarena, mt, NULL, but)) {
-        /* pass */
-      }
-      else if ((mt_from_but = UI_but_menutype_get(but))) {
-
-        if (BLI_gset_add(menu_tagged, mt_from_but)) {
-          BLI_linklist_prepend(&menu_stack, mt_from_but);
-        }
-
-        if (!BLI_ghash_haskey(menu_parent_map, mt_from_but)) {
-          struct MenuSearch_Parent *menu_parent = BLI_memarena_calloc(memarena,
-                                                                      sizeof(*menu_parent));
-          /* Use brackets for menu key shortcuts,
-           * converting "Text|Some-Shortcut" to "Text (Some-Shortcut)".
-           * This is needed so we don't right align sub-menu contents
-           * we only want to do that for the last menu item, not the path that leads to it.
-           */
-          const char *drawstr_sep = but->flag & UI_BUT_HAS_SEP_CHAR ?
-                                        strrchr(but->drawstr, UI_SEP_CHAR) :
-                                        NULL;
-          bool drawstr_is_empty = false;
-          if (drawstr_sep != NULL) {
-            BLI_assert(BLI_dynstr_get_len(dyn_str) == 0);
-            /* Detect empty string, fallback to menu name. */
-            const char *drawstr = but->drawstr;
-            int drawstr_len = drawstr_sep - but->drawstr;
-            if (UNLIKELY(drawstr_len == 0)) {
-              drawstr = CTX_IFACE_(mt_from_but->translation_context, mt_from_but->label);
-              drawstr_len = strlen(drawstr);
-              if (drawstr[0] == '\0') {
-                drawstr_is_empty = true;
-              }
-            }
-            BLI_dynstr_nappend(dyn_str, drawstr, drawstr_len);
-            BLI_dynstr_appendf(dyn_str, " (%s)", drawstr_sep + 1);
-            menu_parent->drawstr = strdup_memarena_from_dynstr(memarena, dyn_str);
-            BLI_dynstr_clear(dyn_str);
-          }
-          else {
-            const char *drawstr = but->drawstr;
-            if (UNLIKELY(drawstr[0] == '\0')) {
-              drawstr = CTX_IFACE_(mt_from_but->translation_context, mt_from_but->label);
-              if (drawstr[0] == '\0') {
-                drawstr_is_empty = true;
-              }
-            }
-            menu_parent->drawstr = strdup_memarena(memarena, drawstr);
-          }
-          menu_parent->parent_mt = mt;
-          BLI_ghash_insert(menu_parent_map, mt_from_but, menu_parent);
-
-          if (drawstr_is_empty) {
-            printf("Warning: '%s' menu has empty 'bl_label'.\n", mt_from_but->idname);
-          }
-        }
-      }
-      else if (but->menu_create_func != NULL) {
-        /* A non 'MenuType' menu button. */
-
-        /* Only expand one level deep, this is mainly for expanding operator menus. */
-        const char *drawstr_submenu = but->drawstr;
-
-        /* +1 to avoid overlap with the current 'block'. */
-        uiBlock *sub_block = UI_block_begin(C, region, __func__ + 1, UI_EMBOSS);
-        uiLayout *sub_layout = UI_block_layout(
-            sub_block, UI_LAYOUT_VERTICAL, UI_LAYOUT_MENU, 0, 0, 200, 0, UI_MENU_PADDING, style);
-
-        UI_block_flag_enable(sub_block, UI_BLOCK_SHOW_SHORTCUT_ALWAYS);
-
-        uiLayoutSetOperatorContext(sub_layout, WM_OP_INVOKE_REGION_WIN);
-
-        but->menu_create_func(C, sub_layout, but->poin);
-
-        UI_block_end(C, sub_block);
-
-        LISTBASE_FOREACH (uiBut *, sub_but, &sub_block->buttons) {
-          menu_items_from_ui_create_item_from_button(data, memarena, mt, drawstr_submenu, sub_but);
-        }
-
-        if (region) {
-          BLI_remlink(&region->uiblocks, sub_block);
-        }
-        UI_block_free(NULL, sub_block);
-      }
-    }
-    if (region) {
-      BLI_remlink(&region->uiblocks, block);
-    }
-    UI_block_free(NULL, block);
-
-    /* Add key-map items as a second pass,
-     * so all menus are accessed from the header & top-bar before key shortcuts are expanded. */
-    if ((menu_stack == NULL) && (has_keymap_menu_items == false)) {
-      has_keymap_menu_items = true;
-      menu_types_add_from_keymap_items(
-          C, win, area, region, &menu_stack, menu_to_kmi, menu_tagged);
-    }
-  }
-
-  LISTBASE_FOREACH (struct MenuSearch_Item *, item, &data->items) {
-    item->menu_parent = BLI_ghash_lookup(menu_parent_map, item->mt);
-  }
-
-  GHASH_ITER (iter, menu_parent_map) {
-    struct MenuSearch_Parent *menu_parent = BLI_ghashIterator_getValue(&iter);
-    menu_parent->parent = BLI_ghash_lookup(menu_parent_map, menu_parent->parent_mt);
-  }
-
-  /* NOTE: currently this builds the full path for each menu item,
-   * that could be moved into the parent menu. */
-
-  /* Unicode arrow. */
-#define MENU_SEP "\xe2\x86\x92"
-
-  /* Set names as full paths. */
-  LISTBASE_FOREACH (struct MenuSearch_Item *, item, &data->items) {
-    if (item->menu_parent != NULL) {
-      struct MenuSearch_Parent *menu_parent = item->menu_parent;
-      menu_parent->temp_child = NULL;
-      while (menu_parent && menu_parent->parent) {
-        menu_parent->parent->temp_child = menu_parent;
-        menu_parent = menu_parent->parent;
-      }
-      BLI_assert(BLI_dynstr_get_len(dyn_str) == 0);
-      while (menu_parent) {
-        BLI_dynstr_append(dyn_str, menu_parent->drawstr);
-        BLI_dynstr_append(dyn_str, " " MENU_SEP " ");
-        menu_parent = menu_parent->temp_child;
-      }
-    }
-    else {
-      BLI_assert(BLI_dynstr_get_len(dyn_str) == 0);
-      const char *drawstr = BLI_ghash_lookup(menu_display_name_map, item->mt);
-      if (drawstr == NULL) {
-        drawstr = CTX_IFACE_(item->mt->translation_context, item->mt->label);
-      }
-      BLI_dynstr_append(dyn_str, drawstr);
-
-      wmKeyMapItem *kmi = BLI_ghash_lookup(menu_to_kmi, item->mt);
-      if (kmi != NULL) {
-        char kmi_str[128];
-        WM_keymap_item_to_string(kmi, false, kmi_str, sizeof(kmi_str));
-        BLI_dynstr_appendf(dyn_str, " (%s)", kmi_str);
-      }
-
-      BLI_dynstr_append(dyn_str, " " MENU_SEP " ");
-    }
-
-    /* Optional nested menu. */
-    if (item->drawstr_submenu != NULL) {
-      BLI_dynstr_append(dyn_str, item->drawstr_submenu);
-      BLI_dynstr_append(dyn_str, " " MENU_SEP " ");
-    }
-
-    BLI_dynstr_append(dyn_str, item->drawstr);
-
-    item->drawwstr_full = strdup_memarena_from_dynstr(memarena, dyn_str);
-    BLI_dynstr_clear(dyn_str);
-  }
-  BLI_dynstr_free(dyn_str);
-#undef MENU_SEP
-
-  /* Finally sort menu items.
-   *
-   * Note: we might want to keep the in-menu order, for now sort all. */
-  BLI_listbase_sort(&data->items, menu_item_sort_by_drawstr_full);
-
-  BLI_ghash_free(menu_parent_map, NULL, NULL);
-  BLI_ghash_free(menu_display_name_map, NULL, NULL);
-
-  BLI_ghash_free(menu_to_kmi, NULL, NULL);
-
-  BLI_gset_free(menu_tagged, NULL);
-
-  data->memarena = memarena;
-
-  return data;
-}
-
-static void menu_items_from_ui_destroy(void *data_v)
-{
-  struct MenuSearch_Data *data = data_v;
-  LISTBASE_FOREACH (struct MenuSearch_Item *, item, &data->items) {
-    switch (item->type) {
-      case MENU_SEARCH_TYPE_OP: {
-        if (item->op.opptr != NULL) {
-          WM_operator_properties_free(item->op.opptr);
-          MEM_freeN(item->op.opptr);
-        }
-      }
-      case MENU_SEARCH_TYPE_RNA: {
-        break;
-      }
-    }
-  }
-
-  BLI_memarena_free(data->memarena);
-
-  MEM_freeN(data);
-}
-
-static void menu_call_fn(bContext *C, void *UNUSED(arg1), void *arg2)
-{
-  struct MenuSearch_Item *item = arg2;
-  if (item == NULL) {
-    return;
-  }
-  if (item->state & UI_BUT_DISABLED) {
-    return;
-  }
-
-  switch (item->type) {
-    case MENU_SEARCH_TYPE_OP: {
-      CTX_store_set(C, item->op.context);
-      WM_operator_name_call_ptr(C, item->op.type, item->op.opcontext, item->op.opptr);
-      CTX_store_set(C, NULL);
-      break;
-    }
-    case MENU_SEARCH_TYPE_RNA: {
-      PointerRNA *ptr = &item->rna.ptr;
-      PropertyRNA *prop = item->rna.prop;
-      int index = item->rna.index;
-      const int prop_type = RNA_property_type(prop);
-      bool changed = false;
-
-      if (prop_type == PROP_BOOLEAN) {
-        const bool is_array = RNA_property_array_check(prop);
-        if (is_array) {
-          const bool value = RNA_property_boolean_get_index(ptr, prop, index);
-          RNA_property_boolean_set_index(ptr, prop, index, !value);
-        }
-        else {
-          const bool value = RNA_property_boolean_get(ptr, prop);
-          RNA_property_boolean_set(ptr, prop, !value);
-        }
-        changed = true;
-      }
-      else if (prop_type == PROP_ENUM) {
-        RNA_property_enum_set(ptr, prop, item->rna.enum_value);
-        changed = true;
-      }
-
-      if (changed) {
-        RNA_property_update(C, ptr, prop);
-      }
-      break;
-    }
-  }
-}
-
-static void menu_search_cb(const bContext *UNUSED(C),
-                           void *arg,
-                           const char *str,
-                           uiSearchItems *items)
-{
-  struct MenuSearch_Data *data = arg;
-  const size_t str_len = strlen(str);
-  const int words_max = (str_len / 2) + 1;
-  int(*words)[2] = BLI_array_alloca(words, words_max);
-
-  const int words_len = BLI_string_find_split_words(str, str_len, ' ', words, words_max);
-
-  for (struct MenuSearch_Item *item = data->items.first; item; item = item->next) {
-    int index;
-
-    /* match name against all search words */
-    for (index = 0; index < words_len; index++) {
-      if (!has_word_prefix(item->drawwstr_full, str + words[index][0], words[index][1])) {
-        break;
-      }
-    }
-
-    if (index == words_len) {
-      if (!UI_search_item_add(items, item->drawwstr_full, item, item->icon, item->state)) {
-        break;
-      }
-    }
-  }
-}
-
-void UI_but_func_menu_search(uiBut *but)
-{
-  bContext *C = but->block->evil_C;
-  wmWindow *win = CTX_wm_window(C);
-  ScrArea *area = CTX_wm_area(C);
-  ARegion *region = CTX_wm_region(C);
-  struct MenuSearch_Data *data = menu_items_from_ui_create(C, win, area, region);
-  UI_but_func_search_set(but,
-                         ui_searchbox_create_menu,
-                         menu_search_cb,
-                         data,
-                         menu_items_from_ui_destroy,
-                         menu_call_fn,
-                         NULL);
-}
-
-void uiTemplateMenuSearch(uiLayout *layout)
-{
-  uiBlock *block;
-  uiBut *but;
-  static char search[256] = "";
-
-  block = uiLayoutGetBlock(layout);
-  UI_block_layout_set_current(block, layout);
-
-  but = uiDefSearchBut(
-      block, search, 0, ICON_VIEWZOOM, sizeof(search), 0, 0, UI_UNIT_X * 6, UI_UNIT_Y, 0, 0, "");
-  UI_but_func_menu_search(but);
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Operator Redo Properties Template
- * \{ */
-
-#ifdef USE_OP_RESET_BUT
-static void ui_layout_operator_buts__reset_cb(bContext *UNUSED(C),
-                                              void *op_pt,
-                                              void *UNUSED(arg_dummy2))
-{
-  WM_operator_properties_reset((wmOperator *)op_pt);
-}
-#endif
-
-struct uiTemplateOperatorPropertyPollParam {
-  const bContext *C;
-  wmOperator *op;
-  short flag;
-};
-
-static bool ui_layout_operator_buts_poll_property(struct PointerRNA *UNUSED(ptr),
-                                                  struct PropertyRNA *prop,
-                                                  void *user_data)
-{
-  struct uiTemplateOperatorPropertyPollParam *params = user_data;
-  if ((params->flag & UI_TEMPLATE_OP_PROPS_HIDE_ADVANCED) &&
-      (RNA_property_tags(prop) & OP_PROP_TAG_ADVANCED)) {
-    return false;
-  }
-  return params->op->type->poll_property(params->C, params->op, prop);
-}
-
-/**
- * Draw Operator property buttons for redoing execution with different settings.
- * This function does not initialize the layout,
- * functions can be called on the layout before and after.
- */
-eAutoPropButsReturn uiTemplateOperatorPropertyButs(const bContext *C,
-                                                   uiLayout *layout,
-                                                   wmOperator *op,
-                                                   const eButLabelAlign label_align,
-                                                   const short flag)
-{
-  uiBlock *block = uiLayoutGetBlock(layout);
-  eAutoPropButsReturn return_info = 0;
-
-  if (!op->properties) {
-    IDPropertyTemplate val = {0};
-    op->properties = IDP_New(IDP_GROUP, &val, "wmOperatorProperties");
-  }
-
-  /* poll() on this operator may still fail,
-   * at the moment there is no nice feedback when this happens just fails silently. */
-  if (!WM_operator_repeat_check(C, op)) {
-    UI_block_lock_set(block, true, "Operator can't' redo");
-    return return_info;
-  }
-  else {
-    /* useful for macros where only one of the steps can't be re-done */
-    UI_block_lock_clear(block);
-  }
-
-  if (flag & UI_TEMPLATE_OP_PROPS_SHOW_TITLE) {
-    uiItemL(layout, WM_operatortype_name(op->type, op->ptr), ICON_NONE);
-  }
-
-  /* menu */
-  if (op->type->flag & OPTYPE_PRESET) {
-    /* XXX, no simple way to get WM_MT_operator_presets.bl_label
-     * from python! Label remains the same always! */
-    PointerRNA op_ptr;
-    uiLayout *row;
-
-    block->ui_operator = op;
-
-    row = uiLayoutRow(layout, true);
-    uiItemM(row, "WM_MT_operator_presets", NULL, ICON_NONE);
-
-    wmOperatorType *ot = WM_operatortype_find("WM_OT_operator_preset_add", false);
-    uiItemFullO_ptr(row, ot, "", ICON_ADD, NULL, WM_OP_INVOKE_DEFAULT, 0, &op_ptr);
-    RNA_string_set(&op_ptr, "operator", op->type->idname);
-
-    uiItemFullO_ptr(row, ot, "", ICON_REMOVE, NULL, WM_OP_INVOKE_DEFAULT, 0, &op_ptr);
-    RNA_string_set(&op_ptr, "operator", op->type->idname);
-    RNA_boolean_set(&op_ptr, "remove_active", true);
-  }
-
-  if (op->type->ui) {
-    op->layout = layout;
-    op->type->ui((bContext *)C, op);
-    op->layout = NULL;
-
-    /* UI_LAYOUT_OP_SHOW_EMPTY ignored. return_info is ignored too. We could
-     * allow ot.ui callback to return this, but not needed right now. */
-  }
-  else {
-    wmWindowManager *wm = CTX_wm_manager(C);
-    PointerRNA ptr;
-    struct uiTemplateOperatorPropertyPollParam user_data = {
-        .C = C,
-        .op = op,
-        .flag = flag,
-    };
-
-    RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
-
-    uiLayoutSetPropSep(layout, true);
-    uiLayoutSetPropDecorate(layout, false);
-
-    /* main draw call */
-    return_info = uiDefAutoButsRNA(
-        layout,
-        &ptr,
-        op->type->poll_property ? ui_layout_operator_buts_poll_property : NULL,
-        op->type->poll_property ? &user_data : NULL,
-        op->type->prop,
-        label_align,
-        (flag & UI_TEMPLATE_OP_PROPS_COMPACT));
-
-    if ((return_info & UI_PROP_BUTS_NONE_ADDED) && (flag & UI_TEMPLATE_OP_PROPS_SHOW_EMPTY)) {
-      uiItemL(layout, IFACE_("No Properties"), ICON_NONE);
-    }
-  }
-
-#ifdef USE_OP_RESET_BUT
-  /* its possible that reset can do nothing if all have PROP_SKIP_SAVE enabled
-   * but this is not so important if this button is drawn in those cases
-   * (which isn't all that likely anyway) - campbell */
-  if (op->properties->len) {
-    uiBut *but;
-    uiLayout *col; /* needed to avoid alignment errors with previous buttons */
-
-    col = uiLayoutColumn(layout, false);
-    block = uiLayoutGetBlock(col);
-    but = uiDefIconTextBut(block,
-                           UI_BTYPE_BUT,
-                           0,
-                           ICON_FILE_REFRESH,
-                           IFACE_("Reset"),
-                           0,
-                           0,
-                           UI_UNIT_X,
-                           UI_UNIT_Y,
-                           NULL,
-                           0.0,
-                           0.0,
-                           0.0,
-                           0.0,
-                           TIP_("Reset operator defaults"));
-    UI_but_func_set(but, ui_layout_operator_buts__reset_cb, op, NULL);
-  }
-#endif
-
-  /* set various special settings for buttons */
-
-  /* Only do this if we're not refreshing an existing UI. */
-  if (block->oldblock == NULL) {
-    const bool is_popup = (block->flag & UI_BLOCK_KEEP_OPEN) != 0;
-    uiBut *but;
-
-    for (but = block->buttons.first; but; but = but->next) {
-      /* no undo for buttons for operator redo panels */
-      UI_but_flag_disable(but, UI_BUT_UNDO);
-
-      /* only for popups, see [#36109] */
-
-      /* if button is operator's default property, and a text-field, enable focus for it
-       * - this is used for allowing operators with popups to rename stuff with fewer clicks
-       */
-      if (is_popup) {
-        if ((but->rnaprop == op->type->prop) && (but->type == UI_BTYPE_TEXT)) {
-          UI_but_focus_on_enter_event(CTX_wm_window(C), but);
-        }
-      }
-    }
-  }
-
-  return return_info;
 }
 
 /** \} */

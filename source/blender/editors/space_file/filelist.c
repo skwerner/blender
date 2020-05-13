@@ -1264,11 +1264,9 @@ static void filelist_intern_free(FileListIntern *filelist_intern)
   MEM_SAFE_FREE(filelist_intern->filtered);
 }
 
-static void filelist_cache_preview_runf(TaskPool *__restrict pool,
-                                        void *taskdata,
-                                        int UNUSED(threadid))
+static void filelist_cache_preview_runf(TaskPool *__restrict pool, void *taskdata)
 {
-  FileListEntryCache *cache = BLI_task_pool_userdata(pool);
+  FileListEntryCache *cache = BLI_task_pool_user_data(pool);
   FileListEntryPreviewTaskData *preview_taskdata = taskdata;
   FileListEntryPreview *preview = preview_taskdata->preview;
 
@@ -1306,9 +1304,7 @@ static void filelist_cache_preview_runf(TaskPool *__restrict pool,
   //  printf("%s: End (%d)...\n", __func__, threadid);
 }
 
-static void filelist_cache_preview_freef(TaskPool *__restrict UNUSED(pool),
-                                         void *taskdata,
-                                         int UNUSED(threadid))
+static void filelist_cache_preview_freef(TaskPool *__restrict UNUSED(pool), void *taskdata)
 {
   FileListEntryPreviewTaskData *preview_taskdata = taskdata;
   FileListEntryPreview *preview = preview_taskdata->preview;
@@ -1327,9 +1323,7 @@ static void filelist_cache_preview_freef(TaskPool *__restrict UNUSED(pool),
 static void filelist_cache_preview_ensure_running(FileListEntryCache *cache)
 {
   if (!cache->previews_pool) {
-    TaskScheduler *scheduler = BLI_task_scheduler_get();
-
-    cache->previews_pool = BLI_task_pool_create_background(scheduler, cache);
+    cache->previews_pool = BLI_task_pool_create_background(cache, TASK_PRIORITY_LOW);
     cache->previews_done = BLI_thread_queue_init();
 
     IMB_thumb_locks_acquire();
@@ -1393,12 +1387,11 @@ static void filelist_cache_previews_push(FileList *filelist, FileDirEntry *entry
     FileListEntryPreviewTaskData *preview_taskdata = MEM_mallocN(sizeof(*preview_taskdata),
                                                                  __func__);
     preview_taskdata->preview = preview;
-    BLI_task_pool_push_ex(cache->previews_pool,
-                          filelist_cache_preview_runf,
-                          preview_taskdata,
-                          true,
-                          filelist_cache_preview_freef,
-                          TASK_PRIORITY_LOW);
+    BLI_task_pool_push(cache->previews_pool,
+                       filelist_cache_preview_runf,
+                       preview_taskdata,
+                       true,
+                       filelist_cache_preview_freef);
   }
 }
 

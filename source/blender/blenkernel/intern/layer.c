@@ -210,8 +210,9 @@ ViewLayer *BKE_view_layer_add(Scene *scene,
     case VIEWLAYER_ADD_COPY: {
       /* Allocate and copy view layer data */
       view_layer_new = MEM_callocN(sizeof(ViewLayer), "View Layer");
-      BLI_addtail(&scene->view_layers, view_layer_new);
+      *view_layer_new = *view_layer_source;
       BKE_view_layer_copy_data(scene, scene, view_layer_new, view_layer_source, 0);
+      BLI_addtail(&scene->view_layers, view_layer_new);
 
       BLI_strncpy_utf8(view_layer_new->name, name, sizeof(view_layer_new->name));
       break;
@@ -467,6 +468,10 @@ void BKE_view_layer_copy_data(Scene *scene_dst,
 
   LayerCollection *lc_scene_dst = view_layer_dst->layer_collections.first;
   lc_scene_dst->collection = scene_dst->master_collection;
+
+  if ((flag & LIB_ID_CREATE_NO_USER_REFCOUNT) == 0) {
+    id_us_plus((ID *)view_layer_dst->mat_override);
+  }
 }
 
 void BKE_view_layer_rename(Main *bmain, Scene *scene, ViewLayer *view_layer, const char *newname)
@@ -1357,6 +1362,49 @@ void BKE_layer_collection_set_visible(ViewLayer *view_layer,
       lc->flag |= LAYER_COLLECTION_HIDE;
     }
   }
+}
+
+/**
+ * Set layer collection hide/exclude/indirect flag on a layer collection.
+ * recursively.
+ */
+static void layer_collection_flag_recursive_set(LayerCollection *lc,
+                                                const int flag,
+                                                const bool value,
+                                                const bool restore_flag)
+{
+  if (flag == LAYER_COLLECTION_EXCLUDE) {
+    /* For exclude flag, we remember the state the children had before
+     * excluding and restoring it when enabling the parent collection again. */
+    if (value) {
+      if (restore_flag) {
+        SET_FLAG_FROM_TEST(
+            lc->flag, (lc->flag & LAYER_COLLECTION_EXCLUDE), LAYER_COLLECTION_PREVIOUSLY_EXCLUDED);
+      }
+      else {
+        lc->flag &= ~LAYER_COLLECTION_PREVIOUSLY_EXCLUDED;
+      }
+
+      lc->flag |= flag;
+    }
+    else {
+      if (!(lc->flag & LAYER_COLLECTION_PREVIOUSLY_EXCLUDED)) {
+        lc->flag &= ~flag;
+      }
+    }
+  }
+  else {
+    SET_FLAG_FROM_TEST(lc->flag, value, flag);
+  }
+
+  LISTBASE_FOREACH (LayerCollection *, nlc, &lc->layer_collections) {
+    layer_collection_flag_recursive_set(nlc, flag, value, true);
+  }
+}
+
+void BKE_layer_collection_set_flag(LayerCollection *lc, const int flag, const bool value)
+{
+  layer_collection_flag_recursive_set(lc, flag, value, false);
 }
 
 /* ---------------------------------------------------------------------- */

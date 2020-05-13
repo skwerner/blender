@@ -924,11 +924,11 @@ static void rna_Scene_volume_update(Main *UNUSED(bmain), Scene *UNUSED(scene), P
   DEG_id_tag_update(&scene->id, ID_RECALC_AUDIO_VOLUME | ID_RECALC_SEQUENCER_STRIPS);
 }
 
-static const char *rna_Scene_statistics_string_get(Scene *scene,
-                                                   Main *bmain,
+static const char *rna_Scene_statistics_string_get(Scene *UNUSED(scene),
+                                                   Main *UNUSED(bmain),
                                                    ViewLayer *view_layer)
 {
-  return ED_info_stats_string(bmain, scene, view_layer);
+  return ED_info_footer_string(view_layer);
 }
 
 static void rna_Scene_framelen_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
@@ -1135,6 +1135,11 @@ static void rna_Scene_all_keyingsets_next(CollectionPropertyIterator *iter)
 static char *rna_SceneEEVEE_path(PointerRNA *UNUSED(ptr))
 {
   return BLI_strdup("eevee");
+}
+
+static char *rna_SceneGpencil_path(PointerRNA *UNUSED(ptr))
+{
+  return BLI_strdup("grease_pencil_settings");
 }
 
 static int rna_RenderSettings_stereoViews_skip(CollectionPropertyIterator *iter,
@@ -2026,6 +2031,24 @@ static void rna_View3DCursor_matrix_set(PointerRNA *ptr, const float *values)
   BKE_scene_cursor_from_mat4(cursor, unit_mat, false);
 }
 
+static char *rna_TransformOrientationSlot_path(PointerRNA *ptr)
+{
+  Scene *scene = (Scene *)ptr->owner_id;
+  TransformOrientationSlot *orientation_slot = ptr->data;
+
+  if (!ELEM(NULL, scene, orientation_slot)) {
+    for (int i = 0; i < ARRAY_SIZE(scene->orientation_slots); i++) {
+      if (&scene->orientation_slots[i] == orientation_slot) {
+        return BLI_sprintfN("transform_orientation_slots[%d]", i);
+      }
+    }
+  }
+
+  /* Should not happen, but in case, just return defqult path. */
+  BLI_assert(0);
+  return BLI_strdup("transform_orientation_slots[0]");
+}
+
 static char *rna_View3DCursor_path(PointerRNA *UNUSED(ptr))
 {
   return BLI_strdup("cursor");
@@ -2664,6 +2687,7 @@ static void rna_def_transform_orientation_slot(BlenderRNA *brna)
 
   srna = RNA_def_struct(brna, "TransformOrientationSlot", NULL);
   RNA_def_struct_sdna(srna, "TransformOrientationSlot");
+  RNA_def_struct_path_func(srna, "rna_TransformOrientationSlot_path");
   RNA_def_struct_ui_text(srna, "Orientation Slot", "");
 
   /* Orientations */
@@ -3824,7 +3848,7 @@ static void rna_def_unit_settings(BlenderRNA *brna)
       "Scale to use when converting between blender units and dimensions."
       " When working at microscopic or astronomical scale, a small or large unit scale"
       " respectively can be used to avoid numerical precision problems");
-  RNA_def_property_range(prop, 0.00001, 100000.0);
+  RNA_def_property_range(prop, 1e-9f, 1e+9f);
   RNA_def_property_ui_range(prop, 0.001, 100.0, 0.1, 6);
   RNA_def_property_update(prop, NC_WINDOW, NULL);
 
@@ -5699,6 +5723,16 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
+  static const EnumPropertyItem meta_input_items[] = {
+      {0, "SCENE", 0, "Scene", "Use metadata from the current scene"},
+      {R_STAMP_STRIPMETA,
+       "STRIPS",
+       0,
+       "Sequencer Strips",
+       "Use metadata from the strips in the sequencer"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   rna_def_scene_ffmpeg_settings(brna);
 
   srna = RNA_def_struct(brna, "RenderSettings", NULL);
@@ -6216,10 +6250,10 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
       prop, "Stamp Labels", "Display stamp labels (\"Camera\" in front of camera name, etc.)");
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
-  prop = RNA_def_property(srna, "use_stamp_strip_meta", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "stamp", R_STAMP_STRIPMETA);
-  RNA_def_property_ui_text(
-      prop, "Strip Metadata", "Use metadata from the strips in the sequencer");
+  prop = RNA_def_property(srna, "metadata_input", PROP_ENUM, PROP_NONE); /* as an enum */
+  RNA_def_property_enum_bitflag_sdna(prop, NULL, "stamp");
+  RNA_def_property_enum_items(prop, meta_input_items);
+  RNA_def_property_ui_text(prop, "Metadata Input", "Where to take the metadata from");
   RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
 
   prop = RNA_def_property(srna, "use_stamp_memory", PROP_BOOLEAN, PROP_NONE);
@@ -7175,6 +7209,28 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
 }
 
+static void rna_def_scene_gpencil(BlenderRNA *brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+  srna = RNA_def_struct(brna, "SceneGpencil", NULL);
+  RNA_def_struct_path_func(srna, "rna_SceneGpencil_path");
+  RNA_def_struct_ui_text(srna, "Grease Pencil Render", "Render settings");
+
+  prop = RNA_def_property(srna, "antialias_threshold", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_float_sdna(prop, NULL, "smaa_threshold");
+  RNA_def_property_float_default(prop, 1.0f);
+  RNA_def_property_range(prop, 0.0f, FLT_MAX);
+  RNA_def_property_ui_range(prop, 0.0f, 2.0f, 1, 3);
+  RNA_def_property_ui_text(prop,
+                           "Anti-Aliasing Threshold",
+                           "Threshold for edge detection algorithm (higher values might overblur "
+                           "some part of the image)");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
+}
+
 void RNA_def_scene(BlenderRNA *brna)
 {
   StructRNA *srna;
@@ -7648,6 +7704,11 @@ void RNA_def_scene(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "SceneEEVEE");
   RNA_def_property_ui_text(prop, "EEVEE", "EEVEE settings for the scene");
 
+  /* Grease Pencil */
+  prop = RNA_def_property(srna, "grease_pencil_settings", PROP_POINTER, PROP_NONE);
+  RNA_def_property_struct_type(prop, "SceneGpencil");
+  RNA_def_property_ui_text(prop, "Grease Pencil", "Grease Pencil settings for the scene");
+
   /* Nestled Data  */
   /* *** Non-Animated *** */
   RNA_define_animate_sdna(false);
@@ -7666,6 +7727,7 @@ void RNA_def_scene(BlenderRNA *brna)
   rna_def_scene_display(brna);
   rna_def_scene_eevee(brna);
   rna_def_view_layer_eevee(brna);
+  rna_def_scene_gpencil(brna);
   RNA_define_animate_sdna(true);
   /* *** Animated *** */
   rna_def_scene_render_data(brna);

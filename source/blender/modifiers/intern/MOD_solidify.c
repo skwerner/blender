@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -53,6 +53,8 @@ static void initData(ModifierData *md)
   smd->mode = MOD_SOLIDIFY_MODE_EXTRUDE;
   smd->nonmanifold_offset_mode = MOD_SOLIDIFY_NONMANIFOLD_OFFSET_MODE_CONSTRAINTS;
   smd->nonmanifold_boundary_mode = MOD_SOLIDIFY_NONMANIFOLD_BOUNDARY_MODE_NONE;
+  smd->merge_tolerance = 0.0001f;
+  smd->bevel_convex = 0.0f;
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -68,14 +70,14 @@ static void requiredDataMask(Object *UNUSED(ob),
   }
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   const SolidifyModifierData *smd = (SolidifyModifierData *)md;
   switch (smd->mode) {
     case MOD_SOLIDIFY_MODE_EXTRUDE:
-      return MOD_solidify_extrude_applyModifier(md, ctx, mesh);
+      return MOD_solidify_extrude_modifyMesh(md, ctx, mesh);
     case MOD_SOLIDIFY_MODE_NONMANIFOLD:
-      return MOD_solidify_nonmanifold_applyModifier(md, ctx, mesh);
+      return MOD_solidify_nonmanifold_modifyMesh(md, ctx, mesh);
     default:
       BLI_assert(0);
   }
@@ -92,13 +94,16 @@ ModifierTypeInfo modifierType_Solidify = {
         eModifierTypeFlag_SupportsMapping | eModifierTypeFlag_SupportsEditmode |
         eModifierTypeFlag_EnableInEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

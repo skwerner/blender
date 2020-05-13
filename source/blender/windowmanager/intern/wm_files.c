@@ -617,9 +617,6 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
 
   UI_view2d_zoom_cache_reset();
 
-  /* Reset session-wise ID UUID counter. */
-  BKE_lib_libblock_session_uuid_reset();
-
   /* first try to append data from exotic file formats... */
   /* it throws error box when file doesn't exist and returns -1 */
   /* note; it should set some error message somewhere... (ton) */
@@ -926,9 +923,6 @@ void wm_homefile_read(bContext *C,
     }
   }
 
-  /* Reset session-wise ID UUID counter. */
-  BKE_lib_libblock_session_uuid_reset();
-
   if (!use_factory_settings || (filepath_startup[0] != '\0')) {
     if (BLI_access(filepath_startup, R_OK) == 0) {
       success = BKE_blendfile_read(C,
@@ -956,20 +950,20 @@ void wm_homefile_read(bContext *C,
     }
   }
 
+  if (use_userdef) {
+    if ((skip_flags & BLO_READ_SKIP_USERDEF) == 0) {
+      UserDef *userdef_default = BKE_blendfile_userdef_from_defaults();
+      BKE_blender_userdef_data_set_and_free(userdef_default);
+      skip_flags |= BLO_READ_SKIP_USERDEF;
+    }
+  }
+
   if (success == false && filepath_startup_override && reports) {
     /* We can not return from here because wm is already reset */
     BKE_reportf(reports, RPT_ERROR, "Could not read '%s'", filepath_startup_override);
   }
 
   if (success == false) {
-    if (use_userdef) {
-      if ((skip_flags & BLO_READ_SKIP_USERDEF) == 0) {
-        UserDef *userdef_default = BKE_blendfile_userdef_from_defaults();
-        BKE_blender_userdef_data_set_and_free(userdef_default);
-        skip_flags |= BLO_READ_SKIP_USERDEF;
-      }
-    }
-
     success = BKE_blendfile_read_from_memory(C,
                                              datatoc_startup_blend,
                                              datatoc_startup_blend_size,
@@ -1959,9 +1953,11 @@ static int wm_homefile_read_exec(bContext *C, wmOperator *op)
     RNA_property_string_get(op->ptr, prop_app_template, app_template_buf);
     app_template = app_template_buf;
 
-    /* Always load preferences when switching templates with own preferences. */
-    use_userdef = BKE_appdir_app_template_has_userpref(app_template) ||
-                  BKE_appdir_app_template_has_userpref(U.app_template);
+    if (!use_factory_settings) {
+      /* Always load preferences when switching templates with own preferences. */
+      use_userdef = BKE_appdir_app_template_has_userpref(app_template) ||
+                    BKE_appdir_app_template_has_userpref(U.app_template);
+    }
 
     /* Turn override off, since we're explicitly loading a different app-template. */
     WM_init_state_app_template_set(NULL);

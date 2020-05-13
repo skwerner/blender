@@ -22,6 +22,7 @@
 /** \file
  * \ingroup bke
  */
+#include "BLI_listbase.h"
 
 #ifdef __cplusplus
 extern "C" {

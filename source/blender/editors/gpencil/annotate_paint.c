@@ -100,6 +100,9 @@ typedef enum eGPencil_PaintFlags {
   GP_PAINTFLAG_STROKEADDED = (1 << 1),
   GP_PAINTFLAG_V3D_ERASER_DEPTH = (1 << 2),
   GP_PAINTFLAG_SELECTMASK = (1 << 3),
+  /* Flags used to indicate if stabilization is being used. */
+  GP_PAINTFLAG_USE_STABILIZER = (1 << 7),
+  GP_PAINTFLAG_USE_STABILIZER_TEMP = (1 << 8),
 } eGPencil_PaintFlags;
 
 /* Temporary 'Stroke' Operation data
@@ -147,6 +150,11 @@ typedef struct tGPsdata {
 
   /** radius of influence for eraser. */
   short radius;
+
+  /* Stabilizer. */
+  float stabilizer_factor;
+  char stabilizer_radius;
+  void *stabilizer_cursor;
 
   /** current mouse-position. */
   float mval[2];
@@ -277,6 +285,18 @@ static bool gp_stroke_filtermval(tGPsdata *p, const float mval[2], float pmval[2
     /* check if mouse moved at least certain distance on both axes (best case)
      * - aims to eliminate some jitter-noise from input when trying to draw straight lines freehand
      */
+  }
+  /* If lazy mouse, check minimum distance. */
+  else if (p->flags & GP_PAINTFLAG_USE_STABILIZER_TEMP) {
+    if ((dx * dx + dy * dy) > (p->stabilizer_radius * p->stabilizer_radius)) {
+      return true;
+    }
+    else {
+      /* If the mouse is moving within the radius of the last move,
+       * don't update the mouse position. This allows sharp turns. */
+      copy_v2_v2(p->mval, p->mvalo);
+      return false;
+    }
   }
   else if ((dx > MIN_MANHATTEN_PX) && (dy > MIN_MANHATTEN_PX)) {
     return true;
@@ -418,6 +438,85 @@ static void gp_smooth_buffer(tGPsdata *p, float inf, int idx)
   copy_v2_v2(&ptc->x, c);
 }
 
+static void gp_stroke_arrow_calc_points_segment(float stroke_points[8],
+                                                const float ref_point[2],
+                                                const float dir_cw[2],
+                                                const float dir_ccw[2],
+                                                const float lenght,
+                                                const float sign)
+{
+  stroke_points[0] = ref_point[0] + dir_cw[0] * lenght * sign;
+  stroke_points[1] = ref_point[1] + dir_cw[1] * lenght * sign;
+  stroke_points[2] = ref_point[0] + dir_ccw[0] * lenght * sign;
+  stroke_points[3] = ref_point[1] + dir_ccw[1] * lenght * sign;
+}
+
+static void gp_stroke_arrow_calc_points(tGPspoint *point,
+                                        const float stroke_dir[2],
+                                        float corner[2],
+                                        float stroke_points[8],
+                                        const int arrow_style)
+{
+  const int arrow_lenght = 8;
+  float norm_dir[2];
+  copy_v2_v2(norm_dir, stroke_dir);
+  normalize_v2(norm_dir);
+  const float inv_norm_dir_clockwise[2] = {norm_dir[1], -norm_dir[0]};
+  const float inv_norm_dir_counterclockwise[2] = {-norm_dir[1], norm_dir[0]};
+
+  switch (arrow_style) {
+    case GP_STROKE_ARROWSTYLE_OPEN:
+      mul_v2_fl(norm_dir, arrow_lenght);
+      stroke_points[0] = corner[0] + inv_norm_dir_clockwise[0] * arrow_lenght + norm_dir[0];
+      stroke_points[1] = corner[1] + inv_norm_dir_clockwise[1] * arrow_lenght + norm_dir[1];
+      stroke_points[2] = corner[0] + inv_norm_dir_counterclockwise[0] * arrow_lenght + norm_dir[0];
+      stroke_points[3] = corner[1] + inv_norm_dir_counterclockwise[1] * arrow_lenght + norm_dir[1];
+      break;
+    case GP_STROKE_ARROWSTYLE_SEGMENT:
+      gp_stroke_arrow_calc_points_segment(stroke_points,
+                                          corner,
+                                          inv_norm_dir_clockwise,
+                                          inv_norm_dir_counterclockwise,
+                                          arrow_lenght,
+                                          1.0f);
+      break;
+    case GP_STROKE_ARROWSTYLE_CLOSED:
+      mul_v2_fl(norm_dir, arrow_lenght);
+      if (point != NULL) {
+        add_v2_v2(&point->x, norm_dir);
+        copy_v2_v2(corner, &point->x);
+      }
+      gp_stroke_arrow_calc_points_segment(stroke_points,
+                                          corner,
+                                          inv_norm_dir_clockwise,
+                                          inv_norm_dir_counterclockwise,
+                                          arrow_lenght,
+                                          -1.0f);
+      stroke_points[4] = corner[0] - norm_dir[0];
+      stroke_points[5] = corner[1] - norm_dir[1];
+      break;
+    case GP_STROKE_ARROWSTYLE_SQUARE:
+      mul_v2_fl(norm_dir, arrow_lenght * 1.5f);
+      if (point != NULL) {
+        add_v2_v2(&point->x, norm_dir);
+        copy_v2_v2(corner, &point->x);
+      }
+      gp_stroke_arrow_calc_points_segment(stroke_points,
+                                          corner,
+                                          inv_norm_dir_clockwise,
+                                          inv_norm_dir_counterclockwise,
+                                          arrow_lenght * 0.75f,
+                                          -1.0f);
+      stroke_points[4] = stroke_points[0] - norm_dir[0];
+      stroke_points[5] = stroke_points[1] - norm_dir[1];
+      stroke_points[6] = stroke_points[2] - norm_dir[0];
+      stroke_points[7] = stroke_points[3] - norm_dir[1];
+      break;
+    default:
+      break;
+  }
+}
+
 /* add current stroke-point to buffer (returns whether point was successfully added) */
 static short gp_stroke_addpoint(tGPsdata *p, const float mval[2], float pressure, double curtime)
 {
@@ -457,6 +556,32 @@ static short gp_stroke_addpoint(tGPsdata *p, const float mval[2], float pressure
 
       /* now the buffer has 2 points (and shouldn't be allowed to get any larger) */
       gpd->runtime.sbuffer_used = 2;
+
+      /* Arrows. */
+      if (gpd->runtime.sbuffer_sflag & (GP_STROKE_USE_ARROW_START | GP_STROKE_USE_ARROW_END)) {
+        /* Store start and end point coords for arrows. */
+        float end[2];
+        copy_v2_v2(end, &pt->x);
+        pt = ((tGPspoint *)(gpd->runtime.sbuffer));
+        float start[2];
+        copy_v2_v2(start, &pt->x);
+
+        /* Arrow end corner. */
+        if (gpd->runtime.sbuffer_sflag & GP_STROKE_USE_ARROW_END) {
+          pt++;
+          float e_heading[2] = {start[0] - end[0], start[1] - end[1]};
+          /* Calculate points for ending arrow. */
+          gp_stroke_arrow_calc_points(
+              pt, e_heading, end, gpd->runtime.arrow_end, gpd->runtime.arrow_end_style);
+        }
+        /* Arrow start corner. */
+        if (gpd->runtime.sbuffer_sflag & GP_STROKE_USE_ARROW_START) {
+          float s_heading[2] = {end[0] - start[0], end[1] - start[1]};
+          /* Calculate points for starting arrow. */
+          gp_stroke_arrow_calc_points(
+              NULL, s_heading, start, gpd->runtime.arrow_start, gpd->runtime.arrow_start_style);
+        }
+      }
     }
 
     /* can keep carrying on this way :) */
@@ -481,16 +606,20 @@ static short gp_stroke_addpoint(tGPsdata *p, const float mval[2], float pressure
 
     /* increment counters */
     gpd->runtime.sbuffer_used++;
-    /* smooth while drawing previous points with a reduction factor for previous */
-    for (int s = 0; s < 3; s++) {
-      gp_smooth_buffer(p, 0.5f * ((3.0f - s) / 3.0f), gpd->runtime.sbuffer_used - s);
+
+    /* Don't smooth if stabilizer is on. */
+    if ((p->flags & GP_PAINTFLAG_USE_STABILIZER_TEMP) == 0) {
+      /* smooth while drawing previous points with a reduction factor for previous */
+      for (int s = 0; s < 3; s++) {
+        gp_smooth_buffer(p, 0.5f * ((3.0f - s) / 3.0f), gpd->runtime.sbuffer_used - s);
+      }
     }
 
     return GP_STROKEADD_NORMAL;
   }
   else if (p->paintmode == GP_PAINTMODE_DRAW_POLY) {
     /* get pointer to destination point */
-    pt = (tGPspoint *)(gpd->runtime.sbuffer);
+    pt = (tGPspoint *)gpd->runtime.sbuffer;
 
     /* store settings */
     copy_v2_v2(&pt->x, mval);
@@ -550,6 +679,123 @@ static short gp_stroke_addpoint(tGPsdata *p, const float mval[2], float pressure
 
   /* return invalid state for now... */
   return GP_STROKEADD_INVALID;
+}
+
+static void gp_stroke_arrow_init_point_default(bGPDspoint *pt)
+{
+  pt->pressure = 1.0f;
+  pt->strength = 1.0f;
+  pt->time = 1.0f;
+}
+
+static void gp_stroke_arrow_init_conv_point(bGPDspoint *pt, const float point[3])
+{
+  copy_v3_v3(&pt->x, point);
+  gp_stroke_arrow_init_point_default(pt);
+}
+
+static void gp_stroke_arrow_init_point(
+    tGPsdata *p, tGPspoint *ptc, bGPDspoint *pt, const float co[8], const int co_idx)
+{
+  /* Note: provided co_idx should be always pair number as it's [x1, y1, x2, y2, x3, y3]. */
+  float real_co[2] = {co[co_idx], co[co_idx + 1]};
+  copy_v2_v2(&ptc->x, real_co);
+  gp_stroke_convertcoords(p, &ptc->x, &pt->x, NULL);
+  gp_stroke_arrow_init_point_default(pt);
+}
+
+static void gp_stroke_arrow_allocate(bGPDstroke *gps, const int totpoints)
+{
+  /* Copy appropriate settings for stroke. */
+  gps->totpoints = totpoints;
+  /* Allocate enough memory for a continuous array for storage points. */
+  gps->points = MEM_callocN(sizeof(bGPDspoint) * gps->totpoints, "gp_stroke_points");
+}
+
+static void gp_arrow_create_open(tGPsdata *p,
+                                 tGPspoint *ptc,
+                                 bGPDspoint *pt,
+                                 const float corner_point[3],
+                                 const float arrow_points[8])
+{
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 0);
+  pt++;
+  gp_stroke_arrow_init_conv_point(pt, corner_point);
+  pt++;
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 2);
+}
+
+static void gp_arrow_create_segm(tGPsdata *p,
+                                 tGPspoint *ptc,
+                                 bGPDspoint *pt,
+                                 const float arrow_points[8])
+{
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 0);
+  pt++;
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 2);
+}
+
+static void gp_arrow_create_closed(tGPsdata *p,
+                                   tGPspoint *ptc,
+                                   bGPDspoint *pt,
+                                   const float arrow_points[8])
+{
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 0);
+  pt++;
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 2);
+  pt++;
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 4);
+  pt++;
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 0);
+}
+
+static void gp_arrow_create_square(tGPsdata *p,
+                                   tGPspoint *ptc,
+                                   bGPDspoint *pt,
+                                   const float corner_point[3],
+                                   const float arrow_points[8])
+{
+  gp_stroke_arrow_init_conv_point(pt, corner_point);
+  pt++;
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 0);
+  pt++;
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 4);
+  pt++;
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 6);
+  pt++;
+  gp_stroke_arrow_init_point(p, ptc, pt, arrow_points, 2);
+  pt++;
+  gp_stroke_arrow_init_conv_point(pt, corner_point);
+}
+
+static void gp_arrow_create(tGPsdata *p,
+                            tGPspoint *ptc,
+                            bGPDspoint *pt,
+                            bGPDstroke *arrow_stroke,
+                            const float arrow_points[8],
+                            const int style)
+{
+  float corner_conv[3];
+  copy_v3_v3(corner_conv, &pt->x);
+
+  switch (style) {
+    case GP_STROKE_ARROWSTYLE_SEGMENT:
+      gp_arrow_create_segm(p, ptc, pt, arrow_points);
+      break;
+    case GP_STROKE_ARROWSTYLE_CLOSED:
+      gp_arrow_create_closed(p, ptc, pt, arrow_points);
+      break;
+    case GP_STROKE_ARROWSTYLE_OPEN:
+      gp_arrow_create_open(p, ptc, pt, corner_conv, arrow_points);
+      break;
+    case GP_STROKE_ARROWSTYLE_SQUARE:
+      gp_arrow_create_square(p, ptc, pt, corner_conv, arrow_points);
+      break;
+    default:
+      break;
+  }
+  /* Link stroke to frame. */
+  BLI_addtail(&p->gpf->strokes, arrow_stroke);
 }
 
 /* make a new stroke from the buffer data */
@@ -637,17 +883,61 @@ static void gp_stroke_newfrombuffer(tGPsdata *p)
     }
 
     if (totelem == 2) {
-      /* last point if applicable */
-      ptc = ((tGPspoint *)gpd->runtime.sbuffer) + (gpd->runtime.sbuffer_used - 1);
+      bGPdata_Runtime runtime = gpd->runtime;
 
-      /* convert screen-coordinates to appropriate coordinates (and store them) */
+      /* Last point if applicable. */
+      ptc = ((tGPspoint *)runtime.sbuffer) + (runtime.sbuffer_used - 1);
+
+      /* Convert screen-coordinates to appropriate coordinates (and store them). */
       gp_stroke_convertcoords(p, &ptc->x, &pt->x, NULL);
 
-      /* copy pressure and time */
+      /* Copy pressure and time. */
       pt->pressure = ptc->pressure;
       pt->strength = ptc->strength;
       CLAMP(pt->strength, GPENCIL_STRENGTH_MIN, 1.0f);
       pt->time = ptc->time;
+
+      /** Create arrow strokes. **/
+      /* End arrow stroke. */
+      if ((runtime.sbuffer_sflag & GP_STROKE_USE_ARROW_END) &&
+          (runtime.arrow_end_style != GP_STROKE_ARROWSTYLE_NONE)) {
+        int totarrowpoints = runtime.arrow_end_style;
+
+        /* Setting up arrow stroke. */
+        bGPDstroke *e_arrow_gps = BKE_gpencil_stroke_duplicate(gps, false);
+        gp_stroke_arrow_allocate(e_arrow_gps, totarrowpoints);
+
+        /* Set pointer to first non-initialized point. */
+        pt = e_arrow_gps->points + (e_arrow_gps->totpoints - totarrowpoints);
+
+        /* End point. */
+        ptc = ((tGPspoint *)runtime.sbuffer) + (runtime.sbuffer_used - 1);
+        gp_stroke_convertcoords(p, &ptc->x, &pt->x, NULL);
+        gp_stroke_arrow_init_point_default(pt);
+
+        /* Fill and convert arrow points to create arrow shape. */
+        gp_arrow_create(p, ptc, pt, e_arrow_gps, runtime.arrow_end, runtime.arrow_end_style);
+      }
+      /* Start arrow stroke. */
+      if ((runtime.sbuffer_sflag & GP_STROKE_USE_ARROW_START) &&
+          (runtime.arrow_start_style != GP_STROKE_ARROWSTYLE_NONE)) {
+        int totarrowpoints = runtime.arrow_start_style;
+
+        /* Setting up arrow stroke. */
+        bGPDstroke *s_arrow_gps = BKE_gpencil_stroke_duplicate(gps, false);
+        gp_stroke_arrow_allocate(s_arrow_gps, totarrowpoints);
+
+        /* Set pointer to first non-initialized point. */
+        pt = s_arrow_gps->points + (s_arrow_gps->totpoints - totarrowpoints);
+
+        /* Start point. */
+        ptc = runtime.sbuffer;
+        gp_stroke_convertcoords(p, &ptc->x, &pt->x, NULL);
+        gp_stroke_arrow_init_point_default(pt);
+
+        /* Fill and convert arrow points to create arrow shape. */
+        gp_arrow_create(p, ptc, pt, s_arrow_gps, runtime.arrow_start, runtime.arrow_start_style);
+      }
     }
   }
   else if (p->paintmode == GP_PAINTMODE_DRAW_POLY) {
@@ -1456,6 +1746,67 @@ static void gpencil_draw_toggle_eraser_cursor(bContext *C, tGPsdata *p, short en
                                                p);
   }
 }
+static void gpencil_draw_stabilizer(bContext *C, int x, int y, void *p_ptr)
+{
+  ARegion *region = CTX_wm_region(C);
+  tGPsdata *p = (tGPsdata *)p_ptr;
+  bGPdata_Runtime runtime = p->gpd->runtime;
+  const tGPspoint *points = runtime.sbuffer;
+  int totpoints = runtime.sbuffer_used;
+  if (totpoints < 2) {
+    return;
+  }
+  const tGPspoint *pt = &points[totpoints - 1];
+
+  GPUVertFormat *format = immVertexFormat();
+  uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+  immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+  GPU_line_smooth(true);
+  GPU_blend(true);
+  GPU_line_width(1.25f);
+  const float color[3] = {1.0f, 0.39f, 0.39f};
+
+  /* default radius and color */
+  float darkcolor[3];
+  const float radius = 4.0f;
+
+  /* Inner Ring: Color from UI panel */
+  immUniformColor4f(color[0], color[1], color[2], 0.8f);
+  imm_draw_circle_wire_2d(pos, x, y, radius, 40);
+
+  /* Outer Ring: Dark color for contrast on light backgrounds (e.g. gray on white) */
+  mul_v3_v3fl(darkcolor, color, 0.40f);
+  immUniformColor4f(darkcolor[0], darkcolor[1], darkcolor[2], 0.8f);
+  imm_draw_circle_wire_2d(pos, x, y, radius + 1, 40);
+
+  /* Rope Simple. */
+  immUniformColor4f(color[0], color[1], color[2], 0.8f);
+  immBegin(GPU_PRIM_LINES, 2);
+  immVertex2f(pos, pt->x + region->winrct.xmin, pt->y + region->winrct.ymin);
+  immVertex2f(pos, x, y);
+  immEnd();
+
+  /* Returns back all GPU settings */
+  GPU_blend(false);
+  GPU_line_smooth(false);
+
+  immUnbindProgram();
+}
+
+/* Turn *stabilizer* brush cursor in 3D view on/off */
+static void gpencil_draw_toggle_stabilizer_cursor(bContext *C, tGPsdata *p, short enable)
+{
+  if (p->stabilizer_cursor && !enable) {
+    /* clear cursor */
+    WM_paint_cursor_end(CTX_wm_manager(C), p->stabilizer_cursor);
+    p->stabilizer_cursor = NULL;
+  }
+  else if (enable && !p->stabilizer_cursor) {
+    /* enable cursor */
+    p->stabilizer_cursor = WM_paint_cursor_activate(
+        CTX_wm_manager(C), SPACE_TYPE_ANY, RGN_TYPE_ANY, NULL, gpencil_draw_stabilizer, p);
+  }
+}
 
 /* Check if tablet eraser is being used (when processing events) */
 static bool gpencil_is_tablet_eraser_active(const wmEvent *event)
@@ -1478,6 +1829,9 @@ static void gpencil_draw_exit(bContext *C, wmOperator *op)
     if (p->paintmode == GP_PAINTMODE_ERASER) {
       /* turn off radial brush cursor */
       gpencil_draw_toggle_eraser_cursor(C, p, false);
+    }
+    else if (p->paintmode == GP_PAINTMODE_DRAW) {
+      gpencil_draw_toggle_stabilizer_cursor(C, p, false);
     }
 
     /* always store the new eraser size to be used again next time
@@ -1566,8 +1920,8 @@ static void gpencil_draw_status_indicators(bContext *C, tGPsdata *p)
                    "ESC/Enter to end  (or click outside this area)"));
           break;
         default:
-          /* Do nothing - the others are self explanatory, exit quickly once the mouse is released
-           * Showing any text would just be annoying as it would flicker.
+          /* Do nothing - the others are self explanatory, exit quickly once the mouse is
+           * released Showing any text would just be annoying as it would flicker.
            */
           break;
       }
@@ -1632,6 +1986,16 @@ static void gpencil_draw_apply(wmOperator *op, tGPsdata *p, Depsgraph *depsgraph
   /* Only add current point to buffer if mouse moved
    * (even though we got an event, it might be just noise). */
   else if (gp_stroke_filtermval(p, p->mval, p->mvalo)) {
+    /* If lazy mouse, interpolate the last and current mouse positions. */
+    if (p->flags & GP_PAINTFLAG_USE_STABILIZER_TEMP) {
+      float now_mouse[2];
+      float last_mouse[2];
+      copy_v2_v2(now_mouse, p->mval);
+      copy_v2_v2(last_mouse, p->mvalo);
+      interp_v2_v2v2(now_mouse, now_mouse, last_mouse, min_ff(p->stabilizer_factor, .995f));
+      copy_v2_v2(p->mval, now_mouse);
+    }
+
     /* try to add point */
     short ok = gp_stroke_addpoint(p, p->mval, p->pressure, p->curtime);
 
@@ -1675,7 +2039,7 @@ static void gpencil_draw_apply(wmOperator *op, tGPsdata *p, Depsgraph *depsgraph
 
 /* handle draw event */
 static void annotation_draw_apply_event(
-    wmOperator *op, const wmEvent *event, Depsgraph *depsgraph, float x, float y)
+    bContext *C, wmOperator *op, const wmEvent *event, Depsgraph *depsgraph, float x, float y)
 {
   tGPsdata *p = op->customdata;
   PointerRNA itemptr;
@@ -1687,8 +2051,23 @@ static void annotation_draw_apply_event(
   p->mval[0] = (float)event->mval[0] - x;
   p->mval[1] = (float)event->mval[1] - y;
 
+  /* Key to toggle stabilization. */
+  if (event->shift > 0 && p->paintmode == GP_PAINTMODE_DRAW) {
+    /* Using permanent stabilization, shift will deactivate the flag. */
+    if (p->flags & (GP_PAINTFLAG_USE_STABILIZER)) {
+      if (p->flags & GP_PAINTFLAG_USE_STABILIZER_TEMP) {
+        gpencil_draw_toggle_stabilizer_cursor(C, p, false);
+        p->flags &= ~GP_PAINTFLAG_USE_STABILIZER_TEMP;
+      }
+    }
+    /* Not using any stabilization flag. Activate temporal one. */
+    else if ((p->flags & GP_PAINTFLAG_USE_STABILIZER_TEMP) == 0) {
+      p->flags |= GP_PAINTFLAG_USE_STABILIZER_TEMP;
+      gpencil_draw_toggle_stabilizer_cursor(C, p, true);
+    }
+  }
   /* verify key status for straight lines */
-  if ((event->ctrl > 0) || (event->alt > 0)) {
+  else if ((event->ctrl > 0) || (event->alt > 0)) {
     if (p->straight[0] == 0) {
       int dx = abs((int)(p->mval[0] - p->mvalo[0]));
       int dy = abs((int)(p->mval[1] - p->mvalo[1]));
@@ -1709,6 +2088,22 @@ static void annotation_draw_apply_event(
   }
   else {
     p->straight[0] = 0;
+    /* We were using shift while having permanent stabilization actived,
+       so activate the temp flag back again. */
+    if (p->flags & GP_PAINTFLAG_USE_STABILIZER) {
+      if ((p->flags & GP_PAINTFLAG_USE_STABILIZER_TEMP) == 0) {
+        gpencil_draw_toggle_stabilizer_cursor(C, p, true);
+        p->flags |= GP_PAINTFLAG_USE_STABILIZER_TEMP;
+      }
+    }
+    /* We are using the temporal stabilizer flag atm,
+       but shift is not pressed as well as the permanent flag is not used,
+       so we don't need the cursor anymore. */
+    else if (p->flags & GP_PAINTFLAG_USE_STABILIZER_TEMP) {
+      /* Reset temporal stabilizer flag and remove cursor. */
+      p->flags &= ~GP_PAINTFLAG_USE_STABILIZER_TEMP;
+      gpencil_draw_toggle_stabilizer_cursor(C, p, false);
+    }
   }
 
   p->curtime = PIL_check_seconds_timer();
@@ -1896,11 +2291,34 @@ static int gpencil_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event
   /* TODO: set any additional settings that we can take from the events?
    * TODO? if tablet is erasing, force eraser to be on? */
 
-  /* TODO: move cursor setting stuff to stroke-start so that paintmode can be changed midway... */
+  /* TODO: move cursor setting stuff to stroke-start so that paintmode can be changed midway...
+   */
 
   /* if eraser is on, draw radial aid */
   if (p->paintmode == GP_PAINTMODE_ERASER) {
     gpencil_draw_toggle_eraser_cursor(C, p, true);
+  }
+  else if (p->paintmode == GP_PAINTMODE_DRAW_STRAIGHT) {
+    if (RNA_enum_get(op->ptr, "arrowstyle_start") != GP_STROKE_ARROWSTYLE_NONE) {
+      p->gpd->runtime.sbuffer_sflag |= GP_STROKE_USE_ARROW_START;
+      p->gpd->runtime.arrow_start_style = RNA_enum_get(op->ptr, "arrowstyle_start");
+    }
+    if (RNA_enum_get(op->ptr, "arrowstyle_end") != GP_STROKE_ARROWSTYLE_NONE) {
+      p->gpd->runtime.sbuffer_sflag |= GP_STROKE_USE_ARROW_END;
+      p->gpd->runtime.arrow_end_style = RNA_enum_get(op->ptr, "arrowstyle_end");
+    }
+  }
+  else if (p->paintmode == GP_PAINTMODE_DRAW) {
+    p->stabilizer_factor = RNA_float_get(op->ptr, "stabilizer_factor");
+    p->stabilizer_radius = RNA_int_get(op->ptr, "stabilizer_radius");
+    if (RNA_boolean_get(op->ptr, "use_stabilizer")) {
+      p->flags |= GP_PAINTFLAG_USE_STABILIZER | GP_PAINTFLAG_USE_STABILIZER_TEMP;
+      gpencil_draw_toggle_stabilizer_cursor(C, p, true);
+    }
+    else if (event->shift > 0) {
+      p->flags |= GP_PAINTFLAG_USE_STABILIZER_TEMP;
+      gpencil_draw_toggle_stabilizer_cursor(C, p, true);
+    }
   }
   /* set cursor
    * NOTE: This may change later (i.e. intentionally via brush toggle,
@@ -1915,7 +2333,7 @@ static int gpencil_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event
     p->status = GP_STATUS_PAINTING;
 
     /* handle the initial drawing - i.e. for just doing a simple dot */
-    annotation_draw_apply_event(op, event, CTX_data_ensure_evaluated_depsgraph(C), 0.0f, 0.0f);
+    annotation_draw_apply_event(C, op, event, CTX_data_ensure_evaluated_depsgraph(C), 0.0f, 0.0f);
     op->flag |= OP_IS_MODAL_CURSOR_REGION;
   }
   else {
@@ -2007,7 +2425,7 @@ static void annotation_add_missing_events(bContext *C,
     interp_v2_v2v2(pt, a, b, 0.5f);
     sub_v2_v2v2(pt, b, pt);
     /* create fake event */
-    annotation_draw_apply_event(op, event, depsgraph, pt[0], pt[1]);
+    annotation_draw_apply_event(C, op, event, depsgraph, pt[0], pt[1]);
   }
   else if (dist >= factor) {
     int slices = 2 + (int)((dist - 1.0) / factor);
@@ -2016,7 +2434,7 @@ static void annotation_add_missing_events(bContext *C,
       interp_v2_v2v2(pt, a, b, n * i);
       sub_v2_v2v2(pt, b, pt);
       /* create fake event */
-      annotation_draw_apply_event(op, event, depsgraph, pt[0], pt[1]);
+      annotation_draw_apply_event(C, op, event, depsgraph, pt[0], pt[1]);
     }
   }
 }
@@ -2106,7 +2524,8 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
   }
 
   /* toggle painting mode upon mouse-button movement
-   *  - LEFTMOUSE  = standard drawing (all) / straight line drawing (all) / polyline (toolbox only)
+   *  - LEFTMOUSE  = standard drawing (all) / straight line drawing (all) / polyline (toolbox
+   * only)
    *  - RIGHTMOUSE = polyline (hotkey) / eraser (all)
    *    (Disabling RIGHTMOUSE case here results in bugs like [#32647])
    * also making sure we have a valid event value, to not exit too early
@@ -2262,7 +2681,8 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
       }
 
       /* TODO(sergey): Possibly evaluating dependency graph from modal operator? */
-      annotation_draw_apply_event(op, event, CTX_data_ensure_evaluated_depsgraph(C), 0.0f, 0.0f);
+      annotation_draw_apply_event(
+          C, op, event, CTX_data_ensure_evaluated_depsgraph(C), 0.0f, 0.0f);
 
       /* finish painting operation if anything went wrong just now */
       if (p->status == GP_STATUS_ERROR) {
@@ -2370,6 +2790,19 @@ static const EnumPropertyItem prop_gpencil_drawmodes[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
+static const EnumPropertyItem arrow_types[] = {
+    {GP_STROKE_ARROWSTYLE_NONE, "NONE", 0, "None", "Don't use any arrow/style in corner"},
+    {GP_STROKE_ARROWSTYLE_CLOSED, "ARROW", 0, "Arrow", "Use closed arrow style"},
+    {GP_STROKE_ARROWSTYLE_OPEN, "ARROW_OPEN", 0, "Open Arrow", "Use open arrow style"},
+    {GP_STROKE_ARROWSTYLE_SEGMENT,
+     "ARROW_OPEN_INVERTED",
+     0,
+     "Segment",
+     "Use perpendicular segment style"},
+    {GP_STROKE_ARROWSTYLE_SQUARE, "DIAMOND", 0, "Square", "Use square style"},
+    {0, NULL, 0, NULL, NULL},
+};
+
 void GPENCIL_OT_annotate(wmOperatorType *ot)
 {
   PropertyRNA *prop;
@@ -2392,6 +2825,37 @@ void GPENCIL_OT_annotate(wmOperatorType *ot)
   /* settings for drawing */
   ot->prop = RNA_def_enum(
       ot->srna, "mode", prop_gpencil_drawmodes, 0, "Mode", "Way to interpret mouse movements");
+
+  /* properties */
+  prop = RNA_def_enum(
+      ot->srna, "arrowstyle_start", arrow_types, 0, "Start Arrow Style", "Stroke start style");
+  prop = RNA_def_enum(
+      ot->srna, "arrowstyle_end", arrow_types, 0, "End Arrow Style", "Stroke end style");
+  prop = RNA_def_boolean(ot->srna,
+                         "use_stabilizer",
+                         false,
+                         "Stabilize Stroke",
+                         "Helper to draw smooth and clean lines. Press Shift for an invert effect "
+                         "(even if this option is not active)");
+  prop = RNA_def_float(ot->srna,
+                       "stabilizer_factor",
+                       0.75f,
+                       0.0f,
+                       1.0f,
+                       "Stabilizer Stroke Factor",
+                       "Higher values gives a smoother stroke",
+                       0.0f,
+                       1.0f);
+  prop = RNA_def_int(ot->srna,
+                     "stabilizer_radius",
+                     35,
+                     0,
+                     200,
+                     "Stabilizer Stroke Radius",
+                     "Minimun distance from last point before stroke continues",
+                     1,
+                     100);
+  RNA_def_property_subtype(prop, PROP_PIXEL);
 
   prop = RNA_def_collection_runtime(ot->srna, "stroke", &RNA_OperatorStrokeElement, "Stroke", "");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);

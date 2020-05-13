@@ -23,11 +23,11 @@
  * \ingroup bke
  */
 
+#include "DNA_scene_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "DNA_scene_types.h"
 
 struct BezTriple;
 struct Curve;
@@ -110,6 +110,8 @@ bool BKE_curve_material_index_used(struct Curve *cu, int index);
 void BKE_curve_material_index_clear(struct Curve *cu);
 bool BKE_curve_material_index_validate(struct Curve *cu);
 void BKE_curve_material_remap(struct Curve *cu, const unsigned int *remap, unsigned int remap_len);
+
+void BKE_curve_smooth_flag_set(struct Curve *cu, const bool use_smooth);
 
 ListBase *BKE_curve_nurbs_get(struct Curve *cu);
 

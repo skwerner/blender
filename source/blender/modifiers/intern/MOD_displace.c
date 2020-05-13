@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -134,19 +134,28 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   DisplaceModifierData *dmd = (DisplaceModifierData *)md;
-  if (dmd->map_object != NULL && dmd->texmapping == MOD_DISP_MAP_OBJECT) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
-    DEG_add_object_relation(
-        ctx->node, dmd->map_object, DEG_OB_COMP_TRANSFORM, "Displace Modifier");
+  bool need_transform_relation = false;
+
+  if (dmd->space == MOD_DISP_SPACE_GLOBAL &&
+      ELEM(dmd->direction, MOD_DISP_DIR_X, MOD_DISP_DIR_Y, MOD_DISP_DIR_Z, MOD_DISP_DIR_RGB_XYZ)) {
+    need_transform_relation = true;
   }
-  if (dmd->texmapping == MOD_DISP_MAP_GLOBAL ||
-      (ELEM(
-           dmd->direction, MOD_DISP_DIR_X, MOD_DISP_DIR_Y, MOD_DISP_DIR_Z, MOD_DISP_DIR_RGB_XYZ) &&
-       dmd->space == MOD_DISP_SPACE_GLOBAL)) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
-  }
+
   if (dmd->texture != NULL) {
     DEG_add_generic_id_relation(ctx->node, &dmd->texture->id, "Displace Modifier");
+
+    if (dmd->map_object != NULL && dmd->texmapping == MOD_DISP_MAP_OBJECT) {
+      MOD_depsgraph_update_object_bone_relation(
+          ctx->node, dmd->map_object, dmd->map_bone, "Displace Modifier");
+      need_transform_relation = true;
+    }
+    if (dmd->texmapping == MOD_DISP_MAP_GLOBAL) {
+      need_transform_relation = true;
+    }
+  }
+
+  if (need_transform_relation) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
   }
 }
 
@@ -412,13 +421,16 @@ ModifierTypeInfo modifierType_Displace = {
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

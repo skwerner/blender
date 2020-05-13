@@ -1068,7 +1068,7 @@ static void drw_engines_draw_text(void)
 }
 
 /* Draw render engine info. */
-void DRW_draw_region_engine_info(int xoffset, int yoffset)
+void DRW_draw_region_engine_info(int xoffset, int *yoffset, int line_height)
 {
   LISTBASE_FOREACH (LinkData *, link, &DST.enabled_engines) {
     DrawEngineType *engine = link->data;
@@ -1091,8 +1091,8 @@ void DRW_draw_region_engine_info(int xoffset, int yoffset)
         if (*chr_current == '\n') {
           char info[GPU_INFO_SIZE];
           BLI_strncpy(info, chr_start, line_len + 1);
-          yoffset -= U.widget_unit;
-          BLF_draw_default(xoffset, yoffset, 0.0f, info, sizeof(info));
+          *yoffset -= line_height;
+          BLF_draw_default(xoffset, *yoffset, 0.0f, info, sizeof(info));
 
           /* Re-start counting. */
           chr_start = chr_current + 1;
@@ -1102,8 +1102,8 @@ void DRW_draw_region_engine_info(int xoffset, int yoffset)
 
       char info[GPU_INFO_SIZE];
       BLI_strncpy(info, chr_start, line_len + 1);
-      yoffset -= U.widget_unit;
-      BLF_draw_default(xoffset, yoffset, 0.0f, info, sizeof(info));
+      *yoffset -= line_height;
+      BLF_draw_default(xoffset, *yoffset, 0.0f, info, sizeof(info));
 
       BLF_disable(font_id, BLF_SHADOW);
     }
@@ -1296,9 +1296,6 @@ void DRW_draw_callbacks_post_scene(void)
     DRW_state_reset();
 
     GPU_framebuffer_bind(dfbl->overlay_fb);
-    /* Disable sRGB encoding from the fixed function pipeline since all the drawing in this
-     * function is done with sRGB color. Avoid double transform. */
-    glDisable(GL_FRAMEBUFFER_SRGB);
 
     GPU_matrix_projection_set(rv3d->winmat);
     GPU_matrix_set(rv3d->viewmat);
@@ -1509,6 +1506,8 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
 
   /* Fix 3D view being "laggy" on macos and win+nvidia. (See T56996, T61474) */
   GPU_flush();
+
+  DRW_stats_reset();
 
   DRW_draw_callbacks_post_scene();
 
@@ -2028,7 +2027,7 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
         Object *obweight = OBWEIGHTPAINT_FROM_OBACT(obact);
         if (obweight) {
           /* Only use Armature pose selection, when connected armature is in pose mode. */
-          Object *ob_armature = modifiers_isDeformedByArmature(obweight);
+          Object *ob_armature = BKE_modifiers_is_deformed_by_armature(obweight);
           if (ob_armature && ob_armature->mode == OB_MODE_POSE) {
             obpose = ob_armature;
           }
@@ -2057,7 +2056,9 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
   }
   else if (!draw_surface) {
     /* grease pencil selection */
-    use_drw_engine(&draw_engine_gpencil_type);
+    if (drw_gpencil_engine_needed(depsgraph, v3d)) {
+      use_drw_engine(&draw_engine_gpencil_type);
+    }
 
     drw_engines_enable_overlays();
   }
@@ -2065,7 +2066,9 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
     /* Draw surface for occlusion. */
     drw_engines_enable_basic();
     /* grease pencil selection */
-    use_drw_engine(&draw_engine_gpencil_type);
+    if (drw_gpencil_engine_needed(depsgraph, v3d)) {
+      use_drw_engine(&draw_engine_gpencil_type);
+    }
 
     drw_engines_enable_overlays();
   }
@@ -2429,7 +2432,8 @@ static void draw_world_clip_planes_from_rv3d(GPUBatch *batch, const float world_
 /**
  * Clears the Depth Buffer and draws only the specified object.
  */
-void DRW_draw_depth_object(ARegion *region, View3D *v3d, GPUViewport *viewport, Object *object)
+void DRW_draw_depth_object(
+    Scene *scene, ARegion *region, View3D *v3d, GPUViewport *viewport, Object *object)
 {
   RegionView3D *rv3d = region->regiondata;
 
@@ -2467,7 +2471,7 @@ void DRW_draw_depth_object(ARegion *region, View3D *v3d, GPUViewport *viewport, 
         batch = DRW_mesh_batch_cache_get_surface(me);
       }
 
-      DRW_mesh_batch_cache_create_requested(object, me, NULL, false, true);
+      DRW_mesh_batch_cache_create_requested(object, me, scene, false, true);
 
       const eGPUShaderConfig sh_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED :
                                                           GPU_SHADER_CFG_DEFAULT;

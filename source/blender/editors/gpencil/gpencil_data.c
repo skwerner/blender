@@ -55,7 +55,7 @@
 #include "BKE_brush.h"
 #include "BKE_context.h"
 #include "BKE_deform.h"
-#include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
 #include "BKE_lib_id.h"
@@ -241,10 +241,8 @@ static int gp_layer_add_exec(bContext *C, wmOperator *op)
     if ((ob != NULL) && (ob->type == OB_GPENCIL)) {
       gpd = (bGPdata *)ob->data;
       bGPDlayer *gpl = BKE_gpencil_layer_addnew(gpd, DATA_("GP_Layer"), true);
-      ScrArea *area = CTX_wm_area(C);
-
-      /* In dopesheet add a new frame. */
-      if ((gpl != NULL) && (area->spacetype == SPACE_ACTION)) {
+      /* Add a new frame to make it visible in Dopesheet. */
+      if (gpl != NULL) {
         gpl->actframe = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_ADD_NEW);
       }
     }
@@ -2621,7 +2619,7 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
 
         /* Apply all GP modifiers before */
         LISTBASE_FOREACH (GpencilModifierData *, md, &ob_iter->greasepencil_modifiers) {
-          const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
+          const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
           if (mti->bakeModifier) {
             mti->bakeModifier(bmain, depsgraph, md, ob_iter);
           }
@@ -3195,7 +3193,7 @@ void GPENCIL_OT_material_unlock_all(wmOperatorType *ot)
 
 /* ***************** Select all strokes using color ************************ */
 
-static int gpencil_select_material_exec(bContext *C, wmOperator *op)
+static int gpencil_material_select_exec(bContext *C, wmOperator *op)
 {
   bGPdata *gpd = ED_gpencil_data_get_active(C);
   Object *ob = CTX_data_active_object(C);
@@ -3265,15 +3263,15 @@ static int gpencil_select_material_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-void GPENCIL_OT_select_material(wmOperatorType *ot)
+void GPENCIL_OT_material_select(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Select Material";
-  ot->idname = "GPENCIL_OT_select_material";
+  ot->idname = "GPENCIL_OT_material_select";
   ot->description = "Select/Deselect all Grease Pencil strokes using current material";
 
   /* callbacks */
-  ot->exec = gpencil_select_material_exec;
+  ot->exec = gpencil_material_select_exec;
   ot->poll = gpencil_active_material_poll;
 
   /* flags */
@@ -3282,6 +3280,48 @@ void GPENCIL_OT_select_material(wmOperatorType *ot)
   /* props */
   ot->prop = RNA_def_boolean(ot->srna, "deselect", 0, "Deselect", "Unselect strokes");
   RNA_def_property_flag(ot->prop, PROP_HIDDEN | PROP_SKIP_SAVE);
+}
+
+/* ***************** Set active material ************************* */
+static int gpencil_material_set_exec(bContext *C, wmOperator *op)
+{
+  Object *ob = CTX_data_active_object(C);
+  int slot = RNA_enum_get(op->ptr, "slot");
+
+  /* Try to get material */
+  if ((slot < 1) || (slot > ob->totcol)) {
+    BKE_reportf(
+        op->reports, RPT_ERROR, "Cannot change to non-existent material (index = %d)", slot);
+    return OPERATOR_CANCELLED;
+  }
+
+  /* Set active material. */
+  ob->actcol = slot;
+
+  /* updates */
+  WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
+  WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_SELECTED, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+void GPENCIL_OT_material_set(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Set Material";
+  ot->idname = "GPENCIL_OT_material_set";
+  ot->description = "Set active material";
+
+  /* callbacks */
+  ot->exec = gpencil_material_set_exec;
+  ot->poll = gpencil_active_material_poll;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  /* Material to use (dynamic enum) */
+  ot->prop = RNA_def_enum(ot->srna, "slot", DummyRNA_DEFAULT_items, 0, "Material Slot", "");
+  RNA_def_enum_funcs(ot->prop, ED_gpencil_material_enum_itemf);
 }
 
 /* ***************** Set selected stroke material the active material ************************ */
@@ -3346,7 +3386,7 @@ bool ED_gpencil_add_lattice_modifier(const bContext *C,
   }
 
   /* if no lattice modifier, add a new one */
-  GpencilModifierData *md = BKE_gpencil_modifiers_findByType(ob, eGpencilModifierType_Lattice);
+  GpencilModifierData *md = BKE_gpencil_modifiers_findby_type(ob, eGpencilModifierType_Lattice);
   if (md == NULL) {
     md = ED_object_gpencil_modifier_add(
         reports, bmain, scene, ob, "Lattice", eGpencilModifierType_Lattice);

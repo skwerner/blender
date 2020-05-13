@@ -125,7 +125,6 @@ class VIEW3D_HT_tool_header(Header):
 
                     if brush.gpencil_tool not in {'FILL', 'TINT'}:
                         layout.popover("VIEW3D_PT_tools_grease_pencil_brush_stroke")
-                        layout.popover("VIEW3D_PT_tools_grease_pencil_brushcurves")
 
                     layout.popover("VIEW3D_PT_tools_grease_pencil_paint_appearance")
         elif tool_mode == 'SCULPT_GPENCIL':
@@ -830,18 +829,17 @@ class VIEW3D_HT_header(Header):
 
         # While exposing 'shading.show_xray(_wireframe)' is correct.
         # this hides the key shortcut from users: T70433.
+        if has_pose_mode:
+            draw_depressed = overlay.show_xray_bone
+        elif shading.type == 'WIREFRAME':
+            draw_depressed = shading.show_xray_wireframe
+        else:
+            draw_depressed = shading.show_xray
         row.operator(
             "view3d.toggle_xray",
             text="",
             icon='XRAY',
-            depress=(
-                overlay.show_xray_bone if has_pose_mode else
-                getattr(
-                    shading,
-                    "show_xray_wireframe" if shading.type == 'WIREFRAME' else
-                    "show_xray"
-                )
-            ),
+            depress=draw_depressed,
         )
 
         row = layout.row(align=True)
@@ -993,6 +991,7 @@ class VIEW3D_MT_transform(VIEW3D_MT_transform_base):
         layout = self.layout
         if context.mode == 'EDIT_MESH':
             layout.operator("transform.shrink_fatten", text="Shrink Fatten")
+            layout.operator("transform.skin_resize")
         elif context.mode == 'EDIT_CURVE':
             layout.operator("transform.transform", text="Radius").mode = 'CURVE_SHRINKFATTEN'
 
@@ -1164,7 +1163,7 @@ class VIEW3D_MT_view(Menu):
         if view.region_quadviews:
             layout.operator("view3d.view_selected", text="Frame Selected (Quad View)").use_all_regions = True
 
-        layout.operator("view3d.view_all", text="Frame All").center = False
+        layout.operator("view3d.view_all").center = False
         layout.operator("view3d.view_persportho", text="Perspective/Orthographic")
         layout.menu("VIEW3D_MT_view_local")
 
@@ -1295,7 +1294,7 @@ class VIEW3D_MT_view_align(Menu):
 
         layout.separator()
 
-        layout.operator("view3d.view_all", text="Center Cursor and View All").center = True
+        layout.operator("view3d.view_all", text="Center Cursor and Frame All").center = True
         layout.operator("view3d.view_center_cursor")
 
         layout.separator()
@@ -3763,11 +3762,6 @@ class VIEW3D_MT_edit_mesh_context_menu(Menu):
 
             col.separator()
 
-            col.operator("mesh.mark_seam").clear = False
-            col.operator("mesh.mark_seam", text="Clear Seam").clear = True
-
-            col.separator()
-
             col.operator("mesh.mark_sharp")
             col.operator("mesh.mark_sharp", text="Clear Sharp").clear = True
 
@@ -3879,6 +3873,8 @@ class VIEW3D_MT_edit_mesh_extrude(Menu):
         return menu
 
     def draw(self, context):
+        from math import pi
+
         layout = self.layout
         layout.operator_context = 'INVOKE_REGION_WIN'
 
@@ -3888,6 +3884,7 @@ class VIEW3D_MT_edit_mesh_extrude(Menu):
         layout.separator()
 
         layout.operator("mesh.extrude_repeat")
+        layout.operator("mesh.spin").angle = pi * 2
 
 
 class VIEW3D_MT_edit_mesh_vertices(Menu):
@@ -4001,16 +3998,12 @@ class VIEW3D_MT_edit_mesh_edges(Menu):
         layout.separator()
 
         layout.operator("transform.edge_slide")
+        layout.operator("mesh.offset_edge_loops_slide")
 
         layout.separator()
 
         layout.operator("transform.edge_crease")
         layout.operator("transform.edge_bevelweight")
-
-        layout.separator()
-
-        layout.operator("mesh.mark_seam").clear = False
-        layout.operator("mesh.mark_seam", text="Clear Seam").clear = True
 
         layout.separator()
 
@@ -5297,6 +5290,7 @@ class VIEW3D_MT_sculpt_mask_edit_pie(Menu):
         op.auto_iteration_count = False
 
 class VIEW3D_MT_sculpt_face_sets_edit_pie(Menu):
+
     bl_label = "Face Sets Edit"
 
     def draw(self, _context):
@@ -5392,8 +5386,8 @@ class VIEW3D_PT_view3d_properties(Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False  # No animation.
 
-        flow = layout.grid_flow(row_major=True, columns=0, even_columns=False, even_rows=False, align=True)
-        col = flow.column()
+
+        col = layout.column()
 
         subcol = col.column()
         subcol.active = bool(view.region_3d.view_perspective != 'CAMERA' or view.region_quadviews)
@@ -5403,20 +5397,22 @@ class VIEW3D_PT_view3d_properties(Panel):
         subcol.prop(view, "clip_start", text="Clip Start")
         subcol.prop(view, "clip_end", text="End")
 
-        subcol.separator()
+        layout.separator()
 
-        col = flow.column()
+        col = layout.column(align=False, heading="Local Camera")
+        col.use_property_decorate = False
+        row = col.row(align=True)
+        sub = row.row(align=True)
+        sub.prop(view, "use_local_camera", text="")
+        sub = sub.row(align=True)
+        sub.enabled = view.use_local_camera
+        sub.prop(view, "camera", text="")
 
-        subcol = col.column()
-        subcol.prop(view, "use_local_camera")
+        layout.separator()
 
-        subcol = col.column()
-        subcol.enabled = view.use_local_camera
-        subcol.prop(view, "camera", text="Local Camera")
-
-        subcol = col.column(align=True)
-        subcol.prop(view, "use_render_border")
-        subcol.active = view.region_3d.view_perspective != 'CAMERA'
+        col = layout.column(align=True)
+        col.prop(view, "use_render_border")
+        col.active = view.region_3d.view_perspective != 'CAMERA'
 
 
 class VIEW3D_PT_view3d_lock(Panel):
@@ -5435,23 +5431,24 @@ class VIEW3D_PT_view3d_lock(Panel):
         view = context.space_data
 
         col = layout.column(align=True)
-        subcol = col.column()
-        subcol.active = bool(view.region_3d.view_perspective != 'CAMERA' or view.region_quadviews)
+        sub = col.column()
+        sub.active = bool(view.region_3d.view_perspective != 'CAMERA' or view.region_quadviews)
 
-        subcol.prop(view, "lock_object")
+        sub.prop(view, "lock_object")
         lock_object = view.lock_object
         if lock_object:
             if lock_object.type == 'ARMATURE':
-                subcol.prop_search(
+                sub.prop_search(
                     view, "lock_bone", lock_object.data,
                     "edit_bones" if lock_object.mode == 'EDIT'
                     else "bones",
                     text="",
                 )
         else:
-            subcol.prop(view, "lock_cursor", text="Lock to 3D Cursor")
+            subcol = sub.column(heading="Lock")
+            subcol.prop(view, "lock_cursor", text="To 3D Cursor")
 
-        col.prop(view, "lock_camera")
+        col.prop(view, "lock_camera", text="Camera to View")
 
 
 class VIEW3D_PT_view3d_cursor(Panel):
@@ -6041,15 +6038,16 @@ class VIEW3D_PT_overlay_guides(Panel):
         split = col.split()
         sub = split.column()
         sub.prop(overlay, "show_text", text="Text Info")
+        sub.prop(overlay, "show_stats", text="Statistics")
+
         sub = split.column()
         sub.prop(overlay, "show_cursor", text="3D Cursor")
+        sub.prop(overlay, "show_annotation", text="Annotations")
 
         if shading.type == 'MATERIAL':
             row = col.row()
             row.active = shading.render_pass == 'COMBINED'
             row.prop(overlay, "show_look_dev")
-
-        col.prop(overlay, "show_annotation", text="Annotations")
 
 
 class VIEW3D_PT_overlay_object(Panel):
@@ -7051,6 +7049,18 @@ def draw_gpencil_layer_active(context, layout):
             row.operator("gpencil.layer_remove", text="", icon='X')
 
 
+def draw_gpencil_material_active(context, layout):
+        ob = context.active_object
+        if ob and len(ob.material_slots) > 0 and ob.active_material_index >= 0:
+            ma = ob.material_slots[ob.active_material_index].material
+            if ma:
+                layout.label(text="Active Material")
+                row = layout.row(align=True)
+                row.operator_context = 'EXEC_REGION_WIN'
+                row.operator_menu_enum("gpencil.material_set", "slot", text="", icon='MATERIAL')
+                row.prop(ma, "name", text="")
+
+
 class VIEW3D_PT_gpencil_sculpt_context_menu(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'WINDOW'
@@ -7124,6 +7134,9 @@ class VIEW3D_PT_gpencil_draw_context_menu(Panel):
 
         # Layers
         draw_gpencil_layer_active(context, layout)
+        # Material
+        if not is_vertex:
+            draw_gpencil_material_active(context, layout)
 
 
 class VIEW3D_PT_gpencil_vertex_context_menu(Panel):

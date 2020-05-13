@@ -68,7 +68,7 @@ c_s_sp$ID$ = 0.4   # classification constant for snd parts\n\
 c_b_sp$ID$ = 0.77  # classification constant for snd parts\n\
 pot_radius_sp$ID$ = $SNDPARTICLE_POTENTIAL_RADIUS$\n\
 update_radius_sp$ID$ = $SNDPARTICLE_UPDATE_RADIUS$\n\
-scaleFromManta_sp$ID$ = $FLUID_DOMAIN_SIZE$ / float(res_s$ID$) # resize factor for snd parts\n";
+using_snd_pushout_sp$ID$ = $SNDPARTICLE_BOUNDARY_PUSHOUT$\n";
 
 //////////////////////////////////////////////////////////////////////
 // GRIDS & MESH & PARTICLESYSTEM
@@ -173,14 +173,14 @@ def liquid_adaptive_step_$ID$(framenr):\n\
     if using_obstacle_s$ID$:\n\
         mantaMsg('Initializing obstacle levelset')\n\
         phiObsIn_s$ID$.join(phiObsSIn_s$ID$) # Join static obstacle map\n\
-        phiObsIn_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=2)\n\
+        phiObsIn_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=1)\n\
         extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=6, inside=True)\n\
         extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=3, inside=False)\n\
         phiObs_s$ID$.join(phiObsIn_s$ID$)\n\
         \n\
         # Using boundaryWidth=2 to not search beginning from walls (just a performance optimization)\n\
         # Additional sanity check: fill holes in phiObs which can result after joining with phiObsIn\n\
-        phiObs_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=2)\n\
+        phiObs_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=2 if using_fractions_s$ID$ else 1)\n\
         extrapolateLsSimple(phi=phiObs_s$ID$, distance=6, inside=True)\n\
         extrapolateLsSimple(phi=phiObs_s$ID$, distance=3)\n\
     \n\
@@ -191,6 +191,7 @@ def liquid_adaptive_step_$ID$(framenr):\n\
     phi_s$ID$.join(phiIn_s$ID$)\n\
     \n\
     if using_outflow_s$ID$:\n\
+        phiOutIn_s$ID$.join(phiOutSIn_s$ID$) # Join static outflow map\n\
         phiOut_s$ID$.join(phiOutIn_s$ID$)\n\
     \n\
     if using_fractions_s$ID$:\n\
@@ -206,6 +207,9 @@ def liquid_adaptive_step_$ID$(framenr):\n\
         extrapolateVec3Simple(vel=invelC_s$ID$, phi=phiIn_s$ID$, distance=6, inside=True)\n\
         resampleVec3ToMac(source=invelC_s$ID$, target=invel_s$ID$)\n\
         pVel_pp$ID$.setSource(invel_s$ID$, isMAC=True)\n\
+    # ensure that pvel has vel as source (important when resuming bake jobs)\n\
+    else:\n\
+        pVel_pp$ID$.setSource(vel_s$ID$, isMAC=True)\n\
     \n\
     sampleLevelsetWithParticles(phi=phiIn_s$ID$, flags=flags_s$ID$, parts=pp_s$ID$, discretization=particleNumber_s$ID$, randomness=randomness_s$ID$)\n\
     flags_s$ID$.updateFromLevelset(phi_s$ID$)\n\
@@ -259,7 +263,7 @@ def liquid_step_$ID$():\n\
     velOld_s$ID$.copyFrom(vel_s$ID$)\n\
     \n\
     # forces & pressure solve\n\
-    addGravity(flags=flags_s$ID$, vel=vel_s$ID$, gravity=gravity_s$ID$)\n\
+    addGravity(flags=flags_s$ID$, vel=vel_s$ID$, gravity=gravity_s$ID$, scale=False)\n\
     \n\
     mantaMsg('Adding external forces')\n\
     addForceField(flags=flags_s$ID$, vel=vel_s$ID$, force=forces_s$ID$)\n\
@@ -363,14 +367,14 @@ def liquid_step_particles_$ID$():\n\
         interpolateGrid(target=phiOut_sp$ID$, source=phiOut_s$ID$)\n\
     \n\
     # phiIn not needed, bwidth to 0 because we are omitting flags.initDomain()\n\
-    setObstacleFlags(flags=flags_sp$ID$, phiObs=phiObs_sp$ID$, phiOut=None, phiIn=None, boundaryWidth=0)\n\
+    setObstacleFlags(flags=flags_sp$ID$, phiObs=phiObs_sp$ID$, phiOut=phiOut_sp$ID$, phiIn=None, boundaryWidth=0)\n\
     flags_sp$ID$.updateFromLevelset(levelset=phi_sp$ID$)\n\
     \n\
     # Actual secondary particle simulation\n\
-    flipComputeSecondaryParticlePotentials(potTA=trappedAir_sp$ID$, potWC=waveCrest_sp$ID$, potKE=kineticEnergy_sp$ID$, neighborRatio=neighborRatio_sp$ID$, flags=flags_sp$ID$, v=vel_sp$ID$, normal=normal_sp$ID$, phi=phi_sp$ID$, radius=pot_radius_sp$ID$, tauMinTA=tauMin_ta_sp$ID$, tauMaxTA=tauMax_ta_sp$ID$, tauMinWC=tauMin_wc_sp$ID$, tauMaxWC=tauMax_wc_sp$ID$, tauMinKE=tauMin_k_sp$ID$, tauMaxKE=tauMax_k_sp$ID$, scaleFromManta=scaleFromManta_sp$ID$)\n\
-    flipSampleSecondaryParticles(mode='single', flags=flags_sp$ID$, v=vel_sp$ID$, pts_sec=ppSnd_sp$ID$, v_sec=pVelSnd_pp$ID$, l_sec=pLifeSnd_pp$ID$, lMin=lMin_sp$ID$, lMax=lMax_sp$ID$, potTA=trappedAir_sp$ID$, potWC=waveCrest_sp$ID$, potKE=kineticEnergy_sp$ID$, neighborRatio=neighborRatio_sp$ID$, c_s=c_s_sp$ID$, c_b=c_b_sp$ID$, k_ta=k_ta_sp$ID$, k_wc=k_wc_sp$ID$, dt=sp$ID$.timestep)\n\
-    flipUpdateSecondaryParticles(mode='linear', pts_sec=ppSnd_sp$ID$, v_sec=pVelSnd_pp$ID$, l_sec=pLifeSnd_pp$ID$, f_sec=pForceSnd_pp$ID$, flags=flags_sp$ID$, v=vel_sp$ID$, neighborRatio=neighborRatio_sp$ID$, radius=update_radius_sp$ID$, gravity=gravity_s$ID$, k_b=k_b_sp$ID$, k_d=k_d_sp$ID$, c_s=c_s_sp$ID$, c_b=c_b_sp$ID$, dt=sp$ID$.timestep)\n\
-    if $SNDPARTICLE_BOUNDARY_PUSHOUT$:\n\
+    flipComputeSecondaryParticlePotentials(potTA=trappedAir_sp$ID$, potWC=waveCrest_sp$ID$, potKE=kineticEnergy_sp$ID$, neighborRatio=neighborRatio_sp$ID$, flags=flags_sp$ID$, v=vel_sp$ID$, normal=normal_sp$ID$, phi=phi_sp$ID$, radius=pot_radius_sp$ID$, tauMinTA=tauMin_ta_sp$ID$, tauMaxTA=tauMax_ta_sp$ID$, tauMinWC=tauMin_wc_sp$ID$, tauMaxWC=tauMax_wc_sp$ID$, tauMinKE=tauMin_k_sp$ID$, tauMaxKE=tauMax_k_sp$ID$, scaleFromManta=ratioMetersToRes_s$ID$)\n\
+    flipSampleSecondaryParticles(mode='single', flags=flags_sp$ID$, v=vel_sp$ID$, pts_sec=ppSnd_sp$ID$, v_sec=pVelSnd_pp$ID$, l_sec=pLifeSnd_pp$ID$, lMin=lMin_sp$ID$, lMax=lMax_sp$ID$, potTA=trappedAir_sp$ID$, potWC=waveCrest_sp$ID$, potKE=kineticEnergy_sp$ID$, neighborRatio=neighborRatio_sp$ID$, c_s=c_s_sp$ID$, c_b=c_b_sp$ID$, k_ta=k_ta_sp$ID$, k_wc=k_wc_sp$ID$)\n\
+    flipUpdateSecondaryParticles(mode='linear', pts_sec=ppSnd_sp$ID$, v_sec=pVelSnd_pp$ID$, l_sec=pLifeSnd_pp$ID$, f_sec=pForceSnd_pp$ID$, flags=flags_sp$ID$, v=vel_sp$ID$, neighborRatio=neighborRatio_sp$ID$, radius=update_radius_sp$ID$, gravity=gravity_s$ID$, scale=False, k_b=k_b_sp$ID$, k_d=k_d_sp$ID$, c_s=c_s_sp$ID$, c_b=c_b_sp$ID$)\n\
+    if using_snd_pushout_sp$ID$:\n\
         pushOutofObs(parts=ppSnd_sp$ID$, flags=flags_sp$ID$, phiObs=phiObs_sp$ID$, shift=1.0)\n\
     flipDeleteParticlesInObstacle(pts=ppSnd_sp$ID$, flags=flags_sp$ID$) # delete particles inside obstacle and outflow cells\n\
     \n\

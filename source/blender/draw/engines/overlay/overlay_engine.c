@@ -30,6 +30,7 @@
 #include "ED_view3d.h"
 
 #include "BKE_object.h"
+#include "BKE_paint.h"
 
 #include "overlay_engine.h"
 #include "overlay_private.h"
@@ -69,12 +70,15 @@ static void OVERLAY_engine_init(void *vedata)
     pd->overlay.flag = V3D_OVERLAY_HIDE_TEXT | V3D_OVERLAY_HIDE_MOTION_PATHS |
                        V3D_OVERLAY_HIDE_BONES | V3D_OVERLAY_HIDE_OBJECT_XTRAS |
                        V3D_OVERLAY_HIDE_OBJECT_ORIGINS;
+    pd->overlay.wireframe_threshold = v3d->overlay.wireframe_threshold;
   }
 
   if (v3d->shading.type == OB_WIRE) {
     pd->overlay.flag |= V3D_OVERLAY_WIREFRAMES;
   }
 
+  pd->use_in_front = (v3d->shading.type <= OB_SOLID) ||
+                     BKE_scene_uses_blender_workbench(draw_ctx->scene);
   pd->wireframe_mode = (v3d->shading.type == OB_WIRE);
   pd->clipping_state = RV3D_CLIPPING_ENABLED(v3d, rv3d) ? DRW_STATE_CLIP_PLANES : 0;
   pd->xray_opacity = XRAY_ALPHA(v3d);
@@ -234,7 +238,8 @@ static void OVERLAY_cache_populate(void *vedata, Object *ob)
   const bool in_particle_edit_mode = ob->mode == OB_MODE_PARTICLE_EDIT;
   const bool in_paint_mode = (ob == draw_ctx->obact) &&
                              (draw_ctx->object_mode & OB_MODE_ALL_PAINT);
-  const bool in_sculpt_mode = (ob == draw_ctx->obact) && (ob->sculpt != NULL);
+  const bool in_sculpt_mode = (ob == draw_ctx->obact) && (ob->sculpt != NULL) &&
+                              (ob->sculpt->mode_type == OB_MODE_SCULPT);
   const bool has_surface = ELEM(ob->type,
                                 OB_MESH,
                                 OB_CURVE,
@@ -479,6 +484,12 @@ static void OVERLAY_draw_scene(void *vedata)
   OVERLAY_xray_depth_infront_copy(vedata);
 
   if (DRW_state_is_fbo()) {
+    GPU_framebuffer_bind(fbl->overlay_in_front_fb);
+  }
+
+  OVERLAY_facing_infront_draw(vedata);
+
+  if (DRW_state_is_fbo()) {
     GPU_framebuffer_bind(fbl->overlay_line_in_front_fb);
   }
 
@@ -495,7 +506,7 @@ static void OVERLAY_draw_scene(void *vedata)
   OVERLAY_motion_path_draw(vedata);
   OVERLAY_extra_centers_draw(vedata);
 
-  if (DRW_state_is_select()) {
+  if (DRW_state_is_select() || DRW_state_is_depth()) {
     /* Edit modes have their own selection code. */
     return;
   }

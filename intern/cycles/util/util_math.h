@@ -782,7 +782,6 @@ ccl_device_inline float3 decode_normal(float2 f)
   n.x = f.x;
   n.y = f.y;
   n.z = 1.0f - fabsf(f.x) - fabsf(f.y);
-  n.w = 0.0f;
 
   if (n.z < 0.0f) {
     n.x = (1.0f - fabsf(f.y)) * sign_not_zero(f.x);

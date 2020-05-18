@@ -2721,7 +2721,7 @@ static void lib_link_id(FileData *fd, Main *bmain, ID *id);
 static void lib_link_nodetree(FileData *fd, Main *bmain, bNodeTree *ntree);
 static void lib_link_collection(FileData *fd, Main *bmain, Collection *collection);
 
-static void lib_link_id_private_id(FileData *fd, Main *bmain, ID *id)
+static void lib_link_id_embedded_id(FileData *fd, Main *bmain, ID *id)
 {
   /* Handle 'private IDs'. */
   bNodeTree *nodetree = ntreeFromID(id);
@@ -2755,7 +2755,7 @@ static void lib_link_id(FileData *fd, Main *bmain, ID *id)
     id->override_library->storage = newlibadr(fd, id->lib, id->override_library->storage);
   }
 
-  lib_link_id_private_id(fd, bmain, id);
+  lib_link_id_embedded_id(fd, bmain, id);
 }
 
 static void direct_link_id_override_property_operation_cb(FileData *fd, void *data)
@@ -2779,18 +2779,22 @@ static void direct_link_id_override_property_cb(FileData *fd, void *data)
   link_list_ex(fd, &op->operations, direct_link_id_override_property_operation_cb);
 }
 
-static void direct_link_id_common(FileData *fd, ID *id, ID *id_old, const int tag);
+static void direct_link_id_common(
+    FileData *fd, Library *current_library, ID *id, ID *id_old, const int tag);
 static void direct_link_nodetree(FileData *fd, bNodeTree *ntree);
 static void direct_link_collection(FileData *fd, Collection *collection);
 
-static void direct_link_id_private_id(FileData *fd, ID *id, ID *id_old)
+static void direct_link_id_embedded_id(FileData *fd, Library *current_library, ID *id, ID *id_old)
 {
   /* Handle 'private IDs'. */
   bNodeTree **nodetree = BKE_ntree_ptr_from_id(id);
   if (nodetree != NULL && *nodetree != NULL) {
     *nodetree = newdataadr(fd, *nodetree);
-    direct_link_id_common(
-        fd, (ID *)*nodetree, id_old != NULL ? (ID *)ntreeFromID(id_old) : NULL, 0);
+    direct_link_id_common(fd,
+                          current_library,
+                          (ID *)*nodetree,
+                          id_old != NULL ? (ID *)ntreeFromID(id_old) : NULL,
+                          0);
     direct_link_nodetree(fd, *nodetree);
   }
 
@@ -2799,6 +2803,7 @@ static void direct_link_id_private_id(FileData *fd, ID *id, ID *id_old)
     if (scene->master_collection != NULL) {
       scene->master_collection = newdataadr(fd, scene->master_collection);
       direct_link_id_common(fd,
+                            current_library,
                             &scene->master_collection->id,
                             id_old != NULL ? &((Scene *)id_old)->master_collection->id : NULL,
                             0);
@@ -2863,18 +2868,40 @@ static int direct_link_id_restore_recalc(const FileData *fd,
   return recalc;
 }
 
-static void direct_link_id_common(FileData *fd, ID *id, ID *id_old, const int tag)
+static void direct_link_id_common(
+    FileData *fd, Library *current_library, ID *id, ID *id_old, const int tag)
 {
+  if (fd->memfile == NULL) {
+    /* When actually reading a file , we do want to reset/re-generate session uuids.
+     * In undo case, we want to re-use existing ones. */
+    id->session_uuid = MAIN_ID_SESSION_UUID_UNSET;
+  }
+
+  BKE_lib_libblock_session_uuid_ensure(id);
+
+  id->lib = current_library;
+  id->us = ID_FAKE_USERS(id);
+  id->icon_id = 0;
+  id->newid = NULL; /* Needed because .blend may have been saved with crap value here... */
+  id->orig_id = NULL;
+  id->py_instance = NULL;
+
+  /* Initialize with provided tag. */
+  id->tag = tag;
+
+  if (tag & LIB_TAG_ID_LINK_PLACEHOLDER) {
+    /* For placeholder we only need to set the tag and properly init generic ID fieds above, no
+     * further data to read. */
+    return;
+  }
+
   /*link direct data of ID properties*/
   if (id->properties) {
     id->properties = newdataadr(fd, id->properties);
     /* this case means the data was written incorrectly, it should not happen */
     IDP_DirectLinkGroup_OrFree(&id->properties, (fd->flags & FD_FLAGS_SWITCH_ENDIAN), fd);
   }
-  id->py_instance = NULL;
 
-  /* Initialize with provided tag. */
-  id->tag = tag;
   id->flag &= ~LIB_INDIRECT_WEAK_LINK;
 
   /* NOTE: It is important to not clear the recalc flags for undo/redo.
@@ -2907,7 +2934,7 @@ static void direct_link_id_common(FileData *fd, ID *id, ID *id_old, const int ta
   }
 
   /* Handle 'private IDs'. */
-  direct_link_id_private_id(fd, id, id_old);
+  direct_link_id_embedded_id(fd, current_library, id, id_old);
 }
 
 /** \} */
@@ -4849,7 +4876,7 @@ static void lib_link_particlesystems(FileData *fd, Object *ob, ID *id, ListBase 
       /* particle modifier must be removed before particle system */
       ParticleSystemModifierData *psmd = psys_get_modifier(ob, psys);
       BLI_remlink(&ob->modifiers, psmd);
-      modifier_free((ModifierData *)psmd);
+      BKE_modifier_free((ModifierData *)psmd);
 
       BLI_remlink(particles, psys);
       MEM_freeN(psys);
@@ -5218,7 +5245,7 @@ static void lib_link_modifiers_common(void *userData, Object *ob, ID **idpoin, i
 
 static void lib_link_modifiers(FileData *fd, Object *ob)
 {
-  modifiers_foreachIDLink(ob, lib_link_modifiers_common, fd);
+  BKE_modifiers_foreach_ID_link(ob, lib_link_modifiers_common, fd);
 
   /* If linking from a library, clear 'local' library override flag. */
   if (ob->id.lib != NULL) {
@@ -5230,7 +5257,7 @@ static void lib_link_modifiers(FileData *fd, Object *ob)
 
 static void lib_link_gpencil_modifiers(FileData *fd, Object *ob)
 {
-  BKE_gpencil_modifiers_foreachIDLink(ob, lib_link_modifiers_common, fd);
+  BKE_gpencil_modifiers_foreach_ID_link(ob, lib_link_modifiers_common, fd);
 
   /* If linking from a library, clear 'local' library override flag. */
   if (ob->id.lib != NULL) {
@@ -5243,7 +5270,7 @@ static void lib_link_gpencil_modifiers(FileData *fd, Object *ob)
 
 static void lib_link_shaderfxs(FileData *fd, Object *ob)
 {
-  BKE_shaderfx_foreachIDLink(ob, lib_link_modifiers_common, fd);
+  BKE_shaderfx_foreach_ID_link(ob, lib_link_modifiers_common, fd);
 
   /* If linking from a library, clear 'local' library override flag. */
   if (ob->id.lib != NULL) {
@@ -5370,7 +5397,7 @@ static void lib_link_object(FileData *fd, Main *bmain, Object *ob)
   }
 
   {
-    FluidsimModifierData *fluidmd = (FluidsimModifierData *)modifiers_findByType(
+    FluidsimModifierData *fluidmd = (FluidsimModifierData *)BKE_modifiers_findby_type(
         ob, eModifierType_Fluidsim);
 
     if (fluidmd && fluidmd->fss) {
@@ -5380,7 +5407,8 @@ static void lib_link_object(FileData *fd, Main *bmain, Object *ob)
   }
 
   {
-    FluidModifierData *mmd = (FluidModifierData *)modifiers_findByType(ob, eModifierType_Fluid);
+    FluidModifierData *mmd = (FluidModifierData *)BKE_modifiers_findby_type(ob,
+                                                                            eModifierType_Fluid);
 
     if (mmd && (mmd->type == MOD_FLUID_TYPE_DOMAIN) && mmd->domain) {
       /* Flag for refreshing the simulation after loading */
@@ -5522,7 +5550,7 @@ static ModifierData *modifier_replace_with_fluid(FileData *fd,
                                                  ListBase *modifiers,
                                                  ModifierData *old_modifier_data)
 {
-  ModifierData *new_modifier_data = modifier_new(eModifierType_Fluid);
+  ModifierData *new_modifier_data = BKE_modifier_new(eModifierType_Fluid);
   FluidModifierData *fluid_modifier_data = (FluidModifierData *)new_modifier_data;
 
   if (old_modifier_data->type == eModifierType_Fluidsim) {
@@ -5645,7 +5673,7 @@ static void direct_link_modifiers(FileData *fd, ListBase *lb, Object *ob)
       is_allocated = true;
     }
     /* if modifiers disappear, or for upward compatibility */
-    if (NULL == modifierType_getInfo(md->type)) {
+    if (NULL == BKE_modifier_get_info(md->type)) {
       md->type = eModifierType_None;
     }
 
@@ -5999,7 +6027,7 @@ static void direct_link_gpencil_modifiers(FileData *fd, ListBase *lb)
     md->error = NULL;
 
     /* if modifiers disappear, or for upward compatibility */
-    if (NULL == BKE_gpencil_modifierType_getInfo(md->type)) {
+    if (NULL == BKE_gpencil_modifier_get_info(md->type)) {
       md->type = eModifierType_None;
     }
 
@@ -6080,7 +6108,7 @@ static void direct_link_shaderfxs(FileData *fd, ListBase *lb)
     fx->error = NULL;
 
     /* if shader disappear, or for upward compatibility */
-    if (NULL == BKE_shaderfxType_getInfo(fx->type)) {
+    if (NULL == BKE_shaderfx_get_info(fx->type)) {
       fx->type = eShaderFxType_None;
     }
   }
@@ -6143,7 +6171,7 @@ static void direct_link_object(FileData *fd, Object *ob)
     if (paf->type == EFF_WAVE) {
       WaveEff *wav = (WaveEff *)paf;
       PartEff *next = paf->next;
-      WaveModifierData *wmd = (WaveModifierData *)modifier_new(eModifierType_Wave);
+      WaveModifierData *wmd = (WaveModifierData *)BKE_modifier_new(eModifierType_Wave);
 
       wmd->damp = wav->damp;
       wmd->flag = wav->flag;
@@ -6167,7 +6195,7 @@ static void direct_link_object(FileData *fd, Object *ob)
     if (paf->type == EFF_BUILD) {
       BuildEff *baf = (BuildEff *)paf;
       PartEff *next = paf->next;
-      BuildModifierData *bmd = (BuildModifierData *)modifier_new(eModifierType_Build);
+      BuildModifierData *bmd = (BuildModifierData *)BKE_modifier_new(eModifierType_Build);
 
       bmd->start = baf->sfra;
       bmd->length = baf->len;
@@ -6244,7 +6272,7 @@ static void direct_link_object(FileData *fd, Object *ob)
   link_list(fd, &ob->hooks);
   while (ob->hooks.first) {
     ObHook *hook = ob->hooks.first;
-    HookModifierData *hmd = (HookModifierData *)modifier_new(eModifierType_Hook);
+    HookModifierData *hmd = (HookModifierData *)BKE_modifier_new(eModifierType_Hook);
 
     hook->indexar = newdataadr(fd, hook->indexar);
     if (fd->flags & FD_FLAGS_SWITCH_ENDIAN) {
@@ -6266,7 +6294,7 @@ static void direct_link_object(FileData *fd, Object *ob)
     BLI_addhead(&ob->modifiers, hmd);
     BLI_remlink(&ob->hooks, hook);
 
-    modifier_unique_name(&ob->modifiers, (ModifierData *)hmd);
+    BKE_modifier_unique_name(&ob->modifiers, (ModifierData *)hmd);
 
     MEM_freeN(hook);
   }
@@ -9360,28 +9388,14 @@ static const char *dataname(short id_code)
 
 static bool direct_link_id(FileData *fd, Main *main, const int tag, ID *id, ID *id_old)
 {
-  if (fd->memfile == NULL) {
-    /* When actually reading a file , we do want to reset/re-generate session uuids.
-     * In undo case, we want to re-use existing ones. */
-    id->session_uuid = MAIN_ID_SESSION_UUID_UNSET;
-  }
-
-  BKE_lib_libblock_session_uuid_ensure(id);
-
-  id->lib = main->curlib;
-  id->us = ID_FAKE_USERS(id);
-  id->icon_id = 0;
-  id->newid = NULL; /* Needed because .blend may have been saved with crap value here... */
-  id->orig_id = NULL;
+  /* Read part of datablock that is common between real and embedded datablocks. */
+  direct_link_id_common(fd, main->curlib, id, id_old, tag);
 
   if (tag & LIB_TAG_ID_LINK_PLACEHOLDER) {
     /* For placeholder we only need to set the tag, no further data to read. */
     id->tag = tag;
     return true;
   }
-
-  /* Read part of datablock that is common between real and embedded datablocks. */
-  direct_link_id_common(fd, id, id_old, tag);
 
   /* XXX Very weakly handled currently, see comment in read_libblock() before trying to
    * use it for anything new. */
@@ -9753,7 +9767,7 @@ static bool read_libblock_undo_restore(
      * this is only for do_version-like code), but for sake of consistency, and also because
      * it will tell us which ID is re-used from old Main, and which one is actually new. */
     /* Also do not add LIB_TAG_NEED_LINK, those IDs will never be re-liblinked, hence that tag will
-     * never be cleared, leading to critical issue in link/appemd code. */
+     * never be cleared, leading to critical issue in link/append code. */
     const int id_tag = tag | LIB_TAG_UNDO_OLD_ID_REUSED;
     read_libblock_undo_restore_identical(fd, main, id, id_old, id_tag);
 
@@ -10002,6 +10016,9 @@ static void do_versions(FileData *fd, Library *lib, Main *main)
 {
   /* WATCH IT!!!: pointers from libdata have not been converted */
 
+  /* Don't allow versioning to create new data-blocks. */
+  main->is_locked_for_linking = true;
+
   if (G.debug & G_DEBUG) {
     char build_commit_datetime[32];
     time_t temp_time = main->build_commit_timestamp;
@@ -10033,6 +10050,8 @@ static void do_versions(FileData *fd, Library *lib, Main *main)
   /* WATCH IT 2!: Userdef struct init see do_versions_userdef() above! */
 
   /* don't forget to set version number in BKE_blender_version.h! */
+
+  main->is_locked_for_linking = false;
 }
 
 static void do_versions_after_linking(Main *main, ReportList *reports)
@@ -10040,11 +10059,16 @@ static void do_versions_after_linking(Main *main, ReportList *reports)
   //  printf("%s for %s (%s), %d.%d\n", __func__, main->curlib ? main->curlib->name : main->name,
   //         main->curlib ? "LIB" : "MAIN", main->versionfile, main->subversionfile);
 
+  /* Don't allow versioning to create new data-blocks. */
+  main->is_locked_for_linking = true;
+
   do_versions_after_linking_250(main);
   do_versions_after_linking_260(main);
   do_versions_after_linking_270(main);
   do_versions_after_linking_280(main, reports);
   do_versions_after_linking_cycles(main);
+
+  main->is_locked_for_linking = false;
 }
 
 /** \} */
@@ -10909,7 +10933,7 @@ static void expand_id(FileData *fd, Main *mainvar, ID *id);
 static void expand_nodetree(FileData *fd, Main *mainvar, bNodeTree *ntree);
 static void expand_collection(FileData *fd, Main *mainvar, Collection *collection);
 
-static void expand_id_private_id(FileData *fd, Main *mainvar, ID *id)
+static void expand_id_embedded_id(FileData *fd, Main *mainvar, ID *id)
 {
   /* Handle 'private IDs'. */
   bNodeTree *nodetree = ntreeFromID(id);
@@ -10941,7 +10965,7 @@ static void expand_id(FileData *fd, Main *mainvar, ID *id)
     expand_animdata(fd, mainvar, adt);
   }
 
-  expand_id_private_id(fd, mainvar, id);
+  expand_id_embedded_id(fd, mainvar, id);
 }
 
 static void expand_action(FileData *fd, Main *mainvar, bAction *act)
@@ -11301,7 +11325,7 @@ static void expand_object(FileData *fd, Main *mainvar, Object *ob)
     data.fd = fd;
     data.mainvar = mainvar;
 
-    modifiers_foreachIDLink(ob, expand_object_expandModifiers, (void *)&data);
+    BKE_modifiers_foreach_ID_link(ob, expand_object_expandModifiers, (void *)&data);
   }
 
   /* expand_object_expandModifier() */
@@ -11313,7 +11337,7 @@ static void expand_object(FileData *fd, Main *mainvar, Object *ob)
     data.fd = fd;
     data.mainvar = mainvar;
 
-    BKE_gpencil_modifiers_foreachIDLink(ob, expand_object_expandModifiers, (void *)&data);
+    BKE_gpencil_modifiers_foreach_ID_link(ob, expand_object_expandModifiers, (void *)&data);
   }
 
   /* expand_object_expandShaderFx() */
@@ -11325,7 +11349,7 @@ static void expand_object(FileData *fd, Main *mainvar, Object *ob)
     data.fd = fd;
     data.mainvar = mainvar;
 
-    BKE_shaderfx_foreachIDLink(ob, expand_object_expandModifiers, (void *)&data);
+    BKE_shaderfx_foreach_ID_link(ob, expand_object_expandModifiers, (void *)&data);
   }
 
   expand_pose(fd, mainvar, ob->pose);
@@ -11941,6 +11965,7 @@ static void add_collections_to_scene(Main *mainvar,
       /* BKE_object_add(...) messes with the selection. */
       Object *ob = BKE_object_add_only_object(bmain, OB_EMPTY, collection->id.name + 2);
       ob->type = OB_EMPTY;
+      ob->empty_drawsize = U.collection_instance_empty_size;
 
       BKE_collection_object_add(bmain, active_collection, ob);
       Base *base = BKE_view_layer_base_find(view_layer, ob);

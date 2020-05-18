@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2020 Blender Foundation.
@@ -256,7 +256,11 @@ bool multires_reshape_assign_final_coords_from_vertcos(
  * Functions specific to reshaping from CCG.
  */
 
-/* NOTE: Displacement grids to be at least at a reshape level.
+/* Store final object-space coordinates in the displacement grids.
+ * The reason why displacement grids are used for storage is based on memory
+ * footprint optimization.
+ *
+ * NOTE: Displacement grids to be at least at a reshape level.
  *
  * Return truth if all coordinates have been updated. */
 bool multires_reshape_assign_final_coords_from_ccg(const MultiresReshapeContext *reshape_context,
@@ -271,7 +275,7 @@ void multires_reshape_assign_final_coords_from_mdisps(
     const MultiresReshapeContext *reshape_context);
 
 /* Reads from original CD_MIDTSPS, writes to the current mesh CD_MDISPS. */
-void multires_reshape_assign_final_coords_from_orig_mdisps(
+void multires_reshape_assign_final_elements_from_orig_mdisps(
     const MultiresReshapeContext *reshape_context);
 
 /* --------------------------------------------------------------------

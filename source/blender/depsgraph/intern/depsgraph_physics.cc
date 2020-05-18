@@ -30,11 +30,9 @@
 #include "BLI_compiler_compat.h"
 #include "BLI_listbase.h"
 
-extern "C" {
 #include "BKE_collision.h"
 #include "BKE_effect.h"
 #include "BKE_modifier.h"
-} /* extern "C" */
 
 #include "DNA_collection_types.h"
 #include "DNA_object_force_types.h"
@@ -106,7 +104,7 @@ void DEG_add_collision_relations(DepsNodeHandle *handle,
       continue;
     }
     if (filter_function == nullptr ||
-        filter_function(ob1, modifiers_findByType(ob1, (ModifierType)modifier_type))) {
+        filter_function(ob1, BKE_modifiers_findby_type(ob1, (ModifierType)modifier_type))) {
       DEG_add_object_pointcache_relation(handle, ob1, DEG_OB_COMP_TRANSFORM, name);
       DEG_add_object_pointcache_relation(handle, ob1, DEG_OB_COMP_GEOMETRY, name);
     }
@@ -143,11 +141,11 @@ void DEG_add_forcefield_relations(DepsNodeHandle *handle,
     }
 
     /* Smoke flow relations. */
-    if (relation->pd->forcefield == PFIELD_SMOKEFLOW && relation->pd->f_source != nullptr) {
+    if (relation->pd->forcefield == PFIELD_FLUIDFLOW && relation->pd->f_source != nullptr) {
       DEG_add_object_pointcache_relation(
-          handle, relation->pd->f_source, DEG_OB_COMP_TRANSFORM, "Smoke Force Domain");
+          handle, relation->pd->f_source, DEG_OB_COMP_TRANSFORM, "Fluid Force Domain");
       DEG_add_object_pointcache_relation(
-          handle, relation->pd->f_source, DEG_OB_COMP_GEOMETRY, "Smoke Force Domain");
+          handle, relation->pd->f_source, DEG_OB_COMP_GEOMETRY, "Fluid Force Domain");
     }
 
     /* Absorption forces need collision relation. */

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -63,7 +63,7 @@ static void initData(GpencilModifierData *md)
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 }
 
 static bool dependsOnTime(GpencilModifierData *UNUSED(md))
@@ -406,6 +406,7 @@ static void generate_geometry(GpencilModifierData *md,
 {
   BuildGpencilModifierData *mmd = (BuildGpencilModifierData *)md;
   const bool reverse = (mmd->transition != GP_BUILD_TRANSITION_GROW);
+  const bool is_percentage = (mmd->flag & GP_BUILD_PERCENTAGE);
 
   const float ctime = DEG_get_ctime(depsgraph);
 
@@ -462,8 +463,8 @@ static void generate_geometry(GpencilModifierData *md,
   }
 
   /* Early exit if current frame is outside start/end bounds */
-  /* NOTE: If we're beyond the next/prev frames (if existent), then we wouldn't have this problem
-   * anyway... */
+  /* NOTE: If we're beyond the next/previous frames (if existent),
+   * then we wouldn't have this problem anyway... */
   if (ctime < start_frame) {
     /* Before Start - Animation hasn't started. Display initial state. */
     if (reverse) {
@@ -500,7 +501,8 @@ static void generate_geometry(GpencilModifierData *md,
   }
 
   /* Determine how far along we are between the keyframes */
-  float fac = (ctime - start_frame) / (end_frame - start_frame);
+  float fac = is_percentage ? mmd->percentage_fac :
+                              (ctime - start_frame) / (end_frame - start_frame);
 
   /* Time management mode */
   switch (mmd->mode) {

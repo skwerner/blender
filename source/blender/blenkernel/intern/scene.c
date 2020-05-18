@@ -155,6 +155,9 @@ static void scene_init_data(ID *id)
   scene->unit.mass_unit = (uchar)bUnit_GetBaseUnitOfType(USER_UNIT_METRIC, B_UNIT_MASS);
   scene->unit.time_unit = (uchar)bUnit_GetBaseUnitOfType(USER_UNIT_METRIC, B_UNIT_TIME);
 
+  /* Anti-aliasing threshold. */
+  scene->grease_pencil_settings.smaa_threshold = 1.0f;
+
   {
     ParticleEditSettings *pset;
     pset = &scene->toolsettings->particle;
@@ -346,6 +349,11 @@ static void scene_free_data(ID *id)
   }
 
   if (scene->rigidbody_world) {
+    /* Prevent rigidbody freeing code to follow other IDs pointers, this should never be allowed
+     * nor necessary from here, and with new undo code, those pointers may be fully invalid or
+     * worse, pointing to data actually belonging to new BMain! */
+    scene->rigidbody_world->constraints = NULL;
+    scene->rigidbody_world->group = NULL;
     BKE_rigidbody_free_world(scene);
   }
 
@@ -1167,34 +1175,6 @@ int BKE_scene_orientation_slot_get_index(const TransformOrientationSlot *orient_
 
 /** \} */
 
-/* That's like really a bummer, because currently animation data for armatures
- * might want to use pose, and pose might be missing on the object.
- * This happens when changing visible layers, which leads to situations when
- * pose is missing or marked for recalc, animation will change it and then
- * object update will restore the pose.
- *
- * This could be solved by the new dependency graph, but for until then we'll
- * do an extra pass on the objects to ensure it's all fine.
- */
-#define POSE_ANIMATION_WORKAROUND
-
-#ifdef POSE_ANIMATION_WORKAROUND
-static void scene_armature_depsgraph_workaround(Main *bmain, Depsgraph *depsgraph)
-{
-  Object *ob;
-  if (BLI_listbase_is_empty(&bmain->armatures) || !DEG_id_type_updated(depsgraph, ID_OB)) {
-    return;
-  }
-  for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-    if (ob->type == OB_ARMATURE && ob->adt) {
-      if (ob->pose == NULL || (ob->pose->flag & POSE_RECALC)) {
-        BKE_pose_rebuild(bmain, ob, ob->data, true);
-      }
-    }
-  }
-}
-#endif
-
 static bool check_rendered_viewport_visible(Main *bmain)
 {
   wmWindowManager *wm = bmain->wm.first;
@@ -1379,9 +1359,6 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
     BKE_image_editors_update_frame(bmain, scene->r.cfra);
     BKE_sound_set_cfra(scene->r.cfra);
     DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
-#ifdef POSE_ANIMATION_WORKAROUND
-    scene_armature_depsgraph_workaround(bmain, depsgraph);
-#endif
     /* Update all objects: drivers, matrices, displists, etc. flags set
      * by depgraph or manual, no layer check here, gets correct flushed.
      *
@@ -2102,7 +2079,7 @@ static Depsgraph **scene_get_depsgraph_p(Main *bmain,
       if (allocate_depsgraph) {
         *depsgraph_ptr = DEG_graph_new(bmain, scene, view_layer, DAG_EVAL_VIEWPORT);
         /* TODO(sergey): Would be cool to avoid string format print,
-         * but is a bit tricky because we can't know in advance  whether
+         * but is a bit tricky because we can't know in advance whether
          * we will ever enable debug messages for this depsgraph.
          */
         char name[1024];

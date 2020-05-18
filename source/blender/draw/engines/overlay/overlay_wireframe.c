@@ -73,8 +73,9 @@ void OVERLAY_wireframe_cache_init(OVERLAY_Data *vedata)
     DRWState state = DRW_STATE_FIRST_VERTEX_CONVENTION | DRW_STATE_WRITE_COLOR |
                      DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL;
     DRWPass *pass;
-    GPUTexture **depth_tx = (pd->xray_enabled || pd->xray_opacity > 0.0f) ? &txl->temp_depth_tx :
-                                                                            &txl->dummy_depth_tx;
+    GPUTexture **depth_tx = ((pd->xray_enabled || pd->xray_opacity > 0.0f) && DRW_state_is_fbo()) ?
+                                &txl->temp_depth_tx :
+                                &txl->dummy_depth_tx;
 
     if (xray == 0) {
       DRW_PASS_CREATE(psl->wireframe_ps, state | pd->clipping_state);
@@ -229,7 +230,7 @@ void OVERLAY_wireframe_cache_populate(OVERLAY_Data *vedata,
         DRW_shgroup_call_no_cull(shgrp, geom, ob);
       }
       else if (use_sculpt_pbvh) {
-        DRW_shgroup_call_sculpt(shgrp, ob, true, false, false);
+        DRW_shgroup_call_sculpt(shgrp, ob, true, false);
       }
       else {
         DRW_shgroup_call(shgrp, geom, ob);

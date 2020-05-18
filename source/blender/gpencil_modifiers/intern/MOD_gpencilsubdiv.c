@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -36,6 +36,8 @@
 
 #include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
+#include "BKE_lib_query.h"
+#include "BKE_modifier.h"
 
 #include "DEG_depsgraph.h"
 
@@ -47,13 +49,12 @@ static void initData(GpencilModifierData *md)
   SubdivGpencilModifierData *gpmd = (SubdivGpencilModifierData *)md;
   gpmd->pass_index = 0;
   gpmd->level = 1;
-  gpmd->layername[0] = '\0';
-  gpmd->materialname[0] = '\0';
+  gpmd->material = NULL;
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 }
 
 /* subdivide stroke to get more control points */
@@ -72,7 +73,7 @@ static void deformStroke(GpencilModifierData *md,
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
-                                      mmd->materialname,
+                                      mmd->material,
                                       mmd->pass_index,
                                       mmd->layer_pass,
                                       minimum_vert,
@@ -104,6 +105,13 @@ static void bakeModifier(struct Main *UNUSED(bmain),
   }
 }
 
+static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
+{
+  SubdivGpencilModifierData *mmd = (SubdivGpencilModifierData *)md;
+
+  walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
+}
+
 GpencilModifierTypeInfo modifierType_Gpencil_Subdiv = {
     /* name */ "Subdivide",
     /* structName */ "SubdivGpencilModifierData",
@@ -124,6 +132,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Subdiv = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* foreachObjectLink */ NULL,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
 };

@@ -1907,19 +1907,19 @@ static int gp_brush_reset_all_exec(bContext *C, wmOperator *UNUSED(op))
 
     switch (mode) {
       case CTX_MODE_PAINT_GPENCIL: {
-        BKE_brush_gpencil_paint_presets(bmain, ts);
+        BKE_brush_gpencil_paint_presets(bmain, ts, true);
         break;
       }
       case CTX_MODE_SCULPT_GPENCIL: {
-        BKE_brush_gpencil_sculpt_presets(bmain, ts);
+        BKE_brush_gpencil_sculpt_presets(bmain, ts, true);
         break;
       }
       case CTX_MODE_WEIGHT_GPENCIL: {
-        BKE_brush_gpencil_weight_presets(bmain, ts);
+        BKE_brush_gpencil_weight_presets(bmain, ts, true);
         break;
       }
       case CTX_MODE_VERTEX_GPENCIL: {
-        BKE_brush_gpencil_vertex_presets(bmain, ts);
+        BKE_brush_gpencil_vertex_presets(bmain, ts, true);
         break;
       }
       default: {
@@ -2619,7 +2619,7 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
 
         /* Apply all GP modifiers before */
         LISTBASE_FOREACH (GpencilModifierData *, md, &ob_iter->greasepencil_modifiers) {
-          const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
+          const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
           if (mti->bakeModifier) {
             mti->bakeModifier(bmain, depsgraph, md, ob_iter);
           }
@@ -3386,7 +3386,7 @@ bool ED_gpencil_add_lattice_modifier(const bContext *C,
   }
 
   /* if no lattice modifier, add a new one */
-  GpencilModifierData *md = BKE_gpencil_modifiers_findByType(ob, eGpencilModifierType_Lattice);
+  GpencilModifierData *md = BKE_gpencil_modifiers_findby_type(ob, eGpencilModifierType_Lattice);
   if (md == NULL) {
     md = ED_object_gpencil_modifier_add(
         reports, bmain, scene, ob, "Lattice", eGpencilModifierType_Lattice);

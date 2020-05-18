@@ -33,6 +33,7 @@
 
 #include "BLI_assert.h"
 #include "BLI_math_inline.h"
+#include "BLI_sys_types.h"
 #include <math.h>
 
 #ifndef M_PI
@@ -90,6 +91,10 @@ static const int NAN_INT = 0x7FC00000;
 #ifdef BLI_MATH_GCC_WARN_PRAGMA
 #  pragma GCC diagnostic push
 #  pragma GCC diagnostic ignored "-Wredundant-decls"
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /******************************* Float ******************************/
@@ -279,6 +284,10 @@ double double_round(double x, int ndigits);
 #  define BLI_ASSERT_ZERO_M3(m) (void)(m)
 #  define BLI_ASSERT_ZERO_M4(m) (void)(m)
 #  define BLI_ASSERT_UNIT_M3(m) (void)(m)
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* __BLI_MATH_BASE_H__ */

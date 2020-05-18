@@ -51,6 +51,8 @@
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
+#include "DEG_depsgraph.h"
+
 #include "MEM_guardedalloc.h"
 
 #include "node_intern.h" /* own include */
@@ -549,6 +551,7 @@ static int node_mouse_select(bContext *C,
     }
     ED_node_set_active_viewer_key(snode);
     ED_node_sort(snode->edittree);
+    DEG_id_tag_update(&snode->edittree->id, ID_RECALC_COPY_ON_WRITE);
 
     WM_event_add_notifier(C, NC_NODE | NA_SELECTED, NULL);
   }
@@ -1116,10 +1119,10 @@ void NODE_OT_select_same_type_step(wmOperatorType *ot)
  * \{ */
 
 /* generic  search invoke */
-static void node_find_cb(const struct bContext *C,
-                         void *UNUSED(arg),
-                         const char *str,
-                         uiSearchItems *items)
+static void node_find_update_fn(const struct bContext *C,
+                                void *UNUSED(arg),
+                                const char *str,
+                                uiSearchItems *items)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
   bNode *node;
@@ -1142,7 +1145,7 @@ static void node_find_cb(const struct bContext *C,
   }
 }
 
-static void node_find_call_cb(struct bContext *C, void *UNUSED(arg1), void *arg2)
+static void node_find_exec_fn(struct bContext *C, void *UNUSED(arg1), void *arg2)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
   bNode *active = arg2;
@@ -1182,7 +1185,7 @@ static uiBlock *node_find_menu(bContext *C, ARegion *region, void *arg_op)
                        0,
                        0,
                        "");
-  UI_but_func_search_set(but, NULL, node_find_cb, op->type, NULL, node_find_call_cb, NULL);
+  UI_but_func_search_set(but, NULL, node_find_update_fn, op->type, NULL, node_find_exec_fn, NULL);
   UI_but_flag_enable(but, UI_BUT_ACTIVATE_ON_INIT);
 
   /* fake button, it holds space for search items */

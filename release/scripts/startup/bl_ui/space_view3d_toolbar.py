@@ -243,62 +243,6 @@ class VIEW3D_PT_tools_meshedit_options_automerge(View3DPanel, Panel):
         col.prop(tool_settings, "use_mesh_automerge_and_split", toggle=False)
         col.prop(tool_settings, "double_threshold", text="Threshold")
 
-# ********** default tools for editmode_curve ****************
-
-
-class VIEW3D_PT_tools_curveedit_options_stroke(View3DPanel, Panel):
-    bl_category = "Tool"
-    bl_context = ".curve_edit"  # dot on purpose (access from topbar)
-    bl_label = "Curve Stroke"
-
-    def draw(self, context):
-        layout = self.layout
-
-        tool_settings = context.tool_settings
-        cps = tool_settings.curve_paint_settings
-
-        col = layout.column()
-
-        col.prop(cps, "curve_type")
-
-        if cps.curve_type == 'BEZIER':
-            col.label(text="Bezier Options:")
-            col.prop(cps, "error_threshold")
-            col.prop(cps, "fit_method")
-            col.prop(cps, "use_corners_detect")
-
-            col = layout.column()
-            col.active = cps.use_corners_detect
-            col.prop(cps, "corner_angle")
-
-        col.label(text="Pressure Radius:")
-        row = layout.row(align=True)
-        rowsub = row.row(align=True)
-        rowsub.prop(cps, "radius_min", text="Min")
-        rowsub.prop(cps, "radius_max", text="Max")
-
-        row.prop(cps, "use_pressure_radius", text="", icon_only=True)
-
-        col = layout.column()
-        col.label(text="Taper Radius:")
-        row = layout.row(align=True)
-        row.prop(cps, "radius_taper_start", text="Start")
-        row.prop(cps, "radius_taper_end", text="End")
-
-        col = layout.column()
-        col.label(text="Projection Depth:")
-        row = layout.row(align=True)
-        row.prop(cps, "depth_mode", expand=True)
-
-        col = layout.column()
-        if cps.depth_mode == 'SURFACE':
-            col.prop(cps, "surface_offset")
-            col.prop(cps, "use_offset_absolute")
-            col.prop(cps, "use_stroke_endpoints")
-            if cps.use_stroke_endpoints:
-                colsub = layout.column(align=True)
-                colsub.prop(cps, "surface_plane", expand=True)
-
 
 # ********** default tools for editmode_armature ****************
 
@@ -899,8 +843,8 @@ class VIEW3D_PT_sculpt_options(Panel, View3DPaintPanel):
         col = layout.column(heading="Auto-Masking", align=True)
         col.prop(sculpt, "use_automasking_topology", text="Topology")
         col.prop(sculpt, "use_automasking_face_sets", text="Face Sets")
-        col.prop(sculpt, "use_automasking_boundary_edges", text="Boundary Edges")
-        col.prop(sculpt, "use_automasking_boundary_face_sets", text="Boundary Face Sets")
+        col.prop(sculpt, "use_automasking_boundary_edges", text="Mesh Boundary")
+        col.prop(sculpt, "use_automasking_boundary_face_sets", text="Face Sets Boundary")
 
 
 class VIEW3D_PT_sculpt_options_gravity(Panel, View3DPaintPanel):
@@ -1380,6 +1324,7 @@ class VIEW3D_PT_tools_grease_pencil_brush_select(Panel, View3DPanel, GreasePenci
 
 class VIEW3D_PT_tools_grease_pencil_brush_settings(Panel, View3DPanel, GreasePencilPaintPanel):
     bl_label = "Brush Settings"
+    bl_options = {'DEFAULT_CLOSED'}
 
     # What is the point of brush presets? Seems to serve the exact same purpose as brushes themselves??
     def draw_header_preset(self, _context):
@@ -2049,7 +1994,6 @@ class VIEW3D_PT_tools_grease_pencil_brush_mixcolor(View3DPanel, Panel):
     bl_context = ".greasepencil_paint"
     bl_label = "Color"
     bl_category = "Tool"
-    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -2109,7 +2053,6 @@ class VIEW3D_PT_tools_grease_pencil_brush_mix_palette(View3DPanel, Panel):
     bl_label = "Palette"
     bl_category = "Tool"
     bl_parent_id = 'VIEW3D_PT_tools_grease_pencil_brush_mixcolor'
-    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -2198,7 +2141,6 @@ classes = (
     VIEW3D_PT_tools_object_options_transform,
     VIEW3D_PT_tools_meshedit_options,
     VIEW3D_PT_tools_meshedit_options_automerge,
-    VIEW3D_PT_tools_curveedit_options_stroke,
     VIEW3D_PT_tools_armatureedit_options,
     VIEW3D_PT_tools_posemode_options,
 

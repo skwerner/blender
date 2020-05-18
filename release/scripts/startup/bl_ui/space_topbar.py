@@ -229,14 +229,7 @@ class TOPBAR_MT_app(Menu):
         layout = self.layout
 
         layout.operator("wm.splash")
-
-        layout.separator()
-
-        layout.menu("TOPBAR_MT_app_support")
-
-        layout.separator()
-
-        layout.menu("TOPBAR_MT_app_about")
+        layout.operator("wm.splash_about")
 
         layout.separator()
 
@@ -316,16 +309,18 @@ class TOPBAR_MT_file_new(Menu):
 
         template_paths = bpy.utils.app_template_paths()
 
-        # expand template paths
-        app_templates = []
+        # Expand template paths.
+
+        # Use a set to avoid duplicate user/system templates.
+        # This is a corner case, but users managed to do it! T76849.
+        app_templates = set()
         for path in template_paths:
             for d in os.listdir(path):
                 if d.startswith(("__", ".")):
                     continue
                 template = os.path.join(path, d)
                 if os.path.isdir(template):
-                    # template_paths_expand.append(template)
-                    app_templates.append(d)
+                    app_templates.add(d)
 
         return sorted(app_templates)
 
@@ -405,45 +400,6 @@ class TOPBAR_MT_file_defaults(Menu):
         props = layout.operator("wm.read_factory_settings")
         if app_template:
             props.app_template = app_template
-
-
-class TOPBAR_MT_app_about(Menu):
-    bl_label = "About"
-
-    def draw(self, _context):
-        layout = self.layout
-
-        layout.operator("wm.url_open_preset", text="Release Notes",
-                        icon='URL').type = 'RELEASE_NOTES'
-
-        layout.separator()
-
-        layout.operator("wm.url_open_preset",
-                        text="Blender Website", icon='URL').type = 'BLENDER'
-        layout.operator("wm.url_open_preset", text="Credits",
-                        icon='URL').type = 'CREDITS'
-
-        layout.separator()
-
-        layout.operator(
-            "wm.url_open", text="License", icon='URL',
-        ).url = "https://www.blender.org/about/license/"
-
-
-class TOPBAR_MT_app_support(Menu):
-    bl_label = "Support Blender"
-
-    def draw(self, _context):
-        layout = self.layout
-
-        layout.operator("wm.url_open_preset",
-                        text="Development Fund", icon='FUND').type = 'FUND'
-
-        layout.separator()
-
-        layout.operator(
-            "wm.url_open", text="Blender Store", icon='URL',
-        ).url = "https://store.blender.org"
 
 
 # Include technical operators here which would otherwise have no way for users to access.
@@ -854,9 +810,7 @@ classes = (
     TOPBAR_MT_workspace_menu,
     TOPBAR_MT_editor_menus,
     TOPBAR_MT_app,
-    TOPBAR_MT_app_about,
     TOPBAR_MT_app_system,
-    TOPBAR_MT_app_support,
     TOPBAR_MT_file,
     TOPBAR_MT_file_new,
     TOPBAR_MT_file_recover,

@@ -276,7 +276,7 @@ class SEQUENCER_MT_view(Menu):
         if is_sequencer_view:
             layout.operator_context = 'INVOKE_REGION_WIN'
             layout.operator("sequencer.view_selected", text="Frame Selected")
-            layout.operator("sequencer.view_all", text="Frame All")
+            layout.operator("sequencer.view_all")
             layout.operator("view2d.zoom_border", text="Zoom")
 
         if is_preview:
@@ -1881,8 +1881,8 @@ class SEQUENCER_PT_strip_proxy(SequencerButtonsPanel, Panel):
 
             row = layout.row(heading="Resolutions", align=True)
             row.prop(strip.proxy, "build_25", toggle=True)
-            row.prop(strip.proxy, "build_75", toggle=True)
             row.prop(strip.proxy, "build_50", toggle=True)
+            row.prop(strip.proxy, "build_75", toggle=True)
             row.prop(strip.proxy, "build_100", toggle=True)
 
             layout.use_property_split = True

@@ -52,6 +52,7 @@
 #include "BKE_key.h"
 #include "BKE_lattice.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
@@ -121,6 +122,12 @@ static void lattice_free_data(ID *id)
   }
 }
 
+static void lattice_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Lattice *lattice = (Lattice *)id;
+  BKE_LIB_FOREACHID_PROCESS(data, lattice->key, IDWALK_CB_USER);
+}
+
 IDTypeInfo IDType_ID_LT = {
     .id_code = ID_LT,
     .id_filter = FILTER_ID_LT,
@@ -135,6 +142,7 @@ IDTypeInfo IDType_ID_LT = {
     .copy_data = lattice_copy_data,
     .free_data = lattice_free_data,
     .make_local = NULL,
+    .foreach_id = lattice_foreach_id,
 };
 
 int BKE_lattice_index_from_uvw(Lattice *lt, const int u, const int v, const int w)
@@ -1119,7 +1127,7 @@ void BKE_lattice_modifiers_calc(struct Depsgraph *depsgraph, Scene *scene, Objec
    * otherwise we get already-modified coordinates. */
   Object *ob_orig = DEG_get_original_object(ob);
   VirtualModifierData virtualModifierData;
-  ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+  ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
   float(*vert_coords)[3] = NULL;
   int numVerts, editmode = (lt->editlatt != NULL);
   const ModifierEvalContext mectx = {depsgraph, ob, 0};
@@ -1132,7 +1140,7 @@ void BKE_lattice_modifiers_calc(struct Depsgraph *depsgraph, Scene *scene, Objec
   }
 
   for (; md; md = md->next) {
-    const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
     if (!(mti->flags & eModifierTypeFlag_AcceptsVertexCosOnly)) {
       continue;

@@ -55,21 +55,22 @@
 #include "BKE_cloth.h"
 #include "BKE_collection.h"
 #include "BKE_colortools.h"
-#include "BKE_effect.h"
-#include "BKE_idtype.h"
-#include "BKE_lattice.h"
-#include "BKE_main.h"
-
 #include "BKE_deform.h"
 #include "BKE_displist.h"
+#include "BKE_effect.h"
+#include "BKE_idtype.h"
 #include "BKE_key.h"
+#include "BKE_lattice.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_scene.h"
+#include "BKE_texture.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -146,6 +147,53 @@ static void particle_settings_free_data(ID *id)
   fluid_free_settings(particle_settings->fluid);
 }
 
+static void particle_settings_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  ParticleSettings *psett = (ParticleSettings *)id;
+  BKE_LIB_FOREACHID_PROCESS(data, psett->instance_collection, IDWALK_CB_USER);
+  BKE_LIB_FOREACHID_PROCESS(data, psett->instance_object, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS(data, psett->bb_ob, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS(data, psett->collision_group, IDWALK_CB_NOP);
+
+  for (int i = 0; i < MAX_MTEX; i++) {
+    if (psett->mtex[i]) {
+      BKE_texture_mtex_foreach_id(data, psett->mtex[i]);
+    }
+  }
+
+  if (psett->effector_weights) {
+    BKE_LIB_FOREACHID_PROCESS(data, psett->effector_weights->group, IDWALK_CB_NOP);
+  }
+
+  if (psett->pd) {
+    BKE_LIB_FOREACHID_PROCESS(data, psett->pd->tex, IDWALK_CB_USER);
+    BKE_LIB_FOREACHID_PROCESS(data, psett->pd->f_source, IDWALK_CB_NOP);
+  }
+  if (psett->pd2) {
+    BKE_LIB_FOREACHID_PROCESS(data, psett->pd2->tex, IDWALK_CB_USER);
+    BKE_LIB_FOREACHID_PROCESS(data, psett->pd2->f_source, IDWALK_CB_NOP);
+  }
+
+  if (psett->boids) {
+    LISTBASE_FOREACH (BoidState *, state, &psett->boids->states) {
+      LISTBASE_FOREACH (BoidRule *, rule, &state->rules) {
+        if (rule->type == eBoidRuleType_Avoid) {
+          BoidRuleGoalAvoid *gabr = (BoidRuleGoalAvoid *)rule;
+          BKE_LIB_FOREACHID_PROCESS(data, gabr->ob, IDWALK_CB_NOP);
+        }
+        else if (rule->type == eBoidRuleType_FollowLeader) {
+          BoidRuleFollowLeader *flbr = (BoidRuleFollowLeader *)rule;
+          BKE_LIB_FOREACHID_PROCESS(data, flbr->ob, IDWALK_CB_NOP);
+        }
+      }
+    }
+  }
+
+  LISTBASE_FOREACH (ParticleDupliWeight *, dw, &psett->instance_weights) {
+    BKE_LIB_FOREACHID_PROCESS(data, dw->ob, IDWALK_CB_NOP);
+  }
+}
+
 IDTypeInfo IDType_ID_PA = {
     .id_code = ID_PA,
     .id_filter = FILTER_ID_PA,
@@ -160,6 +208,7 @@ IDTypeInfo IDType_ID_PA = {
     .copy_data = particle_settings_copy_data,
     .free_data = particle_settings_free_data,
     .make_local = NULL,
+    .foreach_id = particle_settings_foreach_id,
 };
 
 unsigned int PSYS_FRAND_SEED_OFFSET[PSYS_FRAND_COUNT];
@@ -583,7 +632,7 @@ void free_hair(Object *object, ParticleSystem *psys, int dynamics)
 
   if (psys->clmd) {
     if (dynamics) {
-      modifier_free((ModifierData *)psys->clmd);
+      BKE_modifier_free((ModifierData *)psys->clmd);
       psys->clmd = NULL;
       PTCacheID pid;
       BKE_ptcache_id_from_particles(&pid, object, psys);
@@ -735,7 +784,7 @@ void psys_free(Object *ob, ParticleSystem *psys)
      */
     free_hair(ob, psys, 0);
     if (psys->clmd != NULL) {
-      modifier_free((ModifierData *)psys->clmd);
+      BKE_modifier_free((ModifierData *)psys->clmd);
     }
 
     psys_free_particles(psys);
@@ -2383,8 +2432,9 @@ static bool psys_thread_context_init_path(ParticleThreadContext *ctx,
   }
   else {
     totchild = (int)((float)totchild * (float)part->disp / 100.0f);
-    totparent = MIN2(totparent, totchild);
   }
+
+  totparent = MIN2(totparent, totchild);
 
   if (totchild == 0) {
     return false;
@@ -3585,9 +3635,9 @@ ModifierData *object_add_particle_system(Main *bmain, Scene *scene, Object *ob, 
 
   psys->part = BKE_particlesettings_add(bmain, psys->name);
 
-  md = modifier_new(eModifierType_ParticleSystem);
+  md = BKE_modifier_new(eModifierType_ParticleSystem);
   BLI_strncpy(md->name, psys->name, sizeof(md->name));
-  modifier_unique_name(&ob->modifiers, md);
+  BKE_modifier_unique_name(&ob->modifiers, md);
 
   psmd = (ParticleSystemModifierData *)md;
   psmd->psys = psys;
@@ -3615,7 +3665,7 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
   }
 
   /* Clear particle system in fluid modifier. */
-  if ((md = modifiers_findByType(ob, eModifierType_Fluid))) {
+  if ((md = BKE_modifiers_findby_type(ob, eModifierType_Fluid))) {
     FluidModifierData *mmd = (FluidModifierData *)md;
 
     /* Clear particle system pointer in flow settings. */
@@ -3657,7 +3707,7 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
     }
   }
 
-  if ((md = modifiers_findByType(ob, eModifierType_DynamicPaint))) {
+  if ((md = BKE_modifiers_findby_type(ob, eModifierType_DynamicPaint))) {
     DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
     if (pmd->brush && pmd->brush->psys) {
       if (pmd->brush->psys == psys) {
@@ -3670,7 +3720,7 @@ void object_remove_particle_system(Main *bmain, Scene *UNUSED(scene), Object *ob
   psmd = psys_get_modifier(ob, psys);
   if (psmd) {
     BLI_remlink(&ob->modifiers, psmd);
-    modifier_free((ModifierData *)psmd);
+    BKE_modifier_free((ModifierData *)psmd);
   }
 
   /* Clear particle system. */

@@ -28,11 +28,9 @@
 
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_object_types.h"
 
 #include "BKE_action.h"
-} /* extern "C" */
 
 #include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_id.h"
@@ -335,6 +333,7 @@ DEG_COMPONENT_NODE_DEFINE(Synchronization, SYNCHRONIZATION, 0);
 DEG_COMPONENT_NODE_DEFINE(Audio, AUDIO, 0);
 DEG_COMPONENT_NODE_DEFINE(Armature, ARMATURE, 0);
 DEG_COMPONENT_NODE_DEFINE(GenericDatablock, GENERIC_DATABLOCK, 0);
+DEG_COMPONENT_NODE_DEFINE(Simulation, SIMULATION, 0);
 
 /* Node Types Register =================================== */
 
@@ -364,6 +363,7 @@ void deg_register_component_depsnodes()
   register_node_typeinfo(&DNTI_AUDIO);
   register_node_typeinfo(&DNTI_ARMATURE);
   register_node_typeinfo(&DNTI_GENERIC_DATABLOCK);
+  register_node_typeinfo(&DNTI_SIMULATION);
 }
 
 }  // namespace DEG

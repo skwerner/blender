@@ -27,9 +27,7 @@
 
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_listBase.h"
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_debug.h"
@@ -441,7 +439,8 @@ static void deg_debug_graphviz_node(const DebugContext &ctx, const Node *node)
     case NodeType::SYNCHRONIZATION:
     case NodeType::AUDIO:
     case NodeType::ARMATURE:
-    case NodeType::GENERIC_DATABLOCK: {
+    case NodeType::GENERIC_DATABLOCK:
+    case NodeType::SIMULATION: {
       ComponentNode *comp_node = (ComponentNode *)node;
       if (!comp_node->operations.empty()) {
         deg_debug_graphviz_node_cluster_begin(ctx, node);

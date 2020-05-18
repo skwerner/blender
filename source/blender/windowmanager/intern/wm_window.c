@@ -65,6 +65,9 @@
 #include "wm_platform_support.h"
 #include "wm_window.h"
 #include "wm_window_private.h"
+#ifdef WITH_XR_OPENXR
+#  include "wm_xr.h"
+#endif
 
 #include "ED_anim_api.h"
 #include "ED_fileselect.h"
@@ -414,7 +417,7 @@ void wm_quit_with_optional_confirmation_prompt(bContext *C, wmWindow *win)
 void wm_window_close(bContext *C, wmWindowManager *wm, wmWindow *win)
 {
   wmWindow *win_other;
-  const bool is_dialog = GHOST_IsDialogWindow(win->ghostwin);
+  const bool is_dialog = (G.background == false) ? GHOST_IsDialogWindow(win->ghostwin) : false;
 
   /* First check if there is another main window remaining. */
   for (win_other = wm->windows.first; win_other; win_other = win_other->next) {
@@ -430,13 +433,17 @@ void wm_window_close(bContext *C, wmWindowManager *wm, wmWindow *win)
 
   /* Close child windows and bring windows back to front that dialogs have pushed behind the main
    * window. */
-  for (wmWindow *iter_win = wm->windows.first; iter_win; iter_win = iter_win->next) {
+  LISTBASE_FOREACH (wmWindow *, iter_win, &wm->windows) {
     if (iter_win->parent == win) {
       wm_window_close(C, wm, iter_win);
     }
-    else if (is_dialog && iter_win != win && iter_win->parent &&
-             (GHOST_GetWindowState(iter_win->ghostwin) != GHOST_kWindowStateMinimized)) {
-      wm_window_raise(iter_win);
+    else {
+      if (G.background == false) {
+        if (is_dialog && iter_win != win && iter_win->parent &&
+            (GHOST_GetWindowState(iter_win->ghostwin) != GHOST_kWindowStateMinimized)) {
+          wm_window_raise(iter_win);
+        }
+      }
     }
   }
 
@@ -762,22 +769,9 @@ void wm_window_ghostwindows_ensure(wmWindowManager *wm)
      * in practice the window manager will likely move to the correct monitor */
     wm_init_state.start_x = 0;
     wm_init_state.start_y = 0;
-
-#ifdef WITH_X11 /* X11 */
-    /* X11, don't start maximized because we can't figure out the dimensions
-     * of a single display yet if there are multiple, due to lack of Xinerama
-     * handling in GHOST. */
-    wm_init_state.size_x = min_ii(wm_init_state.size_x, WM_WIN_INIT_SIZE_X);
-    wm_init_state.size_y = min_ii(wm_init_state.size_y, WM_WIN_INIT_SIZE_Y);
-    /* pad */
-    wm_init_state.start_x = WM_WIN_INIT_PAD;
-    wm_init_state.start_y = WM_WIN_INIT_PAD;
-    wm_init_state.size_x -= WM_WIN_INIT_PAD * 2;
-    wm_init_state.size_y -= WM_WIN_INIT_PAD * 2;
-#endif
   }
 
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     wm_window_ghostwindow_ensure(wm, win, false);
   }
 }
@@ -797,6 +791,36 @@ void wm_window_ghostwindows_remove_invalid(bContext *C, wmWindowManager *wm)
     if (win->ghostwin == NULL) {
       wm_window_close(C, wm, win);
     }
+  }
+}
+
+/* Update window size and position based on data from GHOST window. */
+static bool wm_window_update_size_position(wmWindow *win)
+{
+  GHOST_RectangleHandle client_rect;
+  int l, t, r, b, scr_w, scr_h;
+  int sizex, sizey, posx, posy;
+
+  client_rect = GHOST_GetClientBounds(win->ghostwin);
+  GHOST_GetRectangle(client_rect, &l, &t, &r, &b);
+
+  GHOST_DisposeRectangle(client_rect);
+
+  wm_get_desktopsize(&scr_w, &scr_h);
+  sizex = r - l;
+  sizey = b - t;
+  posx = l;
+  posy = scr_h - t - win->sizey;
+
+  if (win->sizex != sizex || win->sizey != sizey || win->posx != posx || win->posy != posy) {
+    win->sizex = sizex;
+    win->sizey = sizey;
+    win->posx = posx;
+    win->posy = posy;
+    return true;
+  }
+  else {
+    return false;
   }
 }
 
@@ -850,7 +874,7 @@ wmWindow *WM_window_open_temp(bContext *C,
   wmWindow *win_prev = CTX_wm_window(C);
   wmWindow *win;
   bScreen *screen;
-  ScrArea *sa;
+  ScrArea *area;
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
 
@@ -916,7 +940,8 @@ wmWindow *WM_window_open_temp(bContext *C,
 
   /* make window active, and validate/resize */
   CTX_wm_window_set(C, win);
-  if (!win->ghostwin) {
+  const bool new_window = (win->ghostwin == NULL);
+  if (new_window) {
     wm_window_ghostwindow_ensure(wm, win, dialog);
   }
   WM_check(C);
@@ -928,18 +953,25 @@ wmWindow *WM_window_open_temp(bContext *C,
    */
 
   /* ensure it shows the right spacetype editor */
-  sa = screen->areabase.first;
-  CTX_wm_area_set(C, sa);
+  area = screen->areabase.first;
+  CTX_wm_area_set(C, area);
 
-  ED_area_newspace(C, sa, space_type, false);
+  ED_area_newspace(C, area, space_type, false);
 
   ED_screen_change(C, screen);
-  ED_screen_refresh(wm, win); /* test scale */
+
+  if (!new_window) {
+    /* Set size in GHOST window and then update size and position from GHOST,
+     * in case they where changed by GHOST to fit the monitor/screen. */
+    wm_window_set_size(win, win->sizex, win->sizey);
+    wm_window_update_size_position(win);
+  }
+
+  /* Refresh screen dimensions, after the effective window size is known. */
+  ED_screen_refresh(wm, win);
 
   if (win->ghostwin) {
-    wm_window_set_size(win, win->sizex, win->sizey);
     wm_window_raise(win);
-
     GHOST_SetTitle(win->ghostwin, title);
     return win;
   }
@@ -1347,21 +1379,6 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
 
         /* win32: gives undefined window size when minimized */
         if (state != GHOST_kWindowStateMinimized) {
-          GHOST_RectangleHandle client_rect;
-          int l, t, r, b, scr_w, scr_h;
-          int sizex, sizey, posx, posy;
-
-          client_rect = GHOST_GetClientBounds(win->ghostwin);
-          GHOST_GetRectangle(client_rect, &l, &t, &r, &b);
-
-          GHOST_DisposeRectangle(client_rect);
-
-          wm_get_desktopsize(&scr_w, &scr_h);
-          sizex = r - l;
-          sizey = b - t;
-          posx = l;
-          posy = scr_h - t - win->sizey;
-
           /*
            * Ghost sometimes send size or move events when the window hasn't changed.
            * One case of this is using compiz on linux. To alleviate the problem
@@ -1370,14 +1387,8 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
            * It might be good to eventually do that at Ghost level, but that is for
            * another time.
            */
-          if (win->sizex != sizex || win->sizey != sizey || win->posx != posx ||
-              win->posy != posy) {
+          if (wm_window_update_size_position(win)) {
             const bScreen *screen = WM_window_get_active_screen(win);
-
-            win->sizex = sizex;
-            win->sizey = sizey;
-            win->posx = posx;
-            win->posy = posy;
 
             /* debug prints */
             if (G.debug & G_DEBUG_EVENTS) {
@@ -1672,8 +1683,6 @@ void wm_ghost_init(bContext *C)
     }
 
     GHOST_UseWindowFocus(wm_init_state.window_focus);
-
-    WM_init_tablet_api();
   }
 }
 
@@ -2165,8 +2174,7 @@ void WM_window_screen_rect_calc(const wmWindow *win, rcti *r_rect)
   screen_rect = window_rect;
 
   /* Subtract global areas from screen rectangle. */
-  for (ScrArea *global_area = win->global_areas.areabase.first; global_area;
-       global_area = global_area->next) {
+  LISTBASE_FOREACH (ScrArea *, global_area, &win->global_areas.areabase) {
     int height = ED_area_global_size_y(global_area) - 1;
 
     if (global_area->global->flag & GLOBAL_AREA_IS_HIDDEN) {
@@ -2214,7 +2222,7 @@ bool WM_window_is_maximized(const wmWindow *win)
  */
 void WM_windows_scene_data_sync(const ListBase *win_lb, Scene *scene)
 {
-  for (wmWindow *win = win_lb->first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, win_lb) {
     if (WM_window_get_active_scene(win) == scene) {
       ED_workspace_scene_data_sync(win->workspace_hook, scene);
     }
@@ -2223,7 +2231,7 @@ void WM_windows_scene_data_sync(const ListBase *win_lb, Scene *scene)
 
 Scene *WM_windows_scene_get_from_screen(const wmWindowManager *wm, const bScreen *screen)
 {
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     if (WM_window_get_active_screen(win) == screen) {
       return WM_window_get_active_scene(win);
     }
@@ -2234,7 +2242,7 @@ Scene *WM_windows_scene_get_from_screen(const wmWindowManager *wm, const bScreen
 
 WorkSpace *WM_windows_workspace_get_from_screen(const wmWindowManager *wm, const bScreen *screen)
 {
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     if (WM_window_get_active_screen(win) == screen) {
       return WM_window_get_active_workspace(win);
     }
@@ -2262,7 +2270,7 @@ void WM_window_set_active_scene(Main *bmain, bContext *C, wmWindow *win, Scene *
     changed = true;
   }
 
-  for (wmWindow *win_child = wm->windows.first; win_child; win_child = win_child->next) {
+  LISTBASE_FOREACH (wmWindow *, win_child, &wm->windows) {
     if (win_child->parent == win_parent && win_child->scene != scene) {
       ED_screen_scene_change(C, win_child, scene);
       changed = true;
@@ -2308,7 +2316,7 @@ void WM_window_set_active_view_layer(wmWindow *win, ViewLayer *view_layer)
   wmWindow *win_parent = (win->parent) ? win->parent : win;
 
   /* Set view layer in parent and child windows. */
-  for (wmWindow *win_iter = wm->windows.first; win_iter; win_iter = win_iter->next) {
+  LISTBASE_FOREACH (wmWindow *, win_iter, &wm->windows) {
     if ((win_iter == win_parent) || (win_iter->parent == win_parent)) {
       STRNCPY(win_iter->view_layer_name, view_layer->name);
       bScreen *screen = BKE_workspace_active_screen_get(win_iter->workspace_hook);
@@ -2340,7 +2348,7 @@ void WM_window_set_active_workspace(bContext *C, wmWindow *win, WorkSpace *works
 
   ED_workspace_change(workspace, C, wm, win);
 
-  for (wmWindow *win_child = wm->windows.first; win_child; win_child = win_child->next) {
+  LISTBASE_FOREACH (wmWindow *, win_child, &wm->windows) {
     if (win_child->parent == win_parent) {
       bScreen *screen = WM_window_get_active_screen(win_child);
       /* Don't change temporary screens, they only serve a single purpose. */
@@ -2454,24 +2462,3 @@ void WM_ghost_show_message_box(const char *title,
   GHOST_ShowMessageBox(g_system, title, message, help_label, continue_label, link, dialog_options);
 }
 /** \} */
-
-#ifdef WIN32
-/* -------------------------------------------------------------------- */
-/** \name Direct DirectX Context Management
- * \{ */
-
-void *WM_directx_context_create(void)
-{
-  BLI_assert(GPU_framebuffer_active_get() == NULL);
-  return GHOST_CreateDirectXContext(g_system);
-}
-
-void WM_directx_context_dispose(void *context)
-{
-  BLI_assert(GPU_framebuffer_active_get() == NULL);
-  GHOST_DisposeDirectXContext(g_system, context);
-}
-
-/** \} */
-
-#endif

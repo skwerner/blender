@@ -37,11 +37,12 @@
 #include "BLT_translation.h"
 
 #include "BKE_action.h"
+#include "BKE_anim_data.h"
 #include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
-#include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -57,6 +58,7 @@
 
 #include "ED_armature.h"
 #include "ED_object.h"
+#include "ED_outliner.h"
 #include "ED_screen.h"
 
 #include "UI_interface.h"
@@ -280,7 +282,7 @@ int join_armature_exec(bContext *C, wmOperator *op)
   float mat[4][4], oimat[4][4];
   bool ok = false;
 
-  /*  Ensure we're not in editmode and that the active object is an armature*/
+  /* Ensure we're not in edit-mode and that the active object is an armature. */
   if (!ob_active || ob_active->type != OB_ARMATURE) {
     return OPERATOR_CANCELLED;
   }
@@ -568,7 +570,7 @@ static void separate_armature_bones(Main *bmain, Object *ob, const bool is_selec
     if (is_select == (EBONE_VISIBLE(arm, curbone) && (curbone->flag & BONE_SELECTED))) {
 
       /* clear the bone->parent var of any bone that had this as its parent  */
-      for (EditBone *ebo = arm->edbo->first; ebo; ebo = ebo->next) {
+      LISTBASE_FOREACH (EditBone *, ebo, arm->edbo) {
         if (ebo->parent == curbone) {
           ebo->parent = NULL;
           /* this is needed to prevent random crashes with in ED_armature_from_edit */
@@ -578,7 +580,7 @@ static void separate_armature_bones(Main *bmain, Object *ob, const bool is_selec
       }
 
       /* clear the pchan->parent var of any pchan that had this as its parent */
-      for (bPoseChannel *pchn = ob->pose->chanbase.first; pchn; pchn = pchn->next) {
+      LISTBASE_FOREACH (bPoseChannel *, pchn, &ob->pose->chanbase) {
         if (pchn->parent == pchan) {
           pchn->parent = NULL;
         }
@@ -629,7 +631,7 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
       bArmature *arm_old = ob_old->data;
       bool has_selected_bone = false;
       bool has_selected_any = false;
-      for (EditBone *ebone = arm_old->edbo->first; ebone; ebone = ebone->next) {
+      LISTBASE_FOREACH (EditBone *, ebone, arm_old->edbo) {
         if (EBONE_VISIBLE(arm_old, ebone)) {
           if (ebone->flag & BONE_SELECTED) {
             has_selected_bone = true;
@@ -706,6 +708,7 @@ static int separate_armature_exec(bContext *C, wmOperator *op)
 
   if (ok) {
     BKE_report(op->reports, RPT_INFO, "Separated bones");
+    ED_outliner_select_sync_from_object_tag(C);
   }
 
   return OPERATOR_FINISHED;
@@ -835,7 +838,7 @@ static int armature_parent_set_exec(bContext *C, wmOperator *op)
   bool is_active_only_selected = false;
   if (actbone->flag & BONE_SELECTED) {
     is_active_only_selected = true;
-    for (EditBone *ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+    LISTBASE_FOREACH (EditBone *, ebone, arm->edbo) {
       if (EBONE_EDITABLE(ebone) && (ebone->flag & BONE_SELECTED)) {
         if (ebone != actbone) {
           is_active_only_selected = false;
@@ -867,7 +870,7 @@ static int armature_parent_set_exec(bContext *C, wmOperator *op)
      */
 
     /* Parent selected bones to the active one. */
-    for (EditBone *ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+    LISTBASE_FOREACH (EditBone *, ebone, arm->edbo) {
       if (EBONE_EDITABLE(ebone) && (ebone->flag & BONE_SELECTED)) {
         if (ebone != actbone) {
           bone_connect_to_new_parent(arm->edbo, ebone, actbone, val);
@@ -901,7 +904,7 @@ static int armature_parent_set_invoke(bContext *C,
     Object *ob = CTX_data_edit_object(C);
     bArmature *arm = ob->data;
     EditBone *actbone = arm->act_edbone;
-    for (EditBone *ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+    LISTBASE_FOREACH (EditBone *, ebone, arm->edbo) {
       if (EBONE_EDITABLE(ebone) && (ebone->flag & BONE_SELECTED)) {
         if (ebone != actbone) {
           if (ebone->parent != actbone) {
@@ -983,7 +986,7 @@ static int armature_parent_clear_exec(bContext *C, wmOperator *op)
     bArmature *arm = ob->data;
     bool changed = false;
 
-    for (EditBone *ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+    LISTBASE_FOREACH (EditBone *, ebone, arm->edbo) {
       if (EBONE_EDITABLE(ebone)) {
         changed = true;
         break;

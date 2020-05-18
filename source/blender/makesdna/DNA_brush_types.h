@@ -75,7 +75,7 @@ typedef struct BrushGpencilSettings {
   short fill_leak;
   /** Fill zoom factor */
   short fill_factor;
-  char _pad1[4];
+  int flag2;
 
   /** Number of simplify steps. */
   int fill_simplylvl;
@@ -118,11 +118,24 @@ typedef struct BrushGpencilSettings {
   int sculpt_mode_flag;
   /** Preset type (used to reset brushes - internal). */
   short preset_type;
-  char _pad3[6];
+  char _pad3[2];
+
+  /** Randomness for Hue. */
+  float random_hue;
+  /** Randomness for Saturation. */
+  float random_saturation;
+  /** Randomness for Value. */
+  float random_value;
 
   struct CurveMapping *curve_sensitivity;
   struct CurveMapping *curve_strength;
   struct CurveMapping *curve_jitter;
+  struct CurveMapping *curve_rand_pressure;
+  struct CurveMapping *curve_rand_strength;
+  struct CurveMapping *curve_rand_uv;
+  struct CurveMapping *curve_rand_hue;
+  struct CurveMapping *curve_rand_saturation;
+  struct CurveMapping *curve_rand_value;
 
   /* optional link of material to replace default in context */
   /** Material. */
@@ -204,6 +217,33 @@ typedef enum eGPDbrush_Flag {
   GP_BRUSH_TRIM_STROKE = (1 << 16),
 } eGPDbrush_Flag;
 
+typedef enum eGPDbrush_Flag2 {
+  /* Brush use random Hue at stroke level */
+  GP_BRUSH_USE_HUE_AT_STROKE = (1 << 0),
+  /* Brush use random Saturation at stroke level */
+  GP_BRUSH_USE_SAT_AT_STROKE = (1 << 1),
+  /* Brush use random Value at stroke level */
+  GP_BRUSH_USE_VAL_AT_STROKE = (1 << 2),
+  /* Brush use random Pressure at stroke level */
+  GP_BRUSH_USE_PRESS_AT_STROKE = (1 << 3),
+  /* Brush use random Strength at stroke level */
+  GP_BRUSH_USE_STRENGTH_AT_STROKE = (1 << 4),
+  /* Brush use random UV at stroke level */
+  GP_BRUSH_USE_UV_AT_STROKE = (1 << 5),
+  /* Brush use Hue random pressure */
+  GP_BRUSH_USE_HUE_RAND_PRESS = (1 << 6),
+  /* Brush use Saturation random pressure */
+  GP_BRUSH_USE_SAT_RAND_PRESS = (1 << 7),
+  /* Brush use Value random pressure */
+  GP_BRUSH_USE_VAL_RAND_PRESS = (1 << 8),
+  /* Brush use Pressure random pressure */
+  GP_BRUSH_USE_PRESSURE_RAND_PRESS = (1 << 9),
+  /* Brush use Strength random pressure */
+  GP_BRUSH_USE_STRENGTH_RAND_PRESS = (1 << 10),
+  /* Brush use UV random pressure */
+  GP_BRUSH_USE_UV_RAND_PRESS = (1 << 11),
+} eGPDbrush_Flag2;
+
 /* BrushGpencilSettings->gp_fill_draw_mode */
 typedef enum eGP_FillDrawModes {
   GP_FILL_DMODE_BOTH = 0,
@@ -281,10 +321,20 @@ typedef enum eBrushClothDeformType {
   BRUSH_CLOTH_DEFORM_EXPAND = 6,
 } eBrushClothDeformType;
 
+typedef enum eBrushSmoothDeformType {
+  BRUSH_SMOOTH_DEFORM_LAPLACIAN = 0,
+  BRUSH_SMOOTH_DEFORM_SURFACE = 1,
+} eBrushSmoothDeformType;
+
 typedef enum eBrushClothForceFalloffType {
   BRUSH_CLOTH_FORCE_FALLOFF_RADIAL = 0,
   BRUSH_CLOTH_FORCE_FALLOFF_PLANE = 1,
 } eBrushClothForceFalloffType;
+
+typedef enum eBrushPoseOriginType {
+  BRUSH_POSE_ORIGIN_TOPOLOGY = 0,
+  BRUSH_POSE_ORIGIN_FACE_SETS = 1,
+} eBrushPoseOriginType;
 
 /* Gpencilsettings.Vertex_mode */
 typedef enum eGp_Vertex_Mode {
@@ -322,6 +372,7 @@ typedef enum eAutomasking_flag {
   BRUSH_AUTOMASKING_TOPOLOGY = (1 << 0),
   BRUSH_AUTOMASKING_FACE_SETS = (1 << 1),
   BRUSH_AUTOMASKING_BOUNDARY_EDGES = (1 << 2),
+  BRUSH_AUTOMASKING_BOUNDARY_FACE_SETS = (1 << 3),
 } eAutomasking_flag;
 
 typedef struct Brush {
@@ -401,7 +452,7 @@ typedef struct Brush {
   /** Source for fill tool color gradient application. */
   char gradient_fill_mode;
 
-  char _pad0[5];
+  char _pad0[1];
 
   /** Projection shape (sphere, circle). */
   char falloff_shape;
@@ -462,6 +513,7 @@ typedef struct Brush {
   float pose_offset;
   int pose_smooth_iterations;
   int pose_ik_segments;
+  int pose_origin_type;
 
   /* cloth */
   int cloth_deform_type;
@@ -472,6 +524,12 @@ typedef struct Brush {
 
   float cloth_sim_limit;
   float cloth_sim_falloff;
+
+  /* smooth */
+  int smooth_deform_type;
+  float surface_smooth_shape_preservation;
+  float surface_smooth_current_vertex;
+  int surface_smooth_iterations;
 
   /* multiplane scrape */
   float multiplane_scrape_angle;
@@ -671,7 +729,6 @@ typedef enum eBrushUVSculptTool {
        SCULPT_TOOL_SLIDE_RELAX, \
        SCULPT_TOOL_CREASE, \
        SCULPT_TOOL_BLOB, \
-       SCULPT_TOOL_LAYER, \
        SCULPT_TOOL_INFLATE, \
        SCULPT_TOOL_CLAY, \
        SCULPT_TOOL_CLAY_STRIPS, \
@@ -788,8 +845,8 @@ typedef enum {
 
 /* blur kernel types, Brush.blur_mode */
 typedef enum eBlurKernelType {
-  KERNEL_GAUSSIAN,
-  KERNEL_BOX,
+  KERNEL_GAUSSIAN = 0,
+  KERNEL_BOX = 1,
 } eBlurKernelType;
 
 /* Brush.falloff_shape */

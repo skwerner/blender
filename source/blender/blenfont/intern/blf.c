@@ -682,6 +682,42 @@ int BLF_draw_mono(int fontid, const char *str, size_t len, int cwidth)
   return columns;
 }
 
+/**
+ * Run \a user_fn for each character, with the bound-box that would be used for drawing.
+ *
+ * \param user_fn: Callback that runs on each glyph, returning false early exits.
+ * \param user_data: User argument passed to \a user_fn.
+ *
+ * \note The font position, clipping, matrix and rotation are not applied.
+ */
+void BLF_boundbox_foreach_glyph_ex(int fontid,
+                                   const char *str,
+                                   size_t len,
+                                   BLF_GlyphBoundsFn user_fn,
+                                   void *user_data,
+                                   struct ResultBLF *r_info)
+{
+  FontBLF *font = blf_get(fontid);
+
+  BLF_RESULT_CHECK_INIT(r_info);
+
+  if (font) {
+    if (font->flags & BLF_WORD_WRAP) {
+      /* TODO: word-wrap support. */
+      BLI_assert(0);
+    }
+    else {
+      blf_font_boundbox_foreach_glyph(font, str, len, user_fn, user_data, r_info);
+    }
+  }
+}
+
+void BLF_boundbox_foreach_glyph(
+    int fontid, const char *str, size_t len, BLF_GlyphBoundsFn user_fn, void *user_data)
+{
+  BLF_boundbox_foreach_glyph_ex(fontid, str, len, user_fn, user_data, NULL);
+}
+
 size_t BLF_width_to_strlen(int fontid, const char *str, size_t len, float width, float *r_width)
 {
   FontBLF *font = blf_get(fontid);
@@ -910,8 +946,8 @@ void BLF_buffer(int fontid,
   if (font) {
     font->buf_info.fbuf = fbuf;
     font->buf_info.cbuf = cbuf;
-    font->buf_info.w = w;
-    font->buf_info.h = h;
+    font->buf_info.dims[0] = w;
+    font->buf_info.dims[1] = h;
     font->buf_info.ch = nch;
     font->buf_info.display = display;
   }

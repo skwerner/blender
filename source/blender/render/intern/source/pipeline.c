@@ -51,6 +51,7 @@
 
 #include "BLT_translation.h"
 
+#include "BKE_anim_data.h"
 #include "BKE_animsys.h" /* <------ should this be here?, needed for sequencer update */
 #include "BKE_callbacks.h"
 #include "BKE_camera.h"
@@ -1149,14 +1150,6 @@ void RE_AddObject(Render *UNUSED(re), Object *UNUSED(ob))
 }
 #endif
 
-/* *************************************** */
-
-#ifdef WITH_FREESTYLE
-static void init_freestyle(Render *re);
-static void add_freestyle(Render *re, int render);
-static void free_all_freestyle_renders(void);
-#endif
-
 /* ************  This part uses API, for rendering Blender scenes ********** */
 
 static void do_render_3d(Render *re)
@@ -1365,87 +1358,6 @@ static void render_composit_stats(void *arg, const char *str)
   re->stats_draw(re->sdh, &i);
 }
 
-#ifdef WITH_FREESTYLE
-/* init Freestyle renderer */
-static void init_freestyle(Render *re)
-{
-  re->freestyle_bmain = BKE_main_new();
-
-  /* We use the same window manager for freestyle bmain as
-   * real bmain uses. This is needed because freestyle's
-   * bmain could be used to tag scenes for update, which
-   * implies call of ED_render_scene_update in some cases
-   * and that function requires proper window manager
-   * to present (sergey)
-   */
-  re->freestyle_bmain->wm = re->main->wm;
-
-  FRS_init_stroke_renderer(re);
-}
-
-/* invokes Freestyle stroke rendering */
-static void add_freestyle(Render *re, int render)
-{
-  ViewLayer *view_layer, *active_view_layer;
-  LinkData *link;
-  Render *r;
-
-  active_view_layer = BLI_findlink(&re->view_layers, re->active_view_layer);
-
-  FRS_begin_stroke_rendering(re);
-
-  for (view_layer = (ViewLayer *)re->view_layers.first; view_layer;
-       view_layer = view_layer->next) {
-    link = (LinkData *)MEM_callocN(sizeof(LinkData), "LinkData to Freestyle render");
-    BLI_addtail(&re->freestyle_renders, link);
-
-    if ((re->r.scemode & R_SINGLE_LAYER) && view_layer != active_view_layer) {
-      continue;
-    }
-    if (FRS_is_freestyle_enabled(view_layer)) {
-      r = FRS_do_stroke_rendering(re, view_layer, render);
-      link->data = (void *)r;
-    }
-  }
-
-  FRS_end_stroke_rendering(re);
-}
-
-/* releases temporary scenes and renders for Freestyle stroke rendering */
-static void free_all_freestyle_renders(void)
-{
-  Render *re1;
-  LinkData *link;
-
-  for (re1 = RenderGlobal.renderlist.first; re1; re1 = re1->next) {
-    for (link = (LinkData *)re1->freestyle_renders.first; link; link = link->next) {
-      Render *freestyle_render = (Render *)link->data;
-
-      if (freestyle_render) {
-        Scene *freestyle_scene = freestyle_render->scene;
-        RE_FreeRender(freestyle_render);
-
-        if (freestyle_scene) {
-          BKE_libblock_unlink(re1->freestyle_bmain, freestyle_scene, false, false);
-          BKE_id_free(re1->freestyle_bmain, freestyle_scene);
-        }
-      }
-    }
-    BLI_freelistN(&re1->freestyle_renders);
-
-    if (re1->freestyle_bmain) {
-      /* detach the window manager from freestyle bmain (see comments
-       * in add_freestyle() for more detail)
-       */
-      BLI_listbase_clear(&re1->freestyle_bmain->wm);
-
-      BKE_main_free(re1->freestyle_bmain);
-      re1->freestyle_bmain = NULL;
-    }
-  }
-}
-#endif
-
 /* returns fully composited render-result on given time step (in RenderData) */
 static void do_render_composite(Render *re)
 {
@@ -1530,10 +1442,6 @@ static void do_render_composite(Render *re)
       }
     }
   }
-
-#ifdef WITH_FREESTYLE
-  free_all_freestyle_renders();
-#endif
 
   /* weak... the display callback wants an active renderlayer pointer... */
   if (re->result != NULL) {
@@ -1911,42 +1819,42 @@ bool RE_is_rendering_allowed(Scene *scene,
     }
   }
 
-  if (scemode & R_DOCOMP) {
-    if (scene->use_nodes) {
-      if (!scene->nodetree) {
-        BKE_report(reports, RPT_ERROR, "No node tree in scene");
-        return 0;
-      }
-
-      if (!check_composite_output(scene)) {
-        BKE_report(reports, RPT_ERROR, "No render output node in scene");
-        return 0;
-      }
-
-      if (scemode & R_FULL_SAMPLE) {
-        if (composite_needs_render(scene, 0) == 0) {
-          BKE_report(reports, RPT_ERROR, "Full sample AA not supported without 3D rendering");
-          return 0;
-        }
-      }
-    }
-  }
-
-  /* check valid camera, without camera render is OK (compo, seq) */
-  if (!check_valid_camera(scene, camera_override, reports)) {
-    return 0;
-  }
-
   if (RE_seq_render_active(scene, &scene->r)) {
+    /* Sequencer */
     if (scene->r.mode & R_BORDER) {
       BKE_report(reports, RPT_ERROR, "Border rendering is not supported by sequencer");
       return false;
     }
   }
+  else if ((scemode & R_DOCOMP) && scene->use_nodes) {
+    /* Compositor */
+    if (!scene->nodetree) {
+      BKE_report(reports, RPT_ERROR, "No node tree in scene");
+      return 0;
+    }
 
-  /* layer flag tests */
-  if (!render_scene_has_layers_to_render(scene, single_layer)) {
-    BKE_report(reports, RPT_ERROR, "All render layers are disabled");
+    if (!check_composite_output(scene)) {
+      BKE_report(reports, RPT_ERROR, "No render output node in scene");
+      return 0;
+    }
+
+    if (scemode & R_FULL_SAMPLE) {
+      if (composite_needs_render(scene, 0) == 0) {
+        BKE_report(reports, RPT_ERROR, "Full sample AA not supported without 3D rendering");
+        return 0;
+      }
+    }
+  }
+  else {
+    /* Regular Render */
+    if (!render_scene_has_layers_to_render(scene, single_layer)) {
+      BKE_report(reports, RPT_ERROR, "All render layers are disabled");
+      return 0;
+    }
+  }
+
+  /* check valid camera, without camera render is OK (compo, seq) */
+  if (!check_valid_camera(scene, camera_override, reports)) {
     return 0;
   }
 
@@ -2181,15 +2089,29 @@ void RE_RenderFreestyleStrokes(Render *re, Main *bmain, Scene *scene, int render
 
 void RE_RenderFreestyleExternal(Render *re)
 {
-  if (!re->test_break(re->tbh)) {
-    RenderView *rv;
+  if (re->test_break(re->tbh)) {
+    return;
+  }
 
-    init_freestyle(re);
+  FRS_init_stroke_renderer(re);
 
-    for (rv = re->result->views.first; rv; rv = rv->next) {
-      RE_SetActiveRenderView(re, rv->name);
-      add_freestyle(re, 1);
+  LISTBASE_FOREACH (RenderView *, rv, &re->result->views) {
+    RE_SetActiveRenderView(re, rv->name);
+
+    ViewLayer *active_view_layer = BLI_findlink(&re->view_layers, re->active_view_layer);
+    FRS_begin_stroke_rendering(re);
+
+    LISTBASE_FOREACH (ViewLayer *, view_layer, &re->view_layers) {
+      if ((re->r.scemode & R_SINGLE_LAYER) && view_layer != active_view_layer) {
+        continue;
+      }
+
+      if (FRS_is_freestyle_enabled(view_layer)) {
+        FRS_do_stroke_rendering(re, view_layer);
+      }
     }
+
+    FRS_end_stroke_rendering(re);
   }
 }
 #endif
@@ -2592,7 +2514,7 @@ void RE_RenderAnim(Render *re,
       {
         float ctime = BKE_scene_frame_get(scene);
         AnimData *adt = BKE_animdata_from_id(&scene->id);
-        BKE_animsys_evaluate_animdata(scene, &scene->id, adt, ctime, ADT_RECALC_ALL, false);
+        BKE_animsys_evaluate_animdata(&scene->id, adt, ctime, ADT_RECALC_ALL, false);
       }
 
       render_update_depsgraph(re);
@@ -2943,7 +2865,7 @@ bool RE_layers_have_name(struct RenderResult *rr)
 
 bool RE_passes_have_name(struct RenderLayer *rl)
 {
-  for (RenderPass *rp = rl->passes.first; rp; rp = rp->next) {
+  LISTBASE_FOREACH (RenderPass *, rp, &rl->passes) {
     if (!STREQ(rp->name, "Combined")) {
       return true;
     }
@@ -3033,5 +2955,5 @@ RenderPass *RE_create_gp_pass(RenderResult *rr, const char *layername, const cha
     BLI_freelinkN(&rl->passes, rp);
   }
   /* create a totally new pass */
-  return gp_add_pass(rr, rl, 4, RE_PASSNAME_COMBINED, viewname);
+  return render_layer_add_pass(rr, rl, 4, RE_PASSNAME_COMBINED, viewname, "RGBA");
 }

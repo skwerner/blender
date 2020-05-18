@@ -54,14 +54,14 @@ wmKeyMap *eyedropper_modal_keymap(wmKeyConfig *keyconf)
       {0, NULL, 0, NULL, NULL},
   };
 
-  wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Eyedropper Modal Map");
+  wmKeyMap *keymap = WM_modalkeymap_find(keyconf, "Eyedropper Modal Map");
 
   /* this function is called for each spacetype, only needs to add map once */
   if (keymap && keymap->modal_items) {
     return NULL;
   }
 
-  keymap = WM_modalkeymap_add(keyconf, "Eyedropper Modal Map", modal_items);
+  keymap = WM_modalkeymap_ensure(keyconf, "Eyedropper Modal Map", modal_items);
 
   /* assign to operators */
   WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_colorramp");
@@ -84,12 +84,12 @@ wmKeyMap *eyedropper_colorband_modal_keymap(wmKeyConfig *keyconf)
       {0, NULL, 0, NULL, NULL},
   };
 
-  wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Eyedropper ColorRamp PointSampling Map");
+  wmKeyMap *keymap = WM_modalkeymap_find(keyconf, "Eyedropper ColorRamp PointSampling Map");
   if (keymap && keymap->modal_items) {
     return keymap;
   }
 
-  keymap = WM_modalkeymap_add(
+  keymap = WM_modalkeymap_ensure(
       keyconf, "Eyedropper ColorRamp PointSampling Map", modal_items_point);
 
   /* assign to operators */
@@ -139,8 +139,8 @@ void eyedropper_draw_cursor_text(const struct bContext *C, const ARegion *region
 uiBut *eyedropper_get_property_button_under_mouse(bContext *C, const wmEvent *event)
 {
   bScreen *screen = CTX_wm_screen(C);
-  ScrArea *sa = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, event->x, event->y);
-  ARegion *region = BKE_area_find_region_xy(sa, RGN_TYPE_ANY, event->x, event->y);
+  ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, event->x, event->y);
+  ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_ANY, event->x, event->y);
 
   uiBut *but = ui_but_find_mouse_over(region, event);
 

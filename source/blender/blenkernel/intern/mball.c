@@ -50,11 +50,11 @@
 
 #include "BKE_main.h"
 
-#include "BKE_animsys.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_material.h"
 #include "BKE_mball.h"
 #include "BKE_object.h"
@@ -102,6 +102,14 @@ static void metaball_free_data(ID *id)
   }
 }
 
+static void metaball_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  MetaBall *metaball = (MetaBall *)id;
+  for (int i = 0; i < metaball->totcol; i++) {
+    BKE_LIB_FOREACHID_PROCESS(data, metaball->mat[i], IDWALK_CB_USER);
+  }
+}
+
 IDTypeInfo IDType_ID_MB = {
     .id_code = ID_MB,
     .id_filter = FILTER_ID_MB,
@@ -116,6 +124,7 @@ IDTypeInfo IDType_ID_MB = {
     .copy_data = metaball_copy_data,
     .free_data = metaball_free_data,
     .make_local = NULL,
+    .foreach_id = metaball_foreach_id,
 };
 
 /* Functions */
@@ -431,9 +440,8 @@ Object *BKE_mball_basis_find(Scene *scene, Object *basis)
 
   BLI_split_name_num(basisname, &basisnr, basis->id.name + 2, '.');
 
-  for (ViewLayer *view_layer = scene->view_layers.first; view_layer;
-       view_layer = view_layer->next) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
+    LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
       Object *ob = base->object;
       if ((ob->type == OB_MBALL) && !(base->flag & BASE_FROM_DUPLI)) {
         if (ob != bob) {
@@ -464,7 +472,7 @@ bool BKE_mball_minmax_ex(
 
   INIT_MINMAX(min, max);
 
-  for (const MetaElem *ml = mb->elems.first; ml; ml = ml->next) {
+  LISTBASE_FOREACH (const MetaElem *, ml, &mb->elems) {
     if ((ml->flag & flag) == flag) {
       const float scale_mb = (ml->rad * 0.5f) * scale;
       int i;
@@ -494,7 +502,7 @@ bool BKE_mball_minmax(const MetaBall *mb, float min[3], float max[3])
 {
   INIT_MINMAX(min, max);
 
-  for (const MetaElem *ml = mb->elems.first; ml; ml = ml->next) {
+  LISTBASE_FOREACH (const MetaElem *, ml, &mb->elems) {
     minmax_v3v3_v3(min, max, &ml->x);
   }
 
@@ -507,7 +515,7 @@ bool BKE_mball_center_median(const MetaBall *mb, float r_cent[3])
 
   zero_v3(r_cent);
 
-  for (const MetaElem *ml = mb->elems.first; ml; ml = ml->next) {
+  LISTBASE_FOREACH (const MetaElem *, ml, &mb->elems) {
     add_v3_v3(r_cent, &ml->x);
     total++;
   }
@@ -539,7 +547,7 @@ void BKE_mball_transform(MetaBall *mb, const float mat[4][4], const bool do_prop
 
   mat4_to_quat(quat, mat);
 
-  for (MetaElem *ml = mb->elems.first; ml; ml = ml->next) {
+  LISTBASE_FOREACH (MetaElem *, ml, &mb->elems) {
     mul_m4_v3(mat, &ml->x);
     mul_qt_qtqt(ml->quat, quat, ml->quat);
 
@@ -559,7 +567,7 @@ void BKE_mball_transform(MetaBall *mb, const float mat[4][4], const bool do_prop
 
 void BKE_mball_translate(MetaBall *mb, const float offset[3])
 {
-  for (MetaElem *ml = mb->elems.first; ml; ml = ml->next) {
+  LISTBASE_FOREACH (MetaElem *, ml, &mb->elems) {
     add_v3_v3(&ml->x, offset);
   }
 }
@@ -568,7 +576,7 @@ void BKE_mball_translate(MetaBall *mb, const float offset[3])
 int BKE_mball_select_count(const MetaBall *mb)
 {
   int sel = 0;
-  for (const MetaElem *ml = mb->editelems->first; ml; ml = ml->next) {
+  LISTBASE_FOREACH (const MetaElem *, ml, mb->editelems) {
     if (ml->flag & SELECT) {
       sel++;
     }
@@ -590,7 +598,7 @@ int BKE_mball_select_count_multi(Base **bases, int bases_len)
 bool BKE_mball_select_all(MetaBall *mb)
 {
   bool changed = false;
-  for (MetaElem *ml = mb->editelems->first; ml; ml = ml->next) {
+  LISTBASE_FOREACH (MetaElem *, ml, mb->editelems) {
     if ((ml->flag & SELECT) == 0) {
       ml->flag |= SELECT;
       changed = true;
@@ -613,7 +621,7 @@ bool BKE_mball_select_all_multi_ex(Base **bases, int bases_len)
 bool BKE_mball_deselect_all(MetaBall *mb)
 {
   bool changed = false;
-  for (MetaElem *ml = mb->editelems->first; ml; ml = ml->next) {
+  LISTBASE_FOREACH (MetaElem *, ml, mb->editelems) {
     if ((ml->flag & SELECT) != 0) {
       ml->flag &= ~SELECT;
       changed = true;
@@ -637,7 +645,7 @@ bool BKE_mball_deselect_all_multi_ex(Base **bases, int bases_len)
 bool BKE_mball_select_swap(MetaBall *mb)
 {
   bool changed = false;
-  for (MetaElem *ml = mb->editelems->first; ml; ml = ml->next) {
+  LISTBASE_FOREACH (MetaElem *, ml, mb->editelems) {
     ml->flag ^= SELECT;
     changed = true;
   }

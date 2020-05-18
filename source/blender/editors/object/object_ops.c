@@ -137,6 +137,8 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_multires_reshape);
   WM_operatortype_append(OBJECT_OT_multires_higher_levels_delete);
   WM_operatortype_append(OBJECT_OT_multires_base_apply);
+  WM_operatortype_append(OBJECT_OT_multires_unsubdivide);
+  WM_operatortype_append(OBJECT_OT_multires_rebuild_subdiv);
   WM_operatortype_append(OBJECT_OT_multires_external_save);
   WM_operatortype_append(OBJECT_OT_multires_external_pack);
   WM_operatortype_append(OBJECT_OT_skin_root_mark);
@@ -265,6 +267,8 @@ void ED_operatortypes_object(void)
   WM_operatortype_append(OBJECT_OT_hide_collection);
 
   WM_operatortype_append(OBJECT_OT_voxel_remesh);
+  WM_operatortype_append(OBJECT_OT_voxel_size_edit);
+
   WM_operatortype_append(OBJECT_OT_quadriflow_remesh);
 }
 

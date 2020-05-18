@@ -396,6 +396,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         if md.texture_coords == 'OBJECT':
             col.label(text="Object:")
             col.prop(md, "texture_coords_object", text="")
+            obj = md.texture_coords_object
+            if obj and obj.type == 'ARMATURE':
+                col.label(text="Bone:")
+                col.prop_search(md, "texture_coords_bone", obj.data, "bones", text="")
         elif md.texture_coords == 'UV' and ob.type == 'MESH':
             col.label(text="UV Map:")
             col.prop_search(md, "uv_layer", ob.data, "uv_layers", text="")
@@ -651,6 +655,8 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row = layout.row()
         row.prop(md, "use_mirror_u", text="Flip U")
         row.prop(md, "use_mirror_v", text="Flip V")
+        row = layout.row()
+        row.prop(md, "use_mirror_udim", text="Flip UDIM")
 
         col = layout.column(align=True)
 
@@ -682,8 +688,7 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         split = layout.split()
         col = split.column()
         col.prop(md, "levels", text="Preview")
-        # TODO(sergey): Expose it again after T58473 is solved.
-        # col.prop(md, "sculpt_levels", text="Sculpt")
+        col.prop(md, "sculpt_levels", text="Sculpt")
         col.prop(md, "render_levels", text="Render")
 
         row = col.row()
@@ -693,13 +698,26 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col = split.column()
 
         col.enabled = ob.mode != 'EDIT'
-        col.operator("object.multires_subdivide", text="Subdivide")
+        op = col.operator("object.multires_subdivide", text="Subdivide")
+        op.mode = 'CATMULL_CLARK'
+
+        op = col.operator("object.multires_subdivide", text="Subdivide Simple")
+        op.mode = 'SIMPLE'
+
+        op = col.operator("object.multires_subdivide", text="Subdivide Linear")
+        op.mode = 'LINEAR'
+
         col.operator("object.multires_higher_levels_delete", text="Delete Higher")
+        col.operator("object.multires_unsubdivide", text="Unsubdivide")
         col.operator("object.multires_reshape", text="Reshape")
         col.operator("object.multires_base_apply", text="Apply Base")
+        col.operator("object.multires_rebuild_subdiv", text="Rebuild Subdivisions")
         col.prop(md, "uv_smooth", text="")
         col.prop(md, "show_only_control_edges")
-        col.prop(md, "use_creases")
+
+        row = col.row()
+        row.enabled = not have_displacement
+        row.prop(md, "use_creases")
 
         layout.separator()
 
@@ -1039,12 +1057,23 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         sub = col.row()
         sub.active = bool(md.vertex_group)
         sub.prop(md, "thickness_vertex_group", text="Factor")
+        if solidify_mode == 'NON_MANIFOLD':
+            sub = col.row()
+            sub.active = bool(md.vertex_group)
+            sub.prop(md, "use_flat_faces")
 
         if solidify_mode == 'EXTRUDE':
             col.label(text="Crease:")
             col.prop(md, "edge_crease_inner", text="Inner")
             col.prop(md, "edge_crease_outer", text="Outer")
             col.prop(md, "edge_crease_rim", text="Rim")
+            col.label(text="Bevel:")
+            col.prop(md, "bevel_convex")
+        else:
+            col.label(text="Bevel:")
+            col.prop(md, "bevel_convex")
+            col.separator()
+            col.prop(md, "nonmanifold_merge_threshold")
 
         col = split.column()
 
@@ -1071,6 +1100,17 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         row = row.row(align=True)
         row.active = md.use_rim
         row.prop(md, "material_offset_rim", text="Rim")
+
+        col.separator()
+
+        row = col.row(align=True)
+        row.label(text="Shell Vertex Group:")
+        row = col.row(align=True)
+        row.prop_search(md, "shell_vertex_group", ob, "vertex_groups", text="")
+        row = col.row(align=True)
+        row.label(text="Rim Vertex Group:")
+        row = col.row(align=True)
+        row.prop_search(md, "rim_vertex_group", ob, "vertex_groups", text="")
 
     def SUBSURF(self, layout, ob, md):
         from bpy import context
@@ -1130,13 +1170,24 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.label(text="Settings are inside the Physics tab")
 
     def SURFACE_DEFORM(self, layout, _ob, md):
-        col = layout.column()
+        split = layout.split()
+        col = split.column()
         col.active = not md.is_bound
 
-        col.prop(md, "target")
-        col.prop(md, "falloff")
+        col.label(text="Target:")
+        col.prop(md, "target", text="")
 
-        layout.separator()
+        col = split.column()
+        col.label(text="Vertex Group:")
+        row = col.row(align=True)
+        row.prop_search(md, "vertex_group", _ob, "vertex_groups", text="")
+        row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
+
+        split = layout.split()
+        col = split.column()
+        col.prop(md, "falloff")
+        col = split.column()
+        col.prop(md, "strength")
 
         col = layout.column()
 
@@ -1173,11 +1224,27 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.label(text="From:")
         col.prop(md, "object_from", text="")
 
-        col.prop(md, "use_volume_preserve")
-
         col = split.column()
         col.label(text="To:")
         col.prop(md, "object_to", text="")
+
+        split = layout.split()
+        col = split.column()
+        obj = md.object_from
+        if obj and obj.type == 'ARMATURE':
+            col.label(text="Bone:")
+            col.prop_search(md, "bone_from", obj.data, "bones", text="")
+
+        col = split.column()
+        obj = md.object_to
+        if obj and obj.type == 'ARMATURE':
+            col.label(text="Bone:")
+            col.prop_search(md, "bone_to", obj.data, "bones", text="")
+
+        split = layout.split()
+        col = split.column()
+        col.prop(md, "use_volume_preserve")
+        col = split.column()
         row = col.row(align=True)
         row.prop_search(md, "vertex_group", ob, "vertex_groups", text="")
         row.prop(md, "invert_vertex_group", text="", icon='ARROW_LEFTRIGHT')
@@ -1206,6 +1273,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
         if md.texture_coords == 'OBJECT':
             layout.prop(md, "texture_coords_object", text="Object")
+            obj = md.texture_coords_object
+            if obj and obj.type == 'ARMATURE':
+                layout.prop_search(md, "texture_coords_bone", obj.data, "bones", text="Bone")
         elif md.texture_coords == 'UV' and ob.type == 'MESH':
             layout.prop_search(md, "uv_layer", ob.data, "uv_layers")
 
@@ -1258,6 +1328,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
             layout.prop_search(md, "uv_layer", ob.data, "uv_layers")
         elif md.texture_coords == 'OBJECT':
             layout.prop(md, "texture_coords_object")
+            obj = md.texture_coords_object
+            if obj and obj.type == 'ARMATURE':
+                layout.prop_search(md, "texture_coords_bone", obj.data, "bones")
 
         layout.separator()
 
@@ -1279,17 +1352,22 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         layout.prop(md, "mode")
 
         row = layout.row()
-        row.prop(md, "octree_depth")
-        row.prop(md, "scale")
+        if md.mode == 'VOXEL':
+            layout.prop(md, "voxel_size")
+            layout.prop(md, "adaptivity")
+        else:
+            row.prop(md, "octree_depth")
+            row.prop(md, "scale")
 
-        if md.mode == 'SHARP':
-            layout.prop(md, "sharpness")
+            if md.mode == 'SHARP':
+                layout.prop(md, "sharpness")
+
+            layout.prop(md, "use_remove_disconnected")
+            row = layout.row()
+            row.active = md.use_remove_disconnected
+            row.prop(md, "threshold")
 
         layout.prop(md, "use_smooth_shade")
-        layout.prop(md, "use_remove_disconnected")
-        row = layout.row()
-        row.active = md.use_remove_disconnected
-        row.prop(md, "threshold")
 
     @staticmethod
     def vertex_weight_mask(layout, ob, md):
@@ -1323,6 +1401,9 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
 
                 if md.mask_tex_mapping == 'OBJECT':
                     layout.prop(md, "mask_tex_map_object", text="Object")
+                    obj = md.mask_tex_map_object
+                    if obj and obj.type == 'ARMATURE':
+                        layout.prop_search(md, "mask_tex_map_bone", obj.data, "bones", text="Bone")
                 elif md.mask_tex_mapping == 'UV' and ob.type == 'MESH':
                     layout.prop_search(md, "mask_tex_uv_layer", ob.data, "uv_layers")
 
@@ -1745,6 +1826,10 @@ class DATA_PT_modifiers(ModifierButtonsPanel, Panel):
         col.prop(md, "thresh", text="Threshold")
         col.prop(md, "face_influence")
 
+    def SIMULATION(self, layout, ob, md):
+        layout.prop(md, "simulation")
+        layout.prop(md, "data_path")
+
 
 class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
     bl_label = "Modifiers"
@@ -1806,7 +1891,15 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
         split = col2.split(factor=0.6)
 
         row = split.row(align=True)
-        row.prop_search(md, "material", gpd, "materials", text="", icon='SHADING_TEXTURE')
+
+        valid = md.material in (slot.material for slot in ob.material_slots) or md.material is None
+        if valid:
+            icon = 'SHADING_TEXTURE'
+        else:
+            icon = 'ERROR'
+
+        row.alert = not valid
+        row.prop_search(md, "material", gpd, "materials", text="", icon=icon)
         row.prop(md, "invert_materials", text="", icon='ARROW_LEFTRIGHT')
 
         row = split.row(align=True)
@@ -1909,6 +2002,27 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
 
         self.gpencil_masking(layout, ob, md, True, True)
 
+    def GP_TEXTURE(self, layout, ob, md):
+        col = layout.column()
+
+        col.prop(md, "mode")
+        if md.mode in {'STROKE', 'STROKE_AND_FILL'}:
+            col.label(text="Stroke Texture:")
+            col.prop(md, "fit_method")
+            col.prop(md, "uv_offset")
+            col.prop(md, "uv_scale")
+
+        if md.mode == 'STROKE_AND_FILL':
+            col.separator()
+
+        if md.mode in {'FILL', 'STROKE_AND_FILL'}:
+            col.label(text="Fill Texture:")
+            col.prop(md, "fill_rotation", text="Rotation")
+            col.prop(md, "fill_offset", text="Location")
+            col.prop(md, "fill_scale", text="Scale")
+
+        self.gpencil_masking(layout, ob, md, True)
+
     def GP_TINT(self, layout, ob, md):
         layout.row().prop(md, "tint_type", expand=True)
 
@@ -2002,8 +2116,8 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
         col = split.column()
         col.prop(md, "modify_color")
 
-        if md.modify_color == 'HARDENESS':
-            col.prop(md, "hardeness")
+        if md.modify_color == 'HARDNESS':
+            col.prop(md, "hardness")
             show = False
         else:
             col.prop(md, "normalize_opacity")
@@ -2082,6 +2196,11 @@ class DATA_PT_gpencil_modifiers(ModifierButtonsPanel, Panel):
         sub.active = md.use_restrict_frame_range
         sub.prop(md, "frame_start", text="Start")
         sub.prop(md, "frame_end", text="End")
+
+        col.prop(md, "use_percentage")
+        sub = col.column(align=True)
+        sub.active = md.use_percentage
+        sub.prop(md, "percentage_factor")
 
         layout.label(text="Influence Filters:")
 

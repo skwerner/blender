@@ -529,7 +529,7 @@ void headerRotation(TransInfo *t, char str[UI_MAX_DRAW_STR], float final)
 void postInputRotation(TransInfo *t, float values[3])
 {
   float axis_final[3];
-  copy_v3_v3(axis_final, t->orient_matrix[t->orient_axis]);
+  copy_v3_v3(axis_final, t->spacemtx[t->orient_axis]);
   if ((t->con.mode & CON_APPLY) && t->con.applyRot) {
     t->con.applyRot(t, NULL, NULL, axis_final, values);
   }
@@ -1028,21 +1028,21 @@ short getAnimEdit_SnapMode(TransInfo *t)
   short autosnap = SACTSNAP_OFF;
 
   if (t->spacetype == SPACE_ACTION) {
-    SpaceAction *saction = (SpaceAction *)t->sa->spacedata.first;
+    SpaceAction *saction = (SpaceAction *)t->area->spacedata.first;
 
     if (saction) {
       autosnap = saction->autosnap;
     }
   }
   else if (t->spacetype == SPACE_GRAPH) {
-    SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
+    SpaceGraph *sipo = (SpaceGraph *)t->area->spacedata.first;
 
     if (sipo) {
       autosnap = sipo->autosnap;
     }
   }
   else if (t->spacetype == SPACE_NLA) {
-    SpaceNla *snla = (SpaceNla *)t->sa->spacedata.first;
+    SpaceNla *snla = (SpaceNla *)t->area->spacedata.first;
 
     if (snla) {
       autosnap = snla->autosnap;

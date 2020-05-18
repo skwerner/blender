@@ -338,7 +338,7 @@ void GHOST_SystemX11::getAllDisplayDimensions(GHOST_TUns32 &width, GHOST_TUns32 
  * \param   parentWindow    Parent window
  * \return  The new window (or 0 if creation failed).
  */
-GHOST_IWindow *GHOST_SystemX11::createWindow(const STR_String &title,
+GHOST_IWindow *GHOST_SystemX11::createWindow(const char *title,
                                              GHOST_TInt32 left,
                                              GHOST_TInt32 top,
                                              GHOST_TUns32 width,
@@ -910,8 +910,8 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
           vector<GHOST_IWindow *>::const_iterator win_end = win_vec.end();
 
           for (; win_it != win_end; ++win_it) {
-            GHOST_WindowX11 *window = static_cast<GHOST_WindowX11 *>(*win_it);
-            window->refreshXInputDevices();
+            GHOST_WindowX11 *window_xinput = static_cast<GHOST_WindowX11 *>(*win_it);
+            window_xinput->refreshXInputDevices();
           }
         }
       }
@@ -960,11 +960,7 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
     case MotionNotify: {
       XMotionEvent &xme = xe->xmotion;
 
-#ifdef WITH_X11_XINPUT
       bool is_tablet = window->GetTabletData().Active != GHOST_kTabletModeNone;
-#else
-      bool is_tablet = false;
-#endif
 
       if (is_tablet == false && window->getCursorGrabModeIsWarp()) {
         GHOST_TInt32 x_new = xme.x_root;
@@ -1000,12 +996,17 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
                                           GHOST_kEventCursorMove,
                                           window,
                                           xme.x_root + x_accum,
-                                          xme.y_root + y_accum);
+                                          xme.y_root + y_accum,
+                                          window->GetTabletData());
         }
       }
       else {
-        g_event = new GHOST_EventCursor(
-            getMilliSeconds(), GHOST_kEventCursorMove, window, xme.x_root, xme.y_root);
+        g_event = new GHOST_EventCursor(getMilliSeconds(),
+                                        GHOST_kEventCursorMove,
+                                        window,
+                                        xme.x_root,
+                                        xme.y_root,
+                                        window->GetTabletData());
       }
       break;
     }
@@ -1272,7 +1273,8 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
       else
         break;
 
-      g_event = new GHOST_EventButton(getMilliSeconds(), type, window, gbmask);
+      g_event = new GHOST_EventButton(
+          getMilliSeconds(), type, window, gbmask, window->GetTabletData());
       break;
     }
 
@@ -1373,8 +1375,12 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
        */
       XCrossingEvent &xce = xe->xcrossing;
       if (xce.mode == NotifyNormal) {
-        g_event = new GHOST_EventCursor(
-            getMilliSeconds(), GHOST_kEventCursorMove, window, xce.x_root, xce.y_root);
+        g_event = new GHOST_EventCursor(getMilliSeconds(),
+                                        GHOST_kEventCursorMove,
+                                        window,
+                                        xce.x_root,
+                                        xce.y_root,
+                                        window->GetTabletData());
       }
 
       // printf("X: %s window %d\n",
@@ -1563,7 +1569,7 @@ void GHOST_SystemX11::processEvent(XEvent *xe)
 GHOST_TSuccess GHOST_SystemX11::getModifierKeys(GHOST_ModifierKeys &keys) const
 {
 
-  /* Analyze the masks retuned from XQueryPointer. */
+  /* Analyze the masks returned from XQueryPointer. */
 
   memset((void *)m_keyboard_vector, 0, sizeof(m_keyboard_vector));
 
@@ -1875,7 +1881,7 @@ static GHOST_TKey ghost_key_from_keysym(const KeySym key)
 #  endif
 #endif
       default:
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
         printf("%s: unknown key: %lu / 0x%lx\n", __func__, key, key);
 #endif
         type = GHOST_kKeyUnknown;
@@ -1899,7 +1905,7 @@ static GHOST_TKey ghost_key_from_keycode(const XkbDescPtr xkb_descr, const KeyCo
     switch (id) {
       case MAKE_ID('T', 'L', 'D', 'E'):
         return GHOST_kKeyAccentGrave;
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
       default:
         printf("%s unhandled keycode: %.*s\n", __func__, XkbKeyNameLength, id_str);
         break;
@@ -2166,13 +2172,23 @@ GHOST_TUns8 *GHOST_SystemX11::getClipboard(bool selection) const
   else if (owner == None)
     return (NULL);
 
+  /* Restore events so copy doesn't swallow other event types (keyboard/mouse). */
+  vector<XEvent> restore_events;
+
   while (1) {
     /* only get an event if xcout() is doing something */
-    if (context != XCLIB_XCOUT_NONE)
+    bool restore_this_event = false;
+    if (context != XCLIB_XCOUT_NONE) {
       XNextEvent(m_display, &evt);
+      restore_this_event = (evt.type != SelectionNotify);
+    }
 
     /* fetch the selection, or part of it */
     getClipboard_xcout(&evt, sseln, target, &sel_buf, &sel_len, &context);
+
+    if (restore_this_event) {
+      restore_events.push_back(evt);
+    }
 
     /* fallback is needed. set XA_STRING to target and restart the loop. */
     if (context == XCLIB_XCOUT_FALLBACK) {
@@ -2200,6 +2216,11 @@ GHOST_TUns8 *GHOST_SystemX11::getClipboard(bool selection) const
     /* only continue if xcout() is doing something */
     if (context == XCLIB_XCOUT_NONE)
       break;
+  }
+
+  while (!restore_events.empty()) {
+    XPutBackEvent(m_display, &restore_events.back());
+    restore_events.pop_back();
   }
 
   if (sel_len) {
@@ -2450,7 +2471,7 @@ GHOST_TSuccess GHOST_SystemX11::showMessageBox(const char *title,
           string cmd = "xdg-open \"" + string(link) + "\"";
           if (system(cmd.c_str()) != 0) {
             GHOST_PRINTF("GHOST_SystemX11::showMessageBox: Unable to run system command [%s]",
-                         cmd);
+                         cmd.c_str());
           }
         }
         break;

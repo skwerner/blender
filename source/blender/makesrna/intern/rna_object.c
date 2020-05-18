@@ -329,7 +329,7 @@ static void rna_Object_internal_update_draw(Main *UNUSED(bmain),
                                             Scene *UNUSED(scene),
                                             PointerRNA *ptr)
 {
-  DEG_id_tag_update(ptr->owner_id, ID_RECALC_TRANSFORM);
+  DEG_id_tag_update(ptr->owner_id, ID_RECALC_SHADING);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, ptr->owner_id);
 }
 
@@ -347,6 +347,14 @@ static void rna_Object_hide_update(Main *bmain, Scene *UNUSED(scene), PointerRNA
   DEG_id_tag_update(&ob->id, ID_RECALC_COPY_ON_WRITE);
   DEG_relations_tag_update(bmain);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, &ob->id);
+}
+
+static void rna_Object_duplicator_visibility_flag_update(Main *UNUSED(bmain),
+                                                         Scene *UNUSED(scene),
+                                                         PointerRNA *ptr)
+{
+  Object *ob = (Object *)ptr->owner_id;
+  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 }
 
 static void rna_MaterialIndex_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
@@ -758,6 +766,24 @@ static PointerRNA rna_Object_active_vertex_group_get(PointerRNA *ptr)
   Object *ob = (Object *)ptr->owner_id;
   return rna_pointer_inherit_refine(
       ptr, &RNA_VertexGroup, BLI_findlink(&ob->defbase, ob->actdef - 1));
+}
+
+static void rna_Object_active_vertex_group_set(PointerRNA *ptr,
+                                               PointerRNA value,
+                                               struct ReportList *reports)
+{
+  Object *ob = (Object *)ptr->owner_id;
+  int index = BLI_findindex(&ob->defbase, value.data);
+  if (index == -1) {
+    BKE_reportf(reports,
+                RPT_ERROR,
+                "VertexGroup '%s' not found in object '%s'",
+                ((bDeformGroup *)value.data)->name,
+                ob->id.name + 2);
+    return;
+  }
+
+  ob->actdef = index + 1;
 }
 
 static int rna_Object_active_vertex_group_index_get(PointerRNA *ptr)
@@ -1607,9 +1633,12 @@ bool rna_Object_modifiers_override_apply(Main *bmain,
   }
   mod_src = mod_src ? mod_src->next : ob_src->modifiers.first;
 
-  BLI_assert(mod_src != NULL);
+  if (mod_src == NULL) {
+    BLI_assert(mod_src != NULL);
+    return false;
+  }
 
-  /* While it would be nicer to use lower-level modifier_new() here, this one is lacking
+  /* While it would be nicer to use lower-level BKE_modifier_new() here, this one is lacking
    * special-cases handling (particles and other physics modifiers mostly), so using the ED version
    * instead, to avoid duplicating code. */
   ModifierData *mod_dst = ED_object_modifier_add(
@@ -1624,7 +1653,7 @@ bool rna_Object_modifiers_override_apply(Main *bmain,
   ParticleSystem *psys_dst = (mod_dst->type == eModifierType_ParticleSystem) ?
                                  ((ParticleSystemModifierData *)mod_dst)->psys :
                                  NULL;
-  modifier_copyData(mod_src, mod_dst);
+  BKE_modifier_copydata(mod_src, mod_dst);
   if (mod_dst->type == eModifierType_ParticleSystem) {
     psys_dst->flag &= ~PSYS_DELETE;
     ((ParticleSystemModifierData *)mod_dst)->psys = psys_dst;
@@ -1665,6 +1694,69 @@ static void rna_Object_greasepencil_modifier_clear(Object *object, bContext *C)
 {
   ED_object_gpencil_modifier_clear(CTX_data_main(C), object);
   WM_main_add_notifier(NC_OBJECT | ND_MODIFIER | NA_REMOVED, object);
+}
+
+bool rna_Object_greasepencil_modifiers_override_apply(Main *bmain,
+                                                      PointerRNA *ptr_dst,
+                                                      PointerRNA *ptr_src,
+                                                      PointerRNA *UNUSED(ptr_storage),
+                                                      PropertyRNA *UNUSED(prop_dst),
+                                                      PropertyRNA *UNUSED(prop_src),
+                                                      PropertyRNA *UNUSED(prop_storage),
+                                                      const int UNUSED(len_dst),
+                                                      const int UNUSED(len_src),
+                                                      const int UNUSED(len_storage),
+                                                      PointerRNA *UNUSED(ptr_item_dst),
+                                                      PointerRNA *UNUSED(ptr_item_src),
+                                                      PointerRNA *UNUSED(ptr_item_storage),
+                                                      IDOverrideLibraryPropertyOperation *opop)
+{
+  BLI_assert(opop->operation == IDOVERRIDE_LIBRARY_OP_INSERT_AFTER &&
+             "Unsupported RNA override operation on modifiers collection");
+
+  Object *ob_dst = (Object *)ptr_dst->owner_id;
+  Object *ob_src = (Object *)ptr_src->owner_id;
+
+  /* Remember that insertion operations are defined and stored in correct order, which means that
+   * even if we insert several items in a row, we always insert first one, then second one, etc.
+   * So we should always find 'anchor' modifier in both _src *and* _dst. */
+  GpencilModifierData *mod_anchor = NULL;
+  if (opop->subitem_local_name && opop->subitem_local_name[0]) {
+    mod_anchor = BLI_findstring(
+        &ob_dst->greasepencil_modifiers, opop->subitem_local_name, offsetof(ModifierData, name));
+  }
+  if (mod_anchor == NULL && opop->subitem_local_index >= 0) {
+    mod_anchor = BLI_findlink(&ob_dst->greasepencil_modifiers, opop->subitem_local_index);
+  }
+  /* Otherwise we just insert in first position. */
+
+  GpencilModifierData *mod_src = NULL;
+  if (opop->subitem_local_name && opop->subitem_local_name[0]) {
+    mod_src = BLI_findstring(
+        &ob_src->greasepencil_modifiers, opop->subitem_local_name, offsetof(ModifierData, name));
+  }
+  if (mod_src == NULL && opop->subitem_local_index >= 0) {
+    mod_src = BLI_findlink(&ob_src->greasepencil_modifiers, opop->subitem_local_index);
+  }
+  mod_src = mod_src ? mod_src->next : ob_src->greasepencil_modifiers.first;
+
+  if (mod_src == NULL) {
+    BLI_assert(mod_src != NULL);
+    return false;
+  }
+
+  /* While it would be nicer to use lower-level BKE_modifier_new() here, this one is lacking
+   * special-cases handling (particles and other physics modifiers mostly), so using the ED version
+   * instead, to avoid duplicating code. */
+  GpencilModifierData *mod_dst = ED_object_gpencil_modifier_add(
+      NULL, bmain, NULL, ob_dst, mod_src->name, mod_src->type);
+
+  BLI_remlink(&ob_dst->modifiers, mod_dst);
+  /* This handles NULL anchor as expected by adding at head of list. */
+  BLI_insertlinkafter(&ob_dst->greasepencil_modifiers, mod_anchor, mod_dst);
+
+  //  printf("%s: We inserted a gpencil modifier '%s'...\n", __func__, mod_dst->name);
+  return true;
 }
 
 /* shader fx */
@@ -2333,6 +2425,7 @@ static void rna_def_object_vertex_groups(BlenderRNA *brna, PropertyRNA *cprop)
                                  "rna_Object_active_vertex_group_set",
                                  NULL,
                                  NULL);
+  RNA_def_property_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(prop, "Active Vertex Group", "Vertex groups of the object");
   RNA_def_property_update(prop, NC_GEOM | ND_DATA, "rna_Object_internal_update_data");
 
@@ -2817,6 +2910,10 @@ static void rna_def_object(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "GpencilModifier");
   RNA_def_property_ui_text(
       prop, "Grease Pencil Modifiers", "Modifiers affecting the data of the grease pencil object");
+  RNA_def_property_override_funcs(
+      prop, NULL, NULL, "rna_Object_greasepencil_modifiers_override_apply");
+  RNA_def_property_override_flag(
+      prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY | PROPOVERRIDE_LIBRARY_INSERTION);
   rna_def_object_grease_pencil_modifiers(brna, prop);
 
   /* Shader FX. */
@@ -3008,10 +3105,14 @@ static void rna_def_object(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_instancer_for_render", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "duplicator_visibility_flag", OB_DUPLI_FLAG_RENDER);
   RNA_def_property_ui_text(prop, "Render Instancer", "Make instancer visible when rendering");
+  RNA_def_property_update(
+      prop, NC_OBJECT | ND_DRAW, "rna_Object_duplicator_visibility_flag_update");
 
   prop = RNA_def_property(srna, "show_instancer_for_viewport", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "duplicator_visibility_flag", OB_DUPLI_FLAG_VIEWPORT);
   RNA_def_property_ui_text(prop, "Display Instancer", "Make instancer visible in the viewport");
+  RNA_def_property_update(
+      prop, NC_OBJECT | ND_DRAW, "rna_Object_duplicator_visibility_flag_update");
 
   /* anim */
   rna_def_animdata_common(srna);
@@ -3103,7 +3204,6 @@ static void rna_def_object(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_grease_pencil_lights", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "dtx", OB_USE_GPENCIL_LIGHTS);
   RNA_def_property_boolean_default(prop, true);
-  RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_text(prop, "Use Lights", "Lights affect grease pencil object");
   RNA_def_property_update(prop, NC_OBJECT | ND_DRAW, "rna_GPencil_update");
 

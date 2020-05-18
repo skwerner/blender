@@ -22,8 +22,8 @@
 
 #include "draw_manager.h"
 
-#include "BKE_anim.h"
 #include "BKE_curve.h"
+#include "BKE_duplilist.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_mesh.h"
@@ -38,6 +38,7 @@
 #include "BLI_alloca.h"
 #include "BLI_hash.h"
 #include "BLI_link_utils.h"
+#include "BLI_listbase.h"
 #include "BLI_memblock.h"
 #include "BLI_mempool.h"
 
@@ -657,17 +658,14 @@ static void drw_command_draw_range(
   cmd->vert_count = count;
 }
 
-static void drw_command_draw_instance(DRWShadingGroup *shgroup,
-                                      GPUBatch *batch,
-                                      DRWResourceHandle handle,
-                                      uint count,
-                                      bool use_attrib)
+static void drw_command_draw_instance(
+    DRWShadingGroup *shgroup, GPUBatch *batch, DRWResourceHandle handle, uint count, bool use_attr)
 {
   DRWCommandDrawInstance *cmd = drw_command_create(shgroup, DRW_CMD_DRAW_INSTANCE);
   cmd->batch = batch;
   cmd->handle = handle;
   cmd->inst_count = count;
-  cmd->use_attribs = use_attrib;
+  cmd->use_attrs = use_attr;
 }
 
 static void drw_command_draw_intance_range(
@@ -841,10 +839,10 @@ void DRW_shgroup_call_instances(DRWShadingGroup *shgroup,
   drw_command_draw_instance(shgroup, geom, handle, count, false);
 }
 
-void DRW_shgroup_call_instances_with_attribs(DRWShadingGroup *shgroup,
-                                             Object *ob,
-                                             struct GPUBatch *geom,
-                                             struct GPUBatch *inst_attributes)
+void DRW_shgroup_call_instances_with_attrs(DRWShadingGroup *shgroup,
+                                           Object *ob,
+                                           struct GPUBatch *geom,
+                                           struct GPUBatch *inst_attributes)
 {
   BLI_assert(geom != NULL);
   BLI_assert(inst_attributes != NULL);
@@ -860,6 +858,7 @@ void DRW_shgroup_call_instances_with_attribs(DRWShadingGroup *shgroup,
 typedef struct DRWSculptCallbackData {
   Object *ob;
   DRWShadingGroup **shading_groups;
+  int num_shading_groups;
   bool use_wire;
   bool use_mats;
   bool use_mask;
@@ -884,11 +883,23 @@ static float sculpt_debug_colors[9][4] = {
 
 static void sculpt_draw_cb(DRWSculptCallbackData *scd, GPU_PBVH_Buffers *buffers)
 {
+  if (!buffers) {
+    return;
+  }
+
+  /* Meh... use_mask is a bit misleading here. */
+  if (scd->use_mask && !GPU_pbvh_buffers_has_overlays(buffers)) {
+    return;
+  }
+
   GPUBatch *geom = GPU_pbvh_buffers_batch_get(buffers, scd->fast_mode, scd->use_wire);
   short index = 0;
 
   if (scd->use_mats) {
     index = GPU_pbvh_buffers_material_index_get(buffers);
+    if (index >= scd->num_shading_groups) {
+      index = 0;
+    }
   }
 
   DRWShadingGroup *shgrp = scd->shading_groups[index];
@@ -943,7 +954,7 @@ static void drw_sculpt_get_frustum_planes(Object *ob, float planes[6][4])
   }
 }
 
-static void drw_sculpt_generate_calls(DRWSculptCallbackData *scd, bool use_vcol)
+static void drw_sculpt_generate_calls(DRWSculptCallbackData *scd)
 {
   /* PBVH should always exist for non-empty meshes, created by depsgrah eval. */
   PBVH *pbvh = (scd->ob->sculpt) ? scd->ob->sculpt->pbvh : NULL;
@@ -953,32 +964,60 @@ static void drw_sculpt_generate_calls(DRWSculptCallbackData *scd, bool use_vcol)
 
   const DRWContextState *drwctx = DRW_context_state_get();
   RegionView3D *rv3d = drwctx->rv3d;
+  const bool navigating = rv3d && (rv3d->rflag & RV3D_NAVIGATING);
+
+  Paint *p = NULL;
+  if (drwctx->evil_C != NULL) {
+    p = BKE_paint_get_active_from_context(drwctx->evil_C);
+  }
 
   /* Frustum planes to show only visible PBVH nodes. */
-  float planes[6][4];
-  drw_sculpt_get_frustum_planes(scd->ob, planes);
-  PBVHFrustumPlanes frustum = {.planes = planes, .num_planes = 6};
+  float update_planes[6][4];
+  float draw_planes[6][4];
+  PBVHFrustumPlanes update_frustum;
+  PBVHFrustumPlanes draw_frustum;
+
+  if (p && (p->flags & PAINT_SCULPT_DELAY_UPDATES)) {
+    update_frustum.planes = update_planes;
+    update_frustum.num_planes = 6;
+    BKE_pbvh_get_frustum_planes(pbvh, &update_frustum);
+    if (!navigating) {
+      drw_sculpt_get_frustum_planes(scd->ob, update_planes);
+      update_frustum.planes = update_planes;
+      update_frustum.num_planes = 6;
+      BKE_pbvh_set_frustum_planes(pbvh, &update_frustum);
+    }
+  }
+  else {
+    drw_sculpt_get_frustum_planes(scd->ob, update_planes);
+    update_frustum.planes = update_planes;
+    update_frustum.num_planes = 6;
+  }
+
+  drw_sculpt_get_frustum_planes(scd->ob, draw_planes);
+  draw_frustum.planes = draw_planes;
+  draw_frustum.num_planes = 6;
 
   /* Fast mode to show low poly multires while navigating. */
   scd->fast_mode = false;
-  if (drwctx->evil_C != NULL) {
-    Paint *p = BKE_paint_get_active_from_context(drwctx->evil_C);
-    if (p && (p->flags & PAINT_FAST_NAVIGATE)) {
-      scd->fast_mode = rv3d && (rv3d->rflag & RV3D_NAVIGATING);
-    }
+  if (p && (p->flags & PAINT_FAST_NAVIGATE)) {
+    scd->fast_mode = rv3d && (rv3d->rflag & RV3D_NAVIGATING);
   }
 
   /* Update draw buffers only for visible nodes while painting.
    * But do update them otherwise so navigating stays smooth. */
-  const bool update_only_visible = rv3d && (rv3d->rflag & RV3D_PAINTING);
+  bool update_only_visible = rv3d && !(rv3d->rflag & RV3D_PAINTING);
+  if (p && (p->flags & PAINT_SCULPT_DELAY_UPDATES)) {
+    update_only_visible = true;
+  }
 
   Mesh *mesh = scd->ob->data;
   BKE_pbvh_update_normals(pbvh, mesh->runtime.subdiv_ccg);
 
   BKE_pbvh_draw_cb(pbvh,
-                   use_vcol,
                    update_only_visible,
-                   &frustum,
+                   &update_frustum,
+                   &draw_frustum,
                    (void (*)(void *, GPU_PBVH_Buffers *))sculpt_draw_cb,
                    scd);
 
@@ -993,29 +1032,32 @@ static void drw_sculpt_generate_calls(DRWSculptCallbackData *scd, bool use_vcol)
   }
 }
 
-void DRW_shgroup_call_sculpt(
-    DRWShadingGroup *shgroup, Object *ob, bool use_wire, bool use_mask, bool use_vcol)
+void DRW_shgroup_call_sculpt(DRWShadingGroup *shgroup, Object *ob, bool use_wire, bool use_mask)
 {
   DRWSculptCallbackData scd = {
       .ob = ob,
       .shading_groups = &shgroup,
+      .num_shading_groups = 1,
       .use_wire = use_wire,
       .use_mats = false,
       .use_mask = use_mask,
   };
-  drw_sculpt_generate_calls(&scd, use_vcol);
+  drw_sculpt_generate_calls(&scd);
 }
 
-void DRW_shgroup_call_sculpt_with_materials(DRWShadingGroup **shgroups, Object *ob, bool use_vcol)
+void DRW_shgroup_call_sculpt_with_materials(DRWShadingGroup **shgroups,
+                                            int num_shgroups,
+                                            Object *ob)
 {
   DRWSculptCallbackData scd = {
       .ob = ob,
       .shading_groups = shgroups,
+      .num_shading_groups = num_shgroups,
       .use_wire = false,
       .use_mats = true,
       .use_mask = false,
   };
-  drw_sculpt_generate_calls(&scd, use_vcol);
+  drw_sculpt_generate_calls(&scd);
 }
 
 static GPUVertFormat inst_select_format = {0};
@@ -1264,7 +1306,7 @@ static DRWShadingGroup *drw_shgroup_material_inputs(DRWShadingGroup *grp,
   ListBase textures = GPU_material_textures(material);
 
   /* Bind all textures needed by the material. */
-  for (GPUMaterialTexture *tex = textures.first; tex; tex = tex->next) {
+  LISTBASE_FOREACH (GPUMaterialTexture *, tex, &textures) {
     if (tex->ima) {
       /* Image */
       if (tex->tiled_mapping_name[0]) {
@@ -1867,7 +1909,7 @@ DRWPass *DRW_pass_create(const char *name, DRWState state)
 
 bool DRW_pass_is_empty(DRWPass *pass)
 {
-  for (DRWShadingGroup *shgroup = pass->shgroups.first; shgroup; shgroup = shgroup->next) {
+  LISTBASE_FOREACH (DRWShadingGroup *, shgroup, &pass->shgroups) {
     if (!DRW_shgroup_is_empty(shgroup)) {
       return false;
     }
@@ -1894,7 +1936,7 @@ void DRW_pass_foreach_shgroup(DRWPass *pass,
                               void (*callback)(void *userData, DRWShadingGroup *shgrp),
                               void *userData)
 {
-  for (DRWShadingGroup *shgroup = pass->shgroups.first; shgroup; shgroup = shgroup->next) {
+  LISTBASE_FOREACH (DRWShadingGroup *, shgroup, &pass->shgroups) {
     callback(userData, shgroup);
   }
 }

@@ -296,6 +296,17 @@ def _template_items_proportional_editing(*, connected=False):
     ]
 
 
+def _template_items_change_frame(params):
+    if params.select_mouse == 'LEFTMOUSE' and not params.legacy:
+        return [
+            ("anim.change_frame", {"type": 'RIGHTMOUSE', "value": 'PRESS', "shift": True}, None),
+        ]
+    else:
+        return [
+            ("anim.change_frame", {"type": params.action_mouse, "value": 'PRESS'}, None),
+        ]
+
+
 # Tool System Templates
 
 def _template_items_tool_select(params, operator, cursor_operator, *, extend):
@@ -763,7 +774,9 @@ def km_outliner(params):
          {"properties": [("all", True)]}),
         ("outliner.item_openclose", {"type": 'EVT_TWEAK_L', "value": 'ANY'},
          {"properties": [("all", False)]}),
+        # Fall through to generic context menu if the item(s) selected have no type specific actions.
         ("outliner.operation", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
+        op_menu("OUTLINER_MT_context_menu", {"type": 'RIGHTMOUSE', "value": 'PRESS'}),
         ("outliner.item_drag_drop", {"type": 'EVT_TWEAK_L', "value": 'ANY'}, None),
         ("outliner.item_drag_drop", {"type": 'EVT_TWEAK_L', "value": 'ANY', "shift": True}, None),
         ("outliner.show_hierarchy", {"type": 'HOME', "value": 'PRESS'}, None),
@@ -785,8 +798,8 @@ def km_outliner(params):
         ("outliner.drivers_add_selected", {"type": 'D', "value": 'PRESS', "ctrl": True}, None),
         ("outliner.drivers_delete_selected", {"type": 'D', "value": 'PRESS', "ctrl": True, "alt": True}, None),
         ("outliner.collection_new", {"type": 'C', "value": 'PRESS'}, None),
-        ("outliner.collection_delete", {"type": 'X', "value": 'PRESS'}, None),
-        ("outliner.collection_delete", {"type": 'DEL', "value": 'PRESS'}, None),
+        ("outliner.delete", {"type": 'X', "value": 'PRESS'}, None),
+        ("outliner.delete", {"type": 'DEL', "value": 'PRESS'}, None),
         ("object.move_to_collection", {"type": 'M', "value": 'PRESS'}, None),
         ("object.link_to_collection", {"type": 'M', "value": 'PRESS', "shift": True}, None),
         ("outliner.collection_exclude_set", {"type": 'E', "value": 'PRESS'}, None),
@@ -1378,7 +1391,6 @@ def km_time_scrub(_params):
 
     items.extend([
         ("anim.change_frame", {"type": "LEFTMOUSE", "value": 'PRESS'}, None),
-        ("graph.cursor_set", {"type": "LEFTMOUSE", "value": 'PRESS'}, None),
     ])
 
     return keymap
@@ -2071,6 +2083,7 @@ def km_dopesheet(params):
         ("marker.rename", {"type": 'M', "value": 'PRESS', "ctrl": True}, None),
         ("marker.camera_bind", {"type": 'B', "value": 'PRESS', "ctrl": True}, None),
         *_template_items_context_menu("DOPESHEET_MT_context_menu", params.context_menu_event),
+        *_template_items_change_frame(params),
     ])
 
     return keymap
@@ -2196,6 +2209,7 @@ def km_nla_editor(params):
         ("marker.add", {"type": 'M', "value": 'PRESS'}, None),
         ("marker.rename", {"type": 'M', "value": 'PRESS', "ctrl": True}, None),
         *_template_items_context_menu("NLA_MT_context_menu", params.context_menu_event),
+        *_template_items_change_frame(params),
     ])
 
     return keymap
@@ -2347,6 +2361,7 @@ def km_text(params):
         ("text.scroll", {"type": 'TRACKPADPAN', "value": 'ANY'}, None),
         ("text.selection_set", {"type": 'EVT_TWEAK_L', "value": 'ANY'}, None),
         ("text.cursor_set", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("text.selection_set", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True}, None),
         ("text.scroll", {"type": 'WHEELUPMOUSE', "value": 'PRESS'},
          {"properties": [("lines", -1)]}),
         ("text.scroll", {"type": 'WHEELDOWNMOUSE', "value": 'PRESS'},
@@ -2927,15 +2942,6 @@ def km_animation(params):
         ("anim.end_frame_set", {"type": 'END', "value": 'PRESS', "ctrl": True}, None),
     ])
 
-    if params.select_mouse == 'LEFTMOUSE' and not params.legacy:
-        items.extend([
-            ("anim.change_frame", {"type": 'RIGHTMOUSE', "value": 'PRESS', "shift": True}, None),
-        ])
-    else:
-        items.extend([
-            ("anim.change_frame", {"type": params.action_mouse, "value": 'PRESS'}, None),
-        ])
-
     return keymap
 
 
@@ -3020,6 +3026,8 @@ def km_grease_pencil(_params):
     items.extend([
         # Draw
         ("gpencil.annotate", {"type": 'LEFTMOUSE', "value": 'PRESS', "key_modifier": 'D'},
+         {"properties": [("mode", 'DRAW'), ("wait_for_input", False)]}),
+        ("gpencil.annotate", {"type": 'LEFTMOUSE', "value": 'PRESS', "key_modifier": 'D', "shift": True},
          {"properties": [("mode", 'DRAW'), ("wait_for_input", False)]}),
         # Draw - straight lines
         ("gpencil.annotate", {"type": 'LEFTMOUSE', "value": 'PRESS', "alt": True, "key_modifier": 'D'},
@@ -3219,6 +3227,8 @@ def km_grease_pencil_stroke_paint_mode(params):
          {"properties": [("unselected", True)]}),
         # Active layer
         op_menu("GPENCIL_MT_layer_active", {"type": 'Y', "value": 'PRESS'}),
+        # Active material
+        op_menu("GPENCIL_MT_material_active", {"type": 'U', "value": 'PRESS'}),
         # Keyframe menu
         op_menu("VIEW3D_MT_gpencil_animation", {"type": 'I', "value": 'PRESS'}),
         # Draw context menu
@@ -3852,7 +3862,8 @@ def km_pose(params):
          {"properties": [("direction", 'CHILD'), ("extend", False)]}),
         ("pose.select_hierarchy", {"type": 'RIGHT_BRACKET', "value": 'PRESS', "shift": True},
          {"properties": [("direction", 'CHILD'), ("extend", True)]}),
-        ("pose.select_linked", {"type": 'L', "value": 'PRESS'}, None),
+        ("pose.select_linked", {"type": 'L', "value": 'PRESS', "ctrl": True}, None),
+        ("pose.select_linked_pick", {"type": 'L', "value": 'PRESS'}, None),
         ("pose.select_grouped", {"type": 'G', "value": 'PRESS', "shift": True}, None),
         ("pose.select_mirror", {"type": 'M', "value": 'PRESS', "shift": True, "ctrl": True}, None),
         ("pose.constraint_add_with_targets", {"type": 'C', "value": 'PRESS', "shift": True, "ctrl": True}, None),
@@ -3870,9 +3881,9 @@ def km_pose(params):
         ("anim.keyframe_insert_menu", {"type": 'I', "value": 'PRESS'}, None),
         ("anim.keyframe_delete_v3d", {"type": 'I', "value": 'PRESS', "alt": True}, None),
         ("anim.keying_set_active_set", {"type": 'I', "value": 'PRESS', "shift": True, "ctrl": True, "alt": True}, None),
-        ("poselib.browse_interactive", {"type": 'L', "value": 'PRESS', "ctrl": True}, None),
+        ("poselib.browse_interactive", {"type": 'L', "value": 'PRESS', "alt": True}, None),
         ("poselib.pose_add", {"type": 'L', "value": 'PRESS', "shift": True}, None),
-        ("poselib.pose_remove", {"type": 'L', "value": 'PRESS', "alt": True}, None),
+        ("poselib.pose_remove", {"type": 'L', "value": 'PRESS', "shift": True, "alt": True}, None),
         ("poselib.pose_rename", {"type": 'L', "value": 'PRESS', "shift": True, "ctrl": True}, None),
         ("pose.push", {"type": 'E', "value": 'PRESS', "ctrl": True}, None),
         ("pose.relax", {"type": 'E', "value": 'PRESS', "alt": True}, None),
@@ -4043,7 +4054,7 @@ def km_curve(params):
          {"properties": [("deselect", False)]}),
         ("curve.select_linked_pick", {"type": 'L', "value": 'PRESS', "shift": True},
          {"properties": [("deselect", True)]}),
-        ("curve.shortest_path_pick", {"type": params.select_mouse, "value": 'CLICK', "ctrl": True}, None),
+        ("curve.shortest_path_pick", {"type": params.select_mouse, "value": params.select_mouse_value, "ctrl": True}, None),
         ("curve.separate", {"type": 'P', "value": 'PRESS'}, None),
         ("curve.split", {"type": 'Y', "value": 'PRESS'}, None),
         ("curve.extrude_move", {"type": 'E', "value": 'PRESS'}, None),
@@ -4323,6 +4334,7 @@ def km_sculpt(params):
         ("sculpt.set_detail_size", {"type": 'D', "value": 'PRESS', "shift": True}, None),
         # Remesh
         ("object.voxel_remesh", {"type": 'R', "value": 'PRESS', "ctrl": True}, None),
+        ("object.voxel_size_edit", {"type": 'R', "value": 'PRESS', "shift": True}, None),
         ("object.quadriflow_remesh", {"type": 'R', "value": 'PRESS', "ctrl": True, "alt": True}, None),
         # Brush properties
         ("brush.scale_size", {"type": 'LEFT_BRACKET', "value": 'PRESS'},
@@ -4456,7 +4468,8 @@ def km_mesh(params):
         ("mesh.rip_move", {"type": 'V', "value": 'PRESS', "alt": True},
          {"properties": [("MESH_OT_rip", [("use_fill", True), ],)]}),
         ("mesh.rip_edge_move", {"type": 'D', "value": 'PRESS', "alt": True}, None),
-        op_menu("VIEW3D_MT_edit_mesh_merge", {"type": 'M', "value": 'PRESS', "alt": True}),
+        op_menu("VIEW3D_MT_edit_mesh_merge", {"type": 'M', "value": 'PRESS'}),
+        op_menu("VIEW3D_MT_edit_mesh_split", {"type": 'M', "value": 'PRESS', "alt": True}),
         ("transform.shrink_fatten", {"type": 'S', "value": 'PRESS', "alt": True, "repeat": False}, None),
         ("mesh.edge_face_add", {"type": 'F', "value": 'PRESS'}, None),
         ("mesh.duplicate_move", {"type": 'D', "value": 'PRESS', "shift": True}, None),
@@ -4560,10 +4573,11 @@ def km_armature(params):
         ("armature.select_more", {"type": 'NUMPAD_PLUS', "value": 'PRESS', "ctrl": True}, None),
         ("armature.select_less", {"type": 'NUMPAD_MINUS', "value": 'PRESS', "ctrl": True}, None),
         ("armature.select_similar", {"type": 'G', "value": 'PRESS', "shift": True}, None),
-        ("armature.select_linked", {"type": 'L', "value": 'PRESS'},
+        ("armature.select_linked_pick", {"type": 'L', "value": 'PRESS'},
          {"properties": [("deselect", False)]}),
-        ("armature.select_linked", {"type": 'L', "value": 'PRESS', "shift": True},
+        ("armature.select_linked_pick", {"type": 'L', "value": 'PRESS', "shift": True},
          {"properties": [("deselect", True)]}),
+        ("armature.select_linked", {"type": 'L', "value": 'PRESS', "ctrl": True}, None),
         ("armature.shortest_path_pick", {"type": params.select_mouse, "value": params.select_mouse_value, "ctrl": True}, None),
         # Editing.
         op_menu("VIEW3D_MT_edit_armature_delete", {"type": 'X', "value": 'PRESS'}),
@@ -4575,7 +4589,6 @@ def km_armature(params):
         ("armature.extrude_forked", {"type": 'E', "value": 'PRESS', "shift": True}, None),
         ("armature.click_extrude", {"type": params.action_mouse, "value": 'CLICK', "ctrl": True}, None),
         ("armature.fill", {"type": 'F', "value": 'PRESS'}, None),
-        ("armature.merge", {"type": 'M', "value": 'PRESS', "alt": True}, None),
         ("armature.split", {"type": 'Y', "value": 'PRESS'}, None),
         ("armature.separate", {"type": 'P', "value": 'PRESS'}, None),
         # Set flags.
@@ -4780,7 +4793,7 @@ def km_font(params):
         ("font.text_insert", {"type": 'TEXTINPUT', "value": 'ANY', "any": True}, None),
         ("font.text_insert", {"type": 'BACK_SPACE', "value": 'PRESS', "alt": True},
          {"properties": [("accent", True)]}),
-        *_template_items_context_menu("VIEW3D_MT_edit_text_context_menu", params.context_menu_event),
+        *_template_items_context_menu("VIEW3D_MT_edit_font_context_menu", params.context_menu_event),
     ])
 
     return keymap
@@ -5863,6 +5876,23 @@ def km_3d_view_tool_edit_mesh_extrude_region(params):
         ]},
     )
 
+def km_3d_view_tool_edit_mesh_extrude_dissolve_and_intersect(params):
+    return (
+        "3D View Tool: Edit Mesh, Extrude Dissolve and Intersect",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("mesh.extrude_region_dissolve_move_intersect", {"type": params.tool_tweak, "value": 'ANY'},
+             {"properties": [
+                 ("MESH_OT_extrude_region", [("use_dissolve_ortho_edges", True)]),
+                 ("TRANSFORM_OT_translate", [
+                     ("release_confirm", True),
+                     ("use_automerge_and_split", True),
+                     ("constraint_axis", (False, False, True)),
+                     ("orient_type", 'NORMAL'),
+                 ]),
+              ]}),
+        ]},
+    )
 
 def km_3d_view_tool_edit_mesh_extrude_along_normals(params):
     return (
@@ -6497,6 +6527,7 @@ def km_sequencer_editor_tool_select(params):
         {"items": [
             ("sequencer.select", {"type": params.select_mouse, "value": 'PRESS'},
              {"properties": [("extend", False), ("deselect_all", not params.legacy)]}),
+            *_template_items_change_frame(params),
         ]},
     )
 
@@ -6505,10 +6536,25 @@ def km_sequencer_editor_tool_select_box(params):
     return (
         "Sequencer Tool: Select Box",
         {"space_type": 'SEQUENCE_EDITOR', "region_type": 'WINDOW'},
-        {"items": _template_items_tool_select_actions_simple(
-            "sequencer.select_box", type=params.tool_tweak, value='ANY',
-            properties=[("tweak", True)],
-        )},
+        {"items": [
+            *_template_items_tool_select_actions_simple(
+                "sequencer.select_box", type=params.tool_tweak, value='ANY',
+                properties=[("tweak", params.select_mouse == 'LEFTMOUSE')],
+            ),
+            # RMB select can already set the frame, match the tweak tool.
+            *(_template_items_change_frame(params)
+              if  params.select_mouse == 'LEFTMOUSE' else []),
+        ]},
+    )
+
+
+def km_sequencer_editor_tool_generic_sample(params):
+    return (
+        "Sequencer Tool: Sample",
+        {"space_type": 'SEQUENCE_EDITOR', "region_type": 'WINDOW'},
+        {"items": [
+            ("sequencer.sample", {"type": params.tool_mouse, "value": 'PRESS'}, None),
+        ]},
     )
 
 
@@ -6697,6 +6743,7 @@ def generate_keymaps(params=None):
         km_3d_view_tool_edit_armature_extrude_to_cursor(params),
         km_3d_view_tool_edit_mesh_add_cube(params),
         km_3d_view_tool_edit_mesh_extrude_region(params),
+        km_3d_view_tool_edit_mesh_extrude_dissolve_and_intersect(params),
         km_3d_view_tool_edit_mesh_extrude_along_normals(params),
         km_3d_view_tool_edit_mesh_extrude_individual(params),
         km_3d_view_tool_edit_mesh_extrude_to_cursor(params),
@@ -6756,6 +6803,7 @@ def generate_keymaps(params=None):
         km_sequencer_editor_tool_select(params),
         km_sequencer_editor_tool_select_box(params),
         km_sequencer_editor_tool_blade(params),
+        km_sequencer_editor_tool_generic_sample(params),
     ]
 
 # ------------------------------------------------------------------------------

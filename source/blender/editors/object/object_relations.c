@@ -55,7 +55,7 @@
 
 #include "BKE_DerivedMesh.h"
 #include "BKE_action.h"
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_armature.h"
 #include "BKE_camera.h"
 #include "BKE_collection.h"
@@ -115,7 +115,9 @@
 
 #include "object_intern.h"
 
-/*********************** Make Vertex Parent Operator ************************/
+/* ------------------------------------------------------------------- */
+/** \name Make Vertex Parent Operator
+ * \{ */
 
 static bool vertex_parent_set_poll(bContext *C)
 {
@@ -331,7 +333,11 @@ void OBJECT_OT_vertex_parent_set(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/********************** Make Proxy Operator *************************/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Proxy Operator
+ * \{ */
 
 /* set the object to proxify */
 static int make_proxy_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -411,7 +417,12 @@ static int make_proxy_exec(bContext *C, wmOperator *op)
      * TODO(sergey): We really need to get rid of this bi-directional links
      * in proxies with something like library overrides.
      */
-    newob->proxy->proxy_from = newob;
+    if (newob->proxy != NULL) {
+      newob->proxy->proxy_from = newob;
+    }
+    else {
+      BKE_report(op->reports, RPT_ERROR, "Unable to assign proxy");
+    }
 
     /* depsgraph flushes are needed for the new data */
     DEG_relations_tag_update(bmain);
@@ -485,7 +496,11 @@ void OBJECT_OT_proxy_make(wmOperatorType *ot)
   ot->prop = prop;
 }
 
-/********************** Clear Parent Operator ******************* */
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Clear Parent Operator
+ * \{ */
 
 EnumPropertyItem prop_clear_parent_types[] = {
     {CLEAR_PARENT_ALL,
@@ -542,7 +557,7 @@ static void object_remove_parent_deform_modifiers(Object *ob, const Object *par)
       /* free modifier if match */
       if (free) {
         BLI_remlink(&ob->modifiers, md);
-        modifier_free(md);
+        BKE_modifier_free(md);
       }
     }
   }
@@ -619,7 +634,11 @@ void OBJECT_OT_parent_clear(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", prop_clear_parent_types, CLEAR_PARENT_ALL, "Type", "");
 }
 
-/* ******************** Make Parent Operator *********************** */
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Parent Operator
+ * \{ */
 
 void ED_object_parent(Object *ob, Object *par, const int type, const char *substr)
 {
@@ -784,7 +803,7 @@ bool ED_object_parent_set(ReportList *reports,
 
           switch (partype) {
             case PAR_CURVE: /* curve deform */
-              if (modifiers_isDeformedByCurve(ob) != par) {
+              if (BKE_modifiers_is_deformed_by_curve(ob) != par) {
                 md = ED_object_modifier_add(reports, bmain, scene, ob, NULL, eModifierType_Curve);
                 if (md) {
                   ((CurveModifierData *)md)->object = par;
@@ -795,7 +814,7 @@ bool ED_object_parent_set(ReportList *reports,
               }
               break;
             case PAR_LATTICE: /* lattice deform */
-              if (modifiers_isDeformedByLattice(ob) != par) {
+              if (BKE_modifiers_is_deformed_by_lattice(ob) != par) {
                 md = ED_object_modifier_add(
                     reports, bmain, scene, ob, NULL, eModifierType_Lattice);
                 if (md) {
@@ -804,7 +823,7 @@ bool ED_object_parent_set(ReportList *reports,
               }
               break;
             default: /* armature deform */
-              if (modifiers_isDeformedByArmature(ob) != par) {
+              if (BKE_modifiers_is_deformed_by_armature(ob) != par) {
                 md = ED_object_modifier_add(
                     reports, bmain, scene, ob, NULL, eModifierType_Armature);
                 if (md) {
@@ -880,7 +899,10 @@ bool ED_object_parent_set(ReportList *reports,
         invert_m4_m4(ob->parentinv, workob.obmat);
       }
       else if (pararm && (ob->type == OB_GPENCIL) && (par->type == OB_ARMATURE)) {
-        if (partype == PAR_ARMATURE_NAME) {
+        if (partype == PAR_ARMATURE) {
+          ED_gpencil_add_armature(C, reports, ob, par);
+        }
+        else if (partype == PAR_ARMATURE_NAME) {
           ED_gpencil_add_armature_weights(C, reports, ob, par, GP_PAR_ARMATURE_NAME);
         }
         else if ((partype == PAR_ARMATURE_AUTO) || (partype == PAR_ARMATURE_ENVELOPE)) {
@@ -1138,7 +1160,11 @@ void OBJECT_OT_parent_set(wmOperatorType *ot)
                   "Apply transformation before parenting");
 }
 
-/* ************ Make Parent Without Inverse Operator ******************* */
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Parent Without Inverse Operator
+ * \{ */
 
 static int parent_noinv_set_exec(bContext *C, wmOperator *op)
 {
@@ -1191,7 +1217,11 @@ void OBJECT_OT_parent_no_inverse_set(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************** Clear Track Operator ******************* */
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Clear Track Operator
+ * \{ */
 
 enum {
   CLEAR_TRACK = 1,
@@ -1267,7 +1297,11 @@ void OBJECT_OT_track_clear(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", prop_clear_track_types, 0, "Type", "");
 }
 
-/************************** Make Track Operator *****************************/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Track Operator
+ * \{ */
 
 enum {
   CREATE_TRACK_DAMPTRACK = 1,
@@ -1386,10 +1420,14 @@ void OBJECT_OT_track_set(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", prop_make_track_types, 0, "Type", "");
 }
 
-/************************** Link to Scene Operator *****************************/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Link to Scene Operator
+ * \{ */
 
 #if 0
-static void link_to_scene(Main *UNUSED(bmain), unsigned short UNUSED(nr))
+static void link_to_scene(Main *UNUSED(bmain), ushort UNUSED(nr))
 {
   Scene *sce = (Scene *)BLI_findlink(&bmain->scene, G.curscreen->scenenr - 1);
   Base *base, *nbase;
@@ -1702,7 +1740,11 @@ void OBJECT_OT_make_links_data(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", make_links_items, 0, "Type", "");
 }
 
-/**************************** Make Single User ********************************/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Single User Operator
+ * \{ */
 
 static void libblock_relink_collection(Collection *collection, const bool do_collection)
 {
@@ -1714,7 +1756,7 @@ static void libblock_relink_collection(Collection *collection, const bool do_col
     BKE_libblock_relink_to_newid(&cob->ob->id);
   }
 
-  for (CollectionChild *child = collection->children.first; child; child = child->next) {
+  LISTBASE_FOREACH (CollectionChild *, child, &collection->children) {
     libblock_relink_collection(child->collection, true);
   }
 }
@@ -1733,7 +1775,7 @@ static Collection *single_object_users_collection(Main *bmain,
   }
 
   /* We do not remap to new objects here, this is done in separate step. */
-  for (CollectionObject *cob = collection->gobject.first; cob; cob = cob->next) {
+  LISTBASE_FOREACH (CollectionObject *, cob, &collection->gobject) {
     Object *ob = cob->ob;
     /* an object may be in more than one collection */
     if ((ob->id.newid == NULL) && ((ob->flag & flag) == flag)) {
@@ -2067,7 +2109,7 @@ void ED_object_single_users(Main *bmain,
 
     if (scene->nodetree) {
       IDP_RelinkProperty(scene->nodetree->id.properties);
-      for (bNode *node = scene->nodetree->nodes.first; node; node = node->next) {
+      LISTBASE_FOREACH (bNode *, node, &scene->nodetree->nodes) {
         IDP_RelinkProperty(node->prop);
       }
     }
@@ -2084,7 +2126,11 @@ void ED_object_single_users(Main *bmain,
   DEG_relations_tag_update(bmain);
 }
 
-/******************************* Make Local ***********************************/
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Local Operator
+ * \{ */
 
 enum {
   MAKE_LOCAL_SELECT_OB = 1,
@@ -2202,7 +2248,7 @@ static void make_local_animdata_tag(AnimData *adt)
     /* TODO: need to handle the ID-targets too? */
 
     /* NLA Data */
-    for (NlaTrack *nlt = adt->nla_tracks.first; nlt; nlt = nlt->next) {
+    LISTBASE_FOREACH (NlaTrack *, nlt, &adt->nla_tracks) {
       make_local_animdata_tag_strips(&nlt->strips);
     }
   }
@@ -2323,6 +2369,12 @@ void OBJECT_OT_make_local(wmOperatorType *ot)
   /* properties */
   ot->prop = RNA_def_enum(ot->srna, "type", type_items, 0, "Type", "");
 }
+
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Library Override Operator
+ * \{ */
 
 static void make_override_library_tag_object(Object *obact, Object *ob)
 {
@@ -2585,6 +2637,12 @@ void OBJECT_OT_make_override_library(wmOperatorType *ot)
   ot->prop = prop;
 }
 
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Make Single User Operator
+ * \{ */
+
 enum {
   MAKE_SINGLE_USER_ALL = 1,
   MAKE_SINGLE_USER_SELECTED = 2,
@@ -2673,6 +2731,12 @@ void OBJECT_OT_make_single_user(wmOperatorType *ot)
       ot->srna, "animation", 0, "Object Animation", "Make animation data local to each object");
 }
 
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Drop Named Material on Object Operator
+ * \{ */
+
 static int drop_named_material_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   Main *bmain = CTX_data_main(C);
@@ -2715,6 +2779,12 @@ void OBJECT_OT_drop_named_material(wmOperatorType *ot)
   /* properties */
   RNA_def_string(ot->srna, "name", "Material", MAX_ID_NAME - 2, "Name", "Material name to assign");
 }
+
+/** \} */
+
+/* ------------------------------------------------------------------- */
+/** \name Unlink Object Operator
+ * \{ */
 
 static int object_unlink_data_exec(bContext *C, wmOperator *op)
 {
@@ -2766,3 +2836,5 @@ void OBJECT_OT_unlink_data(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_INTERNAL;
 }
+
+/** \} */

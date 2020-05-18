@@ -38,10 +38,10 @@ Handle_dealloc(Handle* self)
 }
 
 PyDoc_STRVAR(M_aud_Handle_pause_doc,
-			 "pause()\n\n"
-			 "Pauses playback.\n\n"
-			 ":return: Whether the action succeeded.\n"
-			 ":rtype: bool");
+			 ".. classmethod:: pause()\n\n"
+			 "   Pauses playback.\n\n"
+			 "   :return: Whether the action succeeded.\n"
+			 "   :rtype: bool");
 
 static PyObject *
 Handle_pause(Handle* self)
@@ -58,10 +58,10 @@ Handle_pause(Handle* self)
 }
 
 PyDoc_STRVAR(M_aud_Handle_resume_doc,
-			 "resume()\n\n"
-			 "Resumes playback.\n\n"
-			 ":return: Whether the action succeeded.\n"
-			 ":rtype: bool");
+			 ".. classmethod:: resume()\n\n"
+			 "   Resumes playback.\n\n"
+			 "   :return: Whether the action succeeded.\n"
+			 "   :rtype: bool");
 
 static PyObject *
 Handle_resume(Handle* self)
@@ -78,11 +78,11 @@ Handle_resume(Handle* self)
 }
 
 PyDoc_STRVAR(M_aud_Handle_stop_doc,
-			 "stop()\n\n"
-			 "Stops playback.\n\n"
-			 ":return: Whether the action succeeded.\n"
-			 ":rtype: bool\n\n"
-			 ".. note:: This makes the handle invalid.");
+			 ".. classmethod:: stop()\n\n"
+			 "   Stops playback.\n\n"
+			 "   :return: Whether the action succeeded.\n"
+			 "   :rtype: bool\n\n"
+			 "   .. note:: This makes the handle invalid.");
 
 static PyObject *
 Handle_stop(Handle* self)
@@ -696,7 +696,7 @@ Handle_get_position(Handle* self, void* nothing)
 {
 	try
 	{
-		return Py_BuildValue("f", (*reinterpret_cast<std::shared_ptr<IHandle>*>(self->handle))->getPosition());
+		return Py_BuildValue("d", (*reinterpret_cast<std::shared_ptr<IHandle>*>(self->handle))->getPosition());
 	}
 	catch(Exception& e)
 	{
@@ -708,9 +708,9 @@ Handle_get_position(Handle* self, void* nothing)
 static int
 Handle_set_position(Handle* self, PyObject* args, void* nothing)
 {
-	float position;
+	double position;
 
-	if(!PyArg_Parse(args, "f:position", &position))
+	if(!PyArg_Parse(args, "d:position", &position))
 		return -1;
 
 	try
@@ -1122,5 +1122,3 @@ void addHandleToModule(PyObject* module)
 	Py_INCREF(&HandleType);
 	PyModule_AddObject(module, "Handle", (PyObject *)&HandleType);
 }
-
-

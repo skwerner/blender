@@ -336,7 +336,7 @@ set(ICON_NAMES
   force_boid
   force_turbulence
   force_drag
-  force_smokeflow
+  force_fluidflow
   image_plane
   image_background
   image_reference
@@ -766,8 +766,6 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
 )
 
 data_to_c_simple(../../../../release/datafiles/bfont.pfb SRC)
-data_to_c_simple(../../../../release/datafiles/bfont.ttf SRC)
-data_to_c_simple(../../../../release/datafiles/bmonofont.ttf SRC)
 
 if(WITH_BLENDER)
   # blender only (not player)
@@ -781,7 +779,6 @@ if(WITH_BLENDER)
 
     # images
     data_to_c_simple(../../../../release/datafiles/splash.png SRC)
-    data_to_c_simple(../../../../release/datafiles/splash_2x.png SRC)
     data_to_c_simple(../../../../release/datafiles/alert_icons.png SRC)
     # XXX These are handy, but give nasty "false changes" in svn :/
     # svg_to_png(../../../../release/datafiles/blender_icons.svg

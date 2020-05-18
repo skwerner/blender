@@ -148,13 +148,13 @@ static void engine_update(RenderEngine *engine, Main *bmain, Depsgraph *depsgrap
   ParameterList list;
   FunctionRNA *func;
 
-  RNA_pointer_create(NULL, engine->type->ext.srna, engine, &ptr);
+  RNA_pointer_create(NULL, engine->type->rna_ext.srna, engine, &ptr);
   func = &rna_RenderEngine_update_func;
 
   RNA_parameter_list_create(&list, &ptr, func);
   RNA_parameter_set_lookup(&list, "data", &bmain);
   RNA_parameter_set_lookup(&list, "depsgraph", &depsgraph);
-  engine->type->ext.call(NULL, &ptr, func, &list);
+  engine->type->rna_ext.call(NULL, &ptr, func, &list);
 
   RNA_parameter_list_free(&list);
 }
@@ -166,12 +166,12 @@ static void engine_render(RenderEngine *engine, Depsgraph *depsgraph)
   ParameterList list;
   FunctionRNA *func;
 
-  RNA_pointer_create(NULL, engine->type->ext.srna, engine, &ptr);
+  RNA_pointer_create(NULL, engine->type->rna_ext.srna, engine, &ptr);
   func = &rna_RenderEngine_render_func;
 
   RNA_parameter_list_create(&list, &ptr, func);
   RNA_parameter_set_lookup(&list, "depsgraph", &depsgraph);
-  engine->type->ext.call(NULL, &ptr, func, &list);
+  engine->type->rna_ext.call(NULL, &ptr, func, &list);
 
   RNA_parameter_list_free(&list);
 }
@@ -181,18 +181,15 @@ static void engine_bake(RenderEngine *engine,
                         struct Object *object,
                         const int pass_type,
                         const int pass_filter,
-                        const int object_id,
-                        const struct BakePixel *pixel_array,
-                        const int num_pixels,
-                        const int depth,
-                        void *result)
+                        const int width,
+                        const int height)
 {
   extern FunctionRNA rna_RenderEngine_bake_func;
   PointerRNA ptr;
   ParameterList list;
   FunctionRNA *func;
 
-  RNA_pointer_create(NULL, engine->type->ext.srna, engine, &ptr);
+  RNA_pointer_create(NULL, engine->type->rna_ext.srna, engine, &ptr);
   func = &rna_RenderEngine_bake_func;
 
   RNA_parameter_list_create(&list, &ptr, func);
@@ -200,12 +197,9 @@ static void engine_bake(RenderEngine *engine,
   RNA_parameter_set_lookup(&list, "object", &object);
   RNA_parameter_set_lookup(&list, "pass_type", &pass_type);
   RNA_parameter_set_lookup(&list, "pass_filter", &pass_filter);
-  RNA_parameter_set_lookup(&list, "object_id", &object_id);
-  RNA_parameter_set_lookup(&list, "pixel_array", &pixel_array);
-  RNA_parameter_set_lookup(&list, "num_pixels", &num_pixels);
-  RNA_parameter_set_lookup(&list, "depth", &depth);
-  RNA_parameter_set_lookup(&list, "result", &result);
-  engine->type->ext.call(NULL, &ptr, func, &list);
+  RNA_parameter_set_lookup(&list, "width", &width);
+  RNA_parameter_set_lookup(&list, "height", &height);
+  engine->type->rna_ext.call(NULL, &ptr, func, &list);
 
   RNA_parameter_list_free(&list);
 }
@@ -219,13 +213,13 @@ static void engine_view_update(RenderEngine *engine,
   ParameterList list;
   FunctionRNA *func;
 
-  RNA_pointer_create(NULL, engine->type->ext.srna, engine, &ptr);
+  RNA_pointer_create(NULL, engine->type->rna_ext.srna, engine, &ptr);
   func = &rna_RenderEngine_view_update_func;
 
   RNA_parameter_list_create(&list, &ptr, func);
   RNA_parameter_set_lookup(&list, "context", &context);
   RNA_parameter_set_lookup(&list, "depsgraph", &depsgraph);
-  engine->type->ext.call(NULL, &ptr, func, &list);
+  engine->type->rna_ext.call(NULL, &ptr, func, &list);
 
   RNA_parameter_list_free(&list);
 }
@@ -239,13 +233,13 @@ static void engine_view_draw(RenderEngine *engine,
   ParameterList list;
   FunctionRNA *func;
 
-  RNA_pointer_create(NULL, engine->type->ext.srna, engine, &ptr);
+  RNA_pointer_create(NULL, engine->type->rna_ext.srna, engine, &ptr);
   func = &rna_RenderEngine_view_draw_func;
 
   RNA_parameter_list_create(&list, &ptr, func);
   RNA_parameter_set_lookup(&list, "context", &context);
   RNA_parameter_set_lookup(&list, "depsgraph", &depsgraph);
-  engine->type->ext.call(NULL, &ptr, func, &list);
+  engine->type->rna_ext.call(NULL, &ptr, func, &list);
 
   RNA_parameter_list_free(&list);
 }
@@ -259,13 +253,13 @@ static void engine_update_script_node(RenderEngine *engine,
   ParameterList list;
   FunctionRNA *func;
 
-  RNA_pointer_create(NULL, engine->type->ext.srna, engine, &ptr);
+  RNA_pointer_create(NULL, engine->type->rna_ext.srna, engine, &ptr);
   RNA_pointer_create((ID *)ntree, &RNA_Node, node, &nodeptr);
   func = &rna_RenderEngine_update_script_node_func;
 
   RNA_parameter_list_create(&list, &ptr, func);
   RNA_parameter_set_lookup(&list, "node", &nodeptr);
-  engine->type->ext.call(NULL, &ptr, func, &list);
+  engine->type->rna_ext.call(NULL, &ptr, func, &list);
 
   RNA_parameter_list_free(&list);
 }
@@ -279,13 +273,13 @@ static void engine_update_render_passes(RenderEngine *engine,
   ParameterList list;
   FunctionRNA *func;
 
-  RNA_pointer_create(NULL, engine->type->ext.srna, engine, &ptr);
+  RNA_pointer_create(NULL, engine->type->rna_ext.srna, engine, &ptr);
   func = &rna_RenderEngine_update_render_passes_func;
 
   RNA_parameter_list_create(&list, &ptr, func);
   RNA_parameter_set_lookup(&list, "scene", &scene);
   RNA_parameter_set_lookup(&list, "renderlayer", &view_layer);
-  engine->type->ext.call(NULL, &ptr, func, &list);
+  engine->type->rna_ext.call(NULL, &ptr, func, &list);
 
   RNA_parameter_list_free(&list);
 }
@@ -300,7 +294,7 @@ static void rna_RenderEngine_unregister(Main *bmain, StructRNA *type)
     return;
   }
 
-  RNA_struct_free_extension(type, &et->ext);
+  RNA_struct_free_extension(type, &et->rna_ext);
   RNA_struct_free(&BLENDER_RNA, type);
   BLI_freelinkN(&R_engines, et);
 
@@ -343,8 +337,8 @@ static StructRNA *rna_RenderEngine_register(Main *bmain,
   /* check if we have registered this engine type before, and remove it */
   for (et = R_engines.first; et; et = et->next) {
     if (STREQ(et->idname, dummyet.idname)) {
-      if (et->ext.srna) {
-        rna_RenderEngine_unregister(bmain, et->ext.srna);
+      if (et->rna_ext.srna) {
+        rna_RenderEngine_unregister(bmain, et->rna_ext.srna);
       }
       break;
     }
@@ -354,11 +348,11 @@ static StructRNA *rna_RenderEngine_register(Main *bmain,
   et = MEM_mallocN(sizeof(RenderEngineType), "python render engine");
   memcpy(et, &dummyet, sizeof(dummyet));
 
-  et->ext.srna = RNA_def_struct_ptr(&BLENDER_RNA, et->idname, &RNA_RenderEngine);
-  et->ext.data = data;
-  et->ext.call = call;
-  et->ext.free = free;
-  RNA_struct_blender_type_set(et->ext.srna, et);
+  et->rna_ext.srna = RNA_def_struct_ptr(&BLENDER_RNA, et->idname, &RNA_RenderEngine);
+  et->rna_ext.data = data;
+  et->rna_ext.call = call;
+  et->rna_ext.free = free;
+  RNA_struct_blender_type_set(et->rna_ext.srna, et);
 
   et->update = (have_function[0]) ? engine_update : NULL;
   et->render = (have_function[1]) ? engine_render : NULL;
@@ -370,7 +364,7 @@ static StructRNA *rna_RenderEngine_register(Main *bmain,
 
   RE_engines_register(et);
 
-  return et->ext.srna;
+  return et->rna_ext.srna;
 }
 
 static void **rna_RenderEngine_instance(PointerRNA *ptr)
@@ -382,7 +376,8 @@ static void **rna_RenderEngine_instance(PointerRNA *ptr)
 static StructRNA *rna_RenderEngine_refine(PointerRNA *ptr)
 {
   RenderEngine *engine = (RenderEngine *)ptr->data;
-  return (engine->type && engine->type->ext.srna) ? engine->type->ext.srna : &RNA_RenderEngine;
+  return (engine->type && engine->type->rna_ext.srna) ? engine->type->rna_ext.srna :
+                                                        &RNA_RenderEngine;
 }
 
 static PointerRNA rna_RenderEngine_render_get(PointerRNA *ptr)
@@ -460,12 +455,6 @@ void rna_RenderPass_rect_set(PointerRNA *ptr, const float *values)
   memcpy(rpass->rect, values, sizeof(float) * rpass->rectx * rpass->recty * rpass->channels);
 }
 
-static PointerRNA rna_BakePixel_next_get(PointerRNA *ptr)
-{
-  BakePixel *bp = ptr->data;
-  return rna_pointer_inherit_refine(ptr, &RNA_BakePixel, bp + 1);
-}
-
 static RenderPass *rna_RenderPass_find_by_type(RenderLayer *rl, int passtype, const char *view)
 {
   return RE_pass_find_by_type(rl, passtype, view);
@@ -534,33 +523,9 @@ static void rna_def_render_engine(BlenderRNA *brna)
                      0,
                      INT_MAX);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_int(func,
-                     "object_id",
-                     0,
-                     0,
-                     INT_MAX,
-                     "Object Id",
-                     "Id of the current object being baked in relation to the others",
-                     0,
-                     INT_MAX);
+  parm = RNA_def_int(func, "width", 0, 0, INT_MAX, "Width", "Image width", 0, INT_MAX);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_pointer(func, "pixel_array", "BakePixel", "", "");
-  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_int(func,
-                     "num_pixels",
-                     0,
-                     0,
-                     INT_MAX,
-                     "Number of Pixels",
-                     "Size of the baking batch",
-                     0,
-                     INT_MAX);
-  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  parm = RNA_def_int(
-      func, "depth", 0, 0, INT_MAX, "Pixels depth", "Number of channels", 1, INT_MAX);
-  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
-  /* TODO, see how array size of 0 works, this shouldnt be used */
-  parm = RNA_def_pointer(func, "result", "AnyType", "", "");
+  parm = RNA_def_int(func, "height", 0, 0, INT_MAX, "Height", "Image height", 0, INT_MAX);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
   /* viewport render callbacks */
@@ -1118,53 +1083,6 @@ static void rna_def_render_pass(BlenderRNA *brna)
   RNA_define_verify_sdna(1);
 }
 
-static void rna_def_render_bake_pixel(BlenderRNA *brna)
-{
-  StructRNA *srna;
-  PropertyRNA *prop;
-
-  srna = RNA_def_struct(brna, "BakePixel", NULL);
-  RNA_def_struct_ui_text(srna, "Bake Pixel", "");
-
-  RNA_define_verify_sdna(0);
-
-  prop = RNA_def_property(srna, "primitive_id", PROP_INT, PROP_NONE);
-  RNA_def_property_int_sdna(prop, NULL, "primitive_id");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "object_id", PROP_INT, PROP_NONE);
-  RNA_def_property_int_sdna(prop, NULL, "object_id");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "uv", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_array(prop, 2);
-  RNA_def_property_float_sdna(prop, NULL, "uv");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "du_dx", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "du_dx");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "du_dy", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "du_dy");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "dv_dx", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "dv_dx");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "dv_dy", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "dv_dy");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  prop = RNA_def_property(srna, "next", PROP_POINTER, PROP_NONE);
-  RNA_def_property_struct_type(prop, "BakePixel");
-  RNA_def_property_pointer_funcs(prop, "rna_BakePixel_next_get", NULL, NULL, NULL);
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-
-  RNA_define_verify_sdna(1);
-}
-
 void RNA_def_render(BlenderRNA *brna)
 {
   rna_def_render_engine(brna);
@@ -1172,7 +1090,6 @@ void RNA_def_render(BlenderRNA *brna)
   rna_def_render_view(brna);
   rna_def_render_layer(brna);
   rna_def_render_pass(brna);
-  rna_def_render_bake_pixel(brna);
 }
 
 #endif /* RNA_RUNTIME */

@@ -86,8 +86,8 @@ static bool gpencil_view3d_poll(bContext *C)
   bGPDlayer *gpl = CTX_data_active_gpencil_layer(C);
 
   /* only 3D view */
-  ScrArea *sa = CTX_wm_area(C);
-  if (sa && sa->spacetype != SPACE_VIEW3D) {
+  ScrArea *area = CTX_wm_area(C);
+  if (area && area->spacetype != SPACE_VIEW3D) {
     return 0;
   }
 
@@ -134,6 +134,19 @@ static void gp_interpolate_free_temp_strokes(bGPDframe *gpf)
     }
   }
 }
+
+/* Helper: Untag all strokes. */
+static void gp_interpolate_untag_strokes(bGPDframe *gpf)
+{
+  BLI_assert(gpf != NULL);
+
+  LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+    if (gps->flag & GP_STROKE_TAG) {
+      gps->flag &= ~GP_STROKE_TAG;
+    }
+  }
+}
+
 /* Helper: Update all strokes interpolated */
 static void gp_interpolate_update_strokes(bContext *C, tGPDinterpolate *tgpi)
 {
@@ -265,6 +278,10 @@ static void gp_interpolate_set_points(bContext *C, tGPDinterpolate *tgpi)
     tgpil->prevFrame = gpl->actframe;
     tgpil->nextFrame = gpl->actframe->next;
 
+    /* Untag interpolated strokes to be sure nothing is pending. */
+    gp_interpolate_untag_strokes(tgpil->prevFrame);
+    gp_interpolate_untag_strokes(tgpil->nextFrame);
+
     BLI_addtail(&tgpi->ilayers, tgpil);
 
     /* create a new temporary frame */
@@ -383,7 +400,7 @@ static void gpencil_interpolate_status_indicators(bContext *C, tGPDinterpolate *
                  (int)((p->init_factor + p->shift) * 100.0f));
   }
 
-  ED_area_status_text(p->sa, status_str);
+  ED_area_status_text(p->area, status_str);
   ED_workspace_status_text(
       C, TIP_("ESC/RMB to cancel, Enter/LMB to confirm, WHEEL/MOVE to adjust factor"));
 }
@@ -410,7 +427,7 @@ static void gpencil_interpolate_exit(bContext *C, wmOperator *op)
   /* don't assume that operator data exists at all */
   if (tgpi) {
     /* clear status message area */
-    ED_area_status_text(tgpi->sa, NULL);
+    ED_area_status_text(tgpi->area, NULL);
     ED_workspace_status_text(C, NULL);
 
     /* Clear any temp stroke. */
@@ -445,7 +462,7 @@ static bool gp_interpolate_set_init_values(bContext *C, wmOperator *op, tGPDinte
   /* set current scene and window */
   tgpi->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   tgpi->scene = CTX_data_scene(C);
-  tgpi->sa = CTX_wm_area(C);
+  tgpi->area = CTX_wm_area(C);
   tgpi->region = CTX_wm_region(C);
   tgpi->flag = ts->gp_interpolate.flag;
 
@@ -567,7 +584,7 @@ static int gpencil_interpolate_modal(bContext *C, wmOperator *op, const wmEvent 
     case EVT_PADENTER:
     case EVT_RETKEY: {
       /* return to normal cursor and header status */
-      ED_area_status_text(tgpi->sa, NULL);
+      ED_area_status_text(tgpi->area, NULL);
       ED_workspace_status_text(C, NULL);
       WM_cursor_modal_restore(win);
 
@@ -602,7 +619,7 @@ static int gpencil_interpolate_modal(bContext *C, wmOperator *op, const wmEvent 
     case EVT_ESCKEY: /* cancel */
     case RIGHTMOUSE: {
       /* return to normal cursor and header status */
-      ED_area_status_text(tgpi->sa, NULL);
+      ED_area_status_text(tgpi->area, NULL);
       ED_workspace_status_text(C, NULL);
       WM_cursor_modal_restore(win);
 
@@ -953,12 +970,16 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
     bGPDstroke *gps_from, *gps_to;
     int cframe, fFrame;
 
+    /* Need a set of frames to interpolate. */
+    if ((gpl->actframe == NULL) || (gpl->actframe->next == NULL)) {
+      continue;
+    }
     /* all layers or only active */
     if (((flag & GP_TOOLFLAG_INTERPOLATE_ALL_LAYERS) == 0) && (gpl != active_gpl)) {
       continue;
     }
     /* only editable and visible layers are considered */
-    if (!BKE_gpencil_layer_is_editable(gpl) || (gpl->actframe == NULL)) {
+    if (!BKE_gpencil_layer_is_editable(gpl)) {
       continue;
     }
 

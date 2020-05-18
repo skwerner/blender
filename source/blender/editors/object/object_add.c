@@ -53,8 +53,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_action.h"
-#include "BKE_anim.h"
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_armature.h"
 #include "BKE_camera.h"
 #include "BKE_collection.h"
@@ -62,9 +61,10 @@
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
+#include "BKE_duplilist.h"
 #include "BKE_effect.h"
 #include "BKE_font.h"
-#include "BKE_gpencil_geom.h"
+#include "BKE_gpencil_curve.h"
 #include "BKE_hair.h"
 #include "BKE_key.h"
 #include "BKE_lattice.h"
@@ -146,7 +146,7 @@ static const EnumPropertyItem field_type_items[] = {
     {PFIELD_BOID, "BOID", ICON_FORCE_BOID, "Boid", ""},
     {PFIELD_TURBULENCE, "TURBULENCE", ICON_FORCE_TURBULENCE, "Turbulence", ""},
     {PFIELD_DRAG, "DRAG", ICON_FORCE_DRAG, "Drag", ""},
-    {PFIELD_SMOKEFLOW, "SMOKE", ICON_FORCE_SMOKEFLOW, "Smoke Flow", ""},
+    {PFIELD_FLUIDFLOW, "FLUID", ICON_FORCE_FLUIDFLOW, "Fluid Flow", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -1357,6 +1357,7 @@ static int collection_instance_add_exec(bContext *C, wmOperator *op)
     Object *ob = ED_object_add_type(
         C, OB_EMPTY, collection->id.name + 2, loc, rot, false, local_view_bits);
     ob->instance_collection = collection;
+    ob->empty_drawsize = U.collection_instance_empty_size;
     ob->transflag |= OB_DUPLICOLLECTION;
     id_us_plus(&collection->id);
 
@@ -1738,10 +1739,10 @@ static void copy_object_set_idnew(bContext *C)
  * In other words, we consider each group of objects from a same item as being
  * the 'local group' where to check for parents.
  */
-static unsigned int dupliobject_hash(const void *ptr)
+static uint dupliobject_hash(const void *ptr)
 {
   const DupliObject *dob = ptr;
-  unsigned int hash = BLI_ghashutil_ptrhash(dob->ob);
+  uint hash = BLI_ghashutil_ptrhash(dob->ob);
 
   if (dob->type == OB_DUPLICOLLECTION) {
     for (int i = 1; (i < MAX_DUPLI_RECUR) && dob->persistent_id[i] != INT_MAX; i++) {
@@ -1760,10 +1761,10 @@ static unsigned int dupliobject_hash(const void *ptr)
  * since its a unique index and we only want to know if the group objects are from the same
  * dupli-group instance.
  */
-static unsigned int dupliobject_instancer_hash(const void *ptr)
+static uint dupliobject_instancer_hash(const void *ptr)
 {
   const DupliObject *dob = ptr;
-  unsigned int hash = BLI_ghashutil_inthash(dob->persistent_id[0]);
+  uint hash = BLI_ghashutil_inthash(dob->persistent_id[0]);
   for (int i = 1; (i < MAX_DUPLI_RECUR) && dob->persistent_id[i] != INT_MAX; i++) {
     hash ^= (dob->persistent_id[i] ^ i);
   }
@@ -2048,6 +2049,7 @@ static int object_duplicates_make_real_exec(bContext *C, wmOperator *op)
   DEG_relations_tag_update(bmain);
   WM_event_add_notifier(C, NC_SCENE, scene);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, NULL);
+  ED_outliner_select_sync_from_object_tag(C);
 
   return OPERATOR_FINISHED;
 }
@@ -2255,7 +2257,7 @@ static int convert_exec(bContext *C, wmOperator *op)
    * needed since re-evaluating single modifiers causes bugs if they depend
    * on other objects data masks too, see: T50950. */
   {
-    for (CollectionPointerLink *link = selected_editable_bases.first; link; link = link->next) {
+    LISTBASE_FOREACH (CollectionPointerLink *, link, &selected_editable_bases) {
       Base *base = link->ptr.data;
       Object *ob = base->object;
 
@@ -2282,7 +2284,7 @@ static int convert_exec(bContext *C, wmOperator *op)
     scene->customdata_mask = customdata_mask_prev;
   }
 
-  for (CollectionPointerLink *link = selected_editable_bases.first; link; link = link->next) {
+  LISTBASE_FOREACH (CollectionPointerLink *, link, &selected_editable_bases) {
     Object *newob = NULL;
     Base *base = link->ptr.data;
     Object *ob = base->object;
@@ -2380,13 +2382,8 @@ static int convert_exec(bContext *C, wmOperator *op)
 
       cu = newob->data;
 
-      /* TODO(sergey): Ideally DAG will create nurbs list for a curve data
-       *               datablock, but for until we've got granular update
-       *               lets take care by selves.
-       */
-      /* XXX This may fail/crash, since BKE_vfont_to_curve()
-       * accesses evaluated data in some cases (bastien). */
-      BKE_vfont_to_curve(newob, FO_EDIT);
+      Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+      BKE_vfont_to_curve_ex(ob_eval, ob_eval->data, FO_EDIT, &cu->nurb, NULL, NULL, NULL, NULL);
 
       newob->type = OB_CURVE;
       cu->type = OB_CURVE;
@@ -2543,7 +2540,12 @@ static int convert_exec(bContext *C, wmOperator *op)
     }
 
     if (!keep_original && (ob->flag & OB_DONE)) {
-      DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+      /* NOTE: Tag transform for update because object parenting to curve with path is handled
+       * differently from all other cases. Converting curve to mesh and mesh to curve will likely
+       * affect the way children are evaluated.
+       * It is not enough to tag only geometry and rely on the curve parenting relations because
+       * this relation is lost when curve is converted to mesh. */
+      DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY | ID_RECALC_TRANSFORM);
       ((ID *)ob->data)->tag &= ~LIB_TAG_DOIT; /* flag not to convert this datablock again */
     }
   }

@@ -2902,7 +2902,6 @@ void TEXT_OT_scroll_bar(wmOperatorType *ot)
  * \{ */
 
 typedef struct SetSelection {
-  int selecting;
   int selc, sell;
   short mval_prev[2];
   wmTimer *timer; /* needed for scrolling when mouse at region bounds */
@@ -3420,7 +3419,7 @@ static int text_insert_exec(bContext *C, wmOperator *op)
   char *str;
   bool done = false;
   size_t i = 0;
-  unsigned int code;
+  uint code;
 
   text_drawcache_tag_update(st, 0);
 

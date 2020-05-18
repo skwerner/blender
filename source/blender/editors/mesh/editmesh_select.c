@@ -2335,6 +2335,8 @@ void EDBM_selectmode_convert(BMEditMesh *em,
           BM_edge_select_set(bm, eed, false);
         }
       }
+      /* Deselect faces without edges selected. */
+      BM_mesh_deselect_flush(bm);
     }
     else if (selectmode_new == SCE_SELECT_VERTEX) {
       /* flush down (face -> vert) */
@@ -2668,8 +2670,9 @@ bool EDBM_selectmode_disable_multi_ex(Scene *scene,
     Object *ob_iter = base_iter->object;
     BMEditMesh *em_iter = BKE_editmesh_from_object(ob_iter);
 
-    EDBM_selectmode_disable(scene, em_iter, selectmode_disable, selectmode_fallback);
-    changed_multi = true;
+    if (EDBM_selectmode_disable(scene, em_iter, selectmode_disable, selectmode_fallback)) {
+      changed_multi = true;
+    }
   }
   return changed_multi;
 }
@@ -3201,8 +3204,12 @@ static int edbm_select_linked_exec(bContext *C, wmOperator *op)
         BMEdge *e;
         BM_ITER_MESH (e, &iter, em->bm, BM_EDGES_OF_MESH) {
           if (!BMO_edge_flag_test(bm, e, BMO_ELE_TAG)) {
-            BM_elem_flag_disable(e->v1, BM_ELEM_TAG);
-            BM_elem_flag_disable(e->v2, BM_ELEM_TAG);
+            /* Check the edge for selected faces,
+             * this supports stepping off isolated vertices which would otherwise be ignored. */
+            if (BM_edge_is_any_face_flag_test(e, BM_ELEM_SELECT)) {
+              BM_elem_flag_disable(e->v1, BM_ELEM_TAG);
+              BM_elem_flag_disable(e->v2, BM_ELEM_TAG);
+            }
           }
         }
       }
@@ -3258,10 +3265,13 @@ static int edbm_select_linked_exec(bContext *C, wmOperator *op)
 
       if (delimit) {
         BM_ITER_MESH (e, &iter, em->bm, BM_EDGES_OF_MESH) {
-          BM_elem_flag_set(
-              e,
-              BM_ELEM_TAG,
-              (BM_elem_flag_test(e, BM_ELEM_SELECT) && BMO_edge_flag_test(bm, e, BMO_ELE_TAG)));
+          /* Check the edge for selected faces,
+           * this supports stepping off isolated edges which would otherwise be ignored. */
+          BM_elem_flag_set(e,
+                           BM_ELEM_TAG,
+                           (BM_elem_flag_test(e, BM_ELEM_SELECT) &&
+                            (BMO_edge_flag_test(bm, e, BMO_ELE_TAG) ||
+                             !BM_edge_is_any_face_flag_test(e, BM_ELEM_SELECT))));
         }
       }
       else {

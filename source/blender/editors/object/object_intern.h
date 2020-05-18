@@ -169,6 +169,8 @@ void OBJECT_OT_multires_subdivide(struct wmOperatorType *ot);
 void OBJECT_OT_multires_reshape(struct wmOperatorType *ot);
 void OBJECT_OT_multires_higher_levels_delete(struct wmOperatorType *ot);
 void OBJECT_OT_multires_base_apply(struct wmOperatorType *ot);
+void OBJECT_OT_multires_unsubdivide(struct wmOperatorType *ot);
+void OBJECT_OT_multires_rebuild_subdiv(struct wmOperatorType *ot);
 void OBJECT_OT_multires_external_save(struct wmOperatorType *ot);
 void OBJECT_OT_multires_external_pack(struct wmOperatorType *ot);
 void OBJECT_OT_correctivesmooth_bind(struct wmOperatorType *ot);
@@ -291,6 +293,7 @@ void TRANSFORM_OT_vertex_random(struct wmOperatorType *ot);
 
 /* object_remesh.c */
 void OBJECT_OT_voxel_remesh(struct wmOperatorType *ot);
+void OBJECT_OT_voxel_size_edit(struct wmOperatorType *ot);
 void OBJECT_OT_quadriflow_remesh(struct wmOperatorType *ot);
 
 /* object_transfer_data.c */

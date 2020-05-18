@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -464,7 +464,7 @@ static bool is_valid_target(NormalEditModifierData *enmd)
   else if ((enmd->mode == MOD_NORMALEDIT_MODE_DIRECTIONAL) && enmd->target) {
     return true;
   }
-  modifier_setError((ModifierData *)enmd, "Invalid target settings");
+  BKE_modifier_set_error((ModifierData *)enmd, "Invalid target settings");
   return false;
 }
 
@@ -494,7 +494,7 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
   if (!(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH))
 #endif
   {
-    modifier_setError((ModifierData *)enmd, "Enable 'Auto Smooth' in Object Data Properties");
+    BKE_modifier_set_error((ModifierData *)enmd, "Enable 'Auto Smooth' in Object Data Properties");
     return mesh;
   }
 
@@ -684,7 +684,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   }
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   return normalEditModifier_do((NormalEditModifierData *)md, ctx, ctx->object, mesh);
 }
@@ -697,13 +697,16 @@ ModifierTypeInfo modifierType_NormalEdit = {
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

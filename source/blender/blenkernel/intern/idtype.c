@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -92,6 +92,7 @@ static void id_type_init(void)
   INIT_TYPE(ID_HA);
   INIT_TYPE(ID_PT);
   INIT_TYPE(ID_VO);
+  INIT_TYPE(ID_SIM);
 
   /* Special naughty boy... */
   BLI_assert(IDType_ID_LINK_PLACEHOLDER.main_listbase_index == INDEX_ID_NULL);
@@ -124,10 +125,10 @@ const IDTypeInfo *BKE_idtype_get_info_from_id(const ID *id)
   return BKE_idtype_get_info_from_idcode(GS(id->name));
 }
 
-static const IDTypeInfo *idtype_get_info_from_name(const char *str)
+static const IDTypeInfo *idtype_get_info_from_name(const char *idtype_name)
 {
   for (int i = ARRAY_SIZE(id_types); i--;) {
-    if (id_types[i] != NULL && STREQ(str, id_types[i]->name)) {
+    if (id_types[i] != NULL && STREQ(idtype_name, id_types[i]->name)) {
       return id_types[i];
     }
   }
@@ -179,14 +180,14 @@ const char *BKE_idtype_idcode_to_translation_context(const short idcode)
 }
 
 /**
- * Convert a name into an idcode (ie. ID_SCE)
+ * Convert an IDType name into an idcode (ie. ID_SCE)
  *
- * \param name: The name to convert.
- * \return The code for the name, or 0 if invalid.
+ * \param idtype_name: The IDType's 'user visible name' to convert.
+ * \return The idcode for the name, or 0 if invalid.
  */
-short BKE_idtype_idcode_from_name(const char *name)
+short BKE_idtype_idcode_from_name(const char *idtype_name)
 {
-  const IDTypeInfo *id_type = idtype_get_info_from_name(name);
+  const IDTypeInfo *id_type = idtype_get_info_from_name(idtype_name);
   BLI_assert(id_type);
   return id_type != NULL ? id_type->id_code : 0;
 }
@@ -251,6 +252,7 @@ uint64_t BKE_idtype_idcode_to_idfilter(const short idcode)
     CASE_IDFILTER(PT);
     CASE_IDFILTER(LP);
     CASE_IDFILTER(SCE);
+    CASE_IDFILTER(SIM);
     CASE_IDFILTER(SPK);
     CASE_IDFILTER(SO);
     CASE_IDFILTER(TE);
@@ -302,6 +304,7 @@ short BKE_idtype_idcode_from_idfilter(const uint64_t idfilter)
     CASE_IDFILTER(PT);
     CASE_IDFILTER(LP);
     CASE_IDFILTER(SCE);
+    CASE_IDFILTER(SIM);
     CASE_IDFILTER(SPK);
     CASE_IDFILTER(SO);
     CASE_IDFILTER(TE);
@@ -356,6 +359,7 @@ int BKE_idtype_idcode_to_index(const short idcode)
     CASE_IDINDEX(LP);
     CASE_IDINDEX(SCE);
     CASE_IDINDEX(SCR);
+    CASE_IDINDEX(SIM);
     CASE_IDINDEX(SPK);
     CASE_IDINDEX(SO);
     CASE_IDINDEX(TE);
@@ -417,6 +421,7 @@ short BKE_idtype_idcode_from_index(const int index)
     CASE_IDCODE(LP);
     CASE_IDCODE(SCE);
     CASE_IDCODE(SCR);
+    CASE_IDCODE(SIM);
     CASE_IDCODE(SPK);
     CASE_IDCODE(SO);
     CASE_IDCODE(TE);

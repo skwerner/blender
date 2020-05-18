@@ -135,10 +135,10 @@ bool PE_hair_poll(bContext *C)
 
 bool PE_poll_view3d(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   ARegion *region = CTX_wm_region(C);
 
-  return (PE_poll(C) && (sa && sa->spacetype == SPACE_VIEW3D) &&
+  return (PE_poll(C) && (area && area->spacetype == SPACE_VIEW3D) &&
           (region && region->regiontype == RGN_TYPE_WINDOW));
 }
 
@@ -849,7 +849,6 @@ static void foreach_mouse_hit_key(PEData *data, ForHitKeyMatFunc func, int selec
 
   TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
-  settings.scheduling_mode = TASK_SCHEDULING_DYNAMIC;
   BLI_task_parallel_range(0, edit->totpoint, &iter_data, foreach_mouse_hit_key_iter, &settings);
 }
 
@@ -1229,7 +1228,6 @@ static void pe_deflect_emitter(Scene *scene, Object *ob, PTCacheEdit *edit)
 
   TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
-  settings.scheduling_mode = TASK_SCHEDULING_DYNAMIC;
   BLI_task_parallel_range(0, edit->totpoint, &iter_data, deflect_emitter_iter, &settings);
 }
 
@@ -1278,7 +1276,6 @@ static void PE_apply_lengths(Scene *scene, PTCacheEdit *edit)
 
   TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
-  settings.scheduling_mode = TASK_SCHEDULING_DYNAMIC;
   BLI_task_parallel_range(0, edit->totpoint, &iter_data, apply_lengths_iter, &settings);
 }
 
@@ -1353,7 +1350,6 @@ static void pe_iterate_lengths(Scene *scene, PTCacheEdit *edit)
 
   TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
-  settings.scheduling_mode = TASK_SCHEDULING_DYNAMIC;
   BLI_task_parallel_range(0, edit->totpoint, &iter_data, iterate_lengths_iter, &settings);
 }
 
@@ -2256,7 +2252,7 @@ bool PE_circle_select(bContext *C, const int sel_op, const int mval[2], float ra
 
 /************************ lasso select operator ************************/
 
-int PE_lasso_select(bContext *C, const int mcords[][2], const short moves, const int sel_op)
+int PE_lasso_select(bContext *C, const int mcoords[][2], const int mcoords_len, const int sel_op)
 {
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   Scene *scene = CTX_data_scene(C);
@@ -2300,7 +2296,8 @@ int PE_lasso_select(bContext *C, const int mcords[][2], const short moves, const
         const bool is_inside =
             ((ED_view3d_project_int_global(region, co, screen_co, V3D_PROJ_TEST_CLIP_WIN) ==
               V3D_PROJ_RET_OK) &&
-             BLI_lasso_is_point_inside(mcords, moves, screen_co[0], screen_co[1], IS_CLIPPED) &&
+             BLI_lasso_is_point_inside(
+                 mcoords, mcoords_len, screen_co[0], screen_co[1], IS_CLIPPED) &&
              key_test_depth(&data, co, screen_co));
         const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
         if (sel_op_result != -1) {
@@ -2319,7 +2316,8 @@ int PE_lasso_select(bContext *C, const int mcords[][2], const short moves, const
         const bool is_inside =
             ((ED_view3d_project_int_global(region, co, screen_co, V3D_PROJ_TEST_CLIP_WIN) ==
               V3D_PROJ_RET_OK) &&
-             BLI_lasso_is_point_inside(mcords, moves, screen_co[0], screen_co[1], IS_CLIPPED) &&
+             BLI_lasso_is_point_inside(
+                 mcoords, mcoords_len, screen_co[0], screen_co[1], IS_CLIPPED) &&
              key_test_depth(&data, co, screen_co));
         const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
         if (sel_op_result != -1) {
@@ -2833,8 +2831,8 @@ static void remove_tagged_keys(Depsgraph *depsgraph, Object *ob, ParticleSystem 
   if (pe_x_mirror(ob)) {
     /* mirror key tags */
     ParticleSystemModifierData *psmd = psys_get_modifier(ob, psys);
-    ParticleSystemModifierData *psmd_eval = (ParticleSystemModifierData *)modifier_get_evaluated(
-        depsgraph, ob, &psmd->modifier);
+    ParticleSystemModifierData *psmd_eval = (ParticleSystemModifierData *)
+        BKE_modifier_get_evaluated(depsgraph, ob, &psmd->modifier);
 
     LOOP_POINTS {
       LOOP_TAGGED_KEYS {
@@ -4084,7 +4082,6 @@ typedef struct BrushAddCountIterData {
   short size;
   float imat[4][4];
   ParticleData *add_pars;
-  int num_added;
 } BrushAddCountIterData;
 
 typedef struct BrushAddCountIterTLSData {
@@ -4113,7 +4110,7 @@ static void brush_add_count_iter(void *__restrict iter_data_v,
     dmy = size;
     if (tls->rng == NULL) {
       tls->rng = BLI_rng_new_srandom(psys->seed + data->mval[0] + data->mval[1] +
-                                     tls_v->thread_id);
+                                     BLI_task_parallel_thread_id(tls_v));
     }
     /* rejection sampling to get points in circle */
     while (dmx * dmx + dmy * dmy > size2) {
@@ -4176,12 +4173,19 @@ static void brush_add_count_iter(void *__restrict iter_data_v,
   }
 }
 
-static void brush_add_count_iter_finalize(void *__restrict userdata_v,
-                                          void *__restrict userdata_chunk_v)
+static void brush_add_count_iter_reduce(const void *__restrict UNUSED(userdata),
+                                        void *__restrict join_v,
+                                        void *__restrict chunk_v)
 {
-  BrushAddCountIterData *iter_data = (BrushAddCountIterData *)userdata_v;
-  BrushAddCountIterTLSData *tls = (BrushAddCountIterTLSData *)userdata_chunk_v;
-  iter_data->num_added += tls->num_added;
+  BrushAddCountIterTLSData *join = (BrushAddCountIterTLSData *)join_v;
+  BrushAddCountIterTLSData *tls = (BrushAddCountIterTLSData *)chunk_v;
+  join->num_added += tls->num_added;
+}
+
+static void brush_add_count_iter_free(const void *__restrict UNUSED(userdata_v),
+                                      void *__restrict chunk_v)
+{
+  BrushAddCountIterTLSData *tls = (BrushAddCountIterTLSData *)chunk_v;
   if (tls->rng != NULL) {
     BLI_rng_free(tls->rng);
   }
@@ -4245,23 +4249,22 @@ static int brush_add(const bContext *C, PEData *data, short number)
   iter_data.number = number;
   iter_data.size = size;
   iter_data.add_pars = add_pars;
-  iter_data.num_added = 0;
   copy_m4_m4(iter_data.imat, imat);
 
   BrushAddCountIterTLSData tls = {NULL};
 
   TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
-  settings.scheduling_mode = TASK_SCHEDULING_DYNAMIC;
   settings.userdata_chunk = &tls;
   settings.userdata_chunk_size = sizeof(BrushAddCountIterTLSData);
-  settings.func_finalize = brush_add_count_iter_finalize;
+  settings.func_reduce = brush_add_count_iter_reduce;
+  settings.func_free = brush_add_count_iter_free;
   BLI_task_parallel_range(0, number, &iter_data, brush_add_count_iter, &settings);
 
   /* Convert add_parse to a dense array, where all new particles are in the
    * beginning of the array.
    */
-  n = iter_data.num_added;
+  n = tls.num_added;
   for (int current_iter = 0, new_index = 0; current_iter < number; current_iter++) {
     if (add_pars[current_iter].num == DMCACHE_NOTFOUND) {
       continue;
@@ -5124,7 +5127,8 @@ void PE_create_particle_edit(
   int totpoint;
 
   if (psmd != NULL) {
-    psmd_eval = (ParticleSystemModifierData *)modifiers_findByName(ob_eval, psmd->modifier.name);
+    psmd_eval = (ParticleSystemModifierData *)BKE_modifiers_findny_name(ob_eval,
+                                                                        psmd->modifier.name);
   }
 
   /* no psmd->dm happens in case particle system modifier is not enabled */
@@ -5251,8 +5255,8 @@ static bool particle_edit_toggle_poll(bContext *C)
     return 0;
   }
 
-  return (ob->particlesystem.first || modifiers_findByType(ob, eModifierType_Cloth) ||
-          modifiers_findByType(ob, eModifierType_Softbody));
+  return (ob->particlesystem.first || BKE_modifiers_findby_type(ob, eModifierType_Cloth) ||
+          BKE_modifiers_findby_type(ob, eModifierType_Softbody));
 }
 
 static void free_all_psys_edit(Object *object)
@@ -5297,7 +5301,7 @@ static int particle_edit_toggle_exec(bContext *C, wmOperator *op)
        * with possible changes applied when object was outside of the
        * edit mode. */
       Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
-      edit->psmd_eval = (ParticleSystemModifierData *)modifiers_findByName(
+      edit->psmd_eval = (ParticleSystemModifierData *)BKE_modifiers_findny_name(
           object_eval, edit->psmd->modifier.name);
       recalc_emitter_field(depsgraph, ob, edit->psys);
     }

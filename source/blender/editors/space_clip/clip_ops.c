@@ -286,7 +286,7 @@ static int open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event)
     BLI_strncpy(path, clip->name, sizeof(path));
 
     BLI_path_abs(path, CTX_data_main(C)->name);
-    BLI_parent_dir(path);
+    BLI_path_parent_dir(path);
   }
   else {
     BLI_strncpy(path, U.textudir, sizeof(path));
@@ -784,7 +784,7 @@ void CLIP_OT_view_zoom_in(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "View Zoom In";
+  ot->name = "Zoom In";
   ot->idname = "CLIP_OT_view_zoom_in";
   ot->description = "Zoom in the view";
 
@@ -841,7 +841,7 @@ void CLIP_OT_view_zoom_out(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "View Zoom Out";
+  ot->name = "Zoom Out";
   ot->idname = "CLIP_OT_view_zoom_out";
   ot->description = "Zoom out the view";
 
@@ -975,7 +975,7 @@ void CLIP_OT_view_all(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "View All";
+  ot->name = "Frame All";
   ot->idname = "CLIP_OT_view_all";
   ot->description = "View whole image with markers";
 
@@ -1313,12 +1313,12 @@ typedef struct ProxyThread {
   int *build_undistort_sizes, build_undistort_count;
 } ProxyThread;
 
-static unsigned char *proxy_thread_next_frame(ProxyQueue *queue,
-                                              MovieClip *clip,
-                                              size_t *r_size,
-                                              int *r_cfra)
+static uchar *proxy_thread_next_frame(ProxyQueue *queue,
+                                      MovieClip *clip,
+                                      size_t *r_size,
+                                      int *r_cfra)
 {
-  unsigned char *mem = NULL;
+  uchar *mem = NULL;
 
   BLI_spin_lock(&queue->spin);
   if (!*queue->stop && queue->cfra <= queue->efra) {
@@ -1367,11 +1367,11 @@ static unsigned char *proxy_thread_next_frame(ProxyQueue *queue,
   return mem;
 }
 
-static void proxy_task_func(TaskPool *__restrict pool, void *task_data, int UNUSED(threadid))
+static void proxy_task_func(TaskPool *__restrict pool, void *task_data)
 {
   ProxyThread *data = (ProxyThread *)task_data;
-  ProxyQueue *queue = (ProxyQueue *)BLI_task_pool_userdata(pool);
-  unsigned char *mem;
+  ProxyQueue *queue = (ProxyQueue *)BLI_task_pool_user_data(pool);
+  uchar *mem;
   size_t size;
   int cfra;
 
@@ -1413,11 +1413,10 @@ static void do_sequence_proxy(void *pjv,
   ProxyJob *pj = pjv;
   MovieClip *clip = pj->clip;
   Scene *scene = pj->scene;
-  TaskScheduler *task_scheduler = BLI_task_scheduler_get();
   TaskPool *task_pool;
   int sfra = SFRA, efra = EFRA;
   ProxyThread *handles;
-  int i, tot_thread = BLI_task_scheduler_num_threads(task_scheduler);
+  int i, tot_thread = BLI_task_scheduler_num_threads();
   int width, height;
   ProxyQueue queue;
 
@@ -1434,7 +1433,7 @@ static void do_sequence_proxy(void *pjv,
   queue.do_update = do_update;
   queue.progress = progress;
 
-  task_pool = BLI_task_pool_create(task_scheduler, &queue);
+  task_pool = BLI_task_pool_create(&queue, TASK_PRIORITY_LOW);
   handles = MEM_callocN(sizeof(ProxyThread) * tot_thread, "proxy threaded handles");
   for (i = 0; i < tot_thread; i++) {
     ProxyThread *handle = &handles[i];
@@ -1451,7 +1450,7 @@ static void do_sequence_proxy(void *pjv,
       handle->distortion = BKE_tracking_distortion_new(&clip->tracking, width, height);
     }
 
-    BLI_task_pool_push(task_pool, proxy_task_func, handle, false, TASK_PRIORITY_LOW);
+    BLI_task_pool_push(task_pool, proxy_task_func, handle, false, NULL);
   }
 
   BLI_task_pool_work_and_wait(task_pool);
@@ -1533,7 +1532,7 @@ static int clip_rebuild_proxy_exec(bContext *C, wmOperator *UNUSED(op))
   wmJob *wm_job;
   ProxyJob *pj;
   Scene *scene = CTX_data_scene(C);
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   SpaceClip *sc = CTX_wm_space_clip(C);
   MovieClip *clip = ED_space_clip_get_clip(sc);
 
@@ -1570,7 +1569,7 @@ static int clip_rebuild_proxy_exec(bContext *C, wmOperator *UNUSED(op))
   G.is_break = false;
   WM_jobs_start(CTX_wm_manager(C), wm_job);
 
-  ED_area_tag_redraw(sa);
+  ED_area_tag_redraw(area);
 
   return OPERATOR_FINISHED;
 }

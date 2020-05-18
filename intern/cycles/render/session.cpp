@@ -293,14 +293,12 @@ void Session::run_gpu()
        * reset and draw in between */
       thread_scoped_lock buffers_lock(buffers_mutex);
 
-      /* avoid excessive denoising in viewport after reaching a certain amount of samples */
-      bool need_denoise = tile_manager.schedule_denoising || tile_manager.state.sample < 20 ||
-                          (time_dt() - last_display_time) >= params.progressive_update_timeout;
-
       /* update status and timing */
       update_status_time();
 
       /* render */
+      bool delayed_denoise = false;
+      const bool need_denoise = render_need_denoise(delayed_denoise);
       render(need_denoise);
 
       device->task_wait();
@@ -311,7 +309,7 @@ void Session::run_gpu()
       /* update status and timing */
       update_status_time();
 
-      gpu_need_display_buffer_update = need_denoise || !params.run_denoising;
+      gpu_need_display_buffer_update = !delayed_denoise;
       gpu_draw_ready = true;
       progress.set_update();
 
@@ -412,7 +410,16 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
   rtile.num_samples = tile_manager.state.num_samples;
   rtile.resolution = tile_manager.state.resolution_divider;
   rtile.tile_index = tile->index;
-  rtile.task = tile->state == Tile::DENOISE ? RenderTile::DENOISE : RenderTile::PATH_TRACE;
+
+  if (tile->state == Tile::DENOISE) {
+    rtile.task = RenderTile::DENOISE;
+  }
+  else if (read_bake_tile_cb) {
+    rtile.task = RenderTile::BAKE;
+  }
+  else {
+    rtile.task = RenderTile::PATH_TRACE;
+  }
 
   tile_lock.unlock();
 
@@ -453,11 +460,20 @@ bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_typ
   rtile.buffers = tile->buffers;
   rtile.sample = tile_manager.state.sample;
 
-  /* this will tag tile as IN PROGRESS in blender-side render pipeline,
-   * which is needed to highlight currently rendering tile before first
-   * sample was processed for it
-   */
-  update_tile_sample(rtile);
+  if (read_bake_tile_cb) {
+    /* This will read any passes needed as input for baking. */
+    {
+      thread_scoped_lock tile_lock(tile_mutex);
+      read_bake_tile_cb(rtile);
+    }
+    rtile.buffers->buffer.copy_to_device();
+  }
+  else {
+    /* This will tag tile as IN PROGRESS in blender-side render pipeline,
+     * which is needed to highlight currently rendering tile before first
+     * sample was processed for it. */
+    update_tile_sample(rtile);
+  }
 
   return true;
 }
@@ -477,7 +493,7 @@ void Session::update_tile_sample(RenderTile &rtile)
   update_status_time();
 }
 
-void Session::release_tile(RenderTile &rtile)
+void Session::release_tile(RenderTile &rtile, const bool need_denoise)
 {
   thread_scoped_lock tile_lock(tile_mutex);
 
@@ -485,7 +501,8 @@ void Session::release_tile(RenderTile &rtile)
 
   bool delete_tile;
 
-  if (tile_manager.finish_tile(rtile.tile_index, delete_tile)) {
+  if (tile_manager.finish_tile(rtile.tile_index, need_denoise, delete_tile)) {
+    /* Finished tile pixels write. */
     if (write_render_tile_cb && params.progressive_refine == false) {
       write_render_tile_cb(rtile);
     }
@@ -496,6 +513,7 @@ void Session::release_tile(RenderTile &rtile)
     }
   }
   else {
+    /* In progress tile pixels update. */
     if (update_render_tile_cb && params.progressive_refine == false) {
       update_render_tile_cb(rtile, false);
     }
@@ -687,21 +705,19 @@ void Session::run_cpu()
        * reset and draw in between */
       thread_scoped_lock buffers_lock(buffers_mutex);
 
-      /* avoid excessive denoising in viewport after reaching a certain amount of samples */
-      bool need_denoise = tile_manager.schedule_denoising || tile_manager.state.sample < 20 ||
-                          (time_dt() - last_display_time) >= params.progressive_update_timeout;
-
       /* update status and timing */
       update_status_time();
 
       /* render */
+      bool delayed_denoise = false;
+      const bool need_denoise = render_need_denoise(delayed_denoise);
       render(need_denoise);
 
       /* update status and timing */
       update_status_time();
 
       if (!params.background)
-        need_copy_to_display_buffer = need_denoise || !params.run_denoising;
+        need_copy_to_display_buffer = !delayed_denoise;
 
       if (!device->error_message().empty())
         progress.set_error(device->error_message());
@@ -1083,7 +1099,46 @@ void Session::update_status_time(bool show_pause, bool show_done)
   progress.set_status(status, substatus);
 }
 
-void Session::render(bool with_denoising)
+bool Session::render_need_denoise(bool &delayed)
+{
+  delayed = false;
+
+  /* Denoising enabled? */
+  if (!params.run_denoising) {
+    return false;
+  }
+
+  if (params.background) {
+    /* Background render, only denoise when rendering the last sample. */
+    return tile_manager.done();
+  }
+
+  /* Viewport render. */
+
+  /* It can happen that denoising was already enabled, but the scene still needs an update. */
+  if (scene->film->need_update || !scene->film->denoising_data_offset) {
+    return false;
+  }
+
+  /* Do not denoise until the sample at which denoising should start is reached. */
+  if (tile_manager.state.sample < params.denoising_start_sample) {
+    return false;
+  }
+
+  /* Cannot denoise with resolution divider and separate denoising devices.
+   * It breaks the copy in 'MultiDevice::map_neighbor_tiles' (which operates on
+   * the full buffer dimensions and not the scaled ones). */
+  if (!params.device.denoising_devices.empty() && tile_manager.state.resolution_divider > 1) {
+    return false;
+  }
+
+  /* Avoid excessive denoising in viewport after reaching a certain amount of samples. */
+  delayed = (tile_manager.state.sample >= 20 &&
+             (time_dt() - last_display_time) < params.progressive_update_timeout);
+  return !delayed;
+}
+
+void Session::render(bool need_denoise)
 {
   if (buffers && tile_manager.state.sample == tile_manager.range_start_sample) {
     /* Clear buffers. */
@@ -1098,7 +1153,7 @@ void Session::render(bool with_denoising)
   DeviceTask task(DeviceTask::RENDER);
 
   task.acquire_tile = function_bind(&Session::acquire_tile, this, _2, _1, _3);
-  task.release_tile = function_bind(&Session::release_tile, this, _1);
+  task.release_tile = function_bind(&Session::release_tile, this, _1, need_denoise);
   task.map_neighbor_tiles = function_bind(&Session::map_neighbor_tiles, this, _1, _2);
   task.unmap_neighbor_tiles = function_bind(&Session::unmap_neighbor_tiles, this, _1, _2);
   task.get_cancel = function_bind(&Progress::get_cancel, &this->progress);
@@ -1110,31 +1165,12 @@ void Session::render(bool with_denoising)
   task.adaptive_sampling.use = (scene->integrator->sampling_pattern == SAMPLING_PATTERN_PMJ) &&
                                scene->dscene.data.film.pass_adaptive_aux_buffer;
   task.adaptive_sampling.min_samples = scene->dscene.data.integrator.adaptive_min_samples;
+  task.adaptive_sampling.adaptive_step = scene->dscene.data.integrator.adaptive_step;
 
   /* Acquire render tiles by default. */
   task.tile_types = RenderTile::PATH_TRACE;
 
-  with_denoising = params.run_denoising && with_denoising;
-  if (with_denoising) {
-    /* Do not denoise viewport until the sample at which denoising should start is reached. */
-    if (!params.background && tile_manager.state.sample < params.denoising_start_sample) {
-      with_denoising = false;
-    }
-
-    /* Cannot denoise with resolution divider and separate denoising devices.
-     * It breaks the copy in 'MultiDevice::map_neighbor_tiles' (which operates on the full buffer
-     * dimensions and not the scaled ones). */
-    if (!params.device.denoising_devices.empty() && tile_manager.state.resolution_divider > 1) {
-      with_denoising = false;
-    }
-
-    /* It can happen that denoising was already enabled, but the scene still needs an update. */
-    if (scene->film->need_update || !scene->film->denoising_data_offset) {
-      with_denoising = false;
-    }
-  }
-
-  if (with_denoising) {
+  if (need_denoise) {
     task.denoising = params.denoising;
 
     task.pass_stride = scene->film->pass_stride;

@@ -49,7 +49,7 @@
 
 #include "PIL_time.h"
 
-#include "BKE_anim.h" /* needed for where_on_path */
+#include "BKE_anim_path.h" /* needed for where_on_path */
 #include "BKE_bvhutils.h"
 #include "BKE_collection.h"
 #include "BKE_collision.h"
@@ -113,7 +113,7 @@ PartDeflect *BKE_partdeflect_new(int type)
     case PFIELD_TEXTURE:
       pd->f_size = 1.0f;
       break;
-    case PFIELD_SMOKEFLOW:
+    case PFIELD_FLUIDFLOW:
       pd->f_flow = 1.0f;
       break;
   }
@@ -177,7 +177,7 @@ static void precalculate_effector(struct Depsgraph *depsgraph, EffectorCache *ef
     }
   }
   else if (eff->pd->shape == PFIELD_SHAPE_SURFACE) {
-    eff->surmd = (SurfaceModifierData *)modifiers_findByType(eff->ob, eModifierType_Surface);
+    eff->surmd = (SurfaceModifierData *)BKE_modifiers_findby_type(eff->ob, eModifierType_Surface);
     if (eff->ob->type == OB_CURVE) {
       eff->flag |= PE_USE_NORMAL_DATA;
     }
@@ -247,7 +247,7 @@ ListBase *BKE_effector_relations_create(Depsgraph *depsgraph,
       add_effector_relation(relations, ob, NULL, ob->pd);
     }
 
-    for (ParticleSystem *psys = ob->particlesystem.first; psys; psys = psys->next) {
+    LISTBASE_FOREACH (ParticleSystem *, psys, &ob->particlesystem) {
       ParticleSettings *part = psys->part;
 
       if (psys_check_enabled(ob, psys, for_render)) {
@@ -286,7 +286,7 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
     return NULL;
   }
 
-  for (EffectorRelation *relation = relations->first; relation; relation = relation->next) {
+  LISTBASE_FOREACH (EffectorRelation *, relation, relations) {
     /* Get evaluated object. */
     Object *ob = (Object *)DEG_get_evaluated_id(depsgraph, &relation->ob->id);
 
@@ -329,7 +329,7 @@ ListBase *BKE_effectors_create(Depsgraph *depsgraph,
 void BKE_effectors_free(ListBase *lb)
 {
   if (lb) {
-    for (EffectorCache *eff = lb->first; eff; eff = eff->next) {
+    LISTBASE_FOREACH (EffectorCache *, eff, lb) {
       if (eff->guide_data) {
         MEM_freeN(eff->guide_data);
       }
@@ -1024,7 +1024,7 @@ static void do_physical_effector(EffectorCache *eff,
 
       mul_v3_fl(force, -efd->falloff * fac * (strength * fac + damp));
       break;
-    case PFIELD_SMOKEFLOW:
+    case PFIELD_FLUIDFLOW:
       zero_v3(force);
 #ifdef WITH_FLUID
       if (pd->f_source) {
@@ -1046,7 +1046,7 @@ static void do_physical_effector(EffectorCache *eff,
   if (pd->flag & PFIELD_DO_LOCATION) {
     madd_v3_v3fl(total_force, force, 1.0f / point->vel_to_sec);
 
-    if (ELEM(pd->forcefield, PFIELD_HARMONIC, PFIELD_DRAG, PFIELD_SMOKEFLOW) == 0 &&
+    if (ELEM(pd->forcefield, PFIELD_HARMONIC, PFIELD_DRAG, PFIELD_FLUIDFLOW) == 0 &&
         pd->f_flow != 0.0f) {
       madd_v3_v3fl(total_force, point->vel, -pd->f_flow * efd->falloff);
     }

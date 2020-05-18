@@ -421,8 +421,8 @@ enum {
 };
 
 #define RV3D_CLIPPING_ENABLED(v3d, rv3d) \
-  (rv3d && v3d && (rv3d->rflag & RV3D_CLIPPING) && ELEM(v3d->shading.type, OB_WIRE, OB_SOLID) && \
-   rv3d->clipbb)
+  ((rv3d) && (v3d) && ((rv3d)->rflag & RV3D_CLIPPING) && \
+   ELEM((v3d)->shading.type, OB_WIRE, OB_SOLID) && (rv3d)->clipbb)
 
 /** #View3D.flag2 (int) */
 #define V3D_HIDE_OVERLAYS (1 << 2)
@@ -450,6 +450,7 @@ enum {
 #define V3D_GP_FADE_NOACTIVE_GPENCIL (1 << 6) /* Fade other GPencil objects */
 #define V3D_GP_SHOW_STROKE_DIRECTION (1 << 7) /* Show Strokes Directions */
 #define V3D_GP_SHOW_MATERIAL_NAME (1 << 8)    /* Show Material names */
+#define V3D_GP_SHOW_GRID_XRAY (1 << 9)        /* Show Canvas Grid on Top */
 
 /** #View3DShading.flag */
 enum {
@@ -489,6 +490,7 @@ enum {
   V3D_OVERLAY_HIDE_BONES = (1 << 8),
   V3D_OVERLAY_HIDE_OBJECT_XTRAS = (1 << 9),
   V3D_OVERLAY_HIDE_OBJECT_ORIGINS = (1 << 10),
+  V3D_OVERLAY_STATS = (1 << 11),
 };
 
 /** #View3DOverlay.edit_flag */
@@ -548,7 +550,7 @@ enum {
   V3D_AROUND_ACTIVE = 4,
 };
 
-/** #View3d.gridflag */
+/** #View3D.gridflag */
 #define V3D_SHOW_FLOOR (1 << 0)
 #define V3D_SHOW_X (1 << 1)
 #define V3D_SHOW_Y (1 << 2)

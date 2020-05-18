@@ -23,7 +23,6 @@
 
 #include "BCAnimationCurve.h"
 
-extern "C" {
 #include "DNA_action_types.h"
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
@@ -42,14 +41,12 @@ extern "C" {
 
 #include "BIK_api.h"
 #include "BKE_action.h"  // pose functions
-#include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_fcurve.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
 #include "ED_object.h"
-}
 
 #include "MEM_guardedalloc.h"
 

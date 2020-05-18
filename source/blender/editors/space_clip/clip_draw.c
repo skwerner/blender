@@ -66,8 +66,7 @@
 
 /*********************** main area drawing *************************/
 
-static void draw_keyframe(
-    int frame, int cfra, int sfra, float framelen, int width, unsigned int pos)
+static void draw_keyframe(int frame, int cfra, int sfra, float framelen, int width, uint pos)
 {
   int height = (frame == cfra) ? 22 : 10;
   int x = (frame - sfra) * framelen;
@@ -592,7 +591,7 @@ static void draw_marker_outline(SpaceClip *sc,
                                 const float marker_pos[2],
                                 int width,
                                 int height,
-                                unsigned int position)
+                                uint position)
 {
   int tiny = sc->flag & SC_SHOW_TINY_MARKER;
   bool show_search = false;
@@ -895,7 +894,7 @@ static float get_shortest_pattern_side(MovieTrackingMarker *marker)
 }
 
 static void draw_marker_slide_square(
-    float x, float y, float dx, float dy, int outline, const float px[2], unsigned int pos)
+    float x, float y, float dx, float dy, int outline, const float px[2], uint pos)
 {
   float tdx, tdy;
 
@@ -911,7 +910,7 @@ static void draw_marker_slide_square(
 }
 
 static void draw_marker_slide_triangle(
-    float x, float y, float dx, float dy, int outline, const float px[2], unsigned int pos)
+    float x, float y, float dx, float dy, int outline, const float px[2], uint pos)
 {
   float tdx, tdy;
 
@@ -939,7 +938,7 @@ static void draw_marker_slide_zones(SpaceClip *sc,
                                     int act,
                                     int width,
                                     int height,
-                                    unsigned int pos)
+                                    uint pos)
 {
   float dx, dy, patdx, patdy, searchdx, searchdy;
   int tiny = sc->flag & SC_SHOW_TINY_MARKER;
@@ -1056,7 +1055,7 @@ static void draw_marker_texts(SpaceClip *sc,
       UI_FontThemeColor(fontid, TH_ACT_MARKER);
     }
     else {
-      unsigned char color[4];
+      uchar color[4];
       UI_GetThemeColorShade4ubv(TH_DIS_MARKER, 128, color);
       BLF_color4ubv(fontid, color);
     }
@@ -1191,7 +1190,7 @@ static void draw_plane_marker_image(Scene *scene,
   ibuf = BKE_image_acquire_ibuf(image, NULL, &lock);
 
   if (ibuf) {
-    unsigned char *display_buffer;
+    uchar *display_buffer;
     void *cache_handle;
 
     if (image->flag & IMA_VIEW_AS_RENDER) {
@@ -1652,7 +1651,7 @@ static void draw_tracking_tracks(SpaceClip *sc,
           pos[0] = (pos[0] / (pos[3] * 2.0f) + 0.5f) * width;
           pos[1] = (pos[1] / (pos[3] * 2.0f) + 0.5f) * height * aspy;
 
-          BKE_tracking_distort_v2(tracking, pos, npos);
+          BKE_tracking_distort_v2(tracking, width, height, pos, npos);
 
           if (npos[0] >= 0.0f && npos[1] >= 0.0f && npos[0] <= width && npos[1] <= height * aspy) {
             vec[0] = (marker->pos[0] + track->offset[0]) * width;
@@ -1731,8 +1730,7 @@ static void draw_distortion(SpaceClip *sc,
 {
   float x, y;
   const int n = 10;
-  int i, j, a;
-  float pos[2], tpos[2], grid[11][11][2];
+  float tpos[2], grid[11][11][2];
   MovieTracking *tracking = &clip->tracking;
   bGPdata *gpd = NULL;
   float aspy = 1.0f / tracking->camera.pixel_aspect;
@@ -1765,7 +1763,7 @@ static void draw_distortion(SpaceClip *sc,
     float val[4][2], idx[4][2];
     float min[2], max[2];
 
-    for (a = 0; a < 4; a++) {
+    for (int a = 0; a < 4; a++) {
       if (a < 2) {
         val[a][a % 2] = FLT_MAX;
       }
@@ -1774,13 +1772,13 @@ static void draw_distortion(SpaceClip *sc,
       }
     }
 
-    zero_v2(pos);
-    for (i = 0; i <= n; i++) {
-      for (j = 0; j <= n; j++) {
+    for (int i = 0; i <= n; i++) {
+      for (int j = 0; j <= n; j++) {
         if (i == 0 || j == 0 || i == n || j == n) {
-          BKE_tracking_distort_v2(tracking, pos, tpos);
+          const float pos[2] = {dx * j, dy * i};
+          BKE_tracking_distort_v2(tracking, width, height, pos, tpos);
 
-          for (a = 0; a < 4; a++) {
+          for (int a = 0; a < 4; a++) {
             int ok;
 
             if (a < 2) {
@@ -1797,59 +1795,49 @@ static void draw_distortion(SpaceClip *sc,
             }
           }
         }
-
-        pos[0] += dx;
       }
-
-      pos[0] = 0.0f;
-      pos[1] += dy;
     }
 
     INIT_MINMAX2(min, max);
 
-    for (a = 0; a < 4; a++) {
-      pos[0] = idx[a][0] * dx;
-      pos[1] = idx[a][1] * dy;
+    for (int a = 0; a < 4; a++) {
+      const float pos[2] = {idx[a][0] * dx, idx[a][1] * dy};
 
-      BKE_tracking_undistort_v2(tracking, pos, tpos);
+      BKE_tracking_undistort_v2(tracking, width, height, pos, tpos);
 
       minmax_v2v2_v2(min, max, tpos);
     }
 
-    copy_v2_v2(pos, min);
     dx = (max[0] - min[0]) / n;
     dy = (max[1] - min[1]) / n;
 
-    for (i = 0; i <= n; i++) {
-      for (j = 0; j <= n; j++) {
-        BKE_tracking_distort_v2(tracking, pos, grid[i][j]);
+    for (int i = 0; i <= n; i++) {
+      for (int j = 0; j <= n; j++) {
+        const float pos[2] = {min[0] + dx * j, min[1] + dy * i};
+
+        BKE_tracking_distort_v2(tracking, width, height, pos, grid[i][j]);
 
         grid[i][j][0] /= width;
         grid[i][j][1] /= height * aspy;
-
-        pos[0] += dx;
       }
-
-      pos[0] = min[0];
-      pos[1] += dy;
     }
 
     immUniformColor3f(1.0f, 0.0f, 0.0f);
 
-    for (i = 0; i <= n; i++) {
+    for (int i = 0; i <= n; i++) {
       immBegin(GPU_PRIM_LINE_STRIP, n + 1);
 
-      for (j = 0; j <= n; j++) {
+      for (int j = 0; j <= n; j++) {
         immVertex2fv(position, grid[i][j]);
       }
 
       immEnd();
     }
 
-    for (j = 0; j <= n; j++) {
+    for (int j = 0; j <= n; j++) {
       immBegin(GPU_PRIM_LINE_STRIP, n + 1);
 
-      for (i = 0; i <= n; i++) {
+      for (int i = 0; i <= n; i++) {
         immVertex2fv(position, grid[i][j]);
       }
 
@@ -1883,8 +1871,8 @@ static void draw_distortion(SpaceClip *sc,
         while (stroke) {
           if (stroke->flag & GP_STROKE_2DSPACE) {
             if (stroke->totpoints > 1) {
-              for (i = 0; i < stroke->totpoints - 1; i++) {
-                float npos[2], dpos[2], len;
+              for (int i = 0; i < stroke->totpoints - 1; i++) {
+                float pos[2], npos[2], dpos[2], len;
                 int steps;
 
                 pos[0] = (stroke->points[i].x + offsx) * width;
@@ -1898,8 +1886,8 @@ static void draw_distortion(SpaceClip *sc,
 
                 /* we want to distort only long straight lines */
                 if (stroke->totpoints == 2) {
-                  BKE_tracking_undistort_v2(tracking, pos, pos);
-                  BKE_tracking_undistort_v2(tracking, npos, npos);
+                  BKE_tracking_undistort_v2(tracking, width, height, pos, pos);
+                  BKE_tracking_undistort_v2(tracking, width, height, npos, npos);
                 }
 
                 sub_v2_v2v2(dpos, npos, pos);
@@ -1907,8 +1895,8 @@ static void draw_distortion(SpaceClip *sc,
 
                 immBegin(GPU_PRIM_LINE_STRIP, steps + 1);
 
-                for (j = 0; j <= steps; j++) {
-                  BKE_tracking_distort_v2(tracking, pos, tpos);
+                for (int j = 0; j <= steps; j++) {
+                  BKE_tracking_distort_v2(tracking, width, height, pos, tpos);
                   immVertex2f(position, tpos[0] / width, tpos[1] / (height * aspy));
 
                   add_v2_v2(pos, dpos);

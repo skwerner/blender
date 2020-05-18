@@ -257,16 +257,16 @@ void OpenCLDevice::OpenCLSplitPrograms::load_kernels(
 
     /* Ordered with most complex kernels first, to reduce overall compile time. */
     ADD_SPLIT_KERNEL_PROGRAM(subsurface_scatter);
+    ADD_SPLIT_KERNEL_PROGRAM(direct_lighting);
+    ADD_SPLIT_KERNEL_PROGRAM(indirect_background);
     if (requested_features.use_volume || is_preview) {
       ADD_SPLIT_KERNEL_PROGRAM(do_volume);
     }
+    ADD_SPLIT_KERNEL_PROGRAM(shader_eval);
+    ADD_SPLIT_KERNEL_PROGRAM(lamp_emission);
+    ADD_SPLIT_KERNEL_PROGRAM(holdout_emission_blurring_pathtermination_ao);
     ADD_SPLIT_KERNEL_PROGRAM(shadow_blocked_dl);
     ADD_SPLIT_KERNEL_PROGRAM(shadow_blocked_ao);
-    ADD_SPLIT_KERNEL_PROGRAM(holdout_emission_blurring_pathtermination_ao);
-    ADD_SPLIT_KERNEL_PROGRAM(lamp_emission);
-    ADD_SPLIT_KERNEL_PROGRAM(direct_lighting);
-    ADD_SPLIT_KERNEL_PROGRAM(indirect_background);
-    ADD_SPLIT_KERNEL_PROGRAM(shader_eval);
 
     /* Quick kernels bundled in a single program to reduce overhead of starting
      * Blender processes. */
@@ -1367,6 +1367,9 @@ void OpenCLDevice::thread_run(DeviceTask *task)
          */
         clFinish(cqCommandQueue);
       }
+      else if (tile.task == RenderTile::BAKE) {
+        bake(*task, tile);
+      }
       else if (tile.task == RenderTile::DENOISE) {
         tile.sample = tile.start_sample + tile.num_samples;
         denoise(tile, denoising);
@@ -1858,10 +1861,7 @@ void OpenCLDevice::shader(DeviceTask &task)
   cl_int d_offset = task.offset;
 
   OpenCLDevice::OpenCLProgram *program = &background_program;
-  if (task.shader_eval_type >= SHADER_EVAL_BAKE) {
-    program = &bake_program;
-  }
-  else if (task.shader_eval_type == SHADER_EVAL_DISPLACE) {
+  if (task.shader_eval_type == SHADER_EVAL_DISPLACE) {
     program = &displace_program;
   }
   program->wait_for_availability();
@@ -1890,6 +1890,51 @@ void OpenCLDevice::shader(DeviceTask &task)
 
     task.update_progress(NULL);
   }
+}
+
+void OpenCLDevice::bake(DeviceTask &task, RenderTile &rtile)
+{
+  scoped_timer timer(&rtile.buffers->render_time);
+
+  /* Cast arguments to cl types. */
+  cl_mem d_data = CL_MEM_PTR(const_mem_map["__data"]->device_pointer);
+  cl_mem d_buffer = CL_MEM_PTR(rtile.buffer);
+  cl_int d_x = rtile.x;
+  cl_int d_y = rtile.y;
+  cl_int d_w = rtile.w;
+  cl_int d_h = rtile.h;
+  cl_int d_offset = rtile.offset;
+  cl_int d_stride = rtile.stride;
+
+  bake_program.wait_for_availability();
+  cl_kernel kernel = bake_program();
+
+  cl_uint start_arg_index = kernel_set_args(kernel, 0, d_data, d_buffer);
+
+  set_kernel_arg_buffers(kernel, &start_arg_index);
+
+  start_arg_index += kernel_set_args(
+      kernel, start_arg_index, d_x, d_y, d_w, d_h, d_offset, d_stride);
+
+  int start_sample = rtile.start_sample;
+  int end_sample = rtile.start_sample + rtile.num_samples;
+
+  for (int sample = start_sample; sample < end_sample; sample++) {
+    if (task.get_cancel()) {
+      if (task.need_finish_queue == false)
+        break;
+    }
+
+    kernel_set_args(kernel, start_arg_index, sample);
+
+    enqueue_kernel(kernel, d_w, d_h);
+
+    rtile.sample = sample + 1;
+
+    task.update_progress(&rtile, rtile.w * rtile.h);
+  }
+
+  clFinish(cqCommandQueue);
 }
 
 string OpenCLDevice::kernel_build_options(const string *debug_src)

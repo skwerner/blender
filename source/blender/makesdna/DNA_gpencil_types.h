@@ -264,6 +264,10 @@ typedef enum eGPDstroke_Flag {
   /* Flag used to indicate that stroke is used for fill close and must use
    * fill color for stroke and no fill area */
   GP_STROKE_NOFILL = (1 << 8),
+  /* only for use with stroke-buffer (while drawing arrows) */
+  GP_STROKE_USE_ARROW_START = (1 << 12),
+  /* only for use with stroke-buffer (while drawing arrows) */
+  GP_STROKE_USE_ARROW_END = (1 << 13),
   /* Tag for update geometry */
   GP_STROKE_TAG = (1 << 14),
   /* only for use with stroke-buffer (while drawing eraser) */
@@ -276,8 +280,20 @@ typedef enum eGPDstroke_Caps {
   GP_STROKE_CAP_ROUND = 0,
   GP_STROKE_CAP_FLAT = 1,
 
+  /* Keeo last. */
   GP_STROKE_CAP_MAX,
 } GPDstroke_Caps;
+
+/* Arrows ----------------------- */
+
+/* bGPDataRuntime.arrowstyle */
+typedef enum eGPDstroke_Arrowstyle {
+  GP_STROKE_ARROWSTYLE_NONE = 0,
+  GP_STROKE_ARROWSTYLE_SEGMENT = 2,
+  GP_STROKE_ARROWSTYLE_OPEN = 3,
+  GP_STROKE_ARROWSTYLE_CLOSED = 4,
+  GP_STROKE_ARROWSTYLE_SQUARE = 6,
+} eGPDstroke_Arrowstyle;
 
 /* ***************************************** */
 /* GP Frame */
@@ -468,7 +484,7 @@ typedef enum eGPDlayer_OnionFlag {
 /* layer blend_mode */
 typedef enum eGPLayerBlendModes {
   eGplBlendMode_Regular = 0,
-  eGplBlendMode_Overlay = 1,
+  eGplBlendMode_HardLight = 1,
   eGplBlendMode_Add = 2,
   eGplBlendMode_Subtract = 3,
   eGplBlendMode_Multiply = 4,
@@ -504,11 +520,15 @@ typedef struct bGPdata_Runtime {
   /** Number of total elements available in cache. */
   int sbuffer_size;
 
-  /** Vertex Color applied to point (while drawing). */
-  float vert_color[4];
-
   /** Vertex Color applied to Fill (while drawing). */
   float vert_color_fill[4];
+
+  /** Arrow points for stroke corners **/
+  float arrow_start[8];
+  float arrow_end[8];
+  /* Arrow style for each corner */
+  int arrow_start_style;
+  int arrow_end_style;
 
   /** Number of control-points for stroke. */
   int tot_cp_points;
@@ -661,8 +681,6 @@ typedef enum eGPdata_Flag {
 
   /* Autolock not active layers */
   GP_DATA_AUTOLOCK_LAYERS = (1 << 20),
-  /* Internal flag for python update */
-  GP_DATA_PYTHON_UPDATED = (1 << 21),
 } eGPdata_Flag;
 
 /* gpd->onion_flag */
@@ -704,31 +722,32 @@ typedef enum eGP_DrawMode {
 /* Check if 'multiedit sessions' is enabled */
 #define GPENCIL_MULTIEDIT_SESSIONS_ON(gpd) \
   ((gpd) && \
-   (gpd->flag & (GP_DATA_STROKE_EDITMODE | GP_DATA_STROKE_SCULPTMODE | \
-                 GP_DATA_STROKE_WEIGHTMODE | GP_DATA_STROKE_VERTEXMODE)) && \
-   (gpd->flag & GP_DATA_STROKE_MULTIEDIT))
+   ((gpd)->flag & (GP_DATA_STROKE_EDITMODE | GP_DATA_STROKE_SCULPTMODE | \
+                   GP_DATA_STROKE_WEIGHTMODE | GP_DATA_STROKE_VERTEXMODE)) && \
+   ((gpd)->flag & GP_DATA_STROKE_MULTIEDIT))
 
 /* Macros to check grease pencil modes */
 #define GPENCIL_ANY_MODE(gpd) \
-  ((gpd) && \
-   (gpd->flag & (GP_DATA_STROKE_PAINTMODE | GP_DATA_STROKE_EDITMODE | GP_DATA_STROKE_SCULPTMODE | \
-                 GP_DATA_STROKE_WEIGHTMODE | GP_DATA_STROKE_VERTEXMODE)))
+  ((gpd) && ((gpd)->flag & \
+             (GP_DATA_STROKE_PAINTMODE | GP_DATA_STROKE_EDITMODE | GP_DATA_STROKE_SCULPTMODE | \
+              GP_DATA_STROKE_WEIGHTMODE | GP_DATA_STROKE_VERTEXMODE)))
 #define GPENCIL_EDIT_MODE(gpd) ((gpd) && ((gpd)->flag & GP_DATA_STROKE_EDITMODE))
 #define GPENCIL_ANY_EDIT_MODE(gpd) \
-  ((gpd) && (gpd->flag & \
+  ((gpd) && ((gpd)->flag & \
              (GP_DATA_STROKE_EDITMODE | GP_DATA_STROKE_SCULPTMODE | GP_DATA_STROKE_WEIGHTMODE)))
 #define GPENCIL_PAINT_MODE(gpd) ((gpd) && (gpd->flag & (GP_DATA_STROKE_PAINTMODE)))
 #define GPENCIL_SCULPT_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_SCULPTMODE))
 #define GPENCIL_WEIGHT_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_WEIGHTMODE))
 #define GPENCIL_VERTEX_MODE(gpd) ((gpd) && (gpd->flag & (GP_DATA_STROKE_VERTEXMODE)))
 #define GPENCIL_SCULPT_OR_WEIGHT_MODE(gpd) \
-  ((gpd) && (gpd->flag & (GP_DATA_STROKE_SCULPTMODE | GP_DATA_STROKE_WEIGHTMODE)))
+  ((gpd) && ((gpd)->flag & (GP_DATA_STROKE_SCULPTMODE | GP_DATA_STROKE_WEIGHTMODE)))
 #define GPENCIL_NONE_EDIT_MODE(gpd) \
-  ((gpd) && ((gpd->flag & (GP_DATA_STROKE_EDITMODE | GP_DATA_STROKE_SCULPTMODE | \
-                           GP_DATA_STROKE_WEIGHTMODE | GP_DATA_STROKE_VERTEXMODE)) == 0))
+  ((gpd) && (((gpd)->flag & (GP_DATA_STROKE_EDITMODE | GP_DATA_STROKE_SCULPTMODE | \
+                             GP_DATA_STROKE_WEIGHTMODE | GP_DATA_STROKE_VERTEXMODE)) == 0))
 #define GPENCIL_LAZY_MODE(brush, shift) \
-  (((brush) && ((brush->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE) && (shift == 0))) || \
-   (((brush->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE) == 0) && (shift == 1)))
+  (((brush) && \
+    (((brush)->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE) && ((shift) == 0))) || \
+   ((((brush)->gpencil_settings->flag & GP_BRUSH_STABILIZE_MOUSE) == 0) && ((shift) == 1)))
 
 #define GPENCIL_ANY_SCULPT_MASK(flag) \
   ((flag & (GP_SCULPT_MASK_SELECTMODE_POINT | GP_SCULPT_MASK_SELECTMODE_STROKE | \

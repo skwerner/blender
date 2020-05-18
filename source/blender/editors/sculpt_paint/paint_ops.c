@@ -303,7 +303,7 @@ static void PALETTE_OT_color_delete(wmOperatorType *ot)
 static bool palette_extract_img_poll(bContext *C)
 {
   SpaceLink *sl = CTX_wm_space_data(C);
-  if (sl->spacetype == SPACE_IMAGE) {
+  if ((sl != NULL) && (sl->spacetype == SPACE_IMAGE)) {
     return true;
   }
 
@@ -397,7 +397,7 @@ static int palette_sort_exec(bContext *C, wmOperator *op)
     color_array = MEM_calloc_arrayN(totcol, sizeof(tPaletteColorHSV), __func__);
     /* Put all colors in an array. */
     int t = 0;
-    for (PaletteColor *color = palette->colors.first; color; color = color->next) {
+    LISTBASE_FOREACH (PaletteColor *, color, &palette->colors) {
       float h, s, v;
       rgb_to_hsv(color->rgb[0], color->rgb[1], color->rgb[2], &h, &s, &v);
       col_elm = &color_array[t];
@@ -543,7 +543,7 @@ static int palette_join_exec(bContext *C, wmOperator *op)
   const int totcol = BLI_listbase_count(&palette_join->colors);
 
   if (totcol > 0) {
-    for (PaletteColor *color = palette_join->colors.first; color; color = color->next) {
+    LISTBASE_FOREACH (PaletteColor *, color, &palette_join->colors) {
       PaletteColor *palcol = BKE_palette_color_add(palette);
       if (palcol) {
         copy_v3_v3(palcol->rgb, color->rgb);
@@ -716,7 +716,8 @@ static bool brush_generic_tool_set(bContext *C,
     brush = brush_tool_cycle(bmain, paint, brush_orig, tool);
   }
 
-  if (!brush && brush_tool(brush_orig, paint->runtime.tool_offset) != tool && create_missing) {
+  if (((brush == NULL) && create_missing) &&
+      ((brush_orig == NULL) || brush_tool(brush_orig, paint->runtime.tool_offset) != tool)) {
     brush = BKE_brush_add(bmain, tool_name, paint->runtime.ob_mode);
     id_us_min(&brush->id); /* fake user only */
     brush_tool_set(brush, paint->runtime.tool_offset, tool);
@@ -778,6 +779,9 @@ static int brush_select_exec(bContext *C, wmOperator *op)
   }
 
   Paint *paint = BKE_paint_get_active_from_paintmode(scene, paint_mode);
+  if (paint == NULL) {
+    return OPERATOR_CANCELLED;
+  }
   const EnumPropertyItem *items = BKE_paint_get_tool_enum_from_paintmode(paint_mode);
   RNA_enum_name_from_value(items, tool, &tool_name);
 

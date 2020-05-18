@@ -1,5 +1,5 @@
-#include "BLI_string_map.h"
-#include "BLI_vector.h"
+#include "BLI_string_map.hh"
+#include "BLI_vector.hh"
 #include "testing/testing.h"
 
 using namespace BLI;
@@ -231,4 +231,45 @@ TEST(string_map, UniquePtrValues)
   std::unique_ptr<int> &a = map.lookup("A");
   std::unique_ptr<int> *b = map.lookup_ptr("A");
   EXPECT_EQ(a.get(), b->get());
+}
+
+TEST(string_map, AddOrModify)
+{
+  StringMap<int> map;
+  auto create_func = [](int *value) {
+    *value = 10;
+    return true;
+  };
+  auto modify_func = [](int *value) {
+    *value += 5;
+    return false;
+  };
+  EXPECT_TRUE(map.add_or_modify("Hello", create_func, modify_func));
+  EXPECT_EQ(map.lookup("Hello"), 10);
+  EXPECT_FALSE(map.add_or_modify("Hello", create_func, modify_func));
+  EXPECT_EQ(map.lookup("Hello"), 15);
+}
+
+TEST(string_map, LookupOrAdd)
+{
+  StringMap<int> map;
+  auto return_5 = []() { return 5; };
+  auto return_8 = []() { return 8; };
+
+  int &a = map.lookup_or_add("A", return_5);
+  EXPECT_EQ(a, 5);
+  EXPECT_EQ(map.lookup_or_add("A", return_8), 5);
+  EXPECT_EQ(map.lookup_or_add("B", return_8), 8);
+}
+
+TEST(string_map, LookupOrAddDefault)
+{
+  StringMap<std::string> map;
+
+  std::string &a = map.lookup_or_add_default("A");
+  EXPECT_EQ(a.size(), 0);
+  a += "Test";
+  EXPECT_EQ(a.size(), 4);
+  std::string &b = map.lookup_or_add_default("A");
+  EXPECT_EQ(b, "Test");
 }

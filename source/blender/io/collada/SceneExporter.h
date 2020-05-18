@@ -25,7 +25,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-extern "C" {
 #include "DNA_action_types.h"
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
@@ -42,13 +41,11 @@ extern "C" {
 #include "DNA_texture_types.h"
 #include "DNA_userdef_types.h"
 
-#include "BKE_animsys.h"
 #include "BKE_constraint.h"
 #include "BKE_fcurve.h"
 #include "BLI_fileops.h"
 #include "BLI_path_util.h"
 #include "ED_keyframing.h"
-}
 
 #include "COLLADASWAsset.h"
 #include "COLLADASWBaseInputElement.h"

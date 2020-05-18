@@ -168,11 +168,11 @@ def render(engine, depsgraph):
         _cycles.render(engine.session, depsgraph.as_pointer())
 
 
-def bake(engine, depsgraph, obj, pass_type, pass_filter, object_id, pixel_array, num_pixels, depth, result):
+def bake(engine, depsgraph, obj, pass_type, pass_filter, width, height):
     import _cycles
     session = getattr(engine, "session", None)
     if session is not None:
-        _cycles.bake(engine.session, depsgraph.as_pointer(), obj.as_pointer(), pass_type, pass_filter, object_id, pixel_array.as_pointer(), num_pixels, depth, result.as_pointer())
+        _cycles.bake(engine.session, depsgraph.as_pointer(), obj.as_pointer(), pass_type, pass_filter, width, height)
 
 
 def reset(engine, data, depsgraph):
@@ -260,15 +260,16 @@ def list_render_passes(srl):
     if crl.use_pass_volume_indirect:           yield ("VolumeInd",                     "RGB", 'COLOR')
 
     # Cryptomatte passes.
+    crypto_depth = (crl.pass_crypto_depth + 1) // 2
     if crl.use_pass_crypto_object:
-        for i in range(0, crl.pass_crypto_depth, 2):
-            yield ("CryptoObject" + '{:02d}'.format(i//2), "RGBA", 'COLOR')
+        for i in range(0, crypto_depth):
+            yield ("CryptoObject" + '{:02d}'.format(i), "RGBA", 'COLOR')
     if crl.use_pass_crypto_material:
-        for i in range(0, crl.pass_crypto_depth, 2):
-            yield ("CryptoMaterial" + '{:02d}'.format(i//2), "RGBA", 'COLOR')
+        for i in range(0, crypto_depth):
+            yield ("CryptoMaterial" + '{:02d}'.format(i), "RGBA", 'COLOR')
     if srl.cycles.use_pass_crypto_asset:
-        for i in range(0, srl.cycles.pass_crypto_depth, 2):
-            yield ("CryptoAsset" + '{:02d}'.format(i//2), "RGBA", 'COLOR')
+        for i in range(0, crypto_depth):
+            yield ("CryptoAsset" + '{:02d}'.format(i), "RGBA", 'COLOR')
 
     # Denoising passes.
     if crl.use_denoising or crl.denoising_store_passes:

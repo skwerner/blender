@@ -38,10 +38,20 @@ static bool rna_XrSessionState_is_running(bContext *C)
 {
 #  ifdef WITH_XR_OPENXR
   const wmWindowManager *wm = CTX_wm_manager(C);
-  return WM_xr_session_is_ready(&wm->xr);
+  return WM_xr_session_exists(&wm->xr);
 #  else
   UNUSED_VARS(C);
   return false;
+#  endif
+}
+
+static void rna_XrSessionState_reset_to_base_pose(bContext *C)
+{
+#  ifdef WITH_XR_OPENXR
+  wmWindowManager *wm = CTX_wm_manager(C);
+  WM_xr_session_base_pose_reset(&wm->xr);
+#  else
+  UNUSED_VARS(C);
 #  endif
 }
 
@@ -196,6 +206,12 @@ static void rna_def_xr_session_state(BlenderRNA *brna)
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
   parm = RNA_def_boolean(func, "result", 0, "Result", "");
   RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(srna, "reset_to_base_pose", "rna_XrSessionState_reset_to_base_pose");
+  RNA_def_function_ui_description(func, "Force resetting of position and rotation deltas");
+  RNA_def_function_flag(func, FUNC_NO_SELF);
+  parm = RNA_def_pointer(func, "context", "Context", "", "");
+  RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED);
 
   prop = RNA_def_property(srna, "viewer_pose_location", PROP_FLOAT, PROP_TRANSLATION);
   RNA_def_property_array(prop, 3);

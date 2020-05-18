@@ -144,7 +144,7 @@ static void rna_Material_active_paint_texture_index_update(Main *bmain,
                                                            Scene *UNUSED(scene),
                                                            PointerRNA *ptr)
 {
-  bScreen *sc;
+  bScreen *screen;
   Material *ma = (Material *)ptr->owner_id;
 
   if (ma->use_nodes && ma->nodetree) {
@@ -157,8 +157,8 @@ static void rna_Material_active_paint_texture_index_update(Main *bmain,
 
   if (ma->texpaintslot) {
     Image *image = ma->texpaintslot[ma->paint_active_slot].ima;
-    for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-      wmWindow *win = ED_screen_window_find(sc, bmain->wm.first);
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      wmWindow *win = ED_screen_window_find(screen, bmain->wm.first);
       if (win == NULL) {
         continue;
       }
@@ -169,10 +169,10 @@ static void rna_Material_active_paint_texture_index_update(Main *bmain,
         obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
       }
 
-      ScrArea *sa;
-      for (sa = sc->areabase.first; sa; sa = sa->next) {
+      ScrArea *area;
+      for (area = screen->areabase.first; area; area = area->next) {
         SpaceLink *sl;
-        for (sl = sa->spacedata.first; sl; sl = sl->next) {
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_IMAGE) {
             SpaceImage *sima = (SpaceImage *)sl;
             if (!sima->pin) {
@@ -518,13 +518,6 @@ static void rna_def_material_greasepencil(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "texture_offset");
   RNA_def_property_array(prop, 2);
   RNA_def_property_ui_text(prop, "Offset", "Shift Texture in 2d Space");
-  RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
-
-  /* Texture opacity size */
-  prop = RNA_def_property(srna, "texture_opacity", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "texture_opacity");
-  RNA_def_property_range(prop, 0.0f, 1.0f);
-  RNA_def_property_ui_text(prop, "Opacity", "Texture Opacity");
   RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialGpencil_update");
 
   /* texture pixsize factor (used for UV along the stroke) */

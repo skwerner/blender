@@ -33,7 +33,7 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_global.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
@@ -795,12 +795,52 @@ bool BKE_volume_is_points_only(const Volume *volume)
 
 /* Dependency Graph */
 
-static Volume *volume_evaluate_modifiers(struct Depsgraph *UNUSED(depsgraph),
-                                         struct Scene *UNUSED(scene),
-                                         Object *UNUSED(object),
+static Volume *volume_evaluate_modifiers(struct Depsgraph *depsgraph,
+                                         struct Scene *scene,
+                                         Object *object,
                                          Volume *volume_input)
 {
-  return volume_input;
+  Volume *volume = volume_input;
+
+  /* Modifier evaluation modes. */
+  const bool use_render = (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
+  const int required_mode = use_render ? eModifierMode_Render : eModifierMode_Realtime;
+  ModifierApplyFlag apply_flag = use_render ? MOD_APPLY_RENDER : MOD_APPLY_USECACHE;
+  const ModifierEvalContext mectx = {depsgraph, object, apply_flag};
+
+  /* Get effective list of modifiers to execute. Some effects like shape keys
+   * are added as virtual modifiers before the user created modifiers. */
+  VirtualModifierData virtualModifierData;
+  ModifierData *md = BKE_modifiers_get_virtual_modifierlist(object, &virtualModifierData);
+
+  /* Evaluate modifiers. */
+  for (; md; md = md->next) {
+    const ModifierTypeInfo *mti = (const ModifierTypeInfo *)BKE_modifier_get_info(
+        (ModifierType)md->type);
+
+    if (!BKE_modifier_is_enabled(scene, md, required_mode)) {
+      continue;
+    }
+
+    if (mti->modifyVolume) {
+      /* Ensure we are not modifying the input. */
+      if (volume == volume_input) {
+        volume = BKE_volume_copy_for_eval(volume, true);
+      }
+
+      Volume *volume_next = mti->modifyVolume(md, &mectx, volume);
+
+      if (volume_next && volume_next != volume) {
+        /* If the modifier returned a new volume, release the old one. */
+        if (volume != volume_input) {
+          BKE_id_free(NULL, volume);
+        }
+        volume = volume_next;
+      }
+    }
+  }
+
+  return volume;
 }
 
 void BKE_volume_eval_geometry(struct Depsgraph *depsgraph, Volume *volume)
@@ -815,7 +855,10 @@ void BKE_volume_eval_geometry(struct Depsgraph *depsgraph, Volume *volume)
   /* Flush back to original. */
   if (DEG_is_active(depsgraph)) {
     Volume *volume_orig = (Volume *)DEG_get_original_id(&volume->id);
-    volume_orig->runtime.frame = volume->runtime.frame;
+    if (volume_orig->runtime.frame != volume->runtime.frame) {
+      BKE_volume_unload(volume_orig);
+      volume_orig->runtime.frame = volume->runtime.frame;
+    }
   }
 }
 
@@ -856,7 +899,7 @@ void BKE_volume_grids_backup_restore(Volume *volume, VolumeGridVector *grids, co
     volume->runtime.grids = grids;
   }
 #else
-  UNUSED_VARS(volume, grids);
+  UNUSED_VARS(volume, grids, filepath);
 #endif
 }
 
@@ -895,6 +938,16 @@ const char *BKE_volume_grids_error_msg(const Volume *volume)
 {
 #ifdef WITH_OPENVDB
   return volume->runtime.grids->error_msg.c_str();
+#else
+  UNUSED_VARS(volume);
+  return "";
+#endif
+}
+
+const char *BKE_volume_grids_frame_filepath(const Volume *volume)
+{
+#ifdef WITH_OPENVDB
+  return volume->runtime.grids->filepath;
 #else
   UNUSED_VARS(volume);
   return "";
@@ -967,7 +1020,7 @@ void BKE_volume_grid_unload(const Volume *volume, VolumeGrid *grid)
   const char *volume_name = volume->id.name + 2;
   grid->unload(volume_name);
 #else
-  UNUSED_VARS(grid);
+  UNUSED_VARS(volume, grid);
 #endif
 }
 

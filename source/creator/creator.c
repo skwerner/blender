@@ -43,6 +43,7 @@
 #include "BLI_args.h"
 #include "BLI_string.h"
 #include "BLI_system.h"
+#include "BLI_task.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
@@ -108,7 +109,7 @@
 
 #include "creator_intern.h" /* own include */
 
-/*  Local Function prototypes */
+/* Local Function prototypes. */
 #ifdef WITH_PYTHON_MODULE
 int main_python_enter(int argc, const char **argv);
 void main_python_exit(void);
@@ -339,7 +340,7 @@ int main(int argc,
 
   main_callback_setup();
 
-#if defined(__APPLE__) && !defined(WITH_PYTHON_MODULE)
+#if defined(__APPLE__) && !defined(WITH_PYTHON_MODULE) && !defined(WITH_HEADLESS)
   /* patch to ignore argument finder gives us (pid?) */
   if (argc == 2 && STREQLEN(argv[1], "-psn_", 5)) {
     extern int GHOST_HACK_getFirstFile(char buf[]);
@@ -400,6 +401,9 @@ int main(int argc,
   /* Using preferences or user startup makes no sense for #WITH_PYTHON_MODULE. */
   G.factory_startup = true;
 #endif
+
+  /* After parsing number of threads argument. */
+  BLI_task_scheduler_init();
 
 #ifdef WITH_FFMPEG
   IMB_ffmpeg_init();

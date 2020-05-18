@@ -33,7 +33,6 @@
 #include "GHOST_IconX11.h"
 #include "GHOST_SystemX11.h"
 #include "GHOST_WindowX11.h"
-#include "STR_String.h"
 
 #ifdef WITH_XDND
 #  include "GHOST_DropTargetX11.h"
@@ -61,6 +60,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <limits.h>
 #include <math.h>
 #include <string>
 
@@ -212,7 +212,7 @@ static XVisualInfo *x11_visualinfo_from_glx(Display *display,
 
 GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
                                  Display *display,
-                                 const STR_String &title,
+                                 const char *title,
                                  GHOST_TInt32 left,
                                  GHOST_TInt32 top,
                                  GHOST_TUns32 width,
@@ -239,6 +239,7 @@ GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
 #ifdef WITH_XDND
       m_dropTarget(NULL),
 #endif
+      m_tabletData(GHOST_TABLET_DATA_NONE),
 #if defined(WITH_X11_XINPUT) && defined(X_HAVE_UTF8_STRING)
       m_xic(NULL),
 #endif
@@ -413,9 +414,9 @@ GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
   /* XClassHint, title */
   {
     XClassHint *xclasshint = XAllocClassHint();
-    const int len = title.Length() + 1;
+    const int len = strlen(title) + 1;
     char *wmclass = (char *)malloc(sizeof(char) * len);
-    memcpy(wmclass, title.ReadPtr(), len * sizeof(char));
+    memcpy(wmclass, title, len * sizeof(char));
     xclasshint->res_name = wmclass;
     xclasshint->res_class = wmclass;
     XSetClassHint(m_display, m_window, xclasshint);
@@ -498,8 +499,6 @@ GHOST_WindowX11::GHOST_WindowX11(GHOST_SystemX11 *system,
 
 #ifdef WITH_X11_XINPUT
   refreshXInputDevices();
-
-  m_tabletData = GHOST_TABLET_DATA_DEFAULT;
 #endif
 
   /* now set up the rendering context. */
@@ -618,7 +617,7 @@ bool GHOST_WindowX11::getValid() const
   return GHOST_Window::getValid() && m_valid_setup;
 }
 
-void GHOST_WindowX11::setTitle(const STR_String &title)
+void GHOST_WindowX11::setTitle(const char *title)
 {
   Atom name = XInternAtom(m_display, "_NET_WM_NAME", 0);
   Atom utf8str = XInternAtom(m_display, "UTF8_STRING", 0);
@@ -628,8 +627,8 @@ void GHOST_WindowX11::setTitle(const STR_String &title)
                   utf8str,
                   8,
                   PropModeReplace,
-                  (const unsigned char *)title.ReadPtr(),
-                  title.Length());
+                  (const unsigned char *)title,
+                  strlen(title));
 
   /* This should convert to valid x11 string
    * and getTitle would need matching change */
@@ -638,13 +637,14 @@ void GHOST_WindowX11::setTitle(const STR_String &title)
   XFlush(m_display);
 }
 
-void GHOST_WindowX11::getTitle(STR_String &title) const
+std::string GHOST_WindowX11::getTitle() const
 {
   char *name = NULL;
 
   XFetchName(m_display, m_window, &name);
-  title = name ? name : "untitled";
+  std::string title = name ? name : "untitled";
   XFree(name);
+  return title;
 }
 
 void GHOST_WindowX11::getWindowBounds(GHOST_Rect &bounds) const

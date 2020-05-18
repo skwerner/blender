@@ -1155,9 +1155,21 @@ Mesh *BKE_mesh_new_from_object(Depsgraph *depsgraph, Object *object, bool preser
     /* Happens in special cases like request of mesh for non-mother meta ball. */
     return NULL;
   }
+
   /* The result must have 0 users, since it's just a mesh which is free-dangling data-block.
    * All the conversion functions are supposed to ensure mesh is not counted. */
   BLI_assert(new_mesh->id.us == 0);
+
+  /* It is possible that mesh came from modifier stack evaluation, which preserves edit_mesh
+   * pointer (which allows draw manager to access edit mesh when drawing). Normally this does
+   * not cause ownership problems because evaluated object runtime is keeping track of the real
+   * ownership.
+   *
+   * Here we are constructing a mesh which is supposed to be independent, which means no shared
+   * ownership is allowed, so we make sure edit mesh is reset to NULL (which is similar to as if
+   * one duplicates the objects and applies all the modifiers). */
+  new_mesh->edit_mesh = NULL;
+
   return new_mesh;
 }
 
@@ -1301,10 +1313,10 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
                                            int build_shapekey_layers)
 {
   Mesh *me = ob_eval->runtime.data_orig ? ob_eval->runtime.data_orig : ob_eval->data;
-  const ModifierTypeInfo *mti = modifierType_getInfo(md_eval->type);
+  const ModifierTypeInfo *mti = BKE_modifier_get_info(md_eval->type);
   Mesh *result;
   KeyBlock *kb;
-  ModifierEvalContext mectx = {depsgraph, ob_eval, 0};
+  ModifierEvalContext mectx = {depsgraph, ob_eval, MOD_APPLY_TO_BASE_MESH};
 
   if (!(md_eval->mode & eModifierMode_Realtime)) {
     return NULL;
@@ -1341,7 +1353,7 @@ Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
       add_shapekey_layers(mesh_temp, me);
     }
 
-    result = mti->applyModifier(md_eval, &mectx, mesh_temp);
+    result = mti->modifyMesh(md_eval, &mectx, mesh_temp);
     ASSERT_IS_VALID_MESH(result);
 
     if (mesh_temp != result) {

@@ -525,7 +525,7 @@ struct knFlipSampleSecondaryParticlesMoreCylinders : public KernelBase {
     if (!(flags(i, j, k) & itype))
       return;
 
-    RandomStream mRand(9832);
+    static RandomStream mRand(9832);
     Real radius =
         0.25;  // diameter=0.5 => sampling with two cylinders in each dimension since cell size=1
     for (Real x = i - radius; x <= i + radius; x += 2 * radius) {
@@ -791,11 +791,9 @@ struct knFlipSampleSecondaryParticles : public KernelBase {
     const int n = KE * (k_ta * TA + k_wc * WC) * dt;  // number of secondary particles
     if (n == 0)
       return;
-    RandomStream mRand(9832);
+    static RandomStream mRand(9832);
 
-    Vec3 xi = Vec3(i + mRand.getReal(),
-                   j + mRand.getReal(),
-                   k + mRand.getReal());  // randomized offset uniform in cell
+    Vec3 xi = Vec3(i, j, k) + mRand.getVec3();  // randomized offset uniform in cell
     Vec3 vi = v.getInterpolated(xi);
     Vec3 dir = dt * vi;                               // direction of movement of current particle
     Vec3 e1 = getNormalized(Vec3(dir.z, 0, -dir.x));  // perpendicular to dir
@@ -984,9 +982,14 @@ void flipSampleSecondaryParticles(const std::string mode,
                                   const Real c_b,
                                   const Real k_ta,
                                   const Real k_wc,
-                                  const Real dt,
+                                  const Real dt = 0,
                                   const int itype = FlagGrid::TypeFluid)
 {
+
+  float timestep = dt;
+  if (dt <= 0)
+    timestep = flags.getParent()->getDt();
+
   if (mode == "single") {
     knFlipSampleSecondaryParticles(flags,
                                    v,
@@ -1003,7 +1006,7 @@ void flipSampleSecondaryParticles(const std::string mode,
                                    c_b,
                                    k_ta,
                                    k_wc,
-                                   dt,
+                                   timestep,
                                    itype);
   }
   else if (mode == "multiple") {
@@ -1022,7 +1025,7 @@ void flipSampleSecondaryParticles(const std::string mode,
                                                 c_b,
                                                 k_ta,
                                                 k_wc,
-                                                dt,
+                                                timestep,
                                                 itype);
   }
   else {
@@ -1055,7 +1058,7 @@ static PyObject *_W_1(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
       const Real c_b = _args.get<Real>("c_b", 13, &_lock);
       const Real k_ta = _args.get<Real>("k_ta", 14, &_lock);
       const Real k_wc = _args.get<Real>("k_wc", 15, &_lock);
-      const Real dt = _args.get<Real>("dt", 16, &_lock);
+      const Real dt = _args.getOpt<Real>("dt", 16, 0, &_lock);
       const int itype = _args.getOpt<int>("itype", 17, FlagGrid::TypeFluid, &_lock);
       _retval = getPyNone();
       flipSampleSecondaryParticles(mode,
@@ -1693,13 +1696,20 @@ void flipUpdateSecondaryParticles(const std::string mode,
                                   const Real k_d,
                                   const Real c_s,
                                   const Real c_b,
-                                  const Real dt,
+                                  const Real dt = 0,
+                                  bool scale = true,
                                   const int exclude = ParticleBase::PTRACER,
                                   const int antitunneling = 0,
                                   const int itype = FlagGrid::TypeFluid)
 {
 
-  Vec3 g = gravity / flags.getDx();
+  float gridScale = (scale) ? flags.getParent()->getDx() : 1;
+  Vec3 g = gravity / gridScale;
+
+  float timestep = dt;
+  if (dt <= 0)
+    timestep = flags.getParent()->getDt();
+
   if (mode == "linear") {
     knFlipUpdateSecondaryParticlesLinear(pts_sec,
                                          v_sec,
@@ -1713,7 +1723,7 @@ void flipUpdateSecondaryParticles(const std::string mode,
                                          k_d,
                                          c_s,
                                          c_b,
-                                         dt,
+                                         timestep,
                                          exclude,
                                          antitunneling);
   }
@@ -1731,7 +1741,7 @@ void flipUpdateSecondaryParticles(const std::string mode,
                                         k_d,
                                         c_s,
                                         c_b,
-                                        dt,
+                                        timestep,
                                         exclude,
                                         antitunneling,
                                         itype);
@@ -1766,10 +1776,11 @@ static PyObject *_W_2(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
       const Real k_d = _args.get<Real>("k_d", 11, &_lock);
       const Real c_s = _args.get<Real>("c_s", 12, &_lock);
       const Real c_b = _args.get<Real>("c_b", 13, &_lock);
-      const Real dt = _args.get<Real>("dt", 14, &_lock);
-      const int exclude = _args.getOpt<int>("exclude", 15, ParticleBase::PTRACER, &_lock);
-      const int antitunneling = _args.getOpt<int>("antitunneling", 16, 0, &_lock);
-      const int itype = _args.getOpt<int>("itype", 17, FlagGrid::TypeFluid, &_lock);
+      const Real dt = _args.getOpt<Real>("dt", 14, 0, &_lock);
+      bool scale = _args.getOpt<bool>("scale", 15, true, &_lock);
+      const int exclude = _args.getOpt<int>("exclude", 16, ParticleBase::PTRACER, &_lock);
+      const int antitunneling = _args.getOpt<int>("antitunneling", 17, 0, &_lock);
+      const int itype = _args.getOpt<int>("itype", 18, FlagGrid::TypeFluid, &_lock);
       _retval = getPyNone();
       flipUpdateSecondaryParticles(mode,
                                    pts_sec,
@@ -1786,6 +1797,7 @@ static PyObject *_W_2(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
                                    c_s,
                                    c_b,
                                    dt,
+                                   scale,
                                    exclude,
                                    antitunneling,
                                    itype);
@@ -1834,7 +1846,7 @@ struct knFlipDeleteParticlesInObstacle : public KernelBase {
     }
     int gridIndex = flags.index(xidx);
     // remove particles that penetrate obstacles
-    if (flags[gridIndex] == FlagGrid::TypeObstacle || flags[gridIndex] == FlagGrid::TypeOutflow) {
+    if (flags.isObstacle(gridIndex) || flags.isOutflow(gridIndex)) {
       pts.kill(idx);
     }
   }

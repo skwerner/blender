@@ -261,12 +261,16 @@ typedef struct WORKBENCH_PrivateData {
   /* Temporal Antialiasing */
   /** Total number of samples to after which TAA stops accumulating samples. */
   int taa_sample_len;
+  /** Total number of samples of the previous TAA. When changed TAA will be reset. */
+  int taa_sample_len_previous;
   /** Current TAA sample index in [0..taa_sample_len[ range. */
   int taa_sample;
   /** Inverse of taa_sample to divide the accumulation buffer. */
   float taa_sample_inv;
   /** If the view has been updated and TAA needs to be reset. */
   bool view_updated;
+  /** True if the history buffer contains relevant data and false if it could contain garbage. */
+  bool valid_history;
   /** View */
   struct DRWView *view;
   /** Last projection matrix to see if view is still valid. */
@@ -333,6 +337,7 @@ typedef struct WORKBENCH_PrivateData {
   bool dof_enabled;
   bool is_playback;
   bool is_navigating;
+  bool reset_next_sample;
 } WORKBENCH_PrivateData; /* Transient data */
 
 typedef struct WORKBENCH_ObjectData {

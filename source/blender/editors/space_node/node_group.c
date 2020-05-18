@@ -69,7 +69,8 @@ static bool node_group_operator_active(bContext *C)
      */
     if (STREQ(snode->tree_idname, "ShaderNodeTree") ||
         STREQ(snode->tree_idname, "CompositorNodeTree") ||
-        STREQ(snode->tree_idname, "TextureNodeTree")) {
+        STREQ(snode->tree_idname, "TextureNodeTree") ||
+        STREQ(snode->tree_idname, "SimulationNodeTree")) {
       return true;
     }
   }
@@ -85,7 +86,8 @@ static bool node_group_operator_editable(bContext *C)
      * Disabled otherwise to allow pynodes define their own operators
      * with same keymap.
      */
-    if (ED_node_is_shader(snode) || ED_node_is_compositor(snode) || ED_node_is_texture(snode)) {
+    if (ED_node_is_shader(snode) || ED_node_is_compositor(snode) || ED_node_is_texture(snode) ||
+        ED_node_is_simulation(snode)) {
       return true;
     }
   }
@@ -110,6 +112,9 @@ static const char *group_node_idname(bContext *C)
   }
   else if (ED_node_is_texture(snode)) {
     return "TextureNodeGroup";
+  }
+  else if (ED_node_is_simulation(snode)) {
+    return "SimulationNodeGroup";
   }
 
   return "";
@@ -193,11 +198,11 @@ static int node_group_ungroup(Main *bmain, bNodeTree *ntree, bNode *gnode)
   }
 
   /* wgroup is a temporary copy of the NodeTree we're merging in
-   * - all of wgroup's nodes are transferred across to their new home
+   * - all of wgroup's nodes are copied across to their new home
    * - ngroup (i.e. the source NodeTree) is left unscathed
-   * - temp copy. don't change ID usercount
+   * - temp copy. do change ID usercount for the copies
    */
-  wgroup = ntreeCopyTree_ex_new_pointers(ngroup, bmain, false);
+  wgroup = ntreeCopyTree_ex_new_pointers(ngroup, bmain, true);
 
   /* Add the nodes into the ntree */
   for (node = wgroup->nodes.first; node; node = nextnode) {
@@ -351,8 +356,8 @@ static int node_group_ungroup(Main *bmain, bNodeTree *ntree, bNode *gnode)
     nodeRemoveNode(bmain, ntree, node, false);
   }
 
-  /* delete the group instance */
-  nodeRemoveNode(bmain, ntree, gnode, false);
+  /* delete the group instance and dereference group tree */
+  nodeRemoveNode(bmain, ntree, gnode, true);
 
   ntree->update |= NTREE_UPDATE_NODES | NTREE_UPDATE_LINKS;
 

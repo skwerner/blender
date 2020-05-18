@@ -66,6 +66,7 @@ struct wmJob;
 struct wmOperator;
 struct wmOperatorType;
 struct wmPaintCursor;
+struct wmTabletData;
 
 #ifdef WITH_INPUT_NDOF
 struct wmNDOFMotionData;
@@ -156,10 +157,6 @@ void *WM_opengl_context_create(void);
 void WM_opengl_context_dispose(void *context);
 void WM_opengl_context_activate(void *context);
 void WM_opengl_context_release(void *context);
-#ifdef WIN32
-void *WM_directx_context_create(void);
-void WM_directx_context_dispose(void *context);
-#endif
 
 struct wmWindow *WM_window_open(struct bContext *C, const struct rcti *rect);
 struct wmWindow *WM_window_open_temp(struct bContext *C,
@@ -192,7 +189,7 @@ void WM_lib_reload(struct Library *lib, struct bContext *C, struct ReportList *r
 
 /* mouse cursors */
 void WM_cursor_set(struct wmWindow *win, int curs);
-bool WM_cursor_set_from_tool(struct wmWindow *win, const ScrArea *sa, const ARegion *region);
+bool WM_cursor_set_from_tool(struct wmWindow *win, const ScrArea *area, const ARegion *region);
 void WM_cursor_modal_set(struct wmWindow *win, int curs);
 void WM_cursor_modal_restore(struct wmWindow *win);
 void WM_cursor_wait(bool val);
@@ -621,7 +618,7 @@ int WM_gesture_lasso_modal(struct bContext *C, struct wmOperator *op, const stru
 void WM_gesture_lasso_cancel(struct bContext *C, struct wmOperator *op);
 const int (*WM_gesture_lasso_path_to_array(struct bContext *C,
                                            struct wmOperator *op,
-                                           int *mcords_tot))[2];
+                                           int *mcoords_len))[2];
 int WM_gesture_straightline_invoke(struct bContext *C,
                                    struct wmOperator *op,
                                    const struct wmEvent *event);
@@ -777,7 +774,7 @@ void WM_draw_region_viewport_bind(struct ARegion *region);
 void WM_draw_region_viewport_unbind(struct ARegion *region);
 
 /* Region drawing */
-void WM_draw_region_free(struct ARegion *region);
+void WM_draw_region_free(struct ARegion *region, bool hide);
 struct GPUViewport *WM_draw_region_get_viewport(struct ARegion *region);
 struct GPUViewport *WM_draw_region_get_bound_viewport(struct ARegion *region);
 
@@ -789,6 +786,8 @@ bool write_crash_blend(void);
 /* Lock the interface for any communication */
 void WM_set_locked_interface(struct wmWindowManager *wm, bool lock);
 
+void WM_event_tablet_data_default_set(struct wmTabletData *tablet_data);
+
 /* For testing only 'G_FLAG_EVENT_SIMULATE' */
 struct wmEvent *WM_event_add_simulate(struct wmWindow *win, const struct wmEvent *event_to_add);
 
@@ -798,7 +797,7 @@ const char *WM_window_cursor_keymap_status_get(const struct wmWindow *win,
 void WM_window_cursor_keymap_status_refresh(struct bContext *C, struct wmWindow *win);
 
 void WM_window_status_area_tag_redraw(struct wmWindow *win);
-struct ScrArea *WM_window_status_area_find(struct wmWindow *win, struct bScreen *sc);
+struct ScrArea *WM_window_status_area_find(struct wmWindow *win, struct bScreen *screen);
 bool WM_window_modal_keymap_status_draw(struct bContext *C,
                                         struct wmWindow *win,
                                         struct uiLayout *layout);
@@ -845,18 +844,18 @@ typedef struct ARegion *(*wmTooltipInitFn)(struct bContext *C,
 
 void WM_tooltip_immediate_init(struct bContext *C,
                                struct wmWindow *win,
-                               struct ScrArea *sa,
+                               struct ScrArea *area,
                                struct ARegion *region,
                                wmTooltipInitFn init);
 void WM_tooltip_timer_init_ex(struct bContext *C,
                               struct wmWindow *win,
-                              struct ScrArea *sa,
+                              struct ScrArea *area,
                               struct ARegion *region,
                               wmTooltipInitFn init,
                               double delay);
 void WM_tooltip_timer_init(struct bContext *C,
                            struct wmWindow *win,
-                           struct ScrArea *sa,
+                           struct ScrArea *area,
                            struct ARegion *region,
                            wmTooltipInitFn init);
 void WM_tooltip_timer_clear(struct bContext *C, struct wmWindow *win);
@@ -871,11 +870,14 @@ void WM_generic_callback_free(struct wmGenericCallback *callback);
 
 void WM_generic_user_data_free(struct wmGenericUserData *user_data);
 
+bool WM_region_use_viewport(struct ScrArea *area, struct ARegion *region);
+
 #ifdef WITH_XR_OPENXR
 /* wm_xr.c */
 bool WM_xr_session_exists(const wmXrData *xr);
 bool WM_xr_session_is_ready(const wmXrData *xr);
 struct wmXrSessionState *WM_xr_session_state_handle_get(const wmXrData *xr);
+void WM_xr_session_base_pose_reset(wmXrData *xr);
 bool WM_xr_session_state_viewer_pose_location_get(const wmXrData *xr, float r_location[3]);
 bool WM_xr_session_state_viewer_pose_rotation_get(const wmXrData *xr, float r_rotation[4]);
 bool WM_xr_session_state_viewer_pose_matrix_info_get(const wmXrData *xr,

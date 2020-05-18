@@ -19,24 +19,25 @@
 #include "render/scene.h"
 
 #include "util/util_foreach.h"
+#include "util/util_hash.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"
 #include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
 
-static size_t compute_voxel_index(const int3 &resolution, size_t x, size_t y, size_t z)
+const int64_t VOXEL_INDEX_NONE = -1;
+
+static int64_t compute_voxel_index(const int3 &resolution, int64_t x, int64_t y, int64_t z)
 {
-  if (x == -1 || x >= resolution.x) {
-    return -1;
+  if (x < 0 || x >= resolution.x) {
+    return VOXEL_INDEX_NONE;
   }
-
-  if (y == -1 || y >= resolution.y) {
-    return -1;
+  else if (y < 0 || y >= resolution.y) {
+    return VOXEL_INDEX_NONE;
   }
-
-  if (z == -1 || z >= resolution.z) {
-    return -1;
+  else if (z < 0 || z >= resolution.z) {
+    return VOXEL_INDEX_NONE;
   }
 
   return x + y * resolution.x + z * resolution.x * resolution.y;
@@ -184,15 +185,15 @@ VolumeMeshBuilder::VolumeMeshBuilder(VolumeParams *volume_params)
   params = volume_params;
   number_of_nodes = 0;
 
-  const size_t x = divide_up(params->resolution.x, CUBE_SIZE);
-  const size_t y = divide_up(params->resolution.y, CUBE_SIZE);
-  const size_t z = divide_up(params->resolution.z, CUBE_SIZE);
+  const int64_t x = divide_up(params->resolution.x, CUBE_SIZE);
+  const int64_t y = divide_up(params->resolution.y, CUBE_SIZE);
+  const int64_t z = divide_up(params->resolution.z, CUBE_SIZE);
 
   /* Adding 2*pad_size since we pad in both positive and negative directions
    * along the axis. */
-  const size_t px = divide_up(params->resolution.x + 2 * params->pad_size, CUBE_SIZE);
-  const size_t py = divide_up(params->resolution.y + 2 * params->pad_size, CUBE_SIZE);
-  const size_t pz = divide_up(params->resolution.z + 2 * params->pad_size, CUBE_SIZE);
+  const int64_t px = divide_up(params->resolution.x + 2 * params->pad_size, CUBE_SIZE);
+  const int64_t py = divide_up(params->resolution.y + 2 * params->pad_size, CUBE_SIZE);
+  const int64_t pz = divide_up(params->resolution.z + 2 * params->pad_size, CUBE_SIZE);
 
   res = make_int3(px, py, pz);
   pad_offset = make_int3(px - x, py - y, pz - z);
@@ -209,7 +210,10 @@ void VolumeMeshBuilder::add_node(int x, int y, int z)
 
   assert((index_x >= 0) && (index_y >= 0) && (index_z >= 0));
 
-  const size_t index = compute_voxel_index(res, index_x, index_y, index_z);
+  const int64_t index = compute_voxel_index(res, index_x, index_y, index_z);
+  if (index == VOXEL_INDEX_NONE) {
+    return;
+  }
 
   /* We already have a node here. */
   if (grid[index] == 1) {
@@ -256,7 +260,7 @@ void VolumeMeshBuilder::generate_vertices_and_quads(vector<ccl::int3> &vertices_
   for (int z = 0; z < res.z; ++z) {
     for (int y = 0; y < res.y; ++y) {
       for (int x = 0; x < res.x; ++x) {
-        size_t voxel_index = compute_voxel_index(res, x, y, z);
+        int64_t voxel_index = compute_voxel_index(res, x, y, z);
         if (grid[voxel_index] == 0) {
           continue;
         }
@@ -285,32 +289,32 @@ void VolumeMeshBuilder::generate_vertices_and_quads(vector<ccl::int3> &vertices_
          */
 
         voxel_index = compute_voxel_index(res, x - 1, y, z);
-        if (voxel_index == -1 || grid[voxel_index] == 0) {
+        if (voxel_index == VOXEL_INDEX_NONE || grid[voxel_index] == 0) {
           create_quad(corners, vertices_is, quads, res, used_verts, QUAD_X_MIN);
         }
 
         voxel_index = compute_voxel_index(res, x + 1, y, z);
-        if (voxel_index == -1 || grid[voxel_index] == 0) {
+        if (voxel_index == VOXEL_INDEX_NONE || grid[voxel_index] == 0) {
           create_quad(corners, vertices_is, quads, res, used_verts, QUAD_X_MAX);
         }
 
         voxel_index = compute_voxel_index(res, x, y - 1, z);
-        if (voxel_index == -1 || grid[voxel_index] == 0) {
+        if (voxel_index == VOXEL_INDEX_NONE || grid[voxel_index] == 0) {
           create_quad(corners, vertices_is, quads, res, used_verts, QUAD_Y_MIN);
         }
 
         voxel_index = compute_voxel_index(res, x, y + 1, z);
-        if (voxel_index == -1 || grid[voxel_index] == 0) {
+        if (voxel_index == VOXEL_INDEX_NONE || grid[voxel_index] == 0) {
           create_quad(corners, vertices_is, quads, res, used_verts, QUAD_Y_MAX);
         }
 
         voxel_index = compute_voxel_index(res, x, y, z - 1);
-        if (voxel_index == -1 || grid[voxel_index] == 0) {
+        if (voxel_index == VOXEL_INDEX_NONE || grid[voxel_index] == 0) {
           create_quad(corners, vertices_is, quads, res, used_verts, QUAD_Z_MIN);
         }
 
         voxel_index = compute_voxel_index(res, x, y, z + 1);
-        if (voxel_index == -1 || grid[voxel_index] == 0) {
+        if (voxel_index == VOXEL_INDEX_NONE || grid[voxel_index] == 0) {
           create_quad(corners, vertices_is, quads, res, used_verts, QUAD_Z_MAX);
         }
       }
@@ -444,7 +448,14 @@ void GeometryManager::create_volume_mesh(Mesh *mesh, Progress &progress)
   start_point = transform_point(&itfm, start_point);
   cell_size = transform_direction(&itfm, cell_size);
 
-  volume_params.start_point = start_point;
+  /* Slightly offset vertex coordinates to avoid overlapping faces with other
+   * volumes or meshes. The proper solution would be to improve intersection in
+   * the kernel to support robust handling of multiple overlapping faces or use
+   * an all-hit intersection similar to shadows. */
+  const float3 face_overlap_avoidance = cell_size * 0.1f *
+                                        hash_uint_to_float(hash_string(mesh->name.c_str()));
+
+  volume_params.start_point = start_point + face_overlap_avoidance;
   volume_params.cell_size = cell_size;
   volume_params.pad_size = pad_size;
 
@@ -455,7 +466,7 @@ void GeometryManager::create_volume_mesh(Mesh *mesh, Progress &progress)
   for (int z = 0; z < resolution.z; ++z) {
     for (int y = 0; y < resolution.y; ++y) {
       for (int x = 0; x < resolution.x; ++x) {
-        size_t voxel_index = compute_voxel_index(resolution, x, y, z);
+        int64_t voxel_index = compute_voxel_index(resolution, x, y, z);
 
         for (size_t i = 0; i < voxel_grids.size(); ++i) {
           const VoxelAttributeGrid &voxel_grid = voxel_grids[i];

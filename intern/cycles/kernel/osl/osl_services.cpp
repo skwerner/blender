@@ -1012,7 +1012,13 @@ bool OSLRenderServices::get_userdata(
   return false; /* disabled by lockgeom */
 }
 
+#if OSL_LIBRARY_VERSION_CODE >= 11100
+TextureSystem::TextureHandle *OSLRenderServices::get_texture_handle(ustring filename,
+                                                                    OSL::ShadingContext *)
+#else
+
 TextureSystem::TextureHandle *OSLRenderServices::get_texture_handle(ustring filename)
+#endif
 {
   OSLTextureHandleMap::iterator it = textures.find(filename);
 
@@ -1366,6 +1372,17 @@ bool OSLRenderServices::environment(ustring filename,
   return status;
 }
 
+#if OSL_LIBRARY_VERSION_CODE >= 11100
+bool OSLRenderServices::get_texture_info(ustring filename,
+                                         TextureHandle *texture_handle,
+                                         TexturePerthread *,
+                                         OSL::ShadingContext *,
+                                         int subimage,
+                                         ustring dataname,
+                                         TypeDesc datatype,
+                                         void *data,
+                                         ustring *)
+#else
 bool OSLRenderServices::get_texture_info(OSL::ShaderGlobals *sg,
                                          ustring filename,
                                          TextureHandle *texture_handle,
@@ -1373,6 +1390,7 @@ bool OSLRenderServices::get_texture_info(OSL::ShaderGlobals *sg,
                                          ustring dataname,
                                          TypeDesc datatype,
                                          void *data)
+#endif
 {
   OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
 

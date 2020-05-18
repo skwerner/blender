@@ -42,6 +42,7 @@ class GHOST_EventWheel;
 class GHOST_EventWindow;
 class GHOST_EventDragnDrop;
 
+class GHOST_ContextD3D;
 class GHOST_WindowWin32;
 
 /**
@@ -63,6 +64,20 @@ class GHOST_SystemWin32 : public GHOST_System {
   /***************************************************************************************
    ** Time(r) functionality
    ***************************************************************************************/
+
+  /**
+   * This method converts performance counter measurements into milliseconds since the start of the
+   * system process.
+   * \return The number of milliseconds since the start of the system process.
+   */
+  GHOST_TUns64 performanceCounterToMillis(__int64 perf_ticks) const;
+
+  /**
+   * This method converts system ticks into milliseconds since the start of the
+   * system process.
+   * \return The number of milliseconds since the start of the system process.
+   */
+  GHOST_TUns64 tickCountToMillis(__int64 ticks) const;
 
   /**
    * Returns the system time.
@@ -111,7 +126,7 @@ class GHOST_SystemWin32 : public GHOST_System {
    * \param   parentWindow    Parent window
    * \return  The new window (or 0 if creation failed).
    */
-  GHOST_IWindow *createWindow(const STR_String &title,
+  GHOST_IWindow *createWindow(const char *title,
                               GHOST_TInt32 left,
                               GHOST_TInt32 top,
                               GHOST_TUns32 width,
@@ -131,18 +146,28 @@ class GHOST_SystemWin32 : public GHOST_System {
   GHOST_IContext *createOffscreenContext();
 
   /**
-   * Create a new offscreen context.
-   * Never explicitly delete the window, use disposeContext() instead.
-   * \return  The new context (or 0 if creation failed).
-   */
-  GHOST_IContext *createOffscreenContext(GHOST_TDrawingContextType type);
-
-  /**
    * Dispose of a context.
    * \param   context Pointer to the context to be disposed.
    * \return  Indication of success.
    */
   GHOST_TSuccess disposeContext(GHOST_IContext *context);
+
+  /**
+   * Create a new offscreen DirectX context.
+   * Never explicitly delete the context, use disposeContext() instead.
+   * This is for GHOST internal, Win32 specific use, so it can be called statically.
+   *
+   * \return  The new context (or 0 if creation failed).
+   */
+  static GHOST_ContextD3D *createOffscreenContextD3D();
+
+  /**
+   * Dispose of a DirectX context.
+   * This is for GHOST internal, Win32 specific use, so it can be called statically.
+   * \param   context Pointer to the context to be disposed.
+   * \return  Indication of success.
+   */
+  static GHOST_TSuccess disposeContextD3D(GHOST_ContextD3D *context);
 
   /***************************************************************************************
    ** Event management functionality
@@ -256,13 +281,6 @@ class GHOST_SystemWin32 : public GHOST_System {
   GHOST_TSuccess exit();
 
   /**
-   * Create a new offscreen DirectX context.
-   * Never explicitly delete the window, use disposeContext() instead.
-   * \return  The new context (or 0 if creation failed).
-   */
-  GHOST_IContext *createOffscreenContextD3D();
-
-  /**
    * Converts raw WIN32 key codes from the wndproc to GHOST keys.
    * \param vKey      The virtual key from hardKey
    * \param ScanCode  The ScanCode of pressed key (similar to PS/2 Set 1)
@@ -278,7 +296,7 @@ class GHOST_SystemWin32 : public GHOST_System {
    * \param vk        Pointer to virtual key
    * \return The GHOST key (GHOST_kKeyUnknown if no match).
    */
-  GHOST_TKey hardKey(RAWINPUT const &raw, int *keyDown, char *vk);
+  GHOST_TKey hardKey(RAWINPUT const &raw, bool *r_keyDown, bool *r_is_repeated_modifier);
 
   /**
    * Creates mouse button event.
@@ -292,27 +310,29 @@ class GHOST_SystemWin32 : public GHOST_System {
                                                GHOST_TButtonMask mask);
 
   /**
-   * Creates pointer event.
-   * \param type      The type of event to create.
+   * Creates tablet events from Wintab events.
+   * \param type      The type of pointer event
+   * \param window    The window receiving the event (the active window).
+   */
+  static GHOST_TSuccess processWintabEvents(GHOST_TEventType type, GHOST_WindowWin32 *window);
+
+  /**
+   * Creates tablet events from pointer events.
+   * \param type      The type of pointer event
    * \param window    The window receiving the event (the active window).
    * \param wParam    The wParam from the wndproc
    * \param lParam    The lParam from the wndproc
    * \param eventhandled true if the method handled the event
-   * \return The event created.
    */
-  static GHOST_Event *processPointerEvent(GHOST_TEventType type,
-                                          GHOST_WindowWin32 *window,
-                                          WPARAM wParam,
-                                          LPARAM lParam,
-                                          bool &eventhandled);
+  static void processPointerEvents(
+      UINT type, GHOST_WindowWin32 *window, WPARAM wParam, LPARAM lParam, bool &eventhandled);
 
   /**
    * Creates cursor event.
-   * \param type      The type of event to create.
    * \param window    The window receiving the event (the active window).
    * \return The event created.
    */
-  static GHOST_EventCursor *processCursorEvent(GHOST_TEventType type, GHOST_WindowWin32 *window);
+  static GHOST_EventCursor *processCursorEvent(GHOST_WindowWin32 *window);
 
   /**
    * Handles a mouse wheel event.
@@ -422,6 +442,8 @@ class GHOST_SystemWin32 : public GHOST_System {
   __int64 m_freq;
   /** High frequency timer variable. */
   __int64 m_start;
+  /** Low frequency timer variable. */
+  __int64 m_lfstart;
   /** AltGr on current keyboard layout. */
   bool m_hasAltGr;
   /** language identifier. */

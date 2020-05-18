@@ -2898,12 +2898,12 @@ GPUBatch *DRW_cache_curve_edge_overlay_get(Object *ob)
   return DRW_curve_batch_cache_get_edit_edges(cu);
 }
 
-GPUBatch *DRW_cache_curve_vert_overlay_get(Object *ob, bool handles)
+GPUBatch *DRW_cache_curve_vert_overlay_get(Object *ob)
 {
   BLI_assert(ELEM(ob->type, OB_CURVE, OB_SURF));
 
   struct Curve *cu = ob->data;
-  return DRW_curve_batch_cache_get_edit_verts(cu, handles);
+  return DRW_curve_batch_cache_get_edit_verts(cu);
 }
 
 GPUBatch *DRW_cache_curve_surface_get(Object *ob)
@@ -3081,8 +3081,7 @@ GPUBatch *DRW_cache_text_loose_edges_get(Object *ob)
     return DRW_mesh_batch_cache_get_loose_edges(mesh_eval);
   }
   else {
-    /* TODO */
-    return NULL;
+    return DRW_curve_batch_cache_get_wire_edge(cu);
   }
 }
 

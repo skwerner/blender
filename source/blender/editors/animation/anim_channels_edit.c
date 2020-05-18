@@ -42,7 +42,7 @@
 #include "RNA_define.h"
 
 #include "BKE_action.h"
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
@@ -138,7 +138,8 @@ void ANIM_set_active_channel(bAnimContext *ac,
       case ANIMTYPE_DSMCLIP:
       case ANIMTYPE_DSHAIR:
       case ANIMTYPE_DSPOINTCLOUD:
-      case ANIMTYPE_DSVOLUME: {
+      case ANIMTYPE_DSVOLUME:
+      case ANIMTYPE_DSSIMULATION: {
         /* need to verify that this data is valid for now */
         if (ale->adt) {
           ACHANNEL_SET_FLAG(ale->adt, ACHANNEL_SETFLAG_CLEAR, ADT_UI_ACTIVE);
@@ -194,7 +195,8 @@ void ANIM_set_active_channel(bAnimContext *ac,
       case ANIMTYPE_DSMCLIP:
       case ANIMTYPE_DSHAIR:
       case ANIMTYPE_DSPOINTCLOUD:
-      case ANIMTYPE_DSVOLUME: {
+      case ANIMTYPE_DSVOLUME:
+      case ANIMTYPE_DSSIMULATION: {
         /* need to verify that this data is valid for now */
         if (ale && ale->adt) {
           ale->adt->flag |= ADT_UI_ACTIVE;
@@ -332,7 +334,8 @@ void ANIM_deselect_anim_channels(
         case ANIMTYPE_DSMCLIP:
         case ANIMTYPE_DSHAIR:
         case ANIMTYPE_DSPOINTCLOUD:
-        case ANIMTYPE_DSVOLUME: {
+        case ANIMTYPE_DSVOLUME:
+        case ANIMTYPE_DSSIMULATION: {
           if ((ale->adt) && (ale->adt->flag & ADT_UI_SELECTED)) {
             sel = ACHANNEL_SETFLAG_CLEAR;
           }
@@ -428,7 +431,8 @@ void ANIM_deselect_anim_channels(
       case ANIMTYPE_DSMCLIP:
       case ANIMTYPE_DSHAIR:
       case ANIMTYPE_DSPOINTCLOUD:
-      case ANIMTYPE_DSVOLUME: {
+      case ANIMTYPE_DSVOLUME:
+      case ANIMTYPE_DSSIMULATION: {
         /* need to verify that this data is valid for now */
         if (ale->adt) {
           ACHANNEL_SET_FLAG(ale->adt, sel, ADT_UI_SELECTED);
@@ -695,15 +699,15 @@ bool ANIM_remove_empty_action_from_animdata(struct AnimData *adt)
 /* poll callback for being in an Animation Editor channels list region */
 static bool animedit_poll_channels_active(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
   /* channels region test */
   /* TODO: could enhance with actually testing if channels region? */
-  if (ELEM(NULL, sa, CTX_wm_region(C))) {
+  if (ELEM(NULL, area, CTX_wm_region(C))) {
     return 0;
   }
   /* animation editor test */
-  if (ELEM(sa->spacetype, SPACE_ACTION, SPACE_GRAPH, SPACE_NLA) == 0) {
+  if (ELEM(area->spacetype, SPACE_ACTION, SPACE_GRAPH, SPACE_NLA) == 0) {
     return 0;
   }
 
@@ -713,21 +717,21 @@ static bool animedit_poll_channels_active(bContext *C)
 /* poll callback for Animation Editor channels list region + not in NLA-tweakmode for NLA */
 static bool animedit_poll_channels_nla_tweakmode_off(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   Scene *scene = CTX_data_scene(C);
 
   /* channels region test */
   /* TODO: could enhance with actually testing if channels region? */
-  if (ELEM(NULL, sa, CTX_wm_region(C))) {
+  if (ELEM(NULL, area, CTX_wm_region(C))) {
     return 0;
   }
   /* animation editor test */
-  if (ELEM(sa->spacetype, SPACE_ACTION, SPACE_GRAPH, SPACE_NLA) == 0) {
+  if (ELEM(area->spacetype, SPACE_ACTION, SPACE_GRAPH, SPACE_NLA) == 0) {
     return 0;
   }
 
   /* NLA TweakMode test */
-  if (sa->spacetype == SPACE_NLA) {
+  if (area->spacetype == SPACE_NLA) {
     if ((scene == NULL) || (scene->flag & SCE_NLA_EDIT_ON)) {
       return 0;
     }
@@ -1518,19 +1522,19 @@ static void ANIM_OT_channels_move(wmOperatorType *ot)
 
 static bool animchannels_grouping_poll(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   SpaceLink *sl;
 
   /* channels region test */
   /* TODO: could enhance with actually testing if channels region? */
-  if (ELEM(NULL, sa, CTX_wm_region(C))) {
+  if (ELEM(NULL, area, CTX_wm_region(C))) {
     return 0;
   }
 
   /* animation editor test - must be suitable modes only */
   sl = CTX_wm_space_data(C);
 
-  switch (sa->spacetype) {
+  switch (area->spacetype) {
     /* supported... */
     case SPACE_ACTION: {
       SpaceAction *saction = (SpaceAction *)sl;
@@ -2268,7 +2272,8 @@ static int animchannels_clean_empty_exec(bContext *C, wmOperator *UNUSED(op))
   }
 
   /* get animdata blocks */
-  filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_ANIMDATA);
+  filter = (ANIMFILTER_DATA_VISIBLE | ANIMFILTER_LIST_VISIBLE | ANIMFILTER_ANIMDATA |
+            ANIMFILTER_NODUPLIS);
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   for (ale = anim_data.first; ale; ale = ale->next) {
@@ -2353,16 +2358,16 @@ static void ANIM_OT_channels_clean_empty(wmOperatorType *ot)
 
 static bool animchannels_enable_poll(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
   /* channels region test */
   /* TODO: could enhance with actually testing if channels region? */
-  if (ELEM(NULL, sa, CTX_wm_region(C))) {
+  if (ELEM(NULL, area, CTX_wm_region(C))) {
     return 0;
   }
 
   /* animation editor test - Action/Dopesheet/etc. and Graph only */
-  if (ELEM(sa->spacetype, SPACE_ACTION, SPACE_GRAPH) == 0) {
+  if (ELEM(area->spacetype, SPACE_ACTION, SPACE_GRAPH) == 0) {
     return 0;
   }
 
@@ -2431,14 +2436,14 @@ static void ANIM_OT_channels_fcurves_enable(wmOperatorType *ot)
 /* XXX: make this generic? */
 static bool animchannels_find_poll(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
-  if (sa == NULL) {
+  if (area == NULL) {
     return 0;
   }
 
   /* animation editor with dopesheet */
-  return ELEM(sa->spacetype, SPACE_ACTION, SPACE_GRAPH, SPACE_NLA);
+  return ELEM(area->spacetype, SPACE_ACTION, SPACE_GRAPH, SPACE_NLA);
 }
 
 /* find_invoke() - Get initial channels */
@@ -2964,7 +2969,8 @@ static int mouse_anim_channels(bContext *C, bAnimContext *ac, int channel_index,
     case ANIMTYPE_DSMCLIP:
     case ANIMTYPE_DSHAIR:
     case ANIMTYPE_DSPOINTCLOUD:
-    case ANIMTYPE_DSVOLUME: {
+    case ANIMTYPE_DSVOLUME:
+    case ANIMTYPE_DSSIMULATION: {
       /* sanity checking... */
       if (ale->adt) {
         /* select/deselect */

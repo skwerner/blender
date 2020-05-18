@@ -45,7 +45,7 @@ struct OpenXRSessionData {
   XrSpace reference_space;
   XrSpace view_space;
   std::vector<XrView> views;
-  std::vector<std::unique_ptr<GHOST_XrSwapchain>> swapchains;
+  std::vector<GHOST_XrSwapchain> swapchains;
 };
 
 struct GHOST_XrDrawInfo {
@@ -75,6 +75,9 @@ GHOST_XrSession::~GHOST_XrSession()
 
   if (m_oxr->reference_space != XR_NULL_HANDLE) {
     CHECK_XR_ASSERT(xrDestroySpace(m_oxr->reference_space));
+  }
+  if (m_oxr->view_space != XR_NULL_HANDLE) {
+    CHECK_XR_ASSERT(xrDestroySpace(m_oxr->view_space));
   }
   if (m_oxr->session != XR_NULL_HANDLE) {
     CHECK_XR_ASSERT(xrDestroySession(m_oxr->session));
@@ -169,7 +172,8 @@ void GHOST_XrSession::start(const GHOST_XrSessionBeginInfo *begin_info)
   }
 
   std::string requirement_str;
-  m_gpu_binding = GHOST_XrGraphicsBindingCreateFromType(m_context->getGraphicsBindingType());
+  m_gpu_binding = GHOST_XrGraphicsBindingCreateFromType(m_context->getGraphicsBindingType(),
+                                                        m_gpu_ctx);
   if (!m_gpu_binding->checkVersionRequirements(
           m_gpu_ctx, m_context->getInstance(), m_oxr->system_id, &requirement_str)) {
     std::ostringstream strstream;
@@ -199,13 +203,17 @@ void GHOST_XrSession::requestEnd()
   xrRequestExitSession(m_oxr->session);
 }
 
-void GHOST_XrSession::end()
+void GHOST_XrSession::beginSession()
+{
+  XrSessionBeginInfo begin_info = {XR_TYPE_SESSION_BEGIN_INFO};
+  begin_info.primaryViewConfigurationType = m_oxr->view_type;
+  CHECK_XR(xrBeginSession(m_oxr->session, &begin_info), "Failed to cleanly begin the VR session.");
+}
+
+void GHOST_XrSession::endSession()
 {
   assert(m_oxr->session != XR_NULL_HANDLE);
-
   CHECK_XR(xrEndSession(m_oxr->session), "Failed to cleanly end the VR session.");
-  unbindGraphicsContext();
-  m_draw_info = nullptr;
 }
 
 GHOST_XrSession::LifeExpectancy GHOST_XrSession::handleStateChangeEvent(
@@ -218,16 +226,11 @@ GHOST_XrSession::LifeExpectancy GHOST_XrSession::handleStateChangeEvent(
 
   switch (lifecycle->state) {
     case XR_SESSION_STATE_READY: {
-      XrSessionBeginInfo begin_info = {XR_TYPE_SESSION_BEGIN_INFO};
-
-      begin_info.primaryViewConfigurationType = m_oxr->view_type;
-      CHECK_XR(xrBeginSession(m_oxr->session, &begin_info),
-               "Failed to cleanly begin the VR session.");
+      beginSession();
       break;
     }
     case XR_SESSION_STATE_STOPPING:
-      /* Runtime will change state to STATE_EXITING, don't destruct session yet. */
-      end();
+      endSession();
       break;
     case XR_SESSION_STATE_EXITING:
     case XR_SESSION_STATE_LOSS_PENDING:
@@ -264,8 +267,7 @@ void GHOST_XrSession::prepareDrawing()
            "Failed to get count of view configurations.");
 
   for (const XrViewConfigurationView &view_config : view_configs) {
-    m_oxr->swapchains.push_back(std::unique_ptr<GHOST_XrSwapchain>(
-        new GHOST_XrSwapchain(*m_gpu_binding, m_oxr->session, view_config)));
+    m_oxr->swapchains.emplace_back(*m_gpu_binding, m_oxr->session, view_config);
   }
 
   m_oxr->views.resize(view_count, {XR_TYPE_VIEW});
@@ -440,7 +442,7 @@ XrCompositionLayerProjection GHOST_XrSession::drawLayer(
   r_proj_layer_views.resize(view_count);
 
   for (uint32_t view_idx = 0; view_idx < view_count; view_idx++) {
-    drawView(*m_oxr->swapchains[view_idx],
+    drawView(m_oxr->swapchains[view_idx],
              r_proj_layer_views[view_idx],
              view_location,
              m_oxr->views[view_idx],
@@ -452,6 +454,11 @@ XrCompositionLayerProjection GHOST_XrSession::drawLayer(
   layer.views = r_proj_layer_views.data();
 
   return layer;
+}
+
+bool GHOST_XrSession::needsUpsideDownDrawing() const
+{
+  return m_gpu_binding && m_gpu_binding->needsUpsideDownDrawing(*m_gpu_ctx);
 }
 
 /** \} */ /* Drawing */
@@ -493,16 +500,14 @@ void GHOST_XrSession::bindGraphicsContext()
 {
   const GHOST_XrCustomFuncs &custom_funcs = m_context->getCustomFuncs();
   assert(custom_funcs.gpu_ctx_bind_fn);
-  m_gpu_ctx = static_cast<GHOST_Context *>(
-      custom_funcs.gpu_ctx_bind_fn(m_context->getGraphicsBindingType()));
+  m_gpu_ctx = static_cast<GHOST_Context *>(custom_funcs.gpu_ctx_bind_fn());
 }
 
 void GHOST_XrSession::unbindGraphicsContext()
 {
   const GHOST_XrCustomFuncs &custom_funcs = m_context->getCustomFuncs();
   if (custom_funcs.gpu_ctx_unbind_fn) {
-    custom_funcs.gpu_ctx_unbind_fn(m_context->getGraphicsBindingType(),
-                                   (GHOST_ContextHandle)m_gpu_ctx);
+    custom_funcs.gpu_ctx_unbind_fn((GHOST_ContextHandle)m_gpu_ctx);
   }
   m_gpu_ctx = nullptr;
 }

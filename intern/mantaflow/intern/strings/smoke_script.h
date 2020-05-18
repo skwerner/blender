@@ -81,9 +81,10 @@ using_fire_s$ID$ = True\n";
 const std::string smoke_alloc =
     "\n\
 mantaMsg('Smoke alloc')\n\
-shadow_s$ID$     = s$ID$.create(RealGrid)\n\
+shadow_s$ID$     = s$ID$.create(RealGrid, name='$NAME_SHADOW$')\n\
+emission_s$ID$   = s$ID$.create(RealGrid)\n\
 emissionIn_s$ID$ = s$ID$.create(RealGrid)\n\
-density_s$ID$    = s$ID$.create(RealGrid)\n\
+density_s$ID$    = s$ID$.create(RealGrid, name='$NAME_DENSITY$')\n\
 densityIn_s$ID$  = s$ID$.create(RealGrid)\n\
 heat_s$ID$       = None # allocated dynamically\n\
 heatIn_s$ID$     = None\n\
@@ -101,13 +102,13 @@ color_b_in_s$ID$ = None\n\
 \n\
 # Keep track of important objects in dict to load them later on\n\
 smoke_data_dict_final_s$ID$ = dict(density=density_s$ID$, shadow=shadow_s$ID$)\n\
-smoke_data_dict_resume_s$ID$ = dict(densityIn=densityIn_s$ID$, emissionIn=emissionIn_s$ID$)\n";
+smoke_data_dict_resume_s$ID$ = dict(densityIn=densityIn_s$ID$, emission=emission_s$ID$)\n";
 
 const std::string smoke_alloc_noise =
     "\n\
 mantaMsg('Smoke alloc noise')\n\
 vel_sn$ID$        = sn$ID$.create(MACGrid)\n\
-density_sn$ID$    = sn$ID$.create(RealGrid)\n\
+density_sn$ID$    = sn$ID$.create(RealGrid, name='$NAME_DENSITYNOISE$')\n\
 phiIn_sn$ID$      = sn$ID$.create(LevelsetGrid)\n\
 phiOut_sn$ID$     = sn$ID$.create(LevelsetGrid)\n\
 phiObs_sn$ID$     = sn$ID$.create(LevelsetGrid)\n\
@@ -156,9 +157,9 @@ if 'color_g_s$ID$' in globals(): del color_g_s$ID$\n\
 if 'color_b_s$ID$' in globals(): del color_b_s$ID$\n\
 \n\
 mantaMsg('Allocating colors')\n\
-color_r_s$ID$    = s$ID$.create(RealGrid)\n\
-color_g_s$ID$    = s$ID$.create(RealGrid)\n\
-color_b_s$ID$    = s$ID$.create(RealGrid)\n\
+color_r_s$ID$    = s$ID$.create(RealGrid, name='$NAME_COLORR$')\n\
+color_g_s$ID$    = s$ID$.create(RealGrid, name='$NAME_COLORG$')\n\
+color_b_s$ID$    = s$ID$.create(RealGrid, name='$NAME_COLORB$')\n\
 color_r_in_s$ID$ = s$ID$.create(RealGrid)\n\
 color_g_in_s$ID$ = s$ID$.create(RealGrid)\n\
 color_b_in_s$ID$ = s$ID$.create(RealGrid)\n\
@@ -177,9 +178,9 @@ if 'color_g_sn$ID$' in globals(): del color_g_sn$ID$\n\
 if 'color_b_sn$ID$' in globals(): del color_b_sn$ID$\n\
 \n\
 mantaMsg('Allocating colors noise')\n\
-color_r_sn$ID$ = sn$ID$.create(RealGrid)\n\
-color_g_sn$ID$ = sn$ID$.create(RealGrid)\n\
-color_b_sn$ID$ = sn$ID$.create(RealGrid)\n\
+color_r_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_COLORRNOISE$')\n\
+color_g_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_COLORGNOISE$')\n\
+color_b_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_COLORBNOISE$')\n\
 \n\
 # Add objects to dict to load them later on\n\
 if 'smoke_noise_dict_final_s$ID$' in globals():\n\
@@ -212,7 +213,7 @@ if 'heat_s$ID$' in globals(): del heat_s$ID$\n\
 if 'heatIn_s$ID$' in globals(): del heatIn_s$ID$\n\
 \n\
 mantaMsg('Allocating heat')\n\
-heat_s$ID$   = s$ID$.create(RealGrid)\n\
+heat_s$ID$   = s$ID$.create(RealGrid, name='$NAME_HEAT$')\n\
 heatIn_s$ID$ = s$ID$.create(RealGrid)\n\
 \n\
 # Add objects to dict to load them later on\n\
@@ -231,9 +232,9 @@ if 'fuelIn_s$ID$' in globals(): del fuelIn_s$ID$\n\
 if 'reactIn_s$ID$' in globals(): del reactIn_s$ID$\n\
 \n\
 mantaMsg('Allocating fire')\n\
-flame_s$ID$   = s$ID$.create(RealGrid)\n\
-fuel_s$ID$    = s$ID$.create(RealGrid)\n\
-react_s$ID$   = s$ID$.create(RealGrid)\n\
+flame_s$ID$   = s$ID$.create(RealGrid, name='$NAME_FLAME$')\n\
+fuel_s$ID$    = s$ID$.create(RealGrid, name='$NAME_FUEL$')\n\
+react_s$ID$   = s$ID$.create(RealGrid, name='$NAME_REACT$')\n\
 fuelIn_s$ID$  = s$ID$.create(RealGrid)\n\
 reactIn_s$ID$ = s$ID$.create(RealGrid)\n\
 \n\
@@ -251,9 +252,9 @@ if 'fuel_sn$ID$' in globals(): del fuel_sn$ID$\n\
 if 'react_sn$ID$' in globals(): del react_sn$ID$\n\
 \n\
 mantaMsg('Allocating fire noise')\n\
-flame_sn$ID$ = sn$ID$.create(RealGrid)\n\
-fuel_sn$ID$  = sn$ID$.create(RealGrid)\n\
-react_sn$ID$ = sn$ID$.create(RealGrid)\n\
+flame_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_FLAMENOISE$')\n\
+fuel_sn$ID$  = sn$ID$.create(RealGrid, name='$NAME_FUELNOISE$')\n\
+react_sn$ID$ = sn$ID$.create(RealGrid, name='$NAME_REACTNOISE$')\n\
 \n\
 # Add objects to dict to load them later on\n\
 if 'smoke_noise_dict_final_s$ID$' in globals():\n\
@@ -278,14 +279,14 @@ def smoke_adaptive_step_$ID$(framenr):\n\
     if using_obstacle_s$ID$:\n\
         mantaMsg('Initializing obstacle levelset')\n\
         phiObsIn_s$ID$.join(phiObsSIn_s$ID$) # Join static obstacle map\n\
-        phiObsIn_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=2)\n\
+        phiObsIn_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=1)\n\
         extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=6, inside=True)\n\
         extrapolateLsSimple(phi=phiObsIn_s$ID$, distance=3, inside=False)\n\
         phiObs_s$ID$.join(phiObsIn_s$ID$)\n\
         \n\
         # Using boundaryWidth=2 to not search beginning from walls (just a performance optimization)\n\
         # Additional sanity check: fill holes in phiObs which can result after joining with phiObsIn\n\
-        phiObs_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=2)\n\
+        phiObs_s$ID$.fillHoles(maxDepth=int(res_s$ID$), boundaryWidth=1)\n\
         extrapolateLsSimple(phi=phiObs_s$ID$, distance=6, inside=True)\n\
         extrapolateLsSimple(phi=phiObs_s$ID$, distance=3, inside=False)\n\
     \n\
@@ -295,10 +296,17 @@ def smoke_adaptive_step_$ID$(framenr):\n\
     extrapolateLsSimple(phi=phiIn_s$ID$, distance=3, inside=False)\n\
     \n\
     if using_outflow_s$ID$:\n\
+        phiOutIn_s$ID$.join(phiOutSIn_s$ID$) # Join static outflow map\n\
         phiOut_s$ID$.join(phiOutIn_s$ID$)\n\
     \n\
     setObstacleFlags(flags=flags_s$ID$, phiObs=phiObs_s$ID$, phiOut=phiOut_s$ID$, phiIn=phiIn_s$ID$, boundaryWidth=1)\n\
     flags_s$ID$.fillGrid()\n\
+    \n\
+    # reset emission accumulation at the beginning of an adaptive frame\n\
+    if not s$ID$.timePerFrame:\n\
+        emission_s$ID$.setConst(0.)\n\
+    # accumulate emission value per adaptive step for later use in noise computation\n\
+    emission_s$ID$.join(emissionIn_s$ID$)\n\
     \n\
     applyEmission(flags=flags_s$ID$, target=density_s$ID$, source=densityIn_s$ID$, emissionTexture=emissionIn_s$ID$, type=FlagInflow|FlagOutflow)\n\
     if using_heat_s$ID$:\n\
@@ -328,6 +336,9 @@ const std::string smoke_step =
     "\n\
 def smoke_step_$ID$():\n\
     mantaMsg('Smoke step low')\n\
+    \n\
+    # save original state for later (used during noise creation)\n\
+    velTmp_s$ID$.copyFrom(vel_s$ID$)\n\
     \n\
     if using_dissolve_s$ID$:\n\
         mantaMsg('Dissolving smoke')\n\
@@ -365,9 +376,9 @@ def smoke_step_$ID$():\n\
     \n\
     if using_heat_s$ID$:\n\
         mantaMsg('Adding heat buoyancy')\n\
-        addBuoyancy(flags=flags_s$ID$, density=heat_s$ID$, vel=vel_s$ID$, gravity=gravity_s$ID$, coefficient=buoyancy_heat_s$ID$)\n\
+        addBuoyancy(flags=flags_s$ID$, density=heat_s$ID$, vel=vel_s$ID$, gravity=gravity_s$ID$, coefficient=buoyancy_heat_s$ID$, scale=False)\n\
     mantaMsg('Adding buoyancy')\n\
-    addBuoyancy(flags=flags_s$ID$, density=density_s$ID$, vel=vel_s$ID$, gravity=gravity_s$ID$, coefficient=buoyancy_dens_s$ID$)\n\
+    addBuoyancy(flags=flags_s$ID$, density=density_s$ID$, vel=vel_s$ID$, gravity=gravity_s$ID$, coefficient=buoyancy_dens_s$ID$, scale=False)\n\
     \n\
     mantaMsg('Adding forces')\n\
     addForceField(flags=flags_s$ID$, vel=vel_s$ID$, force=forces_s$ID$)\n\
@@ -422,36 +433,36 @@ def smoke_step_noise_$ID$(framenr):\n\
     mantaMsg('Interpolating grids')\n\
     # Join big obstacle levelset after initDomain() call as it overwrites everything in phiObs\n\
     if using_obstacle_s$ID$:\n\
-        interpolateGrid(target=phiIn_sn$ID$, source=phiObsIn_s$ID$) # mis-use phiIn_sn\n\
+        phiIn_sn$ID$.copyFrom(phiObsIn_s$ID$) if upres_sn$ID$ <= 1 else interpolateGrid(target=phiIn_sn$ID$, source=phiObsIn_s$ID$) # mis-use phiIn_sn\n\
         phiObs_sn$ID$.join(phiIn_sn$ID$)\n\
     if using_outflow_s$ID$:\n\
-        interpolateGrid(target=phiOut_sn$ID$, source=phiOut_s$ID$)\n\
-    interpolateGrid(target=phiIn_sn$ID$, source=phiIn_s$ID$)\n\
-    interpolateMACGrid(target=vel_sn$ID$, source=vel_s$ID$)\n\
+        phiOut_sn$ID$.copyFrom(phiOut_s$ID$) if upres_sn$ID$ <= 1 else interpolateGrid(target=phiOut_sn$ID$, source=phiOut_s$ID$)\n\
+    phiIn_sn$ID$.copyFrom(phiIn_s$ID$) if upres_sn$ID$ <= 1 else interpolateGrid(target=phiIn_sn$ID$, source=phiIn_s$ID$)\n\
+    vel_sn$ID$.copyFrom(velTmp_s$ID$) if upres_sn$ID$ <= 1 else interpolateMACGrid(target=vel_sn$ID$, source=velTmp_s$ID$)\n\
     \n\
     setObstacleFlags(flags=flags_sn$ID$, phiObs=phiObs_sn$ID$, phiOut=phiOut_sn$ID$, phiIn=phiIn_sn$ID$, boundaryWidth=1)\n\
     flags_sn$ID$.fillGrid()\n\
     \n\
     # Interpolate emission grids and apply them to big noise grids\n\
-    interpolateGrid(source=densityIn_s$ID$, target=tmpIn_sn$ID$)\n\
-    interpolateGrid(source=emissionIn_s$ID$, target=emissionIn_sn$ID$)\n\
+    tmpIn_sn$ID$.copyFrom(densityIn_s$ID$) if upres_sn$ID$ <= 1 else interpolateGrid(source=densityIn_s$ID$, target=tmpIn_sn$ID$)\n\
+    emissionIn_sn$ID$.copyFrom(emission_s$ID$) if upres_sn$ID$ <= 1 else interpolateGrid(source=emission_s$ID$, target=emissionIn_sn$ID$)\n\
     \n\
     # Higher-res noise grid needs scaled emission values\n\
     tmpIn_sn$ID$.multConst(float(upres_sn$ID$))\n\
     applyEmission(flags=flags_sn$ID$, target=density_sn$ID$, source=tmpIn_sn$ID$, emissionTexture=emissionIn_sn$ID$, type=FlagInflow|FlagOutflow)\n\
     \n\
     if using_colors_s$ID$:\n\
-        interpolateGrid(source=color_r_in_s$ID$, target=tmpIn_sn$ID$)\n\
+        tmpIn_sn$ID$.copyFrom(color_r_in_s$ID$) if upres_sn$ID$ <= 1 else interpolateGrid(source=color_r_in_s$ID$, target=tmpIn_sn$ID$)\n\
         applyEmission(flags=flags_sn$ID$, target=color_r_sn$ID$, source=tmpIn_sn$ID$, emissionTexture=emissionIn_sn$ID$, type=FlagInflow|FlagOutflow)\n\
-        interpolateGrid(source=color_g_in_s$ID$, target=tmpIn_sn$ID$)\n\
+        tmpIn_sn$ID$.copyFrom(color_g_in_s$ID$) if upres_sn$ID$ <= 1 else interpolateGrid(source=color_g_in_s$ID$, target=tmpIn_sn$ID$)\n\
         applyEmission(flags=flags_sn$ID$, target=color_g_sn$ID$, source=tmpIn_sn$ID$, emissionTexture=emissionIn_sn$ID$, type=FlagInflow|FlagOutflow)\n\
-        interpolateGrid(source=color_b_in_s$ID$, target=tmpIn_sn$ID$)\n\
+        tmpIn_sn$ID$.copyFrom(color_b_in_s$ID$) if upres_sn$ID$ <= 1 else interpolateGrid(source=color_b_in_s$ID$, target=tmpIn_sn$ID$)\n\
         applyEmission(flags=flags_sn$ID$, target=color_b_sn$ID$, source=tmpIn_sn$ID$, emissionTexture=emissionIn_sn$ID$, type=FlagInflow|FlagOutflow)\n\
     \n\
     if using_fire_s$ID$:\n\
-        interpolateGrid(source=fuelIn_s$ID$, target=tmpIn_sn$ID$)\n\
+        tmpIn_sn$ID$.copyFrom(fuelIn_s$ID$) if upres_sn$ID$ <= 1 else interpolateGrid(source=fuelIn_s$ID$, target=tmpIn_sn$ID$)\n\
         applyEmission(flags=flags_sn$ID$, target=fuel_sn$ID$, source=tmpIn_sn$ID$, emissionTexture=emissionIn_sn$ID$, type=FlagInflow|FlagOutflow)\n\
-        interpolateGrid(source=reactIn_s$ID$, target=tmpIn_sn$ID$)\n\
+        tmpIn_sn$ID$.copyFrom(reactIn_s$ID$) if upres_sn$ID$ <= 1 else interpolateGrid(source=reactIn_s$ID$, target=tmpIn_sn$ID$)\n\
         applyEmission(flags=flags_sn$ID$, target=react_sn$ID$, source=tmpIn_sn$ID$, emissionTexture=emissionIn_sn$ID$, type=FlagInflow|FlagOutflow)\n\
     \n\
     mantaMsg('Noise step / sn$ID$.frame: ' + str(sn$ID$.frame))\n\

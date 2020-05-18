@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -126,7 +126,7 @@ static void uv_warp_compute(void *__restrict userdata,
   }
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   UVWarpModifierData *umd = (UVWarpModifierData *)md;
   int numPolys, numLoops;
@@ -233,26 +233,14 @@ static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk,
   walk(userData, ob, &umd->object_src, IDWALK_CB_NOP);
 }
 
-static void uv_warp_deps_object_bone_new(struct DepsNodeHandle *node,
-                                         Object *object,
-                                         const char *bonename)
-{
-  if (object != NULL) {
-    if (object->type == OB_ARMATURE && bonename[0]) {
-      DEG_add_object_relation(node, object, DEG_OB_COMP_EVAL_POSE, "UVWarp Modifier");
-    }
-    else {
-      DEG_add_object_relation(node, object, DEG_OB_COMP_TRANSFORM, "UVWarp Modifier");
-    }
-  }
-}
-
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   UVWarpModifierData *umd = (UVWarpModifierData *)md;
 
-  uv_warp_deps_object_bone_new(ctx->node, umd->object_src, umd->bone_src);
-  uv_warp_deps_object_bone_new(ctx->node, umd->object_dst, umd->bone_dst);
+  MOD_depsgraph_update_object_bone_relation(
+      ctx->node, umd->object_src, umd->bone_src, "UVWarp Modifier");
+  MOD_depsgraph_update_object_bone_relation(
+      ctx->node, umd->object_dst, umd->bone_dst, "UVWarp Modifier");
 
   DEG_add_modifier_to_transform_relation(ctx->node, "UVWarp Modifier");
 }
@@ -265,13 +253,16 @@ ModifierTypeInfo modifierType_UVWarp = {
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode |
         eModifierTypeFlag_EnableInEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

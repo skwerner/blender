@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2009 by Nicholas Bishop
@@ -23,6 +23,9 @@
 /** \file
  * \ingroup bke
  */
+
+#include "BLI_utildefines.h"
+#include "DNA_object_enums.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,9 +67,6 @@ struct bToolRef;
 struct tPaletteColorHSV;
 
 enum eOverlayFlags;
-
-#include "BLI_utildefines.h"
-#include "DNA_object_enums.h"
 
 extern const char PAINT_CURSOR_SCULPT[3];
 extern const char PAINT_CURSOR_VERTEX_PAINT[3];
@@ -279,15 +279,30 @@ typedef struct SculptClothSimulation {
 
 } SculptClothSimulation;
 
+typedef struct SculptLayerPersistentBase {
+  float co[3];
+  float no[3];
+  float disp;
+} SculptLayerPersistentBase;
+
 /* Session data (mode-specific) */
 
 typedef struct SculptSession {
   /* Mesh data (not copied) can come either directly from a Mesh, or from a MultiresDM */
-  struct MultiresModifierData *multires; /* Special handling for multires meshes */
+  struct { /* Special handling for multires meshes */
+    bool active;
+    struct MultiresModifierData *modifier;
+    int level;
+  } multires;
+
+  /* These are always assigned to base mesh data when using PBVH_FACES and PBVH_GRIDS. */
   struct MVert *mvert;
   struct MPoly *mpoly;
   struct MLoop *mloop;
+
+  /* These contain the vertex and poly counts of the final mesh. */
   int totvert, totpoly;
+
   struct KeyBlock *shapekey_active;
   float *vmask;
 
@@ -296,6 +311,8 @@ typedef struct SculptSession {
   int *pmap_mem;
 
   /* Mesh Face Sets */
+  /* Total number of polys of the base mesh. */
+  int totfaces;
   int *face_sets;
 
   /* BMesh for dynamic topology sculpting */
@@ -324,14 +341,14 @@ typedef struct SculptSession {
   unsigned int texcache_side, *texcache, texcache_actual;
   struct ImagePool *tex_pool;
 
-  /* Layer brush persistence between strokes */
-  float (*layer_co)[3]; /* Copy of the mesh vertices' locations */
-
   struct StrokeCache *cache;
   struct FilterCache *filter_cache;
 
   /* Cursor data and active vertex for tools */
   int active_vertex_index;
+
+  int active_face_index;
+  int active_grid_index;
 
   float cursor_radius;
   float cursor_location[3];
@@ -350,6 +367,10 @@ typedef struct SculptSession {
   /* Pose Brush Preview */
   float pose_origin[3];
   SculptPoseIKChain *pose_ik_chain_preview;
+
+  /* Layer brush persistence between strokes */
+  /* This is freed with the PBVH, so it is always in sync with the mesh. */
+  SculptLayerPersistentBase *layer_base;
 
   /* Transform operator */
   float pivot_pos[3];
@@ -381,7 +402,7 @@ typedef struct SculptSession {
     /* TODO: identify sculpt-only fields */
     // struct { ... } sculpt;
   } mode;
-  int mode_type;
+  eObjectMode mode_type;
 
   /* This flag prevents PBVH from being freed when creating the vp_handle for texture paint. */
   bool building_vp_handle;

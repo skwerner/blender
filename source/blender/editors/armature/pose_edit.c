@@ -33,7 +33,7 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_action.h"
-#include "BKE_anim.h"
+#include "BKE_anim_visualization.h"
 #include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_deform.h"
@@ -75,12 +75,12 @@
 /* matches logic with ED_operator_posemode_context() */
 Object *ED_pose_object_from_context(bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   Object *ob;
 
   /* Since this call may also be used from the buttons window,
    * we need to check for where to get the object. */
-  if (sa && sa->spacetype == SPACE_PROPERTIES) {
+  if (area && area->spacetype == SPACE_PROPERTIES) {
     ob = ED_object_context(C);
   }
   else {
@@ -665,6 +665,11 @@ static int pose_bone_rotmode_exec(bContext *C, wmOperator *op)
 
   /* set rotation mode of selected bones  */
   CTX_DATA_BEGIN_WITH_ID (C, bPoseChannel *, pchan, selected_pose_bones, Object *, ob) {
+    /* use API Method for conversions... */
+    BKE_rotMode_change_values(
+        pchan->quat, pchan->eul, pchan->rotAxis, &pchan->rotAngle, pchan->rotmode, (short)mode);
+
+    /* finally, set the new rotation type */
     pchan->rotmode = mode;
 
     if (prev_ob != ob) {

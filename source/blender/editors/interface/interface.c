@@ -44,7 +44,6 @@
 
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
 #include "BKE_context.h"
 #include "BKE_idprop.h"
 #include "BKE_main.h"
@@ -262,7 +261,7 @@ void ui_region_to_window(const ARegion *region, int *x, int *y)
 static void ui_update_flexible_spacing(const ARegion *region, uiBlock *block)
 {
   int sepr_flex_len = 0;
-  for (uiBut *but = block->buttons.first; but; but = but->next) {
+  LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
     if (but->type == UI_BTYPE_SEPR_SPACER) {
       sepr_flex_len++;
     }
@@ -284,7 +283,7 @@ static void ui_update_flexible_spacing(const ARegion *region, uiBlock *block)
   /* We could get rid of this loop if we agree on a max number of spacer */
   int *spacers_pos = alloca(sizeof(*spacers_pos) * (size_t)sepr_flex_len);
   int i = 0;
-  for (uiBut *but = block->buttons.first; but; but = but->next) {
+  LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
     if (but->type == UI_BTYPE_SEPR_SPACER) {
       ui_but_to_pixelrect(&rect, region, block, but);
       spacers_pos[i] = rect.xmax + UI_HEADER_OFFSET;
@@ -295,7 +294,7 @@ static void ui_update_flexible_spacing(const ARegion *region, uiBlock *block)
   const float segment_width = region_width / (float)sepr_flex_len;
   float offset = 0, remaining_space = region_width - buttons_width;
   i = 0;
-  for (uiBut *but = block->buttons.first; but; but = but->next) {
+  LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
     BLI_rctf_translate(&but->rect, offset, 0);
     if (but->type == UI_BTYPE_SEPR_SPACER) {
       /* How much the next block overlap with the current segment */
@@ -642,6 +641,26 @@ static int ui_but_calc_float_precision(uiBut *but, double value)
 
 /* ************** BLOCK ENDING FUNCTION ************* */
 
+bool ui_but_rna_equals(const uiBut *a, const uiBut *b)
+{
+  return ui_but_rna_equals_ex(a, &b->rnapoin, b->rnaprop, b->rnaindex);
+}
+
+bool ui_but_rna_equals_ex(const uiBut *but,
+                          const PointerRNA *ptr,
+                          const PropertyRNA *prop,
+                          int index)
+{
+  if (but->rnapoin.data != ptr->data) {
+    return false;
+  }
+  if (but->rnaprop != prop || but->rnaindex != index) {
+    return false;
+  }
+
+  return true;
+}
+
 /* NOTE: if but->poin is allocated memory for every defbut, things fail... */
 static bool ui_but_equals_old(const uiBut *but, const uiBut *oldbut)
 {
@@ -650,10 +669,7 @@ static bool ui_but_equals_old(const uiBut *but, const uiBut *oldbut)
   if (but->retval != oldbut->retval) {
     return false;
   }
-  if (but->rnapoin.data != oldbut->rnapoin.data) {
-    return false;
-  }
-  if (but->rnaprop != oldbut->rnaprop || but->rnaindex != oldbut->rnaindex) {
+  if (!ui_but_rna_equals(but, oldbut)) {
     return false;
   }
   if (but->func != oldbut->func) {
@@ -791,6 +807,8 @@ static bool ui_but_update_from_old_block(const bContext *C,
 
     SWAP(ListBase, but->extra_op_icons, oldbut->extra_op_icons);
 
+    SWAP(struct uiButSearchData *, oldbut->search, but->search);
+
     /* copy hardmin for list rows to prevent 'sticking' highlight to mouse position
      * when scrolling without moving mouse (see [#28432]) */
     if (ELEM(oldbut->type, UI_BTYPE_ROW, UI_BTYPE_LISTROW)) {
@@ -899,7 +917,7 @@ bool UI_but_active_only(const bContext *C, ARegion *region, uiBlock *block, uiBu
 bool UI_block_active_only_flagged_buttons(const bContext *C, ARegion *region, uiBlock *block)
 {
   bool done = false;
-  for (uiBut *but = block->buttons.first; but; but = but->next) {
+  LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
     if (but->flag & UI_BUT_ACTIVATE_ON_INIT) {
       but->flag &= ~UI_BUT_ACTIVATE_ON_INIT;
       if (ui_but_is_editable(but)) {
@@ -914,7 +932,7 @@ bool UI_block_active_only_flagged_buttons(const bContext *C, ARegion *region, ui
   if (done) {
     /* Run this in a second pass since it's possible activating the button
      * removes the buttons being looped over. */
-    for (uiBut *but = block->buttons.first; but; but = but->next) {
+    LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
       but->flag &= ~UI_BUT_ACTIVATE_ON_INIT;
     }
   }
@@ -971,13 +989,15 @@ static void ui_menu_block_set_keyaccels(uiBlock *block)
     /* 2 Passes, on for first letter only, second for any letter if first fails
      * fun first pass on all buttons so first word chars always get first priority */
 
-    for (uiBut *but = block->buttons.first; but; but = but->next) {
+    LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
       if (!ELEM(but->type,
                 UI_BTYPE_BUT,
                 UI_BTYPE_BUT_MENU,
                 UI_BTYPE_MENU,
                 UI_BTYPE_BLOCK,
-                UI_BTYPE_PULLDOWN) ||
+                UI_BTYPE_PULLDOWN,
+                /* For PIE-menus. */
+                UI_BTYPE_ROW) ||
           (but->flag & UI_HIDDEN)) {
         /* pass */
       }
@@ -1297,9 +1317,8 @@ static bool ui_but_event_property_operator_string(const bContext *C,
       }
       else if (GS(id->name) == ID_SCE) {
         if (RNA_struct_is_a(ptr->type, &RNA_ToolSettings)) {
-          /* toolsettings property
-           * NOTE: toolsettings is usually accessed directly (i.e. not through scene)
-           */
+          /* Tool-settings property:
+           * NOTE: tool-settings is usually accessed directly (i.e. not through scene). */
           data_path = RNA_path_from_ID_to_property(ptr, prop);
         }
         else {
@@ -1664,7 +1683,7 @@ static void ui_but_predefined_extra_operator_icons_add(uiBut *but)
   }
 
   if (optype) {
-    for (uiButExtraOpIcon *op_icon = but->extra_op_icons.first; op_icon; op_icon = op_icon->next) {
+    LISTBASE_FOREACH (uiButExtraOpIcon *, op_icon, &but->extra_op_icons) {
       if ((op_icon->optype_params->optype == optype) && (op_icon->icon == icon)) {
         /* Don't add the same operator icon twice (happens if button is kept alive while active).
          */
@@ -1935,7 +1954,7 @@ static void ui_block_message_subscribe(ARegion *region, struct wmMsgBus *mbus, u
 {
   uiBut *but_prev = NULL;
   /* possibly we should keep the region this block is contained in? */
-  for (uiBut *but = block->buttons.first; but; but = but->next) {
+  LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
     if (but->rnapoin.type && but->rnaprop) {
       /* quick check to avoid adding buttons representing a vector, multiple times. */
       if ((but_prev && (but_prev->rnaprop == but->rnaprop) &&
@@ -1960,7 +1979,7 @@ static void ui_block_message_subscribe(ARegion *region, struct wmMsgBus *mbus, u
 
 void UI_region_message_subscribe(ARegion *region, struct wmMsgBus *mbus)
 {
-  for (uiBlock *block = region->uiblocks.first; block; block = block->next) {
+  LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
     ui_block_message_subscribe(region, mbus, block);
   }
 }
@@ -3207,9 +3226,12 @@ static void ui_but_free(const bContext *C, uiBut *but)
     MEM_freeN(but->hold_argN);
   }
 
-  if (but->search_arg_free_func) {
-    but->search_arg_free_func(but->search_arg);
-    but->search_arg = NULL;
+  if (but->search != NULL) {
+    if (but->search->arg_free_fn) {
+      but->search->arg_free_fn(but->search->arg);
+      but->search->arg = NULL;
+    }
+    MEM_freeN(but->search);
   }
 
   if (but->active) {
@@ -3275,7 +3297,7 @@ void UI_blocklist_update_window_matrix(const bContext *C, const ListBase *lb)
   ARegion *region = CTX_wm_region(C);
   wmWindow *window = CTX_wm_window(C);
 
-  for (uiBlock *block = lb->first; block; block = block->next) {
+  LISTBASE_FOREACH (uiBlock *, block, lb) {
     if (block->active) {
       ui_update_window_matrix(window, region, block);
     }
@@ -3284,7 +3306,7 @@ void UI_blocklist_update_window_matrix(const bContext *C, const ListBase *lb)
 
 void UI_blocklist_draw(const bContext *C, const ListBase *lb)
 {
-  for (uiBlock *block = lb->first; block; block = block->next) {
+  LISTBASE_FOREACH (uiBlock *, block, lb) {
     if (block->active) {
       UI_block_draw(C, block);
     }
@@ -6329,36 +6351,51 @@ uiBut *uiDefSearchBut(uiBlock *block,
 }
 
 /**
- * \param search_func, bfunc: both get it as \a arg.
- * \param arg: user value,
- * \param  active: when set, button opens with this item visible and selected.
+ * \note The item-pointer (referred to below) is a per search item user pointer
+ * passed to #UI_search_item_add (stored in  #uiSearchItems.pointers).
+ *
+ * \param search_create_fn: Function to create the menu.
+ * \param search_update_fn: Function to refresh search content after the search text has changed.
+ * \param arg: user value.
+ * \param search_arg_free_fn: When non-null, use this function to free \a arg.
+ * \param search_exec_fn: Function that executes the action, gets \a arg as the first argument.
+ * The second argument as the active item-pointer
+ * \param active: When non-null, this item-pointer item will be visible and selected,
+ * otherwise the first item will be selected.
  */
 void UI_but_func_search_set(uiBut *but,
-                            uiButSearchCreateFunc search_create_func,
-                            uiButSearchFunc search_func,
+                            uiButSearchCreateFn search_create_fn,
+                            uiButSearchUpdateFn search_update_fn,
                             void *arg,
-                            uiButSearchArgFreeFunc search_arg_free_func,
-                            uiButHandleFunc bfunc,
+                            uiButSearchArgFreeFn search_arg_free_fn,
+                            uiButHandleFunc search_exec_fn,
                             void *active)
 {
   /* needed since callers don't have access to internal functions
    * (as an alternative we could expose it) */
-  if (search_create_func == NULL) {
-    search_create_func = ui_searchbox_create_generic;
+  if (search_create_fn == NULL) {
+    search_create_fn = ui_searchbox_create_generic;
   }
 
-  if (but->search_arg_free_func != NULL) {
-    but->search_arg_free_func(but->search_arg);
-    but->search_arg = NULL;
+  struct uiButSearchData *search = but->search;
+  if (search != NULL) {
+    if (search->arg_free_fn != NULL) {
+      search->arg_free_fn(but->search->arg);
+      search->arg = NULL;
+    }
+  }
+  else {
+    search = MEM_callocN(sizeof(*but->search), __func__);
+    but->search = search;
   }
 
-  but->search_create_func = search_create_func;
-  but->search_func = search_func;
+  search->create_fn = search_create_fn;
+  search->update_fn = search_update_fn;
 
-  but->search_arg = arg;
-  but->search_arg_free_func = search_arg_free_func;
+  search->arg = arg;
+  search->arg_free_fn = search_arg_free_fn;
 
-  if (bfunc) {
+  if (search_exec_fn) {
 #ifdef DEBUG
     if (but->func) {
       /* watch this, can be cause of much confusion, see: T47691 */
@@ -6366,7 +6403,7 @@ void UI_but_func_search_set(uiBut *but,
              __func__);
     }
 #endif
-    UI_but_func_set(but, bfunc, arg, active);
+    UI_but_func_set(but, search_exec_fn, search->arg, active);
   }
 
   /* search buttons show red-alert if item doesn't exist, not for menus */
@@ -6378,11 +6415,33 @@ void UI_but_func_search_set(uiBut *but,
   }
 }
 
+void UI_but_func_search_set_context_menu(uiBut *but, uiButSearchContextMenuFn context_menu_fn)
+{
+  struct uiButSearchData *search = but->search;
+  search->context_menu_fn = context_menu_fn;
+}
+
+/**
+ * \param separator_string: when not NULL, this string is used as a separator,
+ * showing the icon and highlighted text after the last instance of this string.
+ */
+void UI_but_func_search_set_sep_string(uiBut *but, const char *search_sep_string)
+{
+  struct uiButSearchData *search = but->search;
+  search->sep_string = search_sep_string;
+}
+
+void UI_but_func_search_set_tooltip(uiBut *but, uiButSearchTooltipFn tooltip_fn)
+{
+  struct uiButSearchData *search = but->search;
+  search->tooltip_fn = tooltip_fn;
+}
+
 /* Callbacks for operator search button. */
-static void operator_enum_search_cb(const struct bContext *C,
-                                    void *but,
-                                    const char *str,
-                                    uiSearchItems *items)
+static void operator_enum_search_update_fn(const struct bContext *C,
+                                           void *but,
+                                           const char *str,
+                                           uiSearchItems *items)
 {
   wmOperatorType *ot = ((uiBut *)but)->optype;
   PropertyRNA *prop = ot->prop;
@@ -6419,7 +6478,7 @@ static void operator_enum_search_cb(const struct bContext *C,
   }
 }
 
-static void operator_enum_call_cb(struct bContext *UNUSED(C), void *but, void *arg2)
+static void operator_enum_search_exec_fn(struct bContext *UNUSED(C), void *but, void *arg2)
 {
   wmOperatorType *ot = ((uiBut *)but)->optype;
   PointerRNA *opptr = UI_but_operator_ptr_get(but); /* Will create it if needed! */
@@ -6462,10 +6521,10 @@ uiBut *uiDefSearchButO_ptr(uiBlock *block,
   but = uiDefSearchBut(block, arg, retval, icon, maxlen, x, y, width, height, a1, a2, tip);
   UI_but_func_search_set(but,
                          ui_searchbox_create_generic,
-                         operator_enum_search_cb,
+                         operator_enum_search_update_fn,
                          but,
                          NULL,
-                         operator_enum_call_cb,
+                         operator_enum_search_exec_fn,
                          NULL);
 
   but->optype = ot;
@@ -6478,6 +6537,13 @@ uiBut *uiDefSearchButO_ptr(uiBlock *block,
   }
 
   return but;
+}
+
+void UI_but_node_link_set(uiBut *but, bNodeSocket *socket, const float draw_color[4])
+{
+  but->flag |= UI_BUT_NODE_LINK;
+  but->custom_data = socket;
+  rgba_float_to_uchar(but->col, draw_color);
 }
 
 /**
@@ -6608,8 +6674,8 @@ void UI_but_string_info_get(bContext *C, uiBut *but, ...)
             }
             else {
               /* Not all menus are from Python. */
-              if (mt->ext.srna) {
-                const char *t = RNA_struct_ui_description(mt->ext.srna);
+              if (mt->rna_ext.srna) {
+                const char *t = RNA_struct_ui_description(mt->rna_ext.srna);
                 if (t && t[0]) {
                   tmp = BLI_strdup(t);
                 }
@@ -6626,7 +6692,7 @@ void UI_but_string_info_get(bContext *C, uiBut *but, ...)
             }
             else {
               /* Not all panels are from Python. */
-              if (pt->ext.srna) {
+              if (pt->rna_ext.srna) {
                 /* Panels don't yet have descriptions, this may be added. */
               }
             }
@@ -6645,7 +6711,7 @@ void UI_but_string_info_get(bContext *C, uiBut *but, ...)
       else if (ELEM(but->type, UI_BTYPE_MENU, UI_BTYPE_PULLDOWN)) {
         MenuType *mt = UI_but_menutype_get(but);
         if (mt) {
-          _tmp = RNA_struct_translation_context(mt->ext.srna);
+          _tmp = RNA_struct_translation_context(mt->rna_ext.srna);
         }
       }
       if (BLT_is_default_context(_tmp)) {

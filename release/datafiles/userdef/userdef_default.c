@@ -19,10 +19,10 @@
 /* For constants. */
 #include "BLI_math_base.h"
 
-#include "DNA_userdef_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_space_types.h"
-#include "DNA_anim_types.h"
+#include "DNA_userdef_types.h"
 
 #include "BLI_math_rotation.h"
 
@@ -64,7 +64,8 @@ const UserDef U_default = {
     .uiflag2 = USER_REGION_OVERLAP,
     .gpu_flag = USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE,
     .app_flag = 0,
-    .language = 0,
+    /** Default language of English (1), not Automatic (0). */
+    .language = 1,
     .viewzoom = USER_ZOOM_DOLLY,
     .mixbufsize = 2048,
     .audiodevice = 0,
@@ -225,6 +226,8 @@ const UserDef U_default = {
     .sequencer_disk_cache_compression = 0,
     .sequencer_disk_cache_size_limit = 100,
     .sequencer_disk_cache_flag = 0,
+
+    .collection_instance_empty_size = 1.0f,
 
     .runtime =
         {

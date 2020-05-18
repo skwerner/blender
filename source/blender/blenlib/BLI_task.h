@@ -25,12 +25,12 @@ struct ListBase;
  * \ingroup bli
  */
 
+#include "BLI_threads.h"
+#include "BLI_utildefines.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_threads.h"
-#include "BLI_utildefines.h"
 
 struct BLI_mempool;
 
@@ -43,16 +43,13 @@ struct BLI_mempool;
  * must be called from the main threads. All other scheduler and pool functions
  * are thread-safe. */
 
-typedef struct TaskScheduler TaskScheduler;
-
-TaskScheduler *BLI_task_scheduler_create(int num_threads);
-void BLI_task_scheduler_free(TaskScheduler *scheduler);
-
-int BLI_task_scheduler_num_threads(TaskScheduler *scheduler);
+void BLI_task_scheduler_init(void);
+void BLI_task_scheduler_exit(void);
+int BLI_task_scheduler_num_threads(void);
 
 /* Task Pool
  *
- * Pool of tasks that will be executed by the central TaskScheduler. For each
+ * Pool of tasks that will be executed by the central task scheduler. For each
  * pool, we can wait for all tasks to be done, or cancel them before they are
  * done.
  *
@@ -70,36 +67,40 @@ typedef enum TaskPriority {
 } TaskPriority;
 
 typedef struct TaskPool TaskPool;
-typedef void (*TaskRunFunction)(TaskPool *__restrict pool, void *taskdata, int threadid);
-typedef void (*TaskFreeFunction)(TaskPool *__restrict pool, void *taskdata, int threadid);
+typedef void (*TaskRunFunction)(TaskPool *__restrict pool, void *taskdata);
+typedef void (*TaskFreeFunction)(TaskPool *__restrict pool, void *taskdata);
 
-TaskPool *BLI_task_pool_create(TaskScheduler *scheduler, void *userdata);
-TaskPool *BLI_task_pool_create_background(TaskScheduler *scheduler, void *userdata);
-TaskPool *BLI_task_pool_create_suspended(TaskScheduler *scheduler, void *userdata);
+/* Regular task pool that immediately starts executing tasks as soon as they
+ * are pushed, either on the current or another thread. */
+TaskPool *BLI_task_pool_create(void *userdata, TaskPriority priority);
+
+/* Background: always run tasks in a background thread, never immediately
+ * execute them. For running background jobs. */
+TaskPool *BLI_task_pool_create_background(void *userdata, TaskPriority priority);
+
+/* Background Serial: run tasks one after the other in the background,
+ * without parallelization between the tasks. */
+TaskPool *BLI_task_pool_create_background_serial(void *userdata, TaskPriority priority);
+
+/* Suspended: don't execute tasks until work_and_wait is called. This is slower
+ * as threads can't immediately start working. But it can be used if the data
+ * structures the threads operate on are not fully initialized until all tasks
+ * are created. */
+TaskPool *BLI_task_pool_create_suspended(void *userdata, TaskPriority priority);
+
+/* No threads: immediately executes tasks on the same thread. For debugging. */
+TaskPool *BLI_task_pool_create_no_threads(void *userdata);
+
 void BLI_task_pool_free(TaskPool *pool);
 
-void BLI_task_pool_push_ex(TaskPool *pool,
-                           TaskRunFunction run,
-                           void *taskdata,
-                           bool free_taskdata,
-                           TaskFreeFunction freedata,
-                           TaskPriority priority);
 void BLI_task_pool_push(TaskPool *pool,
                         TaskRunFunction run,
                         void *taskdata,
                         bool free_taskdata,
-                        TaskPriority priority);
-void BLI_task_pool_push_from_thread(TaskPool *pool,
-                                    TaskRunFunction run,
-                                    void *taskdata,
-                                    bool free_taskdata,
-                                    TaskPriority priority,
-                                    int thread_id);
+                        TaskFreeFunction freedata);
 
 /* work and wait until all tasks are done */
 void BLI_task_pool_work_and_wait(TaskPool *pool);
-/* work and wait until all tasks are done, then reset to the initial suspended state */
-void BLI_task_pool_work_wait_and_reset(TaskPool *pool);
 /* cancel all tasks, keep worker threads running */
 void BLI_task_pool_cancel(TaskPool *pool);
 
@@ -107,50 +108,29 @@ void BLI_task_pool_cancel(TaskPool *pool);
 bool BLI_task_pool_canceled(TaskPool *pool);
 
 /* optional userdata pointer to pass along to run function */
-void *BLI_task_pool_userdata(TaskPool *pool);
+void *BLI_task_pool_user_data(TaskPool *pool);
 
 /* optional mutex to use from run function */
 ThreadMutex *BLI_task_pool_user_mutex(TaskPool *pool);
 
-/* Delayed push, use that to reduce thread overhead by accumulating
- * all new tasks into local queue first and pushing it to scheduler
- * from within a single mutex lock.
- */
-void BLI_task_pool_delayed_push_begin(TaskPool *pool, int thread_id);
-void BLI_task_pool_delayed_push_end(TaskPool *pool, int thread_id);
-
 /* Parallel for routines */
-
-typedef enum eTaskSchedulingMode {
-  /* Task scheduler will divide overall work into equal chunks, scheduling
-   * even chunks to all worker threads.
-   * Least run time benefit, ideal for cases when each task requires equal
-   * amount of compute power.
-   */
-  TASK_SCHEDULING_STATIC,
-  /* Task scheduler will schedule small amount of work to each worker thread.
-   * Has more run time overhead, but deals much better with cases when each
-   * part of the work requires totally different amount of compute power.
-   */
-  TASK_SCHEDULING_DYNAMIC,
-} eTaskSchedulingMode;
 
 /* Per-thread specific data passed to the callback. */
 typedef struct TaskParallelTLS {
-  /* Identifier of the thread who this data belongs to. */
-  int thread_id;
   /* Copy of user-specifier chunk, which is copied from original chunk to all
    * worker threads. This is similar to OpenMP's firstprivate.
    */
   void *userdata_chunk;
 } TaskParallelTLS;
 
-typedef void (*TaskParallelFinalizeFunc)(void *__restrict userdata,
-                                         void *__restrict userdata_chunk);
-
 typedef void (*TaskParallelRangeFunc)(void *__restrict userdata,
                                       const int iter,
                                       const TaskParallelTLS *__restrict tls);
+typedef void (*TaskParallelReduceFunc)(const void *__restrict userdata,
+                                       void *__restrict chunk_join,
+                                       void *__restrict chunk);
+
+typedef void (*TaskParallelFreeFunc)(const void *__restrict userdata, void *__restrict chunk);
 
 typedef struct TaskParallelSettings {
   /* Whether caller allows to do threading of the particular range.
@@ -160,8 +140,6 @@ typedef struct TaskParallelSettings {
    * is higher than a chunk size. As in, threading will always be performed.
    */
   bool use_threading;
-  /* Scheduling mode to use for this parallel range invocation. */
-  eTaskSchedulingMode scheduling_mode;
   /* Each instance of looping chunks will get a copy of this data
    * (similar to OpenMP's firstprivate).
    */
@@ -170,7 +148,13 @@ typedef struct TaskParallelSettings {
   /* Function called from calling thread once whole range have been
    * processed.
    */
-  TaskParallelFinalizeFunc func_finalize;
+  /* Function called to join user data chunk into another, to reduce
+   * the result to the original userdata_chunk memory.
+   * The reduce functions should have no side effects, so that they
+   * can be run on any thread. */
+  TaskParallelReduceFunc func_reduce;
+  /* Function called to free data created by TaskParallelRangeFunc. */
+  TaskParallelFreeFunc func_free;
   /* Minimum allowed number of range iterators to be handled by a single
    * thread. This allows to achieve following:
    * - Reduce amount of threading overhead.
@@ -190,19 +174,7 @@ void BLI_task_parallel_range(const int start,
                              const int stop,
                              void *userdata,
                              TaskParallelRangeFunc func,
-                             TaskParallelSettings *settings);
-
-typedef struct TaskParallelRangePool TaskParallelRangePool;
-struct TaskParallelRangePool *BLI_task_parallel_range_pool_init(
-    const struct TaskParallelSettings *settings);
-void BLI_task_parallel_range_pool_push(struct TaskParallelRangePool *range_pool,
-                                       const int start,
-                                       const int stop,
-                                       void *userdata,
-                                       TaskParallelRangeFunc func,
-                                       const struct TaskParallelSettings *settings);
-void BLI_task_parallel_range_pool_work_and_wait(struct TaskParallelRangePool *range_pool);
-void BLI_task_parallel_range_pool_free(struct TaskParallelRangePool *range_pool);
+                             const TaskParallelSettings *settings);
 
 /* This data is shared between all tasks, its access needs thread lock or similar protection.
  */
@@ -257,10 +229,13 @@ BLI_INLINE void BLI_parallel_range_settings_defaults(TaskParallelSettings *setti
 {
   memset(settings, 0, sizeof(*settings));
   settings->use_threading = true;
-  settings->scheduling_mode = TASK_SCHEDULING_STATIC;
   /* Use default heuristic to define actual chunk size. */
   settings->min_iter_per_thread = 0;
 }
+
+/* Don't use this, store any thread specific data in tls->userdata_chunk instead.
+ * Only here for code to be removed. */
+int BLI_task_parallel_thread_id(const TaskParallelTLS *tls);
 
 #ifdef __cplusplus
 }

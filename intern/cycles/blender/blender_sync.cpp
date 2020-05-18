@@ -85,8 +85,6 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
   /* Sync recalc flags from blender to cycles. Actual update is done separate,
    * so we can do it later on if doing it immediate is not suitable. */
 
-  bool has_updated_objects = b_depsgraph.id_type_updated(BL::DriverTarget::id_type_OBJECT);
-
   if (experimental) {
     /* Mark all meshes as needing to be exported again if dicing changed. */
     PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
@@ -108,7 +106,7 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
     }
 
     if (dicing_prop_changed) {
-      for (const pair<GeometryKey, Geometry *> &iter : geometry_map.key_to_scene_data()) {
+      for (const pair<const GeometryKey, Geometry *> &iter : geometry_map.key_to_scene_data()) {
         Geometry *geom = iter.second;
         if (geom->type == Geometry::MESH) {
           Mesh *mesh = static_cast<Mesh *>(geom);
@@ -142,7 +140,7 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
       BL::Object b_ob(b_id);
       const bool updated_geometry = b_update->is_updated_geometry();
 
-      if (b_update->is_updated_transform()) {
+      if (b_update->is_updated_transform() || b_update->is_updated_shading()) {
         object_map.set_recalc(b_ob);
         light_map.set_recalc(b_ob);
       }
@@ -188,19 +186,6 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
   BlenderViewportParameters new_viewport_parameters(b_v3d);
   if (viewport_parameters.modified(new_viewport_parameters)) {
     world_recalc = true;
-  }
-
-  /* Updates shader with object dependency if objects changed. */
-  if (has_updated_objects) {
-    if (scene->default_background->has_object_dependency) {
-      world_recalc = true;
-    }
-
-    foreach (Shader *shader, scene->shaders) {
-      if (shader->has_object_dependency) {
-        shader->need_sync_object = true;
-      }
-    }
   }
 }
 
@@ -496,6 +481,9 @@ PassType BlenderSync::get_pass_type(BL::RenderPass &b_pass)
   MAP_PASS("AO", PASS_AO);
   MAP_PASS("Shadow", PASS_SHADOW);
 
+  MAP_PASS("BakePrimitive", PASS_BAKE_PRIMITIVE);
+  MAP_PASS("BakeDifferential", PASS_BAKE_DIFFERENTIAL);
+
 #ifdef __KERNEL_DEBUG__
   MAP_PASS("Debug BVH Traversed Nodes", PASS_BVH_TRAVERSED_NODES);
   MAP_PASS("Debug BVH Traversed Instances", PASS_BVH_TRAVERSED_INSTANCES);
@@ -633,12 +621,12 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
 
   /* Cryptomatte stores two ID/weight pairs per RGBA layer.
    * User facing parameter is the number of pairs. */
-  int crypto_depth = min(16, get_int(crp, "pass_crypto_depth"));
+  int crypto_depth = divide_up(min(16, get_int(crp, "pass_crypto_depth")), 2);
   scene->film->cryptomatte_depth = crypto_depth;
   scene->film->cryptomatte_passes = CRYPT_NONE;
   if (get_boolean(crp, "use_pass_crypto_object")) {
-    for (int i = 0; i < crypto_depth; i += 2) {
-      string passname = cryptomatte_prefix + string_printf("Object%02d", i / 2);
+    for (int i = 0; i < crypto_depth; i++) {
+      string passname = cryptomatte_prefix + string_printf("Object%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
       Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
     }
@@ -646,8 +634,8 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
                                                         CRYPT_OBJECT);
   }
   if (get_boolean(crp, "use_pass_crypto_material")) {
-    for (int i = 0; i < crypto_depth; i += 2) {
-      string passname = cryptomatte_prefix + string_printf("Material%02d", i / 2);
+    for (int i = 0; i < crypto_depth; i++) {
+      string passname = cryptomatte_prefix + string_printf("Material%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
       Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
     }
@@ -655,8 +643,8 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
                                                         CRYPT_MATERIAL);
   }
   if (get_boolean(crp, "use_pass_crypto_asset")) {
-    for (int i = 0; i < crypto_depth; i += 2) {
-      string passname = cryptomatte_prefix + string_printf("Asset%02d", i / 2);
+    for (int i = 0; i < crypto_depth; i++) {
+      string passname = cryptomatte_prefix + string_printf("Asset%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
       Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
     }

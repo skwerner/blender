@@ -214,8 +214,8 @@ bool vertex_paint_mode_poll(bContext *C)
 static bool vertex_paint_poll_ex(bContext *C, bool check_tool)
 {
   if (vertex_paint_mode_poll(C) && BKE_paint_brush(&CTX_data_tool_settings(C)->vpaint->paint)) {
-    ScrArea *sa = CTX_wm_area(C);
-    if (sa && sa->spacetype == SPACE_VIEW3D) {
+    ScrArea *area = CTX_wm_area(C);
+    if (area && area->spacetype == SPACE_VIEW3D) {
       ARegion *region = CTX_wm_region(C);
       if (region->regiontype == RGN_TYPE_WINDOW) {
         if (!check_tool || WM_toolsystem_active_tool_is_brush(C)) {
@@ -247,11 +247,11 @@ bool weight_paint_mode_poll(bContext *C)
 static bool weight_paint_poll_ex(bContext *C, bool check_tool)
 {
   Object *ob = CTX_data_active_object(C);
-  ScrArea *sa;
+  ScrArea *area;
 
   if ((ob != NULL) && (ob->mode & OB_MODE_WEIGHT_PAINT) &&
       (BKE_paint_brush(&CTX_data_tool_settings(C)->wpaint->paint) != NULL) &&
-      (sa = CTX_wm_area(C)) && (sa->spacetype == SPACE_VIEW3D)) {
+      (area = CTX_wm_area(C)) && (area->spacetype == SPACE_VIEW3D)) {
     ARegion *region = CTX_wm_region(C);
     if (ELEM(region->regiontype, RGN_TYPE_WINDOW, RGN_TYPE_HUD)) {
       if (!check_tool || WM_toolsystem_active_tool_is_brush(C)) {
@@ -1226,7 +1226,7 @@ static void ed_vwpaintmode_enter_generic(Main *bmain,
     BKE_paint_init(bmain, scene, paint_mode, PAINT_CURSOR_WEIGHT_PAINT);
 
     /* weight paint specific */
-    ED_mesh_mirror_spatial_table(ob, NULL, NULL, NULL, 's');
+    ED_mesh_mirror_spatial_table_end(ob);
     ED_vgroup_sync_from_pose(ob);
   }
   else {
@@ -1318,8 +1318,8 @@ static void ed_vwpaintmode_exit_generic(Object *ob, const eObjectMode mode_flag)
   paint_cursor_delete_textures();
 
   if (mode_flag == OB_MODE_WEIGHT_PAINT) {
-    ED_mesh_mirror_spatial_table(NULL, NULL, NULL, NULL, 'e');
-    ED_mesh_mirror_topo_table(NULL, NULL, 'e');
+    ED_mesh_mirror_spatial_table_end(ob);
+    ED_mesh_mirror_topo_table_end(ob);
   }
 
   /* Never leave derived meshes behind. */
@@ -1398,7 +1398,7 @@ static int wpaint_mode_toggle_exec(bContext *C, wmOperator *op)
    */
   {
     VirtualModifierData virtualModifierData;
-    ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+    ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
     if (md != NULL) {
       /* Can be NULL. */
       View3D *v3d = CTX_wm_view3d(C);
@@ -1450,17 +1450,13 @@ static int wpaint_mode_toggle_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
-/* for switching to/from mode */
-static bool paint_poll_test(bContext *C)
+static bool paint_mode_toggle_poll_test(bContext *C)
 {
   Object *ob = CTX_data_active_object(C);
   if (ob == NULL || ob->type != OB_MESH) {
     return 0;
   }
   if (!ob->data || ID_IS_LINKED(ob->data)) {
-    return 0;
-  }
-  if (CTX_data_edit_object(C)) {
     return 0;
   }
   return 1;
@@ -1476,7 +1472,7 @@ void PAINT_OT_weight_paint_toggle(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = wpaint_mode_toggle_exec;
-  ot->poll = paint_poll_test;
+  ot->poll = paint_mode_toggle_poll_test;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -2183,9 +2179,9 @@ static void calculate_average_weight(SculptThreadedTaskData *data,
   struct WPaintAverageAccum *accum = MEM_mallocN(sizeof(*accum) * totnode, __func__);
   data->custom_data = accum;
 
-  PBVHParallelSettings settings;
+  TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, (data->sd->flags & SCULPT_USE_OPENMP), totnode);
-  BKE_pbvh_parallel_range(0, totnode, data, do_wpaint_brush_calc_average_weight_cb_ex, &settings);
+  BLI_task_parallel_range(0, totnode, data, do_wpaint_brush_calc_average_weight_cb_ex, &settings);
 
   uint accum_len = 0;
   double accum_weight = 0.0;
@@ -2231,22 +2227,22 @@ static void wpaint_paint_leaves(bContext *C,
   data.strength = BKE_brush_weight_get(scene, brush);
 
   /* NOTE: current mirroring code cannot be run in parallel */
-  PBVHParallelSettings settings;
+  TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, !(me->editflag & ME_EDIT_MIRROR_X), totnode);
 
   switch ((eBrushWeightPaintTool)brush->weightpaint_tool) {
     case WPAINT_TOOL_AVERAGE:
       calculate_average_weight(&data, nodes, totnode);
-      BKE_pbvh_parallel_range(0, totnode, &data, do_wpaint_brush_draw_task_cb_ex, &settings);
+      BLI_task_parallel_range(0, totnode, &data, do_wpaint_brush_draw_task_cb_ex, &settings);
       break;
     case WPAINT_TOOL_SMEAR:
-      BKE_pbvh_parallel_range(0, totnode, &data, do_wpaint_brush_smear_task_cb_ex, &settings);
+      BLI_task_parallel_range(0, totnode, &data, do_wpaint_brush_smear_task_cb_ex, &settings);
       break;
     case WPAINT_TOOL_BLUR:
-      BKE_pbvh_parallel_range(0, totnode, &data, do_wpaint_brush_blur_task_cb_ex, &settings);
+      BLI_task_parallel_range(0, totnode, &data, do_wpaint_brush_blur_task_cb_ex, &settings);
       break;
     case WPAINT_TOOL_DRAW:
-      BKE_pbvh_parallel_range(0, totnode, &data, do_wpaint_brush_draw_task_cb_ex, &settings);
+      BLI_task_parallel_range(0, totnode, &data, do_wpaint_brush_draw_task_cb_ex, &settings);
       break;
   }
 }
@@ -2683,7 +2679,7 @@ void PAINT_OT_vertex_paint_toggle(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = vpaint_mode_toggle_exec;
-  ot->poll = paint_poll_test;
+  ot->poll = paint_mode_toggle_poll_test;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -3252,9 +3248,9 @@ static void calculate_average_color(SculptThreadedTaskData *data,
   struct VPaintAverageAccum *accum = MEM_mallocN(sizeof(*accum) * totnode, __func__);
   data->custom_data = accum;
 
-  PBVHParallelSettings settings;
+  TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, totnode);
-  BKE_pbvh_parallel_range(0, totnode, data, do_vpaint_brush_calc_average_color_cb_ex, &settings);
+  BLI_task_parallel_range(0, totnode, data, do_vpaint_brush_calc_average_color_cb_ex, &settings);
 
   uint accum_len = 0;
   uint accum_value[3] = {0};
@@ -3298,21 +3294,21 @@ static void vpaint_paint_leaves(bContext *C,
       .lcol = (uint *)me->mloopcol,
       .me = me,
   };
-  PBVHParallelSettings settings;
+  TaskParallelSettings settings;
   BKE_pbvh_parallel_range_settings(&settings, true, totnode);
   switch ((eBrushVertexPaintTool)brush->vertexpaint_tool) {
     case VPAINT_TOOL_AVERAGE:
       calculate_average_color(&data, nodes, totnode);
-      BKE_pbvh_parallel_range(0, totnode, &data, do_vpaint_brush_draw_task_cb_ex, &settings);
+      BLI_task_parallel_range(0, totnode, &data, do_vpaint_brush_draw_task_cb_ex, &settings);
       break;
     case VPAINT_TOOL_BLUR:
-      BKE_pbvh_parallel_range(0, totnode, &data, do_vpaint_brush_blur_task_cb_ex, &settings);
+      BLI_task_parallel_range(0, totnode, &data, do_vpaint_brush_blur_task_cb_ex, &settings);
       break;
     case VPAINT_TOOL_SMEAR:
-      BKE_pbvh_parallel_range(0, totnode, &data, do_vpaint_brush_smear_task_cb_ex, &settings);
+      BLI_task_parallel_range(0, totnode, &data, do_vpaint_brush_smear_task_cb_ex, &settings);
       break;
     case VPAINT_TOOL_DRAW:
-      BKE_pbvh_parallel_range(0, totnode, &data, do_vpaint_brush_draw_task_cb_ex, &settings);
+      BLI_task_parallel_range(0, totnode, &data, do_vpaint_brush_draw_task_cb_ex, &settings);
       break;
   }
 }

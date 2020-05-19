@@ -36,38 +36,12 @@
 #include "MEM_guardedalloc.h"
 
 /* all types are needed here, in order to do memory operations */
+#include "DNA_ID.h"
 #include "DNA_anim_types.h"
-#include "DNA_armature_types.h"
-#include "DNA_brush_types.h"
-#include "DNA_cachefile_types.h"
-#include "DNA_camera_types.h"
-#include "DNA_collection_types.h"
 #include "DNA_gpencil_types.h"
-#include "DNA_hair_types.h"
-#include "DNA_ipo_types.h"
 #include "DNA_key_types.h"
-#include "DNA_lattice_types.h"
-#include "DNA_light_types.h"
-#include "DNA_lightprobe_types.h"
-#include "DNA_linestyle_types.h"
-#include "DNA_mask_types.h"
-#include "DNA_material_types.h"
-#include "DNA_mesh_types.h"
-#include "DNA_meta_types.h"
-#include "DNA_movieclip_types.h"
 #include "DNA_node_types.h"
-#include "DNA_object_types.h"
-#include "DNA_pointcloud_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_sound_types.h"
-#include "DNA_speaker_types.h"
-#include "DNA_text_types.h"
-#include "DNA_vfont_types.h"
-#include "DNA_volume_types.h"
-#include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
-#include "DNA_world_types.h"
 
 #include "BLI_utildefines.h"
 
@@ -80,50 +54,21 @@
 
 #include "BLT_translation.h"
 
-#include "BKE_action.h"
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_armature.h"
 #include "BKE_bpath.h"
-#include "BKE_brush.h"
-#include "BKE_cachefile.h"
-#include "BKE_camera.h"
-#include "BKE_collection.h"
 #include "BKE_context.h"
-#include "BKE_curve.h"
-#include "BKE_font.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
-#include "BKE_hair.h"
 #include "BKE_idprop.h"
 #include "BKE_idtype.h"
-#include "BKE_image.h"
 #include "BKE_key.h"
-#include "BKE_lattice.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_lib_remap.h"
-#include "BKE_light.h"
-#include "BKE_lightprobe.h"
-#include "BKE_linestyle.h"
 #include "BKE_main.h"
-#include "BKE_mask.h"
-#include "BKE_material.h"
-#include "BKE_mball.h"
-#include "BKE_mesh.h"
-#include "BKE_movieclip.h"
 #include "BKE_node.h"
-#include "BKE_object.h"
-#include "BKE_paint.h"
-#include "BKE_particle.h"
-#include "BKE_pointcloud.h"
 #include "BKE_rigidbody.h"
-#include "BKE_scene.h"
-#include "BKE_sound.h"
-#include "BKE_speaker.h"
-#include "BKE_text.h"
-#include "BKE_texture.h"
-#include "BKE_volume.h"
-#include "BKE_world.h"
 
 #include "DEG_depsgraph.h"
 
@@ -320,7 +265,11 @@ void id_us_min(ID *id)
                  id->lib ? id->lib->filepath : "[Main]",
                  id->us,
                  limit);
-      BLI_assert(0);
+      if (GS(id->name) != ID_IP) {
+        /* Do not assert on deprecated ID types, we cannot really ensure that their ID refcounting
+         * is valid... */
+        BLI_assert(0);
+      }
       id->us = limit;
     }
     else {
@@ -659,7 +608,7 @@ static void id_swap(Main *bmain, ID *id_a, ID *id_b, const bool do_full_id)
  * Does a mere memory swap over the whole IDs data (including type-specific memory).
  * \note Most internal ID data itself is not swapped (only IDProperties are).
  *
- * \param bmain May be NULL, in which case there will be no remapping of internal pointers to
+ * \param bmain: May be NULL, in which case there will be no remapping of internal pointers to
  * itself.
  */
 void BKE_lib_id_swap(Main *bmain, ID *id_a, ID *id_b)
@@ -671,7 +620,7 @@ void BKE_lib_id_swap(Main *bmain, ID *id_a, ID *id_b)
  * Does a mere memory swap over the whole IDs data (including type-specific memory).
  * \note All internal ID data itself is also swapped.
  *
- * \param bmain May be NULL, in which case there will be no remapping of internal pointers to
+ * \param bmain: May be NULL, in which case there will be no remapping of internal pointers to
  * itself.
  */
 void BKE_lib_id_swap_full(Main *bmain, ID *id_a, ID *id_b)
@@ -901,7 +850,7 @@ void BKE_main_id_flag_all(Main *bmain, const int flag, const bool value)
 void BKE_main_id_repair_duplicate_names_listbase(ListBase *lb)
 {
   int lb_len = 0;
-  for (ID *id = lb->first; id; id = id->next) {
+  LISTBASE_FOREACH (ID *, id, lb) {
     if (id->lib == NULL) {
       lb_len += 1;
     }
@@ -914,7 +863,7 @@ void BKE_main_id_repair_duplicate_names_listbase(ListBase *lb)
   ID **id_array = MEM_mallocN(sizeof(*id_array) * lb_len, __func__);
   GSet *gset = BLI_gset_str_new_ex(__func__, lb_len);
   int i = 0;
-  for (ID *id = lb->first; id; id = id->next) {
+  LISTBASE_FOREACH (ID *, id, lb) {
     if (id->lib == NULL) {
       id_array[i] = id;
       i++;
@@ -1014,6 +963,8 @@ void *BKE_libblock_alloc(Main *bmain, short type, const char *name, const int fl
       id->us = 1;
     }
     if ((flag & LIB_ID_CREATE_NO_MAIN) == 0) {
+      /* Note that 2.8x versioning has tested not to cause conflicts. */
+      BLI_assert(bmain->is_locked_for_linking == false || ELEM(type, ID_WS, ID_GR));
       ListBase *lb = which_libbase(bmain, type);
 
       BKE_main_lock(bmain);
@@ -1059,12 +1010,6 @@ void BKE_libblock_init_empty(ID *id)
 /* ********** ID session-wise UUID management. ********** */
 static uint global_session_uuid = 0;
 
-/** Reset the session-wise uuid counter (used when reading a new file e.g.). */
-void BKE_lib_libblock_session_uuid_reset()
-{
-  global_session_uuid = 0;
-}
-
 /**
  * Generate a session-wise uuid for the given \a id.
  *
@@ -1081,6 +1026,18 @@ void BKE_lib_libblock_session_uuid_ensure(ID *id)
       id->session_uuid = atomic_add_and_fetch_uint32(&global_session_uuid, 1);
     }
   }
+}
+
+/**
+ * Re-generate a new session-wise uuid for the given \a id.
+ *
+ * \warning This has a very specific use-case (to handle UI-related data-blocks that are kept
+ * across new file reading, when we do keep existing UI). No other usage is expected currently.
+ */
+void BKE_lib_libblock_session_uuid_renew(ID *id)
+{
+  id->session_uuid = MAIN_ID_SESSION_UUID_UNSET;
+  BKE_lib_libblock_session_uuid_ensure(id);
 }
 
 /**
@@ -1244,7 +1201,7 @@ ID *BKE_libblock_find_name(struct Main *bmain, const short type, const char *nam
  *
  * \note All other IDs beside given one are assumed already properly sorted in the list.
  *
- * \param id_sorting_hint Ignored if NULL. Otherwise, used to check if we can insert \a id
+ * \param id_sorting_hint: Ignored if NULL. Otherwise, used to check if we can insert \a id
  * immediately before or after that pointer. It must always be into given \a lb list.
  */
 void id_sort_by_name(ListBase *lb, ID *id, ID *id_sorting_hint)
@@ -1716,21 +1673,31 @@ static void library_make_local_copying_check(ID *id,
     /* Used_to_user stores ID pointer, not pointer to ID pointer. */
     ID *par_id = (ID *)entry->id_pointer;
 
-    /* Our oh-so-beloved 'from' pointers... */
+    /* Our oh-so-beloved 'from' pointers... Those should always be ignored here, since the actual
+     * relation we want to check is in the other way around. */
     if (entry->usage_flag & IDWALK_CB_LOOPBACK) {
-      /* We totally disregard Object->proxy_from 'usage' here,
-       * this one would only generate fake positives. */
-      if (GS(par_id->name) == ID_OB) {
-        BLI_assert(((Object *)par_id)->proxy_from == (Object *)id);
-        continue;
+#ifndef NDEBUG
+      /* Some debug checks to ensure we explicitly are aware of all 'loop-back' cases, since those
+       * may not always be manageable in the same way... */
+      switch (GS(par_id->name)) {
+        case ID_OB:
+          BLI_assert(((Object *)par_id)->proxy_from == (Object *)id);
+          break;
+        case ID_KE:
+          BLI_assert(((Key *)par_id)->from == id);
+          break;
+        default:
+          BLI_assert(0);
       }
+#endif
+      continue;
+    }
 
-      /* Shapekeys are considered 'private' to their owner ID here, and never tagged
-       * (since they cannot be linked), so we have to switch effective parent to their owner.
-       */
-      if (GS(par_id->name) == ID_KE) {
-        par_id = ((Key *)par_id)->from;
-      }
+    /* Shapekeys are considered 'private' to their owner ID here, and never tagged
+     * (since they cannot be linked), so we have to switch effective parent to their owner.
+     */
+    if (GS(par_id->name) == ID_KE) {
+      par_id = ((Key *)par_id)->from;
     }
 
     if (par_id->lib == NULL) {
@@ -2218,14 +2185,14 @@ void BKE_id_ordered_list(ListBase *ordered_lb, const ListBase *lb)
 {
   BLI_listbase_clear(ordered_lb);
 
-  for (ID *id = lb->first; id; id = id->next) {
+  LISTBASE_FOREACH (ID *, id, lb) {
     BLI_addtail(ordered_lb, BLI_genericNodeN(id));
   }
 
   BLI_listbase_sort(ordered_lb, id_order_compare);
 
   int num = 0;
-  for (LinkData *link = ordered_lb->first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, ordered_lb) {
     int *order = id_order_get(link->data);
     if (order) {
       *order = num++;
@@ -2250,7 +2217,7 @@ void BKE_id_reorder(const ListBase *lb, ID *id, ID *relative, bool after)
 
   if (after) {
     /* Insert after. */
-    for (ID *other = lb->first; other; other = other->next) {
+    LISTBASE_FOREACH (ID *, other, lb) {
       int *order = id_order_get(other);
       if (*order > relative_order) {
         (*order)++;
@@ -2261,7 +2228,7 @@ void BKE_id_reorder(const ListBase *lb, ID *id, ID *relative, bool after)
   }
   else {
     /* Insert before. */
-    for (ID *other = lb->first; other; other = other->next) {
+    LISTBASE_FOREACH (ID *, other, lb) {
       int *order = id_order_get(other);
       if (*order < relative_order) {
         (*order)--;

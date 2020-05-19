@@ -99,6 +99,10 @@ static void drw_deferred_shader_compilation_exec(void *custom_data,
   DRWShaderCompiler *comp = (DRWShaderCompiler *)custom_data;
   void *gl_context = comp->gl_context;
 
+#if TRUST_NO_ONE
+  BLI_assert(gl_context != NULL);
+#endif
+
   WM_opengl_context_activate(gl_context);
 
   while (true) {
@@ -237,6 +241,9 @@ static void drw_deferred_shader_add(GPUMaterial *mat, bool deferred)
   WM_jobs_timer(wm_job, 0.1, NC_MATERIAL | ND_SHADING_DRAW, 0);
   WM_jobs_delay_start(wm_job, 0.1);
   WM_jobs_callbacks(wm_job, drw_deferred_shader_compilation_exec, NULL, NULL, NULL);
+
+  G.is_break = false;
+
   WM_jobs_start(wm, wm_job);
 }
 
@@ -249,7 +256,7 @@ void DRW_deferred_shader_remove(GPUMaterial *mat)
       /* No job running, do not create a new one by calling WM_jobs_get. */
       continue;
     }
-    for (wmWindow *win = wm->windows.first; win; win = win->next) {
+    LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
       wmJob *wm_job = WM_jobs_get(
           wm, win, scene, "Shaders Compilation", WM_JOB_PROGRESS, WM_JOB_TYPE_SHADER_COMPILATION);
 

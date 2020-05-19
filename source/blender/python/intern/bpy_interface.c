@@ -279,9 +279,10 @@ void BPY_python_start(int argc, const char **argv)
    * While harmless, it's noisy. */
   Py_FrozenFlag = 1;
 
-  /* Only use the systems environment variables when explicitly requested.
+  /* Only use the systems environment variables and site when explicitly requested.
    * Since an incorrect 'PYTHONPATH' causes difficult to debug errors, see: T72807. */
   Py_IgnoreEnvironmentFlag = !py_use_system_env;
+  Py_NoUserSiteDirectory = !py_use_system_env;
 
   Py_Initialize();
 
@@ -940,7 +941,7 @@ static void bpy_module_delay_init(PyObject *bpy_proxy)
   char filename_abs[1024];
 
   BLI_strncpy(filename_abs, filename_rel, sizeof(filename_abs));
-  BLI_path_cwd(filename_abs, sizeof(filename_abs));
+  BLI_path_abs_from_cwd(filename_abs, sizeof(filename_abs));
   Py_DECREF(filename_obj);
 
   argv[0] = filename_abs;

@@ -46,13 +46,13 @@
 #include "DNA_scene_types.h"
 #include "DNA_vfont_types.h"
 
-#include "BKE_animsys.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
 #include "BKE_font.h"
 #include "BKE_idtype.h"
 #include "BKE_key.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_object.h"
@@ -118,6 +118,22 @@ static void curve_free_data(ID *id)
   MEM_SAFE_FREE(curve->tb);
 }
 
+static void curve_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Curve *curve = (Curve *)id;
+  BKE_LIB_FOREACHID_PROCESS(data, curve->bevobj, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS(data, curve->taperobj, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS(data, curve->textoncurve, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS(data, curve->key, IDWALK_CB_USER);
+  for (int i = 0; i < curve->totcol; i++) {
+    BKE_LIB_FOREACHID_PROCESS(data, curve->mat[i], IDWALK_CB_USER);
+  }
+  BKE_LIB_FOREACHID_PROCESS(data, curve->vfont, IDWALK_CB_USER);
+  BKE_LIB_FOREACHID_PROCESS(data, curve->vfontb, IDWALK_CB_USER);
+  BKE_LIB_FOREACHID_PROCESS(data, curve->vfonti, IDWALK_CB_USER);
+  BKE_LIB_FOREACHID_PROCESS(data, curve->vfontbi, IDWALK_CB_USER);
+}
+
 IDTypeInfo IDType_ID_CU = {
     .id_code = ID_CU,
     .id_filter = FILTER_ID_CU,
@@ -132,6 +148,7 @@ IDTypeInfo IDType_ID_CU = {
     .copy_data = curve_copy_data,
     .free_data = curve_free_data,
     .make_local = NULL,
+    .foreach_id = curve_foreach_id,
 };
 
 static int cu_isectLL(const float v1[3],
@@ -1878,7 +1895,10 @@ void BKE_curve_bevel_make(Object *ob, ListBase *disp)
       }
       /* Don't duplicate the last back vertex. */
       angle = (cu->ext1 == 0.0f && (cu->flag & CU_BACK)) ? dangle : 0;
-      for (a = 0; a < cu->bevresol + 2; a++) {
+      int front_len = (cu->ext1 == 0.0f && ((cu->flag & CU_BACK) || !(cu->flag & CU_FRONT))) ?
+                          cu->bevresol + 1 :
+                          cu->bevresol + 2;
+      for (a = 0; a < front_len; a++) {
         fp[0] = 0.0;
         fp[1] = (float)(cosf(angle) * (cu->ext2));
         fp[2] = (float)(sinf(angle) * (cu->ext2)) + cu->ext1;
@@ -4149,7 +4169,8 @@ void BKE_nurb_handle_calc_simple_auto(Nurb *nu, BezTriple *bezt)
  */
 void BKE_nurb_bezt_handle_test(BezTriple *bezt,
                                const eBezTriple_Flag__Alias sel_flag,
-                               const bool use_handle)
+                               const bool use_handle,
+                               const bool use_around_local)
 {
   short flag = 0;
 
@@ -4170,6 +4191,10 @@ void BKE_nurb_bezt_handle_test(BezTriple *bezt,
   }
   else {
     flag = (bezt->f2 & sel_flag) ? (SEL_F1 | SEL_F2 | SEL_F3) : 0;
+  }
+
+  if (use_around_local) {
+    flag &= ~SEL_F2;
   }
 
   /* check for partial selection */
@@ -4198,7 +4223,7 @@ void BKE_nurb_bezt_handle_test(BezTriple *bezt,
 #undef SEL_F3
 }
 
-void BKE_nurb_handles_test(Nurb *nu, const bool use_handle)
+void BKE_nurb_handles_test(Nurb *nu, const bool use_handle, const bool use_around_local)
 {
   BezTriple *bezt;
   int a;
@@ -4210,7 +4235,7 @@ void BKE_nurb_handles_test(Nurb *nu, const bool use_handle)
   bezt = nu->bezt;
   a = nu->pntsu;
   while (a--) {
-    BKE_nurb_bezt_handle_test(bezt, SELECT, use_handle);
+    BKE_nurb_bezt_handle_test(bezt, SELECT, use_handle, use_around_local);
     bezt++;
   }
 
@@ -4613,7 +4638,7 @@ void BKE_nurb_direction_switch(Nurb *nu)
 void BKE_curve_nurbs_vert_coords_get(ListBase *lb, float (*vert_coords)[3], int vert_len)
 {
   float *co = vert_coords[0];
-  for (Nurb *nu = lb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, lb) {
     if (nu->type == CU_BEZIER) {
       BezTriple *bezt = nu->bezt;
       for (int i = 0; i < nu->pntsu; i++, bezt++) {
@@ -4693,7 +4718,7 @@ void BKE_curve_nurbs_vert_coords_apply(ListBase *lb,
 {
   const float *co = vert_coords[0];
 
-  for (Nurb *nu = lb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, lb) {
     if (nu->type == CU_BEZIER) {
       BezTriple *bezt = nu->bezt;
 
@@ -4731,7 +4756,7 @@ float (*BKE_curve_nurbs_key_vert_coords_alloc(ListBase *lb, float *key, int *r_v
   float(*cos)[3] = MEM_malloc_arrayN(vert_len, sizeof(*cos), __func__);
 
   float *co = cos[0];
-  for (Nurb *nu = lb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, lb) {
     if (nu->type == CU_BEZIER) {
       BezTriple *bezt = nu->bezt;
 
@@ -5169,7 +5194,7 @@ bool BKE_curve_minmax(Curve *cu, bool use_radius, float min[3], float max[3])
     use_radius = false;
   }
   /* Do bounding box based on splines. */
-  for (Nurb *nu = nurb_lb->first; nu; nu = nu->next) {
+  LISTBASE_FOREACH (Nurb *, nu, nurb_lb) {
     BKE_nurb_minmax(nu, use_radius, min, max);
   }
   const bool result = (BLI_listbase_is_empty(nurb_lb) == false);
@@ -5502,6 +5527,20 @@ void BKE_curve_material_remap(Curve *cu, const unsigned int *remap, unsigned int
   }
 
 #undef MAT_NR_REMAP
+}
+
+void BKE_curve_smooth_flag_set(Curve *cu, const bool use_smooth)
+{
+  if (use_smooth) {
+    for (Nurb *nu = cu->nurb.first; nu; nu = nu->next) {
+      nu->flag |= CU_SMOOTH;
+    }
+  }
+  else {
+    for (Nurb *nu = cu->nurb.first; nu; nu = nu->next) {
+      nu->flag &= ~CU_SMOOTH;
+    }
+  }
 }
 
 void BKE_curve_rect_from_textbox(const struct Curve *cu,

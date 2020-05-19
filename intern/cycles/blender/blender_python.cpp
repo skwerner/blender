@@ -60,6 +60,12 @@ void *pylong_as_voidptr_typesafe(PyObject *object)
   return PyLong_AsVoidPtr(object);
 }
 
+PyObject *pyunicode_from_string(const char *str)
+{
+  /* Ignore errors if device API returns invalid UTF-8 strings. */
+  return PyUnicode_DecodeUTF8(str, strlen(str), "ignore");
+}
+
 /* Synchronize debug flags from a given Blender scene.
  * Return truth when device list needs invalidation.
  */
@@ -292,22 +298,18 @@ static PyObject *render_func(PyObject * /*self*/, PyObject *args)
 static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
 {
   PyObject *pysession, *pydepsgraph, *pyobject;
-  PyObject *pypixel_array, *pyresult;
   const char *pass_type;
-  int num_pixels, depth, object_id, pass_filter;
+  int pass_filter, width, height;
 
   if (!PyArg_ParseTuple(args,
-                        "OOOsiiOiiO",
+                        "OOOsiii",
                         &pysession,
                         &pydepsgraph,
                         &pyobject,
                         &pass_type,
                         &pass_filter,
-                        &object_id,
-                        &pypixel_array,
-                        &num_pixels,
-                        &depth,
-                        &pyresult))
+                        &width,
+                        &height))
     return NULL;
 
   BlenderSession *session = (BlenderSession *)PyLong_AsVoidPtr(pysession);
@@ -320,23 +322,9 @@ static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
   RNA_id_pointer_create((ID *)PyLong_AsVoidPtr(pyobject), &objectptr);
   BL::Object b_object(objectptr);
 
-  void *b_result = PyLong_AsVoidPtr(pyresult);
-
-  PointerRNA bakepixelptr;
-  RNA_pointer_create(NULL, &RNA_BakePixel, PyLong_AsVoidPtr(pypixel_array), &bakepixelptr);
-  BL::BakePixel b_bake_pixel(bakepixelptr);
-
   python_thread_state_save(&session->python_thread_state);
 
-  session->bake(b_depsgraph,
-                b_object,
-                pass_type,
-                pass_filter,
-                object_id,
-                b_bake_pixel,
-                (size_t)num_pixels,
-                depth,
-                (float *)b_result);
+  session->bake(b_depsgraph, b_object, pass_type, pass_filter, width, height);
 
   python_thread_state_restore(&session->python_thread_state);
 
@@ -429,9 +417,9 @@ static PyObject *available_devices_func(PyObject * /*self*/, PyObject *args)
     DeviceInfo &device = devices[i];
     string type_name = Device::string_from_type(device.type);
     PyObject *device_tuple = PyTuple_New(3);
-    PyTuple_SET_ITEM(device_tuple, 0, PyUnicode_FromString(device.description.c_str()));
-    PyTuple_SET_ITEM(device_tuple, 1, PyUnicode_FromString(type_name.c_str()));
-    PyTuple_SET_ITEM(device_tuple, 2, PyUnicode_FromString(device.id.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 0, pyunicode_from_string(device.description.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 1, pyunicode_from_string(type_name.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 2, pyunicode_from_string(device.id.c_str()));
     PyTuple_SET_ITEM(ret, i, device_tuple);
   }
 
@@ -642,7 +630,7 @@ static PyObject *osl_compile_func(PyObject * /*self*/, PyObject *args)
 static PyObject *system_info_func(PyObject * /*self*/, PyObject * /*value*/)
 {
   string system_info = Device::device_capabilities();
-  return PyUnicode_FromString(system_info.c_str());
+  return pyunicode_from_string(system_info.c_str());
 }
 
 #ifdef WITH_OPENCL

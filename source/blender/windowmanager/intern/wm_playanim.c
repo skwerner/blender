@@ -317,7 +317,13 @@ static void playanim_toscreen(
     GPU_blend(true);
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    imm_draw_box_checker_2d(offs_x, offs_y, offs_x + span_x, offs_y + span_y);
+    imm_draw_box_checker_2d_ex(offs_x,
+                               offs_y,
+                               offs_x + span_x,
+                               offs_y + span_y,
+                               (const float[4]){0.15, 0.15, 0.15, 1.0},
+                               (const float[4]){0.20, 0.20, 0.20, 1.0},
+                               8);
   }
 
   IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
@@ -429,7 +435,8 @@ static void build_pict_list_ex(
     } fp_decoded;
 
     BLI_strncpy(filepath, first, sizeof(filepath));
-    fp_framenr = BLI_stringdec(filepath, fp_decoded.head, fp_decoded.tail, &fp_decoded.digits);
+    fp_framenr = BLI_path_sequence_decode(
+        filepath, fp_decoded.head, fp_decoded.tail, &fp_decoded.digits);
 
     pupdate_time();
     ptottime = 1.0;
@@ -522,7 +529,8 @@ static void build_pict_list_ex(
 
       /* create a new filepath each time */
       fp_framenr += fstep;
-      BLI_stringenc(filepath, fp_decoded.head, fp_decoded.tail, fp_decoded.digits, fp_framenr);
+      BLI_path_sequence_encode(
+          filepath, fp_decoded.head, fp_decoded.tail, fp_decoded.digits, fp_framenr);
 
       while ((hasevent = GHOST_ProcessEvents(g_WS.ghost_system, 0))) {
         GHOST_DispatchEvents(g_WS.ghost_system);

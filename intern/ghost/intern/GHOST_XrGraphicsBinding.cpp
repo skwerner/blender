@@ -22,11 +22,12 @@
 #include <list>
 #include <sstream>
 
-#if defined(WITH_X11)
+#if defined(WITH_GHOST_X11)
 #  include "GHOST_ContextGLX.h"
 #elif defined(WIN32)
 #  include "GHOST_ContextD3D.h"
 #  include "GHOST_ContextWGL.h"
+#  include "GHOST_SystemWin32.h"
 #endif
 #include "GHOST_C-api.h"
 #include "GHOST_Xr_intern.h"
@@ -67,7 +68,7 @@ class GHOST_XrGraphicsBindingOpenGL : public GHOST_IXrGraphicsBinding {
                                 XrSystemId system_id,
                                 std::string *r_requirement_info) const override
   {
-#if defined(WITH_X11)
+#if defined(WITH_GHOST_X11)
     GHOST_ContextGLX *ctx_gl = static_cast<GHOST_ContextGLX *>(ghost_ctx);
 #else
     GHOST_ContextWGL *ctx_gl = static_cast<GHOST_ContextWGL *>(ghost_ctx);
@@ -106,7 +107,7 @@ class GHOST_XrGraphicsBindingOpenGL : public GHOST_IXrGraphicsBinding {
 
   void initFromGhostContext(GHOST_Context *ghost_ctx) override
   {
-#if defined(WITH_X11)
+#if defined(WITH_GHOST_X11)
     GHOST_ContextGLX *ctx_glx = static_cast<GHOST_ContextGLX *>(ghost_ctx);
     XVisualInfo *visual_info = glXGetVisualFromFBConfig(ctx_glx->m_display, ctx_glx->m_fbconfig);
 
@@ -180,6 +181,11 @@ class GHOST_XrGraphicsBindingOpenGL : public GHOST_IXrGraphicsBinding {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
   }
 
+  bool needsUpsideDownDrawing(GHOST_Context &ghost_ctx) const
+  {
+    return ghost_ctx.isUpsideDown();
+  }
+
  private:
   std::list<std::vector<XrSwapchainImageOpenGLKHR>> m_image_cache;
   GLuint m_fbo = 0;
@@ -188,19 +194,27 @@ class GHOST_XrGraphicsBindingOpenGL : public GHOST_IXrGraphicsBinding {
 #ifdef WIN32
 class GHOST_XrGraphicsBindingD3D : public GHOST_IXrGraphicsBinding {
  public:
+  GHOST_XrGraphicsBindingD3D(GHOST_Context *ghost_ctx)
+      : GHOST_IXrGraphicsBinding(), m_ghost_wgl_ctx(*static_cast<GHOST_ContextWGL *>(ghost_ctx))
+  {
+    m_ghost_d3d_ctx = GHOST_SystemWin32::createOffscreenContextD3D();
+  }
   ~GHOST_XrGraphicsBindingD3D()
   {
     if (m_shared_resource) {
-      m_ghost_ctx->disposeSharedOpenGLResource(m_shared_resource);
+      m_ghost_d3d_ctx->disposeSharedOpenGLResource(m_shared_resource);
+    }
+    if (m_ghost_d3d_ctx) {
+      GHOST_SystemWin32::disposeContextD3D(m_ghost_d3d_ctx);
     }
   }
 
-  bool checkVersionRequirements(GHOST_Context *ghost_ctx,
-                                XrInstance instance,
-                                XrSystemId system_id,
-                                std::string *r_requirement_info) const override
+  bool checkVersionRequirements(
+      GHOST_Context * /*ghost_ctx*/, /* Remember: This is the OpenGL context! */
+      XrInstance instance,
+      XrSystemId system_id,
+      std::string *r_requirement_info) const override
   {
-    GHOST_ContextD3D *ctx_dx = static_cast<GHOST_ContextD3D *>(ghost_ctx);
     static PFN_xrGetD3D11GraphicsRequirementsKHR s_xrGetD3D11GraphicsRequirementsKHR_fn = nullptr;
     XrGraphicsRequirementsD3D11KHR gpu_requirements = {XR_TYPE_GRAPHICS_REQUIREMENTS_D3D11_KHR};
 
@@ -222,16 +236,15 @@ class GHOST_XrGraphicsBindingD3D : public GHOST_IXrGraphicsBinding {
       *r_requirement_info = std::move(strstream.str());
     }
 
-    return ctx_dx->m_device->GetFeatureLevel() >= gpu_requirements.minFeatureLevel;
+    return m_ghost_d3d_ctx->m_device->GetFeatureLevel() >= gpu_requirements.minFeatureLevel;
   }
 
-  void initFromGhostContext(GHOST_Context *ghost_ctx) override
+  void initFromGhostContext(
+      GHOST_Context * /*ghost_ctx*/ /* Remember: This is the OpenGL context! */
+      ) override
   {
-    GHOST_ContextD3D *ctx_d3d = static_cast<GHOST_ContextD3D *>(ghost_ctx);
-
     oxr_binding.d3d11.type = XR_TYPE_GRAPHICS_BINDING_D3D11_KHR;
-    oxr_binding.d3d11.device = ctx_d3d->m_device;
-    m_ghost_ctx = ctx_d3d;
+    oxr_binding.d3d11.device = m_ghost_d3d_ctx->m_device;
   }
 
   bool chooseSwapchainFormat(const std::vector<int64_t> &runtime_formats,
@@ -266,7 +279,7 @@ class GHOST_XrGraphicsBindingD3D : public GHOST_IXrGraphicsBinding {
         swapchain_image);
 
 #  if 0
-    /* Ideally we'd just create a render target view for the OpenXR swapchain image texture and
+    /* Ideally we'd just create a render target view for the OpenXR swap-chain image texture and
      * blit from the OpenGL context into it. The NV_DX_interop extension doesn't want to work with
      * this though. At least not with Optimus hardware. See:
      * https://github.com/mpv-player/mpv/issues/2949#issuecomment-197262807.
@@ -284,35 +297,47 @@ class GHOST_XrGraphicsBindingD3D : public GHOST_IXrGraphicsBinding {
     m_ghost_ctx->blitFromOpenGLContext(m_shared_resource, draw_info->width, draw_info->height);
 #  else
     if (!m_shared_resource) {
-      m_shared_resource = m_ghost_ctx->createSharedOpenGLResource(draw_info->width,
-                                                                  draw_info->height);
+      m_shared_resource = m_ghost_d3d_ctx->createSharedOpenGLResource(draw_info->width,
+                                                                      draw_info->height);
     }
-    m_ghost_ctx->blitFromOpenGLContext(m_shared_resource, draw_info->width, draw_info->height);
+    m_ghost_d3d_ctx->blitFromOpenGLContext(m_shared_resource, draw_info->width, draw_info->height);
 
-    m_ghost_ctx->m_device_ctx->OMSetRenderTargets(0, nullptr, nullptr);
-    m_ghost_ctx->m_device_ctx->CopyResource(d3d_swapchain_image->texture,
-                                            m_ghost_ctx->getSharedTexture2D(m_shared_resource));
+    m_ghost_d3d_ctx->m_device_ctx->OMSetRenderTargets(0, nullptr, nullptr);
+    m_ghost_d3d_ctx->m_device_ctx->CopyResource(
+        d3d_swapchain_image->texture, m_ghost_d3d_ctx->getSharedTexture2D(m_shared_resource));
 #  endif
   }
 
+  bool needsUpsideDownDrawing(GHOST_Context &) const
+  {
+    return m_ghost_d3d_ctx->isUpsideDown();
+  }
+
  private:
-  GHOST_ContextD3D *m_ghost_ctx;
-  GHOST_SharedOpenGLResource *m_shared_resource;
+  /** Primary OpenGL context for Blender to use for drawing. */
+  GHOST_ContextWGL &m_ghost_wgl_ctx;
+  /** Secondary DirectX 11 context to share with OpenGL context. */
+  GHOST_ContextD3D *m_ghost_d3d_ctx = nullptr;
+  /** Handle to shared resource object. */
+  GHOST_SharedOpenGLResource *m_shared_resource = nullptr;
+
   std::list<std::vector<XrSwapchainImageD3D11KHR>> m_image_cache;
 };
 #endif  // WIN32
 
 std::unique_ptr<GHOST_IXrGraphicsBinding> GHOST_XrGraphicsBindingCreateFromType(
-    GHOST_TXrGraphicsBinding type)
+    GHOST_TXrGraphicsBinding type, GHOST_Context *context)
 {
   switch (type) {
     case GHOST_kXrGraphicsOpenGL:
       return std::unique_ptr<GHOST_XrGraphicsBindingOpenGL>(new GHOST_XrGraphicsBindingOpenGL());
 #ifdef WIN32
     case GHOST_kXrGraphicsD3D11:
-      return std::unique_ptr<GHOST_XrGraphicsBindingD3D>(new GHOST_XrGraphicsBindingD3D());
+      return std::unique_ptr<GHOST_XrGraphicsBindingD3D>(new GHOST_XrGraphicsBindingD3D(context));
 #endif
     default:
       return nullptr;
   }
+
+  (void)context; /* Might be unused. */
 }

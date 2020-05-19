@@ -25,10 +25,8 @@
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include <string.h>  // XXX: memcpy
 
-#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
@@ -36,8 +34,6 @@ extern "C" {
 #include "BKE_customdata.h"
 #include "BKE_idtype.h"
 #include "BKE_main.h"
-
-} /* extern "C" */
 
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -271,7 +267,7 @@ ID *DEG_get_original_id(ID *id)
   return (ID *)id->orig_id;
 }
 
-bool DEG_is_original_id(ID *id)
+bool DEG_is_original_id(const ID *id)
 {
   /* Some explanation of the logic.
    *
@@ -296,17 +292,17 @@ bool DEG_is_original_id(ID *id)
   return true;
 }
 
-bool DEG_is_original_object(Object *object)
+bool DEG_is_original_object(const Object *object)
 {
   return DEG_is_original_id(&object->id);
 }
 
-bool DEG_is_evaluated_id(ID *id)
+bool DEG_is_evaluated_id(const ID *id)
 {
   return !DEG_is_original_id(id);
 }
 
-bool DEG_is_evaluated_object(Object *object)
+bool DEG_is_evaluated_object(const Object *object)
 {
   return !DEG_is_original_object(object);
 }
@@ -319,7 +315,7 @@ bool DEG_is_fully_evaluated(const struct Depsgraph *depsgraph)
     return false;
   }
   /* Check whether IDs are up to date. */
-  if (BLI_gset_len(deg_graph->entry_tags) > 0) {
+  if (!deg_graph->entry_tags.is_empty()) {
     return false;
   }
   return true;

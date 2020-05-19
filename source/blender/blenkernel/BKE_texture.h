@@ -31,6 +31,7 @@ struct Brush;
 struct ColorBand;
 struct FreestyleLineStyle;
 struct ImagePool;
+struct LibraryForeachIDData;
 struct MTex;
 struct Main;
 struct ParticleSettings;
@@ -39,8 +40,10 @@ struct Tex;
 struct TexMapping;
 struct TexResult;
 
-/*  in ColorBand struct */
+/** #ColorBand.data length. */
 #define MAXCOLORBAND 32
+
+void BKE_texture_mtex_foreach_id(struct LibraryForeachIDData *data, struct MTex *mtex);
 
 void BKE_texture_default(struct Tex *tex);
 struct Tex *BKE_texture_copy(struct Main *bmain, const struct Tex *tex);

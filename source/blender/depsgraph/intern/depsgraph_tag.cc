@@ -33,7 +33,6 @@
 #include "BLI_task.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_key_types.h"
@@ -44,7 +43,7 @@ extern "C" {
 #include "DNA_screen_types.h"
 #include "DNA_windowmanager_types.h"
 
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_global.h"
 #include "BKE_idtype.h"
 #include "BKE_node.h"
@@ -54,7 +53,6 @@ extern "C" {
 #define new new_
 #include "BKE_screen.h"
 #undef new
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_debug.h"
@@ -495,13 +493,13 @@ void deg_graph_node_tag_zero(Main *bmain,
   ID *id = id_node->id_orig;
   /* TODO(sergey): Which recalc flags to set here? */
   id_node->id_cow->recalc |= deg_recalc_flags_for_legacy_zero();
-  GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
+
+  for (ComponentNode *comp_node : id_node->components.values()) {
     if (comp_node->type == NodeType::ANIMATION) {
       continue;
     }
     comp_node->tag_update(graph, update_source);
   }
-  GHASH_FOREACH_END();
   deg_graph_id_tag_legacy_compat(bmain, graph, id, (IDRecalcFlag)0, update_source);
 }
 
@@ -622,6 +620,10 @@ void id_tag_update(Main *bmain, ID *id, int flag, eUpdateSource update_source)
   for (DEG::Depsgraph *depsgraph : DEG::get_all_registered_graphs(bmain)) {
     graph_id_tag_update(bmain, depsgraph, id, flag, update_source);
   }
+
+  /* Accumulate all tags for an ID between two undo steps, so they can be
+   * replayed for undo. */
+  id->recalc_after_undo_push |= deg_recalc_flags_effective(NULL, flag);
 }
 
 void graph_id_tag_update(
@@ -820,13 +822,10 @@ void DEG_ids_check_recalc(
 
 static void deg_graph_clear_id_recalc_flags(ID *id)
 {
-  /* Keep incremental track of used recalc flags, to get proper update when undoing. */
-  id->recalc_undo_accumulated |= id->recalc;
   id->recalc &= ~ID_RECALC_ALL;
   bNodeTree *ntree = ntreeFromID(id);
   /* Clear embedded node trees too. */
   if (ntree) {
-    ntree->id.recalc_undo_accumulated |= ntree->id.recalc;
     ntree->id.recalc &= ~ID_RECALC_ALL;
   }
   /* XXX And what about scene's master collection here? */

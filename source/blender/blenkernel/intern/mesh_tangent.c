@@ -452,9 +452,7 @@ finally:
   pRes[3] = fSign;
 }
 
-static void DM_calc_loop_tangents_thread(TaskPool *__restrict UNUSED(pool),
-                                         void *taskdata,
-                                         int UNUSED(threadid))
+static void DM_calc_loop_tangents_thread(TaskPool *__restrict UNUSED(pool), void *taskdata)
 {
   struct SGLSLMeshToTangent *mesh2tangent = taskdata;
   /* new computation method */
@@ -658,9 +656,7 @@ void BKE_mesh_calc_loop_tangent_ex(const MVert *mvert,
 
     /* Calculation */
     if (looptri_len != 0) {
-      TaskScheduler *scheduler = BLI_task_scheduler_get();
-      TaskPool *task_pool;
-      task_pool = BLI_task_pool_create(scheduler, NULL);
+      TaskPool *task_pool = BLI_task_pool_create(NULL, TASK_PRIORITY_LOW);
 
       tangent_mask_curr = 0;
       /* Calculate tangent layers */
@@ -707,8 +703,7 @@ void BKE_mesh_calc_loop_tangent_ex(const MVert *mvert,
         }
 
         mesh2tangent->tangent = loopdata_out->layers[index].data;
-        BLI_task_pool_push(
-            task_pool, DM_calc_loop_tangents_thread, mesh2tangent, false, TASK_PRIORITY_LOW);
+        BLI_task_pool_push(task_pool, DM_calc_loop_tangents_thread, mesh2tangent, false, NULL);
       }
 
       BLI_assert(tangent_mask_curr == tangent_mask);

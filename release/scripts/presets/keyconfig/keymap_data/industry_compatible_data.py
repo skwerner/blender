@@ -496,7 +496,9 @@ def km_outliner(params):
          {"properties": [("all", True)]}),
         ("outliner.item_openclose", {"type": 'EVT_TWEAK_L', "value": 'ANY'},
          {"properties": [("all", False)]}),
+        # Fall through to generic context menu if the item(s) selected have no type specific actions.
         ("outliner.operation", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, None),
+        op_menu("OUTLINER_MT_context_menu", {"type": 'RIGHTMOUSE', "value": 'PRESS'}),
         ("outliner.item_drag_drop", {"type": 'EVT_TWEAK_L', "value": 'ANY'}, None),
         ("outliner.item_drag_drop", {"type": 'EVT_TWEAK_L', "value": 'ANY', "shift": True}, None),
         ("outliner.show_hierarchy", {"type": 'A', "value": 'PRESS'}, None),
@@ -518,10 +520,8 @@ def km_outliner(params):
         ("anim.keyframe_delete", {"type": 'S', "value": 'PRESS', "alt": True}, None),
         ("outliner.drivers_add_selected", {"type": 'D', "value": 'PRESS', "ctrl": True}, None),
         ("outliner.drivers_delete_selected", {"type": 'D', "value": 'PRESS', "ctrl": True, "alt": True}, None),
-        ("outliner.collection_delete", {"type": 'BACK_SPACE', "value": 'PRESS'}, None),
-        ("outliner.collection_delete", {"type": 'DEL', "value": 'PRESS'}, None),
-        ("outliner.object_operation", {"type": 'BACK_SPACE', "value": 'PRESS'},  {"properties": [("type", 'DELETE')]}),
-        ("outliner.object_operation", {"type": 'DEL', "value": 'PRESS'},  {"properties": [("type", 'DELETE')]}),
+        ("outliner.delete", {"type": 'BACK_SPACE', "value": 'PRESS'}, None),
+        ("outliner.delete", {"type": 'DEL', "value": 'PRESS'}, None),
         ("object.move_to_collection", {"type": 'G', "value": 'PRESS', "ctrl": True}, None),
         ("object.link_to_collection", {"type": 'M', "value": 'PRESS', "shift": True, "ctrl": True}, None),
         ("outliner.collection_exclude_set", {"type": 'E', "value": 'PRESS'}, None),
@@ -1682,6 +1682,7 @@ def km_text(params):
         ("text.scroll", {"type": 'TRACKPADPAN', "value": 'ANY'}, None),
         ("text.selection_set", {"type": 'EVT_TWEAK_L', "value": 'ANY'}, None),
         ("text.cursor_set", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+        ("text.selection_set", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True}, None),
         ("text.scroll", {"type": 'WHEELUPMOUSE', "value": 'PRESS'},
          {"properties": [("lines", -1)]}),
         ("text.scroll", {"type": 'WHEELDOWNMOUSE', "value": 'PRESS'},
@@ -2373,7 +2374,7 @@ def km_grease_pencil_stroke_paint_mode(params):
         op_tool_cycle("builtin.cutter", {"type": 'K', "value": 'PRESS'}),
         op_tool_cycle("builtin.cursor", {"type": 'C', "value": 'PRESS'}),
         # Active layer
-        op_menu("GPENCIL_MT_layer_active", {"type": 'M', "value": 'PRESS'}),
+        op_menu("GPENCIL_MT_layer_active", {"type": 'Y', "value": 'PRESS'}),
         # Keyframe menu
         op_menu("VIEW3D_MT_gpencil_animation", {"type": 'I', "value": 'PRESS'}),
     ])
@@ -3374,6 +3375,10 @@ def km_sculpt(params):
         # Remesh
         ("object.voxel_remesh", {"type": 'R', "value": 'PRESS', "ctrl": True}, None),
         ("object.quadriflow_remesh", {"type": 'R', "value": 'PRESS', "ctrl": True, "alt": True}, None),
+        # Remesh
+        ("object.voxel_remesh", {"type": 'R', "value": 'PRESS', "ctrl": True}, None),
+        ("object.voxel_size_edit", {"type": 'R', "value": 'PRESS', "shift": True}, None),
+        ("object.quadriflow_remesh", {"type": 'R', "value": 'PRESS', "ctrl": True, "alt": True}, None),
         # Brush properties
         ("brush.scale_size", {"type": 'LEFT_BRACKET', "value": 'PRESS'},
          {"properties": [("scalar", 0.9)]}),
@@ -3535,7 +3540,7 @@ def km_armature(params):
         ("armature.select_less", {"type": 'DOWN_ARROW', "value": 'PRESS'}, None),
 
         ("armature.select_similar", {"type": 'G', "value": 'PRESS', "shift": True}, None),
-        ("armature.select_linked", {"type": 'RIGHT_BRACKET', "value": 'PRESS'},
+        ("armature.select_linked_pick", {"type": 'RIGHT_BRACKET', "value": 'PRESS'},
          {"properties": [("deselect", False)]}),
 
         ("armature.shortest_path_pick", {"type": 'LEFTMOUSE', "value": 'PRESS', "ctrl": True, "shift": True}, None),
@@ -3747,7 +3752,7 @@ def km_font(params):
         ("font.text_insert", {"type": 'TEXTINPUT', "value": 'ANY', "any": True}, None),
         ("font.text_insert", {"type": 'BACK_SPACE', "value": 'PRESS', "alt": True},
          {"properties": [("accent", True)]}),
-        *_template_items_context_menu("VIEW3D_MT_edit_text_context_menu", {"type": 'RIGHTMOUSE', "value": 'PRESS'}),
+        *_template_items_context_menu("VIEW3D_MT_edit_font_context_menu", {"type": 'RIGHTMOUSE', "value": 'PRESS'}),
     ])
 
 
@@ -3791,7 +3796,7 @@ def km_object_non_modal(params):
          {"properties": [("mode", 'PAINT_GPENCIL')]}),
         ("object.mode_set",{"type": 'FIVE', "value": 'PRESS'},
          {"properties": [("mode", 'WEIGHT_GPENCIL')]}),
-        
+
     ])
 
     return keymap

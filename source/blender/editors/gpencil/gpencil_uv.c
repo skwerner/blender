@@ -92,9 +92,9 @@ static void gpencil_uv_transform_update_header(wmOperator *op, bContext *C)
   const char *str = TIP_("Confirm: Enter/LClick, Cancel: (Esc/RClick) %s");
 
   char msg[UI_MAX_DRAW_STR];
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
-  if (sa) {
+  if (area) {
     char flts_str[NUM_STR_REP_LEN * 2];
     switch (mode) {
       case GP_UV_TRANSLATE: {
@@ -120,7 +120,7 @@ static void gpencil_uv_transform_update_header(wmOperator *op, bContext *C)
         break;
     }
     BLI_snprintf(msg, sizeof(msg), str, flts_str, flts_str + NUM_STR_REP_LEN);
-    ED_area_status_text(sa, msg);
+    ED_area_status_text(area, msg);
   }
 }
 
@@ -176,8 +176,7 @@ static bool gpencil_uv_transform_init(bContext *C, wmOperator *op, const bool is
   float center[3] = {0.0f};
   int i = 0;
   /* Need use evaluated to get the viewport final position. */
-  GP_EVALUATED_STROKES_BEGIN(gpstroke_iter, C, gpl, gps)
-  {
+  GP_EVALUATED_STROKES_BEGIN (gpstroke_iter, C, gpl, gps) {
     if (gps->flag & GP_STROKE_SELECT) {
       float r_center[3];
       gpencil_stroke_center(gps, r_center);
@@ -215,7 +214,7 @@ static bool gpencil_uv_transform_init(bContext *C, wmOperator *op, const bool is
 static void gpencil_uv_transform_exit(bContext *C, wmOperator *op)
 {
   GpUvData *opdata;
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
   opdata = op->customdata;
 
@@ -227,8 +226,8 @@ static void gpencil_uv_transform_exit(bContext *C, wmOperator *op)
 
   WM_cursor_set(CTX_wm_window(C), WM_CURSOR_DEFAULT);
 
-  if (sa) {
-    ED_area_status_text(sa, NULL);
+  if (area) {
+    ED_area_status_text(area, NULL);
   }
   WM_main_add_notifier(NC_GEOM | ND_DATA, NULL);
 
@@ -378,6 +377,9 @@ static int gpencil_transform_fill_exec(bContext *C, wmOperator *op)
 
 static bool gpencil_transform_fill_poll(bContext *C)
 {
+  if (!ED_operator_view3d_active(C)) {
+    return false;
+  }
   Object *ob = CTX_data_active_object(C);
   if ((ob == NULL) || (ob->type != OB_GPENCIL)) {
     return false;

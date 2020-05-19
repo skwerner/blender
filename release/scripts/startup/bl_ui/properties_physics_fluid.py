@@ -176,11 +176,12 @@ class PHYSICS_PT_settings(PhysicButtonsPanel, Panel):
             col.prop(domain, "time_scale", text="Time Scale")
             col.prop(domain, "cfl_condition", text="CFL Number")
 
-            col = flow.column(align=True)
+            col = flow.column()
             col.prop(domain, "use_adaptive_timesteps")
-            col.active = domain.use_adaptive_timesteps
-            col.prop(domain, "timesteps_max", text="Timesteps Maximum")
-            col.prop(domain, "timesteps_min", text="Minimum")
+            sub = col.column(align=True)
+            sub.active = domain.use_adaptive_timesteps
+            sub.prop(domain, "timesteps_max", text="Timesteps Maximum")
+            sub.prop(domain, "timesteps_min", text="Minimum")
 
             col.separator()
 
@@ -193,7 +194,8 @@ class PHYSICS_PT_settings(PhysicButtonsPanel, Panel):
                 col.prop(domain, "gravity", text="Gravity")
 
             col = flow.column()
-            col.prop(domain, "clipping", text="Empty Space")
+            if PhysicButtonsPanel.poll_gas_domain(context):
+                col.prop(domain, "clipping", text="Empty Space")
             col.prop(domain, "delete_in_obstacle", text="Delete In Obstacle")
 
             if domain.cache_type == 'MODULAR':
@@ -234,8 +236,8 @@ class PHYSICS_PT_settings(PhysicButtonsPanel, Panel):
 
             col = grid.column()
             col.prop(flow, "flow_behavior", expand=False)
-            if flow.flow_behavior in {'INFLOW'}:
-                col.prop(flow, "use_inflow", text="Use Inflow")
+            if flow.flow_behavior in {'INFLOW', 'OUTFLOW'}:
+                col.prop(flow, "use_inflow")
 
             col.prop(flow, "subframes", text="Sampling Substeps")
 
@@ -437,7 +439,7 @@ class PHYSICS_PT_fire(PhysicButtonsPanel, Panel):
 class PHYSICS_PT_liquid(PhysicButtonsPanel, Panel):
     bl_label = "Liquid"
     bl_parent_id = 'PHYSICS_PT_fluid'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
@@ -471,21 +473,24 @@ class PHYSICS_PT_liquid(PhysicButtonsPanel, Panel):
         col = flow.column()
         col.prop(domain, "simulation_method", expand=False)
         col.prop(domain, "flip_ratio", text="FLIP Ratio")
-        row = col.row()
-        sub = row.column(align=True)
-        sub.prop(domain, "particle_radius", text="Particle Radius")
-        sub.prop(domain, "particle_number", text="Sampling")
-        sub.prop(domain, "particle_randomness", text="Randomness")
+        col = col.column(align=True)
+        col.prop(domain, "particle_radius", text="Particle Radius")
+        col.prop(domain, "particle_number", text="Sampling")
+        col.prop(domain, "particle_randomness", text="Randomness")
 
         col = flow.column()
-        row = col.row()
-        sub = row.column(align=True)
-        sub.prop(domain, "particle_max", text="Particles Maximum")
-        sub.prop(domain, "particle_min", text="Minimum")
+        col = col.column(align=True)
+        col.prop(domain, "particle_max", text="Particles Maximum")
+        col.prop(domain, "particle_min", text="Minimum")
+
+        col.separator()
+
+        col = col.column()
         col.prop(domain, "particle_band_width", text="Narrow Band Width")
-        row = col.row()
-        sub = row.column(align=True)
-        sub.prop(domain, "use_fractions", text="Fractional Obstacles")
+
+        col = col.column()
+        col.prop(domain, "use_fractions", text="Fractional Obstacles")
+        sub = col.column()
         sub.active = domain.use_fractions
         sub.prop(domain, "fractions_threshold", text="Obstacle-Fluid Threshold")
 
@@ -535,7 +540,7 @@ class PHYSICS_PT_flow_source(PhysicButtonsPanel, Panel):
 class PHYSICS_PT_flow_initial_velocity(PhysicButtonsPanel, Panel):
     bl_label = "Initial Velocity"
     bl_parent_id = 'PHYSICS_PT_settings'
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
@@ -628,7 +633,7 @@ class PHYSICS_PT_adaptive_domain(PhysicButtonsPanel, Panel):
     bl_label = "Adaptive Domain"
     bl_parent_id = 'PHYSICS_PT_settings'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
@@ -837,7 +842,7 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
     bl_label = "Particles"
     bl_parent_id = 'PHYSICS_PT_liquid'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):
@@ -860,13 +865,15 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
         flow.enabled = not is_baking_any
 
         sndparticle_combined_export = domain.sndparticle_combined_export
-        row = flow.row()
+        col = flow.column()
+        row = col.row()
         row.enabled = sndparticle_combined_export in {'OFF', 'FOAM + BUBBLES'}
         row.prop(domain, "use_spray_particles", text="Spray")
         row.prop(domain, "use_foam_particles", text="Foam")
         row.prop(domain, "use_bubble_particles", text="Bubbles")
 
-        col = flow.column()
+        col.separator()
+
         col.prop(domain, "sndparticle_combined_export")
 
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
@@ -981,6 +988,7 @@ class PHYSICS_PT_diffusion(PhysicButtonsPanel, Panel):
         layout.use_property_split = True
 
         domain = context.fluid.domain_settings
+        layout.active = domain.use_diffusion
 
         is_baking_any = domain.is_cache_baking_any
         has_baked_any = domain.has_cache_baked_any
@@ -994,7 +1002,6 @@ class PHYSICS_PT_diffusion(PhysicButtonsPanel, Panel):
         col.prop(domain, "viscosity_exponent", text="Exponent", slider=True)
 
         col = flow.column()
-        col.prop(domain, "domain_size", text="Real World Size")
         col.prop(domain, "surface_tension", text="Surface Tension")
 
 
@@ -1002,7 +1009,7 @@ class PHYSICS_PT_guide(PhysicButtonsPanel, Panel):
     bl_label = "Guides"
     bl_parent_id = 'PHYSICS_PT_fluid'
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_OPENGL'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
     def poll(cls, context):

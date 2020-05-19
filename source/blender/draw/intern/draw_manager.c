@@ -31,10 +31,10 @@
 
 #include "BLF_api.h"
 
-#include "BKE_anim.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
+#include "BKE_duplilist.h"
 #include "BKE_editmesh.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
@@ -63,11 +63,11 @@
 #include "ED_space_api.h"
 #include "ED_view3d.h"
 
-#include "GPU_draw.h"
 #include "GPU_extensions.h"
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
+#include "GPU_state.h"
 #include "GPU_uniformbuffer.h"
 #include "GPU_viewport.h"
 
@@ -145,11 +145,8 @@ bool DRW_object_is_renderable(const Object *ob)
 
   if (ob->type == OB_MESH) {
     if ((ob == DST.draw_ctx.object_edit) || DRW_object_is_in_edit_mode(ob)) {
-
       View3D *v3d = DST.draw_ctx.v3d;
-      const int mask = (V3D_OVERLAY_EDIT_OCCLUDE_WIRE | V3D_OVERLAY_EDIT_WEIGHT);
-
-      if (v3d && v3d->overlay.edit_flag & mask) {
+      if (v3d && v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_OCCLUDE_WIRE) {
         return false;
       }
     }
@@ -693,8 +690,7 @@ void **DRW_duplidata_get(void *vedata)
 
 void *DRW_view_layer_engine_data_get(DrawEngineType *engine_type)
 {
-  for (ViewLayerEngineData *sled = DST.draw_ctx.view_layer->drawdata.first; sled;
-       sled = sled->next) {
+  LISTBASE_FOREACH (ViewLayerEngineData *, sled, &DST.draw_ctx.view_layer->drawdata) {
     if (sled->engine_type == engine_type) {
       return sled->storage;
     }
@@ -925,7 +921,7 @@ void DRW_cache_free_old_batches(Main *bmain)
 
 static void drw_engines_init(void)
 {
-  for (LinkData *link = DST.enabled_engines.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &DST.enabled_engines) {
     DrawEngineType *engine = link->data;
     ViewportEngineData *data = drw_viewport_engine_data_ensure(engine);
     PROFILE_START(stime);
@@ -969,7 +965,7 @@ static void drw_engines_world_update(Scene *scene)
     return;
   }
 
-  for (LinkData *link = DST.enabled_engines.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &DST.enabled_engines) {
     DrawEngineType *engine = link->data;
     ViewportEngineData *data = drw_viewport_engine_data_ensure(engine);
 
@@ -1035,7 +1031,7 @@ static void drw_engines_cache_finish(void)
 
 static void drw_engines_draw_scene(void)
 {
-  for (LinkData *link = DST.enabled_engines.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &DST.enabled_engines) {
     DrawEngineType *engine = link->data;
     ViewportEngineData *data = drw_viewport_engine_data_ensure(engine);
     PROFILE_START(stime);
@@ -1058,7 +1054,7 @@ static void drw_engines_draw_scene(void)
 
 static void drw_engines_draw_text(void)
 {
-  for (LinkData *link = DST.enabled_engines.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &DST.enabled_engines) {
     DrawEngineType *engine = link->data;
     ViewportEngineData *data = drw_viewport_engine_data_ensure(engine);
     PROFILE_START(stime);
@@ -1072,9 +1068,9 @@ static void drw_engines_draw_text(void)
 }
 
 /* Draw render engine info. */
-void DRW_draw_region_engine_info(int xoffset, int yoffset)
+void DRW_draw_region_engine_info(int xoffset, int *yoffset, int line_height)
 {
-  for (LinkData *link = DST.enabled_engines.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &DST.enabled_engines) {
     DrawEngineType *engine = link->data;
     ViewportEngineData *data = drw_viewport_engine_data_ensure(engine);
 
@@ -1095,8 +1091,8 @@ void DRW_draw_region_engine_info(int xoffset, int yoffset)
         if (*chr_current == '\n') {
           char info[GPU_INFO_SIZE];
           BLI_strncpy(info, chr_start, line_len + 1);
-          yoffset -= U.widget_unit;
-          BLF_draw_default(xoffset, yoffset, 0.0f, info, sizeof(info));
+          *yoffset -= line_height;
+          BLF_draw_default(xoffset, *yoffset, 0.0f, info, sizeof(info));
 
           /* Re-start counting. */
           chr_start = chr_current + 1;
@@ -1106,8 +1102,8 @@ void DRW_draw_region_engine_info(int xoffset, int yoffset)
 
       char info[GPU_INFO_SIZE];
       BLI_strncpy(info, chr_start, line_len + 1);
-      yoffset -= U.widget_unit;
-      BLF_draw_default(xoffset, yoffset, 0.0f, info, sizeof(info));
+      *yoffset -= line_height;
+      BLF_draw_default(xoffset, *yoffset, 0.0f, info, sizeof(info));
 
       BLF_disable(font_id, BLF_SHADOW);
     }
@@ -1181,7 +1177,7 @@ static void drw_engines_data_validate(void)
   void **engine_handle_array = BLI_array_alloca(engine_handle_array, enabled_engines + 1);
   int i = 0;
 
-  for (LinkData *link = DST.enabled_engines.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &DST.enabled_engines) {
     DrawEngineType *engine = link->data;
     engine_handle_array[i++] = engine;
   }
@@ -1248,7 +1244,7 @@ void DRW_notify_view_update(const DRWUpdateContext *update_ctx)
     drw_engines_enable(view_layer, engine_type, gpencil_engine_needed);
     drw_engines_data_validate();
 
-    for (LinkData *link = DST.enabled_engines.first; link; link = link->next) {
+    LISTBASE_FOREACH (LinkData *, link, &DST.enabled_engines) {
       DrawEngineType *draw_engine = link->data;
       ViewportEngineData *data = drw_viewport_engine_data_ensure(draw_engine);
 
@@ -1300,9 +1296,6 @@ void DRW_draw_callbacks_post_scene(void)
     DRW_state_reset();
 
     GPU_framebuffer_bind(dfbl->overlay_fb);
-    /* Disable sRGB encoding from the fixed function pipeline since all the drawing in this
-     * function is done with sRGB color. Avoid double transform. */
-    glDisable(GL_FRAMEBUFFER_SRGB);
 
     GPU_matrix_projection_set(rv3d->winmat);
     GPU_matrix_set(rv3d->viewmat);
@@ -1513,6 +1506,8 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
 
   /* Fix 3D view being "laggy" on macos and win+nvidia. (See T56996, T61474) */
   GPU_flush();
+
+  DRW_stats_reset();
 
   DRW_draw_callbacks_post_scene();
 
@@ -2032,7 +2027,7 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
         Object *obweight = OBWEIGHTPAINT_FROM_OBACT(obact);
         if (obweight) {
           /* Only use Armature pose selection, when connected armature is in pose mode. */
-          Object *ob_armature = modifiers_isDeformedByArmature(obweight);
+          Object *ob_armature = BKE_modifiers_is_deformed_by_armature(obweight);
           if (ob_armature && ob_armature->mode == OB_MODE_POSE) {
             obpose = ob_armature;
           }
@@ -2061,7 +2056,9 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
   }
   else if (!draw_surface) {
     /* grease pencil selection */
-    use_drw_engine(&draw_engine_gpencil_type);
+    if (drw_gpencil_engine_needed(depsgraph, v3d)) {
+      use_drw_engine(&draw_engine_gpencil_type);
+    }
 
     drw_engines_enable_overlays();
   }
@@ -2069,7 +2066,9 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
     /* Draw surface for occlusion. */
     drw_engines_enable_basic();
     /* grease pencil selection */
-    use_drw_engine(&draw_engine_gpencil_type);
+    if (drw_gpencil_engine_needed(depsgraph, v3d)) {
+      use_drw_engine(&draw_engine_gpencil_type);
+    }
 
     drw_engines_enable_overlays();
   }
@@ -2433,7 +2432,8 @@ static void draw_world_clip_planes_from_rv3d(GPUBatch *batch, const float world_
 /**
  * Clears the Depth Buffer and draws only the specified object.
  */
-void DRW_draw_depth_object(ARegion *region, View3D *v3d, GPUViewport *viewport, Object *object)
+void DRW_draw_depth_object(
+    Scene *scene, ARegion *region, View3D *v3d, GPUViewport *viewport, Object *object)
 {
   RegionView3D *rv3d = region->regiondata;
 
@@ -2471,7 +2471,7 @@ void DRW_draw_depth_object(ARegion *region, View3D *v3d, GPUViewport *viewport, 
         batch = DRW_mesh_batch_cache_get_surface(me);
       }
 
-      DRW_mesh_batch_cache_create_requested(object, me, NULL, false, true);
+      DRW_mesh_batch_cache_create_requested(object, me, scene, false, true);
 
       const eGPUShaderConfig sh_cfg = world_clip_planes ? GPU_SHADER_CFG_CLIPPED :
                                                           GPU_SHADER_CFG_DEFAULT;
@@ -2572,6 +2572,15 @@ bool DRW_state_is_playback(void)
     return ED_screen_animation_playing(wm) != NULL;
   }
   return false;
+}
+
+/**
+ * Is the user navigating the region.
+ */
+bool DRW_state_is_navigating(void)
+{
+  const RegionView3D *rv3d = DST.draw_ctx.rv3d;
+  return (rv3d) && (rv3d->rflag & (RV3D_NAVIGATING | RV3D_PAINTING));
 }
 
 /**

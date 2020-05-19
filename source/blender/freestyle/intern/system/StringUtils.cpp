@@ -19,12 +19,10 @@
  * \brief String utilities
  */
 
-/* clang-format off */
 // soc #include <qfileinfo.h>
 
-#include "FreestyleConfig.h"
 #include "StringUtils.h"
-/* clang-format on */
+#include "FreestyleConfig.h"
 
 namespace Freestyle {
 
@@ -48,7 +46,7 @@ void getPathName(const string &path, const string &base, vector<string> &pathnam
     dir = path.substr(pos, sep - pos);
 
     BLI_strncpy(cleaned, dir.c_str(), FILE_MAX);
-    BLI_cleanup_path(NULL, cleaned);
+    BLI_path_normalize(NULL, cleaned);
     res = string(cleaned);
 
     if (!base.empty()) {

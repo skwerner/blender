@@ -55,6 +55,8 @@
 #  include "BKE_node.h"
 #  include "BKE_scene.h"
 
+#  include "BLI_listbase.h"
+
 #  include "DEG_depsgraph_build.h"
 #  include "DEG_depsgraph_query.h"
 
@@ -297,19 +299,6 @@ static void rna_LayerCollection_hide_viewport_set(PointerRNA *ptr, bool value)
   rna_LayerCollection_flag_set(ptr, value, LAYER_COLLECTION_HIDE);
 }
 
-static void rna_LayerCollection_exclude_update_recursive(ListBase *lb, const bool exclude)
-{
-  for (LayerCollection *lc = lb->first; lc; lc = lc->next) {
-    if (exclude) {
-      lc->flag |= LAYER_COLLECTION_EXCLUDE;
-    }
-    else {
-      lc->flag &= ~LAYER_COLLECTION_EXCLUDE;
-    }
-    rna_LayerCollection_exclude_update_recursive(&lc->layer_collections, exclude);
-  }
-}
-
 static void rna_LayerCollection_exclude_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
   Scene *scene = (Scene *)ptr->owner_id;
@@ -318,7 +307,7 @@ static void rna_LayerCollection_exclude_update(Main *bmain, Scene *UNUSED(scene)
 
   /* Set/Unset it recursively to match the behavior of excluding via the menu or shortcuts. */
   const bool exclude = (lc->flag & LAYER_COLLECTION_EXCLUDE) != 0;
-  rna_LayerCollection_exclude_update_recursive(&lc->layer_collections, exclude);
+  BKE_layer_collection_set_flag(lc, LAYER_COLLECTION_EXCLUDE, exclude);
 
   BKE_layer_collection_sync(scene, view_layer);
 

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2016 Kévin Dietrich.
@@ -68,6 +68,8 @@ struct CDStreamConfig {
   Alembic::AbcGeom::index_t index;
   Alembic::AbcGeom::index_t ceil_index;
 
+  const char **modifier_error_message;
+
   CDStreamConfig()
       : mloop(NULL),
         totloop(0),
@@ -80,7 +82,8 @@ struct CDStreamConfig {
         weight(0.0f),
         time(0.0f),
         index(0),
-        ceil_index(0)
+        ceil_index(0),
+        modifier_error_message(NULL)
   {
   }
 };

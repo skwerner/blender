@@ -80,6 +80,7 @@ void wm_autosave_location(char *filepath);
 
 /* wm_splash_screen.c */
 void WM_OT_splash(wmOperatorType *ot);
+void WM_OT_splash_about(wmOperatorType *ot);
 
 /* wm_stereo.c */
 void wm_stereo3d_draw_sidebyside(wmWindow *win, int view);
@@ -96,14 +97,4 @@ void wm_stereo3d_set_cancel(bContext *C, wmOperator *op);
 void wm_open_init_load_ui(wmOperator *op, bool use_prefs);
 void wm_open_init_use_scripts(wmOperator *op, bool use_prefs);
 
-#ifdef WITH_XR_OPENXR
-typedef void (*wmXrSessionExitFn)(const wmXrData *xr_data);
-
-/* wm_xr.c */
-bool wm_xr_init(wmWindowManager *wm);
-void wm_xr_exit(wmWindowManager *wm);
-void wm_xr_session_toggle(wmWindowManager *wm, wmXrSessionExitFn session_exit_fn);
-bool wm_xr_events_handle(wmWindowManager *wm);
 #endif
-
-#endif /* __WM_H__ */

@@ -68,7 +68,9 @@
 
 #include "BKE_DerivedMesh.h"
 #include "BKE_action.h"
-#include "BKE_anim.h"
+#include "BKE_anim_data.h"
+#include "BKE_anim_path.h"
+#include "BKE_anim_visualization.h"
 #include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_camera.h"
@@ -77,9 +79,11 @@
 #include "BKE_curve.h"
 #include "BKE_deform.h"
 #include "BKE_displist.h"
+#include "BKE_duplilist.h"
 #include "BKE_editmesh.h"
 #include "BKE_effect.h"
 #include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 #include "BKE_font.h"
 #include "BKE_global.h"
 #include "BKE_gpencil.h"
@@ -172,9 +176,6 @@ static void object_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const in
 {
   Object *ob_dst = (Object *)id_dst;
   const Object *ob_src = (const Object *)id_src;
-  ModifierData *md;
-  GpencilModifierData *gmd;
-  ShaderFxData *fx;
 
   /* Do not copy runtime data. */
   BKE_object_runtime_reset_on_copy(ob_dst, flag);
@@ -204,28 +205,28 @@ static void object_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const in
 
   BLI_listbase_clear(&ob_dst->modifiers);
 
-  for (md = ob_src->modifiers.first; md; md = md->next) {
-    ModifierData *nmd = modifier_new(md->type);
+  LISTBASE_FOREACH (ModifierData *, md, &ob_src->modifiers) {
+    ModifierData *nmd = BKE_modifier_new(md->type);
     BLI_strncpy(nmd->name, md->name, sizeof(nmd->name));
-    modifier_copyData_ex(md, nmd, flag_subdata);
+    BKE_modifier_copydata_ex(md, nmd, flag_subdata);
     BLI_addtail(&ob_dst->modifiers, nmd);
   }
 
   BLI_listbase_clear(&ob_dst->greasepencil_modifiers);
 
-  for (gmd = ob_src->greasepencil_modifiers.first; gmd; gmd = gmd->next) {
+  LISTBASE_FOREACH (GpencilModifierData *, gmd, &ob_src->greasepencil_modifiers) {
     GpencilModifierData *nmd = BKE_gpencil_modifier_new(gmd->type);
     BLI_strncpy(nmd->name, gmd->name, sizeof(nmd->name));
-    BKE_gpencil_modifier_copyData_ex(gmd, nmd, flag_subdata);
+    BKE_gpencil_modifier_copydata_ex(gmd, nmd, flag_subdata);
     BLI_addtail(&ob_dst->greasepencil_modifiers, nmd);
   }
 
   BLI_listbase_clear(&ob_dst->shader_fx);
 
-  for (fx = ob_src->shader_fx.first; fx; fx = fx->next) {
+  LISTBASE_FOREACH (ShaderFxData *, fx, &ob_src->shader_fx) {
     ShaderFxData *nfx = BKE_shaderfx_new(fx->type);
     BLI_strncpy(nfx->name, fx->name, sizeof(nfx->name));
-    BKE_shaderfx_copyData_ex(fx, nfx, flag_subdata);
+    BKE_shaderfx_copydata_ex(fx, nfx, flag_subdata);
     BLI_addtail(&ob_dst->shader_fx, nfx);
   }
 
@@ -433,7 +434,7 @@ void BKE_object_free_modifiers(Object *ob, const int flag)
   GpencilModifierData *gp_md;
 
   while ((md = BLI_pophead(&ob->modifiers))) {
-    modifier_free_ex(md, flag);
+    BKE_modifier_free_ex(md, flag);
   }
 
   while ((gp_md = BLI_pophead(&ob->greasepencil_modifiers))) {
@@ -509,69 +510,97 @@ bool BKE_object_support_modifier_type_check(const Object *ob, int modifier_type)
 {
   const ModifierTypeInfo *mti;
 
-  mti = modifierType_getInfo(modifier_type);
+  mti = BKE_modifier_get_info(modifier_type);
 
-  /* only geometry objects should be able to get modifiers [#25291] */
-  if (!ELEM(ob->type, OB_MESH, OB_CURVE, OB_SURF, OB_FONT, OB_LATTICE)) {
-    return false;
+  /* Only geometry objects should be able to get modifiers [#25291] */
+  if (ob->type == OB_HAIR) {
+    return (mti->modifyHair != NULL) || (mti->flags & eModifierTypeFlag_AcceptsVertexCosOnly);
+  }
+  else if (ob->type == OB_POINTCLOUD) {
+    return (mti->modifyPointCloud != NULL) ||
+           (mti->flags & eModifierTypeFlag_AcceptsVertexCosOnly);
+  }
+  else if (ob->type == OB_VOLUME) {
+    return (mti->modifyVolume != NULL);
+  }
+  else if (ELEM(ob->type, OB_MESH, OB_CURVE, OB_SURF, OB_FONT, OB_LATTICE)) {
+    if (ob->type == OB_LATTICE && (mti->flags & eModifierTypeFlag_AcceptsVertexCosOnly) == 0) {
+      return false;
+    }
+
+    if (!((mti->flags & eModifierTypeFlag_AcceptsCVs) ||
+          (ob->type == OB_MESH && (mti->flags & eModifierTypeFlag_AcceptsMesh)))) {
+      return false;
+    }
+
+    return true;
   }
 
-  if (ob->type == OB_LATTICE && (mti->flags & eModifierTypeFlag_AcceptsLattice) == 0) {
-    return false;
-  }
-
-  if (!((mti->flags & eModifierTypeFlag_AcceptsCVs) ||
-        (ob->type == OB_MESH && (mti->flags & eModifierTypeFlag_AcceptsMesh)))) {
-    return false;
-  }
-
-  return true;
+  return false;
 }
 
 void BKE_object_link_modifiers(struct Object *ob_dst, const struct Object *ob_src)
 {
-  ModifierData *md;
   BKE_object_free_modifiers(ob_dst, 0);
 
-  if (!ELEM(ob_dst->type, OB_MESH, OB_CURVE, OB_SURF, OB_FONT, OB_LATTICE)) {
+  if (!ELEM(ob_dst->type, OB_MESH, OB_CURVE, OB_SURF, OB_FONT, OB_LATTICE, OB_GPENCIL)) {
     /* only objects listed above can have modifiers and linking them to objects
      * which doesn't have modifiers stack is quite silly */
     return;
   }
 
-  for (md = ob_src->modifiers.first; md; md = md->next) {
-    ModifierData *nmd = NULL;
+  /* No grease pencil modifiers. */
+  if ((ob_src->type != OB_GPENCIL) && (ob_dst->type != OB_GPENCIL)) {
+    LISTBASE_FOREACH (ModifierData *, md, &ob_src->modifiers) {
+      ModifierData *nmd = NULL;
 
-    if (ELEM(md->type, eModifierType_Hook, eModifierType_Collision)) {
-      continue;
+      if (ELEM(md->type, eModifierType_Hook, eModifierType_Collision)) {
+        continue;
+      }
+
+      if (!BKE_object_support_modifier_type_check(ob_dst, md->type)) {
+        continue;
+      }
+
+      switch (md->type) {
+        case eModifierType_Softbody:
+          BKE_object_copy_softbody(ob_dst, ob_src, 0);
+          break;
+        case eModifierType_Skin:
+          /* ensure skin-node customdata exists */
+          BKE_mesh_ensure_skin_customdata(ob_dst->data);
+          break;
+      }
+
+      nmd = BKE_modifier_new(md->type);
+      BLI_strncpy(nmd->name, md->name, sizeof(nmd->name));
+
+      if (md->type == eModifierType_Multires) {
+        /* Has to be done after mod creation, but *before* we actually copy its settings! */
+        multiresModifier_sync_levels_ex(
+            ob_dst, (MultiresModifierData *)md, (MultiresModifierData *)nmd);
+      }
+
+      BKE_modifier_copydata(md, nmd);
+      BLI_addtail(&ob_dst->modifiers, nmd);
+      BKE_modifier_unique_name(&ob_dst->modifiers, nmd);
     }
+  }
 
-    if (!BKE_object_support_modifier_type_check(ob_dst, md->type)) {
-      continue;
+  /* Copy grease pencil modifiers. */
+  if ((ob_src->type == OB_GPENCIL) && (ob_dst->type == OB_GPENCIL)) {
+    LISTBASE_FOREACH (GpencilModifierData *, md, &ob_src->greasepencil_modifiers) {
+      GpencilModifierData *nmd = NULL;
+
+      nmd = BKE_gpencil_modifier_new(md->type);
+      BLI_strncpy(nmd->name, md->name, sizeof(nmd->name));
+
+      const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
+      mti->copyData(md, nmd);
+
+      BLI_addtail(&ob_dst->greasepencil_modifiers, nmd);
+      BKE_gpencil_modifier_unique_name(&ob_dst->greasepencil_modifiers, nmd);
     }
-
-    switch (md->type) {
-      case eModifierType_Softbody:
-        BKE_object_copy_softbody(ob_dst, ob_src, 0);
-        break;
-      case eModifierType_Skin:
-        /* ensure skin-node customdata exists */
-        BKE_mesh_ensure_skin_customdata(ob_dst->data);
-        break;
-    }
-
-    nmd = modifier_new(md->type);
-    BLI_strncpy(nmd->name, md->name, sizeof(nmd->name));
-
-    if (md->type == eModifierType_Multires) {
-      /* Has to be done after mod creation, but *before* we actually copy its settings! */
-      multiresModifier_sync_levels_ex(
-          ob_dst, (MultiresModifierData *)md, (MultiresModifierData *)nmd);
-    }
-
-    modifier_copyData(md, nmd);
-    BLI_addtail(&ob_dst->modifiers, nmd);
-    modifier_unique_name(&ob_dst->modifiers, nmd);
   }
 
   BKE_object_copy_particlesystems(ob_dst, ob_src, 0);
@@ -1279,8 +1308,8 @@ ParticleSystem *BKE_object_copy_particlesystem(ParticleSystem *psys, const int f
   psys_copy_particles(psysn, psys);
 
   if (psys->clmd) {
-    psysn->clmd = (ClothModifierData *)modifier_new(eModifierType_Cloth);
-    modifier_copyData_ex((ModifierData *)psys->clmd, (ModifierData *)psysn->clmd, flag);
+    psysn->clmd = (ClothModifierData *)BKE_modifier_new(eModifierType_Cloth);
+    BKE_modifier_copydata_ex((ModifierData *)psys->clmd, (ModifierData *)psysn->clmd, flag);
     psys->hair_in_mesh = psys->hair_out_mesh = NULL;
   }
 
@@ -1433,7 +1462,7 @@ Object *BKE_object_pose_armature_get(Object *ob)
     return ob;
   }
 
-  ob = modifiers_isDeformedByArmature(ob);
+  ob = BKE_modifiers_is_deformed_by_armature(ob);
 
   /* Only use selected check when non-active. */
   if (BKE_object_pose_context_check(ob)) {
@@ -1880,7 +1909,9 @@ bool BKE_object_obdata_is_libdata(const Object *ob)
   return (ob && ob->data && ID_IS_LINKED(ob->data));
 }
 
-/* *************** PROXY **************** */
+/* -------------------------------------------------------------------- */
+/** \name Object Proxy API
+ * \{ */
 
 /* when you make proxy, ensure the exposed layers are extern */
 static void armature_set_id_extern(Object *ob)
@@ -2090,7 +2121,11 @@ void BKE_object_obdata_size_init(struct Object *ob, const float size)
   }
 }
 
-/* *************** CALC ****************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Object Matrix Get/Set API
+ * \{ */
 
 void BKE_object_scale_to_mat3(Object *ob, float mat[3][3])
 {
@@ -2583,6 +2618,12 @@ void BKE_object_get_parent_matrix(Object *ob, Object *par, float parentmat[4][4]
   }
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Object Matrix Evaluation API
+ * \{ */
+
 /**
  * \param r_originmat: Optional matrix that stores the space the object is in
  * (without its own matrix applied)
@@ -2662,7 +2703,7 @@ void BKE_object_where_is_calc_time(Depsgraph *depsgraph, Scene *scene, Object *o
 {
   /* Execute drivers and animation. */
   const bool flush_to_original = DEG_is_active(depsgraph);
-  BKE_animsys_evaluate_animdata(scene, &ob->id, ob->adt, ctime, ADT_RECALC_ALL, flush_to_original);
+  BKE_animsys_evaluate_animdata(&ob->id, ob->adt, ctime, ADT_RECALC_ALL, flush_to_original);
   object_where_is_calc_ex(depsgraph, scene, ob, ctime, NULL, NULL);
 }
 
@@ -2787,6 +2828,12 @@ void BKE_object_apply_mat4(Object *ob,
   BKE_object_apply_mat4_ex(ob, mat, use_parent ? ob->parent : NULL, ob->parentinv, use_compat);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Object Bounding Box API
+ * \{ */
+
 BoundBox *BKE_boundbox_alloc_unit(void)
 {
   BoundBox *bb;
@@ -2907,6 +2954,8 @@ void BKE_object_boundbox_calc_from_mesh(struct Object *ob, struct Mesh *me_eval)
 
   ob->runtime.bb->flag &= ~BOUNDBOX_DIRTY;
 }
+
+/** \} */
 
 /* -------------------------------------------------------------------- */
 /** \name Object Dimension Get/Set
@@ -3591,9 +3640,11 @@ void BKE_object_delete_ptcache(Object *ob, int index)
   BLI_freelinkN(&ob->pc_ids, link);
 }
 
-/* shape key utility function */
+/* -------------------------------------------------------------------- */
+/** \name Object Data Shape Key Insert
+ * \{ */
 
-/************************* Mesh ************************/
+/* Mesh */
 static KeyBlock *insert_meshkey(Main *bmain, Object *ob, const char *name, const bool from_mix)
 {
   Mesh *me = ob->data;
@@ -3625,7 +3676,7 @@ static KeyBlock *insert_meshkey(Main *bmain, Object *ob, const char *name, const
 
   return kb;
 }
-/************************* Lattice ************************/
+/* Lattice */
 static KeyBlock *insert_lattkey(Main *bmain, Object *ob, const char *name, const bool from_mix)
 {
   Lattice *lt = ob->data;
@@ -3663,7 +3714,7 @@ static KeyBlock *insert_lattkey(Main *bmain, Object *ob, const char *name, const
 
   return kb;
 }
-/************************* Curve ************************/
+/* Curve */
 static KeyBlock *insert_curvekey(Main *bmain, Object *ob, const char *name, const bool from_mix)
 {
   Curve *cu = ob->data;
@@ -3703,6 +3754,12 @@ static KeyBlock *insert_curvekey(Main *bmain, Object *ob, const char *name, cons
 
   return kb;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Object Shape Key API
+ * \{ */
 
 KeyBlock *BKE_object_shapekey_insert(Main *bmain,
                                      Object *ob,
@@ -3801,6 +3858,8 @@ bool BKE_object_shapekey_remove(Main *bmain, Object *ob, KeyBlock *kb)
   return true;
 }
 
+/** \} */
+
 bool BKE_object_flag_test_recursive(const Object *ob, short flag)
 {
   if (ob->flag & flag) {
@@ -3837,16 +3896,16 @@ int BKE_object_is_modified(Scene *scene, Object *ob)
     ModifierData *md;
     VirtualModifierData virtualModifierData;
     /* cloth */
-    for (md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+    for (md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
          md && (flag != (eModifierMode_Render | eModifierMode_Realtime));
          md = md->next) {
       if ((flag & eModifierMode_Render) == 0 &&
-          modifier_isEnabled(scene, md, eModifierMode_Render)) {
+          BKE_modifier_is_enabled(scene, md, eModifierMode_Render)) {
         flag |= eModifierMode_Render;
       }
 
       if ((flag & eModifierMode_Realtime) == 0 &&
-          modifier_isEnabled(scene, md, eModifierMode_Realtime)) {
+          BKE_modifier_is_enabled(scene, md, eModifierMode_Realtime)) {
         flag |= eModifierMode_Realtime;
       }
     }
@@ -3975,10 +4034,10 @@ int BKE_object_is_deform_modified(Scene *scene, Object *ob)
   }
 
   /* cloth */
-  for (md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
+  for (md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
        md && (flag != (eModifierMode_Render | eModifierMode_Realtime));
        md = md->next) {
-    const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
     bool can_deform = mti->type == eModifierTypeType_OnlyDeform || is_modifier_animated;
 
     if (!can_deform) {
@@ -3986,12 +4045,13 @@ int BKE_object_is_deform_modified(Scene *scene, Object *ob)
     }
 
     if (can_deform) {
-      if (!(flag & eModifierMode_Render) && modifier_isEnabled(scene, md, eModifierMode_Render)) {
+      if (!(flag & eModifierMode_Render) &&
+          BKE_modifier_is_enabled(scene, md, eModifierMode_Render)) {
         flag |= eModifierMode_Render;
       }
 
       if (!(flag & eModifierMode_Realtime) &&
-          modifier_isEnabled(scene, md, eModifierMode_Realtime)) {
+          BKE_modifier_is_enabled(scene, md, eModifierMode_Realtime)) {
         flag |= eModifierMode_Realtime;
       }
     }
@@ -4326,7 +4386,7 @@ KDTree_3d *BKE_object_as_kdtree(Object *ob, int *r_tot)
 
 bool BKE_object_modifier_use_time(Object *ob, ModifierData *md)
 {
-  if (modifier_dependsOnTime(md)) {
+  if (BKE_modifier_depends_ontime(md)) {
     return true;
   }
 
@@ -4369,7 +4429,7 @@ bool BKE_object_modifier_use_time(Object *ob, ModifierData *md)
 
 bool BKE_object_modifier_gpencil_use_time(Object *ob, GpencilModifierData *md)
 {
-  if (BKE_gpencil_modifier_dependsOnTime(md)) {
+  if (BKE_gpencil_modifier_depends_ontime(md)) {
     return true;
   }
 
@@ -4404,7 +4464,7 @@ bool BKE_object_modifier_gpencil_use_time(Object *ob, GpencilModifierData *md)
 
 bool BKE_object_shaderfx_use_time(Object *ob, ShaderFxData *fx)
 {
-  if (BKE_shaderfx_dependsOnTime(fx)) {
+  if (BKE_shaderfx_depends_ontime(fx)) {
     return true;
   }
 
@@ -4470,7 +4530,7 @@ bool BKE_object_modifier_update_subframe(Depsgraph *depsgraph,
                                          int type)
 {
   const bool flush_to_original = DEG_is_active(depsgraph);
-  ModifierData *md = modifiers_findByType(ob, (ModifierType)type);
+  ModifierData *md = BKE_modifiers_findby_type(ob, (ModifierType)type);
   bConstraint *con;
 
   if (type == eModifierType_DynamicPaint) {
@@ -4534,8 +4594,7 @@ bool BKE_object_modifier_update_subframe(Depsgraph *depsgraph,
   /* TODO(sergey): What about animation? */
   ob->id.recalc |= ID_RECALC_ALL;
   if (update_mesh) {
-    BKE_animsys_evaluate_animdata(
-        scene, &ob->id, ob->adt, frame, ADT_RECALC_ANIM, flush_to_original);
+    BKE_animsys_evaluate_animdata(&ob->id, ob->adt, frame, ADT_RECALC_ANIM, flush_to_original);
     /* ignore cache clear during subframe updates
      * to not mess up cache validity */
     object_cacheIgnoreClear(ob, 1);
@@ -4549,14 +4608,12 @@ bool BKE_object_modifier_update_subframe(Depsgraph *depsgraph,
   /* for curve following objects, parented curve has to be updated too */
   if (ob->type == OB_CURVE) {
     Curve *cu = ob->data;
-    BKE_animsys_evaluate_animdata(
-        scene, &cu->id, cu->adt, frame, ADT_RECALC_ANIM, flush_to_original);
+    BKE_animsys_evaluate_animdata(&cu->id, cu->adt, frame, ADT_RECALC_ANIM, flush_to_original);
   }
   /* and armatures... */
   if (ob->type == OB_ARMATURE) {
     bArmature *arm = ob->data;
-    BKE_animsys_evaluate_animdata(
-        scene, &arm->id, arm->adt, frame, ADT_RECALC_ANIM, flush_to_original);
+    BKE_animsys_evaluate_animdata(&arm->id, arm->adt, frame, ADT_RECALC_ANIM, flush_to_original);
     BKE_pose_where_is(depsgraph, scene, ob);
   }
 

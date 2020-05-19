@@ -619,7 +619,7 @@ static int arg_handle_print_help(int UNUSED(argc), const char **UNUSED(argv), vo
   printf("Misc Options:\n");
   BLI_argsPrintArgDoc(ba, "--app-template");
   BLI_argsPrintArgDoc(ba, "--factory-startup");
-  BLI_argsPrintArgDoc(ba, "--enable-library-override");
+  BLI_argsPrintArgDoc(ba, "--disable-library-override");
   BLI_argsPrintArgDoc(ba, "--enable-event-simulate");
   printf("\n");
   BLI_argsPrintArgDoc(ba, "--env-system-datafiles");
@@ -959,7 +959,7 @@ static const char arg_handle_debug_mode_generic_set_doc_jobs[] =
     "Enable time profiling for background jobs.";
 static const char arg_handle_debug_mode_generic_set_doc_gpu[] =
     "\n\t"
-    "Enable gpu debug context and information for OpenGL 4.3+.";
+    "Enable GPU debug context and information for OpenGL 4.3+.";
 static const char arg_handle_debug_mode_generic_set_doc_depsgraph[] =
     "\n\t"
     "Enable all debug messages from dependency graph.";
@@ -995,7 +995,7 @@ static int arg_handle_debug_mode_generic_set(int UNUSED(argc),
 
 static const char arg_handle_debug_mode_io_doc[] =
     "\n\t"
-    "Enable debug messages for I/O (collada, ...).";
+    "Enable debug messages for I/O (Collada, ...).";
 static int arg_handle_debug_mode_io(int UNUSED(argc),
                                     const char **UNUSED(argv),
                                     void *UNUSED(data))
@@ -1124,7 +1124,7 @@ static int arg_handle_factory_startup_set(int UNUSED(argc),
 
 static const char arg_handle_disable_override_library_doc[] =
     "\n\t"
-    "Enable Library Override features in the UI.";
+    "Disable Library Override features in the UI.";
 static int arg_handle_disable_override_library(int UNUSED(argc),
                                                const char **UNUSED(argv),
                                                void *UNUSED(data))
@@ -1369,6 +1369,7 @@ static int arg_handle_output_set(int argc, const char **argv, void *data)
     Scene *scene = CTX_data_scene(C);
     if (scene) {
       BLI_strncpy(scene->r.pic, argv[1], sizeof(scene->r.pic));
+      DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
     }
     else {
       printf("\nError: no blend loaded. cannot use '-o / --render-output'.\n");
@@ -1402,6 +1403,7 @@ static int arg_handle_engine_set(int argc, const char **argv, void *data)
       if (scene) {
         if (BLI_findstring(&R_engines, argv[1], offsetof(RenderEngineType, idname))) {
           BLI_strncpy_utf8(scene->r.engine, argv[1], sizeof(scene->r.engine));
+          DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
         }
         else {
           printf("\nError: engine not found '%s'\n", argv[1]);
@@ -1447,6 +1449,7 @@ static int arg_handle_image_type_set(int argc, const char **argv, void *data)
       }
       else {
         scene->r.im_format.imtype = imtype_new;
+        DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
       }
     }
     else {
@@ -1494,7 +1497,7 @@ static int arg_handle_threads_set(int argc, const char **argv, void *UNUSED(data
 
 static const char arg_handle_verbosity_set_doc[] =
     "<verbose>\n"
-    "\tSet logging verbosity level for debug messages which supports it.";
+    "\tSet the logging verbosity level for debug messages that support it.";
 static int arg_handle_verbosity_set(int argc, const char **argv, void *UNUSED(data))
 {
   const char *arg_id = "--verbose";
@@ -1532,9 +1535,11 @@ static int arg_handle_extension_set(int argc, const char **argv, void *data)
     if (scene) {
       if (argv[1][0] == '0') {
         scene->r.scemode &= ~R_EXTENSION;
+        DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
       }
       else if (argv[1][0] == '1') {
         scene->r.scemode |= R_EXTENSION;
+        DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
       }
       else {
         printf("\nError: Use '-x 1 / -x 0' To set the extension option or '--use-extension'\n");
@@ -1693,6 +1698,9 @@ static int arg_handle_frame_start_set(int argc, const char **argv, void *data)
                                     &err_msg)) {
         printf("\nError: %s '%s %s'.\n", err_msg, arg_id, argv[1]);
       }
+      else {
+        DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
+      }
       return 1;
     }
     else {
@@ -1727,6 +1735,9 @@ static int arg_handle_frame_end_set(int argc, const char **argv, void *data)
                                     &err_msg)) {
         printf("\nError: %s '%s %s'.\n", err_msg, arg_id, argv[1]);
       }
+      else {
+        DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
+      }
       return 1;
     }
     else {
@@ -1754,6 +1765,9 @@ static int arg_handle_frame_skip_set(int argc, const char **argv, void *data)
       if (!parse_int_clamp(argv[1], NULL, 1, MAXFRAME, &scene->r.frame_step, &err_msg)) {
         printf("\nError: %s '%s %s'.\n", err_msg, arg_id, argv[1]);
       }
+      else {
+        DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
+      }
       return 1;
     }
     else {
@@ -1780,7 +1794,7 @@ static int arg_handle_python_file_run(int argc, const char **argv, void *data)
     /* Make the path absolute because its needed for relative linked blends to be found */
     char filename[FILE_MAX];
     BLI_strncpy(filename, argv[1], sizeof(filename));
-    BLI_path_cwd(filename, sizeof(filename));
+    BLI_path_abs_from_cwd(filename, sizeof(filename));
 
     bool ok;
     BPY_CTX_SETUP(ok = BPY_execute_filepath(C, filename, NULL));
@@ -1924,12 +1938,15 @@ static int arg_handle_python_exit_code_set(int argc, const char **argv, void *UN
 
 static const char arg_handle_python_use_system_env_set_doc[] =
     "\n\t"
-    "Allow Python to use system environment variables such as 'PYTHONPATH'.";
+    "Allow Python to use system environment variables such as 'PYTHONPATH' and the user "
+    "site-packages directory.";
 static int arg_handle_python_use_system_env_set(int UNUSED(argc),
                                                 const char **UNUSED(argv),
                                                 void *UNUSED(data))
 {
+#  ifdef WITH_PYTHON
   BPY_python_use_system_env();
+#  endif
   return 0;
 }
 
@@ -1980,7 +1997,7 @@ static int arg_handle_load_file(int UNUSED(argc), const char **argv, void *data)
   }
 
   BLI_strncpy(filename, argv[0], sizeof(filename));
-  BLI_path_cwd(filename, sizeof(filename));
+  BLI_path_abs_from_cwd(filename, sizeof(filename));
 
   /* load the file */
   BKE_reports_init(&reports, RPT_PRINT);

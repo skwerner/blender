@@ -64,14 +64,14 @@ set(SRC
   ${CMAKE_SOURCE_DIR}/release/datafiles/userdef/userdef_default.c
   intern/CCGSubSurf.c
   intern/CCGSubSurf_legacy.c
-  intern/CCGSubSurf_opensubdiv.c
-  intern/CCGSubSurf_opensubdiv_converter.c
   intern/CCGSubSurf_util.c
   intern/DerivedMesh.c
   intern/action.c
   intern/addon.c
-  intern/anim.c
+  intern/anim_data.c
+  intern/anim_path.c
   intern/anim_sys.c
+  intern/anim_visualization.c
   intern/appdir.c
   intern/armature.c
   intern/armature_update.c
@@ -114,11 +114,13 @@ set(SRC
   intern/editmesh_tangent.c
   intern/effect.c
   intern/fcurve.c
+  intern/fcurve_driver.c
   intern/fluid.c
   intern/fmodifier.c
   intern/font.c
   intern/freestyle.c
   intern/gpencil.c
+  intern/gpencil_curve.c
   intern/gpencil_geom.c
   intern/gpencil_modifier.c
   intern/hair.c
@@ -173,9 +175,11 @@ set(SRC
   intern/multires_reshape_apply_base.c
   intern/multires_reshape_ccg.c
   intern/multires_reshape_smooth.c
+  intern/multires_reshape_subdivide.c
   intern/multires_reshape_util.c
   intern/multires_reshape_vertcos.c
   intern/multires_subdiv.c
+  intern/multires_unsubdivide.c
   intern/nla.c
   intern/node.c
   intern/object.c
@@ -195,7 +199,6 @@ set(SRC
   intern/particle_system.c
   intern/pbvh.c
   intern/pbvh_bmesh.c
-  intern/pbvh_parallel.cc
   intern/pointcache.c
   intern/pointcloud.c
   intern/report.c
@@ -209,6 +212,7 @@ set(SRC
   intern/sequencer.c
   intern/shader_fx.c
   intern/shrinkwrap.c
+  intern/simulation.cc
   intern/softbody.c
   intern/sound.c
   intern/speaker.c
@@ -250,7 +254,9 @@ set(SRC
   BKE_DerivedMesh.h
   BKE_action.h
   BKE_addon.h
-  BKE_anim.h
+  BKE_anim_data.h
+  BKE_anim_path.h
+  BKE_anim_visualization.h
   BKE_animsys.h
   BKE_appdir.h
   BKE_armature.h
@@ -286,6 +292,7 @@ set(SRC
   BKE_deform.h
   BKE_displist.h
   BKE_displist_tangent.h
+  BKE_duplilist.h
   BKE_dynamicpaint.h
   BKE_editlattice.h
   BKE_editmesh.h
@@ -294,11 +301,13 @@ set(SRC
   BKE_editmesh_tangent.h
   BKE_effect.h
   BKE_fcurve.h
+  BKE_fcurve_driver.h
   BKE_fluid.h
   BKE_font.h
   BKE_freestyle.h
   BKE_global.h
   BKE_gpencil.h
+  BKE_gpencil_curve.h
   BKE_gpencil_geom.h
   BKE_gpencil_modifier.h
   BKE_hair.h
@@ -357,6 +366,7 @@ set(SRC
   BKE_sequencer.h
   BKE_shader_fx.h
   BKE_shrinkwrap.h
+  BKE_simulation.h
   BKE_softbody.h
   BKE_sound.h
   BKE_speaker.h
@@ -391,6 +401,7 @@ set(SRC
   intern/lib_intern.h
   intern/multires_inline.h
   intern/multires_reshape.h
+  intern/multires_unsubdivide.h
   intern/pbvh_intern.h
   intern/subdiv_converter.h
   intern/subdiv_inline.h
@@ -659,17 +670,6 @@ if(WITH_QUADRIFLOW)
      bf_intern_quadriflow
   )
   add_definitions(-DWITH_QUADRIFLOW)
-endif()
-
-if(WITH_TBB)
-  add_definitions(-DWITH_TBB)
-
-  list(APPEND INC_SYS
-    ${TBB_INCLUDE_DIRS}
-  )
-  list(APPEND LIB
-    ${TBB_LIBRARIES}
-  )
 endif()
 
 if(WITH_XR_OPENXR)

@@ -40,7 +40,7 @@ struct DMFlagMat;
 struct Mesh;
 struct Subdiv;
 
-/* =============================================================================
+/* --------------------------------------------------------------------
  * Masks.
  */
 
@@ -61,7 +61,7 @@ typedef struct SubdivCCGMaskEvaluator {
 bool BKE_subdiv_ccg_mask_init_from_paint(SubdivCCGMaskEvaluator *mask_evaluator,
                                          const struct Mesh *mesh);
 
-/* =============================================================================
+/* --------------------------------------------------------------------
  * Materials.
  */
 
@@ -80,7 +80,7 @@ typedef struct SubdivCCGMaterialFlagsEvaluator {
 void BKE_subdiv_ccg_material_flags_init_from_mesh(
     SubdivCCGMaterialFlagsEvaluator *material_flags_evaluator, const struct Mesh *mesh);
 
-/* =============================================================================
+/* --------------------------------------------------------------------
  * SubdivCCG.
  */
 
@@ -216,7 +216,10 @@ typedef struct SubdivCCG {
   } dirty;
 } SubdivCCG;
 
-/* Create real hi-res CCG from subdivision.
+/* Create CCG representation of subdivision surface.
+ *
+ * NOTE: CCG stores dense vertices in a grid-like storage. There is no edges or
+ * polygons information's for the high-poly surface.
  *
  * NOTE: Subdiv is expected to be refined and ready for evaluation.
  * NOTE: CCG becomes an owner of subdiv.
@@ -301,6 +304,8 @@ void BKE_subdiv_ccg_neighbor_coords_get(const SubdivCCG *subdiv_ccg,
                                         const SubdivCCGCoord *coord,
                                         const bool include_duplicates,
                                         SubdivCCGNeighbors *r_neighbors);
+
+int BKE_subdiv_ccg_grid_to_face_index(const SubdivCCG *subdiv_ccg, const int grid_index);
 
 #ifdef __cplusplus
 }

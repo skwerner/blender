@@ -117,7 +117,7 @@ static bGPDstroke *gpencil_prepare_stroke(bContext *C, wmOperator *op, int totpo
   /* if not exist, create a new one */
   if ((paint->brush == NULL) || (paint->brush->gpencil_settings == NULL)) {
     /* create new brushes */
-    BKE_brush_gpencil_paint_presets(bmain, ts);
+    BKE_brush_gpencil_paint_presets(bmain, ts, false);
   }
   Brush *brush = paint->brush;
 
@@ -132,18 +132,8 @@ static bGPDstroke *gpencil_prepare_stroke(bContext *C, wmOperator *op, int totpo
   bGPDframe *gpf = BKE_gpencil_layer_frame_get(gpl, CFRA, add_frame_mode);
 
   /* stroke */
-  bGPDstroke *gps = MEM_callocN(sizeof(bGPDstroke), "gp_stroke");
-  gps->totpoints = totpoints;
-  gps->inittime = 0.0f;
-  gps->thickness = brush->size;
-  gps->hardeness = brush->gpencil_settings->hardeness;
-  copy_v2_v2(gps->aspect_ratio, brush->gpencil_settings->aspect_ratio);
+  bGPDstroke *gps = BKE_gpencil_stroke_new(ob->actcol - 1, totpoints, brush->size);
   gps->flag |= GP_STROKE_SELECT;
-  gps->flag |= GP_STROKE_3DSPACE;
-  gps->mat_nr = ob->actcol - 1;
-
-  /* allocate memory for points */
-  gps->points = MEM_callocN(sizeof(bGPDspoint) * totpoints, "gp_stroke_points");
 
   if (cyclic) {
     gps->flag |= GP_STROKE_CYCLIC;
@@ -529,6 +519,8 @@ static int gp_stroke_merge_exec(bContext *C, wmOperator *op)
     gpencil_dissolve_points(C);
   }
 
+  BKE_gpencil_stroke_geometry_update(gps);
+
   /* free memory */
   MEM_SAFE_FREE(original_array);
   MEM_SAFE_FREE(sorted_array);
@@ -630,7 +622,7 @@ static int gp_stroke_merge_material_exec(bContext *C, wmOperator *op)
 
   /* notifiers */
   if (changed) {
-    BKE_reportf(op->reports, RPT_INFO, "Merged %d materiales of %d", removed, *totcol);
+    BKE_reportf(op->reports, RPT_INFO, "Merged %d materials of %d", removed, *totcol);
     DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
     WM_event_add_notifier(C, NC_GPENCIL | ND_DATA | NA_EDITED, NULL);
   }

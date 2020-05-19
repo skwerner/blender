@@ -166,10 +166,11 @@ float paint_calc_object_space_radius(ViewContext *vc, const float center[3], flo
 
 float paint_get_tex_pixel(const MTex *mtex, float u, float v, struct ImagePool *pool, int thread)
 {
-  float intensity, rgba[4];
+  float intensity;
+  float rgba_dummy[4];
   float co[3] = {u, v, 0.0f};
 
-  externtex(mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+  RE_texture_evaluate(mtex, co, thread, pool, false, false, &intensity, rgba_dummy);
 
   return intensity;
 }
@@ -184,11 +185,10 @@ void paint_get_tex_pixel_col(const MTex *mtex,
                              struct ColorSpace *colorspace)
 {
   float co[3] = {u, v, 0.0f};
-  int hasrgb;
   float intensity;
 
-  hasrgb = externtex(
-      mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+  const bool hasrgb = RE_texture_evaluate(mtex, co, thread, pool, false, false, &intensity, rgba);
+
   if (!hasrgb) {
     rgba[0] = intensity;
     rgba[1] = intensity;
@@ -294,12 +294,8 @@ static void imapaint_tri_weights(float matrix[4][4],
 }
 
 /* compute uv coordinates of mouse in face */
-static void imapaint_pick_uv(Mesh *me_eval,
-                             Scene *scene,
-                             Object *ob_eval,
-                             unsigned int faceindex,
-                             const int xy[2],
-                             float uv[2])
+static void imapaint_pick_uv(
+    Mesh *me_eval, Scene *scene, Object *ob_eval, uint faceindex, const int xy[2], float uv[2])
 {
   int i, findex;
   float p[2], w[3], absw, minabsw;
@@ -376,10 +372,7 @@ static void imapaint_pick_uv(Mesh *me_eval,
 }
 
 /* returns 0 if not found, otherwise 1 */
-static int imapaint_pick_face(ViewContext *vc,
-                              const int mval[2],
-                              unsigned int *r_index,
-                              unsigned int totpoly)
+static int imapaint_pick_face(ViewContext *vc, const int mval[2], uint *r_index, uint totpoly)
 {
   if (totpoly == 0) {
     return 0;
@@ -389,7 +382,7 @@ static int imapaint_pick_face(ViewContext *vc,
   ED_view3d_select_id_validate(vc);
   *r_index = DRW_select_buffer_sample_point(vc->depsgraph, vc->region, vc->v3d, mval);
 
-  if ((*r_index) == 0 || (*r_index) > (unsigned int)totpoly) {
+  if ((*r_index) == 0 || (*r_index) > (uint)totpoly) {
     return 0;
   }
 
@@ -464,8 +457,8 @@ void paint_sample_color(
   Palette *palette = BKE_paint_palette(paint);
   PaletteColor *color = NULL;
   Brush *br = BKE_paint_brush(BKE_paint_get_active_from_context(C));
-  unsigned int col;
-  const unsigned char *cp;
+  uint col;
+  const uchar *cp;
 
   CLAMP(x, 0, region->winx);
   CLAMP(y, 0, region->winy);
@@ -497,8 +490,8 @@ void paint_sample_color(
 
       ViewContext vc;
       const int mval[2] = {x, y};
-      unsigned int faceindex;
-      unsigned int totpoly = me->totpoly;
+      uint faceindex;
+      uint totpoly = me->totpoly;
 
       if (CustomData_has_layer(&me_eval->ldata, CD_MLOOPUV)) {
         ED_view3d_viewcontext_init(C, &vc, depsgraph);
@@ -563,7 +556,7 @@ void paint_sample_color(
                 }
               }
               else {
-                unsigned char rgba[4];
+                uchar rgba[4];
                 bilinear_interpolation_color_wrap(ibuf, rgba, NULL, u, v);
                 if (use_palette) {
                   rgb_uchar_to_float(color->rgb, rgba);
@@ -598,7 +591,7 @@ void paint_sample_color(
         x + region->winrct.xmin, y + region->winrct.ymin, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &col);
     glReadBuffer(GL_BACK);
   }
-  cp = (unsigned char *)&col;
+  cp = (uchar *)&col;
 
   if (use_palette) {
     rgb_uchar_to_float(color->rgb, cp);

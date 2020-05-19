@@ -26,10 +26,11 @@
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_operation.h"
 
+#include "BLI_ghash.h"
+#include "BLI_hash.hh"
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
-struct GHash;
 struct ID;
 struct bPoseChannel;
 
@@ -115,7 +116,7 @@ struct ComponentNode : public Node {
 
   /* Operations stored as a hash map, for faster build.
    * This hash map will be freed when graph is fully built. */
-  GHash *operations_map;
+  Map<ComponentNode::OperationIDKey, OperationNode *> *operations_map;
 
   /* This is a "normal" list of operations, used by evaluation
    * and other routines after construction. */
@@ -190,6 +191,7 @@ DEG_COMPONENT_NODE_DECLARE_GENERIC(Synchronization);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Audio);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Armature);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(GenericDatablock);
+DEG_COMPONENT_NODE_DECLARE_GENERIC(Simulation);
 
 /* Bone Component */
 struct BoneComponentNode : public ComponentNode {
@@ -203,3 +205,18 @@ struct BoneComponentNode : public ComponentNode {
 void deg_register_component_depsnodes();
 
 }  // namespace DEG
+
+namespace BLI {
+
+template<> struct DefaultHash<DEG::ComponentNode::OperationIDKey> {
+  uint32_t operator()(const DEG::ComponentNode::OperationIDKey &key) const
+  {
+    const int opcode_as_int = static_cast<int>(key.opcode);
+    return BLI_ghashutil_combine_hash(
+        key.name_tag,
+        BLI_ghashutil_combine_hash(BLI_ghashutil_uinthash(opcode_as_int),
+                                   BLI_ghashutil_strhash_p(key.name)));
+  }
+};
+
+}  // namespace BLI

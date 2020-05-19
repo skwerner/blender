@@ -27,6 +27,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_listbase.h"
 #include "BLI_math_base.h"
 #include "BLI_math_vector.h"
 #include "BLI_utildefines.h"
@@ -123,7 +124,7 @@ static void volume_batch_cache_clear(Volume *volume)
     return;
   }
 
-  for (DRWVolumeGrid *grid = cache->grids.first; grid; grid = grid->next) {
+  LISTBASE_FOREACH (DRWVolumeGrid *, grid, &cache->grids) {
     MEM_SAFE_FREE(grid->name);
     DRW_TEXTURE_FREE_SAFE(grid->texture);
   }
@@ -266,6 +267,7 @@ static DRWVolumeGrid *volume_grid_cache_get(Volume *volume,
 
     GPU_texture_bind(cache_grid->texture, 0);
     GPU_texture_swizzle_channel_auto(cache_grid->texture, channels);
+    GPU_texture_wrap_mode(cache_grid->texture, false, false);
     GPU_texture_unbind(cache_grid->texture);
 
     MEM_freeN(voxels);

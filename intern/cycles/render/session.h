@@ -148,6 +148,7 @@ class Session {
 
   function<void(RenderTile &)> write_render_tile_cb;
   function<void(RenderTile &, bool)> update_render_tile_cb;
+  function<void(RenderTile &)> read_bake_tile_cb;
 
   explicit Session(const SessionParams &params);
   ~Session();
@@ -186,7 +187,7 @@ class Session {
 
   void update_status_time(bool show_pause = false, bool show_done = false);
 
-  void render(bool with_denoising);
+  void render(bool use_denoise);
   void copy_to_display_buffer(int sample);
 
   void reset_(BufferParams &params, int samples);
@@ -199,9 +200,11 @@ class Session {
   bool draw_gpu(BufferParams &params, DeviceDrawParams &draw_params);
   void reset_gpu(BufferParams &params, int samples);
 
+  bool render_need_denoise(bool &delayed);
+
   bool acquire_tile(RenderTile &tile, Device *tile_device, uint tile_types);
   void update_tile_sample(RenderTile &tile);
-  void release_tile(RenderTile &tile);
+  void release_tile(RenderTile &tile, const bool need_denoise);
 
   void map_neighbor_tiles(RenderTile *tiles, Device *tile_device);
   void unmap_neighbor_tiles(RenderTile *tiles, Device *tile_device);

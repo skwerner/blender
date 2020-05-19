@@ -201,7 +201,10 @@ void OVERLAY_gpencil_cache_init(OVERLAY_Data *vedata)
   }
 
   const bool show_overlays = (v3d->flag2 & V3D_HIDE_OVERLAYS) == 0;
-  const bool show_grid = (v3d->gp_flag & V3D_GP_SHOW_GRID) != 0;
+  const bool show_grid = (v3d->gp_flag & V3D_GP_SHOW_GRID) != 0 &&
+                         ((ts->gpencil_v3d_align &
+                           (GP_PROJECT_DEPTH_VIEW | GP_PROJECT_DEPTH_STROKE)) == 0);
+  const bool grid_xray = (v3d->gp_flag & V3D_GP_SHOW_GRID_XRAY);
 
   if (show_grid && show_overlays) {
     const char *grid_unit = NULL;
@@ -238,6 +241,15 @@ void OVERLAY_gpencil_cache_init(OVERLAY_Data *vedata)
         break;
     }
 
+    /* Move the grid to the right location depending of the align type.
+     * This is required only for 3D Cursor or Origin. */
+    if (ts->gpencil_v3d_align & GP_PROJECT_CURSOR) {
+      copy_v3_v3(mat[3], cursor->location);
+    }
+    else if (ts->gpencil_v3d_align & GP_PROJECT_VIEWSPACE) {
+      copy_v3_v3(mat[3], ob->obmat[3]);
+    }
+
     translate_m4(mat, gpd->grid.offset[0], gpd->grid.offset[1], 0.0f);
     mul_v2_v2fl(size, gpd->grid.scale, 2.0f * ED_scene_grid_scale(scene, &grid_unit));
     rescale_m4(mat, (float[3]){size[0], size[1], 0.0f});
@@ -245,7 +257,9 @@ void OVERLAY_gpencil_cache_init(OVERLAY_Data *vedata)
     const int gridlines = (gpd->grid.lines <= 0) ? 1 : gpd->grid.lines;
     int line_ct = gridlines * 4 + 2;
 
-    DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_LESS_EQUAL | DRW_STATE_BLEND_ALPHA;
+    DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ALPHA;
+    state |= (grid_xray) ? DRW_STATE_DEPTH_ALWAYS : DRW_STATE_DEPTH_LESS_EQUAL;
+
     DRW_PASS_CREATE(psl->gpencil_canvas_ps, state);
 
     sh = OVERLAY_shader_gpencil_canvas();
@@ -266,6 +280,11 @@ static void OVERLAY_edit_gpencil_cache_populate(OVERLAY_Data *vedata, Object *ob
   bGPdata *gpd = (bGPdata *)ob->data;
   const DRWContextState *draw_ctx = DRW_context_state_get();
   View3D *v3d = draw_ctx->v3d;
+
+  /* Overlay is only for active object. */
+  if (ob != draw_ctx->obact) {
+    return;
+  }
 
   if (pd->edit_gpencil_wires_grp) {
     DRWShadingGroup *grp = DRW_shgroup_create_sub(pd->edit_gpencil_wires_grp);

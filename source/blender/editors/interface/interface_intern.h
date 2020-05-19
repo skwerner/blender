@@ -25,6 +25,8 @@
 #define __INTERFACE_INTERN_H__
 
 #include "BLI_compiler_attrs.h"
+#include "BLI_rect.h"
+
 #include "DNA_listBase.h"
 #include "RNA_types.h"
 #include "UI_interface.h"
@@ -39,6 +41,7 @@ struct bContextStore;
 struct uiHandleButtonData;
 struct uiLayout;
 struct uiStyle;
+struct uiUndoStack_Text;
 struct uiWidgetColors;
 struct wmEvent;
 struct wmKeyConfig;
@@ -145,6 +148,17 @@ enum {
 /* max amount of items a radial menu (pie menu) can contain */
 #define PIE_MAX_ITEMS 8
 
+struct uiButSearchData {
+  uiButSearchCreateFn create_fn;
+  uiButSearchUpdateFn update_fn;
+  void *arg;
+  uiButSearchArgFreeFn arg_free_fn;
+  uiButSearchContextMenuFn context_menu_fn;
+  uiButSearchTooltipFn tooltip_fn;
+
+  const char *sep_string;
+};
+
 struct uiBut {
   struct uiBut *next, *prev;
   int flag, drawflag;
@@ -201,10 +215,7 @@ struct uiBut {
   uiButCompleteFunc autocomplete_func;
   void *autofunc_arg;
 
-  uiButSearchCreateFunc search_create_func;
-  uiButSearchFunc search_func;
-  void *search_arg;
-  uiButSearchArgFreeFunc search_arg_free_func;
+  struct uiButSearchData *search;
 
   uiButHandleRenameFunc rename_func;
   void *rename_arg1;
@@ -344,7 +355,7 @@ struct uiBlock {
   uiBlock *next, *prev;
 
   ListBase buttons;
-  Panel *panel;
+  struct Panel *panel;
   uiBlock *oldblock;
 
   ListBase butstore; /* UI_butstore_* runtime function */
@@ -476,8 +487,10 @@ extern void ui_window_to_block_rctf(const struct ARegion *region,
                                     uiBlock *block,
                                     rctf *rct_dst,
                                     const rctf *rct_src);
-extern void ui_window_to_region(const ARegion *region, int *x, int *y);
-extern void ui_window_to_region_rcti(const ARegion *region, rcti *rect_dst, const rcti *rct_src);
+extern void ui_window_to_region(const struct ARegion *region, int *x, int *y);
+extern void ui_window_to_region_rcti(const struct ARegion *region,
+                                     rcti *rect_dst,
+                                     const rcti *rct_src);
 extern void ui_region_to_window(const struct ARegion *region, int *x, int *y);
 extern void ui_region_winrct_get_no_margin(const struct ARegion *region, struct rcti *r_rect);
 
@@ -565,7 +578,7 @@ struct uiPopupBlockCreate {
   int event_xy[2];
 
   /* when popup is initialized from a button */
-  ARegion *butregion;
+  struct ARegion *butregion;
   uiBut *but;
 };
 
@@ -596,10 +609,8 @@ struct uiPopupBlockHandle {
 
   /* for operator popups */
   struct wmOperator *popup_op;
-  struct wmOperatorType *optype;
-  ScrArea *ctx_area;
-  ARegion *ctx_region;
-  int opcontext;
+  struct ScrArea *ctx_area;
+  struct ARegion *ctx_region;
 
   /* return values */
   int butretval;
@@ -647,17 +658,24 @@ ColorPicker *ui_block_colorpicker_create(struct uiBlock *block);
 
 /* interface_region_search.c */
 /* Searchbox for string button */
-ARegion *ui_searchbox_create_generic(struct bContext *C, struct ARegion *butregion, uiBut *but);
-ARegion *ui_searchbox_create_operator(struct bContext *C, struct ARegion *butregion, uiBut *but);
-ARegion *ui_searchbox_create_menu(struct bContext *C, struct ARegion *butregion, uiBut *but);
+struct ARegion *ui_searchbox_create_generic(struct bContext *C,
+                                            struct ARegion *butregion,
+                                            uiBut *but);
+struct ARegion *ui_searchbox_create_operator(struct bContext *C,
+                                             struct ARegion *butregion,
+                                             uiBut *but);
+struct ARegion *ui_searchbox_create_menu(struct bContext *C,
+                                         struct ARegion *butregion,
+                                         uiBut *but);
 
 bool ui_searchbox_inside(struct ARegion *region, int x, int y);
 int ui_searchbox_find_index(struct ARegion *region, const char *name);
 void ui_searchbox_update(struct bContext *C, struct ARegion *region, uiBut *but, const bool reset);
 int ui_searchbox_autocomplete(struct bContext *C, struct ARegion *region, uiBut *but, char *str);
-void ui_searchbox_event(struct bContext *C,
+bool ui_searchbox_event(struct bContext *C,
                         struct ARegion *region,
                         uiBut *but,
+                        struct ARegion *butregion,
                         const struct wmEvent *event);
 bool ui_searchbox_apply(uiBut *but, struct ARegion *region);
 void ui_searchbox_free(struct bContext *C, struct ARegion *region);
@@ -671,7 +689,7 @@ void ui_popup_menu_memory_set(uiBlock *block, struct uiBut *but);
 
 uiBlock *ui_popup_block_refresh(struct bContext *C,
                                 uiPopupBlockHandle *handle,
-                                ARegion *butregion,
+                                struct ARegion *butregion,
                                 uiBut *but);
 
 uiPopupBlockHandle *ui_popup_block_create(struct bContext *C,
@@ -698,7 +716,7 @@ uiPopupBlockHandle *ui_popover_panel_create(struct bContext *C,
 void ui_pie_menu_level_create(uiBlock *block,
                               struct wmOperatorType *ot,
                               const char *propname,
-                              IDProperty *properties,
+                              struct IDProperty *properties,
                               const EnumPropertyItem *items,
                               int totitem,
                               int context,
@@ -732,36 +750,46 @@ void ui_draw_but_TAB_outline(const rcti *rect,
                              float rad,
                              uchar highlight[3],
                              uchar highlight_fade[3]);
-void ui_draw_but_HISTOGRAM(ARegion *region,
+void ui_draw_but_HISTOGRAM(struct ARegion *region,
                            uiBut *but,
                            const struct uiWidgetColors *wcol,
                            const rcti *rect);
-void ui_draw_but_WAVEFORM(ARegion *region,
+void ui_draw_but_WAVEFORM(struct ARegion *region,
                           uiBut *but,
                           const struct uiWidgetColors *wcol,
                           const rcti *rect);
-void ui_draw_but_VECTORSCOPE(ARegion *region,
+void ui_draw_but_VECTORSCOPE(struct ARegion *region,
                              uiBut *but,
                              const struct uiWidgetColors *wcol,
                              const rcti *rect);
 void ui_draw_but_COLORBAND(uiBut *but, const struct uiWidgetColors *wcol, const rcti *rect);
 void ui_draw_but_UNITVEC(uiBut *but, const struct uiWidgetColors *wcol, const rcti *rect);
-void ui_draw_but_CURVE(ARegion *region,
+void ui_draw_but_CURVE(struct ARegion *region,
                        uiBut *but,
                        const struct uiWidgetColors *wcol,
                        const rcti *rect);
-void ui_draw_but_CURVEPROFILE(ARegion *region,
+void ui_draw_but_CURVEPROFILE(struct ARegion *region,
                               uiBut *but,
                               const struct uiWidgetColors *wcol,
                               const rcti *rect);
-void ui_draw_but_IMAGE(ARegion *region,
+void ui_draw_but_IMAGE(struct ARegion *region,
                        uiBut *but,
                        const struct uiWidgetColors *wcol,
                        const rcti *rect);
-void ui_draw_but_TRACKPREVIEW(ARegion *region,
+void ui_draw_but_TRACKPREVIEW(struct ARegion *region,
                               uiBut *but,
                               const struct uiWidgetColors *wcol,
                               const rcti *rect);
+
+/* interface_undo.c */
+struct uiUndoStack_Text *ui_textedit_undo_stack_create(void);
+void ui_textedit_undo_stack_destroy(struct uiUndoStack_Text *undo_stack);
+void ui_textedit_undo_push(struct uiUndoStack_Text *undo_stack,
+                           const char *text,
+                           int cursor_index);
+const char *ui_textedit_undo(struct uiUndoStack_Text *undo_stack,
+                             int direction,
+                             int *r_cursor_index);
 
 /* interface_handlers.c */
 PointerRNA *ui_handle_afterfunc_add_operator(struct wmOperatorType *ot,
@@ -789,6 +817,11 @@ float ui_block_calc_pie_segment(struct uiBlock *block, const float event_xy[2]);
 
 void ui_but_add_shortcut(uiBut *but, const char *key_str, const bool do_strip);
 void ui_but_clipboard_free(void);
+bool ui_but_rna_equals(const uiBut *a, const uiBut *b);
+bool ui_but_rna_equals_ex(const uiBut *but,
+                          const PointerRNA *ptr,
+                          const PropertyRNA *prop,
+                          int index);
 uiBut *ui_but_find_old(uiBlock *block_old, const uiBut *but_new);
 uiBut *ui_but_find_new(uiBlock *block_old, const uiBut *but_new);
 
@@ -835,7 +868,10 @@ struct GPUBatch *ui_batch_roundbox_shadow_get(void);
 
 void ui_draw_anti_tria_rect(const rctf *rect, char dir, const float color[4]);
 void ui_draw_menu_back(struct uiStyle *style, uiBlock *block, rcti *rect);
-void ui_draw_popover_back(ARegion *region, struct uiStyle *style, uiBlock *block, rcti *rect);
+void ui_draw_popover_back(struct ARegion *region,
+                          struct uiStyle *style,
+                          uiBlock *block,
+                          rcti *rect);
 void ui_draw_pie_center(uiBlock *block);
 const struct uiWidgetColors *ui_tooltip_get_theme(void);
 
@@ -843,15 +879,19 @@ void ui_draw_widget_menu_back_color(const rcti *rect, bool use_shadow, const flo
 void ui_draw_widget_menu_back(const rcti *rect, bool use_shadow);
 void ui_draw_tooltip_background(const struct uiStyle *UNUSED(style), uiBlock *block, rcti *rect);
 
-extern void ui_draw_but(
-    const struct bContext *C, ARegion *region, struct uiStyle *style, uiBut *but, rcti *rect);
+extern void ui_draw_but(const struct bContext *C,
+                        struct ARegion *region,
+                        struct uiStyle *style,
+                        uiBut *but,
+                        rcti *rect);
 
 void ui_draw_menu_item(const struct uiFontStyle *fstyle,
                        rcti *rect,
                        const char *name,
                        int iconid,
                        int state,
-                       bool use_sep);
+                       bool use_sep,
+                       int *r_xmax);
 void ui_draw_preview_item(
     const struct uiFontStyle *fstyle, rcti *rect, const char *name, int iconid, int state);
 
@@ -893,8 +933,8 @@ void ui_item_paneltype_func(struct bContext *C, struct uiLayout *layout, void *a
 
 /* interface_align.c */
 bool ui_but_can_align(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
-int ui_but_align_opposite_to_area_align_get(const ARegion *region) ATTR_WARN_UNUSED_RESULT;
-void ui_block_align_calc(uiBlock *block, const ARegion *region);
+int ui_but_align_opposite_to_area_align_get(const struct ARegion *region) ATTR_WARN_UNUSED_RESULT;
+void ui_block_align_calc(uiBlock *block, const struct ARegion *region);
 
 /* interface_anim.c */
 void ui_but_anim_flag(uiBut *but, float cfra);
@@ -915,6 +955,7 @@ bool ui_but_is_toggle(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
 bool ui_but_is_interactive(const uiBut *but, const bool labeledit) ATTR_WARN_UNUSED_RESULT;
 bool ui_but_is_popover_once_compat(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
 bool ui_but_has_array_value(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
+int ui_but_icon(const uiBut *but);
 void ui_but_pie_dir(RadialDirection dir, float vec[2]);
 
 bool ui_but_is_cursor_warp(const uiBut *but) ATTR_WARN_UNUSED_RESULT;
@@ -970,12 +1011,15 @@ bool ui_region_contains_point_px(const struct ARegion *region,
                                  int y) ATTR_WARN_UNUSED_RESULT;
 bool ui_region_contains_rect_px(const struct ARegion *region, const rcti *rect_px);
 
-ARegion *ui_screen_region_find_mouse_over_ex(bScreen *screen, int x, int y);
-ARegion *ui_screen_region_find_mouse_over(bScreen *screen, const struct wmEvent *event);
+struct ARegion *ui_screen_region_find_mouse_over_ex(struct bScreen *screen, int x, int y);
+struct ARegion *ui_screen_region_find_mouse_over(struct bScreen *screen,
+                                                 const struct wmEvent *event);
 
 /* interface_context_menu.c */
 bool ui_popup_context_menu_for_button(struct bContext *C, uiBut *but);
-void ui_popup_context_menu_for_panel(struct bContext *C, struct ARegion *region, struct Panel *pa);
+void ui_popup_context_menu_for_panel(struct bContext *C,
+                                     struct ARegion *region,
+                                     struct Panel *panel);
 
 /* interface_eyedropper.c */
 struct wmKeyMap *eyedropper_modal_keymap(struct wmKeyConfig *keyconf);
@@ -1001,9 +1045,10 @@ void UI_OT_eyedropper_driver(struct wmOperatorType *ot);
 void UI_OT_eyedropper_gpencil_color(struct wmOperatorType *ot);
 
 /* interface_util.c */
+bool ui_str_has_word_prefix(const char *haystack, const char *needle, size_t needle_len);
 
 /**
- * For use with #ui_rna_collection_search_cb.
+ * For use with #ui_rna_collection_search_update_fn.
  */
 typedef struct uiRNACollectionSearch {
   PointerRNA target_ptr;
@@ -1012,12 +1057,16 @@ typedef struct uiRNACollectionSearch {
   PointerRNA search_ptr;
   PropertyRNA *search_prop;
 
-  bool *but_changed; /* pointer to uiBut.changed */
+  uiBut *search_but;
+  /* Let UI_butstore_ API update search_but pointer above over redraws. */
+  uiButStore *butstore;
+  /* Block has to be stored for freeing butstore (uiBut.block doesn't work with undo). */
+  uiBlock *butstore_block;
 } uiRNACollectionSearch;
-void ui_rna_collection_search_cb(const struct bContext *C,
-                                 void *arg,
-                                 const char *str,
-                                 uiSearchItems *items);
+void ui_rna_collection_search_update_fn(const struct bContext *C,
+                                        void *arg,
+                                        const char *str,
+                                        uiSearchItems *items);
 
 /* interface_ops.c */
 bool ui_jump_to_target_button_poll(struct bContext *C);

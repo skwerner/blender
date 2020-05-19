@@ -307,14 +307,27 @@ static void rna_userdef_screen_update_header_default(Main *bmain, Scene *scene, 
   USERDEF_TAG_DIRTY;
 }
 
+static void rna_userdef_font_update(Main *UNUSED(bmain),
+                                    Scene *UNUSED(scene),
+                                    PointerRNA *UNUSED(ptr))
+{
+  BLF_cache_clear();
+  UI_reinit_font();
+}
+
 static void rna_userdef_language_update(Main *UNUSED(bmain),
                                         Scene *UNUSED(scene),
                                         PointerRNA *UNUSED(ptr))
 {
-  BLF_cache_clear();
   BLT_lang_set(NULL);
-  UI_reinit_font();
-  USERDEF_TAG_DIRTY;
+
+  const char *uilng = BLT_lang_get();
+  if (STREQ(uilng, "en_US")) {
+    U.transopts &= ~(USER_TR_IFACE | USER_TR_TOOLTIPS | USER_TR_NEWDATANAME);
+  }
+  else {
+    U.transopts |= (USER_TR_IFACE | USER_TR_TOOLTIPS | USER_TR_NEWDATANAME);
+  }
 }
 
 static void rna_userdef_script_autoexec_update(Main *UNUSED(bmain),
@@ -544,7 +557,7 @@ static void rna_Userdef_disk_cache_dir_update(Main *UNUSED(bmain),
 {
   if (U.sequencer_disk_cache_dir[0] != '\0') {
     BLI_path_abs(U.sequencer_disk_cache_dir, BKE_main_blendfile_path_from_global());
-    BLI_add_slash(U.sequencer_disk_cache_dir);
+    BLI_path_slash_ensure(U.sequencer_disk_cache_dir);
     BLI_path_make_safe(U.sequencer_disk_cache_dir);
   }
 
@@ -793,7 +806,7 @@ static PointerRNA rna_Addon_preferences_get(PointerRNA *ptr)
       IDPropertyTemplate val = {0};
       addon->prop = IDP_New(IDP_GROUP, &val, addon->module); /* name is unimportant  */
     }
-    return rna_pointer_inherit_refine(ptr, apt->ext.srna, addon->prop);
+    return rna_pointer_inherit_refine(ptr, apt->rna_ext.srna, addon->prop);
   }
   else {
     return PointerRNA_NULL;
@@ -808,7 +821,7 @@ static void rna_AddonPref_unregister(Main *UNUSED(bmain), StructRNA *type)
     return;
   }
 
-  RNA_struct_free_extension(type, &apt->ext);
+  RNA_struct_free_extension(type, &apt->rna_ext);
   RNA_struct_free(&BLENDER_RNA, type);
 
   BKE_addon_pref_type_remove(apt);
@@ -850,8 +863,8 @@ static StructRNA *rna_AddonPref_register(Main *bmain,
 
   /* check if we have registered this addon-pref type before, and remove it */
   apt = BKE_addon_pref_type_find(dummy_addon.module, true);
-  if (apt && apt->ext.srna) {
-    rna_AddonPref_unregister(bmain, apt->ext.srna);
+  if (apt && apt->rna_ext.srna) {
+    rna_AddonPref_unregister(bmain, apt->rna_ext.srna);
   }
 
   /* create a new addon-pref type */
@@ -859,18 +872,18 @@ static StructRNA *rna_AddonPref_register(Main *bmain,
   memcpy(apt, &dummy_apt, sizeof(dummy_apt));
   BKE_addon_pref_type_add(apt);
 
-  apt->ext.srna = RNA_def_struct_ptr(&BLENDER_RNA, identifier, &RNA_AddonPreferences);
-  apt->ext.data = data;
-  apt->ext.call = call;
-  apt->ext.free = free;
-  RNA_struct_blender_type_set(apt->ext.srna, apt);
+  apt->rna_ext.srna = RNA_def_struct_ptr(&BLENDER_RNA, identifier, &RNA_AddonPreferences);
+  apt->rna_ext.data = data;
+  apt->rna_ext.call = call;
+  apt->rna_ext.free = free;
+  RNA_struct_blender_type_set(apt->rna_ext.srna, apt);
 
   //  apt->draw = (have_function[0]) ? header_draw : NULL;
 
   /* update while blender is running */
   WM_main_add_notifier(NC_WINDOW, NULL);
 
-  return apt->ext.srna;
+  return apt->rna_ext.srna;
 }
 
 /* placeholder, doesn't do anything useful yet */
@@ -4716,20 +4729,14 @@ static void rna_def_userdef_view(BlenderRNA *brna)
   prop = RNA_def_property(srna, "font_path_ui", PROP_STRING, PROP_FILEPATH);
   RNA_def_property_string_sdna(prop, NULL, "font_path_ui");
   RNA_def_property_ui_text(prop, "Interface Font", "Path to interface font");
-  RNA_def_property_update(prop, NC_WINDOW, "rna_userdef_language_update");
+  RNA_def_property_update(prop, NC_WINDOW, "rna_userdef_font_update");
 
   prop = RNA_def_property(srna, "font_path_ui_mono", PROP_STRING, PROP_FILEPATH);
   RNA_def_property_string_sdna(prop, NULL, "font_path_ui_mono");
   RNA_def_property_ui_text(prop, "Mono-space Font", "Path to interface mono-space Font");
-  RNA_def_property_update(prop, NC_WINDOW, "rna_userdef_language_update");
+  RNA_def_property_update(prop, NC_WINDOW, "rna_userdef_font_update");
 
   /* Language. */
-
-  prop = RNA_def_property(srna, "use_international_fonts", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "transopts", USER_DOTRANSLATE);
-  RNA_def_property_ui_text(
-      prop, "Translate UI", "Enable UI translation and use international fonts");
-  RNA_def_property_update(prop, NC_WINDOW, "rna_userdef_language_update");
 
   prop = RNA_def_property(srna, "language", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, rna_enum_language_default_items);
@@ -4832,6 +4839,12 @@ static void rna_def_userdef_edit(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", USER_ADD_EDITMODE);
   RNA_def_property_ui_text(
       prop, "Enter Edit Mode", "Enter Edit Mode automatically after adding a new object");
+
+  prop = RNA_def_property(srna, "collection_instance_empty_size", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_range(prop, 0.001f, FLT_MAX);
+  RNA_def_property_ui_text(prop,
+                           "Collection Instance Empty Size",
+                           "Display size of the empty when new collection instances are created");
 
   /* Undo */
 
@@ -6050,16 +6063,12 @@ static void rna_def_userdef_experimental(BlenderRNA *brna)
   RNA_def_struct_clear_flag(srna, STRUCT_UNDO);
   RNA_def_struct_ui_text(srna, "Experimental", "Experimental features");
 
-  prop = RNA_def_property(srna, "use_undo_speedup", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "use_undo_speedup", 1);
+  prop = RNA_def_property(srna, "use_undo_legacy", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "use_undo_legacy", 1);
   RNA_def_property_ui_text(
       prop,
-      "Undo Speedup",
-      "Use new undo speedup (WARNING: can lead to crashes and serious .blend file corruption)");
-
-  prop = RNA_def_property(srna, "use_menu_search", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "use_menu_search", 1);
-  RNA_def_property_ui_text(prop, "Menu Search", "Search actions by menus instead of operators");
+      "Undo Legacy",
+      "Use legacy undo (slower than the new default one, but may be more stable in some cases)");
 }
 
 static void rna_def_userdef_addon_collection(BlenderRNA *brna, PropertyRNA *cprop)

@@ -32,7 +32,7 @@
 #include "DNA_modifier_types.h"
 #include "DNA_particle_types.h"
 
-#include "BKE_anim.h"
+#include "BKE_duplilist.h"
 
 #include "GPU_batch.h"
 #include "GPU_shader.h"
@@ -89,6 +89,7 @@ static GPUShader *hair_refine_shader_get(ParticleRefineShader sh)
   g_refine_shaders[sh] = DRW_shader_create(vert_with_lib,
                                            NULL,
                                            datatoc_gpu_shader_3D_smooth_color_frag_glsl,
+                                           "#define blender_srgb_to_framebuffer_space(a) a\n"
                                            "#define HAIR_PHASE_SUBDIV\n"
                                            "#define TF_WORKAROUND\n");
 #endif

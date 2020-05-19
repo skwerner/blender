@@ -54,7 +54,7 @@
 
 #include "IMB_imbuf_types.h"
 
-#include "BKE_anim.h"
+#include "BKE_anim_visualization.h"
 #include "BKE_collection.h"
 #include "BKE_constraint.h"
 #include "BKE_context.h"
@@ -100,6 +100,8 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "CLG_log.h"
+
 /* for menu/popup icons etc etc*/
 
 #include "UI_interface.h"
@@ -112,21 +114,17 @@
 
 #include "object_intern.h"  // own include
 
+static CLG_LogRef LOG = {"ed.object.edit"};
+
 /* prototypes */
 typedef struct MoveToCollectionData MoveToCollectionData;
 static void move_to_collection_menus_items(struct uiLayout *layout,
                                            struct MoveToCollectionData *menu);
 static ListBase selected_objects_get(bContext *C);
 
-/* ************* XXX **************** */
-static void error(const char *UNUSED(arg))
-{
-}
-
-/* port over here */
-static void error_libdata(void)
-{
-}
+/* -------------------------------------------------------------------- */
+/** \name Internal Utilities
+ * \{ */
 
 Object *ED_object_context(bContext *C)
 {
@@ -147,7 +145,11 @@ Object *ED_object_active_context(bContext *C)
   return ob;
 }
 
-/* ********************** object hiding *************************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Hide Operator
+ * \{ */
 
 static bool object_hide_poll(bContext *C)
 {
@@ -166,7 +168,7 @@ static int object_hide_view_clear_exec(bContext *C, wmOperator *op)
   const bool select = RNA_boolean_get(op->ptr, "select");
   bool changed = false;
 
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     if (base->flag & BASE_HIDDEN) {
       base->flag &= ~BASE_HIDDEN;
       changed = true;
@@ -217,7 +219,7 @@ static int object_hide_view_set_exec(bContext *C, wmOperator *op)
   bool changed = false;
 
   /* Hide selected or unselected objects. */
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     if (!(base->flag & BASE_VISIBLE_VIEWLAYER)) {
       continue;
     }
@@ -321,7 +323,7 @@ void ED_collection_hide_menu_draw(const bContext *C, uiLayout *layout)
 
   uiLayoutSetOperatorContext(layout, WM_OP_EXEC_REGION_WIN);
 
-  for (LayerCollection *lc = lc_scene->layer_collections.first; lc; lc = lc->next) {
+  LISTBASE_FOREACH (LayerCollection *, lc, &lc_scene->layer_collections) {
     int index = BKE_layer_collection_findindex(view_layer, lc);
     uiLayout *row = uiLayoutRow(layout, false);
 
@@ -401,7 +403,11 @@ void OBJECT_OT_hide_collection(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE | PROP_HIDDEN);
 }
 
-/* ******************* toggle editmode operator  ***************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Toggle Edit-Mode Operator
+ * \{ */
 
 static bool mesh_needs_keyindex(Main *bmain, const Mesh *me)
 {
@@ -414,7 +420,7 @@ static bool mesh_needs_keyindex(Main *bmain, const Mesh *me)
       return true;
     }
     if (ob->data == me) {
-      for (const ModifierData *md = ob->modifiers.first; md; md = md->next) {
+      LISTBASE_FOREACH (const ModifierData *, md, &ob->modifiers) {
         if (md->type == eModifierType_Hook) {
           return true;
         }
@@ -441,7 +447,11 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
     }
 
     if (me->edit_mesh->bm->totvert > MESH_MAX_VERTS) {
-      error("Too many vertices");
+      /* This used to be warned int the UI, we could warn again although it's quite rare. */
+      CLOG_WARN(&LOG,
+                "Too many vertices for mesh '%s' (%d)",
+                me->id.name + 2,
+                me->edit_mesh->bm->totvert);
       return false;
     }
 
@@ -454,8 +464,8 @@ static bool ED_object_editmode_load_ex(Main *bmain, Object *obedit, const bool f
     }
     /* will be recalculated as needed. */
     {
-      ED_mesh_mirror_spatial_table(NULL, NULL, NULL, NULL, 'e');
-      ED_mesh_mirror_topo_table(NULL, NULL, 'e');
+      ED_mesh_mirror_spatial_table_end(obedit);
+      ED_mesh_mirror_topo_table_end(obedit);
     }
   }
   else if (obedit->type == OB_ARMATURE) {
@@ -600,7 +610,8 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
   }
 
   if (BKE_object_obdata_is_libdata(ob)) {
-    error_libdata();
+    /* Ideally the caller should check this. */
+    CLOG_WARN(&LOG, "Unable to enter edit-mode on library data for object '%s'", ob->id.name + 2);
     return false;
   }
 
@@ -777,7 +788,11 @@ void OBJECT_OT_editmode_toggle(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* *************************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Toggle Pose-Mode Operator
+ * \{ */
 
 static int posemode_exec(bContext *C, wmOperator *op)
 {
@@ -861,12 +876,16 @@ void OBJECT_OT_posemode_toggle(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ******************* force field toggle operator ***************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Force Field Toggle Operator
+ * \{ */
 
 void ED_object_check_force_modifiers(Main *bmain, Scene *scene, Object *object)
 {
   PartDeflect *pd = object->pd;
-  ModifierData *md = modifiers_findByType(object, eModifierType_Surface);
+  ModifierData *md = BKE_modifiers_findby_type(object, eModifierType_Surface);
 
   /* add/remove modifier as needed */
   if (!md) {
@@ -924,8 +943,11 @@ void OBJECT_OT_forcefield_toggle(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ********************************************** */
-/* Motion Paths */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Calculate Motion Paths Operator
+ * \{ */
 
 static eAnimvizCalcRange object_path_convert_range(eObjectPathCalcRange range)
 {
@@ -1019,7 +1041,7 @@ static int object_calculate_paths_invoke(bContext *C, wmOperator *op, const wmEv
   }
 
   /* show popup dialog to allow editing of range... */
-  /* FIXME: hardcoded dimensions here are just arbitrary */
+  /* FIXME: hard-coded dimensions here are just arbitrary. */
   return WM_operator_props_dialog_popup(C, op, 200);
 }
 
@@ -1088,7 +1110,11 @@ void OBJECT_OT_paths_calculate(wmOperatorType *ot)
               MAXFRAME / 2.0);
 }
 
-/* --------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Update Motion Paths Operator
+ * \{ */
 
 static bool object_update_paths_poll(bContext *C)
 {
@@ -1132,7 +1158,11 @@ void OBJECT_OT_paths_update(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* --------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Clear Motion Paths Operator
+ * \{ */
 
 /* Helper for ED_objects_clear_paths() */
 static void object_clear_mpath(Object *ob)
@@ -1151,14 +1181,14 @@ static void object_clear_mpath(Object *ob)
 void ED_objects_clear_paths(bContext *C, bool only_selected)
 {
   if (only_selected) {
-    /* loop over all selected + sedtiable objects in scene */
+    /* Loop over all selected + editable objects in scene. */
     CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
       object_clear_mpath(ob);
     }
     CTX_DATA_END;
   }
   else {
-    /* loop over all edtiable objects in scene */
+    /* Loop over all editable objects in scene. */
     CTX_DATA_BEGIN (C, Object *, ob, editable_objects) {
       object_clear_mpath(ob);
     }
@@ -1210,13 +1240,17 @@ void OBJECT_OT_paths_clear(wmOperatorType *ot)
   RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);
 }
 
-/* --------- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Update Motion Paths Range from Scene Operator
+ * \{ */
 
 static int object_update_paths_range_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
 
-  /* loop over all edtiable objects in scene */
+  /* Loop over all editable objects in scene. */
   CTX_DATA_BEGIN (C, Object *, ob, editable_objects) {
     /* use Preview Range or Full Frame Range - whichever is in use */
     ob->avs.path_sf = PSFRA;
@@ -1246,63 +1280,99 @@ void OBJECT_OT_paths_range_update(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/********************** Smooth/Flat *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Object Shade Smooth/Flat Operator
+ * \{ */
 
 static int shade_smooth_exec(bContext *C, wmOperator *op)
 {
-  ID *data;
-  Curve *cu;
-  Nurb *nu;
-  int clear = (STREQ(op->idname, "OBJECT_OT_shade_flat"));
-  bool done = false, linked_data = false;
+  const bool use_smooth = STREQ(op->idname, "OBJECT_OT_shade_smooth");
+  bool changed_multi = false;
+  bool has_linked_data = false;
 
-  CTX_DATA_BEGIN (C, Object *, ob, selected_editable_objects) {
-    data = ob->data;
+  ListBase ctx_objects = {NULL, NULL};
+  CollectionPointerLink ctx_ob_single_active = {NULL};
+
+  /* For modes that only use an active object, don't handle the whole selection. */
+  {
+    ViewLayer *view_layer = CTX_data_view_layer(C);
+    Object *obact = OBACT(view_layer);
+    if (obact && ((obact->mode & OB_MODE_ALL_PAINT))) {
+      ctx_ob_single_active.ptr.data = obact;
+      BLI_addtail(&ctx_objects, &ctx_ob_single_active);
+    }
+  }
+
+  if (ctx_objects.first != &ctx_ob_single_active) {
+    CTX_data_selected_editable_objects(C, &ctx_objects);
+  }
+
+  for (CollectionPointerLink *ctx_ob = ctx_objects.first; ctx_ob; ctx_ob = ctx_ob->next) {
+    Object *ob = ctx_ob->ptr.data;
+    ID *data = ob->data;
+    if (data != NULL) {
+      data->tag |= LIB_TAG_DOIT;
+    }
+  }
+
+  for (CollectionPointerLink *ctx_ob = ctx_objects.first; ctx_ob; ctx_ob = ctx_ob->next) {
+    /* Always un-tag all object data-blocks irrespective of our ability to operate on them. */
+    Object *ob = ctx_ob->ptr.data;
+    ID *data = ob->data;
+    if ((data == NULL) || ((data->tag & LIB_TAG_DOIT) == 0)) {
+      continue;
+    }
+    data->tag &= ~LIB_TAG_DOIT;
+    /* Finished un-tagging, continue with regular logic. */
 
     if (data && ID_IS_LINKED(data)) {
-      linked_data = true;
+      has_linked_data = true;
       continue;
     }
 
+    bool changed = false;
     if (ob->type == OB_MESH) {
-      BKE_mesh_smooth_flag_set(ob->data, !clear);
-
+      BKE_mesh_smooth_flag_set(ob->data, use_smooth);
       BKE_mesh_batch_cache_dirty_tag(ob->data, BKE_MESH_BATCH_DIRTY_ALL);
-      DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-      WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
-
-      done = true;
+      changed = true;
     }
     else if (ELEM(ob->type, OB_SURF, OB_CURVE)) {
-      cu = ob->data;
+      BKE_curve_smooth_flag_set(ob->data, use_smooth);
+      changed = true;
+    }
 
-      for (nu = cu->nurb.first; nu; nu = nu->next) {
-        if (!clear) {
-          nu->flag |= ME_SMOOTH;
-        }
-        else {
-          nu->flag &= ~ME_SMOOTH;
-        }
-      }
+    if (changed) {
+      changed_multi = true;
 
       DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
       WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
-
-      done = true;
     }
   }
-  CTX_DATA_END;
 
-  if (linked_data) {
+  if (ctx_objects.first != &ctx_ob_single_active) {
+    BLI_freelistN(&ctx_objects);
+  }
+
+  if (has_linked_data) {
     BKE_report(op->reports, RPT_WARNING, "Can't edit linked mesh or curve data");
   }
 
-  return (done) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
+  return (changed_multi) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 
 static bool shade_poll(bContext *C)
 {
-  return (CTX_data_edit_object(C) == NULL);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  Object *obact = OBACT(view_layer);
+  if (obact != NULL) {
+    /* Doesn't handle edit-data, sculpt dynamic-topology, or their undo systems. */
+    if (obact->mode & (OB_MODE_EDIT | OB_MODE_SCULPT)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void OBJECT_OT_shade_flat(wmOperatorType *ot)
@@ -1335,7 +1405,11 @@ void OBJECT_OT_shade_smooth(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/* ********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Object Mode Set Operator
+ * \{ */
 
 static const EnumPropertyItem *object_mode_set_itemsf(bContext *C,
                                                       PointerRNA *UNUSED(ptr),
@@ -1355,7 +1429,8 @@ static const EnumPropertyItem *object_mode_set_itemsf(bContext *C,
   if (ob) {
     const bool use_mode_particle_edit = (BLI_listbase_is_empty(&ob->particlesystem) == false) ||
                                         (ob->soft != NULL) ||
-                                        (modifiers_findByType(ob, eModifierType_Cloth) != NULL);
+                                        (BKE_modifiers_findby_type(ob, eModifierType_Cloth) !=
+                                         NULL);
     while (input->identifier) {
       if ((input->value == OB_MODE_EDIT && OB_TYPE_SUPPORT_EDITMODE(ob->type)) ||
           (input->value == OB_MODE_POSE && (ob->type == OB_ARMATURE)) ||
@@ -1393,17 +1468,9 @@ static const EnumPropertyItem *object_mode_set_itemsf(bContext *C,
 
 static bool object_mode_set_poll(bContext *C)
 {
-  /* Since Grease Pencil editmode is also handled here,
-   * we have a special exception for allowing this operator
-   * to still work in that case when there's no active object
-   * so that users can exit editmode this way as per normal.
-   */
-  if (ED_operator_object_active_editable(C)) {
-    return true;
-  }
-  else {
-    return (CTX_data_gpencil_data(C) != NULL);
-  }
+  /* Needed as #ED_operator_object_active_editable doesn't call use 'active_object'. */
+  Object *ob = CTX_data_active_object(C);
+  return ED_operator_object_active_editable_ex(C, ob);
 }
 
 static int object_mode_set_exec(bContext *C, wmOperator *op)
@@ -1411,46 +1478,52 @@ static int object_mode_set_exec(bContext *C, wmOperator *op)
   bool use_submode = STREQ(op->idname, "OBJECT_OT_mode_set_with_submode");
   Object *ob = CTX_data_active_object(C);
   eObjectMode mode = RNA_enum_get(op->ptr, "mode");
-  eObjectMode restore_mode = (ob) ? ob->mode : OB_MODE_OBJECT;
+  eObjectMode restore_mode = ob->mode;
   const bool toggle = RNA_boolean_get(op->ptr, "toggle");
 
   /* by default the operator assume is a mesh, but if gp object change mode */
-  if ((ob != NULL) && (ob->type == OB_GPENCIL) && (mode == OB_MODE_EDIT)) {
+  if ((ob->type == OB_GPENCIL) && (mode == OB_MODE_EDIT)) {
     mode = OB_MODE_EDIT_GPENCIL;
   }
 
-  if (!ob || !ED_object_mode_compat_test(ob, mode)) {
+  if (!ED_object_mode_compat_test(ob, mode)) {
     return OPERATOR_PASS_THROUGH;
   }
 
-  if (ob->mode != mode) {
-    /* we should be able to remove this call, each operator calls  */
-    ED_object_mode_compat_set(C, ob, mode, op->reports);
+  if (toggle == false) {
+    if (ob->mode != mode) {
+      if (mode != OB_MODE_OBJECT) {
+        /* Enter new mode. */
+        ED_object_mode_toggle(C, mode);
+      }
+      else {
+        ED_object_mode_compat_set(C, ob, mode, op->reports);
+      }
+    }
   }
+  else {
+    /* Exit current mode if it's not the mode we're setting */
+    if (mode != OB_MODE_OBJECT) {
+      /* Enter new mode. */
+      ED_object_mode_toggle(C, mode);
+    }
 
-  /* Exit current mode if it's not the mode we're setting */
-  if (mode != OB_MODE_OBJECT && (ob->mode != mode || toggle)) {
-    /* Enter new mode */
-    ED_object_mode_toggle(C, mode);
-  }
-
-  if (toggle) {
     /* Special case for Object mode! */
-    if (mode == OB_MODE_OBJECT && restore_mode == OB_MODE_OBJECT &&
-        ob->restore_mode != OB_MODE_OBJECT) {
+    if ((mode == OB_MODE_OBJECT) && (restore_mode == OB_MODE_OBJECT) &&
+        (ob->restore_mode != OB_MODE_OBJECT)) {
       ED_object_mode_toggle(C, ob->restore_mode);
     }
     else if (ob->mode == mode) {
       /* For toggling, store old mode so we know what to go back to */
       ob->restore_mode = restore_mode;
     }
-    else if (ob->restore_mode != OB_MODE_OBJECT && ob->restore_mode != mode) {
+    else if ((ob->restore_mode != OB_MODE_OBJECT) && (ob->restore_mode != mode)) {
       ED_object_mode_toggle(C, ob->restore_mode);
     }
   }
 
   /* if type is OB_GPENCIL, set cursor mode */
-  if ((ob) && (ob->type == OB_GPENCIL)) {
+  if (ob->type == OB_GPENCIL) {
     if (ob->data) {
       bGPdata *gpd = (bGPdata *)ob->data;
       ED_gpencil_setup_modes(C, gpd, ob->mode);
@@ -1485,8 +1558,7 @@ void OBJECT_OT_mode_set(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = object_mode_set_exec;
-
-  ot->poll = object_mode_set_poll;  // ED_operator_object_active_editable;
+  ot->poll = object_mode_set_poll;
 
   /* flags */
   ot->flag = 0; /* no register/undo here, leave it to operators being called */
@@ -1515,6 +1587,12 @@ void OBJECT_OT_mode_set_with_submode(wmOperatorType *ot)
       ot->srna, "mesh_select_mode", rna_enum_mesh_select_mode_items, 0, "Mesh Mode", "");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Object Link/Move to Collection Operator
+ * \{ */
 
 static ListBase selected_objects_get(bContext *C)
 {
@@ -1593,7 +1671,7 @@ static int move_to_collection_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  for (LinkData *link = objects.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &objects) {
     Object *ob = link->data;
 
     if (!is_link) {
@@ -1856,3 +1934,5 @@ void OBJECT_OT_link_to_collection(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
   ot->prop = prop;
 }
+
+/** \} */

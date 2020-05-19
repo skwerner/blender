@@ -38,10 +38,6 @@
 #include "BLT_translation.h"
 
 #include "DNA_mask_types.h"
-#include "DNA_node_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_sequence_types.h"
-#include "DNA_space_types.h"
 
 #include "BKE_animsys.h"
 #include "BKE_curve.h"
@@ -49,11 +45,10 @@
 
 #include "BKE_image.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_mask.h"
 #include "BKE_movieclip.h"
-#include "BKE_node.h"
-#include "BKE_sequencer.h"
 #include "BKE_tracking.h"
 
 #include "DEG_depsgraph_build.h"
@@ -85,6 +80,20 @@ static void mask_free_data(ID *id)
   BKE_mask_layer_free_list(&mask->masklayers);
 }
 
+static void mask_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Mask *mask = (Mask *)id;
+
+  LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
+    LISTBASE_FOREACH (MaskSpline *, mask_spline, &mask_layer->splines) {
+      for (int i = 0; i < mask_spline->tot_point; i++) {
+        MaskSplinePoint *point = &mask_spline->points[i];
+        BKE_LIB_FOREACHID_PROCESS_ID(data, point->parent.id, IDWALK_CB_USER);
+      }
+    }
+  }
+}
+
 IDTypeInfo IDType_ID_MSK = {
     .id_code = ID_MSK,
     .id_filter = FILTER_ID_MSK,
@@ -99,6 +108,7 @@ IDTypeInfo IDType_ID_MSK = {
     .copy_data = mask_copy_data,
     .free_data = mask_free_data,
     .make_local = NULL,
+    .foreach_id = mask_foreach_id,
 };
 
 static struct {

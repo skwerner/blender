@@ -26,6 +26,7 @@ static bNodeSocketTemplate sh_node_tex_noise_in[] = {
     {SOCK_FLOAT, N_("W"), 0.0f, 0.0f, 0.0f, 0.0f, -1000.0f, 1000.0f},
     {SOCK_FLOAT, N_("Scale"), 5.0f, 0.0f, 0.0f, 0.0f, -1000.0f, 1000.0f},
     {SOCK_FLOAT, N_("Detail"), 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 16.0f},
+    {SOCK_FLOAT, N_("Roughness"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
     {SOCK_FLOAT, N_("Distortion"), 0.0f, 0.0f, 0.0f, 0.0f, -1000.0f, 1000.0f},
     {-1, ""},
 };
@@ -90,7 +91,7 @@ void register_node_type_sh_tex_noise(void)
 {
   static bNodeType ntype;
 
-  sh_node_type_base(&ntype, SH_NODE_TEX_NOISE, "Noise Texture", NODE_CLASS_TEXTURE, 0);
+  sh_fn_node_type_base(&ntype, SH_NODE_TEX_NOISE, "Noise Texture", NODE_CLASS_TEXTURE, 0);
   node_type_socket_templates(&ntype, sh_node_tex_noise_in, sh_node_tex_noise_out);
   node_type_init(&ntype, node_shader_init_tex_noise);
   node_type_storage(

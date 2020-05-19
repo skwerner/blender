@@ -68,6 +68,17 @@ struct PropertyRNA;
 
 /* Internal Operator-State Data ------------------------ */
 
+/** Random settings by stroke */
+typedef struct GpRandomSettings {
+  /** Pressure used for evaluated curves. */
+  float pen_press;
+
+  float hsv[3];
+  float pressure;
+  float strength;
+  float uv;
+} GpRandomSettings;
+
 /* Temporary draw data (no draw manager mode) */
 typedef struct tGPDdraw {
   struct RegionView3D *rv3d;   /* region to draw */
@@ -116,7 +127,7 @@ typedef struct tGPDinterpolate {
   /** current scene from context */
   struct Scene *scene;
   /** area where painting originated */
-  struct ScrArea *sa;
+  struct ScrArea *area;
   /** region where painting originated */
   struct ARegion *region;
   /** current GP datablock */
@@ -156,7 +167,7 @@ typedef struct tGPDprimitive {
   /** current evaluated gp object */
   struct Object *ob_eval;
   /** area where painting originated */
-  struct ScrArea *sa;
+  struct ScrArea *area;
   /** region where painting originated */
   struct RegionView3D *rv3d;
   /** view3d where painting originated */
@@ -230,6 +241,10 @@ typedef struct tGPDprimitive {
 
   /** size in pixels for uv calculation */
   float totpixlen;
+
+  /** Random settings by stroke */
+  GpRandomSettings random_settings;
+
 } tGPDprimitive;
 
 /* Modal Operator Drawing Callbacks ------------------------ */
@@ -247,7 +262,7 @@ typedef struct GP_SpaceConversion {
   struct bGPdata *gpd;
   struct bGPDlayer *gpl;
 
-  struct ScrArea *sa;
+  struct ScrArea *area;
   struct ARegion *region;
   struct View2D *v2d;
 
@@ -257,8 +272,7 @@ typedef struct GP_SpaceConversion {
   float mat[4][4]; /* transform matrix on the strokes (introduced in [b770964]) */
 } GP_SpaceConversion;
 
-bool gp_stroke_inside_circle(
-    const float mval[2], const float UNUSED(mvalo[2]), int rad, int x0, int y0, int x1, int y1);
+bool gp_stroke_inside_circle(const float mval[2], int rad, int x0, int y0, int x1, int y1);
 
 void gp_point_conversion_init(struct bContext *C, GP_SpaceConversion *r_gsc);
 
@@ -304,7 +318,6 @@ bool gp_point_xy_to_3d(const GP_SpaceConversion *gsc,
 void gp_stroke_convertcoords_tpoint(struct Scene *scene,
                                     struct ARegion *region,
                                     struct Object *ob,
-                                    bGPDlayer *gpl,
                                     const struct tGPspoint *point2D,
                                     float *depth,
                                     float out[3]);
@@ -347,6 +360,10 @@ const struct EnumPropertyItem *ED_gpencil_layers_with_new_enum_itemf(struct bCon
                                                                      struct PointerRNA *ptr,
                                                                      struct PropertyRNA *prop,
                                                                      bool *r_free);
+const struct EnumPropertyItem *ED_gpencil_material_enum_itemf(struct bContext *C,
+                                                              struct PointerRNA *ptr,
+                                                              struct PropertyRNA *prop,
+                                                              bool *r_free);
 
 /* ***************************************************** */
 /* Operator Defines */
@@ -552,7 +569,8 @@ void GPENCIL_OT_material_reveal(struct wmOperatorType *ot);
 void GPENCIL_OT_material_lock_all(struct wmOperatorType *ot);
 void GPENCIL_OT_material_unlock_all(struct wmOperatorType *ot);
 void GPENCIL_OT_material_lock_unused(struct wmOperatorType *ot);
-void GPENCIL_OT_select_material(struct wmOperatorType *ot);
+void GPENCIL_OT_material_select(struct wmOperatorType *ot);
+void GPENCIL_OT_material_set(struct wmOperatorType *ot);
 void GPENCIL_OT_set_active_material(struct wmOperatorType *ot);
 
 /* convert old 2.7 files to 2.8 */

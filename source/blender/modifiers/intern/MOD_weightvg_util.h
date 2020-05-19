@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2011 by Bastien Montagne.
@@ -73,6 +73,7 @@ void weightvg_do_mask(const ModifierEvalContext *ctx,
                       const int tex_use_channel,
                       const int tex_mapping,
                       Object *tex_map_object,
+                      const char *text_map_bone,
                       const char *tex_uvlayer_name,
                       const bool invert_vgroup_mask);
 

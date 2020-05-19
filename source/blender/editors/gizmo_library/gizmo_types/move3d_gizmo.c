@@ -106,16 +106,21 @@ static void move_geom_draw(const wmGizmo *gz,
   wm_gizmo_geometryinfo_draw(&wm_gizmo_geom_data_move3d, select);
 #else
   const int draw_style = RNA_enum_get(gz->ptr, "draw_style");
-  const bool filled = ((draw_options & (select ? (ED_GIZMO_MOVE_DRAW_FLAG_FILL |
+  const bool filled = (draw_style != ED_GIZMO_MOVE_STYLE_CROSS_2D) &&
+                      ((draw_options & (select ? (ED_GIZMO_MOVE_DRAW_FLAG_FILL |
                                                   ED_GIZMO_MOVE_DRAW_FLAG_FILL_SELECT) :
                                                  ED_GIZMO_MOVE_DRAW_FLAG_FILL)));
-
-  GPU_line_width(gz->line_width);
 
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
-  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
+  immBindBuiltinProgram(filled ? GPU_SHADER_3D_UNIFORM_COLOR :
+                                 GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR);
+
+  float viewport[4];
+  GPU_viewport_size_get_f(viewport);
+  immUniform2fv("viewportSize", &viewport[2]);
+  immUniform1f("lineWidth", gz->line_width * U.pixelsize);
 
   immUniformColor4fv(color);
 
@@ -372,9 +377,9 @@ static int gizmo_move_invoke(bContext *C, wmGizmo *gz, const wmEvent *event)
   WM_gizmo_calc_matrix_final(gz, inter->init.matrix_final);
 
   if (use_snap) {
-    ScrArea *sa = CTX_wm_area(C);
-    if (sa) {
-      switch (sa->spacetype) {
+    ScrArea *area = CTX_wm_area(C);
+    if (area) {
+      switch (area->spacetype) {
         case SPACE_VIEW3D: {
           inter->snap_context_v3d = ED_transform_snap_object_context_create_view3d(
               CTX_data_main(C), CTX_data_scene(C), 0, CTX_wm_region(C), CTX_wm_view3d(C));

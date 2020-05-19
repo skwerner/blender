@@ -141,18 +141,12 @@ static bool workbench_in_front_history_needed(WORKBENCH_Data *vedata)
   WORKBENCH_StorageList *stl = vedata->stl;
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const View3D *v3d = draw_ctx->v3d;
-  const Object *obact = draw_ctx->obact;
 
   if (!v3d || (v3d->flag2 & V3D_HIDE_OVERLAYS)) {
     return false;
   }
 
   if (stl->wpd->is_playback) {
-    return false;
-  }
-
-  if (!obact || draw_ctx->object_mode != OB_MODE_WEIGHT_PAINT ||
-      v3d->overlay.weight_paint_mode_opacity == 0.0) {
     return false;
   }
 
@@ -168,16 +162,35 @@ void workbench_antialiasing_engine_init(WORKBENCH_Data *vedata)
 
   wpd->view = NULL;
 
-  /* reset complete drawing when navigating. */
+  /* Reset complete drawing when navigating or during viewport playback or when
+   * leaving one of those states. In case of multires modifier the navigation
+   * mesh differs from the viewport mesh, so we need to be sure to restart. */
   if (wpd->taa_sample != 0) {
-    if (wpd->is_navigating) {
+    if (wpd->is_navigating || wpd->is_playback) {
       wpd->taa_sample = 0;
+      wpd->reset_next_sample = true;
     }
+    else if (wpd->reset_next_sample) {
+      wpd->taa_sample = 0;
+      wpd->reset_next_sample = false;
+    }
+  }
+
+  /* Reset the TAA when we have already draw a sample, but the sample count differs from previous
+   * time. This removes render artifacts when the viewport anti-aliasing in the user preferences is
+   * set to a lower value. */
+  if (wpd->taa_sample_len != wpd->taa_sample_len_previous) {
+    wpd->taa_sample = 0;
+    wpd->taa_sample_len_previous = wpd->taa_sample_len;
   }
 
   if (wpd->view_updated) {
     wpd->taa_sample = 0;
     wpd->view_updated = false;
+  }
+
+  if (wpd->taa_sample_len > 0 && wpd->valid_history == false) {
+    wpd->taa_sample = 0;
   }
 
   {
@@ -406,13 +419,16 @@ void workbench_antialiasing_draw_pass(WORKBENCH_Data *vedata)
 {
   WORKBENCH_PrivateData *wpd = vedata->stl->wpd;
   WORKBENCH_FramebufferList *fbl = vedata->fbl;
+  WORKBENCH_TextureList *txl = vedata->txl;
   WORKBENCH_PassList *psl = vedata->psl;
   DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
+  DefaultTextureList *dtxl = DRW_viewport_texture_list_get();
 
   if (wpd->taa_sample_len == 0) {
     /* AA disabled. */
     /* Just set sample to 1 to avoid rendering indefinitely. */
     wpd->taa_sample = 1;
+    wpd->valid_history = false;
     return;
   }
 
@@ -424,14 +440,16 @@ void workbench_antialiasing_draw_pass(WORKBENCH_Data *vedata)
 
   const bool last_sample = wpd->taa_sample + 1 == wpd->taa_sample_len;
   const bool taa_finished = wpd->taa_sample >= wpd->taa_sample_len;
-
   if (wpd->taa_sample == 0) {
+    wpd->valid_history = true;
+    GPU_texture_copy(txl->history_buffer_tx, dtxl->color);
     /* In playback mode, we are sure the next redraw will not use the same viewmatrix.
      * In this case no need to save the depth buffer. */
-    eGPUFrameBufferBits bits = GPU_COLOR_BIT | (!wpd->is_playback ? GPU_DEPTH_BIT : 0);
-    GPU_framebuffer_blit(dfbl->default_fb, 0, fbl->antialiasing_fb, 0, bits);
+    if (!wpd->is_playback) {
+      GPU_texture_copy(txl->depth_buffer_tx, dtxl->depth);
+    }
     if (workbench_in_front_history_needed(vedata)) {
-      GPU_framebuffer_blit(dfbl->in_front_fb, 0, fbl->antialiasing_in_front_fb, 0, GPU_DEPTH_BIT);
+      GPU_texture_copy(txl->depth_buffer_in_front_tx, dtxl->depth_in_front);
     }
   }
   else {
@@ -441,9 +459,9 @@ void workbench_antialiasing_draw_pass(WORKBENCH_Data *vedata)
       DRW_draw_pass(psl->aa_accum_ps);
     }
     /* Copy back the saved depth buffer for correct overlays. */
-    GPU_framebuffer_blit(fbl->antialiasing_fb, 0, dfbl->default_fb, 0, GPU_DEPTH_BIT);
+    GPU_texture_copy(dtxl->depth, txl->depth_buffer_tx);
     if (workbench_in_front_history_needed(vedata)) {
-      GPU_framebuffer_blit(fbl->antialiasing_in_front_fb, 0, dfbl->in_front_fb, 0, GPU_DEPTH_BIT);
+      GPU_texture_copy(dtxl->depth_in_front, txl->depth_buffer_in_front_tx);
     }
   }
 

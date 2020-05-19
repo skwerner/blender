@@ -69,6 +69,7 @@
 
 #include "NOD_composite.h"
 #include "NOD_shader.h"
+#include "NOD_simulation.h"
 #include "NOD_texture.h"
 #include "node_intern.h" /* own include */
 
@@ -127,12 +128,12 @@ static int compo_get_recalc_flags(const bContext *C)
   int recalc_flags = 0;
 
   for (win = wm->windows.first; win; win = win->next) {
-    const bScreen *sc = WM_window_get_active_screen(win);
-    ScrArea *sa;
+    const bScreen *screen = WM_window_get_active_screen(win);
+    ScrArea *area;
 
-    for (sa = sc->areabase.first; sa; sa = sa->next) {
-      if (sa->spacetype == SPACE_IMAGE) {
-        SpaceImage *sima = sa->spacedata.first;
+    for (area = screen->areabase.first; area; area = area->next) {
+      if (area->spacetype == SPACE_IMAGE) {
+        SpaceImage *sima = area->spacedata.first;
         if (sima->image) {
           if (sima->image->type == IMA_TYPE_R_RESULT) {
             recalc_flags |= COM_RECALC_COMPOSITE;
@@ -142,8 +143,8 @@ static int compo_get_recalc_flags(const bContext *C)
           }
         }
       }
-      else if (sa->spacetype == SPACE_NODE) {
-        SpaceNode *snode = sa->spacedata.first;
+      else if (area->spacetype == SPACE_NODE) {
+        SpaceNode *snode = area->spacedata.first;
         if (snode->flag & SNODE_BACKDRAW) {
           recalc_flags |= COM_RECALC_VIEWER;
         }
@@ -436,6 +437,11 @@ bool ED_node_is_shader(struct SpaceNode *snode)
 bool ED_node_is_texture(struct SpaceNode *snode)
 {
   return STREQ(snode->tree_idname, ntreeType_Texture->idname);
+}
+
+bool ED_node_is_simulation(struct SpaceNode *snode)
+{
+  return STREQ(snode->tree_idname, ntreeType_Simulation->idname);
 }
 
 /* assumes nothing being done in ntree yet, sets the default in/out node */
@@ -1326,7 +1332,7 @@ void NODE_OT_duplicate(wmOperatorType *ot)
 
 bool ED_node_select_check(ListBase *lb)
 {
-  for (bNode *node = lb->first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, lb) {
     if (node->flag & NODE_SELECT) {
       return true;
     }
@@ -1346,7 +1352,7 @@ void ED_node_select_all(ListBase *lb, int action)
     }
   }
 
-  for (bNode *node = lb->first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, lb) {
     switch (action) {
       case SEL_SELECT:
         nodeSetSelected(node, true);

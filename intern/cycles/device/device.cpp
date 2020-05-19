@@ -494,16 +494,18 @@ vector<DeviceInfo> Device::available_devices(uint mask)
   }
 #endif
 
-#ifdef WITH_CUDA
-  if (mask & DEVICE_MASK_CUDA) {
+#if defined(WITH_CUDA) || defined(WITH_OPTIX)
+  if (mask & (DEVICE_MASK_CUDA | DEVICE_MASK_OPTIX)) {
     if (!(devices_initialized_mask & DEVICE_MASK_CUDA)) {
       if (device_cuda_init()) {
         device_cuda_info(cuda_devices);
       }
       devices_initialized_mask |= DEVICE_MASK_CUDA;
     }
-    foreach (DeviceInfo &info, cuda_devices) {
-      devices.push_back(info);
+    if (mask & DEVICE_MASK_CUDA) {
+      foreach (DeviceInfo &info, cuda_devices) {
+        devices.push_back(info);
+      }
     }
   }
 #endif
@@ -512,7 +514,7 @@ vector<DeviceInfo> Device::available_devices(uint mask)
   if (mask & DEVICE_MASK_OPTIX) {
     if (!(devices_initialized_mask & DEVICE_MASK_OPTIX)) {
       if (device_optix_init()) {
-        device_optix_info(optix_devices);
+        device_optix_info(cuda_devices, optix_devices);
       }
       devices_initialized_mask |= DEVICE_MASK_OPTIX;
     }
@@ -597,6 +599,7 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
 
   info.has_half_images = true;
   info.has_volume_decoupled = true;
+  info.has_adaptive_stop_per_sample = true;
   info.has_osl = true;
   info.has_profiling = true;
 
@@ -639,6 +642,7 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
     /* Accumulate device info. */
     info.has_half_images &= device.has_half_images;
     info.has_volume_decoupled &= device.has_volume_decoupled;
+    info.has_adaptive_stop_per_sample &= device.has_adaptive_stop_per_sample;
     info.has_osl &= device.has_osl;
     info.has_profiling &= device.has_profiling;
   }

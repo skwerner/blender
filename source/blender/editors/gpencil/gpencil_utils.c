@@ -30,10 +30,13 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_ghash.h"
+#include "BLI_hash.h"
 #include "BLI_math.h"
 #include "BLI_rand.h"
 #include "BLI_utildefines.h"
 #include "BLT_translation.h"
+
+#include "PIL_time.h"
 
 #include "DNA_brush_types.h"
 #include "DNA_gpencil_types.h"
@@ -74,6 +77,7 @@
 #include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
+#include "ED_transform_snap_object_context.h"
 #include "ED_view3d.h"
 
 #include "GPU_immediate.h"
@@ -93,13 +97,13 @@
  * and an RNA-pointer to trace back to whatever owns it,
  * when context info is not available.
  */
-bGPdata **ED_gpencil_data_get_pointers_direct(ScrArea *sa, Object *ob, PointerRNA *r_ptr)
+bGPdata **ED_gpencil_data_get_pointers_direct(ScrArea *area, Object *ob, PointerRNA *r_ptr)
 {
   /* if there's an active area, check if the particular editor may
    * have defined any special Grease Pencil context for editing...
    */
-  if (sa) {
-    switch (sa->spacetype) {
+  if (area) {
+    switch (area->spacetype) {
       case SPACE_PROPERTIES: /* properties */
       case SPACE_INFO:       /* header info */
       case SPACE_TOPBAR:     /* Topbar */
@@ -132,16 +136,16 @@ bGPdata **ED_gpencil_data_get_pointers_direct(ScrArea *sa, Object *ob, PointerRN
  * when context info is not available.
  */
 bGPdata **ED_annotation_data_get_pointers_direct(ID *screen_id,
-                                                 ScrArea *sa,
+                                                 ScrArea *area,
                                                  Scene *scene,
                                                  PointerRNA *r_ptr)
 {
   /* If there's an active area, check if the particular editor may
    * have defined any special Grease Pencil context for editing. */
-  if (sa) {
-    SpaceLink *sl = sa->spacedata.first;
+  if (area) {
+    SpaceLink *sl = area->spacedata.first;
 
-    switch (sa->spacetype) {
+    switch (area->spacetype) {
       case SPACE_PROPERTIES: /* properties */
       case SPACE_INFO:       /* header info */
       {
@@ -236,10 +240,10 @@ bGPdata **ED_annotation_data_get_pointers_direct(ID *screen_id,
  * and an RNA-pointer to trace back to whatever owns it. */
 bGPdata **ED_gpencil_data_get_pointers(const bContext *C, PointerRNA *r_ptr)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   Object *ob = CTX_data_active_object(C);
 
-  return ED_gpencil_data_get_pointers_direct(sa, ob, r_ptr);
+  return ED_gpencil_data_get_pointers_direct(area, ob, r_ptr);
 }
 
 /* Get pointer to active Grease Pencil datablock,
@@ -248,23 +252,23 @@ bGPdata **ED_annotation_data_get_pointers(const bContext *C, PointerRNA *r_ptr)
 {
   ID *screen_id = (ID *)CTX_wm_screen(C);
   Scene *scene = CTX_data_scene(C);
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
-  return ED_annotation_data_get_pointers_direct(screen_id, sa, scene, r_ptr);
+  return ED_annotation_data_get_pointers_direct(screen_id, area, scene, r_ptr);
 }
 /* -------------------------------------------------------- */
 
 /* Get the active Grease Pencil datablock, when context is not available */
-bGPdata *ED_gpencil_data_get_active_direct(ScrArea *sa, Object *ob)
+bGPdata *ED_gpencil_data_get_active_direct(ScrArea *area, Object *ob)
 {
-  bGPdata **gpd_ptr = ED_gpencil_data_get_pointers_direct(sa, ob, NULL);
+  bGPdata **gpd_ptr = ED_gpencil_data_get_pointers_direct(area, ob, NULL);
   return (gpd_ptr) ? *(gpd_ptr) : NULL;
 }
 
 /* Get the active Grease Pencil datablock, when context is not available */
-bGPdata *ED_annotation_data_get_active_direct(ID *screen_id, ScrArea *sa, Scene *scene)
+bGPdata *ED_annotation_data_get_active_direct(ID *screen_id, ScrArea *area, Scene *scene)
 {
-  bGPdata **gpd_ptr = ED_annotation_data_get_pointers_direct(screen_id, sa, scene, NULL);
+  bGPdata **gpd_ptr = ED_annotation_data_get_pointers_direct(screen_id, area, scene, NULL);
   return (gpd_ptr) ? *(gpd_ptr) : NULL;
 }
 
@@ -299,13 +303,13 @@ bGPdata *ED_annotation_data_get_active(const bContext *C)
  */
 bGPdata *ED_gpencil_data_get_active_evaluated(const bContext *C)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
   const Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *ob = CTX_data_active_object(C);
   Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 
-  return ED_gpencil_data_get_active_direct(sa, ob_eval);
+  return ED_gpencil_data_get_active_direct(area, ob_eval);
 }
 
 /* -------------------------------------------------------- */
@@ -481,6 +485,40 @@ const EnumPropertyItem *ED_gpencil_layers_with_new_enum_itemf(bContext *C,
   return item;
 }
 
+/* Just existing Materials */
+const EnumPropertyItem *ED_gpencil_material_enum_itemf(bContext *C,
+                                                       PointerRNA *UNUSED(ptr),
+                                                       PropertyRNA *UNUSED(prop),
+                                                       bool *r_free)
+{
+  Object *ob = CTX_data_active_object(C);
+  EnumPropertyItem *item = NULL, item_tmp = {0};
+  int totitem = 0;
+  int i = 0;
+
+  if (ELEM(NULL, C, ob)) {
+    return DummyRNA_DEFAULT_items;
+  }
+
+  /* Existing materials */
+  for (i = 1; i <= ob->totcol; i++) {
+    Material *ma = BKE_object_material_get(ob, i);
+    if (ma) {
+      item_tmp.identifier = ma->id.name + 2;
+      item_tmp.name = ma->id.name + 2;
+      item_tmp.value = i;
+      item_tmp.icon = ma->preview ? ma->preview->icon_id : ICON_NONE;
+
+      RNA_enum_item_add(&item, &totitem, &item_tmp);
+    }
+  }
+
+  RNA_enum_item_end(&item, &totitem);
+  *r_free = true;
+
+  return item;
+}
+
 /* ******************************************************** */
 /* Brush Tool Core */
 
@@ -494,8 +532,7 @@ const EnumPropertyItem *ED_gpencil_layers_with_new_enum_itemf(bContext *C,
  * \param x0, y0: The screen-space x and y coordinates of the start of the stroke segment
  * \param x1, y1: The screen-space x and y coordinates of the end of the stroke segment
  */
-bool gp_stroke_inside_circle(
-    const float mval[2], const float UNUSED(mvalo[2]), int rad, int x0, int y0, int x1, int y1)
+bool gp_stroke_inside_circle(const float mval[2], int rad, int x0, int y0, int x1, int y1)
 {
   /* simple within-radius check for now */
   const float screen_co_a[2] = {x0, y0};
@@ -514,25 +551,25 @@ bool gp_stroke_inside_circle(
 
 /* Check whether given stroke can be edited given the supplied context */
 /* TODO: do we need additional flags for screenspace vs dataspace? */
-bool ED_gpencil_stroke_can_use_direct(const ScrArea *sa, const bGPDstroke *gps)
+bool ED_gpencil_stroke_can_use_direct(const ScrArea *area, const bGPDstroke *gps)
 {
   /* sanity check */
-  if (ELEM(NULL, sa, gps)) {
+  if (ELEM(NULL, area, gps)) {
     return false;
   }
 
   /* filter stroke types by flags + spacetype */
   if (gps->flag & GP_STROKE_3DSPACE) {
     /* 3D strokes - only in 3D view */
-    return ((sa->spacetype == SPACE_VIEW3D) || (sa->spacetype == SPACE_PROPERTIES));
+    return ((area->spacetype == SPACE_VIEW3D) || (area->spacetype == SPACE_PROPERTIES));
   }
   else if (gps->flag & GP_STROKE_2DIMAGE) {
     /* Special "image" strokes - only in Image Editor */
-    return (sa->spacetype == SPACE_IMAGE);
+    return (area->spacetype == SPACE_IMAGE);
   }
   else if (gps->flag & GP_STROKE_2DSPACE) {
     /* 2D strokes (dataspace) - for any 2D view (i.e. everything other than 3D view) */
-    return (sa->spacetype != SPACE_VIEW3D);
+    return (area->spacetype != SPACE_VIEW3D);
   }
   else {
     /* view aligned - anything goes */
@@ -543,8 +580,8 @@ bool ED_gpencil_stroke_can_use_direct(const ScrArea *sa, const bGPDstroke *gps)
 /* Check whether given stroke can be edited in the current context */
 bool ED_gpencil_stroke_can_use(const bContext *C, const bGPDstroke *gps)
 {
-  ScrArea *sa = CTX_wm_area(C);
-  return ED_gpencil_stroke_can_use_direct(sa, gps);
+  ScrArea *area = CTX_wm_area(C);
+  return ED_gpencil_stroke_can_use_direct(area, gps);
 }
 
 /* Check whether given stroke can be edited for the current color */
@@ -575,7 +612,7 @@ bool ED_gpencil_stroke_color_use(Object *ob, const bGPDlayer *gpl, const bGPDstr
  */
 void gp_point_conversion_init(bContext *C, GP_SpaceConversion *r_gsc)
 {
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   ARegion *region = CTX_wm_region(C);
 
   /* zero out the storage (just in case) */
@@ -586,12 +623,12 @@ void gp_point_conversion_init(bContext *C, GP_SpaceConversion *r_gsc)
   r_gsc->scene = CTX_data_scene(C);
   r_gsc->ob = CTX_data_active_object(C);
 
-  r_gsc->sa = sa;
+  r_gsc->area = area;
   r_gsc->region = region;
   r_gsc->v2d = &region->v2d;
 
   /* init region-specific stuff */
-  if (sa->spacetype == SPACE_VIEW3D) {
+  if (area->spacetype == SPACE_VIEW3D) {
     wmWindow *win = CTX_wm_window(C);
     Scene *scene = CTX_data_scene(C);
     struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
@@ -671,8 +708,8 @@ void gp_apply_parent_point(Depsgraph *depsgraph, Object *obact, bGPDlayer *gpl, 
 /**
  * Convert a Grease Pencil coordinate (i.e. can be 2D or 3D) to screenspace (2D)
  *
- * \param[out] r_x  The screen-space x-coordinate of the point
- * \param[out] r_y  The screen-space y-coordinate of the point
+ * \param[out] r_x: The screen-space x-coordinate of the point
+ * \param[out] r_y: The screen-space y-coordinate of the point
  *
  * \warning This assumes that the caller has already checked
  * whether the stroke in question can be drawn.
@@ -686,8 +723,8 @@ void gp_point_to_xy(
   int xyval[2];
 
   /* sanity checks */
-  BLI_assert(!(gps->flag & GP_STROKE_3DSPACE) || (gsc->sa->spacetype == SPACE_VIEW3D));
-  BLI_assert(!(gps->flag & GP_STROKE_2DSPACE) || (gsc->sa->spacetype != SPACE_VIEW3D));
+  BLI_assert(!(gps->flag & GP_STROKE_3DSPACE) || (gsc->area->spacetype == SPACE_VIEW3D));
+  BLI_assert(!(gps->flag & GP_STROKE_2DSPACE) || (gsc->area->spacetype != SPACE_VIEW3D));
 
   if (gps->flag & GP_STROKE_3DSPACE) {
     if (ED_view3d_project_int_global(region, &pt->x, xyval, V3D_PROJ_TEST_NOP) ==
@@ -744,8 +781,8 @@ void gp_point_to_xy_fl(const GP_SpaceConversion *gsc,
   float xyval[2];
 
   /* sanity checks */
-  BLI_assert(!(gps->flag & GP_STROKE_3DSPACE) || (gsc->sa->spacetype == SPACE_VIEW3D));
-  BLI_assert(!(gps->flag & GP_STROKE_2DSPACE) || (gsc->sa->spacetype != SPACE_VIEW3D));
+  BLI_assert(!(gps->flag & GP_STROKE_3DSPACE) || (gsc->area->spacetype == SPACE_VIEW3D));
+  BLI_assert(!(gps->flag & GP_STROKE_2DSPACE) || (gsc->area->spacetype != SPACE_VIEW3D));
 
   if (gps->flag & GP_STROKE_3DSPACE) {
     if (ED_view3d_project_float_global(region, &pt->x, xyval, V3D_PROJ_TEST_NOP) ==
@@ -803,7 +840,7 @@ void gp_point_3d_to_xy(const GP_SpaceConversion *gsc,
   float xyval[2];
 
   /* sanity checks */
-  BLI_assert((gsc->sa->spacetype == SPACE_VIEW3D));
+  BLI_assert((gsc->area->spacetype == SPACE_VIEW3D));
 
   if (flag & GP_STROKE_3DSPACE) {
     if (ED_view3d_project_float_global(region, pt, xyval, V3D_PROJ_TEST_NOP) == V3D_PROJ_RET_OK) {
@@ -869,8 +906,7 @@ bool gp_point_xy_to_3d(const GP_SpaceConversion *gsc,
   const RegionView3D *rv3d = gsc->region->regiondata;
   float rvec[3];
 
-  ED_gpencil_drawing_reference_get(
-      scene, gsc->ob, gsc->gpl, scene->toolsettings->gpencil_v3d_align, rvec);
+  ED_gpencil_drawing_reference_get(scene, gsc->ob, scene->toolsettings->gpencil_v3d_align, rvec);
 
   float zfac = ED_view3d_calc_zfac(rv3d, rvec, NULL);
 
@@ -905,7 +941,6 @@ bool gp_point_xy_to_3d(const GP_SpaceConversion *gsc,
 void gp_stroke_convertcoords_tpoint(Scene *scene,
                                     ARegion *region,
                                     Object *ob,
-                                    bGPDlayer *gpl,
                                     const tGPspoint *point2D,
                                     float *depth,
                                     float r_out[3])
@@ -929,7 +964,7 @@ void gp_stroke_convertcoords_tpoint(Scene *scene,
     /* Current method just converts each point in screen-coordinates to
      * 3D-coordinates using the 3D-cursor as reference.
      */
-    ED_gpencil_drawing_reference_get(scene, ob, gpl, ts->gpencil_v3d_align, rvec);
+    ED_gpencil_drawing_reference_get(scene, ob, ts->gpencil_v3d_align, rvec);
     zfac = ED_view3d_calc_zfac(region->regiondata, rvec, NULL);
 
     if (ED_view3d_project_float_global(region, rvec, mval_prj, V3D_PROJ_TEST_NOP) ==
@@ -948,8 +983,10 @@ void gp_stroke_convertcoords_tpoint(Scene *scene,
  * Get drawing reference point for conversion or projection of the stroke
  * \param[out] r_vec : Reference point found
  */
-void ED_gpencil_drawing_reference_get(
-    const Scene *scene, const Object *ob, bGPDlayer *UNUSED(gpl), char align_flag, float r_vec[3])
+void ED_gpencil_drawing_reference_get(const Scene *scene,
+                                      const Object *ob,
+                                      char align_flag,
+                                      float r_vec[3])
 {
   const float *fp = scene->cursor.location;
 
@@ -1328,7 +1365,7 @@ void ED_gpencil_add_defaults(bContext *C, Object *ob)
   /* if not exist, create a new one */
   if ((paint->brush == NULL) || (paint->brush->gpencil_settings == NULL)) {
     /* create new brushes */
-    BKE_brush_gpencil_paint_presets(bmain, ts);
+    BKE_brush_gpencil_paint_presets(bmain, ts, true);
   }
 
   /* ensure a color exists and is assigned to object */
@@ -1564,7 +1601,7 @@ void ED_gpencil_vgroup_deselect(bContext *C, Object *ob)
 static bool gp_check_cursor_region(bContext *C, int mval_i[2])
 {
   ARegion *region = CTX_wm_region(C);
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   Object *ob = CTX_data_active_object(C);
 
   if ((ob == NULL) || (!ELEM(ob->mode,
@@ -1576,7 +1613,7 @@ static bool gp_check_cursor_region(bContext *C, int mval_i[2])
   }
 
   /* TODO: add more spacetypes */
-  if (!ELEM(sa->spacetype, SPACE_VIEW3D)) {
+  if (!ELEM(area->spacetype, SPACE_VIEW3D)) {
     return false;
   }
   if ((region) && (region->regiontype != RGN_TYPE_WINDOW)) {
@@ -2174,7 +2211,8 @@ int ED_gpencil_select_stroke_segment(bGPDlayer *gpl,
   float f = 0.0f;
   int i2 = 0;
 
-  bGPDframe *gpf = gpl->actframe;
+  bGPDlayer *gpl_orig = (gpl->runtime.gpl_orig) ? gpl->runtime.gpl_orig : gpl;
+  bGPDframe *gpf = gpl_orig->actframe;
   if (gpf == NULL) {
     return 0;
   }
@@ -2187,7 +2225,7 @@ int ED_gpencil_select_stroke_segment(bGPDlayer *gpl,
 
   /* Save list of strokes to check */
   int totstrokes = 0;
-  for (bGPDstroke *gps_iter = gpf->strokes.first; gps_iter; gps_iter = gps_iter->next) {
+  LISTBASE_FOREACH (bGPDstroke *, gps_iter, &gpf->strokes) {
     if (gps_iter->totpoints < 2) {
       continue;
     }
@@ -2525,25 +2563,169 @@ void ED_gpencil_fill_vertex_color_set(ToolSettings *ts, Brush *brush, bGPDstroke
   }
 }
 
-void ED_gpencil_point_vertex_color_set(ToolSettings *ts, Brush *brush, bGPDspoint *pt)
+void ED_gpencil_point_vertex_color_set(ToolSettings *ts,
+                                       Brush *brush,
+                                       bGPDspoint *pt,
+                                       tGPspoint *tpt)
 {
   if (GPENCIL_USE_VERTEX_COLOR_STROKE(ts, brush)) {
-    copy_v3_v3(pt->vert_color, brush->rgb);
-    pt->vert_color[3] = brush->gpencil_settings->vertex_factor;
-    srgb_to_linearrgb_v4(pt->vert_color, pt->vert_color);
+    if (tpt == NULL) {
+      copy_v3_v3(pt->vert_color, brush->rgb);
+      pt->vert_color[3] = brush->gpencil_settings->vertex_factor;
+      srgb_to_linearrgb_v4(pt->vert_color, pt->vert_color);
+    }
+    else {
+      copy_v3_v3(pt->vert_color, tpt->vert_color);
+      pt->vert_color[3] = brush->gpencil_settings->vertex_factor;
+    }
   }
   else {
     zero_v4(pt->vert_color);
   }
 }
 
-void ED_gpencil_sbuffer_vertex_color_set(
-    Depsgraph *depsgraph, Object *ob, ToolSettings *ts, Brush *brush, Material *material)
+void ED_gpencil_init_random_settings(Brush *brush,
+                                     const int mval[2],
+                                     GpRandomSettings *random_settings)
+{
+  int seed = ((uint)(ceil(PIL_check_seconds_timer())) + 1) % 128;
+  /* Use mouse position to get randomness. */
+  int ix = mval[0] * seed;
+  int iy = mval[1] * seed;
+  int iz = ix + iy * seed;
+  zero_v3(random_settings->hsv);
+
+  BrushGpencilSettings *brush_settings = brush->gpencil_settings;
+  /* Random to Hue. */
+  if (brush_settings->random_hue > 0.0f) {
+    float rand = BLI_hash_int_01(BLI_hash_int_2d(ix, iy)) * 2.0f - 1.0f;
+    random_settings->hsv[0] = rand * brush_settings->random_hue * 0.5f;
+  }
+  /* Random to Saturation. */
+  if (brush_settings->random_saturation > 0.0f) {
+    float rand = BLI_hash_int_01(BLI_hash_int_2d(iy, ix)) * 2.0f - 1.0f;
+    random_settings->hsv[1] = rand * brush_settings->random_saturation;
+  }
+  /* Random to Value. */
+  if (brush_settings->random_value > 0.0f) {
+    float rand = BLI_hash_int_01(BLI_hash_int_2d(ix * iz, iy * iz)) * 2.0f - 1.0f;
+    random_settings->hsv[2] = rand * brush_settings->random_value;
+  }
+
+  /* Random to pressure. */
+  if (brush_settings->draw_random_press > 0.0f) {
+    random_settings->pressure = BLI_hash_int_01(BLI_hash_int_2d(ix + iz, iy + iz)) * 2.0f - 1.0f;
+  }
+
+  /* Randomn to color strength. */
+  if (brush_settings->draw_random_strength) {
+    random_settings->strength = BLI_hash_int_01(BLI_hash_int_2d(ix + iy, iy + iz + ix)) * 2.0f -
+                                1.0f;
+  }
+
+  /* Random to uv texture rotation. */
+  if (brush_settings->uv_random > 0.0f) {
+    random_settings->uv = BLI_hash_int_01(BLI_hash_int_2d(iy + iz, ix * iz)) * 2.0f - 1.0f;
+  }
+}
+
+static void gpencil_sbuffer_vertex_color_random(
+    bGPdata *gpd, Brush *brush, tGPspoint *tpt, float random_color[3], float pen_pressure)
+{
+  BrushGpencilSettings *brush_settings = brush->gpencil_settings;
+  if (brush_settings->flag & GP_BRUSH_GROUP_RANDOM) {
+    int seed = ((uint)(ceil(PIL_check_seconds_timer())) + 1) % 128;
+
+    int ix = (int)(tpt->x * seed);
+    int iy = (int)(tpt->y * seed);
+    int iz = ix + iy * seed;
+    float hsv[3];
+    float factor_value[3];
+    zero_v3(factor_value);
+
+    /* Apply randomness to Hue. */
+    if (brush_settings->random_hue > 0.0f) {
+      if ((brush_settings->flag2 & GP_BRUSH_USE_HUE_AT_STROKE) == 0) {
+
+        float rand = BLI_hash_int_01(BLI_hash_int_2d(ix, gpd->runtime.sbuffer_used)) * 2.0f - 1.0f;
+        factor_value[0] = rand * brush_settings->random_hue * 0.5f;
+      }
+      else {
+        factor_value[0] = random_color[0];
+      }
+
+      /* Apply random curve. */
+      if (brush_settings->flag2 & GP_BRUSH_USE_HUE_RAND_PRESS) {
+        factor_value[0] *= BKE_curvemapping_evaluateF(
+            brush_settings->curve_rand_hue, 0, pen_pressure);
+      }
+    }
+
+    /* Apply randomness to Saturation. */
+    if (brush_settings->random_saturation > 0.0f) {
+      if ((brush_settings->flag2 & GP_BRUSH_USE_SAT_AT_STROKE) == 0) {
+        float rand = BLI_hash_int_01(BLI_hash_int_2d(iy, gpd->runtime.sbuffer_used)) * 2.0f - 1.0f;
+        factor_value[1] = rand * brush_settings->random_saturation;
+      }
+      else {
+        factor_value[1] = random_color[1];
+      }
+
+      /* Apply random curve. */
+      if (brush_settings->flag2 & GP_BRUSH_USE_SAT_RAND_PRESS) {
+        factor_value[1] *= BKE_curvemapping_evaluateF(
+            brush_settings->curve_rand_saturation, 0, pen_pressure);
+      }
+    }
+
+    /* Apply randomness to Value. */
+    if (brush_settings->random_value > 0.0f) {
+      if ((brush_settings->flag2 & GP_BRUSH_USE_VAL_AT_STROKE) == 0) {
+        float rand = BLI_hash_int_01(BLI_hash_int_2d(iz, gpd->runtime.sbuffer_used)) * 2.0f - 1.0f;
+        factor_value[2] = rand * brush_settings->random_value;
+      }
+      else {
+        factor_value[2] = random_color[2];
+      }
+
+      /* Apply random curve. */
+      if (brush_settings->flag2 & GP_BRUSH_USE_VAL_RAND_PRESS) {
+        factor_value[2] *= BKE_curvemapping_evaluateF(
+            brush_settings->curve_rand_value, 0, pen_pressure);
+      }
+    }
+
+    rgb_to_hsv_v(tpt->vert_color, hsv);
+    add_v3_v3(hsv, factor_value);
+    /* For Hue need to cover all range, but for Saturation and Value
+     * is not logic because the effect is too hard, so the value is just clamped. */
+    if (hsv[0] < 0.0f) {
+      hsv[0] += 1.0f;
+    }
+    else if (hsv[0] > 1.0f) {
+      hsv[0] -= 1.0f;
+    }
+
+    CLAMP3(hsv, 0.0f, 1.0f);
+    hsv_to_rgb_v(hsv, tpt->vert_color);
+  }
+}
+
+void ED_gpencil_sbuffer_vertex_color_set(Depsgraph *depsgraph,
+                                         Object *ob,
+                                         ToolSettings *ts,
+                                         Brush *brush,
+                                         Material *material,
+                                         float random_color[3],
+                                         float pen_pressure)
 {
   bGPdata *gpd = (bGPdata *)ob->data;
   Object *ob_eval = (Object *)DEG_get_evaluated_id(depsgraph, &ob->id);
   bGPdata *gpd_eval = (bGPdata *)ob_eval->data;
   MaterialGPencilStyle *gp_style = material->gp_style;
+
+  int idx = gpd->runtime.sbuffer_used;
+  tGPspoint *tpt = (tGPspoint *)gpd->runtime.sbuffer + idx;
 
   float vertex_color[4];
   copy_v3_v3(vertex_color, brush->rgb);
@@ -2559,15 +2741,18 @@ void ED_gpencil_sbuffer_vertex_color_set(
   }
   /* Copy stroke vertex color. */
   if (GPENCIL_USE_VERTEX_COLOR_STROKE(ts, brush)) {
-    copy_v4_v4(gpd->runtime.vert_color, vertex_color);
+    copy_v4_v4(tpt->vert_color, vertex_color);
   }
   else {
-    copy_v4_v4(gpd->runtime.vert_color, gp_style->stroke_rgba);
+    copy_v4_v4(tpt->vert_color, gp_style->stroke_rgba);
   }
 
-  /* Copy to eval data because paint operators don't tag refresh until end for speedup painting. */
+  /* Random Color. */
+  gpencil_sbuffer_vertex_color_random(gpd, brush, tpt, random_color, pen_pressure);
+
+  /* Copy to eval data because paint operators don't tag refresh until end for speedup
+     painting. */
   if (gpd_eval != NULL) {
-    copy_v4_v4(gpd_eval->runtime.vert_color, gpd->runtime.vert_color);
     copy_v4_v4(gpd_eval->runtime.vert_color_fill, gpd->runtime.vert_color_fill);
     gpd_eval->runtime.matid = gpd->runtime.matid;
   }

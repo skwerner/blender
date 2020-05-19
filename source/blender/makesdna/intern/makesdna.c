@@ -136,6 +136,7 @@ static const char *includefiles[] = {
     "DNA_hair_types.h",
     "DNA_pointcloud_types.h",
     "DNA_volume_types.h",
+    "DNA_simulation_types.h",
 
     /* see comment above before editing! */
 
@@ -1073,8 +1074,8 @@ static int calculate_struct_sizes(int firststruct, FILE *file_verify, const char
           types_size_native[structtype] = size_native;
           types_size_32[structtype] = size_32;
           types_size_64[structtype] = size_64;
-          /* two ways to detect if a struct contains a pointer:
-           * has_pointer is set or size_native  doesn't match any of 32/64bit lengths*/
+          /* Two ways to detect if a struct contains a pointer:
+           * has_pointer is set or size_native doesn't match any of 32/64bit lengths. */
           if (has_pointer || size_64 != size_native || size_32 != size_native) {
             if (size_64 % 8) {
               fprintf(stderr,
@@ -1590,6 +1591,7 @@ int main(int argc, char **argv)
 #include "DNA_sdna_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_shader_fx_types.h"
+#include "DNA_simulation_types.h"
 #include "DNA_sound_types.h"
 #include "DNA_space_types.h"
 #include "DNA_speaker_types.h"

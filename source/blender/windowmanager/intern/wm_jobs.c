@@ -35,6 +35,7 @@
 
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_sequencer.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -254,7 +255,7 @@ static void wm_jobs_update_progress_bars(wmWindowManager *wm)
   float total_progress = 0.f;
   float jobs_progress = 0;
 
-  for (wmJob *wm_job = wm->jobs.first; wm_job; wm_job = wm_job->next) {
+  LISTBASE_FOREACH (wmJob *, wm_job, &wm->jobs) {
     if (wm_job->threads.first && !wm_job->ready) {
       if (wm_job->flag & WM_JOB_PROGRESS) {
         /* accumulate global progress for running jobs */
@@ -558,6 +559,9 @@ void WM_jobs_kill_all(wmWindowManager *wm)
   while ((wm_job = wm->jobs.first)) {
     wm_jobs_kill_job(wm, wm_job);
   }
+
+  /* This job will be automatically restarted */
+  BKE_sequencer_prefetch_stop_all();
 }
 
 /* wait until every job ended, except for one owner (used in undo to keep screen job alive) */

@@ -51,6 +51,10 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     endif()
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \"${CLANG_OPENMP_LIB}\"")
   endif()
+  if(WITH_WINDOWS_STRIPPED_PDB)
+    message(WARNING "stripped pdb not supported with clang, disabling..")
+    set(WITH_WINDOWS_STRIPPED_PDB Off)
+  endif()
 endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ${WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS})
@@ -107,12 +111,13 @@ endif()
 unset(_min_ver)
 
 # needed for some MSVC installations
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SAFESEH:NO")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /SAFESEH:NO")
-set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO")
+# 4099 : PDB 'filename' was not found with 'object/library'
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SAFESEH:NO /ignore:4099")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /SAFESEH:NO /ignore:4099")
+set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO /ignore:4099")
 
 list(APPEND PLATFORM_LINKLIBS
-  ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32 Comctl32
+  ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32 Comctl32 version
   advapi32 shfolder shell32 ole32 oleaut32 uuid psapi Dbghelp Shlwapi
 )
 
@@ -134,7 +139,12 @@ add_definitions(-D_ALLOW_KEYWORD_MACROS)
 # We want to support Windows 7 level ABI
 add_definitions(-D_WIN32_WINNT=0x601)
 include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
-remove_cc_flag("/MDd" "/MD")
+remove_cc_flag("/MDd" "/MD" "/Zi")
+
+if(WITH_WINDOWS_PDB)
+	set(PDB_INFO_OVERRIDE_FLAGS "/Z7")
+	set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
+endif()
 
 if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARN_FLAGS} /nologo /J /Gd /EHsc -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference ")
@@ -151,27 +161,42 @@ if(MSVC_VERSION GREATER 1911 AND NOT MSVC_CLANG)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:twoPhase-")
 endif()
 
+if(WITH_WINDOWS_SCCACHE AND CMAKE_VS_MSBUILD_COMMAND)
+    message(WARNING "Disabling sccache, sccache is not supported with msbuild")
+    set(WITH_WINDOWS_SCCACHE Off)
+endif()
 
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd /ZI")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MDd /ZI")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MD")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /MD")
-set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} /MD")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MD")
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /MD")
+if(WITH_WINDOWS_SCCACHE)
+    set(CMAKE_C_COMPILER_LAUNCHER sccache)
+    set(CMAKE_CXX_COMPILER_LAUNCHER sccache)
+    set(SYMBOL_FORMAT /Z7)
+else()
+    unset(CMAKE_C_COMPILER_LAUNCHER)
+    unset(CMAKE_CXX_COMPILER_LAUNCHER)
+    set(SYMBOL_FORMAT /ZI)
+endif()
 
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd ${SYMBOL_FORMAT}")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MDd ${SYMBOL_FORMAT}")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MD ${SYMBOL_FORMAT}")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /MD ${SYMBOL_FORMAT}")
+unset(SYMBOL_FORMAT)
 # JMC is available on msvc 15.8 (1915) and up
 if(MSVC_VERSION GREATER 1914 AND NOT MSVC_CLANG)
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /JMC")
 endif()
 
-set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152 /INCREMENTAL:NO ")
+set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152")
 set(PLATFORM_LINKFLAGS_RELEASE "/NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrtd.lib")
 set(PLATFORM_LINKFLAGS_DEBUG "${PLATFORM_LINKFLAGS_DEBUG} /IGNORE:4099 /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:libcmtd.lib")
 
 # Ignore meaningless for us linker warnings.
 set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /ignore:4049 /ignore:4217 /ignore:4221")
+set(PLATFORM_LINKFLAGS_RELEASE "${PLATFORM_LINKFLAGS} ${PDB_INFO_OVERRIDE_LINKER_FLAGS}")
 set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /ignore:4221")
 
 if(CMAKE_CL_64)
@@ -209,7 +234,7 @@ endif()
 
 # Mark libdir as system headers with a lower warn level, to resolve some warnings
 # that we have very little control over
-if(MSVC_VERSION GREATER_EQUAL 1914 AND NOT MSVC_CLANG)
+if(MSVC_VERSION GREATER_EQUAL 1914 AND NOT MSVC_CLANG AND NOT WITH_WINDOWS_SCCACHE)
   add_compile_options(/experimental:external /external:templates- /external:I "${LIBDIR}" /external:W0)
 endif()
 
@@ -572,7 +597,7 @@ if(WITH_SYSTEM_AUDASPACE)
 endif()
 
 if(WITH_TBB)
-  set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/tbb_debug.lib)
+  set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/debug/tbb_debug.lib)
   set(TBB_INCLUDE_DIR ${LIBDIR}/tbb/include)
   set(TBB_INCLUDE_DIRS ${TBB_INCLUDE_DIR})
   if(WITH_TBB_MALLOC_PROXY)
@@ -669,7 +694,7 @@ if(WITH_USD)
     set(USD_INCLUDE_DIRS ${LIBDIR}/usd/include)
     set(USD_RELEASE_LIB ${LIBDIR}/usd/lib/libusd_m.lib)
     set(USD_DEBUG_LIB ${LIBDIR}/usd/lib/libusd_m_d.lib)
-    set(USD_LIBRARY_DIR ${LIBDIR}/usd/lib/usd)
+    set(USD_LIBRARY_DIR ${LIBDIR}/usd/lib)
     set(USD_LIBRARIES
       debug ${USD_DEBUG_LIB}
       optimized ${USD_RELEASE_LIB}

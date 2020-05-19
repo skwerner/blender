@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -72,7 +72,7 @@ static void copyData(const ModifierData *md_src, ModifierData *md_dst, const int
   const BevelModifierData *bmd_src = (const BevelModifierData *)md_src;
   BevelModifierData *bmd_dst = (BevelModifierData *)md_dst;
 
-  modifier_copyData_generic(md_src, md_dst, flag);
+  BKE_modifier_copydata_generic(md_src, md_dst, flag);
   bmd_dst->custom_profile = BKE_curveprofile_copy(bmd_src->custom_profile);
 }
 
@@ -91,7 +91,7 @@ static void requiredDataMask(Object *UNUSED(ob),
 /*
  * This calls the new bevel code (added since 2.64)
  */
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result;
   BMesh *bm;
@@ -206,7 +206,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   Object *ob = ctx->object;
 
   if (harden_normals && (ob->type == OB_MESH) && !(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH)) {
-    modifier_setError(md, "Enable 'Auto Smooth' in Object Data Properties");
+    BKE_modifier_set_error(md, "Enable 'Auto Smooth' in Object Data Properties");
     harden_normals = false;
   }
 
@@ -275,7 +275,10 @@ ModifierTypeInfo modifierType_Bevel = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
     /* freeData */ freeData,

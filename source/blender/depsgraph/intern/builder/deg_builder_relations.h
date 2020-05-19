@@ -54,6 +54,7 @@ struct FCurve;
 struct FreestyleLineSet;
 struct FreestyleLineStyle;
 struct ID;
+struct IDProperty;
 struct Image;
 struct Key;
 struct LayerCollection;
@@ -68,6 +69,7 @@ struct Object;
 struct ParticleSettings;
 struct ParticleSystem;
 struct Scene;
+struct Simulation;
 struct Speaker;
 struct Tex;
 struct ViewLayer;
@@ -195,6 +197,8 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
 
   virtual void build_id(ID *id);
 
+  virtual void build_idproperties(IDProperty *id_property);
+
   virtual void build_scene_render(Scene *scene, ViewLayer *view_layer);
   virtual void build_scene_parameters(Scene *scene);
   virtual void build_scene_compositor(Scene *scene);
@@ -266,6 +270,7 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
   virtual void build_proxy_rig(Object *object);
   virtual void build_shapekeys(Key *key);
   virtual void build_armature(bArmature *armature);
+  virtual void build_armature_bones(ListBase *bones);
   virtual void build_camera(Camera *camera);
   virtual void build_light(Light *lamp);
   virtual void build_nodetree(bNodeTree *ntree);
@@ -282,6 +287,7 @@ class DepsgraphRelationBuilder : public DepsgraphBuilder {
   virtual void build_lightprobe(LightProbe *probe);
   virtual void build_speaker(Speaker *speaker);
   virtual void build_sound(bSound *sound);
+  virtual void build_simulation(Simulation *simulation);
   virtual void build_scene_sequencer(Scene *scene);
   virtual void build_scene_audio(Scene *scene);
   virtual void build_scene_speakers(Scene *scene, ViewLayer *view_layer);

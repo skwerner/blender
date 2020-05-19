@@ -259,6 +259,7 @@ extern StructRNA RNA_FreestyleLineStyle;
 extern StructRNA RNA_FreestyleModuleSettings;
 extern StructRNA RNA_FreestyleSettings;
 extern StructRNA RNA_Function;
+extern StructRNA RNA_FunctionNode;
 extern StructRNA RNA_GPencilFrame;
 extern StructRNA RNA_GPencilInterpolateSettings;
 extern StructRNA RNA_GPencilLayer;
@@ -548,6 +549,9 @@ extern StructRNA RNA_ShrinkwrapConstraint;
 extern StructRNA RNA_ShrinkwrapModifier;
 extern StructRNA RNA_SimpleDeformModifier;
 extern StructRNA RNA_SimplifyGpencilModifier;
+extern StructRNA RNA_Simulation;
+extern StructRNA RNA_SimulationNode;
+extern StructRNA RNA_SimulationNodeTree;
 extern StructRNA RNA_SkinModifier;
 extern StructRNA RNA_SmoothGpencilModifier;
 extern StructRNA RNA_SmoothModifier;
@@ -929,10 +933,6 @@ void RNA_property_update_main(struct Main *bmain,
                               PointerRNA *ptr,
                               PropertyRNA *prop);
 bool RNA_property_update_check(struct PropertyRNA *prop);
-
-void RNA_property_update_cache_add(PointerRNA *ptr, PropertyRNA *prop);
-void RNA_property_update_cache_flush(struct Main *bmain, struct Scene *scene);
-void RNA_property_update_cache_free(void);
 
 /* Property Data */
 

@@ -28,14 +28,13 @@
 #include <opensubdiv/far/topologyRefinerFactory.h>
 
 #include "internal/opensubdiv_converter_internal.h"
-#include "internal/opensubdiv_converter_orient.h"
 #include "internal/opensubdiv_internal.h"
 #include "internal/opensubdiv_util.h"
 #include "opensubdiv_converter_capi.h"
 
-using opensubdiv_capi::min;
-using opensubdiv_capi::stack;
-using opensubdiv_capi::vector;
+using blender::opensubdiv::min;
+using blender::opensubdiv::stack;
+using blender::opensubdiv::vector;
 
 struct TopologyRefinerData {
   const OpenSubdiv_Converter *converter;
@@ -173,18 +172,27 @@ inline bool TopologyRefinerFactory<TopologyRefinerData>::assignComponentTags(
       setBaseVertexSharpness(refiner, vertex_index, Crease::SHARPNESS_INFINITE);
       continue;
     }
+
+    // Get sharpness provided by the converter.
+    float sharpness = 0.0f;
     if (converter->getVertexSharpness != NULL) {
-      float sharpness = converter->getVertexSharpness(converter, vertex_index);
-      if (vertex_edges.size() == 2) {
-        const int edge0 = vertex_edges[0], edge1 = vertex_edges[1];
-        const float sharpness0 = refiner._levels[0]->getEdgeSharpness(edge0);
-        const float sharpness1 = refiner._levels[0]->getEdgeSharpness(edge1);
-        // TODO(sergey): Find a better mixing between edge and vertex sharpness.
-        sharpness += min(sharpness0, sharpness1);
-        sharpness = min(sharpness, 10.0f);
-      }
-      setBaseVertexSharpness(refiner, vertex_index, sharpness);
+      sharpness = converter->getVertexSharpness(converter, vertex_index);
     }
+
+    // If it's vertex where 2 non-manifold edges meet adjust vertex sharpness to
+    // the edges.
+    // This way having a plane with all 4 edges set to be sharp produces sharp
+    // corners in the subdivided result.
+    if (vertex_edges.size() == 2) {
+      const int edge0 = vertex_edges[0], edge1 = vertex_edges[1];
+      const float sharpness0 = refiner._levels[0]->getEdgeSharpness(edge0);
+      const float sharpness1 = refiner._levels[0]->getEdgeSharpness(edge1);
+      // TODO(sergey): Find a better mixing between edge and vertex sharpness.
+      sharpness += min(sharpness0, sharpness1);
+      sharpness = min(sharpness, 10.0f);
+    }
+
+    setBaseVertexSharpness(refiner, vertex_index, sharpness);
   }
   return true;
 }
@@ -237,7 +245,8 @@ inline void TopologyRefinerFactory<TopologyRefinerData>::reportInvalidTopology(
 } /* namespace OPENSUBDIV_VERSION */
 } /* namespace OpenSubdiv */
 
-namespace opensubdiv_capi {
+namespace blender {
+namespace opensubdiv {
 
 namespace {
 
@@ -283,4 +292,5 @@ OpenSubdiv::Far::TopologyRefiner *createOSDTopologyRefinerFromConverter(
   return TopologyRefinerFactory<TopologyRefinerData>::Create(cb_data, topology_options);
 }
 
-}  // namespace opensubdiv_capi
+}  // namespace opensubdiv
+}  // namespace blender

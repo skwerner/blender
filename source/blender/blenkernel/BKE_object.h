@@ -21,11 +21,14 @@
  * \ingroup bke
  * \brief General operations, lookup, etc. for blender objects.
  */
+
+#include "BLI_compiler_attrs.h"
+
+#include "DNA_object_enums.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_compiler_attrs.h"
 
 struct Base;
 struct BoundBox;
@@ -45,8 +48,6 @@ struct Scene;
 struct ShaderFxData;
 struct View3D;
 struct ViewLayer;
-
-#include "DNA_object_enums.h"
 
 void BKE_object_workob_clear(struct Object *workob);
 void BKE_object_workob_calc_parent(struct Depsgraph *depsgraph,
@@ -277,7 +278,7 @@ void BKE_object_eval_uber_data(struct Depsgraph *depsgraph,
 void BKE_object_eval_assign_data(struct Object *object, struct ID *data, bool is_owned);
 
 void BKE_object_eval_boundbox(struct Depsgraph *depsgraph, struct Object *object);
-void BKE_object_synchronize_to_original(struct Depsgraph *depsgraph, struct Object *object);
+void BKE_object_sync_to_original(struct Depsgraph *depsgraph, struct Object *object);
 
 void BKE_object_eval_ptcache_reset(struct Depsgraph *depsgraph,
                                    struct Scene *scene,

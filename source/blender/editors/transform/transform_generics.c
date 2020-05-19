@@ -64,7 +64,7 @@
 #include "BIK_api.h"
 
 #include "BKE_action.h"
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
@@ -337,7 +337,7 @@ static void animrecord_check_state(Scene *scene, ID *id, wmTimer *animtimer)
 static bool fcu_test_selected(FCurve *fcu)
 {
   BezTriple *bezt = fcu->bezt;
-  unsigned int i;
+  uint i;
 
   if (bezt == NULL) { /* ignore baked */
     return 0;
@@ -356,7 +356,7 @@ static bool fcu_test_selected(FCurve *fcu)
 static void recalcData_actedit(TransInfo *t)
 {
   ViewLayer *view_layer = t->view_layer;
-  SpaceAction *saction = (SpaceAction *)t->sa->spacedata.first;
+  SpaceAction *saction = (SpaceAction *)t->area->spacedata.first;
 
   bAnimContext ac = {NULL};
   ListBase anim_data = {NULL, NULL};
@@ -369,10 +369,10 @@ static void recalcData_actedit(TransInfo *t)
   ac.scene = t->scene;
   ac.view_layer = t->view_layer;
   ac.obact = OBACT(view_layer);
-  ac.sa = t->sa;
+  ac.area = t->area;
   ac.region = t->region;
-  ac.sl = (t->sa) ? t->sa->spacedata.first : NULL;
-  ac.spacetype = (t->sa) ? t->sa->spacetype : 0;
+  ac.sl = (t->area) ? t->area->spacedata.first : NULL;
+  ac.spacetype = (t->area) ? t->area->spacetype : 0;
   ac.regiontype = (t->region) ? t->region->regiontype : 0;
 
   ANIM_animdata_context_getdata(&ac);
@@ -406,7 +406,7 @@ static void recalcData_actedit(TransInfo *t)
 /* helper for recalcData() - for Graph Editor transforms */
 static void recalcData_graphedit(TransInfo *t)
 {
-  SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
+  SpaceGraph *sipo = (SpaceGraph *)t->area->spacedata.first;
   ViewLayer *view_layer = t->view_layer;
 
   ListBase anim_data = {NULL, NULL};
@@ -422,10 +422,10 @@ static void recalcData_graphedit(TransInfo *t)
   ac.scene = t->scene;
   ac.view_layer = t->view_layer;
   ac.obact = OBACT(view_layer);
-  ac.sa = t->sa;
+  ac.area = t->area;
   ac.region = t->region;
-  ac.sl = (t->sa) ? t->sa->spacedata.first : NULL;
-  ac.spacetype = (t->sa) ? t->sa->spacetype : 0;
+  ac.sl = (t->area) ? t->area->spacedata.first : NULL;
+  ac.spacetype = (t->area) ? t->area->spacetype : 0;
   ac.regiontype = (t->region) ? t->region->regiontype : 0;
 
   ANIM_animdata_context_getdata(&ac);
@@ -474,7 +474,7 @@ static void recalcData_graphedit(TransInfo *t)
 /* helper for recalcData() - for NLA Editor transforms */
 static void recalcData_nla(TransInfo *t)
 {
-  SpaceNla *snla = (SpaceNla *)t->sa->spacedata.first;
+  SpaceNla *snla = (SpaceNla *)t->area->spacedata.first;
   Scene *scene = t->scene;
   double secf = FPS;
   int i;
@@ -718,7 +718,7 @@ static void recalcData_image(TransInfo *t)
     flushTransPaintCurve(t);
   }
   else if ((t->flag & T_EDIT) && t->obedit_type == OB_MESH) {
-    SpaceImage *sima = t->sa->spacedata.first;
+    SpaceImage *sima = t->area->spacedata.first;
 
     flushTransUVs(t);
     if (sima->flag & SI_LIVE_UNWRAP) {
@@ -736,7 +736,7 @@ static void recalcData_image(TransInfo *t)
 /* helper for recalcData() - for Movie Clip transforms */
 static void recalcData_spaceclip(TransInfo *t)
 {
-  SpaceClip *sc = t->sa->spacedata.first;
+  SpaceClip *sc = t->area->spacedata.first;
 
   if (ED_space_clip_check_show_trackedit(sc)) {
     MovieClip *clip = ED_space_clip_get_clip(sc);
@@ -1187,7 +1187,6 @@ void recalcData(TransInfo *t)
     flushTransPaintCurve(t);
   }
   else if (t->options & CTX_GPENCIL_STROKES) {
-    /* set recalc triangle cache flag */
     recalcData_gpencil_strokes(t);
   }
   else if (t->options & CTX_SCULPT) {
@@ -1222,7 +1221,7 @@ void recalcData(TransInfo *t)
 void drawLine(TransInfo *t, const float center[3], const float dir[3], char axis, short options)
 {
   float v1[3], v2[3], v3[3];
-  unsigned char col[3], col2[3];
+  uchar col[3], col2[3];
 
   if (t->spacetype == SPACE_VIEW3D) {
     View3D *v3d = t->view;
@@ -1375,7 +1374,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   const eObjectMode object_mode = obact ? obact->mode : OB_MODE_OBJECT;
   ToolSettings *ts = CTX_data_tool_settings(C);
   ARegion *region = CTX_wm_region(C);
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
   bGPdata *gpd = CTX_data_gpencil_data(C);
   PropertyRNA *prop;
@@ -1383,7 +1382,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   t->depsgraph = CTX_data_depsgraph_pointer(C);
   t->scene = sce;
   t->view_layer = view_layer;
-  t->sa = sa;
+  t->area = area;
   t->region = region;
   t->settings = ts;
   t->reports = op ? op->reports : NULL;
@@ -1431,11 +1430,6 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
 
   unit_m3(t->mat);
 
-  unit_m3(t->orient_matrix);
-  negate_m3(t->orient_matrix);
-  /* Leave 't->orient_matrix_is_set' to false,
-   * so we overwrite it when we have a useful value. */
-
   /* Default to rotate on the Z axis. */
   t->orient_axis = 2;
   t->orient_axis_ortho = 1;
@@ -1465,17 +1459,17 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   }
 
   /* Assign the space type, some exceptions for running in different mode */
-  if (sa == NULL) {
+  if (area == NULL) {
     /* background mode */
     t->spacetype = SPACE_EMPTY;
   }
-  else if ((region == NULL) && (sa->spacetype == SPACE_VIEW3D)) {
+  else if ((region == NULL) && (area->spacetype == SPACE_VIEW3D)) {
     /* running in the text editor */
     t->spacetype = SPACE_EMPTY;
   }
   else {
     /* normal operation */
-    t->spacetype = sa->spacetype;
+    t->spacetype = area->spacetype;
   }
 
   /* handle T_ALT_TRANSFORM initialization, we may use for different operators */
@@ -1491,7 +1485,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   }
 
   if (t->spacetype == SPACE_VIEW3D) {
-    View3D *v3d = sa->spacedata.first;
+    View3D *v3d = area->spacedata.first;
     bScreen *animscreen = ED_screen_animation_playing(CTX_wm_manager(C));
 
     t->view = v3d;
@@ -1511,22 +1505,6 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     /* bend always uses the cursor */
     if (t->mode == TFM_BEND) {
       t->around = V3D_AROUND_CURSOR;
-    }
-
-    TransformOrientationSlot *orient_slot = &t->scene->orientation_slots[SCE_ORIENT_DEFAULT];
-    t->orientation.unset = V3D_ORIENT_GLOBAL;
-    t->orientation.user = orient_slot->type;
-    t->orientation.custom = BKE_scene_transform_orientation_find(t->scene,
-                                                                 orient_slot->index_custom);
-
-    t->orientation.index = 0;
-    ARRAY_SET_ITEMS(t->orientation.types, &t->orientation.user, NULL);
-
-    /* Make second orientation local if both are global. */
-    if (t->orientation.user == V3D_ORIENT_GLOBAL) {
-      t->orientation.user_alt = V3D_ORIENT_LOCAL;
-      t->orientation.types[0] = &t->orientation.user_alt;
-      SWAP(short *, t->orientation.types[0], t->orientation.types[1]);
     }
 
     /* exceptional case */
@@ -1564,7 +1542,7 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     }
   }
   else if (t->spacetype == SPACE_IMAGE) {
-    SpaceImage *sima = sa->spacedata.first;
+    SpaceImage *sima = area->spacedata.first;
     // XXX for now, get View2D from the active region
     t->view = &region->v2d;
     t->around = sima->around;
@@ -1589,12 +1567,12 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     t->around = V3D_AROUND_CENTER_BOUNDS;
   }
   else if (t->spacetype == SPACE_GRAPH) {
-    SpaceGraph *sipo = sa->spacedata.first;
+    SpaceGraph *sipo = area->spacedata.first;
     t->view = &region->v2d;
     t->around = sipo->around;
   }
   else if (t->spacetype == SPACE_CLIP) {
-    SpaceClip *sclip = sa->spacedata.first;
+    SpaceClip *sclip = area->spacedata.first;
     t->view = &region->v2d;
     t->around = sclip->around;
 
@@ -1617,48 +1595,138 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
     t->around = V3D_AROUND_CENTER_BOUNDS;
   }
 
-  if (op && (prop = RNA_struct_find_property(op->ptr, "orient_axis"))) {
-    t->orient_axis = RNA_property_enum_get(op->ptr, prop);
-  }
-  if (op && (prop = RNA_struct_find_property(op->ptr, "orient_axis_ortho"))) {
-    t->orient_axis_ortho = RNA_property_enum_get(op->ptr, prop);
-  }
+  BLI_assert(is_zero_v4(t->values_modal_offset));
+  bool t_values_set_is_array = false;
+  if (op && (prop = RNA_struct_find_property(op->ptr, "value")) &&
+      RNA_property_is_set(op->ptr, prop)) {
+    float values[4] = {0}; /* in case value isn't length 4, avoid uninitialized memory  */
+    if (RNA_property_array_check(prop)) {
+      RNA_float_get_array(op->ptr, "value", values);
+      t_values_set_is_array = true;
+    }
+    else {
+      values[0] = RNA_float_get(op->ptr, "value");
+    }
 
-  if (op &&
-      ((prop = RNA_struct_find_property(op->ptr, "orient_matrix")) &&
-       RNA_property_is_set(op->ptr, prop)) &&
-      ((t->flag & T_MODAL) ||
-       /* When using redo, don't use the custom constraint matrix
-        * if the user selects a different orientation. */
-       (RNA_enum_get(op->ptr, "orient_type") == RNA_enum_get(op->ptr, "orient_matrix_type")))) {
-    RNA_property_float_get_array(op->ptr, prop, &t->orient_matrix[0][0]);
-    copy_m3_m3(t->spacemtx, t->orient_matrix);
-    /* Some transform modes use this to operate on an axis. */
-    t->orient_matrix_is_set = true;
-    t->orientation.user = V3D_ORIENT_CUSTOM_MATRIX;
-    t->orientation.custom = 0;
+    copy_v4_v4(t->values, values);
     if (t->flag & T_MODAL) {
-      RNA_enum_set(op->ptr, "orient_matrix_type", RNA_enum_get(op->ptr, "orient_type"));
+      /* Run before init functions so 'values_modal_offset' can be applied on mouse input. */
+      copy_v4_v4(t->values_modal_offset, values);
+    }
+    else {
+      copy_v4_v4(t->values, values);
+      t->flag |= T_INPUT_IS_VALUES_FINAL;
     }
   }
-  else if (op && ((prop = RNA_struct_find_property(op->ptr, "orient_type")) &&
-                  RNA_property_is_set(op->ptr, prop))) {
-    short orientation = RNA_property_enum_get(op->ptr, prop);
-    TransformOrientation *custom_orientation = NULL;
 
-    if (orientation >= V3D_ORIENT_CUSTOM) {
-      if (orientation >= V3D_ORIENT_CUSTOM + BIF_countTransformOrientation(C)) {
-        orientation = V3D_ORIENT_GLOBAL;
+  if (op && (prop = RNA_struct_find_property(op->ptr, "constraint_axis"))) {
+    bool constraint_axis[3] = {false, false, false};
+    if (RNA_property_is_set(op->ptr, prop)) {
+      RNA_property_boolean_get_array(op->ptr, prop, constraint_axis);
+    }
+
+    if (t_values_set_is_array && t->flag & T_INPUT_IS_VALUES_FINAL) {
+      /* For operators whose `t->values` is array, set contrain so that the
+       * orientation is more intuitive in the Redo Panel. */
+      for (int i = 3; i--;) {
+        constraint_axis[i] |= t->values[i] != 0.0f;
+      }
+    }
+
+    if (constraint_axis[0] || constraint_axis[1] || constraint_axis[2]) {
+      t->con.mode |= CON_APPLY;
+
+      if (constraint_axis[0]) {
+        t->con.mode |= CON_AXIS0;
+      }
+      if (constraint_axis[1]) {
+        t->con.mode |= CON_AXIS1;
+      }
+      if (constraint_axis[2]) {
+        t->con.mode |= CON_AXIS2;
+      }
+    }
+  }
+
+  {
+    TransformOrientationSlot *orient_slot = &t->scene->orientation_slots[SCE_ORIENT_DEFAULT];
+    TransformOrientation *custom_orientation = NULL;
+    short orient_type_set = -1;
+    short orient_type_matrix_set = -1;
+    short orient_type_scene = orient_slot->type;
+    if (orient_type_scene == V3D_ORIENT_CUSTOM) {
+      const int index_custom = orient_slot->index_custom;
+      custom_orientation = BKE_scene_transform_orientation_find(t->scene, index_custom);
+      orient_type_scene += index_custom;
+    }
+
+    short orient_type_default = V3D_ORIENT_GLOBAL;
+    short orient_type_constraint[2];
+
+    if (op && (prop = RNA_struct_find_property(op->ptr, "orient_axis"))) {
+      t->orient_axis = RNA_property_enum_get(op->ptr, prop);
+
+      /* For transfor modes that require "orient_axis" use
+       * `V3D_ORIENT_VIEW` as default. */
+      orient_type_default = V3D_ORIENT_VIEW;
+    }
+    if (op && (prop = RNA_struct_find_property(op->ptr, "orient_axis_ortho"))) {
+      t->orient_axis_ortho = RNA_property_enum_get(op->ptr, prop);
+    }
+
+    if (op && ((prop = RNA_struct_find_property(op->ptr, "orient_type")) &&
+               RNA_property_is_set(op->ptr, prop))) {
+      orient_type_set = RNA_property_enum_get(op->ptr, prop);
+      if (orient_type_set >= V3D_ORIENT_CUSTOM) {
+        if (orient_type_set >= V3D_ORIENT_CUSTOM + BIF_countTransformOrientation(C)) {
+          orient_type_set = V3D_ORIENT_GLOBAL;
+        }
+        else {
+          custom_orientation = BKE_scene_transform_orientation_find(
+              t->scene, orient_type_default - V3D_ORIENT_CUSTOM);
+        }
+      }
+
+      /* Change the default orientation to be used when redoing. */
+      orient_type_default = orient_type_set;
+      orient_type_constraint[0] = orient_type_set;
+      orient_type_constraint[1] = orient_type_scene;
+    }
+    else {
+      orient_type_constraint[0] = orient_type_scene;
+      orient_type_constraint[1] = orient_type_scene != V3D_ORIENT_GLOBAL ? V3D_ORIENT_GLOBAL :
+                                                                           V3D_ORIENT_LOCAL;
+    }
+
+    if (op && ((prop = RNA_struct_find_property(op->ptr, "orient_matrix")) &&
+               RNA_property_is_set(op->ptr, prop))) {
+      RNA_property_float_get_array(op->ptr, prop, &t->orientation.custom_matrix[0][0]);
+
+      if ((prop = RNA_struct_find_property(op->ptr, "orient_matrix_type")) &&
+          RNA_property_is_set(op->ptr, prop)) {
+        orient_type_matrix_set = RNA_property_enum_get(op->ptr, prop);
+      }
+      else if (orient_type_set != -1) {
+        orient_type_matrix_set = orient_type_set;
       }
       else {
-        custom_orientation = BKE_scene_transform_orientation_find(t->scene,
-                                                                  orientation - V3D_ORIENT_CUSTOM);
-        orientation = V3D_ORIENT_CUSTOM;
+        orient_type_matrix_set = orient_type_set = V3D_ORIENT_GLOBAL;
+      }
+
+      if (orient_type_matrix_set == orient_type_set) {
+        /* Constraints are forced to use the custom matrix when redoing. */
+        orient_type_default = V3D_ORIENT_CUSTOM_MATRIX;
       }
     }
 
-    t->orientation.user = orientation;
+    t->orientation.types[0] = orient_type_default;
+    t->orientation.types[1] = orient_type_constraint[0];
+    t->orientation.types[2] = orient_type_constraint[1];
     t->orientation.custom = custom_orientation;
+
+    if (t->con.mode & CON_APPLY) {
+      t->orientation.index = 1;
+    }
   }
 
   if (op && ((prop = RNA_struct_find_property(op->ptr, "release_confirm")) &&
@@ -1761,6 +1829,24 @@ void initTransInfo(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
   }
   else { /* add not pet option to context when not available */
     t->options |= CTX_NO_PET;
+  }
+
+  if (t->obedit_type == OB_MESH) {
+    if (op && (prop = RNA_struct_find_property(op->ptr, "use_automerge_and_split")) &&
+        RNA_property_is_set(op->ptr, prop)) {
+      if (RNA_property_boolean_get(op->ptr, prop)) {
+        t->flag |= T_AUTOMERGE | T_AUTOSPLIT;
+      }
+    }
+    else {
+      char automerge = t->scene->toolsettings->automerge;
+      if (automerge & AUTO_MERGE) {
+        t->flag |= T_AUTOMERGE;
+        if (automerge & AUTO_MERGE_AND_SPLIT) {
+          t->flag |= T_AUTOSPLIT;
+        }
+      }
+    }
   }
 
   // Mirror is not supported with PET, turn it off.
@@ -1876,14 +1962,14 @@ void postTrans(bContext *C, TransInfo *t)
       /* pass */
     }
     else {
-      SpaceImage *sima = t->sa->spacedata.first;
+      SpaceImage *sima = t->area->spacedata.first;
       if (sima->flag & SI_LIVE_UNWRAP) {
         ED_uvedit_live_unwrap_end(t->state == TRANS_CANCEL);
       }
     }
   }
   else if (t->spacetype == SPACE_VIEW3D) {
-    View3D *v3d = t->sa->spacedata.first;
+    View3D *v3d = t->area->spacedata.first;
     /* restore gizmo */
     if (t->flag & T_MODAL) {
       v3d->gizmo_flag = t->gizmo_flag;
@@ -2023,11 +2109,11 @@ void calculateCenterCursor2D(TransInfo *t, float r_center[2])
   const float *cursor = NULL;
 
   if (t->spacetype == SPACE_IMAGE) {
-    SpaceImage *sima = (SpaceImage *)t->sa->spacedata.first;
+    SpaceImage *sima = (SpaceImage *)t->area->spacedata.first;
     cursor = sima->cursor;
   }
   else if (t->spacetype == SPACE_CLIP) {
-    SpaceClip *space_clip = (SpaceClip *)t->sa->spacedata.first;
+    SpaceClip *space_clip = (SpaceClip *)t->area->spacedata.first;
     cursor = space_clip->cursor;
   }
 
@@ -2036,11 +2122,11 @@ void calculateCenterCursor2D(TransInfo *t, float r_center[2])
       float co[2];
 
       if (t->spacetype == SPACE_IMAGE) {
-        SpaceImage *sima = (SpaceImage *)t->sa->spacedata.first;
+        SpaceImage *sima = (SpaceImage *)t->area->spacedata.first;
         BKE_mask_coord_from_image(sima->image, &sima->iuser, co, cursor);
       }
       else if (t->spacetype == SPACE_CLIP) {
-        SpaceClip *space_clip = (SpaceClip *)t->sa->spacedata.first;
+        SpaceClip *space_clip = (SpaceClip *)t->area->spacedata.first;
         BKE_mask_coord_from_movieclip(space_clip->clip, &space_clip->user, co, cursor);
       }
       else {
@@ -2065,7 +2151,7 @@ void calculateCenterCursor2D(TransInfo *t, float r_center[2])
 
 void calculateCenterCursorGraph2D(TransInfo *t, float r_center[2])
 {
-  SpaceGraph *sipo = (SpaceGraph *)t->sa->spacedata.first;
+  SpaceGraph *sipo = (SpaceGraph *)t->area->spacedata.first;
   Scene *scene = t->scene;
 
   /* cursor is combination of current frame, and graph-editor cursor value */

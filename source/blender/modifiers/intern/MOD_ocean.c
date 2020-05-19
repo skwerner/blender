@@ -46,7 +46,7 @@
 #ifdef WITH_OCEANSIM
 static void init_cache_data(Object *ob, struct OceanModifierData *omd)
 {
-  const char *relbase = modifier_path_relbase_from_global(ob);
+  const char *relbase = BKE_modifier_path_relbase_from_global(ob);
 
   omd->oceancache = BKE_ocean_init_cache(omd->cachepath,
                                          relbase,
@@ -100,7 +100,7 @@ static void initData(ModifierData *md)
   omd->repeat_x = 1;
   omd->repeat_y = 1;
 
-  modifier_path_init(omd->cachepath, sizeof(omd->cachepath), "cache_ocean");
+  BKE_modifier_path_init(omd->cachepath, sizeof(omd->cachepath), "cache_ocean");
 
   omd->cached = 0;
   omd->bakestart = 1;
@@ -141,7 +141,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 #  endif
   OceanModifierData *tomd = (OceanModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   /* The oceancache object will be recreated for this copy
    * automatically when cached=true */
@@ -482,7 +482,7 @@ static Mesh *doOcean(ModifierData *UNUSED(md), const ModifierEvalContext *UNUSED
 }
 #endif /* WITH_OCEANSIM */
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result;
 
@@ -509,7 +509,10 @@ ModifierTypeInfo modifierType_Ocean = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

@@ -66,7 +66,7 @@ typedef struct SubdivSettings {
 
   /* This refers to an adaptive isolation when creating patches for the subdivided surface.
    *
-   * When is set to to false (aka uniform subdivision) fixed depth of isolation is used, which
+   * When is set to false (aka uniform subdivision) fixed depth of isolation is used, which
    * allows to iteratively add more subdivisions (uniform subdivision level 2 = uniform subdivision
    * level 1 + uniform subdivision level 1). Uniform subdivisions will progressively go to a limit
    * surface.
@@ -193,6 +193,12 @@ typedef struct Subdiv {
     int *face_ptex_offset;
   } cache_;
 } Subdiv;
+
+/* =================----====--===== MODULE ==========================------== */
+
+/* (De)initialize the entire subdivision surface module. */
+void BKE_subdiv_init(void);
+void BKE_subdiv_exit(void);
 
 /* ========================== CONVERSION HELPERS ============================ */
 

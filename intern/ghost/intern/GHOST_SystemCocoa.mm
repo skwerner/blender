@@ -698,7 +698,7 @@ void GHOST_SystemCocoa::getAllDisplayDimensions(GHOST_TUns32 &width, GHOST_TUns3
   getMainDisplayDimensions(width, height);
 }
 
-GHOST_IWindow *GHOST_SystemCocoa::createWindow(const STR_String &title,
+GHOST_IWindow *GHOST_SystemCocoa::createWindow(const char *title,
                                                GHOST_TInt32 left,
                                                GHOST_TInt32 top,
                                                GHOST_TUns32 width,
@@ -817,7 +817,8 @@ GHOST_TSuccess GHOST_SystemCocoa::setCursorPosition(GHOST_TInt32 x, GHOST_TInt32
   CGAssociateMouseAndMouseCursorPosition(true);
 
   // Force mouse move event (not pushed by Cocoa)
-  pushEvent(new GHOST_EventCursor(getMilliSeconds(), GHOST_kEventCursorMove, window, x, y));
+  pushEvent(new GHOST_EventCursor(
+      getMilliSeconds(), GHOST_kEventCursorMove, window, x, y, window->GetCocoaTabletData()));
   m_outsideLoopEventProcessed = true;
 
   return GHOST_kSuccess;
@@ -1062,14 +1063,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleWindowEvent(GHOST_TEventType eventType,
   }
   switch (eventType) {
     case GHOST_kEventWindowClose:
-      // check for index of mainwindow as it would quit blender without dialog and discard
-      if ([windowsList count] > 1 &&
-          window->getCocoaWindow() != [windowsList objectAtIndex:[windowsList count] - 1]) {
-        pushEvent(new GHOST_Event(getMilliSeconds(), GHOST_kEventWindowClose, window));
-      }
-      else {
-        handleQuitRequest();  // -> quit dialog
-      }
+      pushEvent(new GHOST_Event(getMilliSeconds(), GHOST_kEventWindowClose, window));
       break;
     case GHOST_kEventWindowActivate:
       m_windowManager->setActiveWindow(window);
@@ -1098,8 +1092,11 @@ GHOST_TSuccess GHOST_SystemCocoa::handleWindowEvent(GHOST_TEventType eventType,
         pushEvent(new GHOST_Event(getMilliSeconds(), GHOST_kEventWindowSize, window));
         // Mouse up event is trapped by the resizing event loop,
         // so send it anyway to the window manager.
-        pushEvent(new GHOST_EventButton(
-            getMilliSeconds(), GHOST_kEventButtonUp, window, GHOST_kButtonMaskLeft));
+        pushEvent(new GHOST_EventButton(getMilliSeconds(),
+                                        GHOST_kEventButtonUp,
+                                        window,
+                                        GHOST_kButtonMaskLeft,
+                                        GHOST_TABLET_DATA_NONE));
         // m_ignoreWindowSizedMessages = true;
       }
       break;
@@ -1437,7 +1434,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleTabletEvent(void *eventPtr, short eventT
 
     case NSEventTypeTabletProximity:
       /* Reset tablet data when device enters proximity or leaves. */
-      ct = GHOST_TABLET_DATA_DEFAULT;
+      ct = GHOST_TABLET_DATA_NONE;
       if ([event isEnteringProximity]) {
         /* Pointer is entering tablet area proximity. */
         switch ([event pointingDeviceType]) {
@@ -1504,38 +1501,52 @@ GHOST_TSuccess GHOST_SystemCocoa::handleMouseEvent(void *eventPtr)
   switch ([event type]) {
     case NSEventTypeLeftMouseDown:
       handleTabletEvent(event);  // Update window tablet state to be included in event.
-      pushEvent(new GHOST_EventButton(
-          [event timestamp] * 1000, GHOST_kEventButtonDown, window, GHOST_kButtonMaskLeft));
+      pushEvent(new GHOST_EventButton([event timestamp] * 1000,
+                                      GHOST_kEventButtonDown,
+                                      window,
+                                      GHOST_kButtonMaskLeft,
+                                      window -> GetCocoaTabletData()));
       break;
     case NSEventTypeRightMouseDown:
       handleTabletEvent(event);  // Update window tablet state to be included in event.
-      pushEvent(new GHOST_EventButton(
-          [event timestamp] * 1000, GHOST_kEventButtonDown, window, GHOST_kButtonMaskRight));
+      pushEvent(new GHOST_EventButton([event timestamp] * 1000,
+                                      GHOST_kEventButtonDown,
+                                      window,
+                                      GHOST_kButtonMaskRight,
+                                      window -> GetCocoaTabletData()));
       break;
     case NSEventTypeOtherMouseDown:
       handleTabletEvent(event);  // Handle tablet events combined with mouse events
       pushEvent(new GHOST_EventButton([event timestamp] * 1000,
                                       GHOST_kEventButtonDown,
                                       window,
-                                      convertButton([event buttonNumber])));
+                                      convertButton([event buttonNumber]),
+                                      window -> GetCocoaTabletData()));
       break;
 
     case NSEventTypeLeftMouseUp:
       handleTabletEvent(event);  // Update window tablet state to be included in event.
-      pushEvent(new GHOST_EventButton(
-          [event timestamp] * 1000, GHOST_kEventButtonUp, window, GHOST_kButtonMaskLeft));
+      pushEvent(new GHOST_EventButton([event timestamp] * 1000,
+                                      GHOST_kEventButtonUp,
+                                      window,
+                                      GHOST_kButtonMaskLeft,
+                                      window -> GetCocoaTabletData()));
       break;
     case NSEventTypeRightMouseUp:
       handleTabletEvent(event);  // Update window tablet state to be included in event.
-      pushEvent(new GHOST_EventButton(
-          [event timestamp] * 1000, GHOST_kEventButtonUp, window, GHOST_kButtonMaskRight));
+      pushEvent(new GHOST_EventButton([event timestamp] * 1000,
+                                      GHOST_kEventButtonUp,
+                                      window,
+                                      GHOST_kButtonMaskRight,
+                                      window -> GetCocoaTabletData()));
       break;
     case NSEventTypeOtherMouseUp:
       handleTabletEvent(event);  // Update window tablet state to be included in event.
       pushEvent(new GHOST_EventButton([event timestamp] * 1000,
                                       GHOST_kEventButtonUp,
                                       window,
-                                      convertButton([event buttonNumber])));
+                                      convertButton([event buttonNumber]),
+                                      window -> GetCocoaTabletData()));
       break;
 
     case NSEventTypeLeftMouseDragged:
@@ -1568,8 +1579,12 @@ GHOST_TSuccess GHOST_SystemCocoa::handleMouseEvent(void *eventPtr)
           window->setCursorGrabAccum(x_accum, y_accum);
 
           window->clientToScreenIntern(x_warp + x_accum, y_warp + y_accum, x, y);
-          pushEvent(new GHOST_EventCursor(
-              [event timestamp] * 1000, GHOST_kEventCursorMove, window, x, y));
+          pushEvent(new GHOST_EventCursor([event timestamp] * 1000,
+                                          GHOST_kEventCursorMove,
+                                          window,
+                                          x,
+                                          y,
+                                          window -> GetCocoaTabletData()));
           break;
         }
         case GHOST_kGrabWrap:  // Wrap cursor at area/window boundaries
@@ -1614,8 +1629,12 @@ GHOST_TSuccess GHOST_SystemCocoa::handleMouseEvent(void *eventPtr)
           // Generate event
           GHOST_TInt32 x, y;
           window->clientToScreenIntern(x_mouse + x_accum, y_mouse + y_accum, x, y);
-          pushEvent(new GHOST_EventCursor(
-              [event timestamp] * 1000, GHOST_kEventCursorMove, window, x, y));
+          pushEvent(new GHOST_EventCursor([event timestamp] * 1000,
+                                          GHOST_kEventCursorMove,
+                                          window,
+                                          x,
+                                          y,
+                                          window -> GetCocoaTabletData()));
           break;
         }
         default: {
@@ -1624,8 +1643,12 @@ GHOST_TSuccess GHOST_SystemCocoa::handleMouseEvent(void *eventPtr)
           GHOST_TInt32 x, y;
 
           window->clientToScreenIntern(mousePos.x, mousePos.y, x, y);
-          pushEvent(new GHOST_EventCursor(
-              [event timestamp] * 1000, GHOST_kEventCursorMove, window, x, y));
+          pushEvent(new GHOST_EventCursor([event timestamp] * 1000,
+                                          GHOST_kEventCursorMove,
+                                          window,
+                                          x,
+                                          y,
+                                          window -> GetCocoaTabletData()));
           break;
         }
       }

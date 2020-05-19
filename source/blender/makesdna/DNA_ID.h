@@ -25,13 +25,12 @@
 #ifndef __DNA_ID_H__
 #define __DNA_ID_H__
 
+#include "DNA_defs.h"
 #include "DNA_listBase.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "DNA_defs.h"
 
 struct FileData;
 struct GHash;
@@ -106,6 +105,18 @@ enum {
   IDP_NUMTYPES = 10,
 };
 
+/** Used by some IDP utils, keep values in sync with type enum above. */
+enum {
+  IDP_TYPE_FILTER_STRING = 1 << 0,
+  IDP_TYPE_FILTER_INT = 1 << 1,
+  IDP_TYPE_FILTER_FLOAT = 1 << 2,
+  IDP_TYPE_FILTER_ARRAY = 1 << 5,
+  IDP_TYPE_FILTER_GROUP = 1 << 6,
+  IDP_TYPE_FILTER_ID = 1 << 7,
+  IDP_TYPE_FILTER_DOUBLE = 1 << 8,
+  IDP_TYPE_FILTER_IDPARRAY = 1 << 9,
+};
+
 /*->subtype */
 
 /* IDP_STRING */
@@ -135,7 +146,10 @@ typedef struct IDOverrideLibraryPropertyOperation {
   /* Type of override. */
   short operation;
   short flag;
-  char _pad0[4];
+
+  /** Runtime, tags are common to both IDOverrideProperty and IDOverridePropertyOperation. */
+  short tag;
+  char _pad0[2];
 
   /* Sub-item references, if needed (for arrays or collections only).
    * We need both reference and local values to allow e.g. insertion into collections
@@ -189,7 +203,17 @@ typedef struct IDOverrideLibraryProperty {
 
   /** List of overriding operations (IDOverridePropertyOperation) applied to this property. */
   ListBase operations;
+
+  /** Runtime, tags are common to both IDOverrideProperty and IDOverridePropertyOperation. */
+  short tag;
+  char _pad0[6];
 } IDOverrideLibraryProperty;
+
+/* IDOverrideProperty->tag and IDOverridePropertyOperation->tag. */
+enum {
+  /** This override property (operation) is unused and should be removed by cleanup process. */
+  IDOVERRIDE_LIBRARY_TAG_UNUSED = 1 << 0,
+};
 
 /* We do not need a full struct for that currently, just a GHash. */
 typedef struct GHash IDOverrideLibraryRuntime;
@@ -246,19 +270,22 @@ typedef struct ID {
   int icon_id;
   int recalc;
   /**
-   * Used by undo code. Value of recalc is stored there when reading an ID from memfile, and not
-   * touched by anything, which means it can be used as 'reference' recalc value for the next undo
-   * step, when going backward (i.e. actual undo, redo can just use recalc value directly).
+   * Used by undo code. recalc_after_undo_push contains the changes between the
+   * last undo push and the current state. This is accumulated as IDs are tagged
+   * for update in the depsgraph, and only cleared on undo push.
+   *
+   * recalc_up_to_undo_push is saved to undo memory, and is the value of
+   * recalc_after_undo_push at the time of the undo push. This means it can be
+   * used to find the changes between undo states.
    */
-  int recalc_undo_accumulated;
+  int recalc_up_to_undo_push;
+  int recalc_after_undo_push;
 
   /**
    * A session-wide unique identifier for a given ID, that remain the same across potential
    * re-allocations (e.g. due to undo/redo steps).
    */
   unsigned int session_uuid;
-
-  char _pad[4];
 
   IDProperty *properties;
 
@@ -408,6 +435,7 @@ typedef enum ID_Type {
   ID_HA = MAKE_ID2('H', 'A'),  /* Hair */
   ID_PT = MAKE_ID2('P', 'T'),  /* PointCloud */
   ID_VO = MAKE_ID2('V', 'O'),  /* Volume */
+  ID_SIM = MAKE_ID2('S', 'I'), /* Simulation */
 } ID_Type;
 
 /* Only used as 'placeholder' in .blend files for directly linked data-blocks. */
@@ -536,9 +564,9 @@ enum {
   /* RESET_NEVER tag data-block as needing an auto-override execution, if enabled. */
   LIB_TAG_OVERRIDE_LIBRARY_AUTOREFRESH = 1 << 17,
 
-  /* tag data-block has having an extra user. */
+  /* tag data-block as having an extra user. */
   LIB_TAG_EXTRAUSER = 1 << 2,
-  /* tag data-block has having actually increased usercount for the extra virtual user. */
+  /* tag data-block as having actually increased usercount for the extra virtual user. */
   LIB_TAG_EXTRAUSER_SET = 1 << 7,
 
   /* RESET_AFTER_USE tag newly duplicated/copied IDs.
@@ -707,6 +735,7 @@ typedef enum IDRecalcFlag {
 #define FILTER_ID_HA (1ULL << 32)
 #define FILTER_ID_PT (1ULL << 33)
 #define FILTER_ID_VO (1ULL << 34)
+#define FILTER_ID_SIM (1ULL << 35)
 
 #define FILTER_ID_ALL \
   (FILTER_ID_AC | FILTER_ID_AR | FILTER_ID_BR | FILTER_ID_CA | FILTER_ID_CU | FILTER_ID_GD | \
@@ -714,7 +743,7 @@ typedef enum IDRecalcFlag {
    FILTER_ID_MB | FILTER_ID_MC | FILTER_ID_ME | FILTER_ID_MSK | FILTER_ID_NT | FILTER_ID_OB | \
    FILTER_ID_PA | FILTER_ID_PAL | FILTER_ID_PC | FILTER_ID_SCE | FILTER_ID_SPK | FILTER_ID_SO | \
    FILTER_ID_TE | FILTER_ID_TXT | FILTER_ID_VF | FILTER_ID_WO | FILTER_ID_CF | FILTER_ID_WS | \
-   FILTER_ID_LP | FILTER_ID_HA | FILTER_ID_PT | FILTER_ID_VO)
+   FILTER_ID_LP | FILTER_ID_HA | FILTER_ID_PT | FILTER_ID_VO | FILTER_ID_SIM)
 
 /* IMPORTANT: this enum matches the order currently use in set_listbasepointers,
  * keep them in sync! */
@@ -758,6 +787,7 @@ enum {
   INDEX_ID_WS,
   INDEX_ID_WM,
   INDEX_ID_MSK,
+  INDEX_ID_SIM,
   INDEX_ID_NULL,
   INDEX_ID_MAX,
 };

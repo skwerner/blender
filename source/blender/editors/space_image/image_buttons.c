@@ -656,8 +656,8 @@ static void uiblock_layer_pass_buttons(
     /* pass */
     rpass = (rl ? BLI_findlink(&rl->passes, iuser->pass) : NULL);
 
-    if (rpass && RE_passes_have_name(rl)) {
-      display_name = rpass->name;
+    if (rl && RE_passes_have_name(rl)) {
+      display_name = rpass ? rpass->name : "";
       rnd_pt = ui_imageuser_data_copy(&rnd_pt_local);
       but = uiDefMenuBut(block,
                          ui_imageuser_pass_menu,
@@ -1276,7 +1276,7 @@ void uiTemplateImageInfo(uiLayout *layout, bContext *C, Image *ima, ImageUser *i
     }
     else if (ima->source == IMA_SRC_SEQUENCE && ibuf) {
       /* Image sequence frame number + filename */
-      const char *filename = BLI_last_slash(ibuf->name);
+      const char *filename = BLI_path_slash_rfind(ibuf->name);
       filename = (filename == NULL) ? ibuf->name : filename + 1;
       BLI_snprintf(str, MAX_IMAGE_INFO_LEN, TIP_("Frame %d: %s"), framenr, filename);
     }

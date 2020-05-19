@@ -51,8 +51,7 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_action.h"
-#include "BKE_anim.h"
-#include "BKE_animsys.h"
+#include "BKE_anim_visualization.h"
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_curve.h"
@@ -62,11 +61,13 @@
 #include "BKE_idtype.h"
 #include "BKE_lattice.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
 
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_query.h"
 
 #include "BIK_api.h"
 
@@ -151,13 +152,31 @@ static void armature_free_data(struct ID *id)
   }
 }
 
+static void armature_foreach_id_bone(Bone *bone, LibraryForeachIDData *data)
+{
+  IDP_foreach_property(
+      bone->prop, IDP_TYPE_FILTER_ID, BKE_lib_query_idpropertiesForeachIDLink_callback, data);
+
+  LISTBASE_FOREACH (Bone *, curbone, &bone->childbase) {
+    armature_foreach_id_bone(curbone, data);
+  }
+}
+
+static void armature_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  bArmature *arm = (bArmature *)id;
+  LISTBASE_FOREACH (Bone *, bone, &arm->bonebase) {
+    armature_foreach_id_bone(bone, data);
+  }
+}
+
 IDTypeInfo IDType_ID_AR = {
     .id_code = ID_AR,
     .id_filter = FILTER_ID_AR,
     .main_listbase_index = INDEX_ID_AR,
     .struct_size = sizeof(bArmature),
     .name = "Armature",
-    .name_plural = "armature",
+    .name_plural = "armatures",
     .translation_context = BLT_I18NCONTEXT_ID_ARMATURE,
     .flags = 0,
 
@@ -165,6 +184,7 @@ IDTypeInfo IDType_ID_AR = {
     .copy_data = armature_copy_data,
     .free_data = armature_free_data,
     .make_local = NULL,
+    .foreach_id = armature_foreach_id,
 };
 
 /* **************** Generic Functions, data level *************** */
@@ -191,7 +211,7 @@ bArmature *BKE_armature_from_object(Object *ob)
 int BKE_armature_bonelist_count(ListBase *lb)
 {
   int i = 0;
-  for (Bone *bone = lb->first; bone; bone = bone->next) {
+  LISTBASE_FOREACH (Bone *, bone, lb) {
     i += 1 + BKE_armature_bonelist_count(&bone->childbase);
   }
 
@@ -304,7 +324,7 @@ static void armature_transform_recurse(ListBase *bonebase,
                                        const Bone *bone_parent,
                                        const float arm_mat_parent_inv[4][4])
 {
-  for (Bone *bone = bonebase->first; bone; bone = bone->next) {
+  LISTBASE_FOREACH (Bone *, bone, bonebase) {
 
     /* Store the initial bone roll in a matrix, this is needed even for child bones
      * so any change in head/tail doesn't cause the roll to change.
@@ -425,7 +445,7 @@ Bone *BKE_armature_find_bone_name(bArmature *arm, const char *name)
 
 static void armature_bone_from_name_insert_recursive(GHash *bone_hash, ListBase *lb)
 {
-  for (Bone *bone = lb->first; bone; bone = bone->next) {
+  LISTBASE_FOREACH (Bone *, bone, lb) {
     BLI_ghash_insert(bone_hash, bone->name, bone);
     armature_bone_from_name_insert_recursive(bone_hash, &bone->childbase);
   }
@@ -475,20 +495,27 @@ bool BKE_armature_bone_flag_test_recursive(const Bone *bone, int flag)
 
 static void armature_refresh_layer_used_recursive(bArmature *arm, ListBase *bones)
 {
-  for (Bone *bone = bones->first; bone; bone = bone->next) {
+  LISTBASE_FOREACH (Bone *, bone, bones) {
     arm->layer_used |= bone->layer;
     armature_refresh_layer_used_recursive(arm, &bone->childbase);
   }
 }
 
-/* Update the layers_used variable after bones are moved between layer
- * NOTE: Used to be done in drawing code in 2.7, but that won't work with
- *       Copy-on-Write, as drawing uses evaluated copies.
- */
-void BKE_armature_refresh_layer_used(bArmature *arm)
+void BKE_armature_refresh_layer_used(struct Depsgraph *depsgraph, struct bArmature *arm)
 {
+  if (arm->edbo != NULL) {
+    /* Don't perform this update when the armature is in edit mode. In that case it should be
+     * handled by ED_armature_edit_refresh_layer_used(). */
+    return;
+  }
+
   arm->layer_used = 0;
   armature_refresh_layer_used_recursive(arm, &arm->bonebase);
+
+  if (depsgraph == NULL || DEG_is_active(depsgraph)) {
+    bArmature *arm_orig = (bArmature *)DEG_get_original_id(&arm->id);
+    arm_orig->layer_used = arm->layer_used;
+  }
 }
 
 /* Finds the best possible extension to the name on a particular axis. (For renaming, check for
@@ -2523,7 +2550,7 @@ void BKE_armature_where_is(bArmature *arm)
 
 /* if bone layer is protected, copy the data from from->pose
  * when used with linked libraries this copies from the linked pose into the local pose */
-static void pose_proxy_synchronize(Object *ob, Object *from, int layer_protected)
+static void pose_proxy_sync(Object *ob, Object *from, int layer_protected)
 {
   bPose *pose = ob->pose, *frompose = from->pose;
   bPoseChannel *pchan, *pchanp;
@@ -2702,7 +2729,7 @@ static int rebuild_pose_bone(bPose *pose, Bone *bone, bPoseChannel *parchan, int
  */
 void BKE_pose_clear_pointers(bPose *pose)
 {
-  for (bPoseChannel *pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
+  LISTBASE_FOREACH (bPoseChannel *, pchan, &pose->chanbase) {
     pchan->bone = NULL;
     pchan->child = NULL;
   }
@@ -2710,7 +2737,7 @@ void BKE_pose_clear_pointers(bPose *pose)
 
 void BKE_pose_remap_bone_pointers(bArmature *armature, bPose *pose)
 {
-  for (bPoseChannel *pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
+  LISTBASE_FOREACH (bPoseChannel *, pchan, &pose->chanbase) {
     pchan->bone = BKE_armature_find_bone_name(armature, pchan->name);
   }
 }
@@ -2786,7 +2813,7 @@ void BKE_pose_rebuild(Main *bmain, Object *ob, bArmature *arm, const bool do_id_
    * using COW tag was working this morning, but not anymore... */
   if (ob->proxy != NULL && (ob->id.tag & LIB_TAG_NO_MAIN) == 0) {
     BKE_object_copy_proxy_drivers(ob, ob->proxy);
-    pose_proxy_synchronize(ob, ob->proxy, arm->layer_protected);
+    pose_proxy_sync(ob, ob->proxy, arm->layer_protected);
   }
 
   BKE_pose_update_constraint_flags(pose); /* for IK detection for example */

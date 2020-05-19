@@ -38,10 +38,10 @@
 #include "DNA_screen_types.h"
 #include "DNA_view3d_types.h"
 
-#include "BKE_anim.h" /* for duplis */
 #include "BKE_armature.h"
 #include "BKE_bvhutils.h"
 #include "BKE_curve.h"
+#include "BKE_duplilist.h"
 #include "BKE_editmesh.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -447,7 +447,7 @@ struct RayCastAll_Data {
   float local_scale;
 
   Object *ob;
-  unsigned int ob_uuid;
+  uint ob_uuid;
 
   /* output data */
   ListBase *hit_list;
@@ -460,7 +460,7 @@ static struct SnapObjectHitDepth *hit_depth_create(const float depth,
                                                    int index,
                                                    Object *ob,
                                                    const float obmat[4][4],
-                                                   unsigned int ob_uuid)
+                                                   uint ob_uuid)
 {
   struct SnapObjectHitDepth *hit = MEM_mallocN(sizeof(*hit), __func__);
 
@@ -586,7 +586,7 @@ static bool raycastMesh(SnapObjectContext *sctx,
                         Object *ob,
                         Mesh *me,
                         const float obmat[4][4],
-                        const unsigned int ob_index,
+                        const uint ob_index,
                         bool use_hide,
                         bool use_backface_culling,
                         /* read/write args */
@@ -761,7 +761,7 @@ static bool raycastEditMesh(SnapObjectContext *sctx,
                             Object *ob,
                             BMEditMesh *em,
                             const float obmat[4][4],
-                            const unsigned int ob_index,
+                            const uint ob_index,
                             bool use_backface_culling,
                             /* read/write args */
                             float *ray_depth,
@@ -931,7 +931,7 @@ static bool raycastObj(SnapObjectContext *sctx,
                        const float ray_dir[3],
                        Object *ob,
                        const float obmat[4][4],
-                       const unsigned int ob_index,
+                       const uint ob_index,
                        bool use_obedit,
                        bool use_occlusion_test,
                        bool use_backface_culling,
@@ -1046,7 +1046,7 @@ static bool raycastObj(SnapObjectContext *sctx,
 struct RaycastObjUserData {
   const float *ray_start;
   const float *ray_dir;
-  unsigned int ob_index;
+  uint ob_index;
   /* read/write args */
   float *ray_depth;
   /* return args */
@@ -1227,7 +1227,7 @@ static void cb_mlooptri_edges_get(const int index, int v_index[3], const BVHTree
   const MLoopTri *lt = &data->looptri[index];
   for (int j = 2, j_next = 0; j_next < 3; j = j_next++) {
     const MEdge *ed = &medge[mloop[lt->tri[j]].e];
-    unsigned int tri_edge[2] = {mloop[lt->tri[j]].v, mloop[lt->tri[j_next]].v};
+    uint tri_edge[2] = {mloop[lt->tri[j]].v, mloop[lt->tri[j_next]].v};
     if (ELEM(ed->v1, tri_edge[0], tri_edge[1]) && ELEM(ed->v2, tri_edge[0], tri_edge[1])) {
       // printf("real edge found\n");
       v_index[j] = mloop[lt->tri[j]].e;
@@ -1707,8 +1707,14 @@ static short snap_mesh_edge_verts_mixed(SnapObjectContext *sctx,
                                      &nearest.dist_sq,
                                      nearest.co)) {
           nearest.index = vindex[v_id];
-          nearest2d.copy_vert_no(vindex[v_id], nearest.no, nearest2d.userdata);
           elem = SCE_SNAP_MODE_VERTEX;
+          if (r_no) {
+            float imat[4][4];
+            invert_m4_m4(imat, obmat);
+            nearest2d.copy_vert_no(vindex[v_id], r_no, nearest2d.userdata);
+            mul_transposed_mat3_m4_v3(imat, r_no);
+            normalize_v3(r_no);
+          }
         }
       }
     }
@@ -1726,10 +1732,6 @@ static short snap_mesh_edge_verts_mixed(SnapObjectContext *sctx,
                                      vmid,
                                      &nearest.dist_sq,
                                      nearest.co)) {
-          float v_nor[2][3];
-          nearest2d.copy_vert_no(vindex[0], v_nor[0], nearest2d.userdata);
-          nearest2d.copy_vert_no(vindex[1], v_nor[1], nearest2d.userdata);
-          mid_v3_v3v3(nearest.no, v_nor[0], v_nor[1]);
           nearest.index = *r_index;
           elem = SCE_SNAP_MODE_EDGE_MIDPOINT;
         }
@@ -1757,11 +1759,6 @@ static short snap_mesh_edge_verts_mixed(SnapObjectContext *sctx,
                                        v_near,
                                        &nearest.dist_sq,
                                        nearest.co)) {
-            float v_nor[2][3];
-            nearest2d.copy_vert_no(vindex[0], v_nor[0], nearest2d.userdata);
-            nearest2d.copy_vert_no(vindex[1], v_nor[1], nearest2d.userdata);
-            mid_v3_v3v3(nearest.no, v_nor[0], v_nor[1]);
-
             nearest.index = *r_index;
             elem = SCE_SNAP_MODE_EDGE_PERPENDICULAR;
           }
@@ -1776,15 +1773,6 @@ static short snap_mesh_edge_verts_mixed(SnapObjectContext *sctx,
     copy_v3_v3(r_loc, nearest.co);
     if (elem != SCE_SNAP_MODE_EDGE_PERPENDICULAR) {
       mul_m4_v3(obmat, r_loc);
-    }
-
-    if (r_no) {
-      float imat[4][4];
-      invert_m4_m4(imat, obmat);
-
-      copy_v3_v3(r_no, nearest.no);
-      mul_transposed_mat3_m4_v3(imat, r_no);
-      normalize_v3(r_no);
     }
 
     *r_index = nearest.index;
@@ -1838,7 +1826,7 @@ static short snapArmature(SnapData *snapdata,
 
   bArmature *arm = ob->data;
   if (arm->edbo) {
-    for (EditBone *eBone = arm->edbo->first; eBone; eBone = eBone->next) {
+    LISTBASE_FOREACH (EditBone *, eBone, arm->edbo) {
       if (eBone->layer & arm->layer) {
         /* skip hidden or moving (selected) bones */
         if ((eBone->flag & (BONE_HIDDEN_A | BONE_ROOTSEL | BONE_TIPSEL)) == 0) {
@@ -1881,7 +1869,7 @@ static short snapArmature(SnapData *snapdata,
     }
   }
   else if (ob->pose && ob->pose->chanbase.first) {
-    for (bPoseChannel *pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
+    LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
       Bone *bone = pchan->bone;
       /* skip hidden bones */
       if (bone && !(bone->flag & (BONE_HIDDEN_P | BONE_HIDDEN_PG))) {
@@ -3049,7 +3037,7 @@ bool ED_transform_snap_object_project_ray(SnapObjectContext *sctx,
 static short transform_snap_context_project_view3d_mixed_impl(
     SnapObjectContext *sctx,
     Depsgraph *depsgraph,
-    const unsigned short snap_to_flag,
+    const ushort snap_to_flag,
     const struct SnapObjectParams *params,
     const float mval[2],
     const float prev_co[3],
@@ -3225,7 +3213,7 @@ static short transform_snap_context_project_view3d_mixed_impl(
 
 short ED_transform_snap_object_project_view3d_ex(SnapObjectContext *sctx,
                                                  Depsgraph *depsgraph,
-                                                 const unsigned short snap_to,
+                                                 const ushort snap_to,
                                                  const struct SnapObjectParams *params,
                                                  const float mval[2],
                                                  const float prev_co[3],
@@ -3265,7 +3253,7 @@ short ED_transform_snap_object_project_view3d_ex(SnapObjectContext *sctx,
  */
 bool ED_transform_snap_object_project_view3d(SnapObjectContext *sctx,
                                              Depsgraph *depsgraph,
-                                             const unsigned short snap_to,
+                                             const ushort snap_to,
                                              const struct SnapObjectParams *params,
                                              const float mval[2],
                                              const float prev_co[3],

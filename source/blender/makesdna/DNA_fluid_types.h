@@ -215,6 +215,72 @@ enum {
 #define FLUID_DOMAIN_SMOKE_SCRIPT "smoke_script.py"
 #define FLUID_DOMAIN_LIQUID_SCRIPT "liquid_script.py"
 
+#define FLUID_FILENAME_CONFIG "config_####"
+
+#define FLUID_FILENAME_DATA "fluid_data_####"
+#define FLUID_FILENAME_NOISE "fluid_noise_####"
+#define FLUID_FILENAME_DENSITY "density_####"
+#define FLUID_FILENAME_SHADOW "shadow_####"
+#define FLUID_FILENAME_VELOCITY "vel_####"
+#define FLUID_FILENAME_HEAT "heat_####"
+#define FLUID_FILENAME_COLORR "color_r_####"
+#define FLUID_FILENAME_COLORG "color_g_####"
+#define FLUID_FILENAME_COLORB "color_b_####"
+#define FLUID_FILENAME_FLAME "flame_####"
+#define FLUID_FILENAME_FUEL "fuel_####"
+#define FLUID_FILENAME_REACT "react_####"
+#define FLUID_FILENAME_PHI "phi_####"
+#define FLUID_FILENAME_PP "pp_####"
+#define FLUID_FILENAME_PVEL "pVel_####"
+#define FLUID_FILENAME_DENSITYNOISE "density_noise_####"
+#define FLUID_FILENAME_COLORRNOISE "color_r_noise_####"
+#define FLUID_FILENAME_COLORGNOISE "color_g_noise_####"
+#define FLUID_FILENAME_COLORBNOISE "color_b_noise_####"
+#define FLUID_FILENAME_FLAMENOISE "flame_noise_####"
+#define FLUID_FILENAME_FUELNOISE "fuel_noise_####"
+#define FLUID_FILENAME_REACTNOISE "react_noise_####"
+#define FLUID_FILENAME_MESH "lMesh_####"
+#define FLUID_FILENAME_MESHVEL "lVelMesh_####"
+#define FLUID_FILENAME_PPSND "ppSnd_####"
+#define FLUID_FILENAME_PVELSND "pVelSnd_####"
+#define FLUID_FILENAME_PLIFESND "pLifeSnd_####"
+#define FLUID_FILENAME_GUIDEVEL "guidevel_####"
+
+#define FLUID_GRIDNAME_DENSITY "density"
+#define FLUID_GRIDNAME_SHADOW "shadow"
+#define FLUID_GRIDNAME_VELOCITY "velocity"
+#define FLUID_GRIDNAME_HEAT "heat"
+#define FLUID_GRIDNAME_COLORR "color_r"
+#define FLUID_GRIDNAME_COLORG "color_g"
+#define FLUID_GRIDNAME_COLORB "color_b"
+#define FLUID_GRIDNAME_FLAME "flame"
+#define FLUID_GRIDNAME_FUEL "fuel"
+#define FLUID_GRIDNAME_REACT "react"
+#define FLUID_GRIDNAME_DENSITYNOISE "density_noise"
+#define FLUID_GRIDNAME_COLORRNOISE "color_r_noise"
+#define FLUID_GRIDNAME_COLORGNOISE "color_g_noise"
+#define FLUID_GRIDNAME_COLORBNOISE "color_b_noise"
+#define FLUID_GRIDNAME_FLAMENOISE "flame_noise"
+#define FLUID_GRIDNAME_FUELNOISE "fuel_noise"
+#define FLUID_GRIDNAME_REACTNOISE "react_noise"
+
+#define FLUID_DOMAIN_EXTENSION_UNI ".uni"
+#define FLUID_DOMAIN_EXTENSION_OPENVDB ".vdb"
+#define FLUID_DOMAIN_EXTENSION_RAW ".raw"
+#define FLUID_DOMAIN_EXTENSION_OBJ ".obj"
+#define FLUID_DOMAIN_EXTENSION_BINOBJ ".bobj.gz"
+
+enum {
+  FLUID_DOMAIN_GRID_FLOAT = 0,
+  FLUID_DOMAIN_GRID_INT = 1,
+  FLUID_DOMAIN_GRID_VEC3F = 2,
+};
+
+enum {
+  FLUID_DOMAIN_CACHE_FILES_SINGLE = 0,
+  FLUID_DOMAIN_CACHE_FILES_COMBINED = 1,
+};
+
 enum {
   FLUID_DOMAIN_CACHE_REPLAY = 0,
   FLUID_DOMAIN_CACHE_MODULAR = 1,
@@ -353,7 +419,6 @@ typedef struct FluidDomainSettings {
   float surface_tension;
   float viscosity_base;
   int viscosity_exponent;
-  float domain_size;
 
   /* Mesh options. */
   float mesh_concave_upper;
@@ -364,7 +429,7 @@ typedef struct FluidDomainSettings {
   int mesh_scale;
   int totvert;
   short mesh_generator;
-  char _pad5[2]; /* Unused. */
+  char _pad5[6]; /* Unused. */
 
   /* Secondary particle options. */
   int particle_type;
@@ -501,6 +566,8 @@ enum {
   FLUID_FLOW_USE_INFLOW = (1 << 5),
   /* Control how to initialize flow objects. */
   FLUID_FLOW_USE_PLANE_INIT = (1 << 6),
+  /* Notify domain objects about state change (invalidate cache). */
+  FLUID_FLOW_NEEDS_UPDATE = (1 << 7),
 };
 
 typedef struct FluidFlowSettings {
@@ -574,6 +641,8 @@ enum {
   FLUID_EFFECTOR_USE_EFFEC = (1 << 1),
   /* Control how to initialize flow objects. */
   FLUID_EFFECTOR_USE_PLANE_INIT = (1 << 2),
+  /* Notify domain objects about state change (invalidate cache). */
+  FLUID_EFFECTOR_NEEDS_UPDATE = (1 << 3),
 };
 
 /* Collision objects (filled with smoke). */

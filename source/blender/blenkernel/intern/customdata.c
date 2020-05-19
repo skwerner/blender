@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
@@ -315,6 +315,9 @@ static void layerInterp_mdeformvert(const void **sources,
   if (totweight) {
     dvert->totweight = totweight;
     for (i = 0, node = dest_dwlink; node; node = node->next, i++) {
+      if (node->dw.weight > 1.0f) {
+        node->dw.weight = 1.0f;
+      }
       dvert->dw[i] = node->dw;
     }
   }
@@ -695,6 +698,24 @@ static size_t layerFilesize_mdisps(CDataFile *UNUSED(cdf), const void *data, int
   }
 
   return size;
+}
+static void layerInterp_paint_mask(
+    const void **sources, const float *weights, const float *sub_weights, int count, void *dest)
+{
+  float mask = 0.0f;
+  const float *sub_weight = sub_weights;
+  for (int i = 0; i < count; i++) {
+    float weight = weights ? weights[i] : 1.0f;
+    const float *src = sources[i];
+    if (sub_weights) {
+      mask += (*src) * (*sub_weight) * weight;
+      sub_weight++;
+    }
+    else {
+      mask += (*src) * weight;
+    }
+  }
+  *(float *)dest = mask;
 }
 
 static void layerCopy_grid_paint_mask(const void *source, void *dest, int count)
@@ -1592,7 +1613,7 @@ static const LayerTypeInfo LAYERTYPEINFO[CD_NUMTYPES] = {
     /* END BMESH ONLY */
 
     /* 34: CD_PAINT_MASK */
-    {sizeof(float), "", 0, NULL, NULL, NULL, NULL, NULL, NULL},
+    {sizeof(float), "", 0, NULL, NULL, NULL, layerInterp_paint_mask, NULL, NULL},
     /* 35: CD_GRID_PAINT_MASK */
     {sizeof(GridPaintMask),
      "GridPaintMask",
@@ -3556,10 +3577,9 @@ void CustomData_bmesh_copy_data_exclude_by_type(const CustomData *source,
     /* if we found a matching layer, copy the data */
     if (dest->layers[dest_i].type == source->layers[src_i].type &&
         STREQ(dest->layers[dest_i].name, source->layers[src_i].name)) {
-      const void *src_data = POINTER_OFFSET(src_block, source->layers[src_i].offset);
-      void *dest_data = POINTER_OFFSET(*dest_block, dest->layers[dest_i].offset);
-
       if (no_mask || ((CD_TYPE_AS_MASK(dest->layers[dest_i].type) & mask_exclude) == 0)) {
+        const void *src_data = POINTER_OFFSET(src_block, source->layers[src_i].offset);
+        void *dest_data = POINTER_OFFSET(*dest_block, dest->layers[dest_i].offset);
         const LayerTypeInfo *typeInfo = layerType_getInfo(source->layers[src_i].type);
         if (typeInfo->copy) {
           typeInfo->copy(src_data, dest_data, 1);

@@ -148,6 +148,8 @@ class _defs_annotate:
 
     def draw_settings_common(context, layout, tool):
         gpd = context.annotation_data
+        region_type = context.region.type
+
         if gpd is not None:
             if gpd.layers.active_note is not None:
                 text = gpd.layers.active_note
@@ -160,17 +162,24 @@ class _defs_annotate:
             gpl = context.active_annotation_layer
             if gpl is not None:
                 layout.label(text="Annotation:")
-                sub = layout.row(align=True)
-                sub.ui_units_x = 8
+                if context.space_data.type == 'VIEW_3D':
+                    if region_type == 'TOOL_HEADER':
+                        sub = layout.split(align=True, factor=0.5)
+                        sub.ui_units_x = 6.5
+                        sub.prop(gpl, "color", text="")
+                    else:
+                        sub = layout.row(align=True)
+                        sub.prop(gpl, "color", text="")
+                    sub.popover(
+                        panel="TOPBAR_PT_annotation_layers",
+                        text=text,
+                    )
+                else:
+                    layout.prop(gpl, "color", text="")
 
-                sub.prop(gpl, "color", text="")
-                sub.popover(
-                    panel="TOPBAR_PT_annotation_layers",
-                    text=text,
-                )
-
-        tool_settings = context.tool_settings
         space_type = tool.space_type
+        tool_settings = context.tool_settings
+
         if space_type == 'VIEW_3D':
             layout.separator()
 
@@ -180,6 +189,29 @@ class _defs_annotate:
                 row.prop(tool_settings.gpencil_sculpt, "lockaxis")
             elif tool_settings.gpencil_stroke_placement_view3d in {'SURFACE', 'STROKE'}:
                 row.prop(tool_settings, "use_gpencil_stroke_endpoints")
+
+        if tool.idname == "builtin.annotate_line":
+            layout.separator()
+
+            props = tool.operator_properties("gpencil.annotate")
+            if region_type == 'TOOL_HEADER':
+                row = layout.row()
+                row.ui_units_x = 15
+                row.prop(props, "arrowstyle_start", text="Start")
+                row.separator()
+                row.prop(props, "arrowstyle_end", text="End")
+            else:
+                col = layout.row().column(align=True)
+                col.prop(props, "arrowstyle_start", text="Style Start")
+                col.prop(props, "arrowstyle_end", text="End")
+        elif tool.idname == "builtin.annotate" and region_type != 'TOOL_HEADER':
+            layout.separator()
+            props = tool.operator_properties("gpencil.annotate")
+            layout.prop(props, "use_stabilizer", text="Stabilize Stroke")
+            col = layout.column(align=False)
+            col.active = props.use_stabilizer
+            col.prop(props, "stabilizer_radius", text="Radius", slider=True)
+            col.prop(props, "stabilizer_factor", text="Factor", slider=True)
 
     @ToolDef.from_fn.with_args(draw_settings=draw_settings_common)
     def scribble(*, draw_settings):
@@ -628,9 +660,10 @@ class _defs_edit_mesh:
                 layout.prop(props, "vertex_only")
                 layout.prop(props, "clamp_overlap")
                 layout.prop(props, "loop_slide")
-                layout.prop(props, "mark_seam")
-                layout.prop(props, "mark_sharp")
                 layout.prop(props, "harden_normals")
+                col = layout.column(heading="Mark")
+                col.prop(props, "mark_seam", text="Seam")
+                col.prop(props, "mark_sharp", text="Sharp")
 
                 layout.prop(props, "material")
 
@@ -668,6 +701,19 @@ class _defs_edit_mesh:
             operator="view3d.edit_mesh_extrude_move_normal",
             keymap=(),
             draw_settings=_template_widget.VIEW3D_GGT_xform_extrude.draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def extrude_dissolve_and_intersect():
+        return dict(
+            idname="builtin.extrude_dissolve_and_intersect",
+            label="Extrude Dissolve and Intersect",
+            description=(
+                "Extrude, dissolves edges whose faces form a flat surface and intersect new edges"
+            ),
+            icon="none",
+            widget="VIEW3D_GGT_tool_generic_handle_normal",
+            keymap=(),
         )
 
     @ToolDef.from_fn
@@ -845,23 +891,61 @@ class _defs_edit_curve:
 
     @ToolDef.from_fn
     def draw():
-        def draw_settings(context, layout, _tool):
+        def draw_settings(context, layout, tool, *, extra=False):
             # Tool settings initialize operator options.
             tool_settings = context.tool_settings
             cps = tool_settings.curve_paint_settings
+            region_type = context.region.type
 
-            col = layout.column()
+            if region_type == 'TOOL_HEADER':
+                if not extra:
+                    layout.prop(cps, "curve_type", text="")
+                    layout.prop(cps, "depth_mode", expand=True)
+                    layout.popover("TOPBAR_PT_tool_settings_extra", text="...")
+                    return
 
-            col.prop(cps, "curve_type")
+            layout.use_property_split = True
+            layout.use_property_decorate = False
 
+            if region_type != 'TOOL_HEADER':
+                layout.prop(cps, "curve_type")
+                layout.separator()
             if cps.curve_type == 'BEZIER':
-                col.prop(cps, "error_threshold")
-                col.prop(cps, "fit_method")
-                col.prop(cps, "use_corners_detect")
+                layout.prop(cps, "fit_method")
+                layout.prop(cps, "error_threshold")
+                if region_type != 'TOOL_HEADER':
+                    row = layout.row(heading="Detect Corners", align=True)
+                else:
+                    row = layout.row(heading="Corners", align=True)
+                row.prop(cps, "use_corners_detect", text="")
+                sub = row.row(align=True)
+                sub.active = cps.use_corners_detect
+                sub.prop(cps, "corner_angle", text="")
+                layout.separator()
 
-                col = layout.row()
-                col.active = cps.use_corners_detect
-                col.prop(cps, "corner_angle")
+
+            col = layout.column(align=True)
+            col.prop(cps, "radius_taper_start", text="Taper Start", slider=True)
+            col.prop(cps, "radius_taper_end", text="End", slider=True)
+            col = layout.column(align=True)
+            col.prop(cps, "radius_min", text="Radius Min")
+            col.prop(cps, "radius_max", text="Max")
+            col.prop(cps, "use_pressure_radius")
+
+            layout.separator()
+
+            if region_type != 'TOOL_HEADER':
+                row = layout.row()
+                row.prop(cps, "depth_mode", expand=True)
+            if cps.depth_mode == 'SURFACE':
+                col = layout.column()
+                col.prop(cps, "surface_offset")
+                col.prop(cps, "use_offset_absolute")
+                col.prop(cps, "use_stroke_endpoints")
+                if cps.use_stroke_endpoints:
+                    colsub = layout.column(align=True)
+                    colsub.prop(cps, "surface_plane")
+
 
         return dict(
             idname="builtin.draw",
@@ -1031,6 +1115,11 @@ class _defs_sculpt:
             layout.prop(props, "strength")
             layout.prop(props, "deform_axis")
             layout.prop(props, "use_face_sets")
+            if (props.type == "SURFACE_SMOOTH"):
+                layout.prop(props, "surface_smooth_shape_preservation", expand=False)
+                layout.prop(props, "surface_smooth_current_vertex", expand=False)
+            if (props.type == "SHARPEN"):
+                layout.prop(props, "sharpen_smooth_ratio", expand=False)
 
         return dict(
             idname="builtin.mesh_filter",
@@ -1804,6 +1893,21 @@ class _defs_sequencer_generic:
             draw_settings=draw_settings,
         )
 
+    @ToolDef.from_fn
+    def sample():
+        def draw_settings(_context, layout, tool):
+            props = tool.operator_properties("sequencer.sample")
+        return dict(
+            idname="builtin.sample",
+            label="Sample",
+            description=(
+                "Sample pixel values under the cursor"
+            ),
+            icon="ops.paint.weight_sample",  # XXX, needs own icon.
+            keymap="Sequencer Tool: Sample",
+            draw_settings=draw_settings,
+        )
+
 
 class _defs_sequencer_select:
     @ToolDef.from_fn
@@ -1916,6 +2020,8 @@ class IMAGE_PT_tools_active(ToolSelectPanelHelper, Panel):
         ],
         'PAINT': [
             _defs_texture_paint.generate_from_brushes,
+            None,
+            *_tools_annotate,
         ],
     }
 
@@ -2092,6 +2198,7 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
             None,
             (
                 _defs_edit_mesh.extrude,
+                _defs_edit_mesh.extrude_dissolve_and_intersect,
                 _defs_edit_mesh.extrude_normals,
                 _defs_edit_mesh.extrude_individual,
                 _defs_edit_mesh.extrude_cursor,
@@ -2343,6 +2450,7 @@ class SEQUENCER_PT_tools_active(ToolSelectPanelHelper, Panel):
         None: [
         ],
         'PREVIEW': [
+            _defs_sequencer_generic.sample,
             *_tools_annotate,
         ],
         'SEQUENCER': [
@@ -2350,6 +2458,7 @@ class SEQUENCER_PT_tools_active(ToolSelectPanelHelper, Panel):
             _defs_sequencer_generic.blade,
         ],
         'SEQUENCER_PREVIEW': [
+            _defs_sequencer_generic.sample,
             *_tools_select,
             *_tools_annotate,
             _defs_sequencer_generic.blade,

@@ -59,13 +59,14 @@
 #include "BLT_translation.h"
 
 #include "BKE_action.h"
-#include "BKE_anim.h"
+#include "BKE_anim_data.h"
 #include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_cachefile.h"
 #include "BKE_collection.h"
 #include "BKE_colortools.h"
 #include "BKE_curveprofile.h"
+#include "BKE_duplilist.h"
 #include "BKE_editmesh.h"
 #include "BKE_fcurve.h"
 #include "BKE_freestyle.h"
@@ -154,6 +155,9 @@ static void scene_init_data(ID *id)
   scene->unit.mass_unit = (uchar)bUnit_GetBaseUnitOfType(USER_UNIT_METRIC, B_UNIT_MASS);
   scene->unit.time_unit = (uchar)bUnit_GetBaseUnitOfType(USER_UNIT_METRIC, B_UNIT_TIME);
 
+  /* Anti-aliasing threshold. */
+  scene->grease_pencil_settings.smaa_threshold = 1.0f;
+
   {
     ParticleEditSettings *pset;
     pset = &scene->toolsettings->particle;
@@ -211,7 +215,7 @@ static void scene_init_data(ID *id)
   /* Master Collection */
   scene->master_collection = BKE_collection_master_add();
 
-  BKE_view_layer_add(scene, "View Layer");
+  BKE_view_layer_add(scene, "View Layer", NULL, VIEWLAYER_ADD_NEW);
 }
 
 static void scene_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int flag)
@@ -339,12 +343,17 @@ static void scene_free_data(ID *id)
 
   /* is no lib link block, but scene extension */
   if (scene->nodetree) {
-    ntreeFreeNestedTree(scene->nodetree);
+    ntreeFreeEmbeddedTree(scene->nodetree);
     MEM_freeN(scene->nodetree);
     scene->nodetree = NULL;
   }
 
   if (scene->rigidbody_world) {
+    /* Prevent rigidbody freeing code to follow other IDs pointers, this should never be allowed
+     * nor necessary from here, and with new undo code, those pointers may be fully invalid or
+     * worse, pointing to data actually belonging to new BMain! */
+    scene->rigidbody_world->constraints = NULL;
+    scene->rigidbody_world->group = NULL;
     BKE_rigidbody_free_world(scene);
   }
 
@@ -668,10 +677,9 @@ Scene *BKE_scene_copy(Main *bmain, Scene *sce, int type)
 
     if (type == SCE_COPY_FULL) {
       /* Copy Freestyle LineStyle datablocks. */
-      for (ViewLayer *view_layer_dst = sce_copy->view_layers.first; view_layer_dst;
-           view_layer_dst = view_layer_dst->next) {
-        for (FreestyleLineSet *lineset = view_layer_dst->freestyle_config.linesets.first; lineset;
-             lineset = lineset->next) {
+      LISTBASE_FOREACH (ViewLayer *, view_layer_dst, &sce_copy->view_layers) {
+        LISTBASE_FOREACH (
+            FreestyleLineSet *, lineset, &view_layer_dst->freestyle_config.linesets) {
           if (lineset->linestyle) {
             id_us_min(&lineset->linestyle->id);
             BKE_id_copy_ex(
@@ -731,8 +739,7 @@ Scene *BKE_scene_add(Main *bmain, const char *name)
  */
 bool BKE_scene_object_find(Scene *scene, Object *ob)
 {
-  for (ViewLayer *view_layer = scene->view_layers.first; view_layer;
-       view_layer = view_layer->next) {
+  LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
     if (BLI_findptr(&view_layer->object_bases, ob, offsetof(Base, object))) {
       return true;
     }
@@ -742,9 +749,8 @@ bool BKE_scene_object_find(Scene *scene, Object *ob)
 
 Object *BKE_scene_object_find_by_name(const Scene *scene, const char *name)
 {
-  for (ViewLayer *view_layer = scene->view_layers.first; view_layer;
-       view_layer = view_layer->next) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
+    LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
       if (STREQ(base->object->id.name + 2, name)) {
         return base->object;
       }
@@ -772,9 +778,8 @@ void BKE_scene_set_background(Main *bmain, Scene *scene)
   }
 
   /* copy layers and flags from bases to objects */
-  for (ViewLayer *view_layer = scene->view_layers.first; view_layer;
-       view_layer = view_layer->next) {
-    for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
+    LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
       ob = base->object;
       /* collection patch... */
       BKE_scene_object_base_flag_sync_from_base(base);
@@ -928,7 +933,7 @@ int BKE_scene_base_iter_next(
 Scene *BKE_scene_find_from_collection(const Main *bmain, const Collection *collection)
 {
   for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
-    for (ViewLayer *layer = scene->view_layers.first; layer; layer = layer->next) {
+    LISTBASE_FOREACH (ViewLayer *, layer, &scene->view_layers) {
       if (BKE_view_layer_has_collection(layer, collection)) {
         return scene;
       }
@@ -954,7 +959,7 @@ Object *BKE_scene_camera_switch_find(Scene *scene)
   Object *camera = NULL;
   Object *first_camera = NULL;
 
-  for (TimeMarker *m = scene->markers.first; m; m = m->next) {
+  LISTBASE_FOREACH (TimeMarker *, m, &scene->markers) {
     if (m->camera && (m->camera->restrictflag & OB_RESTRICT_RENDER) == 0) {
       if ((m->frame <= cfra) && (m->frame > frame)) {
         camera = m->camera;
@@ -1170,34 +1175,6 @@ int BKE_scene_orientation_slot_get_index(const TransformOrientationSlot *orient_
 
 /** \} */
 
-/* That's like really a bummer, because currently animation data for armatures
- * might want to use pose, and pose might be missing on the object.
- * This happens when changing visible layers, which leads to situations when
- * pose is missing or marked for recalc, animation will change it and then
- * object update will restore the pose.
- *
- * This could be solved by the new dependency graph, but for until then we'll
- * do an extra pass on the objects to ensure it's all fine.
- */
-#define POSE_ANIMATION_WORKAROUND
-
-#ifdef POSE_ANIMATION_WORKAROUND
-static void scene_armature_depsgraph_workaround(Main *bmain, Depsgraph *depsgraph)
-{
-  Object *ob;
-  if (BLI_listbase_is_empty(&bmain->armatures) || !DEG_id_type_updated(depsgraph, ID_OB)) {
-    return;
-  }
-  for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-    if (ob->type == OB_ARMATURE && ob->adt) {
-      if (ob->pose == NULL || (ob->pose->flag & POSE_RECALC)) {
-        BKE_pose_rebuild(bmain, ob, ob->data, true);
-      }
-    }
-  }
-}
-#endif
-
 static bool check_rendered_viewport_visible(Main *bmain)
 {
   wmWindowManager *wm = bmain->wm.first;
@@ -1279,6 +1256,14 @@ void BKE_scene_update_sound(Depsgraph *depsgraph, Main *bmain)
     BKE_sound_update_scene_listener(scene);
   }
   BKE_sound_update_scene(depsgraph, scene);
+}
+
+void BKE_scene_update_tag_audio_volume(Depsgraph *UNUSED(depsgraph), Scene *scene)
+{
+  BLI_assert(DEG_is_evaluated_id(&scene->id));
+  /* The volume is actually updated in BKE_scene_update_sound(), from either
+   * scene_graph_update_tagged() or from BKE_scene_graph_update_for_newframe(). */
+  scene->id.recalc |= ID_RECALC_AUDIO_VOLUME;
 }
 
 /* TODO(sergey): This actually should become view_layer_graph or so.
@@ -1374,9 +1359,6 @@ void BKE_scene_graph_update_for_newframe(Depsgraph *depsgraph, Main *bmain)
     BKE_image_editors_update_frame(bmain, scene->r.cfra);
     BKE_sound_set_cfra(scene->r.cfra);
     DEG_graph_relations_update(depsgraph, bmain, scene, view_layer);
-#ifdef POSE_ANIMATION_WORKAROUND
-    scene_armature_depsgraph_workaround(bmain, depsgraph);
-#endif
     /* Update all objects: drivers, matrices, displists, etc. flags set
      * by depgraph or manual, no layer check here, gets correct flushed.
      *
@@ -2097,7 +2079,7 @@ static Depsgraph **scene_get_depsgraph_p(Main *bmain,
       if (allocate_depsgraph) {
         *depsgraph_ptr = DEG_graph_new(bmain, scene, view_layer, DAG_EVAL_VIEWPORT);
         /* TODO(sergey): Would be cool to avoid string format print,
-         * but is a bit tricky because we can't know in advance  whether
+         * but is a bit tricky because we can't know in advance whether
          * we will ever enable debug messages for this depsgraph.
          */
         char name[1024];
@@ -2170,8 +2152,6 @@ GHash *BKE_scene_undo_depsgraphs_extract(Main *bmain)
 void BKE_scene_undo_depsgraphs_restore(Main *bmain, GHash *depsgraph_extract)
 {
   for (Scene *scene = bmain->scenes.first; scene != NULL; scene = scene->id.next) {
-    BLI_assert(scene->depsgraph_hash == NULL);
-
     for (ViewLayer *view_layer = scene->view_layers.first; view_layer != NULL;
          view_layer = view_layer->next) {
       char key_full[MAX_ID_NAME + FILE_MAX + MAX_NAME] = {0};

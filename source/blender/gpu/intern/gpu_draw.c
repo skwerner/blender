@@ -905,7 +905,7 @@ GPUTexture *GPU_texture_from_blender(Image *ima, ImageUser *iuser, ImBuf *ibuf, 
     bindcode = gpu_texture_create_tile_array(ima, ibuf_intern);
   }
   else if (textarget == GL_TEXTURE_1D_ARRAY) {
-    bindcode = gpu_texture_create_tile_mapping(ima, iuser->multiview_eye);
+    bindcode = gpu_texture_create_tile_mapping(ima, iuser ? iuser->multiview_eye : 0);
   }
   else {
     bindcode = gpu_texture_create_from_ibuf(ima, ibuf_intern, textarget);
@@ -1479,68 +1479,5 @@ void GPU_free_images_old(Main *bmain)
       }
     }
     ima = ima->id.next;
-  }
-}
-
-static void gpu_disable_multisample(void)
-{
-#ifdef __linux__
-  /* changing multisample from the default (enabled) causes problems on some
-   * systems (NVIDIA/Linux) when the pixel format doesn't have a multisample buffer */
-  bool toggle_ok = true;
-
-  if (GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_UNIX, GPU_DRIVER_ANY)) {
-    int samples = 0;
-    glGetIntegerv(GL_SAMPLES, &samples);
-
-    if (samples == 0) {
-      toggle_ok = false;
-    }
-  }
-
-  if (toggle_ok) {
-    glDisable(GL_MULTISAMPLE);
-  }
-#else
-  glDisable(GL_MULTISAMPLE);
-#endif
-}
-
-/* Default OpenGL State
- *
- * This is called on startup, for opengl offscreen render.
- * Generally we should always return to this state when
- * temporarily modifying the state for drawing, though that are (undocumented)
- * exceptions that we should try to get rid of. */
-
-void GPU_state_init(void)
-{
-  GPU_program_point_size(false);
-
-  glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
-
-  glDepthFunc(GL_LEQUAL);
-
-  glDisable(GL_BLEND);
-  glDisable(GL_DEPTH_TEST);
-  glDisable(GL_COLOR_LOGIC_OP);
-  glDisable(GL_STENCIL_TEST);
-
-  glDepthRange(0.0, 1.0);
-
-  glFrontFace(GL_CCW);
-  glCullFace(GL_BACK);
-  glDisable(GL_CULL_FACE);
-
-  gpu_disable_multisample();
-
-  /* This is a bit dangerous since addons could change this. */
-  glEnable(GL_PRIMITIVE_RESTART);
-  glPrimitiveRestartIndex((GLuint)0xFFFFFFFF);
-
-  /* TODO: Should become default. But needs at least GL 4.3 */
-  if (GLEW_ARB_ES3_compatibility) {
-    /* Takes predecence over GL_PRIMITIVE_RESTART */
-    glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
   }
 }

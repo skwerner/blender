@@ -1264,6 +1264,7 @@ static void fill_crossdata_for_intersect(CDT_state *cdt,
   se_vcva = t->next->next;
   BLI_assert(se_vcva->vert == vc && se_vcva->next->vert == va);
   BLI_assert(se_vcvb->vert == vc && se_vcvb->next->vert == vb);
+  UNUSED_VARS_NDEBUG(vc);
   isect = isect_seg_seg_v2_lambda_mu_db(va->co, vb->co, curco, v2->co, &lambda, &mu);
 #ifdef DEBUG_CDT
   if (dbg_level > 0) {
@@ -1992,25 +1993,25 @@ typedef struct EdgeVertLambda {
 /* For sorting first by edge id, then by lambda, then by vert id. */
 static int evl_cmp(const void *a, const void *b)
 {
-  const EdgeVertLambda *sa = a;
+  const EdgeVertLambda *area = a;
   const EdgeVertLambda *sb = b;
 
-  if (sa->e_id < sb->e_id) {
+  if (area->e_id < sb->e_id) {
     return -1;
   }
-  else if (sa->e_id > sb->e_id) {
+  else if (area->e_id > sb->e_id) {
     return 1;
   }
-  else if (sa->lambda < sb->lambda) {
+  else if (area->lambda < sb->lambda) {
     return -1;
   }
-  else if (sa->lambda > sb->lambda) {
+  else if (area->lambda > sb->lambda) {
     return 1;
   }
-  else if (sa->v_id < sb->v_id) {
+  else if (area->v_id < sb->v_id) {
     return -1;
   }
-  else if (sa->v_id > sb->v_id) {
+  else if (area->v_id > sb->v_id) {
     return 1;
   }
   return 0;

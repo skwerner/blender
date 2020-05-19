@@ -45,10 +45,8 @@
 #include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
-#include "DNA_workspace_types.h"
 
 #include "RNA_access.h"
-#include "RNA_enum_types.h"
 
 #include "BKE_appdir.h"
 #include "BKE_context.h"
@@ -62,10 +60,6 @@
 #include "IMB_thumbs.h"
 
 #include "BIF_glutil.h"
-
-#include "DEG_depsgraph.h"
-
-#include "DRW_engine.h"
 
 #include "ED_datafiles.h"
 #include "ED_keyframes_draw.h"
@@ -759,11 +753,11 @@ static ImBuf *create_mono_icon_with_border(ImBuf *buf,
           // blur alpha channel
           const int write_offset = by * (ICON_GRID_W + 2 * ICON_MONO_BORDER_OUTSET) + bx;
           float alpha_accum = 0.0;
-          unsigned int alpha_samples = 0;
+          uint alpha_samples = 0;
           for (int ax = asx; ax < aex; ax++) {
             for (int ay = asy; ay < aey; ay++) {
               const int offset_read = (sy + ay) * buf->x + (sx + ax);
-              unsigned int color_read = buf->rect[offset_read];
+              uint color_read = buf->rect[offset_read];
               const float alpha_read = ((color_read & 0xff000000) >> 24) / 255.0;
               alpha_accum += alpha_read;
               alpha_samples += 1;
@@ -782,8 +776,8 @@ static ImBuf *create_mono_icon_with_border(ImBuf *buf,
           const float border_srgb[4] = {
               0, 0, 0, MIN2(1.0, blurred_alpha * border_sharpness) * border_intensity};
 
-          const unsigned int color_read = buf->rect[offset_write];
-          const unsigned char *orig_color = (unsigned char *)&color_read;
+          const uint color_read = buf->rect[offset_write];
+          const uchar *orig_color = (uchar *)&color_read;
 
           float border_rgba[4];
           float orig_rgba[4];
@@ -795,8 +789,8 @@ static ImBuf *create_mono_icon_with_border(ImBuf *buf,
           blend_color_interpolate_float(dest_rgba, orig_rgba, border_rgba, 1.0 - orig_rgba[3]);
           linearrgb_to_srgb_v4(dest_srgb, dest_rgba);
 
-          unsigned int alpha_mask = ((unsigned int)(dest_srgb[3] * 255)) << 24;
-          unsigned int cpack = rgb_to_cpack(dest_srgb[0], dest_srgb[1], dest_srgb[2]) | alpha_mask;
+          uint alpha_mask = ((uint)(dest_srgb[3] * 255)) << 24;
+          uint cpack = rgb_to_cpack(dest_srgb[0], dest_srgb[1], dest_srgb[2]) | alpha_mask;
           result->rect[offset_write] = cpack;
         }
       }
@@ -1129,8 +1123,8 @@ void UI_icons_free(void)
 #ifndef WITH_HEADLESS
   free_icons_textures();
   free_iconfile_list(&iconfilelist);
-  BKE_icons_free();
 #endif
+  BKE_icons_free();
 }
 
 void UI_icons_free_drawinfo(void *drawinfo)
@@ -1892,7 +1886,7 @@ static void icon_draw_size(float x,
     mul_v4_fl(color, alpha);
 
     float border_outset = 0.0;
-    unsigned int border_texel = 0;
+    uint border_texel = 0;
 #ifndef WITH_HEADLESS
     if (with_border) {
       const float scale = (float)ICON_GRID_W / (float)ICON_DEFAULT_WIDTH;
@@ -2015,8 +2009,8 @@ static int ui_id_brush_get_icon(const bContext *C, ID *id)
     Object *ob = CTX_data_active_object(C);
     const EnumPropertyItem *items = NULL;
     ePaintMode paint_mode = PAINT_MODE_INVALID;
-    ScrArea *sa = CTX_wm_area(C);
-    char space_type = sa->spacetype;
+    ScrArea *area = CTX_wm_area(C);
+    char space_type = area->spacetype;
     /* Fallback to 3D view. */
     if (space_type == SPACE_PROPERTIES) {
       space_type = SPACE_VIEW3D;
@@ -2041,8 +2035,8 @@ static int ui_id_brush_get_icon(const bContext *C, ID *id)
       }
     }
     else if (space_type == SPACE_IMAGE) {
-      if (sa->spacetype == space_type) {
-        const SpaceImage *sima = sa->spacedata.first;
+      if (area->spacetype == space_type) {
+        const SpaceImage *sima = area->spacedata.first;
         if (sima->mode == SI_MODE_PAINT) {
           paint_mode = PAINT_MODE_TEXTURE_2D;
         }
@@ -2326,6 +2320,9 @@ int UI_idcode_icon_get(const int idcode)
       return ICON_WORLD_DATA;
     case ID_WS:
       return ICON_WORKSPACE;
+    case ID_SIM:
+      /* TODO: Use correct icon. */
+      return ICON_PHYSICS;
     default:
       return ICON_NONE;
   }

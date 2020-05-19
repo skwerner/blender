@@ -23,12 +23,9 @@
  * Implementation of tools for debugging the depsgraph
  */
 
-#include "BLI_ghash.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_scene_types.h"
-} /* extern "C" */
 
 #include "DNA_object_types.h"
 
@@ -198,10 +195,10 @@ bool DEG_debug_consistency_check(Depsgraph *graph)
 /* ------------------------------------------------ */
 
 /**
- * Obtain simple statistics about the complexity of the depsgraph
- * \param[out] r_outer       The number of outer nodes in the graph
- * \param[out] r_operations  The number of operation nodes in the graph
- * \param[out] r_relations   The number of relations between (executable) nodes in the graph
+ * Obtain simple statistics about the complexity of the depsgraph.
+ * \param[out] r_outer:      The number of outer nodes in the graph
+ * \param[out] r_operations: The number of operation nodes in the graph
+ * \param[out] r_relations:  The number of relations between (executable) nodes in the graph
  */
 void DEG_stats_simple(const Depsgraph *graph,
                       size_t *r_outer,
@@ -224,13 +221,12 @@ void DEG_stats_simple(const Depsgraph *graph,
 
     for (DEG::IDNode *id_node : deg_graph->id_nodes) {
       tot_outer++;
-      GHASH_FOREACH_BEGIN (DEG::ComponentNode *, comp_node, id_node->components) {
+      for (DEG::ComponentNode *comp_node : id_node->components.values()) {
         tot_outer++;
         for (DEG::OperationNode *op_node : comp_node->operations) {
           tot_rels += op_node->inlinks.size();
         }
       }
-      GHASH_FOREACH_END();
     }
 
     DEG::TimeSourceNode *time_source = deg_graph->find_time_source();

@@ -24,6 +24,7 @@
 
 #include "DRW_render.h"
 
+#include "BLI_listbase.h"
 #include "BLI_rand.h"
 #include "BLI_string_utils.h"
 
@@ -486,8 +487,8 @@ static bool eevee_volume_object_mesh_init(Scene *scene,
 
   /* Smoke Simulation */
   if (((ob->base_flag & BASE_FROM_DUPLI) == 0) &&
-      (md = modifiers_findByType(ob, eModifierType_Fluid)) &&
-      (modifier_isEnabled(scene, md, eModifierMode_Realtime)) &&
+      (md = BKE_modifiers_findby_type(ob, eModifierType_Fluid)) &&
+      (BKE_modifier_is_enabled(scene, md, eModifierMode_Realtime)) &&
       ((FluidModifierData *)md)->domain != NULL) {
     FluidModifierData *mmd = (FluidModifierData *)md;
     FluidDomainSettings *mds = mmd->domain;
@@ -851,7 +852,7 @@ void EEVEE_volumes_resolve(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *veda
 void EEVEE_volumes_free_smoke_textures(void)
 {
   /* Free Smoke Textures after rendering */
-  for (LinkData *link = e_data.smoke_domains.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &e_data.smoke_domains) {
     FluidModifierData *mmd = (FluidModifierData *)link->data;
     GPU_free_smoke(mmd);
   }

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2020 Blender Foundation.
@@ -81,6 +81,11 @@ static float v3_dist_from_plane(float v[3], float center[3], float no[3])
 
 void multires_reshape_apply_base_refit_base_mesh(MultiresReshapeContext *reshape_context)
 {
+  if (reshape_context->mmd->simple) {
+    /* Simple subdivisions does not move base mesh verticies, so no refitting is needed. */
+    return;
+  }
+
   Mesh *base_mesh = reshape_context->base_mesh;
 
   MeshElemMap *pmap;
@@ -177,7 +182,7 @@ void multires_reshape_apply_base_refit_base_mesh(MultiresReshapeContext *reshape
 
 void multires_reshape_apply_base_refine_from_base(MultiresReshapeContext *reshape_context)
 {
-  BKE_subdiv_eval_update_from_mesh(reshape_context->subdiv, reshape_context->base_mesh, NULL);
+  BKE_subdiv_eval_refine_from_mesh(reshape_context->subdiv, reshape_context->base_mesh, NULL);
 }
 
 void multires_reshape_apply_base_refine_from_deform(MultiresReshapeContext *reshape_context)
@@ -192,7 +197,7 @@ void multires_reshape_apply_base_refine_from_deform(MultiresReshapeContext *resh
   float(*deformed_verts)[3] = BKE_multires_create_deformed_base_mesh_vert_coords(
       depsgraph, object, mmd, NULL);
 
-  BKE_subdiv_eval_update_from_mesh(
+  BKE_subdiv_eval_refine_from_mesh(
       reshape_context->subdiv, reshape_context->base_mesh, deformed_verts);
 
   MEM_freeN(deformed_verts);

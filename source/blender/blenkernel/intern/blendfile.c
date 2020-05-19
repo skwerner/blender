@@ -76,7 +76,7 @@
 static bool clean_paths_visit_cb(void *UNUSED(userdata), char *path_dst, const char *path_src)
 {
   strcpy(path_dst, path_src);
-  BLI_path_native_slash(path_dst);
+  BLI_path_slash_native(path_dst);
   return !STREQ(path_dst, path_src);
 }
 
@@ -88,7 +88,7 @@ static void clean_paths(Main *main)
   BKE_bpath_traverse_main(main, clean_paths_visit_cb, BKE_BPATH_TRAVERSE_SKIP_MULTIFILE, NULL);
 
   for (scene = main->scenes.first; scene; scene = scene->id.next) {
-    BLI_path_native_slash(scene->r.pic);
+    BLI_path_slash_native(scene->r.pic);
   }
 }
 
@@ -201,6 +201,27 @@ static void setup_app_data(bContext *C,
     SWAP(ListBase, bmain->workspaces, bfd->main->workspaces);
     SWAP(ListBase, bmain->screens, bfd->main->screens);
 
+    /* In case of actual new file reading without loading UI, we need to regenerate the session
+     * uuid of the UI-related datablocks we are keeping from previous session, otherwise their uuid
+     * will collide with some generated for newly read data. */
+    if (mode != LOAD_UNDO) {
+      ID *id;
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (&bfd->main->wm, id) {
+        BKE_lib_libblock_session_uuid_renew(id);
+      }
+      FOREACH_MAIN_LISTBASE_ID_END;
+
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (&bfd->main->workspaces, id) {
+        BKE_lib_libblock_session_uuid_renew(id);
+      }
+      FOREACH_MAIN_LISTBASE_ID_END;
+
+      FOREACH_MAIN_LISTBASE_ID_BEGIN (&bfd->main->screens, id) {
+        BKE_lib_libblock_session_uuid_renew(id);
+      }
+      FOREACH_MAIN_LISTBASE_ID_END;
+    }
+
     /* we re-use current window and screen */
     win = CTX_wm_window(C);
     curscreen = CTX_wm_screen(C);
@@ -257,9 +278,6 @@ static void setup_app_data(bContext *C,
   /* free G_MAIN Main database */
   //  CTX_wm_manager_set(C, NULL);
   BKE_blender_globals_clear();
-
-  /* clear old property update cache, in case some old references are left dangling */
-  RNA_property_update_cache_free();
 
   bmain = G_MAIN = bfd->main;
   bfd->main = NULL;
@@ -345,7 +363,7 @@ static void setup_app_data(bContext *C,
     wmWindowManager *wm = bmain->wm.first;
 
     if (wm) {
-      for (wmWindow *win = wm->windows.first; win; win = win->next) {
+      LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
         if (win->scene && win->scene != curscene) {
           BKE_scene_set_background(bmain, win->scene);
         }

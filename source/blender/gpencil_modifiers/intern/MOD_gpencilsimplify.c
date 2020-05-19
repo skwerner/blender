@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -34,6 +34,8 @@
 
 #include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
+#include "BKE_lib_query.h"
+#include "BKE_modifier.h"
 
 #include "DEG_depsgraph.h"
 
@@ -48,13 +50,12 @@ static void initData(GpencilModifierData *md)
   gpmd->factor = 0.0f;
   gpmd->length = 0.1f;
   gpmd->distance = 0.1f;
-  gpmd->layername[0] = '\0';
-  gpmd->materialname[0] = '\0';
+  gpmd->material = NULL;
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 }
 
 static void deformStroke(GpencilModifierData *md,
@@ -68,7 +69,7 @@ static void deformStroke(GpencilModifierData *md,
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
-                                      mmd->materialname,
+                                      mmd->material,
                                       mmd->pass_index,
                                       mmd->layer_pass,
                                       mmd->mode == GP_SIMPLIFY_SAMPLE ? 3 : 4,
@@ -123,6 +124,13 @@ static void bakeModifier(struct Main *UNUSED(bmain),
   }
 }
 
+static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
+{
+  SimplifyGpencilModifierData *mmd = (SimplifyGpencilModifierData *)md;
+
+  walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
+}
+
 GpencilModifierTypeInfo modifierType_Gpencil_Simplify = {
     /* name */ "Simplify",
     /* structName */ "SimplifyGpencilModifierData",
@@ -143,6 +151,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Simplify = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* foreachObjectLink */ NULL,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
 };

@@ -62,8 +62,6 @@ typedef struct GpencilBatchCache {
 
   /** Cache is dirty */
   bool is_dirty;
-  /** Edit mode flag */
-  bool is_editmode;
   /** Last cache frame */
   int cache_frame;
 } GpencilBatchCache;
@@ -71,19 +69,15 @@ typedef struct GpencilBatchCache {
 static bool gpencil_batch_cache_valid(GpencilBatchCache *cache, bGPdata *gpd, int cfra)
 {
   bool valid = true;
+
   if (cache == NULL) {
     return false;
   }
 
-  cache->is_editmode = GPENCIL_ANY_EDIT_MODE(gpd);
   if (cfra != cache->cache_frame) {
     valid = false;
   }
   else if (gpd->flag & GP_DATA_CACHE_IS_DIRTY) {
-    valid = false;
-  }
-  else if (gpd->flag & GP_DATA_PYTHON_UPDATED) {
-    gpd->flag &= ~GP_DATA_PYTHON_UPDATED;
     valid = false;
   }
   else if (cache->is_dirty) {
@@ -106,7 +100,6 @@ static GpencilBatchCache *gpencil_batch_cache_init(Object *ob, int cfra)
     memset(cache, 0, sizeof(*cache));
   }
 
-  cache->is_editmode = GPENCIL_ANY_EDIT_MODE(gpd);
   cache->is_dirty = true;
   cache->cache_frame = cfra;
   return cache;
@@ -181,7 +174,8 @@ static GPUVertFormat *gpencil_stroke_format(void)
     GPU_vertformat_attr_add(&format, "ma", GPU_COMP_I32, 4, GPU_FETCH_INT);
     GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
     GPU_vertformat_attr_add(&format, "uv", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
-    /* IMPORTANT: This means having only 4 attributes to fit into GPU module limit of 16 attrib. */
+    /* IMPORTANT: This means having only 4 attributes
+     * to fit into GPU module limit of 16 attributes. */
     GPU_vertformat_multiload_enable(&format, 4);
   }
   return &format;
@@ -215,7 +209,8 @@ static GPUVertFormat *gpencil_color_format(void)
   if (format.attr_len == 0) {
     GPU_vertformat_attr_add(&format, "col", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
     GPU_vertformat_attr_add(&format, "fcol", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
-    /* IMPORTANT: This means having only 4 attributes to fit into GPU module limit of 16 attrib. */
+    /* IMPORTANT: This means having only 4 attributes
+     * to fit into GPU module limit of 16 attributes. */
     GPU_vertformat_multiload_enable(&format, 4);
   }
   return &format;
@@ -296,7 +291,7 @@ static void gpencil_buffer_add_point(gpStrokeVert *verts,
   vert->u_stroke = pt->uv_fac;
   vert->stroke_id = gps->runtime.stroke_start;
   vert->point_id = v;
-  vert->thickness = max_ff(0.0f, gps->thickness * pt->pressure) * (round_cap1 ? 1.0 : -1.0);
+  vert->thickness = max_ff(0.0f, gps->thickness * pt->pressure) * (round_cap1 ? 1.0f : -1.0f);
   /* Tag endpoint material to -1 so they get discarded by vertex shader. */
   vert->mat = (is_endpoint) ? -1 : (gps->mat_nr % GP_MATERIAL_BUFFER_LEN);
 
@@ -542,15 +537,14 @@ static void gpencil_sbuffer_stroke_ensure(bGPdata *gpd, bool do_stroke, bool do_
 
     /* Get origin to reproject points. */
     float origin[3];
-    bGPDlayer *gpl = BKE_gpencil_layer_active_get(gpd);
     ToolSettings *ts = scene->toolsettings;
-    ED_gpencil_drawing_reference_get(scene, ob, gpl, ts->gpencil_v3d_align, origin);
+    ED_gpencil_drawing_reference_get(scene, ob, ts->gpencil_v3d_align, origin);
 
     for (int i = 0; i < vert_len; i++) {
       ED_gpencil_tpoint_to_point(region, origin, &tpoints[i], &gps->points[i]);
       mul_m4_v3(ob->imat, &gps->points[i].x);
       bGPDspoint *pt = &gps->points[i];
-      copy_v4_v4(pt->vert_color, gpd->runtime.vert_color);
+      copy_v4_v4(pt->vert_color, tpoints[i].vert_color);
     }
     /* Calc uv data along the stroke. */
     BKE_gpencil_stroke_uv_update(gps);

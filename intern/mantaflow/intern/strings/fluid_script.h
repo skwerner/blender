@@ -92,7 +92,7 @@ const std::string fluid_variables =
 mantaMsg('Fluid variables')\n\
 dim_s$ID$     = $SOLVER_DIM$\n\
 res_s$ID$     = $RES$\n\
-gravity_s$ID$ = vec3($GRAVITY_X$, $GRAVITY_Y$, $GRAVITY_Z$)\n\
+gravity_s$ID$ = vec3($GRAVITY_X$, $GRAVITY_Y$, $GRAVITY_Z$) # in SI unit (e.g. m/s^2)\n\
 gs_s$ID$      = vec3($RESX$, $RESY$, $RESZ$)\n\
 maxVel_s$ID$  = 0\n\
 \n\
@@ -115,9 +115,16 @@ using_speedvectors_s$ID$ = $USING_SPEEDVECTORS$\n\
 using_diffusion_s$ID$    = $USING_DIFFUSION$\n\
 \n\
 # Fluid time params\n\
+timeScale_s$ID$    = $TIME_SCALE$\n\
 timeTotal_s$ID$    = $TIME_TOTAL$\n\
 timePerFrame_s$ID$ = $TIME_PER_FRAME$\n\
-frameLength_s$ID$  = $FRAME_LENGTH$\n\
+\n\
+# In Blender fluid.c: frame_length = DT_DEFAULT * (25.0 / fps) * time_scale\n\
+# with DT_DEFAULT = 0.1\n\
+frameLength_s$ID$ = $FRAME_LENGTH$\n\
+frameLengthUnscaled_s$ID$  = frameLength_s$ID$ / timeScale_s$ID$\n\
+frameLengthRaw_s$ID$ = 0.1 * 25 # dt = 0.1 at 25 fps\n\
+\n\
 dt0_s$ID$          = $DT$\n\
 cflCond_s$ID$      = $CFL$\n\
 timestepsMin_s$ID$ = $TIMESTEPS_MIN$\n\
@@ -132,8 +139,29 @@ end_frame_s$ID$     = $END_FRAME$\n\
 domainSize_s$ID$ = $FLUID_DOMAIN_SIZE$ # longest domain side in meters\n\
 viscosity_s$ID$ = $FLUID_VISCOSITY$ / (domainSize_s$ID$*domainSize_s$ID$) # kinematic viscosity in m^2/s\n\
 \n\
-# Factor to convert blender velocities to manta velocities\n\
-toMantaUnitsFac_s$ID$ = (1.0 / (1.0 / res_s$ID$))\n # = dt/dx * 1/dt ";
+# Factors to convert Blender units to Manta units\n\
+ratioMetersToRes_s$ID$ = float(domainSize_s$ID$) / float(res_s$ID$) # [meters / cells]\n\
+mantaMsg('1 Mantaflow cell is ' + str(ratioMetersToRes_s$ID$) + ' Blender length units long.')\n\
+\n\
+ratioResToBLength_s$ID$ = float(res_s$ID$) / float(domainSize_s$ID$) # [cells / blength] (blength: cm, m, or km, ... )\n\
+mantaMsg('1 Blender length unit is ' + str(ratioResToBLength_s$ID$) + ' Mantaflow cells long.')\n\
+\n\
+ratioBTimeToTimstep_s$ID$ = float(1) / float(frameLengthRaw_s$ID$) # the time within 1 blender time unit, see also fluid.c\n\
+mantaMsg('1 Blender time unit is ' + str(ratioBTimeToTimstep_s$ID$) + ' Mantaflow time units long.')\n\
+\n\
+ratioFrameToFramelength_s$ID$ = float(1) / float(frameLengthUnscaled_s$ID$ ) # the time within 1 frame\n\
+mantaMsg('frame / frameLength is ' + str(ratioFrameToFramelength_s$ID$) + ' Mantaflow time units long.')\n\
+\n\
+scaleAcceleration_s$ID$ = ratioResToBLength_s$ID$ * (ratioBTimeToTimstep_s$ID$**2)# [meters/btime^2] to [cells/timestep^2] (btime: sec, min, or h, ...)\n\
+mantaMsg('scaleAcceleration is ' + str(scaleAcceleration_s$ID$))\n\
+\n\
+scaleSpeedFrames_s$ID$ = ratioResToBLength_s$ID$ * ratioFrameToFramelength_s$ID$ # [blength/frame] to [cells/frameLength]\n\
+mantaMsg('scaleSpeed is ' + str(scaleSpeedFrames_s$ID$))\n\
+\n\
+scaleSpeedTime_s$ID$ = ratioResToBLength_s$ID$ * ratioBTimeToTimstep_s$ID$ # [blength/btime] to [cells/frameLength]\n\
+mantaMsg('scaleSpeedTime is ' + str(scaleSpeedTime_s$ID$))\n\
+\n\
+gravity_s$ID$ *= scaleAcceleration_s$ID$ # scale from world acceleration to cell based acceleration\n";
 
 const std::string fluid_variables_noise =
     "\n\
@@ -231,7 +259,7 @@ const std::string fluid_alloc =
     "\n\
 mantaMsg('Fluid alloc data')\n\
 flags_s$ID$       = s$ID$.create(FlagGrid)\n\
-vel_s$ID$         = s$ID$.create(MACGrid)\n\
+vel_s$ID$         = s$ID$.create(MACGrid, name='$NAME_VELOCITY$')\n\
 velTmp_s$ID$      = s$ID$.create(MACGrid)\n\
 x_vel_s$ID$       = s$ID$.create(RealGrid)\n\
 y_vel_s$ID$       = s$ID$.create(RealGrid)\n\
@@ -261,7 +289,7 @@ const std::string fluid_alloc_obstacle =
     "\n\
 mantaMsg('Allocating obstacle data')\n\
 numObs_s$ID$     = s$ID$.create(RealGrid)\n\
-phiObsSIn_s$ID$  = s$ID$.create(LevelsetGrid) # helper for static obstacles\n\
+phiObsSIn_s$ID$  = s$ID$.create(LevelsetGrid) # helper for static obstacle objects\n\
 phiObsIn_s$ID$   = s$ID$.create(LevelsetGrid)\n\
 obvel_s$ID$      = s$ID$.create(MACGrid)\n\
 obvelC_s$ID$     = s$ID$.create(Vec3Grid)\n\
@@ -311,7 +339,15 @@ z_invel_s$ID$ = s$ID$.create(RealGrid)\n";
 const std::string fluid_alloc_outflow =
     "\n\
 mantaMsg('Allocating outflow data')\n\
-phiOutIn_s$ID$ = s$ID$.create(LevelsetGrid)\n";
+phiOutSIn_s$ID$ = s$ID$.create(LevelsetGrid) # helper for static outflow objects\n\
+phiOutIn_s$ID$  = s$ID$.create(LevelsetGrid)\n\
+\n\
+# Set some initial values\n\
+phiOutSIn_s$ID$.setConst(9999)\n\
+phiOutIn_s$ID$.setConst(9999)\n\
+\n\
+if 'fluid_data_dict_resume_s$ID$' in globals():\n\
+    fluid_data_dict_resume_s$ID$.update(phiOutIn=phiOutIn_s$ID$)\n";
 
 //////////////////////////////////////////////////////////////////////
 // PRE / POST STEP
@@ -334,17 +370,16 @@ def fluid_pre_step_$ID$():\n\
         y_obvel_s$ID$.safeDivide(numObs_s$ID$)\n\
         z_obvel_s$ID$.safeDivide(numObs_s$ID$)\n\
         \n\
-        x_obvel_s$ID$.multConst(toMantaUnitsFac_s$ID$)\n\
-        y_obvel_s$ID$.multConst(toMantaUnitsFac_s$ID$)\n\
-        z_obvel_s$ID$.multConst(toMantaUnitsFac_s$ID$)\n\
-        \n\
+        x_obvel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
+        y_obvel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
+        z_obvel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
         copyRealToVec3(sourceX=x_obvel_s$ID$, sourceY=y_obvel_s$ID$, sourceZ=z_obvel_s$ID$, target=obvelC_s$ID$)\n\
     \n\
     # translate invels (world space) to grid space\n\
     if using_invel_s$ID$:\n\
-        x_invel_s$ID$.multConst(toMantaUnitsFac_s$ID$)\n\
-        y_invel_s$ID$.multConst(toMantaUnitsFac_s$ID$)\n\
-        z_invel_s$ID$.multConst(toMantaUnitsFac_s$ID$)\n\
+        x_invel_s$ID$.multConst(scaleSpeedTime_s$ID$)\n\
+        y_invel_s$ID$.multConst(scaleSpeedTime_s$ID$)\n\
+        z_invel_s$ID$.multConst(scaleSpeedTime_s$ID$)\n\
         copyRealToVec3(sourceX=x_invel_s$ID$, sourceY=y_invel_s$ID$, sourceZ=z_invel_s$ID$, target=invelC_s$ID$)\n\
     \n\
     if using_guiding_s$ID$:\n\
@@ -354,9 +389,9 @@ def fluid_pre_step_$ID$():\n\
         velT_s$ID$.multConst(vec3(gamma_sg$ID$))\n\
     \n\
     # translate external forces (world space) to grid space\n\
-    x_force_s$ID$.multConst(toMantaUnitsFac_s$ID$)\n\
-    y_force_s$ID$.multConst(toMantaUnitsFac_s$ID$)\n\
-    z_force_s$ID$.multConst(toMantaUnitsFac_s$ID$)\n\
+    x_force_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
+    y_force_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
+    z_force_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
     copyRealToVec3(sourceX=x_force_s$ID$, sourceY=y_force_s$ID$, sourceZ=z_force_s$ID$, target=forces_s$ID$)\n\
     \n\
     # If obstacle has velocity, i.e. is a moving obstacle, switch to dynamic preconditioner\n\
@@ -523,11 +558,10 @@ def bake_noise_process_$ID$(framenr, format_data, format_noise, path_data, path_
     \n\
     sn$ID$.frame = framenr\n\
     sn$ID$.frameLength = frameLength_s$ID$\n\
-    sn$ID$.timeTotal = abs(framenr - start_frame_s$ID$) * frameLength_s$ID$\n\
+    sn$ID$.timeTotal = timeTotal_s$ID$\n\
     sn$ID$.timestep = frameLength_s$ID$ # no adaptive timestep for noise\n\
     \n\
     smoke_step_noise_$ID$(framenr)\n\
-    smoke_save_noise_$ID$(path_noise, framenr, format_noise, resumable)\n\
 \n\
 def bake_noise_$ID$(path_data, path_noise, framenr, format_data, format_noise, resumable):\n\
     if not withMPBake or isWindows:\n\
@@ -542,7 +576,7 @@ def bake_mesh_process_$ID$(framenr, format_data, format_mesh, format_particles, 
     \n\
     sm$ID$.frame = framenr\n\
     sm$ID$.frameLength = frameLength_s$ID$\n\
-    sm$ID$.timeTotal = abs(framenr - start_frame_s$ID$) * frameLength_s$ID$\n\
+    sm$ID$.timeTotal = timeTotal_s$ID$\n\
     sm$ID$.timestep = frameLength_s$ID$ # no adaptive timestep for mesh\n\
     \n\
     #if using_smoke_s$ID$:\n\
@@ -566,7 +600,7 @@ def bake_particles_process_$ID$(framenr, format_data, format_particles, path_dat
     \n\
     sp$ID$.frame = framenr\n\
     sp$ID$.frameLength = frameLength_s$ID$\n\
-    sp$ID$.timeTotal = abs(framenr - start_frame_s$ID$) * frameLength_s$ID$\n\
+    sp$ID$.timeTotal = timeTotal_s$ID$\n\
     sp$ID$.timestep = frameLength_s$ID$ # no adaptive timestep for particles\n\
     \n\
     #if using_smoke_s$ID$:\n\
@@ -591,10 +625,9 @@ def bake_guiding_process_$ID$(framenr, format_guiding, path_guiding, resumable):
     y_guidevel_s$ID$.safeDivide(numGuides_s$ID$)\n\
     z_guidevel_s$ID$.safeDivide(numGuides_s$ID$)\n\
     \n\
-    x_guidevel_s$ID$.multConst(Real(toMantaUnitsFac_s$ID$))\n\
-    y_guidevel_s$ID$.multConst(Real(toMantaUnitsFac_s$ID$))\n\
-    z_guidevel_s$ID$.multConst(Real(toMantaUnitsFac_s$ID$))\n\
-    \n\
+    x_guidevel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
+    y_guidevel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
+    z_guidevel_s$ID$.multConst(scaleSpeedFrames_s$ID$)\n\
     copyRealToVec3(sourceX=x_guidevel_s$ID$, sourceY=y_guidevel_s$ID$, sourceZ=z_guidevel_s$ID$, target=guidevelC_s$ID$)\n\
     \n\
     mantaMsg('Extrapolating guiding velocity')\n\

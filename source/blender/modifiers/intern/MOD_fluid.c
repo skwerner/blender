@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -101,7 +101,7 @@ static void requiredDataMask(Object *UNUSED(ob),
   }
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *me)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *me)
 {
 #ifndef WITH_FLUID
   UNUSED_VARS(md, ctx);
@@ -159,7 +159,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
                                  ctx->object,
                                  mmd->domain->effector_weights,
                                  true,
-                                 PFIELD_SMOKEFLOW,
+                                 PFIELD_FLUIDFLOW,
                                  "Fluid Force Field");
 
     if (mmd->domain->guide_parent != NULL) {
@@ -207,7 +207,10 @@ ModifierTypeInfo modifierType_Fluid = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

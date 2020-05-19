@@ -388,6 +388,10 @@ void paint_brush_color_get(struct Scene *scene,
           break;
         }
       }
+      /* Gradient / Colorband colors are not considered PROP_COLOR_GAMMA.
+       * Brush colors are expected to be in sRGB though. */
+      IMB_colormanagement_scene_linear_to_srgb_v3(color_gr);
+
       copy_v3_v3(color, color_gr);
     }
     else {
@@ -764,9 +768,9 @@ void PAINT_OT_image_paint(wmOperatorType *ot)
 
 bool get_imapaint_zoom(bContext *C, float *zoomx, float *zoomy)
 {
-  ScrArea *sa = CTX_wm_area(C);
-  if (sa && sa->spacetype == SPACE_IMAGE) {
-    SpaceImage *sima = sa->spacedata.first;
+  ScrArea *area = CTX_wm_area(C);
+  if (area && area->spacetype == SPACE_IMAGE) {
+    SpaceImage *sima = area->spacedata.first;
     if (sima->mode == SI_MODE_PAINT) {
       ARegion *region = CTX_wm_region(C);
       ED_space_image_get_zoom(sima, region, zoomx, zoomy);
@@ -808,12 +812,12 @@ void ED_space_image_paint_update(Main *bmain, wmWindowManager *wm, Scene *scene)
   ImagePaintSettings *imapaint = &settings->imapaint;
   bool enabled = false;
 
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     bScreen *screen = WM_window_get_active_screen(win);
 
-    for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-      if (sa->spacetype == SPACE_IMAGE) {
-        if (((SpaceImage *)sa->spacedata.first)->mode == SI_MODE_PAINT) {
+    LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+      if (area->spacetype == SPACE_IMAGE) {
+        if (((SpaceImage *)area->spacedata.first)->mode == SI_MODE_PAINT) {
           enabled = true;
         }
       }
@@ -949,9 +953,9 @@ typedef struct {
 static void sample_color_update_header(SampleColorData *data, bContext *C)
 {
   char msg[UI_MAX_DRAW_STR];
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
 
-  if (sa) {
+  if (area) {
     BLI_snprintf(msg,
                  sizeof(msg),
                  TIP_("Sample color for %s"),
@@ -1126,9 +1130,6 @@ static bool texture_paint_toggle_poll(bContext *C)
   if (!ob->data || ID_IS_LINKED(ob->data)) {
     return 0;
   }
-  if (CTX_data_edit_object(C)) {
-    return 0;
-  }
 
   return 1;
 }
@@ -1159,7 +1160,7 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
     toggle_paint_cursor(C, 0);
   }
   else {
-    bScreen *sc;
+    bScreen *screen;
     Image *ima = NULL;
     ImagePaintSettings *imapaint = &scene->toolsettings->imapaint;
 
@@ -1183,11 +1184,11 @@ static int texture_paint_toggle_exec(bContext *C, wmOperator *op)
     }
 
     if (ima) {
-      for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-        ScrArea *sa;
-        for (sa = sc->areabase.first; sa; sa = sa->next) {
+      for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+        ScrArea *area;
+        for (area = screen->areabase.first; area; area = area->next) {
           SpaceLink *sl;
-          for (sl = sa->spacedata.first; sl; sl = sl->next) {
+          for (sl = area->spacedata.first; sl; sl = sl->next) {
             if (sl->spacetype == SPACE_IMAGE) {
               SpaceImage *sima = (SpaceImage *)sl;
 
@@ -1288,9 +1289,9 @@ static bool brush_colors_flip_poll(bContext *C)
 void PAINT_OT_brush_colors_flip(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Brush Colors Flip";
+  ot->name = "Swap Colors";
   ot->idname = "PAINT_OT_brush_colors_flip";
-  ot->description = "Toggle foreground and background brush colors";
+  ot->description = "Swap primary and secondary brush colors";
 
   /* api callbacks */
   ot->exec = brush_colors_flip_exec;
@@ -1305,20 +1306,20 @@ void ED_imapaint_bucket_fill(struct bContext *C,
                              wmOperator *op,
                              const int mouse[2])
 {
-  wmWindowManager *wm = CTX_wm_manager(C);
   SpaceImage *sima = CTX_wm_space_image(C);
-  Image *ima = sima->image;
 
-  BKE_undosys_step_push_init_with_type(wm->undo_stack, C, op->type->name, BKE_UNDOSYS_TYPE_IMAGE);
+  if (sima && sima->image) {
+    Image *ima = sima->image;
 
-  ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_2D);
+    ED_image_undo_push_begin(op->type->name, PAINT_MODE_TEXTURE_2D);
 
-  float mouse_init[2] = {mouse[0], mouse[1]};
-  paint_2d_bucket_fill(C, color, NULL, mouse_init, NULL, NULL);
+    float mouse_init[2] = {mouse[0], mouse[1]};
+    paint_2d_bucket_fill(C, color, NULL, mouse_init, NULL, NULL);
 
-  BKE_undosys_step_push(wm->undo_stack, C, op->type->name);
+    ED_image_undo_push_end();
 
-  DEG_id_tag_update(&ima->id, 0);
+    DEG_id_tag_update(&ima->id, 0);
+  }
 }
 
 static bool texture_paint_poll(bContext *C)

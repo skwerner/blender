@@ -587,10 +587,12 @@ def brush_settings(layout, context, brush, popover=False):
                 slider=True,
             )
 
-            layout.prop(brush, "use_plane_trim", text="Plane Trim")
-            row = layout.row()
-            row.active = brush.use_plane_trim
-            row.prop(brush, "plane_trim", slider=True, text="Distance")
+            row = layout.row(heading="Plane Trim")
+            row.prop(brush, "use_plane_trim", text="")
+            sub = row.row()
+            sub.active = brush.use_plane_trim
+            sub.prop(brush, "plane_trim", slider=True, text="")
+
             layout.separator()
 
         # height
@@ -600,19 +602,10 @@ def brush_settings(layout, context, brush, popover=False):
         # use_persistent, set_persistent_base
         if capabilities.has_persistence:
             ob = context.sculpt_object
-            do_persistent = True
-
-            # not supported yet for this case
-            for md in ob.modifiers:
-                if md.type == 'MULTIRES':
-                    do_persistent = False
-                    break
-
-            if do_persistent:
-                layout.separator()
-                layout.prop(brush, "use_persistent")
-                layout.operator("sculpt.set_persistent_base")
-                layout.separator()
+            layout.separator()
+            layout.prop(brush, "use_persistent")
+            layout.operator("sculpt.set_persistent_base")
+            layout.separator()
 
         if brush.sculpt_tool == 'CLAY_STRIPS':
             row = layout.row()
@@ -626,6 +619,7 @@ def brush_settings(layout, context, brush, popover=False):
 
         if brush.sculpt_tool == 'POSE':
             layout.separator()
+            layout.prop(brush, "pose_origin_type")
             layout.prop(brush, "pose_offset")
             layout.prop(brush, "pose_smooth_iterations")
             layout.prop(brush, "pose_ik_segments")
@@ -664,6 +658,14 @@ def brush_settings(layout, context, brush, popover=False):
             col.prop(brush, "multiplane_scrape_angle")
             col.prop(brush, "use_multiplane_scrape_dynamic")
             col.prop(brush, "show_multiplane_scrape_planes_preview")
+
+        if brush.sculpt_tool == 'SMOOTH':
+            col = layout.column()
+            col.prop(brush, "smooth_deform_type")
+            if brush.smooth_deform_type == 'SURFACE':
+                col.prop(brush, "surface_smooth_shape_preservation")
+                col.prop(brush, "surface_smooth_current_vertex")
+                col.prop(brush, "surface_smooth_iterations")
 
         if brush.sculpt_tool == 'MASK':
             layout.row().prop(brush, "mask_tool", expand=True)
@@ -808,22 +810,27 @@ def brush_settings_advanced(layout, context, brush, popover=False):
         use_accumulate = capabilities.has_accumulate
         use_frontface = True
 
+        col = layout.column(heading="Auto-Masking", align=True)
+
         # topology automasking
-        layout.prop(brush, "use_automasking_topology")
+        col.prop(brush, "use_automasking_topology", text="Topology")
 
         # face masks automasking
-        layout.prop(brush, "use_automasking_face_sets")
-        
-        # boundary edges automasking
-        layout.prop(brush, "use_automasking_boundary_edges")
-        layout.prop(brush, "automasking_boundary_edges_propagation_steps")
+        col.prop(brush, "use_automasking_face_sets", text="Face Sets")
 
+        # boundary edges/face sets automasking
+        col.prop(brush, "use_automasking_boundary_edges", text="Mesh Boundary")
+        col.prop(brush, "use_automasking_boundary_face_sets", text="Face Sets Boundary")
+        col.prop(brush, "automasking_boundary_edges_propagation_steps")
+
+        layout.separator()
 
         # sculpt plane settings
         if capabilities.has_sculpt_plane:
             layout.prop(brush, "sculpt_plane")
-            layout.prop(brush, "use_original_normal")
-            layout.prop(brush, "use_original_plane")
+            col = layout.column(heading="Use Original", align=True)
+            col.prop(brush, "use_original_normal", text="Normal")
+            col.prop(brush, "use_original_plane", text="Plane")
             layout.separator()
 
     # 3D and 2D Texture Paint.
@@ -892,7 +899,7 @@ def draw_color_settings(context, layout, brush, color_type=False):
         UnifiedPaintPanel.prop_unified_color(row, context, brush, "secondary_color", text="")
         row.separator()
         row.operator("paint.brush_colors_flip", icon='FILE_REFRESH', text="", emboss=False)
-        row.prop(ups, "use_unified_color", text="", icon='WORLD')
+        row.prop(ups, "use_unified_color", text="", icon='BRUSHES_ALL')
     # Gradient
     elif brush.color_type == 'GRADIENT':
         layout.template_color_ramp(brush, "gradient", expand=True)
@@ -1069,9 +1076,21 @@ def brush_basic_gpencil_paint_settings(layout, context, brush, *, compact=False)
         row = layout.row(align=True)
         row.prop(brush, "size", text="Radius")
         row.prop(gp_settings, "use_pressure", text="", icon='STYLUS_PRESSURE')
+
+        if gp_settings.use_pressure and context.area.type == 'PROPERTIES':
+            col = layout.column()
+            col.template_curve_mapping(gp_settings, "curve_sensitivity", brush=True,
+                                      use_negative_slope=True)
+
         row = layout.row(align=True)
         row.prop(gp_settings, "pen_strength", slider=True)
         row.prop(gp_settings, "use_strength_pressure", text="", icon='STYLUS_PRESSURE')
+
+        if gp_settings.use_strength_pressure and context.area.type == 'PROPERTIES':
+            col = layout.column()
+            col.template_curve_mapping(gp_settings, "curve_strength", brush=True,
+                                        use_negative_slope=True)
+
         if brush.gpencil_tool == 'TINT':
             row = layout.row(align=True)
             row.prop(gp_settings, "vertex_mode", text="Mode")
@@ -1088,7 +1107,7 @@ def brush_basic_gpencil_paint_settings(layout, context, brush, *, compact=False)
         settings = context.tool_settings.gpencil_sculpt
         if compact:
             row = layout.row(align=True)
-            row.prop(settings, "use_thickness_curve", text="", icon='CURVE_DATA')
+            row.prop(settings, "use_thickness_curve", text="", icon='SPHERECURVE')
             sub = row.row(align=True)
             sub.active = settings.use_thickness_curve
             sub.popover(

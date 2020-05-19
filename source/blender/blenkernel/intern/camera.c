@@ -38,11 +38,11 @@
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
 #include "BKE_camera.h"
 #include "BKE_idtype.h"
 #include "BKE_layer.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_scene.h"
@@ -62,17 +62,6 @@ static void camera_init_data(ID *id)
   BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cam, id));
 
   MEMCPY_STRUCT_AFTER(cam, DNA_struct_default_get(Camera), id);
-}
-
-void *BKE_camera_add(Main *bmain, const char *name)
-{
-  Camera *cam;
-
-  cam = BKE_libblock_alloc(bmain, ID_CA, name, 0);
-
-  camera_init_data(&cam->id);
-
-  return cam;
 }
 
 /**
@@ -95,13 +84,6 @@ static void camera_copy_data(Main *UNUSED(bmain),
   BLI_duplicatelist(&cam_dst->bg_images, &cam_src->bg_images);
 }
 
-Camera *BKE_camera_copy(Main *bmain, const Camera *cam)
-{
-  Camera *cam_copy;
-  BKE_id_copy(bmain, &cam->id, (ID **)&cam_copy);
-  return cam_copy;
-}
-
 static void camera_make_local(Main *bmain, ID *id, const int flags)
 {
   BKE_lib_id_make_local_generic(bmain, id, flags);
@@ -112,6 +94,21 @@ static void camera_free_data(ID *id)
 {
   Camera *cam = (Camera *)id;
   BLI_freelistN(&cam->bg_images);
+}
+
+static void camera_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Camera *camera = (Camera *)id;
+
+  BKE_LIB_FOREACHID_PROCESS(data, camera->dof.focus_object, IDWALK_CB_NOP);
+  LISTBASE_FOREACH (CameraBGImage *, bgpic, &camera->bg_images) {
+    if (bgpic->source == CAM_BGIMG_SOURCE_IMAGE) {
+      BKE_LIB_FOREACHID_PROCESS(data, bgpic->ima, IDWALK_CB_USER);
+    }
+    else if (bgpic->source == CAM_BGIMG_SOURCE_MOVIE) {
+      BKE_LIB_FOREACHID_PROCESS(data, bgpic->clip, IDWALK_CB_USER);
+    }
+  }
 }
 
 IDTypeInfo IDType_ID_CA = {
@@ -128,9 +125,28 @@ IDTypeInfo IDType_ID_CA = {
     .copy_data = camera_copy_data,
     .free_data = camera_free_data,
     .make_local = camera_make_local,
+    .foreach_id = camera_foreach_id,
 };
 
 /******************************** Camera Usage *******************************/
+
+void *BKE_camera_add(Main *bmain, const char *name)
+{
+  Camera *cam;
+
+  cam = BKE_libblock_alloc(bmain, ID_CA, name, 0);
+
+  camera_init_data(&cam->id);
+
+  return cam;
+}
+
+Camera *BKE_camera_copy(Main *bmain, const Camera *cam)
+{
+  Camera *cam_copy;
+  BKE_id_copy(bmain, &cam->id, (ID **)&cam_copy);
+  return cam_copy;
+}
 
 /* get the camera's dof value, takes the dof object into account */
 float BKE_camera_object_dof_distance(Object *ob)
@@ -913,7 +929,7 @@ static Object *camera_multiview_advanced(const Scene *scene, Object *camera, con
   name[0] = '\0';
 
   /* we need to take the better match, thus the len_suffix_max test */
-  for (const SceneRenderView *srv = scene->r.views.first; srv; srv = srv->next) {
+  LISTBASE_FOREACH (const SceneRenderView *, srv, &scene->r.views) {
     const int len_suffix = strlen(srv->suffix);
 
     if ((len_suffix < len_suffix_max) || (len_name < len_suffix)) {

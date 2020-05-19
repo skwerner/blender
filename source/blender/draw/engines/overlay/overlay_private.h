@@ -35,7 +35,6 @@ typedef struct OVERLAY_FramebufferList {
   struct GPUFrameBuffer *overlay_color_only_fb;
   struct GPUFrameBuffer *overlay_in_front_fb;
   struct GPUFrameBuffer *overlay_line_in_front_fb;
-  struct GPUFrameBuffer *overlay_xray_depth_copy_fb;
   struct GPUFrameBuffer *outlines_prepass_fb;
   struct GPUFrameBuffer *outlines_resolve_fb;
 } OVERLAY_FramebufferList;
@@ -70,7 +69,6 @@ typedef struct OVERLAY_PassList {
   DRWPass *edit_mesh_faces_cage_ps[2];
   DRWPass *edit_mesh_analysis_ps;
   DRWPass *edit_mesh_normals_ps;
-  DRWPass *edit_mesh_weight_ps;
   DRWPass *edit_particle_ps;
   DRWPass *edit_text_overlay_ps;
   DRWPass *edit_text_wire_ps[2];
@@ -79,7 +77,7 @@ typedef struct OVERLAY_PassList {
   DRWPass *extra_centers_ps;
   DRWPass *extra_grid_ps;
   DRWPass *gpencil_canvas_ps;
-  DRWPass *facing_ps;
+  DRWPass *facing_ps[2];
   DRWPass *grid_ps;
   DRWPass *image_background_ps;
   DRWPass *image_empties_ps;
@@ -93,6 +91,7 @@ typedef struct OVERLAY_PassList {
   DRWPass *outlines_detect_ps;
   DRWPass *outlines_resolve_ps;
   DRWPass *paint_color_ps;
+  DRWPass *paint_depth_ps;
   DRWPass *paint_overlay_ps;
   DRWPass *particle_ps;
   DRWPass *pointcloud_ps;
@@ -234,17 +233,17 @@ typedef struct OVERLAY_PrivateData {
   DRWShadingGroup *edit_mesh_skin_roots_grp[2];
   DRWShadingGroup *edit_mesh_normals_grp;
   DRWShadingGroup *edit_mesh_analysis_grp;
-  DRWShadingGroup *edit_mesh_weight_grp;
   DRWShadingGroup *edit_particle_strand_grp;
   DRWShadingGroup *edit_particle_point_grp;
   DRWShadingGroup *edit_text_overlay_grp;
   DRWShadingGroup *edit_text_wire_grp[2];
   DRWShadingGroup *extra_grid_grp;
-  DRWShadingGroup *facing_grp;
+  DRWShadingGroup *facing_grp[2];
   DRWShadingGroup *motion_path_lines_grp;
   DRWShadingGroup *motion_path_points_grp;
   DRWShadingGroup *outlines_grp;
   DRWShadingGroup *outlines_gpencil_grp;
+  DRWShadingGroup *paint_depth_grp;
   DRWShadingGroup *paint_surf_grp;
   DRWShadingGroup *paint_wire_grp;
   DRWShadingGroup *paint_wire_selected_grp;
@@ -278,6 +277,7 @@ typedef struct OVERLAY_PrivateData {
   View3DOverlay overlay;
   enum eContextObjectMode ctx_mode;
   bool clear_in_front;
+  bool use_in_front;
   bool wireframe_mode;
   bool hide_overlays;
   bool xray_enabled;
@@ -291,6 +291,8 @@ typedef struct OVERLAY_PrivateData {
 
   struct {
     bool enabled;
+    bool do_depth_copy;
+    bool do_depth_infront_copy;
   } antialiasing;
   struct {
     bool show_handles;
@@ -318,6 +320,7 @@ typedef struct OVERLAY_PrivateData {
   } armature;
   struct {
     bool in_front;
+    bool alpha_blending;
   } painting;
   struct {
     DRWCallBuffer *handle[2];
@@ -408,6 +411,7 @@ void OVERLAY_antialiasing_start(OVERLAY_Data *vedata);
 void OVERLAY_antialiasing_end(OVERLAY_Data *vedata);
 void OVERLAY_xray_fade_draw(OVERLAY_Data *vedata);
 void OVERLAY_xray_depth_copy(OVERLAY_Data *vedata);
+void OVERLAY_xray_depth_infront_copy(OVERLAY_Data *vedata);
 
 bool OVERLAY_armature_is_pose_mode(Object *ob, const struct DRWContextState *draw_ctx);
 void OVERLAY_armature_cache_init(OVERLAY_Data *vedata);
@@ -495,6 +499,7 @@ void OVERLAY_facing_init(OVERLAY_Data *vedata);
 void OVERLAY_facing_cache_init(OVERLAY_Data *vedata);
 void OVERLAY_facing_cache_populate(OVERLAY_Data *vedata, Object *ob);
 void OVERLAY_facing_draw(OVERLAY_Data *vedata);
+void OVERLAY_facing_infront_draw(OVERLAY_Data *vedata);
 
 void OVERLAY_grid_init(OVERLAY_Data *vedata);
 void OVERLAY_grid_cache_init(OVERLAY_Data *vedata);
@@ -610,7 +615,7 @@ GPUShader *OVERLAY_shader_particle_shape(void);
 GPUShader *OVERLAY_shader_pointcloud_dot(void);
 GPUShader *OVERLAY_shader_sculpt_mask(void);
 GPUShader *OVERLAY_shader_volume_velocity(bool use_needle);
-GPUShader *OVERLAY_shader_wireframe(void);
+GPUShader *OVERLAY_shader_wireframe(bool custom_bias);
 GPUShader *OVERLAY_shader_wireframe_select(void);
 GPUShader *OVERLAY_shader_xray_fade(void);
 

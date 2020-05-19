@@ -43,7 +43,7 @@
 #include "BLT_translation.h"
 
 #include "BKE_action.h"
-#include "BKE_anim.h"
+#include "BKE_anim_visualization.h"
 #include "BKE_animsys.h"
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
@@ -52,6 +52,7 @@
 #include "BKE_idprop.h"
 #include "BKE_idtype.h"
 #include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 
@@ -154,6 +155,15 @@ static void action_free_data(struct ID *id)
   BLI_freelistN(&action->markers);
 }
 
+static void action_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  bAction *act = (bAction *)id;
+
+  LISTBASE_FOREACH (TimeMarker *, marker, &act->markers) {
+    BKE_LIB_FOREACHID_PROCESS(data, marker->camera, IDWALK_CB_NOP);
+  }
+}
+
 IDTypeInfo IDType_ID_AC = {
     .id_code = ID_AC,
     .id_filter = FILTER_ID_AC,
@@ -168,6 +178,7 @@ IDTypeInfo IDType_ID_AC = {
     .copy_data = action_copy_data,
     .free_data = action_free_data,
     .make_local = NULL,
+    .foreach_id = action_foreach_id,
 };
 
 /* ***************** Library data level operations on action ************** */
@@ -925,6 +936,7 @@ void BKE_pose_channel_free_ex(bPoseChannel *pchan, bool do_id_user)
 
   if (pchan->prop) {
     IDP_FreeProperty(pchan->prop);
+    pchan->prop = NULL;
   }
 
   /* Cached data, for new draw manager rendering code. */
@@ -1664,6 +1676,6 @@ void what_does_obaction(
     adt.action = act;
 
     /* execute effects of Action on to workob (or it's PoseChannels) */
-    BKE_animsys_evaluate_animdata(NULL, &workob->id, &adt, cframe, ADT_RECALC_ANIM, false);
+    BKE_animsys_evaluate_animdata(&workob->id, &adt, cframe, ADT_RECALC_ANIM, false);
   }
 }

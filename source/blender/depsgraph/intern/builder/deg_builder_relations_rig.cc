@@ -34,7 +34,6 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_action_types.h"
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
@@ -45,7 +44,6 @@ extern "C" {
 #include "BKE_action.h"
 #include "BKE_armature.h"
 #include "BKE_constraint.h"
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -68,6 +66,12 @@ void DepsgraphRelationBuilder::build_ik_pose(Object *object,
                                              bConstraint *con,
                                              RootPChanMap *root_map)
 {
+  if ((con->flag & CONSTRAINT_DISABLE) != 0) {
+    /* Do not add disabled IK constraints to the relations. If these needs to be temporarily
+     * enabled, they will be added as temporary constraints during transform. */
+    return;
+  }
+
   bKinematicConstraint *data = (bKinematicConstraint *)con->data;
   /* Attach owner to IK Solver to. */
   bPoseChannel *rootchan = BKE_armature_ik_solver_find_root(pchan, data);
@@ -350,6 +354,7 @@ void DepsgraphRelationBuilder::build_rig(Object *object)
   }
   /* Links between operations for each bone. */
   LISTBASE_FOREACH (bPoseChannel *, pchan, &object->pose->chanbase) {
+    build_idproperties(pchan->prop);
     OperationKey bone_local_key(
         &object->id, NodeType::BONE, pchan->name, OperationCode::BONE_LOCAL);
     OperationKey bone_pose_key(
@@ -458,6 +463,7 @@ void DepsgraphRelationBuilder::build_proxy_rig(Object *object)
   OperationKey pose_done_key(&object->id, NodeType::EVAL_POSE, OperationCode::POSE_DONE);
   OperationKey pose_cleanup_key(&object->id, NodeType::EVAL_POSE, OperationCode::POSE_CLEANUP);
   LISTBASE_FOREACH (bPoseChannel *, pchan, &object->pose->chanbase) {
+    build_idproperties(pchan->prop);
     OperationKey bone_local_key(
         &object->id, NodeType::BONE, pchan->name, OperationCode::BONE_LOCAL);
     OperationKey bone_ready_key(

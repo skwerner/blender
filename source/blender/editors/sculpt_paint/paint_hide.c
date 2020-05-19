@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2010 by Nicholas Bishop
@@ -403,6 +403,9 @@ static int hide_show_exec(bContext *C, wmOperator *op)
     BKE_mesh_flush_hidden_from_verts(me);
   }
 
+  SCULPT_visibility_sync_all_vertex_to_face_sets(ob->sculpt);
+
+  DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
   ED_region_tag_redraw(region);
 
   return OPERATOR_FINISHED;

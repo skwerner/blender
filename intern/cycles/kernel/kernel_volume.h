@@ -276,12 +276,12 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
    Monochromatic.
    Requires sigma_m to be a tight upper bound of the volume density. */
 ccl_device void kernel_volume_transmission_woodcock(KernelGlobals *kg,
-                          ccl_addr_space PathState *state,
-                          Ray *ray,
-                          ShaderData *sd,
-                          float3 *throughput)
+                                                    ccl_addr_space PathState *state,
+                                                    Ray *ray,
+                                                    ShaderData *sd,
+                                                    float3 *throughput)
 {
-  const float sigma_m =  kernel_data.integrator.volume_max_density;
+  const float sigma_m = kernel_data.integrator.volume_max_density;
   float t = 0.0f;
   float3 sigma_t;
   float s2;
@@ -289,8 +289,8 @@ ccl_device void kernel_volume_transmission_woodcock(KernelGlobals *kg,
   for (int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
     float s = lcg_step_float_addrspace(&lcg_state);
     t = t - (logf(1.f - s) / sigma_m);
-    if(t >= ray->t) {
-        break;
+    if (t >= ray->t) {
+      break;
     }
     s2 = lcg_step_float_addrspace(&lcg_state);
     float3 new_P = ray->P + ray->D * t;
@@ -306,10 +306,10 @@ ccl_device void kernel_volume_transmission_woodcock(KernelGlobals *kg,
 }
 
 /* Residual ratio tracking to estimate volume transmission.
- See Novak et al, 2014, "Residual Ratio Tracking for Estimating Attenuation in Participating Media."
- sigma_c should be the lower bound of the volume density,
- sigma_r should be the difference between lower and upper bound of volume density.
- When sigma_c == 0, it is the same as ratio tracking. */
+ See Novak et al, 2014, "Residual Ratio Tracking for Estimating Attenuation in Participating
+ Media." sigma_c should be the lower bound of the volume density, sigma_r should be the difference
+ between lower and upper bound of volume density. When sigma_c == 0, it is the same as ratio
+ tracking. */
 ccl_device void kernel_volume_transmission_residual_ratio(KernelGlobals *kg,
                                                           ccl_addr_space PathState *state,
                                                           Ray *ray,
@@ -319,7 +319,7 @@ ccl_device void kernel_volume_transmission_residual_ratio(KernelGlobals *kg,
   /* Control variate, set to min density. */
   const float sigma_c = 0.0f;
   /* Residual compononent, max density - min density. */
-  const float sigma_r =  kernel_data.integrator.volume_max_density - sigma_c;
+  const float sigma_r = kernel_data.integrator.volume_max_density - sigma_c;
   float3 sigma_t = make_float3(0.0f, 0.0f, 0.0f);
   float t = 0.0f;
   float T_c = expf(-sigma_c * ray->t);
@@ -368,7 +368,7 @@ ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
     if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_RAY_MARCH) {
       kernel_volume_shadow_heterogeneous(kg, state, ray, shadow_sd, throughput, step_size);
     }
-    else if(kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_WOODCOCK) {
+    else if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_WOODCOCK) {
       kernel_volume_transmission_woodcock(kg, state, ray, shadow_sd, throughput);
     }
     else {
@@ -780,11 +780,11 @@ kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
 
 ccl_device VolumeIntegrateResult
 kernel_volume_integrate_heterogeneous_spectral_tracking(KernelGlobals *kg,
-                                               ccl_addr_space PathState *state,
-                                               Ray *ray,
-                                               ShaderData *sd,
-                                               PathRadiance *L,
-                                               ccl_addr_space float3 *throughput)
+                                                        ccl_addr_space PathState *state,
+                                                        Ray *ray,
+                                                        ShaderData *sd,
+                                                        PathRadiance *L,
+                                                        ccl_addr_space float3 *throughput)
 {
   uint lcg_state = lcg_state_init_addrspace(state, 0x0f0f0f0f);
   float3 tp = *throughput;
@@ -846,11 +846,11 @@ kernel_volume_integrate_heterogeneous_spectral_tracking(KernelGlobals *kg,
 
 ccl_device VolumeIntegrateResult
 kernel_volume_integrate_heterogeneous_woodcock_tracking(KernelGlobals *kg,
-                                               ccl_addr_space PathState *state,
-                                               Ray *ray,
-                                               ShaderData *sd,
-                                               PathRadiance *L,
-                                               ccl_addr_space float3 *throughput)
+                                                        ccl_addr_space PathState *state,
+                                                        Ray *ray,
+                                                        ShaderData *sd,
+                                                        PathRadiance *L,
+                                                        ccl_addr_space float3 *throughput)
 {
   uint lcg_state = lcg_state_init_addrspace(state, 0x12345678);
   float t = 0.0f;
@@ -859,9 +859,9 @@ kernel_volume_integrate_heterogeneous_woodcock_tracking(KernelGlobals *kg,
 
   for (int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
     float s = lcg_step_float_addrspace(&lcg_state);
-    float dt = - (logf(1.f - s) / sigma_m);
-    t = t + dt ;
-    if(t >= ray->t) {
+    float dt = -(logf(1.f - s) / sigma_m);
+    t = t + dt;
+    if (t >= ray->t) {
       break;
     }
     float s2 = lcg_step_float_addrspace(&lcg_state);
@@ -890,11 +890,11 @@ kernel_volume_integrate_heterogeneous_woodcock_tracking(KernelGlobals *kg,
 
 ccl_device VolumeIntegrateResult
 kernel_volume_integrate_heterogeneous_woodcock_mis_tracking(KernelGlobals *kg,
-                                               ccl_addr_space PathState *state,
-                                               Ray *ray,
-                                               ShaderData *sd,
-                                               PathRadiance *L,
-                                               ccl_addr_space float3 *throughput)
+                                                            ccl_addr_space PathState *state,
+                                                            Ray *ray,
+                                                            ShaderData *sd,
+                                                            PathRadiance *L,
+                                                            ccl_addr_space float3 *throughput)
 {
   uint lcg_state = lcg_state_init_addrspace(state, 0x12345678);
   float t = 0.0f;
@@ -902,20 +902,21 @@ kernel_volume_integrate_heterogeneous_woodcock_mis_tracking(KernelGlobals *kg,
   VolumeShaderCoefficients coeff;
   float3 channel_pdf;
   float rphase = path_state_rng_1D(kg, state, PRNG_PHASE_CHANNEL);
-  int channel = kernel_volume_sample_channel(make_float3(1.0f, 1.0f, 1.0f), make_float3(1.0f, 1.0f, 1.0f), rphase, &channel_pdf);
+  int channel = kernel_volume_sample_channel(
+      make_float3(1.0f, 1.0f, 1.0f), make_float3(1.0f, 1.0f, 1.0f), rphase, &channel_pdf);
   float3 tp = *throughput;
   float3 pdf = make_float3(1.0f, 1.0f, 1.0f);
 
   for (int i = 0; i < kernel_data.integrator.volume_max_steps; ++i) {
     float s = lcg_step_float_addrspace(&lcg_state);
-    float dt = - (logf(1.f - s) / sigma_m);
-    t = t + dt ;
-    if(t >= ray->t) {
+    float dt = -(logf(1.f - s) / sigma_m);
+    t = t + dt;
+    if (t >= ray->t) {
       break;
     }
     float s2 = lcg_step_float_addrspace(&lcg_state);
     float3 new_P = ray->P + ray->D * t;
-    const float Tc = expf(-t*sigma_m);
+    const float Tc = expf(-t * sigma_m);
     coeff.sigma_t = make_float3(1.0f, 1.0f, 1.0f);
     if (volume_shader_sample(kg, sd, state, new_P, &coeff)) {
       int closure_flag = sd->flag;
@@ -944,7 +945,6 @@ kernel_volume_integrate_heterogeneous_woodcock_mis_tracking(KernelGlobals *kg,
   *throughput = tp / average(pdf);
   return VOLUME_PATH_MISSED;
 }
-
 
 /* The particle tracing algorithm from section 4.1 in
  "Unbiased Light Transport Estimators for Inhomogeneous Participating Media"
@@ -1043,14 +1043,18 @@ kernel_volume_integrate(KernelGlobals *kg,
       return kernel_volume_integrate_heterogeneous_tracking(kg, state, ray, sd, L, throughput);
     }
     else if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_SPECTRAL) {
-//      return kernel_volume_integrate_heterogeneous_woodcock_mis_tracking(kg, state, ray, sd, L, throughput);
-      return kernel_volume_integrate_heterogeneous_spectral_tracking(kg, state, ray, sd, L, throughput);
+      //      return kernel_volume_integrate_heterogeneous_woodcock_mis_tracking(kg, state, ray,
+      //      sd, L, throughput);
+      return kernel_volume_integrate_heterogeneous_spectral_tracking(
+          kg, state, ray, sd, L, throughput);
     }
     else if (kernel_data.integrator.volume_integrator == VOLUME_INTEGRATOR_WOODCOCK) {
-      return kernel_volume_integrate_heterogeneous_woodcock_tracking(kg, state, ray, sd, L, throughput);
+      return kernel_volume_integrate_heterogeneous_woodcock_tracking(
+          kg, state, ray, sd, L, throughput);
     }
     else {
-      return kernel_volume_integrate_heterogeneous_distance(kg, state, ray, sd, L, throughput, step_size);
+      return kernel_volume_integrate_heterogeneous_distance(
+          kg, state, ray, sd, L, throughput, step_size);
     }
 
   else

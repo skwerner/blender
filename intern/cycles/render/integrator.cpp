@@ -57,7 +57,8 @@ NODE_DEFINE(Integrator)
   volume_integrator_enum.insert("ratio tracking", VOLUME_INTEGRATOR_RATIO_TRACKING);
   volume_integrator_enum.insert("weighted tracking", VOLUME_INTEGRATOR_WEIGHTED);
   volume_integrator_enum.insert("spectral tracking", VOLUME_INTEGRATOR_SPECTRAL);
-  SOCKET_ENUM(volume_integrator, "Volume Integrator", volume_integrator_enum, VOLUME_INTEGRATOR_RAY_MARCH);
+  SOCKET_ENUM(
+      volume_integrator, "Volume Integrator", volume_integrator_enum, VOLUME_INTEGRATOR_RAY_MARCH);
 
   SOCKET_FLOAT(volume_max_density, "Volume Max Density", 1.0f);
 

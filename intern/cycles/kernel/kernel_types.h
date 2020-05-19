@@ -1372,7 +1372,7 @@ typedef struct KernelIntegrator {
   float volume_step_rate;
   float volume_max_density;
   int volume_integrator;
-  
+
   int volume_samples;
 
   int start_sample;

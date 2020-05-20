@@ -83,7 +83,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
     kernel_volume_clean_stack(kg, state->volume_stack);
   }
 
-  if (state->volume_stack[0].shader == SHADER_NONE) {
+  if (!kernel_volume_stack_is_visible(kg, state->volume_stack, state->flag)) {
     return;
   }
 

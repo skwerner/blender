@@ -172,6 +172,25 @@ ccl_device int volume_stack_sampling_method(KernelGlobals *kg, VolumeStack *stac
   return method;
 }
 
+
+ccl_device_inline bool kernel_volume_stack_is_visible(KernelGlobals *kg,
+                                                      ccl_addr_space VolumeStack *volume_stack,
+                                                      uint flags)
+{
+  /* Check visiblity. */
+  bool stack_visible = false;
+  uint ray_visibility = flags; /* path_state_ray_visibility(kg, flags); */
+  for (int i = 0; i < VOLUME_STACK_SIZE - 1; ++i) {
+    if (volume_stack[i].shader == SHADER_NONE) {
+      break;
+    }
+    uint visibility = kernel_tex_fetch(__object_flag, volume_stack[i].object) >> 16;
+    stack_visible |= (ray_visibility & visibility) != 0;
+    volume_stack[i].visibility = 1;
+  }
+  return stack_visible;
+}
+
 ccl_device_inline void kernel_volume_step_init(KernelGlobals *kg,
                                                ccl_addr_space PathState *state,
                                                const float object_step_size,
@@ -280,6 +299,16 @@ ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
                                               Ray *ray,
                                               float3 *throughput)
 {
+#  ifdef __SHADOW_TRICKS__
+  const uint flags = (state->flag & PATH_RAY_SHADOW_CATCHER) ? PATH_RAY_SHADOW_NON_CATCHER :
+                                                                    PATH_RAY_SHADOW;
+#  else
+  const uint flags = PATH_RAY_SHADOW;
+#  endif
+  if (!kernel_volume_stack_is_visible(kg, state->volume_stack, flags)) {
+    return;
+  }
+
   shader_setup_from_volume(kg, shadow_sd, ray);
 
   float step_size = volume_stack_step_size(kg, state->volume_stack);

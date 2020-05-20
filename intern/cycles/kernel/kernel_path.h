@@ -62,7 +62,7 @@ ccl_device_forceinline bool kernel_path_scene_intersect(KernelGlobals *kg,
 {
   PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
 
-  uint visibility = path_state_ray_visibility(kg, state);
+  uint visibility = path_state_ray_visibility(kg, state->flag);
 
   if (path_state_ao_bounce(kg, state)) {
     visibility = PATH_RAY_SHADOW;
@@ -163,7 +163,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
     kernel_volume_clean_stack(kg, state->volume_stack);
   }
 
-  if (state->volume_stack[0].shader == SHADER_NONE) {
+  if (!kernel_volume_stack_is_visible(kg, state->volume_stack, state->flag)) {
     return VOLUME_PATH_ATTENUATED;
   }
 

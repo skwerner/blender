@@ -187,16 +187,15 @@ ccl_device_inline bool path_state_volume_next(KernelGlobals *kg, ccl_addr_space 
 }
 #endif
 
-ccl_device_inline uint path_state_ray_visibility(KernelGlobals *kg,
-                                                 ccl_addr_space PathState *state)
+ccl_device_inline uint path_state_ray_visibility(KernelGlobals *kg, uint state_flag)
 {
-  uint flag = state->flag & PATH_RAY_ALL_VISIBILITY;
+  uint flag = state_flag & PATH_RAY_ALL_VISIBILITY;
 
   /* for visibility, diffuse/glossy are for reflection only */
   if (flag & PATH_RAY_TRANSMIT)
     flag &= ~(PATH_RAY_DIFFUSE | PATH_RAY_GLOSSY);
   /* todo: this is not supported as its own ray visibility yet */
-  if (state->flag & PATH_RAY_VOLUME_SCATTER)
+  if (state_flag & PATH_RAY_VOLUME_SCATTER)
     flag |= PATH_RAY_DIFFUSE;
 
   return flag;

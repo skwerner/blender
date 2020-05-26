@@ -87,6 +87,10 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
     return;
   }
 
+  if (!kernel_volume_stack_is_visible(kg, state->volume_stack, state->flag)) {
+    return;
+  }
+
   /* volume attenuation, emission, scatter */
   Ray volume_ray = *ray;
   volume_ray.t = (hit) ? isect->t : FLT_MAX;

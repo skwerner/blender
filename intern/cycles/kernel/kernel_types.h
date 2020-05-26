@@ -918,6 +918,8 @@ enum ShaderDataObjectFlag {
                      SD_OBJECT_NEGATIVE_SCALE_APPLIED | SD_OBJECT_HAS_VOLUME |
                      SD_OBJECT_INTERSECTS_VOLUME | SD_OBJECT_SHADOW_CATCHER |
                      SD_OBJECT_HAS_VOLUME_ATTRIBUTES)
+
+  /* Upper 16 bytes are reserved for visibility flags. */
 };
 
 typedef ccl_addr_space struct ccl_align(16) ShaderData
@@ -1022,8 +1024,9 @@ ShaderDataTinyStorage;
 
 #ifdef __VOLUME__
 typedef struct VolumeStack {
-  int object;
   int shader;
+  int visible;
+  int object;
 } VolumeStack;
 #endif
 

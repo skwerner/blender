@@ -265,6 +265,18 @@ uint Object::visibility_for_tracing() const
   else {
     trace_visibility &= ~PATH_RAY_SHADOW_CATCHER;
   }
+
+  bool volume_only = true;
+  foreach (Shader *shader, geometry->used_shaders) {
+    if (!(shader->has_volume_connected && !shader->has_surface)) {
+      volume_only = false;
+      break;
+    }
+  }
+  if (volume_only) {
+    trace_visibility |= PATH_RAY_CAMERA | PATH_RAY_REFLECT | PATH_RAY_TRANSMIT | PATH_RAY_DIFFUSE |
+                        PATH_RAY_GLOSSY | PATH_RAY_SINGULAR | PATH_RAY_TRANSPARENT;
+  }
   return trace_visibility;
 }
 
@@ -772,6 +784,11 @@ void ObjectManager::device_update_flags(
        */
       object_flag[object->index] |= SD_OBJECT_INTERSECTS_VOLUME;
     }
+
+    /* Pack object visibility into upper bits. */
+    uint visibility = object->visibility;
+    visibility = (visibility & 0xffff) << 16;
+    object_flag[object->index] |= visibility;
   }
 
   /* Copy object flag. */

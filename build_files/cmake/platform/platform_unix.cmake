@@ -53,6 +53,11 @@ if(EXISTS ${LIBDIR})
   set(CMAKE_PREFIX_PATH ${LIBDIR}/zlib ${LIB_SUBDIRS})
   set(WITH_STATIC_LIBS ON)
   set(WITH_OPENMP_STATIC ON)
+  set(Boost_NO_BOOST_CMAKE ON)
+  set(BOOST_ROOT ${LIBDIR}/boost)
+  set(BOOST_LIBRARYDIR ${LIBDIR}/boost/lib)
+  set(Boost_NO_SYSTEM_PATHS ON)
+  set(OPENEXR_ROOT_DIR ${LIBDIR}/openexr)
 endif()
 
 if(WITH_STATIC_LIBS)
@@ -68,25 +73,20 @@ macro(find_package_wrapper)
   endif()
 endmacro()
 
+# ----------------------------------------------------------------------------
+# Precompiled Libraries
+#
+# These are libraries that may be precompiled. For this we disable searching in
+# the system directories so that we don't accidentally use them instead.
+
+if(EXISTS ${LIBDIR})
+  without_system_libs_begin()
+endif()
+
 find_package_wrapper(JPEG REQUIRED)
 find_package_wrapper(PNG REQUIRED)
 find_package_wrapper(ZLIB REQUIRED)
 find_package_wrapper(Freetype REQUIRED)
-
-if(WITH_LZO AND WITH_SYSTEM_LZO)
-  find_package_wrapper(LZO)
-  if(NOT LZO_FOUND)
-    message(FATAL_ERROR "Failed finding system LZO version!")
-  endif()
-endif()
-
-if(WITH_SYSTEM_EIGEN3)
-  find_package_wrapper(Eigen3)
-  if(NOT EIGEN3_FOUND)
-    message(FATAL_ERROR "Failed finding system Eigen3 version!")
-  endif()
-endif()
-# else values are set below for all platforms
 
 if(WITH_PYTHON)
   # No way to set py35, remove for now.
@@ -122,14 +122,6 @@ if(WITH_IMAGE_TIFF)
   endif()
 endif()
 
-# Audio IO
-if(WITH_SYSTEM_AUDASPACE)
-  find_package_wrapper(Audaspace)
-  if(NOT AUDASPACE_FOUND OR NOT AUDASPACE_C_FOUND)
-    message(FATAL_ERROR "Audaspace external library not found!")
-  endif()
-endif()
-
 if(WITH_OPENAL)
   find_package_wrapper(OpenAL)
   if(NOT OPENAL_FOUND)
@@ -159,13 +151,6 @@ if(WITH_SDL)
     if(NOT SDL_FOUND)
       set(WITH_SDL OFF)
     endif()
-  endif()
-endif()
-
-if(WITH_JACK)
-  find_package_wrapper(Jack)
-  if(NOT JACK_FOUND)
-    set(WITH_JACK OFF)
   endif()
 endif()
 
@@ -211,8 +196,14 @@ endif()
 if(WITH_OPENCOLLADA)
   find_package_wrapper(OpenCOLLADA)
   if(OPENCOLLADA_FOUND)
+    if(WITH_STATIC_LIBS)
+      # PCRE is bundled with OpenCollada without headers, so can't use
+      # find_package reliably to detect it.
+      set(PCRE_LIBRARIES ${LIBDIR}/opencollada/lib/libpcre.a)
+    else()
+      find_package_wrapper(PCRE)
+    endif()
     find_package_wrapper(XML2)
-    find_package_wrapper(PCRE)
   else()
     set(WITH_OPENCOLLADA OFF)
   endif()
@@ -285,6 +276,14 @@ if(WITH_ALEMBIC)
   endif()
 endif()
 
+if(WITH_USD)
+  find_package_wrapper(USD)
+
+  if(NOT USD_FOUND)
+    set(WITH_USD OFF)
+  endif()
+endif()
+
 if(WITH_BOOST)
   # uses in build instructions to override include and library variables
   if(NOT BOOST_CUSTOM)
@@ -328,6 +327,11 @@ if(WITH_BOOST)
   set(BOOST_LIBRARIES ${Boost_LIBRARIES})
   set(BOOST_LIBPATH ${Boost_LIBRARY_DIRS})
   set(BOOST_DEFINITIONS "-DBOOST_ALL_NO_LIB")
+
+  if(Boost_USE_STATIC_LIBS AND WITH_BOOST_ICU)
+    find_package(IcuLinux)
+    list(APPEND BOOST_LIBRARIES ${ICU_LIBRARIES})
+  endif()
 endif()
 
 if(WITH_OPENIMAGEIO)
@@ -376,7 +380,7 @@ if(WITH_OPENCOLORIO)
 endif()
 
 if(WITH_CYCLES_EMBREE)
-  find_package(Embree 3.2.4 REQUIRED)
+  find_package(Embree 3.8.0 REQUIRED)
 endif()
 
 if(WITH_OPENIMAGEDENOISE)
@@ -408,13 +412,6 @@ if(WITH_LLVM)
   endif()
 endif()
 
-if(WITH_LLVM OR WITH_SDL_DYNLOAD)
-  # Fix for conflict with Mesa llvmpipe
-  set(PLATFORM_LINKFLAGS
-    "${PLATFORM_LINKFLAGS} -Wl,--version-script='${CMAKE_SOURCE_DIR}/source/creator/blender.map'"
-  )
-endif()
-
 if(WITH_OPENSUBDIV)
   find_package_wrapper(OpenSubdiv)
 
@@ -431,16 +428,20 @@ if(WITH_TBB)
   find_package_wrapper(TBB)
 endif()
 
-if(NOT WITH_TBB OR NOT TBB_FOUND)
-  if(WITH_OPENIMAGEDENOISE)
-    message(STATUS "TBB not found, disabling OpenImageDenoise")
-    set(WITH_OPENIMAGEDENOISE OFF)
-  endif()
-  if(WITH_OPENVDB)
-    message(STATUS "TBB not found, disabling OpenVDB")
-    set(WITH_OPENVDB OFF)
+if(WITH_XR_OPENXR)
+  find_package(XR-OpenXR-SDK)
+  if(NOT XR_OPENXR_SDK_FOUND)
+    message(WARNING "OpenXR-SDK not found, disabling WITH_XR_OPENXR")
+    set(WITH_XR_OPENXR OFF)
   endif()
 endif()
+
+if(EXISTS ${LIBDIR})
+  without_system_libs_end()
+endif()
+
+# ----------------------------------------------------------------------------
+# Build and Link Flags
 
 # OpenSuse needs lutil, ArchLinux not, for now keep, can avoid by using --as-needed
 if(HAIKU)
@@ -469,6 +470,115 @@ endif()
 # lfs on glibc, all compilers should use
 add_definitions(-D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE)
 
+# ----------------------------------------------------------------------------
+# System Libraries
+#
+# Keep last, so indirectly linked libraries don't override our own pre-compiled libs.
+
+if(WITH_LZO AND WITH_SYSTEM_LZO)
+  find_package_wrapper(LZO)
+  if(NOT LZO_FOUND)
+    message(FATAL_ERROR "Failed finding system LZO version!")
+  endif()
+endif()
+
+if(WITH_SYSTEM_EIGEN3)
+  find_package_wrapper(Eigen3)
+  if(NOT EIGEN3_FOUND)
+    message(FATAL_ERROR "Failed finding system Eigen3 version!")
+  endif()
+endif()
+
+# Jack is intended to use the system library.
+if(WITH_JACK)
+  find_package_wrapper(Jack)
+  if(NOT JACK_FOUND)
+    set(WITH_JACK OFF)
+  endif()
+endif()
+
+# Audio IO
+if(WITH_SYSTEM_AUDASPACE)
+  find_package_wrapper(Audaspace)
+  if(NOT AUDASPACE_FOUND OR NOT AUDASPACE_C_FOUND)
+    message(FATAL_ERROR "Audaspace external library not found!")
+  endif()
+endif()
+
+if(WITH_GHOST_WAYLAND)
+  find_package(PkgConfig)
+  pkg_check_modules(wayland-client REQUIRED wayland-client>=1.12)
+  pkg_check_modules(wayland-egl REQUIRED wayland-egl)
+  pkg_check_modules(wayland-scanner REQUIRED wayland-scanner)
+  pkg_check_modules(xkbcommon REQUIRED xkbcommon)
+  pkg_check_modules(wayland-cursor REQUIRED wayland-cursor)
+
+  set(WITH_GL_EGL ON)
+
+  if(WITH_GHOST_WAYLAND)
+    list(APPEND PLATFORM_LINKLIBS
+      ${wayland-client_LIBRARIES}
+      ${wayland-egl_LIBRARIES}
+      ${xkbcommon_LIBRARIES}
+      ${wayland-cursor_LIBRARIES}
+    )
+  endif()
+endif()
+
+if(WITH_GHOST_X11)
+  find_package(X11 REQUIRED)
+
+  find_path(X11_XF86keysym_INCLUDE_PATH X11/XF86keysym.h ${X11_INC_SEARCH_PATH})
+  mark_as_advanced(X11_XF86keysym_INCLUDE_PATH)
+
+  list(APPEND PLATFORM_LINKLIBS ${X11_X11_LIB})
+
+  if(WITH_X11_XINPUT)
+    if(X11_Xinput_LIB)
+      list(APPEND PLATFORM_LINKLIBS ${X11_Xinput_LIB})
+    else()
+      message(FATAL_ERROR "LibXi not found. Disable WITH_X11_XINPUT if you
+      want to build without tablet support")
+    endif()
+  endif()
+
+  if(WITH_X11_XF86VMODE)
+    # XXX, why doesn't cmake make this available?
+    find_library(X11_Xxf86vmode_LIB Xxf86vm   ${X11_LIB_SEARCH_PATH})
+    mark_as_advanced(X11_Xxf86vmode_LIB)
+    if(X11_Xxf86vmode_LIB)
+      list(APPEND PLATFORM_LINKLIBS ${X11_Xxf86vmode_LIB})
+    else()
+      message(FATAL_ERROR "libXxf86vm not found. Disable WITH_X11_XF86VMODE if you
+      want to build without")
+    endif()
+  endif()
+
+  if(WITH_X11_XFIXES)
+    if(X11_Xfixes_LIB)
+      list(APPEND PLATFORM_LINKLIBS ${X11_Xfixes_LIB})
+    else()
+      message(FATAL_ERROR "libXfixes not found. Disable WITH_X11_XFIXES if you
+      want to build without")
+    endif()
+  endif()
+
+  if(WITH_X11_ALPHA)
+    find_library(X11_Xrender_LIB Xrender  ${X11_LIB_SEARCH_PATH})
+    mark_as_advanced(X11_Xrender_LIB)
+    if(X11_Xrender_LIB)
+      list(APPEND PLATFORM_LINKLIBS ${X11_Xrender_LIB})
+    else()
+      message(FATAL_ERROR "libXrender not found. Disable WITH_X11_ALPHA if you
+      want to build without")
+    endif()
+  endif()
+
+endif()
+
+# ----------------------------------------------------------------------------
+# Compilers
+
 # GNU Compiler
 if(CMAKE_COMPILER_IS_GNUCC)
   set(PLATFORM_CFLAGS "-pipe -fPIC -funsigned-char -fno-strict-aliasing")
@@ -482,6 +592,19 @@ if(CMAKE_COMPILER_IS_GNUCC)
       set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
     else()
       message(STATUS "GNU gold linker isn't available, using the default system linker.")
+    endif()
+    unset(LD_VERSION)
+  endif()
+
+  if(WITH_LINKER_LLD)
+    execute_process(
+      COMMAND ${CMAKE_C_COMPILER} -fuse-ld=lld -Wl,--version
+      ERROR_QUIET OUTPUT_VARIABLE LD_VERSION)
+    if("${LD_VERSION}" MATCHES "LLD")
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fuse-ld=lld")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=lld")
+    else()
+      message(STATUS "LLD linker isn't available, using the default system linker.")
     endif()
     unset(LD_VERSION)
   endif()
@@ -510,4 +633,17 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
   # set(PLATFORM_CFLAGS "${PLATFORM_CFLAGS} -diag-enable sc3")
   set(PLATFORM_CFLAGS "-pipe -fPIC -funsigned-char -fno-strict-aliasing")
   set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} -static-intel")
+endif()
+
+# Avoid conflicts with Mesa llvmpipe, Luxrender, and other plug-ins that may
+# use the same libraries as Blender with a different version or build options.
+set(PLATFORM_LINKFLAGS
+  "${PLATFORM_LINKFLAGS} -Wl,--version-script='${CMAKE_SOURCE_DIR}/source/creator/blender.map'"
+)
+
+# Don't use position independent executable for portable install since file
+# browsers can't properly detect blender as an executable then. Still enabled
+# for non-portable installs as typically used by Linux distributions.
+if(WITH_INSTALL_PORTABLE)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
 endif()

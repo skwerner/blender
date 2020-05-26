@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include "render/camera.h"
-#include "device/device.h"
 #include "render/film.h"
+#include "device/device.h"
+#include "render/camera.h"
 #include "render/integrator.h"
 #include "render/mesh.h"
 #include "render/scene.h"
@@ -41,7 +41,34 @@ static bool compare_pass_order(const Pass &a, const Pass &b)
 void Pass::add(PassType type, vector<Pass> &passes, const char *name)
 {
   for (size_t i = 0; i < passes.size(); i++) {
-    if (passes[i].type == type && (name ? (passes[i].name == name) : passes[i].name.empty())) {
+    if (passes[i].type != type) {
+      continue;
+    }
+
+    /* An empty name is used as a placeholder to signal that any pass of
+     * that type is fine (because the content always is the same).
+     * This is important to support divide_type: If the pass that has a
+     * divide_type is added first, a pass for divide_type with an empty
+     * name will be added. Then, if a matching pass with a name is later
+     * requested, the existing placeholder will be renamed to that.
+     * If the divide_type is explicitly allocated with a name first and
+     * then again as part of another pass, the second one will just be
+     * skipped because that type already exists. */
+
+    /* If no name is specified, any pass of the correct type will match. */
+    if (name == NULL) {
+      return;
+    }
+
+    /* If we already have a placeholder pass, rename that one. */
+    if (passes[i].name.empty()) {
+      passes[i].name = name;
+      return;
+    }
+
+    /* If neither existing nor requested pass have placeholder name, they
+     * must match. */
+    if (name == passes[i].name) {
       return;
     }
   }
@@ -128,7 +155,6 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
     case PASS_DIFFUSE_COLOR:
     case PASS_GLOSSY_COLOR:
     case PASS_TRANSMISSION_COLOR:
-    case PASS_SUBSURFACE_COLOR:
       pass.components = 4;
       break;
     case PASS_DIFFUSE_DIRECT:
@@ -149,18 +175,29 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
       pass.exposure = true;
       pass.divide_type = PASS_TRANSMISSION_COLOR;
       break;
-    case PASS_SUBSURFACE_DIRECT:
-    case PASS_SUBSURFACE_INDIRECT:
-      pass.components = 4;
-      pass.exposure = true;
-      pass.divide_type = PASS_SUBSURFACE_COLOR;
-      break;
     case PASS_VOLUME_DIRECT:
     case PASS_VOLUME_INDIRECT:
       pass.components = 4;
       pass.exposure = true;
       break;
     case PASS_CRYPTOMATTE:
+      pass.components = 4;
+      break;
+    case PASS_ADAPTIVE_AUX_BUFFER:
+      pass.components = 4;
+      break;
+    case PASS_SAMPLE_COUNT:
+      pass.components = 1;
+      pass.exposure = false;
+      break;
+    case PASS_AOV_COLOR:
+      pass.components = 4;
+      break;
+    case PASS_AOV_VALUE:
+      pass.components = 1;
+      break;
+    case PASS_BAKE_PRIMITIVE:
+    case PASS_BAKE_DIFFERENTIAL:
       pass.components = 4;
       break;
     default:
@@ -170,9 +207,10 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
 
   passes.push_back(pass);
 
-  /* order from by components, to ensure alignment so passes with size 4
-   * come first and then passes with size 1 */
-  sort(&passes[0], &passes[0] + passes.size(), compare_pass_order);
+  /* Order from by components, to ensure alignment so passes with size 4
+   * come first and then passes with size 1. Note this must use stable sort
+   * so cryptomatte passes remain in the right order. */
+  stable_sort(&passes[0], &passes[0] + passes.size(), compare_pass_order);
 
   if (pass.divide_type != PASS_NONE)
     Pass::add(pass.divide_type, passes);
@@ -281,21 +319,23 @@ NODE_DEFINE(Film)
   SOCKET_FLOAT(mist_depth, "Mist Depth", 100.0f);
   SOCKET_FLOAT(mist_falloff, "Mist Falloff", 1.0f);
 
-  SOCKET_BOOLEAN(use_sample_clamp, "Use Sample Clamp", false);
-
   SOCKET_BOOLEAN(denoising_data_pass, "Generate Denoising Data Pass", false);
   SOCKET_BOOLEAN(denoising_clean_pass, "Generate Denoising Clean Pass", false);
   SOCKET_BOOLEAN(denoising_prefiltered_pass, "Generate Denoising Prefiltered Pass", false);
   SOCKET_INT(denoising_flags, "Denoising Flags", 0);
+  SOCKET_BOOLEAN(use_adaptive_sampling, "Use Adaptive Sampling", false);
 
   return type;
 }
 
 Film::Film() : Node(node_type)
 {
+  Pass::add(PASS_COMBINED, passes);
+
   use_light_visibility = false;
   filter_table_offset = TABLE_OFFSET_INVALID;
   cryptomatte_passes = CRYPT_NONE;
+  display_pass = PASS_COMBINED;
 
   need_update = true;
 }
@@ -325,7 +365,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
   kfilm->light_pass_flag = 0;
   kfilm->pass_stride = 0;
-  kfilm->use_light_pass = use_light_visibility || use_sample_clamp;
+  kfilm->use_light_pass = use_light_visibility;
+  kfilm->pass_aov_value_num = 0;
+  kfilm->pass_aov_color_num = 0;
 
   bool have_cryptomatte = false;
 
@@ -348,10 +390,12 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
     if (pass.type <= PASS_CATEGORY_MAIN_END) {
       kfilm->pass_flag |= pass_flag;
     }
-    else {
-      assert(pass.type <= PASS_CATEGORY_LIGHT_END);
+    else if (pass.type <= PASS_CATEGORY_LIGHT_END) {
       kfilm->use_light_pass = 1;
       kfilm->light_pass_flag |= pass_flag;
+    }
+    else {
+      assert(pass.type <= PASS_CATEGORY_BAKE_END);
     }
 
     switch (pass.type) {
@@ -408,9 +452,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
       case PASS_TRANSMISSION_COLOR:
         kfilm->pass_transmission_color = kfilm->pass_stride;
         break;
-      case PASS_SUBSURFACE_COLOR:
-        kfilm->pass_subsurface_color = kfilm->pass_stride;
-        break;
       case PASS_DIFFUSE_INDIRECT:
         kfilm->pass_diffuse_indirect = kfilm->pass_stride;
         break;
@@ -419,9 +460,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
         break;
       case PASS_TRANSMISSION_INDIRECT:
         kfilm->pass_transmission_indirect = kfilm->pass_stride;
-        break;
-      case PASS_SUBSURFACE_INDIRECT:
-        kfilm->pass_subsurface_indirect = kfilm->pass_stride;
         break;
       case PASS_VOLUME_INDIRECT:
         kfilm->pass_volume_indirect = kfilm->pass_stride;
@@ -435,11 +473,15 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
       case PASS_TRANSMISSION_DIRECT:
         kfilm->pass_transmission_direct = kfilm->pass_stride;
         break;
-      case PASS_SUBSURFACE_DIRECT:
-        kfilm->pass_subsurface_direct = kfilm->pass_stride;
-        break;
       case PASS_VOLUME_DIRECT:
         kfilm->pass_volume_direct = kfilm->pass_stride;
+        break;
+
+      case PASS_BAKE_PRIMITIVE:
+        kfilm->pass_bake_primitive = kfilm->pass_stride;
+        break;
+      case PASS_BAKE_DIFFERENTIAL:
+        kfilm->pass_bake_differential = kfilm->pass_stride;
         break;
 
 #ifdef WITH_CYCLES_DEBUG
@@ -464,6 +506,24 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
                                       kfilm->pass_stride;
         have_cryptomatte = true;
         break;
+      case PASS_ADAPTIVE_AUX_BUFFER:
+        kfilm->pass_adaptive_aux_buffer = kfilm->pass_stride;
+        break;
+      case PASS_SAMPLE_COUNT:
+        kfilm->pass_sample_count = kfilm->pass_stride;
+        break;
+      case PASS_AOV_COLOR:
+        if (kfilm->pass_aov_color_num == 0) {
+          kfilm->pass_aov_color = kfilm->pass_stride;
+        }
+        kfilm->pass_aov_color_num++;
+        break;
+      case PASS_AOV_VALUE:
+        if (kfilm->pass_aov_value_num == 0) {
+          kfilm->pass_aov_value = kfilm->pass_stride;
+        }
+        kfilm->pass_aov_value_num++;
+        break;
       default:
         assert(false);
         break;
@@ -475,7 +535,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
       kfilm->use_display_exposure = pass.exposure && (kfilm->exposure != 1.0f);
     }
     else if (pass.type == PASS_DIFFUSE_COLOR || pass.type == PASS_TRANSMISSION_COLOR ||
-             pass.type == PASS_GLOSSY_COLOR || pass.type == PASS_SUBSURFACE_COLOR) {
+             pass.type == PASS_GLOSSY_COLOR) {
       kfilm->display_divide_pass_stride = kfilm->pass_stride;
     }
 
@@ -547,13 +607,13 @@ bool Film::modified(const Film &film)
 void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_, bool update_passes)
 {
   if (Pass::contains(passes, PASS_UV) != Pass::contains(passes_, PASS_UV)) {
-    scene->mesh_manager->tag_update(scene);
+    scene->geometry_manager->tag_update(scene);
 
     foreach (Shader *shader, scene->shaders)
-      shader->need_update_mesh = true;
+      shader->need_update_geometry = true;
   }
   else if (Pass::contains(passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION)) {
-    scene->mesh_manager->tag_update(scene);
+    scene->geometry_manager->tag_update(scene);
   }
   else if (Pass::contains(passes, PASS_AO) != Pass::contains(passes_, PASS_AO)) {
     scene->integrator->tag_update(scene);
@@ -567,6 +627,29 @@ void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_, bool upd
 void Film::tag_update(Scene * /*scene*/)
 {
   need_update = true;
+}
+
+int Film::get_aov_offset(string name, bool &is_color)
+{
+  int num_color = 0, num_value = 0;
+  foreach (const Pass &pass, passes) {
+    if (pass.type == PASS_AOV_COLOR) {
+      num_color++;
+    }
+    else if (pass.type == PASS_AOV_VALUE) {
+      num_value++;
+    }
+    else {
+      continue;
+    }
+
+    if (pass.name == name) {
+      is_color = (pass.type == PASS_AOV_COLOR);
+      return (is_color ? num_color : num_value) - 1;
+    }
+  }
+
+  return -1;
 }
 
 CCL_NAMESPACE_END

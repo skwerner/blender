@@ -23,6 +23,7 @@
 
 #include "util/util_array.h"
 #include "util/util_half.h"
+#include "util/util_string.h"
 #include "util/util_texture.h"
 #include "util/util_types.h"
 #include "util/util_vector.h"
@@ -31,7 +32,14 @@ CCL_NAMESPACE_BEGIN
 
 class Device;
 
-enum MemoryType { MEM_READ_ONLY, MEM_READ_WRITE, MEM_DEVICE_ONLY, MEM_TEXTURE, MEM_PIXELS };
+enum MemoryType {
+  MEM_READ_ONLY,
+  MEM_READ_WRITE,
+  MEM_DEVICE_ONLY,
+  MEM_GLOBAL,
+  MEM_TEXTURE,
+  MEM_PIXELS
+};
 
 /* Supported Data Types */
 
@@ -208,14 +216,14 @@ class device_memory {
   size_t data_depth;
   MemoryType type;
   const char *name;
-  InterpolationType interpolation;
-  ExtensionType extension;
 
   /* Pointers. */
   Device *device;
   device_ptr device_pointer;
   void *host_pointer;
   void *shared_pointer;
+  /* reference counter for shared_pointer */
+  int shared_counter;
 
   virtual ~device_memory();
 
@@ -224,6 +232,7 @@ class device_memory {
 
  protected:
   friend class CUDADevice;
+  friend class OptiXDevice;
 
   /* Only create through subclasses. */
   device_memory(Device *device, const char *name, MemoryType type);
@@ -231,9 +240,6 @@ class device_memory {
   /* No copying allowed. */
   device_memory(const device_memory &) = delete;
   device_memory &operator=(const device_memory &) = delete;
-
-  /* But moving is possible. */
-  device_memory(device_memory &&);
 
   /* Host allocation on the device. All host_pointer memory should be
    * allocated with these functions, for devices that support using
@@ -270,11 +276,6 @@ template<typename T> class device_only_memory : public device_memory {
   virtual ~device_only_memory()
   {
     free();
-  }
-
-  device_only_memory(device_only_memory &&other)
-      : device_memory(static_cast<device_memory &&>(other))
-  {
   }
 
   void alloc_to_device(size_t num, bool shrink_to_fit = true)
@@ -315,7 +316,7 @@ template<typename T> class device_only_memory : public device_memory {
  * in and copied to the device with copy_to_device(). Or alternatively
  * allocated and set to zero on the device with zero_to_device().
  *
- * When using memory type MEM_TEXTURE, a pointer to this memory will be
+ * When using memory type MEM_GLOBAL, a pointer to this memory will be
  * automatically attached to kernel globals, using the provided name
  * matching an entry in kernel_textures.h. */
 
@@ -333,10 +334,6 @@ template<typename T> class device_vector : public device_memory {
   virtual ~device_vector()
   {
     free();
-  }
-
-  device_vector(device_vector &&other) : device_memory(static_cast<device_memory &&>(other))
-  {
   }
 
   /* Host memory allocation. */
@@ -436,6 +433,11 @@ template<typename T> class device_vector : public device_memory {
     device_copy_to();
   }
 
+  void copy_from_device()
+  {
+    device_copy_from(0, data_width, data_height, sizeof(T));
+  }
+
   void copy_from_device(int y, int w, int h)
   {
     device_copy_from(y, w, h, sizeof(T));
@@ -505,6 +507,33 @@ class device_sub_ptr {
 
   Device *device;
   device_ptr ptr;
+};
+
+/* Device Texture
+ *
+ * 2D or 3D image texture memory. */
+
+class device_texture : public device_memory {
+ public:
+  device_texture(Device *device,
+                 const char *name,
+                 const uint slot,
+                 ImageDataType image_data_type,
+                 InterpolationType interpolation,
+                 ExtensionType extension);
+  ~device_texture();
+
+  void *alloc(const size_t width, const size_t height, const size_t depth = 0);
+  void copy_to_device();
+
+  uint slot;
+  TextureInfo info;
+
+ protected:
+  size_t size(const size_t width, const size_t height, const size_t depth)
+  {
+    return width * ((height == 0) ? 1 : height) * ((depth == 0) ? 1 : depth);
+  }
 };
 
 CCL_NAMESPACE_END

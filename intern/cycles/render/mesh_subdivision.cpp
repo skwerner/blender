@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-#include "render/mesh.h"
 #include "render/attribute.h"
 #include "render/camera.h"
+#include "render/mesh.h"
 
-#include "subd/subd_split.h"
 #include "subd/subd_patch.h"
 #include "subd/subd_patch_table.h"
+#include "subd/subd_split.h"
 
-#include "util/util_foreach.h"
 #include "util/util_algorithm.h"
+#include "util/util_foreach.h"
 #include "util/util_hash.h"
 
 CCL_NAMESPACE_BEGIN
@@ -32,10 +32,10 @@ CCL_NAMESPACE_BEGIN
 
 CCL_NAMESPACE_END
 
-#  include <opensubdiv/far/topologyRefinerFactory.h>
-#  include <opensubdiv/far/primvarRefiner.h>
-#  include <opensubdiv/far/patchTableFactory.h>
 #  include <opensubdiv/far/patchMap.h>
+#  include <opensubdiv/far/patchTableFactory.h>
+#  include <opensubdiv/far/primvarRefiner.h>
+#  include <opensubdiv/far/topologyRefinerFactory.h>
 
 /* specializations of TopologyRefinerFactory for ccl::Mesh */
 
@@ -394,7 +394,7 @@ void Mesh::tessellate(DiagSplit *split)
   int num_faces = subd_faces.size();
 
   Attribute *attr_vN = subd_attributes.find(ATTR_STD_VERTEX_NORMAL);
-  float3 *vN = attr_vN->data_float3();
+  float3 *vN = (attr_vN) ? attr_vN->data_float3() : NULL;
 
   /* count patches */
   int num_patches = 0;

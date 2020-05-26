@@ -18,14 +18,12 @@
 
 #include <string.h>
 
-extern "C" {
 #include "DNA_node_types.h"
 
 #include "BKE_node.h"
-}
 
-#include "COM_NodeOperationBuilder.h"
 #include "COM_NodeOperation.h"
+#include "COM_NodeOperationBuilder.h"
 
 #include "COM_AlphaOverNode.h"
 #include "COM_BilateralBlurNode.h"
@@ -77,9 +75,9 @@ extern "C" {
 #include "COM_KeyingScreenNode.h"
 #include "COM_LensDistortionNode.h"
 #include "COM_LuminanceMatteNode.h"
+#include "COM_MapRangeNode.h"
 #include "COM_MapUVNode.h"
 #include "COM_MapValueNode.h"
-#include "COM_MapRangeNode.h"
 #include "COM_MaskNode.h"
 #include "COM_MathNode.h"
 #include "COM_MixNode.h"
@@ -88,6 +86,8 @@ extern "C" {
 #include "COM_NormalNode.h"
 #include "COM_NormalizeNode.h"
 #include "COM_OutputFileNode.h"
+#include "COM_PixelateNode.h"
+#include "COM_PlaneTrackDeformNode.h"
 #include "COM_RenderLayersNode.h"
 #include "COM_RotateNode.h"
 #include "COM_ScaleNode.h"
@@ -103,18 +103,16 @@ extern "C" {
 #include "COM_TextureNode.h"
 #include "COM_TimeNode.h"
 #include "COM_TonemapNode.h"
+#include "COM_TrackPositionNode.h"
 #include "COM_TransformNode.h"
 #include "COM_TranslateNode.h"
 #include "COM_TranslateOperation.h"
-#include "COM_TrackPositionNode.h"
 #include "COM_ValueNode.h"
 #include "COM_VectorBlurNode.h"
 #include "COM_VectorCurveNode.h"
 #include "COM_ViewLevelsNode.h"
 #include "COM_ViewerNode.h"
 #include "COM_ZCombineNode.h"
-#include "COM_PixelateNode.h"
-#include "COM_PlaneTrackDeformNode.h"
 
 bool Converter::is_fast_node(bNode *b_node)
 {

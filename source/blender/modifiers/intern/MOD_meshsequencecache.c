@@ -20,8 +20,8 @@
 
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_cachefile_types.h"
 #include "DNA_mesh_types.h"
@@ -31,7 +31,7 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_cachefile.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_scene.h"
 
 #include "DEG_depsgraph_build.h"
@@ -42,7 +42,7 @@
 #ifdef WITH_ALEMBIC
 #  include "ABC_alembic.h"
 #  include "BKE_global.h"
-#  include "BKE_library.h"
+#  include "BKE_lib_id.h"
 #endif
 
 static void initData(ModifierData *md)
@@ -64,7 +64,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 #endif
   MeshSeqCacheModifierData *tmcmd = (MeshSeqCacheModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   tmcmd->reader = NULL;
   tmcmd->reader_object_path[0] = '\0';
@@ -90,7 +90,7 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return (mcmd->cache_file == NULL) || (mcmd->object_path[0] == '\0');
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
 #ifdef WITH_ALEMBIC
   MeshSeqCacheModifierData *mcmd = (MeshSeqCacheModifierData *)md;
@@ -109,7 +109,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     STRNCPY(mcmd->reader_object_path, mcmd->object_path);
     BKE_cachefile_reader_open(cache_file, &mcmd->reader, ctx->object, mcmd->object_path);
     if (!mcmd->reader) {
-      modifier_setError(md, "Could not create Alembic reader for file %s", cache_file->filepath);
+      BKE_modifier_set_error(
+          md, "Could not create Alembic reader for file %s", cache_file->filepath);
       return mesh;
     }
   }
@@ -141,7 +142,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   Mesh *result = ABC_read_mesh(mcmd->reader, ctx->object, mesh, time, &err_str, mcmd->read_flag);
 
   if (err_str) {
-    modifier_setError(md, "%s", err_str);
+    BKE_modifier_set_error(md, "%s", err_str);
   }
 
   if (!ELEM(result, NULL, mesh) && (mesh != org_mesh)) {
@@ -197,7 +198,10 @@ ModifierTypeInfo modifierType_MeshSequenceCache = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,

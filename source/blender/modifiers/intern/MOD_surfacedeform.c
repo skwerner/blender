@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * Copyright 2017, Blender Foundation.
@@ -30,11 +30,13 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_bvhutils.h"
-#include "BKE_mesh_runtime.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
+
+#include "BKE_deform.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -110,6 +112,8 @@ typedef struct SDefDeformData {
   const SDefVert *const bind_verts;
   float (*const targetCos)[3];
   float (*const vertexCos)[3];
+  float *const weights;
+  float const strength;
 } SDefDeformData;
 
 /* Bind result values */
@@ -136,6 +140,19 @@ static void initData(ModifierData *md)
   smd->verts = NULL;
   smd->flags = 0;
   smd->falloff = 4.0f;
+  smd->strength = 1.0f;
+}
+
+static void requiredDataMask(Object *UNUSED(ob),
+                             ModifierData *md,
+                             CustomData_MeshMasks *r_cddata_masks)
+{
+  SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
+
+  /* Ask for vertex groups if we need them. */
+  if (smd->defgrp_name[0] != '\0') {
+    r_cddata_masks->vmask |= CD_MASK_MDEFORMVERT;
+  }
 }
 
 static void freeData(ModifierData *md)
@@ -163,7 +180,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   const SurfaceDeformModifierData *smd = (const SurfaceDeformModifierData *)md;
   SurfaceDeformModifierData *tsmd = (SurfaceDeformModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   if (smd->verts) {
     tsmd->verts = MEM_dupallocN(smd->verts);
@@ -979,7 +996,8 @@ static void bindVert(void *__restrict userdata,
   freeBindData(bwdata);
 }
 
-static bool surfacedeformBind(SurfaceDeformModifierData *smd,
+static bool surfacedeformBind(SurfaceDeformModifierData *smd_orig,
+                              SurfaceDeformModifierData *smd_eval,
                               float (*vertexCos)[3],
                               uint numverts,
                               uint tnumpoly,
@@ -999,38 +1017,38 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd,
 
   vert_edges = MEM_calloc_arrayN(tnumverts, sizeof(*vert_edges), "SDefVertEdgeMap");
   if (vert_edges == NULL) {
-    modifier_setError((ModifierData *)smd, "Out of memory");
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
     return false;
   }
 
   adj_array = MEM_malloc_arrayN(tnumedges, 2 * sizeof(*adj_array), "SDefVertEdge");
   if (adj_array == NULL) {
-    modifier_setError((ModifierData *)smd, "Out of memory");
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
     MEM_freeN(vert_edges);
     return false;
   }
 
   edge_polys = MEM_calloc_arrayN(tnumedges, sizeof(*edge_polys), "SDefEdgeFaceMap");
   if (edge_polys == NULL) {
-    modifier_setError((ModifierData *)smd, "Out of memory");
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
     MEM_freeN(vert_edges);
     MEM_freeN(adj_array);
     return false;
   }
 
-  smd->verts = MEM_malloc_arrayN(numverts, sizeof(*smd->verts), "SDefBindVerts");
-  if (smd->verts == NULL) {
-    modifier_setError((ModifierData *)smd, "Out of memory");
+  smd_orig->verts = MEM_malloc_arrayN(numverts, sizeof(*smd_orig->verts), "SDefBindVerts");
+  if (smd_orig->verts == NULL) {
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
     freeAdjacencyMap(vert_edges, adj_array, edge_polys);
     return false;
   }
 
   BKE_bvhtree_from_mesh_get(&treeData, target, BVHTREE_FROM_LOOPTRI, 2);
   if (treeData.tree == NULL) {
-    modifier_setError((ModifierData *)smd, "Out of memory");
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
     freeAdjacencyMap(vert_edges, adj_array, edge_polys);
-    MEM_freeN(smd->verts);
-    smd->verts = NULL;
+    MEM_freeN(smd_orig->verts);
+    smd_orig->verts = NULL;
     return false;
   }
 
@@ -1038,16 +1056,17 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd,
       mpoly, medge, mloop, tnumpoly, tnumedges, vert_edges, adj_array, edge_polys);
 
   if (adj_result == MOD_SDEF_BIND_RESULT_NONMANY_ERR) {
-    modifier_setError((ModifierData *)smd, "Target has edges with more than two polygons");
+    BKE_modifier_set_error((ModifierData *)smd_eval,
+                           "Target has edges with more than two polygons");
     freeAdjacencyMap(vert_edges, adj_array, edge_polys);
     free_bvhtree_from_mesh(&treeData);
-    MEM_freeN(smd->verts);
-    smd->verts = NULL;
+    MEM_freeN(smd_orig->verts);
+    smd_orig->verts = NULL;
     return false;
   }
 
-  smd->numverts = numverts;
-  smd->numpoly = tnumpoly;
+  smd_orig->numverts = numverts;
+  smd_orig->numpoly = tnumpoly;
 
   SDefBindCalcData data = {
       .treeData = &treeData,
@@ -1058,22 +1077,22 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd,
       .mloop = mloop,
       .looptri = BKE_mesh_runtime_looptri_ensure(target),
       .targetCos = MEM_malloc_arrayN(tnumverts, sizeof(float[3]), "SDefTargetBindVertArray"),
-      .bind_verts = smd->verts,
+      .bind_verts = smd_orig->verts,
       .vertexCos = vertexCos,
-      .falloff = smd->falloff,
+      .falloff = smd_orig->falloff,
       .success = MOD_SDEF_BIND_RESULT_SUCCESS,
   };
 
   if (data.targetCos == NULL) {
-    modifier_setError((ModifierData *)smd, "Out of memory");
-    freeData((ModifierData *)smd);
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
+    freeData((ModifierData *)smd_orig);
     return false;
   }
 
-  invert_m4_m4(data.imat, smd->mat);
+  invert_m4_m4(data.imat, smd_orig->mat);
 
   for (int i = 0; i < tnumverts; i++) {
-    mul_v3_m4v3(data.targetCos[i], smd->mat, mvert[i].co);
+    mul_v3_m4v3(data.targetCos[i], smd_orig->mat, mvert[i].co);
   }
 
   TaskParallelSettings settings;
@@ -1084,28 +1103,29 @@ static bool surfacedeformBind(SurfaceDeformModifierData *smd,
   MEM_freeN(data.targetCos);
 
   if (data.success == MOD_SDEF_BIND_RESULT_MEM_ERR) {
-    modifier_setError((ModifierData *)smd, "Out of memory");
-    freeData((ModifierData *)smd);
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Out of memory");
+    freeData((ModifierData *)smd_orig);
   }
   else if (data.success == MOD_SDEF_BIND_RESULT_NONMANY_ERR) {
-    modifier_setError((ModifierData *)smd, "Target has edges with more than two polygons");
-    freeData((ModifierData *)smd);
+    BKE_modifier_set_error((ModifierData *)smd_eval,
+                           "Target has edges with more than two polygons");
+    freeData((ModifierData *)smd_orig);
   }
   else if (data.success == MOD_SDEF_BIND_RESULT_CONCAVE_ERR) {
-    modifier_setError((ModifierData *)smd, "Target contains concave polygons");
-    freeData((ModifierData *)smd);
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Target contains concave polygons");
+    freeData((ModifierData *)smd_orig);
   }
   else if (data.success == MOD_SDEF_BIND_RESULT_OVERLAP_ERR) {
-    modifier_setError((ModifierData *)smd, "Target contains overlapping verts");
-    freeData((ModifierData *)smd);
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Target contains overlapping verts");
+    freeData((ModifierData *)smd_orig);
   }
   else if (data.success == MOD_SDEF_BIND_RESULT_GENERIC_ERR) {
     /* I know this message is vague, but I could not think of a way
      * to explain this with a reasonably sized message.
      * Though it shouldn't really matter all that much,
      * because this is very unlikely to occur */
-    modifier_setError((ModifierData *)smd, "Target contains invalid polygons");
-    freeData((ModifierData *)smd);
+    BKE_modifier_set_error((ModifierData *)smd_eval, "Target contains invalid polygons");
+    freeData((ModifierData *)smd_orig);
   }
 
   freeAdjacencyMap(vert_edges, adj_array, edge_polys);
@@ -1120,20 +1140,32 @@ static void deformVert(void *__restrict userdata,
 {
   const SDefDeformData *const data = (SDefDeformData *)userdata;
   const SDefBind *sdbind = data->bind_verts[index].binds;
+  const int num_binds = data->bind_verts[index].numbinds;
   float *const vertexCos = data->vertexCos[index];
-  float norm[3], temp[3];
+  float norm[3], temp[3], offset[3];
+  const float weight = (data->weights != NULL) ? data->weights[index] : 1.0f;
 
-  zero_v3(vertexCos);
+  /* Check if this vertex will be deformed. If it is not deformed we return and avoid
+   * unnecessary calculations. */
+  if (weight == 0.0f) {
+    return;
+  }
 
-  for (int j = 0; j < data->bind_verts[index].numbinds; j++, sdbind++) {
-    /* Mode-generic operations (allocate poly coordinates) */
-    float(*coords)[3] = MEM_malloc_arrayN(sdbind->numverts, sizeof(*coords), "SDefDoPolyCoords");
+  zero_v3(offset);
 
+  /* Allocate a `coords_buffer` that fits all the temp-data. */
+  int max_verts = 0;
+  for (int j = 0; j < num_binds; j++) {
+    max_verts = MAX2(max_verts, sdbind[j].numverts);
+  }
+  float(*coords_buffer)[3] = MEM_malloc_arrayN(max_verts, sizeof(*coords_buffer), __func__);
+
+  for (int j = 0; j < num_binds; j++, sdbind++) {
     for (int k = 0; k < sdbind->numverts; k++) {
-      copy_v3_v3(coords[k], data->targetCos[sdbind->vert_inds[k]]);
+      copy_v3_v3(coords_buffer[k], data->targetCos[sdbind->vert_inds[k]]);
     }
 
-    normal_poly_v3(norm, coords, sdbind->numverts);
+    normal_poly_v3(norm, coords_buffer, sdbind->numverts);
     zero_v3(temp);
 
     /* ---------- looptri mode ---------- */
@@ -1146,14 +1178,14 @@ static void deformVert(void *__restrict userdata,
       /* ---------- ngon mode ---------- */
       if (sdbind->mode == MOD_SDEF_MODE_NGON) {
         for (int k = 0; k < sdbind->numverts; k++) {
-          madd_v3_v3fl(temp, coords[k], sdbind->vert_weights[k]);
+          madd_v3_v3fl(temp, coords_buffer[k], sdbind->vert_weights[k]);
         }
       }
 
       /* ---------- centroid mode ---------- */
       else if (sdbind->mode == MOD_SDEF_MODE_CENTROID) {
         float cent[3];
-        mid_v3_v3_array(cent, coords, sdbind->numverts);
+        mid_v3_v3_array(cent, coords_buffer, sdbind->numverts);
 
         madd_v3_v3fl(temp, data->targetCos[sdbind->vert_inds[0]], sdbind->vert_weights[0]);
         madd_v3_v3fl(temp, data->targetCos[sdbind->vert_inds[1]], sdbind->vert_weights[1]);
@@ -1161,20 +1193,25 @@ static void deformVert(void *__restrict userdata,
       }
     }
 
-    MEM_freeN(coords);
-
     /* Apply normal offset (generic for all modes) */
     madd_v3_v3fl(temp, norm, sdbind->normal_dist);
 
-    madd_v3_v3fl(vertexCos, temp, sdbind->influence);
+    madd_v3_v3fl(offset, temp, sdbind->influence);
   }
+  /* Subtract the vertex coord to get the deformation offset. */
+  sub_v3_v3(offset, vertexCos);
+
+  /* Add the offset to start coord multiplied by the strength and weight values. */
+  madd_v3_v3fl(vertexCos, offset, data->strength * weight);
+  MEM_freeN(coords_buffer);
 }
 
 static void surfacedeformModifier_do(ModifierData *md,
                                      const ModifierEvalContext *ctx,
                                      float (*vertexCos)[3],
                                      uint numverts,
-                                     Object *ob)
+                                     Object *ob,
+                                     Mesh *mesh)
 {
   SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
   Mesh *target;
@@ -1184,10 +1221,10 @@ static void surfacedeformModifier_do(ModifierData *md,
   if (!(smd->flags & MOD_SDEF_BIND)) {
     if (smd->verts != NULL) {
       if (!DEG_is_active(ctx->depsgraph)) {
-        modifier_setError(md, "Attempt to bind from inactive dependency graph");
+        BKE_modifier_set_error(md, "Attempt to bind from inactive dependency graph");
         return;
       }
-      ModifierData *md_orig = modifier_get_original(md);
+      ModifierData *md_orig = BKE_modifier_get_original(md);
       freeData(md_orig);
     }
     return;
@@ -1196,7 +1233,7 @@ static void surfacedeformModifier_do(ModifierData *md,
   Object *ob_target = smd->target;
   target = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
   if (!target) {
-    modifier_setError(md, "No valid target mesh");
+    BKE_modifier_set_error(md, "No valid target mesh");
     return;
   }
 
@@ -1206,17 +1243,18 @@ static void surfacedeformModifier_do(ModifierData *md,
   /* If not bound, execute bind. */
   if (smd->verts == NULL) {
     if (!DEG_is_active(ctx->depsgraph)) {
-      modifier_setError(md, "Attempt to unbind from inactive dependency graph");
+      BKE_modifier_set_error(md, "Attempt to unbind from inactive dependency graph");
       return;
     }
 
-    SurfaceDeformModifierData *smd_orig = (SurfaceDeformModifierData *)modifier_get_original(md);
+    SurfaceDeformModifierData *smd_orig = (SurfaceDeformModifierData *)BKE_modifier_get_original(
+        md);
     float tmp_mat[4][4];
 
     invert_m4_m4(tmp_mat, ob->obmat);
     mul_m4_m4m4(smd_orig->mat, tmp_mat, ob_target->obmat);
 
-    if (!surfacedeformBind(smd_orig, vertexCos, numverts, tnumpoly, tnumverts, target)) {
+    if (!surfacedeformBind(smd_orig, smd, vertexCos, numverts, tnumpoly, tnumverts, target)) {
       smd->flags &= ~MOD_SDEF_BIND;
     }
     /* Early abort, this is binding 'call', no need to perform whole evaluation. */
@@ -1225,12 +1263,43 @@ static void surfacedeformModifier_do(ModifierData *md,
 
   /* Poly count checks */
   if (smd->numverts != numverts) {
-    modifier_setError(md, "Verts changed from %u to %u", smd->numverts, numverts);
+    BKE_modifier_set_error(md, "Verts changed from %u to %u", smd->numverts, numverts);
     return;
   }
   else if (smd->numpoly != tnumpoly) {
-    modifier_setError(md, "Target polygons changed from %u to %u", smd->numpoly, tnumpoly);
+    BKE_modifier_set_error(md, "Target polygons changed from %u to %u", smd->numpoly, tnumpoly);
     return;
+  }
+
+  /* Early out if modifier would not affect input at all - still *after* the sanity checks (and
+   * potential binding) above.
+   */
+  if (smd->strength == 0.0f) {
+    return;
+  }
+
+  int defgrp_index;
+  MDeformVert *dvert;
+  MOD_get_vgroup(ob, mesh, smd->defgrp_name, &dvert, &defgrp_index);
+  float *weights = NULL;
+  const bool invert_group = (smd->flags & MOD_SDEF_INVERT_VGROUP) != 0;
+
+  if (defgrp_index != -1) {
+    dvert = CustomData_duplicate_referenced_layer(&mesh->vdata, CD_MDEFORMVERT, mesh->totvert);
+    /* If no vertices were ever added to an object's vgroup, dvert might be NULL. */
+    if (dvert == NULL) {
+      /* Add a valid data layer! */
+      dvert = CustomData_add_layer(&mesh->vdata, CD_MDEFORMVERT, CD_CALLOC, NULL, mesh->totvert);
+    }
+
+    if (dvert) {
+      weights = MEM_calloc_arrayN((size_t)numverts, sizeof(*weights), __func__);
+      MDeformVert *dv = dvert;
+      for (uint i = 0; i < numverts; i++, dv++) {
+        weights[i] = invert_group ? (1.0f - BKE_defvert_find_weight(dv, defgrp_index)) :
+                                    BKE_defvert_find_weight(dv, defgrp_index);
+      }
+    }
   }
 
   /* Actual vertex location update starts here */
@@ -1238,6 +1307,8 @@ static void surfacedeformModifier_do(ModifierData *md,
       .bind_verts = smd->verts,
       .targetCos = MEM_malloc_arrayN(tnumverts, sizeof(float[3]), "SDefTargetVertArray"),
       .vertexCos = vertexCos,
+      .weights = weights,
+      .strength = smd->strength,
   };
 
   if (data.targetCos != NULL) {
@@ -1254,25 +1325,51 @@ static void surfacedeformModifier_do(ModifierData *md,
 
     MEM_freeN(data.targetCos);
   }
+
+  MEM_SAFE_FREE(weights);
 }
 
 static void deformVerts(ModifierData *md,
                         const ModifierEvalContext *ctx,
-                        Mesh *UNUSED(mesh),
+                        Mesh *mesh,
                         float (*vertexCos)[3],
                         int numVerts)
 {
-  surfacedeformModifier_do(md, ctx, vertexCos, numVerts, ctx->object);
+  SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
+  Mesh *mesh_src = NULL;
+
+  if (smd->defgrp_name[0] != '\0') {
+    /* Only need to use mesh_src when a vgroup is used. */
+    mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, numVerts, false, false);
+  }
+
+  surfacedeformModifier_do(md, ctx, vertexCos, numVerts, ctx->object, mesh_src);
+
+  if (!ELEM(mesh_src, NULL, mesh)) {
+    BKE_id_free(NULL, mesh_src);
+  }
 }
 
 static void deformVertsEM(ModifierData *md,
                           const ModifierEvalContext *ctx,
-                          struct BMEditMesh *UNUSED(editData),
-                          Mesh *UNUSED(mesh),
+                          struct BMEditMesh *em,
+                          Mesh *mesh,
                           float (*vertexCos)[3],
                           int numVerts)
 {
-  surfacedeformModifier_do(md, ctx, vertexCos, numVerts, ctx->object);
+  SurfaceDeformModifierData *smd = (SurfaceDeformModifierData *)md;
+  Mesh *mesh_src = NULL;
+
+  if (smd->defgrp_name[0] != '\0') {
+    /* Only need to use mesh_src when a vgroup is used. */
+    mesh_src = MOD_deform_mesh_eval_get(ctx->object, em, mesh, NULL, numVerts, false, false);
+  }
+
+  surfacedeformModifier_do(md, ctx, vertexCos, numVerts, ctx->object, mesh_src);
+
+  if (!ELEM(mesh_src, NULL, mesh)) {
+    BKE_id_free(NULL, mesh_src);
+  }
 }
 
 static bool isDisabled(const Scene *UNUSED(scene), ModifierData *md, bool UNUSED(useRenderParams))
@@ -1301,10 +1398,13 @@ ModifierTypeInfo modifierType_SurfaceDeform = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
-    /* requiredDataMask */ NULL,
+    /* requiredDataMask */ requiredDataMask,
     /* freeData */ freeData,
     /* isDisabled */ isDisabled,
     /* updateDepsgraph */ updateDepsgraph,

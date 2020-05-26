@@ -24,6 +24,8 @@
 #ifndef __GPU_INIT_EXIT_H__
 #define __GPU_INIT_EXIT_H__
 
+#include "BLI_utildefines.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

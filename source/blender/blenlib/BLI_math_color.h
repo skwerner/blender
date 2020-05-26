@@ -27,21 +27,11 @@
  * \ingroup bli
  */
 
+#include "BLI_math_inline.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_math_inline.h"
-
-/* primaries */
-#define BLI_XYZ_SMPTE 0
-#define BLI_XYZ_REC709_SRGB 1
-#define BLI_XYZ_CIE 2
-
-/* built-in profiles */
-#define BLI_PR_NONE 0
-#define BLI_PR_SRGB 1
-#define BLI_PR_REC709 2
 
 /* YCbCr */
 #define BLI_YCC_ITU_BT601 0

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -23,28 +23,29 @@
 
 #include <stdio.h>
 
+#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
-#include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_deform.h"
-#include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
-#include "BKE_modifier.h"
 #include "BKE_lattice.h"
-#include "BKE_library_query.h"
-#include "BKE_scene.h"
-#include "BKE_main.h"
 #include "BKE_layer.h"
+#include "BKE_lib_query.h"
+#include "BKE_main.h"
+#include "BKE_modifier.h"
+#include "BKE_scene.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "MOD_gpencil_util.h"
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_util.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -54,9 +55,7 @@ static void initData(GpencilModifierData *md)
 {
   LatticeGpencilModifierData *gpmd = (LatticeGpencilModifierData *)md;
   gpmd->pass_index = 0;
-  gpmd->layername[0] = '\0';
-  gpmd->materialname[0] = '\0';
-  gpmd->vgname[0] = '\0';
+  gpmd->material = NULL;
   gpmd->object = NULL;
   gpmd->cache_data = NULL;
   gpmd->strength = 1.0f;
@@ -64,7 +63,7 @@ static void initData(GpencilModifierData *md)
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 }
 
 static void deformStroke(GpencilModifierData *md,
@@ -75,11 +74,11 @@ static void deformStroke(GpencilModifierData *md,
                          bGPDstroke *gps)
 {
   LatticeGpencilModifierData *mmd = (LatticeGpencilModifierData *)md;
-  const int def_nr = defgroup_name_index(ob, mmd->vgname);
+  const int def_nr = BKE_object_defgroup_name_index(ob, mmd->vgname);
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
-                                      mmd->materialname,
+                                      mmd->material,
                                       mmd->pass_index,
                                       mmd->layer_pass,
                                       1,
@@ -108,6 +107,8 @@ static void deformStroke(GpencilModifierData *md,
     }
     calc_latt_deform((struct LatticeDeformData *)mmd->cache_data, &pt->x, mmd->strength * weight);
   }
+  /* Calc geometry data. */
+  BKE_gpencil_stroke_geometry_update(gps);
 }
 
 /* FIXME: Ideally we be doing this on a copy of the main depsgraph
@@ -125,8 +126,8 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
     return;
   }
 
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-    for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
       /* apply lattice effects on this frame
        * NOTE: this assumes that we don't want lattice animation on non-keyframed frames
        */
@@ -137,7 +138,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
       BKE_gpencil_lattice_init(ob);
 
       /* compute lattice effects on this frame */
-      for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+      LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
         deformStroke(md, depsgraph, ob, gpl, gpf, gps);
       }
     }
@@ -197,6 +198,15 @@ static void foreachObjectLink(GpencilModifierData *md,
   walk(userData, ob, &mmd->object, IDWALK_CB_NOP);
 }
 
+static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
+{
+  LatticeGpencilModifierData *mmd = (LatticeGpencilModifierData *)md;
+
+  walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
+
+  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+}
+
 GpencilModifierTypeInfo modifierType_Gpencil_Lattice = {
     /* name */ "Lattice",
     /* structName */ "LatticeGpencilModifierData",
@@ -217,6 +227,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Lattice = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
 };

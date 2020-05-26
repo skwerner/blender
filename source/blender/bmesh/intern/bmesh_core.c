@@ -22,10 +22,10 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math_vector.h"
-#include "BLI_array.h"
 #include "BLI_alloca.h"
+#include "BLI_array.h"
 #include "BLI_linklist_stack.h"
+#include "BLI_math_vector.h"
 #include "BLI_utildefines_stack.h"
 
 #include "BLT_translation.h"
@@ -363,7 +363,7 @@ BMFace *BM_face_copy(
  * only create the face, since this calloc's the length is initialized to 0,
  * leave adding loops to the caller.
  *
- * \note, caller needs to handle customdata.
+ * \note Caller needs to handle customdata.
  */
 BLI_INLINE BMFace *bm_face_create__internal(BMesh *bm)
 {

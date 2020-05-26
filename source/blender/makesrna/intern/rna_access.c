@@ -18,37 +18,37 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
-#include <stddef.h>
-#include <string.h>
 #include <ctype.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "DNA_ID.h"
-#include "DNA_scene_types.h"
 #include "DNA_constraint_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_scene_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_dynstr.h"
 #include "BLI_ghash.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "BLF_api.h"
 #include "BLT_translation.h"
 
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_collection.h"
 #include "BKE_context.h"
-#include "BKE_idcode.h"
-#include "BKE_idprop.h"
 #include "BKE_fcurve.h"
+#include "BKE_idprop.h"
+#include "BKE_idtype.h"
 #include "BKE_main.h"
-#include "BKE_report.h"
 #include "BKE_node.h"
+#include "BKE_report.h"
 
 #include "DEG_depsgraph.h"
 
@@ -63,8 +63,8 @@
 #include "DNA_object_types.h"
 #include "WM_types.h"
 
-#include "rna_internal.h"
 #include "rna_access_internal.h"
+#include "rna_internal.h"
 
 const PointerRNA PointerRNA_NULL = {NULL};
 
@@ -97,8 +97,6 @@ void RNA_init(void)
 void RNA_exit(void)
 {
   StructRNA *srna;
-
-  RNA_property_update_cache_free();
 
   for (srna = BLENDER_RNA.structs.first; srna; srna = srna->cont.next) {
     if (srna->cont.prophash) {
@@ -2263,10 +2261,22 @@ static void rna_property_update(
   }
 
   if (!is_rna || (prop->flag & PROP_IDPROPERTY)) {
-    /* WARNING! This is so property drivers update the display!
-     * not especially nice  */
+
+    /* Disclaimer: this logic is not applied consistently, causing some confusing behavior.
+     *
+     * - When animated (which skips update functions).
+     * - When ID-properties are edited via Python (since RNA properties aren't used in this case).
+     *
+     * Adding updates will add a lot of overhead in the case of animation.
+     * For Python it may cause unexpected slow-downs for developers using ID-properties
+     * for data storage. Further, the root ID isn't available with nested data-structures.
+     *
+     * So editing custom properties only causes updates in the UI,
+     * keep this exception because it happens to be useful for driving settings.
+     * Python developers on the other hand will need to manually 'update_tag', see: T74000. */
     DEG_id_tag_update(ptr->owner_id,
                       ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_PARAMETERS);
+
     WM_main_add_notifier(NC_WINDOW, NULL);
     /* Not nice as well, but the only way to make sure material preview
      * is updated with custom nodes.
@@ -2294,115 +2304,6 @@ void RNA_property_update(bContext *C, PointerRNA *ptr, PropertyRNA *prop)
 void RNA_property_update_main(Main *bmain, Scene *scene, PointerRNA *ptr, PropertyRNA *prop)
 {
   rna_property_update(NULL, bmain, scene, ptr, prop);
-}
-
-/* RNA Updates Cache ------------------------ */
-/* Overview of RNA Update cache system:
- *
- * RNA Update calls need to be cached in order to maintain reasonable performance
- * of the animation system (i.e. maintaining a somewhat interactive framerate)
- * while still allowing updates to be called (necessary in particular for modifier
- * property updates to actually work).
- *
- * The cache is structured with a dual-layer structure
- * - L1 = PointerRNA used as key; owner_id is used (it should always be defined,
- *        and most updates end up using just that anyways)
- * - L2 = Update functions to be called on those PointerRNA's
- */
-
-/* cache element */
-typedef struct tRnaUpdateCacheElem {
-  struct tRnaUpdateCacheElem *next, *prev;
-
-  PointerRNA ptr;   /* L1 key - id as primary, data secondary/ignored? */
-  ListBase L2Funcs; /* L2 functions (LinkData<RnaUpdateFuncRef>) */
-} tRnaUpdateCacheElem;
-
-/* cache global (tRnaUpdateCacheElem's) - only accessible using these API calls */
-static ListBase rna_updates_cache = {NULL, NULL};
-
-/* ........................... */
-
-void RNA_property_update_cache_add(PointerRNA *ptr, PropertyRNA *prop)
-{
-  const bool is_rna = (prop->magic == RNA_MAGIC);
-  tRnaUpdateCacheElem *uce = NULL;
-  UpdateFunc fn = NULL;
-  LinkData *ld;
-
-  /* sanity check */
-  if (NULL == ptr) {
-    return;
-  }
-
-  prop = rna_ensure_property(prop);
-
-  /* we can only handle update calls with no context args for now (makes animsys updates easier) */
-  if ((is_rna == false) || (prop->update == NULL) || (prop->flag & PROP_CONTEXT_UPDATE)) {
-    return;
-  }
-  fn = prop->update;
-
-  /* find cache element for which key matches... */
-  for (uce = rna_updates_cache.first; uce; uce = uce->next) {
-    /* Just match by id only for now,
-     * since most update calls that we'll encounter only really care about this. */
-    /* TODO: later, the cache might need to have some nesting on L1 to cope better
-     * with these problems + some tagging to indicate we need this */
-    if (uce->ptr.owner_id == ptr->owner_id) {
-      break;
-    }
-  }
-  if (uce == NULL) {
-    /* create new instance */
-    uce = MEM_callocN(sizeof(tRnaUpdateCacheElem), "tRnaUpdateCacheElem");
-    BLI_addtail(&rna_updates_cache, uce);
-
-    /* copy pointer */
-    RNA_pointer_create(ptr->owner_id, ptr->type, ptr->data, &uce->ptr);
-  }
-
-  /* check on the update func */
-  for (ld = uce->L2Funcs.first; ld; ld = ld->next) {
-    /* stop on match - function already cached */
-    if (fn == ld->data) {
-      return;
-    }
-  }
-  /* else... if still here, we need to add it */
-  BLI_addtail(&uce->L2Funcs, BLI_genericNodeN(fn));
-}
-
-void RNA_property_update_cache_flush(Main *bmain, Scene *scene)
-{
-  tRnaUpdateCacheElem *uce;
-
-  /* TODO: should we check that bmain and scene are valid? The above stuff doesn't! */
-
-  /* execute the cached updates */
-  for (uce = rna_updates_cache.first; uce; uce = uce->next) {
-    LinkData *ld;
-
-    for (ld = uce->L2Funcs.first; ld; ld = ld->next) {
-      UpdateFunc fn = (UpdateFunc)ld->data;
-      fn(bmain, scene, &uce->ptr);
-    }
-  }
-}
-
-void RNA_property_update_cache_free(void)
-{
-  tRnaUpdateCacheElem *uce, *ucn;
-
-  for (uce = rna_updates_cache.first; uce; uce = ucn) {
-    ucn = uce->next;
-
-    /* free L2 cache */
-    BLI_freelistN(&uce->L2Funcs);
-
-    /* remove self */
-    BLI_freelinkN(&rna_updates_cache, uce);
-  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -3604,7 +3505,7 @@ char *RNA_property_string_get_default_alloc(PointerRNA *ptr,
 /* this is the length without \0 terminator */
 int RNA_property_string_default_length(PointerRNA *UNUSED(ptr), PropertyRNA *prop)
 {
-  StringPropertyRNA *sprop = (StringPropertyRNA *)prop;
+  StringPropertyRNA *sprop = (StringPropertyRNA *)rna_ensure_property(prop);
 
   BLI_assert(RNA_property_type(prop) == PROP_STRING);
 
@@ -3762,25 +3663,59 @@ void RNA_property_pointer_set(PointerRNA *ptr,
                               ReportList *reports)
 {
   PointerPropertyRNA *pprop = (PointerPropertyRNA *)prop;
+  IDProperty *idprop = rna_idproperty_check(&prop, ptr);
   BLI_assert(RNA_property_type(prop) == PROP_POINTER);
 
-  /* Check types */
-  if (ptr_value.type != NULL && !RNA_struct_is_a(ptr_value.type, pprop->type)) {
-    BKE_reportf(reports,
-                RPT_ERROR,
-                "%s: expected %s type, not %s.\n",
-                __func__,
-                pprop->type->identifier,
-                ptr_value.type->identifier);
-    return;
+  /* Check types. */
+  if (pprop->set != NULL) {
+    /* Assigning to a real RNA property. */
+    if (ptr_value.type != NULL && !RNA_struct_is_a(ptr_value.type, pprop->type)) {
+      BKE_reportf(reports,
+                  RPT_ERROR,
+                  "%s: expected %s type, not %s",
+                  __func__,
+                  pprop->type->identifier,
+                  ptr_value.type->identifier);
+      return;
+    }
+  }
+  else {
+    /* Assigning to an IDProperty desguised as RNA one. */
+    if (ptr_value.type != NULL && !RNA_struct_is_a(ptr_value.type, &RNA_ID)) {
+      BKE_reportf(reports,
+                  RPT_ERROR,
+                  "%s: expected ID type, not %s",
+                  __func__,
+                  ptr_value.type->identifier);
+      return;
+    }
   }
 
-  /* RNA */
-  if (pprop->set && !((prop->flag & PROP_NEVER_NULL) && ptr_value.data == NULL) &&
-      !((prop->flag & PROP_ID_SELF_CHECK) && ptr->owner_id == ptr_value.owner_id)) {
+  /* We got an existing IDProperty. */
+  if (idprop != NULL) {
+    /* Not-yet-defined ID IDProps have an IDP_GROUP type, not an IDP_ID one - because of reasons?
+     * XXX This has to be investigated fully - there might be a good reason for it, but off hands
+     * this seems really weird... */
+    if (idprop->type == IDP_ID) {
+      IDP_AssignID(idprop, ptr_value.data, 0);
+      rna_idproperty_touch(idprop);
+    }
+    else {
+      BLI_assert(idprop->type == IDP_GROUP);
+
+      IDPropertyTemplate val = {.id = ptr_value.data};
+      IDProperty *group = RNA_struct_idprops(ptr, true);
+      BLI_assert(group != NULL);
+
+      IDP_ReplaceInGroup_ex(group, IDP_New(IDP_ID, &val, idprop->name), idprop);
+    }
+  }
+  /* RNA property. */
+  else if (pprop->set && !((prop->flag & PROP_NEVER_NULL) && ptr_value.data == NULL) &&
+           !((prop->flag & PROP_ID_SELF_CHECK) && ptr->owner_id == ptr_value.owner_id)) {
     pprop->set(ptr, ptr_value, reports);
   }
-  /* IDProperty */
+  /* IDProperty desguised as RNA property (and not yet defined in ptr). */
   else if (prop->flag & PROP_EDITABLE) {
     IDPropertyTemplate val = {0};
     IDProperty *group;
@@ -4451,8 +4386,8 @@ static int rna_raw_access(ReportList *reports,
     /* check type */
     itemtype = RNA_property_type(itemprop);
 
-    if (!ELEM(itemtype, PROP_BOOLEAN, PROP_INT, PROP_FLOAT)) {
-      BKE_report(reports, RPT_ERROR, "Only boolean, int and float properties supported");
+    if (!ELEM(itemtype, PROP_BOOLEAN, PROP_INT, PROP_FLOAT, PROP_ENUM)) {
+      BKE_report(reports, RPT_ERROR, "Only boolean, int float and enum properties supported");
       return 0;
     }
 
@@ -5738,11 +5673,28 @@ static char *rna_idp_path(PointerRNA *ptr,
   return path;
 }
 
+/**
+ * Find the path from the structure referenced by the pointer to the #IDProperty object.
+ *
+ * \param ptr: Reference to the object owning the custom property storage.
+ * \param needle: Custom property object to find.
+ * \return Relative path or NULL.
+ */
+char *RNA_path_from_struct_to_idproperty(PointerRNA *ptr, IDProperty *needle)
+{
+  IDProperty *haystack = RNA_struct_idprops(ptr, false);
+
+  if (haystack) { /* can fail when called on bones */
+    return rna_idp_path(ptr, haystack, needle, NULL);
+  }
+  else {
+    return NULL;
+  }
+}
+
 static char *rna_path_from_ID_to_idpgroup(PointerRNA *ptr)
 {
   PointerRNA id_ptr;
-  IDProperty *haystack;
-  IDProperty *needle;
 
   BLI_assert(ptr->owner_id != NULL);
 
@@ -5753,14 +5705,7 @@ static char *rna_path_from_ID_to_idpgroup(PointerRNA *ptr)
    */
   RNA_id_pointer_create(ptr->owner_id, &id_ptr);
 
-  haystack = RNA_struct_idprops(&id_ptr, false);
-  if (haystack) { /* can fail when called on bones */
-    needle = ptr->data;
-    return rna_idp_path(&id_ptr, haystack, needle, NULL);
-  }
-  else {
-    return NULL;
-  }
+  return RNA_path_from_struct_to_idproperty(&id_ptr, ptr->data);
 }
 
 /**
@@ -5776,7 +5721,7 @@ ID *RNA_find_real_ID_and_path(Main *bmain, ID *id, const char **r_path)
     *r_path = "";
   }
 
-  if ((id != NULL) && (id->flag & LIB_PRIVATE_DATA)) {
+  if ((id != NULL) && (id->flag & LIB_EMBEDDED_DATA)) {
     switch (GS(id->name)) {
       case ID_NT:
         if (r_path) {
@@ -6060,7 +6005,7 @@ char *RNA_path_full_ID_py(Main *bmain, ID *id)
   BLI_strescape(id_esc, id->name + 2, sizeof(id_esc));
 
   return BLI_sprintfN("bpy.data.%s[\"%s\"]%s%s",
-                      BKE_idcode_to_name_plural(GS(id->name)),
+                      BKE_idtype_idcode_to_name_plural(GS(id->name)),
                       id_esc,
                       path[0] ? "." : "",
                       path);

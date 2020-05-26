@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -27,11 +27,10 @@
 
 #include "BLI_utildefines.h"
 
+#include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_mesh_types.h"
 
-#include "BKE_cdderivedmesh.h"
 #include "BKE_scene.h"
 #include "BKE_subdiv.h"
 #include "BKE_subdiv_ccg.h"
@@ -59,7 +58,7 @@ static void initData(ModifierData *md)
   smd->renderLevels = 2;
   smd->uv_smooth = SUBSURF_UV_SMOOTH_PRESERVE_CORNERS;
   smd->quality = 3;
-  smd->flags |= eSubsurfModifierFlag_UseCrease;
+  smd->flags |= (eSubsurfModifierFlag_UseCrease | eSubsurfModifierFlag_ControlEdges);
 }
 
 static void copyData(const ModifierData *md, ModifierData *target, const int flag)
@@ -69,7 +68,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 #endif
   SubsurfModifierData *tsmd = (SubsurfModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   tsmd->emCache = tsmd->mCache = NULL;
 }
@@ -149,7 +148,8 @@ static void subdiv_mesh_settings_init(SubdivToMeshSettings *settings,
 {
   const int level = subdiv_levels_for_modifier_get(smd, ctx);
   settings->resolution = (1 << level) + 1;
-  settings->use_optimal_display = (smd->flags & eSubsurfModifierFlag_ControlEdges);
+  settings->use_optimal_display = (smd->flags & eSubsurfModifierFlag_ControlEdges) &&
+                                  !(ctx->flag & MOD_APPLY_TO_BASE_MESH);
 }
 
 static Mesh *subdiv_as_mesh(SubsurfModifierData *smd,
@@ -206,11 +206,11 @@ static SubsurfRuntimeData *subsurf_ensure_runtime(SubsurfModifierData *smd)
 
 /* Modifier itself. */
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result = mesh;
 #if !defined(WITH_OPENSUBDIV)
-  modifier_setError(md, "Disabled, built without OpenSubdiv");
+  BKE_modifier_set_error(md, "Disabled, built without OpenSubdiv");
   return result;
 #endif
   SubsurfModifierData *smd = (SubsurfModifierData *)md;
@@ -249,7 +249,7 @@ static void deformMatrices(ModifierData *md,
                            int num_verts)
 {
 #if !defined(WITH_OPENSUBDIV)
-  modifier_setError(md, "Disabled, built without OpenSubdiv");
+  BKE_modifier_set_error(md, "Disabled, built without OpenSubdiv");
   return;
 #endif
 
@@ -290,7 +290,10 @@ ModifierTypeInfo modifierType_Subsurf = {
     /* deformMatrices */ deformMatrices,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,

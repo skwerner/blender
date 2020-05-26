@@ -20,15 +20,15 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_buffer.h"
 #include "BLI_ghash.h"
 #include "BLI_heap_simple.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_ccg.h"
 #include "BKE_DerivedMesh.h"
+#include "BKE_ccg.h"
 #include "BKE_pbvh.h"
 
 #include "GPU_buffers.h"
@@ -413,7 +413,7 @@ static bool pbvh_bmesh_node_limit_ensure(PBVH *bvh, int node_index)
     /* so we can do direct lookups on 'bbc_array' */
     BM_elem_index_set(f, i); /* set_dirty! */
   }
-  /* likely this is already dirty */
+  /* Likely this is already dirty. */
   bvh->bm->elem_index_dirty |= BM_FACE;
 
   pbvh_bmesh_node_split(bvh, bbc_array, node_index);
@@ -872,7 +872,7 @@ static void long_edge_queue_edge_add(EdgeQueueContext *eq_ctx, BMEdge *e)
 static void long_edge_queue_edge_add_recursive(
     EdgeQueueContext *eq_ctx, BMLoop *l_edge, BMLoop *l_end, const float len_sq, float limit_len)
 {
-  BLI_assert(len_sq > SQUARE(limit_len));
+  BLI_assert(len_sq > square_f(limit_len));
 
 #  ifdef USE_EDGEQUEUE_FRONTFACE
   if (eq_ctx->q->use_view_normal) {
@@ -895,17 +895,17 @@ static void long_edge_queue_edge_add_recursive(
   }
 
   if ((l_edge->radial_next != l_edge)) {
-    /* how much longer we need to be to consider for subdividing
+    /* How much longer we need to be to consider for subdividing
      * (avoids subdividing faces which are only *slightly* skinny) */
 #  define EVEN_EDGELEN_THRESHOLD 1.2f
-    /* how much the limit increases per recursion
-     * (avoids performing subdvisions too far away) */
+    /* How much the limit increases per recursion
+     * (avoids performing subdivisions too far away). */
 #  define EVEN_GENERATION_SCALE 1.6f
 
     const float len_sq_cmp = len_sq * EVEN_EDGELEN_THRESHOLD;
 
     limit_len *= EVEN_GENERATION_SCALE;
-    const float limit_len_sq = SQUARE(limit_len);
+    const float limit_len_sq = square_f(limit_len);
 
     BMLoop *l_iter = l_edge;
     do {
@@ -1687,7 +1687,7 @@ struct FastNodeBuildInfo {
 
 /**
  * Recursively split the node if it exceeds the leaf_limit.
- * This function is multi-threadabe since each invocation applies
+ * This function is multi-thread-able since each invocation applies
  * to a sub part of the arrays.
  */
 static void pbvh_bmesh_node_limit_ensure_fast(
@@ -1811,7 +1811,7 @@ static void pbvh_bmesh_create_nodes_fast_recursive(
   }
   else {
     /* node does not have children so it's a leaf node, populate with faces and tag accordingly
-     * this is an expensive part but it's not so easily threadable due to vertex node indices */
+     * this is an expensive part but it's not so easily thread-able due to vertex node indices */
     const int cd_vert_node_offset = bvh->cd_vert_node_offset;
     const int cd_face_node_offset = bvh->cd_face_node_offset;
 
@@ -1923,14 +1923,13 @@ void BKE_pbvh_build_bmesh(PBVH *bvh,
     nodeinfo[i] = f;
     BM_ELEM_CD_SET_INT(f, cd_face_node_offset, DYNTOPO_NODE_NONE);
   }
+  /* Likely this is already dirty. */
+  bm->elem_index_dirty |= BM_FACE;
 
   BMVert *v;
   BM_ITER_MESH (v, &iter, bm, BM_VERTS_OF_MESH) {
     BM_ELEM_CD_SET_INT(v, cd_vert_node_offset, DYNTOPO_NODE_NONE);
   }
-
-  /* likely this is already dirty */
-  bm->elem_index_dirty |= BM_FACE;
 
   /* setup root node */
   struct FastNodeBuildInfo rootnode = {0};
@@ -1978,7 +1977,7 @@ bool BKE_pbvh_bmesh_update_topology(PBVH *bvh,
 
   if (mode & PBVH_Collapse) {
     EdgeQueue q;
-    BLI_mempool *queue_pool = BLI_mempool_create(sizeof(BMVert *[2]), 0, 128, BLI_MEMPOOL_NOP);
+    BLI_mempool *queue_pool = BLI_mempool_create(sizeof(BMVert *) * 2, 0, 128, BLI_MEMPOOL_NOP);
     EdgeQueueContext eq_ctx = {
         &q,
         queue_pool,
@@ -1997,7 +1996,7 @@ bool BKE_pbvh_bmesh_update_topology(PBVH *bvh,
 
   if (mode & PBVH_Subdivide) {
     EdgeQueue q;
-    BLI_mempool *queue_pool = BLI_mempool_create(sizeof(BMVert *[2]), 0, 128, BLI_MEMPOOL_NOP);
+    BLI_mempool *queue_pool = BLI_mempool_create(sizeof(BMVert *) * 2, 0, 128, BLI_MEMPOOL_NOP);
     EdgeQueueContext eq_ctx = {
         &q,
         queue_pool,
@@ -2036,7 +2035,7 @@ bool BKE_pbvh_bmesh_update_topology(PBVH *bvh,
  * (currently just raycast), store the node's triangles and vertices.
  *
  * Skips triangles that are hidden. */
-void BKE_pbvh_bmesh_node_save_orig(PBVHNode *node)
+void BKE_pbvh_bmesh_node_save_orig(BMesh *bm, PBVHNode *node)
 {
   /* Skip if original coords/triangles are already saved */
   if (node->bm_orco) {
@@ -2065,6 +2064,8 @@ void BKE_pbvh_bmesh_node_save_orig(PBVHNode *node)
     BM_elem_index_set(v, i); /* set_dirty! */
     i++;
   }
+  /* Likely this is already dirty. */
+  bm->elem_index_dirty |= BM_VERT;
 
   /* Copy the triangles */
   i = 0;

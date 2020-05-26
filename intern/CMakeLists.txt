@@ -20,7 +20,6 @@
 
 # add_subdirectory(atomic)  # header only
 add_subdirectory(clog)
-add_subdirectory(string)
 add_subdirectory(ghost)
 add_subdirectory(guardedalloc)
 add_subdirectory(libmv)
@@ -38,14 +37,6 @@ endif()
 
 if(WITH_MOD_REMESH)
   add_subdirectory(dualcon)
-endif()
-
-if(WITH_MOD_FLUID)
-  add_subdirectory(elbeem)
-endif()
-
-if(WITH_MOD_SMOKE)
-  add_subdirectory(smoke)
 endif()
 
 if(WITH_IK_SOLVER)
@@ -73,6 +64,10 @@ if(WIN32)
   add_subdirectory(utfconv)
 endif()
 
+if(WITH_MOD_FLUID)
+  add_subdirectory(mantaflow)
+endif()
+
 if(WITH_OPENVDB)
   add_subdirectory(openvdb)
 endif()
@@ -81,3 +76,6 @@ if(WITH_QUADRIFLOW)
   add_subdirectory(quadriflow)
 endif()
 
+if(UNIX AND NOT APPLE)
+  add_subdirectory(libc_compat)
+endif()

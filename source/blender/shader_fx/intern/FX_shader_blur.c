@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -23,6 +23,7 @@
 
 #include <stdio.h>
 
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "FX_shader_types.h"
@@ -30,14 +31,14 @@
 static void initData(ShaderFxData *fx)
 {
   BlurShaderFxData *gpfx = (BlurShaderFxData *)fx;
-  ARRAY_SET_ITEMS(gpfx->radius, 1, 1);
-  gpfx->samples = 4;
-  gpfx->coc = 0.025f;
+  copy_v2_fl(gpfx->radius, 50.0f);
+  gpfx->samples = 8;
+  gpfx->rotation = 0.0f;
 }
 
 static void copyData(const ShaderFxData *md, ShaderFxData *target)
 {
-  BKE_shaderfx_copyData_generic(md, target);
+  BKE_shaderfx_copydata_generic(md, target);
 }
 
 ShaderFxTypeInfo shaderfx_Type_Blur = {
@@ -45,7 +46,7 @@ ShaderFxTypeInfo shaderfx_Type_Blur = {
     /* structName */ "BlurShaderFxData",
     /* structSize */ sizeof(BlurShaderFxData),
     /* type */ eShaderFxType_GpencilType,
-    /* flags */ eShaderFxTypeFlag_Single,
+    /* flags */ 0,
 
     /* copyData */ copyData,
 

@@ -24,6 +24,10 @@
 #ifndef __OBJECT_INTERN_H__
 #define __OBJECT_INTERN_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Object;
 struct StructRNA;
 struct bContext;
@@ -111,6 +115,8 @@ void OBJECT_OT_light_add(struct wmOperatorType *ot);
 void OBJECT_OT_effector_add(struct wmOperatorType *ot);
 void OBJECT_OT_camera_add(struct wmOperatorType *ot);
 void OBJECT_OT_speaker_add(struct wmOperatorType *ot);
+void OBJECT_OT_hair_add(struct wmOperatorType *ot);
+void OBJECT_OT_pointcloud_add(struct wmOperatorType *ot);
 void OBJECT_OT_collection_instance_add(struct wmOperatorType *ot);
 
 void OBJECT_OT_duplicates_make_real(struct wmOperatorType *ot);
@@ -119,6 +125,10 @@ void OBJECT_OT_delete(struct wmOperatorType *ot);
 void OBJECT_OT_join(struct wmOperatorType *ot);
 void OBJECT_OT_join_shapes(struct wmOperatorType *ot);
 void OBJECT_OT_convert(struct wmOperatorType *ot);
+
+/* object_volume.c */
+void OBJECT_OT_volume_add(struct wmOperatorType *ot);
+void OBJECT_OT_volume_import(struct wmOperatorType *ot);
 
 /* object_hook.c */
 void OBJECT_OT_hook_add_selob(struct wmOperatorType *ot);
@@ -129,7 +139,7 @@ void OBJECT_OT_hook_assign(struct wmOperatorType *ot);
 void OBJECT_OT_hook_reset(struct wmOperatorType *ot);
 void OBJECT_OT_hook_recenter(struct wmOperatorType *ot);
 
-/* object_group.c */
+/* object_collection.c */
 void COLLECTION_OT_create(struct wmOperatorType *ot);
 void COLLECTION_OT_objects_remove_all(struct wmOperatorType *ot);
 void COLLECTION_OT_objects_remove(struct wmOperatorType *ot);
@@ -159,6 +169,8 @@ void OBJECT_OT_multires_subdivide(struct wmOperatorType *ot);
 void OBJECT_OT_multires_reshape(struct wmOperatorType *ot);
 void OBJECT_OT_multires_higher_levels_delete(struct wmOperatorType *ot);
 void OBJECT_OT_multires_base_apply(struct wmOperatorType *ot);
+void OBJECT_OT_multires_unsubdivide(struct wmOperatorType *ot);
+void OBJECT_OT_multires_rebuild_subdiv(struct wmOperatorType *ot);
 void OBJECT_OT_multires_external_save(struct wmOperatorType *ot);
 void OBJECT_OT_multires_external_pack(struct wmOperatorType *ot);
 void OBJECT_OT_correctivesmooth_bind(struct wmOperatorType *ot);
@@ -172,7 +184,7 @@ void OBJECT_OT_skin_armature_create(struct wmOperatorType *ot);
 void OBJECT_OT_laplaciandeform_bind(struct wmOperatorType *ot);
 void OBJECT_OT_surfacedeform_bind(struct wmOperatorType *ot);
 
-/* grease pencil modifiers */
+/* object_gpencil_modifiers.c */
 void OBJECT_OT_gpencil_modifier_add(struct wmOperatorType *ot);
 void OBJECT_OT_gpencil_modifier_remove(struct wmOperatorType *ot);
 void OBJECT_OT_gpencil_modifier_move_up(struct wmOperatorType *ot);
@@ -180,7 +192,7 @@ void OBJECT_OT_gpencil_modifier_move_down(struct wmOperatorType *ot);
 void OBJECT_OT_gpencil_modifier_apply(struct wmOperatorType *ot);
 void OBJECT_OT_gpencil_modifier_copy(struct wmOperatorType *ot);
 
-/* shader fx */
+/* object_shader_fx.c */
 void OBJECT_OT_shaderfx_add(struct wmOperatorType *ot);
 void OBJECT_OT_shaderfx_remove(struct wmOperatorType *ot);
 void OBJECT_OT_shaderfx_move_up(struct wmOperatorType *ot);
@@ -265,7 +277,7 @@ void OBJECT_OT_shape_key_retime(struct wmOperatorType *ot);
 void OBJECT_OT_shape_key_mirror(struct wmOperatorType *ot);
 void OBJECT_OT_shape_key_move(struct wmOperatorType *ot);
 
-/* object_group.c */
+/* object_collection.c */
 void OBJECT_OT_collection_add(struct wmOperatorType *ot);
 void OBJECT_OT_collection_link(struct wmOperatorType *ot);
 void OBJECT_OT_collection_remove(struct wmOperatorType *ot);
@@ -281,10 +293,15 @@ void TRANSFORM_OT_vertex_random(struct wmOperatorType *ot);
 
 /* object_remesh.c */
 void OBJECT_OT_voxel_remesh(struct wmOperatorType *ot);
+void OBJECT_OT_voxel_size_edit(struct wmOperatorType *ot);
 void OBJECT_OT_quadriflow_remesh(struct wmOperatorType *ot);
 
 /* object_transfer_data.c */
 void OBJECT_OT_data_transfer(struct wmOperatorType *ot);
 void OBJECT_OT_datalayout_transfer(struct wmOperatorType *ot);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __OBJECT_INTERN_H__ */

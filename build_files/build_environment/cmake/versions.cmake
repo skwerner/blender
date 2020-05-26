@@ -20,9 +20,9 @@ set(ZLIB_VERSION 1.2.11)
 set(ZLIB_URI https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz)
 set(ZLIB_HASH 1c9f62f0778697a09d36121ead88e08e)
 
-set(OPENAL_VERSION 1.18.2)
+set(OPENAL_VERSION 1.20.1)
 set(OPENAL_URI http://openal-soft.org/openal-releases/openal-soft-${OPENAL_VERSION}.tar.bz2)
-set(OPENAL_HASH d4eeb0889812e2fdeaa1843523d76190)
+set(OPENAL_HASH 556695068ce8375b89986083d810fd35)
 
 set(PNG_VERSION 1.6.35)
 set(PNG_URI http://prdownloads.sourceforge.net/libpng/libpng-${PNG_VERSION}.tar.xz)
@@ -32,47 +32,43 @@ set(JPEG_VERSION 1.5.3)
 set(JPEG_URI https://github.com/libjpeg-turbo/libjpeg-turbo/archive/${JPEG_VERSION}.tar.gz)
 set(JPEG_HASH 5b7549d440b86c98a517355c102d155e)
 
-set(BOOST_VERSION 1.68.0)
-set(BOOST_VERSION_NODOTS 1_68_0)
+set(BOOST_VERSION 1.70.0)
+set(BOOST_VERSION_NODOTS 1_70_0)
+set(BOOST_VERSION_NODOTS_SHORT 1_70)
 set(BOOST_URI https://dl.bintray.com/boostorg/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_NODOTS}.tar.gz)
-set(BOOST_HASH 5d8b4503582fffa9eefdb9045359c239)
+set(BOOST_HASH fea771fe8176828fabf9c09242ee8c26)
 
-set(BLOSC_VERSION 1.14.4)
+# Using old version as recommended by OpenVDB build documentation.
+set(BLOSC_VERSION 1.5.0)
 set(BLOSC_URI https://github.com/Blosc/c-blosc/archive/v${BLOSC_VERSION}.tar.gz)
-set(BLOSC_HASH e80dfc71e4cba03b8d01ed0876547ffe)
+set(BLOSC_HASH 6e4a49c8c06f05aa543f3312cfce3d55)
 
 set(PTHREADS_VERSION 3.0.0)
 set(PTHREADS_URI http://sourceforge.mirrorservice.org/p/pt/pthreads4w/pthreads4w-code-v${PTHREADS_VERSION}.zip)
 set(PTHREADS_HASH f3bf81bb395840b3446197bcf4ecd653)
 
-set(ILMBASE_VERSION 2.3.0)
+set(OPENEXR_VERSION 2.4.0)
+set(OPENEXR_URI https://github.com/AcademySoftwareFoundation/openexr/archive/v${OPENEXR_VERSION}.tar.gz)
+set(OPENEXR_HASH 9e4d69cf2a12c6fb19b98af7c5e0eaee)
 if(WIN32)
+  # Openexr started appending _d on its own so now
+  # we need to tell the build the postfix is _s while
+  # telling all other deps the postfix is _s_d
   if(BUILD_MODE STREQUAL Release)
-    set(ILMBASE_VERSION_POSTFIX _s)
     set(OPENEXR_VERSION_POSTFIX _s)
+    set(OPENEXR_VERSION_BUILD_POSTFIX _s)
   else()
-    set(ILMBASE_VERSION_POSTFIX _s_d)
     set(OPENEXR_VERSION_POSTFIX _s_d)
+    set(OPENEXR_VERSION_BUILD_POSTFIX _s)
   endif()
 else()
-  set(ILMBASE_VERSION_POSTFIX)
-endif()
-set(ILMBASE_URI https://github.com/openexr/openexr/releases/download/v${ILMBASE_VERSION}/ilmbase-${ILMBASE_VERSION}.tar.gz)
-set(ILMBASE_HASH 354bf86de3b930ab87ac63619d60c860)
-
-set(OPENEXR_VERSION 2.3.0)
-if(WIN32) #release 2.3.0 tarball has broken cmake support
-  set(OPENEXR_URI https://github.com/openexr/openexr/archive/0ac2ea34c8f3134148a5df4052e40f155b76f6fb.tar.gz)
-  set(OPENEXR_HASH ed159435d508240712fbaaa21d94bafb)
-else()
+  set(OPENEXR_VERSION_BUILD_POSTFIX)
   set(OPENEXR_VERSION_POSTFIX)
-  set(OPENEXR_URI https://github.com/openexr/openexr/releases/download/v${OPENEXR_VERSION}/openexr-${OPENEXR_VERSION}.tar.gz)
-  set(OPENEXR_HASH a157e8a46596bc185f2472a5a4682174)
 endif()
 
-set(FREETYPE_VERSION 2.9.1)
+set(FREETYPE_VERSION 2.10.2)
 set(FREETYPE_URI http://prdownloads.sourceforge.net/freetype/freetype-${FREETYPE_VERSION}.tar.gz)
-set(FREETYPE_HASH 3adb0e35d3c100c456357345ccfa8056)
+set(FREETYPE_HASH b1cb620e4c875cd4d1bfa04945400945)
 
 set(GLEW_VERSION 1.13.0)
 set(GLEW_URI http://prdownloads.sourceforge.net/glew/glew/${GLEW_VERSION}/glew-${GLEW_VERSION}.tgz)
@@ -86,32 +82,32 @@ set(HDF5_VERSION 1.8.17)
 set(HDF5_URI https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8/hdf5-${HDF5_VERSION}/src/hdf5-${HDF5_VERSION}.tar.gz)
 set(HDF5_HASH 7d572f8f3b798a628b8245af0391a0ca)
 
-set(ALEMBIC_VERSION 1.7.8)
+set(ALEMBIC_VERSION 1.7.12)
 set(ALEMBIC_URI https://github.com/alembic/alembic/archive/${ALEMBIC_VERSION}.tar.gz)
-set(ALEMBIC_MD5 d095c2feb5e183b824904db7b63c1d30)
+set(ALEMBIC_MD5 e2b3777f23c5c09481a008cc6f0f8a40)
 
-## hash is for 3.1.2
+# hash is for 3.1.2
 set(GLFW_GIT_UID 30306e54705c3adae9fe082c816a3be71963485c)
 set(GLFW_URI https://github.com/glfw/glfw/archive/${GLFW_GIT_UID}.zip)
 set(GLFW_HASH 20cacb1613da7eeb092f3ac4f6b2b3d0)
 
-#latest uid in git as of 2016-04-01
+# latest uid in git as of 2016-04-01
 set(CLEW_GIT_UID 277db43f6cafe8b27c6f1055f69dc67da4aeb299)
 set(CLEW_URI https://github.com/OpenCLWrangler/clew/archive/${CLEW_GIT_UID}.zip)
 set(CLEW_HASH 2c699d10ed78362e71f56fae2a4c5f98)
 
-#latest uid in git as of 2016-04-01
+# latest uid in git as of 2016-04-01
 set(CUEW_GIT_UID 1744972026de9cf27c8a7dc39cf39cd83d5f922f)
 set(CUEW_URI https://github.com/CudaWrangler/cuew/archive/${CUEW_GIT_UID}.zip)
 set(CUEW_HASH 86760d62978ebfd96cd93f5aa1abaf4a)
 
-set(OPENSUBDIV_VERSION v3_4_0_RC2)
-set(OPENSUBDIV_Hash f6a10ba9efaa82fde86fe65aad346319)
+set(OPENSUBDIV_VERSION v3_4_3)
 set(OPENSUBDIV_URI https://github.com/PixarAnimationStudios/OpenSubdiv/archive/${OPENSUBDIV_VERSION}.tar.gz)
+set(OPENSUBDIV_HASH 7bbfa275d021fb829e521df749160edb)
 
-set(SDL_VERSION 2.0.8)
+set(SDL_VERSION 2.0.12)
 set(SDL_URI https://www.libsdl.org/release/SDL2-${SDL_VERSION}.tar.gz)
-set(SDL_HASH 3800d705cef742c6a634f202c37f263f)
+set(SDL_HASH 783b6f2df8ff02b19bb5ce492b99c8ff)
 
 set(OPENCOLLADA_VERSION v1.6.68)
 set(OPENCOLLADA_URI https://github.com/KhronosGroup/OpenCOLLADA/archive/${OPENCOLLADA_VERSION}.tar.gz)
@@ -121,15 +117,15 @@ set(OPENCOLORIO_VERSION 1.1.0)
 set(OPENCOLORIO_URI https://github.com/imageworks/OpenColorIO/archive/v${OPENCOLORIO_VERSION}.tar.gz)
 set(OPENCOLORIO_HASH 802d8f5b1d1fe316ec5f76511aa611b8)
 
-set(LLVM_VERSION 6.0.1)
-set(LLVM_URI http://releases.llvm.org/${LLVM_VERSION}/llvm-${LLVM_VERSION}.src.tar.xz)
-set(LLVM_HASH c88c98709300ce2c285391f387fecce0)
+set(LLVM_VERSION 9.0.1)
+set(LLVM_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/llvm-${LLVM_VERSION}.src.tar.xz)
+set(LLVM_HASH 31eb9ce73dd2a0f8dcab8319fb03f8fc)
 
-set(CLANG_URI http://releases.llvm.org/${LLVM_VERSION}/cfe-${LLVM_VERSION}.src.tar.xz)
-set(CLANG_HASH 4e419bd4e3b55aa06d872320f754bd85)
+set(CLANG_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/clang-${LLVM_VERSION}.src.tar.xz)
+set(CLANG_HASH 13468e4a44940efef1b75e8641752f90)
 
-set(OPENMP_URI http://releases.llvm.org/${LLVM_VERSION}/openmp-${LLVM_VERSION}.src.tar.xz)
-set(OPENMP_HASH 4826402ae3633c36c51ba4d0e5527d30)
+set(OPENMP_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/openmp-${LLVM_VERSION}.src.tar.xz)
+set(OPENMP_HASH 6eade16057edbdecb3c4eef9daa2bfcf)
 
 set(OPENIMAGEIO_VERSION 1.8.13)
 set(OPENIMAGEIO_URI https://github.com/OpenImageIO/oiio/archive/Release-${OPENIMAGEIO_VERSION}.tar.gz)
@@ -139,9 +135,9 @@ set(TIFF_VERSION 4.0.9)
 set(TIFF_URI http://download.osgeo.org/libtiff/tiff-${TIFF_VERSION}.tar.gz)
 set(TIFF_HASH 54bad211279cc93eb4fca31ba9bfdc79)
 
-set(OSL_VERSION 1.9.9)
+set(OSL_VERSION 1.10.9)
 set(OSL_URI https://github.com/imageworks/OpenShadingLanguage/archive/Release-${OSL_VERSION}.tar.gz)
-set(OSL_HASH 44ad511e424965a10fce051a053b0605)
+set(OSL_HASH a94f1e8506f7e8f5e993653de5c5fa00)
 
 set(PYTHON_VERSION 3.7.4)
 set(PYTHON_SHORT_VERSION 3.7)
@@ -149,13 +145,13 @@ set(PYTHON_SHORT_VERSION_NO_DOTS 37)
 set(PYTHON_URI https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz)
 set(PYTHON_HASH d33e4aae66097051c2eca45ee3604803)
 
-set(TBB_VERSION 2018_U5)
-set(TBB_URI https://github.com/01org/tbb/archive/${TBB_VERSION}.tar.gz)
-set(TBB_HASH ff3ae09f8c23892fbc3008c39f78288f)
+set(TBB_VERSION 2019_U9)
+set(TBB_URI https://github.com/oneapi-src/oneTBB/archive/${TBB_VERSION}.tar.gz)
+set(TBB_HASH 26263622e9187212ec240dcf01b66207)
 
-set(OPENVDB_VERSION 5.1.0)
+set(OPENVDB_VERSION 7.0.0)
 set(OPENVDB_URI https://github.com/dreamworksanimation/openvdb/archive/v${OPENVDB_VERSION}.tar.gz)
-set(OPENVDB_HASH 5310101f874dcfd2165f9cee68c22624)
+set(OPENVDB_HASH fd6c4f168282f7e0e494d290cd531fa8)
 
 set(IDNA_VERSION 2.8)
 set(CHARDET_VERSION 3.0.4)
@@ -172,9 +168,9 @@ set(LAME_VERSION 3.100)
 set(LAME_URI http://downloads.sourceforge.net/project/lame/lame/3.100/lame-${LAME_VERSION}.tar.gz)
 set(LAME_HASH 83e260acbe4389b54fe08e0bdbf7cddb)
 
-set(OGG_VERSION 1.3.3)
+set(OGG_VERSION 1.3.4)
 set(OGG_URI http://downloads.xiph.org/releases/ogg/libogg-${OGG_VERSION}.tar.gz)
-set(OGG_HASH c2e8a485110b97550f453226ec644ebac6cb29d1caef2902c007edab4308d985)
+set(OGG_HASH fe5670640bd49e828d64d2879c31cb4dde9758681bb664f9bdbf159a01b0c76e)
 
 set(VORBIS_VERSION 1.3.6)
 set(VORBIS_URI http://downloads.xiph.org/releases/vorbis/libvorbis-${VORBIS_VERSION}.tar.gz)
@@ -184,39 +180,35 @@ set(THEORA_VERSION 1.1.1)
 set(THEORA_URI http://downloads.xiph.org/releases/theora/libtheora-${THEORA_VERSION}.tar.bz2)
 set(THEORA_HASH b6ae1ee2fa3d42ac489287d3ec34c5885730b1296f0801ae577a35193d3affbc)
 
-set(FLAC_VERSION 1.3.2)
+set(FLAC_VERSION 1.3.3)
 set(FLAC_URI http://downloads.xiph.org/releases/flac/flac-${FLAC_VERSION}.tar.xz)
-set(FLAC_HASH 91cfc3ed61dc40f47f050a109b08610667d73477af6ef36dcad31c31a4a8d53f)
+set(FLAC_HASH 213e82bd716c9de6db2f98bcadbc4c24c7e2efe8c75939a1a84e28539c4e1748)
 
-set(VPX_VERSION 1.7.0)
+set(VPX_VERSION 1.8.2)
 set(VPX_URI https://github.com/webmproject/libvpx/archive/v${VPX_VERSION}/libvpx-v${VPX_VERSION}.tar.gz)
-set(VPX_HASH 1fec931eb5c94279ad219a5b6e0202358e94a93a90cfb1603578c326abfc1238)
+set(VPX_HASH 8735d9fcd1a781ae6917f28f239a8aa358ce4864ba113ea18af4bb2dc8b474ac)
 
 set(OPUS_VERSION 1.3.1)
 set(OPUS_URI https://archive.mozilla.org/pub/opus/opus-${OPUS_VERSION}.tar.gz)
 set(OPUS_HASH 65b58e1e25b2a114157014736a3d9dfeaad8d41be1c8179866f144a2fb44ff9d)
 
-set(X264_URI http://download.videolan.org/pub/videolan/x264/snapshots/x264-snapshot-20180811-2245-stable.tar.bz2)
-set(X264_HASH ae8a868a0e236a348b35d79f3ee80294b169d1195408b689f9851383661ed7aa)
+set(X264_URI https://code.videolan.org/videolan/x264/-/archive/master/x264-33f9e1474613f59392be5ab6a7e7abf60fa63622.tar.gz)
+set(X264_HASH 300dfb5b6c35722516f168868ce9419252a9e9eb77a05d82c9cede925b691bd6)
 
-set(XVIDCORE_VERSION 1.3.5)
-set(XVIDCORE_URI http://downloads.xvid.org/downloads/xvidcore-${XVIDCORE_VERSION}.tar.gz)
-set(XVIDCORE_HASH 165ba6a2a447a8375f7b06db5a3c91810181f2898166e7c8137401d7fc894cf0)
+set(XVIDCORE_VERSION 1.3.7)
+set(XVIDCORE_URI https://downloads.xvid.com/downloads/xvidcore-${XVIDCORE_VERSION}.tar.gz)
+set(XVIDCORE_HASH abbdcbd39555691dd1c9b4d08f0a031376a3b211652c0d8b3b8aa9be1303ce2d)
 
-#this has to be in sync with the version in blenders /extern folder
+# This has to be in sync with the version in blenders /extern folder.
 set(OPENJPEG_VERSION 2.3.0)
 set(OPENJPEG_SHORT_VERSION 2.3)
 # Use slightly newer commit after release which includes a cmake fix
 set(OPENJPEG_URI https://github.com/uclouvain/openjpeg/archive/66297f07a43.zip)
 set(OPENJPEG_HASH 8242b18d908c7c42174e4231a741cfa7ce7c26b6ed5c9644feb9df7b3054310b)
 
-set(FAAD_VERSION 2-2.8.8)
-set(FAAD_URI http://downloads.sourceforge.net/faac/faad${FAAD_VERSION}.tar.gz)
-set(FAAD_HASH 28f6116efdbe9378269f8a6221767d1f)
-
-set(FFMPEG_VERSION 4.0.2)
+set(FFMPEG_VERSION 4.2.3)
 set(FFMPEG_URI http://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2)
-set(FFMPEG_HASH 5576e8a22f80b6a336db39808f427cfb)
+set(FFMPEG_HASH 695fad11f3baf27784e24cb0e977b65a)
 
 set(FFTW_VERSION 3.3.8)
 set(FFTW_URI http://www.fftw.org/fftw-${FFTW_VERSION}.tar.gz)
@@ -234,9 +226,9 @@ set(SNDFILE_VERSION 1.0.28)
 set(SNDFILE_URI http://www.mega-nerd.com/libsndfile/files/libsndfile-${SNDFILE_VERSION}.tar.gz)
 set(SNDFILE_HASH 646b5f98ce89ac60cdb060fcd398247c)
 
-#set(HIDAPI_VERSION 0.8.0-rc1)
-#set(HIDAPI_URI https://github.com/signal11/hidapi/archive/hidapi-${HIDAPI_VERSION}.tar.gz)
-#set(HIDAPI_HASH 069f9dd746edc37b6b6d0e3656f47199)
+# set(HIDAPI_VERSION 0.8.0-rc1)
+# set(HIDAPI_URI https://github.com/signal11/hidapi/archive/hidapi-${HIDAPI_VERSION}.tar.gz)
+# set(HIDAPI_HASH 069f9dd746edc37b6b6d0e3656f47199)
 
 set(HIDAPI_UID 89a6c75dc6f45ecabd4ddfbd2bf5ba6ad8ba38b5)
 set(HIDAPI_URI https://github.com/TheOnlyJoey/hidapi/archive/${HIDAPI_UID}.zip)
@@ -263,9 +255,9 @@ set(TINYXML_VERSION_DOTS 2.6.2)
 set(TINYXML_URI https://nchc.dl.sourceforge.net/project/tinyxml/tinyxml/${TINYXML_VERSION_DOTS}/tinyxml_${TINYXML_VERSION}.tar.gz)
 set(TINYXML_HASH c1b864c96804a10526540c664ade67f0)
 
-set(YAMLCPP_VERSION 0.6.2)
+set(YAMLCPP_VERSION 0.6.3)
 set(YAMLCPP_URI https://codeload.github.com/jbeder/yaml-cpp/tar.gz/yaml-cpp-${YAMLCPP_VERSION})
-set(YAMLCPP_HASH 5b943e9af0060d0811148b037449ef82)
+set(YAMLCPP_HASH b45bf1089a382e81f6b661062c10d0c2)
 
 set(LCMS_VERSION 2.9)
 set(LCMS_URI https://nchc.dl.sourceforge.net/project/lcms/lcms/${LCMS_VERSION}/lcms2-${LCMS_VERSION}.tar.gz)
@@ -303,9 +295,13 @@ set(SQLITE_VERSION 3.24.0)
 set(SQLITE_URI https://www.sqlite.org/2018/sqlite-src-3240000.zip)
 set(SQLITE_HASH fb558c49ee21a837713c4f1e7e413309aabdd9c7)
 
-set(EMBREE_VERSION 3.2.4)
+set(EMBREE_VERSION 3.8.0)
 set(EMBREE_URI https://github.com/embree/embree/archive/v${EMBREE_VERSION}.zip)
-set(EMBREE_HASH 3d4a1147002ff43939d45140aa9d6fb8)
+set(EMBREE_HASH ac504d5426945fe25dec1267e0c39d52)
+
+set(USD_VERSION 19.11)
+set(USD_URI https://github.com/PixarAnimationStudios/USD/archive/v${USD_VERSION}.tar.gz)
+set(USD_HASH 79ff176167b3fe85f4953abd6cc5e0cc)
 
 set(OIDN_VERSION 1.0.0)
 set(OIDN_URI https://github.com/OpenImageDenoise/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.src.zip)
@@ -318,3 +314,7 @@ set(LIBGLU_HASH 151aef599b8259efe9acd599c96ea2a3)
 set(MESA_VERSION 18.3.1)
 set(MESA_URI ftp://ftp.freedesktop.org/pub/mesa//mesa-${MESA_VERSION}.tar.xz)
 set(MESA_HASH d60828056d77bfdbae0970f9b15fb1be)
+
+set(XR_OPENXR_SDK_VERSION 1.0.8)
+set(XR_OPENXR_SDK_URI https://github.com/KhronosGroup/OpenXR-SDK/archive/release-${XR_OPENXR_SDK_VERSION}.tar.gz)
+set(XR_OPENXR_SDK_HASH c6de63d2e0f9029aa58dfa97cad8ce07)

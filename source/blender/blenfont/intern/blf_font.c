@@ -25,10 +25,10 @@
  * Also low level functions for managing \a FontBLF.
  */
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 #include <ft2build.h>
 
@@ -50,11 +50,11 @@
 
 #include "UI_interface.h"
 
-#include "GPU_matrix.h"
 #include "GPU_batch.h"
+#include "GPU_matrix.h"
 
-#include "blf_internal_types.h"
 #include "blf_internal.h"
+#include "blf_internal_types.h"
 
 #include "BLI_strict_flags.h"
 
@@ -84,19 +84,28 @@ static void blf_batch_draw_init(void)
 {
   GPUVertFormat format = {0};
   g_batch.pos_loc = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
-  g_batch.tex_loc = GPU_vertformat_attr_add(&format, "tex", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
   g_batch.col_loc = GPU_vertformat_attr_add(
       &format, "col", GPU_COMP_U8, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
+  g_batch.offset_loc = GPU_vertformat_attr_add(&format, "offset", GPU_COMP_I32, 1, GPU_FETCH_INT);
+  g_batch.glyph_size_loc = GPU_vertformat_attr_add(
+      &format, "glyph_size", GPU_COMP_I32, 2, GPU_FETCH_INT);
 
   g_batch.verts = GPU_vertbuf_create_with_format_ex(&format, GPU_USAGE_STREAM);
   GPU_vertbuf_data_alloc(g_batch.verts, BLF_BATCH_DRAW_LEN_MAX);
 
   GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.pos_loc, &g_batch.pos_step);
-  GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.tex_loc, &g_batch.tex_step);
   GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.col_loc, &g_batch.col_step);
+  GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.offset_loc, &g_batch.offset_step);
+  GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.glyph_size_loc, &g_batch.glyph_size_step);
   g_batch.glyph_len = 0;
 
-  g_batch.batch = GPU_batch_create_ex(GPU_PRIM_POINTS, g_batch.verts, NULL, GPU_BATCH_OWNS_VBO);
+  /* A dummy VBO containing 4 points, attributes are not used. */
+  GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
+  GPU_vertbuf_data_alloc(vbo, 4);
+
+  /* We render a quad as a triangle strip and instance it for each glyph. */
+  g_batch.batch = GPU_batch_create_ex(GPU_PRIM_TRI_STRIP, vbo, NULL, GPU_BATCH_OWNS_VBO);
+  GPU_batch_instbuf_set(g_batch.batch, g_batch.verts, true);
 }
 
 static void blf_batch_draw_exit(void)
@@ -171,6 +180,46 @@ void blf_batch_draw_begin(FontBLF *font)
   }
 }
 
+static GPUTexture *blf_batch_cache_texture_load(void)
+{
+  GlyphCacheBLF *gc = g_batch.glyph_cache;
+  BLI_assert(gc);
+  BLI_assert(gc->bitmap_len > 0);
+
+  if (gc->bitmap_len > gc->bitmap_len_landed) {
+    const int tex_width = GPU_texture_width(gc->texture);
+
+    int bitmap_len_landed = gc->bitmap_len_landed;
+    int remain = gc->bitmap_len - bitmap_len_landed;
+    int offset_x = bitmap_len_landed % tex_width;
+    int offset_y = bitmap_len_landed / tex_width;
+
+    /* TODO(germano): Update more than one row in a single call. */
+    while (remain) {
+      int remain_row = tex_width - offset_x;
+      int width = remain > remain_row ? remain_row : remain;
+      GPU_texture_update_sub(gc->texture,
+                             GPU_DATA_UNSIGNED_BYTE,
+                             &gc->bitmap_result[bitmap_len_landed],
+                             offset_x,
+                             offset_y,
+                             0,
+                             width,
+                             1,
+                             0);
+
+      bitmap_len_landed += width;
+      remain -= width;
+      offset_x = 0;
+      offset_y += 1;
+    }
+
+    gc->bitmap_len_landed = bitmap_len_landed;
+  }
+
+  return gc->texture;
+}
+
 void blf_batch_draw(void)
 {
   if (g_batch.glyph_len == 0) {
@@ -181,15 +230,17 @@ void blf_batch_draw(void)
   GPU_blend_set_func_separate(
       GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ONE, GPU_ONE_MINUS_SRC_ALPHA);
 
+#ifndef BLF_STANDALONE
   /* We need to flush widget base first to ensure correct ordering. */
   UI_widgetbase_draw_cache_flush();
+#endif
 
-  GPU_texture_bind(g_batch.tex_bind_state, 0);
+  GPUTexture *texture = blf_batch_cache_texture_load();
+  GPU_texture_bind(texture, 0);
   GPU_vertbuf_data_len_set(g_batch.verts, g_batch.glyph_len);
   GPU_vertbuf_use(g_batch.verts); /* send data */
 
-  eGPUBuiltinShader shader = (g_batch.simple_shader) ? GPU_SHADER_TEXT_SIMPLE : GPU_SHADER_TEXT;
-  GPU_batch_program_set_builtin(g_batch.batch, shader);
+  GPU_batch_program_set_builtin(g_batch.batch, GPU_SHADER_TEXT);
   GPU_batch_uniform_1i(g_batch.batch, "glyph", 0);
   GPU_batch_draw(g_batch.batch);
 
@@ -197,8 +248,9 @@ void blf_batch_draw(void)
 
   /* restart to 1st vertex data pointers */
   GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.pos_loc, &g_batch.pos_step);
-  GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.tex_loc, &g_batch.tex_step);
   GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.col_loc, &g_batch.col_step);
+  GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.offset_loc, &g_batch.offset_step);
+  GPU_vertbuf_attr_get_raw_data(g_batch.verts, g_batch.glyph_size_loc, &g_batch.glyph_size_step);
   g_batch.glyph_len = 0;
 }
 
@@ -504,7 +556,7 @@ int blf_font_draw_mono(FontBLF *font, const char *str, size_t len, int cwidth)
     /* do not return this loop if clipped, we want every character tested */
     blf_glyph_render(font, gc, g, (float)pen_x, (float)pen_y);
 
-    col = BLI_wcwidth((wchar_t)c);
+    col = BLI_wcwidth((char32_t)c);
     if (col < 0) {
       col = 1;
     }
@@ -561,28 +613,28 @@ static void blf_font_draw_buffer_ex(FontBLF *font,
       BLF_KERNING_STEP_FAST(font, kern_mode, g_prev, g, c_prev, c, pen_x);
     }
 
-    chx = pen_x + ((int)g->pos_x);
-    chy = pen_y_basis + g->height;
+    chx = pen_x + ((int)g->pos[0]);
+    chy = pen_y_basis + g->dims[1];
 
     if (g->pitch < 0) {
-      pen_y = pen_y_basis + (g->height - (int)g->pos_y);
+      pen_y = pen_y_basis + (g->dims[1] - g->pos[1]);
     }
     else {
-      pen_y = pen_y_basis - (g->height - (int)g->pos_y);
+      pen_y = pen_y_basis - (g->dims[1] - g->pos[1]);
     }
 
-    if ((chx + g->width) >= 0 && chx < buf_info->w && (pen_y + g->height) >= 0 &&
-        pen_y < buf_info->h) {
+    if ((chx + g->dims[0]) >= 0 && chx < buf_info->dims[0] && (pen_y + g->dims[1]) >= 0 &&
+        pen_y < buf_info->dims[1]) {
       /* don't draw beyond the buffer bounds */
-      int width_clip = g->width;
-      int height_clip = g->height;
-      int yb_start = g->pitch < 0 ? 0 : g->height - 1;
+      int width_clip = g->dims[0];
+      int height_clip = g->dims[1];
+      int yb_start = g->pitch < 0 ? 0 : g->dims[1] - 1;
 
-      if (width_clip + chx > buf_info->w) {
-        width_clip -= chx + width_clip - buf_info->w;
+      if (width_clip + chx > buf_info->dims[0]) {
+        width_clip -= chx + width_clip - buf_info->dims[0];
       }
-      if (height_clip + pen_y > buf_info->h) {
-        height_clip -= pen_y + height_clip - buf_info->h;
+      if (height_clip + pen_y > buf_info->dims[1]) {
+        height_clip -= pen_y + height_clip - buf_info->dims[1];
       }
 
       /* drawing below the image? */
@@ -600,7 +652,7 @@ static void blf_font_draw_buffer_ex(FontBLF *font,
             if (a_byte) {
               const float a = (a_byte / 255.0f) * b_col_float[3];
               const size_t buf_ofs = (((size_t)(chx + x) +
-                                       ((size_t)(pen_y + y) * (size_t)buf_info->w)) *
+                                       ((size_t)(pen_y + y) * (size_t)buf_info->dims[0])) *
                                       (size_t)buf_info->ch);
               float *fbuf = buf_info->fbuf + buf_ofs;
 
@@ -637,7 +689,7 @@ static void blf_font_draw_buffer_ex(FontBLF *font,
             if (a_byte) {
               const float a = (a_byte / 255.0f) * b_col_float[3];
               const size_t buf_ofs = (((size_t)(chx + x) +
-                                       ((size_t)(pen_y + y) * (size_t)buf_info->w)) *
+                                       ((size_t)(pen_y + y) * (size_t)buf_info->dims[0])) *
                                       (size_t)buf_info->ch);
               unsigned char *cbuf = buf_info->cbuf + buf_ofs;
 
@@ -1149,6 +1201,84 @@ float blf_font_fixed_width(FontBLF *font)
   return g->advance;
 }
 
+/* -------------------------------------------------------------------- */
+/** \name Glyph Bound Box with Callback
+ * \{ */
+
+static void blf_font_boundbox_foreach_glyph_ex(FontBLF *font,
+                                               GlyphCacheBLF *gc,
+                                               const char *str,
+                                               size_t len,
+                                               BLF_GlyphBoundsFn user_fn,
+                                               void *user_data,
+                                               struct ResultBLF *r_info,
+                                               int pen_y)
+{
+  unsigned int c, c_prev = BLI_UTF8_ERR;
+  GlyphBLF *g, *g_prev = NULL;
+  int pen_x = 0;
+  size_t i = 0, i_curr;
+  rcti gbox;
+
+  if (len == 0) {
+    /* early output. */
+    return;
+  }
+
+  GlyphBLF **glyph_ascii_table = blf_font_ensure_ascii_table(font, gc);
+
+  BLF_KERNING_VARS(font, has_kerning, kern_mode);
+
+  blf_font_ensure_ascii_kerning(font, gc, kern_mode);
+
+  while ((i < len) && str[i]) {
+    i_curr = i;
+    BLF_UTF8_NEXT_FAST(font, gc, g, str, i, c, glyph_ascii_table);
+
+    if (UNLIKELY(c == BLI_UTF8_ERR)) {
+      break;
+    }
+    if (UNLIKELY(g == NULL)) {
+      continue;
+    }
+    if (has_kerning) {
+      BLF_KERNING_STEP_FAST(font, kern_mode, g_prev, g, c_prev, c, pen_x);
+    }
+
+    gbox.xmin = pen_x;
+    gbox.xmax = gbox.xmin + MIN2(g->advance_i, g->dims[0]);
+    gbox.ymin = pen_y;
+    gbox.ymax = gbox.ymin - g->dims[1];
+
+    pen_x += g->advance_i;
+
+    if (user_fn(str, i_curr, &gbox, g->advance_i, &g->box, g->pos, user_data) == false) {
+      break;
+    }
+
+    g_prev = g;
+    c_prev = c;
+  }
+
+  if (r_info) {
+    r_info->lines = 1;
+    r_info->width = pen_x;
+  }
+}
+void blf_font_boundbox_foreach_glyph(FontBLF *font,
+                                     const char *str,
+                                     size_t len,
+                                     BLF_GlyphBoundsFn user_fn,
+                                     void *user_data,
+                                     struct ResultBLF *r_info)
+{
+  GlyphCacheBLF *gc = blf_glyph_cache_acquire(font);
+  blf_font_boundbox_foreach_glyph_ex(font, gc, str, len, user_fn, user_data, r_info, 0);
+  blf_glyph_cache_release(font);
+}
+
+/** \} */
+
 int blf_font_count_missing_chars(FontBLF *font,
                                  const char *str,
                                  const size_t len,
@@ -1235,8 +1365,8 @@ static void blf_font_fill(FontBLF *font)
 
   font->buf_info.fbuf = NULL;
   font->buf_info.cbuf = NULL;
-  font->buf_info.w = 0;
-  font->buf_info.h = 0;
+  font->buf_info.dims[0] = 0;
+  font->buf_info.dims[1] = 0;
   font->buf_info.ch = 0;
   font->buf_info.col_init[0] = 0;
   font->buf_info.col_init[1] = 0;

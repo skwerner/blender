@@ -29,33 +29,31 @@
 // iTaSC headers
 #ifdef WITH_IK_ITASC
 #  include "Armature.hpp"
-#  include "MovingFrame.hpp"
-#  include "CopyPose.hpp"
-#  include "WSDLSSolver.hpp"
-#  include "WDLSSolver.hpp"
-#  include "Scene.hpp"
 #  include "Cache.hpp"
+#  include "CopyPose.hpp"
 #  include "Distance.hpp"
+#  include "MovingFrame.hpp"
+#  include "Scene.hpp"
+#  include "WDLSSolver.hpp"
+#  include "WSDLSSolver.hpp"
 #endif
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include "BIK_api.h"
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_global.h"
-#include "BKE_armature.h"
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_constraint.h"
-#include "DNA_object_types.h"
+#include "BKE_global.h"
 #include "DNA_action_types.h"
-#include "DNA_constraint_types.h"
 #include "DNA_armature_types.h"
+#include "DNA_constraint_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-};
 
 #include "itasc_plugin.h"
 

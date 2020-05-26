@@ -21,23 +21,23 @@
  * \ingroup bke
  */
 
-#include <string.h>
 #include <math.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "DNA_object_force_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_rand.h"
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
 #include "BLI_kdtree.h"
+#include "BLI_math.h"
+#include "BLI_rand.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_boids.h"
 #include "BKE_collision.h"
 #include "BKE_effect.h"
-#include "BKE_boids.h"
 #include "BKE_particle.h"
 
 #include "BKE_modifier.h"
@@ -861,7 +861,7 @@ static Object *boid_find_ground(BoidBrainData *bbd,
     SurfaceModifierData *surmd = NULL;
     float x[3], v[3];
 
-    surmd = (SurfaceModifierData *)modifiers_findByType(bpa->ground, eModifierType_Surface);
+    surmd = (SurfaceModifierData *)BKE_modifiers_findby_type(bpa->ground, eModifierType_Surface);
 
     /* take surface velocity into account */
     closest_point_on_surface(surmd, pa->state.co, x, NULL, v);

@@ -21,6 +21,8 @@
  * \ingroup bmesh
  */
 
+#include "bmesh_class.h"
+
 struct BMAllocTemplate;
 struct BMLoopNorEditDataArray;
 struct MLoopNorSpaceArray;
@@ -70,7 +72,6 @@ void BM_lnorspace_err(BMesh *bm);
 struct BMLoopNorEditDataArray *BM_loop_normal_editdata_array_init(BMesh *bm,
                                                                   const bool do_all_loops_of_vert);
 void BM_loop_normal_editdata_array_free(struct BMLoopNorEditDataArray *lnors_ed_arr);
-int BM_total_loop_select(BMesh *bm);
 
 void BM_edges_sharp_from_angle_set(BMesh *bm, const float split_angle);
 
@@ -158,5 +159,13 @@ extern const BMAllocTemplate bm_mesh_chunksize_default;
   }
 #define BMALLOC_TEMPLATE_FROM_ME(...) \
   VA_NARGS_CALL_OVERLOAD(_VA_BMALLOC_TEMPLATE_FROM_ME_, __VA_ARGS__)
+
+/* Vertex coords access. */
+void BM_mesh_vert_coords_get(BMesh *bm, float (*orco)[3]);
+float (*BM_mesh_vert_coords_alloc(BMesh *bm, int *r_vert_len))[3];
+void BM_mesh_vert_coords_apply(BMesh *bm, const float (*orco)[3]);
+void BM_mesh_vert_coords_apply_with_mat4(BMesh *bm,
+                                         const float (*vert_coords)[3],
+                                         const float mat[4][4]);
 
 #endif /* __BMESH_MESH_H__ */

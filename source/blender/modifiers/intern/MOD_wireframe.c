@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -61,7 +61,7 @@ static Mesh *WireframeModifier_do(WireframeModifierData *wmd, Object *ob, Mesh *
   Mesh *result;
   BMesh *bm;
 
-  const int defgrp_index = defgroup_name_index(ob, wmd->defgrp_name);
+  const int defgrp_index = BKE_object_defgroup_name_index(ob, wmd->defgrp_name);
 
   bm = BKE_mesh_to_bmesh_ex(mesh,
                             &(struct BMeshCreateParams){0},
@@ -99,9 +99,7 @@ static Mesh *WireframeModifier_do(WireframeModifierData *wmd, Object *ob, Mesh *
   return result;
 }
 
-static Mesh *applyModifier(ModifierData *md,
-                           const struct ModifierEvalContext *ctx,
-                           struct Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const struct ModifierEvalContext *ctx, struct Mesh *mesh)
 {
   return WireframeModifier_do((WireframeModifierData *)md, ctx->object, mesh);
 }
@@ -113,13 +111,16 @@ ModifierTypeInfo modifierType_Wireframe = {
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

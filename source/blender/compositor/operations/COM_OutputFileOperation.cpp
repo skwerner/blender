@@ -30,13 +30,11 @@
 #include "BKE_scene.h"
 
 #include "DNA_color_types.h"
-
-extern "C" {
 #include "MEM_guardedalloc.h"
-#include "IMB_imbuf.h"
+
 #include "IMB_colormanagement.h"
+#include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
 void add_exr_channels(void *exrhandle,
                       const char *layerName,

@@ -22,9 +22,10 @@
 
 #include "draw_manager.h"
 
-#include "BKE_anim.h"
 #include "BKE_curve.h"
+#include "BKE_duplilist.h"
 #include "BKE_global.h"
+#include "BKE_image.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
 #include "BKE_paint.h"
@@ -37,14 +38,16 @@
 #include "BLI_alloca.h"
 #include "BLI_hash.h"
 #include "BLI_link_utils.h"
-#include "BLI_mempool.h"
+#include "BLI_listbase.h"
 #include "BLI_memblock.h"
+#include "BLI_mempool.h"
 
 #ifdef DRW_DEBUG_CULLING
 #  include "BLI_math_bits.h"
 #endif
 
 #include "GPU_buffers.h"
+#include "GPU_material.h"
 
 #include "intern/gpu_codegen.h"
 
@@ -506,8 +509,14 @@ static void drw_call_obinfos_init(DRWObjectInfos *ob_infos, Object *ob)
                      * put it in ob->runtime and make depsgraph ensure it is up to date. */
                     BLI_hash_int_2d(BLI_hash_string(ob->id.name + 2), 0);
   ob_infos->ob_random = random * (1.0f / (float)0xFFFFFFFF);
-  /* Negative scalling. */
-  ob_infos->ob_neg_scale = (ob->transflag & OB_NEG_SCALE) ? -1.0f : 1.0f;
+  /* Object State. */
+  ob_infos->ob_flag = 1.0f; /* Required to have a correct sign */
+  ob_infos->ob_flag += (ob->base_flag & BASE_SELECTED) ? (1 << 1) : 0;
+  ob_infos->ob_flag += (ob->base_flag & BASE_FROM_DUPLI) ? (1 << 2) : 0;
+  ob_infos->ob_flag += (ob->base_flag & BASE_FROM_SET) ? (1 << 3) : 0;
+  ob_infos->ob_flag += (ob == DST.draw_ctx.obact) ? (1 << 4) : 0;
+  /* Negative scaling. */
+  ob_infos->ob_flag *= (ob->transflag & OB_NEG_SCALE) ? -1.0f : 1.0f;
   /* Object Color. */
   copy_v4_v4(ob_infos->ob_color, ob->color);
 }
@@ -551,6 +560,16 @@ static DRWResourceHandle drw_resource_handle_new(float (*obmat)[4], Object *ob)
   drw_call_culling_init(culling, ob);
   /* ob_infos is init only if needed. */
 
+  return handle;
+}
+
+uint32_t DRW_object_resource_id_get(Object *UNUSED(ob))
+{
+  DRWResourceHandle handle = DST.ob_handle;
+  if (handle == 0) {
+    /* Handle not yet allocated. Return next handle. */
+    handle = DST.resource_handle;
+  }
   return handle;
 }
 
@@ -629,25 +648,33 @@ static void drw_command_draw(DRWShadingGroup *shgroup, GPUBatch *batch, DRWResou
   cmd->handle = handle;
 }
 
-static void drw_command_draw_range(DRWShadingGroup *shgroup,
-                                   GPUBatch *batch,
-                                   uint start,
-                                   uint count)
+static void drw_command_draw_range(
+    DRWShadingGroup *shgroup, GPUBatch *batch, DRWResourceHandle handle, uint start, uint count)
 {
   DRWCommandDrawRange *cmd = drw_command_create(shgroup, DRW_CMD_DRAW_RANGE);
   cmd->batch = batch;
+  cmd->handle = handle;
   cmd->vert_first = start;
   cmd->vert_count = count;
 }
 
-static void drw_command_draw_instance(DRWShadingGroup *shgroup,
-                                      GPUBatch *batch,
-                                      DRWResourceHandle handle,
-                                      uint count)
+static void drw_command_draw_instance(
+    DRWShadingGroup *shgroup, GPUBatch *batch, DRWResourceHandle handle, uint count, bool use_attr)
 {
   DRWCommandDrawInstance *cmd = drw_command_create(shgroup, DRW_CMD_DRAW_INSTANCE);
   cmd->batch = batch;
   cmd->handle = handle;
+  cmd->inst_count = count;
+  cmd->use_attrs = use_attr;
+}
+
+static void drw_command_draw_intance_range(
+    DRWShadingGroup *shgroup, GPUBatch *batch, DRWResourceHandle handle, uint start, uint count)
+{
+  DRWCommandDrawInstanceRange *cmd = drw_command_create(shgroup, DRW_CMD_DRAW_INSTANCE_RANGE);
+  cmd->batch = batch;
+  cmd->handle = handle;
+  cmd->inst_first = start;
   cmd->inst_count = count;
 }
 
@@ -671,11 +698,18 @@ static void drw_command_set_select_id(DRWShadingGroup *shgroup, GPUVertBuf *buf,
   cmd->select_id = select_id;
 }
 
-static void drw_command_set_stencil_mask(DRWShadingGroup *shgroup, uint mask)
+static void drw_command_set_stencil_mask(DRWShadingGroup *shgroup,
+                                         uint write_mask,
+                                         uint reference,
+                                         uint compare_mask)
 {
-  BLI_assert(mask <= 0xFF);
+  BLI_assert(write_mask <= 0xFF);
+  BLI_assert(reference <= 0xFF);
+  BLI_assert(compare_mask <= 0xFF);
   DRWCommandSetStencil *cmd = drw_command_create(shgroup, DRW_CMD_STENCIL);
-  cmd->mask = mask;
+  cmd->write_mask = write_mask;
+  cmd->comp_mask = compare_mask;
+  cmd->ref = reference;
 }
 
 static void drw_command_clear(DRWShadingGroup *shgroup,
@@ -736,13 +770,27 @@ void DRW_shgroup_call_ex(DRWShadingGroup *shgroup,
   }
 }
 
-void DRW_shgroup_call_range(DRWShadingGroup *shgroup, struct GPUBatch *geom, uint v_sta, uint v_ct)
+void DRW_shgroup_call_range(
+    DRWShadingGroup *shgroup, struct Object *ob, GPUBatch *geom, uint v_sta, uint v_ct)
 {
   BLI_assert(geom != NULL);
   if (G.f & G_FLAG_PICKSEL) {
     drw_command_set_select_id(shgroup, NULL, DST.select_id);
   }
-  drw_command_draw_range(shgroup, geom, v_sta, v_ct);
+  DRWResourceHandle handle = drw_resource_handle(shgroup, ob ? ob->obmat : NULL, ob);
+  drw_command_draw_range(shgroup, geom, handle, v_sta, v_ct);
+}
+
+void DRW_shgroup_call_instance_range(
+    DRWShadingGroup *shgroup, Object *ob, struct GPUBatch *geom, uint i_sta, uint i_ct)
+{
+  BLI_assert(i_ct > 0);
+  BLI_assert(geom != NULL);
+  if (G.f & G_FLAG_PICKSEL) {
+    drw_command_set_select_id(shgroup, NULL, DST.select_id);
+  }
+  DRWResourceHandle handle = drw_resource_handle(shgroup, ob ? ob->obmat : NULL, ob);
+  drw_command_draw_intance_range(shgroup, geom, handle, i_sta, i_ct);
 }
 
 static void drw_shgroup_call_procedural_add_ex(DRWShadingGroup *shgroup,
@@ -788,32 +836,33 @@ void DRW_shgroup_call_instances(DRWShadingGroup *shgroup,
     drw_command_set_select_id(shgroup, NULL, DST.select_id);
   }
   DRWResourceHandle handle = drw_resource_handle(shgroup, ob ? ob->obmat : NULL, ob);
-  drw_command_draw_instance(shgroup, geom, handle, count);
+  drw_command_draw_instance(shgroup, geom, handle, count, false);
 }
 
-void DRW_shgroup_call_instances_with_attribs(DRWShadingGroup *shgroup,
-                                             Object *ob,
-                                             struct GPUBatch *geom,
-                                             struct GPUBatch *inst_attributes)
+void DRW_shgroup_call_instances_with_attrs(DRWShadingGroup *shgroup,
+                                           Object *ob,
+                                           struct GPUBatch *geom,
+                                           struct GPUBatch *inst_attributes)
 {
   BLI_assert(geom != NULL);
-  BLI_assert(inst_attributes->verts[0] != NULL);
+  BLI_assert(inst_attributes != NULL);
   if (G.f & G_FLAG_PICKSEL) {
     drw_command_set_select_id(shgroup, NULL, DST.select_id);
   }
   DRWResourceHandle handle = drw_resource_handle(shgroup, ob ? ob->obmat : NULL, ob);
-  GPUVertBuf *buf_inst = inst_attributes->verts[0];
-  GPUBatch *batch = DRW_temp_batch_instance_request(DST.idatalist, buf_inst, geom);
-  drw_command_draw(shgroup, batch, handle);
+  GPUBatch *batch = DRW_temp_batch_instance_request(DST.idatalist, NULL, inst_attributes, geom);
+  drw_command_draw_instance(shgroup, batch, handle, 0, true);
 }
 
 #define SCULPT_DEBUG_BUFFERS (G.debug_value == 889)
 typedef struct DRWSculptCallbackData {
   Object *ob;
   DRWShadingGroup **shading_groups;
+  int num_shading_groups;
   bool use_wire;
   bool use_mats;
   bool use_mask;
+  bool use_fsets;
   bool fast_mode; /* Set by draw manager. Do not init. */
 
   int debug_node_nr;
@@ -834,8 +883,12 @@ static float sculpt_debug_colors[9][4] = {
 
 static void sculpt_draw_cb(DRWSculptCallbackData *scd, GPU_PBVH_Buffers *buffers)
 {
+  if (!buffers) {
+    return;
+  }
+
   /* Meh... use_mask is a bit misleading here. */
-  if (scd->use_mask && !GPU_pbvh_buffers_has_mask(buffers)) {
+  if (scd->use_mask && !GPU_pbvh_buffers_has_overlays(buffers)) {
     return;
   }
 
@@ -844,6 +897,9 @@ static void sculpt_draw_cb(DRWSculptCallbackData *scd, GPU_PBVH_Buffers *buffers
 
   if (scd->use_mats) {
     index = GPU_pbvh_buffers_material_index_get(buffers);
+    if (index >= scd->num_shading_groups) {
+      index = 0;
+    }
   }
 
   DRWShadingGroup *shgrp = scd->shading_groups[index];
@@ -898,7 +954,7 @@ static void drw_sculpt_get_frustum_planes(Object *ob, float planes[6][4])
   }
 }
 
-static void drw_sculpt_generate_calls(DRWSculptCallbackData *scd, bool use_vcol)
+static void drw_sculpt_generate_calls(DRWSculptCallbackData *scd)
 {
   /* PBVH should always exist for non-empty meshes, created by depsgrah eval. */
   PBVH *pbvh = (scd->ob->sculpt) ? scd->ob->sculpt->pbvh : NULL;
@@ -908,32 +964,60 @@ static void drw_sculpt_generate_calls(DRWSculptCallbackData *scd, bool use_vcol)
 
   const DRWContextState *drwctx = DRW_context_state_get();
   RegionView3D *rv3d = drwctx->rv3d;
+  const bool navigating = rv3d && (rv3d->rflag & RV3D_NAVIGATING);
+
+  Paint *p = NULL;
+  if (drwctx->evil_C != NULL) {
+    p = BKE_paint_get_active_from_context(drwctx->evil_C);
+  }
 
   /* Frustum planes to show only visible PBVH nodes. */
-  float planes[6][4];
-  drw_sculpt_get_frustum_planes(scd->ob, planes);
-  PBVHFrustumPlanes frustum = {.planes = planes, .num_planes = 6};
+  float update_planes[6][4];
+  float draw_planes[6][4];
+  PBVHFrustumPlanes update_frustum;
+  PBVHFrustumPlanes draw_frustum;
+
+  if (p && (p->flags & PAINT_SCULPT_DELAY_UPDATES)) {
+    update_frustum.planes = update_planes;
+    update_frustum.num_planes = 6;
+    BKE_pbvh_get_frustum_planes(pbvh, &update_frustum);
+    if (!navigating) {
+      drw_sculpt_get_frustum_planes(scd->ob, update_planes);
+      update_frustum.planes = update_planes;
+      update_frustum.num_planes = 6;
+      BKE_pbvh_set_frustum_planes(pbvh, &update_frustum);
+    }
+  }
+  else {
+    drw_sculpt_get_frustum_planes(scd->ob, update_planes);
+    update_frustum.planes = update_planes;
+    update_frustum.num_planes = 6;
+  }
+
+  drw_sculpt_get_frustum_planes(scd->ob, draw_planes);
+  draw_frustum.planes = draw_planes;
+  draw_frustum.num_planes = 6;
 
   /* Fast mode to show low poly multires while navigating. */
   scd->fast_mode = false;
-  if (drwctx->evil_C != NULL) {
-    Paint *p = BKE_paint_get_active_from_context(drwctx->evil_C);
-    if (p && (p->flags & PAINT_FAST_NAVIGATE)) {
-      scd->fast_mode = rv3d && (rv3d->rflag & RV3D_NAVIGATING);
-    }
+  if (p && (p->flags & PAINT_FAST_NAVIGATE)) {
+    scd->fast_mode = rv3d && (rv3d->rflag & RV3D_NAVIGATING);
   }
 
   /* Update draw buffers only for visible nodes while painting.
    * But do update them otherwise so navigating stays smooth. */
-  const bool update_only_visible = rv3d && (rv3d->rflag & RV3D_PAINTING);
+  bool update_only_visible = rv3d && !(rv3d->rflag & RV3D_PAINTING);
+  if (p && (p->flags & PAINT_SCULPT_DELAY_UPDATES)) {
+    update_only_visible = true;
+  }
 
   Mesh *mesh = scd->ob->data;
   BKE_pbvh_update_normals(pbvh, mesh->runtime.subdiv_ccg);
 
   BKE_pbvh_draw_cb(pbvh,
-                   use_vcol,
                    update_only_visible,
-                   &frustum,
+                   &update_frustum,
+                   &draw_frustum,
                    (void (*)(void *, GPU_PBVH_Buffers *))sculpt_draw_cb,
                    scd);
 
@@ -948,29 +1032,32 @@ static void drw_sculpt_generate_calls(DRWSculptCallbackData *scd, bool use_vcol)
   }
 }
 
-void DRW_shgroup_call_sculpt(
-    DRWShadingGroup *shgroup, Object *ob, bool use_wire, bool use_mask, bool use_vcol)
+void DRW_shgroup_call_sculpt(DRWShadingGroup *shgroup, Object *ob, bool use_wire, bool use_mask)
 {
   DRWSculptCallbackData scd = {
       .ob = ob,
       .shading_groups = &shgroup,
+      .num_shading_groups = 1,
       .use_wire = use_wire,
       .use_mats = false,
       .use_mask = use_mask,
   };
-  drw_sculpt_generate_calls(&scd, use_vcol);
+  drw_sculpt_generate_calls(&scd);
 }
 
-void DRW_shgroup_call_sculpt_with_materials(DRWShadingGroup **shgroups, Object *ob, bool use_vcol)
+void DRW_shgroup_call_sculpt_with_materials(DRWShadingGroup **shgroups,
+                                            int num_shgroups,
+                                            Object *ob)
 {
   DRWSculptCallbackData scd = {
       .ob = ob,
       .shading_groups = shgroups,
+      .num_shading_groups = num_shgroups,
       .use_wire = false,
       .use_mats = true,
       .use_mask = false,
   };
-  drw_sculpt_generate_calls(&scd, use_vcol);
+  drw_sculpt_generate_calls(&scd);
 }
 
 static GPUVertFormat inst_select_format = {0};
@@ -1027,10 +1114,31 @@ DRWCallBuffer *DRW_shgroup_call_buffer_instance(DRWShadingGroup *shgroup,
   }
 
   DRWResourceHandle handle = drw_resource_handle(shgroup, NULL, NULL);
-  GPUBatch *batch = DRW_temp_batch_instance_request(DST.idatalist, callbuf->buf, geom);
+  GPUBatch *batch = DRW_temp_batch_instance_request(DST.idatalist, callbuf->buf, NULL, geom);
   drw_command_draw(shgroup, batch, handle);
 
   return callbuf;
+}
+
+void DRW_buffer_add_entry_struct(DRWCallBuffer *callbuf, const void *data)
+{
+  GPUVertBuf *buf = callbuf->buf;
+  const bool resize = (callbuf->count == buf->vertex_alloc);
+
+  if (UNLIKELY(resize)) {
+    GPU_vertbuf_data_resize(buf, callbuf->count + DRW_BUFFER_VERTS_CHUNK);
+  }
+
+  GPU_vertbuf_vert_set(buf, callbuf->count, data);
+
+  if (G.f & G_FLAG_PICKSEL) {
+    if (UNLIKELY(resize)) {
+      GPU_vertbuf_data_resize(callbuf->buf_select, callbuf->count + DRW_BUFFER_VERTS_CHUNK);
+    }
+    GPU_vertbuf_attr_set(callbuf->buf_select, 0, callbuf->count, &DST.select_id);
+  }
+
+  callbuf->count++;
 }
 
 void DRW_buffer_add_entry_array(DRWCallBuffer *callbuf, const void *attr[], uint attr_len)
@@ -1075,10 +1183,16 @@ static void drw_shgroup_init(DRWShadingGroup *shgroup, GPUShader *shader)
   int info_ubo_location = GPU_shader_get_uniform_block(shader, "infoBlock");
   int baseinst_location = GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_BASE_INSTANCE);
   int chunkid_location = GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_RESOURCE_CHUNK);
+  int resourceid_location = GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_RESOURCE_ID);
 
   if (chunkid_location != -1) {
     drw_shgroup_uniform_create_ex(
         shgroup, chunkid_location, DRW_UNIFORM_RESOURCE_CHUNK, NULL, 0, 1);
+  }
+
+  if (resourceid_location != -1) {
+    drw_shgroup_uniform_create_ex(
+        shgroup, resourceid_location, DRW_UNIFORM_RESOURCE_ID, NULL, 0, 1);
   }
 
   if (baseinst_location != -1) {
@@ -1173,32 +1287,39 @@ static DRWShadingGroup *drw_shgroup_material_create_ex(GPUPass *gpupass, DRWPass
   return grp;
 }
 
+static void drw_shgroup_material_texture(DRWShadingGroup *grp,
+                                         GPUMaterialTexture *tex,
+                                         const char *name,
+                                         int textarget)
+{
+  GPUTexture *gputex = GPU_texture_from_blender(tex->ima, tex->iuser, NULL, textarget);
+  DRW_shgroup_uniform_texture(grp, name, gputex);
+
+  GPUTexture **gputex_ref = BLI_memblock_alloc(DST.vmempool->images);
+  *gputex_ref = gputex;
+  GPU_texture_ref(gputex);
+}
+
 static DRWShadingGroup *drw_shgroup_material_inputs(DRWShadingGroup *grp,
                                                     struct GPUMaterial *material)
 {
-  ListBase *inputs = GPU_material_get_inputs(material);
+  ListBase textures = GPU_material_textures(material);
 
-  /* Converting dynamic GPUInput to DRWUniform */
-  for (GPUInput *input = inputs->first; input; input = input->next) {
-    /* Textures */
-    if (input->source == GPU_SOURCE_TEX) {
-      GPUTexture *tex = NULL;
-
-      if (input->ima) {
-        GPUTexture **tex_ref = BLI_memblock_alloc(DST.vmempool->images);
-
-        *tex_ref = tex = GPU_texture_from_blender(input->ima, input->iuser, GL_TEXTURE_2D);
-
-        GPU_texture_ref(tex);
+  /* Bind all textures needed by the material. */
+  LISTBASE_FOREACH (GPUMaterialTexture *, tex, &textures) {
+    if (tex->ima) {
+      /* Image */
+      if (tex->tiled_mapping_name[0]) {
+        drw_shgroup_material_texture(grp, tex, tex->sampler_name, GL_TEXTURE_2D_ARRAY);
+        drw_shgroup_material_texture(grp, tex, tex->tiled_mapping_name, GL_TEXTURE_1D_ARRAY);
       }
       else {
-        /* Color Ramps */
-        tex = *input->coba;
+        drw_shgroup_material_texture(grp, tex, tex->sampler_name, GL_TEXTURE_2D);
       }
-
-      if (input->bindtex) {
-        drw_shgroup_uniform_create_ex(grp, input->shaderloc, DRW_UNIFORM_TEXTURE, tex, 0, 1);
-      }
+    }
+    else if (tex->colorband) {
+      /* Color Ramp */
+      DRW_shgroup_uniform_texture(grp, tex->sampler_name, *tex->colorband);
     }
   }
 
@@ -1269,9 +1390,18 @@ void DRW_shgroup_state_disable(DRWShadingGroup *shgroup, DRWState state)
   drw_command_set_mutable_state(shgroup, 0x0, state);
 }
 
+void DRW_shgroup_stencil_set(DRWShadingGroup *shgroup,
+                             uint write_mask,
+                             uint reference,
+                             uint compare_mask)
+{
+  drw_command_set_stencil_mask(shgroup, write_mask, reference, compare_mask);
+}
+
+/* TODO remove this function. */
 void DRW_shgroup_stencil_mask(DRWShadingGroup *shgroup, uint mask)
 {
-  drw_command_set_stencil_mask(shgroup, mask);
+  drw_command_set_stencil_mask(shgroup, 0xFF, mask, 0xFF);
 }
 
 void DRW_shgroup_clear_framebuffer(DRWShadingGroup *shgroup,
@@ -1379,53 +1509,19 @@ static void draw_frustum_boundbox_calc(const float (*viewinv)[4],
   }
 }
 
-static void draw_frustum_culling_planes_calc(const BoundBox *bbox, float (*frustum_planes)[4])
+static void draw_frustum_culling_planes_calc(const float (*persmat)[4], float (*frustum_planes)[4])
 {
-  /* TODO See if planes_from_projmat cannot do the job. */
+  planes_from_projmat(persmat,
+                      frustum_planes[0],
+                      frustum_planes[5],
+                      frustum_planes[3],
+                      frustum_planes[1],
+                      frustum_planes[4],
+                      frustum_planes[2]);
 
-  /* Compute clip planes using the world space frustum corners. */
+  /* Normalize. */
   for (int p = 0; p < 6; p++) {
-    int q, r, s;
-    switch (p) {
-      case 0:
-        q = 1;
-        r = 2;
-        s = 3;
-        break; /* -X */
-      case 1:
-        q = 0;
-        r = 4;
-        s = 5;
-        break; /* -Y */
-      case 2:
-        q = 1;
-        r = 5;
-        s = 6;
-        break; /* +Z (far) */
-      case 3:
-        q = 2;
-        r = 6;
-        s = 7;
-        break; /* +Y */
-      case 4:
-        q = 0;
-        r = 3;
-        s = 7;
-        break; /* -Z (near) */
-      default:
-        q = 4;
-        r = 7;
-        s = 6;
-        break; /* +X */
-    }
-
-    normal_quad_v3(frustum_planes[p], bbox->vec[p], bbox->vec[q], bbox->vec[r], bbox->vec[s]);
-    /* Increase precision and use the mean of all 4 corners. */
-    frustum_planes[p][3] = -dot_v3v3(frustum_planes[p], bbox->vec[p]);
-    frustum_planes[p][3] += -dot_v3v3(frustum_planes[p], bbox->vec[q]);
-    frustum_planes[p][3] += -dot_v3v3(frustum_planes[p], bbox->vec[r]);
-    frustum_planes[p][3] += -dot_v3v3(frustum_planes[p], bbox->vec[s]);
-    frustum_planes[p][3] *= 0.25f;
+    frustum_planes[p][3] /= normalize_v3(frustum_planes[p]);
   }
 }
 
@@ -1546,13 +1642,6 @@ static void draw_view_matrix_state_update(DRWViewUboStorage *storage,
                                           const float viewmat[4][4],
                                           const float winmat[4][4])
 {
-  /* If only one the matrices is negative, then the
-   * polygon winding changes and we don't want that.
-   * By convention, the winmat is negative because
-   * looking through the -Z axis. So this inverse the
-   * changes the test for the winmat. */
-  BLI_assert(is_negative_m4(viewmat) == !is_negative_m4(winmat));
-
   copy_m4_m4(storage->viewmat, viewmat);
   invert_m4_m4(storage->viewinv, storage->viewmat);
 
@@ -1595,13 +1684,17 @@ DRWView *DRW_view_create_sub(const DRWView *parent_view,
                              const float viewmat[4][4],
                              const float winmat[4][4])
 {
-  BLI_assert(parent_view && parent_view->parent == NULL);
+  /* Search original parent. */
+  const DRWView *ori_view = parent_view;
+  while (ori_view->parent != NULL) {
+    ori_view = ori_view->parent;
+  }
 
   DRWView *view = BLI_memblock_alloc(DST.vmempool->views);
 
   /* Perform copy. */
-  *view = *parent_view;
-  view->parent = (DRWView *)parent_view;
+  *view = *ori_view;
+  view->parent = (DRWView *)ori_view;
 
   DRW_view_update_sub(view, viewmat, winmat);
 
@@ -1620,6 +1713,7 @@ void DRW_view_update_sub(DRWView *view, const float viewmat[4][4], const float w
   BLI_assert(view->parent != NULL);
 
   view->is_dirty = true;
+  view->is_inverted = (is_negative_m4(viewmat) == is_negative_m4(winmat));
 
   draw_view_matrix_state_update(&view->storage, viewmat, winmat);
 }
@@ -1637,6 +1731,7 @@ void DRW_view_update(DRWView *view,
   BLI_assert(view->parent == NULL);
 
   view->is_dirty = true;
+  view->is_inverted = (is_negative_m4(viewmat) == is_negative_m4(winmat));
 
   draw_view_matrix_state_update(&view->storage, viewmat, winmat);
 
@@ -1679,7 +1774,7 @@ void DRW_view_update(DRWView *view,
   }
 
   draw_frustum_boundbox_calc(viewinv, winmat, &view->frustum_corners);
-  draw_frustum_culling_planes_calc(&view->frustum_corners, view->frustum_planes);
+  draw_frustum_culling_planes_calc(view->storage.persmat, view->frustum_planes);
   draw_frustum_bound_sphere_calc(
       &view->frustum_corners, viewinv, winmat, wininv, &view->frustum_bsphere);
 
@@ -1814,7 +1909,7 @@ DRWPass *DRW_pass_create(const char *name, DRWState state)
 
 bool DRW_pass_is_empty(DRWPass *pass)
 {
-  for (DRWShadingGroup *shgroup = pass->shgroups.first; shgroup; shgroup = shgroup->next) {
+  LISTBASE_FOREACH (DRWShadingGroup *, shgroup, &pass->shgroups) {
     if (!DRW_shgroup_is_empty(shgroup)) {
       return false;
     }
@@ -1841,7 +1936,7 @@ void DRW_pass_foreach_shgroup(DRWPass *pass,
                               void (*callback)(void *userData, DRWShadingGroup *shgrp),
                               void *userData)
 {
-  for (DRWShadingGroup *shgroup = pass->shgroups.first; shgroup; shgroup = shgroup->next) {
+  LISTBASE_FOREACH (DRWShadingGroup *, shgroup, &pass->shgroups) {
     callback(userData, shgroup);
   }
 }
@@ -1905,7 +2000,10 @@ void DRW_pass_sort_shgroup_z(DRWPass *pass)
       }
     }
     /* To be sorted a shgroup needs to have at least one draw command.  */
-    BLI_assert(handle != 0);
+    /* FIXME(fclem) In some case, we can still have empty shading group to sort. However their
+     * final order is not well defined.
+     * (see T76730 & D7729). */
+    // BLI_assert(handle != 0);
 
     DRWObjectMatrix *obmats = DRW_memblock_elem_from_handle(DST.vmempool->obmats, &handle);
 
@@ -1927,6 +2025,16 @@ void DRW_pass_sort_shgroup_z(DRWPass *pass)
     last->pass_handle = pass->handle;
   }
   pass->shgroups.last = last;
+}
+
+/**
+ * Reverse Shading group submission order.
+ */
+void DRW_pass_sort_shgroup_reverse(DRWPass *pass)
+{
+  pass->shgroups.last = pass->shgroups.first;
+  /* WARNING: Assume that DRWShadingGroup->next is the first member. */
+  BLI_linklist_reverse((LinkNode **)&pass->shgroups.first);
 }
 
 /** \} */

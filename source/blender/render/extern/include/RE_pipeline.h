@@ -24,9 +24,9 @@
 #ifndef __RE_PIPELINE_H__
 #define __RE_PIPELINE_H__
 
+#include "DEG_depsgraph.h"
 #include "DNA_listBase.h"
 #include "DNA_vec_types.h"
-#include "DEG_depsgraph.h"
 
 struct Image;
 struct ImageFormatData;
@@ -39,6 +39,10 @@ struct Scene;
 struct StampData;
 struct ViewLayer;
 struct bMovieHandle;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 /* this include is what is exposed of render to outside world */
@@ -228,6 +232,13 @@ struct RenderPass *RE_create_gp_pass(struct RenderResult *rr,
                                      const char *layername,
                                      const char *viewname);
 
+void RE_create_render_pass(struct RenderResult *rr,
+                           const char *name,
+                           int channels,
+                           const char *chan_id,
+                           const char *layername,
+                           const char *viewname);
+
 /* obligatory initialize call, disprect is optional */
 void RE_InitState(struct Render *re,
                   struct Render *source,
@@ -246,9 +257,6 @@ void RE_SetOverrideCamera(struct Render *re, struct Object *camera);
 void RE_SetCamera(struct Render *re, struct Object *camera);
 void RE_SetWindow(struct Render *re, const rctf *viewplane, float clip_start, float clip_end);
 void RE_SetOrtho(struct Render *re, const rctf *viewplane, float clip_start, float clip_end);
-
-/* option to set viewmatrix before making dbase */
-void RE_SetView(struct Render *re, float mat[4][4]);
 
 /* get current view and window transform */
 void RE_GetViewPlane(struct Render *re, rctf *r_viewplane, rcti *r_disprect);
@@ -359,7 +367,7 @@ struct RenderPass *RE_pass_find_by_type(volatile struct RenderLayer *rl,
 #define RE_BAKE_DISPLACEMENT 1
 #define RE_BAKE_AO 2
 
-void RE_GetCameraWindow(struct Render *re, struct Object *camera, int frame, float mat[4][4]);
+void RE_GetCameraWindow(struct Render *re, struct Object *camera, float mat[4][4]);
 void RE_GetCameraWindowWithOverscan(struct Render *re, float mat[4][4], float overscan);
 void RE_GetCameraModelMatrix(struct Render *re, struct Object *camera, float r_mat[4][4]);
 struct Scene *RE_GetScene(struct Render *re);
@@ -381,5 +389,9 @@ struct RenderView *RE_RenderViewGetById(struct RenderResult *res, const int view
 struct RenderView *RE_RenderViewGetByName(struct RenderResult *res, const char *viewname);
 
 RenderResult *RE_DuplicateRenderResult(RenderResult *rr);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __RE_PIPELINE_H__ */

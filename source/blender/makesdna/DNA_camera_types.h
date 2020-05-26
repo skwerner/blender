@@ -24,11 +24,11 @@
 #ifndef __DNA_CAMERA_TYPES_H__
 #define __DNA_CAMERA_TYPES_H__
 
+#include "DNA_ID.h"
 #include "DNA_defs.h"
 #include "DNA_gpu_types.h"
-#include "DNA_movieclip_types.h"
 #include "DNA_image_types.h"
-#include "DNA_ID.h"
+#include "DNA_movieclip_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -156,7 +156,7 @@ enum {
   CAM_SHOWNAME = (1 << 4),
   CAM_ANGLETOGGLE = (1 << 5),
   CAM_DS_EXPAND = (1 << 6),
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   CAM_PANORAMA = (1 << 7), /* deprecated */
 #endif
   CAM_SHOWSENSOR = (1 << 8),

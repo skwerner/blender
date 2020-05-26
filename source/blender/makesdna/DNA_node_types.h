@@ -25,10 +25,10 @@
 #define __DNA_NODE_TYPES_H__
 
 #include "DNA_ID.h"
-#include "DNA_vec_types.h"
 #include "DNA_listBase.h"
-#include "DNA_texture_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_texture_types.h"
+#include "DNA_vec_types.h"
 
 struct AnimData;
 struct ID;
@@ -94,7 +94,8 @@ typedef struct bNodeSocket {
   void *storage;
 
   short type, flag;
-  /** Max. number of links. */
+  /** Max. number of links. Read via nodeSocketLinkLimit, because the limit might be defined on the
+   * socket type. */
   short limit;
   /** Input/output type. */
   short in_out;
@@ -115,6 +116,9 @@ typedef struct bNodeSocket {
   short stack_type DNA_DEPRECATED;
   char display_shape;
   char _pad[3];
+
+  /** Custom dynamic defined label, MAX_NAME. */
+  char label[64];
 
   /** Cached data from execution. */
   void *cache;
@@ -150,6 +154,12 @@ typedef enum eNodeSocketDatatype {
   __SOCK_MESH = 5, /* deprecated */
   SOCK_INT = 6,
   SOCK_STRING = 7,
+  SOCK_OBJECT = 8,
+  SOCK_IMAGE = 9,
+  SOCK_EMITTERS = 10,
+  SOCK_EVENTS = 11,
+  SOCK_FORCES = 12,
+  SOCK_CONTROL_FLOW = 13,
 } eNodeSocketDatatype;
 
 /* socket shape */
@@ -494,6 +504,7 @@ typedef struct bNodeTree {
 #define NTREE_SHADER 0
 #define NTREE_COMPOSIT 1
 #define NTREE_TEXTURE 2
+#define NTREE_SIMULATION 3
 
 /* ntree->init, flag */
 #define NTREE_TYPE_INIT 1
@@ -561,19 +572,20 @@ typedef struct bNodeSocketValueString {
   char value[1024];
 } bNodeSocketValueString;
 
+typedef struct bNodeSocketValueObject {
+  struct Object *value;
+} bNodeSocketValueObject;
+
+typedef struct bNodeSocketValueImage {
+  struct Image *value;
+} bNodeSocketValueImage;
+
 /* data structs, for node->storage */
 enum {
   CMP_NODE_MASKTYPE_ADD = 0,
   CMP_NODE_MASKTYPE_SUBTRACT = 1,
   CMP_NODE_MASKTYPE_MULTIPLY = 2,
   CMP_NODE_MASKTYPE_NOT = 3,
-};
-
-enum {
-  CMP_NODE_LENSFLARE_GHOST = (1 << 0),
-  CMP_NODE_LENSFLARE_GLOW = (1 << 1),
-  CMP_NODE_LENSFLARE_CIRCLE = (1 << 2),
-  CMP_NODE_LENSFLARE_STREAKS = (1 << 3),
 };
 
 enum {
@@ -893,6 +905,8 @@ typedef struct NodeTexMusgrave {
 typedef struct NodeTexWave {
   NodeTexBase base;
   int wave_type;
+  int bands_direction;
+  int rings_direction;
   int wave_profile;
 } NodeTexWave;
 
@@ -1009,6 +1023,10 @@ typedef struct NodeShaderTexIES {
   /** 1024 = FILE_MAX. */
   char filepath[1024];
 } NodeShaderTexIES;
+
+typedef struct NodeShaderOutputAOV {
+  char name[64];
+} NodeShaderOutputAOV;
 
 typedef struct NodeSunBeams {
   float source[2];
@@ -1132,8 +1150,25 @@ enum {
 #define SHD_WAVE_BANDS 0
 #define SHD_WAVE_RINGS 1
 
-#define SHD_WAVE_PROFILE_SIN 0
-#define SHD_WAVE_PROFILE_SAW 1
+enum {
+  SHD_WAVE_BANDS_DIRECTION_X = 0,
+  SHD_WAVE_BANDS_DIRECTION_Y = 1,
+  SHD_WAVE_BANDS_DIRECTION_Z = 2,
+  SHD_WAVE_BANDS_DIRECTION_DIAGONAL = 3,
+};
+
+enum {
+  SHD_WAVE_RINGS_DIRECTION_X = 0,
+  SHD_WAVE_RINGS_DIRECTION_Y = 1,
+  SHD_WAVE_RINGS_DIRECTION_Z = 2,
+  SHD_WAVE_RINGS_DIRECTION_SPHERICAL = 3,
+};
+
+enum {
+  SHD_WAVE_PROFILE_SIN = 0,
+  SHD_WAVE_PROFILE_SAW = 1,
+  SHD_WAVE_PROFILE_TRI = 2,
+};
 
 /* sky texture */
 #define SHD_SKY_OLD 0
@@ -1186,6 +1221,15 @@ enum {
   NODE_MAPPING_TYPE_NORMAL = 3,
 };
 
+/* Rotation node vector types */
+enum {
+  NODE_VECTOR_ROTATE_TYPE_AXIS = 0,
+  NODE_VECTOR_ROTATE_TYPE_AXIS_X = 1,
+  NODE_VECTOR_ROTATE_TYPE_AXIS_Y = 2,
+  NODE_VECTOR_ROTATE_TYPE_AXIS_Z = 3,
+  NODE_VECTOR_ROTATE_TYPE_EULER_XYZ = 4,
+};
+
 /* math node clamp */
 #define SHD_MATH_CLAMP 1
 
@@ -1215,6 +1259,22 @@ enum {
   NODE_MATH_CEIL = 21,
   NODE_MATH_FRACTION = 22,
   NODE_MATH_SQRT = 23,
+  NODE_MATH_INV_SQRT = 24,
+  NODE_MATH_SIGN = 25,
+  NODE_MATH_EXPONENT = 26,
+  NODE_MATH_RADIANS = 27,
+  NODE_MATH_DEGREES = 28,
+  NODE_MATH_SINH = 29,
+  NODE_MATH_COSH = 30,
+  NODE_MATH_TANH = 31,
+  NODE_MATH_TRUNC = 32,
+  NODE_MATH_SNAP = 33,
+  NODE_MATH_WRAP = 34,
+  NODE_MATH_COMPARE = 35,
+  NODE_MATH_MULTIPLY_ADD = 36,
+  NODE_MATH_PINGPONG = 37,
+  NODE_MATH_SMOOTH_MIN = 38,
+  NODE_MATH_SMOOTH_MAX = 39,
 };
 
 /* Vector Math node operations. */
@@ -1242,6 +1302,41 @@ enum {
   NODE_VECTOR_MATH_ABSOLUTE = 17,
   NODE_VECTOR_MATH_MINIMUM = 18,
   NODE_VECTOR_MATH_MAXIMUM = 19,
+  NODE_VECTOR_MATH_WRAP = 20,
+  NODE_VECTOR_MATH_SINE = 21,
+  NODE_VECTOR_MATH_COSINE = 22,
+  NODE_VECTOR_MATH_TANGENT = 23,
+};
+
+/* Boolean math node operations. */
+enum {
+  NODE_BOOLEAN_MATH_AND = 0,
+  NODE_BOOLEAN_MATH_OR = 1,
+  NODE_BOOLEAN_MATH_NOT = 2,
+};
+
+/* Float compare node operations. */
+enum {
+  NODE_FLOAT_COMPARE_LESS_THAN = 0,
+  NODE_FLOAT_COMPARE_LESS_EQUAL = 1,
+  NODE_FLOAT_COMPARE_GREATER_THAN = 2,
+  NODE_FLOAT_COMPARE_GREATER_EQUAL = 3,
+  NODE_FLOAT_COMPARE_EQUAL = 4,
+  NODE_FLOAT_COMPARE_NOT_EQUAL = 5,
+};
+
+/* Clamp node types. */
+enum {
+  NODE_CLAMP_MINMAX = 0,
+  NODE_CLAMP_RANGE = 1,
+};
+
+/* Map range node types. */
+enum {
+  NODE_MAP_RANGE_LINEAR = 0,
+  NODE_MAP_RANGE_STEPPED = 1,
+  NODE_MAP_RANGE_SMOOTHSTEP = 2,
+  NODE_MAP_RANGE_SMOOTHERSTEP = 3,
 };
 
 /* mix rgb node flags */
@@ -1250,7 +1345,7 @@ enum {
 
 /* subsurface */
 enum {
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   SHD_SUBSURFACE_COMPATIBLE = 0,  // Deprecated
 #endif
   SHD_SUBSURFACE_CUBIC = 1,
@@ -1321,5 +1416,17 @@ typedef enum NodeShaderOutputTarget {
   SHD_OUTPUT_EEVEE = 1,
   SHD_OUTPUT_CYCLES = 2,
 } NodeShaderOutputTarget;
+
+/* Particle Time Step Event node */
+typedef enum NodeSimParticleTimeStepEventType {
+  NODE_PARTICLE_TIME_STEP_EVENT_BEGIN = 0,
+  NODE_PARTICLE_TIME_STEP_EVENT_END = 1,
+} NodeSimParticleTimeStepEventType;
+
+/* Simulation Time node */
+typedef enum NodeSimInputTimeType {
+  NODE_SIM_INPUT_SIMULATION_TIME = 0,
+  NODE_SIM_INPUT_SCENE_TIME = 1,
+} NodeSimInputTimeType;
 
 #endif

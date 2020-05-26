@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2013 by the Blender Foundation.
@@ -34,7 +34,8 @@
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
+#include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_particle.h"
@@ -528,6 +529,7 @@ static void initSystem(
   MDeformVert *dvert = NULL;
   MDeformVert *dv = NULL;
   LaplacianSystem *sys;
+  const bool invert_vgroup = (lmd->flag & MOD_LAPLACIANDEFORM_INVERT_VGROUP) != 0;
 
   if (isValidVertexGroup(lmd, ob, mesh)) {
     int *index_anchors = MEM_malloc_arrayN(numVerts, sizeof(int), __func__); /* over-alloc */
@@ -542,7 +544,8 @@ static void initSystem(
     BLI_assert(dvert != NULL);
     dv = dvert;
     for (i = 0; i < numVerts; i++) {
-      wpaint = defvert_find_weight(dv, defgrp_index);
+      wpaint = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dv, defgrp_index) :
+                               BKE_defvert_find_weight(dv, defgrp_index);
       dv++;
       if (wpaint > 0.0f) {
         STACK_PUSH(index_anchors, i);
@@ -596,6 +599,7 @@ static int isSystemDifferent(LaplacianDeformModifierData *lmd,
   MDeformVert *dvert = NULL;
   MDeformVert *dv = NULL;
   LaplacianSystem *sys = (LaplacianSystem *)lmd->cache_system;
+  const bool invert_vgroup = (lmd->flag & MOD_LAPLACIANDEFORM_INVERT_VGROUP) != 0;
 
   if (sys->total_verts != numVerts) {
     return LAPDEFORM_SYSTEM_CHANGE_VERTEXES;
@@ -612,7 +616,8 @@ static int isSystemDifferent(LaplacianDeformModifierData *lmd,
   }
   dv = dvert;
   for (i = 0; i < numVerts; i++) {
-    wpaint = defvert_find_weight(dv, defgrp_index);
+    wpaint = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dv, defgrp_index) :
+                             BKE_defvert_find_weight(dv, defgrp_index);
     dv++;
     if (wpaint > 0.0f) {
       total_anchors++;
@@ -663,17 +668,17 @@ static void LaplacianDeformModifier_do(
       }
       else {
         if (sysdif == LAPDEFORM_SYSTEM_CHANGE_VERTEXES) {
-          modifier_setError(
+          BKE_modifier_set_error(
               &lmd->modifier, "Vertices changed from %d to %d", lmd->total_verts, numVerts);
         }
         else if (sysdif == LAPDEFORM_SYSTEM_CHANGE_EDGES) {
-          modifier_setError(
+          BKE_modifier_set_error(
               &lmd->modifier, "Edges changed from %d to %d", sys->total_edges, mesh->totedge);
         }
         else if (sysdif == LAPDEFORM_SYSTEM_CHANGE_NOT_VALID_GROUP) {
-          modifier_setError(&lmd->modifier,
-                            "Vertex group '%s' is not valid, or maybe empty",
-                            sys->anchor_grp_name);
+          BKE_modifier_set_error(&lmd->modifier,
+                                 "Vertex group '%s' is not valid, or maybe empty",
+                                 sys->anchor_grp_name);
         }
       }
     }
@@ -684,7 +689,7 @@ static void LaplacianDeformModifier_do(
   }
   else {
     if (!isValidVertexGroup(lmd, ob, mesh)) {
-      modifier_setError(
+      BKE_modifier_set_error(
           &lmd->modifier, "Vertex group '%s' is not valid, or maybe empty", lmd->anchor_grp_name);
       lmd->flag &= ~MOD_LAPLACIANDEFORM_BIND;
     }
@@ -705,7 +710,7 @@ static void LaplacianDeformModifier_do(
     }
   }
   if (sys && sys->is_matrix_computed && !sys->has_solution) {
-    modifier_setError(&lmd->modifier, "The system did not find a solution");
+    BKE_modifier_set_error(&lmd->modifier, "The system did not find a solution");
   }
 }
 
@@ -725,7 +730,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   const LaplacianDeformModifierData *lmd = (const LaplacianDeformModifierData *)md;
   LaplacianDeformModifierData *tlmd = (LaplacianDeformModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   tlmd->vertexco = MEM_dupallocN(lmd->vertexco);
   tlmd->cache_system = NULL;
@@ -779,6 +784,11 @@ static void deformVertsEM(ModifierData *md,
   Mesh *mesh_src = MOD_deform_mesh_eval_get(
       ctx->object, editData, mesh, NULL, numVerts, false, false);
 
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
+
   LaplacianDeformModifier_do(
       (LaplacianDeformModifierData *)md, ctx->object, mesh_src, vertexCos, numVerts);
 
@@ -810,7 +820,10 @@ ModifierTypeInfo modifierType_LaplacianDeform = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

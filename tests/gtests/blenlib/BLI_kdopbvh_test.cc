@@ -4,12 +4,13 @@
 
 /* TODO: ray intersection, overlap ... etc.*/
 
+#include "MEM_guardedalloc.h"
+
 extern "C" {
 #include "BLI_compiler_attrs.h"
 #include "BLI_kdopbvh.h"
-#include "BLI_rand.h"
 #include "BLI_math_vector.h"
-#include "MEM_guardedalloc.h"
+#include "BLI_rand.h"
 }
 
 #include "stubs/bf_intern_eigen_stubs.h"
@@ -50,7 +51,10 @@ TEST(kdopbvh, Single)
   BLI_bvhtree_free(tree);
 }
 
-void optimal_check_callback(void *userdata, int index, const float co[3], BVHTreeNearest *nearest)
+static void optimal_check_callback(void *userdata,
+                                   int index,
+                                   const float co[3],
+                                   BVHTreeNearest *nearest)
 {
   float(*points)[3] = (float(*)[3])userdata;
 

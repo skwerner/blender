@@ -22,15 +22,15 @@
  */
 
 #include <math.h>
-#include <string.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_listbase.h"
-#include "BLI_timecode.h"
 #include "BLI_math.h"
 #include "BLI_threads.h"
+#include "BLI_timecode.h"
 #include "BLI_utildefines.h"
 
 #include "PIL_time.h"
@@ -39,25 +39,25 @@
 
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_view3d_types.h"
 #include "DNA_userdef_types.h"
+#include "DNA_view3d_types.h"
 
 #include "BKE_blender_undo.h"
 #include "BKE_blender_version.h"
 #include "BKE_camera.h"
-#include "BKE_context.h"
 #include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
-#include "BKE_sequencer.h"
-#include "BKE_screen.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
+#include "BKE_sequencer.h"
 #include "BKE_undo_system.h"
 
 #include "DEG_depsgraph.h"
@@ -68,14 +68,14 @@
 #include "ED_object.h"
 #include "ED_render.h"
 #include "ED_screen.h"
-#include "ED_util.h"
 #include "ED_undo.h"
+#include "ED_util.h"
 #include "ED_view3d.h"
 
 #include "BIF_glutil.h"
 
-#include "RE_pipeline.h"
 #include "RE_engine.h"
+#include "RE_pipeline.h"
 
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf_types.h"
@@ -112,7 +112,7 @@ typedef struct RenderJob {
   ReportList *reports;
   int orig_layer;
   int last_layer;
-  ScrArea *sa;
+  ScrArea *area;
   ColorManagedViewSettings view_settings;
   ColorManagedDisplaySettings display_settings;
   bool supports_glsl_draw;
@@ -333,9 +333,11 @@ static int screen_render_exec(bContext *C, wmOperator *op)
   re = RE_NewSceneRender(scene);
 
   G.is_break = false;
+
+  RE_draw_lock_cb(re, NULL, NULL);
   RE_test_break_cb(re, NULL, render_break);
 
-  ima = BKE_image_verify_viewer(mainp, IMA_TYPE_R_RESULT, "Render Result");
+  ima = BKE_image_ensure_viewer(mainp, IMA_TYPE_R_RESULT, "Render Result");
   BKE_image_signal(mainp, ima, NULL, IMA_SIGNAL_FREE);
   BKE_image_backup_render(scene, ima, true);
 
@@ -347,7 +349,6 @@ static int screen_render_exec(bContext *C, wmOperator *op)
 
   RE_SetReports(re, op->reports);
 
-  BLI_threaded_malloc_begin();
   if (is_animation) {
     RE_RenderAnim(re,
                   mainp,
@@ -361,7 +362,6 @@ static int screen_render_exec(bContext *C, wmOperator *op)
   else {
     RE_RenderFrame(re, mainp, scene, single_layer, camera_override, scene->r.cfra, is_write_still);
   }
-  BLI_threaded_malloc_end();
 
   RE_SetReports(re, NULL);
 
@@ -389,16 +389,14 @@ static void make_renderinfo_string(const RenderStats *rs,
                                    char *str)
 {
   char info_time_str[32];  // used to be extern to header_info.c
-  uintptr_t mem_in_use, mmap_in_use, peak_memory;
-  float megs_used_memory, mmap_used_memory, megs_peak_memory;
+  uintptr_t mem_in_use, peak_memory;
+  float megs_used_memory, megs_peak_memory;
   char *spos = str;
 
   mem_in_use = MEM_get_memory_in_use();
-  mmap_in_use = MEM_get_mapped_memory_in_use();
   peak_memory = MEM_get_peak_memory();
 
-  megs_used_memory = (mem_in_use - mmap_in_use) / (1024.0 * 1024.0);
-  mmap_used_memory = (mmap_in_use) / (1024.0 * 1024.0);
+  megs_used_memory = (mem_in_use) / (1024.0 * 1024.0);
   megs_peak_memory = (peak_memory) / (1024.0 * 1024.0);
 
   /* local view */
@@ -460,11 +458,7 @@ static void make_renderinfo_string(const RenderStats *rs,
     }
 
     if (rs->mem_peak == 0.0f) {
-      spos += sprintf(spos,
-                      TIP_("| Mem:%.2fM (%.2fM, Peak %.2fM) "),
-                      megs_used_memory,
-                      mmap_used_memory,
-                      megs_peak_memory);
+      spos += sprintf(spos, TIP_("| Mem:%.2fM (Peak %.2fM) "), megs_used_memory, megs_peak_memory);
     }
     else {
       spos += sprintf(spos, TIP_("| Mem:%.2fM, Peak: %.2fM "), rs->mem_used, rs->mem_peak);
@@ -541,24 +535,24 @@ static void render_progress_update(void *rjv, float progress)
 static void render_image_update_pass_and_layer(RenderJob *rj, RenderResult *rr, ImageUser *iuser)
 {
   wmWindowManager *wm;
-  ScrArea *first_sa = NULL, *matched_sa = NULL;
+  ScrArea *first_area = NULL, *matched_area = NULL;
 
   /* image window, compo node users */
-  for (wm = rj->main->wm.first; wm && matched_sa == NULL; wm = wm->id.next) { /* only 1 wm */
+  for (wm = rj->main->wm.first; wm && matched_area == NULL; wm = wm->id.next) { /* only 1 wm */
     wmWindow *win;
-    for (win = wm->windows.first; win && matched_sa == NULL; win = win->next) {
+    for (win = wm->windows.first; win && matched_area == NULL; win = win->next) {
       const bScreen *screen = WM_window_get_active_screen(win);
 
-      for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-        if (sa->spacetype == SPACE_IMAGE) {
-          SpaceImage *sima = sa->spacedata.first;
-          // sa->spacedata might be empty when toggling fullscreen mode.
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        if (area->spacetype == SPACE_IMAGE) {
+          SpaceImage *sima = area->spacedata.first;
+          // area->spacedata might be empty when toggling fullscreen mode.
           if (sima != NULL && sima->image == rj->image) {
-            if (first_sa == NULL) {
-              first_sa = sa;
+            if (first_area == NULL) {
+              first_area = area;
             }
-            if (sa == rj->sa) {
-              matched_sa = sa;
+            if (area == rj->area) {
+              matched_area = area;
               break;
             }
           }
@@ -567,12 +561,12 @@ static void render_image_update_pass_and_layer(RenderJob *rj, RenderResult *rr, 
     }
   }
 
-  if (matched_sa == NULL) {
-    matched_sa = first_sa;
+  if (matched_area == NULL) {
+    matched_area = first_area;
   }
 
-  if (matched_sa) {
-    SpaceImage *sima = matched_sa->spacedata.first;
+  if (matched_area) {
+    SpaceImage *sima = matched_area->spacedata.first;
     RenderResult *main_rr = RE_AcquireResultRead(rj->re);
 
     /* TODO(sergey): is there faster way to get the layer index? */
@@ -687,10 +681,10 @@ static void render_image_restore_layer(RenderJob *rj)
     for (win = wm->windows.first; win; win = win->next) {
       const bScreen *screen = WM_window_get_active_screen(win);
 
-      for (ScrArea *sa = screen->areabase.first; sa; sa = sa->next) {
-        if (sa == rj->sa) {
-          if (sa->spacetype == SPACE_IMAGE) {
-            SpaceImage *sima = sa->spacedata.first;
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        if (area == rj->area) {
+          if (area->spacetype == SPACE_IMAGE) {
+            SpaceImage *sima = area->spacedata.first;
 
             if (RE_HasSingleLayer(rj->re)) {
               /* For single layer renders keep the active layer
@@ -746,7 +740,7 @@ static void render_endjob(void *rjv)
     WM_main_add_notifier(NC_NODE | NA_EDITED, rj->scene);
   }
 
-  if (rj->sa) {
+  if (rj->area) {
     render_image_restore_layer(rj);
   }
 
@@ -842,7 +836,7 @@ static int screen_render_modal(bContext *C, wmOperator *op, const wmEvent *event
 
   /* running render */
   switch (event->type) {
-    case ESCKEY:
+    case EVT_ESCKEY:
       return OPERATOR_RUNNING_MODAL;
   }
   return OPERATOR_PASS_THROUGH;
@@ -885,7 +879,7 @@ static void clean_viewport_memory(Main *bmain, Scene *scene)
 
   /* Go over all the visible objects. */
   for (wmWindowManager *wm = bmain->wm.first; wm; wm = wm->id.next) {
-    for (wmWindow *win = wm->windows.first; win; win = win->next) {
+    LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
       ViewLayer *view_layer = WM_window_get_active_view_layer(win);
 
       for (base = view_layer->object_bases.first; base; base = base->next) {
@@ -918,7 +912,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   View3D *v3d = use_viewport ? CTX_wm_view3d(C) : NULL;
   struct Object *camera_override = v3d ? V3D_CAMERA_LOCAL(v3d) : NULL;
   const char *name;
-  ScrArea *sa;
+  ScrArea *area;
 
   /* Cannot do render if there is not this function. */
   if (re_type->render == NULL) {
@@ -943,6 +937,12 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
     return OPERATOR_CANCELLED;
   }
 
+  /* Reports are done inside check function, and it will return false if there are other strips to
+   * render. */
+  if ((scene->r.scemode & R_DOSEQ) && BKE_sequencer_check_scene_recursion(scene, op->reports)) {
+    return OPERATOR_CANCELLED;
+  }
+
   /* stop all running jobs, except screen one. currently previews frustrate Render */
   WM_jobs_kill_all_except(CTX_wm_manager(C), CTX_wm_screen(C));
 
@@ -955,7 +955,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   WM_cursor_wait(1);
 
   /* flush sculpt and editmode changes */
-  ED_editors_flush_edits(bmain, true);
+  ED_editors_flush_edits_ex(bmain, true, false);
 
   /* cleanup sequencer caches before starting user triggered render.
    * otherwise, invalidated cache entries can make their way into
@@ -968,7 +968,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   // store spare
 
   /* ensure at least 1 area shows result */
-  sa = render_view_open(C, event->x, event->y, op->reports);
+  area = render_view_open(C, event->x, event->y, op->reports);
 
   /* job custom data */
   rj = MEM_callocN(sizeof(RenderJob), "render job");
@@ -989,14 +989,14 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   rj->reports = op->reports;
   rj->orig_layer = 0;
   rj->last_layer = 0;
-  rj->sa = sa;
+  rj->area = area;
   rj->supports_glsl_draw = IMB_colormanagement_support_glsl_draw(&scene->view_settings);
 
   BKE_color_managed_display_settings_copy(&rj->display_settings, &scene->display_settings);
   BKE_color_managed_view_settings_copy(&rj->view_settings, &scene->view_settings);
 
-  if (sa) {
-    SpaceImage *sima = sa->spacedata.first;
+  if (area) {
+    SpaceImage *sima = area->spacedata.first;
     rj->orig_layer = sima->iuser.layer;
   }
 
@@ -1047,7 +1047,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   }
 
   /* get a render result image, and make sure it is empty */
-  ima = BKE_image_verify_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
+  ima = BKE_image_ensure_viewer(bmain, IMA_TYPE_R_RESULT, "Render Result");
   BKE_image_signal(rj->main, ima, NULL, IMA_SIGNAL_FREE);
   BKE_image_backup_render(rj->scene, ima, true);
   rj->image = ima;
@@ -1173,7 +1173,7 @@ static int render_shutter_curve_preset_exec(bContext *C, wmOperator *op)
   CurveMap *cm = mblur_shutter_curve->cm;
   int preset = RNA_enum_get(op->ptr, "shape");
 
-  cm->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
+  mblur_shutter_curve->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
   mblur_shutter_curve->preset = preset;
   BKE_curvemap_reset(
       cm, &mblur_shutter_curve->clipr, mblur_shutter_curve->preset, CURVEMAP_SLOPE_POS_NEG);

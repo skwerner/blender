@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -31,15 +31,15 @@
 #include "DNA_object_types.h"
 
 #include "BKE_customdata.h"
+#include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
 #include "BKE_image.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
-#include "BKE_texture.h"
-#include "BKE_deform.h"
 #include "BKE_object.h"
+#include "BKE_texture.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -134,19 +134,28 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   DisplaceModifierData *dmd = (DisplaceModifierData *)md;
-  if (dmd->map_object != NULL && dmd->texmapping == MOD_DISP_MAP_OBJECT) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
-    DEG_add_object_relation(
-        ctx->node, dmd->map_object, DEG_OB_COMP_TRANSFORM, "Displace Modifier");
+  bool need_transform_relation = false;
+
+  if (dmd->space == MOD_DISP_SPACE_GLOBAL &&
+      ELEM(dmd->direction, MOD_DISP_DIR_X, MOD_DISP_DIR_Y, MOD_DISP_DIR_Z, MOD_DISP_DIR_RGB_XYZ)) {
+    need_transform_relation = true;
   }
-  if (dmd->texmapping == MOD_DISP_MAP_GLOBAL ||
-      (ELEM(
-           dmd->direction, MOD_DISP_DIR_X, MOD_DISP_DIR_Y, MOD_DISP_DIR_Z, MOD_DISP_DIR_RGB_XYZ) &&
-       dmd->space == MOD_DISP_SPACE_GLOBAL)) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
-  }
+
   if (dmd->texture != NULL) {
     DEG_add_generic_id_relation(ctx->node, &dmd->texture->id, "Displace Modifier");
+
+    if (dmd->map_object != NULL && dmd->texmapping == MOD_DISP_MAP_OBJECT) {
+      MOD_depsgraph_update_object_bone_relation(
+          ctx->node, dmd->map_object, dmd->map_bone, "Displace Modifier");
+      need_transform_relation = true;
+    }
+    if (dmd->texmapping == MOD_DISP_MAP_GLOBAL) {
+      need_transform_relation = true;
+    }
+  }
+
+  if (need_transform_relation) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "Displace Modifier");
   }
 }
 
@@ -174,6 +183,7 @@ static void displaceModifier_do_task(void *__restrict userdata,
   DisplaceUserdata *data = (DisplaceUserdata *)userdata;
   DisplaceModifierData *dmd = data->dmd;
   MDeformVert *dvert = data->dvert;
+  const bool invert_vgroup = (dmd->flag & MOD_DISP_INVERT_VGROUP) != 0;
   float weight = data->weight;
   int defgrp_index = data->defgrp_index;
   int direction = data->direction;
@@ -192,7 +202,8 @@ static void displaceModifier_do_task(void *__restrict userdata,
   float local_vec[3];
 
   if (dvert) {
-    weight = defvert_find_weight(dvert + iter, defgrp_index);
+    weight = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dvert + iter, defgrp_index) :
+                             BKE_defvert_find_weight(dvert + iter, defgrp_index);
     if (weight == 0.0f) {
       return;
     }
@@ -396,6 +407,11 @@ static void deformVertsEM(ModifierData *md,
   Mesh *mesh_src = MOD_deform_mesh_eval_get(
       ctx->object, editData, mesh, NULL, numVerts, false, false);
 
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
+
   displaceModifier_do((DisplaceModifierData *)md, ctx, mesh_src, vertexCos, numVerts);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
@@ -410,13 +426,16 @@ ModifierTypeInfo modifierType_Displace = {
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

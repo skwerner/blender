@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -27,14 +27,14 @@
 #include "BLI_bitmap.h"
 #include "BLI_math.h"
 
-#include "DNA_object_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
 
-#include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_mesh.h"
 #include "BKE_deform.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_mesh.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -464,7 +464,7 @@ static bool is_valid_target(NormalEditModifierData *enmd)
   else if ((enmd->mode == MOD_NORMALEDIT_MODE_DIRECTIONAL) && enmd->target) {
     return true;
   }
-  modifier_setError((ModifierData *)enmd, "Invalid target settings");
+  BKE_modifier_set_error((ModifierData *)enmd, "Invalid target settings");
   return false;
 }
 
@@ -494,7 +494,7 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
   if (!(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH))
 #endif
   {
-    modifier_setError((ModifierData *)enmd, "Enable 'Auto Smooth' option in mesh settings");
+    BKE_modifier_set_error((ModifierData *)enmd, "Enable 'Auto Smooth' in Object Data Properties");
     return mesh;
   }
 
@@ -502,7 +502,7 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
   if (mesh->medge == ((Mesh *)ob->data)->medge) {
     /* We need to duplicate data here, otherwise setting custom normals
      * (which may also affect sharp edges) could
-     * modify org mesh, see T43671. */
+     * modify original mesh, see T43671. */
     BKE_id_copy_ex(NULL, &mesh->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
   }
   else {
@@ -527,18 +527,13 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
   float(*polynors)[3];
 
   CustomData *ldata = &result->ldata;
-  if (CustomData_has_layer(ldata, CD_NORMAL)) {
-    loopnors = CustomData_get_layer(ldata, CD_NORMAL);
-  }
-  else {
-    loopnors = CustomData_add_layer(ldata, CD_NORMAL, CD_CALLOC, NULL, num_loops);
-  }
 
   /* Compute poly (always needed) and vert normals. */
   CustomData *pdata = &result->pdata;
   polynors = CustomData_get_layer(pdata, CD_NORMAL);
   if (!polynors) {
     polynors = CustomData_add_layer(pdata, CD_NORMAL, CD_CALLOC, NULL, num_polys);
+    CustomData_set_layer_flag(pdata, CD_NORMAL, CD_FLAG_TEMPORARY);
   }
   BKE_mesh_calc_normals_poly(mvert,
                              NULL,
@@ -552,8 +547,10 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
 
   result->runtime.cd_dirty_vert &= ~CD_MASK_NORMAL;
 
+  clnors = CustomData_get_layer(ldata, CD_CUSTOMLOOPNORMAL);
   if (use_current_clnors) {
     clnors = CustomData_duplicate_referenced_layer(ldata, CD_CUSTOMLOOPNORMAL, num_loops);
+    loopnors = MEM_malloc_arrayN((size_t)num_loops, sizeof(*loopnors), __func__);
 
     BKE_mesh_normals_loop_split(mvert,
                                 num_verts,
@@ -572,7 +569,7 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
                                 NULL);
   }
 
-  if (!clnors) {
+  if (clnors == NULL) {
     clnors = CustomData_add_layer(ldata, CD_CUSTOMLOOPNORMAL, CD_CALLOC, NULL, num_loops);
   }
 
@@ -624,6 +621,10 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
                                       mpoly,
                                       num_polys);
   }
+
+  /* Currently Modifier stack assumes there is no poly normal data passed around... */
+  CustomData_free_layers(pdata, CD_NORMAL, num_polys);
+  MEM_SAFE_FREE(loopnors);
 
   return result;
 }
@@ -683,7 +684,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   }
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   return normalEditModifier_do((NormalEditModifierData *)md, ctx, ctx->object, mesh);
 }
@@ -696,13 +697,16 @@ ModifierTypeInfo modifierType_NormalEdit = {
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

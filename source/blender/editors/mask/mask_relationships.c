@@ -21,6 +21,7 @@
  * \ingroup edmask
  */
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
 
@@ -35,26 +36,22 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_screen.h"
 #include "ED_clip.h" /* frame remapping functions */
+#include "ED_screen.h"
 
 #include "mask_intern.h" /* own include */
 
 static int mask_parent_clear_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Mask *mask = CTX_data_edit_mask(C);
-  MaskLayer *masklay;
 
-  for (masklay = mask->masklayers.first; masklay; masklay = masklay->next) {
-    MaskSpline *spline;
-    int i;
-
-    if (masklay->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+  LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
+    if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
       continue;
     }
 
-    for (spline = masklay->splines.first; spline; spline = spline->next) {
-      for (i = 0; i < spline->tot_point; i++) {
+    LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
+      for (int i = 0; i < spline->tot_point; i++) {
         MaskSplinePoint *point = &spline->points[i];
 
         if (MASKPOINT_ISSEL_ANY(point)) {
@@ -89,7 +86,6 @@ void MASK_OT_parent_clear(wmOperatorType *ot)
 static int mask_parent_set_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Mask *mask = CTX_data_edit_mask(C);
-  MaskLayer *masklay;
 
   /* parent info */
   SpaceClip *sc = CTX_wm_space_clip(C);
@@ -141,16 +137,13 @@ static int mask_parent_set_exec(bContext *C, wmOperator *UNUSED(op))
     return OPERATOR_CANCELLED;
   }
 
-  for (masklay = mask->masklayers.first; masklay; masklay = masklay->next) {
-    MaskSpline *spline;
-    int i;
-
-    if (masklay->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
+  LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
+    if (mask_layer->restrictflag & (MASK_RESTRICT_VIEW | MASK_RESTRICT_SELECT)) {
       continue;
     }
 
-    for (spline = masklay->splines.first; spline; spline = spline->next) {
-      for (i = 0; i < spline->tot_point; i++) {
+    LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
+      for (int i = 0; i < spline->tot_point; i++) {
         MaskSplinePoint *point = &spline->points[i];
 
         if (MASKPOINT_ISSEL_ANY(point)) {

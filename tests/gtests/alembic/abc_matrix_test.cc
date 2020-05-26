@@ -1,11 +1,11 @@
 #include "testing/testing.h"
 
 // Keep first since utildefines defines AT which conflicts with STL
-#include "intern/abc_util.h"
+#include "intern/abc_axis_conversion.h"
 
 extern "C" {
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 }
 
 TEST(abc_matrix, CreateRotationMatrixY_YfromZ)

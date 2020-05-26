@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -31,8 +31,8 @@
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 
@@ -105,6 +105,7 @@ static void sphere_do(CastModifierData *cmd,
                       int numVerts)
 {
   MDeformVert *dvert = NULL;
+  const bool invert_vgroup = (cmd->flag & MOD_CAST_INVERT_VGROUP) != 0;
 
   Object *ctrl_ob = NULL;
 
@@ -152,7 +153,9 @@ static void sphere_do(CastModifierData *cmd,
 
   /* 3) if we were given a vertex group name,
    * only those vertices should be affected */
-  MOD_get_vgroup(ob, mesh, cmd->defgrp_name, &dvert, &defgrp_index);
+  if (cmd->defgrp_name[0] != '\0') {
+    MOD_get_vgroup(ob, mesh, cmd->defgrp_name, &dvert, &defgrp_index);
+  }
 
   if (flag & MOD_CAST_SIZE_FROM_RADIUS) {
     len = cmd->radius;
@@ -198,7 +201,10 @@ static void sphere_do(CastModifierData *cmd,
     }
 
     if (dvert) {
-      const float weight = defvert_find_weight(&dvert[i], defgrp_index);
+      const float weight = invert_vgroup ?
+                               1.0f - BKE_defvert_find_weight(&dvert[i], defgrp_index) :
+                               BKE_defvert_find_weight(&dvert[i], defgrp_index);
+
       if (weight == 0.0f) {
         continue;
       }
@@ -240,9 +246,12 @@ static void cuboid_do(CastModifierData *cmd,
                       int numVerts)
 {
   MDeformVert *dvert = NULL;
+  int defgrp_index;
+  const bool invert_vgroup = (cmd->flag & MOD_CAST_INVERT_VGROUP) != 0;
+
   Object *ctrl_ob = NULL;
 
-  int i, defgrp_index;
+  int i;
   bool has_radius = false;
   short flag;
   float fac = cmd->fac;
@@ -267,7 +276,9 @@ static void cuboid_do(CastModifierData *cmd,
 
   /* 3) if we were given a vertex group name,
    * only those vertices should be affected */
-  MOD_get_vgroup(ob, mesh, cmd->defgrp_name, &dvert, &defgrp_index);
+  if (cmd->defgrp_name[0] != '\0') {
+    MOD_get_vgroup(ob, mesh, cmd->defgrp_name, &dvert, &defgrp_index);
+  }
 
   if (ctrl_ob) {
     if (flag & MOD_CAST_USE_OB_TRANSFORM) {
@@ -365,7 +376,10 @@ static void cuboid_do(CastModifierData *cmd,
     }
 
     if (dvert) {
-      const float weight = defvert_find_weight(&dvert[i], defgrp_index);
+      const float weight = invert_vgroup ?
+                               1.0f - BKE_defvert_find_weight(&dvert[i], defgrp_index) :
+                               BKE_defvert_find_weight(&dvert[i], defgrp_index);
+
       if (weight == 0.0f) {
         continue;
       }
@@ -482,10 +496,20 @@ static void deformVertsEM(ModifierData *md,
                           int numVerts)
 {
   CastModifierData *cmd = (CastModifierData *)md;
-  Mesh *mesh_src = MOD_deform_mesh_eval_get(
-      ctx->object, editData, mesh, NULL, numVerts, false, false);
+  Mesh *mesh_src = NULL;
 
-  BLI_assert(mesh_src->totvert == numVerts);
+  if (cmd->defgrp_name[0] != '\0') {
+    mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
+  }
+
+  if (mesh && mesh->runtime.wrapper_type == ME_WRAPPER_TYPE_MDATA) {
+    BLI_assert(mesh_src->totvert == numVerts);
+  }
+
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
 
   if (cmd->type == MOD_CAST_TYPE_CUBOID) {
     cuboid_do(cmd, ctx, ctx->object, mesh_src, vertexCos, numVerts);
@@ -494,7 +518,7 @@ static void deformVertsEM(ModifierData *md,
     sphere_do(cmd, ctx, ctx->object, mesh_src, vertexCos, numVerts);
   }
 
-  if (mesh_src != mesh) {
+  if (!ELEM(mesh_src, NULL, mesh)) {
     BKE_id_free(NULL, mesh_src);
   }
 }
@@ -504,16 +528,19 @@ ModifierTypeInfo modifierType_Cast = {
     /* structName */ "CastModifierData",
     /* structSize */ sizeof(CastModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

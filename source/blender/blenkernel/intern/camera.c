@@ -21,31 +21,34 @@
  * \ingroup bke
  */
 
-#include <stdlib.h>
 #include <stddef.h>
+#include <stdlib.h>
 
+#include "DNA_ID.h"
 #include "DNA_camera_types.h"
+#include "DNA_defaults.h"
 #include "DNA_light_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_view3d_types.h"
-#include "DNA_ID.h"
-#include "DNA_defaults.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_rect.h"
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
 #include "BKE_camera.h"
-#include "BKE_object.h"
+#include "BKE_idtype.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
+#include "BKE_object.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
+
+#include "BLT_translation.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -53,22 +56,12 @@
 
 /****************************** Camera Datablock *****************************/
 
-void BKE_camera_init(Camera *cam)
+static void camera_init_data(ID *id)
 {
+  Camera *cam = (Camera *)id;
   BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cam, id));
 
   MEMCPY_STRUCT_AFTER(cam, DNA_struct_default_get(Camera), id);
-}
-
-void *BKE_camera_add(Main *bmain, const char *name)
-{
-  Camera *cam;
-
-  cam = BKE_libblock_alloc(bmain, ID_CA, name, 0);
-
-  BKE_camera_init(cam);
-
-  return cam;
 }
 
 /**
@@ -79,14 +72,73 @@ void *BKE_camera_add(Main *bmain, const char *name)
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_lib_id.h's LIB_ID_COPY_... flags for more).
  */
-void BKE_camera_copy_data(Main *UNUSED(bmain),
-                          Camera *cam_dst,
-                          const Camera *cam_src,
-                          const int UNUSED(flag))
+static void camera_copy_data(Main *UNUSED(bmain),
+                             ID *id_dst,
+                             const ID *id_src,
+                             const int UNUSED(flag))
 {
+  Camera *cam_dst = (Camera *)id_dst;
+  const Camera *cam_src = (const Camera *)id_src;
   BLI_duplicatelist(&cam_dst->bg_images, &cam_src->bg_images);
+}
+
+static void camera_make_local(Main *bmain, ID *id, const int flags)
+{
+  BKE_lib_id_make_local_generic(bmain, id, flags);
+}
+
+/** Free (or release) any data used by this camera (does not free the camera itself). */
+static void camera_free_data(ID *id)
+{
+  Camera *cam = (Camera *)id;
+  BLI_freelistN(&cam->bg_images);
+}
+
+static void camera_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Camera *camera = (Camera *)id;
+
+  BKE_LIB_FOREACHID_PROCESS(data, camera->dof.focus_object, IDWALK_CB_NOP);
+  LISTBASE_FOREACH (CameraBGImage *, bgpic, &camera->bg_images) {
+    if (bgpic->source == CAM_BGIMG_SOURCE_IMAGE) {
+      BKE_LIB_FOREACHID_PROCESS(data, bgpic->ima, IDWALK_CB_USER);
+    }
+    else if (bgpic->source == CAM_BGIMG_SOURCE_MOVIE) {
+      BKE_LIB_FOREACHID_PROCESS(data, bgpic->clip, IDWALK_CB_USER);
+    }
+  }
+}
+
+IDTypeInfo IDType_ID_CA = {
+    .id_code = ID_CA,
+    .id_filter = FILTER_ID_CA,
+    .main_listbase_index = INDEX_ID_CA,
+    .struct_size = sizeof(Camera),
+    .name = "Camera",
+    .name_plural = "cameras",
+    .translation_context = BLT_I18NCONTEXT_ID_CAMERA,
+    .flags = 0,
+
+    .init_data = camera_init_data,
+    .copy_data = camera_copy_data,
+    .free_data = camera_free_data,
+    .make_local = camera_make_local,
+    .foreach_id = camera_foreach_id,
+};
+
+/******************************** Camera Usage *******************************/
+
+void *BKE_camera_add(Main *bmain, const char *name)
+{
+  Camera *cam;
+
+  cam = BKE_libblock_alloc(bmain, ID_CA, name, 0);
+
+  camera_init_data(&cam->id);
+
+  return cam;
 }
 
 Camera *BKE_camera_copy(Main *bmain, const Camera *cam)
@@ -95,21 +147,6 @@ Camera *BKE_camera_copy(Main *bmain, const Camera *cam)
   BKE_id_copy(bmain, &cam->id, (ID **)&cam_copy);
   return cam_copy;
 }
-
-void BKE_camera_make_local(Main *bmain, Camera *cam, const bool lib_local)
-{
-  BKE_id_make_local_generic(bmain, &cam->id, true, lib_local);
-}
-
-/** Free (or release) any data used by this camera (does not free the camera itself). */
-void BKE_camera_free(Camera *ca)
-{
-  BLI_freelistN(&ca->bg_images);
-
-  BKE_animdata_free((ID *)ca, false);
-}
-
-/******************************** Camera Usage *******************************/
 
 /* get the camera's dof value, takes the dof object into account */
 float BKE_camera_object_dof_distance(Object *ob)
@@ -645,7 +682,7 @@ static bool camera_frame_fit_calc_from_data(CameraParams *params,
 /* don't move the camera, just yield the fit location */
 /* r_scale only valid/useful for ortho cameras */
 bool BKE_camera_view_frame_fit_to_scene(
-    Depsgraph *depsgraph, Scene *scene, Object *camera_ob, float r_co[3], float *r_scale)
+    Depsgraph *depsgraph, const Scene *scene, Object *camera_ob, float r_co[3], float *r_scale)
 {
   CameraParams params;
   CameraViewFrameData data_cb;
@@ -792,7 +829,7 @@ static void camera_stereo3d_model_matrix(const Object *camera,
 }
 
 /* the view matrix is used by the viewport drawing, it is basically the inverted model matrix */
-void BKE_camera_multiview_view_matrix(RenderData *rd,
+void BKE_camera_multiview_view_matrix(const RenderData *rd,
                                       const Object *camera,
                                       const bool is_left,
                                       float r_viewmat[4][4])
@@ -811,7 +848,7 @@ static bool camera_is_left(const char *viewname)
   return true;
 }
 
-void BKE_camera_multiview_model_matrix(RenderData *rd,
+void BKE_camera_multiview_model_matrix(const RenderData *rd,
                                        const Object *camera,
                                        const char *viewname,
                                        float r_modelmat[4][4])
@@ -820,7 +857,7 @@ void BKE_camera_multiview_model_matrix(RenderData *rd,
   normalize_m4(r_modelmat);
 }
 
-void BKE_camera_multiview_model_matrix_scaled(RenderData *rd,
+void BKE_camera_multiview_model_matrix_scaled(const RenderData *rd,
                                               const Object *camera,
                                               const char *viewname,
                                               float r_modelmat[4][4])
@@ -839,7 +876,7 @@ void BKE_camera_multiview_model_matrix_scaled(RenderData *rd,
   }
 }
 
-void BKE_camera_multiview_window_matrix(RenderData *rd,
+void BKE_camera_multiview_window_matrix(const RenderData *rd,
                                         const Object *camera,
                                         const char *viewname,
                                         float r_winmat[4][4])
@@ -858,7 +895,7 @@ void BKE_camera_multiview_window_matrix(RenderData *rd,
   copy_m4_m4(r_winmat, params.winmat);
 }
 
-bool BKE_camera_multiview_spherical_stereo(RenderData *rd, const Object *camera)
+bool BKE_camera_multiview_spherical_stereo(const RenderData *rd, const Object *camera)
 {
   Camera *cam;
   const bool is_multiview = (rd && rd->scemode & R_MULTIVIEW) != 0;
@@ -882,9 +919,8 @@ bool BKE_camera_multiview_spherical_stereo(RenderData *rd, const Object *camera)
   return false;
 }
 
-static Object *camera_multiview_advanced(Scene *scene, Object *camera, const char *suffix)
+static Object *camera_multiview_advanced(const Scene *scene, Object *camera, const char *suffix)
 {
-  SceneRenderView *srv;
   char name[MAX_NAME];
   const char *camera_name = camera->id.name + 2;
   const int len_name = strlen(camera_name);
@@ -893,7 +929,7 @@ static Object *camera_multiview_advanced(Scene *scene, Object *camera, const cha
   name[0] = '\0';
 
   /* we need to take the better match, thus the len_suffix_max test */
-  for (srv = scene->r.views.first; srv; srv = srv->next) {
+  LISTBASE_FOREACH (const SceneRenderView *, srv, &scene->r.views) {
     const int len_suffix = strlen(srv->suffix);
 
     if ((len_suffix < len_suffix_max) || (len_name < len_suffix)) {
@@ -917,7 +953,7 @@ static Object *camera_multiview_advanced(Scene *scene, Object *camera, const cha
 }
 
 /* returns the camera to be used for render */
-Object *BKE_camera_multiview_render(Scene *scene, Object *camera, const char *viewname)
+Object *BKE_camera_multiview_render(const Scene *scene, Object *camera, const char *viewname)
 {
   const bool is_multiview = (camera != NULL) && (scene->r.scemode & R_MULTIVIEW) != 0;
 
@@ -972,7 +1008,9 @@ static float camera_stereo3d_shift_x(const Object *camera, const char *viewname)
   return shift;
 }
 
-float BKE_camera_multiview_shift_x(RenderData *rd, const Object *camera, const char *viewname)
+float BKE_camera_multiview_shift_x(const RenderData *rd,
+                                   const Object *camera,
+                                   const char *viewname)
 {
   const bool is_multiview = (rd && rd->scemode & R_MULTIVIEW) != 0;
   Camera *data = camera->data;
@@ -990,7 +1028,7 @@ float BKE_camera_multiview_shift_x(RenderData *rd, const Object *camera, const c
   }
 }
 
-void BKE_camera_multiview_params(RenderData *rd,
+void BKE_camera_multiview_params(const RenderData *rd,
                                  CameraParams *params,
                                  const Object *camera,
                                  const char *viewname)

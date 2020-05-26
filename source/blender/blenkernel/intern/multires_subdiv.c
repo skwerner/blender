@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2018 Blender Foundation.
@@ -50,9 +50,11 @@ void BKE_multires_subdiv_mesh_settings_init(SubdivToMeshSettings *mesh_settings,
                                             const Object *object,
                                             const MultiresModifierData *mmd,
                                             const bool use_render_params,
-                                            const bool ignore_simplify)
+                                            const bool ignore_simplify,
+                                            const bool ignore_control_edges)
 {
   const int level = multires_get_level(scene, object, mmd, use_render_params, ignore_simplify);
   mesh_settings->resolution = (1 << level) + 1;
-  mesh_settings->use_optimal_display = (mmd->flags & eMultiresModifierFlag_ControlEdges);
+  mesh_settings->use_optimal_display = (mmd->flags & eMultiresModifierFlag_ControlEdges) &&
+                                       !ignore_control_edges;
 }

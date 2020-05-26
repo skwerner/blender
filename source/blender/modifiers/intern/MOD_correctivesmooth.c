@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -27,17 +27,17 @@
 
 #include "BLI_math.h"
 
-#include "DNA_scene_types.h"
+#include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-#include "DNA_mesh_types.h"
+#include "DNA_scene_types.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "BKE_deform.h"
-#include "BKE_mesh.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
+#include "BKE_mesh.h"
 
 #include "MOD_modifiertypes.h"
 #include "MOD_util.h"
@@ -64,6 +64,7 @@ static void initData(ModifierData *md)
   csmd->bind_coords_num = 0;
 
   csmd->lambda = 0.5f;
+  csmd->scale = 1.0f;
   csmd->repeat = 5;
   csmd->flag = 0;
   csmd->smooth_type = MOD_CORRECTIVESMOOTH_SMOOTH_SIMPLE;
@@ -78,7 +79,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   const CorrectiveSmoothModifierData *csmd = (const CorrectiveSmoothModifierData *)md;
   CorrectiveSmoothModifierData *tcsmd = (CorrectiveSmoothModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   if (csmd->bind_coords) {
     tcsmd->bind_coords = MEM_dupallocN(csmd->bind_coords);
@@ -124,7 +125,7 @@ static void mesh_get_weights(MDeformVert *dvert,
   uint i;
 
   for (i = 0; i < numVerts; i++, dvert++) {
-    const float w = defvert_find_weight(dvert, defgrp_index);
+    const float w = BKE_defvert_find_weight(dvert, defgrp_index);
 
     if (use_invert_vgroup == false) {
       smooth_weights[i] = w;
@@ -601,12 +602,12 @@ static void correctivesmooth_modifier_do(ModifierData *md,
       BLI_assert(csmd->bind_coords != NULL);
       /* Copy bound data to the original modifier. */
       CorrectiveSmoothModifierData *csmd_orig = (CorrectiveSmoothModifierData *)
-          modifier_get_original(&csmd->modifier);
+          BKE_modifier_get_original(&csmd->modifier);
       csmd_orig->bind_coords = MEM_dupallocN(csmd->bind_coords);
       csmd_orig->bind_coords_num = csmd->bind_coords_num;
     }
     else {
-      modifier_setError(md, "Attempt to bind from inactive dependency graph");
+      BKE_modifier_set_error(md, "Attempt to bind from inactive dependency graph");
     }
   }
 
@@ -616,14 +617,14 @@ static void correctivesmooth_modifier_do(ModifierData *md,
   }
 
   if ((csmd->rest_source == MOD_CORRECTIVESMOOTH_RESTSOURCE_BIND) && (csmd->bind_coords == NULL)) {
-    modifier_setError(md, "Bind data required");
+    BKE_modifier_set_error(md, "Bind data required");
     goto error;
   }
 
   /* If the number of verts has changed, the bind is invalid, so we do nothing */
   if (csmd->rest_source == MOD_CORRECTIVESMOOTH_RESTSOURCE_BIND) {
     if (csmd->bind_coords_num != numVerts) {
-      modifier_setError(
+      BKE_modifier_set_error(
           md, "Bind vertex count mismatch: %u to %u", csmd->bind_coords_num, numVerts);
       goto error;
     }
@@ -631,14 +632,15 @@ static void correctivesmooth_modifier_do(ModifierData *md,
   else {
     /* MOD_CORRECTIVESMOOTH_RESTSOURCE_ORCO */
     if (ob->type != OB_MESH) {
-      modifier_setError(md, "Object is not a mesh");
+      BKE_modifier_set_error(md, "Object is not a mesh");
       goto error;
     }
     else {
       uint me_numVerts = (uint)((em) ? em->bm->totvert : ((Mesh *)ob->data)->totvert);
 
       if (me_numVerts != numVerts) {
-        modifier_setError(md, "Original vertex count mismatch: %u to %u", me_numVerts, numVerts);
+        BKE_modifier_set_error(
+            md, "Original vertex count mismatch: %u to %u", me_numVerts, numVerts);
         goto error;
       }
     }
@@ -696,7 +698,7 @@ static void correctivesmooth_modifier_do(ModifierData *md,
     uint i;
 
     float(*tangent_spaces)[3][3];
-
+    const float scale = csmd->scale;
     /* calloc, since values are accumulated */
     tangent_spaces = MEM_calloc_arrayN(numVerts, sizeof(float[3][3]), __func__);
 
@@ -710,7 +712,7 @@ static void correctivesmooth_modifier_do(ModifierData *md,
 #endif
 
       mul_v3_m3v3(delta, tangent_spaces[i], csmd->delta_cache.deltas[i]);
-      add_v3_v3(vertexCos[i], delta);
+      madd_v3_v3fl(vertexCos[i], delta, scale);
     }
 
     MEM_freeN(tangent_spaces);
@@ -739,7 +741,7 @@ static void deformVerts(ModifierData *md,
   correctivesmooth_modifier_do(
       md, ctx->depsgraph, ctx->object, mesh_src, vertexCos, (uint)numVerts, NULL);
 
-  if (mesh_src != mesh) {
+  if (!ELEM(mesh_src, NULL, mesh)) {
     BKE_id_free(NULL, mesh_src);
   }
 }
@@ -754,10 +756,15 @@ static void deformVertsEM(ModifierData *md,
   Mesh *mesh_src = MOD_deform_mesh_eval_get(
       ctx->object, editData, mesh, NULL, numVerts, false, false);
 
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
+
   correctivesmooth_modifier_do(
       md, ctx->depsgraph, ctx->object, mesh_src, vertexCos, (uint)numVerts, editData);
 
-  if (mesh_src != mesh) {
+  if (!ELEM(mesh_src, NULL, mesh)) {
     BKE_id_free(NULL, mesh_src);
   }
 }
@@ -775,7 +782,10 @@ ModifierTypeInfo modifierType_CorrectiveSmooth = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

@@ -26,6 +26,10 @@
 #include "BLI_bitmap.h"
 #include "BLI_kdopbvh.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * This header encapsulates necessary code to build a BVH
  */
@@ -81,6 +85,21 @@ typedef struct BVHTreeFromMesh {
 
 } BVHTreeFromMesh;
 
+typedef enum BVHCacheType {
+  BVHTREE_FROM_VERTS,
+  BVHTREE_FROM_EDGES,
+  BVHTREE_FROM_FACES,
+  BVHTREE_FROM_LOOPTRI,
+  BVHTREE_FROM_LOOPTRI_NO_HIDDEN,
+
+  BVHTREE_FROM_LOOSEVERTS,
+  BVHTREE_FROM_LOOSEEDGES,
+
+  BVHTREE_FROM_EM_VERTS,
+  BVHTREE_FROM_EM_EDGES,
+  BVHTREE_FROM_EM_LOOPTRI,
+} BVHCacheType;
+
 /**
  * Builds a bvh tree where nodes are the relevant elements of the given mesh.
  * Configures #BVHTreeFromMesh.
@@ -102,7 +121,7 @@ BVHTree *bvhtree_from_editmesh_verts_ex(BVHTreeFromEditMesh *data,
                                         float epsilon,
                                         int tree_type,
                                         int axis,
-                                        const int bvh_cache_type,
+                                        const BVHCacheType bvh_cache_type,
                                         BVHCache **bvh_cache);
 
 BVHTree *bvhtree_from_mesh_verts_ex(struct BVHTreeFromMesh *data,
@@ -114,7 +133,7 @@ BVHTree *bvhtree_from_mesh_verts_ex(struct BVHTreeFromMesh *data,
                                     float epsilon,
                                     int tree_type,
                                     int axis,
-                                    const int bvh_cache_type,
+                                    const BVHCacheType bvh_cache_type,
                                     BVHCache **bvh_cache);
 
 BVHTree *bvhtree_from_editmesh_edges(
@@ -127,7 +146,7 @@ BVHTree *bvhtree_from_editmesh_edges_ex(BVHTreeFromEditMesh *data,
                                         float epsilon,
                                         int tree_type,
                                         int axis,
-                                        const int bvh_cache_type,
+                                        const BVHCacheType bvh_cache_type,
                                         BVHCache **bvh_cache);
 
 BVHTree *bvhtree_from_mesh_edges_ex(struct BVHTreeFromMesh *data,
@@ -141,7 +160,7 @@ BVHTree *bvhtree_from_mesh_edges_ex(struct BVHTreeFromMesh *data,
                                     float epsilon,
                                     int tree_type,
                                     int axis,
-                                    const int bvh_cache_type,
+                                    const BVHCacheType bvh_cache_type,
                                     BVHCache **bvh_cache);
 
 BVHTree *bvhtree_from_mesh_faces_ex(struct BVHTreeFromMesh *data,
@@ -155,7 +174,7 @@ BVHTree *bvhtree_from_mesh_faces_ex(struct BVHTreeFromMesh *data,
                                     float epsilon,
                                     int tree_type,
                                     int axis,
-                                    const int bvh_cache_type,
+                                    const BVHCacheType bvh_cache_type,
                                     BVHCache **bvh_cache);
 
 BVHTree *bvhtree_from_editmesh_looptri(
@@ -168,7 +187,7 @@ BVHTree *bvhtree_from_editmesh_looptri_ex(BVHTreeFromEditMesh *data,
                                           float epsilon,
                                           int tree_type,
                                           int axis,
-                                          const int bvh_cache_type,
+                                          const BVHCacheType bvh_cache_type,
                                           BVHCache **bvh_cache);
 
 BVHTree *bvhtree_from_mesh_looptri_ex(struct BVHTreeFromMesh *data,
@@ -184,18 +203,18 @@ BVHTree *bvhtree_from_mesh_looptri_ex(struct BVHTreeFromMesh *data,
                                       float epsilon,
                                       int tree_type,
                                       int axis,
-                                      const int bvh_cache_type,
+                                      const BVHCacheType bvh_cache_type,
                                       BVHCache **bvh_cache);
 
 BVHTree *BKE_bvhtree_from_mesh_get(struct BVHTreeFromMesh *data,
                                    struct Mesh *mesh,
-                                   const int type,
+                                   const BVHCacheType bvh_cache_type,
                                    const int tree_type);
 
 BVHTree *BKE_bvhtree_from_editmesh_get(BVHTreeFromEditMesh *data,
                                        struct BMEditMesh *em,
                                        const int tree_type,
-                                       const int bvh_cache_type,
+                                       const BVHCacheType bvh_cache_type,
                                        BVHCache **bvh_cache);
 
 /**
@@ -224,24 +243,14 @@ float bvhtree_sphereray_tri_intersection(const BVHTreeRay *ray,
  */
 
 /* Using local coordinates */
-enum {
-  BVHTREE_FROM_VERTS,
-  BVHTREE_FROM_EDGES,
-  BVHTREE_FROM_FACES,
-  BVHTREE_FROM_LOOPTRI,
-  BVHTREE_FROM_LOOPTRI_NO_HIDDEN,
 
-  BVHTREE_FROM_LOOSEVERTS,
-  BVHTREE_FROM_LOOSEEDGES,
-
-  BVHTREE_FROM_EM_VERTS,
-  BVHTREE_FROM_EM_EDGES,
-  BVHTREE_FROM_EM_LOOPTRI,
-};
-
-bool bvhcache_find(const BVHCache *cache, int type, BVHTree **r_tree);
+bool bvhcache_find(const BVHCache *cache, BVHCacheType type, BVHTree **r_tree);
 bool bvhcache_has_tree(const BVHCache *cache, const BVHTree *tree);
-void bvhcache_insert(BVHCache **cache_p, BVHTree *tree, int type);
+void bvhcache_insert(BVHCache **cache_p, BVHTree *tree, BVHCacheType type);
 void bvhcache_free(BVHCache **cache_p);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

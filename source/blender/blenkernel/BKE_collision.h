@@ -23,8 +23,8 @@
  * \ingroup bke
  */
 
-#include <math.h>
 #include <float.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -33,6 +33,10 @@
 #include "DNA_cloth_types.h"
 
 #include "BLI_kdopbvh.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Collection;
 struct CollisionModifierData;
@@ -125,7 +129,10 @@ void bvhtree_update_from_mvert(BVHTree *bvhtree,
 
 // move Collision modifier object inter-frame with step = [0,1]
 // defined in collisions.c
-void collision_move_object(struct CollisionModifierData *collmd, float step, float prevstep);
+void collision_move_object(struct CollisionModifierData *collmd,
+                           const float step,
+                           const float prevstep,
+                           const bool moving_bvh);
 
 void collision_get_collider_velocity(float vel_old[3],
                                      float vel_new[3],
@@ -167,5 +174,9 @@ void BKE_collider_cache_free(struct ListBase **colliders);
 /////////////////////////////////////////////////
 
 /////////////////////////////////////////////////
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

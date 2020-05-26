@@ -22,13 +22,13 @@ extern "C" {
 #include <Python.h>
 }
 
-#include <string>
-#include <fstream>
 #include <float.h>
+#include <fstream>
+#include <string>
 
-#include "AppView.h"
 #include "AppCanvas.h"
 #include "AppConfig.h"
+#include "AppView.h"
 #include "Controller.h"
 
 #include "../image/Image.h"
@@ -41,12 +41,12 @@ extern "C" {
 #include "../scene_graph/VertexRep.h"
 
 #include "../stroke/PSStrokeRenderer.h"
-#include "../stroke/TextStrokeRenderer.h"
 #include "../stroke/StrokeTesselator.h"
 #include "../stroke/StyleModule.h"
+#include "../stroke/TextStrokeRenderer.h"
 
-#include "../system/StringUtils.h"
 #include "../system/PythonInterpreter.h"
+#include "../system/StringUtils.h"
 
 #include "../view_map/SteerableViewMap.h"
 #include "../view_map/ViewMap.h"
@@ -55,16 +55,16 @@ extern "C" {
 
 #include "../winged_edge/Curvature.h"
 #include "../winged_edge/WEdge.h"
-#include "../winged_edge/WingedEdgeBuilder.h"
 #include "../winged_edge/WXEdgeBuilder.h"
+#include "../winged_edge/WingedEdgeBuilder.h"
 
 #include "../blender_interface/BlenderFileLoader.h"
 #include "../blender_interface/BlenderStrokeRenderer.h"
 #include "../blender_interface/BlenderStyleModule.h"
 
 #include "BKE_global.h"
-#include "BLI_utildefines.h"
 #include "BLI_path_util.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_freestyle_types.h"
 
@@ -347,7 +347,7 @@ int Controller::LoadMesh(Render *re, ViewLayer *view_layer, Depsgraph *depsgraph
   soc string basename((const char *)qfi.fileName().toAscii().data());
   char cleaned[FILE_MAX];
   BLI_strncpy(cleaned, iFileName, FILE_MAX);
-  BLI_cleanup_file(NULL, cleaned);
+  BLI_path_normalize(NULL, cleaned);
   string basename = string(cleaned);
 #endif
 
@@ -923,19 +923,16 @@ Render *Controller::RenderStrokes(Render *re, bool render)
     cout << "Stroke rendering  : " << d << endl;
 
     uintptr_t mem_in_use = MEM_get_memory_in_use();
-    uintptr_t mmap_in_use = MEM_get_mapped_memory_in_use();
     uintptr_t peak_memory = MEM_get_peak_memory();
 
-    float megs_used_memory = (mem_in_use - mmap_in_use) / (1024.0 * 1024.0);
-    float mmap_used_memory = (mmap_in_use) / (1024.0 * 1024.0);
+    float megs_used_memory = (mem_in_use) / (1024.0 * 1024.0);
     float megs_peak_memory = (peak_memory) / (1024.0 * 1024.0);
 
-    printf("%d objs, %d verts, %d faces, mem %.2fM (%.2fM, peak %.2fM)\n",
+    printf("%d objs, %d verts, %d faces, mem %.2fM (peak %.2fM)\n",
            totmesh,
            freestyle_render->i.totvert,
            freestyle_render->i.totface,
            megs_used_memory,
-           mmap_used_memory,
            megs_peak_memory);
   }
   delete blenderRenderer;

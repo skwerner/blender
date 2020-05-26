@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -33,7 +33,7 @@
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 
@@ -378,6 +378,7 @@ static void laplaciansmoothModifier_do(
   float w, wpaint;
   int i, iter;
   int defgrp_index;
+  const bool invert_vgroup = (smd->flag & MOD_LAPLACIANSMOOTH_INVERT_VGROUP) != 0;
 
   sys = init_laplacian_system(mesh->totedge, mesh->totpoly, mesh->totloop, numVerts);
   if (!sys) {
@@ -420,7 +421,8 @@ static void laplaciansmoothModifier_do(
       EIG_linear_solver_right_hand_side_add(sys->context, 2, i, vertexCos[i][2]);
       if (iter == 0) {
         if (dv) {
-          wpaint = defvert_find_weight(dv, defgrp_index);
+          wpaint = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dv, defgrp_index) :
+                                   BKE_defvert_find_weight(dv, defgrp_index);
           dv++;
         }
         else {
@@ -557,6 +559,11 @@ static void deformVertsEM(ModifierData *md,
 
   mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
 
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
+
   laplaciansmoothModifier_do(
       (LaplacianSmoothModifierData *)md, ctx->object, mesh_src, vertexCos, numVerts);
 
@@ -572,13 +579,16 @@ ModifierTypeInfo modifierType_LaplacianSmooth = {
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ init_data,
     /* requiredDataMask */ required_data_mask,

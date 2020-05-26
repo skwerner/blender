@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -30,11 +30,11 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
+#include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_particle.h"
-#include "BKE_deform.h"
 
 #include "MOD_modifiertypes.h"
 #include "MOD_util.h"
@@ -101,6 +101,7 @@ static void smoothModifier_do(
 
   const float fac_new = smd->fac;
   const float fac_orig = 1.0f - fac_new;
+  const bool invert_vgroup = (smd->flag & MOD_SMOOTH_INVERT_VGROUP) != 0;
 
   MEdge *medges = mesh->medge;
   const int num_edges = mesh->totedge;
@@ -139,7 +140,9 @@ static void smoothModifier_do(
         }
         float *vco_new = accumulated_vecs[i];
 
-        const float f_new = defvert_find_weight(dv, defgrp_index) * fac_new;
+        const float f_new = invert_vgroup ?
+                                (1.0f - BKE_defvert_find_weight(dv, defgrp_index)) * fac_new :
+                                BKE_defvert_find_weight(dv, defgrp_index) * fac_new;
         if (f_new <= 0.0f) {
           continue;
         }
@@ -213,6 +216,9 @@ static void deformVertsEM(ModifierData *md,
   /* mesh_src is needed for vgroups, and taking edges into account. */
   mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
 
+  /* TODO(campbell): use edit-mode data only (remove this line). */
+  BKE_mesh_wrapper_ensure_mdata(mesh_src);
+
   smoothModifier_do(smd, ctx->object, mesh_src, vertexCos, numVerts);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
@@ -228,13 +234,16 @@ ModifierTypeInfo modifierType_Smooth = {
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_SupportsEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

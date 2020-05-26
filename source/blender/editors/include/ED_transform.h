@@ -24,13 +24,16 @@
 #ifndef __ED_TRANSFORM_H__
 #define __ED_TRANSFORM_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ******************* Registration Function ********************** */
 
 struct Object;
-struct SnapObjectContext;
-struct SnapObjectParams;
 struct bContext;
 struct wmKeyConfig;
+struct wmMsgBus;
 struct wmOperatorType;
 
 void ED_keymap_transform(struct wmKeyConfig *keyconf);
@@ -107,7 +110,6 @@ bool calculateTransformCenter(struct bContext *C,
 
 struct Object;
 struct Scene;
-struct TransInfo;
 struct wmGizmoGroup;
 struct wmGizmoGroupType;
 
@@ -121,7 +123,7 @@ struct bContext;
 void BIF_clearTransformOrientation(struct bContext *C);
 void BIF_removeTransformOrientation(struct bContext *C, struct TransformOrientation *ts);
 void BIF_removeTransformOrientationIndex(struct bContext *C, int index);
-void BIF_createTransformOrientation(struct bContext *C,
+bool BIF_createTransformOrientation(struct bContext *C,
                                     struct ReportList *reports,
                                     const char *name,
                                     const bool use_view,
@@ -155,6 +157,8 @@ int BIF_countTransformOrientation(const struct bContext *C);
 #define P_GPENCIL_EDIT (1 << 13)
 #define P_CURSOR_EDIT (1 << 14)
 #define P_CLNOR_INVALIDATE (1 << 15)
+/* For properties performed when confirming the transformation. */
+#define P_POST_TRANSFORM (1 << 19)
 
 void Transform_Properties(struct wmOperatorType *ot, int flags);
 
@@ -168,44 +172,13 @@ void VIEW3D_GGT_xform_shear(struct wmGizmoGroupType *gzgt);
 /* *** transform_gizmo_extrude_3d.c *** */
 void VIEW3D_GGT_xform_extrude(struct wmGizmoGroupType *gzgt);
 
-bool ED_widgetgroup_gizmo2d_poll(const struct bContext *C, struct wmGizmoGroupType *gzgt);
-void ED_widgetgroup_gizmo2d_setup(const struct bContext *C, struct wmGizmoGroup *gzgroup);
-void ED_widgetgroup_gizmo2d_refresh(const struct bContext *C, struct wmGizmoGroup *gzgroup);
-void ED_widgetgroup_gizmo2d_draw_prepare(const struct bContext *C, struct wmGizmoGroup *gzgroup);
+/* Generic 2D transform gizmo callback assignment. */
+void ED_widgetgroup_gizmo2d_xform_callbacks_set(struct wmGizmoGroupType *gzgt);
+void ED_widgetgroup_gizmo2d_xform_no_cage_callbacks_set(struct wmGizmoGroupType *gzgt);
+void ED_widgetgroup_gizmo2d_resize_callbacks_set(struct wmGizmoGroupType *gzgt);
+void ED_widgetgroup_gizmo2d_rotate_callbacks_set(struct wmGizmoGroupType *gzgt);
 
-/* Snapping */
-
-#define SNAP_MIN_DISTANCE 30
 #define SNAP_INCREMENTAL_ANGLE DEG2RAD(5.0)
-
-bool peelObjectsTransform(struct TransInfo *t,
-                          const float mval[2],
-                          const bool use_peel_object,
-                          /* return args */
-                          float r_loc[3],
-                          float r_no[3],
-                          float *r_thickness);
-bool peelObjectsSnapContext(struct SnapObjectContext *sctx,
-                            const float mval[2],
-                            const struct SnapObjectParams *params,
-                            const bool use_peel_object,
-                            /* return args */
-                            float r_loc[3],
-                            float r_no[3],
-                            float *r_thickness);
-
-short snapObjectsTransform(struct TransInfo *t,
-                           const float mval[2],
-                           float *dist_px,
-                           /* return args */
-                           float r_loc[3],
-                           float r_no[3]);
-bool snapNodesTransform(struct TransInfo *t,
-                        const int mval[2],
-                        /* return args */
-                        float r_loc[2],
-                        float *r_dist_px,
-                        char *r_node_border);
 
 void ED_transform_calc_orientation_from_type(const struct bContext *C, float r_mat[3][3]);
 void ED_transform_calc_orientation_from_type_ex(const struct bContext *C,
@@ -238,5 +211,9 @@ struct TransformCalcParams {
 int ED_transform_calc_gizmo_stats(const struct bContext *C,
                                   const struct TransformCalcParams *params,
                                   struct TransformBounds *tbounds);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ED_TRANSFORM_H__ */

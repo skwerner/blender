@@ -27,23 +27,23 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
-#include "BLI_math.h"
 
 #include "BLT_translation.h"
 
 #include "DNA_mask_types.h"
-#include "DNA_sequence_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_sequence_types.h"
 
 #include "BKE_colortools.h"
 #include "BKE_sequencer.h"
 
+#include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-#include "IMB_colormanagement.h"
 
 static SequenceModifierTypeInfo *modifiersTypes[NUM_SEQUENCE_MODIFIER_TYPES];
 static bool modifierTypesInit = false;
@@ -1045,7 +1045,7 @@ ImBuf *BKE_sequence_modifier_apply_stack(const SeqRenderData *context,
         frame_offset = seq->start;
       }
       else /*if (smd->mask_time == SEQUENCE_MASK_TIME_ABSOLUTE)*/ {
-        frame_offset = ((Mask *)smd->mask_id)->sfra;
+        frame_offset = smd->mask_id ? ((Mask *)smd->mask_id)->sfra : 0;
       }
 
       ImBuf *mask = modifier_mask_get(smd, context, cfra, frame_offset, ibuf->rect_float != NULL);

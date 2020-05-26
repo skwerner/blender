@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2011 by Bastien Montagne.
@@ -35,7 +35,7 @@
 
 #include "BKE_colortools.h" /* CurveMapping. */
 #include "BKE_deform.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_modifier.h"
 #include "BKE_texture.h" /* Texture masking. */
 
@@ -44,8 +44,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "MOD_weightvg_util.h"
 #include "MOD_modifiertypes.h"
+#include "MOD_util.h"
+#include "MOD_weightvg_util.h"
 
 /**************************************
  * Modifiers functions.               *
@@ -79,7 +80,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   const WeightVGEditModifierData *wmd = (const WeightVGEditModifierData *)md;
   WeightVGEditModifierData *twmd = (WeightVGEditModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   twmd->cmap_curve = BKE_curvemapping_copy(wmd->cmap_curve);
 }
@@ -134,16 +135,23 @@ static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   WeightVGEditModifierData *wmd = (WeightVGEditModifierData *)md;
-  if (wmd->mask_tex_map_obj != NULL && wmd->mask_tex_mapping == MOD_DISP_MAP_OBJECT) {
-    DEG_add_object_relation(
-        ctx->node, wmd->mask_tex_map_obj, DEG_OB_COMP_TRANSFORM, "WeightVGEdit Modifier");
-    DEG_add_modifier_to_transform_relation(ctx->node, "WeightVGEdit Modifier");
-  }
-  else if (wmd->mask_tex_mapping == MOD_DISP_MAP_GLOBAL) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "WeightVGEdit Modifier");
-  }
+  bool need_transform_relation = false;
+
   if (wmd->mask_texture != NULL) {
     DEG_add_generic_id_relation(ctx->node, &wmd->mask_texture->id, "WeightVGEdit Modifier");
+
+    if (wmd->mask_tex_map_obj != NULL && wmd->mask_tex_mapping == MOD_DISP_MAP_OBJECT) {
+      MOD_depsgraph_update_object_bone_relation(
+          ctx->node, wmd->mask_tex_map_obj, wmd->mask_tex_map_bone, "WeightVGEdit Modifier");
+      need_transform_relation = true;
+    }
+    else if (wmd->mask_tex_mapping == MOD_DISP_MAP_GLOBAL) {
+      need_transform_relation = true;
+    }
+  }
+
+  if (need_transform_relation) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "WeightVGEdit Modifier");
   }
 }
 
@@ -156,7 +164,7 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return (wmd->defgrp_name[0] == '\0');
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   BLI_assert(mesh != NULL);
 
@@ -167,6 +175,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   float *org_w; /* Array original weights. */
   float *new_w; /* Array new weights. */
   int i;
+  const bool invert_vgroup_mask = (wmd->edit_flags & MOD_WVG_EDIT_INVERT_VGROUP_MASK) != 0;
 
   /* Flags. */
   const bool do_add = (wmd->edit_flags & MOD_WVG_EDIT_ADD2VG) != 0;
@@ -187,7 +196,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
 
   /* Get vgroup idx from its name. */
-  const int defgrp_index = defgroup_name_index(ctx->object, wmd->defgrp_name);
+  const int defgrp_index = BKE_object_defgroup_name_index(ctx->object, wmd->defgrp_name);
   if (defgrp_index == -1) {
     return mesh;
   }
@@ -219,7 +228,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   new_w = MEM_malloc_arrayN(numVerts, sizeof(float), "WeightVGEdit Modifier, new_w");
   dw = MEM_malloc_arrayN(numVerts, sizeof(MDeformWeight *), "WeightVGEdit Modifier, dw");
   for (i = 0; i < numVerts; i++) {
-    dw[i] = defvert_find_index(&dvert[i], defgrp_index);
+    dw[i] = BKE_defvert_find_index(&dvert[i], defgrp_index);
     if (dw[i]) {
       org_w[i] = new_w[i] = dw[i]->weight;
     }
@@ -229,14 +238,15 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
 
   /* Do mapping. */
-  if (wmd->falloff_type != MOD_WVG_MAPPING_NONE) {
+  const bool do_invert_mapping = (wmd->edit_flags & MOD_WVG_INVERT_FALLOFF) != 0;
+  if (do_invert_mapping || wmd->falloff_type != MOD_WVG_MAPPING_NONE) {
     RNG *rng = NULL;
 
     if (wmd->falloff_type == MOD_WVG_MAPPING_RANDOM) {
       rng = BLI_rng_new_srandom(BLI_ghashutil_strhash(ctx->object->id.name + 2));
     }
 
-    weightvg_do_map(numVerts, new_w, wmd->falloff_type, wmd->cmap_curve, rng);
+    weightvg_do_map(numVerts, new_w, wmd->falloff_type, do_invert_mapping, wmd->cmap_curve, rng);
 
     if (rng) {
       BLI_rng_free(rng);
@@ -259,7 +269,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
                    wmd->mask_tex_use_channel,
                    wmd->mask_tex_mapping,
                    wmd->mask_tex_map_obj,
-                   wmd->mask_tex_uvlayer_name);
+                   wmd->mask_tex_map_bone,
+                   wmd->mask_tex_uvlayer_name,
+                   invert_vgroup_mask);
 
   /* Update/add/remove from vgroup. */
   weightvg_update_vg(dvert,
@@ -303,7 +315,10 @@ ModifierTypeInfo modifierType_WeightVGEdit = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

@@ -20,6 +20,7 @@
 from bpy.types import Header, Panel, Menu, UIList
 
 
+
 class FILEBROWSER_HT_header(Header):
     bl_space_type = 'FILE_BROWSER'
 
@@ -27,13 +28,11 @@ class FILEBROWSER_HT_header(Header):
         layout = self.layout
 
         st = context.space_data
-        params = st.params
 
         if st.active_operator is None:
             layout.template_header()
 
-        layout.menu("FILEBROWSER_MT_view")
-        layout.menu("FILEBROWSER_MT_select")
+        FILEBROWSER_MT_editor_menus.draw_collapsible(context, layout)
 
         # can be None when save/reload with a file selector open
 
@@ -57,7 +56,6 @@ class FILEBROWSER_PT_display(Panel):
 
         space = context.space_data
         params = space.params
-        is_lib_browser = params.use_library_browsing
 
         layout.label(text="Display as")
         layout.column().prop(params, "display_type", expand=True)
@@ -68,8 +66,9 @@ class FILEBROWSER_PT_display(Panel):
         if params.display_type == 'THUMBNAIL':
             layout.prop(params, "display_size", text="Size")
         else:
-            layout.prop(params, "show_details_size", text="Size")
-            layout.prop(params, "show_details_datetime", text="Date")
+            col = layout.column(heading="Columns", align=True)
+            col.prop(params, "show_details_size", text="Size")
+            col.prop(params, "show_details_datetime", text="Date")
 
         layout.prop(params, "recursion_level", text="Recursions")
 
@@ -139,6 +138,9 @@ class FILEBROWSER_PT_filter(Panel):
             row = col.row()
             row.label(icon='FILE_TEXT')
             row.prop(params, "use_filter_text", text="Text Files", toggle=0)
+            row = col.row()
+            row.label(icon='FILE_VOLUME')
+            row.prop(params, "use_filter_volume", text="Volume Files", toggle=0)
 
         col.separator()
 
@@ -150,7 +152,12 @@ class FILEBROWSER_PT_filter(Panel):
             if params.use_filter_blendid:
                 row = col.row()
                 row.label(icon='BLANK1')  # Indentation
-                row.prop(params, "filter_id_category", text="")
+
+                sub = row.column(align=True)
+                filter_id = params.filter_id
+                for identifier in dir(filter_id):
+                    if identifier.startswith("category_"):
+                        sub.prop(filter_id, identifier, toggle=True)
 
                 col.separator()
 
@@ -164,27 +171,18 @@ def panel_poll_is_upper_region(region):
 
 
 class FILEBROWSER_UL_dir(UIList):
-    def draw_item(self, _context, layout, _data, item, icon, _active_data, active_propname, _index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         direntry = item
         # space = context.space_data
-        icon = 'NONE'
-        if active_propname == "system_folders_active":
-            icon = 'DISK_DRIVE'
-        if active_propname == "system_bookmarks_active":
-            icon = 'BOOKMARKS'
-        if active_propname == "bookmarks_active":
-            icon = 'BOOKMARKS'
-        if active_propname == "recent_folders_active":
-            icon = 'FILE_FOLDER'
 
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row(align=True)
             row.enabled = direntry.is_valid
             # Non-editable entries would show grayed-out, which is bad in this specific case, so switch to mere label.
             if direntry.is_property_readonly("name"):
-                row.label(text=direntry.name, icon=icon)
+                row.label(text=direntry.name, icon_value=icon)
             else:
-                row.prop(direntry, "name", text="", emboss=False, icon=icon)
+                row.prop(direntry, "name", text="", emboss=False, icon_value=icon)
 
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
@@ -286,7 +284,7 @@ class FILEBROWSER_PT_bookmarks_recents(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOLS'
     bl_category = "Bookmarks"
-    bl_label = "Recents"
+    bl_label = "Recent"
 
     @classmethod
     def poll(cls, context):
@@ -325,8 +323,11 @@ class FILEBROWSER_PT_advanced_filter(Panel):
             layout.prop(params, "use_filter_blendid")
             if params.use_filter_blendid:
                 layout.separator()
-                col = layout.column()
-                col.prop(params, "filter_id")
+                col = layout.column(align=True)
+                filter_id = params.filter_id
+                for identifier in dir(filter_id):
+                    if identifier.startswith("filter_"):
+                        col.prop(filter_id, identifier, toggle=True)
 
 
 class FILEBROWSER_PT_directory_path(Panel):
@@ -410,6 +411,17 @@ class FILEBROWSER_PT_directory_path(Panel):
             ).region_type = 'TOOL_PROPS'
 
 
+class FILEBROWSER_MT_editor_menus(Menu):
+    bl_idname = "FILEBROWSER_MT_editor_menus"
+    bl_label = ""
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.menu("FILEBROWSER_MT_view")
+        layout.menu("FILEBROWSER_MT_select")
+
+
 class FILEBROWSER_MT_view(Menu):
     bl_label = "View"
 
@@ -434,9 +446,8 @@ class FILEBROWSER_MT_view(Menu):
 class FILEBROWSER_MT_select(Menu):
     bl_label = "Select"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
-        st = context.space_data
 
         layout.operator("file.select_all", text="All").action = 'SELECT'
         layout.operator("file.select_all", text="None").action = 'DESELECT'
@@ -502,6 +513,7 @@ classes = (
     FILEBROWSER_PT_bookmarks_recents,
     FILEBROWSER_PT_advanced_filter,
     FILEBROWSER_PT_directory_path,
+    FILEBROWSER_MT_editor_menus,
     FILEBROWSER_MT_view,
     FILEBROWSER_MT_select,
     FILEBROWSER_MT_context_menu,

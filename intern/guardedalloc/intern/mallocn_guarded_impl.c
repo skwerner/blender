@@ -23,18 +23,20 @@
  * Guarded memory allocation, and boundary-write detection.
  */
 
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h> /* memcpy */
-#include <stdarg.h>
 #include <sys/types.h>
+
+#include <pthread.h>
 
 #include "MEM_guardedalloc.h"
 
 /* to ensure strict conversions */
 #include "../../source/blender/blenlib/BLI_strict_flags.h"
 
-#include "mallocn_intern.h"
 #include "atomic_ops.h"
+#include "mallocn_intern.h"
 
 /* Only for debugging:
  * store original buffer's name when doing MEM_dupallocN
@@ -49,17 +51,6 @@
  * in situations where the leak is predictable */
 
 //#define DEBUG_MEMCOUNTER
-
-/* Only for debugging:
- * defining DEBUG_THREADS will enable check whether memory manager
- * is locked with a mutex when allocation is called from non-main
- * thread.
- *
- * This helps troubleshooting memory issues caused by the fact
- * guarded allocator is not thread-safe, however this check will
- * fail to check allocations from openmp threads.
- */
-//#define DEBUG_THREADS
 
 /* Only for debugging:
  * Defining DEBUG_BACKTRACE will store a backtrace from where
@@ -104,7 +95,7 @@ typedef struct MemHead {
   const char *name;
   const char *nextname;
   int tag2;
-  short mmap;      /* if true, memory was mmapped */
+  short pad1;
   short alignment; /* if non-zero aligned alloc was used
                     * and alignment is stored here.
                     */
@@ -123,24 +114,6 @@ typedef struct MemHead {
 } MemHead;
 
 typedef MemHead MemHeadAligned;
-
-/* for openmp threading asserts, saves time troubleshooting
- * we may need to extend this if blender code starts using MEM_
- * functions inside OpenMP correctly with omp_set_lock() */
-
-#if 0 /* disable for now, only use to debug openmp code which doesn lock threads for malloc */
-#  if defined(_OPENMP) && defined(DEBUG)
-#    include <assert.h>
-#    include <omp.h>
-#    define DEBUG_OMP_MALLOC
-#  endif
-#endif
-
-#ifdef DEBUG_THREADS
-#  include <assert.h>
-#  include <pthread.h>
-static pthread_t mainid;
-#endif
 
 #ifdef DEBUG_BACKTRACE
 #  if defined(__linux__) || defined(__APPLE__)
@@ -187,13 +160,11 @@ static const char *check_memlist(MemHead *memh);
 /* --------------------------------------------------------------------- */
 
 static unsigned int totblock = 0;
-static size_t mem_in_use = 0, mmap_in_use = 0, peak_mem = 0;
+static size_t mem_in_use = 0, peak_mem = 0;
 
 static volatile struct localListBase _membase;
 static volatile struct localListBase *membase = &_membase;
 static void (*error_callback)(const char *) = NULL;
-static void (*thread_lock_callback)(void) = NULL;
-static void (*thread_unlock_callback)(void) = NULL;
 
 static bool malloc_debug_memset = false;
 
@@ -233,40 +204,16 @@ print_error(const char *str, ...)
     fputs(buf, stderr);
 }
 
+static pthread_mutex_t thread_lock = PTHREAD_MUTEX_INITIALIZER;
+
 static void mem_lock_thread(void)
 {
-#ifdef DEBUG_THREADS
-  static int initialized = 0;
-
-  if (initialized == 0) {
-    /* assume first allocation happens from main thread */
-    mainid = pthread_self();
-    initialized = 1;
-  }
-
-  if (!pthread_equal(pthread_self(), mainid) && thread_lock_callback == NULL) {
-    assert(!"Memory function is called from non-main thread without lock");
-  }
-#endif
-
-#ifdef DEBUG_OMP_MALLOC
-  assert(omp_in_parallel() == 0);
-#endif
-
-  if (thread_lock_callback)
-    thread_lock_callback();
+  pthread_mutex_lock(&thread_lock);
 }
 
 static void mem_unlock_thread(void)
 {
-#ifdef DEBUG_THREADS
-  if (!pthread_equal(pthread_self(), mainid) && thread_lock_callback == NULL) {
-    assert(!"Thread lock was removed while allocation from thread is in progress");
-  }
-#endif
-
-  if (thread_unlock_callback)
-    thread_unlock_callback();
+  pthread_mutex_unlock(&thread_lock);
 }
 
 bool MEM_guarded_consistency_check(void)
@@ -285,12 +232,6 @@ bool MEM_guarded_consistency_check(void)
 void MEM_guarded_set_error_callback(void (*func)(const char *))
 {
   error_callback = func;
-}
-
-void MEM_guarded_set_lock_callback(void (*lock)(void), void (*unlock)(void))
-{
-  thread_lock_callback = lock;
-  thread_unlock_callback = unlock;
 }
 
 void MEM_guarded_set_memory_debug(void)
@@ -320,10 +261,8 @@ void *MEM_guarded_dupallocN(const void *vmemh)
     memh--;
 
 #ifndef DEBUG_MEMDUPLINAME
-    if (UNLIKELY(memh->mmap))
-      newp = MEM_guarded_mapallocN(memh->len, "dupli_mapalloc");
-    else if (LIKELY(memh->alignment == 0))
-      newp = MEM_guarded_mapallocN(memh->len, "dupli_mapalloc");
+    if (LIKELY(memh->alignment == 0))
+      newp = MEM_guarded_mallocN(memh->len, "dupli_alloc");
     else
       newp = MEM_guarded_mallocN_aligned(memh->len, (size_t)memh->alignment, "dupli_alloc");
 
@@ -334,11 +273,7 @@ void *MEM_guarded_dupallocN(const void *vmemh)
       MemHead *nmemh;
       char *name = malloc(strlen(memh->name) + 24);
 
-      if (UNLIKELY(memh->mmap)) {
-        sprintf(name, "%s %s", "dupli_mapalloc", memh->name);
-        newp = MEM_guarded_mapallocN(memh->len, name);
-      }
-      else if (LIKELY(memh->alignment == 0)) {
+      if (LIKELY(memh->alignment == 0)) {
         sprintf(name, "%s %s", "dupli_alloc", memh->name);
         newp = MEM_guarded_mallocN(memh->len, name);
       }
@@ -478,7 +413,7 @@ static void make_memhead_header(MemHead *memh, size_t len, const char *str)
   memh->name = str;
   memh->nextname = NULL;
   memh->len = len;
-  memh->mmap = 0;
+  memh->pad1 = 0;
   memh->alignment = 0;
   memh->tag2 = MEMTAG2;
 
@@ -646,58 +581,6 @@ void *MEM_guarded_calloc_arrayN(size_t len, size_t size, const char *str)
   return MEM_guarded_callocN(total_size, str);
 }
 
-/* note; mmap returns zero'd memory */
-void *MEM_guarded_mapallocN(size_t len, const char *str)
-{
-  MemHead *memh;
-
-  /* on 64 bit, simply use calloc instead, as mmap does not support
-   * allocating > 4 GB on Windows. the only reason mapalloc exists
-   * is to get around address space limitations in 32 bit OSes. */
-  if (sizeof(void *) >= 8)
-    return MEM_guarded_callocN(len, str);
-
-  len = SIZET_ALIGN_4(len);
-
-#if defined(WIN32)
-  /* our windows mmap implementation is not thread safe */
-  mem_lock_thread();
-#endif
-  memh = mmap(NULL,
-              len + sizeof(MemHead) + sizeof(MemTail),
-              PROT_READ | PROT_WRITE,
-              MAP_SHARED | MAP_ANON,
-              -1,
-              0);
-#if defined(WIN32)
-  mem_unlock_thread();
-#endif
-
-  if (memh != (MemHead *)-1) {
-    make_memhead_header(memh, len, str);
-    memh->mmap = 1;
-    atomic_add_and_fetch_z(&mmap_in_use, len);
-    mem_lock_thread();
-    peak_mem = mmap_in_use > peak_mem ? mmap_in_use : peak_mem;
-    mem_unlock_thread();
-#ifdef DEBUG_MEMCOUNTER
-    if (_mallocn_count == DEBUG_MEMCOUNTER_ERROR_VAL)
-      memcount_raise(__func__);
-    memh->_count = _mallocn_count++;
-#endif
-    return (++memh);
-  }
-  else {
-    print_error(
-        "Mapalloc returns null, fallback to regular malloc: "
-        "len=" SIZET_FORMAT " in %s, total %u\n",
-        SIZET_ARG(len),
-        str,
-        (unsigned int)mmap_in_use);
-    return MEM_guarded_callocN(len, str);
-  }
-}
-
 /* Memory statistics print */
 typedef struct MemPrintBlock {
   const char *name;
@@ -735,8 +618,19 @@ void MEM_guarded_printmemlist_stats(void)
 
   mem_lock_thread();
 
-  /* put memory blocks into array */
-  printblock = malloc(sizeof(MemPrintBlock) * totblock);
+  if (totblock != 0) {
+    /* put memory blocks into array */
+    printblock = malloc(sizeof(MemPrintBlock) * totblock);
+
+    if (UNLIKELY(!printblock)) {
+      mem_unlock_thread();
+      print_error("malloc returned null while generating stats");
+      return;
+    }
+  }
+  else {
+    printblock = NULL;
+  }
 
   pb = printblock;
   totpb = 0;
@@ -745,7 +639,7 @@ void MEM_guarded_printmemlist_stats(void)
   if (membl)
     membl = MEMNEXT(membl);
 
-  while (membl) {
+  while (membl && pb) {
     pb->name = membl->name;
     pb->len = membl->len;
     pb->items = 1;
@@ -754,7 +648,7 @@ void MEM_guarded_printmemlist_stats(void)
     pb++;
 
 #ifdef USE_MALLOC_USABLE_SIZE
-    if (!membl->mmap && membl->alignment == 0) {
+    if (membl->alignment == 0) {
       mem_in_use_slop += (sizeof(MemHead) + sizeof(MemTail) + malloc_usable_size((void *)membl)) -
                          membl->len;
     }
@@ -767,7 +661,10 @@ void MEM_guarded_printmemlist_stats(void)
   }
 
   /* sort by name and add together blocks with the same name */
-  qsort(printblock, totpb, sizeof(MemPrintBlock), compare_name);
+  if (totpb > 1) {
+    qsort(printblock, totpb, sizeof(MemPrintBlock), compare_name);
+  }
+
   for (a = 0, b = 0; a < totpb; a++) {
     if (a == b) {
       continue;
@@ -784,7 +681,10 @@ void MEM_guarded_printmemlist_stats(void)
   totpb = b + 1;
 
   /* sort by length and print */
-  qsort(printblock, totpb, sizeof(MemPrintBlock), compare_len);
+  if (totpb > 1) {
+    qsort(printblock, totpb, sizeof(MemPrintBlock), compare_len);
+  }
+
   printf("\ntotal memory len: %.3f MB\n", (double)mem_in_use / (double)(1024 * 1024));
   printf("peak memory len: %.3f MB\n", (double)peak_mem / (double)(1024 * 1024));
   printf("slop memory len: %.3f MB\n", (double)mem_in_use_slop / (double)(1024 * 1024));
@@ -796,7 +696,10 @@ void MEM_guarded_printmemlist_stats(void)
            (double)pb->len / 1024.0 / (double)pb->items,
            pb->name);
   }
-  free(printblock);
+
+  if (printblock != NULL) {
+    free(printblock);
+  }
 
   mem_unlock_thread();
 
@@ -1078,27 +981,13 @@ static void rem_memblock(MemHead *memh)
     free((char *)memh->name);
 #endif
 
-  if (memh->mmap) {
-    atomic_sub_and_fetch_z(&mmap_in_use, memh->len);
-#if defined(WIN32)
-    /* our windows mmap implementation is not thread safe */
-    mem_lock_thread();
-#endif
-    if (munmap(memh, memh->len + sizeof(MemHead) + sizeof(MemTail)))
-      printf("Couldn't unmap memory %s\n", memh->name);
-#if defined(WIN32)
-    mem_unlock_thread();
-#endif
+  if (UNLIKELY(malloc_debug_memset && memh->len))
+    memset(memh + 1, 255, memh->len);
+  if (LIKELY(memh->alignment == 0)) {
+    free(memh);
   }
   else {
-    if (UNLIKELY(malloc_debug_memset && memh->len))
-      memset(memh + 1, 255, memh->len);
-    if (LIKELY(memh->alignment == 0)) {
-      free(memh);
-    }
-    else {
-      aligned_free(MEMHEAD_REAL_PTR(memh));
-    }
+    aligned_free(MEMHEAD_REAL_PTR(memh));
   }
 }
 
@@ -1248,17 +1137,6 @@ size_t MEM_guarded_get_memory_in_use(void)
   mem_unlock_thread();
 
   return _mem_in_use;
-}
-
-size_t MEM_guarded_get_mapped_memory_in_use(void)
-{
-  size_t _mmap_in_use;
-
-  mem_lock_thread();
-  _mmap_in_use = mmap_in_use;
-  mem_unlock_thread();
-
-  return _mmap_in_use;
 }
 
 unsigned int MEM_guarded_get_memory_blocks_in_use(void)

@@ -99,8 +99,7 @@ class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
             physics_add(col, context.soft_body, "Soft Body", 'SOFT_BODY', 'MOD_SOFT', True)
 
         if obj.type == 'MESH':
-            physics_add(col, context.fluid, "Fluid", 'FLUID_SIMULATION', 'MOD_FLUIDSIM', True)
-            physics_add(col, context.smoke, "Smoke", 'SMOKE', 'MOD_SMOKE', True)
+            physics_add(col, context.fluid, "Fluid", 'FLUID', 'MOD_FLUIDSIM', True)
 
             physics_add_special(
                 col, obj.rigid_body, "Rigid Body",
@@ -118,7 +117,7 @@ class PHYSICS_PT_add(PhysicButtonsPanel, Panel):
         )
 
 
-# cache-type can be 'PSYS' 'HAIR' 'SMOKE' etc.
+# cache-type can be 'PSYS' 'HAIR' 'FLUID' etc.
 
 def point_cache_ui(self, cache, enabled, cachetype):
     layout = self.layout
@@ -141,10 +140,10 @@ def point_cache_ui(self, cache, enabled, cachetype):
         col.operator("ptcache.add", icon='ADD', text="")
         col.operator("ptcache.remove", icon='REMOVE', text="")
 
-    if cachetype in {'PSYS', 'HAIR', 'SMOKE'}:
+    if cachetype in {'PSYS', 'HAIR', 'FLUID'}:
         col = layout.column()
 
-        if cachetype == 'SMOKE':
+        if cachetype == 'FLUID':
             col.prop(cache, "use_library_path", text="Use Library Path")
 
         col.prop(cache, "use_external")
@@ -160,14 +159,14 @@ def point_cache_ui(self, cache, enabled, cachetype):
             col.alignment = 'RIGHT'
             col.label(text=cache_info)
     else:
-        if cachetype in {'SMOKE', 'DYNAMIC_PAINT'}:
+        if cachetype in {'FLUID', 'DYNAMIC_PAINT'}:
             if not is_saved:
                 col = layout.column(align=True)
                 col.alignment = 'RIGHT'
                 col.label(text="Cache is disabled until the file is saved")
                 layout.enabled = False
 
-    if not cache.use_external or cachetype == 'SMOKE':
+    if not cache.use_external or cachetype == 'FLUID':
         col = layout.column(align=True)
 
         if cachetype not in {'PSYS', 'DYNAMIC_PAINT'}:
@@ -175,18 +174,18 @@ def point_cache_ui(self, cache, enabled, cachetype):
             col.prop(cache, "frame_start", text="Simulation Start")
             col.prop(cache, "frame_end")
 
-        if cachetype not in {'SMOKE', 'CLOTH', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
+        if cachetype not in {'FLUID', 'CLOTH', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
             col.prop(cache, "frame_step")
 
         cache_info = cache.info
-        if cachetype != 'SMOKE' and cache_info:  # avoid empty space.
+        if cachetype != 'FLUID' and cache_info:  # avoid empty space.
             col = layout.column(align=True)
             col.alignment = 'RIGHT'
             col.label(text=cache_info)
 
         can_bake = True
 
-        if cachetype not in {'SMOKE', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
+        if cachetype not in {'FLUID', 'DYNAMIC_PAINT', 'RIGID_BODY'}:
             if not is_saved:
                 col = layout.column(align=True)
                 col.alignment = 'RIGHT'
@@ -228,7 +227,7 @@ def point_cache_ui(self, cache, enabled, cachetype):
             col.operator("ptcache.bake", text="Bake").bake = True
 
         sub = col.row()
-        sub.enabled = (cache.is_frame_skip or cache.is_outdated) and enabled
+        sub.enabled = enabled
         sub.operator("ptcache.bake", text="Calculate To Frame").bake = False
 
         sub = col.column()
@@ -269,7 +268,7 @@ def effector_weights_ui(self, weights, weight_type):
     col.prop(weights, "curve_guide", slider=True)
     col.prop(weights, "texture", slider=True)
 
-    if weight_type != 'SMOKE':
+    if weight_type != 'FLUID':
         col.prop(weights, "smokeflow", slider=True)
 
     col = flow.column()
@@ -311,8 +310,10 @@ def basic_force_field_settings_ui(self, field):
     else:
         col.prop(field, "flow")
 
-    col.prop(field, "apply_to_location", text="Affect Location")
-    col.prop(field, "apply_to_rotation", text="Affect Rotation")
+    sub = col.column(heading="Affect")
+
+    sub.prop(field, "apply_to_location", text="Location")
+    sub.prop(field, "apply_to_rotation", text="Rotation")
 
     col = flow.column()
     sub = col.column(align=True)
@@ -337,26 +338,29 @@ def basic_force_field_falloff_ui(self, field):
     if not field or field.type == 'NONE':
         return
 
-    flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=True)
-
-    col = flow.column()
+    col = layout.column()
     col.prop(field, "z_direction")
     col.prop(field, "falloff_power", text="Power")
 
-    col = flow.column()
-    col.prop(field, "use_min_distance", text="Use Minimum")
-
-    sub = col.column(align=True)
+    col = layout.column(align=False, heading="Min Distance")
+    col.use_property_decorate = False
+    row = col.row(align=True)
+    sub = row.row(align=True)
+    sub.prop(field, "use_min_distance", text="")
+    sub = sub.row(align=True)
     sub.active = field.use_min_distance
-    sub.prop(field, "distance_min", text="Min Distance")
+    sub.prop(field, "distance_min", text="")
+    row.prop_decorator(field, "distance_min")
 
-    col = flow.column()
-    col.prop(field, "use_max_distance", text="Use Maximum")
-
-    sub = col.column(align=True)
+    col = layout.column(align=False, heading="Max Distance")
+    col.use_property_decorate = False
+    row = col.row(align=True)
+    sub = row.row(align=True)
+    sub.prop(field, "use_max_distance", text="")
+    sub = sub.row(align=True)
     sub.active = field.use_max_distance
-    sub.prop(field, "distance_max", text="Max Distance")
-
+    sub.prop(field, "distance_max", text="")
+    row.prop_decorator(field, "distance_max")
 
 classes = (
     PHYSICS_PT_add,

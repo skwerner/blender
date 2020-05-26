@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -26,21 +26,21 @@
 
 #include "BLI_utildefines.h"
 
-#include "BLI_math.h"
 #include "BLI_alloca.h"
+#include "BLI_math.h"
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_library_query.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
 
-#include "MOD_modifiertypes.h"
 #include "MEM_guardedalloc.h"
+#include "MOD_modifiertypes.h"
 
 #include "BLI_strict_flags.h"
 
@@ -112,7 +112,7 @@ static Mesh *mesh_remove_doubles_on_axis(Mesh *result,
                                          const float axis_offset[3],
                                          const float merge_threshold)
 {
-  const float merge_threshold_sq = SQUARE(merge_threshold);
+  const float merge_threshold_sq = square_f(merge_threshold);
   const bool use_offset = axis_offset != NULL;
   uint tot_doubles = 0;
   for (uint i = 0; i < totvert; i += 1) {
@@ -178,7 +178,7 @@ static void initData(ModifierData *md)
   ltmd->merge_dist = 0.01f;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *meshData)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *meshData)
 {
   Mesh *mesh = meshData;
   Mesh *result;
@@ -352,12 +352,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
    * Note! smaller then `FLT_EPSILON * 100`
    * gives problems with float precision so its never closed. */
   if (fabsf(screw_ofs) <= (FLT_EPSILON * 100.0f) &&
-      fabsf(fabsf(angle) - ((float)M_PI * 2.0f)) <= (FLT_EPSILON * 100.0f)) {
+      fabsf(fabsf(angle) - ((float)M_PI * 2.0f)) <= (FLT_EPSILON * 100.0f) && step_tot > 3) {
     close = 1;
     step_tot--;
-    if (step_tot < 3) {
-      step_tot = 3;
-    }
 
     maxVerts = totvert * step_tot;    /* -1 because we're joining back up */
     maxEdges = (totvert * step_tot) + /* these are the edges between new verts */
@@ -368,8 +365,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
   else {
     close = 0;
-    if (step_tot < 3) {
-      step_tot = 3;
+    if (step_tot < 2) {
+      step_tot = 2;
     }
 
     maxVerts = totvert * step_tot;          /* -1 because we're joining back up */
@@ -1090,7 +1087,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   /* validate loop edges */
 #if 0
   {
-    unsigned i = 0;
+    uint i = 0;
     printf("\n");
     for (; i < maxPolys * 4; i += 4) {
       uint ii;
@@ -1168,13 +1165,16 @@ ModifierTypeInfo modifierType_Screw = {
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,

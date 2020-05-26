@@ -21,41 +21,63 @@
 #ifndef __TEXTVIEW_H__
 #define __TEXTVIEW_H__
 
+enum eTextViewContext_LineFlag {
+  TVC_LINE_FG = (1 << 0),
+  TVC_LINE_BG = (1 << 1),
+  TVC_LINE_ICON = (1 << 2),
+  TVC_LINE_ICON_FG = (1 << 3),
+  TVC_LINE_ICON_BG = (1 << 4)
+};
+
 typedef struct TextViewContext {
+  /** Font size scaled by the interface size. */
   int lheight;
+  /** Text selection, when a selection range is in use. */
   int sel_start, sel_end;
 
-  /* view settings */
-  int cwidth;        /* shouldnt be needed! */
-  int console_width; /* shouldnt be needed! */
+  int row_vpadding;
 
-  int winx;
-  int ymin, ymax;
+  /** Area to draw text: (0, 0, winx, winy) with a margin applied and scroll-bar subtracted. */
+  rcti draw_rect;
+  /** Area to draw text background colors (extending beyond text in some cases). */
+  rcti draw_rect_outer;
+
+  /** Scroll offset in pixels. */
+  int scroll_ymin, scroll_ymax;
 
   /* callbacks */
   int (*begin)(struct TextViewContext *tvc);
   void (*end)(struct TextViewContext *tvc);
-  void *arg1;
-  void *arg2;
+  const void *arg1;
+  const void *arg2;
 
   /* iterator */
   int (*step)(struct TextViewContext *tvc);
-  int (*line_get)(struct TextViewContext *tvc, const char **, int *);
-  int (*line_color)(struct TextViewContext *tvc, unsigned char fg[3], unsigned char bg[3]);
+  void (*line_get)(struct TextViewContext *tvc, const char **r_line, int *r_len);
+  enum eTextViewContext_LineFlag (*line_data)(struct TextViewContext *tvc,
+                                              uchar fg[4],
+                                              uchar bg[4],
+                                              int *r_icon,
+                                              uchar r_icon_fg[4],
+                                              uchar r_icon_bg[4]);
+  void (*draw_cursor)(struct TextViewContext *tvc, int cwidth, int columns);
   /* constant theme colors */
   void (*const_colors)(struct TextViewContext *tvc, unsigned char bg_sel[4]);
-  void *iter;
+  const void *iter;
   int iter_index;
-  int iter_char;      /* char intex, used for multi-line report display */
-  int iter_char_next; /* same as above, next \n */
-  int iter_tmp;       /* internal iterator use */
+  /** Used for internal multi-line iteration. */
+  int iter_char_begin;
+  /** The last character (not inclusive). */
+  int iter_char_end;
+  /** Internal iterator use. */
+  int iter_tmp;
 
 } TextViewContext;
 
-int textview_draw(
-    struct TextViewContext *tvc, const int draw, int mval[2], void **mouse_pick, int *pos_pick);
-
-#define TVC_LINE_FG (1 << 0)
-#define TVC_LINE_BG (1 << 1)
+int textview_draw(struct TextViewContext *tvc,
+                  const bool do_draw,
+                  const int mval_init[2],
+                  void **r_mval_pick_item,
+                  int *r_mval_pick_offset);
 
 #endif /* __TEXTVIEW_H__ */

@@ -147,8 +147,8 @@ class BakeToKeyframes(Operator):
                 scene.frame_set(f)
                 for j, obj in enumerate(objects):
                     mat = bake[i][j]
-                    # convert world space transform to parent space, so parented objects don't get offset after baking
-                    if (obj.parent):
+                    # Convert world space transform to parent space, so parented objects don't get offset after baking.
+                    if obj.parent:
                         mat = obj.matrix_parent_inverse.inverted() @ obj.parent.matrix_world.inverted() @ mat
 
                     obj.location = mat.to_translation()
@@ -241,7 +241,8 @@ class ConnectRigidBodies(Operator):
         description="Pattern used to connect objects",
         items=(
             ('SELECTED_TO_ACTIVE', "Selected to Active", "Connect selected objects to the active object"),
-            ('CHAIN_DISTANCE', "Chain by Distance", "Connect objects as a chain based on distance, starting at the active object"),
+            ('CHAIN_DISTANCE', "Chain by Distance", "Connect objects as a chain based on distance, "
+             "starting at the active object"),
         ),
         default='SELECTED_TO_ACTIVE',
     )

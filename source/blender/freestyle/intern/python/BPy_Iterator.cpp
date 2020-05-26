@@ -22,15 +22,15 @@
 
 #include "BPy_Convert.h"
 #include "Iterator/BPy_AdjacencyIterator.h"
-#include "Iterator/BPy_Interface0DIterator.h"
-#include "Iterator/BPy_CurvePointIterator.h"
-#include "Iterator/BPy_StrokeVertexIterator.h"
-#include "Iterator/BPy_SVertexIterator.h"
-#include "Iterator/BPy_orientedViewEdgeIterator.h"
-#include "Iterator/BPy_ViewEdgeIterator.h"
-#include "Iterator/BPy_ChainingIterator.h"
 #include "Iterator/BPy_ChainPredicateIterator.h"
 #include "Iterator/BPy_ChainSilhouetteIterator.h"
+#include "Iterator/BPy_ChainingIterator.h"
+#include "Iterator/BPy_CurvePointIterator.h"
+#include "Iterator/BPy_Interface0DIterator.h"
+#include "Iterator/BPy_SVertexIterator.h"
+#include "Iterator/BPy_StrokeVertexIterator.h"
+#include "Iterator/BPy_ViewEdgeIterator.h"
+#include "Iterator/BPy_orientedViewEdgeIterator.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -217,17 +217,9 @@ static PyObject *Iterator_is_end_get(BPy_Iterator *self, void *UNUSED(closure))
 }
 
 static PyGetSetDef BPy_Iterator_getseters[] = {
-    {(char *)"name", (getter)Iterator_name_get, (setter)NULL, (char *)Iterator_name_doc, NULL},
-    {(char *)"is_begin",
-     (getter)Iterator_is_begin_get,
-     (setter)NULL,
-     (char *)Iterator_is_begin_doc,
-     NULL},
-    {(char *)"is_end",
-     (getter)Iterator_is_end_get,
-     (setter)NULL,
-     (char *)Iterator_is_end_doc,
-     NULL},
+    {"name", (getter)Iterator_name_get, (setter)NULL, Iterator_name_doc, NULL},
+    {"is_begin", (getter)Iterator_is_begin_get, (setter)NULL, Iterator_is_begin_doc, NULL},
+    {"is_end", (getter)Iterator_is_end_get, (setter)NULL, Iterator_is_end_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 

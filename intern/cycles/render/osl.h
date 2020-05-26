@@ -93,9 +93,10 @@ class OSLShaderManager : public ShaderManager {
   OSLShaderInfo *shader_loaded_info(const string &hash);
 
   /* create OSL node using OSLQuery */
-  OSLNode *osl_node(const std::string &filepath,
-                    const std::string &bytecode_hash = "",
-                    const std::string &bytecode = "");
+  static OSLNode *osl_node(ShaderManager *manager,
+                           const std::string &filepath,
+                           const std::string &bytecode_hash = "",
+                           const std::string &bytecode = "");
 
  protected:
   void texture_system_init();
@@ -131,10 +132,9 @@ class OSLCompiler {
   OSLCompiler(OSLShaderManager *manager,
               OSLRenderServices *services,
               OSL::ShadingSystem *shadingsys,
-              ImageManager *image_manager,
-              LightManager *light_manager);
+              Scene *scene);
 #endif
-  void compile(Scene *scene, OSLGlobals *og, Shader *shader);
+  void compile(OSLGlobals *og, Shader *shader);
 
   void add(ShaderNode *node, const char *name, bool isfilepath = false);
 
@@ -165,8 +165,7 @@ class OSLCompiler {
   }
 
   bool background;
-  ImageManager *image_manager;
-  LightManager *light_manager;
+  Scene *scene;
 
  private:
 #ifdef WITH_OSL

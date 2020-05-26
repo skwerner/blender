@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -63,11 +63,11 @@
 
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_object_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
 
 #include "BKE_deform.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_modifier.h"
@@ -943,7 +943,7 @@ static Mesh *subdivide_base(Mesh *orig)
         weight = interpf(vg->w2, vg->w1, t);
 
         if (weight > 0) {
-          defvert_add_index_notest(&outdvert[v], vg->def_nr, weight);
+          BKE_defvert_add_index_notest(&outdvert[v], vg->def_nr, weight);
         }
       }
 
@@ -1058,7 +1058,7 @@ static void output_frames(BMesh *bm, SkinNode *sn, const MDeformVert *input_dver
           dv = CustomData_bmesh_get(&bm->vdata, v->head.data, CD_MDEFORMVERT);
 
           BLI_assert(dv->totweight == 0);
-          defvert_copy(dv, input_dvert);
+          BKE_defvert_copy(dv, input_dvert);
         }
       }
     }
@@ -1779,7 +1779,7 @@ static BMesh *build_skin(SkinNode *skin_nodes,
   skin_update_merged_vertices(skin_nodes, totvert);
 
   if (!skin_output_branch_hulls(&so, skin_nodes, totvert, emap, medge)) {
-    modifier_setError(&smd->modifier, "Hull error");
+    BKE_modifier_set_error(&smd->modifier, "Hull error");
   }
 
   /* Merge triangles here in the hope of providing better target
@@ -1862,7 +1862,7 @@ static Mesh *base_skin(Mesh *origmesh, SkinModifierData *smd)
   MEM_freeN(emapmem);
 
   if (!has_valid_root) {
-    modifier_setError(
+    BKE_modifier_set_error(
         &smd->modifier,
         "No valid root vertex found (you need one per mesh island you want to skin)");
   }
@@ -1911,7 +1911,7 @@ static void initData(ModifierData *md)
   smd->symmetry_axes = MOD_SKIN_SYMM_X;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
 {
   Mesh *result;
 
@@ -1935,13 +1935,16 @@ ModifierTypeInfo modifierType_Skin = {
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

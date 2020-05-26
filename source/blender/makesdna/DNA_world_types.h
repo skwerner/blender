@@ -24,8 +24,8 @@
 #ifndef __DNA_WORLD_TYPES_H__
 #define __DNA_WORLD_TYPES_H__
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
+#include "DNA_defs.h"
 
 struct AnimData;
 struct Ipo;
@@ -85,9 +85,6 @@ typedef struct World {
   /* nodes */
   struct bNodeTree *nodetree;
 
-  /** Runtime : miststa + mistdist, used for drawing camera. */
-  float mistend;
-  char _pad1[4];
   /** Runtime. */
   ListBase gpumaterial;
 } World;

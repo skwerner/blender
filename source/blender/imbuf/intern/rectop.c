@@ -24,15 +24,15 @@
 
 #include <stdlib.h>
 
-#include "BLI_utildefines.h"
-#include "BLI_rect.h"
 #include "BLI_math_base.h"
 #include "BLI_math_color.h"
 #include "BLI_math_color_blend.h"
 #include "BLI_math_vector.h"
+#include "BLI_rect.h"
+#include "BLI_utildefines.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "IMB_colormanagement.h"
 
@@ -213,7 +213,9 @@ void IMB_blend_color_float(float dst[4],
   }
 }
 
-/** Crop */
+/* -------------------------------------------------------------------- */
+/** \name Crop
+ * \{ */
 
 static void rect_crop_4bytes(void **buf_p, const int size_src[2], const rcti *crop)
 {
@@ -279,8 +281,9 @@ void IMB_rect_crop(ImBuf *ibuf, const rcti *crop)
   ibuf->y = size_dst[1];
 }
 
-/** Re-alloc buffers at a new size */
-
+/**
+ * Re-allocate buffers at a new size.
+ */
 static void rect_realloc_4bytes(void **buf_p, const uint size[2])
 {
   if (*buf_p == NULL) {
@@ -317,6 +320,8 @@ void IMB_rect_size_set(ImBuf *ibuf, const uint size[2])
   ibuf->x = size[0];
   ibuf->y = size[1];
 }
+
+/** \} */
 
 /* clipping */
 

@@ -18,20 +18,22 @@
  * \ingroup RNA
  */
 
+#include <errno.h>
 #include <float.h>
+#include <inttypes.h>
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h"
 
 #include "RNA_define.h"
-#include "RNA_types.h"
 #include "RNA_enum_types.h"
+#include "RNA_types.h"
 
 #include "rna_internal.h"
 
@@ -480,8 +482,14 @@ static const char *rna_type_type_name(PropertyRNA *prop)
     case PROP_BOOLEAN:
       return "bool";
     case PROP_INT:
-    case PROP_ENUM:
       return "int";
+    case PROP_ENUM: {
+      EnumPropertyRNA *eprop = (EnumPropertyRNA *)prop;
+      if (eprop->native_enum_type) {
+        return eprop->native_enum_type;
+      }
+      return "int";
+    }
     case PROP_FLOAT:
       return "float";
     case PROP_STRING:
@@ -587,7 +595,7 @@ static void rna_float_print(FILE *f, float num)
   else if (num == FLT_MAX) {
     fprintf(f, "FLT_MAX");
   }
-  else if ((ABS(num) < INT64_MAX) && ((int64_t)num == num)) {
+  else if ((fabsf(num) < INT64_MAX) && ((int64_t)num == num)) {
     fprintf(f, "%.1ff", num);
   }
   else {
@@ -595,7 +603,7 @@ static void rna_float_print(FILE *f, float num)
   }
 }
 
-static void rna_int_print(FILE *f, int num)
+static void rna_int_print(FILE *f, int64_t num)
 {
   if (num == INT_MIN) {
     fprintf(f, "INT_MIN");
@@ -603,8 +611,17 @@ static void rna_int_print(FILE *f, int num)
   else if (num == INT_MAX) {
     fprintf(f, "INT_MAX");
   }
+  else if (num == INT64_MIN) {
+    fprintf(f, "INT64_MIN");
+  }
+  else if (num == INT64_MAX) {
+    fprintf(f, "INT64_MAX");
+  }
+  else if (num < INT_MIN || num > INT_MAX) {
+    fprintf(f, "%" PRId64 "LL", num);
+  }
   else {
-    fprintf(f, "%d", num);
+    fprintf(f, "%d", (int)num);
   }
 }
 
@@ -642,7 +659,19 @@ static char *rna_def_property_get_func(
           }
         }
       }
-      else if (prop->type == PROP_INT || prop->type == PROP_BOOLEAN || prop->type == PROP_ENUM) {
+      else if (prop->type == PROP_BOOLEAN) {
+        if (IS_DNATYPE_BOOLEAN_COMPAT(dp->dnatype) == 0) {
+          CLOG_ERROR(&LOG,
+                     "%s.%s is a '%s' but wrapped as type '%s'.",
+                     srna->identifier,
+                     prop->identifier,
+                     dp->dnatype,
+                     RNA_property_typename(prop->type));
+          DefRNA.error = 1;
+          return NULL;
+        }
+      }
+      else if (prop->type == PROP_INT || prop->type == PROP_ENUM) {
         if (IS_DNATYPE_INT_COMPAT(dp->dnatype) == 0) {
           CLOG_ERROR(&LOG,
                      "%s.%s is a '%s' but wrapped as type '%s'.",
@@ -784,10 +813,11 @@ static char *rna_def_property_get_func(
           if (dp->dnaarraylength == 1) {
             if (prop->type == PROP_BOOLEAN && dp->booleanbit) {
               fprintf(f,
-                      "        values[i] = %s((data->%s & (%du << i)) != 0);\n",
+                      "        values[i] = %s((data->%s & (",
                       (dp->booleannegative) ? "!" : "",
-                      dp->dnaname,
-                      dp->booleanbit);
+                      dp->dnaname);
+              rna_int_print(f, dp->booleanbit);
+              fprintf(f, " << i)) != 0);\n");
             }
             else {
               fprintf(f,
@@ -1111,11 +1141,14 @@ static char *rna_def_property_set_func(
           if (dp->dnaarraylength == 1) {
             if (prop->type == PROP_BOOLEAN && dp->booleanbit) {
               fprintf(f,
-                      "        if (%svalues[i]) data->%s |= (%du << i);\n",
+                      "        if (%svalues[i]) data->%s |= (",
                       (dp->booleannegative) ? "!" : "",
-                      dp->dnaname,
-                      dp->booleanbit);
-              fprintf(f, "        else data->%s &= ~(%du << i);\n", dp->dnaname, dp->booleanbit);
+                      dp->dnaname);
+              rna_int_print(f, dp->booleanbit);
+              fprintf(f, " << i);\n");
+              fprintf(f, "        else data->%s &= ~(", dp->dnaname);
+              rna_int_print(f, dp->booleanbit);
+              fprintf(f, " << i);\n");
             }
             else {
               fprintf(
@@ -1789,6 +1822,10 @@ static void rna_def_property_funcs(FILE *f, StructRNA *srna, PropertyDefRNA *dp)
     }
     case PROP_ENUM: {
       EnumPropertyRNA *eprop = (EnumPropertyRNA *)prop;
+
+      if (!eprop->get && !eprop->set) {
+        rna_set_raw_property(dp, prop);
+      }
 
       eprop->get = (void *)rna_def_property_get_func(f, srna, prop, dp, (const char *)eprop->get);
       eprop->set = (void *)rna_def_property_set_func(f, srna, prop, dp, (const char *)eprop->set);
@@ -4231,8 +4268,10 @@ static RNAProcessItem PROCESS_ITEMS[] = {
     {"rna_curve.c", "rna_curve_api.c", RNA_def_curve},
     {"rna_dynamicpaint.c", NULL, RNA_def_dynamic_paint},
     {"rna_fcurve.c", "rna_fcurve_api.c", RNA_def_fcurve},
-    {"rna_fluidsim.c", NULL, RNA_def_fluidsim},
     {"rna_gpencil.c", NULL, RNA_def_gpencil},
+#ifdef WITH_NEW_OBJECT_TYPES
+    {"rna_hair.c", NULL, RNA_def_hair},
+#endif
     {"rna_image.c", "rna_image_api.c", RNA_def_image},
     {"rna_key.c", NULL, RNA_def_key},
     {"rna_light.c", NULL, RNA_def_light},
@@ -4240,6 +4279,7 @@ static RNAProcessItem PROCESS_ITEMS[] = {
     {"rna_layer.c", NULL, RNA_def_view_layer},
     {"rna_linestyle.c", NULL, RNA_def_linestyle},
     {"rna_main.c", "rna_main_api.c", RNA_def_main},
+    {"rna_fluid.c", NULL, RNA_def_fluid},
     {"rna_material.c", "rna_material_api.c", RNA_def_material},
     {"rna_mesh.c", "rna_mesh_api.c", RNA_def_mesh},
     {"rna_meta.c", "rna_meta_api.c", RNA_def_meta},
@@ -4254,7 +4294,11 @@ static RNAProcessItem PROCESS_ITEMS[] = {
     {"rna_packedfile.c", NULL, RNA_def_packedfile},
     {"rna_palette.c", NULL, RNA_def_palette},
     {"rna_particle.c", NULL, RNA_def_particle},
+#ifdef WITH_NEW_OBJECT_TYPES
+    {"rna_pointcloud.c", NULL, RNA_def_pointcloud},
+#endif
     {"rna_pose.c", "rna_pose_api.c", RNA_def_pose},
+    {"rna_curveprofile.c", NULL, RNA_def_profile},
     {"rna_lightprobe.c", NULL, RNA_def_lightprobe},
     {"rna_render.c", NULL, RNA_def_render},
     {"rna_rigidbody.c", NULL, RNA_def_rigidbody},
@@ -4262,7 +4306,9 @@ static RNAProcessItem PROCESS_ITEMS[] = {
     {"rna_screen.c", NULL, RNA_def_screen},
     {"rna_sculpt_paint.c", NULL, RNA_def_sculpt_paint},
     {"rna_sequencer.c", "rna_sequencer_api.c", RNA_def_sequencer},
-    {"rna_smoke.c", NULL, RNA_def_smoke},
+#ifdef WITH_NEW_SIMULATION_TYPE
+    {"rna_simulation.c", NULL, RNA_def_simulation},
+#endif
     {"rna_space.c", "rna_space_api.c", RNA_def_space},
     {"rna_speaker.c", NULL, RNA_def_speaker},
     {"rna_test.c", NULL, RNA_def_test},
@@ -4272,6 +4318,7 @@ static RNAProcessItem PROCESS_ITEMS[] = {
     {"rna_ui.c", "rna_ui_api.c", RNA_def_ui},
     {"rna_userdef.c", NULL, RNA_def_userdef},
     {"rna_vfont.c", "rna_vfont_api.c", RNA_def_vfont},
+    {"rna_volume.c", NULL, RNA_def_volume},
     {"rna_wm.c", "rna_wm_api.c", RNA_def_wm},
     {"rna_wm_gizmo.c", "rna_wm_gizmo_api.c", RNA_def_wm_gizmo},
     {"rna_workspace.c", "rna_workspace_api.c", RNA_def_workspace},
@@ -4279,6 +4326,7 @@ static RNAProcessItem PROCESS_ITEMS[] = {
     {"rna_movieclip.c", NULL, RNA_def_movieclip},
     {"rna_tracking.c", NULL, RNA_def_tracking},
     {"rna_mask.c", NULL, RNA_def_mask},
+    {"rna_xr.c", NULL, RNA_def_xr},
     {NULL, NULL},
 };
 
@@ -4304,12 +4352,13 @@ static void rna_generate(BlenderRNA *brna, FILE *f, const char *filename, const 
 
   fprintf(f, "#include \"DNA_ID.h\"\n");
   fprintf(f, "#include \"DNA_scene_types.h\"\n");
+  fprintf(f, "#include \"DNA_node_types.h\"\n");
 
   fprintf(f, "#include \"BLI_blenlib.h\"\n\n");
   fprintf(f, "#include \"BLI_utildefines.h\"\n\n");
 
   fprintf(f, "#include \"BKE_context.h\"\n");
-  fprintf(f, "#include \"BKE_library.h\"\n");
+  fprintf(f, "#include \"BKE_lib_id.h\"\n");
   fprintf(f, "#include \"BKE_main.h\"\n");
   fprintf(f, "#include \"BKE_report.h\"\n");
 
@@ -4320,7 +4369,9 @@ static void rna_generate(BlenderRNA *brna, FILE *f, const char *filename, const 
   /* include the generated prototypes header */
   fprintf(f, "#include \"rna_prototypes_gen.h\"\n\n");
 
-  fprintf(f, "#include \"%s\"\n", filename);
+  if (filename) {
+    fprintf(f, "#include \"%s\"\n", filename);
+  }
   if (api_filename) {
     fprintf(f, "#include \"%s\"\n", api_filename);
   }
@@ -4394,6 +4445,7 @@ static void rna_generate_header(BlenderRNA *UNUSED(brna), FILE *f)
           " * Do not edit manually, changes will be overwritten.              */\n\n");
 
   fprintf(f, "#include \"RNA_types.h\"\n\n");
+  fprintf(f, "#include \"DNA_node_types.h\"\n\n");
 
   fprintf(f, "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
 
@@ -4626,8 +4678,8 @@ static const char *cpp_classes =
     "    operator void*() { return ptr.data; }\n"
     "    operator bool() { return ptr.data != NULL; }\n"
     "\n"
-    "    bool operator==(const Pointer &other) { return ptr.data == other.ptr.data; }\n"
-    "    bool operator!=(const Pointer &other) { return ptr.data != other.ptr.data; }\n"
+    "    bool operator==(const Pointer &other) const { return ptr.data == other.ptr.data; }\n"
+    "    bool operator!=(const Pointer &other) const { return ptr.data != other.ptr.data; }\n"
     "\n"
     "    PointerRNA ptr;\n"
     "};\n"
@@ -4828,6 +4880,7 @@ static void rna_generate_header_cpp(BlenderRNA *UNUSED(brna), FILE *f)
   fprintf(f, "#include \"RNA_blender.h\"\n");
   fprintf(f, "#include \"RNA_types.h\"\n");
   fprintf(f, "#include \"RNA_access.h\"\n");
+  fprintf(f, "#include \"DNA_node_types.h\"\n");
 
   fprintf(f, "%s", cpp_classes);
 

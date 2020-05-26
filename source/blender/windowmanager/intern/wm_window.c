@@ -25,8 +25,8 @@
  */
 
 #include <math.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "DNA_listBase.h"
@@ -38,8 +38,8 @@
 
 #include "GHOST_C-api.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
@@ -60,32 +60,35 @@
 #include "WM_types.h"
 #include "wm.h"
 #include "wm_draw.h"
+#include "wm_event_system.h"
 #include "wm_files.h"
 #include "wm_platform_support.h"
 #include "wm_window.h"
 #include "wm_window_private.h"
-#include "wm_event_system.h"
+#ifdef WITH_XR_OPENXR
+#  include "wm_xr.h"
+#endif
 
 #include "ED_anim_api.h"
+#include "ED_fileselect.h"
 #include "ED_render.h"
 #include "ED_scene.h"
 #include "ED_screen.h"
-#include "ED_fileselect.h"
 
 #include "UI_interface.h"
 #include "UI_interface_icons.h"
 
 #include "PIL_time.h"
 
+#include "BLF_api.h"
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h"
-#include "GPU_draw.h"
-#include "GPU_platform.h"
-#include "GPU_framebuffer.h"
-#include "GPU_init_exit.h"
-#include "GPU_immediate.h"
 #include "GPU_context.h"
-#include "BLF_api.h"
+#include "GPU_framebuffer.h"
+#include "GPU_immediate.h"
+#include "GPU_init_exit.h"
+#include "GPU_platform.h"
+#include "GPU_state.h"
 
 #include "UI_resources.h"
 
@@ -257,6 +260,8 @@ void wm_window_free(bContext *C, wmWindowManager *wm, wmWindow *win)
     MEM_freeN(win->cursor_keymap_status);
   }
 
+  WM_gestures_free_all(win);
+
   wm_event_free_all(win);
 
   wm_ghostwindow_destroy(wm, win);
@@ -281,16 +286,15 @@ static int find_free_winid(wmWindowManager *wm)
 }
 
 /* don't change context itself */
-wmWindow *wm_window_new(bContext *C, wmWindow *parent)
+wmWindow *wm_window_new(const Main *bmain, wmWindowManager *wm, wmWindow *parent, bool dialog)
 {
-  Main *bmain = CTX_data_main(C);
-  wmWindowManager *wm = CTX_wm_manager(C);
   wmWindow *win = MEM_callocN(sizeof(wmWindow), "window");
 
   BLI_addtail(&wm->windows, win);
   win->winid = find_free_winid(wm);
 
-  win->parent = (parent && parent->parent) ? parent->parent : parent;
+  /* Dialogs may have a child window as parent. Otherwise, a child must not be a parent too. */
+  win->parent = (!dialog && parent && parent->parent) ? parent->parent : parent;
   win->stereo3d_format = MEM_callocN(sizeof(Stereo3dFormat), "Stereo 3D Format (window)");
   win->workspace_hook = BKE_workspace_instance_hook_create(bmain);
 
@@ -298,14 +302,15 @@ wmWindow *wm_window_new(bContext *C, wmWindow *parent)
 }
 
 /* part of wm_window.c api */
-wmWindow *wm_window_copy(bContext *C,
+wmWindow *wm_window_copy(Main *bmain,
+                         wmWindowManager *wm,
                          wmWindow *win_src,
                          const bool duplicate_layout,
                          const bool child)
 {
-  Main *bmain = CTX_data_main(C);
+  const bool is_dialog = GHOST_IsDialogWindow(win_src->ghostwin);
   wmWindow *win_parent = (child) ? win_src : win_src->parent;
-  wmWindow *win_dst = wm_window_new(C, win_parent);
+  wmWindow *win_dst = wm_window_new(bmain, wm, win_parent, is_dialog);
   WorkSpace *workspace = WM_window_get_active_workspace(win_src);
   WorkSpaceLayout *layout_old = WM_window_get_active_layout(win_src);
   WorkSpaceLayout *layout_new;
@@ -337,15 +342,16 @@ wmWindow *wm_window_copy_test(bContext *C,
                               const bool duplicate_layout,
                               const bool child)
 {
+  Main *bmain = CTX_data_main(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   wmWindow *win_dst;
 
-  win_dst = wm_window_copy(C, win_src, duplicate_layout, child);
+  win_dst = wm_window_copy(bmain, wm, win_src, duplicate_layout, child);
 
   WM_check(C);
 
   if (win_dst->ghostwin) {
-    WM_event_add_notifier(C, NC_WINDOW | NA_ADDED, NULL);
+    WM_event_add_notifier_ex(wm, CTX_wm_window(C), NC_WINDOW | NA_ADDED, NULL);
     return win_dst;
   }
   else {
@@ -392,7 +398,8 @@ void wm_quit_with_optional_confirmation_prompt(bContext *C, wmWindow *win)
   CTX_wm_window_set(C, win);
 
   if (U.uiflag & USER_SAVE_PROMPT) {
-    if (wm_file_or_image_is_modified(C) && !G.background) {
+    if (wm_file_or_image_is_modified(CTX_data_main(C), CTX_wm_manager(C)) && !G.background) {
+      wm_window_raise(win);
       wm_confirm_quit(C);
     }
     else {
@@ -412,7 +419,6 @@ void wm_quit_with_optional_confirmation_prompt(bContext *C, wmWindow *win)
 void wm_window_close(bContext *C, wmWindowManager *wm, wmWindow *win)
 {
   wmWindow *win_other;
-  const bool is_dialog = GHOST_IsDialogWindow(win->ghostwin);
 
   /* First check if there is another main window remaining. */
   for (win_other = wm->windows.first; win_other; win_other = win_other->next) {
@@ -426,15 +432,10 @@ void wm_window_close(bContext *C, wmWindowManager *wm, wmWindow *win)
     return;
   }
 
-  /* Close child windows and bring windows back to front that dialogs have pushed behind the main
-   * window. */
-  for (wmWindow *iter_win = wm->windows.first; iter_win; iter_win = iter_win->next) {
+  /* Close child windows */
+  LISTBASE_FOREACH_MUTABLE (wmWindow *, iter_win, &wm->windows) {
     if (iter_win->parent == win) {
       wm_window_close(C, wm, iter_win);
-    }
-    else if (is_dialog && iter_win != win && iter_win->parent &&
-             (GHOST_GetWindowState(iter_win->ghostwin) != GHOST_kWindowStateMinimized)) {
-      wm_window_raise(iter_win);
     }
   }
 
@@ -494,7 +495,7 @@ void wm_window_title(wmWindowManager *wm, wmWindow *win)
   }
 }
 
-void WM_window_set_dpi(wmWindow *win)
+void WM_window_set_dpi(const wmWindow *win)
 {
   float auto_dpi = GHOST_GetDPIHint(win->ghostwin);
 
@@ -545,6 +546,12 @@ void WM_window_set_dpi(wmWindow *win)
   BLF_default_dpi(U.pixelsize * U.dpi);
 }
 
+static void wm_window_update_eventstate(wmWindow *win)
+{
+  /* Update mouse position when a window is activated. */
+  wm_get_cursor_position(win, &win->eventstate->x, &win->eventstate->y);
+}
+
 static void wm_window_ensure_eventstate(wmWindow *win)
 {
   if (win->eventstate) {
@@ -552,7 +559,7 @@ static void wm_window_ensure_eventstate(wmWindow *win)
   }
 
   win->eventstate = MEM_callocN(sizeof(wmEvent), "window event state");
-  wm_get_cursor_position(win, &win->eventstate->x, &win->eventstate->y);
+  wm_window_update_eventstate(win);
 }
 
 /* belongs to below */
@@ -700,6 +707,8 @@ static void wm_window_ghostwindow_ensure(wmWindowManager *wm, wmWindow *win, boo
 
     /* happens after fileread */
     wm_window_ensure_eventstate(win);
+
+    WM_window_set_dpi(win);
   }
 
   /* add keymap handlers (1 handler for all keys in map!) */
@@ -752,22 +761,9 @@ void wm_window_ghostwindows_ensure(wmWindowManager *wm)
      * in practice the window manager will likely move to the correct monitor */
     wm_init_state.start_x = 0;
     wm_init_state.start_y = 0;
-
-#ifdef WITH_X11 /* X11 */
-    /* X11, don't start maximized because we can't figure out the dimensions
-     * of a single display yet if there are multiple, due to lack of Xinerama
-     * handling in GHOST. */
-    wm_init_state.size_x = min_ii(wm_init_state.size_x, WM_WIN_INIT_SIZE_X);
-    wm_init_state.size_y = min_ii(wm_init_state.size_y, WM_WIN_INIT_SIZE_Y);
-    /* pad */
-    wm_init_state.start_x = WM_WIN_INIT_PAD;
-    wm_init_state.start_y = WM_WIN_INIT_PAD;
-    wm_init_state.size_x -= WM_WIN_INIT_PAD * 2;
-    wm_init_state.size_y -= WM_WIN_INIT_PAD * 2;
-#endif
   }
 
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     wm_window_ghostwindow_ensure(wm, win, false);
   }
 }
@@ -790,6 +786,36 @@ void wm_window_ghostwindows_remove_invalid(bContext *C, wmWindowManager *wm)
   }
 }
 
+/* Update window size and position based on data from GHOST window. */
+static bool wm_window_update_size_position(wmWindow *win)
+{
+  GHOST_RectangleHandle client_rect;
+  int l, t, r, b, scr_w, scr_h;
+  int sizex, sizey, posx, posy;
+
+  client_rect = GHOST_GetClientBounds(win->ghostwin);
+  GHOST_GetRectangle(client_rect, &l, &t, &r, &b);
+
+  GHOST_DisposeRectangle(client_rect);
+
+  wm_get_desktopsize(&scr_w, &scr_h);
+  sizex = r - l;
+  sizey = b - t;
+  posx = l;
+  posy = scr_h - t - win->sizey;
+
+  if (win->sizex != sizex || win->sizey != sizey || win->posx != posx || win->posy != posy) {
+    win->sizex = sizex;
+    win->sizey = sizey;
+    win->posx = posx;
+    win->posy = posy;
+    return true;
+  }
+  else {
+    return false;
+  }
+}
+
 /**
  * new window, no screen yet, but we open ghostwindow for it,
  * also gets the window level handlers
@@ -798,8 +824,9 @@ void wm_window_ghostwindows_remove_invalid(bContext *C, wmWindowManager *wm)
  */
 wmWindow *WM_window_open(bContext *C, const rcti *rect)
 {
+  wmWindowManager *wm = CTX_wm_manager(C);
   wmWindow *win_prev = CTX_wm_window(C);
-  wmWindow *win = wm_window_new(C, win_prev);
+  wmWindow *win = wm_window_new(CTX_data_main(C), wm, win_prev, false);
 
   win->posx = rect->xmin;
   win->posy = rect->ymin;
@@ -812,7 +839,7 @@ wmWindow *WM_window_open(bContext *C, const rcti *rect)
     return win;
   }
   else {
-    wm_window_close(C, CTX_wm_manager(C), win);
+    wm_window_close(C, wm, win);
     CTX_wm_window_set(C, win_prev);
     return NULL;
   }
@@ -839,7 +866,7 @@ wmWindow *WM_window_open_temp(bContext *C,
   wmWindow *win_prev = CTX_wm_window(C);
   wmWindow *win;
   bScreen *screen;
-  ScrArea *sa;
+  ScrArea *area;
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
 
@@ -870,7 +897,7 @@ wmWindow *WM_window_open_temp(bContext *C,
 
   /* add new window? */
   if (win == NULL) {
-    win = wm_window_new(C, win_prev);
+    win = wm_window_new(bmain, wm, win_prev, dialog);
 
     win->posx = rect.xmin;
     win->posy = rect.ymin;
@@ -905,7 +932,8 @@ wmWindow *WM_window_open_temp(bContext *C,
 
   /* make window active, and validate/resize */
   CTX_wm_window_set(C, win);
-  if (!win->ghostwin) {
+  const bool new_window = (win->ghostwin == NULL);
+  if (new_window) {
     wm_window_ghostwindow_ensure(wm, win, dialog);
   }
   WM_check(C);
@@ -917,18 +945,25 @@ wmWindow *WM_window_open_temp(bContext *C,
    */
 
   /* ensure it shows the right spacetype editor */
-  sa = screen->areabase.first;
-  CTX_wm_area_set(C, sa);
+  area = screen->areabase.first;
+  CTX_wm_area_set(C, area);
 
-  ED_area_newspace(C, sa, space_type, false);
+  ED_area_newspace(C, area, space_type, false);
 
   ED_screen_change(C, screen);
-  ED_screen_refresh(wm, win); /* test scale */
+
+  if (!new_window) {
+    /* Set size in GHOST window and then update size and position from GHOST,
+     * in case they where changed by GHOST to fit the monitor/screen. */
+    wm_window_set_size(win, win->sizex, win->sizey);
+    wm_window_update_size_position(win);
+  }
+
+  /* Refresh screen dimensions, after the effective window size is known. */
+  ED_screen_refresh(wm, win);
 
   if (win->ghostwin) {
-    wm_window_set_size(win, win->sizex, win->sizey);
     wm_window_raise(win);
-
     GHOST_SetTitle(win->ghostwin, title);
     return win;
   }
@@ -1204,7 +1239,6 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
       case GHOST_kEventWindowActivate: {
         GHOST_TEventKeyData kdata;
         wmEvent event;
-        int wx, wy;
         const int keymodifier = ((query_qual(SHIFT) ? KM_SHIFT : 0) |
                                  (query_qual(CONTROL) ? KM_CTRL : 0) |
                                  (query_qual(ALT) ? KM_ALT : 0) | (query_qual(OS) ? KM_OSKEY : 0));
@@ -1289,10 +1323,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
         win->eventstate->keymodifier = 0;
 
         /* entering window, update mouse pos. but no event */
-        wm_get_cursor_position(win, &wx, &wy);
-
-        win->eventstate->x = wx;
-        win->eventstate->y = wy;
+        wm_window_update_eventstate(win);
 
         win->addmousemove = 1; /* enables highlighted buttons */
 
@@ -1340,21 +1371,6 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
 
         /* win32: gives undefined window size when minimized */
         if (state != GHOST_kWindowStateMinimized) {
-          GHOST_RectangleHandle client_rect;
-          int l, t, r, b, scr_w, scr_h;
-          int sizex, sizey, posx, posy;
-
-          client_rect = GHOST_GetClientBounds(win->ghostwin);
-          GHOST_GetRectangle(client_rect, &l, &t, &r, &b);
-
-          GHOST_DisposeRectangle(client_rect);
-
-          wm_get_desktopsize(&scr_w, &scr_h);
-          sizex = r - l;
-          sizey = b - t;
-          posx = l;
-          posy = scr_h - t - win->sizey;
-
           /*
            * Ghost sometimes send size or move events when the window hasn't changed.
            * One case of this is using compiz on linux. To alleviate the problem
@@ -1363,14 +1379,8 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
            * It might be good to eventually do that at Ghost level, but that is for
            * another time.
            */
-          if (win->sizex != sizex || win->sizey != sizey || win->posx != posx ||
-              win->posy != posy) {
+          if (wm_window_update_size_position(win)) {
             const bScreen *screen = WM_window_get_active_screen(win);
-
-            win->sizex = sizex;
-            win->sizey = sizey;
-            win->posx = posx;
-            win->posy = posy;
 
             /* debug prints */
             if (G.debug & G_DEBUG_EVENTS) {
@@ -1443,7 +1453,8 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
 
           WM_operator_properties_create_ptr(&props_ptr, ot);
           RNA_string_set(&props_ptr, "filepath", path);
-          WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_DEFAULT, &props_ptr);
+          RNA_boolean_set(&props_ptr, "display_file_selector", false);
+          WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr);
           WM_operator_properties_free(&props_ptr);
 
           CTX_wm_window_set(C, NULL);
@@ -1453,12 +1464,9 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
       case GHOST_kEventDraggingDropDone: {
         wmEvent event;
         GHOST_TEventDragnDropData *ddd = GHOST_GetEventData(evt);
-        int wx, wy;
 
         /* entering window, update mouse pos */
-        wm_get_cursor_position(win, &wx, &wy);
-        win->eventstate->x = wx;
-        win->eventstate->y = wy;
+        wm_window_update_eventstate(win);
 
         wm_event_init_from_window(win, &event); /* copy last state, like mouse coords */
 
@@ -1540,9 +1548,21 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
         wm_event_add_ghostevent(wm, win, type, data);
         break;
       }
-      default:
+      case GHOST_kEventButtonDown:
+      case GHOST_kEventButtonUp: {
+        if (win->active == 0) {
+          /* Entering window, update cursor and tablet state.
+           * (ghost sends win-activate *after* the mouse-click in window!) */
+          wm_window_update_eventstate(win);
+        }
+
         wm_event_add_ghostevent(wm, win, type, data);
         break;
+      }
+      default: {
+        wm_event_add_ghostevent(wm, win, type, data);
+        break;
+      }
     }
   }
   return 1;
@@ -1556,6 +1576,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
  */
 static int wm_window_timer(const bContext *C)
 {
+  Main *bmain = CTX_data_main(C);
   wmWindowManager *wm = CTX_wm_manager(C);
   wmTimer *wt, *wtnext;
   wmWindow *win;
@@ -1574,10 +1595,10 @@ static int wm_window_timer(const bContext *C)
         wt->ntime = wt->stime + wt->timestep * ceil(wt->duration / wt->timestep);
 
         if (wt->event_type == TIMERJOBS) {
-          wm_jobs_timer(C, wm, wt);
+          wm_jobs_timer(wm, wt);
         }
         else if (wt->event_type == TIMERAUTOSAVE) {
-          wm_autosave_timer(C, wm, wt);
+          wm_autosave_timer(bmain, wm, wt);
         }
         else if (wt->event_type == TIMERNOTIFIER) {
           WM_main_add_notifier(POINTER_AS_UINT(wt->customdata), NULL);
@@ -1613,6 +1634,11 @@ void wm_window_process_events(const bContext *C)
     GHOST_DispatchEvents(g_system);
   }
   hasevent |= wm_window_timer(C);
+#ifdef WITH_XR_OPENXR
+  /* XR events don't use the regular window queues. So here we don't only trigger
+   * processing/dispatching but also handling. */
+  hasevent |= wm_xr_events_handle(CTX_wm_manager(C));
+#endif
 
   /* no event, we sleep 5 milliseconds */
   if (hasevent == 0) {
@@ -1638,6 +1664,7 @@ void wm_ghost_init(bContext *C)
     }
 
     g_system = GHOST_CreateSystem();
+    GHOST_SystemInitDebug(g_system, G.debug & G_DEBUG_GHOST);
 
     if (C != NULL) {
       GHOST_AddEventConsumer(g_system, consumer);
@@ -1648,8 +1675,6 @@ void wm_ghost_init(bContext *C)
     }
 
     GHOST_UseWindowFocus(wm_init_state.window_focus);
-
-    WM_init_tablet_api();
   }
 }
 
@@ -1882,12 +1907,17 @@ void WM_clipboard_text_set(const char *buf, bool selection)
 
 void WM_progress_set(wmWindow *win, float progress)
 {
-  GHOST_SetProgressBar(win->ghostwin, progress);
+  /* In background mode we may have windows, but not actual GHOST windows. */
+  if (win->ghostwin) {
+    GHOST_SetProgressBar(win->ghostwin, progress);
+  }
 }
 
 void WM_progress_clear(wmWindow *win)
 {
-  GHOST_EndProgressBar(win->ghostwin);
+  if (win->ghostwin) {
+    GHOST_EndProgressBar(win->ghostwin);
+  }
 }
 
 /** \} */
@@ -1933,6 +1963,9 @@ void wm_window_raise(wmWindow *win)
 /** \name Window Buffers
  * \{ */
 
+/**
+ * \brief Push rendered buffer to the screen.
+ */
 void wm_window_swap_buffers(wmWindow *win)
 {
   GHOST_SwapWindowBuffers(win->ghostwin);
@@ -2090,21 +2123,6 @@ void WM_cursor_compatible_xy(wmWindow *win, int *x, int *y)
   }
 }
 
-/**
- * Get the cursor pressure, in most cases you'll want to use wmTabletData from the event
- */
-float WM_cursor_pressure(const struct wmWindow *win)
-{
-  const GHOST_TabletData *td = GHOST_GetTabletData(win->ghostwin);
-  /* if there's tablet data from an active tablet device then add it */
-  if ((td != NULL) && td->Active != GHOST_kTabletModeNone) {
-    return wm_pressure_curve(td->Pressure);
-  }
-  else {
-    return -1.0f;
-  }
-}
-
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -2148,8 +2166,7 @@ void WM_window_screen_rect_calc(const wmWindow *win, rcti *r_rect)
   screen_rect = window_rect;
 
   /* Subtract global areas from screen rectangle. */
-  for (ScrArea *global_area = win->global_areas.areabase.first; global_area;
-       global_area = global_area->next) {
+  LISTBASE_FOREACH (ScrArea *, global_area, &win->global_areas.areabase) {
     int height = ED_area_global_size_y(global_area) - 1;
 
     if (global_area->global->flag & GLOBAL_AREA_IS_HIDDEN) {
@@ -2158,21 +2175,9 @@ void WM_window_screen_rect_calc(const wmWindow *win, rcti *r_rect)
 
     switch (global_area->global->align) {
       case GLOBAL_AREA_ALIGN_TOP:
-        if ((screen_rect.ymax - height) > window_rect.ymin) {
-          height += U.pixelsize;
-        }
-        if (screen_rect.ymax < (window_rect.ymax - 1)) {
-          height += U.pixelsize;
-        }
         screen_rect.ymax -= height;
         break;
       case GLOBAL_AREA_ALIGN_BOTTOM:
-        if (screen_rect.ymin > window_rect.ymin) {
-          height += U.pixelsize;
-        }
-        if ((screen_rect.ymin + height) < (window_rect.ymax - 1)) {
-          height += U.pixelsize;
-        }
         screen_rect.ymin += height;
         break;
       default:
@@ -2181,14 +2186,19 @@ void WM_window_screen_rect_calc(const wmWindow *win, rcti *r_rect)
     }
   }
 
-  BLI_assert(screen_rect.xmin < screen_rect.xmax);
-  BLI_assert(screen_rect.ymin < screen_rect.ymax);
+  BLI_assert(BLI_rcti_is_valid(&screen_rect));
+
   *r_rect = screen_rect;
 }
 
-bool WM_window_is_fullscreen(wmWindow *win)
+bool WM_window_is_fullscreen(const wmWindow *win)
 {
   return win->windowstate == GHOST_kWindowStateFullScreen;
+}
+
+bool WM_window_is_maximized(const wmWindow *win)
+{
+  return win->windowstate == GHOST_kWindowStateMaximized;
 }
 
 /** \} */
@@ -2204,7 +2214,7 @@ bool WM_window_is_fullscreen(wmWindow *win)
  */
 void WM_windows_scene_data_sync(const ListBase *win_lb, Scene *scene)
 {
-  for (wmWindow *win = win_lb->first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, win_lb) {
     if (WM_window_get_active_scene(win) == scene) {
       ED_workspace_scene_data_sync(win->workspace_hook, scene);
     }
@@ -2213,7 +2223,7 @@ void WM_windows_scene_data_sync(const ListBase *win_lb, Scene *scene)
 
 Scene *WM_windows_scene_get_from_screen(const wmWindowManager *wm, const bScreen *screen)
 {
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     if (WM_window_get_active_screen(win) == screen) {
       return WM_window_get_active_scene(win);
     }
@@ -2224,7 +2234,7 @@ Scene *WM_windows_scene_get_from_screen(const wmWindowManager *wm, const bScreen
 
 WorkSpace *WM_windows_workspace_get_from_screen(const wmWindowManager *wm, const bScreen *screen)
 {
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     if (WM_window_get_active_screen(win) == screen) {
       return WM_window_get_active_workspace(win);
     }
@@ -2252,7 +2262,7 @@ void WM_window_set_active_scene(Main *bmain, bContext *C, wmWindow *win, Scene *
     changed = true;
   }
 
-  for (wmWindow *win_child = wm->windows.first; win_child; win_child = win_child->next) {
+  LISTBASE_FOREACH (wmWindow *, win_child, &wm->windows) {
     if (win_child->parent == win_parent && win_child->scene != scene) {
       ED_screen_scene_change(C, win_child, scene);
       changed = true;
@@ -2298,7 +2308,7 @@ void WM_window_set_active_view_layer(wmWindow *win, ViewLayer *view_layer)
   wmWindow *win_parent = (win->parent) ? win->parent : win;
 
   /* Set view layer in parent and child windows. */
-  for (wmWindow *win_iter = wm->windows.first; win_iter; win_iter = win_iter->next) {
+  LISTBASE_FOREACH (wmWindow *, win_iter, &wm->windows) {
     if ((win_iter == win_parent) || (win_iter->parent == win_parent)) {
       STRNCPY(win_iter->view_layer_name, view_layer->name);
       bScreen *screen = BKE_workspace_active_screen_get(win_iter->workspace_hook);
@@ -2330,7 +2340,7 @@ void WM_window_set_active_workspace(bContext *C, wmWindow *win, WorkSpace *works
 
   ED_workspace_change(workspace, C, wm, win);
 
-  for (wmWindow *win_child = wm->windows.first; win_child; win_child = win_child->next) {
+  LISTBASE_FOREACH (wmWindow *, win_child, &wm->windows) {
     if (win_child->parent == win_parent) {
       bScreen *screen = WM_window_get_active_screen(win_child);
       /* Don't change temporary screens, they only serve a single purpose. */

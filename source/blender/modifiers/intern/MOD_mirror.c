@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -27,12 +27,12 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_mesh.h"
-#include "BKE_mirror.h"
-#include "BKE_modifier.h"
 #include "BKE_deform.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_mesh.h"
+#include "BKE_mesh_mirror.h"
+#include "BKE_modifier.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
@@ -78,11 +78,11 @@ static Mesh *mirrorModifier__doMirror(MirrorModifierData *mmd,
 
   /* check which axes have been toggled and mirror accordingly */
   if (mmd->flag & MOD_MIR_AXIS_X) {
-    result = BKE_mirror_apply_mirror_on_axis(mmd, ctx, ob, result, 0);
+    result = BKE_mesh_mirror_apply_mirror_on_axis(mmd, ctx, ob, result, 0);
   }
   if (mmd->flag & MOD_MIR_AXIS_Y) {
     Mesh *tmp = result;
-    result = BKE_mirror_apply_mirror_on_axis(mmd, ctx, ob, result, 1);
+    result = BKE_mesh_mirror_apply_mirror_on_axis(mmd, ctx, ob, result, 1);
     if (tmp != mesh) {
       /* free intermediate results */
       BKE_id_free(NULL, tmp);
@@ -90,7 +90,7 @@ static Mesh *mirrorModifier__doMirror(MirrorModifierData *mmd,
   }
   if (mmd->flag & MOD_MIR_AXIS_Z) {
     Mesh *tmp = result;
-    result = BKE_mirror_apply_mirror_on_axis(mmd, ctx, ob, result, 2);
+    result = BKE_mesh_mirror_apply_mirror_on_axis(mmd, ctx, ob, result, 2);
     if (tmp != mesh) {
       /* free intermediate results */
       BKE_id_free(NULL, tmp);
@@ -100,7 +100,7 @@ static Mesh *mirrorModifier__doMirror(MirrorModifierData *mmd,
   return result;
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   Mesh *result;
   MirrorModifierData *mmd = (MirrorModifierData *)md;
@@ -124,13 +124,16 @@ ModifierTypeInfo modifierType_Mirror = {
         /* this is only the case when 'MOD_MIR_VGROUP' is used */
         eModifierTypeFlag_UsesPreview,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,

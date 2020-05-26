@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -23,21 +23,24 @@
 
 #include <stdio.h>
 
+#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 #include "DNA_vec_types.h"
 
-#include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
+#include "BKE_lib_query.h"
+#include "BKE_modifier.h"
 
 #include "DEG_depsgraph.h"
 
-#include "MOD_gpencil_util.h"
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
@@ -47,13 +50,12 @@ static void initData(GpencilModifierData *md)
   gpmd->factor = 0.0f;
   gpmd->length = 0.1f;
   gpmd->distance = 0.1f;
-  gpmd->layername[0] = '\0';
-  gpmd->materialname[0] = '\0';
+  gpmd->material = NULL;
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 }
 
 static void deformStroke(GpencilModifierData *md,
@@ -67,7 +69,7 @@ static void deformStroke(GpencilModifierData *md,
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
-                                      mmd->materialname,
+                                      mmd->material,
                                       mmd->pass_index,
                                       mmd->layer_pass,
                                       mmd->mode == GP_SIMPLIFY_SAMPLE ? 3 : 4,
@@ -84,21 +86,21 @@ static void deformStroke(GpencilModifierData *md,
   switch (mmd->mode) {
     case GP_SIMPLIFY_FIXED: {
       for (int i = 0; i < mmd->step; i++) {
-        BKE_gpencil_simplify_fixed(gps);
+        BKE_gpencil_stroke_simplify_fixed(gps);
       }
       break;
     }
     case GP_SIMPLIFY_ADAPTIVE: {
       /* simplify stroke using Ramer-Douglas-Peucker algorithm */
-      BKE_gpencil_simplify_stroke(gps, mmd->factor);
+      BKE_gpencil_stroke_simplify_adaptive(gps, mmd->factor);
       break;
     }
     case GP_SIMPLIFY_SAMPLE: {
-      BKE_gpencil_sample_stroke(gps, mmd->length, false);
+      BKE_gpencil_stroke_sample(gps, mmd->length, false);
       break;
     }
     case GP_SIMPLIFY_MERGE: {
-      BKE_gpencil_merge_distance_stroke(gpf, gps, mmd->distance, true);
+      BKE_gpencil_stroke_merge_distance(gpf, gps, mmd->distance, true);
       break;
     }
     default:
@@ -113,13 +115,20 @@ static void bakeModifier(struct Main *UNUSED(bmain),
 {
   bGPdata *gpd = ob->data;
 
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-    for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
-      for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+      LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
         deformStroke(md, depsgraph, ob, gpl, gpf, gps);
       }
     }
   }
+}
+
+static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
+{
+  SimplifyGpencilModifierData *mmd = (SimplifyGpencilModifierData *)md;
+
+  walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
 }
 
 GpencilModifierTypeInfo modifierType_Gpencil_Simplify = {
@@ -142,6 +151,6 @@ GpencilModifierTypeInfo modifierType_Gpencil_Simplify = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* foreachObjectLink */ NULL,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
 };

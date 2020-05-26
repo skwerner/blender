@@ -31,21 +31,17 @@
 #include <Python.h>
 #include <frameobject.h>
 
-/* Needed for 'PyInterpreterState', we should remove this dependency. */
-#if PY_VERSION_HEX >= 0x03080000
-#  define Py_BUILD_CORE
-#  include <internal/pycore_pystate.h>
-#endif
-
 #include "BLI_utildefines.h" /* for bool */
 
 #include "py_capi_utils.h"
 
 #include "python_utildefines.h"
 
-#include "BLI_string.h"
-
 #ifndef MATH_STANDALONE
+#  include "MEM_guardedalloc.h"
+
+#  include "BLI_string.h"
+
 /* Only for BLI_strncpy_wchar_from_utf8,
  * should replace with py funcs but too late in release now. */
 #  include "BLI_string_utf8.h"
@@ -202,8 +198,8 @@ PyObject *PyC_Tuple_PackArray_Bool(const bool *array, uint len)
  */
 void PyC_Tuple_Fill(PyObject *tuple, PyObject *value)
 {
-  unsigned int tot = PyTuple_GET_SIZE(tuple);
-  unsigned int i;
+  uint tot = PyTuple_GET_SIZE(tuple);
+  uint i;
 
   for (i = 0; i < tot; i++) {
     PyTuple_SET_ITEM(tuple, i, value);
@@ -213,8 +209,8 @@ void PyC_Tuple_Fill(PyObject *tuple, PyObject *value)
 
 void PyC_List_Fill(PyObject *list, PyObject *value)
 {
-  unsigned int tot = PyList_GET_SIZE(list);
-  unsigned int i;
+  uint tot = PyList_GET_SIZE(list);
+  uint i;
 
   for (i = 0; i < tot; i++) {
     PyList_SET_ITEM(list, i, value);
@@ -364,15 +360,15 @@ void PyC_StackSpit(void)
   }
 }
 
-void PyC_FileAndNum(const char **filename, int *lineno)
+void PyC_FileAndNum(const char **r_filename, int *r_lineno)
 {
   PyFrameObject *frame;
 
-  if (filename) {
-    *filename = NULL;
+  if (r_filename) {
+    *r_filename = NULL;
   }
-  if (lineno) {
-    *lineno = -1;
+  if (r_lineno) {
+    *r_lineno = -1;
   }
 
   if (!(frame = PyThreadState_GET()->frame)) {
@@ -380,13 +376,13 @@ void PyC_FileAndNum(const char **filename, int *lineno)
   }
 
   /* when executing a script */
-  if (filename) {
-    *filename = _PyUnicode_AsString(frame->f_code->co_filename);
+  if (r_filename) {
+    *r_filename = _PyUnicode_AsString(frame->f_code->co_filename);
   }
 
   /* when executing a module */
-  if (filename && *filename == NULL) {
-    /* try an alternative method to get the filename - module based
+  if (r_filename && *r_filename == NULL) {
+    /* try an alternative method to get the r_filename - module based
      * references below are all borrowed (double checked) */
     PyObject *mod_name = PyDict_GetItemString(PyEval_GetGlobals(), "__name__");
     if (mod_name) {
@@ -394,7 +390,7 @@ void PyC_FileAndNum(const char **filename, int *lineno)
       if (mod) {
         PyObject *mod_file = PyModule_GetFilenameObject(mod);
         if (mod_file) {
-          *filename = _PyUnicode_AsString(mod_name);
+          *r_filename = _PyUnicode_AsString(mod_name);
           Py_DECREF(mod_file);
         }
         else {
@@ -403,24 +399,24 @@ void PyC_FileAndNum(const char **filename, int *lineno)
       }
 
       /* unlikely, fallback */
-      if (*filename == NULL) {
-        *filename = _PyUnicode_AsString(mod_name);
+      if (*r_filename == NULL) {
+        *r_filename = _PyUnicode_AsString(mod_name);
       }
     }
   }
 
-  if (lineno) {
-    *lineno = PyFrame_GetLineNumber(frame);
+  if (r_lineno) {
+    *r_lineno = PyFrame_GetLineNumber(frame);
   }
 }
 
-void PyC_FileAndNum_Safe(const char **filename, int *lineno)
+void PyC_FileAndNum_Safe(const char **r_filename, int *r_lineno)
 {
   if (!PyC_IsInterpreterActive()) {
     return;
   }
 
-  PyC_FileAndNum(filename, lineno);
+  PyC_FileAndNum(r_filename, r_lineno);
 }
 
 /* Would be nice if python had this built in */
@@ -757,9 +753,10 @@ PyObject *PyC_UnicodeFromByte(const char *str)
  ****************************************************************************/
 PyObject *PyC_DefaultNameSpace(const char *filename)
 {
-  PyInterpreterState *interp = PyThreadState_GET()->interp;
+  PyObject *modules = PyImport_GetModuleDict();
+  PyObject *builtins = PyEval_GetBuiltins();
   PyObject *mod_main = PyModule_New("__main__");
-  PyDict_SetItemString(interp->modules, "__main__", mod_main);
+  PyDict_SetItemString(modules, "__main__", mod_main);
   Py_DECREF(mod_main); /* sys.modules owns now */
   PyModule_AddStringConstant(mod_main, "__name__", "__main__");
   if (filename) {
@@ -767,8 +764,8 @@ PyObject *PyC_DefaultNameSpace(const char *filename)
      * note: this wont map to a real file when executing text-blocks and buttons. */
     PyModule_AddObject(mod_main, "__file__", PyC_UnicodeFromByte(filename));
   }
-  PyModule_AddObject(mod_main, "__builtins__", interp->builtins);
-  Py_INCREF(interp->builtins); /* AddObject steals a reference */
+  PyModule_AddObject(mod_main, "__builtins__", builtins);
+  Py_INCREF(builtins); /* AddObject steals a reference */
   return PyModule_GetDict(mod_main);
 }
 
@@ -795,15 +792,15 @@ bool PyC_NameSpace_ImportArray(PyObject *py_dict, const char *imports[])
 /* restore MUST be called after this */
 void PyC_MainModule_Backup(PyObject **main_mod)
 {
-  PyInterpreterState *interp = PyThreadState_GET()->interp;
-  *main_mod = PyDict_GetItemString(interp->modules, "__main__");
+  PyObject *modules = PyImport_GetModuleDict();
+  *main_mod = PyDict_GetItemString(modules, "__main__");
   Py_XINCREF(*main_mod); /* don't free */
 }
 
 void PyC_MainModule_Restore(PyObject *main_mod)
 {
-  PyInterpreterState *interp = PyThreadState_GET()->interp;
-  PyDict_SetItemString(interp->modules, "__main__", main_mod);
+  PyObject *modules = PyImport_GetModuleDict();
+  PyDict_SetItemString(modules, "__main__", main_mod);
   Py_XDECREF(main_mod);
 }
 
@@ -1049,23 +1046,15 @@ void *PyC_RNA_AsPointer(PyObject *value, const char *type_name)
   }
 }
 
-/* PyC_FlagSet_* functions - so flags/sets can be interchanged in a generic way */
-#  include "BLI_dynstr.h"
-#  include "MEM_guardedalloc.h"
-
-char *PyC_FlagSet_AsString(PyC_FlagSet *item)
+PyObject *PyC_FlagSet_AsString(PyC_FlagSet *item)
 {
-  DynStr *dynstr = BLI_dynstr_new();
-  PyC_FlagSet *e;
-  char *cstring;
-
-  for (e = item; item->identifier; item++) {
-    BLI_dynstr_appendf(dynstr, (e == item) ? "'%s'" : ", '%s'", item->identifier);
+  PyObject *py_items = PyList_New(0);
+  for (; item->identifier; item++) {
+    PyList_APPEND(py_items, PyUnicode_FromString(item->identifier));
   }
-
-  cstring = BLI_dynstr_get_cstring(dynstr);
-  BLI_dynstr_free(dynstr);
-  return cstring;
+  PyObject *py_string = PyObject_Repr(py_items);
+  Py_DECREF(py_items);
+  return py_string;
 }
 
 int PyC_FlagSet_ValueFromID_int(PyC_FlagSet *item, const char *identifier, int *r_value)
@@ -1086,10 +1075,10 @@ int PyC_FlagSet_ValueFromID(PyC_FlagSet *item,
                             const char *error_prefix)
 {
   if (PyC_FlagSet_ValueFromID_int(item, identifier, r_value) == 0) {
-    const char *enum_str = PyC_FlagSet_AsString(item);
+    PyObject *enum_str = PyC_FlagSet_AsString(item);
     PyErr_Format(
-        PyExc_ValueError, "%s: '%.200s' not found in (%s)", error_prefix, identifier, enum_str);
-    MEM_freeN((void *)enum_str);
+        PyExc_ValueError, "%s: '%.200s' not found in (%U)", error_prefix, identifier, enum_str);
+    Py_DECREF(enum_str);
     return -1;
   }
 
@@ -1268,10 +1257,11 @@ bool PyC_RunString_AsIntPtr(const char *imports[],
   return ok;
 }
 
-bool PyC_RunString_AsString(const char *imports[],
-                            const char *expr,
-                            const char *filename,
-                            char **r_value)
+bool PyC_RunString_AsStringAndSize(const char *imports[],
+                                   const char *expr,
+                                   const char *filename,
+                                   char **r_value,
+                                   size_t *r_value_size)
 {
   PyObject *py_dict, *retval;
   bool ok = true;
@@ -1299,6 +1289,7 @@ bool PyC_RunString_AsString(const char *imports[],
       char *val_alloc = MEM_mallocN(val_len + 1, __func__);
       memcpy(val_alloc, val, val_len + 1);
       *r_value = val_alloc;
+      *r_value_size = val_len;
     }
 
     Py_DECREF(retval);
@@ -1307,6 +1298,15 @@ bool PyC_RunString_AsString(const char *imports[],
   PyC_MainModule_Restore(main_mod);
 
   return ok;
+}
+
+bool PyC_RunString_AsString(const char *imports[],
+                            const char *expr,
+                            const char *filename,
+                            char **r_value)
+{
+  size_t value_size;
+  return PyC_RunString_AsStringAndSize(imports, expr, filename, r_value, &value_size);
 }
 
 #endif /* #ifndef MATH_STANDALONE */

@@ -27,16 +27,16 @@
  * \ingroup bli
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "BLI_compiler_attrs.h"
 #include "BLI_math_inline.h"
 
 #ifdef BLI_MATH_GCC_WARN_PRAGMA
 #  pragma GCC diagnostic push
 #  pragma GCC diagnostic ignored "-Wredundant-decls"
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /********************************** Polygons *********************************/
@@ -91,6 +91,9 @@ float volume_tetrahedron_signed_v3(const float v1[3],
                                    const float v2[3],
                                    const float v3[3],
                                    const float v4[3]);
+
+float volume_tri_tetrahedron_signed_v3_6x(const float v1[3], const float v2[3], const float v3[3]);
+float volume_tri_tetrahedron_signed_v3(const float v1[3], const float v2[3], const float v3[3]);
 
 bool is_edge_convex_v3(const float v1[3], const float v2[3], const float v3[3], const float v4[3]);
 bool is_quad_convex_v3(const float v1[3], const float v2[3], const float v3[3], const float v4[3]);
@@ -633,6 +636,13 @@ void perspective_m4(float mat[4][4],
                     const float top,
                     const float nearClip,
                     const float farClip);
+void perspective_m4_fov(float mat[4][4],
+                        const float angle_left,
+                        const float angle_right,
+                        const float angle_up,
+                        const float angle_down,
+                        const float nearClip,
+                        const float farClip);
 void orthographic_m4(float mat[4][4],
                      const float left,
                      const float right,
@@ -642,7 +652,7 @@ void orthographic_m4(float mat[4][4],
                      const float farClip);
 void window_translate_m4(float winmat[4][4], float perspmat[4][4], const float x, const float y);
 
-void planes_from_projmat(float mat[4][4],
+void planes_from_projmat(const float mat[4][4],
                          float left[4],
                          float right[4],
                          float top[4],

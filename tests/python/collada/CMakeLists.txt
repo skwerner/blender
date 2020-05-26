@@ -29,9 +29,9 @@ set(TEST_OUT_DIR ${CMAKE_BINARY_DIR}/tests)
 # ugh, any better way to do this on testing only?
 execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${TEST_OUT_DIR})
 
-#~  if(NOT IS_DIRECTORY ${TEST_SRC_DIR})
-#~      message(FATAL_ERROR "CMake test directory not found!")
-#~  endif()
+# if(NOT IS_DIRECTORY ${TEST_SRC_DIR})
+#   message(FATAL_ERROR "CMake test directory not found!")
+# endif()
 
 # all calls to blender use this
 if(APPLE)
@@ -50,7 +50,7 @@ endif()
 
 # ------------------------------------------------------------------------------
 # GENERAL PYTHON CORRECTNESS TESTS
-macro (COLLADA_TEST module test_name blend_file)
+macro(COLLADA_TEST module test_name blend_file)
   add_test(
     NAME collada_${module}_${test_name}
     COMMAND "$<TARGET_FILE:blender>" ${TEST_BLENDER_EXE_PARAMS} ${TEST_SRC_DIR}/collada/${module}/${blend_file}
@@ -61,5 +61,6 @@ endmacro()
 
 # Tests are disabled because they only work on Windows
 # Tests will be redone completely to work reliable
-#COLLADA_TEST(mesh simple mesh_simple.blend)
-#COLLADA_TEST(animation simple suzannes_parent_inverse.blend)
+#
+# COLLADA_TEST(mesh simple mesh_simple.blend)
+# COLLADA_TEST(animation simple suzannes_parent_inverse.blend)

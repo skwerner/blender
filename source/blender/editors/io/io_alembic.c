@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
@@ -30,8 +30,8 @@
 #    include "BLI_winstuff.h"
 #  endif
 
-#  include <string.h>
 #  include <errno.h>
+#  include <string.h>
 
 #  include "MEM_guardedalloc.h"
 
@@ -127,7 +127,7 @@ static int wm_alembic_export_exec(bContext *C, wmOperator *op)
       .apply_subdiv = RNA_boolean_get(op->ptr, "apply_subdiv"),
       .curves_as_mesh = RNA_boolean_get(op->ptr, "curves_as_mesh"),
       .flatten_hierarchy = RNA_boolean_get(op->ptr, "flatten"),
-      .visible_layers_only = RNA_boolean_get(op->ptr, "visible_layers_only"),
+      .visible_objects_only = RNA_boolean_get(op->ptr, "visible_objects_only"),
       .renderable_only = RNA_boolean_get(op->ptr, "renderable_only"),
       .face_sets = RNA_boolean_get(op->ptr, "face_sets"),
       .use_subdiv_schema = RNA_boolean_get(op->ptr, "subdiv_schema"),
@@ -209,7 +209,7 @@ static void ui_alembic_export_settings(uiLayout *layout, PointerRNA *imfptr)
   uiItemR(row, imfptr, "renderable_only", 0, NULL, ICON_NONE);
 
   row = uiLayoutRow(box, false);
-  uiItemR(row, imfptr, "visible_layers_only", 0, NULL, ICON_NONE);
+  uiItemR(row, imfptr, "visible_objects_only", 0, NULL, ICON_NONE);
 
   row = uiLayoutRow(box, false);
   uiItemR(row, imfptr, "flatten", 0, NULL, ICON_NONE);
@@ -316,7 +316,7 @@ void WM_OT_alembic_export(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_ALEMBIC,
                                  FILE_BLENDER,
                                  FILE_SAVE,
-                                 WM_FILESEL_FILEPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 
@@ -392,10 +392,10 @@ void WM_OT_alembic_export(wmOperatorType *ot)
                   "Export only objects marked renderable in the outliner");
 
   RNA_def_boolean(ot->srna,
-                  "visible_layers_only",
+                  "visible_objects_only",
                   0,
-                  "Visible Layers Only",
-                  "Export only objects in visible layers");
+                  "Visible Objects Only",
+                  "Export only objects that are visible");
 
   RNA_def_boolean(ot->srna,
                   "flatten",
@@ -694,7 +694,7 @@ void WM_OT_alembic_import(wmOperatorType *ot)
                                  FILE_TYPE_FOLDER | FILE_TYPE_ALEMBIC,
                                  FILE_BLENDER,
                                  FILE_SAVE,
-                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH | WM_FILESEL_SHOW_PROPS,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_ALPHA);
 

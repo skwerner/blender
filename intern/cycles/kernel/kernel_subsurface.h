@@ -138,7 +138,7 @@ ccl_device void subsurface_color_bump_blur(
 
   if (bump || texture_blur > 0.0f) {
     /* average color and normal at incoming point */
-    shader_eval_surface(kg, sd, state, state->flag);
+    shader_eval_surface(kg, sd, state, NULL, state->flag);
     float3 in_color = shader_bssrdf_sum(sd, (bump) ? N : NULL, NULL);
 
     /* we simply divide out the average color and multiply with the average
@@ -428,12 +428,17 @@ ccl_device_noinline
     hit = (ss_isect->num_hits > 0);
 
     if (hit) {
+#ifdef __KERNEL_OPTIX__
+      /* t is always in world space with OptiX. */
+      t = ss_isect->hits[0].t;
+#else
       /* Compute world space distance to surface hit. */
       float3 D = ray->D;
       object_inverse_dir_transform(kg, sd, &D);
       D = normalize(D) * ss_isect->hits[0].t;
       object_dir_transform(kg, sd, &D);
       t = len(D);
+#endif
     }
 
     /* Advance to new scatter location. */

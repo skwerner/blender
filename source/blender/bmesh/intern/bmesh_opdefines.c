@@ -102,6 +102,16 @@ static BMO_FlagSet bmo_enum_axis_xyz[] = {
   {0, NULL},
 };
 
+static BMO_FlagSet bmo_enum_axis_neg_xyz_and_xyz[] = {
+  {0, "-X"},
+  {1, "-Y"},
+  {2, "-Z"},
+  {3, "X"},
+  {4, "Y"},
+  {5, "Z"},
+  {0, NULL},
+};
+
 static BMO_FlagSet bmo_enum_falloff_type[] = {
   {SUBD_FALLOFF_SMOOTH, "SMOOTH"},
   {SUBD_FALLOFF_SPHERE, "SPHERE"},
@@ -111,6 +121,11 @@ static BMO_FlagSet bmo_enum_falloff_type[] = {
   {SUBD_FALLOFF_INVSQUARE, "INVERSE_SQUARE"},
   {0, NULL},
 };
+
+/* Quiet 'enum-conversion' warning. */
+#define BM_FACE ((int)BM_FACE)
+#define BM_EDGE ((int)BM_EDGE)
+#define BM_VERT ((int)BM_VERT)
 
 /*
  * Vertex Smooth.
@@ -310,6 +325,7 @@ static BMOpDefine bmo_mirror_def = {
    {"axis",            BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM}, bmo_enum_axis_xyz},   /* the axis to use. */
    {"mirror_u",        BMO_OP_SLOT_BOOL},  /* mirror UVs across the u axis */
    {"mirror_v",        BMO_OP_SLOT_BOOL},  /* mirror UVs across the v axis */
+   {"mirror_udim",     BMO_OP_SLOT_BOOL},  /* mirror UVs in each tile */
    {{'\0'}},
   },
   /* slots_out */
@@ -1036,6 +1052,7 @@ static BMOpDefine bmo_extrude_face_region_def = {
    {"use_keep_orig", BMO_OP_SLOT_BOOL},   /* keep original geometry (requires ``geom`` to include edges). */
    {"use_normal_flip", BMO_OP_SLOT_BOOL},  /* Create faces with reversed direction. */
    {"use_normal_from_adjacent", BMO_OP_SLOT_BOOL},  /* Use winding from surrounding faces instead of this region. */
+   {"use_dissolve_ortho_edges", BMO_OP_SLOT_BOOL},  /* Dissolve edges whose faces form a flat surface. */
    {"use_select_history", BMO_OP_SLOT_BOOL},  /* pass to duplicate */
    {{'\0'}},
   },
@@ -1725,6 +1742,12 @@ static BMO_FlagSet bmo_enum_bevel_miter_type[] = {
   {0, NULL},
 };
 
+static BMO_FlagSet bmo_enum_bevel_vmesh_method[] = {
+  {BEVEL_VMESH_ADJ, "ADJ"},
+  {BEVEL_VMESH_CUTOFF, "CUTOFF"},
+  {0, NULL},
+};
+
 /*
  * Bevel.
  *
@@ -1735,7 +1758,8 @@ static BMOpDefine bmo_bevel_def = {
   /* slots_in */
   {{"geom", BMO_OP_SLOT_ELEMENT_BUF, {BM_VERT | BM_EDGE | BM_FACE}},     /* input edges and vertices */
    {"offset", BMO_OP_SLOT_FLT},           /* amount to offset beveled edge */
-   {"offset_type", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM}, bmo_enum_bevel_offset_type}, /* how to measure the offset */
+   {"offset_type", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
+    bmo_enum_bevel_offset_type}, /* how to measure the offset */
    {"segments", BMO_OP_SLOT_INT},         /* number of segments in bevel */
    {"profile", BMO_OP_SLOT_FLT},          /* profile shape, 0->1 (.5=>round) */
    {"vertex_only", BMO_OP_SLOT_BOOL},     /* only bevel vertices, not edges */
@@ -1746,13 +1770,18 @@ static BMOpDefine bmo_bevel_def = {
    {"mark_sharp", BMO_OP_SLOT_BOOL},      /* extend edge data to allow sharp edges to run across bevels */
    {"harden_normals", BMO_OP_SLOT_BOOL},  /* harden normals */
    {"face_strength_mode", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
-    bmo_enum_bevel_face_strength_type}, /* whether to set face strength, and which faces to set if so */
+    bmo_enum_bevel_face_strength_type},   /* whether to set face strength, and which faces to set if so */
    {"miter_outer", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
-    bmo_enum_bevel_miter_type},         /* outer miter kind */
+    bmo_enum_bevel_miter_type},           /* outer miter kind */
    {"miter_inner", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
-    bmo_enum_bevel_miter_type},         /* outer miter kind */
+    bmo_enum_bevel_miter_type},           /* outer miter kind */
    {"spread", BMO_OP_SLOT_FLT},           /* amount to offset beveled edge */
    {"smoothresh", BMO_OP_SLOT_FLT},       /* for passing mesh's smoothresh, used in hardening */
+   {"use_custom_profile", BMO_OP_SLOT_BOOL}, /* Whether to use custom profile feature */
+   /* the ProfileWiget struct for the custom profile shape */
+   {"custom_profile", BMO_OP_SLOT_PTR, {(int)BMO_OP_SLOT_SUBTYPE_PTR_STRUCT}},
+   {"vmesh_method", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM},
+    bmo_enum_bevel_vmesh_method},
    {{'\0'}},
   },
   /* slots_out */
@@ -2034,7 +2063,7 @@ static BMOpDefine bmo_symmetrize_def = {
   "symmetrize",
   /* slots_in */
   {{"input", BMO_OP_SLOT_ELEMENT_BUF, {BM_VERT | BM_EDGE | BM_FACE}},
-   {"direction", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM}, bmo_enum_axis_xyz}, /* axis to use */
+   {"direction", BMO_OP_SLOT_INT, {(int)BMO_OP_SLOT_SUBTYPE_INT_ENUM}, bmo_enum_axis_neg_xyz_and_xyz}, /* axis to use */
    {"dist", BMO_OP_SLOT_FLT}, /* minimum distance */
    {{'\0'}},
   },
@@ -2049,6 +2078,10 @@ static BMOpDefine bmo_symmetrize_def = {
 };
 
 /* clang-format on */
+
+#undef BM_FACE
+#undef BM_EDGE
+#undef BM_VERT
 
 const BMOpDefine *bmo_opdefines[] = {
     &bmo_average_vert_facedata_def,

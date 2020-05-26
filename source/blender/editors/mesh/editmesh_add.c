@@ -33,15 +33,15 @@
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
 
-#include "RNA_define.h"
 #include "RNA_access.h"
+#include "RNA_define.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
 #include "ED_mesh.h"
-#include "ED_screen.h"
 #include "ED_object.h"
+#include "ED_screen.h"
 #include "ED_uvedit.h"
 
 #include "mesh_intern.h" /* own include */
@@ -92,7 +92,7 @@ static void make_prim_finish(bContext *C,
   EDBM_selectmode_flush_ex(em, SCE_SELECT_VERTEX);
 
   /* only recalc editmode tessface if we are staying in editmode */
-  EDBM_update_generic(em, !exit_editmode, true);
+  EDBM_update_generic(obedit->data, !exit_editmode, true);
 
   /* userdef */
   if (exit_editmode) {

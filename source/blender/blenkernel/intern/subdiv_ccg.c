@@ -40,9 +40,9 @@
 
 #include "opensubdiv_topology_refiner_capi.h"
 
-/* =============================================================================
- * Various forward declarations.
- */
+/* -------------------------------------------------------------------- */
+/** \name Various forward declarations
+ * \{ */
 
 static void subdiv_ccg_average_all_boundaries_and_corners(SubdivCCG *subdiv_ccg, CCGKey *key);
 
@@ -50,9 +50,11 @@ static void subdiv_ccg_average_inner_face_grids(SubdivCCG *subdiv_ccg,
                                                 CCGKey *key,
                                                 SubdivCCGFace *face);
 
-/* =============================================================================
- * Generally useful internal helpers.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Generally useful internal helpers
+ * \{ */
 
 /* Number of floats in per-vertex elements.  */
 static int num_element_float_get(const SubdivCCG *subdiv_ccg)
@@ -74,9 +76,11 @@ static int element_size_bytes_get(const SubdivCCG *subdiv_ccg)
   return sizeof(float) * num_element_float_get(subdiv_ccg);
 }
 
-/* =============================================================================
- * Internal helpers for CCG creation.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Internal helpers for CCG creation
+ * \{ */
 
 static void subdiv_ccg_init_layers(SubdivCCG *subdiv_ccg, const SubdivToCCGSettings *settings)
 {
@@ -158,9 +162,11 @@ static void subdiv_ccg_alloc_elements(SubdivCCG *subdiv_ccg, Subdiv *subdiv)
   }
 }
 
-/* =============================================================================
- * Grids evaluation.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Grids evaluation
+ * \{ */
 
 typedef struct CCGEvalGridsData {
   SubdivCCG *subdiv_ccg;
@@ -556,9 +562,11 @@ static void subdiv_ccg_init_faces_neighborhood(SubdivCCG *subdiv_ccg)
   subdiv_ccg_init_faces_vertex_neighborhood(subdiv_ccg);
 }
 
-/* =============================================================================
- * Creation / evaluation.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Creation / evaluation
+ * \{ */
 
 SubdivCCG *BKE_subdiv_to_ccg(Subdiv *subdiv,
                              const SubdivToCCGSettings *settings,
@@ -589,7 +597,7 @@ Mesh *BKE_subdiv_to_ccg_mesh(Subdiv *subdiv,
 {
   /* Make sure evaluator is ready. */
   BKE_subdiv_stats_begin(&subdiv->stats, SUBDIV_STATS_SUBDIV_TO_CCG);
-  if (!BKE_subdiv_eval_update_from_mesh(subdiv, coarse_mesh, NULL)) {
+  if (!BKE_subdiv_eval_begin_from_mesh(subdiv, coarse_mesh, NULL)) {
     if (coarse_mesh->totpoly) {
       return NULL;
     }
@@ -623,9 +631,9 @@ void BKE_subdiv_ccg_destroy(SubdivCCG *subdiv_ccg)
   MEM_SAFE_FREE(subdiv_ccg->grid_flag_mats);
   if (subdiv_ccg->grid_hidden != NULL) {
     for (int grid_index = 0; grid_index < num_grids; grid_index++) {
-      MEM_freeN(subdiv_ccg->grid_hidden[grid_index]);
+      MEM_SAFE_FREE(subdiv_ccg->grid_hidden[grid_index]);
     }
-    MEM_freeN(subdiv_ccg->grid_hidden);
+    MEM_SAFE_FREE(subdiv_ccg->grid_hidden);
   }
   if (subdiv_ccg->subdiv != NULL) {
     BKE_subdiv_free(subdiv_ccg->subdiv);
@@ -670,9 +678,11 @@ void BKE_subdiv_ccg_key_top_level(CCGKey *key, const SubdivCCG *subdiv_ccg)
   BKE_subdiv_ccg_key(key, subdiv_ccg, subdiv_ccg->level);
 }
 
-/* =============================================================================
- * Normals.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Normals
+ * \{ */
 
 typedef struct RecalcInnerNormalsData {
   SubdivCCG *subdiv_ccg;
@@ -770,8 +780,8 @@ static void subdiv_ccg_recalc_inner_normal_task(void *__restrict userdata_v,
   subdiv_ccg_average_inner_face_normals(data->subdiv_ccg, data->key, tls, grid_index);
 }
 
-static void subdiv_ccg_recalc_inner_normal_finalize(void *__restrict UNUSED(userdata),
-                                                    void *__restrict tls_v)
+static void subdiv_ccg_recalc_inner_normal_free(const void *__restrict UNUSED(userdata),
+                                                void *__restrict tls_v)
 {
   RecalcInnerNormalsTLSData *tls = tls_v;
   MEM_SAFE_FREE(tls->face_normals);
@@ -791,7 +801,7 @@ static void subdiv_ccg_recalc_inner_grid_normals(SubdivCCG *subdiv_ccg)
   BLI_parallel_range_settings_defaults(&parallel_range_settings);
   parallel_range_settings.userdata_chunk = &tls_data;
   parallel_range_settings.userdata_chunk_size = sizeof(tls_data);
-  parallel_range_settings.func_finalize = subdiv_ccg_recalc_inner_normal_finalize;
+  parallel_range_settings.func_free = subdiv_ccg_recalc_inner_normal_free;
   BLI_task_parallel_range(0,
                           subdiv_ccg->num_grids,
                           &data,
@@ -834,8 +844,8 @@ static void subdiv_ccg_recalc_modified_inner_normal_task(void *__restrict userda
   subdiv_ccg_average_inner_face_grids(subdiv_ccg, key, face);
 }
 
-static void subdiv_ccg_recalc_modified_inner_normal_finalize(void *__restrict UNUSED(userdata),
-                                                             void *__restrict tls_v)
+static void subdiv_ccg_recalc_modified_inner_normal_free(const void *__restrict UNUSED(userdata),
+                                                         void *__restrict tls_v)
 {
   RecalcInnerNormalsTLSData *tls = tls_v;
   MEM_SAFE_FREE(tls->face_normals);
@@ -857,7 +867,7 @@ static void subdiv_ccg_recalc_modified_inner_grid_normals(SubdivCCG *subdiv_ccg,
   BLI_parallel_range_settings_defaults(&parallel_range_settings);
   parallel_range_settings.userdata_chunk = &tls_data;
   parallel_range_settings.userdata_chunk_size = sizeof(tls_data);
-  parallel_range_settings.func_finalize = subdiv_ccg_recalc_modified_inner_normal_finalize;
+  parallel_range_settings.func_free = subdiv_ccg_recalc_modified_inner_normal_free;
   BLI_task_parallel_range(0,
                           num_effected_faces,
                           &data,
@@ -885,9 +895,11 @@ void BKE_subdiv_ccg_update_normals(SubdivCCG *subdiv_ccg,
   subdiv_ccg_average_all_boundaries_and_corners(subdiv_ccg, &key);
 }
 
-/* =============================================================================
- * Boundary averaging/stitching.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Boundary averaging/stitching
+ * \{ */
 
 typedef struct AverageInnerGridsData {
   SubdivCCG *subdiv_ccg;
@@ -1077,8 +1089,8 @@ static void subdiv_ccg_average_grids_boundaries_task(void *__restrict userdata_v
   subdiv_ccg_average_grids_boundary(subdiv_ccg, key, adjacent_edge, tls);
 }
 
-static void subdiv_ccg_average_grids_boundaries_finalize(void *__restrict UNUSED(userdata),
-                                                         void *__restrict tls_v)
+static void subdiv_ccg_average_grids_boundaries_free(const void *__restrict UNUSED(userdata),
+                                                     void *__restrict tls_v)
 {
   AverageGridsBoundariesTLSData *tls = tls_v;
   MEM_SAFE_FREE(tls->accumulators);
@@ -1136,7 +1148,7 @@ static void subdiv_ccg_average_all_boundaries(SubdivCCG *subdiv_ccg, CCGKey *key
   AverageGridsBoundariesTLSData tls_data = {NULL};
   parallel_range_settings.userdata_chunk = &tls_data;
   parallel_range_settings.userdata_chunk_size = sizeof(tls_data);
-  parallel_range_settings.func_finalize = subdiv_ccg_average_grids_boundaries_finalize;
+  parallel_range_settings.func_free = subdiv_ccg_average_grids_boundaries_free;
   BLI_task_parallel_range(0,
                           subdiv_ccg->num_adjacent_edges,
                           &boundaries_data,
@@ -1244,9 +1256,11 @@ void BKE_subdiv_ccg_topology_counters(const SubdivCCG *subdiv_ccg,
   *r_num_loops = *r_num_faces * 4;
 }
 
-/* =============================================================================
- * Neighbors.
- */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Neighbors
+ * \{ */
 
 void BKE_subdiv_ccg_print_coord(const char *message, const SubdivCCGCoord *coord)
 {
@@ -1780,3 +1794,16 @@ void BKE_subdiv_ccg_neighbor_coords_get(const SubdivCCG *subdiv_ccg,
   }
 #endif
 }
+
+int BKE_subdiv_ccg_grid_to_face_index(const SubdivCCG *subdiv_ccg, const int grid_index)
+{
+  // Subdiv *subdiv = subdiv_ccg->subdiv; /* UNUSED */
+  // OpenSubdiv_TopologyRefiner *topology_refiner = subdiv->topology_refiner; /* UNUSED */
+  SubdivCCGFace *face = subdiv_ccg->grid_faces[grid_index];
+
+  // const int face_grid_index = grid_index - face->start_grid_index; /* UNUSED */
+  const int face_index = face - subdiv_ccg->faces;
+  return face_index;
+}
+
+/** \} */

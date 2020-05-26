@@ -27,16 +27,14 @@
 
 #include "../geometry/Geom.h"
 
-#include "../image/ImagePyramid.h"
 #include "../image/Image.h"
+#include "../image/ImagePyramid.h"
 
 #include "BKE_global.h"
 #include "BLI_math.h"
 
-extern "C" {
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
-}
 
 namespace Freestyle {
 

@@ -20,7 +20,6 @@ import bpy
 import sys
 import os
 import tempfile
-import traceback
 import inspect
 from bpy.types import UIList
 
@@ -54,8 +53,8 @@ def abort_if_false(expr, msg=None):
 
 
 class TestClass(bpy.types.PropertyGroup):
-    test_prop = bpy.props.PointerProperty(type=bpy.types.Object)
-    name = bpy.props.StringProperty()
+    test_prop: bpy.props.PointerProperty(type=bpy.types.Object)
+    name: bpy.props.StringProperty()
 
 
 def get_scene(lib_name, sce_name):
@@ -213,13 +212,14 @@ def test_restrictions1():
         bl_idname = 'scene.test_op'
         bl_label = 'Test'
         bl_options = {"INTERNAL"}
-        str_prop = bpy.props.StringProperty(name="str_prop")
+
+        str_prop: bpy.props.StringProperty(name="str_prop")
 
         # disallow registration of datablock properties in operators
         # will be checked in the draw method (test manually)
         # also, see console:
         #   ValueError: bpy_struct "SCENE_OT_test_op" doesn't support datablock properties
-        id_prop = bpy.props.PointerProperty(type=bpy.types.Object)
+        id_prop: bpy.props.PointerProperty(type=bpy.types.Object)
 
         def execute(self, context):
             return {'FINISHED'}
@@ -291,7 +291,7 @@ def test_regressions():
 # test restrictions for datablock pointers
 def test_restrictions2():
     class TestClassCollection(bpy.types.PropertyGroup):
-        prop = bpy.props.CollectionProperty(
+        prop: bpy.props.CollectionProperty(
             name="prop_array",
             type=TestClass)
     bpy.utils.register_class(TestClassCollection)
@@ -299,9 +299,9 @@ def test_restrictions2():
     class TestPrefs(bpy.types.AddonPreferences):
         bl_idname = "testprefs"
         # expecting crash during registering
-        my_prop2 = bpy.props.PointerProperty(type=TestClass)
+        my_prop2: bpy.props.PointerProperty(type=TestClass)
 
-        prop = bpy.props.PointerProperty(
+        prop: bpy.props.PointerProperty(
             name="prop",
             type=TestClassCollection,
             description="test")
@@ -309,7 +309,7 @@ def test_restrictions2():
     bpy.types.Addon.a = bpy.props.PointerProperty(type=bpy.types.Object)
 
     class TestUIList(UIList):
-        test = bpy.props.PointerProperty(type=bpy.types.Object)
+        test: bpy.props.PointerProperty(type=bpy.types.Object)
 
         def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
             layout.prop(item, "name", text="", emboss=False, icon_value=icon)
@@ -330,11 +330,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except:
-        import traceback
-
-        traceback.print_exc()
-        sys.stderr.flush()
-        os._exit(1)
+    main()

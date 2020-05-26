@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2018, Blender Foundation
@@ -23,30 +23,32 @@
 
 #include <stdio.h>
 
+#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "BLI_math.h"
 
 #include "DNA_armature_types.h"
-#include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
-#include "BKE_lattice.h"
 #include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
-#include "BKE_modifier.h"
-#include "BKE_library_query.h"
-#include "BKE_scene.h"
+#include "BKE_lattice.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
+#include "BKE_modifier.h"
+#include "BKE_scene.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "MOD_gpencil_util.h"
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_util.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -61,7 +63,7 @@ static void initData(GpencilModifierData *md)
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 }
 
 static void gpencil_deform_verts(ArmatureGpencilModifierData *mmd, Object *target, bGPDstroke *gps)
@@ -116,6 +118,8 @@ static void deformStroke(GpencilModifierData *md,
   }
 
   gpencil_deform_verts(mmd, ob, gps);
+  /* Calc geometry data. */
+  BKE_gpencil_stroke_geometry_update(gps);
 }
 
 static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData *md, Object *ob)
@@ -123,7 +127,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
   Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
   ArmatureGpencilModifierData *mmd = (ArmatureGpencilModifierData *)md;
-  GpencilModifierData *md_eval = BKE_gpencil_modifiers_findByName(object_eval, md->name);
+  GpencilModifierData *md_eval = BKE_gpencil_modifiers_findby_name(object_eval, md->name);
   bGPdata *gpd = (bGPdata *)ob->data;
   int oldframe = (int)DEG_get_ctime(depsgraph);
 
@@ -131,8 +135,8 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
     return;
   }
 
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-    for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
       /* apply armature effects on this frame
        * NOTE: this assumes that we don't want armature animation on non-keyframed frames
        */
@@ -140,7 +144,7 @@ static void bakeModifier(Main *bmain, Depsgraph *depsgraph, GpencilModifierData 
       BKE_scene_graph_update_for_newframe(depsgraph, bmain);
 
       /* compute armature effects on this frame */
-      for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+      LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
         deformStroke(md_eval, depsgraph, object_eval, gpl, gpf, gps);
       }
     }

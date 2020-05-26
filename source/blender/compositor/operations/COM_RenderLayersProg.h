@@ -19,14 +19,13 @@
 #ifndef __COM_RENDERLAYERSPROG_H__
 #define __COM_RENDERLAYERSPROG_H__
 
+#include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 #include "COM_NodeOperation.h"
 #include "DNA_scene_types.h"
-#include "BLI_listbase.h"
-#include "BKE_image.h"
-extern "C" {
-#include "RE_pipeline.h"
 #include "MEM_guardedalloc.h"
-}
+
+#include "RE_pipeline.h"
 
 /**
  * Base class for all renderlayeroperations
@@ -56,7 +55,7 @@ class RenderLayersProg : public NodeOperation {
   float *m_inputBuffer;
 
   /**
-   * renderpass where this operation needs to get its data from
+   * Render-pass where this operation needs to get its data from.
    */
   std::string m_passName;
 

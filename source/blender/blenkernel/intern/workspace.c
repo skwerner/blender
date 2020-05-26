@@ -21,16 +21,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "BLI_utildefines.h"
+#include "BLI_listbase.h"
 #include "BLI_string.h"
 #include "BLI_string_utils.h"
-#include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
+#include "BLT_translation.h"
+
+#include "BKE_global.h"
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_idtype.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
-#include "BKE_scene.h"
 #include "BKE_object.h"
+#include "BKE_scene.h"
 #include "BKE_workspace.h"
 
 #include "DNA_object_types.h"
@@ -44,6 +49,57 @@
 #include "MEM_guardedalloc.h"
 
 /* -------------------------------------------------------------------- */
+
+static void workspace_free_data(ID *id)
+{
+  WorkSpace *workspace = (WorkSpace *)id;
+
+  BKE_workspace_relations_free(&workspace->hook_layout_relations);
+
+  BLI_freelistN(&workspace->owner_ids);
+  BLI_freelistN(&workspace->layouts);
+
+  while (!BLI_listbase_is_empty(&workspace->tools)) {
+    BKE_workspace_tool_remove(workspace, workspace->tools.first);
+  }
+
+  MEM_SAFE_FREE(workspace->status_text);
+}
+
+static void workspace_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  WorkSpace *workspace = (WorkSpace *)id;
+  ListBase *layouts = BKE_workspace_layouts_get(workspace);
+
+  LISTBASE_FOREACH (WorkSpaceLayout *, layout, layouts) {
+    bScreen *screen = BKE_workspace_layout_screen_get(layout);
+
+    /* CALLBACK_INVOKE expects an actual pointer, not a variable holding the pointer.
+     * However we can't access layout->screen here
+     * since we are outside the workspace project. */
+    BKE_LIB_FOREACHID_PROCESS(data, screen, IDWALK_CB_USER);
+    /* allow callback to set a different screen */
+    BKE_workspace_layout_screen_set(layout, screen);
+  }
+}
+
+IDTypeInfo IDType_ID_WS = {
+    .id_code = ID_WS,
+    .id_filter = FILTER_ID_WS,
+    .main_listbase_index = INDEX_ID_WS,
+    .struct_size = sizeof(WorkSpace),
+    .name = "WorkSpace",
+    .name_plural = "workspaces",
+    .translation_context = BLT_I18NCONTEXT_ID_WORKSPACE,
+    .flags = IDTYPE_FLAGS_NO_COPY | IDTYPE_FLAGS_NO_MAKELOCAL,
+
+    .init_data = NULL,
+    .copy_data = NULL,
+    .free_data = workspace_free_data,
+    .make_local = NULL,
+    .foreach_id = workspace_foreach_id,
+};
+
 /** \name Internal Utils
  * \{ */
 
@@ -145,36 +201,13 @@ static bool UNUSED_FUNCTION(workspaces_is_screen_used)
 WorkSpace *BKE_workspace_add(Main *bmain, const char *name)
 {
   WorkSpace *new_workspace = BKE_libblock_alloc(bmain, ID_WS, name, 0);
+  id_us_ensure_real(&new_workspace->id);
   return new_workspace;
 }
 
 /**
- * The function that actually frees the workspace data (not workspace itself).
- * It shouldn't be called directly, instead #BKE_workspace_remove should be,
- * which calls this through #BKE_id_free then.
- *
- * Should something like a bke_internal.h be added, this should go there!
- */
-void BKE_workspace_free(WorkSpace *workspace)
-{
-  BKE_workspace_relations_free(&workspace->hook_layout_relations);
-
-  BLI_freelistN(&workspace->owner_ids);
-  BLI_freelistN(&workspace->layouts);
-
-  while (!BLI_listbase_is_empty(&workspace->tools)) {
-    BKE_workspace_tool_remove(workspace, workspace->tools.first);
-  }
-
-  if (workspace->status_text) {
-    MEM_freeN(workspace->status_text);
-    workspace->status_text = NULL;
-  }
-}
-
-/**
  * Remove \a workspace by freeing itself and its data. This is a higher-level wrapper that
- * calls #BKE_workspace_free (through #BKE_id_free) to free the workspace data, and frees
+ * calls #workspace_free_data (through #BKE_id_free) to free the workspace data, and frees
  * other data-blocks owned by \a workspace and its layouts (currently that is screens only).
  *
  * Always use this to remove (and free) workspaces. Don't free non-ID workspace members here.
@@ -202,8 +235,10 @@ WorkSpaceInstanceHook *BKE_workspace_instance_hook_create(const Main *bmain)
 }
 void BKE_workspace_instance_hook_free(const Main *bmain, WorkSpaceInstanceHook *hook)
 {
-  /* workspaces should never be freed before wm (during which we call this function) */
-  BLI_assert(!BLI_listbase_is_empty(&bmain->workspaces));
+  /* workspaces should never be freed before wm (during which we call this function).
+   * However, when running in background mode, loading a blend file may allocate windows (that need
+   * to be freed) without creating workspaces. This happens in BlendfileLoadingBaseTest. */
+  BLI_assert(!BLI_listbase_is_empty(&bmain->workspaces) || G.background);
 
   /* Free relations for this hook */
   for (WorkSpace *workspace = bmain->workspaces.first; workspace; workspace = workspace->id.next) {
@@ -244,8 +279,12 @@ WorkSpaceLayout *BKE_workspace_layout_add(Main *bmain,
 
 void BKE_workspace_layout_remove(Main *bmain, WorkSpace *workspace, WorkSpaceLayout *layout)
 {
-  id_us_min(&layout->screen->id);
-  BKE_id_free(bmain, layout->screen);
+  /* Screen should usually be set, but we call this from file reading to get rid of invalid
+   * layouts. */
+  if (layout->screen) {
+    id_us_min(&layout->screen->id);
+    BKE_id_free(bmain, layout->screen);
+  }
   BLI_freelinkN(&workspace->layouts, layout);
 }
 
@@ -376,7 +415,7 @@ void BKE_workspace_id_tag_all_visible(Main *bmain, int tag)
 {
   BKE_main_id_tag_listbase(&bmain->workspaces, tag, false);
   wmWindowManager *wm = bmain->wm.first;
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     WorkSpace *workspace = BKE_workspace_active_get(win->workspace_hook);
     workspace->id.tag |= tag;
   }

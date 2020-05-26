@@ -85,7 +85,6 @@
  \
     .im_format = _DNA_DEFAULT_ImageFormatData, \
  \
-    .displaymode = R_OUTPUT_WINDOW, \
     .framapto = 100, \
     .images = 100, \
     .framelen = 1.0, \
@@ -171,7 +170,7 @@
 
 #define _DNA_DEFAULT_PhysicsSettings \
   { \
-    .gravity = {0.0f, 0.0f -9.81f}, \
+    .gravity = {0.0f, 0.0f, -9.81f}, \
     .flag = PHYS_GLOBAL_GRAVITY, \
   }
 
@@ -225,7 +224,7 @@
     .shadow_cube_size = 512, \
     .shadow_cascade_size = 1024, \
  \
-    .light_cache = NULL, \
+    .light_cache_data = NULL, \
     .light_threshold = 0.01f, \
  \
     .overscan = 3.0f, \

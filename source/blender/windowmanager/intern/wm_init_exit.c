@@ -23,8 +23,8 @@
  * Manage initializing resources and correctly shutting down.
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef _WIN32
@@ -44,37 +44,38 @@
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
+#include "BLI_task.h"
 #include "BLI_threads.h"
-#include "BLI_utildefines.h"
 #include "BLI_timer.h"
+#include "BLI_utildefines.h"
 
-#include "BLO_writefile.h"
 #include "BLO_undofile.h"
+#include "BLO_writefile.h"
 
-#include "BKE_blendfile.h"
 #include "BKE_blender.h"
+#include "BKE_blendfile.h"
 #include "BKE_callbacks.h"
 #include "BKE_context.h"
 #include "BKE_font.h"
 #include "BKE_global.h"
 #include "BKE_icons.h"
-#include "BKE_library_remap.h"
+#include "BKE_keyconfig.h"
+#include "BKE_lib_remap.h"
 #include "BKE_main.h"
 #include "BKE_mball_tessellate.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
-#include "BKE_screen.h"
 #include "BKE_scene.h"
+#include "BKE_screen.h"
 #include "BKE_sound.h"
-#include "BKE_keyconfig.h"
 
 #include "BKE_addon.h"
 #include "BKE_appdir.h"
+#include "BKE_mask.h"      /* free mask clipboard */
+#include "BKE_material.h"  /* BKE_material_copybuf_clear */
 #include "BKE_sequencer.h" /* free seq clipboard */
 #include "BKE_studiolight.h"
-#include "BKE_material.h" /* clear_matcopybuf */
 #include "BKE_tracking.h" /* free tracking clipboard */
-#include "BKE_mask.h"     /* free mask clipboard */
 
 #include "RE_engine.h"
 #include "RE_pipeline.h" /* RE_ free stuff */
@@ -85,54 +86,53 @@
 #  include "BPY_extern.h"
 #endif
 
-#include "GHOST_Path-api.h"
 #include "GHOST_C-api.h"
+#include "GHOST_Path-api.h"
 
 #include "RNA_define.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
+#include "WM_types.h"
 
+#include "wm.h"
 #include "wm_cursors.h"
 #include "wm_event_system.h"
-#include "wm.h"
 #include "wm_files.h"
-#include "wm_window.h"
 #include "wm_platform_support.h"
+#include "wm_surface.h"
+#include "wm_window.h"
 
 #include "ED_anim_api.h"
 #include "ED_armature.h"
 #include "ED_gpencil.h"
-#include "ED_keyframing.h"
 #include "ED_keyframes_edit.h"
+#include "ED_keyframing.h"
 #include "ED_node.h"
 #include "ED_render.h"
-#include "ED_space_api.h"
 #include "ED_screen.h"
-#include "ED_util.h"
+#include "ED_space_api.h"
 #include "ED_undo.h"
+#include "ED_util.h"
 
-#include "UI_interface.h"
-#include "UI_resources.h"
 #include "BLF_api.h"
 #include "BLT_lang.h"
+#include "UI_interface.h"
+#include "UI_resources.h"
 
-#include "GPU_material.h"
 #include "GPU_draw.h"
 #include "GPU_init_exit.h"
+#include "GPU_material.h"
 
 #include "BKE_sound.h"
+#include "BKE_subdiv.h"
+
 #include "COM_compositor.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
 #include "DRW_engine.h"
-
-#ifdef WITH_OPENSUBDIV
-#  include "BKE_subsurf.h"
-#endif
 
 CLG_LOGREF_DECLARE_GLOBAL(WM_LOG_OPERATORS, "wm.operator");
 CLG_LOGREF_DECLARE_GLOBAL(WM_LOG_HANDLERS, "wm.handler");
@@ -150,11 +150,9 @@ static void wm_init_reports(bContext *C)
 
   BKE_reports_init(reports, RPT_STORE);
 }
-static void wm_free_reports(bContext *C)
+static void wm_free_reports(wmWindowManager *wm)
 {
-  ReportList *reports = CTX_wm_reports(C);
-
-  BKE_reports_clear(reports);
+  BKE_reports_clear(&wm->reports);
 }
 
 static bool wm_start_with_console = false;
@@ -193,13 +191,12 @@ void WM_init_opengl(Main *bmain)
 
   GPU_pass_cache_init();
 
-#ifdef WITH_OPENSUBDIV
-  BKE_subsurf_osd_init();
-#endif
+  BKE_subdiv_init();
+
   opengl_is_init = true;
 }
 
-static void sound_jack_sync_callback(Main *bmain, int mode, float time)
+static void sound_jack_sync_callback(Main *bmain, int mode, double time)
 {
   /* Ugly: Blender doesn't like it when the animation is played back during rendering. */
   if (G.is_rendering) {
@@ -218,8 +215,10 @@ static void sound_jack_sync_callback(Main *bmain, int mode, float time)
     if (depsgraph == NULL) {
       continue;
     }
+    BKE_sound_lock();
     Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
     BKE_sound_jack_scene_update(scene_eval, mode, time);
+    BKE_sound_unlock();
   }
 }
 
@@ -249,19 +248,17 @@ void WM_init(bContext *C, int argc, const char **argv)
 
   ED_undosys_type_init();
 
-  BKE_library_callback_free_window_manager_set(wm_close_and_free); /* library.c */
   BKE_library_callback_free_notifier_reference_set(
-      WM_main_remove_notifier_reference);                    /* library.c */
+      WM_main_remove_notifier_reference);                    /* lib_id.c */
   BKE_region_callback_free_gizmomap_set(wm_gizmomap_remove); /* screen.c */
   BKE_region_callback_refresh_tag_gizmomap_set(WM_gizmomap_tag_refresh);
   BKE_library_callback_remap_editor_id_reference_set(
-      WM_main_remap_editor_id_reference);                     /* library.c */
+      WM_main_remap_editor_id_reference);                     /* lib_id.c */
   BKE_spacedata_callback_id_remap_set(ED_spacedata_id_remap); /* screen.c */
   DEG_editors_set_update_cb(ED_render_id_flush_update, ED_render_scene_update);
 
   ED_spacetypes_init(); /* editors/space_api/spacetype.c */
 
-  ED_file_init(); /* for fsmenu */
   ED_node_init_butfuncs();
 
   BLF_init();
@@ -291,6 +288,8 @@ void WM_init(bContext *C, int argc, const char **argv)
    * otherwise the versioning cannot find the default studio-light. */
   BKE_studiolight_init();
 
+  BLI_assert((G.fileflags & G_FILE_NO_UI) == 0);
+
   wm_homefile_read(C,
                    NULL,
                    G.factory_startup,
@@ -303,6 +302,9 @@ void WM_init(bContext *C, int argc, const char **argv)
 
   /* Call again to set from userpreferences... */
   BLT_lang_set(NULL);
+
+  /* For fsMenu. Called here so can include user preference paths if needed. */
+  ED_file_init();
 
   /* That one is generated on demand, we need to be sure it's clear on init. */
   IMB_thumb_clear_translations();
@@ -346,7 +348,7 @@ void WM_init(bContext *C, int argc, const char **argv)
     GHOST_toggleConsole(3);
   }
 
-  clear_matcopybuf();
+  BKE_material_copybuf_clear();
   ED_render_clear_mtex_copybuf();
 
   // glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -356,7 +358,8 @@ void WM_init(bContext *C, int argc, const char **argv)
   /* allow a path of "", this is what happens when making a new file */
 #if 0
   if (BKE_main_blendfile_path_from_global()[0] == '\0') {
-    BLI_make_file_string("/", G_MAIN->name, BKE_appdir_folder_default(), "untitled.blend");
+    BLI_join_dirfile(
+        G_MAIN->name, sizeof(G_MAIN->name), BKE_appdir_folder_default(), "untitled.blend");
   }
 #endif
 
@@ -466,7 +469,7 @@ void wm_exit_schedule_delayed(const bContext *C)
   /* Use modal UI handler for now.
    * Could add separate WM handlers or so, but probably not worth it. */
   WM_event_add_ui_handler(C, &win->modalhandlers, wm_exit_handler, NULL, NULL, 0);
-  WM_event_add_mousemove(C); /* ensure handler actually gets called */
+  WM_event_add_mousemove(win); /* ensure handler actually gets called */
 }
 
 /**
@@ -493,9 +496,9 @@ void WM_exit_ex(bContext *C, const bool do_python)
         bool has_edited;
         int fileflags = G.fileflags & ~(G_FILE_COMPRESS | G_FILE_HISTORY);
 
-        BLI_make_file_string("/", filename, BKE_tempdir_base(), BLENDER_QUIT_FILE);
+        BLI_join_dirfile(filename, sizeof(filename), BKE_tempdir_base(), BLENDER_QUIT_FILE);
 
-        has_edited = ED_editors_flush_edits(bmain, false);
+        has_edited = ED_editors_flush_edits(bmain);
 
         if ((has_edited && BLO_write_file(bmain, filename, fileflags, NULL, NULL)) ||
             (undo_memfile && BLO_memfile_write_file(undo_memfile, filename))) {
@@ -529,9 +532,10 @@ void WM_exit_ex(bContext *C, const bool do_python)
 
   BKE_addon_pref_type_free();
   BKE_keyconfig_pref_type_free();
-  BKE_material_gpencil_default_free();
+  BKE_materials_exit();
 
   wm_operatortype_free();
+  wm_surfaces_free();
   wm_dropbox_free();
   WM_menutype_free();
   WM_uilisttype_free();
@@ -554,9 +558,9 @@ void WM_exit_ex(bContext *C, const bool do_python)
 
   ED_preview_free_dbase(); /* frees a Main dbase, before BKE_blender_free! */
 
-  if (C && wm) {
+  if (wm) {
     /* Before BKE_blender_free! - since the ListBases get freed there. */
-    wm_free_reports(C);
+    wm_free_reports(wm);
   }
 
   BKE_sequencer_free_clipboard(); /* sequencer.c */
@@ -569,16 +573,14 @@ void WM_exit_ex(bContext *C, const bool do_python)
   COM_deinitialize();
 #endif
 
-  if (opengl_is_init) {
-#ifdef WITH_OPENSUBDIV
-    BKE_subsurf_osd_cleanup();
-#endif
+  BKE_subdiv_exit();
 
+  if (opengl_is_init) {
     GPU_free_unused_buffers(G_MAIN);
   }
 
   BKE_blender_free(); /* blender.c, does entire library and spacetypes */
-                      //  free_matcopybuf();
+                      //  BKE_material_copybuf_free();
   ANIM_fcurves_copybuf_free();
   ANIM_drivers_copybuf_free();
   ANIM_driver_vars_copybuf_free();
@@ -603,8 +605,6 @@ void WM_exit_ex(bContext *C, const bool do_python)
   }
 
 #ifdef WITH_INTERNATIONAL
-  BLF_free_unifont();
-  BLF_free_unifont_mono();
   BLT_lang_free();
 #endif
 
@@ -644,6 +644,7 @@ void WM_exit_ex(bContext *C, const bool do_python)
   DNA_sdna_current_free();
 
   BLI_threadapi_exit();
+  BLI_task_scheduler_exit();
 
   /* No need to call this early, rather do it late so that other
    * pieces of Blender using sound may exit cleanly, see also T50676. */

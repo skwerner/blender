@@ -57,7 +57,7 @@ class RENDER_PT_freestyle(RenderFreestyleButtonsPanel, Panel):
 
         layout.prop(rd, "line_thickness_mode", expand=True)
 
-        if (rd.line_thickness_mode == 'ABSOLUTE'):
+        if rd.line_thickness_mode == 'ABSOLUTE':
             layout.prop(rd, "line_thickness")
 
 
@@ -126,6 +126,7 @@ class VIEWLAYER_PT_freestyle(ViewLayerFreestyleButtonsPanel, Panel):
         row = layout.row()
         layout.prop(freestyle, "mode", text="Control Mode")
         layout.prop(freestyle, "use_view_map_cache", text="View Map Cache")
+        layout.prop(freestyle, "as_render_pass", text="As Render Pass")
         layout.label(text="Edge Detection Options:")
 
         split = layout.split()

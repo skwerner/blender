@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -25,9 +25,9 @@
 
 #include "BLI_utildefines.h"
 
-#include "DNA_scene_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_force_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_layer.h"
 #include "BKE_particle.h"
@@ -69,6 +69,8 @@ static void updateDepsgraph(ModifierData *UNUSED(md), const ModifierUpdateDepsgr
     DEG_add_forcefield_relations(
         ctx->node, ctx->object, ctx->object->soft->effector_weights, true, 0, "Softbody Field");
   }
+  /* We need own transformation as well. */
+  DEG_add_modifier_to_transform_relation(ctx->node, "SoftBody Modifier");
 }
 
 ModifierTypeInfo modifierType_Softbody = {
@@ -76,8 +78,9 @@ ModifierTypeInfo modifierType_Softbody = {
     /* structName */ "SoftbodyModifierData",
     /* structSize */ sizeof(SoftbodyModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
-        eModifierTypeFlag_RequiresOriginalData | eModifierTypeFlag_Single,
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
+        eModifierTypeFlag_RequiresOriginalData | eModifierTypeFlag_Single |
+        eModifierTypeFlag_UsesPointCache,
 
     /* copyData */ NULL,
 
@@ -85,7 +88,10 @@ ModifierTypeInfo modifierType_Softbody = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ NULL,
     /* requiredDataMask */ NULL,

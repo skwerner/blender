@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -30,13 +30,13 @@
 #include "DNA_object_types.h"
 
 #include "BKE_action.h"
+#include "BKE_colortools.h"
+#include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
-#include "BKE_deform.h"
-#include "BKE_colortools.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -59,7 +59,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
   const HookModifierData *hmd = (const HookModifierData *)md;
   HookModifierData *thmd = (HookModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   thmd->curfalloff = BKE_curvemapping_copy(hmd->curfalloff);
 
@@ -143,6 +143,8 @@ struct HookData_cb {
 
   float mat_uniform[3][3];
   float mat[4][4];
+
+  bool invert_vgroup;
 };
 
 static float hook_falloff(const struct HookData_cb *hd, const float len_sq)
@@ -236,7 +238,8 @@ static void hook_co_apply(struct HookData_cb *hd, const int j)
 
   if (fac) {
     if (hd->dvert) {
-      fac *= defvert_find_weight(&hd->dvert[j], hd->defgrp_index);
+      fac *= hd->invert_vgroup ? 1.0f - BKE_defvert_find_weight(&hd->dvert[j], hd->defgrp_index) :
+                                 BKE_defvert_find_weight(&hd->dvert[j], hd->defgrp_index);
     }
 
     if (fac) {
@@ -259,6 +262,7 @@ static void deformVerts_do(HookModifierData *hmd,
   float dmat[4][4];
   int i, *index_pt;
   struct HookData_cb hd;
+  const bool invert_vgroup = (hmd->flag & MOD_HOOK_INVERT_VGROUP) != 0;
 
   if (hmd->curfalloff == NULL) {
     /* should never happen, but bad lib linking could cause it */
@@ -277,11 +281,13 @@ static void deformVerts_do(HookModifierData *hmd,
 
   hd.falloff_type = hmd->falloff_type;
   hd.falloff = (hmd->falloff_type == eHook_Falloff_None) ? 0.0f : hmd->falloff;
-  hd.falloff_sq = SQUARE(hd.falloff);
+  hd.falloff_sq = square_f(hd.falloff);
   hd.fac_orig = hmd->force;
 
   hd.use_falloff = (hd.falloff_sq != 0.0f);
   hd.use_uniform = (hmd->flag & MOD_HOOK_UNIFORM_SPACE) != 0;
+
+  hd.invert_vgroup = invert_vgroup;
 
   if (hd.use_uniform) {
     copy_m3_m4(hd.mat_uniform, hmd->parentinv);
@@ -310,7 +316,7 @@ static void deformVerts_do(HookModifierData *hmd,
    * This should always be true and I don't generally like
    * "paranoid" style code like this, but old files can have
    * indices that are out of range because old blender did
-   * not correct them on exit editmode. - zr
+   * not correct them on exit edit-mode. - zr
    */
 
   if (hmd->force == 0.0f) {
@@ -387,7 +393,7 @@ ModifierTypeInfo modifierType_Hook = {
     /* structName */ "HookModifierData",
     /* structSize */ sizeof(HookModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
     /* copyData */ copyData,
 
@@ -395,7 +401,10 @@ ModifierTypeInfo modifierType_Hook = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

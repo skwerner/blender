@@ -24,12 +24,12 @@
 #ifndef __DNA_OBJECT_FORCE_TYPES_H__
 #define __DNA_OBJECT_FORCE_TYPES_H__
 
+#include "DNA_defs.h"
+#include "DNA_listBase.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "DNA_listBase.h"
-#include "DNA_defs.h"
 
 /* pd->forcefield:  Effector Fields types */
 typedef enum ePFieldType {
@@ -59,9 +59,10 @@ typedef enum ePFieldType {
   PFIELD_TURBULENCE = 11,
   /** Linear & quadratic drag. */
   PFIELD_DRAG = 12,
-  /** Force based on smoke simulation air flow. */
-  PFIELD_SMOKEFLOW = 13,
+  /** Force based on fluid simulation velocities. */
+  PFIELD_FLUIDFLOW = 13,
 
+  /* Keep last. */
   NUM_PFIELD_TYPES,
 } ePFieldType;
 
@@ -492,8 +493,10 @@ typedef struct SoftBody {
 #define PTCACHE_READ_INFO (1 << 10)
 /** don't use the filename of the blendfile the data is linked from (write a local cache) */
 #define PTCACHE_IGNORE_LIBPATH (1 << 11)
-/** high resolution cache is saved for smoke for backwards compatibility,
- * so set this flag to know it's a "fake" cache */
+/**
+ * High resolution cache is saved for smoke for backwards compatibility,
+ * so set this flag to know it's a "fake" cache.
+ */
 #define PTCACHE_FAKE_SMOKE (1 << 12)
 #define PTCACHE_IGNORE_CLEAR (1 << 13)
 

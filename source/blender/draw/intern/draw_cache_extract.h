@@ -34,12 +34,17 @@ typedef struct DRW_MeshWeightState {
   /* Set of all selected bones for Multipaint. */
   bool *defgroup_sel; /* [defgroup_len] */
   int defgroup_sel_count;
+
+  /* Set of all locked and unlocked deform bones for Lock Relative mode. */
+  bool *defgroup_locked;   /* [defgroup_len] */
+  bool *defgroup_unlocked; /* [defgroup_len] */
 } DRW_MeshWeightState;
 
 /* DRW_MeshWeightState.flags */
 enum {
   DRW_MESH_WEIGHT_STATE_MULTIPAINT = (1 << 0),
   DRW_MESH_WEIGHT_STATE_AUTO_NORMALIZE = (1 << 1),
+  DRW_MESH_WEIGHT_STATE_LOCK_RELATIVE = (1 << 2),
 };
 
 typedef struct DRW_MeshCDMask {
@@ -81,7 +86,7 @@ BLI_INLINE int mesh_render_mat_len_get(Mesh *me)
 
 typedef struct MeshBufferCache {
   /* Every VBO below contains at least enough
-   * data for every loops in the mesh (except fdots).
+   * data for every loops in the mesh (except fdots and skin roots).
    * For some VBOs, it extends to (in this exact order) :
    * loops + loose_edges*2 + loose_verts */
   struct {
@@ -104,6 +109,7 @@ typedef struct MeshBufferCache {
     GPUVertBuf *fdots_uv;
     // GPUVertBuf *fdots_edit_data; /* inside fdots_nor for now. */
     GPUVertBuf *fdots_edituv_data;
+    GPUVertBuf *skin_roots;
     /* Selection */
     GPUVertBuf *vert_idx; /* extend */
     GPUVertBuf *edge_idx; /* extend */
@@ -114,8 +120,9 @@ typedef struct MeshBufferCache {
    * Only need to be updated when topology changes. */
   struct {
     /* Indices to vloops. */
-    GPUIndexBuf *tris;  /* Ordered per material. */
-    GPUIndexBuf *lines; /* Loose edges last. */
+    GPUIndexBuf *tris;        /* Ordered per material. */
+    GPUIndexBuf *lines;       /* Loose edges last. */
+    GPUIndexBuf *lines_loose; /* sub buffer of `lines` only containing the loose edges. */
     GPUIndexBuf *points;
     GPUIndexBuf *fdots;
     /* 3D overlays. */
@@ -157,6 +164,7 @@ typedef enum DRWBatchFlag {
   MBC_WIRE_LOOPS = (1 << 24),
   MBC_WIRE_LOOPS_UVS = (1 << 25),
   MBC_SURF_PER_MAT = (1 << 26),
+  MBC_SKIN_ROOTS = (1 << 27),
 } DRWBatchFlag;
 
 #define MBC_EDITUV \
@@ -185,6 +193,7 @@ typedef struct MeshBatchCache {
     GPUBatch *edit_lnor;
     GPUBatch *edit_fdots;
     GPUBatch *edit_mesh_analysis;
+    GPUBatch *edit_skin_roots;
     /* Edit UVs */
     GPUBatch *edituv_faces_stretch_area;
     GPUBatch *edituv_faces_stretch_angle;
@@ -208,12 +217,6 @@ typedef struct MeshBatchCache {
   } batch;
 
   GPUBatch **surface_per_mat;
-
-  /* arrays of bool uniform names (and value) that will be use to
-   * set srgb conversion for auto attributes.*/
-  char *auto_layer_names;
-  int *auto_layer_is_srgb;
-  int auto_layer_len;
 
   DRWBatchFlag batch_requested;
   DRWBatchFlag batch_ready;
@@ -249,10 +252,14 @@ typedef struct MeshBatchCache {
 void mesh_buffer_cache_create_requested(MeshBatchCache *cache,
                                         MeshBufferCache mbc,
                                         Mesh *me,
+                                        const bool is_editmode,
+                                        const bool is_paint_mode,
+                                        const float obmat[4][4],
                                         const bool do_final,
                                         const bool do_uvedit,
                                         const bool use_subsurf_fdots,
                                         const DRW_MeshCDMask *cd_layer_used,
+                                        const Scene *scene,
                                         const ToolSettings *ts,
                                         const bool use_hide);
 

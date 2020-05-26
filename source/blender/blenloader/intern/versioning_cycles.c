@@ -24,20 +24,20 @@
 #include <float.h>
 #include <string.h>
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
-#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
+#include "DNA_anim_types.h"
+#include "DNA_camera_types.h"
 #include "DNA_color_types.h"
 #include "DNA_light_types.h"
 #include "DNA_node_types.h"
 #include "DNA_particle_types.h"
-#include "DNA_camera_types.h"
-#include "DNA_anim_types.h"
 
-#include "BKE_colortools.h"
 #include "BKE_animsys.h"
+#include "BKE_colortools.h"
 #include "BKE_idprop.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
@@ -173,7 +173,7 @@ static void square_roughness_node_insert(bNodeTree *ntree)
   bool need_update = false;
 
   /* Update default values */
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node_has_roughness(node)) {
       bNodeSocket *roughness_input = nodeFindSocket(node, SOCK_IN, "Roughness");
       float *roughness_value = cycles_node_socket_float_value(roughness_input);
@@ -221,7 +221,7 @@ static void square_roughness_node_insert(bNodeTree *ntree)
 static void mapping_node_order_flip(bNode *node)
 {
   /* Flip euler order of mapping shader node */
-  if (node->type == SH_NODE_MAPPING) {
+  if (node->type == SH_NODE_MAPPING && node->storage) {
     TexMapping *texmap = node->storage;
 
     float quat[4];
@@ -233,7 +233,7 @@ static void mapping_node_order_flip(bNode *node)
 static void vector_curve_node_remap(bNode *node)
 {
   /* Remap values of vector curve node from normalized to absolute values */
-  if (node->type == SH_NODE_CURVE_VEC) {
+  if (node->type == SH_NODE_CURVE_VEC && node->storage) {
     CurveMapping *mapping = node->storage;
     mapping->flag &= ~CUMA_DO_CLIP;
 
@@ -256,7 +256,7 @@ static void ambient_occlusion_node_relink(bNodeTree *ntree)
   bool need_update = false;
 
   /* Set default values. */
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node->type == SH_NODE_AMBIENT_OCCLUSION) {
       node->custom1 = 1; /* samples */
       node->custom2 &= ~SHD_AO_LOCAL;
@@ -300,11 +300,11 @@ static void image_node_colorspace(bNode *node)
   }
 
   int color_space;
-  if (node->type == SH_NODE_TEX_IMAGE) {
+  if (node->type == SH_NODE_TEX_IMAGE && node->storage) {
     NodeTexImage *tex = node->storage;
     color_space = tex->color_space;
   }
-  else if (node->type == SH_NODE_TEX_ENVIRONMENT) {
+  else if (node->type == SH_NODE_TEX_ENVIRONMENT && node->storage) {
     NodeTexEnvironment *tex = node->storage;
     color_space = tex->color_space;
   }
@@ -338,7 +338,7 @@ static void light_emission_node_to_energy(Light *light, float *energy, float col
   }
 
   bNode *emission_node = NULL;
-  for (bNodeLink *link = ntree->links.first; link; link = link->next) {
+  LISTBASE_FOREACH (bNodeLink *, link, &ntree->links) {
     if (link->tonode == output_node && link->fromnode->type == SH_NODE_EMISSION) {
       emission_node = link->fromnode;
       break;
@@ -410,7 +410,7 @@ static void update_math_node_single_operand_operators(bNodeTree *ntree)
 {
   bool need_update = false;
 
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node->type == SH_NODE_MATH) {
       if (ELEM(node->custom1,
                NODE_MATH_SQRT,
@@ -459,7 +459,7 @@ static void update_vector_math_node_add_and_subtract_operators(bNodeTree *ntree)
 {
   bool need_update = false;
 
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node->type == SH_NODE_VECTOR_MATH) {
       bNodeSocket *sockOutValue = nodeFindSocket(node, SOCK_OUT, "Value");
       if (socket_is_used(sockOutValue) &&
@@ -511,7 +511,7 @@ static void update_vector_math_node_dot_product_operator(bNodeTree *ntree)
 {
   bool need_update = false;
 
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node->type == SH_NODE_VECTOR_MATH) {
       bNodeSocket *sockOutVector = nodeFindSocket(node, SOCK_OUT, "Vector");
       if (socket_is_used(sockOutVector) && node->custom1 == NODE_VECTOR_MATH_DOT_PRODUCT) {
@@ -550,7 +550,7 @@ static void update_vector_math_node_cross_product_operator(bNodeTree *ntree)
 {
   bool need_update = false;
 
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node->type == SH_NODE_VECTOR_MATH) {
       if (node->custom1 == NODE_VECTOR_MATH_CROSS_PRODUCT) {
         bNodeSocket *sockOutVector = nodeFindSocket(node, SOCK_OUT, "Vector");
@@ -616,7 +616,7 @@ static void update_vector_math_node_normalize_operator(bNodeTree *ntree)
 {
   bool need_update = false;
 
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node->type == SH_NODE_VECTOR_MATH) {
       bNodeSocket *sockOutValue = nodeFindSocket(node, SOCK_OUT, "Value");
       if (node->custom1 == NODE_VECTOR_MATH_NORMALIZE && socket_is_used(sockOutValue)) {
@@ -675,7 +675,7 @@ static void update_vector_math_node_normalize_operator(bNodeTree *ntree)
  */
 static void update_vector_math_node_operators_enum_mapping(bNodeTree *ntree)
 {
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node->type == SH_NODE_VECTOR_MATH) {
       switch (node->custom1) {
         case 2:
@@ -702,7 +702,7 @@ static void update_vector_math_node_average_operator(bNodeTree *ntree)
 {
   bool need_update = false;
 
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node->type == SH_NODE_VECTOR_MATH) {
       /* See update_vector_math_node_operators_enum_mapping. */
       if (node->custom1 == -1) {
@@ -765,11 +765,68 @@ static void update_vector_math_node_average_operator(bNodeTree *ntree)
  */
 static void update_noise_node_dimensions(bNodeTree *ntree)
 {
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
-    if (node->type == SH_NODE_TEX_NOISE) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == SH_NODE_TEX_NOISE && node->storage) {
       NodeTexNoise *tex = (NodeTexNoise *)node->storage;
       tex->dimensions = 3;
     }
+  }
+}
+
+/* This structure is only used to pass data to
+ * update_mapping_node_fcurve_rna_path_callback.
+ */
+typedef struct {
+  char *nodePath;
+  bNode *minimumNode;
+  bNode *maximumNode;
+} MappingNodeFCurveCallbackData;
+
+/* This callback function is used by update_mapping_node_inputs_and_properties.
+ * It is executed on every fcurve in the nodetree id updating its RNA paths. The
+ * paths needs to be updated because the node properties became inputs.
+ *
+ * nodes["Mapping"].translation --> nodes["Mapping"].inputs[1].default_value
+ * nodes["Mapping"].rotation --> nodes["Mapping"].inputs[2].default_value
+ * nodes["Mapping"].scale --> nodes["Mapping"].inputs[3].default_value
+ * nodes["Mapping"].max --> nodes["Maximum"].inputs[1].default_value
+ * nodes["Mapping"].min --> nodes["Minimum"].inputs[1].default_value
+ *
+ * The fcurve can be that of any node or property in the nodetree, so we only
+ * update if the rna path starts with the rna path of the mapping node and
+ * doesn't end with "default_value", that is, not the Vector input.
+ */
+static void update_mapping_node_fcurve_rna_path_callback(ID *UNUSED(id),
+                                                         FCurve *fcurve,
+                                                         void *_data)
+{
+  MappingNodeFCurveCallbackData *data = (MappingNodeFCurveCallbackData *)_data;
+  if (!STRPREFIX(fcurve->rna_path, data->nodePath) ||
+      BLI_str_endswith(fcurve->rna_path, "default_value")) {
+    return;
+  }
+  char *old_fcurve_rna_path = fcurve->rna_path;
+
+  if (BLI_str_endswith(old_fcurve_rna_path, "translation")) {
+    fcurve->rna_path = BLI_sprintfN("%s.%s", data->nodePath, "inputs[1].default_value");
+  }
+  else if (BLI_str_endswith(old_fcurve_rna_path, "rotation")) {
+    fcurve->rna_path = BLI_sprintfN("%s.%s", data->nodePath, "inputs[2].default_value");
+  }
+  else if (BLI_str_endswith(old_fcurve_rna_path, "scale")) {
+    fcurve->rna_path = BLI_sprintfN("%s.%s", data->nodePath, "inputs[3].default_value");
+  }
+  else if (data->minimumNode && BLI_str_endswith(old_fcurve_rna_path, "max")) {
+    fcurve->rna_path = BLI_sprintfN(
+        "nodes[\"%s\"].%s", data->minimumNode->name, "inputs[1].default_value");
+  }
+  else if (data->maximumNode && BLI_str_endswith(old_fcurve_rna_path, "min")) {
+    fcurve->rna_path = BLI_sprintfN(
+        "nodes[\"%s\"].%s", data->maximumNode->name, "inputs[1].default_value");
+  }
+
+  if (fcurve->rna_path != old_fcurve_rna_path) {
+    MEM_freeN(old_fcurve_rna_path);
   }
 }
 
@@ -796,7 +853,7 @@ static void update_mapping_node_inputs_and_properties(bNodeTree *ntree)
 {
   bool need_update = false;
 
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     /* If node->storage is NULL, then conversion has already taken place.
      * This can happen if a file with the new mapping node [saved from (2, 81, 8) or newer]
      * is opened in a blender version prior to (2, 81, 8) and saved from there again. */
@@ -875,40 +932,10 @@ static void update_mapping_node_inputs_and_properties(bNodeTree *ntree)
       MEM_freeN(node->storage);
       node->storage = NULL;
 
-      AnimData *animData = BKE_animdata_from_id(&ntree->id);
-      if (animData && animData->action) {
-        char *nodePath = BLI_sprintfN("nodes[\"%s\"]", node->name);
-        for (FCurve *fcu = animData->action->curves.first; fcu; fcu = fcu->next) {
-          if (STRPREFIX(fcu->rna_path, nodePath) &&
-              !BLI_str_endswith(fcu->rna_path, "default_value")) {
-            char *old_fcu_rna_path = fcu->rna_path;
-
-            if (BLI_str_endswith(old_fcu_rna_path, "translation")) {
-              fcu->rna_path = BLI_sprintfN("%s.%s", nodePath, "inputs[1].default_value");
-            }
-            else if (BLI_str_endswith(old_fcu_rna_path, "rotation")) {
-              fcu->rna_path = BLI_sprintfN("%s.%s", nodePath, "inputs[2].default_value");
-            }
-            else if (BLI_str_endswith(old_fcu_rna_path, "scale")) {
-              fcu->rna_path = BLI_sprintfN("%s.%s", nodePath, "inputs[3].default_value");
-            }
-            else if (minimumNode && BLI_str_endswith(old_fcu_rna_path, "max")) {
-              fcu->rna_path = BLI_sprintfN(
-                  "nodes[\"%s\"].%s", minimumNode->name, "inputs[1].default_value");
-            }
-            else if (maximumNode && BLI_str_endswith(old_fcu_rna_path, "min")) {
-              fcu->rna_path = BLI_sprintfN(
-                  "nodes[\"%s\"].%s", maximumNode->name, "inputs[1].default_value");
-            }
-
-            if (fcu->rna_path != old_fcu_rna_path) {
-              MEM_freeN(old_fcu_rna_path);
-            }
-          }
-        }
-
-        MEM_freeN(nodePath);
-      }
+      char *nodePath = BLI_sprintfN("nodes[\"%s\"]", node->name);
+      MappingNodeFCurveCallbackData data = {nodePath, minimumNode, maximumNode};
+      BKE_fcurves_id_cb(&ntree->id, update_mapping_node_fcurve_rna_path_callback, &data);
+      MEM_freeN(nodePath);
     }
   }
 
@@ -922,8 +949,8 @@ static void update_mapping_node_inputs_and_properties(bNodeTree *ntree)
  */
 static void update_musgrave_node_dimensions(bNodeTree *ntree)
 {
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
-    if (node->type == SH_NODE_TEX_MUSGRAVE) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == SH_NODE_TEX_MUSGRAVE && node->storage) {
       NodeTexMusgrave *tex = (NodeTexMusgrave *)node->storage;
       tex->dimensions = 3;
     }
@@ -950,8 +977,8 @@ static void update_musgrave_node_color_output(bNodeTree *ntree)
  */
 static void update_voronoi_node_dimensions(bNodeTree *ntree)
 {
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
-    if (node->type == SH_NODE_TEX_VORONOI) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == SH_NODE_TEX_VORONOI && node->storage) {
       NodeTexVoronoi *tex = (NodeTexVoronoi *)node->storage;
       tex->dimensions = 3;
     }
@@ -965,8 +992,8 @@ static void update_voronoi_node_dimensions(bNodeTree *ntree)
  */
 static void update_voronoi_node_f3_and_f4(bNodeTree *ntree)
 {
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
-    if (node->type == SH_NODE_TEX_VORONOI) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == SH_NODE_TEX_VORONOI && node->storage) {
       NodeTexVoronoi *tex = (NodeTexVoronoi *)node->storage;
       if (ELEM(tex->feature, 2, 3)) {
         tex->feature = SHD_VORONOI_F2;
@@ -983,7 +1010,7 @@ static void update_voronoi_node_f3_and_f4(bNodeTree *ntree)
  */
 static void update_voronoi_node_fac_output(bNodeTree *ntree)
 {
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node->type == SH_NODE_TEX_VORONOI) {
       bNodeSocket *facOutput = BLI_findlink(&node->outputs, 1);
       strcpy(facOutput->identifier, "Distance");
@@ -1013,8 +1040,8 @@ static void update_voronoi_node_crackle(bNodeTree *ntree)
 {
   bool need_update = false;
 
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
-    if (node->type == SH_NODE_TEX_VORONOI) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == SH_NODE_TEX_VORONOI && node->storage) {
       NodeTexVoronoi *tex = (NodeTexVoronoi *)node->storage;
       bNodeSocket *sockDistance = nodeFindSocket(node, SOCK_OUT, "Distance");
       bNodeSocket *sockColor = nodeFindSocket(node, SOCK_OUT, "Color");
@@ -1106,7 +1133,7 @@ static void update_voronoi_node_coloring(bNodeTree *ntree)
 
   LISTBASE_FOREACH_BACKWARD_MUTABLE (bNodeLink *, link, &ntree->links) {
     bNode *node = link->fromnode;
-    if (node && node->type == SH_NODE_TEX_VORONOI) {
+    if (node && node->type == SH_NODE_TEX_VORONOI && node->storage) {
       NodeTexVoronoi *tex = (NodeTexVoronoi *)node->storage;
       if (tex->coloring == 0) {
         bNodeSocket *sockColor = nodeFindSocket(node, SOCK_OUT, "Color");
@@ -1135,15 +1162,15 @@ static void update_voronoi_node_coloring(bNodeTree *ntree)
 }
 
 /* Previously, the output euclidean distance was actually the squared
- * euclidean distance. To fix this, we square the the output distance
+ * euclidean distance. To fix this, we square the output distance
  * socket if the distance metric is set to SHD_VORONOI_EUCLIDEAN.
  */
 static void update_voronoi_node_square_distance(bNodeTree *ntree)
 {
   bool need_update = false;
 
-  for (bNode *node = ntree->nodes.first; node; node = node->next) {
-    if (node->type == SH_NODE_TEX_VORONOI) {
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == SH_NODE_TEX_VORONOI && node->storage) {
       NodeTexVoronoi *tex = (NodeTexVoronoi *)node->storage;
       bNodeSocket *sockDistance = nodeFindSocket(node, SOCK_OUT, "Distance");
       if (tex->distance == SHD_VORONOI_EUCLIDEAN &&
@@ -1175,6 +1202,77 @@ static void update_voronoi_node_square_distance(bNodeTree *ntree)
 
   if (need_update) {
     ntreeUpdateTree(NULL, ntree);
+  }
+}
+
+/* Noise and Wave Texture nodes: Restore previous Distortion range.
+ * In 2.81 we used noise() for distortion, now we use snoise() which has twice the range.
+ * To fix this we halve distortion value, directly or by adding multiply node for used sockets.
+ */
+static void update_noise_and_wave_distortion(bNodeTree *ntree)
+{
+  bool need_update = false;
+
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == SH_NODE_TEX_NOISE || node->type == SH_NODE_TEX_WAVE) {
+
+      bNodeSocket *sockDistortion = nodeFindSocket(node, SOCK_IN, "Distortion");
+      float *distortion = cycles_node_socket_float_value(sockDistortion);
+
+      if (socket_is_used(sockDistortion) && sockDistortion->link != NULL) {
+        bNode *distortionInputNode = sockDistortion->link->fromnode;
+        bNodeSocket *distortionInputSock = sockDistortion->link->fromsock;
+
+        bNode *mulNode = nodeAddStaticNode(NULL, ntree, SH_NODE_MATH);
+        mulNode->custom1 = NODE_MATH_MULTIPLY;
+        mulNode->locx = node->locx;
+        mulNode->locy = node->locy - 240.0f;
+        mulNode->flag |= NODE_HIDDEN;
+        bNodeSocket *mulSockA = BLI_findlink(&mulNode->inputs, 0);
+        bNodeSocket *mulSockB = BLI_findlink(&mulNode->inputs, 1);
+        *cycles_node_socket_float_value(mulSockB) = 0.5f;
+        bNodeSocket *mulSockOut = nodeFindSocket(mulNode, SOCK_OUT, "Value");
+
+        nodeRemLink(ntree, sockDistortion->link);
+        nodeAddLink(ntree, distortionInputNode, distortionInputSock, mulNode, mulSockA);
+        nodeAddLink(ntree, mulNode, mulSockOut, node, sockDistortion);
+
+        need_update = true;
+      }
+      else if (*distortion != 0.0f) {
+        *distortion = *distortion * 0.5f;
+      }
+    }
+  }
+
+  if (need_update) {
+    ntreeUpdateTree(NULL, ntree);
+  }
+}
+
+/**
+ * Wave Texture node: Restore previous texture directions and offset.
+ * 1. In 2.81, Wave texture had fixed diagonal direction (Bands) or
+ *    mapping along distance (Rings). Now, directions are customizable
+ *    properties, with X axis being new default. To fix this we set new
+ *    direction options to Diagonal and Spherical.
+ * 2. Sine profile is now negatively offset by PI/2 to better match
+ *    other profiles. To fix this we set new Phase Offset input to PI/2
+ *    in nodes with Sine profile.
+ */
+static void update_wave_node_directions_and_offset(bNodeTree *ntree)
+{
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == SH_NODE_TEX_WAVE) {
+      NodeTexWave *tex = (NodeTexWave *)node->storage;
+      tex->bands_direction = SHD_WAVE_BANDS_DIRECTION_DIAGONAL;
+      tex->rings_direction = SHD_WAVE_RINGS_DIRECTION_SPHERICAL;
+
+      if (tex->wave_profile == SHD_WAVE_PROFILE_SIN) {
+        bNodeSocket *sockPhaseOffset = nodeFindSocket(node, SOCK_IN, "Phase Offset");
+        *cycles_node_socket_float_value(sockPhaseOffset) = M_PI_2;
+      }
+    }
   }
 }
 
@@ -1253,13 +1351,13 @@ void do_versions_after_linking_cycles(Main *bmain)
 
       if (!MAIN_VERSION_ATLEAST(bmain, 273, 5)) {
         /* Euler order was ZYX in previous versions. */
-        for (bNode *node = ntree->nodes.first; node; node = node->next) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
           mapping_node_order_flip(node);
         }
       }
 
       if (!MAIN_VERSION_ATLEAST(bmain, 276, 6)) {
-        for (bNode *node = ntree->nodes.first; node; node = node->next) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
           vector_curve_node_remap(node);
         }
       }
@@ -1270,7 +1368,7 @@ void do_versions_after_linking_cycles(Main *bmain)
       }
 
       if (!MAIN_VERSION_ATLEAST(bmain, 279, 3)) {
-        for (bNode *node = ntree->nodes.first; node; node = node->next) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
           displacement_principled_nodes(node);
         }
       }
@@ -1286,7 +1384,7 @@ void do_versions_after_linking_cycles(Main *bmain)
       }
 
       if (!MAIN_VERSION_ATLEAST(bmain, 280, 66)) {
-        for (bNode *node = ntree->nodes.first; node; node = node->next) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
           image_node_colorspace(node);
         }
       }
@@ -1404,6 +1502,24 @@ void do_versions_after_linking_cycles(Main *bmain)
         update_voronoi_node_crackle(ntree);
         update_voronoi_node_coloring(ntree);
         update_voronoi_node_square_distance(ntree);
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 282, 4)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_SHADER) {
+        update_noise_and_wave_distortion(ntree);
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 283, 4)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_SHADER) {
+        update_wave_node_directions_and_offset(ntree);
       }
     }
     FOREACH_NODETREE_END;

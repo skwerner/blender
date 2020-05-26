@@ -63,14 +63,14 @@
 #  include "MEM_guardedalloc.h"
 
 extern "C" {
-#  include "DNA_scene_types.h"
-#  include "DNA_object_types.h"
-#  include "DNA_object_force_types.h"
 #  include "DNA_meshdata_types.h"
+#  include "DNA_object_force_types.h"
+#  include "DNA_object_types.h"
+#  include "DNA_scene_types.h"
 #  include "DNA_texture_types.h"
 
-#  include "BLI_math.h"
 #  include "BLI_linklist.h"
+#  include "BLI_math.h"
 #  include "BLI_utildefines.h"
 
 #  include "BKE_cloth.h"
@@ -830,7 +830,7 @@ static float calc_nor_area_tri(float nor[3],
   sub_v3_v3v3(n2, v2, v3);
 
   cross_v3_v3v3(nor, n1, n2);
-  return normalize_v3(nor);
+  return normalize_v3(nor) / 2.0f;
 }
 
 /* XXX does not support force jacobians yet,

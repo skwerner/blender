@@ -21,16 +21,16 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
+#include "BLI_alloca.h"
 #include "BLI_edgehash.h"
+#include "BLI_math.h"
 #include "BLI_memarena.h"
 #include "BLI_string.h"
-#include "BLI_alloca.h"
 
 #include "BLT_translation.h"
 
@@ -39,8 +39,8 @@
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
 
-#include "ED_mesh.h"
 #include "ED_armature.h"
+#include "ED_mesh.h"
 
 #include "DEG_depsgraph.h"
 
@@ -1549,7 +1549,7 @@ static void meshdeform_matrix_solve(MeshDeformModifierData *mmd, MeshDeformBind 
       }
     }
     else {
-      modifier_setError(&mmd->modifier, "Failed to find bind solution (increase precision?)");
+      BKE_modifier_set_error(&mmd->modifier, "Failed to find bind solution (increase precision?)");
       error("Mesh Deform: failed to find bind solution.");
       break;
     }
@@ -1753,7 +1753,7 @@ void ED_mesh_deform_bind_callback(MeshDeformModifierData *mmd,
                                   int totvert,
                                   float cagemat[4][4])
 {
-  MeshDeformModifierData *mmd_orig = (MeshDeformModifierData *)modifier_get_original(
+  MeshDeformModifierData *mmd_orig = (MeshDeformModifierData *)BKE_modifier_get_original(
       &mmd->modifier);
   MeshDeformBind mdb;
   MVert *mvert;
@@ -1799,7 +1799,7 @@ void ED_mesh_deform_bind_callback(MeshDeformModifierData *mmd,
   MEM_freeN(mdb.vertexcos);
 
   /* compact weights */
-  modifier_mdef_compact_influences((ModifierData *)mmd_orig);
+  BKE_modifier_mdef_compact_influences((ModifierData *)mmd_orig);
 
   end_progress_bar();
   waitcursor(0);

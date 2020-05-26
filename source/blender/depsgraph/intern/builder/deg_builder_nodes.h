@@ -35,8 +35,10 @@ struct CacheFile;
 struct Camera;
 struct Collection;
 struct FCurve;
-struct GHash;
+struct FreestyleLineSet;
+struct FreestyleLineStyle;
 struct ID;
+struct IDProperty;
 struct Image;
 struct Key;
 struct LayerCollection;
@@ -50,6 +52,7 @@ struct MovieClip;
 struct Object;
 struct ParticleSettings;
 struct Scene;
+struct Simulation;
 struct Speaker;
 struct Tex;
 struct World;
@@ -104,27 +107,27 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
 
   OperationNode *add_operation_node(ComponentNode *comp_node,
                                     OperationCode opcode,
-                                    const DepsEvalOperationCb &op = NULL,
+                                    const DepsEvalOperationCb &op = nullptr,
                                     const char *name = "",
                                     int name_tag = -1);
   OperationNode *add_operation_node(ID *id,
                                     NodeType comp_type,
                                     const char *comp_name,
                                     OperationCode opcode,
-                                    const DepsEvalOperationCb &op = NULL,
+                                    const DepsEvalOperationCb &op = nullptr,
                                     const char *name = "",
                                     int name_tag = -1);
   OperationNode *add_operation_node(ID *id,
                                     NodeType comp_type,
                                     OperationCode opcode,
-                                    const DepsEvalOperationCb &op = NULL,
+                                    const DepsEvalOperationCb &op = nullptr,
                                     const char *name = "",
                                     int name_tag = -1);
 
   OperationNode *ensure_operation_node(ID *id,
                                        NodeType comp_type,
                                        OperationCode opcode,
-                                       const DepsEvalOperationCb &op = NULL,
+                                       const DepsEvalOperationCb &op = nullptr,
                                        const char *name = "",
                                        int name_tag = -1);
 
@@ -147,6 +150,8 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
 
   virtual void build_id(ID *id);
 
+  virtual void build_idproperties(IDProperty *id_property);
+
   virtual void build_scene_render(Scene *scene, ViewLayer *view_layer);
   virtual void build_scene_parameters(Scene *scene);
   virtual void build_scene_compositor(Scene *scene);
@@ -162,6 +167,7 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
                             bool is_visible);
   virtual void build_object_proxy_from(Object *object, bool is_object_visible);
   virtual void build_object_proxy_group(Object *object, bool is_object_visible);
+  virtual void build_object_instance_collection(Object *object, bool is_object_visible);
   virtual void build_object_flags(int base_index,
                                   Object *object,
                                   eDepsNode_LinkedState_Type linked_state);
@@ -190,17 +196,21 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   virtual void build_driver_variables(ID *id, FCurve *fcurve);
   virtual void build_driver_id_property(ID *id, const char *rna_path);
   virtual void build_parameters(ID *id);
+  virtual void build_dimensions(Object *object);
   virtual void build_ik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
   virtual void build_splineik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
   virtual void build_rig(Object *object, bool is_object_visible);
   virtual void build_proxy_rig(Object *object);
   virtual void build_armature(bArmature *armature);
+  virtual void build_armature_bones(ListBase *bones);
   virtual void build_shapekeys(Key *key);
   virtual void build_camera(Camera *camera);
   virtual void build_light(Light *lamp);
   virtual void build_nodetree(bNodeTree *ntree);
   virtual void build_material(Material *ma);
   virtual void build_materials(Material **materials, int num_materials);
+  virtual void build_freestyle_lineset(FreestyleLineSet *fls);
+  virtual void build_freestyle_linestyle(FreestyleLineStyle *linestyle);
   virtual void build_texture(Tex *tex);
   virtual void build_image(Image *image);
   virtual void build_world(World *world);
@@ -211,6 +221,7 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   virtual void build_lightprobe(LightProbe *probe);
   virtual void build_speaker(Speaker *speaker);
   virtual void build_sound(bSound *sound);
+  virtual void build_simulation(Simulation *simulation);
   virtual void build_scene_sequencer(Scene *scene);
   virtual void build_scene_audio(Scene *scene);
   virtual void build_scene_speakers(Scene *scene, ViewLayer *view_layer);
@@ -269,7 +280,7 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   bool is_parent_collection_visible_;
 
   /* Indexed by original ID, values are IDInfo. */
-  GHash *id_info_hash_;
+  Map<const ID *, IDInfo *> id_info_hash_;
 
   /* Set of IDs which were already build. Makes it easier to keep track of
    * what was already built and what was not. */

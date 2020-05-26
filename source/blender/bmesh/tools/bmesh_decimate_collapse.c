@@ -24,14 +24,14 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
-#include "BLI_quadric.h"
+#include "BLI_alloca.h"
 #include "BLI_heap.h"
 #include "BLI_linklist.h"
-#include "BLI_alloca.h"
+#include "BLI_math.h"
 #include "BLI_memarena.h"
 #include "BLI_polyfill_2d.h"
 #include "BLI_polyfill_2d_beautify.h"
+#include "BLI_quadric.h"
 #include "BLI_utildefines_stack.h"
 
 #include "BKE_customdata.h"
@@ -60,8 +60,10 @@
 #endif
 
 #define BOUNDARY_PRESERVE_WEIGHT 100.0f
-/** Uses double precision, impacts behavior on near-flat surfaces,
- * cane give issues with very small faces. 1e-2 is too big, see: T48154. */
+/**
+ * Uses double precision, impacts behavior on near-flat surfaces,
+ * cane give issues with very small faces. 1e-2 is too big, see: T48154.
+ */
 #define OPTIMIZE_EPS 1e-8
 #define COST_INVALID FLT_MAX
 
@@ -409,7 +411,7 @@ static int *bm_edge_symmetry_map(BMesh *bm, uint symmetry_axis, float limit)
   BMEdge *e, **etable;
   uint i;
   int *edge_symmetry_map;
-  const float limit_sq = SQUARE(limit);
+  const float limit_sq = square_f(limit);
   KDTree_3d *tree;
 
   tree = BLI_kdtree_3d_new(bm->totedge);

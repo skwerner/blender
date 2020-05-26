@@ -21,14 +21,14 @@
 #include "BPy_Interface0D.h"
 
 #include "BPy_Convert.h"
+#include "BPy_Nature.h"
 #include "Interface0D/BPy_CurvePoint.h"
-#include "Interface0D/CurvePoint/BPy_StrokeVertex.h"
 #include "Interface0D/BPy_SVertex.h"
 #include "Interface0D/BPy_ViewVertex.h"
+#include "Interface0D/CurvePoint/BPy_StrokeVertex.h"
 #include "Interface0D/ViewVertex/BPy_NonTVertex.h"
 #include "Interface0D/ViewVertex/BPy_TVertex.h"
 #include "Interface1D/BPy_FEdge.h"
-#include "BPy_Nature.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -275,42 +275,26 @@ static PyObject *Interface0D_nature_get(BPy_Interface0D *self, void *UNUSED(clos
 }
 
 static PyGetSetDef BPy_Interface0D_getseters[] = {
-    {(char *)"name",
-     (getter)Interface0D_name_get,
-     (setter)NULL,
-     (char *)Interface0D_name_doc,
-     NULL},
-    {(char *)"point_3d",
-     (getter)Interface0D_point_3d_get,
-     (setter)NULL,
-     (char *)Interface0D_point_3d_doc,
-     NULL},
-    {(char *)"projected_x",
+    {"name", (getter)Interface0D_name_get, (setter)NULL, Interface0D_name_doc, NULL},
+    {"point_3d", (getter)Interface0D_point_3d_get, (setter)NULL, Interface0D_point_3d_doc, NULL},
+    {"projected_x",
      (getter)Interface0D_projected_x_get,
      (setter)NULL,
-     (char *)Interface0D_projected_x_doc,
+     Interface0D_projected_x_doc,
      NULL},
-    {(char *)"projected_y",
+    {"projected_y",
      (getter)Interface0D_projected_y_get,
      (setter)NULL,
-     (char *)Interface0D_projected_y_doc,
+     Interface0D_projected_y_doc,
      NULL},
-    {(char *)"projected_z",
+    {"projected_z",
      (getter)Interface0D_projected_z_get,
      (setter)NULL,
-     (char *)Interface0D_projected_z_doc,
+     Interface0D_projected_z_doc,
      NULL},
-    {(char *)"point_2d",
-     (getter)Interface0D_point_2d_get,
-     (setter)NULL,
-     (char *)Interface0D_point_2d_doc,
-     NULL},
-    {(char *)"id", (getter)Interface0D_id_get, (setter)NULL, (char *)Interface0D_id_doc, NULL},
-    {(char *)"nature",
-     (getter)Interface0D_nature_get,
-     (setter)NULL,
-     (char *)Interface0D_nature_doc,
-     NULL},
+    {"point_2d", (getter)Interface0D_point_2d_get, (setter)NULL, Interface0D_point_2d_doc, NULL},
+    {"id", (getter)Interface0D_id_get, (setter)NULL, Interface0D_id_doc, NULL},
+    {"nature", (getter)Interface0D_nature_get, (setter)NULL, Interface0D_nature_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
 

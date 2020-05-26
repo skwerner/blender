@@ -51,6 +51,10 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     endif()
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} \"${CLANG_OPENMP_LIB}\"")
   endif()
+  if(WITH_WINDOWS_STRIPPED_PDB)
+    message(WARNING "stripped pdb not supported with clang, disabling..")
+    set(WITH_WINDOWS_STRIPPED_PDB Off)
+  endif()
 endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ${WINDOWS_USE_VISUAL_STUDIO_PROJECT_FOLDERS})
@@ -107,13 +111,14 @@ endif()
 unset(_min_ver)
 
 # needed for some MSVC installations
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SAFESEH:NO")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /SAFESEH:NO")
-set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO")
+# 4099 : PDB 'filename' was not found with 'object/library'
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SAFESEH:NO /ignore:4099")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /SAFESEH:NO /ignore:4099")
+set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /SAFESEH:NO /ignore:4099")
 
 list(APPEND PLATFORM_LINKLIBS
-  ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32 Comctl32
-  advapi32 shfolder shell32 ole32 oleaut32 uuid psapi Dbghelp
+  ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32 Comctl32 version
+  advapi32 shfolder shell32 ole32 oleaut32 uuid psapi Dbghelp Shlwapi
 )
 
 if(WITH_INPUT_IME)
@@ -131,17 +136,15 @@ add_definitions(
 # MSVC11 needs _ALLOW_KEYWORD_MACROS to build
 add_definitions(-D_ALLOW_KEYWORD_MACROS)
 
-# We want to support Vista level ABI
-add_definitions(-D_WIN32_WINNT=0x600)
+# We want to support Windows 7 level ABI
+add_definitions(-D_WIN32_WINNT=0x601)
+include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
+remove_cc_flag("/MDd" "/MD" "/Zi")
 
-# Make cmake find the msvc redistributables
-set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP FALSE)
-set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
-set(CMAKE_INSTALL_OPENMP_LIBRARIES ${WITH_OPENMP})
-set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
-include(InstallRequiredSystemLibraries)
-
-remove_cc_flag("/MDd" "/MD")
+if(WITH_WINDOWS_PDB)
+	set(PDB_INFO_OVERRIDE_FLAGS "/Z7")
+	set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
+endif()
 
 if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARN_FLAGS} /nologo /J /Gd /EHsc -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference ")
@@ -151,25 +154,49 @@ else()
   set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd /MP /bigobj")
 endif()
 
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd /ZI")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd /ZI")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /MT")
-set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} /MT")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MT")
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /MT")
+# C++ standards conformace (/permissive-) is available on msvc 15.5 (1912) and up
+if(MSVC_VERSION GREATER 1911 AND NOT MSVC_CLANG)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /permissive-")
+  # Two-phase name lookup does not place nicely with OpenMP yet, so disable for now
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:twoPhase-")
+endif()
 
-#JMC is available on msvc 15.8 (1915) and up
+if(WITH_WINDOWS_SCCACHE AND CMAKE_VS_MSBUILD_COMMAND)
+    message(WARNING "Disabling sccache, sccache is not supported with msbuild")
+    set(WITH_WINDOWS_SCCACHE Off)
+endif()
+
+if(WITH_WINDOWS_SCCACHE)
+    set(CMAKE_C_COMPILER_LAUNCHER sccache)
+    set(CMAKE_CXX_COMPILER_LAUNCHER sccache)
+    set(SYMBOL_FORMAT /Z7)
+else()
+    unset(CMAKE_C_COMPILER_LAUNCHER)
+    unset(CMAKE_CXX_COMPILER_LAUNCHER)
+    set(SYMBOL_FORMAT /ZI)
+endif()
+
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd ${SYMBOL_FORMAT}")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MDd ${SYMBOL_FORMAT}")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} /MD ${PDB_INFO_OVERRIDE_FLAGS}")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MD ${SYMBOL_FORMAT}")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} /MD ${SYMBOL_FORMAT}")
+unset(SYMBOL_FORMAT)
+# JMC is available on msvc 15.8 (1915) and up
 if(MSVC_VERSION GREATER 1914 AND NOT MSVC_CLANG)
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /JMC")
 endif()
 
-set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152 /INCREMENTAL:NO ")
-set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:msvcmrt.lib /NODEFAULTLIB:msvcurt.lib /NODEFAULTLIB:msvcrtd.lib ")
+set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /SUBSYSTEM:CONSOLE /STACK:2097152")
+set(PLATFORM_LINKFLAGS_RELEASE "/NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libcmtd.lib /NODEFAULTLIB:msvcrtd.lib")
+set(PLATFORM_LINKFLAGS_DEBUG "${PLATFORM_LINKFLAGS_DEBUG} /IGNORE:4099 /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:msvcrt.lib /NODEFAULTLIB:libcmtd.lib")
 
 # Ignore meaningless for us linker warnings.
 set(PLATFORM_LINKFLAGS "${PLATFORM_LINKFLAGS} /ignore:4049 /ignore:4217 /ignore:4221")
+set(PLATFORM_LINKFLAGS_RELEASE "${PLATFORM_LINKFLAGS} ${PDB_INFO_OVERRIDE_LINKER_FLAGS}")
 set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /ignore:4221")
 
 if(CMAKE_CL_64)
@@ -177,8 +204,6 @@ if(CMAKE_CL_64)
 else()
   set(PLATFORM_LINKFLAGS "/MACHINE:IX86 /LARGEADDRESSAWARE ${PLATFORM_LINKFLAGS}")
 endif()
-
-set(PLATFORM_LINKFLAGS_DEBUG "${PLATFORM_LINKFLAGS_DEBUG} /IGNORE:4099 /NODEFAULTLIB:libcmt.lib /NODEFAULTLIB:libc.lib")
 
 if(NOT DEFINED LIBDIR)
 
@@ -192,27 +217,24 @@ if(NOT DEFINED LIBDIR)
   # Can be 1910..1912
   if(MSVC_VERSION GREATER 1919)
     message(STATUS "Visual Studio 2019 detected.")
-    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc14)
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc15)
   elseif(MSVC_VERSION GREATER 1909)
     message(STATUS "Visual Studio 2017 detected.")
-    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc14)
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc15)
   elseif(MSVC_VERSION EQUAL 1900)
     message(STATUS "Visual Studio 2015 detected.")
-    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc14)
-  else()
-    message(STATUS "Visual Studio 2013 detected.")
-    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc12)
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_BASE}_vc15)
   endif()
 else()
   message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
 endif()
 if(NOT EXISTS "${LIBDIR}/")
-  message(FATAL_ERROR "Windows requires pre-compiled libs at: '${LIBDIR}'")
+  message(FATAL_ERROR "\n\nWindows requires pre-compiled libs at: '${LIBDIR}'. Please run `make update` in the blender source folder to obtain them.")
 endif()
 
 # Mark libdir as system headers with a lower warn level, to resolve some warnings
 # that we have very little control over
-if(MSVC_VERSION GREATER_EQUAL 1914 AND NOT MSVC_CLANG)
+if(MSVC_VERSION GREATER_EQUAL 1914 AND NOT MSVC_CLANG AND NOT WITH_WINDOWS_SCCACHE)
   add_compile_options(/experimental:external /external:templates- /external:I "${LIBDIR}" /external:W0)
 endif()
 
@@ -236,7 +258,7 @@ windows_find_package(png)
 if(NOT PNG_FOUND)
   warn_hardcoded_paths(libpng)
   set(PNG_PNG_INCLUDE_DIR ${LIBDIR}/png/include)
-  set(PNG_LIBRARIES ${LIBDIR}/png/lib/libpng.lib)
+  set(PNG_LIBRARIES ${LIBDIR}/png/lib/libpng.lib ${ZLIB_LIBRARY})
   set(PNG "${LIBDIR}/png")
   set(PNG_INCLUDE_DIRS "${PNG}/include")
   set(PNG_LIBPATH ${PNG}/lib) # not cmake defined
@@ -280,21 +302,33 @@ if(WITH_OPENCOLLADA)
   )
 
   set(OPENCOLLADA_LIBRARIES
-    ${OPENCOLLADA}/lib/opencollada/OpenCOLLADASaxFrameworkLoader.lib
-    ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAFramework.lib
-    ${OPENCOLLADA}/lib/opencollada/OpenCOLLADABaseUtils.lib
-    ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAStreamWriter.lib
-    ${OPENCOLLADA}/lib/opencollada/MathMLSolver.lib
-    ${OPENCOLLADA}/lib/opencollada/GeneratedSaxParser.lib
-    ${OPENCOLLADA}/lib/opencollada/xml.lib
-    ${OPENCOLLADA}/lib/opencollada/buffer.lib
-    ${OPENCOLLADA}/lib/opencollada/ftoa.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/OpenCOLLADASaxFrameworkLoader.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAFramework.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/OpenCOLLADABaseUtils.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAStreamWriter.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/MathMLSolver.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/GeneratedSaxParser.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/xml.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/buffer.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/ftoa.lib
+
+    debug ${OPENCOLLADA}/lib/opencollada/OpenCOLLADASaxFrameworkLoader_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAFramework_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/OpenCOLLADABaseUtils_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/OpenCOLLADAStreamWriter_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/MathMLSolver_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/GeneratedSaxParser_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/xml_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/buffer_d.lib
+    debug ${OPENCOLLADA}/lib/opencollada/ftoa_d.lib
   )
 
   list(APPEND OPENCOLLADA_LIBRARIES ${OPENCOLLADA}/lib/opencollada/UTF.lib)
 
   set(PCRE_LIBRARIES
-    ${OPENCOLLADA}/lib/opencollada/pcre.lib
+    optimized ${OPENCOLLADA}/lib/opencollada/pcre.lib
+
+    debug ${OPENCOLLADA}/lib/opencollada/pcre_d.lib
   )
 endif()
 
@@ -397,8 +431,8 @@ if(WITH_BOOST)
     set(BOOST_INCLUDE_DIR ${BOOST}/include)
     set(BOOST_LIBPATH ${BOOST}/lib)
     if(CMAKE_CL_64)
-      set(BOOST_POSTFIX "vc140-mt-s-x64-1_68.lib")
-      set(BOOST_DEBUG_POSTFIX "vc140-mt-sgd-x64-1_68.lib")
+      set(BOOST_POSTFIX "vc141-mt-x64-1_70.lib")
+      set(BOOST_DEBUG_POSTFIX "vc141-mt-gd-x64-1_70.lib")
     endif()
     set(BOOST_LIBRARIES
       optimized ${BOOST_LIBPATH}/libboost_date_time-${BOOST_POSTFIX}
@@ -495,7 +529,7 @@ if(WITH_OPENVDB)
   set(OPENVDB_LIBPATH ${OPENVDB}/lib)
   set(OPENVDB_INCLUDE_DIRS ${OPENVDB}/include)
   set(OPENVDB_LIBRARIES optimized ${OPENVDB_LIBPATH}/openvdb.lib debug ${OPENVDB_LIBPATH}/openvdb_d.lib ${BLOSC_LIBRARIES})
-  set(OPENVDB_DEFINITIONS -DNOMINMAX)
+  set(OPENVDB_DEFINITIONS -DNOMINMAX -DOPENVDB_STATICLIB -D_USE_MATH_DEFINES)
 endif()
 
 if(WITH_OPENIMAGEDENOISE)
@@ -503,8 +537,12 @@ if(WITH_OPENIMAGEDENOISE)
   set(OPENIMAGEDENOISE_LIBPATH ${LIBDIR}/OpenImageDenoise/lib)
   set(OPENIMAGEDENOISE_INCLUDE_DIRS ${OPENIMAGEDENOISE}/include)
   set(OPENIMAGEDENOISE_LIBRARIES
-    optimized ${OPENIMAGEDENOISE_LIBPATH}/OpenImageDenoise.lib ${OPENIMAGEDENOISE_LIBPATH}/common.lib ${OPENIMAGEDENOISE_LIBPATH}/mkldnn.lib
-    debug ${OPENIMAGEDENOISE_LIBPATH}/OpenImageDenoise_d.lib ${OPENIMAGEDENOISE_LIBPATH}/common_d.lib ${OPENIMAGEDENOISE_LIBPATH}/mkldnn_d.lib)
+    optimized ${OPENIMAGEDENOISE_LIBPATH}/OpenImageDenoise.lib
+    optimized ${OPENIMAGEDENOISE_LIBPATH}/common.lib
+    optimized ${OPENIMAGEDENOISE_LIBPATH}/mkldnn.lib
+    debug ${OPENIMAGEDENOISE_LIBPATH}/OpenImageDenoise_d.lib
+    debug ${OPENIMAGEDENOISE_LIBPATH}/common_d.lib
+    debug ${OPENIMAGEDENOISE_LIBPATH}/mkldnn_d.lib)
   set(OPENIMAGEDENOISE_DEFINITIONS)
 endif()
 
@@ -515,17 +553,6 @@ if(WITH_ALEMBIC)
   set(ALEMBIC_LIBPATH ${ALEMBIC}/lib)
   set(ALEMBIC_LIBRARIES optimized ${ALEMBIC}/lib/Alembic.lib debug ${ALEMBIC}/lib/Alembic_d.lib)
   set(ALEMBIC_FOUND 1)
-endif()
-
-if(WITH_MOD_CLOTH_ELTOPO)
-  set(LAPACK ${LIBDIR}/lapack)
-  # set(LAPACK_INCLUDE_DIR ${LAPACK}/include)
-  set(LAPACK_LIBPATH ${LAPACK}/lib)
-  set(LAPACK_LIBRARIES
-    ${LIBDIR}/lapack/lib/libf2c.lib
-    ${LIBDIR}/lapack/lib/clapack_nowrap.lib
-    ${LIBDIR}/lapack/lib/BLAS_nowrap.lib
-  )
 endif()
 
 if(WITH_IMAGE_OPENJPEG)
@@ -570,34 +597,17 @@ if(WITH_SYSTEM_AUDASPACE)
 endif()
 
 if(WITH_TBB)
-  set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/tbb_debug.lib)
+  set(TBB_LIBRARIES optimized ${LIBDIR}/tbb/lib/tbb.lib debug ${LIBDIR}/tbb/lib/debug/tbb_debug.lib)
   set(TBB_INCLUDE_DIR ${LIBDIR}/tbb/include)
   set(TBB_INCLUDE_DIRS ${TBB_INCLUDE_DIR})
-else()
-  if(WITH_OPENIMAGEDENOISE)
-    message(STATUS "TBB disabled, also disabling OpenImageDenoise")
-    set(WITH_OPENIMAGEDENOISE OFF)
-  endif()
-  if(WITH_OPENVDB)
-    message(STATUS "TBB disabled, also disabling OpenVDB")
-    set(WITH_OPENVDB OFF)
+  if(WITH_TBB_MALLOC_PROXY)
+    add_definitions(-DWITH_TBB_MALLOC)
   endif()
 endif()
 
 # used in many places so include globally, like OpenGL
 blender_include_dirs_sys("${PTHREADS_INCLUDE_DIRS}")
 
-#find signtool
-set(ProgramFilesX86_NAME "ProgramFiles(x86)") #env dislikes the ( )
-find_program(SIGNTOOL_EXE signtool
-  HINTS
-    "$ENV{${ProgramFilesX86_NAME}}/Windows Kits/10/bin/x86/"
-    "$ENV{ProgramFiles}/Windows Kits/10/bin/x86/"
-    "$ENV{${ProgramFilesX86_NAME}}/Windows Kits/8.1/bin/x86/"
-    "$ENV{ProgramFiles}/Windows Kits/8.1/bin/x86/"
-    "$ENV{${ProgramFilesX86_NAME}}/Windows Kits/8.0/bin/x86/"
-    "$ENV{ProgramFiles}/Windows Kits/8.0/bin/x86/"
-)
 set(WINTAB_INC ${LIBDIR}/wintab/include)
 
 if(WITH_OPENAL)
@@ -620,13 +630,9 @@ if(WITH_CODEC_SNDFILE)
   set(LIBSNDFILE_LIBRARIES ${LIBSNDFILE_LIBPATH}/libsndfile-1.lib)
 endif()
 
-if(WITH_RAYOPTIMIZATION AND SUPPORT_SSE_BUILD)
-  add_definitions(-D__SSE__ -D__MMX__)
-endif()
-
 if(WITH_CYCLES_OSL)
   set(CYCLES_OSL ${LIBDIR}/osl CACHE PATH "Path to OpenShadingLanguage installation")
-
+  set(OSL_SHADER_DIR ${CYCLES_OSL}/shaders)
   find_library(OSL_LIB_EXEC NAMES oslexec PATHS ${CYCLES_OSL}/lib)
   find_library(OSL_LIB_COMP NAMES oslcomp PATHS ${CYCLES_OSL}/lib)
   find_library(OSL_LIB_QUERY NAMES oslquery PATHS ${CYCLES_OSL}/lib)
@@ -681,6 +687,21 @@ if(WITH_CYCLES_EMBREE)
   endif()
 endif()
 
+if(WITH_USD)
+  windows_find_package(USD)
+  if(NOT USD_FOUND)
+    set(USD_FOUND ON)
+    set(USD_INCLUDE_DIRS ${LIBDIR}/usd/include)
+    set(USD_RELEASE_LIB ${LIBDIR}/usd/lib/libusd_m.lib)
+    set(USD_DEBUG_LIB ${LIBDIR}/usd/lib/libusd_m_d.lib)
+    set(USD_LIBRARY_DIR ${LIBDIR}/usd/lib)
+    set(USD_LIBRARIES
+      debug ${USD_DEBUG_LIB}
+      optimized ${USD_RELEASE_LIB}
+    )
+  endif()
+endif()
+
 if(WINDOWS_PYTHON_DEBUG)
   # Include the system scripts in the blender_python_system_scripts project.
   FILE(GLOB_RECURSE inFiles "${CMAKE_SOURCE_DIR}/release/scripts/*.*" )
@@ -715,5 +736,17 @@ if(WINDOWS_PYTHON_DEBUG)
     <LocalDebuggerCommandArguments>-con --env-system-scripts \"${CMAKE_SOURCE_DIR}/release/scripts\" </LocalDebuggerCommandArguments>
   </PropertyGroup>
 </Project>")
+  endif()
+endif()
+
+if(WITH_XR_OPENXR)
+  if(EXISTS ${LIBDIR}/xr_openxr_sdk)
+    set(XR_OPENXR_SDK ${LIBDIR}/xr_openxr_sdk)
+    set(XR_OPENXR_SDK_LIBPATH ${LIBDIR}/xr_openxr_sdk/lib)
+    set(XR_OPENXR_SDK_INCLUDE_DIR ${XR_OPENXR_SDK}/include)
+    set(XR_OPENXR_SDK_LIBRARIES optimized ${XR_OPENXR_SDK_LIBPATH}/openxr_loader.lib debug ${XR_OPENXR_SDK_LIBPATH}/openxr_loader_d.lib)
+  else()
+    message(WARNING "OpenXR-SDK was not found, disabling WITH_XR_OPENXR")
+    set(WITH_XR_OPENXR OFF)
   endif()
 endif()

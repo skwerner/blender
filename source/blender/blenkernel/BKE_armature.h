@@ -22,6 +22,11 @@
 /** \file
  * \ingroup bke
  */
+#include "BLI_listbase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Bone;
 struct Depsgraph;
@@ -57,21 +62,12 @@ typedef struct PoseTree {
   int stretch;                 /* disable stretching */
 } PoseTree;
 
-/*  Core armature functionality */
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* Core armature functionality. */
 
 struct bArmature *BKE_armature_add(struct Main *bmain, const char *name);
 struct bArmature *BKE_armature_from_object(struct Object *ob);
 int BKE_armature_bonelist_count(struct ListBase *lb);
 void BKE_armature_bonelist_free(struct ListBase *lb);
-void BKE_armature_free(struct bArmature *arm);
-void BKE_armature_make_local(struct Main *bmain, struct bArmature *arm, const bool lib_local);
-void BKE_armature_copy_data(struct Main *bmain,
-                            struct bArmature *arm_dst,
-                            const struct bArmature *arm_src,
-                            const int flag);
 struct bArmature *BKE_armature_copy(struct Main *bmain, const struct bArmature *arm);
 
 void BKE_armature_copy_bone_transforms(struct bArmature *armature_dst,
@@ -94,7 +90,7 @@ void BKE_armature_bone_hash_free(struct bArmature *arm);
 
 bool BKE_armature_bone_flag_test_recursive(const struct Bone *bone, int flag);
 
-void BKE_armature_refresh_layer_used(struct bArmature *arm);
+void BKE_armature_refresh_layer_used(struct Depsgraph *depsgraph, struct bArmature *arm);
 
 float distfactor_to_bone(
     const float vec[3], const float b1[3], const float b2[3], float r1, float r2, float rdist);
@@ -165,6 +161,7 @@ void BKE_bone_offset_matrix_get(const struct Bone *bone, float offs_bone[4][4]);
 typedef struct BoneParentTransform {
   float rotscale_mat[4][4]; /* parent effect on rotation & scale pose channels */
   float loc_mat[4][4];      /* parent effect on location pose channel */
+  float post_scale[3];      /* additional scale to apply with post-multiply */
 } BoneParentTransform;
 
 /* Matrix-like algebra operations on the transform */

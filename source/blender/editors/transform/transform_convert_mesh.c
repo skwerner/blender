@@ -29,9 +29,9 @@
 
 #include "BLI_alloca.h"
 #include "BLI_bitmap.h"
+#include "BLI_linklist_stack.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
-#include "BLI_linklist_stack.h"
 
 #include "BKE_context.h"
 #include "BKE_crazyspace.h"
@@ -52,6 +52,8 @@
 
 #include "transform.h"
 #include "transform_convert.h"
+#include "transform_snap.h"
+
 #include "bmesh.h"
 
 /* Used for both mirror epsilon and TD_MIRROR_EDGE_ */
@@ -59,8 +61,10 @@
 
 /* when transforming islands */
 struct TransIslandData {
-  float co[3];
-  float axismtx[3][3];
+  float (*center)[3];
+  float (*axismtx)[3][3];
+  int island_tot;
+  int *island_vert_map;
 };
 
 /* -------------------------------------------------------------------- */
@@ -190,8 +194,8 @@ static void editmesh_set_connectivity_distance(BMesh *bm,
             if (e_iter->l) {
               BMLoop *l_iter_radial, *l_first_radial;
               /**
-               * imaginary edge diagonally across quad,
-               * \note, this takes advantage of the rules of winding that we
+               * imaginary edge diagonally across quad.
+               * \note This takes advantage of the rules of winding that we
                * know 2 or more of a verts edges wont reference the same face twice.
                * Also, if the edge is hidden, the face will be hidden too.
                */
@@ -245,18 +249,19 @@ static void editmesh_set_connectivity_distance(BMesh *bm,
   }
 }
 
-static struct TransIslandData *editmesh_islands_info_calc(BMEditMesh *em,
-                                                          int *r_island_tot,
-                                                          int **r_island_vert_map,
-                                                          bool calc_single_islands)
+static void editmesh_islands_info_calc(BMEditMesh *em,
+                                       const bool calc_single_islands,
+                                       const bool calc_island_axismtx,
+                                       struct TransIslandData *r_island_data)
 {
   BMesh *bm = em->bm;
-  struct TransIslandData *trans_islands;
   char htype;
   char itype;
   int i;
 
   /* group vars */
+  float(*center)[3];
+  float(*axismtx)[3][3] = NULL;
   int *groups_array;
   int(*group_index)[2];
   int group_tot;
@@ -281,7 +286,11 @@ static struct TransIslandData *editmesh_islands_info_calc(BMEditMesh *em,
     itype = BM_VERTS_OF_FACE;
   }
 
-  trans_islands = MEM_mallocN(sizeof(*trans_islands) * group_tot, __func__);
+  center = MEM_mallocN(sizeof(*center) * group_tot, __func__);
+
+  if (calc_island_axismtx) {
+    axismtx = MEM_mallocN(sizeof(*axismtx) * group_tot, __func__);
+  }
 
   vert_map = MEM_mallocN(sizeof(*vert_map) * bm->totvert, __func__);
   /* we shouldn't need this, but with incorrect selection flushing
@@ -309,7 +318,7 @@ static struct TransIslandData *editmesh_islands_info_calc(BMEditMesh *em,
 
     ese.htype = htype;
 
-    /* loop on each face in this group:
+    /* loop on each face or edge in this group:
      * - assign r_vert_map
      * - calculate (co, no)
      */
@@ -319,12 +328,14 @@ static struct TransIslandData *editmesh_islands_info_calc(BMEditMesh *em,
       ese.ele = ele_array[groups_array[fg_sta + j]];
 
       BM_editselection_center(&ese, tmp_co);
-      BM_editselection_normal(&ese, tmp_no);
-      BM_editselection_plane(&ese, tmp_tangent);
-
       add_v3_v3(co, tmp_co);
-      add_v3_v3(no, tmp_no);
-      add_v3_v3(tangent, tmp_tangent);
+
+      if (axismtx) {
+        BM_editselection_normal(&ese, tmp_no);
+        BM_editselection_plane(&ese, tmp_tangent);
+        add_v3_v3(no, tmp_no);
+        add_v3_v3(tangent, tmp_tangent);
+      }
 
       {
         /* setup vertex map */
@@ -338,18 +349,20 @@ static struct TransIslandData *editmesh_islands_info_calc(BMEditMesh *em,
       }
     }
 
-    mul_v3_v3fl(trans_islands[i].co, co, 1.0f / (float)fg_len);
+    mul_v3_v3fl(center[i], co, 1.0f / (float)fg_len);
 
-    if (createSpaceNormalTangent(trans_islands[i].axismtx, no, tangent)) {
-      /* pass */
-    }
-    else {
-      if (normalize_v3(no) != 0.0f) {
-        axis_dominant_v3_to_m3(trans_islands[i].axismtx, no);
-        invert_m3(trans_islands[i].axismtx);
+    if (axismtx) {
+      if (createSpaceNormalTangent(axismtx[i], no, tangent)) {
+        /* pass */
       }
       else {
-        unit_m3(trans_islands[i].axismtx);
+        if (normalize_v3(no) != 0.0f) {
+          axis_dominant_v3_to_m3(axismtx[i], no);
+          invert_m3(axismtx[i]);
+        }
+        else {
+          unit_m3(axismtx[i]);
+        }
       }
     }
   }
@@ -370,22 +383,24 @@ static struct TransIslandData *editmesh_islands_info_calc(BMEditMesh *em,
     }
 
     if (group_tot_single != 0) {
-      trans_islands = MEM_reallocN(trans_islands,
-                                   sizeof(*trans_islands) * (group_tot + group_tot_single));
+      center = MEM_reallocN(center, sizeof(*center) * (group_tot + group_tot_single));
+      if (axismtx) {
+        axismtx = MEM_reallocN(axismtx, sizeof(*axismtx) * (group_tot + group_tot_single));
+      }
 
       BM_ITER_MESH_INDEX (v, &viter, bm, BM_VERTS_OF_MESH, i) {
         if (BM_elem_flag_test(v, BM_ELEM_SELECT) && (vert_map[i] == -1)) {
-          struct TransIslandData *v_island = &trans_islands[group_tot];
           vert_map[i] = group_tot;
+          copy_v3_v3(center[group_tot], v->co);
 
-          copy_v3_v3(v_island->co, v->co);
-
-          if (is_zero_v3(v->no) != 0.0f) {
-            axis_dominant_v3_to_m3(v_island->axismtx, v->no);
-            invert_m3(v_island->axismtx);
-          }
-          else {
-            unit_m3(v_island->axismtx);
+          if (axismtx) {
+            if (is_zero_v3(v->no) != 0.0f) {
+              axis_dominant_v3_to_m3(axismtx[group_tot], v->no);
+              invert_m3(axismtx[group_tot]);
+            }
+            else {
+              unit_m3(axismtx[group_tot]);
+            }
           }
 
           group_tot += 1;
@@ -394,10 +409,10 @@ static struct TransIslandData *editmesh_islands_info_calc(BMEditMesh *em,
     }
   }
 
-  *r_island_tot = group_tot;
-  *r_island_vert_map = vert_map;
-
-  return trans_islands;
+  r_island_data->axismtx = axismtx;
+  r_island_data->center = center;
+  r_island_data->island_tot = group_tot;
+  r_island_data->island_vert_map = vert_map;
 }
 
 static bool is_in_quadrant_v3(const float co[3], const int quadrant[3], const float epsilon)
@@ -565,7 +580,8 @@ static void VertsToTransData(TransInfo *t,
                              BMEditMesh *em,
                              BMVert *eve,
                              float *bweight,
-                             struct TransIslandData *v_island,
+                             const struct TransIslandData *island_data,
+                             const int island_index,
                              const bool no_island_center)
 {
   float *no, _no[3];
@@ -587,14 +603,17 @@ static void VertsToTransData(TransInfo *t,
     no = eve->no;
   }
 
-  if (v_island) {
+  if (island_index != -1) {
     if (no_island_center) {
       copy_v3_v3(td->center, td->loc);
     }
     else {
-      copy_v3_v3(td->center, v_island->co);
+      copy_v3_v3(td->center, island_data->center[island_index]);
     }
-    copy_m3_m3(td->axismtx, v_island->axismtx);
+  }
+
+  if ((island_index != -1) && island_data->axismtx) {
+    copy_m3_m3(td->axismtx, island_data->axismtx[island_index]);
   }
   else if (t->around == V3D_AROUND_LOCAL_ORIGINS) {
     copy_v3_v3(td->center, td->loc);
@@ -652,9 +671,7 @@ void createTransEditVerts(TransInfo *t)
     const int prop_mode = (t->flag & T_PROP_EDIT) ? (t->flag & T_PROP_EDIT_ALL) : 0;
     int cd_vert_bweight_offset = -1;
 
-    struct TransIslandData *island_info = NULL;
-    int island_info_tot;
-    int *island_vert_map = NULL;
+    struct TransIslandData island_data = {NULL};
 
     /* Snap rotation along normal needs a common axis for whole islands,
      * otherwise one get random crazy results, see T59104.
@@ -756,14 +773,17 @@ void createTransEditVerts(TransInfo *t)
                                         (t->around == V3D_AROUND_LOCAL_ORIGINS) &&
                                         (em->selectmode & SCE_SELECT_VERTEX));
 
-      island_info = editmesh_islands_info_calc(
-          em, &island_info_tot, &island_vert_map, calc_single_islands);
+      /* The island axismtx is only necessary in some modes.
+       * TODO(Germano): Extend the list to exclude other modes. */
+      const bool calc_island_axismtx = !ELEM(t->mode, TFM_SHRINKFATTEN);
+
+      editmesh_islands_info_calc(em, calc_single_islands, calc_island_axismtx, &island_data);
     }
 
     /* detect CrazySpace [tm] */
-    if (modifiers_getCageIndex(t->scene, tc->obedit, NULL, 1) != -1) {
+    if (BKE_modifiers_get_cage_index(t->scene, tc->obedit, NULL, 1) != -1) {
       int totleft = -1;
-      if (modifiers_isCorrectableDeformed(t->scene, tc->obedit)) {
+      if (BKE_modifiers_is_correctable_deformed(t->scene, tc->obedit)) {
         BKE_scene_graph_evaluated_ensure(t->depsgraph, CTX_data_main(t->context));
 
         /* Use evaluated state because we need b-bone cache. */
@@ -807,21 +827,19 @@ void createTransEditVerts(TransInfo *t)
         continue;
       }
       if (prop_mode || BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
-        struct TransIslandData *v_island = NULL;
         float *bweight = (cd_vert_bweight_offset != -1) ?
                              BM_ELEM_CD_GET_VOID_P(eve, cd_vert_bweight_offset) :
                              NULL;
 
-        if (island_info) {
+        int island_index = -1;
+        if (island_data.island_vert_map) {
           const int connected_index = (dists_index && dists_index[a] != -1) ? dists_index[a] : a;
-          v_island = (island_vert_map[connected_index] != -1) ?
-                         &island_info[island_vert_map[connected_index]] :
-                         NULL;
+          island_index = island_data.island_vert_map[connected_index];
         }
 
         /* Do not use the island center in case we are using islands
          * only to get axis for snap/rotate to normal... */
-        VertsToTransData(t, tob, tx, em, eve, bweight, v_island, is_snap_rotate);
+        VertsToTransData(t, tob, tx, em, eve, bweight, &island_data, island_index, is_snap_rotate);
         if (tx) {
           tx++;
         }
@@ -887,9 +905,16 @@ void createTransEditVerts(TransInfo *t)
       }
     }
 
-    if (island_info) {
-      MEM_freeN(island_info);
-      MEM_freeN(island_vert_map);
+    if (island_data.center) {
+      MEM_freeN(island_data.center);
+    }
+
+    if (island_data.axismtx) {
+      MEM_freeN(island_data.axismtx);
+    }
+
+    if (island_data.island_vert_map) {
+      MEM_freeN(island_data.island_vert_map);
     }
 
   cleanup:
@@ -1028,7 +1053,15 @@ static void create_trans_vert_customdata_layer(BMVert *v,
 void trans_mesh_customdata_correction_init(TransInfo *t)
 {
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
-    BLI_assert(tc->custom.type.data == NULL);
+    if (tc->custom.type.data) {
+      if (tc->custom.type.free_cb == trans_mesh_customdata_free_cb) {
+        /* Custom data correction has initiated before. */
+        continue;
+      }
+      else {
+        BLI_assert(false);
+      }
+    }
     int i;
 
     BMEditMesh *em = BKE_editmesh_from_object(tc->obedit);
@@ -1166,7 +1199,7 @@ static void trans_mesh_customdata_correction_apply_vert(struct TransCustomDataLa
     BM_loop_interp_from_face(bm, l, f_copy, false, false);
 
     /* make sure face-attributes are correct (e.g. #MLoopUV, #MLoopCol) */
-    BM_elem_attrs_copy_ex(tcld->bm_origfaces, bm, f_copy, l->f, 0x0, CD_MASK_NORMAL);
+    BM_elem_attrs_copy_ex(tcld->bm_origfaces, bm, f_copy, l->f, BM_ELEM_SELECT, CD_MASK_NORMAL);
 
     /* weight the loop */
     if (do_loop_weight) {
@@ -1417,7 +1450,6 @@ static void UVsToTransData(const float aspect[2],
 void createTransUVs(bContext *C, TransInfo *t)
 {
   SpaceImage *sima = CTX_wm_space_image(C);
-  Image *ima = CTX_data_edit_image(C);
   Scene *scene = t->scene;
   ToolSettings *ts = CTX_data_tool_settings(C);
 
@@ -1449,7 +1481,8 @@ void createTransUVs(bContext *C, TransInfo *t)
     if (is_prop_connected || is_island_center) {
       /* create element map with island information */
       const bool use_facesel = (ts->uv_flag & UV_SYNC_SELECTION) == 0;
-      elementmap = BM_uv_element_map_create(em->bm, use_facesel, false, true);
+      const bool use_uvsel = !is_prop_connected;
+      elementmap = BM_uv_element_map_create(em->bm, scene, use_facesel, use_uvsel, false, true);
       if (elementmap == NULL) {
         continue;
       }
@@ -1466,7 +1499,7 @@ void createTransUVs(bContext *C, TransInfo *t)
     BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
       BMLoop *l;
 
-      if (!uvedit_face_visible_test(scene, tc->obedit, ima, efa)) {
+      if (!uvedit_face_visible_test(scene, efa)) {
         BM_elem_flag_disable(efa, BM_ELEM_TAG);
         continue;
       }
@@ -1545,16 +1578,17 @@ void createTransUVs(bContext *C, TransInfo *t)
 
         if (is_prop_connected || is_island_center) {
           UvElement *element = BM_uv_element_get(elementmap, efa, l);
-
-          if (is_prop_connected) {
-            if (!BLI_BITMAP_TEST(island_enabled, element->island)) {
-              count_rejected++;
-              continue;
+          if (element) {
+            if (is_prop_connected) {
+              if (!BLI_BITMAP_TEST(island_enabled, element->island)) {
+                count_rejected++;
+                continue;
+              }
             }
-          }
 
-          if (is_island_center) {
-            center = island_center[element->island].co;
+            if (is_island_center) {
+              center = island_center[element->island].co;
+            }
           }
         }
 
@@ -1596,7 +1630,7 @@ void createTransUVs(bContext *C, TransInfo *t)
 
 void flushTransUVs(TransInfo *t)
 {
-  SpaceImage *sima = t->sa->spacedata.first;
+  SpaceImage *sima = t->area->spacedata.first;
   const bool use_pixel_snap = ((sima->pixel_snap_mode != SI_PIXEL_SNAP_DISABLED) &&
                                (t->state != TRANS_CANCEL));
 

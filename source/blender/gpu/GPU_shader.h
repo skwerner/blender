@@ -29,6 +29,7 @@ extern "C" {
 #endif
 
 typedef struct GPUShader GPUShader;
+struct GPUShaderInterface;
 struct GPUTexture;
 struct GPUUniformBuffer;
 
@@ -49,6 +50,11 @@ GPUShader *GPU_shader_create(const char *vertexcode,
                              const char *libcode,
                              const char *defines,
                              const char *shader_name);
+GPUShader *GPU_shader_create_from_python(const char *vertexcode,
+                                         const char *fragcode,
+                                         const char *geocode,
+                                         const char *libcode,
+                                         const char *defines);
 GPUShader *GPU_shader_create_ex(const char *vertexcode,
                                 const char *fragcode,
                                 const char *geocode,
@@ -83,6 +89,8 @@ int GPU_shader_get_program(GPUShader *shader);
 
 void *GPU_shader_get_interface(GPUShader *shader);
 
+void GPU_shader_set_srgb_uniform(const struct GPUShaderInterface *interface);
+
 int GPU_shader_get_uniform(GPUShader *shader, const char *name);
 int GPU_shader_get_uniform_ensure(GPUShader *shader, const char *name);
 int GPU_shader_get_builtin_uniform(GPUShader *shader, int builtin);
@@ -101,17 +109,14 @@ int GPU_shader_get_attribute(GPUShader *shader, const char *name);
 
 char *GPU_shader_get_binary(GPUShader *shader, uint *r_binary_format, int *r_binary_len);
 
+void GPU_shader_set_framebuffer_srgb_target(int use_srgb_to_linear);
+
 /* Builtin/Non-generated shaders */
 typedef enum eGPUBuiltinShader {
   /* specialized drawing */
   GPU_SHADER_TEXT,
-  GPU_SHADER_TEXT_SIMPLE,
   GPU_SHADER_KEYFRAME_DIAMOND,
   GPU_SHADER_SIMPLE_LIGHTING,
-  GPU_SHADER_SIMPLE_LIGHTING_FLAT_COLOR,
-  GPU_SHADER_SIMPLE_LIGHTING_SMOOTH_COLOR,
-  GPU_SHADER_SIMPLE_LIGHTING_SMOOTH_COLOR_ALPHA,
-
   /* for simple 2D drawing */
   /**
    * Take a single color for all the vertices and a 2D position for each vertex.
@@ -134,7 +139,6 @@ typedef enum eGPUBuiltinShader {
    * \param pos: in vec2
    */
   GPU_SHADER_2D_SMOOTH_COLOR,
-  GPU_SHADER_2D_SMOOTH_COLOR_DITHER,
   GPU_SHADER_2D_IMAGE,
   GPU_SHADER_2D_IMAGE_COLOR,
   GPU_SHADER_2D_IMAGE_DESATURATE_COLOR,
@@ -142,14 +146,6 @@ typedef enum eGPUBuiltinShader {
   GPU_SHADER_2D_IMAGE_ALPHA,
   GPU_SHADER_2D_IMAGE_RECT_COLOR,
   GPU_SHADER_2D_IMAGE_MULTI_RECT_COLOR,
-  GPU_SHADER_2D_IMAGE_MULTISAMPLE_2,
-  GPU_SHADER_2D_IMAGE_MULTISAMPLE_4,
-  GPU_SHADER_2D_IMAGE_MULTISAMPLE_8,
-  GPU_SHADER_2D_IMAGE_MULTISAMPLE_16,
-  GPU_SHADER_2D_IMAGE_MULTISAMPLE_2_DEPTH_TEST,
-  GPU_SHADER_2D_IMAGE_MULTISAMPLE_4_DEPTH_TEST,
-  GPU_SHADER_2D_IMAGE_MULTISAMPLE_8_DEPTH_TEST,
-  GPU_SHADER_2D_IMAGE_MULTISAMPLE_16_DEPTH_TEST,
   GPU_SHADER_2D_CHECKER,
   GPU_SHADER_2D_DIAG_STRIPES,
   /* for simple 3D drawing */
@@ -160,8 +156,7 @@ typedef enum eGPUBuiltinShader {
    * \param pos: in vec3
    */
   GPU_SHADER_3D_UNIFORM_COLOR,
-  /* Sets Z-depth to 1.0 (draw onto background). */
-  GPU_SHADER_3D_UNIFORM_COLOR_BACKGROUND,
+  GPU_SHADER_3D_CLIPPED_UNIFORM_COLOR,
   /**
    * Take a 3D position and color for each vertex without color interpolation.
    *
@@ -177,14 +172,40 @@ typedef enum eGPUBuiltinShader {
    */
   GPU_SHADER_3D_SMOOTH_COLOR,
   /**
+   * Take a single color for all the vertices and a 3D position for each vertex.
+   * Used for drawing wide lines.
+   *
+   * \param color: uniform vec4
+   * \param pos: in vec3
+   */
+  GPU_SHADER_3D_POLYLINE_UNIFORM_COLOR,
+  GPU_SHADER_3D_POLYLINE_CLIPPED_UNIFORM_COLOR,
+  /**
+   * Take a 3D position and color for each vertex without color interpolation.
+   * Used for drawing wide lines.
+   *
+   * \param color: in vec4
+   * \param pos: in vec3
+   */
+  GPU_SHADER_3D_POLYLINE_FLAT_COLOR,
+  /**
+   * Take a 3D position and color for each vertex with perspective correct interpolation.
+   * Used for drawing wide lines.
+   *
+   * \param color: in vec4
+   * \param pos: in vec3
+   */
+  GPU_SHADER_3D_POLYLINE_SMOOTH_COLOR,
+  /**
    * Take a 3D position for each vertex and output only depth.
+   * Used for drawing wide lines.
    *
    * \param pos: in vec3
    */
   GPU_SHADER_3D_DEPTH_ONLY,
-  GPU_SHADER_3D_CLIPPED_UNIFORM_COLOR,
   /* basic image drawing */
-  GPU_SHADER_2D_IMAGE_LINEAR_TO_SRGB,
+  GPU_SHADER_2D_IMAGE_OVERLAYS_MERGE,
+  GPU_SHADER_2D_IMAGE_OVERLAYS_STEREO_MERGE,
   GPU_SHADER_2D_IMAGE_SHUFFLE_COLOR,
   GPU_SHADER_2D_IMAGE_MASK_UNIFORM_COLOR,
   /**
@@ -196,20 +217,6 @@ typedef enum eGPUBuiltinShader {
    * \param pos: in vec3
    */
   GPU_SHADER_3D_IMAGE_MODULATE_ALPHA,
-  /**
-   * Draw linearized depth texture relate to near and far distances.
-   * Take a 3D position and a 2D texture coordinate for each vertex.
-   *
-   * \param znear: uniform float
-   * \param zfar: uniform float
-   * \param image: uniform sampler2D
-   * \param texCoord: in vec2
-   * \param pos: in vec3
-   */
-  GPU_SHADER_3D_IMAGE_DEPTH,
-  GPU_SHADER_3D_IMAGE_DEPTH_COPY,
-  /* stereo 3d */
-  GPU_SHADER_2D_IMAGE_INTERLACE,
   /* points */
   /**
    * Draw round points with a hardcoded size.
@@ -316,26 +323,8 @@ typedef enum eGPUBuiltinShader {
   /* lines */
   GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR,
   GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR,
-  /* light drawing */
-  GPU_SHADER_3D_GROUNDPOINT,
-  GPU_SHADER_3D_GROUNDLINE,
-  GPU_SHADER_3D_SCREENSPACE_VARIYING_COLOR,
-  /* bone drawing */
-  GPU_SHADER_3D_OBJECTSPACE_VARIYING_COLOR,
-  GPU_SHADER_3D_OBJECTSPACE_SIMPLE_LIGHTING_VARIYING_COLOR,
-  /* camera drawing */
-  GPU_SHADER_CAMERA,
-  /* distance in front of objects */
-  GPU_SHADER_DISTANCE_LINES,
-  /* axis name */
-  GPU_SHADER_3D_INSTANCE_SCREEN_ALIGNED_AXIS,
-  GPU_SHADER_3D_INSTANCE_SCREEN_ALIGNED,
   /* instance */
-  GPU_SHADER_INSTANCE_UNIFORM_COLOR,
-  GPU_SHADER_INSTANCE_VARIYING_ID_VARIYING_SIZE,    /* Uniformly scaled */
   GPU_SHADER_INSTANCE_VARIYING_COLOR_VARIYING_SIZE, /* Uniformly scaled */
-  GPU_SHADER_INSTANCE_VARIYING_COLOR_VARIYING_SCALE,
-  GPU_SHADER_INSTANCE_EDGES_VARIYING_COLOR,
   /* grease pencil drawing */
   GPU_SHADER_GPENCIL_STROKE,
   GPU_SHADER_GPENCIL_FILL,
@@ -372,16 +361,6 @@ typedef struct GPUShaderConfigData {
 /* gpu_shader.c */
 extern const GPUShaderConfigData GPU_shader_cfg_data[GPU_SHADER_CFG_LEN];
 
-/** Keep these in sync with:
- * - `gpu_shader_image_interlace_frag.glsl`
- * - `gpu_shader_image_rect_interlace_frag.glsl`
- */
-typedef enum eGPUInterlaceShader {
-  GPU_SHADER_INTERLACE_ROW = 0,
-  GPU_SHADER_INTERLACE_COLUMN = 1,
-  GPU_SHADER_INTERLACE_CHECKER = 2,
-} eGPUInterlaceShader;
-
 GPUShader *GPU_shader_get_builtin_shader_with_config(eGPUBuiltinShader shader,
                                                      eGPUShaderConfig sh_cfg);
 GPUShader *GPU_shader_get_builtin_shader(eGPUBuiltinShader shader);
@@ -399,16 +378,6 @@ void GPU_shader_free_builtin_shaders(void);
 /* Hardware limit is 16. Position attribute is always needed so we reduce to 15.
  * This makes sure the GPUVertexFormat name buffer does not overflow. */
 #define GPU_MAX_ATTR 15
-
-typedef struct GPUVertAttrLayers {
-  struct {
-    int type; /* CustomDataType */
-    int attr_id;
-    char name[64]; /* MAX_CUSTOMDATA_LAYER_NAME */
-  } layer[GPU_MAX_ATTR];
-
-  int totlayer;
-} GPUVertAttrLayers;
 
 #ifdef __cplusplus
 }

@@ -29,9 +29,11 @@
 #include "DNA_object_types.h"
 
 #include "BLI_array_utils.h"
+#include "BLI_listbase.h"
 
 #include "BKE_context.h"
 #include "BKE_layer.h"
+#include "BKE_main.h"
 #include "BKE_undo_system.h"
 
 #include "DEG_depsgraph.h"
@@ -41,8 +43,8 @@
 #include "ED_undo.h"
 #include "ED_util.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 /** We only need this locally. */
 static CLG_LogRef LOG = {"ed.undo.armature"};
@@ -93,7 +95,7 @@ static void *undoarm_from_editarm(UndoArmature *uarm, bArmature *arm)
 
   ED_armature_ebone_listbase_temp_clear(&uarm->lb);
 
-  for (EditBone *ebone = uarm->lb.first; ebone; ebone = ebone->next) {
+  LISTBASE_FOREACH (EditBone *, ebone, &uarm->lb) {
     uarm->undo_size += sizeof(EditBone);
   }
 
@@ -107,7 +109,8 @@ static void undoarm_free_data(UndoArmature *uarm)
 
 static Object *editarm_object_from_context(bContext *C)
 {
-  Object *obedit = CTX_data_edit_object(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
   if (obedit && obedit->type == OB_ARMATURE) {
     bArmature *arm = obedit->data;
     if (arm->edbo != NULL) {
@@ -142,9 +145,7 @@ static bool armature_undosys_poll(bContext *C)
   return editarm_object_from_context(C) != NULL;
 }
 
-static bool armature_undosys_step_encode(struct bContext *C,
-                                         struct Main *UNUSED(bmain),
-                                         UndoStep *us_p)
+static bool armature_undosys_step_encode(struct bContext *C, struct Main *bmain, UndoStep *us_p)
 {
   ArmatureUndoStep *us = (ArmatureUndoStep *)us_p;
 
@@ -152,8 +153,7 @@ static bool armature_undosys_step_encode(struct bContext *C,
    * outside of this list will be moved out of edit-mode when reading back undo steps. */
   ViewLayer *view_layer = CTX_data_view_layer(C);
   uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
-      view_layer, NULL, &objects_len);
+  Object **objects = ED_undo_editmode_objects_from_view_layer(view_layer, &objects_len);
 
   us->elems = MEM_callocN(sizeof(*us->elems) * objects_len, __func__);
   us->elems_len = objects_len;
@@ -165,17 +165,18 @@ static bool armature_undosys_step_encode(struct bContext *C,
     elem->obedit_ref.ptr = ob;
     bArmature *arm = elem->obedit_ref.ptr->data;
     undoarm_from_editarm(&elem->data, arm);
+    arm->needs_flush_to_id = 1;
     us->step.data_size += elem->data.undo_size;
   }
   MEM_freeN(objects);
+
+  bmain->is_memfile_undo_flush_needed = true;
+
   return true;
 }
 
-static void armature_undosys_step_decode(struct bContext *C,
-                                         struct Main *UNUSED(bmain),
-                                         UndoStep *us_p,
-                                         int UNUSED(dir),
-                                         bool UNUSED(is_final))
+static void armature_undosys_step_decode(
+    struct bContext *C, struct Main *bmain, UndoStep *us_p, int UNUSED(dir), bool UNUSED(is_final))
 {
   ArmatureUndoStep *us = (ArmatureUndoStep *)us_p;
 
@@ -198,12 +199,15 @@ static void armature_undosys_step_decode(struct bContext *C,
       continue;
     }
     undoarm_to_editarm(&elem->data, arm);
+    arm->needs_flush_to_id = 1;
     DEG_id_tag_update(&obedit->id, ID_RECALC_GEOMETRY);
   }
 
   /* The first element is always active */
   ED_undo_object_set_active_or_warn(
       CTX_data_view_layer(C), us->elems[0].obedit_ref.ptr, us_p->name, &LOG);
+
+  bmain->is_memfile_undo_flush_needed = true;
 
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, NULL);
 }

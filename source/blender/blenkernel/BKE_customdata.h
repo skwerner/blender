@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
@@ -25,14 +25,14 @@
 #ifndef __BKE_CUSTOMDATA_H__
 #define __BKE_CUSTOMDATA_H__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "BLI_sys_types.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_customdata_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct BMesh;
 struct CustomData;
@@ -168,8 +168,8 @@ bool CustomData_bmesh_merge(const struct CustomData *source,
 /** NULL's all members and resets the typemap. */
 void CustomData_reset(struct CustomData *data);
 
-/** frees data associated with a CustomData object (doesn't free the object
- * itself, though)
+/**
+ * Frees data associated with a CustomData object (doesn't free the object itself, though).
  */
 void CustomData_free(struct CustomData *data, int totelem);
 
@@ -258,6 +258,11 @@ void CustomData_bmesh_copy_data(const struct CustomData *source,
                                 struct CustomData *dest,
                                 void *src_block,
                                 void **dest_block);
+void CustomData_bmesh_copy_data_exclude_by_type(const struct CustomData *source,
+                                                struct CustomData *dest,
+                                                void *src_block,
+                                                void **dest_block,
+                                                const CustomDataMask mask_exclude);
 
 /* Copies data of a single layer of a given type. */
 void CustomData_copy_layer_type_data(const struct CustomData *source,
@@ -392,6 +397,9 @@ void CustomData_clear_layer_flag(struct CustomData *data, int type, int flag);
 void CustomData_bmesh_set_default(struct CustomData *data, void **block);
 void CustomData_bmesh_free_block(struct CustomData *data, void **block);
 void CustomData_bmesh_free_block_data(struct CustomData *data, void *block);
+void CustomData_bmesh_free_block_data_exclude_by_type(struct CustomData *data,
+                                                      void *block,
+                                                      const CustomDataMask mask_exclude);
 
 /* copy custom data to/from layers as in mesh/derivedmesh, to editmesh
  * blocks of data. the CustomData's must not be compatible */

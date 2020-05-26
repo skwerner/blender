@@ -16,6 +16,10 @@
 #ifndef __BKE_BLENDER_VERSION_H__
 #define __BKE_BLENDER_VERSION_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** \file
  * \ingroup bke
  */
@@ -26,8 +30,8 @@
  *
  * \note Use #STRINGIFY() rather than defining with quotes.
  */
-#define BLENDER_VERSION 282
-#define BLENDER_SUBVERSION 0
+#define BLENDER_VERSION 290
+#define BLENDER_SUBVERSION 3
 /** Several breakages with 280, e.g. collections vs layers. */
 #define BLENDER_MINVERSION 280
 #define BLENDER_MINSUBVERSION 0
@@ -37,10 +41,14 @@
 #define BLENDER_VERSION_CHAR
 /** alpha/beta/rc/release, docs use this. */
 #define BLENDER_VERSION_CYCLE alpha
-/** Optionally set to 1,2,... for example to to get alpha1 or rc2. */
+/** Optionally set to 1,2,... for example to get alpha1 or rc2. */
 #define BLENDER_VERSION_CYCLE_NUMBER
 
 /** Defined in from blender.c */
 extern char versionstr[];
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __BKE_BLENDER_VERSION_H__ */

@@ -55,7 +55,7 @@ bool BLI_eigen_solve_selfadjoint_m3(const float m3[3][3],
 }
 
 /**
- * \brief Compute the SVD (Singular Values Decomposition) of given 3D  matrix (m3 = USV*).
+ * \brief Compute the SVD (Singular Values Decomposition) of given 3D matrix (m3 = USV*).
  *
  * \param m3: the matrix to decompose.
  * \return r_U the computed left singular vector of \a m3 (NULL if not needed).
@@ -215,10 +215,10 @@ bool BLI_newton3d_solve(Newton3D_DeltaFunc func_delta,
   fdeltav = len_squared_v3(fdelta);
 
   if (trace) {
-    printf("START (%g, %g, %g) %g\n", x[0], x[1], x[2], fdeltav);
+    printf("START (%g, %g, %g) %g %g\n", x[0], x[1], x[2], fdeltav, epsilon);
   }
 
-  for (int i = 0; i < max_iterations && fdeltav > epsilon; i++) {
+  for (int i = 0; i == 0 || (i < max_iterations && fdeltav > epsilon); i++) {
     /* Newton's method step. */
     func_jacobian(userdata, x, jacobian);
 
@@ -248,7 +248,7 @@ bool BLI_newton3d_solve(Newton3D_DeltaFunc func_delta,
     }
 
     /* Line search correction. */
-    while (next_fdeltav > fdeltav) {
+    while (next_fdeltav > fdeltav && next_fdeltav > epsilon) {
       float g0 = sqrtf(fdeltav), g1 = sqrtf(next_fdeltav);
       float g01 = -g0 / len_v3(step);
       float det = 2.0f * (g1 - g0 - g01);

@@ -25,16 +25,16 @@
 
 /* **************** MAPPING  ******************** */
 static bNodeSocketTemplate sh_node_mapping_in[] = {
-    {SOCK_VECTOR, 1, N_("Vector"), 0.0f, 0.0f, 0.0f, 1.0f, -FLT_MAX, FLT_MAX, PROP_NONE},
-    {SOCK_VECTOR, 1, N_("Location"), 0.0f, 0.0f, 0.0f, 1.0f, -FLT_MAX, FLT_MAX, PROP_TRANSLATION},
-    {SOCK_VECTOR, 1, N_("Rotation"), 0.0f, 0.0f, 0.0f, 1.0f, -FLT_MAX, FLT_MAX, PROP_EULER},
-    {SOCK_VECTOR, 1, N_("Scale"), 1.0f, 1.0f, 1.0f, 1.0f, -FLT_MAX, FLT_MAX, PROP_XYZ},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Vector"), 0.0f, 0.0f, 0.0f, 1.0f, -FLT_MAX, FLT_MAX, PROP_NONE},
+    {SOCK_VECTOR, N_("Location"), 0.0f, 0.0f, 0.0f, 1.0f, -FLT_MAX, FLT_MAX, PROP_TRANSLATION},
+    {SOCK_VECTOR, N_("Rotation"), 0.0f, 0.0f, 0.0f, 1.0f, -FLT_MAX, FLT_MAX, PROP_EULER},
+    {SOCK_VECTOR, N_("Scale"), 1.0f, 1.0f, 1.0f, 1.0f, -FLT_MAX, FLT_MAX, PROP_XYZ},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_mapping_out[] = {
-    {SOCK_VECTOR, 0, N_("Vector")},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Vector")},
+    {-1, ""},
 };
 
 static int gpu_shader_mapping(GPUMaterial *mat,
@@ -50,7 +50,12 @@ static int gpu_shader_mapping(GPUMaterial *mat,
       [NODE_MAPPING_TYPE_NORMAL] = "mapping_normal",
   };
 
-  return GPU_stack_link(mat, node, names[node->custom1], in, out);
+  if (node->custom1 < ARRAY_SIZE(names) && names[node->custom1]) {
+    return GPU_stack_link(mat, node, names[node->custom1], in, out);
+  }
+  else {
+    return 0;
+  }
 }
 
 static void node_shader_update_mapping(bNodeTree *UNUSED(ntree), bNode *node)

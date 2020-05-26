@@ -18,14 +18,12 @@
 
 #include <cstring>
 
-extern "C" {
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_node_types.h"
 
 #include "BKE_node.h"
-}
 
 #include "COM_CompositorContext.h"
 #include "COM_Converter.h"
@@ -188,7 +186,7 @@ NodeOutput *NodeGraph::find_output(const NodeRange &node_range, bNodeSocket *b_s
 
 void NodeGraph::add_bNodeLink(const NodeRange &node_range, bNodeLink *b_nodelink)
 {
-  /// \note: ignore invalid links
+  /// \note Ignore invalid links.
   if (!(b_nodelink->flag & NODE_LINK_VALID)) {
     return;
   }

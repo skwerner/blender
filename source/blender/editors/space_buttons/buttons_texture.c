@@ -32,23 +32,23 @@
 
 #include "BLT_translation.h"
 
-#include "DNA_brush_types.h"
 #include "DNA_ID.h"
+#include "DNA_brush_types.h"
+#include "DNA_linestyle_types.h"
 #include "DNA_node_types.h"
-#include "DNA_object_types.h"
 #include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
 #include "DNA_particle_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
-#include "DNA_linestyle_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BKE_context.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_layer.h"
 #include "BKE_linestyle.h"
 #include "BKE_modifier.h"
-#include "BKE_gpencil_modifier.h"
 #include "BKE_node.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
@@ -236,10 +236,10 @@ static void buttons_texture_users_from_context(ListBase *users,
     int a;
 
     /* modifiers */
-    modifiers_foreachTexLink(ob, buttons_texture_modifier_foreach, users);
+    BKE_modifiers_foreach_tex_link(ob, buttons_texture_modifier_foreach, users);
 
     /* grease pencil modifiers */
-    BKE_gpencil_modifiers_foreachTexLink(ob, buttons_texture_modifier_gpencil_foreach, users);
+    BKE_gpencil_modifiers_foreach_tex_link(ob, buttons_texture_modifier_gpencil_foreach, users);
 
     /* particle systems */
     if (psys && !limited_mode) {

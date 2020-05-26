@@ -23,20 +23,20 @@
 
 #include "atomic_ops.h"
 
-#include "COM_ExecutionGroup.h"
-#include "COM_defines.h"
-#include "COM_ExecutionSystem.h"
-#include "COM_ReadBufferOperation.h"
-#include "COM_WriteBufferOperation.h"
-#include "COM_WorkScheduler.h"
-#include "COM_ViewerOperation.h"
 #include "COM_ChunkOrder.h"
 #include "COM_Debug.h"
+#include "COM_ExecutionGroup.h"
+#include "COM_ExecutionSystem.h"
+#include "COM_ReadBufferOperation.h"
+#include "COM_ViewerOperation.h"
+#include "COM_WorkScheduler.h"
+#include "COM_WriteBufferOperation.h"
+#include "COM_defines.h"
 
-#include "MEM_guardedalloc.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLT_translation.h"
+#include "MEM_guardedalloc.h"
 #include "PIL_time.h"
 #include "WM_api.h"
 #include "WM_types.h"
@@ -198,13 +198,13 @@ void ExecutionGroup::execute(ExecutionSystem *graph)
   const bNodeTree *bTree = context.getbNodeTree();
   if (this->m_width == 0 || this->m_height == 0) {
     return;
-  }  /// \note: break out... no pixels to calculate.
+  }  /// \note Break out... no pixels to calculate.
   if (bTree->test_break && bTree->test_break(bTree->tbh)) {
     return;
-  }  /// \note: early break out for blur and preview nodes
+  }  /// \note Early break out for blur and preview nodes.
   if (this->m_numberOfChunks == 0) {
     return;
-  }  /// \note: early break out
+  }  /// \note Early break out.
   unsigned int chunkNumber;
 
   this->m_executionStartTime = PIL_check_seconds_timer();

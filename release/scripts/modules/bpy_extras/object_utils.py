@@ -24,7 +24,6 @@ __all__ = (
     "AddObjectHelper",
     "object_add_grid_scale",
     "object_add_grid_scale_apply_operator",
-    "object_image_guess",
     "world_to_camera_view",
 )
 
@@ -131,7 +130,10 @@ def object_data_add(context, obdata, operator=None, name=None):
     obj_new.matrix_world = add_object_align_init(context, operator)
 
     space_data = context.space_data
-    if space_data.type == 'VIEW_3D':
+    if space_data and space_data.type != 'VIEW_3D':
+        space_data = None
+
+    if space_data:
         if space_data.local_view:
             obj_new.local_view_set(space_data, True)
 
@@ -159,7 +161,7 @@ def object_data_add(context, obdata, operator=None, name=None):
         bpy.ops.object.mode_set(mode='EDIT')
     else:
         layer.objects.active = obj_new
-        if context.preferences.edit.use_enter_edit_mode:
+        if obdata and context.preferences.edit.use_enter_edit_mode:
             bpy.ops.object.mode_set(mode='EDIT')
 
     return obj_new
@@ -225,46 +227,6 @@ def object_add_grid_scale_apply_operator(operator, context):
                         getattr(operator, prop_id) * grid_scale)
 
 
-def object_image_guess(obj, bm=None):
-    """
-    Return a single image used by the object,
-    first checking the texture-faces, then the material.
-    """
-    # TODO, cycles/nodes materials
-    me = obj.data
-    if bm is None:
-        if obj.mode == 'EDIT':
-            import bmesh
-            bm = bmesh.from_edit_mesh(me)
-
-    if bm is not None:
-        tex_layer = bm.faces.layers.tex.active
-        if tex_layer is not None:
-            for f in bm.faces:
-                image = f[tex_layer].image
-                if image is not None:
-                    return image
-    else:
-        tex_layer = me.uv_textures.active
-        if tex_layer is not None:
-            for tf in tex_layer.data:
-                image = tf.image
-                if image is not None:
-                    return image
-
-    for m in obj.data.materials:
-        if m is not None:
-            # backwards so topmost are highest priority
-            for mtex in reversed(m.texture_slots):
-                if mtex and mtex.use_map_color_diffuse:
-                    texture = mtex.texture
-                    if texture and texture.type == 'IMAGE':
-                        image = texture.image
-                        if image is not None:
-                            return image
-    return None
-
-
 def world_to_camera_view(scene, obj, coord):
     """
     Returns the camera space coords for a 3d point.
@@ -294,15 +256,15 @@ def world_to_camera_view(scene, obj, coord):
     z = -co_local.z
 
     camera = obj.data
-    frame = [-v for v in camera.view_frame(scene=scene)[:3]]
+    frame = [v for v in camera.view_frame(scene=scene)[:3]]
     if camera.type != 'ORTHO':
         if z == 0.0:
             return Vector((0.5, 0.5, 0.0))
         else:
-            frame = [(v / (v.z / z)) for v in frame]
+            frame = [-(v / (v.z / z)) for v in frame]
 
-    min_x, max_x = frame[1].x, frame[2].x
-    min_y, max_y = frame[0].y, frame[1].y
+    min_x, max_x = frame[2].x, frame[1].x
+    min_y, max_y = frame[1].y, frame[0].y
 
     x = (co_local.x - min_x) / (max_x - min_x)
     y = (co_local.y - min_y) / (max_y - min_y)

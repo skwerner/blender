@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -28,14 +28,14 @@
 #include "BLI_math.h"
 #include "BLI_rand.h"
 
-#include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_deform.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
 #include "BKE_particle.h"
@@ -67,7 +67,7 @@ static void copyData(const ModifierData *md, ModifierData *target, const int fla
 #endif
   ExplodeModifierData *temd = (ExplodeModifierData *)target;
 
-  modifier_copyData_generic(md, target, flag);
+  BKE_modifier_copydata_generic(md, target, flag);
 
   temd->facepa = NULL;
 }
@@ -97,6 +97,7 @@ static void createFacepa(ExplodeModifierData *emd, ParticleSystemModifierData *p
   float center[3], co[3];
   int *facepa = NULL, *vertpa = NULL, totvert = 0, totface = 0, totpart = 0;
   int i, p, v1, v2, v3, v4 = 0;
+  const bool invert_vgroup = (emd->flag & eExplodeFlag_INVERT_VGROUP) != 0;
 
   mvert = mesh->mvert;
   mface = mesh->mface;
@@ -129,7 +130,9 @@ static void createFacepa(ExplodeModifierData *emd, ParticleSystemModifierData *p
       for (i = 0; i < totvert; i++, dvert++) {
         float val = BLI_rng_get_float(rng);
         val = (1.0f - emd->protect) * val + emd->protect * 0.5f;
-        if (val < defvert_find_weight(dvert, defgrp_index)) {
+        const float weight = invert_vgroup ? 1.0f - BKE_defvert_find_weight(dvert, defgrp_index) :
+                                             BKE_defvert_find_weight(dvert, defgrp_index);
+        if (val < weight) {
           vertpa[i] = -1;
         }
       }
@@ -974,7 +977,6 @@ static Mesh *explodeMesh(ExplodeModifierData *emd,
   explode = BKE_mesh_new_nomain_from_template(mesh, totdup, 0, totface - delface, 0, 0);
 
   mtface = CustomData_get_layer_named(&explode->fdata, CD_MTFACE, emd->uvname);
-  /*dupvert = CDDM_get_verts(explode);*/
 
   /* getting back to object space */
   invert_m4_m4(imat, ctx->object->obmat);
@@ -1121,7 +1123,7 @@ static ParticleSystemModifierData *findPrecedingParticlesystem(Object *ob, Modif
   }
   return psmd;
 }
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   ExplodeModifierData *emd = (ExplodeModifierData *)md;
   ParticleSystemModifierData *psmd = findPrecedingParticlesystem(ctx->object, md);
@@ -1184,7 +1186,10 @@ ModifierTypeInfo modifierType_Explode = {
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

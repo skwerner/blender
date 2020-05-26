@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -20,16 +20,17 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_linklist.h"
 #include "BLI_math.h"
 
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BKE_cdderivedmesh.h"
 #include "BKE_deform.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 
 #include "MOD_modifiertypes.h"
@@ -142,7 +143,7 @@ static void aggregate_item_normal(WeightedNormalModifierData *wnmd,
 
   const bool has_vgroup = dvert != NULL;
   const bool vert_of_group = has_vgroup &&
-                             defvert_find_index(&dvert[mv_index], defgrp_index) != NULL;
+                             BKE_defvert_find_index(&dvert[mv_index], defgrp_index) != NULL;
 
   if (has_vgroup &&
       ((vert_of_group && use_invert_vgroup) || (!vert_of_group && !use_invert_vgroup))) {
@@ -360,7 +361,7 @@ static void apply_weights_vertex_normal(WeightedNormalModifierData *wnmd,
   }
   else {
     /* TODO: Ideally, we could add an option to BKE_mesh_normals_loop_custom_[from_vertices_]set()
-     * to keep current clnors instead of resetting them to default autocomputed ones,
+     * to keep current clnors instead of resetting them to default auto-computed ones,
      * when given new custom normal is zero-vec.
      * But this is not exactly trivial change, better to keep this optimization for later...
      */
@@ -545,7 +546,7 @@ static void wn_face_with_angle(WeightedNormalModifierData *wnmd, WeightedNormalD
   apply_weights_vertex_normal(wnmd, wn_data);
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   WeightedNormalModifierData *wnmd = (WeightedNormalModifierData *)md;
   Object *ob = ctx->object;
@@ -561,7 +562,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   if (!(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH))
 #endif
   {
-    modifier_setError((ModifierData *)wnmd, "Enable 'Auto Smooth' option in mesh settings");
+    BKE_modifier_set_error((ModifierData *)wnmd, "Enable 'Auto Smooth' in Object Data Properties");
     return mesh;
   }
 
@@ -707,13 +708,16 @@ ModifierTypeInfo modifierType_WeightedNormal = {
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

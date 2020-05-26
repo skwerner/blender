@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2019
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/image_save.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <errno.h>
@@ -60,13 +54,13 @@ void BKE_image_save_options_init(ImageSaveOptions *opts, Main *bmain, Scene *sce
 }
 
 static void image_save_post(ReportList *reports,
-                            Main *bmain,
                             Image *ima,
                             ImBuf *ibuf,
                             int ok,
                             ImageSaveOptions *opts,
                             int save_copy,
-                            const char *filepath)
+                            const char *filepath,
+                            bool *r_colorspace_changed)
 {
   if (!ok) {
     BKE_reportf(reports, RPT_ERROR, "Could not write image: %s", strerror(errno));
@@ -120,7 +114,7 @@ static void image_save_post(ReportList *reports,
   IMB_colormanagement_colorspace_from_ibuf_ftype(&ima->colorspace_settings, ibuf);
   if (!BKE_color_managed_colorspace_settings_equals(&old_colorspace_settings,
                                                     &ima->colorspace_settings)) {
-    BKE_image_signal(bmain, ima, NULL, IMA_SIGNAL_COLORMANAGE);
+    *r_colorspace_changed = true;
   }
 }
 
@@ -144,8 +138,11 @@ static void imbuf_save_post(ImBuf *ibuf, ImBuf *colormanaged_ibuf)
  * \note ``ima->name`` and ``ibuf->name`` should end up the same.
  * \note for multiview the first ``ibuf`` is important to get the settings.
  */
-bool BKE_image_save(
-    ReportList *reports, Main *bmain, Image *ima, ImageUser *iuser, ImageSaveOptions *opts)
+static bool image_save_single(ReportList *reports,
+                              Image *ima,
+                              ImageUser *iuser,
+                              ImageSaveOptions *opts,
+                              bool *r_colorspace_changed)
 {
   void *lock;
   ImBuf *ibuf = BKE_image_acquire_ibuf(ima, iuser, &lock);
@@ -229,7 +226,7 @@ bool BKE_image_save(
   if (imf->views_format == R_IMF_VIEWS_MULTIVIEW && is_exr_rr) {
     /* save render result */
     ok = RE_WriteRenderResult(reports, rr, opts->filepath, imf, NULL, layer);
-    image_save_post(reports, bmain, ima, ibuf, ok, opts, true, opts->filepath);
+    image_save_post(reports, ima, ibuf, ok, opts, true, opts->filepath, r_colorspace_changed);
     BKE_image_release_ibuf(ima, ibuf, lock);
   }
   /* regular mono pipeline */
@@ -243,8 +240,14 @@ bool BKE_image_save(
       ok = BKE_imbuf_write_as(colormanaged_ibuf, opts->filepath, imf, save_copy);
       imbuf_save_post(ibuf, colormanaged_ibuf);
     }
-    image_save_post(
-        reports, bmain, ima, ibuf, ok, opts, (is_exr_rr ? true : save_copy), opts->filepath);
+    image_save_post(reports,
+                    ima,
+                    ibuf,
+                    ok,
+                    opts,
+                    (is_exr_rr ? true : save_copy),
+                    opts->filepath,
+                    r_colorspace_changed);
     BKE_image_release_ibuf(ima, ibuf, lock);
   }
   /* individual multiview images */
@@ -266,7 +269,7 @@ bool BKE_image_save(
       if (is_exr_rr) {
         BKE_scene_multiview_view_filepath_get(&opts->scene->r, opts->filepath, view, filepath);
         ok_view = RE_WriteRenderResult(reports, rr, filepath, imf, view, layer);
-        image_save_post(reports, bmain, ima, ibuf, ok_view, opts, true, filepath);
+        image_save_post(reports, ima, ibuf, ok_view, opts, true, filepath, r_colorspace_changed);
       }
       else {
         /* copy iuser to get the correct ibuf for this view */
@@ -299,7 +302,7 @@ bool BKE_image_save(
             ibuf, save_as_render, true, &imf->view_settings, &imf->display_settings, imf);
         ok_view = BKE_imbuf_write_as(colormanaged_ibuf, filepath, &opts->im_format, save_copy);
         imbuf_save_post(ibuf, colormanaged_ibuf);
-        image_save_post(reports, bmain, ima, ibuf, ok_view, opts, true, filepath);
+        image_save_post(reports, ima, ibuf, ok_view, opts, true, filepath, r_colorspace_changed);
         BKE_image_release_ibuf(ima, ibuf, lock);
       }
       ok &= ok_view;
@@ -313,7 +316,7 @@ bool BKE_image_save(
   else if (opts->im_format.views_format == R_IMF_VIEWS_STEREO_3D) {
     if (imf->imtype == R_IMF_IMTYPE_MULTILAYER) {
       ok = RE_WriteRenderResult(reports, rr, opts->filepath, imf, NULL, layer);
-      image_save_post(reports, bmain, ima, ibuf, ok, opts, true, opts->filepath);
+      image_save_post(reports, ima, ibuf, ok, opts, true, opts->filepath, r_colorspace_changed);
       BKE_image_release_ibuf(ima, ibuf, lock);
     }
     else {
@@ -388,6 +391,64 @@ bool BKE_image_save(
 cleanup:
   if (rr) {
     BKE_image_release_renderresult(opts->scene, ima);
+  }
+
+  return ok;
+}
+
+bool BKE_image_save(
+    ReportList *reports, Main *bmain, Image *ima, ImageUser *iuser, ImageSaveOptions *opts)
+{
+  ImageUser save_iuser;
+  BKE_imageuser_default(&save_iuser);
+
+  bool colorspace_changed = false;
+
+  if (ima->source == IMA_SRC_TILED) {
+    /* Verify filepath for tiles images. */
+    if (BLI_path_sequence_decode(opts->filepath, NULL, NULL, NULL) != 1001) {
+      BKE_reportf(reports,
+                  RPT_ERROR,
+                  "When saving a tiled image, the path '%s' must contain the UDIM tag 1001",
+                  opts->filepath);
+      return false;
+    }
+
+    /* For saving a tiled image we need an iuser, so use a local one if there isn't already one. */
+    if (iuser == NULL) {
+      iuser = &save_iuser;
+    }
+  }
+
+  /* Save image - or, for tiled images, the first tile. */
+  bool ok = image_save_single(reports, ima, iuser, opts, &colorspace_changed);
+
+  if (ok && ima->source == IMA_SRC_TILED) {
+    char filepath[FILE_MAX];
+    BLI_strncpy(filepath, opts->filepath, sizeof(filepath));
+
+    char head[FILE_MAX], tail[FILE_MAX];
+    unsigned short numlen;
+    BLI_path_sequence_decode(filepath, head, tail, &numlen);
+
+    /* Save all other tiles. */
+    LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
+      /* Tile 1001 was already saved before the loop. */
+      if (tile->tile_number == 1001 || !ok) {
+        continue;
+      }
+
+      /* Build filepath of the tile. */
+      BLI_path_sequence_encode(opts->filepath, head, tail, numlen, tile->tile_number);
+
+      iuser->tile = tile->tile_number;
+      ok = ok && image_save_single(reports, ima, iuser, opts, &colorspace_changed);
+    }
+    BLI_strncpy(opts->filepath, filepath, sizeof(opts->filepath));
+  }
+
+  if (colorspace_changed) {
+    BKE_image_signal(bmain, ima, NULL, IMA_SIGNAL_COLORMANAGE);
   }
 
   return ok;

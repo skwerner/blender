@@ -25,8 +25,8 @@
 #ifndef __DNA_CONSTRAINT_TYPES_H__
 #define __DNA_CONSTRAINT_TYPES_H__
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
+#include "DNA_defs.h"
 #include "DNA_listBase.h"
 
 struct Action;
@@ -125,7 +125,7 @@ typedef enum eConstraintObType {
   /** string is vertex-group name */
   CONSTRAINT_OBTYPE_VERT = 3,
   /** string is vertex-group name - is not available until curves get vgroups */
-  CONSTRAINT_OBTYPE_CV = 4,
+  /* CONSTRAINT_OBTYPE_CV = 4, */ /* UNUSED */
 } eConstraintObType;
 
 /* Python Script Constraint */
@@ -336,6 +336,8 @@ typedef struct bActionConstraint {
   float min;
   float max;
   int flag;
+  char mix_mode;
+  char _pad[7];
   struct bAction *act;
   /** MAX_ID_NAME-2. */
   char subtarget[64];
@@ -495,7 +497,7 @@ typedef struct bPivotConstraint {
   float offset[3];
 
   /* Rotation-driven activation:
-   * This option provides easier one-stop setups for footrolls
+   * This option provides easier one-stop setups for foot-rolls.
    */
   /** Rotation axes to consider for this (#ePivotConstraint_Axis). */
   short rotAxis;
@@ -713,8 +715,10 @@ typedef enum eBConstraint_Flags {
 typedef enum eBConstraint_SpaceTypes {
   /** Default for all - worldspace. */
   CONSTRAINT_SPACE_WORLD = 0,
-  /** For objects (relative to parent/without parent influence),
-   * for bones (along normals of bone, without parent/restpositions). */
+  /**
+   * For objects (relative to parent/without parent influence),
+   * for bones (along normals of bone, without parent/rest-positions).
+   */
   CONSTRAINT_SPACE_LOCAL = 1,
   /** For posechannels - pose space. */
   CONSTRAINT_SPACE_POSE = 2,
@@ -724,13 +728,6 @@ typedef enum eBConstraint_SpaceTypes {
   CONSTRAINT_SPACE_INVALID = 4, /* do not exchange for anything! */
 } eBConstraint_SpaceTypes;
 
-/* bConstraintChannel.flag */
-// XXX deprecated... old AnimSys
-typedef enum eConstraintChannel_Flags {
-  CONSTRAINT_CHANNEL_SELECT = (1 << 0),
-  CONSTRAINT_CHANNEL_PROTECTED = (1 << 1),
-} eConstraintChannel_Flags;
-
 /* Common enum for constraints that support override. */
 typedef enum eConstraint_EulerOrder {
   /** Automatic euler mode. */
@@ -738,11 +735,11 @@ typedef enum eConstraint_EulerOrder {
 
   /** Explicit euler rotation modes - must sync with BLI_math_rotation.h defines. */
   CONSTRAINT_EULER_XYZ = 1,
-  CONSTRAINT_EULER_XZY,
-  CONSTRAINT_EULER_YXZ,
-  CONSTRAINT_EULER_YZX,
-  CONSTRAINT_EULER_ZXY,
-  CONSTRAINT_EULER_ZYX,
+  CONSTRAINT_EULER_XZY = 2,
+  CONSTRAINT_EULER_YXZ = 3,
+  CONSTRAINT_EULER_YZX = 4,
+  CONSTRAINT_EULER_ZXY = 5,
+  CONSTRAINT_EULER_ZYX = 6,
 } eConstraint_EulerOrder;
 
 /* -------------------------------------- */
@@ -755,7 +752,7 @@ typedef enum eCopyRotation_Flags {
   ROTLIKE_X_INVERT = (1 << 4),
   ROTLIKE_Y_INVERT = (1 << 5),
   ROTLIKE_Z_INVERT = (1 << 6),
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   ROTLIKE_OFFSET = (1 << 7),
 #endif
 } eCopyRotation_Flags;
@@ -765,13 +762,13 @@ typedef enum eCopyRotation_MixMode {
   /* Replace rotation channel values. */
   ROTLIKE_MIX_REPLACE = 0,
   /* Legacy Offset mode - don't use. */
-  ROTLIKE_MIX_OFFSET,
+  ROTLIKE_MIX_OFFSET = 1,
   /* Add Euler components together. */
-  ROTLIKE_MIX_ADD,
+  ROTLIKE_MIX_ADD = 2,
   /* Multiply the copied rotation on the left. */
-  ROTLIKE_MIX_BEFORE,
+  ROTLIKE_MIX_BEFORE = 3,
   /* Multiply the copied rotation on the right. */
-  ROTLIKE_MIX_AFTER,
+  ROTLIKE_MIX_AFTER = 4,
 } eCopyRotation_MixMode;
 
 /* bLocateLikeConstraint.flag */
@@ -802,9 +799,9 @@ typedef enum eCopyTransforms_MixMode {
   /* Replace rotation channel values. */
   TRANSLIKE_MIX_REPLACE = 0,
   /* Multiply the copied transformation on the left, with anti-shear scale handling. */
-  TRANSLIKE_MIX_BEFORE,
+  TRANSLIKE_MIX_BEFORE = 1,
   /* Multiply the copied transformation on the right, with anti-shear scale handling. */
-  TRANSLIKE_MIX_AFTER,
+  TRANSLIKE_MIX_AFTER = 2,
 } eCopyTransforms_MixMode;
 
 /* bTransformConstraint.to/from */
@@ -819,7 +816,7 @@ typedef enum eTransform_MixModeLoc {
   /* Add component values together (default). */
   TRANS_MIXLOC_ADD = 0,
   /* Replace component values. */
-  TRANS_MIXLOC_REPLACE,
+  TRANS_MIXLOC_REPLACE = 1,
 } eTransform_MixModeLoc;
 
 /* bTransformConstraint.mix_mode_rot */
@@ -827,11 +824,11 @@ typedef enum eTransform_MixModeRot {
   /* Add component values together (default). */
   TRANS_MIXROT_ADD = 0,
   /* Replace component values. */
-  TRANS_MIXROT_REPLACE,
+  TRANS_MIXROT_REPLACE = 1,
   /* Multiply the generated rotation on the left. */
-  TRANS_MIXROT_BEFORE,
+  TRANS_MIXROT_BEFORE = 2,
   /* Multiply the generated rotation on the right. */
-  TRANS_MIXROT_AFTER,
+  TRANS_MIXROT_AFTER = 3,
 } eTransform_MixModeRot;
 
 /* bTransformConstraint.mix_mode_scale */
@@ -839,7 +836,7 @@ typedef enum eTransform_MixModeScale {
   /* Replace component values (default). */
   TRANS_MIXSCALE_REPLACE = 0,
   /* Multiply component values together. */
-  TRANS_MIXSCALE_MULTIPLY,
+  TRANS_MIXSCALE_MULTIPLY = 1,
 } eTransform_MixModeScale;
 
 /* bSameVolumeConstraint.free_axis */
@@ -864,6 +861,16 @@ typedef enum eActionConstraint_Flags {
   /* Bones use "object" part of target action, instead of "same bone name" part */
   ACTCON_BONE_USE_OBJECT_ACTION = (1 << 0),
 } eActionConstraint_Flags;
+
+/* bActionConstraint.mix_mode */
+typedef enum eActionConstraint_MixMode {
+  /* Multiply the action transformation on the right. */
+  ACTCON_MIX_AFTER_FULL = 0,
+  /* Multiply the action transformation on the right, with anti-shear scale handling. */
+  ACTCON_MIX_AFTER = 1,
+  /* Multiply the action transformation on the left, with anti-shear scale handling. */
+  ACTCON_MIX_BEFORE = 2,
+} eActionConstraint_MixMode;
 
 /* Locked-Axis Values (Locked Track) */
 typedef enum eLockAxis_Modes {
@@ -930,7 +937,7 @@ typedef enum eStretchTo_VolMode {
 /* Stretch To Constraint -> plane mode */
 typedef enum eStretchTo_PlaneMode {
   PLANE_X = 0,
-  PLANE_Y = 1,
+  SWING_Y = 1,
   PLANE_Z = 2,
 } eStretchTo_PlaneMode;
 
@@ -976,7 +983,7 @@ typedef enum eSplineIK_Flags {
   CONSTRAINT_SPLINEIK_BOUND = (1 << 0),
   /* root of chain is not influenced by the constraint */
   CONSTRAINT_SPLINEIK_NO_ROOT = (1 << 1),
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   /* bones in the chain should not scale to fit the curve */
   CONSTRAINT_SPLINEIK_SCALE_LIMITED = (1 << 2),
 #endif
@@ -1035,7 +1042,7 @@ typedef enum eFloor_Flags {
 /* transform limiting constraints -> flag2 */
 typedef enum eTransformLimits_Flags2 {
   /* not used anymore - for older Limit Location constraints only */
-  LIMIT_NOPARENT = (1 << 0),
+  /* LIMIT_NOPARENT = (1 << 0), */ /* UNUSED */
   /* for all Limit constraints - allow to be used during transform? */
   LIMIT_TRANSFORM = (1 << 1),
 } eTransformLimits_Flags2;
@@ -1091,6 +1098,8 @@ typedef enum eChildOf_Flags {
   CHILDOF_SIZEY = (1 << 7),
   CHILDOF_SIZEZ = (1 << 8),
   CHILDOF_ALL = 511,
+  /* Temporary flag used by the Set Inverse operator. */
+  CHILDOF_SET_INVERSE = (1 << 9),
 } eChildOf_Flags;
 
 /* Pivot Constraint */
@@ -1142,6 +1151,8 @@ typedef enum eCameraSolver_Flags {
 /* ObjectSolver Constraint -> flag */
 typedef enum eObjectSolver_Flags {
   OBJECTSOLVER_ACTIVECLIP = (1 << 0),
+  /* Temporary flag used by the Set Inverse operator. */
+  OBJECTSOLVER_SET_INVERSE = (1 << 1),
 } eObjectSolver_Flags;
 
 /* ObjectSolver Constraint -> flag */

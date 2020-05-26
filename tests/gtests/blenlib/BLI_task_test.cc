@@ -5,17 +5,67 @@
 
 #include "atomic_ops.h"
 
+#include "MEM_guardedalloc.h"
+
 extern "C" {
 #include "BLI_utildefines.h"
 
 #include "BLI_listbase.h"
 #include "BLI_mempool.h"
 #include "BLI_task.h"
-
-#include "MEM_guardedalloc.h"
 };
 
 #define NUM_ITEMS 10000
+
+/* *** Parallel iterations over range of integer values. *** */
+
+static void task_range_iter_func(void *userdata, int index, const TaskParallelTLS *__restrict tls)
+{
+  int *data = (int *)userdata;
+  data[index] = index;
+  *((int *)tls->userdata_chunk) += index;
+  //  printf("%d, %d, %d\n", index, data[index], *((int *)tls->userdata_chunk));
+}
+
+static void task_range_iter_reduce_func(const void *__restrict UNUSED(userdata),
+                                        void *__restrict join_v,
+                                        void *__restrict userdata_chunk)
+{
+  int *join = (int *)join_v;
+  int *chunk = (int *)userdata_chunk;
+  *join += *chunk;
+  //  printf("%d, %d\n", data[NUM_ITEMS], *((int *)userdata_chunk));
+}
+
+TEST(task, RangeIter)
+{
+  int data[NUM_ITEMS] = {0};
+  int sum = 0;
+
+  BLI_threadapi_init();
+
+  TaskParallelSettings settings;
+  BLI_parallel_range_settings_defaults(&settings);
+  settings.min_iter_per_thread = 1;
+
+  settings.userdata_chunk = &sum;
+  settings.userdata_chunk_size = sizeof(sum);
+  settings.func_reduce = task_range_iter_reduce_func;
+
+  BLI_task_parallel_range(0, NUM_ITEMS, data, task_range_iter_func, &settings);
+
+  /* Those checks should ensure us all items of the listbase were processed once, and only once
+   * as expected. */
+
+  int expected_sum = 0;
+  for (int i = 0; i < NUM_ITEMS; i++) {
+    EXPECT_EQ(data[i], i);
+    expected_sum += i;
+  }
+  EXPECT_EQ(sum, expected_sum);
+
+  BLI_threadapi_exit();
+}
 
 /* *** Parallel iterations over mempool items. *** */
 
@@ -88,7 +138,10 @@ TEST(task, MempoolIter)
 
 /* *** Parallel iterations over double-linked list items. *** */
 
-static void task_listbase_iter_func(void *userdata, Link *item, int index)
+static void task_listbase_iter_func(void *userdata,
+                                    void *item,
+                                    int index,
+                                    const TaskParallelTLS *__restrict UNUSED(tls))
 {
   LinkData *data = (LinkData *)item;
   int *count = (int *)userdata;
@@ -112,7 +165,10 @@ TEST(task, ListBaseIter)
     num_items++;
   }
 
-  BLI_task_parallel_listbase(&list, &num_items, task_listbase_iter_func, true);
+  TaskParallelSettings settings;
+  BLI_parallel_range_settings_defaults(&settings);
+
+  BLI_task_parallel_listbase(&list, &num_items, task_listbase_iter_func, &settings);
 
   /* Those checks should ensure us all items of the listbase were processed once, and only once -
    * as expected. */

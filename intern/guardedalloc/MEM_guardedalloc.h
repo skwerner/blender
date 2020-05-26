@@ -52,8 +52,8 @@
 #include <stdio.h> /* needed for FILE* */
 
 /* needed for uintptr_t and attributes, exception, dont use BLI anywhere else in MEM_* */
-#include "../../source/blender/blenlib/BLI_sys_types.h"
 #include "../../source/blender/blenlib/BLI_compiler_attrs.h"
+#include "../../source/blender/blenlib/BLI_sys_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -145,14 +145,6 @@ extern void *(*MEM_mallocN_aligned)(size_t len,
                                     const char *str) /* ATTR_MALLOC */ ATTR_WARN_UNUSED_RESULT
     ATTR_ALLOC_SIZE(1) ATTR_NONNULL(3);
 
-/**
- * Same as callocN, clears memory and uses mmap (disk cached) if supported.
- * Can be free'd with MEM_freeN as usual.
- * */
-extern void *(*MEM_mapallocN)(size_t len,
-                              const char *str) /* ATTR_MALLOC */ ATTR_WARN_UNUSED_RESULT
-    ATTR_ALLOC_SIZE(1) ATTR_NONNULL(2);
-
 /** Print a list of the names and sizes of all allocated memory
  * blocks. as a python dict for easy investigation */
 extern void (*MEM_printmemlist_pydict)(void);
@@ -176,20 +168,11 @@ extern void (*MEM_set_error_callback)(void (*func)(const char *));
  * @retval true for correct memory, false for corrupted memory. */
 extern bool (*MEM_consistency_check)(void);
 
-/** Set thread locking functions for safe memory allocation from multiple
- * threads, pass NULL pointers to disable thread locking again. */
-extern void (*MEM_set_lock_callback)(void (*lock)(void), void (*unlock)(void));
-
 /** Attempt to enforce OSX (or other OS's) to have malloc and stack nonzero */
 extern void (*MEM_set_memory_debug)(void);
 
-/**
- * Memory usage stats
- * - MEM_get_memory_in_use is all memory
- * - MEM_get_mapped_memory_in_use is a subset of all memory */
+/** Memory usage stats. */
 extern size_t (*MEM_get_memory_in_use)(void);
-/** Get mapped memory usage. */
-extern size_t (*MEM_get_mapped_memory_in_use)(void);
 /** Get amount of memory blocks in use. */
 extern unsigned int (*MEM_get_memory_blocks_in_use)(void);
 
@@ -231,6 +214,10 @@ extern const char *(*MEM_name_ptr)(void *vmemh);
 void MEM_use_guarded_allocator(void);
 
 #ifdef __cplusplus
+}
+#endif /* __cplusplus */
+
+#ifdef __cplusplus
 /* alloc funcs for C++ only */
 #  define MEM_CXX_CLASS_ALLOC_FUNCS(_id) \
    public: \
@@ -253,6 +240,13 @@ void MEM_use_guarded_allocator(void);
         MEM_freeN(mem); \
     }
 
+/* Needed when type includes a namespace, then the namespace should not be
+ * specified after ~, so using a macro fails. */
+template<class T> inline void OBJECT_GUARDED_DESTRUCTOR(T *what)
+{
+  what->~T();
+}
+
 #  if defined __GNUC__
 #    define OBJECT_GUARDED_NEW(type, args...) new (MEM_mallocN(sizeof(type), __func__)) type(args)
 #  else
@@ -262,15 +256,20 @@ void MEM_use_guarded_allocator(void);
 #  define OBJECT_GUARDED_DELETE(what, type) \
     { \
       if (what) { \
-        ((type *)(what))->~type(); \
+        OBJECT_GUARDED_DESTRUCTOR((type *)what); \
         MEM_freeN(what); \
       } \
     } \
     (void)0
-#endif /* __cplusplus */
-
-#ifdef __cplusplus
-}
+#  define OBJECT_GUARDED_SAFE_DELETE(what, type) \
+    { \
+      if (what) { \
+        OBJECT_GUARDED_DESTRUCTOR((type *)what); \
+        MEM_freeN(what); \
+        what = NULL; \
+      } \
+    } \
+    (void)0
 #endif /* __cplusplus */
 
 #endif /* __MEM_GUARDEDALLOC_H__ */

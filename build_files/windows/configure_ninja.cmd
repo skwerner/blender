@@ -6,6 +6,13 @@ if %ERRORLEVEL% NEQ 0 (
 
 set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% -G "Ninja" %TESTS_CMAKE_ARGS% -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
 
+if "%BUILD_WITH_SCCACHE%"=="1" (
+	set BUILD_CMAKE_ARGS=%BUILD_CMAKE_ARGS% -DWITH_WINDOWS_SCCACHE=On
+	if NOT "%verbose%" == "" (
+		echo Enabling sccache
+	)
+)
+
 if "%WITH_CLANG%" == "1" (
 set LLVM_DIR=
 	for /F "usebackq skip=2 tokens=1-2*" %%A IN (`REG QUERY "HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\LLVM\LLVM" /ve 2^>nul`) DO set LLVM_DIR=%%C
@@ -80,7 +87,10 @@ if "%MUST_CONFIGURE%"=="1" (
 	)
 )
 
-echo call "%VCVARS%" %BUILD_ARCH% > %BUILD_DIR%\rebuild.cmd
+echo echo off > %BUILD_DIR%\rebuild.cmd
+echo if "%%VSCMD_VER%%" == "" ^( >> %BUILD_DIR%\rebuild.cmd
+echo   call "%VCVARS%" %BUILD_ARCH% >> %BUILD_DIR%\rebuild.cmd
+echo ^) >> %BUILD_DIR%\rebuild.cmd
 echo echo %%TIME%% ^> buildtime.txt >> %BUILD_DIR%\rebuild.cmd
 echo ninja install >> %BUILD_DIR%\rebuild.cmd 
 echo echo %%TIME%% ^>^> buildtime.txt >> %BUILD_DIR%\rebuild.cmd

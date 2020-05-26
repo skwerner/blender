@@ -29,6 +29,10 @@
 /* Thread sync primitives used directly.  */
 #include "BLI_threads.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct CCGEdge;
 struct CCGElem;
 struct CCGFace;
@@ -58,7 +62,7 @@ typedef enum {
 
 struct DerivedMesh *subsurf_make_derived_from_derived(struct DerivedMesh *dm,
                                                       struct SubsurfModifierData *smd,
-                                                      struct Scene *scene,
+                                                      const struct Scene *scene,
                                                       float (*vertCos)[3],
                                                       SubsurfFlags flags);
 
@@ -99,7 +103,7 @@ typedef struct CCGDerivedMesh {
 
   struct CCGSubSurf *ss;
   int freeSS;
-  int drawInteriorEdges, useSubsurfUv, useGpuBackend;
+  int drawInteriorEdges, useSubsurfUv;
 
   struct {
     int startVert;
@@ -152,11 +156,8 @@ typedef struct CCGDerivedMesh {
   ThreadRWMutex origindex_cache_rwlock;
 } CCGDerivedMesh;
 
-#ifdef WITH_OPENSUBDIV
-/* TODO(sergey): Not really ideal place, but we don't currently have better one. */
-void BKE_subsurf_osd_init(void);
-void BKE_subsurf_free_unused_buffers(void);
-void BKE_subsurf_osd_cleanup(void);
+#ifdef __cplusplus
+}
 #endif
 
 #endif

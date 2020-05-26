@@ -36,6 +36,10 @@ set(SRC_CUDA_KERNELS
 )
 
 set(SRC_OPENCL_KERNELS
+  kernels/opencl/kernel_adaptive_stopping.cl
+  kernels/opencl/kernel_adaptive_filter_x.cl
+  kernels/opencl/kernel_adaptive_filter_y.cl
+  kernels/opencl/kernel_adaptive_adjust_samples.cl
   kernels/opencl/kernel_bake.cl
   kernels/opencl/kernel_base.cl
   kernels/opencl/kernel_displace.cl
@@ -94,6 +98,7 @@ set(SRC_BVH_HEADERS
 
 set(SRC_HEADERS
   kernel_accumulate.h
+  kernel_adaptive_sampling.h
   kernel_bake.h
   kernel_camera.h
   kernel_color.h
@@ -129,6 +134,7 @@ set(SRC_HEADERS
   kernel_types.h
   kernel_volume.h
   kernel_work_stealing.h
+  kernel_write_passes.h
 )
 
 set(SRC_KERNELS_CPU_HEADERS
@@ -182,6 +188,7 @@ set(SRC_CLOSURE_HEADERS
 set(SRC_SVM_HEADERS
   svm/svm.h
   svm/svm_ao.h
+  svm/svm_aov.h
   svm/svm_attribute.h
   svm/svm_bevel.h
   svm/svm_blackbody.h
@@ -226,6 +233,7 @@ set(SRC_SVM_HEADERS
   svm/svm_fractal_noise.h
   svm/svm_types.h
   svm/svm_value.h
+  svm/svm_vector_rotate.h
   svm/svm_vector_transform.h
   svm/svm_voronoi.h
   svm/svm_voxel.h
@@ -321,6 +329,10 @@ set(SRC_UTIL_HEADERS
 )
 
 set(SRC_SPLIT_HEADERS
+  split/kernel_adaptive_adjust_samples.h
+  split/kernel_adaptive_filter_x.h
+  split/kernel_adaptive_filter_y.h
+  split/kernel_adaptive_stopping.h
   split/kernel_branched.h
   split/kernel_buffer_update.h
   split/kernel_data_init.h
@@ -363,11 +375,11 @@ if(WITH_CYCLES_CUDA_BINARIES)
   set(CUDA_VERSION "${CUDA_VERSION_MAJOR}${CUDA_VERSION_MINOR}")
 
   # warn for other versions
-  if(CUDA_VERSION MATCHES "101")
+  if((CUDA_VERSION MATCHES "101") OR (CUDA_VERSION MATCHES "102"))
   else()
     message(WARNING
       "CUDA version ${CUDA_VERSION_MAJOR}.${CUDA_VERSION_MINOR} detected, "
-      "build may succeed but only CUDA 10.1 is officially supported")
+      "build may succeed but only CUDA 10.1 and 10.2 are officially supported")
   endif()
 
   # build for each arch
@@ -440,7 +452,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
       endif()
 
       add_custom_command(
-        OUTPUT ${cuda_cubin}
+        OUTPUT ${cuda_file}
         COMMAND ${CUBIN_CC_ENV}
             "$<TARGET_FILE:cycles_cubin_cc>"
             -target ${CUDA_ARCH}
@@ -449,7 +461,6 @@ if(WITH_CYCLES_CUDA_BINARIES)
             -v
             -cuda-toolkit-dir "${CUDA_TOOLKIT_ROOT_DIR}"
         DEPENDS ${kernel_sources} cycles_cubin_cc)
-      set(cuda_file ${cuda_cubin})
     else()
       add_custom_command(
         OUTPUT ${cuda_file}
@@ -496,7 +507,7 @@ endif()
 
 # OptiX PTX modules
 
-if(WITH_CYCLES_DEVICE_OPTIX)
+if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
   foreach(input ${SRC_OPTIX_KERNELS})
     get_filename_component(input_we ${input} NAME_WE)
 
@@ -505,7 +516,6 @@ if(WITH_CYCLES_DEVICE_OPTIX)
       -I "${OPTIX_INCLUDE_DIR}"
       -I "${CMAKE_CURRENT_SOURCE_DIR}/.."
       -I "${CMAKE_CURRENT_SOURCE_DIR}/kernels/cuda"
-      -arch=sm_30
       --use_fast_math
       -o ${output})
 
@@ -513,25 +523,62 @@ if(WITH_CYCLES_DEVICE_OPTIX)
       set(cuda_flags ${cuda_flags}
         -D __KERNEL_DEBUG__)
     endif()
+    if(WITH_CYCLES_CUBIN_COMPILER)
 
-    add_custom_command(
-      OUTPUT
-        ${output}
-      DEPENDS
-        ${input}
-        ${SRC_HEADERS}
-        ${SRC_KERNELS_CUDA_HEADERS}
-        ${SRC_KERNELS_OPTIX_HEADERS}
-        ${SRC_BVH_HEADERS}
-        ${SRC_SVM_HEADERS}
-        ${SRC_GEOM_HEADERS}
-        ${SRC_CLOSURE_HEADERS}
-        ${SRC_UTIL_HEADERS}
-      COMMAND
-        ${CUDA_NVCC_EXECUTABLE} --ptx ${cuda_flags} ${input}
-      WORKING_DIRECTORY
-        "${CMAKE_CURRENT_SOURCE_DIR}")
+      # Needed to find libnvrtc-builtins.so. Can't do it from inside
+      # cycles_cubin_cc since the env variable is read before main()
+      if(APPLE)
+        set(CUBIN_CC_ENV ${CMAKE_COMMAND}
+          -E env DYLD_LIBRARY_PATH="${CUDA_TOOLKIT_ROOT_DIR}/lib")
+      elseif(UNIX)
+        set(CUBIN_CC_ENV ${CMAKE_COMMAND}
+          -E env LD_LIBRARY_PATH="${CUDA_TOOLKIT_ROOT_DIR}/lib64")
+      endif()
 
+      add_custom_command(
+        OUTPUT ${output}
+        DEPENDS
+          ${input}
+          ${SRC_HEADERS}
+          ${SRC_KERNELS_CUDA_HEADERS}
+          ${SRC_KERNELS_OPTIX_HEADERS}
+          ${SRC_BVH_HEADERS}
+          ${SRC_SVM_HEADERS}
+          ${SRC_GEOM_HEADERS}
+          ${SRC_CLOSURE_HEADERS}
+          ${SRC_UTIL_HEADERS}
+        COMMAND ${CUBIN_CC_ENV}
+            "$<TARGET_FILE:cycles_cubin_cc>"
+            -target 30
+            -ptx
+            -i ${CMAKE_CURRENT_SOURCE_DIR}/${input}
+            ${cuda_flags}
+            -v
+            -cuda-toolkit-dir "${CUDA_TOOLKIT_ROOT_DIR}"
+        DEPENDS ${kernel_sources} cycles_cubin_cc)
+    else()
+      add_custom_command(
+        OUTPUT
+          ${output}
+        DEPENDS
+          ${input}
+          ${SRC_HEADERS}
+          ${SRC_KERNELS_CUDA_HEADERS}
+          ${SRC_KERNELS_OPTIX_HEADERS}
+          ${SRC_BVH_HEADERS}
+          ${SRC_SVM_HEADERS}
+          ${SRC_GEOM_HEADERS}
+          ${SRC_CLOSURE_HEADERS}
+          ${SRC_UTIL_HEADERS}
+        COMMAND
+          ${CUDA_NVCC_EXECUTABLE}
+          --ptx
+          -arch=sm_30
+          ${cuda_flags}
+          ${input}
+        WORKING_DIRECTORY
+          "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
     list(APPEND optix_ptx ${output})
 
     delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${output}" ${CYCLES_INSTALL_PATH}/lib)
@@ -630,19 +677,19 @@ source_group("svm" FILES ${SRC_SVM_HEADERS})
 if(WITH_CYCLES_CUDA)
   add_dependencies(cycles_kernel cycles_kernel_cuda)
 endif()
-if(WITH_CYCLES_DEVICE_OPTIX)
+if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
   add_dependencies(cycles_kernel cycles_kernel_optix)
 endif()
 
 # OpenCL kernel
 
-#set(KERNEL_PREPROCESSED ${CMAKE_CURRENT_BINARY_DIR}/kernel_preprocessed.cl)
-#add_custom_command(
-#   OUTPUT ${KERNEL_PREPROCESSED}
-#   COMMAND gcc -x c++ -E ${CMAKE_CURRENT_SOURCE_DIR}/kernel.cl -I ${CMAKE_CURRENT_SOURCE_DIR}/../util/ -DCCL_NAMESPACE_BEGIN= -DCCL_NAMESPACE_END= -o ${KERNEL_PREPROCESSED}
-#   DEPENDS ${SRC_KERNEL} ${SRC_UTIL_HEADERS})
-#add_custom_target(cycles_kernel_preprocess ALL DEPENDS ${KERNEL_PREPROCESSED})
-#delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${KERNEL_PREPROCESSED}" ${CYCLES_INSTALL_PATH}/kernel)
+# set(KERNEL_PREPROCESSED ${CMAKE_CURRENT_BINARY_DIR}/kernel_preprocessed.cl)
+# add_custom_command(
+#    OUTPUT ${KERNEL_PREPROCESSED}
+#    COMMAND gcc -x c++ -E ${CMAKE_CURRENT_SOURCE_DIR}/kernel.cl -I ${CMAKE_CURRENT_SOURCE_DIR}/../util/ -DCCL_NAMESPACE_BEGIN= -DCCL_NAMESPACE_END= -o ${KERNEL_PREPROCESSED}
+#    DEPENDS ${SRC_KERNEL} ${SRC_UTIL_HEADERS})
+# add_custom_target(cycles_kernel_preprocess ALL DEPENDS ${KERNEL_PREPROCESSED})
+# delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${KERNEL_PREPROCESSED}" ${CYCLES_INSTALL_PATH}/kernel)
 
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_OPENCL_KERNELS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/opencl)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_CUDA_KERNELS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/cuda)

@@ -22,20 +22,26 @@
 #define DNA_DEPRECATED_ALLOW
 #include <string.h>
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
-#include "DNA_userdef_types.h"
+#ifdef WITH_INTERNATIONAL
+#  include "BLT_translation.h"
+#endif
+
+#include "DNA_anim_types.h"
 #include "DNA_curve_types.h"
-#include "DNA_windowmanager_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_space_types.h"
-#include "DNA_anim_types.h"
+#include "DNA_userdef_types.h"
+#include "DNA_windowmanager_types.h"
 
 #include "BKE_addon.h"
 #include "BKE_colorband.h"
-#include "BKE_main.h"
+#include "BKE_idprop.h"
 #include "BKE_keyconfig.h"
+#include "BKE_main.h"
 
 #include "BLO_readfile.h" /* Own include. */
 
@@ -155,10 +161,72 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     copy_v4_v4_uchar(btheme->space_nla.nla_track, btheme->space_nla.header);
   }
 
+  if (!USER_VERSION_ATLEAST(282, 5)) {
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.anim_preview_range);
+    FROM_DEFAULT_V4_UCHAR(space_text.line_numbers);
+    FROM_DEFAULT_V4_UCHAR(tui.widget_text_cursor);
+    FROM_DEFAULT_V4_UCHAR(space_view3d.face_back);
+    FROM_DEFAULT_V4_UCHAR(space_view3d.face_front);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 1)) {
+    FROM_DEFAULT_V4_UCHAR(space_view3d.bone_locked_weight);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 2)) {
+    FROM_DEFAULT_V4_UCHAR(space_info.info_property);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_property_text);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_operator);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_operator_text);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 5)) {
+    FROM_DEFAULT_V4_UCHAR(space_graph.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_action.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_nla.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_clip.time_marker_line);
+    FROM_DEFAULT_V4_UCHAR(space_graph.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_action.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_nla.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.time_marker_line_selected);
+    FROM_DEFAULT_V4_UCHAR(space_clip.time_marker_line_selected);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 6)) {
+    btheme->space_node.grid_levels = U_theme_default.space_node.grid_levels;
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 9)) {
+    FROM_DEFAULT_V4_UCHAR(space_info.info_warning);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 10)) {
+    FROM_DEFAULT_V4_UCHAR(tui.gizmo_view_align);
+
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.active_strip);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.selected_strip);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.color_strip);
+    FROM_DEFAULT_V4_UCHAR(space_sequencer.mask);
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 11)) {
+    FROM_DEFAULT_V4_UCHAR(tui.transparent_checker_primary);
+    FROM_DEFAULT_V4_UCHAR(tui.transparent_checker_secondary);
+    btheme->tui.transparent_checker_size = U_theme_default.tui.transparent_checker_size;
+  }
+
   /**
-   * Include next version bump.
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - #BLO_version_defaults_userpref_blend in this file.
+   * - "versioning_{BLENDER_VERSION}.c"
+   *
+   * \note Keep this message at the bottom of the function.
    */
   {
+    /* Keep this block, even when empty. */
   }
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -196,6 +264,18 @@ static void do_version_select_mouse(UserDef *userdef, wmKeyMapItem *kmi)
     default:
       break;
   }
+}
+
+static bool keymap_item_has_invalid_wm_context_data_path(wmKeyMapItem *kmi,
+                                                         void *UNUSED(user_data))
+{
+  if (STRPREFIX(kmi->idname, "WM_OT_context_") && kmi->properties) {
+    IDProperty *idprop = IDP_GetPropertyFromGroup(kmi->properties, "data_path");
+    if (idprop && (idprop->type == IDP_STRING) && STRPREFIX(idprop->data.pointer, "(null)")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /* patching UserDef struct and Themes */
@@ -458,7 +538,7 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     userdef->gpu_viewport_quality = 0.6f;
 
     /* Reset theme, old themes will not be compatible with minor version updates from now on. */
-    for (bTheme *btheme = userdef->themes.first; btheme; btheme = btheme->next) {
+    LISTBASE_FOREACH (bTheme *, btheme, &userdef->themes) {
       memcpy(btheme, &U_theme_default, sizeof(*btheme));
     }
 
@@ -476,8 +556,8 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
 
   if (!USER_VERSION_ATLEAST(280, 31)) {
     /* Remove select/action mouse from user defined keymaps. */
-    for (wmKeyMap *keymap = userdef->user_keymaps.first; keymap; keymap = keymap->next) {
-      for (wmKeyMapDiffItem *kmdi = keymap->diff_items.first; kmdi; kmdi = kmdi->next) {
+    LISTBASE_FOREACH (wmKeyMap *, keymap, &userdef->user_keymaps) {
+      LISTBASE_FOREACH (wmKeyMapDiffItem *, kmdi, &keymap->diff_items) {
         if (kmdi->remove_item) {
           do_version_select_mouse(userdef, kmdi->remove_item);
         }
@@ -486,7 +566,7 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
         }
       }
 
-      for (wmKeyMapItem *kmi = keymap->items.first; kmi; kmi = kmi->next) {
+      LISTBASE_FOREACH (wmKeyMapItem *, kmi, &keymap->items) {
         do_version_select_mouse(userdef, kmi);
       }
     }
@@ -637,18 +717,64 @@ void BLO_version_defaults_userpref_blend(Main *bmain, UserDef *userdef)
     }
   }
 
+  if (!USER_VERSION_ATLEAST(281, 16)) {
+    BKE_keyconfig_pref_filter_items(userdef,
+                                    &((struct wmKeyConfigFilterItemParams){
+                                        .check_item = true,
+                                        .check_diff_item_add = true,
+                                    }),
+                                    keymap_item_has_invalid_wm_context_data_path,
+                                    NULL);
+  }
+
+  if (!USER_VERSION_ATLEAST(282, 1)) {
+    userdef->file_space_data.filter_id = U_default.file_space_data.filter_id;
+  }
+
+  if (!USER_VERSION_ATLEAST(282, 4)) {
+    if (userdef->view_rotate_sensitivity_turntable == 0.0f) {
+      userdef->view_rotate_sensitivity_turntable = DEG2RADF(0.4f);
+      userdef->view_rotate_sensitivity_trackball = 1.0f;
+    }
+    if (userdef->scrollback == 0) {
+      userdef->scrollback = U_default.scrollback;
+    }
+
+    /* Enable Overlay Engine Smooth Wire by default */
+    userdef->gpu_flag |= USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE;
+  }
+
+  if (!USER_VERSION_ATLEAST(283, 13)) {
+    /* If Translations is off then language should default to English. */
+    if ((userdef->transopts & USER_DOTRANSLATE_DEPRECATED) == 0) {
+      userdef->language = ULANGUAGE_ENGLISH;
+    }
+    /* Clear this deprecated flag. */
+    userdef->transopts &= ~USER_DOTRANSLATE_DEPRECATED;
+  }
+
   /**
-   * Include next version bump.
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - #do_versions_theme in this file.
+   * - "versioning_{BLENDER_VERSION}.c"
+   *
+   * \note Keep this message at the bottom of the function.
    */
   {
-    /* pass */
+    /* Keep this block, even when empty. */
+
+    if (userdef->collection_instance_empty_size == 0) {
+      userdef->collection_instance_empty_size = 1.0f;
+    }
   }
 
   if (userdef->pixelsize == 0.0f) {
     userdef->pixelsize = 1.0f;
   }
 
-  for (bTheme *btheme = userdef->themes.first; btheme; btheme = btheme->next) {
+  LISTBASE_FOREACH (bTheme *, btheme, &userdef->themes) {
     do_versions_theme(userdef, btheme);
   }
 #undef USER_VERSION_ATLEAST

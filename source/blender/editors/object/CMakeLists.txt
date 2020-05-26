@@ -17,6 +17,7 @@
 
 set(INC
   ../include
+  ../../blenfont
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
@@ -33,6 +34,7 @@ set(INC
   ../../shader_fx
   ../../render/extern/include
   ../../windowmanager
+  ../../../../intern/clog
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
 )
@@ -65,6 +67,7 @@ set(SRC
   object_transform.c
   object_utils.c
   object_vgroup.c
+  object_volume.c
   object_warp.c
 
   object_intern.h
@@ -73,7 +76,9 @@ set(SRC
 set(LIB
   bf_blenkernel
   bf_blenlib
+  bf_editor_mesh
   bf_render
+  bf_windowmanager
 )
 
 add_definitions(${GL_DEFINITIONS})
@@ -84,6 +89,10 @@ endif()
 
 if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
+endif()
+
+if(WITH_NEW_OBJECT_TYPES)
+  add_definitions(-DWITH_NEW_OBJECT_TYPES)
 endif()
 
 blender_add_lib(bf_editor_object "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

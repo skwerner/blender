@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -32,8 +32,8 @@
 
 #include "BKE_deform.h"
 #include "BKE_editmesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
 #include "BKE_scene.h"
 #include "BKE_texture.h"
@@ -98,17 +98,28 @@ static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
   WaveModifierData *wmd = (WaveModifierData *)md;
+  bool need_transform_relation = false;
+
   if (wmd->objectcenter != NULL) {
     DEG_add_object_relation(ctx->node, wmd->objectcenter, DEG_OB_COMP_TRANSFORM, "Wave Modifier");
+    need_transform_relation = true;
   }
-  if (wmd->map_object != NULL) {
-    DEG_add_object_relation(ctx->node, wmd->map_object, DEG_OB_COMP_TRANSFORM, "Wave Modifier");
-  }
-  if (wmd->objectcenter != NULL || wmd->map_object != NULL) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "Wave Modifier");
-  }
+
   if (wmd->texture != NULL) {
     DEG_add_generic_id_relation(ctx->node, &wmd->texture->id, "Wave Modifier");
+
+    if ((wmd->texmapping == MOD_DISP_MAP_OBJECT) && wmd->map_object != NULL) {
+      MOD_depsgraph_update_object_bone_relation(
+          ctx->node, wmd->map_object, wmd->map_bone, "Wave Modifier");
+      need_transform_relation = true;
+    }
+    else if (wmd->texmapping == MOD_DISP_MAP_GLOBAL) {
+      need_transform_relation = true;
+    }
+  }
+
+  if (need_transform_relation) {
+    DEG_add_modifier_to_transform_relation(ctx->node, "Wave Modifier");
   }
 }
 
@@ -154,6 +165,7 @@ static void waveModifier_do(WaveModifierData *md,
   const int wmd_axis = wmd->flag & (MOD_WAVE_X | MOD_WAVE_Y);
   const float falloff = wmd->falloff;
   float falloff_fac = 1.0f; /* when falloff == 0.0f this stays at 1.0f */
+  const bool invert_group = (wmd->flag & MOD_WAVE_INVERT_VGROUP) != 0;
 
   if ((wmd->flag & MOD_WAVE_NORM) && (mesh != NULL)) {
     mvert = mesh->mvert;
@@ -213,7 +225,8 @@ static void waveModifier_do(WaveModifierData *md,
 
       /* get weights */
       if (dvert) {
-        def_weight = defvert_find_weight(&dvert[i], defgrp_index);
+        def_weight = invert_group ? 1.0f - BKE_defvert_find_weight(&dvert[i], defgrp_index) :
+                                    BKE_defvert_find_weight(&dvert[i], defgrp_index);
 
         /* if this vert isn't in the vgroup, don't deform it */
         if (def_weight == 0.0f) {
@@ -340,6 +353,11 @@ static void deformVertsEM(ModifierData *md,
     mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
   }
 
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
+
   waveModifier_do(wmd, ctx, ctx->object, mesh_src, vertexCos, numVerts);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
@@ -352,16 +370,19 @@ ModifierTypeInfo modifierType_Wave = {
     /* structName */ "WaveModifierData",
     /* structSize */ sizeof(WaveModifierData),
     /* type */ eModifierTypeType_OnlyDeform,
-    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsLattice |
+    /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

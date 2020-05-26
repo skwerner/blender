@@ -20,17 +20,17 @@
  * \ingroup edanimation
  */
 
+#include <float.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <float.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_lasso_2d.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_object_types.h"
@@ -79,7 +79,7 @@ short ANIM_fcurve_keyframes_loop(KeyframeEditData *ked,
 {
   BezTriple *bezt;
   short ok = 0;
-  unsigned int i;
+  uint i;
 
   /* sanity check */
   if (ELEM(NULL, fcu, fcu->bezt)) {
@@ -456,6 +456,24 @@ short ANIM_animchanneldata_keyframes_loop(KeyframeEditData *ked,
   return 0;
 }
 
+void ANIM_animdata_keyframe_callback(bAnimContext *ac,
+                                     eAnimFilter_Flags filter,
+                                     KeyframeEditFunc callback_fn)
+{
+  ListBase anim_data = {NULL, NULL};
+  bAnimListElem *ale;
+
+  ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
+
+  for (ale = anim_data.first; ale; ale = ale->next) {
+    ANIM_fcurve_keyframes_loop(NULL, ale->key_data, NULL, callback_fn, calchandles_fcurve);
+    ale->update |= ANIM_UPDATE_DEFAULT;
+  }
+
+  ANIM_animdata_update(ac, &anim_data);
+  ANIM_animdata_freelist(&anim_data);
+}
+
 /* ************************************************************************** */
 /* Keyframe Integrity Tools */
 
@@ -501,10 +519,16 @@ void ANIM_editkeyframes_refresh(bAnimContext *ac)
       ok |= KEYFRAME_OK_KEY; \
 \
     if (ked && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES)) { \
-      if (check(0)) \
-        ok |= KEYFRAME_OK_H1; \
-      if (check(2)) \
-        ok |= KEYFRAME_OK_H2; \
+      /* Only act on visible items, so check handle visibility state. */ \
+      const bool handles_visible = ((ked->iterflags & KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE) ? \
+                                        (BEZT_ISSEL_ANY(bezt)) : \
+                                        true); \
+      if (handles_visible) { \
+        if (check(0)) \
+          ok |= KEYFRAME_OK_H1; \
+        if (check(2)) \
+          ok |= KEYFRAME_OK_H2; \
+      } \
     } \
   } \
   (void)0
@@ -609,7 +633,7 @@ bool keyframe_region_lasso_test(const KeyframeEdit_LassoData *data_lasso, const 
     BLI_rctf_transform_pt_v(data_lasso->rectf_view, data_lasso->rectf_scaled, xy_view, xy);
 
     if (BLI_lasso_is_point_inside(
-            data_lasso->mcords, data_lasso->mcords_tot, xy_view[0], xy_view[1], INT_MAX)) {
+            data_lasso->mcoords, data_lasso->mcoords_len, xy_view[0], xy_view[1], INT_MAX)) {
       return true;
     }
   }
@@ -1054,7 +1078,11 @@ KeyframeEditFunc ANIM_editkeyframes_mirror(short type)
 /* Sets the selected bezier handles to type 'auto' */
 static short set_bezier_auto(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if ((bezt->f1 & SELECT) || (bezt->f3 & SELECT)) {
+  /* If the key is selected, always apply to both handles. */
+  if (bezt->f2 & SELECT) {
+    bezt->h1 = bezt->h2 = HD_AUTO;
+  }
+  else {
     if (bezt->f1 & SELECT) {
       bezt->h1 = HD_AUTO;
     }
@@ -1064,6 +1092,7 @@ static short set_bezier_auto(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 
     ENSURE_HANDLES_MATCH(bezt);
   }
+
   return 0;
 }
 
@@ -1072,7 +1101,11 @@ static short set_bezier_auto(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
  */
 static short set_bezier_auto_clamped(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if ((bezt->f1 & SELECT) || (bezt->f3 & SELECT)) {
+  /* If the key is selected, always apply to both handles. */
+  if (bezt->f2 & SELECT) {
+    bezt->h1 = bezt->h2 = HD_AUTO_ANIM;
+  }
+  else {
     if (bezt->f1 & SELECT) {
       bezt->h1 = HD_AUTO_ANIM;
     }
@@ -1082,18 +1115,26 @@ static short set_bezier_auto_clamped(KeyframeEditData *UNUSED(ked), BezTriple *b
 
     ENSURE_HANDLES_MATCH(bezt);
   }
+
   return 0;
 }
 
 /* Sets the selected bezier handles to type 'vector'  */
 static short set_bezier_vector(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f1 & SELECT) {
-    bezt->h1 = HD_VECT;
+  /* If the key is selected, always apply to both handles. */
+  if (bezt->f2 & SELECT) {
+    bezt->h1 = bezt->h2 = HD_VECT;
   }
-  if (bezt->f3 & SELECT) {
-    bezt->h2 = HD_VECT;
+  else {
+    if (bezt->f1 & SELECT) {
+      bezt->h1 = HD_VECT;
+    }
+    if (bezt->f3 & SELECT) {
+      bezt->h2 = HD_VECT;
+    }
   }
+
   return 0;
 }
 
@@ -1114,24 +1155,38 @@ static short bezier_isfree(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 /* Sets selected bezier handles to type 'align' */
 static short set_bezier_align(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f1 & SELECT) {
-    bezt->h1 = HD_ALIGN;
+  /* If the key is selected, always apply to both handles. */
+  if (bezt->f2 & SELECT) {
+    bezt->h1 = bezt->h2 = HD_ALIGN;
   }
-  if (bezt->f3 & SELECT) {
-    bezt->h2 = HD_ALIGN;
+  else {
+    if (bezt->f1 & SELECT) {
+      bezt->h1 = HD_ALIGN;
+    }
+    if (bezt->f3 & SELECT) {
+      bezt->h2 = HD_ALIGN;
+    }
   }
+
   return 0;
 }
 
 /* Sets selected bezier handles to type 'free'  */
 static short set_bezier_free(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f1 & SELECT) {
-    bezt->h1 = HD_FREE;
+  /* If the key is selected, always apply to both handles. */
+  if (bezt->f2 & SELECT) {
+    bezt->h1 = bezt->h2 = HD_FREE;
   }
-  if (bezt->f3 & SELECT) {
-    bezt->h2 = HD_FREE;
+  else {
+    if (bezt->f1 & SELECT) {
+      bezt->h1 = HD_FREE;
+    }
+    if (bezt->f3 & SELECT) {
+      bezt->h2 = HD_FREE;
+    }
   }
+
   return 0;
 }
 
@@ -1422,8 +1477,13 @@ KeyframeEditFunc ANIM_editkeyframes_easing(short mode)
 
 static short select_bezier_add(KeyframeEditData *ked, BezTriple *bezt)
 {
+  /* Only act on visible items, so check handle visibility state. */
+  const bool handles_visible = ked && ((ked->iterflags & KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE) ?
+                                           (BEZT_ISSEL_ANY(bezt)) :
+                                           true);
+
   /* if we've got info on what to select, use it, otherwise select all */
-  if ((ked) && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES)) {
+  if ((ked) && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES) && handles_visible) {
     if (ked->curflags & KEYFRAME_OK_KEY) {
       bezt->f2 |= SELECT;
     }
@@ -1443,8 +1503,13 @@ static short select_bezier_add(KeyframeEditData *ked, BezTriple *bezt)
 
 static short select_bezier_subtract(KeyframeEditData *ked, BezTriple *bezt)
 {
+  /* Only act on visible items, so check handle visibility state. */
+  const bool handles_visible = ked && ((ked->iterflags & KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE) ?
+                                           (BEZT_ISSEL_ANY(bezt)) :
+                                           true);
+
   /* if we've got info on what to deselect, use it, otherwise deselect all */
-  if ((ked) && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES)) {
+  if ((ked) && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES) && handles_visible) {
     if (ked->curflags & KEYFRAME_OK_KEY) {
       bezt->f2 &= ~SELECT;
     }

@@ -1,19 +1,19 @@
+#include "BLI_type_construct_mock.hh"
+#include "BLI_vector.hh"
 #include "testing/testing.h"
-#include "BLI_vector.h"
 #include <forward_list>
 
 using BLI::Vector;
-using IntVector = Vector<int>;
 
 TEST(vector, DefaultConstructor)
 {
-  IntVector vec;
+  Vector<int> vec;
   EXPECT_EQ(vec.size(), 0);
 }
 
 TEST(vector, SizeConstructor)
 {
-  IntVector vec(3);
+  Vector<int> vec(3);
   EXPECT_EQ(vec.size(), 3);
   EXPECT_EQ(vec[0], 0);
   EXPECT_EQ(vec[1], 0);
@@ -22,7 +22,7 @@ TEST(vector, SizeConstructor)
 
 TEST(vector, SizeValueConstructor)
 {
-  IntVector vec(4, 10);
+  Vector<int> vec(4, 10);
   EXPECT_EQ(vec.size(), 4);
   EXPECT_EQ(vec[0], 10);
   EXPECT_EQ(vec[1], 10);
@@ -32,7 +32,7 @@ TEST(vector, SizeValueConstructor)
 
 TEST(vector, InitializerListConstructor)
 {
-  IntVector vec = {1, 3, 4, 6};
+  Vector<int> vec = {1, 3, 4, 6};
   EXPECT_EQ(vec.size(), 4);
   EXPECT_EQ(vec[0], 1);
   EXPECT_EQ(vec[1], 3);
@@ -45,7 +45,7 @@ struct TestListValue {
   int value;
 };
 
-TEST(vector, IntrusiveListBaseConstructor)
+TEST(vector, ListBaseConstructor)
 {
   TestListValue *value1 = new TestListValue{0, 0, 4};
   TestListValue *value2 = new TestListValue{0, 0, 5};
@@ -55,7 +55,7 @@ TEST(vector, IntrusiveListBaseConstructor)
   BLI_addtail(&list, value1);
   BLI_addtail(&list, value2);
   BLI_addtail(&list, value3);
-  Vector<TestListValue *> vec(list, true);
+  Vector<TestListValue *> vec(list);
 
   EXPECT_EQ(vec.size(), 3);
   EXPECT_EQ(vec[0]->value, 4);
@@ -74,7 +74,7 @@ TEST(vector, ContainerConstructor)
   list.push_front(1);
   list.push_front(5);
 
-  IntVector vec = IntVector::FromContainer(list);
+  Vector<int> vec = Vector<int>::FromContainer(list);
   EXPECT_EQ(vec.size(), 3);
   EXPECT_EQ(vec[0], 5);
   EXPECT_EQ(vec[1], 1);
@@ -83,8 +83,8 @@ TEST(vector, ContainerConstructor)
 
 TEST(vector, CopyConstructor)
 {
-  IntVector vec1 = {1, 2, 3};
-  IntVector vec2(vec1);
+  Vector<int> vec1 = {1, 2, 3};
+  Vector<int> vec2(vec1);
   EXPECT_EQ(vec2.size(), 3);
   EXPECT_EQ(vec2[0], 1);
   EXPECT_EQ(vec2[1], 2);
@@ -133,8 +133,8 @@ TEST(vector, CopyConstructor4)
 
 TEST(vector, MoveConstructor)
 {
-  IntVector vec1 = {1, 2, 3, 4};
-  IntVector vec2(std::move(vec1));
+  Vector<int> vec1 = {1, 2, 3, 4};
+  Vector<int> vec2(std::move(vec1));
 
   EXPECT_EQ(vec1.size(), 0);
   EXPECT_EQ(vec2.size(), 4);
@@ -179,20 +179,20 @@ TEST(vector, MoveConstructor4)
 
 TEST(vector, MoveAssignment)
 {
-  IntVector vec = {1, 2};
+  Vector<int> vec = {1, 2};
   EXPECT_EQ(vec.size(), 2);
   EXPECT_EQ(vec[0], 1);
   EXPECT_EQ(vec[1], 2);
 
-  vec = IntVector({5});
+  vec = Vector<int>({5});
   EXPECT_EQ(vec.size(), 1);
   EXPECT_EQ(vec[0], 5);
 }
 
 TEST(vector, CopyAssignment)
 {
-  IntVector vec1 = {1, 2, 3};
-  IntVector vec2 = {4, 5};
+  Vector<int> vec1 = {1, 2, 3};
+  Vector<int> vec2 = {4, 5};
   EXPECT_EQ(vec1.size(), 3);
   EXPECT_EQ(vec2.size(), 2);
 
@@ -206,7 +206,7 @@ TEST(vector, CopyAssignment)
 
 TEST(vector, Append)
 {
-  IntVector vec;
+  Vector<int> vec;
   vec.append(3);
   vec.append(6);
   vec.append(7);
@@ -216,9 +216,41 @@ TEST(vector, Append)
   EXPECT_EQ(vec[2], 7);
 }
 
+TEST(vector, AppendAndGetIndex)
+{
+  Vector<int> vec;
+  EXPECT_EQ(vec.append_and_get_index(10), 0);
+  EXPECT_EQ(vec.append_and_get_index(10), 1);
+  EXPECT_EQ(vec.append_and_get_index(10), 2);
+  vec.append(10);
+  EXPECT_EQ(vec.append_and_get_index(10), 4);
+}
+
+TEST(vector, AppendNonDuplicates)
+{
+  Vector<int> vec;
+  vec.append_non_duplicates(4);
+  EXPECT_EQ(vec.size(), 1);
+  vec.append_non_duplicates(5);
+  EXPECT_EQ(vec.size(), 2);
+  vec.append_non_duplicates(4);
+  EXPECT_EQ(vec.size(), 2);
+}
+
+TEST(vector, ExtendNonDuplicates)
+{
+  Vector<int> vec;
+  vec.extend_non_duplicates({1, 2});
+  EXPECT_EQ(vec.size(), 2);
+  vec.extend_non_duplicates({3, 4});
+  EXPECT_EQ(vec.size(), 4);
+  vec.extend_non_duplicates({0, 1, 2, 3});
+  EXPECT_EQ(vec.size(), 5);
+}
+
 TEST(vector, Fill)
 {
-  IntVector vec(5);
+  Vector<int> vec(5);
   vec.fill(3);
   EXPECT_EQ(vec.size(), 5);
   EXPECT_EQ(vec[0], 3);
@@ -230,7 +262,7 @@ TEST(vector, Fill)
 
 TEST(vector, FillIndices)
 {
-  IntVector vec(5, 0);
+  Vector<int> vec(5, 0);
   vec.fill_indices({1, 2}, 4);
   EXPECT_EQ(vec[0], 0);
   EXPECT_EQ(vec[1], 4);
@@ -241,7 +273,7 @@ TEST(vector, FillIndices)
 
 TEST(vector, Iterator)
 {
-  IntVector vec({1, 4, 9, 16});
+  Vector<int> vec({1, 4, 9, 16});
   int i = 1;
   for (int value : vec) {
     EXPECT_EQ(value, i * i);
@@ -261,14 +293,14 @@ TEST(vector, BecomeLarge)
   }
 }
 
-IntVector return_by_value_helper()
+static Vector<int> return_by_value_helper()
 {
-  return IntVector({3, 5, 1});
+  return Vector<int>({3, 5, 1});
 }
 
 TEST(vector, ReturnByValue)
 {
-  IntVector vec = return_by_value_helper();
+  Vector<int> vec = return_by_value_helper();
   EXPECT_EQ(vec.size(), 3);
   EXPECT_EQ(vec[0], 3);
   EXPECT_EQ(vec[1], 5);
@@ -277,10 +309,10 @@ TEST(vector, ReturnByValue)
 
 TEST(vector, VectorOfVectors_Append)
 {
-  Vector<IntVector> vec;
+  Vector<Vector<int>> vec;
   EXPECT_EQ(vec.size(), 0);
 
-  IntVector v({1, 2});
+  Vector<int> v({1, 2});
   vec.append(v);
   vec.append({7, 8});
   EXPECT_EQ(vec.size(), 2);
@@ -292,7 +324,7 @@ TEST(vector, VectorOfVectors_Append)
 
 TEST(vector, VectorOfVectors_Fill)
 {
-  Vector<IntVector> vec(3);
+  Vector<Vector<int>> vec(3);
   vec.fill({4, 5});
 
   EXPECT_EQ(vec[0][0], 4);
@@ -305,7 +337,7 @@ TEST(vector, VectorOfVectors_Fill)
 
 TEST(vector, RemoveLast)
 {
-  IntVector vec = {5, 6};
+  Vector<int> vec = {5, 6};
   EXPECT_EQ(vec.size(), 2);
   vec.remove_last();
   EXPECT_EQ(vec.size(), 1);
@@ -313,19 +345,19 @@ TEST(vector, RemoveLast)
   EXPECT_EQ(vec.size(), 0);
 }
 
-TEST(vector, Empty)
+TEST(vector, IsEmpty)
 {
-  IntVector vec;
-  EXPECT_TRUE(vec.empty());
+  Vector<int> vec;
+  EXPECT_TRUE(vec.is_empty());
   vec.append(1);
-  EXPECT_FALSE(vec.empty());
+  EXPECT_FALSE(vec.is_empty());
   vec.remove_last();
-  EXPECT_TRUE(vec.empty());
+  EXPECT_TRUE(vec.is_empty());
 }
 
 TEST(vector, RemoveReorder)
 {
-  IntVector vec = {4, 5, 6, 7};
+  Vector<int> vec = {4, 5, 6, 7};
   vec.remove_and_reorder(1);
   EXPECT_EQ(vec[0], 4);
   EXPECT_EQ(vec[1], 7);
@@ -336,29 +368,45 @@ TEST(vector, RemoveReorder)
   vec.remove_and_reorder(0);
   EXPECT_EQ(vec[0], 7);
   vec.remove_and_reorder(0);
-  EXPECT_TRUE(vec.empty());
+  EXPECT_TRUE(vec.is_empty());
+}
+
+TEST(vector, RemoveFirstOccurrenceAndReorder)
+{
+  Vector<int> vec = {4, 5, 6, 7};
+  vec.remove_first_occurrence_and_reorder(5);
+  EXPECT_EQ(vec[0], 4);
+  EXPECT_EQ(vec[1], 7);
+  EXPECT_EQ(vec[2], 6);
+  vec.remove_first_occurrence_and_reorder(6);
+  EXPECT_EQ(vec[0], 4);
+  EXPECT_EQ(vec[1], 7);
+  vec.remove_first_occurrence_and_reorder(4);
+  EXPECT_EQ(vec[0], 7);
+  vec.remove_first_occurrence_and_reorder(7);
+  EXPECT_EQ(vec.size(), 0);
 }
 
 TEST(vector, AllEqual_False)
 {
-  IntVector a = {1, 2, 3};
-  IntVector b = {1, 2, 4};
-  bool result = IntVector::all_equal(a, b);
+  Vector<int> a = {1, 2, 3};
+  Vector<int> b = {1, 2, 4};
+  bool result = Vector<int>::all_equal(a, b);
   EXPECT_FALSE(result);
 }
 
 TEST(vector, AllEqual_True)
 {
-  IntVector a = {4, 5, 6};
-  IntVector b = {4, 5, 6};
-  bool result = IntVector::all_equal(a, b);
+  Vector<int> a = {4, 5, 6};
+  Vector<int> b = {4, 5, 6};
+  bool result = Vector<int>::all_equal(a, b);
   EXPECT_TRUE(result);
 }
 
 TEST(vector, ExtendSmallVector)
 {
-  IntVector a = {2, 3, 4};
-  IntVector b = {11, 12};
+  Vector<int> a = {2, 3, 4};
+  Vector<int> b = {11, 12};
   b.extend(a);
   EXPECT_EQ(b.size(), 5);
   EXPECT_EQ(b[0], 11);
@@ -372,7 +420,7 @@ TEST(vector, ExtendArray)
 {
   int array[] = {3, 4, 5, 6};
 
-  IntVector a;
+  Vector<int> a;
   a.extend(array, 2);
 
   EXPECT_EQ(a.size(), 2);
@@ -382,13 +430,13 @@ TEST(vector, ExtendArray)
 
 TEST(vector, Last)
 {
-  IntVector a{3, 5, 7};
+  Vector<int> a{3, 5, 7};
   EXPECT_EQ(a.last(), 7);
 }
 
 TEST(vector, AppendNTimes)
 {
-  IntVector a;
+  Vector<int> a;
   a.append_n_times(5, 3);
   a.append_n_times(2, 2);
   EXPECT_EQ(a.size(), 5);
@@ -411,4 +459,69 @@ TEST(vector, UniquePtrValue)
   vec.remove_and_reorder(0);
 
   UNUSED_VARS(a, b);
+}
+
+TEST(vector, SizeConstructorCallsDefaultConstructor)
+{
+  Vector<TypeConstructMock> vec(3);
+  EXPECT_TRUE(vec[0].default_constructed);
+  EXPECT_TRUE(vec[1].default_constructed);
+  EXPECT_TRUE(vec[2].default_constructed);
+}
+
+TEST(vector, SizeValueConstructorCallsCopyConstructor)
+{
+  Vector<TypeConstructMock> vec(3, TypeConstructMock());
+  EXPECT_TRUE(vec[0].copy_constructed);
+  EXPECT_TRUE(vec[1].copy_constructed);
+  EXPECT_TRUE(vec[2].copy_constructed);
+}
+
+TEST(vector, AppendCallsCopyConstructor)
+{
+  Vector<TypeConstructMock> vec;
+  TypeConstructMock value;
+  vec.append(value);
+  EXPECT_TRUE(vec[0].copy_constructed);
+}
+
+TEST(vector, AppendCallsMoveConstructor)
+{
+  Vector<TypeConstructMock> vec;
+  vec.append(TypeConstructMock());
+  EXPECT_TRUE(vec[0].move_constructed);
+}
+
+TEST(vector, SmallVectorCopyCallsCopyConstructor)
+{
+  Vector<TypeConstructMock, 2> src(2);
+  Vector<TypeConstructMock, 2> dst(src);
+  EXPECT_TRUE(dst[0].copy_constructed);
+  EXPECT_TRUE(dst[1].copy_constructed);
+}
+
+TEST(vector, LargeVectorCopyCallsCopyConstructor)
+{
+  Vector<TypeConstructMock, 2> src(5);
+  Vector<TypeConstructMock, 2> dst(src);
+  EXPECT_TRUE(dst[0].copy_constructed);
+  EXPECT_TRUE(dst[1].copy_constructed);
+}
+
+TEST(vector, SmallVectorMoveCallsMoveConstructor)
+{
+  Vector<TypeConstructMock, 2> src(2);
+  Vector<TypeConstructMock, 2> dst(std::move(src));
+  EXPECT_TRUE(dst[0].move_constructed);
+  EXPECT_TRUE(dst[1].move_constructed);
+}
+
+TEST(vector, LargeVectorMoveCallsNoConstructor)
+{
+  Vector<TypeConstructMock, 2> src(5);
+  Vector<TypeConstructMock, 2> dst(std::move(src));
+
+  EXPECT_TRUE(dst[0].default_constructed);
+  EXPECT_FALSE(dst[0].move_constructed);
+  EXPECT_FALSE(dst[0].copy_constructed);
 }

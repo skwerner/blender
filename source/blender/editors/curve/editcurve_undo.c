@@ -22,15 +22,15 @@
 
 #include "CLG_log.h"
 
+#include "DNA_anim_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_anim_types.h"
 
+#include "BLI_array_utils.h"
 #include "BLI_blenlib.h"
 #include "BLI_ghash.h"
-#include "BLI_array_utils.h"
 
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_fcurve.h"
@@ -40,11 +40,11 @@
 
 #include "DEG_depsgraph.h"
 
-#include "ED_undo.h"
 #include "ED_curve.h"
+#include "ED_undo.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "curve_intern.h"
 
@@ -208,9 +208,7 @@ static bool curve_undosys_poll(bContext *C)
   return (obedit != NULL);
 }
 
-static bool curve_undosys_step_encode(struct bContext *C,
-                                      struct Main *UNUSED(bmain),
-                                      UndoStep *us_p)
+static bool curve_undosys_step_encode(struct bContext *C, struct Main *bmain, UndoStep *us_p)
 {
   CurveUndoStep *us = (CurveUndoStep *)us_p;
 
@@ -218,21 +216,25 @@ static bool curve_undosys_step_encode(struct bContext *C,
    * outside of this list will be moved out of edit-mode when reading back undo steps. */
   ViewLayer *view_layer = CTX_data_view_layer(C);
   uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
-      view_layer, NULL, &objects_len);
+  Object **objects = ED_undo_editmode_objects_from_view_layer(view_layer, &objects_len);
 
   us->elems = MEM_callocN(sizeof(*us->elems) * objects_len, __func__);
   us->elems_len = objects_len;
 
   for (uint i = 0; i < objects_len; i++) {
     Object *ob = objects[i];
+    Curve *cu = ob->data;
     CurveUndoStep_Elem *elem = &us->elems[i];
 
     elem->obedit_ref.ptr = ob;
     undocurve_from_editcurve(&elem->data, ob->data, ob->shapenr);
+    cu->editnurb->needs_flush_to_id = 1;
     us->step.data_size += elem->data.undo_size;
   }
   MEM_freeN(objects);
+
+  bmain->is_memfile_undo_flush_needed = true;
+
   return true;
 }
 
@@ -260,12 +262,15 @@ static void curve_undosys_step_decode(
       continue;
     }
     undocurve_to_editcurve(bmain, &elem->data, obedit->data, &obedit->shapenr);
+    cu->editnurb->needs_flush_to_id = 1;
     DEG_id_tag_update(&obedit->id, ID_RECALC_GEOMETRY);
   }
 
   /* The first element is always active */
   ED_undo_object_set_active_or_warn(
       CTX_data_view_layer(C), us->elems[0].obedit_ref.ptr, us_p->name, &LOG);
+
+  bmain->is_memfile_undo_flush_needed = true;
 
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, NULL);
 }

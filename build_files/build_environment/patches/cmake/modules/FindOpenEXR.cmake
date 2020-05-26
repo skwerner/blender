@@ -119,7 +119,6 @@ set(OpenEXR_generic_include_paths
   /usr/include
   /usr/include/${CMAKE_LIBRARY_ARCHITECTURE}
   /usr/local/include
-  /sw/include
   /opt/local/include
 )
 set(OpenEXR_generic_library_paths
@@ -128,7 +127,6 @@ set(OpenEXR_generic_library_paths
   /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}
   /usr/local/lib
   /usr/local/lib/${CMAKE_LIBRARY_ARCHITECTURE}
-  /sw/lib
   /opt/local/lib
 )
 
@@ -188,11 +186,11 @@ if(OPENEXR_CUSTOM)
   endif()
   set(OpenEXR_Library ${OPENEXR_CUSTOM_LIBRARY})
 else()
-#elseif(${OPENEXR_VERSION} VERSION_LESS "2.1")
+# elseif(${OPENEXR_VERSION} VERSION_LESS "2.1")
   set(OpenEXR_Library IlmImf)
-#else()
-#  string(REGEX REPLACE "([0-9]+)[.]([0-9]+).*" "\\1_\\2" _openexr_libs_ver ${OPENEXR_VERSION})
-#  set(OpenEXR_Library IlmImf-${_openexr_libs_ver})
+# else()
+#   string(REGEX REPLACE "([0-9]+)[.]([0-9]+).*" "\\1_\\2" _openexr_libs_ver ${OPENEXR_VERSION})
+#   set(OpenEXR_Library IlmImf-${_openexr_libs_ver})
 endif()
 
 # Locate the OpenEXR library
@@ -232,7 +230,7 @@ if(OPENEXR_FOUND)
 endif()
 
 # Restore the original find library ordering
-if( OPENEXR_USE_STATIC_LIBS )
+if(OPENEXR_USE_STATIC_LIBS )
   set(CMAKE_FIND_LIBRARY_SUFFIXES ${_openexr_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES})
 endif()
 

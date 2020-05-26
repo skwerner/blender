@@ -40,10 +40,11 @@ set(DEFSRC
   rna_constraint.c
   rna_context.c
   rna_curve.c
+  rna_curveprofile.c
   rna_depsgraph.c
   rna_dynamicpaint.c
   rna_fcurve.c
-  rna_fluidsim.c
+  rna_fluid.c
   rna_gpencil.c
   rna_gpencil_modifier.c
   rna_image.c
@@ -76,7 +77,6 @@ set(DEFSRC
   rna_sculpt_paint.c
   rna_sequencer.c
   rna_shader_fx.c
-  rna_smoke.c
   rna_sound.c
   rna_space.c
   rna_speaker.c
@@ -88,11 +88,27 @@ set(DEFSRC
   rna_ui.c
   rna_userdef.c
   rna_vfont.c
+  rna_volume.c
   rna_wm.c
   rna_wm_gizmo.c
   rna_workspace.c
   rna_world.c
+  rna_xr.c
 )
+
+if(WITH_NEW_OBJECT_TYPES)
+  list(APPEND DEFSRC
+    rna_hair.c
+    rna_pointcloud.c
+  )
+endif()
+
+if (WITH_NEW_SIMULATION_TYPE)
+  list(APPEND DEFSRC
+    rna_simulation.c
+  )
+endif()
+
 
 set(APISRC
   rna_action_api.c
@@ -174,7 +190,7 @@ set(INC
   ../../../../intern/clog
 
   # Needed for defaults forward declarations.
-  ../../../blender/blenloader
+  ../../blenloader
 
   ${CMAKE_BINARY_DIR}/source/blender/makesdna/intern
 )
@@ -228,6 +244,10 @@ if(WITH_AUDASPACE)
   list(APPEND INC_SYS
     ${AUDASPACE_C_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${AUDASPACE_C_LIBRARIES}
+    ${AUDASPACE_PY_LIBRARIES}
+  )
 endif()
 
 if(WITH_CODEC_FFMPEG)
@@ -237,19 +257,18 @@ if(WITH_CODEC_FFMPEG)
   list(APPEND INC_SYS
     ${FFMPEG_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${FFMPEG_LIBRARIES}
+  )
   add_definitions(-DWITH_FFMPEG)
-endif()
-
-if(WITH_MOD_FLUID)
-  add_definitions(-DWITH_MOD_FLUID)
 endif()
 
 if(WITH_FFTW3)
   add_definitions(-DWITH_FFTW3)
 endif()
 
-if(WITH_MOD_SMOKE)
-  add_definitions(-DWITH_SMOKE)
+if(WITH_MOD_FLUID)
+  add_definitions(-DWITH_FLUID)
 endif()
 
 if(WITH_MOD_OCEANSIM)
@@ -284,7 +303,7 @@ endif()
 
 if(WITH_ALEMBIC)
   list(APPEND INC
-    ../../alembic
+    ../../io/alembic
   )
   add_definitions(-DWITH_ALEMBIC)
 endif()
@@ -322,6 +341,19 @@ if(WITH_INPUT_NDOF)
   add_definitions(-DWITH_INPUT_NDOF)
 endif()
 
+if(WITH_XR_OPENXR)
+  add_definitions(-DWITH_XR_OPENXR)
+endif()
+
+if(WITH_NEW_OBJECT_TYPES)
+  add_definitions(-DWITH_NEW_OBJECT_TYPES)
+endif()
+
+if (WITH_NEW_SIMULATION_TYPE)
+  add_definitions(-DWITH_NEW_SIMULATION_TYPE)
+endif()
+
+
 # Build makesrna executable
 blender_include_dirs(
   .
@@ -347,7 +379,7 @@ blender_include_dirs(
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
   ../../../../intern/memutil
-  ../../../../intern/smoke/extern
+  ../../../../intern/mantaflow/extern
 )
 
 blender_include_dirs_sys(
@@ -361,6 +393,10 @@ add_executable(makesrna ${SRC} ${SRC_RNA_INC} ${SRC_DNA_INC})
 
 target_link_libraries(makesrna bf_dna)
 target_link_libraries(makesrna bf_dna_blenlib)
+
+if(WIN32 AND NOT UNIX)
+  target_link_libraries(makesrna ${PTHREADS_LIBRARIES})
+endif()
 
 # Output rna_*_gen.c
 # note (linux only): with crashes try add this after COMMAND: valgrind --leak-check=full --track-origins=yes
@@ -385,23 +421,23 @@ set(SRC
 
 set(LIB
   bf_dna
+  bf_editor_space_api
+
+  bf_editor_animation
   bf_editor_armature
   bf_editor_curve
   bf_editor_gizmo_library
   bf_editor_gpencil
+  bf_editor_io
   bf_editor_mesh
   bf_editor_object
   bf_editor_physics
   bf_editor_render
   bf_editor_scene
   bf_editor_sculpt_paint
-  bf_editor_space_clip
-  bf_editor_space_file
-  bf_editor_space_image
-  bf_editor_space_info
-  bf_editor_space_node
-  bf_editor_space_view3d
+  bf_editor_sound
   bf_editor_transform
+  bf_editor_undo
 )
 
 add_definitions(${GL_DEFINITIONS})

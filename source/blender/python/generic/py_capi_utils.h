@@ -38,8 +38,8 @@ PyObject *PyC_Err_SetString_Prefix(PyObject *exception_type_prefix, const char *
 
 void PyC_Err_PrintWithFunc(PyObject *py_func);
 
-void PyC_FileAndNum(const char **filename, int *lineno);
-void PyC_FileAndNum_Safe(const char **filename, int *lineno); /* checks python is running */
+void PyC_FileAndNum(const char **r_filename, int *r_lineno);
+void PyC_FileAndNum_Safe(const char **r_filename, int *r_lineno); /* checks python is running */
 int PyC_AsArray_FAST(void *array,
                      PyObject *value_fast,
                      const Py_ssize_t length,
@@ -99,7 +99,7 @@ typedef struct PyC_FlagSet {
   const char *identifier;
 } PyC_FlagSet;
 
-char *PyC_FlagSet_AsString(PyC_FlagSet *item);
+PyObject *PyC_FlagSet_AsString(PyC_FlagSet *item);
 int PyC_FlagSet_ValueFromID_int(PyC_FlagSet *item, const char *identifier, int *r_value);
 int PyC_FlagSet_ValueFromID(PyC_FlagSet *item,
                             const char *identifier,
@@ -119,6 +119,11 @@ bool PyC_RunString_AsIntPtr(const char **imports,
                             const char *expr,
                             const char *filename,
                             intptr_t *r_value);
+bool PyC_RunString_AsStringAndSize(const char **imports,
+                                   const char *expr,
+                                   const char *filename,
+                                   char **r_value,
+                                   size_t *r_value_size);
 bool PyC_RunString_AsString(const char **imports,
                             const char *expr,
                             const char *filename,

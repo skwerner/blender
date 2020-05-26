@@ -23,22 +23,22 @@
 
 #undef DEBUG_MESSAGES
 
-#include <stdlib.h> /* for qsort */
 #include <memory.h>
+#include <stdlib.h> /* for qsort */
 
-#include "MEM_guardedalloc.h"
 #include "MEM_CacheLimiterC-Api.h"
+#include "MEM_guardedalloc.h"
 
-#include "BLI_string.h"
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_mempool.h"
+#include "BLI_string.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
 #include "IMB_moviecache.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #ifdef DEBUG_MESSAGES
 #  if defined __GNUC__
@@ -388,6 +388,14 @@ bool IMB_moviecache_put_if_possible(MovieCache *cache, void *userkey, ImBuf *ibu
   return result;
 }
 
+void IMB_moviecache_remove(MovieCache *cache, void *userkey)
+{
+  MovieCacheKey key;
+  key.cache_owner = cache;
+  key.userkey = userkey;
+  BLI_ghash_remove(cache->hash, &key, moviecache_keyfree, moviecache_valfree);
+}
+
 ImBuf *IMB_moviecache_get(MovieCache *cache, void *userkey)
 {
   MovieCacheKey key;
@@ -471,10 +479,10 @@ void IMB_moviecache_cleanup(MovieCache *cache,
 
 /* get segments of cached frames. useful for debugging cache policies */
 void IMB_moviecache_get_cache_segments(
-    MovieCache *cache, int proxy, int render_flags, int *totseg_r, int **points_r)
+    MovieCache *cache, int proxy, int render_flags, int *r_totseg, int **r_points)
 {
-  *totseg_r = 0;
-  *points_r = NULL;
+  *r_totseg = 0;
+  *r_points = NULL;
 
   if (!cache->getdatafp) {
     return;
@@ -489,8 +497,8 @@ void IMB_moviecache_get_cache_segments(
   }
 
   if (cache->points) {
-    *totseg_r = cache->totseg;
-    *points_r = cache->points;
+    *r_totseg = cache->totseg;
+    *r_points = cache->points;
   }
   else {
     int totframe = BLI_ghash_len(cache->hash);
@@ -547,8 +555,8 @@ void IMB_moviecache_get_cache_segments(
         }
       }
 
-      *totseg_r = totseg;
-      *points_r = points;
+      *r_totseg = totseg;
+      *r_points = points;
 
       cache->totseg = totseg;
       cache->points = points;

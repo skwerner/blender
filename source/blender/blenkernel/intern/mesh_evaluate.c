@@ -29,23 +29,24 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_memarena.h"
-#include "BLI_math.h"
-#include "BLI_edgehash.h"
+#include "BLI_alloca.h"
 #include "BLI_bitmap.h"
-#include "BLI_polyfill_2d.h"
+#include "BLI_edgehash.h"
 #include "BLI_linklist.h"
 #include "BLI_linklist_stack.h"
-#include "BLI_alloca.h"
+#include "BLI_math.h"
+#include "BLI_memarena.h"
+#include "BLI_polyfill_2d.h"
 #include "BLI_stack.h"
 #include "BLI_task.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
+#include "BKE_editmesh_cache.h"
 #include "BKE_global.h"
 #include "BKE_mesh.h"
 #include "BKE_multires.h"
@@ -396,6 +397,21 @@ void BKE_mesh_ensure_normals(Mesh *mesh)
  */
 void BKE_mesh_ensure_normals_for_display(Mesh *mesh)
 {
+  switch ((eMeshWrapperType)mesh->runtime.wrapper_type) {
+    case ME_WRAPPER_TYPE_MDATA:
+      /* Run code below. */
+      break;
+    case ME_WRAPPER_TYPE_BMESH: {
+      struct BMEditMesh *em = mesh->edit_mesh;
+      EditMeshData *emd = mesh->runtime.edit_data;
+      if (emd->vertexCos) {
+        BKE_editmesh_cache_ensure_vert_normals(em, emd);
+        BKE_editmesh_cache_ensure_poly_normals(em, emd);
+      }
+      return;
+    }
+  }
+
   float(*poly_nors)[3] = CustomData_get_layer(&mesh->pdata, CD_NORMAL);
   const bool do_vert_normals = (mesh->runtime.cd_dirty_vert & CD_MASK_NORMAL) != 0;
   const bool do_poly_normals = (mesh->runtime.cd_dirty_poly & CD_MASK_NORMAL || poly_nors == NULL);
@@ -915,7 +931,8 @@ static void mesh_edges_sharp_tag(LoopSplitTaskDataCommon *data,
   }
 }
 
-/** Define sharp edges as needed to mimic 'autosmooth' from angle threshold.
+/**
+ * Define sharp edges as needed to mimic 'autosmooth' from angle threshold.
  *
  * Used when defining an empty custom loop normals data layer,
  * to keep same shading as with autosmooth!
@@ -1011,7 +1028,7 @@ void BKE_mesh_loop_manifold_fan_around_vert_next(const MLoop *mloops,
 static void split_loop_nor_single_do(LoopSplitTaskDataCommon *common_data, LoopSplitTaskData *data)
 {
   MLoopNorSpaceArray *lnors_spacearr = common_data->lnors_spacearr;
-  short(*clnors_data)[2] = common_data->clnors_data;
+  const short(*clnors_data)[2] = common_data->clnors_data;
 
   const MVert *mverts = common_data->mverts;
   const MEdge *medges = common_data->medges;
@@ -1278,7 +1295,7 @@ static void split_loop_nor_fan_do(LoopSplitTaskDataCommon *common_data, LoopSpli
         copy_v3_v3(nor, lnor);
       }
     }
-    /* Extra bonus: since small-stack is local to this funcion,
+    /* Extra bonus: since small-stack is local to this function,
      * no more need to empty it at all cost! */
   }
 }
@@ -1299,9 +1316,9 @@ static void loop_split_worker_do(LoopSplitTaskDataCommon *common_data,
   }
 }
 
-static void loop_split_worker(TaskPool *__restrict pool, void *taskdata, int UNUSED(threadid))
+static void loop_split_worker(TaskPool *__restrict pool, void *taskdata)
 {
-  LoopSplitTaskDataCommon *common_data = BLI_task_pool_userdata(pool);
+  LoopSplitTaskDataCommon *common_data = BLI_task_pool_user_data(pool);
   LoopSplitTaskData *data = taskdata;
 
   /* Temp edge vectors stack, only used when computing lnor spacearr. */
@@ -1554,7 +1571,7 @@ static void loop_split_generator(TaskPool *pool, LoopSplitTaskDataCommon *common
         if (pool) {
           data_idx++;
           if (data_idx == LOOP_SPLIT_TASK_BLOCK_SIZE) {
-            BLI_task_pool_push(pool, loop_split_worker, data_buff, true, TASK_PRIORITY_LOW);
+            BLI_task_pool_push(pool, loop_split_worker, data_buff, true, NULL);
             data_idx = 0;
           }
         }
@@ -1571,7 +1588,7 @@ static void loop_split_generator(TaskPool *pool, LoopSplitTaskDataCommon *common
   /* Last block of data... Since it is calloc'ed and we use first NULL item as stopper,
    * everything is fine. */
   if (pool && data_idx) {
-    BLI_task_pool_push(pool, loop_split_worker, data_buff, true, TASK_PRIORITY_LOW);
+    BLI_task_pool_push(pool, loop_split_worker, data_buff, true, NULL);
   }
 
   if (edge_vectors) {
@@ -1703,11 +1720,7 @@ void BKE_mesh_normals_loop_split(const MVert *mverts,
     loop_split_generator(NULL, &common_data);
   }
   else {
-    TaskScheduler *task_scheduler;
-    TaskPool *task_pool;
-
-    task_scheduler = BLI_task_scheduler_get();
-    task_pool = BLI_task_pool_create(task_scheduler, &common_data);
+    TaskPool *task_pool = BLI_task_pool_create(&common_data, TASK_PRIORITY_HIGH);
 
     loop_split_generator(task_pool, &common_data);
 
@@ -2391,9 +2404,7 @@ static float mesh_calc_poly_volume_centroid(const MPoly *mpoly,
 
     /* Calculate the 6x volume of the tetrahedron formed by the 3 vertices
      * of the triangle and the origin as the fourth vertex */
-    float v_cross[3];
-    cross_v3_v3v3(v_cross, v_pivot, v_step1);
-    const float tetra_volume = dot_v3v3(v_cross, v_step2);
+    const float tetra_volume = volume_tri_tetrahedron_signed_v3_6x(v_pivot, v_step1, v_step2);
     total_volume += tetra_volume;
 
     /* Calculate the centroid of the tetrahedron formed by the 3 vertices
@@ -3577,6 +3588,7 @@ void BKE_mesh_convert_mfaces_to_mpolys_ex(ID *id,
 
   if (id) {
     /* ensure external data is transferred */
+    /* TODO(sergey): Use multiresModifier_ensure_external_read(). */
     CustomData_external_read(fdata, id, CD_MASK_MDISPS, totface_i);
   }
 

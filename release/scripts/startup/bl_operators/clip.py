@@ -387,9 +387,12 @@ class CLIP_OT_delete_proxy(Operator):
             self._rmproxy(d + "_undistorted")
             self._rmproxy(os.path.join(absproxy, "proxy_%d.avi" % x))
 
-        tc = ("free_run.blen_tc",
-              "interp_free_run.blen_tc",
-              "record_run.blen_tc")
+        tc = (
+            "free_run.blen_tc",
+            "interp_free_run.blen_tc",
+            "record_run.blen_tc",
+            "record_run_no_gaps.blen_tc",
+        )
 
         for x in tc:
             self._rmproxy(os.path.join(absproxy, x))
@@ -483,7 +486,18 @@ class CLIP_OT_constraint_to_fcurve(Operator):
             return {'FINISHED'}
 
         # Find start and end frames.
-        for track in clip.tracking.tracks:
+        if con.object:
+            tracking_object = clip.tracking.objects.get(con.object, None)
+            if not tracking_object:
+                self.report({'ERROR'}, "Motion Tracking object not found")
+
+                return {'CANCELLED'}
+
+            tracks = tracking_object.tracks
+        else:
+            tracks = clip.tracking.tracks
+
+        for track in tracks:
             if sfra is None:
                 sfra = track.markers[0].frame
             else:

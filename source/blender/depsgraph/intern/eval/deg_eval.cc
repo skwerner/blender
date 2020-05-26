@@ -28,12 +28,13 @@
 #include "PIL_time.h"
 
 #include "BLI_compiler_attrs.h"
-#include "BLI_utildefines.h"
+#include "BLI_gsqueue.h"
 #include "BLI_task.h"
-#include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_global.h"
 
+#include "DNA_node_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -42,6 +43,8 @@
 
 #include "atomic_ops.h"
 
+#include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
 #include "intern/eval/deg_eval_copy_on_write.h"
 #include "intern/eval/deg_eval_flush.h"
 #include "intern/eval/deg_eval_stats.h"
@@ -50,48 +53,81 @@
 #include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 #include "intern/node/deg_node_time.h"
-#include "intern/depsgraph.h"
 
 namespace DEG {
 
-/* ********************** */
-/* Evaluation Entrypoints */
+namespace {
 
-/* Forward declarations. */
-static void schedule_children(TaskPool *pool,
-                              Depsgraph *graph,
-                              OperationNode *node,
-                              const int thread_id);
+struct DepsgraphEvalState;
+
+void deg_task_run_func(TaskPool *pool, void *taskdata);
+
+template<typename ScheduleFunction, typename... ScheduleFunctionArgs>
+void schedule_children(DepsgraphEvalState *state,
+                       OperationNode *node,
+                       ScheduleFunction *schedule_function,
+                       ScheduleFunctionArgs... schedule_function_args);
+
+void schedule_node_to_pool(OperationNode *node, const int UNUSED(thread_id), TaskPool *pool)
+{
+  BLI_task_pool_push(pool, deg_task_run_func, node, false, NULL);
+}
+
+/* Denotes which part of dependency graph is being evaluated. */
+enum class EvaluationStage {
+  /* Stage 1: Only  Copy-on-Write operations are to be evaluated, prior to anything else.
+   * This allows other operations to access its dependencies when there is a dependency cycle
+   * involved. */
+  COPY_ON_WRITE,
+
+  /* Threaded evaluation of all possible operations. */
+  THREADED_EVALUATION,
+
+  /* Workaround for areas which can not be evaluated in threads.
+   *
+   * For example, metaballs, which are iterating over all bases and are requesting dupli-lists
+   * to see whether there are metaballs inside. */
+  SINGLE_THREADED_WORKAROUND,
+};
 
 struct DepsgraphEvalState {
   Depsgraph *graph;
   bool do_stats;
-  bool is_cow_stage;
+  EvaluationStage stage;
+  bool need_single_thread_pass;
 };
 
-static void deg_task_run_func(TaskPool *pool, void *taskdata, int thread_id)
+void evaluate_node(const DepsgraphEvalState *state, OperationNode *operation_node)
 {
-  void *userdata_v = BLI_task_pool_userdata(pool);
-  DepsgraphEvalState *state = (DepsgraphEvalState *)userdata_v;
-  OperationNode *node = (OperationNode *)taskdata;
+  ::Depsgraph *depsgraph = reinterpret_cast<::Depsgraph *>(state->graph);
+
   /* Sanity checks. */
-  BLI_assert(!node->is_noop() && "NOOP nodes should not actually be scheduled");
+  BLI_assert(!operation_node->is_noop() && "NOOP nodes should not actually be scheduled");
   /* Perform operation. */
   if (state->do_stats) {
     const double start_time = PIL_check_seconds_timer();
-    node->evaluate((::Depsgraph *)state->graph);
-    node->stats.current_time += PIL_check_seconds_timer() - start_time;
+    operation_node->evaluate(depsgraph);
+    operation_node->stats.current_time += PIL_check_seconds_timer() - start_time;
   }
   else {
-    node->evaluate((::Depsgraph *)state->graph);
+    operation_node->evaluate(depsgraph);
   }
-  /* Schedule children. */
-  BLI_task_pool_delayed_push_begin(pool, thread_id);
-  schedule_children(pool, state->graph, node, thread_id);
-  BLI_task_pool_delayed_push_end(pool, thread_id);
 }
 
-static bool check_operation_node_visible(OperationNode *op_node)
+void deg_task_run_func(TaskPool *pool, void *taskdata)
+{
+  void *userdata_v = BLI_task_pool_user_data(pool);
+  DepsgraphEvalState *state = (DepsgraphEvalState *)userdata_v;
+
+  /* Evaluate node. */
+  OperationNode *operation_node = reinterpret_cast<OperationNode *>(taskdata);
+  evaluate_node(state, operation_node);
+
+  /* Schedule children. */
+  schedule_children(state, operation_node, schedule_node_to_pool, pool);
+}
+
+bool check_operation_node_visible(OperationNode *op_node)
 {
   const ComponentNode *comp_node = op_node->owner;
   /* Special exception, copy on write component is to be always evaluated,
@@ -102,7 +138,7 @@ static bool check_operation_node_visible(OperationNode *op_node)
   return comp_node->affects_directly_visible;
 }
 
-static void calculate_pending_parents_for_node(OperationNode *node)
+void calculate_pending_parents_for_node(OperationNode *node)
 {
   /* Update counters, applies for both visible and invisible IDs. */
   node->num_links_pending = 0;
@@ -134,14 +170,14 @@ static void calculate_pending_parents_for_node(OperationNode *node)
   }
 }
 
-static void calculate_pending_parents(Depsgraph *graph)
+void calculate_pending_parents(Depsgraph *graph)
 {
   for (OperationNode *node : graph->operations) {
     calculate_pending_parents_for_node(node);
   }
 }
 
-static void initialize_execution(DepsgraphEvalState *state, Depsgraph *graph)
+void initialize_execution(DepsgraphEvalState *state, Depsgraph *graph)
 {
   const bool do_stats = state->do_stats;
   calculate_pending_parents(graph);
@@ -153,12 +189,53 @@ static void initialize_execution(DepsgraphEvalState *state, Depsgraph *graph)
   }
 }
 
+bool is_metaball_object_operation(const OperationNode *operation_node)
+{
+  const ComponentNode *component_node = operation_node->owner;
+  const IDNode *id_node = component_node->owner;
+  if (GS(id_node->id_cow->name) != ID_OB) {
+    return false;
+  }
+  const Object *object = reinterpret_cast<const Object *>(id_node->id_cow);
+  return object->type == OB_MBALL;
+}
+
+bool need_evaluate_operation_at_stage(DepsgraphEvalState *state,
+                                      const OperationNode *operation_node)
+{
+  const ComponentNode *component_node = operation_node->owner;
+  switch (state->stage) {
+    case EvaluationStage::COPY_ON_WRITE:
+      return (component_node->type == NodeType::COPY_ON_WRITE);
+
+    case EvaluationStage::THREADED_EVALUATION:
+      /* Sanity check: copy-on-write node should be evaluated already. This will be indicated by
+       * scheduled flag (we assume that scheduled operations have been actually handled by previous
+       * stage). */
+      BLI_assert(operation_node->scheduled || component_node->type != NodeType::COPY_ON_WRITE);
+      if (is_metaball_object_operation(operation_node)) {
+        state->need_single_thread_pass = true;
+        return false;
+      }
+      return true;
+
+    case EvaluationStage::SINGLE_THREADED_WORKAROUND:
+      return true;
+  }
+  BLI_assert(!"Unhandled evaluation stage, should never happen.");
+  return false;
+}
+
 /* Schedule a node if it needs evaluation.
  *   dec_parents: Decrement pending parents count, true when child nodes are
  *                scheduled after a task has been completed.
  */
-static void schedule_node(
-    TaskPool *pool, Depsgraph *graph, OperationNode *node, bool dec_parents, const int thread_id)
+template<typename ScheduleFunction, typename... ScheduleFunctionArgs>
+void schedule_node(DepsgraphEvalState *state,
+                   OperationNode *node,
+                   bool dec_parents,
+                   ScheduleFunction *schedule_function,
+                   ScheduleFunctionArgs... schedule_function_args)
 {
   /* No need to schedule nodes of invisible ID. */
   if (!check_operation_node_visible(node)) {
@@ -181,41 +258,38 @@ static void schedule_node(
     return;
   }
   /* During the COW stage only schedule COW nodes. */
-  DepsgraphEvalState *state = (DepsgraphEvalState *)BLI_task_pool_userdata(pool);
-  if (state->is_cow_stage) {
-    if (node->owner->type != NodeType::COPY_ON_WRITE) {
-      return;
-    }
-  }
-  else {
-    BLI_assert(node->scheduled || node->owner->type != NodeType::COPY_ON_WRITE);
+  if (!need_evaluate_operation_at_stage(state, node)) {
+    return;
   }
   /* Actually schedule the node. */
   bool is_scheduled = atomic_fetch_and_or_uint8((uint8_t *)&node->scheduled, (uint8_t) true);
   if (!is_scheduled) {
     if (node->is_noop()) {
       /* skip NOOP node, schedule children right away */
-      schedule_children(pool, graph, node, thread_id);
+      schedule_children(state, node, schedule_function, schedule_function_args...);
     }
     else {
       /* children are scheduled once this task is completed */
-      BLI_task_pool_push_from_thread(
-          pool, deg_task_run_func, node, false, TASK_PRIORITY_HIGH, thread_id);
+      schedule_function(node, 0, schedule_function_args...);
     }
   }
 }
 
-static void schedule_graph(TaskPool *pool, Depsgraph *graph)
+template<typename ScheduleFunction, typename... ScheduleFunctionArgs>
+void schedule_graph(DepsgraphEvalState *state,
+                    ScheduleFunction *schedule_function,
+                    ScheduleFunctionArgs... schedule_function_args)
 {
-  for (OperationNode *node : graph->operations) {
-    schedule_node(pool, graph, node, false, -1);
+  for (OperationNode *node : state->graph->operations) {
+    schedule_node(state, node, false, schedule_function, schedule_function_args...);
   }
 }
 
-static void schedule_children(TaskPool *pool,
-                              Depsgraph *graph,
-                              OperationNode *node,
-                              const int thread_id)
+template<typename ScheduleFunction, typename... ScheduleFunctionArgs>
+void schedule_children(DepsgraphEvalState *state,
+                       OperationNode *node,
+                       ScheduleFunction *schedule_function,
+                       ScheduleFunctionArgs... schedule_function_args)
 {
   for (Relation *rel : node->outlinks) {
     OperationNode *child = (OperationNode *)rel->to;
@@ -224,21 +298,62 @@ static void schedule_children(TaskPool *pool,
       /* Happens when having cyclic dependencies. */
       continue;
     }
-    schedule_node(pool, graph, child, (rel->flag & RELATION_FLAG_CYCLIC) == 0, thread_id);
+    schedule_node(state,
+                  child,
+                  (rel->flag & RELATION_FLAG_CYCLIC) == 0,
+                  schedule_function,
+                  schedule_function_args...);
   }
 }
 
-static void depsgraph_ensure_view_layer(Depsgraph *graph)
+void schedule_node_to_queue(OperationNode *node,
+                            const int /*thread_id*/,
+                            GSQueue *evaluation_queue)
+{
+  BLI_gsqueue_push(evaluation_queue, &node);
+}
+
+void evaluate_graph_single_threaded(DepsgraphEvalState *state)
+{
+  GSQueue *evaluation_queue = BLI_gsqueue_new(sizeof(OperationNode *));
+  schedule_graph(state, schedule_node_to_queue, evaluation_queue);
+
+  while (!BLI_gsqueue_is_empty(evaluation_queue)) {
+    OperationNode *operation_node;
+    BLI_gsqueue_pop(evaluation_queue, &operation_node);
+
+    evaluate_node(state, operation_node);
+    schedule_children(state, operation_node, schedule_node_to_queue, evaluation_queue);
+  }
+
+  BLI_gsqueue_free(evaluation_queue);
+}
+
+void depsgraph_ensure_view_layer(Depsgraph *graph)
 {
   /* We update copy-on-write scene in the following cases:
    * - It was not expanded yet.
    * - It was tagged for update of CoW component.
    * This allows us to have proper view layer pointer. */
   Scene *scene_cow = graph->scene_cow;
-  if (!deg_copy_on_write_is_expanded(&scene_cow->id) ||
-      scene_cow->id.recalc & ID_RECALC_COPY_ON_WRITE) {
-    const IDNode *id_node = graph->find_id_node(&graph->scene->id);
-    deg_update_copy_on_write_datablock(graph, id_node);
+  if (deg_copy_on_write_is_expanded(&scene_cow->id) &&
+      (scene_cow->id.recalc & ID_RECALC_COPY_ON_WRITE) == 0) {
+    return;
+  }
+
+  const IDNode *scene_id_node = graph->find_id_node(&graph->scene->id);
+  deg_update_copy_on_write_datablock(graph, scene_id_node);
+}
+
+}  // namespace
+
+static TaskPool *deg_evaluate_task_pool_create(DepsgraphEvalState *state)
+{
+  if (G.debug & G_DEBUG_DEPSGRAPH_NO_THREADS) {
+    return BLI_task_pool_create_no_threads(state);
+  }
+  else {
+    return BLI_task_pool_create_suspended(state, TASK_PRIORITY_HIGH);
   }
 }
 
@@ -252,41 +367,42 @@ static void depsgraph_ensure_view_layer(Depsgraph *graph)
 void deg_evaluate_on_refresh(Depsgraph *graph)
 {
   /* Nothing to update, early out. */
-  if (BLI_gset_len(graph->entry_tags) == 0) {
+  if (graph->entry_tags.is_empty()) {
     return;
   }
-  const bool do_time_debug = ((G.debug & G_DEBUG_DEPSGRAPH_TIME) != 0);
-  const double start_time = do_time_debug ? PIL_check_seconds_timer() : 0;
+
+  graph->debug.begin_graph_evaluation();
+
   graph->is_evaluating = true;
   depsgraph_ensure_view_layer(graph);
   /* Set up evaluation state. */
   DepsgraphEvalState state;
   state.graph = graph;
-  state.do_stats = do_time_debug;
-  /* Set up task scheduler and pull for threaded evaluation. */
-  TaskScheduler *task_scheduler;
-  bool need_free_scheduler;
-  if (G.debug & G_DEBUG_DEPSGRAPH_NO_THREADS) {
-    task_scheduler = BLI_task_scheduler_create(1);
-    need_free_scheduler = true;
-  }
-  else {
-    task_scheduler = BLI_task_scheduler_get();
-    need_free_scheduler = false;
-  }
-  TaskPool *task_pool = BLI_task_pool_create_suspended(task_scheduler, &state);
+  state.do_stats = graph->debug.do_time_debug();
+  state.need_single_thread_pass = false;
   /* Prepare all nodes for evaluation. */
   initialize_execution(&state, graph);
+
   /* Do actual evaluation now. */
   /* First, process all Copy-On-Write nodes. */
-  state.is_cow_stage = true;
-  schedule_graph(task_pool, graph);
-  BLI_task_pool_work_wait_and_reset(task_pool);
-  /* After that, process all other nodes. */
-  state.is_cow_stage = false;
-  schedule_graph(task_pool, graph);
+  state.stage = EvaluationStage::COPY_ON_WRITE;
+  TaskPool *task_pool = deg_evaluate_task_pool_create(&state);
+  schedule_graph(&state, schedule_node_to_pool, task_pool);
   BLI_task_pool_work_and_wait(task_pool);
   BLI_task_pool_free(task_pool);
+
+  /* After that, process all other nodes. */
+  state.stage = EvaluationStage::THREADED_EVALUATION;
+  task_pool = deg_evaluate_task_pool_create(&state);
+  schedule_graph(&state, schedule_node_to_pool, task_pool);
+  BLI_task_pool_work_and_wait(task_pool);
+  BLI_task_pool_free(task_pool);
+
+  if (state.need_single_thread_pass) {
+    state.stage = EvaluationStage::SINGLE_THREADED_WORKAROUND;
+    evaluate_graph_single_threaded(&state);
+  }
+
   /* Finalize statistics gathering. This is because we only gather single
    * operation timing here, without aggregating anything to avoid any extra
    * synchronization. */
@@ -295,13 +411,9 @@ void deg_evaluate_on_refresh(Depsgraph *graph)
   }
   /* Clear any uncleared tags - just in case. */
   deg_graph_clear_tags(graph);
-  if (need_free_scheduler) {
-    BLI_task_scheduler_free(task_scheduler);
-  }
   graph->is_evaluating = false;
-  if (do_time_debug) {
-    printf("Depsgraph updated in %f seconds.\n", PIL_check_seconds_timer() - start_time);
-  }
+
+  graph->debug.end_graph_evaluation();
 }
 
 }  // namespace DEG

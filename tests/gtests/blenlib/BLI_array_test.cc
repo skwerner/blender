@@ -1,5 +1,5 @@
+#include "BLI_array.hh"
 #include "testing/testing.h"
-#include "BLI_array_cxx.h"
 
 using namespace BLI;
 

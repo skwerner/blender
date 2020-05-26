@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) Blender Foundation, 2002-2009
@@ -24,14 +24,14 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_math.h"
 #include "BLI_ghash.h"
+#include "BLI_math.h"
+#include "BLI_utildefines.h"
 
-#include "DNA_object_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_brush_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_brush.h"
 #include "BKE_colortools.h"
@@ -43,9 +43,9 @@
 
 #include "DEG_depsgraph.h"
 
-#include "ED_screen.h"
 #include "ED_image.h"
 #include "ED_mesh.h"
+#include "ED_screen.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -70,8 +70,8 @@ typedef struct UvAdjacencyElement {
 } UvAdjacencyElement;
 
 typedef struct UvEdge {
-  unsigned int uv1;
-  unsigned int uv2;
+  uint uv1;
+  uint uv2;
   /* general use flag
    * (Used to check if edge is boundary here, and propagates to adjacency elements) */
   char flag;
@@ -313,9 +313,9 @@ static void uv_sculpt_stroke_apply(bContext *C,
 {
   float co[2], radius, radius_root;
   Scene *scene = CTX_data_scene(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   BMEditMesh *em = BKE_editmesh_from_object(obedit);
-  unsigned int tool;
+  uint tool;
   UvSculptData *sculptdata = (UvSculptData *)op->customdata;
   SpaceImage *sima;
   int invert;
@@ -327,11 +327,11 @@ static void uv_sculpt_stroke_apply(bContext *C,
   tool = sculptdata->tool;
   invert = sculptdata->invert ? -1 : 1;
   alpha = BKE_brush_alpha_get(scene, brush);
-  UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &co[0], &co[1]);
+  UI_view2d_region_to_view(&region->v2d, event->mval[0], event->mval[1], &co[0], &co[1]);
 
   sima = CTX_wm_space_image(C);
   ED_space_image_get_size(sima, &width, &height);
-  ED_space_image_get_zoom(sima, ar, &zoomx, &zoomy);
+  ED_space_image_get_zoom(sima, region, &zoomx, &zoomy);
 
   radius = BKE_brush_size_get(scene, brush) / (width * zoomx);
   aspectRatio = width / (float)height;
@@ -386,7 +386,7 @@ static void uv_sculpt_stroke_apply(bContext *C,
    * Smooth Tool
    */
   else if (tool == UV_SCULPT_TOOL_RELAX) {
-    unsigned int method = toolsettings->uv_relax_method;
+    uint method = toolsettings->uv_relax_method;
     if (method == UV_SCULPT_TOOL_RELAX_HC) {
       HC_relaxation_iteration_uv(em, sculptdata, co, alpha, radius, aspectRatio);
     }
@@ -464,7 +464,7 @@ static int uv_element_offset_from_face_get(
   return element - map->buf;
 }
 
-static unsigned int uv_edge_hash(const void *key)
+static uint uv_edge_hash(const void *key)
 {
   const UvEdge *edge = key;
   return (BLI_ghashutil_uinthash(edge->uv2) + BLI_ghashutil_uinthash(edge->uv1));
@@ -496,7 +496,7 @@ static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wm
 
   if (data) {
     int counter = 0, i;
-    ARegion *ar = CTX_wm_region(C);
+    ARegion *region = CTX_wm_region(C);
     float co[2];
     BMFace *efa;
     MLoopUV *luv;
@@ -521,18 +521,18 @@ static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wm
     if (do_island_optimization) {
       /* We will need island information */
       if (ts->uv_flag & UV_SYNC_SELECTION) {
-        data->elementMap = BM_uv_element_map_create(bm, false, true, true);
+        data->elementMap = BM_uv_element_map_create(bm, scene, false, false, true, true);
       }
       else {
-        data->elementMap = BM_uv_element_map_create(bm, true, true, true);
+        data->elementMap = BM_uv_element_map_create(bm, scene, true, false, true, true);
       }
     }
     else {
       if (ts->uv_flag & UV_SYNC_SELECTION) {
-        data->elementMap = BM_uv_element_map_create(bm, false, true, false);
+        data->elementMap = BM_uv_element_map_create(bm, scene, false, false, true, false);
       }
       else {
-        data->elementMap = BM_uv_element_map_create(bm, true, true, false);
+        data->elementMap = BM_uv_element_map_create(bm, scene, true, false, true, false);
       }
     }
 
@@ -542,14 +542,13 @@ static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wm
     }
 
     /* Mouse coordinates, useful for some functions like grab and sculpt all islands */
-    UI_view2d_region_to_view(&ar->v2d, event->mval[0], event->mval[1], &co[0], &co[1]);
+    UI_view2d_region_to_view(&region->v2d, event->mval[0], event->mval[1], &co[0], &co[1]);
 
     /* we need to find the active island here */
     if (do_island_optimization) {
       UvElement *element;
       UvNearestHit hit = UV_NEAREST_HIT_INIT;
-      Image *ima = CTX_data_edit_image(C);
-      uv_find_nearest_vert(scene, ima, obedit, co, 0.0f, &hit);
+      uv_find_nearest_vert(scene, obedit, co, 0.0f, &hit);
 
       element = BM_uv_element_get(data->elementMap, hit.efa, hit.l);
       island_index = element->island;
@@ -704,7 +703,7 @@ static UvSculptData *uv_sculpt_stroke_init(bContext *C, wmOperator *op, const wm
       radius = BKE_brush_size_get(scene, brush);
       sima = CTX_wm_space_image(C);
       ED_space_image_get_size(sima, &width, &height);
-      ED_space_image_get_zoom(sima, ar, &zoomx, &zoomy);
+      ED_space_image_get_zoom(sima, region, &zoomx, &zoomy);
 
       aspectRatio = width / (float)height;
       radius /= (width * zoomx);
@@ -807,6 +806,23 @@ static int uv_sculpt_stroke_modal(bContext *C, wmOperator *op, const wmEvent *ev
   return OPERATOR_RUNNING_MODAL;
 }
 
+static bool uv_sculpt_stroke_poll(bContext *C)
+{
+  if (ED_operator_uvedit_space_image(C)) {
+    /* While these values could be initialized on demand,
+     * the only case this would be useful is running from the operator search popup.
+     * This is such a corner case that it's simpler to check a brush has already been created
+     * (something the tool system ensures). */
+    Scene *scene = CTX_data_scene(C);
+    ToolSettings *ts = scene->toolsettings;
+    Brush *brush = BKE_paint_brush(&ts->uvsculpt->paint);
+    if (brush != NULL) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void SCULPT_OT_uv_sculpt_stroke(wmOperatorType *ot)
 {
   static const EnumPropertyItem stroke_mode_items[] = {
@@ -832,7 +848,7 @@ void SCULPT_OT_uv_sculpt_stroke(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = uv_sculpt_stroke_invoke;
   ot->modal = uv_sculpt_stroke_modal;
-  ot->poll = ED_operator_uvedit_space_image;
+  ot->poll = uv_sculpt_stroke_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

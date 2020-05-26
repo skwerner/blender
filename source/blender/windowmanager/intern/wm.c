@@ -25,8 +25,8 @@
  * Also Blenders main event loop (WM_main)
  */
 
-#include <string.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "BLI_sys_types.h"
 
@@ -34,33 +34,85 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_blenlib.h"
+#include "BLI_utildefines.h"
+
+#include "BLT_translation.h"
 
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
-#include "BKE_library.h"
+#include "BKE_idtype.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
+#include "BKE_screen.h"
 #include "BKE_workspace.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
-#include "wm_window.h"
-#include "wm_event_system.h"
-#include "wm_draw.h"
+#include "WM_types.h"
 #include "wm.h"
+#include "wm_draw.h"
+#include "wm_event_system.h"
+#include "wm_window.h"
+#ifdef WITH_XR_OPENXR
+#  include "wm_xr.h"
+#endif
 
-#include "ED_screen.h"
 #include "BKE_undo_system.h"
+#include "ED_screen.h"
 
 #ifdef WITH_PYTHON
 #  include "BPY_extern.h"
 #endif
 
 /* ****************************************************** */
+
+static void window_manager_free_data(ID *id)
+{
+  wm_close_and_free(NULL, (wmWindowManager *)id);
+}
+
+static void window_manager_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  wmWindowManager *wm = (wmWindowManager *)id;
+
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
+    BKE_LIB_FOREACHID_PROCESS(data, win->scene, IDWALK_CB_USER_ONE);
+
+    /* This pointer can be NULL during old files reading, better be safe than sorry. */
+    if (win->workspace_hook != NULL) {
+      ID *workspace = (ID *)BKE_workspace_active_get(win->workspace_hook);
+      BKE_LIB_FOREACHID_PROCESS_ID(data, workspace, IDWALK_CB_NOP);
+      /* allow callback to set a different workspace */
+      BKE_workspace_active_set(win->workspace_hook, (WorkSpace *)workspace);
+    }
+    if (BKE_lib_query_foreachid_process_flags_get(data) & IDWALK_INCLUDE_UI) {
+      LISTBASE_FOREACH (ScrArea *, area, &win->global_areas.areabase) {
+        BKE_screen_foreach_id_screen_area(data, area);
+      }
+    }
+  }
+}
+
+IDTypeInfo IDType_ID_WM = {
+    .id_code = ID_WM,
+    .id_filter = 0,
+    .main_listbase_index = INDEX_ID_WM,
+    .struct_size = sizeof(wmWindowManager),
+    .name = "WindowManager",
+    .name_plural = "window_managers",
+    .translation_context = BLT_I18NCONTEXT_ID_WINDOWMANAGER,
+    .flags = IDTYPE_FLAGS_NO_COPY | IDTYPE_FLAGS_NO_LIBLINKING | IDTYPE_FLAGS_NO_MAKELOCAL,
+
+    .init_data = NULL,
+    .copy_data = NULL,
+    .free_data = window_manager_free_data,
+    .make_local = NULL,
+    .foreach_id = window_manager_foreach_id,
+};
 
 #define MAX_OP_REGISTERED 32
 
@@ -267,12 +319,17 @@ void WM_check(bContext *C)
 
   /* wm context */
   if (wm == NULL) {
-    wm = CTX_data_main(C)->wm.first;
+    wm = bmain->wm.first;
     CTX_wm_manager_set(C, wm);
   }
 
   if (wm == NULL || BLI_listbase_is_empty(&wm->windows)) {
     return;
+  }
+
+  /* Run before loading the keyconfig. */
+  if (wm->message_bus == NULL) {
+    wm->message_bus = WM_msgbus_create();
   }
 
   if (!G.background) {
@@ -284,10 +341,6 @@ void WM_check(bContext *C)
 
     /* case: no open windows at all, for old file reads */
     wm_window_ghostwindows_ensure(wm);
-  }
-
-  if (wm->message_bus == NULL) {
-    wm->message_bus = WM_msgbus_create();
   }
 
   /* case: fileread */
@@ -331,7 +384,7 @@ void wm_add_default(Main *bmain, bContext *C)
   WorkSpaceLayout *layout = BKE_workspace_layout_find_global(bmain, screen, &workspace);
 
   CTX_wm_manager_set(C, wm);
-  win = wm_window_new(C, NULL);
+  win = wm_window_new(bmain, wm, NULL, false);
   win->scene = CTX_data_scene(C);
   STRNCPY(win->view_layer_name, CTX_data_view_layer(C)->name);
   BKE_workspace_active_set(win->workspace_hook, workspace);
@@ -343,7 +396,7 @@ void wm_add_default(Main *bmain, bContext *C)
   wm_window_make_drawable(wm, win);
 }
 
-/* context is allowed to be NULL, do not free wm itself (library.c) */
+/* context is allowed to be NULL, do not free wm itself (lib_id.c) */
 void wm_close_and_free(bContext *C, wmWindowManager *wm)
 {
   wmWindow *win;
@@ -353,6 +406,11 @@ void wm_close_and_free(bContext *C, wmWindowManager *wm)
   if (wm->autosavetimer) {
     wm_autosave_timer_ended(wm);
   }
+
+#ifdef WITH_XR_OPENXR
+  /* May send notifier, so do before freeing notifier queue. */
+  wm_xr_exit(wm);
+#endif
 
   while ((win = BLI_pophead(&wm->windows))) {
     /* prevent draw clear to use screen */

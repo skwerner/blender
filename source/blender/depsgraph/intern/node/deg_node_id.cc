@@ -23,26 +23,22 @@
 
 #include "intern/node/deg_node_id.h"
 
-#include <stdio.h>
 #include <cstring> /* required for STREQ later on. */
+#include <stdio.h>
 
-#include "BLI_utildefines.h"
-#include "BLI_ghash.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
-extern "C" {
 #include "DNA_ID.h"
 #include "DNA_anim_types.h"
 
-#include "BKE_animsys.h"
-#include "BKE_library.h"
-}
+#include "BKE_lib_id.h"
 
 #include "DEG_depsgraph.h"
 
 #include "intern/eval/deg_eval_copy_on_write.h"
-#include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_component.h"
+#include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_time.h"
 
 namespace DEG {
@@ -70,39 +66,12 @@ bool IDNode::ComponentIDKey::operator==(const ComponentIDKey &other) const
   return type == other.type && STREQ(name, other.name);
 }
 
-static unsigned int id_deps_node_hash_key(const void *key_v)
-{
-  const IDNode::ComponentIDKey *key = reinterpret_cast<const IDNode::ComponentIDKey *>(key_v);
-  const int type_as_int = static_cast<int>(key->type);
-  return BLI_ghashutil_combine_hash(BLI_ghashutil_uinthash(type_as_int),
-                                    BLI_ghashutil_strhash_p(key->name));
-}
-
-static bool id_deps_node_hash_key_cmp(const void *a, const void *b)
-{
-  const IDNode::ComponentIDKey *key_a = reinterpret_cast<const IDNode::ComponentIDKey *>(a);
-  const IDNode::ComponentIDKey *key_b = reinterpret_cast<const IDNode::ComponentIDKey *>(b);
-  return !(*key_a == *key_b);
-}
-
-static void id_deps_node_hash_key_free(void *key_v)
-{
-  typedef IDNode::ComponentIDKey ComponentIDKey;
-  ComponentIDKey *key = reinterpret_cast<ComponentIDKey *>(key_v);
-  OBJECT_GUARDED_DELETE(key, ComponentIDKey);
-}
-
-static void id_deps_node_hash_value_free(void *value_v)
-{
-  ComponentNode *comp_node = reinterpret_cast<ComponentNode *>(value_v);
-  OBJECT_GUARDED_DELETE(comp_node, ComponentNode);
-}
-
 /* Initialize 'id' node - from pointer data given. */
 void IDNode::init(const ID *id, const char *UNUSED(subdata))
 {
-  BLI_assert(id != NULL);
+  BLI_assert(id != nullptr);
   /* Store ID-pointer. */
+  id_type = GS(id->name);
   id_orig = (ID *)id;
   eval_flags = 0;
   previous_eval_flags = 0;
@@ -116,9 +85,6 @@ void IDNode::init(const ID *id, const char *UNUSED(subdata))
 
   visible_components_mask = 0;
   previously_visible_components_mask = 0;
-
-  components = BLI_ghash_new(
-      id_deps_node_hash_key, id_deps_node_hash_key_cmp, "Depsgraph id components hash");
 }
 
 void IDNode::init_copy_on_write(ID *id_cow_hint)
@@ -126,7 +92,7 @@ void IDNode::init_copy_on_write(ID *id_cow_hint)
   /* Create pointer as early as possible, so we can use it for function
    * bindings. Rest of data we'll be copying to the new datablock when
    * it is actually needed. */
-  if (id_cow_hint != NULL) {
+  if (id_cow_hint != nullptr) {
     // BLI_assert(deg_copy_on_write_is_needed(id_orig));
     if (deg_copy_on_write_is_needed(id_orig)) {
       id_cow = id_cow_hint;
@@ -154,22 +120,24 @@ IDNode::~IDNode()
 
 void IDNode::destroy()
 {
-  if (id_orig == NULL) {
+  if (id_orig == nullptr) {
     return;
   }
 
-  BLI_ghash_free(components, id_deps_node_hash_key_free, id_deps_node_hash_value_free);
+  for (ComponentNode *comp_node : components.values()) {
+    OBJECT_GUARDED_DELETE(comp_node, ComponentNode);
+  }
 
   /* Free memory used by this CoW ID. */
-  if (id_cow != id_orig && id_cow != NULL) {
+  if (id_cow != id_orig && id_cow != nullptr) {
     deg_free_copy_on_write_datablock(id_cow);
     MEM_freeN(id_cow);
-    id_cow = NULL;
+    id_cow = nullptr;
     DEG_COW_PRINT("Destroy CoW for %s: id_orig=%p id_cow=%p\n", id_orig->name, id_orig, id_cow);
   }
 
   /* Tag that the node is freed. */
-  id_orig = NULL;
+  id_orig = nullptr;
 }
 
 string IDNode::identifier() const
@@ -185,7 +153,7 @@ string IDNode::identifier() const
 ComponentNode *IDNode::find_component(NodeType type, const char *name) const
 {
   ComponentIDKey key(type, name);
-  return reinterpret_cast<ComponentNode *>(BLI_ghash_lookup(components, &key));
+  return components.lookup_default(key, nullptr);
 }
 
 ComponentNode *IDNode::add_component(NodeType type, const char *name)
@@ -196,8 +164,8 @@ ComponentNode *IDNode::add_component(NodeType type, const char *name)
     comp_node = (ComponentNode *)factory->create_node(this->id_orig, "", name);
 
     /* Register. */
-    ComponentIDKey *key = OBJECT_GUARDED_NEW(ComponentIDKey, type, name);
-    BLI_ghash_insert(components, key, comp_node);
+    ComponentIDKey key(type, name);
+    components.add_new(key, comp_node);
     comp_node->owner = this;
   }
   return comp_node;
@@ -205,7 +173,7 @@ ComponentNode *IDNode::add_component(NodeType type, const char *name)
 
 void IDNode::tag_update(Depsgraph *graph, eUpdateSource source)
 {
-  GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, components) {
+  for (ComponentNode *comp_node : components.values()) {
     /* Relations update does explicit animation update when needed. Here we ignore animation
      * component to avoid loss of possible unkeyed changes. */
     if (comp_node->type == NodeType::ANIMATION && source == DEG_UPDATE_SOURCE_RELATIONS) {
@@ -213,30 +181,27 @@ void IDNode::tag_update(Depsgraph *graph, eUpdateSource source)
     }
     comp_node->tag_update(graph, source);
   }
-  GHASH_FOREACH_END();
 }
 
 void IDNode::finalize_build(Depsgraph *graph)
 {
   /* Finalize build of all components. */
-  GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, components) {
+  for (ComponentNode *comp_node : components.values()) {
     comp_node->finalize_build(graph);
   }
-  GHASH_FOREACH_END();
   visible_components_mask = get_visible_components_mask();
 }
 
 IDComponentsMask IDNode::get_visible_components_mask() const
 {
   IDComponentsMask result = 0;
-  GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, components) {
+  for (ComponentNode *comp_node : components.values()) {
     if (comp_node->affects_directly_visible) {
       const int component_type_as_int = static_cast<int>(comp_node->type);
       BLI_assert(component_type_as_int < 64);
       result |= (1ULL << component_type_as_int);
     }
   }
-  GHASH_FOREACH_END();
   return result;
 }
 

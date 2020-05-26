@@ -23,6 +23,7 @@
 
 #include <math.h>
 
+#include "BLI_compiler_compat.h"
 #include "BLI_noise.h"
 
 /* local */
@@ -264,17 +265,17 @@ static const float hashvectf[768] = {
 /*  IMPROVED PERLIN NOISE */
 /**************************/
 
-static float lerp(float t, float a, float b)
+BLI_INLINE float lerp(float t, float a, float b)
 {
   return (a + t * (b - a));
 }
 
-static float npfade(float t)
+BLI_INLINE float npfade(float t)
 {
   return (t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f));
 }
 
-static float grad(int hash_val, float x, float y, float z)
+BLI_INLINE float grad(int hash_val, float x, float y, float z)
 {
   int h = hash_val & 15;   /* CONVERT LO 4 BITS OF HASH CODE */
   float u = h < 8 ? x : y; /* INTO 12 GRADIENT DIRECTIONS. */
@@ -331,8 +332,8 @@ static float newPerlinU(float x, float y, float z)
 /* Was BLI_hnoise(), removed noisesize, so other functions can call it without scaling. */
 static float orgBlenderNoise(float x, float y, float z)
 {
-  register float cn1, cn2, cn3, cn4, cn5, cn6, i;
-  register const float *h;
+  float cn1, cn2, cn3, cn4, cn5, cn6, i;
+  const float *h;
   float fx, fy, fz, ox, oy, oz, jx, jy, jz;
   float n = 0.5;
   int ix, iy, iz, b00, b01, b10, b11, b20, b21;
@@ -785,7 +786,7 @@ static float noise3_perlin(float vec[3])
   int bx0, bx1, by0, by1, bz0, bz1, b00, b10, b01, b11;
   float rx0, rx1, ry0, ry1, rz0, rz1, sx, sy, sz, a, b, c, d, t, u, v;
   const float *q;
-  register int i, j;
+  int i, j;
 
   SETUP(vec[0], bx0, bx1, rx0, rx1);
   SETUP(vec[1], by0, by1, ry0, ry1);

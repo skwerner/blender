@@ -22,8 +22,8 @@
 #ifndef __GHOST_WINDOWSDL_H__
 #define __GHOST_WINDOWSDL_H__
 
-#include "GHOST_Window.h"
 #include "GHOST_SystemSDL.h"
+#include "GHOST_Window.h"
 
 #include <map>
 
@@ -35,7 +35,6 @@ extern "C" {
 #  error "SDL 2.0 or newer is needed to build with Ghost"
 #endif
 
-class STR_String;
 class GHOST_SystemSDL;
 
 class GHOST_WindowSDL : public GHOST_Window {
@@ -48,22 +47,17 @@ class GHOST_WindowSDL : public GHOST_Window {
   SDL_Cursor *m_sdl_custom_cursor;
 
  public:
-  const GHOST_TabletData *GetTabletData()
-  {
-    return NULL;
-  }
-
   GHOST_WindowSDL(GHOST_SystemSDL *system,
-                  const STR_String &title,
+                  const char *title,
                   GHOST_TInt32 left,
                   GHOST_TInt32 top,
                   GHOST_TUns32 width,
                   GHOST_TUns32 height,
                   GHOST_TWindowState state,
-                  const GHOST_TEmbedderWindowID parentWindow,
                   GHOST_TDrawingContextType type = GHOST_kDrawingContextTypeNone,
                   const bool stereoVisual = false,
-                  const bool exclusive = false);
+                  const bool exclusive = false,
+                  const GHOST_IWindow *parentWindow = NULL);
 
   ~GHOST_WindowSDL();
 
@@ -112,9 +106,9 @@ class GHOST_WindowSDL : public GHOST_Window {
 
   GHOST_TSuccess setWindowCursorVisibility(bool visible);
 
-  void setTitle(const STR_String &title);
+  void setTitle(const char *title);
 
-  void getTitle(STR_String &title) const;
+  std::string getTitle() const;
 
   GHOST_TSuccess setClientWidth(GHOST_TUns32 width);
 

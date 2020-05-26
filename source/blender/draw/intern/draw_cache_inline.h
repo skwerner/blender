@@ -23,8 +23,8 @@
 #ifndef __DRAW_CACHE_INLINE_H__
 #define __DRAW_CACHE_INLINE_H__
 
-#include "MEM_guardedalloc.h"
 #include "GPU_batch.h"
+#include "MEM_guardedalloc.h"
 
 /* Common */
 // #define DRW_DEBUG_MESH_CACHE_REQUEST
@@ -72,8 +72,10 @@ BLI_INLINE void DRW_ibo_request(GPUBatch *batch, GPUIndexBuf **ibo)
   if (*ibo == NULL) {
     *ibo = MEM_callocN(sizeof(GPUIndexBuf), "GPUIndexBuf");
   }
-  GPU_batch_vao_cache_clear(batch);
-  batch->elem = *ibo;
+  if (batch != NULL) {
+    GPU_batch_vao_cache_clear(batch);
+    batch->elem = *ibo;
+  }
 }
 
 BLI_INLINE bool DRW_ibo_requested(GPUIndexBuf *ibo)

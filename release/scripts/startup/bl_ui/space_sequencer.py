@@ -29,6 +29,10 @@ from bpy.app.translations import (
 )
 from bl_ui.properties_grease_pencil_common import (
     AnnotationDataPanel,
+    AnnotationOnionSkin,
+)
+from bl_ui.space_toolsystem_common import (
+    ToolActivePanelHelper,
 )
 from rna_prop_ui import PropertyPanel
 
@@ -89,6 +93,35 @@ def draw_color_balance(layout, color_balance):
     split.template_color_picker(color_balance, "gain", value_slider=True, lock_luminosity=True, cubic=True)
 
 
+class SEQUENCER_PT_active_tool(ToolActivePanelHelper, Panel):
+    bl_space_type = 'SEQUENCE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "Tool"
+
+
+class SEQUENCER_HT_tool_header(Header):
+    bl_space_type = 'SEQUENCE_EDITOR'
+    bl_region_type = 'TOOL_HEADER'
+
+    def draw(self, context):
+        layout = self.layout
+
+        layout.template_header()
+
+        self.draw_tool_settings(context)
+
+        # TODO: options popover.
+
+    def draw_tool_settings(self, context):
+        layout = self.layout
+
+        # Active Tool
+        # -----------
+        from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+        tool = ToolSelectPanelHelper.draw_active_tool_header(context, layout)
+        tool_mode = context.mode if tool is None else tool.mode
+
+
 class SEQUENCER_HT_header(Header):
     bl_space_type = 'SEQUENCE_EDITOR'
 
@@ -97,7 +130,10 @@ class SEQUENCER_HT_header(Header):
 
         st = context.space_data
 
-        layout.template_header()
+        show_region_tool_header = st.show_region_tool_header
+
+        if not show_region_tool_header:
+            layout.template_header()
 
         layout.prop(st, "view_type", text="")
 
@@ -134,7 +170,8 @@ class SEQUENCER_MT_editor_menus(Menu):
 
         if st.view_type in {'SEQUENCER', 'SEQUENCER_PREVIEW'}:
             layout.menu("SEQUENCER_MT_select")
-            layout.menu("SEQUENCER_MT_marker")
+            if st.show_markers:
+                layout.menu("SEQUENCER_MT_marker")
             layout.menu("SEQUENCER_MT_add")
             layout.menu("SEQUENCER_MT_strip")
 
@@ -176,12 +213,14 @@ class SEQUENCER_MT_range(Menu):
         layout = self.layout
 
         layout.operator("anim.previewrange_set", text="Set Preview Range")
+        layout.operator("sequencer.set_range_to_strips", text="Set Preview Range to Strips").preview = True
         layout.operator("anim.previewrange_clear", text="Clear Preview Range")
 
         layout.separator()
 
         layout.operator("anim.start_frame_set", text="Set Start Frame")
         layout.operator("anim.end_frame_set", text="Set End Frame")
+        layout.operator("sequencer.set_range_to_strips", text="Set Frame Range to Strips")
 
 
 class SEQUENCER_MT_preview_zoom(Menu):
@@ -223,7 +262,11 @@ class SEQUENCER_MT_view(Menu):
             # wm_keymap_item_find_props() (see #32595).
             layout.operator_context = 'INVOKE_REGION_PREVIEW'
         layout.prop(st, "show_region_ui")
+        layout.prop(st, "show_region_toolbar")
         layout.operator_context = 'INVOKE_DEFAULT'
+
+        if is_sequencer_view:
+            layout.prop(st, "show_region_hud")
 
         if st.view_type == 'SEQUENCER':
             layout.prop(st, "show_backdrop", text="Preview as Backdrop")
@@ -233,7 +276,7 @@ class SEQUENCER_MT_view(Menu):
         if is_sequencer_view:
             layout.operator_context = 'INVOKE_REGION_WIN'
             layout.operator("sequencer.view_selected", text="Frame Selected")
-            layout.operator("sequencer.view_all", text="Frame All")
+            layout.operator("sequencer.view_all")
             layout.operator("view2d.zoom_border", text="Zoom")
 
         if is_preview:
@@ -264,8 +307,12 @@ class SEQUENCER_MT_view(Menu):
             layout.separator()
             layout.operator_context = 'INVOKE_DEFAULT'
 
+            layout.prop(st, "show_seconds")
+            layout.prop(st, "show_locked_time")
             layout.prop(st, "show_strip_offset")
-            layout.prop(st, "show_marker_lines")
+            layout.prop(st, "show_fcurves")
+            layout.separator()
+            layout.prop(st, "show_markers")
 
         if is_preview:
             layout.separator()
@@ -315,8 +362,10 @@ class SEQUENCER_MT_select_channel(Menu):
     def draw(self, _context):
         layout = self.layout
 
-        layout.operator("sequencer.select_active_side", text="Left").side = 'LEFT'
-        layout.operator("sequencer.select_active_side", text="Right").side = 'RIGHT'
+        layout.operator("sequencer.select_side", text="Left").side = 'LEFT'
+        layout.operator("sequencer.select_side", text="Right").side = 'RIGHT'
+        layout.separator()
+        layout.operator("sequencer.select_side", text="Both Sides").side = 'BOTH'
 
 
 class SEQUENCER_MT_select_linked(Menu):
@@ -357,6 +406,8 @@ class SEQUENCER_MT_select(Menu):
         layout.separator()
 
         layout.operator("sequencer.select_box", text="Box Select")
+        props = layout.operator("sequencer.select_box", text="Box Select (Include Handles)")
+        props.include_handles = True
 
         layout.separator()
 
@@ -503,7 +554,7 @@ class SEQUENCER_MT_add(Menu):
         col.enabled = selected_sequences_len(context) >= 2
 
         col = layout.column()
-        col.operator_menu_enum("sequencer.fades_add", "type", text="Fade", icon="IPO_EASE_IN_OUT")
+        col.operator_menu_enum("sequencer.fades_add", "type", text="Fade", icon='IPO_EASE_IN_OUT')
         col.enabled = selected_sequences_len(context) >= 1
 
 
@@ -669,8 +720,8 @@ class SEQUENCER_MT_strip(Menu):
         layout.menu("SEQUENCER_MT_strip_transform")
 
         layout.separator()
-        layout.operator("sequencer.cut", text="Cut").type = 'SOFT'
-        layout.operator("sequencer.cut", text="Hold Cut").type = 'HARD'
+        layout.operator("sequencer.split", text="Split").type = 'SOFT'
+        layout.operator("sequencer.split", text="Hold Split").type = 'HARD'
 
         layout.separator()
         layout.operator("sequencer.copy", text="Copy")
@@ -734,7 +785,7 @@ class SEQUENCER_MT_context_menu(Menu):
 
         layout.operator_context = 'INVOKE_REGION_WIN'
 
-        layout.operator("sequencer.cut", text="Cut").type = 'SOFT'
+        layout.operator("sequencer.split", text="Split").type = 'SOFT'
 
         layout.separator()
 
@@ -750,6 +801,10 @@ class SEQUENCER_MT_context_menu(Menu):
 
         layout.operator("sequencer.slip", text="Slip Strip Contents")
         layout.operator("sequencer.snap")
+
+        layout.separator()
+
+        layout.operator("sequencer.set_range_to_strips", text="Set Preview Range to Strips").preview = True
 
         layout.separator()
 
@@ -791,7 +846,7 @@ class SEQUENCER_MT_context_menu(Menu):
             }:
                 layout.separator()
                 layout.menu("SEQUENCER_MT_strip_effect")
-            elif strip_type in 'MOVIE':
+            elif strip_type == 'MOVIE':
                 layout.separator()
                 layout.menu("SEQUENCER_MT_strip_movie")
             elif strip_type == 'IMAGE':
@@ -1005,10 +1060,8 @@ class SEQUENCER_PT_effect(SequencerButtonsPanel, Panel):
             flow.prop(strip, "clamp", slider=True)
             flow.prop(strip, "boost_factor")
             flow.prop(strip, "blur_radius")
-
-            row = layout.row()
-            row.prop(strip, "quality", slider=True)
-            row.prop(strip, "use_only_boost")
+            flow.prop(strip, "quality", slider=True)
+            flow.prop(strip, "use_only_boost")
 
         elif strip_type == 'SPEED':
             layout.prop(strip, "use_default_fade", text="Stretch to input strip length")
@@ -1064,11 +1117,11 @@ class SEQUENCER_PT_effect(SequencerButtonsPanel, Panel):
                     if i == strip.multicam_source:
                         sub = row.row(align=True)
                         sub.enabled = False
-                        sub.operator("sequencer.cut_multicam", text=f"{i:d}").camera = i
+                        sub.operator("sequencer.split_multicam", text="%d" % i).camera = i
                     else:
                         sub_1 = row.row(align=True)
                         sub_1.enabled = True
-                        sub_1.operator("sequencer.cut_multicam", text=f"{i:d}").camera = i
+                        sub_1.operator("sequencer.split_multicam", text="%d" % i).camera = i
 
                 if strip.channel > BT_ROW and (strip_channel - 1) % BT_ROW:
                     for i in range(strip.channel, strip_channel + ((BT_ROW + 1 - strip_channel) % BT_ROW)):
@@ -1086,6 +1139,8 @@ class SEQUENCER_PT_effect(SequencerButtonsPanel, Panel):
         col = layout.column(align=True)
         if strip_type == 'SPEED':
             col.prop(strip, "multiply_speed")
+            col.prop(strip, "frame_interpolation_mode")
+
         elif strip_type in {'CROSS', 'GAMMA_CROSS', 'WIPE', 'ALPHA_OVER', 'ALPHA_UNDER', 'OVER_DROP'}:
             col.prop(strip, "use_default_fade", text="Default fade")
             if not strip.use_default_fade:
@@ -1635,18 +1690,15 @@ class SEQUENCER_PT_adjust_transform(SequencerButtonsPanel, Panel):
         layout = self.layout
         strip = act_strip(context)
 
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
         layout.active = not strip.mute
 
-        split = layout.split()
-
-        col = split.column()
-        col.alignment = 'RIGHT'
-        col.label(text="Mirror")
-
-        col = split.column()
-        row = col.row(align=True)
-        row.prop(strip, "use_flip_x", text="X", toggle=True)
-        row.prop(strip, "use_flip_y", text="Y", toggle=True)
+        row = layout.row(heading="Mirror")
+        sub = row.row(align=True)
+        sub.prop(strip, "use_flip_x", text="X", toggle=True)
+        sub.prop(strip, "use_flip_y", text="Y", toggle=True)
 
 
 class SEQUENCER_PT_adjust_video(SequencerButtonsPanel, Panel):
@@ -1750,12 +1802,12 @@ class SEQUENCER_PT_cache_settings(SequencerButtonsPanel, Panel):
 
         ed = context.scene.sequence_editor
 
-        col = layout.column()
+        col = layout.column(heading="Cache", align=True)
 
-        col.prop(ed, "use_cache_raw")
-        col.prop(ed, "use_cache_preprocessed")
-        col.prop(ed, "use_cache_composite")
-        col.prop(ed, "use_cache_final")
+        col.prop(ed, "use_cache_raw", text="Raw")
+        col.prop(ed, "use_cache_preprocessed", text="Pre-Processed")
+        col.prop(ed, "use_cache_composite", text="Composite")
+        col.prop(ed, "use_cache_final", text="Final")
         col.separator()
         col.prop(ed, "recycle_max_cost")
 
@@ -1819,21 +1871,19 @@ class SEQUENCER_PT_strip_proxy(SequencerButtonsPanel, Panel):
 
             flow = layout.column_flow()
             if ed.proxy_storage == 'PER_STRIP':
-                flow.prop(proxy, "use_proxy_custom_directory")
-                flow.prop(proxy, "use_proxy_custom_file")
-
+                col = layout.column(heading="Custom Proxy")
+                col.prop(proxy, "use_proxy_custom_directory", text="Directory")
                 if proxy.use_proxy_custom_directory and not proxy.use_proxy_custom_file:
-                    flow.prop(proxy, "directory")
+                    col.prop(proxy, "directory")
+                col.prop(proxy, "use_proxy_custom_file", text="File")
                 if proxy.use_proxy_custom_file:
-                    flow.prop(proxy, "filepath")
+                    col.prop(proxy, "filepath")
 
-            box = layout.box()
-            row = box.row(align=True)
-            row.prop(strip.proxy, "build_25")
-            row.prop(strip.proxy, "build_75")
-            row = box.row(align=True)
-            row.prop(strip.proxy, "build_50")
-            row.prop(strip.proxy, "build_100")
+            row = layout.row(heading="Resolutions", align=True)
+            row.prop(strip.proxy, "build_25", toggle=True)
+            row.prop(strip.proxy, "build_50", toggle=True)
+            row.prop(strip.proxy, "build_75", toggle=True)
+            row.prop(strip.proxy, "build_100", toggle=True)
 
             layout.use_property_split = True
             layout.use_property_decorate = False
@@ -1874,10 +1924,10 @@ class SEQUENCER_PT_strip_cache(SequencerButtonsPanel, Panel):
         strip = act_strip(context)
         layout.active = strip.override_cache_settings
 
-        col = layout.column()
-        col.prop(strip, "use_cache_raw")
-        col.prop(strip, "use_cache_preprocessed")
-        col.prop(strip, "use_cache_composite")
+        col = layout.column(heading="Cache")
+        col.prop(strip, "use_cache_raw", text="Raw")
+        col.prop(strip, "use_cache_preprocessed", text="Pre-Processed")
+        col.prop(strip, "use_cache_composite", text="Composite")
 
 
 class SEQUENCER_PT_preview(SequencerButtonsPanel_Output, Panel):
@@ -1923,13 +1973,21 @@ class SEQUENCER_PT_view(SequencerButtonsPanel_Output, Panel):
             col.prop(st, "show_separate_color")
 
         col.prop(st, "proxy_render_size")
-        col.prop(ed, "use_prefetch")
+
+        if ed:
+            col.prop(ed, "use_prefetch")
 
 
 class SEQUENCER_PT_frame_overlay(SequencerButtonsPanel_Output, Panel):
     bl_label = "Frame Overlay"
     bl_category = "View"
     bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        if not context.scene.sequence_editor:
+            return False
+        return SequencerButtonsPanel_Output.poll(context)
 
     def draw_header(self, context):
         scene = context.scene
@@ -2035,10 +2093,12 @@ class SEQUENCER_PT_modifiers(SequencerButtonsPanel, Panel):
             box = layout.box()
 
             row = box.row()
+            row.use_property_decorate = False
             row.prop(mod, "show_expanded", text="", emboss=False)
             row.prop(mod, "name", text="")
 
             row.prop(mod, "mute", text="")
+            row.use_property_decorate = True
 
             sub = row.row(align=True)
             props = sub.operator("sequencer.strip_modifier_move", text="", icon='TRIA_UP')
@@ -2110,6 +2170,33 @@ class SEQUENCER_PT_annotation(AnnotationDataPanel, SequencerButtonsPanel_Output,
     # But, it should only show up when there are images in the preview region
 
 
+class SEQUENCER_PT_annotation_onion(AnnotationOnionSkin, SequencerButtonsPanel_Output, Panel):
+    bl_space_type = 'SEQUENCE_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "View"
+
+    @staticmethod
+    def has_preview(context):
+        st = context.space_data
+        return st.view_type in {'PREVIEW', 'SEQUENCER_PREVIEW'}
+
+    @classmethod
+    def poll(cls, context):
+        if context.annotation_data_owner is None:
+            return False
+        elif type(context.annotation_data_owner) is bpy.types.Object:
+            return False
+        else:
+            gpl = context.active_annotation_layer
+            if gpl is None:
+                return False
+
+        return cls.has_preview(context)
+
+    # NOTE: this is just a wrapper around the generic GP Panel
+    # But, it should only show up when there are images in the preview region
+
+
 class SEQUENCER_PT_custom_props(SequencerButtonsPanel, PropertyPanel, Panel):
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
     _context_path = "scene.sequence_editor.active_strip"
@@ -2119,6 +2206,7 @@ class SEQUENCER_PT_custom_props(SequencerButtonsPanel, PropertyPanel, Panel):
 
 classes = (
     SEQUENCER_MT_change,
+    SEQUENCER_HT_tool_header,
     SEQUENCER_HT_header,
     SEQUENCER_MT_editor_menus,
     SEQUENCER_MT_range,
@@ -2144,7 +2232,7 @@ classes = (
     SEQUENCER_MT_strip_input,
     SEQUENCER_MT_strip_lock_mute,
     SEQUENCER_MT_context_menu,
-
+    SEQUENCER_PT_active_tool,
     SEQUENCER_PT_strip,
 
     SEQUENCER_PT_effect,
@@ -2182,6 +2270,7 @@ classes = (
     SEQUENCER_PT_view_safe_areas_center_cut,
 
     SEQUENCER_PT_annotation,
+    SEQUENCER_PT_annotation_onion,
 )
 
 if __name__ == "__main__":  # only for live edit.

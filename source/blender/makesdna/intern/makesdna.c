@@ -43,18 +43,18 @@
 
 #define DNA_DEPRECATED_ALLOW
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_alloca.h"
 #include "BLI_ghash.h"
 #include "BLI_memarena.h"
 #include "BLI_sys_types.h" /* for intptr_t support */
+#include "BLI_utildefines.h"
 
 #include "dna_utils.h"
 
@@ -118,7 +118,7 @@ static const char *includefiles[] = {
     "DNA_windowmanager_types.h",
     "DNA_anim_types.h",
     "DNA_boid_types.h",
-    "DNA_smoke_types.h",
+    "DNA_fluid_types.h",
     "DNA_speaker_types.h",
     "DNA_movieclip_types.h",
     "DNA_tracking_types.h",
@@ -131,6 +131,12 @@ static const char *includefiles[] = {
     "DNA_layer_types.h",
     "DNA_workspace_types.h",
     "DNA_lightprobe_types.h",
+    "DNA_curveprofile_types.h",
+    "DNA_xr_types.h",
+    "DNA_hair_types.h",
+    "DNA_pointcloud_types.h",
+    "DNA_volume_types.h",
+    "DNA_simulation_types.h",
 
     /* see comment above before editing! */
 
@@ -158,7 +164,8 @@ static short *types_size_native;
 static short *types_size_32;
 /** Contains sizes as they are calculated on 64 bit systems. */
 static short *types_size_64;
-/** At `sp = structs[a]` is the first address of a struct definition:
+/**
+ * At `sp = structs[a]` is the first address of a struct definition:
  * - `sp[0]` is type number.
  * - `sp[1]` is the length of the element array (next).
  * - `sp[2]` sp[3] is [(type_index, name_index), ..] (number of pairs is defined by `sp[1]`),
@@ -901,7 +908,8 @@ static int calculate_struct_sizes(int firststruct, FILE *file_verify, const char
   /* Write test to verify sizes are accurate. */
   fprintf(file_verify, "/* Verify struct sizes and member offsets are as expected by DNA. */\n");
   fprintf(file_verify, "#include \"BLI_assert.h\"\n\n");
-  fprintf(file_verify, "#define DNA_DEPRECATED\n");
+  /* Needed so we can find offsets of deprecated structs. */
+  fprintf(file_verify, "#define DNA_DEPRECATED_ALLOW\n");
   /* Workaround enum naming collision in static asserts
    * (ideally this included a unique name/id per file). */
   fprintf(file_verify, "#define assert_line_ assert_line_DNA_\n");
@@ -939,7 +947,11 @@ static int calculate_struct_sizes(int firststruct, FILE *file_verify, const char
 
           /* Write size verification to file. */
           {
-            char *name_static = alloca(namelen + 1);
+            /* Normally 'alloca' would be used here, however we can't in a loop.
+             * Use an over-sized buffer instead. */
+            char name_static[1024];
+            BLI_assert(sizeof(name_static) > namelen);
+
             DNA_elem_id_strip_copy(name_static, cp);
             const char *str_pair[2] = {types[structtype], name_static};
             const char *name_alias = BLI_ghash_lookup(g_version_data.elem_map_alias_from_static,
@@ -1062,8 +1074,8 @@ static int calculate_struct_sizes(int firststruct, FILE *file_verify, const char
           types_size_native[structtype] = size_native;
           types_size_32[structtype] = size_32;
           types_size_64[structtype] = size_64;
-          /* two ways to detect if a struct contains a pointer:
-           * has_pointer is set or size_native  doesn't match any of 32/64bit lengths*/
+          /* Two ways to detect if a struct contains a pointer:
+           * has_pointer is set or size_native doesn't match any of 32/64bit lengths. */
           if (has_pointer || size_64 != size_native || size_32 != size_native) {
             if (size_64 % 8) {
               fprintf(stderr,
@@ -1525,71 +1537,77 @@ int main(int argc, char **argv)
 #  pragma GCC poison long
 #endif
 
-#include "DNA_listBase.h"
-#include "DNA_vec_types.h"
 #include "DNA_ID.h"
+#include "DNA_action_types.h"
+#include "DNA_anim_types.h"
+#include "DNA_armature_types.h"
+#include "DNA_boid_types.h"
+#include "DNA_brush_types.h"
+#include "DNA_cachefile_types.h"
+#include "DNA_camera_types.h"
+#include "DNA_cloth_types.h"
+#include "DNA_collection_types.h"
+#include "DNA_color_types.h"
+#include "DNA_constraint_types.h"
+#include "DNA_curve_types.h"
+#include "DNA_curveprofile_types.h"
+#include "DNA_customdata_types.h"
+#include "DNA_dynamicpaint_types.h"
+#include "DNA_effect_types.h"
+#include "DNA_fileglobal_types.h"
+#include "DNA_fluid_types.h"
+#include "DNA_freestyle_types.h"
+#include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_hair_types.h"
+#include "DNA_image_types.h"
 #include "DNA_ipo_types.h"
 #include "DNA_key_types.h"
-#include "DNA_text_types.h"
-#include "DNA_packedFile_types.h"
-#include "DNA_camera_types.h"
-#include "DNA_image_types.h"
-#include "DNA_texture_types.h"
+#include "DNA_lattice_types.h"
+#include "DNA_layer_types.h"
 #include "DNA_light_types.h"
+#include "DNA_lightprobe_types.h"
+#include "DNA_linestyle_types.h"
+#include "DNA_listBase.h"
+#include "DNA_mask_types.h"
 #include "DNA_material_types.h"
-#include "DNA_vfont_types.h"
-#include "DNA_meta_types.h"
-#include "DNA_curve_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_meta_types.h"
 #include "DNA_modifier_types.h"
-#include "DNA_lattice_types.h"
-#include "DNA_object_types.h"
-#include "DNA_object_force_types.h"
-#include "DNA_object_fluidsim_types.h"
-#include "DNA_world_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_view3d_types.h"
-#include "DNA_view2d_types.h"
-#include "DNA_space_types.h"
-#include "DNA_userdef_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_sdna_types.h"
-#include "DNA_fileglobal_types.h"
-#include "DNA_sequence_types.h"
-#include "DNA_effect_types.h"
-#include "DNA_outliner_types.h"
-#include "DNA_sound_types.h"
-#include "DNA_collection_types.h"
-#include "DNA_armature_types.h"
-#include "DNA_action_types.h"
-#include "DNA_constraint_types.h"
+#include "DNA_movieclip_types.h"
 #include "DNA_nla_types.h"
 #include "DNA_node_types.h"
-#include "DNA_color_types.h"
-#include "DNA_brush_types.h"
-#include "DNA_customdata_types.h"
+#include "DNA_object_fluidsim_types.h"
+#include "DNA_object_force_types.h"
+#include "DNA_object_types.h"
+#include "DNA_outliner_types.h"
+#include "DNA_packedFile_types.h"
 #include "DNA_particle_types.h"
-#include "DNA_cloth_types.h"
-#include "DNA_gpencil_types.h"
-#include "DNA_gpencil_modifier_types.h"
-#include "DNA_shader_fx_types.h"
-#include "DNA_windowmanager_types.h"
-#include "DNA_anim_types.h"
-#include "DNA_boid_types.h"
-#include "DNA_smoke_types.h"
-#include "DNA_speaker_types.h"
-#include "DNA_movieclip_types.h"
-#include "DNA_tracking_types.h"
-#include "DNA_dynamicpaint_types.h"
-#include "DNA_mask_types.h"
+#include "DNA_pointcloud_types.h"
 #include "DNA_rigidbody_types.h"
-#include "DNA_freestyle_types.h"
-#include "DNA_linestyle_types.h"
-#include "DNA_cachefile_types.h"
-#include "DNA_layer_types.h"
+#include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
+#include "DNA_sdna_types.h"
+#include "DNA_sequence_types.h"
+#include "DNA_shader_fx_types.h"
+#include "DNA_simulation_types.h"
+#include "DNA_sound_types.h"
+#include "DNA_space_types.h"
+#include "DNA_speaker_types.h"
+#include "DNA_text_types.h"
+#include "DNA_texture_types.h"
+#include "DNA_tracking_types.h"
+#include "DNA_userdef_types.h"
+#include "DNA_vec_types.h"
+#include "DNA_vfont_types.h"
+#include "DNA_view2d_types.h"
+#include "DNA_view3d_types.h"
+#include "DNA_volume_types.h"
+#include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
-#include "DNA_lightprobe_types.h"
+#include "DNA_world_types.h"
+#include "DNA_xr_types.h"
 
 /* end of list */
 

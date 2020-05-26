@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include "device/device.h"
 #include "device/device_memory.h"
+#include "device/device.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -31,40 +31,18 @@ device_memory::device_memory(Device *device, const char *name, MemoryType type)
       data_depth(0),
       type(type),
       name(name),
-      interpolation(INTERPOLATION_NONE),
-      extension(EXTENSION_REPEAT),
       device(device),
       device_pointer(0),
       host_pointer(0),
-      shared_pointer(0)
+      shared_pointer(0),
+      shared_counter(0)
 {
 }
 
 device_memory::~device_memory()
 {
-}
-
-device_memory::device_memory(device_memory &&other)
-    : data_type(other.data_type),
-      data_elements(other.data_elements),
-      data_size(other.data_size),
-      device_size(other.device_size),
-      data_width(other.data_width),
-      data_height(other.data_height),
-      data_depth(other.data_depth),
-      type(other.type),
-      name(other.name),
-      interpolation(other.interpolation),
-      extension(other.extension),
-      device(other.device),
-      device_pointer(other.device_pointer),
-      host_pointer(other.host_pointer),
-      shared_pointer(other.shared_pointer)
-{
-  other.device_size = 0;
-  other.device_pointer = 0;
-  other.host_pointer = 0;
-  other.shared_pointer = 0;
+  assert(shared_pointer == 0);
+  assert(shared_counter == 0);
 }
 
 void *device_memory::host_alloc(size_t size)
@@ -96,7 +74,7 @@ void device_memory::host_free()
 
 void device_memory::device_alloc()
 {
-  assert(!device_pointer && type != MEM_TEXTURE);
+  assert(!device_pointer && type != MEM_TEXTURE && type != MEM_GLOBAL);
   device->mem_alloc(*this);
 }
 
@@ -116,7 +94,7 @@ void device_memory::device_copy_to()
 
 void device_memory::device_copy_from(int y, int w, int h, int elem)
 {
-  assert(type != MEM_TEXTURE && type != MEM_READ_ONLY);
+  assert(type != MEM_TEXTURE && type != MEM_READ_ONLY && type != MEM_GLOBAL);
   device->mem_copy_from(*this, y, w, h, elem);
 }
 
@@ -157,6 +135,95 @@ device_sub_ptr::device_sub_ptr(device_memory &mem, int offset, int size) : devic
 device_sub_ptr::~device_sub_ptr()
 {
   device->mem_free_sub_ptr(ptr);
+}
+
+/* Device Texture */
+
+device_texture::device_texture(Device *device,
+                               const char *name,
+                               const uint slot,
+                               ImageDataType image_data_type,
+                               InterpolationType interpolation,
+                               ExtensionType extension)
+    : device_memory(device, name, MEM_TEXTURE), slot(slot)
+{
+  switch (image_data_type) {
+    case IMAGE_DATA_TYPE_FLOAT4:
+      data_type = TYPE_FLOAT;
+      data_elements = 4;
+      break;
+    case IMAGE_DATA_TYPE_FLOAT:
+      data_type = TYPE_FLOAT;
+      data_elements = 1;
+      break;
+    case IMAGE_DATA_TYPE_BYTE4:
+      data_type = TYPE_UCHAR;
+      data_elements = 4;
+      break;
+    case IMAGE_DATA_TYPE_BYTE:
+      data_type = TYPE_UCHAR;
+      data_elements = 1;
+      break;
+    case IMAGE_DATA_TYPE_HALF4:
+      data_type = TYPE_HALF;
+      data_elements = 4;
+      break;
+    case IMAGE_DATA_TYPE_HALF:
+      data_type = TYPE_HALF;
+      data_elements = 1;
+      break;
+    case IMAGE_DATA_TYPE_USHORT4:
+      data_type = TYPE_UINT16;
+      data_elements = 4;
+      break;
+    case IMAGE_DATA_TYPE_USHORT:
+      data_type = TYPE_UINT16;
+      data_elements = 1;
+      break;
+    case IMAGE_DATA_NUM_TYPES:
+      assert(0);
+      return;
+  }
+
+  memset(&info, 0, sizeof(info));
+  info.data_type = image_data_type;
+  info.interpolation = interpolation;
+  info.extension = extension;
+}
+
+device_texture::~device_texture()
+{
+  device_free();
+  host_free();
+}
+
+/* Host memory allocation. */
+void *device_texture::alloc(const size_t width, const size_t height, const size_t depth)
+{
+  const size_t new_size = size(width, height, depth);
+
+  if (new_size != data_size) {
+    device_free();
+    host_free();
+    host_pointer = host_alloc(data_elements * datatype_size(data_type) * new_size);
+    assert(device_pointer == 0);
+  }
+
+  data_size = new_size;
+  data_width = width;
+  data_height = height;
+  data_depth = depth;
+
+  info.width = width;
+  info.height = height;
+  info.depth = depth;
+
+  return host_pointer;
+}
+
+void device_texture::copy_to_device()
+{
+  device_copy_to();
 }
 
 CCL_NAMESPACE_END

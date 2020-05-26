@@ -21,16 +21,16 @@
  * \ingroup edlattice
  */
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "CLG_log.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_array_utils.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_curve_types.h"
 #include "DNA_lattice_types.h"
@@ -39,17 +39,18 @@
 
 #include "BKE_context.h"
 #include "BKE_layer.h"
+#include "BKE_main.h"
 #include "BKE_undo_system.h"
 
 #include "DEG_depsgraph.h"
 
-#include "ED_object.h"
 #include "ED_lattice.h"
+#include "ED_object.h"
 #include "ED_undo.h"
 #include "ED_util.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "lattice_intern.h"
 
@@ -60,9 +61,13 @@ static CLG_LogRef LOG = {"ed.undo.lattice"};
 /** \name Undo Conversion
  * \{ */
 
+/* TODO(Campbell): this could contain an entire 'Lattice' struct. */
 typedef struct UndoLattice {
   BPoint *def;
   int pntsu, pntsv, pntsw, actbp;
+  char typeu, typev, typew;
+  float fu, fv, fw;
+  float du, dv, dw;
   size_t undo_size;
 } UndoLattice;
 
@@ -82,6 +87,17 @@ static void undolatt_to_editlatt(UndoLattice *ult, EditLatt *editlatt)
   editlatt->latt->pntsv = ult->pntsv;
   editlatt->latt->pntsw = ult->pntsw;
   editlatt->latt->actbp = ult->actbp;
+
+  editlatt->latt->typeu = ult->typeu;
+  editlatt->latt->typev = ult->typev;
+  editlatt->latt->typew = ult->typew;
+
+  editlatt->latt->fu = ult->fu;
+  editlatt->latt->fv = ult->fv;
+  editlatt->latt->fw = ult->fw;
+  editlatt->latt->du = ult->du;
+  editlatt->latt->dv = ult->dv;
+  editlatt->latt->dw = ult->dw;
 }
 
 static void *undolatt_from_editlatt(UndoLattice *ult, EditLatt *editlatt)
@@ -93,6 +109,17 @@ static void *undolatt_from_editlatt(UndoLattice *ult, EditLatt *editlatt)
   ult->pntsv = editlatt->latt->pntsv;
   ult->pntsw = editlatt->latt->pntsw;
   ult->actbp = editlatt->latt->actbp;
+
+  ult->typeu = editlatt->latt->typeu;
+  ult->typev = editlatt->latt->typev;
+  ult->typew = editlatt->latt->typew;
+
+  ult->fu = editlatt->latt->fu;
+  ult->fv = editlatt->latt->fv;
+  ult->fw = editlatt->latt->fw;
+  ult->du = editlatt->latt->du;
+  ult->dv = editlatt->latt->dv;
+  ult->dw = editlatt->latt->dw;
 
   ult->undo_size += sizeof(*ult->def) * ult->pntsu * ult->pntsv * ult->pntsw;
 
@@ -119,7 +146,8 @@ static int validate_undoLatt(void *data, void *edata)
 
 static Object *editlatt_object_from_context(bContext *C)
 {
-  Object *obedit = CTX_data_edit_object(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
   if (obedit && obedit->type == OB_LATTICE) {
     Lattice *lt = obedit->data;
     if (lt->editlatt != NULL) {
@@ -154,9 +182,7 @@ static bool lattice_undosys_poll(bContext *C)
   return editlatt_object_from_context(C) != NULL;
 }
 
-static bool lattice_undosys_step_encode(struct bContext *C,
-                                        struct Main *UNUSED(bmain),
-                                        UndoStep *us_p)
+static bool lattice_undosys_step_encode(struct bContext *C, Main *bmain, UndoStep *us_p)
 {
   LatticeUndoStep *us = (LatticeUndoStep *)us_p;
 
@@ -164,8 +190,7 @@ static bool lattice_undosys_step_encode(struct bContext *C,
    * outside of this list will be moved out of edit-mode when reading back undo steps. */
   ViewLayer *view_layer = CTX_data_view_layer(C);
   uint objects_len = 0;
-  Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
-      view_layer, NULL, &objects_len);
+  Object **objects = ED_undo_editmode_objects_from_view_layer(view_layer, &objects_len);
 
   us->elems = MEM_callocN(sizeof(*us->elems) * objects_len, __func__);
   us->elems_len = objects_len;
@@ -177,17 +202,18 @@ static bool lattice_undosys_step_encode(struct bContext *C,
     elem->obedit_ref.ptr = ob;
     Lattice *lt = ob->data;
     undolatt_from_editlatt(&elem->data, lt->editlatt);
+    lt->editlatt->needs_flush_to_id = 1;
     us->step.data_size += elem->data.undo_size;
   }
   MEM_freeN(objects);
+
+  bmain->is_memfile_undo_flush_needed = true;
+
   return true;
 }
 
-static void lattice_undosys_step_decode(struct bContext *C,
-                                        struct Main *UNUSED(bmain),
-                                        UndoStep *us_p,
-                                        int UNUSED(dir),
-                                        bool UNUSED(is_final))
+static void lattice_undosys_step_decode(
+    struct bContext *C, struct Main *bmain, UndoStep *us_p, int UNUSED(dir), bool UNUSED(is_final))
 {
   LatticeUndoStep *us = (LatticeUndoStep *)us_p;
 
@@ -210,12 +236,15 @@ static void lattice_undosys_step_decode(struct bContext *C,
       continue;
     }
     undolatt_to_editlatt(&elem->data, lt->editlatt);
+    lt->editlatt->needs_flush_to_id = 1;
     DEG_id_tag_update(&obedit->id, ID_RECALC_GEOMETRY);
   }
 
   /* The first element is always active */
   ED_undo_object_set_active_or_warn(
       CTX_data_view_layer(C), us->elems[0].obedit_ref.ptr, us_p->name, &LOG);
+
+  bmain->is_memfile_undo_flush_needed = true;
 
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, NULL);
 }

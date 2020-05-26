@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2018, Blender Foundation
@@ -35,7 +35,7 @@ static void initData(ShaderFxData *fx)
   ARRAY_SET_ITEMS(gpfx->offset, 50, -100);
   ARRAY_SET_ITEMS(gpfx->rim_rgb, 1.0f, 1.0f, 0.5f);
   ARRAY_SET_ITEMS(gpfx->mask_rgb, 0.0f, 0.0f, 0.0f);
-  gpfx->mode = eShaderFxRimMode_Multiply;
+  gpfx->mode = eShaderFxRimMode_Overlay;
 
   ARRAY_SET_ITEMS(gpfx->blur, 0, 0);
   gpfx->samples = 2;
@@ -43,7 +43,7 @@ static void initData(ShaderFxData *fx)
 
 static void copyData(const ShaderFxData *md, ShaderFxData *target)
 {
-  BKE_shaderfx_copyData_generic(md, target);
+  BKE_shaderfx_copydata_generic(md, target);
 }
 
 ShaderFxTypeInfo shaderfx_Type_Rim = {

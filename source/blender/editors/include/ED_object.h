@@ -24,6 +24,9 @@
 #ifndef __ED_OBJECT_H__
 #define __ED_OBJECT_H__
 
+#include "BLI_compiler_attrs.h"
+#include "DNA_object_enums.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -54,9 +57,6 @@ struct wmOperator;
 struct wmOperatorType;
 struct wmWindowManager;
 
-#include "DNA_object_enums.h"
-#include "BLI_compiler_attrs.h"
-
 /* object_edit.c */
 /* context.object */
 struct Object *ED_object_context(struct bContext *C);
@@ -72,6 +72,51 @@ bool ED_object_calc_active_center_for_posemode(struct Object *ob,
                                                const bool select_only,
                                                float r_center[3]);
 bool ED_object_calc_active_center(struct Object *ob, const bool select_only, float r_center[3]);
+
+/* Object Data Container helper API. */
+struct XFormObjectData_Container;
+struct XFormObjectData_Container *ED_object_data_xform_container_create(void);
+void ED_object_data_xform_container_destroy(struct XFormObjectData_Container *xds);
+void ED_object_data_xform_container_update_all(struct XFormObjectData_Container *xds,
+                                               struct Main *bmain,
+                                               struct Depsgraph *depsgraph);
+void ED_object_data_xform_container_item_ensure(struct XFormObjectData_Container *xds,
+                                                struct Object *ob);
+
+/* Object Skip-Child Container helper API. */
+enum {
+  /**
+   * The parent is transformed, this is held in place.
+   */
+  XFORM_OB_SKIP_CHILD_PARENT_IS_XFORM = 1,
+  /**
+   * The same as #XFORM_OB_SKIP_CHILD_PARENT_IS_XFORM,
+   * however this objects parent isn't transformed directly.
+   */
+  XFORM_OB_SKIP_CHILD_PARENT_IS_XFORM_INDIRECT = 3,
+  /**
+   * Use the parent invert matrix to apply transformation,
+   * this is needed, because breaks in the selection chain prevents this from being transformed.
+   * This is used to add the transform which would have been added
+   * if there weren't breaks in the parent/child chain.
+   */
+  XFORM_OB_SKIP_CHILD_PARENT_APPLY = 2,
+};
+struct XFormObjectSkipChild_Container;
+struct XFormObjectSkipChild_Container *ED_object_xform_skip_child_container_create(void);
+void ED_object_xform_skip_child_container_item_ensure_from_array(
+    struct XFormObjectSkipChild_Container *xcs,
+    struct ViewLayer *view_layer,
+    struct Object **objects,
+    uint objects_len);
+void ED_object_xform_skip_child_container_destroy(struct XFormObjectSkipChild_Container *xcs);
+void ED_object_xform_skip_child_container_update_all(struct XFormObjectSkipChild_Container *xcs,
+                                                     struct Main *bmain,
+                                                     struct Depsgraph *depsgraph);
+void ED_object_xform_skip_child_container_item_ensure(struct XFormObjectSkipChild_Container *xcs,
+                                                      struct Object *ob,
+                                                      struct Object *ob_parent_recurse,
+                                                      int mode);
 
 /* object_ops.c */
 void ED_operatortypes_object(void);
@@ -100,6 +145,12 @@ typedef enum eObjectSelect_Mode {
   BA_SELECT = 1,
   BA_INVERT = 2,
 } eObjectSelect_Mode;
+
+typedef enum eObClearParentTypes {
+  CLEAR_PARENT_ALL = 0,
+  CLEAR_PARENT_KEEP_TRANSFORM,
+  CLEAR_PARENT_INVERSE,
+} eObClearParentTypes;
 
 #ifdef __RNA_TYPES_H__
 extern struct EnumPropertyItem prop_clear_parent_types[];
@@ -195,7 +246,7 @@ void ED_object_sculptmode_exit(struct bContext *C, struct Depsgraph *depsgraph);
 void ED_object_location_from_view(struct bContext *C, float loc[3]);
 void ED_object_rotation_from_quat(float rot[3], const float quat[4], const char align_axis);
 void ED_object_rotation_from_view(struct bContext *C, float rot[3], const char align_axis);
-void ED_object_base_init_transform_on_add(struct Object *obejct,
+void ED_object_base_init_transform_on_add(struct Object *object,
                                           const float loc[3],
                                           const float rot[3]);
 float ED_object_new_primitive_matrix(struct bContext *C,
@@ -209,6 +260,7 @@ float ED_object_new_primitive_matrix(struct bContext *C,
 #define OBJECT_ADD_SIZE_MAXF 1.0e12f
 
 void ED_object_add_unit_props_size(struct wmOperatorType *ot);
+void ED_object_add_unit_props_radius_ex(struct wmOperatorType *ot, float default_value);
 void ED_object_add_unit_props_radius(struct wmOperatorType *ot);
 void ED_object_add_generic_props(struct wmOperatorType *ot, bool do_editmode);
 void ED_object_add_mesh_props(struct wmOperatorType *ot);
@@ -317,13 +369,13 @@ int ED_object_modifier_convert(struct ReportList *reports,
                                struct ViewLayer *view_layer,
                                struct Object *ob,
                                struct ModifierData *md);
-int ED_object_modifier_apply(struct Main *bmain,
-                             struct ReportList *reports,
-                             struct Depsgraph *depsgraph,
-                             struct Scene *scene,
-                             struct Object *ob,
-                             struct ModifierData *md,
-                             int mode);
+bool ED_object_modifier_apply(struct Main *bmain,
+                              struct ReportList *reports,
+                              struct Depsgraph *depsgraph,
+                              struct Scene *scene,
+                              struct Object *ob,
+                              struct ModifierData *md,
+                              int mode);
 int ED_object_modifier_copy(struct ReportList *reports,
                             struct Object *ob,
                             struct ModifierData *md);
@@ -410,10 +462,16 @@ void ED_object_facemap_face_add(struct Object *ob, struct bFaceMap *fmap, int fa
 void ED_object_facemap_face_remove(struct Object *ob, struct bFaceMap *fmap, int facenum);
 
 /* object_data_transform.c */
+struct XFormObjectData *ED_object_data_xform_create_ex(struct ID *id, bool is_edit_mode);
 struct XFormObjectData *ED_object_data_xform_create(struct ID *id);
+struct XFormObjectData *ED_object_data_xform_create_from_edit_mode(ID *id);
+
 void ED_object_data_xform_destroy(struct XFormObjectData *xod);
 
 void ED_object_data_xform_by_mat4(struct XFormObjectData *xod, const float mat[4][4]);
+
+void ED_object_data_xform_restore(struct XFormObjectData *xod);
+void ED_object_data_xform_tag_update(struct XFormObjectData *xod);
 
 #ifdef __cplusplus
 }

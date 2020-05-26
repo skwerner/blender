@@ -33,6 +33,7 @@ set(INC
   ../../windowmanager
   ../../../../intern/clog
   ../../../../intern/guardedalloc
+  ../../../../intern/mantaflow/extern
   ../../../../intern/opencolorio
 )
 
@@ -55,6 +56,7 @@ set(SRC
   bpy_app_sdl.c
   bpy_app_timers.c
   bpy_app_translations.c
+  bpy_app_usd.c
   bpy_capi_utils.c
   bpy_driver.c
   bpy_gizmo_wrap.c
@@ -75,6 +77,7 @@ set(SRC
   bpy_rna_driver.c
   bpy_rna_gizmo.c
   bpy_rna_id_collection.c
+  bpy_rna_types_capi.c
   bpy_traceback.c
   bpy_utils_previews.c
   bpy_utils_units.c
@@ -94,6 +97,7 @@ set(SRC
   bpy_app_sdl.h
   bpy_app_timers.h
   bpy_app_translations.h
+  bpy_app_usd.h
   bpy_capi_utils.h
   bpy_driver.h
   bpy_gizmo_wrap.h
@@ -110,6 +114,7 @@ set(SRC
   bpy_rna_driver.h
   bpy_rna_gizmo.h
   bpy_rna_id_collection.h
+  bpy_rna_types_capi.h
   bpy_traceback.h
   bpy_utils_previews.h
   bpy_utils_units.h
@@ -122,6 +127,9 @@ set(LIB
   bf_editor_interface
   bf_editor_space_api
   bf_python_gpu
+
+  ${PYTHON_LINKFLAGS}
+  ${PYTHON_LIBRARIES}
 )
 
 # only to check if buildinfo is available
@@ -154,6 +162,9 @@ endif()
 if(WITH_CODEC_FFMPEG)
   list(APPEND INC_SYS
     ${FFMPEG_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${FFMPEG_LIBRARIES}
   )
   add_definitions(-DWITH_FFMPEG)
 endif()
@@ -239,6 +250,11 @@ if(WITH_SDL)
   list(APPEND INC_SYS
     ${SDL_INCLUDE_DIR}
   )
+  if(NOT WITH_SDL_DYNLOAD)
+    list(APPEND LIB
+      ${SDL_LIBRARY}
+    )
+  endif()
   add_definitions(-DWITH_SDL)
 endif()
 
@@ -257,10 +273,6 @@ if(WITH_LIBMV)
   add_definitions(-DWITH_LIBMV)
 endif()
 
-if(WITH_MOD_FLUID)
-  add_definitions(-DWITH_MOD_FLUID)
-endif()
-
 if(WITH_MOD_OCEANSIM)
   add_definitions(-DWITH_OCEANSIM)
 endif()
@@ -269,8 +281,8 @@ if(WITH_MOD_REMESH)
   add_definitions(-DWITH_MOD_REMESH)
 endif()
 
-if(WITH_MOD_SMOKE)
-  add_definitions(-DWITH_SMOKE)
+if(WITH_MOD_FLUID)
+  add_definitions(-DWITH_FLUID)
 endif()
 
 if(WITH_OPENCOLLADA)
@@ -295,7 +307,14 @@ endif()
 if(WITH_ALEMBIC)
   add_definitions(-DWITH_ALEMBIC)
   list(APPEND INC
-    ../../alembic
+    ../../io/alembic
+  )
+endif()
+
+if(WITH_USD)
+  add_definitions(-DWITH_USD)
+  list(APPEND INC
+    ../../io/usd
   )
 endif()
 
@@ -311,6 +330,10 @@ if(WITH_OPENSUBDIV)
   list(APPEND INC
     ../../../../intern/opensubdiv
   )
+endif()
+
+if(WITH_XR_OPENXR)
+  add_definitions(-DWITH_XR_OPENXR)
 endif()
 
 add_definitions(${GL_DEFINITIONS})

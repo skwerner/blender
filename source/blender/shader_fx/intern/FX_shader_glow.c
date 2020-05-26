@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2018, Blender Foundation
@@ -23,10 +23,11 @@
 
 #include <stdio.h>
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_modifier.h"
@@ -37,17 +38,16 @@
 static void initData(ShaderFxData *md)
 {
   GlowShaderFxData *gpfx = (GlowShaderFxData *)md;
-  ARRAY_SET_ITEMS(gpfx->glow_color, 0.75f, 1.0f, 1.0f);
+  ARRAY_SET_ITEMS(gpfx->glow_color, 0.75f, 1.0f, 1.0f, 1.0f);
   ARRAY_SET_ITEMS(gpfx->select_color, 0.0f, 0.0f, 0.0f);
+  copy_v2_fl(gpfx->blur, 50.0f);
   gpfx->threshold = 0.1f;
-
-  ARRAY_SET_ITEMS(gpfx->blur, 50, 0);
-  gpfx->samples = 16;
+  gpfx->samples = 8;
 }
 
 static void copyData(const ShaderFxData *md, ShaderFxData *target)
 {
-  BKE_shaderfx_copyData_generic(md, target);
+  BKE_shaderfx_copydata_generic(md, target);
 }
 
 ShaderFxTypeInfo shaderfx_Type_Glow = {

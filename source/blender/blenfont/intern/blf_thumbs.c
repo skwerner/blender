@@ -30,10 +30,10 @@
 
 #include FT_FREETYPE_H
 
-#include "BLI_utildefines.h"
 #include "BLI_listbase.h"
 #include "BLI_rect.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
 #include "blf_internal.h"
 #include "blf_internal_types.h"
@@ -78,8 +78,8 @@ void BLF_thumb_preview(const char *filename,
   /* Would be done via the BLF API, but we're not using a fontid here */
   font->buf_info.cbuf = buf;
   font->buf_info.ch = channels;
-  font->buf_info.w = w;
-  font->buf_info.h = h;
+  font->buf_info.dims[0] = w;
+  font->buf_info.dims[1] = h;
 
   /* Always create the image with a white font,
    * the caller can theme how it likes */

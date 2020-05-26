@@ -294,7 +294,7 @@ class RENDER_PT_eevee_volumetric_shadows(RenderButtonsPanel, Panel):
         props = scene.eevee
 
         layout.active = props.use_volumetric_shadows
-        layout.prop(props, "volumetric_shadow_samples", text="Shadow Samples")
+        layout.prop(props, "volumetric_shadow_samples", text="Samples")
 
 
 class RENDER_PT_eevee_subsurface_scattering(RenderButtonsPanel, Panel):
@@ -475,33 +475,21 @@ class RENDER_PT_eevee_film(RenderButtonsPanel, Panel):
 
         scene = context.scene
         rd = scene.render
+        props = scene.eevee
 
         col = layout.column()
         col.prop(rd, "filter_size")
         col.prop(rd, "film_transparent", text="Transparent")
 
-
-class RENDER_PT_eevee_film_overscan(RenderButtonsPanel, Panel):
-    bl_label = "Overscan"
-    bl_parent_id = "RENDER_PT_eevee_film"
-    bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_EEVEE'}
-
-    def draw_header(self, context):
-
-        scene = context.scene
-        props = scene.eevee
-
-        self.layout.prop(props, "use_overscan", text="")
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        scene = context.scene
-        props = scene.eevee
-
-        layout.active = props.use_overscan
-        layout.prop(props, "overscan_size", text="Size")
+        col = layout.column(align=False, heading="Overscan")
+        col.use_property_decorate = False
+        row = col.row(align=True)
+        sub = row.row(align=True)
+        sub.prop(props, "use_overscan", text="")
+        sub = sub.row(align=True)
+        sub.active = props.use_overscan
+        sub.prop(props, "overscan_size", text="")
+        row.prop_decorator(props, "overscan_size")
 
 
 class RENDER_PT_eevee_hair(RenderButtonsPanel, Panel):
@@ -524,6 +512,45 @@ class RENDER_PT_eevee_hair(RenderButtonsPanel, Panel):
         layout.prop(rd, "hair_subdiv")
 
 
+class RENDER_PT_eevee_performance(RenderButtonsPanel, Panel):
+    bl_label = "Performance"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.engine in cls.COMPAT_ENGINES)
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        rd = scene.render
+
+        layout.use_property_split = True
+
+        layout.prop(rd, "use_high_quality_normals")
+
+
+class RENDER_PT_gpencil(RenderButtonsPanel, Panel):
+    bl_label = "Grease Pencil"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        scene = context.scene
+        props = scene.grease_pencil_settings
+
+        col = layout.column()
+        col.prop(props, "antialias_threshold")
+
+
 class RENDER_PT_opengl_sampling(RenderButtonsPanel, Panel):
     bl_label = "Sampling"
     COMPAT_ENGINES = {'BLENDER_WORKBENCH'}
@@ -542,7 +569,7 @@ class RENDER_PT_opengl_sampling(RenderButtonsPanel, Panel):
 
         col = layout.column()
         col.prop(props, "render_aa", text="Render")
-        col.prop(props, "viewport_aa", text="Viewport Render")
+        col.prop(props, "viewport_aa", text="Viewport")
 
 
 class RENDER_PT_opengl_film(RenderButtonsPanel, Panel):
@@ -629,9 +656,6 @@ class RENDER_PT_simplify_viewport(RenderButtonsPanel, Panel):
         col = flow.column()
         col.prop(rd, "simplify_child_particles", text="Max Child Particles")
 
-        col = flow.column()
-        col.prop(rd, "use_simplify_smoke_highres", text="High-resolution Smoke")
-
 
 class RENDER_PT_simplify_render(RenderButtonsPanel, Panel):
     bl_label = "Render"
@@ -674,12 +698,14 @@ classes = (
     RENDER_PT_eevee_volumetric,
     RENDER_PT_eevee_volumetric_lighting,
     RENDER_PT_eevee_volumetric_shadows,
+    RENDER_PT_eevee_performance,
     RENDER_PT_eevee_hair,
     RENDER_PT_eevee_shadows,
     RENDER_PT_eevee_indirect_lighting,
     RENDER_PT_eevee_indirect_lighting_display,
     RENDER_PT_eevee_film,
-    RENDER_PT_eevee_film_overscan,
+
+    RENDER_PT_gpencil,
     RENDER_PT_opengl_sampling,
     RENDER_PT_opengl_lighting,
     RENDER_PT_opengl_color,

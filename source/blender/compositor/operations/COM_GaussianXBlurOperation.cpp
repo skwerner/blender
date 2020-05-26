@@ -17,13 +17,11 @@
  */
 
 #include "COM_GaussianXBlurOperation.h"
-#include "COM_OpenCLDevice.h"
 #include "BLI_math.h"
+#include "COM_OpenCLDevice.h"
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include "RE_pipeline.h"
-}
 
 GaussianXBlurOperation::GaussianXBlurOperation() : BlurBaseOperation(COM_DT_COLOR)
 {

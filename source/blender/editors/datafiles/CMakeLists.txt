@@ -336,7 +336,7 @@ set(ICON_NAMES
   force_boid
   force_turbulence
   force_drag
-  force_smokeflow
+  force_fluidflow
   image_plane
   image_background
   image_reference
@@ -385,9 +385,8 @@ set(ICON_NAMES
   mod_mask
   mod_cloth
   mod_explode
-  mod_fluidsim
   mod_multires
-  mod_smoke
+  mod_fluid
   mod_solidify
   mod_screw
   mod_vertex_weight
@@ -529,10 +528,6 @@ set(ICON_NAMES
   axis_side
   axis_front
   axis_top
-  ndof_dom
-  ndof_turn
-  ndof_fly
-  ndof_trans
   layer_used
   layer_active
   sortalpha
@@ -614,6 +609,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.gpencil_draw.draw
   brush.gpencil_draw.erase
   brush.gpencil_draw.fill
+  brush.gpencil_draw.tint
   brush.paint_texture.airbrush
   brush.paint_texture.clone
   brush.paint_texture.draw
@@ -627,6 +623,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.paint_vertex.average
   brush.paint_vertex.blur
   brush.paint_vertex.draw
+  brush.paint_vertex.replace
   brush.paint_vertex.smear
   brush.paint_weight.average
   brush.paint_weight.blur
@@ -643,8 +640,11 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.sculpt.blob
   brush.sculpt.clay
   brush.sculpt.clay_strips
+  brush.sculpt.clay_thumb
+  brush.sculpt.cloth
   brush.sculpt.crease
   brush.sculpt.draw
+  brush.sculpt.draw_face_sets
   brush.sculpt.draw_sharp
   brush.sculpt.elastic_deform
   brush.sculpt.fill
@@ -653,6 +653,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.sculpt.inflate
   brush.sculpt.layer
   brush.sculpt.mask
+  brush.sculpt.multiplane_scrape
   brush.sculpt.nudge
   brush.sculpt.pinch
   brush.sculpt.pose
@@ -662,6 +663,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.sculpt.smooth
   brush.sculpt.snake_hook
   brush.sculpt.thumb
+  brush.sculpt.topology
   brush.uv_sculpt.grab
   brush.uv_sculpt.pinch
   brush.uv_sculpt.relax
@@ -693,6 +695,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.gpencil.primitive_circle
   ops.gpencil.primitive_curve
   ops.gpencil.primitive_line
+  ops.gpencil.primitive_polyline
   ops.gpencil.radius
   ops.gpencil.sculpt_clone
   ops.gpencil.sculpt_grab
@@ -705,6 +708,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.gpencil.sculpt_twist
   ops.gpencil.sculpt_weight
   ops.gpencil.stroke_cutter
+  ops.gpencil.transform_fill
   ops.mesh.bevel
   ops.mesh.bisect
   ops.mesh.dupli_extrude_cursor
@@ -728,6 +732,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.mesh.spin.duplicate
   ops.mesh.vertices_smooth
   ops.node.links_cut
+  ops.paint.eyedropper_add
   ops.paint.vertex_color_fill
   ops.paint.weight_fill
   ops.paint.weight_gradient
@@ -740,6 +745,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.sculpt.border_mask
   ops.sculpt.lasso_mask
   ops.sculpt.mesh_filter
+  ops.sequencer.blade
   ops.transform.bone_envelope
   ops.transform.bone_size
   ops.transform.edge_slide
@@ -760,8 +766,6 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
 )
 
 data_to_c_simple(../../../../release/datafiles/bfont.pfb SRC)
-data_to_c_simple(../../../../release/datafiles/bfont.ttf SRC)
-data_to_c_simple(../../../../release/datafiles/bmonofont.ttf SRC)
 
 if(WITH_BLENDER)
   # blender only (not player)
@@ -775,22 +779,22 @@ if(WITH_BLENDER)
 
     # images
     data_to_c_simple(../../../../release/datafiles/splash.png SRC)
-    data_to_c_simple(../../../../release/datafiles/splash_2x.png SRC)
+    data_to_c_simple(../../../../release/datafiles/alert_icons.png SRC)
     # XXX These are handy, but give nasty "false changes" in svn :/
-    #svg_to_png(../../../../release/datafiles/blender_icons.svg
-               #../../../../release/datafiles/blender_icons16.png
-               #90 SRC)
+    # svg_to_png(../../../../release/datafiles/blender_icons.svg
+    #            ../../../../release/datafiles/blender_icons16.png
+    #            90 SRC)
 
     data_to_c_simple_icons(../../../../release/datafiles/blender_icons16 "icon16_" "${ICON_NAMES}" SRC)
-    #data_to_c_simple(../../../../release/datafiles/blender_icons16.png SRC)
-    #svg_to_png(../../../../release/datafiles/blender_icons.svg
-               #../../../../release/datafiles/blender_icons32.png
-               #180 SRC)
+    # data_to_c_simple(../../../../release/datafiles/blender_icons16.png SRC)
+    # svg_to_png(../../../../release/datafiles/blender_icons.svg
+    #            ../../../../release/datafiles/blender_icons32.png
+    #            180 SRC)
     data_to_c_simple_icons(../../../../release/datafiles/blender_icons32 "icon32_" "${ICON_NAMES}" SRC)
-    #data_to_c_simple(../../../../release/datafiles/blender_icons32.png SRC)
-    #svg_to_png(../../../../release/datafiles/prvicons.svg
-               #../../../../release/datafiles/prvicons.png
-               #90 SRC)
+    # data_to_c_simple(../../../../release/datafiles/blender_icons32.png SRC)
+    # svg_to_png(../../../../release/datafiles/prvicons.svg
+    #            ../../../../release/datafiles/prvicons.png
+    #            90 SRC)
     data_to_c_simple(../../../../release/datafiles/prvicons.png SRC)
 
     # brushes

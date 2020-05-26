@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -29,12 +29,12 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
-#include "BKE_editmesh.h"
-#include "BKE_mesh.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_modifier.h"
 #include "BKE_deform.h"
+#include "BKE_editmesh.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_mesh.h"
+#include "BKE_modifier.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -316,7 +316,7 @@ static void SimpleDeformModifier_do(SimpleDeformModifierData *smd,
       axis_map_table[(smd->mode != MOD_SIMPLEDEFORM_MODE_BEND) ? deform_axis : 2];
 
   for (i = 0; i < numVerts; i++) {
-    float weight = defvert_array_find_weight_safe(dvert, i, vgroup);
+    float weight = BKE_defvert_array_find_weight_safe(dvert, i, vgroup);
 
     if (invert_vgroup) {
       weight = 1.0f - weight;
@@ -440,6 +440,11 @@ static void deformVertsEM(ModifierData *md,
     mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, numVerts, false, false);
   }
 
+  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  if (mesh_src != NULL) {
+    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  }
+
   SimpleDeformModifier_do(sdmd, ctx, ctx->object, mesh_src, vertexCos, numVerts);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
@@ -454,16 +459,19 @@ ModifierTypeInfo modifierType_SimpleDeform = {
     /* type */ eModifierTypeType_OnlyDeform,
 
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
-        eModifierTypeFlag_AcceptsLattice | eModifierTypeFlag_SupportsEditmode |
+        eModifierTypeFlag_AcceptsVertexCosOnly | eModifierTypeFlag_SupportsEditmode |
         eModifierTypeFlag_EnableInEditmode,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ deformVerts,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ deformVertsEM,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ NULL,
+    /* modifyMesh */ NULL,
+    /* modifyHair */ NULL,
+    /* modifyPointCloud */ NULL,
+    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

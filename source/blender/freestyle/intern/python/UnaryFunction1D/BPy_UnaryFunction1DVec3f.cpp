@@ -21,8 +21,8 @@
 #include "BPy_UnaryFunction1DVec3f.h"
 
 #include "../BPy_Convert.h"
-#include "../BPy_Interface1D.h"
 #include "../BPy_IntegrationType.h"
+#include "../BPy_Interface1D.h"
 
 #include "UnaryFunction1D_Vec3f/BPy_Orientation3DF1D.h"
 
@@ -162,10 +162,10 @@ static int integration_type_set(BPy_UnaryFunction1DVec3f *self,
 }
 
 static PyGetSetDef BPy_UnaryFunction1DVec3f_getseters[] = {
-    {(char *)"integration_type",
+    {"integration_type",
      (getter)integration_type_get,
      (setter)integration_type_set,
-     (char *)integration_type_doc,
+     integration_type_doc,
      NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };

@@ -20,9 +20,9 @@
 
 #include "DNA_curve_types.h"
 
-#include "MEM_guardedalloc.h"
 #include "BLI_heap.h"
 #include "BLI_math_vector.h"
+#include "MEM_guardedalloc.h"
 
 #include "BKE_curve.h"
 
@@ -269,11 +269,11 @@ uint BKE_curve_decimate_bezt_array(BezTriple *bezt_array,
     if (a == HD_VECT) { \
       a = HD_FREE; \
     } \
-    else if (a == HD_AUTO) { \
+    else if (a == HD_AUTO || a == HD_AUTO_ANIM) { \
       a = HD_ALIGN; \
     } \
     /* opposite handle */ \
-    if (b == HD_AUTO) { \
+    if (b == HD_AUTO || b == HD_AUTO_ANIM) { \
       b = HD_ALIGN; \
     } \
   } \

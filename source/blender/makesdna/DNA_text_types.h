@@ -26,8 +26,8 @@
 #ifndef __DNA_TEXT_TYPES_H__
 #define __DNA_TEXT_TYPES_H__
 
-#include "DNA_listBase.h"
 #include "DNA_ID.h"
+#include "DNA_listBase.h"
 
 typedef struct TextLine {
   struct TextLine *next, *prev;
@@ -36,7 +36,8 @@ typedef struct TextLine {
   /** May be NULL if syntax is off or not yet formatted. */
   char *format;
   /** Blen unused. */
-  int len, blen;
+  int len;
+  char _pad0[4];
 } TextLine;
 
 typedef struct Text {

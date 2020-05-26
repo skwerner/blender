@@ -29,17 +29,18 @@
 
 #include "BLT_translation.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_listbase.h"
+#include "BLI_math_bits.h"
 #include "BLI_rect.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_object_types.h"
 
 #include "BKE_camera.h"
-#include "BKE_global.h"
 #include "BKE_colortools.h"
+#include "BKE_global.h"
 #include "BKE_layer.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
@@ -55,16 +56,16 @@
 #  include "BPY_extern.h"
 #endif
 
+#include "RE_bake.h"
 #include "RE_engine.h"
 #include "RE_pipeline.h"
-#include "RE_bake.h"
 
 #include "DRW_engine.h"
 
 #include "initrender.h"
-#include "renderpipeline.h"
-#include "render_types.h"
 #include "render_result.h"
+#include "render_types.h"
+#include "renderpipeline.h"
 
 /* Render Engine Types */
 
@@ -87,8 +88,8 @@ void RE_engines_exit(void)
     BLI_remlink(&R_engines, type);
 
     if (!(type->flag & RE_INTERNAL)) {
-      if (type->ext.free) {
-        type->ext.free(type->ext.data);
+      if (type->rna_ext.free) {
+        type->rna_ext.free(type->rna_ext.data);
       }
 
       MEM_freeN(type);
@@ -116,7 +117,7 @@ RenderEngineType *RE_engines_find(const char *idname)
   return type;
 }
 
-bool RE_engine_is_external(Render *re)
+bool RE_engine_is_external(const Render *re)
 {
   return (re->engine && re->engine->type && re->engine->type->render);
 }
@@ -131,19 +132,8 @@ bool RE_engine_is_opengl(RenderEngineType *render_type)
 
 RenderEngine *RE_engine_create(RenderEngineType *type)
 {
-  return RE_engine_create_ex(type, false);
-}
-
-RenderEngine *RE_engine_create_ex(RenderEngineType *type, bool use_for_viewport)
-{
   RenderEngine *engine = MEM_callocN(sizeof(RenderEngine), "RenderEngine");
   engine->type = type;
-
-  if (use_for_viewport) {
-    engine->flag |= RE_ENGINE_USED_FOR_VIEWPORT;
-
-    BLI_threaded_malloc_begin();
-  }
 
   BLI_mutex_init(&engine->update_render_passes_mutex);
 
@@ -158,13 +148,92 @@ void RE_engine_free(RenderEngine *engine)
   }
 #endif
 
-  if (engine->flag & RE_ENGINE_USED_FOR_VIEWPORT) {
-    BLI_threaded_malloc_end();
-  }
-
   BLI_mutex_end(&engine->update_render_passes_mutex);
 
   MEM_freeN(engine);
+}
+
+/* Bake Render Results */
+
+static RenderResult *render_result_from_bake(RenderEngine *engine, int x, int y, int w, int h)
+{
+  /* Create render result with specified size. */
+  RenderResult *rr = MEM_callocN(sizeof(RenderResult), __func__);
+
+  rr->rectx = w;
+  rr->recty = h;
+  rr->tilerect.xmin = x;
+  rr->tilerect.ymin = y;
+  rr->tilerect.xmax = x + w;
+  rr->tilerect.ymax = y + h;
+
+  /* Add single baking render layer. */
+  RenderLayer *rl = MEM_callocN(sizeof(RenderLayer), "bake render layer");
+  rl->rectx = w;
+  rl->recty = h;
+  BLI_addtail(&rr->layers, rl);
+
+  /* Add render passes. */
+  render_layer_add_pass(rr, rl, engine->bake.depth, RE_PASSNAME_COMBINED, "", "RGBA");
+  RenderPass *primitive_pass = render_layer_add_pass(rr, rl, 4, "BakePrimitive", "", "RGBA");
+  RenderPass *differential_pass = render_layer_add_pass(rr, rl, 4, "BakeDifferential", "", "RGBA");
+
+  /* Fill render passes from bake pixel array, to be read by the render engine. */
+  for (int ty = 0; ty < h; ty++) {
+    size_t offset = ty * w * 4;
+    float *primitive = primitive_pass->rect + offset;
+    float *differential = differential_pass->rect + offset;
+
+    size_t bake_offset = (y + ty) * engine->bake.width + x;
+    const BakePixel *bake_pixel = engine->bake.pixels + bake_offset;
+
+    for (int tx = 0; tx < w; tx++) {
+      if (bake_pixel->object_id != engine->bake.object_id) {
+        primitive[0] = int_as_float(-1);
+        primitive[1] = int_as_float(-1);
+      }
+      else {
+        primitive[0] = int_as_float(bake_pixel->object_id);
+        primitive[1] = int_as_float(bake_pixel->primitive_id);
+        primitive[2] = bake_pixel->uv[0];
+        primitive[3] = bake_pixel->uv[1];
+
+        differential[0] = bake_pixel->du_dx;
+        differential[1] = bake_pixel->du_dy;
+        differential[2] = bake_pixel->dv_dx;
+        differential[3] = bake_pixel->dv_dy;
+      }
+
+      primitive += 4;
+      differential += 4;
+      bake_pixel++;
+    }
+  }
+
+  return rr;
+}
+
+static void render_result_to_bake(RenderEngine *engine, RenderResult *rr)
+{
+  RenderPass *rpass = RE_pass_find_by_name(rr->layers.first, RE_PASSNAME_COMBINED, "");
+
+  if (!rpass) {
+    return;
+  }
+
+  /* Copy from tile render result to full image bake result. */
+  int x = rr->tilerect.xmin;
+  int y = rr->tilerect.ymin;
+  int w = rr->tilerect.xmax - rr->tilerect.xmin;
+  int h = rr->tilerect.ymax - rr->tilerect.ymin;
+
+  for (int ty = 0; ty < h; ty++) {
+    size_t offset = ty * w * engine->bake.depth;
+    size_t bake_offset = ((y + ty) * engine->bake.width + x) * engine->bake.depth;
+    size_t size = w * engine->bake.depth * sizeof(float);
+
+    memcpy(engine->bake.result + bake_offset, rpass->rect + offset, size);
+  }
 }
 
 /* Render Results */
@@ -180,6 +249,12 @@ static RenderPart *get_part_from_result(Render *re, RenderResult *result)
 RenderResult *RE_engine_begin_result(
     RenderEngine *engine, int x, int y, int w, int h, const char *layername, const char *viewname)
 {
+  if (engine->bake.pixels) {
+    RenderResult *result = render_result_from_bake(engine, x, y, w, h);
+    BLI_addtail(&engine->fullresult, result);
+    return result;
+  }
+
   Render *re = engine->re;
   RenderResult *result;
   rcti disprect;
@@ -237,6 +312,11 @@ RenderResult *RE_engine_begin_result(
 
 void RE_engine_update_result(RenderEngine *engine, RenderResult *result)
 {
+  if (engine->bake.pixels) {
+    /* No interactive baking updates for now. */
+    return;
+  }
+
   Render *re = engine->re;
 
   if (result) {
@@ -258,7 +338,7 @@ void RE_engine_add_pass(RenderEngine *engine,
     return;
   }
 
-  render_result_add_pass(re->result, name, channels, chan_id, layername, NULL);
+  RE_create_render_pass(re->result, name, channels, chan_id, layername, NULL);
 }
 
 void RE_engine_end_result(
@@ -267,6 +347,13 @@ void RE_engine_end_result(
   Render *re = engine->re;
 
   if (!result) {
+    return;
+  }
+
+  if (engine->bake.pixels) {
+    render_result_to_bake(engine, result);
+    BLI_remlink(&engine->fullresult, result);
+    render_result_free(result);
     return;
   }
 
@@ -574,7 +661,7 @@ bool RE_bake_engine(Render *re,
                     Object *object,
                     const int object_id,
                     const BakePixel pixel_array[],
-                    const size_t num_pixels,
+                    const BakeImages *bake_images,
                     const int depth,
                     const eScenePassType pass_type,
                     const int pass_filter,
@@ -605,9 +692,11 @@ bool RE_bake_engine(Render *re,
   engine->resolution_x = re->winx;
   engine->resolution_y = re->winy;
 
+  BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
   RE_parts_init(re);
   engine->tile_x = re->r.tilex;
   engine->tile_y = re->r.tiley;
+  BLI_rw_mutex_unlock(&re->partsmutex);
 
   if (type->bake) {
     engine->depsgraph = depsgraph;
@@ -617,16 +706,21 @@ bool RE_bake_engine(Render *re,
       type->update(engine, re->main, engine->depsgraph);
     }
 
-    type->bake(engine,
-               engine->depsgraph,
-               object,
-               pass_type,
-               pass_filter,
-               object_id,
-               pixel_array,
-               num_pixels,
-               depth,
-               result);
+    for (int i = 0; i < bake_images->size; i++) {
+      const BakeImage *image = bake_images->data + i;
+
+      engine->bake.pixels = pixel_array + image->offset;
+      engine->bake.result = result + image->offset * depth;
+      engine->bake.width = image->width;
+      engine->bake.height = image->height;
+      engine->bake.depth = depth;
+      engine->bake.object_id = object_id;
+
+      type->bake(
+          engine, engine->depsgraph, object, pass_type, pass_filter, image->width, image->height);
+
+      memset(&engine->bake, 0, sizeof(engine->bake));
+    }
 
     engine->depsgraph = NULL;
   }
@@ -863,7 +957,7 @@ void RE_engine_register_pass(struct RenderEngine *engine,
                              const char *name,
                              int channels,
                              const char *chanid,
-                             int type)
+                             eNodeSocketDatatype type)
 {
   if (!(scene && view_layer && engine && engine->update_render_passes_cb)) {
     return;

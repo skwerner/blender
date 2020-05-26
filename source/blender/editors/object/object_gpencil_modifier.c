@@ -27,8 +27,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_gpencil_types.h"
 #include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -37,11 +37,11 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_context.h"
-#include "BKE_main.h"
-#include "BKE_gpencil_modifier.h"
-#include "BKE_report.h"
-#include "BKE_object.h"
 #include "BKE_gpencil.h"
+#include "BKE_gpencil_modifier.h"
+#include "BKE_main.h"
+#include "BKE_object.h"
+#include "BKE_report.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -65,7 +65,7 @@ GpencilModifierData *ED_object_gpencil_modifier_add(
     ReportList *reports, Main *bmain, Scene *UNUSED(scene), Object *ob, const char *name, int type)
 {
   GpencilModifierData *new_md = NULL;
-  const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(type);
+  const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(type);
 
   if (ob->type != OB_GPENCIL) {
     BKE_reportf(reports, RPT_WARNING, "Modifiers cannot be added to object '%s'", ob->id.name + 2);
@@ -73,7 +73,7 @@ GpencilModifierData *ED_object_gpencil_modifier_add(
   }
 
   if (mti->flags & eGpencilModifierTypeFlag_Single) {
-    if (BKE_gpencil_modifiers_findByType(ob, type)) {
+    if (BKE_gpencil_modifiers_findby_type(ob, type)) {
       BKE_report(reports, RPT_WARNING, "Only one modifier of this type is allowed");
       return NULL;
     }
@@ -90,6 +90,11 @@ GpencilModifierData *ED_object_gpencil_modifier_add(
 
   /* make sure modifier data has unique name */
   BKE_gpencil_modifier_unique_name(&ob->greasepencil_modifiers, new_md);
+
+  /* Enable edit mode visible by default. */
+  if (mti->flags & eGpencilModifierTypeFlag_SupportsEditmode) {
+    new_md->mode |= eGpencilModifierMode_Editmode;
+  }
 
   bGPdata *gpd = ob->data;
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
@@ -209,7 +214,7 @@ int ED_object_gpencil_modifier_move_down(ReportList *UNUSED(reports),
 static int gpencil_modifier_apply_obdata(
     ReportList *reports, Main *bmain, Depsgraph *depsgraph, Object *ob, GpencilModifierData *md)
 {
-  const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
+  const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
 
   if (mti->isDisabled && mti->isDisabled(md, 0)) {
     BKE_report(reports, RPT_ERROR, "Modifier is disabled, skipping apply");
@@ -276,18 +281,18 @@ int ED_object_gpencil_modifier_apply(Main *bmain,
 int ED_object_gpencil_modifier_copy(ReportList *reports, Object *ob, GpencilModifierData *md)
 {
   GpencilModifierData *nmd;
-  const GpencilModifierTypeInfo *mti = BKE_gpencil_modifierType_getInfo(md->type);
+  const GpencilModifierTypeInfo *mti = BKE_gpencil_modifier_get_info(md->type);
   GpencilModifierType type = md->type;
 
   if (mti->flags & eGpencilModifierTypeFlag_Single) {
-    if (BKE_gpencil_modifiers_findByType(ob, type)) {
+    if (BKE_gpencil_modifiers_findby_type(ob, type)) {
       BKE_report(reports, RPT_WARNING, "Only one modifier of this type is allowed");
       return 0;
     }
   }
 
   nmd = BKE_gpencil_modifier_new(md->type);
-  BKE_gpencil_modifier_copyData(md, nmd);
+  BKE_gpencil_modifier_copydata(md, nmd);
   BLI_insertlinkafter(&ob->greasepencil_modifiers, md, nmd);
   BKE_gpencil_modifier_unique_name(&ob->greasepencil_modifiers, nmd);
 
@@ -330,7 +335,7 @@ static const EnumPropertyItem *gpencil_modifier_add_itemf(bContext *C,
   for (a = 0; rna_enum_object_greasepencil_modifier_type_items[a].identifier; a++) {
     md_item = &rna_enum_object_greasepencil_modifier_type_items[a];
     if (md_item->identifier[0]) {
-      mti = BKE_gpencil_modifierType_getInfo(md_item->value);
+      mti = BKE_gpencil_modifier_get_info(md_item->value);
 
       if (mti->flags & eGpencilModifierTypeFlag_NoUserAdd) {
         continue;
@@ -362,7 +367,7 @@ void OBJECT_OT_gpencil_modifier_add(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "Add Grease Pencil Modifier";
+  ot->name = "Add Modifier";
   ot->description = "Add a procedural operation/effect to the active grease pencil object";
   ot->idname = "OBJECT_OT_gpencil_modifier_add";
 
@@ -450,7 +455,7 @@ static GpencilModifierData *gpencil_edit_modifier_property_get(wmOperator *op,
   GpencilModifierData *md;
   RNA_string_get(op->ptr, "modifier", modifier_name);
 
-  md = BKE_gpencil_modifiers_findByName(ob, modifier_name);
+  md = BKE_gpencil_modifiers_findby_name(ob, modifier_name);
 
   if (md && type != 0 && md->type != type) {
     md = NULL;

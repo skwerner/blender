@@ -24,17 +24,17 @@
  */
 
 #include "DNA_screen_types.h"
-#include "DNA_vec_types.h"
 #include "DNA_userdef_types.h"
+#include "DNA_vec_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_bitmap_draw_2d.h"
 #include "BLI_blenlib.h"
+#include "BLI_lasso_2d.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
-#include "BLI_lasso_2d.h"
 
 #include "BKE_context.h"
 
@@ -51,17 +51,15 @@
 #include "BIF_glutil.h"
 
 /* context checked on having screen, window and area */
-wmGesture *WM_gesture_new(bContext *C, const wmEvent *event, int type)
+wmGesture *WM_gesture_new(wmWindow *window, const ARegion *region, const wmEvent *event, int type)
 {
   wmGesture *gesture = MEM_callocN(sizeof(wmGesture), "new gesture");
-  wmWindow *window = CTX_wm_window(C);
-  ARegion *ar = CTX_wm_region(C);
 
   BLI_addtail(&window->gesture, gesture);
 
   gesture->type = type;
   gesture->event_type = event->type;
-  gesture->winrct = ar->winrct;
+  gesture->winrct = region->winrct;
   gesture->user_data.use_free = true; /* Free if userdata is set. */
   gesture->modal_state = GESTURE_MODAL_NOP;
 
@@ -97,10 +95,8 @@ wmGesture *WM_gesture_new(bContext *C, const wmEvent *event, int type)
   return gesture;
 }
 
-void WM_gesture_end(bContext *C, wmGesture *gesture)
+void WM_gesture_end(wmWindow *win, wmGesture *gesture)
 {
-  wmWindow *win = CTX_wm_window(C);
-
   if (win->tweak == gesture) {
     win->tweak = NULL;
   }
@@ -110,12 +106,17 @@ void WM_gesture_end(bContext *C, wmGesture *gesture)
   MEM_freeN(gesture);
 }
 
-void WM_gestures_remove(bContext *C)
+void WM_gestures_free_all(wmWindow *win)
 {
-  wmWindow *win = CTX_wm_window(C);
-
   while (win->gesture.first) {
-    WM_gesture_end(C, win->gesture.first);
+    WM_gesture_end(win, win->gesture.first);
+  }
+}
+
+void WM_gestures_remove(wmWindow *win)
+{
+  while (win->gesture.first) {
+    WM_gesture_end(win, win->gesture.first);
   }
 }
 
@@ -319,24 +320,24 @@ static void draw_filled_lasso_px_cb(int x, int x_end, int y, void *user_data)
 static void draw_filled_lasso(wmGesture *gt)
 {
   const short *lasso = (short *)gt->customdata;
-  const int tot = gt->points;
-  int(*moves)[2] = MEM_mallocN(sizeof(*moves) * (tot + 1), __func__);
+  const int mcoords_len = gt->points;
+  int(*mcoords)[2] = MEM_mallocN(sizeof(*mcoords) * (mcoords_len + 1), __func__);
   int i;
   rcti rect;
   float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 
-  for (i = 0; i < tot; i++, lasso += 2) {
-    moves[i][0] = lasso[0];
-    moves[i][1] = lasso[1];
+  for (i = 0; i < mcoords_len; i++, lasso += 2) {
+    mcoords[i][0] = lasso[0];
+    mcoords[i][1] = lasso[1];
   }
 
-  BLI_lasso_boundbox(&rect, (const int(*)[2])moves, tot);
+  BLI_lasso_boundbox(&rect, (const int(*)[2])mcoords, mcoords_len);
 
   BLI_rcti_translate(&rect, gt->winrct.xmin, gt->winrct.ymin);
   BLI_rcti_isect(&gt->winrct, &rect, &rect);
   BLI_rcti_translate(&rect, -gt->winrct.xmin, -gt->winrct.ymin);
 
-  /* highly unlikely this will fail, but could crash if (tot == 0) */
+  /* Highly unlikely this will fail, but could crash if (mcoords_len == 0). */
   if (BLI_rcti_is_empty(&rect) == false) {
     const int w = BLI_rcti_size_x(&rect);
     const int h = BLI_rcti_size_y(&rect);
@@ -347,8 +348,8 @@ static void draw_filled_lasso(wmGesture *gt)
                                   rect.ymin,
                                   rect.xmax,
                                   rect.ymax,
-                                  (const int(*)[2])moves,
-                                  tot,
+                                  (const int(*)[2])mcoords,
+                                  mcoords_len,
                                   draw_filled_lasso_px_cb,
                                   &lasso_fill_data);
 
@@ -389,7 +390,7 @@ static void draw_filled_lasso(wmGesture *gt)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   }
 
-  MEM_freeN(moves);
+  MEM_freeN(mcoords);
 }
 
 static void wm_gesture_draw_lasso(wmGesture *gt, bool filled)
@@ -521,9 +522,9 @@ void wm_gesture_draw(wmWindow *win)
   }
 }
 
-void wm_gesture_tag_redraw(bContext *C)
+void wm_gesture_tag_redraw(wmWindow *win)
 {
-  bScreen *screen = CTX_wm_screen(C);
+  bScreen *screen = WM_window_get_active_screen(win);
 
   if (screen) {
     screen->do_draw_gesture = true;

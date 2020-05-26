@@ -486,7 +486,7 @@ set(SRC
   operations/COM_WrapOperation.cpp
   operations/COM_WrapOperation.h
 
-  #Filter operations
+  # Filter operations
   operations/COM_ConvolutionEdgeFilterOperation.cpp
   operations/COM_ConvolutionEdgeFilterOperation.h
   operations/COM_ConvolutionFilterOperation.cpp
@@ -515,7 +515,7 @@ set(SRC
   operations/COM_SetSamplerOperation.h
 
 
-  #Convert operations
+  # Convert operations
   operations/COM_ConvertOperation.cpp
   operations/COM_ConvertOperation.h
   operations/COM_IDMaskOperation.cpp
@@ -552,8 +552,11 @@ list(APPEND INC
   ${CMAKE_CURRENT_BINARY_DIR}/operations
 )
 
-data_to_c(${CMAKE_CURRENT_SOURCE_DIR}/operations/COM_OpenCLKernels.cl
-          ${CMAKE_CURRENT_BINARY_DIR}/operations/COM_OpenCLKernels.cl.h SRC)
+data_to_c(
+  ${CMAKE_CURRENT_SOURCE_DIR}/operations/COM_OpenCLKernels.cl
+  ${CMAKE_CURRENT_BINARY_DIR}/operations/COM_OpenCLKernels.cl.h
+  SRC
+)
 
 add_definitions(-DCL_USE_DEPRECATED_OPENCL_1_1_APIS)
 
@@ -567,6 +570,10 @@ if(WITH_OPENIMAGEDENOISE)
   list(APPEND INC_SYS
     ${OPENIMAGEDENOISE_INCLUDE_DIRS}
     ${TBB_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${OPENIMAGEDENOISE_LIBRARIES}
+    ${TBB_LIBRARIES}
   )
 endif()
 

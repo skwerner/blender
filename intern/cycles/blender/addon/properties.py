@@ -19,6 +19,7 @@
 import bpy
 from bpy.props import (
     BoolProperty,
+    CollectionProperty,
     EnumProperty,
     FloatProperty,
     IntProperty,
@@ -31,6 +32,7 @@ from math import pi
 # enums
 
 import _cycles
+from . import engine
 
 enum_devices = (
     ('CPU', "CPU", "Use CPU for rendering"),
@@ -110,6 +112,7 @@ enum_use_layer_samples = (
 enum_sampling_pattern = (
     ('SOBOL', "Sobol", "Use Sobol random sampling pattern"),
     ('CORRELATED_MUTI_JITTER', "Correlated Multi-Jitter", "Use Correlated Multi-Jitter random sampling pattern"),
+    ('PROGRESSIVE_MUTI_JITTER', "Progressive Multi-Jitter", "Use Progressive Multi-Jitter random sampling pattern"),
 )
 
 enum_integrator = (
@@ -176,10 +179,6 @@ enum_view3d_shading_render_pass= (
     ('TRANSMISSION_INDIRECT', "Transmission Indirect", "Show the Transmission Indirect render pass", 45),
     ('TRANSMISSION_COLOR', "Transmission Color", "Show the Transmission Color render pass", 46),
 
-    ('SUBSURFACE_DIRECT', "Subsurface Direct", "Show the Subsurface Direct render pass", 47),
-    ('SUBSURFACE_INDIRECT', "Subsurface Indirect", "Show the Subsurface Indirect render pass", 48),
-    ('SUBSURFACE_COLOR', "Subsurface Color", "Show the Subsurface Color render pass", 49),
-
     ('VOLUME_DIRECT', "Volume Direct", "Show the Volume Direct render pass", 50),
     ('VOLUME_INDIRECT', "Volume Indirect", "Show the Volume Indirect render pass", 51),
 
@@ -190,6 +189,21 @@ enum_view3d_shading_render_pass= (
     ('MIST', "Mist", "Show the Mist render pass", 32),
 )
 
+enum_aov_types = (
+    ('VALUE', "Value", "Write a Value pass", 0),
+    ('COLOR', "Color", "Write a Color pass", 1),
+)
+
+enum_viewport_denoising = (
+    ('NONE', "None", "Disable viewport denoising", 0),
+    ('OPTIX', "OptiX AI-Accelerated", "Use the OptiX denoiser running on the GPU (requires at least one compatible OptiX device)", 1),
+)
+
+enum_denoising_optix_input_passes = (
+    ('RGB', "Color", "Use only color as input", 1),
+    ('RGB_ALBEDO', "Color + Albedo", "Use color and albedo data as input", 2),
+    ('RGB_ALBEDO_NORMAL', "Color + Albedo + Normal", "Use color, albedo and normal data as input", 3),
+)
 
 class CyclesRenderSettings(bpy.types.PropertyGroup):
 
@@ -217,6 +231,18 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default='PATH',
     )
 
+    preview_pause: BoolProperty(
+        name="Pause Preview",
+        description="Pause all viewport preview renders",
+        default=False,
+    )
+    preview_denoising: EnumProperty(
+        name="Viewport Denoising",
+        description="Denoise the image after each preview update with the selected denoiser engine",
+        items=enum_viewport_denoising,
+        default='NONE',
+    )
+
     use_square_samples: BoolProperty(
         name="Square Samples",
         description="Square sampling values for easier artist control",
@@ -235,11 +261,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         min=0, max=(1 << 24),
         default=32,
     )
-    preview_pause: BoolProperty(
-        name="Pause Preview",
-        description="Pause all viewport preview renders",
-        default=False,
-    )
     aa_samples: IntProperty(
         name="AA Samples",
         description="Number of antialiasing samples to render for each pixel",
@@ -252,6 +273,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         min=0, max=2097151,
         default=32,
     )
+
     diffuse_samples: IntProperty(
         name="Diffuse Samples",
         description="Number of diffuse bounce samples to render for each AA sample",
@@ -282,14 +304,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         min=1, max=1024,
         default=1,
     )
-
     subsurface_samples: IntProperty(
         name="Subsurface Samples",
         description="Number of subsurface scattering samples to render for each AA sample",
         min=1, max=1024,
         default=1,
     )
-
     volume_samples: IntProperty(
         name="Volume Samples",
         description="Number of volume scattering samples to render for each AA sample",
@@ -328,6 +348,26 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         "Zero disables the test and never ignores lights",
         min=0.0, max=1.0,
         default=0.01,
+    )
+
+    use_adaptive_sampling: BoolProperty(
+        name="Use Adaptive Sampling",
+        description="Automatically reduce the number of samples per pixel based on estimated noise level",
+        default=False,
+    )
+
+    adaptive_threshold: FloatProperty(
+        name="Adaptive Sampling Threshold",
+        description="Noise level step to stop sampling at, lower values reduce noise the cost of render time. Zero for automatic setting based on number of AA samples",
+        min=0.0, max=1.0,
+        default=0.0,
+        precision=4,
+    )
+    adaptive_min_samples: IntProperty(
+        name="Adaptive Min Samples",
+        description="Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on number of AA samples",
+        min=0, max=4096,
+        default=0,
     )
 
     min_light_bounces: IntProperty(
@@ -404,13 +444,20 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=8,
     )
 
-    volume_step_size: FloatProperty(
-        name="Step Size",
-        description="Distance between volume shader samples when rendering the volume "
-        "(lower values give more accurate and detailed results, but also increased render time)",
-        default=0.1,
-        min=0.0000001, max=100000.0, soft_min=0.01, soft_max=1.0, precision=4,
-        unit='LENGTH'
+    volume_step_rate: FloatProperty(
+        name="Step Rate",
+        description="Globally adjust detail for volume rendering, on top of automatically estimated step size. "
+                    "Higher values reduce render time, lower values render with more detail",
+        default=1.0,
+        min=0.01, max=100.0, soft_min=0.1, soft_max=10.0, precision=2
+    )
+
+    volume_preview_step_rate: FloatProperty(
+        name="Step Rate",
+        description="Globally adjust detail for volume rendering, on top of automatically estimated step size. "
+                    "Higher values reduce render time, lower values render with more detail",
+        default=1.0,
+        min=0.01, max=100.0, soft_min=0.1, soft_max=10.0, precision=2
     )
 
     volume_max_steps: IntProperty(
@@ -550,6 +597,12 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=64,
         subtype='PIXEL'
     )
+    preview_denoising_start_sample: IntProperty(
+        name="Start Denoising",
+        description="Sample to start denoising the preview at",
+        min=0, max=(1 << 24),
+        default=1,
+    )
 
     debug_reset_timeout: FloatProperty(
         name="Reset timeout",
@@ -629,7 +682,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
             ('DIFFUSE', "Diffuse", ""),
             ('GLOSSY', "Glossy", ""),
             ('TRANSMISSION', "Transmission", ""),
-            ('SUBSURFACE', "Subsurface", ""),
         ),
     )
 
@@ -889,6 +941,14 @@ class CyclesMaterialSettings(bpy.types.PropertyGroup):
         default='LINEAR',
     )
 
+    volume_step_rate: FloatProperty(
+        name="Step Rate",
+        description="Scale the distance between volume shader samples when rendering the volume "
+                    "(lower values give more accurate and detailed results, but also increased render time)",
+        default=1.0,
+        min=0.001, max=1000.0, soft_min=0.1, soft_max=10.0, precision=4
+    )
+
     displacement_method: EnumProperty(
         name="Displacement Method",
         description="Method to use for the displacement",
@@ -998,6 +1058,13 @@ class CyclesWorldSettings(bpy.types.PropertyGroup):
         description="Interpolation method to use for volumes",
         items=enum_volume_interpolation,
         default='LINEAR',
+    )
+    volume_step_size: FloatProperty(
+        name="Step Size",
+        description="Distance between volume shader samples when rendering the volume "
+                    "(lower values give more accurate and detailed results, but also increased render time)",
+        default=1.0,
+        min=0.0000001, max=100000.0, soft_min=0.1, soft_max=100.0, precision=4
     )
 
     @classmethod
@@ -1109,7 +1176,7 @@ class CyclesObjectSettings(bpy.types.PropertyGroup):
     motion_steps: IntProperty(
         name="Motion Steps",
         description="Control accuracy of motion blur, more steps gives more memory usage (actual number of steps is 2^(steps - 1))",
-        min=1, soft_max=8,
+        min=1, max=7,
         default=1,
     )
 
@@ -1218,7 +1285,28 @@ class CyclesCurveRenderSettings(bpy.types.PropertyGroup):
 def update_render_passes(self, context):
     view_layer = context.view_layer
     view_layer.update_render_passes()
+    engine.detect_conflicting_passes(view_layer)
 
+
+class CyclesAOVPass(bpy.types.PropertyGroup):
+    name: StringProperty(
+        name="Name",
+        description="Name of the pass, to use in the AOV Output shader node",
+        update=update_render_passes,
+        default="AOV"
+    )
+    type: EnumProperty(
+        name="Type",
+        description="Pass data type",
+        update=update_render_passes,
+        items=enum_aov_types,
+        default='COLOR'
+    )
+    conflict: StringProperty(
+        name="Conflict",
+        description="If there is a conflict with another render passes, message explaining why",
+        default=""
+    )
 
 class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
 
@@ -1249,6 +1337,12 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
     pass_debug_render_time: BoolProperty(
         name="Debug Render Time",
         description="Render time in milliseconds per sample and pixel",
+        default=False,
+        update=update_render_passes,
+    )
+    pass_debug_sample_count: BoolProperty(
+        name="Debug Sample Count",
+        description="Number of samples/camera rays per pixel",
         default=False,
         update=update_render_passes,
     )
@@ -1301,16 +1395,6 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         description="Denoise the indirect transmission lighting",
         default=True,
     )
-    denoising_subsurface_direct: BoolProperty(
-        name="Subsurface Direct",
-        description="Denoise the direct subsurface lighting",
-        default=True,
-    )
-    denoising_subsurface_indirect: BoolProperty(
-        name="Subsurface Indirect",
-        description="Denoise the indirect subsurface lighting",
-        default=True,
-    )
     denoising_strength: FloatProperty(
         name="Denoising Strength",
         description="Controls neighbor pixel weighting for the denoising filter (lower values preserve more detail, but aren't as smooth)",
@@ -1347,6 +1431,20 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         min=0, max=7,
         default=0,
     )
+
+    use_optix_denoising: BoolProperty(
+        name="OptiX AI-Accelerated",
+        description="Use the OptiX denoiser to denoise the rendered image",
+        default=False,
+        update=update_render_passes,
+    )
+    denoising_optix_input_passes: EnumProperty(
+        name="Input Passes",
+        description="Passes handed over to the OptiX denoiser (this can have different effects on the denoised image)",
+        items=enum_denoising_optix_input_passes,
+        default='RGB_ALBEDO',
+    )
+
     use_pass_crypto_object: BoolProperty(
         name="Cryptomatte Object",
         description="Render cryptomatte object pass, for isolating objects in compositing",
@@ -1377,6 +1475,15 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         default=True,
         update=update_render_passes,
         )
+
+    aovs: CollectionProperty(
+        type=CyclesAOVPass,
+        description="Custom render passes that can be output by shader nodes",
+    )
+    active_aov: IntProperty(
+        default=0,
+        min=0
+    )
 
     @classmethod
     def register(cls):
@@ -1467,9 +1574,11 @@ class CyclesPreferences(bpy.types.AddonPreferences):
             devices.extend(cpu_devices)
         return devices
 
-    # For backwards compatibility, only has CUDA and OpenCL.
+    # For backwards compatibility, only returns CUDA and OpenCL but still
+    # refreshes all devices.
     def get_devices(self, compute_device_type=''):
         cuda_devices = self.get_devices_for_type('CUDA')
+        self.get_devices_for_type('OPTIX')
         opencl_devices = self.get_devices_for_type('OPENCL')
         return cuda_devices, opencl_devices
 
@@ -1550,6 +1659,7 @@ def register():
     bpy.utils.register_class(CyclesCurveRenderSettings)
     bpy.utils.register_class(CyclesDeviceSettings)
     bpy.utils.register_class(CyclesPreferences)
+    bpy.utils.register_class(CyclesAOVPass)
     bpy.utils.register_class(CyclesRenderLayerSettings)
     bpy.utils.register_class(CyclesView3DShadingSettings)
 
@@ -1571,5 +1681,6 @@ def unregister():
     bpy.utils.unregister_class(CyclesCurveRenderSettings)
     bpy.utils.unregister_class(CyclesDeviceSettings)
     bpy.utils.unregister_class(CyclesPreferences)
+    bpy.utils.unregister_class(CyclesAOVPass)
     bpy.utils.unregister_class(CyclesRenderLayerSettings)
     bpy.utils.unregister_class(CyclesView3DShadingSettings)

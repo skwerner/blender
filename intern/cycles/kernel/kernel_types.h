@@ -1379,7 +1379,7 @@ typedef struct KernelIntegrator {
 
   int max_closures;
 
-  int pad1;
+  int pad1, pad2, pad3;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 

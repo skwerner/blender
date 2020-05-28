@@ -18,6 +18,8 @@
  * \ingroup bke
  */
 
+#include <iostream>
+
 #include "MEM_guardedalloc.h"
 
 #include "DNA_ID.h"
@@ -46,6 +48,7 @@
 #include "BLT_translation.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 static void simulation_init_data(ID *id)
 {
@@ -87,13 +90,13 @@ static void simulation_free_data(ID *id)
   }
 }
 
-void *BKE_simulation_add(Main *bmain, const char *name)
+static void simulation_foreach_id(ID *id, LibraryForeachIDData *data)
 {
-  Simulation *simulation = (Simulation *)BKE_libblock_alloc(bmain, ID_SIM, name, 0);
-
-  simulation_init_data(&simulation->id);
-
-  return simulation;
+  Simulation *simulation = (Simulation *)id;
+  if (simulation->nodetree) {
+    /* nodetree **are owned by IDs**, treat them as mere sub-data and not real ID! */
+    BKE_library_foreach_ID_embedded(data, (ID **)&simulation->nodetree);
+  }
 }
 
 IDTypeInfo IDType_ID_SIM = {
@@ -110,8 +113,20 @@ IDTypeInfo IDType_ID_SIM = {
     /* copy_data */ simulation_copy_data,
     /* free_data */ simulation_free_data,
     /* make_local */ nullptr,
+    /* foreach_id */ simulation_foreach_id,
 };
 
-void BKE_simulation_data_update(Depsgraph *UNUSED(depsgraph), Scene *UNUSED(scene))
+void *BKE_simulation_add(Main *bmain, const char *name)
+{
+  Simulation *simulation = (Simulation *)BKE_libblock_alloc(bmain, ID_SIM, name, 0);
+
+  simulation_init_data(&simulation->id);
+
+  return simulation;
+}
+
+void BKE_simulation_data_update(Depsgraph *UNUSED(depsgraph),
+                                Scene *UNUSED(scene),
+                                Simulation *UNUSED(simulation))
 {
 }

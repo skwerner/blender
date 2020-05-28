@@ -3789,11 +3789,9 @@ static void write_cachefile(WriteData *wd, CacheFile *cache_file, const void *id
 
 static void write_workspace(WriteData *wd, WorkSpace *workspace, const void *id_address)
 {
-  ListBase *layouts = BKE_workspace_layouts_get(workspace);
-
   writestruct_at_address(wd, ID_WS, WorkSpace, 1, id_address, workspace);
   write_iddata(wd, &workspace->id);
-  writelist(wd, DATA, WorkSpaceLayout, layouts);
+  writelist(wd, DATA, WorkSpaceLayout, &workspace->layouts);
   writelist(wd, DATA, WorkSpaceDataRelation, &workspace->hook_layout_relations);
   writelist(wd, DATA, wmOwnerID, &workspace->owner_ids);
   writelist(wd, DATA, bToolRef, &workspace->tools);
@@ -3915,6 +3913,11 @@ static void write_libraries(WriteData *wd, Main *main)
 
     /* test: is lib being used */
     if (main->curlib && main->curlib->packedfile) {
+      found_one = true;
+    }
+    else if (wd->use_memfile) {
+      /* When writing undo step we always write all existing libraries, makes reading undo step
+       * much easier when dealing with purely indirectly used libraries. */
       found_one = true;
     }
     else {

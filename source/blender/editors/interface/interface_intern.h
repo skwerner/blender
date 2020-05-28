@@ -105,7 +105,6 @@ extern const char ui_radial_dir_to_numpad[8];
 extern const short ui_radial_dir_to_angle[8];
 
 /* internal panel drawing defines */
-#define PNL_GRID (UI_UNIT_Y / 5)     /* 4 default */
 #define PNL_HEADER (UI_UNIT_Y * 1.2) /* 24 default */
 
 /* bit button defines */
@@ -868,6 +867,7 @@ struct GPUBatch *ui_batch_roundbox_shadow_get(void);
 
 void ui_draw_anti_tria_rect(const rctf *rect, char dir, const float color[4]);
 void ui_draw_menu_back(struct uiStyle *style, uiBlock *block, rcti *rect);
+void ui_draw_box_opaque(rcti *rect, int roundboxalign);
 void ui_draw_popover_back(struct ARegion *region,
                           struct uiStyle *style,
                           uiBlock *block,

@@ -94,6 +94,8 @@ enum {
 
 typedef struct LibraryIDLinkCallbackData {
   void *user_data;
+  /** Main database used to call `BKE_library_foreach_ID_link()`. */
+  struct Main *bmain;
   /**
    * 'Real' ID, the one that might be in bmain, only differs from self_id when the later is an
    * embedded one.
@@ -133,6 +135,9 @@ bool BKE_lib_query_foreachid_process(struct LibraryForeachIDData *data,
                                      struct ID **id_pp,
                                      int cb_flag);
 int BKE_lib_query_foreachid_process_flags_get(struct LibraryForeachIDData *data);
+int BKE_lib_query_foreachid_process_callback_flag_override(struct LibraryForeachIDData *data,
+                                                           const int cb_flag,
+                                                           const bool do_replace);
 
 #define BKE_LIB_FOREACHID_PROCESS_ID(_data, _id, _cb_flag) \
   { \

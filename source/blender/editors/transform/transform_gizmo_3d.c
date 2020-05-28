@@ -929,7 +929,7 @@ int ED_transform_calc_gizmo_stats(const bContext *C,
                * if handles are hidden then only check the center points.
                * If the center knot is selected then only use this as the center point.
                */
-              if ((v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) == 0) {
+              if (v3d->overlay.handle_display == CURVE_HANDLE_NONE) {
                 if (bezt->f2 & SELECT) {
                   calc_tw_center_with_matrix(tbounds, bezt->vec[1], use_mat_local, mat_local);
                   totsel++;
@@ -1390,21 +1390,21 @@ void drawDial3d(const TransInfo *t)
     if (tc->mode & CON_APPLY) {
       if (tc->mode & CON_AXIS0) {
         axis_idx = MAN_AXIS_ROT_X;
-        negate_v3_v3(mat_basis[2], tc->mtx[0]);
+        negate_v3_v3(mat_basis[2], t->spacemtx[0]);
       }
       else if (tc->mode & CON_AXIS1) {
         axis_idx = MAN_AXIS_ROT_Y;
-        negate_v3_v3(mat_basis[2], tc->mtx[1]);
+        negate_v3_v3(mat_basis[2], t->spacemtx[1]);
       }
       else {
         BLI_assert((tc->mode & CON_AXIS2) != 0);
         axis_idx = MAN_AXIS_ROT_Z;
-        negate_v3_v3(mat_basis[2], tc->mtx[2]);
+        negate_v3_v3(mat_basis[2], t->spacemtx[2]);
       }
     }
     else {
       axis_idx = MAN_AXIS_ROT_C;
-      negate_v3_v3(mat_basis[2], t->spacemtx[t->orient_axis]);
+      copy_v3_v3(mat_basis[2], t->spacemtx[t->orient_axis]);
       scale *= 1.2f;
       line_with -= 1.0f;
     }

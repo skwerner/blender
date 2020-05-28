@@ -429,7 +429,7 @@ class CYCLES_RENDER_PT_volumes(CyclesButtonsPanel, Panel):
         cscene = scene.cycles
 
         col = layout.column()
-        col.prop(cscene, "volume_integrator")
+        col.prop(cscene, "volume_integrator", text="Volume Integrator")
         if cscene.volume_integrator == 'VOLUME_RAY_MARCH':
             col.prop(cscene, "volume_step_rate", text="Step Rate Render")
         else:

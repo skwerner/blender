@@ -1823,6 +1823,10 @@ static void rna_def_property_funcs(FILE *f, StructRNA *srna, PropertyDefRNA *dp)
     case PROP_ENUM: {
       EnumPropertyRNA *eprop = (EnumPropertyRNA *)prop;
 
+      if (!eprop->get && !eprop->set) {
+        rna_set_raw_property(dp, prop);
+      }
+
       eprop->get = (void *)rna_def_property_get_func(f, srna, prop, dp, (const char *)eprop->get);
       eprop->set = (void *)rna_def_property_set_func(f, srna, prop, dp, (const char *)eprop->set);
       break;
@@ -4705,7 +4709,8 @@ static const char *cpp_classes =
     "    DynamicArray() : data(NULL), length(0) {}\n"
     "    DynamicArray(int new_length) : data(NULL), length(new_length) { data = (T "
     "*)malloc(sizeof(T) * new_length); }\n"
-    "    DynamicArray(const DynamicArray<T>& other) { copy_from(other); }\n"
+    "    DynamicArray(const DynamicArray<T>& other) : data(NULL), length(0) { copy_from(other); "
+    "}\n"
     "    const DynamicArray<T>& operator = (const DynamicArray<T>& other) { copy_from(other); "
     "return *this; }\n"
     "\n"

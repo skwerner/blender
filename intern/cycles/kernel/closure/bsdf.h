@@ -98,7 +98,7 @@ ccl_device_inline float bump_shadowing_term(float3 Ng, float3 N, float3 I)
 }
 
 /* Shadow terminator workaround, taken from Appleseed.
- * Original code is unter the MIT License
+ * Original code is under the MIT License
  * Copyright (c) 2019 Francois Beaune, The appleseedhq Organization */
 ccl_device_inline float shift_cos_in(float cos_in, const float frequency_multiplier)
 {
@@ -462,11 +462,9 @@ ccl_device_inline int bsdf_sample(KernelGlobals *kg,
   }
   else {
     /* Shadow terminator offset. */
-    if (!isequal_float3(sd->Ng, sd->N)) {
-      const float frequency_multiplier = kernel_tex_fetch(__objects, sd->object).terminator_offset;
-      if (frequency_multiplier > 1.0f) {
-        *eval *= shift_cos_in(dot(*omega_in, sc->N), frequency_multiplier);
-      }
+    const float frequency_multiplier = kernel_tex_fetch(__objects, sd->object).shadow_terminator_offset;
+    if (frequency_multiplier > 1.0f) {
+      *eval *= shift_cos_in(dot(*omega_in, sc->N), frequency_multiplier);
     }
     if (label & LABEL_DIFFUSE) {
       if (!isequal_float3(sc->N, sd->N)) {
@@ -591,11 +589,9 @@ ccl_device_inline
       }
     }
     /* Shadow terminator offset. */
-    if (!isequal_float3(sd->Ng, sd->N)) {
-      const float frequency_multiplier = kernel_tex_fetch(__objects, sd->object).terminator_offset;
-      if (frequency_multiplier > 1.0f) {
-        eval *= shift_cos_in(dot(omega_in, sc->N), frequency_multiplier);
-      }
+    const float frequency_multiplier = kernel_tex_fetch(__objects, sd->object).shadow_terminator_offset;
+    if (frequency_multiplier > 1.0f) {
+      eval *= shift_cos_in(dot(omega_in, sc->N), frequency_multiplier);
     }
   }
   else {

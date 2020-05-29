@@ -1229,7 +1229,7 @@ class CYCLES_OBJECT_PT_shading(CyclesButtonsPanel, Panel):
 
         if has_geometry_visibility(ob):
             col = flow.column()
-            col.prop(cob, "terminator_offset")
+            col.prop(cob, "shadow_terminator_offset")
 
 class CYCLES_OBJECT_PT_visibility(CyclesButtonsPanel, Panel):
     bl_label = "Visibility"

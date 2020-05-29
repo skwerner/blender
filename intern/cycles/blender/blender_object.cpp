@@ -238,9 +238,9 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
     object_updated = true;
   }
 
-  float terminator_offset = get_float(cobject, "terminator_offset");
-  if (terminator_offset != object->terminator_offset) {
-    object->terminator_offset = terminator_offset;
+  float shadow_terminator_offset = get_float(cobject, "shadow_terminator_offset");
+  if (shadow_terminator_offset != object->shadow_terminator_offset) {
+    object->shadow_terminator_offset = shadow_terminator_offset;
     object_updated = true;
   }
 

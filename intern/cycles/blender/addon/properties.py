@@ -1205,8 +1205,8 @@ class CyclesObjectSettings(bpy.types.PropertyGroup):
         default=1.0,
     )
 
-    terminator_offset: FloatProperty(
-        name="Shadow Termiantor Offset",
+    shadow_terminator_offset: FloatProperty(
+        name="Shadow Terminator Offset",
         description="Push the shadow terminator towards the light to hide artifacts on low poly geometry",
         min=0.0, max=1.0,
         default=0.0,

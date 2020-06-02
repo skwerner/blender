@@ -24,560 +24,594 @@
 
 CCL_NAMESPACE_BEGIN
 
-LightTree::LightTree(const vector<Primitive>& prims_,
-                     Scene* scene_,
+LightTree::LightTree(const vector<Primitive> &prims_,
+                     Scene *scene_,
                      const uint max_lights_in_node_)
-    :  max_lights_in_node(max_lights_in_node_), scene(scene_)
+    : max_lights_in_node(max_lights_in_node_), scene(scene_)
 {
 
-	if (prims_.empty()) return;
+  if (prims_.empty())
+    return;
 
-	/* background and distant lights are not added to the light tree and are
-	 * considered seperately. so here all primitives except background and
-	 * distant lights are moved into a local primitives array */
-	primitives.reserve(prims_.size());
-	vector<Primitive> distant_lights;
-	vector<Primitive> background_lights;
-	foreach(Primitive prim, prims_ ){
+  /* background and distant lights are not added to the light tree and are
+   * considered seperately. so here all primitives except background and
+   * distant lights are moved into a local primitives array */
+  primitives.reserve(prims_.size());
+  vector<Primitive> distant_lights;
+  vector<Primitive> background_lights;
+  foreach (Primitive prim, prims_) {
 
-		/* put background and distant lights into their own arrays */
-		if (prim.prim_id < 0){
-			const Light *lamp = scene->lights[prim.lamp_id];
-			if (lamp->type == LIGHT_DISTANT){
-				distant_lights.push_back(prim);
-				continue;
-			} else if(lamp->type == LIGHT_BACKGROUND){
-				background_lights.push_back(prim);
-				continue;
-			}
-		}
+    /* put background and distant lights into their own arrays */
+    if (prim.prim_id < 0) {
+      const Light *lamp = scene->lights[prim.lamp_id];
+      if (lamp->type == LIGHT_DISTANT) {
+        distant_lights.push_back(prim);
+        continue;
+      }
+      else if (lamp->type == LIGHT_BACKGROUND) {
+        background_lights.push_back(prim);
+        continue;
+      }
+    }
 
-		primitives.push_back(prim);
-	}
+    primitives.push_back(prim);
+  }
 
-	/* initialize build_data array that stores the energy and spatial and
-	 * orientation bounds for each light. */
-	vector<BVHPrimitiveInfo> build_data;
-	build_data.reserve(primitives.size());
-	for(int i = 0; i < primitives.size(); ++i){
-		BoundBox bbox     = compute_bbox(primitives[i]);
-		Orientation bcone = compute_bcone(primitives[i]);
-		float energy      = compute_energy(primitives[i]);
+  /* initialize build_data array that stores the energy and spatial and
+   * orientation bounds for each light. */
+  vector<BVHPrimitiveInfo> build_data;
+  build_data.reserve(primitives.size());
+  for (int i = 0; i < primitives.size(); ++i) {
+    BoundBox bbox = compute_bbox(primitives[i]);
+    Orientation bcone = compute_bcone(primitives[i]);
+    float energy = compute_energy(primitives[i]);
 
-		build_data.push_back(BVHPrimitiveInfo(i, bbox, bcone, energy));
-	}
+    build_data.push_back(BVHPrimitiveInfo(i, bbox, bcone, energy));
+  }
 
-	/* recursively build BVH tree */
-	uint total_nodes = 0;
-	vector<Primitive> ordered_prims;
-	ordered_prims.reserve(primitives.size());
-	BVHBuildNode *root = recursive_build(0, primitives.size(), build_data,
-	                                     total_nodes, ordered_prims);
+  /* recursively build BVH tree */
+  uint total_nodes = 0;
+  vector<Primitive> ordered_prims;
+  ordered_prims.reserve(primitives.size());
+  BVHBuildNode *root = recursive_build(
+      0, primitives.size(), build_data, total_nodes, ordered_prims);
 
-	/* order the primitives array so lights belonging to the same node are
-	 * next to each other */
-	primitives.swap(ordered_prims);
-	ordered_prims.clear();
-	build_data.clear();
+  /* order the primitives array so lights belonging to the same node are
+   * next to each other */
+  primitives.swap(ordered_prims);
+  ordered_prims.clear();
+  build_data.clear();
 
-	/* add background lights to the primitives array */
-	for(int i = 0; i < background_lights.size(); ++i){
-		primitives.push_back(background_lights[i]);
-	}
+  /* add background lights to the primitives array */
+  for (int i = 0; i < background_lights.size(); ++i) {
+    primitives.push_back(background_lights[i]);
+  }
 
-	/* add distant lights to the end of primitives array */
-	for(int i = 0; i < distant_lights.size(); ++i){
-		primitives.push_back(distant_lights[i]);
-	}
+  /* add distant lights to the end of primitives array */
+  for (int i = 0; i < distant_lights.size(); ++i) {
+    primitives.push_back(distant_lights[i]);
+  }
 
-	VLOG(1) << "Total BVH nodes: " << total_nodes;
+  VLOG(1) << "Total BVH nodes: " << total_nodes;
 
-	if(!root) return;
+  if (!root)
+    return;
 
-	/* convert to linear representation of the tree */
-	nodes.resize(total_nodes);
-	int offset = 0;
-	flattenBVHTree(*root, offset);
+  /* convert to linear representation of the tree */
+  nodes.resize(total_nodes);
+  int offset = 0;
+  flattenBVHTree(*root, offset);
 
-	assert(offset == total_nodes);
+  assert(offset == total_nodes);
 }
 
-int LightTree::flattenBVHTree(const BVHBuildNode &node, int &offset){
-
-	CompactNode& compact_node = nodes[offset];
-	compact_node.bounds_s     = node.bbox;
-	compact_node.bounds_o     = node.bcone;
-
-	int my_offset = offset++;
-	if (node.is_leaf){
-		/* create leaf node */
-		assert( !node.children[0] && !node.children[1] );
-		compact_node.energy            = node.energy;
-		compact_node.energy_variance   = node.energy_variance;
-		compact_node.first_prim_offset = node.first_prim_offset;
-		compact_node.num_lights        = node.num_lights;
-	} else {
-		/* create interior compact node */
-		compact_node.num_lights         = node.num_lights;
-		compact_node.energy             = node.energy;
-		compact_node.energy_variance    = node.energy_variance;
-		assert( node.children[0] && node.children[1] );
-		flattenBVHTree(*node.children[0], offset);
-		compact_node.right_child_offset = flattenBVHTree(*node.children[1],
-		        offset);
-		compact_node.energy             = node.energy;
-	}
-
-	return my_offset;
-}
-
-
-BoundBox LightTree::compute_bbox(const Primitive& prim)
+int LightTree::flattenBVHTree(const BVHBuildNode &node, int &offset)
 {
-	BoundBox bbox = BoundBox::empty;
-	if( prim.prim_id >= 0 ){
-		/* extract bounding box from emissive triangle */
-		const Object* object          = scene->objects[prim.object_id];
-		const Mesh* mesh              = object->mesh;
-		const int triangle_id         = prim.prim_id - mesh->tri_offset;
-		const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
 
-		float3 p0 = mesh->verts[triangle.v[0]];
-		float3 p1 = mesh->verts[triangle.v[1]];
-		float3 p2 = mesh->verts[triangle.v[2]];
+  CompactNode &compact_node = nodes[offset];
+  compact_node.bounds_s = node.bbox;
+  compact_node.bounds_o = node.bcone;
 
-		/* instanced mesh lights have not applied their transform at this point.
-		 * in this case, these points have to be transformed to get the proper
-		 * spatial bound. */
-		if(!mesh->transform_applied) {
-			const Transform& tfm = object->tfm;
-			p0 = transform_point(&tfm, p0);
-			p1 = transform_point(&tfm, p1);
-			p2 = transform_point(&tfm, p2);
-		}
+  int my_offset = offset++;
+  if (node.is_leaf) {
+    /* create leaf node */
+    assert(!node.children[0] && !node.children[1]);
+    compact_node.energy = node.energy;
+    compact_node.energy_variance = node.energy_variance;
+    compact_node.first_prim_offset = node.first_prim_offset;
+    compact_node.num_lights = node.num_lights;
+  }
+  else {
+    /* create interior compact node */
+    compact_node.num_lights = node.num_lights;
+    compact_node.energy = node.energy;
+    compact_node.energy_variance = node.energy_variance;
+    assert(node.children[0] && node.children[1]);
+    flattenBVHTree(*node.children[0], offset);
+    compact_node.right_child_offset = flattenBVHTree(*node.children[1], offset);
+    compact_node.energy = node.energy;
+  }
 
-		bbox.grow(p0);
-		bbox.grow(p1);
-		bbox.grow(p2);
-	} else {
-		/* extract bounding box from lamp based on light type */
-		Light* lamp = scene->lights[prim.lamp_id];
-		if (lamp->type == LIGHT_POINT || lamp->type == LIGHT_SPOT){
-			float radius = lamp->size;
-			bbox.grow(lamp->co + make_float3(radius));
-			bbox.grow(lamp->co - make_float3(radius));
-		} else if(lamp->type == LIGHT_AREA){
-			const float3 center = lamp->co;
-			const float3 half_axisu = 0.5f * lamp->axisu*(lamp->sizeu*lamp->size);
-			const float3 half_axisv = 0.5f * lamp->axisv*(lamp->sizev*lamp->size);
-			const float3 p0         = center - half_axisu - half_axisv;
-			const float3 p1         = center - half_axisu + half_axisv;
-			const float3 p2         = center + half_axisu - half_axisv;
-			const float3 p3         = center + half_axisu + half_axisv;
-
-			bbox.grow(p0);
-			bbox.grow(p1);
-			bbox.grow(p2);
-			bbox.grow(p3);
-		} else {
-			/* LIGHT_DISTANT and LIGHT_BACKGROUND are handled separately */
-			assert(false);
-		}
-	}
-
-	return bbox;
+  return my_offset;
 }
 
-Orientation LightTree::compute_bcone(const Primitive& prim){
-	Orientation bcone;
-	if (prim.prim_id >= 0){
-		/* extract bounding cone from emissive triangle */
-		const Object* object          = scene->objects[prim.object_id];
-		const Mesh* mesh              = object->mesh;
-		const int triangle_id         = prim.prim_id - mesh->tri_offset;
-		const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
+BoundBox LightTree::compute_bbox(const Primitive &prim)
+{
+  BoundBox bbox = BoundBox::empty;
+  if (prim.prim_id >= 0) {
+    /* extract bounding box from emissive triangle */
+    const Object *object = scene->objects[prim.object_id];
+    const Mesh *mesh = object->mesh;
+    const int triangle_id = prim.prim_id - mesh->tri_offset;
+    const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
 
-		float3 p0 = mesh->verts[triangle.v[0]];
-		float3 p1 = mesh->verts[triangle.v[1]];
-		float3 p2 = mesh->verts[triangle.v[2]];
+    float3 p0 = mesh->verts[triangle.v[0]];
+    float3 p1 = mesh->verts[triangle.v[1]];
+    float3 p2 = mesh->verts[triangle.v[2]];
 
-		if(!mesh->transform_applied) {
-			const Transform& tfm = object->tfm;
-			p0 = transform_point(&tfm, p0);
-			p1 = transform_point(&tfm, p1);
-			p2 = transform_point(&tfm, p2);
-		}
+    /* instanced mesh lights have not applied their transform at this point.
+     * in this case, these points have to be transformed to get the proper
+     * spatial bound. */
+    if (!mesh->transform_applied) {
+      const Transform &tfm = object->tfm;
+      p0 = transform_point(&tfm, p0);
+      p1 = transform_point(&tfm, p1);
+      p2 = transform_point(&tfm, p2);
+    }
 
-		float3 normal       = make_float3(1.0f, 0.0f, 0.0f);
-		const float3 norm   = cross(p1 - p0, p2 - p0);
-		const float normlen = len(norm);
-		if(normlen != 0.0f) {
-			normal = norm / normlen;
-		}
+    bbox.grow(p0);
+    bbox.grow(p1);
+    bbox.grow(p2);
+  }
+  else {
+    /* extract bounding box from lamp based on light type */
+    Light *lamp = scene->lights[prim.lamp_id];
+    if (lamp->type == LIGHT_POINT || lamp->type == LIGHT_SPOT) {
+      float radius = lamp->size;
+      bbox.grow(lamp->co + make_float3(radius));
+      bbox.grow(lamp->co - make_float3(radius));
+    }
+    else if (lamp->type == LIGHT_AREA) {
+      const float3 center = lamp->co;
+      const float3 half_axisu = 0.5f * lamp->axisu * (lamp->sizeu * lamp->size);
+      const float3 half_axisv = 0.5f * lamp->axisv * (lamp->sizev * lamp->size);
+      const float3 p0 = center - half_axisu - half_axisv;
+      const float3 p1 = center - half_axisu + half_axisv;
+      const float3 p2 = center + half_axisu - half_axisv;
+      const float3 p3 = center + half_axisu + half_axisv;
 
-		bcone.axis    = normal;
-		bcone.theta_o = 0.0f;
-		bcone.theta_e = M_PI_2_F;
-	} else {
-		Light* lamp = scene->lights[prim.lamp_id];
-		bcone.axis = lamp->dir / len(lamp->dir);
-		if (lamp->type == LIGHT_POINT) {
-			bcone.theta_o = M_PI_F;
-			bcone.theta_e = M_PI_2_F;
-		} else if (lamp->type == LIGHT_SPOT){
-			bcone.theta_o = 0;
-			bcone.theta_e = lamp->spot_angle * 0.5f;
-		} else if (lamp->type == LIGHT_AREA){
-			bcone.theta_o = 0;
-			bcone.theta_e = M_PI_2_F;
-		}
-	}
+      bbox.grow(p0);
+      bbox.grow(p1);
+      bbox.grow(p2);
+      bbox.grow(p3);
+    }
+    else {
+      /* LIGHT_DISTANT and LIGHT_BACKGROUND are handled separately */
+      assert(false);
+    }
+  }
 
-	return bcone;
+  return bbox;
 }
 
-float LightTree::compute_energy(const Primitive &prim){
-	float3 emission = make_float3(0.0f);
-	Shader *shader  = NULL;
+Orientation LightTree::compute_bcone(const Primitive &prim)
+{
+  Orientation bcone;
+  if (prim.prim_id >= 0) {
+    /* extract bounding cone from emissive triangle */
+    const Object *object = scene->objects[prim.object_id];
+    const Mesh *mesh = object->mesh;
+    const int triangle_id = prim.prim_id - mesh->tri_offset;
+    const Mesh::Triangle triangle = mesh->get_triangle(triangle_id);
 
-	if (prim.prim_id >= 0){
-		/* extract shader from emissive triangle */
-		const Object* object  = scene->objects[prim.object_id];
-		const Mesh* mesh      = object->mesh;
-		const int triangle_id = prim.prim_id - mesh->tri_offset;
+    float3 p0 = mesh->verts[triangle.v[0]];
+    float3 p1 = mesh->verts[triangle.v[1]];
+    float3 p2 = mesh->verts[triangle.v[2]];
 
-		int shader_index = mesh->shader[triangle_id];
-		shader = mesh->used_shaders.at(shader_index);
+    if (!mesh->transform_applied) {
+      const Transform &tfm = object->tfm;
+      p0 = transform_point(&tfm, p0);
+      p1 = transform_point(&tfm, p1);
+      p2 = transform_point(&tfm, p2);
+    }
 
-		/* get emission from shader */
-		bool is_constant_emission = shader->is_constant_emission(&emission);
-		if(!is_constant_emission){
-			emission = make_float3(1.0f);
-		}
+    float3 normal = make_float3(1.0f, 0.0f, 0.0f);
+    const float3 norm = cross(p1 - p0, p2 - p0);
+    const float normlen = len(norm);
+    if (normlen != 0.0f) {
+      normal = norm / normlen;
+    }
 
-		const Transform& tfm = scene->objects[prim.object_id]->tfm;
-		float area = mesh->compute_triangle_area(triangle_id, tfm);
+    bcone.axis = normal;
+    bcone.theta_o = 0.0f;
+    bcone.theta_e = M_PI_2_F;
+  }
+  else {
+    Light *lamp = scene->lights[prim.lamp_id];
+    bcone.axis = lamp->dir / len(lamp->dir);
+    if (lamp->type == LIGHT_POINT) {
+      bcone.theta_o = M_PI_F;
+      bcone.theta_e = M_PI_2_F;
+    }
+    else if (lamp->type == LIGHT_SPOT) {
+      bcone.theta_o = 0;
+      bcone.theta_e = lamp->spot_angle * 0.5f;
+    }
+    else if (lamp->type == LIGHT_AREA) {
+      bcone.theta_o = 0;
+      bcone.theta_e = M_PI_2_F;
+    }
+  }
 
-		emission *= area * M_PI_F;
-
-	} else {
-		const Light* light = scene->lights[prim.lamp_id];
-
-		/* get emission from shader */
-		shader = light->shader;
-		bool is_constant_emission = shader->is_constant_emission(&emission);
-		if(!is_constant_emission){
-			emission = make_float3(1.0f);
-		}
-
-		/* calculate the total emission by integrating the emission over the
-		 * the entire sphere of directions. */
-		if (light->type == LIGHT_POINT){
-			emission *= M_4PI_F;
-		} else if (light->type == LIGHT_SPOT){
-			/* The emission is only non-zero within the cone and if spot_smooth
-			 * is non-zero there will be a falloff. In this case, approximate
-			 * the integral by considering a smaller cone without falloff. */
-			float spot_angle         = light->spot_angle * 0.5f;
-			float spot_falloff_angle = spot_angle * (1.0f - light->spot_smooth);
-			float spot_middle_angle  = (spot_angle + spot_falloff_angle) * 0.5f;
-			emission *= M_2PI_F * (1.0f - cosf(spot_middle_angle));
-		} else if (light->type == LIGHT_AREA){
-			float3 axisu = light->axisu*(light->sizeu*light->size);
-			float3 axisv = light->axisv*(light->sizev*light->size);
-			float area   = len(axisu)*len(axisv);
-			emission *= area * M_PI_F;
-		} else {
-			/* LIGHT_DISTANT and LIGHT_BACKGROUND are handled separately */
-			assert(false);
-		}
-	}
-
-	return scene->shader_manager->linear_rgb_to_gray(emission);
+  return bcone;
 }
 
-Orientation LightTree::combine_bounding_cones(
-        const vector<Orientation> &bcones) {
+float LightTree::compute_energy(const Primitive &prim)
+{
+  float3 emission = make_float3(0.0f);
+  Shader *shader = NULL;
 
-	if(bcones.size() == 0){
-		return Orientation();
-	} else if(bcones.size() == 1){
-		return bcones[0];
-	}
+  if (prim.prim_id >= 0) {
+    /* extract shader from emissive triangle */
+    const Object *object = scene->objects[prim.object_id];
+    const Mesh *mesh = object->mesh;
+    const int triangle_id = prim.prim_id - mesh->tri_offset;
 
-	Orientation cone = bcones[0];
-	for(int i = 1; i < bcones.size(); ++i){
-		cone = cone_union(cone, bcones[i]);
-	}
+    int shader_index = mesh->shader[triangle_id];
+    shader = mesh->used_shaders.at(shader_index);
 
-	return cone;
+    /* get emission from shader */
+    bool is_constant_emission = shader->is_constant_emission(&emission);
+    if (!is_constant_emission) {
+      emission = make_float3(1.0f);
+    }
+
+    const Transform &tfm = scene->objects[prim.object_id]->tfm;
+    float area = mesh->compute_triangle_area(triangle_id, tfm);
+
+    emission *= area * M_PI_F;
+  }
+  else {
+    const Light *light = scene->lights[prim.lamp_id];
+
+    /* get emission from shader */
+    shader = light->shader;
+    bool is_constant_emission = shader->is_constant_emission(&emission);
+    if (!is_constant_emission) {
+      emission = make_float3(1.0f);
+    }
+
+    /* calculate the total emission by integrating the emission over the
+     * the entire sphere of directions. */
+    if (light->type == LIGHT_POINT) {
+      emission *= M_4PI_F;
+    }
+    else if (light->type == LIGHT_SPOT) {
+      /* The emission is only non-zero within the cone and if spot_smooth
+       * is non-zero there will be a falloff. In this case, approximate
+       * the integral by considering a smaller cone without falloff. */
+      float spot_angle = light->spot_angle * 0.5f;
+      float spot_falloff_angle = spot_angle * (1.0f - light->spot_smooth);
+      float spot_middle_angle = (spot_angle + spot_falloff_angle) * 0.5f;
+      emission *= M_2PI_F * (1.0f - cosf(spot_middle_angle));
+    }
+    else if (light->type == LIGHT_AREA) {
+      float3 axisu = light->axisu * (light->sizeu * light->size);
+      float3 axisv = light->axisv * (light->sizev * light->size);
+      float area = len(axisu) * len(axisv);
+      emission *= area * M_PI_F;
+    }
+    else {
+      /* LIGHT_DISTANT and LIGHT_BACKGROUND are handled separately */
+      assert(false);
+    }
+  }
+
+  return scene->shader_manager->linear_rgb_to_gray(emission);
+}
+
+Orientation LightTree::combine_bounding_cones(const vector<Orientation> &bcones)
+{
+
+  if (bcones.size() == 0) {
+    return Orientation();
+  }
+  else if (bcones.size() == 1) {
+    return bcones[0];
+  }
+
+  Orientation cone = bcones[0];
+  for (int i = 1; i < bcones.size(); ++i) {
+    cone = cone_union(cone, bcones[i]);
+  }
+
+  return cone;
 }
 
 /* Algorithm 1 */
-Orientation LightTree::cone_union(const Orientation& cone1, const Orientation& cone2){
-	const Orientation * a = &cone1;
-	const Orientation * b = &cone2;
-	if (b->theta_o > a->theta_o){
-		a = &cone2;
-		b = &cone1;
-	}
+Orientation LightTree::cone_union(const Orientation &cone1, const Orientation &cone2)
+{
+  const Orientation *a = &cone1;
+  const Orientation *b = &cone2;
+  if (b->theta_o > a->theta_o) {
+    a = &cone2;
+    b = &cone1;
+  }
 
-	float theta_d = safe_acosf(dot(a->axis, b->axis));
+  float theta_d = safe_acosf(dot(a->axis, b->axis));
 
-	float theta_e = fmaxf(a->theta_e, b->theta_e);
-	if (fminf(theta_d + b->theta_o, M_PI_F) <= a->theta_o){
-		return Orientation(a->axis, a->theta_o, theta_e);
-	}
+  float theta_e = fmaxf(a->theta_e, b->theta_e);
+  if (fminf(theta_d + b->theta_o, M_PI_F) <= a->theta_o) {
+    return Orientation(a->axis, a->theta_o, theta_e);
+  }
 
-	float theta_o = (a->theta_o + theta_d + b->theta_o) * 0.5f;
-	if (M_PI_F <= theta_o){
-		return Orientation(a->axis, M_PI_F, theta_e);
-	}
+  float theta_o = (a->theta_o + theta_d + b->theta_o) * 0.5f;
+  if (M_PI_F <= theta_o) {
+    return Orientation(a->axis, M_PI_F, theta_e);
+  }
 
-	float theta_r = theta_o - a->theta_o;
-	float3 axis   = rotate_around_axis(a->axis, cross(a->axis, b->axis), theta_r);
-	axis          = normalize(axis);
-	return Orientation(axis, theta_o, theta_e);
+  float theta_r = theta_o - a->theta_o;
+  float3 axis = rotate_around_axis(a->axis, cross(a->axis, b->axis), theta_r);
+  axis = normalize(axis);
+  return Orientation(axis, theta_o, theta_e);
 }
 
-float LightTree::calculate_cone_measure(const Orientation &bcone) {
-	/* eq. 1 */
-	float theta_w = fminf(bcone.theta_o + bcone.theta_e, M_PI_F);
-	return M_2PI_F * (1.0f-cosf(bcone.theta_o) +
-	                  0.5f  * (theta_w-bcone.theta_o) * sinf(bcone.theta_o) +
-	                  0.25f * cosf(bcone.theta_o) -
-	                  0.25f * cosf(bcone.theta_o - 2.0f*theta_w ));
+float LightTree::calculate_cone_measure(const Orientation &bcone)
+{
+  /* eq. 1 */
+  float theta_w = fminf(bcone.theta_o + bcone.theta_e, M_PI_F);
+  return M_2PI_F *
+         (1.0f - cosf(bcone.theta_o) + 0.5f * (theta_w - bcone.theta_o) * sinf(bcone.theta_o) +
+          0.25f * cosf(bcone.theta_o) - 0.25f * cosf(bcone.theta_o - 2.0f * theta_w));
 }
 
 void LightTree::split_saoh(const BoundBox &centroid_bbox,
                            const vector<BVHPrimitiveInfo> &build_data,
-                           const int start, const int end, const int num_buckets,
+                           const int start,
+                           const int end,
+                           const int num_buckets,
                            const float node_M_Omega,
                            const BoundBox &node_bbox,
-                           float &min_cost, int &min_dim, int &min_bucket){
+                           float &min_cost,
+                           int &min_dim,
+                           int &min_bucket)
+{
 
-	struct BucketInfo {
-		BucketInfo(): count(0), energy(0.0f){
-			bounds = BoundBox::empty;
-		}
+  struct BucketInfo {
+    BucketInfo() : count(0), energy(0.0f)
+    {
+      bounds = BoundBox::empty;
+    }
 
-		int count;
-		float energy; // total energy
-		BoundBox bounds; // bounds of all primitives
-		Orientation bcone;
-	};
+    int count;
+    float energy;     // total energy
+    BoundBox bounds;  // bounds of all primitives
+    Orientation bcone;
+  };
 
-	min_cost   = std::numeric_limits<float>::max();
-	min_bucket = -1;
+  min_cost = std::numeric_limits<float>::max();
+  min_bucket = -1;
 
-	const float extent_max = max3(centroid_bbox.size());
-	for (int dim = 0; dim < 3; ++dim){
+  const float extent_max = max3(centroid_bbox.size());
+  for (int dim = 0; dim < 3; ++dim) {
 
-		BucketInfo buckets[num_buckets];
-		vector<Orientation> bucket_bcones[num_buckets];
+    BucketInfo buckets[num_buckets];
+    vector<Orientation> bucket_bcones[num_buckets];
 
-		/* calculate total energy in each bucket and a bbox of it */
-		const float extent = centroid_bbox.max[dim] - centroid_bbox.min[dim];
-		if (extent == 0.0f){ // All dims cannot be zero
-			continue;
-		}
+    /* calculate total energy in each bucket and a bbox of it */
+    const float extent = centroid_bbox.max[dim] - centroid_bbox.min[dim];
+    if (extent == 0.0f) {  // All dims cannot be zero
+      continue;
+    }
 
-		const float extent_inv = 1.0f / extent;
-		for (unsigned int i = start; i < end; ++i){
-			int bucket_id = (int)((float)num_buckets *
-			                      (build_data[i].centroid[dim] - centroid_bbox.min[dim]) *
-			                      extent_inv);
-			if (bucket_id == num_buckets) bucket_id = num_buckets - 1;
-			buckets[bucket_id].count++;
-			buckets[bucket_id].energy += build_data[i].energy;
-			buckets[bucket_id].bounds.grow(build_data[i].bbox);
-			bucket_bcones[bucket_id].push_back(build_data[i].bcone);
-		}
+    const float extent_inv = 1.0f / extent;
+    for (unsigned int i = start; i < end; ++i) {
+      int bucket_id = (int)((float)num_buckets *
+                            (build_data[i].centroid[dim] - centroid_bbox.min[dim]) * extent_inv);
+      if (bucket_id == num_buckets)
+        bucket_id = num_buckets - 1;
+      buckets[bucket_id].count++;
+      buckets[bucket_id].energy += build_data[i].energy;
+      buckets[bucket_id].bounds.grow(build_data[i].bbox);
+      bucket_bcones[bucket_id].push_back(build_data[i].bcone);
+    }
 
-		for (unsigned int i = 0; i < num_buckets; ++i){
-			if (buckets[i].count != 0){
-				buckets[i].bcone = combine_bounding_cones(bucket_bcones[i]);
-			}
-		}
+    for (unsigned int i = 0; i < num_buckets; ++i) {
+      if (buckets[i].count != 0) {
+        buckets[i].bcone = combine_bounding_cones(bucket_bcones[i]);
+      }
+    }
 
-		/* compute costs for splitting at bucket boundaries */
-		float cost[num_buckets-1];
-		BoundBox bbox_L,bbox_R;
-		float energy_L, energy_R;
-		vector<Orientation> bcones_L, bcones_R;
+    /* compute costs for splitting at bucket boundaries */
+    float cost[num_buckets - 1];
+    BoundBox bbox_L, bbox_R;
+    float energy_L, energy_R;
+    vector<Orientation> bcones_L, bcones_R;
 
-		for (int i = 0; i < num_buckets-1; ++i) {
-			bbox_L = BoundBox::empty;
-			bbox_R = BoundBox::empty;
-			energy_L = 0;
-			energy_R = 0;
-			bcones_L.clear();
-			bcones_R.clear();
+    for (int i = 0; i < num_buckets - 1; ++i) {
+      bbox_L = BoundBox::empty;
+      bbox_R = BoundBox::empty;
+      energy_L = 0;
+      energy_R = 0;
+      bcones_L.clear();
+      bcones_R.clear();
 
-			/* L corresponds to all buckets up to and including i */
-			for (int j = 0; j <= i; ++j){
-				if (buckets[j].count != 0){
-					energy_L += buckets[j].energy;
-					bbox_L.grow(buckets[j].bounds);
-					bcones_L.push_back(buckets[j].bcone);
-				}
-			}
+      /* L corresponds to all buckets up to and including i */
+      for (int j = 0; j <= i; ++j) {
+        if (buckets[j].count != 0) {
+          energy_L += buckets[j].energy;
+          bbox_L.grow(buckets[j].bounds);
+          bcones_L.push_back(buckets[j].bcone);
+        }
+      }
 
-			/* R corresponds to bucket i+1 and all after */
-			for (int j = i+1; j < num_buckets; ++j){
-				if (buckets[j].count != 0){
-					energy_R += buckets[j].energy;
-					bbox_R.grow(buckets[j].bounds);
-					bcones_R.push_back(buckets[j].bcone);
-				}
-			}
+      /* R corresponds to bucket i+1 and all after */
+      for (int j = i + 1; j < num_buckets; ++j) {
+        if (buckets[j].count != 0) {
+          energy_R += buckets[j].energy;
+          bbox_R.grow(buckets[j].bounds);
+          bcones_R.push_back(buckets[j].bcone);
+        }
+      }
 
-			/* eq. 2 */
-			const Orientation bcone_L = combine_bounding_cones(bcones_L);
-			const Orientation bcone_R = combine_bounding_cones(bcones_R);
-			const float M_Omega_L     = calculate_cone_measure(bcone_L);
-			const float M_Omega_R     = calculate_cone_measure(bcone_R);
-			const float K             = extent_max * extent_inv;
+      /* eq. 2 */
+      const Orientation bcone_L = combine_bounding_cones(bcones_L);
+      const Orientation bcone_R = combine_bounding_cones(bcones_R);
+      const float M_Omega_L = calculate_cone_measure(bcone_L);
+      const float M_Omega_R = calculate_cone_measure(bcone_R);
+      const float K = extent_max * extent_inv;
 
-			cost[i] = K * (energy_L    * M_Omega_L    * bbox_L.area()  +
-			               energy_R    * M_Omega_R    * bbox_R.area()) /
-			              (node_M_Omega * node_bbox.area());
-		}
+      cost[i] = K * (energy_L * M_Omega_L * bbox_L.area() + energy_R * M_Omega_R * bbox_R.area()) /
+                (node_M_Omega * node_bbox.area());
+    }
 
-		/* update minimum cost, dim and bucket */
-		for (int i = 0; i < num_buckets-1; ++i){
-			if (cost[i] < min_cost){
-				min_cost = cost[i];
-				min_dim = dim;
-				min_bucket = i;
-			}
-		}
-	}
+    /* update minimum cost, dim and bucket */
+    for (int i = 0; i < num_buckets - 1; ++i) {
+      if (cost[i] < min_cost) {
+        min_cost = cost[i];
+        min_dim = dim;
+        min_bucket = i;
+      }
+    }
+  }
 }
 
-BVHBuildNode* LightTree::recursive_build(const uint start,
+BVHBuildNode *LightTree::recursive_build(const uint start,
                                          const uint end,
                                          vector<BVHPrimitiveInfo> &build_data,
                                          uint &total_nodes,
                                          vector<Primitive> &ordered_prims)
 {
-	if(build_data.size() == 0) return NULL;
+  if (build_data.size() == 0)
+    return NULL;
 
-	total_nodes++;
-	BVHBuildNode *node = new BVHBuildNode();
+  total_nodes++;
+  BVHBuildNode *node = new BVHBuildNode();
 
-	/* compute bounds and energy for all emissive primitives in node */
-	BoundBox node_bbox = BoundBox::empty;
-	vector<Orientation> bcones;
-	bcones.reserve(end-start);
-	double node_energy = 0.0;
-	double node_energy_sum_squared = 0.0;
-	uint num_lights = end - start;
+  /* compute bounds and energy for all emissive primitives in node */
+  BoundBox node_bbox = BoundBox::empty;
+  vector<Orientation> bcones;
+  bcones.reserve(end - start);
+  double node_energy = 0.0;
+  double node_energy_sum_squared = 0.0;
+  uint num_lights = end - start;
 
-	for (unsigned int i = start; i < end; ++i){
-		const BVHPrimitiveInfo& light = build_data.at(i);
-		node_bbox.grow(light.bbox);
-		bcones.push_back(light.bcone);
+  for (unsigned int i = start; i < end; ++i) {
+    const BVHPrimitiveInfo &light = build_data.at(i);
+    node_bbox.grow(light.bbox);
+    bcones.push_back(light.bcone);
 
-		double energy = (double)light.energy;
-		node_energy += energy;
-		node_energy_sum_squared += energy * energy;
-	}
+    double energy = (double)light.energy;
+    node_energy += energy;
+    node_energy_sum_squared += energy * energy;
+  }
 
-	/* pre-calculate energy variance for the splitting heuristic */
-	double node_energy_mean = node_energy / (double)num_lights;
-	double node_energy_variance =
-	       node_energy_sum_squared / (double)num_lights - // E[e^2]
-	       node_energy_mean * node_energy_mean; // E[e]^2
-	node_energy_variance = max(node_energy_variance, 0.0);
+  /* pre-calculate energy variance for the splitting heuristic */
+  double node_energy_mean = node_energy / (double)num_lights;
+  double node_energy_variance = node_energy_sum_squared / (double)num_lights -  // E[e^2]
+                                node_energy_mean * node_energy_mean;            // E[e]^2
+  node_energy_variance = max(node_energy_variance, 0.0);
 
-	Orientation node_bcone = combine_bounding_cones(bcones);
-	bcones.clear();
-	const float node_M_Omega = calculate_cone_measure(node_bcone);
+  Orientation node_bcone = combine_bounding_cones(bcones);
+  bcones.clear();
+  const float node_M_Omega = calculate_cone_measure(node_bcone);
 
-	if(num_lights == 1){
-		/* create leaf */
-		int first_prim_offset = ordered_prims.size();
-		int prim = build_data.at(start).primitive_offset;
-		ordered_prims.push_back(primitives.at(prim));
+  if (num_lights == 1) {
+    /* create leaf */
+    int first_prim_offset = ordered_prims.size();
+    int prim = build_data.at(start).primitive_offset;
+    ordered_prims.push_back(primitives.at(prim));
 
-		node->init_leaf(first_prim_offset, num_lights, node_bbox, node_bcone,
-		                node_energy, node_energy_variance);
-		return node;
-	} else {
-		/* compute spatial bound for primitive centroids */
-		BoundBox centroid_bbox = BoundBox::empty;
-		for (unsigned int i = start; i < end; ++i){
-			centroid_bbox.grow(build_data.at(i).centroid);
-		}
+    node->init_leaf(
+        first_prim_offset, num_lights, node_bbox, node_bcone, node_energy, node_energy_variance);
+    return node;
+  }
+  else {
+    /* compute spatial bound for primitive centroids */
+    BoundBox centroid_bbox = BoundBox::empty;
+    for (unsigned int i = start; i < end; ++i) {
+      centroid_bbox.grow(build_data.at(i).centroid);
+    }
 
-		/* find dimension of bounding box with maximum extent */
-		float3 diag = centroid_bbox.size();
-		int max_dim;
-		if(diag[0] > diag[1] && diag[0] > diag[2]){
-			max_dim = 0;
-		} else if ( diag[1] > diag[2] ) {
-			max_dim = 1;
-		} else {
-			max_dim = 2;
-		}
+    /* find dimension of bounding box with maximum extent */
+    float3 diag = centroid_bbox.size();
+    int max_dim;
+    if (diag[0] > diag[1] && diag[0] > diag[2]) {
+      max_dim = 0;
+    }
+    else if (diag[1] > diag[2]) {
+      max_dim = 1;
+    }
+    else {
+      max_dim = 2;
+    }
 
-		/* checks special case if all lights are in the same place */
-		if (centroid_bbox.max[max_dim] == centroid_bbox.min[max_dim]){
-			/* create leaf */
-			int first_prim_offset = ordered_prims.size();
-			for (int i = start; i < end; ++i) {
-				int prim = build_data.at(i).primitive_offset;
-				ordered_prims.push_back(primitives.at(prim));
-			}
+    /* checks special case if all lights are in the same place */
+    if (centroid_bbox.max[max_dim] == centroid_bbox.min[max_dim]) {
+      /* create leaf */
+      int first_prim_offset = ordered_prims.size();
+      for (int i = start; i < end; ++i) {
+        int prim = build_data.at(i).primitive_offset;
+        ordered_prims.push_back(primitives.at(prim));
+      }
 
-			node->init_leaf(first_prim_offset, num_lights, node_bbox, node_bcone,
-			                node_energy, node_energy_variance);
+      node->init_leaf(
+          first_prim_offset, num_lights, node_bbox, node_bcone, node_energy, node_energy_variance);
 
-			return node;
-		} else {
+      return node;
+    }
+    else {
 
-			/* find dimension and bucket with smallest SAOH cost */
-			const int num_buckets = 12;
-			float min_cost;
-			int min_dim, min_bucket;
-			split_saoh(centroid_bbox, build_data, start, end, num_buckets,
-			           node_M_Omega, node_bbox, min_cost, min_dim, min_bucket);
-			assert(min_dim != -1);
+      /* find dimension and bucket with smallest SAOH cost */
+      const int num_buckets = 12;
+      float min_cost;
+      int min_dim, min_bucket;
+      split_saoh(centroid_bbox,
+                 build_data,
+                 start,
+                 end,
+                 num_buckets,
+                 node_M_Omega,
+                 node_bbox,
+                 min_cost,
+                 min_dim,
+                 min_bucket);
+      assert(min_dim != -1);
 
-			int mid = 0;
-			if (num_lights > max_lights_in_node || min_cost < (float)node_energy){
-				/* partition primitives */
-				BVHPrimitiveInfo *mid_ptr =
-				        std::partition(&build_data[start], &build_data[end-1]+1,
-				        CompareToBucket(min_bucket, num_buckets,
-				                        min_dim, centroid_bbox));
-				mid = mid_ptr - &build_data[0];
-			} else {
-				/* create leaf */
-				int first_prim_offset = ordered_prims.size();
-				for (int i = start; i < end; ++i) {
-					int prim = build_data.at(i).primitive_offset;
-					ordered_prims.push_back(primitives.at(prim));
-				}
+      int mid = 0;
+      if (num_lights > max_lights_in_node || min_cost < (float)node_energy) {
+        /* partition primitives */
+        BVHPrimitiveInfo *mid_ptr = std::partition(
+            &build_data[start],
+            &build_data[end - 1] + 1,
+            CompareToBucket(min_bucket, num_buckets, min_dim, centroid_bbox));
+        mid = mid_ptr - &build_data[0];
+      }
+      else {
+        /* create leaf */
+        int first_prim_offset = ordered_prims.size();
+        for (int i = start; i < end; ++i) {
+          int prim = build_data.at(i).primitive_offset;
+          ordered_prims.push_back(primitives.at(prim));
+        }
 
-				node->init_leaf(first_prim_offset, num_lights, node_bbox,
-				                node_bcone, node_energy, node_energy_variance);
-				return node;
-			}
+        node->init_leaf(first_prim_offset,
+                        num_lights,
+                        node_bbox,
+                        node_bcone,
+                        node_energy,
+                        node_energy_variance);
+        return node;
+      }
 
-			/* build children */
-			BVHBuildNode *left = recursive_build(start, mid, build_data,
-			                                      total_nodes, ordered_prims);
-			BVHBuildNode *right = recursive_build(mid, end, build_data,
-			                                       total_nodes, ordered_prims);
-			node->init_interior(left, right, node_bcone, num_lights,
-			                    node_energy, node_energy_variance);
-		}
-	}
+      /* build children */
+      BVHBuildNode *left = recursive_build(start, mid, build_data, total_nodes, ordered_prims);
+      BVHBuildNode *right = recursive_build(mid, end, build_data, total_nodes, ordered_prims);
+      node->init_interior(left, right, node_bcone, num_lights, node_energy, node_energy_variance);
+    }
+  }
 
-	return node;
+  return node;
 }
-
 
 CCL_NAMESPACE_END

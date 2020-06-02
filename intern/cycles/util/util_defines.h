@@ -20,7 +20,8 @@
 
 /* Bitness */
 
-#if defined(__ppc64__) || defined(__PPC64__) || defined(__x86_64__) || defined(__ia64__) || defined(_M_X64)
+#if defined(__ppc64__) || defined(__PPC64__) || defined(__x86_64__) || defined(__ia64__) || \
+    defined(_M_X64)
 #  define __KERNEL_64_BIT__
 #endif
 
@@ -45,16 +46,16 @@
 #    define ccl_align(...) __declspec(align(__VA_ARGS__))
 #    ifdef __KERNEL_64_BIT__
 #      define ccl_try_align(...) __declspec(align(__VA_ARGS__))
-#    else  /* __KERNEL_64_BIT__ */
+#    else /* __KERNEL_64_BIT__ */
 #      undef __KERNEL_WITH_SSE_ALIGN__
 /* No support for function arguments (error C2719). */
 #      define ccl_try_align(...)
-#    endif  /* __KERNEL_64_BIT__ */
+#    endif /* __KERNEL_64_BIT__ */
 #    define ccl_may_alias
 #    define ccl_always_inline __forceinline
 #    define ccl_never_inline __declspec(noinline)
 #    define ccl_maybe_unused
-#  else  /* _WIN32 && !FREE_WINDOWS */
+#  else /* _WIN32 && !FREE_WINDOWS */
 #    define ccl_device_inline static inline __attribute__((always_inline))
 #    define ccl_device_forceinline static inline __attribute__((always_inline))
 #    define ccl_align(...) __attribute__((aligned(__VA_ARGS__)))
@@ -66,33 +67,36 @@
 #    define ccl_always_inline __attribute__((always_inline))
 #    define ccl_never_inline __attribute__((noinline))
 #    define ccl_maybe_unused __attribute__((used))
-#  endif  /* _WIN32 && !FREE_WINDOWS */
+#  endif /* _WIN32 && !FREE_WINDOWS */
 
 /* Use to suppress '-Wimplicit-fallthrough' (in place of 'break'). */
 #  ifndef ATTR_FALLTHROUGH
-#    if defined(__GNUC__) && (__GNUC__ >= 7)  /* gcc7.0+ only */
+#    if defined(__GNUC__) && (__GNUC__ >= 7) /* gcc7.0+ only */
 #      define ATTR_FALLTHROUGH __attribute__((fallthrough))
 #    else
-#      define ATTR_FALLTHROUGH ((void) 0)
+#      define ATTR_FALLTHROUGH ((void)0)
 #    endif
 #  endif
-#endif  /* __KERNEL_GPU__ */
+#endif /* __KERNEL_GPU__ */
 
 /* macros */
 
 /* hints for branch prediction, only use in code that runs a _lot_ */
 #if defined(__GNUC__) && defined(__KERNEL_CPU__)
-#  define LIKELY(x)       __builtin_expect(!!(x), 1)
-#  define UNLIKELY(x)     __builtin_expect(!!(x), 0)
+#  define LIKELY(x) __builtin_expect(!!(x), 1)
+#  define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #else
-#  define LIKELY(x)       (x)
-#  define UNLIKELY(x)     (x)
+#  define LIKELY(x) (x)
+#  define UNLIKELY(x) (x)
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
 #  if defined(__cplusplus)
 /* Some magic to be sure we don't have reference in the type. */
-template<typename T> static inline T decltype_helper(T x) { return x; }
+template<typename T> static inline T decltype_helper(T x)
+{
+  return x;
+}
 #    define TYPEOF(x) decltype(decltype_helper(x))
 #  else
 #    define TYPEOF(x) typeof(x)
@@ -103,31 +107,34 @@ template<typename T> static inline T decltype_helper(T x) { return x; }
  * incompatible types when assigning to type 'Foo' from type 'Bar'
  * ... the compiler optimizes away the temp var */
 #ifdef __GNUC__
-#define CHECK_TYPE(var, type)  {  \
-	TYPEOF(var) *__tmp;           \
-	__tmp = (type *)NULL;         \
-	(void) __tmp;                 \
-} (void) 0
+#  define CHECK_TYPE(var, type) \
+    { \
+      TYPEOF(var) * __tmp; \
+      __tmp = (type *)NULL; \
+      (void)__tmp; \
+    } \
+    (void)0
 
-#define CHECK_TYPE_PAIR(var_a, var_b)  {  \
-	TYPEOF(var_a) *__tmp;                 \
-	__tmp = (typeof(var_b) *)NULL;        \
-	(void) __tmp;                          \
-} (void) 0
+#  define CHECK_TYPE_PAIR(var_a, var_b) \
+    { \
+      TYPEOF(var_a) * __tmp; \
+      __tmp = (typeof(var_b) *)NULL; \
+      (void)__tmp; \
+    } \
+    (void)0
 #else
 #  define CHECK_TYPE(var, type)
 #  define CHECK_TYPE_PAIR(var_a, var_b)
 #endif
 
 /* can be used in simple macros */
-#define CHECK_TYPE_INLINE(val, type) \
-	((void)(((type)0) != (val)))
+#define CHECK_TYPE_INLINE(val, type) ((void)(((type)0) != (val)))
 
 #ifndef __KERNEL_GPU__
 #  include <cassert>
-#  define util_assert(statement)  assert(statement)
+#  define util_assert(statement) assert(statement)
 #else
 #  define util_assert(statement)
 #endif
 
-#endif  /* __UTIL_DEFINES_H__ */
+#endif /* __UTIL_DEFINES_H__ */

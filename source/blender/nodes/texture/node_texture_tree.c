@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2007 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s):
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/nodes/texture/node_texture_tree.c
- *  \ingroup nodes
+/** \file
+ * \ingroup nodes
  */
 
 
@@ -53,44 +45,22 @@
 #include "NOD_texture.h"
 #include "node_texture_util.h"
 
+#include "DEG_depsgraph.h"
+
 #include "RNA_access.h"
 
 #include "RE_shader_ext.h"
 
-
-static void texture_get_from_context(const bContext *C, bNodeTreeType *UNUSED(treetype), bNodeTree **r_ntree, ID **r_id, ID **r_from)
+static void texture_get_from_context(
+        const bContext *C, bNodeTreeType *UNUSED(treetype), bNodeTree **r_ntree, ID **r_id, ID **r_from)
 {
 	SpaceNode *snode = CTX_wm_space_node(C);
 	Scene *scene = CTX_data_scene(C);
-	Object *ob = OBACT;
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	Object *ob = OBACT(view_layer);
 	Tex *tx = NULL;
 
-	if (snode->texfrom == SNODE_TEX_OBJECT) {
-		if (ob) {
-			tx = give_current_object_texture(ob);
-			if (tx) {
-				if (ob->type == OB_LAMP)
-					*r_from = (ID *)ob->data;
-				else
-					*r_from = (ID *)give_current_material(ob, ob->actcol);
-
-				/* from is not set fully for material nodes, should be ID + Node then */
-				*r_id = &tx->id;
-				*r_ntree = tx->nodetree;
-			}
-		}
-	}
-	else if (snode->texfrom == SNODE_TEX_WORLD) {
-		if (scene->world) {
-			*r_from = (ID *)scene->world;
-			tx = give_current_world_texture(scene->world);
-			if (tx) {
-				*r_id = &tx->id;
-				*r_ntree = tx->nodetree;
-			}
-		}
-	}
-	else if (snode->texfrom == SNODE_TEX_BRUSH) {
+	if (snode->texfrom == SNODE_TEX_BRUSH) {
 		struct Brush *brush = NULL;
 
 		if (ob && (ob->mode & OB_MODE_SCULPT))
@@ -108,7 +78,7 @@ static void texture_get_from_context(const bContext *C, bNodeTreeType *UNUSED(tr
 		}
 	}
 	else if (snode->texfrom == SNODE_TEX_LINESTYLE) {
-		FreestyleLineStyle *linestyle = BKE_linestyle_active_from_scene(scene);
+		FreestyleLineStyle *linestyle = BKE_linestyle_active_from_view_layer(view_layer);
 		if (linestyle) {
 			*r_from = (ID *)linestyle;
 			tx = give_current_linestyle_texture(linestyle);
@@ -148,7 +118,7 @@ static void localize(bNodeTree *localtree, bNodeTree *UNUSED(ntree))
 
 		if (node->flag & NODE_MUTED || node->type == NODE_REROUTE) {
 			nodeInternalRelink(localtree, node);
-			nodeFreeNode(localtree, node);
+			ntreeFreeLocalNode(localtree, node);
 		}
 	}
 }
@@ -186,9 +156,9 @@ void register_node_tree_type_tex(void)
 
 	tt->type = NTREE_TEXTURE;
 	strcpy(tt->idname, "TextureNodeTree");
-	strcpy(tt->ui_name, "Texture");
+	strcpy(tt->ui_name, N_("Texture Node Editor"));
 	tt->ui_icon = 0;    /* defined in drawnode.c */
-	strcpy(tt->ui_description, "Texture nodes");
+	strcpy(tt->ui_description, N_("Texture nodes"));
 
 	tt->foreach_nodeclass = foreach_nodeclass;
 	tt->update = update;
@@ -321,7 +291,6 @@ int ntreeTexExecTree(
         short which_output,
         int cfra,
         int preview,
-        ShadeInput *shi,
         MTex *mtex)
 {
 	TexCallData data;
@@ -336,12 +305,11 @@ int ntreeTexExecTree(
 	data.osatex = osatex;
 	data.target = texres;
 	data.do_preview = preview;
-	data.do_manage = (shi) ? shi->do_manage : true;
+	data.do_manage = true;
 	data.thread = thread;
 	data.which_output = which_output;
 	data.cfra = cfra;
 	data.mtex = mtex;
-	data.shi = shi;
 
 	/* ensure execdata is only initialized once */
 	if (!exec) {

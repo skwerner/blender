@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/imbuf/intern/allocimbuf.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 
@@ -155,13 +147,6 @@ void imb_freetilesImBuf(ImBuf *ibuf)
 	ibuf->mall &= ~IB_tiles;
 }
 
-static void imb_free_bitmap_font(ImBuf *ibuf)
-{
-	if (ibuf->userdata && (ibuf->userflags & IB_BITMAPFONT)) {
-		MEM_freeN(ibuf->userdata);
-	}
-}
-
 static void freeencodedbufferImBuf(ImBuf *ibuf)
 {
 	if (ibuf == NULL) return;
@@ -215,7 +200,6 @@ void IMB_freeImBuf(ImBuf *ibuf)
 			imb_freerectImBuf(ibuf);
 			imb_freerectfloatImBuf(ibuf);
 			imb_freetilesImBuf(ibuf);
-			imb_free_bitmap_font(ibuf);
 			IMB_freezbufImBuf(ibuf);
 			IMB_freezbuffloatImBuf(ibuf);
 			freeencodedbufferImBuf(ibuf);
@@ -521,7 +505,6 @@ ImBuf *IMB_dupImBuf(const ImBuf *ibuf1)
 
 	x = ibuf1->x;
 	y = ibuf1->y;
-	if (ibuf1->flags & IB_fields) y *= 2;
 
 	ibuf2 = IMB_allocImBuf(x, y, ibuf1->planes, flags);
 	if (ibuf2 == NULL) return NULL;

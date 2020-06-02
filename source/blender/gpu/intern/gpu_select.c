@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,15 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Antony Riakiotakis.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/gpu/intern/gpu_select.c
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  *
- * Interface for accessing gpu-related methods for selection. The semantics will be
- * similar to glRenderMode(GL_SELECT) since the goal is to maintain compatibility.
+ * Interface for accessing gpu-related methods for selection. The semantics are
+ * similar to glRenderMode(GL_SELECT) from older OpenGL versions.
  */
+#include <string.h>
 #include <stdlib.h>
 
 #include "GPU_select.h"
@@ -36,6 +31,8 @@
 #include "GPU_glew.h"
 
 #include "MEM_guardedalloc.h"
+
+#include "BLI_rect.h"
 
 #include "DNA_userdef_types.h"
 
@@ -45,21 +42,17 @@
 
 /* Internal algorithm used */
 enum {
-	/** GL_SELECT, legacy OpenGL selection */
-	ALGO_GL_LEGACY = 1,
 	/** glBegin/EndQuery(GL_SAMPLES_PASSED... ), `gpu_select_query.c`
 	 * Only sets 4th component (ID) correctly. */
-	ALGO_GL_QUERY = 2,
+	ALGO_GL_QUERY = 1,
 	/** Read depth buffer for every drawing pass and extract depths, `gpu_select_pick.c`
 	 * Only sets 4th component (ID) correctly. */
-	ALGO_GL_PICK = 3,
+	ALGO_GL_PICK = 2,
 };
 
 typedef struct GPUSelectState {
 	/* To ignore selection id calls when not initialized */
 	bool select_is_active;
-	/* flag to cache user preference for occlusion based selection */
-	bool use_gpu_select;
 	/* mode of operation */
 	char mode;
 	/* internal algorithm for selection */
@@ -82,29 +75,16 @@ void GPU_select_begin(uint *buffer, uint bufsize, const rcti *input, char mode, 
 	}
 
 	g_select_state.select_is_active = true;
-	g_select_state.use_gpu_select = GPU_select_query_check_active();
 	g_select_state.mode = mode;
 
 	if (ELEM(g_select_state.mode, GPU_SELECT_PICK_ALL, GPU_SELECT_PICK_NEAREST)) {
 		g_select_state.algorithm = ALGO_GL_PICK;
-	}
-	else if (!g_select_state.use_gpu_select) {
-		g_select_state.algorithm = ALGO_GL_LEGACY;
 	}
 	else {
 		g_select_state.algorithm = ALGO_GL_QUERY;
 	}
 
 	switch (g_select_state.algorithm) {
-		case ALGO_GL_LEGACY:
-		{
-			g_select_state.use_cache = false;
-			glSelectBuffer(bufsize, (GLuint *)buffer);
-			glRenderMode(GL_SELECT);
-			glInitNames();
-			glPushName(-1);
-			break;
-		}
 		case ALGO_GL_QUERY:
 		{
 			g_select_state.use_cache = false;
@@ -133,11 +113,6 @@ bool GPU_select_load_id(uint id)
 		return true;
 
 	switch (g_select_state.algorithm) {
-		case ALGO_GL_LEGACY:
-		{
-			glLoadName(id);
-			return true;
-		}
 		case ALGO_GL_QUERY:
 		{
 			return gpu_select_query_load_id(id);
@@ -159,12 +134,6 @@ uint GPU_select_end(void)
 	uint hits = 0;
 
 	switch (g_select_state.algorithm) {
-		case ALGO_GL_LEGACY:
-		{
-			glPopName();
-			hits = glRenderMode(GL_RENDER);
-			break;
-		}
 		case ALGO_GL_QUERY:
 		{
 			hits = gpu_select_query_end();
@@ -180,19 +149,6 @@ uint GPU_select_end(void)
 	g_select_state.select_is_active = false;
 
 	return hits;
-}
-
-/**
- * has user activated?
- */
-bool GPU_select_query_check_active(void)
-{
-	return ((U.gpu_select_method == USER_SELECT_USE_OCCLUSION_QUERY) ||
-	        ((U.gpu_select_method == USER_SELECT_AUTO) &&
-	         (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_ANY, GPU_DRIVER_ANY) ||
-	          /* unsupported by nouveau, gallium 0.4, see: T47940 */
-	          GPU_type_matches(GPU_DEVICE_NVIDIA, GPU_OS_UNIX, GPU_DRIVER_OPENSOURCE))));
-
 }
 
 /* ----------------------------------------------------------------------------
@@ -231,4 +187,65 @@ void GPU_select_cache_end(void)
 bool GPU_select_is_cached(void)
 {
 	return g_select_state.use_cache && gpu_select_pick_is_cached();
+}
+
+
+/* ----------------------------------------------------------------------------
+ * Utilities
+ */
+
+/**
+ * Helper function, nothing special but avoids doing inline since hit's aren't sorted by depth
+ * and purpose of 4x buffer indices isn't so clear.
+ *
+ * Note that comparing depth as uint is fine.
+ */
+const uint *GPU_select_buffer_near(const uint *buffer, int hits)
+{
+	const uint *buffer_near = NULL;
+	uint depth_min = (uint) - 1;
+	for (int i = 0; i < hits; i++) {
+		if (buffer[1] < depth_min) {
+			BLI_assert(buffer[3] != -1);
+			depth_min = buffer[1];
+			buffer_near = buffer;
+		}
+		buffer += 4;
+	}
+	return buffer_near;
+}
+
+/* Part of the solution copied from `rect_subregion_stride_calc`. */
+void GPU_select_buffer_stride_realign(
+        const rcti *src, const rcti *dst, uint *r_buf)
+{
+	const int x = dst->xmin - src->xmin;
+	const int y = dst->ymin - src->ymin;
+
+	BLI_assert(src->xmin <= dst->xmin && src->ymin <= dst->ymin &&
+	           src->xmax >= dst->xmax && src->ymax >= dst->ymax);
+	BLI_assert(x >= 0 && y >= 0);
+
+	const int src_x = BLI_rcti_size_x(src);
+	const int src_y = BLI_rcti_size_y(src);
+	const int dst_x = BLI_rcti_size_x(dst);
+	const int dst_y = BLI_rcti_size_y(dst);
+
+	int last_px_written = dst_x * dst_y - 1;
+	int last_px_id = src_x * (y + dst_y - 1) + (x + dst_x - 1);
+	const int skip = src_x - dst_x;
+
+	memset(&r_buf[last_px_id + 1], 0, (src_x * src_y - (last_px_id + 1)) * sizeof(*r_buf));
+
+	while (true) {
+		for (int i = dst_x; i--;) {
+			r_buf[last_px_id--] = r_buf[last_px_written--];
+		}
+		if (last_px_written < 0) {
+			break;
+		}
+		last_px_id -= skip;
+		memset(&r_buf[last_px_id + 1], 0, skip * sizeof(*r_buf));
+	}
+	memset(r_buf, 0, (last_px_id + 1) * sizeof(*r_buf));
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,22 +15,15 @@
  *
  * The Original Code is Copyright (C) 2013 Blender Foundation.
  * All rights reserved.
- *
- * Original Author: Joshua Leung
- * Contributor(s): None Yet
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/depsgraph/intern/eval/deg_eval.h
- *  \ingroup depsgraph
+/** \file
+ * \ingroup depsgraph
  *
  * Evaluation engine entrypoints for Depsgraph Engine.
  */
 
 #pragma once
-
-struct EvaluationContext;
 
 namespace DEG {
 
@@ -45,8 +36,6 @@ struct Depsgraph;
  *
  * \note Time sources should be all valid!
  */
-void deg_evaluate_on_refresh(EvaluationContext *eval_ctx,
-                             Depsgraph *graph,
-                             const unsigned int layers);
+void deg_evaluate_on_refresh(Depsgraph *graph);
 
 }  // namespace DEG

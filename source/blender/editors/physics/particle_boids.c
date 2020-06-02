@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2009 Janne Karhu.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/physics/particle_boids.c
- *  \ingroup edphys
+/** \file
+ * \ingroup edphys
  */
 
 
@@ -39,9 +33,11 @@
 
 #include "BKE_boids.h"
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_main.h"
 #include "BKE_particle.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
 
 #include "RNA_access.h"
 #include "RNA_enum_types.h"
@@ -57,7 +53,7 @@ static int rule_add_exec(bContext *C, wmOperator *op)
 {
 	PointerRNA ptr = CTX_data_pointer_get_type(C, "particle_settings", &RNA_ParticleSettings);
 	ParticleSettings *part = ptr.data;
-	int type= RNA_enum_get(op->ptr, "type");
+	int type = RNA_enum_get(op->ptr, "type");
 
 	BoidRule *rule;
 	BoidState *state;
@@ -67,7 +63,7 @@ static int rule_add_exec(bContext *C, wmOperator *op)
 
 	state = boid_get_current_state(part->boids);
 
-	for (rule=state->rules.first; rule; rule=rule->next)
+	for (rule = state->rules.first; rule; rule = rule->next)
 		rule->flag &= ~BOIDRULE_CURRENT;
 
 	rule = boid_new_rule(type);
@@ -75,7 +71,7 @@ static int rule_add_exec(bContext *C, wmOperator *op)
 
 	BLI_addtail(&state->rules, rule);
 
-	DAG_id_tag_update(&part->id, OB_RECALC_DATA|PSYS_RECALC_RESET);
+	DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_RESET);
 
 	return OPERATOR_FINISHED;
 }
@@ -92,7 +88,7 @@ void BOID_OT_rule_add(wmOperatorType *ot)
 	ot->exec = rule_add_exec;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER|OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
 	ot->prop = RNA_def_enum(ot->srna, "type", rna_enum_boidrule_type_items, 0, "Type", "");
 }
@@ -109,7 +105,7 @@ static int rule_del_exec(bContext *C, wmOperator *UNUSED(op))
 
 	state = boid_get_current_state(part->boids);
 
-	for (rule=state->rules.first; rule; rule=rule->next) {
+	for (rule = state->rules.first; rule; rule = rule->next) {
 		if (rule->flag & BOIDRULE_CURRENT) {
 			BLI_remlink(&state->rules, rule);
 			MEM_freeN(rule);
@@ -121,8 +117,8 @@ static int rule_del_exec(bContext *C, wmOperator *UNUSED(op))
 	if (rule)
 		rule->flag |= BOIDRULE_CURRENT;
 
-	DAG_relations_tag_update(bmain);
-	DAG_id_tag_update(&part->id, OB_RECALC_DATA|PSYS_RECALC_RESET);
+	DEG_relations_tag_update(bmain);
+	DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_RESET);
 
 	return OPERATOR_FINISHED;
 }
@@ -138,7 +134,7 @@ void BOID_OT_rule_del(wmOperatorType *ot)
 	ot->exec = rule_del_exec;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER|OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
 /************************ move up/down boid rule operators *********************/
@@ -153,12 +149,12 @@ static int rule_move_up_exec(bContext *C, wmOperator *UNUSED(op))
 		return OPERATOR_CANCELLED;
 
 	state = boid_get_current_state(part->boids);
-	for (rule = state->rules.first; rule; rule=rule->next) {
+	for (rule = state->rules.first; rule; rule = rule->next) {
 		if (rule->flag & BOIDRULE_CURRENT && rule->prev) {
 			BLI_remlink(&state->rules, rule);
 			BLI_insertlinkbefore(&state->rules, rule->prev, rule);
 
-			DAG_id_tag_update(&part->id, OB_RECALC_DATA|PSYS_RECALC_RESET);
+			DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_RESET);
 			break;
 		}
 	}
@@ -175,7 +171,7 @@ void BOID_OT_rule_move_up(wmOperatorType *ot)
 	ot->exec = rule_move_up_exec;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER|OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
 static int rule_move_down_exec(bContext *C, wmOperator *UNUSED(op))
@@ -189,12 +185,12 @@ static int rule_move_down_exec(bContext *C, wmOperator *UNUSED(op))
 		return OPERATOR_CANCELLED;
 
 	state = boid_get_current_state(part->boids);
-	for (rule = state->rules.first; rule; rule=rule->next) {
+	for (rule = state->rules.first; rule; rule = rule->next) {
 		if (rule->flag & BOIDRULE_CURRENT && rule->next) {
 			BLI_remlink(&state->rules, rule);
 			BLI_insertlinkafter(&state->rules, rule->next, rule);
 
-			DAG_id_tag_update(&part->id, OB_RECALC_DATA|PSYS_RECALC_RESET);
+			DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_RESET);
 			break;
 		}
 	}
@@ -211,7 +207,7 @@ void BOID_OT_rule_move_down(wmOperatorType *ot)
 	ot->exec = rule_move_down_exec;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER|OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
 
@@ -225,7 +221,7 @@ static int state_add_exec(bContext *C, wmOperator *UNUSED(op))
 	if (!part || part->phystype != PART_PHYS_BOIDS)
 		return OPERATOR_CANCELLED;
 
-	for (state=part->boids->states.first; state; state=state->next)
+	for (state = part->boids->states.first; state; state = state->next)
 		state->flag &= ~BOIDSTATE_CURRENT;
 
 	state = boid_new_state(part->boids);
@@ -247,7 +243,7 @@ void BOID_OT_state_add(wmOperatorType *ot)
 	ot->exec = state_add_exec;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER|OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 static int state_del_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -259,7 +255,7 @@ static int state_del_exec(bContext *C, wmOperator *UNUSED(op))
 	if (!part || part->phystype != PART_PHYS_BOIDS)
 		return OPERATOR_CANCELLED;
 
-	for (state=part->boids->states.first; state; state=state->next) {
+	for (state = part->boids->states.first; state; state = state->next) {
 		if (state->flag & BOIDSTATE_CURRENT) {
 			BLI_remlink(&part->boids->states, state);
 			MEM_freeN(state);
@@ -277,8 +273,8 @@ static int state_del_exec(bContext *C, wmOperator *UNUSED(op))
 
 	state->flag |= BOIDSTATE_CURRENT;
 
-	DAG_relations_tag_update(bmain);
-	DAG_id_tag_update(&part->id, OB_RECALC_DATA|PSYS_RECALC_RESET);
+	DEG_relations_tag_update(bmain);
+	DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_RESET);
 
 	return OPERATOR_FINISHED;
 }
@@ -294,7 +290,7 @@ void BOID_OT_state_del(wmOperatorType *ot)
 	ot->exec = state_del_exec;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER|OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
 /************************ move up/down boid state operators *********************/
@@ -310,7 +306,7 @@ static int state_move_up_exec(bContext *C, wmOperator *UNUSED(op))
 
 	boids = part->boids;
 
-	for (state = boids->states.first; state; state=state->next) {
+	for (state = boids->states.first; state; state = state->next) {
 		if (state->flag & BOIDSTATE_CURRENT && state->prev) {
 			BLI_remlink(&boids->states, state);
 			BLI_insertlinkbefore(&boids->states, state->prev, state);
@@ -330,7 +326,7 @@ void BOID_OT_state_move_up(wmOperatorType *ot)
 	ot->exec = state_move_up_exec;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER|OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
 static int state_move_down_exec(bContext *C, wmOperator *UNUSED(op))
@@ -345,11 +341,11 @@ static int state_move_down_exec(bContext *C, wmOperator *UNUSED(op))
 
 	boids = part->boids;
 
-	for (state = boids->states.first; state; state=state->next) {
+	for (state = boids->states.first; state; state = state->next) {
 		if (state->flag & BOIDSTATE_CURRENT && state->next) {
 			BLI_remlink(&boids->states, state);
 			BLI_insertlinkafter(&boids->states, state->next, state);
-			DAG_id_tag_update(&part->id, OB_RECALC_DATA|PSYS_RECALC_RESET);
+			DEG_id_tag_update(&part->id, ID_RECALC_GEOMETRY | ID_RECALC_PSYS_RESET);
 			break;
 		}
 	}
@@ -366,5 +362,5 @@ void BOID_OT_state_move_down(wmOperatorType *ot)
 	ot->exec = state_move_down_exec;
 
 	/* flags */
-	ot->flag = OPTYPE_REGISTER|OPTYPE_UNDO;
+	ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }

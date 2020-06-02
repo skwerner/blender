@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2014, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jason Wilkins
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -39,6 +34,9 @@ set(SRC
 	intern/symbol-binding.h
 )
 
+set(LIB
+)
+
 add_definitions(${GL_DEFINITIONS})
 
-blender_add_lib(bf_intern_glew_mx "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_intern_glew_mx "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

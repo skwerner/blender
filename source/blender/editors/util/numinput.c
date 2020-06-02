@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Jonathan Smith
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/util/numinput.c
- *  \ingroup edutil
+/** \file
+ * \ingroup edutil
  */
 
 #include "MEM_guardedalloc.h"
@@ -48,21 +42,34 @@
 #include "ED_numinput.h"
 #include "UI_interface.h"
 
+/* Numeric input which isn't allowing full numeric editing. */
+#define USE_FAKE_EDIT
 
-/* NumInput.flag */
+/** #NumInput.flag
+ * (1 << 8) and below are reserved for public flags!
+ */
 enum {
-	/* (1 << 8) and below are reserved for public flags! */
-	NUM_EDIT_FULL       = (1 << 9),   /* Enable full editing, with units and math operators support. */
-	NUM_FAKE_EDITED     = (1 << 10),  /* Fake edited state (temp, avoids issue with backspace). */
+	/** Enable full editing, with units and math operators support. */
+	NUM_EDIT_FULL       = (1 << 9),
+#ifdef USE_FAKE_EDIT
+	/** Fake edited state (temp, avoids issue with backspace). */
+	NUM_FAKE_EDITED     = (1 << 10),
+#endif
 };
 
 /* NumInput.val_flag[] */
 enum {
 	/* (1 << 8) and below are reserved for public flags! */
-	NUM_EDITED          = (1 << 9),    /* User has edited this value somehow. */
-	NUM_INVALID         = (1 << 10),   /* Current expression for this value is invalid. */
-	NUM_NEGATE          = (1 << 11),   /* Current expression's result has to be negated. */
-	NUM_INVERSE         = (1 << 12),   /* Current expression's result has to be inverted. */
+	/** User has edited this value somehow. */
+	NUM_EDITED          = (1 << 9),
+	/** Current expression for this value is invalid. */
+	NUM_INVALID         = (1 << 10),
+#ifdef USE_FAKE_EDIT
+	/** Current expression's result has to be negated. */
+	NUM_NEGATE          = (1 << 11),
+	/** Current expression's result has to be inverted. */
+	NUM_INVERSE         = (1 << 12),
+#endif
 };
 
 /* ************************** Functions *************************** */
@@ -109,6 +116,7 @@ void outputNumInput(NumInput *n, char *str, UnitSettings *unit_settings)
 				char before_cursor[NUM_STR_REP_LEN];
 				char val[16];
 
+#ifdef USE_FAKE_EDIT
 				if (n->val_flag[i] & NUM_NEGATE) {
 					heading_exp = (n->val_flag[i] & NUM_INVERSE) ? "-1/(" : "-(";
 					trailing_exp = ")";
@@ -117,6 +125,7 @@ void outputNumInput(NumInput *n, char *str, UnitSettings *unit_settings)
 					heading_exp = "1/(";
 					trailing_exp = ")";
 				}
+#endif
 
 				if (n->val_flag[i] & NUM_INVALID) {
 					BLI_strncpy(val, "Invalid", sizeof(val));
@@ -126,7 +135,8 @@ void outputNumInput(NumInput *n, char *str, UnitSettings *unit_settings)
 					               n->unit_sys, n->unit_type[i], true, false);
 				}
 
-				BLI_strncpy(before_cursor, n->str, n->str_cur + 1);  /* +1 because of trailing '\0' */
+				/* +1 because of trailing '\0' */
+				BLI_strncpy(before_cursor, n->str, n->str_cur + 1);
 				BLI_snprintf(&str[j * ln], ln, "[%s%s|%s%s] = %s",
 				             heading_exp, before_cursor, &n->str[n->str_cur], trailing_exp, val);
 			}
@@ -147,7 +157,8 @@ void outputNumInput(NumInput *n, char *str, UnitSettings *unit_settings)
 			const char *cur = (i == n->idx) ? "|" : "";
 			BLI_snprintf(&str[j * ln], ln, "%sNONE%s", cur, cur);
 		}
-		/* We might have cut some multi-bytes utf8 chars (e.g. trailing '°' of degrees values can become only 'A')... */
+		/* We might have cut some multi-bytes utf8 chars
+		 * (e.g. trailing '°' of degrees values can become only 'A')... */
 		BLI_utf8_invalid_strip(&str[j * ln], strlen(&str[j * ln]));
 	}
 }
@@ -156,9 +167,11 @@ bool hasNumInput(const NumInput *n)
 {
 	short i;
 
+#ifdef USE_FAKE_EDIT
 	if (n->flag & NUM_FAKE_EDITED) {
 		return true;
 	}
+#endif
 
 	for (i = 0; i <= n->idx_max; i++) {
 		if (n->val_flag[i] & NUM_EDITED) {
@@ -179,10 +192,13 @@ bool applyNumInput(NumInput *n, float *vec)
 
 	if (hasNumInput(n)) {
 		for (j = 0; j <= n->idx_max; j++) {
+#ifdef USE_FAKE_EDIT
 			if (n->flag & NUM_FAKE_EDITED) {
 				val = n->val[j];
 			}
-			else {
+			else
+#endif
+			{
 				/* if AFFECTALL and no number typed and cursor not on number, use first number */
 				i = (n->flag & NUM_AFFECT_ALL && n->idx != j && !(n->val_flag[j] & NUM_EDITED)) ? 0 : j;
 				val = (!(n->val_flag[i] & NUM_EDITED) && n->val_flag[i] & NUM_NULL_ONE) ? 1.0f : n->val[i];
@@ -202,7 +218,9 @@ bool applyNumInput(NumInput *n, float *vec)
 			}
 			vec[j] = val;
 		}
+#ifdef USE_FAKE_EDIT
 		n->flag &= ~NUM_FAKE_EDITED;
+#endif
 		return true;
 	}
 	else {
@@ -239,6 +257,32 @@ static bool editstr_insert_at_cursor(NumInput *n, const char *buf, const int buf
 	return true;
 }
 
+bool user_string_to_number(bContext *C, const char *str, const UnitSettings *unit, int type, double *r_value)
+{
+#ifdef WITH_PYTHON
+	double unit_scale = BKE_scene_unit_scale(unit, type, 1.0);
+	if (bUnit_ContainsUnit(str, type)) {
+		char str_unit_convert[256];
+		BLI_strncpy(str_unit_convert, str, sizeof(str_unit_convert));
+		bUnit_ReplaceString(
+		        str_unit_convert, sizeof(str_unit_convert), str,
+		        unit_scale, unit->system, type);
+
+		return BPY_execute_string_as_number(C, NULL, str_unit_convert, true, r_value);
+	}
+	else {
+		int success = BPY_execute_string_as_number(C, NULL, str, true, r_value);
+		*r_value *= bUnit_PreferredInputUnitScalar(unit, type);
+		*r_value /= unit_scale;
+		return success;
+	}
+#else
+	*r_value = atof(str);
+	return true;
+#endif
+}
+
+
 static bool editstr_is_simple_numinput(const char ascii)
 {
 	if (ascii >= '0' && ascii <= '9') {
@@ -261,6 +305,21 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 	short dir = STRCUR_DIR_NEXT, mode = STRCUR_JUMP_NONE;
 	int cur;
 
+#ifdef USE_FAKE_EDIT
+	if (U.flag & USER_FLAG_NUMINPUT_ADVANCED)
+#endif
+	{
+		if ((event->ctrl == 0) && (event->alt == 0) && (event->ascii != '\0') &&
+		    strchr("01234567890@%^&*-+/{}()[]<>.|", event->ascii))
+		{
+			if (!(n->flag & NUM_EDIT_FULL)) {
+				n->flag |= NUM_EDITED;
+				n->flag |= NUM_EDIT_FULL;
+				n->val_flag[idx] |= NUM_EDITED;
+			}
+		}
+	}
+
 	switch (event->type) {
 		case EVT_MODAL_MAP:
 			if (ELEM(event->val, NUM_MODAL_INCREMENT_UP, NUM_MODAL_INCREMENT_DOWN)) {
@@ -282,7 +341,11 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 				n->val_flag[0] &= ~NUM_EDITED;
 				n->val_flag[1] &= ~NUM_EDITED;
 				n->val_flag[2] &= ~NUM_EDITED;
+#ifdef USE_FAKE_EDIT
 				n->flag |= NUM_FAKE_EDITED;
+#else
+				n->flag |= NUM_EDIT_FULL;
+#endif
 				updated = true;
 				break;
 			}
@@ -294,7 +357,8 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 				updated = true;
 				break;
 			}
-			/* Else, common behavior with DELKEY, only difference is remove char(s) before/after the cursor. */
+			/* Else, common behavior with DELKEY,
+			 * only difference is remove char(s) before/after the cursor. */
 			dir = STRCUR_DIR_PREV;
 			ATTR_FALLTHROUGH;
 		case DELKEY:
@@ -309,7 +373,8 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 						SWAP(int, t_cur, cur);
 						n->str_cur = cur;
 					}
-					memmove(&n->str[cur], &n->str[t_cur], strlen(&n->str[t_cur]) + 1);  /* +1 for trailing '\0'. */
+					/* +1 for trailing '\0'. */
+					memmove(&n->str[cur], &n->str[t_cur], strlen(&n->str[t_cur]) + 1);
 					updated = true;
 				}
 				if (!n->str[0]) {
@@ -347,7 +412,9 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 			}
 			return false;
 		case TABKEY:
+#ifdef USE_FAKE_EDIT
 			n->val_flag[idx] &= ~(NUM_NEGATE | NUM_INVERSE);
+#endif
 
 			idx = (idx + idx_max + (event->ctrl ? 0 : 2)) % (idx_max + 1);
 			n->idx = idx;
@@ -361,7 +428,8 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 			return true;
 		case PADPERIOD:
 		case PERIODKEY:
-			/* Force numdot, some OSs/countries generate a comma char in this case, sic...  (T37992) */
+			/* Force numdot, some OSs/countries generate a comma char in this case,
+			 * sic...  (T37992) */
 			ascii[0] = '.';
 			utf8_buf = ascii;
 			break;
@@ -382,6 +450,8 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 			}
 			break;
 #endif
+
+#ifdef USE_FAKE_EDIT
 		case PADMINUS:
 		case MINUSKEY:
 			if (event->ctrl || !(n->flag & NUM_EDIT_FULL)) {
@@ -396,6 +466,7 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 				updated = true;
 			}
 			break;
+#endif
 		case CKEY:
 			if (event->ctrl) {
 				/* Copy current str to the copypaste buffer. */
@@ -431,6 +502,7 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 		ascii[0] = event->ascii;
 	}
 
+#ifdef USE_FAKE_EDIT
 	/* XXX Hack around keyboards without direct access to '=' nor '*'... */
 	if (ELEM(ascii[0], '=', '*')) {
 		if (!(n->flag & NUM_EDIT_FULL)) {
@@ -443,6 +515,7 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 			return true;
 		}
 	}
+#endif
 
 	/* Up to this point, if we have a ctrl modifier, skip.
 	 * This allows to still access most of modals' shortcuts even in numinput mode.
@@ -475,48 +548,32 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 		return false;
 	}
 
-	/* At this point, our value has changed, try to interpret it with python (if str is not empty!). */
+	/* At this point, our value has changed, try to interpret it with python
+	 * (if str is not empty!). */
 	if (n->str[0]) {
 		const float val_prev = n->val[idx];
-		double val;
-#ifdef WITH_PYTHON
 		Scene *sce = CTX_data_scene(C);
-		char str_unit_convert[NUM_STR_REP_LEN * 6];  /* Should be more than enough! */
-		const char *default_unit = NULL;
 
-		/* Use scale_length if needed! */
-		const float fac = (float)BKE_scene_unit_scale(&sce->unit, n->unit_type[idx], 1.0);
+		double val;
+		int success = user_string_to_number(C, n->str, &sce->unit, n->unit_type[idx], &val);
 
-		/* Make radian default unit when needed. */
-		if (n->unit_use_radians && n->unit_type[idx] == B_UNIT_ROTATION) {
-			default_unit = "r";
-		}
-
-		BLI_strncpy(str_unit_convert, n->str, sizeof(str_unit_convert));
-
-		bUnit_ReplaceString(str_unit_convert, sizeof(str_unit_convert), default_unit, fac,
-		                    n->unit_sys, n->unit_type[idx]);
-
-		/* Note: with angles, we always get values as radians here... */
-		if (BPY_execute_string_as_number(C, str_unit_convert, false, &val)) {
+		if (success) {
 			n->val[idx] = (float)val;
 			n->val_flag[idx] &= ~NUM_INVALID;
 		}
 		else {
 			n->val_flag[idx] |= NUM_INVALID;
 		}
-#else  /* Very unlikely, but does not harm... */
-		val = atof(n->str);
-		n->val[idx] = (float)val;
-		UNUSED_VARS(C);
-#endif  /* WITH_PYTHON */
 
+
+#ifdef USE_FAKE_EDIT
 		if (n->val_flag[idx] & NUM_NEGATE) {
 			n->val[idx] = -n->val[idx];
 		}
 		if (n->val_flag[idx] & NUM_INVERSE) {
 			val = n->val[idx];
-			/* If we invert on radians when user is in degrees, you get unexpected results... See T53463. */
+			/* If we invert on radians when user is in degrees,
+			 * you get unexpected results... See T53463. */
 			if (!n->unit_use_radians && n->unit_type[idx] == B_UNIT_ROTATION) {
 				val = RAD2DEG(val);
 			}
@@ -526,6 +583,7 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 			}
 			n->val[idx] = (float)val;
 		}
+#endif
 
 		if (UNLIKELY(!isfinite(n->val[idx]))) {
 			n->val[idx] = val_prev;

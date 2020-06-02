@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Esteban Tovagliari, Cedric Paille, Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #include "abc_nurbs.h"
@@ -60,12 +58,11 @@ using Alembic::AbcGeom::ONuPatchSchema;
 
 /* ************************************************************************** */
 
-AbcNurbsWriter::AbcNurbsWriter(Scene *scene,
-                               Object *ob,
+AbcNurbsWriter::AbcNurbsWriter(Object *ob,
                                AbcTransformWriter *parent,
                                uint32_t time_sampling,
                                ExportSettings &settings)
-    : AbcObjectWriter(scene, ob, time_sampling, settings, parent)
+    : AbcObjectWriter(ob, time_sampling, settings, parent)
 {
 	m_is_animated = isAnimated();
 
@@ -103,7 +100,7 @@ static void get_knots(std::vector<float> &knots, const int num_knots, float *nu_
 		return;
 	}
 
-	/* Add an extra knot at the beggining and end of the array since most apps
+	/* Add an extra knot at the beginning and end of the array since most apps
 	 * require/expect them. */
 	knots.reserve(num_knots + 2);
 
@@ -131,8 +128,8 @@ void AbcNurbsWriter::do_write()
 	Curve *curve = static_cast<Curve *>(m_object->data);
 	ListBase *nulb;
 
-	if (m_object->curve_cache->deformed_nurbs.first != NULL) {
-		nulb = &m_object->curve_cache->deformed_nurbs;
+	if (m_object->runtime.curve_cache->deformed_nurbs.first != NULL) {
+		nulb = &m_object->runtime.curve_cache->deformed_nurbs;
 	}
 	else {
 		nulb = BKE_curve_nurbs_get(curve);
@@ -167,7 +164,7 @@ void AbcNurbsWriter::do_write()
 		sample.setNu(nu->pntsu);
 		sample.setNv(nu->pntsv);
 
-		/* TODO(kevin): to accomodate other software we should duplicate control
+		/* TODO(kevin): to accommodate other software we should duplicate control
 		 * points to indicate that a NURBS is cyclic. */
 		OCompoundProperty user_props = m_nurbs_schema[count].getUserProperties();
 
@@ -210,7 +207,7 @@ bool AbcNurbsReader::valid() const
 		return false;
 	}
 
-	std::vector< std::pair<INuPatchSchema, IObject> >::const_iterator it;
+	std::vector<std::pair<INuPatchSchema, IObject>>::const_iterator it;
 	for (it = m_schemas.begin(); it != m_schemas.end(); ++it) {
 		const INuPatchSchema &schema = it->first;
 
@@ -244,7 +241,7 @@ void AbcNurbsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSele
 	Curve *cu = static_cast<Curve *>(BKE_curve_add(bmain, "abc_curve", OB_SURF));
 	cu->actvert = CU_ACT_NONE;
 
-	std::vector< std::pair<INuPatchSchema, IObject> >::iterator it;
+	std::vector<std::pair<INuPatchSchema, IObject>>::iterator it;
 
 	for (it = m_schemas.begin(); it != m_schemas.end(); ++it) {
 		Nurb *nu = static_cast<Nurb *>(MEM_callocN(sizeof(Nurb), "abc_getnurb"));
@@ -254,7 +251,19 @@ void AbcNurbsReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSele
 		nu->resolv = cu->resolv;
 
 		const INuPatchSchema &schema = it->first;
-		const INuPatchSchema::Sample smp = schema.getValue(sample_sel);
+		INuPatchSchema::Sample smp;
+		try {
+			smp = schema.getValue(sample_sel);
+		}
+		catch(Alembic::Util::Exception &ex) {
+			printf("Alembic: error reading nurbs sample for '%s/%s' at time %f: %s\n",
+			       m_iobject.getFullName().c_str(),
+			       schema.getName().c_str(),
+			       sample_sel.getRequestedTime(),
+			       ex.what());
+			return;
+		}
+
 
 		nu->orderu = smp.getUOrder() - 1;
 		nu->orderv = smp.getVOrder() - 1;

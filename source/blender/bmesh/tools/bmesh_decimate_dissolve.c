@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/tools/bmesh_decimate_dissolve.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * BMesh decimator that dissolves flat areas into polygons (ngons).
  */
@@ -382,12 +376,16 @@ void BM_mesh_decimate_dissolve_ex(
 				BM_edge_kill(bm, e_iter);
 				if (v1->e == NULL) {
 					vidx_reverse = vert_reverse_lookup[BM_elem_index_get(v1)];
-					if (vidx_reverse != -1) vinput_arr[vidx_reverse] = NULL;
+					if (vidx_reverse != -1) {
+						vinput_arr[vidx_reverse] = NULL;
+					}
 					BM_vert_kill(bm, v1);
 				}
 				if (v2->e == NULL) {
 					vidx_reverse = vert_reverse_lookup[BM_elem_index_get(v2)];
-					if (vidx_reverse != -1) vinput_arr[vidx_reverse] = NULL;
+					if (vidx_reverse != -1) {
+						vinput_arr[vidx_reverse] = NULL;
+					}
 					BM_vert_kill(bm, v2);
 				}
 			}

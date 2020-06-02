@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,34 +15,32 @@
  *
  * The Original Code is Copyright (C) 2004 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation (2008).
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BKE_SEQUENCER_H__
 #define __BKE_SEQUENCER_H__
 
-/** \file BKE_sequencer.h
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
-struct bContext;
-struct EvaluationContext;
-struct StripColorBalance;
+struct Depsgraph;
 struct Editing;
-struct GSet;
-struct GPUOffScreen;
 struct GPUFX;
+struct GPUOffScreen;
+struct GSet;
 struct ImBuf;
 struct Main;
 struct Mask;
+struct RenderEngineType;
 struct Scene;
 struct Sequence;
 struct SequenceModifierData;
 struct Stereo3dFormat;
+struct StripColorBalance;
 struct StripElem;
+struct TextVars;
+struct bContext;
 struct bSound;
 
 struct SeqIndexBuildContext;
@@ -89,15 +85,16 @@ void BKE_sequence_iterator_end(SeqIterator *iter);
 #define SEQ_END                                                               \
 		}                                                                     \
 		BKE_sequence_iterator_end(&iter_macro);                               \
-	}
+	} ((void)0)
 
 typedef struct SeqRenderData {
-	struct EvaluationContext *eval_ctx;
 	struct Main *bmain;
+	struct Depsgraph *depsgraph;
 	struct Scene *scene;
 	int rectx;
 	int recty;
 	int preview_render_size;
+	int for_render;
 	int motion_blur_samples;
 	float motion_blur_shutter;
 	bool skip_cache;
@@ -112,8 +109,9 @@ typedef struct SeqRenderData {
 } SeqRenderData;
 
 void BKE_sequencer_new_render_data(
-        struct EvaluationContext *eval_ctx, struct Main *bmain, struct Scene *scene,
+        struct Main *bmain, struct Depsgraph *depsgraph, struct Scene *scene,
         int rectx, int recty, int preview_render_size,
+        int for_render,
         SeqRenderData *r_context);
 
 int BKE_sequencer_cmp_time_startdisp(const void *a, const void *b);
@@ -125,7 +123,7 @@ enum {
 	DO_BOX_WIPE,
 	DO_CROSS_WIPE,
 	DO_IRIS_WIPE,
-	DO_CLOCK_WIPE
+	DO_CLOCK_WIPE,
 };
 
 struct SeqEffectHandle {
@@ -142,13 +140,13 @@ struct SeqEffectHandle {
 
 	/* load is called first time after readblenfile in
 	 * get_sequence_effect automatically */
-	void (*load)(struct Sequence *seq);
+	void (*load)(struct Sequence *seqconst);
 
 	/* duplicate */
-	void (*copy)(struct Sequence *dst, struct Sequence *src);
+	void (*copy)(struct Sequence *dst, struct Sequence *src, const int flag);
 
 	/* destruct */
-	void (*free)(struct Sequence *seq);
+	void (*free)(struct Sequence *seq, const bool do_id_user);
 
 	/* returns: -1: no input needed,
 	 * 0: no early out,
@@ -226,12 +224,8 @@ int BKE_sequencer_recursive_apply(struct Sequence *seq, int (*apply_func)(struct
 
 void BKE_sequencer_free_clipboard(void);
 
-void BKE_sequence_clipboard_pointers_free(struct Sequence *seq);
-void BKE_sequence_clipboard_pointers_store(struct Sequence *seq);
-void BKE_sequence_clipboard_pointers_restore(struct Sequence *seq, struct Main *bmain);
-
 void BKE_sequencer_base_clipboard_pointers_free(struct ListBase *seqbase);
-void BKE_sequencer_base_clipboard_pointers_store(struct ListBase *seqbase);
+void BKE_sequencer_base_clipboard_pointers_store(struct Main *bmain, struct ListBase *seqbase);
 void BKE_sequencer_base_clipboard_pointers_restore(struct ListBase *seqbase, struct Main *bmain);
 
 void BKE_sequence_free(struct Scene *scene, struct Sequence *seq);
@@ -249,7 +243,7 @@ struct StripElem *BKE_sequencer_give_stripelem(struct Sequence *seq, int cfra);
 void BKE_sequencer_update_changed_seq_and_deps(struct Scene *scene, struct Sequence *changed_seq, int len_change, int ibuf_change);
 bool BKE_sequencer_input_have_to_preprocess(const SeqRenderData *context, struct Sequence *seq, float cfra);
 
-void BKE_sequencer_proxy_rebuild_context(struct Main *bmain, struct Scene *scene, struct Sequence *seq, struct GSet *file_list, ListBase *queue);
+void BKE_sequencer_proxy_rebuild_context(struct Main *bmain, struct Depsgraph *depsgraph, struct Scene *scene, struct Sequence *seq, struct GSet *file_list, ListBase *queue);
 void BKE_sequencer_proxy_rebuild(struct SeqIndexBuildContext *context, short *stop, short *do_update, float *progress);
 void BKE_sequencer_proxy_rebuild_finish(struct SeqIndexBuildContext *context, bool stop);
 
@@ -264,7 +258,7 @@ typedef enum {
 	SEQ_STRIPELEM_IBUF,
 	SEQ_STRIPELEM_IBUF_COMP,
 	SEQ_STRIPELEM_IBUF_STARTSTILL,
-	SEQ_STRIPELEM_IBUF_ENDSTILL
+	SEQ_STRIPELEM_IBUF_ENDSTILL,
 } eSeqStripElemIBuf;
 
 void BKE_sequencer_cache_destruct(void);
@@ -302,6 +296,9 @@ void BKE_sequence_effect_speed_rebuild_map(struct Scene *scene, struct Sequence 
 struct SeqEffectHandle BKE_sequence_get_effect(struct Sequence *seq);
 int BKE_sequence_effect_get_num_inputs(int seq_type);
 int BKE_sequence_effect_get_supports_mask(int seq_type);
+void BKE_sequencer_text_font_unload(struct TextVars *data, const bool do_id_user);
+void BKE_sequencer_text_font_load(struct TextVars *data, const bool do_id_user);
+
 
 /* **********************************************************************
  * Sequencer editing functions
@@ -336,7 +333,8 @@ bool BKE_sequence_base_shuffle_time(ListBase *seqbasep, struct Scene *evil_scene
 bool BKE_sequence_base_isolated_sel_check(struct ListBase *seqbase);
 void BKE_sequencer_free_imbuf(struct Scene *scene, struct ListBase *seqbasep, bool for_render);
 struct Sequence *BKE_sequence_dupli_recursive(
-        const struct Scene *scene_src, struct Scene *scene_dst, struct Sequence *seq, int dupe_flag);
+        const struct Scene *scene_src, struct Scene *scene_dst,
+        struct ListBase *new_seq_list, struct Sequence *seq, int dupe_flag);
 int BKE_sequence_swap(struct Sequence *seq_a, struct Sequence *seq_b, const char **error_str);
 
 bool BKE_sequence_check_depend(struct Sequence *seq, struct Sequence *cur);
@@ -392,7 +390,7 @@ typedef struct SeqLoadInfo {
 
 
 /* seq_dupli' flags */
-#define SEQ_DUPE_UNIQUE_NAME    (1 << 0)  /* WARNING: does NOT work when duplicating Meta strips! */
+#define SEQ_DUPE_UNIQUE_NAME    (1 << 0)
 #define SEQ_DUPE_CONTEXT        (1 << 1)
 #define SEQ_DUPE_ANIM           (1 << 2)
 #define SEQ_DUPE_ALL            (1 << 3) /* otherwise only selected are copied */
@@ -412,7 +410,7 @@ enum {
 	SEQ_SIDE_NONE = 0,
 	SEQ_SIDE_LEFT,
 	SEQ_SIDE_RIGHT,
-	SEQ_SIDE_BOTH
+	SEQ_SIDE_BOTH,
 };
 int BKE_sequencer_find_next_prev_edit(
         struct Scene *scene, int cfra, const short side,
@@ -434,11 +432,12 @@ enum {
 };
 
 typedef struct ImBuf *(*SequencerDrawView)(
-        struct Main *bmain, struct Scene *scene,
+        struct Depsgraph *depsgraph, struct Scene *scene,
+        int drawtype,
         struct Object *camera, int width, int height,
-        unsigned int flag, unsigned int draw_flags, int drawtype, int alpha_mode,
+        unsigned int flag, unsigned int draw_flags, int alpha_mode,
         int samples, const char *viewname,
-        struct GPUFX *fx, struct GPUOffScreen *ofs, char err_out[256]);
+        struct GPUOffScreen *ofs, char err_out[256]);
 extern SequencerDrawView sequencer_view3d_cb;
 
 /* copy/paste */

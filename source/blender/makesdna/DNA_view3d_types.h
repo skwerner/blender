@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,137 +15,224 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file DNA_view3d_types.h
- *  \ingroup DNA
+/** \file
+ * \ingroup DNA
  */
 
 #ifndef __DNA_VIEW3D_TYPES_H__
 #define __DNA_VIEW3D_TYPES_H__
 
-struct ViewDepths;
-struct Object;
-struct Image;
-struct SpaceLink;
 struct BoundBox;
+struct GPUViewport;
+struct Image;
+struct Material;
 struct MovieClip;
 struct MovieClipUser;
+struct Object;
 struct RenderEngine;
-struct bGPdata;
 struct SmoothView3DStore;
+struct SpaceLink;
+struct ViewDepths;
+struct bGPdata;
 struct wmTimer;
-struct Material;
-struct GPUFX;
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
 #include "DNA_image_types.h"
+#include "DNA_object_types.h"
 #include "DNA_movieclip_types.h"
 #include "DNA_gpu_types.h"
 
-/* ******************************** */
-
-/* The near/far thing is a Win EXCEPTION, caused by indirect includes from <windows.h>.
- * Thus, leave near/far in the code, and undef for windows. */
-#ifdef _WIN32
-#  undef near
-#  undef far
-#endif
-
-/* Background Picture in 3D-View */
-typedef struct BGpic {
-	struct BGpic *next, *prev;
-
-	struct Image *ima;
-	struct ImageUser iuser;
-	struct MovieClip *clip;
-	struct MovieClipUser cuser;
-	float xof, yof, size, blend, rotation;
-	short view;
-	short flag;
-	short source;
-	char pad[6];
-} BGpic;
-
-/* ********************************* */
-
 typedef struct RegionView3D {
 
-	float winmat[4][4];			/* GL_PROJECTION matrix */
-	float viewmat[4][4];		/* GL_MODELVIEW matrix */
-	float viewinv[4][4];		/* inverse of viewmat */
-	float persmat[4][4];		/* viewmat*winmat */
-	float persinv[4][4];		/* inverse of persmat */
-	float viewcamtexcofac[4];	/* offset/scale for camera glsl texcoords */
+	/** GL_PROJECTION matrix. */
+	float winmat[4][4];
+	/** GL_MODELVIEW matrix. */
+	float viewmat[4][4];
+	/** Inverse of viewmat. */
+	float viewinv[4][4];
+	/** Viewmat*winmat. */
+	float persmat[4][4];
+	/** Inverse of persmat. */
+	float persinv[4][4];
+	/** Offset/scale for camera glsl texcoords. */
+	float viewcamtexcofac[4];
 
-	/* viewmat/persmat multiplied with object matrix, while drawing and selection */
+	/** viewmat/persmat multiplied with object matrix, while drawing and selection. */
 	float viewmatob[4][4];
 	float persmatob[4][4];
 
-	/* user defined clipping planes */
+	/** User defined clipping planes. */
 	float clip[6][4];
-	float clip_local[6][4]; /* clip in object space, means we can test for clipping in editmode without first going into worldspace */
+	/** Clip in object space,
+	 * means we can test for clipping in editmode without first going into worldspace. */
+	float clip_local[6][4];
 	struct BoundBox *clipbb;
 
-	struct RegionView3D *localvd; /* allocated backup of its self while in localview */
+	/** Allocated backup of its self while in localview. */
+	struct RegionView3D *localvd;
 	struct RenderEngine *render_engine;
 	struct ViewDepths *depths;
-	void *gpuoffscreen;
 
-	/* animated smooth view */
+	/** Animated smooth view. */
 	struct SmoothView3DStore *sms;
 	struct wmTimer *smooth_timer;
 
 
-	/* transform widget matrix */
+	/** Transform gizmo matrix. */
 	float twmat[4][4];
+	/** min/max dot product on twmat xyz axis. */
+	float tw_axis_min[3], tw_axis_max[3];
+	float tw_axis_matrix[3][3];
 
-	float viewquat[4];			/* view rotation, must be kept normalized */
-	float dist;					/* distance from 'ofs' along -viewinv[2] vector, where result is negative as is 'ofs' */
-	float camdx, camdy;			/* camera view offsets, 1.0 = viewplane moves entire width/height */
-	float pixsize;				/* runtime only */
-	float ofs[3];				/* view center & orbit pivot, negative of worldspace location,
-								 * also matches -viewinv[3][0:3] in ortho mode.*/
-	float camzoom;				/* viewport zoom on the camera frame, see BKE_screen_view3d_zoom_to_fac */
-	char is_persp;				/* check if persp/ortho view, since 'persp' cant be used for this since
-								 * it can have cameras assigned as well. (only set in view3d_winmatrix_set) */
+	float gridview DNA_DEPRECATED;
+
+	/** View rotation, must be kept normalized. */
+	float viewquat[4];
+	/** Distance from 'ofs' along -viewinv[2] vector, where result is negative as is 'ofs'. */
+	float dist;
+	/** Camera view offsets, 1.0 = viewplane moves entire width/height. */
+	float camdx, camdy;
+	/** Runtime only. */
+	float pixsize;
+	/**
+	 * View center & orbit pivot, negative of worldspace location,
+	 * also matches -viewinv[3][0:3] in ortho mode.
+	 */
+	float ofs[3];
+	/** Viewport zoom on the camera frame, see BKE_screen_view3d_zoom_to_fac. */
+	float camzoom;
+	/**
+	 * Check if persp/ortho view, since 'persp' cant be used for this since
+	 * it can have cameras assigned as well. (only set in #view3d_winmatrix_set)
+	 */
+	char is_persp;
 	char persp;
 	char view;
 	char viewlock;
-	char viewlock_quad;			/* options for quadview (store while out of quad view) */
-	char pad[3];
-	float ofs_lock[2];			/* normalized offset for locked view: (-1, -1) bottom left, (1, 1) upper right */
+	/** Options for quadview (store while out of quad view). */
+	char viewlock_quad;
+	char _pad[3];
+	/** Normalized offset for locked view: (-1, -1) bottom left, (1, 1) upper right. */
+	float ofs_lock[2];
 
+	/** XXX can easily get rid of this (Julian). */
 	short twdrawflag;
 	short rflag;
 
 
-	/* last view (use when switching out of camera view) */
+	/** Last view (use when switching out of camera view). */
 	float lviewquat[4];
-	short lpersp, lview; /* lpersp can never be set to 'RV3D_CAMOB' */
+	/** Lpersp can never be set to 'RV3D_CAMOB'. */
+	short lpersp, lview;
 
-	float gridview;
-	float tw_idot[3];  /* manipulator runtime: (1 - dot) product with view vector (used to check view alignment) */
-
-
-	/* active rotation from NDOF or elsewhere */
+	/** Active rotation from NDOF or elsewhere. */
 	float rot_angle;
 	float rot_axis[3];
-
-	struct GPUFX *compositor;
 } RegionView3D;
 
-/* 3D ViewPort Struct */
+typedef struct View3DCursor {
+	float location[3];
+
+	float rotation_quaternion[4];
+	float rotation_euler[3];
+	float rotation_axis[3], rotation_angle;
+	short rotation_mode;
+
+	char _pad[6];
+} View3DCursor;
+
+/** 3D Viewport Shading settings. */
+typedef struct View3DShading {
+	/** Shading type (VIEW3D_SHADE_SOLID, ..). */
+	char type;
+	/** Runtime, for toggle between rendered viewport. */
+	char prev_type;
+	char prev_type_wire;
+
+	char color_type;
+	short flag;
+
+	char light;
+	char background_type;
+	char cavity_type;
+	char wire_color_type;
+	char _pad[6];
+
+	/** FILE_MAXFILE. */
+	char studio_light[256];
+	/** FILE_MAXFILE. */
+	char lookdev_light[256];
+	/** FILE_MAXFILE. */
+	char matcap[256];
+
+	float shadow_intensity;
+	float single_color[3];
+
+	float studiolight_rot_z;
+	float studiolight_background;
+
+	float object_outline_color[3];
+	float xray_alpha;
+	float xray_alpha_wire;
+
+	float cavity_valley_factor;
+	float cavity_ridge_factor;
+
+	float background_color[3];
+
+	float curvature_ridge_factor;
+	float curvature_valley_factor;
+
+} View3DShading;
+
+/** 3D Viewport Overlay settings. */
+typedef struct View3DOverlay {
+	int flag;
+
+	/** Edit mode settings. */
+	int edit_flag;
+	float normals_length;
+	float backwire_opacity;
+
+	/** Paint mode settings. */
+	int paint_flag;
+
+	/** Weight paint mode settings. */
+	int wpaint_flag;
+	char _pad2[4];
+
+	/** Alpha for texture, weight, vertex paint overlay. */
+	float texture_paint_mode_opacity;
+	float vertex_paint_mode_opacity;
+	float weight_paint_mode_opacity;
+
+	/** Armature edit/pose mode settings. */
+	int _pad3;
+	float xray_alpha_bone;
+
+	/** Other settings. */
+	float wireframe_threshold;
+
+	/** Grease pencil settings. */
+	float gpencil_paper_opacity;
+	float gpencil_grid_opacity;
+	float gpencil_fade_layer;
+
+} View3DOverlay;
+
+typedef struct View3D_Runtime {
+	/** Nkey panel stores stuff here. */
+	void *properties_storage;
+} View3D_Runtime;
+
+/** 3D ViewPort Struct. */
 typedef struct View3D {
 	struct SpaceLink *next, *prev;
-	ListBase regionbase;		/* storage of regions for inactive spaces */
+	/** Storage of regions for inactive spaces. */
+	ListBase regionbase;
 	char spacetype;
 	char link_flag;
 	char _pad0[6];
@@ -156,12 +241,20 @@ typedef struct View3D {
 	float viewquat[4]  DNA_DEPRECATED;
 	float dist         DNA_DEPRECATED;
 
-	float bundle_size;			/* size of bundles in reconstructed data */
-	char bundle_drawtype;		/* display style for bundle */
-	char pad[3];
+	/** Size of bundles in reconstructed data. */
+	float bundle_size;
+	/** Display style for bundle. */
+	char bundle_drawtype;
 
-	unsigned int lay_prev; /* for active layer toggle */
-	unsigned int lay_used; /* used while drawing */
+	char drawtype DNA_DEPRECATED;
+
+	char _pad3[1];
+
+	/** Multiview current eye - for internal use. */
+	char multiview_eye;
+
+	int object_type_exclude_viewport;
+	int object_type_exclude_select;
 
 	short persp  DNA_DEPRECATED;
 	short view   DNA_DEPRECATED;
@@ -169,123 +262,114 @@ typedef struct View3D {
 	struct Object *camera, *ob_centre;
 	rctf render_border;
 
-	struct ListBase bgpicbase;
-	struct BGpic *bgpic  DNA_DEPRECATED; /* deprecated, use bgpicbase, only kept for do_versions(...) */
+	/** Allocated backup of its self while in localview. */
+	struct View3D *localvd;
 
-	struct View3D *localvd; /* allocated backup of its self while in localview */
+	/** Optional string for armature bone to define center, MAXBONENAME. */
+	char ob_centre_bone[64];
 
-	char ob_centre_bone[64];		/* optional string for armature bone to define center, MAXBONENAME */
+	unsigned short local_view_uuid;
+	char _pad6[2];
+	int layact DNA_DEPRECATED;
 
-	unsigned int lay;
-	int layact;
-
-	/**
-	 * The drawing mode for the 3d display. Set to OB_BOUNDBOX, OB_WIRE, OB_SOLID,
-	 * OB_TEXTURE, OB_MATERIAL or OB_RENDER */
-	char drawtype;
-	char ob_centre_cursor;		/* optional bool for 3d cursor to define center */
-	short scenelock, around;
+	/** Optional bool for 3d cursor to define center. */
+	short ob_centre_cursor;
+	short scenelock;
+	short gp_flag;
 	short flag;
 	int flag2;
 
 	float lens, grid;
-	float near, far;
-	float ofs[3]  DNA_DEPRECATED;			/* XXX deprecated */
-	float cursor[3];
+	float clip_start, clip_end;
+	float ofs[3] DNA_DEPRECATED;
 
-	short matcap_icon;			/* icon id */
+	char _pad[1];
 
-	short gridlines;
-	short gridsubdiv;	/* Number of subdivisions in the grid between each highlighted grid line */
+	/** Transform gizmo info. */
+	/** #V3D_GIZMO_SHOW_* */
+	char gizmo_flag;
+
+	char gizmo_show_object;
+	char gizmo_show_armature;
+	char gizmo_show_empty;
+	char gizmo_show_light;
+	char gizmo_show_camera;
+
 	char gridflag;
 
-	/* transform widget info */
-	char twtype, twmode, twflag;
+	short gridlines;
+	/** Number of subdivisions in the grid between each highlighted grid line. */
+	short gridsubdiv;
 
-	short _pad1;
-
-	/* afterdraw, for xray & transparent */
-	struct ListBase afterdraw_transp;
-	struct ListBase afterdraw_xray;
-	struct ListBase afterdraw_xraytransp;
-
-	/* drawflags, denoting state */
-	char zbuf, transp, xray;
-
-	char multiview_eye;				/* multiview current eye - for internal use */
-
-	/* built-in shader effects (eGPUFXFlags) */
-	char pad3[4];
+	/** Actually only used to define the opacity of the grease pencil vertex in edit mode. */
+	float vertex_opacity;
 
 	/* note, 'fx_settings.dof' is currently _not_ allocated,
 	 * instead set (temporarily) from camera */
 	struct GPUFXSettings fx_settings;
 
-	void *properties_storage;		/* Nkey panel stores stuff here (runtime only!) */
-	/* Allocated per view, not library data (used by matcap). */
-	struct Material *defmaterial;
-
 	/* XXX deprecated? */
-	struct bGPdata *gpd  DNA_DEPRECATED;		/* Grease-Pencil Data (annotation layers) */
+	/** Grease-Pencil Data (annotation layers). */
+	struct bGPdata *gpd  DNA_DEPRECATED;
 
-	 /* multiview - stereo 3d */
+	/** Stereoscopy settings. */
 	short stereo3d_flag;
 	char stereo3d_camera;
-	char pad4;
+	char _pad4;
 	float stereo3d_convergence_factor;
 	float stereo3d_volume_alpha;
 	float stereo3d_convergence_alpha;
 
-	/* Previous viewport draw type.
-	 * Runtime-only, set in the rendered viewport toggle operator.
-	 */
-	short prev_drawtype;
-	short pad1;
-	float pad2;
+	/** Display settings. */
+	View3DShading shading;
+	View3DOverlay overlay;
+
+	/** Runtime evaluation data (keep last). */
+	View3D_Runtime runtime;
 } View3D;
 
 
-/* View3D->stereo_flag (short) */
-#define V3D_S3D_DISPCAMERAS		(1 << 0)
-#define V3D_S3D_DISPPLANE		(1 << 1)
-#define V3D_S3D_DISPVOLUME		(1 << 2)
+/** #View3D.stereo3d_flag */
+#define V3D_S3D_DISPCAMERAS     (1 << 0)
+#define V3D_S3D_DISPPLANE       (1 << 1)
+#define V3D_S3D_DISPVOLUME      (1 << 2)
 
-/* View3D->flag (short) */
-/*#define V3D_DISPIMAGE		1*/ /*UNUSED*/
-#define V3D_DISPBGPICS		2
-#define V3D_HIDE_HELPLINES	4
-#define V3D_INVALID_BACKBUF	8
+/** #View3D.flag */
+#define V3D_FLAG_UNUSED_0       (1 << 0)  /* cleared */
+#define V3D_FLAG_UNUSED_1       (1 << 1)  /* cleared */
+#define V3D_HIDE_HELPLINES      (1 << 2)
+#define V3D_INVALID_BACKBUF     (1 << 3)
 
-#define V3D_ALIGN			1024
-#define V3D_SELECT_OUTLINE	2048
-#define V3D_ZBUF_SELECT		4096
-#define V3D_GLOBAL_STATS	8192
-#define V3D_DRAW_CENTERS	32768
+#define V3D_FLAG_UNUSED_10      (1 << 10)  /* cleared */
+#define V3D_SELECT_OUTLINE      (1 << 11)
+#define V3D_FLAG_UNUSED_12      (1 << 12)  /* cleared */
+#define V3D_GLOBAL_STATS        (1 << 13)
+#define V3D_DRAW_CENTERS        (1 << 15)
 
-/* RegionView3d->persp */
+/** #RegionView3D.persp */
 #define RV3D_ORTHO				0
 #define RV3D_PERSP				1
 #define RV3D_CAMOB				2
 
-/* RegionView3d->rflag */
-#define RV3D_CLIPPING				4
-#define RV3D_NAVIGATING				8
-#define RV3D_GPULIGHT_UPDATE		16
-#define RV3D_IS_GAME_ENGINE			32  /* runtime flag, used to check if LoD's should be used */
+/** #RegionView3D.rflag */
+#define RV3D_CLIPPING               (1 << 2)
+#define RV3D_NAVIGATING             (1 << 3)
+#define RV3D_GPULIGHT_UPDATE        (1 << 4)
+/*#define RV3D_IS_GAME_ENGINE       (1 << 5) *//* UNUSED */
 /**
  * Disable zbuffer offset, skip calls to #ED_view3d_polygon_offset.
  * Use when precise surface depth is needed and picking bias isn't, see T45434).
  */
 #define RV3D_ZOFFSET_DISABLED		64
 
-/* RegionView3d->viewlock */
+/** #RegionView3D.viewlock */
 #define RV3D_LOCKED			(1 << 0)
 #define RV3D_BOXVIEW		(1 << 1)
 #define RV3D_BOXCLIP		(1 << 2)
-/* RegionView3d->viewlock_quad */
+/** #RegionView3D.viewlock_quad */
 #define RV3D_VIEWLOCK_INIT	(1 << 7)
 
-/* RegionView3d->view */
+/** #RegionView3D.view */
 #define RV3D_VIEW_USER			 0
 #define RV3D_VIEW_FRONT			 1
 #define RV3D_VIEW_BACK			 2
@@ -298,30 +382,140 @@ typedef struct View3D {
 #define RV3D_VIEW_IS_AXIS(view) \
 	(((view) >= RV3D_VIEW_FRONT) && ((view) <= RV3D_VIEW_BOTTOM))
 
-/* View3d->flag2 (int) */
-#define V3D_RENDER_OVERRIDE		(1 << 2)
-#define V3D_SOLID_TEX			(1 << 3)
-#define V3D_SHOW_GPENCIL		(1 << 4)
-#define V3D_LOCK_CAMERA			(1 << 5)
-#define V3D_RENDER_SHADOW		(1 << 6)		/* This is a runtime only flag that's used to tell draw_mesh_object() that we're doing a shadow pass instead of a regular draw */
-#define V3D_SHOW_RECONSTRUCTION	(1 << 7)
-#define V3D_SHOW_CAMERAPATH		(1 << 8)
-#define V3D_SHOW_BUNDLENAME		(1 << 9)
-#define V3D_BACKFACE_CULLING	(1 << 10)
-#define V3D_RENDER_BORDER		(1 << 11)
-#define V3D_SOLID_MATCAP		(1 << 12)	/* user flag */
-#define V3D_SHOW_SOLID_MATCAP	(1 << 13)	/* runtime flag */
-#define V3D_OCCLUDE_WIRE		(1 << 14)
-#define V3D_SHADELESS_TEX		(1 << 15)
-#define V3D_SHOW_WORLD			(1 << 16)
+/** #View3D.flag2 (int) */
+#define V3D_HIDE_OVERLAYS       (1 << 2)
+#define V3D_FLAG2_UNUSED_3      (1 << 3)   /* cleared */
+#define V3D_SHOW_ANNOTATION     (1 << 4)
+#define V3D_LOCK_CAMERA         (1 << 5)
+#define V3D_FLAG2_UNUSED_6      (1 << 6)   /* cleared */
+#define V3D_SHOW_RECONSTRUCTION (1 << 7)
+#define V3D_SHOW_CAMERAPATH     (1 << 8)
+#define V3D_SHOW_BUNDLENAME     (1 << 9)
+#define V3D_FLAG2_UNUSED_10     (1 << 10)  /* cleared */
+#define V3D_RENDER_BORDER       (1 << 11)
+#define V3D_FLAG2_UNUSED_12     (1 << 12)  /* cleared */
+#define V3D_FLAG2_UNUSED_13     (1 << 13)  /* cleared */
+#define V3D_FLAG2_UNUSED_14     (1 << 14)  /* cleared */
+#define V3D_FLAG2_UNUSED_15     (1 << 15)  /* cleared */
 
+/** #View3D.gp_flag (short) */
+#define V3D_GP_SHOW_PAPER            (1 << 0) /* Activate paper to cover all viewport */
+#define V3D_GP_SHOW_GRID             (1 << 1) /* Activate paper grid */
+#define V3D_GP_SHOW_EDIT_LINES       (1 << 2)
+#define V3D_GP_SHOW_MULTIEDIT_LINES  (1 << 3)
+#define V3D_GP_SHOW_ONION_SKIN       (1 << 4) /* main switch at view level */
+#define V3D_GP_FADE_NOACTIVE_LAYERS  (1 << 5) /* fade layers not active */
 
-/* View3D->around */
+/** #View3DShading.light */
+enum {
+	V3D_LIGHTING_FLAT   = 0,
+	V3D_LIGHTING_STUDIO = 1,
+	V3D_LIGHTING_MATCAP = 2,
+};
+
+/** #View3DShading.flag */
+enum {
+	V3D_SHADING_OBJECT_OUTLINE      = (1 << 0),
+	V3D_SHADING_XRAY                = (1 << 1),
+	V3D_SHADING_SHADOW              = (1 << 2),
+	V3D_SHADING_SCENE_LIGHTS        = (1 << 3),
+	V3D_SHADING_SPECULAR_HIGHLIGHT  = (1 << 4),
+	V3D_SHADING_CAVITY              = (1 << 5),
+	V3D_SHADING_MATCAP_FLIP_X       = (1 << 6),
+	V3D_SHADING_SCENE_WORLD         = (1 << 7),
+	V3D_SHADING_XRAY_BONE           = (1 << 8),
+	V3D_SHADING_WORLD_ORIENTATION   = (1 << 9),
+	V3D_SHADING_BACKFACE_CULLING    = (1 << 10),
+	V3D_SHADING_DEPTH_OF_FIELD      = (1 << 11),
+};
+
+/** #View3DShading.color_type */
+enum {
+	V3D_SHADING_MATERIAL_COLOR = 0,
+	V3D_SHADING_RANDOM_COLOR   = 1,
+	V3D_SHADING_SINGLE_COLOR   = 2,
+	V3D_SHADING_TEXTURE_COLOR  = 3,
+	V3D_SHADING_OBJECT_COLOR   = 4,
+};
+
+/** #View3DShading.background_type */
+enum {
+	V3D_SHADING_BACKGROUND_THEME    = 0,
+	V3D_SHADING_BACKGROUND_WORLD    = 1,
+	V3D_SHADING_BACKGROUND_VIEWPORT = 2,
+};
+
+/** #View3DShading.cavity_type */
+enum {
+	V3D_SHADING_CAVITY_SSAO = 0,
+	V3D_SHADING_CAVITY_CURVATURE = 1,
+	V3D_SHADING_CAVITY_BOTH = 2,
+};
+
+/** #View3DOverlay.flag */
+enum {
+	V3D_OVERLAY_FACE_ORIENTATION  = (1 << 0),
+	V3D_OVERLAY_HIDE_CURSOR       = (1 << 1),
+	V3D_OVERLAY_BONE_SELECT       = (1 << 2),
+	V3D_OVERLAY_LOOK_DEV          = (1 << 3),
+	V3D_OVERLAY_WIREFRAMES        = (1 << 4),
+	V3D_OVERLAY_HIDE_TEXT         = (1 << 5),
+	V3D_OVERLAY_HIDE_MOTION_PATHS = (1 << 6),
+	V3D_OVERLAY_ONION_SKINS       = (1 << 7),
+	V3D_OVERLAY_HIDE_BONES        = (1 << 8),
+	V3D_OVERLAY_HIDE_OBJECT_XTRAS = (1 << 9),
+	V3D_OVERLAY_HIDE_OBJECT_ORIGINS = (1 << 10),
+};
+
+/** #View3DOverlay.edit_flag */
+enum {
+	V3D_OVERLAY_EDIT_VERT_NORMALS = (1 << 0),
+	V3D_OVERLAY_EDIT_LOOP_NORMALS = (1 << 1),
+	V3D_OVERLAY_EDIT_FACE_NORMALS = (1 << 2),
+
+	V3D_OVERLAY_EDIT_OCCLUDE_WIRE = (1 << 3),
+
+	V3D_OVERLAY_EDIT_WEIGHT       = (1 << 4),
+
+	V3D_OVERLAY_EDIT_EDGES        = (1 << 5),
+	V3D_OVERLAY_EDIT_FACES        = (1 << 6),
+	V3D_OVERLAY_EDIT_FACE_DOT     = (1 << 7),
+
+	V3D_OVERLAY_EDIT_SEAMS        = (1 << 8),
+	V3D_OVERLAY_EDIT_SHARP        = (1 << 9),
+	V3D_OVERLAY_EDIT_CREASES      = (1 << 10),
+	V3D_OVERLAY_EDIT_BWEIGHTS     = (1 << 11),
+
+	V3D_OVERLAY_EDIT_FREESTYLE_EDGE = (1 << 12),
+	V3D_OVERLAY_EDIT_FREESTYLE_FACE = (1 << 13),
+
+	V3D_OVERLAY_EDIT_STATVIS      = (1 << 14),
+	V3D_OVERLAY_EDIT_EDGE_LEN     = (1 << 15),
+	V3D_OVERLAY_EDIT_EDGE_ANG     = (1 << 16),
+	V3D_OVERLAY_EDIT_FACE_ANG     = (1 << 17),
+	V3D_OVERLAY_EDIT_FACE_AREA    = (1 << 18),
+	V3D_OVERLAY_EDIT_INDICES      = (1 << 19),
+
+	V3D_OVERLAY_EDIT_CU_HANDLES   = (1 << 20),
+	V3D_OVERLAY_EDIT_CU_NORMALS   = (1 << 21),
+};
+
+/** #View3DOverlay.paint_flag */
+enum {
+	V3D_OVERLAY_PAINT_WIRE        = (1 << 0),
+};
+
+/** #View3DOverlay.wpaint_flag */
+enum {
+	V3D_OVERLAY_WPAINT_CONTOURS   = (1 << 0),
+};
+
+/** #View3D.around */
 enum {
 	/* center of the bounding box */
 	V3D_AROUND_CENTER_BOUNDS	= 0,
 	/* center from the sum of all points divided by the total */
-	V3D_AROUND_CENTER_MEAN		= 3,
+	V3D_AROUND_CENTER_MEDIAN    = 3,
 	/* pivot around the 2D/3D cursor */
 	V3D_AROUND_CURSOR			= 1,
 	/* pivot around each items own origin */
@@ -330,69 +524,69 @@ enum {
 	V3D_AROUND_ACTIVE			= 4,
 };
 
-/*View3D types (only used in tools, not actually saved)*/
-#define V3D_VIEW_STEPLEFT		 1
-#define V3D_VIEW_STEPRIGHT		 2
-#define V3D_VIEW_STEPDOWN		 3
-#define V3D_VIEW_STEPUP		 4
-#define V3D_VIEW_PANLEFT		 5
-#define V3D_VIEW_PANRIGHT		 6
-#define V3D_VIEW_PANDOWN		 7
-#define V3D_VIEW_PANUP			 8
+/** #View3d.gridflag */
+#define V3D_SHOW_FLOOR          (1 << 0)
+#define V3D_SHOW_X              (1 << 1)
+#define V3D_SHOW_Y              (1 << 2)
+#define V3D_SHOW_Z              (1 << 3)
 
-/* View3d->gridflag */
-#define V3D_SHOW_FLOOR			1
-#define V3D_SHOW_X				2
-#define V3D_SHOW_Y				4
-#define V3D_SHOW_Z				8
-
-/* View3d->twtype (bits, we can combine them) */
-#define V3D_MANIP_TRANSLATE		1
-#define V3D_MANIP_ROTATE		2
-#define V3D_MANIP_SCALE			4
-
-/* View3d->twmode */
-#define V3D_MANIP_GLOBAL		0
-#define V3D_MANIP_LOCAL			1
-#define V3D_MANIP_NORMAL		2
-#define V3D_MANIP_VIEW			3
-#define V3D_MANIP_GIMBAL		4
-#define V3D_MANIP_CUSTOM		5 /* anything of value 5 or higher is custom */
-
-/* View3d->twflag */
-   /* USE = user setting, DRAW = based on selection */
-#define V3D_USE_MANIPULATOR		1
-#define V3D_DRAW_MANIPULATOR	2
-/* #define V3D_CALC_MANIPULATOR	4 */ /*UNUSED*/
-
-/* BGPic->flag */
-/* may want to use 1 for select ? */
+/** #TransformOrientationSlot.type */
 enum {
-	V3D_BGPIC_EXPANDED      = (1 << 1),
-	V3D_BGPIC_CAMERACLIP    = (1 << 2),
-	V3D_BGPIC_DISABLED      = (1 << 3),
-	V3D_BGPIC_FOREGROUND    = (1 << 4),
-
-	/* Camera framing options */
-	V3D_BGPIC_CAMERA_ASPECT = (1 << 5),  /* don't stretch to fit the camera view  */
-	V3D_BGPIC_CAMERA_CROP   = (1 << 6),  /* crop out the image */
-
-	/* Axis flip options */
-	V3D_BGPIC_FLIP_X        = (1 << 7),
-	V3D_BGPIC_FLIP_Y        = (1 << 8),
+	V3D_ORIENT_GLOBAL        = 0,
+	V3D_ORIENT_LOCAL         = 1,
+	V3D_ORIENT_NORMAL        = 2,
+	V3D_ORIENT_VIEW          = 3,
+	V3D_ORIENT_GIMBAL        = 4,
+	V3D_ORIENT_CURSOR        = 5,
+	V3D_ORIENT_CUSTOM        = 1024,
+	/** Runtime only, never saved to DNA. */
+	V3D_ORIENT_CUSTOM_MATRIX =   (V3D_ORIENT_CUSTOM - 1),
 };
 
-#define V3D_BGPIC_EXPANDED (V3D_BGPIC_EXPANDED | V3D_BGPIC_CAMERACLIP)
+/** #View3d.gizmo_flag */
+enum {
+	/** All gizmos. */
+	V3D_GIZMO_HIDE                = (1 << 0),
+	V3D_GIZMO_HIDE_NAVIGATE       = (1 << 1),
+	V3D_GIZMO_HIDE_CONTEXT        = (1 << 2),
+	V3D_GIZMO_HIDE_TOOL           = (1 << 3),
+};
 
-/* BGPic->source */
-/* may want to use 1 for select ?*/
-#define V3D_BGPIC_IMAGE		0
-#define V3D_BGPIC_MOVIE		1
+/** #View3d.gizmo_show_object */
+enum {
+	V3D_GIZMO_SHOW_OBJECT_TRANSLATE = (1 << 0),
+	V3D_GIZMO_SHOW_OBJECT_ROTATE    = (1 << 1),
+	V3D_GIZMO_SHOW_OBJECT_SCALE     = (1 << 2),
+};
+/** #View3d.gizmo_show_armature */
+enum {
+	/** Currently unused (WIP gizmo). */
+	V3D_GIZMO_SHOW_ARMATURE_BBONE = (1 << 0),
+	/** Not yet implemented. */
+	V3D_GIZMO_SHOW_ARMATURE_ROLL = (1 << 1),
+};
+/** #View3d.gizmo_show_empty */
+enum {
+	V3D_GIZMO_SHOW_EMPTY_IMAGE = (1 << 0),
+	V3D_GIZMO_SHOW_EMPTY_FORCE_FIELD = (1 << 1),
+};
+/** #View3d.gizmo_show_light */
+enum {
+	/** Use for both spot & area size. */
+	V3D_GIZMO_SHOW_LIGHT_SIZE = (1 << 0),
+	V3D_GIZMO_SHOW_LIGHT_LOOK_AT = (1 << 1),
+};
+/** #View3d.gizmo_show_camera */
+enum {
+	/** Also used for ortho size. */
+	V3D_GIZMO_SHOW_CAMERA_LENS = (1 << 0),
+	V3D_GIZMO_SHOW_CAMERA_DOF_DIST = (1 << 2),
+};
 
 #define RV3D_CAMZOOM_MIN -30
 #define RV3D_CAMZOOM_MAX 600
 
-/* #BKE_screen_view3d_zoom_to_fac() values above */
+/** #BKE_screen_view3d_zoom_to_fac() values above */
 #define RV3D_CAMZOOM_MIN_FACTOR  0.1657359312880714853f
 #define RV3D_CAMZOOM_MAX_FACTOR 44.9852813742385702928f
 

@@ -33,6 +33,11 @@ ccl_device_noinline float svm_ao(KernelGlobals *kg,
 		return 1.0f;
 	}
 
+	/* Can't raytrace from shaders like displacement, before BVH exists. */
+	if (kernel_data.bvh.bvh_layout == BVH_LAYOUT_NONE) {
+		return 1.0f;
+	}
+
 	if(flags & NODE_AO_INSIDE) {
 		N = -N;
 	}
@@ -55,6 +60,8 @@ ccl_device_noinline float svm_ao(KernelGlobals *kg,
 		ray.D = D.x*T + D.y*B + D.z*N;
 		ray.t = max_dist;
 		ray.time = sd->time;
+		ray.dP = sd->dP;
+		ray.dD = differential3_zero();
 
 		if(flags & NODE_AO_ONLY_LOCAL) {
 			if(!scene_intersect_local(kg,
@@ -98,11 +105,11 @@ ccl_device void svm_node_ao(KernelGlobals *kg,
 	float3 normal = stack_valid(normal_offset)? stack_load_float3(stack, normal_offset): sd->N;
 	float ao = svm_ao(kg, sd, normal, state, dist, samples, flags);
 
-	if (stack_valid(out_ao_offset)) {
+	if(stack_valid(out_ao_offset)) {
 		stack_store_float(stack, out_ao_offset, ao);
 	}
 
-	if (stack_valid(out_color_offset)) {
+	if(stack_valid(out_color_offset)) {
 		float3 color = stack_load_float3(stack, color_offset);
 		stack_store_float3(stack, out_color_offset, ao * color);
 	}

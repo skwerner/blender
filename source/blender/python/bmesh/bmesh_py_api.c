@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/python/bmesh/bmesh_py_api.c
- *  \ingroup pybmesh
+/** \file
+ * \ingroup pybmesh
  *
  * This file defines the 'bmesh' module.
  */
@@ -101,42 +95,42 @@ static PyObject *bpy_bm_from_edit_mesh(PyObject *UNUSED(self), PyObject *value)
 		return NULL;
 	}
 
-	if (me->edit_btmesh == NULL) {
+	if (me->edit_mesh == NULL) {
 		PyErr_SetString(PyExc_ValueError,
 		                "The mesh must be in editmode");
 		return NULL;
 	}
 
-	bm = me->edit_btmesh->bm;
+	bm = me->edit_mesh->bm;
 
 	return BPy_BMesh_CreatePyObject(bm, BPY_BMFLAG_IS_WRAPPED);
 }
 
 PyDoc_STRVAR(bpy_bm_update_edit_mesh_doc,
-".. method:: update_edit_mesh(mesh, tessface=True, destructive=True)\n"
+".. method:: update_edit_mesh(mesh, loop_triangles=True, destructive=True)\n"
 "\n"
-"   Update the mesh after changes to the BMesh in editmode, \n"
+"   Update the mesh after changes to the BMesh in editmode,\n"
 "   optionally recalculating n-gon tessellation.\n"
 "\n"
 "   :arg mesh: The editmode mesh.\n"
 "   :type mesh: :class:`bpy.types.Mesh`\n"
-"   :arg tessface: Option to recalculate n-gon tessellation.\n"
-"   :type tessface: boolean\n"
+"   :arg loop_triangles: Option to recalculate n-gon tessellation.\n"
+"   :type loop_triangles: boolean\n"
 "   :arg destructive: Use when geometry has been added or removed.\n"
 "   :type destructive: boolean\n"
 );
 static PyObject *bpy_bm_update_edit_mesh(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
-	static const char *kwlist[] = {"mesh", "tessface", "destructive", NULL};
+	static const char *kwlist[] = {"mesh", "loop_triangles", "destructive", NULL};
 	PyObject *py_me;
 	Mesh *me;
-	bool do_tessface = true;
+	bool do_loop_triangles = true;
 	bool is_destructive = true;
 
 	if (!PyArg_ParseTupleAndKeywords(
 	        args, kw, "O|O&O&:update_edit_mesh", (char **)kwlist,
 	        &py_me,
-	        PyC_ParseBool, &do_tessface,
+	        PyC_ParseBool, &do_loop_triangles,
 	        PyC_ParseBool, &is_destructive))
 	{
 		return NULL;
@@ -148,7 +142,7 @@ static PyObject *bpy_bm_update_edit_mesh(PyObject *UNUSED(self), PyObject *args,
 		return NULL;
 	}
 
-	if (me->edit_btmesh == NULL) {
+	if (me->edit_mesh == NULL) {
 		PyErr_SetString(PyExc_ValueError,
 		                "The mesh must be in editmode");
 		return NULL;
@@ -156,13 +150,8 @@ static PyObject *bpy_bm_update_edit_mesh(PyObject *UNUSED(self), PyObject *args,
 
 	{
 		extern void EDBM_update_generic(BMEditMesh *em, const bool do_tessface, const bool is_destructive);
-		BMEditMesh *em = me->edit_btmesh;
-		BMesh *bm = em->bm;
 
-		/* python won't ensure matching uv/mtex */
-		BM_mesh_cd_validate(bm);
-
-		EDBM_update_generic(me->edit_btmesh, do_tessface, is_destructive);
+		EDBM_update_generic(me->edit_mesh, do_loop_triangles, is_destructive);
 	}
 
 	Py_RETURN_NONE;
@@ -172,7 +161,7 @@ static struct PyMethodDef BPy_BM_methods[] = {
 	{"new",            (PyCFunction)bpy_bm_new,            METH_VARARGS | METH_KEYWORDS,  bpy_bm_new_doc},
 	{"from_edit_mesh", (PyCFunction)bpy_bm_from_edit_mesh, METH_O,       bpy_bm_from_edit_mesh_doc},
 	{"update_edit_mesh", (PyCFunction)bpy_bm_update_edit_mesh, METH_VARARGS | METH_KEYWORDS, bpy_bm_update_edit_mesh_doc},
-	{NULL, NULL, 0, NULL}
+	{NULL, NULL, 0, NULL},
 };
 
 PyDoc_STRVAR(BPy_BM_doc,
@@ -196,7 +185,7 @@ PyObject *BPyInit_bmesh(void)
 {
 	PyObject *mod;
 	PyObject *submodule;
-	PyObject *sys_modules = PyThreadState_GET()->interp->modules;
+	PyObject *sys_modules = PyImport_GetModuleDict();
 
 	BPy_BM_init_types();
 	BPy_BM_init_types_select();
@@ -208,21 +197,17 @@ PyObject *BPyInit_bmesh(void)
 	/* bmesh.types */
 	PyModule_AddObject(mod, "types", (submodule = BPyInit_bmesh_types()));
 	PyDict_SetItem(sys_modules, PyModule_GetNameObject(submodule), submodule);
-	Py_INCREF(submodule);
 
 	/* bmesh.ops (not a real module, exposes module like access). */
 	PyModule_AddObject(mod, "ops", (submodule = BPyInit_bmesh_ops()));
 	/* PyDict_SetItemString(sys_modules, PyModule_GetNameObject(submodule), submodule); */
 	PyDict_SetItemString(sys_modules, "bmesh.ops", submodule); /* fake module */
-	Py_INCREF(submodule);
 
 	PyModule_AddObject(mod, "utils", (submodule = BPyInit_bmesh_utils()));
 	PyDict_SetItem(sys_modules, PyModule_GetNameObject(submodule), submodule);
-	Py_INCREF(submodule);
 
 	PyModule_AddObject(mod, "geometry", (submodule = BPyInit_bmesh_geometry()));
 	PyDict_SetItem(sys_modules, PyModule_GetNameObject(submodule), submodule);
-	Py_INCREF(submodule);
 
 	return mod;
 }

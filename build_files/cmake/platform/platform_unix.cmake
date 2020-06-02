@@ -16,23 +16,31 @@
 #
 # The Original Code is Copyright (C) 2016, Blender Foundation
 # All rights reserved.
-#
-# Contributor(s): Sergey Sharybin.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 # Libraries configuration for any *nix system including Linux and Unix.
 
 # Detect precompiled library directory
-set(LIBDIR_NAME ${CMAKE_SYSTEM_NAME}_${CMAKE_SYSTEM_PROCESSOR})
-string(TOLOWER ${LIBDIR_NAME} LIBDIR_NAME)
-set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_NAME})
+if(NOT DEFINED LIBDIR)
+	set(LIBDIR_NAME ${CMAKE_SYSTEM_NAME}_${CMAKE_SYSTEM_PROCESSOR})
+	string(TOLOWER ${LIBDIR_NAME} LIBDIR_NAME)
+	set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/${LIBDIR_NAME})
+else()
+	message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
+endif()
 
 if(EXISTS ${LIBDIR})
 	file(GLOB LIB_SUBDIRS ${LIBDIR}/*)
-	set(CMAKE_PREFIX_PATH ${LIB_SUBDIRS})
+	# NOTE: Make sure "proper" compiled zlib comes first before the one
+	# which is a part of OpenCollada. They have different ABI, and we
+	# do need to use the official one.
+	set(CMAKE_PREFIX_PATH ${LIBDIR}/zlib ${LIB_SUBDIRS})
 	set(WITH_STATIC_LIBS ON)
 	set(WITH_OPENMP_STATIC ON)
+endif()
+
+if(WITH_STATIC_LIBS)
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
 endif()
 
 # Wrapper to prefer static libraries
@@ -148,7 +156,7 @@ endif()
 # Codecs
 if(WITH_CODEC_SNDFILE)
 	find_package_wrapper(SndFile)
-	if(NOT SNDFILE_FOUND)
+	if(NOT LIBSNDFILE_FOUND)
 		set(WITH_CODEC_SNDFILE OFF)
 	endif()
 endif()
@@ -238,13 +246,17 @@ if(WITH_OPENVDB)
 	find_package_wrapper(OpenVDB)
 	find_package_wrapper(TBB)
 	find_package_wrapper(Blosc)
-	if(NOT OPENVDB_FOUND OR NOT TBB_FOUND)
+	if(NOT TBB_FOUND)
+		set(WITH_OPENVDB OFF)
+		set(WITH_OPENVDB_BLOSC OFF)
+		message(STATUS "TBB not found, disabling OpenVDB")
+	elseif(NOT OPENVDB_FOUND)
 		set(WITH_OPENVDB OFF)
 		set(WITH_OPENVDB_BLOSC OFF)
 		message(STATUS "OpenVDB not found, disabling it")
 	elseif(NOT BLOSC_FOUND)
 		set(WITH_OPENVDB_BLOSC OFF)
-		message(STATUS "Blosc not found, disabling it")
+		message(STATUS "Blosc not found, disabling it for OpenVBD")
 	endif()
 endif()
 
@@ -298,7 +310,7 @@ if(WITH_BOOST)
 		if(Boost_USE_STATIC_LIBS AND WITH_BOOST_ICU)
 			find_package(IcuLinux)
 		endif()
-		mark_as_advanced(Boost_DIR)  # why doesnt boost do this?
+		mark_as_advanced(Boost_DIR)  # why doesn't boost do this?
 	endif()
 
 	set(BOOST_INCLUDE_DIR ${Boost_INCLUDE_DIRS})
@@ -352,16 +364,23 @@ if(WITH_OPENCOLORIO)
 	endif()
 endif()
 
+if(WITH_CYCLES_EMBREE)
+	find_package(Embree 3.2.4 REQUIRED)
+endif()
+
 if(WITH_LLVM)
-	# Symbol conflicts with same UTF library used by OpenCollada
 	if(EXISTS ${LIBDIR})
 		set(LLVM_STATIC ON)
-		if(WITH_OPENCOLLADA)
-			list(REMOVE_ITEM OPENCOLLADA_LIBRARIES ${OPENCOLLADA_UTF_LIBRARY})
-		endif()
 	endif()
 
 	find_package_wrapper(LLVM)
+
+	# Symbol conflicts with same UTF library used by OpenCollada
+	if(EXISTS ${LIBDIR})
+		if(WITH_OPENCOLLADA AND (${LLVM_VERSION} VERSION_LESS "4.0.0"))
+			list(REMOVE_ITEM OPENCOLLADA_LIBRARIES ${OPENCOLLADA_UTF_LIBRARY})
+		endif()
+	endif()
 
 	if(NOT LLVM_FOUND)
 		set(WITH_LLVM OFF)
@@ -376,7 +395,7 @@ if(WITH_LLVM OR WITH_SDL_DYNLOAD)
 	)
 endif()
 
-if(WITH_OPENSUBDIV OR WITH_CYCLES_OPENSUBDIV)
+if(WITH_OPENSUBDIV)
 	find_package_wrapper(OpenSubdiv)
 
 	set(OPENSUBDIV_LIBRARIES ${OPENSUBDIV_LIBRARIES})
@@ -384,7 +403,6 @@ if(WITH_OPENSUBDIV OR WITH_CYCLES_OPENSUBDIV)
 
 	if(NOT OPENSUBDIV_FOUND)
 		set(WITH_OPENSUBDIV OFF)
-		set(WITH_CYCLES_OPENSUBDIV OFF)
 		message(STATUS "OpenSubdiv not found")
 	endif()
 endif()

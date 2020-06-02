@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include <string.h>
@@ -33,8 +29,8 @@ extern "C" {
 #define PASS_VECTOR_MAX 10000.0f
 
 /* Forward declarations */
-struct ZSpan;
 struct DrawBufPixel;
+struct ZSpan;
 void zbuf_accumulate_vecblur(
         NodeBlurData *nbd, int xsize, int ysize, float *newrect,
         const float *imgrect, float *vecbufrect, const float *zbufrect);
@@ -761,7 +757,7 @@ void zbuf_accumulate_vecblur(
 			}
 
 			/* blend with a falloff. this fixes the ugly effect you get with
-			 * a fast moving object. then it looks like a solid object overlayed
+			 * a fast moving object. then it looks like a solid object overlaid
 			 * over a very transparent moving version of itself. in reality, the
 			 * whole object should become transparent if it is moving fast, be
 			 * we don't know what is behind it so we don't do that. this hack

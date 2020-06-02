@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2013, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s):
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -44,6 +39,9 @@ set(SRC
 	openimageio_api.cpp
 )
 
+set(LIB
+)
+
 if(WITH_OPENIMAGEIO)
 	list(APPEND INC_SYS
 		${OPENIMAGEIO_INCLUDE_DIRS}
@@ -57,4 +55,4 @@ if(WITH_OPENIMAGEIO)
 	add_definitions(-DWITH_OPENIMAGEIO)
 endif()
 
-blender_add_lib(bf_imbuf_openimageio "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_imbuf_openimageio "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

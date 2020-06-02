@@ -16,9 +16,6 @@
 #
 # The Original Code is Copyright (C) 2014, Blender Foundation
 # All rights reserved.
-#
-# Contributor(s): Sybren A. Stüvel
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -28,10 +25,16 @@ set(INC
 	../../../source/blender/blenkernel
 	../../../source/blender/alembic
 	../../../source/blender/makesdna
+	../../../source/blender/depsgraph
 	${ALEMBIC_INCLUDE_DIRS}
 	${BOOST_INCLUDE_DIR}
 	${HDF5_INCLUDE_DIRS}
 	${OPENEXR_INCLUDE_DIRS}
+)
+
+set(LIB
+	bf_blenloader  # Should not be needed but gives linking error without it.
+	bf_alembic
 )
 
 include_directories(${INC})
@@ -46,7 +49,7 @@ else()
 endif()
 
 # For motivation on doubling BLENDER_SORTED_LIBS, see ../bmesh/CMakeLists.txt
-BLENDER_SRC_GTEST(alembic "abc_matrix_test.cc;abc_export_test.cc;${_buildinfo_src}" "${BLENDER_SORTED_LIBS};${BLENDER_SORTED_LIBS}")
+BLENDER_SRC_GTEST(alembic "abc_matrix_test.cc;abc_export_test.cc;${_buildinfo_src}" "${LIB}")
 
 unset(_buildinfo_src)
 

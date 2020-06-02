@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file source/blender/freestyle/intern/python/Interface0D/CurvePoint/BPy_StrokeVertex.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include "BPy_StrokeVertex.h"
@@ -186,10 +182,10 @@ static int StrokeVertex_mathutils_get_index(BaseMathObject *bmo, int /*subtype*/
 {
 	BPy_StrokeVertex *self = (BPy_StrokeVertex *)bmo->cb_user;
 	switch (index) {
-	case 0: bmo->data[0] = (float)self->sv->x(); break;
-	case 1: bmo->data[1] = (float)self->sv->y(); break;
-	default:
-		return -1;
+		case 0: bmo->data[0] = (float)self->sv->x(); break;
+		case 1: bmo->data[1] = (float)self->sv->y(); break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -198,10 +194,10 @@ static int StrokeVertex_mathutils_set_index(BaseMathObject *bmo, int /*subtype*/
 {
 	BPy_StrokeVertex *self = (BPy_StrokeVertex *)bmo->cb_user;
 	switch (index) {
-	case 0: self->sv->setX((real)bmo->data[0]); break;
-	case 1: self->sv->setY((real)bmo->data[1]); break;
-	default:
-		return -1;
+		case 0: self->sv->setX((real)bmo->data[0]); break;
+		case 1: self->sv->setY((real)bmo->data[1]); break;
+		default:
+			return -1;
 	}
 	return 0;
 }
@@ -211,7 +207,7 @@ static Mathutils_Callback StrokeVertex_mathutils_cb = {
 	StrokeVertex_mathutils_get,
 	StrokeVertex_mathutils_set,
 	StrokeVertex_mathutils_get_index,
-	StrokeVertex_mathutils_set_index
+	StrokeVertex_mathutils_set_index,
 };
 
 static unsigned char StrokeVertex_mathutils_cb_index = -1;

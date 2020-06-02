@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 macro(list_insert_after
@@ -199,7 +194,7 @@ endfunction()
 # Support per-target CMake flags
 # Read from: CMAKE_C_FLAGS_**** (made upper case) when set.
 #
-# 'name' should alway match the target name,
+# 'name' should always match the target name,
 # use this macro before add_library or add_executable.
 #
 # Optionally takes an arg passed to set(), eg PARENT_SCOPE.
@@ -227,6 +222,7 @@ function(blender_add_lib__impl
 	sources
 	includes
 	includes_sys
+	library_deps
 	)
 
 	# message(STATUS "Configuring library ${name}")
@@ -237,6 +233,10 @@ function(blender_add_lib__impl
 	blender_include_dirs_sys("${includes_sys}")
 
 	add_library(${name} ${sources})
+
+	if (NOT "${library_deps}" STREQUAL "")
+		target_link_libraries(${name} "${library_deps}")
+	endif()
 
 	# works fine without having the includes
 	# listed is helpful for IDE's (QtCreator/MSVC)
@@ -262,11 +262,12 @@ function(blender_add_lib_nolist
 	sources
 	includes
 	includes_sys
+	library_deps
 	)
 
 	add_cc_flags_custom_test(${name} PARENT_SCOPE)
 
-	blender_add_lib__impl(${name} "${sources}" "${includes}" "${includes_sys}")
+	blender_add_lib__impl(${name} "${sources}" "${includes}" "${includes_sys}" "${library_deps}")
 endfunction()
 
 function(blender_add_lib
@@ -274,11 +275,12 @@ function(blender_add_lib
 	sources
 	includes
 	includes_sys
+	library_deps
 	)
 
 	add_cc_flags_custom_test(${name} PARENT_SCOPE)
 
-	blender_add_lib__impl(${name} "${sources}" "${includes}" "${includes_sys}")
+	blender_add_lib__impl(${name} "${sources}" "${includes}" "${includes_sys}" "${library_deps}")
 
 	set_property(GLOBAL APPEND PROPERTY BLENDER_LINK_LIBS ${name})
 endfunction()
@@ -326,7 +328,7 @@ function(SETUP_LIBDIRS)
 			link_directories(${JACK_LIBPATH})
 		endif()
 		if(WITH_CODEC_SNDFILE)
-			link_directories(${SNDFILE_LIBPATH})
+			link_directories(${LIBSNDFILE_LIBPATH})
 		endif()
 		if(WITH_FFTW3)
 			link_directories(${FFTW3_LIBPATH})
@@ -370,6 +372,11 @@ function(setup_liblinks
 	set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${PLATFORM_LINKFLAGS}" PARENT_SCOPE)
 	set(CMAKE_MODULE_LINKER_FLAGS_DEBUG "${CMAKE_MODULE_LINKER_FLAGS_DEBUG} ${PLATFORM_LINKFLAGS_DEBUG}" PARENT_SCOPE)
 
+	# jemalloc must be early in the list, to be before pthread (see T57998)
+	if(WITH_MEM_JEMALLOC)
+		target_link_libraries(${target} ${JEMALLOC_LIBRARIES})
+	endif()
+
 	target_link_libraries(
 		${target}
 		${PNG_LIBRARIES}
@@ -412,13 +419,16 @@ function(setup_liblinks
 		target_link_libraries(${target} ${JACK_LIBRARIES})
 	endif()
 	if(WITH_CODEC_SNDFILE)
-		target_link_libraries(${target} ${SNDFILE_LIBRARIES})
+		target_link_libraries(${target} ${LIBSNDFILE_LIBRARIES})
 	endif()
 	if(WITH_SDL AND NOT WITH_SDL_DYNLOAD)
 		target_link_libraries(${target} ${SDL_LIBRARY})
 	endif()
-	if(WITH_IMAGE_TIFF)
-		target_link_libraries(${target} ${TIFF_LIBRARY})
+	if(WITH_CYCLES_OSL)
+		target_link_libraries(${target} ${OSL_LIBRARIES})
+	endif()
+	if(WITH_OPENVDB)
+		target_link_libraries(${target} ${OPENVDB_LIBRARIES} ${TBB_LIBRARIES} ${BLOSC_LIBRARIES})
 	endif()
 	if(WITH_OPENIMAGEIO)
 		target_link_libraries(${target} ${OPENIMAGEIO_LIBRARIES})
@@ -426,14 +436,11 @@ function(setup_liblinks
 	if(WITH_OPENCOLORIO)
 		target_link_libraries(${target} ${OPENCOLORIO_LIBRARIES})
 	endif()
-	if(WITH_OPENSUBDIV OR WITH_CYCLES_OPENSUBDIV)
+	if(WITH_OPENSUBDIV)
 			target_link_libraries(${target} ${OPENSUBDIV_LIBRARIES})
 	endif()
-	if(WITH_OPENVDB)
-		target_link_libraries(${target} ${OPENVDB_LIBRARIES} ${TBB_LIBRARIES} ${BLOSC_LIBRARIES})
-	endif()
-	if(WITH_CYCLES_OSL)
-		target_link_libraries(${target} ${OSL_LIBRARIES})
+	if(WITH_CYCLES_EMBREE)
+		target_link_libraries(${target} ${EMBREE_LIBRARIES})
 	endif()
 	if(WITH_BOOST)
 		target_link_libraries(${target} ${BOOST_LIBRARIES})
@@ -445,10 +452,13 @@ function(setup_liblinks
 	if(WITH_ALEMBIC)
 		target_link_libraries(${target} ${ALEMBIC_LIBRARIES} ${HDF5_LIBRARIES})
 	endif()
+	if(WITH_IMAGE_TIFF)
+		target_link_libraries(${target} ${TIFF_LIBRARY})
+	endif()
 	if(WITH_IMAGE_OPENEXR)
 		target_link_libraries(${target} ${OPENEXR_LIBRARIES})
 	endif()
-	if(WITH_IMAGE_OPENJPEG AND WITH_SYSTEM_OPENJPEG)
+	if(WITH_IMAGE_OPENJPEG)
 		target_link_libraries(${target} ${OPENJPEG_LIBRARIES})
 	endif()
 	if(WITH_CODEC_FFMPEG)
@@ -482,9 +492,6 @@ function(setup_liblinks
 			)
 		endif()
 	endif()
-	if(WITH_MEM_JEMALLOC)
-		target_link_libraries(${target} ${JEMALLOC_LIBRARIES})
-	endif()
 	if(WITH_MOD_CLOTH_ELTOPO)
 		target_link_libraries(${target} ${LAPACK_LIBRARIES})
 	endif()
@@ -509,7 +516,7 @@ function(setup_liblinks
 		target_link_libraries(${target} ${GFLAGS_LIBRARIES})
 	endif()
 
-	# We put CLEW and CUEW here because OPENSUBDIV_LIBRARIES dpeends on them..
+	# We put CLEW and CUEW here because OPENSUBDIV_LIBRARIES depends on them..
 	if(WITH_CYCLES OR WITH_COMPOSITOR OR WITH_OPENSUBDIV)
 		target_link_libraries(${target} "extern_clew")
 		if(WITH_CUDA_DYNLOAD)
@@ -530,265 +537,6 @@ function(setup_liblinks
 
 	#target_link_libraries(${target} ${PLATFORM_LINKLIBS} ${CMAKE_DL_LIBS})
 	target_link_libraries(${target} ${PLATFORM_LINKLIBS})
-endfunction()
-
-
-function(SETUP_BLENDER_SORTED_LIBS)
-
-	get_property(BLENDER_LINK_LIBS GLOBAL PROPERTY BLENDER_LINK_LIBS)
-
-	list(APPEND BLENDER_LINK_LIBS
-		bf_windowmanager
-		bf_render
-	)
-
-	if(WITH_MOD_FLUID)
-		list(APPEND BLENDER_LINK_LIBS bf_intern_elbeem)
-	endif()
-
-	if(WITH_CYCLES)
-		list(APPEND BLENDER_LINK_LIBS
-			cycles_render
-			cycles_graph
-			cycles_bvh
-			cycles_device
-			cycles_kernel
-			cycles_util
-			cycles_subd)
-		if(WITH_CYCLES_OSL)
-			list(APPEND BLENDER_LINK_LIBS cycles_kernel_osl)
-		endif()
-	endif()
-
-	# Sort libraries
-	set(BLENDER_SORTED_LIBS
-		bf_windowmanager
-
-		bf_editor_undo
-
-		bf_editor_space_api
-		bf_editor_space_action
-		bf_editor_space_buttons
-		bf_editor_space_console
-		bf_editor_space_file
-		bf_editor_space_graph
-		bf_editor_space_image
-		bf_editor_space_info
-		bf_editor_space_logic
-		bf_editor_space_nla
-		bf_editor_space_node
-		bf_editor_space_outliner
-		bf_editor_space_script
-		bf_editor_space_sequencer
-		bf_editor_space_text
-		bf_editor_space_time
-		bf_editor_space_userpref
-		bf_editor_space_view3d
-		bf_editor_space_clip
-
-		bf_editor_transform
-		bf_editor_util
-		bf_editor_uvedit
-		bf_editor_curve
-		bf_editor_gpencil
-		bf_editor_interface
-		bf_editor_mesh
-		bf_editor_metaball
-		bf_editor_object
-		bf_editor_lattice
-		bf_editor_armature
-		bf_editor_physics
-		bf_editor_render
-		bf_editor_screen
-		bf_editor_sculpt_paint
-		bf_editor_sound
-		bf_editor_animation
-		bf_editor_datafiles
-		bf_editor_mask
-		bf_editor_io
-
-		bf_render
-		bf_python
-		bf_python_ext
-		bf_python_mathutils
-		bf_python_bmesh
-		bf_freestyle
-		bf_ikplugin
-		bf_modifiers
-		bf_alembic
-		bf_bmesh
-		bf_gpu
-		bf_blenloader
-		bf_blenkernel
-		bf_physics
-		bf_nodes
-		bf_rna
-		bf_imbuf
-		bf_blenlib
-		bf_depsgraph
-		bf_intern_ghost
-		bf_intern_string
-		bf_avi
-		bf_imbuf_cineon
-		bf_imbuf_openexr
-		bf_imbuf_openimageio
-		bf_imbuf_dds
-		bf_collada
-		bf_intern_elbeem
-		bf_intern_memutil
-		bf_intern_guardedalloc
-		bf_intern_ctr
-		bf_intern_utfconv
-		ge_blen_routines
-		ge_converter
-		ge_phys_dummy
-		ge_phys_bullet
-		bf_intern_smoke
-		extern_lzma
-		extern_curve_fit_nd
-		ge_logic_ketsji
-		extern_recastnavigation
-		ge_logic
-		ge_rasterizer
-		ge_oglrasterizer
-		ge_logic_expressions
-		ge_scenegraph
-		ge_logic_network
-		ge_logic_ngnetwork
-		ge_logic_loopbacknetwork
-		bf_intern_moto
-		extern_openjpeg
-		ge_videotex
-		bf_dna
-		bf_blenfont
-		bf_blentranslation
-		bf_intern_audaspace
-		bf_intern_mikktspace
-		bf_intern_dualcon
-		bf_intern_cycles
-		cycles_render
-		cycles_graph
-		cycles_bvh
-		cycles_device
-		cycles_kernel
-		cycles_util
-		cycles_subd
-		bf_intern_opencolorio
-		bf_intern_eigen
-		extern_rangetree
-		extern_wcwidth
-		bf_intern_libmv
-		extern_sdlew
-
-		bf_intern_glew_mx
-		bf_intern_clog
-	)
-
-	if(NOT WITH_SYSTEM_GLOG)
-		list(APPEND BLENDER_SORTED_LIBS extern_glog)
-	endif()
-
-	if(NOT WITH_SYSTEM_GFLAGS)
-		list(APPEND BLENDER_SORTED_LIBS extern_gflags)
-	endif()
-
-	if(WITH_COMPOSITOR)
-		# added for opencl compositor
-		list_insert_before(BLENDER_SORTED_LIBS "bf_blenkernel" "bf_compositor")
-		list_insert_after(BLENDER_SORTED_LIBS "bf_compositor" "bf_intern_opencl")
-	endif()
-
-	if(WITH_LIBMV)
-		list(APPEND BLENDER_SORTED_LIBS extern_ceres)
-	endif()
-
-	if(WITH_MOD_CLOTH_ELTOPO)
-		list(APPEND BLENDER_SORTED_LIBS extern_eltopo)
-	endif()
-
-	if(NOT WITH_SYSTEM_LZO)
-		list(APPEND BLENDER_SORTED_LIBS extern_minilzo)
-	endif()
-
-	if(NOT WITH_SYSTEM_GLEW)
-		list(APPEND BLENDER_SORTED_LIBS ${BLENDER_GLEW_LIBRARIES})
-	endif()
-
-	if(WITH_BINRELOC)
-		list(APPEND BLENDER_SORTED_LIBS extern_binreloc)
-	endif()
-
-	if(WITH_CXX_GUARDEDALLOC)
-		list(APPEND BLENDER_SORTED_LIBS bf_intern_guardedalloc_cpp)
-	endif()
-
-	if(WITH_IK_SOLVER)
-		list_insert_after(BLENDER_SORTED_LIBS "bf_intern_elbeem" "bf_intern_iksolver")
-	endif()
-
-	if(WITH_IK_ITASC)
-		list(APPEND BLENDER_SORTED_LIBS bf_intern_itasc)
-	endif()
-
-	if(WITH_GHOST_XDND)
-		list(APPEND BLENDER_SORTED_LIBS extern_xdnd)
-	endif()
-
-	if(WITH_CYCLES_OSL)
-		list_insert_after(BLENDER_SORTED_LIBS "cycles_kernel" "cycles_kernel_osl")
-	endif()
-
-	if(WITH_INTERNATIONAL)
-		list(APPEND BLENDER_SORTED_LIBS bf_intern_locale)
-	endif()
-
-	if(WITH_BULLET)
-		list_insert_after(BLENDER_SORTED_LIBS "bf_blenkernel" "bf_intern_rigidbody")
-	endif()
-
-	if(WITH_BULLET AND NOT WITH_SYSTEM_BULLET)
-		list_insert_after(BLENDER_SORTED_LIBS "ge_logic_ngnetwork" "extern_bullet")
-	endif()
-
-	if(WITH_GAMEENGINE_DECKLINK)
-		list(APPEND BLENDER_SORTED_LIBS bf_intern_decklink)
-	endif()
-
-	if(WIN32)
-		list(APPEND BLENDER_SORTED_LIBS bf_intern_gpudirect)
-	endif()
-
-	if(WITH_OPENSUBDIV OR WITH_CYCLES_OPENSUBDIV)
-		list(APPEND BLENDER_SORTED_LIBS bf_intern_opensubdiv)
-	endif()
-
-	if(WITH_OPENVDB)
-		list(APPEND BLENDER_SORTED_LIBS bf_intern_openvdb)
-	endif()
-
-	foreach(SORTLIB ${BLENDER_SORTED_LIBS})
-		set(REMLIB ${SORTLIB})
-		foreach(SEARCHLIB ${BLENDER_LINK_LIBS})
-			if(${SEARCHLIB} STREQUAL ${SORTLIB})
-				set(REMLIB "")
-			endif()
-		endforeach()
-		if(REMLIB)
-			# message(STATUS "Removing library ${REMLIB} from blender linking because: not configured")
-			list(APPEND REM_MSG ${REMLIB})
-			list(REMOVE_ITEM BLENDER_SORTED_LIBS ${REMLIB})
-		endif()
-	endforeach()
-	if(REM_MSG)
-		list(SORT REM_MSG)
-		message(STATUS "Blender Skipping: (${REM_MSG})")
-	endif()
-
-
-	set(BLENDER_SORTED_LIBS ${BLENDER_SORTED_LIBS} PARENT_SCOPE)
-
-	# for top-level tests
-	set_property(GLOBAL PROPERTY BLENDER_SORTED_LIBS_PROP ${BLENDER_SORTED_LIBS})
 endfunction()
 
 macro(TEST_SSE_SUPPORT
@@ -1195,7 +943,11 @@ function(delayed_do_install
 		foreach(i RANGE ${n})
 			list(GET files ${i} f)
 			list(GET destinations ${i} d)
-			install(FILES ${f} DESTINATION ${targetdir}/${d})
+			if(NOT IS_ABSOLUTE ${d})
+				install(FILES ${f} DESTINATION ${targetdir}/${d})
+			else()
+				install(FILES ${f} DESTINATION ${d})
+			endif()
 		endforeach()
 	endif()
 endfunction()
@@ -1232,6 +984,8 @@ function(data_to_c_simple
 	get_filename_component(_file_to   ${CMAKE_CURRENT_BINARY_DIR}/${file_from}.c REALPATH)
 
 	list(APPEND ${list_to_add} ${_file_to})
+	source_group(Generated FILES ${_file_to})
+	list(APPEND ${list_to_add} ${file_from})
 	set(${list_to_add} ${${list_to_add}} PARENT_SCOPE)
 
 	get_filename_component(_file_to_path ${_file_to} PATH)
@@ -1376,6 +1130,7 @@ function(find_python_package
 		  NAMES
 		    ${package}
 		  HINTS
+		    "${PYTHON_LIBPATH}/"
 		    "${PYTHON_LIBPATH}/python${PYTHON_VERSION}/"
 		    "${PYTHON_LIBPATH}/python${_PY_VER_MAJOR}/"
 		  PATH_SUFFIXES
@@ -1385,7 +1140,7 @@ function(find_python_package
 		   NO_DEFAULT_PATH
 		)
 
-		 if(NOT EXISTS "${PYTHON_${_upper_package}_PATH}")
+		if(NOT EXISTS "${PYTHON_${_upper_package}_PATH}")
 			message(WARNING
 				"Python package '${package}' path could not be found in:\n"
 				"'${PYTHON_LIBPATH}/python${PYTHON_VERSION}/site-packages/${package}', "

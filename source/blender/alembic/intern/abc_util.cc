@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Esteban Tovagliari, Cedric Paille, Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #include "abc_util.h"
@@ -35,6 +33,7 @@
 
 extern "C" {
 #include "DNA_object_types.h"
+#include "DNA_layer_types.h"
 
 #include "BLI_math.h"
 
@@ -60,6 +59,15 @@ std::string get_id_name(const ID * const id)
 	return name;
 }
 
+/**
+ * \brief get_object_dag_path_name returns the name under which the object
+ *  will be exported in the Alembic file. It is of the form
+ *  "[../grandparent/]parent/object" if dupli_parent is NULL, or
+ *  "dupli_parent/[../grandparent/]parent/object" otherwise.
+ * \param ob:
+ * \param dupli_parent:
+ * \return
+ */
 std::string get_object_dag_path_name(const Object * const ob, Object *dupli_parent)
 {
 	std::string name = get_id_name(ob);
@@ -76,33 +84,6 @@ std::string get_object_dag_path_name(const Object * const ob, Object *dupli_pare
 	}
 
 	return name;
-}
-
-bool object_selected(Object *ob)
-{
-	return ob->flag & SELECT;
-}
-
-bool parent_selected(Object *ob)
-{
-	if (object_selected(ob)) {
-		return true;
-	}
-
-	bool do_export = false;
-
-	Object *parent = ob->parent;
-
-	while (parent != NULL) {
-		if (object_selected(parent)) {
-			do_export = true;
-			break;
-		}
-
-		parent = parent->parent;
-	}
-
-	return do_export;
 }
 
 Imath::M44d convert_matrix(float mat[4][4])
@@ -152,7 +133,10 @@ void create_swapped_rotation_matrix(
 			rz = -euler[1];
 			break;
 		default:
+			ry = 0.0f;
+			rz = 0.0f;
 			BLI_assert(false);
+			break;
 	}
 
 	unit_m3(rot_x_mat);
@@ -190,11 +174,11 @@ void copy_m44_axis_swap(float dst_mat[4][4], float src_mat[4][4], AbcAxisSwapMod
 	unit_m3(dst_rot);
 	unit_m4(dst_scale_mat);
 
-	/* We assume there is no sheer component and no homogeneous scaling component. */
-	BLI_assert(fabs(src_mat[0][3]) < 2 * FLT_EPSILON);
-	BLI_assert(fabs(src_mat[1][3]) < 2 * FLT_EPSILON);
-	BLI_assert(fabs(src_mat[2][3]) < 2 * FLT_EPSILON);
-	BLI_assert(fabs(src_mat[3][3] - 1.0f) < 2 * FLT_EPSILON);
+	/* TODO(Sybren): This code assumes there is no sheer component and no
+	 * homogeneous scaling component, which is not always true when writing
+	 * non-hierarchical (e.g. flat) objects (e.g. when parent has non-uniform
+	 * scale and the child rotates). This is currently not taken into account
+	 * when axis-swapping. */
 
 	/* Extract translation, rotation, and scale form matrix. */
 	mat4_to_loc_rot_size(src_trans, src_rot, src_scale, src_mat);

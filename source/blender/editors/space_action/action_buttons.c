@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation, Joshua Leung
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_action/action_buttons.c
- *  \ingroup spaction
+/** \file
+ * \ingroup spaction
  */
 
 
@@ -40,15 +33,12 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
-#include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
 #include "BKE_curve.h"
-#include "BKE_depsgraph.h"
 #include "BKE_fcurve.h"
 #include "BKE_screen.h"
 #include "BKE_unit.h"
@@ -118,7 +108,7 @@ static int action_properties_toggle_exec(bContext *C, wmOperator *UNUSED(op))
 
 void ACTION_OT_properties(wmOperatorType *ot)
 {
-	ot->name = "Properties";
+	ot->name = "Toggle Sidebar";
 	ot->idname = "ACTION_OT_properties";
 	ot->description = "Toggle the properties region visibility";
 

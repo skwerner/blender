@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_subdivide.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Edge based subdivision with various subdivision patterns.
  */
@@ -157,7 +151,9 @@ static BMEdge *connect_smallest_face(BMesh *bm, BMVert *v_a, BMVert *v_b, BMFace
 
 		f_new = BM_face_split(bm, f, l_a, l_b, &l_new, NULL, false);
 
-		if (r_f_new) *r_f_new = f_new;
+		if (r_f_new) {
+			*r_f_new = f_new;
+		}
 		return l_new ? l_new->e : NULL;
 	}
 
@@ -182,14 +178,11 @@ static void interp_slerp_co_no_v3(
 	/* calculate sphere 'center' */
 	{
 		/* use point on plane to */
-		float plane_a[4], plane_b[4], plane_c[4];
 		float no_mid[3], no_ortho[3];
 		/* pass this as an arg instead */
 #if 0
 		float no_dir[3];
 #endif
-
-		float v_a_no_ortho[3], v_b_no_ortho[3];
 
 		add_v3_v3v3(no_mid, no_a, no_b);
 		normalize_v3(no_mid);
@@ -200,24 +193,28 @@ static void interp_slerp_co_no_v3(
 #endif
 
 		/* axis of slerp */
+		bool center_ok = false;
 		cross_v3_v3v3(no_ortho, no_mid, no_dir);
-		normalize_v3(no_ortho);
+		if (normalize_v3(no_ortho) != 0.0f) {
+			float plane_a[4], plane_b[4], plane_c[4];
+			float v_a_no_ortho[3], v_b_no_ortho[3];
 
-		/* create planes */
-		cross_v3_v3v3(v_a_no_ortho, no_ortho, no_a);
-		cross_v3_v3v3(v_b_no_ortho, no_ortho, no_b);
-		project_v3_plane(v_a_no_ortho, no_ortho, v_a_no_ortho);
-		project_v3_plane(v_b_no_ortho, no_ortho, v_b_no_ortho);
+			/* create planes */
+			cross_v3_v3v3(v_a_no_ortho, no_ortho, no_a);
+			cross_v3_v3v3(v_b_no_ortho, no_ortho, no_b);
+			project_v3_plane(v_a_no_ortho, no_ortho, v_a_no_ortho);
+			project_v3_plane(v_b_no_ortho, no_ortho, v_b_no_ortho);
 
-		plane_from_point_normal_v3(plane_a, co_a, v_a_no_ortho);
-		plane_from_point_normal_v3(plane_b, co_b, v_b_no_ortho);
-		plane_from_point_normal_v3(plane_c, co_b, no_ortho);
+			plane_from_point_normal_v3(plane_a, co_a, v_a_no_ortho);
+			plane_from_point_normal_v3(plane_b, co_b, v_b_no_ortho);
+			plane_from_point_normal_v3(plane_c, co_b, no_ortho);
 
-		/* find the sphere center from 3 planes */
-		if (isect_plane_plane_plane_v3(plane_a, plane_b, plane_c, center)) {
-			/* pass */
+			/* find the sphere center from 3 planes */
+			if (isect_plane_plane_plane_v3(plane_a, plane_b, plane_c, center)) {
+				center_ok = true;
+			}
 		}
-		else {
+		if (center_ok == false) {
 			mid_v3_v3v3(center, co_a, co_b);
 		}
 	}
@@ -453,8 +450,12 @@ static void bm_subdivide_multicut(
 		BMO_edge_flag_enable(bm, e_new, SUBD_SPLIT | ELE_SPLIT);
 
 		BM_CHECK_ELEMENT(v);
-		if (v->e) BM_CHECK_ELEMENT(v->e);
-		if (v->e && v->e->l) BM_CHECK_ELEMENT(v->e->l->f);
+		if (v->e) {
+			BM_CHECK_ELEMENT(v->e);
+		}
+		if (v->e && v->e->l) {
+			BM_CHECK_ELEMENT(v->e->l->f);
+		}
 	}
 
 	alter_co(v1, &e_tmp, params, 0, &v1_tmp, &v2_tmp);
@@ -694,8 +695,9 @@ static void quad_4edge_subdivide(BMesh *bm, BMFace *UNUSED(face), BMVert **verts
 		b = numcuts + 1 + numcuts + 1 + (numcuts - i - 1);
 
 		e = connect_smallest_face(bm, verts[a], verts[b], &f_new);
-		if (!e)
+		if (!e) {
 			continue;
+		}
 
 		BMO_edge_flag_enable(bm, e, ELE_INNER);
 		BMO_face_flag_enable(bm, f_new, ELE_INNER);
@@ -720,8 +722,9 @@ static void quad_4edge_subdivide(BMesh *bm, BMFace *UNUSED(face), BMVert **verts
 			a = i * s + j;
 			b = (i - 1) * s + j;
 			e = connect_smallest_face(bm, lines[a], lines[b], &f_new);
-			if (!e)
+			if (!e) {
 				continue;
+			}
 
 			BMO_edge_flag_enable(bm, e, ELE_INNER);
 			BMO_face_flag_enable(bm, f_new, ELE_INNER);
@@ -799,7 +802,9 @@ static void tri_3edge_subdivide(BMesh *bm, BMFace *UNUSED(face), BMVert **verts,
 		a = numcuts * 2 + 2 + i;
 		b = numcuts + numcuts - i;
 		e = connect_smallest_face(bm, verts[a], verts[b], &f_new);
-		if (!e) goto cleanup;
+		if (!e) {
+			goto cleanup;
+		}
 
 		BMO_edge_flag_enable(bm, e, ELE_INNER);
 		BMO_face_flag_enable(bm, f_new, ELE_INNER);
@@ -848,7 +853,9 @@ static void tri_3edge_subdivide(BMesh *bm, BMFace *UNUSED(face), BMVert **verts,
 
 cleanup:
 	for (i = 1; i < numcuts + 2; i++) {
-		if (lines[i]) MEM_freeN(lines[i]);
+		if (lines[i]) {
+			MEM_freeN(lines[i]);
+		}
 	}
 
 	MEM_freeN(lines);
@@ -1006,8 +1013,9 @@ void bmo_subdivide_edges_exec(BMesh *bm, BMOperator *op)
 		bool matched = false;
 
 		/* skip non-quads if requested */
-		if (use_only_quads && face->len != 4)
+		if (use_only_quads && face->len != 4) {
 			continue;
+		}
 
 		/* figure out which pattern to use */
 
@@ -1023,8 +1031,8 @@ void bmo_subdivide_edges_exec(BMesh *bm, BMOperator *op)
 			verts[i] = l_new->v;
 
 			if (BMO_edge_flag_test(bm, edges[i], SUBD_SPLIT)) {
-				if (!e1) e1 = edges[i];
-				else     e2 = edges[i];
+				if (!e1) { e1 = edges[i]; }
+				else     { e2 = edges[i]; }
 
 				totesel++;
 			}
@@ -1283,8 +1291,12 @@ void bmo_subdivide_edges_exec(BMesh *bm, BMOperator *op)
 	BM_data_layer_free_n(bm, &bm->vdata, CD_SHAPEKEY, params.shape_info.tmpkey);
 
 	BLI_stack_free(facedata);
-	if (edges) BLI_array_free(edges);
-	if (verts) BLI_array_free(verts);
+	if (edges) {
+		BLI_array_free(edges);
+	}
+	if (verts) {
+		BLI_array_free(verts);
+	}
 	BLI_array_free(loops_split);
 	BLI_array_free(loops);
 
@@ -1362,6 +1374,9 @@ void bmo_bisect_edges_exec(BMesh *bm, BMOperator *op)
 	BM_data_layer_add(bm, &bm->vdata, CD_SHAPEKEY);
 
 	bmo_subd_init_shape_info(bm, &params);
+
+	/* tag edges in map */
+	BMO_slot_map_to_flag(bm, op->slots_in, "edge_percents", BM_EDGE, EDGE_PERCENT);
 
 	/* go through and split edges */
 	BMO_ITER (e, &siter, op->slots_in, "edges", BM_EDGE) {

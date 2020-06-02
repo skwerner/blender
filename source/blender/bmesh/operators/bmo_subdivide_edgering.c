@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_subdivide_edgering.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * This operator is a special edge-ring subdivision tool
  * which gives special options for interpolation.
@@ -34,7 +28,7 @@
  * - verts use BM_ELEM_TAG, these need to be cleared before functions exit.
  *
  * \note Order of execution with 2+ rings is undefined,
- * so tage care
+ * so take care.
  */
 
 #include "MEM_guardedalloc.h"
@@ -255,8 +249,9 @@ static GSet *bm_edgering_pair_calc(BMesh *bm, ListBase *eloops_rim)
 					pair_test.first = el_store;
 					pair_test.second = el_store_other;
 
-					if (pair_test.first > pair_test.second)
+					if (pair_test.first > pair_test.second) {
 						SWAP(const void *, pair_test.first, pair_test.second);
+					}
 
 					void **pair_key_p;
 					if (!BLI_gset_ensure_p_ex(eloop_pair_gs, &pair_test, &pair_key_p)) {
@@ -505,7 +500,7 @@ static LoopPairStore *bm_edgering_pair_store_create(
 			for (v_iter = lb->first, i = 0; v_iter; v_iter = v_iter->next, i++) {
 				BMVert *v = v_iter->data;
 				bm_vert_calc_surface_tangent(bm, v, nor[i]);
-				BLI_ghash_insert(nors_gh_iter, v, SET_UINT_IN_POINTER(i));
+				BLI_ghash_insert(nors_gh_iter, v, POINTER_FROM_UINT(i));
 			}
 		}
 
@@ -699,8 +694,8 @@ static void bm_edgering_pair_interpolate(
 				/* create the triangle and transform */
 				for (j = 0; j < 3; j++) {
 					zero_v3(tri_tmp[j]);
-					if      (j == 1) tri_tmp[j][0] = shape_size;
-					else if (j == 2) tri_tmp[j][1] = shape_size;
+					if      (j == 1) { tri_tmp[j][0] = shape_size; }
+					else if (j == 2) { tri_tmp[j][1] = shape_size; }
 					mul_qt_v3(quat_array[i], tri_tmp[j]);
 					add_v3_v3(tri_tmp[j], coord_array_main[i]);
 				}
@@ -768,8 +763,8 @@ static void bm_edgering_pair_interpolate(
 				bm_vert_calc_surface_tangent(bm, v_b, no_b);
 #else
 				{
-					const uint index_a = GET_UINT_FROM_POINTER(BLI_ghash_lookup(lpair->nors_gh_a, v_a));
-					const uint index_b = GET_UINT_FROM_POINTER(BLI_ghash_lookup(lpair->nors_gh_b, v_b));
+					const uint index_a = POINTER_AS_UINT(BLI_ghash_lookup(lpair->nors_gh_a, v_a));
+					const uint index_b = POINTER_AS_UINT(BLI_ghash_lookup(lpair->nors_gh_b, v_b));
 
 					BLI_assert(BLI_ghash_haskey(lpair->nors_gh_a, v_a));
 					BLI_assert(BLI_ghash_haskey(lpair->nors_gh_b, v_b));

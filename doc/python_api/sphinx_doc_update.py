@@ -16,8 +16,6 @@
 #  along with this program; if not, write to the Free Software Foundation,
 #  Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
-# Contributor(s): Bastien Montagne
-#
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
@@ -163,7 +161,6 @@ def main():
     os.rename(zip_path, os.path.join(api_dir, "%s.zip" % zip_name))
 
     # VII) Create symlinks and html redirects.
-    os.symlink("./contents.html", os.path.join(api_dir, "index.html"))
     if is_release:
         symlink = os.path.join(args.mirror_dir, "current")
         os.remove(symlink)

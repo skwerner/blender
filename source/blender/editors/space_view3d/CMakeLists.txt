@@ -13,9 +13,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -25,6 +22,7 @@ set(INC
 	../../blenlib
 	../../blentranslation
 	../../bmesh
+	../../draw
 	../../gpu
 	../../imbuf
 	../../makesdna
@@ -42,43 +40,46 @@ set(INC_SYS
 )
 
 set(SRC
-	drawanimviz.c
-	drawarmature.c
-	drawmesh.c
 	drawobject.c
-	drawsimdebug.c
-	drawvolume.c
 	space_view3d.c
 	view3d_buttons.c
 	view3d_camera_control.c
 	view3d_draw.c
+	view3d_draw_legacy.c
 	view3d_edit.c
 	view3d_fly.c
-	view3d_walk.c
+	view3d_gizmo_armature.c
+	view3d_gizmo_camera.c
+	view3d_gizmo_empty.c
+	view3d_gizmo_forcefield.c
+	view3d_gizmo_light.c
+	view3d_gizmo_navigate.c
+	view3d_gizmo_navigate_type.c
+	view3d_gizmo_preselect.c
+	view3d_gizmo_preselect_type.c
+	view3d_gizmo_ruler.c
 	view3d_header.c
 	view3d_iterators.c
 	view3d_ops.c
 	view3d_project.c
-	view3d_ruler.c
 	view3d_select.c
 	view3d_snap.c
 	view3d_toolbar.c
 	view3d_utils.c
 	view3d_view.c
+	view3d_walk.c
 
 	view3d_intern.h
+)
+
+set(LIB
+	bf_editor_lattice
+	bf_editor_mesh
 )
 
 if(WITH_PYTHON)
 	blender_include_dirs(../../python)
 	add_definitions(-DWITH_PYTHON)
-endif()
-
-if(WITH_GAMEENGINE)
-	list(APPEND INC
-		../../../gameengine/BlenderRoutines
-	)
-	add_definitions(-DWITH_GAMEENGINE)
 endif()
 
 add_definitions(${GL_DEFINITIONS})
@@ -95,8 +96,4 @@ if(WITH_MOD_SMOKE)
 	add_definitions(-DWITH_SMOKE)
 endif()
 
-if(WITH_LEGACY_DEPSGRAPH)
-	add_definitions(-DWITH_LEGACY_DEPSGRAPH)
-endif()
-
-blender_add_lib(bf_editor_space_view3d "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_editor_space_view3d "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

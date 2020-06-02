@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Jason Wilkins
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file intern/gl-deprecated.h
- *  \ingroup glew-mx
+/** \file
+ * \ingroup glew-mx
  *  Utility used to check for use of deprecated functions.
  */
 
@@ -841,6 +833,7 @@
 #undef GL_SOURCE2_RGB
 #define GL_SOURCE2_RGB DO_NOT_USE_GL_SOURCE2_RGB
 
+#if 0 /* Those are deprecated but still valid */
 // Old Token Names 3.0
 #undef GL_CLIP_PLANE0
 #define GL_CLIP_PLANE0 USE_GL_CLIP_DISTANCE0
@@ -864,9 +857,6 @@
 // Old Token Names 3.2
 #undef GL_VERTEX_PROGRAM_POINT_SIZE
 #define GL_VERTEX_PROGRAM_POINT_SIZE USE_GL_PROGRAM_POINT_SIZE
-
-// Old Token Names 4.1
-#undef GL_CURRENT_PROGRAM
-#define GL_CURRENT_PROGRAM DO_NOT_USE_GL_CURRENT_PROGRAM
+#endif
 
 #endif /* __GL_DEPRECATED_H__ */

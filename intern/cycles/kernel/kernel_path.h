@@ -57,6 +57,8 @@ ccl_device_forceinline bool kernel_path_scene_intersect(
 	Intersection *isect,
 	PathRadiance *L)
 {
+	PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
+
 	uint visibility = path_state_ray_visibility(kg, state);
 
 	if(path_state_ao_bounce(kg, state)) {
@@ -105,6 +107,8 @@ ccl_device_forceinline void kernel_path_lamp_emission(
 	ShaderData *emission_sd,
 	PathRadiance *L)
 {
+	PROFILING_INIT(kg, PROFILING_INDIRECT_EMISSION);
+
 #ifdef __LAMP_MIS__
 	if(kernel_data.integrator.use_lamp_mis && !(state->flag & PATH_RAY_CAMERA)) {
 		/* ray starting from previous non-transparent bounce */
@@ -178,6 +182,8 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(
 	ShaderData *emission_sd,
 	PathRadiance *L)
 {
+	PROFILING_INIT(kg, PROFILING_VOLUME);
+
 	/* Sanitize volume stack. */
 	if(!hit) {
 		kernel_volume_clean_stack(kg, state->volume_stack);
@@ -276,7 +282,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(
 }
 #endif  /* __VOLUME__ */
 
-#endif /* __SPLIT_KERNEL__ */
+#endif  /* __SPLIT_KERNEL__ */
 
 ccl_device_forceinline bool kernel_path_shader_apply(
 	KernelGlobals *kg,
@@ -289,6 +295,8 @@ ccl_device_forceinline bool kernel_path_shader_apply(
 	ccl_global float *buffer,
 	bool has_volume)
 {
+	PROFILING_INIT(kg, PROFILING_SHADER_APPLY);
+
 #ifdef __SHADOW_TRICKS__
 	if((sd->object_flag & SD_OBJECT_SHADOW_CATCHER)) {
 		if(state->flag & PATH_RAY_TRANSPARENT_BACKGROUND) {
@@ -384,6 +392,8 @@ ccl_device_noinline void kernel_path_ao(KernelGlobals *kg,
                                         float3 throughput,
                                         float3 ao_alpha)
 {
+	PROFILING_INIT(kg, PROFILING_AO);
+
 	/* todo: solve correlation */
 	float bsdf_u, bsdf_v;
 
@@ -465,7 +475,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 			break;
 		}
 
-#endif /* __VOLUME__*/
+#endif  /* __VOLUME__*/
 
 		/* Shade background. */
 		if(!hit) {
@@ -593,7 +603,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 #endif  /* __SUBSURFACE__ */
 }
 
-#endif /* defined(__BRANCHED_PATH__) || defined(__BAKING__) */
+#endif  /* defined(__BRANCHED_PATH__) || defined(__BAKING__) */
 
 ccl_device_forceinline void kernel_path_integrate(
 	KernelGlobals *kg,
@@ -604,6 +614,8 @@ ccl_device_forceinline void kernel_path_integrate(
 	ccl_global float *buffer,
 	ShaderData *emission_sd)
 {
+	PROFILING_INIT(kg, PROFILING_PATH_INTEGRATE);
+
 	/* Shader data memory used for both volumes and surfaces, saves stack space. */
 	ShaderData sd;
 #ifdef __SUBSURFACE__
@@ -641,7 +653,7 @@ ccl_device_forceinline void kernel_path_integrate(
 		else if(result == VOLUME_PATH_MISSED) {
 			break;
 		}
-#endif /* __VOLUME__*/
+#endif  /* __VOLUME__*/
 
 		/* Shade background. */
 		if(!hit) {
@@ -760,6 +772,8 @@ ccl_device void kernel_path_trace(KernelGlobals *kg,
 	ccl_global float *buffer,
 	int sample, int x, int y, int offset, int stride)
 {
+	PROFILING_INIT(kg, PROFILING_RAY_SETUP);
+
 	/* buffer offset */
 	int index = offset + x + y*stride;
 	int pass_stride = kernel_data.film.pass_stride;

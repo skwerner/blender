@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,36 +12,32 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Sybren A. Stüvel
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #ifndef __ABC_MBALL_H__
 #define __ABC_MBALL_H__
 
 #include "abc_object.h"
+#include "abc_mesh.h"
 
-class AbcMeshWriter;
 struct EvaluationContext;
 struct Main;
 struct MetaBall;
 struct Object;
 
 /* AbcMBallWriter converts the metaballs to meshes at every frame,
- * and defers to a wrapped AbcMeshWriter to perform the writing
+ * and defers to AbcGenericMeshWriter to perform the writing
  * to the Alembic file. Only the basis balls are exported, as this
  * results in the entire shape as one mesh. */
-class AbcMBallWriter : public AbcObjectWriter {
-	AbcMeshWriter *m_mesh_writer;
-	Object *m_mesh_ob;
-	bool m_is_animated;
+class AbcMBallWriter : public AbcGenericMeshWriter {
 	Main *m_bmain;
 public:
-	AbcMBallWriter(
+	explicit AbcMBallWriter(
 	        Main *bmain,
-	        Scene *scene,
 	        Object *ob,
 	        AbcTransformWriter *parent,
 	        uint32_t time_sampling,
@@ -51,11 +45,14 @@ public:
 
 	~AbcMBallWriter();
 
-	static bool isBasisBall(Main *bmain, EvaluationContext *eval_ctx, Scene *scene, Object *ob);
+	static bool isBasisBall(Scene *scene, Object *ob);
+
+protected:
+	Mesh *getEvaluatedMesh(Scene *scene_eval, Object *ob_eval, bool &r_needsfree) override;
+	void freeEvaluatedMesh(struct Mesh *mesh) override;
 
 private:
-	virtual void do_write();
-	bool isAnimated() const;
+	bool isAnimated() const override;
 };
 
 

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Esteban Tovagliari, Cedric Paille, Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #ifndef __ABC_ALEMBIC_H__
@@ -27,12 +25,12 @@
 extern "C" {
 #endif
 
-struct bContext;
 struct CacheReader;
-struct DerivedMesh;
 struct ListBase;
+struct Mesh;
 struct Object;
 struct Scene;
+struct bContext;
 
 typedef struct AbcArchiveHandle AbcArchiveHandle;
 
@@ -58,6 +56,7 @@ struct AlembicExportParams {
 	bool normals;
 	bool vcolors;
 	bool apply_subdiv;
+	bool curves_as_mesh;
 	bool flatten_hierarchy;
 	bool visible_layers_only;
 	bool renderable_only;
@@ -114,12 +113,13 @@ void ABC_get_transform(struct CacheReader *reader,
                        float time,
                        float scale);
 
-struct DerivedMesh *ABC_read_mesh(struct CacheReader *reader,
-                                  struct Object *ob,
-                                  struct DerivedMesh *dm,
-                                  const float time,
-                                  const char **err_str,
-                                  int flags);
+/* Either modifies current_mesh in-place or constructs a new mesh. */
+struct Mesh *ABC_read_mesh(struct CacheReader *reader,
+                           struct Object *ob,
+                           struct Mesh *current_mesh,
+                           const float time,
+                           const char **err_str,
+                           int flags);
 
 void CacheReader_incref(struct CacheReader *reader);
 void CacheReader_free(struct CacheReader *reader);

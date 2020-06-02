@@ -18,6 +18,7 @@
 
 set(INC
 	.
+	../atomic
 	../guardedalloc
 )
 
@@ -31,4 +32,10 @@ set(SRC
 	CLG_log.h
 )
 
-blender_add_lib(bf_intern_clog "${SRC}" "${INC}" "${INC_SYS}")
+set(LIB
+)
+
+# Disabled for makesdna/makesrna.
+add_definitions(-DWITH_CLOG_PTHREADS)
+
+blender_add_lib(bf_intern_clog "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

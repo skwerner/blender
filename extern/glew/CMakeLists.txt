@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2006, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -40,15 +35,15 @@ endif()
 set(SRC
 	src/glew.c
 
+	include/GL/eglew.h
 	include/GL/glew.h
 	include/GL/glxew.h
 	include/GL/wglew.h
 )
 
+set(LIB
+)
+
 add_definitions(${GL_DEFINITIONS})
 
-if(WITH_GLEW_MX)
-	add_definitions(-DGLEW_MX)
-endif()
-
-blender_add_lib(extern_glew "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(extern_glew "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

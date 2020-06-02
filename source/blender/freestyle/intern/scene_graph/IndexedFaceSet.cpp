@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/scene_graph/IndexedFaceSet.cpp
- *  \ingroup freestyle
- *  \brief A Set of indexed faces to represent a surfacic object
- *  \author Stephane Grabli
- *  \date 22/01/2002
+/** \file
+ * \ingroup freestyle
+ * \brief A Set of indexed faces to represent a surfacic object
  */
 
 #include "IndexedFaceSet.h"
@@ -51,7 +45,6 @@ IndexedFaceSet::IndexedFaceSet() : Rep()
 	_MISize = 0;
 	_TIndices = NULL;
 	_TISize = 0;
-	_displayList = 0;
 }
 
 IndexedFaceSet::IndexedFaceSet(float *iVertices, unsigned iVSize, float *iNormals, unsigned iNSize,
@@ -150,8 +143,6 @@ IndexedFaceSet::IndexedFaceSet(float *iVertices, unsigned iVSize, float *iNormal
 		_TISize = iTISize;
 		_TIndices = iTIndices;
 	}
-
-	_displayList = 0;
 }
 
 IndexedFaceSet::IndexedFaceSet(const IndexedFaceSet& iBrother) : Rep(iBrother)
@@ -215,8 +206,6 @@ IndexedFaceSet::IndexedFaceSet(const IndexedFaceSet& iBrother) : Rep(iBrother)
 		_TIndices = new unsigned[_TISize];
 		memcpy(_TIndices, iBrother.tindices(), _TISize * sizeof(unsigned));
 	}
-
-	_displayList = 0;
 }
 
 IndexedFaceSet::~IndexedFaceSet()
@@ -276,10 +265,6 @@ IndexedFaceSet::~IndexedFaceSet()
 		delete[] _TIndices;
 		_TIndices = NULL;
 	}
-
-	// should find a way to deallocates the displayList
-	// glDeleteLists(GLuint list, GLSizei range)
-	_displayList = 0;
 }
 
 void IndexedFaceSet::accept(SceneVisitor& v)

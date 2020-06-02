@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/sculpt_paint/paint_intern.h
- *  \ingroup edsculpt
+/** \file
+ * \ingroup edsculpt
  */
 
 
@@ -33,30 +26,34 @@
 #define __PAINT_INTERN_H__
 
 struct ARegion;
-struct bContext;
 struct Brush;
-struct ImagePool;
-struct ColorSpace;
 struct ColorManagedDisplay;
+struct ColorSpace;
+struct ImagePool;
 struct ListBase;
 struct MTex;
 struct Object;
-struct PaintStroke;
 struct Paint;
 struct PaintCurve;
+struct PaintStroke;
 struct PointerRNA;
-struct rcti;
-struct Scene;
 struct RegionView3D;
+struct Scene;
+struct UndoStep;
 struct VPaint;
 struct ViewContext;
+struct bContext;
+struct rcti;
 struct wmEvent;
 struct wmOperator;
 struct wmOperatorType;
 struct wmWindowManager;
-struct DMCoNo;
-struct UndoStep;
 enum ePaintMode;
+
+typedef struct CoNo {
+	float co[3];
+	float no[3];
+} CoNo;
 
 /* paint_stroke.c */
 typedef bool (*StrokeGetLocation)(struct bContext *C, float location[3], const float mouse[2]);
@@ -65,10 +62,11 @@ typedef void (*StrokeUpdateStep)(struct bContext *C, struct PaintStroke *stroke,
 typedef void (*StrokeRedraw)(const struct bContext *C, struct PaintStroke *stroke, bool final);
 typedef void (*StrokeDone)(const struct bContext *C, struct PaintStroke *stroke);
 
-struct PaintStroke *paint_stroke_new(struct bContext *C, struct wmOperator *op,
-                                     StrokeGetLocation get_location, StrokeTestStart test_start,
-                                     StrokeUpdateStep update_step, StrokeRedraw redraw,
-                                     StrokeDone done, int event_type);
+struct PaintStroke *paint_stroke_new(
+        struct bContext *C, struct wmOperator *op,
+        StrokeGetLocation get_location, StrokeTestStart test_start,
+        StrokeUpdateStep update_step, StrokeRedraw redraw,
+        StrokeDone done, int event_type);
 void paint_stroke_data_free(struct wmOperator *op);
 
 bool paint_space_stroke_enabled(struct Brush *br, enum ePaintMode mode);
@@ -83,6 +81,7 @@ int paint_stroke_modal(struct bContext *C, struct wmOperator *op, const struct w
 int paint_stroke_exec(struct bContext *C, struct wmOperator *op);
 void paint_stroke_cancel(struct bContext *C, struct wmOperator *op);
 bool paint_stroke_flipped(struct PaintStroke *stroke);
+bool paint_stroke_inverted(struct PaintStroke *stroke);
 struct ViewContext *paint_stroke_view_context(struct PaintStroke *stroke);
 void *paint_stroke_mode_data(struct PaintStroke *stroke);
 float paint_stroke_distance_get(struct PaintStroke *stroke);
@@ -94,8 +93,10 @@ void paint_cursor_delete_textures(void);
 
 /* paint_vertex.c */
 bool weight_paint_poll(struct bContext *C);
+bool weight_paint_poll_ignore_tool(bContext *C);
 bool weight_paint_mode_poll(struct bContext *C);
 bool vertex_paint_poll(struct bContext *C);
+bool vertex_paint_poll_ignore_tool(struct bContext *C);
 bool vertex_paint_mode_poll(struct bContext *C);
 
 typedef void (*VPaintTransform_Callback)(const float col[3], const void *user_data, float r_col[3]);
@@ -106,14 +107,14 @@ void PAINT_OT_weight_set(struct wmOperatorType *ot);
 
 enum {
 	WPAINT_GRADIENT_TYPE_LINEAR,
-	WPAINT_GRADIENT_TYPE_RADIAL
+	WPAINT_GRADIENT_TYPE_RADIAL,
 };
 void PAINT_OT_weight_gradient(struct wmOperatorType *ot);
 
 void PAINT_OT_vertex_paint_toggle(struct wmOperatorType *ot);
 void PAINT_OT_vertex_paint(struct wmOperatorType *ot);
 
-unsigned int vpaint_get_current_col(struct Scene *scene, struct VPaint *vp);
+unsigned int vpaint_get_current_col(struct Scene *scene, struct VPaint *vp, bool secondary);
 
 /* paint_vertex_color_utils.c */
 unsigned int ED_vpaint_blend_tool(
@@ -157,10 +158,10 @@ void PAINT_OT_weight_sample_group(struct wmOperatorType *ot);
 /* paint_vertex_proj.c */
 struct VertProjHandle;
 struct VertProjHandle *ED_vpaint_proj_handle_create(
-        struct Scene *scene, struct Object *ob,
-        struct DMCoNo **r_vcosnos);
+        struct Depsgraph *depsgraph, struct Scene *scene, struct Object *ob,
+        struct CoNo **r_vcosnos);
 void  ED_vpaint_proj_handle_update(
-        struct VertProjHandle *vp_handle,
+        struct Depsgraph *depsgraph, struct VertProjHandle *vp_handle,
         /* runtime vars */
         struct ARegion *ar, const float mval_fl[2]);
 void  ED_vpaint_proj_handle_free(
@@ -216,7 +217,6 @@ void PAINT_OT_texture_paint_toggle(struct wmOperatorType *ot);
 void PAINT_OT_project_image(struct wmOperatorType *ot);
 void PAINT_OT_image_from_view(struct wmOperatorType *ot);
 void PAINT_OT_add_texture_paint_slot(struct wmOperatorType *ot);
-void PAINT_OT_delete_texture_paint_slot(struct wmOperatorType *ot);
 void PAINT_OT_image_paint(struct wmOperatorType *ot);
 void PAINT_OT_add_simple_uvs(struct wmOperatorType *ot);
 
@@ -247,21 +247,22 @@ void SCULPT_OT_uv_sculpt_stroke(struct wmOperatorType *ot);
 /* Convert the object-space axis-aligned bounding box (expressed as
  * its minimum and maximum corners) into a screen-space rectangle,
  * returns zero if the result is empty */
-bool paint_convert_bb_to_rect(struct rcti *rect,
-                              const float bb_min[3],
-                              const float bb_max[3],
-                              const struct ARegion *ar,
-                              struct RegionView3D *rv3d,
-                              struct Object *ob);
+bool paint_convert_bb_to_rect(
+        struct rcti *rect,
+        const float bb_min[3],
+        const float bb_max[3],
+        const struct ARegion *ar,
+        struct RegionView3D *rv3d,
+        struct Object *ob);
 
 /* Get four planes in object-space that describe the projection of
  * screen_rect from screen into object-space (essentially converting a
  * 2D screens-space bounding box into four 3D planes) */
-void paint_calc_redraw_planes(float planes[4][4],
-                              const struct ARegion *ar,
-                              struct RegionView3D *rv3d,
-                              struct Object *ob,
-                              const struct rcti *screen_rect);
+void paint_calc_redraw_planes(
+        float planes[4][4],
+        const struct ARegion *ar,
+        struct Object *ob,
+        const struct rcti *screen_rect);
 
 float paint_calc_object_space_radius(struct ViewContext *vc, const float center[3], float pixel_radius);
 float paint_get_tex_pixel(const struct MTex *mtex, float u, float v, struct ImagePool *pool, int thread);
@@ -296,34 +297,21 @@ void flip_qt_qt(float out[3], const float in[3], const char symm);
 typedef enum BrushStrokeMode {
 	BRUSH_STROKE_NORMAL,
 	BRUSH_STROKE_INVERT,
-	BRUSH_STROKE_SMOOTH
+	BRUSH_STROKE_SMOOTH,
 } BrushStrokeMode;
-
-/* paint_ops.c */
-typedef enum {
-	RC_COLOR    = 1,
-	RC_ROTATION = 2,
-	RC_ZOOM     = 4,
-	RC_WEIGHT   = 8,
-	RC_SECONDARY_ROTATION = 16,
-	RC_COLOR_OVERRIDE = 32,
-} RCFlags;
-
-void set_brush_rc_props(struct PointerRNA *ptr, const char *paint, const char *prop, const char *secondary_prop,
-                        RCFlags flags);
 
 /* paint_hide.c */
 
 typedef enum {
 	PARTIALVIS_HIDE,
-	PARTIALVIS_SHOW
+	PARTIALVIS_SHOW,
 } PartialVisAction;
 
 typedef enum {
 	PARTIALVIS_INSIDE,
 	PARTIALVIS_OUTSIDE,
 	PARTIALVIS_ALL,
-	PARTIALVIS_MASKED
+	PARTIALVIS_MASKED,
 } PartialVisArea;
 
 void PAINT_OT_hide_show(struct wmOperatorType *ot);
@@ -333,7 +321,7 @@ void PAINT_OT_hide_show(struct wmOperatorType *ot);
 typedef enum {
 	PAINT_MASK_FLOOD_VALUE,
 	PAINT_MASK_FLOOD_VALUE_INVERSE,
-	PAINT_MASK_INVERT
+	PAINT_MASK_INVERT,
 } PaintMaskFloodMode;
 
 void PAINT_OT_mask_flood_fill(struct wmOperatorType *ot);
@@ -347,9 +335,6 @@ void PAINTCURVE_OT_select(struct wmOperatorType *ot);
 void PAINTCURVE_OT_slide(struct wmOperatorType *ot);
 void PAINTCURVE_OT_draw(struct wmOperatorType *ot);
 void PAINTCURVE_OT_cursor(struct wmOperatorType *ot);
-
-/* paint_curve_undo.c */
-void ED_paintcurve_undo_push(struct bContext *C, struct wmOperator *op, struct PaintCurve *pc);
 
 /* image painting blur kernel */
 typedef struct {

@@ -16,11 +16,6 @@
 #
 # The Original Code is Copyright (C) 2015, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
-# Contributor(s): Kevin Dietrich.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -35,9 +30,13 @@ set(SRC
 	openvdb_capi.h
 )
 
+set(LIB
+)
+
 if(WITH_OPENVDB)
 	add_definitions(
 		-DWITH_OPENVDB
+		${OPENVDB_DEFINITIONS}
 	)
 
 	if(WITH_OPENVDB_3_ABI_COMPATIBLE)
@@ -73,4 +72,4 @@ if(WITH_OPENVDB)
 	endif()
 endif()
 
-blender_add_lib(bf_intern_openvdb "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_intern_openvdb "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

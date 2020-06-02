@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_clip/tracking_ops.c
- *  \ingroup spclip
+/** \file
+ * \ingroup spclip
  */
 
 #include "MEM_guardedalloc.h"
@@ -42,9 +34,10 @@
 #include "BKE_context.h"
 #include "BKE_movieclip.h"
 #include "BKE_tracking.h"
-#include "BKE_depsgraph.h"
 #include "BKE_report.h"
 #include "BKE_sound.h"
+
+#include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -154,8 +147,8 @@ static int add_marker_at_click_invoke(bContext *C,
                                       wmOperator *op,
                                       const wmEvent *UNUSED(event))
 {
-	ED_area_headerprint(
-	        CTX_wm_area(C),
+	ED_workspace_status_text(
+	        C,
 	        IFACE_("Use LMB click to define location where place the marker"));
 
 	/* Add modal handler for ESC. */
@@ -179,7 +172,7 @@ static int add_marker_at_click_modal(bContext *C,
 			ARegion *ar = CTX_wm_region(C);
 			float pos[2];
 
-			ED_area_headerprint(CTX_wm_area(C), NULL);
+			ED_workspace_status_text(C, NULL);
 
 			ED_clip_point_stable_pos(sc, ar,
 			                         event->x - ar->winrct.xmin,
@@ -195,7 +188,7 @@ static int add_marker_at_click_modal(bContext *C,
 		}
 
 		case ESCKEY:
-			ED_area_headerprint(CTX_wm_area(C), NULL);
+			ED_workspace_status_text(C, NULL);
 			return OPERATOR_CANCELLED;
 	}
 
@@ -675,7 +668,7 @@ MovieTrackingTrack *tracking_marker_check_slide(bContext *C,
 				 * the mouse.
 				 */
 				if (sc->flag & SC_SHOW_MARKER_PATTERN) {
-					int current_corner;
+					int current_corner = -1;
 					distance_squared =
 					        mouse_to_closest_pattern_corner_distance_squared(
 					                marker,
@@ -898,7 +891,7 @@ static int slide_marker_modal(bContext *C, wmOperator *op, const wmEvent *event)
 				}
 
 				WM_event_add_notifier(C, NC_OBJECT | ND_TRANSFORM, NULL);
-				DAG_id_tag_update(&sc->clip->id, 0);
+				DEG_id_tag_update(&sc->clip->id, 0);
 			}
 			else if (data->area == TRACK_AREA_PAT) {
 				if (data->action == SLIDE_ACTION_SIZE) {
@@ -1134,7 +1127,7 @@ void CLIP_OT_clear_track_path(wmOperatorType *ot)
 		{TRACK_CLEAR_UPTO, "UPTO", 0, "Clear up-to", "Clear path up to current frame"},
 		{TRACK_CLEAR_REMAINED, "REMAINED", 0, "Clear remained", "Clear path at remaining frames (after current)"},
 		{TRACK_CLEAR_ALL, "ALL", 0, "Clear all", "Clear the whole path"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1193,7 +1186,7 @@ static int disable_markers_exec(bContext *C, wmOperator *op)
 		}
 	}
 
-	DAG_id_tag_update(&clip->id, 0);
+	DEG_id_tag_update(&clip->id, 0);
 
 	WM_event_add_notifier(C, NC_MOVIECLIP | NA_EVALUATED, clip);
 
@@ -1209,7 +1202,7 @@ void CLIP_OT_disable_markers(wmOperatorType *ot)
 		 "Enable selected markers"},
 		{MARKER_OP_TOGGLE,  "TOGGLE", 0, "Toggle",
 		 "Toggle disabled flag for selected markers"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1427,7 +1420,7 @@ static int frame_jump_exec(bContext *C, wmOperator *op)
 			sc->user.framenr += delta;
 		}
 	}
-	else {  /* to to failed frame */
+	else {  /* to failed frame */
 		if (tracking->reconstruction.flag & TRACKING_RECONSTRUCTED) {
 			int framenr = ED_space_clip_get_clip_frame_number(sc);
 			MovieTrackingObject *object = BKE_tracking_object_get_active(tracking);
@@ -1474,7 +1467,7 @@ void CLIP_OT_frame_jump(wmOperatorType *ot)
 		{1, "PATHEND",    0, "Path End",        "Jump to end of current path"},
 		{2, "FAILEDPREV", 0, "Previous Failed", "Jump to previous failed frame"},
 		{2, "FAILNEXT",   0, "Next Failed",     "Jump to next failed frame"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1642,7 +1635,7 @@ void CLIP_OT_lock_tracks(wmOperatorType *ot)
 		{TRACK_ACTION_UNLOCK, "UNLOCK", 0, "Unlock", "Unlock selected tracks"},
 		{TRACK_ACTION_TOGGLE, "TOGGLE", 0, "Toggle",
 		 "Toggle locked flag for selected tracks"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1696,7 +1689,7 @@ void CLIP_OT_set_solver_keyframe(wmOperatorType *ot)
 	static const EnumPropertyItem keyframe_items[] = {
 		{SOLVER_KEYFRAME_A, "KEYFRAME_A", 0, "Keyframe A", ""},
 		{SOLVER_KEYFRAME_B, "KEYFRAME_B", 0, "Keyframe B", ""},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */
@@ -1975,7 +1968,7 @@ void CLIP_OT_clean_tracks(wmOperatorType *ot)
 		 "Delete unclean tracks"},
 		{TRACKING_CLEAN_DELETE_SEGMENT, "DELETE_SEGMENTS", 0, "Delete Segments",
 		 "Delete unclean segments of tracks"},
-		{0, NULL, 0, NULL, NULL}
+		{0, NULL, 0, NULL, NULL},
 	};
 
 	/* identifiers */

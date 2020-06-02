@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/freestyle/intern/application/Controller.cpp
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 extern "C" {
@@ -40,7 +36,7 @@ extern "C" {
 #include "../scene_graph/NodeDrawingStyle.h"
 #include "../scene_graph/NodeShape.h"
 #include "../scene_graph/NodeTransform.h"
-#include "../scene_graph/NodeSceneRenderLayer.h"
+#include "../scene_graph/NodeViewLayer.h"
 #include "../scene_graph/ScenePrettyPrinter.h"
 #include "../scene_graph/VertexRep.h"
 
@@ -232,9 +228,9 @@ bool Controller::hitViewMapCache()
 	return false;
 }
 
-int Controller::LoadMesh(Render *re, SceneRenderLayer *srl)
+int Controller::LoadMesh(Render *re, ViewLayer *view_layer, Depsgraph *depsgraph)
 {
-	BlenderFileLoader loader(re, srl);
+	BlenderFileLoader loader(re, view_layer, depsgraph);
 
 	loader.setRenderMonitor(_pRenderMonitor);
 
@@ -301,7 +297,7 @@ int Controller::LoadMesh(Render *re, SceneRenderLayer *srl)
 		}
 		cam->setProjectionMatrix(proj);
 		_RootNode->AddChild(cam);
-		_RootNode->AddChild(new NodeSceneRenderLayer(*re->scene, *srl));
+		_RootNode->AddChild(new NodeViewLayer(*re->scene, *view_layer));
 
 		sceneHashFunc.reset();
 		//blenderScene->accept(sceneHashFunc);
@@ -642,11 +638,11 @@ void Controller::ComputeSteerableViewMap()
 	NodeShape *completeNS = new NodeShape;
 	completeNS->material().setDiffuse(c,c,c,1);
 	ng[Canvas::NB_STEERABLE_VIEWMAP-1]->AddChild(completeNS);
-	SteerableViewMap * svm = _Canvas->getSteerableViewMap();
+	SteerableViewMap *svm = _Canvas->getSteerableViewMap();
 	svm->Reset();
 
 	ViewMap::fedges_container& fedges = _ViewMap->FEdges();
-	LineRep * fRep;
+	LineRep *fRep;
 	NodeShape *ns;
 	for (ViewMap::fedges_container::iterator f = fedges.begin(), fend = fedges.end();
 	     f != fend;
@@ -722,7 +718,7 @@ void Controller::ComputeSteerableViewMap()
 
 void Controller::saveSteerableViewMapImages()
 {
-	SteerableViewMap * svm = _Canvas->getSteerableViewMap();
+	SteerableViewMap *svm = _Canvas->getSteerableViewMap();
 	if (!svm) {
 		cerr << "the Steerable ViewMap has not been computed yet" << endl;
 		return;
@@ -1003,7 +999,7 @@ void Controller::resetModified(bool iMod)
 	_Canvas->resetModified(iMod);
 }
 
-NodeGroup * Controller::BuildRep(vector<ViewEdge*>::iterator vedges_begin, vector<ViewEdge*>::iterator vedges_end)
+NodeGroup *Controller::BuildRep(vector<ViewEdge*>::iterator vedges_begin, vector<ViewEdge*>::iterator vedges_end)
 {
 	ViewMapTesselator2D tesselator2D;
 	FrsMaterial mat;
@@ -1052,7 +1048,7 @@ void Controller::resetInterpreter()
 
 void Controller::displayDensityCurves(int x, int y)
 {
-	SteerableViewMap * svm = _Canvas->getSteerableViewMap();
+	SteerableViewMap *svm = _Canvas->getSteerableViewMap();
 	if (!svm)
 		return;
 

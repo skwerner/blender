@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,10 @@
  *
  * The Original Code is Copyright (C) 2008 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_fileselect.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_FILESELECT_H__
@@ -113,18 +106,31 @@ void ED_file_change_dir(struct bContext *C);
 
 /* File menu stuff */
 
+/* FSMenuEntry's without paths indicate separators */
+typedef struct FSMenuEntry {
+	struct FSMenuEntry *next;
+
+	char *path;
+	char name[256];  /* FILE_MAXFILE */
+	short save;
+	short valid;
+	short pad[2];
+} FSMenuEntry;
+
 typedef enum FSMenuCategory {
 	FS_CATEGORY_SYSTEM,
 	FS_CATEGORY_SYSTEM_BOOKMARKS,
 	FS_CATEGORY_BOOKMARKS,
-	FS_CATEGORY_RECENT
+	FS_CATEGORY_RECENT,
 } FSMenuCategory;
 
 typedef enum FSMenuInsert {
 	FS_INSERT_SORTED = (1 << 0),
 	FS_INSERT_SAVE   = (1 << 1),
-	FS_INSERT_FIRST  = (1 << 2),  /* moves the item to the front of the list when its not already there */
-	FS_INSERT_LAST   = (1 << 3),  /* just append to preseve delivered order */
+	/** moves the item to the front of the list when its not already there */
+	FS_INSERT_FIRST  = (1 << 2),
+	/** just append to preseve delivered order */
+	FS_INSERT_LAST   = (1 << 3),
 } FSMenuInsert;
 
 struct FSMenu;

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * ***** END GPL LICENSE BLOCK *****
  * BIF_meshlaplacian.h: Algorithms using the mesh laplacian.
  */
 
-/** \file blender/editors/armature/meshlaplacian.h
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 
@@ -29,8 +26,8 @@
 
 //#define RIGID_DEFORM
 
-struct Object;
 struct Mesh;
+struct Object;
 struct bDeformGroup;
 
 #ifdef RIGID_DEFORM
@@ -52,10 +49,11 @@ float laplacian_system_get_solution(LaplacianSystem *sys, int v);
 
 /* Heat Weighting */
 
-void heat_bone_weighting(struct Object *ob, struct Mesh *me, float (*verts)[3],
-                         int numbones, struct bDeformGroup **dgrouplist,
-                         struct bDeformGroup **dgroupflip, float (*root)[3], float (*tip)[3],
-                         int *selected, const char **error);
+void heat_bone_weighting(
+        struct Object *ob, struct Mesh *me, float (*verts)[3],
+        int numbones, struct bDeformGroup **dgrouplist,
+        struct bDeformGroup **dgroupflip, float (*root)[3], float (*tip)[3],
+        int *selected, const char **error);
 
 #ifdef RIGID_DEFORM
 /* As-Rigid-As-Possible Deformation */

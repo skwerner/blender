@@ -17,7 +17,6 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
-import bpy
 from bpy.types import Panel
 
 
@@ -36,24 +35,34 @@ class DATA_PT_empty(DataButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
 
         ob = context.object
 
-        layout.prop(ob, "empty_draw_type", text="Display")
+        layout.prop(ob, "empty_display_type", text="Display As")
+        layout.prop(ob, "empty_display_size", text="Size")
 
-        if ob.empty_draw_type == 'IMAGE':
+        if ob.empty_display_type == 'IMAGE':
             layout.template_ID(ob, "data", open="image.open", unlink="object.unlink_data")
             layout.template_image(ob, "data", ob.image_user, compact=True)
 
-            row = layout.row(align=True)
-            row = layout.row(align=True)
+            layout.row(align=True).row(align=True)
 
-            layout.prop(ob, "color", text="Transparency", index=3, slider=True)
-            row = layout.row(align=True)
-            row.prop(ob, "empty_image_offset", text="Offset X", index=0)
-            row.prop(ob, "empty_image_offset", text="Offset Y", index=1)
+            layout.prop(ob, "use_empty_image_alpha")
 
-        layout.prop(ob, "empty_draw_size", text="Size")
+            col = layout.column()
+            col.active = ob.use_empty_image_alpha
+            col.prop(ob, "color", text="Transparency", index=3, slider=True)
+
+            col = layout.column(align=True)
+            col.prop(ob, "empty_image_offset", text="Offset X", index=0)
+            col.prop(ob, "empty_image_offset", text="Y", index=1)
+
+            col = layout.column()
+            col.row().prop(ob, "empty_image_depth", text="Depth", expand=True)
+            col.row().prop(ob, "empty_image_side", text="Side", expand=True)
+            col.prop(ob, "show_empty_image_orthographic", text="Display Orthographic")
+            col.prop(ob, "show_empty_image_perspective", text="Display Perspective")
 
 
 classes = (

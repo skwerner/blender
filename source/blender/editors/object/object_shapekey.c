@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, shapekey support
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/object/object_shapekey.c
- *  \ingroup edobj
+/** \file
+ * \ingroup edobj
  */
 
 
@@ -51,13 +45,14 @@
 #include "DNA_object_types.h"
 
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
+#include "BKE_curve.h"
 #include "BKE_key.h"
-#include "BKE_library.h"
+#include "BKE_lattice.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
-#include "BKE_lattice.h"
-#include "BKE_curve.h"
+
+#include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
 
 #include "BLI_sys_types.h" // for intptr_t support
 
@@ -214,7 +209,7 @@ static bool object_shape_key_mirror(bContext *C, Object *ob,
 	*r_totmirr = totmirr;
 	*r_totfail = totfail;
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
 	return 1;
@@ -265,8 +260,8 @@ static int shape_key_add_exec(bContext *C, wmOperator *op)
 
 	ED_object_shape_key_add(C, ob, from_mix);
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
-	DAG_relations_tag_update(CTX_data_main(C));
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+	DEG_relations_tag_update(CTX_data_main(C));
 
 	return OPERATOR_FINISHED;
 }
@@ -303,8 +298,8 @@ static int shape_key_remove_exec(bContext *C, wmOperator *op)
 	}
 
 	if (changed) {
-		DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
-		DAG_relations_tag_update(CTX_data_main(C));
+		DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+		DEG_relations_tag_update(CTX_data_main(C));
 		WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
 		return OPERATOR_FINISHED;
@@ -344,7 +339,7 @@ static int shape_key_clear_exec(bContext *C, wmOperator *UNUSED(op))
 	for (kb = key->block.first; kb; kb = kb->next)
 		kb->curval = 0.0f;
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
 	return OPERATOR_FINISHED;
@@ -381,7 +376,7 @@ static int shape_key_retime_exec(bContext *C, wmOperator *UNUSED(op))
 		cfra += 0.1f;
 	}
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
 	return OPERATOR_FINISHED;
@@ -472,7 +467,7 @@ static int shape_key_move_exec(bContext *C, wmOperator *op)
 		return OPERATOR_CANCELLED;
 	}
 
-	DAG_id_tag_update(&ob->id, OB_RECALC_DATA);
+	DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
 	WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
 
 	return OPERATOR_FINISHED;

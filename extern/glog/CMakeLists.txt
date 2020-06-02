@@ -16,10 +16,6 @@
 #
 # The Original Code is Copyright (C) 2016, Blender Foundation
 # All rights reserved.
-#
-# Contributor(s): Blender Foundation,
-#                 Sergey Sharybin
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -56,6 +52,15 @@ set(SRC
 	src/stacktrace_x86_64-inl.h
 	src/stacktrace_x86-inl.h
 )
+
+set(LIB
+)
+
+if(NOT WITH_SYSTEM_GFLAGS)
+	list(APPEND LIB
+		extern_gflags
+	)
+endif()
 
 if(WIN32)
 	list(APPEND SRC
@@ -94,4 +99,4 @@ endif()
 add_definitions(${GFLAGS_DEFINES})
 add_definitions(${GLOG_DEFINES})
 
-blender_add_lib(extern_glog "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(extern_glog "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

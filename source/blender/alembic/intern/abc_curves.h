@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,15 +15,17 @@
  *
  * The Original Code is Copyright (C) 2016 Kévin Dietrich.
  * All rights reserved.
- *
- * ***** END GPL LICENSE BLOCK *****
- *
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #ifndef __ABC_CURVES_H__
 #define __ABC_CURVES_H__
 
 #include "abc_object.h"
+#include "abc_mesh.h"
 
 struct Curve;
 
@@ -36,13 +36,24 @@ class AbcCurveWriter : public AbcObjectWriter {
 	Alembic::AbcGeom::OCurvesSchema::Sample m_sample;
 
 public:
-	AbcCurveWriter(Scene *scene,
-	               Object *ob,
+	AbcCurveWriter(Object *ob,
 	               AbcTransformWriter *parent,
 	               uint32_t time_sampling,
 	               ExportSettings &settings);
 
+protected:
 	void do_write();
+};
+
+class AbcCurveMeshWriter : public AbcGenericMeshWriter {
+public:
+	AbcCurveMeshWriter(Object *ob,
+	                   AbcTransformWriter *parent,
+	                   uint32_t time_sampling,
+	                   ExportSettings &settings);
+
+protected:
+	Mesh *getEvaluatedMesh(Scene *scene_eval, Object *ob_eval, bool &r_needsfree);
 };
 
 /* ************************************************************************** */
@@ -59,16 +70,17 @@ public:
 	                         const char **err_str) const;
 
 	void readObjectData(Main *bmain, const Alembic::Abc::ISampleSelector &sample_sel);
-	DerivedMesh *read_derivedmesh(DerivedMesh *dm,
-	                              const Alembic::Abc::ISampleSelector &sample_sel,
-	                              int read_flag,
-	                              const char **err_str);
+	struct Mesh *read_mesh(struct Mesh *existing_mesh,
+	                       const Alembic::Abc::ISampleSelector &sample_sel,
+	                       int read_flag,
+	                       const char **err_str);
+
+	void read_curve_sample(Curve *cu,
+	                       const Alembic::AbcGeom::ICurvesSchema &schema,
+	                       const Alembic::Abc::ISampleSelector &sample_selector);
+
 };
 
 /* ************************************************************************** */
-
-void read_curve_sample(Curve *cu,
-                       const Alembic::AbcGeom::ICurvesSchema &schema,
-                       const Alembic::Abc::ISampleSelector &sample_selector);
 
 #endif  /* __ABC_CURVES_H__ */

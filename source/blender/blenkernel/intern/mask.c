@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,20 +15,16 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/mask.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stddef.h>
 #include <string.h>
+
+#include "CLG_log.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -51,7 +45,7 @@
 
 #include "BKE_animsys.h"
 #include "BKE_curve.h"
-#include "BKE_depsgraph.h"
+
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_mask.h"
@@ -60,6 +54,10 @@
 #include "BKE_tracking.h"
 #include "BKE_movieclip.h"
 #include "BKE_image.h"
+
+#include "DEG_depsgraph_build.h"
+
+static CLG_LogRef LOG = {"bke.mask"};
 
 static struct {
 	ListBase splines;
@@ -205,6 +203,7 @@ MaskLayer *BKE_mask_layer_copy(const MaskLayer *masklay)
 	masklay_new->blend = masklay->blend;
 	masklay_new->blend_flag = masklay->blend_flag;
 	masklay_new->flag = masklay->flag;
+	masklay_new->falloff = masklay->falloff;
 	masklay_new->restrictflag = masklay->restrictflag;
 
 	for (spline = masklay->splines.first; spline; spline = spline->next) {
@@ -817,7 +816,7 @@ Mask *BKE_mask_new(Main *bmain, const char *name)
 	mask->sfra = 1;
 	mask->efra = 100;
 
-	DAG_relations_tag_update(bmain);
+	DEG_relations_tag_update(bmain);
 
 	return mask;
 }
@@ -845,11 +844,11 @@ Mask *BKE_mask_copy_nolib(Mask *mask)
 
 /**
  * Only copy internal data of Mask ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag  Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
  */
 void BKE_mask_copy_data(Main *UNUSED(bmain), Mask *mask_dst, const Mask *mask_src, const int UNUSED(flag))
 {
@@ -864,7 +863,7 @@ void BKE_mask_copy_data(Main *UNUSED(bmain), Mask *mask_dst, const Mask *mask_sr
 Mask *BKE_mask_copy(Main *bmain, const Mask *mask)
 {
 	Mask *mask_copy;
-	BKE_id_copy_ex(bmain, &mask->id, (ID **)&mask_copy, 0, false);
+	BKE_id_copy(bmain, &mask->id, (ID **)&mask_copy);
 	return mask_copy;
 }
 
@@ -1417,34 +1416,6 @@ void BKE_mask_evaluate(Mask *mask, const float ctime, const bool do_newframe)
  * for now re-evaluate all. eventually this might work differently */
 void BKE_mask_update_display(Mask *mask, float ctime)
 {
-#if 0
-	MaskLayer *masklay;
-
-	for (masklay = mask->masklayers.first; masklay; masklay = masklay->next) {
-		MaskSpline *spline;
-
-		for (spline = masklay->splines.first; spline; spline = spline->next) {
-			if (spline->points_deform) {
-				int i = 0;
-
-				for (i = 0; i < spline->tot_point; i++) {
-					MaskSplinePoint *point;
-
-					if (spline->points_deform) {
-						point = &spline->points_deform[i];
-						BKE_mask_point_free(point);
-					}
-				}
-				if (spline->points_deform) {
-					MEM_freeN(spline->points_deform);
-				}
-
-				spline->points_deform = NULL;
-			}
-		}
-	}
-#endif
-
 	BKE_mask_evaluate(mask, ctime, false);
 }
 
@@ -1452,20 +1423,8 @@ void BKE_mask_evaluate_all_masks(Main *bmain, float ctime, const bool do_newfram
 {
 	Mask *mask;
 
-	for (mask = bmain->mask.first; mask; mask = mask->id.next) {
+	for (mask = bmain->masks.first; mask; mask = mask->id.next) {
 		BKE_mask_evaluate(mask, ctime, do_newframe);
-	}
-}
-
-void BKE_mask_update_scene(Main *bmain, Scene *scene)
-{
-	Mask *mask;
-
-	for (mask = bmain->mask.first; mask; mask = mask->id.next) {
-		if (mask->id.recalc & ID_RECALC_ALL) {
-			bool do_new_frame = (mask->id.recalc & ID_RECALC_DATA) != 0;
-			BKE_mask_evaluate_all_masks(bmain, CFRA, do_new_frame);
-		}
 	}
 }
 
@@ -1526,8 +1485,8 @@ void BKE_mask_layer_shape_from_mask(MaskLayer *masklay, MaskLayerShape *masklay_
 		}
 	}
 	else {
-		printf("%s: vert mismatch %d != %d (frame %d)\n",
-		       __func__, masklay_shape->tot_vert, tot, masklay_shape->frame);
+		CLOG_ERROR(&LOG, "vert mismatch %d != %d (frame %d)",
+		           masklay_shape->tot_vert, tot, masklay_shape->frame);
 	}
 }
 
@@ -1548,8 +1507,8 @@ void BKE_mask_layer_shape_to_mask(MaskLayer *masklay, MaskLayerShape *masklay_sh
 		}
 	}
 	else {
-		printf("%s: vert mismatch %d != %d (frame %d)\n",
-		       __func__, masklay_shape->tot_vert, tot, masklay_shape->frame);
+		CLOG_ERROR(&LOG, "vert mismatch %d != %d (frame %d)",
+		           masklay_shape->tot_vert, tot, masklay_shape->frame);
 	}
 }
 
@@ -1587,9 +1546,9 @@ void BKE_mask_layer_shape_to_mask_interp(MaskLayer *masklay,
 		}
 	}
 	else {
-		printf("%s: vert mismatch %d != %d != %d (frame %d - %d)\n",
-		       __func__, masklay_shape_a->tot_vert, masklay_shape_b->tot_vert, tot,
-		       masklay_shape_a->frame, masklay_shape_b->frame);
+		CLOG_ERROR(&LOG, "vert mismatch %d != %d != %d (frame %d - %d)",
+		           masklay_shape_a->tot_vert, masklay_shape_b->tot_vert, tot,
+		           masklay_shape_a->frame, masklay_shape_b->frame);
 	}
 }
 
@@ -1666,19 +1625,6 @@ MaskLayerShape *BKE_mask_layer_shape_verify_frame(MaskLayer *masklay, const int 
 		BLI_addtail(&masklay->splines_shapes, masklay_shape);
 		BKE_mask_layer_shape_sort(masklay);
 	}
-
-#if 0
-	{
-		MaskLayerShape *masklay_shape;
-		int i = 0;
-		for (masklay_shape = masklay->splines_shapes.first;
-		     masklay_shape;
-		     masklay_shape = masklay_shape->next)
-		{
-			printf("mask %d, %d\n", i++, masklay_shape->frame);
-		}
-	}
-#endif
 
 	return masklay_shape;
 }
@@ -1856,8 +1802,8 @@ void BKE_mask_layer_shape_changed_add(MaskLayer *masklay, int index,
 				masklay_shape->data = data_resized;
 			}
 			else {
-				printf("%s: vert mismatch %d != %d (frame %d)\n",
-				       __func__, masklay_shape->tot_vert, tot, masklay_shape->frame);
+				CLOG_ERROR(&LOG, "vert mismatch %d != %d (frame %d)",
+				           masklay_shape->tot_vert, tot, masklay_shape->frame);
 			}
 		}
 	}
@@ -1897,8 +1843,8 @@ void BKE_mask_layer_shape_changed_remove(MaskLayer *masklay, int index, int coun
 			masklay_shape->data = data_resized;
 		}
 		else {
-			printf("%s: vert mismatch %d != %d (frame %d)\n",
-			       __func__, masklay_shape->tot_vert - count, tot, masklay_shape->frame);
+			CLOG_ERROR(&LOG, "vert mismatch %d != %d (frame %d)",
+			           masklay_shape->tot_vert - count, tot, masklay_shape->frame);
 		}
 	}
 }

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,45 +15,39 @@
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Daniel Dunbar
- *                 Ton Roosendaal,
- *                 Ben Batt,
- *                 Brecht Van Lommel,
- *                 Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/modifiers/intern/MOD_softbody.c
- *  \ingroup modifiers
+/** \file
+ * \ingroup modifiers
  */
 
 #include <stdio.h>
 
-#include "DNA_scene_types.h"
-#include "DNA_object_force_types.h"
-
 #include "BLI_utildefines.h"
 
-#include "BKE_cdderivedmesh.h"
+#include "DNA_scene_types.h"
+#include "DNA_mesh_types.h"
+#include "DNA_object_force_types.h"
+
+#include "BKE_layer.h"
 #include "BKE_particle.h"
 #include "BKE_softbody.h"
 
-#include "depsgraph_private.h"
+#include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_physics.h"
+#include "DEG_depsgraph_query.h"
 
 #include "MOD_modifiertypes.h"
 
 static void deformVerts(
-        ModifierData *md, Object *ob,
-        DerivedMesh *UNUSED(derivedData),
+        ModifierData *UNUSED(md), const ModifierEvalContext *ctx,
+        Mesh *UNUSED(derivedData),
         float (*vertexCos)[3],
-        int numVerts,
-        ModifierApplyFlag UNUSED(flag))
+        int numVerts)
 {
-	sbObjectStep(md->scene, ob, (float)md->scene->r.cfra, vertexCos, numVerts);
+	Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
+	sbObjectStep(ctx->depsgraph, scene, ctx->object, DEG_get_ctime(ctx->depsgraph), vertexCos, numVerts);
 }
 
 static bool dependsOnTime(ModifierData *UNUSED(md))
@@ -63,27 +55,12 @@ static bool dependsOnTime(ModifierData *UNUSED(md))
 	return true;
 }
 
-static void updateDepgraph(ModifierData *UNUSED(md), const ModifierUpdateDepsgraphContext *ctx)
-{
-	if (ctx->object->soft) {
-#ifdef WITH_LEGACY_DEPSGRAPH
-		/* Actual code uses ccd_build_deflector_hash */
-		dag_add_collision_relations(ctx->forest, ctx->scene, ctx->object, ctx->obNode, ctx->object->soft->collision_group, ctx->object->lay, eModifierType_Collision, NULL, false, "Softbody Collision");
-
-		dag_add_forcefield_relations(ctx->forest, ctx->scene, ctx->object, ctx->obNode, ctx->object->soft->effector_weights, true, 0, "Softbody Field");
-#else
-	(void)ctx;
-#endif
-	}
-}
-
 static void updateDepsgraph(ModifierData *UNUSED(md), const ModifierUpdateDepsgraphContext *ctx)
 {
 	if (ctx->object->soft) {
 		/* Actual code uses ccd_build_deflector_hash */
-		DEG_add_collision_relations(ctx->node, ctx->scene, ctx->object, ctx->object->soft->collision_group, ctx->object->lay, eModifierType_Collision, NULL, false, "Softbody Collision");
-
-		DEG_add_forcefield_relations(ctx->node, ctx->scene, ctx->object, ctx->object->soft->effector_weights, true, 0, "Softbody Field");
+		DEG_add_collision_relations(ctx->node, ctx->object, ctx->object->soft->collision_group, eModifierType_Collision, NULL, "Softbody Collision");
+		DEG_add_forcefield_relations(ctx->node, ctx->object, ctx->object->soft->effector_weights, true, 0, "Softbody Field");
 	}
 }
 
@@ -98,21 +75,22 @@ ModifierTypeInfo modifierType_Softbody = {
 	                        eModifierTypeFlag_Single,
 
 	/* copyData */          NULL,
+
 	/* deformVerts */       deformVerts,
 	/* deformMatrices */    NULL,
 	/* deformVertsEM */     NULL,
 	/* deformMatricesEM */  NULL,
 	/* applyModifier */     NULL,
-	/* applyModifierEM */   NULL,
+
 	/* initData */          NULL,
 	/* requiredDataMask */  NULL,
 	/* freeData */          NULL,
 	/* isDisabled */        NULL,
-	/* updateDepgraph */    updateDepgraph,
 	/* updateDepsgraph */   updateDepsgraph,
 	/* dependsOnTime */     dependsOnTime,
 	/* dependsOnNormals */	NULL,
 	/* foreachObjectLink */ NULL,
 	/* foreachIDLink */     NULL,
 	/* foreachTexLink */    NULL,
+	/* freeRuntimeData */   NULL,
 };

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * Contributor(s): Antony Riakiotakis.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file GPU_select.h
- *  \ingroup gpu
+/** \file
+ * \ingroup gpu
  */
 
 #ifndef __GPU_SELECT_H__
@@ -49,12 +43,15 @@ void GPU_select_begin(unsigned int *buffer, unsigned int bufsize, const struct r
 bool GPU_select_load_id(unsigned int id);
 void GPU_select_finalize(void);
 unsigned int GPU_select_end(void);
-bool GPU_select_query_check_active(void);
 
 /* cache selection region */
 bool GPU_select_is_cached(void);
 void GPU_select_cache_begin(void);
 void GPU_select_cache_load_id(void);
 void GPU_select_cache_end(void);
+
+/* utilities */
+const uint *GPU_select_buffer_near(const uint *buffer, int hits);
+void GPU_select_buffer_stride_realign(const struct rcti *src, const struct rcti *dst, uint *r_buf);
 
 #endif

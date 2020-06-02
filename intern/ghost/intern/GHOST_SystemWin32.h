@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_SystemWin32.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_SystemWin32 class.
  */
 
@@ -59,8 +51,6 @@ class GHOST_WindowWin32;
 /**
  * WIN32 Implementation of GHOST_System class.
  * \see GHOST_System.
- * \author	Maarten Gribnau
- * \date	May 10, 2001
  */
 class GHOST_SystemWin32 : public GHOST_System {
 public:
@@ -131,6 +121,21 @@ public:
 	    GHOST_GLSettings glSettings,
 	    const bool exclusive = false,
 	    const GHOST_TEmbedderWindowID parentWindow = 0);
+
+
+	/**
+	 * Create a new offscreen context.
+	 * Never explicitly delete the window, use disposeContext() instead.
+	 * \return  The new context (or 0 if creation failed).
+	 */
+	GHOST_IContext *createOffscreenContext();
+
+	/**
+	 * Dispose of a context.
+	 * \param   context Pointer to the context to be disposed.
+	 * \return  Indication of success.
+	 */
+	GHOST_TSuccess disposeContext(GHOST_IContext *context);
 
 	/***************************************************************************************
 	 ** Event management functionality
@@ -256,6 +261,17 @@ protected:
 	static GHOST_EventButton *processButtonEvent(GHOST_TEventType type, GHOST_WindowWin32 *window, GHOST_TButtonMask mask);
 
 	/**
+	 * Creates pointer event.
+	 * \param type		The type of event to create.
+	 * \param window	The window receiving the event (the active window).
+	 * \param wParam	The wParam from the wndproc
+	 * \param lParam	The lParam from the wndproc
+	 * \param eventhandled true if the method handled the event
+	 * \return The event created.
+	 */
+	static GHOST_Event *processPointerEvent(GHOST_TEventType type, GHOST_WindowWin32 *window, WPARAM wParam, LPARAM lParam, bool & eventhandled);
+
+	/**
 	 * Creates cursor event.
 	 * \param type		The type of event to create.
 	 * \param window	The window receiving the event (the active window).
@@ -377,7 +393,7 @@ protected:
 	/** Console status */
 	int m_consoleStatus;
 
-	/** Wheel delta accumulator **/
+	/** Wheel delta accumulator */
 	int m_wheelDeltaAccum;
 };
 

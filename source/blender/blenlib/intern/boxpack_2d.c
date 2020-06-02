@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Campbell Barton
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/boxpack_2d.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <stdlib.h> /* for qsort */
@@ -220,8 +214,8 @@ static int box_areasort(const void *p1, const void *p2)
 	const float a1 = box_area(b1);
 	const float a2 = box_area(b2);
 
-	if      (a1 < a2) return  1;
-	else if (a1 > a2) return -1;
+	if      (a1 < a2) { return  1; }
+	else if (a1 > a2) { return -1; }
 	return 0;
 }
 
@@ -246,9 +240,9 @@ static int vertex_sort(const void *p1, const void *p2, void *vs_ctx_p)
 
 #ifdef USE_FREE_STRIP
 	/* push free verts to the end so we can strip */
-	if      (UNLIKELY(v1->free == 0 && v2->free == 0)) return  0;
-	else if (UNLIKELY(v1->free == 0))                  return  1;
-	else if (UNLIKELY(v2->free == 0))                  return -1;
+	if      (UNLIKELY(v1->free == 0 && v2->free == 0)) { return  0; }
+	else if (UNLIKELY(v1->free == 0))                  { return  1; }
+	else if (UNLIKELY(v2->free == 0))                  { return -1; }
 #endif
 
 	a1 = max_ff(v1->x + vs_ctx->box_width, v1->y + vs_ctx->box_height);
@@ -260,8 +254,8 @@ static int vertex_sort(const void *p1, const void *p2, void *vs_ctx_p)
 #endif
 
 	/* sort largest to smallest */
-	if      (a1 > a2) return 1;
-	else if (a1 < a2) return -1;
+	if      (a1 > a2) { return 1; }
+	else if (a1 < a2) { return -1; }
 	return 0;
 }
 /** \} */
@@ -371,8 +365,9 @@ void BLI_box_pack_2d(BoxPack *boxarray, const uint len, float *r_tot_x, float *r
 #endif
 	}
 
-	for (i = 0; i < 3; i++)
+	for (i = 0; i < 3; i++) {
 		vertex_pack_indices[i] = box->v[i + 1]->index;
+	}
 	verts_pack_len = 3;
 	box++; /* next box, needed for the loop below */
 	/* ...done packing the first box */

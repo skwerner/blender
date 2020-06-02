@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,23 +12,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __GRID_H__
 #define __GRID_H__
 
-/** \file blender/freestyle/intern/geometry/Grid.h
- *  \ingroup freestyle
- *  \brief Base class to define a cell grid surrounding the bounding box of the scene
- *  \author Stephane Grabli
- *  \date 30/07/2002
+/** \file
+ * \ingroup freestyle
+ * \brief Base class to define a cell grid surrounding the bounding box of the scene
  */
 
 #include <cstring> // for memset
 #include <float.h>
-#include <stdint.h> // For SET_UINT_IN_POINTER, i.e. uintptr_t.
+#include <stdint.h> // For POINTER_FROM_UINT, i.e. uintptr_t.
 #include <vector>
 
 #include "Geom.h"
@@ -290,8 +284,9 @@ public:
 	 *  Returns the first intersection (occluder,t,u,v) or null.
 	 *  Starts with a call to InitRay.
 	 */
-	Polygon3r * castRayToFindFirstIntersection(const Vec3r& orig, const Vec3r& dir, double& t,
-	                                           double& u, double& v, unsigned timestamp);
+	Polygon3r *castRayToFindFirstIntersection(
+	        const Vec3r& orig, const Vec3r& dir, double& t,
+	        double& u, double& v, unsigned timestamp);
 
 
 	/*! Init all structures and values for computing the cells intersected by this new ray */
@@ -338,8 +333,8 @@ protected:
 				visitor.discoverCell(current_cell);
 				OccludersSet& occluders = current_cell->getOccluders(); // FIXME: I had forgotten the ref &
 				for (OccludersSet::iterator it = occluders.begin(); it != occluders.end(); it++) {
-					if (GET_UINT_FROM_POINTER((*it)->userdata2) != _timestamp) {
-						(*it)->userdata2 = SET_UINT_IN_POINTER(_timestamp);
+					if (POINTER_AS_UINT((*it)->userdata2) != _timestamp) {
+						(*it)->userdata2 = POINTER_FROM_UINT(_timestamp);
 						visitor.examineOccluder(*it);
 					}
 				}

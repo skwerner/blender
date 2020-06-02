@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BLENDER_FILE_LOADER_H__
 #define __BLENDER_FILE_LOADER_H__
 
-/** \file blender/freestyle/intern/blender_interface/BlenderFileLoader.h
- *  \ingroup freestyle
+/** \file
+ * \ingroup freestyle
  */
 
 #include <string.h>
@@ -40,18 +36,29 @@
 #include "../system/RenderMonitor.h"
 
 extern "C" {
+#include "MEM_guardedalloc.h"
+
 #include "DNA_material_types.h"
+#include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_modifier_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "renderdatabase.h"
 #include "render_types.h"
 
+#include "BKE_customdata.h"
+#include "BKE_library.h"
+#include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_scene.h"
 
+#include "BLI_iterator.h"
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 }
+
+#include "DEG_depsgraph_query.h"
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #include "MEM_guardedalloc.h"
@@ -78,11 +85,11 @@ class BlenderFileLoader
 {
 public:
 	/*! Builds a MaxFileLoader */
-	BlenderFileLoader(Render *re, SceneRenderLayer *srl);
+	BlenderFileLoader(Render *re, ViewLayer *view_layer, Depsgraph *depsgraph);
 	virtual ~BlenderFileLoader();
 
 	/*! Loads the 3D scene and returns a pointer to the scene root node */
-	NodeGroup * Load();
+	NodeGroup *Load();
 
 	/*! Gets the number of read faces */
 	inline unsigned int numFacesRead() {return _numFacesRead;}
@@ -96,9 +103,8 @@ public:
 	inline void setRenderMonitor(RenderMonitor *iRenderMonitor) {_pRenderMonitor = iRenderMonitor;}
 
 protected:
-	void insertShapeNode(ObjectInstanceRen *obi, int id);
+	void insertShapeNode(Object *ob, Mesh *mesh, int id);
 	int testDegenerateTriangle(float v1[3], float v2[3], float v3[3]);
-	bool testEdgeRotation(float v1[3], float v2[3], float v3[3], float v4[3]);
 	int countClippedFaces(float v1[3], float v2[3], float v3[3], int clip[3]);
 	void clipLine(float v1[3], float v2[3], float c[3], float z);
 	void clipTriangle(int numTris, float triCoords[][3], float v1[3], float v2[3], float v3[3],
@@ -114,7 +120,7 @@ protected:
 		unsigned n;
 	};
 	Render *_re;
-	SceneRenderLayer *_srl;
+	Depsgraph *_depsgraph;
 	NodeGroup *_Scene;
 	unsigned _numFacesRead;
 #if 0

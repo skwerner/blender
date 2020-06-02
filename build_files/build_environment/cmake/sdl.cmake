@@ -25,6 +25,7 @@ else()
 		-DSDL_STATIC=ON
 		-DSDL_SHARED=OFF
 		-DSDL_VIDEO=OFF
+		-DSNDIO=OFF
 	)
 endif()
 
@@ -37,3 +38,12 @@ ExternalProject_Add(external_sdl
 	CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LIBDIR}/sdl ${DEFAULT_CMAKE_FLAGS} ${SDL_EXTRA_ARGS}
 	INSTALL_DIR ${LIBDIR}/sdl
 )
+
+if(BUILD_MODE STREQUAL Release AND WIN32)
+	ExternalProject_Add_Step(external_sdl after_install
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/sdl/include/sdl2 ${HARVEST_TARGET}/sdl/include
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/sdl/lib ${HARVEST_TARGET}/sdl/lib
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${LIBDIR}/sdl/bin ${HARVEST_TARGET}/sdl/lib
+		DEPENDEES install
+	)
+endif()

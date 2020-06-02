@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mask/mask_add.c
- *  \ingroup edmask
+/** \file
+ * \ingroup edmask
  */
 
 #include "MEM_guardedalloc.h"
@@ -34,8 +26,9 @@
 #include "BLI_math.h"
 
 #include "BKE_context.h"
-#include "BKE_depsgraph.h"
 #include "BKE_mask.h"
+
+#include "DEG_depsgraph.h"
 
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
@@ -44,6 +37,7 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "ED_select_utils.h"
 #include "ED_mask.h"  /* own include */
 #include "ED_screen.h"
 
@@ -692,7 +686,7 @@ static int add_feather_vertex_exec(bContext *C, wmOperator *op)
 
 		WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
 
-		DAG_id_tag_update(&mask->id, 0);
+		DEG_id_tag_update(&mask->id, 0);
 
 		return OPERATOR_FINISHED;
 	}
@@ -763,7 +757,8 @@ static int create_primitive_from_points(bContext *C, wmOperator *op, const float
 	location[0] -= 0.5f * scale;
 	location[1] -= 0.5f * scale;
 
-	mask_layer = ED_mask_layer_ensure(C);
+	bool added_mask = false;
+	mask_layer = ED_mask_layer_ensure(C, &added_mask);
 	mask = CTX_data_edit_mask(C);
 
 	ED_mask_select_toggle_all(mask, SEL_DESELECT);
@@ -799,6 +794,9 @@ static int create_primitive_from_points(bContext *C, wmOperator *op, const float
 		}
 	}
 
+	if (added_mask) {
+		WM_event_add_notifier(C, NC_MASK | NA_ADDED, NULL);
+	}
 	WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
 
 	/* TODO: only update this spline */

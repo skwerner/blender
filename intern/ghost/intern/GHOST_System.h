@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_System.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  * Declaration of GHOST_System class.
  */
 
@@ -58,8 +50,6 @@ class GHOST_NDOFManager;
  * GHOST_System is an abstract class because not all methods of GHOST_ISystem
  * are implemented.
  * \see GHOST_ISystem.
- * \author	Maarten Gribnau
- * \date	May 7, 2001
  */
 class GHOST_System : public GHOST_ISystem
 {
@@ -177,6 +167,12 @@ public:
 	bool useNativePixel(void);
 	bool m_nativePixel;
 
+	/**
+	 * Focus window after opening, or put them in the background.
+	 */
+	void useWindowFocus(const bool use_focus);
+	bool m_windowFocus;
+
 	/***************************************************************************************
 	 * Event management functionality
 	 ***************************************************************************************/
@@ -184,7 +180,7 @@ public:
 	/**
 	 * Inherited from GHOST_ISystem but left pure virtual
 	 *
-	 *  virtual bool processEvents(bool waitForEvent) = 0;
+	 * virtual bool processEvents(bool waitForEvent) = 0;
 	 */
 
 
@@ -213,9 +209,12 @@ public:
 	 * Cursor management functionality
 	 ***************************************************************************************/
 
-	/** Inherited from GHOST_ISystem but left pure virtual
-	 *	GHOST_TSuccess getCursorPosition(GHOST_TInt32& x, GHOST_TInt32& y) const = 0;
-	 *  GHOST_TSuccess setCursorPosition(GHOST_TInt32 x, GHOST_TInt32 y)
+	/**
+	 * Inherited from GHOST_ISystem but left pure virtual
+	 * <pre>
+	 * GHOST_TSuccess getCursorPosition(GHOST_TInt32& x, GHOST_TInt32& y) const = 0;
+	 * GHOST_TSuccess setCursorPosition(GHOST_TInt32 x, GHOST_TInt32 y)
+	 * </pre>
 	 */
 
 	/***************************************************************************************
@@ -237,6 +236,13 @@ public:
 	 * \return			Indication of success.
 	 */
 	GHOST_TSuccess getButtonState(GHOST_TButtonMask mask, bool& isDown) const;
+
+	/**
+	 * Set which tablet API to use. Only affects Windows, other platforms have a single API.
+	 * \param api Enum indicating which API to use.
+	 */
+	void setTabletAPI(GHOST_TTabletAPI api);
+	GHOST_TTabletAPI getTabletAPI(void);
 
 #ifdef WITH_INPUT_NDOF
 	/***************************************************************************************
@@ -371,6 +377,8 @@ protected:
 	/** Settings of the display before the display went fullscreen. */
 	GHOST_DisplaySetting m_preFullScreenSetting;
 
+	/** Which tablet API to use. */
+	GHOST_TTabletAPI m_tabletAPI;
 };
 
 inline GHOST_TimerManager *GHOST_System::getTimerManager() const

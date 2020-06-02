@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,10 @@
  *
  * The Original Code is Copyright (C) 2012 by Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
- *
  */
 
-/** \file blender/blenlib/intern/math_interp.c
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  */
 
 #include <math.h>
@@ -44,7 +35,7 @@
  ***************************************************************************/
 
 /* BICUBIC Interpolation functions
- *  More info: http://wiki.blender.org/index.php/User:Damiles#Bicubic_pixel_interpolation
+ * More info: http://wiki.blender.org/index.php/User:Damiles#Bicubic_pixel_interpolation
  * function assumes out to be zero'ed, only does RGBA */
 
 static float P(float k)
@@ -146,7 +137,8 @@ BLI_INLINE void bicubic_interpolation(const unsigned char *byte_buffer, const fl
 			CLAMP(y1, 0, height - 1);
 			/* normally we could do this */
 			/* w = P(n-a) * P(b-m); */
-			/* except that would call P() 16 times per pixel therefor pow() 64 times, better precalc these */
+			/* except that would call P() 16 times per pixel therefor pow() 64 times,
+			 * better precalc these */
 			w = wx * wy[m + 1];
 
 			if (float_output) {
@@ -281,8 +273,12 @@ BLI_INLINE void bilinear_interpolation(const unsigned char *byte_buffer, const f
 
 		/* pixel value must be already wrapped, however values at boundaries may flip */
 		if (wrap_x) {
-			if (x1 < 0) x1 = width  - 1;
-			if (x2 >= width) x2 = 0;
+			if (x1 < 0) {
+				x1 = width  - 1;
+			}
+			if (x2 >= width) {
+				x2 = 0;
+			}
 		}
 		else if (x2 < 0 || x1 >= width) {
 			copy_vn_fl(float_output, components, 0.0f);
@@ -290,8 +286,12 @@ BLI_INLINE void bilinear_interpolation(const unsigned char *byte_buffer, const f
 		}
 
 		if (wrap_y) {
-			if (y1 < 0) y1 = height - 1;
-			if (y2 >= height) y2 = 0;
+			if (y1 < 0) {
+				y1 = height - 1;
+			}
+			if (y2 >= height) {
+				y2 = 0;
+			}
 		}
 		else if (y2 < 0 || y1 >= height) {
 			copy_vn_fl(float_output, components, 0.0f);
@@ -299,17 +299,33 @@ BLI_INLINE void bilinear_interpolation(const unsigned char *byte_buffer, const f
 		}
 
 		/* sample including outside of edges of image */
-		if (x1 < 0 || y1 < 0) row1 = empty;
-		else row1 = float_buffer + width * y1 * components + components * x1;
+		if (x1 < 0 || y1 < 0) {
+			row1 = empty;
+		}
+		else {
+			row1 = float_buffer + width * y1 * components + components * x1;
+		}
 
-		if (x1 < 0 || y2 > height - 1) row2 = empty;
-		else row2 = float_buffer + width * y2 * components + components * x1;
+		if (x1 < 0 || y2 > height - 1) {
+			row2 = empty;
+		}
+		else {
+			row2 = float_buffer + width * y2 * components + components * x1;
+		}
 
-		if (x2 > width - 1 || y1 < 0) row3 = empty;
-		else row3 = float_buffer + width * y1 * components + components * x2;
+		if (x2 > width - 1 || y1 < 0) {
+			row3 = empty;
+		}
+		else {
+			row3 = float_buffer + width * y1 * components + components * x2;
+		}
 
-		if (x2 > width - 1 || y2 > height - 1) row4 = empty;
-		else row4 = float_buffer + width * y2 * components + components * x2;
+		if (x2 > width - 1 || y2 > height - 1) {
+			row4 = empty;
+		}
+		else {
+			row4 = float_buffer + width * y2 * components + components * x2;
+		}
 
 		a = u - floorf(u);
 		b = v - floorf(v);
@@ -336,8 +352,12 @@ BLI_INLINE void bilinear_interpolation(const unsigned char *byte_buffer, const f
 
 		/* pixel value must be already wrapped, however values at boundaries may flip */
 		if (wrap_x) {
-			if (x1 < 0) x1 = width  - 1;
-			if (x2 >= width) x2 = 0;
+			if (x1 < 0) {
+				x1 = width  - 1;
+			}
+			if (x2 >= width) {
+				x2 = 0;
+			}
 		}
 		else if (x2 < 0 || x1 >= width) {
 			copy_vn_uchar(byte_output, components, 0);
@@ -345,8 +365,12 @@ BLI_INLINE void bilinear_interpolation(const unsigned char *byte_buffer, const f
 		}
 
 		if (wrap_y) {
-			if (y1 < 0) y1 = height - 1;
-			if (y2 >= height) y2 = 0;
+			if (y1 < 0) {
+				y1 = height - 1;
+			}
+			if (y2 >= height) {
+				y2 = 0;
+			}
 		}
 		else if (y2 < 0 || y1 >= height) {
 			copy_vn_uchar(byte_output, components, 0);
@@ -354,17 +378,33 @@ BLI_INLINE void bilinear_interpolation(const unsigned char *byte_buffer, const f
 		}
 
 		/* sample including outside of edges of image */
-		if (x1 < 0 || y1 < 0) row1 = empty;
-		else row1 = byte_buffer + width * y1 * components + components * x1;
+		if (x1 < 0 || y1 < 0) {
+			row1 = empty;
+		}
+		else {
+			row1 = byte_buffer + width * y1 * components + components * x1;
+		}
 
-		if (x1 < 0 || y2 > height - 1) row2 = empty;
-		else row2 = byte_buffer + width * y2 * components + components * x1;
+		if (x1 < 0 || y2 > height - 1) {
+			row2 = empty;
+		}
+		else {
+			row2 = byte_buffer + width * y2 * components + components * x1;
+		}
 
-		if (x2 > width - 1 || y1 < 0) row3 = empty;
-		else row3 = byte_buffer + width * y1 * components + components * x2;
+		if (x2 > width - 1 || y1 < 0) {
+			row3 = empty;
+		}
+		else {
+			row3 = byte_buffer + width * y1 * components + components * x2;
+		}
 
-		if (x2 > width - 1 || y2 > height - 1) row4 = empty;
-		else row4 = byte_buffer + width * y2 * components + components * x2;
+		if (x2 > width - 1 || y2 > height - 1) {
+			row4 = empty;
+		}
+		else {
+			row4 = byte_buffer + width * y2 * components + components * x2;
+		}
 
 		a = u - floorf(u);
 		b = v - floorf(v);
@@ -414,7 +454,8 @@ void BLI_bilinear_interpolation_wrap_char(const unsigned char *buffer, unsigned 
 
 /**************************************************************************
  * Filtering method based on
- * "Creating raster omnimax images from multiple perspective views using the elliptical weighted average filter"
+ * "Creating raster omnimax images from multiple perspective views
+ * using the elliptical weighted average filter"
  * by Ned Greene and Paul S. Heckbert (1986)
  ***************************************************************************/
 
@@ -453,7 +494,7 @@ const float EWA_WTS[EWA_MAXIDX + 1] = {
 	0.0415211f, 0.039974f, 0.0384389f, 0.0369158f, 0.0354046f, 0.0339052f, 0.0324175f, 0.0309415f,
 	0.029477f, 0.0280239f, 0.0265822f, 0.0251517f, 0.0237324f, 0.0223242f, 0.020927f, 0.0195408f,
 	0.0181653f, 0.0168006f, 0.0154466f, 0.0141031f, 0.0127701f, 0.0114476f, 0.0101354f, 0.00883339f,
-	0.00754159f, 0.00625989f, 0.00498819f, 0.00372644f, 0.00247454f, 0.00123242f, 0.f
+	0.00754159f, 0.00625989f, 0.00498819f, 0.00372644f, 0.00247454f, 0.00123242f, 0.f,
 };
 
 static void radangle2imp(float a2, float b2, float th, float *A, float *B, float *C, float *F)
@@ -555,10 +596,10 @@ void BLI_ewa_filter(const int width, const int height,
 	/* note: if eccentricity gets clamped (see above),
 	 * the ue/ve limits can also be lowered accordingly
 	 */
-	if (U0 - (float)u1 > EWA_MAXIDX) u1 = (int)U0 - EWA_MAXIDX;
-	if ((float)u2 - U0 > EWA_MAXIDX) u2 = (int)U0 + EWA_MAXIDX;
-	if (V0 - (float)v1 > EWA_MAXIDX) v1 = (int)V0 - EWA_MAXIDX;
-	if ((float)v2 - V0 > EWA_MAXIDX) v2 = (int)V0 + EWA_MAXIDX;
+	if (U0 - (float)u1 > EWA_MAXIDX) { u1 = (int)U0 - EWA_MAXIDX; }
+	if ((float)u2 - U0 > EWA_MAXIDX) { u2 = (int)U0 + EWA_MAXIDX; }
+	if (V0 - (float)v1 > EWA_MAXIDX) { v1 = (int)V0 - EWA_MAXIDX; }
+	if ((float)v2 - V0 > EWA_MAXIDX) { v2 = (int)V0 + EWA_MAXIDX; }
 
 	/* Early output check for cases the whole region is outside of the buffer. */
 	if ((u2 < 0 || u1 >= width) ||  (v2 < 0 || v1 >= height)) {

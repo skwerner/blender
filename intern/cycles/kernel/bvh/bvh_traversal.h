@@ -20,6 +20,9 @@
 #ifdef __QBVH__
 #  include "kernel/bvh/qbvh_traversal.h"
 #endif
+#ifdef __KERNEL_AVX2__
+#  include "kernel/bvh/obvh_traversal.h"
+#endif
 
 #if BVH_FEATURE(BVH_HAIR)
 #  define NODE_INTERSECT bvh_node_intersect
@@ -37,7 +40,6 @@
  * BVH_HAIR: hair curve rendering
  * BVH_HAIR_MINIMUM_WIDTH: hair curve rendering with minimum width
  * BVH_MOTION: motion blur rendering
- *
  */
 
 ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
@@ -143,7 +145,7 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 					                               visibility,
 					                               dist);
 				}
-#else // __KERNEL_SSE2__
+#else  // __KERNEL_SSE2__
 #  if BVH_FEATURE(BVH_HAIR_MINIMUM_WIDTH)
 				if(difl != 0.0f) {
 					traverse_mask = NODE_INTERSECT_ROBUST(kg,
@@ -181,7 +183,7 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
 					                               visibility,
 					                               dist);
 				}
-#endif // __KERNEL_SSE2__
+#endif  // __KERNEL_SSE2__
 
 				node_addr = __float_as_int(cnodes.z);
 				node_addr_child1 = __float_as_int(cnodes.w);
@@ -427,6 +429,19 @@ ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
                                          )
 {
 	switch(kernel_data.bvh.bvh_layout) {
+#ifdef __KERNEL_AVX2__
+		case BVH_LAYOUT_BVH8:
+			return BVH_FUNCTION_FULL_NAME(OBVH)(kg,
+			                                    ray,
+			                                    isect,
+			                                    visibility
+#  if BVH_FEATURE(BVH_HAIR_MINIMUM_WIDTH)
+			                                    , lcg_state,
+			                                    difl,
+			                                    extmax
+#  endif
+			                                    );
+#endif
 #ifdef __QBVH__
 		case BVH_LAYOUT_BVH4:
 			return BVH_FUNCTION_FULL_NAME(QBVH)(kg,

@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,10 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Esteban Tovagliari, Cedric Paille, Kevin Dietrich
- *
- * ***** END GPL LICENSE BLOCK *****
+ */
+
+/** \file
+ * \ingroup balembic
  */
 
 #include "abc_mesh.h"
@@ -30,6 +28,7 @@
 extern "C" {
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_fluidsim_types.h"
 #include "DNA_object_types.h"
@@ -37,11 +36,13 @@ extern "C" {
 #include "BLI_math_geom.h"
 #include "BLI_string.h"
 
-#include "BKE_cdderivedmesh.h"
-#include "BKE_depsgraph.h"
+#include "BKE_animsys.h"
+#include "BKE_key.h"
+#include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 
@@ -52,6 +53,8 @@ extern "C" {
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
+
+#include "DEG_depsgraph_query.h"
 }
 
 using Alembic::Abc::FloatArraySample;
@@ -104,27 +107,27 @@ using Alembic::AbcGeom::IN3fGeomParam;
 
 /* NOTE: Alembic's polygon winding order is clockwise, to match with Renderman. */
 
-static void get_vertices(DerivedMesh *dm, std::vector<Imath::V3f> &points)
+static void get_vertices(struct Mesh *mesh, std::vector<Imath::V3f> &points)
 {
 	points.clear();
-	points.resize(dm->getNumVerts(dm));
+	points.resize(mesh->totvert);
 
-	MVert *verts = dm->getVertArray(dm);
+	MVert *verts = mesh->mvert;
 
-	for (int i = 0, e = dm->getNumVerts(dm); i < e; ++i) {
+	for (int i = 0, e = mesh->totvert; i < e; ++i) {
 		copy_yup_from_zup(points[i].getValue(), verts[i].co);
 	}
 }
 
-static void get_topology(DerivedMesh *dm,
+static void get_topology(struct Mesh *mesh,
                          std::vector<int32_t> &poly_verts,
                          std::vector<int32_t> &loop_counts,
                          bool &smooth_normal)
 {
-	const int num_poly = dm->getNumPolys(dm);
-	const int num_loops = dm->getNumLoops(dm);
-	MLoop *mloop = dm->getLoopArray(dm);
-	MPoly *mpoly = dm->getPolyArray(dm);
+	const int num_poly = mesh->totpoly;
+	const int num_loops = mesh->totloop;
+	MLoop *mloop = mesh->mloop;
+	MPoly *mpoly = mesh->mpoly;
 
 	poly_verts.clear();
 	loop_counts.clear();
@@ -146,7 +149,7 @@ static void get_topology(DerivedMesh *dm,
 	}
 }
 
-static void get_creases(DerivedMesh *dm,
+static void get_creases(struct Mesh *mesh,
                         std::vector<int32_t> &indices,
                         std::vector<int32_t> &lengths,
                         std::vector<float> &sharpnesses)
@@ -157,9 +160,9 @@ static void get_creases(DerivedMesh *dm,
 	lengths.clear();
 	sharpnesses.clear();
 
-	MEdge *edge = dm->getEdgeArray(dm);
+	MEdge *edge = mesh->medge;
 
-	for (int i = 0, e = dm->getNumEdges(dm); i < e; ++i) {
+	for (int i = 0, e = mesh->totedge; i < e; ++i) {
 		const float sharpness = static_cast<float>(edge[i].crease) * factor;
 
 		if (sharpness != 0.0f) {
@@ -172,41 +175,40 @@ static void get_creases(DerivedMesh *dm,
 	lengths.resize(sharpnesses.size(), 2);
 }
 
-static void get_vertex_normals(DerivedMesh *dm, std::vector<Imath::V3f> &normals)
+static void get_vertex_normals(struct Mesh *mesh, std::vector<Imath::V3f> &normals)
 {
 	normals.clear();
-	normals.resize(dm->getNumVerts(dm));
+	normals.resize(mesh->totvert);
 
-	MVert *verts = dm->getVertArray(dm);
+	MVert *verts = mesh->mvert;
 	float no[3];
 
-	for (int i = 0, e = dm->getNumVerts(dm); i < e; ++i) {
+	for (int i = 0, e = mesh->totvert; i < e; ++i) {
 		normal_short_to_float_v3(no, verts[i].no);
 		copy_yup_from_zup(normals[i].getValue(), no);
 	}
 }
 
-static void get_loop_normals(DerivedMesh *dm, std::vector<Imath::V3f> &normals)
+static void get_loop_normals(struct Mesh *mesh, std::vector<Imath::V3f> &normals)
 {
-	MPoly *mpoly = dm->getPolyArray(dm);
-	MPoly *mp = mpoly;
+	MPoly *mp = mesh->mpoly;
 
-	MLoop *mloop = dm->getLoopArray(dm);
+	MLoop *mloop = mesh->mloop;
 	MLoop *ml = mloop;
 
-	MVert *verts = dm->getVertArray(dm);
+	MVert *verts = mesh->mvert;
 
-	const float (*lnors)[3] = static_cast<float(*)[3]>(dm->getLoopDataArray(dm, CD_NORMAL));
+	const float (*lnors)[3] = static_cast<float(*)[3]>(CustomData_get_layer(&mesh->ldata, CD_NORMAL));
 
 	normals.clear();
-	normals.resize(dm->getNumLoops(dm));
+	normals.resize(mesh->totloop);
 
 	unsigned loop_index = 0;
 
 	/* NOTE: data needs to be written in the reverse order. */
 
 	if (lnors) {
-		for (int i = 0, e = dm->getNumPolys(dm); i < e; ++i, ++mp) {
+		for (int i = 0, e = mesh->totpoly; i < e; ++i, ++mp) {
 			ml = mloop + mp->loopstart + (mp->totloop - 1);
 
 			for (int j = 0; j < mp->totloop; --ml, ++j, ++loop_index) {
@@ -218,7 +220,7 @@ static void get_loop_normals(DerivedMesh *dm, std::vector<Imath::V3f> &normals)
 	else {
 		float no[3];
 
-		for (int i = 0, e = dm->getNumPolys(dm); i < e; ++i, ++mp) {
+		for (int i = 0, e = mesh->totpoly; i < e; ++i, ++mp) {
 			ml = mloop + mp->loopstart + (mp->totloop - 1);
 
 			/* Flat shaded, use common normal for all verts. */
@@ -287,12 +289,11 @@ static ModifierData *get_liquid_sim_modifier(Scene *scene, Object *ob)
 
 /* ************************************************************************** */
 
-AbcMeshWriter::AbcMeshWriter(Scene *scene,
-                             Object *ob,
-                             AbcTransformWriter *parent,
-                             uint32_t time_sampling,
-                             ExportSettings &settings)
-    : AbcObjectWriter(scene, ob, time_sampling, settings, parent)
+AbcGenericMeshWriter::AbcGenericMeshWriter(Object *ob,
+                                           AbcTransformWriter *parent,
+                                           uint32_t time_sampling,
+                                           ExportSettings &settings)
+    : AbcObjectWriter(ob, time_sampling, settings, parent)
 {
 	m_is_animated = isAnimated();
 	m_subsurf_mod = NULL;
@@ -304,11 +305,11 @@ AbcMeshWriter::AbcMeshWriter(Scene *scene,
 	}
 
 	if (!m_settings.apply_subdiv) {
-		m_subsurf_mod = get_subsurf_modifier(m_scene, m_object);
+		m_subsurf_mod = get_subsurf_modifier(m_settings.scene, m_object);
 		m_is_subd = (m_subsurf_mod != NULL);
 	}
 
-	m_is_liquid = (get_liquid_sim_modifier(m_scene, m_object) != NULL);
+	m_is_liquid = (get_liquid_sim_modifier(m_settings.scene, m_object) != NULL);
 
 	while (parent->alembicXform().getChildHeader(m_name)) {
 		m_name.append("_");
@@ -328,26 +329,32 @@ AbcMeshWriter::AbcMeshWriter(Scene *scene,
 	}
 }
 
-AbcMeshWriter::~AbcMeshWriter()
+AbcGenericMeshWriter::~AbcGenericMeshWriter()
 {
 	if (m_subsurf_mod) {
 		m_subsurf_mod->mode &= ~eModifierMode_DisableTemporary;
 	}
 }
 
-bool AbcMeshWriter::isAnimated() const
+bool AbcGenericMeshWriter::isAnimated() const
 {
-	/* Check if object has shape keys. */
-	Mesh *me = static_cast<Mesh *>(m_object->data);
-
-	if (me->key) {
+	if (m_object->data != NULL) {
+		AnimData *adt = BKE_animdata_from_id(static_cast<ID*>(m_object->data));
+		/* TODO(Sybren): make this check more strict, as the AnimationData may
+		 * actually be empty (no fcurves, drivers, etc.) and thus effectively
+		 * have no animation at all. */
+		if (adt != NULL) {
+			return true;
+		}
+	}
+	if (BKE_key_from_object(m_object) != NULL) {
 		return true;
 	}
 
 	/* Test modifiers. */
 	ModifierData *md = static_cast<ModifierData *>(m_object->modifiers.first);
-
 	while (md) {
+
 		if (md->type != eModifierType_Subsurf) {
 			return true;
 		}
@@ -355,50 +362,56 @@ bool AbcMeshWriter::isAnimated() const
 		md = md->next;
 	}
 
-	return me->adt != NULL;
+	return false;
 }
 
-void AbcMeshWriter::setIsAnimated(bool is_animated)
+void AbcGenericMeshWriter::setIsAnimated(bool is_animated)
 {
 	m_is_animated = is_animated;
 }
 
-void AbcMeshWriter::do_write()
+void AbcGenericMeshWriter::do_write()
 {
 	/* We have already stored a sample for this object. */
 	if (!m_first_frame && !m_is_animated)
 		return;
 
-	DerivedMesh *dm = getFinalMesh();
+	bool needsfree;
+	struct Mesh *mesh = getFinalMesh(needsfree);
 
 	try {
 		if (m_settings.use_subdiv_schema && m_subdiv_schema.valid()) {
-			writeSubD(dm);
+			writeSubD(mesh);
 		}
 		else {
-			writeMesh(dm);
+			writeMesh(mesh);
 		}
 
-		freeMesh(dm);
+		if (needsfree) freeEvaluatedMesh(mesh);
 	}
 	catch (...) {
-		freeMesh(dm);
+		if (needsfree) freeEvaluatedMesh(mesh);
 		throw;
 	}
 }
 
-void AbcMeshWriter::writeMesh(DerivedMesh *dm)
+void AbcGenericMeshWriter::freeEvaluatedMesh(struct Mesh *mesh)
+{
+	BKE_id_free(NULL, mesh);
+}
+
+void AbcGenericMeshWriter::writeMesh(struct Mesh *mesh)
 {
 	std::vector<Imath::V3f> points, normals;
 	std::vector<int32_t> poly_verts, loop_counts;
 
 	bool smooth_normal = false;
 
-	get_vertices(dm, points);
-	get_topology(dm, poly_verts, loop_counts, smooth_normal);
+	get_vertices(mesh, points);
+	get_topology(mesh, poly_verts, loop_counts, smooth_normal);
 
 	if (m_first_frame && m_settings.export_face_sets) {
-		writeFaceSets(dm, m_mesh_schema);
+		writeFaceSets(mesh, m_mesh_schema);
 	}
 
 	m_mesh_sample = OPolyMeshSchema::Sample(V3fArraySample(points),
@@ -407,7 +420,7 @@ void AbcMeshWriter::writeMesh(DerivedMesh *dm)
 
 	UVSample sample;
 	if (m_first_frame && m_settings.export_uvs) {
-		const char *name = get_uv_sample(sample, m_custom_data_config, &dm->loopData);
+		const char *name = get_uv_sample(sample, m_custom_data_config, &mesh->ldata);
 
 		if (!sample.indices.empty() && !sample.uvs.empty()) {
 			OV2fGeomParam::Sample uv_sample;
@@ -419,15 +432,15 @@ void AbcMeshWriter::writeMesh(DerivedMesh *dm)
 			m_mesh_sample.setUVs(uv_sample);
 		}
 
-		write_custom_data(m_mesh_schema.getArbGeomParams(), m_custom_data_config, &dm->loopData, CD_MLOOPUV);
+		write_custom_data(m_mesh_schema.getArbGeomParams(), m_custom_data_config, &mesh->ldata, CD_MLOOPUV);
 	}
 
 	if (m_settings.export_normals) {
 		if (smooth_normal) {
-			get_loop_normals(dm, normals);
+			get_loop_normals(mesh, normals);
 		}
 		else {
-			get_vertex_normals(dm, normals);
+			get_vertex_normals(mesh, normals);
 		}
 
 		ON3fGeomParam::Sample normals_sample;
@@ -441,7 +454,7 @@ void AbcMeshWriter::writeMesh(DerivedMesh *dm)
 
 	if (m_is_liquid) {
 		std::vector<Imath::V3f> velocities;
-		getVelocities(dm, velocities);
+		getVelocities(mesh, velocities);
 
 		m_mesh_sample.setVelocities(V3fArraySample(velocities));
 	}
@@ -450,10 +463,10 @@ void AbcMeshWriter::writeMesh(DerivedMesh *dm)
 
 	m_mesh_schema.set(m_mesh_sample);
 
-	writeArbGeoParams(dm);
+	writeArbGeoParams(mesh);
 }
 
-void AbcMeshWriter::writeSubD(DerivedMesh *dm)
+void AbcGenericMeshWriter::writeSubD(struct Mesh *mesh)
 {
 	std::vector<float> crease_sharpness;
 	std::vector<Imath::V3f> points;
@@ -462,12 +475,12 @@ void AbcMeshWriter::writeSubD(DerivedMesh *dm)
 
 	bool smooth_normal = false;
 
-	get_vertices(dm, points);
-	get_topology(dm, poly_verts, loop_counts, smooth_normal);
-	get_creases(dm, crease_indices, crease_lengths, crease_sharpness);
+	get_vertices(mesh, points);
+	get_topology(mesh, poly_verts, loop_counts, smooth_normal);
+	get_creases(mesh, crease_indices, crease_lengths, crease_sharpness);
 
 	if (m_first_frame && m_settings.export_face_sets) {
-		writeFaceSets(dm, m_subdiv_schema);
+		writeFaceSets(mesh, m_subdiv_schema);
 	}
 
 	m_subdiv_sample = OSubDSchema::Sample(V3fArraySample(points),
@@ -476,7 +489,7 @@ void AbcMeshWriter::writeSubD(DerivedMesh *dm)
 
 	UVSample sample;
 	if (m_first_frame && m_settings.export_uvs) {
-		const char *name = get_uv_sample(sample, m_custom_data_config, &dm->loopData);
+		const char *name = get_uv_sample(sample, m_custom_data_config, &mesh->ldata);
 
 		if (!sample.indices.empty() && !sample.uvs.empty()) {
 			OV2fGeomParam::Sample uv_sample;
@@ -488,7 +501,7 @@ void AbcMeshWriter::writeSubD(DerivedMesh *dm)
 			m_subdiv_sample.setUVs(uv_sample);
 		}
 
-		write_custom_data(m_subdiv_schema.getArbGeomParams(), m_custom_data_config, &dm->loopData, CD_MLOOPUV);
+		write_custom_data(m_subdiv_schema.getArbGeomParams(), m_custom_data_config, &mesh->ldata, CD_MLOOPUV);
 	}
 
 	if (!crease_indices.empty()) {
@@ -500,16 +513,16 @@ void AbcMeshWriter::writeSubD(DerivedMesh *dm)
 	m_subdiv_sample.setSelfBounds(bounds());
 	m_subdiv_schema.set(m_subdiv_sample);
 
-	writeArbGeoParams(dm);
+	writeArbGeoParams(mesh);
 }
 
 template <typename Schema>
-void AbcMeshWriter::writeFaceSets(DerivedMesh *dm, Schema &schema)
+void AbcGenericMeshWriter::writeFaceSets(struct Mesh *me, Schema &schema)
 {
-	std::map< std::string, std::vector<int32_t> > geo_groups;
-	getGeoGroups(dm, geo_groups);
+	std::map< std::string, std::vector<int32_t>> geo_groups;
+	getGeoGroups(me, geo_groups);
 
-	std::map< std::string, std::vector<int32_t>  >::iterator it;
+	std::map< std::string, std::vector<int32_t>>::iterator it;
 	for (it = geo_groups.begin(); it != geo_groups.end(); ++it) {
 		OFaceSet face_set = schema.createFaceSet(it->first);
 		OFaceSetSchema::Sample samp;
@@ -518,14 +531,18 @@ void AbcMeshWriter::writeFaceSets(DerivedMesh *dm, Schema &schema)
 	}
 }
 
-DerivedMesh *AbcMeshWriter::getFinalMesh()
+Mesh *AbcGenericMeshWriter::getFinalMesh(bool &r_needsfree)
 {
 	/* We don't want subdivided mesh data */
 	if (m_subsurf_mod) {
 		m_subsurf_mod->mode |= eModifierMode_DisableTemporary;
 	}
 
-	DerivedMesh *dm = mesh_create_derived_render(m_scene, m_object, CD_MASK_MESH);
+	r_needsfree = false;
+
+	Scene *scene = DEG_get_evaluated_scene(m_settings.depsgraph);
+	Object *ob_eval = DEG_get_evaluated_object(m_settings.depsgraph, m_object);
+	struct Mesh *mesh = getEvaluatedMesh(scene, ob_eval, r_needsfree);
 
 	if (m_subsurf_mod) {
 		m_subsurf_mod->mode &= ~eModifierMode_DisableTemporary;
@@ -536,34 +553,34 @@ DerivedMesh *AbcMeshWriter::getFinalMesh()
 		const int quad_method = m_settings.quad_method;
 		const int ngon_method = m_settings.ngon_method;
 
-		BMesh *bm = DM_to_bmesh(dm, true);
+		struct BMeshCreateParams bmcp = {false};
+		struct BMeshFromMeshParams bmfmp = {true, false, false, 0};
+		BMesh *bm = BKE_mesh_to_bmesh_ex(mesh, &bmcp, &bmfmp);
 
-		BM_mesh_triangulate(bm, quad_method, ngon_method, tag_only, NULL, NULL, NULL);
+		BM_mesh_triangulate(bm, quad_method, ngon_method, 4, tag_only, NULL, NULL, NULL);
 
-		DerivedMesh *result = CDDM_from_bmesh(bm, false);
+		Mesh *result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL);
 		BM_mesh_free(bm);
 
-		freeMesh(dm);
+		if (r_needsfree) {
+			BKE_id_free(NULL, mesh);
+		}
 
-		dm = result;
+		mesh = result;
+		r_needsfree = true;
 	}
 
 	m_custom_data_config.pack_uvs = m_settings.pack_uv;
-	m_custom_data_config.mpoly = dm->getPolyArray(dm);
-	m_custom_data_config.mloop = dm->getLoopArray(dm);
-	m_custom_data_config.totpoly = dm->getNumPolys(dm);
-	m_custom_data_config.totloop = dm->getNumLoops(dm);
-	m_custom_data_config.totvert = dm->getNumVerts(dm);
+	m_custom_data_config.mpoly = mesh->mpoly;
+	m_custom_data_config.mloop = mesh->mloop;
+	m_custom_data_config.totpoly = mesh->totpoly;
+	m_custom_data_config.totloop = mesh->totloop;
+	m_custom_data_config.totvert = mesh->totvert;
 
-	return dm;
+	return mesh;
 }
 
-void AbcMeshWriter::freeMesh(DerivedMesh *dm)
-{
-	dm->release(dm);
-}
-
-void AbcMeshWriter::writeArbGeoParams(DerivedMesh *dm)
+void AbcGenericMeshWriter::writeArbGeoParams(struct Mesh *me)
 {
 	if (m_is_liquid) {
 		/* We don't need anything more for liquid meshes. */
@@ -572,22 +589,22 @@ void AbcMeshWriter::writeArbGeoParams(DerivedMesh *dm)
 
 	if (m_first_frame && m_settings.export_vcols) {
 		if (m_subdiv_schema.valid()) {
-			write_custom_data(m_subdiv_schema.getArbGeomParams(), m_custom_data_config, &dm->loopData, CD_MLOOPCOL);
+			write_custom_data(m_subdiv_schema.getArbGeomParams(), m_custom_data_config, &me->ldata, CD_MLOOPCOL);
 		}
 		else {
-			write_custom_data(m_mesh_schema.getArbGeomParams(), m_custom_data_config, &dm->loopData, CD_MLOOPCOL);
+			write_custom_data(m_mesh_schema.getArbGeomParams(), m_custom_data_config, &me->ldata, CD_MLOOPCOL);
 		}
 	}
 }
 
-void AbcMeshWriter::getVelocities(DerivedMesh *dm, std::vector<Imath::V3f> &vels)
+void AbcGenericMeshWriter::getVelocities(struct Mesh *mesh, std::vector<Imath::V3f> &vels)
 {
-	const int totverts = dm->getNumVerts(dm);
+	const int totverts = mesh->totvert;
 
 	vels.clear();
 	vels.resize(totverts);
 
-	ModifierData *md = get_liquid_sim_modifier(m_scene, m_object);
+	ModifierData *md = get_liquid_sim_modifier(m_settings.scene, m_object);
 	FluidsimModifierData *fmd = reinterpret_cast<FluidsimModifierData *>(md);
 	FluidsimSettings *fss = fmd->fss;
 
@@ -604,12 +621,12 @@ void AbcMeshWriter::getVelocities(DerivedMesh *dm, std::vector<Imath::V3f> &vels
 	}
 }
 
-void AbcMeshWriter::getGeoGroups(
-        DerivedMesh *dm,
-        std::map<std::string, std::vector<int32_t> > &geo_groups)
+void AbcGenericMeshWriter::getGeoGroups(
+        struct Mesh *mesh,
+        std::map<std::string, std::vector<int32_t>> &geo_groups)
 {
-	const int num_poly = dm->getNumPolys(dm);
-	MPoly *polygons = dm->getPolyArray(dm);
+	const int num_poly = mesh->totpoly;
+	MPoly *polygons = mesh->mpoly;
 
 	for (int i = 0; i < num_poly; ++i) {
 		MPoly &current_poly = polygons[i];
@@ -638,13 +655,30 @@ void AbcMeshWriter::getGeoGroups(
 
 		std::vector<int32_t> faceArray;
 
-		for (int i = 0, e = dm->getNumTessFaces(dm); i < e; ++i) {
+		for (int i = 0, e = mesh->totface; i < e; ++i) {
 			faceArray.push_back(i);
 		}
 
 		geo_groups[name] = faceArray;
 	}
 }
+
+
+AbcMeshWriter::AbcMeshWriter(Object *ob,
+                             AbcTransformWriter *parent,
+                             uint32_t time_sampling,
+                             ExportSettings &settings)
+    : AbcGenericMeshWriter(ob, parent, time_sampling, settings)
+{}
+
+AbcMeshWriter::~AbcMeshWriter()
+{}
+
+Mesh *AbcMeshWriter::getEvaluatedMesh(Scene *scene_eval, Object *ob_eval, bool &UNUSED(r_needsfree))
+{
+	return mesh_get_eval_final(m_settings.depsgraph, scene_eval, ob_eval, &CD_MASK_MESH);
+}
+
 
 /* ************************************************************************** */
 
@@ -653,7 +687,7 @@ namespace utils {
 
 static void build_mat_map(const Main *bmain, std::map<std::string, Material *> &mat_map)
 {
-	Material *material = static_cast<Material *>(bmain->mat.first);
+	Material *material = static_cast<Material *>(bmain->materials.first);
 
 	for (; material; material = static_cast<Material *>(material->id.next)) {
 		mat_map[material->id.name + 2] = material;
@@ -873,11 +907,11 @@ ABC_INLINE void read_normals_params(AbcMeshData &abc_data,
 	}
 }
 
-static bool check_smooth_poly_flag(DerivedMesh *dm)
+static bool check_smooth_poly_flag(Mesh *mesh)
 {
-	MPoly *mpolys = dm->getPolyArray(dm);
+	MPoly *mpolys = mesh->mpoly;
 
-	for (int i = 0, e = dm->getNumPolys(dm); i < e; ++i) {
+	for (int i = 0, e = mesh->totpoly; i < e; ++i) {
 		MPoly &poly = mpolys[i];
 
 		if ((poly.flag & ME_SMOOTH) != 0) {
@@ -888,11 +922,11 @@ static bool check_smooth_poly_flag(DerivedMesh *dm)
 	return false;
 }
 
-static void set_smooth_poly_flag(DerivedMesh *dm)
+static void set_smooth_poly_flag(Mesh *mesh)
 {
-	MPoly *mpolys = dm->getPolyArray(dm);
+	MPoly *mpolys = mesh->mpoly;
 
-	for (int i = 0, e = dm->getNumPolys(dm); i < e; ++i) {
+	for (int i = 0, e = mesh->totpoly; i < e; ++i) {
 		MPoly &poly = mpolys[i];
 		poly.flag |= ME_SMOOTH;
 	}
@@ -900,7 +934,7 @@ static void set_smooth_poly_flag(DerivedMesh *dm)
 
 static void *add_customdata_cb(void *user_data, const char *name, int data_type)
 {
-	DerivedMesh *dm = static_cast<DerivedMesh *>(user_data);
+	Mesh *mesh = static_cast<Mesh *>(user_data);
 	CustomDataType cd_data_type = static_cast<CustomDataType>(data_type);
 	void *cd_ptr;
 	CustomData *loopdata;
@@ -911,7 +945,7 @@ static void *add_customdata_cb(void *user_data, const char *name, int data_type)
 		return NULL;
 	}
 
-	loopdata = dm->getLoopDataLayout(dm);
+	loopdata = &mesh->ldata;
 	cd_ptr = CustomData_get_layer_named(loopdata, cd_data_type, name);
 	if (cd_ptr != NULL) {
 		/* layer already exists, so just return it. */
@@ -920,15 +954,9 @@ static void *add_customdata_cb(void *user_data, const char *name, int data_type)
 
 	/* create a new layer, taking care to construct the hopefully-soon-to-be-removed
 	 * CD_MTEXPOLY layer too, with the same name. */
-	numloops = dm->getNumLoops(dm);
+	numloops = mesh->totloop;
 	cd_ptr = CustomData_add_layer_named(loopdata, cd_data_type, CD_DEFAULT,
 	                                    NULL, numloops, name);
-	if (cd_data_type == CD_MLOOPUV) {
-		CustomData_add_layer_named(dm->getPolyDataLayout(dm),
-		                           CD_MTEXPOLY, CD_DEFAULT,
-		                           NULL, numloops, name);
-	}
-
 	return cd_ptr;
 }
 
@@ -992,17 +1020,19 @@ static void read_mesh_sample(const std::string & iobject_full_name,
 	}
 }
 
-CDStreamConfig get_config(DerivedMesh *dm)
+CDStreamConfig get_config(Mesh *mesh)
 {
 	CDStreamConfig config;
 
-	config.user_data = dm;
-	config.mvert = dm->getVertArray(dm);
-	config.mloop = dm->getLoopArray(dm);
-	config.mpoly = dm->getPolyArray(dm);
-	config.totloop = dm->getNumLoops(dm);
-	config.totpoly = dm->getNumPolys(dm);
-	config.loopdata = dm->getLoopDataLayout(dm);
+	BLI_assert(mesh->mvert || mesh->totvert == 0);
+
+	config.user_data = mesh;
+	config.mvert = mesh->mvert;
+	config.mloop = mesh->mloop;
+	config.mpoly = mesh->mpoly;
+	config.totloop = mesh->totloop;
+	config.totpoly = mesh->totpoly;
+	config.loopdata = &mesh->ldata;
 	config.add_customdata_cb = add_customdata_cb;
 
 	return config;
@@ -1033,14 +1063,10 @@ void AbcMeshReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 	m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
 	m_object->data = mesh;
 
-	DerivedMesh *dm = CDDM_from_mesh(mesh);
-	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
-
-	if (ndm != dm) {
-		dm->release(dm);
+	Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
+	if (read_mesh != mesh) {
+		BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, &CD_MASK_MESH, true);
 	}
-
-	DM_to_mesh(ndm, mesh, m_object, CD_MASK_MESH, true);
 
 	if (m_settings->validate_meshes) {
 		BKE_mesh_validate(mesh, false, false);
@@ -1070,33 +1096,45 @@ bool AbcMeshReader::accepts_object_type(const Alembic::AbcCoreAbstract::ObjectHe
 	return true;
 }
 
-DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm,
-                                             const ISampleSelector &sample_sel,
-                                             int read_flag,
-                                             const char **err_str)
+Mesh *AbcMeshReader::read_mesh(Mesh *existing_mesh,
+                               const ISampleSelector &sample_sel,
+                               int read_flag,
+                               const char **err_str)
 {
-	const IPolyMeshSchema::Sample sample = m_schema.getValue(sample_sel);
+	IPolyMeshSchema::Sample sample;
+	try {
+		sample = m_schema.getValue(sample_sel);
+	}
+	catch(Alembic::Util::Exception &ex) {
+		*err_str = "Error reading mesh sample; more detail on the console";
+		printf("Alembic: error reading mesh sample for '%s/%s' at time %f: %s\n",
+		       m_iobject.getFullName().c_str(),
+		       m_schema.getName().c_str(),
+		       sample_sel.getRequestedTime(),
+		       ex.what());
+		return existing_mesh;
+	}
 
 	const P3fArraySamplePtr &positions = sample.getPositions();
 	const Alembic::Abc::Int32ArraySamplePtr &face_indices = sample.getFaceIndices();
 	const Alembic::Abc::Int32ArraySamplePtr &face_counts = sample.getFaceCounts();
 
-	DerivedMesh *new_dm = NULL;
+	Mesh *new_mesh = NULL;
 
 	/* Only read point data when streaming meshes, unless we need to create new ones. */
 	ImportSettings settings;
 	settings.read_flag |= read_flag;
 
-	bool topology_changed =  positions->size() != dm->getNumVerts(dm) ||
-	                         face_counts->size() != dm->getNumPolys(dm) ||
-	                         face_indices->size() != dm->getNumLoops(dm);
+	bool topology_changed =  positions->size() != existing_mesh->totvert ||
+	                         face_counts->size() != existing_mesh->totpoly ||
+	                         face_indices->size() != existing_mesh->totloop;
 	if (topology_changed) {
-		new_dm = CDDM_from_template(dm,
-		                            positions->size(),
-		                            0,
-		                            0,
-		                            face_indices->size(),
-		                            face_counts->size());
+		new_mesh = BKE_mesh_new_nomain_from_template(existing_mesh,
+		                                             positions->size(),
+		                                             0,
+		                                             0,
+		                                             face_indices->size(),
+		                                             face_counts->size());
 
 		settings.read_flag |= MOD_MESHSEQ_READ_ALL;
 	}
@@ -1104,8 +1142,8 @@ DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm,
 		/* If the face count changed (e.g. by triangulation), only read points.
 		 * This prevents crash from T49813.
 		 * TODO(kevin): perhaps find a better way to do this? */
-		if (face_counts->size() != dm->getNumPolys(dm) ||
-		    face_indices->size() != dm->getNumLoops(dm))
+		if (face_counts->size() != existing_mesh->totpoly ||
+		    face_indices->size() != existing_mesh->totloop)
 		{
 			settings.read_flag = MOD_MESHSEQ_READ_VERT;
 
@@ -1116,40 +1154,39 @@ DerivedMesh *AbcMeshReader::read_derivedmesh(DerivedMesh *dm,
 		}
 	}
 
-	CDStreamConfig config = get_config(new_dm ? new_dm : dm);
+	CDStreamConfig config = get_config(new_mesh ? new_mesh : existing_mesh);
 	config.time = sample_sel.getRequestedTime();
 
 	bool do_normals = false;
 	read_mesh_sample(m_iobject.getFullName(),
 	                 &settings, m_schema, sample_sel, config, do_normals);
 
-	if (new_dm) {
+	if (new_mesh) {
 		/* Check if we had ME_SMOOTH flag set to restore it. */
-		if (!do_normals && check_smooth_poly_flag(dm)) {
-			set_smooth_poly_flag(new_dm);
+		if (!do_normals && check_smooth_poly_flag(existing_mesh)) {
+			set_smooth_poly_flag(new_mesh);
 		}
 
-		CDDM_calc_normals(new_dm);
-		CDDM_calc_edges(new_dm);
+		BKE_mesh_calc_normals(new_mesh);
+		BKE_mesh_calc_edges(new_mesh, false, false);
 
 		/* Here we assume that the number of materials doesn't change, i.e. that
 		 * the material slots that were created when the object was loaded from
 		 * Alembic are still valid now. */
-		size_t num_polys = new_dm->getNumPolys(new_dm);
+		size_t num_polys = new_mesh->totpoly;
 		if (num_polys > 0) {
-			MPoly *dmpolies = new_dm->getPolyArray(new_dm);
 			std::map<std::string, int> mat_map;
-			assign_facesets_to_mpoly(sample_sel, 0, dmpolies, num_polys, mat_map);
+			assign_facesets_to_mpoly(sample_sel, 0, new_mesh->mpoly, num_polys, mat_map);
 		}
 
-		return new_dm;
+		return new_mesh;
 	}
 
 	if (do_normals) {
-		CDDM_calc_normals(dm);
+		BKE_mesh_calc_normals(existing_mesh);
 	}
 
-	return dm;
+	return existing_mesh;
 }
 
 void AbcMeshReader::assign_facesets_to_mpoly(
@@ -1311,16 +1348,24 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 	m_object = BKE_object_add_only_object(bmain, OB_MESH, m_object_name.c_str());
 	m_object->data = mesh;
 
-	DerivedMesh *dm = CDDM_from_mesh(mesh);
-	DerivedMesh *ndm = this->read_derivedmesh(dm, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
-
-	if (ndm != dm) {
-		dm->release(dm);
+	Mesh *read_mesh = this->read_mesh(mesh, sample_sel, MOD_MESHSEQ_READ_ALL, NULL);
+	if (read_mesh != mesh) {
+		BKE_mesh_nomain_to_mesh(read_mesh, mesh, m_object, &CD_MASK_MESH, true);
 	}
 
-	DM_to_mesh(ndm, mesh, m_object, CD_MASK_MESH, true);
+	ISubDSchema::Sample sample;
+	try {
+		sample = m_schema.getValue(sample_sel);
+	}
+	catch(Alembic::Util::Exception &ex) {
+		printf("Alembic: error reading mesh sample for '%s/%s' at time %f: %s\n",
+		       m_iobject.getFullName().c_str(),
+		       m_schema.getName().c_str(),
+		       sample_sel.getRequestedTime(),
+		       ex.what());
+		return;
+	}
 
-	const ISubDSchema::Sample sample = m_schema.getValue(sample_sel);
 	Int32ArraySamplePtr indices = sample.getCreaseIndices();
 	Alembic::Abc::FloatArraySamplePtr sharpnesses = sample.getCreaseSharpnesses();
 
@@ -1350,29 +1395,41 @@ void AbcSubDReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSelec
 	}
 }
 
-DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm,
-                                             const ISampleSelector &sample_sel,
-                                             int read_flag,
-                                             const char **err_str)
+Mesh *AbcSubDReader::read_mesh(Mesh *existing_mesh,
+                               const ISampleSelector &sample_sel,
+                               int read_flag,
+                               const char **err_str)
 {
-	const ISubDSchema::Sample sample = m_schema.getValue(sample_sel);
+	ISubDSchema::Sample sample;
+	try {
+		sample = m_schema.getValue(sample_sel);
+	}
+	catch(Alembic::Util::Exception &ex) {
+		*err_str = "Error reading mesh sample; more detail on the console";
+		printf("Alembic: error reading mesh sample for '%s/%s' at time %f: %s\n",
+		       m_iobject.getFullName().c_str(),
+		       m_schema.getName().c_str(),
+		       sample_sel.getRequestedTime(),
+		       ex.what());
+		return existing_mesh;
+	}
 
 	const P3fArraySamplePtr &positions = sample.getPositions();
 	const Alembic::Abc::Int32ArraySamplePtr &face_indices = sample.getFaceIndices();
 	const Alembic::Abc::Int32ArraySamplePtr &face_counts = sample.getFaceCounts();
 
-	DerivedMesh *new_dm = NULL;
+	Mesh *new_mesh = NULL;
 
 	ImportSettings settings;
 	settings.read_flag |= read_flag;
 
-	if (dm->getNumVerts(dm) != positions->size()) {
-		new_dm = CDDM_from_template(dm,
-		                            positions->size(),
-		                            0,
-		                            0,
-		                            face_indices->size(),
-		                            face_counts->size());
+	if (existing_mesh->totvert != positions->size()) {
+		new_mesh = BKE_mesh_new_nomain_from_template(existing_mesh,
+		                                           positions->size(),
+		                                           0,
+		                                           0,
+		                                           face_indices->size(),
+		                                           face_counts->size());
 
 		settings.read_flag |= MOD_MESHSEQ_READ_ALL;
 	}
@@ -1380,8 +1437,8 @@ DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm,
 		/* If the face count changed (e.g. by triangulation), only read points.
 		 * This prevents crash from T49813.
 		 * TODO(kevin): perhaps find a better way to do this? */
-		if (face_counts->size() != dm->getNumPolys(dm) ||
-		    face_indices->size() != dm->getNumLoops(dm))
+		if (face_counts->size() != existing_mesh->totpoly ||
+		    face_indices->size() != existing_mesh->totpoly)
 		{
 			settings.read_flag = MOD_MESHSEQ_READ_VERT;
 
@@ -1393,22 +1450,22 @@ DerivedMesh *AbcSubDReader::read_derivedmesh(DerivedMesh *dm,
 	}
 
 	/* Only read point data when streaming meshes, unless we need to create new ones. */
-	CDStreamConfig config = get_config(new_dm ? new_dm : dm);
+	CDStreamConfig config = get_config(new_mesh ? new_mesh : existing_mesh);
 	config.time = sample_sel.getRequestedTime();
 	read_subd_sample(m_iobject.getFullName(),
 	                 &settings, m_schema, sample_sel, config);
 
-	if (new_dm) {
+	if (new_mesh) {
 		/* Check if we had ME_SMOOTH flag set to restore it. */
-		if (check_smooth_poly_flag(dm)) {
-			set_smooth_poly_flag(new_dm);
+		if (check_smooth_poly_flag(existing_mesh)) {
+			set_smooth_poly_flag(new_mesh);
 		}
 
-		CDDM_calc_normals(new_dm);
-		CDDM_calc_edges(new_dm);
+		BKE_mesh_calc_normals(new_mesh);
+		BKE_mesh_calc_edges(new_mesh, false, false);
 
-		return new_dm;
+		return new_mesh;
 	}
 
-	return dm;
+	return existing_mesh;
 }

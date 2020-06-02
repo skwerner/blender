@@ -12,11 +12,8 @@ set(WITH_INSTALL_PORTABLE    OFF CACHE BOOL "" FORCE)
 # no point int copying python into python
 set(WITH_PYTHON_INSTALL      OFF CACHE BOOL "" FORCE)
 
-# dont build the game engine
-set(WITH_GAMEENGINE          OFF CACHE BOOL "" FORCE)
-
 # disable audio, its possible some devs may want this but for now disable
-# so the python module doesnt hold the audio device and loads quickly.
+# so the python module doesn't hold the audio device and loads quickly.
 set(WITH_AUDASPACE           OFF CACHE BOOL "" FORCE)
 set(WITH_FFTW3               OFF CACHE BOOL "" FORCE)
 set(WITH_JACK                OFF CACHE BOOL "" FORCE)
@@ -33,3 +30,8 @@ set(WITH_INTERNATIONAL       OFF CACHE BOOL "" FORCE)
 set(WITH_BULLET              OFF CACHE BOOL "" FORCE)
 set(WITH_OPENVDB             OFF CACHE BOOL "" FORCE)
 set(WITH_ALEMBIC             OFF CACHE BOOL "" FORCE)
+
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+	# jemalloc causes linking error on import, disable.
+	set(WITH_MEM_JEMALLOC        OFF CACHE BOOL "" FORCE)
+endif()

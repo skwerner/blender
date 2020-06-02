@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,17 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenlib/intern/BLI_args.c
- *  \ingroup bli
- *  \brief A general argument parsing module
+/** \file
+ * \ingroup bli
+ * \brief A general argument parsing module
  */
 
 #include <ctype.h> /* for tolower */
@@ -79,8 +71,9 @@ static uint case_strhash(const void *ptr)
 	uint i = 0;
 	unsigned char c;
 
-	while ( (c = tolower(*s++)) )
+	while ((c = tolower(*s++))) {
 		i = i * 37 + c;
+	}
 
 	return i;
 }
@@ -158,8 +151,9 @@ static bArgDoc *internalDocs(struct bArgs *ba, const char *short_arg, const char
 
 	d = MEM_callocN(sizeof(bArgDoc), "bArgDoc");
 
-	if (doc == NULL)
+	if (doc == NULL) {
 		doc = NO_DOCS;
+	}
 
 	d->short_arg = short_arg;
 	d->long_arg = long_arg;
@@ -208,11 +202,13 @@ void BLI_argsAddCase(struct bArgs *ba, int pass,
 {
 	bArgDoc *d = internalDocs(ba, short_arg, long_arg, doc);
 
-	if (short_arg)
+	if (short_arg) {
 		internalAdd(ba, short_arg, pass, short_case, cb, data, d);
+	}
 
-	if (long_arg)
+	if (long_arg) {
 		internalAdd(ba, long_arg, pass, long_case, cb, data, d);
+	}
 }
 
 void BLI_argsAdd(struct bArgs *ba, int pass,
@@ -224,12 +220,15 @@ void BLI_argsAdd(struct bArgs *ba, int pass,
 
 static void internalDocPrint(bArgDoc *d)
 {
-	if (d->short_arg && d->long_arg)
+	if (d->short_arg && d->long_arg) {
 		printf("%s or %s", d->short_arg, d->long_arg);
-	else if (d->short_arg)
+	}
+	else if (d->short_arg) {
 		printf("%s", d->short_arg);
-	else if (d->long_arg)
+	}
+	else if (d->long_arg) {
 		printf("%s", d->long_arg);
+	}
 
 	printf(" %s\n\n", d->documentation);
 }
@@ -292,8 +291,9 @@ void BLI_argsParse(struct bArgs *ba, int pass, BA_ArgCallback default_cb, void *
 				}
 				else if (retval == -1) {
 					if (a) {
-						if (a->key->pass != -1)
+						if (a->key->pass != -1) {
 							ba->passes[i] = pass;
+						}
 					}
 					break;
 				}

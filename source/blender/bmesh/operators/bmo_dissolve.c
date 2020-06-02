@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_dissolve.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Removes isolated geometry regions without creating holes in the mesh.
  */
@@ -209,8 +203,9 @@ void bmo_dissolve_faces_exec(BMesh *bm, BMOperator *op)
 			goto cleanup;
 		}
 
-		while (faces[tot])
+		while (faces[tot]) {
 			tot++;
+		}
 
 		f_new = BM_faces_join(bm, faces, tot, true);
 
@@ -260,7 +255,9 @@ void bmo_dissolve_faces_exec(BMesh *bm, BMOperator *op)
 cleanup:
 	/* free/cleanup */
 	for (i = 0; i < BLI_array_len(regions); i++) {
-		if (regions[i]) MEM_freeN(regions[i]);
+		if (regions[i]) {
+			MEM_freeN(regions[i]);
+		}
 	}
 
 	BLI_array_free(regions);

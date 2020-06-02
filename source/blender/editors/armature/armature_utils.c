@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,14 +15,10 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * Contributor(s): Blender Foundation, 2002-2009 full recode.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/armature/armature_utils.c
- *  \ingroup edarmature
+/** \file
+ * \ingroup edarmature
  */
 
 #include "DNA_armature_types.h"
@@ -39,10 +33,11 @@
 #include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_deform.h"
-#include "BKE_depsgraph.h"
 #include "BKE_global.h"
 #include "BKE_idprop.h"
 #include "BKE_main.h"
+
+#include "DEG_depsgraph.h"
 
 #include "ED_armature.h"
 #include "ED_util.h"
@@ -130,6 +125,16 @@ void bone_free(bArmature *arm, EditBone *bone)
 		MEM_freeN(bone->prop);
 	}
 
+	/* Clear references from other edit bones. */
+	for (EditBone *ebone = arm->edbo->first; ebone; ebone = ebone->next) {
+		if (ebone->bbone_next == bone) {
+			ebone->bbone_next = NULL;
+		}
+		if (ebone->bbone_prev == bone) {
+			ebone->bbone_prev = NULL;
+		}
+	}
+
 	BLI_freelinkN(arm->edbo, bone);
 }
 
@@ -170,8 +175,8 @@ bool ED_armature_ebone_is_child_recursive(EditBone *ebone_parent, EditBone *ebon
 /**
  * Finds the first parent shared by \a ebone_child
  *
- * \param ebone_child  Children bones to search
- * \param ebone_child_tot  Size of the ebone_child array
+ * \param ebone_child: Children bones to search
+ * \param ebone_child_tot: Size of the ebone_child array
  * \return The shared parent or NULL.
  */
 EditBone *ED_armature_ebone_find_shared_parent(EditBone *ebone_child[], const unsigned int ebone_child_tot)
@@ -425,7 +430,7 @@ void ED_armature_edit_transform_mirror_update(Object *obedit)
 /* Armature EditMode Conversions */
 
 /* converts Bones to EditBone list, used for tools as well */
-EditBone *make_boneList(ListBase *edbo, ListBase *bones, EditBone *parent, Bone *actBone)
+static EditBone *make_boneList_rec(ListBase *edbo, ListBase *bones, EditBone *parent, Bone *actBone)
 {
 	EditBone    *eBone;
 	EditBone    *eBoneAct = NULL;
@@ -434,6 +439,7 @@ EditBone *make_boneList(ListBase *edbo, ListBase *bones, EditBone *parent, Bone 
 
 	for (curBone = bones->first; curBone; curBone = curBone->next) {
 		eBone = MEM_callocN(sizeof(EditBone), "make_editbone");
+		eBone->temp.bone = curBone;
 
 		/* Copy relevant data from bone to eBone
 		 * Keep selection logic in sync with ED_armature_edit_sync_selection.
@@ -489,6 +495,9 @@ EditBone *make_boneList(ListBase *edbo, ListBase *bones, EditBone *parent, Bone 
 		eBone->scaleIn = curBone->scaleIn;
 		eBone->scaleOut = curBone->scaleOut;
 
+		eBone->bbone_prev_type = curBone->bbone_prev_type;
+		eBone->bbone_next_type = curBone->bbone_next_type;
+
 		if (curBone->prop)
 			eBone->prop = IDP_CopyProperty(curBone->prop);
 
@@ -496,7 +505,7 @@ EditBone *make_boneList(ListBase *edbo, ListBase *bones, EditBone *parent, Bone 
 
 		/*	Add children if necessary */
 		if (curBone->childbase.first) {
-			eBoneTest = make_boneList(edbo, &curBone->childbase, eBone, actBone);
+			eBoneTest = make_boneList_rec(edbo, &curBone->childbase, eBone, actBone);
 			if (eBoneTest)
 				eBoneAct = eBoneTest;
 		}
@@ -508,13 +517,46 @@ EditBone *make_boneList(ListBase *edbo, ListBase *bones, EditBone *parent, Bone 
 	return eBoneAct;
 }
 
-/* This function:
- *     - sets local head/tail rest locations using parent bone's arm_mat.
- *     - calls BKE_armature_where_is_bone() which uses parent's transform (arm_mat) to define this bone's transform.
- *     - fixes (converts) EditBone roll into Bone roll.
- *     - calls again BKE_armature_where_is_bone(), since roll fiddling may have changed things for our bone...
- * Note that order is crucial here, we can only handle child if all its parents in chain have already been handled
- * (this is ensured by recursive process). */
+static EditBone *find_ebone_link(ListBase *edbo, Bone *link)
+{
+	if (link != NULL) {
+		for (EditBone *ebone = edbo->first; ebone; ebone = ebone->next) {
+			if (ebone->temp.bone == link) {
+				return ebone;
+			}
+		}
+	}
+
+	return NULL;
+}
+
+EditBone *make_boneList(ListBase *edbo, ListBase *bones, struct Bone *actBone)
+{
+	BLI_assert(!edbo->first && !edbo->last);
+
+	EditBone *active = make_boneList_rec(edbo, bones, NULL, actBone);
+
+	for (EditBone *ebone = edbo->first; ebone; ebone = ebone->next) {
+		Bone *bone = ebone->temp.bone;
+
+		/* Convert custom B-Bone handle links. */
+		ebone->bbone_prev = find_ebone_link(edbo, bone->bbone_prev);
+		ebone->bbone_next = find_ebone_link(edbo, bone->bbone_next);
+	}
+
+	return active;
+}
+
+/**
+ * This function:
+ * - Sets local head/tail rest locations using parent bone's arm_mat.
+ * - Calls #BKE_armature_where_is_bone() which uses parent's transform (arm_mat) to define this bone's transform.
+ * - Fixes (converts) EditBone roll into Bone roll.
+ * - Calls again #BKE_armature_where_is_bone(), since roll fiddling may have changed things for our bone...
+ *
+ * \note The order is crucial here, we can only handle child
+ * if all its parents in chain have already been handled (this is ensured by recursive process).
+ */
 static void armature_finalize_restpose(ListBase *bonelist, ListBase *editbonelist)
 {
 	Bone *curBone;
@@ -627,7 +669,9 @@ void ED_armature_from_edit(Main *bmain, bArmature *arm)
 		if (eBone == arm->act_edbone) {
 			/* don't change active selection, this messes up separate which uses
 			 * editmode toggle and can separate active bone which is de-selected originally */
-			/* newBone->flag |= BONE_SELECTED; */ /* important, editbones can be active with only 1 point selected */
+
+			/* important, editbones can be active with only 1 point selected */
+			/* newBone->flag |= BONE_SELECTED; */
 			arm->act_bone = newBone;
 		}
 		newBone->roll = 0.0f;
@@ -654,14 +698,17 @@ void ED_armature_from_edit(Main *bmain, bArmature *arm)
 		newBone->scaleIn = eBone->scaleIn;
 		newBone->scaleOut = eBone->scaleOut;
 
+		newBone->bbone_prev_type = eBone->bbone_prev_type;
+		newBone->bbone_next_type = eBone->bbone_next_type;
 
 		if (eBone->prop)
 			newBone->prop = IDP_CopyProperty(eBone->prop);
 	}
 
 	/* Fix parenting in a separate pass to ensure ebone->bone connections are valid at this point.
-	 * Do not set bone->head/tail here anymore, using EditBone data for that is not OK since our later fiddling
-	 * with parent's arm_mat (for roll conversion) may have some small but visible impact on locations (T46010). */
+	 * Do not set bone->head/tail here anymore,
+	 * using EditBone data for that is not OK since our later fiddling with parent's arm_mat
+	 * (for roll conversion) may have some small but visible impact on locations (T46010). */
 	for (eBone = arm->edbo->first; eBone; eBone = eBone->next) {
 		newBone = eBone->temp.bone;
 		if (eBone->parent) {
@@ -672,19 +719,27 @@ void ED_armature_from_edit(Main *bmain, bArmature *arm)
 		else {
 			BLI_addtail(&arm->bonebase, newBone);
 		}
+
+		/* Also transfer B-Bone custom handles. */
+		if (eBone->bbone_prev) {
+			newBone->bbone_prev = eBone->bbone_prev->temp.bone;
+		}
+		if (eBone->bbone_next) {
+			newBone->bbone_next = eBone->bbone_next->temp.bone;
+		}
 	}
 
 	/* Finalize definition of restpose data (roll, bone_mat, arm_mat, head/tail...). */
 	armature_finalize_restpose(&arm->bonebase, arm->edbo);
 
 	/* so all users of this armature should get rebuilt */
-	for (obt = bmain->object.first; obt; obt = obt->id.next) {
+	for (obt = bmain->objects.first; obt; obt = obt->id.next) {
 		if (obt->data == arm) {
-			BKE_pose_rebuild(obt, arm);
+			BKE_pose_rebuild(bmain, obt, arm, true);
 		}
 	}
 
-	DAG_id_tag_update(&arm->id, 0);
+	DEG_id_tag_update(&arm->id, 0);
 }
 
 void ED_armature_edit_free(struct bArmature *arm)
@@ -714,9 +769,7 @@ void ED_armature_to_edit(bArmature *arm)
 {
 	ED_armature_edit_free(arm);
 	arm->edbo = MEM_callocN(sizeof(ListBase), "edbo armature");
-	arm->act_edbone = make_boneList(arm->edbo, &arm->bonebase, NULL, arm->act_bone);
-
-//	BIF_freeTemplates(); /* force template update when entering editmode */
+	arm->act_edbone = make_boneList(arm->edbo, &arm->bonebase, arm->act_bone);
 }
 
 /* *************************************************************** */
@@ -762,6 +815,12 @@ void ED_armature_ebone_listbase_copy(ListBase *lb_dst, ListBase *lb_src)
 	for (ebone_dst = lb_dst->first; ebone_dst; ebone_dst = ebone_dst->next) {
 		if (ebone_dst->parent) {
 			ebone_dst->parent = ebone_dst->parent->temp.ebone;
+		}
+		if (ebone_dst->bbone_next) {
+			ebone_dst->bbone_next = ebone_dst->bbone_next->temp.ebone;
+		}
+		if (ebone_dst->bbone_prev) {
+			ebone_dst->bbone_prev = ebone_dst->bbone_prev->temp.ebone;
 		}
 	}
 }

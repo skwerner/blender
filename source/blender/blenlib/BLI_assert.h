@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,15 +12,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
 #ifndef __BLI_ASSERT_H__
 #define __BLI_ASSERT_H__
 
-/** \file BLI_assert.h
- *  \ingroup bli
+/** \file
+ * \ingroup bli
  *
  * Defines:
  * - #BLI_assert
@@ -36,6 +32,10 @@ extern "C" {
 
 #ifndef NDEBUG /* for BLI_assert */
 #include <stdio.h>
+#endif
+
+#ifdef _MSC_VER
+#include <crtdbg.h> /* for _STATIC_ASSERT */
 #endif
 
 /* BLI_assert(), default only to print
@@ -76,24 +76,20 @@ extern "C" {
     (!defined(__COVERITY__)) && \
     (defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 406))  /* gcc4.6+ only */
 #  define BLI_STATIC_ASSERT(a, msg) __extension__ _Static_assert(a, msg);
-#else
-/* Code adapted from http://www.pixelbeat.org/programming/gcc/static_assert.html */
-/* Note we need the two concats below because arguments to ## are not expanded, so we need to
- * expand __LINE__ with one indirection before doing the actual concatenation. */
+#elif defined(_MSC_VER)
+#  define BLI_STATIC_ASSERT(a, msg) _STATIC_ASSERT(a);
+#else  /* older gcc, clang... */
+  /* Code adapted from http://www.pixelbeat.org/programming/gcc/static_assert.html */
+  /* Note we need the two concats below because arguments to ## are not expanded, so we need to
+   * expand __LINE__ with one indirection before doing the actual concatenation. */
 #  define _BLI_ASSERT_CONCAT_(a, b) a##b
 #  define _BLI_ASSERT_CONCAT(a, b) _BLI_ASSERT_CONCAT_(a, b)
-   /* These can't be used after statements in c89. */
-#  if defined(__COUNTER__)  /* MSVC */
-#    define BLI_STATIC_ASSERT(a, msg) \
-         ; enum { _BLI_ASSERT_CONCAT(static_assert_, __COUNTER__) = 1 / (int)(!!(a)) };
-#  else  /* older gcc, clang... */
-    /* This can't be used twice on the same line so ensure if using in headers
-     * that the headers are not included twice (by wrapping in #ifndef...#endif)
-     * Note it doesn't cause an issue when used on same line of separate modules
-     * compiled with gcc -combine -fwhole-program. */
-#    define BLI_STATIC_ASSERT(a, msg) \
-         ; enum { _BLI_ASSERT_CONCAT(assert_line_, __LINE__) = 1 / (int)(!!(a)) };
-#  endif
+   /* This can't be used twice on the same line so ensure if using in headers
+    * that the headers are not included twice (by wrapping in #ifndef...#endif)
+    * Note it doesn't cause an issue when used on same line of separate modules
+    * compiled with gcc -combine -fwhole-program. */
+#  define BLI_STATIC_ASSERT(a, msg) \
+       ; enum { _BLI_ASSERT_CONCAT(assert_line_, __LINE__) = 1 / (int)(!!(a)) };
 #endif
 
 #define BLI_STATIC_ASSERT_ALIGN(st, align) \

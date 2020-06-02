@@ -17,6 +17,7 @@ set(INC_SYS
 
 set(SRC
 	blender_camera.cpp
+	blender_device.cpp
 	blender_mesh.cpp
 	blender_object.cpp
 	blender_object_cull.cpp
@@ -37,9 +38,26 @@ set(SRC
 	blender_util.h
 )
 
+set(LIB
+	cycles_bvh
+	cycles_device
+	cycles_graph
+	cycles_kernel
+	cycles_render
+	cycles_subd
+	cycles_util
+)
+
+if(WITH_CYCLES_LOGGING)
+	list(APPEND LIB
+		extern_glog
+	)
+endif()
+
 set(ADDON_FILES
 	addon/__init__.py
 	addon/engine.py
+	addon/operators.py
 	addon/osl.py
 	addon/presets.py
 	addon/properties.py
@@ -49,11 +67,15 @@ set(ADDON_FILES
 
 add_definitions(${GL_DEFINITIONS})
 
+if(WITH_CYCLES_DEVICE_OPENCL)
+    add_definitions(-DWITH_OPENCL)
+endif()
+
 if(WITH_CYCLES_NETWORK)
 	add_definitions(-DWITH_NETWORK)
 endif()
 
-blender_add_lib(bf_intern_cycles "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_intern_cycles "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 
 # avoid link failure with clang 3.4 debug
 if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND NOT ${CMAKE_C_COMPILER_VERSION} VERSION_LESS '3.4')

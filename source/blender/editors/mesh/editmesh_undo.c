@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,35 +12,38 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/mesh/editmesh_undo.c
- *  \ingroup edmesh
+/** \file
+ * \ingroup edmesh
  */
 
 #include "MEM_guardedalloc.h"
 
+#include "CLG_log.h"
+
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_key_types.h"
+#include "DNA_layer_types.h"
 
 #include "BLI_listbase.h"
 #include "BLI_array_utils.h"
-#include "BLI_alloca.h"
 
-#include "BKE_DerivedMesh.h"
 #include "BKE_context.h"
 #include "BKE_key.h"
+#include "BKE_layer.h"
 #include "BKE_mesh.h"
 #include "BKE_editmesh.h"
-#include "BKE_depsgraph.h"
 #include "BKE_undo_system.h"
+
+#include "DEG_depsgraph.h"
 
 #include "ED_object.h"
 #include "ED_mesh.h"
 #include "ED_util.h"
+#include "ED_undo.h"
 
 #include "WM_types.h"
 #include "WM_api.h"
@@ -67,6 +68,9 @@
 #ifdef USE_ARRAY_STORE_THREAD
 #  include "BLI_task.h"
 #endif
+
+/** We only need this locally. */
+static CLG_LogRef LOG = {"ed.undo.mesh"};
 
 /* -------------------------------------------------------------------- */
 /** \name Undo Conversion
@@ -505,7 +509,7 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
 	        NULL, em->bm, &um->me, (&(struct BMeshToMeshParams){
 	            /* Undo code should not be manipulating 'G_MAIN->object' hooks/vertex-parent. */
 	            .calc_object_remap = false,
-	            .cd_mask_extra = CD_MASK_SHAPE_KEYINDEX,
+	            .cd_mask_extra = {.vmask = CD_MASK_SHAPE_KEYINDEX},
 	        }));
 
 	um->selectmode = em->selectmode;
@@ -589,6 +593,8 @@ static void undomesh_to_editmesh(UndoMesh *um, BMEditMesh *em, Mesh *obmesh)
 	bm->selectmode = um->selectmode;
 	em->ob = ob;
 
+	bm->spacearr_dirty = BM_SPACEARR_DIRTY_ALL;
+
 	/* T35170: Restore the active key on the RealMesh. Otherwise 'fake' offset propagation happens
 	 *         if the active is a basis for any other. */
 	if (key && (key->type == KEY_RELATIVE)) {
@@ -656,7 +662,7 @@ static Object *editmesh_object_from_context(bContext *C)
 	Object *obedit = CTX_data_edit_object(C);
 	if (obedit && obedit->type == OB_MESH) {
 		Mesh *me = obedit->data;
-		if (me->edit_btmesh != NULL) {
+		if (me->edit_mesh != NULL) {
 			return obedit;
 		}
 	}
@@ -667,116 +673,96 @@ static Object *editmesh_object_from_context(bContext *C)
 
 /* -------------------------------------------------------------------- */
 /** \name Implements ED Undo System
+ *
+ * \note This is similar for all edit-mode types.
  * \{ */
+
+typedef struct MeshUndoStep_Elem {
+	struct MeshUndoStep_Elem *next, *prev;
+	UndoRefID_Object obedit_ref;
+	UndoMesh data;
+} MeshUndoStep_Elem;
 
 typedef struct MeshUndoStep {
 	UndoStep step;
-	/* Use for all ID lookups (can be NULL). */
 	struct UndoIDPtrMap *id_map;
-
-	/* note: will split out into list for multi-object-editmode. */
-	UndoRefID_Object obedit_ref;
-	/* Needed for MTexPoly's image use. */
-	UndoRefID_Object *image_array_ref;
-	UndoMesh data;
+	MeshUndoStep_Elem *elems;
+	uint               elems_len;
 } MeshUndoStep;
-
-static void mesh_undosys_step_encode_store_ids(MeshUndoStep *us)
-{
-	Mesh *me = us->obedit_ref.ptr->data;
-	BMesh *bm = me->edit_btmesh->bm;
-	const int mtex_len = CustomData_number_of_layers(&bm->pdata, CD_MTEXPOLY);
-	if (mtex_len != 0) {
-		ID **id_prev_array = BLI_array_alloca(id_prev_array,  mtex_len);
-		memset(id_prev_array, 0x0, sizeof(*id_prev_array) * mtex_len);
-
-		BMIter iter;
-		BMFace *efa;
-
-		if (us->id_map == NULL) {
-			us->id_map = BKE_undosys_ID_map_create();
-		}
-
-		uint cd_poly_tex_offset_first = CustomData_get_n_offset(&bm->pdata, CD_MTEXPOLY, 0);
-		uint cd_poly_tex_offset_end = cd_poly_tex_offset_first + (sizeof(MTexPoly) * mtex_len);
-		BM_ITER_MESH(efa, &iter, bm, BM_FACES_OF_MESH) {
-			for (uint cd_poly_tex_offset = cd_poly_tex_offset_first, i = 0;
-			     cd_poly_tex_offset < cd_poly_tex_offset_end;
-			     cd_poly_tex_offset += sizeof(MTexPoly), i++)
-			{
-				const MTexPoly *tf = BM_ELEM_CD_GET_VOID_P(efa, cd_poly_tex_offset);
-				if (tf->tpage != NULL) {
-					BKE_undosys_ID_map_add_with_prev(us->id_map, (ID *)tf->tpage, &id_prev_array[i]);
-				}
-			}
-		}
-	}
-}
-
-static void mesh_undosys_step_decode_restore_ids(MeshUndoStep *us)
-{
-	Mesh *me = us->obedit_ref.ptr->data;
-	BMesh *bm = me->edit_btmesh->bm;
-	const int mtex_len = CustomData_number_of_layers(&bm->pdata, CD_MTEXPOLY);
-	if (mtex_len != 0 && us->id_map) {
-		BMIter iter;
-		BMFace *efa;
-
-		ID *(*id_prev_array)[2] = BLI_array_alloca(id_prev_array, mtex_len);
-		memset(id_prev_array, 0x0, sizeof(*id_prev_array) * mtex_len);
-
-		uint cd_poly_tex_offset_first = CustomData_get_n_offset(&bm->pdata, CD_MTEXPOLY, 0);
-		uint cd_poly_tex_offset_end = cd_poly_tex_offset_first + (sizeof(MTexPoly) * mtex_len);
-		BM_ITER_MESH(efa, &iter, bm, BM_FACES_OF_MESH) {
-			for (uint cd_poly_tex_offset = cd_poly_tex_offset_first, i = 0;
-			     cd_poly_tex_offset < cd_poly_tex_offset_end;
-			     cd_poly_tex_offset += sizeof(MTexPoly), i++)
-			{
-				MTexPoly *tf = BM_ELEM_CD_GET_VOID_P(efa, cd_poly_tex_offset);
-				if (tf->tpage != NULL) {
-					tf->tpage = (Image *)BKE_undosys_ID_map_lookup_with_prev(us->id_map, (ID *)tf->tpage, id_prev_array[i]);
-				}
-			}
-		}
-	}
-}
 
 static bool mesh_undosys_poll(bContext *C)
 {
 	return editmesh_object_from_context(C) != NULL;
 }
 
-static bool mesh_undosys_step_encode(struct bContext *C, UndoStep *us_p)
+static bool mesh_undosys_step_encode(struct bContext *C, struct Main *UNUSED(bmain), UndoStep *us_p)
 {
 	MeshUndoStep *us = (MeshUndoStep *)us_p;
-	us->obedit_ref.ptr = editmesh_object_from_context(C);
-	Mesh *me = us->obedit_ref.ptr->data;
-	undomesh_from_editmesh(&us->data, me->edit_btmesh, me->key);
-	mesh_undosys_step_encode_store_ids(us);
-	us->step.data_size = us->data.undo_size;
+
+	/* Important not to use the 3D view when getting objects because all objects
+	 * outside of this list will be moved out of edit-mode when reading back undo steps. */
+	ViewLayer *view_layer = CTX_data_view_layer(C);
+	uint objects_len = 0;
+	Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(view_layer, NULL, &objects_len);
+
+	us->elems = MEM_callocN(sizeof(*us->elems) * objects_len, __func__);
+	us->elems_len = objects_len;
+
+	for (uint i = 0; i < objects_len; i++) {
+		Object *ob = objects[i];
+		MeshUndoStep_Elem *elem = &us->elems[i];
+
+		elem->obedit_ref.ptr = ob;
+		Mesh *me = elem->obedit_ref.ptr->data;
+		undomesh_from_editmesh(&elem->data, me->edit_mesh, me->key);
+		us->step.data_size += elem->data.undo_size;
+	}
+	MEM_freeN(objects);
 	return true;
 }
 
-static void mesh_undosys_step_decode(struct bContext *C, UndoStep *us_p, int UNUSED(dir))
+static void mesh_undosys_step_decode(struct bContext *C, struct Main *UNUSED(bmain), UndoStep *us_p, int UNUSED(dir))
 {
-	/* TODO(campbell): undo_system: use low-level API to set mode. */
-	ED_object_mode_set(C, OB_MODE_EDIT);
+	MeshUndoStep *us = (MeshUndoStep *)us_p;
+
+	/* Load all our objects  into edit-mode, clear everything else. */
+	ED_undo_object_editmode_restore_helper(C, &us->elems[0].obedit_ref.ptr, us->elems_len, sizeof(*us->elems));
+
 	BLI_assert(mesh_undosys_poll(C));
 
-	MeshUndoStep *us = (MeshUndoStep *)us_p;
-	Object *obedit = us->obedit_ref.ptr;
-	Mesh *me = obedit->data;
-	BMEditMesh *em = me->edit_btmesh;
-	undomesh_to_editmesh(&us->data, em, obedit->data);
-	mesh_undosys_step_decode_restore_ids(us);
-	DAG_id_tag_update(&obedit->id, OB_RECALC_DATA);
+	for (uint i = 0; i < us->elems_len; i++) {
+		MeshUndoStep_Elem *elem = &us->elems[i];
+		Object *obedit = elem->obedit_ref.ptr;
+		Mesh *me = obedit->data;
+		if (me->edit_mesh == NULL) {
+			/* Should never fail, may not crash but can give odd behavior. */
+			CLOG_ERROR(&LOG, "name='%s', failed to enter edit-mode for object '%s', undo state invalid",
+			           us_p->name, obedit->id.name);
+			continue;
+		}
+		BMEditMesh *em = me->edit_mesh;
+		undomesh_to_editmesh(&elem->data, em, obedit->data);
+		DEG_id_tag_update(&obedit->id, ID_RECALC_GEOMETRY);
+	}
+
+	/* The first element is always active */
+	ED_undo_object_set_active_or_warn(CTX_data_view_layer(C), us->elems[0].obedit_ref.ptr, us_p->name, &LOG);
+
+	Scene *scene = CTX_data_scene(C);
+	scene->toolsettings->selectmode = us->elems[0].data.selectmode;
+
 	WM_event_add_notifier(C, NC_GEOM | ND_DATA, NULL);
 }
 
 static void mesh_undosys_step_free(UndoStep *us_p)
 {
 	MeshUndoStep *us = (MeshUndoStep *)us_p;
-	undomesh_free_data(&us->data);
+
+	for (uint i = 0; i < us->elems_len; i++) {
+		MeshUndoStep_Elem *elem = &us->elems[i];
+		undomesh_free_data(&elem->data);
+	}
+	MEM_freeN(us->elems);
 
 	if (us->id_map != NULL) {
 		BKE_undosys_ID_map_destroy(us->id_map);
@@ -787,7 +773,12 @@ static void mesh_undosys_foreach_ID_ref(
         UndoStep *us_p, UndoTypeForEachIDRefFn foreach_ID_ref_fn, void *user_data)
 {
 	MeshUndoStep *us = (MeshUndoStep *)us_p;
-	foreach_ID_ref_fn(user_data, ((UndoRefID *)&us->obedit_ref));
+
+	for (uint i = 0; i < us->elems_len; i++) {
+		MeshUndoStep_Elem *elem = &us->elems[i];
+		foreach_ID_ref_fn(user_data, ((UndoRefID *)&elem->obedit_ref));
+	}
+
 	if (us->id_map != NULL) {
 		BKE_undosys_ID_map_foreach_ID_ref(us->id_map, foreach_ID_ref_fn, user_data);
 	}
@@ -804,7 +795,6 @@ void ED_mesh_undosys_type(UndoType *ut)
 
 	ut->step_foreach_ID_ref = mesh_undosys_foreach_ID_ref;
 
-	ut->mode = BKE_UNDOTYPE_MODE_STORE;
 	ut->use_context = true;
 
 	ut->step_size = sizeof(MeshUndoStep);

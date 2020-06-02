@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,18 +15,11 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  * allocimbuf.c
- *
  */
 
-/** \file blender/imbuf/intern/divers.c
- *  \ingroup imbuf
+/** \file
+ * \ingroup imbuf
  */
 
 #include "BLI_math.h"
@@ -44,62 +35,6 @@
 
 
 #include "MEM_guardedalloc.h"
-
-/**************************** Interlace/Deinterlace **************************/
-
-void IMB_de_interlace(ImBuf *ibuf)
-{
-	ImBuf *tbuf1, *tbuf2;
-
-	if (ibuf == NULL) return;
-	if (ibuf->flags & IB_fields) return;
-	ibuf->flags |= IB_fields;
-
-	if (ibuf->rect) {
-		/* make copies */
-		tbuf1 = IMB_allocImBuf(ibuf->x, ibuf->y / 2, 32, IB_rect);
-		tbuf2 = IMB_allocImBuf(ibuf->x, ibuf->y / 2, 32, IB_rect);
-
-		ibuf->x *= 2;
-		IMB_rectcpy(tbuf1, ibuf, 0, 0, 0, 0, ibuf->x, ibuf->y);
-		IMB_rectcpy(tbuf2, ibuf, 0, 0, tbuf2->x, 0, ibuf->x, ibuf->y);
-
-		ibuf->x /= 2;
-		IMB_rectcpy(ibuf, tbuf1, 0, 0, 0, 0, tbuf1->x, tbuf1->y);
-		IMB_rectcpy(ibuf, tbuf2, 0, tbuf2->y, 0, 0, tbuf2->x, tbuf2->y);
-
-		IMB_freeImBuf(tbuf1);
-		IMB_freeImBuf(tbuf2);
-	}
-	ibuf->y /= 2;
-}
-
-void IMB_interlace(ImBuf *ibuf)
-{
-	ImBuf *tbuf1, *tbuf2;
-
-	if (ibuf == NULL) return;
-	ibuf->flags &= ~IB_fields;
-
-	ibuf->y *= 2;
-
-	if (ibuf->rect) {
-		/* make copies */
-		tbuf1 = IMB_allocImBuf(ibuf->x, ibuf->y / 2, 32, IB_rect);
-		tbuf2 = IMB_allocImBuf(ibuf->x, ibuf->y / 2, 32, IB_rect);
-
-		IMB_rectcpy(tbuf1, ibuf, 0, 0, 0, 0, ibuf->x, ibuf->y);
-		IMB_rectcpy(tbuf2, ibuf, 0, 0, 0, tbuf2->y, ibuf->x, ibuf->y);
-
-		ibuf->x *= 2;
-		IMB_rectcpy(ibuf, tbuf1, 0, 0, 0, 0, tbuf1->x, tbuf1->y);
-		IMB_rectcpy(ibuf, tbuf2, tbuf2->x, 0, 0, 0, tbuf2->x, tbuf2->y);
-		ibuf->x /= 2;
-
-		IMB_freeImBuf(tbuf1);
-		IMB_freeImBuf(tbuf2);
-	}
-}
 
 /************************* Floyd-Steinberg dithering *************************/
 

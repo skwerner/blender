@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,29 +15,24 @@
  *
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): none yet.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/blenkernel/intern/camera.c
- *  \ingroup bke
+/** \file
+ * \ingroup bke
  */
 
 #include <stdlib.h>
 #include <stddef.h>
 
 #include "DNA_camera_types.h"
-#include "DNA_lamp_types.h"
+#include "DNA_light_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_view3d_types.h"
 #include "DNA_ID.h"
 
 #include "BLI_math.h"
+#include "BLI_listbase.h"
 #include "BLI_rect.h"
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
@@ -47,32 +40,34 @@
 #include "BKE_animsys.h"
 #include "BKE_camera.h"
 #include "BKE_object.h"
+#include "BKE_layer.h"
 #include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
 #include "BKE_main.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
 
-#include "GPU_compositing.h"
+#include "DEG_depsgraph_query.h"
+
+#include "MEM_guardedalloc.h"
 
 /****************************** Camera Datablock *****************************/
 
 void BKE_camera_init(Camera *cam)
 {
-	BLI_assert(MEMCMP_STRUCT_OFS_IS_ZERO(cam, id));
+	BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(cam, id));
 
-	cam->lens = 35.0f;
+	cam->lens = 50.0f;
 	cam->sensor_x = DEFAULT_SENSOR_WIDTH;
 	cam->sensor_y = DEFAULT_SENSOR_HEIGHT;
-	cam->clipsta = 0.1f;
-	cam->clipend = 100.0f;
-	cam->drawsize = 0.5f;
+	cam->clip_start = 0.1f;
+	cam->clip_end = 1000.0f;
+	cam->drawsize = 1.0f;
 	cam->ortho_scale = 6.0;
 	cam->flag |= CAM_SHOWPASSEPARTOUT;
 	cam->passepartalpha = 0.5f;
 
-	GPU_fx_compositor_init_dof_settings(&cam->gpu_dof);
+	cam->gpu_dof.fstop = 128.0f;
+	cam->gpu_dof.ratio = 1.0f;
 
 	/* stereoscopy 3d */
 	cam->stereo.interocular_distance = 0.065f;
@@ -94,21 +89,21 @@ void *BKE_camera_add(Main *bmain, const char *name)
 
 /**
  * Only copy internal data of Camera ID from source to already allocated/initialized destination.
- * You probably nerver want to use that directly, use id_copy or BKE_id_copy_ex for typical needs.
+ * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
  *
  * WARNING! This function will not handle ID user count!
  *
- * \param flag  Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
+ * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
  */
-void BKE_camera_copy_data(Main *UNUSED(bmain), Camera *UNUSED(cam_dst), const Camera *UNUSED(cam_src), const int UNUSED(flag))
+void BKE_camera_copy_data(Main *UNUSED(bmain), Camera *cam_dst, const Camera *cam_src, const int UNUSED(flag))
 {
-	/* Nothing to do! */
+	BLI_duplicatelist(&cam_dst->bg_images, &cam_src->bg_images);
 }
 
 Camera *BKE_camera_copy(Main *bmain, const Camera *cam)
 {
 	Camera *cam_copy;
-	BKE_id_copy_ex(bmain, &cam->id, (ID **)&cam_copy, 0, false);
+	BKE_id_copy(bmain, &cam->id, (ID **)&cam_copy);
 	return cam_copy;
 }
 
@@ -120,21 +115,12 @@ void BKE_camera_make_local(Main *bmain, Camera *cam, const bool lib_local)
 /** Free (or release) any data used by this camera (does not free the camera itself). */
 void BKE_camera_free(Camera *ca)
 {
+	BLI_freelistN(&ca->bg_images);
+
 	BKE_animdata_free((ID *)ca, false);
 }
 
 /******************************** Camera Usage *******************************/
-
-void BKE_camera_object_mode(RenderData *rd, Object *cam_ob)
-{
-	rd->mode &= ~(R_ORTHO | R_PANORAMA);
-
-	if (cam_ob && cam_ob->type == OB_CAMERA) {
-		Camera *cam = cam_ob->data;
-		if (cam->type == CAM_ORTHO) rd->mode |= R_ORTHO;
-		if (cam->type == CAM_PANO) rd->mode |= R_PANORAMA;
-	}
-}
 
 /* get the camera's dof value, takes the dof object into account */
 float BKE_camera_object_dof_distance(Object *ob)
@@ -143,17 +129,12 @@ float BKE_camera_object_dof_distance(Object *ob)
 	if (ob->type != OB_CAMERA)
 		return 0.0f;
 	if (cam->dof_ob) {
-#if 0
-		/* too simple, better to return the distance on the view axis only */
-		return len_v3v3(ob->obmat[3], cam->dof_ob->obmat[3]);
-#else
 		float view_dir[3], dof_dir[3];
 		normalize_v3_v3(view_dir, ob->obmat[2]);
 		sub_v3_v3v3(dof_dir, ob->obmat[3], cam->dof_ob->obmat[3]);
 		return fabsf(dot_v3v3(view_dir, dof_dir));
-#endif
 	}
-	return cam->YF_dofdist;
+	return cam->dof_distance;
 }
 
 float BKE_camera_sensor_size(int sensor_fit, float sensor_x, float sensor_y)
@@ -191,8 +172,8 @@ void BKE_camera_params_init(CameraParams *params)
 	params->zoom = 1.0f;
 
 	/* fallback for non camera objects */
-	params->clipsta = 0.1f;
-	params->clipend = 100.0f;
+	params->clip_start = 0.1f;
+	params->clip_end = 100.0f;
 }
 
 void BKE_camera_params_from_object(CameraParams *params, const Object *ob)
@@ -216,37 +197,32 @@ void BKE_camera_params_from_object(CameraParams *params, const Object *ob)
 		params->sensor_y = cam->sensor_y;
 		params->sensor_fit = cam->sensor_fit;
 
-		params->clipsta = cam->clipsta;
-		params->clipend = cam->clipend;
+		params->clip_start = cam->clip_start;
+		params->clip_end = cam->clip_end;
 	}
 	else if (ob->type == OB_LAMP) {
-		/* lamp object */
-		Lamp *la = ob->data;
-		float fac = cosf(la->spotsize * 0.5f);
-		float phi = acosf(fac);
-
-		params->lens = 16.0f * fac / sinf(phi);
+		/* light object */
+		Light *la = ob->data;
+		params->lens = 16.0f / tanf(la->spotsize * 0.5f);
 		if (params->lens == 0.0f)
 			params->lens = 35.0f;
-
-		params->clipsta = la->clipsta;
-		params->clipend = la->clipend;
 	}
 	else {
 		params->lens = 35.0f;
 	}
 }
 
-void BKE_camera_params_from_view3d(CameraParams *params, const View3D *v3d, const RegionView3D *rv3d)
+void BKE_camera_params_from_view3d(CameraParams *params, Depsgraph *depsgraph, const View3D *v3d, const RegionView3D *rv3d)
 {
 	/* common */
 	params->lens = v3d->lens;
-	params->clipsta = v3d->near;
-	params->clipend = v3d->far;
+	params->clip_start = v3d->clip_start;
+	params->clip_end = v3d->clip_end;
 
 	if (rv3d->persp == RV3D_CAMOB) {
 		/* camera view */
-		BKE_camera_params_from_object(params, v3d->camera);
+		const Object *ob_camera_eval = DEG_get_evaluated_object(depsgraph, v3d->camera);
+		BKE_camera_params_from_object(params, ob_camera_eval);
 
 		params->zoom = BKE_screen_view3d_zoom_to_fac(rv3d->camzoom);
 
@@ -261,8 +237,9 @@ void BKE_camera_params_from_view3d(CameraParams *params, const View3D *v3d, cons
 	else if (rv3d->persp == RV3D_ORTHO) {
 		/* orthographic view */
 		float sensor_size = BKE_camera_sensor_size(params->sensor_fit, params->sensor_x, params->sensor_y);
-		params->clipend *= 0.5f;    // otherwise too extreme low zbuffer quality
-		params->clipsta = -params->clipend;
+		/* Halve, otherwise too extreme low zbuffer quality. */
+		params->clip_end *= 0.5f;
+		params->clip_start = -params->clip_end;
 
 		params->is_ortho = true;
 		/* make sure any changes to this match ED_view3d_radius_to_dist_ortho() */
@@ -281,10 +258,7 @@ void BKE_camera_params_compute_viewplane(CameraParams *params, int winx, int win
 	float pixsize, viewfac, sensor_size, dx, dy;
 	int sensor_fit;
 
-	/* fields rendering */
 	params->ycor = yasp / xasp;
-	if (params->use_fields)
-		params->ycor *= 2.0f;
 
 	if (params->is_ortho) {
 		/* orthographic camera */
@@ -294,7 +268,7 @@ void BKE_camera_params_compute_viewplane(CameraParams *params, int winx, int win
 	else {
 		/* perspective camera */
 		sensor_size = BKE_camera_sensor_size(params->sensor_fit, params->sensor_x, params->sensor_y);
-		pixsize = (sensor_size * params->clipsta) / params->lens;
+		pixsize = (sensor_size * params->clip_start) / params->lens;
 	}
 
 	/* determine sensor fit */
@@ -326,18 +300,6 @@ void BKE_camera_params_compute_viewplane(CameraParams *params, int winx, int win
 	viewplane.xmax += dx;
 	viewplane.ymax += dy;
 
-	/* fields offset */
-	if (params->field_second) {
-		if (params->field_odd) {
-			viewplane.ymin -= 0.5f * params->ycor;
-			viewplane.ymax -= 0.5f * params->ycor;
-		}
-		else {
-			viewplane.ymin += 0.5f * params->ycor;
-			viewplane.ymax += 0.5f * params->ycor;
-		}
-	}
-
 	/* the window matrix is used for clipping, and not changed during OSA steps */
 	/* using an offset of +0.5 here would give clip errors on edges */
 	viewplane.xmin *= pixsize;
@@ -360,10 +322,10 @@ void BKE_camera_params_compute_matrix(CameraParams *params)
 	/* compute projection matrix */
 	if (params->is_ortho)
 		orthographic_m4(params->winmat, viewplane.xmin, viewplane.xmax,
-		                viewplane.ymin, viewplane.ymax, params->clipsta, params->clipend);
+		                viewplane.ymin, viewplane.ymax, params->clip_start, params->clip_end);
 	else
 		perspective_m4(params->winmat, viewplane.xmin, viewplane.xmax,
-		               viewplane.ymin, viewplane.ymax, params->clipsta, params->clipend);
+		               viewplane.ymin, viewplane.ymax, params->clip_start, params->clip_end);
 }
 
 /***************************** Camera View Frame *****************************/
@@ -401,34 +363,22 @@ void BKE_camera_view_frame_ex(
 		facy = 0.5f * camera->ortho_scale * r_asp[1] * scale[1];
 		r_shift[0] = camera->shiftx * camera->ortho_scale * scale[0];
 		r_shift[1] = camera->shifty * camera->ortho_scale * scale[1];
-		depth = do_clip ? -((camera->clipsta * scale[2]) + 0.1f) : -drawsize * camera->ortho_scale * scale[2];
+		depth = -drawsize * scale[2];
 
 		*r_drawsize = 0.5f * camera->ortho_scale;
 	}
 	else {
-		/* that way it's always visible - clipsta+0.1 */
+		/* that way it's always visible - clip_start+0.1 */
 		float fac, scale_x, scale_y;
 		float half_sensor = 0.5f * ((camera->sensor_fit == CAMERA_SENSOR_FIT_VERT) ?
 		                            (camera->sensor_y) : (camera->sensor_x));
 
-
-		if (do_clip) {
-			/* fixed depth, variable size (avoids exceeding clipping range) */
-			/* r_drawsize shouldn't be used in this case, set to dummy value */
-			*r_drawsize = 1.0f;
-			depth = -(camera->clipsta + 0.1f) * scale[2];
-			fac = depth / (camera->lens / (-half_sensor));
-			scale_x = scale[0] / scale[2];
-			scale_y = scale[1] / scale[2];
-		}
-		else {
-			/* fixed size, variable depth (stays a reasonable size in the 3D view) */
-			*r_drawsize = drawsize / ((scale[0] + scale[1] + scale[2]) / 3.0f);
-			depth = *r_drawsize * camera->lens / (-half_sensor) * scale[2];
-			fac = *r_drawsize;
-			scale_x = scale[0];
-			scale_y = scale[1];
-		}
+		/* fixed size, variable depth (stays a reasonable size in the 3D view) */
+		*r_drawsize = (drawsize / 2.0f) / ((scale[0] + scale[1] + scale[2]) / 3.0f);
+		depth = *r_drawsize * camera->lens / (-half_sensor) * scale[2];
+		fac = *r_drawsize;
+		scale_x = scale[0];
+		scale_y = scale[1];
 
 		facx = fac * r_asp[0] * scale_x;
 		facy = fac * r_asp[1] * scale_y;
@@ -440,6 +390,19 @@ void BKE_camera_view_frame_ex(
 	r_vec[1][0] = r_shift[0] + facx; r_vec[1][1] = r_shift[1] - facy; r_vec[1][2] = depth;
 	r_vec[2][0] = r_shift[0] - facx; r_vec[2][1] = r_shift[1] - facy; r_vec[2][2] = depth;
 	r_vec[3][0] = r_shift[0] - facx; r_vec[3][1] = r_shift[1] + facy; r_vec[3][2] = depth;
+
+	if (do_clip) {
+		/* Ensure the frame isn't behind the near clipping plane, T62814. */
+		float fac = (camera->clip_start + 0.1f) / -r_vec[0][2];
+		for (uint i = 0; i < 4; i++) {
+			if (camera->type == CAM_ORTHO) {
+				r_vec[i][2] *= fac;
+			}
+			else {
+				mul_v3_fl(r_vec[i], fac);
+			}
+		}
+	}
 }
 
 void BKE_camera_view_frame(const Scene *scene, const Camera *camera, float r_vec[4][3])
@@ -449,7 +412,7 @@ void BKE_camera_view_frame(const Scene *scene, const Camera *camera, float r_vec
 	float dummy_drawsize;
 	const float dummy_scale[3] = {1.0f, 1.0f, 1.0f};
 
-	BKE_camera_view_frame_ex(scene, camera, 0.0, true, dummy_scale,
+	BKE_camera_view_frame_ex(scene, camera, 1.0, false, dummy_scale,
 	                         dummy_asp, dummy_shift, &dummy_drawsize, r_vec);
 }
 
@@ -573,7 +536,7 @@ static bool camera_frame_fit_calc_from_data(
 		zero_v3(r_co);
 		madd_v3_v3fl(r_co, cam_axis_x, (dists[2] - dists[0]) * 0.5f + params->shiftx * scale_diff);
 		madd_v3_v3fl(r_co, cam_axis_y, (dists[1] - dists[3]) * 0.5f + params->shifty * scale_diff);
-		madd_v3_v3fl(r_co, cam_axis_z, -(data->dist_to_cam - 1.0f - params->clipsta));
+		madd_v3_v3fl(r_co, cam_axis_z, -(data->dist_to_cam - 1.0f - params->clip_start));
 
 		return true;
 	}
@@ -641,7 +604,7 @@ static bool camera_frame_fit_calc_from_data(
 /* don't move the camera, just yield the fit location */
 /* r_scale only valid/useful for ortho cameras */
 bool BKE_camera_view_frame_fit_to_scene(
-        Main *bmain, Scene *scene, struct View3D *v3d, Object *camera_ob, float r_co[3], float *r_scale)
+        Depsgraph *depsgraph, Scene *scene, Object *camera_ob, float r_co[3], float *r_scale)
 {
 	CameraParams params;
 	CameraViewFrameData data_cb;
@@ -652,22 +615,24 @@ bool BKE_camera_view_frame_fit_to_scene(
 	camera_frame_fit_data_init(scene, camera_ob, &params, &data_cb);
 
 	/* run callback on all visible points */
-	BKE_scene_foreach_display_point(bmain, scene, v3d, BA_SELECT, camera_to_frame_view_cb, &data_cb);
+	BKE_scene_foreach_display_point(depsgraph, camera_to_frame_view_cb, &data_cb);
 
 	return camera_frame_fit_calc_from_data(&params, &data_cb, r_co, r_scale);
 }
 
 bool BKE_camera_view_frame_fit_to_coords(
-        const Scene *scene, const float (*cos)[3], int num_cos, const Object *camera_ob,
+        const Depsgraph *depsgraph, const float (*cos)[3], int num_cos, Object *camera_ob,
         float r_co[3], float *r_scale)
 {
+	Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+	Object *camera_ob_eval = DEG_get_evaluated_object(depsgraph, camera_ob);
 	CameraParams params;
 	CameraViewFrameData data_cb;
 
 	/* just in case */
 	*r_scale = 1.0f;
 
-	camera_frame_fit_data_init(scene, camera_ob, &params, &data_cb);
+	camera_frame_fit_data_init(scene_eval, camera_ob_eval, &params, &data_cb);
 
 	/* run callback on all given coordinates */
 	while (num_cos--) {
@@ -679,12 +644,12 @@ bool BKE_camera_view_frame_fit_to_coords(
 
 /******************* multiview matrix functions ***********************/
 
-static void camera_model_matrix(Object *camera, float r_modelmat[4][4])
+static void camera_model_matrix(const Object *camera, float r_modelmat[4][4])
 {
 	copy_m4_m4(r_modelmat, camera->obmat);
 }
 
-static void camera_stereo3d_model_matrix(Object *camera, const bool is_left, float r_modelmat[4][4])
+static void camera_stereo3d_model_matrix(const Object *camera, const bool is_left, float r_modelmat[4][4])
 {
 	Camera *data = (Camera *)camera->data;
 	float interocular_distance, convergence_distance;
@@ -782,7 +747,7 @@ static void camera_stereo3d_model_matrix(Object *camera, const bool is_left, flo
 }
 
 /* the view matrix is used by the viewport drawing, it is basically the inverted model matrix */
-void BKE_camera_multiview_view_matrix(RenderData *rd, Object *camera, const bool is_left, float r_viewmat[4][4])
+void BKE_camera_multiview_view_matrix(RenderData *rd, const Object *camera, const bool is_left, float r_viewmat[4][4])
 {
 	BKE_camera_multiview_model_matrix(rd, camera, is_left ? STEREO_LEFT_NAME : STEREO_RIGHT_NAME, r_viewmat);
 	invert_m4(r_viewmat);
@@ -797,7 +762,13 @@ static bool camera_is_left(const char *viewname)
 	return true;
 }
 
-void BKE_camera_multiview_model_matrix(RenderData *rd, Object *camera, const char *viewname, float r_modelmat[4][4])
+void BKE_camera_multiview_model_matrix(RenderData *rd, const Object *camera, const char *viewname, float r_modelmat[4][4])
+{
+	BKE_camera_multiview_model_matrix_scaled(rd, camera, viewname, r_modelmat);
+	normalize_m4(r_modelmat);
+}
+
+void BKE_camera_multiview_model_matrix_scaled(RenderData *rd, const Object *camera, const char *viewname, float r_modelmat[4][4])
 {
 	const bool is_multiview = (rd && rd->scemode & R_MULTIVIEW) != 0;
 
@@ -811,10 +782,25 @@ void BKE_camera_multiview_model_matrix(RenderData *rd, Object *camera, const cha
 		const bool is_left = camera_is_left(viewname);
 		camera_stereo3d_model_matrix(camera, is_left, r_modelmat);
 	}
-	normalize_m4(r_modelmat);
 }
 
-bool BKE_camera_multiview_spherical_stereo(RenderData *rd, Object *camera)
+void BKE_camera_multiview_window_matrix(RenderData *rd, const Object *camera, const char *viewname, float r_winmat[4][4])
+{
+	CameraParams params;
+
+	/* Setup parameters */
+	BKE_camera_params_init(&params);
+	BKE_camera_params_from_object(&params, camera);
+	BKE_camera_multiview_params(rd, &params, camera, viewname);
+
+	/* Compute matrix, viewplane, .. */
+	BKE_camera_params_compute_viewplane(&params, rd->xsch, rd->ysch, rd->xasp, rd->yasp);
+	BKE_camera_params_compute_matrix(&params);
+
+	copy_m4_m4(r_winmat, params.winmat);
+}
+
+bool BKE_camera_multiview_spherical_stereo(RenderData *rd, const Object *camera)
 {
 	Camera *cam;
 	const bool is_multiview = (rd && rd->scemode & R_MULTIVIEW) != 0;
@@ -861,9 +847,9 @@ static Object *camera_multiview_advanced(Scene *scene, Object *camera, const cha
 	}
 
 	if (name[0] != '\0') {
-		Base *base = BKE_scene_base_find_by_name(scene, name);
-		if (base) {
-			return base->object;
+		Object *ob = BKE_scene_object_find_by_name(scene, name);
+		if (ob != NULL) {
+			return ob;
 		}
 	}
 
@@ -887,7 +873,7 @@ Object *BKE_camera_multiview_render(Scene *scene, Object *camera, const char *vi
 	}
 }
 
-static float camera_stereo3d_shift_x(Object *camera, const char *viewname)
+static float camera_stereo3d_shift_x(const Object *camera, const char *viewname)
 {
 	Camera *data = camera->data;
 	float shift = data->shiftx;
@@ -925,7 +911,7 @@ static float camera_stereo3d_shift_x(Object *camera, const char *viewname)
 	return shift;
 }
 
-float BKE_camera_multiview_shift_x(RenderData *rd, Object *camera, const char *viewname)
+float BKE_camera_multiview_shift_x(RenderData *rd, const Object *camera, const char *viewname)
 {
 	const bool is_multiview = (rd && rd->scemode & R_MULTIVIEW) != 0;
 	Camera *data = camera->data;
@@ -943,7 +929,7 @@ float BKE_camera_multiview_shift_x(RenderData *rd, Object *camera, const char *v
 	}
 }
 
-void BKE_camera_multiview_params(RenderData *rd, CameraParams *params, Object *camera, const char *viewname)
+void BKE_camera_multiview_params(RenderData *rd, CameraParams *params, const Object *camera, const char *viewname)
 {
 	if (camera->type == OB_CAMERA) {
 		params->shiftx = BKE_camera_multiview_shift_x(rd, camera, viewname);
@@ -958,5 +944,40 @@ void BKE_camera_to_gpu_dof(struct Object *camera, struct GPUFXSettings *r_fx_set
 		r_fx_settings->dof->focal_length = cam->lens;
 		r_fx_settings->dof->sensor = BKE_camera_sensor_size(cam->sensor_fit, cam->sensor_x, cam->sensor_y);
 		r_fx_settings->dof->focus_distance = BKE_camera_object_dof_distance(camera);
+	}
+}
+
+CameraBGImage *BKE_camera_background_image_new(Camera *cam)
+{
+	CameraBGImage *bgpic = MEM_callocN(sizeof(CameraBGImage), "Background Image");
+
+	bgpic->scale = 1.0f;
+	bgpic->alpha = 0.5f;
+	bgpic->iuser.ok = 1;
+	bgpic->iuser.flag |= IMA_ANIM_ALWAYS;
+	bgpic->flag |= CAM_BGIMG_FLAG_EXPANDED;
+
+	BLI_addtail(&cam->bg_images, bgpic);
+
+	return bgpic;
+}
+
+void BKE_camera_background_image_remove(Camera *cam, CameraBGImage *bgpic)
+{
+	BLI_remlink(&cam->bg_images, bgpic);
+
+	MEM_freeN(bgpic);
+}
+
+void BKE_camera_background_image_clear(Camera *cam)
+{
+	CameraBGImage *bgpic = cam->bg_images.first;
+
+	while (bgpic) {
+		CameraBGImage *next_bgpic = bgpic->next;
+
+		BKE_camera_background_image_remove(cam, bgpic);
+
+		bgpic = next_bgpic;
 	}
 }

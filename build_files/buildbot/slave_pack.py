@@ -107,8 +107,8 @@ if builder.find('cmake') != -1:
         if builder.endswith('vc2015'):
             platform += "-vc14"
         builderified_name = 'blender-{}-{}-{}'.format(blender_full_version, git_hash, platform)
-        # NOTE: Blender 2.8 is already respected by blender_full_version.
-        if branch != '' and branch != 'blender2.8':
+        # NOTE: Blender 2.7 is already respected by blender_full_version.
+        if branch != '' and branch != 'blender2.7':
             builderified_name = branch + "-" + builderified_name
 
         os.rename(result_file, "{}.zip".format(builderified_name))
@@ -126,7 +126,6 @@ if builder.find('cmake') != -1:
 
     elif builder.startswith('linux_'):
         blender = os.path.join(install_dir, 'blender')
-        blenderplayer = os.path.join(install_dir, 'blenderplayer')
 
         buildinfo_h = os.path.join(build_dir, "source", "creator", "buildinfo.h")
         blender_h = os.path.join(blender_dir, "source", "blender", "blenkernel", "BKE_blender_version.h")
@@ -149,7 +148,7 @@ if builder.find('cmake') != -1:
         # Strip all unused symbols from the binaries
         print("Stripping binaries...")
         chroot_prefix = ['schroot', '-c', chroot_name, '--']
-        subprocess.call(chroot_prefix + ['strip', '--strip-all', blender, blenderplayer])
+        subprocess.call(chroot_prefix + ['strip', '--strip-all', blender])
 
         print("Stripping python...")
         py_target = os.path.join(install_dir, blender_version)
@@ -174,8 +173,8 @@ if builder.find('cmake') != -1:
                                                       blender_hash,
                                                       blender_glibc,
                                                       blender_arch)
-        # NOTE: Blender 2.8 is already respected by blender_full_version.
-        if branch != '' and branch != 'blender2.8':
+        # NOTE: Blender 2.7 is already respected by blender_full_version.
+        if branch != '' and branch != 'blender2.7':
             package_name = branch + "-" + package_name
 
         upload_filename = package_name + ".tar.bz2"

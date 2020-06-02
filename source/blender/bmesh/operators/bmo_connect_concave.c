@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,12 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_connect_concave.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * Connect vertices so all resulting faces are convex.
  *
@@ -60,15 +56,15 @@ static int bm_edge_length_cmp(const void *a_, const void *b_)
 
 	/* merge edges between concave edges last since these
 	 * are most likely to remain and be the main dividers */
-	if      (e_a_concave < e_b_concave) return -1;
-	else if (e_a_concave > e_b_concave) return  1;
+	if      (e_a_concave < e_b_concave) { return -1; }
+	else if (e_a_concave > e_b_concave) { return  1; }
 	else {
 		/* otherwise shortest edges last */
 		const float e_a_len = BM_edge_calc_length_squared(e_a);
 		const float e_b_len = BM_edge_calc_length_squared(e_b);
-		if      (e_a_len < e_b_len) return  1;
-		else if (e_a_len > e_b_len) return -1;
-		else                        return  0;
+		if      (e_a_len < e_b_len) { return  1; }
+		else if (e_a_len > e_b_len) { return -1; }
+		else                        { return  0; }
 	}
 }
 

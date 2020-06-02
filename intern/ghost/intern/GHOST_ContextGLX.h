@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2014 Blender Foundation.
  * All rights reserved.
- *
- * The Original Code is: all of this file.
- *
- * Contributor(s): Jason Wilkins
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ghost/intern/GHOST_ContextGLX.h
- *  \ingroup GHOST
+/** \file
+ * \ingroup GHOST
  */
 
 #ifndef __GHOST_CONTEXTGLX_H__
@@ -34,15 +26,7 @@
 
 #include "GHOST_Context.h"
 
-#ifdef WITH_GLEW_MX
-#  define glxewGetContext() glxewContext
-#endif
-
 #include <GL/glxew.h>
-
-#ifdef WITH_GLEW_MX
-extern "C" GLXEWContext *glxewContext;
-#endif
 
 
 #ifndef GHOST_OPENGL_GLX_CONTEXT_FLAGS
@@ -65,7 +49,6 @@ public:
 	        GHOST_TUns16 numOfAASamples,
 	        Window window,
 	        Display *display,
-	        XVisualInfo *visualInfo,
 	        GLXFBConfig fbconfig,
 	        int contextProfileMask,
 	        int contextMajorVersion,
@@ -89,6 +72,12 @@ public:
 	 * \return  A boolean success indicator.
 	 */
 	GHOST_TSuccess activateDrawingContext();
+
+	/**
+	 * Release the drawing context of the calling thread.
+	 * \return  A boolean success indicator.
+	 */
+	GHOST_TSuccess releaseDrawingContext();
 
 	/**
 	 * Call immediately after new to initialize.  If this fails then immediately delete the object.
@@ -117,18 +106,10 @@ public:
 	 */
 	GHOST_TSuccess getSwapInterval(int &intervalOut);
 
-protected:
-	inline void activateGLXEW() const {
-#ifdef WITH_GLEW_MX
-		glxewContext = m_glxewContext;
-#endif
-	}
-
 private:
 	void initContextGLXEW();
 
 	Display *m_display;
-	XVisualInfo *m_visualInfo;
 	GLXFBConfig m_fbconfig;
 	Window   m_window;
 
@@ -139,10 +120,6 @@ private:
 	const int m_contextResetNotificationStrategy;
 
 	GLXContext m_context;
-
-#ifdef WITH_GLEW_MX
-	GLXEWContext *m_glxewContext;
-#endif
 
 	/** The first created OpenGL context (for sharing display lists) */
 	static GLXContext s_sharedContext;

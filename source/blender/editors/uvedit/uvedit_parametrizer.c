@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,26 +12,23 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s):
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/uvedit/uvedit_parametrizer.c
- *  \ingroup eduv
+/** \file
+ * \ingroup eduv
  */
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_alloca.h"
 #include "BLI_memarena.h"
 #include "BLI_math.h"
 #include "BLI_rand.h"
 #include "BLI_heap.h"
 #include "BLI_boxpack_2d.h"
 #include "BLI_convexhull_2d.h"
+#include "BLI_polyfill_2d.h"
+#include "BLI_polyfill_2d_beautify.h"
 
 #include "uvedit_parametrizer.h"
 
@@ -70,7 +65,7 @@
 #endif
 typedef enum PBool {
 	P_TRUE = 1,
-	P_FALSE = 0
+	P_FALSE = 0,
 } PBool;
 
 /* Special Purpose Hash */
@@ -90,11 +85,11 @@ typedef struct PHash {
 
 
 
-struct PVert;
+struct PChart;
 struct PEdge;
 struct PFace;
-struct PChart;
 struct PHandle;
+struct PVert;
 
 /* Simplices */
 
@@ -153,7 +148,7 @@ enum PVertFlag {
 	PVERT_SELECT = 2,
 	PVERT_INTERIOR = 4,
 	PVERT_COLLAPSE = 8,
-	PVERT_SPLIT = 16
+	PVERT_SPLIT = 16,
 };
 
 enum PEdgeFlag {
@@ -165,7 +160,7 @@ enum PEdgeFlag {
 	PEDGE_FILLED = 32,
 	PEDGE_COLLAPSE = 64,
 	PEDGE_COLLAPSE_EDGE = 128,
-	PEDGE_COLLAPSE_PAIR = 256
+	PEDGE_COLLAPSE_PAIR = 256,
 };
 
 /* for flipping faces */
@@ -174,7 +169,7 @@ enum PEdgeFlag {
 enum PFaceFlag {
 	PFACE_CONNECTED = 1,
 	PFACE_FILLED = 2,
-	PFACE_COLLAPSE = 4
+	PFACE_COLLAPSE = 4,
 };
 
 /* Chart */
@@ -206,19 +201,21 @@ typedef struct PChart {
 } PChart;
 
 enum PChartFlag {
-	PCHART_NOPACK = 1
+	PCHART_HAS_PINS = 1,
 };
 
 enum PHandleState {
 	PHANDLE_STATE_ALLOCATED,
 	PHANDLE_STATE_CONSTRUCTED,
 	PHANDLE_STATE_LSCM,
-	PHANDLE_STATE_STRETCH
+	PHANDLE_STATE_STRETCH,
 };
 
 typedef struct PHandle {
 	enum PHandleState state;
 	MemArena *arena;
+	MemArena *polyfill_arena;
+	Heap *polyfill_heap;
 
 	PChart *construction_chart;
 	PHash *hash_verts;
@@ -244,7 +241,7 @@ typedef struct PHandle {
 static int PHashSizes[] = {
 	1, 3, 5, 11, 17, 37, 67, 131, 257, 521, 1031, 2053, 4099, 8209,
 	16411, 32771, 65537, 131101, 262147, 524309, 1048583, 2097169,
-	4194319, 8388617, 16777259, 33554467, 67108879, 134217757, 268435459
+	4194319, 8388617, 16777259, 33554467, 67108879, 134217757, 268435459,
 };
 
 #define PHASH_hash(ph, item) (((uintptr_t) (item)) % ((unsigned int) (ph)->cursize))
@@ -991,6 +988,10 @@ static void p_split_vert(PChart *chart, PEdge *e)
 	PEdge *we, *lastwe = NULL;
 	PVert *v = e->vert;
 	PBool copy = P_TRUE;
+
+	if (e->flag & PEDGE_PIN) {
+		chart->flag |= PCHART_HAS_PINS;
+	}
 
 	if (e->flag & PEDGE_VERTEX_SPLIT)
 		return;
@@ -3058,9 +3059,6 @@ static void p_chart_lscm_begin(PChart *chart, PBool live, PBool abf)
 			chart->u.lscm.pin1 = pin1;
 			chart->u.lscm.pin2 = pin2;
 		}
-		else {
-			chart->flag |= PCHART_NOPACK;
-		}
 
 		for (v = chart->verts; v; v = v->nextlink)
 			v->u.id = id++;
@@ -4119,6 +4117,8 @@ ParamHandle *param_construct_begin(void)
 	handle->construction_chart = p_chart_new(handle);
 	handle->state = PHANDLE_STATE_ALLOCATED;
 	handle->arena = BLI_memarena_new(MEM_SIZE_OPTIMAL(1 << 16), "param construct arena");
+	handle->polyfill_arena = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, "param polyfill arena");
+	handle->polyfill_heap = BLI_heap_new_ex(BLI_POLYFILL_ALLOC_NGON_RESERVE);
 	handle->aspx = 1.0f;
 	handle->aspy = 1.0f;
 	handle->do_aspect = false;
@@ -4162,82 +4162,71 @@ void param_delete(ParamHandle *handle)
 	}
 
 	BLI_memarena_free(phandle->arena);
+	BLI_memarena_free(phandle->polyfill_arena);
+	BLI_heap_free(phandle->polyfill_heap, NULL);
 	MEM_freeN(phandle);
 }
 
 static void p_add_ngon(ParamHandle *handle, ParamKey key, int nverts,
                        ParamKey *vkeys, float **co, float **uv,
-                       ParamBool *pin, ParamBool *select, const float normal[3])
+                       ParamBool *pin, ParamBool *select)
 {
-	int *boundary = BLI_array_alloca(boundary, nverts);
+	/* Allocate memory for polyfill. */
+	PHandle *phandle = (PHandle *)handle;
+	MemArena *arena = phandle->polyfill_arena;
+	Heap *heap = phandle->polyfill_heap;
+	unsigned int nfilltri = nverts - 2;
+	unsigned int (*tris)[3] = BLI_memarena_alloc(arena, sizeof(*tris) * (size_t)nfilltri);
+	float (*projverts)[2] = BLI_memarena_alloc(arena, sizeof(*projverts) * (size_t)nverts);
 
-	/* boundary vertex indexes */
-	for (int i = 0; i < nverts; i++) {
-		boundary[i] = i;
+	/* Calc normal, flipped: to get a positive 2d cross product. */
+	float normal[3];
+	zero_v3(normal);
+
+	const float *co_curr, *co_prev = co[nverts - 1];
+	for (int j = 0; j < nverts; j++) {
+		co_curr = co[j];
+		add_newell_cross_v3_v3v3(normal, co_prev, co_curr);
+		co_prev = co_curr;
+	}
+	if (UNLIKELY(normalize_v3(normal) == 0.0f)) {
+		normal[2] = 1.0f;
 	}
 
-	while (nverts > 2) {
-		float minangle = FLT_MAX;
-		float minshape = FLT_MAX;
-		int i, mini = 0;
-
-		/* find corner with smallest angle */
-		for (i = 0; i < nverts; i++) {
-			int v0 = boundary[(i + nverts - 1) % nverts];
-			int v1 = boundary[i];
-			int v2 = boundary[(i + 1) % nverts];
-			float angle = p_vec_angle(co[v0], co[v1], co[v2]);
-			float n[3];
-
-			normal_tri_v3(n, co[v0], co[v1], co[v2]);
-
-			if (normal && (dot_v3v3(n, normal) < 0.0f))
-				angle = (float)(2.0 * M_PI) - angle;
-
-			float other_angle = p_vec_angle(co[v2], co[v0], co[v1]);
-			float shape = fabsf((float)M_PI - angle - 2.0f * other_angle);
-
-			if (fabsf(angle - minangle) < 0.01f) {
-				/* for nearly equal angles, try to get well shaped triangles */
-				if (shape < minshape) {
-					minangle = angle;
-					minshape = shape;
-					mini = i;
-				}
-			}
-			else if (angle < minangle) {
-				minangle = angle;
-				minshape = shape;
-				mini = i;
-			}
-		}
-
-		/* add triangle in corner */
-		{
-			int v0 = boundary[(mini + nverts - 1) % nverts];
-			int v1 = boundary[mini];
-			int v2 = boundary[(mini + 1) % nverts];
-
-			ParamKey tri_vkeys[3] = {vkeys[v0], vkeys[v1], vkeys[v2]};
-			float *tri_co[3] = {co[v0], co[v1], co[v2]};
-			float *tri_uv[3] = {uv[v0], uv[v1], uv[v2]};
-			ParamBool tri_pin[3] = {pin[v0], pin[v1], pin[v2]};
-			ParamBool tri_select[3] = {select[v0], select[v1], select[v2]};
-
-			param_face_add(handle, key, 3, tri_vkeys, tri_co, tri_uv, tri_pin, tri_select, NULL);
-		}
-
-		/* remove corner */
-		if (mini + 1 < nverts)
-			memmove(boundary + mini, boundary + mini + 1, (nverts - mini - 1) * sizeof(int));
-
-		nverts--;
+	/* Project verts to 2d. */
+	float axis_mat[3][3];
+	axis_dominant_v3_to_m3_negate(axis_mat, normal);
+	for (int j = 0; j < nverts; j++) {
+		mul_v2_m3v3(projverts[j], axis_mat, co[j]);
 	}
+
+	BLI_polyfill_calc_arena(projverts, nverts, 1, tris, arena);
+
+	/* Beautify helps avoid thin triangles that give numerical problems. */
+	BLI_polyfill_beautify(projverts, nverts, tris, arena, heap);
+
+	/* Add triangles. */
+	for (int j = 0; j < nfilltri; j++) {
+		unsigned int *tri = tris[j];
+		unsigned int v0 = tri[0];
+		unsigned int v1 = tri[1];
+		unsigned int v2 = tri[2];
+
+		ParamKey tri_vkeys[3] = {vkeys[v0], vkeys[v1], vkeys[v2]};
+		float *tri_co[3] = {co[v0], co[v1], co[v2]};
+		float *tri_uv[3] = {uv[v0], uv[v1], uv[v2]};
+		ParamBool tri_pin[3] = {pin[v0], pin[v1], pin[v2]};
+		ParamBool tri_select[3] = {select[v0], select[v1], select[v2]};
+
+		param_face_add(handle, key, 3, tri_vkeys, tri_co, tri_uv, tri_pin, tri_select);
+	}
+
+	BLI_memarena_clear(arena);
 }
 
 void param_face_add(ParamHandle *handle, ParamKey key, int nverts,
                     ParamKey *vkeys, float *co[4], float *uv[4],
-                    ParamBool *pin, ParamBool *select, float normal[3])
+                    ParamBool *pin, ParamBool *select)
 {
 	PHandle *phandle = (PHandle *)handle;
 
@@ -4247,7 +4236,7 @@ void param_face_add(ParamHandle *handle, ParamKey key, int nverts,
 
 	if (nverts > 4) {
 		/* ngon */
-		p_add_ngon(handle, key, nverts, vkeys, co, uv, pin, select, normal);
+		p_add_ngon(handle, key, nverts, vkeys, co, uv, pin, select);
 	}
 	else if (nverts == 4) {
 		/* quad */
@@ -4355,7 +4344,7 @@ void param_lscm_solve(ParamHandle *handle)
 		if (chart->u.lscm.context) {
 			result = p_chart_lscm_solve(phandle, chart);
 
-			if (result && !(chart->flag & PCHART_NOPACK))
+			if (result && !(chart->flag & PCHART_HAS_PINS))
 				p_chart_rotate_minimum_area(chart);
 
 			if (!result || (chart->u.lscm.pin1))
@@ -4462,7 +4451,7 @@ void param_smooth_area(ParamHandle *handle)
 }
 
 /* don't pack, just rotate (used for better packing) */
-static void param_pack_rotate(ParamHandle *handle)
+static void param_pack_rotate(ParamHandle *handle, bool ignore_pinned)
 {
 	PChart *chart;
 	int i;
@@ -4475,7 +4464,7 @@ static void param_pack_rotate(ParamHandle *handle)
 
 		chart = phandle->charts[i];
 
-		if (chart->flag & PCHART_NOPACK) {
+		if (ignore_pinned && (chart->flag & PCHART_HAS_PINS)) {
 			continue;
 		}
 
@@ -4495,7 +4484,7 @@ static void param_pack_rotate(ParamHandle *handle)
 	}
 }
 
-void param_pack(ParamHandle *handle, float margin, bool do_rotate)
+void param_pack(ParamHandle *handle, float margin, bool do_rotate, bool ignore_pinned)
 {
 	/* box packing variables */
 	BoxPack *boxarray, *box;
@@ -4511,13 +4500,13 @@ void param_pack(ParamHandle *handle, float margin, bool do_rotate)
 	if (phandle->ncharts == 0)
 		return;
 
-	if (phandle->aspx != phandle->aspy)
-		param_scale(handle, 1.0f / phandle->aspx, 1.0f / phandle->aspy);
-
 	/* this could be its own function */
 	if (do_rotate) {
-		param_pack_rotate(handle);
+		param_pack_rotate(handle, ignore_pinned);
 	}
+
+	if (phandle->aspx != phandle->aspy)
+		param_scale(handle, 1.0f / phandle->aspx, 1.0f / phandle->aspy);
 
 	/* we may not use all these boxes */
 	boxarray = MEM_mallocN(phandle->ncharts * sizeof(BoxPack), "BoxPack box");
@@ -4526,7 +4515,7 @@ void param_pack(ParamHandle *handle, float margin, bool do_rotate)
 	for (i = 0; i < phandle->ncharts; i++) {
 		chart = phandle->charts[i];
 
-		if (chart->flag & PCHART_NOPACK) {
+		if (ignore_pinned && (chart->flag & PCHART_HAS_PINS)) {
 			unpacked++;
 			continue;
 		}
@@ -4542,7 +4531,7 @@ void param_pack(ParamHandle *handle, float margin, bool do_rotate)
 
 		box->w =  chart->u.pack.size[0] + trans[0];
 		box->h =  chart->u.pack.size[1] + trans[1];
-		box->index = i; /* warning this index skips PCHART_NOPACK boxes */
+		box->index = i; /* warning this index skips PCHART_HAS_PINS boxes */
 
 		if (margin > 0.0f)
 			area += (double)sqrtf(box->w * box->h);
@@ -4551,13 +4540,14 @@ void param_pack(ParamHandle *handle, float margin, bool do_rotate)
 	if (margin > 0.0f) {
 		/* multiply the margin by the area to give predictable results not dependent on UV scale,
 		 * ...Without using the area running pack multiple times also gives a bad feedback loop.
-		 * multiply by 0.1 so the margin value from the UI can be from 0.0 to 1.0 but not give a massive margin */
+		 * multiply by 0.1 so the margin value from the UI can be from
+		 * 0.0 to 1.0 but not give a massive margin */
 		margin = (margin * (float)area) * 0.1f;
 		unpacked = 0;
 		for (i = 0; i < phandle->ncharts; i++) {
 			chart = phandle->charts[i];
 
-			if (chart->flag & PCHART_NOPACK) {
+			if (ignore_pinned && (chart->flag & PCHART_HAS_PINS)) {
 				unpacked++;
 				continue;
 			}
@@ -4593,7 +4583,7 @@ void param_pack(ParamHandle *handle, float margin, bool do_rotate)
 		param_scale(handle, phandle->aspx, phandle->aspy);
 }
 
-void param_average(ParamHandle *handle)
+void param_average(ParamHandle *handle, bool ignore_pinned)
 {
 	PChart *chart;
 	int i;
@@ -4609,8 +4599,9 @@ void param_average(ParamHandle *handle)
 		PFace *f;
 		chart = phandle->charts[i];
 
-		if (chart->flag & PCHART_NOPACK)
+		if (ignore_pinned && (chart->flag & PCHART_HAS_PINS)) {
 			continue;
+		}
 
 		chart->u.pack.area = 0.0f; /* 3d area */
 		chart->u.pack.rescale = 0.0f; /* UV area, abusing rescale for tmp storage, oh well :/ */
@@ -4634,8 +4625,9 @@ void param_average(ParamHandle *handle)
 	for (i = 0; i < phandle->ncharts; i++) {
 		chart = phandle->charts[i];
 
-		if (chart->flag & PCHART_NOPACK)
+		if (ignore_pinned && (chart->flag & PCHART_HAS_PINS)) {
 			continue;
+		}
 
 		if (chart->u.pack.area != 0.0f && chart->u.pack.rescale != 0.0f) {
 			fac = chart->u.pack.area / chart->u.pack.rescale;

@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #include "COM_RenderLayersNode.h"
@@ -65,12 +61,12 @@ void RenderLayersNode::testRenderLink(NodeConverter &converter,
 		missingRenderLink(converter);
 		return;
 	}
-	SceneRenderLayer *srl = (SceneRenderLayer *)BLI_findlink(&scene->r.layers, layerId);
-	if (srl == NULL) {
+	ViewLayer *view_layer = (ViewLayer *)BLI_findlink(&scene->view_layers, layerId);
+	if (view_layer == NULL) {
 		missingRenderLink(converter);
 		return;
 	}
-	RenderLayer *rl = RE_GetRenderLayer(rr, srl->name);
+	RenderLayer *rl = RE_GetRenderLayer(rr, view_layer->name);
 	if (rl == NULL) {
 		missingRenderLink(converter);
 		return;
@@ -78,8 +74,8 @@ void RenderLayersNode::testRenderLink(NodeConverter &converter,
 	const int num_outputs = this->getNumberOfOutputSockets();
 	for (int i = 0; i < num_outputs; i++) {
 		NodeOutput *output = this->getOutputSocket(i);
-		NodeImageLayer *storage = (NodeImageLayer*) output->getbNodeSocket()->storage;
-		RenderPass *rpass = (RenderPass*) BLI_findstring(
+		NodeImageLayer *storage = (NodeImageLayer *)output->getbNodeSocket()->storage;
+		RenderPass *rpass = (RenderPass *)BLI_findstring(
 		        &rl->passes,
 		        storage->pass_name,
 		        offsetof(RenderPass, name));
@@ -156,6 +152,11 @@ void RenderLayersNode::missingSocketLink(NodeConverter &converter,
 			value_operation->setValue(0.0f);
 			operation = value_operation;
 			break;
+		}
+		default:
+		{
+			BLI_assert("!Unexpected data type");
+			return;
 		}
 	}
 

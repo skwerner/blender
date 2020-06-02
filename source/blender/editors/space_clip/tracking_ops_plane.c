@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -17,16 +15,10 @@
  *
  * The Original Code is Copyright (C) 2011 Blender Foundation.
  * All rights reserved.
- *
- *
- * Contributor(s): Blender Foundation,
- *                 Sergey Sharybin
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/editors/space_clip/tracking_ops_plane.c
- *  \ingroup spclip
+/** \file
+ * \ingroup spclip
  */
 
 #include "MEM_guardedalloc.h"
@@ -39,8 +31,9 @@
 
 #include "BKE_context.h"
 #include "BKE_tracking.h"
-#include "BKE_depsgraph.h"
 #include "BKE_report.h"
+
+#include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -372,7 +365,7 @@ static int slide_plane_marker_modal(bContext *C,
 			data->previous_mval[1] = event->mval[1];
 			copy_v2_v2(data->previous_corner, data->corner);
 
-			DAG_id_tag_update(&sc->clip->id, 0);
+			DEG_id_tag_update(&sc->clip->id, 0);
 
 			WM_event_add_notifier(C, NC_MOVIECLIP | NA_EDITED, NULL);
 
@@ -390,7 +383,7 @@ static int slide_plane_marker_modal(bContext *C,
 
 				clip_tracking_show_cursor(C);
 
-				DAG_id_tag_update(&sc->clip->id, 0);
+				DEG_id_tag_update(&sc->clip->id, 0);
 				WM_event_add_notifier(C, NC_MOVIECLIP | NA_EDITED, clip);
 
 				return OPERATOR_FINISHED;

@@ -16,9 +16,6 @@
 #
 # The Original Code is Copyright (C) 2008, Blender Foundation
 # All rights reserved.
-#
-# The Original Code is: all of this file.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 set(INC
@@ -42,8 +39,16 @@ set(SRC
 	BLT_translation.h
 )
 
+set(LIB
+	bf_blenkernel
+	bf_blenlib
+)
+
 if(WITH_INTERNATIONAL)
 	add_definitions(-DWITH_INTERNATIONAL)
+	list(APPEND LIB
+		bf_intern_locale
+	)
 endif()
 
 if(WITH_PYTHON)
@@ -59,7 +64,7 @@ if(WIN32)
 	endif()
 endif()
 
-blender_add_lib(bf_blentranslation "${SRC}" "${INC}" "${INC_SYS}")
+blender_add_lib(bf_blentranslation "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 
 if(WITH_INTERNATIONAL)
 	add_subdirectory(msgfmt)

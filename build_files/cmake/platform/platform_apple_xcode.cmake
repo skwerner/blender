@@ -16,9 +16,6 @@
 #
 # The Original Code is Copyright (C) 2016, Blender Foundation
 # All rights reserved.
-#
-# Contributor(s): Jacques Beaurain.
-#
 # ***** END GPL LICENSE BLOCK *****
 
 # Xcode and system configuration for Apple.
@@ -83,7 +80,7 @@ if(${XCODE_VERSION} VERSION_LESS 4.3)
 	# use guaranteed existing sdk
 	set(CMAKE_OSX_SYSROOT /Developer/SDKs/MacOSX${OSX_SYSTEM}.sdk CACHE PATH "" FORCE)
 else()
-	# note: xcode-select path could be ambigous,
+	# note: xcode-select path could be ambiguous,
 	# cause /Applications/Xcode.app/Contents/Developer or /Applications/Xcode.app would be allowed
 	# so i use a selfcomposed bundlepath here
 	set(OSX_SYSROOT_PREFIX ${XCODE_BUNDLE}/Contents/Developer/Platforms/MacOSX.platform)
@@ -97,7 +94,7 @@ else()
 endif()
 
 if(OSX_SYSTEM MATCHES 10.9)
-	# make sure syslibs and headers are looked up in sdk ( expecially for 10.9 openGL atm. )
+	# make sure syslibs and headers are looked up in sdk ( especially for 10.9 openGL atm. )
 	set(CMAKE_FIND_ROOT_PATH ${CMAKE_OSX_SYSROOT})
 endif()
 

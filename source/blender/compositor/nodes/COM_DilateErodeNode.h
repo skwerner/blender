@@ -1,6 +1,4 @@
 /*
- * Copyright 2011, Blender Foundation.
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -15,9 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
- * Contributor:
- *		Jeroen Bakker
- *		Monique Dewanchand
+ * Copyright 2011, Blender Foundation.
  */
 
 #ifndef __COM_DILATEERODENODE_H__
@@ -26,11 +22,11 @@
 #include "COM_Node.h"
 
 /**
- * @brief DilateErodeNode
- * @ingroup Node
+ * \brief DilateErodeNode
+ * \ingroup Node
  */
 class DilateErodeNode : public Node {
-	NodeBlurData m_alpha_blur; /* only used for blurring alpha, since the dilate/erode node doesnt have this */
+	NodeBlurData m_alpha_blur; /* only used for blurring alpha, since the dilate/erode node doesn't have this */
 public:
 	DilateErodeNode(bNode *editorNode);
 	void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;

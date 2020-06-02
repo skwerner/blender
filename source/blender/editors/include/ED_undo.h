@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,21 +12,24 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file ED_undo.h
- *  \ingroup editors
+/** \file
+ * \ingroup editors
  */
 
 #ifndef __ED_UNDO_H__
 #define __ED_UNDO_H__
 
+#include "BLI_compiler_attrs.h"
+
+struct CLG_LogRef;
+struct Object;
+struct UndoStack;
+struct ViewLayer;
 struct bContext;
 struct wmOperator;
 struct wmOperatorType;
-struct UndoStack;
 
 /* undo.c */
 void    ED_undo_push(struct bContext *C, const char *str);
@@ -51,7 +52,17 @@ void    ED_undo_operator_repeat_cb_evt(struct bContext *C, void *arg_op, int arg
 
 bool    ED_undo_is_valid(const struct bContext *C, const char *undoname);
 
+bool    ED_undo_is_memfile_compatible(const struct bContext *C);
+
+void    ED_undo_object_editmode_restore_helper(
+        struct bContext *C,
+        struct Object **object_array, uint object_array_len, uint object_array_stride);
+
 struct UndoStack *ED_undo_stack_get(void);
+
+/* helpers */
+void ED_undo_object_set_active_or_warn(
+        struct ViewLayer *view_layer, struct Object *ob, const char *info, struct CLG_LogRef *log);
 
 /* undo_system_types.c */
 void ED_undosys_type_init(void);

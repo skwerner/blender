@@ -17,6 +17,7 @@
 #ifndef __OSL_H__
 #define __OSL_H__
 
+#include "util/util_array.h"
 #include "util/util_set.h"
 #include "util/util_string.h"
 #include "util/util_thread.h"
@@ -26,6 +27,7 @@
 #include "render/shader.h"
 
 #ifdef WITH_OSL
+#include <OSL/llvm_util.h>
 #include <OSL/oslcomp.h>
 #include <OSL/oslexec.h>
 #include <OSL/oslquery.h>
@@ -67,6 +69,8 @@ class OSLShaderManager : public ShaderManager {
 public:
 	OSLShaderManager();
 	~OSLShaderManager();
+
+	static void free_memory();
 
 	void reset(Scene *scene);
 
@@ -170,4 +174,4 @@ private:
 
 CCL_NAMESPACE_END
 
-#endif /* __OSL_H__  */
+#endif  /* __OSL_H__  */

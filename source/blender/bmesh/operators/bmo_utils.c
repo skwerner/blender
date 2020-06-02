@@ -1,6 +1,4 @@
 /*
- * ***** BEGIN GPL LICENSE BLOCK *****
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -14,14 +12,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
- *
- * Contributor(s): Joseph Eagar.
- *
- * ***** END GPL LICENSE BLOCK *****
  */
 
-/** \file blender/bmesh/operators/bmo_utils.c
- *  \ingroup bmesh
+/** \file
+ * \ingroup bmesh
  *
  * utility bmesh operators, e.g. transform,
  * translate, rotate, scale, etc.
@@ -405,24 +399,30 @@ void bmo_smooth_vert_exec(BMesh *UNUSED(bm), BMOperator *op)
 		mul_v3_fl(co, 1.0f / (float)j);
 		interp_v3_v3v3(co, v->co, co, fac);
 
-		if (clipx && fabsf(v->co[0]) <= clip_dist)
+		if (clipx && fabsf(v->co[0]) <= clip_dist) {
 			co[0] = 0.0f;
-		if (clipy && fabsf(v->co[1]) <= clip_dist)
+		}
+		if (clipy && fabsf(v->co[1]) <= clip_dist) {
 			co[1] = 0.0f;
-		if (clipz && fabsf(v->co[2]) <= clip_dist)
+		}
+		if (clipz && fabsf(v->co[2]) <= clip_dist) {
 			co[2] = 0.0f;
+		}
 
 		i++;
 	}
 
 	i = 0;
 	BMO_ITER (v, &siter, op->slots_in, "verts", BM_VERT) {
-		if (xaxis)
+		if (xaxis) {
 			v->co[0] = cos[i][0];
-		if (yaxis)
+		}
+		if (yaxis) {
 			v->co[1] = cos[i][1];
-		if (zaxis)
+		}
+		if (zaxis) {
 			v->co[2] = cos[i][2];
+		}
 
 		i++;
 	}

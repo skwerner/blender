@@ -90,7 +90,7 @@ ccl_device_noinline void compute_light_pass(
 
     /* sample light and BSDF */
     if (!is_sss_sample && (pass_filter & (BAKE_FILTER_DIRECT | BAKE_FILTER_INDIRECT))) {
-      kernel_path_surface_connect_light(kg, sd, emission_sd, throughput, &state, L);
+      kernel_path_surface_connect_light(kg, sd, emission_sd, throughput, &state, L, NULL);
 
       if (kernel_path_surface_bounce(kg, sd, &throughput, &state, &L->state, &ray)) {
 #  ifdef __LAMP_MIS__

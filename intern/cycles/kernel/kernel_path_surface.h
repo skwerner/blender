@@ -210,18 +210,25 @@ ccl_device bool kernel_branched_path_surface_bounce(KernelGlobals *kg,
 
 #endif
 
+typedef struct FooFoo {
+  int light;
+  float weight;
+  float pq;
+} FooFoo;
+
 /* path tracing: connect path directly to position on a light and add it to L */
 ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
                                                          ShaderData *sd,
                                                          ShaderData *emission_sd,
                                                          float3 throughput,
                                                          ccl_addr_space PathState *state,
-                                                         PathRadiance *L)
+                                                         PathRadiance *L,
+                                                         ccl_global float *buffer)
 {
   PROFILING_INIT(kg, PROFILING_CONNECT_LIGHT);
 
 #ifdef __EMISSION__
-#  ifdef __SHADOW_TRICKS__
+#  if 0//def __SHADOW_TRICKS__
   int all = (state->flag & PATH_RAY_SHADOW_CATCHER);
   kernel_branched_path_surface_connect_light(kg, sd, emission_sd, state, throughput, 1.0f, L, all);
 #  else
@@ -236,16 +243,100 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
   light_ray.time = sd->time;
 #    endif
 
+  /* reservoir sampling */
+  typedef struct Reservoir {
+    int M;
+    float w;
+    int light;
+    float pq;
+  } Reservoir;
+  Reservoir r;
+  r.w = 0.0f;
+  r.M = 0;
+  r.light = -1;
+
+  Reservoir last_light_sample = {0, 0.0f, -1, 0.0f};
+  
   if (kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL)) {
     float light_u, light_v;
     path_state_rng_2D(kg, state, PRNG_LIGHT_U, &light_u, &light_v);
 
+    uint lcg_state = lcg_state_init_addrspace(state, 0xfaafeade);
     LightSample ls ccl_optional_struct_init;
+    /* ris */
+#if 0
+    float samp[10];
+    const int kNumCandidates = 10;
+    int lite[kNumCandidates];
+    BsdfEval llight[kNumCandidates];
+    float w_sum = 0.0f;
+    for (int i = 0; i < kNumCandidates; ++i) {
+      llight[i].diffuse = make_float3(0.0f, 0.0f, 0.0f);
+      int light = min((int)floorf(kernel_data.integrator.num_all_lights * lcg_step_float_addrspace(&lcg_state)), kernel_data.integrator.num_all_lights - 1);
+      if (light_sample(kg, light, light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
+        float terminate = path_state_rng_light_termination(kg, state);
+        direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &llight[i], &is_lamp, terminate);
+      }
+      float w_i = average(llight[i].diffuse) / kernel_data.integrator.num_all_lights;
+      w_sum += w_i;
+      samp[i] = w_sum;
+      lite[i] = light;
+    }
+    float pick = w_sum * lcg_step_float_addrspace(&lcg_state);
+    for (int i = 0; i < kNumCandidates; ++i) {
+      if (pick < samp[i]) {
+        if (light_sample(kg, lite[i], light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
+          ls.pdf = kNumCandidates / kernel_data.integrator.num_all_lights;
+          float terminate = path_state_rng_light_termination(kg, state);
+          has_emission = direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate);
+        }
+        break;
+      }
+    }
+#else
+    const int kNumCandidates = 16;
+    if (buffer && kernel_data.film.pass_light_sampling) {
+      Reservoir *foo = (Reservoir*)(buffer + kernel_data.film.pass_light_sampling);
+      last_light_sample = *foo;
+    }
+    if (0 && last_light_sample.w > 0.0f && last_light_sample.light >= 0) {
+      r.w = last_light_sample.w;
+      r.light = last_light_sample.light;
+      r.pq = last_light_sample.pq;
+      r.M = last_light_sample.M;
+    }
+    for (int i = 0; i < kNumCandidates; ++i) {
+      int light = min((int)floorf(kernel_data.integrator.num_all_lights * lcg_step_float_addrspace(&lcg_state)), kernel_data.integrator.num_all_lights - 1);
+      if (light_sample(kg, light, light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
+        float terminate = path_state_rng_light_termination(kg, state);
+        direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate);
+      }
+      float w_i = dot(ls.D, sd->N) * average(L_light.diffuse) / kernel_data.integrator.num_all_lights;
+      r.w += w_i;
+      r.M++;
+      if (lcg_step_float_addrspace(&lcg_state) < (w_i / r.w)) {
+        r.light = light;
+        r.pq = dot(ls.D, sd->N) * average(L_light.diffuse);
+      }
+    }
+    last_light_sample.light = r.light;
+    last_light_sample.w = r.w;
+    last_light_sample.pq = r.pq;
+    last_light_sample.M = r.M;
+    r.w = (1.0 / r.pq) * (r.w / r.M);
+    if (light_sample(kg, r.light, light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
+      ls.pdf *= 1.0f / (r.w * kernel_data.integrator.num_all_lights);
+      float terminate = path_state_rng_light_termination(kg, state);
+      has_emission = direct_emission(kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate);
+    }
+#endif
+/*
     if (light_sample(kg, -1, light_u, light_v, sd->time, sd->P, state->bounce, &ls)) {
       float terminate = path_state_rng_light_termination(kg, state);
       has_emission = direct_emission(
           kg, sd, emission_sd, &ls, state, &light_ray, &L_light, &is_lamp, terminate);
     }
+ */
   }
 
   /* trace shadow ray */
@@ -255,6 +346,10 @@ ccl_device_inline void kernel_path_surface_connect_light(KernelGlobals *kg,
 
   if (has_emission) {
     if (!blocked) {
+      if (buffer && kernel_data.film.pass_light_sampling) {
+        Reservoir *foo = (Reservoir*)(buffer + kernel_data.film.pass_light_sampling);
+        *foo = last_light_sample;
+      }
       /* accumulate */
       path_radiance_accum_light(kg, L, state, throughput, &L_light, shadow, 1.0f, is_lamp);
     }

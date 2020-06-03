@@ -622,7 +622,7 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
 
 #  ifdef __EMISSION__
         /* direct lighting */
-        kernel_path_surface_connect_light(kg, &sd, emission_sd, throughput, state, L);
+        kernel_path_surface_connect_light(kg, &sd, emission_sd, throughput, state, L, buffer);
 #  endif /* __EMISSION__ */
 
 #  ifdef __VOLUME__

@@ -200,6 +200,9 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
     case PASS_BAKE_DIFFERENTIAL:
       pass.components = 4;
       break;
+    case PASS_LIGHT_SAMPLING:
+      pass.components = 4;
+      break;
     default:
       assert(false);
       break;
@@ -523,6 +526,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
           kfilm->pass_aov_value = kfilm->pass_stride;
         }
         kfilm->pass_aov_value_num++;
+        break;
+      case PASS_LIGHT_SAMPLING:
+        kfilm->pass_light_sampling = kfilm->pass_stride;
         break;
       default:
         assert(false);

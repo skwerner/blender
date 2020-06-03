@@ -686,6 +686,8 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
   }
   RNA_END;
 
+  Pass::add(PASS_LIGHT_SAMPLING, passes);
+
   return passes;
 }
 
